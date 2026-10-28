@@ -2581,7 +2581,7 @@ app.post('/admin/support-snapshots/sync-all', requireAdmin, wrap(async (req, res
   await log(req.admin, 'support_snapshot_all', { total: rows.length });
   res.json(SNAP_JOB);
   (async () => {
-    const workers = Math.max(1, Math.min(8, parseInt(process.env.SNAP_CONCURRENCY || '5', 10) || 5));
+    const workers = Math.max(1, Math.min(16, parseInt(process.env.SNAP_CONCURRENCY || '10', 10) || 10));
     const queue = rows.slice(); let stop = false; let browser = null, uses = 0, opening = null;
     const getBrowser = async () => {
       if (browser && uses < 150 && browser.connected !== false) return browser;

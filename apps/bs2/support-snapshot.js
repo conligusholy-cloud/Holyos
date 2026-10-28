@@ -48,6 +48,13 @@ async function captureWith(browser, email, { path = '/cs/bo/my-invests/', type =
   try {
     const page = await ctx.newPage();
     await page.setViewport({ width: 1280, height: 900 });
+    // Zrychlení: nestahovat média a sledovací/chatové skripty (screenshot je nepotřebuje, stránka se načte dřív)
+    await page.setRequestInterception(true);
+    page.on('request', (rq) => {
+      const u = rq.url();
+      if (rq.resourceType() === 'media' || /google-analytics|googletagmanager|facebook\.net|hotjar|intercom|doubleclick|clarity\.ms/i.test(u)) rq.abort().catch(() => {});
+      else rq.continue().catch(() => {});
+    });
     // Rychlá cesta: přihlásit se mimo prohlížeč (fake-login bez následování přesměrování na těžký dashboard),
     // session cookie vložit do kontextu a jít rovnou na Přehled podpory. Když se cookie nepodaří, klasická cesta.
     let fast = false;
@@ -59,13 +66,16 @@ async function captureWith(browser, email, { path = '/cs/bo/my-invests/', type =
       if (cookies.length) { await page.setCookie(...cookies); fast = true; }
     } catch (e) { /* fallback níže */ }
     if (!fast) await page.goto(BASE + '/php-action/fake-login.php?email=' + encodeURIComponent(email), { waitUntil: 'domcontentloaded', timeout: 25000 });
-    await page.goto(BASE + path, { waitUntil: 'networkidle2', timeout: 25000 });
+    // Místo čekání na „ticho v síti" počkat jen na to, až se na stránce objeví „Celkem jste podpořili: <číslo>" (dopočet JS)
+    const ready = () => page.waitForFunction(() => /Celkem jste\s*podpořili:\s*[\d\s .,]*\d/i.test(document.body.innerText || ''), { timeout: 8000 }).catch(() => {});
+    await page.goto(BASE + path, { waitUntil: 'domcontentloaded', timeout: 25000 });
+    await ready();
     if (fast && !/jste podpořili/i.test(await page.evaluate(() => document.body.innerText).catch(() => ''))) {
       // cookie nestačila (portál chce dashboard) → klasické přihlášení v prohlížeči
       await page.goto(BASE + '/php-action/fake-login.php?email=' + encodeURIComponent(email), { waitUntil: 'domcontentloaded', timeout: 25000 });
-      await page.goto(BASE + path, { waitUntil: 'networkidle2', timeout: 25000 });
+      await page.goto(BASE + path, { waitUntil: 'domcontentloaded', timeout: 25000 });
+      await ready();
     }
-    await new Promise((r) => setTimeout(r, 300));
     // Přečíst z vykreslené stránky přesně to, co je na screenshotu: „Celkem jste podpořili" (po dopočtu JS) + měnu
     const read = await page.evaluate(() => {
       const t = document.body.innerText || '';
