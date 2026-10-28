@@ -2517,18 +2517,44 @@ app.get('/admin/partner-support', requireAdmin, wrap(async (req, res) => {
 // Screenshot „Přehledu podpory" ze starého portálu — vizuální důkaz vedle textového syncu výše.
 // Jeden klik = jeden uživatel (headless Chromium, ne hromadné procházení).
 const SUPPORT_SNAP = require('./support-snapshot');
+// Hodnota přečtená z vykreslené stránky (to, co je na screenshotu) → porovnat s uloženou podporou a případně opravit.
+// Vrací { status: 'unread'|'placeholder'|'matched'|'corrected', before, after, currency }.
+async function applySnapshotRead(supporterId, rd) {
+  rd = rd || {};
+  if (rd.total == null) return { status: 'unread' };
+  const cur = (await q('SELECT partner_support FROM supporters WHERE id=$1', [supporterId])).rows[0];
+  const p = (cur && cur.partner_support) || {};
+  // Starý portál u části účtů „Celkem" nedopočítá (AJAX neproběhne) a ukáže jen částku za aktuální rok — takovou hodnotu nebrat jako opravu.
+  const placeholder = rd.year_total != null && Math.abs(rd.total - rd.year_total) < 0.01 && p.total_all != null && Number(p.total_all) > rd.total + 0.01;
+  const differs = !placeholder && (p.total_all == null || Math.abs(Number(p.total_all) - rd.total) > 0.01 || (rd.currency && (p.currency || 'CZK') !== rd.currency));
+  const np = { ...p, snapshot_total: rd.total, snapshot_currency: rd.currency, snapshot_checked_at: new Date().toISOString() };
+  const before = p.total_all != null ? p.total_all : null;
+  if (differs) {
+    np.total_all_before_snapshot = before;
+    np.total_all = rd.total; if (rd.currency) np.currency = rd.currency;
+    np.corrected_from_snapshot = true;
+    await LEGACY.addCzk(np, np.eur_rate ? { rate: np.eur_rate, date: np.eur_rate_date } : null);
+  }
+  await q('UPDATE supporters SET partner_support=$2 WHERE id=$1', [supporterId, JSON.stringify(np)]);
+  return { status: differs ? 'corrected' : placeholder ? 'placeholder' : 'matched', before, after: rd.total, currency: np.currency };
+}
 app.post('/admin/supporters/:id(\\d+)/support-snapshot', requireAdmin, wrap(async (req, res) => {
   const s = await loadSupporter(req.params.id);
   if (!s) return res.status(404).json({ error: 'Uživatel nenalezen.' });
   if (!s.email) return res.status(400).json({ error: 'Uživatel nemá e-mail.' });
+  let browser;
   try {
-    const buf = await SUPPORT_SNAP.captureSupportScreenshot(s.email, '/cs/bo/my-invests/');
+    browser = await SUPPORT_SNAP.openBrowser();
+    const buf = await SUPPORT_SNAP.captureWith(browser, s.email, { type: 'png' });
     const r = await q('UPDATE supporters SET support_snapshot=$2, support_snapshot_at=now() WHERE id=$1 RETURNING support_snapshot_at', [s.id, buf]);
-    await log(req.admin, 'support_snapshot', { id: s.id, email: s.email, bytes: buf.length });
-    res.json({ ok: true, at: r.rows[0].support_snapshot_at });
+    const ap = await applySnapshotRead(s.id, buf.read);
+    await log(req.admin, 'support_snapshot', { id: s.id, email: s.email, bytes: buf.length, read: buf.read, result: ap });
+    res.json({ ok: true, at: r.rows[0].support_snapshot_at, result: ap });
   } catch (e) {
     await log(req.admin, 'support_snapshot_error', { id: s.id, email: s.email, error: e.message });
     res.status(502).json({ error: 'Nepodařilo se pořídit screenshot: ' + e.message });
+  } finally {
+    if (browser) await browser.close().catch(() => {});
   }
 }));
 app.get('/admin/supporters/:id(\\d+)/support-snapshot.png', requireAdmin, wrap(async (req, res) => {

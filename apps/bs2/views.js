@@ -1678,6 +1678,10 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
         th.dataset.src = src; th.querySelector('img').src = src; th.title = 'Screenshot z ' + new Date(x.j.at).toLocaleString('cs-CZ') + ' — klikni pro zvětšení';
         if (cell) { var a = cell.querySelector('a'); if (a) a.dataset.lightbox = '1'; }
         openSnap(src);
+        var rs = x.j.result || {};
+        if (rs.status === 'corrected') setTimeout(function () { alert('Hodnota „Celkem podpořil" opravena podle screenshotu: ' + (rs.before == null ? '—' : Number(rs.before).toLocaleString('cs-CZ')) + ' → ' + Number(rs.after).toLocaleString('cs-CZ') + ' ' + (rs.currency || 'CZK')); }, 300);
+        else if (rs.status === 'matched') setTimeout(function () { alert('Hodnota ve screenshotu sedí s uloženou (' + Number(rs.after).toLocaleString('cs-CZ') + ').'); }, 300);
+        else if (rs.status === 'unread') setTimeout(function () { alert('Ze stránky se nepodařilo přečíst „Celkem jste podpořili" — hodnotu zkontroluj ručně podle screenshotu.'); }, 300);
       })
       .catch(function (err) { alert('Chyba spojení: ' + err.message); })
       .finally(function () { b.disabled = false; b.textContent = orig; });
