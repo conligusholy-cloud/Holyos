@@ -168,6 +168,36 @@ async function fetchLegacyExpansion(email) {
   } catch (e) { return { ok: false, error: e.message }; }
 }
 
+// Standardní podpora = palety + opakovačky přes VŠECHNY roky (Přehled podpory ?y=YYYY, roky z výběru „Období").
+async function fetchLegacyStandard(email) {
+  if (!email) return { ok: false, error: 'Uživatel nemá e-mail' };
+  const jar = {};
+  try {
+    await get(BASE + '/php-action/fake-login.php?email=' + encodeURIComponent(email), jar, 1).catch(() => {});
+    const first = await get(BASE + '/cs/bo/my-invests/', jar);
+    if (!/jste podpořili/i.test(htmlToText(first.html))) return { ok: false, error: 'Stránka podpory nemá očekávaný obsah (nepřihlášeno?)' };
+    const sel = (first.html.match(/<select[^>]*name="y"[^>]*>([\s\S]*?)<\/select>/i) || [])[1] || '';
+    let years = [...sel.matchAll(/<option[^>]*value="(\d{4})"/gi)].map((m) => Number(m[1]));
+    if (!years.length) { const y0 = new Date().getFullYear(); years = []; for (let y = y0; y >= 2018; y--) years.push(y); }
+    years = [...new Set(years)].sort((a, b) => b - a);
+    const by = {}; let cur = null;
+    for (const y of years) {
+      const pg = y === years[0] && /selected/.test(sel) && new RegExp('value="' + y + '"[^>]*selected').test(sel) ? first : await get(BASE + '/cs/bo/my-invests/?y=' + y, jar);
+      const d = parseInvests(htmlToText(pg.html));
+      if (d.year && d.year !== y) continue; // stránka vrátila jiný rok — nepočítat dvakrát
+      if (!cur && d.currency) cur = d.currency;
+      const rec = { palety: d.palety || 0, opakovacky: d.opakovacky || 0, expanze: d.expanze || 0, neurawash: d.neurawash || 0, total_year: d.total_year || 0 };
+      if (rec.palety || rec.opakovacky || rec.expanze || rec.neurawash || rec.total_year) by[y] = rec;
+    }
+    const sum = (k) => Math.round(Object.values(by).reduce((a, r) => a + (Number(r[k]) || 0), 0) * 100) / 100;
+    const data = { std_by_year: by, std_years: years, std_palety_all: sum('palety'), std_opakovacky_all: sum('opakovacky'), std_expanze_all: sum('expanze'), std_neurawash_all: sum('neurawash'), std_currency: cur || 'CZK', std_checked_at: new Date().toISOString() };
+    data.std_total = Math.round((data.std_palety_all + data.std_opakovacky_all) * 100) / 100;
+    if (data.std_currency === 'EUR') { try { const c = await cnbEurRate(); data.std_total_czk = Math.round(data.std_total * c.rate * 100) / 100; data.std_eur_rate = c.rate; data.std_eur_rate_date = c.date; } catch (e) { /* bez kurzu */ } }
+    else data.std_total_czk = data.std_total;
+    return { ok: true, data };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+
 /** Stáhne podporu pro e-mail uživatele. Vrací { ok, data } nebo { ok:false, error }. */
 async function fetchLegacySupport(email) {
   if (!email) return { ok: false, error: 'Uživatel nemá e-mail' };
@@ -203,4 +233,4 @@ async function fetchLegacySupport(email) {
   }
 }
 
-module.exports = { fetchLegacySupport, fetchLegacyPosition, fetchLegacyPiv, parsePiv, fetchLegacyExpansion, parseExpansion, parsePosition, parseInvests, htmlToText, addCzk, cnbEurRate };
+module.exports = { fetchLegacyStandard, fetchLegacySupport, fetchLegacyPosition, fetchLegacyPiv, parsePiv, fetchLegacyExpansion, parseExpansion, parsePosition, parseInvests, htmlToText, addCzk, cnbEurRate };
