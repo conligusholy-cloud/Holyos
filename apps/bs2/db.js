@@ -358,6 +358,14 @@ async function migrate() {
     -- Screenshot Přehledu podpory ze starého portálu (vizuální důkaz, nezávisle na partner_support textovém syncu)
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS support_snapshot BYTEA;
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS support_snapshot_at TIMESTAMPTZ;
+    -- Přenos všech dat ze starého portálu: poslední stav každé stránky (oblasti) u uživatele
+    CREATE TABLE IF NOT EXISTS legacy_snapshots (
+      supporter_id INT NOT NULL REFERENCES supporters(id) ON DELETE CASCADE,
+      section      TEXT NOT NULL,
+      data         JSONB NOT NULL,
+      fetched_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (supporter_id, section)
+    );
   `);
 }
 

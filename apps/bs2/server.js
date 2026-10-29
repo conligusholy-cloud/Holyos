@@ -2279,7 +2279,8 @@ app.get('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   let machines = []; try { machines = (await loadProducts()).items || []; } catch (e) { /* bez výběru */ }
   const credits = (await q('SELECT * FROM credits WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC', [s.id])).rows;
   let timeline = []; try { timeline = await loadTimeline(s); } catch (e) { console.warn('[bs2] timeline:', e.message); }
-  res.send(V.adminSupporterDetail({ admin: req.admin, s, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, firstLine, purchases, machines, credits, timeline }));
+  let legacy = []; try { legacy = (await q('SELECT section, data, fetched_at FROM legacy_snapshots WHERE supporter_id=$1', [s.id])).rows; } catch (e) { /* tabulka ještě není */ }
+  res.send(V.adminSupporterDetail({ admin: req.admin, s, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, firstLine, purchases, machines, credits, timeline, legacy, legacySections: COLLECT.SECTIONS }));
 }));
 // Kompletní časová osa aktivity uživatele: přihlášení, chování na webu, chat, e-maily, objednávky, převody, DC, podněty, zásahy admina
 const EV_TXT = { login: 'Přihlášení', login_fail: 'Neúspěšné přihlášení', logout: 'Odhlášení', consent: 'Souhlas s VOP a GDPR', reset_request: 'Žádost o obnovu hesla', suggestion: 'Podnět na vylepšení', pageview: 'Zobrazil stránku', click: 'Klikl', section: 'Četl sekci', interact: 'Použil prvek' };
@@ -2629,6 +2630,65 @@ app.post('/admin/supporters/:id(\\d+)/partner-standard', requireAdmin, wrap(asyn
   const r = await LEGACY.fetchLegacyStandard(s.email);
   if (r.ok) await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify(r.data)]);
   res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent(r.ok ? 'Standardní podpora (palety + opakovačky, všechny roky): ' + Number(r.data.std_total).toLocaleString('cs-CZ') + (r.data.std_currency === 'EUR' ? ' €' : ' Kč') : 'Standardní podporu se nepodařilo načíst: ' + r.error));
+}));
+// ── Přenos VŠECH dat ze starého portálu (všechny stránky menu + podpora po letech + AJAX hodnoty) ──
+const COLLECT = require('./legacy-collect');
+async function saveLegacyCollect(sid, r) {
+  for (const [key, data] of Object.entries(r.sections || {})) {
+    await q("INSERT INTO legacy_snapshots (supporter_id, section, data, fetched_at) VALUES ($1,$2,$3,now()) ON CONFLICT (supporter_id, section) DO UPDATE SET data=EXCLUDED.data, fetched_at=now()", [sid, key, JSON.stringify(data)]);
+  }
+  const cur = (await q('SELECT partner_support FROM supporters WHERE id=$1', [sid])).rows[0];
+  const m = { ...((cur && cur.partner_support) || {}), ...(r.partner || {}) };
+  if (r.partner && r.partner.std_currency) m.currency = r.partner.std_currency;
+  m.synced_at = new Date().toISOString(); m.source = 'partner.bestseries.cz';
+  try { await LEGACY.addCzk(m, m.eur_rate ? { rate: m.eur_rate, date: m.eur_rate_date } : null); } catch (e) { /* bez kurzu */ }
+  await q('UPDATE supporters SET partner_support=$2 WHERE id=$1', [sid, JSON.stringify(m)]);
+}
+let COLLECT_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, pages_ok: 0, pages_failed: 0, errors: [], started_at: null, finished_at: null };
+app.post('/admin/legacy/collect-all', requireAdmin, wrap(async (req, res) => {
+  if (COLLECT_JOB.running) return res.json(COLLECT_JOB);
+  const b = req.body || {}; const all = !!b.all; const force = !!b.force;
+  const where = [all ? 'email IS NOT NULL' : OBRAT_NONZERO];
+  if (!force) where.push("(partner_support IS NULL OR partner_support->>'legacy_collected_at' IS NULL OR (partner_support->>'legacy_collected_at')::timestamptz < now() - interval '24 hours')");
+  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${where.join(' AND ')} ORDER BY id`)).rows;
+  COLLECT_JOB = { running: true, scope: all ? 'všichni' : 'obrat ≠ 0', total: rows.length, done: 0, ok: 0, failed: 0, pages_ok: 0, pages_failed: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
+  await log(req.admin, 'legacy_collect_all', { total: rows.length, all, force });
+  res.json(COLLECT_JOB);
+  (async () => {
+    const queue = rows.slice();
+    const workers = Math.max(1, Math.min(10, parseInt(process.env.LEGACY_COLLECT_CONCURRENCY || '4', 10) || 4));
+    let stop = false;
+    await Promise.all(Array.from({ length: workers }, async () => {
+      while (queue.length && !stop) {
+        const s = queue.shift();
+        try {
+          const r = await COLLECT.collectAll(s.email, { concurrency: 3 });
+          if (r.ok) {
+            await saveLegacyCollect(s.id, r); COLLECT_JOB.ok++;
+            for (const v of Object.values(r.sections)) { if (v.ok) COLLECT_JOB.pages_ok++; else COLLECT_JOB.pages_failed++; }
+            if (r.errors.length && COLLECT_JOB.errors.length < 80) COLLECT_JOB.errors.push((s.nick || s.email) + ': ' + r.errors.slice(0, 3).join(', '));
+          } else { COLLECT_JOB.failed++; if (COLLECT_JOB.errors.length < 80) COLLECT_JOB.errors.push((s.nick || s.email) + ': ' + r.error); }
+        } catch (e) { COLLECT_JOB.failed++; if (COLLECT_JOB.errors.length < 80) COLLECT_JOB.errors.push((s.nick || s.email) + ': ' + e.message); }
+        COLLECT_JOB.done++; COLLECT_JOB.last = s.nick || s.email;
+        if (COLLECT_JOB.failed >= 10 && COLLECT_JOB.ok === 0) { stop = true; COLLECT_JOB.errors.push('Zastaveno — prvních 10 uživatelů selhalo.'); }
+      }
+    }));
+    COLLECT_JOB.running = false; COLLECT_JOB.finished_at = new Date().toISOString();
+    console.log('[bs2] přenos všech dat hotovo', JSON.stringify({ ...COLLECT_JOB, errors: COLLECT_JOB.errors.slice(0, 5) }));
+  })().catch((e) => { COLLECT_JOB.running = false; COLLECT_JOB.finished_at = new Date().toISOString(); COLLECT_JOB.errors.push(e.message); });
+}));
+app.get('/admin/legacy/collect-all', requireAdmin, wrap(async (req, res) => {
+  let overall = {};
+  try { overall = (await q(`SELECT count(*) FILTER (WHERE partner_support->>'legacy_collected_at' IS NOT NULL)::int AS collected, count(*) FILTER (WHERE ${OBRAT_NONZERO})::int AS eligible FROM supporters`)).rows[0]; } catch (e) { /* jen info */ }
+  res.json({ ...COLLECT_JOB, errors: (COLLECT_JOB.errors || []).slice(-30), overall });
+}));
+app.post('/admin/supporters/:id(\\d+)/legacy-collect', requireAdmin, wrap(async (req, res) => {
+  const s = await loadSupporter(req.params.id); if (!s) return res.redirect('/admin/supporters');
+  const r = await COLLECT.collectAll(s.email, { concurrency: 3 });
+  if (r.ok) await saveLegacyCollect(s.id, r);
+  await log(req.admin, 'legacy_collect', { id: s.id, ok: r.ok, error: r.error || null });
+  const okN = r.ok ? Object.values(r.sections).filter((v) => v.ok).length : 0;
+  res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent(r.ok ? 'Starý portál: načteno ' + okN + '/' + COLLECT.SECTIONS.length + ' oblastí' + (r.errors.length ? ' (problémy: ' + r.errors.slice(0, 3).join(', ') + ')' : '') : 'Nepodařilo se načíst: ' + r.error));
 }));
 // Pozice jednoho uživatele (tlačítko v detailu)
 app.post('/admin/supporters/:id(\\d+)/partner-position', requireAdmin, wrap(async (req, res) => {

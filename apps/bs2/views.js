@@ -1595,7 +1595,22 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
   <div id="sup-top">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
       <h1 style="margin:0">Uživatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
-      <button type="button" class="btn sec sm" id="ps-sync-all" title="U všech uživatelů s nenulovým obratem načte podporu ze starého portálu (palety, expanze, NeuraWash, opakovačky, celkem) do detailu">🔄 Načíst podporu (obrat ≠ 0)</button><a class="btn sec sm" href="/admin/partner-support" title="Načtená podpora všech uživatelů — ruční kontrola, průběh načítání, eurové účty">📋 Kontrola podpory</a><a class="btn sec sm" href="/admin/partner-support/export.xlsx" title="Všichni uživatelé s nenulovou podporou do Excelu">⬇ Excel</a><button type="button" class="btn sec sm" id="std-all" title="U všech s nenulovým obratem projde Přehled podpory za VŠECHNY roky a sečte palety + opakovačky (na pozadí, přeskočí načtené za 24 h)">📦 Standardní podpora všech</button><span id="std-all-st" class="small muted"></span>
+      <button type="button" class="btn sec sm" id="ps-sync-all" title="U všech uživatelů s nenulovým obratem načte podporu ze starého portálu (palety, expanze, NeuraWash, opakovačky, celkem) do detailu">🔄 Načíst podporu (obrat ≠ 0)</button><a class="btn sec sm" href="/admin/partner-support" title="Načtená podpora všech uživatelů — ruční kontrola, průběh načítání, eurové účty">📋 Kontrola podpory</a><a class="btn sec sm" href="/admin/partner-support/export.xlsx" title="Všichni uživatelé s nenulovou podporou do Excelu">⬇ Excel</a><span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px solid var(--primary,#3b82f6);border-radius:10px;padding:4px 8px"><button type="button" class="btn sm" id="lg-all" title="U všech uživatelů načte ze starého portálu VŠECHNA data (všechny stránky menu, podpora po letech, PIV, VIP, úroky, provize, obraty, síť, kiosky, opakovačky, objednávky, wallet, podíly, výběry, laundry, profil). Běží na pozadí.">🗄 Přenést všechna data</button><label class="small" style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" id="lg-all-zero" style="width:auto;margin:0"> i s nulovým obratem</label><label class="small" style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" id="lg-all-force" style="width:auto;margin:0"> znovu i načtené</label><span id="lg-all-st" class="small muted"></span></span>
+      <script>
+        (function(){ var b=document.getElementById('lg-all'), st=document.getElementById('lg-all-st'); if(!b) return;
+          function f(n){ return Math.round(Number(n)||0).toLocaleString('cs-CZ'); }
+          function dur(s){ s=Math.max(0,Math.round(s)); var h=Math.floor(s/3600), m=Math.floor(s%3600/60); return h? h+' h '+m+' min' : (m? m+' min' : s+' s'); }
+          function show(j){ var o=j.overall||{}, t='';
+            if(j.total){ var el=((j.finished_at?new Date(j.finished_at):new Date())-new Date(j.started_at))/1000, per=j.done?el/j.done:0, left=per*(j.total-j.done);
+              t=' 🗄 '+(j.running?'běží ':'hotovo ')+f(j.done)+'/'+f(j.total)+' ('+Math.round(100*j.done/j.total)+' %) · OK '+f(j.ok)+(j.failed?' · chyby '+f(j.failed):'')+(j.pages_failed?' · nenačtené stránky '+f(j.pages_failed):'')
+                +(j.running&&j.done?' · zbývá cca '+dur(left)+' (hotovo kolem '+new Date(Date.now()+left*1000).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})+')':'')+' · '+(j.running?'běží ':'trvalo ')+dur(el); }
+            st.textContent=t+(o.collected!=null?' | přeneseno celkem '+f(o.collected):''); st.title=(j.errors||[]).join(' | '); b.disabled=!!j.running; }
+          function poll(){ fetch('/admin/legacy/collect-all').then(function(r){return r.json()}).then(function(j){ show(j); if(j.running) setTimeout(poll,3000); }).catch(function(){ setTimeout(poll,10000); }); }
+          b.onclick=function(){ var all=document.getElementById('lg-all-zero').checked, force=document.getElementById('lg-all-force').checked;
+            if(!confirm('Přenést VŠECHNA data ze starého portálu u '+(all?'VŠECH uživatelů':'všech uživatelů s nenulovým obratem')+(force?' (i těch už načtených)':'')+'? Běží na pozadí, může to trvat několik hodin.')) return;
+            fetch('/admin/legacy/collect-all',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({all:all,force:force})}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
+          poll(); })();
+      </script><button type="button" class="btn sec sm" id="std-all" title="U všech s nenulovým obratem projde Přehled podpory za VŠECHNY roky a sečte palety + opakovačky (na pozadí, přeskočí načtené za 24 h)">📦 Standardní podpora všech</button><span id="std-all-st" class="small muted"></span>
       <script>
         (function(){ var b=document.getElementById('std-all'), st=document.getElementById('std-all-st'); if(!b) return;
           function f(n){ return Math.round(Number(n)||0).toLocaleString('cs-CZ'); }
@@ -2140,7 +2155,33 @@ function adminPartnerSupport({ admin, rows, job, overall = {}, q: qs = '', onlyD
       if (w) setTimeout(function () { try { w.location.href = 'https://partner.bestseries.cz' + b.dataset.to; } catch (x) {} }, 2500); });
   </script>`);
 }
-function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false, firstLine = [], purchases = [], machines = [], credits = [], timeline = [] }) {
+// Karta „Starý portál — všechna data": každá oblast (stránka) jako rozbalovací sekce s čísly a tabulkami
+function legacyCard(s, legacy, sections) {
+  const by = {}; (legacy || []).forEach((r) => { by[r.section] = r; });
+  const list = (sections && sections.length ? sections : Object.keys(by).map((k) => ({ key: k, label: k }))).filter((x) => by[x.key] || true);
+  const okN = list.filter((x) => by[x.key] && by[x.key].data && by[x.key].data.ok).length;
+  const last = (legacy || []).reduce((m, r) => (!m || new Date(r.fetched_at) > new Date(m) ? r.fetched_at : m), null);
+  const tbl = (t) => `<div class="small" style="margin:8px 0 2px;font-weight:700">${esc(t.title || 'Tabulka')} <span class="muted">(${t.rows.length} řádků)</span></div><div class="tbl-wrap" style="max-height:340px;overflow:auto"><table class="small" style="width:100%;border-collapse:collapse">${t.headers && t.headers.length ? '<tr>' + t.headers.map((h) => `<th style="text-align:left;padding:3px 8px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card)">${esc(h)}</th>`).join('') + '</tr>' : ''}${t.rows.slice(0, 300).map((r) => '<tr>' + r.map((c) => `<td style="padding:3px 8px;border-bottom:1px solid var(--border)">${esc(c)}</td>`).join('') + '</tr>').join('')}</table></div>${t.rows.length > 300 ? `<div class="small muted">… a dalších ${t.rows.length - 300} řádků (celé jsou uložené)</div>` : ''}`;
+  const kv = (o) => { const k = Object.keys(o || {}); return k.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:4px 16px">${k.map((x) => `<div class="small" style="display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed var(--border);padding:2px 0"><span class="muted">${esc(x)}</span><b style="text-align:right">${esc(o[x])}</b></div>`).join('')}</div>` : ''; };
+  const body = list.map((x) => {
+    const r = by[x.key]; const d = r && r.data;
+    if (!d) return `<details class="lg-sec"><summary><span>${esc(x.label)}</span><span class="small muted">nenačteno</span></summary></details>`;
+    if (!d.ok) return `<details class="lg-sec"><summary><span>${esc(x.label)}</span><span class="small" style="color:#f87171">chyba: ${esc(d.error || '?')}</span></summary></details>`;
+    const nf = Object.keys(d.fields || {}).length, nt = (d.tables || []).length;
+    return `<details class="lg-sec"><summary><span>${esc(x.label)}</span><span class="small muted">${nf} hodnot · ${nt} tabulek · ${new Date(r.fetched_at).toLocaleString('cs-CZ')}</span></summary><div style="padding:6px 2px 10px">
+      ${nf ? kv(d.fields) : '<div class="small muted">Žádné hodnoty „popisek: číslo“.</div>'}
+      ${d.inputs && Object.keys(d.inputs).length ? '<div class="small" style="margin:8px 0 2px;font-weight:700">Údaje profilu</div>' + kv(d.inputs) : ''}
+      ${(d.tables || []).map(tbl).join('')}
+      ${d.text ? `<details style="margin-top:8px"><summary class="small muted" style="cursor:pointer">Text stránky (důkaz)</summary><pre class="small" style="white-space:pre-wrap;max-height:300px;overflow:auto;background:var(--bg2,#0b1220);padding:8px;border-radius:8px">${esc(d.text)}</pre></details>` : ''}
+    </div></details>`;
+  }).join('');
+  return `<details class="card sec" data-sec="legacy" style="margin-top:12px"><summary><span>Starý portál — všechna data <span class="muted small">${okN}/${list.length} oblastí${last ? ' · ' + new Date(last).toLocaleString('cs-CZ') : ''}</span></span><span class="chev">▶</span></summary><div class="sec-body">
+    <style>.lg-sec{border:1px solid var(--border);border-radius:10px;padding:0 12px;margin-bottom:6px}.lg-sec>summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px;padding:9px 0;font-weight:600}.lg-sec>summary::-webkit-details-marker{display:none}</style>
+    <form method="post" action="/admin/supporters/${s.id}/legacy-collect" style="margin:0 0 10px" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Načítám… (cca 30–60 s)'"><button class="btn sm" type="submit" title="Přihlásí se jako uživatel do starého portálu a načte všechny stránky menu (podpora po letech, PIV, VIP, úroky, provize, obraty, síť, kiosky, opakovačky, objednávky, wallet, podíly, výběry, laundry, profil)">🗄 Načíst vše ze starého portálu</button></form>
+    ${body}
+  </div></details>`;
+}
+function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false, firstLine = [], purchases = [], machines = [], credits = [], timeline = [], legacy = [], legacySections = [] }) {
   const PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
   const HIDE_IN_LIST = /^(password|hash|secret|loggin_token|login_token|aed)$/i; // technické hodnoty ze starého systému — uložené jsou, jen se nezobrazují v detailu
   const keys = s && s.extra ? Object.keys(s.extra).filter(k => !HIDE_IN_LIST.test(k)).sort((a, b) => { const ia = PRIO.indexOf(a), ib = PRIO.indexOf(b); return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib) || a.localeCompare(b); }) : [];
@@ -2182,6 +2223,7 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
       </div>
     </div></details>
     ${partnerSupportCard(s)}
+    ${isNew ? '' : legacyCard(s, legacy, legacySections)}
     <details class="card sec" data-sec="import" open><summary><span>Další údaje z importu <span class="muted small">(${keys.length})</span></span><span class="chev">▶</span></summary><div class="sec-body">${extra}</div></details>`}
   </div>
   ${isNew ? '' : `<details class="card sec" data-sec="linie" open style="margin-top:12px"><summary><span>První linie <span class="muted small">(${firstLine.length}) — kdo má v poli tab3 nick „${esc(s.nick || '—')}"</span></span><span class="chev">▶</span></summary><div class="sec-body">

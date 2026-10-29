@@ -172,8 +172,12 @@ async function fetchLegacyExpansion(email) {
 async function fetchLegacyStandard(email) {
   if (!email) return { ok: false, error: 'Uživatel nemá e-mail' };
   const jar = {};
+  await get(BASE + '/php-action/fake-login.php?email=' + encodeURIComponent(email), jar, 1).catch(() => {});
+  return fetchLegacyStandardWithJar(jar);
+}
+/** Totéž nad již přihlášenou session (jar) — používá hromadný přenos všech dat. */
+async function fetchLegacyStandardWithJar(jar) {
   try {
-    await get(BASE + '/php-action/fake-login.php?email=' + encodeURIComponent(email), jar, 1).catch(() => {});
     const first = await get(BASE + '/cs/bo/my-invests/', jar);
     if (!/jste podpořili/i.test(htmlToText(first.html))) return { ok: false, error: 'Stránka podpory nemá očekávaný obsah (nepřihlášeno?)' };
     const sel = (first.html.match(/<select[^>]*name="y"[^>]*>([\s\S]*?)<\/select>/i) || [])[1] || '';
@@ -233,4 +237,4 @@ async function fetchLegacySupport(email) {
   }
 }
 
-module.exports = { fetchLegacyStandard, fetchLegacySupport, fetchLegacyPosition, fetchLegacyPiv, parsePiv, fetchLegacyExpansion, parseExpansion, parsePosition, parseInvests, htmlToText, addCzk, cnbEurRate };
+module.exports = { get, cookieHeader, fetchLegacyStandardWithJar, fetchLegacyStandard, fetchLegacySupport, fetchLegacyPosition, fetchLegacyPiv, parsePiv, fetchLegacyExpansion, parseExpansion, parsePosition, parseInvests, htmlToText, addCzk, cnbEurRate };
