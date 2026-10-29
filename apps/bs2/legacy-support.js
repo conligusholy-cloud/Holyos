@@ -106,6 +106,34 @@ async function fetchLegacyPosition(email) {
   } catch (e) { return { ok: false, error: e.message }; }
 }
 
+// PIV členství (/cs/bo/piv/): „Máte vloženo: <h4>1 809 450czk</h4>" + aktivní řádek tabulky (td.active):
+// průměrná návštěvnost, hranice podpory a zvýhodněný úrok.
+function parsePiv(html) {
+  const h = String(html || '');
+  const m = h.match(/Máte vloženo:\s*<\/strong>\s*<h\d[^>]*>\s*([\d\s\u00a0.,]+)\s*(czk|kč|eur|€)?/i) || h.match(/Máte vloženo:[\s\S]{0,120}?([\d][\d\s\u00a0.,]*)\s*(czk|kč|eur|€)/i);
+  const tds = [...h.matchAll(/<td[^>]*class="[^"]*\bactive\b[^"]*"[^>]*>([\s\S]*?)<\/td>/gi)].map((x) => x[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim());
+  const out = { piv_checked_at: new Date().toISOString() };
+  if (m) { out.piv_total = num(m[1]); out.piv_currency = m[2] && /eur|€/i.test(m[2]) ? 'EUR' : 'CZK'; }
+  else out.piv_total = null;
+  if (tds.length >= 3) { out.piv_tier_visits = tds[0]; out.piv_tier_amount = num(tds[1]); out.piv_rate = tds[2]; }
+  else { out.piv_tier_visits = null; out.piv_tier_amount = null; out.piv_rate = null; }
+  return out;
+}
+/** PIV jednoho uživatele (přihlášení + 1 stránka). */
+async function fetchLegacyPiv(email) {
+  if (!email) return { ok: false, error: 'Uživatel nemá e-mail' };
+  const jar = {};
+  try {
+    await get(BASE + '/php-action/fake-login.php?email=' + encodeURIComponent(email), jar, 1).catch(() => {});
+    const r = await get(BASE + '/cs/bo/piv/', jar);
+    if (!/PIV/i.test(r.html) || !/vloženo/i.test(r.html)) return { ok: false, error: 'Stránka PIV nemá očekávaný obsah (nepřihlášeno?)' };
+    const data = parsePiv(r.html);
+    if (data.piv_currency === 'EUR' && data.piv_total != null) { try { const c = await cnbEurRate(); data.piv_total_czk = Math.round(data.piv_total * c.rate * 100) / 100; data.piv_eur_rate = c.rate; data.piv_eur_rate_date = c.date; } catch (e) { /* bez kurzu */ } }
+    else data.piv_total_czk = data.piv_total;
+    return { ok: true, data };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+
 /** Stáhne podporu pro e-mail uživatele. Vrací { ok, data } nebo { ok:false, error }. */
 async function fetchLegacySupport(email) {
   if (!email) return { ok: false, error: 'Uživatel nemá e-mail' };
@@ -141,4 +169,4 @@ async function fetchLegacySupport(email) {
   }
 }
 
-module.exports = { fetchLegacySupport, fetchLegacyPosition, parsePosition, parseInvests, htmlToText, addCzk, cnbEurRate };
+module.exports = { fetchLegacySupport, fetchLegacyPosition, fetchLegacyPiv, parsePiv, parsePosition, parseInvests, htmlToText, addCzk, cnbEurRate };

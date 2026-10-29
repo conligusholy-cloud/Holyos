@@ -1517,6 +1517,7 @@ const BASE_COLS = [
   { key: 'email', label: 'E-mail', render: (r) => `<a href="mailto:${esc(r.email)}">${esc(r.email)}</a>` },
   { key: 'nick', label: 'Nick', render: (r) => r.nick ? esc(r.nick) : '<span class="muted">—</span>' },
   { key: 'legacy_position', label: 'Pozice', render: (r) => r.legacy_position ? posBadge(r.legacy_position) : '<span class="muted small">—</span>' },
+  { key: 'piv', label: 'PIV vloženo', render: (r) => r.piv_total != null && Number(r.piv_total) > 0 ? `<span style="white-space:nowrap" title="${r.piv_rate ? 'Zvýhodněný úrok ' + esc(r.piv_rate) : ''}"><b>${Number(r.piv_total).toLocaleString('cs-CZ', { maximumFractionDigits: 0 })}</b> ${r.piv_currency === 'EUR' ? '€' : 'Kč'}${r.piv_rate ? ' <span class="muted small">' + esc(r.piv_rate) + '</span>' : ''}</span>` : (r.piv_total != null ? '<span class="muted small">0</span>' : '<span class="muted small">—</span>') },
   { key: 'support_czk', label: 'Celkem podpořil (Kč)', render: (r) => r.support_czk != null && r.support_czk !== '' ? `<span style="white-space:nowrap" title="${r.support_currency === 'EUR' ? 'Eurový účet — přepočteno kurzem ČNB' : 'Celkem od počátku ze starého portálu'}"><b>${Number(r.support_czk).toLocaleString('cs-CZ', { maximumFractionDigits: 0 })}</b>${r.support_currency === 'EUR' ? ' <span class="muted small">€→Kč</span>' : ''}</span>` : '<span class="muted small">—</span>' },
   { key: 'status', label: 'Stav', render: (r) => `<span class="badge ${esc(r.status)}">${r.status === 'active' ? 'aktivní' : r.status === 'blocked' ? 'blokován' : 'čeká na aktivaci'}</span>` },
   { key: 'user_type', label: 'Typ uživatele', render: (r) => typeBadge(r.user_type) },
@@ -1526,7 +1527,7 @@ const BASE_COLS = [
   { key: 'source', label: 'Zdroj importu', render: (r) => `<span class="muted small">${esc(r.source || '—')}</span>` },
   { key: 'support_snapshot', label: 'Screenshot podpory', render: (r) => r.support_snapshot_at ? `<a href="/admin/supporters/${r.id}/support-snapshot.png" target="_blank" rel="noopener" class="small" data-lightbox="1">${fmtDT(r.support_snapshot_at)}</a>` : '<span class="muted small">—</span>' },
 ];
-const DEFAULT_COLS = ['email', 'nick', 'legacy_position', 'support_czk', 'user_type', 'status', 'last_login_at', 'x:obrat', 'support_snapshot'];
+const DEFAULT_COLS = ['email', 'nick', 'legacy_position', 'support_czk', 'piv', 'user_type', 'status', 'last_login_at', 'x:obrat', 'support_snapshot'];
 // Přihlášení za uživatele ve starém systému (partner.bestseries.cz).
 // Bez `to`: přímý odkaz na fake-login.php (přistane na výchozím dashboardu) — funguje spolehlivě,
 // protože je to normální top-level navigace a cookie session se nastaví jako first-party.
@@ -1561,7 +1562,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
   const picker = `
   <details class="colpick" id="colpick"><summary class="btn sec" title="Vybrat sloupce tabulky" style="padding:10px 12px">${ico('settings', 18)}</summary>
     <form method="post" action="/admin/supporters/columns" class="colpick-pop">
-      <input type="hidden" name="cols" value="_seen_czk"><input type="hidden" name="cols" value="_seen_pos">
+      <input type="hidden" name="cols" value="_seen_czk"><input type="hidden" name="cols" value="_seen_pos"><input type="hidden" name="cols" value="_seen_piv">
       <input type="hidden" name="back" value="${esc('/admin/supporters?q=' + encodeURIComponent(qstr) + '&status=' + encodeURIComponent(status))}">
       <div class="colpick-grid">
         <div><div class="colpick-h">Základní</div>
@@ -1592,7 +1593,17 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
   <div id="sup-top">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
       <h1 style="margin:0">Uživatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
-      <button type="button" class="btn sec sm" id="ps-sync-all" title="U všech uživatelů s nenulovým obratem načte podporu ze starého portálu (palety, expanze, NeuraWash, opakovačky, celkem) do detailu">🔄 Načíst podporu (obrat ≠ 0)</button><a class="btn sec sm" href="/admin/partner-support" title="Načtená podpora všech uživatelů — ruční kontrola, průběh načítání, eurové účty">📋 Kontrola podpory</a><a class="btn sec sm" href="/admin/partner-support/export.xlsx" title="Všichni uživatelé s nenulovou podporou do Excelu">⬇ Excel</a><button type="button" class="btn sec sm" id="pos-all" title="U všech s nenulovým obratem zjistí ze starého portálu pozici Partner / VIP / VIP 2 (na pozadí, přeskočí zjištěné za posledních 24 h)">🏷 Zjistit pozice všech</button><span id="pos-all-st" class="small muted"></span>
+      <button type="button" class="btn sec sm" id="ps-sync-all" title="U všech uživatelů s nenulovým obratem načte podporu ze starého portálu (palety, expanze, NeuraWash, opakovačky, celkem) do detailu">🔄 Načíst podporu (obrat ≠ 0)</button><a class="btn sec sm" href="/admin/partner-support" title="Načtená podpora všech uživatelů — ruční kontrola, průběh načítání, eurové účty">📋 Kontrola podpory</a><a class="btn sec sm" href="/admin/partner-support/export.xlsx" title="Všichni uživatelé s nenulovou podporou do Excelu">⬇ Excel</a><button type="button" class="btn sec sm" id="piv-all" title="U všech s nenulovým obratem načte ze stránky PIV starého portálu „Máte vloženo" a aktivní úroveň (na pozadí, přeskočí načtené za posledních 24 h)">💠 PIV všech</button><span id="piv-all-st" class="small muted"></span>
+      <script>
+        (function(){ var b=document.getElementById('piv-all'), st=document.getElementById('piv-all-st'); if(!b) return;
+          function f(n){ return Math.round(Number(n)||0).toLocaleString('cs-CZ'); }
+          function show(j){ var t=''; if(j.total){ var el=((j.finished_at?new Date(j.finished_at):new Date())-new Date(j.started_at))/1000, per=j.done?el/j.done:0; t=' 💠 '+(j.running?'běží ':'hotovo ')+j.done+'/'+j.total+(j.failed?' · chyby '+j.failed:'')+(j.running&&per?' · zbývá cca '+Math.max(1,Math.round(per*(j.total-j.done)/60))+' min':''); }
+            var o=j.overall||{}; st.textContent=t+(o.n?' | s PIV '+f(o.n)+' · celkem '+f(o.sum_czk)+' Kč':''); st.title=(j.errors||[]).join(' | '); b.disabled=!!j.running; }
+          function poll(){ fetch('/admin/partner-support/piv/sync-all').then(function(r){return r.json()}).then(function(j){ show(j); if(j.running) setTimeout(poll,3000); }).catch(function(){}); }
+          b.onclick=function(){ if(!confirm('Načíst PIV (Máte vloženo + úroveň) u všech uživatelů s nenulovým obratem? Běží na pozadí.')) return;
+            fetch('/admin/partner-support/piv/sync-all',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
+          poll(); })();
+      </script><button type="button" class="btn sec sm" id="pos-all" title="U všech s nenulovým obratem zjistí ze starého portálu pozici Partner / VIP / VIP 2 (na pozadí, přeskočí zjištěné za posledních 24 h)">🏷 Zjistit pozice všech</button><span id="pos-all-st" class="small muted"></span>
       <script>
         (function(){ var b=document.getElementById('pos-all'), st=document.getElementById('pos-all-st'); if(!b) return;
           function fmtC(c){ return Object.keys(c||{}).sort().map(function(k){ return k+' '+c[k]; }).join(' · '); }
@@ -2010,6 +2021,8 @@ function partnerSupportCard(s) {
   return `<details class="card sec" data-sec="partner" open><summary><span>Podpora (partnerský portál)${p.position ? ' ' + posBadge(p.position) : ''}${p.total_all != null ? ` <span class="muted small">celkem ${Number(p.total_all).toLocaleString('cs-CZ')} ${cur}${p.currency === 'EUR' && p.total_all_czk != null ? ' ≈ ' + Number(p.total_all_czk).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč' : ''}</span>` : ''}</span><span class="chev">▶</span></summary><div class="sec-body">
     <div class="row" style="gap:8px;align-items:center;margin-bottom:10px"><span class="small muted">Pozice ve starém portálu:</span> ${p.position ? posBadge(p.position) : '<span class="muted small">nezjištěno</span>'}${p.position_checked_at ? `<span class="small muted">· ${new Date(p.position_checked_at).toLocaleString('cs-CZ')}</span>` : ''}
       <form method="post" action="/admin/supporters/${s.id}/partner-position" style="margin:0"><button class="btn sec sm" type="submit" title="Přihlásí se jako uživatel do starého portálu a přečte popisek pod logem (Partner / VIP / VIP 2)">🏷 Zjistit pozici</button></form></div>
+    <div class="row" style="gap:8px;align-items:center;margin-bottom:10px"><span class="small muted">PIV vloženo (od 1.12.2024):</span> ${p.piv_total != null ? `<b>${Number(p.piv_total).toLocaleString('cs-CZ')} ${p.piv_currency === 'EUR' ? '€' : 'Kč'}</b>${p.piv_currency === 'EUR' && p.piv_total_czk != null ? ` <span class="small muted">≈ ${Number(p.piv_total_czk).toLocaleString('cs-CZ', { maximumFractionDigits: 0 })} Kč</span>` : ''}${p.piv_rate ? ` <span class="small muted">· úroveň ${esc(p.piv_tier_visits || '')} · ${esc(p.piv_rate)}</span>` : ''}` : '<span class="muted small">nezjištěno</span>'}${p.piv_checked_at ? `<span class="small muted">· ${new Date(p.piv_checked_at).toLocaleString('cs-CZ')}</span>` : ''}
+      <form method="post" action="/admin/supporters/${s.id}/partner-piv" style="margin:0"><button class="btn sec sm" type="submit" title="Přihlásí se jako uživatel do starého portálu a přečte ze stránky PIV „Máte vloženo" a aktivní úroveň">💠 Načíst PIV</button></form></div>
     <form method="post" action="/admin/supporters/${s.id}/partner-support">
       <div class="row" style="gap:10px;align-items:flex-end">
         ${inp('total_all', 'Celkem podpořil (od počátku)', p.total_all)}
