@@ -79,6 +79,33 @@ async function addCzk(data, keepRate) {
   return data;
 }
 
+// Pozice uživatele ve starém portálu = popisek pod logem v levém menu (.sa-sidebar-logo__caption):
+// „PARTNER", „VIP", „VIP 2" (+ obrázek loga, např. /images/vip.png). Normalizujeme na Partner / VIP / VIP 2.
+function parsePosition(html) {
+  const h = String(html || '');
+  const cap = (h.match(/sa-sidebar-logo__caption[^>]*>([\s\S]*?)<\/div>/i) || [])[1];
+  const logo = (h.match(/sa-sidebar-logo[^>]*>[\s\S]*?<img[^>]*src="([^"]+)"/i) || [])[1] || null;
+  const raw = cap ? cap.replace(/<[^>]+>/g, ' ').replace(/&sup2;|²/g, ' 2').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim() : '';
+  const logoFile = logo ? logo.split('/').pop() : null;
+  let position = null;
+  if (/^vip\s*-?\s*(2|ii)$/i.test(raw) || /vip[-_ ]?2/i.test(logoFile || '')) position = 'VIP 2';
+  else if (/^vip$/i.test(raw) || (!raw && /^vip\./i.test(logoFile || ''))) position = 'VIP';
+  else if (/^partner$/i.test(raw)) position = 'Partner';
+  else if (raw) position = raw;
+  return { position, position_raw: raw || null, position_logo: logoFile, position_checked_at: new Date().toISOString() };
+}
+/** Jen pozice (rychlé: přihlášení + 1 stránka). */
+async function fetchLegacyPosition(email) {
+  if (!email) return { ok: false, error: 'Uživatel nemá e-mail' };
+  const jar = {};
+  try {
+    await get(BASE + '/php-action/fake-login.php?email=' + encodeURIComponent(email), jar, 1).catch(() => {});
+    const inv = await get(BASE + '/cs/bo/my-invests/', jar);
+    if (!/sa-sidebar-logo/i.test(inv.html)) return { ok: false, error: 'Stránka nemá očekávaný obsah (nepřihlášeno?)' };
+    return { ok: true, data: parsePosition(inv.html) };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+
 /** Stáhne podporu pro e-mail uživatele. Vrací { ok, data } nebo { ok:false, error }. */
 async function fetchLegacySupport(email) {
   if (!email) return { ok: false, error: 'Uživatel nemá e-mail' };
@@ -90,6 +117,7 @@ async function fetchLegacySupport(email) {
     const text = htmlToText(inv.html);
     if (!/jste podpořili/i.test(text)) return { ok: false, error: /přihl|login/i.test(inv.url + text.slice(0, 500)) ? 'Starý portál nepřihlásil uživatele (fake-login nefunguje bez přihlášeného admina?)' : 'Stránka podpory nemá očekávaný obsah' };
     const data = parseInvests(text);
+    Object.assign(data, parsePosition(inv.html)); // pozice Partner / VIP / VIP 2
     // „Celkem jste podpořili" se na stránce dotahuje AJAXem (v HTML je jen zástupná hodnota = rok)
     try {
       const r = await fetch(BASE + '/php/load-support-total.php', { method: 'POST', headers: { cookie: cookieHeader(jar), 'content-type': 'application/x-www-form-urlencoded; charset=UTF-8', 'x-requested-with': 'XMLHttpRequest', 'user-agent': 'BS2-admin-sync' }, body: 'user_id=0' });
@@ -113,4 +141,4 @@ async function fetchLegacySupport(email) {
   }
 }
 
-module.exports = { fetchLegacySupport, parseInvests, htmlToText, addCzk, cnbEurRate };
+module.exports = { fetchLegacySupport, fetchLegacyPosition, parsePosition, parseInvests, htmlToText, addCzk, cnbEurRate };

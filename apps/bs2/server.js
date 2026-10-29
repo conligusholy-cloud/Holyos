@@ -1718,6 +1718,7 @@ function readCols(req) {
   try { const a = JSON.parse(req.cookies[COLS_COOKIE] || 'null'); cols = Array.isArray(a) && a.length ? a.filter(x => typeof x === 'string').slice(0, 60) : V.DEFAULT_COLS; } catch (e) { cols = V.DEFAULT_COLS; }
   // nový sloupec „Celkem podpořil (Kč)" ukázat i těm, kdo už mají uložený vlastní výběr (značka _seen_czk = už o něm rozhodli)
   if (!cols.includes('_seen_czk') && !cols.includes('support_czk')) cols = cols.concat('support_czk');
+  if (!cols.includes('_seen_pos') && !cols.includes('legacy_position')) cols = cols.concat('legacy_position');
   return cols;
 }
 let extraKeysCache = { at: 0, keys: [] };
@@ -1778,7 +1779,7 @@ app.get('/admin/supporters', requireAdmin, wrap(async (req, res) => {
   const keys = await extraKeys();
   const needExtra = cols.some(c => c.startsWith('x:'));
   const total = (await q('SELECT count(*)::int AS c ' + sql, params)).rows[0].c;
-  const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,user_type,last_login_at,activated_at,created_at,source,support_snapshot_at,partner_support->>'currency' AS support_currency, CASE WHEN partner_support->>'currency'='EUR' THEN partner_support->>'total_all_czk' ELSE partner_support->>'total_all' END AS support_czk${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
+  const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,user_type,last_login_at,activated_at,created_at,source,support_snapshot_at,partner_support->>'currency' AS support_currency, partner_support->>'position' AS legacy_position, CASE WHEN partner_support->>'currency'='EUR' THEN partner_support->>'total_all_czk' ELSE partner_support->>'total_all' END AS support_czk${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
   res.send(V.adminSupporters({ admin: req.admin, rows, qstr: qs, status, utype, total, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, cols, extraKeys: keys, supportStats: await supportStats() }));
 }));
 // Produkty = aktivní stroje z prodejního ceníku HolyOS (jen čtení; cache 5 min)
@@ -2465,6 +2466,50 @@ async function legacyOverall() {
   catch (e) { return { eligible: null, synced: null }; }
 }
 app.get('/admin/partner-support/sync-all', requireAdmin, wrap(async (req, res) => res.json({ ...LEGACY_JOB, overall: await legacyOverall() })));
+// Hromadné zjištění pozice (Partner / VIP / VIP 2) ze starého portálu u všech s nenulovým obratem.
+// Do partner_support se jen PŘIMÍCHAJÍ pole position* (jsonb ||), ostatní hodnoty podpory zůstanou.
+let POS_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, counts: {}, errors: [], started_at: null, finished_at: null };
+app.post('/admin/partner-support/positions/sync-all', requireAdmin, wrap(async (req, res) => {
+  if (POS_JOB.running) return res.json(POS_JOB);
+  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'position_checked_at' IS NULL OR (partner_support->>'position_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
+  POS_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, counts: {}, errors: [], started_at: new Date().toISOString(), finished_at: null };
+  await log(req.admin, 'partner_position_sync_all', { total: rows.length });
+  res.json(POS_JOB);
+  (async () => {
+    const queue = rows.slice();
+    const workers = Math.max(1, Math.min(10, parseInt(process.env.LEGACY_SYNC_CONCURRENCY || '6', 10) || 6));
+    let stop = false;
+    await Promise.all(Array.from({ length: workers }, async () => {
+      while (queue.length && !stop) {
+        const s = queue.shift();
+        try {
+          const r = await LEGACY.fetchLegacyPosition(s.email);
+          if (r.ok) {
+            await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify(r.data)]);
+            POS_JOB.ok++; const k = r.data.position || 'nezjištěno'; POS_JOB.counts[k] = (POS_JOB.counts[k] || 0) + 1;
+          } else { POS_JOB.failed++; if (POS_JOB.errors.length < 50) POS_JOB.errors.push((s.nick || s.email) + ': ' + r.error); }
+        } catch (e) { POS_JOB.failed++; if (POS_JOB.errors.length < 50) POS_JOB.errors.push((s.nick || s.email) + ': ' + e.message); }
+        POS_JOB.done++; POS_JOB.last = s.nick || s.email;
+        await new Promise((r) => setTimeout(r, 100));
+        if (POS_JOB.failed >= 10 && POS_JOB.ok === 0) { stop = true; POS_JOB.errors.push('Zastaveno — prvních 10 pokusů selhalo.'); }
+      }
+    }));
+    POS_JOB.running = false; POS_JOB.finished_at = new Date().toISOString();
+    console.log('[bs2] pozice hotovo', JSON.stringify({ ...POS_JOB, errors: POS_JOB.errors.slice(0, 5) }));
+  })().catch((e) => { POS_JOB.running = false; POS_JOB.finished_at = new Date().toISOString(); POS_JOB.errors.push(e.message); });
+}));
+app.get('/admin/partner-support/positions/sync-all', requireAdmin, wrap(async (req, res) => {
+  let overall = {};
+  try { overall = Object.fromEntries((await q(`SELECT coalesce(partner_support->>'position','nezjištěno') AS k, count(*)::int AS n FROM supporters WHERE ${OBRAT_NONZERO} GROUP BY 1`)).rows.map((r) => [r.k, r.n])); } catch (e) { /* jen info */ }
+  res.json({ ...POS_JOB, overall });
+}));
+// Pozice jednoho uživatele (tlačítko v detailu)
+app.post('/admin/supporters/:id(\\d+)/partner-position', requireAdmin, wrap(async (req, res) => {
+  const s = await loadSupporter(req.params.id); if (!s) return res.redirect('/admin/supporters');
+  const r = await LEGACY.fetchLegacyPosition(s.email);
+  if (r.ok) await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify(r.data)]);
+  res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent(r.ok ? 'Pozice ve starém portálu: ' + (r.data.position || 'nezjištěno') : 'Pozici se nepodařilo zjistit: ' + r.error));
+}));
 // Seznam uživatelů s načtenou podporou (od posledně načtených) — ruční kontrola
 // Export do Excelu: všichni uživatelé s nenulovou podporou ze starého portálu (seřazeno podle Celkem v Kč)
 app.get('/admin/partner-support/export.xlsx', requireAdmin, wrap(async (req, res) => {
@@ -2478,7 +2523,7 @@ app.get('/admin/partner-support/export.xlsx', requireAdmin, wrap(async (req, res
   rows.sort((a, b) => (czkOf(b.p) || 0) - (czkOf(a.p) || 0));
   const data = rows.map((r, i) => { const p = r.p || {}; const eur = p.currency === 'EUR';
     return { '#': i + 1, 'Příjmení': txt(r.last_name), 'Jméno': txt(r.first_name), 'Nick': txt(r.nick), 'E-mail': r.email, 'Stav': r.status, 'Typ': r.user_type || '',
-      'Celkem podpořil (v měně účtu: Kč nebo €)': n(p.total_all), 'Měna účtu': eur ? 'EUR' : 'CZK', 'Celkem podpořil (Kč)': czkOf(p),
+      'Pozice (starý portál)': p.position || '', 'Celkem podpořil (v měně účtu: Kč nebo €)': n(p.total_all), 'Měna účtu': eur ? 'EUR' : 'CZK', 'Celkem podpořil (Kč)': czkOf(p),
       'Kurz ČNB': eur ? n(p.eur_rate) : null, 'Datum kurzu': eur ? (p.eur_rate_date || '') : '',
       'Aktuální rok': n(p.year), 'V aktuálním roce (v měně účtu)': n(p.total_year), 'V aktuálním roce (Kč)': eur ? n(p.total_year_czk) : n(p.total_year),
       'Palety': n(p.palety), 'Expanze': n(p.expanze), 'NeuraWash': n(p.neurawash), 'Opakovačky': n(p.opakovacky),
