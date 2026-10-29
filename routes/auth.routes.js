@@ -441,6 +441,38 @@ router.post('/bs2/notify', express.json({ limit: '20kb' }), async (req, res, nex
 // PATCH  /api/auth/bs2/meetings/slots/:id        — upravit termín (čas, délka, kapacita, forma, poznámka, aktivní)
 // DELETE /api/auth/bs2/meetings/slots/:id        — smazat termín (jen bez aktivní rezervace; jinak vypnout)
 // PATCH  /api/auth/bs2/meetings/reservations/:id — stav rezervace {status: booked|done|canceled|no_show, note?}
+// POST /api/auth/bs2/meeting-contacts — dohrání kontaktů Compounderu pro nové zájemce, kteří si v minulosti domluvili schůzku
+// přes BS2 (těm se kontakt dřív nezakládal). Body: { contacts: [{ name, email, phone, mode }] }. Idempotentní (hledá podle e-mailu / telefonu),
+// páruje i dosud nespárované rezervace. Vrací { created, existing, linked }.
+router.post('/bs2/meeting-contacts', async (req, res, next) => {
+  try {
+    if (!verifyBs2Token(req, res)) return;
+    const list = Array.isArray(req.body && req.body.contacts) ? req.body.contacts.slice(0, 2000) : [];
+    let created = 0, existing = 0, linked = 0;
+    for (const c of list) {
+      const email = c.email ? String(c.email).trim().toLowerCase() : null;
+      const phone = c.phone ? String(c.phone).trim().slice(0, 40) : null;
+      if (!email && !phone) continue;
+      const or = [];
+      if (email) or.push({ email: { equals: email, mode: 'insensitive' } });
+      if (phone) or.push({ phone });
+      let lead = await prisma.compounderLead.findFirst({ where: { OR: or }, select: { id: true }, orderBy: { created_at: 'asc' } });
+      if (lead) existing++;
+      else {
+        lead = await prisma.compounderLead.create({
+          data: { name: String(c.name || email || phone || 'Kontakt ze schůzky').slice(0, 255), email, phone, source: 'meeting_bs2', role: 'compounder', status: c.mode === 'online' ? 'schuzka_online' : 'schuzka' },
+          select: { id: true },
+        });
+        created++;
+      }
+      if (email) {
+        const r = await prisma.meetingReservation.updateMany({ where: { compounder_lead_id: null, email: { equals: email, mode: 'insensitive' } }, data: { compounder_lead_id: lead.id } });
+        linked += r.count;
+      }
+    }
+    res.json({ ok: true, created, existing, linked });
+  } catch (err) { next(err); }
+});
 const BS2_RES_STATUSES = ['booked', 'done', 'canceled', 'no_show'];
 router.get('/bs2/meetings', async (req, res, next) => {
   try {

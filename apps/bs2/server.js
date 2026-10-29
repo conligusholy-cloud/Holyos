@@ -1831,6 +1831,13 @@ app.get('/admin/leads/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
 const MA = require('./meetings-admin');
 app.get('/admin/meetings', requireAdmin, (req, res) => res.send(MA.meetingsPage(V, { admin: req.admin, holyosUrl: HOLYOS_URL })));
 const meetApi = (fn) => wrap(async (req, res) => { try { res.json(await fn(req)); } catch (e) { res.status(e.status && e.status < 500 ? e.status : 502).json({ ok: false, error: e.message }); } });
+// Dohrání dřívějších schůzek do Compounderu: jen NOVÍ zájemci (účet založen rezervací, detail.ucet='nový'), ne stávající podporovatelé
+app.post('/admin/api/meetings/backfill-compounder', requireAdmin, meetApi(async (req) => {
+  const rows = (await q("SELECT DISTINCT ON (lower(email)) name, email, phone, detail->>'forma' AS mode FROM leads WHERE kind='meeting' AND detail->>'ucet' = 'nový' AND email IS NOT NULL ORDER BY lower(email), created_at")).rows;
+  const r = await holyosSvc('POST', '/api/auth/bs2/meeting-contacts', { contacts: rows });
+  log(req.admin, 'meeting_backfill_compounder', { candidates: rows.length, ...r });
+  return Object.assign({ ok: true, candidates: rows.length }, r);
+}));
 app.get('/admin/api/meetings', requireAdmin, meetApi(async (req) => ({ ok: true, slots: await holyosSvc('GET', '/api/auth/bs2/meetings?from=' + encodeURIComponent(String(req.query.from || '')) + '&to=' + encodeURIComponent(String(req.query.to || ''))) })));
 app.post('/admin/api/meetings/slots', requireAdmin, meetApi(async (req) => { const r = await holyosSvc('POST', '/api/auth/bs2/meetings/slots', { slots: (req.body || {}).slots || [] }); log(req.admin, 'meeting_slots_create', { count: (r.created || []).length }); return r; }));
 app.post('/admin/api/meetings/slots/:id(\\d+)/update', requireAdmin, meetApi(async (req) => holyosSvc('PATCH', '/api/auth/bs2/meetings/slots/' + req.params.id, req.body || {})));
