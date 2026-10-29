@@ -1520,6 +1520,7 @@ const BASE_COLS = [
   { key: 'piv', label: 'PIV vloženo', render: (r) => r.piv_total != null && Number(r.piv_total) > 0 ? `<span style="white-space:nowrap" title="${r.piv_rate ? 'Zvýhodněný úrok ' + esc(r.piv_rate) : ''}"><b>${Number(r.piv_total).toLocaleString('cs-CZ', { maximumFractionDigits: 0 })}</b> ${r.piv_currency === 'EUR' ? '€' : 'Kč'}${r.piv_rate ? ' <span class="small" style="color:#22c55e">' + esc(r.piv_rate) + '</span>' : ''}${r.piv_tier_visits ? ' <span class="muted small">od ø' + esc(r.piv_tier_visits) + '</span>' : ''}</span>` : (r.piv_total != null ? '<span class="muted small">0</span>' : '<span class="muted small">—</span>') },
   { key: 'expansion', label: 'Expanze', render: (r) => r.exp_invested != null ? `<span style="white-space:nowrap" title="${r.exp_limit_from ? 'Nárok od ø ' + esc(r.exp_limit_from) : ''}${r.exp_eligible === 'true' ? ' · tento měsíc má nárok' : r.exp_eligible === 'false' ? ' · tento měsíc nárok nemá' : ''}"><b>${Number(r.exp_invested).toLocaleString('cs-CZ', { maximumFractionDigits: 0 })}</b> ${r.exp_currency === 'EUR' ? '€' : 'Kč'}${r.exp_rate ? ' <span class="small" style="color:' + (r.exp_eligible === 'true' ? '#22c55e' : '#94a3b8') + '">' + esc(r.exp_rate) + '</span>' : ''}${r.exp_limit_from ? ' <span class="muted small">od ø' + esc(r.exp_limit_from) + '</span>' : ''}</span>` : '<span class="muted small">—</span>' },
   { key: 'standard', label: 'Standardní podpora', render: (r) => r.std_total != null ? `<span style="white-space:nowrap" title="Palety ${Number(r.std_palety_all || 0).toLocaleString('cs-CZ')} + opakovačky ${Number(r.std_opakovacky_all || 0).toLocaleString('cs-CZ')} (všechny roky)"><b>${Number(r.std_total).toLocaleString('cs-CZ', { maximumFractionDigits: 0 })}</b> ${r.std_currency === 'EUR' ? '€' : 'Kč'}</span>` : '<span class="muted small">—</span>' },
+  { key: 'exp_std', label: 'Expanze + standardní (Kč)', render: (r) => r.exp_std_czk != null ? `<b style="white-space:nowrap" title="Vloženo v expanzi + standardní podpora (palety + opakovačky, všechny roky), přepočteno na Kč">${Number(r.exp_std_czk).toLocaleString('cs-CZ', { maximumFractionDigits: 0 })}</b>` : '<span class="muted small">—</span>' },
   { key: 'support_czk', label: 'Celkem podpořil (Kč)', render: (r) => r.support_czk != null && r.support_czk !== '' ? `<span style="white-space:nowrap" title="${r.support_currency === 'EUR' ? 'Eurový účet — přepočteno kurzem ČNB' : 'Celkem od počátku ze starého portálu'}"><b>${Number(r.support_czk).toLocaleString('cs-CZ', { maximumFractionDigits: 0 })}</b>${r.support_currency === 'EUR' ? ' <span class="muted small">€→Kč</span>' : ''}</span>` : '<span class="muted small">—</span>' },
   { key: 'status', label: 'Stav', render: (r) => `<span class="badge ${esc(r.status)}">${r.status === 'active' ? 'aktivní' : r.status === 'blocked' ? 'blokován' : 'čeká na aktivaci'}</span>` },
   { key: 'user_type', label: 'Typ uživatele', render: (r) => typeBadge(r.user_type) },
@@ -1529,7 +1530,7 @@ const BASE_COLS = [
   { key: 'source', label: 'Zdroj importu', render: (r) => `<span class="muted small">${esc(r.source || '—')}</span>` },
   { key: 'support_snapshot', label: 'Screenshot podpory', render: (r) => r.support_snapshot_at ? `<a href="/admin/supporters/${r.id}/support-snapshot.png" target="_blank" rel="noopener" class="small" data-lightbox="1">${fmtDT(r.support_snapshot_at)}</a>` : '<span class="muted small">—</span>' },
 ];
-const DEFAULT_COLS = ['email', 'nick', 'legacy_position', 'support_czk', 'standard', 'piv', 'expansion', 'user_type', 'status', 'last_login_at', 'x:obrat', 'support_snapshot'];
+const DEFAULT_COLS = ['email', 'nick', 'legacy_position', 'support_czk', 'standard', 'expansion', 'exp_std', 'piv', 'user_type', 'status', 'last_login_at', 'x:obrat', 'support_snapshot'];
 // Přihlášení za uživatele ve starém systému (partner.bestseries.cz).
 // Bez `to`: přímý odkaz na fake-login.php (přistane na výchozím dashboardu) — funguje spolehlivě,
 // protože je to normální top-level navigace a cookie session se nastaví jako first-party.
@@ -1564,7 +1565,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
   const picker = `
   <details class="colpick" id="colpick"><summary class="btn sec" title="Vybrat sloupce tabulky" style="padding:10px 12px">${ico('settings', 18)}</summary>
     <form method="post" action="/admin/supporters/columns" class="colpick-pop">
-      <input type="hidden" name="cols" value="_seen_czk"><input type="hidden" name="cols" value="_seen_pos"><input type="hidden" name="cols" value="_seen_piv"><input type="hidden" name="cols" value="_seen_exp"><input type="hidden" name="cols" value="_seen_std">
+      <input type="hidden" name="cols" value="_seen_czk"><input type="hidden" name="cols" value="_seen_pos"><input type="hidden" name="cols" value="_seen_piv"><input type="hidden" name="cols" value="_seen_exp"><input type="hidden" name="cols" value="_seen_std"><input type="hidden" name="cols" value="_seen_es">
       <input type="hidden" name="back" value="${esc('/admin/supporters?q=' + encodeURIComponent(qstr) + '&status=' + encodeURIComponent(status))}">
       <div class="colpick-grid">
         <div><div class="colpick-h">Základní</div>
@@ -1678,6 +1679,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
       return `<div class="row" style="gap:10px;margin:10px 0 4px;flex-wrap:wrap">
         ${box('Podpořili v Kč', n0(st.czk_sum) + ' Kč', n0(st.czk_n) + ' korunových účtů')}
         ${box('Podpořili v eurech', n0(st.eur_sum) + ' €', n0(st.eur_n) + ' eurových účtů · ≈ ' + n0(st.eur_czk) + ' Kč')}
+        ${box('Expanze + standardní podpora', n0((st.exp_czk || 0) + (st.std_czk || 0)) + ' Kč', 'expanze ' + n0(st.exp_czk) + ' · standardní ' + n0(st.std_czk) + ' · ' + n0(st.es_n) + ' účtů')}
         ${box('Celkem v Kč', n0(st.total_czk) + ' Kč', 'eura přepočtena kurzem ČNB' + (st.rate_date ? ' (' + esc(st.rate_date) + ')' : '') + (st.partial ? ' · část eur bez kurzu' : ''), true)}
       </div>`; })() : ''}
     ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
