@@ -177,7 +177,7 @@ function verifyMeetingChangeToken(t) {
 }
 
 // Najde kontakt (CompounderLead) podle e-mailu / telefonu, jinak ho založí. Vrací { id, created }.
-async function _findOrCreateLeadForMeeting({ name, email, phone, mode, source }) {
+async function _findOrCreateLeadForMeeting({ name, email, phone, mode, source, createIfMissing = true }) {
   const em = email ? String(email).trim().toLowerCase() : null;
   const ph = phone ? String(phone).trim() : null;
   const or = [];
@@ -185,6 +185,7 @@ async function _findOrCreateLeadForMeeting({ name, email, phone, mode, source })
   if (ph) or.push({ phone: ph });
   let lead = or.length ? await prisma.compounderLead.findFirst({ where: { OR: or }, select: { id: true }, orderBy: { created_at: 'asc' } }) : null;
   if (lead) return { id: lead.id, created: false };
+  if (!createIfMissing) return null;
   lead = await prisma.compounderLead.create({
     data: { name: (name || em || ph || 'Kontakt ze schůzky').slice(0, 255), email: em, phone: ph, source: source || 'meeting_bs2', status: mode === 'online' ? 'schuzka_online' : 'schuzka', role: 'compounder' },
     select: { id: true },
@@ -197,7 +198,8 @@ setTimeout(async () => {
     const orphans = await prisma.meetingReservation.findMany({ where: { compounder_lead_id: null, status: 'booked' }, select: { id: true, name: true, email: true, phone: true, mode: true } });
     for (const r of orphans) {
       if (!r.email && !r.phone) continue;
-      const f = await _findOrCreateLeadForMeeting({ ...r, source: 'meeting_bs2' }).catch(() => null);
+      // Dohánění jen páruje na už existující kontakty — HolyOS neví, kdo je existující podporovatel BS2 (ti se zakládat nemají).
+      const f = await _findOrCreateLeadForMeeting({ ...r, source: 'meeting_bs2', createIfMissing: false }).catch(() => null);
       if (f) await prisma.meetingReservation.update({ where: { id: r.id }, data: { compounder_lead_id: f.id } }).catch(() => {});
     }
     if (orphans.length) console.log('[meeting] dohnáno kontaktů k rezervacím:', orphans.length);
@@ -238,7 +240,8 @@ router.post('/meeting-reservation', async (req, res) => {
     // Rezervace bez portálového tokenu (např. z Bestseries2 / pradlomaty.info): spáruj s existujícím kontaktem
     // podle e-mailu / telefonu, jinak založ nový — ať se člověk objeví v seznamu kontaktů Compounderu.
     if (!leadId) {
-      const found = await _findOrCreateLeadForMeeting({ name, email, phone, mode, source: String(b.source || 'meeting_bs2').slice(0, 50) }).catch((e) => { console.warn('[meeting] lead:', e.message); return null; });
+      // Existující podporovatel BS2 (existing_account) → nový kontakt nezakládat; do Compounderu jen noví zájemci z kalendáře.
+      const found = await _findOrCreateLeadForMeeting({ name, email, phone, mode, source: String(b.source || 'meeting_bs2').slice(0, 50), createIfMissing: b.existing_account !== true }).catch((e) => { console.warn('[meeting] lead:', e.message); return null; });
       if (found) {
         leadId = found.id;
         const canceled = await prisma.meetingReservation.updateMany({ where: { compounder_lead_id: leadId, status: 'booked' }, data: { status: 'canceled' } }).catch(() => ({ count: 0 }));

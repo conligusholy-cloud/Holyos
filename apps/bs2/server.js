@@ -751,11 +751,14 @@ app.post('/api/cesta/meeting-reservation', wrap(async (req, res) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) return res.status(400).json({ ok: false, error: 'Zadejte prosím platný e-mail.' });
   if (!/^[+0-9 ()./-]{6,25}$/.test(f.phone) || f.phone.replace(/\D/g, '').length < 9) return res.status(400).json({ ok: false, error: 'Zadejte prosím platný telefon.' });
   if (b.gdpr !== true && String(b.gdpr) !== '1') return res.status(400).json({ ok: false, error: 'Pro rezervaci je potřeba souhlas se zpracováním osobních údajů.' });
+  // Je to už existující podporovatel v BS2? Takový se do kontaktů Compounderu NEzakládá (jen noví zájemci z kalendáře).
+  let existingAccount = false;
+  try { existingAccount = !!(await q('SELECT 1 FROM supporters WHERE lower(email)=$1', [f.email])).rows.length; } catch (e) { /* bez příznaku = nový */ }
   // 1) rezervace v HolyOS
   let d;
   try {
     const r = await fetch(HOLYOS_URL + '/api/compounder/meeting-reservation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000),
-      body: JSON.stringify({ slot_id: b.slot_id, t: b.t || undefined, change: b.change || undefined, mode: b.mode, path: b.path, name: f.first_name + ' ' + f.last_name, email: f.email, phone: f.phone }) });
+      body: JSON.stringify({ slot_id: b.slot_id, t: b.t || undefined, change: b.change || undefined, mode: b.mode, path: b.path, name: f.first_name + ' ' + f.last_name, email: f.email, phone: f.phone, existing_account: existingAccount }) });
     d = await r.json().catch(() => ({}));
     if (!r.ok || !d.ok) return res.status(r.status >= 400 ? r.status : 400).json({ ok: false, error: d.error || 'Rezervaci se nepodařilo dokončit.' });
   } catch (e) { console.warn('[bs2] cesta rezervace:', e.message); return res.status(502).json({ ok: false, error: 'Rezervace je teď nedostupná. Zkuste to prosím za chvíli.' }); }
