@@ -44,11 +44,13 @@ function parseInvests(text) {
   if (m) { out.year = Number(m[1]); out.total_year = num(m[2]); out.currency = curOf(m[3]); }
   m = text.match(new RegExp('Celkem jste podpořili:\\s*\\n?\\s*([\\d\\s ,.]+)\\s*' + CUR, 'i'));
   if (m) { out.total_all = num(m[1]); out.currency = out.currency || curOf(m[2]); }
-  const map = { palety: 'palety', expanze: 'expanze', neurawash: 'neurawash', 'opakovačky': 'opakovacky', opakovacky: 'opakovacky' };
+  // Starší roky mají i jiné sekce: „balíčky“ (2019–2025), „likvidní“ … → uložit VŠECHNY sekce do out.sections
+  const map = { palety: 'palety', expanze: 'expanze', neurawash: 'neurawash', 'opakovačky': 'opakovacky', opakovacky: 'opakovacky', 'balíčky': 'balicky', balicky: 'balicky', 'likvidní': 'likvidni', likvidni: 'likvidni' };
+  out.sections = {};
   const re = new RegExp('Seznam vaší podpory\\s*-\\s*([^:\\n]+):([\\s\\S]*?)Celkem:\\s*([\\d\\s ,.]+)\\s*' + CUR, 'gi');
   let s;
-  while ((s = re.exec(text))) { const k = map[s[1].trim().toLowerCase()]; if (k) out[k] = num(s[3]); }
-  for (const k of ['palety', 'expanze', 'neurawash', 'opakovacky']) if (out[k] == null) out[k] = 0;
+  while ((s = re.exec(text))) { const name = s[1].trim(); const k = map[name.toLowerCase()]; const v = num(s[3]); out.sections[name] = (out.sections[name] || 0) + (v || 0); if (k) out[k] = (out[k] || 0) + (v || 0); }
+  for (const k of ['palety', 'expanze', 'neurawash', 'opakovacky', 'balicky', 'likvidni']) if (out[k] == null) out[k] = 0;
   if (!out.currency) out.currency = 'CZK';
   return out;
 }
@@ -190,12 +192,16 @@ async function fetchLegacyStandardWithJar(jar) {
       const d = parseInvests(htmlToText(pg.html));
       if (d.year && d.year !== y) continue; // stránka vrátila jiný rok — nepočítat dvakrát
       if (!cur && d.currency) cur = d.currency;
-      const rec = { palety: d.palety || 0, opakovacky: d.opakovacky || 0, expanze: d.expanze || 0, neurawash: d.neurawash || 0, total_year: d.total_year || 0 };
-      if (rec.palety || rec.opakovacky || rec.expanze || rec.neurawash || rec.total_year) by[y] = rec;
+      // „ostatni“ = sekce, které neznáme jménem — započtou se do standardní podpory (vše kromě expanze a NeuraWash)
+      const known = (d.palety || 0) + (d.opakovacky || 0) + (d.expanze || 0) + (d.neurawash || 0) + (d.balicky || 0) + (d.likvidni || 0);
+      const secSum = Object.values(d.sections || {}).reduce((a, v) => a + (v || 0), 0);
+      const rec = { palety: d.palety || 0, opakovacky: d.opakovacky || 0, balicky: d.balicky || 0, likvidni: d.likvidni || 0, ostatni: Math.round((secSum - known) * 100) / 100, expanze: d.expanze || 0, neurawash: d.neurawash || 0, total_year: d.total_year || 0, sections: d.sections || {} };
+      if (rec.palety || rec.opakovacky || rec.balicky || rec.likvidni || rec.ostatni || rec.expanze || rec.neurawash || rec.total_year) by[y] = rec;
     }
     const sum = (k) => Math.round(Object.values(by).reduce((a, r) => a + (Number(r[k]) || 0), 0) * 100) / 100;
-    const data = { std_by_year: by, std_years: years, std_palety_all: sum('palety'), std_opakovacky_all: sum('opakovacky'), std_expanze_all: sum('expanze'), std_neurawash_all: sum('neurawash'), std_currency: cur || 'CZK', std_checked_at: new Date().toISOString() };
-    data.std_total = Math.round((data.std_palety_all + data.std_opakovacky_all) * 100) / 100;
+    const data = { std_by_year: by, std_years: years, std_palety_all: sum('palety'), std_opakovacky_all: sum('opakovacky'), std_expanze_all: sum('expanze'), std_neurawash_all: sum('neurawash'), std_balicky_all: sum('balicky'), std_likvidni_all: sum('likvidni'), std_ostatni_all: sum('ostatni'), std_v: 2, std_currency: cur || 'CZK', std_checked_at: new Date().toISOString() };
+    // Standardní podpora = všechny sekce Přehledu podpory kromě expanze a NeuraWash (palety, opakovačky, balíčky, likvidní, ostatní)
+    data.std_total = Math.round((data.std_palety_all + data.std_opakovacky_all + data.std_balicky_all + data.std_likvidni_all + data.std_ostatni_all) * 100) / 100;
     if (data.std_currency === 'EUR') { try { const c = await cnbEurRate(); data.std_total_czk = Math.round(data.std_total * c.rate * 100) / 100; data.std_eur_rate = c.rate; data.std_eur_rate_date = c.date; } catch (e) { /* bez kurzu */ } }
     else data.std_total_czk = data.std_total;
     return { ok: true, data };
