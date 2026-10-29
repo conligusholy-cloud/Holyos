@@ -134,6 +134,40 @@ async function fetchLegacyPiv(email) {
   } catch (e) { return { ok: false, error: e.message }; }
 }
 
+// Úrok z EXPANZE (dashboard starého portálu): data dotahuje AJAX /php/load-days-visits-ratio.php →
+// { invested: "3 731 953 czk", pp: 2.5 (nárok od ø návštěvnosti), day: "4.27 ø", prew_day: "4.46 ø",
+//   minimum: "0 czk" (zbývá podpořit), narok: 1, text: "Tento měsíc máte nárok na 2% úrok z EXPANZE" }
+function parseExpansion(j) {
+  const txt = (v) => String(v == null ? '' : v).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const f = (v) => { const m = txt(v).match(/-?[\d\s\u00a0]+(?:[.,]\d+)?/); return m ? Number(m[0].replace(/[\s\u00a0]/g, '').replace(',', '.')) : null; };
+  const inv = txt(j.invested);
+  const rate = (txt(j.text).match(/([\d.,]+)\s*%/) || [])[1];
+  return {
+    exp_invested: f(j.invested), exp_currency: /eur|€/i.test(inv) ? 'EUR' : 'CZK',
+    exp_rate: rate ? rate.replace(',', '.') + ' %' : null, exp_eligible: String(j.narok) === '1' || j.narok === true,
+    exp_limit_from: f(j.pp), exp_visits_month: f(j.day), exp_visits_prev: f(j.prew_day),
+    exp_remaining: f(j.minimum), exp_text: txt(j.text) || null, exp_checked_at: new Date().toISOString(),
+  };
+}
+async function fetchLegacyExpansion(email) {
+  if (!email) return { ok: false, error: 'Uživatel nemá e-mail' };
+  const jar = {};
+  const call = async () => {
+    const r = await fetch(BASE + '/php/load-days-visits-ratio.php', { method: 'POST', headers: { cookie: cookieHeader(jar), 'content-type': 'application/x-www-form-urlencoded; charset=UTF-8', 'x-requested-with': 'XMLHttpRequest', 'user-agent': 'BS2-admin-sync' }, body: 'user_id=0' });
+    const t = await r.text(); try { return JSON.parse(t); } catch (e) { return null; }
+  };
+  try {
+    await get(BASE + '/php-action/fake-login.php?email=' + encodeURIComponent(email), jar, 1).catch(() => {});
+    let j = await call();
+    if (!j || j.invested == null) { await get(BASE + '/cs/bo/dashboard/', jar).catch(() => {}); j = await call(); } // některé účty chtějí nejdřív dashboard
+    if (!j || j.invested == null) return { ok: false, error: 'Data expanze se nenačetla (nepřihlášeno?)' };
+    const data = parseExpansion(j);
+    if (data.exp_currency === 'EUR' && data.exp_invested != null) { try { const c = await cnbEurRate(); data.exp_invested_czk = Math.round(data.exp_invested * c.rate * 100) / 100; data.exp_eur_rate = c.rate; data.exp_eur_rate_date = c.date; } catch (e) { /* bez kurzu */ } }
+    else data.exp_invested_czk = data.exp_invested;
+    return { ok: true, data };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+
 /** Stáhne podporu pro e-mail uživatele. Vrací { ok, data } nebo { ok:false, error }. */
 async function fetchLegacySupport(email) {
   if (!email) return { ok: false, error: 'Uživatel nemá e-mail' };
@@ -169,4 +203,4 @@ async function fetchLegacySupport(email) {
   }
 }
 
-module.exports = { fetchLegacySupport, fetchLegacyPosition, fetchLegacyPiv, parsePiv, parsePosition, parseInvests, htmlToText, addCzk, cnbEurRate };
+module.exports = { fetchLegacySupport, fetchLegacyPosition, fetchLegacyPiv, parsePiv, fetchLegacyExpansion, parseExpansion, parsePosition, parseInvests, htmlToText, addCzk, cnbEurRate };

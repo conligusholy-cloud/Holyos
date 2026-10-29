@@ -1720,6 +1720,7 @@ function readCols(req) {
   if (!cols.includes('_seen_czk') && !cols.includes('support_czk')) cols = cols.concat('support_czk');
   if (!cols.includes('_seen_pos') && !cols.includes('legacy_position')) cols = cols.concat('legacy_position');
   if (!cols.includes('_seen_piv') && !cols.includes('piv')) cols = cols.concat('piv');
+  if (!cols.includes('_seen_exp') && !cols.includes('expansion')) cols = cols.concat('expansion');
   return cols;
 }
 let extraKeysCache = { at: 0, keys: [] };
@@ -1780,7 +1781,7 @@ app.get('/admin/supporters', requireAdmin, wrap(async (req, res) => {
   const keys = await extraKeys();
   const needExtra = cols.some(c => c.startsWith('x:'));
   const total = (await q('SELECT count(*)::int AS c ' + sql, params)).rows[0].c;
-  const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,user_type,last_login_at,activated_at,created_at,source,support_snapshot_at,partner_support->>'currency' AS support_currency, partner_support->>'position' AS legacy_position, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_total_czk' AS piv_total_czk, partner_support->>'piv_rate' AS piv_rate, CASE WHEN partner_support->>'currency'='EUR' THEN partner_support->>'total_all_czk' ELSE partner_support->>'total_all' END AS support_czk${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
+  const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,user_type,last_login_at,activated_at,created_at,source,support_snapshot_at,partner_support->>'currency' AS support_currency, partner_support->>'position' AS legacy_position, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_total_czk' AS piv_total_czk, partner_support->>'piv_rate' AS piv_rate, partner_support->>'exp_invested' AS exp_invested, partner_support->>'exp_currency' AS exp_currency, partner_support->>'exp_rate' AS exp_rate, partner_support->>'exp_limit_from' AS exp_limit_from, partner_support->>'exp_eligible' AS exp_eligible, CASE WHEN partner_support->>'currency'='EUR' THEN partner_support->>'total_all_czk' ELSE partner_support->>'total_all' END AS support_czk${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
   res.send(V.adminSupporters({ admin: req.admin, rows, qstr: qs, status, utype, total, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, cols, extraKeys: keys, supportStats: await supportStats() }));
 }));
 // Produkty = aktivní stroje z prodejního ceníku HolyOS (jen čtení; cache 5 min)
@@ -2546,6 +2547,48 @@ app.post('/admin/supporters/:id(\\d+)/partner-piv', requireAdmin, wrap(async (re
   if (r.ok) await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify(r.data)]);
   res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent(r.ok ? 'PIV vloženo: ' + (r.data.piv_total != null ? Number(r.data.piv_total).toLocaleString('cs-CZ') + ' ' + (r.data.piv_currency === 'EUR' ? '€' : 'Kč') : 'nezjištěno') : 'PIV se nepodařilo načíst: ' + r.error));
 }));
+// Hromadné načtení úroku z EXPANZE (vloženo v expanzi, nárok od ø, % úroku, návštěvnost) u všech s nenulovým obratem
+let EXP_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, eligible: 0, errors: [], started_at: null, finished_at: null };
+app.post('/admin/partner-support/expansion/sync-all', requireAdmin, wrap(async (req, res) => {
+  if (EXP_JOB.running) return res.json(EXP_JOB);
+  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'exp_checked_at' IS NULL OR (partner_support->>'exp_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
+  EXP_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, eligible: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
+  await log(req.admin, 'partner_expansion_sync_all', { total: rows.length });
+  res.json(EXP_JOB);
+  (async () => {
+    const queue = rows.slice();
+    const workers = Math.max(1, Math.min(10, parseInt(process.env.LEGACY_SYNC_CONCURRENCY || '6', 10) || 6));
+    let stop = false;
+    await Promise.all(Array.from({ length: workers }, async () => {
+      while (queue.length && !stop) {
+        const s = queue.shift();
+        try {
+          const r = await LEGACY.fetchLegacyExpansion(s.email);
+          if (r.ok) {
+            await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify(r.data)]);
+            EXP_JOB.ok++; if (r.data.exp_eligible) EXP_JOB.eligible++;
+          } else { EXP_JOB.failed++; if (EXP_JOB.errors.length < 50) EXP_JOB.errors.push((s.nick || s.email) + ': ' + r.error); }
+        } catch (e) { EXP_JOB.failed++; if (EXP_JOB.errors.length < 50) EXP_JOB.errors.push((s.nick || s.email) + ': ' + e.message); }
+        EXP_JOB.done++; EXP_JOB.last = s.nick || s.email;
+        await new Promise((r) => setTimeout(r, 100));
+        if (EXP_JOB.failed >= 10 && EXP_JOB.ok === 0) { stop = true; EXP_JOB.errors.push('Zastaveno — prvních 10 pokusů selhalo.'); }
+      }
+    }));
+    EXP_JOB.running = false; EXP_JOB.finished_at = new Date().toISOString();
+    console.log('[bs2] expanze hotovo', JSON.stringify({ ...EXP_JOB, errors: EXP_JOB.errors.slice(0, 5) }));
+  })().catch((e) => { EXP_JOB.running = false; EXP_JOB.finished_at = new Date().toISOString(); EXP_JOB.errors.push(e.message); });
+}));
+app.get('/admin/partner-support/expansion/sync-all', requireAdmin, wrap(async (req, res) => {
+  let overall = {};
+  try { overall = (await q(`SELECT count(*) FILTER (WHERE (partner_support->>'exp_invested')::numeric > 0)::int AS n, count(*) FILTER (WHERE partner_support->>'exp_eligible' = 'true')::int AS eligible, coalesce(sum((partner_support->>'exp_invested_czk')::numeric) FILTER (WHERE (partner_support->>'exp_invested')::numeric > 0),0)::float AS sum_czk FROM supporters WHERE partner_support->>'exp_invested' ~ '^-?[0-9.]+$'`)).rows[0]; } catch (e) { /* jen info */ }
+  res.json({ ...EXP_JOB, overall });
+}));
+app.post('/admin/supporters/:id(\\d+)/partner-expansion', requireAdmin, wrap(async (req, res) => {
+  const s = await loadSupporter(req.params.id); if (!s) return res.redirect('/admin/supporters');
+  const r = await LEGACY.fetchLegacyExpansion(s.email);
+  if (r.ok) await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify(r.data)]);
+  res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent(r.ok ? 'Expanze: vloženo ' + (r.data.exp_invested != null ? Number(r.data.exp_invested).toLocaleString('cs-CZ') + (r.data.exp_currency === 'EUR' ? ' €' : ' Kč') : '?') + (r.data.exp_rate ? ', úrok ' + r.data.exp_rate : '') : 'Expanzi se nepodařilo načíst: ' + r.error));
+}));
 // Pozice jednoho uživatele (tlačítko v detailu)
 app.post('/admin/supporters/:id(\\d+)/partner-position', requireAdmin, wrap(async (req, res) => {
   const s = await loadSupporter(req.params.id); if (!s) return res.redirect('/admin/supporters');
@@ -2566,7 +2609,7 @@ app.get('/admin/partner-support/export.xlsx', requireAdmin, wrap(async (req, res
   rows.sort((a, b) => (czkOf(b.p) || 0) - (czkOf(a.p) || 0));
   const data = rows.map((r, i) => { const p = r.p || {}; const eur = p.currency === 'EUR';
     return { '#': i + 1, 'Příjmení': txt(r.last_name), 'Jméno': txt(r.first_name), 'Nick': txt(r.nick), 'E-mail': r.email, 'Stav': r.status, 'Typ': r.user_type || '',
-      'Pozice (starý portál)': p.position || '', 'PIV vloženo (v měně účtu)': n(p.piv_total), 'PIV vloženo (Kč)': n(p.piv_total_czk), 'PIV úrok': p.piv_rate || '', 'Celkem podpořil (v měně účtu: Kč nebo €)': n(p.total_all), 'Měna účtu': eur ? 'EUR' : 'CZK', 'Celkem podpořil (Kč)': czkOf(p),
+      'Pozice (starý portál)': p.position || '', 'PIV vloženo (v měně účtu)': n(p.piv_total), 'PIV vloženo (Kč)': n(p.piv_total_czk), 'PIV úrok': p.piv_rate || '', 'Vloženo v expanzi (v měně účtu)': n(p.exp_invested), 'Vloženo v expanzi (Kč)': n(p.exp_invested_czk), 'Expanze úrok': p.exp_rate || '', 'Expanze nárok od ø': n(p.exp_limit_from), 'Expanze nárok tento měsíc': p.exp_eligible == null ? '' : (p.exp_eligible ? 'ano' : 'ne'), 'Návštěvnost tento měsíc ø': n(p.exp_visits_month), 'Návštěvnost minulý měsíc ø': n(p.exp_visits_prev), 'Expanze zbývá podpořit': n(p.exp_remaining), 'Celkem podpořil (v měně účtu: Kč nebo €)': n(p.total_all), 'Měna účtu': eur ? 'EUR' : 'CZK', 'Celkem podpořil (Kč)': czkOf(p),
       'Kurz ČNB': eur ? n(p.eur_rate) : null, 'Datum kurzu': eur ? (p.eur_rate_date || '') : '',
       'Aktuální rok': n(p.year), 'V aktuálním roce (v měně účtu)': n(p.total_year), 'V aktuálním roce (Kč)': eur ? n(p.total_year_czk) : n(p.total_year),
       'Palety': n(p.palety), 'Expanze': n(p.expanze), 'NeuraWash': n(p.neurawash), 'Opakovačky': n(p.opakovacky),
