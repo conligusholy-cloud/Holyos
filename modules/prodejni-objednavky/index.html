@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
-  <script src="/js/column-filters.js?v=7"></script>
+  <script src="/js/column-filters.js?v=8"></script>
   <!-- Leaflet — mapa s půdorysem prádlomatu v detailu nabídky lokality -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -1064,7 +1064,7 @@
       var rv = (_cmpResvMapCache || {})[l.id]; if (!rv) return '';
       return (rv.status === 'active' ? 'Aktivní' : rv.status === 'hold' ? 'Blokace 1 h' : 'Rezervováno') + (rv.kiosk_code ? ' ' + rv.kiosk_code : '');
     }
-    var CMP_LEADS_CF = { noun: 'kontaktů', emptyText: 'Žádné kontakty.', limit: 10000, columns: [
+    var CMP_LEADS_CF = { noun: 'kontaktů', emptyText: 'Žádné kontakty.', progressive: true, chunk: 200, columns: [
       null,
       { key: 'created', label: 'Vytvořeno', type: 'date', ph: 'dd.mm.rrrr', get: function (l) { return l.created_at || null; } },
       { key: 'activity', label: 'Poslední aktivita', type: 'date', ph: 'dd.mm.rrrr', get: function (l) { return l.lastActivityAt || null; } },

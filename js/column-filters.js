@@ -492,6 +492,11 @@
     let rows = [];
     let visible = [];
     const limit = o.limit || 500;
+    // Postupné odkrývání bez limitu (progressive: true nebo limit: Infinity): vykreslí se první dávka řádků
+    // a další se doplňují při rolování (IntersectionObserver) nebo tlačítkem — filtry a řazení běží nad VŠEMI řádky.
+    const progressive = o.progressive === true || o.limit === Infinity;
+    const chunk = o.chunk || 150;
+    let io = null;
     const noun = o.noun || 'záznamů';
     const getTable = () => (typeof o.table === 'function' ? o.table() : (typeof o.table === 'string' ? document.querySelector(o.table) : o.table));
     const cf = create({ columns: fcols, onChange: () => render() });
@@ -563,14 +568,33 @@
       const parts = ensure(tbl);
       const tbody = tbl.tBodies[0] || tbl.appendChild(document.createElement('tbody'));
       const ncol = (tbl.tHead && tbl.tHead.rows[0] && tbl.tHead.rows[0].cells.length) || 1;
+      if (io) { io.disconnect(); io = null; }
+      const cap = progressive ? chunk : limit;
       tbody.innerHTML = list.length
-        ? list.slice(0, limit).map((r, i) => o.renderRow(r, i)).join('')
+        ? list.slice(0, cap).map((r, i) => o.renderRow(r, i)).join('') + (progressive && list.length > cap ? '<tr class="cf-more"><td colspan="' + ncol + '" style="text-align:center;color:var(--text2,#9ca3af);padding:14px">Načítám další… <button type="button" class="btn btn-secondary btn-sm cf-more-btn">Zobrazit další</button></td></tr>' : '')
         : '<tr><td colspan="' + ncol + '" style="text-align:center;color:var(--text2,#9ca3af);padding:18px">' + (rows.length ? 'Filtrům nic neodpovídá.' : escH(o.emptyText || 'Žádné záznamy.')) + '</td></tr>';
+      if (progressive && list.length > cap) {
+        let shown = cap;
+        const loadNext = () => {
+          const mr = tbody.querySelector('.cf-more'); if (!mr) return;
+          const next = list.slice(shown, shown + chunk);
+          mr.insertAdjacentHTML('beforebegin', next.map((r, i) => o.renderRow(r, shown + i)).join(''));
+          shown += next.length;
+          if (shown >= list.length) { mr.remove(); if (io) { io.disconnect(); io = null; } }
+          else if (io) { io.unobserve(mr); io.observe(mr); } // pořád vidět → načti další dávku
+        };
+        const mr0 = tbody.querySelector('.cf-more');
+        const btn = mr0 && mr0.querySelector('.cf-more-btn'); if (btn) btn.onclick = loadNext;
+        if (mr0 && 'IntersectionObserver' in window) {
+          io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) loadNext(); }, { rootMargin: '600px 0px' });
+          io.observe(mr0);
+        }
+      }
       markSort(tbl);
       if (parts && parts.info) {
         const n = cf.activeCount();
         parts.info.innerHTML = (n ? 'Zobrazeno <b>' + list.length + '</b> z ' + rows.length + ' ' + noun : 'Zobrazeno všech ' + rows.length + ' ' + noun) +
-          (list.length > limit ? ' · prvních ' + limit + ' — upřesni filtr' : '') +
+          (!progressive && list.length > limit ? ' · prvních ' + limit + ' — upřesni filtr' : '') +
           (n ? ' <button type="button" class="btn btn-secondary btn-sm cf-clear-all">✕ Zrušit filtry</button>' : '') +
           ' <span title="Ikona vlevo v poli filtru = typ podmínky (Obsahuje, Rovná se, Větší než, Rozsah, Měsíc, Dnes…). Kliknutím ji změníš, „Přidat podmínku…“ přidá další. Sloupce s málo hodnotami: klikni do pole a zaškrtej. Šipky ↑↓ v hlavičce = řazení (3 stavy). Rychlý zápis: >1000, 5..10, >1.10.2026, 10.2026, dnes, !slovo" style="cursor:help">ⓘ</span>';
         const cb = parts.info.querySelector('.cf-clear-all'); if (cb) cb.onclick = () => cf.clear();
