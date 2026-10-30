@@ -280,6 +280,8 @@ router.post('/meeting-reservation', async (req, res) => {
       if (mode) data.schuzka_mode = mode;
       if (path) data.financing_path = path;
       await prisma.compounderLead.update({ where: { id: leadId }, data }).catch(() => {});
+      // Záchytná stránka funelu může mít nastaveno: po domluvení schůzky přiřadit leada (např. Janu Holému) a odebrat ho obchodníkovi.
+      await _applyMeetingOwner(leadId).catch((e) => console.warn('[meeting] přiřazení po schůzce:', e.message));
       // Zaznamenat do cesty zákazníka (timeline u leada).
       try {
         await prisma.compounderEvent.create({ data: { sid: 'server:meeting:' + leadId, event: 'meeting_booked', path: '/schuzka',
@@ -6767,6 +6769,22 @@ async function _fbCreateLead(fields, meta, formCfg) {
   return { created: true, id: created.id };
 }
 
+// Po domluvení schůzky: lead z formuláře, jehož záchytná stránka ve funelu má nastaveno „přiřadit po schůzce", přejde na určenou osobu (výchozí Jan Holý)
+// a odebere se dosavadnímu obchodníkovi (i externímu zástupci). Nastavení je u formuláře (fb_lead_forms.meeting_owner), plní se při uložení funelu.
+async function _applyMeetingOwner(leadId) {
+  const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { id: true, meta_form_id: true, owner_person_id: true, external_rep_id: true, activity_log: true } });
+  if (!lead || !lead.meta_form_id) return;
+  const forms = await _fbLoadForms(); const fc = forms.find((x) => String(x.form_id) === String(lead.meta_form_id));
+  if (!fc || !fc.meeting_owner) return;
+  const pid = String(fc.meeting_owner) === 'jan' ? await _blacklistOwnerId() : (parseInt(fc.meeting_owner, 10) || null);
+  if (!pid) return;
+  if (lead.owner_person_id === pid && !lead.external_rep_id) return;
+  const nm = async (id) => { if (!id) return 'nikdo'; const p = await prisma.person.findUnique({ where: { id }, select: { first_name: true, last_name: true } }).catch(() => null); return p ? ((p.first_name || '') + ' ' + (p.last_name || '')).trim() : ('#' + id); };
+  const prev = lead.external_rep_id ? 'externí zástupce #' + lead.external_rep_id : await nm(lead.owner_person_id);
+  const line = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' · Schůzka domluvena → lead přiřazen: ' + await nm(pid) + ' (odebráno: ' + prev + ')';
+  await prisma.compounderLead.update({ where: { id: leadId }, data: { owner_person_id: pid, external_rep_id: null, activity_log: line + (lead.activity_log ? '\n' + lead.activity_log : '') } });
+  console.log('[meeting-owner] lead', leadId, '→ osoba', pid, '(' + prev + ')');
+}
 // Vlastník pro black-list kontakty = Jan Holý. Lze přepsat AppSetting compounder.blacklist_owner_person_id,
 // jinak se dohledá osoba jménem „Jan Holý".
 async function _blacklistOwnerId() {
@@ -7088,6 +7106,7 @@ router.post('/fb-lead-forms', requireAuth, async (req, res, next) => {
         campaign: f.campaign || null,
         role: f.role || 'compounder',
         lang: f.lang || null,
+        meeting_owner: f.meeting_owner ? String(f.meeting_owner).slice(0, 20) : null, // po domluvení schůzky přiřadit leada této osobě ('jan' nebo ID)
         active: f.active !== false,
       };
     }
