@@ -48,4 +48,23 @@ function vocativeFirstName(fullName) {
   return vocFirst(first, isFemale(first, last));
 }
 
-module.exports = { vocFirst, isFemale, vocativeFirstName };
+/** Příjmení v 5. pádě – jen u typicky českých tvarů, ostatní (cizí, přídavná jména -ý/-á/-í, -ová) zůstávají beze změny. */
+function vocLast(last) {
+  const n = String(last || '').trim(); const l = n.toLowerCase();
+  if (!n || /(ý|á|í|ová|ská|cká)$/.test(l)) return n;
+  if (/(ek|ěk|ec|ák|ík|ař|ář|ch|ka|a)$/.test(l)) return vocFirst(n, false);
+  return n;
+}
+/** Celé jméno („Tomáš Holý“) v 5. pádě pro oslovení: „Tomáši Holý“, „Jano Nováková“, „Petře Nováku“. Neosobní údaje (e-mail, číslo) nechá být. */
+function vocativeFullName(fullName) {
+  const t = String(fullName || '').trim();
+  if (!t || /[@\d]/.test(t)) return t;
+  const parts = t.split(/\s+/).filter(Boolean);
+  const first = parts[0], last = parts.length > 1 ? parts[parts.length - 1] : '';
+  const female = isFemale(first, last);
+  const out = [vocFirst(first, female)];
+  if (parts.length > 1) { out.push(...parts.slice(1, -1)); out.push(female ? last : vocLast(last)); }
+  return out.join(' ');
+}
+
+module.exports = { vocFirst, isFemale, vocativeFirstName, vocativeFullName };

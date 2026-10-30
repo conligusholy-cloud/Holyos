@@ -141,6 +141,25 @@ function slotModal(id){
   q('.e-del').onclick=function(){if(!confirm('Smazat termín?'))return;api('/admin/api/meetings/slots/'+id+'/delete',{}).then(function(j){if(j.deactivated)alert('Termín měl historii rezervací – byl jen vypnut.');done();}).catch(function(e){msg(e.message);});};
   [].forEach.call(ov.querySelectorAll('[data-rs]'),function(b){b.onclick=function(){var st=b.getAttribute('data-st');if(st==='canceled'&&!confirm('Zrušit rezervaci? Zájemce se o tom automaticky nedozví – dejte mu vědět.'))return;api('/admin/api/meetings/reservations/'+b.getAttribute('data-rs'),{status:st}).then(done).catch(function(e){msg(e.message);});};});
 }
+function autoModal(){
+  var ov=modal('<h3>⚙ Automatické uvolňování termínů</h3><div class="muted small">Systém sám vypisuje termíny na zadaný počet pracovních dnů dopředu (So, Ne a státní svátky se přeskakují). Každý den se vygeneruje jednou – termín, který pak smažete nebo upravíte, se znovu nevytvoří.</div><div class="mt-msg">Načítám…</div>');
+  var q=function(c){return ov.querySelector(c);};
+  api('/admin/api/meetings/auto').then(function(j){var c=j.config||{},st=j.status||{};
+    q('.mt-msg').outerHTML='<label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" class="a-en" style="width:auto"'+(c.enabled?' checked':'')+'> Zapnout automatické uvolňování</label>'
+     +'<div class="mt-row"><div><label>Pracovních dnů dopředu</label><input type="number" class="a-wd" min="1" max="30" value="'+c.workdays+'"></div><div><label>Kapacita termínu (kolik lidí vyřizuje)</label><input type="number" class="a-cap" min="1" max="50" value="'+c.capacity+'"></div></div>'
+     +'<div class="mt-row"><div><label>Od (první termín)</label><input type="time" class="a-from" value="'+esc(c.from)+'"></div><div><label>Do (konec posledního okna)</label><input type="time" class="a-to" value="'+esc(c.to)+'"></div></div>'
+     +'<div class="mt-row"><div><label>Krok oken (min)</label><input type="number" class="a-step" min="5" max="240" value="'+c.step+'"></div><div><label>Délka schůzky (min)</label><input type="number" class="a-dur" min="5" max="480" value="'+c.duration_min+'"></div></div>'
+     +'<label>Forma</label><select class="a-mode"><option value="">online i osobně (zájemce si vybere)</option><option value="online"'+(c.mode==='online'?' selected':'')+'>jen online</option><option value="osobne"'+(c.mode==='osobne'?' selected':'')+'>jen osobně</option></select>'
+     +'<label>Poznámka (interní)</label><input class="a-note" value="'+esc(c.note||'')+'" placeholder="např. Tomáš + Jan">'
+     +'<div class="muted small" style="margin-top:8px">Příklad: 10:00–18:00 po 30 min = termíny 10:00, 10:30 … 17:30. Kapacita 2 = ve stejný čas si mohou domluvit schůzku dva zájemci.'+(st.last_run?'<br>Naposledy běželo: '+new Date(st.last_run).toLocaleString('cs-CZ')+' (vytvořeno '+(st.last_created||0)+').':'')+'</div>'
+     +'<div class="mt-act"><button class="btn a-save">Uložit</button><button class="btn sec a-run">Uvolnit teď</button></div><div class="mt-msg"></div>';
+    var msg=function(t){q('.mt-msg').textContent=t;};
+    var body=function(){return {enabled:q('.a-en').checked,workdays:+q('.a-wd').value,capacity:+q('.a-cap').value,from:q('.a-from').value,to:q('.a-to').value,step:+q('.a-step').value,duration_min:+q('.a-dur').value,mode:q('.a-mode').value||null,note:q('.a-note').value};};
+    q('.a-save').onclick=function(){this.disabled=true;msg('Ukládám…');api('/admin/api/meetings/auto',body()).then(function(r){msg('Uloženo.'+(r.config&&r.config.enabled?' Nově vytvořeno termínů: '+(r.created||0)+'.':''));q('.a-save').disabled=false;load();}).catch(function(e){msg(e.message);q('.a-save').disabled=false;});};
+    q('.a-run').onclick=function(){this.disabled=true;msg('Uvolňuji…');api('/admin/api/meetings/auto',body()).then(function(){return api('/admin/api/meetings/auto/run',{});}).then(function(r){msg('Hotovo. Nově vytvořeno termínů: '+(r.created||0)+'.');q('.a-run').disabled=false;load();}).catch(function(e){msg(e.message);q('.a-run').disabled=false;});};
+  }).catch(function(e){q('.mt-msg').textContent=e.message;});
+}
+root.querySelector('.mt-auto').onclick=autoModal;
 root.addEventListener('click',function(e){var a=e.target.closest('[data-add]');if(a){e.stopPropagation();return addModal(a.getAttribute('data-add'));}var s=e.target.closest('[data-slot]');if(s)slotModal(+s.getAttribute('data-slot'));});
 root.querySelector('.mt-prev').onclick=function(){week--;render();if(week<-1)load();};
 root.querySelector('.mt-next').onclick=function(){week++;if(week>7)load();else render();};
@@ -154,7 +173,7 @@ function meetingsPage(V, { admin, holyosUrl, error }) {
   <div id="mt">
     <div class="mt-bar"><h2>📅 Kalendář schůzek</h2>
       <button class="btn sec sm mt-prev">←</button><span class="mt-range"></span><button class="btn sec sm mt-next">→</button>
-      <button class="btn sec sm mt-today">Dnes</button><span style="flex:1"></span><button class="btn sm mt-new">+ Přidat termíny</button></div>
+      <button class="btn sec sm mt-today">Dnes</button><span style="flex:1"></span><button class="btn sec sm mt-auto" title="Automatické vypisování termínů dopředu">⚙ Automatika</button><button class="btn sm mt-new">+ Přidat termíny</button></div>
     <p class="muted small" style="margin:-6px 0 14px">Termíny, které tady vypíšete, si zájemci rezervují na <a href="/cesta" target="_blank">bestseries2.cz/cesta</a> (a ve starém odkazu z SMS). Data jsou společná s HolyOS → Prodejní objednávky → Termíny.</p>
     ${error ? `<div class="card" style="border-color:var(--err);color:#ff8f8f">${error}</div>` : ''}
     <div class="mt-sum"></div>

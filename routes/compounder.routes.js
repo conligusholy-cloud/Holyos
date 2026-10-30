@@ -1138,7 +1138,8 @@ async function specialistEmail(name, link, overrides) {
   let c = {}; try { c = (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {}; } catch (e) { c = {}; }
   const o = overrides || {};
   const nm = String(name || '').trim();
-  const fill = (t) => String(t || '').replace(/\{link\}/g, link).replace(/\{name\}/g, nm);
+  const nmVoc = require('../services/vocative').vocativeFullName(nm); // {name} = 5. pád („Tomáši Holý"), {name_nom} = 1. pád
+  const fill = (t) => String(t || '').replace(/\{link\}/g, link).replace(/\{name_nom\}/g, nm).replace(/\{name\}/g, nmVoc);
   return {
     subject: fill(o.subject || c.specialistEmailSubject || SPECIALIST_EMAIL_DEFAULT.subject),
     body: fill(o.body || c.specialistEmailBody || SPECIALIST_EMAIL_DEFAULT.body),
@@ -1152,7 +1153,8 @@ function buildSchuzkaEmail(lead, cfg, overrides) {
   const c = Object.assign({}, AISPEC_AUTOSEND_DEFAULT, cfg || {}, overrides || {});
   const link = autosendLink(c, 'schuzka', lead.id, 'email');
   const name = (lead.name || '').trim();
-  const fill = (s) => String(s || '').replace(/\{link\}/g, link).replace(/\{name\}/g, name);
+  const nameVoc = require('../services/vocative').vocativeFullName(name); // {name} = 5. pád, {name_nom} = 1. pád
+  const fill = (s) => String(s || '').replace(/\{link\}/g, link).replace(/\{name_nom\}/g, name).replace(/\{name\}/g, nameVoc);
   const subject = fill(c.schuzkaEmailSubject || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailSubject);
   const body = fill(c.schuzkaEmailBody || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailBody);
   const linkLabel = String(c.schuzkaEmailLinkLabel || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailLinkLabel);
@@ -10913,6 +10915,7 @@ module.exports = router;
 // Interní API pro přímé stahování leadů z FB (services/ads/meta-leads-sync.js) – stejná cesta založení jako webhook.
 // Ruční / opravné spuštění automatu (SMS + e-mail) pro lead – čte čerstvý stav z DB
 module.exports.funnelMailFrom = funnelMailFrom;
+try { require('../services/meetings/autorelease').start(); } catch (e) { console.warn('[meeting-autorelease] start:', e.message); } // automatické uvolňování termínů schůzek
 module.exports.rerunAutosend = async function (leadId) { const lead = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) } }); if (!lead) return { ok: false, error: 'lead nenalezen' }; await autosendAiSpecialistSms(lead); const lead2 = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) } }); if (lead2 && !lead2.schuzka_email_sent_at && !lead2.ai_specialist_email_sent_at) await autosendAiSpecialistEmail(lead2); const l3 = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) }, select: { status: true, outreach_variant: true, schuzka_sms_sent_at: true, ai_specialist_sms_sent_at: true, schuzka_email_sent_at: true, ai_specialist_email_sent_at: true } }); return { ok: true, lead: l3 }; };
 // Dodatečné / opakované odeslání z funelu: kanál sms|email; force = ignoruje pojistku „už odesláno" (lead se tváří jako čerstvý)
 module.exports.forceSend = async function (leadId, channel, force) { const L = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) } }); if (!L) return { ok: false, error: 'lead nenalezen' }; const lead = Object.assign({}, L);

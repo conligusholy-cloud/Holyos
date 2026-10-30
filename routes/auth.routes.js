@@ -477,6 +477,16 @@ router.post('/bs2/meeting-contacts', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 const BS2_RES_STATUSES = ['booked', 'done', 'canceled', 'no_show'];
+// Automatické uvolňování termínů: GET nastavení + stav, PUT uložení (a okamžité spuštění), POST run (ruční spuštění)
+router.get('/bs2/meetings-auto', async (req, res, next) => {
+  try { if (!verifyBs2Token(req, res)) return; const A = require('../services/meetings/autorelease'); res.json({ ok: true, config: await A.getConfig(), status: await A.status() }); } catch (err) { next(err); }
+});
+router.put('/bs2/meetings-auto', express.json({ limit: '20kb' }), async (req, res, next) => {
+  try { if (!verifyBs2Token(req, res)) return; const A = require('../services/meetings/autorelease'); const config = await A.saveConfig(req.body || {}); const r = config.enabled ? await A.run() : { created: 0 }; res.json({ ok: true, config, created: r.created || 0, status: await A.status() }); } catch (err) { next(err); }
+});
+router.post('/bs2/meetings-auto/run', async (req, res, next) => {
+  try { if (!verifyBs2Token(req, res)) return; const A = require('../services/meetings/autorelease'); const r = await A.run({ force: true }); res.json({ ok: true, created: r.created || 0, days: r.days || [], status: await A.status() }); } catch (err) { next(err); }
+});
 router.get('/bs2/meetings', async (req, res, next) => {
   try {
     if (!verifyBs2Token(req, res)) return;

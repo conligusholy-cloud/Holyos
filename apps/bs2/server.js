@@ -1839,6 +1839,10 @@ app.post('/admin/api/meetings/backfill-compounder', requireAdmin, meetApi(async 
   log(req.admin, 'meeting_backfill_compounder', { candidates: rows.length, ...r });
   return Object.assign({ ok: true, candidates: rows.length }, r);
 }));
+// Automatické uvolňování termínů (nastavení žije v HolyOS)
+app.get('/admin/api/meetings/auto', requireAdmin, meetApi(async () => holyosSvc('GET', '/api/auth/bs2/meetings-auto')));
+app.post('/admin/api/meetings/auto', requireAdmin, meetApi(async (req) => { const r = await holyosSvc('PUT', '/api/auth/bs2/meetings-auto', req.body || {}); log(req.admin, 'meeting_autorelease_save', { enabled: !!(r.config && r.config.enabled), created: r.created || 0 }); return r; }));
+app.post('/admin/api/meetings/auto/run', requireAdmin, meetApi(async (req) => { const r = await holyosSvc('POST', '/api/auth/bs2/meetings-auto/run', {}); log(req.admin, 'meeting_autorelease_run', { created: r.created || 0 }); return r; }));
 app.get('/admin/api/meetings', requireAdmin, meetApi(async (req) => ({ ok: true, slots: await holyosSvc('GET', '/api/auth/bs2/meetings?from=' + encodeURIComponent(String(req.query.from || '')) + '&to=' + encodeURIComponent(String(req.query.to || ''))) })));
 app.post('/admin/api/meetings/slots', requireAdmin, meetApi(async (req) => { const r = await holyosSvc('POST', '/api/auth/bs2/meetings/slots', { slots: (req.body || {}).slots || [] }); log(req.admin, 'meeting_slots_create', { count: (r.created || []).length }); return r; }));
 app.post('/admin/api/meetings/slots/:id(\\d+)/update', requireAdmin, meetApi(async (req) => holyosSvc('PATCH', '/api/auth/bs2/meetings/slots/' + req.params.id, req.body || {})));
