@@ -6688,7 +6688,7 @@ async function _fbCreateLead(fields, meta, formCfg) {
       meta_raw: meta.raw || null,
       activity_log: initLog,
     },
-    select: { id: true, name: true, email: true, phone: true, owner_person_id: true, external_rep_id: true, status: true, source: true, ai_specialist_sms_sent_at: true },
+    select: { id: true, name: true, email: true, phone: true, owner_person_id: true, external_rep_id: true, status: true, source: true, ai_specialist_sms_sent_at: true, meta_lead_id: true },
   });
   console.log(`[fb-webhook] Založen Compounder lead #${created.id} (${srcLabel})`);
 
