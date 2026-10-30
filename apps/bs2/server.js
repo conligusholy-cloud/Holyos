@@ -721,7 +721,8 @@ app.get('/findlocation', (req, res) => { res.set('Cache-Control', 'no-cache'); r
 app.get('/location', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(LOC.locationPage(LAPP.LIMITS, LAPP.SEARCH_LIMITS).replace('</body>', PUBT)); });
 // Cesta k rozhodnutí (záchytná stránka funelu, značka Best Series 2.0): 3 kroky k prádlomatu → CTA na vytvoření účtu
 // Společný obal stránek cesty: logo, počítadlo „právě si prohlíží", měření návštěv
-const cestaShell = (html) => html.replace('@@LOGO@@', '<span style="margin-right:10px;display:inline-flex">' + require('./logo').logoSvg(34, 'cs') + '</span>').replace('@@FOOTER@@', '<div style="max-width:720px;margin:0 auto;padding:0 22px 40px">' + require('./footer').siteFooter() + '</div>').replace('</style>', require('./footer').FOOTER_CSS + V.PRESENCE_CSS + '</style>').replace('<!--PRESENCE-->', V.PRESENCE_HTML).replace('</body>', '<script>' + V.PRESENCE_JS + '</script>' + PUBT);
+const CI18N = require('./cesta-i18n');
+const cestaShell = (html) => CI18N.addSwitch(html.replace('@@LOGO@@', '<span style="margin-right:10px;display:inline-flex">' + require('./logo').logoSvg(34, 'cs') + '</span>').replace('@@FOOTER@@', '<div style="max-width:720px;margin:0 auto;padding:0 22px 40px">' + require('./footer').siteFooter() + '</div>').replace('</style>', require('./footer').FOOTER_CSS + V.PRESENCE_CSS + '</style>').replace('<!--PRESENCE-->', V.PRESENCE_HTML).replace('</body>', '<script>' + V.PRESENCE_JS + '</script>' + PUBT));
 app.get('/cesta', wrap(async (req, res) => {
   const fs = require('fs'), path = require('path');
   res.set('Cache-Control', 'no-cache').type('html').send(cestaShell(fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8')));
@@ -733,6 +734,14 @@ app.get('/cesta/vlastni-kapital', (req, res) => res.set('Cache-Control', 'no-cac
 app.get('/cesta/financovani', (req, res) => res.set('Cache-Control', 'no-cache').type('html').send(cestaShell(CP.financovaniPage())));
 app.get('/cesta/schuzka', (req, res) => res.set('Cache-Control', 'no-cache').type('html').send(cestaShell(CP.schuzkaPage())));
 app.get('/cesta/booking.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').send(CP.bookingJs()));
+// Polská verze (/cesta/pl…): stejné stránky přeložené slovníkem (cesta-i18n.js) + přepínač CZ | PL v hlavičce
+const plSend = (res, html) => res.set('Cache-Control', 'no-cache').type('html').send(CI18N.toPl(cestaShell(html)));
+app.get('/cesta/pl', wrap(async (req, res) => { plSend(res, require('fs').readFileSync(require('path').join(__dirname, 'cesta.html'), 'utf8')); }));
+app.get('/cesta/pl/info', (req, res) => plSend(res, CP.infoPage()));
+app.get('/cesta/pl/vlastni-kapital', (req, res) => plSend(res, CP.vlastniPage()));
+app.get('/cesta/pl/financovani', (req, res) => plSend(res, CP.financovaniPage()));
+app.get('/cesta/pl/schuzka', (req, res) => plSend(res, CP.schuzkaPage()));
+app.get('/cesta/booking.pl.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').send(CI18N.bookingToPl(CP.bookingJs())));
 // Rezervace schůzky: proxy na HolyOS /api/compounder/* (termíny a rezervace žijí v HolyOS, lead se páruje tokenem t z SMS)
 async function holyosMeeting(req, res, method, sub) {
   try {
@@ -779,6 +788,13 @@ app.post('/api/cesta/meeting-reservation', wrap(async (req, res) => {
   const dt = new Date(d.starts_at); const p = new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }).formatToParts(dt).reduce((a, x) => (a[x.type] = x.value, a), {});
   const when = p.weekday + ' ' + p.day + '. ' + MON[(+p.month) - 1] + ' v ' + p.hour + ':' + p.minute;
   const modeTxt = d.mode === 'online' ? 'online video hovor (odkaz vám pošleme před schůzkou)' : d.mode === 'osobne' ? 'osobní schůzka (místo upřesníme)' : 'schůzka';
+  // Polská verze (zájemce rezervoval na /cesta/pl): potvrzení i kalendářová pozvánka v polštině
+  const isPl = b.lang === 'pl';
+  const PL_MON = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia'];
+  const PL_DAY = { Sunday: 'niedziela', Monday: 'poniedziałek', Tuesday: 'wtorek', Wednesday: 'środa', Thursday: 'czwartek', Friday: 'piątek', Saturday: 'sobota' };
+  const pp = isPl ? new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Prague', weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(dt).reduce((a, x) => (a[x.type] = x.value, a), {}) : null;
+  const whenPl = isPl ? PL_DAY[pp.weekday] + ' ' + pp.day + ' ' + PL_MON[(+pp.month) - 1] + ' o ' + pp.hour + ':' + pp.minute : '';
+  const modeTxtPl = d.mode === 'online' ? 'rozmowa wideo online (link wyślemy przed spotkaniem)' : d.mode === 'osobne' ? 'spotkanie osobiste (miejsce ustalimy)' : 'spotkanie';
   const activated = !!(u && u.password_hash);
   // Kalendářová pozvánka (.ics) — přidá se do e-mailu jako příloha (Outlook / Google / Apple kalendář)
   const icsDt = (x) => x.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -786,12 +802,15 @@ app.post('/api/cesta/meeting-reservation', wrap(async (req, res) => {
   const durMin = Number(d.duration_min) || 17;
   const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Best Series//Schuzka//CS', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
     'UID:schuzka-' + (d.id || Date.now()) + '@bestseries2.cz', 'DTSTAMP:' + icsDt(new Date()), 'DTSTART:' + icsDt(dt), 'DTEND:' + icsDt(new Date(dt.getTime() + durMin * 60000)),
-    'SUMMARY:' + icsEsc('Schůzka Best Series – prádlomat'), 'DESCRIPTION:' + icsEsc('Potvrzená schůzka (' + modeTxt + '). Potrvá zhruba ' + durMin + ' minut. Best Series s.r.o.'),
-    'STATUS:CONFIRMED', 'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:Schůzka Best Series za hodinu', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+    'SUMMARY:' + icsEsc(isPl ? 'Spotkanie Best Series – automat pralniczy' : 'Schůzka Best Series – prádlomat'), 'DESCRIPTION:' + icsEsc(isPl ? 'Potwierdzone spotkanie (' + modeTxtPl + '). Potrwa około ' + durMin + ' minut. Best Series s.r.o.' : 'Potvrzená schůzka (' + modeTxt + '). Potrvá zhruba ' + durMin + ' minut. Best Series s.r.o.'),
+    'STATUS:CONFIRMED', 'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:' + (isPl ? 'Spotkanie Best Series za godzinę' : 'Schůzka Best Series za hodinu'), 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
   const body = 'Dobrý den, ' + require('./vocative').vocFirst(f.first_name, require('./vocative').isFemale(f.first_name, f.last_name)) + ',\n\nvaši schůzku potvrzujeme: ' + when + ' – ' + modeTxt + '. Potrvá zhruba ' + durMin + ' minut.\n\nTermín jsme si pro vás pevně vyhradili a rádi bychom, abyste ho využili – berte to prosím jako domluvu, na které nám záleží. Pozvánku do kalendáře najdete v příloze tohoto e-mailu (stačí na ni kliknout). Kdyby vám termín přesto nevyhovoval, můžete ho jedním kliknutím změnit pomocí tlačítka níže.\n\n'
     + (activated ? '' : 'Zároveň jsme vám založili účet v Best Series 2.0 – aktivujete ho na ' + PUBLIC_URL + '/activate (zadejte tento e-mail ' + f.email + ' a zvolte si nick a heslo).')
     + '\n\nBest Series s.r.o.';
-  sendBs2Mail({ to: f.email, subject: 'Potvrzení schůzky ' + when + (activated ? '' : ' · přístup do Best Series 2.0'), body, ics, link: PUBLIC_URL + '/cesta/schuzka' + (d.change_token ? '?zmena=' + encodeURIComponent(d.change_token) : ''), linkLabel: 'Změnit termín', sender: 'pradlomaty' }).catch((e) => console.warn('[bs2] cesta mail:', e.message));
+  const bodyPl = 'Dzień dobry,\n\npotwierdzamy Twoje spotkanie: ' + whenPl + ' – ' + modeTxtPl + '. Potrwa około ' + durMin + ' minut.\n\nTen termin zarezerwowaliśmy specjalnie dla Ciebie i bardzo zależy nam na tym, abyś z niego skorzystał – potraktuj to proszę jako umowę, na której nam zależy. Zaproszenie do kalendarza znajdziesz w załączniku tego e-maila (wystarczy w nie kliknąć). Gdyby termin jednak Ci nie odpowiadał, możesz go zmienić jednym kliknięciem za pomocą przycisku poniżej.\n\n'
+    + (activated ? '' : 'Jednocześnie założyliśmy Ci konto w Best Series 2.0 – aktywujesz je na ' + PUBLIC_URL + '/activate (podaj ten adres e-mail ' + f.email + ' i wybierz nick oraz hasło).')
+    + '\n\nBest Series s.r.o.';
+  sendBs2Mail({ to: f.email, subject: isPl ? 'Potwierdzenie spotkania ' + whenPl + (activated ? '' : ' · dostęp do Best Series 2.0') : 'Potvrzení schůzky ' + when + (activated ? '' : ' · přístup do Best Series 2.0'), body: isPl ? bodyPl : body, ics, link: PUBLIC_URL + (isPl ? '/cesta/pl/schuzka' : '/cesta/schuzka') + (d.change_token ? '?zmena=' + encodeURIComponent(d.change_token) : ''), linkLabel: isPl ? 'Zmień termin' : 'Změnit termín', sender: 'pradlomaty' }).catch((e) => console.warn('[bs2] cesta mail:', e.message));
   const leadId = await recordLead({ kind: 'meeting', refId: d.id, supporterId: u && u.id, name: f.first_name + ' ' + f.last_name, email: f.email, phone: f.phone, lead: b.lead,
     detail: { termin: when, forma: d.mode || null, cesta: d.financing_path || b.path || null, ucet: account === 'created' ? 'nový' : 'existující', sms_token: !!b.t },
     title: '📅 Schůzka ' + when + (account === 'created' ? ' + nový účet' : '') });
