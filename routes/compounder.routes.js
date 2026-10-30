@@ -6639,7 +6639,7 @@ async function _fbCreateLead(fields, meta, formCfg) {
   const dupOr = [];
   if (email) dupOr.push({ email: { equals: email, mode: 'insensitive' } });
   if (phone) { const pn = phone.replace(/\s+/g, ''); const vars = Array.from(new Set([phone, pn, pn.replace(/^\+420/, '+420 '), pn.replace(/^\+420/, '')])); dupOr.push({ phone: { in: vars } }); } // stejné číslo s mezerou / bez předvolby = stejný kontakt
-  const existing = dupOr.length ? await prisma.compounderLead.findFirst({ where: { OR: dupOr }, select: { id: true, activity_log: true } }) : null;
+  const existing = (dupOr.length && !meta.allowDuplicate) ? await prisma.compounderLead.findFirst({ where: { OR: dupOr }, select: { id: true, activity_log: true } }) : null;
 
   const role = (formCfg && formCfg.role === 'distributor') ? 'distributor' : 'compounder';
   const campaign = formCfg && formCfg.campaign ? String(formCfg.campaign).slice(0, 160) : null;
