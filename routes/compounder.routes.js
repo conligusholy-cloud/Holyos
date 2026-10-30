@@ -1068,6 +1068,36 @@ router.put('/ai-specialist-config', requireAuth, async (req, res, next) => {
 });
 
 // ─── Automatické odesílání SMS s odkazem na AI specialistu (pravidla) ─────────
+// ── Jazyková varianta (PL) automatického oslovení ──
+// cfg.pl = { text, schuzkaText, specialistEmail*, schuzkaEmail*, landing:{specialist,schuzka} } – použije se u leadů s lang 'pl' (formulář s jazykem PL / FB locale pl_PL).
+const PL_DEFAULTS = {
+  text: 'PRADLOMATY-info: {link}',
+  schuzkaText: 'PRADLOMATY: wybierz termin spotkania {link}',
+  specialistEmailSubject: 'Prádlomat — Twój specjalista odpowie na wszystko',
+  specialistEmailBody: 'Dzień dobry,\n\nprzygotowaliśmy dla Ciebie osobistego specjalistę od automatów pralniczych, który od razu odpowie na każde pytanie — jak to działa, ekonomia, zwrot z inwestycji, wybór lokalizacji.\n\nWystarczy kliknąć i zapytać: {link}',
+  specialistEmailLinkLabel: 'Zapytaj specjalistę',
+  schuzkaEmailSubject: 'Automat pralniczy: za 3 minuty wiesz, czy to dla Ciebie',
+  schuzkaEmailBody: 'Dzień dobry, {name}\n\nAutomat pralniczy zarabia, nawet gdy śpisz — a miejsc ubywa.\n\n📍 70+ sprawdzonych lokalizacji w Czechach\n💰 Realne przychody i możliwości finansowania\n🚀 Decyzja w ciągu 10 dni od spotkania\n\nOtwórz stronę i zobacz, co dla Ciebie mamy 👇',
+  schuzkaEmailLinkLabel: 'Pokaż mi, jak to działa',
+};
+const PL_KEYS = Object.keys(PL_DEFAULTS);
+// BS2 stránky cesty → jejich polská verze (https://www.bestseries2.cz/cesta/schuzka → …/cesta/pl/schuzka); ostatní adresy beze změny
+function plUrl(u) { try { const x = new URL(String(u || '')); if (/(^|\.)bestseries2\.cz$/.test(x.hostname) && /^\/cesta(\/|$)/.test(x.pathname) && !/^\/cesta\/pl(\/|$)/.test(x.pathname)) { x.pathname = x.pathname.replace(/^\/cesta/, '/cesta/pl'); return x.toString(); } } catch (e) { /* beze změny */ } return String(u || ''); }
+function plOverlay(cfg) {
+  const p = (cfg && cfg.pl) || {}; const o = Object.assign({}, cfg);
+  PL_KEYS.forEach((k) => { o[k] = (p[k] && String(p[k]).trim()) ? p[k] : PL_DEFAULTS[k]; });
+  const cl = (cfg && cfg.landing) || {}; const pl = p.landing || {};
+  o.landing = { specialist: pl.specialist || (cl.specialist ? plUrl(cl.specialist) : ''), schuzka: pl.schuzka || (cl.schuzka ? plUrl(cl.schuzka) : '') };
+  o._lang = 'pl';
+  return o;
+}
+// Konfigurace pro konkrétního leada (jazyk z lead.lang; když chybí v objektu, dohledá se v DB)
+async function cfgForLead(cfg, lead) {
+  if (!cfg || !lead) return cfg;
+  let lang = lead.lang;
+  if (lang === undefined && lead.id) { try { const l = await prisma.compounderLead.findUnique({ where: { id: lead.id }, select: { lang: true } }); lang = l && l.lang; } catch (e) { lang = null; } }
+  return String(lang || '').toLowerCase().startsWith('pl') ? plOverlay(cfg) : cfg;
+}
 // Odkaz do SMS / e-mailu: když je ve funelu nastavená vlastní záchytná stránka varianty (cfg.landing), jde na ni (s označením zdroje a leadu);
 // jinak výchozí osobní krátký odkaz (specialista = /s/, schůzka = /c/).
 function autosendLink(cfg, variant, leadId, channel) {
@@ -1086,7 +1116,8 @@ async function trackedLandingRedirect(code, variant, channel, req) {
   const isTest = String(code || '') === makeShortCode(0);
   const id = isTest ? 0 : verifyShortCode(code); if (id == null || (!isTest && !id)) return null;
   const vr = variant === 'schuzka' ? 'schuzka' : 'specialist';
-  const cfg = Object.assign({}, AISPEC_AUTOSEND_DEFAULT, (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {});
+  let cfg = Object.assign({}, AISPEC_AUTOSEND_DEFAULT, (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {});
+  if (!isTest) cfg = await cfgForLead(cfg, { id });
   const u = cfg.landing && cfg.landing[vr] ? String(cfg.landing[vr]) : '';
   let target;
   if (/^https:\/\//.test(u)) { try { const x = new URL(u); x.searchParams.set('utm_source', channel === 'email' ? 'email' : 'sms'); x.searchParams.set('utm_medium', 'autosend'); x.searchParams.set('l', code); target = x.toString(); } catch (e) { target = null; } }
@@ -1136,11 +1167,12 @@ const SPECIALIST_EMAIL_DEFAULT = {
 };
 // Podpis „Prádlomaty — Best Series" na konci e-mailu z funelu se neposílá (ani z dříve uložených textů)
 const stripMailSig = (t) => String(t || '').replace(/\s*\n\s*Pr[aá]dlomaty\s*[—–-]\s*Best Series\s*$/i, '');
-async function specialistEmail(name, link, overrides) {
+async function specialistEmail(name, link, overrides, lang) {
   let c = {}; try { c = (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {}; } catch (e) { c = {}; }
+  if (lang === 'pl') c = plOverlay(c);
   const o = overrides || {};
   const nm = String(name || '').trim();
-  const nmVoc = require('../services/vocative').vocativeFullName(nm); // {name} = 5. pád („Tomáši Holý"), {name_nom} = 1. pád
+  const nmVoc = lang === 'pl' ? nm : require('../services/vocative').vocativeFullName(nm); // {name} = 5. pád („Tomáši Holý"), {name_nom} = 1. pád
   const fill = (t) => String(t || '').replace(/\{link\}/g, link).replace(/\{name_nom\}/g, nm).replace(/\{name\}/g, nmVoc);
   return {
     subject: fill(o.subject || c.specialistEmailSubject || SPECIALIST_EMAIL_DEFAULT.subject),
@@ -1155,13 +1187,14 @@ function buildSchuzkaEmail(lead, cfg, overrides) {
   const c = Object.assign({}, AISPEC_AUTOSEND_DEFAULT, cfg || {}, overrides || {});
   const link = autosendLink(c, 'schuzka', lead.id, 'email');
   const name = (lead.name || '').trim();
-  const nameVoc = require('../services/vocative').vocativeFullName(name); // {name} = 5. pád, {name_nom} = 1. pád
+  const nameVoc = c._lang === 'pl' ? name : require('../services/vocative').vocativeFullName(name); // {name} = 5. pád, {name_nom} = 1. pád
   const fill = (s) => String(s || '').replace(/\{link\}/g, link).replace(/\{name_nom\}/g, name).replace(/\{name\}/g, nameVoc);
   const subject = fill(c.schuzkaEmailSubject || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailSubject);
   const body = stripMailSig(fill(c.schuzkaEmailBody || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailBody));
   const linkLabel = String(c.schuzkaEmailLinkLabel || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailLinkLabel);
   return { subject, body, link, linkLabel, preheader: null };
 }
+function cleanPl(x) { x = x && typeof x === 'object' ? x : {}; const o = {}; PL_KEYS.forEach((k) => { const v = String(x[k] || '').slice(0, k.indexOf('Body') >= 0 ? 4000 : 500); if (v.trim()) o[k] = v; }); o.landing = { specialist: cleanLandingUrl(x.landing && x.landing.specialist), schuzka: cleanLandingUrl(x.landing && x.landing.schuzka) }; return o; }
 function cleanLandingUrl(u) { const t = String(u || '').trim().slice(0, 300); return /^https:\/\/[^\s]+$/.test(t) ? t : ''; }
 router.get('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
   try {
@@ -1199,6 +1232,8 @@ router.put('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
       specialistEmailLinkLabel: has('specialistEmailLinkLabel') ? String(b.specialistEmailLinkLabel || '').slice(0, 80) : (prev.specialistEmailLinkLabel || ''),
       specialistEmailFrom: has('specialistEmailFrom') ? String(b.specialistEmailFrom || '').trim().slice(0, 200) : (prev.specialistEmailFrom || ''),
       schuzkaEmailFrom: has('schuzkaEmailFrom') ? String(b.schuzkaEmailFrom || '').trim().slice(0, 200) : (prev.schuzkaEmailFrom || ''),
+      // Polská varianta textů a stránek (leady s jazykem PL)
+      pl: has('pl') ? cleanPl(b.pl) : (prev.pl || {}),
     };
     const overlap = cfg.ownerPersonIds.filter((id) => cfg.schuzkaOwnerPersonIds.indexOf(id) !== -1);
     if (overlap.length) {
@@ -1577,8 +1612,9 @@ function logOutreach(leadId, variant, kind, reason) {
 async function autosendAiSpecialistSms(lead, opts) {
   try {
     opts = opts || {}; if (!lead || !lead.id) return;
-    const cfg = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null });
+    let cfg = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null });
     if (!cfg || !cfg.enabled) return logOutreach(lead.id, 'specialist', 'skip', 'automat je vypnutý');
+    cfg = await cfgForLead(cfg, lead); // jazyková varianta (PL texty a stránka)
     const skip = (why) => logOutreach(lead.id, 'specialist', 'skip', why);
     // Pojistka: jednomu leadovi se pošle jen JEDNA varianta (specialista NEBO schůzka).
     if (lead.outreach_variant || lead.schuzka_sms_sent_at || lead.schuzka_email_sent_at) return skip('už osloveno variantou „' + (lead.outreach_variant || 'schuzka') + '"');
@@ -1676,8 +1712,9 @@ async function autosendAiSpecialistEmail(lead, opts) {
   try {
     if (!lead || !lead.id) return;
     const manual = !!(opts && opts.manual);
-    const cfg = (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || (manual ? {} : null);
+    let cfg = (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || (manual ? {} : null);
     if (!cfg || (!cfg.emailEnabled && !manual)) return;
+    cfg = await cfgForLead(cfg, lead); // jazyková varianta (PL texty a stránka)
     const skip = (why) => { console.log('[aispec-autosend-email] lead', lead.id, '— přeskočeno:', why); prisma.compounderEvent.create({ data: { sid: 'lead:' + lead.id, event: 'outreach_skip', path: '/autosend', props: { lead_id: lead.id, reason: why, channel: 'email' } } }).catch(() => {}); };
     if (!lead.email) return skip('chybí e-mail');
     // Pojistka: lead obchodníka s variantou „schůzka" nedostane specialistu (ani e-mailem).
@@ -1692,7 +1729,7 @@ async function autosendAiSpecialistEmail(lead, opts) {
     const from = await funnelMailFrom('specialist');
     if (!from) return skip('není nastavený odesílatel');
     const link = autosendLink(cfg, 'specialist', lead.id, 'email');
-    const { subject, body, linkLabel: spLabel } = await specialistEmail(lead && lead.name, link);
+    const { subject, body, linkLabel: spLabel } = await specialistEmail(lead && lead.name, link, undefined, cfg._lang);
     await sendMail({ to: lead.email, subject, body, from, fromName: '💧 PRÁDLOMATY 💧', link, linkLabel: spLabel, brand: 'pradlomaty', trackingPixel: mailOpenPixel(lead.id, 'specialist'), leadId: lead.id, campaignId: 'funnel-specialist' });
     await prisma.compounderLead.update({
       where: { id: lead.id },
@@ -6637,6 +6674,7 @@ async function _fbCreateLead(fields, meta, formCfg) {
   let lang = String(fields.lang || fields.locale || '').trim().toLowerCase().slice(0, 5) || null;
   if (lang && lang.indexOf('_') !== -1) lang = lang.split('_')[0];
   if (!lang && formCfg && formCfg.lang) lang = String(formCfg.lang).toLowerCase().slice(0, 10);
+  if (formCfg && String(formCfg.lang || '').toLowerCase() === 'pl') lang = 'pl'; // formulář označený jako polský: jazyk leada je PL bez ohledu na locale z FB
 
   // Soft-dedup: existující lead se stejným e-mailem/telefonem nepřepisujeme,
   // jen mu doplníme řádek do aktivit (a nezakládáme duplikát).
@@ -10916,7 +10954,7 @@ router.get('/ares/:ico(\\d{6,8})', async (req, res, next) => {
 module.exports = router;
 // Interní API pro přímé stahování leadů z FB (services/ads/meta-leads-sync.js) – stejná cesta založení jako webhook.
 // Ruční / opravné spuštění automatu (SMS + e-mail) pro lead – čte čerstvý stav z DB
-module.exports.funnelMailFrom = funnelMailFrom;
+module.exports.funnelMailFrom = funnelMailFrom; module.exports.plUrl = plUrl;
 try { require('../services/meetings/autorelease').start(); } catch (e) { console.warn('[meeting-autorelease] start:', e.message); } // automatické uvolňování termínů schůzek
 module.exports.rerunAutosend = async function (leadId) { const lead = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) } }); if (!lead) return { ok: false, error: 'lead nenalezen' }; await autosendAiSpecialistSms(lead); const lead2 = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) } }); if (lead2 && !lead2.schuzka_email_sent_at && !lead2.ai_specialist_email_sent_at) await autosendAiSpecialistEmail(lead2); const l3 = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) }, select: { status: true, outreach_variant: true, schuzka_sms_sent_at: true, ai_specialist_sms_sent_at: true, schuzka_email_sent_at: true, ai_specialist_email_sent_at: true } }); return { ok: true, lead: l3 }; };
 // Dodatečné / opakované odeslání z funelu: kanál sms|email; force = ignoruje pojistku „už odesláno" (lead se tváří jako čerstvý)
@@ -10925,6 +10963,6 @@ module.exports.forceSend = async function (leadId, channel, force) { const L = a
   lead.outreach_variant = null; if (['odeslana_schuzka', 'odeslan_specialista'].includes(lead.status)) lead.status = 'new';
   if (channel === 'email') { lead.schuzka_sms_sent_at = null; lead.ai_specialist_sms_sent_at = null; if (force) { lead.schuzka_email_sent_at = null; lead.ai_specialist_email_sent_at = null; } } else { lead.schuzka_email_sent_at = null; lead.ai_specialist_email_sent_at = null; if (force) { lead.schuzka_sms_sent_at = null; lead.ai_specialist_sms_sent_at = null; } }
   const t0 = new Date(Date.now() - 2000);
-  if (channel === 'email') { const cfg = Object.assign({}, AISPEC_AUTOSEND_DEFAULT, (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {}); if (Array.isArray(cfg.schuzkaOwnerPersonIds) && cfg.schuzkaOwnerPersonIds.indexOf(lead.owner_person_id) !== -1) await sendSchuzkaEmailAuto(lead, cfg); else await autosendAiSpecialistEmail(lead, { manual: true }); } else await autosendAiSpecialistSms(lead, { only: 'sms' });
+  if (channel === 'email') { const cfg = Object.assign({}, AISPEC_AUTOSEND_DEFAULT, (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {}); if (Array.isArray(cfg.schuzkaOwnerPersonIds) && cfg.schuzkaOwnerPersonIds.indexOf(lead.owner_person_id) !== -1) await sendSchuzkaEmailAuto(lead, await cfgForLead(cfg, lead)); else await autosendAiSpecialistEmail(lead, { manual: true }); } else await autosendAiSpecialistSms(lead, { only: 'sms' });
   const l3 = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) }, select: { status: true, outreach_variant: true, schuzka_sms_sent_at: true, ai_specialist_sms_sent_at: true, schuzka_email_sent_at: true, ai_specialist_email_sent_at: true } }); const after = channel === 'email' ? (l3.schuzka_email_sent_at || l3.ai_specialist_email_sent_at) : (l3.schuzka_sms_sent_at || l3.ai_specialist_sms_sent_at); const sent = !!after && new Date(after).getTime() >= t0.getTime(); let reason = ''; if (!sent) { try { const ev = await prisma.compounderEvent.findFirst({ where: { event: { in: ['outreach_skip', 'outreach_error'] }, path: '/autosend', created_at: { gte: t0 } }, orderBy: { created_at: 'desc' } }); if (ev && Number(ev.props && ev.props.lead_id) === Number(leadId)) reason = (ev.event === 'outreach_error' ? '⚠ ' : '') + (ev.props.reason || ''); } catch (e) { /* bez důvodu */ } if (!reason) reason = after ? 'zpráva už byla odeslána ' + new Date(after).toLocaleString('cs-CZ') + ' (použij „znovu“)' : 'automat zprávu neodeslal (zkontroluj kontakt / nastavení uzlu)'; } return { ok: true, sent, reason, lead: l3 }; };
-module.exports._fbCreateLead = _fbCreateLead; module.exports._fbExtractFields = _fbExtractFields; module.exports._fbLoadForms = _fbLoadForms; module.exports._fbResolveOwner = _fbResolveOwner;
+module.exports._fbCreateLead = _fbCreateLead; module.exports._fbExtractFields = _fbExtractFields; module.exports._fbLoadForms = _fbLoadForms; module.exports._fbSaveForms = _fbSaveForms; module.exports._fbResolveOwner = _fbResolveOwner;
