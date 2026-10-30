@@ -1073,10 +1073,10 @@ router.put('/ai-specialist-config', requireAuth, async (req, res, next) => {
 const PL_DEFAULTS = {
   text: 'PRADLOMATY-info: {link}',
   schuzkaText: 'PRADLOMATY: wybierz termin spotkania {link}',
-  specialistEmailSubject: 'Prádlomat — Twój specjalista odpowie na wszystko',
-  specialistEmailBody: 'Dzień dobry,\n\nprzygotowaliśmy dla Ciebie osobistego specjalistę od automatów pralniczych, który od razu odpowie na każde pytanie — jak to działa, ekonomia, zwrot z inwestycji, wybór lokalizacji.\n\nWystarczy kliknąć i zapytać: {link}',
-  specialistEmailLinkLabel: 'Zapytaj specjalistę',
-  schuzkaEmailSubject: 'Automat pralniczy: za 3 minuty wiesz, czy to dla Ciebie',
+  specialistEmailSubject: '🧺 Automat pralniczy: za 3 minuty wiesz, czy to dla Ciebie',
+  specialistEmailBody: 'Dzień dobry, {name}\n\nAutomat pralniczy zarabia, nawet gdy śpisz — a miejsc ubywa.\n\n📍 70+ sprawdzonych lokalizacji w Czechach\n💰 Realne przychody i możliwości finansowania\n🚀 Decyzja w ciągu 10 dni od spotkania\n\nOtwórz stronę i zobacz, co dla Ciebie mamy 👇',
+  specialistEmailLinkLabel: 'Pokaż mi, jak to działa',
+  schuzkaEmailSubject: '🧺 Automat pralniczy: za 3 minuty wiesz, czy to dla Ciebie',
   schuzkaEmailBody: 'Dzień dobry, {name}\n\nAutomat pralniczy zarabia, nawet gdy śpisz — a miejsc ubywa.\n\n📍 70+ sprawdzonych lokalizacji w Czechach\n💰 Realne przychody i możliwości finansowania\n🚀 Decyzja w ciągu 10 dni od spotkania\n\nOtwórz stronę i zobacz, co dla Ciebie mamy 👇',
   schuzkaEmailLinkLabel: 'Pokaż mi, jak to działa',
 };
