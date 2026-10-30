@@ -184,11 +184,34 @@
 
     // Po výběru termínu: kontaktní údaje (jméno, příjmení, e-mail, telefon) → rezervace + účet v Best Series 2.0
     var elForm = null;
-    function book(slotId) {
+    // Osobní odkaz (SMS / e-mail s ?t=…): kontakt známe z HolyOS → neptáme se na jméno, e-mail ani telefon.
+    var contact = null;
+    function contactComplete(c) { return !!(c && c.first_name && c.last_name && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email || '') && String(c.phone || '').replace(/\D/g, '').length >= 9); }
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    function book(slotId, forceForm) {
       var slot = (slotsCache || []).filter(function (s) { return s.id === slotId; })[0];
       var dt = slot ? new Date(slot.starts_at) : null;
       if (!elForm) { elForm = document.createElement('div'); elForm.className = 'bk-form'; elCal.parentNode.insertBefore(elForm, elDone); }
+      // Známý kontakt s kompletními údaji → jen potvrzení termínu (bez formuláře).
+      if (!forceForm && contactComplete(contact)) {
+        elForm.innerHTML =
+          '<button type="button" class="bk-back bk-fback">← vybrat jiný termín</button>' +
+          '<h2 class="bk-h">Potvrďte <span class="g">termín</span></h2>' +
+          '<p class="bk-sub">' + (dt ? '<b>' + dayHead(dt) + ' v ' + hhmm(dt) + '</b> · ' : '') + MODE_LABEL[chosenMode] + (path ? ' · ' + PATH_LABEL[path] : '') + '</p>' +
+          '<p class="bk-sub" style="margin-top:6px">Potvrzení pošleme na <b>' + esc(contact.email) + '</b> · ' + esc(contact.first_name + ' ' + contact.last_name) + ' · ' + esc(contact.phone) + '</p>' +
+          '<button type="button" class="bk-mode bk-submit" style="width:100%;margin-top:14px">Potvrdit termín →</button>' +
+          '<p class="bk-note">Potvrzením souhlasíte se <a href="/gdpr" target="_blank">zpracováním osobních údajů</a> pro domluvení schůzky a založení účtu v Best Series 2.0 (přihlašovací odkaz vám pošleme e-mailem).</p>' +
+          '<p class="bk-note"><a href="#" class="bk-edit">Nejsou to vaše údaje? Upravit</a></p>';
+        show('form');
+        elForm.querySelector('.bk-fback').addEventListener('click', function () { show('cal'); setStatus(''); });
+        elForm.querySelector('.bk-edit').addEventListener('click', function (e) { e.preventDefault(); book(slotId, true); });
+        elForm.querySelector('.bk-submit').addEventListener('click', function () { var btn = this; btn.disabled = true; send(slotId, contact, function () { btn.disabled = false; }); });
+        root.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        return;
+      }
       var saved = {}; try { saved = JSON.parse(localStorage.getItem('bs2_bk_contact') || '{}') || {}; } catch (e) { saved = {}; }
+      // Údaje z osobního odkazu mají přednost před tím, co si prohlížeč pamatuje (chybějící pole se doplní ručně).
+      if (contact) ['first_name', 'last_name', 'email', 'phone'].forEach(function (k) { if (contact[k]) saved[k] = contact[k]; });
       var v = function (k) { return String(saved[k] || '').replace(/"/g, '&quot;'); };
       elForm.innerHTML =
         '<button type="button" class="bk-back bk-fback">← vybrat jiný termín</button>' +
@@ -246,6 +269,10 @@
     show('modes');
     if (changeTok) { var sub0 = root.querySelector('.bk-modes-wrap .bk-sub'); if (sub0) sub0.textContent = 'Změna termínu: vyberte si nový čas, původní rezervaci po potvrzení zrušíme.'; }
     if (token) {
+      fetch('/api/compounder/meeting-contact?t=' + encodeURIComponent(token), { credentials: 'include' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (d && d.contact) contact = d.contact; })
+        .catch(function () {});
       fetch('/api/compounder/meeting-reservation?t=' + encodeURIComponent(token), { credentials: 'include' })
         .then(function (r) { return r.json(); })
         .then(function (d) { if (d && d.reservation) renderDone(d.reservation, false); })

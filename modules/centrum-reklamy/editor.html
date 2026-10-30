@@ -271,8 +271,9 @@
         var lk = pgSel ? pgSel.url : (CHAN && CHAN.autosend && CHAN.autosend.links ? (spl2 ? CHAN.autosend.links.specialist : CHAN.autosend.links.schuzka) : '');
         var lv2 = val(nd);
         var lopts = '<optgroup label="Odkaz z oslovení (SMS / e-mail)"><option value="v:specialist"' + (!pgSel && spl2 ? ' selected' : '') + '>AI specialista (chat)</option><option value="v:schuzka"' + (!pgSel && !spl2 ? ' selected' : '') + '>Cesta k rozhodnutí (rezervace termínu)</option></optgroup><optgroup label="Záchytné stránky z Centra reklamy">' + PAGES.map(function (x) { return '<option value="p:' + esc(x.key) + '"' + (pgSel && pgSel.key === x.key ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</optgroup>';
-        el.innerHTML = '<div class="port in" title="vstup – sem vede odkaz z SMS / e-mailu"></div><div class="port out" title="výstup"></div><div class="hd"><i style="background:#f472b6"></i>🌐 Záchytná stránka<button class="x" title="Smazat">✕</button></div><div class="bd"><select class="avr">' + lopts + '</select><div class="row2"><span>Adresa</span><b>' + (lk && /^https?:\/\//.test(lk) ? '<a href="' + esc(lk) + '" target="_blank" rel="noopener" class="lnk" title="Otevřít záchytnou stránku v novém okně" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">' + esc(lk) + ' ↗</a>' : esc(lk || '—')) + '</b></div><div class="row2"><span>Co lead uvidí</span><b>' + esc(pgSel ? (pgSel.desc || pgSel.name) : (spl2 ? 'osobní AI specialista, odpovídá na vše' : 'kalendář – výběr termínu schůzky')) + '</b></div><div class="st"><span class="big">' + (lv2 != null ? n(lv2) : '—') + '</span><span style="font-size:11px;color:#8ea2c2">' + ((NS_READY && !landingDirect(nd)) ? 'leadů otevřelo odkaz z tohoto vlákna' : (landingDirect(nd) && landingAdClicks(nd) != null ? 'kliků na web z napojené reklamy' : (pgSel ? 'unikátních návštěvníků' : 'leadů otevřelo odkaz'))) + ' · ' + perLabel() + '</span></div></div>';
+        el.innerHTML = '<div class="port in" title="vstup – sem vede odkaz z SMS / e-mailu"></div><div class="port out" title="výstup"></div><div class="hd"><i style="background:#f472b6"></i>🌐 Záchytná stránka<button class="gear lgear" title="Nastavit, o jakou záchytnou stránku jde">' + GEAR + '</button><button class="x" title="Smazat">✕</button></div><div class="bd"><select class="avr">' + lopts + '</select><div class="row2"><span>Adresa</span><b>' + (lk && /^https?:\/\//.test(lk) ? '<a href="' + esc(lk) + '" target="_blank" rel="noopener" class="lnk" title="Otevřít záchytnou stránku v novém okně" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">' + esc(lk) + ' ↗</a>' : esc(lk || '—')) + '</b></div><div class="row2"><span>Co lead uvidí</span><b>' + esc(pgSel ? (pgSel.desc || pgSel.name) : (spl2 ? 'osobní AI specialista, odpovídá na vše' : 'kalendář – výběr termínu schůzky')) + '</b></div><div class="st"><span class="big">' + (lv2 != null ? n(lv2) : '—') + '</span><span style="font-size:11px;color:#8ea2c2">' + ((NS_READY && !landingDirect(nd)) ? 'leadů otevřelo odkaz z tohoto vlákna' : (landingDirect(nd) && landingAdClicks(nd) != null ? 'kliků na web z napojené reklamy' : (pgSel ? 'unikátních návštěvníků' : 'leadů otevřelo odkaz'))) + ' · ' + perLabel() + '</span></div></div>';
         el.querySelectorAll('select').forEach(function (q) { q.addEventListener('mousedown', function (e) { e.stopPropagation(); }); });
+        var lg = el.querySelector('.lgear'); if (lg) { lg.addEventListener('mousedown', function (e) { e.stopPropagation(); }); lg.addEventListener('click', function (e) { e.stopPropagation(); openLandingConfig(nd); }); }
         el.querySelector('.avr').addEventListener('change', function (e) { var v = e.target.value; if (v.indexOf('p:') === 0) nd.page = v.slice(2); else { nd.page = null; nd.variant = v.slice(2); } render(); });
         // Cíle stránky (z analýzy v Centru reklamy) – rozbalovací panel, každý cíl má vlastní výstup (port i+1) → oblak Výsledek
         var gpg = pgSel || page(spl2 ? 'specialist' : 'cesta'); // stránka pro cíle: vybraná z Centra reklamy, jinak výchozí stránka varianty
@@ -710,6 +711,25 @@
         dlg.querySelector('.db-save').addEventListener('click', async function () { readCond(); nd.goals_open = true; ov.classList.remove('open'); dlg.classList.remove('full'); await (nd.kind === 'list' ? loadListCounts() : loadDbCounts()); render(); document.getElementById('msg').textContent = 'Seznamy jsou nastavené – nezapomeň funel uložit (💾).'; });
       }
       draw();
+    }
+    // ── Uzel Záchytná stránka: ozubené kolečko = výběr, o jakou stránku jde (kam lead přistane po prokliku ze SMS / e-mailu) ──
+    function openLandingConfig(nd) {
+      ov.classList.add('open');
+      var cur = nd.page ? 'p:' + nd.page : 'v:' + (nd.variant || 'specialist');
+      var items = [
+        ['v:specialist', '🤖 AI specialista (chat)', 'Osobní AI prodejce prádlomatů – lead si s ním píše a odpovídá na vše. Odkaz je osobní (lead je znám).'],
+        ['v:schuzka', '📅 Cesta k rozhodnutí (rezervace termínu)', 'Kalendář s volnými termíny schůzky. Odkaz je osobní – jméno, e-mail a telefon se předvyplní, lead jen vybere čas a potvrdí.']
+      ].concat(PAGES.map(function (x) { return ['p:' + x.key, '🌐 ' + x.name, x.desc || x.url || '']; }));
+      dlg.innerHTML = '<h2>🌐 Záchytná stránka – nastavení</h2><div class="note" style="margin-bottom:10px">Vyber, na jakou stránku lead přistane po prokliku z SMS / e-mailu napojeného na tento uzel. Změna se projeví v odkazu {link} i ve statistikách.</div>'
+        + '<div style="max-height:52vh;overflow:auto">' + items.map(function (it) {
+          return '<label class="fstep" style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;margin-bottom:6px' + (it[0] === cur ? ';outline:1px solid #f472b6' : '') + '"><input type="radio" name="lpg" value="' + esc(it[0]) + '"' + (it[0] === cur ? ' checked' : '') + ' style="width:auto;margin-top:3px"><span><b>' + esc(it[1]) + '</b><br><span class="note" style="font-size:11.5px">' + esc(it[2]) + '</span></span></label>';
+        }).join('') + '</div>'
+        + '<div class="toolbar" style="margin-top:14px"><button class="btn on lc-save">Uložit</button><button class="btn lc-x">Zavřít</button></div>';
+      dlg.querySelector('.lc-x').addEventListener('click', function () { ov.classList.remove('open'); });
+      dlg.querySelector('.lc-save').addEventListener('click', function () {
+        var r = dlg.querySelector('input[name=lpg]:checked'); if (r) { var v = r.value; if (v.indexOf('p:') === 0) nd.page = v.slice(2); else { nd.page = null; nd.variant = v.slice(2); } }
+        ov.classList.remove('open'); render(); var m = document.getElementById('msg'); if (m) m.textContent = 'Záchytná stránka nastavena – nezapomeň funel uložit (💾).';
+      });
     }
     async function openDbLeads(nd, port) {
       ov.classList.add('open'); dlg.classList.add('full'); dlg.innerHTML = '<div class="note">Načítám leady…</div>';

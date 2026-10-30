@@ -168,6 +168,20 @@ router.get('/meeting-reservation', async (req, res) => {
   } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
 });
 
+// GET /api/compounder/meeting-contact?t=<portalToken> — kontakt leada pro předvyplnění rezervace (osobní odkaz ze SMS / e-mailu):
+// člověk nemusí zadávat jméno, e-mail ani telefon. Token je podepsaný a patří jen tomuto leadovi.
+router.get('/meeting-contact', async (req, res) => {
+  try {
+    const leadId = req.query.t ? verifyPortalToken(String(req.query.t)) : null;
+    if (!leadId) return res.json({ ok: true, contact: null });
+    const l = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { name: true, first_name: true, last_name: true, email: true, phone: true } }).catch(() => null);
+    if (!l) return res.json({ ok: true, contact: null });
+    let first = (l.first_name || '').trim(), last = (l.last_name || '').trim();
+    if (!first && !last && l.name) { const p = String(l.name).trim().split(/\s+/); first = p.shift() || ''; last = p.join(' '); }
+    res.json({ ok: true, contact: { first_name: first, last_name: last, email: l.email || '', phone: l.phone || '' } });
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
 // Podepsaný odkaz „změna termínu" (z potvrzovacího e-mailu): <id rezervace>.<HMAC>. Nová rezervace s tímto tokenem zruší původní.
 const _chgSecret = () => process.env.BS2_SSO_SECRET || process.env.JWT_SECRET || 'holyos';
 const meetingChangeToken = (id) => id + '.' + crypto.createHmac('sha256', _chgSecret()).update('mchg:' + id).digest('hex').slice(0, 24);

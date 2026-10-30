@@ -741,6 +741,7 @@ async function holyosMeeting(req, res, method, sub) {
   } catch (e) { console.warn('[bs2] cesta meeting proxy:', e.message); res.status(502).json({ ok: false, error: 'Rezervace je teď nedostupná. Zkuste to prosím za chvíli.' }); }
 }
 app.get('/api/cesta/meeting-slots', (req, res) => holyosMeeting(req, res, 'GET', 'meeting-slots?days=' + (parseInt(req.query.days, 10) || 15)));
+app.get('/api/cesta/meeting-contact', (req, res) => holyosMeeting(req, res, 'GET', 'meeting-contact?t=' + encodeURIComponent(String(req.query.t || ''))));
 app.get('/api/cesta/meeting-reservation', (req, res) => holyosMeeting(req, res, 'GET', 'meeting-reservation?t=' + encodeURIComponent(String(req.query.t || ''))));
 // Rezervace z /cesta: kontakt (jméno, příjmení, e-mail, telefon) → rezervace v HolyOS + účet v BS2 (pozvaný) + e-mail s přihlášením
 app.post('/api/cesta/meeting-reservation', wrap(async (req, res) => {
