@@ -102,7 +102,7 @@ function addModal(day){
   var d0=day?new Date(day):sod(new Date()), d1=day?new Date(day):new Date(d0.getTime()+13*86400000);
   var ov=modal('<h3>Přidat termíny</h3><div class="mt-row"><div><label>Od</label><input type="date" class="f-from" value="'+ymd(d0)+'"></div><div><label>Do</label><input type="date" class="f-to" value="'+ymd(d1)+'"></div></div>'
    +'<label>Dny v týdnu</label><div class="mt-dows">'+[1,2,3,4,5,6,0].map(function(n){return '<label><input type="checkbox" value="'+n+'"'+(day?(new Date(day).getDay()===n?' checked':''):(n>=1&&n<=5?' checked':''))+'>'+DN[n]+'</label>';}).join('')+'</div>'
-   +'<label>Časy (oddělte čárkou)</label><input class="f-times" value="9:00, 10:00, 11:00, 14:00, 15:00, 16:00">'
+   +'<label>Časy (oddělte čárkou)</label><input class="f-times" value="9:00, 9:30, 10:00, 10:30, 11:00, 11:30, 12:00, 12:30, 13:00, 13:30, 14:00, 14:30, 15:00, 15:30, 16:00, 16:30, 17:00, 17:30, 18:00, 18:30, 19:00">'
    +'<div class="mt-row"><div><label>Délka (min)</label><input type="number" class="f-dur" value="17" min="5" max="480"></div><div><label>Kapacita (počet zájemců)</label><input type="number" class="f-cap" value="1" min="1" max="50"></div></div>'
    +'<label>Forma</label><select class="f-mode"><option value="">online i osobně (zájemce si vybere)</option><option value="online">jen online</option><option value="osobne">jen osobně</option></select>'
    +'<label>Poznámka (interní)</label><input class="f-note" placeholder="např. Tomáš, výroba Vrtačka">'
