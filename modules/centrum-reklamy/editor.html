@@ -477,7 +477,9 @@
         var w = await fetch('/api/ads-center/funnels', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(list) }); if (!w.ok) throw new Error('HTTP ' + w.status); msg.textContent = 'Uloženo ' + new Date().toLocaleTimeString('cs-CZ'); } catch (e) { msg.textContent = 'Uložení selhalo: ' + e.message; } });
     // ── Nastavení Facebook (Meta Ads) ──
     var ov = document.getElementById('ov'), dlg = document.getElementById('dlg'), metaNode = null;
-    ov.addEventListener('click', function (e) { if (e.target === ov) ov.classList.remove('open'); });
+    ov.addEventListener('click', function (e) { if (e.target === ov && !ov.hasAttribute('data-no-backdrop-close')) ov.classList.remove('open'); });
+    // zámek „zavřít jen křížkem“ (testovací lead) se po zavření okna sám zruší
+    new MutationObserver(function () { if (!ov.classList.contains('open')) ov.removeAttribute('data-no-backdrop-close'); }).observe(ov, { attributes: true, attributeFilter: ['class'] });
     function badge(st) { return st === 'ACTIVE' ? '<span class="badge b-on">aktivní</span>' : /PAUSED|ARCHIVED|DELETED|DISAPPROVED/.test(st || '') ? '<span class="badge b-off">' + esc(st) + '</span>' : '<span class="badge b-x">' + esc(st || '—') + '</span>'; }
     function epHtml(ep) { if (!ep) return '—'; if (ep.type === 'lead_form') return '<div class="ep"><span class="lf">📋 Rychlý formulář (lead form)</span>' + (ep.form ? ': <b>' + esc(ep.form.name) + '</b>' + (ep.form.questions ? '<div style="color:var(--text2)">' + esc(ep.form.questions.join(' · ')) + '</div>' : '') : '') + (ep.cta ? '<div style="color:var(--text2)">CTA ' + esc(ep.cta) + '</div>' : '') + '</div>'; if (ep.type === 'website') return '<div class="ep"><span class="web">🔗 ' + esc(ep.url) + '</span>' + (ep.cta ? '<div style="color:var(--text2)">CTA ' + esc(ep.cta) + '</div>' : '') + '</div>'; return '<div class="ep" style="color:var(--text2)">jiný cíl' + (ep.cta ? ' · CTA ' + esc(ep.cta) : '') + '</div>'; }
     // Seznam leadů z rychlého formuláře – přes celé okno
@@ -668,13 +670,13 @@
     // 🧪 Testovací lead: založí lead, jako by přišel z rychlého formuláře za startem – projde rozdělením, SMS/e-mailem i vlákny
     function openTestLead(nd) {
       var fe = F.edges.find(function (ed) { return ed.from === nd.id; }); var fn = fe ? F.nodes.find(function (x) { return x.id === fe.to && x.kind === 'leadform'; }) : null; if (!fn) fn = F.nodes.find(function (x) { return x.kind === 'leadform'; });
-      ov.classList.add('open'); dlg.classList.remove('full');
-      dlg.innerHTML = '<h2>🧪 Testovací lead</h2><div class="note" style="margin-bottom:10px">Založí kontakt stejně, jako by přišel z rychlého formuláře <b>' + esc(fn ? (fn.form.name || fn.form.form_id) : '— žádný formulář za startem —') + '</b>: přiřadí se obchodníkovi podle pravidel Rozdělení, odejde mu skutečná SMS / e-mail a uvidíš ho na vláknech. Použij svoje číslo a e-mail.</div>'
+      ov.classList.add('open'); dlg.classList.remove('full'); ov.setAttribute('data-no-backdrop-close', ''); dlg.style.position = 'relative';
+      dlg.innerHTML = '<button class="tl-x" title="Zavřít" style="position:absolute;top:10px;right:14px;background:none;border:none;color:var(--text2,#9aa4bf);font-size:24px;line-height:1;cursor:pointer">×</button><h2>🧪 Testovací lead</h2><div class="note" style="margin-bottom:10px">Založí kontakt stejně, jako by přišel z rychlého formuláře <b>' + esc(fn ? (fn.form.name || fn.form.form_id) : '— žádný formulář za startem —') + '</b>: přiřadí se obchodníkovi podle pravidel Rozdělení, odejde mu skutečná SMS / e-mail a uvidíš ho na vláknech. Použij svoje číslo a e-mail.</div>'
         + '<div class="form-row"><div><label>Jméno</label><input class="tl-fn" placeholder="Tomáš"></div><div><label>Příjmení</label><input class="tl-ln" placeholder="Holý"></div></div>'
         + '<div class="form-row"><div><label>Telefon</label><input class="tl-ph" placeholder="+420 …"></div><div><label>E-mail</label><input class="tl-em" placeholder="jmeno@firma.cz"></div></div>'
         + '<div class="form-row"><div><label>Město (nepovinné)</label><input class="tl-ci" placeholder="Praha"></div><div class="note" style="align-self:end;padding-bottom:6px">Lead dostane poznámku „TEST z funelu" a po 5 minutách se sám smaže.</div></div>'
         + '<div class="form-row"><div><label>Počet testovacích leadů za sebou</label><input class="tl-n" type="number" min="1" max="10" value="1"></div><div class="note" style="align-self:end;padding-bottom:6px">Každý projde celým funelem (včetně SMS) a bez kontroly duplicit / černé listiny.</div></div>'
-        + '<div class="toolbar" style="margin-top:14px"><button class="btn on tl-go"' + (fn ? '' : ' disabled') + '>Odeslat do funelu</button><button class="btn tl-x">Zavřít</button><span class="note tl-msg"></span></div>';
+        + '<div class="toolbar" style="margin-top:14px"><button class="btn on tl-go"' + (fn ? '' : ' disabled') + '>Odeslat do funelu</button><span class="note tl-msg"></span></div>';
       // Předvyplněné údaje (výchozí Tomáš Holý; poslední použité se pamatují v prohlížeči)
       var TLK = 'holyos_testlead_defaults', tls = { first_name: 'Tomáš', last_name: 'Holý', phone: '', email: '', city: '' };
       try { var sv = JSON.parse(localStorage.getItem(TLK) || 'null'); if (sv) tls = Object.assign(tls, sv); } catch (e) { /* výchozí */ }
