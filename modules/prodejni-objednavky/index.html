@@ -1064,7 +1064,7 @@
       var rv = (_cmpResvMapCache || {})[l.id]; if (!rv) return '';
       return (rv.status === 'active' ? 'Aktivní' : rv.status === 'hold' ? 'Blokace 1 h' : 'Rezervováno') + (rv.kiosk_code ? ' ' + rv.kiosk_code : '');
     }
-    var CMP_LEADS_CF = { noun: 'kontaktů', emptyText: 'Žádné kontakty.', limit: 1000, columns: [
+    var CMP_LEADS_CF = { noun: 'kontaktů', emptyText: 'Žádné kontakty.', limit: 10000, columns: [
       null,
       { key: 'created', label: 'Vytvořeno', type: 'date', ph: 'dd.mm.rrrr', get: function (l) { return l.created_at || null; } },
       { key: 'activity', label: 'Poslední aktivita', type: 'date', ph: 'dd.mm.rrrr', get: function (l) { return l.lastActivityAt || null; } },

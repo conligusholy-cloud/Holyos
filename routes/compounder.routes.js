@@ -3939,9 +3939,9 @@ router.get('/leads', requireAuth, async (req, res, next) => {
     const leads = await prisma.compounderLead.findMany({
       where,
       orderBy: { created_at: 'desc' },
-      // Bez filtru ukazujeme 500 nejnovějších (kvůli dopočtu aktivity). Při hledání
-      // nebo filtru prohledáváme VŠECHNY kontakty a vrátíme až 1000 shod.
-      take: (search || status || role || lang || owner) ? 1000 : 500,
+      // Vracíme VŠECHNY kontakty (strop 10 000 jako pojistka) — sloupcové filtry (telefon, e-mail…) v tabulce
+      // pracují nad načtenou sadou, takže musí obsahovat všechny kontakty, ne jen 500 nejnovějších.
+      take: 10000,
     });
     // Model zákazníka (skládačka portfolia): odvodíme „má model" + čas posledního uložení.
     // Samotný example_model do seznamu neposíláme (detail si ho načítá zvlášť) — šetří payload.
@@ -3956,7 +3956,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
     await annotateAiChat(leads);
     // Levná míra zahřátí z eventů otagovaných lead_id (bez AI). Limit = strop načítaných leadů (500),
     // ať dopočet aktivity nevypadne, když leadů přibude přes 200 (import/FB reklamy).
-    if (leads.length && leads.length <= 500) {
+    if (leads.length && leads.length <= 10000) {
       const ids = leads.map((l) => l.id);
       const idsSet = new Set(ids);
       // Výkon: místo ~500 OR podmínek přes JSON props.lead_id (pomalé, s růstem dat se to zasekne)
