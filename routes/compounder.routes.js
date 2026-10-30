@@ -156,7 +156,7 @@ router.get('/meeting-slots', async (req, res) => {
 // ukázala „máte rezervováno" a nedovolila druhý termín bez vědomé změny).
 router.get('/meeting-reservation', async (req, res) => {
   try {
-    const leadId = req.query.t ? verifyPortalToken(String(req.query.t)) : null;
+    const leadId = _leadFromTL(req.query.t, req.query.l);
     if (!leadId) return res.json({ ok: true, reservation: null });
     const r = await prisma.meetingReservation.findFirst({
       where: { compounder_lead_id: leadId, status: 'booked', slot: { starts_at: { gte: new Date() } } },
@@ -170,9 +170,11 @@ router.get('/meeting-reservation', async (req, res) => {
 
 // GET /api/compounder/meeting-contact?t=<portalToken> — kontakt leada pro předvyplnění rezervace (osobní odkaz ze SMS / e-mailu):
 // člověk nemusí zadávat jméno, e-mail ani telefon. Token je podepsaný a patří jen tomuto leadovi.
+// Odkaz z funelu (SMS / e-mail přes sledovaný /r/<kód>/schuzka) nese krátký kód `l`, odkaz z portálu token `t`.
+const _leadFromTL = (t, l) => (t ? verifyPortalToken(String(t)) : null) || (l ? verifyShortCode(String(l)) : null) || null;
 router.get('/meeting-contact', async (req, res) => {
   try {
-    const leadId = req.query.t ? verifyPortalToken(String(req.query.t)) : null;
+    const leadId = _leadFromTL(req.query.t, req.query.l);
     if (!leadId) return res.json({ ok: true, contact: null });
     const l = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { name: true, first_name: true, last_name: true, email: true, phone: true } }).catch(() => null);
     if (!l) return res.json({ ok: true, contact: null });
@@ -228,7 +230,7 @@ router.post('/meeting-reservation', async (req, res) => {
     const b = req.body || {};
     const slotId = parseInt(b.slot_id, 10);
     if (!Number.isInteger(slotId)) return res.status(400).json({ ok: false, error: 'Chybí termín' });
-    let leadId = b.t ? verifyPortalToken(String(b.t)) : null;
+    let leadId = _leadFromTL(b.t, b.l);
 
     const slot = await prisma.meetingSlot.findUnique({
       where: { id: slotId },

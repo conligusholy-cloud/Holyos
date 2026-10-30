@@ -741,8 +741,8 @@ async function holyosMeeting(req, res, method, sub) {
   } catch (e) { console.warn('[bs2] cesta meeting proxy:', e.message); res.status(502).json({ ok: false, error: 'Rezervace je teď nedostupná. Zkuste to prosím za chvíli.' }); }
 }
 app.get('/api/cesta/meeting-slots', (req, res) => holyosMeeting(req, res, 'GET', 'meeting-slots?days=' + (parseInt(req.query.days, 10) || 15)));
-app.get('/api/cesta/meeting-contact', (req, res) => holyosMeeting(req, res, 'GET', 'meeting-contact?t=' + encodeURIComponent(String(req.query.t || ''))));
-app.get('/api/cesta/meeting-reservation', (req, res) => holyosMeeting(req, res, 'GET', 'meeting-reservation?t=' + encodeURIComponent(String(req.query.t || ''))));
+app.get('/api/cesta/meeting-contact', (req, res) => holyosMeeting(req, res, 'GET', 'meeting-contact?t=' + encodeURIComponent(String(req.query.t || '')) + '&l=' + encodeURIComponent(String(req.query.l || ''))));
+app.get('/api/cesta/meeting-reservation', (req, res) => holyosMeeting(req, res, 'GET', 'meeting-reservation?t=' + encodeURIComponent(String(req.query.t || '')) + '&l=' + encodeURIComponent(String(req.query.l || ''))));
 // Rezervace z /cesta: kontakt (jméno, příjmení, e-mail, telefon) → rezervace v HolyOS + účet v BS2 (pozvaný) + e-mail s přihlášením
 app.post('/api/cesta/meeting-reservation', wrap(async (req, res) => {
   if (rateLimited('cmr:' + req.ip, 20, 3600e3)) return res.status(429).json({ ok: false, error: 'Příliš mnoho pokusů. Zkuste to prosím později.' });
@@ -759,7 +759,7 @@ app.post('/api/cesta/meeting-reservation', wrap(async (req, res) => {
   let d;
   try {
     const r = await fetch(HOLYOS_URL + '/api/compounder/meeting-reservation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000),
-      body: JSON.stringify({ slot_id: b.slot_id, t: b.t || undefined, change: b.change || undefined, mode: b.mode, path: b.path, name: f.first_name + ' ' + f.last_name, email: f.email, phone: f.phone, existing_account: existingAccount }) });
+      body: JSON.stringify({ slot_id: b.slot_id, t: b.t || undefined, l: b.l || undefined, change: b.change || undefined, mode: b.mode, path: b.path, name: f.first_name + ' ' + f.last_name, email: f.email, phone: f.phone, existing_account: existingAccount }) });
     d = await r.json().catch(() => ({}));
     if (!r.ok || !d.ok) return res.status(r.status >= 400 ? r.status : 400).json({ ok: false, error: d.error || 'Rezervaci se nepodařilo dokončit.' });
   } catch (e) { console.warn('[bs2] cesta rezervace:', e.message); return res.status(502).json({ ok: false, error: 'Rezervace je teď nedostupná. Zkuste to prosím za chvíli.' }); }

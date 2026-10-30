@@ -74,6 +74,8 @@
 
   function mount(root) {
     var token = new URLSearchParams(location.search).get('t') || '';
+    var lcode = new URLSearchParams(location.search).get('l') || ''; // krátký kód leada z odkazu ze SMS / e-mailu (/r/<kód>/schuzka)
+    var idq = token ? 't=' + encodeURIComponent(token) : (lcode ? 'l=' + encodeURIComponent(lcode) : '');
     var changeTok = new URLSearchParams(location.search).get('zmena') || ''; // změna termínu z e-mailu: původní rezervace se po novém výběru zruší
     var path = root.getAttribute('data-path') || new URLSearchParams(location.search).get('path') || '';
     if (!PATH_LABEL[path]) path = '';
@@ -240,7 +242,7 @@
       root.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
     function send(slotId, f, onFail) {
-      var payload = { slot_id: slotId, t: token || undefined, change: changeTok || undefined, mode: chosenMode, path: path || undefined, first_name: f.first_name, last_name: f.last_name, email: f.email, phone: f.phone, gdpr: true };
+      var payload = { slot_id: slotId, t: token || undefined, l: (!token && lcode) ? lcode : undefined, change: changeTok || undefined, mode: chosenMode, path: path || undefined, first_name: f.first_name, last_name: f.last_name, email: f.email, phone: f.phone, gdpr: true };
       try { if (window.__bs2Lead) payload.lead = window.__bs2Lead(); } catch (e) {}
       setStatus('Rezervuji termín…');
       fetch('/api/compounder/meeting-reservation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) })
@@ -268,12 +270,12 @@
     // Už má rezervaci? Ukázat ji místo výběru (jeden lead = jeden termín).
     show('modes');
     if (changeTok) { var sub0 = root.querySelector('.bk-modes-wrap .bk-sub'); if (sub0) sub0.textContent = 'Změna termínu: vyberte si nový čas, původní rezervaci po potvrzení zrušíme.'; }
-    if (token) {
-      fetch('/api/compounder/meeting-contact?t=' + encodeURIComponent(token), { credentials: 'include' })
+    if (idq) {
+      fetch('/api/compounder/meeting-contact?' + idq, { credentials: 'include' })
         .then(function (r) { return r.json(); })
         .then(function (d) { if (d && d.contact) contact = d.contact; })
         .catch(function () {});
-      fetch('/api/compounder/meeting-reservation?t=' + encodeURIComponent(token), { credentials: 'include' })
+      fetch('/api/compounder/meeting-reservation?' + idq, { credentials: 'include' })
         .then(function (r) { return r.json(); })
         .then(function (d) { if (d && d.reservation) renderDone(d.reservation, false); })
         .catch(function () {});
