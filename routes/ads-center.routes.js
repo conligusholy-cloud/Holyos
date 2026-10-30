@@ -256,6 +256,12 @@ async function sweepTestLeads() {
   } catch (e) { /* úklid je best-effort */ }
 }
 setInterval(sweepTestLeads, 60000).unref();
+// Okamžitý restart: smaže všechny testovací leady (tlačítko v editoru funelu)
+router.delete('/test-leads', async (req, res, next) => { try {
+  const all = await prisma.compounderLead.findMany({ where: { meta_lead_id: { startsWith: 'test-' } }, select: { id: true } }); let deleted = 0, failed = 0;
+  for (const l of all) { try { await prisma.compounderLead.delete({ where: { id: l.id } }); deleted++; } catch (e) { failed++; } }
+  res.json({ ok: true, deleted, failed });
+} catch (err) { next(err); } });
 router.post('/test-lead', async (req, res, next) => { try {
   const b = req.body || {}; const formId = String(b.form_id || '').trim(); if (!formId) return res.status(400).json({ error: 'Chybí formulář' });
   const first = String(b.first_name || '').trim(), last = String(b.last_name || '').trim(); const phone = String(b.phone || '').trim(), email = String(b.email || '').trim();
