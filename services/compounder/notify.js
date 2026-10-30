@@ -263,11 +263,14 @@ async function notifyLeadReply(prisma, { lead, preview }) {
 
 // Nový kontakt z FB reklamy (rychlý formulář) → push + zvonek majitelům
 // (Jan + Tomáš, resp. nastavení compounder.velin_notify_person_ids).
+// Vlaječka země podle jazyka leadu (PL / CZ reklamy); prázdný jazyk = domácí CZ, neznámý jazyk = bez vlaječky
+function langFlag(lang) { const l = String(lang || 'cs').toLowerCase().slice(0, 2); return { cs: '🇨🇿', pl: '🇵🇱', sk: '🇸🇰', de: '🇩🇪', en: '🇬🇧' }[l] || ''; }
 async function notifyFbLead(prisma, { lead, campaign, ownerName }) {
   try {
     if (!lead) return;
     const who = lead.name || lead.email || lead.phone || ('lead #' + lead.id);
-    const title = '📢 Nový kontakt z FB reklamy — ' + who;
+    const flag = langFlag(lead.lang);
+    const title = (flag ? flag + ' ' : '') + '📢 Nový kontakt z FB reklamy — ' + who;
     const body = (campaign ? ('Kampaň: ' + campaign + '. ') : '')
       + (lead.email ? ('E-mail: ' + lead.email + '. ') : '')
       + (lead.phone ? ('Tel: ' + lead.phone + '. ') : '')
