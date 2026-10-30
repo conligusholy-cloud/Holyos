@@ -265,10 +265,10 @@ app.get('/login', wrap(async (req, res) => {
 // Zapomenuté heslo — zatím bez automatického e-mailu: žádost se zapíše do admin_log, Tomáš/Jan ji vyřídí ručně (reset v adminu)
 app.get('/forgot', (req, res) => res.send(V.forgotPage()));
 // Odeslání e-mailu přes HolyOS (Graph send-as); BS2 samo e-maily neodesílá.
-async function sendBs2MailRaw({ to, subject, body, link, linkLabel, ics }) {
+async function sendBs2MailRaw({ to, subject, body, link, linkLabel, ics, sender }) {
   const secret = process.env.BS2_SSO_SECRET; if (!secret) throw new Error('Chybí BS2_SSO_SECRET');
   const token = jwt.sign({ aud: 'holyos-api', iss: 'bs2' }, secret, { expiresIn: '1m' });
-  const r = await fetch(HOLYOS_URL + '/api/auth/bs2/send-mail', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ to, subject, body, link, linkLabel, ics }), signal: AbortSignal.timeout(20000) });
+  const r = await fetch(HOLYOS_URL + '/api/auth/bs2/send-mail', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ to, subject, body, link, linkLabel, ics, sender }), signal: AbortSignal.timeout(20000) });
   console.log('[bs2] HolyOS send-mail odpověď ' + r.status);
   if (!r.ok) throw new Error('HolyOS send-mail ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 200));
 }
@@ -791,7 +791,7 @@ app.post('/api/cesta/meeting-reservation', wrap(async (req, res) => {
   const body = 'Dobrý den, ' + require('./vocative').vocFirst(f.first_name, require('./vocative').isFemale(f.first_name, f.last_name)) + ',\n\nvaši schůzku potvrzujeme: ' + when + ' – ' + modeTxt + '. Potrvá zhruba ' + durMin + ' minut.\n\nTermín jsme si pro vás pevně vyhradili a rádi bychom, abyste ho využili – berte to prosím jako domluvu, na které nám záleží. Pozvánku do kalendáře najdete v příloze tohoto e-mailu (stačí na ni kliknout). Kdyby vám termín přesto nevyhovoval, můžete ho jedním kliknutím změnit pomocí tlačítka níže.\n\n'
     + (activated ? '' : 'Zároveň jsme vám založili účet v Best Series 2.0 – aktivujete ho na ' + PUBLIC_URL + '/activate (zadejte tento e-mail ' + f.email + ' a zvolte si nick a heslo).')
     + '\n\nBest Series s.r.o.';
-  sendBs2Mail({ to: f.email, subject: 'Potvrzení schůzky ' + when + (activated ? '' : ' · přístup do Best Series 2.0'), body, ics, link: PUBLIC_URL + '/cesta/schuzka' + (d.change_token ? '?zmena=' + encodeURIComponent(d.change_token) : ''), linkLabel: 'Změnit termín' }).catch((e) => console.warn('[bs2] cesta mail:', e.message));
+  sendBs2Mail({ to: f.email, subject: 'Potvrzení schůzky ' + when + (activated ? '' : ' · přístup do Best Series 2.0'), body, ics, link: PUBLIC_URL + '/cesta/schuzka' + (d.change_token ? '?zmena=' + encodeURIComponent(d.change_token) : ''), linkLabel: 'Změnit termín', sender: 'pradlomaty' }).catch((e) => console.warn('[bs2] cesta mail:', e.message));
   const leadId = await recordLead({ kind: 'meeting', refId: d.id, supporterId: u && u.id, name: f.first_name + ' ' + f.last_name, email: f.email, phone: f.phone, lead: b.lead,
     detail: { termin: when, forma: d.mode || null, cesta: d.financing_path || b.path || null, ucet: account === 'created' ? 'nový' : 'existující', sms_token: !!b.t },
     title: '📅 Schůzka ' + when + (account === 'created' ? ' + nový účet' : '') });

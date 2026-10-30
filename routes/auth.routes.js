@@ -274,10 +274,13 @@ router.post('/bs2/send-mail', express.json({ limit: '50kb' }), async (req, res, 
     }
     let our = null; try { our = await require('../services/settings').getOurCompany(); } catch (e) { our = null; }
     // Odesílatel: BS2_MAIL_FROM, jinak info@pradlomaty.info; když ho Graph odmítne (schránka neexistuje / není povolená), záloha = dosavadní fakturační schránka.
-    const preferred = process.env.BS2_MAIL_FROM || 'info@pradlomaty.info';
+    // sender 'pradlomaty' (potvrzení schůzky) = stejný odesílatel a jméno jako e-maily z funelu (💧 PRÁDLOMATY 💧)
+    const asPrad = b.sender === 'pradlomaty'; let pradFrom = null;
+    if (asPrad) { try { pradFrom = await require('./compounder.routes').funnelMailFrom('schuzka'); } catch (e) { pradFrom = null; } }
+    const preferred = pradFrom || process.env.BS2_MAIL_FROM || 'info@pradlomaty.info';
     const fallback = process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined;
     const mailer = require('../services/email');
-    const base2 = { to, brand: 'bs2', fromName: process.env.BS2_MAIL_FROM_NAME || 'Best Series 2.0', subject: String(b.subject || 'Best Series 2.0').slice(0, 200), body: String(b.body || '').slice(0, 5000), link, linkLabel: b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined };
+    const base2 = { to, brand: asPrad ? 'pradlomaty' : 'bs2', fromName: asPrad ? '💧 PRÁDLOMATY 💧' : (process.env.BS2_MAIL_FROM_NAME || 'Best Series 2.0'), subject: String(b.subject || 'Best Series 2.0').slice(0, 200), body: String(b.body || '').slice(0, 5000), link, linkLabel: b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined };
     // Volitelná kalendářová pozvánka (.ics) jako příloha — zákazník si schůzku jedním klikem přidá do kalendáře
     if (b.ics && typeof b.ics === 'string' && b.ics.indexOf('BEGIN:VCALENDAR') === 0 && b.ics.length < 20000) {
       base2.attachments = [{ filename: 'schuzka.ics', content: b.ics, contentType: 'text/calendar; charset=utf-8; method=PUBLISH' }];
