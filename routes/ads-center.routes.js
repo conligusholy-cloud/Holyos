@@ -247,6 +247,15 @@ router.get('/funnels/:id/edge-leads', async (req, res, next) => { try { const da
 // Log odeslání uzlu (SMS / e-mail): seznam zpráv s textem, adresátem, doručením a reakcí – pro kontrolu z editoru funelu
 router.get('/funnels/:id/node-log', async (req, res, next) => { try { const days = parseDays(req.query.days, 30); const list = await require('../services/ads/funnel-events').nodeLog(String(req.params.id || ''), String(req.query.node || ''), sinceDate(days)); res.json({ list }); } catch (err) { next(err); } });
 // Testovací lead z editoru funelu: založí se jako lead z rychlého formuláře (stejná cesta jako napřímo z FB) → rozdělení, autosend, vlákna
+// Testovací leady (meta_lead_id 'test-…') se po 5 minutách samy smažou (úklid běží každou minutu → přežije restart)
+const TEST_LEAD_TTL_MIN = 5;
+async function sweepTestLeads() {
+  try {
+    const old = await prisma.compounderLead.findMany({ where: { meta_lead_id: { startsWith: 'test-' }, created_at: { lt: new Date(Date.now() - TEST_LEAD_TTL_MIN * 60000) } }, select: { id: true } });
+    for (const l of old) { try { await prisma.compounderLead.delete({ where: { id: l.id } }); } catch (e) { /* např. vazba – zkusí se příště */ } }
+  } catch (e) { /* úklid je best-effort */ }
+}
+setInterval(sweepTestLeads, 60000).unref();
 router.post('/test-lead', async (req, res, next) => { try {
   const b = req.body || {}; const formId = String(b.form_id || '').trim(); if (!formId) return res.status(400).json({ error: 'Chybí formulář' });
   const first = String(b.first_name || '').trim(), last = String(b.last_name || '').trim(); const phone = String(b.phone || '').trim(), email = String(b.email || '').trim();

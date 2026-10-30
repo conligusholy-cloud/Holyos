@@ -671,7 +671,7 @@
       dlg.innerHTML = '<h2>🧪 Testovací lead</h2><div class="note" style="margin-bottom:10px">Založí kontakt stejně, jako by přišel z rychlého formuláře <b>' + esc(fn ? (fn.form.name || fn.form.form_id) : '— žádný formulář za startem —') + '</b>: přiřadí se obchodníkovi podle pravidel Rozdělení, odejde mu skutečná SMS / e-mail a uvidíš ho na vláknech. Použij svoje číslo a e-mail.</div>'
         + '<div class="form-row"><div><label>Jméno</label><input class="tl-fn" placeholder="Tomáš"></div><div><label>Příjmení</label><input class="tl-ln" placeholder="Holý"></div></div>'
         + '<div class="form-row"><div><label>Telefon</label><input class="tl-ph" placeholder="+420 …"></div><div><label>E-mail</label><input class="tl-em" placeholder="jmeno@firma.cz"></div></div>'
-        + '<div class="form-row"><div><label>Město (nepovinné)</label><input class="tl-ci" placeholder="Praha"></div><div class="note" style="align-self:end;padding-bottom:6px">Lead dostane poznámku „TEST z funelu", ať ho poznáš v Compounderu.</div></div>'
+        + '<div class="form-row"><div><label>Město (nepovinné)</label><input class="tl-ci" placeholder="Praha"></div><div class="note" style="align-self:end;padding-bottom:6px">Lead dostane poznámku „TEST z funelu" a po 5 minutách se sám smaže.</div></div>'
         + '<div class="toolbar" style="margin-top:14px"><button class="btn on tl-go"' + (fn ? '' : ' disabled') + '>Odeslat do funelu</button><button class="btn tl-x">Zavřít</button><span class="note tl-msg"></span></div>';
       // Předvyplněné údaje (výchozí Tomáš Holý; poslední použité se pamatují v prohlížeči)
       var TLK = 'holyos_testlead_defaults', tls = { first_name: 'Tomáš', last_name: 'Holý', phone: '', email: '', city: '' };
