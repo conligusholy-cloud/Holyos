@@ -673,9 +673,15 @@
         + '<div class="form-row"><div><label>Telefon</label><input class="tl-ph" placeholder="+420 …"></div><div><label>E-mail</label><input class="tl-em" placeholder="jmeno@firma.cz"></div></div>'
         + '<div class="form-row"><div><label>Město (nepovinné)</label><input class="tl-ci" placeholder="Praha"></div><div class="note" style="align-self:end;padding-bottom:6px">Lead dostane poznámku „TEST z funelu", ať ho poznáš v Compounderu.</div></div>'
         + '<div class="toolbar" style="margin-top:14px"><button class="btn on tl-go"' + (fn ? '' : ' disabled') + '>Odeslat do funelu</button><button class="btn tl-x">Zavřít</button><span class="note tl-msg"></span></div>';
+      // Předvyplněné údaje (výchozí Tomáš Holý; poslední použité se pamatují v prohlížeči)
+      var TLK = 'holyos_testlead_defaults', tls = { first_name: 'Tomáš', last_name: 'Holý', phone: '', email: '', city: '' };
+      try { var sv = JSON.parse(localStorage.getItem(TLK) || 'null'); if (sv) tls = Object.assign(tls, sv); } catch (e) { /* výchozí */ }
+      dlg.querySelector('.tl-fn').value = tls.first_name || ''; dlg.querySelector('.tl-ln').value = tls.last_name || ''; dlg.querySelector('.tl-ph').value = tls.phone || ''; dlg.querySelector('.tl-em').value = tls.email || ''; dlg.querySelector('.tl-ci').value = tls.city || '';
       dlg.querySelector('.tl-x').addEventListener('click', function () { ov.classList.remove('open'); });
       dlg.querySelector('.tl-go').addEventListener('click', async function () { var m = dlg.querySelector('.tl-msg'); var b = { form_id: fn.form.form_id, form_name: fn.form.name, ad_id: (fn.form.ad_ids || [])[0] || null, first_name: dlg.querySelector('.tl-fn').value.trim(), last_name: dlg.querySelector('.tl-ln').value.trim(), phone: dlg.querySelector('.tl-ph').value.trim(), email: dlg.querySelector('.tl-em').value.trim(), city: dlg.querySelector('.tl-ci').value.trim() };
-        if (!b.first_name || (!b.phone && !b.email)) { m.innerHTML = '<span class="warn">Vyplň jméno a telefon nebo e-mail.</span>'; return; } m.textContent = 'Zakládám…';
+        if (!b.first_name || (!b.phone && !b.email)) { m.innerHTML = '<span class="warn">Vyplň jméno a telefon nebo e-mail.</span>'; return; }
+        try { localStorage.setItem(TLK, JSON.stringify({ first_name: b.first_name, last_name: b.last_name, phone: b.phone, email: b.email, city: b.city })); } catch (e) { /* bez uložení */ }
+        m.textContent = 'Zakládám…';
         try { var r = await (await fetch('/api/ads-center/test-lead', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) })).json(); if (r && r.ok) { m.innerHTML = '<span style="color:#22c55e">Lead #' + r.id + ' založen' + (r.owner ? ' → ' + esc(r.owner) : '') + '. SMS / e-mail odchází během chvíle.</span>'; setTimeout(function () { loadCounts().then(function () { return loadNodeStats(); }).then(function () { render(); }); }, 4000); } else m.innerHTML = '<span class="warn">' + esc((r && r.error) || 'chyba') + '</span>'; } catch (e) { m.innerHTML = '<span class="warn">' + esc(e.message) + '</span>'; } });
     }
     // ── DB HolyOS: počty, seznamy, konfigurace podmínek ──
