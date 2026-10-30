@@ -1123,7 +1123,7 @@ const AISPEC_AUTOSEND_DEFAULT = {
   schuzkaEmailEnabled: false,
   // Stejná forma jako e-mail specialisty (předmět, oslovení, tón, podpis) — jen cíl odkazu je cesta k rozhodnutí.
   schuzkaEmailSubject: 'Prádlomat — váš specialista odpoví na vše',
-  schuzkaEmailBody: 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: {link}\n\nPrádlomaty — Best Series',
+  schuzkaEmailBody: 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: {link}',
   schuzkaEmailLinkLabel: 'Zeptat se specialisty',
   // Záchytná stránka za SMS / e-mailem (nastavuje se ve funelu v Centru reklamy). Prázdné = výchozí osobní krátký odkaz varianty.
   landing: { specialist: '', schuzka: '' },
@@ -1131,9 +1131,11 @@ const AISPEC_AUTOSEND_DEFAULT = {
 // E-mail varianty SPECIALISTA: vlastní předmět/text z nastavení funelu ({link}, {name}), jinak výchozí šablona.
 const SPECIALIST_EMAIL_DEFAULT = {
   subject: 'Prádlomat — váš specialista odpoví na vše',
-  body: 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: {link}\n\nPrádlomaty — Best Series',
+  body: 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: {link}',
   linkLabel: 'Zeptat se specialisty',
 };
+// Podpis „Prádlomaty — Best Series" na konci e-mailu z funelu se neposílá (ani z dříve uložených textů)
+const stripMailSig = (t) => String(t || '').replace(/\s*\n\s*Pr[aá]dlomaty\s*[—–-]\s*Best Series\s*$/i, '');
 async function specialistEmail(name, link, overrides) {
   let c = {}; try { c = (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {}; } catch (e) { c = {}; }
   const o = overrides || {};
@@ -1142,7 +1144,7 @@ async function specialistEmail(name, link, overrides) {
   const fill = (t) => String(t || '').replace(/\{link\}/g, link).replace(/\{name_nom\}/g, nm).replace(/\{name\}/g, nmVoc);
   return {
     subject: fill(o.subject || c.specialistEmailSubject || SPECIALIST_EMAIL_DEFAULT.subject),
-    body: fill(o.body || c.specialistEmailBody || SPECIALIST_EMAIL_DEFAULT.body),
+    body: stripMailSig(fill(o.body || c.specialistEmailBody || SPECIALIST_EMAIL_DEFAULT.body)),
     linkLabel: String(o.linkLabel || c.specialistEmailLinkLabel || SPECIALIST_EMAIL_DEFAULT.linkLabel),
   };
 }
@@ -1156,7 +1158,7 @@ function buildSchuzkaEmail(lead, cfg, overrides) {
   const nameVoc = require('../services/vocative').vocativeFullName(name); // {name} = 5. pád, {name_nom} = 1. pád
   const fill = (s) => String(s || '').replace(/\{link\}/g, link).replace(/\{name_nom\}/g, name).replace(/\{name\}/g, nameVoc);
   const subject = fill(c.schuzkaEmailSubject || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailSubject);
-  const body = fill(c.schuzkaEmailBody || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailBody);
+  const body = stripMailSig(fill(c.schuzkaEmailBody || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailBody));
   const linkLabel = String(c.schuzkaEmailLinkLabel || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailLinkLabel);
   return { subject, body, link, linkLabel, preheader: null };
 }
