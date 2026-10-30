@@ -975,7 +975,7 @@
       // Jeden výstup = jedno vlákno do funelu; vedle něj ale může jít navíc vlákno do DB HolyOS (jen vizuální: „kontakt se zároveň ukládá do databáze")
       var isDb = function (id) { var x = F.nodes.find(function (n0) { return n0.id === id; }); return !!x && x.kind === 'db'; };
       var toDb = isDb(to);
-      var src = F.nodes.find(function (n0) { return n0.id === from; }); var fan = !!src && (src.kind === 'db' || src.kind === 'list'); // zdroje kontaktů (DB / Seznam) smí z jedné tečky vést na víc míst naráz
+      var src = F.nodes.find(function (n0) { return n0.id === from; }); var fan = !!src && (src.kind === 'db' || src.kind === 'list' || src.kind === 'split'); // zdroje kontaktů (DB / Seznam) i výstupy Rozdělení smí z jedné tečky vést na víc míst naráz (např. SMS + e-mail současně)
       F.edges = F.edges.filter(function (ed) { if (ed.from !== from || (ed.port || 0) !== (port || 0)) return true; if (ed.to === to) return false; if (fan) return true; return toDb ? !isDb(ed.to) : isDb(ed.to); });
       F.edges.push({ from: from, to: to, port: port || 0, created_at: new Date().toISOString() });
       F.edges.sort(function (a, b) { return (isDb(a.to) ? 1 : 0) - (isDb(b.to) ? 1 : 0); }); /* vlákna do DB jdou na konec, ať průchod funelem bere hlavní větev */
