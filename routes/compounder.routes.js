@@ -1591,7 +1591,7 @@ async function autosendAiSpecialistSms(lead, opts) {
     if (!lead.phone) return skip('chybí telefon');
     if (Array.isArray(cfg.ownerPersonIds) && cfg.ownerPersonIds.length && cfg.ownerPersonIds.indexOf(lead.owner_person_id) === -1) return skip('obchodník není ve výběru');
     if (lead.ai_specialist_sms_sent_at) return skip('SMS už odeslána');
-    if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return skip('black list'); }
+    if (cfg.skipBlacklist && !String(lead.meta_lead_id || '').startsWith('test-')) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return skip('black list'); }
     await prisma.compounderLead.update({ where: { id: lead.id }, data: { show_ai_specialist: true } }).catch(() => {});
     const link = autosendLink(cfg, 'specialist', lead.id, 'sms');
     const tpl = String(cfg.text || 'PRADLOMATY-info: {link}');
@@ -1621,7 +1621,7 @@ async function sendSchuzkaSmsAuto(lead, cfg) {
     if (!lead || !lead.id) return;
     if (!lead.phone) return logOutreach(lead.id, 'schuzka', 'skip', 'chybí telefon (SMS)');
     if (lead.outreach_variant || lead.schuzka_sms_sent_at) return logOutreach(lead.id, 'schuzka', 'skip', 'už osloveno (' + (lead.outreach_variant || 'schuzka') + ')');
-    if (cfg && cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return logOutreach(lead.id, 'schuzka', 'skip', 'black list'); }
+    if (cfg && cfg.skipBlacklist && !String(lead.meta_lead_id || '').startsWith('test-')) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return logOutreach(lead.id, 'schuzka', 'skip', 'black list'); }
     const link = autosendLink(cfg, 'schuzka', lead.id, 'sms');
     const tpl = String((cfg && cfg.schuzkaText) || 'PRADLOMATY: vyberte si termin schuzky {link}');
     const text = tpl.indexOf('{link}') !== -1 ? tpl.replace('{link}', link) : (tpl + ' ' + link);
@@ -1650,7 +1650,7 @@ async function sendSchuzkaEmailAuto(lead, cfg) {
     if (!cfg || !cfg.schuzkaEmailEnabled) return;
     if (!lead.email) return logOutreach(lead.id, 'schuzka', 'skip', 'chybí e-mail (e-mail)');
     if (lead.outreach_variant === 'specialist' || lead.schuzka_email_sent_at) return logOutreach(lead.id, 'schuzka', 'skip', 'e-mail už odeslán / osloven specialistou');
-    if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return logOutreach(lead.id, 'schuzka', 'skip', 'black list (e-mail)'); }
+    if (cfg.skipBlacklist && !String(lead.meta_lead_id || '').startsWith('test-')) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return logOutreach(lead.id, 'schuzka', 'skip', 'black list (e-mail)'); }
     const from = await funnelMailFrom('schuzka');
     if (!from) return logOutreach(lead.id, 'schuzka', 'error', 'není nastavený odesílatel e-mailu');
     const m = buildSchuzkaEmail(lead, cfg);
@@ -1683,7 +1683,7 @@ async function autosendAiSpecialistEmail(lead, opts) {
     if (!manual && Array.isArray(cfg.sources) && cfg.sources.length && cfg.sources.indexOf(lead.source || '') === -1) return skip('zdroj „' + (lead.source || '?') + '" není v pravidlech');
     if (!manual && cfg.onlyNew && (lead.status || 'new') !== 'new' && lead.status !== 'odeslan_specialista') return skip('CRM stav není Nový');
     if (lead.ai_specialist_email_sent_at) return skip('e-mail už odeslán');
-    if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return skip('black list'); }
+    if (cfg.skipBlacklist && !String(lead.meta_lead_id || '').startsWith('test-')) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return skip('black list'); }
     await prisma.compounderLead.update({ where: { id: lead.id }, data: { show_ai_specialist: true } }).catch(() => {});
     const from = await funnelMailFrom('specialist');
     if (!from) return skip('není nastavený odesílatel');
@@ -6647,7 +6647,7 @@ async function _fbCreateLead(fields, meta, formCfg) {
   let externalRepId = formCfg && formCfg.owner_kind === 'external' && formCfg.external_rep_id ? Number(formCfg.external_rep_id) : null;
   // Black list: kontakt s červeným ❗ (na seznamu „neoslovovat") přiřaď POUZE Janu Holému — přebije split i mapování.
   try {
-    if ((email || phone) && await _isBlocked(email, phone)) {
+    if ((email || phone) && !meta.allowDuplicate && await _isBlocked(email, phone)) {
       const jid = await _blacklistOwnerId();
       if (jid) { ownerPersonId = jid; externalRepId = null; }
     }
