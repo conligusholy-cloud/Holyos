@@ -2,6 +2,10 @@
 // podle slovníku níže (přesné řetězce). Přepínač jazyka CZ | PL se přidává do hlavičky obou verzí.
 // Pozn.: když v češtině změníš text na /cesta, musí se doplnit i řádek ve slovníku — jinak ta věta zůstane česky (hlídá to `leftovers()`).
 
+// Kurz CZK → PLN (NBP, tabulka A, 30. 10. 2026: 0,1807). Při větší změně kurzu stačí upravit tady.
+const CZK_PLN = 0.1807;
+const plnK = (tisKc) => Math.round(tisKc * CZK_PLN);
+
 // ── Slovník CS → PL pro stránky (HTML) ──
 const PAGES_PL = [
   // /cesta (hlavní stránka)
@@ -59,7 +63,8 @@ const PAGES_PL = [
   ['Financování<small>splátky z výnosu →</small>', 'Finansowanie<small>raty z przychodu →</small>'],
   ['Proč prádlomat', 'Dlaczego automat pralniczy'],
   ['Výnos jednoho prádlomatu', 'Przychód jednego automatu'],
-  ['tis.&nbsp;Kč', 'tys.&nbsp;CZK'],
+  ['<div class="bx-big rev">40<span class="dash">–</span>120<span class="cur">tis.&nbsp;Kč</span></div>', `<div class="bx-big rev">${plnK(40)}<span class="dash">–</span>${plnK(120)}<span class="cur">tys.&nbsp;zł</span></div>`], // přepočet na zł
+  ['tis.&nbsp;Kč', 'tys.&nbsp;zł'],
   ['měsíčně v ČR', 'miesięcznie w Czechach'],
   ['Podle lokality, spádové oblasti a vytížení.', 'W zależności od lokalizacji, obszaru oddziaływania i wykorzystania.'],
   ['Instalaci, servis i provoz umíme kompletně zajistit', 'Instalację, serwis i obsługę możemy zapewnić w całości'],
