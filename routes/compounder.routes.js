@@ -397,7 +397,7 @@ router.post('/leads/:id/owner-meeting', requireAuth, async (req, res) => {
         const body = pl
           ? 'Dzień dobry,\n\npotwierdzamy Twoje spotkanie online z właścicielem: ' + when + '. Potrwa około ' + durMin + ' minut. Link do rozmowy wyślemy przed spotkaniem.\n\nZaproszenie do kalendarza znajdziesz w załączniku. Gdyby termin Ci nie odpowiadał, możesz go zmienić jednym kliknięciem za pomocą przycisku poniżej.\n\nLaundromats.eu'
           : 'Dobrý den,\n\npotvrzujeme vaši online schůzku s majitelem: ' + when + '. Potrvá zhruba ' + durMin + ' minut. Odkaz na videohovor vám pošleme před schůzkou.\n\nPozvánku do kalendáře najdete v příloze tohoto e-mailu. Kdyby vám termín nevyhovoval, můžete ho jedním kliknutím změnit tlačítkem níže.\n\nLaundromats.eu';
-        const from = (await funnelMailFrom('schuzka').catch(() => null)) || process.env.COMPOUNDER_MAIL_FROM || undefined;
+        const from = (await funnelMailFrom('schuzka', pl ? 'pl' : undefined).catch(() => null)) || process.env.COMPOUNDER_MAIL_FROM || undefined;
         const r = await require('../services/email').sendMail({ to: lead.email, from, brand: 'pradlomaty', fromName: '💧 PRÁDLOMATY 💧', subject: (pl ? 'Potwierdzenie spotkania ' : 'Potvrzení schůzky ') + when, body,
           link: base + (pl ? '/cesta/pl/schuzka' : '/cesta/schuzka') + '?zmena=' + encodeURIComponent(meetingChangeToken(resv.id)), linkLabel: pl ? 'Zmień termin' : 'Změnit termín',
           attachments: [{ filename: 'schuzka.ics', content: ics, contentType: 'text/calendar; charset=utf-8; method=PUBLISH' }] });
@@ -1273,13 +1273,16 @@ const PL_DEFAULTS = {
   schuzkaEmailSubject: '🧺 Automat pralniczy: za 3 minuty wiesz, czy to dla Ciebie',
   schuzkaEmailBody: 'Dzień dobry, {name}\n\nAutomat pralniczy zarabia, nawet gdy śpisz — a miejsc ubywa.\n\n📍 70+ sprawdzonych lokalizacji w Czechach\n💰 Realne przychody i możliwości finansowania\n🚀 Decyzja w ciągu 10 dni od spotkania\n\nOtwórz stronę i zobacz, co dla Ciebie mamy 👇',
   schuzkaEmailLinkLabel: 'Pokaż mi, jak to działa',
+  // Odesílatel polských e-mailů (např. info@laundromats.eu). Prázdné = stejný odesílatel jako u češtiny.
+  specialistEmailFrom: '',
+  schuzkaEmailFrom: '',
 };
 const PL_KEYS = Object.keys(PL_DEFAULTS);
 // BS2 stránky cesty → jejich polská verze (https://www.bestseries2.cz/cesta/schuzka → …/cesta/pl/schuzka); ostatní adresy beze změny
 function plUrl(u) { try { const x = new URL(String(u || '')); if (/(^|\.)(bestseries2\.cz|laundromats\.eu)$/.test(x.hostname) && /^\/cesta(\/|$)/.test(x.pathname) && !/^\/cesta\/pl(\/|$)/.test(x.pathname)) { x.pathname = x.pathname.replace(/^\/cesta/, '/cesta/pl'); return x.toString(); } } catch (e) { /* beze změny */ } return String(u || ''); }
 function plOverlay(cfg) {
   const p = (cfg && cfg.pl) || {}; const o = Object.assign({}, cfg);
-  PL_KEYS.forEach((k) => { o[k] = (p[k] && String(p[k]).trim()) ? p[k] : PL_DEFAULTS[k]; });
+  PL_KEYS.forEach((k) => { o[k] = (p[k] && String(p[k]).trim()) ? p[k] : (/EmailFrom$/.test(k) ? (cfg && cfg[k]) || '' : PL_DEFAULTS[k]); }); // odesílatel: bez PL hodnoty zůstává český
   const cl = (cfg && cfg.landing) || {}; const pl = p.landing || {};
   o.landing = { specialist: pl.specialist || (cl.specialist ? plUrl(cl.specialist) : ''), schuzka: pl.schuzka || (cl.schuzka ? plUrl(cl.schuzka) : '') };
   o._lang = 'pl';
@@ -1887,7 +1890,7 @@ async function sendSchuzkaEmailAuto(lead, cfg) {
     if (!lead.email) return logOutreach(lead.id, 'schuzka', 'skip', 'chybí e-mail (e-mail)');
     if (lead.outreach_variant === 'specialist' || lead.schuzka_email_sent_at) return logOutreach(lead.id, 'schuzka', 'skip', 'e-mail už odeslán / osloven specialistou');
     if (cfg.skipBlacklist && !String(lead.meta_lead_id || '').startsWith('test-')) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return logOutreach(lead.id, 'schuzka', 'skip', 'black list (e-mail)'); }
-    const from = await funnelMailFrom('schuzka');
+    const from = await funnelMailFrom('schuzka', cfg); // cfg je u PL leadů přeložená (plOverlay) → polský odesílatel
     if (!from) return logOutreach(lead.id, 'schuzka', 'error', 'není nastavený odesílatel e-mailu');
     const m = buildSchuzkaEmail(lead, cfg);
     const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: '💧 PRÁDLOMATY 💧', link: m.link, linkLabel: m.linkLabel, trackingPixel: mailOpenPixel(lead.id, 'schuzka'), preheader: m.preheader, brand: 'pradlomaty', leadId: lead.id, campaignId: 'funnel-schuzka' });
@@ -1923,7 +1926,7 @@ async function autosendAiSpecialistEmail(lead, opts) {
     if (lead.ai_specialist_email_sent_at) return skip('e-mail už odeslán');
     if (cfg.skipBlacklist && !String(lead.meta_lead_id || '').startsWith('test-')) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return skip('black list'); }
     await prisma.compounderLead.update({ where: { id: lead.id }, data: { show_ai_specialist: true } }).catch(() => {});
-    const from = await funnelMailFrom('specialist');
+    const from = await funnelMailFrom('specialist', cfg);
     if (!from) return skip('není nastavený odesílatel');
     const link = autosendLink(cfg, 'specialist', lead.id, 'email');
     const { subject, body, linkLabel: spLabel } = await specialistEmail(lead && lead.name, link, undefined, cfg._lang);
@@ -8421,7 +8424,7 @@ function compounderMailFrom() {
   return process.env.COMPOUNDER_MAIL_FROM || null;
 }
 // Odesílatel pro e-maily z funelu (Centrum reklamy → Nastavení → výchozí odesílatel); jinak env
-async function funnelMailFrom(variant) { try { if (variant) { const c = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null }); const f = c && (variant === 'schuzka' ? c.schuzkaEmailFrom : c.specialistEmailFrom); if (f) return String(f); } } catch (e) { /* výchozí */ } try { const v = await getSetting('ads_center.channels', { type: 'json', defaultValue: null }); if (v && v.email_from) return String(v.email_from); } catch (e) { /* env */ } return process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || compounderMailFrom(); }
+async function funnelMailFrom(variant, cfgOverride) { try { if (variant) { let c = cfgOverride; if (!c || c === 'pl') { c = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null }); if (cfgOverride === 'pl' && c) c = plOverlay(c); } /* 'pl' = odesílatel pro polské e-maily (cfg.pl.*EmailFrom, jinak český) */ const f = c && (variant === 'schuzka' ? c.schuzkaEmailFrom : c.specialistEmailFrom); if (f) return String(f); } } catch (e) { /* výchozí */ } try { const v = await getSetting('ads_center.channels', { type: 'json', defaultValue: null }); if (v && v.email_from) return String(v.email_from); } catch (e) { /* env */ } return process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || compounderMailFrom(); }
 async function sendPortalInvite(d, portalUrl) {
   const from = compounderMailFrom();
   // E-mail v jazyce, který zájemce zvolil na webu (d.lang); fallback angličtina.

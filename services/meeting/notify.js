@@ -136,7 +136,7 @@ async function notifyMeetingCanceled(prisma, reservationId, { by } = {}) {
         const text = pl
           ? 'Dzień dobry,\n\nz przykrością informujemy, że spotkanie zaplanowane na ' + when + ' zostało odwołane.\n\nJeśli nadal jesteś zainteresowany, wybierz nowy termin za pomocą przycisku poniżej.\n\nLaundromats.eu'
           : 'Dobrý den,\n\nbohužel vám musíme oznámit, že schůzka naplánovaná na ' + when + ' byla zrušena.\n\nPokud máte stále zájem, vyberte si prosím nový termín tlačítkem níže.\n\nLaundromats.eu';
-        const from = (await require('../../routes/compounder.routes').funnelMailFrom('schuzka').catch(() => null)) || process.env.COMPOUNDER_MAIL_FROM || undefined;
+        const from = (await require('../../routes/compounder.routes').funnelMailFrom('schuzka', pl ? 'pl' : undefined).catch(() => null)) || process.env.COMPOUNDER_MAIL_FROM || undefined;
         await require('../email').sendMail({ to: email, from, brand: 'pradlomaty', fromName: '💧 PRÁDLOMATY 💧', subject: (pl ? 'Spotkanie odwołane – ' : 'Schůzka zrušena – ') + when, body: text,
           link: base + (pl ? '/cesta/pl/schuzka' : '/cesta/schuzka'), linkLabel: pl ? 'Wybierz nowy termin' : 'Vybrat nový termín' });
       } catch (e) { console.warn('[meeting-cancel] e-mail:', e.message); }

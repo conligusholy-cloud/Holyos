@@ -130,7 +130,7 @@ app.post('/api/cesta/meeting-reservation', async (req, res) => {
     const body = isPl
       ? 'Dzień dobry,\n\npotwierdzamy Twoje spotkanie: ' + when + ' – ' + modeTxt + '. Potrwa około ' + durMin + ' minut.\n\nTen termin zarezerwowaliśmy specjalnie dla Ciebie i zależy nam na tym, abyś z niego skorzystał. Zaproszenie do kalendarza znajdziesz w załączniku. Gdyby termin Ci nie odpowiadał, możesz go zmienić jednym kliknięciem za pomocą przycisku poniżej.\n\nLaundromats.eu'
       : 'Dobrý den, ' + voc.vocFirst(f.first_name, voc.isFemale(f.first_name, f.last_name)) + ',\n\nvaši schůzku potvrzujeme: ' + when + ' – ' + modeTxt + '. Potrvá zhruba ' + durMin + ' minut.\n\nTermín jsme si pro vás pevně vyhradili a rádi bychom, abyste ho využili. Pozvánku do kalendáře najdete v příloze tohoto e-mailu. Kdyby vám termín přesto nevyhovoval, můžete ho jedním kliknutím změnit tlačítkem níže.\n\nLaundromats.eu';
-    await sendConfirmMail({ to: f.email, subject: (isPl ? 'Potwierdzenie spotkania ' : 'Potvrzení schůzky ') + when, body, ics, link: PUBLIC_URL + (isPl ? '/cesta/pl/schuzka' : '/cesta/schuzka') + (d.change_token ? '?zmena=' + encodeURIComponent(d.change_token) : ''), linkLabel: isPl ? 'Zmień termin' : 'Změnit termín' });
+    await sendConfirmMail({ lang: isPl ? 'pl' : undefined, to: f.email, subject: (isPl ? 'Potwierdzenie spotkania ' : 'Potvrzení schůzky ') + when, body, ics, link: PUBLIC_URL + (isPl ? '/cesta/pl/schuzka' : '/cesta/schuzka') + (d.change_token ? '?zmena=' + encodeURIComponent(d.change_token) : ''), linkLabel: isPl ? 'Zmień termin' : 'Změnit termín' });
   } catch (e) { console.warn('[laundromats] potvrzovací e-mail:', e.message); }
   res.json(Object.assign({}, d, { account: 'none' }));
 });

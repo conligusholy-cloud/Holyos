@@ -297,7 +297,7 @@ router.post('/bs2/send-mail', express.json({ limit: '50kb' }), async (req, res, 
     // Odesílatel: BS2_MAIL_FROM, jinak info@pradlomaty.info; když ho Graph odmítne (schránka neexistuje / není povolená), záloha = dosavadní fakturační schránka.
     // sender 'pradlomaty' (potvrzení schůzky) = stejný odesílatel a jméno jako e-maily z funelu (💧 PRÁDLOMATY 💧)
     const asPrad = b.sender === 'pradlomaty'; let pradFrom = null;
-    if (asPrad) { try { pradFrom = await require('./compounder.routes').funnelMailFrom('schuzka'); } catch (e) { pradFrom = null; } }
+    if (asPrad) { try { pradFrom = await require('./compounder.routes').funnelMailFrom('schuzka', b.lang === 'pl' ? 'pl' : undefined); } catch (e) { pradFrom = null; } }
     const preferred = pradFrom || process.env.BS2_MAIL_FROM || 'info@pradlomaty.info';
     const fallback = process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined;
     const mailer = require('../services/email');
@@ -336,7 +336,7 @@ router.post('/lm/send-mail', express.json({ limit: '50kb' }), async (req, res, n
       const hostOf = (u) => { try { return new URL(u).host.replace(/^www\./, '').toLowerCase(); } catch (e) { return ''; } };
       if (!/^https:\/\//.test(link) || hostOf(link) !== hostOf(base)) return res.status(400).json({ error: 'Odkaz mimo Laundromats' });
     }
-    let pradFrom = null; try { pradFrom = await require('./compounder.routes').funnelMailFrom('schuzka'); } catch (e) { pradFrom = null; }
+    let pradFrom = null; try { pradFrom = await require('./compounder.routes').funnelMailFrom('schuzka', b.lang === 'pl' ? 'pl' : undefined); } catch (e) { pradFrom = null; }
     const from = pradFrom || process.env.COMPOUNDER_MAIL_FROM || undefined;
     const mail = { to, from, brand: 'pradlomaty', fromName: '💧 PRÁDLOMATY 💧', subject: String(b.subject || 'Laundromats').slice(0, 200), body: String(b.body || '').slice(0, 5000), link, linkLabel: b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined };
     if (b.ics && typeof b.ics === 'string' && b.ics.indexOf('BEGIN:VCALENDAR') === 0 && b.ics.length < 20000) mail.attachments = [{ filename: 'schuzka.ics', content: b.ics, contentType: 'text/calendar; charset=utf-8; method=PUBLISH' }];
