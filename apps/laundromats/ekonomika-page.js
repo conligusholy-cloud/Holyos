@@ -68,6 +68,8 @@ const CSS = `<style>
   .ek-note{font-size:12px;color:var(--muted2);margin:6px 0 8px}
   .ek-track{height:10px;border-radius:6px;background:rgba(120,160,255,.14);overflow:hidden;margin:12px 0 6px}
   .ek-fill{height:100%;width:0;background:linear-gradient(90deg,#3ee08a,#4fd1ff);border-radius:6px;transition:width .35s}
+  .ek-photo{float:right;width:300px;max-width:44%;aspect-ratio:4/3;object-fit:cover;border-radius:18px;border:1px solid rgba(79,209,255,.45);margin:4px 0 14px 18px;cursor:zoom-in;box-shadow:0 20px 60px -24px rgba(58,108,245,.7);background:rgba(120,160,255,.06)}
+  @media(max-width:520px){.ek-photo{float:none;display:block;width:100%;max-width:100%;margin:0 0 14px}}
   @media(min-width:560px){.ek-metrics{grid-template-columns:1fr 1fr}}
 </style>`;
 
@@ -78,12 +80,13 @@ function economyPage(lang) {
   const pl = lang === 'pl';
   const main = `${CSS}
     <a class="bx-back" data-keep href="/cesta">${t.back}</a>
+    <img class="ek-photo" id="ek-photo" src="/img/pradlomat-mini.webp" alt="Prádlomat">
     <p class="bx-eyebrow">${t.eyebrow}</p>
     <h1>${t.h1}</h1>
     <p class="bx-lead">${t.lead}</p>
     <p class="ek-note" style="margin-top:-10px">${t.vat}</p>
 
-    <div class="ek-metrics">
+    <div class="ek-metrics" style="clear:both">
       <div class="ek-m"><div class="k">${t.invest}</div><div class="v g" id="m-invest">—</div><div class="b4" id="m-invest-before" style="display:none"></div><div class="s">${t.investSub}</div></div>
       <div class="ek-m"><div class="k">${t.rev}</div><div class="v" id="m-revenue">—</div><div class="s" id="m-cust">—</div></div>
       <div class="ek-m"><div class="k">${t.profit}</div><div class="v" id="m-profit">—</div><div class="s">${t.profitSub}</div></div>

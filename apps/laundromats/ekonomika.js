@@ -10,6 +10,8 @@
   var PERMIT = 825;
   var RATES = { CZK: 1, EUR: 24.35, PLN: 1 / 0.1807 }; // CZK za 1 jednotku
   var SYM = { CZK: 'Kč', EUR: '€', PLN: 'zł' };
+  var PHOTOS = {};
+  function photo() { var im = $('ek-photo'); if (im && PHOTOS[VER] && im.getAttribute('src') !== PHOTOS[VER]) im.src = PHOTOS[VER]; }
   var CUR = T.defCur || 'CZK', VER = 'V3';
   var M = { machine: 0, permit: 0, conn: 0, spend: 0, cost: 0, perday: 0 }; // v EUR (perday ks)
   var $ = function (id) { return document.getElementById(id); };
@@ -25,7 +27,7 @@
     [].forEach.call(document.querySelectorAll('.u-cur'), function (e) { e.textContent = S; });
     [].forEach.call(document.querySelectorAll('#ek-ver button'), function (b) { b.classList.toggle('on', b.getAttribute('data-v') === VER); });
     [].forEach.call(document.querySelectorAll('#ek-cur button'), function (b) { b.classList.toggle('on', b.getAttribute('data-c') === CUR); });
-    calc();
+    photo(); calc();
   }
   function calc() {
     var k = f(), S = ' ' + SYM[CUR];
@@ -63,6 +65,11 @@
   $('ek-reset').addEventListener('click', function () { load(VER); show(); });
 
   load(VER); show();
+  var im0 = $('ek-photo'); if (im0) im0.addEventListener('click', function () {
+    var ov = document.createElement('div'); ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:14000;display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out';
+    ov.onclick = function () { ov.remove(); }; var b = document.createElement('img'); b.src = im0.src; b.style.cssText = 'max-width:96vw;max-height:92vh;border-radius:16px;border:1px solid rgba(79,209,255,.5)'; ov.appendChild(b); document.body.appendChild(ov);
+  });
+  fetch('/api/compounder/portal/machines').then(function (r) { return r.json(); }).then(function (j) { (j.machines || []).forEach(function (m) { PHOTOS[m.ver] = m.photo; }); photo(); }).catch(function () {});
   // Kurz EUR z ČNB (přes server); při chybě zůstává výchozí
   fetch('/api/ekonomika/fx').then(function (r) { return r.json(); }).then(function (j) {
     if (j && j.rates && j.rates.EUR > 0) { RATES.EUR = j.rates.EUR; if (j.rates.PLN > 0) RATES.PLN = j.rates.PLN; show(); }

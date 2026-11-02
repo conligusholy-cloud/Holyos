@@ -71,7 +71,17 @@ app.get('/api/ekonomika/fx', async (req, res) => {
     res.set('Cache-Control', 'public, max-age=1800').json(_fx.data || { rates: {} });
   } catch (e) { res.json({ rates: {} }); }
 });
-app.get('/api/compounder/portal/machines', (req, res) => res.json({ machines: [], discount: null }));
+// Fotky strojů V2/V3 z HolyOS (jen ver + photo, bez cen a slev; cache 1 h) — používá stránka Ekonomika i podrobný model
+let _mach = { at: 0, data: { machines: [], discount: null } };
+app.get('/api/compounder/portal/machines', async (req, res) => {
+  try {
+    if (Date.now() - _mach.at > 3600000) {
+      const r = await fetch(HOLYOS_URL + '/api/compounder/portal/machines'); const j = await r.json();
+      _mach = { at: Date.now(), data: { machines: (j.machines || []).filter((m) => m && m.ver && m.photo).map((m) => ({ ver: m.ver, photo: m.photo })), discount: null } };
+    }
+  } catch (e) { _mach.at = Date.now() - 3000000; }
+  res.set('Cache-Control', 'public, max-age=1800').json(_mach.data);
+});
 app.get('/cesta/booking.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').send(CP.bookingJs()));
 // ── polská verze ──
 const plSend = (res, html) => send(res, CI18N.toPl(shell(html)));
