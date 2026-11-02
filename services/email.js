@@ -72,6 +72,31 @@ function escapeHtml(s) {
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// Prádlomaty mimo Česko = značka LAUNDROMATS (laundromats.eu). Texty šablony podle jazyka leadu.
+const LAUNDRO_TXT = {
+  en: { sub: 'Self-service laundromats', unsub: 'Unsubscribe', open: 'Open' },
+  pl: { sub: 'Samoobsługowe pralnie', unsub: 'Wypisz się', open: 'Otwórz' },
+  sk: { sub: 'Samoobslužné práčovne', unsub: 'Odhlásiť odber', open: 'Otvoriť' },
+  de: { sub: 'Selbstbedienungs-Waschsalons', unsub: 'Abmelden', open: 'Öffnen' },
+  hu: { sub: 'Önkiszolgáló mosodák', unsub: 'Leiratkozás', open: 'Megnyitás' },
+  ro: { sub: 'Spălătorii self-service', unsub: 'Dezabonare', open: 'Deschide' },
+  it: { sub: 'Lavanderie self-service', unsub: 'Annulla iscrizione', open: 'Apri' },
+  es: { sub: 'Lavanderías autoservicio', unsub: 'Darse de baja', open: 'Abrir' },
+  fr: { sub: 'Laveries libre-service', unsub: 'Se désabonner', open: 'Ouvrir' },
+};
+// Vrátí jazyk pro LAUNDROMATS, nebo null (= Česko → PRÁDLOMATY). Explicitní lang má přednost; jinak podle domény laundromats.eu (odesílatel / odkaz) + odhad jazyka z textu.
+function laundroLang({ lang, from, link, body, subject }) {
+  const l = String(lang || '').toLowerCase().slice(0, 2);
+  if (l) return l === 'cs' ? null : l;
+  if (!/laundromats\.eu/i.test(String(from || '') + ' ' + String(link || ''))) return null;
+  const t = String(subject || '') + ' ' + String(body || '');
+  if (/[ąęłńśźż]/i.test(t)) return 'pl';
+  if (/[ľĺŕô]/i.test(t)) return 'sk';
+  if (/[őű]/i.test(t)) return 'hu';
+  if (/[äöüß]/i.test(t)) return 'de';
+  return 'en';
+}
+
 function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', preheader, brand, trackingPixel, flyerUrl, rawHtml }) {
   // Odkaz je v HTML e-mailu jen pod tlačítkem (jednou, malým písmem) – z textu zprávy se vyjme (i s dvojtečkou před ním)
   if (link && body && !rawHtml) {
@@ -196,8 +221,8 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border:1px solid #cfe0fb;border-radius:18px;overflow:hidden;">
         <tr><td style="padding:26px 34px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);">
-          <div style="font-size:22px;font-weight:800;letter-spacing:.04em;color:#ffffff;">💧 PRÁDLOMATY 💧</div>
-          <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#dbe8ff;margin-top:6px;">Samoobslužné prádelny</div>
+          <div style="font-size:22px;font-weight:800;letter-spacing:.04em;color:#ffffff;">${brandTitle}</div>
+          <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#dbe8ff;margin-top:6px;">${escapeHtml(brandSub)}</div>
         </td></tr>
         <tr><td style="padding:30px 34px 8px;">
           <div style="font-size:22px;font-weight:700;color:#0f2444;line-height:1.3;">${escapeHtml(title || '')}</div>
@@ -317,8 +342,11 @@ async function isCustomerMailPaused() {
   try { const { getSetting } = require('./settings'); return (await getSetting(CUSTOMER_MAIL_PAUSE_KEY, { type: 'boolean', defaultValue: false })) === true; } catch (e) { return false; }
 }
 
-async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, deliveryReceipt, audience, leadId, campaignId, unsubscribe }) {
+async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, deliveryReceipt, audience, leadId, campaignId, unsubscribe, lang }) {
   if (!to) return { sent: false, skipped: 'no-recipient' };
+  // Prádlomaty mimo Česko → značka LAUNDROMATS (hlavička šablony i jméno odesílatele)
+  let unsubLabel = 'Odhlásit odběr';
+  if (brand === 'pradlomaty') { const ll = laundroLang({ lang, from, link, body, subject }); if (ll) { brand = 'laundromats:' + ll; unsubLabel = (LAUNDRO_TXT[ll] || LAUNDRO_TXT.en).unsub; if (!fromName || /PR[ÁA]DLOMATY/i.test(fromName)) fromName = '💧 LAUNDROMATS 💧'; } }
   if (audience === 'customer' && await isCustomerMailPaused()) {
     console.warn(`[Email] POZASTAVENO (customer_emails_paused) — neodesláno → ${to}: ${subject}`);
     return { sent: false, skipped: 'customer-emails-paused', error: 'E-maily zákazníkům jsou pozastaveny (přepínač v Prodejních objednávkách)' };
@@ -326,7 +354,7 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
 
   // 00) Amazon SES brána (env SMTP_* + SES_CONFIGURATION_SET, src/mailer.js): jen e-maily od adresy SMTP_FROM
   try { const M = require('./ses/mailer'); if (M.isConfigured()) { const sesS = from ? await M.sesSenderFor(from) : null; const sf = sesS ? sesS.raw : M.smtpConf().from; const useSes = !!sesS; // SES jen pro odesílatele SES (SMTP_FROM + další v Nastavení) – ostatní cesty (M365 Graph) beze změny
-    if (useSes) { const EL = require('./ses/email-log'); const unsubUrl = unsubscribe === false ? null : EL.unsubscribeUrl(to); let html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand, trackingPixel, flyerUrl, rawHtml }); if (unsubUrl) html = html.replace(/<\/body>/i, '<div style="text-align:center;font-size:11px;color:#8ea2c2;padding:10px 0 18px"><a href="' + unsubUrl + '" style="color:#8ea2c2;text-decoration:underline">Odhlásit odběr</a></div></body>');
+    if (useSes) { const EL = require('./ses/email-log'); const unsubUrl = unsubscribe === false ? null : EL.unsubscribeUrl(to); let html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand, trackingPixel, flyerUrl, rawHtml }); if (unsubUrl) html = html.replace(/<\/body>/i, '<div style="text-align:center;font-size:11px;color:#8ea2c2;padding:10px 0 18px"><a href="' + unsubUrl + '" style="color:#8ea2c2;text-decoration:underline">' + escapeHtml(unsubLabel) + '</a></div></body>');
       const fa = parseAddrLite(sf); const fromHeader = fromName ? '"' + String(fromName).replace(/"/g, '') + '" <' + fa.address + '>' : sf;
       const r = await M.sendEmail({ to, subject, html, from: fromHeader, replyTo, inlineImages: [] }); await EL.logMessage(r, { to, subject, campaignId: campaignId || (brand ? 'brand:' + brand : null), leadId });
       if (r.ok) { console.log('[Email] odesláno přes Amazon SES → ' + to + (r.simulated ? ' (simulace)' : '')); return { sent: true, via: 'ses', from: fa.address, messageId: r.messageId, sesMessageId: r.sesMessageId, simulated: !!r.simulated }; }
