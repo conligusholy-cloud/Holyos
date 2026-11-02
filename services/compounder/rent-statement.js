@@ -175,7 +175,7 @@ async function generate(contractId, ym) {
     kiosk_code: c.kiosk_code, customer_name: c.customer_name || null, buyer_ico: c.buyer_ico || null,
     period_from: new Date(rev.period_from + 'T00:00:00Z'), period_to: new Date(rev.period_to + 'T00:00:00Z'),
     currency: c.currency || rev.currency || 'CZK', vat_rate: Number(c.vat_rate) || 21, fee_pct: Number(c.fee_pct) || 13,
-    revenue_sis: rev.prevMonth,
+    revenue_sis: rev.prevMonth, reverse_charge: !!c.reverse_charge, buyer_vat_id: c.buyer_vat_id || null,
   };
   const k = calc(Object.assign({}, existing || {}, base, { lines: allLines }));
   const data = Object.assign({}, base, { suggestions, lines: k.lines, revenue_gross: k.revenue_gross, revenue_net: k.revenue_net, fee_net: k.fee_net, cost_d: k.cost_d, cost_e: k.cost_e, cost_f: k.cost_f, rent: k.rent });
@@ -224,7 +224,7 @@ function html(st, ourCompany) {
   const fxOn = !!(st.invoice_currency && st.fx_rate && st.rent_invoice != null);
   const fm = (n) => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (st.invoice_currency || '');
   return bs2.page({ title: 'Podklad pro fakturaci nájemného', number: st.doc_number || 'KONCEPT', pill: 'Nájem kiosku · ' + st.kiosk_code, ext: st.status === 'issued' ? '' : (st.test ? 'TESTOVACÍ UKÁZKA' : 'Koncept — nevydáno') }, `
-  <div class="parties"><div class="party"><span class="h">Nájemce (provozovatel)</span><div class="name">${esc(st.customer_name || '—')}</div>${st.buyer_ico ? `<div class="row">IČO ${esc(st.buyer_ico)}</div>` : ''}<div class="row">Kiosk: ${esc(st.kiosk_code)}</div></div>
+  <div class="parties"><div class="party"><span class="h">Nájemce (provozovatel)</span><div class="name">${esc(st.customer_name || '—')}</div>${st.buyer_ico ? `<div class="row">IČO ${esc(st.buyer_ico)}</div>` : ''}${st.buyer_vat_id ? `<div class="row">DIČ / VAT ID ${esc(st.buyer_vat_id)}</div>` : ''}<div class="row">Kiosk: ${esc(st.kiosk_code)}</div></div>
     <div class="party"><span class="h">Pronajímatel</span><div class="name">${esc((ourCompany && ourCompany.name) || 'Best Series s.r.o.')}</div>${ourCompany && ourCompany.ico ? `<div class="row">IČO ${esc(ourCompany.ico)}</div>` : ''}</div></div>
   <div class="meta"><div><div class="l">Období</div><div class="v">${d(st.period_from)} – ${d(st.period_to)}</div></div><div><div class="l">Měsíc</div><div class="v">${esc(st.period_ym)}</div></div><div><div class="l">DPH</div><div class="v">${Number(st.vat_rate)} %</div></div><div><div class="l">Poplatek Nájemce</div><div class="v">${Number(st.fee_pct)} % z tržeb</div></div></div>
   <table class="items"><thead><tr><th>Položka výpočtu (čl. VI)</th><th class="r">Částka vč. DPH</th><th class="r">Bez DPH</th></tr></thead><tbody>
@@ -233,8 +233,10 @@ function html(st, ourCompany) {
     <tr><td><b>C. Servisní a provozní poplatek Nájemce</b> <span style="color:#5b6b86">(${Number(st.fee_pct)} % z A, bez DPH)</span></td><td class="r"></td><td class="r"><b>− ${m(st.fee_net)}</b></td></tr>
     ${catRows}
   </tbody></table>
+  <style>.sum{width:86%}.sum .row{gap:16px;align-items:center}.sum .row span{white-space:nowrap}.sum .row span:last-child{text-align:right}</style>
   <div class="sum"><div class="row${fxOn ? '' : ' total'}"><span>${rent >= 0 ? 'Měsíční nájemné (B − C − D − E − F)' : 'Záporný výsledek — vyúčtování nekrytých nákladů'}</span><span>${m(rent)}</span></div>${fxOn ? `<div class="row total"><span>${rent >= 0 ? 'Měsíční nájemné k fakturaci' : 'Vyúčtování nekrytých nákladů'} v ${esc(st.invoice_currency)}</span><span>${fm(st.rent_invoice)}</span></div><div class="row" style="font-size:11px;color:#5b6b86"><span>Přepočet kurzem ČNB ${Number(st.fx_rate).toLocaleString('cs-CZ', { minimumFractionDigits: 3, maximumFractionDigits: 4 })} ${esc(cur)}/${esc(st.invoice_currency)}${st.fx_rate_date ? ' ze dne ' + d(st.fx_rate_date) : ''}</span><span></span></div>` : ''}</div>
-  <div class="box"><h3>Jak číst výsledek</h3>${rent >= 0 ? 'Kladný výsledek je měsíční nájemné bez DPH za uvedené období. K částce se připočte DPH v zákonné výši, je-li podle právních předpisů účtována.' : 'Výsledek vzorce B − C − D − E − F je záporný. Absolutní hodnota představuje část nákladů na lokalitu, energie, provozní média a případný pozáruční servis, které nebyly kryty obratem po odečtení servisního a provozního poplatku. Nájemce tuto částku vyúčtuje Pronajímateli (čl. VI odst. 4).'} Položky D, E a F se uvádějí po odečtení DPH, na kterou má Nájemce nárok na odpočet; podklady (daňové doklady) jsou součástí vyúčtování.</div>
+  ${st.reverse_charge ? `<div class="box" style="border-color:#f59e0b"><h3>Fakturace bez DPH — přenesení daňové povinnosti</h3>Nájemce je plátcem DPH v jiném členském státě EU${st.buyer_vat_id ? ' (VAT ID ' + esc(st.buyer_vat_id) + ')' : ''}. Fakturu vystavte <b>bez DPH</b> s uvedením „Reverse charge / přenesení daňové povinnosti“ (čl. 196 směrnice 2006/112/ES); daň přizná a odvede příjemce plnění.</div>` : ''}
+  <div class="box"><h3>Jak číst výsledek</h3>${rent >= 0 ? (st.reverse_charge ? 'Kladný výsledek je měsíční nájemné bez DPH za uvedené období. Fakturuje se bez DPH (přenesení daňové povinnosti).' : 'Kladný výsledek je měsíční nájemné bez DPH za uvedené období. K částce se připočte DPH v zákonné výši, je-li podle právních předpisů účtována.') : 'Výsledek vzorce B − C − D − E − F je záporný. Absolutní hodnota představuje část nákladů na lokalitu, energie, provozní média a případný pozáruční servis, které nebyly kryty obratem po odečtení servisního a provozního poplatku. Nájemce tuto částku vyúčtuje Pronajímateli (čl. VI odst. 4).'} Položky D, E a F se uvádějí po odečtení DPH, na kterou má Nájemce nárok na odpočet; podklady (daňové doklady) jsou součástí vyúčtování.</div>
   ${lines.some((l) => l.cat === 'E' && l.source === 'advance') ? '<div class="box"><h3>Energie — zálohy</h3>Energie a provozní média (E) jsou v tomto podkladu účtovány formou pevných měsíčních záloh dle smlouvy. Vyúčtování proběhne dle skutečnosti po obdržení ročního vyúčtování od dodavatele; rozdíl (doplatek / přeplatek) bude zohledněn v podkladu za měsíc, ve kterém bude vyúčtování doručeno.</div>' : ''}
   ${st.note ? `<div class="box"><h3>Poznámka</h3>${esc(st.note)}</div>` : ''}
   <div class="sig"><div>Za Nájemce (zpracoval)</div><div>Za Pronajímatele (odsouhlasil)</div></div>`);
@@ -258,6 +260,7 @@ function mailText(st, contract, test) {
     + (rent >= 0 ? 'Měsíční nájemné bez DPH (B − C − D − E − F): ' : 'Záporný výsledek — vyúčtování nekrytých nákladů: ') + f(rent) + '\n'
     + (st.invoice_currency && st.fx_rate && st.rent_invoice != null ? (rent >= 0 ? 'K fakturaci v ' : 'Vyúčtování v ') + st.invoice_currency + ': ' + Number(st.rent_invoice).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + st.invoice_currency + ' (kurz ČNB ' + Number(st.fx_rate).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) + ' ' + cur + '/' + st.invoice_currency + (st.fx_rate_date ? ', ' + st.fx_rate_date : '') + ')\n' : '')
     + '\n'
+    + (st.reverse_charge ? 'Fakturu prosím vystavte BEZ DPH s textem „Reverse charge / přenesení daňové povinnosti“ (čl. 196 směrnice 2006/112/ES).\n\n' : '')
     + 'Podle tohoto podkladu prosím vystavte fakturu.\n\nS pozdravem\nBest Series';
 }
 async function sendStatementMail(st, contract, opts) {
@@ -284,7 +287,7 @@ async function sendTest(contract, to) {
   let inv = { lines: [], missing: [] }; try { inv = await pullInvoiceLines(contract, base); } catch (e) { /* bez faktur */ }
   let lines = inv.lines.length ? inv.lines : [{ cat: 'D', label: 'Ukázka — faktura za nájem lokality', amount: 12100, vat_rate: 21, deductible: true }, { cat: 'E', label: 'Ukázka — faktura za energie', amount: 6050, vat_rate: 21, deductible: true }];
   lines = applyEnergyAdvances(contract, base, applyFixedRent(contract, base, lines).lines);
-  const st = { test: true, kiosk_code: contract.kiosk_code, customer_name: contract.customer_name, buyer_ico: contract.buyer_ico, period_ym: base.prevMonthYm, period_from: new Date(base.period_from + 'T00:00:00Z'), period_to: new Date(base.period_to + 'T00:00:00Z'), currency: contract.currency || 'CZK', vat_rate: Number(contract.vat_rate) || 21, fee_pct: Number(contract.fee_pct) || 13, revenue_sis: real ? base.prevMonth : 121000, revenue_adjust: 0, lines, status: 'draft', note: real ? null : 'UKÁZKA — vzorová data, tržby za minulý měsíc se nepodařilo načíst.' };
+  const st = { test: true, kiosk_code: contract.kiosk_code, customer_name: contract.customer_name, buyer_ico: contract.buyer_ico, reverse_charge: !!contract.reverse_charge, buyer_vat_id: contract.buyer_vat_id || null, period_ym: base.prevMonthYm, period_from: new Date(base.period_from + 'T00:00:00Z'), period_to: new Date(base.period_to + 'T00:00:00Z'), currency: contract.currency || 'CZK', vat_rate: Number(contract.vat_rate) || 21, fee_pct: Number(contract.fee_pct) || 13, revenue_sis: real ? base.prevMonth : 121000, revenue_adjust: 0, lines, status: 'draft', note: real ? null : 'UKÁZKA — vzorová data, tržby za minulý měsíc se nepodařilo načíst.' };
   Object.assign(st, calc(st));
   await withFx(st, contract, null, true);
   const r = await sendStatementMail(st, contract, { to, test: true });
