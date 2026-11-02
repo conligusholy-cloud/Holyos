@@ -269,6 +269,29 @@ async function sweepTestLeads() {
   } catch (e) { /* úklid je best-effort */ }
 }
 setInterval(sweepTestLeads, 60000).unref();
+// Doposlání SMS + e-mailu PL leadům, kterým nic neodešlo (tlačítko v editoru funelu). body.dry = jen přehled.
+// Nejdřív doplní e-mail/jméno z poznámky (starý PL formulář je neuložil do polí), pak pošle jen kanály, které ještě neodešly.
+router.post('/pl-resend', async (req, res, next) => { try {
+  const dry = !!(req.body && req.body.dry); const CR = require('./compounder.routes');
+  const since = new Date(Date.now() - 30 * 86400000);
+  const leads = await prisma.compounderLead.findMany({ where: { lang: 'pl', created_at: { gte: since }, NOT: { meta_lead_id: { startsWith: 'test-' } } }, orderBy: { id: 'asc' } });
+  const out = []; let sms = 0, email = 0, fixed = 0;
+  for (const l0 of leads) {
+    let l = l0; const notes = String(l.notes || '');
+    if (!l.email) { const em = /adres[\s_]*e-?mail:\s*([^\s,;]+@[^\s,;]+)/i.exec(notes); if (em) { if (!dry) l = await prisma.compounderLead.update({ where: { id: l.id }, data: { email: em[1].trim().toLowerCase() } }); else l = Object.assign({}, l, { email: em[1].trim().toLowerCase() }); fixed++; } }
+    if (!l.name || l.name === l.phone) { const nm = /imi[eę][\s_]*i[\s_]*nazwisko:\s*(.+)/i.exec(notes); if (nm && !dry) await prisma.compounderLead.update({ where: { id: l.id }, data: { name: nm[1].split('\n')[0].trim().slice(0, 255) } }).catch(() => {}); }
+    const needSms = !!l.phone && !l.schuzka_sms_sent_at && !l.ai_specialist_sms_sent_at;
+    const needEmail = !!l.email && !l.schuzka_email_sent_at && !l.ai_specialist_email_sent_at;
+    if (!needSms && !needEmail) continue;
+    const row = { id: l.id, phone: l.phone, email: l.email || null, sms: needSms ? (dry ? 'poslat' : null) : '—', email_res: needEmail ? (dry ? 'poslat' : null) : '—' };
+    if (!dry) {
+      if (needSms) { const r = await CR.forceSend(l.id, 'sms', false).catch((e) => ({ sent: false, reason: e.message })); row.sms = r.sent ? 'odesláno' : ('NE: ' + (r.reason || '?')); if (r.sent) sms++; await new Promise((z) => setTimeout(z, 600)); }
+      if (needEmail) { const r = await CR.forceSend(l.id, 'email', false).catch((e) => ({ sent: false, reason: e.message })); row.email_res = r.sent ? 'odesláno' : ('NE: ' + (r.reason || '?')); if (r.sent) email++; await new Promise((z) => setTimeout(z, 600)); }
+    }
+    out.push(row);
+  }
+  res.json({ ok: true, dry, total_pl: leads.length, k_doposlani: out.length, doplneno_emailu: fixed, odeslano_sms: sms, odeslano_email: email, leady: out });
+} catch (err) { next(err); } });
 // Okamžitý restart: smaže všechny testovací leady (tlačítko v editoru funelu)
 router.delete('/test-leads', async (req, res, next) => { try {
   const all = await prisma.compounderLead.findMany({ where: { meta_lead_id: { startsWith: 'test-' } }, select: { id: true } }); let deleted = 0, failed = 0;
