@@ -7077,10 +7077,13 @@ async function _fbCreateLead(fields, meta, formCfg) {
 // a odebere se dosavadnímu obchodníkovi (i externímu zástupci). Nastavení je u formuláře (fb_lead_forms.meeting_owner), plní se při uložení funelu.
 async function _applyMeetingOwner(leadId) {
   const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { id: true, meta_form_id: true, owner_person_id: true, external_rep_id: true, activity_log: true } });
-  if (!lead || !lead.meta_form_id) return;
-  const forms = await _fbLoadForms(); const fc = forms.find((x) => String(x.form_id) === String(lead.meta_form_id));
-  if (!fc || !fc.meeting_owner) return;
-  const pid = String(fc.meeting_owner) === 'jan' ? await _blacklistOwnerId() : (parseInt(fc.meeting_owner, 10) || null);
+  if (!lead) return;
+  // Výchozí pravidlo: domluvená schůzka s majitelem → kontakt přebírá Jan Holý (spravuje ho dál) a obchodníkovi se odebírá.
+  // Formulář funelu může určit jinou osobu (meeting_owner = id osoby); 'jan' nebo nic = Jan Holý.
+  let fc = null;
+  if (lead.meta_form_id) { const forms = await _fbLoadForms().catch(() => []); fc = (forms || []).find((x) => String(x.form_id) === String(lead.meta_form_id)) || null; }
+  const mo = fc && fc.meeting_owner ? String(fc.meeting_owner) : 'jan';
+  const pid = mo === 'jan' ? await _blacklistOwnerId() : (parseInt(mo, 10) || await _blacklistOwnerId());
   if (!pid) return;
   if (lead.owner_person_id === pid && !lead.external_rep_id) return;
   const nm = async (id) => { if (!id) return 'nikdo'; const p = await prisma.person.findUnique({ where: { id }, select: { first_name: true, last_name: true } }).catch(() => null); return p ? ((p.first_name || '') + ' ' + (p.last_name || '')).trim() : ('#' + id); };
