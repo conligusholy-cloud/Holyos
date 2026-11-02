@@ -36,6 +36,7 @@ function rateLimited(key, max, windowMs) {
 
 const CI18N = require('./cesta-i18n');
 const CP = require('./cesta-pages');
+const EP = require('./ekonomika-page');
 const FOOT_CSS = '.site-foot{margin-top:70px;padding:26px 0 8px;border-top:1px solid rgba(120,160,255,.14);display:flex;align-items:center;justify-content:space-between;gap:16px 28px;flex-wrap:wrap;font-size:13.5px;color:#58698a}.site-foot b{font-weight:800;background:linear-gradient(90deg,#4fd1ff,#7c5cff);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:15px}.site-foot nav{display:flex;flex-wrap:wrap;gap:6px 22px}.site-foot a{color:#7d93b8;text-decoration:none}.site-foot a:hover{color:#4fd1ff}';
 const LOGO = '<span style="margin-right:10px;display:inline-flex"><svg width="34" height="34" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="lmg" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff"/><stop offset=".55" stop-color="#3a6cf5"/><stop offset="1" stop-color="#7c5cff"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="17" fill="#0b1220"/><rect x="2.75" y="2.75" width="58.5" height="58.5" rx="16.5" stroke="url(#lmg)" stroke-width="1.5"/><circle cx="32" cy="34" r="15" stroke="url(#lmg)" stroke-width="3.5"/><circle cx="32" cy="34" r="8" stroke="url(#lmg)" stroke-width="2.5" stroke-opacity=".6"/><circle cx="20" cy="16" r="2" fill="#4fd1ff"/><circle cx="27" cy="16" r="2" fill="#7c5cff"/></svg></span>';
 const FOOTER = '<div style="max-width:720px;margin:0 auto;padding:0 22px 40px"><footer class="site-foot"><div><b>Laundromats.eu</b> &nbsp;© Best Series s.r.o.</div><nav><a href="/gdpr">Ochrana osobních údajů</a><a href="mailto:info@laundromats.eu">info@laundromats.eu</a></nav></footer></div>';
@@ -57,10 +58,26 @@ app.get('/cesta/info', (req, res) => send(res, shell(CP.infoPage())));
 app.get('/cesta/vlastni-kapital', (req, res) => send(res, shell(CP.vlastniPage())));
 app.get('/cesta/financovani', (req, res) => send(res, shell(CP.financovaniPage())));
 app.get('/cesta/schuzka', (req, res) => send(res, shell(CP.schuzkaPage())));
+app.get('/cesta/ekonomika', (req, res) => send(res, shell(EP.economyPage('cs'))));
+app.get('/cesta/ekonomika/podrobne', (req, res) => send(res, shell(EP.economyDetailPage('cs'))));
+app.get('/ekonomika', (req, res) => res.redirect(302, '/cesta/ekonomika' + (req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '')));
+app.get('/cesta/ekonomika.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').sendFile(path.join(__dirname, 'ekonomika.js')));
+app.get('/cesta/pradlomat-economy.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').sendFile(path.join(__dirname, 'pradlomat-economy.js')));
+// Kurzy ČNB přes HolyOS (cache 1 h) + prázdná odpověď pro fotky/slevy strojů (model je na veřejném webu bez slev)
+let _fx = { at: 0, data: null };
+app.get('/api/ekonomika/fx', async (req, res) => {
+  try {
+    if (!_fx.data || Date.now() - _fx.at > 3600000) { const r = await fetch(HOLYOS_URL + '/api/compounder/fx-rates'); const j = await r.json(); if (j && j.rates) _fx = { at: Date.now(), data: j }; }
+    res.set('Cache-Control', 'public, max-age=1800').json(_fx.data || { rates: {} });
+  } catch (e) { res.json({ rates: {} }); }
+});
+app.get('/api/compounder/portal/machines', (req, res) => res.json({ machines: [], discount: null }));
 app.get('/cesta/booking.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').send(CP.bookingJs()));
 // ── polská verze ──
 const plSend = (res, html) => send(res, CI18N.toPl(shell(html)));
 app.get('/cesta/pl', (req, res) => plSend(res, cestaHtml()));
+app.get('/cesta/pl/ekonomika', (req, res) => plSend(res, EP.economyPage('pl')));
+app.get('/cesta/pl/ekonomika/podrobne', (req, res) => plSend(res, EP.economyDetailPage('pl')));
 app.get('/cesta/pl/info', (req, res) => plSend(res, CP.infoPage()));
 app.get('/cesta/pl/vlastni-kapital', (req, res) => plSend(res, CP.vlastniPage()));
 app.get('/cesta/pl/financovani', (req, res) => plSend(res, CP.financovaniPage()));

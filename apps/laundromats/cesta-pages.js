@@ -200,4 +200,4 @@ function bookingJs() {
   return _booking;
 }
 
-module.exports = { infoPage, vlastniPage, financovaniPage, schuzkaPage, bookingJs };
+module.exports = { infoPage, vlastniPage, financovaniPage, schuzkaPage, bookingJs, page };
