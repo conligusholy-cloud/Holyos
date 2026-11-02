@@ -40,7 +40,7 @@ const EP = require('./ekonomika-page');
 const FOOT_CSS = '.site-foot{margin-top:70px;padding:26px 0 8px;border-top:1px solid rgba(120,160,255,.14);display:flex;align-items:center;justify-content:space-between;gap:16px 28px;flex-wrap:wrap;font-size:13.5px;color:#58698a}.site-foot b{font-weight:800;background:linear-gradient(90deg,#4fd1ff,#7c5cff);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:15px}.site-foot nav{display:flex;flex-wrap:wrap;gap:6px 22px}.site-foot a{color:#7d93b8;text-decoration:none}.site-foot a:hover{color:#4fd1ff}';
 const LOGO = '<span style="margin-right:10px;display:inline-flex"><svg width="34" height="34" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="lmg" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff"/><stop offset=".55" stop-color="#3a6cf5"/><stop offset="1" stop-color="#7c5cff"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="17" fill="#0b1220"/><rect x="2.75" y="2.75" width="58.5" height="58.5" rx="16.5" stroke="url(#lmg)" stroke-width="1.5"/><circle cx="32" cy="34" r="15" stroke="url(#lmg)" stroke-width="3.5"/><circle cx="32" cy="34" r="8" stroke="url(#lmg)" stroke-width="2.5" stroke-opacity=".6"/><circle cx="20" cy="16" r="2" fill="#4fd1ff"/><circle cx="27" cy="16" r="2" fill="#7c5cff"/></svg></span>';
 const FOOTER = '<div style="max-width:720px;margin:0 auto;padding:0 22px 40px"><footer class="site-foot"><div><b>Laundromats.eu</b> &nbsp;© Best Series s.r.o.</div><nav><a href="/gdpr">Ochrana osobních údajů</a><a href="mailto:info@laundromats.eu">info@laundromats.eu</a></nav></footer></div>';
-const shell = (html) => CI18N.addSwitch(String(html).replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</style>', FOOT_CSS + '</style>').replace('<!--PRESENCE-->', ''));
+const shell = (html) => CI18N.addSwitch(String(html).replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</style>', FOOT_CSS + '</style>').replace('<!--PRESENCE-->', '').replace('</body>', '<script src="/cesta/track.js" defer></script></body>'));
 const send = (res, html) => res.set('Cache-Control', 'no-cache').type('html').send(html);
 const cestaHtml = () => fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8');
 
@@ -61,6 +61,16 @@ app.get('/cesta/schuzka', (req, res) => send(res, shell(CP.schuzkaPage())));
 app.get('/cesta/ekonomika', (req, res) => send(res, shell(EP.economyPage('cs'))));
 app.get('/cesta/ekonomika/podrobne', (req, res) => send(res, shell(EP.economyDetailPage('cs'))));
 app.get('/ekonomika', (req, res) => res.redirect(302, '/cesta/ekonomika' + (req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '')));
+app.get('/cesta/track.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').sendFile(path.join(__dirname, 'track.js')));
+// Sledování chování → HolyOS (/api/compounder/track). Kontakt se pozná podle t/l (HolyOS ověří podpis); IP a prohlížeč se předávají dál.
+app.post('/api/cesta/track', (req, res) => {
+  res.status(204).end();
+  try {
+    const b = req.body || {};
+    if (!b.event || !b.sid || rateLimited('trk:' + req.ip, 240, 60000)) return;
+    fetch(HOLYOS_URL + '/api/compounder/track', { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': req.headers['user-agent'] || 'laundromats', 'X-Forwarded-For': req.ip || '' }, body: JSON.stringify({ sid: String(b.sid).slice(0, 64), event: String(b.event).slice(0, 60), path: b.path, lang: b.lang, props: b.props && typeof b.props === 'object' ? b.props : {} }), signal: AbortSignal.timeout(8000) }).catch(() => {});
+  } catch (e) { /* analytika je best-effort */ }
+});
 app.get('/cesta/ekonomika.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').sendFile(path.join(__dirname, 'ekonomika.js')));
 app.get('/cesta/pradlomat-economy.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').sendFile(path.join(__dirname, 'pradlomat-economy.js')));
 // Kurzy ČNB přes HolyOS (cache 1 h) + prázdná odpověď pro fotky/slevy strojů (model je na veřejném webu bez slev)
@@ -137,7 +147,7 @@ app.post('/api/cesta/meeting-reservation', async (req, res) => {
   let d;
   try {
     const r = await fetch(HOLYOS_URL + '/api/compounder/meeting-reservation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000),
-      body: JSON.stringify({ slot_id: b.slot_id, t: b.t || undefined, l: b.l || undefined, change: b.change || undefined, mode: b.mode, path: b.path, lang: b.lang === 'pl' ? 'pl' : undefined, name: f.first_name + ' ' + f.last_name, email: f.email, phone: f.phone, existing_account: false }) });
+      body: JSON.stringify({ slot_id: b.slot_id, t: b.t || undefined, l: b.l || undefined, change: b.change || undefined, mode: b.mode, path: b.path, lang: b.lang === 'pl' ? 'pl' : undefined, sid: /^lm-[a-z0-9]{4,60}$/.test(String(b.sid || '')) ? b.sid : undefined, name: f.first_name + ' ' + f.last_name, email: f.email, phone: f.phone, existing_account: false }) });
     d = await r.json().catch(() => ({}));
     if (!r.ok || !d.ok) return res.status(r.status >= 400 ? r.status : 400).json({ ok: false, error: d.error || 'Rezervaci se nepodařilo dokončit.' });
   } catch (e) { console.warn('[laundromats] rezervace:', e.message); return res.status(502).json({ ok: false, error: 'Rezervace je teď nedostupná. Zkuste to prosím za chvíli.' }); }

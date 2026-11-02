@@ -199,7 +199,9 @@ function economyDetailPage(lang) {
     <p class="bx-lead" style="max-width:720px">${t.dLead}</p>
     <div id="pradlomat-tool-root"></div>
     <script src="/cesta/pradlomat-economy.js"></script>
-    <script>window.PradlomatTool.mount(document.getElementById('pradlomat-tool-root'),{version:'V3',showVerSwitch:true});</script>`;
+    <script>window.PradlomatTool.mount(document.getElementById('pradlomat-tool-root'),{version:'V3',showVerSwitch:true});
+    (function(){var r=document.getElementById('pradlomat-tool-root'),tm={};if(window.lmTrack)lmTrack('eco_open',{view:'detail'});
+      r.addEventListener('change',function(ev){var i=ev.target;if(!i||!i.getAttribute)return;var k=i.getAttribute('data-key');if(!k)return;var row=i.closest('.pe-row'),lb=row&&row.querySelector('label');clearTimeout(tm[k]);tm[k]=setTimeout(function(){if(window.lmTrack)lmTrack('eco_edit',{key:k,label:lb?lb.textContent.trim().slice(0,60):k,value:i.value});},400);});})();</script>`;
   return CP.page(t.dTitle, t.desc, main, false);
 }
 

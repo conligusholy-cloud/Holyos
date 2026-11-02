@@ -58,6 +58,12 @@
     el.addEventListener('input', function () { var v = parse(el.value); M[key] = perCur ? v / f() : v; calc(); });
     el.addEventListener('blur', function () { el.value = perCur ? fmt(M[key] * f()) : String(M[key]); });
   }
+  // sledování úprav modelu (po dokončení psaní) + otevření stránky
+  var LBL = { 'i-machine': 'Cena prádlomatu', 'i-permit': 'Projekt + povolení', 'i-conn': 'Přípojky', 'i-perday': 'Zákazníků / den' };
+  Object.keys(LBL).forEach(function (id) { $(id).addEventListener('change', function () { if (window.lmTrack) lmTrack('eco_edit', { key: id, label: LBL[id], value: $(id).value + (id === 'i-perday' ? '' : ' ' + SYM[CUR]) }); }); });
+  [].forEach.call(document.querySelectorAll('#ek-ver button'), function (b) { b.addEventListener('click', function () { if (window.lmTrack) lmTrack('eco_edit', { key: 'variant', label: 'Varianta', value: b.textContent }); }); });
+  [].forEach.call(document.querySelectorAll('#ek-cur button'), function (b) { b.addEventListener('click', function () { if (window.lmTrack) lmTrack('eco_edit', { key: 'currency', label: 'Měna', value: b.textContent }); }); });
+  if (window.lmTrack) lmTrack('eco_open', { view: 'basic' });
   bind('i-machine', 'machine', true); bind('i-permit', 'permit', true); bind('i-conn', 'conn', true); bind('i-perday', 'perday', false);
 
   [].forEach.call(document.querySelectorAll('#ek-ver button'), function (b) { b.addEventListener('click', function () { VER = b.getAttribute('data-v'); load(VER); show(); }); });

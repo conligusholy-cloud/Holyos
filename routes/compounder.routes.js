@@ -104,6 +104,12 @@ router.post('/track', async (req, res) => {
   try {
     const b = req.body || {};
     if (b && b.event && b.sid) {
+      // laundromats.eu posílá t/l z odkazu (SMS / e-mail) → ověř podpis a převeď na lead_id (t/l se neukládají)
+      if (b.props && typeof b.props === 'object' && (b.props.t || b.props.l)) {
+        const lid = !b.props.lead_id ? _leadFromTL(b.props.t, b.props.l) : null;
+        delete b.props.t; delete b.props.l;
+        if (lid) b.props.lead_id = lid;
+      }
       await prisma.compounderEvent.create({
         data: {
           sid: String(b.sid).slice(0, 64),
@@ -268,6 +274,8 @@ router.post('/meeting-reservation', async (req, res) => {
       }
     }
 
+    // Anonymní návštěva laundromats.eu (sid) → napoj na kontakt, ať je v jeho aktivitě celá cesta před rezervací
+    if (leadId && b.sid && /^lm-[a-z0-9]{4,60}$/.test(String(b.sid))) prisma.compounderEvent.create({ data: { sid: String(b.sid), event: 'lead_linked', props: { lead_id: leadId, via: 'meeting_reservation', site: 'laundromats' }, path: '/cesta/schuzka' } }).catch(() => {});
     // Rezervace z polské stránky: kontakt si zapamatuje jazyk PL (zrušení schůzky, SMS a e-maily pak odejdou polsky)
     if (leadId && /^pl/i.test(String(b.lang || ''))) await prisma.compounderLead.updateMany({ where: { id: leadId, lang: null }, data: { lang: 'pl' } }).catch(() => {});
     // (mode a path jsou deklarované výš — před vyhledáním / založením kontaktu)
@@ -5636,6 +5644,9 @@ router.get('/leads/:id/activity', requireAuth, async (req, res, next) => {
     });
     const or = [{ props: { path: ['lead_id'], equals: id } }];
     if (reg && reg.sid) or.push({ sid: reg.sid });
+    // Anonymní návštěvy laundromats.eu, které se napojily na kontakt až při rezervaci (event lead_linked)
+    const linked = await prisma.compounderEvent.findMany({ where: { event: 'lead_linked', props: { path: ['lead_id'], equals: id } }, select: { sid: true }, distinct: ['sid'], take: 20 });
+    linked.forEach((x) => { if (x.sid) or.push({ sid: x.sid }); });
     // Bereme NEJNOVĚJŠÍCH 500 eventů (desc) a otočíme do chronologie — jinak by se
     // u leada s >500 eventy nikdy nenačetla nedávná aktivita (např. ekonomika).
     const events = (await prisma.compounderEvent.findMany({

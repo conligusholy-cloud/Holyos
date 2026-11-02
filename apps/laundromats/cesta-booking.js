@@ -241,7 +241,7 @@
       root.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
     function send(slotId, f, onFail) {
-      var payload = { slot_id: slotId, t: token || undefined, l: (!token && lcode) ? lcode : undefined, change: changeTok || undefined, mode: chosenMode, path: path || undefined, first_name: f.first_name, last_name: f.last_name, email: f.email, phone: f.phone, gdpr: true };
+      var payload = { slot_id: slotId, t: token || undefined, l: (!token && lcode) ? lcode : undefined, change: changeTok || undefined, mode: chosenMode, sid: (window.lmSid ? window.lmSid() : undefined), path: path || undefined, first_name: f.first_name, last_name: f.last_name, email: f.email, phone: f.phone, gdpr: true };
       try { if (window.__bs2Lead) payload.lead = window.__bs2Lead(); } catch (e) {}
       setStatus('Rezervuji termín…');
       fetch('/api/compounder/meeting-reservation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) })
