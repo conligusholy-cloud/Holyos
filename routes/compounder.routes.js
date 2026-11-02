@@ -4373,7 +4373,7 @@ const rentContractSchema = z.object({
   contact_name: z.string().max(255).optional().nullable(), contact_email: z.string().max(255).optional().nullable(), cc_emails: z.string().max(500).optional().nullable(),
   effective_from: dateStr, effective_to: dateStr.optional().nullable().or(z.literal('')),
   issue_day: z.number().int().min(1).max(28).optional(), auto_mode: z.enum(['draft', 'issue', 'send']).optional(), active: z.boolean().optional(),
-  currency: z.string().max(3).optional(), invoice_currency: z.enum(['CZK', 'EUR']).optional(), vat_rate: z.number().optional(), fee_pct: z.number().optional(), vat_deductible: z.boolean().optional(),
+  currency: z.string().max(3).optional(), invoice_currency: z.enum(['CZK', 'EUR']).optional(), reverse_charge: z.boolean().optional(), buyer_vat_id: z.string().max(20).optional().nullable(), vat_rate: z.number().optional(), fee_pct: z.number().optional(), vat_deductible: z.boolean().optional(),
   rent_fixed_net: z.number().min(0).nullable().optional(), energy_advances: z.array(z.object({ label: z.string().max(120).optional().nullable(), amount_net: z.number().min(0), vat_rate: z.number().min(0).max(30).optional().nullable() })).max(10).optional().nullable(), rent_rules: rentRuleSchema, energy_rules: rentRuleSchema, service_rules: rentRuleSchema, ai_match: z.boolean().optional(), note: z.string().max(2000).optional().nullable(),
 });
 function rentContractData(d) {
@@ -4387,6 +4387,8 @@ function rentContractData(d) {
   if (d.auto_mode) out.auto_mode = d.auto_mode;
   if (d.currency) out.currency = d.currency.toUpperCase().slice(0, 3);
   if (d.invoice_currency) out.invoice_currency = d.invoice_currency;
+  if (d.reverse_charge !== undefined) out.reverse_charge = !!d.reverse_charge;
+  if (d.buyer_vat_id !== undefined) out.buyer_vat_id = d.buyer_vat_id ? String(d.buyer_vat_id).replace(/\s+/g, '').toUpperCase() : null;
   ['active', 'vat_deductible', 'ai_match'].forEach(function (k) { if (d[k] !== undefined) out[k] = !!d[k]; });
   ['rent_rules', 'energy_rules', 'service_rules'].forEach(function (k) { if (d[k] !== undefined) out[k] = (d[k] || []).map(function (r) { return { company_id: r.company_id, keyword: (r.keyword || '').trim() || null, share_pct: r.share_pct || 100 }; }); });
   return out;

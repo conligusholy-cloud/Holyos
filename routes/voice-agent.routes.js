@@ -298,10 +298,15 @@ async function resolveTransferPlan(mode, targetId, line) {
       const now = new Date();
       const ymd = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
       const sh = shifts && shifts[ymd];
+      if (!sh) console.warn('[voice] směna pro ' + ymd + ' není nastavena → jen statická čísla');
       if (sh) {
         const pushPerson = async (pid) => {
           const id = parseInt(pid, 10); if (!id) return;
-          try { const p = await prisma.person.findUnique({ where: { id }, select: { phone: true, active: true } }); if (p && p.active !== false && p.phone) base.push(p.phone); } catch (_) { /* přeskoč */ }
+          try {
+            const p = await prisma.person.findUnique({ where: { id }, select: { phone: true, active: true } });
+            if (p && p.active !== false && p.phone) base.push(p.phone);
+            else console.warn('[voice] směna: osoba #' + id + ' přeskočena (' + (!p ? 'neexistuje' : p.active === false ? 'neaktivní' : 'bez telefonu') + ')');
+          } catch (_) { /* přeskoč */ }
         };
         // v (globální) pracovní době přednostně osoba „v práci"
         if (sh.wperson && workFrom && workTo) {
@@ -645,6 +650,11 @@ router.post('/relay-end', form, async (req, res) => {
       console.warn('[voice] relay-end: přepojení chtěné, ale ŽÁDNÉ číslo (obchodník leadu bez telefonu a žádná záložní čísla u kampaně).');
       notifyTransferFailed(mode, target, 0, line, (req.body && req.body.CallSid) || '');
       return res.type('text/xml').send(twimlApology());
+    }
+    // Ochrana: když je v kolečku jen JEDNO číslo (záložní chybí / nemá telefon / není směna),
+    // nemá hovor náhradníka → hned upozorni lidi z Infolinky (ať doplní směnu), hovor přesto vytoč.
+    if (plan.perRound < 2) {
+      console.warn('[voice] relay-end: v plánu přepojení je jen ' + plan.perRound + ' číslo — chybí záložní operátor!');
     }
     return res.type('text/xml').send(twimlDial(plan.numbers, plan.timeout, { mode, target, callerId: plan.callerId, line }));
   } catch (e) {
