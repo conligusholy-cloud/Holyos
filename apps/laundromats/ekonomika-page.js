@@ -149,7 +149,7 @@ const DCSS = `<style>
   #pradlomat-tool-root .pe-toolbar{background:var(--card);border:1px solid rgba(120,160,255,.18);border-radius:15px;padding:14px 16px;gap:10px 14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
   #pradlomat-tool-root .pe-toolbar .pe-legend{font-size:12px;color:var(--muted)}
   #pradlomat-tool-root .pe-toolbar .pe-legend .pe-sw{width:18px;height:18px;border-radius:6px;background:rgba(255,205,60,.07);border:1px solid rgba(255,205,60,.38)}
-  #pradlomat-tool-root .pe-toolbar .pe-legend .pe-sw.ro{background:rgba(120,160,255,.06);border:1px solid rgba(120,160,255,.2)}
+  #pradlomat-tool-root .pe-toolbar .pe-legend .pe-sw.ro{background:rgba(79,209,255,.08);border:1px solid rgba(79,209,255,.35)}
   #pradlomat-tool-root .pe-toolbar span[style*="font-size:12px"]{color:var(--muted)!important}
   #pradlomat-tool-root .btn,#pradlomat-tool-root .pe-chip{cursor:pointer;font-size:13px;font-weight:700;color:var(--text);background:rgba(120,160,255,.08);border:1px solid rgba(120,160,255,.28);border-radius:10px;padding:7px 13px!important;transition:filter .15s}
   #pradlomat-tool-root .btn:hover{filter:brightness(1.18)}
@@ -183,7 +183,7 @@ const DCSS = `<style>
   /* vstupy: žluté pole = vstup (jako na hlavní stránce) */
   #pradlomat-tool-root .pe-input{background:rgba(255,205,60,.07);color:#ffd866;border:1px solid rgba(255,205,60,.38);border-radius:10px;padding:8px 11px;font-size:15px;font-weight:700}
   #pradlomat-tool-root .pe-input:focus{border-color:#ffd866;box-shadow:0 0 0 3px rgba(255,205,60,.15)}
-  #pradlomat-tool-root .pe-readonly{background:rgba(120,160,255,.06);border:1px solid rgba(120,160,255,.2);border-radius:10px;padding:8px 11px;font-size:15px;font-weight:700;color:var(--text)}
+  #pradlomat-tool-root .pe-readonly{background:rgba(79,209,255,.08);border:1px solid rgba(79,209,255,.35);border-radius:10px;padding:8px 11px;font-size:15px;font-weight:700;color:#4fd1ff}
   #pradlomat-tool-root .pe-readonly.emp{background:rgba(79,209,255,.08);color:#4fd1ff;border-color:rgba(79,209,255,.35)}
   #pradlomat-tool-root .pe-info{background:rgba(79,209,255,.07);border-color:rgba(79,209,255,.3);color:#b9dcf3;border-radius:12px}
   #pradlomat-tool-root .pe-warn{border-radius:12px}
