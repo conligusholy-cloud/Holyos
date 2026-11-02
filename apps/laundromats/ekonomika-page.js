@@ -148,7 +148,8 @@ const DCSS = `<style>
   /* lišta nástrojů */
   #pradlomat-tool-root .pe-toolbar{background:var(--card);border:1px solid rgba(120,160,255,.18);border-radius:15px;padding:14px 16px;gap:10px 14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
   #pradlomat-tool-root .pe-toolbar .pe-legend{font-size:12px;color:var(--muted)}
-  #pradlomat-tool-root .pe-toolbar .pe-legend .pe-sw{border-radius:5px;border:1px solid rgba(255,205,60,.5);background:rgba(255,205,60,.14)}
+  #pradlomat-tool-root .pe-toolbar .pe-legend .pe-sw{width:18px;height:18px;border-radius:6px;background:rgba(255,205,60,.07);border:1px solid rgba(255,205,60,.38)}
+  #pradlomat-tool-root .pe-toolbar .pe-legend .pe-sw.ro{background:rgba(120,160,255,.06);border:1px solid rgba(120,160,255,.2)}
   #pradlomat-tool-root .pe-toolbar span[style*="font-size:12px"]{color:var(--muted)!important}
   #pradlomat-tool-root .btn,#pradlomat-tool-root .pe-chip{cursor:pointer;font-size:13px;font-weight:700;color:var(--text);background:rgba(120,160,255,.08);border:1px solid rgba(120,160,255,.28);border-radius:10px;padding:7px 13px!important;transition:filter .15s}
   #pradlomat-tool-root .btn:hover{filter:brightness(1.18)}
@@ -169,6 +170,12 @@ const DCSS = `<style>
   #pradlomat-tool-root .pe-section-head{background:transparent;border-bottom:1px solid rgba(120,160,255,.14);padding:14px 18px}
   #pradlomat-tool-root .pe-section-head h3{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--blue-soft);font-weight:600}
   #pradlomat-tool-root .pe-section-head .pe-h-tag{color:var(--muted2)}
+  #pradlomat-tool-root .pe-section-head{gap:12px}
+  #pradlomat-tool-root .pe-section-head .pe-h-icon{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:11px;color:#4fd1ff;background:linear-gradient(135deg,rgba(79,209,255,.14),rgba(124,92,255,.16));border:1px solid rgba(120,160,255,.28);flex:0 0 auto}
+  #pradlomat-tool-root .pe-section-head .pe-chev{color:var(--muted2);transition:transform .2s;flex:0 0 auto}
+  #pradlomat-tool-root .pe-section:not(.pe-collapsed) .pe-chev{transform:rotate(180deg)}
+  #pradlomat-tool-root .pe-section.pe-collapsed .pe-section-head{border-bottom-color:transparent}
+  #pradlomat-tool-root .pe-section-head:hover .pe-h-icon{filter:brightness(1.25)}
   #pradlomat-tool-root .pe-section-body{padding:12px 18px}
   #pradlomat-tool-root .pe-row{padding:5px 0;border-top:1px solid rgba(120,160,255,.08);font-size:14.5px}
   #pradlomat-tool-root .pe-row:first-child{border-top:0}

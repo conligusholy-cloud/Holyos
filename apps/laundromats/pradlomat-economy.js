@@ -495,14 +495,33 @@
       '</div>'
     );
   }
+  // Moderní linkové ikony sekcí (stroke = barva z motivu), všechny sekce jsou ve výchozím stavu zavřené.
+  var SEC_OPEN = {};
+  var SEC_ICONS = {
+    investice: '<path d="M3 21h18"/><path d="M5 21V9l7-5 7 5v12"/><path d="M9 21v-6h6v6"/>',
+    modelace: '<path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/>',
+    fixni: '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6.5 9.5v.01M17.5 14.5v.01"/>',
+    energie: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+    sluzby: '<path d="M20 12l-8 8-9-9V4h7z"/><circle cx="8" cy="8" r="1.4"/>',
+    detergenty: '<path d="M9 3h6v3H9z"/><path d="M8 6h8l1 4v10a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V10z"/><path d="M7.5 13h9"/>',
+    velka_pracka: '<rect x="4" y="3" width="16" height="18" rx="2.5"/><circle cx="12" cy="13" r="4.2"/><path d="M7.5 6.5h.01M10.5 6.5h3"/>',
+    mala_pracka: '<rect x="5" y="4" width="14" height="16" rx="2.5"/><circle cx="12" cy="13" r="3"/><path d="M8 7.5h.01M10.5 7.5h3"/>',
+    susicka: '<rect x="4" y="3" width="16" height="18" rx="2.5"/><circle cx="12" cy="13" r="4.2"/><path d="M10 12.2c.8-1 1.4.9 2.2 0s1.4.9 2.2 0"/><path d="M7.5 6.5h.01M10.5 6.5h3"/>'
+  };
+  function secIcon(id, fallback) {
+    var d = SEC_ICONS[id];
+    if (!d) return fallback;
+    return '<svg class="pe-ico" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+  }
   function section(id, icon, title, tag, bodyHtml, collapsed) {
+    var closed = !SEC_OPEN[id]; // výchozí stav: zavřeno
     return (
-      '<div class="pe-section' + (collapsed ? ' pe-collapsed' : '') + '" data-section="' + id + '">' +
+      '<div class="pe-section' + (closed ? ' pe-collapsed' : '') + '" data-section="' + id + '">' +
         '<div class="pe-section-head" onclick="window.PradlomatTool._toggleSection(this)">' +
-          '<span class="pe-h-icon">' + icon + '</span>' +
+          '<span class="pe-h-icon">' + secIcon(id, icon) + '</span>' +
           '<h3>' + title + '</h3>' +
           (tag ? '<span class="pe-h-tag">' + tag + '</span>' : '') +
-          '<span style="font-size:14px;color:var(--text2);">▾</span>' +
+          '<svg class="pe-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>' +
         '</div>' +
         '<div class="pe-section-body">' + bodyHtml + '</div>' +
       '</div>'
@@ -1205,6 +1224,7 @@
   function _toggleSection(headEl) {
     var sec = headEl.parentElement;
     sec.classList.toggle('pe-collapsed');
+    var id = sec.getAttribute('data-section'); if (id) SEC_OPEN[id] = !sec.classList.contains('pe-collapsed');
   }
 
   function getState() { return Object.assign({}, STATE); }
