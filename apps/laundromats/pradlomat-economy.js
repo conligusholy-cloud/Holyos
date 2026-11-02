@@ -154,7 +154,7 @@
     var html = '<span style="font-size:12px;color:var(--text2);margin:0 4px 0 2px">' + _t('Varianta') + ':</span>';
     ['V3', 'V2'].forEach(function (v) {
       var on = v === VER;
-      html += '<button type="button" class="btn btn-sm" onclick="window.PradlomatTool._setVer(\'' + v + '\')" style="padding:6px 10px;' + (on ? 'background:#c9a24b;border-color:#c9a24b;color:#241c05;font-weight:700;' : '') + '">' + (v === 'V3' ? 'FLEX' : 'MINI') + '</button>';
+      html += '<button type="button" class="btn btn-sm pe-chip' + (on ? ' pe-on' : '') + '" onclick="window.PradlomatTool._setVer(\'' + v + '\')" style="padding:6px 10px">' + (v === 'V3' ? 'FLEX' : 'MINI') + '</button>';
     });
     return html;
   }
@@ -176,7 +176,7 @@
     var html = '<span style="font-size:12px;color:var(--text2);margin:0 4px 0 2px">' + _t('Měna') + ':</span>';
     ['CZK', 'EUR', 'USD', 'GBP'].forEach(function (c) {
       var on = c === CUR.code;
-      html += '<button type="button" class="btn btn-sm" onclick="window.PradlomatTool._setCur(\'' + c + '\')" style="padding:6px 10px;' + (on ? 'background:#c9a24b;border-color:#c9a24b;color:#241c05;font-weight:700;' : '') + '">' + CUR_SYMS[c] + '</button>';
+      html += '<button type="button" class="btn btn-sm pe-chip' + (on ? ' pe-on' : '') + '" onclick="window.PradlomatTool._setCur(\'' + c + '\')" style="padding:6px 10px">' + CUR_SYMS[c] + '</button>';
     });
     return html;
   }
@@ -186,7 +186,7 @@
     var html = '<span style="font-size:12px;color:var(--text2);margin:0 4px 0 2px">' + _t('DPH') + ':</span>';
     opts.forEach(function (o) {
       var on = o[0] === VAT_MODE;
-      html += '<button type="button" class="btn btn-sm" onclick="window.PradlomatTool._setVat(\'' + o[0] + '\')" style="padding:6px 10px;' + (on ? 'background:#c9a24b;border-color:#c9a24b;color:#241c05;font-weight:700;' : '') + '">' + o[1] + '</button>';
+      html += '<button type="button" class="btn btn-sm pe-chip' + (on ? ' pe-on' : '') + '" onclick="window.PradlomatTool._setVat(\'' + o[0] + '\')" style="padding:6px 10px">' + o[1] + '</button>';
     });
     return html;
   }
@@ -529,7 +529,6 @@
         '<span class="pe-cur" style="display:inline-flex;align-items:center;gap:4px;margin-right:6px">' + curButtons() + '</span>' +
         saveDefaultsBtn +
         '<button class="btn btn-secondary btn-sm" onclick="window.PradlomatTool.resetDefaults()">' + _t('↺ Tovární hodnoty') + '</button>' +
-        '<button class="btn btn-secondary btn-sm pe-btn-json" onclick="window.PradlomatTool.exportJSON()">' + _t('⬇ Stáhnout model (JSON)') + '</button>' +
       '</div>';
 
     // Vlaječka slevy (když je u leada aktivní) — kolik % a do kdy platí.

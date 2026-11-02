@@ -143,8 +143,44 @@ function economyPage(lang) {
 
 const DCSS = `<style>
   .wrap{max-width:1040px!important}
-  #pradlomat-tool-root{--bg:rgba(8,13,28,.82);--surface:rgba(14,22,40,.72);--surface2:rgba(120,160,255,.08);--border:rgba(120,160,255,.22);--text:#eaf2ff;--text2:#8ea2c2;--accent:#4fd1ff;--primary:#4fd1ff;color:var(--text);font-family:inherit}
-  #pradlomat-tool-root input,#pradlomat-tool-root select{font-family:inherit}
+  #pradlomat-tool-root{--bg:rgba(8,13,28,.55);--surface:rgba(14,22,40,.72);--surface2:rgba(120,160,255,.07);--border:rgba(120,160,255,.2);--text:#eaf2ff;--text2:#8ea2c2;color:var(--text);font-family:inherit}
+  #pradlomat-tool-root input,#pradlomat-tool-root select,#pradlomat-tool-root button{font-family:inherit}
+  /* lišta nástrojů */
+  #pradlomat-tool-root .pe-toolbar{background:var(--card);border:1px solid rgba(120,160,255,.18);border-radius:15px;padding:14px 16px;gap:10px 14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  #pradlomat-tool-root .pe-toolbar .pe-legend{font-size:12px;color:var(--muted)}
+  #pradlomat-tool-root .pe-toolbar .pe-legend .pe-sw{border-radius:5px;border:1px solid rgba(255,205,60,.5);background:rgba(255,205,60,.14)}
+  #pradlomat-tool-root .pe-toolbar span[style*="font-size:12px"]{color:var(--muted)!important}
+  #pradlomat-tool-root .btn,#pradlomat-tool-root .pe-chip{cursor:pointer;font-size:13px;font-weight:700;color:var(--text);background:rgba(120,160,255,.08);border:1px solid rgba(120,160,255,.28);border-radius:10px;padding:7px 13px!important;transition:filter .15s}
+  #pradlomat-tool-root .btn:hover{filter:brightness(1.18)}
+  #pradlomat-tool-root .pe-chip.pe-on{background:linear-gradient(90deg,#1e86e0,#7c5cff);border-color:transparent;color:#fff}
+  #pradlomat-tool-root .btn-secondary{font-weight:600;color:var(--muted)}
+  /* výsledné dlaždice */
+  #pradlomat-tool-root .pe-results{background:none;border:0;padding:0;grid-template-columns:1fr 1fr;gap:12px;clear:none}
+  #pradlomat-tool-root .pe-result-card{background:var(--card);border:1px solid rgba(120,160,255,.18);border-radius:15px;padding:16px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  #pradlomat-tool-root .pe-rc-label{font-size:11px!important;letter-spacing:.13em!important;color:var(--muted2)!important}
+  #pradlomat-tool-root .pe-rc-value{font-size:clamp(21px,5.2vw,28px)!important;font-weight:800!important;letter-spacing:-.02em;color:var(--text)!important}
+  #pradlomat-tool-root #pe-rc-investice .pe-rc-value,#pradlomat-tool-root #pe-rc-navratnost .pe-rc-value{background:linear-gradient(90deg,#4fd1ff,#8fd0ff 50%,#7c5cff);-webkit-background-clip:text;background-clip:text;color:transparent!important}
+  #pradlomat-tool-root .pe-result-card.neg .pe-rc-value{background:none;color:#ef4444!important}
+  #pradlomat-tool-root .pe-result-card .pe-rc-sub{color:var(--muted)}
+  /* fotka */
+  #pradlomat-tool-root .pe-verphoto{border:1px solid rgba(79,209,255,.45);border-radius:18px;animation:none;box-shadow:0 20px 60px -24px rgba(58,108,245,.75)}
+  /* sekce */
+  #pradlomat-tool-root .pe-section{background:var(--card);border:1px solid rgba(120,160,255,.18);border-radius:15px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  #pradlomat-tool-root .pe-section-head{background:transparent;border-bottom:1px solid rgba(120,160,255,.14);padding:14px 18px}
+  #pradlomat-tool-root .pe-section-head h3{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--blue-soft);font-weight:600}
+  #pradlomat-tool-root .pe-section-head .pe-h-tag{color:var(--muted2)}
+  #pradlomat-tool-root .pe-section-body{padding:12px 18px}
+  #pradlomat-tool-root .pe-row{padding:5px 0;border-top:1px solid rgba(120,160,255,.08);font-size:14.5px}
+  #pradlomat-tool-root .pe-row:first-child{border-top:0}
+  #pradlomat-tool-root .pe-row .pe-unit{color:var(--muted)}
+  /* vstupy: žluté pole = vstup (jako na hlavní stránce) */
+  #pradlomat-tool-root .pe-input{background:rgba(255,205,60,.07);color:#ffd866;border:1px solid rgba(255,205,60,.38);border-radius:10px;padding:8px 11px;font-size:15px;font-weight:700}
+  #pradlomat-tool-root .pe-input:focus{border-color:#ffd866;box-shadow:0 0 0 3px rgba(255,205,60,.15)}
+  #pradlomat-tool-root .pe-readonly{background:rgba(120,160,255,.06);border:1px solid rgba(120,160,255,.2);border-radius:10px;padding:8px 11px;font-size:15px;font-weight:700;color:var(--text)}
+  #pradlomat-tool-root .pe-readonly.emp{background:rgba(79,209,255,.08);color:#4fd1ff;border-color:rgba(79,209,255,.35)}
+  #pradlomat-tool-root .pe-info{background:rgba(79,209,255,.07);border-color:rgba(79,209,255,.3);color:#b9dcf3;border-radius:12px}
+  #pradlomat-tool-root .pe-warn{border-radius:12px}
+  @media(max-width:520px){#pradlomat-tool-root .pe-results{grid-template-columns:1fr}}
 </style>`;
 function economyDetailPage(lang) {
   const t = TXT[lang] || TXT.cs;
