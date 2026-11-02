@@ -1383,6 +1383,11 @@ server.listen(PORT, async () => {
     console.error('[app] payment-milestone-worker nelze spustit:', err.message);
   }
   try {
+    require('./services/voice/recordings-cleanup-worker').start(); // úklid lokálních kopií nahrávek (>30 dní) z volume
+  } catch (err) {
+    console.error('[app] recordings-cleanup-worker nelze spustit:', err.message);
+  }
+  try {
     const voiceOutboundWorker = require('./services/voice/outbound-worker');
     voiceOutboundWorker.start();
   } catch (err) {
