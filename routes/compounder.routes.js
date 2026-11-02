@@ -328,6 +328,69 @@ router.post('/meeting-reservation', async (req, res) => {
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
 
+// POST /api/compounder/leads/:id/owner-meeting — obchodník rezervuje zákazníkovi online schůzku s majitelem (aplikace obchodníka).
+// { slot_id }. Založí rezervaci (vidět v kalendáři schůzek), nastaví stav leada a pošle zákazníkovi potvrzení (SMS + e-mail s pozvánkou).
+router.post('/leads/:id/owner-meeting', requireAuth, async (req, res) => {
+  try {
+    const leadId = parseInt(req.params.id, 10); const slotId = parseInt((req.body || {}).slot_id, 10);
+    if (!Number.isInteger(leadId) || !Number.isInteger(slotId)) return res.status(400).json({ ok: false, error: 'Chybí kontakt nebo termín' });
+    const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { id: true, name: true, first_name: true, last_name: true, email: true, phone: true, lang: true } });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Kontakt nenalezen' });
+    if (!lead.email && !lead.phone) return res.status(400).json({ ok: false, error: 'Kontakt nemá e-mail ani telefon — nemáme kam poslat potvrzení.' });
+    const slot = await prisma.meetingSlot.findUnique({ where: { id: slotId }, include: { _count: { select: { reservations: true } } } });
+    if (!slot || !slot.active) return res.status(404).json({ ok: false, error: 'Termín není dostupný' });
+    if (slot.starts_at.getTime() < Date.now() + MEETING_MIN_LEAD_MS) return res.status(400).json({ ok: false, error: 'Termín je příliš brzy — vyberte čas alespoň 2 hodiny od teď' });
+    if ((slot._count.reservations || 0) >= slot.capacity) return res.status(409).json({ ok: false, error: 'Termín je již obsazený' });
+    // Jeden kontakt = jedna aktivní rezervace (starší se zruší = přesun)
+    const canceled = await prisma.meetingReservation.updateMany({ where: { compounder_lead_id: leadId, status: 'booked' }, data: { status: 'canceled' } }).catch(() => ({ count: 0 }));
+    const who = (req.user && (req.user.display_name || req.user.displayName || req.user.username)) || 'obchodník';
+    const name = String(lead.name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || lead.email || lead.phone).slice(0, 255);
+    const resv = await prisma.meetingReservation.create({
+      data: { slot_id: slotId, compounder_lead_id: leadId, name, email: lead.email || null, phone: lead.phone || null, status: 'booked', note: ('Online video hovor · rezervoval obchodník ' + who).slice(0, 255), mode: 'online' },
+      select: { id: true },
+    });
+    await prisma.compounderLead.update({ where: { id: leadId }, data: { status: 'schuzka_online', schuzka_mode: 'online' } }).catch(() => {});
+    try { await prisma.compounderEvent.create({ data: { sid: 'server:meeting:' + leadId, event: 'meeting_booked', path: '/schuzka', props: { lead_id: leadId, reservation_id: resv.id, starts_at: slot.starts_at, mode: 'online', by: who } } }); } catch (e) { /* bonus */ }
+    try { require('../services/meeting/notify').notifyMeetingBooked(prisma, { leadId, reservationId: resv.id, startsAt: slot.starts_at, mode: 'online', financingPath: null, rebooked: !!(canceled && canceled.count) }); } catch (e) { console.warn('[meeting-notify] init:', e.message); }
+
+    // Potvrzení zákazníkovi (jazyk dle leada)
+    const pl = /^pl/i.test(String(lead.lang || '')); const dt = slot.starts_at; const durMin = slot.duration_min || 17;
+    const PLM = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia'];
+    const PLD = { Sunday: 'niedziela', Monday: 'poniedziałek', Tuesday: 'wtorek', Wednesday: 'środa', Thursday: 'czwartek', Friday: 'piątek', Saturday: 'sobota' };
+    const CSM = ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
+    let when;
+    if (pl) { const pp = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Prague', weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(dt).reduce((a, x) => (a[x.type] = x.value, a), {}); when = PLD[pp.weekday] + ' ' + pp.day + ' ' + PLM[(+pp.month) - 1] + ' o ' + pp.hour + ':' + pp.minute; }
+    else { const p = new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }).formatToParts(dt).reduce((a, x) => (a[x.type] = x.value, a), {}); when = p.weekday + ' ' + p.day + '. ' + CSM[(+p.month) - 1] + ' v ' + p.hour + ':' + p.minute; }
+    const out = { sms: null, email: null };
+    if (lead.phone) {
+      try {
+        const first = require('../services/vocative').vocativeFirstName(name);
+        const smsText = pl ? 'Spotkanie online z właścicielem potwierdzone: ' + when + '. Potwierdzenie znajdziesz też w e-mailu. Gdyby coś się zmieniło, odpowiedz na ten e-mail.'
+          : (first ? first + ', online' : 'Online') + ' schůzku s majitelem máme potvrzenou na ' + when + '. Potvrzení máte i v e-mailu. Kdyby se cokoli změnilo, odpovězte na něj.';
+        await require('../services/voice/sms').sendSms(lead.phone, smsText, { context: 'schuzka_potvrzeni', leadId });
+        out.sms = true;
+      } catch (e) { out.sms = false; console.warn('[owner-meeting] SMS:', e.message); }
+    }
+    if (lead.email) {
+      try {
+        const icsDt = (x) => x.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+        const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Laundromats//Schuzka//CS', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT', 'UID:schuzka-' + resv.id + '@laundromats.eu', 'DTSTAMP:' + icsDt(new Date()), 'DTSTART:' + icsDt(dt), 'DTEND:' + icsDt(new Date(dt.getTime() + durMin * 60000)),
+          'SUMMARY:' + (pl ? 'Spotkanie online z właścicielem – Laundromats' : 'Online schůzka s majitelem – Laundromats'), 'STATUS:CONFIRMED', 'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:' + (pl ? 'Spotkanie za godzinę' : 'Schůzka za hodinu'), 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+        const base = String(process.env.LM_URL || 'https://www.laundromats.eu').replace(/\/$/, '');
+        const body = pl
+          ? 'Dzień dobry,\n\npotwierdzamy Twoje spotkanie online z właścicielem: ' + when + '. Potrwa około ' + durMin + ' minut. Link do rozmowy wyślemy przed spotkaniem.\n\nZaproszenie do kalendarza znajdziesz w załączniku. Gdyby termin Ci nie odpowiadał, możesz go zmienić jednym kliknięciem za pomocą przycisku poniżej.\n\nLaundromats.eu'
+          : 'Dobrý den,\n\npotvrzujeme vaši online schůzku s majitelem: ' + when + '. Potrvá zhruba ' + durMin + ' minut. Odkaz na videohovor vám pošleme před schůzkou.\n\nPozvánku do kalendáře najdete v příloze tohoto e-mailu. Kdyby vám termín nevyhovoval, můžete ho jedním kliknutím změnit tlačítkem níže.\n\nLaundromats.eu';
+        const from = (await funnelMailFrom('schuzka').catch(() => null)) || process.env.COMPOUNDER_MAIL_FROM || undefined;
+        const r = await require('../services/email').sendMail({ to: lead.email, from, brand: 'pradlomaty', fromName: '💧 PRÁDLOMATY 💧', subject: (pl ? 'Potwierdzenie spotkania ' : 'Potvrzení schůzky ') + when, body,
+          link: base + (pl ? '/cesta/pl/schuzka' : '/cesta/schuzka') + '?zmena=' + encodeURIComponent(meetingChangeToken(resv.id)), linkLabel: pl ? 'Zmień termin' : 'Změnit termín',
+          attachments: [{ filename: 'schuzka.ics', content: ics, contentType: 'text/calendar; charset=utf-8; method=PUBLISH' }] });
+        out.email = !!(r && r.sent);
+      } catch (e) { out.email = false; console.warn('[owner-meeting] e-mail:', e.message); }
+    }
+    res.status(201).json({ ok: true, id: resv.id, starts_at: slot.starts_at, when, sms: out.sms, email: out.email, rebooked: !!(canceled && canceled.count) });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+});
+
 // ─── ADMIN: správa termínů (Prodejní objednávky) ────────────────────────────
 router.get('/admin/meeting-slots', requireAuth, async (req, res) => {
   try {

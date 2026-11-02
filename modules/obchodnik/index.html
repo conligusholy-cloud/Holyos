@@ -713,6 +713,49 @@
   function deleteMeetingFromModal(){ var id=document.getElementById('mt-id').value; if(id && confirm('Smazat tuto schůzku?')){ deleteMeeting(parseInt(id,10)); closeMeeting(); } }
   window.deleteMeetingFromModal=deleteMeetingFromModal;
   function meetingFromSite(id){ var s=calFindSite(id)||{}; var addr=s.address||[s.zip,s.city].filter(Boolean).join(' ')||''; openMeeting({ title:'Schůzka – '+(s.owner_name||'lokalita'), location:addr, site_id:id, attendees:(s.owner_email||'') }); }
+  // ── Online schůzka s majitelem: výběr z volných termínů → rezervace + potvrzení zákazníkovi (SMS + e-mail) ──
+  async function obOwnerMeeting(id){
+    var lead=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{};
+    var old=document.getElementById('ob-om'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.id='ob-om';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+    function close(){ ov.remove(); document.removeEventListener('keydown',onKey); }
+    function onKey(e){ if(e.key==='Escape') close(); }
+    document.addEventListener('keydown',onKey);
+    ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
+    var box=document.createElement('div');
+    box.style.cssText='background:#0f172a;color:#e8eefc;width:100%;max-width:520px;max-height:88vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px 24px;border:1px solid #1e293b';
+    ov.appendChild(box); document.body.appendChild(ov);
+    function head(extra){ return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:17px;font-weight:800;flex:1">👔 Online schůzka s majitelem</div><button id="ob-om-x" class="btn btn-g" style="padding:4px 10px">✕</button></div><div style="font-size:13px;color:#94a3b8;margin-bottom:12px">Zákazník: <b style="color:#e8eefc">'+esc(lead.name||lead.email||'kontakt')+'</b>'+(extra||'')+'</div>'; }
+    function bindX(){ var x=document.getElementById('ob-om-x'); if(x) x.onclick=close; }
+    if(!lead.email && !lead.phone){ box.innerHTML=head()+'<div style="color:#fca5a5">Kontakt nemá e-mail ani telefon — nemáme kam poslat potvrzení. Doplň údaje (⚙️) a zkus to znovu.</div>'; bindX(); return; }
+    box.innerHTML=head()+'<div style="color:#94a3b8">Načítám volné termíny…</div>'; bindX();
+    var slots=[];
+    try { var r=await api('/meeting-slots?days=30'); slots=(await r.json())||[]; } catch(e){ box.innerHTML=head()+'<div style="color:#fca5a5">Termíny se nepodařilo načíst.</div>'; bindX(); return; }
+    slots=slots.filter(function(s){ return !s.mode || s.mode==='online'; });
+    if(!slots.length){ box.innerHTML=head()+'<div style="color:#fca5a5">Žádné volné online termíny. Majitel je může přidat v administraci schůzek.</div>'; bindX(); return; }
+    var DN=['Ne','Po','Út','St','Čt','Pá','So'], byDay={}, order=[];
+    slots.forEach(function(s){ var d=new Date(s.starts_at); var k=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); if(!byDay[k]){ byDay[k]={d:d,items:[]}; order.push(k); } byDay[k].items.push(s); });
+    var html=head(lead.phone&&lead.email?'<br>Potvrzení dostane SMS i e-mailem.':(lead.phone?'<br>Potvrzení dostane SMS.':'<br>Potvrzení dostane e-mailem.'));
+    order.forEach(function(k){ var g=byDay[k], d=g.d;
+      html+='<div style="font-weight:700;margin:12px 0 6px;color:#7dd3fc">'+DN[d.getDay()]+' '+d.getDate()+'. '+(d.getMonth()+1)+'.</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
+      g.items.forEach(function(s){ var t=new Date(s.starts_at); html+='<button class="btn btn-g ob-om-slot" data-id="'+s.id+'" data-t="'+DN[t.getDay()]+' '+t.getDate()+'. '+(t.getMonth()+1)+'. v '+('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2)+'" style="padding:8px 12px;font-weight:700">'+('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2)+'</button>'; });
+      html+='</div>'; });
+    box.innerHTML=html; bindX();
+    Array.prototype.forEach.call(box.querySelectorAll('.ob-om-slot'),function(b){ b.onclick=async function(){
+      if(!confirm('Rezervovat '+b.getAttribute('data-t')+' pro '+(lead.name||lead.email)+'?\nZákazník dostane potvrzení.')) return;
+      box.innerHTML=head()+'<div style="color:#94a3b8">Rezervuji a odesílám potvrzení…</div>'; bindX();
+      try {
+        var rr=await api('/leads/'+id+'/owner-meeting',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slot_id:Number(b.getAttribute('data-id'))})});
+        var j=await rr.json().catch(function(){return {};});
+        if(!rr.ok||!j.ok){ box.innerHTML=head()+'<div style="color:#fca5a5">'+esc(j.error||'Rezervace se nepodařila.')+'</div><button class="btn btn-g" style="margin-top:12px" onclick="obOwnerMeeting('+id+')">↻ Zkusit znovu</button>'; bindX(); return; }
+        var info=[]; if(j.sms===true) info.push('SMS odeslána'); if(j.sms===false) info.push('SMS se nepodařilo odeslat'); if(j.email===true) info.push('e-mail odeslán'); if(j.email===false) info.push('e-mail se nepodařilo odeslat');
+        box.innerHTML=head()+'<div style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.5);border-radius:12px;padding:14px"><div style="font-weight:800;color:#86efac;font-size:16px">✅ Rezervováno: '+esc(j.when||'')+'</div><div style="font-size:13px;color:#cbd5e1;margin-top:6px">Schůzka je v kalendáři majitele. '+esc(info.join(' · '))+'.'+(j.rebooked?' Původní termín byl zrušen.':'')+'</div></div><button class="btn btn-p" style="width:100%;margin-top:12px" id="ob-om-ok">Hotovo</button>';
+        bindX(); document.getElementById('ob-om-ok').onclick=function(){ close(); try{ load({silent:true}); }catch(e){} try{ loadUpcomingMeetings(); }catch(e){} };
+      } catch(e){ box.innerHTML=head()+'<div style="color:#fca5a5">Chyba spojení.</div>'; bindX(); }
+    }; });
+  }
+  window.obOwnerMeeting=obOwnerMeeting;
   function meetingFromLead(id){ var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ title:'Schůzka – '+(l.name||l.email||'lead'), compounder_lead_id:id, attendees:(l.email||'') }); }
   function callFromLead(id){ obLogAction(id,'plan_call','📅 Naplánován hovor'); var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ _kind:'call', title:'Hovor – '+(l.name||l.email||'lead'), compounder_lead_id:id, attendees:(l.email||'') }); }
   // Dosledování + slíbený krok = jen do MÉHO kalendáře (bez pozvánky zákazníkovi).
@@ -1545,6 +1588,7 @@
            '</div>') : '') +
         '<div class="field" style="margin-top:8px"><button class="btn" id="hot-'+l.id+'" style="width:100%;font-size:15px;'+(l.is_hot?'background:#eab308;color:#1a1a1a;font-weight:800':'background:transparent;border:1px solid #eab308;color:#eab308;font-weight:700')+'" onclick="obToggleHot('+l.id+',this)">'+(l.is_hot?'⭐ Zajímavý kontakt ✓':'⭐ Označit jako zajímavý kontakt')+'</button></div>' +
         '<div class="field" style="margin-top:8px"><button class="btn btn-g" style="width:100%" onclick="meetingFromLead('+l.id+')">📅 Naplánovat schůzku</button></div>' +
+        '<div class="field" style="margin-top:6px"><button class="btn" style="width:100%;background:linear-gradient(135deg,#1e86e0,#7c5cff);color:#fff;font-weight:800" onclick="obOwnerMeeting('+l.id+')">👔 Online schůzka s majitelem</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="callFromLead('+l.id+')">📞 Naplánovat hovor</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn btn-p" style="width:100%" onclick="obPromisePrompt('+l.id+')">✅ Slíbený krok (co jsi slíbil + termín)</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn" style="width:100%;background:linear-gradient(135deg,#6C5CE7,#0984E3);color:#fff;font-weight:700" onclick="OrderWizard.open('+l.id+')">🧾 Nová objednávka (průvodce)</button></div>' +
