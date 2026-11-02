@@ -3615,7 +3615,7 @@
       document.getElementById('rc-energy-rules').innerHTML = rulesHtml('energy_rules', window.__rcDraft.energy_rules, co, inp);
       document.getElementById('rc-service-rules').innerHTML = rulesHtml('service_rules', window.__rcDraft.service_rules, co, inp);
       const adv = window.__rcDraft.energy_advances || [];
-      document.getElementById('rc-energy-adv').innerHTML = adv.map((a, i) => '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">'
+      document.getElementById('rc-energy-adv').innerHTML = (adv.length ? '<div style="display:flex;gap:6px;font-size:11px;color:var(--text2);margin-bottom:3px;"><span style="flex:2">Název (např. Elektřina)</span><span style="flex:1">Částka bez DPH / měsíc</span><span style="width:70px">DPH %</span><span style="width:34px"></span></div>' : '') + adv.map((a, i) => '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">'
         + '<input data-rk="energy_advances" data-i="' + i + '" data-f="label" placeholder="např. Elektřina / Vodné a stočné" value="' + String(a.label || '').replace(/"/g, '&quot;') + '" style="' + inp + 'flex:2;">'
         + '<input data-rk="energy_advances" data-i="' + i + '" data-f="amount_net" type="text" inputmode="decimal" placeholder="Kč bez DPH / měs." value="' + (a.amount_net != null ? a.amount_net : '') + '" style="' + inp + 'flex:1;">'
         + '<input data-rk="energy_advances" data-i="' + i + '" data-f="vat_rate" type="number" step="1" min="0" max="30" placeholder="DPH %" value="' + (a.vat_rate != null ? a.vat_rate : '') + '" style="' + inp + 'width:70px;flex:none;" title="DPH % (prázdné = sazba smlouvy)">'
@@ -3632,7 +3632,10 @@
       const rows = window.__rcDraft.energy_advances || [];
       document.querySelectorAll('#rc-energy-adv input[data-rk="energy_advances"]').forEach(function (inp) { const r = rows[parseInt(inp.dataset.i, 10)]; if (r) r[inp.dataset.f] = inp.value; });
       const num = (v) => { const n = Number(String(v == null ? '' : v).replace(/[\s\u00a0]/g, '').replace(',', '.')); return isFinite(n) ? n : NaN; };
-      return rows.map(a => ({ label: String(a.label || '').trim() || null, amount_net: num(a.amount_net), vat_rate: a.vat_rate === '' || a.vat_rate == null ? null : num(a.vat_rate) }))
+      return rows.map(a => { let label = String(a.label || '').trim(); let amt = num(a.amount_net);
+          // částka napsaná omylem do pole Název (např. „2500") → vezmi ji jako částku
+          if (!(amt > 0) && label && /^[\d\s\u00a0.,]+$/.test(label) && num(label) > 0) { amt = num(label); label = ''; }
+          return { label: label || null, amount_net: amt, vat_rate: a.vat_rate === '' || a.vat_rate == null ? null : num(a.vat_rate) }; })
         .filter(a => a.label || (a.amount_net > 0));
     }
     function rcBody() {
