@@ -617,7 +617,10 @@ router.patch('/bs2/meetings/reservations/:id(\\d+)', express.json({ limit: '20kb
     const b = req.body || {}, data = {};
     if (b.status !== undefined) { if (!BS2_RES_STATUSES.includes(b.status)) return res.status(400).json({ ok: false, error: 'Neplatný stav' }); data.status = b.status; }
     if (b.note !== undefined) data.note = b.note ? String(b.note).slice(0, 1000) : null;
-    await prisma.meetingReservation.update({ where: { id: parseInt(req.params.id, 10) }, data });
+    const rid = parseInt(req.params.id, 10);
+    const prevRes = data.status === 'canceled' ? await prisma.meetingReservation.findUnique({ where: { id: rid }, select: { status: true } }).catch(() => null) : null;
+    await prisma.meetingReservation.update({ where: { id: rid }, data });
+    if (data.status === 'canceled' && prevRes && prevRes.status !== 'canceled') require('../services/meeting/notify').notifyMeetingCanceled(prisma, rid, { by: 'administrace' }).catch(() => {});
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

@@ -77,4 +77,72 @@ async function notifyMeetingBooked(prisma, { leadId, reservationId, startsAt, mo
   } catch (e) { console.warn('[meeting-notify] selhalo:', e.message); }
 }
 
-module.exports = { notifyMeetingBooked };
+// ── Zrušení schůzky: push + zvonek do Velína (Jan, Tomáš, obchodník) a zákazníkovi SMS + e-mail v jeho jazyce ──
+const PL_MON = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia'];
+const PL_DAY = { Sunday: 'niedziela', Monday: 'poniedziałek', Tuesday: 'wtorek', Wednesday: 'środa', Thursday: 'czwartek', Friday: 'piątek', Saturday: 'sobota' };
+const CS_MON = ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
+function whenText(d, pl) {
+  const dt = new Date(d);
+  if (pl) { const p = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Prague', weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(dt).reduce((a, x) => (a[x.type] = x.value, a), {}); return PL_DAY[p.weekday] + ' ' + p.day + ' ' + PL_MON[(+p.month) - 1] + ' o ' + p.hour + ':' + p.minute; }
+  const p = new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }).formatToParts(dt).reduce((a, x) => (a[x.type] = x.value, a), {});
+  return p.weekday + ' ' + p.day + '. ' + CS_MON[(+p.month) - 1] + ' v ' + p.hour + ':' + p.minute;
+}
+function isPolish(lead, resv) {
+  const lang = String((lead && lead.lang) || '').toLowerCase();
+  if (lang) return lang.startsWith('pl');
+  const ph = String((resv && resv.phone) || (lead && lead.phone) || '').replace(/[\s()-]/g, '');
+  return /^(\+|00)48/.test(ph);
+}
+
+// Fire-and-forget. { by? } — kdo zrušil (jméno do notifikace)
+async function notifyMeetingCanceled(prisma, reservationId, { by } = {}) {
+  try {
+    const resv = await prisma.meetingReservation.findUnique({ where: { id: reservationId }, include: { slot: { select: { starts_at: true } } } });
+    if (!resv || !resv.slot) return;
+    const lead = resv.compounder_lead_id ? await prisma.compounderLead.findUnique({ where: { id: resv.compounder_lead_id }, select: { id: true, name: true, phone: true, email: true, owner_person_id: true, lang: true, is_test: true } }).catch(() => null) : null;
+    const starts = resv.slot.starts_at; const past = new Date(starts).getTime() < Date.now();
+    const pl = isPolish(lead, resv);
+    const name = resv.name || (lead && lead.name) || 'Zákazník';
+
+    // 1) Velín push + zvonek
+    const ids = new Set(await alwaysPersonIds(prisma));
+    if (lead && lead.owner_person_id) ids.add(lead.owner_person_id);
+    if (resv.booked_by_person_id) ids.add(resv.booked_by_person_id);
+    const title = '❌ Zrušená schůzka: ' + name + (lead && lead.is_test ? ' 🧪' : '');
+    const parts = [fmtWhen(starts)]; if (resv.phone || (lead && lead.phone)) parts.push(resv.phone || lead.phone); if (by) parts.push('zrušil: ' + by);
+    const body = parts.join(' · '); const link = '/modules/prodejni-objednavky/index.html?gs_tab=terminy';
+    if (ids.size) {
+      const persons = await prisma.person.findMany({ where: { id: { in: Array.from(ids) } }, select: { id: true, user_id: true } });
+      for (const p of persons) {
+        notifyPerson(prisma, p.id, { title, body, data: { type: 'meeting_canceled', lead_id: (lead && lead.id) || null, reservation_id: reservationId, link }, sound: 'default' }).catch((e) => console.warn('[meeting-cancel] push', p.id, e.message));
+        if (p.user_id) createNotification({ userId: p.user_id, type: 'system', title, body, link, meta: { lead_id: (lead && lead.id) || null, reservation_id: reservationId } }).catch((e) => console.warn('[meeting-cancel] zvonek', p.user_id, e.message));
+      }
+    }
+    if (past) { console.log('[meeting-cancel] rezervace', reservationId, '— termín už proběhl, zákazníkovi se nepíše'); return; }
+
+    // 2) Zákazníkovi SMS + e-mail (jeho jazyk)
+    const when = whenText(starts, pl); const phone = resv.phone || (lead && lead.phone); const email = resv.email || (lead && lead.email);
+    const base = String(process.env.LM_URL || 'https://www.laundromats.eu').replace(/\/$/, '');
+    if (phone) {
+      try {
+        const first = require('../vocative').vocativeFirstName(name);
+        const sms = pl ? 'Spotkanie ' + when + ' zostało odwołane. Nowy termin wybierzesz tutaj: ' + base + '/cesta/pl/schuzka'
+          : (first ? first + ', schůzka' : 'Schůzka') + ' ' + when + ' byla zrušena. Nový termín si vyberete zde: ' + base + '/cesta/schuzka';
+        await require('../voice/sms').sendSms(phone, sms, { context: 'schuzka_zruseni', leadId: (lead && lead.id) || undefined });
+      } catch (e) { console.warn('[meeting-cancel] SMS:', e.message); }
+    }
+    if (email) {
+      try {
+        const text = pl
+          ? 'Dzień dobry,\n\nz przykrością informujemy, że spotkanie zaplanowane na ' + when + ' zostało odwołane.\n\nJeśli nadal jesteś zainteresowany, wybierz nowy termin za pomocą przycisku poniżej.\n\nLaundromats.eu'
+          : 'Dobrý den,\n\nbohužel vám musíme oznámit, že schůzka naplánovaná na ' + when + ' byla zrušena.\n\nPokud máte stále zájem, vyberte si prosím nový termín tlačítkem níže.\n\nLaundromats.eu';
+        const from = (await require('../../routes/compounder.routes').funnelMailFrom('schuzka').catch(() => null)) || process.env.COMPOUNDER_MAIL_FROM || undefined;
+        await require('../email').sendMail({ to: email, from, brand: 'pradlomaty', fromName: '💧 PRÁDLOMATY 💧', subject: (pl ? 'Spotkanie odwołane – ' : 'Schůzka zrušena – ') + when, body: text,
+          link: base + (pl ? '/cesta/pl/schuzka' : '/cesta/schuzka'), linkLabel: pl ? 'Wybierz nowy termin' : 'Vybrat nový termín' });
+      } catch (e) { console.warn('[meeting-cancel] e-mail:', e.message); }
+    }
+    console.log('[meeting-cancel] rezervace', reservationId, 'lead', lead && lead.id, pl ? 'PL' : 'CS', 'SMS:', !!phone, 'e-mail:', !!email);
+  } catch (e) { console.warn('[meeting-cancel] selhalo:', e.message); }
+}
+
+module.exports = { notifyMeetingBooked, notifyMeetingCanceled };

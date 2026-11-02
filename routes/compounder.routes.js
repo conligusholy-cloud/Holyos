@@ -268,6 +268,8 @@ router.post('/meeting-reservation', async (req, res) => {
       }
     }
 
+    // Rezervace z polské stránky: kontakt si zapamatuje jazyk PL (zrušení schůzky, SMS a e-maily pak odejdou polsky)
+    if (leadId && /^pl/i.test(String(b.lang || ''))) await prisma.compounderLead.updateMany({ where: { id: leadId, lang: null }, data: { lang: 'pl' } }).catch(() => {});
     // (mode a path jsou deklarované výš — před vyhledáním / založením kontaktu)
     const note = [mode && MEETING_MODE_LABEL[mode], path && FINANCING_PATH_LABEL[path]].filter(Boolean).join(' · ') || null;
 
@@ -334,7 +336,7 @@ router.post('/leads/:id/owner-meeting', requireAuth, async (req, res) => {
   try {
     const leadId = parseInt(req.params.id, 10); const slotId = parseInt((req.body || {}).slot_id, 10);
     if (!Number.isInteger(leadId) || !Number.isInteger(slotId)) return res.status(400).json({ ok: false, error: 'Chybí kontakt nebo termín' });
-    const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { id: true, name: true, first_name: true, last_name: true, email: true, phone: true, lang: true } });
+    const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { id: true, name: true, first_name: true, last_name: true, email: true, phone: true, lang: true, owner_person_id: true, external_rep_id: true, activity_log: true } });
     if (!lead) return res.status(404).json({ ok: false, error: 'Kontakt nenalezen' });
     if (!lead.email && !lead.phone) return res.status(400).json({ ok: false, error: 'Kontakt nemá e-mail ani telefon — nemáme kam poslat potvrzení.' });
     const slot = await prisma.meetingSlot.findUnique({ where: { id: slotId }, include: { _count: { select: { reservations: true } } } });
@@ -345,12 +347,27 @@ router.post('/leads/:id/owner-meeting', requireAuth, async (req, res) => {
     const canceled = await prisma.meetingReservation.updateMany({ where: { compounder_lead_id: leadId, status: 'booked' }, data: { status: 'canceled' } }).catch(() => ({ count: 0 }));
     const who = (req.user && (req.user.display_name || req.user.displayName || req.user.username)) || 'obchodník';
     const name = String(lead.name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || lead.email || lead.phone).slice(0, 255);
+    const bookerId = salesMyPersonId(req);
     const resv = await prisma.meetingReservation.create({
-      data: { slot_id: slotId, compounder_lead_id: leadId, name, email: lead.email || null, phone: lead.phone || null, status: 'booked', note: ('Online video hovor · rezervoval obchodník ' + who).slice(0, 255), mode: 'online' },
+      data: { slot_id: slotId, compounder_lead_id: leadId, name, email: lead.email || null, phone: lead.phone || null, status: 'booked', note: ('Online video hovor · rezervoval obchodník ' + who).slice(0, 255), mode: 'online',
+        booked_by_person_id: bookerId || null, previous_owner_person_id: lead.owner_person_id || null },
       select: { id: true },
     });
     await prisma.compounderLead.update({ where: { id: leadId }, data: { status: 'schuzka_online', schuzka_mode: 'online' } }).catch(() => {});
-    try { await prisma.compounderEvent.create({ data: { sid: 'server:meeting:' + leadId, event: 'meeting_booked', path: '/schuzka', props: { lead_id: leadId, reservation_id: resv.id, starts_at: slot.starts_at, mode: 'online', by: who } } }); } catch (e) { /* bonus */ }
+    // Kontakt přechází k majiteli (Jan Holý) a odebírá se obchodníkovi; vazba „kdo schůzku domluvil" zůstává na rezervaci (booked_by_person_id) + v záznamu aktivit.
+    let movedTo = null;
+    try {
+      const ownerId = await _blacklistOwnerId();
+      if (ownerId && !(lead.owner_person_id === ownerId && !lead.external_rep_id)) {
+        const nm = async (id) => { if (!id) return 'nikdo'; const p = await prisma.person.findUnique({ where: { id }, select: { first_name: true, last_name: true } }).catch(() => null); return p ? ((p.first_name || '') + ' ' + (p.last_name || '')).trim() : ('#' + id); };
+        movedTo = await nm(ownerId);
+        const prev = lead.external_rep_id ? 'externí zástupce #' + lead.external_rep_id : await nm(lead.owner_person_id);
+        const line = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' · Schůzka s majitelem domluvena (' + who + ') → kontakt přiřazen: ' + movedTo + ' (odebráno: ' + prev + ')';
+        await prisma.compounderLead.update({ where: { id: leadId }, data: { owner_person_id: ownerId, external_rep_id: null, activity_log: line + (lead.activity_log ? '\n' + lead.activity_log : '') } });
+        console.log('[owner-meeting] lead', leadId, '→ osoba', ownerId, '(domluvil', who + ', dříve', prev + ')');
+      }
+    } catch (e) { console.warn('[owner-meeting] přesun kontaktu:', e.message); }
+    try { await prisma.compounderEvent.create({ data: { sid: 'server:meeting:' + leadId, event: 'meeting_booked', path: '/schuzka', props: { lead_id: leadId, reservation_id: resv.id, starts_at: slot.starts_at, mode: 'online', by: who, by_person_id: bookerId || null, previous_owner_person_id: lead.owner_person_id || null } } }); } catch (e) { /* bonus */ }
     try { require('../services/meeting/notify').notifyMeetingBooked(prisma, { leadId, reservationId: resv.id, startsAt: slot.starts_at, mode: 'online', financingPath: null, rebooked: !!(canceled && canceled.count) }); } catch (e) { console.warn('[meeting-notify] init:', e.message); }
 
     // Potvrzení zákazníkovi (jazyk dle leada)
@@ -387,8 +404,29 @@ router.post('/leads/:id/owner-meeting', requireAuth, async (req, res) => {
         out.email = !!(r && r.sent);
       } catch (e) { out.email = false; console.warn('[owner-meeting] e-mail:', e.message); }
     }
-    res.status(201).json({ ok: true, id: resv.id, starts_at: slot.starts_at, when, sms: out.sms, email: out.email, rebooked: !!(canceled && canceled.count) });
+    res.status(201).json({ ok: true, id: resv.id, starts_at: slot.starts_at, when, sms: out.sms, email: out.email, moved_to: movedTo, rebooked: !!(canceled && canceled.count) });
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+});
+
+// GET /api/compounder/owner-meetings/stats?days=90 — vyhodnocení: kolik schůzek s majitelem který obchodník domluvil
+// (z rezervací s booked_by_person_id; nezrušené / proběhlé). Vrací i seznam rezervací s kontaktem.
+router.get('/owner-meetings/stats', requireAuth, async (req, res) => {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 90, 1), 730);
+    const since = new Date(Date.now() - days * 86400000);
+    const rows = await prisma.meetingReservation.findMany({
+      where: { booked_by_person_id: { not: null }, created_at: { gte: since } },
+      orderBy: { created_at: 'desc' },
+      select: { id: true, name: true, compounder_lead_id: true, status: true, created_at: true, booked_by_person_id: true, previous_owner_person_id: true, slot: { select: { starts_at: true } } },
+    });
+    const ids = Array.from(new Set(rows.map((r) => r.booked_by_person_id)));
+    const ppl = ids.length ? await prisma.person.findMany({ where: { id: { in: ids } }, select: { id: true, first_name: true, last_name: true } }) : [];
+    const pn = {}; ppl.forEach((p) => { pn[p.id] = ((p.first_name || '') + ' ' + (p.last_name || '')).trim(); });
+    const by = {};
+    rows.forEach((r) => { const k = r.booked_by_person_id; const o = by[k] || (by[k] = { person_id: k, name: pn[k] || ('#' + k), booked: 0, canceled: 0, done: 0 }); if (r.status === 'canceled') o.canceled++; else { o.booked++; if (r.status === 'done') o.done++; } });
+    res.json({ ok: true, days, per_person: Object.values(by).sort((a, b) => b.booked - a.booked),
+      reservations: rows.map((r) => ({ id: r.id, name: r.name, lead_id: r.compounder_lead_id, status: r.status, booked_at: r.created_at, meeting_at: r.slot && r.slot.starts_at, booked_by: pn[r.booked_by_person_id] || null, previous_owner_person_id: r.previous_owner_person_id })) });
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
 });
 
 // ─── ADMIN: správa termínů (Prodejní objednávky) ────────────────────────────
@@ -482,7 +520,9 @@ router.patch('/admin/meeting-reservations/:id', requireAuth, async (req, res) =>
   try {
     const id = parseInt(req.params.id, 10);
     const status = (req.body && req.body.status) ? String(req.body.status).slice(0, 20) : 'canceled';
+    const prevRes = await prisma.meetingReservation.findUnique({ where: { id }, select: { status: true } }).catch(() => null);
     await prisma.meetingReservation.update({ where: { id }, data: { status } });
+    if (status === 'canceled' && prevRes && prevRes.status !== 'canceled') require('../services/meeting/notify').notifyMeetingCanceled(prisma, id, { by: req.user && (req.user.display_name || req.user.displayName || req.user.username) }).catch(() => {});
     // „Nedorazil" → za 20 min odejde e-mail s odkazem na nový termín (pokud se stav mezitím nezmění); jiný stav čekající e-mail zruší
     try {
       const w = require('../services/meeting/reminder-worker');

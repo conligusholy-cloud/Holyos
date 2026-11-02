@@ -6530,12 +6530,15 @@ model MeetingReservation {
   internal_note      String?  @db.Text // naše interní poznámka ze Velínu (diktovaná / psaná)
   mode               String?  @db.VarChar(20) // online | osobne
   financing_path     String?  @db.VarChar(20) // vlastni | financovani
+  booked_by_person_id Int?    // obchodník, který schůzku domluvil (vazba pro vyhodnocení výkonu obchodníků)
+  previous_owner_person_id Int? // kdo kontakt vlastnil před přesunem k majiteli
   created_at         DateTime @default(now())
 
   slot MeetingSlot @relation(fields: [slot_id], references: [id], onDelete: Cascade)
 
   @@index([slot_id])
   @@index([compounder_lead_id])
+  @@index([booked_by_person_id])
   @@map("meeting_reservations")
 }
 
