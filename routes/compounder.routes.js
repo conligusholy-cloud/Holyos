@@ -411,11 +411,12 @@ router.post('/leads/:id/owner-meeting', requireAuth, async (req, res) => {
 // ── Nastavení aplikace obchodníka: které bloky / tlačítka u kontaktu jsou ve výchozím stavu vidět ──
 // key = hodnota data-obk v modules/obchodnik/index.html; hidden = výchozí schováno.
 const OB_UI_BUTTONS = [
-  { key: 'contact_actions', group: 'Rychlé akce', label: '📞 Volat · 💬 WhatsApp · 📩 SMS · ✉️ E-mail (řádek ikon)' },
+  { key: 'call_main', group: 'Rychlé akce', label: '📞 Volat (velké zelené tlačítko nahoře)' },
+  { key: 'owner_meeting', group: 'Rychlé akce', label: '👔 Online schůzka s majitelem (velké tlačítko, druhé v pořadí)' },
+  { key: 'contact_actions', group: 'Rychlé akce', label: '💬 WhatsApp · 📩 SMS · ✉️ E-mail (řádek ikon)' },
   { key: 'aispec', group: 'Rychlé akce', label: '💬 Odeslat SMS s odkazem na specialistu + 🧠 Vyhodnotit chat', hidden: true },
   { key: 'hot', group: 'Rychlé akce', label: '⭐ Označit jako zajímavý kontakt' },
   { key: 'meeting', group: 'Schůzky a hovory', label: '📅 Naplánovat schůzku' },
-  { key: 'owner_meeting', group: 'Schůzky a hovory', label: '👔 Online schůzka s majitelem' },
   { key: 'call_plan', group: 'Schůzky a hovory', label: '📞 Naplánovat hovor' },
   { key: 'promise', group: 'Schůzky a hovory', label: '✅ Slíbený krok (co jsi slíbil + termín)' },
   { key: 'called', group: 'Schůzky a hovory', label: '📵 Box „Ještě jsi nevolal / Mluvil jsi s ním" (Zavolat teď, Už jsem mluvil)' },

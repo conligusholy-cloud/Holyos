@@ -1575,8 +1575,9 @@
         '<span class="chev">▸</span>' +
       '</div>' +
       '<div class="detail">' +
+        (l.phone ? '<div class="field" data-obk="call_main" style="margin-top:12px"><a class="btn" href="tel:'+esc(telClean)+'" onclick="return obCallClick(event,'+l.id+')" style="display:block;width:100%;box-sizing:border-box;background:#22c55e;color:#052e13;font-weight:800;font-size:17px;text-align:center;text-decoration:none;padding:14px">📞 Volat</a></div>' : '') +
+        '<div class="field" data-obk="owner_meeting" style="margin-top:8px"><button class="btn" style="width:100%;font-size:16px;padding:14px;background:linear-gradient(135deg,#1e86e0,#7c5cff);color:#fff;font-weight:800" onclick="obOwnerMeeting('+l.id+')">👔 Online schůzka s majitelem</button></div>' +
         '<div class="actions-row" data-obk="contact_actions" style="margin-top:12px">' +
-          (l.phone ? '<a href="tel:'+esc(telClean)+'" onclick="return obCallClick(event,'+l.id+')">📞 Volat</a>' : '') +
           (waNum ? '<a href="https://wa.me/'+waNum+'" target="_blank" rel="noopener" onclick="return obLinkGate(event,'+l.id+')">💬 WhatsApp</a>' : '') +
           (l.phone ? '<a href="sms:'+esc(telClean)+'" onclick="return obLinkGate(event,'+l.id+')">📩 SMS</a>' : '') +
           (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
@@ -1590,7 +1591,6 @@
            '</div>') : '') +
         '<div class="field" data-obk="hot" style="margin-top:8px"><button class="btn" id="hot-'+l.id+'" style="width:100%;font-size:15px;'+(l.is_hot?'background:#eab308;color:#1a1a1a;font-weight:800':'background:transparent;border:1px solid #eab308;color:#eab308;font-weight:700')+'" onclick="obToggleHot('+l.id+',this)">'+(l.is_hot?'⭐ Zajímavý kontakt ✓':'⭐ Označit jako zajímavý kontakt')+'</button></div>' +
         '<div class="field" data-obk="meeting" style="margin-top:8px"><button class="btn btn-g" style="width:100%" onclick="meetingFromLead('+l.id+')">📅 Naplánovat schůzku</button></div>' +
-        '<div class="field" data-obk="owner_meeting" style="margin-top:6px"><button class="btn" style="width:100%;background:linear-gradient(135deg,#1e86e0,#7c5cff);color:#fff;font-weight:800" onclick="obOwnerMeeting('+l.id+')">👔 Online schůzka s majitelem</button></div>' +
         '<div class="field" data-obk="call_plan" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="callFromLead('+l.id+')">📞 Naplánovat hovor</button></div>' +
         '<div class="field" data-obk="promise" style="margin-top:6px"><button class="btn btn-p" style="width:100%" onclick="obPromisePrompt('+l.id+')">✅ Slíbený krok (co jsi slíbil + termín)</button></div>' +
         '<div class="field" data-obk="order" style="margin-top:6px"><button class="btn" style="width:100%;background:linear-gradient(135deg,#6C5CE7,#0984E3);color:#fff;font-weight:700" onclick="OrderWizard.open('+l.id+')">🧾 Nová objednávka (průvodce)</button></div>' +
