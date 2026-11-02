@@ -5,13 +5,23 @@
 // cookie `token` (HolyOS JWT) jako u Centra reklamy, takže se nemusíš znovu přihlašovat.
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { apiBase } from '../lib/api';
 import { loadAuth } from '../lib/auth';
 
 const BS = { bg: '#04060c', text: '#eaf2ff', text2: '#8ea2c2', accent2: '#4fd1ff' };
+
+// Odkazy mimo HolyOS (WhatsApp, telefon, SMS, e-mail, mapy, cizí weby) se neotevírají ve WebView
+// (WebView neumí přepnout do jiné aplikace → černá stránka), ale v systému: WhatsApp / Telefon / Safari.
+const OWN_HOST = (() => { try { return new URL(apiBase).host.replace(/^www\./, ''); } catch { return 'app.holyos.cz'; } })();
+function isInternal(url: string): boolean {
+  if (!url || /^(about:|data:|blob:|javascript:)/i.test(url)) return true;
+  if (!/^https?:/i.test(url)) return false; // tel:, sms:, mailto:, whatsapp:, intent: …
+  try { const h = new URL(url).host.replace(/^www\./, ''); return h === OWN_HOST || h.endsWith('.' + OWN_HOST) || /(^|\.)holyos\.cz$/i.test(h); } catch { return true; }
+}
+function openExternal(url: string) { Linking.openURL(url).catch(() => { /* aplikace pro tento odkaz není */ }); }
 
 export default function SalesWeb() {
   const [jwt, setJwt] = useState<string | null>(null);
@@ -46,6 +56,10 @@ export default function SalesWeb() {
         javaScriptEnabled
         allowsBackForwardNavigationGestures
         allowsInlineMediaPlayback
+        originWhitelist={['*']}
+        setSupportMultipleWindows={false}
+        onShouldStartLoadWithRequest={(req) => { if (isInternal(req.url)) return true; openExternal(req.url); return false; }}
+        onOpenWindow={(e) => { const u = e.nativeEvent.targetUrl; if (u) { if (isInternal(u)) ref.current?.injectJavaScript(`location.href=${JSON.stringify(u)};true;`); else openExternal(u); } }}
         startInLoadingState
         renderLoading={() => <ActivityIndicator color={BS.accent2} style={StyleSheet.absoluteFill} />}
         style={{ flex: 1, backgroundColor: BS.bg }}
