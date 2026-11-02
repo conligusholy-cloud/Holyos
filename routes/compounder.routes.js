@@ -4374,7 +4374,7 @@ const rentContractSchema = z.object({
   effective_from: dateStr, effective_to: dateStr.optional().nullable().or(z.literal('')),
   issue_day: z.number().int().min(1).max(28).optional(), auto_mode: z.enum(['draft', 'issue', 'send']).optional(), active: z.boolean().optional(),
   currency: z.string().max(3).optional(), invoice_currency: z.enum(['CZK', 'EUR']).optional(), vat_rate: z.number().optional(), fee_pct: z.number().optional(), vat_deductible: z.boolean().optional(),
-  rent_fixed_net: z.number().min(0).nullable().optional(), rent_rules: rentRuleSchema, energy_rules: rentRuleSchema, service_rules: rentRuleSchema, ai_match: z.boolean().optional(), note: z.string().max(2000).optional().nullable(),
+  rent_fixed_net: z.number().min(0).nullable().optional(), energy_advances: z.array(z.object({ label: z.string().max(120).optional().nullable(), amount_net: z.number().min(0), vat_rate: z.number().min(0).max(30).optional().nullable() })).max(10).optional().nullable(), rent_rules: rentRuleSchema, energy_rules: rentRuleSchema, service_rules: rentRuleSchema, ai_match: z.boolean().optional(), note: z.string().max(2000).optional().nullable(),
 });
 function rentContractData(d) {
   const out = {};
@@ -4383,6 +4383,7 @@ function rentContractData(d) {
   if (d.effective_to !== undefined) out.effective_to = d.effective_to ? new Date(d.effective_to + 'T00:00:00Z') : null;
   ['issue_day', 'vat_rate', 'fee_pct'].forEach(function (k) { if (d[k] !== undefined) out[k] = d[k]; });
   if (d.rent_fixed_net !== undefined) out.rent_fixed_net = d.rent_fixed_net === null ? null : d.rent_fixed_net;
+  if (d.energy_advances !== undefined) { const a = (d.energy_advances || []).filter(function (x) { return x && Number(x.amount_net) > 0; }).map(function (x) { return { label: (x.label || '').trim() || 'Záloha na energie', amount_net: Number(x.amount_net), vat_rate: x.vat_rate == null ? null : Number(x.vat_rate) }; }); out.energy_advances = a.length ? a : null; }
   if (d.auto_mode) out.auto_mode = d.auto_mode;
   if (d.currency) out.currency = d.currency.toUpperCase().slice(0, 3);
   if (d.invoice_currency) out.invoice_currency = d.invoice_currency;

@@ -67,6 +67,16 @@ function applyFixedRent(c, rev, lines) {
   const line = { cat: 'D', label: 'Nájem lokality — pevná částka dle smlouvy' + (factor < 1 ? ', poměrně ' + rev.days + '/' + rev.month_days + ' dní' : ''), amount: r2(net * (1 + vatR / 100)), vat_rate: vatR, deductible: true, source: 'fixed' };
   return { lines: rest.concat([line]), check: null };
 }
+// Pevné měsíční zálohy na energie (E) dle smlouvy: nahradí faktury/AI za energie; ruční řádky E (např. roční vyúčtování — doplatek kladně, přeplatek záporně) zůstávají.
+function applyEnergyAdvances(c, rev, lines) {
+  const adv = Array.isArray(c.energy_advances) ? c.energy_advances.filter((a) => a && Number(a.amount_net) > 0) : [];
+  if (!adv.length) return lines;
+  const vatR = Number(c.vat_rate) || 21; const factor = rev.partial && rev.month_days ? rev.days / rev.month_days : 1;
+  const keep = lines.filter((l) => !(l && l.cat === 'E' && (l.source === 'invoice' || l.source === 'ai' || l.source === 'advance')));
+  const add = adv.map((a) => { const v = a.vat_rate == null ? vatR : Number(a.vat_rate); const net = r2(Number(a.amount_net) * factor);
+    return { cat: 'E', label: (a.label || 'Záloha na energie') + ' — pevná záloha dle smlouvy' + (factor < 1 ? ', poměrně ' + rev.days + '/' + rev.month_days + ' dní' : ''), amount: r2(net * (1 + v / 100)), vat_rate: v, deductible: true, source: 'advance' }; });
+  return keep.concat(add);
+}
 const { periodVsMonth } = require('./rent-period');
 const toYmd = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 
@@ -145,7 +155,7 @@ async function generate(contractId, ym) {
   const existing = await prisma.kioskRentStatement.findUnique({ where: { contract_id_period_ym: { contract_id: c.id, period_ym: period } } });
   if (existing && existing.status === 'issued') { const e = new Error('Podklad už je vydaný — nelze přepsat.'); e.status = 409; throw e; }
   const inv = await pullInvoiceLines(c, rev);
-  const manual = ((existing && Array.isArray(existing.lines)) ? existing.lines : []).filter((l) => l && l.source !== 'invoice' && l.source !== 'ai' && l.source !== 'fixed');
+  const manual = ((existing && Array.isArray(existing.lines)) ? existing.lines : []).filter((l) => l && l.source !== 'invoice' && l.source !== 'ai' && l.source !== 'fixed' && l.source !== 'advance');
   // Chytré vyhledání: AI přečte ostatní přijaté doklady za měsíc a určí nájem / energie / díly pro tento kiosk
   let ai = { lines: [], suggestions: [] };
   try {
@@ -154,7 +164,9 @@ async function generate(contractId, ym) {
   } catch (e) { console.warn('[rent-statement] AI vyhledání selhalo:', e.message); }
   ai.lines = (ai.lines || []).filter((l) => l.cat !== 'D'); ai.suggestions = (ai.suggestions || []).filter((x) => x.cat !== 'D');
   const fx = applyFixedRent(c, rev, manual.concat(inv.lines, ai.lines));
-  const allLines = onePerCat(fx.lines);
+  const hasAdv = Array.isArray(c.energy_advances) && c.energy_advances.some((a) => a && Number(a.amount_net) > 0);
+  // se zálohami na energie se E nebere „jeden doklad" — všechny zálohy + ruční vyúčtování se sečtou
+  const allLines = hasAdv ? onePerCat(fx.lines.filter((l) => l.cat !== 'E')).concat(applyEnergyAdvances(c, rev, fx.lines.filter((l) => l.cat === 'E'))) : onePerCat(fx.lines);
   const haveIds = new Set(allLines.map((l) => l.invoice_id).filter(Boolean));
   const suggestions = (ai.suggestions || []).filter((s) => !haveIds.has(s.invoice_id));
   // „Chybí" = pravidla požadují doklad (nájem/energie), ale nenašel se ani podle pravidel, ani AI
@@ -269,7 +281,8 @@ async function sendTest(contract, to) {
   const real = !!(rev && rev.prevMonth > 0);
   const base = rev || { prevMonthYm: new Date().toISOString().slice(0, 7), period_from: new Date().toISOString().slice(0, 8) + '01', period_to: new Date().toISOString().slice(0, 10), prevMonth: 0, partial: false, days: 30, month_days: 30 };
   let inv = { lines: [], missing: [] }; try { inv = await pullInvoiceLines(contract, base); } catch (e) { /* bez faktur */ }
-  const lines = inv.lines.length ? inv.lines : [{ cat: 'D', label: 'Ukázka — faktura za nájem lokality', amount: 12100, vat_rate: 21, deductible: true }, { cat: 'E', label: 'Ukázka — faktura za energie', amount: 6050, vat_rate: 21, deductible: true }];
+  let lines = inv.lines.length ? inv.lines : [{ cat: 'D', label: 'Ukázka — faktura za nájem lokality', amount: 12100, vat_rate: 21, deductible: true }, { cat: 'E', label: 'Ukázka — faktura za energie', amount: 6050, vat_rate: 21, deductible: true }];
+  lines = applyEnergyAdvances(contract, base, applyFixedRent(contract, base, lines).lines);
   const st = { test: true, kiosk_code: contract.kiosk_code, customer_name: contract.customer_name, buyer_ico: contract.buyer_ico, period_ym: base.prevMonthYm, period_from: new Date(base.period_from + 'T00:00:00Z'), period_to: new Date(base.period_to + 'T00:00:00Z'), currency: contract.currency || 'CZK', vat_rate: Number(contract.vat_rate) || 21, fee_pct: Number(contract.fee_pct) || 13, revenue_sis: real ? base.prevMonth : 121000, revenue_adjust: 0, lines, status: 'draft', note: real ? null : 'UKÁZKA — vzorová data, tržby za minulý měsíc se nepodařilo načíst.' };
   Object.assign(st, calc(st));
   await withFx(st, contract, null, true);
