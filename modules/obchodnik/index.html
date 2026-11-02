@@ -1661,6 +1661,16 @@
           (l.phone ? '<a href="sms:'+esc(telClean)+'" onclick="return obLinkGate(event,'+l.id+')">📩 SMS</a>' : '') +
           (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
         '</div>' +
+        (obAiSpecAllowed() ?
+          ('<div class="field" data-obk="economy_link" style="margin-top:10px;background:rgba(79,209,255,.08);border:1px solid rgba(79,209,255,.4);border-radius:12px;padding:12px">' +
+             '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">📊 Poslat odkaz na Ekonomiku (jedinečný pro kontakt — sledujeme jeho chování)</div>' +
+             '<div style="display:flex;gap:8px">' +
+               (l.phone ? '<button class="btn" style="flex:1;background:#25d366;color:#052e13;font-weight:800;font-size:14px" onclick="obEconomyLink('+l.id+',\'whatsapp\')">💬 WhatsApp</button>' : '') +
+               (l.phone ? '<button class="btn" style="flex:1;background:#3b82f6;color:#fff;font-weight:800;font-size:14px" onclick="obEconomyLink('+l.id+',\'sms\')">📩 SMS</button>' : '') +
+               (l.email ? '<button class="btn" style="flex:1;background:#7c5cff;color:#fff;font-weight:800;font-size:14px" onclick="obEconomyLink('+l.id+',\'email\')">✉️ E-mail</button>' : '') +
+             '</div>' +
+             '<div id="eco-msg-'+l.id+'" style="font-size:12px;color:var(--muted);margin-top:8px;min-height:14px"></div>' +
+           '</div>') : '') +
         ((l.phone && obAiSpecAllowed()) ?
           ('<div class="field" data-obk="aispec" style="margin-top:10px;background:rgba(139,92,246,0.10);border:1px solid rgba(139,92,246,0.55);border-radius:12px;padding:12px">' +
              '<button class="btn" style="width:100%;background:#8b5cf6;color:#fff;font-weight:800;font-size:15px" onclick="sendAiSpecSMS('+l.id+')">💬 Odeslat SMS s odkazem na specialistu</button>' +
@@ -1842,6 +1852,24 @@
   window.obAiSpecAllowed = obAiSpecAllowed;
   // Otevře nativní SMS (z čísla obchodníka) s odkazem na specialistu; nejdřív nabídne uložení
   // kontaktu do telefonu a automaticky přepne stav na „Odeslán odkaz na specialistu".
+  // Odeslání jedinečného odkazu na Ekonomiku (jen Jan a Tomáš Holý — kontrola i na serveru)
+  async function obEconomyLink(id, channel, _skipGate){
+    var msg = document.getElementById('eco-msg-'+id);
+    var say = function(h){ if (msg) msg.innerHTML = h; };
+    var l = (state.leads||[]).find(function(x){return x.id===id;})||{};
+    if (channel==='whatsapp' && !_skipGate && !obContactSaved(id)){ obAskSaveFirst(l.name, function(){ obEconomyLink(id, channel, true); }, id); return; }
+    if (channel!=='whatsapp' && !confirm((channel==='sms'?'Odeslat SMS s odkazem na Ekonomiku na ':'Odeslat e-mail s odkazem na Ekonomiku na ')+(channel==='sms'?(l.phone||''):(l.email||''))+' ?')) return;
+    say('<span style="color:var(--muted)">Připravuji jedinečný odkaz…</span>');
+    try{
+      var r = await api('/leads/'+id+'/economy-link', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ channel: channel }) });
+      var j = await r.json().catch(function(){return {};});
+      if (!r.ok || !j.ok){ say('<span style="color:#fca5a5">'+esc(j.error||'Odeslání se nezdařilo.')+'</span>'); return; }
+      if (channel==='whatsapp'){ window.open('https://wa.me/'+j.phone+'?text='+encodeURIComponent(j.message||''), '_blank'); say('<span style="color:var(--converted)">✓ WhatsApp otevřen — odešli zprávu.</span>'); }
+      else say('<span style="color:var(--converted)">✓ '+(channel==='sms'?'SMS odeslána.':'E-mail odeslán.')+'</span>');
+    }catch(e){ say('<span style="color:#fca5a5">Odeslání se nezdařilo.</span>'); }
+  }
+  window.obEconomyLink = obEconomyLink;
+
   async function sendAiSpecSMS(id){
     var st = document.getElementById('aispec-status-'+id); if (st) st.innerHTML = '<span style="color:var(--muted)">Připravuji SMS…</span>';
     try {

@@ -423,6 +423,7 @@ const OB_UI_BUTTONS = [
   { key: 'owner_meeting', group: 'Rychlé akce', label: '👔 Online schůzka s majitelem (velké tlačítko, druhé v pořadí)' },
   { key: 'only_polish', group: 'Rychlé akce', label: '🇵🇱 Umí jen polsky (příznak kontaktu)' },
   { key: 'contact_actions', group: 'Rychlé akce', label: '💬 WhatsApp · 📩 SMS · ✉️ E-mail (řádek ikon)' },
+  { key: 'economy_link', group: 'Rychlé akce', label: '📊 Odeslat odkaz na Ekonomiku (WhatsApp · SMS · E-mail) — vidí jen Jan a Tomáš Holý' },
   { key: 'aispec', group: 'Rychlé akce', label: '💬 Odeslat SMS s odkazem na specialistu + 🧠 Vyhodnotit chat', hidden: true },
   { key: 'hot', group: 'Rychlé akce', label: '⭐ Označit jako zajímavý kontakt' },
   { key: 'meeting', group: 'Schůzky a hovory', label: '📅 Naplánovat schůzku' },
@@ -3958,6 +3959,65 @@ router.post('/leads/:id/access-link', requireAuth, async (req, res, next) => {
       select: { access_sent_count: true, access_last_sent_at: true, status: true },
     });
     res.json({ ok: true, url, phone: wa || null, message, access_sent_count: updated.access_sent_count, access_last_sent_at: updated.access_last_sent_at });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/leads/:id/economy-link — odeslání JEDINEČNÉHO odkazu na Ekonomiku (laundromats.eu/cesta/ekonomika)
+// kontaktu přes WhatsApp (vrací text + číslo, otevře klient), SMS nebo e-mail (odešle server). Smí jen Jan Holý a Tomáš Holý.
+// Odkaz nese podepsaný osobní kód ?l=<kód> → návštěvy a chování na stránkách se vážou na kontakt.
+async function _isEconomyLinkSender(req) {
+  const pid = salesMyPersonId(req); if (!pid) return false;
+  const p = await prisma.person.findUnique({ where: { id: pid }, select: { first_name: true, last_name: true } }).catch(() => null);
+  if (!p) return false;
+  const nrm = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  const full = nrm(p.first_name) + ' ' + nrm(p.last_name);
+  return full === 'jan holy' || full === 'tomas holy';
+}
+router.post('/leads/:id/economy-link', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    if (!(await _isEconomyLinkSender(req))) return res.status(403).json({ error: 'Odkaz na ekonomiku smí posílat jen Jan Holý a Tomáš Holý.' });
+    const channel = String((req.body && req.body.channel) || '');
+    if (['whatsapp', 'sms', 'email'].indexOf(channel) === -1) return res.status(400).json({ error: 'Neplatný kanál' });
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, name: true, first_name: true, email: true, phone: true, lang: true } });
+    if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
+    const pl = String(lead.lang || '').toLowerCase().startsWith('pl') || /^(\+|00)48/.test(String(lead.phone || '').replace(/[\s()-]/g, ''));
+    const base = String(process.env.LM_URL || 'https://laundromats.eu').replace(/\/+$/, '');
+    const ch = channel === 'whatsapp' ? 'wa' : channel; // označení zdroje v odkazu → vidíme, odkud kontakt přišel
+    const link = base + (pl ? '/cesta/pl/ekonomika' : '/cesta/ekonomika') + '?l=' + makeShortCode(lead.id) + '&ch=' + ch;
+    let first = String(lead.first_name || '').trim(); if (!first && lead.name) first = String(lead.name).trim().split(/\s+/)[0];
+    let hello = first;
+    if (!pl && first) { try { hello = require('../services/vocative').vocativeFirstName(first) || first; } catch (e) { hello = first; } }
+    const text = pl
+      ? (first ? 'Dzień dobry ' + first + ', ' : 'Dzień dobry, ') + 'przesyłam ekonomikę automatu pralniczego — możesz dostosować liczby do swojej lokalizacji: ' + link
+      : (hello ? 'Dobrý den ' + hello + ', ' : 'Dobrý den, ') + 'posílám vám ekonomiku prádlomatu — čísla si můžete upravit podle své lokality: ' + link;
+    const by = (req.user && (req.user.display_name || req.user.username)) || null;
+    const log = (extra) => prisma.compounderEvent.create({ data: { sid: 'lead:' + lead.id, event: 'economy_link_sent', path: '/obchodnik', props: Object.assign({ lead_id: lead.id, channel, link, by, lang: pl ? 'pl' : 'cs' }, extra || {}) } }).catch(() => {});
+
+    if (channel === 'whatsapp') {
+      let wa = lead.phone ? String(lead.phone).replace(/[^\d]/g, '') : ''; if (wa.startsWith('00')) wa = wa.slice(2);
+      if (!wa) return res.status(400).json({ error: 'Kontakt nemá telefon' });
+      await log();
+      return res.json({ ok: true, phone: wa, message: text, link });
+    }
+    if (channel === 'sms') {
+      if (!lead.phone) return res.status(400).json({ error: 'Kontakt nemá telefon' });
+      const sid = await require('../services/voice/sms').sendSms(lead.phone, text, { context: 'ekonomika_odkaz', leadId: lead.id });
+      await log({ msg_id: String(sid || '') });
+      try { require('../services/ads/funnel-events').record('sms', lead.id, { variant: 'ekonomika', channel: 'sms', to: lead.phone, text: String(text).slice(0, 600), msg_id: String(sid || ''), link }); } catch (e) { /* best-effort */ }
+      return res.json({ ok: true, link });
+    }
+    if (!lead.email) return res.status(400).json({ error: 'Kontakt nemá e-mail' });
+    const from = (await funnelMailFrom('schuzka', pl ? 'pl' : undefined).catch(() => null)) || process.env.COMPOUNDER_MAIL_FROM || undefined;
+    const subject = pl ? 'Ekonomika automatu pralniczego' : 'Ekonomika prádlomatu';
+    const body = pl
+      ? (first ? 'Dzień dobry ' + first + ',' : 'Dzień dobry,') + '\n\nprzesyłam interaktywny model ekonomiki automatu pralniczego. Żółte pola możesz dostosować do swojej lokalizacji i od razu zobaczysz obrót, zysk oraz zwrot inwestycji.\n\nZ poważaniem'
+      : (hello ? 'Dobrý den ' + hello + ',' : 'Dobrý den,') + '\n\nposílám vám interaktivní model ekonomiky prádlomatu. Žlutá pole si můžete upravit podle své lokality a okamžitě uvidíte obrat, zisk i návratnost.\n\nS pozdravem';
+    await sendMail({ to: lead.email, subject, body, from, fromName: '💧 PRÁDLOMATY 💧', link, linkLabel: pl ? 'Otwórz ekonomikę' : 'Otevřít ekonomiku', brand: 'pradlomaty', leadId: lead.id, campaignId: 'economy-link' });
+    await log({ subject });
+    try { require('../services/ads/funnel-events').record('email', lead.id, { variant: 'ekonomika', channel: 'email', to: lead.email, subject, text: body.slice(0, 1500), from, link }); } catch (e) { /* best-effort */ }
+    res.json({ ok: true, link });
   } catch (err) { next(err); }
 });
 
