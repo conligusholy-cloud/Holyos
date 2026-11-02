@@ -768,7 +768,7 @@ app.post('/api/cesta/meeting-reservation', wrap(async (req, res) => {
   let d;
   try {
     const r = await fetch(HOLYOS_URL + '/api/compounder/meeting-reservation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000),
-      body: JSON.stringify({ slot_id: b.slot_id, t: b.t || undefined, l: b.l || undefined, change: b.change || undefined, mode: b.mode, path: b.path, name: f.first_name + ' ' + f.last_name, email: f.email, phone: f.phone, existing_account: existingAccount }) });
+      body: JSON.stringify({ slot_id: b.slot_id, t: b.t || undefined, l: b.l || undefined, change: b.change || undefined, mode: b.mode, path: b.path, lang: b.lang === 'pl' ? 'pl' : undefined, name: f.first_name + ' ' + f.last_name, email: f.email, phone: f.phone, existing_account: existingAccount }) });
     d = await r.json().catch(() => ({}));
     if (!r.ok || !d.ok) return res.status(r.status >= 400 ? r.status : 400).json({ ok: false, error: d.error || 'Rezervaci se nepodařilo dokončit.' });
   } catch (e) { console.warn('[bs2] cesta rezervace:', e.message); return res.status(502).json({ ok: false, error: 'Rezervace je teď nedostupná. Zkuste to prosím za chvíli.' }); }

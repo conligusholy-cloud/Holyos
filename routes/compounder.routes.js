@@ -298,10 +298,22 @@ router.post('/meeting-reservation', async (req, res) => {
     // Potvrzovací SMS zákazníkovi (fire-and-forget) — ať ví, že schůzku bereme vážně.
     if (phone) {
       try {
-        const fmt = new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }).formatToParts(slot.starts_at).reduce((a, x) => (a[x.type] = x.value, a), {});
-        const when = fmt.weekday + ' ' + fmt.day + '.' + fmt.month + '. v ' + fmt.hour + ':' + fmt.minute;
-        const first = require('../services/vocative').vocativeFirstName(name);
-        const smsText = (first ? first + ', schůzku' : 'Schůzku') + ' máme potvrzenou na ' + when + '. Budeme se na Vás těšit a připravíme se. Potvrzení máte i v e-mailu. Kdyby se cokoli změnilo, odpovězte na něj.';
+        // Jazyk SMS: z rezervace (b.lang z polské stránky) nebo z jazyka leada
+        let smsPl = /^pl/i.test(String(b.lang || ''));
+        if (!smsPl && leadId) { const ll = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { lang: true } }).catch(() => null); smsPl = !!(ll && /^pl/i.test(String(ll.lang || ''))); }
+        let smsText;
+        if (smsPl) {
+          const PLM = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia'];
+          const PLD = { Sunday: 'niedziela', Monday: 'poniedziałek', Tuesday: 'wtorek', Wednesday: 'środa', Thursday: 'czwartek', Friday: 'piątek', Saturday: 'sobota' };
+          const pp = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Prague', weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(slot.starts_at).reduce((a, x) => (a[x.type] = x.value, a), {});
+          const whenPl = PLD[pp.weekday] + ' ' + pp.day + ' ' + PLM[(+pp.month) - 1] + ' o ' + pp.hour + ':' + pp.minute;
+          smsText = 'Spotkanie potwierdzone: ' + whenPl + '. Będziemy się cieszyć na rozmowę i dobrze się przygotujemy. Potwierdzenie znajdziesz też w e-mailu. Gdyby coś się zmieniło, odpowiedz na ten e-mail.';
+        } else {
+          const fmt = new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }).formatToParts(slot.starts_at).reduce((a, x) => (a[x.type] = x.value, a), {});
+          const when = fmt.weekday + ' ' + fmt.day + '.' + fmt.month + '. v ' + fmt.hour + ':' + fmt.minute;
+          const first = require('../services/vocative').vocativeFirstName(name);
+          smsText = (first ? first + ', schůzku' : 'Schůzku') + ' máme potvrzenou na ' + when + '. Budeme se na Vás těšit a připravíme se. Potvrzení máte i v e-mailu. Kdyby se cokoli změnilo, odpovězte na něj.';
+        }
         require('../services/voice/sms').sendSms(phone, smsText, { context: 'schuzka_potvrzeni', leadId: leadId || undefined })
           .catch((e) => console.warn('[meeting] potvrzovací SMS:', e.message));
       } catch (e) { console.warn('[meeting] potvrzovací SMS init:', e.message); }
