@@ -906,6 +906,8 @@ async function ensureLocalRecording(callId, audioUrl, line) {
   const auth = 'Basic ' + Buffer.from(creds.sid + ':' + creds.token).toString('base64');
 
   const localSize = (fs.existsSync(file) ? fs.statSync(file).size : 0);
+  // Při každém přehrání posunout čas souboru → často přehrávaná nahrávka se nepřesune do archivu
+  if (localSize > 0) { try { const t = new Date(); fs.utimesSync(file, t, t); } catch (_) { /* */ } }
   // Ověř skutečnou velikost u Twilia — když je lokální kopie menší (uřízlá /
   // stažená dřív, než byla nahrávka hotová), stáhneme ji znovu celou.
   const remoteSize = await remoteRecordingSize(mediaUrl, auth);
@@ -914,6 +916,9 @@ async function ensureLocalRecording(callId, audioUrl, line) {
   const r = await fetch(mediaUrl, { headers: { Authorization: auth } });
   if (!r.ok) {
     if (localSize > 0) return file; // radši starší kopie než nic
+    // Starší nahrávky se přesouvají do archivu R2 (services/voice/recordings-cleanup-worker.js) — zkusit odtud
+    const arch = await require('../services/voice/recordings-cleanup-worker').archiveGet(path.basename(file)).catch(() => null);
+    if (arch && arch.length) { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file, arch); return file; }
     throw new Error('Nahrávku nelze načíst (' + r.status + ')');
   }
   fs.mkdirSync(dir, { recursive: true });

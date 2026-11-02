@@ -40,7 +40,25 @@ const EP = require('./ekonomika-page');
 const FOOT_CSS = '.site-foot{margin-top:70px;padding:26px 0 8px;border-top:1px solid rgba(120,160,255,.14);display:flex;align-items:center;justify-content:space-between;gap:16px 28px;flex-wrap:wrap;font-size:13.5px;color:#58698a}.site-foot b{font-weight:800;background:linear-gradient(90deg,#4fd1ff,#7c5cff);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:15px}.site-foot nav{display:flex;flex-wrap:wrap;gap:6px 22px}.site-foot a{color:#7d93b8;text-decoration:none}.site-foot a:hover{color:#4fd1ff}';
 const LOGO = '<span style="margin-right:10px;display:inline-flex"><svg width="34" height="34" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="lmg" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff"/><stop offset=".55" stop-color="#3a6cf5"/><stop offset="1" stop-color="#7c5cff"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="17" fill="#0b1220"/><rect x="2.75" y="2.75" width="58.5" height="58.5" rx="16.5" stroke="url(#lmg)" stroke-width="1.5"/><circle cx="32" cy="34" r="15" stroke="url(#lmg)" stroke-width="3.5"/><circle cx="32" cy="34" r="8" stroke="url(#lmg)" stroke-width="2.5" stroke-opacity=".6"/><circle cx="20" cy="16" r="2" fill="#4fd1ff"/><circle cx="27" cy="16" r="2" fill="#7c5cff"/></svg></span>';
 const FOOTER = '<div style="max-width:720px;margin:0 auto;padding:0 22px 40px"><footer class="site-foot"><div><b>Laundromats.eu</b> &nbsp;© Best Series s.r.o.</div><nav><a href="/gdpr">Ochrana osobních údajů</a><a href="mailto:info@laundromats.eu">info@laundromats.eu</a></nav></footer></div>';
-const shell = (html) => CI18N.addSwitch(String(html).replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</style>', FOOT_CSS + '</style>').replace('<!--PRESENCE-->', '').replace('</body>', '<script src="/cesta/track.js" defer></script></body>'));
+// ── počítadlo „právě si prohlíží" v záhlaví (jako na Best Series 2.0): anonymní sid z prohlížeče, držíme jen v paměti ──
+const PRES = new Map(); // sid → poslední ping (ms)
+const PRES_HTML = '<span class="presence" id="presence" title="Právě online + aktivní lidé za posledních 60 minut (klouzavé okno)"><i></i>právě si prohlíží <b id="pr-hour">–</b></span>';
+const PRES_CSS = '.presence{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;border:1px solid rgba(47,227,160,.35);background:rgba(47,227,160,.08);color:#a9f5d9;font-size:12px;font-weight:500;white-space:nowrap;transition:box-shadow .3s,background .3s;font-family:inherit;margin-left:12px}.presence i{width:7px;height:7px;border-radius:50%;background:#2fe3a0;box-shadow:0 0 8px #2fe3a0;animation:prpulse 2s infinite}.presence b{font-weight:800;color:#fff}.presence.flash{box-shadow:0 0 0 2px rgba(47,227,160,.5),0 0 22px rgba(47,227,160,.75);background:rgba(47,227,160,.22)}.presence.flash b{text-shadow:0 0 10px #2fe3a0}@keyframes prpulse{0%,100%{opacity:1}50%{opacity:.45}}@media(max-width:430px){.presence{margin-left:6px;padding:3px 9px;font-size:11px}}';
+const PRES_JS = '(function(){var el=document.getElementById("presence");if(!el)return;var h=document.getElementById("pr-hour"),last="";var sid;try{sid=localStorage.getItem("lm_sid");if(!sid){sid="lm-"+Date.now().toString(36)+Math.random().toString(36).slice(2,10);localStorage.setItem("lm_sid",sid);}}catch(e){sid="lm-x"+Date.now().toString(36);}'
+  + 'function ping(){try{fetch("/api/presence/ping",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sid:sid}),keepalive:true});}catch(e){}}'
+  + 'function upd(){fetch("/api/presence",{cache:"no-store"}).then(function(r){return r.ok?r.json():null;}).then(function(j){if(!j)return;var v=j.total,k=String(v);h.textContent=v;if(last&&k!==last){el.classList.add("flash");setTimeout(function(){el.classList.remove("flash");},1400);}last=k;}).catch(function(){});}'
+  + 'ping();setTimeout(upd,400);setInterval(function(){if(document.visibilityState==="visible"){ping();upd();}},15000);})();';
+app.post('/api/presence/ping', (req, res) => {
+  const sid = String((req.body || {}).sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+  if (sid && !rateLimited('pp:' + req.ip, 240, 3600e3)) { PRES.set(sid, Date.now()); if (PRES.size > 20000) { const lim = Date.now() - 3600e3; for (const [k, v] of PRES) if (v < lim) PRES.delete(k); } }
+  res.json({ ok: true });
+});
+app.get('/api/presence', (req, res) => {
+  const now = Date.now(); let n = 0, hr = 0;
+  for (const v of PRES.values()) { if (now - v < 120e3) n++; if (now - v < 3600e3) hr++; }
+  res.set('Cache-Control', 'no-store').json({ now: n, hour: hr, total: Math.max(hr, n) });
+});
+const shell = (html) => CI18N.addSwitch(String(html).replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</style>', FOOT_CSS + PRES_CSS + '</style>').replace('<!--PRESENCE-->', '').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>').replace('</body>', '<script src="/cesta/track.js" defer></script></body>'));
 const send = (res, html) => res.set('Cache-Control', 'no-cache').type('html').send(html);
 const cestaHtml = () => fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8');
 
