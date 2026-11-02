@@ -74,7 +74,7 @@ function applyEnergyAdvances(c, rev, lines) {
   const vatR = Number(c.vat_rate) || 21; const factor = rev.partial && rev.month_days ? rev.days / rev.month_days : 1;
   const keep = lines.filter((l) => !(l && l.cat === 'E' && (l.source === 'invoice' || l.source === 'ai' || l.source === 'advance')));
   const add = adv.map((a) => { const v = a.vat_rate == null ? vatR : Number(a.vat_rate); const net = r2(Number(a.amount_net) * factor);
-    return { cat: 'E', label: (a.label || 'Záloha na energie') + ' — pevná záloha dle smlouvy' + (factor < 1 ? ', poměrně ' + rev.days + '/' + rev.month_days + ' dní' : ''), amount: r2(net * (1 + v / 100)), vat_rate: v, deductible: true, source: 'advance' }; });
+    return { cat: 'E', label: (a.label || 'Záloha na energie') + ' — záloha dle smlouvy, vyúčtování dle skutečnosti' + (factor < 1 ? ', poměrně ' + rev.days + '/' + rev.month_days + ' dní' : ''), amount: r2(net * (1 + v / 100)), vat_rate: v, deductible: true, source: 'advance' }; });
   return keep.concat(add);
 }
 const { periodVsMonth } = require('./rent-period');
@@ -235,6 +235,7 @@ function html(st, ourCompany) {
   </tbody></table>
   <div class="sum"><div class="row${fxOn ? '' : ' total'}"><span>${rent >= 0 ? 'Měsíční nájemné (B − C − D − E − F)' : 'Záporný výsledek — vyúčtování nekrytých nákladů'}</span><span>${m(rent)}</span></div>${fxOn ? `<div class="row total"><span>${rent >= 0 ? 'Měsíční nájemné k fakturaci' : 'Vyúčtování nekrytých nákladů'} v ${esc(st.invoice_currency)}</span><span>${fm(st.rent_invoice)}</span></div><div class="row" style="font-size:11px;color:#5b6b86"><span>Přepočet kurzem ČNB ${Number(st.fx_rate).toLocaleString('cs-CZ', { minimumFractionDigits: 3, maximumFractionDigits: 4 })} ${esc(cur)}/${esc(st.invoice_currency)}${st.fx_rate_date ? ' ze dne ' + d(st.fx_rate_date) : ''}</span><span></span></div>` : ''}</div>
   <div class="box"><h3>Jak číst výsledek</h3>${rent >= 0 ? 'Kladný výsledek je měsíční nájemné bez DPH za uvedené období. K částce se připočte DPH v zákonné výši, je-li podle právních předpisů účtována.' : 'Výsledek vzorce B − C − D − E − F je záporný. Absolutní hodnota představuje část nákladů na lokalitu, energie, provozní média a případný pozáruční servis, které nebyly kryty obratem po odečtení servisního a provozního poplatku. Nájemce tuto částku vyúčtuje Pronajímateli (čl. VI odst. 4).'} Položky D, E a F se uvádějí po odečtení DPH, na kterou má Nájemce nárok na odpočet; podklady (daňové doklady) jsou součástí vyúčtování.</div>
+  ${lines.some((l) => l.cat === 'E' && l.source === 'advance') ? '<div class="box"><h3>Energie — zálohy</h3>Energie a provozní média (E) jsou v tomto podkladu účtovány formou pevných měsíčních záloh dle smlouvy. Vyúčtování proběhne dle skutečnosti po obdržení ročního vyúčtování od dodavatele; rozdíl (doplatek / přeplatek) bude zohledněn v podkladu za měsíc, ve kterém bude vyúčtování doručeno.</div>' : ''}
   ${st.note ? `<div class="box"><h3>Poznámka</h3>${esc(st.note)}</div>` : ''}
   <div class="sig"><div>Za Nájemce (zpracoval)</div><div>Za Pronajímatele (odsouhlasil)</div></div>`);
 }
