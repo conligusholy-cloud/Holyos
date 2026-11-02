@@ -69,7 +69,7 @@
       btn.type = 'button'; btn.className = 'tab-btn'; btn.setAttribute('data-tab', TAB);
       btn.textContent = '📨 SMS schůzka';
       btn.onclick = function () { window.switchTab(TAB); };
-      var after = bar.querySelector('.tab-btn[data-tab="terminy"]');
+      var after = bar.querySelector('.tab-btn[data-tab="rezervace"]');
       if (after && after.nextSibling) bar.insertBefore(btn, after.nextSibling); else bar.appendChild(btn);
     }
     var host = document.getElementById('tab-orders');

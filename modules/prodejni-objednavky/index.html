@@ -301,7 +301,6 @@
       <button type="button" class="tab-btn" data-tab="compounder" onclick="switchTab('compounder')">🌐 Compounder</button>
       <button type="button" class="tab-btn" data-tab="compounding" onclick="switchTab('compounding')">🧺 Compounding</button>
       <button type="button" class="tab-btn" data-tab="rezervace" onclick="switchTab('rezervace')">📋 Rezervace</button>
-      <button type="button" class="tab-btn" data-tab="terminy" onclick="switchTab('terminy')">📅 Termíny schůzek</button>
       <button type="button" class="tab-btn" data-tab="databaze" onclick="switchTab('databaze')">🗃️ Databáze</button>
       <button type="button" class="tab-btn" data-tab="externi" onclick="switchTab('externi')">🤝 Externí obchod</button>
       <button type="button" class="tab-btn" data-tab="externisti" onclick="switchTab('externisti')">🧑‍💼 Externí obchodníci</button>
@@ -440,20 +439,7 @@
       <div id="servis-subs-table"><div style="color:var(--text2);">Načítám…</div></div>
     </div>
 
-    <!-- TAB: Termíny schůzek (pradlomaty.info rezervace) -->
-    <div id="tab-terminy" style="display:none; padding:20px 24px 24px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
-        <h3 style="margin:0;font-size:16px;">📅 Termíny schůzek — pradlomaty.info</h3>
-        <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
-          <button class="btn btn-sm" onclick="msWeek(-1)" title="Předchozí týden">←</button>
-          <span id="ms-week-label" style="font-size:13px;min-width:150px;text-align:center;font-weight:600;"></span>
-          <button class="btn btn-sm" onclick="msWeek(1)" title="Další týden">→</button>
-          <button class="btn btn-sm" onclick="msWeek(0)" title="Aktuální týden">Dnes</button>
-        </div>
-      </div>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Táhni přes prázdná políčka → hromadně otevřeš možnosti schůzek (30 min). Táhni přes <span style="color:#1e86e0;">volno</span> → hromadně smažeš. Otevřené termíny se hned nabízejí na pradlomaty.info/home. <span style="color:#1e86e0;">■</span> volno · <span style="color:#1f7a45;">■</span> rezervováno.</div>
-      <div id="ms-grid" style="overflow-x:auto;"><div style="color:var(--text2);">Načítám…</div></div>
-    </div>
+    <!-- Termíny schůzek se spravují v administraci Laundromats (SOUKROMÉ) -->
 
     <!-- TAB: AI telefonní asistent -->
     <div id="tab-ai-asistent" style="display:none; padding:20px 24px 24px;">
@@ -7153,7 +7139,7 @@
     window.prekladacCopy = prekladacCopy;
 
     function switchTab(name) {
-      ['orders', 'pricelist', 'accessories', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'terminy', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan', 'ai-asistent', 'prekladac', 'servis-smlouvy'].forEach(function(t) {
+      ['orders', 'pricelist', 'accessories', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan', 'ai-asistent', 'prekladac', 'servis-smlouvy'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
@@ -7165,7 +7151,6 @@
       if (name === 'compounder') loadCompounderLeads();
       if (name === 'compounding') loadKioskValues();
       if (name === 'rezervace') loadReservationsPage();
-      if (name === 'terminy') loadMeetingSlots();
       if (name === 'databaze') crmInit();
       if (name === 'lokality') loadLokality();
       if (name === 'externi') renderExternalTrade();
