@@ -253,6 +253,9 @@ router.post('/meeting-reservation', async (req, res) => {
       req._meetingRebooked = !!(canceled && canceled.count);
     }
     if (!leadId && !email && !phone) return res.status(400).json({ ok: false, error: 'Zadejte prosím kontakt (e-mail nebo telefon)' });
+    // Forma schůzky (online / osobně) + zvolená cesta pořízení (vlastní kapitál / financování) — musí být před použitím níže.
+    const mode = MEETING_MODE_LABEL[String(b.mode || '').trim()] ? String(b.mode).trim() : null;
+    const path = FINANCING_PATH_LABEL[String(b.path || '').trim()] ? String(b.path).trim() : null;
     // Rezervace bez portálového tokenu (např. z Bestseries2 / pradlomaty.info): spáruj s existujícím kontaktem
     // podle e-mailu / telefonu, jinak založ nový — ať se člověk objeví v seznamu kontaktů Compounderu.
     if (!leadId) {
@@ -265,9 +268,7 @@ router.post('/meeting-reservation', async (req, res) => {
       }
     }
 
-    // Forma schůzky (online / osobně) + zvolená cesta pořízení (vlastní kapitál / financování).
-    const mode = MEETING_MODE_LABEL[String(b.mode || '').trim()] ? String(b.mode).trim() : null;
-    const path = FINANCING_PATH_LABEL[String(b.path || '').trim()] ? String(b.path).trim() : null;
+    // (mode a path jsou deklarované výš — před vyhledáním / založením kontaktu)
     const note = [mode && MEETING_MODE_LABEL[mode], path && FINANCING_PATH_LABEL[path]].filter(Boolean).join(' · ') || null;
 
     const resv = await prisma.meetingReservation.create({
