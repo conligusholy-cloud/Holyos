@@ -154,7 +154,7 @@
     var html = '<span style="font-size:12px;color:var(--text2);margin:0 4px 0 2px">' + _t('Varianta') + ':</span>';
     ['V3', 'V2'].forEach(function (v) {
       var on = v === VER;
-      html += '<button type="button" class="btn btn-sm" onclick="window.PradlomatTool._setVer(\'' + v + '\')" style="padding:6px 10px;' + (on ? 'background:#c9a24b;border-color:#c9a24b;color:#241c05;font-weight:700;' : '') + '">' + v + '</button>';
+      html += '<button type="button" class="btn btn-sm" onclick="window.PradlomatTool._setVer(\'' + v + '\')" style="padding:6px 10px;' + (on ? 'background:#c9a24b;border-color:#c9a24b;color:#241c05;font-weight:700;' : '') + '">' + (v === 'V3' ? 'FLEX' : 'MINI') + '</button>';
     });
     return html;
   }

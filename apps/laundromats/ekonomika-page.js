@@ -9,7 +9,7 @@ const TXT = {
     lead: 'Živý model. Žlutá pole jsou vstupy — upravte je podle své lokality a okamžitě uvidíte obrat, zisk a návratnost. Hodnoty jsou orientační.',
     vat: 'Všechny ceny jsou uvedené bez DPH.',
     invest: 'Investice celkem', investSub: 'na jedno místo', rev: 'Obrat / měsíc', profit: 'Zisk / měsíc', profitSub: 'po všech nákladech', payback: 'Návratnost',
-    variant: 'Varianta', v3: 'V3 — vyšší kapacita', v2: 'V2 — nižší investice', cur: 'Měna', reset: '↺ Obnovit výchozí hodnoty',
+    variant: 'Varianta', v3: 'FLEX — vyšší kapacita', v2: 'MINI — nižší investice', cur: 'Měna', reset: '↺ Obnovit výchozí hodnoty',
     invTitle: 'Investiční náklady (jednorázové)', machine: 'Cena prádlomatu', permit: 'Projekt + povolení', conn: 'Přípojky', invTotal: 'Investice celkem',
     opTitle: 'Provoz (měsíčně)', perday: 'Zákazníků / den', spend: 'Ø útrata / zákazník', cost: 'Provozní náklady / měs', mprofit: 'Měsíční zisk',
     opNote: 'Náklady = nájem + energie + servis + ostatní. Počítáme 30,5 dne/měsíc.', pcs: 'ks',
@@ -27,7 +27,7 @@ const TXT = {
     lead: 'Model na żywo. Żółte pola to dane wejściowe — dostosuj je do swojej lokalizacji i od razu zobacz obrót, zysk i zwrot. Wartości są orientacyjne.',
     vat: 'Wszystkie ceny podano bez VAT.',
     invest: 'Inwestycja łącznie', investSub: 'na jedno miejsce', rev: 'Obrót / miesiąc', profit: 'Zysk / miesiąc', profitSub: 'po wszystkich kosztach', payback: 'Zwrot',
-    variant: 'Wariant', v3: 'V3 — większa wydajność', v2: 'V2 — niższa inwestycja', cur: 'Waluta', reset: '↺ Przywróć wartości domyślne',
+    variant: 'Wariant', v3: 'FLEX — większa wydajność', v2: 'MINI — niższa inwestycja', cur: 'Waluta', reset: '↺ Przywróć wartości domyślne',
     invTitle: 'Koszty inwestycyjne (jednorazowe)', machine: 'Cena automatu', permit: 'Projekt + pozwolenia', conn: 'Przyłącza', invTotal: 'Inwestycja łącznie',
     opTitle: 'Działalność (miesięcznie)', perday: 'Klientów / dzień', spend: 'Ø wydatek / klient', cost: 'Koszty operacyjne / mies.', mprofit: 'Zysk miesięczny',
     opNote: 'Koszty = czynsz + energia + serwis + pozostałe. Przyjmujemy 30,5 dnia/miesiąc.', pcs: 'szt.',
@@ -94,7 +94,7 @@ function economyPage(lang) {
     </div>
 
     <div class="ek-bar">
-      <span class="ek-seg" id="ek-ver"><span>${t.variant}:</span><button type="button" data-v="V3" class="on" title="${t.v3}">V3</button><button type="button" data-v="V2" title="${t.v2}">V2</button></span>
+      <span class="ek-seg" id="ek-ver"><span>${t.variant}:</span><button type="button" data-v="V3" class="on" title="${t.v3}">FLEX</button><button type="button" data-v="V2" title="${t.v2}">MINI</button></span>
       <span class="ek-seg" id="ek-cur"><span>${t.cur}:</span><button type="button" data-c="CZK">CZK</button><button type="button" data-c="EUR">EUR</button><button type="button" data-c="PLN">PLN</button></span>
       <button type="button" class="ek-reset" id="ek-reset">${t.reset}</button>
     </div>
