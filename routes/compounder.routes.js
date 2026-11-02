@@ -408,6 +408,52 @@ router.post('/leads/:id/owner-meeting', requireAuth, async (req, res) => {
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
 
+// ── Nastavení aplikace obchodníka: které bloky / tlačítka u kontaktu jsou ve výchozím stavu vidět ──
+// key = hodnota data-obk v modules/obchodnik/index.html; hidden = výchozí schováno.
+const OB_UI_BUTTONS = [
+  { key: 'contact_actions', group: 'Rychlé akce', label: '📞 Volat · 💬 WhatsApp · 📩 SMS · ✉️ E-mail (řádek ikon)' },
+  { key: 'aispec', group: 'Rychlé akce', label: '💬 Odeslat SMS s odkazem na specialistu + 🧠 Vyhodnotit chat', hidden: true },
+  { key: 'hot', group: 'Rychlé akce', label: '⭐ Označit jako zajímavý kontakt' },
+  { key: 'meeting', group: 'Schůzky a hovory', label: '📅 Naplánovat schůzku' },
+  { key: 'owner_meeting', group: 'Schůzky a hovory', label: '👔 Online schůzka s majitelem' },
+  { key: 'call_plan', group: 'Schůzky a hovory', label: '📞 Naplánovat hovor' },
+  { key: 'promise', group: 'Schůzky a hovory', label: '✅ Slíbený krok (co jsi slíbil + termín)' },
+  { key: 'called', group: 'Schůzky a hovory', label: '📵 Box „Ještě jsi nevolal / Mluvil jsi s ním" (Zavolat teď, Už jsem mluvil)' },
+  { key: 'order', group: 'Obchod', label: '🧾 Nová objednávka (průvodce)' },
+  { key: 'leasing', group: 'Obchod', label: '🏦 Poslat kontakt leasingové společnosti' },
+  { key: 'discount', group: 'Obchod', label: '🏷️ Sleva (stav + tlačítka)' },
+  { key: 'offer', group: 'Obchod', label: '👁️ Nabídka lokalit (zobrazit / přidat individuální)' },
+  { key: 'save_contact', group: 'Kontakt', label: '💾 Uložit kontakt do telefonu' },
+  { key: 'status', group: 'Kontakt', label: '🏷️ Stav kontaktu (výběr)' },
+  { key: 'portal_access', group: 'Portál', label: '✉️ Odeslat přístup e-mailem · 🟢 WhatsApp · 📩 SMS · 🔗 Kopírovat odkaz' },
+  { key: 'portal_sections', group: 'Portál', label: '⚙️ Verze portálu, viditelné sekce a vzory smluv' },
+  { key: 'activity', group: 'Záznamy', label: '📝 Zaznamenat aktivitu (diktování, hovor, historie)' },
+  { key: 'notes', group: 'Záznamy', label: '🗒️ Poznámky' },
+  { key: 'journey', group: 'Záznamy', label: '🧭 Cesta zákazníka / analytika' },
+  { key: 'reservations', group: 'Záznamy', label: '📋 Rezervace lokalit' },
+  { key: 'ai_eval', group: 'Záznamy', label: '🤖 AI vyhodnocení kontaktu' },
+];
+const OB_UI_KEY = 'obchodnik.ui_hidden';
+async function _obUiHidden() {
+  const v = await getSetting(OB_UI_KEY, { type: 'json', defaultValue: null }).catch(() => null);
+  return Array.isArray(v) ? v.map(String) : OB_UI_BUTTONS.filter((b) => b.hidden).map((b) => b.key);
+}
+// GET /api/compounder/obchodnik-ui — seznam bloků + které jsou schované (čte aplikace obchodníka i nastavení)
+router.get('/obchodnik-ui', requireAuth, async (req, res) => {
+  try { res.json({ ok: true, buttons: OB_UI_BUTTONS.map((b) => ({ key: b.key, group: b.group, label: b.label, default_hidden: !!b.hidden })), hidden: await _obUiHidden() }); }
+  catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+// PUT /api/compounder/obchodnik-ui { hidden: [klíče] } — jen admin
+router.put('/obchodnik-ui', requireAuth, async (req, res) => {
+  try {
+    const u = req.user || {}; if (!(u.isSuperAdmin || u.role === 'admin')) return res.status(403).json({ ok: false, error: 'Jen administrátor.' });
+    const valid = new Set(OB_UI_BUTTONS.map((b) => b.key));
+    const hidden = (Array.isArray((req.body || {}).hidden) ? req.body.hidden : []).map(String).filter((k) => valid.has(k));
+    await setSetting(OB_UI_KEY, hidden, { type: 'json', description: 'Aplikace obchodníka – schované bloky u kontaktu', scope: 'compounder', userId: u.id });
+    res.json({ ok: true, hidden });
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
 // GET /api/compounder/owner-meetings/stats?days=90 — vyhodnocení: kolik schůzek s majitelem který obchodník domluvil
 // (z rezervací s booked_by_person_id; nezrušené / proběhlé). Vrací i seznam rezervací s kontaktem.
 router.get('/owner-meetings/stats', requireAuth, async (req, res) => {
