@@ -10,6 +10,32 @@ const { prisma } = require('../../config/database');
 const { computePrevMonthRevenue } = require('./kiosk-revenue');
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+// ─── Fakturace v cizí měně (např. EUR pro zahraniční subjekt) ─────────────────
+// Výpočet podkladu zůstává v Kč; výsledné nájemné se přepočte aktuálním kurzem ČNB (Kč za 1 jednotku měny).
+let _fx = { at: 0, rates: null, date: null };
+async function cnbRate(code) {
+  if (!code || code === 'CZK') return null;
+  if (!_fx.rates || Date.now() - _fx.at > 3600e3) {
+    const r = await fetch('https://api.cnb.cz/cnbapi/exrates/daily?lang=CZ', { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) throw new Error('ČNB kurzy nedostupné (HTTP ' + r.status + ')');
+    const j = await r.json(); const rates = {}; let date = null;
+    (j.rates || []).forEach((x) => { const amt = Number(x.amount) || 1; if (Number(x.rate) > 0) rates[x.currencyCode] = Number(x.rate) / amt; if (!date && x.validFor) date = String(x.validFor).slice(0, 10); });
+    _fx = { at: Date.now(), rates, date };
+  }
+  const rate = _fx.rates[code]; if (!rate) throw new Error('Kurz ČNB pro ' + code + ' nenalezen');
+  return { rate: Math.round(rate * 10000) / 10000, date: _fx.date };
+}
+// Doplní do dat podkladu přepočet do měny fakturace. keepRate = použít už uložený kurz (koncept), fresh = vždy aktuální kurz (vystavení).
+async function withFx(data, contract, prev, fresh) {
+  const cur = String((contract && contract.invoice_currency) || 'CZK').toUpperCase();
+  const base = String(data.currency || (prev && prev.currency) || 'CZK').toUpperCase();
+  if (cur === base) return Object.assign(data, { invoice_currency: null, fx_rate: null, fx_rate_date: null, rent_invoice: null });
+  let rate = !fresh && prev && prev.invoice_currency === cur && prev.fx_rate ? { rate: Number(prev.fx_rate), date: prev.fx_rate_date } : null;
+  if (!rate) { try { rate = await cnbRate(cur); } catch (e) { console.warn('[rent-statement] kurz ČNB:', e.message); rate = prev && prev.fx_rate ? { rate: Number(prev.fx_rate), date: prev.fx_rate_date } : null; } }
+  const rent = data.rent !== undefined ? Number(data.rent) : Number(prev && prev.rent) || 0;
+  return Object.assign(data, { invoice_currency: cur, fx_rate: rate ? rate.rate : null, fx_rate_date: rate ? rate.date : null, rent_invoice: rate ? r2(rent / rate.rate) : null });
+}
 const CATS = { D: 'Náklad na užívání lokality', E: 'Energie a provozní média', F: 'Pozáruční servis a náhradní díly' };
 const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 // Klíčové slovo pravidla: „+" = musí platit všechno (AND), „|" = stačí jedno z nich (OR). Bez diakritiky a velikosti písmen.
@@ -141,6 +167,7 @@ async function generate(contractId, ym) {
   };
   const k = calc(Object.assign({}, existing || {}, base, { lines: allLines }));
   const data = Object.assign({}, base, { suggestions, lines: k.lines, revenue_gross: k.revenue_gross, revenue_net: k.revenue_net, fee_net: k.fee_net, cost_d: k.cost_d, cost_e: k.cost_e, cost_f: k.cost_f, rent: k.rent });
+  await withFx(data, c, existing, false);
   const statement = existing
     ? await prisma.kioskRentStatement.update({ where: { id: existing.id }, data })
     : await prisma.kioskRentStatement.create({ data: Object.assign({ contract_id: c.id, period_ym: period }, data) });
@@ -161,6 +188,10 @@ async function update(id, body) {
   if (Array.isArray(body.suggestions)) data.suggestions = body.suggestions.slice(0, 100);
   if (body.status === 'issued' && st.status !== 'issued') { data.status = 'issued'; if (!st.doc_number) data.doc_number = await nextDocNumber(); }
   if (body.status === 'draft' && st.status === 'issued') data.status = 'draft';
+  // měna fakturace: při vystavení vždy aktuální kurz ČNB, jinak ponechat uložený
+  const contract = st.contract_id ? await prisma.kioskRentContract.findUnique({ where: { id: st.contract_id } }).catch(() => null) : null;
+  await withFx(Object.assign(data, { currency: st.currency }), contract || { invoice_currency: st.invoice_currency || 'CZK' }, st, data.status === 'issued');
+  delete data.currency;
   return prisma.kioskRentStatement.update({ where: { id }, data });
 }
 
@@ -178,6 +209,8 @@ function html(st, ourCompany) {
     return `<tr><td><b>${c}. ${CATS[c]}</b></td><td class="r"></td><td class="r"><b>− ${m(total)}</b></td></tr>${detail}`;
   }).join('');
   const rent = Number(st.rent) || 0;
+  const fxOn = !!(st.invoice_currency && st.fx_rate && st.rent_invoice != null);
+  const fm = (n) => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (st.invoice_currency || '');
   return bs2.page({ title: 'Podklad pro fakturaci nájemného', number: st.doc_number || 'KONCEPT', pill: 'Nájem kiosku · ' + st.kiosk_code, ext: st.status === 'issued' ? '' : (st.test ? 'TESTOVACÍ UKÁZKA' : 'Koncept — nevydáno') }, `
   <div class="parties"><div class="party"><span class="h">Nájemce (provozovatel)</span><div class="name">${esc(st.customer_name || '—')}</div>${st.buyer_ico ? `<div class="row">IČO ${esc(st.buyer_ico)}</div>` : ''}<div class="row">Kiosk: ${esc(st.kiosk_code)}</div></div>
     <div class="party"><span class="h">Pronajímatel</span><div class="name">${esc((ourCompany && ourCompany.name) || 'Best Series s.r.o.')}</div>${ourCompany && ourCompany.ico ? `<div class="row">IČO ${esc(ourCompany.ico)}</div>` : ''}</div></div>
@@ -188,7 +221,7 @@ function html(st, ourCompany) {
     <tr><td><b>C. Servisní a provozní poplatek Nájemce</b> <span style="color:#5b6b86">(${Number(st.fee_pct)} % z A, bez DPH)</span></td><td class="r"></td><td class="r"><b>− ${m(st.fee_net)}</b></td></tr>
     ${catRows}
   </tbody></table>
-  <div class="sum"><div class="row total"><span>${rent >= 0 ? 'Měsíční nájemné (B − C − D − E − F)' : 'Záporný výsledek — vyúčtování nekrytých nákladů'}</span><span>${m(rent)}</span></div></div>
+  <div class="sum"><div class="row${fxOn ? '' : ' total'}"><span>${rent >= 0 ? 'Měsíční nájemné (B − C − D − E − F)' : 'Záporný výsledek — vyúčtování nekrytých nákladů'}</span><span>${m(rent)}</span></div>${fxOn ? `<div class="row total"><span>${rent >= 0 ? 'Měsíční nájemné k fakturaci' : 'Vyúčtování nekrytých nákladů'} v ${esc(st.invoice_currency)}</span><span>${fm(st.rent_invoice)}</span></div><div class="row" style="font-size:11px;color:#5b6b86"><span>Přepočet kurzem ČNB ${Number(st.fx_rate).toLocaleString('cs-CZ', { minimumFractionDigits: 3, maximumFractionDigits: 4 })} ${esc(cur)}/${esc(st.invoice_currency)}${st.fx_rate_date ? ' ze dne ' + d(st.fx_rate_date) : ''}</span><span></span></div>` : ''}</div>
   <div class="box"><h3>Jak číst výsledek</h3>${rent >= 0 ? 'Kladný výsledek je měsíční nájemné bez DPH za uvedené období. K částce se připočte DPH v zákonné výši, je-li podle právních předpisů účtována.' : 'Výsledek vzorce B − C − D − E − F je záporný. Absolutní hodnota představuje část nákladů na lokalitu, energie, provozní média a případný pozáruční servis, které nebyly kryty obratem po odečtení servisního a provozního poplatku. Nájemce tuto částku vyúčtuje Pronajímateli (čl. VI odst. 4).'} Položky D, E a F se uvádějí po odečtení DPH, na kterou má Nájemce nárok na odpočet; podklady (daňové doklady) jsou součástí vyúčtování.</div>
   ${st.note ? `<div class="box"><h3>Poznámka</h3>${esc(st.note)}</div>` : ''}
   <div class="sig"><div>Za Nájemce (zpracoval)</div><div>Za Pronajímatele (odsouhlasil)</div></div>`);
@@ -209,7 +242,9 @@ function mailText(st, contract, test) {
   return (test ? 'TESTOVACÍ E-MAIL — takto bude vypadat zpráva pro kompetentní osobu. Podklad v příloze je ukázka.\n\n' : '')
     + hi + '\n\nv příloze zasíláme podklad pro fakturaci nájemného kiosku ' + st.kiosk_code + ' za období ' + st.period_ym + (st.doc_number ? ' (' + st.doc_number + ')' : '') + '.\n\n'
     + 'Tržby s DPH (A): ' + f(st.revenue_gross) + '\nServisní a provozní poplatek (C): ' + f(st.fee_net) + '\n'
-    + (rent >= 0 ? 'Měsíční nájemné bez DPH (B − C − D − E − F): ' : 'Záporný výsledek — vyúčtování nekrytých nákladů: ') + f(rent) + '\n\n'
+    + (rent >= 0 ? 'Měsíční nájemné bez DPH (B − C − D − E − F): ' : 'Záporný výsledek — vyúčtování nekrytých nákladů: ') + f(rent) + '\n'
+    + (st.invoice_currency && st.fx_rate && st.rent_invoice != null ? (rent >= 0 ? 'K fakturaci v ' : 'Vyúčtování v ') + st.invoice_currency + ': ' + Number(st.rent_invoice).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + st.invoice_currency + ' (kurz ČNB ' + Number(st.fx_rate).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) + ' ' + cur + '/' + st.invoice_currency + (st.fx_rate_date ? ', ' + st.fx_rate_date : '') + ')\n' : '')
+    + '\n'
     + 'Podle tohoto podkladu prosím vystavte fakturu.\n\nS pozdravem\nBest Series';
 }
 async function sendStatementMail(st, contract, opts) {
@@ -237,6 +272,7 @@ async function sendTest(contract, to) {
   const lines = inv.lines.length ? inv.lines : [{ cat: 'D', label: 'Ukázka — faktura za nájem lokality', amount: 12100, vat_rate: 21, deductible: true }, { cat: 'E', label: 'Ukázka — faktura za energie', amount: 6050, vat_rate: 21, deductible: true }];
   const st = { test: true, kiosk_code: contract.kiosk_code, customer_name: contract.customer_name, buyer_ico: contract.buyer_ico, period_ym: base.prevMonthYm, period_from: new Date(base.period_from + 'T00:00:00Z'), period_to: new Date(base.period_to + 'T00:00:00Z'), currency: contract.currency || 'CZK', vat_rate: Number(contract.vat_rate) || 21, fee_pct: Number(contract.fee_pct) || 13, revenue_sis: real ? base.prevMonth : 121000, revenue_adjust: 0, lines, status: 'draft', note: real ? null : 'UKÁZKA — vzorová data, tržby za minulý měsíc se nepodařilo načíst.' };
   Object.assign(st, calc(st));
+  await withFx(st, contract, null, true);
   const r = await sendStatementMail(st, contract, { to, test: true });
   return Object.assign({}, r, { sent_to: to, rent: st.rent, real_data: real });
 }

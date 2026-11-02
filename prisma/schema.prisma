@@ -3293,6 +3293,10 @@ model KioskRentStatement {
   cost_e          Decimal  @default(0) @db.Decimal(14, 2)
   cost_f          Decimal  @default(0) @db.Decimal(14, 2)
   rent            Decimal  @default(0) @db.Decimal(14, 2) // B − C − D − E − F
+  invoice_currency String?  @db.VarChar(3) // měna fakturace (např. EUR) — výpočet zůstává v Kč, výsledek se přepočte kurzem ČNB
+  fx_rate         Decimal? @db.Decimal(10, 4) // kurz ČNB: Kč za 1 jednotku invoice_currency
+  fx_rate_date    String?  @db.VarChar(10) // datum platnosti kurzu (YYYY-MM-DD)
+  rent_invoice    Decimal? @db.Decimal(14, 2) // nájemné přepočtené do invoice_currency
   status          String   @default("draft") @db.VarChar(12) // draft | issued
   note            String?  @db.Text
   created_at      DateTime @default(now())
@@ -3320,6 +3324,7 @@ model KioskRentContract {
   auto_mode       String    @default("draft") @db.VarChar(10) // draft = jen koncept | issue = vystavit | send = vystavit a odeslat
   active          Boolean   @default(true)
   currency        String    @default("CZK") @db.VarChar(3)
+  invoice_currency String   @default("CZK") @db.VarChar(3) // měna podkladu k fakturaci: CZK nebo EUR (výpočet v Kč, výsledek přepočten kurzem ČNB)
   vat_rate        Decimal   @default(21) @db.Decimal(5, 2)
   fee_pct         Decimal   @default(13) @db.Decimal(5, 2)
   vat_deductible  Boolean   @default(true) // Nájemce má nárok na odpočet DPH u D–F

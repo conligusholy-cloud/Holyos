@@ -4373,7 +4373,7 @@ const rentContractSchema = z.object({
   contact_name: z.string().max(255).optional().nullable(), contact_email: z.string().max(255).optional().nullable(), cc_emails: z.string().max(500).optional().nullable(),
   effective_from: dateStr, effective_to: dateStr.optional().nullable().or(z.literal('')),
   issue_day: z.number().int().min(1).max(28).optional(), auto_mode: z.enum(['draft', 'issue', 'send']).optional(), active: z.boolean().optional(),
-  currency: z.string().max(3).optional(), vat_rate: z.number().optional(), fee_pct: z.number().optional(), vat_deductible: z.boolean().optional(),
+  currency: z.string().max(3).optional(), invoice_currency: z.enum(['CZK', 'EUR']).optional(), vat_rate: z.number().optional(), fee_pct: z.number().optional(), vat_deductible: z.boolean().optional(),
   rent_fixed_net: z.number().min(0).nullable().optional(), rent_rules: rentRuleSchema, energy_rules: rentRuleSchema, service_rules: rentRuleSchema, ai_match: z.boolean().optional(), note: z.string().max(2000).optional().nullable(),
 });
 function rentContractData(d) {
@@ -4385,6 +4385,7 @@ function rentContractData(d) {
   if (d.rent_fixed_net !== undefined) out.rent_fixed_net = d.rent_fixed_net === null ? null : d.rent_fixed_net;
   if (d.auto_mode) out.auto_mode = d.auto_mode;
   if (d.currency) out.currency = d.currency.toUpperCase().slice(0, 3);
+  if (d.invoice_currency) out.invoice_currency = d.invoice_currency;
   ['active', 'vat_deductible', 'ai_match'].forEach(function (k) { if (d[k] !== undefined) out[k] = !!d[k]; });
   ['rent_rules', 'energy_rules', 'service_rules'].forEach(function (k) { if (d[k] !== undefined) out[k] = (d[k] || []).map(function (r) { return { company_id: r.company_id, keyword: (r.keyword || '').trim() || null, share_pct: r.share_pct || 100 }; }); });
   return out;
