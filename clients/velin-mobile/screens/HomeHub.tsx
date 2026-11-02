@@ -40,6 +40,8 @@ const APPS: HubApp[] = [
   { key: 'ads', title: 'Reklama', icon: '📣', tint: BS.accent2, screen: 'Ads', adminOnly: true },
   // Obchodník (Dnešní plán, kontakty, kalendář, AI vedoucí) — web HolyOS ve WebView; jen obchodníci, vedoucí obchodu a Tomáš/Jan Holý
   { key: 'sales', title: 'Obchodník', icon: '🧭', tint: '#22c55e', screen: 'SalesWeb', salesOnly: true },
+  // Výsledky obchodu — statistiky týmu a obchodníků (dnes / týden / měsíc) — jen Tomáš a Jan Holý
+  { key: 'salesStats', title: 'Výsledky', icon: '📊', tint: '#f5c451', screen: 'SalesStats', adminOnly: true },
 ];
 
 function greeting(): string {

@@ -35,6 +35,12 @@ export type LoginResponse = {
   };
 };
 
+// Výsledky obchodu (GET /api/velin/sales/team-stats)
+export type SalesMetrics = { calls: number; talk_min: number; actions: number; booked: number; done: number; no_show: number; canceled: number; deals: number; new_leads: number };
+export type SalesPerson = SalesMetrics & { id: number; name: string; lead: boolean; target: number; backlog: number; calls_per_meeting: number | null };
+export type SalesPeriod = { label: string; vs: string; from: string; to: string; total: SalesMetrics; prev: SalesMetrics; team_target: number; show_rate: number | null; calls_per_meeting: number | null; people: SalesPerson[] };
+export type SalesTeamStats = { generated_at: string; target_per_day: number; backlog: { total: number; unassigned: number }; periods: { today: SalesPeriod; week: SalesPeriod; month: SalesPeriod } };
+
 export type MeetingReservation = {
   id: number; name: string | null; email: string | null; phone: string | null; status: 'booked' | 'done' | 'canceled' | 'no_show' | string;
   compounder_lead_id: number | null; created_at: string; note: string | null; internal_note?: string | null; mode: string | null; financing_path: string | null;
@@ -450,6 +456,10 @@ export const api = {
   // Aplikace Obchodník v Moderní HOME: obchodníci + vedoucí obchodu + Tomáš a Jan Holý
   salesMe: (jwt: string) =>
     request<{ allowed: boolean }>('GET', '/api/velin/sales/me', { jwt }),
+
+  // Výsledky obchodu (tým + obchodníci; dnes / týden / měsíc vs. předchozí období) — jen Tomáš a Jan Holý
+  salesTeamStats: (jwt: string) =>
+    request<SalesTeamStats>('GET', '/api/velin/sales/team-stats', { jwt }),
 
   supportThreads: (jwt: string) =>
     request<SupportThreadsResponse>('GET', '/api/velin/support/threads', {

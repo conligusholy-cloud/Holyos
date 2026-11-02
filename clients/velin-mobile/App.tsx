@@ -52,6 +52,7 @@ import Meetings from './screens/Meetings';
 import Ads from './screens/Ads';
 import AdsWeb from './screens/AdsWeb';
 import SalesWeb from './screens/SalesWeb';
+import SalesStats from './screens/SalesStats';
 import AdsLive from './screens/AdsLive';
 import AdsPage from './screens/AdsPage';
 import PayRequest from './screens/PayRequest';
@@ -93,6 +94,7 @@ export type RootStackParamList = {
   Ads: undefined;
   AdsWeb: undefined;
   SalesWeb: undefined;
+  SalesStats: undefined;
   AdsLive: undefined;
   AdsPage: { key: string; name: string; color?: string };
   PayRequest: { token: string };
@@ -427,6 +429,11 @@ export default function App() {
             name="SalesWeb"
             component={SalesWeb}
             options={{ animation: 'slide_from_right', headerShown: true, title: 'Obchodník', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text, headerShadowVisible: false }}
+          />
+          <Stack.Screen
+            name="SalesStats"
+            component={SalesStats}
+            options={{ animation: 'slide_from_right', headerShown: true, title: 'Výsledky obchodu', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text, headerShadowVisible: false }}
           />
           <Stack.Screen
             name="Meetings"

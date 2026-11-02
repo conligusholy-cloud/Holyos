@@ -1981,6 +1981,10 @@ function supportGuard(req, res, next) {
   next();
 }
 mobile.get('/support/me', (req, res) => res.json({ allowed: supportAllowed(req.velin.person) }));
+// GET /api/velin/sales/team-stats — statistiky obchodu (tým + obchodníci, dnes/týden/měsíc vs. předchozí) — jen Tomáš a Jan Holý
+mobile.get('/sales/team-stats', supportGuard, async (req, res, next) => {
+  try { res.json(await require('../services/sales/team-stats').compute()); } catch (err) { next(err); }
+});
 // GET /api/velin/sales/me — { allowed } aplikace Obchodník v Moderní HOME: jen role Obchodník / Vedoucí obchodu + Tomáš a Jan Holý
 mobile.get('/sales/me', async (req, res) => {
   try {
