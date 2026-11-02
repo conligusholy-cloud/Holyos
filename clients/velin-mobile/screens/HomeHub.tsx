@@ -29,7 +29,7 @@ const BS = {
   err: '#ff5d6c',
 };
 
-type HubApp = { key: string; title: string; icon: string; tint: string; screen: string; params?: any; adminOnly?: boolean };
+type HubApp = { key: string; title: string; icon: string; tint: string; screen: string; params?: any; adminOnly?: boolean; salesOnly?: boolean };
 
 // ── Aplikace na ploše (pořadí = pořadí v mřížce) ──
 const APPS: HubApp[] = [
@@ -38,6 +38,8 @@ const APPS: HubApp[] = [
   { key: 'meetings', title: 'Schůzky', icon: '📅', tint: BS.vio, screen: 'Meetings', adminOnly: true },
   // Centrum reklamy (statistiky stránek, funely, Meta + celé Centrum ve WebView) — jen Tomáš a Jan Holý
   { key: 'ads', title: 'Reklama', icon: '📣', tint: BS.accent2, screen: 'Ads', adminOnly: true },
+  // Obchodník (Dnešní plán, kontakty, kalendář, AI vedoucí) — web HolyOS ve WebView; jen obchodníci, vedoucí obchodu a Tomáš/Jan Holý
+  { key: 'sales', title: 'Obchodník', icon: '🧭', tint: '#22c55e', screen: 'SalesWeb', salesOnly: true },
 ];
 
 function greeting(): string {
@@ -80,12 +82,14 @@ export default function HomeHub() {
   const [name, setName] = useState<string>('');
   const [badges, setBadges] = useState<Record<string, number>>({});
   const [refreshing, setRefreshing] = useState(false);
+  const [salesAllowed, setSalesAllowed] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const auth = await loadAuth();
       setName(String((auth as any).displayName || '').split(' ')[0] || '');
       if (!auth.jwt) return;
+      try { const s = await api.salesMe(auth.jwt); setSalesAllowed(!!s.allowed); } catch (_) { /* bez sítě necháme poslední hodnotu */ }
       // Odznak u „Vzkazy" = počet nepřečtených vzkazů
       try {
         const r = await api.myAssistantCalls(auth.jwt);
@@ -110,7 +114,7 @@ export default function HomeHub() {
         <View style={styles.line} />
 
         <View style={styles.grid}>
-          {APPS.filter((a) => !a.adminOnly || adminAllowed).map((a) => {
+          {APPS.filter((a) => (!a.adminOnly || adminAllowed) && (!a.salesOnly || salesAllowed || adminAllowed)).map((a) => {
             const n = badges[a.key] || 0;
             return (
               <TouchableOpacity key={a.key} activeOpacity={0.75} style={styles.app} onPress={() => navigation.navigate(a.screen, a.params)}>

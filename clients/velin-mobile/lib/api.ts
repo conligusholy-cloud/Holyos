@@ -447,6 +447,10 @@ export const api = {
   supportMe: (jwt: string) =>
     request<{ allowed: boolean }>('GET', '/api/velin/support/me', { jwt }),
 
+  // Aplikace Obchodník v Moderní HOME: obchodníci + vedoucí obchodu + Tomáš a Jan Holý
+  salesMe: (jwt: string) =>
+    request<{ allowed: boolean }>('GET', '/api/velin/sales/me', { jwt }),
+
   supportThreads: (jwt: string) =>
     request<SupportThreadsResponse>('GET', '/api/velin/support/threads', {
       jwt,

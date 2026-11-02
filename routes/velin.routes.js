@@ -1981,6 +1981,17 @@ function supportGuard(req, res, next) {
   next();
 }
 mobile.get('/support/me', (req, res) => res.json({ allowed: supportAllowed(req.velin.person) }));
+// GET /api/velin/sales/me — { allowed } aplikace Obchodník v Moderní HOME: jen role Obchodník / Vedoucí obchodu + Tomáš a Jan Holý
+mobile.get('/sales/me', async (req, res) => {
+  try {
+    const p = req.velin.person;
+    if (supportAllowed(p)) return res.json({ allowed: true });
+    if (!p || !p.id) return res.json({ allowed: false });
+    const row = await prisma.person.findUnique({ where: { id: p.id }, select: { role: { select: { name: true } } } });
+    const rn = _bsNorm(row && row.role && row.role.name);
+    res.json({ allowed: rn === 'obchodnik' || rn === 'vedouci obchodu' });
+  } catch (e) { res.json({ allowed: false }); }
+});
 mobile.get('/support/threads', supportGuard, async (req, res, next) => {
   try { res.json(await bs2Support(req.velin.person, 'GET', '/threads')); } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
 });
