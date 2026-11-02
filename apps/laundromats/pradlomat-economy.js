@@ -667,41 +667,7 @@
       outRow(_t('Celkem na zákazníka'), 'naklad_na_zakaznika', '€', true);
     html += section('susicka', '♨️', _t('Sušička — spotřeba a souhrn nákladů'), _t('zdrojová data'), s9, true);
 
-    // Vizualizace struktury nákladů
-    html +=
-      '<div class="pe-bar-wrap">' +
-        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text2);margin-bottom:10px;">' + _t('Struktura měsíčních toků') + '</div>' +
-        '<div id="pe-bars"></div>' +
-      '</div>';
-
-    // Sekce: 10letý plán rozvoje — úplně na konci (vrchol "prodejního příběhu")
-    html +=
-      '<div class="pe-section" data-section="projection" style="margin-top:18px;">' +
-        '<div class="pe-section-head" onclick="window.PradlomatTool._toggleSection(this)">' +
-          '<span class="pe-h-icon">📈</span>' +
-          '<h3>' + _t('10letý plán rozvoje') + '</h3>' +
-          '<span class="pe-h-tag">' + _t('vlastní síť prádlomatů') + '</span>' +
-          '<span style="font-size:14px;color:var(--text2);">▾</span>' +
-        '</div>' +
-        '<div class="pe-section-body">' +
-          '<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:10px;">' +
-            _t('Kolik nových prádlomatů uvedete do provozu v každém roce? Pomůcka spočítá kumulativní zisk pro celou rostoucí síť.') +
-          '</div>' +
-          '<div class="pe-years-grid" id="pe-years-grid">' + buildYearsGrid() + '</div>' +
-          '<div class="pe-projection-summary" id="pe-projection-summary"></div>' +
-          '<div class="pe-projection-chart-wrap">' +
-            '<div class="pe-chart-head">' +
-              '<div class="pe-chart-title">' + _t('Roční zisk a kumulativní cashflow (10 let)') + '</div>' +
-              '<div class="pe-chart-legend">' +
-                '<span class="pe-leg-item"><span class="pe-leg-sw pe-leg-green"></span><span>' + _t('Roční provozní zisk') + ' <em>' + _t('(levá osa)') + '</em></span></span>' +
-                '<span class="pe-leg-item"><span class="pe-leg-sw pe-leg-line"></span><span>' + _t('Kumulativní cashflow') + ' <em>' + _t('(pravá osa)') + '</em></span></span>' +
-              '</div>' +
-            '</div>' +
-            '<div id="pe-projection-chart"></div>' +
-            '<div class="pe-chart-swipe-hint">' + _t('← Tažením doleva zobrazíte další roky →') + '</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
+    // (Struktura měsíčních toků a 10letý plán rozvoje jsou na laundromats.eu vynechané.)
 
     return html;
   }
