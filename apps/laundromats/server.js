@@ -44,7 +44,7 @@ const FOOTER = '<div style="max-width:720px;margin:0 auto;padding:0 22px 40px"><
 const PRES = new Map(); // sid → poslední ping (ms)
 const PRES_HTML = '<span class="presence" id="presence" title="Právě online + aktivní lidé za posledních 60 minut (klouzavé okno)"><i></i>právě si prohlíží <b id="pr-hour">–</b></span>';
 const PRES_CSS = '.presence{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;border:1px solid rgba(47,227,160,.35);background:rgba(47,227,160,.08);color:#a9f5d9;font-size:12px;font-weight:500;white-space:nowrap;transition:box-shadow .3s,background .3s;font-family:inherit;margin-left:12px}.presence i{width:7px;height:7px;border-radius:50%;background:#2fe3a0;box-shadow:0 0 8px #2fe3a0;animation:prpulse 2s infinite}.presence b{font-weight:800;color:#fff}.presence.flash{box-shadow:0 0 0 2px rgba(47,227,160,.5),0 0 22px rgba(47,227,160,.75);background:rgba(47,227,160,.22)}.presence.flash b{text-shadow:0 0 10px #2fe3a0}@keyframes prpulse{0%,100%{opacity:1}50%{opacity:.45}}@media(max-width:430px){.presence{margin-left:6px;padding:3px 9px;font-size:11px}}';
-const PRES_JS = '(function(){var el=document.getElementById("presence");if(!el)return;var h=document.getElementById("pr-hour"),last="";var sid;try{sid=localStorage.getItem("lm_sid");if(!sid){sid="lm-"+Date.now().toString(36)+Math.random().toString(36).slice(2,10);localStorage.setItem("lm_sid",sid);}}catch(e){sid="lm-x"+Date.now().toString(36);}'
+const PRES_JS = '(function(){var el=document.getElementById("presence");if(!el)return;var h=document.getElementById("pr-hour"),last="";var sid;try{sid=localStorage.getItem("lm_sid");if(!sid){var cm=document.cookie.match(/(?:^|; )lm_sid=([^;]+)/);if(cm){sid=decodeURIComponent(cm[1]);localStorage.setItem("lm_sid",sid);}}if(!sid){sid="lm-"+Date.now().toString(36)+Math.random().toString(36).slice(2,10);localStorage.setItem("lm_sid",sid);}}catch(e){sid="lm-x"+Date.now().toString(36);}'
   + 'function ping(){try{fetch("/api/presence/ping",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sid:sid}),keepalive:true});}catch(e){}}'
   + 'function upd(){fetch("/api/presence",{cache:"no-store"}).then(function(r){return r.ok?r.json():null;}).then(function(j){if(!j)return;var v=j.total,k=String(v);h.textContent=v;if(last&&k!==last){el.classList.add("flash");setTimeout(function(){el.classList.remove("flash");},1400);}last=k;}).catch(function(){});}'
   + 'ping();setTimeout(upd,400);setInterval(function(){if(document.visibilityState==="visible"){ping();upd();}},15000);})();';
@@ -62,6 +62,7 @@ const shell = (html) => CI18N.addSwitch(String(html).replace('@@LOGO@@', LOGO).r
 const send = (res, html) => res.set('Cache-Control', 'no-cache').type('html').send(html);
 const cestaHtml = () => fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8');
 
+app.use((req, res, next) => lmIdentity(req, res, next)); // identita návštěvníka v cookie (definice níž u /api/cesta/track)
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /api/\n'));
 app.get('/', (req, res) => res.redirect(302, '/cesta' + (req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '')));
@@ -81,7 +82,29 @@ app.get('/cesta/ekonomika/podrobne', (req, res) => send(res, shell(EP.economyDet
 app.get('/ekonomika', (req, res) => res.redirect(302, '/cesta/ekonomika' + (req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '')));
 app.get('/cesta/track.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').sendFile(path.join(__dirname, 'track.js')));
 // Sledování chování → HolyOS (/api/compounder/track). Kontakt se pozná podle t/l (HolyOS ověří podpis); IP a prohlížeč se předávají dál.
+// Identita návštěvníka v cookie ze serveru (Safari maže localStorage po 7 dnech bez návštěvy, cookie ze serveru ne):
+//   lm_sid — anonymní id prohlížeče (čte ho i track.js), lm_tl — t/l z jedinečného odkazu (jen server, HttpOnly).
+const CK_AGE = 400 * 86400; // max. doba, kterou prohlížeče u cookie dovolí
+function cookies(req) { const o = {}; String(req.headers.cookie || '').split(';').forEach((p) => { const i = p.indexOf('='); if (i > 0) { try { o[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim()); } catch (_) {} } }); return o; }
+function setCk(res, name, val, httpOnly) { res.append('Set-Cookie', name + '=' + encodeURIComponent(val) + '; Path=/; Max-Age=' + CK_AGE + '; SameSite=Lax; Secure' + (httpOnly ? '; HttpOnly' : '')); }
+const SID_RE = /^lm-[a-z0-9]{4,60}$/;
+const tlOk = (t, l) => (t && /^[0-9]+\.[A-Za-z0-9._-]{8,200}$/.test(String(t))) || (l && /^[0-9a-z]+\.[A-Za-z0-9_-]{4,40}$/.test(String(l)));
+// Každá stránka: zapamatuj jedinečný odkaz (t/l) a zajisti trvalé sid (zapojeno nahoře před stránkami: app.use(lmIdentity))
+function lmIdentity(req, res, next) {
+  if (req.method === 'GET' && /^\/(cesta|pl|ekonomika|$)/.test(req.path)) {
+    const ck = cookies(req); const t = req.query.t, l = req.query.l;
+    if (tlOk(t, l)) setCk(res, 'lm_tl', JSON.stringify({ t: t || '', l: l || '' }), true);
+    if (!SID_RE.test(ck.lm_sid || '')) setCk(res, 'lm_sid', 'lm-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10), false);
+  }
+  next();
+}
 app.post('/api/cesta/track', (req, res) => {
+  const b0 = req.body || {}; const ck = cookies(req);
+  // sid z prohlížeče = sid v cookie (návrat po smazání localStorage pak naváže na stejného návštěvníka)
+  if (SID_RE.test(String(b0.sid || '')) && ck.lm_sid !== b0.sid) setCk(res, 'lm_sid', b0.sid, false);
+  const p0 = b0.props && typeof b0.props === 'object' ? b0.props : null;
+  if (p0 && tlOk(p0.t, p0.l)) { const v = JSON.stringify({ t: p0.t || '', l: p0.l || '' }); if (ck.lm_tl !== v) setCk(res, 'lm_tl', v, true); }
+  else if (p0 && ck.lm_tl) { try { const s = JSON.parse(ck.lm_tl); if (s && tlOk(s.t, s.l)) { if (s.t) p0.t = s.t; if (s.l) p0.l = s.l; p0.ident_via = 'cookie'; } } catch (_) {} }
   res.status(204).end();
   try {
     const b = req.body || {};

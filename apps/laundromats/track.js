@@ -10,7 +10,13 @@
   var rnd = function () { return Math.random().toString(36).slice(2, 10); };
 
   // ── identita: sid (prohlížeč) + t/l (kontakt) ──
-  var sid = get('lm_sid'); if (!sid) { sid = 'lm-' + Date.now().toString(36) + rnd(); set('lm_sid', sid); }
+  // sid: localStorage → cookie ze serveru (přežije smazání localStorage v Safari) → nový
+  var ckSid = (document.cookie.match(/(?:^|; )lm_sid=([^;]+)/) || [])[1];
+  try { ckSid = ckSid ? decodeURIComponent(ckSid) : ''; } catch (e) { ckSid = ''; }
+  var sid = get('lm_sid') || (/^lm-[a-z0-9]{4,60}$/.test(ckSid) ? ckSid : '');
+  if (!sid) sid = 'lm-' + Date.now().toString(36) + rnd();
+  set('lm_sid', sid);
+  // t/l: odkaz v adrese → localStorage; když chybí obojí, doplní je server z HttpOnly cookie lm_tl
   var q = new URLSearchParams(location.search);
   var t = q.get('t'), l = q.get('l');
   if (t || l) { set('lm_tl', JSON.stringify({ t: t || '', l: l || '' })); }

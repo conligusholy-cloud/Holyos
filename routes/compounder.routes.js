@@ -100,6 +100,13 @@ router.post('/register', async (req, res, next) => {
 // ─── VEŘEJNÉ: analytika chování ─────────────────────────────────────────────
 // Frontend posílá beacon s eventy (page_view, section_view, cta_click, portal_view…).
 // register_success nese v props lead_id → spojení session ↔ lead. Nikdy nesmí shodit web.
+const _sidLinked = new Set(); // cache „sid:lead" už napojených (ať se nedotazujeme při každém eventu)
+async function _linkSidToLead(sid, leadId) {
+  const k = sid + ':' + leadId; if (_sidLinked.has(k)) return;
+  const ex = await prisma.compounderEvent.findFirst({ where: { sid, event: 'lead_linked', props: { path: ['lead_id'], equals: leadId } }, select: { id: true } });
+  if (!ex) await prisma.compounderEvent.create({ data: { sid, event: 'lead_linked', props: { lead_id: leadId, via: 'link', site: 'laundromats' }, path: '/cesta' } });
+  _sidLinked.add(k); if (_sidLinked.size > 20000) _sidLinked.clear();
+}
 router.post('/track', async (req, res) => {
   try {
     const b = req.body || {};
@@ -109,6 +116,9 @@ router.post('/track', async (req, res) => {
         const lid = !b.props.lead_id ? _leadFromTL(b.props.t, b.props.l) : null;
         delete b.props.t; delete b.props.l;
         if (lid) b.props.lead_id = lid;
+        // Prohlížeč (sid) se jednou poznal přes odkaz → napoj ho na kontakt natrvalo: k leadovi se tím připíšou
+        // i dřívější anonymní návštěvy a pozdější návrat bez odkazu (stejný sid). Jednou na dvojici sid+lead.
+        if (lid && /^lm-[a-z0-9]{4,60}$/.test(String(b.sid))) _linkSidToLead(String(b.sid), lid).catch(() => {});
       }
       await prisma.compounderEvent.create({
         data: {
