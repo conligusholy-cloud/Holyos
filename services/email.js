@@ -179,12 +179,17 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
   }
 
   // ── Prádlomaty brand (modrá grafika jako stránka specialisty / leták) ─────
-  if (brand === 'pradlomaty') {
-    const site = 'https://pradlomaty.info';
+  if (brand === 'pradlomaty' || String(brand || '').startsWith('laundromats')) {
+    // Mimo Česko (brand 'laundromats:<jazyk>') = značka LAUNDROMATS a texty šablony v jazyce leadu
+    const lLang = String(brand).startsWith('laundromats') ? (String(brand).split(':')[1] || 'en') : null;
+    const lt = lLang ? (LAUNDRO_TXT[lLang] || LAUNDRO_TXT.en) : null;
+    const site = lLang ? 'https://www.laundromats.eu' : 'https://pradlomaty.info';
     const pLink = link && link.startsWith('http') ? link : site + (link || '');
     const bodyHtml = body ? escapeHtml(body).replace(/\n/g, '<br>') : '';
+    const brandTitle = lLang ? '💧 LAUNDROMATS 💧' : '💧 PRÁDLOMATY 💧';
+    const brandSub = lt ? lt.sub : 'Samoobslužné prádelny';
     return `<!DOCTYPE html>
-<html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"></head>
+<html lang="${lLang || 'cs'}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"></head>
 <body style="margin:0;padding:0;background:#eaf2ff;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0f2444;">
   ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}${"&zwnj;&nbsp;".repeat(70)}</div>` : ''}
   <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eaf2ff;padding:32px 0;">

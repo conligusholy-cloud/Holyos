@@ -3177,6 +3177,17 @@ router.post('/discount/start-all', requireAuth, async (req, res, next) => {
 });
 
 // POST /api/compounder/sales/coach {message, history[]} — chat s AI vedoucím (mentor/kouč).
+// GET /api/compounder/sales/meeting-day — režim schůzek: dnešní cíl, statistiky, úspěšnost, obchody, AI vedoucí (+ ?person_id= pro vedení)
+router.get('/sales/meeting-day', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    let personId = salesMyPersonId(req);
+    if (req.query.person_id && salesIsMgr(u)) personId = Number(req.query.person_id);
+    if (!personId) return res.status(400).json({ error: 'Uživatel nemá přiřazenou osobu' });
+    res.json(await require('../services/sales/meeting-mode').getDay(personId));
+  } catch (err) { next(err); }
+});
+
 router.post('/sales/coach', requireAuth, async (req, res, next) => {
   try {
     const u = req.user || {};

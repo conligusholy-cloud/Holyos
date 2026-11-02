@@ -931,11 +931,67 @@
   }
   window.obLeasingPrompt=obLeasingPrompt; window.obLoadLeasing=obLoadLeasing;
 
-  // ── Moje statistiky (stejné bloky jako vidí vedoucí v Přehledu obchodu) ──
+  // ── Režim schůzek: cíl dne, fond 8 h, AI vedoucí, statistiky domluvených schůzek ──
+  var _mdCache = null, _mdAt = 0;
+  async function obMeetingDay(force){
+    if(!force && _mdCache && Date.now()-_mdAt < 60000) return _mdCache;
+    var r = await fetch('/api/compounder/sales/meeting-day',{credentials:'include'});
+    var j = await r.json().catch(function(){return{};});
+    if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+    _mdCache=j; _mdAt=Date.now(); return j;
+  }
+  function _mdFmt(m){ m=Number(m)||0; var h=Math.floor(m/60), mm=m%60; return h?(h+' h '+mm+' min'):(mm+' min'); }
+  function _mdBox(lbl,val,sub,col){ return '<div style="background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><div style="font-size:11px;color:var(--muted2)">'+lbl+'</div><div style="font-size:22px;font-weight:800;color:'+(col||'var(--text)')+'">'+val+'</div>'+(sub?'<div style="font-size:11px;color:var(--muted)">'+sub+'</div>':'')+'</div>'; }
+  function _mdBar(a,t,col){ var pc=t?Math.min(100,Math.round(a/t*100)):0; return '<div style="height:8px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:6px"><div style="height:100%;width:'+pc+'%;background:'+(col||(pc>=100?'#22c55e':pc>=50?'#eab308':'#ef4444'))+'"></div></div>'; }
+  function mdTodayHtml(m){
+    var b=m.booked||{}, tg=m.target||0, done=b.today>=tg;
+    var h='<div style="background:linear-gradient(135deg,rgba(139,92,246,.18),rgba(59,130,246,.12));border:1px solid rgba(139,92,246,.45);border-radius:14px;padding:14px;margin-bottom:10px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-size:12px;color:var(--muted2);text-transform:uppercase;letter-spacing:.05em">🎯 Dnešní cíl: schůzky s majitelem</div><div style="font-size:26px;font-weight:800;color:'+(done?'#22c55e':'var(--text)')+'">'+b.today+'<span style="font-size:15px;color:var(--muted);font-weight:500"> / '+tg+'</span></div></div>'
+      +_mdBar(b.today,tg)
+      +'<div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-top:8px"><span>⏱ Odpracováno '+_mdFmt(m.worked_min)+' / fond '+_mdFmt(m.fund_min)+'</span><span>📞 hovorů dnes: <b style="color:var(--text)">'+(m.calls_today||0)+'</b></span></div>'
+      +_mdBar(m.worked_min,m.fund_min,'#a78bfa')
+      +(m.remaining_today>0?'<div style="font-size:12.5px;margin-top:8px;color:var(--text)">Zbývá <b>'+m.remaining_today+'</b> schůzek → cca <b>'+m.calls_needed+'</b> hovorů (~'+m.calls_per_hour+' za hodinu)</div>':'<div style="font-size:13px;margin-top:8px;color:#22c55e;font-weight:700">✓ Cíl dne splněn — každá další schůzka navíc!</div>')
+      +'</div>';
+    var c=m.coach||{};
+    if(c.message) h+='<div style="background:rgba(139,92,246,.10);border:1px solid rgba(139,92,246,.4);border-radius:12px;padding:12px;margin-bottom:10px"><div style="font-size:11px;color:#a78bfa;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">🧠 AI vedoucí</div><div style="font-size:13.5px;line-height:1.5;color:var(--text)">'+esc(c.message)+'</div>'
+      +((c.steps&&c.steps.length)?'<ol style="margin:8px 0 0;padding-left:20px;font-size:13px;line-height:1.55;color:var(--text)">'+c.steps.map(function(s){return '<li>'+esc(s)+'</li>';}).join('')+'</ol>':'')+'</div>';
+    if(m.upcoming&&m.upcoming.length) h+='<div style="font-size:12px;color:var(--muted2);margin:4px 2px">📅 Nadcházející schůzky</div>'+m.upcoming.map(function(u){ var d=new Date(u.starts_at); return '<div style="font-size:13px;padding:6px 10px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;margin-bottom:4px"><b>'+d.toLocaleDateString('cs-CZ',{weekday:'short',day:'numeric',month:'numeric'})+' '+d.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})+'</b> · '+esc(u.name||'')+'</div>'; }).join('');
+    if(m.queue&&m.queue.length) h+='<div style="font-size:12px;color:var(--muted2);margin:10px 2px 4px">📞 Další k obvolání ('+(m.uncalled||0)+' nevolaných)</div>'+m.queue.slice(0,5).map(function(q){ return '<div style="font-size:13px;padding:6px 10px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;margin-bottom:4px;display:flex;justify-content:space-between;gap:8px"><span>'+esc(q.name||q.phone||'kontakt')+(q.only_polish?' 🇵🇱':'')+'</span><a href="#" onclick="openLeadFromTask('+q.id+');return false" style="color:#a78bfa">Otevřít</a></div>'; }).join('');
+    return h;
+  }
+  function mdStatsHtml(m){
+    var b=m.booked||{}, o=m.outcomes||{}, d=m.deals||{};
+    var pct=function(v){ return v==null?'–':String(v).replace('.',',')+' %'; };
+    var h='<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">'+esc((m.person||{}).name||'')+' · domlouváš online schůzky s majitelem</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+_mdBox('Dnes',b.today,'cíl '+m.target,b.today>=m.target?'#22c55e':'')+_mdBox('Týden',b.week)+_mdBox('Měsíc',b.month,m.month_target?('cíl '+m.month_target):'')+'</div>'
+      +(m.month_target?_mdBar(b.month,m.month_target):'')
+      +'<div style="margin-top:14px;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.05em">Úspěšnost schůzek (posledních 90 dní)</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">'
+      +_mdBox('Proběhlo',o.done,'úspěšnost '+pct(m.success_rate),'#22c55e')+_mdBox('Nedorazil',o.no_show,'','#ef4444')+_mdBox('Zrušeno',o.canceled,'','#9aa0ad')+_mdBox('Čeká / neoznačeno',(o.upcoming||0)+' / '+(o.unmarked||0),'nadcházející / bez výsledku','#eab308')+'</div>'
+      +'<div style="margin-top:14px;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.05em">Následný obchod</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">'+_mdBox('Prodáno ze schůzek',d.count||0,'','#22c55e')+_mdBox('Konverze po schůzce',pct(d.rate),'z proběhlých schůzek')+'</div>'
+      +((d.list&&d.list.length)?'<div style="font-size:12.5px;color:var(--text);margin-top:6px">🏆 '+d.list.map(function(x){return esc(x.name||'');}).join(', ')+'</div>':'');
+    var mx=Math.max.apply(null,(m.history||[]).map(function(x){return x.n;}).concat([m.target||1,1]));
+    h+='<div style="margin-top:14px;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.05em">Domluvené schůzky — posledních 14 dní</div><div style="display:flex;align-items:flex-end;gap:4px;height:70px;margin-top:6px">'
+      +(m.history||[]).map(function(x){ var ht=Math.round(x.n/mx*100); return '<div title="'+x.d+': '+x.n+'" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><div style="height:'+ht+'%;min-height:'+(x.n?3:1)+'px;background:'+(x.n>=m.target?'#22c55e':'#8b5cf6')+';border-radius:3px 3px 0 0"></div></div>'; }).join('')+'</div>';
+    if(m.coach&&m.coach.message) h+='<div style="font-size:13px;color:var(--text);background:rgba(139,92,246,.10);border:1px solid rgba(139,92,246,.4);border-radius:10px;padding:10px 12px;margin-top:12px">🧠 '+esc(m.coach.message)+'</div>';
+    return h;
+  }
+  window.obMeetingDay=obMeetingDay;
+
+  // ── Moje statistiky (režim schůzek) ──
   var _statsLoadedAt = 0;
   async function loadMyStats(force){
     var box=document.getElementById('stats-body'); if(!box) return;
     if(!force && Date.now()-_statsLoadedAt < 60000 && box.dataset.ok==='1') return;
+    box.innerHTML='<div style="color:var(--muted)">Načítám statistiky…</div>';
+    try{ var m=await obMeetingDay(force); box.innerHTML=mdStatsHtml(m); box.dataset.ok='1'; _statsLoadedAt=Date.now(); }
+    catch(e){ box.innerHTML='<div style="color:#ef4444">Statistiky se nepodařilo načíst: '+esc(e.message)+'</div>'; box.dataset.ok=''; }
+  }
+  window.loadMyStats=loadMyStats;
+  // Původní (starý) pohled na statistiky — ponechán pro případné vrácení
+  async function loadMyStatsLegacy(force){
+    var box=document.getElementById('stats-body'); if(!box) return;
     box.innerHTML='<div style="color:var(--muted)">Načítám statistiky…</div>';
     try{
       var r=await fetch('/api/compounder/sales/my-stats',{credentials:'include'});
@@ -956,7 +1012,6 @@
       box.innerHTML=html; box.dataset.ok='1'; _statsLoadedAt=Date.now();
     }catch(e){ box.innerHTML='<div style="color:#ef4444">Statistiky se nepodařilo načíst: '+esc(e.message)+'</div>'; box.dataset.ok=''; }
   }
-  window.loadMyStats=loadMyStats;
 
   // Slíbený krok — přímý dotaz „co jsi slíbil + na kdy" → uloží do kalendáře (SalesEvent task) i do plánu (úkol).
   function obPromisePrompt(id){
@@ -2652,6 +2707,10 @@
     if (focus) focus.textContent = (plan && plan.focus) ? plan.focus : '';
     var sEl = document.getElementById('today-stats');
     if (sEl) {
+      sEl.innerHTML = '<div style="flex-basis:100%;color:var(--muted);font-size:13px">Načítám cíl dne…</div>';
+      obMeetingDay(true).then(function(m){ sEl.style.display='block'; sEl.innerHTML = mdTodayHtml(m); }).catch(function(e){ sEl.innerHTML='<div style="color:#ef4444;font-size:13px">Cíl dne se nepodařilo načíst: '+esc(e.message)+'</div>'; });
+    }
+    if (false) {
       var s = (j && j.stats) || {}; var tb = s.time_by || {};
       var fmtm = function(m){ m=Number(m)||0; var h=Math.floor(m/60), mm=m%60; return h?(h+' h '+mm+' min'):(mm+' min'); };
       var chip = function(ic,lbl,val,col,tmin,metric){ var tt=(tmin!=null)?('<div style="font-size:10.5px;color:'+col+';margin-top:2px;opacity:.85">⏱ '+fmtm(tmin)+'</div>'):''; return '<div onclick="openStatHistory(\''+metric+'\')" title="Zobrazit vývoj (den/týden/měsíc/rok)" style="flex:1;min-width:72px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:8px 6px;text-align:center;cursor:pointer"><div style="font-size:20px;font-weight:800;color:'+col+'">'+(val||0)+'</div><div style="font-size:11px;color:var(--muted2);margin-top:1px">'+ic+' '+lbl+' 📈</div>'+tt+'</div>'; };
