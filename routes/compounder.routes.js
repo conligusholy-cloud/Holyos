@@ -1108,7 +1108,9 @@ function autosendLink(cfg, variant, leadId, channel) {
   if (/^https:\/\//.test(u)) {
     // Vlastní záchytná stránka: VŽDY jedinečný sledovaný odkaz /r/<kód>/<varianta> – při otevření se zaloguje
     // lead + kanál (CompounderEvent landing_open) a teprve pak se přesměruje na stránku (s ?l=<kód>, utm_*).
-    return schuzkaBase() + '/r/' + makeShortCode(leadId) + '/' + (variant === 'schuzka' ? 'schuzka' : 'specialist') + '?c=' + (channel === 'email' ? 'email' : 'sms');
+    // Viditelná doména odkazu = doména cílové stránky (laundromats.eu → odkaz na laundromats.eu, ten přesměruje na HolyOS /r/…)
+    let base = schuzkaBase(); try { const x = new URL(u); if (/(^|\.)laundromats\.eu$/.test(x.hostname)) base = x.origin; } catch (e) { /* výchozí základ */ }
+    return base + '/r/' + makeShortCode(leadId) + '/' + (variant === 'schuzka' ? 'schuzka' : 'specialist') + '?c=' + (channel === 'email' ? 'email' : 'sms');
   }
   return variant === 'schuzka' ? schuzkaShortLink(leadId, channel === 'email' ? 'email' : undefined) : specialistShortLink(leadId, channel === 'email' ? 'email' : 'sms');
 }

@@ -65,6 +65,11 @@ app.get('/cesta/pl/info', (req, res) => plSend(res, CP.infoPage()));
 app.get('/cesta/pl/vlastni-kapital', (req, res) => plSend(res, CP.vlastniPage()));
 app.get('/cesta/pl/financovani', (req, res) => plSend(res, CP.financovaniPage()));
 app.get('/cesta/pl/schuzka', (req, res) => plSend(res, CP.schuzkaPage()));
+// Sledovaný odkaz ze SMS / e-mailu (viditelná doména laundromats.eu) → HolyOS zaloguje otevření a přesměruje zpět na stránku
+app.get('/r/:code/:variant?', (req, res) => {
+  const qs = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+  res.redirect(302, HOLYOS_URL + '/r/' + encodeURIComponent(req.params.code) + (req.params.variant ? '/' + encodeURIComponent(req.params.variant) : '') + qs);
+});
 app.get('/cesta/booking.pl.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').send(CI18N.bookingToPl(CP.bookingJs())));
 
 // Ochrana osobních údajů (stručné informace; správce Best Series s.r.o.)
