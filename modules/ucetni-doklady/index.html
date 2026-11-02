@@ -695,8 +695,8 @@
           <div class="pb-card" style="margin-top:16px;">
             <h3>📋 Nájemní smlouvy kiosků <span id="rent-inactive-hint" style="font-size:12px;font-weight:400;color:var(--text2);margin-left:10px;"></span></h3>
             <table class="data-table" id="rent-table" style="width:100%;">
-              <thead><tr><th>Stroj (kód)</th><th>Subjekt</th><th>Kompetentní osoba</th><th>Účinnost</th><th>Den vystavení</th><th>Automatizace</th><th>Poplatek</th><th title="Aktivní smlouvu zpracovává automatika (plánování, vystavení, odeslání)">Automatika zapnutá</th><th></th></tr></thead>
-              <tbody><tr><td colspan="9" class="empty-hint">Načítám…</td></tr></tbody>
+              <thead><tr><th>Stroj (kód)</th><th>Subjekt</th><th>Kompetentní osoba</th><th>Účinnost</th><th>Den vystavení</th><th>Automatizace</th><th>Poplatek</th><th title="Pevný nájem lokality bez DPH / měsíc (D)">Nájem (pevně)</th><th title="Pevná záloha na elektřinu bez DPH / měsíc (E)">Elektřina</th><th title="Pevná záloha na vodné a stočné bez DPH / měsíc (E)">Vodné a stočné</th><th title="Aktivní smlouvu zpracovává automatika (plánování, vystavení, odeslání)">Automatika zapnutá</th><th></th></tr></thead>
+              <tbody><tr><td colspan="12" class="empty-hint">Načítám…</td></tr></tbody>
             </table>
           </div>
           <div class="pb-card" style="margin-top:16px;">
@@ -3471,6 +3471,10 @@
     // Standardní sloupcové filtry + řazení — nájemní smlouvy kiosků
     const rentFd = (v) => v ? new Date(v).toLocaleDateString('cs-CZ', { timeZone: 'UTC' }) : '…';
     const RENT_MODE_LABEL = { send: 'vystavit + odeslat', issue: 'vystavit' };
+    // pevné zálohy podle názvu: elektřina / vodné a stočné (ostatní se ukážou pod poplatkem)
+    const rentAdvKind = (a) => { const t = String((a && a.label) || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); return /elektr|proud|energ/.test(t) ? 'el' : /vod|stoc|kanal/.test(t) ? 'voda' : 'jine'; };
+    const rentAdvSum = (c, kind) => { const a = (Array.isArray(c.energy_advances) ? c.energy_advances : []).filter(x => rentAdvKind(x) === kind); return a.length ? a.reduce((s, x) => s + (Number(x.amount_net) || 0), 0) : null; };
+    const rentKc = (v) => v == null ? '<span style="color:var(--text2)">—</span>' : Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' Kč';
     const rentTable = ColFilters.table({
       table: '#rent-table',
       columns: [
@@ -3481,6 +3485,9 @@
         { key: 'day', label: 'Den vystavení', type: 'num', ph: '', get: (c) => c.issue_day == null ? null : Number(c.issue_day) },
         { key: 'mode', label: 'Automatizace', type: 'text', ph: 'Režim…', get: (c) => RENT_MODE_LABEL[c.auto_mode] || 'jen koncept' },
         { key: 'fee', label: 'Poplatek', type: 'num', ph: '', get: (c) => c.fee_pct == null ? null : Number(c.fee_pct) },
+        { key: 'rentfix', label: 'Nájem (pevně)', type: 'num', ph: '', get: (c) => c.rent_fixed_net == null ? null : Number(c.rent_fixed_net) },
+        { key: 'adv_el', label: 'Elektřina', type: 'num', ph: '', get: (c) => rentAdvSum(c, 'el') },
+        { key: 'adv_voda', label: 'Vodné a stočné', type: 'num', ph: '', get: (c) => rentAdvSum(c, 'voda') },
         { key: 'active', label: 'Automatika zapnutá', type: 'text', ph: 'Stav…', get: (c) => c.active ? 'aktivní' : 'neaktivní' },
         null,
       ],
@@ -3489,7 +3496,8 @@
           '<td>' + rentFd(c.effective_from) + ' – ' + rentFd(c.effective_to) + '</td>' +
           '<td>' + c.issue_day + '. v měsíci</td>' +
           '<td>' + (c.auto_mode === 'send' ? 'vystavit + odeslat' : c.auto_mode === 'issue' ? 'vystavit' : 'jen koncept') + '</td>' +
-          '<td>' + Number(c.fee_pct) + ' % · DPH ' + Number(c.vat_rate) + ' %' + (Array.isArray(c.energy_advances) && c.energy_advances.length ? '<div style="font-size:11px;color:var(--text2);">zálohy E: ' + c.energy_advances.reduce((s, x) => s + (Number(x.amount_net) || 0), 0).toLocaleString('cs-CZ') + ' Kč/měs.</div>' : '') + (c.invoice_currency === 'EUR' ? '<div style="font-size:11px;color:var(--text2);">fakturace v EUR</div>' : '') + '</td>' +
+          '<td>' + Number(c.fee_pct) + ' % · DPH ' + Number(c.vat_rate) + ' %' + (rentAdvSum(c, 'jine') != null ? '<div style="font-size:11px;color:var(--text2);">jiné zálohy E: ' + rentKc(rentAdvSum(c, 'jine')) + '/měs.</div>' : '') + (c.invoice_currency === 'EUR' ? '<div style="font-size:11px;color:var(--text2);">fakturace v EUR</div>' : '') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;">' + rentKc(c.rent_fixed_net) + '</td><td style="text-align:right;white-space:nowrap;">' + rentKc(rentAdvSum(c, 'el')) + '</td><td style="text-align:right;white-space:nowrap;">' + rentKc(rentAdvSum(c, 'voda')) + '</td>' +
           '<td style="text-align:center;"><label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;" title="' + (c.active ? 'Automatika zapnutá — kliknutím vypnout' : 'Automatika vypnutá — kliknutím zapnout') + '"><input type="checkbox" ' + (c.active ? 'checked ' : '') + 'onchange="rentToggleActive(' + c.id + ',this.checked)"> <span style="font-size:11px;color:' + (c.active ? '#16a34a' : 'var(--text2)') + ';">' + (c.active ? 'aktivní' : 'neaktivní') + '</span></label></td>' +
           '<td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" title="Ručně vytvořit podklad za měsíc zvolený nahoře (funguje i u neaktivní smlouvy)" onclick="rentGenerate(' + c.id + ')">Vytvořit podklad</button> ' + '<button class="btn btn-secondary btn-sm" onclick="openRentContractModal(' + c.id + ')">Upravit</button></td></tr>',
       noun: 'smluv',
