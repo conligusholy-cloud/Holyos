@@ -205,9 +205,20 @@ async function bs2Allowed(user) {
   const fn = String(person.first_name || '').trim().toLowerCase(), ln = String(person.last_name || '').trim().toLowerCase();
   return ln === 'holý' && (fn === 'tomáš' || fn === 'jan');
 }
+// Laundromats (laundromats.eu) — samostatný server pro nové zájemce; admin kalendáře schůzek se otevírá přes SSO z HolyOS (LM_SSO_SECRET).
+async function lmAllowed(user) {
+  if (!process.env.LM_URL || !process.env.LM_SSO_SECRET) return false;
+  const person = user && user.person;
+  if (!person) return false;
+  const ids = String(process.env.LM_ALLOWED_PERSON_IDS || process.env.BS2_ALLOWED_PERSON_IDS || '').split(',').map(s => parseInt(s.trim(), 10)).filter(Number.isFinite);
+  if (ids.length) return ids.includes(person.id);
+  const fn = String(person.first_name || '').trim().toLowerCase(), ln = String(person.last_name || '').trim().toLowerCase();
+  return ln === 'holý' && (fn === 'tomáš' || fn === 'jan');
+}
 async function externalSectionsFor(user) {
   const out = [];
   try {
+    if (await lmAllowed(user)) out.push({ id: 'laundromats', name: process.env.LM_NAME || 'Laundromats', icon: '&#129530;', color: '#3a6cf5', href: '/api/auth/sso/laundromats' });
     if (await bs2Allowed(user)) {
       out.push({ id: 'bs2', name: process.env.BS2_NAME || 'Best Series 2.0', icon: '&#128101;', color: '#1e86e0', href: '/api/auth/sso/bs2' });
       out.push({ id: 'ads', name: 'Centrum reklamy', icon: '&#128227;', color: '#f59e0b', href: '/modules/centrum-reklamy/index.html', internal: true });
@@ -231,6 +242,16 @@ router.get('/sso/bs2', loginRedirectIfAnonymous, requireAuth, async (req, res, n
     const p = req.user.person;
     const token = jwt.sign({ uid: req.user.id, pid: p.id, name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), username: req.user.username, aud: 'bs2', iss: 'holyos' }, secret, { expiresIn: '2m' });
     res.redirect(String(process.env.BS2_URL).replace(/\/$/, '') + '/sso?t=' + encodeURIComponent(token));
+  } catch (err) { next(err); }
+});
+
+// GET /api/auth/sso/laundromats — přesměrování do administrace Laundromats s jednorázovým tokenem (platnost 2 min)
+router.get('/sso/laundromats', requireAuth, async (req, res, next) => {
+  try {
+    if (!(await lmAllowed(req.user))) return res.status(403).send('Do této sekce nemáš přístup.');
+    const p = req.user.person;
+    const token = jwt.sign({ uid: req.user.id, pid: p.id, name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), aud: 'laundromats', iss: 'holyos' }, process.env.LM_SSO_SECRET, { expiresIn: '2m' });
+    res.redirect(String(process.env.LM_URL).replace(/\/$/, '') + '/sso?t=' + encodeURIComponent(token));
   } catch (err) { next(err); }
 });
 
@@ -505,19 +526,28 @@ router.post('/bs2/meeting-contacts', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 const BS2_RES_STATUSES = ['booked', 'done', 'canceled', 'no_show'];
+// Kalendář schůzek smí volat BS2 (BS2_SSO_SECRET) i Laundromats (LM_SSO_SECRET, iss laundromats) — jen routy níže, ne faktury ani produkty.
+function verifyMeetingsToken(req, res) {
+  const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  if (m) {
+    const tries = [[process.env.BS2_SSO_SECRET, 'bs2'], [process.env.LM_SSO_SECRET, 'laundromats']];
+    for (const [secret, iss] of tries) { if (!secret) continue; try { jwt.verify(m[1], secret, { audience: 'holyos-api', issuer: iss }); return true; } catch (e) { /* zkus další */ } }
+  }
+  res.status(401).json({ error: 'Neplatný token' }); return false;
+}
 // Automatické uvolňování termínů: GET nastavení + stav, PUT uložení (a okamžité spuštění), POST run (ruční spuštění)
 router.get('/bs2/meetings-auto', async (req, res, next) => {
-  try { if (!verifyBs2Token(req, res)) return; const A = require('../services/meetings/autorelease'); res.json({ ok: true, config: await A.getConfig(), status: await A.status() }); } catch (err) { next(err); }
+  try { if (!verifyMeetingsToken(req, res)) return; const A = require('../services/meetings/autorelease'); res.json({ ok: true, config: await A.getConfig(), status: await A.status() }); } catch (err) { next(err); }
 });
 router.put('/bs2/meetings-auto', express.json({ limit: '20kb' }), async (req, res, next) => {
-  try { if (!verifyBs2Token(req, res)) return; const A = require('../services/meetings/autorelease'); const config = await A.saveConfig(req.body || {}); const r = config.enabled ? await A.run() : { created: 0 }; res.json({ ok: true, config, created: r.created || 0, status: await A.status() }); } catch (err) { next(err); }
+  try { if (!verifyMeetingsToken(req, res)) return; const A = require('../services/meetings/autorelease'); const config = await A.saveConfig(req.body || {}); const r = config.enabled ? await A.run() : { created: 0 }; res.json({ ok: true, config, created: r.created || 0, status: await A.status() }); } catch (err) { next(err); }
 });
 router.post('/bs2/meetings-auto/run', async (req, res, next) => {
-  try { if (!verifyBs2Token(req, res)) return; const A = require('../services/meetings/autorelease'); const r = await A.run({ force: true }); res.json({ ok: true, created: r.created || 0, days: r.days || [], status: await A.status() }); } catch (err) { next(err); }
+  try { if (!verifyMeetingsToken(req, res)) return; const A = require('../services/meetings/autorelease'); const r = await A.run({ force: true }); res.json({ ok: true, created: r.created || 0, days: r.days || [], status: await A.status() }); } catch (err) { next(err); }
 });
 router.get('/bs2/meetings', async (req, res, next) => {
   try {
-    if (!verifyBs2Token(req, res)) return;
+    if (!verifyMeetingsToken(req, res)) return;
     const from = req.query.from ? new Date(String(req.query.from)) : new Date(Date.now() - 7 * 86400000);
     const to = req.query.to ? new Date(String(req.query.to)) : new Date(Date.now() + 60 * 86400000);
     if (isNaN(from) || isNaN(to)) return res.status(400).json({ error: 'Neplatný rozsah' });
@@ -538,7 +568,7 @@ router.get('/bs2/meetings', async (req, res, next) => {
 });
 router.post('/bs2/meetings/slots', express.json({ limit: '200kb' }), async (req, res, next) => {
   try {
-    if (!verifyBs2Token(req, res)) return;
+    if (!verifyMeetingsToken(req, res)) return;
     const b = req.body || {};
     const items = (Array.isArray(b.slots) ? b.slots : [b]).slice(0, 500);
     const created = [];
@@ -557,7 +587,7 @@ router.post('/bs2/meetings/slots', express.json({ limit: '200kb' }), async (req,
 });
 router.patch('/bs2/meetings/slots/:id(\\d+)', express.json({ limit: '20kb' }), async (req, res, next) => {
   try {
-    if (!verifyBs2Token(req, res)) return;
+    if (!verifyMeetingsToken(req, res)) return;
     const b = req.body || {}, data = {};
     if (b.starts_at) { const d = new Date(b.starts_at); if (!isNaN(d)) data.starts_at = d; }
     if (b.duration_min != null) data.duration_min = Math.min(Math.max(parseInt(b.duration_min, 10) || 17, 5), 480);
@@ -571,7 +601,7 @@ router.patch('/bs2/meetings/slots/:id(\\d+)', express.json({ limit: '20kb' }), a
 });
 router.delete('/bs2/meetings/slots/:id(\\d+)', async (req, res, next) => {
   try {
-    if (!verifyBs2Token(req, res)) return;
+    if (!verifyMeetingsToken(req, res)) return;
     const id = parseInt(req.params.id, 10);
     const booked = await prisma.meetingReservation.count({ where: { slot_id: id, status: 'booked' } });
     if (booked) return res.status(409).json({ ok: false, error: 'Termín má aktivní rezervaci — nejdřív ji zrušte, nebo termín jen vypněte.' });
@@ -583,7 +613,7 @@ router.delete('/bs2/meetings/slots/:id(\\d+)', async (req, res, next) => {
 });
 router.patch('/bs2/meetings/reservations/:id(\\d+)', express.json({ limit: '20kb' }), async (req, res, next) => {
   try {
-    if (!verifyBs2Token(req, res)) return;
+    if (!verifyMeetingsToken(req, res)) return;
     const b = req.body || {}, data = {};
     if (b.status !== undefined) { if (!BS2_RES_STATUSES.includes(b.status)) return res.status(400).json({ ok: false, error: 'Neplatný stav' }); data.status = b.status; }
     if (b.note !== undefined) data.note = b.note ? String(b.note).slice(0, 1000) : null;

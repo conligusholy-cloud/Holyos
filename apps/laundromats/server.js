@@ -130,6 +130,52 @@ app.post('/api/cesta/meeting-reservation', async (req, res) => {
   res.json(Object.assign({}, d, { account: 'none' }));
 });
 
+// ═══ Administrace schůzek (jen pro lidi přihlášené přes SSO z HolyOS: sekce Soukromé → Laundromats) ═══
+// Přihlášení: HolyOS pošle krátký JWT (aud laundromats, iss holyos, podepsaný LM_SSO_SECRET) na /sso → podepsaná cookie (8 h).
+// Kalendář (termíny, rezervace, automatika) žije v HolyOS; tenhle server ho jen zobrazuje přes /api/auth/bs2/meetings* s tokenem LM (iss laundromats).
+const crypto = require('crypto');
+const SESSION_KEY = LM_SECRET ? crypto.createHmac('sha256', LM_SECRET).update('lm-admin-session').digest('hex') : '';
+const COOKIE = 'lm_admin';
+const readCookie = (req, name) => { const m = String(req.headers.cookie || '').split(/;\s*/).map((c) => c.split('=')).find((p) => p[0] === name); return m ? decodeURIComponent(m.slice(1).join('=')) : ''; };
+function adminOf(req) { if (!SESSION_KEY) return null; try { const t = jwt.verify(readCookie(req, COOKIE), SESSION_KEY, { audience: 'laundromats-admin', issuer: 'laundromats' }); return { name: t.name || '' }; } catch (e) { return null; } }
+const toHolyos = () => HOLYOS_URL + '/api/auth/sso/laundromats';
+app.get('/sso', (req, res) => {
+  try {
+    if (!LM_SECRET) return res.status(500).type('text/plain').send('Chybí LM_SSO_SECRET');
+    const t = jwt.verify(String(req.query.t || ''), LM_SECRET, { audience: 'laundromats', issuer: 'holyos' });
+    const session = jwt.sign({ name: t.name || '', aud: 'laundromats-admin', iss: 'laundromats' }, SESSION_KEY, { expiresIn: '8h' });
+    res.set('Set-Cookie', COOKIE + '=' + encodeURIComponent(session) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + 8 * 3600);
+    res.set('Cache-Control', 'no-store').redirect(302, '/admin/meetings');
+  } catch (e) { res.status(401).type('text/plain').send('Přihlášení vypršelo. Otevři sekci Laundromats znovu z HolyOS.'); }
+});
+app.get('/admin/logout', (req, res) => { res.set('Set-Cookie', COOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'); res.redirect(302, '/cesta'); });
+const requireAdmin = (req, res, next) => {
+  const a = adminOf(req);
+  if (a) { req.admin = a; return next(); }
+  if (req.path.startsWith('/admin/api/')) return res.status(401).json({ ok: false, error: 'Přihlášení vypršelo. Otevři sekci Laundromats znovu z HolyOS.' });
+  res.redirect(302, toHolyos());
+};
+app.get('/admin', requireAdmin, (req, res) => res.redirect(302, '/admin/meetings'));
+const MA = require('./meetings-admin');
+app.get('/admin/meetings', requireAdmin, (req, res) => res.set('Cache-Control', 'no-store').type('html').send(MA.meetingsPage({ admin: req.admin, holyosUrl: HOLYOS_URL })));
+async function holyosSvc(method, p, body) {
+  const token = jwt.sign({ aud: 'holyos-api', iss: 'laundromats' }, LM_SECRET, { expiresIn: '1m' });
+  const r = await fetch(HOLYOS_URL + p, { method, headers: Object.assign({ Authorization: 'Bearer ' + token }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(20000) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error || ('HolyOS vrátil chybu ' + r.status)); e.status = r.status; throw e; }
+  return j;
+}
+const api = (fn) => async (req, res) => { try { res.json(await fn(req)); } catch (e) { res.status(e.status && e.status < 500 ? e.status : 502).json({ ok: false, error: e.message }); } };
+const P = '/api/auth/bs2/meetings';
+app.get('/admin/api/meetings/auto', requireAdmin, api(() => holyosSvc('GET', '/api/auth/bs2/meetings-auto')));
+app.post('/admin/api/meetings/auto', requireAdmin, api((req) => holyosSvc('PUT', '/api/auth/bs2/meetings-auto', req.body || {})));
+app.post('/admin/api/meetings/auto/run', requireAdmin, api(() => holyosSvc('POST', '/api/auth/bs2/meetings-auto/run', {})));
+app.get('/admin/api/meetings', requireAdmin, api(async (req) => ({ ok: true, slots: await holyosSvc('GET', P + '?from=' + qs(req.query.from) + '&to=' + qs(req.query.to)) })));
+app.post('/admin/api/meetings/slots', requireAdmin, api((req) => holyosSvc('POST', P + '/slots', { slots: (req.body || {}).slots || [] })));
+app.post('/admin/api/meetings/slots/:id(\\d+)/update', requireAdmin, api((req) => holyosSvc('PATCH', P + '/slots/' + req.params.id, req.body || {})));
+app.post('/admin/api/meetings/slots/:id(\\d+)/delete', requireAdmin, api((req) => holyosSvc('DELETE', P + '/slots/' + req.params.id)));
+app.post('/admin/api/meetings/reservations/:id(\\d+)', requireAdmin, api((req) => holyosSvc('PATCH', P + '/reservations/' + req.params.id, { status: (req.body || {}).status })));
+
 app.use((req, res) => res.status(404).type('text/plain').send('Stránka nenalezena'));
 app.use((err, req, res, next) => { console.warn('[laundromats]', err && err.message); res.status(500).type('text/plain').send('Chyba serveru'); });
 
