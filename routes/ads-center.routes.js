@@ -290,7 +290,12 @@ router.post('/pl-resend', async (req, res, next) => { try {
     }
     out.push(row);
   }
-  res.json({ ok: true, dry, total_pl: leads.length, k_doposlani: out.length, doplneno_emailu: fixed, odeslano_sms: sms, odeslano_email: email, leady: out });
+  // Přehled stavu (z DB + potvrzení v e-mailovém logu): kolik PL kontaktů, komu odešla SMS a e-mail
+  const ids = leads.map((x) => x.id); const sesOk = new Set();
+  try { const ms = await prisma.emailMessage.findMany({ where: { leadId: { in: ids } }, select: { leadId: true, status: true } }); ms.forEach((m) => { if (/^odesláno/.test(m.status || '') && !/simulace/.test(m.status || '')) sesOk.add(m.leadId); }); } catch (e) { /* bez e-mail logu */ }
+  const stats = { pl_celkem: leads.length, s_telefonem: leads.filter((x) => x.phone).length, sms_odeslano: leads.filter((x) => x.schuzka_sms_sent_at || x.ai_specialist_sms_sent_at).length, s_emailem: leads.filter((x) => x.email).length, email_odeslano: leads.filter((x) => x.schuzka_email_sent_at || x.ai_specialist_email_sent_at).length, email_potvrzeno_v_logu: ids.filter((i) => sesOk.has(i)).length };
+  const by_form = {}; leads.forEach((l) => { const k = (l.meta_form_id || 'bez formuláře') + (l.meta_ad_id ? '' : ' (bez reklamy)'); by_form[k] = (by_form[k] || 0) + 1; });
+  res.json({ ok: true, dry, by_form, stats, total_pl: leads.length, k_doposlani: out.length, doplneno_emailu: fixed, odeslano_sms: sms, odeslano_email: email, leady: out });
 } catch (err) { next(err); } });
 // Okamžitý restart: smaže všechny testovací leady (tlačítko v editoru funelu)
 router.delete('/test-leads', async (req, res, next) => { try {
