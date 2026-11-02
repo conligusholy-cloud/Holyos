@@ -455,6 +455,34 @@ router.put('/obchodnik-ui', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
 });
 
+// ── Denní vyhodnocení schůzek domluvených obchodníky (tabulka den × obchodník, úspěšnost, cíl) ──
+router.get('/owner-meetings/daily', requireAuth, async (req, res) => {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 14, 1), 90);
+    const report_hour = Number(await getSetting('obchodnik.report_hour', { type: 'number', defaultValue: 18 }).catch(() => 18)) || 18;
+    res.json(Object.assign({ ok: true, report_hour }, await require('../services/meeting/owner-stats').compute(prisma, days)));
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+// PUT { target?, report_hour? } — jen admin
+router.put('/owner-meetings/settings', requireAuth, async (req, res) => {
+  try {
+    const u = req.user || {}; if (!(u.isSuperAdmin || u.role === 'admin')) return res.status(403).json({ ok: false, error: 'Jen administrátor.' });
+    const b = req.body || {};
+    if (b.target !== undefined) await require('../services/meeting/owner-stats').setTarget(b.target);
+    if (b.report_hour !== undefined) { const h = Math.max(0, Math.min(23, parseInt(b.report_hour, 10) || 18)); await setSetting('obchodnik.report_hour', h, { type: 'number', description: 'Hodina denního reportu schůzek obchodníků (Europe/Prague)', scope: 'compounder', userId: u.id }); }
+    const hour = Number(await getSetting('obchodnik.report_hour', { type: 'number', defaultValue: 18 }).catch(() => 18)) || 18;
+    res.json({ ok: true, target: await require('../services/meeting/owner-stats').getTarget(), report_hour: hour });
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+// POST — okamžitě pošle dnešní report do Velína (test, jen admin)
+router.post('/owner-meetings/report-now', requireAuth, async (req, res) => {
+  try {
+    const u = req.user || {}; if (!(u.isSuperAdmin || u.role === 'admin')) return res.status(403).json({ ok: false, error: 'Jen administrátor.' });
+    const r = await require('../services/meeting/owner-daily-report').sendReport();
+    res.json({ ok: true, title: r.title, body: r.body });
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
 // GET /api/compounder/owner-meetings/stats?days=90 — vyhodnocení: kolik schůzek s majitelem který obchodník domluvil
 // (z rezervací s booked_by_person_id; nezrušené / proběhlé). Vrací i seznam rezervací s kontaktem.
 router.get('/owner-meetings/stats', requireAuth, async (req, res) => {

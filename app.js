@@ -1350,6 +1350,11 @@ server.listen(PORT, async () => {
     console.error('[app] meeting-reminder-worker nelze spustit:', err.message);
   }
   try {
+    require('./services/meeting/owner-daily-report').start(); // denní vyhodnocení schůzek domluvených obchodníky (Velín)
+  } catch (err) {
+    console.error('[app] owner-daily-report nelze spustit:', err.message);
+  }
+  try {
     const salesManagerWorker = require('./services/sales/sales-manager-worker');
     salesManagerWorker.start();
   } catch (err) {
