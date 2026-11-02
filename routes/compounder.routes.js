@@ -1715,7 +1715,8 @@ async function autosendAiSpecialistEmail(lead, opts) {
     if (!lead || !lead.id) return;
     const manual = !!(opts && opts.manual);
     let cfg = (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || (manual ? {} : null);
-    if (!cfg || (!cfg.emailEnabled && !manual)) return;
+    // Dřív tichý návrat → lead pak ve funelu visel jako „Zatím nezpracováno". Teď se důvod zapíše (outreach_skip).
+    if (!cfg || (!cfg.emailEnabled && !manual)) { if (lead.email) prisma.compounderEvent.create({ data: { sid: 'lead:' + lead.id, event: 'outreach_skip', path: '/autosend', props: { lead_id: lead.id, reason: 'automatický e-mail je vypnutý (Rozdělení/E-mail není zapnutý v pravidlech)', channel: 'email' } } }).catch(() => {}); return; }
     cfg = await cfgForLead(cfg, lead); // jazyková varianta (PL texty a stránka)
     const skip = (why) => { console.log('[aispec-autosend-email] lead', lead.id, '— přeskočeno:', why); prisma.compounderEvent.create({ data: { sid: 'lead:' + lead.id, event: 'outreach_skip', path: '/autosend', props: { lead_id: lead.id, reason: why, channel: 'email' } } }).catch(() => {}); };
     if (!lead.email) return skip('chybí e-mail');
@@ -1739,7 +1740,10 @@ async function autosendAiSpecialistEmail(lead, opts) {
     }).catch(() => {});
     console.log('[aispec-autosend-email] e-mail specialisty odeslán na lead', lead.id);
     require('../services/ads/funnel-events').record('email', lead.id, { variant: 'specialist', channel: 'email', to: lead.email, subject: String(subject || '').slice(0, 200), text: String(body || '').slice(0, 1500), from, link });
-  } catch (e) { console.warn('[aispec-autosend-email] selhalo:', e.message); }
+  } catch (e) {
+    console.warn('[aispec-autosend-email] selhalo:', e.message);
+    try { prisma.compounderEvent.create({ data: { sid: 'lead:' + (lead && lead.id), event: 'outreach_skip', path: '/autosend', props: { lead_id: lead && lead.id, reason: 'chyba e-mailu: ' + String(e.message).slice(0, 200), channel: 'email' } } }).catch(() => {}); } catch (_) { /* best-effort */ }
+  }
 }
 
 // ─── Znalostní báze AI specialisty (nahrané podklady = závazný zdroj dat) ──────
