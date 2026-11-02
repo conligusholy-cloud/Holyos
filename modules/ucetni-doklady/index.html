@@ -3489,7 +3489,7 @@
           '<td>' + rentFd(c.effective_from) + ' – ' + rentFd(c.effective_to) + '</td>' +
           '<td>' + c.issue_day + '. v měsíci</td>' +
           '<td>' + (c.auto_mode === 'send' ? 'vystavit + odeslat' : c.auto_mode === 'issue' ? 'vystavit' : 'jen koncept') + '</td>' +
-          '<td>' + Number(c.fee_pct) + ' % · DPH ' + Number(c.vat_rate) + ' %</td>' +
+          '<td>' + Number(c.fee_pct) + ' % · DPH ' + Number(c.vat_rate) + ' %' + (Array.isArray(c.energy_advances) && c.energy_advances.length ? '<div style="font-size:11px;color:var(--text2);">zálohy E: ' + c.energy_advances.reduce((s, x) => s + (Number(x.amount_net) || 0), 0).toLocaleString('cs-CZ') + ' Kč/měs.</div>' : '') + (c.invoice_currency === 'EUR' ? '<div style="font-size:11px;color:var(--text2);">fakturace v EUR</div>' : '') + '</td>' +
           '<td style="text-align:center;"><label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;" title="' + (c.active ? 'Automatika zapnutá — kliknutím vypnout' : 'Automatika vypnutá — kliknutím zapnout') + '"><input type="checkbox" ' + (c.active ? 'checked ' : '') + 'onchange="rentToggleActive(' + c.id + ',this.checked)"> <span style="font-size:11px;color:' + (c.active ? '#16a34a' : 'var(--text2)') + ';">' + (c.active ? 'aktivní' : 'neaktivní') + '</span></label></td>' +
           '<td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" title="Ručně vytvořit podklad za měsíc zvolený nahoře (funguje i u neaktivní smlouvy)" onclick="rentGenerate(' + c.id + ')">Vytvořit podklad</button> ' + '<button class="btn btn-secondary btn-sm" onclick="openRentContractModal(' + c.id + ')">Upravit</button></td></tr>',
       noun: 'smluv',
@@ -3617,7 +3617,7 @@
       const adv = window.__rcDraft.energy_advances || [];
       document.getElementById('rc-energy-adv').innerHTML = adv.map((a, i) => '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">'
         + '<input data-rk="energy_advances" data-i="' + i + '" data-f="label" placeholder="např. Elektřina / Vodné a stočné" value="' + String(a.label || '').replace(/"/g, '&quot;') + '" style="' + inp + 'flex:2;">'
-        + '<input data-rk="energy_advances" data-i="' + i + '" data-f="amount_net" type="number" step="0.01" min="0" placeholder="Kč bez DPH / měs." value="' + (a.amount_net != null ? a.amount_net : '') + '" style="' + inp + 'flex:1;">'
+        + '<input data-rk="energy_advances" data-i="' + i + '" data-f="amount_net" type="text" inputmode="decimal" placeholder="Kč bez DPH / měs." value="' + (a.amount_net != null ? a.amount_net : '') + '" style="' + inp + 'flex:1;">'
         + '<input data-rk="energy_advances" data-i="' + i + '" data-f="vat_rate" type="number" step="1" min="0" max="30" placeholder="DPH %" value="' + (a.vat_rate != null ? a.vat_rate : '') + '" style="' + inp + 'width:70px;flex:none;" title="DPH % (prázdné = sazba smlouvy)">'
         + '<button type="button" onclick="rentAdvDel(' + i + ')" style="background:none;border:1px solid var(--border);color:#ef4444;border-radius:6px;padding:4px 8px;cursor:pointer;">✕</button></div>').join('')
         + '<button type="button" onclick="rentAdvAdd()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;cursor:pointer;">+ záloha</button>'
@@ -3627,13 +3627,21 @@
     window.rentAdvDel = function(i) { window.__rcDraft.energy_advances.splice(i, 1); rcRenderRules(); };
     window.rentRuleAdd = function(kind) { window.__rcDraft[kind].push({ company_id: null, keyword: '', share_pct: 100 }); rcRenderRules(); };
     window.rentRuleDel = function(kind, i) { window.__rcDraft[kind].splice(i, 1); rcRenderRules(); };
+    // Zálohy na energie z formuláře — čte přímo z polí (nečeká na „change"), přijme „1 500,50"
+    function rcAdvances() {
+      const rows = window.__rcDraft.energy_advances || [];
+      document.querySelectorAll('#rc-energy-adv input[data-rk="energy_advances"]').forEach(function (inp) { const r = rows[parseInt(inp.dataset.i, 10)]; if (r) r[inp.dataset.f] = inp.value; });
+      const num = (v) => { const n = Number(String(v == null ? '' : v).replace(/[\s\u00a0]/g, '').replace(',', '.')); return isFinite(n) ? n : NaN; };
+      return rows.map(a => ({ label: String(a.label || '').trim() || null, amount_net: num(a.amount_net), vat_rate: a.vat_rate === '' || a.vat_rate == null ? null : num(a.vat_rate) }))
+        .filter(a => a.label || (a.amount_net > 0));
+    }
     function rcBody() {
       const g = (i) => document.getElementById(i).value.trim();
       const clean = (rs) => rs.filter(r => r.company_id).map(r => ({ company_id: r.company_id, keyword: (r.keyword || '').trim() || null, share_pct: Number(r.share_pct) || 100 }));
       return { kiosk_code: g('rc-kiosk'), customer_name: g('rc-name') || null, buyer_ico: g('rc-ico') || null, contact_name: g('rc-contact') || null, contact_email: g('rc-email') || null, cc_emails: g('rc-cc') || null,
         effective_from: g('rc-from'), effective_to: g('rc-to') || null, issue_day: Math.min(28, Math.max(1, parseInt(g('rc-day'), 10) || 5)), auto_mode: document.getElementById('rc-autosend').checked ? 'send' : (document.getElementById('rc-autoissue').checked ? 'issue' : 'draft'),
         rent_fixed_net: g('rc-rentfix') === '' ? null : (Number(g('rc-rentfix')) || null), fee_pct: Number(g('rc-fee')) || 13, vat_rate: Number(g('rc-vat')) || 21, currency: (g('rc-cur') || 'CZK').toUpperCase(), invoice_currency: document.getElementById('rc-invcur').value, vat_deductible: true,
-        energy_advances: (window.__rcDraft.energy_advances || []).map(a => ({ label: (a.label || '').trim() || null, amount_net: Number(String(a.amount_net).replace(',', '.')) || 0, vat_rate: a.vat_rate === '' || a.vat_rate == null ? null : Number(a.vat_rate) })).filter(a => a.amount_net > 0),
+        energy_advances: rcAdvances(),
         rent_rules: clean(window.__rcDraft.rent_rules), energy_rules: clean(window.__rcDraft.energy_rules), service_rules: clean(window.__rcDraft.service_rules), ai_match: document.getElementById('rc-ai').checked, note: g('rc-note') || null, active: document.getElementById('rc-active').checked };
     }
     window.saveRentContract = async function(id) {
@@ -3641,6 +3649,9 @@
       if (!b.kiosk_code) return alert('Vyber stroj.'); if (!b.customer_name) return alert('Vyplň subjekt (Nájemce).'); if (!b.effective_from) return alert('Zadej, od kdy smlouva platí.');
       if (b.effective_to && b.effective_to < b.effective_from) return alert('Konec smlouvy je dřív než její začátek.');
       if (b.auto_mode === 'send' && !b.contact_email) return alert('Pro automatické odesílání vyplň e-mail kompetentní osoby.');
+      const badAdv = (b.energy_advances || []).filter(a => !(a.amount_net > 0));
+      if (badAdv.length) return alert('Záloha na energie „' + (badAdv[0].label || 'bez názvu') + '“ nemá platnou částku. Zadej měsíční částku bez DPH, např. 1500 nebo 1 500,50.');
+      b.energy_advances = (b.energy_advances || []).filter(a => a.amount_net > 0);
       const r = id ? await api('PUT', '/api/compounder/rent-contracts/' + id, b) : await api('POST', '/api/compounder/rent-contracts', b);
       if (r.status === 409 && r.data && r.data.existing_id) {
         if (confirm(r.data.error + '\n\nOtevřít stávající smlouvu k úpravě' + (r.data.existing_active === false ? ' (a znovu ji aktivovat)' : '') + '?')) { closeModal(); document.getElementById('rent-inactive').checked = true; await loadRent(); openRentContractModal(r.data.existing_id); }
