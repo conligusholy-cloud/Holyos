@@ -296,7 +296,7 @@
   var CONTRACT_TYPES = [['rezervacni','Rezervační'],['kupni','Kupní'],['servisni','Servisní']];
   var CONTRACT_STATUS = { koncept:'Koncept', odeslano:'Odesláno', vyplneno:'Vyplněno', k_podpisu:'Čeká na náš podpis', podepsano:'Podepsáno' };
   var SPEECH_OK = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-  var state = { leads:[], filter:'', search:'', openId:null, typeFilter:'all', leadStatusFilter:'', calledTodayOnly:false, hotOnly:false, chatEverOnly:false, uncalledOnly:false };
+  var state = { leads:[], filter:'', search:'', openId:null, typeFilter:'all', leadStatusFilter:'', calledTodayOnly:false, hotOnly:false, plOnly:false, chatEverOnly:false, uncalledOnly:false };
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function langCode(l){ return (l||'').toLowerCase().split(/[-_]/)[0]; }
@@ -1174,6 +1174,22 @@
   window.setUncalledOnly = setUncalledOnly;
   window.setCalledTodayOnly = setCalledTodayOnly;
   function setHotOnly(v){ state.hotOnly = !!v; render(); }
+  function setPlOnly(v){ state.plOnly = !!v; render(); }
+  // Příznak „Umí jen polsky" (nastaví i jazyk kontaktu na PL → SMS / e-maily polsky); seznam těchto kontaktů = filtr 🇵🇱
+  async function obToggleOnlyPolish(id, btn){
+    var l = (state.leads||[]).find(function(x){ return x.id===id; });
+    var next = l ? !l.only_polish : true;
+    if (btn) btn.disabled = true;
+    try {
+      var r = await api('/leads/'+id+'/only-polish', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ value: next }) });
+      var j = await r.json().catch(function(){return {};});
+      if (!r.ok) throw new Error(j.error||'Chyba');
+      if (l){ l.only_polish = !!j.only_polish; if (j.lang) l.lang = j.lang; }
+    } catch(e){ alert('Nepodařilo se uložit příznak: '+e.message); }
+    if (btn) btn.disabled = false;
+    render();
+  }
+  window.obToggleOnlyPolish = obToggleOnlyPolish;
   window.setHotOnly = setHotOnly;
   function setChatTodayOnly(v){ state.chatTodayOnly = !!v; render(); }
   window.setChatTodayOnly = setChatTodayOnly;
@@ -1442,11 +1458,13 @@
       if (state.calledTodayOnly) filtered = filtered.filter(function(l){ return l.last_called_at && isTodayD(new Date(l.last_called_at)); });
       if (state.uncalledOnly) filtered = filtered.filter(isUncalled);
       if (state.hotOnly) filtered = filtered.filter(function(l){ return !!l.is_hot; });
+      if (state.plOnly) filtered = filtered.filter(function(l){ return !!l.only_polish; });
       if (state.chatTodayOnly) filtered = filtered.filter(function(l){ return l.ai_last_chat_at && isTodayD(new Date(l.ai_last_chat_at)); });
       if (state.chatEverOnly) filtered = filtered.filter(hasChatted);
       var calledTodayCount = leads.filter(function(l){ return l.last_called_at && isTodayD(new Date(l.last_called_at)); }).length;
       var uncalledCount = leads.filter(isUncalled).length;
       var hotCount = leads.filter(function(l){ return !!l.is_hot; }).length;
+      var plCount = leads.filter(function(l){ return !!l.only_polish; }).length;
       var chatTodayCount = leads.filter(function(l){ return l.ai_last_chat_at && isTodayD(new Date(l.ai_last_chat_at)); }).length;
       var chatEverCount = leads.filter(hasChatted).length;
       var opts = '<option value="">Všechny stavy ('+leads.length+')</option>' +
@@ -1458,6 +1476,7 @@
         '<span style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">🌐 Compounder kontakty</span>' +
         '<span style="background:var(--primary);color:#04121e;border-radius:10px;padding:1px 8px;font-size:12px">'+leads.length+'</span>' +
         '<button onclick="setHotOnly('+(!state.hotOnly)+')" title="Zobrazit jen zajímavé kontakty" style="margin-left:auto;font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.hotOnly?'#eab308':'var(--line)')+';background:'+(state.hotOnly?'rgba(234,179,8,0.18)':'transparent')+';color:'+(state.hotOnly?'#eab308':'var(--muted)')+'">⭐ Zajímavé'+(hotCount?' ('+hotCount+')':'')+'</button>' +
+        '<button onclick="setPlOnly('+(!state.plOnly)+')" title="Kontakty, které umí jen polsky" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.plOnly?'#f43f5e':'var(--line)')+';background:'+(state.plOnly?'rgba(244,63,94,0.18)':'transparent')+';color:'+(state.plOnly?'#fb7185':'var(--muted)')+'">🇵🇱 Jen polsky'+(plCount?' ('+plCount+')':'')+'</button>' +
         '<button onclick="setUncalledOnly('+(!state.uncalledOnly)+')" title="Kontakty, kterým jsi ještě nevolal (bez ohledu na stav od automatu)" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.uncalledOnly?'#ef4444':(uncalledCount?'rgba(239,68,68,0.6)':'var(--line)'))+';background:'+(state.uncalledOnly?'rgba(239,68,68,0.2)':'transparent')+';color:'+(state.uncalledOnly||uncalledCount?'#fca5a5':'var(--muted)')+';font-weight:'+(uncalledCount?'700':'400')+'">📵 Nevolané'+(uncalledCount?' ('+uncalledCount+')':'')+'</button>' +
         '<button onclick="setCalledTodayOnly('+(!state.calledTodayOnly)+')" title="Zobrazit jen dnes volané" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.calledTodayOnly?'#a78bfa':'var(--line)')+';background:'+(state.calledTodayOnly?'rgba(167,139,250,0.18)':'transparent')+';color:'+(state.calledTodayOnly?'#a78bfa':'var(--muted)')+'">📞 Dnes volané'+(calledTodayCount?' ('+calledTodayCount+')':'')+'</button>' +
         '<button onclick="setChatTodayOnly('+(!state.chatTodayOnly)+')" title="Zobrazit jen ty, co dnes chatovali se specialistou" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.chatTodayOnly?'#8b5cf6':'var(--line)')+';background:'+(state.chatTodayOnly?'rgba(139,92,246,0.22)':'transparent')+';color:'+(state.chatTodayOnly?'#c4b5fd':'var(--muted)')+'">💬 Dnes chatoval'+(chatTodayCount?' ('+chatTodayCount+')':'')+'</button>' +
@@ -1569,7 +1588,7 @@
     return '<div class="card'+(open?' open':'')+(laToday?' today':'')+'" id="card-'+l.id+'">' +
       '<div class="card-main" onclick="toggle('+l.id+')">' +
         '<span class="dot" style="background:'+st.c+'"></span>' +
-        '<div class="card-body"><div class="card-name">'+(l.is_hot?'⭐ ':'')+esc(l.name||l.email)+blBadge+(l.extra_offers?' <span title="Individuální nabídka lokalit">🎯</span>':'')+'</div>'+invHtml+'<div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+obOverdueBadge(l)+calledBadge+chatBadge+chatEverHtml+obNextEventBadge(l.id)+'</div>' +
+        '<div class="card-body"><div class="card-name">'+(l.is_hot?'⭐ ':'')+(l.only_polish?'<span title="Umí jen polsky">🇵🇱</span> ':'')+esc(l.name||l.email)+blBadge+(l.extra_offers?' <span title="Individuální nabídka lokalit">🎯</span>':'')+'</div>'+invHtml+'<div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+obOverdueBadge(l)+calledBadge+chatBadge+chatEverHtml+obNextEventBadge(l.id)+'</div>' +
         '<span class="badge" style="background:'+st.c+'22;color:'+st.c+';white-space:normal;text-align:center;line-height:1.2">'+st.l+((l.status==='dosledovani' && l.discount && l.discount.endsAt)?('<br><span style="font-weight:400;font-size:.85em;opacity:.85">do '+new Date(l.discount.endsAt).toLocaleDateString('cs-CZ')+'</span>'):'')+'</span>' +
         '<span class="gear" onclick="event.stopPropagation();openEdit('+l.id+')" title="Upravit údaje kontaktu">⚙️</span>' +
         '<span class="chev">▸</span>' +
@@ -1577,6 +1596,7 @@
       '<div class="detail">' +
         (l.phone ? '<div class="field" data-obk="call_main" style="margin-top:12px"><a class="btn" href="tel:'+esc(telClean)+'" onclick="return obCallClick(event,'+l.id+')" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;min-height:84px;background:#22c55e;color:#052e13;font-weight:900;font-size:30px;text-align:center;text-decoration:none;padding:24px 14px;border-radius:18px;box-shadow:0 4px 18px rgba(34,197,94,.35)">📞 Volat</a></div>' : '') +
         '<div class="field" data-obk="owner_meeting" style="margin-top:12px"><button class="btn" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;min-height:84px;font-size:26px;line-height:1.15;padding:20px 14px;border-radius:18px;background:linear-gradient(135deg,#1e86e0,#7c5cff);color:#fff;font-weight:900;box-shadow:0 4px 18px rgba(124,92,255,.4)" onclick="obOwnerMeeting('+l.id+')">👔 Online schůzka s majitelem</button></div>' +
+        '<div class="field" data-obk="only_polish" style="margin-top:10px"><button class="btn" id="pl-'+l.id+'" style="width:100%;font-size:14px;'+(l.only_polish?'background:#f43f5e;color:#fff;font-weight:800;border:1px solid #f43f5e':'background:transparent;border:1px solid #f43f5e;color:#fb7185;font-weight:700')+'" onclick="obToggleOnlyPolish('+l.id+',this)">'+(l.only_polish?'🇵🇱 Umí jen polsky ✓':'🇵🇱 Umí jen polsky')+'</button></div>' +
         '<div class="actions-row" data-obk="contact_actions" style="margin-top:12px">' +
           (waNum ? '<a href="https://wa.me/'+waNum+'" target="_blank" rel="noopener" onclick="return obLinkGate(event,'+l.id+')">💬 WhatsApp</a>' : '') +
           (l.phone ? '<a href="sms:'+esc(telClean)+'" onclick="return obLinkGate(event,'+l.id+')">📩 SMS</a>' : '') +
@@ -2738,7 +2758,7 @@
     showScreen('contacts');
     // Zruš všechny filtry, které by mohly konkrétní kontakt schovat (hledání, nevolané, zajímavé, dnes volané…)
     try {
-      state.typeFilter='all'; state.leadStatusFilter=''; state.filter=''; state.search=''; state.calledTodayOnly=false; state.hotOnly=false; state.chatEverOnly=false; state.uncalledOnly=false;
+      state.typeFilter='all'; state.leadStatusFilter=''; state.filter=''; state.search=''; state.calledTodayOnly=false; state.hotOnly=false; state.plOnly=false; state.chatEverOnly=false; state.uncalledOnly=false;
       var si=document.getElementById('search'); if (si) si.value='';
       state.openId=id; renderChips(); render();
     } catch(e){}

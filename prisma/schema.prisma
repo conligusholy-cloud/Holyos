@@ -6337,6 +6337,9 @@ model CompounderLead {
   // „Zajímavý kontakt" — ruční příznak horkého kontaktu (není stav). Filtruje se v mobilu i v HolyOS.
   is_hot Boolean @default(false)
 
+  // „Umí jen polsky" — ruční příznak obchodníka (kontakt nemluví česky; nastaví i lang = pl). Slouží pro seznam polsky mluvících kontaktů.
+  only_polish Boolean @default(false)
+
   // Preferovaný jazyk z webu (ISO kód: en, cs, de…)
   lang String? @db.VarChar(10)
 

@@ -413,6 +413,7 @@ router.post('/leads/:id/owner-meeting', requireAuth, async (req, res) => {
 const OB_UI_BUTTONS = [
   { key: 'call_main', group: 'Rychlé akce', label: '📞 Volat (velké zelené tlačítko nahoře)' },
   { key: 'owner_meeting', group: 'Rychlé akce', label: '👔 Online schůzka s majitelem (velké tlačítko, druhé v pořadí)' },
+  { key: 'only_polish', group: 'Rychlé akce', label: '🇵🇱 Umí jen polsky (příznak kontaktu)' },
   { key: 'contact_actions', group: 'Rychlé akce', label: '💬 WhatsApp · 📩 SMS · ✉️ E-mail (řádek ikon)' },
   { key: 'aispec', group: 'Rychlé akce', label: '💬 Odeslat SMS s odkazem na specialistu + 🧠 Vyhodnotit chat', hidden: true },
   { key: 'hot', group: 'Rychlé akce', label: '⭐ Označit jako zajímavý kontakt' },
@@ -4377,6 +4378,22 @@ router.post('/leads/:id(\\d+)/hot', requireAuth, async (req, res, next) => {
     const hot = (req.body && req.body.hot !== undefined) ? !!req.body.hot : !lead.is_hot;
     const upd = await prisma.compounderLead.update({ where: { id }, data: { is_hot: hot }, select: { id: true, is_hot: true } });
     res.json({ ok: true, is_hot: upd.is_hot });
+  } catch (err) { next(err); }
+});
+
+// POST /leads/:id/only-polish { value?: bool } — příznak „Umí jen polsky". Zapnutí nastaví i jazyk kontaktu na PL (SMS a e-maily pak odcházejí polsky).
+router.post('/leads/:id(\\d+)/only-polish', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, only_polish: true, lang: true, activity_log: true } });
+    if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
+    const val = (req.body && req.body.value !== undefined) ? !!req.body.value : !lead.only_polish;
+    const who = (req.user && (req.user.display_name || req.user.displayName || req.user.username)) || 'obchodník';
+    const line = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' · ' + (val ? '🇵🇱 Označen: umí jen polsky' : 'Zrušen příznak „umí jen polsky"') + ' (' + who + ')';
+    const data = { only_polish: val, activity_log: line + (lead.activity_log ? '\n' + lead.activity_log : '') };
+    if (val) data.lang = 'pl';
+    const upd = await prisma.compounderLead.update({ where: { id }, data, select: { id: true, only_polish: true, lang: true } });
+    res.json({ ok: true, only_polish: upd.only_polish, lang: upd.lang });
   } catch (err) { next(err); }
 });
 
