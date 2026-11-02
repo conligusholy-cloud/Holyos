@@ -1,0 +1,13 @@
+{
+  "name": "laundromats",
+  "version": "0.1.0",
+  "description": "Laundromats — veřejný web laundromats.eu (cesta k rozhodnutí pro nové zájemce). Samostatný server oddělený od BS2.",
+  "private": true,
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

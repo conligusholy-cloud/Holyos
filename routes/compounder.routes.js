@@ -1084,7 +1084,7 @@ const PL_DEFAULTS = {
 };
 const PL_KEYS = Object.keys(PL_DEFAULTS);
 // BS2 stránky cesty → jejich polská verze (https://www.bestseries2.cz/cesta/schuzka → …/cesta/pl/schuzka); ostatní adresy beze změny
-function plUrl(u) { try { const x = new URL(String(u || '')); if (/(^|\.)bestseries2\.cz$/.test(x.hostname) && /^\/cesta(\/|$)/.test(x.pathname) && !/^\/cesta\/pl(\/|$)/.test(x.pathname)) { x.pathname = x.pathname.replace(/^\/cesta/, '/cesta/pl'); return x.toString(); } } catch (e) { /* beze změny */ } return String(u || ''); }
+function plUrl(u) { try { const x = new URL(String(u || '')); if (/(^|\.)(bestseries2\.cz|laundromats\.eu)$/.test(x.hostname) && /^\/cesta(\/|$)/.test(x.pathname) && !/^\/cesta\/pl(\/|$)/.test(x.pathname)) { x.pathname = x.pathname.replace(/^\/cesta/, '/cesta/pl'); return x.toString(); } } catch (e) { /* beze změny */ } return String(u || ''); }
 function plOverlay(cfg) {
   const p = (cfg && cfg.pl) || {}; const o = Object.assign({}, cfg);
   PL_KEYS.forEach((k) => { o[k] = (p[k] && String(p[k]).trim()) ? p[k] : PL_DEFAULTS[k]; });

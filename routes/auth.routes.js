@@ -298,6 +298,34 @@ router.post('/bs2/send-mail', express.json({ limit: '50kb' }), async (req, res, 
   } catch (err) { next(err); }
 });
 
+// POST /api/auth/lm/send-mail — potvrzení schůzky z laundromats.eu (samostatný server, VLASTNÍ tajemství LM_SSO_SECRET, ne BS2).
+// Omezení: odkaz smí mířit jen na LM_URL (laundromats.eu), odesílatel je pevně „Prádlomaty" (jako e-maily z funelu).
+router.post('/lm/send-mail', express.json({ limit: '50kb' }), async (req, res, next) => {
+  try {
+    const secret = process.env.LM_SSO_SECRET;
+    const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+    if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
+    try { jwt.verify(m[1], secret, { audience: 'holyos-api', issuer: 'laundromats' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
+    const b = req.body || {};
+    const to = String(b.to || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: 'Neplatný příjemce' });
+    const base = String(process.env.LM_URL || 'https://laundromats.eu').replace(/\/$/, '');
+    const link = b.link ? String(b.link) : undefined;
+    if (link) {
+      const hostOf = (u) => { try { return new URL(u).host.replace(/^www\./, '').toLowerCase(); } catch (e) { return ''; } };
+      if (!/^https:\/\//.test(link) || hostOf(link) !== hostOf(base)) return res.status(400).json({ error: 'Odkaz mimo Laundromats' });
+    }
+    let pradFrom = null; try { pradFrom = await require('./compounder.routes').funnelMailFrom('schuzka'); } catch (e) { pradFrom = null; }
+    const from = pradFrom || process.env.COMPOUNDER_MAIL_FROM || undefined;
+    const mail = { to, from, brand: 'pradlomaty', fromName: '💧 PRÁDLOMATY 💧', subject: String(b.subject || 'Laundromats').slice(0, 200), body: String(b.body || '').slice(0, 5000), link, linkLabel: b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined };
+    if (b.ics && typeof b.ics === 'string' && b.ics.indexOf('BEGIN:VCALENDAR') === 0 && b.ics.length < 20000) mail.attachments = [{ filename: 'schuzka.ics', content: b.ics, contentType: 'text/calendar; charset=utf-8; method=PUBLISH' }];
+    const r = await require('../services/email').sendMail(mail);
+    console.log('[lm mail] příjemce=' + to + ' výsledek=' + JSON.stringify({ sent: !!(r && r.sent), error: r && (r.error || r.skipped) }));
+    if (!r || !r.sent) return res.status(502).json({ error: (r && (r.error || r.skipped)) || 'E-mail se nepodařilo odeslat' });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // POST /api/auth/bs2/invoice/proforma — BS2 odešle objednávku produktu → zálohová faktura (splatnost 3 dny) + e-mail zákazníkovi
 // POST /api/auth/bs2/invoice/online   — BS2 odešle zaplacenou online objednávku (Stripe) → faktura + e-mail
 function verifyBs2Token(req, res) {
