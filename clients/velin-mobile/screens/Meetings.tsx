@@ -257,7 +257,8 @@ function SlotModal({ slot, onClose, onChanged }: { slot: MeetingSlot; onClose: (
                     {L && L.city ? <Text style={s.resSub}>{L.city}</Text> : null}
                   </View>
                   <Text style={s.resSub}>{[r.mode && MODE[r.mode], r.financing_path && PATH[r.financing_path], r.compounder_lead_id ? 'lead #' + r.compounder_lead_id : ''].filter(Boolean).join(' · ')}</Text>
-                  {r.note ? <Text style={s.resSub}>{r.note}</Text> : null}
+                  {r.note ? <Text style={s.resSub}>{/\(Teams\)/.test(r.note) ? '🟣 ' : /\(WhatsApp\)/.test(r.note) ? '🟢 ' : ''}{String(r.note).replace(/\s*·?\s*https:\/\/\S+/, '')}</Text> : null}
+                  {r.note && /https:\/\/\S+/.test(r.note) ? <TouchableOpacity onPress={() => Linking.openURL((String(r.note).match(/https:\/\/\S+/) || [''])[0])}><Text style={[s.resSub, { color: BS.accent, textDecorationLine: 'underline' }]}>🟣 Otevřít Teams schůzku</Text></TouchableOpacity> : null}
                   <ResNote r={r} run={run} onChanged={onChanged} />
                   <LeasingBox r={r} run={run} />
                   {phone ? (

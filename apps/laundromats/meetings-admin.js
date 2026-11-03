@@ -122,12 +122,18 @@ function addModal(day){
     api('/admin/api/meetings/slots',{slots:slots}).then(function(j){ov.remove();load();}).catch(function(e){q('.mt-msg').textContent=e.message;q('.f-go').disabled=false;});
   };
 }
+function chanHtml(note){
+  if(!note)return '';
+  var m=/\\((WhatsApp|Teams)\\)/.exec(note),u=/https:\\/\\/\\S+/.exec(note),txt=String(note).replace(/\\s*·?\\s*https:\\/\\/\\S+/,'');
+  var pill=m?'<span class="mt-pill" style="border-color:'+(m[1]==='Teams'?'#a78bfa':'#25D366')+';color:'+(m[1]==='Teams'?'#c4b5fd':'#4ade80')+'">'+(m[1]==='Teams'?'🟣 Teams':'🟢 WhatsApp')+'</span> ':'';
+  return '<div class="small muted">'+pill+esc(txt)+(u?' · <a href="'+esc(u[0])+'" target="_blank" rel="noopener">Odkaz na Teams</a>':'')+'</div>';
+}
 function slotModal(id){
   var s=data.filter(function(x){return x.id===id;})[0]; if(!s)return; var d=new Date(s.starts_at);
   var res=(s.reservations||[]).map(function(r){var L=r.lead||{};return '<div class="mt-res"><div class="nm">'+esc(L.name||r.name||'Zájemce')+' <span class="mt-pill '+esc(r.status)+'">'+(ST[r.status]||esc(r.status))+'</span></div>'
     +'<div class="small muted">'+[r.phone||L.phone,r.email||L.email,L.city].filter(Boolean).map(esc).join(' · ')+'</div>'
     +'<div class="small">'+[MODE[r.mode],PATH[r.financing_path]].filter(Boolean).join(' · ')+(r.compounder_lead_id?' · lead #'+r.compounder_lead_id:'')+'</div>'
-    +(r.note?'<div class="small muted">'+esc(r.note)+'</div>':'')
+    +chanHtml(r.note)
     +'<div class="mt-act">'+(r.status!=='done'?'<button class="btn sm" data-rs="'+r.id+'" data-st="done">✓ Proběhla</button>':'')+(r.status!=='no_show'?'<button class="btn sec sm" data-rs="'+r.id+'" data-st="no_show">Nedorazil</button>':'')+(r.status!=='canceled'?'<button class="btn sec sm" data-rs="'+r.id+'" data-st="canceled">Zrušit</button>':'')+(r.status!=='booked'?'<button class="btn sec sm" data-rs="'+r.id+'" data-st="booked">Obnovit</button>':'')+'</div></div>';}).join('');
   var ov=modal('<h3>'+dlong(d)+' '+hm(d)+'</h3><div class="mt-row"><div><label>Datum</label><input type="date" class="e-d" value="'+ymd(d)+'"></div><div><label>Čas</label><input type="time" class="e-t" value="'+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+'"></div></div>'
    +'<div class="mt-row"><div><label>Délka (min)</label><input type="number" class="e-dur" value="'+s.duration_min+'"></div><div><label>Kapacita</label><input type="number" class="e-cap" value="'+s.capacity+'"></div></div>'
