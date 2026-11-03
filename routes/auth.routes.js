@@ -5,6 +5,11 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
+const { createLimiter } = require('../middleware/rate-limit');
+// Ochrana proti hádání hesel: 10 pokusů / 15 min na IP a 8 neúspěšných / 15 min na uživatelské jméno
+const loginIpLimiter = createLimiter({ windowMs: 15 * 60000, max: 10, message: 'Příliš mnoho pokusů o přihlášení. Zkuste to za chvíli znovu.' });
+const loginFailLimiter = createLimiter({ windowMs: 15 * 60000, max: 8 });
+const loginKey = (u) => 'u:' + String(u || '').toLowerCase().slice(0, 100);
 const { prisma } = require('../config/database');
 const { generateToken, requireAuth, requireAdmin } = require('../middleware/auth');
 
@@ -88,7 +93,7 @@ router.post('/setup', async (req, res, next) => {
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res, next) => {
+router.post('/login', loginIpLimiter, async (req, res, next) => {
   try {
     const { username, password } = req.body;
 
@@ -101,14 +106,17 @@ router.post('/login', async (req, res, next) => {
       include: { person: true },
     });
 
-    if (!user) {
-      return res.status(401).json({ error: 'Neplatné přihlašovací údaje' });
-    }
+    // Zámek účtu po opakovaných neúspěších (chrání i proti rozprostřenému útoku z více IP)
+    const fk = loginKey(username);
+    if (!user) { const r = loginFailLimiter.take(fk); if (r.blocked) { res.set('Retry-After', String(r.retryAfter)); return res.status(429).json({ error: 'Účet je dočasně uzamčen kvůli opakovaným pokusům. Zkuste to za chvíli.' }); } return res.status(401).json({ error: 'Neplatné přihlašovací údaje' }); }
 
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
+      const r = loginFailLimiter.take(fk);
+      if (r.blocked) { res.set('Retry-After', String(r.retryAfter)); return res.status(429).json({ error: 'Účet je dočasně uzamčen kvůli opakovaným pokusům. Zkuste to za chvíli.' }); }
       return res.status(401).json({ error: 'Neplatné přihlašovací údaje' });
     }
+    loginFailLimiter.reset(fk);
 
     const access = await computeSalesAccess(user);
     const token = generateToken(user, { sales_only: access.sales_only, sales_home: access.sales_home });

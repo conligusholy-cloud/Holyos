@@ -7,6 +7,7 @@ const express = require('express');
 const https = require('https');
 const router = express.Router();
 const { prisma } = require('../config/database');
+const { requireAuth } = require('../middleware/auth');
 
 // ─── STT CHECK ────────────────────────────────────────────────────────────
 
@@ -19,7 +20,7 @@ router.get('/stt-check', (req, res) => {
 // ─── WHISPER TRANSCRIPTION ────────────────────────────────────────────────
 
 // POST /api/ai/transcribe
-router.post('/transcribe', async (req, res) => {
+router.post('/transcribe', requireAuth, async (req, res) => {
   try {
     const openaiKey = process.env.OPENAI_API_KEY;
     if (!openaiKey) {
@@ -199,7 +200,7 @@ async function gatherDataContext(message, context) {
 }
 
 // POST /api/ai/voice
-router.post('/voice', async (req, res) => {
+router.post('/voice', requireAuth, async (req, res) => {
   try {
     const { message, context } = req.body;
     if (!message) return res.status(400).json({ error: 'Missing message' });

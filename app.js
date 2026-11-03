@@ -73,6 +73,7 @@ const compounderRoutes = require('./routes/compounder.routes');
 // ─── Inicializace aplikace ────────────────────────────────────────────────
 
 const app = express();
+app.set('trust proxy', 1); // Railway proxy → req.ip je skutečná IP klienta (rate limit přihlášení)
 
 // ─── Middleware ─────────────────────────────────────────────────────────────
 

@@ -8,7 +8,9 @@
 //   - F5 slot-health-score
 
 const express = require('express');
+const { requireAuth } = require('../middleware/auth');
 const router = express.Router();
+router.use(requireAuth); // Plánování výroby: jen přihlášení uživatelé
 const { prisma } = require('../config/database');
 const { generateBatchOperationsForBatch } = require('../services/planning/batch-operations');
 const { computeMrpForBatch } = require('../services/planning/mrp');

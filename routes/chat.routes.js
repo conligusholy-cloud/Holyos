@@ -5,12 +5,13 @@
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../config/database');
+const { requireAuth } = require('../middleware/auth');
 const { processQuery } = require('../services/ai/orchestrator');
 
 // ─── CHAT ENDPOINT (MCP orchestrátor) ───────────────────────────────────────
 
 // POST /api/ai/chat
-router.post('/chat', async (req, res) => {
+router.post('/chat', requireAuth, async (req, res) => {
   try {
     const { message, module: currentModule, history, assistantSlug, multiAgent } = req.body;
     if (!message) return res.status(400).json({ error: 'Chybí zpráva' });
@@ -101,7 +102,7 @@ router.get('/assistants-public', async (req, res) => {
 
 // ─── CAPABILITIES ───────────────────────────────────────────────────────────
 
-router.get('/capabilities', async (req, res) => {
+router.get('/capabilities', requireAuth, async (req, res) => {
   try {
     const { AGENT_MCP_MAP } = require('../services/ai/orchestrator');
 
