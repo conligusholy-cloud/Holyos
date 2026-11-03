@@ -6098,6 +6098,13 @@
   // ── 📦 Exporty dokladů pro účetní: nastavení období + automatické odesílání ZIPů + historie ──
   (function(){
     var X = { cfg: null };
+    // vlastní volání API (hlavní api() je schované v jiném bloku skriptu)
+    async function api(method, url, body){
+      var h={'Content-Type':'application/json'}; try{ var t=localStorage.getItem('token')||sessionStorage.getItem('token'); if(t) h['Authorization']='Bearer '+t; }catch(_){}
+      var o={method:method,credentials:'include',headers:h}; if(body!==undefined) o.body=JSON.stringify(body);
+      try{ var r=await fetch(url,o); var ct=r.headers.get('content-type')||''; return { status:r.status, data: ct.indexOf('json')>=0 ? await r.json().catch(function(){return null;}) : null }; }
+      catch(e){ return { status:0, data:{ error:'Spojení selhalo: '+e.message } }; }
+    }
     function ex(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
     function d8(d){ if(!d) return '—'; var x=new Date(d); return x.toLocaleDateString('cs-CZ'); }
     function dt(d){ if(!d) return '—'; var x=new Date(d); return x.toLocaleDateString('cs-CZ')+' '+x.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'}); }
