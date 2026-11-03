@@ -25,7 +25,7 @@ const EXPORT_DIR = path.join(STORAGE_DIR, 'accounting-exports');
 const SKIP_STATUSES = ['cancelled']; // i rozpracované (draft) — přijaté z e-mailu bývají draft, účetní je potřebuje
 const GRAPH_INLINE_MAX = 2.8 * 1024 * 1024; // menší přílohy jdou běžným sendMail, větší přes upload session
 const DEFAULTS = { enabled: false, recipients: '', sender: '', start_from: null, interval: 'week', send_hour: 7, directions: ['ap', 'ar'], include_proforma: false, max_mb: 20, last_period_to: null };
-const INTERVAL_LABEL = { day: 'denně', week: 'týdně', '2weeks': 'každých 14 dní', month: 'měsíčně' };
+const INTERVAL_LABEL = { day: 'denně', '2days': 'každé 2 dny', '3days': 'každé 3 dny', week: 'týdně', '2weeks': 'každých 14 dní', month: 'měsíčně' };
 
 const pad = (n) => String(n).padStart(2, '0');
 const ymd = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
@@ -60,12 +60,14 @@ async function saveConfig(patch, userId) {
   return next;
 }
 
+// Délka jednoho období ve dnech. 'month' se počítá kalendářně (ne 30 dní),
+// proto stojí stranou. Neznámý interval = týden (bezpečný default).
+const INTERVAL_DAYS = { day: 1, '2days': 2, '3days': 3, week: 7, '2weeks': 14 };
+
 function addInterval(from, interval) {
   const d = new Date(from);
-  if (interval === 'day') d.setDate(d.getDate() + 1);
-  else if (interval === '2weeks') d.setDate(d.getDate() + 14);
-  else if (interval === 'month') d.setMonth(d.getMonth() + 1);
-  else d.setDate(d.getDate() + 7);
+  if (interval === 'month') d.setMonth(d.getMonth() + 1);
+  else d.setDate(d.getDate() + (INTERVAL_DAYS[interval] || 7));
   return d;
 }
 // Další období k odeslání: [od, do) — od = konec minulého (nebo start_from)
