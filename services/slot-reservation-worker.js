@@ -80,6 +80,31 @@ async function sweepExpiredReservations() {
   };
 }
 
+// Upozornění Jan Holý + Tomáš Holý (Velín push + zvonek), že rezervace slotu vypršela a slot je zase volný.
+async function notifyReleased(details) {
+  if (!details || !details.length) return;
+  const { notifyPerson } = require('./push/expo-push');
+  const { createNotification } = require('../routes/notifications.routes');
+  const people = [];
+  for (const [fn, ln] of [['Jan', 'Holý'], ['Tomáš', 'Holý']]) {
+    const p = await prisma.person.findFirst({ where: { active: true, first_name: { equals: fn, mode: 'insensitive' }, last_name: { equals: ln, mode: 'insensitive' } }, select: { id: true, user_id: true } }).catch(() => null);
+    if (p) people.push(p);
+  }
+  const slotIds = Array.from(new Set(details.map((d) => d.slot_id)));
+  const slots = await prisma.productionSlot.findMany({ where: { id: { in: slotIds } } }).catch(() => []);
+  const fmt = (x) => { try { return new Date(x).toLocaleDateString('cs-CZ', { timeZone: 'Europe/Prague' }); } catch (e) { return ''; } };
+  for (const d of details) {
+    const sl = slots.find((x) => x.id === d.slot_id) || {};
+    const when = sl.start_date ? fmt(sl.start_date) + (sl.end_date ? '–' + fmt(sl.end_date) : '') : ('slot #' + d.slot_id);
+    const title = '⏰ Rezervace slotu vypršela: ' + (d.customer_name || d.product_name || 'bez jména');
+    const body = when + (d.product_name ? ' · ' + d.product_name : '') + (d.order_id ? ' · objednávka #' + d.order_id : '') + ' — slot je zase volný.';
+    for (const p of people) {
+      notifyPerson(prisma, p.id, { title, body, data: { type: 'slot_released', slot_id: d.slot_id, order_id: d.order_id || null, link: '/modules/vyrobni-sloty/index.html' }, sound: 'default' }).catch(() => {});
+      if (p.user_id) createNotification({ userId: p.user_id, type: 'system', title, body, link: '/modules/vyrobni-sloty/index.html', meta: { slot_id: d.slot_id, order_id: d.order_id || null } }).catch(() => {});
+    }
+  }
+}
+
 async function runOnce() {
   if (_running) {
     console.log('[slot-reservation-worker] Předchozí run ještě běží, přeskakuji.');
@@ -90,6 +115,9 @@ async function runOnce() {
     const result = await sweepExpiredReservations();
     if (result.released > 0) {
       console.log(`[slot-reservation-worker] ✓ Uvolněno ${result.released} expirovaných rezervací (sloty: ${result.freed_slot_ids.join(', ')}).`);
+      // Podrobný záznam kdo/co se uvolnilo — ať jde rezervaci dohledat a obnovit (assignment se maže natvrdo)
+      result.details.forEach((d) => console.log('[slot-reservation-worker]   • slot ' + d.slot_id + ' · zákazník: ' + (d.customer_name || '—') + ' · produkt: ' + (d.product_name || '—') + ' · objednávka #' + (d.order_id || '—') + ' · rezervace platila do ' + (d.reserved_until ? new Date(d.reserved_until).toISOString() : '—')));
+      notifyReleased(result.details).catch((e) => console.warn('[slot-reservation-worker] notifikace selhala:', e.message));
     }
   } catch (err) {
     console.error('[slot-reservation-worker] Run selhalo:', err);
