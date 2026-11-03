@@ -106,6 +106,7 @@ function isAllowedAdmin(p) {
   return last === 'holy' && (first === 'tomas' || first === 'jan');
 }
 // ── Volitelné 2FA pro správce (zapne se env BS2_ADMIN_2FA=1): TOTP (Google/Microsoft Authenticator), tajemství per správce v app_settings ──
+const USER_2FA_REQUIRED = String(process.env.BS2_USER_2FA || '') !== '0'; // povinné 2FA pro investory (vypnout jen BS2_USER_2FA=0)
 const ADMIN_2FA = String(process.env.BS2_ADMIN_2FA || '') !== '0'; // ve výchozím stavu ZAPNUTO (vypnout jen BS2_ADMIN_2FA=0)
 const crypto = require('crypto');
 const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -135,6 +136,11 @@ async function requireUser(req, res, next, skipConsent) {
   if (!u || u.status !== 'active') { res.clearCookie(USER_COOKIE); return res.redirect('/login'); }
   // Změna hesla / 2FA odvolá všechny starší relace
   if (u.pw_changed_at && s.iat && s.iat * 1000 < new Date(u.pw_changed_at).getTime() - 2000) { res.clearCookie(USER_COOKIE); return res.redirect('/login'); }
+  // Povinné 2FA: kdo ho nemá, smí jen nastavit 2FA, zobrazit podmínky a odhlásit se (hned při dalším požadavku i u už přihlášených)
+  if (USER_2FA_REQUIRED && !u.totp_enabled && !/^\/(2fa(\/|$)|logout|vop|gdpr|img\/|favicon)/.test(req.path)) {
+    if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'Nejdřív si zapni dvoufázové ověření.', redirect: '/2fa' });
+    return res.redirect('/2fa');
+  }
   // Záložka AI chat se v menu ukáže jen když je chat zapnutý v Admin → AI chat (a je k dispozici API klíč)
   try { const cfg = await AI.loadConfig(); u.ai_chat_on = !!cfg.enabled && !!process.env.ANTHROPIC_API_KEY; } catch (e) { u.ai_chat_on = false; }
   // Kdo ještě nepotvrdil VOP a souhlas se zpracováním osobních údajů (např. přenesený ze starého systému), musí je nejdřív odsouhlasit
@@ -425,8 +431,8 @@ app.post('/login/2fa', wrap(async (req, res) => {
 // ── Dvoufázové ověření investora (nastavení v Můj účet) ──
 app.get('/2fa', wrap(requireUser), wrap(async (req, res) => {
   const u = req.user; let setup = null;
-  if (!u.totp_enabled) { const secret = b32enc(crypto.randomBytes(20)); await q('UPDATE supporters SET totp_secret=$2 WHERE id=$1', [u.id, encSecret(secret)]); setup = { secret, uri: 'otpauth://totp/' + encodeURIComponent('Best Series 2.0:' + (u.nick || u.email)) + '?secret=' + secret + '&issuer=' + encodeURIComponent('Best Series 2.0') + '&digits=6&period=30' }; }
-  res.send(V.tfaPage({ s: u, enabled: !!u.totp_enabled, setup, left: Array.isArray(u.totp_backup) ? u.totp_backup.length : 0, error: req.query.err ? String(req.query.err).slice(0, 120) : '' }));
+  if (!u.totp_enabled) { let secret = decSecret(u.totp_secret); if (!secret) { secret = b32enc(crypto.randomBytes(20)); await q('UPDATE supporters SET totp_secret=$2 WHERE id=$1', [u.id, encSecret(secret)]); } setup = { secret, uri: 'otpauth://totp/' + encodeURIComponent('Best Series 2.0:' + (u.nick || u.email)) + '?secret=' + secret + '&issuer=' + encodeURIComponent('Best Series 2.0') + '&digits=6&period=30' }; }
+  res.send(V.tfaPage({ s: u, enabled: !!u.totp_enabled, setup, forced: USER_2FA_REQUIRED, left: Array.isArray(u.totp_backup) ? u.totp_backup.length : 0, error: req.query.err ? String(req.query.err).slice(0, 120) : '' }));
 }));
 app.post('/2fa/enable', wrap(requireUser), wrap(async (req, res) => {
   const u = req.user; if (u.totp_enabled) return res.redirect('/2fa');
@@ -436,10 +442,11 @@ app.post('/2fa/enable', wrap(requireUser), wrap(async (req, res) => {
   const codes = Array.from({ length: 8 }, () => crypto.randomBytes(5).toString('hex').toUpperCase().replace(/(.{5})(.{5})/, '$1-$2'));
   await q('UPDATE supporters SET totp_enabled=true, totp_backup=$2, pw_changed_at=now() WHERE id=$1', [u.id, JSON.stringify(codes.map(hashCode))]);
   setCookie(req, res, USER_COOKIE, { kind: 'user', sid: u.id, nick: u.nick }, 7 * 24 * 3600); // obnov relaci (ostatní zařízení se odhlásí)
-  res.send(V.tfaPage({ s: u, enabled: true, codes, left: codes.length }));
+  res.send(V.tfaPage({ s: u, enabled: true, codes, forced: USER_2FA_REQUIRED, left: codes.length }));
 }));
 app.post('/2fa/disable', wrap(requireUser), wrap(async (req, res) => {
   const u = req.user; if (!u.totp_enabled) return res.redirect('/2fa');
+  if (USER_2FA_REQUIRED) return res.redirect('/2fa?err=' + encodeURIComponent('Dvoufázové ověření je povinné a nelze ho vypnout. Při ztrátě telefonu kontaktuj správce.'));
   if (rateLimited('tfadis:' + u.id, 8, 15 * 60e3)) return res.status(429).send(V.errorPage('Příliš mnoho pokusů', 'Zkus to za 15 minut.', '/2fa'));
   const code = String(req.body.code || ''); const sec = decSecret(u.totp_secret);
   const h = hashCode(code); const list = Array.isArray(u.totp_backup) ? u.totp_backup : [];
@@ -2972,6 +2979,10 @@ app.post('/admin/supporters/:id(\\d+)/password', requireAdmin, wrap(async (req, 
   res.redirect('/admin/supporters/' + req.params.id + '?msg=' + encodeURIComponent('Nové dočasné heslo pro ' + (u.nick || u.email) + ': ' + pwd + ' — pošli ho uživateli, ať si ho po přihlášení změní.'));
 }));
 // „Reset přihlášení" (smazání nicku + hesla) odstraněn 2026-10-05 na přání Tomáše — nahrazen akcí Nové heslo. Endpoint záměrně neexistuje.
+app.post('/admin/supporters/:id(\\d+)/2fa-reset', requireAdmin, wrap(async (req, res) => {
+  await q('UPDATE supporters SET totp_enabled=false, totp_secret=NULL, totp_backup=NULL, pw_changed_at=now(), updated_at=now() WHERE id=$1', [req.params.id]); await log(req.admin, '2fa-reset', { id: Number(req.params.id) });
+  res.redirect('/admin/supporters/' + req.params.id + '?msg=' + encodeURIComponent('2FA zrušeno — při dalším přihlášení si ho uživatel nastaví znovu.'));
+}));
 app.post('/admin/supporters/:id(\\d+)/block', requireAdmin, wrap(async (req, res) => {
   await q("UPDATE supporters SET status='blocked', updated_at=now() WHERE id=$1", [req.params.id]); await log(req.admin, 'block', { id: Number(req.params.id) });
   res.redirect('/admin/supporters/' + req.params.id + '?msg=' + encodeURIComponent('Účet zablokován.'));

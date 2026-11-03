@@ -2225,6 +2225,7 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
       <div class="list-item"><span class="muted">Import</span><span class="small">${esc(s.source || '—')} ${s.imported_at ? '· ' + fmtDT(s.imported_at) : ''}</span></div>
       <div class="row" style="margin-top:12px">
         <form method="post" action="/admin/supporters/${s.id}/password" onsubmit="return confirm('Vygenerovat nové dočasné heslo? Nick zůstane, staré heslo přestane platit.')"><button class="btn sm" type="submit">${ico('key', 16)} Nové heslo</button></form>
+        <form method="post" action="/admin/supporters/${s.id}/2fa-reset" onsubmit="return confirm('Zrušit uživateli dvoufázové ověření? Při dalším přihlášení si ho nastaví znovu.')"><button class="btn sec sm" type="submit">${ico('key', 16)} Reset 2FA${s.totp_enabled ? ' (zapnuto)' : ''}</button></form>
         <a class="btn sec sm" href="/admin/stats/user/${s.id}">Chování a statistiky</a>
         <form method="post" action="/admin/supporters/${s.id}/${s.status === 'blocked' ? 'unblock' : 'block'}"><button class="btn ${s.status === 'blocked' ? 'sec' : 'danger'} sm" type="submit">${s.status === 'blocked' ? ico('check', 16) + ' Odblokovat' : ico('block', 16) + ' Blokovat'}</button></form>
         <form method="post" action="/admin/supporters/${s.id}/delete" onsubmit="return confirm('Opravdu smazat uživatele ' + ${JSON.stringify(s.email)} + '?')"><button class="btn danger sm" type="submit">${ico('trash', 16)} Smazat</button></form>
@@ -2353,19 +2354,19 @@ function userTfaLoginPage({ error = '' } = {}) {
     <button class="btn" type="submit">Ověřit ${ICON.arrow}</button></form>
     <p class="foot"><a href="/login">Zpět na přihlášení</a></p>` });
 }
-function tfaPage({ s, enabled = false, setup = null, codes = null, left = 0, error = '' }) {
+function tfaPage({ s, enabled = false, setup = null, codes = null, left = 0, error = '', forced = false }) {
   const u = s || {};
   let body;
   if (codes) body = `<div class="msg ok">Dvoufázové ověření je zapnuté. Ulož si záložní kódy — každý jde použít jednou, když nemáš telefon. <b>Znovu se už nezobrazí.</b></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0;font-family:ui-monospace,Consolas,monospace">${codes.map((c) => `<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px;text-align:center">${esc(c)}</div>`).join('')}</div>
     <a class="btn full" href="/password">Hotovo</a>`;
   else if (enabled) body = `<p><span class="badge" style="background:rgba(34,197,94,.18);color:#4ade80">Zapnuto</span> <span class="muted">Zbývá záložních kódů: ${left}</span></p>
-    <h3>Vypnout</h3><p class="muted small">Pro vypnutí zadej heslo a kód z aplikace.</p>
     ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
+    ${forced ? `<p class="muted small">Dvoufázové ověření je povinné pro všechny účty. Při ztrátě telefonu a záložních kódů kontaktuj správce, který ho resetuje.</p>` : `<h3>Vypnout</h3><p class="muted small">Pro vypnutí zadej heslo a kód z aplikace.</p>
     <form method="post" action="/2fa/disable"><label>Heslo</label><input name="password" type="password" autocomplete="current-password" required>
     <label>Kód z aplikace nebo záložní kód</label><input name="code" inputmode="numeric" autocomplete="one-time-code" required>
-    <div style="height:14px"></div><button class="btn full" type="submit">Vypnout dvoufázové ověření</button></form>`;
-  else body = `<p class="muted">Po zapnutí se při přihlášení kromě hesla zadává kód z aplikace Authenticator (Google / Microsoft). Chrání tvůj účet i při úniku hesla.</p>
+    <div style="height:14px"></div><button class="btn full" type="submit">Vypnout dvoufázové ověření</button></form>`}`;
+  else body = `${forced ? `<div class="msg err" style="margin-bottom:12px"><b>Dvoufázové ověření je povinné.</b> Než budeš pokračovat v aplikaci, nastav si ho (zabere to minutu).</div>` : ''}<p class="muted">Po zapnutí se při přihlášení kromě hesla zadává kód z aplikace Authenticator (Google / Microsoft). Chrání tvůj účet i při úniku hesla.</p>
     <p><b>1.</b> Naskenuj QR kód v aplikaci:</p><div style="text-align:center">${qrBlock(setup.uri)}<div class="small muted" style="margin-top:6px">Ruční zadání: <code>${esc(setup.secret)}</code></div></div>
     ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
     <p><b>2.</b> Opiš 6místný kód:</p>
