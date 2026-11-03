@@ -802,6 +802,15 @@ function mstInternal(email) {
   const at = em.lastIndexOf('@');
   return at > 0 && domains.indexOf(em.slice(at + 1)) !== -1;
 }
+// Zdroj schůzky: kdo ji domluvil. Obchodník = rezervace s booked_by_person_id (rezervoval v aplikaci obchodníka);
+// Reklama = zákazník si termín vybral sám a kontakt přišel z reklamy (Meta / Google / LinkedIn formuláře, UTM);
+// Sám z webu = ostatní samostatné rezervace (cesta z SMS / e-mailu, bestseries2.cz, pradlomaty.info…).
+const MST_ADS_RE = /(facebook|fb_|meta|google|gads|linkedin|instagram|tiktok|_ads$|^ads)/i;
+function mstSource(r, leadSrc) {
+  if (r.booked_by_person_id) return { key: 'p:' + r.booked_by_person_id, kind: 'sales' };
+  if (leadSrc && MST_ADS_RE.test(leadSrc)) return { key: 'ads', kind: 'ads' };
+  return { key: 'self', kind: 'self' };
+}
 router.get('/bs2/meetings-stats', async (req, res, next) => {
   try {
     if (!verifyMeetingsToken(req, res)) return;
@@ -825,8 +834,16 @@ router.get('/bs2/meetings-stats', async (req, res, next) => {
           : new Date(Date.now() + (fwd * 7 + 9) * 86400000);
     const rows = await prisma.meetingReservation.findMany({
       where: { slot: { starts_at: { gte: from, lt: to } } },
-      select: { status: true, email: true, slot: { select: { starts_at: true } } },
+      select: { status: true, email: true, booked_by_person_id: true, compounder_lead_id: true, slot: { select: { starts_at: true } } },
     });
+    // Zdroje: kontakt (source) + jména obchodníků — dvěma dotazy, ne po řádcích
+    const leadIds = [...new Set(rows.map((r) => r.compounder_lead_id).filter(Boolean))];
+    const leadSrc = new Map((leadIds.length ? await prisma.compounderLead.findMany({ where: { id: { in: leadIds } }, select: { id: true, source: true } }).catch(() => []) : []).map((l) => [l.id, l.source || '']));
+    const pIds = [...new Set(rows.map((r) => r.booked_by_person_id).filter(Boolean))];
+    const pName = new Map((pIds.length ? await prisma.person.findMany({ where: { id: { in: pIds } }, select: { id: true, first_name: true, last_name: true } }).catch(() => []) : []).map((p) => [p.id, [p.first_name, p.last_name].filter(Boolean).join(' ')]));
+    const src = String(req.query.src || 'all');
+    const srcMatch = (s) => src === 'all' || src === s.kind || src === s.key;
+    const bySrc = {};
     const now = Date.now();
     const cells = buckets.map(() => mstCell());
     const totals = mstCell();
@@ -836,6 +853,10 @@ router.get('/bs2/meetings-stats', async (req, res, next) => {
       if (mstInternal(r.email)) { internal++; return; }
       const i = idx[mstBucket(group, mstParts(r.slot.starts_at)).key];
       if (i === undefined) return;
+      const so = mstSource(r, leadSrc.get(r.compounder_lead_id));
+      if (!bySrc[so.key]) bySrc[so.key] = Object.assign({ key: so.key, kind: so.kind, label: so.kind === 'sales' ? (pName.get(r.booked_by_person_id) || ('Obchodník #' + r.booked_by_person_id)) : so.kind === 'ads' ? 'Reklama' : 'Sám z webu / odkazu' }, mstCell());
+      mstAdd(bySrc[so.key], r.status, r.slot.starts_at, now);
+      if (!srcMatch(so)) return;
       mstAdd(cells[i], r.status, r.slot.starts_at, now);
       mstAdd(totals, r.status, r.slot.starts_at, now);
     });
@@ -851,6 +872,20 @@ router.get('/bs2/meetings-stats', async (req, res, next) => {
       buckets: out,
       totals: Object.assign({}, totals, { rate: mstRate(totals) }),
       internal_skipped: internal,
+      src,
+      // Rozpad podle zdroje za celé zobrazené období: souhrn Obchodníci + po obchodnících, Reklama, Sám z webu
+      sources: (() => {
+        const list = Object.values(bySrc);
+        const sales = list.filter((x) => x.kind === 'sales');
+        const sum = mstCell(); sales.forEach((x) => Object.keys(sum).forEach((k) => { sum[k] += x[k]; }));
+        const withRate = (x) => Object.assign({}, x, { rate: mstRate(x) });
+        const out = [];
+        if (sales.length) out.push(withRate(Object.assign({ key: 'sales', kind: 'sales_total', label: 'Obchodníci celkem' }, sum)));
+        sales.sort((a, b) => b.booked - a.booked).forEach((x) => out.push(withRate(x)));
+        list.filter((x) => x.kind === 'ads').forEach((x) => out.push(withRate(x)));
+        list.filter((x) => x.kind === 'self').forEach((x) => out.push(withRate(x)));
+        return out;
+      })(),
     });
   } catch (err) { next(err); }
 });

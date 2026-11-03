@@ -354,13 +354,13 @@ root.querySelector('.mt-usrreload').onclick=usrLoad;
 // ── Statistiky schůzek — kolik se jich na dané období domluvilo a kolik proběhlo ──
 // Schůzka patří do období podle TERMÍNU, ne podle data domluvení, aby byl obojí
 // údaj ve stejném sloupci. Úspěšnost = proběhlé / vyřešené (nadcházející se nepočítají).
-var statGroup='day', statData=null, statBusy=false, statDivFrac=null;
+var statGroup='day', statData=null, statBusy=false, statDivFrac=null, statSrc='all', statSrcLabel='';
 var STAT_N={day:28,week:12,month:12,year:5};
 function statLoad(){
   var box=root.querySelector('.mt-statwrap');
   if(statBusy)return; statBusy=true;
   box.innerHTML='<div class="mt-empty">Načítám…</div>';
-  api('/admin/api/meetings-stats?group='+statGroup+'&n='+STAT_N[statGroup])
+  api('/admin/api/meetings-stats?group='+statGroup+'&n='+STAT_N[statGroup]+'&src='+encodeURIComponent(statSrc))
     .then(function(j){statBusy=false;statData=j;statRender();})
     .catch(function(e){statBusy=false;box.innerHTML='<div class="mt-empty" style="color:#ff8f8f">'+esc(e.message)+'</div>';});
 }
@@ -416,8 +416,17 @@ function statRender(){
       +'<td>'+(x.rate!=null?x.rate+' %':'<span class="muted">—</span>')+'</td></tr>';
   }).join('');
   var avail=(box.clientWidth||root.clientWidth||900)-36;
+  // Rozpad podle zdroje: kdo schůzku domluvil (obchodníci / reklama / zákazník sám). Klik = filtr grafu i čísel nahoře.
+  var SK={sales_total:'👥',sales:'🧑‍💼',ads:'📣',self:'🌐'};
+  var srcRows=(statData.sources||[]).map(function(x){var on=statSrc===x.key||(statSrc==='sales'&&x.key==='sales');
+    return '<tr data-ssrc="'+esc(x.key)+'" data-slabel="'+esc(x.label)+'" style="cursor:pointer'+(on?';background:rgba(79,209,255,.1)':'')+'"><td'+(x.kind==='sales'?' style="padding-left:26px"':'')+'>'+(SK[x.kind]||'')+' <b>'+esc(x.label)+'</b></td><td>'+x.booked+'</td><td style="color:#2fe3a0">'+x.done+'</td><td>'+x.no_show+'</td><td>'+x.canceled+'</td><td>'+x.unmarked+'</td><td>'+x.upcoming+'</td>'
+      +'<td>'+(x.rate!=null?'<b>'+x.rate+' %</b>':'<span class="muted">—</span>')+'</td></tr>';}).join('');
+  var srcBox=srcRows?'<h3 style="margin:18px 0 6px">Úspěšnost podle zdroje <span class="muted small" style="font-weight:500">· kdo schůzku domluvil · klikněte na řádek pro filtr grafu</span></h3>'
+    +(statSrc!=='all'?'<div style="margin:0 0 8px"><span class="mt-pill" style="border-color:#4fd1ff;color:#4fd1ff">Zobrazeno: '+esc(statSrcLabel||statSrc)+'</span> <button class="btn sec sm" data-ssrc="all">✕ Všechny zdroje</button></div>':'')
+    +'<div class="mt-tw"><table><thead><tr><th>Zdroj</th><th>Domluveno</th><th>Proběhlo</th><th>Nedorazil</th><th>Zrušeno</th><th>Neoznačeno</th><th>Nadchází</th><th>Úspěšnost</th></tr></thead><tbody>'+srcRows+'</tbody></table></div>'
+    +'<p class="muted small" style="margin:6px 0 0">Obchodník = schůzku zarezervoval v aplikaci obchodníka. Reklama = zákazník si termín vybral sám a kontakt přišel z reklamy (Meta / Google / LinkedIn). Sám z webu / odkazu = ostatní samostatné rezervace (cesta z SMS či e-mailu, bestseries2.cz…).</p>':'';
   box.innerHTML=kpi
-    +'<div class="mt-chart">'+statChart(b,avail)+'</div>'+leg
+    +'<div class="mt-chart">'+statChart(b,avail)+'</div>'+leg+srcBox
     +'<div class="mt-tw" style="margin-top:16px"><table><thead><tr><th>Období</th><th>Domluveno</th><th>Proběhlo</th><th>Nedorazil</th><th>Zrušeno</th><th>Neoznačeno</th><th>Nadchází</th><th>Úspěšnost</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +(statData.internal_skipped?'<p class="muted small" style="margin:10px 0 0">Nepočítá se '+statData.internal_skipped+' našich vlastních (testovacích) rezervací z firemních e-mailů.</p>':'');
   // Graf jde dál doprava než se vejde — odrolujeme tak, aby byl dnešek i kus dopředu vidět.
@@ -426,6 +435,8 @@ function statRender(){
 }
 var statRz=null;
 window.addEventListener('resize',function(){if(!statData)return;clearTimeout(statRz);statRz=setTimeout(statRender,200);});
+root.addEventListener('click',function(e){var r=e.target.closest('[data-ssrc]');if(!r)return;
+  var k=r.getAttribute('data-ssrc');statSrc=(k===statSrc?'all':k);statSrcLabel=r.getAttribute('data-slabel')||'';statLoad();});
 root.addEventListener('click',function(e){var b=e.target.closest('[data-sgrp]');if(!b)return;
   statGroup=b.getAttribute('data-sgrp');
   root.querySelectorAll('[data-sgrp]').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-sgrp')===statGroup);});
