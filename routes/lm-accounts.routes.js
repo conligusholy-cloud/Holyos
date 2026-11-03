@@ -149,4 +149,20 @@ router.post('/:id(\\d+)/password', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /list — přehled účtů pro administraci Laundromats (záložka Uživatelé)
+router.get('/list', async (req, res, next) => {
+  try {
+    const rows = await prisma.lmAccount.findMany({ orderBy: { created_at: 'desc' }, take: 2000,
+      select: { id: true, email: true, name: true, phone: true, company: true, plan: true, disabled: true, email_verified_at: true, last_login_at: true, login_count: true, compounder_lead_id: true, created_at: true } });
+    res.json({ ok: true, users: rows });
+  } catch (err) { next(err); }
+});
+// POST /:id/disabled {disabled} — zablokovat / odblokovat účet (zablokovaný se odhlásí do 5 minut)
+router.post('/:id(\\d+)/disabled', async (req, res, next) => {
+  try {
+    const upd = await prisma.lmAccount.update({ where: { id: parseInt(req.params.id, 10) }, data: { disabled: !!(req.body || {}).disabled, token_version: { increment: 1 } }, select: { id: true, disabled: true } });
+    res.json({ ok: true, disabled: upd.disabled });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

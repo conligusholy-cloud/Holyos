@@ -228,13 +228,66 @@ function hotRender(){
   });
   hotT.setRows(hot);
 }
+// ── Uživatelé — účty registrované na laundromats.eu (/cesta/registrace) ──
+var usr=null, usrT=null;
+function usrLoad(){
+  var box=root.querySelector('.mt-usrwrap');
+  box.innerHTML='<div class="mt-empty">Načítám…</div>';
+  api('/admin/api/users').then(function(j){usr=j.users||[];usrRender();})
+    .catch(function(e){box.innerHTML='<div class="mt-empty" style="color:#ff8f8f">'+esc(e.message)+'</div>';});
+}
+function dtm(v){if(!v)return '<span class="muted">—</span>';var d=new Date(v);return dlong(d)+' '+hm(d);}
+function usrRow(u){
+  var lead=u.compounder_lead_id&&window.LM_HOLYOS?'<a href="'+window.LM_HOLYOS+'/modules/prodejni-objednavky/index.html?lead='+u.compounder_lead_id+'" target="_blank" rel="noopener" class="small">kontakt #'+u.compounder_lead_id+' ↗</a>':(u.compounder_lead_id?'<span class="small muted">#'+u.compounder_lead_id+'</span>':'<span class="muted">—</span>');
+  return '<tr'+(u.disabled?' style="opacity:.55"':'')+'><td><span class="nm">'+esc(u.name)+'</span></td>'
+    +'<td><a href="mailto:'+esc(u.email)+'">'+esc(u.email)+'</a></td>'
+    +'<td>'+(u.phone?'<a href="tel:'+esc(u.phone)+'">'+esc(u.phone)+'</a>':'<span class="muted">—</span>')+'</td>'
+    +hcell(u.company)
+    +'<td>'+dtm(u.created_at)+'</td>'
+    +'<td>'+(u.email_verified_at?'<span class="mt-pill" style="color:#4ade80;border-color:#4ade80">ověřen</span>':'<span class="mt-pill" style="color:#ffd866;border-color:#ffd866">čeká na ověření</span>')+'</td>'
+    +'<td>'+dtm(u.last_login_at)+'</td><td style="text-align:right">'+(u.login_count||0)+'</td>'
+    +'<td>'+lead+'</td>'
+    +'<td><button class="btn sec sm" data-udis="'+u.id+'" data-on="'+(u.disabled?0:1)+'"'+(u.disabled?'':' style="color:#ff8f8f"')+'>'+(u.disabled?'Odblokovat':'Zablokovat')+'</button></td></tr>';
+}
+function usrRender(){
+  var box=root.querySelector('.mt-usrwrap');
+  if(!usr){box.innerHTML='';return;}
+  var ver=usr.filter(function(u){return u.email_verified_at;}).length;
+  root.querySelector('.mt-usrsum').textContent=usr.length?('Celkem '+usr.length+' · ověřených '+ver+' · zablokovaných '+usr.filter(function(u){return u.disabled;}).length):'';
+  if(!usr.length){box.innerHTML='<div class="mt-empty">Zatím se nikdo nezaregistroval. Registrace je na laundromats.eu/cesta/registrace.</div>';return;}
+  box.innerHTML='<div class="mt-tw"><table class="usr-dt"><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Firma</th><th>Registrace</th><th>Ověření</th><th>Poslední přihlášení</th><th>Přihlášení</th><th>Kontakt v HolyOS</th><th></th></tr></thead><tbody></tbody></table></div>';
+  if(!window.ColFilters){box.querySelector('tbody').innerHTML=usr.map(usrRow).join('');return;}
+  usrT=window.ColFilters.table({
+    table:function(){return root.querySelector('.usr-dt');},
+    columns:[
+      {key:'name',label:'Jméno',get:function(u){return u.name||'';},ph:'Jméno…',enum:false},
+      {key:'email',label:'E-mail',get:function(u){return u.email||'';},ph:'E-mail…',enum:false},
+      {key:'phone',label:'Telefon',get:function(u){return u.phone||'';},ph:'Telefon…',enum:false},
+      {key:'company',label:'Firma',get:function(u){return u.company||'';},ph:'Firma…'},
+      {key:'created_at',label:'Registrace',type:'date',get:function(u){return u.created_at||null;}},
+      {key:'verified',label:'Ověření',get:function(u){return u.email_verified_at?'ověřen':'čeká na ověření';},ph:'Vyber…',enum:true},
+      {key:'last_login_at',label:'Poslední přihlášení',type:'date',get:function(u){return u.last_login_at||null;}},
+      {key:'login_count',label:'Přihlášení',type:'number',get:function(u){return u.login_count||0;}},
+      {key:'lead',label:'Kontakt v HolyOS',get:function(u){return u.compounder_lead_id?String(u.compounder_lead_id):'';},enum:false},
+      {key:'act',label:'',get:function(u){return u.disabled?'zablokovaný':'aktivní';},enum:true}
+    ],
+    renderRow:usrRow, progressive:true, noun:'uživatelů', emptyText:'Žádný uživatel.'
+  });
+  usrT.setRows(usr);
+}
+root.addEventListener('click',function(e){var b=e.target.closest('[data-udis]');if(!b)return;e.stopPropagation();var id=+b.getAttribute('data-udis'),dis=b.getAttribute('data-on')==='1';
+  if(dis&&!confirm('Zablokovat účet? Uživatel se odhlásí a nebude se moci přihlásit.'))return;b.disabled=true;
+  api('/admin/api/users/'+id+'/disabled',{disabled:dis}).then(function(){(usr||[]).forEach(function(u){if(u.id===id)u.disabled=dis;});usrRender();}).catch(function(er){b.disabled=false;alert(er.message);});},true);
+root.querySelector('.mt-usrreload').onclick=usrLoad;
 // Přepínání záložek. Seznam se tahá ze serveru až při prvním otevření.
 function tab(name){
-  var isHot=name==='hot';
+  var isHot=name==='hot', isUsr=name==='usr';
   root.querySelectorAll('.mt-tabs button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-tab')===name);});
-  root.querySelector('.mt-meet').style.display=isHot?'none':'';
+  root.querySelector('.mt-meet').style.display=(isHot||isUsr)?'none':'';
   root.querySelector('.mt-hot').style.display=isHot?'':'none';
+  root.querySelector('.mt-usr').style.display=isUsr?'':'none';
   if(isHot&&hot===null)hotLoad();
+  if(isUsr&&usr===null)usrLoad();
 }
 root.querySelectorAll('.mt-tabs button').forEach(function(b){b.onclick=function(){tab(b.getAttribute('data-tab'));};});
 
@@ -264,7 +317,7 @@ function meetingsPage({ admin, holyosUrl, error }) {
   <div class="top"><b>Laundromats<span>.eu</span></b><span class="muted">Administrace schůzek</span><span class="sp"></span><span class="who">${nm}</span>${holyosUrl ? `<a href="${holyosUrl}" class="small">← HolyOS</a>` : ''}<a href="/admin/logout" class="small">Odhlásit</a></div>
   <div class="wrap"><style>${CSS}</style>
   <div id="mt">
-    <div class="mt-tabs"><button data-tab="meet" class="on">📅 Schůzky</button><button data-tab="hot">⭐ Jmenný seznam</button></div>
+    <div class="mt-tabs"><button data-tab="meet" class="on">📅 Schůzky</button><button data-tab="hot">⭐ Jmenný seznam</button><button data-tab="usr">👤 Uživatelé</button></div>
     <div class="mt-meet">
     <div class="mt-bar"><h2>📅 Kalendář schůzek</h2>
       <button class="btn sec sm mt-prev">←</button><span class="mt-range"></span><button class="btn sec sm mt-next">→</button>
@@ -280,9 +333,14 @@ function meetingsPage({ admin, holyosUrl, error }) {
       <p class="muted small" style="margin:-6px 0 14px">Kontakty, které jsou v HolyOS označené jako <b>zajímavý kontakt</b> (hvězdička v kartě kontaktu). Seznam se bere živě z HolyOS.</p>
       <div class="mt-hotwrap card"></div>
     </div>
+    <div class="mt-usr" style="display:none">
+      <div class="mt-bar"><h2>👤 Uživatelé</h2><span style="flex:1"></span><span class="muted small mt-usrsum"></span><button class="btn sec sm mt-usrreload">↻ Obnovit</button></div>
+      <p class="muted small" style="margin:-6px 0 14px">Účty registrované na <a href="/cesta/registrace" target="_blank">laundromats.eu/cesta/registrace</a> – mají přístup ke Compounderu, Prádlomatům, Ekonomice, Najít místo a Zhodnotit místo. Každá registrace se zároveň spáruje s kontaktem v HolyOS.</p>
+      <div class="mt-usrwrap card"></div>
+    </div>
   </div></div>
   ${holyosUrl ? `<script src="${holyosUrl}/js/column-filters.js"></script>` : ''}
-  <script>${JS}</script></body></html>`;
+  <script>window.LM_HOLYOS=${JSON.stringify(holyosUrl || '')};</script><script>${JS}</script></body></html>`;
 }
 
 module.exports = { meetingsPage };
