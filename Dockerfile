@@ -29,10 +29,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       gnupg \
   && rm -rf /var/lib/apt/lists/*
 
-# pg_dump 17 (klient z PGDG repozitáře — dokáže zálohovat servery PostgreSQL 12–17) pro noční šifrované zálohy databáze.
+# pg_dump 18 (klient z PGDG repozitáře — musí mít verzi ≥ serveru; produkční DB je PostgreSQL 18.6) pro noční šifrované zálohy databáze.
 RUN curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg \
   && echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
-  && apt-get update && apt-get install -y --no-install-recommends postgresql-client-17 \
+  && apt-get update && apt-get install -y --no-install-recommends postgresql-client-18 \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
