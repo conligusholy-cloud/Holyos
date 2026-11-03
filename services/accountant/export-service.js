@@ -208,7 +208,7 @@ async function runExport(from, to, opts = {}) {
       + (N > 1 ? '⚠️ Kvůli velikosti příloh posíláme doklady za toto období ve ' + eml(N) + '. Toto je ' + n + '. e-mail z ' + N + (opts.test ? ' (v testu se posílá jen tento první)' : ' — prosím zkontrolujte, že vám dorazily všechny') + '.\n\n' : '')
       + 'V této zprávě: ' + p.length + ' dokladů (' + (bytes / 1048576).toFixed(1).replace('.', ',') + ' MB).\n'
       + 'Celkem za období: ' + docs.length + ' dokladů (přijaté ' + docs.filter((d) => d.inv.direction === 'ap').length + ', vydané ' + docs.filter((d) => d.inv.direction === 'ar').length + ')' + (missing.length ? ', z toho ' + missing.length + ' bez přílohy (uvedeny v seznamu)' : '') + '.\n'
-      + 'Úplný seznam dokladů je v souboru seznam-dokladu.csv' + (N > 1 ? ' v části 1' : '') + '.\n' + (opts.test ? '\nTOTO JE TESTOVACÍ ODESLÁNÍ: posílá se jen 1. část' + (N > 1 ? ' z ' + N + ' (zbylých ' + (docs.length - p.length) + ' dokladů by přišlo v dalších e-mailech)' : '') + '; doklady nejsou označené jako odeslané.\n' : '') + '\nS pozdravem\n' + firm + '\n(automaticky odesláno z HolyOS)';
+      + 'Úplný seznam dokladů je v souboru seznam-dokladu.csv' + (N > 1 ? ' v části 1' : '') + '.\n' + (opts.test ? '\nTOTO JE TESTOVACÍ ODESLÁNÍ: posílá se jen 1. část' + (N > 1 ? ' z ' + N + ' (zbylých ' + (docs.length - p.length) + ' dokladů by přišlo v dalších e-mailech)' : '') + '; doklady nejsou označené jako odeslané.\n' : '') + '\nS pozdravem\n' + firm;
     const info = { part: n, file: fname, bytes, docs: p.length, sent: false };
     try {
       const r = await sendPart({ sender: cfg.sender, recipients, subject, body, file: zipPath, filename: fname });
@@ -229,6 +229,8 @@ async function resendExport(id, { all = false, recipients } = {}) {
   const exp = await prisma.accountingExport.findUnique({ where: { id } });
   if (!exp) throw new Error('Export nenalezen');
   const cfg = await getConfig();
+  const our = await getOurCompany().catch(() => null);
+  const firm = (our && our.name) || 'Best Series';
   const parts = Array.isArray(exp.parts) ? exp.parts : [];
   const to = String(recipients || exp.recipients);
   const periodTxt = csDate(exp.period_from) + ' – ' + csDate(new Date(new Date(exp.period_to).getTime() - 1));
@@ -238,7 +240,7 @@ async function resendExport(id, { all = false, recipients } = {}) {
     const file = path.join(EXPORT_DIR, String(exp.id), p.file);
     if (!fs.existsSync(file)) { p.error = 'ZIP už na disku není'; continue; }
     try {
-      const r = await sendPart({ sender: cfg.sender, recipients: to, subject: 'Doklady ' + periodTxt + (parts.length > 1 ? ' (část ' + p.part + '/' + parts.length + ')' : '') + ' — opakované odeslání', body: 'Dobrý den,\n\nznovu zasíláme doklady za období ' + periodTxt + (parts.length > 1 ? ' — část ' + p.part + ' z ' + parts.length : '') + '.\n\nS pozdravem\n(automaticky odesláno z HolyOS)', file, filename: p.file });
+      const r = await sendPart({ sender: cfg.sender, recipients: to, subject: 'Doklady ' + periodTxt + (parts.length > 1 ? ' (část ' + p.part + '/' + parts.length + ')' : '') + ' — opakované odeslání', body: 'Dobrý den,\n\nznovu zasíláme doklady za období ' + periodTxt + (parts.length > 1 ? ' — část ' + p.part + ' z ' + parts.length : '') + '.\n\nS pozdravem\n' + firm, file, filename: p.file });
       p.sent = true; p.sent_at = new Date().toISOString(); p.via = r.via; delete p.error; ok++;
       await prisma.accountingExportItem.updateMany({ where: { export_id: exp.id, part: p.part }, data: { sent: true } });
     } catch (e) { p.error = String(e.message || e).slice(0, 500); }
