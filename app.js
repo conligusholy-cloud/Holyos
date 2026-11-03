@@ -1383,6 +1383,11 @@ server.listen(PORT, async () => {
     console.error('[app] payment-milestone-worker nelze spustit:', err.message);
   }
   try {
+    require('./services/accountant/export-service').start(); // 📦 automatický export dokladů účetním (období + e-mail)
+  } catch (err) {
+    console.error('[app] acc-export worker nelze spustit:', err.message);
+  }
+  try {
     require('./services/voice/recordings-cleanup-worker').start(); // hlídač úložiště: archiv nahrávek do R2 + upozornění na plný volume/DB
   } catch (err) {
     console.error('[app] recordings-cleanup-worker nelze spustit:', err.message);

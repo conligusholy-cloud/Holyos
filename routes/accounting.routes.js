@@ -3252,4 +3252,58 @@ router.post('/invoices/:id/verify-bank-account', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── 📦 Exporty dokladů pro účetní (services/accountant/export-service.js) ───────────────
+// GET  /exports/config            nastavení + příští období
+// PUT  /exports/config            uložit nastavení
+// GET  /exports/preview?from&to   náhled (počet dokladů, odhad velikosti a počtu ZIPů) — nic neposílá
+// POST /exports/run {from,to,recipients?,include_sent?}  ruční export a odeslání
+// GET  /exports                   historie odeslání
+// GET  /exports/:id               detail (seznam dokladů)
+// GET  /exports/:id/download?part=N   stažení ZIPu
+// POST /exports/:id/resend {all?, recipients?}  znovu odeslat (neodeslané / všechny části)
+const accExport = require('../services/accountant/export-service');
+router.get('/exports/config', async (req, res, next) => {
+  try { const cfg = await accExport.getConfig(); const np = accExport.nextPeriod(cfg); res.json({ config: cfg, next: np, intervals: accExport.INTERVAL_LABEL }); } catch (err) { next(err); }
+});
+router.put('/exports/config', async (req, res, next) => {
+  try { const cfg = await accExport.saveConfig(req.body || {}, req.user && req.user.id); res.json({ ok: true, config: cfg, next: accExport.nextPeriod(cfg) }); } catch (err) { next(err); }
+});
+function _expRange(q) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(q.from || '')) || !/^\d{4}-\d{2}-\d{2}$/.test(String(q.to || ''))) return null;
+  const from = accExport.dayStart(q.from); const to = accExport.dayStart(q.to); to.setDate(to.getDate() + 1); // „do" včetně celého dne
+  return to > from ? { from, to } : null;
+}
+router.get('/exports/preview', async (req, res, next) => {
+  try { const r = _expRange(req.query); if (!r) return res.status(400).json({ error: 'Zadej platné období od–do' }); res.json(await accExport.runExport(r.from, r.to, { dryRun: true, includeSent: req.query.include_sent === '1' })); } catch (err) { next(err); }
+});
+router.post('/exports/run', async (req, res, next) => {
+  try {
+    const b = req.body || {}; const r = _expRange(b); if (!r) return res.status(400).json({ error: 'Zadej platné období od–do' });
+    res.json(await accExport.runExport(r.from, r.to, { trigger: 'manual', recipients: b.recipients || undefined, includeSent: !!b.include_sent, userId: req.user && req.user.id }));
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+router.get('/exports', async (req, res, next) => {
+  try { res.json(await prisma.accountingExport.findMany({ orderBy: { created_at: 'desc' }, take: 200 })); } catch (err) { next(err); }
+});
+router.get('/exports/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10); if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné id' });
+    const exp = await prisma.accountingExport.findUnique({ where: { id }, include: { items: { orderBy: [{ part: 'asc' }, { direction: 'asc' }, { invoice_number: 'asc' }] } } });
+    if (!exp) return res.status(404).json({ error: 'Export nenalezen' });
+    res.json(exp);
+  } catch (err) { next(err); }
+});
+router.get('/exports/:id/download', async (req, res, next) => {
+  try {
+    const exp = await prisma.accountingExport.findUnique({ where: { id: parseInt(req.params.id, 10) || 0 } });
+    if (!exp) return res.status(404).json({ error: 'Export nenalezen' });
+    const f = accExport.zipPathFor(exp, parseInt(req.query.part, 10) || 1);
+    if (!f) return res.status(404).json({ error: 'ZIP na disku není' });
+    res.download(f, path.basename(f));
+  } catch (err) { next(err); }
+});
+router.post('/exports/:id/resend', async (req, res) => {
+  try { const b = req.body || {}; res.json(await accExport.resendExport(parseInt(req.params.id, 10) || 0, { all: !!b.all, recipients: b.recipients || undefined })); } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 module.exports = router;

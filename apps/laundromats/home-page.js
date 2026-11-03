@@ -297,6 +297,12 @@ footer{border-top:1px solid var(--line);padding:56px 0 34px;margin-top:40px}
 @media (max-width:820px){.vids{grid-template-columns:1fr 1fr}.vids .ph{grid-column:1/-1;min-height:160px}}
 .vid{margin:0}.vid video{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:18px;border:1px solid var(--line2);background:#0b1426;display:block}
 .vid figcaption{margin-top:10px;color:var(--tx2);font-size:14px;font-weight:600}
+.site img,.vid video{cursor:zoom-in;transition:filter .2s,transform .2s}.site img:hover,.vid video:hover{filter:brightness(1.08)}
+.vid{position:relative}.vid.pl:before{content:"";position:absolute;left:50%;top:calc(50% - 18px);width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;background:rgba(6,12,24,.62) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M9 6.5v11l9-5.5z'/%3E%3C/svg%3E") center/32px no-repeat;border:1px solid rgba(255,255,255,.35);pointer-events:none}
+#lb{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(2,6,14,.92);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);cursor:zoom-out}
+#lb.on{display:flex}#lb img,#lb video{max-width:96vw;max-height:90vh;border-radius:16px;border:1px solid rgba(120,160,255,.35);box-shadow:0 30px 90px rgba(0,0,0,.6);background:#0b1426;cursor:default}
+#lb .x,#lb .nv{position:absolute;display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.28);background:rgba(10,18,36,.7);color:#fff;font-size:24px;line-height:1;cursor:pointer}
+#lb .x{top:16px;right:16px}#lb .nv{top:50%;margin-top:-23px}#lb .pv{left:16px}#lb .nx{right:16px}#lb .cp{position:absolute;left:0;right:0;bottom:18px;text-align:center;color:#cfe0f5;font-size:14.5px;font-weight:600;padding:0 70px;pointer-events:none}
 /* Pozadí jako Best Series 2.0: síť bodů (canvas) + záře + perspektivní mřížka */
 #net{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:.7}
 .bgglow{position:fixed;border-radius:50%;filter:blur(90px);opacity:.45;z-index:-1;pointer-events:none;animation:drift 18s ease-in-out infinite alternate}
@@ -361,7 +367,7 @@ function homePage(lang) {
     // PH: galerie skutečných provozoven + mapa (body až po dodání seznamu adres)
     + '<div class="vids rv">'
     + '<figure class="vid"><video class="autovid" src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" muted loop playsinline preload="none" aria-label="' + esc(L.network.vid1) + '"></video><figcaption>' + esc(L.network.vid1) + '</figcaption></figure>'
-    + '<figure class="vid"><video src="/media/krok.mp4" poster="/media/krok-poster.jpg" controls playsinline preload="none" aria-label="' + esc(L.network.vid2) + '"></video><figcaption>' + esc(L.network.vid2) + '</figcaption></figure>'
+    + '<figure class="vid pl"><video src="/media/krok.mp4" poster="/media/krok-poster.jpg" playsinline preload="none" aria-label="' + esc(L.network.vid2) + '"></video><figcaption>' + esc(L.network.vid2) + '</figcaption></figure>'
     + '<div class="ph" role="img" aria-label="' + esc(L.network.map) + '">' + svg('map', 30) + '<span>' + esc(L.network.map) + '</span></div></div></div></section>'
     // ── vlastnictví ──
     + '<section id="vlastnictvi"><div class="wrap"><div class="own"><div>' + kicker(L.own.kicker) + '<h2 class="rv">' + esc(L.own.h) + '</h2><p class="lead rv">' + esc(L.own.lead) + '</p></div>'
@@ -398,7 +404,7 @@ function homePage(lang) {
     + '<div><h4>' + esc(L.foot.company) + '</h4><div class="fph">Firemní a kontaktní údaje doplníme</div>'
     + '<a class="fl" href="mailto:info@laundromats.eu" style="margin-top:12px">info@laundromats.eu</a><a class="fl" href="/gdpr">' + esc(L.foot.privacy) + '</a></div></div>'
     + '<div class="fbot"><span>' + esc(L.foot.rights) + ' ' + new Date().getFullYear() + ' Laundromats</span><span>' + esc(L.foot.claim) + '</span></div></div></footer>'
-    + '<script>' + clientJs(L) + '</script><script>' + NET_JS + '</script><script src="/cesta/track.js" defer></script></body></html>';
+    + '<script>' + clientJs(L) + '</script><script>' + NET_JS + '</script><script>' + LIGHTBOX_JS + '</script><script src="/cesta/track.js" defer></script></body></html>';
 }
 
 function clientJs(L) {
@@ -430,6 +436,20 @@ function clientJs(L) {
     + '.finally(function(){bt.disabled=false;bt.textContent=M.submit;});});'
     + '})();';
 }
+
+const LIGHTBOX_JS = "(function(){var d=document,lb=d.createElement('div');lb.id='lb';lb.setAttribute('role','dialog');lb.setAttribute('aria-modal','true');lb.innerHTML='<button class=\"x\" aria-label=\"Zavřít\">&times;</button><button class=\"nv pv\" aria-label=\"Předchozí\">&#8249;</button><button class=\"nv nx\" aria-label=\"Další\">&#8250;</button><div class=\"cp\"></div>';d.body.appendChild(lb);"
+  + "var m=null,cp=lb.querySelector('.cp'),pv=lb.querySelector('.pv'),nx=lb.querySelector('.nx'),list=[],ix=0;"
+  + "function clr(){if(m){if(m.pause)m.pause();m.remove();m=null;}}"
+  + "function show(i){clr();ix=(i+list.length)%list.length;var it=list[ix];if(it.v){m=d.createElement('video');m.src=it.src;m.poster=it.poster||'';m.controls=true;m.playsInline=true;m.autoplay=true;}else{m=d.createElement('img');m.src=it.src;m.alt=it.cap||'';}"
+  + "m.addEventListener('click',function(e){e.stopPropagation();});lb.insertBefore(m,cp);cp.textContent=it.cap||'';var many=list.length>1;pv.style.display=nx.style.display=many?'flex':'none';}"
+  + "function open(l,i){list=l;lb.classList.add('on');d.documentElement.style.overflow='hidden';show(i);}"
+  + "function close(){clr();lb.classList.remove('on');d.documentElement.style.overflow='';}"
+  + "lb.addEventListener('click',function(e){if(e.target===lb||e.target.classList.contains('x'))close();});pv.addEventListener('click',function(e){e.stopPropagation();show(ix-1);});nx.addEventListener('click',function(e){e.stopPropagation();show(ix+1);});"
+  + "d.addEventListener('keydown',function(e){if(!lb.classList.contains('on'))return;if(e.key==='Escape')close();else if(e.key==='ArrowLeft')show(ix-1);else if(e.key==='ArrowRight')show(ix+1);});"
+  + "var ph=[].slice.call(d.querySelectorAll('.site img')).map(function(im){var f=im.closest('figure'),c=f&&f.querySelector('figcaption');return{src:im.currentSrc||im.src,cap:c?c.textContent.trim():im.alt};});"
+  + "[].forEach.call(d.querySelectorAll('.site img'),function(im,i){im.addEventListener('click',function(){open(ph,i);});});"
+  + "[].forEach.call(d.querySelectorAll('.vid video'),function(v){v.addEventListener('click',function(e){e.preventDefault();v.pause();var f=v.closest('figure'),c=f&&f.querySelector('figcaption');open([{v:1,src:v.getAttribute('src'),poster:v.getAttribute('poster'),cap:c?c.textContent.trim():''}],0);});});"
+  + "})();";
 
 const NET_JS = "(function(){var c=document.getElementById('net');if(!c)return;var x=c.getContext('2d'),w,h,P=[],N=70,R=150,dpr=Math.min(2,window.devicePixelRatio||1),mx=-1e4,my=-1e4;function size(){w=c.clientWidth;h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;x.setTransform(dpr,0,0,dpr,0,0);N=Math.max(34,Math.min(90,Math.round(w*h/16000)));P=[];for(var i=0;i<N;i++)P.push({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.35,vy:(Math.random()-.5)*.35,r:Math.random()*1.6+.6})}window.addEventListener('resize',size);size();window.addEventListener('pointermove',function(e){mx=e.clientX;my=e.clientY},{passive:true});var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;function step(){x.clearRect(0,0,w,h);for(var i=0;i<P.length;i++){var p=P[i];if(!reduce){p.x+=p.vx;p.y+=p.vy;var dx=p.x-mx,dy=p.y-my,d=Math.hypot(dx,dy);if(d<140){p.x+=dx/d*.6;p.y+=dy/d*.6}}if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;}for(var i=0;i<P.length;i++){for(var j=i+1;j<P.length;j++){var a=P[i],b=P[j],dd=Math.hypot(a.x-b.x,a.y-b.y);if(dd<R){x.globalAlpha=(1-dd/R)*.35;x.strokeStyle='#4fa3ff';x.lineWidth=1;x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke()}}}x.globalAlpha=1;for(var i=0;i<P.length;i++){var p=P[i];x.fillStyle='#8fd0ff';x.beginPath();x.arc(p.x,p.y,p.r,0,6.283);x.fill()}if(!reduce)requestAnimationFrame(step)}step();})();";
 
