@@ -135,7 +135,7 @@ const IC = {
 const svg = (k, sz) => '<svg width="' + (sz || 22) + '" height="' + (sz || 22) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + IC[k] + '</svg>';
 
 const CSS = `
-:root{--bg:#04060c;--bg2:#070b16;--navy:#0b1426;--card:rgba(14,22,40,.72);--line:rgba(120,160,255,.14);--line2:rgba(120,160,255,.28);--tx:#eef4ff;--tx2:#a9b8d3;--tx3:#6b7d9e;--az:#4fd1ff;--bl:#1e86e0;--vi:#7c5cff;--teal:#2fe3c6;--r:20px;--max:1180px}
+:root{--bg:#04060c;--bg2:#070b16;--navy:#0b1426;--card:rgba(14,22,40,.62);--line:rgba(120,160,255,.14);--line2:rgba(120,160,255,.28);--tx:#eef4ff;--tx2:#a9b8d3;--tx3:#6b7d9e;--az:#4fd1ff;--bl:#1e86e0;--vi:#7c5cff;--teal:#2fe3c6;--r:20px;--max:1180px}
 *{box-sizing:border-box}html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
 body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.6 Inter,"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
@@ -197,7 +197,7 @@ h3{font-size:20px;font-weight:700;letter-spacing:-.01em;line-height:1.25}
 .card:hover{border-color:var(--line2);transform:translateY(-3px)}
 .ico{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;color:var(--az);background:linear-gradient(135deg,rgba(79,209,255,.16),rgba(124,92,255,.12));border:1px solid rgba(79,209,255,.22);margin-bottom:20px}
 .card p{color:var(--tx2);margin:12px 0 0;font-size:15.5px}
-.alt{background:linear-gradient(180deg,var(--bg2),var(--bg))}
+.alt{background:linear-gradient(180deg,rgba(7,11,22,.55),rgba(4,6,12,.25))}
 .divline{position:absolute;inset:0 0 auto 0;height:1px;background:linear-gradient(90deg,transparent,var(--line2),transparent)}
 /* cesty */
 .path{display:flex;flex-direction:column;padding:34px;border-radius:24px;background:linear-gradient(160deg,rgba(20,32,58,.9),rgba(10,16,30,.9));border:1px solid var(--line2);position:relative;overflow:hidden}
@@ -286,6 +286,14 @@ footer{border-top:1px solid var(--line);padding:56px 0 34px;margin-top:40px}
 /* odhalení při scrollu */
 .rv{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .7s ease}.rv.in{opacity:1;transform:none}
 .no-js .rv{opacity:1;transform:none}
+
+/* Pozadí jako Best Series 2.0: síť bodů (canvas) + záře + perspektivní mřížka */
+#net{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:.7}
+.bgglow{position:fixed;border-radius:50%;filter:blur(90px);opacity:.45;z-index:-1;pointer-events:none;animation:drift 18s ease-in-out infinite alternate}
+.bgglow.a{width:620px;height:620px;left:-200px;top:-200px;background:radial-gradient(circle,rgba(30,134,224,.6),transparent 65%)}
+.bgglow.b{width:560px;height:560px;right:-180px;bottom:-220px;background:radial-gradient(circle,rgba(124,92,255,.5),transparent 65%);animation-delay:-9s}
+.gridfx{position:fixed;inset:auto 0 0 0;height:40vh;z-index:-1;pointer-events:none;background-image:linear-gradient(rgba(120,160,255,.14) 1px,transparent 1px),linear-gradient(90deg,rgba(120,160,255,.14) 1px,transparent 1px);background-size:64px 64px;transform:perspective(600px) rotateX(62deg);transform-origin:top;mask-image:linear-gradient(to bottom,transparent,#000 35%,#000 70%,transparent);-webkit-mask-image:linear-gradient(to bottom,transparent,#000 35%,#000 70%,transparent)}
+@keyframes drift{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(50px,30px,0) scale(1.1)}}
 `;
 
 function homePage(lang) {
@@ -305,6 +313,7 @@ function homePage(lang) {
     + '<meta name="theme-color" content="#04060c"><link rel="icon" href="/favicon.svg" type="image/svg+xml">'
     + '<link rel="preload" as="image" href="/img/pradlomat-flex.webp" fetchpriority="high">'
     + '<style>' + CSS + '</style></head><body>'
+    + '<canvas id="net" aria-hidden="true"></canvas><div class="bgglow a" aria-hidden="true"></div><div class="bgglow b" aria-hidden="true"></div><div class="gridfx" aria-hidden="true"></div>'
     + '<a class="skip" href="#obsah">' + esc(L.skip) + '</a>'
     // ── hlavička ──
     + '<header class="hdr" id="hdr"><div class="wrap"><a class="logo" href="#top" aria-label="Laundromats">' + logo(34) + '<span>LAUNDROMATS</span></a>'
@@ -322,7 +331,7 @@ function homePage(lang) {
     + '<ul class="pts rv">' + L.hero.points.map((p) => '<li>' + svg('check', 18) + esc(p) + '</li>').join('') + '</ul></div>'
     + '<div class="visual rv"><div class="glow"></div><div class="ground"></div>'
     // PH: nahradit fotografií skutečného venkovního prádlomatu v reálném prostředí (WebP, ~1600 px, < 250 kB)
-    + '<img src="/img/pradlomat-flex.webp" width="1100" height="896" alt="' + esc(L.hero.imgAlt) + '" fetchpriority="high" decoding="async"><span class="note">' + esc(L.hero.imgNote) + '</span>'
+    + '<img src="/img/pradlomat-flex.webp" width="1100" height="896" alt="' + esc(L.hero.imgAlt) + '" fetchpriority="high" decoding="async">'
     + '<div class="statcard"><b class="grad">70+</b><p>' + esc(L.hero.card) + '</p></div></div></div></section>'
     // ── proč ──
     + '<section class="alt" id="proc"><div class="divline"></div><div class="wrap">' + kicker(L.why.kicker) + '<h2 class="rv">' + esc(L.why.h) + '</h2><p class="lead rv">' + esc(L.why.lead) + '</p>'
@@ -377,7 +386,7 @@ function homePage(lang) {
     + '<div><h4>' + esc(L.foot.company) + '</h4><div class="fph">Firemní a kontaktní údaje doplníme</div>'
     + '<a class="fl" href="mailto:info@laundromats.eu" style="margin-top:12px">info@laundromats.eu</a><a class="fl" href="/gdpr">' + esc(L.foot.privacy) + '</a><a class="fl" href="#technologie">' + esc(L.foot.tech) + '</a></div></div>'
     + '<div class="fbot"><span>' + esc(L.foot.rights) + ' ' + new Date().getFullYear() + ' Laundromats</span><span>' + esc(L.foot.claim) + '</span></div></div></footer>'
-    + '<script>' + clientJs(L) + '</script><script src="/cesta/track.js" defer></script></body></html>';
+    + '<script>' + clientJs(L) + '</script><script>' + NET_JS + '</script><script src="/cesta/track.js" defer></script></body></html>';
 }
 
 function clientJs(L) {
@@ -407,5 +416,7 @@ function clientJs(L) {
     + '.finally(function(){bt.disabled=false;bt.textContent=M.submit;});});'
     + '})();';
 }
+
+const NET_JS = "(function(){var c=document.getElementById('net');if(!c)return;var x=c.getContext('2d'),w,h,P=[],N=70,R=150,dpr=Math.min(2,window.devicePixelRatio||1),mx=-1e4,my=-1e4;function size(){w=c.clientWidth;h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;x.setTransform(dpr,0,0,dpr,0,0);N=Math.max(34,Math.min(90,Math.round(w*h/16000)));P=[];for(var i=0;i<N;i++)P.push({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.35,vy:(Math.random()-.5)*.35,r:Math.random()*1.6+.6})}window.addEventListener('resize',size);size();window.addEventListener('pointermove',function(e){mx=e.clientX;my=e.clientY},{passive:true});var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;function step(){x.clearRect(0,0,w,h);for(var i=0;i<P.length;i++){var p=P[i];if(!reduce){p.x+=p.vx;p.y+=p.vy;var dx=p.x-mx,dy=p.y-my,d=Math.hypot(dx,dy);if(d<140){p.x+=dx/d*.6;p.y+=dy/d*.6}}if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;}for(var i=0;i<P.length;i++){for(var j=i+1;j<P.length;j++){var a=P[i],b=P[j],dd=Math.hypot(a.x-b.x,a.y-b.y);if(dd<R){x.globalAlpha=(1-dd/R)*.35;x.strokeStyle='#4fa3ff';x.lineWidth=1;x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke()}}}x.globalAlpha=1;for(var i=0;i<P.length;i++){var p=P[i];x.fillStyle='#8fd0ff';x.beginPath();x.arc(p.x,p.y,p.r,0,6.283);x.fill()}if(!reduce)requestAnimationFrame(step)}step();})();";
 
 module.exports = { homePage, LANGS, T };
