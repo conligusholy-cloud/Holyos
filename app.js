@@ -797,26 +797,26 @@ app.use('/api/slot-schemes', slotSchemesRoutes);
 app.use('/api/dev', devRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/messages', messagesRoutes);
-app.use('/api/fleet', fleetRoutes);
+app.use('/api/fleet', requireAuth, requireModule(['vozovy-park']), fleetRoutes);
 app.use('/api/cad', cadRoutes);
-app.use('/api/print', printRoutes);
+app.use('/api/print', requireAuth, requireModule(['tiskarny', 'nakup-sklad']), printRoutes);
 app.use('/api/accounting', requireAuth, requireModule(['ucetni-doklady', 'naklady', 'pokladna', 'prodejni-objednavky', 'obchod', 'banky']), accountingRoutes);
-app.use('/api/doc-templates', docTemplatesRoutes); // Šablony dokumentů — náhledy
+app.use('/api/doc-templates', requireAuth, requireModule(['sablony-dokumentu', 'ucetni-doklady']), docTemplatesRoutes); // Šablony dokumentů — náhledy
 app.use('/api/banking', requireAuth, requireModule(['banky', 'banka-pravidla', 'ucetni-doklady']), bankingRoutes);
 app.use('/api/cash', requireAuth, requireModule(['pokladna']), cashRegisterRoutes);
 app.use('/api/reports', requireAuth, requireModule(['naklady', 'reporty']), reportsRoutes);
-app.use('/api/normovani', normovaniRoutes);
+app.use('/api/normovani', requireAuth, requireModule(['normovani-fy', 'normovani-prehled']), normovaniRoutes);
 app.use('/api/directives', directivesRoutes);
 app.use('/api/agent', agentRoutes); // AI Vývojář (modul #13) — super-admin only
 app.use('/api/tools', businessToolsRoutes); // Obchodní pomůcky (sales-aid)
 app.use('/api/sales', salesRoutes); // Obchod — CRM (SalesContact, pipeline, kalendář, webhooky FB/IG/LinkedIn)
 app.use('/api/sites', siteDevelopmentRoutes); // Site Development — řízení expanze (vyhledávání lokalit, pozemků, smluv)
-app.use('/api/service', serviceRoutes); // Servis — interní admin (znalostní báze pro servisáky)
+app.use('/api/service', requireAuth, requireModule(['servis']), serviceRoutes); // Servis — interní admin (znalostní báze pro servisáky)
 app.use('/api/hugo', hugoRoutes);        // Hugo AI servisák — partner login + chat (bestseries.cash)
 app.use('/api/velin', velinRoutes); // Velín — mobilní aplikace pro řízení dne kolegů
-app.use('/api/eshop-admin', eshopAdminRoutes); // Spare Parts Shop — admin CRUD (interní login)
+app.use('/api/eshop-admin', requireAuth, requireModule(['spare-parts', 'doprava']), eshopAdminRoutes); // Spare Parts Shop — admin CRUD (interní login)
 app.use('/api/shop', shopRoutes); // Spare Parts Shop — partner-facing API (bestseries.cash)
-app.use('/api/shipping', shippingRoutes); // Doprava — agenda požadavků na dopravu (interní login)
+app.use('/api/shipping', requireAuth, requireModule(['doprava']), shippingRoutes); // Doprava — agenda požadavků na dopravu (interní login)
 app.use('/api/compounder', compounderRoutes); // Compounder — veřejný web compounder.world (registrace leadů, analytika, push)
 app.use('/api/lokality', require('./routes/lokality-public.routes')); // Lokality — veřejný web bestseries.global (nabídka místa pro prádlomat)
 app.use('/api/pradlomat-spots', require('./routes/pradlomat-spots.routes'));
