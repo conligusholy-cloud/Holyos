@@ -165,7 +165,7 @@ h3{font-size:20px;font-weight:700;letter-spacing:-.01em;line-height:1.25}
 .hdr .wrap{display:flex;align-items:center;gap:22px;height:72px}
 .logo{display:inline-flex;align-items:center;gap:10px;text-decoration:none;font-weight:900;letter-spacing:.14em;font-size:15px}
 .nav{display:flex;gap:4px;margin-left:auto}
-.nav a{padding:8px 12px;border-radius:10px;text-decoration:none;color:var(--tx2);font-size:14.5px;font-weight:500}.nav a:hover{color:var(--tx);background:rgba(255,255,255,.04)}
+.nav a{white-space:nowrap;padding:8px 10px;border-radius:10px;text-decoration:none;color:var(--tx2);font-size:14.5px;font-weight:500}.nav a:hover{color:var(--tx);background:rgba(255,255,255,.04)}
 .burger{display:none;margin-left:auto;background:none;border:1px solid var(--line2);color:var(--tx);border-radius:12px;width:46px;height:42px;cursor:pointer}
 .mnav{display:none}
 @media (max-width:1060px){.nav,.hdr .btn-cta{display:none}.burger{display:inline-flex;align-items:center;justify-content:center}
@@ -319,8 +319,8 @@ function homePage(lang) {
   const navLinks = NAV.map(([id, t]) => '<a href="#' + id + '">' + esc(t) + '</a>').join('');
   // Podstránky webu + aplikace lokalit (zatím jen česky)
   const APPS = String(process.env.LM_APPS_URL || 'https://lokality.laundromats.eu').replace(/\/$/, '');
-  const pageLinks = lg === 'cs' ? [['/compounder', 'Compounder'], ['/pradlomaty', 'Prádlomaty'], [APPS + '/hledat', 'Najít místo'], [APPS + '/zhodnotit', 'Zhodnotit místo']].map(([h, t]) => '<a href="' + h + '">' + esc(t) + '</a>').join('') : '';
-  const headLinks = (lg === 'cs' ? NAV.slice(0, 2) : NAV).map(([id, t]) => '<a href="#' + id + '">' + esc(t) + '</a>').join('') + pageLinks;
+  const pageLinks = lg === 'cs' ? [['/compounder', 'Compounder'], ['/pradlomaty', 'Prádlomaty'], ['/cesta/ekonomika', 'Ekonomika'], [APPS + '/hledat', 'Najít místo'], [APPS + '/zhodnotit', 'Zhodnotit místo']].map(([h, t]) => '<a href="' + h + '">' + esc(t) + '</a>').join('') : '';
+  const headLinks = (lg === 'cs' ? NAV.slice(0, 1) : NAV).map(([id, t]) => '<a href="#' + id + '">' + esc(t) + '</a>').join('') + pageLinks;
   const langSwitch = LANGS.length > 1 ? '<div class="langs" role="navigation" aria-label="Jazyk">' + LANGS.map((x) => '<a href="/' + (x === 'cs' ? '' : x) + '" hreflang="' + x + '"' + (x === lg ? ' aria-current="true"' : '') + '>' + x.toUpperCase() + '</a>').join('') + '</div>' : '';
   const logo = (sz) => '<svg width="' + sz + '" height="' + sz + '" viewBox="0 0 64 64" fill="none" aria-hidden="true"><defs><linearGradient id="lg' + sz + '" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff"/><stop offset=".55" stop-color="#3a6cf5"/><stop offset="1" stop-color="#7c5cff"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="17" fill="#0b1220"/><rect x="2.75" y="2.75" width="58.5" height="58.5" rx="16.5" stroke="url(#lg' + sz + ')" stroke-width="1.5"/><circle cx="32" cy="34" r="15" stroke="url(#lg' + sz + ')" stroke-width="3.5"/><circle cx="32" cy="34" r="8" stroke="url(#lg' + sz + ')" stroke-width="2.5" stroke-opacity=".6"/><circle cx="20" cy="16" r="2" fill="#4fd1ff"/><circle cx="27" cy="16" r="2" fill="#7c5cff"/></svg>';
   const kicker = (t) => '<div class="kicker">' + esc(t) + '</div>';

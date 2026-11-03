@@ -302,6 +302,8 @@ app.post('/admin/api/meetings/slots', requireAdmin, api((req) => holyosSvc('POST
 app.post('/admin/api/meetings/slots/:id(\\d+)/update', requireAdmin, api((req) => holyosSvc('PATCH', P + '/slots/' + req.params.id, req.body || {})));
 app.post('/admin/api/meetings/slots/:id(\\d+)/delete', requireAdmin, api((req) => holyosSvc('DELETE', P + '/slots/' + req.params.id)));
 app.post('/admin/api/meetings/reservations/:id(\\d+)', requireAdmin, api((req) => holyosSvc('PATCH', P + '/reservations/' + req.params.id, { status: (req.body || {}).status })));
+// Jmenný seznam — kontakty označené v HolyOS jako „zajímavý kontakt".
+app.get('/admin/api/hot-leads', requireAdmin, api(async () => ({ ok: true, leads: await holyosSvc('GET', '/api/auth/bs2/hot-leads') })));
 
 // ── Stránky Compounder + Prádlomaty (převzato z BS2, upraveno pro zájemce) ──
 // Nabídka strojů z HolyOS (ceník, aktivní stroje). LM_PRODUCT_IDS = čárkami oddělená ID pro zúžení nabídky.

@@ -16,6 +16,7 @@ function navItems(opts) {
     { id: 'home', label: 'Domů', href: m + homeHref() },
     { id: 'compounder', label: 'Compounder', href: m + '/compounder' },
     { id: 'pradlomaty', label: 'Prádlomaty', href: m + '/pradlomaty' },
+    { id: 'ekonomika', label: 'Ekonomika', href: m + '/cesta/ekonomika' },
     { id: 'hledat', label: 'Najít místo', href: a + '/hledat' },
     { id: 'zhodnotit', label: 'Zhodnotit místo', href: a + '/zhodnotit' },
   ];
