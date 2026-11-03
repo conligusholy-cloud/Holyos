@@ -731,6 +731,14 @@
     function head(extra){ return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:17px;font-weight:800;flex:1">👔 Online schůzka s majitelem</div><button id="ob-om-x" class="btn btn-g" style="padding:4px 10px">✕</button></div><div style="font-size:13px;color:#94a3b8;margin-bottom:12px">Zákazník: <b style="color:#e8eefc">'+esc(lead.name||lead.email||'kontakt')+'</b>'+(extra||'')+'</div>'; }
     function bindX(){ var x=document.getElementById('ob-om-x'); if(x) x.onclick=close; }
     if(!lead.email && !lead.phone){ box.innerHTML=head()+'<div style="color:#fca5a5">Kontakt nemá e-mail ani telefon — nemáme kam poslat potvrzení. Doplň údaje (⚙️) a zkus to znovu.</div>'; bindX(); return; }
+    var channel=await new Promise(function(res){
+      box.innerHTML=head()+'<div style="font-weight:700;margin:6px 0 10px">Jak schůzka proběhne?</div><div style="display:flex;gap:10px"><button class="btn btn-g" id="ob-om-wa" style="flex:1;padding:16px 8px;font-size:15px;font-weight:800">🟢 WhatsApp</button><button class="btn btn-g" id="ob-om-tm" style="flex:1;padding:16px 8px;font-size:15px;font-weight:800">🟣 Teams</button></div>'; bindX();
+      document.getElementById('ob-om-wa').onclick=function(){ res('whatsapp'); };
+      document.getElementById('ob-om-tm').onclick=function(){ res('teams'); };
+      var x=document.getElementById('ob-om-x'); if(x) x.addEventListener('click',function(){ res(null); });
+    });
+    if(!channel) return;
+    var chLabel=channel==='whatsapp'?'WhatsApp':'Teams';
     box.innerHTML=head()+'<div style="color:#94a3b8">Načítám volné termíny…</div>'; bindX();
     var slots=[];
     try { var r=await api('/meeting-slots?days=30'); slots=(await r.json())||[]; } catch(e){ box.innerHTML=head()+'<div style="color:#fca5a5">Termíny se nepodařilo načíst.</div>'; bindX(); return; }
@@ -738,17 +746,17 @@
     if(!slots.length){ box.innerHTML=head()+'<div style="color:#fca5a5">Žádné volné online termíny. Majitel je může přidat v administraci schůzek.</div>'; bindX(); return; }
     var DN=['Ne','Po','Út','St','Čt','Pá','So'], byDay={}, order=[];
     slots.forEach(function(s){ var d=new Date(s.starts_at); var k=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); if(!byDay[k]){ byDay[k]={d:d,items:[]}; order.push(k); } byDay[k].items.push(s); });
-    var html=head(lead.phone&&lead.email?'<br>Potvrzení dostane SMS i e-mailem.':(lead.phone?'<br>Potvrzení dostane SMS.':'<br>Potvrzení dostane e-mailem.'));
+    var html=head('<br><b>'+chLabel+'</b>'+(lead.phone&&lead.email?'<br>Potvrzení dostane SMS i e-mailem.':(lead.phone?'<br>Potvrzení dostane SMS.':'<br>Potvrzení dostane e-mailem.')));
     order.forEach(function(k){ var g=byDay[k], d=g.d;
       html+='<div style="font-weight:700;margin:12px 0 6px;color:#7dd3fc">'+DN[d.getDay()]+' '+d.getDate()+'. '+(d.getMonth()+1)+'.</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
       g.items.forEach(function(s){ var t=new Date(s.starts_at); html+='<button class="btn btn-g ob-om-slot" data-id="'+s.id+'" data-t="'+DN[t.getDay()]+' '+t.getDate()+'. '+(t.getMonth()+1)+'. v '+('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2)+'" style="padding:8px 12px;font-weight:700">'+('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2)+'</button>'; });
       html+='</div>'; });
     box.innerHTML=html; bindX();
     Array.prototype.forEach.call(box.querySelectorAll('.ob-om-slot'),function(b){ b.onclick=async function(){
-      if(!confirm('Rezervovat '+b.getAttribute('data-t')+' pro '+(lead.name||lead.email)+'?\nZákazník dostane potvrzení a kontakt přejde na majitele (tobě zůstane zapsáno, že jsi schůzku domluvil).')) return;
+      if(!confirm('Rezervovat '+b.getAttribute('data-t')+' ('+chLabel+') pro '+(lead.name||lead.email)+'?\nZákazník dostane potvrzení a kontakt přejde na majitele (tobě zůstane zapsáno, že jsi schůzku domluvil).')) return;
       box.innerHTML=head()+'<div style="color:#94a3b8">Rezervuji a odesílám potvrzení…</div>'; bindX();
       try {
-        var rr=await api('/leads/'+id+'/owner-meeting',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slot_id:Number(b.getAttribute('data-id'))})});
+        var rr=await api('/leads/'+id+'/owner-meeting',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slot_id:Number(b.getAttribute('data-id')),channel:channel})});
         var j=await rr.json().catch(function(){return {};});
         if(!rr.ok||!j.ok){ box.innerHTML=head()+'<div style="color:#fca5a5">'+esc(j.error||'Rezervace se nepodařila.')+'</div><button class="btn btn-g" style="margin-top:12px" onclick="obOwnerMeeting('+id+')">↻ Zkusit znovu</button>'; bindX(); return; }
         var info=[]; if(j.sms===true) info.push('SMS odeslána'); if(j.sms===false) info.push('SMS se nepodařilo odeslat'); if(j.email===true) info.push('e-mail odeslán'); if(j.email===false) info.push('e-mail se nepodařilo odeslat');
