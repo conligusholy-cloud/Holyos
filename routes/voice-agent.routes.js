@@ -305,6 +305,10 @@ async function resolveTransferPlan(mode, targetId, line) {
     enabled = enRaw === undefined || enRaw === null ? true : (enRaw === true || enRaw === 'true' || enRaw === 1 || enRaw === '1');
     timeout = get ? parseInt(await get(cfgKey(line, 'transfer_ring_timeout')), 10) || 20 : 20;
     rounds = get ? parseInt(await get(cfgKey(line, 'transfer_rounds')), 10) || 2 : 2;
+    // Infolinka: JEDNO kolečko — každý z rozpisu zazvoní právě jednou (20 s),
+    // a když to nikdo nevezme, zákazník hned slyší hlášku. Opakovat celý rozpis
+    // by znamenalo i dvě minuty vyzvánění do ticha.
+    if (normLine(line) === 'infolinka') rounds = 1;
     // 0) Aktuální směna z rozpisu — PRIMÁRNÍ zdroj operátorů pro přepojení.
     //    Který řádek rozpisu a které role platí, počítá services/voice/shift-window.js
     //    (pásma Po–Čt / Pá / So / Ne včetně nočních přesahů, vše v Europe/Prague).
@@ -663,7 +667,7 @@ router.post('/relay-end', form, async (req, res) => {
       // Přepojení zapnuto, ale není koho volat → řekni to zákazníkovi + info do Velína.
       console.warn('[voice] relay-end: přepojení chtěné, ale ŽÁDNÉ číslo (obchodník leadu bez telefonu a žádná záložní čísla u kampaně).');
       notifyTransferFailed(mode, target, 0, line, (req.body && req.body.CallSid) || '');
-      return res.type('text/xml').send(twimlApology());
+      return res.type('text/xml').send(twimlApology(line));
     }
     // Ochrana: když je v kolečku jen JEDNO číslo (záložní chybí / nemá telefon / není směna),
     // nemá hovor náhradníka → hned upozorni lidi z Infolinky (ať doplní směnu), hovor přesto vytoč.
