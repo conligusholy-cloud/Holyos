@@ -6136,6 +6136,7 @@
         + row('Odeslat v (hodina)', '<input type="number" min="0" max="23" id="exp-hr" value="'+ex(c.send_hour)+'">', 'Po skončení období v tuto hodinu.')
         + row('Max. velikost jednoho e-mailu (MB)', '<input type="number" min="2" max="30" step="1" id="exp-mb" value="'+ex(c.max_mb)+'">', 'Větší objem se rozdělí do více e-mailů (část 1/2, 2/2…). Běžný limit schránek je 20–25 MB.')
         + row('Odesílatel', '<input id="exp-snd" value="'+ex(c.sender)+'" placeholder="faktury@bestseries.cz">', 'Schránka M365, ze které se posílá.')
+        + row('Potvrzení o odeslání (více oddělte čárkou)', '<input id="exp-cc" value="'+ex(c.confirm_recipients||'')+'" placeholder="kolega@bestseries.cz">', 'Komu přijde krátké potvrzení, že doklady odešly účetní — bez příloh. Při chybě přijde upozornění. Testovací odeslání se nehlásí.')
         + row('Doklady', '<label style="display:inline-flex;gap:6px;margin-right:14px"><input type="checkbox" id="exp-ap"'+((c.directions||[]).indexOf('ap')>=0?' checked':'')+'> přijaté</label><label style="display:inline-flex;gap:6px;margin-right:14px"><input type="checkbox" id="exp-ar"'+((c.directions||[]).indexOf('ar')>=0?' checked':'')+'> vydané</label><label style="display:inline-flex;gap:6px"><input type="checkbox" id="exp-pf"'+(c.include_proforma?' checked':'')+'> i zálohové</label>')
         + '</div>'
         + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px"><button class="btn btn-primary" onclick="expSaveCfg()">💾 Uložit nastavení</button><span id="exp-cfg-msg" style="font-size:13px"></span>'
@@ -6144,7 +6145,7 @@
     window.expSaveCfg = async function(){
       var m=document.getElementById('exp-cfg-msg'); m.textContent='Ukládám…';
       var dirs=[]; if(document.getElementById('exp-ap').checked) dirs.push('ap'); if(document.getElementById('exp-ar').checked) dirs.push('ar');
-      var body={ enabled:document.getElementById('exp-en').checked, recipients:document.getElementById('exp-to').value, start_from:document.getElementById('exp-from').value||null, interval:document.getElementById('exp-iv').value, send_hour:document.getElementById('exp-hr').value, max_mb:document.getElementById('exp-mb').value, sender:document.getElementById('exp-snd').value, directions:dirs, include_proforma:document.getElementById('exp-pf').checked };
+      var body={ enabled:document.getElementById('exp-en').checked, recipients:document.getElementById('exp-to').value, start_from:document.getElementById('exp-from').value||null, interval:document.getElementById('exp-iv').value, send_hour:document.getElementById('exp-hr').value, max_mb:document.getElementById('exp-mb').value, sender:document.getElementById('exp-snd').value, confirm_recipients:document.getElementById('exp-cc').value, directions:dirs, include_proforma:document.getElementById('exp-pf').checked };
       if(body.enabled && !body.recipients.trim()){ m.innerHTML='<span style="color:#ef4444">Vyplňte e-mail účetní.</span>'; return; }
       if(body.enabled && !body.start_from){ m.innerHTML='<span style="color:#ef4444">Vyplňte datum, od kterého se mají doklady odesílat.</span>'; return; }
       var r=await api('PUT','/api/accounting/exports/config',body);

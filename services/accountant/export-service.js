@@ -24,7 +24,7 @@ const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', '..', 
 const EXPORT_DIR = path.join(STORAGE_DIR, 'accounting-exports');
 const SKIP_STATUSES = ['cancelled']; // i rozpracované (draft) — přijaté z e-mailu bývají draft, účetní je potřebuje
 const GRAPH_INLINE_MAX = 2.8 * 1024 * 1024; // menší přílohy jdou běžným sendMail, větší přes upload session
-const DEFAULTS = { enabled: false, recipients: '', sender: '', start_from: null, interval: 'week', send_hour: 7, directions: ['ap', 'ar'], include_proforma: false, max_mb: 20, last_period_to: null };
+const DEFAULTS = { enabled: false, recipients: '', confirm_recipients: '', sender: '', start_from: null, interval: 'week', send_hour: 7, directions: ['ap', 'ar'], include_proforma: false, max_mb: 20, last_period_to: null };
 const INTERVAL_LABEL = { day: 'denně', '2days': 'každé 2 dny', '3days': 'každé 3 dny', week: 'týdně', '2weeks': 'každých 14 dní', month: 'měsíčně' };
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -33,6 +33,8 @@ const csDate = (d) => (d ? new Date(d).toLocaleDateString('cs-CZ', { timeZone: '
 const dayStart = (s) => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0); };
 const csv = (v) => { const s = v == null ? '' : String(v); return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 const safeName = (s) => String(s || '').replace(/[\\/:*?"<>|\s]+/g, '_').replace(/_+/g, '_').slice(0, 80);
+// Z textu udělá očištěný seznam e-mailů oddělený čárkou (co není e-mail, vypadne).
+const emailList = (v) => String(v || '').split(/[,;\s]+/).map((x) => x.trim()).filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)).join(', ');
 
 async function getConfig() {
   const v = (await getSetting(CFG_KEY, { type: 'json', defaultValue: {} }).catch(() => ({}))) || {};
@@ -45,7 +47,9 @@ async function saveConfig(patch, userId) {
   const p = patch || {};
   const next = Object.assign({}, cur, {
     enabled: p.enabled != null ? !!p.enabled : cur.enabled,
-    recipients: p.recipients != null ? String(p.recipients).split(/[,;\s]+/).map((x) => x.trim()).filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)).join(', ') : cur.recipients,
+    recipients: p.recipients != null ? emailList(p.recipients) : cur.recipients,
+    // Komu přijde krátké potvrzení, že export odešel (bez příloh).
+    confirm_recipients: p.confirm_recipients != null ? emailList(p.confirm_recipients) : cur.confirm_recipients,
     sender: p.sender != null ? String(p.sender).trim().slice(0, 255) : cur.sender,
     start_from: p.start_from != null ? (/^\d{4}-\d{2}-\d{2}$/.test(String(p.start_from)) ? String(p.start_from) : cur.start_from) : cur.start_from,
     interval: INTERVAL_LABEL[p.interval] ? p.interval : cur.interval,
@@ -162,6 +166,56 @@ async function sendPart({ sender, recipients, subject, body, file, filename }) {
   return { via: r.via || 'mail' };
 }
 
+// ── Potvrzení kolegům, že export odešel ─────────────────────────────────────
+// Krátký e-mail BEZ příloh pro lidi z „Potvrzení o odeslání" — aby věděli, že
+// doklady za období odešly účetní, aniž by jim chodily desítky MB ZIPů.
+// Testovací odeslání se nehlásí (to je jen kontrola doručení) a selhání
+// potvrzení nikdy neshodí samotný export.
+async function sendConfirmation(cfg, { periodTxt, docs, missing, partInfo, status, recipients, firm }) {
+  const to = emailList(cfg.confirm_recipients);
+  if (!to) return;
+  const okParts = partInfo.filter((x) => x.sent);
+  const totalMb = (partInfo.reduce((a, x) => a + (x.bytes || 0), 0) / 1048576).toFixed(1).replace('.', ',');
+  const ap = docs.filter((d) => d.inv.direction === 'ap').length;
+  const ar = docs.filter((d) => d.inv.direction === 'ar').length;
+  const when = new Date().toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' });
+
+  let subject, head;
+  if (status === 'sent') {
+    subject = '✅ Doklady za ' + periodTxt + ' odeslány účetní';
+    head = 'doklady za období ' + periodTxt + ' byly odeslány účetní.';
+  } else if (status === 'partial') {
+    subject = '⚠️ Doklady za ' + periodTxt + ' odešly jen zčásti';
+    head = 'doklady za období ' + periodTxt + ' se podařilo odeslat jen zčásti — zbytek je potřeba poslat znovu.';
+  } else {
+    subject = '⛔ Doklady za ' + periodTxt + ' se nepodařilo odeslat';
+    head = 'doklady za období ' + periodTxt + ' se NEPODAŘILO odeslat účetní.';
+  }
+
+  const chyby = partInfo.filter((x) => x.error);
+  const body = 'Dobrý den,\n\n' + head + '\n\n'
+    + 'Období: ' + periodTxt + '\n'
+    + 'Dokladů: ' + docs.length + ' (přijaté ' + ap + ', vydané ' + ar + ')'
+      + (missing.length ? ', z toho ' + missing.length + ' bez přílohy' : '') + '\n'
+    + 'E-mailů: ' + okParts.length + ' z ' + partInfo.length + ' (celkem ' + totalMb + ' MB)\n'
+    + 'Komu: ' + recipients + '\n'
+    + 'Kdy: ' + when + '\n'
+    + (chyby.length ? '\nChyby:\n' + chyby.map((x) => '- část ' + x.part + ': ' + x.error).join('\n') + '\n' : '')
+    + (status === 'sent' ? '' : '\nOpakované odeslání najdete v Účetních dokladech → 📦 Exporty → Historie odeslání (tlačítko ↻).\n')
+    + '\nToto je jen potvrzení, doklady v příloze nejsou.\n\nS pozdravem\n' + firm;
+
+  try {
+    const { sendMail } = require('../email');
+    const list = to.split(', ').filter(Boolean);
+    const r = await sendMail({ to: list.length === 1 ? list[0] : list, from: cfg.sender || undefined, subject, body });
+    if (!r || r.sent === false) throw new Error((r && (r.error || r.skipped)) || 'neodesláno');
+    console.log('[acc-export] potvrzení odesláno na', to);
+  } catch (e) {
+    // Potvrzení je doplněk — když selže, export tím nepadá.
+    console.warn('[acc-export] potvrzení se nepodařilo odeslat:', e.message);
+  }
+}
+
 /**
  * Sestaví ZIPy za období a odešle je. opts: { trigger, recipients?, includeSent?, userId?, dryRun? }
  * dryRun = jen spočítá (náhled), nic nevytváří ani neposílá.
@@ -223,6 +277,8 @@ async function runExport(from, to, opts = {}) {
   if (!opts.test && missing.length && partInfo[0] && partInfo[0].sent) await prisma.accountingExportItem.updateMany({ where: { export_id: exp.id, missing: true }, data: { sent: true } });
   const status = okCount === partInfo.length ? 'sent' : (okCount ? 'partial' : 'failed');
   await prisma.accountingExport.update({ where: { id: exp.id }, data: { status, parts: partInfo, total_bytes: total, error: status === 'sent' ? null : partInfo.filter((x) => x.error).map((x) => 'část ' + x.part + ': ' + x.error).join(' | ').slice(0, 2000) } });
+  // Potvrzení kolegům — u testu ne, ten nic doopravdy neodesílá.
+  if (!opts.test) await sendConfirmation(cfg, { periodTxt, docs, missing, partInfo, status, recipients, firm });
   return { id: exp.id, status, doc_count: docs.length, parts: partInfo };
 }
 
@@ -329,4 +385,4 @@ function start() {
   console.log('[acc-export] worker spuštěn (kontrola 2× za hodinu, úklid testů po ' + TEST_KEEP_MINUTES + ' min)');
 }
 
-module.exports = { getConfig, saveConfig, nextPeriod, runExport, resendExport, zipPathFor, start, tick, cleanupTestExports, TEST_KEEP_MINUTES, INTERVAL_LABEL, dayStart, addInterval };
+module.exports = { getConfig, saveConfig, nextPeriod, runExport, resendExport, zipPathFor, start, tick, cleanupTestExports, sendConfirmation, TEST_KEEP_MINUTES, INTERVAL_LABEL, dayStart, addInterval };
