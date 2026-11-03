@@ -832,8 +832,8 @@
     ].concat(isArchive ? [{ key: 'end', label: 'Konec zaměstnání', type: 'date', ph: 'dd.mm.rrrr', get: (p) => cfDate(p.end_date) }] : []).concat([
       { key: 'email', label: 'E-mail', type: 'text', ph: 'E-mail…', get: (p) => p.email || '' },
       { key: 'phone', label: 'Telefon', type: 'text', ph: 'Telefon…', get: (p) => p.phone || '' },
-      { key: 'company', label: 'Společnost', type: 'text', ph: 'Společnost…', get: (p) => p.department_name || '' },
-      { key: 'role', label: 'Pozice', type: 'text', ph: 'Pozice…', get: (p) => p.role_name || '' },
+      { key: 'company', label: 'Společnost', type: 'text', ph: 'Společnost…', get: (p) => (p.company && p.company.name) || '' },
+      { key: 'role', label: 'Pozice', type: 'text', ph: 'Pozice…', get: (p) => (p.role && p.role.name) || '' },
       { key: 'contract', label: 'Smlouva', type: 'text', ph: 'Smlouva…', get: (p) => p.contract_type ? (CONTRACT_LABELS[p.contract_type] || p.contract_type) : '' },
       { key: 'account', label: 'Účet', type: 'text', ph: 'Účet…', get: (p) => p.username || '', enum: false },
       null,
@@ -1008,8 +1008,8 @@
           ${isArchive ? '<td>' + (p.end_date ? new Date(p.end_date).toLocaleDateString('cs-CZ') : '—') + '</td>' : ''}
           <td>${p.email || '—'}</td>
           <td>${p.phone || '—'}</td>
-          <td>${p.department_name || '—'}</td>
-          <td>${p.role_name || '—'}</td>
+          <td>${(p.company && p.company.name) || '—'}</td>
+          <td>${(p.role && p.role.name) || '—'}</td>
           <td>${p.contract_type ? '<span class="badge badge-' + p.contract_type + '">' + (CONTRACT_LABELS[p.contract_type] || p.contract_type) + '</span>' : '—'}</td>
           <td>${p.username ? '<span class="badge badge-active">' + p.username + '</span>' : '<span style="color:var(--text2);font-size:11px">—</span>'}</td>
           <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();deletePerson(${p.id},'${p.last_name} ${p.first_name}')">✕</button></td>
