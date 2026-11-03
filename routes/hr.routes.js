@@ -5,7 +5,9 @@
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../config/database');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireHrWrite, stripSensitive, canSeeSensitive } = require('../middleware/hr-access');
+const { logAudit: _logAuditHr } = require('../services/audit');
 const { logAudit, diffObjects, makeSnapshot } = require('../services/audit');
 const { z } = require('zod');
 
@@ -676,7 +678,10 @@ router.get('/people', async (req, res, next) => {
       orderBy: { last_name: 'asc' },
     });
 
-    res.json(people);
+    // Citlivé údaje (RČ, OP, účet, mzda) jen pro admina / HR s právem úpravy / osobu samu
+    const out = [];
+    for (const pp of people) out.push((await canSeeSensitive(req.user, pp.id)) ? pp : stripSensitive(pp));
+    res.json(out);
   } catch (err) {
     next(err);
   }
@@ -699,6 +704,11 @@ router.get('/people/:id', async (req, res, next) => {
     });
 
     if (!person) return res.status(404).json({ error: 'Osoba nenalezena' });
+    if (!(await canSeeSensitive(req.user, person.id))) return res.json(stripSensitive(person));
+    // Audit čtení: kdo si otevřel kartu osoby s citlivými údaji (ne vlastní kartu)
+    if (!(req.user.person && req.user.person.id === person.id)) {
+      _logAuditHr({ action: 'read', entity: 'person', entity_id: person.id, description: 'Zobrazena karta osoby s citlivými údaji: ' + [person.first_name, person.last_name].filter(Boolean).join(' '), user: req.user }).catch(() => {});
+    }
     res.json(person);
   } catch (err) {
     next(err);
@@ -795,7 +805,7 @@ function sanitizeRoleData(body) {
 }
 
 // POST /api/hr/people
-router.post('/people', async (req, res, next) => {
+router.post('/people', requireHrWrite, async (req, res, next) => {
   try {
     const person = await prisma.person.create({
       data: ensureFormerEndDate(sanitizePersonData(req.body, req.user, { mode: 'create' }), null),
@@ -813,7 +823,7 @@ router.post('/people', async (req, res, next) => {
 });
 
 // PUT /api/hr/people/:id
-router.put('/people/:id', async (req, res, next) => {
+router.put('/people/:id', requireHrWrite, async (req, res, next) => {
   try {
     const before = await prisma.person.findUnique({ where: { id: parseInt(req.params.id) } });
     const person = await prisma.person.update({
@@ -836,7 +846,7 @@ router.put('/people/:id', async (req, res, next) => {
 });
 
 // DELETE /api/hr/people/:id (soft delete)
-router.delete('/people/:id', async (req, res, next) => {
+router.delete('/people/:id', requireHrWrite, async (req, res, next) => {
   try {
     const before = await prisma.person.findUnique({ where: { id: parseInt(req.params.id) } });
     await prisma.person.update({
@@ -945,7 +955,7 @@ router.get('/roles', async (req, res, next) => {
 });
 
 // POST /api/hr/roles
-router.post('/roles', async (req, res, next) => {
+router.post('/roles', requireAdmin, async (req, res, next) => {
   try {
     const data = sanitizeRoleData(req.body);
     const role = await prisma.role.create({ data });
@@ -961,7 +971,7 @@ router.post('/roles', async (req, res, next) => {
 });
 
 // PUT /api/hr/roles/:id
-router.put('/roles/:id', async (req, res, next) => {
+router.put('/roles/:id', requireAdmin, async (req, res, next) => {
   try {
     const before = await prisma.role.findUnique({ where: { id: parseInt(req.params.id) } });
     const data = sanitizeRoleData(req.body);
@@ -984,7 +994,7 @@ router.put('/roles/:id', async (req, res, next) => {
 });
 
 // DELETE /api/hr/roles/:id
-router.delete('/roles/:id', async (req, res, next) => {
+router.delete('/roles/:id', requireAdmin, async (req, res, next) => {
   try {
     const before = await prisma.role.findUnique({ where: { id: parseInt(req.params.id) } });
     await prisma.role.delete({ where: { id: parseInt(req.params.id) } });
@@ -1590,7 +1600,7 @@ router.get('/permissions', async (req, res, next) => {
 // Přijme buď array `{ permissions: [{ module_id, access_level }, ...] }`,
 // nebo mapu `{ module_id: access_level, ... }` (frontend lide-hr ji posílá takhle).
 // Záznamy s 'none' nebo prázdnou hodnotou se neukládají — chybí = nemá přístup.
-router.post('/permissions/:roleId', async (req, res, next) => {
+router.post('/permissions/:roleId', requireAdmin, async (req, res, next) => {
   try {
     const roleId = parseInt(req.params.roleId);
     if (Number.isNaN(roleId)) {
@@ -1913,7 +1923,7 @@ router.put('/document-notifications/:id', async (req, res, next) => {
 // ─── SPRÁVA ÚČTŮ ZAMĚSTNANCŮ ─────────────────────────────────────────────
 
 // POST /api/hr/people/:id/account — vytvoří uživatelský účet pro osobu
-router.post('/people/:id/account', async (req, res, next) => {
+router.post('/people/:id/account', requireAdmin, async (req, res, next) => {
   try {
     const personId = parseInt(req.params.id);
     const person = await prisma.person.findUnique({ where: { id: personId } });
@@ -1922,7 +1932,9 @@ router.post('/people/:id/account', async (req, res, next) => {
 
     const bcrypt = require('bcryptjs');
     const { username, password, role } = req.body;
-    const hash = await bcrypt.hash(password || 'changeme', 12);
+    if (role === 'admin' && !req.user.isSuperAdmin) return res.status(403).json({ error: 'Roli administrátora může přidělit pouze super admin' });
+    if (!password || String(password).length < 8) return res.status(400).json({ error: 'Heslo musí mít aspoň 8 znaků' });
+    const hash = await bcrypt.hash(password, 12);
 
     const user = await prisma.user.create({
       data: {
@@ -1945,18 +1957,21 @@ router.post('/people/:id/account', async (req, res, next) => {
 });
 
 // PUT /api/hr/people/:id/password — změna hesla zaměstnance
-router.put('/people/:id/password', async (req, res, next) => {
+router.put('/people/:id/password', requireAdmin, async (req, res, next) => {
   try {
     const person = await prisma.person.findUnique({ where: { id: parseInt(req.params.id) } });
     if (!person) return res.status(404).json({ error: 'Osoba nenalezena' });
     if (!person.user_id) return res.status(400).json({ error: 'Osoba nemá účet' });
 
     const bcrypt = require('bcryptjs');
+    if (!req.body.password || String(req.body.password).length < 8) return res.status(400).json({ error: 'Heslo musí mít aspoň 8 znaků' });
+    const target = await prisma.user.findUnique({ where: { id: person.user_id }, select: { role: true, is_super_admin: true } });
+    if (target && (target.is_super_admin || target.role === 'admin') && !req.user.isSuperAdmin) return res.status(403).json({ error: 'Heslo administrátora může změnit pouze super admin' });
     const hash = await bcrypt.hash(req.body.password, 12);
 
     await prisma.user.update({
       where: { id: person.user_id },
-      data: { password_hash: hash },
+      data: { password_hash: hash, token_version: { increment: 1 } },
     });
 
     res.json({ ok: true });
