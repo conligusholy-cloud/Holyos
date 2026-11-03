@@ -94,6 +94,7 @@ app.post('/api/inquiry', async (req, res) => {
 app.get('/pl', (req, res) => res.redirect(302, '/cesta/pl' + (req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '')));
 app.get('/favicon.svg', (req, res) => res.set('Content-Type', 'image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(LOGO.replace(/^<span[^>]*>/, '').replace(/<\/span>$/, '').replace('width="34" height="34"', 'width="64" height="64"')));
 app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
+app.use('/media', express.static(path.join(__dirname, 'media'), { maxAge: '7d', fallthrough: false })); // fotky provozoven + videa (Range pro přehrávání)
 app.get('/img/pradlomat-flex.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(path.join(__dirname, 'pradlomat-flex.webp')));
 app.get('/img/pradlomat-mini.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(path.join(__dirname, 'pradlomat-mini.webp')));
 

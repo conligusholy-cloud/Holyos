@@ -21,8 +21,7 @@ const T = {
       card: 'Přes 70 prádlomatů, které sami provozujeme v České republice.',
       imgAlt: 'Samoobslužný venkovní prádlomat se dvěma pračkami a sušičkou',
       sites: 'Skutečné provozovny',
-      sitePh: 'Fotografie provozovny',
-      siteCity: 'Město doplníme',
+      siteList: [['/media/provozovna-1.webp', 'Česká republika · u čerpací stanice', 'Prádlomat u čerpací stanice ORLEN'], ['/media/provozovna-2.webp', 'Česká republika', 'Prádlomat Best Series u silnice ve městě'], ['/media/provozovna-3.webp', 'Irsko · partnerský provoz', 'Partnerský prádlomat u čerpací stanice v Irsku']],
     },
     why: {
       kicker: 'Proč prádlomat', h: 'Jednoduchá služba. Více možností pro vaše podnikání.',
@@ -53,6 +52,7 @@ const T = {
       stat: 'přes', statUnit: 'prádlomatů v ČR, které sami provozujeme',
       note: 'Zkušenosti z českého trhu. Podmínky v jiných zemích posuzujeme vždy podle místní situace.',
       gallery: 'Fotografie skutečných provozoven doplníme',
+      vid1: 'Prádlomat v provozu', vid2: 'Jak se prádlomat používá — krok za krokem', vidPlay: 'Přehrát video',
       map: 'Mapa sítě bude doplněna po zveřejnění seznamu lokalit',
       cta: 'Chci vidět prádlomat v provozu',
     },
@@ -291,8 +291,12 @@ footer{border-top:1px solid var(--line);padding:56px 0 34px;margin-top:40px}
 
 .sites{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 @media (max-width:760px){.sites{grid-template-columns:1fr}}
-.site{margin:0}.site .ph{aspect-ratio:4/3;min-height:0}
+.site{margin:0}.site img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:18px;border:1px solid var(--line)}
 .site figcaption{display:flex;align-items:center;gap:7px;margin-top:10px;color:var(--tx2);font-size:14.5px;font-weight:600}.site figcaption svg{color:var(--az)}
+.vids{display:grid;grid-template-columns:minmax(0,270px) minmax(0,270px) 1fr;gap:16px;margin-top:44px;align-items:stretch}
+@media (max-width:820px){.vids{grid-template-columns:1fr 1fr}.vids .ph{grid-column:1/-1;min-height:160px}}
+.vid{margin:0}.vid video{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:18px;border:1px solid var(--line2);background:#0b1426;display:block}
+.vid figcaption{margin-top:10px;color:var(--tx2);font-size:14px;font-weight:600}
 /* Pozadí jako Best Series 2.0: síť bodů (canvas) + záře + perspektivní mřížka */
 #net{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:.7}
 .bgglow{position:fixed;border-radius:50%;filter:blur(90px);opacity:.45;z-index:-1;pointer-events:none;animation:drift 18s ease-in-out infinite alternate}
@@ -341,7 +345,7 @@ function homePage(lang) {
     + '<div class="statcard"><b class="grad">70+</b><p>' + esc(L.hero.card) + '</p></div></div></div></section>'
     // ── skutečné provozovny (3 fotky s názvem města) — PH: doplnit skutečné fotografie + města ──
     + '<section id="provozovny" style="padding:10px 0 70px"><div class="wrap"><div class="kicker">' + esc(L.hero.sites) + '</div><div class="sites">'
-    + [1, 2, 3].map(() => '<figure class="site rv"><div class="ph" role="img" aria-label="' + esc(L.hero.sitePh) + '">' + svg('photo', 30) + '<span>' + esc(L.hero.sitePh) + '</span></div><figcaption>' + svg('site', 16) + esc(L.hero.siteCity) + '</figcaption></figure>').join('')
+    + L.hero.siteList.map((x) => '<figure class="site rv"><img src="' + x[0] + '" alt="' + esc(x[2]) + '" loading="lazy" decoding="async" width="1200" height="900"><figcaption>' + svg('site', 16) + esc(x[1]) + '</figcaption></figure>').join('')
     + '</div></div></section>'
     // ── proč ──
     + '<section class="alt" id="proc"><div class="divline"></div><div class="wrap">' + kicker(L.why.kicker) + '<h2 class="rv">' + esc(L.why.h) + '</h2><p class="lead rv">' + esc(L.why.lead) + '</p>'
@@ -355,7 +359,10 @@ function homePage(lang) {
     + '<div class="ctas rv">' + interestBtn('visit', L.network.cta, 'btn-g') + '</div></div>'
     + '<div class="areas">' + L.network.areas.map((a, i) => '<div class="area rv"><div class="ico">' + svg(['site', 'self', 'you'][i], 22) + '</div><div><h3>' + esc(a[0]) + '</h3><p>' + esc(a[1]) + '</p></div></div>').join('') + '</div></div>'
     // PH: galerie skutečných provozoven + mapa (body až po dodání seznamu adres)
-    + '<div class="media rv"><div class="ph" role="img" aria-label="' + esc(L.network.gallery) + '">' + svg('photo', 30) + '<span>' + esc(L.network.gallery) + '</span></div><div class="ph" role="img" aria-label="' + esc(L.network.map) + '">' + svg('map', 30) + '<span>' + esc(L.network.map) + '</span></div></div></div></section>'
+    + '<div class="vids rv">'
+    + '<figure class="vid"><video class="autovid" src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" muted loop playsinline preload="none" aria-label="' + esc(L.network.vid1) + '"></video><figcaption>' + esc(L.network.vid1) + '</figcaption></figure>'
+    + '<figure class="vid"><video src="/media/krok.mp4" poster="/media/krok-poster.jpg" controls playsinline preload="none" aria-label="' + esc(L.network.vid2) + '"></video><figcaption>' + esc(L.network.vid2) + '</figcaption></figure>'
+    + '<div class="ph" role="img" aria-label="' + esc(L.network.map) + '">' + svg('map', 30) + '<span>' + esc(L.network.map) + '</span></div></div></div></section>'
     // ── vlastnictví ──
     + '<section id="vlastnictvi"><div class="wrap"><div class="own"><div>' + kicker(L.own.kicker) + '<h2 class="rv">' + esc(L.own.h) + '</h2><p class="lead rv">' + esc(L.own.lead) + '</p></div>'
     + '<div><ul class="tasks">' + L.own.items.map((x) => '<li class="rv"><span>' + svg('check', 16) + '</span>' + esc(x) + '</li>').join('') + '</ul><p class="ofoot rv">' + esc(L.own.foot) + '</p></div></div></div></section>'
@@ -409,6 +416,8 @@ function clientJs(L) {
     + 'b.addEventListener("click",function(){var o=mn.classList.toggle("open");b.setAttribute("aria-expanded",o?"true":"false");});mn.addEventListener("click",function(e){if(e.target.closest("a"))cl();});d.addEventListener("keydown",function(e){if(e.key==="Escape")cl();});'
     // odhalení při scrollu
     + 'var rv=d.querySelectorAll(".rv");if("IntersectionObserver"in window){var io=new IntersectionObserver(function(es){es.forEach(function(x){if(x.isIntersecting){x.target.classList.add("in");io.unobserve(x.target);}});},{threshold:.12,rootMargin:"0px 0px -40px 0px"});rv.forEach(function(e){io.observe(e);});}else rv.forEach(function(e){e.classList.add("in");});'
+    // video v provozu: přehrávat jen ve viditelné části stránky (šetří data i baterii), ne při omezení pohybu
+    + 'var av=d.querySelectorAll(".autovid"),red=matchMedia("(prefers-reduced-motion: reduce)").matches;if(!red&&"IntersectionObserver"in window){var vo=new IntersectionObserver(function(es){es.forEach(function(x){var v=x.target;if(x.isIntersecting){v.preload="auto";var p=v.play();if(p&&p.catch)p.catch(function(){});}else v.pause();});},{threshold:.35});av.forEach(function(v){vo.observe(v);});}else av.forEach(function(v){v.controls=true;});'
     // tlačítka s předvybraným zájmem
     + 'var sel=d.getElementById("f-int");d.addEventListener("click",function(e){var a=e.target.closest("[data-interest]");if(!a)return;sel.value=a.getAttribute("data-interest");sel.closest(".fld").classList.remove("bad");setTimeout(function(){d.getElementById("f-name").focus({preventScroll:true});},450);});'
     // formulář: validace → skutečné odeslání; úspěch jen při potvrzení serveru

@@ -66,3 +66,6 @@ podklady/
 
 # Bankovní plán — vygenerované JSON výstupy (probe/snapshot)
 scripts/out/
+
+# Laundromats — originály fotek a videí (na web jdou zmenšené verze z apps/laundromats/media)
+apps/laundromats/foto/
