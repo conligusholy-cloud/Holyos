@@ -172,7 +172,7 @@ router.get('/invoices', async (req, res, next) => {
     const invoices = await prisma.invoice.findMany({
       where,
       include: {
-        company: { select: { id: true, name: true, ico: true, verified_bank_accounts: true } },
+        company: { select: { id: true, name: true, ico: true, bank_account: true, verified_bank_accounts: true } },
         order: { select: { id: true, order_number: true } },
         warehouse_document: { select: { id: true, number: true, type: true, status: true } },
         created_by: { select: { id: true, first_name: true, last_name: true } },
@@ -215,17 +215,21 @@ router.get('/invoices', async (req, res, next) => {
             : [];
           const accNorm = normalizeAccount(inv.partner_bank_account);
           const ibanNorm = (inv.partner_iban || '').replace(/\s+/g, '').toUpperCase();
+          const { canonAccount } = require('../services/banking/mfcr-registr');
+          const mine = [canonAccount(inv.partner_bank_account), canonAccount(inv.partner_iban)].filter(Boolean);
+          const hit = (...vals) => vals.some((v) => { const c = canonAccount(v); return c && mine.includes(c); });
+          // stejné pravidlo jako detail (account-verification): whitelist + hlavní účet v kartě firmy
           const matched = whitelist.find(e => {
             const eAcc = normalizeAccount(e.account);
             const eIban = (e.iban || '').replace(/\s+/g, '').toUpperCase();
-            return (accNorm && eAcc === accNorm) || (ibanNorm && eIban === ibanNorm);
-          });
+            return (accNorm && eAcc === accNorm) || (ibanNorm && eIban === ibanNorm) || hit(e.account, e.iban);
+          }) || (inv.company.bank_account && hit(inv.company.bank_account) ? { source: 'card' } : null);
           if (matched) {
             verification = { status: 'verified', source: matched.source || 'manual', message: 'Známý účet ✓' };
-          } else if (whitelist.length > 0) {
+          } else if (whitelist.length > 0 || inv.company.bank_account) {
             verification = {
               status: 'mismatch',
-              message: `Firma má ${whitelist.length} jiných účtů — tenhle není mezi nimi!`,
+              message: `Firma má ${whitelist.length + (inv.company.bank_account ? 1 : 0)} jiných účtů — tenhle není mezi nimi!`,
             };
           } else {
             verification = { status: 'unknown', message: 'Firma zatím nemá ověřené účty.' };
@@ -236,7 +240,7 @@ router.get('/invoices', async (req, res, next) => {
       }
 
       // Strip whitelist z odpovědi (lehčí payload, raw data nepotřebujeme v listingu)
-      const { verified_bank_accounts, ...companyTrimmed } = inv.company || {};
+      const { verified_bank_accounts, bank_account: _cardAcc, ...companyTrimmed } = inv.company || {};
       return {
         ...inv,
         company: inv.company ? companyTrimmed : null,

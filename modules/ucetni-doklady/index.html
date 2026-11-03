@@ -1638,7 +1638,7 @@
         if (!v) return '<span style="color:var(--text2);">—</span>';
         if (!reg) return '<span style="color:var(--text2);">nekontrolováno</span>';
         if (!reg.checked) return '<span style="color:#f59e0b;" title="' + escapeHtml(reg.error || '') + '">⚠ nedostupné</span>';
-        if (!reg.found) return '<span style="color:#f59e0b;">firma nenalezena</span>';
+        if (!reg.found) return '<span style="color:#f59e0b;cursor:help;" title="Registr plátců DPH (MFČR) toto DIČ nevede jako samostatného plátce. Obvykle jde o člena skupiny DPH (pak je v registru pod DIČ skupiny, např. ORLEN, ČEZ, O2), o neplátce, nebo o zahraniční firmu. Rozhoduje kontrola proti účtům uloženým u firmy.">není v registru ⓘ</span>';
         return inReg(v) ? '<span style="color:#10b981;font-weight:700;">✓ zveřejněný</span>' : '<span style="color:#ef4444;font-weight:700;">✗ není v registru</span>';
       };
       const row = (lbl, v, key) => '<tr><td ' + td + '><b>' + lbl + '</b></td><td ' + td + '>' + mono(v) + '</td><td ' + td + ' id="dv-known-' + key + '">' + (v ? '<span style="color:var(--text2);">…</span>' : '<span style="color:var(--text2);">—</span>') + '</td><td ' + td + '>' + regCell(v) + '</td></tr>';

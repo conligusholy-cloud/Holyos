@@ -29,6 +29,9 @@ function canonAccount(s) {
 }
 
 function dicFor(company) {
+  // Zahraniční firma (country ≠ CZ) — registr MFČR je jen pro české plátce; slovenské IČO by se omylem hledalo jako CZ DIČ.
+  const ctry = String((company && company.country) || '').trim().toUpperCase();
+  if (ctry && !['CZ', 'CZE', 'ČR', 'CR', 'ČESKO', 'CESKO', 'ČESKÁ REPUBLIKA', 'CESKA REPUBLIKA', 'CZECH REPUBLIC', 'CZECHIA'].includes(ctry)) return null;
   const raw = String((company && (company.dic || company.ico)) || '').replace(/\s+/g, '').toUpperCase();
   if (!raw) return null;
   if (/^CZ\d{8,10}$/.test(raw)) return raw.slice(2);

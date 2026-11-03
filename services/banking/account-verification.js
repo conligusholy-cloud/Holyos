@@ -50,7 +50,7 @@ async function verifyAccount({ companyId, partnerBankAccount, partnerIban, useRe
   }
   const company = await prisma.company.findUnique({
     where: { id: companyId },
-    select: { id: true, name: true, ico: true, dic: true, bank_account: true, verified_bank_accounts: true },
+    select: { id: true, name: true, ico: true, dic: true, country: true, bank_account: true, verified_bank_accounts: true },
   });
   if (!company) return { status: 'unknown', needs_physical: true, message: 'Firma nenalezena.' };
 
