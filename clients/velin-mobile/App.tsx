@@ -27,7 +27,7 @@ import {
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AppState, Linking, Platform, Text, TouchableOpacity, View } from 'react-native';
+import { AppState, Platform, Text, TouchableOpacity, View } from 'react-native';
 import * as Updates from 'expo-updates';
 import * as Notifications from 'expo-notifications';
 import Gate from './screens/Gate';
@@ -52,6 +52,8 @@ import Meetings from './screens/Meetings';
 import Ads from './screens/Ads';
 import AdsWeb from './screens/AdsWeb';
 import SalesWeb from './screens/SalesWeb';
+import VideoCall from './screens/VideoCall';
+import VideoCalls from './screens/VideoCalls';
 import SalesStats from './screens/SalesStats';
 import AdsLive from './screens/AdsLive';
 import AdsPage from './screens/AdsPage';
@@ -94,6 +96,8 @@ export type RootStackParamList = {
   Ads: undefined;
   AdsWeb: undefined;
   SalesWeb: undefined;
+  VideoCall: { url: string };
+  VideoCalls: undefined;
   SalesStats: undefined;
   AdsLive: undefined;
   AdsPage: { key: string; name: string; color?: string };
@@ -133,11 +137,6 @@ export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 // pushne ChatThread na zásobník.
 function handleNotificationTap(data: any) {
   if (!data || typeof data !== 'object') return;
-  // Videohovor z laundromats.eu → otevřít v prohlížeči (kamera + mikrofon přes WebRTC, bez nového buildu aplikace)
-  if (data.type === 'videocall' && typeof data.url === 'string' && /^https:\/\/(www\.)?laundromats\.eu\/videocall\/agent\//.test(data.url)) {
-    Linking.openURL(data.url).catch(() => {});
-    return;
-  }
 
   // Routing podle typu/kind notifikace:
   // - kind='evening_reflection' (velin-scheduler 16:30) → EveningReflection modal
@@ -145,7 +144,10 @@ function handleNotificationTap(data: any) {
   // - jinak: žádná specifická navigace, jen otevřít app.
   let target: { name: keyof RootStackParamList; params?: any } | null = null;
 
-  if (data.kind === 'evening_reflection' || data.type === 'evening_reflection') {
+  if (data.type === 'videocall' && typeof data.url === 'string' && /^https:\/\/(www\.)?laundromats\.eu\/videocall\/agent\//.test(data.url)) {
+    // Videohovor z laundromats.eu → rovnou do hovoru ve Velínu (kamera + mikrofon ve WebView)
+    target = { name: 'VideoCall', params: { url: data.url } };
+  } else if (data.kind === 'evening_reflection' || data.type === 'evening_reflection') {
     target = { name: 'EveningReflection' };
   } else if (data.type === 'pay_request' && typeof data.token === 'string' && data.token) {
     // Žádost o zaplacení dokladu (QR platba) → stránka s QR
@@ -434,6 +436,16 @@ export default function App() {
             name="SalesWeb"
             component={SalesWeb}
             options={{ animation: 'slide_from_right', headerShown: true, title: 'Obchodník', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text, headerShadowVisible: false }}
+          />
+          <Stack.Screen
+            name="VideoCall"
+            component={VideoCall}
+            options={{ animation: 'slide_from_bottom', headerShown: true, title: 'Videohovor', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text, headerShadowVisible: false }}
+          />
+          <Stack.Screen
+            name="VideoCalls"
+            component={VideoCalls}
+            options={{ animation: 'slide_from_right', headerShown: true, title: 'Videohovory', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text, headerShadowVisible: false }}
           />
           <Stack.Screen
             name="SalesStats"

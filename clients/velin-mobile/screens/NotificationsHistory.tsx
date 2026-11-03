@@ -186,6 +186,10 @@ export default function NotificationsHistory() {
                   <TouchableOpacity style={styles.linkBtn} onPress={() => navigation.navigate('AssistantSettings')}>
                     <Text style={styles.linkText}>Otevřít vzkaz v aplikaci</Text>
                   </TouchableOpacity>
+                ) : isOpen && !!item.link && /^https:\/\/(www\.)?laundromats\.eu\/videocall\/agent\//.test(item.link) ? (
+                  <TouchableOpacity style={styles.linkBtn} onPress={() => navigation.navigate('VideoCall', { url: item.link })}>
+                    <Text style={styles.linkText}>🎥 Připojit se k videohovoru</Text>
+                  </TouchableOpacity>
                 ) : isOpen && !!item.link ? (
                   <TouchableOpacity style={styles.linkBtn} onPress={() => openLink(item.link!)}>
                     <Text style={styles.linkText}>Otevřít v prohlížeči</Text>

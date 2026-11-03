@@ -22,20 +22,24 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "cz.bestseries.velin",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Velín potřebuje polohu, aby poznal, že jsi přišel do práce (docházka GPS).",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Velín potřebuje polohu i na pozadí, aby automaticky zaznamenal příchod a odchod z provozu (GPS docházka).",
         "NSLocationAlwaysUsageDescription": "Velín potřebuje polohu na pozadí, aby automaticky zaznamenal příchod a odchod z provozu (GPS docházka).",
-        "NSCameraUsageDescription": "Velín potřebuje přístup k fotoaparátu, abys mohl posílat fotky kolegům do chatu.",
+        "NSCameraUsageDescription": "Velín potřebuje fotoaparát pro fotky do chatu a pro videohovory se zákazníky.",
         "NSPhotoLibraryUsageDescription": "Velín potřebuje přístup k fotkám, abys mohl vybrat fotku z galerie a poslat ji kolegům.",
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["location", "fetch"]
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ],
+        "NSMicrophoneUsageDescription": "Velín potřebuje mikrofon pro videohovory se zákazníky."
       }
     },
     "android": {
       "package": "cz.bestseries.velin",
-      "versionCode": 2,
+      "versionCode": 3,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -46,7 +50,10 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION"
+        "FOREGROUND_SERVICE_LOCATION",
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
       ]
     },
     "extra": {
@@ -78,7 +85,8 @@
         "expo-image-picker",
         {
           "photosPermission": "Velín potřebuje přístup k fotkám, abys mohl vybrat fotku z galerie a poslat ji kolegům.",
-          "cameraPermission": "Velín potřebuje přístup k fotoaparátu, abys mohl posílat fotky kolegům do chatu."
+          "cameraPermission": "Velín potřebuje přístup k fotoaparátu, abys mohl posílat fotky kolegům do chatu.",
+          "microphonePermission": "Velín potřebuje mikrofon pro videohovory se zákazníky."
         }
       ],
       [
