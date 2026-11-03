@@ -354,8 +354,8 @@ root.querySelector('.mt-usrreload').onclick=usrLoad;
 // ── Statistiky schůzek — kolik se jich na dané období domluvilo a kolik proběhlo ──
 // Schůzka patří do období podle TERMÍNU, ne podle data domluvení, aby byl obojí
 // údaj ve stejném sloupci. Úspěšnost = proběhlé / vyřešené (nadcházející se nepočítají).
-var statGroup='month', statData=null, statBusy=false;
-var STAT_N={day:14,week:12,month:12,year:5};
+var statGroup='day', statData=null, statBusy=false, statDivFrac=null;
+var STAT_N={day:28,week:12,month:12,year:5};
 function statLoad(){
   var box=root.querySelector('.mt-statwrap');
   if(statBusy)return; statBusy=true;
@@ -366,7 +366,8 @@ function statLoad(){
 }
 // Sloupcový graf bez knihoven: domluveno vedle proběhlo, popisky period dole.
 function statChart(b,avail){
-  var W=Math.max(560,Math.min(Math.max(560,(avail||0)-8),b.length*120)), H=240, PL=46, PR=10, PT=18, PB=34;
+  var dvaRadky=b.some(function(x){return !!x.sub;});
+  var W=Math.max(560,Math.min(Math.max(560,(avail||0)-8),b.length*(dvaRadky?66:120))), H=dvaRadky?252:240, PL=46, PR=10, PT=18, PB=dvaRadky?46:34;
   var max=1; b.forEach(function(x){if(x.booked>max)max=x.booked;});
   var raw=Math.ceil(max/4), step=Math.pow(10,Math.max(0,String(raw).length-1)), tick=Math.ceil(raw/step)*step, top=tick*4;
   var iw=W-PL-PR, ih=H-PT-PB, bw=iw/b.length, g='';
@@ -376,13 +377,23 @@ function statChart(b,avail){
   b.forEach(function(x,i){
     var c=PL+bw*i+bw/2, w=Math.max(10,Math.min(26,(bw-16)/2));
     var hb=(x.booked/top)*ih, hd=(x.done/top)*ih;
-    var tip=esc(x.title)+' — domluveno '+x.booked+', proběhlo '+x.done+(x.rate!=null?' ('+x.rate+' %)':'');
-    g+='<rect x="'+(c-w-3)+'" y="'+(PT+ih-hb)+'" width="'+w+'" height="'+hb+'" rx="3" fill="#4fd1ff" opacity=".85"><title>'+tip+'</title></rect>'
-      +'<rect x="'+(c+3)+'" y="'+(PT+ih-hd)+'" width="'+w+'" height="'+hd+'" rx="3" fill="#2fe3a0" opacity=".9"><title>'+tip+'</title></rect>';
-    if(x.booked)g+='<text x="'+c+'" y="'+(PT+ih-hb-6)+'" text-anchor="middle" fill="#e8f0ff" font-size="11" font-weight="700">'+x.booked+'</text>';
-    g+='<text x="'+c+'" y="'+(H-12)+'" text-anchor="middle" fill="#8ea2c2" font-size="11">'+esc(x.label)+'</text>';
+    var tip=x.future?(esc(x.title)+' — domluveno dopředu '+x.booked):(esc(x.title)+' — domluveno '+x.booked+', proběhlo '+x.done+(x.rate!=null?' ('+x.rate+' %)':''));
+    g+='<rect x="'+(c-w-3)+'" y="'+(PT+ih-hb)+'" width="'+w+'" height="'+hb+'" rx="3" fill="#4fd1ff" opacity="'+(x.future?'.3':'.85')+'"'+(x.future?' stroke="#4fd1ff" stroke-width="1.2" stroke-dasharray="3 2"':'')+'><title>'+tip+'</title></rect>'
+      +(x.future?'':'<rect x="'+(c+3)+'" y="'+(PT+ih-hd)+'" width="'+w+'" height="'+hd+'" rx="3" fill="#2fe3a0" opacity=".9"><title>'+tip+'</title></rect>');
+    if(x.booked)g+='<text x="'+c+'" y="'+(PT+ih-hb-6)+'" text-anchor="middle" fill="'+(x.future?'#8ea2c2':'#e8f0ff')+'" font-size="11" font-weight="700">'+x.booked+'</text>';
+    g+='<text x="'+c+'" y="'+(H-(x.sub?26:12))+'" text-anchor="middle" fill="'+(x.future?'#58698a':(x.sub?'#e8f0ff':'#8ea2c2'))+'" font-size="11"'+(x.sub?' font-weight="700"':'')+'>'+esc(x.label)+'</text>'
+      +(x.sub?'<text x="'+c+'" y="'+(H-11)+'" text-anchor="middle" fill="#8ea2c2" font-size="10.5">'+esc(x.sub)+'</text>':'');
   });
   g+='<line x1="'+PL+'" y1="'+(PT+ih)+'" x2="'+(W-PR)+'" y2="'+(PT+ih)+'" stroke="rgba(120,160,255,.3)"/>';
+  // Svislá čára tam, kde končí minulost a začínají domluvené termíny dopředu.
+  var fi=-1; b.forEach(function(x,i){if(fi<0&&x.future)fi=i;});
+  statDivFrac=null;
+  if(fi>0){
+    var dx=PL+bw*fi;
+    statDivFrac=dx/W;
+    g+='<line x1="'+dx+'" y1="'+(PT-6)+'" x2="'+dx+'" y2="'+(PT+ih)+'" stroke="#ffd866" stroke-width="1.2" stroke-dasharray="4 3" opacity=".65"/>'
+      +'<text x="'+(dx-5)+'" y="'+(PT-10)+'" text-anchor="end" fill="#ffd866" font-size="10.5">dnes</text>';
+  }
   return '<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block;max-width:none">'+g+'</svg>';
 }
 function statRender(){
@@ -398,6 +409,7 @@ function statRender(){
     +'<div><b style="color:#ffd866">'+(t.unmarked||0)+'</b><span>Neoznačeno</span></div>'
     +'<div><b style="color:#4fd1ff">'+(t.upcoming||0)+'</b><span>Nadchází</span></div></div>';
   var leg='<div class="mt-leg"><span><i style="background:#4fd1ff"></i>domluveno</span><span><i style="background:#2fe3a0"></i>proběhlo</span>'
+    +'<span><i style="background:rgba(79,209,255,.3);border:1px dashed #4fd1ff"></i>domluveno dopředu</span>'
     +'<span>Úspěšnost = proběhlé ze schůzek, které už mají výsledek. Nadcházející se nepočítají.</span></div>';
   var rows=b.slice().reverse().map(function(x){
     return '<tr><td>'+esc(x.title)+'</td><td>'+x.booked+'</td><td style="color:#2fe3a0">'+x.done+'</td><td>'+x.no_show+'</td><td>'+x.canceled+'</td><td>'+x.unmarked+'</td><td>'+x.upcoming+'</td>'
@@ -408,6 +420,9 @@ function statRender(){
     +'<div class="mt-chart">'+statChart(b,avail)+'</div>'+leg
     +'<div class="mt-tw" style="margin-top:16px"><table><thead><tr><th>Období</th><th>Domluveno</th><th>Proběhlo</th><th>Nedorazil</th><th>Zrušeno</th><th>Neoznačeno</th><th>Nadchází</th><th>Úspěšnost</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +(statData.internal_skipped?'<p class="muted small" style="margin:10px 0 0">Nepočítá se '+statData.internal_skipped+' našich vlastních (testovacích) rezervací z firemních e-mailů.</p>':'');
+  // Graf jde dál doprava než se vejde — odrolujeme tak, aby byl dnešek i kus dopředu vidět.
+  var ch=box.querySelector('.mt-chart');
+  if(ch&&statDivFrac!=null&&ch.scrollWidth>ch.clientWidth)ch.scrollLeft=Math.max(0,statDivFrac*ch.scrollWidth-ch.clientWidth*0.55);
 }
 var statRz=null;
 window.addEventListener('resize',function(){if(!statData)return;clearTimeout(statRz);statRz=setTimeout(statRender,200);});
@@ -478,7 +493,7 @@ function meetingsPage({ admin, holyosUrl, error }) {
     </div>
     <div class="mt-stat" style="display:none">
       <div class="mt-bar"><h2>📊 Statistiky schůzek</h2><span style="flex:1"></span>
-        <div class="mt-seg"><button data-sgrp="day">Dny</button><button data-sgrp="week">Týdny</button><button data-sgrp="month" class="on">Měsíce</button><button data-sgrp="year">Roky</button></div></div>
+        <div class="mt-seg"><button data-sgrp="day" class="on">Dny</button><button data-sgrp="week">Týdny</button><button data-sgrp="month">Měsíce</button><button data-sgrp="year">Roky</button></div></div>
       <p class="muted small" style="margin:-6px 0 14px">Schůzka se počítá do období, na které byl <b>termín</b> (ne kdy se domluvila). Data jsou společná s HolyOS → Prodejní objednávky → Termíny.</p>
       <div class="mt-statwrap card"></div>
     </div>

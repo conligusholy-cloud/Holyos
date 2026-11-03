@@ -48,8 +48,8 @@ module.exports = function mountVideocall(app, ctx) {
     const b = req.body || {};
     if (b.website) return res.json({ ok: true, room: 'x', key: 'x' });
     if (rateLimited('vcstart:' + req.ip, 6, 3600e3)) return res.status(429).json({ ok: false, error: 'Příliš mnoho pokusů, zkuste to prosím později.' });
-    const name = String(b.name || (req.account && req.account.name) || '').trim().slice(0, 120);
-    if (name.length < 2) return res.status(400).json({ ok: false, error: 'Vyplňte prosím své jméno.' });
+    let name = String(b.name || (req.account && req.account.name) || '').trim().slice(0, 120);
+    if (name.length < 2) name = 'Návštěvník webu';
     const phone = String(b.phone || (req.account && req.account.phone) || '').trim().slice(0, 40), email = String(b.email || (req.account && req.account.email) || '').trim().slice(0, 160), note = String(b.note || '').trim().slice(0, 300);
     const id = crypto.randomBytes(10).toString('hex'), vkey = crypto.randomBytes(16).toString('hex');
     const r = { id, vkey, created: now(), touched: now(), status: 'waiting', agent: null, vready: false, visitor: { name, phone, email, note }, msgs: [], clients: new Set(), lead_id: req.account && req.account.lead_id };
@@ -136,13 +136,10 @@ module.exports = function mountVideocall(app, ctx) {
   // ── stránka návštěvníka ──
   app.get('/videocall', (req, res) => {
     const a = req.account || {};
-    const body = CSS + `<div class="vc-wrap"><div class="hero" style="padding-bottom:8px"><span class="eyebrow"><i></i>Videohovor</span><h1>Spojte se s <span class="g">kompetentní osobou</span></h1><p>Probereme váš záměr přímo s námi – přes kameru, nebo jen hlasem či chatem. Funguje v telefonu i v počítači, nic neinstalujete.</p></div>
+    const body = CSS + `<div class="vc-wrap"><div class="hero" style="padding-bottom:8px"><span class="eyebrow"><i></i>Videohovor</span><h1>Spojte se s <span class="g">kompetentní osobou</span></h1></div>
       <form class="card" id="vc-start" style="max-width:560px">
-        <label>Jméno a příjmení<input name="name" required maxlength="120" autocomplete="name" value="${esc(a.name || '')}"></label>
-        <label>Telefon (pro případ, že by se spojení přerušilo)<input name="phone" type="tel" maxlength="40" autocomplete="tel" value="${esc(a.phone || '')}"></label>
-        <label>S čím vám můžeme pomoci? (nepovinné)<input name="note" maxlength="300" placeholder="např. vlastní prádlomat, lokalita, financování…"></label>
         <input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
-        <button class="btn" type="submit" style="width:100%;justify-content:center;margin-top:16px">🎥 Spojit se teď</button>
+        <button class="btn" type="submit" style="width:100%;justify-content:center">🎥 Spojit se teď</button>
         <p class="small muted" style="margin:10px 0 0">Kameru a mikrofon zapnete až ve chvíli, kdy se k hovoru připojíme – prohlížeč se vás na ně zeptá.</p>
         <div class="msg err" id="vc-err" style="display:none"></div></form>
       <div id="vc-call" style="display:none">${stage('visitor')}</div></div>
