@@ -48,5 +48,5 @@ const CSS = '.lhdr{position:sticky;top:0;z-index:60;background:rgba(4,6,12,.72);
   + '.lhdr .lcta{flex:none;white-space:nowrap;padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:700;color:#fff;text-decoration:none;background:linear-gradient(90deg,#1e86e0,#7c5cff);box-shadow:0 6px 20px -8px rgba(79,120,255,.7)}'
   + '.lhdr .htag{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#a9b8d6;border:1px solid rgba(120,160,255,.14);border-radius:999px;padding:3px 9px;background:rgba(255,255,255,.02);white-space:nowrap;margin-left:12px}@media(max-width:520px){.lhdr .htag{display:none}}'
   + '@media(max-width:1320px){.lhdr .in{flex-wrap:wrap;row-gap:8px}.lhdr .lnav{order:9;flex-basis:100%;margin:0 -18px;padding:0 18px;overflow-x:auto;scrollbar-width:none}.lhdr .lnav::-webkit-scrollbar{display:none}}'
-  + '@media(max-width:520px){.lhdr .lcta{display:none}.lhdr .presence .pt{display:none}}';
+  + '@media(max-width:520px){.lhdr .lcta{padding:6px 12px;font-size:12px}.lhdr .presence .pt{display:none}.lhdr .in{gap:8px}.lhdr .lmenu-b{right:-8px;min-width:210px}}';
 module.exports = { header, CSS, FONT, LOGO };
