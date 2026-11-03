@@ -3279,7 +3279,8 @@ router.get('/exports/preview', async (req, res, next) => {
 router.post('/exports/run', async (req, res, next) => {
   try {
     const b = req.body || {}; const r = _expRange(b); if (!r) return res.status(400).json({ error: 'Zadej platné období od–do' });
-    res.json(await accExport.runExport(r.from, r.to, { trigger: 'manual', recipients: b.recipients || undefined, includeSent: !!b.include_sent, userId: req.user && req.user.id }));
+    if (b.test && !String(b.recipients || '').trim()) return res.status(400).json({ error: 'Pro test zadej svůj e-mail' });
+    res.json(await accExport.runExport(r.from, r.to, { trigger: b.test ? 'test' : 'manual', test: !!b.test, recipients: b.recipients || undefined, includeSent: !!b.include_sent || !!b.test, userId: req.user && req.user.id }));
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 router.get('/exports', async (req, res, next) => {

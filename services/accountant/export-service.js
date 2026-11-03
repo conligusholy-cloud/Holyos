@@ -194,28 +194,29 @@ async function runExport(from, to, opts = {}) {
   const firm = (our && our.name) || 'Best Series';
   const partInfo = []; let total = 0, okCount = 0;
   // Bez příloh, ale s doklady (jen seznam) → pošle se aspoň seznam v jednom ZIPu
-  const sendList = parts.length ? parts : [[]];
+  // Test: jen první ZIP (ať se zkouška neposílá v desítkách MB); doklady se neoznačí jako odeslané → automatika je pošle normálně
+  const sendList = parts.length ? (opts.test ? parts.slice(0, 1) : parts) : [[]];
   for (let i = 0; i < sendList.length; i++) {
     const p = sendList[i]; const n = i + 1, N = sendList.length;
     const fname = 'doklady_' + ymd(from) + '_' + ymd(new Date(to.getTime() - 1)) + (N > 1 ? '_cast-' + n + 'z' + N : '') + '.zip';
     const zipPath = path.join(dir, fname);
     const bytes = await writeZip(zipPath, p, i === 0 ? fullCsv : listCsv(p, () => n));
     total += bytes;
-    const subject = 'Doklady ' + periodTxt + ' — ' + firm + (N > 1 ? ' (část ' + n + '/' + N + ')' : '');
+    const subject = (opts.test ? '[TEST] ' : '') + 'Doklady ' + periodTxt + ' — ' + firm + (N > 1 ? ' (část ' + n + '/' + N + ')' : '');
     const body = 'Dobrý den,\n\nv příloze zasíláme doklady za období ' + periodTxt + (N > 1 ? ' — část ' + n + ' z ' + N : '') + '.\n\n'
       + 'V této zprávě: ' + p.length + ' dokladů (' + (bytes / 1048576).toFixed(1).replace('.', ',') + ' MB).\n'
       + 'Celkem za období: ' + docs.length + ' dokladů (přijaté ' + docs.filter((d) => d.inv.direction === 'ap').length + ', vydané ' + docs.filter((d) => d.inv.direction === 'ar').length + ')' + (missing.length ? ', z toho ' + missing.length + ' bez přílohy (uvedeny v seznamu)' : '') + '.\n'
-      + 'Úplný seznam dokladů je v souboru seznam-dokladu.csv' + (N > 1 ? ' v části 1' : '') + '.\n\nS pozdravem\n' + firm + '\n(automaticky odesláno z HolyOS)';
+      + 'Úplný seznam dokladů je v souboru seznam-dokladu.csv' + (N > 1 ? ' v části 1' : '') + '.\n' + (opts.test ? '\nTOTO JE TESTOVACÍ ODESLÁNÍ (jen 1. část, doklady nejsou označené jako odeslané).\n' : '') + '\nS pozdravem\n' + firm + '\n(automaticky odesláno z HolyOS)';
     const info = { part: n, file: fname, bytes, docs: p.length, sent: false };
     try {
       const r = await sendPart({ sender: cfg.sender, recipients, subject, body, file: zipPath, filename: fname });
       info.sent = true; info.sent_at = new Date().toISOString(); info.via = r.via; okCount++;
-      if (p.length) await prisma.accountingExportItem.updateMany({ where: { export_id: exp.id, part: n }, data: { sent: true } });
+      if (p.length && !opts.test) await prisma.accountingExportItem.updateMany({ where: { export_id: exp.id, part: n }, data: { sent: true } }); // test = neoznačovat jako odeslané
     } catch (e) { info.error = String(e.message || e).slice(0, 500); console.warn('[acc-export] část', n, info.error); }
     partInfo.push(info);
   }
   // doklady bez přílohy: odeslané v seznamu = „sent", když prošla část 1
-  if (missing.length && partInfo[0] && partInfo[0].sent) await prisma.accountingExportItem.updateMany({ where: { export_id: exp.id, missing: true }, data: { sent: true } });
+  if (!opts.test && missing.length && partInfo[0] && partInfo[0].sent) await prisma.accountingExportItem.updateMany({ where: { export_id: exp.id, missing: true }, data: { sent: true } });
   const status = okCount === partInfo.length ? 'sent' : (okCount ? 'partial' : 'failed');
   await prisma.accountingExport.update({ where: { id: exp.id }, data: { status, parts: partInfo, total_bytes: total, error: status === 'sent' ? null : partInfo.filter((x) => x.error).map((x) => 'část ' + x.part + ': ' + x.error).join(' | ').slice(0, 2000) } });
   return { id: exp.id, status, doc_count: docs.length, parts: partInfo };

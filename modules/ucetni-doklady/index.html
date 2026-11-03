@@ -6111,7 +6111,7 @@
     function mb(b){ return ((Number(b)||0)/1048576).toFixed(1).replace('.',',')+' MB'; }
     function iso(d){ var x=new Date(d); return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); }
     var ST = { sent:['✅ Odesláno','#22c55e'], partial:['⚠️ Částečně','#eab308'], failed:['❌ Chyba','#ef4444'], empty:['— Žádné doklady','#9aa0ad'], pending:['… Probíhá','#60a5fa'] };
-    var TRG = { auto:'automaticky', manual:'ručně', resend:'znovu' };
+    var TRG = { auto:'automaticky', manual:'ručně', resend:'znovu', test:'🧪 test' };
     window.openExports = async function(){
       document.getElementById('modal-root').insertAdjacentHTML('beforeend',
         '<div class="modal-overlay" id="exp-ov" onclick="if(event.target===this)closeModal()"><div class="modal wide" style="max-width:1100px;width:96vw">'
@@ -6158,7 +6158,8 @@
         + '<div><label style="font-size:12px;display:block">do (včetně)</label><input type="date" id="exm-to" value="'+iso(now)+'"></div>'
         + '<div style="flex:1;min-width:220px"><label style="font-size:12px;display:block">Příjemci (prázdné = z nastavení)</label><input id="exm-rcp" placeholder="'+ex(X.cfg&&X.cfg.recipients||'')+'" style="width:100%"></div>'
         + '<label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="exm-all"> i už odeslané doklady</label>'
-        + '<button class="btn btn-secondary" onclick="expPreview()">🔍 Náhled</button><button class="btn btn-primary" onclick="expRun()">📤 Zabalit a odeslat</button></div><div id="exm-msg" style="margin-top:8px;font-size:13px"></div>';
+        + '<button class="btn btn-secondary" onclick="expPreview()">🔍 Náhled</button><button class="btn btn-secondary" onclick="expRun(true)" title="Pošle jen 1. ZIP na zadaného příjemce; doklady se NEoznačí jako odeslané">🧪 Poslat test</button><button class="btn btn-primary" onclick="expRun(false)">📤 Zabalit a odeslat</button></div>'
+        + '<div style="font-size:11.5px;color:var(--text2,#9aa);margin-top:4px">🧪 Test: do „Příjemci“ zadejte svůj e-mail. Odejde jen první ZIP s označením [TEST] a doklady zůstanou neodeslané, takže je automatika později pošle účetní normálně.</div><div id="exm-msg" style="margin-top:8px;font-size:13px"></div>';
     }
     function manRange(){ return { from:document.getElementById('exm-from').value, to:document.getElementById('exm-to').value, include_sent:document.getElementById('exm-all').checked }; }
     window.expPreview = async function(){
@@ -6167,12 +6168,13 @@
       if(r.status!==200){ m.innerHTML='<span style="color:#ef4444">'+ex(r.data&&r.data.error||'Chyba')+'</span>'; return; }
       var p=r.data; m.innerHTML = p.doc_count ? ('Doklady k odeslání: <b>'+p.doc_count+'</b> (s přílohou '+p.with_file+(p.missing?', <span style="color:#eab308">bez přílohy '+p.missing+'</span>':'')+') · odhad <b>'+mb(p.est_bytes)+'</b> → <b>'+p.est_parts+'</b> '+(p.est_parts===1?'e-mail':'e-maily')+' (max. '+p.max_mb+' MB)') : 'V tomto období nejsou žádné neodeslané doklady.';
     };
-    window.expRun = async function(){
+    window.expRun = async function(test){
       var q=manRange(), rcp=document.getElementById('exm-rcp').value.trim(), to=rcp||(X.cfg&&X.cfg.recipients)||'';
+      if(test && !rcp){ document.getElementById('exm-rcp').focus(); return alert('Pro test zadejte do „Příjemci“ svůj e-mail.'); }
       if(!to) return alert('Vyplňte příjemce nebo e-mail účetní v nastavení.');
-      if(!confirm('Odeslat doklady založené '+q.from+' – '+q.to+' na: '+to+' ?')) return;
+      if(!confirm((test?'TEST — poslat 1. ZIP s doklady vytvořenými ':'Odeslat doklady vytvořené ')+q.from+' – '+q.to+' na: '+to+' ?')) return;
       var m=document.getElementById('exm-msg'); m.textContent='Balím a odesílám… (může to trvat i minutu)';
-      var r=await api('POST','/api/accounting/exports/run',{ from:q.from, to:q.to, include_sent:q.include_sent, recipients:rcp||undefined });
+      var r=await api('POST','/api/accounting/exports/run',{ from:q.from, to:q.to, include_sent:q.include_sent, recipients:rcp||undefined, test:!!test });
       if(r.status!==200){ m.innerHTML='<span style="color:#ef4444">'+ex(r.data&&r.data.error||'Chyba')+'</span>'; return; }
       var s=ST[r.data.status]||[r.data.status,'']; m.innerHTML='<span style="color:'+s[1]+'">'+s[0]+'</span> · '+r.data.doc_count+' dokladů'+(r.data.parts?' · '+r.data.parts.length+' ZIP':'');
       expLoadHist();
