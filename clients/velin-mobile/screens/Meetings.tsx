@@ -17,7 +17,7 @@ import { loadAuth } from '../lib/auth';
 const BS = {
   bg: '#04060c', card: 'rgba(14,22,40,0.85)', border: 'rgba(120,160,255,0.16)', border2: 'rgba(120,160,255,0.32)',
   text: '#eaf2ff', text2: '#8ea2c2', text3: '#58698a', accent: '#1e86e0', accent2: '#4fd1ff', vio: '#7c5cff',
-  ok: '#2fe3a0', err: '#ff7a86',
+  ok: '#2fe3a0', err: '#ff7a86', warn: '#ffc453',
 };
 const DN = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
 const MON = ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
@@ -146,14 +146,17 @@ export default function Meetings() {
                   </View>
                   {list.length === 0 ? <Text style={s.empty}>—</Text> : list.map((x) => {
                     const full = x.booked >= x.capacity;
+                    // Částečně obsazený termín (např. 1/2) se dřív kreslil stejně
+                    // jako úplně prázdný — vizuálně zanikl. Má vlastní stav.
+                    const partial = !full && x.booked > 0;
                     const who = x.reservations.filter((r) => r.status === 'booked').map((r) => (r.lead && r.lead.name) || r.name || r.phone || r.email || 'zájemce');
                     return (
                       <TouchableOpacity key={x.id} activeOpacity={0.7} onPress={() => setDetail(x)}
-                        style={[s.slot, !x.active ? s.slotOff : full ? s.slotFull : s.slotFree]}>
+                        style={[s.slot, !x.active ? s.slotOff : full ? s.slotFull : partial ? s.slotPartial : s.slotFree]}>
                         <View style={s.slotTop}>
                           <Text style={s.slotT}>{hm(new Date(x.starts_at))}</Text>
                           <Text style={s.slotW}> · {x.duration_min} min{x.mode ? ' · ' + (MODE[x.mode] || x.mode) : ''}</Text>
-                          <Text style={[s.slotOcc, { color: !x.active ? BS.text3 : full ? BS.ok : BS.accent2 }]}>{x.active ? x.booked + '/' + x.capacity : 'vypnuto'}</Text>
+                          <Text style={[s.slotOcc, { color: !x.active ? BS.text3 : full ? BS.ok : partial ? BS.warn : BS.accent2 }]}>{x.active ? x.booked + '/' + x.capacity : 'vypnuto'}</Text>
                         </View>
                         {who.map((w, k) => <Text key={k} style={s.who} numberOfLines={1}>{w}</Text>)}
                       </TouchableOpacity>
@@ -510,6 +513,7 @@ const s = StyleSheet.create({
   slot: { borderWidth: 1, borderColor: BS.border2, borderRadius: 10, padding: 9, marginTop: 6, backgroundColor: 'rgba(8,13,26,0.6)' },
   slotFree: { borderLeftWidth: 3, borderLeftColor: BS.accent2 },
   slotFull: { borderLeftWidth: 3, borderLeftColor: BS.ok, backgroundColor: 'rgba(47,227,160,0.08)' },
+  slotPartial: { borderLeftWidth: 3, borderLeftColor: BS.warn, backgroundColor: 'rgba(255,196,83,0.10)' },
   slotOff: { opacity: 0.5, borderStyle: 'dashed' },
   slotTop: { flexDirection: 'row', alignItems: 'baseline' },
   slotT: { color: BS.text, fontWeight: '800', fontSize: 15 },
