@@ -4223,6 +4223,18 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
     if (!meId) return res.json([]);
     const where = { owner_person_id: meId, is_test: false };
     if (req.query.status) where.status = String(req.query.status);
+    // Online schůzky s majitelem, které jsem domluvil já (kontakt už je přiřazen majiteli)
+    if (req.query.owner_meetings) {
+      const rs = await prisma.meetingReservation.findMany({ where: { booked_by_person_id: meId, compounder_lead_id: { not: null } }, select: { compounder_lead_id: true, status: true, slot: { select: { starts_at: true } } }, orderBy: { id: 'desc' }, take: 3000 });
+      const info = {}; rs.forEach((r) => { if (!info[r.compounder_lead_id]) info[r.compounder_lead_id] = r; });
+      const ids = Object.keys(info).map(Number);
+      if (!ids.length) return res.json([]);
+      const ls = await prisma.compounderLead.findMany({ where: { id: { in: ids }, is_test: false }, orderBy: { created_at: 'desc' } });
+      await enrichWarmth(ls); await _annotateBlacklist(ls); await annotateDiscount(ls); await annotateAiChat(ls);
+      ls.forEach((l) => { const r = info[l.id]; l.owner_meeting_status = r.status; l.owner_meeting_at = r.slot && r.slot.starts_at ? new Date(r.slot.starts_at).toISOString() : null; });
+      ls.sort((a, b) => String(b.owner_meeting_at || '').localeCompare(String(a.owner_meeting_at || '')));
+      return res.json(ls);
+    }
     const q = req.query.search ? String(req.query.search).trim() : '';
     let leads;
     if (q && q.length >= 2) {
