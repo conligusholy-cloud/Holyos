@@ -724,7 +724,7 @@ router.get('/bs2/meetings', async (req, res, next) => {
 // Nadchazejici schuzky se do uspesnosti nepocitaji -- vysledek jeste neni znamy.
 // Nase vlastni (testovaci) rezervace podle e-mailove domeny se nepocitaji; jejich pocet vracime zvlast.
 const MST_TZ = 'Europe/Prague';
-const MST_DOW = ['ne', 'po', 'út', 'st', 'čt', 'pá', 'so'];
+const MST_DOW = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
 const MST_MON3 = ['led', 'úno', 'bře', 'dub', 'kvě', 'čvn', 'čvc', 'srp', 'zář', 'říj', 'lis', 'pro'];
 const MST_MON = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
 // Datum tak, jak ho v dany okamzik vidi Praha (server bezi v UTC).
@@ -744,7 +744,9 @@ function mstBucket(group, p) {
   if (group === 'day') {
     return {
       key: p.y + '-' + mst2(p.m) + '-' + mst2(p.d),
-      label: p.d + '. ' + p.m + '.',
+      label: MST_DOW[p.dow],
+      sub: p.d + '. ' + p.m + '.',
+      dow: p.dow,
       title: MST_DOW[p.dow] + ' ' + p.d + '. ' + p.m + '. ' + p.y,
     };
   }
@@ -759,11 +761,12 @@ function mstBucket(group, p) {
   }
   return { key: p.y + '-' + mst2(p.m), label: MST_MON3[p.m - 1] + ' ' + mst2(p.y % 100), title: MST_MON[p.m - 1] + ' ' + p.y };
 }
-// Seznam obdobi od nejstarsiho po soucasne (vcetne), pozpatku od dneska.
-function mstBuckets(group, n) {
+// Seznam obdobi od nejstarsiho po soucasne (vcetne) a jeste fwd obdobi dopredu,
+// aby bylo videt, co uz je domluvene na pristi dny. Budouci obdobi maji future:true.
+function mstBuckets(group, n, fwd) {
   const now = mstParts(Date.now());
   const out = [];
-  for (let i = n - 1; i >= 0; i--) {
+  for (let i = n - 1; i >= -(fwd || 0); i--) {
     if (group === 'year') out.push(mstBucket('year', { y: now.y - i, m: 1, d: 1, dow: 0 }));
     else if (group === 'day') {
       const t = mstNoon(now.y, now.m, now.d) - i * 86400000; const x = mstYmd(t);
@@ -776,7 +779,7 @@ function mstBuckets(group, n) {
       out.push(mstBucket('month', { y, m, d: 1, dow: 0 }));
     }
   }
-  return out;
+  return out.map((x, i) => Object.assign(x, { future: i >= n }));
 }
 const mstCell = () => ({ booked: 0, done: 0, no_show: 0, canceled: 0, upcoming: 0, unmarked: 0 });
 function mstAdd(c, status, startsAt, now) {
@@ -804,8 +807,11 @@ router.get('/bs2/meetings-stats', async (req, res, next) => {
     if (!verifyMeetingsToken(req, res)) return;
     const group = ['day', 'week', 'month', 'year'].includes(String(req.query.group)) ? String(req.query.group) : 'month';
     const nMax = group === 'year' ? 10 : group === 'week' ? 26 : group === 'day' ? 62 : 24;
-    const n = Math.max(1, Math.min(nMax, parseInt(req.query.n, 10) || (group === 'year' ? 5 : group === 'day' ? 14 : 12)));
-    const buckets = mstBuckets(group, n);
+    const n = Math.max(1, Math.min(nMax, parseInt(req.query.n, 10) || (group === 'year' ? 5 : group === 'day' ? 28 : 12)));
+    // Kousek dopredu, at je videt, co uz je na pristi dny domluvene.
+    const FWD = { day: 14, week: 2, month: 1, year: 0 };
+    const fwd = Math.max(0, Math.min(62, req.query.fwd != null ? parseInt(req.query.fwd, 10) || 0 : FWD[group]));
+    const buckets = mstBuckets(group, n, fwd);
     const idx = {}; buckets.forEach((b, i) => { idx[b.key] = i; });
     // Rozsah dotazu delame s rezervou na obou stranach; presne zatridi az klic obdobi v prazskem case.
     const nowP = mstParts(Date.now());
@@ -813,10 +819,10 @@ router.get('/bs2/meetings-stats', async (req, res, next) => {
     const from = group === 'year' ? new Date(Date.UTC(+first, 0, 1) - 2 * 86400000)
       : group === 'month' ? new Date(Date.UTC(+first.slice(0, 4), +first.slice(5, 7) - 1, 1) - 2 * 86400000)
         : new Date(Date.UTC(+first.slice(0, 4), +first.slice(5, 7) - 1, +first.slice(8, 10)) - 2 * 86400000);
-    const to = group === 'year' ? new Date(Date.UTC(nowP.y + 1, 0, 1) + 2 * 86400000)
-      : group === 'month' ? new Date(Date.UTC(nowP.y, nowP.m, 1) + 2 * 86400000)
-        : group === 'day' ? new Date(Date.now() + 2 * 86400000)
-          : new Date(Date.now() + 9 * 86400000);
+    const to = group === 'year' ? new Date(Date.UTC(nowP.y + 1 + fwd, 0, 1) + 2 * 86400000)
+      : group === 'month' ? new Date(Date.UTC(nowP.y, nowP.m + fwd, 1) + 2 * 86400000)
+        : group === 'day' ? new Date(Date.now() + (fwd + 2) * 86400000)
+          : new Date(Date.now() + (fwd * 7 + 9) * 86400000);
     const rows = await prisma.meetingReservation.findMany({
       where: { slot: { starts_at: { gte: from, lt: to } } },
       select: { status: true, email: true, slot: { select: { starts_at: true } } },
@@ -833,10 +839,16 @@ router.get('/bs2/meetings-stats', async (req, res, next) => {
       mstAdd(cells[i], r.status, r.slot.starts_at, now);
       mstAdd(totals, r.status, r.slot.starts_at, now);
     });
+    // U dnu schovavame prazdne vikendy (schuzky se delaji v pracovnich dnech).
+    // Jakmile na sobotu nebo nedeli neco pripadne, zustane videt - nic se neztrati.
+    const out = buckets
+      .map((b, i) => Object.assign({}, b, cells[i], { rate: mstRate(cells[i]) }))
+      .filter((b) => !(group === 'day' && (b.dow === 0 || b.dow === 6) && !b.booked));
     res.json({
       group,
       n,
-      buckets: buckets.map((b, i) => Object.assign({}, b, cells[i], { rate: mstRate(cells[i]) })),
+      fwd,
+      buckets: out,
       totals: Object.assign({}, totals, { rate: mstRate(totals) }),
       internal_skipped: internal,
     });
