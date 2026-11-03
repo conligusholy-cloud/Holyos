@@ -91,8 +91,20 @@ app.use((req, res, next) => {
 });
 
 // CORS
+// Povolené původy: naše domény (+ subdomény), localhost mimo produkci a volitelně CORS_ORIGIN (čárkou oddělený seznam).
+// Požadavky bez hlavičky Origin (stejný origin, mobilní Velín, server-to-server) procházejí. Cizí původ nedostane CORS hlavičky.
+const CORS_DOMAINS = ['holyos.cz', 'bestseries.cz', 'bestseries2.cz', 'bestseries.cash', 'bestseries.global', 'pradlomaty.info', 'compounder.world', 'laundromats.eu'];
+const CORS_EXTRA = String(process.env.CORS_ORIGIN || '').split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean);
+function corsOriginAllowed(origin) {
+  if (!origin) return true;
+  if (CORS_EXTRA.includes(origin)) return true;
+  let u; try { u = new URL(origin); } catch (e) { return false; }
+  if (process.env.NODE_ENV !== 'production' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1')) return true;
+  if (u.protocol !== 'https:') return false;
+  return CORS_DOMAINS.some((d) => u.hostname === d || u.hostname.endsWith('.' + d));
+}
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || true,
+  origin: (origin, cb) => cb(null, corsOriginAllowed(origin)),
   credentials: true,
 }));
 

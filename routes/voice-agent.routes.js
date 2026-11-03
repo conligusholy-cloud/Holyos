@@ -989,7 +989,7 @@ async function maybeTranscribeCall(callId) {
 // za některými proxy/kompresí neposlal Content-Length/Range a přehrávač se sekal.)
 // Podepsaný odkaz na nahrávku (bez hlavičky Authorization — pro přehrávač v aplikaci Velín):
 // /api/voice/recording-signed/<callId>?exp=<unix>&sig=<hmac>. Platnost omezená (výchozí 6 h).
-function recordingSecret() { return process.env.JWT_SECRET || process.env.SESSION_SECRET || 'holyos-rec'; }
+function recordingSecret() { return process.env.JWT_SECRET || process.env.SESSION_SECRET || require('../config/secrets').jwtSecret(); }
 function signRecording(callId, ttlSec) {
   const exp = Math.floor(Date.now() / 1000) + (ttlSec || 6 * 3600);
   const sig = require('crypto').createHmac('sha256', recordingSecret()).update(String(callId) + '.' + exp).digest('base64url').slice(0, 32);

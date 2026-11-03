@@ -5,7 +5,7 @@
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../config/database');
 
-const JWT_SECRET = process.env.JWT_SECRET || process.env.SECRET || 'holyos-dev-secret-change-me';
+const JWT_SECRET = require('../config/secrets').jwtSecret();
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '24h';
 
 /**

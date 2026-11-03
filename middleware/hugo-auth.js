@@ -8,8 +8,7 @@ const { prisma } = require('../config/database');
 
 const HUGO_SECRET = process.env.HUGO_COOKIE_SECRET
   || process.env.JWT_SECRET
-  || process.env.SECRET
-  || 'hugo-dev-secret-change-me';
+  || require('../config/secrets').jwtSecret();
 const HUGO_EXPIRY = process.env.HUGO_TOKEN_EXPIRY || '30d'; // partner stays logged in a měsíc
 const HUGO_COOKIE_NAME = 'hugo_token';
 

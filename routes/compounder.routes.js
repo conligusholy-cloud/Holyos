@@ -251,7 +251,7 @@ router.get('/meeting-contact', async (req, res) => {
 });
 
 // Podepsaný odkaz „změna termínu" (z potvrzovacího e-mailu): <id rezervace>.<HMAC>. Nová rezervace s tímto tokenem zruší původní.
-const _chgSecret = () => process.env.BS2_SSO_SECRET || process.env.JWT_SECRET || 'holyos';
+const _chgSecret = () => process.env.BS2_SSO_SECRET || require('../config/secrets').jwtSecret();
 const meetingChangeToken = (id) => id + '.' + crypto.createHmac('sha256', _chgSecret()).update('mchg:' + id).digest('hex').slice(0, 24);
 function verifyMeetingChangeToken(t) {
   const m = /^(\d+)\.([a-f0-9]{24})$/.exec(String(t || '')); if (!m) return null;
@@ -4949,7 +4949,7 @@ router.get('/leads/:id(\\d+)', requireAuth, async (req, res, next) => {
 // jako nativní kartu „Přidat do kontaktů".
 // Z appky na ploše (standalone PWA) se odkaz otevírá v novém okně BEZ cookies →
 // proto existuje i veřejná varianta /vcard/:id?t=<krátkodobý podepsaný token>.
-const VCARD_SECRET = process.env.JWT_SECRET || process.env.SECRET || 'holyos-dev-secret-change-me';
+const VCARD_SECRET = require('../config/secrets').jwtSecret();
 function buildLeadVcard(lead) {
   const vesc = (s) => String(s == null ? '' : s).replace(/([,;\\])/g, '\\$1').replace(/\r?\n/g, '\\n');
   const name = lead.name || lead.email || 'Compounder lead';

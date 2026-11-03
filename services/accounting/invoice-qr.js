@@ -3,7 +3,7 @@
 'use strict';
 const crypto = require('crypto');
 
-const SECRET = process.env.QR_PAY_SECRET || process.env.JWT_SECRET || process.env.SECRET || 'holyos-dev-secret-change-me';
+const SECRET = process.env.QR_PAY_SECRET || require('../../config/secrets').jwtSecret();
 const TTL_DAYS = 14;
 
 // Stavy, ve kterých se doklad už platit nesmí / nemá (zaplaceno, zrušeno, na příkazu…)
