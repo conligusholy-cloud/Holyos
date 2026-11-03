@@ -38,11 +38,9 @@ function layout({ title, desc = '', body, active = '', absolute = false, head = 
   return `<!doctype html><html lang="cs"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#04060c">
 <title>${esc(title)} · Laundromats</title>${desc ? `<meta name="description" content="${esc(desc)}">` : ''}<link rel="icon" type="image/svg+xml" href="${absolute ? MAIN_URL() : ''}/favicon.svg">
-<style>${BS2_CSS}${LM_CSS}</style>${head}</head>
+${require('./lm-header').FONT}<style>${BS2_CSS}${LM_CSS}${require('./lm-header').CSS}.lhdr .in{width:100%}</style>${head}</head>
 <body><canvas id="net" aria-hidden="true"></canvas><div class="glow a"></div><div class="glow b"></div><div class="gridfx" aria-hidden="true"></div>
-<header><a class="brand" href="${nav[0].href}"><span class="mark">${LOGO}</span>LAUNDROMATS</a>
-<nav><a href="${ctaHref}" class="btn sm" style="padding:8px 14px">Probrat můj záměr</a></nav></header>
-<div class="tabs"><div class="in">${nav.map((n) => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${esc(n.label)}</a>`).join('')}</div></div>
+${require('./lm-header').header({ absolute })}
 <main>${body}</main>
 <footer class="lm-foot"><span><b style="color:var(--text)">Laundromats</b> · Samoobslužné prádlomaty. Zkušenosti z provozu. Možnosti pro vaše podnikání.</span><span><a href="mailto:info@laundromats.eu">info@laundromats.eu</a> · <a href="${absolute ? MAIN_URL() : ''}/gdpr">Ochrana osobních údajů</a></span></footer>
 <script>${require('./home-page').NET_JS}</script>${absolute ? '' : '<script src="/cesta/track.js" defer></script>'}

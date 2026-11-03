@@ -145,7 +145,7 @@ a{color:inherit}img{max-width:100%;display:block}
 .skip{position:absolute;left:-999px;top:8px;background:#fff;color:#04060c;padding:8px 14px;border-radius:8px;z-index:100}.skip:focus{left:12px}
 :focus-visible{outline:2px solid var(--az);outline-offset:3px;border-radius:6px}
 .wrap{max-width:var(--max);margin:0 auto;padding:0 24px}
-section{position:relative;padding:110px 0;scroll-margin-top:76px}
+section{position:relative;padding:110px 0;scroll-margin-top:70px}
 .kicker{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--az);margin-bottom:16px}
 .kicker:before{content:"";width:18px;height:2px;border-radius:2px;background:linear-gradient(90deg,var(--az),var(--vi))}
 h1,h2,h3{margin:0;letter-spacing:-.025em;line-height:1.08}
@@ -172,7 +172,7 @@ h3{font-size:20px;font-weight:700;letter-spacing:-.01em;line-height:1.25}
  .mnav{position:fixed;inset:72px 0 0 0;background:rgba(4,6,12,.97);backdrop-filter:blur(10px);padding:24px;display:none;flex-direction:column;gap:6px;z-index:49}
  .mnav.open{display:flex}.mnav a{padding:14px 10px;font-size:19px;text-decoration:none;border-bottom:1px solid var(--line)}.mnav .btn{margin-top:18px}}
 /* hero */
-.hero{padding:112px 0 80px;overflow:hidden}
+.hero{padding:52px 0 80px;overflow:hidden}
 .hero:before{content:"";position:absolute;inset:-20% -10% auto -10%;height:120%;background:radial-gradient(900px 520px at 78% 38%,rgba(58,108,245,.28),transparent 62%),radial-gradient(700px 420px at 12% 18%,rgba(79,209,255,.12),transparent 60%);pointer-events:none}
 .hero .wrap{display:grid;grid-template-columns:1.2fr .8fr;gap:40px;align-items:center;position:relative}
 .eyebrow{display:inline-flex;align-items:center;gap:9px;padding:7px 14px;border:1px solid rgba(47,227,198,.35);background:rgba(47,227,198,.07);border-radius:999px;color:#b6f5ea;font-size:13.5px;font-weight:600}
@@ -191,7 +191,7 @@ h3{font-size:20px;font-weight:700;letter-spacing:-.01em;line-height:1.25}
 .visual .note{position:absolute;right:4%;top:2%;font-size:11.5px;color:var(--tx3);letter-spacing:.04em}
 .statcard{position:absolute;left:-4%;bottom:4%;max-width:270px;padding:18px 20px;border-radius:18px;background:rgba(10,16,30,.82);border:1px solid var(--line2);backdrop-filter:blur(12px);box-shadow:0 20px 50px -20px rgba(0,0,0,.8)}
 .statcard b{display:block;font-size:40px;line-height:1;font-weight:850;letter-spacing:-.03em}.statcard p{margin:8px 0 0;font-size:14px;color:var(--tx2);line-height:1.45}
-@media (max-width:900px){.hero{padding:100px 0 60px}.hero .wrap{grid-template-columns:1fr;gap:30px}.visual{justify-self:center;max-width:430px}.statcard{left:0}}
+@media (max-width:900px){.hero{padding:40px 0 60px}.hero .wrap{grid-template-columns:1fr;gap:30px}.visual{justify-self:center;max-width:430px}.statcard{left:0}}
 /* karty */
 .grid{display:grid;gap:18px;margin-top:52px}.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}
 @media (max-width:1000px){.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr}}@media (max-width:620px){.g4{grid-template-columns:1fr}}
@@ -332,15 +332,11 @@ function homePage(lang) {
     + '<meta property="og:title" content="' + esc(L.seoTitle) + '"><meta property="og:description" content="' + esc(L.seoDesc) + '"><meta property="og:type" content="website"><meta property="og:image" content="/img/pradlomat-flex.webp">'
     + '<meta name="theme-color" content="#04060c"><link rel="icon" href="/favicon.svg" type="image/svg+xml">'
     + '<link rel="preload" as="image" href="/img/pradlomat-flex.webp" fetchpriority="high">'
-    + '<style>' + CSS + '</style></head><body>'
+    + require('./lm-header').FONT + '<style>' + CSS + require('./lm-header').CSS + '</style></head><body>'
     + '<canvas id="net" aria-hidden="true"></canvas><div class="bgglow a" aria-hidden="true"></div><div class="bgglow b" aria-hidden="true"></div><div class="gridfx" aria-hidden="true"></div>'
     + '<a class="skip" href="#obsah">' + esc(L.skip) + '</a>'
     // ── hlavička ──
-    + '<header class="hdr" id="hdr"><div class="wrap"><a class="logo" href="#top" aria-label="Laundromats">' + logo(34) + '<span>LAUNDROMATS</span></a>'
-    + '<nav class="nav" aria-label="Hlavní navigace">' + headLinks + '</nav>' + langSwitch
-    + '<a class="btn btn-p btn-s btn-cta" href="#kontakt">' + esc(n.cta) + '</a>'
-    + '<button class="burger" id="burger" aria-expanded="false" aria-controls="mnav" aria-label="' + esc(n.menu) + '"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>'
-    + '<nav class="mnav" id="mnav" aria-label="Mobilní navigace">' + navLinks + pageLinks + '<a class="btn btn-p" href="#kontakt">' + esc(n.cta) + '</a></nav></header>'
+    + require('./lm-header').header({})
     + '<main id="obsah">'
     // ── úvod ──
     + '<section class="hero" id="top"><div class="wrap"><div>'
@@ -416,9 +412,9 @@ function clientJs(L) {
   const M = JSON.stringify({ sending: f.sending, submit: f.submit, ok: f.ok, err: f.err, invalid: f.invalid });
   return '(function(){var d=document;d.documentElement.classList.remove("no-js");var M=' + M + ';'
     // hlavička + mobilní menu
-    + 'var h=d.getElementById("hdr");function sc(){h.classList.toggle("sc",scrollY>20);}addEventListener("scroll",sc,{passive:true});sc();'
-    + 'var b=d.getElementById("burger"),mn=d.getElementById("mnav");function cl(){mn.classList.remove("open");b.setAttribute("aria-expanded","false");}'
-    + 'b.addEventListener("click",function(){var o=mn.classList.toggle("open");b.setAttribute("aria-expanded",o?"true":"false");});mn.addEventListener("click",function(e){if(e.target.closest("a"))cl();});d.addEventListener("keydown",function(e){if(e.key==="Escape")cl();});'
+    + ''
+    + 'var b=d.getElementById("burger"),mn=d.getElementById("mnav");function cl(){if(mn)mn.classList.remove("open");if(b)b.setAttribute("aria-expanded","false");}if(b&&mn){'
+    + 'b.addEventListener("click",function(){var o=mn.classList.toggle("open");b.setAttribute("aria-expanded",o?"true":"false");});mn.addEventListener("click",function(e){if(e.target.closest("a"))cl();});d.addEventListener("keydown",function(e){if(e.key==="Escape")cl();});}'
     // odhalení při scrollu
     + 'var rv=d.querySelectorAll(".rv");if("IntersectionObserver"in window){var io=new IntersectionObserver(function(es){es.forEach(function(x){if(x.isIntersecting){x.target.classList.add("in");io.unobserve(x.target);}});},{threshold:.12,rootMargin:"0px 0px -40px 0px"});rv.forEach(function(e){io.observe(e);});}else rv.forEach(function(e){e.classList.add("in");});'
     // video v provozu: přehrávat jen ve viditelné části stránky (šetří data i baterii), ne při omezení pohybu

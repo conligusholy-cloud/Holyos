@@ -75,7 +75,10 @@ app.get('/api/presence', (req, res) => {
   for (const v of PRES.values()) { if (now - v < 120e3) n++; if (now - v < 3600e3) hr++; }
   res.set('Cache-Control', 'no-store').json({ now: n, hour: hr, total: Math.max(hr, n) });
 });
-const shell = (html) => CI18N.addSwitch(String(html).replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</style>', FOOT_CSS + PRES_CSS + '</style>').replace('<!--PRESENCE-->', '').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>').replace('</body>', '<script src="/cesta/track.js" defer></script></body>'));
+const LH = require('./lm-header');
+// Stránky mimo /cesta (úvod, Compounder, Prádlomaty): stejná lišta + počítadlo, bez přepínače jazyka
+const lite = (html) => String(html).replace('</style>', PRES_CSS + '</style>').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>');
+const shell = (html, lang) => CI18N.addSwitch(String(html).replace('@@LHDR@@', LH.header({ lang })).replace('</style>', LH.CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</style>', FOOT_CSS + PRES_CSS + '</style>').replace('<!--PRESENCE-->', '').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>').replace('</body>', '<script src="/cesta/track.js" defer></script></body>'));
 const send = (res, html) => res.set('Cache-Control', 'no-cache').type('html').send(html);
 const cestaHtml = () => fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8');
 
@@ -86,10 +89,10 @@ app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\
 // Jedinečné odkazy ze SMS / e-mailu (?t= / ?l=) vedou dál na /cesta, ať funel zůstane beze změny.
 const HP = require('./home-page');
 const homeHtml = () => HP.homePage('cs');
-app.get('/uvod', (req, res) => send(res, homeHtml()));
+app.get('/uvod', (req, res) => send(res, lite(homeHtml())));
 app.get('/', (req, res) => {
   const q = req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '';
-  if (process.env.LM_HOME_LIVE === '1' && !req.query.t && !req.query.l) return send(res, homeHtml());
+  if (process.env.LM_HOME_LIVE === '1' && !req.query.t && !req.query.l) return send(res, lite(homeHtml()));
   res.redirect(302, '/cesta' + q);
 });
 // Poptávka z úvodní stránky → HolyOS (/api/compounder/lm-inquiry): založí / spáruje kontakt a upozorní vedení.
@@ -179,7 +182,7 @@ app.get('/api/compounder/portal/machines', async (req, res) => {
 });
 app.get('/cesta/booking.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').send(CP.bookingJs()));
 // ── polská verze ──
-const plSend = (res, html) => send(res, CI18N.toPl(shell(html)));
+const plSend = (res, html) => send(res, CI18N.toPl(shell(html, 'pl')));
 app.get('/cesta/pl', (req, res) => plSend(res, cestaHtml()));
 app.get('/cesta/pl/ekonomika', (req, res) => plSend(res, EP.economyPage('pl')));
 app.get('/cesta/pl/ekonomika/podrobne', (req, res) => plSend(res, EP.economyDetailPage('pl')));
@@ -322,8 +325,8 @@ async function fetchProducts() {
 }
 const COMP = require('./compounder-page');
 const PRAD = require('./pradlomaty-page');
-app.get('/compounder', (req, res) => send(res, COMP.compounderPage()));
-app.get('/pradlomaty', async (req, res) => { let list = []; try { list = await fetchProducts(); } catch (e) { console.warn('[laundromats] produkty:', e.message); if (_prod.data) list = _prod.data; } send(res, PRAD.pradlomatyPage(list)); });
+app.get('/compounder', (req, res) => send(res, lite(COMP.compounderPage())));
+app.get('/pradlomaty', async (req, res) => { let list = []; try { list = await fetchProducts(); } catch (e) { console.warn('[laundromats] produkty:', e.message); if (_prod.data) list = _prod.data; } send(res, lite(PRAD.pradlomatyPage(list))); });
 app.get('/img/pradlomat.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(path.join(__dirname, 'pradlomat-flex.webp')));
 app.get('/img/product/:id(\\d+)', async (req, res) => {
   try {
