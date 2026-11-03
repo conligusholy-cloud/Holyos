@@ -1462,6 +1462,7 @@ function passwordPage({ s, nick, error = '', ok = '', purchases = null }) {
     <label>Nové heslo (min. 8)</label><input name="password" type="password" autocomplete="new-password" minlength="8" required>
     <label>Nové heslo znovu</label><input name="password2" type="password" autocomplete="new-password" minlength="8" required>
     <div style="height:14px"></div><button class="btn full" type="submit">Uložit nové heslo</button></form></div>
+    <div class="card"><h2 style="margin-top:0">Dvoufázové ověření</h2><p class="muted small">Druhý krok při přihlášení (kód z aplikace Authenticator). Stav: <b>${u.totp_enabled ? 'zapnuto' : 'vypnuto'}</b>.</p><a class="btn full" href="/2fa">${u.totp_enabled ? 'Spravovat' : 'Zapnout'}</a></div>
     ${u.location_package ? (() => { const pk = u.location_package, col = pk === 'premium' ? '#ffd866' : pk === 'plus' ? '#a78bfa' : '#4fd1ff', lbl = { basic: 'Základ', plus: 'Plus', premium: 'Premium' }[pk] || pk; const exp = u.location_expires_at ? new Date(u.location_expires_at) : null; const expired = exp && exp < new Date();
       return `<div class="card" style="grid-column:1/-1;border-color:${col}55"><div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><div><h2 style="margin:0 0 4px">Můj balíček</h2><div class="row" style="gap:8px;align-items:center;flex-wrap:wrap"><span style="display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:999px;border:1px solid ${col}66;background:${col}14;color:${col};font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase"><span style="width:7px;height:7px;border-radius:50%;background:${col};box-shadow:0 0 8px ${col}"></span>Balíček ${lbl}</span><span class="small ${expired ? '' : 'muted'}" style="${expired ? 'color:var(--err)' : ''}">${exp ? (expired ? 'přístup vypršel ' + exp.toLocaleDateString('cs-CZ') : 'přístup do ' + exp.toLocaleDateString('cs-CZ')) : ''}</span></div></div><div class="row" style="gap:8px"><a class="btn sm" href="/lokalita/balicek">Detail balíčku a přechod na vyšší</a><a class="btn sec sm" href="/lokalita">Moje lokality</a></div></div></div>`; })() : ''}
     ${purchaseHistory(purchases)}
@@ -2325,20 +2326,55 @@ function adminImport({ admin, result = null, error = '', holyosUrl, job = null }
   ${res}`, holyosUrl);
 }
 // 2FA správce (volitelné, BS2_ADMIN_2FA=1)
+// QR kód se kreslí v prohlížeči (tajemství TOTP se NEPOSÍLÁ žádné cizí službě)
+function qrBlock(uri) {
+  return `<div id="qrbox" style="display:inline-block;background:#fff;padding:10px;border-radius:12px"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script>(function(){try{new QRCode(document.getElementById('qrbox'),{text:${JSON.stringify(uri).replace(/</g, '\\u003c')},width:180,height:180});}catch(e){var b=document.getElementById('qrbox');if(b)b.style.display='none';}})();</script>`;
+}
 function admin2faPage({ setup = false, secret = '', uri = '', error = '' }) {
-  const qr = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(uri);
   return authShell({ title: 'Ověření správce', esc, card: `
     <h2>${setup ? 'Nastavení dvoufázového ověření' : 'Ověření správce'}</h2>
     <p class="sub">${setup ? 'Naskenujte QR kód v aplikaci Google Authenticator / Microsoft Authenticator a zadejte vygenerovaný kód.' : 'Zadejte 6místný kód z aplikace Authenticator.'}</p>
     ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
-    ${setup ? `<div style="text-align:center;margin:10px 0"><img src="${qr}" alt="QR" width="200" height="200" style="border-radius:12px;background:#fff;padding:8px"><div class="small muted" style="margin-top:6px">Ruční zadání: <code>${esc(secret)}</code></div></div>` : ''}
+    ${setup ? `<div style="text-align:center;margin:10px 0">${qrBlock(uri)}<div class="small muted" style="margin-top:6px">Ruční zadání: <code>${esc(secret)}</code></div></div>` : ''}
     <form method="post" action="/admin/2fa"><label>Kód</label>${field({ name: 'code', value: '', icon: 'lock', placeholder: '123 456', auto: 'one-time-code', extra: 'inputmode="numeric" required autofocus' })}
     <button class="btn" type="submit">Ověřit ${ICON.arrow}</button></form>
     <p class="foot"><a href="/logout">Odhlásit</a></p>` });
 }
 const SV = require('./stats-views')({ esc, fmtDT, adminLayout });
+
+// ── Dvoufázové ověření investora ──
+function userTfaLoginPage({ error = '' } = {}) {
+  return authShell({ title: 'Ověření přihlášení', esc, card: `
+    <h2>Ověření přihlášení</h2><p class="sub">Zadej 6místný kód z aplikace Authenticator (nebo záložní kód).</p>
+    ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
+    <form method="post" action="/login/2fa"><label>Kód</label>${field({ name: 'code', value: '', icon: 'lock', placeholder: '123 456', auto: 'one-time-code', extra: 'inputmode="numeric" autocapitalize="none" required autofocus' })}
+    <button class="btn" type="submit">Ověřit ${ICON.arrow}</button></form>
+    <p class="foot"><a href="/login">Zpět na přihlášení</a></p>` });
+}
+function tfaPage({ s, enabled = false, setup = null, codes = null, left = 0, error = '' }) {
+  const u = s || {};
+  let body;
+  if (codes) body = `<div class="msg ok">Dvoufázové ověření je zapnuté. Ulož si záložní kódy — každý jde použít jednou, když nemáš telefon. <b>Znovu se už nezobrazí.</b></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0;font-family:ui-monospace,Consolas,monospace">${codes.map((c) => `<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px;text-align:center">${esc(c)}</div>`).join('')}</div>
+    <a class="btn full" href="/password">Hotovo</a>`;
+  else if (enabled) body = `<p><span class="badge" style="background:rgba(34,197,94,.18);color:#4ade80">Zapnuto</span> <span class="muted">Zbývá záložních kódů: ${left}</span></p>
+    <h3>Vypnout</h3><p class="muted small">Pro vypnutí zadej heslo a kód z aplikace.</p>
+    ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
+    <form method="post" action="/2fa/disable"><label>Heslo</label><input name="password" type="password" autocomplete="current-password" required>
+    <label>Kód z aplikace nebo záložní kód</label><input name="code" inputmode="numeric" autocomplete="one-time-code" required>
+    <div style="height:14px"></div><button class="btn full" type="submit">Vypnout dvoufázové ověření</button></form>`;
+  else body = `<p class="muted">Po zapnutí se při přihlášení kromě hesla zadává kód z aplikace Authenticator (Google / Microsoft). Chrání tvůj účet i při úniku hesla.</p>
+    <p><b>1.</b> Naskenuj QR kód v aplikaci:</p><div style="text-align:center">${qrBlock(setup.uri)}<div class="small muted" style="margin-top:6px">Ruční zadání: <code>${esc(setup.secret)}</code></div></div>
+    ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
+    <p><b>2.</b> Opiš 6místný kód:</p>
+    <form method="post" action="/2fa/enable"><input name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required>
+    <div style="height:14px"></div><button class="btn full" type="submit">Zapnout dvoufázové ověření</button></form>`;
+  return layout({ title: 'Dvoufázové ověření', user: u.nick, nav: userNav(u), active: 'acc', fx: true, body: `<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:14px"><h1 style="margin:0">Dvoufázové ověření</h1><a class="btn sec sm" href="/password">Zpět na Můj účet</a></div><div class="card" style="max-width:520px">${body}</div>` });
+}
 function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { adminPartnerSupport, presenceWidget, PRESENCE_HTML, PRESENCE_CSS, PRESENCE_JS, locVopPage, locGdprPage, adminLayout, ADMIN_NAV, adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { userTfaLoginPage, tfaPage, adminPartnerSupport, presenceWidget, PRESENCE_HTML, PRESENCE_CSS, PRESENCE_JS, locVopPage, locGdprPage, adminLayout, ADMIN_NAV, adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };

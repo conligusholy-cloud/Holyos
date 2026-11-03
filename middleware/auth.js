@@ -77,6 +77,14 @@ async function requireAuth(req, res, next) {
       return res.status(401).json({ error: 'Přihlášení vypršelo — přihlaste se znovu' });
     }
 
+    // Povinné 2FA: po odkladu smí uživatel bez 2FA jen na /api/auth/* (nastavení 2FA, odhlášení, /me)
+    try {
+      const tf = await require('../services/two-factor-policy').statusFor(user);
+      if (tf.enforced && !String(req.originalUrl || '').startsWith('/api/auth/')) {
+        return res.status(403).json({ error: 'Zapněte si dvoufaktorové ověření (Zabezpečení účtu), jinak nelze pokračovat.', code: '2FA_REQUIRED' });
+      }
+    } catch (e) { /* politika nesmí shodit přihlášení */ }
+
     // Přidej uživatele do requestu
     req.user = {
       id: user.id,

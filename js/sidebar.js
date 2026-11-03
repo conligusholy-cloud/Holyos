@@ -129,6 +129,19 @@ function renderSidebar(activeModule) {
   }).then(function(data) {
     if (!data) return; // redirected
     var u = data.user || data;
+    // Povinné 2FA: po odkladu rovnou na stránku Zabezpečení účtu; během odkladu jen upozornění nahoře
+    try {
+      var tf = data.twofa;
+      if (tf && tf.required && !tf.enabled) {
+        if (tf.enforced) { if (location.pathname !== '/security.html') { location.href = '/security.html'; return; } }
+        else if (!document.getElementById('tfa-banner')) {
+          var bn = document.createElement('div'); bn.id = 'tfa-banner';
+          bn.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#b45309;color:#fff;padding:8px 14px;font-size:13px;text-align:center;font-family:inherit';
+          bn.innerHTML = '🔒 Zapněte si dvoufaktorové ověření' + (tf.grace_days_left != null ? ' — zbývá ' + tf.grace_days_left + ' dní, pak bude povinné' : '') + '. <a href="/security.html" style="color:#fff;font-weight:700;text-decoration:underline">Zapnout teď</a>';
+          document.body.appendChild(bn);
+        }
+      }
+    } catch (e) { /* nesmí rozbít sidebar */ }
     // allowed_modules: null = vidí vše (admin/super admin), jinak mapa { module_id: 'read'|'write' }
     var allowedModules = data.allowed_modules;
     var seesAll = (allowedModules === null || allowedModules === undefined) ||

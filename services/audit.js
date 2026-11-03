@@ -18,6 +18,8 @@ const { prisma } = require('../config/database');
  */
 async function logAudit({ action, entity, entity_id, description, changes, snapshot, user }) {
   try {
+    // Citlivá pole osob se do historie ukládají zašifrovaná (jen když je zapnutý FIELD_ENC_KEY)
+    if (entity === 'person') { const fc = require('./field-crypto'); changes = fc.redactForAudit(changes); snapshot = fc.redactForAudit(snapshot); }
     await prisma.auditLog.create({
       data: {
         action,

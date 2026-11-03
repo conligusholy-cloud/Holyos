@@ -71,7 +71,7 @@ app.use((req, res, next) => {
   next();
 });
 // ---- CSRF: každý POST musí přijít z našeho webu (Origin/Referer = náš host). Formuláře navíc nesou token svázaný s relací. ----
-const CSRF_SECRET = (process.env.BS2_SESSION_SECRET || 'dev') + ':csrf';
+const CSRF_SECRET = (SESSION_SECRET || require('crypto').randomBytes(32).toString('hex')) + ':csrf'; // bez záložního předvídatelného klíče
 function csrfToken(req) { const a = req.cookies && (req.cookies.bs2_user || req.cookies.bs2_admin || ''); return require('crypto').createHmac('sha256', CSRF_SECRET).update(String(a)).digest('hex').slice(0, 32); }
 app.use((req, res, next) => {
   if (req.method !== 'POST' || req.path === '/sso' || req.path.startsWith('/api/health')) return next();
@@ -106,14 +106,19 @@ function isAllowedAdmin(p) {
   return last === 'holy' && (first === 'tomas' || first === 'jan');
 }
 // ── Volitelné 2FA pro správce (zapne se env BS2_ADMIN_2FA=1): TOTP (Google/Microsoft Authenticator), tajemství per správce v app_settings ──
-const ADMIN_2FA = String(process.env.BS2_ADMIN_2FA || '') === '1';
+const ADMIN_2FA = String(process.env.BS2_ADMIN_2FA || '') !== '0'; // ve výchozím stavu ZAPNUTO (vypnout jen BS2_ADMIN_2FA=0)
 const crypto = require('crypto');
 const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 function b32enc(buf) { let bits = '', out = ''; for (const b of buf) bits += b.toString(2).padStart(8, '0'); for (let i = 0; i + 5 <= bits.length; i += 5) out += B32[parseInt(bits.slice(i, i + 5), 2)]; return out; }
 function b32dec(str) { let bits = '', out = []; for (const c of String(str).toUpperCase().replace(/[^A-Z2-7]/g, '')) bits += B32.indexOf(c).toString(2).padStart(5, '0'); for (let i = 0; i + 8 <= bits.length; i += 8) out.push(parseInt(bits.slice(i, i + 8), 2)); return Buffer.from(out); }
 function totp(secret, t = Date.now(), step = 30) { const ctr = Buffer.alloc(8); ctr.writeBigUInt64BE(BigInt(Math.floor(t / 1000 / step))); const h = crypto.createHmac('sha1', b32dec(secret)).update(ctr).digest(); const o = h[h.length - 1] & 0xf; const code = ((h.readUInt32BE(o) & 0x7fffffff) % 1000000).toString().padStart(6, '0'); return code; }
 function totpOk(secret, code) { const c = String(code || '').replace(/\s/g, ''); if (!/^\d{6}$/.test(c)) return false; for (const d of [-1, 0, 1]) if (totp(secret, Date.now() + d * 30000) === c) return true; return false; }
-async function adminTotpSecret(pid) { try { const r = await q("SELECT value FROM app_settings WHERE key=$1", ['admin_totp_' + pid]); return (r.rows[0] || {}).value || null; } catch (e) { return null; } }
+// Tajemství TOTP se v databázi ukládají šifrovaně (AES-256-GCM, klíč z relačního tajemství); starší čistý text se čte dál
+const _tk = () => crypto.createHash('sha256').update('bs2-totp:' + (SESSION_SECRET || '')).digest();
+function encSecret(p) { if (!SESSION_SECRET) return p; const iv = crypto.randomBytes(12); const c = crypto.createCipheriv('aes-256-gcm', _tk(), iv); const e = Buffer.concat([c.update(String(p), 'utf8'), c.final()]); return 'e1:' + Buffer.concat([iv, c.getAuthTag(), e]).toString('base64'); }
+function decSecret(s) { s = String(s || ''); if (!s.startsWith('e1:')) return s || null; try { const raw = Buffer.from(s.slice(3), 'base64'); const d = crypto.createDecipheriv('aes-256-gcm', _tk(), raw.subarray(0, 12)); d.setAuthTag(raw.subarray(12, 28)); return Buffer.concat([d.update(raw.subarray(28)), d.final()]).toString('utf8'); } catch (e) { return null; } }
+const hashCode = (c) => crypto.createHash('sha256').update(String(c).replace(/[^A-Za-z0-9]/g, '').toUpperCase()).digest('hex');
+async function adminTotpSecret(pid) { try { const r = await q("SELECT value FROM app_settings WHERE key=$1", ['admin_totp_' + pid]); return decSecret((r.rows[0] || {}).value); } catch (e) { return null; } }
 function requireAdmin(req, res, next) {
   const s = readCookie(req, ADMIN_COOKIE);
   if (ADMIN_2FA && s && s.kind === 'admin' && !s.tfa && !req.path.startsWith('/admin/2fa')) return res.redirect('/admin/2fa');
@@ -128,6 +133,8 @@ async function requireUser(req, res, next, skipConsent) {
   const r = await q('SELECT * FROM supporters WHERE id=$1', [s.sid]);
   const u = r.rows[0];
   if (!u || u.status !== 'active') { res.clearCookie(USER_COOKIE); return res.redirect('/login'); }
+  // Změna hesla / 2FA odvolá všechny starší relace
+  if (u.pw_changed_at && s.iat && s.iat * 1000 < new Date(u.pw_changed_at).getTime() - 2000) { res.clearCookie(USER_COOKIE); return res.redirect('/login'); }
   // Záložka AI chat se v menu ukáže jen když je chat zapnutý v Admin → AI chat (a je k dispozici API klíč)
   try { const cfg = await AI.loadConfig(); u.ai_chat_on = !!cfg.enabled && !!process.env.ANTHROPIC_API_KEY; } catch (e) { u.ai_chat_on = false; }
   // Kdo ještě nepotvrdil VOP a souhlas se zpracováním osobních údajů (např. přenesený ze starého systému), musí je nejdřív odsouhlasit
@@ -256,7 +263,7 @@ function agentPhotos(names) { const m = {}; (names || []).forEach((n) => { if (n
 app.get('/img/agent/:f', (req, res) => { const f = String(req.params.f || ''); if (!/^[a-z0-9-]+\.(jpe?g|png|webp)$/i.test(f)) return res.status(404).end(); res.set('Cache-Control', 'public, max-age=86400').sendFile(require('path').join(AGENT_DIR, f), (err) => { if (err && !res.headersSent) res.status(404).end(); }); });
 app.get('/img/pradlomat-mini.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(require('path').join(__dirname, 'pradlomat-mini.webp')));
 // Chyby přihlášení se předávají přes redirect (?e=kód), aby obnovení stránky nenabízelo „odeslat formulář znovu"
-const LOGIN_ERRORS = { bad: 'Nesprávný nick/e-mail nebo heslo.', inactive: 'Účet ještě není aktivovaný. Otevři bestseries2.cz/activate a nastav si heslo.', many: 'Příliš mnoho pokusů. Zkus to za 15 minut.', locked: 'Účet je dočasně zamčený po opakovaných neúspěšných pokusech. Zkus to za chvíli.' };
+const LOGIN_ERRORS = { bad: 'Nesprávný nick/e-mail nebo heslo. Pokud účet ještě nemáš aktivovaný, otevři bestseries2.cz/activate.', inactive: 'Nesprávný nick/e-mail nebo heslo. Pokud účet ještě nemáš aktivovaný, otevři bestseries2.cz/activate.', many: 'Příliš mnoho pokusů. Zkus to za 15 minut.', locked: 'Účet je dočasně zamčený po opakovaných neúspěšných pokusech. Zkus to za chvíli.' };
 app.get('/login', wrap(async (req, res) => {
   if (readCookie(req, USER_COOKIE)) return res.redirect('/');
   const e = String(req.query.e || ''); const error = LOGIN_ERRORS[e] ? LOGIN_ERRORS[e] + (e === 'locked' && req.query.min ? ' (' + parseInt(req.query.min, 10) + ' min)' : '') : '';
@@ -366,7 +373,7 @@ app.post('/reset/:token', wrap(async (req, res) => {
   if (password.length < 8) return back('Heslo musí mít aspoň 8 znaků.');
   if (password !== password2) return back('Hesla se neshodují.');
   const hash = await bcrypt.hash(password, 11);
-  await q("UPDATE supporters SET password_hash=$1, updated_at=now() WHERE id=$2", [hash, t.supporter_id]);
+  await q("UPDATE supporters SET password_hash=$1, updated_at=now(), pw_changed_at=now() WHERE id=$2", [hash, t.supporter_id]);
   await q('UPDATE password_resets SET used_at=now() WHERE supporter_id=$1 AND used_at IS NULL', [t.supporter_id]);
   await log({ name: 'web' }, 'password_reset_done', { supporter_id: t.supporter_id, ip });
   res.redirect('/login?reset=1');
@@ -382,13 +389,64 @@ app.post('/login', wrap(async (req, res) => {
     noteFail(ip);
     ST.track(req, u && u.id, 'login_fail', { meta: { known: !!u, activated: !!(u && u.password_hash) } });
     if (u) await q("UPDATE supporters SET failed_logins=COALESCE(failed_logins,0)+1, locked_until=CASE WHEN COALESCE(failed_logins,0)+1>=10 THEN now()+interval '15 minutes' ELSE locked_until END WHERE id=$1", [u.id]).catch(() => {});
-    return res.redirect('/login?e=' + (u && !u.password_hash ? 'inactive' : 'bad') + '&login=' + encodeURIComponent(login));
+    return res.redirect('/login?e=bad&login=' + encodeURIComponent(login)); // stejná hláška pro neexistující i neaktivovaný účet (neprozrazuje, kdo je registrovaný)
   }
   if (u.status === 'blocked') return res.status(403).send(V.loginPage({ error: 'Účet je zablokovaný. Ozvi se nám.', login }));
-  await q('UPDATE supporters SET last_login_at=now(), failed_logins=0, locked_until=NULL WHERE id=$1', [u.id]);
-  ST.track(req, u.id, 'login', { meta: { by: login.includes('@') ? 'email' : 'nick' } });
-  setCookie(req, res, USER_COOKIE, { kind: 'user', sid: u.id, nick: u.nick }, 30 * 24 * 3600);
+  await q('UPDATE supporters SET failed_logins=0, locked_until=NULL WHERE id=$1', [u.id]);
+  // Dvoufázové ověření: heslo sedí → krátká výzva (5 min), přihlášení se dokončí až po kódu z aplikace
+  if (u.totp_enabled) { setCookie(req, res, 'bs2_tfa', { kind: 'tfa', sid: u.id, by: login.includes('@') ? 'email' : 'nick' }, 300); return res.redirect('/login/2fa'); }
+  await finishUserLogin(req, res, u, login.includes('@') ? 'email' : 'nick');
+}));
+// Dokončení přihlášení investora: relace na 7 dní
+async function finishUserLogin(req, res, u, by) {
+  await q('UPDATE supporters SET last_login_at=now() WHERE id=$1', [u.id]);
+  ST.track(req, u.id, 'login', { meta: { by } });
+  setCookie(req, res, USER_COOKIE, { kind: 'user', sid: u.id, nick: u.nick }, 7 * 24 * 3600);
   res.redirect('/');
+}
+app.get('/login/2fa', wrap(async (req, res) => {
+  const t = readCookie(req, 'bs2_tfa'); if (!t || t.kind !== 'tfa') return res.redirect('/login');
+  res.send(V.userTfaLoginPage({ error: req.query.err ? 'Kód nesedí. Zkus to znovu.' : '' }));
+}));
+app.post('/login/2fa', wrap(async (req, res) => {
+  const t = readCookie(req, 'bs2_tfa'); if (!t || t.kind !== 'tfa') return res.redirect('/login');
+  if (rateLimited('utfa:' + req.ip, 20, 15 * 60e3) || rateLimited('utfa-u:' + t.sid, 8, 15 * 60e3)) return res.status(429).send(V.errorPage('Příliš mnoho pokusů', 'Zkus to za 15 minut.', '/login'));
+  const u = (await q('SELECT * FROM supporters WHERE id=$1', [t.sid])).rows[0];
+  if (!u || !u.totp_enabled || u.status !== 'active') return res.redirect('/login');
+  const code = String(req.body.code || '');
+  let ok = false; const sec = decSecret(u.totp_secret);
+  if (sec && totpOk(sec, code)) ok = true;
+  else { const h = hashCode(code); const list = Array.isArray(u.totp_backup) ? u.totp_backup : []; if (list.includes(h)) { ok = true; await q('UPDATE supporters SET totp_backup=$2 WHERE id=$1', [u.id, JSON.stringify(list.filter((x) => x !== h))]); } }
+  if (!ok) { ST.track(req, u.id, 'login_fail', { meta: { stage: '2fa' } }); return res.redirect('/login/2fa?err=1'); }
+  res.clearCookie('bs2_tfa');
+  await finishUserLogin(req, res, u, t.by || 'nick');
+}));
+
+// ── Dvoufázové ověření investora (nastavení v Můj účet) ──
+app.get('/2fa', wrap(requireUser), wrap(async (req, res) => {
+  const u = req.user; let setup = null;
+  if (!u.totp_enabled) { const secret = b32enc(crypto.randomBytes(20)); await q('UPDATE supporters SET totp_secret=$2 WHERE id=$1', [u.id, encSecret(secret)]); setup = { secret, uri: 'otpauth://totp/' + encodeURIComponent('Best Series 2.0:' + (u.nick || u.email)) + '?secret=' + secret + '&issuer=' + encodeURIComponent('Best Series 2.0') + '&digits=6&period=30' }; }
+  res.send(V.tfaPage({ s: u, enabled: !!u.totp_enabled, setup, left: Array.isArray(u.totp_backup) ? u.totp_backup.length : 0, error: req.query.err ? String(req.query.err).slice(0, 120) : '' }));
+}));
+app.post('/2fa/enable', wrap(requireUser), wrap(async (req, res) => {
+  const u = req.user; if (u.totp_enabled) return res.redirect('/2fa');
+  if (rateLimited('tfaen:' + u.id, 10, 15 * 60e3)) return res.status(429).send(V.errorPage('Příliš mnoho pokusů', 'Zkus to za 15 minut.', '/2fa'));
+  const sec = decSecret(u.totp_secret);
+  if (!sec || !totpOk(sec, req.body.code)) return res.redirect('/2fa?err=' + encodeURIComponent('Kód nesedí. Zkontroluj čas v telefonu a zkus to znovu.'));
+  const codes = Array.from({ length: 8 }, () => crypto.randomBytes(5).toString('hex').toUpperCase().replace(/(.{5})(.{5})/, '$1-$2'));
+  await q('UPDATE supporters SET totp_enabled=true, totp_backup=$2, pw_changed_at=now() WHERE id=$1', [u.id, JSON.stringify(codes.map(hashCode))]);
+  setCookie(req, res, USER_COOKIE, { kind: 'user', sid: u.id, nick: u.nick }, 7 * 24 * 3600); // obnov relaci (ostatní zařízení se odhlásí)
+  res.send(V.tfaPage({ s: u, enabled: true, codes, left: codes.length }));
+}));
+app.post('/2fa/disable', wrap(requireUser), wrap(async (req, res) => {
+  const u = req.user; if (!u.totp_enabled) return res.redirect('/2fa');
+  if (rateLimited('tfadis:' + u.id, 8, 15 * 60e3)) return res.status(429).send(V.errorPage('Příliš mnoho pokusů', 'Zkus to za 15 minut.', '/2fa'));
+  const code = String(req.body.code || ''); const sec = decSecret(u.totp_secret);
+  const h = hashCode(code); const list = Array.isArray(u.totp_backup) ? u.totp_backup : [];
+  const okPw = await bcrypt.compare(String(req.body.password || ''), u.password_hash);
+  if (!okPw || !((sec && totpOk(sec, code)) || list.includes(h))) return res.redirect('/2fa?err=' + encodeURIComponent('Nesprávné heslo nebo kód.'));
+  await q('UPDATE supporters SET totp_enabled=false, totp_secret=NULL, totp_backup=NULL, pw_changed_at=now() WHERE id=$1', [u.id]);
+  res.clearCookie(USER_COOKIE); res.redirect('/login');
 }));
 app.get('/activate', (req, res) => res.send(V.activatePage({ step: 'email' })));
 app.post('/activate', wrap(async (req, res) => {
@@ -419,8 +477,8 @@ app.post('/activate/finish', wrap(async (req, res) => {
   const taken = await q('SELECT 1 FROM supporters WHERE lower(nick)=lower($1) AND id<>$2', [nick, u.id]);
   if (taken.rows.length) return back('Tenhle nick už někdo má, zvol jiný.');
   const hash = await bcrypt.hash(password, 11);
-  await q("UPDATE supporters SET nick=$1, password_hash=$2, status='active', activated_at=now(), last_login_at=now(), updated_at=now(), gdpr_consent_at=now(), vop_consent_at=now() WHERE id=$3", [nick, hash, u.id]);
-  setCookie(req, res, USER_COOKIE, { kind: 'user', sid: u.id, nick }, 30 * 24 * 3600);
+  await q("UPDATE supporters SET nick=$1, password_hash=$2, status='active', activated_at=now(), last_login_at=now(), updated_at=now(), pw_changed_at=now(), gdpr_consent_at=now(), vop_consent_at=now() WHERE id=$3", [nick, hash, u.id]);
+  setCookie(req, res, USER_COOKIE, { kind: 'user', sid: u.id, nick }, 7 * 24 * 3600);
   res.redirect('/');
 }));
 app.get('/logout', (req, res) => { try { const ls = readCookie(req, USER_COOKIE); if (ls && ls.kind === 'user') { ST.track(req, ls.sid, 'logout'); ST.leave(ls.sid); } } catch (e) {} res.clearCookie(USER_COOKIE); res.clearCookie(ADMIN_COOKIE); res.redirect('/login?out=1'); });
@@ -1484,7 +1542,7 @@ app.post('/join/:code', wrap(async (req, res) => {
   const r = await q(`INSERT INTO supporters (email, first_name, last_name, phone, nick, password_hash, status, user_type, referred_by, source, activated_at, last_login_at, gdpr_consent_at, vop_consent_at)
     VALUES ($1,$2,$3,$4,$5,$6,'active','new',$7,'referral',now(),now(),now(),now()) RETURNING id`, [f.email, f.first_name, f.last_name, f.phone || null, f.nick, hash, seller.id]);
   await log({ name: 'web' }, 'join_via_referral', { id: r.rows[0].id, email: f.email, seller_id: seller.id, seller_nick: seller.nick, ip });
-  setCookie(req, res, USER_COOKIE, { kind: 'user', sid: r.rows[0].id, nick: f.nick }, 30 * 24 * 3600);
+  setCookie(req, res, USER_COOKIE, { kind: 'user', sid: r.rows[0].id, nick: f.nick }, 7 * 24 * 3600);
   res.redirect('/?welcome=1');
 }));
 
@@ -1715,7 +1773,8 @@ app.post('/password', wrap(requireUser), wrap(async (req, res) => {
   if (!(await bcrypt.compare(String(old), req.user.password_hash))) return back('Současné heslo nesouhlasí.');
   if (String(password).length < 8) return back('Nové heslo musí mít aspoň 8 znaků.');
   if (password !== password2) return back('Nová hesla se neshodují.');
-  await q('UPDATE supporters SET password_hash=$1, updated_at=now() WHERE id=$2', [await bcrypt.hash(String(password), 11), req.user.id]);
+  await q('UPDATE supporters SET password_hash=$1, updated_at=now(), pw_changed_at=now() WHERE id=$2', [await bcrypt.hash(String(password), 11), req.user.id]);
+  setCookie(req, res, USER_COOKIE, { kind: 'user', sid: req.user.id, nick: req.user.nick }, 7 * 24 * 3600); // aktuální relace zůstane, ostatní se odvolají
   await back('', 'Heslo změněno.');
 }));
 
@@ -1985,7 +2044,7 @@ app.get('/admin/2fa', wrap(async (req, res) => {
   const s = readCookie(req, ADMIN_COOKIE); if (!s || s.kind !== 'admin' || !isAllowedAdmin(s)) return res.redirect('/login');
   if (!ADMIN_2FA || s.tfa) return res.redirect('/admin');
   let secret = await adminTotpSecret(s.pid); let setup = false;
-  if (!secret) { secret = b32enc(crypto.randomBytes(20)); setup = true; await q("INSERT INTO app_settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", ['admin_totp_pending_' + s.pid, secret]); }
+  if (!secret) { secret = b32enc(crypto.randomBytes(20)); setup = true; await q("INSERT INTO app_settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", ['admin_totp_pending_' + s.pid, encSecret(secret)]); }
   const uri = 'otpauth://totp/' + encodeURIComponent('Best Series 2.0:' + (s.name || s.username || 'admin')) + '?secret=' + secret + '&issuer=' + encodeURIComponent('Best Series 2.0') + '&digits=6&period=30';
   res.send(V.admin2faPage({ setup, secret, uri, error: req.query.err ? 'Kód nesedí. Zkuste to znovu.' : '' }));
 }));
@@ -1993,9 +2052,9 @@ app.post('/admin/2fa', wrap(async (req, res) => {
   const s = readCookie(req, ADMIN_COOKIE); if (!s || s.kind !== 'admin' || !isAllowedAdmin(s)) return res.redirect('/login');
   if (rateLimited('2fa:' + s.pid, 10, 15 * 60e3)) return res.status(429).send(V.errorPage('Příliš mnoho pokusů', 'Zkuste to za 15 minut.', '/admin/2fa'));
   let secret = await adminTotpSecret(s.pid); let pending = false;
-  if (!secret) { const r = await q("SELECT value FROM app_settings WHERE key=$1", ['admin_totp_pending_' + s.pid]); secret = (r.rows[0] || {}).value || null; pending = true; }
+  if (!secret) { const r = await q("SELECT value FROM app_settings WHERE key=$1", ['admin_totp_pending_' + s.pid]); secret = decSecret((r.rows[0] || {}).value); pending = true; }
   if (!secret || !totpOk(secret, req.body.code)) return res.redirect('/admin/2fa?err=1');
-  if (pending) { await q("INSERT INTO app_settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", ['admin_totp_' + s.pid, secret]); await q("DELETE FROM app_settings WHERE key=$1", ['admin_totp_pending_' + s.pid]); await log(s, '2fa_setup', { pid: s.pid }); }
+  if (pending) { await q("INSERT INTO app_settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", ['admin_totp_' + s.pid, encSecret(secret)]); await q("DELETE FROM app_settings WHERE key=$1", ['admin_totp_pending_' + s.pid]); await log(s, '2fa_setup', { pid: s.pid }); }
   setCookie(req, res, ADMIN_COOKIE, Object.assign({}, s, { tfa: true, iat: undefined, exp: undefined }), 12 * 3600);
   res.redirect('/admin');
 }));
@@ -2907,7 +2966,7 @@ app.post('/admin/supporters/:id(\\d+)/password', requireAdmin, wrap(async (req, 
   const bytes = require('crypto').randomBytes(10);
   const pwd = Array.from(bytes, b => alphabet[b % alphabet.length]).join('');
   const hash = await bcrypt.hash(pwd, 10);
-  const r = await q("UPDATE supporters SET password_hash=$2, status=CASE WHEN status='blocked' THEN 'blocked' ELSE 'active' END, activated_at=COALESCE(activated_at, now()), updated_at=now() WHERE id=$1 RETURNING nick, email", [req.params.id, hash]);
+  const r = await q("UPDATE supporters SET password_hash=$2, status=CASE WHEN status='blocked' THEN 'blocked' ELSE 'active' END, activated_at=COALESCE(activated_at, now()), updated_at=now(), pw_changed_at=now() WHERE id=$1 RETURNING nick, email", [req.params.id, hash]);
   await log(req.admin, 'new_password', { id: Number(req.params.id) });
   const u = r.rows[0] || {};
   res.redirect('/admin/supporters/' + req.params.id + '?msg=' + encodeURIComponent('Nové dočasné heslo pro ' + (u.nick || u.email) + ': ' + pwd + ' — pošli ho uživateli, ať si ho po přihlášení změní.'));

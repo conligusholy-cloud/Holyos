@@ -1278,6 +1278,19 @@ server.listen(PORT, async () => {
   } catch (err) {
     console.error('[app] ensureInvoiceSchema selhal:', err.message);
   }
+  // Šifrování citlivých polí osob: po startu zašifruje stávající záznamy (jen s FIELD_ENC_KEY, idempotentní)
+  try {
+    const fc = require('./services/field-crypto');
+    if (fc.enabled()) {
+      const { prisma: extPrisma, basePrisma } = require('./config/database');
+      const r = await fc.encryptExistingPeople(basePrisma, extPrisma);
+      console.log('[field-crypto] šifrování osob:', JSON.stringify(r));
+    } else {
+      console.warn('[field-crypto] FIELD_ENC_KEY není nastaven — rodná čísla, OP a účty osob se v databázi neukládají šifrovaně');
+    }
+  } catch (err) {
+    console.error('[field-crypto] šifrování stávajících záznamů selhalo:', err.message);
+  }
   runExpiredLotsSweep();
   setInterval(runExpiredLotsSweep, SWEEP_INTERVAL_MS);
   try {

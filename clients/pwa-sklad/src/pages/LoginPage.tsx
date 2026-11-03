@@ -16,6 +16,8 @@ export default function LoginPage() {
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [needCode, setNeedCode] = useState(false); // účet s 2FA → po heslu se ptáme na kód
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,8 +30,13 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(username.trim(), password);
+      await login(username.trim(), password, needCode ? code.trim() : undefined);
     } catch (err) {
+      if (err instanceof Error && err.message === '2FA_CODE_REQUIRED') {
+        setNeedCode(true);
+        setSubmitting(false);
+        return;
+      }
       const msg =
         err instanceof ApiError
           ? err.status === 0
@@ -54,7 +61,26 @@ export default function LoginPage() {
       </header>
 
       <form className="login-form" onSubmit={handleSubmit} autoComplete="off">
-        <label className="field">
+        {needCode && (
+          <label className="field">
+            <span className="field-label">Kód z ověřovací aplikace (nebo záložní kód)</span>
+            <input
+              className="field-input"
+              type="text"
+              inputMode="numeric"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              required
+              autoFocus
+              disabled={submitting}
+            />
+          </label>
+        )}
+
+        <label className="field" style={needCode ? { display: 'none' } : undefined}>
           <span className="field-label">Uživatel</span>
           <input
             className="field-input"
@@ -69,7 +95,7 @@ export default function LoginPage() {
           />
         </label>
 
-        <label className="field">
+        <label className="field" style={needCode ? { display: 'none' } : undefined}>
           <span className="field-label">Heslo</span>
           <input
             className="field-input"

@@ -26,7 +26,7 @@ export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 interface AuthContextValue {
   status: AuthStatus;
   user: AuthUser | null;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, code?: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -69,15 +69,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
-  const login = useCallback(async (username: string, password: string) => {
-    const data = await apiFetch<LoginResponse>('/api/auth/login', {
-      method: 'POST',
-      body: { username, password },
-      skipAuth: true,
-    });
-    if ((data as any).needs_2fa) {
-      throw new Error('Tento účet má zapnuté dvoufaktorové ověření — přihlaste se v HolyOS ve webovém prohlížeči (2FA zatím v aplikaci Sklad není).');
+  const challengeRef = useRef<string | null>(null); // výzva z 1. kroku u účtu s 2FA
+  const login = useCallback(async (username: string, password: string, code?: string) => {
+    let data: LoginResponse;
+    if (challengeRef.current && code) {
+      data = await apiFetch<LoginResponse>('/api/auth/login/2fa', {
+        method: 'POST',
+        body: { challenge: challengeRef.current, code },
+        skipAuth: true,
+      });
+    } else {
+      data = await apiFetch<LoginResponse>('/api/auth/login', {
+        method: 'POST',
+        body: { username, password },
+        skipAuth: true,
+      });
+      if ((data as any).needs_2fa) {
+        challengeRef.current = (data as any).challenge || null;
+        throw new Error('2FA_CODE_REQUIRED');
+      }
     }
+    challengeRef.current = null;
     setStoredToken(data.token);
     setUser(data.user);
     setStatus('authenticated');

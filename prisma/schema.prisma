@@ -103,12 +103,12 @@ model Person {
   contract_type   String?   @db.VarChar(50)
   hourly_rate     Decimal?  @db.Decimal(10, 2)
   monthly_salary  Decimal?  @db.Decimal(10, 2)
-  bank_account    String?   @db.VarChar(50)
+  bank_account    String?   @db.Text // šifrováno (services/field-crypto.js)
 
   // Osobní údaje
   birth_date     DateTime? @db.Date
-  birth_number   String?   @db.VarChar(20)
-  id_card_number String?   @db.VarChar(20)
+  birth_number   String?   @db.Text // šifrováno
+  id_card_number String?   @db.Text // šifrováno
   gender         String?   @db.VarChar(10)
   address        String?   @db.VarChar(255)
   city           String?   @db.VarChar(100)

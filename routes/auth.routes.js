@@ -252,6 +252,28 @@ router.post('/2fa/disable', requireAuth, tfaLimiter, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET/PUT /api/auth/2fa/policy — politika povinného 2FA (jen super admin)
+router.get('/2fa/policy', requireAuth, async (req, res, next) => {
+  try {
+    if (!req.user.isSuperAdmin) return res.status(403).json({ error: 'Jen super admin' });
+    const pol = await require('../services/two-factor-policy').getPolicy();
+    const total = await prisma.user.count();
+    const enrolled = await prisma.user.count({ where: { totp_enabled: true } });
+    res.json({ policy: pol, users_total: total, users_enrolled: enrolled });
+  } catch (err) { next(err); }
+});
+router.put('/2fa/policy', requireAuth, async (req, res, next) => {
+  try {
+    if (!req.user.isSuperAdmin) return res.status(403).json({ error: 'Jen super admin' });
+    const b = req.body || {};
+    // Pojistka: zapínající super admin musí mít 2FA sám, jinak by se mohl vyřadit
+    if (b.enabled) { const me = await prisma.user.findUnique({ where: { id: req.user.id }, select: { totp_enabled: true } }); if (!me.totp_enabled) return res.status(400).json({ error: 'Nejdřív si zapněte 2FA sami.' }); }
+    const pol = await require('../services/two-factor-policy').setPolicy(b);
+    require('../services/audit').logAudit({ action: 'update', entity: 'security_policy', description: 'Politika povinného 2FA: ' + (pol.enabled ? 'zapnuto (odklad ' + pol.grace_days + ' dní)' : 'vypnuto'), user: req.user }).catch(() => {});
+    res.json({ ok: true, policy: pol });
+  } catch (err) { next(err); }
+});
+
 // POST /api/auth/users/:id/2fa-reset — super admin zruší 2FA uživateli (ztracený telefon i záložní kódy)
 router.post('/users/:id/2fa-reset', requireAuth, async (req, res, next) => {
   try {
@@ -308,7 +330,9 @@ router.get('/me', requireAuth, async (req, res, next) => {
       }
     }
 
-    res.json({ user: req.user, allowed_modules, external_sections: await externalSectionsFor(req.user) });
+    let twofa = null;
+    try { const u2 = await prisma.user.findUnique({ where: { id: req.user.id }, select: { username: true, totp_enabled: true } }); twofa = await require('../services/two-factor-policy').statusFor(u2); } catch (e) { twofa = null; }
+    res.json({ user: req.user, allowed_modules, external_sections: await externalSectionsFor(req.user), twofa });
   } catch (err) {
     next(err);
   }

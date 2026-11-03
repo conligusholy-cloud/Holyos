@@ -33,6 +33,8 @@
   <div id="area"></div>
   <div class="err" id="err"></div>
 
+  <div id="policy"></div>
+
   <hr>
   <div style="font-size:13px;color:#8a93b8">Ztratil jsi telefon nebo podezříváš, že někdo zná tvé heslo?</div>
   <button class="sec" id="logoutAll">Odhlásit ze všech zařízení</button>
@@ -85,7 +87,25 @@
     if (!confirm('Odhlásit tento účet ze všech zařízení?')) return;
     api('POST','/api/auth/logout-all').then(function(){ location.href='/login.html'; }).catch(err);
   };
-  load();
+  // Politika povinného 2FA (jen super admin)
+  function loadPolicy(){
+    api('GET','/api/auth/2fa/policy').then(function(d){
+      var p = d.policy;
+      $('policy').innerHTML = '<hr><div style="font-weight:700;margin-bottom:6px">🛡 Povinné 2FA pro všechny uživatele</div>'
+        + '<div style="font-size:13px;color:#8a93b8">Stav: <span class="badge '+(p.enabled?'on':'off')+'">'+(p.enabled?'zapnuto':'vypnuto')+'</span> · 2FA má '+d.users_enrolled+' z '+d.users_total+' účtů</div>'
+        + '<label>Odklad (dní) — po zapnutí se jen zobrazuje upozornění</label><input type="number" id="pg" min="0" max="90" value="'+p.grace_days+'">'
+        + '<label>Výjimky (uživatelská jména oddělená čárkou — např. sdílené kiosky)</label><input type="text" id="pe" value="'+esc((p.exempt||[]).join(', '))+'">'
+        + '<button id="psave">'+(p.enabled?'Uložit':'Zapnout povinné 2FA')+'</button>'
+        + (p.enabled?' <button class="sec" id="poff">Vypnout povinnost</button>':'');
+      $('psave').onclick = function(){
+        var ex = $('pe').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
+        if (!p.enabled && !confirm('Zapnout povinné 2FA pro všechny uživatele s odkladem '+$('pg').value+' dní?')) return;
+        api('PUT','/api/auth/2fa/policy',{enabled:true, grace_days:Number($('pg').value), exempt:ex}).then(loadPolicy).catch(err);
+      };
+      if ($('poff')) $('poff').onclick = function(){ api('PUT','/api/auth/2fa/policy',{enabled:false}).then(loadPolicy).catch(err); };
+    }).catch(function(){ /* ne super admin → panel se nezobrazí */ });
+  }
+  load(); loadPolicy();
 })();
 </script>
 </body>

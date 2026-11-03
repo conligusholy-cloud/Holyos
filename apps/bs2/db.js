@@ -60,6 +60,10 @@ async function migrate() {
 
     -- Referenční program: prodejce (user_type=seller) má unikátní ref_code, nově registrovaní přes /join/<code> mají referred_by
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS ref_code TEXT UNIQUE;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS totp_secret TEXT;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS totp_backup JSONB;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS pw_changed_at TIMESTAMPTZ;
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS referred_by INTEGER REFERENCES supporters(id) ON DELETE SET NULL;
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS phone TEXT;
     CREATE INDEX IF NOT EXISTS supporters_referred_by_idx ON supporters (referred_by);

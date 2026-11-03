@@ -54,6 +54,7 @@ async function tryJwt(token) {
     include: { person: true },
   });
   if (!user || !user.person || !user.person.active) return { kind: 'invalid' };
+  if ((decoded.tv || 0) !== (user.token_version || 0)) return { kind: 'bad' }; // zneplatněný token (změna hesla / odhlásit všude)
   return { kind: 'ok', user, person: user.person };
 }
 
