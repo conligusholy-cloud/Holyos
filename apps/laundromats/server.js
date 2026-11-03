@@ -339,6 +339,9 @@ app.get('/admin/column-filters.js', requireAdmin, async (req, res) => {
 });
 
 app.get('/admin/api/users/:id(\\d+)/activity', requireAdmin, api(async (req) => holyosSvc('GET', '/api/auth/lm/accounts/' + req.params.id + '/activity')));
+// Statistika schuzek (tyden / mesic / rok) pro zalozku Statistiky v administraci.
+app.get('/admin/api/meetings-stats', requireAdmin, api(async (req) => Object.assign({ ok: true },
+  await holyosSvc('GET', '/api/auth/bs2/meetings-stats?group=' + qs(req.query.group) + '&n=' + qs(req.query.n)))));
 app.get('/admin/api/hot-leads', requireAdmin, api(async () => ({ ok: true, leads: await holyosSvc('GET', '/api/auth/bs2/hot-leads') })));
 
 // ── Stránky Compounder + Prádlomaty (převzato z BS2, upraveno pro zájemce) ──

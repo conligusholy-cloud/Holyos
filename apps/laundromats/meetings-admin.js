@@ -66,6 +66,16 @@ const CSS = `
 .mt-tw .nm{font-weight:700}
 .mt-tw .cf-info{font-size:12px;color:var(--text2);margin:0 0 8px}
 .mt-tw .btn.sm{padding:3px 9px;font-size:12px}
+.mt-seg{display:flex;gap:6px;flex-wrap:wrap}
+.mt-seg button{background:transparent;border:1px solid var(--border2);color:var(--text2);border-radius:9px;padding:6px 13px;font:inherit;font-weight:700;font-size:13px;cursor:pointer}
+.mt-seg button.on{background:rgba(79,209,255,.14);border-color:var(--blue);color:var(--blue)}
+.mt-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:14px 0 4px}
+.mt-kpi div{background:rgba(8,13,26,.6);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+.mt-kpi b{display:block;font-size:23px;line-height:1.2}
+.mt-kpi span{font-size:11.5px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em}
+.mt-chart{overflow-x:auto;margin-top:6px}
+.mt-leg{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--text2);margin:2px 0 0}
+.mt-leg i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 .mt-msg{margin-top:10px;font-size:13px}
 @media(max-width:900px){.mt-week{grid-template-columns:1fr}.mt-day{min-height:0}}
 `;
@@ -341,15 +351,81 @@ root.addEventListener('click',function(e){var b=e.target.closest('[data-udis]');
   if(dis&&!confirm('Zablokovat účet? Uživatel se odhlásí a nebude se moci přihlásit.'))return;b.disabled=true;
   api('/admin/api/users/'+id+'/disabled',{disabled:dis}).then(function(){(usr||[]).forEach(function(u){if(u.id===id)u.disabled=dis;});usrRender();}).catch(function(er){b.disabled=false;alert(er.message);});},true);
 root.querySelector('.mt-usrreload').onclick=usrLoad;
+// ── Statistiky schůzek — kolik se jich na dané období domluvilo a kolik proběhlo ──
+// Schůzka patří do období podle TERMÍNU, ne podle data domluvení, aby byl obojí
+// údaj ve stejném sloupci. Úspěšnost = proběhlé / vyřešené (nadcházející se nepočítají).
+var statGroup='month', statData=null, statBusy=false;
+var STAT_N={week:12,month:12,year:5};
+function statLoad(){
+  var box=root.querySelector('.mt-statwrap');
+  if(statBusy)return; statBusy=true;
+  box.innerHTML='<div class="mt-empty">Načítám…</div>';
+  api('/admin/api/meetings-stats?group='+statGroup+'&n='+STAT_N[statGroup])
+    .then(function(j){statBusy=false;statData=j;statRender();})
+    .catch(function(e){statBusy=false;box.innerHTML='<div class="mt-empty" style="color:#ff8f8f">'+esc(e.message)+'</div>';});
+}
+// Sloupcový graf bez knihoven: domluveno vedle proběhlo, popisky period dole.
+function statChart(b,avail){
+  var W=Math.max(560,Math.min(Math.max(560,(avail||0)-8),b.length*120)), H=240, PL=46, PR=10, PT=18, PB=34;
+  var max=1; b.forEach(function(x){if(x.booked>max)max=x.booked;});
+  var raw=Math.ceil(max/4), step=Math.pow(10,Math.max(0,String(raw).length-1)), tick=Math.ceil(raw/step)*step, top=tick*4;
+  var iw=W-PL-PR, ih=H-PT-PB, bw=iw/b.length, g='';
+  for(var i=0;i<=4;i++){var v=tick*i, y=PT+ih-(v/top)*ih;
+    g+='<line x1="'+PL+'" y1="'+y+'" x2="'+(W-PR)+'" y2="'+y+'" stroke="rgba(120,160,255,.16)" stroke-width="1"/>'
+      +'<text x="'+(PL-7)+'" y="'+(y+4)+'" text-anchor="end" fill="#8ea2c2" font-size="11">'+v+'</text>';}
+  b.forEach(function(x,i){
+    var c=PL+bw*i+bw/2, w=Math.max(10,Math.min(26,(bw-16)/2));
+    var hb=(x.booked/top)*ih, hd=(x.done/top)*ih;
+    var tip=esc(x.title)+' — domluveno '+x.booked+', proběhlo '+x.done+(x.rate!=null?' ('+x.rate+' %)':'');
+    g+='<rect x="'+(c-w-3)+'" y="'+(PT+ih-hb)+'" width="'+w+'" height="'+hb+'" rx="3" fill="#4fd1ff" opacity=".85"><title>'+tip+'</title></rect>'
+      +'<rect x="'+(c+3)+'" y="'+(PT+ih-hd)+'" width="'+w+'" height="'+hd+'" rx="3" fill="#2fe3a0" opacity=".9"><title>'+tip+'</title></rect>';
+    if(x.booked)g+='<text x="'+c+'" y="'+(PT+ih-hb-6)+'" text-anchor="middle" fill="#e8f0ff" font-size="11" font-weight="700">'+x.booked+'</text>';
+    g+='<text x="'+c+'" y="'+(H-12)+'" text-anchor="middle" fill="#8ea2c2" font-size="11">'+esc(x.label)+'</text>';
+  });
+  g+='<line x1="'+PL+'" y1="'+(PT+ih)+'" x2="'+(W-PR)+'" y2="'+(PT+ih)+'" stroke="rgba(120,160,255,.3)"/>';
+  return '<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block;max-width:none">'+g+'</svg>';
+}
+function statRender(){
+  var box=root.querySelector('.mt-statwrap');
+  if(!statData){box.innerHTML='';return;}
+  var t=statData.totals||{}, b=statData.buckets||[];
+  var kpi='<div class="mt-kpi">'
+    +'<div><b>'+(t.booked||0)+'</b><span>Domluveno</span></div>'
+    +'<div><b style="color:#2fe3a0">'+(t.done||0)+'</b><span>Proběhlo</span></div>'
+    +'<div><b>'+(t.rate!=null?t.rate+' %':'—')+'</b><span>Úspěšnost</span></div>'
+    +'<div><b style="color:#ff8f8f">'+(t.no_show||0)+'</b><span>Nedorazil</span></div>'
+    +'<div><b style="color:#ff8f8f">'+(t.canceled||0)+'</b><span>Zrušeno</span></div>'
+    +'<div><b style="color:#ffd866">'+(t.unmarked||0)+'</b><span>Neoznačeno</span></div>'
+    +'<div><b style="color:#4fd1ff">'+(t.upcoming||0)+'</b><span>Nadchází</span></div></div>';
+  var leg='<div class="mt-leg"><span><i style="background:#4fd1ff"></i>domluveno</span><span><i style="background:#2fe3a0"></i>proběhlo</span>'
+    +'<span>Úspěšnost = proběhlé ze schůzek, které už mají výsledek. Nadcházející se nepočítají.</span></div>';
+  var rows=b.slice().reverse().map(function(x){
+    return '<tr><td>'+esc(x.title)+'</td><td>'+x.booked+'</td><td style="color:#2fe3a0">'+x.done+'</td><td>'+x.no_show+'</td><td>'+x.canceled+'</td><td>'+x.unmarked+'</td><td>'+x.upcoming+'</td>'
+      +'<td>'+(x.rate!=null?x.rate+' %':'<span class="muted">—</span>')+'</td></tr>';
+  }).join('');
+  var avail=(box.clientWidth||root.clientWidth||900)-36;
+  box.innerHTML=kpi
+    +'<div class="mt-chart">'+statChart(b,avail)+'</div>'+leg
+    +'<div class="mt-tw" style="margin-top:16px"><table><thead><tr><th>Období</th><th>Domluveno</th><th>Proběhlo</th><th>Nedorazil</th><th>Zrušeno</th><th>Neoznačeno</th><th>Nadchází</th><th>Úspěšnost</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +(statData.internal_skipped?'<p class="muted small" style="margin:10px 0 0">Nepočítá se '+statData.internal_skipped+' našich vlastních (testovacích) rezervací z firemních e-mailů.</p>':'');
+}
+var statRz=null;
+window.addEventListener('resize',function(){if(!statData)return;clearTimeout(statRz);statRz=setTimeout(statRender,200);});
+root.addEventListener('click',function(e){var b=e.target.closest('[data-sgrp]');if(!b)return;
+  statGroup=b.getAttribute('data-sgrp');
+  root.querySelectorAll('[data-sgrp]').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-sgrp')===statGroup);});
+  statLoad();});
 // Přepínání záložek. Seznam se tahá ze serveru až při prvním otevření.
 function tab(name){
-  var isHot=name==='hot', isUsr=name==='usr';
+  var isHot=name==='hot', isUsr=name==='usr', isStat=name==='stat';
   root.querySelectorAll('.mt-tabs button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-tab')===name);});
-  root.querySelector('.mt-meet').style.display=(isHot||isUsr)?'none':'';
+  root.querySelector('.mt-meet').style.display=(isHot||isUsr||isStat)?'none':'';
   root.querySelector('.mt-hot').style.display=isHot?'':'none';
   root.querySelector('.mt-usr').style.display=isUsr?'':'none';
+  root.querySelector('.mt-stat').style.display=isStat?'':'none';
   if(isHot&&hot===null)hotLoad();
   if(isUsr&&usr===null)usrLoad();
+  if(isStat&&statData===null)statLoad();
 }
 root.querySelectorAll('.mt-tabs button').forEach(function(b){b.onclick=function(){tab(b.getAttribute('data-tab'));};});
 
@@ -379,7 +455,7 @@ function meetingsPage({ admin, holyosUrl, error }) {
   <div class="top"><b>Laundromats<span>.eu</span></b><span class="muted">Administrace schůzek</span><span class="sp"></span><span class="who">${nm}</span>${holyosUrl ? `<a href="${holyosUrl}" class="small">← HolyOS</a>` : ''}<a href="/admin/logout" class="small">Odhlásit</a></div>
   <div class="wrap"><style>${CSS}</style>
   <div id="mt">
-    <div class="mt-tabs"><button data-tab="meet" class="on">📅 Schůzky</button><button data-tab="hot">⭐ Jmenný seznam</button><button data-tab="usr">👤 Uživatelé</button></div>
+    <div class="mt-tabs"><button data-tab="meet" class="on">📅 Schůzky</button><button data-tab="hot">⭐ Jmenný seznam</button><button data-tab="usr">👤 Uživatelé</button><button data-tab="stat">📊 Statistiky</button></div>
     <div class="mt-meet">
     <div class="mt-bar"><h2>📅 Kalendář schůzek</h2>
       <button class="btn sec sm mt-prev">←</button><span class="mt-range"></span><button class="btn sec sm mt-next">→</button>
@@ -399,6 +475,12 @@ function meetingsPage({ admin, holyosUrl, error }) {
       <div class="mt-bar"><h2>👤 Uživatelé</h2><span style="flex:1"></span><span class="muted small mt-usrsum"></span><button class="btn sec sm mt-usrreload">↻ Obnovit</button></div>
       <p class="muted small" style="margin:-6px 0 14px">Účty registrované na <a href="/cesta/registrace" target="_blank">laundromats.eu/cesta/registrace</a> – mají přístup ke Compounderu, Prádlomatům, Ekonomice, Najít místo a Zhodnotit místo. Každá registrace se zároveň spáruje s kontaktem v HolyOS.</p>
       <div class="mt-usrwrap card"></div>
+    </div>
+    <div class="mt-stat" style="display:none">
+      <div class="mt-bar"><h2>📊 Statistiky schůzek</h2><span style="flex:1"></span>
+        <div class="mt-seg"><button data-sgrp="week">Týdny</button><button data-sgrp="month" class="on">Měsíce</button><button data-sgrp="year">Roky</button></div></div>
+      <p class="muted small" style="margin:-6px 0 14px">Schůzka se počítá do období, na které byl <b>termín</b> (ne kdy se domluvila). Data jsou společná s HolyOS → Prodejní objednávky → Termíny.</p>
+      <div class="mt-statwrap card"></div>
     </div>
   </div></div>
   <script src="/admin/column-filters.js"></script>

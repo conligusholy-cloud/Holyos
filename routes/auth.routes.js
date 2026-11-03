@@ -715,6 +715,121 @@ router.get('/bs2/meetings', async (req, res, next) => {
     })));
   } catch (err) { next(err); }
 });
+// GET /api/auth/bs2/meetings-stats?group=week|month|year&n=12
+// Statistika schuzek pro administraci Laundromats: kolik schuzek na dane obdobi pripadlo
+// a kolik z nich probehlo. Schuzka patri do obdobi podle TERMINU (slot.starts_at), ne podle
+// data domluveni -- "domluveno" i "probehlo" jsou tak ve stejnem sloupci a da se z nich cist uspesnost.
+// Uspesnost pocitame stejne jako vyhodnoceni obchodniku (services/meeting/owner-stats.js):
+// probehle / vyresene, kde vyresene = probehle + nedorazil + zrusene + termin uz uplynul a nikdo stav neoznacil.
+// Nadchazejici schuzky se do uspesnosti nepocitaji -- vysledek jeste neni znamy.
+// Nase vlastni (testovaci) rezervace podle e-mailove domeny se nepocitaji; jejich pocet vracime zvlast.
+const MST_TZ = 'Europe/Prague';
+const MST_MON3 = ['led', 'uno', 'bre', 'dub', 'kve', 'cvn', 'cvc', 'srp', 'zar', 'rij', 'lis', 'pro'];
+const MST_MON = ['leden', 'unor', 'brezen', 'duben', 'kveten', 'cerven', 'cervenec', 'srpen', 'zari', 'rijen', 'listopad', 'prosinec'];
+// Datum tak, jak ho v dany okamzik vidi Praha (server bezi v UTC).
+function mstParts(d) {
+  const f = new Intl.DateTimeFormat('en-CA', { timeZone: MST_TZ, year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })
+    .formatToParts(new Date(d)).reduce((a, x) => { a[x.type] = x.value; return a; }, {});
+  const DOW = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return { y: +f.year, m: +f.month, d: +f.day, dow: DOW[f.weekday] };
+}
+// Pocitame v UTC poledne, aby prechod na letni/zimni cas nikdy neposunul datum o den vedle.
+const mstNoon = (y, m, d) => Date.UTC(y, m - 1, d, 12, 0, 0);
+const mstYmd = (t) => { const x = new Date(t); return { y: x.getUTCFullYear(), m: x.getUTCMonth() + 1, d: x.getUTCDate() }; };
+const mst2 = (n) => String(n).padStart(2, '0');
+// Klic obdobi + popisky do grafu. Tyden zacina pondelim.
+function mstBucket(group, p) {
+  if (group === 'year') return { key: String(p.y), label: String(p.y), title: String(p.y) };
+  if (group === 'week') {
+    const mon = mstYmd(mstNoon(p.y, p.m, p.d) - ((p.dow + 6) % 7) * 86400000);
+    const sun = mstYmd(mstNoon(mon.y, mon.m, mon.d) + 6 * 86400000);
+    return {
+      key: mon.y + '-' + mst2(mon.m) + '-' + mst2(mon.d),
+      label: mon.d + '. ' + mon.m + '.',
+      title: mon.d + '. ' + mon.m + '. - ' + sun.d + '. ' + sun.m + '. ' + sun.y,
+    };
+  }
+  return { key: p.y + '-' + mst2(p.m), label: MST_MON3[p.m - 1] + ' ' + mst2(p.y % 100), title: MST_MON[p.m - 1] + ' ' + p.y };
+}
+// Seznam obdobi od nejstarsiho po soucasne (vcetne), pozpatku od dneska.
+function mstBuckets(group, n) {
+  const now = mstParts(Date.now());
+  const out = [];
+  for (let i = n - 1; i >= 0; i--) {
+    if (group === 'year') out.push(mstBucket('year', { y: now.y - i, m: 1, d: 1, dow: 0 }));
+    else if (group === 'week') {
+      const x = mstYmd(mstNoon(now.y, now.m, now.d) - (((now.dow + 6) % 7) + i * 7) * 86400000);
+      out.push(mstBucket('week', { y: x.y, m: x.m, d: x.d, dow: 1 }));
+    } else {
+      const mm = now.m - 1 - i; const y = now.y + Math.floor(mm / 12); const m = ((mm % 12) + 12) % 12 + 1;
+      out.push(mstBucket('month', { y, m, d: 1, dow: 0 }));
+    }
+  }
+  return out;
+}
+const mstCell = () => ({ booked: 0, done: 0, no_show: 0, canceled: 0, upcoming: 0, unmarked: 0 });
+function mstAdd(c, status, startsAt, now) {
+  c.booked++;
+  if (status === 'canceled') c.canceled++;
+  else if (status === 'done') c.done++;
+  else if (status === 'no_show') c.no_show++;
+  else if (new Date(startsAt).getTime() > now) c.upcoming++;
+  else c.unmarked++;
+}
+function mstRate(c) {
+  const resolved = c.done + c.no_show + c.canceled + c.unmarked;
+  return resolved ? Math.round((c.done / resolved) * 1000) / 10 : null;
+}
+// Nase vlastni e-maily = testovaci rezervace, do statistiky nepatri.
+function mstInternal(email) {
+  const domains = String(process.env.ADS_INTERNAL_EMAIL_DOMAINS || 'bestseries.cz,bestseries2.cz,pradlomaty.info')
+    .split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+  const em = String(email || '').trim().toLowerCase();
+  const at = em.lastIndexOf('@');
+  return at > 0 && domains.indexOf(em.slice(at + 1)) !== -1;
+}
+router.get('/bs2/meetings-stats', async (req, res, next) => {
+  try {
+    if (!verifyMeetingsToken(req, res)) return;
+    const group = ['week', 'month', 'year'].includes(String(req.query.group)) ? String(req.query.group) : 'month';
+    const nMax = group === 'year' ? 10 : group === 'week' ? 26 : 24;
+    const n = Math.max(1, Math.min(nMax, parseInt(req.query.n, 10) || (group === 'year' ? 5 : 12)));
+    const buckets = mstBuckets(group, n);
+    const idx = {}; buckets.forEach((b, i) => { idx[b.key] = i; });
+    // Rozsah dotazu delame s rezervou na obou stranach; presne zatridi az klic obdobi v prazskem case.
+    const nowP = mstParts(Date.now());
+    const first = buckets[0].key;
+    const from = group === 'year' ? new Date(Date.UTC(+first, 0, 1) - 2 * 86400000)
+      : group === 'month' ? new Date(Date.UTC(+first.slice(0, 4), +first.slice(5, 7) - 1, 1) - 2 * 86400000)
+        : new Date(Date.UTC(+first.slice(0, 4), +first.slice(5, 7) - 1, +first.slice(8, 10)) - 2 * 86400000);
+    const to = group === 'year' ? new Date(Date.UTC(nowP.y + 1, 0, 1) + 2 * 86400000)
+      : group === 'month' ? new Date(Date.UTC(nowP.y, nowP.m, 1) + 2 * 86400000)
+        : new Date(Date.now() + 9 * 86400000);
+    const rows = await prisma.meetingReservation.findMany({
+      where: { slot: { starts_at: { gte: from, lt: to } } },
+      select: { status: true, email: true, slot: { select: { starts_at: true } } },
+    });
+    const now = Date.now();
+    const cells = buckets.map(() => mstCell());
+    const totals = mstCell();
+    let internal = 0;
+    rows.forEach((r) => {
+      if (!r.slot || !r.slot.starts_at) return;
+      if (mstInternal(r.email)) { internal++; return; }
+      const i = idx[mstBucket(group, mstParts(r.slot.starts_at)).key];
+      if (i === undefined) return;
+      mstAdd(cells[i], r.status, r.slot.starts_at, now);
+      mstAdd(totals, r.status, r.slot.starts_at, now);
+    });
+    res.json({
+      group,
+      n,
+      buckets: buckets.map((b, i) => Object.assign({}, b, cells[i], { rate: mstRate(cells[i]) })),
+      totals: Object.assign({}, totals, { rate: mstRate(totals) }),
+      internal_skipped: internal,
+    });
+  } catch (err) { next(err); }
+});
 // GET /api/auth/bs2/hot-leads — kontakty ručně označené jako „zajímavý kontakt"
 // (CompounderLead.is_hot). Slouží jmennému seznamu v administraci Laundromats,
 // aby obchodník viděl horké kontakty vedle kalendáře schůzek.
