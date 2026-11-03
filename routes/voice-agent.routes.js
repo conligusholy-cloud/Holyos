@@ -9,6 +9,7 @@
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../config/database');
+const shiftWindow = require('../services/voice/shift-window'); // pásma rozpisu infolinky (Europe/Prague)
 const { requireAuth } = require('../middleware/auth');
 const { z } = require('zod');
 
@@ -83,6 +84,14 @@ function xmlAttr(s) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// XML-escape textu (obsah <Say>) — bez toho shodí „&" celé TwiML.
+function xmlEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 // TwiML pro spojení hovoru s ConversationRelay. actionUrl = kam Twilio zavolá,
@@ -169,11 +178,20 @@ function decList(s) {
 }
 
 // Omluvná zpráva + zavěšení, když se nikoho nepodařilo zastihnout.
-function twimlApology() {
+// Infolinka má vlastní znění: operátoři nejsou „nezastižitelní", ale vyřizují
+// jiné hovory — zákazník má vědět, že se jen nedostalo na něj (požadavek #127).
+const APOLOGY_INFOLINKA =
+  'Omlouvám se, všichni naši operátoři právě vyřizují jiné hovory a řeší jiné požadavky. ' +
+  'Zkuste to prosím za chvíli znovu. Na shledanou.';
+const APOLOGY_DEFAULT =
+  'Omlouvám se, teď se nedaří nikoho zastihnout. Ozveme se vám co nejdříve. Na shledanou.';
+
+function twimlApology(line) {
+  const text = normLine(line) === 'infolinka' ? APOLOGY_INFOLINKA : APOLOGY_DEFAULT;
   return (
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<Response>\n' +
-    '  <Say voice="Polly.Jitka" language="cs-CZ">Omlouvám se, teď se nedaří nikoho zastihnout. Ozveme se vám co nejdříve. Na shledanou.</Say>\n' +
+    '  <Say voice="Polly.Jitka" language="cs-CZ">' + xmlEsc(text) + '</Say>\n' +
     '  <Hangup/>\n' +
     '</Response>'
   );
@@ -201,7 +219,7 @@ async function numberForLine(line) {
 function twimlDial(numbers, timeout, ctx) {
   const list = (numbers || []).map(e164).filter(Boolean);
   const t = Math.max(8, Math.min(60, parseInt(timeout, 10) || 20));
-  if (!list.length) return twimlApology();
+  if (!list.length) return twimlApology((ctx || {}).line);
   const first = xmlAttr(list[0]);
   const tail = encList(list.slice(1));
   const c = ctx || {};
@@ -287,42 +305,43 @@ async function resolveTransferPlan(mode, targetId, line) {
     enabled = enRaw === undefined || enRaw === null ? true : (enRaw === true || enRaw === 'true' || enRaw === 1 || enRaw === '1');
     timeout = get ? parseInt(await get(cfgKey(line, 'transfer_ring_timeout')), 10) || 20 : 20;
     rounds = get ? parseInt(await get(cfgKey(line, 'transfer_rounds')), 10) || 2 : 2;
-    // 0) Dnešní směna: v pracovní době osoba „v práci" → hlavní → záložní operátor
-    //    (vše z rozpisu daného dne; mají přednost před statickými čísly).
+    // 0) Aktuální směna z rozpisu — PRIMÁRNÍ zdroj operátorů pro přepojení.
+    //    Který řádek rozpisu a které role platí, počítá services/voice/shift-window.js
+    //    (pásma Po–Čt / Pá / So / Ne včetně nočních přesahů, vše v Europe/Prague).
+    //    Pozor: v úterý ve 2:00 platí PONDĚLNÍ řádek — proto se nelze ptát na „dnešek".
     try {
       let shifts = get ? await get(cfgKey(line, 'shifts')) : {};
       if (typeof shifts === 'string') { try { shifts = JSON.parse(shifts); } catch (_) { shifts = {}; } }
-      // Pracovní doba je GLOBÁLNÍ (jednotná pro všechny dny), ne per den.
-      const workFrom = get ? (await get(cfgKey(line, 'work_from'))) || '' : '';
-      const workTo = get ? (await get(cfgKey(line, 'work_to'))) || '' : '';
-      const now = new Date();
-      const ymd = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-      const sh = shifts && shifts[ymd];
-      if (!sh) console.warn('[voice] směna pro ' + ymd + ' není nastavena → jen statická čísla');
-      if (sh) {
-        const pushPerson = async (pid) => {
+      const win = shiftWindow.resolveShiftWindow(new Date());
+      const sh = shifts && shifts[win.rosterDate];
+      if (!sh) {
+        console.warn('[voice] rozpis pro ' + win.rosterDate + ' (' + win.label + ') není vyplněný → nikdo z rozpisu');
+      } else {
+        const pushPerson = async (pid, role) => {
           const id = parseInt(pid, 10); if (!id) return;
           try {
             const p = await prisma.person.findUnique({ where: { id }, select: { phone: true, active: true } });
             if (p && p.active !== false && p.phone) base.push(p.phone);
-            else console.warn('[voice] směna: osoba #' + id + ' přeskočena (' + (!p ? 'neexistuje' : p.active === false ? 'neaktivní' : 'bez telefonu') + ')');
+            else console.warn('[voice] rozpis (' + role + '): osoba #' + id + ' přeskočena (' + (!p ? 'neexistuje' : p.active === false ? 'neaktivní' : 'bez telefonu') + ')');
           } catch (_) { /* přeskoč */ }
         };
-        // v (globální) pracovní době přednostně osoba „v práci"
-        if (sh.wperson && workFrom && workTo) {
-          const toMin = (s) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(s).trim()); return m ? (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) : null; };
-          const a = toMin(workFrom), b = toMin(workTo), cur = now.getHours() * 60 + now.getMinutes();
-          if (a != null && b != null && cur >= a && cur < b) await pushPerson(sh.wperson);
-        }
-        await pushPerson(sh.main);
-        await pushPerson(sh.backup);
+        // Role se vytáčejí v pořadí daném pásmem (V práci → Hlavní → Záložní,
+        // o víkendu a v noci bez „V práci"). Stejná osoba ve dvou rolích se
+        // vytočí jen jednou — řeší deduplikace v E.164 níž.
+        for (const role of win.roles) await pushPerson(sh[role], role);
+        console.log('[voice] rozpis ' + win.rosterDate + ' (' + win.label + '): ' + win.roles.join(' → ') + ' → ' + base.length + ' kontaktů');
       }
-    } catch (_) { /* směny nejsou povinné */ }
-    // 1) statická čísla (hlavní + záložní) jako další fallback
-    const inboundNum = get ? (await get(cfgKey(line, 'transfer_inbound_number'))) || '' : '';
-    if (inboundNum) base.push(inboundNum);
-    const fb = await fallbackNumbersFromStored(get ? (await get(cfgKey(line, 'transfer_fallback_numbers'))) || '' : '');
-    fb.forEach((f) => base.push(f));
+    } catch (e) { console.warn('[voice] výběr operátorů z rozpisu selhal:', e.message); }
+
+    // 1) statická čísla (hlavní + záložní) jako další fallback.
+    //    Infolinka je ZÁMĚRNĚ nepoužívá — tam je rozpis jediný zdroj a po jeho
+    //    vyčerpání se zákazníkovi přehraje hláška (požadavek #127).
+    if (normLine(line) !== 'infolinka') {
+      const inboundNum = get ? (await get(cfgKey(line, 'transfer_inbound_number'))) || '' : '';
+      if (inboundNum) base.push(inboundNum);
+      const fb = await fallbackNumbersFromStored(get ? (await get(cfgKey(line, 'transfer_fallback_numbers'))) || '' : '');
+      fb.forEach((f) => base.push(f));
+    }
   }
 
   // deduplikace jednoho kolečka v E.164
@@ -410,18 +429,13 @@ async function todaysShiftPeople(line) {
     let shifts = await get(cfgKey(line, 'shifts'));
     if (typeof shifts === 'string') { try { shifts = JSON.parse(shifts); } catch (_) { shifts = {}; } }
     if (!shifts || typeof shifts !== 'object') return [];
-    const now = new Date();
-    const ymd = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-    const sh = shifts[ymd]; if (!sh) return [];
+    // Kdo je PRÁVĚ TEĎ ve službě — stejná pásma jako přepojování hovorů
+    // (services/voice/shift-window.js). V noci je to řádek předchozího dne,
+    // o víkendu bez role „V práci".
+    const win = shiftWindow.resolveShiftWindow(new Date());
+    const sh = shifts[win.rosterDate]; if (!sh) return [];
     const ids = new Set();
-    [sh.main, sh.backup].forEach((p) => { const id = parseInt(p, 10); if (id) ids.add(id); });
-    if (sh.wperson) { // osobu „v práci" počítáme jen v (globální) pracovní době
-      const workFrom = (await get(cfgKey(line, 'work_from'))) || '';
-      const workTo = (await get(cfgKey(line, 'work_to'))) || '';
-      const toMin = (s) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(s).trim()); return m ? (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) : null; };
-      const a = toMin(workFrom), b = toMin(workTo), cur = now.getHours() * 60 + now.getMinutes();
-      if (a != null && b != null && cur >= a && cur < b) { const id = parseInt(sh.wperson, 10); if (id) ids.add(id); }
-    }
+    for (const role of win.roles) { const id = parseInt(sh[role], 10); if (id) ids.add(id); }
     if (!ids.size) return [];
     const people = await prisma.person.findMany({ where: { id: { in: Array.from(ids) }, active: { not: false } }, select: { id: true, first_name: true, last_name: true, email: true } });
     return people.map((p) => ({ id: p.id, name: [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ('#' + p.id), email: (p.work_email || p.email || '').trim() }));
@@ -713,7 +727,7 @@ router.post('/transfer', form, (req, res) => {
     if (!rest.length) {
       // Vyčerpána všechna čísla i kolečka a nikdo se nedovolal → info do Velína.
       notifyTransferFailed(mode, target, undefined, line, callSid);
-      return res.type('text/xml').send(twimlApology());
+      return res.type('text/xml').send(twimlApology(line));
     }
     return res.type('text/xml').send(twimlDial(rest, timeout, { mode, target, callerId, line }));
   } catch (e) {
@@ -2300,3 +2314,6 @@ router.delete('/campaigns/:id', requireAuth, async (req, res, next) => {
 
 module.exports = router;
 module.exports.signRecording = signRecording;
+// Exportováno kvůli testům výběru operátorů z rozpisu (požadavek #127).
+module.exports.resolveTransferPlan = resolveTransferPlan;
+module.exports.twimlApology = twimlApology;

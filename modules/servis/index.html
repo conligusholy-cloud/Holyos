@@ -1090,6 +1090,14 @@
       function shYmd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
       function shDayLabel(d){ var dn=['Ne','Po','Út','St','Čt','Pá','So']; return dn[d.getDay()]+' '+d.getDate()+'. '+(d.getMonth()+1)+'.'; }
       function shOpts(sel){ return '<option value="">— nikdo —</option>'+_ops.map(function(id){ return '<option value="'+id+'"'+(String(sel)===String(id)?' selected':'')+'>'+esc(opName(id))+'</option>'; }).join(''); }
+      // Platnost směny pro daný den — musí odpovídat services/voice/shift-window.js
+      // (podle toho se reálně vybírají operátoři pro přepojení).
+      function shWindowLabel(dow){
+        if(dow===6) return 'So 0:00 – Ne 7:00';
+        if(dow===0) return 'Ne 7:00 – Po 7:00';
+        if(dow===5) return '7:00–15:00 · 15:00 – So 0:00';
+        return '7:00–15:00 · 15:00–7:00';
+      }
       var _weekOffset=0;
       window.shiftWeek=function(delta){ _weekOffset=(delta===0)?0:(_weekOffset+delta); renderShiftRoster(); };
       function weekMonday(offset){ var d=new Date(); d.setHours(0,0,0,0); var dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow+offset*7); return d; }
@@ -1111,9 +1119,15 @@
           var planned=!!(sh.main && sh.backup); if(!planned) unplanned++;
           var rowBg = planned ? '' : 'background:rgba(239,68,68,0.08);border-left:3px solid #ef4444;padding-left:6px;';
           var mainStyle=inp+(sh.main?'':'border-color:#ef4444;'); var backStyle=inp+(sh.backup?'':'border-color:#ef4444;');
+          // O víkendu se role „V práci" nepoužívá (sobotní i nedělní služba jede
+          // jen Hlavní → Záložní), tak ji ani nenabízíme.
+          var wcell = we
+            ? '<div style="font-size:11px;color:var(--text2);padding:7px 0;">—'+(sh.wperson?' <span title="Uloženo z dřívějška, přepojování to o víkendu ignoruje.">(nepoužívá se)</span>':'')+'</div>'
+            : '<select data-sh-key="'+key+'" data-sh-role="wperson" style="'+inp+'">'+shOpts(sh.wperson)+'</select>';
           rows+='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);'+(we?'opacity:.85;':'')+rowBg+'">'
-            +'<div style="font-size:13px;'+(isToday?'font-weight:700;color:#22d3ee;':'')+'">'+esc(shDayLabel(d))+(isToday?' · dnes':'')+(planned?'':' <span style="color:#ef4444;font-size:11px;">⚠</span>')+'</div>'
-            +'<select data-sh-key="'+key+'" data-sh-role="wperson" style="'+inp+'">'+shOpts(sh.wperson)+'</select>'
+            +'<div style="font-size:13px;'+(isToday?'font-weight:700;color:#22d3ee;':'')+'">'+esc(shDayLabel(d))+(isToday?' · dnes':'')+(planned?'':' <span style="color:#ef4444;font-size:11px;">⚠</span>')
+              +'<div style="font-size:10px;color:var(--text2);font-weight:400;letter-spacing:.2px;margin-top:2px;">'+esc(shWindowLabel(d.getDay()))+'</div></div>'
+            +wcell
             +'<select data-sh-key="'+key+'" data-sh-role="main" style="'+mainStyle+'">'+shOpts(sh.main)+'</select>'
             +'<select data-sh-key="'+key+'" data-sh-role="backup" style="'+backStyle+'">'+shOpts(sh.backup)+'</select>'
             +'</div>';
