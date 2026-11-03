@@ -7497,3 +7497,32 @@ model AccountingExportItem {
   @@index([invoice_id])
   @@map("accounting_export_items")
 }
+
+// Laundromats.eu — účty registrovaných uživatelů (přístup ke Compounder, Prádlomaty, Ekonomika, Najít / Zhodnotit místo)
+model LmAccount {
+  id                 Int       @id @default(autoincrement())
+  email              String    @unique @db.VarChar(160)
+  name               String    @db.VarChar(120)
+  phone              String?   @db.VarChar(40)
+  company            String?   @db.VarChar(160)
+  password_hash      String    @db.VarChar(100)
+  email_verified_at  DateTime?
+  verify_token_hash  String?   @db.VarChar(64)
+  reset_token_hash   String?   @db.VarChar(64)
+  reset_expires_at   DateTime?
+  // zvýšení odhlásí všechna zařízení (změna / obnova hesla)
+  token_version      Int       @default(0)
+  // připraveno na placený přístup (free | paid …)
+  plan               String    @default("free") @db.VarChar(20)
+  disabled           Boolean   @default(false)
+  compounder_lead_id Int?
+  last_login_at      DateTime?
+  login_count        Int       @default(0)
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  @@index([compounder_lead_id])
+  @@index([verify_token_hash])
+  @@index([reset_token_hash])
+  @@map("lm_accounts")
+}

@@ -21,4 +21,9 @@ Texty stránek se drží shodné s apps/bs2 (cesta-*.js); při změně textu v B
   - `LM_SHOW_PRICES=1` zobrazí ceny, `LM_PRODUCT_IDS=1,2,3` zúží nabídku.
 - Aplikace `/cesta/hledat` (Najít místo), `/cesta/zhodnotit` (Zhodnotit místo). Staré adresy (/compounder, /hledat…, subdoména lokality.*) se přesměrují.
   - `lm-location-app.js` je odvozený z `apps/bs2/location-app.js` (bez kreditů, balíčků, Stripe, ukládání).
-  - Přístup `LM_APPS_ACCESS`: `open` | `code` (výchozí, kódy v `LM_APPS_CODES`) | `closed`. Správce přihlášený z HolyOS (/sso) má přístup vždy.
+  - Přístup jen pro přihlášené (účty laundromats.eu) a správce z HolyOS (/sso).
+
+## Účty registrovaných uživatelů (lm-account.js)
+- Veřejná je jen úvodní stránka a cesta (/cesta, Ekonomika z SMS). Compounder, Prádlomaty, /cesta/ucet/ekonomika, Najít a Zhodnotit místo vyžadují přihlášení.
+- /cesta/registrace → e-mail s ověřením (/cesta/overit) → přihlášen; /cesta/prihlaseni, /cesta/zapomenute-heslo, /cesta/nove-heslo, /cesta/ucet (rozcestník + údaje + heslo), /cesta/odhlasit.
+- Účty v HolyOS (model LmAccount, /api/auth/lm/accounts/*), relace v cookie lm_acc (30 dní), kontrola platnosti v HolyOS á 5 min.

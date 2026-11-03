@@ -1,68 +1,17 @@
 // Laundromats — aplikace lokalit: Najít místo (/cesta/hledat) a Zhodnotit místo (/cesta/zhodnotit).
-// Přístup řídí env LM_APPS_ACCESS:
-//   open   = volně pro všechny
-//   code   = (výchozí) jen s přístupovým kódem z LM_APPS_CODES (čárkami oddělené); bez kódu formulář „Požádat o přístup"
-//   closed = jen formulář „Požádat o přístup" (a správci přihlášení z HolyOS)
-// Připraveno na placený přístup: kód lze později vydávat po zaplacení.
+// Přístup jen pro přihlášené uživatele (lm-account.js) a správce z HolyOS.
 'use strict';
-const crypto = require('crypto');
 const LAPP = require('./lm-location-app');
 const { layout, esc, MAIN_URL } = require('./lm-layout');
 
-const mode = () => { const m = String(process.env.LM_APPS_ACCESS || 'code').toLowerCase(); return ['open', 'code', 'closed'].includes(m) ? m : 'code'; };
-const codes = () => String(process.env.LM_APPS_CODES || '').split(',').map((s) => s.trim()).filter((s) => s.length >= 4);
-const ACK = 'lm_apps';
-const sign = (secret, code) => crypto.createHmac('sha256', secret || 'lm-apps').update('apps:' + code).digest('hex').slice(0, 32);
-
 module.exports = function mountApps(app, ctx) {
-  const { HOLYOS_URL, LM_SECRET, rateLimited, cookies, adminOf, ckDomain, fetchProducts } = ctx;
-  const hasAccess = (req) => {
-    if (mode() === 'open') return true;
-    if (adminOf(req)) return true;
-    if (mode() === 'closed') return false;
-    const v = cookies(req)[ACK] || '';
-    return !!v && codes().some((c) => sign(LM_SECRET, c) === v);
-  };
-  const gate = (req, res, next) => {
-    if (hasAccess(req)) return next();
-    if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'Aplikace je dostupná jen s přístupem.' });
-    res.status(200).set('Cache-Control', 'no-store').type('html').send(accessPage(req.originalUrl, ''));
-  };
-  function accessPage(back, err) {
-    const showCode = mode() === 'code' && codes().length > 0;
-    const body = `<div class="hero"><span class="eyebrow"><i></i>Aplikace Laundromats</span><h1><span class="g">Najít místo</span> a <span class="g">zhodnotit místo</span></h1>
-    <p>Naše aplikace pro výběr lokality: spádová oblast 15 km, odhad kapacity, provozované prádlomaty v okolí, tipy na konkrétní místa a orientační ekonomika vybraného místa. Přístup otevíráme po domluvě.</p></div>
-    ${err ? `<div class="msg err">${esc(err)}</div>` : ''}
-    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
-      <form class="card" id="acc-req" style="margin:0"><h2 style="margin:0 0 6px">Požádat o přístup</h2><p class="muted small" style="margin:0 0 10px">Ozveme se vám a přístup domluvíme.</p>
-        <label>Jméno<input name="name" required maxlength="120" autocomplete="name"></label>
-        <label>E-mail<input name="email" type="email" required maxlength="160" autocomplete="email"></label>
-        <label>Telefon<input name="phone" required maxlength="40" autocomplete="tel"></label>
-        <label>Kde hledáte místo?<input name="place" required maxlength="160" placeholder="např. Tábor"></label>
-        <input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
-        <div class="row" style="margin-top:12px;gap:10px;align-items:center"><button class="btn" type="submit">Odeslat žádost</button><span class="small muted" id="acc-st"></span></div>
-        <p class="small muted" style="margin:10px 0 0">Odesláním souhlasíte se zpracováním údajů pro vyřízení žádosti (<a href="${MAIN_URL()}/gdpr">ochrana osobních údajů</a>).</p></form>
-      ${showCode ? `<form class="card" method="post" action="/cesta/pristup" style="margin:0;align-self:start"><h2 style="margin:0 0 6px">Mám přístupový kód</h2>
-        <input type="hidden" name="back" value="${esc(back || '/cesta/hledat')}"><label>Kód<input name="code" required maxlength="80" autocomplete="off"></label>
-        <div style="margin-top:12px"><button class="btn sec" type="submit">Vstoupit</button></div></form>` : ''}
-    </div>
-    <script>(function(){var f=document.getElementById('acc-req'),st=document.getElementById('acc-st');f.addEventListener('submit',function(e){e.preventDefault();var d={};new FormData(f).forEach(function(v,k){d[k]=v;});d.interest='apps';d.note='Žádost o přístup k aplikacím Najít místo / Zhodnotit místo';var b=f.querySelector('button');b.disabled=true;st.textContent='Odesílám…';
-      fetch('/api/inquiry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(function(r){return r.json().catch(function(){return {};}).then(function(j){return {ok:r.ok&&j.ok,j:j};});}).then(function(x){if(x.ok){f.innerHTML='<h2 style="margin:0 0 6px">Děkujeme</h2><p class="muted" style="margin:0">Žádost jsme přijali, brzy se vám ozveme.</p>';}else{b.disabled=false;st.textContent=(x.j&&x.j.error)||'Odeslání se nepodařilo.';}}).catch(function(){b.disabled=false;st.textContent='Chyba spojení.';});});})();</script>`;
-    return layout({ title: 'Aplikace lokalit', body, active: 'hledat' });
-  }
+  const { HOLYOS_URL, rateLimited, fetchProducts, requireAccount, render } = ctx;
+  const gate = requireAccount; // přístup jen pro přihlášené (účty laundromats.eu) a správce z HolyOS
   const urlenc = require('express').urlencoded({ extended: false, limit: '60kb' });
-  app.post('/cesta/pristup', urlenc, (req, res) => {
-    if (rateLimited('acc:' + req.ip, 10, 3600e3)) return res.status(429).type('html').send(accessPage('/cesta/hledat', 'Příliš mnoho pokusů, zkuste to později.'));
-    const code = String((req.body || {}).code || '').trim();
-    const back = /^\/cesta\/(hledat|zhodnotit)/.test(String((req.body || {}).back || '')) ? req.body.back : '/cesta/hledat';
-    if (mode() !== 'code' || !codes().includes(code)) return res.status(200).type('html').send(accessPage(back, 'Kód není platný.'));
-    res.append('Set-Cookie', ACK + '=' + sign(LM_SECRET, code) + '; Path=/; Max-Age=' + 30 * 86400 + '; HttpOnly; Secure; SameSite=Lax' + ckDomain(req));
-    res.redirect(302, back);
-  });
 
   // ── Najít místo ──
   const S = { nick: '' };
-  app.get('/cesta/hledat', gate, (req, res) => res.set('Cache-Control', 'no-store').type('html').send(LAPP.analyzerPage(S, String(req.query.q || '').slice(0, 80), null, '')));
+  app.get('/cesta/hledat', gate, (req, res) => res.set('Cache-Control', 'no-store').type('html').send(render(req, LAPP.analyzerPage(S, String(req.query.q || '').slice(0, 80), null, ''))));
   // ── Zhodnotit místo (výpočet bez ukládání) ──
   async function products() {
     try { return (await fetchProducts()).map((p) => ({ id: p.id, name: p.name_cs, price_czk: p.price_czk })).filter((p) => p.price_czk > 0); } catch (e) { return []; }
@@ -71,16 +20,16 @@ module.exports = function mountApps(app, ctx) {
     try {
       const pre = { city: String(req.query.city || '').slice(0, 120), address: String(req.query.address || '').slice(0, 300) };
       if (isFinite(+req.query.lat) && isFinite(+req.query.lng) && +req.query.lat) { pre.lat = String(+req.query.lat); pre.lng = String(+req.query.lng); if (pre.address) pre.name = pre.address; }
-      res.set('Cache-Control', 'no-store').type('html').send(LAPP.siteForm(S, null, pre, '', false, false, await products()));
+      res.set('Cache-Control', 'no-store').type('html').send(render(req, LAPP.siteForm(S, null, pre, '', false, false, await products())));
     } catch (e) { next(e); }
   });
   app.post('/cesta/zhodnotit', gate, urlenc, async (req, res, next) => {
     try {
       if (rateLimited('eval:' + req.ip, 30, 3600e3)) return res.status(429).type('text/plain').send('Příliš mnoho vyhodnocení, zkuste to později.');
       const d = LAPP.clean(req.body || {});
-      if (!d.name || !d.address) return res.status(400).type('html').send(LAPP.siteForm(S, null, d, 'Vyplňte název a adresu místa.', false, false, await products()));
+      if (!d.name || !d.address) return res.status(400).type('html').send(render(req, LAPP.siteForm(S, null, d, 'Vyplňte název a adresu místa.', false, false, await products())));
       const c = LAPP.calc(d), ev = LAPP.evaluate(d, c);
-      res.set('Cache-Control', 'no-store').type('html').send(reportPage(d, c, ev));
+      res.set('Cache-Control', 'no-store').type('html').send(render(req, reportPage(d, c, ev)));
     } catch (e) { next(e); }
   });
   function reportPage(d, c, ev) {
@@ -96,7 +45,7 @@ module.exports = function mountApps(app, ctx) {
     return LAPP.page(S, 'Vyhodnocení – ' + (d.name || ''), 'loc', body, (d.lat && d.lng) ? LAPP.LEAFLET_HEAD : '');
   }
   app.post('/cesta/zhodnotit/upravit', gate, urlenc, async (req, res, next) => {
-    try { res.set('Cache-Control', 'no-store').type('html').send(LAPP.siteForm(S, null, LAPP.clean(req.body || {}), '', false, false, await products())); } catch (e) { next(e); }
+    try { res.set('Cache-Control', 'no-store').type('html').send(render(req, LAPP.siteForm(S, null, LAPP.clean(req.body || {}), '', false, false, await products()))); } catch (e) { next(e); }
   });
 
   // ── API pro aplikace: proxy na veřejné API HolyOS (bez ukládání), limity per IP ──

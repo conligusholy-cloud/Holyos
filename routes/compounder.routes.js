@@ -11379,7 +11379,7 @@ router.get('/ares/:ico(\\d{6,8})', async (req, res, next) => {
 module.exports = router;
 // Interní API pro přímé stahování leadů z FB (services/ads/meta-leads-sync.js) – stejná cesta založení jako webhook.
 // Ruční / opravné spuštění automatu (SMS + e-mail) pro lead – čte čerstvý stav z DB
-module.exports.funnelMailFrom = funnelMailFrom; module.exports.plUrl = plUrl;
+module.exports._linkSidToLead = _linkSidToLead; module.exports.funnelMailFrom = funnelMailFrom; module.exports.plUrl = plUrl;
 try { require('../services/meetings/autorelease').start(); } catch (e) { console.warn('[meeting-autorelease] start:', e.message); } // automatické uvolňování termínů schůzek
 module.exports.rerunAutosend = async function (leadId) { const lead = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) } }); if (!lead) return { ok: false, error: 'lead nenalezen' }; await autosendAiSpecialistSms(lead); const lead2 = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) } }); if (lead2 && !lead2.schuzka_email_sent_at && !lead2.ai_specialist_email_sent_at) await autosendAiSpecialistEmail(lead2); const l3 = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) }, select: { status: true, outreach_variant: true, schuzka_sms_sent_at: true, ai_specialist_sms_sent_at: true, schuzka_email_sent_at: true, ai_specialist_email_sent_at: true } }); return { ok: true, lead: l3 }; };
 // Dodatečné / opakované odeslání z funelu: kanál sms|email; force = ignoruje pojistku „už odesláno" (lead se tváří jako čerstvý)

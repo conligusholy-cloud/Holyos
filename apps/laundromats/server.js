@@ -53,6 +53,12 @@ const LOGO = '<span style="margin-right:10px;display:inline-flex"><svg width="34
 const FOOTER = '<div style="max-width:720px;margin:0 auto;padding:0 22px 40px"><footer class="site-foot"><div><b>Laundromats.eu</b> &nbsp;© Best Series s.r.o.</div><nav><a href="/gdpr">Ochrana osobních údajů</a><a href="mailto:info@laundromats.eu">info@laundromats.eu</a></nav></footer></div>';
 // ── počítadlo „právě si prohlíží" v záhlaví (jako na Best Series 2.0): anonymní sid z prohlížeče, držíme jen v paměti ──
 const PRES = new Map(); // sid → poslední ping (ms)
+const PRES_HTML = '<span class="presence" id="presence" title="Právě online + aktivní lidé za posledních 60 minut (klouzavé okno)"><i></i><span class="pt">právě si prohlíží </span><b id="pr-hour">–</b></span>';
+const PRES_CSS = '.presence{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;border:1px solid rgba(47,227,160,.35);background:rgba(47,227,160,.08);color:#a9f5d9;font-size:12px;font-weight:500;white-space:nowrap;transition:box-shadow .3s,background .3s;font-family:inherit;margin-left:12px}.presence i{width:7px;height:7px;border-radius:50%;background:#2fe3a0;box-shadow:0 0 8px #2fe3a0;animation:prpulse 2s infinite}.presence b{font-weight:800;color:#fff}.presence.flash{box-shadow:0 0 0 2px rgba(47,227,160,.5),0 0 22px rgba(47,227,160,.75);background:rgba(47,227,160,.22)}.presence.flash b{text-shadow:0 0 10px #2fe3a0}@keyframes prpulse{0%,100%{opacity:1}50%{opacity:.45}}@media(max-width:520px){.lhdr{padding-left:12px;padding-right:12px}.lhdr .in{gap:8px}.lhdr .brand{flex:none;min-width:0}.lhdr .brand>span:first-child{margin-right:7px!important}.lhdr .brand svg{width:30px;height:30px}.lhdr .brand .name{font-size:14px}.lsw{flex:none;margin-right:0!important}.presence{margin-left:2px;padding:3px 9px;font-size:11px}}@media(max-width:420px){.presence .pt{display:none}.lhdr .brand .name{font-size:13px}}';
+const PRES_JS = '(function(){var el=document.getElementById("presence");if(!el)return;var h=document.getElementById("pr-hour"),last="";var sid;try{sid=localStorage.getItem("lm_sid");if(!sid){var cm=document.cookie.match(/(?:^|; )lm_sid=([^;]+)/);if(cm){sid=decodeURIComponent(cm[1]);localStorage.setItem("lm_sid",sid);}}if(!sid){sid="lm-"+Date.now().toString(36)+Math.random().toString(36).slice(2,10);localStorage.setItem("lm_sid",sid);}}catch(e){sid="lm-x"+Date.now().toString(36);}'
+  + 'function ping(){try{fetch("/api/presence/ping",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sid:sid}),keepalive:true});}catch(e){}}'
+  + 'function upd(){fetch("/api/presence",{cache:"no-store"}).then(function(r){return r.ok?r.json():null;}).then(function(j){if(!j)return;var v=j.total,k=String(v);h.textContent=v;if(last&&k!==last){el.classList.add("flash");setTimeout(function(){el.classList.remove("flash");},1400);}last=k;}).catch(function(){});}'
+  + 'ping();setTimeout(upd,400);setInterval(function(){if(document.visibilityState==="visible"){ping();upd();}},15000);})();';
 app.post('/api/presence/ping', (req, res) => {
   const sid = String((req.body || {}).sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
   if (sid && !rateLimited('pp:' + req.ip, 240, 3600e3)) { PRES.set(sid, Date.now()); if (PRES.size > 20000) { const lim = Date.now() - 3600e3; for (const [k, v] of PRES) if (v < lim) PRES.delete(k); } }
@@ -64,25 +70,26 @@ app.get('/api/presence', (req, res) => {
   res.set('Cache-Control', 'no-store').json({ now: n, hour: hr, total: Math.max(hr, n) });
 });
 const LH = require('./lm-header');
-// Počítadlo „právě si prohlíží" se sdílí s lm-layout.js (stránky aplikací).
-const { PRES_HTML, PRES_CSS, PRES_JS } = LH;
 // Stránky mimo /cesta (úvod, Compounder, Prádlomaty): stejná lišta + počítadlo, bez přepínače jazyka
-const lite = (html) => String(html).replace('</style>', PRES_CSS + '</style>').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>');
+const lite = (html, req) => String(html).replace('<!--LACC-->', ACC.headerSlot(req)).replace('</style>', PRES_CSS + '</style>').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>');
 const shell = (html, lang) => CI18N.addSwitch(String(html).replace('@@LHDR@@', LH.header({ lang, minimal: true })).replace('</style>', LH.CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</style>', FOOT_CSS + PRES_CSS + '</style>').replace('<!--PRESENCE-->', '').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>').replace('</body>', '<script src="/cesta/track.js" defer></script></body>'));
 const send = (res, html) => res.set('Cache-Control', 'no-cache').type('html').send(html);
 const cestaHtml = () => fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8');
 
 app.use((req, res, next) => lmIdentity(req, res, next)); // identita návštěvníka v cookie (definice níž u /api/cesta/track)
+// Účty registrovaných uživatelů (lm-account.js): req.account na každém požadavku
+const ACC = require('./lm-account')({ HOLYOS_URL, LM_SECRET, PUBLIC_URL, rateLimited, cookies, ckDomain, sendMail: (p) => sendConfirmMail(p), adminOf: (req) => adminOf(req), render: (req, html) => lite(html, req) });
+app.use((req, res, next) => (/^\/(cesta|api\/location|uvod|$)/.test(req.path) ? ACC.attach(req, res, next) : next()));
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /api/\n'));
 // Úvodní stránka značky (home-page.js). Náhled vždy na /uvod; na / až s LM_HOME_LIVE=1 (do té doby / → /cesta jako dřív).
 // Jedinečné odkazy ze SMS / e-mailu (?t= / ?l=) vedou dál na /cesta, ať funel zůstane beze změny.
 const HP = require('./home-page');
 const homeHtml = () => HP.homePage('cs');
-app.get('/uvod', (req, res) => send(res, lite(homeHtml())));
+app.get('/uvod', (req, res) => send(res, lite(homeHtml(), req)));
 app.get('/', (req, res) => {
   const q = req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '';
-  if (process.env.LM_HOME_LIVE === '1' && !req.query.t && !req.query.l) return send(res, lite(homeHtml()));
+  if (process.env.LM_HOME_LIVE === '1' && !req.query.t && !req.query.l) return send(res, lite(homeHtml(), req));
   res.redirect(302, '/cesta' + q);
 });
 // Poptávka z úvodní stránky → HolyOS (/api/compounder/lm-inquiry): založí / spáruje kontakt a upozorní vedení.
@@ -316,8 +323,10 @@ async function fetchProducts() {
 }
 const COMP = require('./compounder-page');
 const PRAD = require('./pradlomaty-page');
-app.get('/cesta/compounder', (req, res) => send(res, lite(COMP.compounderPage())));
-app.get('/cesta/pradlomaty', async (req, res) => { let list = []; try { list = await fetchProducts(); } catch (e) { console.warn('[laundromats] produkty:', e.message); if (_prod.data) list = _prod.data; } send(res, lite(PRAD.pradlomatyPage(list))); });
+app.get('/cesta/compounder', ACC.requireAccount, (req, res) => send(res, lite(COMP.compounderPage(), req)));
+// Ekonomika pro přihlášené: stejný model jako /cesta/ekonomika (ten zůstává veřejný pro cestu z SMS), ale s menu
+app.get('/cesta/ucet/ekonomika', ACC.requireAccount, (req, res) => send(res, lite(String(EP.economyPage('cs')).replace('<a class="bx-back" data-keep href="/cesta">', '<a class="bx-back" href="/cesta/ucet">').replace('@@LHDR@@', LH.header({})).replace('</style>', LH.CSS + FOOT_CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</body>', '<script src="/cesta/track.js" defer></script></body>'), req)));
+app.get('/cesta/pradlomaty', ACC.requireAccount, async (req, res) => { let list = []; try { list = await fetchProducts(); } catch (e) { console.warn('[laundromats] produkty:', e.message); if (_prod.data) list = _prod.data; } send(res, lite(PRAD.pradlomatyPage(list), req)); });
 app.get('/img/pradlomat.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(path.join(__dirname, 'pradlomat-flex.webp')));
 app.get('/img/product/:id(\\d+)', async (req, res) => {
   try {
@@ -329,7 +338,8 @@ app.get('/img/product/:id(\\d+)', async (req, res) => {
   } catch (e) { res.status(404).end(); }
 });
 // ── Aplikace lokalit (/cesta/hledat, /cesta/zhodnotit) ──
-require('./lm-apps')(app, { HOLYOS_URL, LM_SECRET, rateLimited, cookies, adminOf, ckDomain, fetchProducts });
+ACC.mount(app);
+require('./lm-apps')(app, { HOLYOS_URL, rateLimited, fetchProducts, requireAccount: ACC.requireAccount, render: (req, html) => lite(html, req) });
 
 app.use((req, res) => res.status(404).type('text/plain').send('Stránka nenalezena'));
 app.use((err, req, res, next) => { console.warn('[laundromats]', err && err.message); res.status(500).type('text/plain').send('Chyba serveru'); });

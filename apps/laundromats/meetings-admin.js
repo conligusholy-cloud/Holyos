@@ -53,13 +53,13 @@ const CSS = `
 .mt-tabs{display:flex;gap:8px;margin:0 0 16px;flex-wrap:wrap}
 .mt-tabs button{background:transparent;border:1px solid var(--border2);color:var(--text2);border-radius:999px;padding:8px 16px;font:inherit;font-weight:700;cursor:pointer}
 .mt-tabs button.on{background:rgba(79,209,255,.14);border-color:var(--blue);color:var(--blue)}
+.mt-tw{overflow-x:auto}
 .mt-hot table{width:100%;border-collapse:collapse;font-size:13.5px}
-.mt-hot th,.mt-hot td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+.mt-hot th,.mt-hot td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle;white-space:nowrap}
 .mt-hot th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text2)}
 .mt-hot tr:hover td{background:rgba(79,209,255,.05)}
 .mt-hot .nm{font-weight:700}
-.mt-hot-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 12px}
-.mt-hot-head input{flex:1;min-width:200px;background:rgba(8,13,26,.85);border:1px solid var(--border2);border-radius:9px;color:var(--text);padding:9px 11px;font:inherit}
+.mt-hot .cf-info{font-size:12px;color:var(--text2);margin:0 0 8px}
 .mt-msg{margin-top:10px;font-size:13px}
 @media(max-width:900px){.mt-week{grid-template-columns:1fr}.mt-day{min-height:0}}
 `;
@@ -179,41 +179,54 @@ function autoModal(){
     q('.a-run').onclick=function(){this.disabled=true;msg('Uvolňuji…');api('/admin/api/meetings/auto',body()).then(function(){return api('/admin/api/meetings/auto/run',{});}).then(function(r){msg('Hotovo. Nově vytvořeno termínů: '+(r.created||0)+'.');q('.a-run').disabled=false;load();}).catch(function(e){msg(e.message);q('.a-run').disabled=false;});};
   }).catch(function(e){q('.mt-msg').textContent=e.message;});
 }
-// ── Jmenný seznam — kontakty označené v HolyOS jako „zajímavý kontakt" ──
-var hot=null, hotQ='';
+// ── Jmenný seznam — kontakty označené v HolyOS jako „zajímavý kontakt“ ──
+// Filtry, řazení i počítadlo řádků dělá sdílená komponenta HolyOS (ColFilters,
+// /js/column-filters.js), aby se tabulka ovládala přesně stejně jako tabulky v HolyOS.
+// Kdyby se skript nenačetl (HolyOS nedostupný), vykreslí se aspoň prostá tabulka.
+var hot=null, hotT=null;
 function hotLoad(){
   var box=root.querySelector('.mt-hotwrap');
   box.innerHTML='<div class="mt-empty">Načítám…</div>';
   api('/admin/api/hot-leads').then(function(j){hot=j.leads||[];hotRender();})
     .catch(function(e){box.innerHTML='<div class="mt-empty" style="color:#ff8f8f">'+esc(e.message)+'</div>';});
 }
+function hcell(v){return '<td>'+(v?esc(v):'<span class="muted">—</span>')+'</td>';}
+// Jeden kontakt = jeden řádek: každý údaj má vlastní sloupec, nic se neláme pod sebe.
+function hotRow(l){
+  return '<tr><td><span class="nm">⭐ '+esc(l.name)+'</span>'+(l.only_polish?' <span class="mt-pill">🇵🇱 jen polsky</span>':'')+'</td>'
+    +hcell(l.company)+hcell(l.city)
+    +'<td>'+(l.phone?'<a href="tel:'+esc(l.phone)+'">'+esc(l.phone)+'</a>':'<span class="muted">—</span>')+'</td>'
+    +'<td>'+(l.email?'<a href="mailto:'+esc(l.email)+'">'+esc(l.email)+'</a>':'<span class="muted">—</span>')+'</td>'
+    +'<td><span class="mt-pill">'+esc(ST2[l.status]||l.status||'—')+'</span></td>'
+    +hcell(l.owner)
+    +'<td>'+(l.last_called_at?dlong(new Date(l.last_called_at)):'<span class="muted">nevoláno</span>')+'</td></tr>';
+}
 function hotRender(){
   var box=root.querySelector('.mt-hotwrap');
   if(!hot){box.innerHTML='';return;}
-  var q=hotQ.trim().toLowerCase();
-  var list=!q?hot:hot.filter(function(l){
-    return [l.name,l.company,l.city,l.email,l.phone,l.owner].some(function(v){return String(v||'').toLowerCase().indexOf(q)>=0;});
+  if(!hot.length){box.innerHTML='<div class="mt-empty">Zatím není žádný kontakt označený jako zajímavý. Označuje se hvězdičkou v kartě kontaktu v HolyOS.</div>';return;}
+  box.innerHTML='<div class="mt-tw"><table class="hot-dt"><thead><tr>'
+    +'<th>Jméno</th><th>Firma</th><th>Město</th><th>Telefon</th><th>E-mail</th><th>Stav</th><th>Obchodník</th><th>Naposledy voláno</th>'
+    +'</tr></thead><tbody></tbody></table></div>';
+  if(!window.ColFilters){box.querySelector('tbody').innerHTML=hot.map(hotRow).join('');return;}
+  hotT=window.ColFilters.table({
+    table:function(){return root.querySelector('.hot-dt');},
+    columns:[
+      {key:'name',label:'Jméno',get:function(l){return l.name||'';},ph:'Jméno…',enum:false},
+      {key:'company',label:'Firma',get:function(l){return l.company||'';},ph:'Firma…'},
+      {key:'city',label:'Město',get:function(l){return l.city||'';},ph:'Město…'},
+      {key:'phone',label:'Telefon',get:function(l){return l.phone||'';},ph:'Telefon…',enum:false},
+      {key:'email',label:'E-mail',get:function(l){return l.email||'';},ph:'E-mail…',enum:false},
+      {key:'status',label:'Stav',get:function(l){return ST2[l.status]||l.status||'';},ph:'Vyber…',enum:true},
+      {key:'owner',label:'Obchodník',get:function(l){return l.owner||'';},ph:'Vyber…',enum:true},
+      {key:'last_called_at',label:'Naposledy voláno',type:'date',get:function(l){return l.last_called_at||null;}}
+    ],
+    renderRow:hotRow,
+    progressive:true,
+    noun:'kontaktů',
+    emptyText:'Zatím není žádný kontakt označený jako zajímavý.'
   });
-  var head='<div class="mt-hot-head"><input class="mt-hot-q" placeholder="Hledat jméno, firmu, město, telefon…" value="'+esc(hotQ)+'">'
-    +'<span class="muted small">'+(q?list.length+' z '+hot.length:hot.length+' kontaktů')+'</span></div>';
-  if(!hot.length){box.innerHTML=head+'<div class="mt-empty">Zatím není žádný kontakt označený jako zajímavý. Označuje se hvězdičkou v kartě kontaktu v HolyOS.</div>';bindHotQ();return;}
-  if(!list.length){box.innerHTML=head+'<div class="mt-empty">Hledání nic nenašlo.</div>';bindHotQ();return;}
-  box.innerHTML=head+'<table><thead><tr><th>Jméno</th><th>Firma / město</th><th>Kontakt</th><th>Stav</th><th>Obchodník</th><th>Naposledy voláno</th></tr></thead><tbody>'
-    +list.map(function(l){
-      return '<tr><td><span class="nm">⭐ '+esc(l.name)+'</span>'+(l.only_polish?' <span class="mt-pill">🇵🇱 jen polsky</span>':'')+'</td>'
-        +'<td>'+esc(l.company||'—')+(l.city?'<div class="small muted">'+esc(l.city)+'</div>':'')+'</td>'
-        +'<td>'+(l.phone?'<a href="tel:'+esc(l.phone)+'">'+esc(l.phone)+'</a>':'')
-          +(l.email?'<div class="small"><a href="mailto:'+esc(l.email)+'">'+esc(l.email)+'</a></div>':'')
-          +(!l.phone&&!l.email?'<span class="muted">—</span>':'')+'</td>'
-        +'<td><span class="mt-pill">'+esc(ST2[l.status]||l.status||'—')+'</span></td>'
-        +'<td>'+esc(l.owner||'—')+'</td>'
-        +'<td>'+(l.last_called_at?dlong(new Date(l.last_called_at)):'<span class="muted">nevoláno</span>')+'</td></tr>';
-    }).join('')+'</tbody></table>';
-  bindHotQ();
-}
-function bindHotQ(){
-  var i=root.querySelector('.mt-hot-q'); if(!i)return;
-  i.oninput=function(){hotQ=this.value;var pos=this.selectionStart;hotRender();var n=root.querySelector('.mt-hot-q');if(n){n.focus();n.setSelectionRange(pos,pos);}};
+  hotT.setRows(hot);
 }
 // Přepínání záložek. Seznam se tahá ze serveru až při prvním otevření.
 function tab(name){
@@ -235,14 +248,14 @@ load();
 })();`;
 
 const LAYOUT_CSS = `
-:root{--bg:#04060c;--card:rgba(14,22,42,.85);--border:rgba(120,160,255,.16);--border2:rgba(120,160,255,.28);--text:#e8f0ff;--text2:#8ea2c2;--text3:#58698a;--blue:#4fd1ff;--err:#ff5d6c}
+:root{--bg:#04060c;--surface2:#0d1426;--card:rgba(14,22,42,.85);--border:rgba(120,160,255,.16);--border2:rgba(120,160,255,.28);--text:#e8f0ff;--text2:#8ea2c2;--text3:#58698a;--blue:#4fd1ff;--err:#ff5d6c}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,'Segoe UI',Arial,sans-serif;font-size:14.5px;line-height:1.5}
-a{color:var(--blue)}.wrap{max-width:1180px;margin:0 auto;padding:0 20px 60px}
+a{color:var(--blue)}.wrap{max-width:1400px;margin:0 auto;padding:0 20px 60px}
 .top{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border);background:rgba(8,13,26,.9);margin-bottom:22px}
 .top b{font-size:17px}.top b span{color:var(--blue)}.top .sp{flex:1}.top .who{color:var(--text2);font-size:13px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-top:16px}
 .btn{background:linear-gradient(90deg,#1e86e0,#7c5cff);color:#fff;border:none;border-radius:10px;padding:9px 16px;font:inherit;font-weight:700;cursor:pointer}
-.btn.sec{background:transparent;border:1px solid var(--border2);color:var(--text)}.btn.sm{padding:5px 11px;font-size:13px}.btn:disabled{opacity:.5}
+.btn.sec,.btn.btn-secondary{background:transparent;border:1px solid var(--border2);color:var(--text)}.btn.sm,.btn.btn-sm{padding:5px 11px;font-size:13px}.btn:disabled{opacity:.5}
 .muted{color:var(--text2)}.small{font-size:12.5px}`;
 
 function meetingsPage({ admin, holyosUrl, error }) {
@@ -268,6 +281,7 @@ function meetingsPage({ admin, holyosUrl, error }) {
       <div class="mt-hotwrap card"></div>
     </div>
   </div></div>
+  ${holyosUrl ? `<script src="${holyosUrl}/js/column-filters.js"></script>` : ''}
   <script>${JS}</script></body></html>`;
 }
 

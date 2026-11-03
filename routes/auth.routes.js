@@ -850,6 +850,8 @@ function lmApiAuth(req, res) {
   if (!secret || !m) { res.status(401).json({ error: 'Neautorizováno' }); return false; }
   try { jwt.verify(m[1], secret, { audience: 'holyos-api', issuer: 'laundromats' }); return true; } catch (e) { res.status(401).json({ error: 'Neplatný token' }); return false; }
 }
+// Účty registrovaných uživatelů laundromats.eu (servisní JWT z Laundromats)
+router.use('/lm/accounts', require('./lm-accounts.routes'));
 router.get('/lm/products', async (req, res, next) => {
   try {
     if (!lmApiAuth(req, res)) return;
