@@ -14,11 +14,11 @@ function navItems(opts) {
   const a = abs ? '' : APPS_URL();
   return [
     { id: 'home', label: 'Domů', href: m + homeHref() },
-    { id: 'compounder', label: 'Compounder', href: m + '/compounder' },
-    { id: 'pradlomaty', label: 'Prádlomaty', href: m + '/pradlomaty' },
+    { id: 'compounder', label: 'Compounder', href: m + '/cesta/compounder' },
+    { id: 'pradlomaty', label: 'Prádlomaty', href: m + '/cesta/pradlomaty' },
     { id: 'ekonomika', label: 'Ekonomika', href: m + '/cesta/ekonomika' },
-    { id: 'hledat', label: 'Najít místo', href: a + '/hledat' },
-    { id: 'zhodnotit', label: 'Zhodnotit místo', href: a + '/zhodnotit' },
+    { id: 'hledat', label: 'Najít místo', href: m + '/cesta/hledat' },
+    { id: 'zhodnotit', label: 'Zhodnotit místo', href: m + '/cesta/zhodnotit' },
   ];
 }
 const LM_CSS = `

@@ -1,4 +1,4 @@
-// Laundromats — aplikace lokalit na subdoméně (lokality.laundromats.eu): Najít místo (/hledat) a Zhodnotit místo (/zhodnotit).
+// Laundromats — aplikace lokalit: Najít místo (/cesta/hledat) a Zhodnotit místo (/cesta/zhodnotit).
 // Přístup řídí env LM_APPS_ACCESS:
 //   open   = volně pro všechny
 //   code   = (výchozí) jen s přístupovým kódem z LM_APPS_CODES (čárkami oddělené); bez kódu formulář „Požádat o přístup"
@@ -42,19 +42,19 @@ module.exports = function mountApps(app, ctx) {
         <input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
         <div class="row" style="margin-top:12px;gap:10px;align-items:center"><button class="btn" type="submit">Odeslat žádost</button><span class="small muted" id="acc-st"></span></div>
         <p class="small muted" style="margin:10px 0 0">Odesláním souhlasíte se zpracováním údajů pro vyřízení žádosti (<a href="${MAIN_URL()}/gdpr">ochrana osobních údajů</a>).</p></form>
-      ${showCode ? `<form class="card" method="post" action="/pristup" style="margin:0;align-self:start"><h2 style="margin:0 0 6px">Mám přístupový kód</h2>
-        <input type="hidden" name="back" value="${esc(back || '/hledat')}"><label>Kód<input name="code" required maxlength="80" autocomplete="off"></label>
+      ${showCode ? `<form class="card" method="post" action="/cesta/pristup" style="margin:0;align-self:start"><h2 style="margin:0 0 6px">Mám přístupový kód</h2>
+        <input type="hidden" name="back" value="${esc(back || '/cesta/hledat')}"><label>Kód<input name="code" required maxlength="80" autocomplete="off"></label>
         <div style="margin-top:12px"><button class="btn sec" type="submit">Vstoupit</button></div></form>` : ''}
     </div>
     <script>(function(){var f=document.getElementById('acc-req'),st=document.getElementById('acc-st');f.addEventListener('submit',function(e){e.preventDefault();var d={};new FormData(f).forEach(function(v,k){d[k]=v;});d.interest='apps';d.note='Žádost o přístup k aplikacím Najít místo / Zhodnotit místo';var b=f.querySelector('button');b.disabled=true;st.textContent='Odesílám…';
       fetch('/api/inquiry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(function(r){return r.json().catch(function(){return {};}).then(function(j){return {ok:r.ok&&j.ok,j:j};});}).then(function(x){if(x.ok){f.innerHTML='<h2 style="margin:0 0 6px">Děkujeme</h2><p class="muted" style="margin:0">Žádost jsme přijali, brzy se vám ozveme.</p>';}else{b.disabled=false;st.textContent=(x.j&&x.j.error)||'Odeslání se nepodařilo.';}}).catch(function(){b.disabled=false;st.textContent='Chyba spojení.';});});})();</script>`;
-    return layout({ title: 'Aplikace lokalit', body, active: 'hledat', absolute: true });
+    return layout({ title: 'Aplikace lokalit', body, active: 'hledat' });
   }
   const urlenc = require('express').urlencoded({ extended: false, limit: '60kb' });
-  app.post('/pristup', urlenc, (req, res) => {
-    if (rateLimited('acc:' + req.ip, 10, 3600e3)) return res.status(429).type('html').send(accessPage('/hledat', 'Příliš mnoho pokusů, zkuste to později.'));
+  app.post('/cesta/pristup', urlenc, (req, res) => {
+    if (rateLimited('acc:' + req.ip, 10, 3600e3)) return res.status(429).type('html').send(accessPage('/cesta/hledat', 'Příliš mnoho pokusů, zkuste to později.'));
     const code = String((req.body || {}).code || '').trim();
-    const back = /^\/(hledat|zhodnotit)/.test(String((req.body || {}).back || '')) ? req.body.back : '/hledat';
+    const back = /^\/cesta\/(hledat|zhodnotit)/.test(String((req.body || {}).back || '')) ? req.body.back : '/cesta/hledat';
     if (mode() !== 'code' || !codes().includes(code)) return res.status(200).type('html').send(accessPage(back, 'Kód není platný.'));
     res.append('Set-Cookie', ACK + '=' + sign(LM_SECRET, code) + '; Path=/; Max-Age=' + 30 * 86400 + '; HttpOnly; Secure; SameSite=Lax' + ckDomain(req));
     res.redirect(302, back);
@@ -62,19 +62,19 @@ module.exports = function mountApps(app, ctx) {
 
   // ── Najít místo ──
   const S = { nick: '' };
-  app.get('/hledat', gate, (req, res) => res.set('Cache-Control', 'no-store').type('html').send(LAPP.analyzerPage(S, String(req.query.q || '').slice(0, 80), null, '')));
+  app.get('/cesta/hledat', gate, (req, res) => res.set('Cache-Control', 'no-store').type('html').send(LAPP.analyzerPage(S, String(req.query.q || '').slice(0, 80), null, '')));
   // ── Zhodnotit místo (výpočet bez ukládání) ──
   async function products() {
     try { return (await fetchProducts()).map((p) => ({ id: p.id, name: p.name_cs, price_czk: p.price_czk })).filter((p) => p.price_czk > 0); } catch (e) { return []; }
   }
-  app.get('/zhodnotit', gate, async (req, res, next) => {
+  app.get('/cesta/zhodnotit', gate, async (req, res, next) => {
     try {
       const pre = { city: String(req.query.city || '').slice(0, 120), address: String(req.query.address || '').slice(0, 300) };
       if (isFinite(+req.query.lat) && isFinite(+req.query.lng) && +req.query.lat) { pre.lat = String(+req.query.lat); pre.lng = String(+req.query.lng); if (pre.address) pre.name = pre.address; }
       res.set('Cache-Control', 'no-store').type('html').send(LAPP.siteForm(S, null, pre, '', false, false, await products()));
     } catch (e) { next(e); }
   });
-  app.post('/zhodnotit', gate, urlenc, async (req, res, next) => {
+  app.post('/cesta/zhodnotit', gate, urlenc, async (req, res, next) => {
     try {
       if (rateLimited('eval:' + req.ip, 30, 3600e3)) return res.status(429).type('text/plain').send('Příliš mnoho vyhodnocení, zkuste to později.');
       const d = LAPP.clean(req.body || {});
@@ -87,15 +87,15 @@ module.exports = function mountApps(app, ctx) {
     const R = LAPP.reportSections({ name: d.name }, d, c, ev);
     // „Upravit údaje" = stejné údaje zpět do formuláře (nic se neukládá na server)
     const hidden = Object.keys(d).map((k) => `<input type="hidden" name="${esc(k)}" value="${esc(d[k])}">`).join('');
-    const body = `<div class="row no-print" style="justify-content:space-between;flex-wrap:wrap;gap:10px"><a class="btn sec sm" href="/hledat">← Najít místo</a><div class="row" style="gap:8px">
-      <form method="post" action="/zhodnotit/upravit" style="margin:0">${hidden}<button class="btn sec sm" type="submit">Upravit údaje</button></form><button class="btn sm" type="button" onclick="window.print()">🖨️ Uložit do PDF</button></div></div>
+    const body = `<div class="row no-print" style="justify-content:space-between;flex-wrap:wrap;gap:10px"><a class="btn sec sm" href="/cesta/hledat">← Najít místo</a><div class="row" style="gap:8px">
+      <form method="post" action="/cesta/zhodnotit/upravit" style="margin:0">${hidden}<button class="btn sec sm" type="submit">Upravit údaje</button></form><button class="btn sm" type="button" onclick="window.print()">🖨️ Uložit do PDF</button></div></div>
     <div class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><div class="small muted">Orientační vyhodnocení místa · ${new Date().toLocaleDateString('cs-CZ')}</div><h1 style="margin:2px 0 4px">${esc(d.name)}</h1><div class="muted">${esc(d.address || '')}</div></div><span class="res ${ev.cls}">${esc(ev.result)}</span></div>
     <p class="small muted" style="margin:10px 0 0">Výpočet je orientační a vychází jen ze zadaných údajů a modelových předpokladů. Podrobnou studii místa s námi můžete probrat.</p></div>
     ${R.map}${R.scenarios}${R.facts}
     <div class="lm-cta no-print"><div><h3>Chcete místo probrat s námi?</h3><p>Projdeme vyhodnocení, doplníme zkušenosti z provozu a navrhneme další postup.</p></div><a class="btn" href="${MAIN_URL()}${process.env.LM_HOME_LIVE === '1' ? '/' : '/uvod'}#kontakt">Probrat můj záměr →</a></div>`;
     return LAPP.page(S, 'Vyhodnocení – ' + (d.name || ''), 'loc', body, (d.lat && d.lng) ? LAPP.LEAFLET_HEAD : '');
   }
-  app.post('/zhodnotit/upravit', gate, urlenc, async (req, res, next) => {
+  app.post('/cesta/zhodnotit/upravit', gate, urlenc, async (req, res, next) => {
     try { res.set('Cache-Control', 'no-store').type('html').send(LAPP.siteForm(S, null, LAPP.clean(req.body || {}), '', false, false, await products())); } catch (e) { next(e); }
   });
 

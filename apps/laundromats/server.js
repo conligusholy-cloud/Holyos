@@ -26,18 +26,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── Subdoména aplikací (lokality.laundromats.eu): jen aplikace lokalit; ostatní cesty → hlavní web. Naopak /hledat a /zhodnotit z hlavní domény → subdoména.
-const APPS_PATH_RE = /^\/(hledat|zhodnotit|pristup|api\/location)(\/|$)/;
-const APPS_SHARED_RE = /^\/(api\/health|api\/inquiry|api\/presence|api\/cesta\/track|cesta\/track\.js|favicon|img\/|media\/|robots\.txt|gdpr)/;
-const appsUrl = () => String(process.env.LM_APPS_URL || 'https://lokality.laundromats.eu').replace(/\/$/, '');
+// Stránky a aplikace žijí pod /cesta/… (jako Ekonomika). Staré adresy a subdoména lokality.* → přesměrování.
 app.use((req, res, next) => {
-  const h = String(req.hostname || '').toLowerCase();
-  if (h.startsWith('lokality.')) {
-    if (req.path === '/') return res.redirect(302, '/hledat');
-    if (!APPS_PATH_RE.test(req.path) && !APPS_SHARED_RE.test(req.path) && !/^\/(sso|admin)/.test(req.path)) return res.redirect(302, PUBLIC_URL + req.originalUrl);
-  } else if (APPS_PATH_RE.test(req.path) && req.method === 'GET' && /(^|\.)laundromats\.eu$/.test(h)) {
-    return res.redirect(302, appsUrl() + req.originalUrl);
-  }
+  const q = req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '';
+  if (String(req.hostname || '').toLowerCase().startsWith('lokality.')) return res.redirect(301, PUBLIC_URL + '/cesta' + (/^\/(hledat|zhodnotit)/.test(req.path) ? req.path : '/hledat') + q);
+  const m = /^\/(compounder|pradlomaty|hledat|zhodnotit)(\/.*)?$/.exec(req.path);
+  if (m && req.method === 'GET') return res.redirect(301, '/cesta/' + m[1] + (m[2] || '') + q);
   next();
 });
 // Cookie platná pro laundromats.eu i subdomény (identita návštěvníka + přístup do aplikací)
@@ -326,8 +320,8 @@ async function fetchProducts() {
 }
 const COMP = require('./compounder-page');
 const PRAD = require('./pradlomaty-page');
-app.get('/compounder', (req, res) => send(res, lite(COMP.compounderPage())));
-app.get('/pradlomaty', async (req, res) => { let list = []; try { list = await fetchProducts(); } catch (e) { console.warn('[laundromats] produkty:', e.message); if (_prod.data) list = _prod.data; } send(res, lite(PRAD.pradlomatyPage(list))); });
+app.get('/cesta/compounder', (req, res) => send(res, lite(COMP.compounderPage())));
+app.get('/cesta/pradlomaty', async (req, res) => { let list = []; try { list = await fetchProducts(); } catch (e) { console.warn('[laundromats] produkty:', e.message); if (_prod.data) list = _prod.data; } send(res, lite(PRAD.pradlomatyPage(list))); });
 app.get('/img/pradlomat.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(path.join(__dirname, 'pradlomat-flex.webp')));
 app.get('/img/product/:id(\\d+)', async (req, res) => {
   try {
@@ -338,7 +332,7 @@ app.get('/img/product/:id(\\d+)', async (req, res) => {
     res.set('Content-Type', r.headers.get('content-type') || 'image/webp').set('Cache-Control', 'public, max-age=86400').send(Buffer.from(await r.arrayBuffer()));
   } catch (e) { res.status(404).end(); }
 });
-// ── Aplikace lokalit (subdoména lokality.laundromats.eu) ──
+// ── Aplikace lokalit (/cesta/hledat, /cesta/zhodnotit) ──
 require('./lm-apps')(app, { HOLYOS_URL, LM_SECRET, rateLimited, cookies, adminOf, ckDomain, fetchProducts });
 
 app.use((req, res) => res.status(404).type('text/plain').send('Stránka nenalezena'));

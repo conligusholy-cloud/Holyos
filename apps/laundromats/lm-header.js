@@ -13,21 +13,20 @@ const T = {
 function header(opts) {
   const o = opts || {}; const t = T[o.lang] || T.cs;
   const m = o.absolute ? MAIN_URL() : '';
-  const a = o.absolute ? '' : APPS_URL();
   const home = m + homeHref();
   const items = [
     [home + '#proc', t.why, 'home'],
-    [m + '/compounder', t.comp, 'compounder'],
-    [m + '/pradlomaty', t.prad, 'pradlomaty'],
+    [m + '/cesta/compounder', t.comp, 'compounder'],
+    [m + '/cesta/pradlomaty', t.prad, 'pradlomaty'],
     [m + (o.lang === 'pl' ? '/cesta/pl/ekonomika' : '/cesta/ekonomika'), t.eco, 'ekonomika'],
-    [a + '/hledat', t.find, 'hledat'],
-    [a + '/zhodnotit', t.eval, 'zhodnotit'],
+    [m + '/cesta/hledat', t.find, 'hledat'],
+    [m + '/cesta/zhodnotit', t.eval, 'zhodnotit'],
   ];
   return '<header class="lhdr" id="lhdr"><div class="in"><a class="brand" href="' + home + '" aria-label="Laundromats">' + LOGO + '<span class="name">Laundromats<span>.eu</span></span></a>'
     + '<nav class="lnav" aria-label="Navigace">' + items.map(([h, l, k]) => '<a href="' + h + '" data-k="' + k + '">' + l + '</a>').join('') + '</nav>'
     + '<span class="lsp"></span><span style="margin-left:auto"></span>'
     + '<a class="lcta" href="' + home + '#kontakt">' + t.cta + '</a></div></header>'
-    + '<script>(function(){var p=location.pathname,k=/^\\/compounder/.test(p)?"compounder":/^\\/pradlomaty/.test(p)?"pradlomaty":/ekonomika/.test(p)?"ekonomika":/^\\/hledat/.test(p)?"hledat":/^\\/zhodnotit/.test(p)?"zhodnotit":"";if(k){var e=document.querySelector(\'.lnav a[data-k="\'+k+\'"]\');if(e)e.classList.add("on");}})();</script>';
+    + '<script>(function(){var p=location.pathname,k=/\\/compounder/.test(p)?"compounder":/\\/pradlomaty/.test(p)?"pradlomaty":/ekonomika/.test(p)?"ekonomika":/\\/hledat/.test(p)?"hledat":/\\/zhodnotit/.test(p)?"zhodnotit":"";if(k){var e=document.querySelector(\'.lnav a[data-k="\'+k+\'"]\');if(e)e.classList.add("on");}})();</script>';
 }
 const FONT = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">';
 const CSS = '.lhdr{position:sticky;top:0;z-index:60;background:rgba(4,6,12,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(120,160,255,.14);padding:10px 18px;padding-top:calc(10px + env(safe-area-inset-top));font-family:\'Inter\',system-ui,Arial,sans-serif;color:#eaf1ff}'
