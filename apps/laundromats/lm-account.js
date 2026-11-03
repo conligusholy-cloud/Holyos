@@ -63,7 +63,9 @@ module.exports = function createAccounts(ctx) {
     <label>E-mail<input name="email" type="email" required maxlength="160" autocomplete="email" value="${esc(q.email || '')}"></label>
     <label>Heslo<input name="password" type="password" required maxlength="200" autocomplete="current-password"></label>
     <button class="btn" type="submit">Přihlásit se</button></form>
-    <div class="acc-links"><a href="/cesta/registrace${q.next ? '?next=' + encodeURIComponent(safeNext(q.next)) : ''}">Nemáte účet? Zaregistrujte se</a><a href="/cesta/zapomenute-heslo">Zapomenuté heslo</a></div>`);
+    <div class="acc-links"><span></span><a href="/cesta/zapomenute-heslo">Zapomenuté heslo?</a></div>
+    <div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--border);text-align:center"><p class="muted" style="margin:0 0 4px">Ještě nemáte účet?</p>
+    <a class="btn sec" style="width:100%;justify-content:center;margin-top:6px" href="/cesta/registrace${q.next ? '?next=' + encodeURIComponent(safeNext(q.next)) : ''}">Vytvořit účet zdarma</a></div>`);
   const regPage = (q, err) => box('Registrace', 'Vytvořte si zdarma účet a získejte přístup ke všem nástrojům.', `${msgHtml(err)}
     <form method="post" action="/cesta/registrace"><input type="hidden" name="next" value="${esc(safeNext(q.next))}">
     <label>Jméno a příjmení<input name="name" required maxlength="120" autocomplete="name" value="${esc(q.name || '')}"></label>
@@ -180,8 +182,7 @@ module.exports = function createAccounts(ctx) {
   // Odkazy účtu do horní lišty (slot <!--LACC-->)
   function headerSlot(req) {
     if (req && req.account) return '<a class="lacc" href="/cesta/ucet" title="Můj účet">👤 ' + esc(String(req.account.name || 'Účet').split(/\s+/)[0]) + '</a>';
-    if (req && adminOf(req)) return '<a class="lacc" href="/cesta/ucet" title="Správce (HolyOS)">👤 Správce</a>';
-    return '<a class="lcta" href="/cesta/prihlaseni">Přihlásit</a>';
+    return '<a class="lcta" href="/cesta/prihlaseni">Přihlásit se</a>';
   }
   const attach = (req, res, next) => attachInner(req, res, next).catch((e) => { console.warn('[lm-acc] relace:', e.message); req.account = null; next(); });
   return { attach, requireAccount, mount, headerSlot };
