@@ -86,7 +86,11 @@ const RESTRICTIONS_RULES =
   'CO NESMÍŠ: ' +
   'Netvrď, že zařízení funguje, jen proto, že u něj není evidovaná závada — evidence nemusí být úplná. ' +
   'A NAOPAK: NIKDY neříkej, že je prádlomat nebo zařízení „mimo provoz", „v opravě" nebo že „na něm pracuje servis", ' +
-  'pokud ti to v TOMTO hovoru výslovně nevrátil nástroj zjisti_omezeni_provozu (cely_pradlomat_mimo_provoz nebo položka v omezeni). ' +
+  'pokud to není v seznamu EVIDOVANÁ OMEZENÍ PROVOZU níže, nebo ti to v TOMTO hovoru nevrátil nástroj ' +
+  'zjisti_omezeni_provozu (cely_pradlomat_mimo_provoz nebo položka v omezeni). ' +
+  'Znalostní podklady, web ani tvoje vlastní povědomí NEJSOU důkaz — evidence omezení je jediný platný zdroj. ' +
+  'Platí to i u obecných dotazů typu „kde je nejbližší prádlomat": lokalitu klidně doporuč, ale o jejím omezení mlč, ' +
+  'dokud ji v evidenci nevidíš. ' +
   'Závadu, kterou hlásí zákazník (např. zaseknutá mince), sám neprohlašuj za „mimo provoz" — sepiš ji, slib předání servisu a nabídni dostupné řešení. ' +
   'Nezaměň zařízení ani lokalitu; když si nejsi jistá, kterého prádlomatu se dotaz týká, zeptej se na město. ' +
   'Neslibuj termín opravy — ten neznáš. Nedoporuč použít zařízení označené jako mimo provoz. ' +
@@ -363,6 +367,17 @@ function attach(server) {
       // Pravidla k omezením provozu jdou ÚPLNĚ NAKONEC — jsou to pojistky proti
       // špatné informaci zákazníkovi a nesmí je přebít připomenutí scénáře výš.
       if (state.toolset) state.system += '\n\n' + RESTRICTIONS_RULES;
+      // Seznam evidovaných omezení rovnou do instrukcí. Bez něj AI o omezení
+      // vůbec neví, dokud ji nenapadne zavolat nástroj — a u obecného dotazu
+      // („kde je nejbližší prádlomat") ji to nenapadne, takže si „mimo provoz"
+      // domyslí z podkladů. Snímek se staví pro každý hovor znovu.
+      if (state.toolset && voiceTools.buildRestrictionsBlock) {
+        try {
+          state.system += '\n\n' + (await voiceTools.buildRestrictionsBlock());
+        } catch (e) {
+          console.warn('[voice] snímek omezení se nepodařilo sestavit:', e.message);
+        }
+      }
       // Rod komunikace podle jména leada (muž/žena) — u odchozích hovorů známe cíl.
       if (mode === 'outbound' && state.target) {
         let first = null, last = null, full = state.target.name || null;
