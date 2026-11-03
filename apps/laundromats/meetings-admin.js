@@ -53,13 +53,15 @@ const CSS = `
 .mt-tabs{display:flex;gap:8px;margin:0 0 16px;flex-wrap:wrap}
 .mt-tabs button{background:transparent;border:1px solid var(--border2);color:var(--text2);border-radius:999px;padding:8px 16px;font:inherit;font-weight:700;cursor:pointer}
 .mt-tabs button.on{background:rgba(79,209,255,.14);border-color:var(--blue);color:var(--blue)}
+/* Společný vzhled VšECH tabulek administrace (obal .mt-tw) — jeden záznam = jeden řádek. */
 .mt-tw{overflow-x:auto}
-.mt-hot table{width:100%;border-collapse:collapse;font-size:13.5px}
-.mt-hot th,.mt-hot td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle;white-space:nowrap}
-.mt-hot th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text2)}
-.mt-hot tr:hover td{background:rgba(79,209,255,.05)}
-.mt-hot .nm{font-weight:700}
-.mt-hot .cf-info{font-size:12px;color:var(--text2);margin:0 0 8px}
+.mt-tw table{width:100%;border-collapse:collapse;font-size:13.5px}
+.mt-tw th,.mt-tw td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle;white-space:nowrap;height:38px}
+.mt-tw th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);height:auto}
+.mt-tw tr:hover td{background:rgba(79,209,255,.05)}
+.mt-tw .nm{font-weight:700}
+.mt-tw .cf-info{font-size:12px;color:var(--text2);margin:0 0 8px}
+.mt-tw .btn.sm{padding:3px 9px;font-size:12px}
 .mt-msg{margin-top:10px;font-size:13px}
 @media(max-width:900px){.mt-week{grid-template-columns:1fr}.mt-day{min-height:0}}
 `;
@@ -267,7 +269,7 @@ function usrRender(){
       {key:'created_at',label:'Registrace',type:'date',get:function(u){return u.created_at||null;}},
       {key:'verified',label:'Ověření',get:function(u){return u.email_verified_at?'ověřen':'čeká na ověření';},ph:'Vyber…',enum:true},
       {key:'last_login_at',label:'Poslední přihlášení',type:'date',get:function(u){return u.last_login_at||null;}},
-      {key:'login_count',label:'Přihlášení',type:'number',get:function(u){return u.login_count||0;}},
+      {key:'login_count',label:'Přihlášení',type:'num',get:function(u){return u.login_count||0;}},
       {key:'lead',label:'Kontakt v HolyOS',get:function(u){return u.compounder_lead_id?String(u.compounder_lead_id):'';},enum:false},
       {key:'act',label:'',get:function(u){return u.disabled?'zablokovaný':'aktivní';},enum:true}
     ],usrRow,'uživatelů','Žádný uživatel.');
