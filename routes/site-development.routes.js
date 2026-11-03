@@ -39,6 +39,8 @@ for (const d of [PHOTOS_DIR, DOCS_DIR]) {
 
 // ─── Auth pro všechny endpointy ─────────────────────────────────────────────
 router.use(requireAuth);
+// Serverová kontrola práv: modul Site Development; obchodníci (mobilní obrazovka) a obchod mají přístup také
+router.use(require('../middleware/module-access').requireModule(['site-development', 'prodejni-objednavky', 'obchod'], { roles: ['Obchodník', 'Vedoucí obchodu'] }));
 
 // ─── Pomocné funkce ─────────────────────────────────────────────────────────
 

@@ -166,7 +166,7 @@ app.use(cookieParser());
 // obrazovku + /api/auth a /api/compounder. Admin/super-admin NIKDY dotčen.
 // Nouzový vypínač: env SALES_GATE_OFF=1.
 const { peekToken, requireAuth, requireAdmin } = require('./middleware/auth');
-const { requireModule } = require('./middleware/module-access');
+const { requireModule, auditModuleAccess } = require('./middleware/module-access');
 function salesGateAllowed(pathname) {
   if (pathname === '/api/health' || pathname === '/favicon.ico') return true;
   if (pathname.startsWith('/api/auth') || pathname.startsWith('/api/compounder') || pathname.startsWith('/api/sales') || pathname.startsWith('/api/lokality')) return true;
@@ -773,6 +773,14 @@ app.get('/vybery-admin/', serveVyberyAdmin);
 // ─── API Routes ────────────────────────────────────────────────────────────
 
 app.use('/api/auth', authRoutes);
+// Audit přístupu (NEBLOKUJE): zaloguje „[access-audit] DENY …", koho by serverová kontrola modulu odmítla.
+// Po týdnu provozu se podle logu seznamy vyladí a přepnou na vynucování (requireModule).
+app.use('/api/wh', auditModuleAccess('wh', ['nakup-sklad', 'sklady', 'doklady', 'davky', 'tiskarny', 'prodejni-objednavky', 'obchod', 'programovani-vyroby', 'pracovni-postup', 'nastaveni-vyroby', 'pracoviste', 'vyrobni-sloty', 'normovani-fy', 'normovani-prehled', 'servis', 'spare-parts', 'doprava', 'ucetni-doklady', 'kiosky', 'simulace-vyroby', 'velin']));
+app.use('/api/production', auditModuleAccess('production', ['programovani-vyroby', 'pracovni-postup', 'nastaveni-vyroby', 'pracoviste', 'planovani-vyroby', 'simulace-vyroby', 'vytvoreni-arealu', 'kiosky', 'davky', 'normovani-fy', 'normovani-prehled', 'vyrobni-sloty', 'nakup-sklad', 'sklady', 'velin', 'prodejni-objednavky']));
+app.use('/api/slots', auditModuleAccess('slots', ['vyrobni-sloty', 'prodejni-objednavky', 'obchod', 'programovani-vyroby', 'planovani-vyroby', 'simulace-vyroby']));
+app.use('/api/cad', auditModuleAccess('cad', ['cad-vykresy', 'nakup-sklad', 'sklady', 'davky', 'pracovni-postup', 'nastaveni-vyroby', 'programovani-vyroby']));
+app.use('/api/sales', auditModuleAccess('sales', ['obchod', 'prodejni-objednavky'], { roles: ['Obchodník', 'Vedoucí obchodu'] }));
+app.use('/api/hr', auditModuleAccess('hr', ['lide-hr', 'kiosky', 'velin', 'chat', 'obchod']));
 app.use('/api/hr/applicants', applicantsRoutes); // musí být PŘED /api/hr (pevný podcesta)
 app.use('/api/hr', hrRoutes);
 app.use('/api/wh/purchase-pricelist', purchasePricelistRoutes); // Nákupní ceník — vlastní cesta (/api/wh/pricelist = prodejní ceník strojů ve warehouse.routes)
@@ -830,7 +838,7 @@ app.use('/api/banking', requireAuth, requireModule(['banky', 'banka-pravidla', '
 app.use('/api/cash', requireAuth, requireModule(['pokladna']), cashRegisterRoutes);
 app.use('/api/reports', requireAuth, requireModule(['naklady', 'reporty']), reportsRoutes);
 app.use('/api/normovani', requireAuth, requireModule(['normovani-fy', 'normovani-prehled']), normovaniRoutes);
-app.use('/api/directives', directivesRoutes);
+app.use('/api/directives', requireAuth, requireModule(['metodicke-pokyny']), directivesRoutes);
 app.use('/api/agent', agentRoutes); // AI Vývojář (modul #13) — super-admin only
 app.use('/api/tools', businessToolsRoutes); // Obchodní pomůcky (sales-aid)
 app.use('/api/sales', salesRoutes); // Obchod — CRM (SalesContact, pipeline, kalendář, webhooky FB/IG/LinkedIn)

@@ -101,6 +101,8 @@ router.post('/inquiry/:token/respond', express.urlencoded({ extended: false }), 
 });
 
 router.use(requireAuth);
+// Serverová kontrola práv: záložka Leasing (Prodejní objednávky / Obchod) + obchodníci z mobilní obrazovky obchodníka
+router.use(require('../middleware/module-access').requireModule(['prodejni-objednavky', 'obchod'], { roles: ['Obchodník', 'Vedoucí obchodu'] }));
 
 // Úložiště dokumentů (Railway persistent volume přes DATA_DIR).
 const DATA_ROOT = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
