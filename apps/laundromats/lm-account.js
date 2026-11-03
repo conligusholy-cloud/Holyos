@@ -52,7 +52,7 @@ module.exports = function createAccounts(ctx) {
   // ── stránky ──
   const CSS = `<style>.acc-box{max-width:460px;margin:30px auto 0}.acc-box h1{margin:0 0 6px;font-size:28px;text-align:center}.acc-box>p.muted{text-align:center}.acc-logo{display:flex;align-items:center;justify-content:center;gap:0;margin:4px 0 16px;font-weight:800;font-size:22px;letter-spacing:.01em}.acc-logo b{background:linear-gradient(90deg,#4fd1ff,#7c5cff);-webkit-background-clip:text;background-clip:text;color:transparent}.acc-box label{display:block;margin-top:12px}.acc-box .btn{width:100%;margin-top:18px;justify-content:center}
   .acc-links{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:14px}.acc-links a{color:var(--accent2)}
-  .acc-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:18px}.acc-tile{display:block;text-decoration:none;color:inherit;margin:0;transition:transform .15s,border-color .15s}.acc-tile:hover{transform:translateY(-2px);border-color:rgba(79,209,255,.45)}.acc-tile .ic{font-size:26px}.acc-tile h3{margin:8px 0 4px}.acc-tile p{margin:0;color:var(--text2);font-size:14px}</style>`;
+  .acc-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:18px}.acc-tile{display:block;text-decoration:none;color:inherit;margin:0;transition:transform .15s,border-color .15s}.acc-tile:hover{transform:translateY(-2px);border-color:rgba(79,209,255,.45)}.acc-tile .ic{width:50px;height:50px;border-radius:15px;display:grid;place-items:center;color:#9fe6ff;background:linear-gradient(135deg,rgba(79,209,255,.18),rgba(124,92,255,.22));border:1px solid rgba(120,160,255,.32);box-shadow:0 10px 26px -12px rgba(79,140,255,.7),inset 0 1px 0 rgba(255,255,255,.06);transition:transform .2s,box-shadow .2s,color .2s}.acc-tile:hover .ic{transform:translateY(-1px) scale(1.04);color:#fff;box-shadow:0 14px 34px -12px rgba(124,92,255,.85),inset 0 1px 0 rgba(255,255,255,.08)}.acc-tile h3{margin-top:14px!important}.acc-tile h3{margin:8px 0 4px}.acc-tile p{margin:0;color:var(--text2);font-size:14px}</style>`;
   const LOGO = require('./lm-header').LOGO.replace('width="34" height="34"', 'width="46" height="46"');
   const box = (title, sub, inner) => CSS + `<div class="card acc-box"><div class="acc-logo">${LOGO}<span>Laundromats<b>.eu</b></span></div><h1>${title}</h1>${sub ? `<p class="muted" style="margin:0 0 6px">${sub}</p>` : ''}${inner}</div>`;
   const msgHtml = (err, ok) => (err ? `<div class="msg err">${esc(err)}</div>` : '') + (ok ? `<div class="msg ok">${esc(ok)}</div>` : '');
@@ -84,6 +84,18 @@ module.exports = function createAccounts(ctx) {
   }
   const sentPage = (email) => box('Zkontrolujte e-mail', '', `<p>Na adresu <b>${esc(email)}</b> jsme poslali odkaz pro potvrzení účtu. Po kliknutí budete rovnou přihlášeni.</p><p class="small muted">E-mail nedorazil? Podívejte se do spamu, případně se zkuste <a href="/cesta/prihlaseni">přihlásit</a> – pošleme odkaz znovu.</p>`);
 
+  // Ikony dlaždic — tenké linky (stroke), barva z gradientu v odznaku; ladí s logem a sítí v pozadí
+  const SV = (d) => '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+  const IC = {
+    compounder: SV('<circle cx="12" cy="12" r="2.6"/><circle cx="4.5" cy="6" r="1.8"/><circle cx="19.5" cy="6" r="1.8"/><circle cx="4.5" cy="18" r="1.8"/><circle cx="19.5" cy="18" r="1.8"/><path d="M6.1 7.1 9.9 10.4M17.9 7.1l-3.8 3.3M6.1 16.9l3.8-3.3M17.9 16.9l-3.8-3.3"/>'),
+    pradlomaty: SV('<rect x="4" y="2.5" width="16" height="19" rx="3"/><path d="M4 7h16"/><circle cx="7.3" cy="4.8" r=".5" fill="currentColor"/><circle cx="12" cy="14" r="4.6"/><path d="M8.6 14.6c1.2-1 2.2 1 3.4 0s2.2 1 3.4 0"/>'),
+    ekonomika: SV('<path d="M3 3v18h18"/><path d="m6.5 15 4-4.5 3 3L20 6.5"/><path d="M15.5 6.5H20V11"/>'),
+    hledat: SV('<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 1.1-.3 2.2-.7 3.2"/><circle cx="12" cy="10" r="2.3"/><circle cx="17.6" cy="17.6" r="2.6"/><path d="m19.5 19.5 2 2"/>'),
+    zhodnotit: SV('<path d="M4.5 18a8.5 8.5 0 1 1 15 0"/><path d="m12 13.5 4-4.5"/><circle cx="12" cy="13.5" r="1.4"/><path d="M8 21h8"/>'),
+    tools: SV('<rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/>'),
+    user: SV('<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5c1.2-3.6 4-5.4 7.5-5.4s6.3 1.8 7.5 5.4"/>'),
+    logout: SV('<path d="M14 4h3.5A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5H14"/><path d="M10 16.5 5.5 12 10 7.5M5.5 12H15"/>'),
+  };
   const A = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next); // async chyby → error handler (ne pád procesu)
   function mount(app) {
     app.get('/cesta/prihlaseni', (req, res) => { if (req.account) return res.redirect(302, safeNext(req.query.next)); send(req, res, 'Přihlášení', loginPage(req.query)); });
@@ -142,18 +154,18 @@ module.exports = function createAccounts(ctx) {
 
     // Můj účet = rozcestník nástrojů + údaje + změna hesla
     const TILES = [
-      ['/cesta/compounder', '🧩', 'Compounder', 'Jak roste síť prádlomatů a co znamená pro vaše podnikání.'],
-      ['/cesta/pradlomaty', '🧺', 'Prádlomaty', 'Nabídka strojů a služby kolem nich.'],
-      ['/cesta/ucet/ekonomika', '📈', 'Ekonomika', 'Živý model: investice, obrat, zisk a návratnost.'],
-      ['/cesta/hledat', '🔎', 'Najít místo', 'Spádová oblast, kapacita a provozované prádlomaty v okolí.'],
-      ['/cesta/zhodnotit', '🧠', 'Zhodnotit místo', 'Orientační ekonomika vašeho konkrétního místa.'],
+      ['/cesta/compounder', 'compounder', 'Compounder', 'Jak roste síť prádlomatů a co znamená pro vaše podnikání.'],
+      ['/cesta/pradlomaty', 'pradlomaty', 'Prádlomaty', 'Nabídka strojů a služby kolem nich.'],
+      ['/cesta/ucet/ekonomika', 'ekonomika', 'Ekonomika', 'Živý model: investice, obrat, zisk a návratnost.'],
+      ['/cesta/hledat', 'hledat', 'Najít místo', 'Spádová oblast, kapacita a provozované prádlomaty v okolí.'],
+      ['/cesta/zhodnotit', 'zhodnotit', 'Zhodnotit místo', 'Orientační ekonomika vašeho konkrétního místa.'],
     ];
     app.get('/cesta/ucet', requireAccount, (req, res) => {
       const a = req.account || { name: (adminOf(req) || {}).name || 'Správce', email: '' };
       const welcome = req.query.vitejte === '1' ? 'Účet je potvrzený. Vítejte!' : '';
       const err = String(req.query.err || '').slice(0, 200);
       const body = CSS + `<div class="hero" style="padding-bottom:6px"><span class="eyebrow"><i></i>Moje nástroje</span><h1>Dobrý den, <span class="g">${esc(String(a.name).split(/\s+/)[0])}</span></h1><p>Vaše nástroje Laundromats na jednom místě.</p></div>${msgHtml(err, welcome)}
-        <div class="acc-tiles">${TILES.map(([h, i, t, d]) => `<a class="card acc-tile" href="${h}"><div class="ic">${i}</div><h3>${t}</h3><p>${d}</p></a>`).join('')}</div>
+        <div class="acc-tiles">${TILES.map(([h, i, t, d]) => `<a class="card acc-tile" href="${h}"><div class="ic">${IC[i]}</div><h3>${t}</h3><p>${d}</p></a>`).join('')}</div>
 `;
       send(req, res, 'Moje nástroje', body);
     });
@@ -191,9 +203,9 @@ module.exports = function createAccounts(ctx) {
   }
   // Odkazy účtu do horní lišty (slot <!--LACC-->)
   function headerSlot(req) {
-    if (req && req.account) return '<details class="lmenu"><summary class="lacc" title="Můj účet">👤 ' + esc(String(req.account.name || 'Účet').split(/\s+/)[0]) + ' ▾</summary><div class="lmenu-b">'
+    if (req && req.account) return '<details class="lmenu"><summary class="lacc" title="Můj účet">' + IC.user + ' ' + esc(String(req.account.name || 'Účet').split(/\s+/)[0]) + ' ▾</summary><div class="lmenu-b">'
       + '<div class="lmenu-h"><b>' + esc(req.account.name || '') + '</b><span>' + esc(req.account.email || '') + '</span></div>'
-      + '<a href="/cesta/ucet">🧰 Moje nástroje</a><a href="/cesta/ucet/nastaveni">⚙️ Můj účet</a><form method="post" action="/cesta/odhlasit"><button type="submit">↩ Odhlásit se</button></form></div></details>'
+      + '<a href="/cesta/ucet">' + IC.tools + 'Moje nástroje</a><a href="/cesta/ucet/nastaveni">' + IC.user + 'Můj účet</a><form method="post" action="/cesta/odhlasit"><button type="submit">' + IC.logout + 'Odhlásit se</button></form></div></details>'
       + '<script>document.addEventListener("click",function(e){document.querySelectorAll("details.lmenu[open]").forEach(function(d){if(!d.contains(e.target))d.removeAttribute("open");});});</script>';
     return '<a class="lcta" href="/cesta/prihlaseni">Přihlásit se</a>';
   }
