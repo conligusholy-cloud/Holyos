@@ -50,15 +50,16 @@ module.exports = function createAccounts(ctx) {
   }
 
   // ── stránky ──
-  const CSS = `<style>.acc-box{max-width:460px;margin:30px auto 0}.acc-box h1{margin:0 0 6px;font-size:30px}.acc-box label{display:block;margin-top:12px}.acc-box .btn{width:100%;margin-top:18px;justify-content:center}
+  const CSS = `<style>.acc-box{max-width:460px;margin:30px auto 0}.acc-box h1{margin:0 0 6px;font-size:28px;text-align:center}.acc-box>p.muted{text-align:center}.acc-logo{display:flex;align-items:center;justify-content:center;gap:0;margin:4px 0 16px;font-weight:800;font-size:22px;letter-spacing:.01em}.acc-logo b{background:linear-gradient(90deg,#4fd1ff,#7c5cff);-webkit-background-clip:text;background-clip:text;color:transparent}.acc-box label{display:block;margin-top:12px}.acc-box .btn{width:100%;margin-top:18px;justify-content:center}
   .acc-links{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:14px}.acc-links a{color:var(--accent2)}
   .acc-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:18px}.acc-tile{display:block;text-decoration:none;color:inherit;margin:0;transition:transform .15s,border-color .15s}.acc-tile:hover{transform:translateY(-2px);border-color:rgba(79,209,255,.45)}.acc-tile .ic{font-size:26px}.acc-tile h3{margin:8px 0 4px}.acc-tile p{margin:0;color:var(--text2);font-size:14px}</style>`;
-  const box = (title, sub, inner) => CSS + `<div class="card acc-box"><h1>${title}</h1>${sub ? `<p class="muted" style="margin:0 0 6px">${sub}</p>` : ''}${inner}</div>`;
+  const LOGO = require('./lm-header').LOGO.replace('width="34" height="34"', 'width="46" height="46"');
+  const box = (title, sub, inner) => CSS + `<div class="card acc-box"><div class="acc-logo">${LOGO}<span>Laundromats<b>.eu</b></span></div><h1>${title}</h1>${sub ? `<p class="muted" style="margin:0 0 6px">${sub}</p>` : ''}${inner}</div>`;
   const msgHtml = (err, ok) => (err ? `<div class="msg err">${esc(err)}</div>` : '') + (ok ? `<div class="msg ok">${esc(ok)}</div>` : '');
   const urlenc = require('express').urlencoded({ extended: false, limit: '20kb' });
   const send = (req, res, title, body, code) => res.status(code || 200).set('Cache-Control', 'no-store').type('html').send(ctx.render(req, layout({ title, body })));
 
-  const loginPage = (q, err, ok) => box('Přihlášení', 'Do prostředí Laundromats: Compounder, Prádlomaty, Ekonomika, Najít místo a Zhodnotit místo.', `${msgHtml(err, ok)}
+  const loginPage = (q, err, ok) => box('Přihlášení do prostředí', '', `${msgHtml(err, ok)}
     <form method="post" action="/cesta/prihlaseni"><input type="hidden" name="next" value="${esc(safeNext(q.next))}">
     <label>E-mail<input name="email" type="email" required maxlength="160" autocomplete="email" value="${esc(q.email || '')}"></label>
     <label>Heslo<input name="password" type="password" required maxlength="200" autocomplete="current-password"></label>
@@ -74,7 +75,7 @@ module.exports = function createAccounts(ctx) {
     <label>Firma (nepovinné)<input name="company" maxlength="160" autocomplete="organization" value="${esc(q.company || '')}"></label>
     <label>Heslo<input name="password" type="password" required minlength="8" maxlength="200" autocomplete="new-password"><small class="muted">alespoň 8 znaků</small></label>
     <input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
-    <label style="display:flex;gap:10px;align-items:flex-start;font-size:13.5px;color:var(--text2)"><input type="checkbox" name="gdpr" value="1" required style="width:auto;margin-top:3px"> Souhlasím se zpracováním osobních údajů (<a href="/gdpr" target="_blank">ochrana osobních údajů</a>).</label>
+    <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--text2);margin-top:14px;white-space:nowrap"><input type="checkbox" name="gdpr" value="1" required style="width:auto;margin:0;flex:none"><span>Souhlasím se <a href="/gdpr" target="_blank">zpracováním osobních údajů</a></span></label>
     <button class="btn" type="submit">Vytvořit účet</button></form>
     <div class="acc-links"><a href="/cesta/prihlaseni">Už máte účet? Přihlaste se</a></div>`);
 
@@ -134,7 +135,7 @@ module.exports = function createAccounts(ctx) {
       const r = await hos('POST', '/reset', { token: t, password: String(b.password || '') });
       if (r.status !== 200 || !r.j.account) return send(req, res, 'Nové heslo', newPwPage(t, r.j.error || 'Heslo se nepodařilo uložit.'), 400);
       setSession(req, res, r.j.account);
-      res.redirect(302, '/cesta/ucet?heslo=1');
+      res.redirect(302, '/cesta/ucet/nastaveni?heslo=1');
     }));
     const logout = (req, res) => { clearSession(req, res); res.redirect(302, '/'); };
     app.get('/cesta/odhlasit', logout); app.post('/cesta/odhlasit', logout);
@@ -149,11 +150,20 @@ module.exports = function createAccounts(ctx) {
     ];
     app.get('/cesta/ucet', requireAccount, (req, res) => {
       const a = req.account || { name: (adminOf(req) || {}).name || 'Správce', email: '' };
-      const welcome = req.query.vitejte === '1' ? 'Účet je potvrzený. Vítejte!' : req.query.heslo === '1' ? 'Heslo bylo změněno.' : req.query.ok === '1' ? 'Uloženo.' : '';
+      const welcome = req.query.vitejte === '1' ? 'Účet je potvrzený. Vítejte!' : '';
       const err = String(req.query.err || '').slice(0, 200);
-      const body = CSS + `<div class="hero" style="padding-bottom:6px"><span class="eyebrow"><i></i>Můj účet</span><h1>Dobrý den, <span class="g">${esc(String(a.name).split(/\s+/)[0])}</span></h1><p>Vaše nástroje Laundromats na jednom místě.</p></div>${msgHtml(err, welcome)}
+      const body = CSS + `<div class="hero" style="padding-bottom:6px"><span class="eyebrow"><i></i>Moje nástroje</span><h1>Dobrý den, <span class="g">${esc(String(a.name).split(/\s+/)[0])}</span></h1><p>Vaše nástroje Laundromats na jednom místě.</p></div>${msgHtml(err, welcome)}
         <div class="acc-tiles">${TILES.map(([h, i, t, d]) => `<a class="card acc-tile" href="${h}"><div class="ic">${i}</div><h3>${t}</h3><p>${d}</p></a>`).join('')}</div>
-        ${req.account ? `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:22px">
+`;
+      send(req, res, 'Moje nástroje', body);
+    });
+    // Můj účet = údaje, změna hesla, odhlášení (z tlačítka 👤 v liště)
+    app.get('/cesta/ucet/nastaveni', requireAccount, (req, res) => {
+      const a = req.account || { name: (adminOf(req) || {}).name || 'Správce', email: '' };
+      const welcome = req.query.heslo === '1' ? 'Heslo bylo změněno.' : req.query.ok === '1' ? 'Uloženo.' : '';
+      const err = String(req.query.err || '').slice(0, 200);
+      const body = CSS + `<div class="hero" style="padding-bottom:6px"><span class="eyebrow"><i></i>Můj účet</span><h1>${esc(a.name)}</h1><p>${esc(a.email || 'Správce přihlášený z HolyOS')}</p></div>${msgHtml(err, welcome)}
+        ${req.account ? `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:10px">
           <form class="card" method="post" action="/cesta/ucet/profil" style="margin:0"><h2 style="margin:0 0 4px">Moje údaje</h2><p class="small muted" style="margin:0">${esc(a.email)}</p>
             <label>Jméno a příjmení<input name="name" required maxlength="120" value="${esc(a.name)}"></label><label>Telefon<input name="phone" maxlength="40" value="${esc(a.phone || '')}"></label><label>Firma<input name="company" maxlength="160" value="${esc(a.company || '')}"></label>
             <div style="margin-top:14px"><button class="btn sec" type="submit">Uložit údaje</button></div></form>
@@ -168,20 +178,23 @@ module.exports = function createAccounts(ctx) {
       if (!req.account) return res.redirect(302, '/cesta/prihlaseni');
       const r = await hos('POST', '/' + req.account.id + '/profile', req.body || {});
       if (r.status === 200 && r.j.account) cache.set(req.account.id, { at: Date.now(), account: r.j.account });
-      res.redirect(302, '/cesta/ucet?' + (r.status === 200 ? 'ok=1' : 'err=' + encodeURIComponent(r.j.error || 'Uložení se nepodařilo.')));
+      res.redirect(302, '/cesta/ucet/nastaveni?' + (r.status === 200 ? 'ok=1' : 'err=' + encodeURIComponent(r.j.error || 'Uložení se nepodařilo.')));
     }));
     app.post('/cesta/ucet/heslo', urlenc, A(async (req, res) => {
       if (!req.account) return res.redirect(302, '/cesta/prihlaseni');
-      if (rateLimited('chpw:' + req.account.id, 8, 3600e3)) return res.redirect(302, '/cesta/ucet?err=' + encodeURIComponent('Příliš mnoho pokusů, zkuste to později.'));
+      if (rateLimited('chpw:' + req.account.id, 8, 3600e3)) return res.redirect(302, '/cesta/ucet/nastaveni?err=' + encodeURIComponent('Příliš mnoho pokusů, zkuste to později.'));
       const r = await hos('POST', '/' + req.account.id + '/password', { old: (req.body || {}).old, password: (req.body || {}).password });
-      if (r.status !== 200 || !r.j.account) return res.redirect(302, '/cesta/ucet?err=' + encodeURIComponent(r.j.error || 'Heslo se nepodařilo změnit.'));
+      if (r.status !== 200 || !r.j.account) return res.redirect(302, '/cesta/ucet/nastaveni?err=' + encodeURIComponent(r.j.error || 'Heslo se nepodařilo změnit.'));
       setSession(req, res, r.j.account);
-      res.redirect(302, '/cesta/ucet?heslo=1');
+      res.redirect(302, '/cesta/ucet/nastaveni?heslo=1');
     }));
   }
   // Odkazy účtu do horní lišty (slot <!--LACC-->)
   function headerSlot(req) {
-    if (req && req.account) return '<a class="lacc" href="/cesta/ucet" title="Můj účet">👤 ' + esc(String(req.account.name || 'Účet').split(/\s+/)[0]) + '</a>';
+    if (req && req.account) return '<details class="lmenu"><summary class="lacc" title="Můj účet">👤 ' + esc(String(req.account.name || 'Účet').split(/\s+/)[0]) + ' ▾</summary><div class="lmenu-b">'
+      + '<div class="lmenu-h"><b>' + esc(req.account.name || '') + '</b><span>' + esc(req.account.email || '') + '</span></div>'
+      + '<a href="/cesta/ucet">🧰 Moje nástroje</a><a href="/cesta/ucet/nastaveni">⚙️ Můj účet</a><form method="post" action="/cesta/odhlasit"><button type="submit">↩ Odhlásit se</button></form></div></details>'
+      + '<script>document.addEventListener("click",function(e){document.querySelectorAll("details.lmenu[open]").forEach(function(d){if(!d.contains(e.target))d.removeAttribute("open");});});</script>';
     return '<a class="lcta" href="/cesta/prihlaseni">Přihlásit se</a>';
   }
   const attach = (req, res, next) => attachInner(req, res, next).catch((e) => { console.warn('[lm-acc] relace:', e.message); req.account = null; next(); });
