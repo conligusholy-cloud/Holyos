@@ -197,16 +197,18 @@ async function runExport(from, to, opts = {}) {
   // Test: jen první ZIP (ať se zkouška neposílá v desítkách MB); doklady se neoznačí jako odeslané → automatika je pošle normálně
   const sendList = parts.length ? (opts.test ? parts.slice(0, 1) : parts) : [[]];
   for (let i = 0; i < sendList.length; i++) {
-    const p = sendList[i]; const n = i + 1, N = sendList.length;
+    const p = sendList[i]; const n = i + 1, N = Math.max(sendList.length, parts.length); // N = skutečný počet částí (i v testu, kdy jde jen 1.)
     const fname = 'doklady_' + ymd(from) + '_' + ymd(new Date(to.getTime() - 1)) + (N > 1 ? '_cast-' + n + 'z' + N : '') + '.zip';
     const zipPath = path.join(dir, fname);
     const bytes = await writeZip(zipPath, p, i === 0 ? fullCsv : listCsv(p, () => n));
     total += bytes;
     const subject = (opts.test ? '[TEST] ' : '') + 'Doklady ' + periodTxt + ' — ' + firm + (N > 1 ? ' (část ' + n + '/' + N + ')' : '');
-    const body = 'Dobrý den,\n\nv příloze zasíláme doklady za období ' + periodTxt + (N > 1 ? ' — část ' + n + ' z ' + N : '') + '.\n\n'
+    const eml = (k) => k + ' ' + (k >= 2 && k <= 4 ? 'e-mailech' : 'e-mailech');
+    const body = 'Dobrý den,\n\nv příloze zasíláme doklady za období ' + periodTxt + '.\n\n'
+      + (N > 1 ? '⚠️ Kvůli velikosti příloh posíláme doklady za toto období ve ' + eml(N) + '. Toto je ' + n + '. e-mail z ' + N + (opts.test ? ' (v testu se posílá jen tento první)' : ' — prosím zkontrolujte, že vám dorazily všechny') + '.\n\n' : '')
       + 'V této zprávě: ' + p.length + ' dokladů (' + (bytes / 1048576).toFixed(1).replace('.', ',') + ' MB).\n'
       + 'Celkem za období: ' + docs.length + ' dokladů (přijaté ' + docs.filter((d) => d.inv.direction === 'ap').length + ', vydané ' + docs.filter((d) => d.inv.direction === 'ar').length + ')' + (missing.length ? ', z toho ' + missing.length + ' bez přílohy (uvedeny v seznamu)' : '') + '.\n'
-      + 'Úplný seznam dokladů je v souboru seznam-dokladu.csv' + (N > 1 ? ' v části 1' : '') + '.\n' + (opts.test ? '\nTOTO JE TESTOVACÍ ODESLÁNÍ (jen 1. část, doklady nejsou označené jako odeslané).\n' : '') + '\nS pozdravem\n' + firm + '\n(automaticky odesláno z HolyOS)';
+      + 'Úplný seznam dokladů je v souboru seznam-dokladu.csv' + (N > 1 ? ' v části 1' : '') + '.\n' + (opts.test ? '\nTOTO JE TESTOVACÍ ODESLÁNÍ: posílá se jen 1. část' + (N > 1 ? ' z ' + N + ' (zbylých ' + (docs.length - p.length) + ' dokladů by přišlo v dalších e-mailech)' : '') + '; doklady nejsou označené jako odeslané.\n' : '') + '\nS pozdravem\n' + firm + '\n(automaticky odesláno z HolyOS)';
     const info = { part: n, file: fname, bytes, docs: p.length, sent: false };
     try {
       const r = await sendPart({ sender: cfg.sender, recipients, subject, body, file: zipPath, filename: fname });
