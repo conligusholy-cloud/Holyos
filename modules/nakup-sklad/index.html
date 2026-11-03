@@ -2132,7 +2132,11 @@
       var comps = (function () {
         var map = new Map();
         rawComps.forEach(function (co) {
-          var base = String(co.name || '').replace(/[-_]\d+\s*$/, '').trim() || String(co.name || '');
+          // Server instanční příponu „-1" už odstranil — tady ji znovu NEořezávat naslepo, jinak z „BS-D-0123" zbude „BS-D".
+          // Jen u starších importů: když název = název souboru + „-<číslo>", vrať název souboru.
+          var nm = String(co.name || '').trim();
+          var fb = String(co.path || '').split(/[\\/]/).pop().replace(/\.[^.]+$/, '').trim();
+          var base = (fb && nm.toLowerCase() !== fb.toLowerCase() && new RegExp('^' + fb.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[-_]\\d+$', 'i').test(nm)) ? fb : nm;
           var key = base.toLowerCase() + '|' + (co.configuration || '') + '|' + ((co.material && co.material.code) || '');
           var q = Number(co.quantity) || 1;
           if (map.has(key)) { map.get(key).quantity += q; }
