@@ -112,6 +112,17 @@ async function status() {
   return { configured: configured(), running, last, count: list.length, newest: list.length ? list[list.length - 1] : null, total_bytes: list.reduce((s, o) => s + (o.size || 0), 0) };
 }
 
+// Stažení zašifrované zálohy (pro test obnovy). Bez klíče je soubor nečitelný. key = konkrétní záloha, jinak nejnovější.
+async function openDownload(key) {
+  if (!configured()) throw Object.assign(new Error('Zálohy nejsou nakonfigurované'), { status: 503 });
+  const list = await listAll();
+  const item = key ? list.find((o) => o.key === key) : list[list.length - 1];
+  if (!item) throw Object.assign(new Error('Záloha nenalezena'), { status: 404 });
+  const { GetObjectCommand } = require('@aws-sdk/client-s3');
+  const r = await r2.getClient().send(new GetObjectCommand({ Bucket: process.env.R2_BACKUP_BUCKET, Key: item.key }));
+  return { stream: r.Body, size: item.size, name: item.key.slice(PREFIX.length) };
+}
+
 // Plánovač: každý den ve 2:30 (Europe/Prague); při startu doběhne, pokud poslední úspěšná záloha je starší než 26 h
 function start() {
   if (!configured()) { console.warn('[backup] zálohy vypnuté — chybí BACKUP_ENC_KEY / R2_BACKUP_BUCKET / R2_* / DATABASE_URL'); return; }
@@ -133,4 +144,4 @@ function start() {
   console.log('[backup] plánovač zapnut (denně 2:30)');
 }
 
-module.exports = { runBackup, status, start, configured, _encryptFile: encryptFile };
+module.exports = { runBackup, status, start, configured, openDownload, _encryptFile: encryptFile };

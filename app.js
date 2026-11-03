@@ -792,6 +792,20 @@ app.post('/api/admin/backup/run', require('./middleware/auth').requireAuth, requ
   B.runBackup('manual').catch(() => {}); // běží na pozadí, výsledek je ve /status
   res.status(202).json({ ok: true, message: 'Záloha spuštěna na pozadí. Výsledek zjistíš na /api/admin/backup/status.' });
 });
+// Stažení zašifrované zálohy (jen super admin) — /api/admin/backup/download[?key=db-backups/...]; bez ?key nejnovější
+app.get('/api/admin/backup/download', require('./middleware/auth').requireAuth, require('./middleware/auth').requireSuperAdmin, async (req, res, next) => {
+  try {
+    const d = await require('./services/backup/db-backup').openDownload(req.query.key ? String(req.query.key) : null);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Length', d.size);
+    res.setHeader('Content-Disposition', 'attachment; filename="' + d.name.replace(/[^\w.\-]/g, '_') + '"');
+    d.stream.on('error', next);
+    d.stream.pipe(res);
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ error: e.message });
+    next(e);
+  }
+});
 app.get('/api/admin/secrets-health', require('./middleware/auth').requireAuth, require('./middleware/auth').requireSuperAdmin, async (req, res, next) => {
   try { res.json(await require('./services/secrets-health').runAll()); } catch (err) { next(err); }
 });
