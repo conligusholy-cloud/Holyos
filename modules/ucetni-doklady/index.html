@@ -330,6 +330,7 @@
         <div style="display:flex; gap:8px;">
           <button class="btn btn-secondary" id="btn-fetch-mails" onclick="fetchEmailsNow()" title="Stáhne nové faktury z IMAP schránky a spustí OCR">📧 Zkontrolovat maily</button>
           <button class="btn btn-secondary" onclick="openIngestList()" title="Přehled přijatých e-mailů a jejich OCR stav">📥 Příchozí e-maily</button>
+          <button class="btn btn-secondary" onclick="openExports()" title="Automatické odesílání příloh dokladů účetním (ZIP, období, historie)">📦 Exporty</button>
           <button class="btn btn-secondary" id="btn-ingest-stats" onclick="openIngestStats()" title="Jednodenní statistika příjmu faktur e-mailem, log problémů a AI návrh nastavení">📊 Dnes: …</button>
           <button class="btn btn-primary" onclick="openCreateModal('received')">+ Přijatá</button>
           <button class="btn btn-primary" onclick="openCreateModal('issued')">+ Vydaná</button>
@@ -6091,6 +6092,108 @@
       // Počkáme chvíli, ať se loadInvoices stihne, pak otevřeme detail
       setTimeout(() => openDetail(invoiceId), 600);
     }
+  })();
+  </script>
+  <script>
+  // ── 📦 Exporty dokladů pro účetní: nastavení období + automatické odesílání ZIPů + historie ──
+  (function(){
+    var X = { cfg: null };
+    function ex(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+    function d8(d){ if(!d) return '—'; var x=new Date(d); return x.toLocaleDateString('cs-CZ'); }
+    function dt(d){ if(!d) return '—'; var x=new Date(d); return x.toLocaleDateString('cs-CZ')+' '+x.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'}); }
+    function mb(b){ return ((Number(b)||0)/1048576).toFixed(1).replace('.',',')+' MB'; }
+    function iso(d){ var x=new Date(d); return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); }
+    var ST = { sent:['✅ Odesláno','#22c55e'], partial:['⚠️ Částečně','#eab308'], failed:['❌ Chyba','#ef4444'], empty:['— Žádné doklady','#9aa0ad'], pending:['… Probíhá','#60a5fa'] };
+    var TRG = { auto:'automaticky', manual:'ručně', resend:'znovu' };
+    window.openExports = async function(){
+      document.getElementById('modal-root').insertAdjacentHTML('beforeend',
+        '<div class="modal-overlay" id="exp-ov" onclick="if(event.target===this)closeModal()"><div class="modal wide" style="max-width:1100px;width:96vw">'
+        + '<h2 style="margin-top:0">📦 Exporty dokladů pro účetní</h2>'
+        + '<div class="note" style="font-size:13px;color:var(--text2,#9aa);margin:-4px 0 14px">Přílohy dokladů založených v daném období se zabalí do ZIPu (víc ZIPů, když by e-mail přesáhl max. velikost) a odešlou účetním. Každý ZIP obsahuje <b>seznam-dokladu.csv</b>. Doklad, který už jednou odešel, se automaticky znovu neposílá.</div>'
+        + '<div id="exp-cfg">Načítám…</div><hr style="border:none;border-top:1px solid rgba(255,255,255,.08);margin:16px 0">'
+        + '<h3 style="margin:0 0 8px">Ruční export</h3><div id="exp-man"></div><hr style="border:none;border-top:1px solid rgba(255,255,255,.08);margin:16px 0">'
+        + '<h3 style="margin:0 0 8px">Historie odeslání</h3><div id="exp-hist">Načítám…</div>'
+        + '<div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div></div></div>');
+      await expLoadCfg(); expRenderManual(); expLoadHist();
+    };
+    async function expLoadCfg(){
+      var r = await api('GET','/api/accounting/exports/config'); var box=document.getElementById('exp-cfg'); if(!box) return;
+      if(r.status!==200){ box.innerHTML='<span style="color:#ef4444">Chyba načtení: '+ex(r.data&&r.data.error||r.status)+'</span>'; return; }
+      var c = X.cfg = r.data.config, iv = r.data.intervals || {}, np = r.data.next;
+      var row = function(lbl, html, hint){ return '<div class="modal-row"><label>'+lbl+'</label>'+html+(hint?'<div style="font-size:11.5px;color:var(--text2,#9aa);margin-top:3px">'+hint+'</div>':'')+'</div>'; };
+      box.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px">'
+        + row('Automatické odesílání', '<label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="exp-en"'+(c.enabled?' checked':'')+'> zapnuto</label>')
+        + row('E-mail účetní (více oddělte čárkou)', '<input id="exp-to" value="'+ex(c.recipients)+'" placeholder="ucetni@firma.cz">')
+        + row('Od kdy', '<input type="date" id="exp-from" value="'+ex(c.start_from||'')+'">', 'Od tohoto dne se počítají období. Změnou se období začnou počítat znovu.')
+        + row('Interval', '<select id="exp-iv">'+Object.keys(iv).map(function(k){return '<option value="'+k+'"'+(k===c.interval?' selected':'')+'>'+ex(iv[k])+'</option>';}).join('')+'</select>')
+        + row('Odeslat v (hodina)', '<input type="number" min="0" max="23" id="exp-hr" value="'+ex(c.send_hour)+'">', 'Po skončení období v tuto hodinu.')
+        + row('Max. velikost jednoho e-mailu (MB)', '<input type="number" min="2" max="30" step="1" id="exp-mb" value="'+ex(c.max_mb)+'">', 'Větší objem se rozdělí do více e-mailů (část 1/2, 2/2…). Běžný limit schránek je 20–25 MB.')
+        + row('Odesílatel', '<input id="exp-snd" value="'+ex(c.sender)+'" placeholder="faktury@bestseries.cz">', 'Schránka M365, ze které se posílá.')
+        + row('Doklady', '<label style="display:inline-flex;gap:6px;margin-right:14px"><input type="checkbox" id="exp-ap"'+((c.directions||[]).indexOf('ap')>=0?' checked':'')+'> přijaté</label><label style="display:inline-flex;gap:6px;margin-right:14px"><input type="checkbox" id="exp-ar"'+((c.directions||[]).indexOf('ar')>=0?' checked':'')+'> vydané</label><label style="display:inline-flex;gap:6px"><input type="checkbox" id="exp-pf"'+(c.include_proforma?' checked':'')+'> i zálohové</label>')
+        + '</div>'
+        + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px"><button class="btn btn-primary" onclick="expSaveCfg()">💾 Uložit nastavení</button><span id="exp-cfg-msg" style="font-size:13px"></span>'
+        + '<span style="margin-left:auto;font-size:13px;color:var(--text2,#9aa)">'+(np ? 'Příští automatické odeslání: <b>'+d8(np.from)+' – '+d8(new Date(new Date(np.to).getTime()-1))+'</b> → '+dt(np.sendAt)+(c.enabled?'':' (vypnuto)') : 'Nastavte „Od kdy" pro automatické odesílání.')+'</span></div>';
+    }
+    window.expSaveCfg = async function(){
+      var m=document.getElementById('exp-cfg-msg'); m.textContent='Ukládám…';
+      var dirs=[]; if(document.getElementById('exp-ap').checked) dirs.push('ap'); if(document.getElementById('exp-ar').checked) dirs.push('ar');
+      var body={ enabled:document.getElementById('exp-en').checked, recipients:document.getElementById('exp-to').value, start_from:document.getElementById('exp-from').value||null, interval:document.getElementById('exp-iv').value, send_hour:document.getElementById('exp-hr').value, max_mb:document.getElementById('exp-mb').value, sender:document.getElementById('exp-snd').value, directions:dirs, include_proforma:document.getElementById('exp-pf').checked };
+      if(body.enabled && !body.recipients.trim()){ m.innerHTML='<span style="color:#ef4444">Vyplňte e-mail účetní.</span>'; return; }
+      if(body.enabled && !body.start_from){ m.innerHTML='<span style="color:#ef4444">Vyplňte „Od kdy".</span>'; return; }
+      var r=await api('PUT','/api/accounting/exports/config',body);
+      if(r.status!==200){ m.innerHTML='<span style="color:#ef4444">'+ex(r.data&&r.data.error||'Chyba')+'</span>'; return; }
+      await expLoadCfg(); var m2=document.getElementById('exp-cfg-msg'); if(m2) m2.innerHTML='<span style="color:#22c55e">Uloženo.</span>';
+    };
+    function expRenderManual(){
+      var box=document.getElementById('exp-man'); if(!box) return; var now=new Date(), wk=new Date(now); wk.setDate(now.getDate()-7);
+      box.innerHTML='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
+        + '<div><label style="font-size:12px;display:block">Založeno od</label><input type="date" id="exm-from" value="'+iso(wk)+'"></div>'
+        + '<div><label style="font-size:12px;display:block">do (včetně)</label><input type="date" id="exm-to" value="'+iso(now)+'"></div>'
+        + '<div style="flex:1;min-width:220px"><label style="font-size:12px;display:block">Příjemci (prázdné = z nastavení)</label><input id="exm-rcp" placeholder="'+ex(X.cfg&&X.cfg.recipients||'')+'" style="width:100%"></div>'
+        + '<label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="exm-all"> i už odeslané doklady</label>'
+        + '<button class="btn btn-secondary" onclick="expPreview()">🔍 Náhled</button><button class="btn btn-primary" onclick="expRun()">📤 Zabalit a odeslat</button></div><div id="exm-msg" style="margin-top:8px;font-size:13px"></div>';
+    }
+    function manRange(){ return { from:document.getElementById('exm-from').value, to:document.getElementById('exm-to').value, include_sent:document.getElementById('exm-all').checked }; }
+    window.expPreview = async function(){
+      var m=document.getElementById('exm-msg'), q=manRange(); m.textContent='Počítám…';
+      var r=await api('GET','/api/accounting/exports/preview?from='+q.from+'&to='+q.to+(q.include_sent?'&include_sent=1':''));
+      if(r.status!==200){ m.innerHTML='<span style="color:#ef4444">'+ex(r.data&&r.data.error||'Chyba')+'</span>'; return; }
+      var p=r.data; m.innerHTML = p.doc_count ? ('Doklady k odeslání: <b>'+p.doc_count+'</b> (s přílohou '+p.with_file+(p.missing?', <span style="color:#eab308">bez přílohy '+p.missing+'</span>':'')+') · odhad <b>'+mb(p.est_bytes)+'</b> → <b>'+p.est_parts+'</b> '+(p.est_parts===1?'e-mail':'e-maily')+' (max. '+p.max_mb+' MB)') : 'V tomto období nejsou žádné neodeslané doklady.';
+    };
+    window.expRun = async function(){
+      var q=manRange(), rcp=document.getElementById('exm-rcp').value.trim(), to=rcp||(X.cfg&&X.cfg.recipients)||'';
+      if(!to) return alert('Vyplňte příjemce nebo e-mail účetní v nastavení.');
+      if(!confirm('Odeslat doklady založené '+q.from+' – '+q.to+' na: '+to+' ?')) return;
+      var m=document.getElementById('exm-msg'); m.textContent='Balím a odesílám… (může to trvat i minutu)';
+      var r=await api('POST','/api/accounting/exports/run',{ from:q.from, to:q.to, include_sent:q.include_sent, recipients:rcp||undefined });
+      if(r.status!==200){ m.innerHTML='<span style="color:#ef4444">'+ex(r.data&&r.data.error||'Chyba')+'</span>'; return; }
+      var s=ST[r.data.status]||[r.data.status,'']; m.innerHTML='<span style="color:'+s[1]+'">'+s[0]+'</span> · '+r.data.doc_count+' dokladů'+(r.data.parts?' · '+r.data.parts.length+' ZIP':'');
+      expLoadHist();
+    };
+    async function expLoadHist(){
+      var box=document.getElementById('exp-hist'); if(!box) return; var r=await api('GET','/api/accounting/exports');
+      if(r.status!==200){ box.innerHTML='<span style="color:#ef4444">Chyba načtení</span>'; return; }
+      var L=r.data||[]; if(!L.length){ box.innerHTML='<div style="color:var(--text2,#9aa);font-size:13px">Zatím nic neodešlo.</div>'; return; }
+      box.innerHTML='<div style="overflow:auto;max-height:340px"><table class="data-table" style="width:100%;font-size:13px"><thead><tr><th>Odesláno</th><th>Období (založeno)</th><th>Komu</th><th>Doklady</th><th>Soubory</th><th>Stav</th><th></th></tr></thead><tbody>'
+        + L.map(function(e){ var s=ST[e.status]||[e.status,'']; var parts=Array.isArray(e.parts)?e.parts:[];
+          return '<tr><td>'+dt(e.created_at)+'<div style="font-size:11px;color:var(--text2,#9aa)">'+ex(TRG[e.run_trigger]||e.run_trigger||'')+'</div></td><td>'+d8(e.period_from)+' – '+d8(new Date(new Date(e.period_to).getTime()-1))+'</td><td style="max-width:200px;word-break:break-all">'+ex(e.recipients)+'</td>'
+            + '<td><a href="#" onclick="expDetail('+e.id+');return false">'+e.doc_count+' dokladů</a>'+(e.missing_count?'<div style="font-size:11px;color:#eab308">'+e.missing_count+' bez přílohy</div>':'')+'</td>'
+            + '<td>'+(parts.map(function(p){ return '<a href="/api/accounting/exports/'+e.id+'/download?part='+p.part+'" title="'+ex(p.file)+'">⬇ ZIP '+(parts.length>1?p.part+'/'+parts.length:'')+'</a> <span style="font-size:11px;color:var(--text2,#9aa)">'+mb(p.bytes)+'</span>'+(p.sent?'':' <span style="color:#ef4444" title="'+ex(p.error||'')+'">✗</span>'); }).join('<br>')||'—')+'</td>'
+            + '<td><span style="color:'+s[1]+';font-weight:700">'+s[0]+'</span>'+(e.error?'<div style="font-size:11px;color:#ef4444;max-width:220px">'+ex(e.error).slice(0,160)+'</div>':'')+'</td>'
+            + '<td>'+((e.status==='failed'||e.status==='partial')?'<button class="btn btn-secondary btn-sm" onclick="expResend('+e.id+',false)">↻ Odeslat chybějící</button>':'')+(parts.length?'<button class="btn btn-secondary btn-sm" onclick="expResend('+e.id+',true)" title="Znovu poslat všechny ZIPy">↻ Znovu</button>':'')+'</td></tr>'; }).join('')
+        + '</tbody></table></div><div id="exp-det" style="margin-top:10px"></div>';
+    }
+    window.expResend = async function(id, all){
+      if(!confirm(all?'Znovu odeslat všechny ZIPy tohoto exportu?':'Odeslat neodeslané části?')) return;
+      var r=await api('POST','/api/accounting/exports/'+id+'/resend',{ all:!!all }); if(r.status!==200) alert('Chyba: '+(r.data&&r.data.error||r.status)); expLoadHist();
+    };
+    window.expDetail = async function(id){
+      var box=document.getElementById('exp-det'); box.textContent='Načítám…'; var r=await api('GET','/api/accounting/exports/'+id);
+      if(r.status!==200){ box.textContent='Chyba'; return; } var e=r.data;
+      box.innerHTML='<div style="font-weight:700;margin-bottom:6px">Doklady v exportu #'+e.id+' ('+e.items.length+')</div><div style="overflow:auto;max-height:300px"><table class="data-table" style="width:100%;font-size:12.5px"><thead><tr><th>ZIP</th><th>Směr</th><th>Číslo</th><th>Ext. číslo</th><th>Firma</th><th>Vystaveno</th><th style="text-align:right">Částka</th><th>Soubor</th><th>Odesláno</th></tr></thead><tbody>'
+        + e.items.map(function(i){ return '<tr><td>'+(i.part||'—')+'</td><td>'+(i.direction==='ap'?'Přijatá':'Vydaná')+'</td><td><a href="#" onclick="closeModal();openDetail('+i.invoice_id+');return false">'+ex(i.invoice_number)+'</a></td><td>'+ex(i.external_number||'')+'</td><td>'+ex(i.company_name||'')+'</td><td>'+d8(i.date_issued)+'</td><td style="text-align:right">'+(i.total!=null?Number(i.total).toLocaleString('cs-CZ',{minimumFractionDigits:2})+' '+ex(i.currency||''):'')+'</td><td>'+(i.missing?'<span style="color:#eab308">bez přílohy</span>':ex(i.file_name||''))+'</td><td>'+(i.sent?'✅':'✗')+'</td></tr>'; }).join('')
+        + '</tbody></table></div>';
+    };
   })();
   </script>
 </body>
