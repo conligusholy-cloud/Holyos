@@ -355,7 +355,7 @@ root.querySelector('.mt-usrreload').onclick=usrLoad;
 // Schůzka patří do období podle TERMÍNU, ne podle data domluvení, aby byl obojí
 // údaj ve stejném sloupci. Úspěšnost = proběhlé / vyřešené (nadcházející se nepočítají).
 var statGroup='month', statData=null, statBusy=false;
-var STAT_N={week:12,month:12,year:5};
+var STAT_N={day:14,week:12,month:12,year:5};
 function statLoad(){
   var box=root.querySelector('.mt-statwrap');
   if(statBusy)return; statBusy=true;
@@ -478,7 +478,7 @@ function meetingsPage({ admin, holyosUrl, error }) {
     </div>
     <div class="mt-stat" style="display:none">
       <div class="mt-bar"><h2>📊 Statistiky schůzek</h2><span style="flex:1"></span>
-        <div class="mt-seg"><button data-sgrp="week">Týdny</button><button data-sgrp="month" class="on">Měsíce</button><button data-sgrp="year">Roky</button></div></div>
+        <div class="mt-seg"><button data-sgrp="day">Dny</button><button data-sgrp="week">Týdny</button><button data-sgrp="month" class="on">Měsíce</button><button data-sgrp="year">Roky</button></div></div>
       <p class="muted small" style="margin:-6px 0 14px">Schůzka se počítá do období, na které byl <b>termín</b> (ne kdy se domluvila). Data jsou společná s HolyOS → Prodejní objednávky → Termíny.</p>
       <div class="mt-statwrap card"></div>
     </div>

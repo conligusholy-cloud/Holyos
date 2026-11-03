@@ -89,7 +89,7 @@ function trackServer(req, event, props) {
   } catch (e) { /* best-effort */ }
 }
 const ACC = require('./lm-account')({ HOLYOS_URL, LM_SECRET, PUBLIC_URL, rateLimited, cookies, ckDomain, sendMail: (p) => sendConfirmMail(p), adminOf: (req) => adminOf(req), render: (req, html) => lite(html, req), trackServer });
-app.use((req, res, next) => (/^\/(cesta|api\/location|api\/cesta|uvod|$)/.test(req.path) ? ACC.attach(req, res, next) : next()));
+app.use((req, res, next) => (/^\/(cesta|api\/location|api\/cesta|api\/vc|videocall|uvod|$)/.test(req.path) ? ACC.attach(req, res, next) : next()));
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /api/\n'));
 // Úvodní stránka značky (home-page.js). Náhled vždy na /uvod; na / až s LM_HOME_LIVE=1 (do té doby / → /cesta jako dřív).
@@ -145,7 +145,7 @@ const SID_RE = /^lm-[a-z0-9]{4,60}$/;
 const tlOk = (t, l) => (t && /^[0-9]+\.[A-Za-z0-9._-]{8,200}$/.test(String(t))) || (l && /^[0-9a-z]+\.[A-Za-z0-9_-]{4,40}$/.test(String(l)));
 // Každá stránka: zapamatuj jedinečný odkaz (t/l) a zajisti trvalé sid (zapojeno nahoře před stránkami: app.use(lmIdentity))
 function lmIdentity(req, res, next) {
-  if (req.method === 'GET' && /^\/(cesta|pl|ekonomika|uvod|compounder|pradlomaty|hledat|zhodnotit|$)/.test(req.path)) {
+  if (req.method === 'GET' && /^\/(cesta|pl|ekonomika|uvod|compounder|pradlomaty|hledat|zhodnotit|videocall|$)/.test(req.path)) {
     const ck = cookies(req); const t = req.query.t, l = req.query.l;
     if (tlOk(t, l)) setCk(res, 'lm_tl', JSON.stringify({ t: t || '', l: l || '' }), true);
     if (!SID_RE.test(ck.lm_sid || '')) setCk(res, 'lm_sid', 'lm-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10), false);
@@ -377,6 +377,8 @@ app.get('/img/product/:id(\\d+)', async (req, res) => {
 });
 // ── Aplikace lokalit (/cesta/hledat, /cesta/zhodnotit) ──
 ACC.mount(app);
+// Videohovor s kompetentní osobou (/videocall) — WebRTC + SSE, upozornění přes HolyOS (Velín)
+require('./lm-videocall')(app, { HOLYOS_URL, LM_SECRET, rateLimited, render: (req, html) => lite(html, req), trackServer });
 require('./lm-apps')(app, { HOLYOS_URL, rateLimited, fetchProducts, requireAccount: ACC.requireAccount, render: (req, html) => lite(html, req), trackServer });
 
 app.use((req, res) => res.status(404).type('text/plain').send('Stránka nenalezena'));

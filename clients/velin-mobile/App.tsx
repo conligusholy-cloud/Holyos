@@ -27,7 +27,7 @@ import {
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AppState, Platform, Text, TouchableOpacity, View } from 'react-native';
+import { AppState, Linking, Platform, Text, TouchableOpacity, View } from 'react-native';
 import * as Updates from 'expo-updates';
 import * as Notifications from 'expo-notifications';
 import Gate from './screens/Gate';
@@ -133,6 +133,11 @@ export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 // pushne ChatThread na zásobník.
 function handleNotificationTap(data: any) {
   if (!data || typeof data !== 'object') return;
+  // Videohovor z laundromats.eu → otevřít v prohlížeči (kamera + mikrofon přes WebRTC, bez nového buildu aplikace)
+  if (data.type === 'videocall' && typeof data.url === 'string' && /^https:\/\/(www\.)?laundromats\.eu\/videocall\/agent\//.test(data.url)) {
+    Linking.openURL(data.url).catch(() => {});
+    return;
+  }
 
   // Routing podle typu/kind notifikace:
   // - kind='evening_reflection' (velin-scheduler 16:30) → EveningReflection modal

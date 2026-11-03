@@ -715,7 +715,7 @@ router.get('/bs2/meetings', async (req, res, next) => {
     })));
   } catch (err) { next(err); }
 });
-// GET /api/auth/bs2/meetings-stats?group=week|month|year&n=12
+// GET /api/auth/bs2/meetings-stats?group=day|week|month|year&n=12
 // Statistika schuzek pro administraci Laundromats: kolik schuzek na dane obdobi pripadlo
 // a kolik z nich probehlo. Schuzka patri do obdobi podle TERMINU (slot.starts_at), ne podle
 // data domluveni -- "domluveno" i "probehlo" jsou tak ve stejnem sloupci a da se z nich cist uspesnost.
@@ -724,8 +724,9 @@ router.get('/bs2/meetings', async (req, res, next) => {
 // Nadchazejici schuzky se do uspesnosti nepocitaji -- vysledek jeste neni znamy.
 // Nase vlastni (testovaci) rezervace podle e-mailove domeny se nepocitaji; jejich pocet vracime zvlast.
 const MST_TZ = 'Europe/Prague';
-const MST_MON3 = ['led', 'uno', 'bre', 'dub', 'kve', 'cvn', 'cvc', 'srp', 'zar', 'rij', 'lis', 'pro'];
-const MST_MON = ['leden', 'unor', 'brezen', 'duben', 'kveten', 'cerven', 'cervenec', 'srpen', 'zari', 'rijen', 'listopad', 'prosinec'];
+const MST_DOW = ['ne', 'po', 'út', 'st', 'čt', 'pá', 'so'];
+const MST_MON3 = ['led', 'úno', 'bře', 'dub', 'kvě', 'čvn', 'čvc', 'srp', 'zář', 'říj', 'lis', 'pro'];
+const MST_MON = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
 // Datum tak, jak ho v dany okamzik vidi Praha (server bezi v UTC).
 function mstParts(d) {
   const f = new Intl.DateTimeFormat('en-CA', { timeZone: MST_TZ, year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })
@@ -740,6 +741,13 @@ const mst2 = (n) => String(n).padStart(2, '0');
 // Klic obdobi + popisky do grafu. Tyden zacina pondelim.
 function mstBucket(group, p) {
   if (group === 'year') return { key: String(p.y), label: String(p.y), title: String(p.y) };
+  if (group === 'day') {
+    return {
+      key: p.y + '-' + mst2(p.m) + '-' + mst2(p.d),
+      label: p.d + '. ' + p.m + '.',
+      title: MST_DOW[p.dow] + ' ' + p.d + '. ' + p.m + '. ' + p.y,
+    };
+  }
   if (group === 'week') {
     const mon = mstYmd(mstNoon(p.y, p.m, p.d) - ((p.dow + 6) % 7) * 86400000);
     const sun = mstYmd(mstNoon(mon.y, mon.m, mon.d) + 6 * 86400000);
@@ -757,7 +765,10 @@ function mstBuckets(group, n) {
   const out = [];
   for (let i = n - 1; i >= 0; i--) {
     if (group === 'year') out.push(mstBucket('year', { y: now.y - i, m: 1, d: 1, dow: 0 }));
-    else if (group === 'week') {
+    else if (group === 'day') {
+      const t = mstNoon(now.y, now.m, now.d) - i * 86400000; const x = mstYmd(t);
+      out.push(mstBucket('day', { y: x.y, m: x.m, d: x.d, dow: new Date(t).getUTCDay() }));
+    } else if (group === 'week') {
       const x = mstYmd(mstNoon(now.y, now.m, now.d) - (((now.dow + 6) % 7) + i * 7) * 86400000);
       out.push(mstBucket('week', { y: x.y, m: x.m, d: x.d, dow: 1 }));
     } else {
@@ -791,9 +802,9 @@ function mstInternal(email) {
 router.get('/bs2/meetings-stats', async (req, res, next) => {
   try {
     if (!verifyMeetingsToken(req, res)) return;
-    const group = ['week', 'month', 'year'].includes(String(req.query.group)) ? String(req.query.group) : 'month';
-    const nMax = group === 'year' ? 10 : group === 'week' ? 26 : 24;
-    const n = Math.max(1, Math.min(nMax, parseInt(req.query.n, 10) || (group === 'year' ? 5 : 12)));
+    const group = ['day', 'week', 'month', 'year'].includes(String(req.query.group)) ? String(req.query.group) : 'month';
+    const nMax = group === 'year' ? 10 : group === 'week' ? 26 : group === 'day' ? 62 : 24;
+    const n = Math.max(1, Math.min(nMax, parseInt(req.query.n, 10) || (group === 'year' ? 5 : group === 'day' ? 14 : 12)));
     const buckets = mstBuckets(group, n);
     const idx = {}; buckets.forEach((b, i) => { idx[b.key] = i; });
     // Rozsah dotazu delame s rezervou na obou stranach; presne zatridi az klic obdobi v prazskem case.
@@ -804,7 +815,8 @@ router.get('/bs2/meetings-stats', async (req, res, next) => {
         : new Date(Date.UTC(+first.slice(0, 4), +first.slice(5, 7) - 1, +first.slice(8, 10)) - 2 * 86400000);
     const to = group === 'year' ? new Date(Date.UTC(nowP.y + 1, 0, 1) + 2 * 86400000)
       : group === 'month' ? new Date(Date.UTC(nowP.y, nowP.m, 1) + 2 * 86400000)
-        : new Date(Date.now() + 9 * 86400000);
+        : group === 'day' ? new Date(Date.now() + 2 * 86400000)
+          : new Date(Date.now() + 9 * 86400000);
     const rows = await prisma.meetingReservation.findMany({
       where: { slot: { starts_at: { gte: from, lt: to } } },
       select: { status: true, email: true, slot: { select: { starts_at: true } } },
@@ -967,6 +979,8 @@ function lmApiAuth(req, res) {
 }
 // Účty registrovaných uživatelů laundromats.eu (servisní JWT z Laundromats)
 router.use('/lm/accounts', require('./lm-accounts.routes'));
+// Videohovory z laundromats.eu/videocall (upozornění Jan + Tomáš, TURN servery)
+router.use('/lm/vc', require('./lm-videocall.routes'));
 router.get('/lm/products', async (req, res, next) => {
   try {
     if (!lmApiAuth(req, res)) return;
