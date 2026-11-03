@@ -2062,7 +2062,8 @@ app.post('/admin/2fa', wrap(async (req, res) => {
   if (!secret) { const r = await q("SELECT value FROM app_settings WHERE key=$1", ['admin_totp_pending_' + s.pid]); secret = decSecret((r.rows[0] || {}).value); pending = true; }
   if (!secret || !totpOk(secret, req.body.code)) return res.redirect('/admin/2fa?err=1');
   if (pending) { await q("INSERT INTO app_settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", ['admin_totp_' + s.pid, encSecret(secret)]); await q("DELETE FROM app_settings WHERE key=$1", ['admin_totp_pending_' + s.pid]); await log(s, '2fa_setup', { pid: s.pid }); }
-  setCookie(req, res, ADMIN_COOKIE, Object.assign({}, s, { tfa: true, iat: undefined, exp: undefined }), 12 * 3600);
+  const fresh = Object.assign({}, s, { tfa: true }); delete fresh.iat; delete fresh.exp; // jwt.sign odmítne payload s iat/exp (i undefined)
+  setCookie(req, res, ADMIN_COOKIE, fresh, 12 * 3600);
   res.redirect('/admin');
 }));
 
