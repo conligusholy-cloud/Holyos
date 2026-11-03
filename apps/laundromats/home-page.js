@@ -9,16 +9,16 @@ const LANGS = ['cs'];
 const T = {
   cs: {
     seoTitle: 'Laundromats | Vlastní prádlomat a možnosti spolupráce',
-    seoDesc: 'Poznejte podnikání se samoobslužnými prádlomaty. Laundromats staví na zkušenostech z přibližně 70 provozů v ČR. Proberte s námi svůj záměr.',
+    seoDesc: 'Poznejte podnikání se samoobslužnými prádlomaty. Laundromats staví na zkušenostech z více než 70 provozů v ČR. Proberte s námi svůj záměr.',
     skip: 'Přeskočit na obsah',
     nav: { why: 'Proč prádlomat', paths: 'Možnosti spolupráce', network: 'Naše síť', start: 'Jak začít', faq: 'Časté otázky', cta: 'Probrat můj záměr', menu: 'Menu', close: 'Zavřít menu' },
     hero: {
-      eyebrow: 'Zkušenosti z přibližně 70 vlastních provozů v ČR',
+      eyebrow: 'Zkušenosti z více než 70 vlastních provozů v ČR',
       h1a: 'Vlastní prádlomat.', h1b: 'Podnikání podle vašeho života.',
       sub: 'Poznejte možnosti vlastnictví a provozování samoobslužného prádlomatu. S Laundromats získáte praktický pohled od lidí, kteří tuto službu sami každý den provozují.',
       cta1: 'Chci vlastní prádlomat', cta2: 'Poznat možnosti spolupráce',
       points: ['Zkušenosti ze skutečného provozu', 'Samoobslužné praní a sušení', 'Možnost postupného rozvoje'],
-      card: 'Přibližně 70 prádlomatů, které sami provozujeme v České republice.',
+      card: 'Přes 70 prádlomatů, které sami provozujeme v České republice.',
       imgAlt: 'Samoobslužný venkovní prádlomat s pračkou a sušičkou',
       imgNote: 'Ilustrační snímek zařízení',
     },
@@ -42,13 +42,13 @@ const T = {
     },
     network: {
       kicker: 'Naše síť', h: 'Zkušenosti, které vznikají každý den v provozu.',
-      lead: 'V České republice sami provozujeme přibližně 70 prádlomatů. Známe jejich každodenní fungování, péči o zařízení i otázky zákazníků. Na těchto zkušenostech stavíme Laundromats.',
+      lead: 'V České republice sami provozujeme přes 70 prádlomatů. Známe jejich každodenní fungování, péči o zařízení i otázky zákazníků. Na těchto zkušenostech stavíme Laundromats.',
       areas: [
         ['Lokalita', 'Dostupnost, viditelnost a okolí tvoří důležitou součást každého záměru.'],
         ['Péče o provoz', 'Čistota, doplňování prostředků a řešení závad patří k fungující službě.'],
         ['Zákaznická zkušenost', 'Srozumitelná obsluha a dostupná pomoc jsou součástí kvalitního provozu.'],
       ],
-      stat: 'přibližně', statUnit: 'prádlomatů v ČR, které sami provozujeme',
+      stat: 'přes', statUnit: 'prádlomatů v ČR, které sami provozujeme',
       note: 'Zkušenosti z českého trhu. Podmínky v jiných zemích posuzujeme vždy podle místní situace.',
       gallery: 'Fotografie skutečných provozoven doplníme',
       map: 'Mapa sítě bude doplněna po zveřejnění seznamu lokalit',
@@ -301,9 +301,9 @@ function homePage(lang) {
 
   return '<!doctype html><html lang="' + lg + '" class="no-js"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
     + '<title>' + esc(L.seoTitle) + '</title><meta name="description" content="' + esc(L.seoDesc) + '">'
-    + '<meta property="og:title" content="' + esc(L.seoTitle) + '"><meta property="og:description" content="' + esc(L.seoDesc) + '"><meta property="og:type" content="website"><meta property="og:image" content="/img/pradlomat-mini.webp">'
+    + '<meta property="og:title" content="' + esc(L.seoTitle) + '"><meta property="og:description" content="' + esc(L.seoDesc) + '"><meta property="og:type" content="website"><meta property="og:image" content="/img/pradlomat-flex.webp">'
     + '<meta name="theme-color" content="#04060c"><link rel="icon" href="/favicon.svg" type="image/svg+xml">'
-    + '<link rel="preload" as="image" href="/img/pradlomat-mini.webp" fetchpriority="high">'
+    + '<link rel="preload" as="image" href="/img/pradlomat-flex.webp" fetchpriority="high">'
     + '<style>' + CSS + '</style></head><body>'
     + '<a class="skip" href="#obsah">' + esc(L.skip) + '</a>'
     // ── hlavička ──
@@ -322,8 +322,8 @@ function homePage(lang) {
     + '<ul class="pts rv">' + L.hero.points.map((p) => '<li>' + svg('check', 18) + esc(p) + '</li>').join('') + '</ul></div>'
     + '<div class="visual rv"><div class="glow"></div><div class="ground"></div>'
     // PH: nahradit fotografií skutečného venkovního prádlomatu v reálném prostředí (WebP, ~1600 px, < 250 kB)
-    + '<img src="/img/pradlomat-mini.webp" width="1000" height="820" alt="' + esc(L.hero.imgAlt) + '" fetchpriority="high" decoding="async"><span class="note">' + esc(L.hero.imgNote) + '</span>'
-    + '<div class="statcard"><b class="grad">~70</b><p>' + esc(L.hero.card) + '</p></div></div></div></section>'
+    + '<img src="/img/pradlomat-flex.webp" width="1100" height="896" alt="' + esc(L.hero.imgAlt) + '" fetchpriority="high" decoding="async"><span class="note">' + esc(L.hero.imgNote) + '</span>'
+    + '<div class="statcard"><b class="grad">70+</b><p>' + esc(L.hero.card) + '</p></div></div></div></section>'
     // ── proč ──
     + '<section class="alt" id="proc"><div class="divline"></div><div class="wrap">' + kicker(L.why.kicker) + '<h2 class="rv">' + esc(L.why.h) + '</h2><p class="lead rv">' + esc(L.why.lead) + '</p>'
     + '<div class="grid g4">' + L.why.cards.map((c, i) => '<article class="card rv"><div class="ico">' + svg(['self', 'needs', 'you', 'grow'][i], 24) + '</div><h3>' + esc(c[0]) + '</h3><p>' + esc(c[1]) + '</p></article>').join('') + '</div></div></section>'
@@ -332,7 +332,7 @@ function homePage(lang) {
     + '<div class="grid g3">' + L.paths.cards.map((c) => '<article class="path rv"><div class="ico">' + svg(c[0], 24) + '</div><h3>' + esc(c[1]) + '</h3><p>' + esc(c[2]) + '</p>' + interestBtn(c[0], c[3], 'btn-p btn-s') + '</article>').join('') + '</div></div></section>'
     // ── síť ──
     + '<section class="alt" id="sit"><div class="divline"></div><div class="wrap"><div class="net"><div>' + kicker(L.network.kicker) + '<h2 class="rv">' + esc(L.network.h) + '</h2><p class="lead rv">' + esc(L.network.lead) + '</p>'
-    + '<div class="big rv"><b class="grad">~70</b><span>' + esc(L.network.statUnit) + '<small>' + esc(L.network.note) + '</small></span></div>'
+    + '<div class="big rv"><b class="grad">70+</b><span>' + esc(L.network.statUnit) + '<small>' + esc(L.network.note) + '</small></span></div>'
     + '<div class="ctas rv">' + interestBtn('visit', L.network.cta, 'btn-g') + '</div></div>'
     + '<div class="areas">' + L.network.areas.map((a, i) => '<div class="area rv"><div class="ico">' + svg(['site', 'self', 'you'][i], 22) + '</div><div><h3>' + esc(a[0]) + '</h3><p>' + esc(a[1]) + '</p></div></div>').join('') + '</div></div>'
     // PH: galerie skutečných provozoven + mapa (body až po dodání seznamu adres)
