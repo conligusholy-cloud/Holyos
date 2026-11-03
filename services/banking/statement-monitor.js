@@ -29,6 +29,13 @@ async function alert(key, title, body, link = '/modules/ucetni-doklady/index.htm
   const now = Date.now();
   if (_collect) _collect.push({ title, body, notified: !(sent.has(key) && now - sent.get(key) < DEDUP_MS) });
   if (sent.has(key) && now - sent.get(key) < DEDUP_MS) return false;
+  // Dedup i přes restart serveru (nasazení restartuje proces a paměť se smaže → upozornění chodilo po každém deployi):
+  // stejné upozornění (dedup_key) už v zvonku za posledních 12 h (u „ticha" 24 h = 1× denně) → nepošle se znovu.
+  try {
+    const win = key.startsWith('stale:') ? 24 * 3600e3 : DEDUP_MS;
+    const dup = await prisma.notification.findFirst({ where: { created_at: { gte: new Date(now - win) }, meta: { path: ['dedup_key'], equals: key } }, select: { id: true } });
+    if (dup) { sent.set(key, now); if (_collect && _collect.length) _collect[_collect.length - 1].notified = false; return false; }
+  } catch (e) { /* bez DB kontroly jen paměť */ }
   sent.set(key, now);
   console.warn('[bank-monitor] ⚠', title, '—', body);
   const ids = await recipients();
@@ -38,7 +45,7 @@ async function alert(key, title, body, link = '/modules/ucetni-doklady/index.htm
   const persons = await prisma.person.findMany({ where: { id: { in: ids } }, select: { id: true, user_id: true } }).catch(() => []);
   for (const p of persons) {
     if (notifyPerson) notifyPerson(prisma, p.id, { title, body, data: { type: 'bank_statement_alert', link }, sound: 'default' }).catch((e) => console.warn('[bank-monitor] push', p.id, e.message));
-    if (createNotification && p.user_id) createNotification({ userId: p.user_id, type: 'system', title, body, link }).catch(() => {});
+    if (createNotification && p.user_id) createNotification({ userId: p.user_id, type: 'system', title, body, link, meta: { dedup_key: key, kind: 'bank_monitor' } }).catch(() => {});
   }
   return true;
 }
