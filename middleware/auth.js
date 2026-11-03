@@ -81,6 +81,7 @@ async function requireAuth(req, res, next) {
       isSuperAdmin: user.is_super_admin || (user.person && user.person.is_super_admin),
       person: user.person,
     };
+    try { require('../services/audit-context').setUser(req.user); } catch (e) { /* audit je best-effort */ }
 
     next();
   } catch (err) {

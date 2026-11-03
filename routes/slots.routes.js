@@ -285,7 +285,11 @@ router.put('/:id', async (req, res, next) => {
 });
 
 router.delete('/:id', async (req, res, next) => {
-  try { await prisma.productionSlot.delete({ where: { id: parseInt(req.params.id) } }); res.json({ ok: true }); }
+  try {
+    const sid = parseInt(req.params.id);
+    // Přiřazení se při smazání slotu smažou kaskádou v DB → zapiš je do historie předem
+    try { const rows = await prisma.slotAssignment.findMany({ where: { slot_id: sid } }); if (rows.length) await require('../services/slot-audit').logDeleted(prisma, rows, 'smazání celého slotu'); } catch (e) { /* audit je best-effort */ }
+    await prisma.productionSlot.delete({ where: { id: sid } }); res.json({ ok: true }); }
   catch (err) { next(err); }
 });
 

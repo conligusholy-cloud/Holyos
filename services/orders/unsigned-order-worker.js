@@ -33,7 +33,7 @@ async function releaseOrderSlots(orderId) {
   if (!assignments.length) return 0;
 
   const ids = assignments.map((a) => a.id);
-  await prisma.slotAssignment.deleteMany({ where: { id: { in: ids } } });
+  await require('../audit-context').runWithSource('automaticky — nepodepsaná objednávka', () => prisma.slotAssignment.deleteMany({ where: { id: { in: ids } } }));
 
   // Slot bez zbylých přiřazení → zpět na 'open'.
   const slotIds = Array.from(new Set(assignments.map((a) => a.slot_id).filter(Boolean)));

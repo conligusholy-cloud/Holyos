@@ -83,6 +83,7 @@
           <option value="warehouse">Sklady</option>
           <option value="movement">Pohyby</option>
           <option value="attendance">Docházka</option>
+          <option value="slot_assignment">Výrobní sloty — rezervace</option>
         </select>
         <select id="filter-action" onchange="filterLocally()">
           <option value="">Všechny akce</option>
@@ -108,7 +109,7 @@
   </script>
     initDate();
 
-    const ENTITY_LABELS = { person: 'Osoba', department: 'Oddělení', role: 'Role', company: 'Společnost', material: 'Materiál', warehouse: 'Sklad', movement: 'Pohyb', attendance: 'Docházka' };
+    const ENTITY_LABELS = { person: 'Osoba', department: 'Oddělení', role: 'Role', company: 'Společnost', material: 'Materiál', warehouse: 'Sklad', movement: 'Pohyb', attendance: 'Docházka', slot_assignment: 'Výrobní slot — rezervace' };
     const ACTION_LABELS = { create: 'Vytvořeno', update: 'Upraveno', delete: 'Smazáno', rollback: 'Rollback' };
     const FIELD_LABELS = {
       first_name: 'Jméno', last_name: 'Příjmení', email: 'E-mail', phone: 'Telefon',

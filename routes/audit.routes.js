@@ -92,6 +92,20 @@ router.post('/:id/rollback', requireAdmin, async (req, res, next) => {
     const entityId = log.entity_id;
     const snapshot = typeof log.snapshot === 'string' ? JSON.parse(log.snapshot) : log.snapshot;
 
+    // Obnova SMAZANÉ rezervace výrobního slotu: záznam se vytvoří znovu ze snapshotu
+    if (entity === 'slot_assignment' && log.action === 'delete') {
+      const data = {};
+      ['slot_id', 'order_id', 'order_item_id', 'batch_id', 'product_name', 'customer_name', 'quantity', 'estimated_hours', 'priority', 'status', 'note', 'reservation_status', 'reservation_confirmed_at'].forEach((k) => { if (snapshot[k] !== undefined && snapshot[k] !== null) data[k] = snapshot[k]; });
+      if (data.reservation_confirmed_at) data.reservation_confirmed_at = new Date(data.reservation_confirmed_at);
+      // nepotvrzená rezervace dostane novou 72h lhůtu (stará už vypršela)
+      if (data.reservation_status === 'reserved') data.reserved_until = new Date(Date.now() + (Number(process.env.SLOT_RESERVATION_HOURS) || 72) * 3600 * 1000);
+      const slot = await prisma.productionSlot.findUnique({ where: { id: data.slot_id } });
+      if (!slot) return res.status(400).json({ error: 'Původní slot už neexistuje, obnova není možná' });
+      if (data.order_item_id) { const oi = await prisma.orderItem.findUnique({ where: { id: data.order_item_id }, select: { id: true } }); if (!oi) delete data.order_item_id; }
+      const restored = await prisma.slotAssignment.create({ data });
+      return res.json({ ok: true, restored_assignment_id: restored.id });
+    }
+
     // Odstranit systémová pole
     delete snapshot.id;
     delete snapshot.created_at;
@@ -110,6 +124,7 @@ router.post('/:id/rollback', requireAdmin, async (req, res, next) => {
       warehouse: 'warehouse',
       order: 'order',
       document: 'document',
+      slot_assignment: 'slotAssignment',
     };
 
     const model = modelMap[entity];

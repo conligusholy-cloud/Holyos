@@ -112,7 +112,7 @@ async function runOnce() {
   }
   _running = true;
   try {
-    const result = await sweepExpiredReservations();
+    const result = await require('./audit-context').runWithSource('automatické uvolnění — vypršela 72h rezervace', () => sweepExpiredReservations());
     if (result.released > 0) {
       console.log(`[slot-reservation-worker] ✓ Uvolněno ${result.released} expirovaných rezervací (sloty: ${result.freed_slot_ids.join(', ')}).`);
       // Podrobný záznam kdo/co se uvolnilo — ať jde rezervaci dohledat a obnovit (assignment se maže natvrdo)
