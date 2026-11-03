@@ -314,6 +314,17 @@
     opts = opts || {}; opts.credentials = 'include';
     var r = await fetch(API + path, opts);
     if (r.status === 401){ window.location.href = '/login.html?redirect=' + encodeURIComponent(location.pathname); throw new Error('401'); }
+    // Povinné dvoufaktorové ověření: server vrací 403 s kódem 2FA_REQUIRED na
+    // všechno mimo /api/auth. Tahle obrazovka nemá sidebar (ten to řeší jinde),
+    // tak uživatele pošleme na Zabezpečení účtu sami — jinak by viděl jen „HTTP 403".
+    if (r.status === 403){
+      var body = null;
+      try { body = await r.clone().json(); } catch(e){}
+      if (body && body.code === '2FA_REQUIRED'){
+        window.location.href = '/security.html?redirect=' + encodeURIComponent(location.pathname);
+        throw new Error('Je potřeba zapnout dvoufaktorové ověření.');
+      }
+    }
     return r;
   }
 
