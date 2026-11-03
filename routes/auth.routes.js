@@ -706,7 +706,7 @@ router.get('/bs2/meetings', async (req, res, next) => {
       include: { reservations: { orderBy: { created_at: 'asc' }, select: { id: true, name: true, email: true, phone: true, status: true, compounder_lead_id: true, created_at: true, note: true, mode: true, financing_path: true } } },
     });
     const leadIds = [...new Set(slots.flatMap((s) => s.reservations.map((r) => r.compounder_lead_id)).filter(Boolean))];
-    const leads = leadIds.length ? await prisma.compounderLead.findMany({ where: { id: { in: leadIds } }, select: { id: true, name: true, email: true, phone: true, city: true, status: true } }).catch(() => []) : [];
+    const leads = leadIds.length ? await prisma.compounderLead.findMany({ where: { id: { in: leadIds } }, select: { id: true, name: true, email: true, phone: true, city: true, status: true, is_hot: true } }).catch(() => []) : [];
     const lm = new Map(leads.map((l) => [l.id, l]));
     res.json(slots.map((s) => ({
       id: s.id, starts_at: s.starts_at, duration_min: s.duration_min, capacity: s.capacity, mode: s.mode, note: s.note, active: s.active,
@@ -797,6 +797,18 @@ router.delete('/bs2/meetings/slots/:id(\\d+)', async (req, res, next) => {
     if (any) { await prisma.meetingSlot.update({ where: { id }, data: { active: false } }); return res.json({ ok: true, deactivated: true }); } // historii rezervací nemažeme
     await prisma.meetingSlot.delete({ where: { id } });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+// POST /api/auth/bs2/leads/:id/hot {hot} — „Zajímavý kontakt" (CompounderLead.is_hot) z kalendáře schůzek Laundromats
+router.post('/bs2/leads/:id(\\d+)/hot', express.json({ limit: '5kb' }), async (req, res, next) => {
+  try {
+    if (!verifyMeetingsToken(req, res)) return;
+    const id = parseInt(req.params.id, 10);
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, is_hot: true } });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Kontakt nenalezen' });
+    const hot = (req.body && req.body.hot !== undefined) ? !!req.body.hot : !lead.is_hot;
+    const upd = await prisma.compounderLead.update({ where: { id }, data: { is_hot: hot }, select: { id: true, is_hot: true } });
+    res.json({ ok: true, is_hot: upd.is_hot });
   } catch (err) { next(err); }
 });
 router.patch('/bs2/meetings/reservations/:id(\\d+)', express.json({ limit: '20kb' }), async (req, res, next) => {

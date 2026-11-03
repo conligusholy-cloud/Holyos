@@ -306,6 +306,7 @@ app.post('/admin/api/meetings/slots/:id(\\d+)/update', requireAdmin, api((req) =
 app.post('/admin/api/meetings/slots/:id(\\d+)/delete', requireAdmin, api((req) => holyosSvc('DELETE', P + '/slots/' + req.params.id)));
 app.post('/admin/api/meetings/reservations/:id(\\d+)', requireAdmin, api((req) => holyosSvc('PATCH', P + '/reservations/' + req.params.id, { status: (req.body || {}).status })));
 // Jmenný seznam — kontakty označené v HolyOS jako „zajímavý kontakt".
+app.post('/admin/api/leads/:id(\\d+)/hot', requireAdmin, api(async (req) => holyosSvc('POST', '/api/auth/bs2/leads/' + req.params.id + '/hot', { hot: !!(req.body || {}).hot })));
 app.get('/admin/api/hot-leads', requireAdmin, api(async () => ({ ok: true, leads: await holyosSvc('GET', '/api/auth/bs2/hot-leads') })));
 
 // ── Stránky Compounder + Prádlomaty (převzato z BS2, upraveno pro zájemce) ──
