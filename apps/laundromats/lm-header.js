@@ -27,7 +27,7 @@ function header(opts) {
   return '<header class="lhdr" id="lhdr"><div class="in"><a class="brand" href="' + home + '" aria-label="Laundromats">' + LOGO + '<span class="name">Laundromats<span>.eu</span></span></a>'
     + '<nav class="lnav" aria-label="Navigace">' + items.map(([h, l, k]) => '<!--PRIV--><a href="' + h + '" data-k="' + k + '">' + l + '</a><!--/PRIV-->').join('') + '</nav>'
     + '<span class="lsp"></span><span style="margin-left:auto"></span>'
-    + '<!--LACC--><a class="lcta" href="' + home + '#kontakt">' + t.cta + '</a></div></header>'
+    + '<!--LACC--></div></header>'
     + '<script>(function(){var p=location.pathname,k=/\\/compounder/.test(p)?"compounder":/\\/pradlomaty/.test(p)?"pradlomaty":/ekonomika/.test(p)?"ekonomika":/\\/hledat/.test(p)?"hledat":/\\/zhodnotit/.test(p)?"zhodnotit":"";if(k){var e=document.querySelector(\'.lnav a[data-k="\'+k+\'"]\');if(e)e.classList.add("on");}})();</script>';
 }
 const FONT = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">';

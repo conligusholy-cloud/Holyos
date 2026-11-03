@@ -181,7 +181,7 @@ module.exports = function createAccounts(ctx) {
   function headerSlot(req) {
     if (req && req.account) return '<a class="lacc" href="/cesta/ucet" title="Můj účet">👤 ' + esc(String(req.account.name || 'Účet').split(/\s+/)[0]) + '</a>';
     if (req && adminOf(req)) return '<a class="lacc" href="/cesta/ucet" title="Správce (HolyOS)">👤 Správce</a>';
-    return '<a class="lacc" href="/cesta/prihlaseni">Přihlásit</a>';
+    return '<a class="lcta" href="/cesta/prihlaseni">Přihlásit</a>';
   }
   const attach = (req, res, next) => attachInner(req, res, next).catch((e) => { console.warn('[lm-acc] relace:', e.message); req.account = null; next(); });
   return { attach, requireAccount, mount, headerSlot };
