@@ -1525,13 +1525,14 @@ const BASE_COLS = [
   { key: 'support_czk', label: 'Celkem podpořil (Kč)', render: (r) => r.support_czk != null && r.support_czk !== '' ? `<span style="white-space:nowrap" title="${r.support_currency === 'EUR' ? 'Eurový účet — přepočteno kurzem ČNB' : 'Celkem od počátku ze starého portálu'}"><b>${Number(r.support_czk).toLocaleString('cs-CZ', { maximumFractionDigits: 0 })}</b>${r.support_currency === 'EUR' ? ' <span class="muted small">€→Kč</span>' : ''}</span>` : '<span class="muted small">—</span>' },
   { key: 'status', label: 'Stav', render: (r) => `<span class="badge ${esc(r.status)}">${r.status === 'active' ? 'aktivní' : r.status === 'blocked' ? 'blokován' : 'čeká na aktivaci'}</span>` },
   { key: 'user_type', label: 'Typ uživatele', render: (r) => typeBadge(r.user_type) },
+  { key: 'tfa', label: '2FA', render: (r) => r.totp_enabled ? '<span class="badge active" title="Dvoufázové ověření je zapnuté">🔐 zapnuto</span>' : '<span class="muted small" title="Dvoufázové ověření není zapnuté">vypnuto</span>' },
   { key: 'last_login_at', label: 'Poslední přihlášení', render: (r) => `<span class="muted small">${fmtDT(r.last_login_at)}</span>` },
   { key: 'activated_at', label: 'Aktivován', render: (r) => `<span class="muted small">${fmtDT(r.activated_at)}</span>` },
   { key: 'created_at', label: 'Vytvořen v BS2', render: (r) => `<span class="muted small">${fmtDT(r.created_at)}</span>` },
   { key: 'source', label: 'Zdroj importu', render: (r) => `<span class="muted small">${esc(r.source || '—')}</span>` },
   { key: 'support_snapshot', label: 'Screenshot podpory', render: (r) => r.support_snapshot_at ? `<a href="/admin/supporters/${r.id}/support-snapshot.png" target="_blank" rel="noopener" class="small" data-lightbox="1">${fmtDT(r.support_snapshot_at)}</a>` : '<span class="muted small">—</span>' },
 ];
-const DEFAULT_COLS = ['email', 'nick', 'legacy_position', 'support_czk', 'standard', 'expansion', 'exp_std', 'piv', 'user_type', 'status', 'last_login_at', 'x:obrat', 'support_snapshot'];
+const DEFAULT_COLS = ['email', 'nick', 'legacy_position', 'support_czk', 'standard', 'expansion', 'exp_std', 'piv', 'user_type', 'status', 'tfa', 'last_login_at', 'x:obrat', 'support_snapshot'];
 // Přihlášení za uživatele ve starém systému (partner.bestseries.cz).
 // Bez `to`: přímý odkaz na fake-login.php (přistane na výchozím dashboardu) — funguje spolehlivě,
 // protože je to normální top-level navigace a cookie session se nastaví jako first-party.
@@ -1566,7 +1567,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
   const picker = `
   <details class="colpick" id="colpick"><summary class="btn sec" title="Vybrat sloupce tabulky" style="padding:10px 12px">${ico('settings', 18)}</summary>
     <form method="post" action="/admin/supporters/columns" class="colpick-pop">
-      <input type="hidden" name="cols" value="_seen_czk"><input type="hidden" name="cols" value="_seen_pos"><input type="hidden" name="cols" value="_seen_piv"><input type="hidden" name="cols" value="_seen_exp"><input type="hidden" name="cols" value="_seen_std"><input type="hidden" name="cols" value="_seen_es">
+      <input type="hidden" name="cols" value="_seen_czk"><input type="hidden" name="cols" value="_seen_tfa"><input type="hidden" name="cols" value="_seen_pos"><input type="hidden" name="cols" value="_seen_piv"><input type="hidden" name="cols" value="_seen_exp"><input type="hidden" name="cols" value="_seen_std"><input type="hidden" name="cols" value="_seen_es">
       <input type="hidden" name="back" value="${esc('/admin/supporters?q=' + encodeURIComponent(qstr) + '&status=' + encodeURIComponent(status))}">
       <div class="colpick-grid">
         <div><div class="colpick-h">Základní</div>
