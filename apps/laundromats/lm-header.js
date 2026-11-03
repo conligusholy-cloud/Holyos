@@ -12,6 +12,8 @@ const T = {
 // opts: { absolute: odkazy na hlavní web absolutně (subdoména aplikací), lang: 'cs'|'pl' }
 function header(opts) {
   const o = opts || {}; const t = T[o.lang] || T.cs;
+  // Cesta (funel /cesta…): bez menu a bez tlačítka — jen logo, štítek, počítadlo a přepínač jazyka
+  if (o.minimal) return '<header class="lhdr" id="lhdr"><div class="in"><a class="brand" href="' + (o.lang === 'pl' ? '/cesta/pl' : '/cesta') + '">' + LOGO + '<span class="name">Laundromats<span>.eu</span></span></a><span class="htag">Jak to u nás probíhá</span><span class="lsp"></span><span style="margin-left:auto"></span></div></header>';
   const m = o.absolute ? MAIN_URL() : '';
   const home = m + homeHref();
   const items = [
@@ -40,6 +42,7 @@ const CSS = '.lhdr{position:sticky;top:0;z-index:60;background:rgba(4,6,12,.72);
   + '.lhdr .lnav a.on{color:#fff;border-color:rgba(120,160,255,.28);background:rgba(79,209,255,.08)}'
   + '.lhdr .lsp{flex:1}'
   + '.lhdr .lcta{flex:none;white-space:nowrap;padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:700;color:#fff;text-decoration:none;background:linear-gradient(90deg,#1e86e0,#7c5cff);box-shadow:0 6px 20px -8px rgba(79,120,255,.7)}'
-  + '@media(max-width:980px){.lhdr .in{flex-wrap:wrap;row-gap:8px}.lhdr .lnav{order:9;flex-basis:100%;margin:0 -18px;padding:0 18px;overflow-x:auto;scrollbar-width:none}.lhdr .lnav::-webkit-scrollbar{display:none}}'
+  + '.lhdr .htag{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#a9b8d6;border:1px solid rgba(120,160,255,.14);border-radius:999px;padding:3px 9px;background:rgba(255,255,255,.02);white-space:nowrap;margin-left:12px}@media(max-width:520px){.lhdr .htag{display:none}}'
+  + '@media(max-width:1240px){.lhdr .in{flex-wrap:wrap;row-gap:8px}.lhdr .lnav{order:9;flex-basis:100%;margin:0 -18px;padding:0 18px;overflow-x:auto;scrollbar-width:none}.lhdr .lnav::-webkit-scrollbar{display:none}}'
   + '@media(max-width:520px){.lhdr .lcta{display:none}.lhdr .presence .pt{display:none}}';
 module.exports = { header, CSS, FONT, LOGO };

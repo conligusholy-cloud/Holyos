@@ -72,7 +72,7 @@ app.get('/api/presence', (req, res) => {
 const LH = require('./lm-header');
 // Stránky mimo /cesta (úvod, Compounder, Prádlomaty): stejná lišta + počítadlo, bez přepínače jazyka
 const lite = (html) => String(html).replace('</style>', PRES_CSS + '</style>').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>');
-const shell = (html, lang) => CI18N.addSwitch(String(html).replace('@@LHDR@@', LH.header({ lang })).replace('</style>', LH.CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</style>', FOOT_CSS + PRES_CSS + '</style>').replace('<!--PRESENCE-->', '').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>').replace('</body>', '<script src="/cesta/track.js" defer></script></body>'));
+const shell = (html, lang) => CI18N.addSwitch(String(html).replace('@@LHDR@@', LH.header({ lang, minimal: true })).replace('</style>', LH.CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</style>', FOOT_CSS + PRES_CSS + '</style>').replace('<!--PRESENCE-->', '').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>').replace('</body>', '<script src="/cesta/track.js" defer></script></body>'));
 const send = (res, html) => res.set('Cache-Control', 'no-cache').type('html').send(html);
 const cestaHtml = () => fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8');
 

@@ -38,12 +38,12 @@ function layout({ title, desc = '', body, active = '', absolute = false, head = 
   return `<!doctype html><html lang="cs"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#04060c">
 <title>${esc(title)} · Laundromats</title>${desc ? `<meta name="description" content="${esc(desc)}">` : ''}<link rel="icon" type="image/svg+xml" href="${absolute ? MAIN_URL() : ''}/favicon.svg">
-${require('./lm-header').FONT}<style>${BS2_CSS}${LM_CSS}${require('./lm-header').CSS}.lhdr .in{width:100%}</style>${head}</head>
+${require('./lm-header').FONT}<style>${BS2_CSS}${LM_CSS}${require('./lm-header').CSS}${require('./lm-header').PRES_CSS}</style>${head}</head>
 <body><canvas id="net" aria-hidden="true"></canvas><div class="glow a"></div><div class="glow b"></div><div class="gridfx" aria-hidden="true"></div>
-${require('./lm-header').header({ absolute })}
+${require('./lm-header').header({ absolute }).replace('<span style="margin-left:auto"></span>', require('./lm-header').PRES_HTML + '<span style="margin-left:auto"></span>')}
 <main>${body}</main>
 <footer class="lm-foot"><span><b style="color:var(--text)">Laundromats</b> · Samoobslužné prádlomaty. Zkušenosti z provozu. Možnosti pro vaše podnikání.</span><span><a href="mailto:info@laundromats.eu">info@laundromats.eu</a> · <a href="${absolute ? MAIN_URL() : ''}/gdpr">Ochrana osobních údajů</a></span></footer>
-<script>${require('./home-page').NET_JS}</script>${absolute ? '' : '<script src="/cesta/track.js" defer></script>'}
+<script>${require('./home-page').NET_JS}</script><script>${require('./lm-header').PRES_JS}</script>${absolute ? '' : '<script src="/cesta/track.js" defer></script>'}
 </body></html>`;
 }
 // Výzva na konci stránek
