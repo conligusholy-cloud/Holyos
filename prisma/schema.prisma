@@ -322,6 +322,9 @@ model Shift {
   end_time      String? @db.VarChar(5) // HH:MM
   hours_fund    Decimal @default(8.0) @db.Decimal(5, 2)
   break_minutes Int     @default(30)
+  // Dny v týdnu, kterých se směna týká — pole čísel podle ISO (1 = pondělí … 7 = neděle).
+  // null / prázdné pole = dny nejsou určené (tak se chovají i směny založené dřív).
+  weekdays      Json?
 
   created_at DateTime @default(now())
 

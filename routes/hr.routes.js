@@ -1009,6 +1009,10 @@ const shiftBaseSchema = z.object({
   end_time: z.string().regex(/^\d{2}:\d{2}$/, 'Konec musí být ve formátu HH:MM').nullable().default(null),
   hours_fund: z.coerce.number('Fond hodin musí být číslo').min(0, 'Fond hodin nemůže být negativní').max(24, 'Fond hodin nemůže přesáhnout 24 h').default(8),
   break_minutes: z.coerce.number('Přestávka musí být číslo').int('Přestávka musí být celé číslo').min(0, 'Přestávka nemůže být negativní').max(480, 'Přestávka nemůže přesáhnout 480 min').default(30),
+  // Dny v týdnu (ISO: 1 = pondělí … 7 = neděle). null = neurčeno.
+  weekdays: z.array(
+    z.coerce.number('Den v týdnu musí být číslo').int().min(1, 'Neplatný den v týdnu').max(7, 'Neplatný den v týdnu'),
+  ).max(7, 'Dnů v týdnu je nejvýš sedm').nullable().default(null),
 });
 
 // U pevné směny musí být vyplněný začátek i konec
@@ -1026,6 +1030,14 @@ function normalizeShiftBody(body) {
   if (raw.type === 'flexible') {
     raw.start_time = null;
     raw.end_time = null;
+  }
+  // Dny v týdnu: zahodíme duplicity, seřadíme od pondělí. Prázdný výběr ukládáme
+  // jako null — „žádný den nezaškrtnut" a „dny neurčeny" je pro směnu totéž.
+  if (Array.isArray(raw.weekdays)) {
+    const uniq = Array.from(new Set(raw.weekdays.map((d) => Number(d)).filter((d) => Number.isInteger(d))));
+    raw.weekdays = uniq.length ? uniq.sort((a, b) => a - b) : null;
+  } else if (raw.weekdays === '' || raw.weekdays === undefined) {
+    raw.weekdays = null;
   }
   return raw;
 }
