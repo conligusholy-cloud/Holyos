@@ -13,14 +13,16 @@ const T = {
     skip: 'Přeskočit na obsah',
     nav: { why: 'Proč prádlomat', paths: 'Možnosti spolupráce', network: 'Naše síť', start: 'Jak začít', faq: 'Časté otázky', cta: 'Probrat můj záměr', menu: 'Menu', close: 'Zavřít menu' },
     hero: {
-      eyebrow: 'Zkušenosti z více než 70 vlastních provozů v ČR',
-      h1a: 'Vlastní prádlomat.', h1b: 'Podnikání podle vašeho života.',
-      sub: 'Poznejte možnosti vlastnictví a provozování samoobslužného prádlomatu. S Laundromats získáte praktický pohled od lidí, kteří tuto službu sami každý den provozují.',
-      cta1: 'Chci vlastní prádlomat', cta2: 'Poznat možnosti spolupráce',
-      points: ['Zkušenosti ze skutečného provozu', 'Samoobslužné praní a sušení', 'Možnost postupného rozvoje'],
+      eyebrow: 'Zkušenosti z více než 70 prádlomatů v České republice',
+      h1a: 'Vybudujte vlastní podnikání', h1b: 'se samoobslužnými prádlomaty.',
+      sub: 'Začněte jedním prádlomatem a vytvořte si prostor pro další růst. Poznejte podnikání, které sami každý den provozujeme, a zjistěte, jak může fungovat ve vaší lokalitě.',
+      cta1: 'Chci zjistit, jak začít', cta2: 'Prohlédnout skutečné provozovny',
+      points: ['Samoobslužný provoz', 'Možnosti zajištění péče', 'Zkušenosti z vlastní sítě'],
       card: 'Přes 70 prádlomatů, které sami provozujeme v České republice.',
-      imgAlt: 'Samoobslužný venkovní prádlomat s pračkou a sušičkou',
-      imgNote: 'Ilustrační snímek zařízení',
+      imgAlt: 'Samoobslužný venkovní prádlomat se dvěma pračkami a sušičkou',
+      sites: 'Skutečné provozovny',
+      sitePh: 'Fotografie provozovny',
+      siteCity: 'Město doplníme',
     },
     why: {
       kicker: 'Proč prádlomat', h: 'Jednoduchá služba. Více možností pro vaše podnikání.',
@@ -287,6 +289,10 @@ footer{border-top:1px solid var(--line);padding:56px 0 34px;margin-top:40px}
 .rv{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .7s ease}.rv.in{opacity:1;transform:none}
 .no-js .rv{opacity:1;transform:none}
 
+.sites{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media (max-width:760px){.sites{grid-template-columns:1fr}}
+.site{margin:0}.site .ph{aspect-ratio:4/3;min-height:0}
+.site figcaption{display:flex;align-items:center;gap:7px;margin-top:10px;color:var(--tx2);font-size:14.5px;font-weight:600}.site figcaption svg{color:var(--az)}
 /* Pozadí jako Best Series 2.0: síť bodů (canvas) + záře + perspektivní mřížka */
 #net{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:.7}
 .bgglow{position:fixed;border-radius:50%;filter:blur(90px);opacity:.45;z-index:-1;pointer-events:none;animation:drift 18s ease-in-out infinite alternate}
@@ -327,12 +333,16 @@ function homePage(lang) {
     + '<div class="eyebrow rv"><i></i>' + esc(L.hero.eyebrow) + '</div>'
     + '<h1 class="rv"><span>' + esc(L.hero.h1a) + '</span><span class="grad">' + esc(L.hero.h1b) + '</span></h1>'
     + '<p class="lead rv">' + esc(L.hero.sub) + '</p>'
-    + '<div class="ctas rv">' + interestBtn('own', L.hero.cta1, 'btn-p') + '<a class="btn btn-g" href="#spoluprace">' + esc(L.hero.cta2) + '</a></div>'
+    + '<div class="ctas rv"><a class="btn btn-p" href="#jak-zacit">' + esc(L.hero.cta1) + ' ' + svg('arrow', 18) + '</a><a class="btn btn-g" href="#provozovny">' + esc(L.hero.cta2) + '</a></div>'
     + '<ul class="pts rv">' + L.hero.points.map((p) => '<li>' + svg('check', 18) + esc(p) + '</li>').join('') + '</ul></div>'
     + '<div class="visual rv"><div class="glow"></div><div class="ground"></div>'
     // PH: nahradit fotografií skutečného venkovního prádlomatu v reálném prostředí (WebP, ~1600 px, < 250 kB)
     + '<img src="/img/pradlomat-flex.webp" width="1100" height="896" alt="' + esc(L.hero.imgAlt) + '" fetchpriority="high" decoding="async">'
     + '<div class="statcard"><b class="grad">70+</b><p>' + esc(L.hero.card) + '</p></div></div></div></section>'
+    // ── skutečné provozovny (3 fotky s názvem města) — PH: doplnit skutečné fotografie + města ──
+    + '<section id="provozovny" style="padding:10px 0 70px"><div class="wrap"><div class="kicker">' + esc(L.hero.sites) + '</div><div class="sites">'
+    + [1, 2, 3].map(() => '<figure class="site rv"><div class="ph" role="img" aria-label="' + esc(L.hero.sitePh) + '">' + svg('photo', 30) + '<span>' + esc(L.hero.sitePh) + '</span></div><figcaption>' + svg('site', 16) + esc(L.hero.siteCity) + '</figcaption></figure>').join('')
+    + '</div></div></section>'
     // ── proč ──
     + '<section class="alt" id="proc"><div class="divline"></div><div class="wrap">' + kicker(L.why.kicker) + '<h2 class="rv">' + esc(L.why.h) + '</h2><p class="lead rv">' + esc(L.why.lead) + '</p>'
     + '<div class="grid g4">' + L.why.cards.map((c, i) => '<article class="card rv"><div class="ico">' + svg(['self', 'needs', 'you', 'grow'][i], 24) + '</div><h3>' + esc(c[0]) + '</h3><p>' + esc(c[1]) + '</p></article>').join('') + '</div></div></section>'
