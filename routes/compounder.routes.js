@@ -100,6 +100,56 @@ router.post('/register', async (req, res, next) => {
 // ─── VEŘEJNÉ: analytika chování ─────────────────────────────────────────────
 // Frontend posílá beacon s eventy (page_view, section_view, cta_click, portal_view…).
 // register_success nese v props lead_id → spojení session ↔ lead. Nikdy nesmí shodit web.
+// ─── VEŘEJNÉ: poptávka z úvodní stránky laundromats.eu ──────────────────────
+// POST /api/compounder/lm-inquiry { name, email, phone, interest, place, note, lang?, sid?, t?, l? }
+// Spáruje existující kontakt (t/l z odkazu → e-mail → telefon), jinak založí nový (source laundromats_web).
+// Nový kontakt dostane Jan Holý (jako po domluvené schůzce); upozornění do Velína + zvonek Janovi a Tomášovi.
+const LM_INTEREST = { own: 'Chci vlastnit prádlomat', partner: 'Chci provozovat nebo rozvíjet síť', site: 'Mám vhodné místo', visit: 'Chci vidět prádlomat v provozu' };
+const _lmInqHits = new Map();
+router.post('/lm-inquiry', express.json({ limit: '20kb' }), async (req, res) => {
+  try {
+    const ip = clientIp(req) || 'x'; const now = Date.now();
+    const hits = (_lmInqHits.get(ip) || []).filter((t) => now - t < 3600e3); hits.push(now); _lmInqHits.set(ip, hits);
+    if (hits.length > 10) return res.status(429).json({ ok: false, error: 'Příliš mnoho odeslání' });
+    if (_lmInqHits.size > 5000) _lmInqHits.clear();
+    const b = req.body || {}; const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+    const name = s(b.name, 120), email = s(b.email, 160).toLowerCase(), phone = s(b.phone, 30), place = s(b.place, 160), note = s(b.note, 2000);
+    const interest = LM_INTEREST[b.interest] ? b.interest : null;
+    if (name.length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email) || phone.replace(/\D/g, '').length < 9 || !interest || place.length < 2) return res.status(400).json({ ok: false, error: 'Vyplňte prosím všechna povinná pole' });
+    let leadId = _leadFromTL(b.t, b.l);
+    if (leadId && !(await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { id: true } }).catch(() => null))) leadId = null;
+    if (!leadId) { const ex = await prisma.compounderLead.findFirst({ where: { OR: [{ email: { equals: email, mode: 'insensitive' } }, { phone }] }, select: { id: true }, orderBy: { created_at: 'asc' } }).catch(() => null); if (ex) leadId = ex.id; }
+    const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
+    const line = stamp + ' · Poptávka z laundromats.eu: ' + LM_INTEREST[interest] + ' · ' + place + (note ? ' · „' + note.replace(/\s+/g, ' ').slice(0, 600) + '“' : '');
+    const ownerId = await _blacklistOwnerId();
+    let created = false;
+    if (leadId) {
+      const l = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { activity_log: true, phone: true, email: true, city: true } });
+      await prisma.compounderLead.update({ where: { id: leadId }, data: { activity_log: line + (l && l.activity_log ? '\n' + l.activity_log : ''), phone: (l && l.phone) || phone, email: (l && l.email) || email, city: (l && l.city) || place } });
+    } else {
+      const parts = name.split(/\s+/);
+      const c = await prisma.compounderLead.create({ data: { name, first_name: parts[0] || null, last_name: parts.slice(1).join(' ') || null, email, phone, city: place, source: 'laundromats_web', status: 'new', role: 'compounder', lang: /^[a-z]{2}$/.test(String(b.lang || '')) ? b.lang : 'cs', owner_person_id: ownerId || null, activity_log: line }, select: { id: true } });
+      leadId = c.id; created = true;
+    }
+    if (b.sid && /^lm-[a-z0-9]{4,60}$/.test(String(b.sid))) _linkSidToLead(String(b.sid), leadId).catch(() => {});
+    prisma.compounderEvent.create({ data: { sid: String(b.sid || ('server:inquiry:' + leadId)).slice(0, 64), event: 'inquiry_submitted', path: '/', props: { lead_id: leadId, interest, place, site: 'laundromats', created } } }).catch(() => {});
+    // Upozornění Jan + Tomáš (Velín push + zvonek)
+    try {
+      const { notifyPerson } = require('../services/push/expo-push');
+      const { createNotification } = require('./notifications.routes');
+      const title = '📩 Nová poptávka z laundromats.eu — ' + LM_INTEREST[interest];
+      const body = name + ' · ' + place + ' · ' + phone + (created ? '' : ' (existující kontakt)');
+      const ps = await prisma.person.findMany({ where: { active: true, last_name: { equals: 'Holý', mode: 'insensitive' }, first_name: { in: ['Jan', 'Tomáš'], mode: 'insensitive' } }, select: { id: true, user_id: true } });
+      for (const p of ps) {
+        notifyPerson(prisma, p.id, { title, body, data: { type: 'lm_inquiry', lead_id: leadId }, sound: 'default' }).catch(() => {});
+        if (p.user_id) createNotification({ userId: p.user_id, type: 'system', title, body, link: '/modules/prodejni-objednavky/index.html?lead=' + leadId, meta: { lead_id: leadId } }).catch(() => {});
+      }
+    } catch (e) { console.warn('[lm-inquiry] upozornění:', e.message); }
+    console.log('[lm-inquiry] lead', leadId, created ? '(nový)' : '(existující)', interest);
+    res.json({ ok: true });
+  } catch (err) { console.warn('[lm-inquiry]', err.message); res.status(500).json({ ok: false, error: 'Odeslání se nepodařilo' }); }
+});
+
 const _sidLinked = new Set(); // cache „sid:lead" už napojených (ať se nedotazujeme při každém eventu)
 async function _linkSidToLead(sid, leadId) {
   const k = sid + ':' + leadId; if (_sidLinked.has(k)) return;

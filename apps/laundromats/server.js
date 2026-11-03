@@ -65,7 +65,32 @@ const cestaHtml = () => fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf
 app.use((req, res, next) => lmIdentity(req, res, next)); // identita návštěvníka v cookie (definice níž u /api/cesta/track)
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /api/\n'));
-app.get('/', (req, res) => res.redirect(302, '/cesta' + (req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '')));
+// Úvodní stránka značky (home-page.js). Náhled vždy na /uvod; na / až s LM_HOME_LIVE=1 (do té doby / → /cesta jako dřív).
+// Jedinečné odkazy ze SMS / e-mailu (?t= / ?l=) vedou dál na /cesta, ať funel zůstane beze změny.
+const HP = require('./home-page');
+const homeHtml = () => HP.homePage('cs');
+app.get('/uvod', (req, res) => send(res, homeHtml()));
+app.get('/', (req, res) => {
+  const q = req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '';
+  if (process.env.LM_HOME_LIVE === '1' && !req.query.t && !req.query.l) return send(res, homeHtml());
+  res.redirect(302, '/cesta' + q);
+});
+// Poptávka z úvodní stránky → HolyOS (/api/compounder/lm-inquiry): založí / spáruje kontakt a upozorní vedení.
+// Úspěch vracíme jen tehdy, když ho HolyOS skutečně potvrdí.
+app.post('/api/inquiry', async (req, res) => {
+  const b = req.body || {};
+  if (b.website) return res.json({ ok: true }); // honeypot (bot) — tváříme se, že prošlo
+  if (rateLimited('inq:' + req.ip, 5, 3600e3)) return res.status(429).json({ ok: false, error: 'Příliš mnoho odeslání, zkuste to později.' });
+  const ck = cookies(req); let tl = {}; try { tl = JSON.parse(ck.lm_tl || '{}') || {}; } catch (_) {}
+  const sid = SID_RE.test(String(b.sid || '')) ? b.sid : (SID_RE.test(ck.lm_sid || '') ? ck.lm_sid : undefined);
+  try {
+    const r = await fetch(HOLYOS_URL + '/api/compounder/lm-inquiry', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': req.ip || '', 'User-Agent': req.headers['user-agent'] || 'laundromats' },
+      body: JSON.stringify({ name: b.name, email: b.email, phone: b.phone, interest: b.interest, place: b.place, note: b.note, lang: b.lang, sid, t: tlOk(tl.t, null) ? tl.t : undefined, l: tlOk(null, tl.l) ? tl.l : undefined }), signal: AbortSignal.timeout(15000) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) return res.status(r.status >= 400 ? r.status : 502).json({ ok: false, error: j.error || 'Odeslání se nepodařilo' });
+    res.json({ ok: true });
+  } catch (e) { res.status(502).json({ ok: false, error: 'Odeslání se nepodařilo' }); }
+});
 app.get('/pl', (req, res) => res.redirect(302, '/cesta/pl' + (req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '')));
 app.get('/favicon.svg', (req, res) => res.set('Content-Type', 'image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(LOGO.replace(/^<span[^>]*>/, '').replace(/<\/span>$/, '').replace('width="34" height="34"', 'width="64" height="64"')));
 app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
@@ -91,7 +116,7 @@ const SID_RE = /^lm-[a-z0-9]{4,60}$/;
 const tlOk = (t, l) => (t && /^[0-9]+\.[A-Za-z0-9._-]{8,200}$/.test(String(t))) || (l && /^[0-9a-z]+\.[A-Za-z0-9_-]{4,40}$/.test(String(l)));
 // Každá stránka: zapamatuj jedinečný odkaz (t/l) a zajisti trvalé sid (zapojeno nahoře před stránkami: app.use(lmIdentity))
 function lmIdentity(req, res, next) {
-  if (req.method === 'GET' && /^\/(cesta|pl|ekonomika|$)/.test(req.path)) {
+  if (req.method === 'GET' && /^\/(cesta|pl|ekonomika|uvod|$)/.test(req.path)) {
     const ck = cookies(req); const t = req.query.t, l = req.query.l;
     if (tlOk(t, l)) setCk(res, 'lm_tl', JSON.stringify({ t: t || '', l: l || '' }), true);
     if (!SID_RE.test(ck.lm_sid || '')) setCk(res, 'lm_sid', 'lm-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10), false);
