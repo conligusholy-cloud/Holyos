@@ -78,9 +78,43 @@ app.set('trust proxy', 1); // Railway proxy → req.ip je skutečná IP klienta 
 // ─── Middleware ─────────────────────────────────────────────────────────────
 
 // Bezpečnost
+// CSP je zatím jen v režimu REPORT-ONLY: nic neblokuje, prohlížeč jen hlásí porušení na /api/csp-report (viz log „[csp]").
+// Inline skripty zůstávají povolené (stávající frontend je na nich postavený); sleduje se hlavně načítání z cizích domén.
 app.use(helmet({
-  contentSecurityPolicy: false, // Povolit inline skripty pro stávající frontend
+  contentSecurityPolicy: {
+    useDefaults: false,
+    reportOnly: true,
+    directives: {
+      'default-src': ["'self'"],
+      'script-src': ["'self'", "'unsafe-inline'", 'https://cdnjs.cloudflare.com', 'https://cdn.jsdelivr.net'],
+      'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
+      'font-src': ["'self'", 'data:', 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com'],
+      'img-src': ["'self'", 'data:', 'blob:', 'https:'],
+      'media-src': ["'self'", 'data:', 'blob:', 'https:'],
+      'connect-src': ["'self'", 'https:', 'wss:'],
+      'frame-src': ["'self'", 'https:'],
+      'object-src': ["'none'"],
+      'base-uri': ["'self'"],
+      'form-action': ["'self'", 'https:'],
+      'report-uri': ['/api/csp-report'],
+    },
+  },
 }));
+
+// Příjem CSP hlášení (bez přihlášení, jen log; deduplikace a limit, aby hlášení nezahltila log)
+const _cspSeen = new Map();
+app.post('/api/csp-report', express.json({ type: ['application/csp-report', 'application/reports+json', 'application/json'], limit: '16kb' }), (req, res) => {
+  try {
+    const raw = req.body || {};
+    const r = raw['csp-report'] || (Array.isArray(raw) && raw[0] && raw[0].body) || raw;
+    const dir = String(r['effective-directive'] || r['violated-directive'] || r.effectiveDirective || '?').slice(0, 40);
+    const blocked = String(r['blocked-uri'] || r.blockedURL || '').replace(/[?#].*$/, '').slice(0, 120);
+    const page = String(r['document-uri'] || r.documentURL || '').replace(/[?#].*$/, '').slice(0, 120);
+    const key = dir + '|' + blocked + '|' + page;
+    if (!_cspSeen.has(key) && _cspSeen.size < 500) { _cspSeen.set(key, 1); console.warn('[csp] ' + dir + ' blocked=' + (blocked || '-') + ' page=' + page); }
+  } catch (e) { /* hlášení jsou jen informativní */ }
+  res.status(204).end();
+});
 
 // Výslovně povol geolokaci/kameru/mikrofon pro stejný origin (servisák bere GPS,
 // mobilní formuláře fotí). Bez toho může prohlížeč v některých kontextech (webview,
