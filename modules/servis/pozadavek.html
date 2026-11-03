@@ -236,12 +236,15 @@
     }).catch(function(){ show('gate'); });
 
     // 2) Stroje v provozu → datalist
+    var pickedMachineId=null; // ServiceMachine.id vybraného stroje (null = psáno ručně)
     function loadMachines(){
       api(API+'/machines?status=v_provozu').then(function(r){ return r.ok?r.json():[]; }).then(function(list){
         var sel=$('f-machine-sel'); if(!sel) return;
+        // Hodnota option je ID stroje (ne název) — požadavek se pak váže na
+        // ServiceMachine.id a infolinka ani AI nemusí hádat podle názvu.
         var opts=(Array.isArray(list)?list:[]).map(function(m){
           var nm=String(m.name||'').replace(/</g,'&lt;'), ty=m.type?(' · '+String(m.type).replace(/</g,'&lt;')):'';
-          return '<option value="'+nm.replace(/"/g,'&quot;')+'">'+nm+ty+'</option>';
+          return '<option value="'+m.id+'" data-name="'+nm.replace(/"/g,'&quot;')+'">'+nm+ty+'</option>';
         }).join('');
         sel.innerHTML='<option value="">— vyber stroj v provozu —</option>'+opts+'<option value="__other">✏️ Jiný / napsat ručně</option>';
         // Předvyplnění lokality z hovoru (fuzzy shoda s názvem stroje)
@@ -249,18 +252,24 @@
           var nl=nrm(callLoc), toks=nl.split(/[^a-z0-9]+/).filter(function(x){ return x.length>=4; });
           var best=null, bestScore=0;
           (Array.isArray(list)?list:[]).forEach(function(m){ var nm=nrm(m.name); var sc=0; if(nm.indexOf(nl)>=0||nl.indexOf(nm)>=0) sc=10; toks.forEach(function(t){ if(nm.indexOf(t)>=0) sc+=t.length; }); if(sc>bestScore){ bestScore=sc; best=m; } });
-          if(best&&bestScore>=4){ sel.value=best.name; $('f-problem').value=best.name; $('f-problem').style.display='none'; checkDup(best.name); }
-          else { sel.value='__other'; $('f-problem').style.display=''; $('f-problem').value=callLoc; checkDup(callLoc); }
+          if(best&&bestScore>=4){ sel.value=String(best.id); pickedMachineId=best.id; $('f-problem').value=best.name; $('f-problem').style.display='none'; checkDup(best.name); }
+          else { sel.value='__other'; pickedMachineId=null; $('f-problem').style.display=''; $('f-problem').value=callLoc; checkDup(callLoc); }
         }
       }).catch(function(){});
     }
     // Výběr stroje ze seznamu → nastaví hodnotu; „Jiný" odkryje textové pole.
     $('f-machine-sel').addEventListener('change', function(){
       var v=this.value, inp=$('f-problem');
-      if(v==='__other'){ inp.style.display=''; inp.value=''; inp.focus(); $('dupw').classList.add('hidden'); }
-      else { inp.style.display='none'; inp.value=v; checkDup(v); }
+      if(v==='__other'||!v){ pickedMachineId=null; inp.style.display=''; inp.value=''; inp.focus(); $('dupw').classList.add('hidden'); }
+      else {
+        var opt=this.options[this.selectedIndex];
+        var nm=(opt&&opt.getAttribute('data-name'))||'';
+        pickedMachineId=parseInt(v,10)||null;
+        inp.style.display='none'; inp.value=nm; checkDup(nm);
+      }
     });
-    $('f-problem').addEventListener('change', function(){ checkDup(this.value.trim()); });
+    // Ruční přepis názvu = už to není stroj ze seznamu, vazbu na ID zahodíme.
+    $('f-problem').addEventListener('change', function(){ pickedMachineId=null; checkDup(this.value.trim()); });
 
     // 3) Foto — otevře fotoaparát, náhled, klientská komprese
     $('photo-btn').addEventListener('click', function(){ $('f-photo').click(); });
@@ -310,6 +319,7 @@
         msg.textContent='Odesílám požadavek…';
         var body={
           problem: problem,
+          machine_id: pickedMachineId,
           action: $('f-action').value.trim() || null,
           task: $('f-task').value.trim() || null,
           description: $('f-desc').value.trim() || null,

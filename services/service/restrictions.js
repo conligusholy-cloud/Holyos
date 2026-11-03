@@ -1,0 +1,255 @@
+// =============================================================================
+// HolyOS — Aktuální omezení provozu (jediný zdroj pravdy)
+// =============================================================================
+// Odsud čte PŘEHLED „Aktuální omezení provozu" na Infolince (GET /api/service/restrictions)
+// i hlasový AI agent během hovoru (services/voice/tools.js). Jedna logika filtrování
+// pro obě místa — ať operátorka a AI nikdy neříkají zákazníkovi něco jiného.
+//
+// Co se považuje za aktivní omezení:
+//   • ServiceRequest.show_infoline = true   (technik povolil „Zobrazit infolince")
+//   • status ∈ {novy, reseni}               (NE vyřešeno / zamítnuto)
+// Jakmile technik označí požadavek Vyřešeno, ze seznamu okamžitě zmizí.
+//
+// DŮLEŽITÉ: při chybě čtení z databáze vracíme available:false, NIKDY prázdný
+// seznam. Prázdný seznam znamená „nic se neděje" a AI by podle něj zákazníkovi
+// tvrdila, že je všechno v pořádku.
+
+const { prisma } = require('../../config/database');
+
+const ACTIVE_STATUSES = ['novy', 'reseni'];
+
+const IMPACT_LABEL = {
+  none: 'Bez omezení provozu',
+  known: 'Známý problém – zařízení funguje',
+  limited: 'Omezený provoz',
+  out: 'Zařízení mimo provoz',
+  site_out: 'Celý prádlomat mimo provoz',
+};
+const IMPACT_RANK = { site_out: 0, out: 1, limited: 2, known: 3, none: 9 };
+const STATUS_LABEL = { novy: 'Nový', reseni: 'V řešení', vyreseno: 'Vyřešeno', zamitnuto: 'Zamítnuto' };
+
+// ─── Párování lokality podle názvu (záloha, když chybí machine_id) ───────────
+// Bez diakritiky, tokeny ≥ 3 znaky, generické řetězce ("tesco", "pradlomat")
+// samy o sobě shodu nedělají — jinak by „Tesco Vlašim" sedlo na „Tesco Beroun".
+const LOC_GENERIC = new Set(['tesco', 'albert', 'kaufland', 'lidl', 'penny', 'billa', 'globus', 'coop', 'obi', 'ulice', 'namesti', 'pradlomat', 'parkoviste']);
+const locNorm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const locTokens = (t) => locNorm(t).split(/[^a-z0-9]+/).filter((x) => x.length >= 3);
+
+function locationMatches(a, b) {
+  const na = locNorm(a).trim(), nb = locNorm(b).trim();
+  if (!na || !nb) return false;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  const ta = locTokens(na), tb = new Set(locTokens(nb));
+  const common = ta.filter((x) => tb.has(x));
+  if (common.length >= 2) return true;
+  return common.some((x) => x.length >= 5 && !LOC_GENERIC.has(x));
+}
+
+// Skóre shody názvu — čím víc, tím jistější. Používá se při hledání stroje
+// podle toho, co zaznělo v hovoru ("Tesco Rychnov").
+function locationScore(machineName, spoken) {
+  const nm = locNorm(machineName), ns = locNorm(spoken);
+  if (!nm || !ns) return 0;
+  if (nm === ns) return 100;
+  let score = 0;
+  if (nm.includes(ns) || ns.includes(nm)) score += 50;
+  const tm = new Set(locTokens(nm));
+  locTokens(ns).forEach((t) => {
+    if (!tm.has(t)) return;
+    score += LOC_GENERIC.has(t) ? 2 : 10; // "tesco" samo o sobě skoro nic neznamená
+  });
+  return score;
+}
+
+// ─── Druh zařízení ───────────────────────────────────────────────────────────
+// Rozlišení, které po nás chce zadání: celý prádlomat × jednotlivý stroj ×
+// platební zařízení. Jede se podle názvu zařízení, který technik zapsal.
+const DEVICE_KINDS = [
+  { kind: 'payment', label: 'platební zařízení', re: /(platebn|terminal|mincovn|bankovk|zeton|platba|karta|kiosek|kiosk|automat na \w*minc)/ },
+  { kind: 'washer', re: /(pracka|pracky|pracce|washer)/, label: 'pračka' },
+  { kind: 'dryer', re: /(susic|susick|susarna|dryer)/, label: 'sušička' },
+];
+
+function classifyDevice(name) {
+  const n = locNorm(name);
+  for (const d of DEVICE_KINDS) if (d.re.test(n)) return d.kind;
+  return 'other';
+}
+
+// ─── Načtení aktivních omezení ───────────────────────────────────────────────
+
+const SELECT_FIELDS = {
+  id: true, problem: true, action: true, description: true, impact: true, devices: true,
+  infoline_note: true, impact_since: true, status: true, assignee_id: true, created_at: true,
+  phone: true, machine_id: true,
+};
+
+// Syrové řádky z DB (bez filtru lokality) — sdílí route i AI.
+async function loadActiveRows() {
+  const rows = await prisma.serviceRequest.findMany({
+    where: { show_infoline: true, status: { in: ACTIVE_STATUSES } },
+    select: SELECT_FIELDS,
+  });
+  return rows;
+}
+
+// Převede řádek požadavku na položku omezení.
+function toItem(r) {
+  const devices = Array.isArray(r.devices) ? r.devices.filter(Boolean) : [];
+  return {
+    id: r.id,
+    machine_id: r.machine_id || null,
+    location: r.problem,
+    action: r.action,
+    problem: r.description || r.action || '',
+    impact: r.impact,
+    impact_label: IMPACT_LABEL[r.impact] || r.impact,
+    devices,
+    device_kinds: devices.map((d) => ({ name: d, kind: classifyDevice(d) })),
+    site_out: r.impact === 'site_out',
+    infoline_note: r.infoline_note,
+    since: r.impact_since || r.created_at,
+    status: r.status,
+    status_label: STATUS_LABEL[r.status] || r.status,
+    // Interní — do odpovědi pro zákazníka NIKDY nepatří (jméno technika).
+    assignee_id: r.assignee_id || null,
+  };
+}
+
+function sortBySeverity(items) {
+  return items.sort((a, b) =>
+    (IMPACT_RANK[a.impact] ?? 9) - (IMPACT_RANK[b.impact] ?? 9) ||
+    new Date(b.since) - new Date(a.since));
+}
+
+function countBySeverity(items) {
+  const counts = { total: items.length, site_out: 0, out: 0, limited: 0, known: 0 };
+  items.forEach((r) => { if (counts[r.impact] != null) counts[r.impact]++; });
+  return counts;
+}
+
+// Najde stroj podle ID, nebo (když ID není) podle toho, co zaznělo v hovoru.
+// Vrací { machine, ambiguous } — ambiguous = víc lokalit se stejně dobrou shodou,
+// to si AI musí u volajícího ujasnit, ne hádat.
+async function resolveMachine({ machineId, location }) {
+  if (machineId) {
+    const m = await prisma.serviceMachine.findUnique({
+      where: { id: Number(machineId) },
+      select: { id: true, name: true, status: true, type: true },
+    });
+    return { machine: m || null, ambiguous: false };
+  }
+  const spoken = String(location || '').trim();
+  if (!spoken) return { machine: null, ambiguous: false };
+
+  const all = await prisma.serviceMachine.findMany({ select: { id: true, name: true, status: true, type: true } });
+  const scored = all
+    .map((m) => ({ m, score: locationScore(m.name, spoken) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (!scored.length) return { machine: null, ambiguous: false };
+  const best = scored[0];
+  // Dvě lokality se stejným skóre = nejednoznačné (např. „Tesco" bez města).
+  const tie = scored.filter((x) => x.score === best.score);
+  if (tie.length > 1) {
+    return { machine: null, ambiguous: true, candidates: tie.slice(0, 5).map((x) => x.m) };
+  }
+  return { machine: best.m, ambiguous: false };
+}
+
+/**
+ * getActiveRestrictions — aktivní omezení pro konkrétní prádlomat.
+ *
+ * @param {object} opts
+ * @param {number} [opts.machineId]  ServiceMachine.id (preferované — spolehlivé)
+ * @param {string} [opts.location]   co zaznělo v hovoru ("Tesco Rychnov"), když ID není
+ * @returns {Promise<object>} vždy objekt s `available`; při chybě available:false
+ */
+async function getActiveRestrictions({ machineId = null, location = null } = {}) {
+  try {
+    const { machine, ambiguous, candidates } = await resolveMachine({ machineId, location });
+
+    if (ambiguous) {
+      return {
+        available: true,
+        resolved: false,
+        ambiguous: true,
+        message: 'Lokalita není jednoznačná — je potřeba si ji upřesnit (město nebo přesnější označení).',
+        candidates: (candidates || []).map((m) => ({ id: m.id, name: m.name })),
+        items: [],
+      };
+    }
+    if (!machine && !location) {
+      return { available: true, resolved: false, message: 'Nebyla zadána lokalita.', items: [] };
+    }
+
+    const rows = await loadActiveRows();
+    const name = machine ? machine.name : String(location || '');
+    const id = machine ? machine.id : null;
+
+    // Primárně podle ID. Název je záloha pro požadavky zadané ručně (bez výběru
+    // stroje) a pro historická data z doby před zavedením machine_id.
+    const items = sortBySeverity(
+      rows
+        .filter((r) => (id && r.machine_id === id) || (!r.machine_id && locationMatches(r.problem, name)))
+        .map(toItem)
+    );
+
+    const siteOut = items.filter((i) => i.site_out);
+    const machineStatusOut = !!(machine && machine.status === 'mimo_provozu');
+
+    return {
+      available: true,
+      resolved: !!machine,
+      machine: machine ? { id: machine.id, name: machine.name, status: machine.status, type: machine.type } : null,
+      matched_by: machine ? (id && items.some((i) => i.machine_id === id) ? 'id' : 'nazev') : 'nazev',
+      location: name,
+      site_out: siteOut.length > 0 || machineStatusOut,
+      items,
+      counts: countBySeverity(items),
+    };
+  } catch (err) {
+    // Nedostupnost dat ≠ žádné závady. Volající kód (a AI) to musí poznat.
+    console.warn('[restrictions] načtení selhalo:', err.message);
+    return {
+      available: false,
+      error: 'Údaje o omezeních provozu se teď nepodařilo načíst.',
+      items: [],
+    };
+  }
+}
+
+/**
+ * listActiveRestrictions — plochý seznam pro přehled na Infolince.
+ * @param {object} opts { q, location }
+ */
+async function listActiveRestrictions({ q = '', location = '' } = {}) {
+  const rows = await loadActiveRows();
+  let out = rows.map(toItem);
+  const query = String(q || '').trim();
+  if (query) {
+    const nq = locNorm(query);
+    out = out.filter((r) => locNorm(r.location + ' ' + r.devices.join(' ') + ' ' + (r.problem || '') + ' ' + (r.infoline_note || '')).includes(nq));
+  }
+  const loc = String(location || '').trim();
+  if (loc) out = out.filter((r) => locationMatches(r.location, loc));
+  sortBySeverity(out);
+  return { items: out, counts: countBySeverity(out) };
+}
+
+module.exports = {
+  getActiveRestrictions,
+  listActiveRestrictions,
+  loadActiveRows,
+  resolveMachine,
+  classifyDevice,
+  locationMatches,
+  locationScore,
+  locNorm,
+  toItem,
+  ACTIVE_STATUSES,
+  IMPACT_LABEL,
+  IMPACT_RANK,
+  STATUS_LABEL,
+};

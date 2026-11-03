@@ -13,6 +13,7 @@ const path = require('path');
 const multer = require('multer');
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+const restrictions = require('../services/service/restrictions'); // sdílený zdroj „Aktuální omezení provozu"
 
 router.use(requireAuth);
 
@@ -1112,51 +1113,38 @@ router.post('/trips/:id/return-end', express.json(), async (req, res, next) => {
 
 // ---- Dopad na provoz (Aktuální omezení pro Infolinku) ----
 const IMPACTS = ['none', 'known', 'limited', 'out', 'site_out'];
-const IMPACT_LABEL = { none: 'Bez omezení provozu', known: 'Známý problém – zařízení funguje', limited: 'Omezený provoz', out: 'Zařízení mimo provoz', site_out: 'Celý prádlomat mimo provoz' };
-const IMPACT_RANK = { site_out: 0, out: 1, limited: 2, known: 3, none: 9 };
+// Popisky i párování lokalit má na starosti sdílená služba — ať se definice
+// nerozejdou mezi přehledem pro operátorku a tím, co říká AI zákazníkovi.
+const { IMPACT_LABEL, STATUS_LABEL } = restrictions;
 const impactFields = {
   impact: z.enum(IMPACTS).optional(),
   devices: z.array(z.string().max(80)).max(20).optional().nullable(),
   show_infoline: z.boolean().optional(),
   infoline_note: z.string().max(500).optional().nullable(),
 };
-// Fuzzy shoda lokality (text z hovoru / název stroje) — bez diakritiky, tokeny ≥ 3 znaky, generické řetězce ignorovány.
-const LOC_GENERIC = new Set(['tesco', 'albert', 'kaufland', 'lidl', 'penny', 'billa', 'globus', 'coop', 'obi', 'ulice', 'namesti', 'pradlomat', 'parkoviste']);
-const locNorm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-const locTokens = (t) => locNorm(t).split(/[^a-z0-9]+/).filter((x) => x.length >= 3);
-function locationMatches(a, b) {
-  const na = locNorm(a).trim(), nb = locNorm(b).trim();
-  if (!na || !nb) return false;
-  if (na.includes(nb) || nb.includes(na)) return true;
-  const ta = locTokens(na), tb = new Set(locTokens(nb));
-  const common = ta.filter((x) => tb.has(x));
-  if (common.length >= 2) return true;
-  return common.some((x) => x.length >= 5 && !LOC_GENERIC.has(x));
-}
 
 // GET /api/service/restrictions?q=&location=  — aktivní omezení pro Infolinku (jen show_infoline, stav ≠ vyřešeno/zamítnuto),
 // řazeno podle závažnosti (⛔ → 🔴 → 🟠 → 🟡), v rámci závažnosti nejnovější nahoře.
+// Filtrování i tvar položek žije v services/service/restrictions.js — ze stejného
+// zdroje čte hlasový AI agent, ať operátorka a AI neříkají zákazníkovi každý něco jiného.
 router.get('/restrictions', async (req, res, next) => {
   try {
-    const q = String(req.query.q || '').trim(), loc = String(req.query.location || '').trim();
-    const rows = await prisma.serviceRequest.findMany({
-      where: { show_infoline: true, status: { in: ['novy', 'reseni'] } },
-      select: { id: true, problem: true, action: true, description: true, impact: true, devices: true, infoline_note: true, impact_since: true, status: true, assignee_id: true, created_at: true, phone: true },
+    const { items, counts } = await restrictions.listActiveRestrictions({
+      q: String(req.query.q || '').trim(),
+      location: String(req.query.location || '').trim(),
     });
-    const withA = await _attachAssignees(rows);
-    let out = withA.map((r) => ({ id: r.id, location: r.problem, action: r.action, problem: r.description || r.action || '', impact: r.impact, impact_label: IMPACT_LABEL[r.impact] || r.impact, devices: Array.isArray(r.devices) ? r.devices : [], infoline_note: r.infoline_note, since: r.impact_since || r.created_at, status: r.status, status_label: STATUS_LABEL[r.status] || r.status, assignee_name: r.assignee_name || null }));
-    if (q) { const nq = locNorm(q); out = out.filter((r) => locNorm(r.location + ' ' + r.devices.join(' ') + ' ' + (r.problem || '') + ' ' + (r.infoline_note || '')).includes(nq)); }
-    if (loc) out = out.filter((r) => locationMatches(r.location, loc));
-    out.sort((a, b) => (IMPACT_RANK[a.impact] ?? 9) - (IMPACT_RANK[b.impact] ?? 9) || new Date(b.since) - new Date(a.since));
-    const counts = { total: out.length, site_out: 0, out: 0, limited: 0, known: 0 };
-    out.forEach((r) => { if (counts[r.impact] != null) counts[r.impact]++; });
-    res.json({ items: out, counts });
+    // Jméno řešitele doplňujeme až tady — AI ho nedostává (interní údaj).
+    const withA = await _attachAssignees(items);
+    res.json({ items: withA, counts });
   } catch (err) { next(err); }
 });
 
 const requestSchema = z.object({
   ...impactFields,
   problem: z.string().min(1).max(255),
+  // Lokalita vybraná ze seznamu strojů. Když uživatel píše ručně, zůstane null
+  // a páruje se podle názvu (viz services/service/restrictions.js).
+  machine_id: z.number().int().positive().optional().nullable(),
   action: z.string().max(255).optional().nullable(),
   task: z.string().max(255).optional().nullable(),
   description: z.string().optional().nullable(),
@@ -1176,8 +1164,11 @@ router.post('/requests', async (req, res, next) => {
     // vrať existující, ať UI nabídne „přidat volajícího k existujícímu".
     const force = !!(req.body && req.body.force);
     if (!force && parsed.data.problem) {
+      // Shoda na stroj: primárně přes machine_id, pro ručně psané lokality podle názvu.
+      const dupOr = [{ problem: { equals: parsed.data.problem, mode: 'insensitive' } }];
+      if (parsed.data.machine_id) dupOr.unshift({ machine_id: parsed.data.machine_id });
       const dup = await prisma.serviceRequest.findFirst({
-        where: { status: { in: ['novy', 'reseni'] }, problem: { equals: parsed.data.problem, mode: 'insensitive' } },
+        where: { status: { in: ['novy', 'reseni'] }, OR: dupOr },
         orderBy: { created_at: 'desc' },
       });
       if (dup) {
@@ -1256,7 +1247,6 @@ const requestPatchSchema = z.object({
   est_repair_min: z.number().int().nonnegative().optional().nullable(),
 });
 
-const STATUS_LABEL = { novy: 'Nový', reseni: 'V řešení', vyreseno: 'Vyřešeno', zamitnuto: 'Zamítnuto' };
 router.patch('/requests/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -1727,6 +1717,9 @@ router.post('/maintenance-inspections', async (req, res, next) => {
       const sr = await prisma.serviceRequest.create({
         data: {
           problem: (d.machine_name || 'Neurčený stroj').slice(0, 255),
+          // Protokol zná stroj podle ID — předáme ho dál, ať omezení provozu
+          // nemusí párovat podle názvu.
+          machine_id: d.machine_id || null,
           action: r.text.slice(0, 255),
           description: ((r.note ? r.note + '\n' : '') + 'Závada zjištěna při kontrole (protokol #' + row.id + ').').trim(),
           photo_url: r.photo_url || null,

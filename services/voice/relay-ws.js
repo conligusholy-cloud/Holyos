@@ -14,6 +14,7 @@
 const { WebSocketServer } = require('ws');
 const { prisma } = require('../../config/database');
 const agent = require('./agent');
+const voiceTools = require('./tools');
 
 let getSetting = null;
 try {
@@ -67,6 +68,28 @@ const SCENARIO_REMINDER =
   'a všechny zákazy. Znalostní podklady a obecný styl slouží jen jako doplněk — při rozporu vždy vyhrává scénář. ' +
   'Před každou odpovědí si v duchu ověř, že neporušuješ žádné pravidlo scénáře. Nevymýšlej si nic mimo scénář a podklady. ' +
   'Mluv krátce: jedna až dvě věty a nejvýš jedna otázka.';
+
+// Pravidla pro práci s evidovanými závadami. Jsou napevno v kódu (ne v
+// editovatelném scénáři linky), protože jde o ochranu před špatnou informací
+// zákazníkovi — scénář se mění často a tohle se nesmí omylem smazat.
+const RESTRICTIONS_RULES =
+  '=== AKTUÁLNÍ OMEZENÍ PROVOZU (závazné) === ' +
+  'Máš nástroj zjisti_omezeni_provozu, který ti řekne, jaké závady jsou na daném prádlomatu právě evidované. ' +
+  'KDY HO VOLAT: jakmile z hovoru víš město a lokalitu prádlomatu, a VŽDY dřív, než začneš zákazníkovi radit, co má zkusit. ' +
+  'Když si potřebuješ stav během hovoru ověřit znovu, zavolej nástroj znovu — data jsou vždy aktuální. ' +
+  'JAK ODPOVÍDAT: ' +
+  '1) Když je celý prádlomat mimo provoz, řekni to zákazníkovi hned na začátku. ' +
+  '2) Když je mimo provoz konkrétní zařízení, ověř, jestli mluví právě o něm. ' +
+  '3) Když je jeho závada už evidovaná, nevysvětluj mu postupy, které ji nemůžou odstranit — rovnou mu řekni, že o tom víme a servis to řeší. ' +
+  '4) Nabídni jen takovou náhradu, která podle dat není omezená (jiná pračka, jiná platba). ' +
+  '5) Když hlásí něco jiného, než co je evidované, pokračuj běžným postupem podle znalostních podkladů. ' +
+  'CO NESMÍŠ: ' +
+  'Netvrď, že zařízení funguje, jen proto, že u něj není evidovaná závada — evidence nemusí být úplná. ' +
+  'Nezaměň zařízení ani lokalitu; když si nejsi jistá, kterého prádlomatu se dotaz týká, zeptej se na město. ' +
+  'Neslibuj termín opravy — ten neznáš. Nedoporuč použít zařízení označené jako mimo provoz. ' +
+  'Nečti nahlas interní servisní poznámky ani jména techniků. ' +
+  'Když nástroj vrátí dostupnost „nedostupne", NEŘÍKEJ, že žádná závada není evidovaná — pokračuj běžným postupem. ' +
+  'Když zákazník chce mluvit s člověkem, přepoj ho okamžitě a už nediagnostikuj.';
 
 function send(ws, obj) {
   try {
@@ -282,6 +305,7 @@ function attach(server) {
       target: null,
       campaign: null,
       system: mode === 'outbound' ? outboundSystem(null) : personalSystem(),
+      toolset: null, // nastaví se níž podle linky (infolinka má nástroje)
       greeting:
         'Dobrý den, dovolali jste se na asistenta. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?',
     };
@@ -325,12 +349,17 @@ function attach(server) {
       let knowledge = true;
       if (/^osobni-/.test(String(line || '')) && getSetting) { try { const v = await getSetting(lineKey('use_knowledge')); if (v === false || v === 'false') knowledge = false; } catch (_) { /* default */ } }
       state.system = await aic.augmentSystem(state.system, { voice: true, scope, knowledge });
+      // Infolinka prádlomatů: AI dostane nástroj na aktuální omezení provozu.
+      if (mode === 'inbound' && line === 'infolinka') state.toolset = voiceTools.infolinkaToolset;
       // Znalostní podklady jsou na konci dlouhé → zopakuj prioritu scénáře úplně nakonec (nejblíže odpovědi).
       state.system += '\n\n' + SCENARIO_REMINDER;
       // Vícejazyčnost linky (voice.<linka>.multilang)
       state.lang = 'cs';
       if (mode === 'inbound' && getSetting) { try { const ml = await getSetting(lineKey('multilang')); state.multilang = ml === true || ml === 'true'; } catch (_) { state.multilang = false; } }
       if (state.multilang) state.system += '\n\n' + MULTILANG_RULE;
+      // Pravidla k omezením provozu jdou ÚPLNĚ NAKONEC — jsou to pojistky proti
+      // špatné informaci zákazníkovi a nesmí je přebít připomenutí scénáře výš.
+      if (state.toolset) state.system += '\n\n' + RESTRICTIONS_RULES;
       // Rod komunikace podle jména leada (muž/žena) — u odchozích hovorů známe cíl.
       if (mode === 'outbound' && state.target) {
         let first = null, last = null, full = state.target.name || null;
@@ -466,7 +495,7 @@ function attach(server) {
             system: state.system,
             history: state.history,
             userText,
-            toolset: null,
+            toolset: state.toolset,
             maxTokens: 300,
             temperature: 0.2, // přesnější dodržování scénáře (méně improvizace)
           });
@@ -669,4 +698,4 @@ function attach(server) {
   return wss;
 }
 
-module.exports = { attach, WS_PATH, calls };
+module.exports = { attach, WS_PATH, calls, wantsHuman, RESTRICTIONS_RULES };

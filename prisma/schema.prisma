@@ -5346,6 +5346,10 @@ model ServiceRequest {
   show_infoline Boolean   @default(false) // zobrazit infolince (dokud není Vyřešeno)
   infoline_note String?   @db.VarChar(500) // krátká informace pro operátora / zákazníka
   impact_since  DateTime? // od kdy omezení platí (nastaví se při zadání dopadu ≠ none)
+  // Lokalita/prádlomat vybraný ze seznamu strojů (ServiceMachine.id) — bez FK, jen odkaz,
+  // stejně jako u MaintenanceInspection. Název zůstává v `problem` jako záloha pro ručně
+  // psané lokality a historická data. AI infolinky páruje omezení primárně přes tohle ID.
+  machine_id    Int?
   resolved_at   DateTime? // kdy byl požadavek označen Vyřešeno
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
@@ -5355,6 +5359,7 @@ model ServiceRequest {
   @@index([created_by_user_id])
   @@index([voice_call_id])
   @@index([show_infoline, status])
+  @@index([machine_id])
   @@map("service_requests")
 }
 
