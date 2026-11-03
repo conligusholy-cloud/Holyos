@@ -3284,7 +3284,12 @@ router.post('/exports/run', async (req, res, next) => {
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 router.get('/exports', async (req, res, next) => {
-  try { res.json(await prisma.accountingExport.findMany({ orderBy: { created_at: 'desc' }, take: 200 })); } catch (err) { next(err); }
+  try {
+    // Testovací odeslání starší 5 minut uklidíme ještě před výpisem, ať je
+    // historie čistá hned, jak uživatel okno otevře (worker běží po intervalech).
+    await accExport.cleanupTestExports();
+    res.json(await prisma.accountingExport.findMany({ orderBy: { created_at: 'desc' }, take: 200 }));
+  } catch (err) { next(err); }
 });
 router.get('/exports/:id', async (req, res, next) => {
   try {

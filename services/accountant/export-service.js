@@ -255,11 +255,54 @@ function zipPathFor(exp, part) {
   return fs.existsSync(f) ? f : null;
 }
 
+// ── Úklid testovacích odeslání ──────────────────────────────────────────────
+// Test je jen rychlá kontrola, že e-mail dorazí — v historii nemá co dělat
+// a jeho ZIPy (klidně desítky MB) zbytečně drží místo na disku. Po 5 minutách
+// se záznam i se soubory smaže sám.
+const TEST_KEEP_MINUTES = 5;
+// Rozdělaný test (status 'pending') běží — ten nemažeme, jinak by si běžící
+// export sáhl na smazaný řádek. Když zůstane viset hodinu, je po smrti.
+const TEST_PENDING_KEEP_MINUTES = 60;
+
+async function cleanupTestExports() {
+  const now = Date.now();
+  const done = new Date(now - TEST_KEEP_MINUTES * 60000);
+  const stuck = new Date(now - TEST_PENDING_KEEP_MINUTES * 60000);
+  try {
+    const old = await prisma.accountingExport.findMany({
+      where: {
+        run_trigger: 'test',
+        OR: [
+          { status: { not: 'pending' }, created_at: { lt: done } },
+          { status: 'pending', created_at: { lt: stuck } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!old.length) return 0;
+    for (const e of old) {
+      try {
+        fs.rmSync(path.join(EXPORT_DIR, String(e.id)), { recursive: true, force: true });
+      } catch (err) {
+        console.warn('[acc-export] ZIPy testu #' + e.id + ' se nepodařilo smazat:', err.message);
+      }
+    }
+    // Položky exportu mají onDelete: Cascade, takže stačí smazat hlavičku.
+    const r = await prisma.accountingExport.deleteMany({ where: { id: { in: old.map((e) => e.id) } } });
+    console.log('[acc-export] úklid: smazáno ' + r.count + ' testovacích odeslání starších než ' + TEST_KEEP_MINUTES + ' min');
+    return r.count;
+  } catch (e) {
+    console.warn('[acc-export] úklid testů selhal:', e.message);
+    return 0;
+  }
+}
+
 // ── Automatické odesílání (worker) ──
 let running = false;
 async function tick() {
   if (running) return; running = true;
   try {
+    await cleanupTestExports();
     for (let guard = 0; guard < 12; guard++) { // dohnat i víc zmeškaných období, max 12 najednou
       const cfg = await getConfig();
       if (!cfg.enabled || !cfg.recipients) break;
@@ -273,6 +316,13 @@ async function tick() {
   } catch (e) { console.warn('[acc-export] tick:', e.message); } finally { running = false; }
 }
 let timer = null;
-function start() { if (timer) return; timer = setInterval(tick, 30 * 60 * 1000); setTimeout(tick, 3 * 60 * 1000); console.log('[acc-export] worker spuštěn (kontrola 2× za hodinu)'); }
+let cleanupTimer = null;
+function start() {
+  if (timer) return;
+  timer = setInterval(tick, 30 * 60 * 1000); setTimeout(tick, 3 * 60 * 1000);
+  // Úklid testů má vlastní, častější interval — 30 minut by na „po 5 minutách" nestačilo.
+  cleanupTimer = setInterval(cleanupTestExports, TEST_KEEP_MINUTES * 60 * 1000);
+  console.log('[acc-export] worker spuštěn (kontrola 2× za hodinu, úklid testů po ' + TEST_KEEP_MINUTES + ' min)');
+}
 
-module.exports = { getConfig, saveConfig, nextPeriod, runExport, resendExport, zipPathFor, start, tick, INTERVAL_LABEL, dayStart, addInterval };
+module.exports = { getConfig, saveConfig, nextPeriod, runExport, resendExport, zipPathFor, start, tick, cleanupTestExports, TEST_KEEP_MINUTES, INTERVAL_LABEL, dayStart, addInterval };
