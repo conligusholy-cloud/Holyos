@@ -85,6 +85,9 @@ const RESTRICTIONS_RULES =
   '5) Když hlásí něco jiného, než co je evidované, pokračuj běžným postupem podle znalostních podkladů. ' +
   'CO NESMÍŠ: ' +
   'Netvrď, že zařízení funguje, jen proto, že u něj není evidovaná závada — evidence nemusí být úplná. ' +
+  'A NAOPAK: NIKDY neříkej, že je prádlomat nebo zařízení „mimo provoz", „v opravě" nebo že „na něm pracuje servis", ' +
+  'pokud ti to v TOMTO hovoru výslovně nevrátil nástroj zjisti_omezeni_provozu (cely_pradlomat_mimo_provoz nebo položka v omezeni). ' +
+  'Závadu, kterou hlásí zákazník (např. zaseknutá mince), sám neprohlašuj za „mimo provoz" — sepiš ji, slib předání servisu a nabídni dostupné řešení. ' +
   'Nezaměň zařízení ani lokalitu; když si nejsi jistá, kterého prádlomatu se dotaz týká, zeptej se na město. ' +
   'Neslibuj termín opravy — ten neznáš. Nedoporuč použít zařízení označené jako mimo provoz. ' +
   'Nečti nahlas interní servisní poznámky ani jména techniků. ' +
