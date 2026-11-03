@@ -374,11 +374,6 @@ function homePage(lang) {
     // ── jak začít ──
     + '<section class="alt" id="jak-zacit"><div class="divline"></div><div class="wrap">' + kicker(L.start.kicker) + '<h2 class="rv">' + esc(L.start.h) + '</h2>'
     + '<ol class="steps" style="list-style:none;padding:0">' + L.start.steps.map((s, i) => '<li class="step rv"><div class="n">' + (i + 1) + '</div><h3>' + esc(s[0]) + '</h3><p>' + esc(s[1]) + '</p></li>').join('') + '</ol></div></section>'
-    // ── technologie ──
-    + '<section id="technologie" style="padding:70px 0"><div class="wrap"><div class="tech rv">'
-    // PH: logo Best Series + odkaz na web výrobce (URL doplní zadavatel)
-    + '<div class="ph logo-ph" role="img" aria-label="Logo Best Series">Best Series</div>'
-    + '<div>' + kicker(L.tech.kicker) + '<h2>' + esc(L.tech.h) + '</h2><p>' + esc(L.tech.text) + '</p><span class="lnk" data-ph="bestseries-url">' + esc(L.tech.link) + ' · odkaz doplníme</span></div></div></div></section>'
     // ── FAQ ──
     + '<section class="alt" id="otazky"><div class="divline"></div><div class="wrap">' + kicker(L.faq.kicker) + '<h2 class="rv">' + esc(L.faq.h) + '</h2><div class="faq">'
     + L.faq.items.map((q) => '<details class="rv"><summary>' + esc(q[0]) + svg('plus', 22) + '</summary><p>' + esc(q[1]) + '</p></details>').join('') + '</div></div></section>'
@@ -401,7 +396,7 @@ function homePage(lang) {
     + '<footer><div class="wrap"><div class="fgrid"><div><a class="logo" href="#top">' + logo(30) + '<span>LAUNDROMATS</span></a><p>' + esc(L.foot.claim) + '</p></div>'
     + '<div><h4>Navigace</h4><nav aria-label="Navigace v patičce">' + navLinks + '</nav></div>'
     + '<div><h4>' + esc(L.foot.company) + '</h4><div class="fph">Firemní a kontaktní údaje doplníme</div>'
-    + '<a class="fl" href="mailto:info@laundromats.eu" style="margin-top:12px">info@laundromats.eu</a><a class="fl" href="/gdpr">' + esc(L.foot.privacy) + '</a><a class="fl" href="#technologie">' + esc(L.foot.tech) + '</a></div></div>'
+    + '<a class="fl" href="mailto:info@laundromats.eu" style="margin-top:12px">info@laundromats.eu</a><a class="fl" href="/gdpr">' + esc(L.foot.privacy) + '</a></div></div>'
     + '<div class="fbot"><span>' + esc(L.foot.rights) + ' ' + new Date().getFullYear() + ' Laundromats</span><span>' + esc(L.foot.claim) + '</span></div></div></footer>'
     + '<script>' + clientJs(L) + '</script><script>' + NET_JS + '</script><script src="/cesta/track.js" defer></script></body></html>';
 }

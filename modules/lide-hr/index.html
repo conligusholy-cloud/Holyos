@@ -1861,13 +1861,41 @@
       }
     }
 
+    // Dny v týdnu pro formulář směny — hodnoty podle ISO (1 = pondělí … 7 = neděle),
+    // stejné číslování jako Date.prototype.getDay() posunuté (neděle = 7).
+    const WEEKDAYS = [
+      { value: 1, short: 'Po', full: 'Pondělí' },
+      { value: 2, short: 'Út', full: 'Úterý' },
+      { value: 3, short: 'St', full: 'Středa' },
+      { value: 4, short: 'Čt', full: 'Čtvrtek' },
+      { value: 5, short: 'Pá', full: 'Pátek' },
+      { value: 6, short: 'So', full: 'Sobota' },
+      { value: 7, short: 'Ne', full: 'Neděle' },
+    ];
+
+    // Dny směny do tabulky: souvislé úseky spojí pomlčkou („Po–Pá"), zbytek vyjmenuje.
+    function formatWeekdays(days) {
+      const list = Array.from(new Set((days || []).map(Number).filter((d) => d >= 1 && d <= 7))).sort((a, b) => a - b);
+      if (!list.length) return '—';
+      const short = (v) => (WEEKDAYS.find((w) => w.value === v) || {}).short || v;
+      const parts = [];
+      let from = list[0], prev = list[0];
+      for (let i = 1; i <= list.length; i++) {
+        const cur = list[i];
+        if (cur === prev + 1) { prev = cur; continue; }
+        parts.push(from === prev ? short(from) : (prev - from === 1 ? short(from) + ', ' + short(prev) : short(from) + '–' + short(prev)));
+        from = cur; prev = cur;
+      }
+      return parts.join(', ');
+    }
+
     function renderShifts(shifts) {
       const el = document.getElementById('shifts-table');
       if (!shifts || shifts.length === 0) {
         el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏰</div><h3>Žádné směny</h3><p>Vytvořte směny pro zaměstnance</p></div>';
         return;
       }
-      let html = '<table class="data-table"><thead><tr><th>Název</th><th>Typ</th><th>Čas</th><th>Fond hodin</th><th>Přestávka</th><th></th></tr></thead><tbody>';
+      let html = '<table class="data-table"><thead><tr><th>Název</th><th>Typ</th><th>Čas</th><th>Fond hodin</th><th>Přestávka</th><th>Dny</th><th></th></tr></thead><tbody>';
       for (const s of shifts) {
         const typeLabel = s.type === 'fixed' ? 'Pevná' : 'Pružná';
         const timeStr = s.type === 'fixed' && s.start_time && s.end_time ? `${escHtml(s.start_time)} – ${escHtml(s.end_time)}` : '—';
@@ -1877,6 +1905,7 @@
           <td>${timeStr}</td>
           <td>${s.hours_fund || 8}h</td>
           <td>${s.break_minutes || 30} min</td>
+          <td>${escHtml(formatWeekdays(s.weekdays))}</td>
           <td>
             <button class="btn btn-sm" onclick="openShiftModal(${s.id})">✏️</button>
             <button class="btn btn-sm btn-danger" onclick="deleteShift(${s.id}, ${(s._count && s._count.people) || 0})">✕</button>
@@ -1888,7 +1917,7 @@
     }
 
     async function openShiftModal(editId) {
-      let shift = { name: '', type: 'fixed', start_time: '07:00', end_time: '15:30', hours_fund: 8, break_minutes: 30 };
+      let shift = { name: '', type: 'fixed', start_time: '07:00', end_time: '15:30', hours_fund: 8, break_minutes: 30, weekdays: [] };
       if (editId) {
         try {
           const res = await fetch('/api/hr/shifts');
@@ -1928,6 +1957,18 @@
                 <label>Přestávka (min)</label>
                 <input type="number" name="break_minutes" value="${shift.break_minutes || 30}">
               </div>
+              <div class="form-group full">
+                <label>Dny v týdnu</label>
+                <div style="display:flex; flex-wrap:wrap; gap:14px; padding-top:4px;">
+                  ${WEEKDAYS.map(d => `
+                    <span style="display:flex; align-items:center; gap:6px;">
+                      <input type="checkbox" name="weekdays" id="chk-weekday-${d.value}" value="${d.value}"
+                        ${(shift.weekdays || []).map(Number).includes(d.value) ? 'checked' : ''}
+                        style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;">
+                      <label for="chk-weekday-${d.value}" style="cursor:pointer;margin:0;" title="${d.full}">${d.short}</label>
+                    </span>`).join('')}
+                </div>
+              </div>
             </div>
             <div class="modal-actions">
               <button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
@@ -1955,6 +1996,8 @@
         end_time: form.get('end_time') || null,
         hours_fund: parseFloat(form.get('hours_fund')),
         break_minutes: parseInt(form.get('break_minutes'), 10),
+        // Zaškrtnuté dny v týdnu; žádný zaškrtnutý = prázdné pole (server uloží null)
+        weekdays: form.getAll('weekdays').map(Number).filter(Number.isInteger),
       };
       // Pružná směna nemá pevný začátek ani konec
       if (data.type === 'flexible') {
