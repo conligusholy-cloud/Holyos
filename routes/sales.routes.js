@@ -51,7 +51,9 @@ router.post('/webhook/meta', async (req, res) => {
         .createHmac('sha256', appSecret)
         .update(JSON.stringify(req.body))
         .digest('hex');
-      if (signature !== expected) return res.status(401).json({ error: 'Neplatný podpis' });
+      if (!require('../config/secrets').safeEqual(signature, expected)) return res.status(401).json({ error: 'Neplatný podpis' });
+    } else {
+      console.warn('[sales-meta-webhook] META_APP_SECRET chybí — POST přijat bez ověření podpisu (nastav ho na Railway)');
     }
 
     const entries = req.body.entry || [];
@@ -139,7 +141,8 @@ router.post('/webhook/meta', async (req, res) => {
 router.post('/webhook/linkedin', async (req, res) => {
   try {
     const SECRET = process.env.LINKEDIN_WEBHOOK_SECRET;
-    if (SECRET) {
+    if (!SECRET) return res.status(503).json({ error: 'Webhook není nakonfigurován (chybí LINKEDIN_WEBHOOK_SECRET).' });
+    {
       const provided = req.headers['x-li-webhook-secret'];
       if (!require('../config/secrets').safeEqual(provided, SECRET)) return res.status(401).json({ error: 'Neplatný secret' });
     }

@@ -3118,7 +3118,9 @@ router.post('/misto/stripe-webhook', express.raw({ type: '*/*', limit: '1mb' }),
       const expected = crypto.createHmac('sha256', secret).update(t + '.' + raw).digest('hex');
       if (!safeEqStr(expected, v1) || Math.abs(Date.now() / 1000 - Number(t)) > 600) return res.status(400).send('Neplatný podpis');
     } else {
-      console.warn('[compounder] STRIPE_WEBHOOK_SECRET chybí — webhook přijat bez ověření podpisu');
+      // Bez ověření podpisu by kdokoli mohl podvrhnout „zaplaceno" → webhook odmítneme
+      console.error('[compounder] STRIPE_WEBHOOK_SECRET chybí — webhook odmítnut (nelze ověřit podpis)');
+      return res.status(503).send('Webhook není nakonfigurován');
     }
     const ev = JSON.parse(raw);
     if (ev.type === 'checkout.session.completed' || ev.type === 'checkout.session.async_payment_succeeded') {
