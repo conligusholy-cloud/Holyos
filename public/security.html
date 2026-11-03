@@ -21,6 +21,15 @@
     .codes{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px;font-family:ui-monospace,Consolas,monospace;font-size:15px}
     .codes div{background:#0f1220;border:1px solid #262c48;border-radius:8px;padding:8px;text-align:center}
     a{color:#7dd3fc} hr{border:0;border-top:1px solid #262c48;margin:20px 0}
+    /* Stažení Authenticatoru — QR pro skenování z počítače, tlačítko pro mobil. */
+    .getapp{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+    .getapp .g{background:#0f1220;border:1px solid #262c48;border-radius:12px;padding:12px;text-align:center}
+    .getapp .g .os{font-size:12px;color:#8a93b8;margin-bottom:8px}
+    .getapp .g .q{background:#fff;padding:7px;border-radius:9px;display:inline-block;line-height:0}
+    .getapp .g a.store{display:block;margin-top:9px;padding:9px 10px;border-radius:9px;background:#262c48;color:#e8ecf8;
+      text-decoration:none;font-weight:700;font-size:13px}
+    .getapp .g a.store:hover{background:#30375a}
+    @media(max-width:380px){.getapp{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -44,6 +53,12 @@
 <script>
 (function(){
   var $ = function(id){ return document.getElementById(id); };
+  // Odkazy na stažení ověřovací aplikace. Google Authenticator je nejrozšířenější;
+  // fungují i Microsoft Authenticator a Authy, proto na ně jen odkazujeme textem.
+  var STORE = {
+    android: 'https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2',
+    ios: 'https://apps.apple.com/app/google-authenticator/id388497605'
+  };
   function api(method, url, body){
     return fetch(url, { method: method, credentials: 'include', headers: {'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : undefined })
       .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(!r.ok) { var e=new Error(d.error||('Chyba '+r.status)); e.status=r.status; throw e; } return d; }); });
@@ -68,9 +83,20 @@
   function setup(){
     err('');
     api('POST','/api/auth/2fa/setup').then(function(d){
-      $('area').innerHTML = '<div style="font-size:14px;margin-top:6px"><b>1.</b> V aplikaci (Authenticator) přidej účet naskenováním QR kódu:</div><div id="qr"></div>'
+      $('area').innerHTML = '<div style="font-size:14px;margin-top:6px"><b>1.</b> Nemáš ještě aplikaci? Stáhni si Google Authenticator — z telefonu klikni na tlačítko, z počítače naskenuj QR kód telefonem:</div>'
+        + '<div class="getapp">'
+        +   '<div class="g"><div class="os">📱 Android</div><div class="q" id="qr-android"></div>'
+        +     '<a class="store" href="'+STORE.android+'" target="_blank" rel="noopener">Google Play</a></div>'
+        +   '<div class="g"><div class="os">🍎 iPhone</div><div class="q" id="qr-ios"></div>'
+        +     '<a class="store" href="'+STORE.ios+'" target="_blank" rel="noopener">App Store</a></div>'
+        + '</div>'
+        + '<div style="font-size:12px;color:#8a93b8;margin-top:8px">Stejně dobře poslouží Microsoft Authenticator nebo Authy — stačí jedna z nich.</div>'
+        + '<div style="font-size:14px;margin-top:16px"><b>2.</b> V aplikaci přidej účet naskenováním tohohle QR kódu:</div><div id="qr"></div>'
         + '<div style="font-size:13px;color:#8a93b8;margin-top:10px">Nebo zadej klíč ručně:</div><div class="secret">'+esc(d.secret)+'</div>'
-        + '<div style="font-size:14px;margin-top:14px"><b>2.</b> Opiš 6místný kód z aplikace:</div><input type="text" id="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456"><button id="enable">Potvrdit a zapnout</button>';
+        + '<div style="font-size:14px;margin-top:14px"><b>3.</b> Opiš 6místný kód z aplikace:</div><input type="text" id="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456"><button id="enable">Potvrdit a zapnout</button>';
+      // QR na stažení aplikace (pro ty, co nastavují 2FA na počítači).
+      try { new QRCode($('qr-android'), { text: STORE.android, width: 104, height: 104 }); } catch(e) {}
+      try { new QRCode($('qr-ios'), { text: STORE.ios, width: 104, height: 104 }); } catch(e) {}
       try { new QRCode($('qr'), { text: d.otpauth, width: 180, height: 180 }); } catch(e) { $('qr').remove(); }
       $('enable').onclick = function(){
         api('POST','/api/auth/2fa/enable',{code:$('code').value}).then(function(r){
