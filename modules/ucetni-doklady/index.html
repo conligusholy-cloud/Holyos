@@ -353,12 +353,13 @@
             <th>Splatnost</th>
             <th>Objednávka</th>
             <th>Příjemka</th>
+            <th>Odesláno ÚOL</th>
             <th>Založil</th>
             <th>Založeno</th>
             <th></th>
           </tr>
         </thead>
-        <tbody><tr><td colspan="16" class="empty-hint">Načítání…</td></tr></tbody>
+        <tbody><tr><td colspan="17" class="empty-hint">Načítání…</td></tr></tbody>
       </table>
 
       </div><!-- /tab-invoices -->
@@ -1048,6 +1049,7 @@
           '<td style="white-space:nowrap;' + (isOverdue ? 'color:#ef4444;font-weight:600;' : (inv.status === 'qr_pending' ? 'color:#22d3ee;font-weight:600;' : '')) + '">' + fmtDate(inv.date_due) + '</td>' +
           '<td' + (inv.order ? '' : ' onclick="event.stopPropagation()"') + '>' + (inv.order ? '<span class="inline-code">' + escapeHtml(inv.order.order_number) + '</span>' : manualMatchBox(inv, 'order')) + '</td>' +
           '<td' + (inv.warehouse_document ? '' : ' onclick="event.stopPropagation()"') + '>' + (inv.warehouse_document ? '<span class="inline-code">' + escapeHtml(inv.warehouse_document.number) + '</span>' : manualMatchBox(inv, 'receipt')) + '</td>' +
+          '<td onclick="event.stopPropagation()">' + uolSentBox(inv) + '</td>' +
           '<td>' + escapeHtml(creatorLabel(inv)) + '</td>' +
           '<td style="color:var(--text2);font-size:0.88em;white-space:nowrap;">' + fmtDateTime(inv.created_at) + '</td>' +
           '<td onclick="event.stopPropagation()" style="white-space:nowrap;">' +
@@ -1086,6 +1088,12 @@
       if (field === 'order') return inv.order ? 'ano ' + inv.order.order_number : (tags.includes('manual_order') ? 'ano ručně' : 'ne');
       return inv.warehouse_document ? 'ano ' + inv.warehouse_document.number : (tags.includes('manual_receipt') ? 'ano ručně' : 'ne');
     };
+    // Odesláno do účetnictví: „ano exportem" (z historie exportů) / „ano ručně" / „ne"
+    const ivUol = (inv) => {
+      if (inv.uol_export_at) return 'ano exportem';
+      const tags = Array.isArray(inv.tags) ? inv.tags : [];
+      return tags.includes('uol_sent') ? 'ano ručně' : 'ne';
+    };
     // Pořadí = pořadí sloupců tabulky (poslední sloupec s tlačítky filtr nemá)
     const IV_COLS = [
       { key: 'num', label: 'Číslo', type: 'text', ph: 'Číslo…', get: (i) => i.invoice_number + ' ' + (i.direction || '') },
@@ -1101,6 +1109,7 @@
       { key: 'due', label: 'Splatnost', type: 'date', ph: 'dd.mm.rrrr', get: (i) => ivDate(i.date_due) },
       { key: 'order', label: 'Objednávka', type: 'text', ph: 'ano / ne', get: (i) => ivHas(i, 'order'), enum: true, enumValue: (i) => { const v = ivHas(i, 'order'); return v.startsWith('ano ručně') ? 'ano ručně' : v.startsWith('ano') ? 'ano' : 'ne'; }, pick: true },
       { key: 'receipt', label: 'Příjemka', type: 'text', ph: 'ano / ne', get: (i) => ivHas(i, 'receipt'), enum: true, enumValue: (i) => { const v = ivHas(i, 'receipt'); return v.startsWith('ano ručně') ? 'ano ručně' : v.startsWith('ano') ? 'ano' : 'ne'; }, pick: true },
+      { key: 'uol', label: 'Odesláno ÚOL', type: 'text', ph: 'ano / ne', get: (i) => ivUol(i), enum: true, enumValue: (i) => ivUol(i), pick: true },
       { key: 'creator', label: 'Založil', type: 'text', ph: 'Založil…', get: (i) => creatorLabel(i), pick: true },
       { key: 'created', label: 'Založeno', type: 'date', ph: 'dd.mm.rrrr', get: (i) => ivDate(i.created_at) },
     ];
@@ -1277,6 +1286,45 @@
         (at ? '<span style="color:' + (on ? '#10b981' : 'var(--text2)') + ';font-size:0.72em;white-space:nowrap;line-height:1.2;">' + escapeHtml(when) + (by ? '<br>' + escapeHtml(by) : '') + '</span>' : '') +
         '</label>';
     }
+    // ─── Odesláno do účetnictví (ÚOL) ───────────────────────────────────────
+    // Doklad, který prošel exportem pro účetní, má fajfku automaticky (a zamčenou —
+    // odškrtnutím by se historie exportu stejně nezměnila). Ostatní doklady, které
+    // se k účetní dostaly jinudy, jde zaškrtnout ručně; ukáže se kdo a kdy.
+    function uolSentBox(inv) {
+      if (inv.uol_export_at) {
+        const when = fmtDateTime(inv.uol_export_at);
+        return '<span title="Odesláno účetní exportem ' + escapeHtml(when) + '" ' +
+          'style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;line-height:1.2;">' +
+          '<span style="color:#10b981;font-size:1.05em;">✅</span>' +
+          '<span style="color:#10b981;font-size:0.72em;white-space:nowrap;">' + escapeHtml(when) + '<br>exportem</span>' +
+          '</span>';
+      }
+      const tags = Array.isArray(inv.tags) ? inv.tags : [];
+      const on = tags.includes('uol_sent');
+      const when = inv.uol_sent_at ? fmtDateTime(inv.uol_sent_at) : '';
+      const by = inv.uol_sent_by || '';
+      return '<label title="Ručně označit: doklad byl odeslaný do účetnictví" ' +
+        'style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;cursor:pointer;">' +
+        '<input type="checkbox" ' + (on ? 'checked ' : '') +
+        'onchange="toggleUolSent(' + inv.id + ',this)" style="width:16px;height:16px;cursor:inherit;accent-color:#10b981;">' +
+        (when ? '<span style="color:' + (on ? '#10b981' : 'var(--text2)') + ';font-size:0.72em;white-space:nowrap;line-height:1.2;">' +
+          escapeHtml(when) + (by ? '<br>' + escapeHtml(by) : '') + '</span>' : '') +
+        '</label>';
+    }
+    window.toggleUolSent = async function(id, el) {
+      const checked = !!el.checked;
+      el.disabled = true;
+      const r = await api('POST', '/api/accounting/invoices/' + id + '/uol-sent', { checked });
+      el.disabled = false;
+      if (r.status !== 200) {
+        el.checked = !checked;   // vrať zaškrtnutí zpátky, uložit se nepovedlo
+        alert('Nepodařilo se uložit: ' + (r.data?.error || r.status));
+        return;
+      }
+      if (typeof showToast === 'function') showToast(checked ? '✅ Označeno jako odeslané do účetnictví' : 'Odznačeno');
+      loadInvoices();
+    };
+
     // Hover → historie změn zaškrtávátka (kdo, kdy, co)
     const _mmHistCache = {};
     let _mmHistTimer = null;

@@ -183,6 +183,23 @@ router.get('/invoices', async (req, res, next) => {
       take: Math.min(parseInt(limit, 10) || 200, 1000),
     });
 
+    // Odesláno do účetnictví (ÚOL): doklad, který prošel exportem, má v
+    // accounting_export_items.sent=true. Taháme to JEDNÍM dotazem pro celou
+    // stránku (ne per doklad) a bereme nejstarší odeslání — kdy to odešlo poprvé.
+    const uolSentAt = new Map();
+    if (invoices.length) {
+      const expItems = await prisma.accountingExportItem.findMany({
+        where: { invoice_id: { in: invoices.map((i) => i.id) }, sent: true },
+        select: { invoice_id: true, acc_export: { select: { created_at: true } } },
+      });
+      for (const it of expItems) {
+        const at = it.acc_export && it.acc_export.created_at;
+        if (!at) continue;
+        const cur = uolSentAt.get(it.invoice_id);
+        if (!cur || at < cur) uolSentAt.set(it.invoice_id, at);
+      }
+    }
+
     // Anti-podvod kontrola: pro každou fakturu s vyplněným partner_bank_account
     // porovnej s Company.verified_bank_accounts (whitelist). UI zobrazí badge.
     const { normalizeAccount } = require('../services/banking/account-verification');
@@ -224,6 +241,8 @@ router.get('/invoices', async (req, res, next) => {
         company: inv.company ? companyTrimmed : null,
         has_source_file: !!(inv.source_file_path || inv.pdf_file_path),
         bank_account_verification: verification,
+        // Kdy doklad odešel účetní v exportu (null = exportem zatím neodešel).
+        uol_export_at: uolSentAt.get(inv.id) || null,
       };
     });
 
@@ -1204,6 +1223,39 @@ router.post('/invoices/:id/manual-match', async (req, res, next) => {
       user: req.user,
     }).catch(() => {});
     res.json({ ...updated, has_order: hasOrder, has_receipt: hasReceipt });
+  } catch (err) { next(err); }
+});
+
+// POST /api/accounting/invoices/:id/uol-sent — ruční označení „odesláno do účetnictví"
+// Body: { checked: bool }. Pro doklady, které se k účetní dostaly mimo export
+// (ty z exportu se poznají samy podle accounting_export_items.sent).
+const uolSentSchema = z.object({ checked: z.boolean().optional() });
+router.post('/invoices/:id/uol-sent', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné id' });
+    const parsed = uolSentSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatné tělo požadavku', details: parsed.error.issues });
+    const checked = parsed.data.checked !== false;
+
+    const invoice = await prisma.invoice.findUnique({ where: { id }, select: { id: true, tags: true, invoice_number: true } });
+    if (!invoice) return res.status(404).json({ error: 'Faktura nenalezena' });
+
+    const tags = (invoice.tags || []).filter((t) => t !== 'uol_sent');
+    if (checked) tags.push('uol_sent');
+    const updated = await prisma.invoice.update({
+      where: { id },
+      // Datum i jméno zapisujeme při zaškrtnutí i odškrtnutí — ať je vidět poslední změna.
+      data: { tags, uol_sent_at: new Date(), uol_sent_by: (checked ? '' : 'zrušil ') + userLabel(req.user) },
+      select: { id: true, tags: true, uol_sent_at: true, uol_sent_by: true },
+    });
+    logAudit({
+      action: 'update', entity: 'invoice', entity_id: id,
+      description: invoice.invoice_number + ': ručně ' + (checked ? 'označeno' : 'odznačeno') + ' jako odeslané do účetnictví',
+      changes: { uol_sent: { checked, by: userLabel(req.user) } },
+      user: req.user,
+    }).catch(() => {});
+    res.json(updated);
   } catch (err) { next(err); }
 });
 

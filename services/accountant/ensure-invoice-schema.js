@@ -23,6 +23,9 @@ const STATEMENTS = [
   `ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "send_error" TEXT`,
   `ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "send_message_id" VARCHAR(255)`,
   `ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "send_attempts" INTEGER NOT NULL DEFAULT 0`,
+  // Ruční označení „odesláno do účetnictví (ÚOL)" — sloupec v seznamu dokladů.
+  `ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "uol_sent_at" TIMESTAMP(3)`,
+  `ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "uol_sent_by" VARCHAR(150)`,
   `CREATE INDEX IF NOT EXISTS "invoices_parent_invoice_id_idx" ON "invoices"("parent_invoice_id")`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "invoices_source_payment_id_parent_invoice_id_key" ON "invoices"("source_payment_id", "parent_invoice_id")`,
   `CREATE TABLE IF NOT EXISTS "document_counters" (

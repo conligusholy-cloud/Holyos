@@ -3184,6 +3184,12 @@ model Invoice {
   manual_receipt_at DateTime?
   manual_receipt_by String?   @db.VarChar(150)
 
+  // Odesláno do účetnictví (ÚOL). Doklady odeslané exportem se poznají podle
+  // AccountingExportItem.sent — tahle pole jsou pro RUČNÍ označení dokladů,
+  // které se k účetní dostaly jinudy (štítek uol_sent drží stav zaškrtnutí).
+  uol_sent_at DateTime?
+  uol_sent_by String?   @db.VarChar(150)
+
   // Krátké shrnutí „za co platím" (AI z položek, např. „Nájem Brno") — do poznámky pro mě v QR / u příkazu
   payment_note String? @db.VarChar(60)
 
