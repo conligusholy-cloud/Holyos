@@ -782,6 +782,16 @@ app.use('/api/wh', warehouseV2Routes); // Sklad 2.0 — moves, lookup, sync (mou
 app.use('/api/mindmap', mindmapRoutes);
 app.use('/api/admin-tasks', adminTasksRoutes);
 // Kontrola platnosti klíčů externích služeb (po rotaci secretů) — jen super admin, jen čtecí volání
+// Zálohy databáze (jen super admin): stav a ruční spuštění
+app.get('/api/admin/backup/status', require('./middleware/auth').requireAuth, require('./middleware/auth').requireSuperAdmin, async (req, res, next) => {
+  try { res.json(await require('./services/backup/db-backup').status()); } catch (e) { next(e); }
+});
+app.post('/api/admin/backup/run', require('./middleware/auth').requireAuth, require('./middleware/auth').requireSuperAdmin, (req, res) => {
+  const B = require('./services/backup/db-backup');
+  if (!B.configured()) return res.status(503).json({ error: 'Zálohy nejsou nakonfigurované (BACKUP_ENC_KEY, R2_BACKUP_BUCKET, R2_*).' });
+  B.runBackup('manual').catch(() => {}); // běží na pozadí, výsledek je ve /status
+  res.status(202).json({ ok: true, message: 'Záloha spuštěna na pozadí. Výsledek zjistíš na /api/admin/backup/status.' });
+});
 app.get('/api/admin/secrets-health', require('./middleware/auth').requireAuth, require('./middleware/auth').requireSuperAdmin, async (req, res, next) => {
   try { res.json(await require('./services/secrets-health').runAll()); } catch (err) { next(err); }
 });
@@ -1426,6 +1436,7 @@ server.listen(PORT, async () => {
     console.error('[app] acc-export worker nelze spustit:', err.message);
   }
   try {
+    require('./services/backup/db-backup').start(); // noční šifrované zálohy databáze do R2
     require('./services/voice/recordings-cleanup-worker').start(); // hlídač úložiště: archiv nahrávek do R2 + upozornění na plný volume/DB
   } catch (err) {
     console.error('[app] recordings-cleanup-worker nelze spustit:', err.message);
