@@ -54,9 +54,13 @@ const CSS = `
 .mt-tabs button{background:transparent;border:1px solid var(--border2);color:var(--text2);border-radius:999px;padding:8px 16px;font:inherit;font-weight:700;cursor:pointer}
 .mt-tabs button.on{background:rgba(79,209,255,.14);border-color:var(--blue);color:var(--blue)}
 /* Společný vzhled VšECH tabulek administrace (obal .mt-tw) — jeden záznam = jeden řádek. */
-.mt-tw{overflow-x:auto}
+.mt-tw{overflow:auto;max-height:calc(100vh - 250px);min-height:240px}
+.mt-tw thead th,.mt-tw thead td{position:sticky;top:0;z-index:3;background:#0d1526}
+.mt-tw thead tr.cf-filter-row th,.mt-tw thead tr.cf-filter-row td{top:var(--h1,38px);z-index:2;box-shadow:0 1px 0 var(--border)}
+.mt-topsc{overflow-x:auto;overflow-y:hidden;height:14px;margin:0 0 4px}.mt-topsc>div{height:1px}
+.mt-topsc::-webkit-scrollbar,.mt-tw::-webkit-scrollbar{height:10px;width:10px}.mt-topsc::-webkit-scrollbar-thumb,.mt-tw::-webkit-scrollbar-thumb{background:rgba(120,160,255,.35);border-radius:8px}.mt-topsc::-webkit-scrollbar-track,.mt-tw::-webkit-scrollbar-track{background:rgba(255,255,255,.03)}
 .mt-tw table{width:100%;border-collapse:collapse;font-size:13.5px}
-.mt-tw th,.mt-tw td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle;white-space:nowrap;height:38px}
+.mt-tw th,.mt-tw td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--border);vertical-align:middle;white-space:nowrap;height:38px}
 .mt-tw th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);height:auto}
 .mt-tw tr:hover td{background:rgba(79,209,255,.05)}
 .mt-tw .nm{font-weight:700}
@@ -231,6 +235,16 @@ function hotRender(){
       {key:'last_called_at',label:'Naposledy voláno',type:'date',get:function(l){return l.last_called_at||null;}}
     ],hotRow,'kontaktů','Zatím není žádný kontakt označený jako zajímavý.');
   hotT.setRows(hot);
+  stick(box);
+}
+// Tabulka: hlavička + řádek filtrů zůstává nahoře (sticky v rámci .mt-tw), nad tabulkou horní jezdec pro vodorovný posun
+function stick(box){
+  var tw=box.querySelector('.mt-tw'), t=tw&&tw.querySelector('table'); if(!t)return;
+  var top=box.querySelector('.mt-topsc'); if(!top){top=document.createElement('div');top.className='mt-topsc';top.innerHTML='<div></div>';tw.parentNode.insertBefore(top,tw);
+    var lock=false;top.addEventListener('scroll',function(){if(lock){lock=false;return;}lock=true;tw.scrollLeft=top.scrollLeft;});tw.addEventListener('scroll',function(){if(lock){lock=false;return;}lock=true;top.scrollLeft=tw.scrollLeft;});}
+  function upd(){var h=t.tHead&&t.tHead.rows[0];if(h)tw.style.setProperty('--h1',h.offsetHeight+'px');top.firstChild.style.width=t.scrollWidth+'px';top.style.display=t.scrollWidth>tw.clientWidth+2?'':'none';}
+  upd(); setTimeout(upd,60); setTimeout(upd,400);
+  if(!tw._ro&&window.ResizeObserver){tw._ro=new ResizeObserver(upd);tw._ro.observe(t);tw._ro.observe(tw);}
 }
 // ── Uživatelé — účty registrované na laundromats.eu (/cesta/registrace) ──
 var usr=null, usrT=null;
@@ -259,7 +273,7 @@ function usrRender(){
   var ver=usr.filter(function(u){return u.email_verified_at;}).length;
   root.querySelector('.mt-usrsum').textContent=usr.length?('Celkem '+usr.length+' · ověřených '+ver+' · zablokovaných '+usr.filter(function(u){return u.disabled;}).length):'';
   if(!usr.length){box.innerHTML='<div class="mt-empty">Zatím se nikdo nezaregistroval. Registrace je na laundromats.eu/cesta/registrace.</div>';return;}
-  box.innerHTML='<div class="mt-tw"><table class="usr-dt"><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Firma</th><th>Registrace</th><th>Ověření</th><th>Poslední přihlášení</th><th>Přihlášení</th><th>Kontakt v HolyOS</th><th></th></tr></thead><tbody></tbody></table></div>';
+  box.innerHTML='<div class="mt-tw"><table class="usr-dt"><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Firma</th><th>Registrace</th><th>Ověření</th><th>Poslední přihlášení</th><th>Přihlášení</th><th>V HolyOS</th><th>Účet</th></tr></thead><tbody></tbody></table></div>';
   if(!window.ColFilters){box.querySelector('tbody').innerHTML=usr.map(usrRow).join('');return;}
   usrT=dtable('.usr-dt',[
       {key:'name',label:'Jméno',get:function(u){return u.name||'';},ph:'Jméno…',enum:false},
@@ -270,10 +284,11 @@ function usrRender(){
       {key:'verified',label:'Ověření',get:function(u){return u.email_verified_at?'ověřen':'čeká na ověření';},ph:'Vyber…',enum:true},
       {key:'last_login_at',label:'Poslední přihlášení',type:'date',get:function(u){return u.last_login_at||null;}},
       {key:'login_count',label:'Přihlášení',type:'num',get:function(u){return u.login_count||0;}},
-      {key:'lead',label:'Kontakt v HolyOS',get:function(u){return u.compounder_lead_id?String(u.compounder_lead_id):'';},enum:false},
-      {key:'act',label:'',get:function(u){return u.disabled?'zablokovaný':'aktivní';},enum:true}
+      {key:'lead',label:'V HolyOS',get:function(u){return u.compounder_lead_id?String(u.compounder_lead_id):'';},enum:false},
+      {key:'act',label:'Účet',get:function(u){return u.disabled?'zablokovaný':'aktivní';},enum:true}
     ],usrRow,'uživatelů','Žádný uživatel.');
   usrT.setRows(usr);
+  stick(box);
 }
 root.addEventListener('click',function(e){var b=e.target.closest('[data-udis]');if(!b)return;e.stopPropagation();var id=+b.getAttribute('data-udis'),dis=b.getAttribute('data-on')==='1';
   if(dis&&!confirm('Zablokovat účet? Uživatel se odhlásí a nebude se moci přihlásit.'))return;b.disabled=true;
