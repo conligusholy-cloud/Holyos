@@ -8,7 +8,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, RefreshControl,
-  ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
+  ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, MeetingSlot, MeetingReservation } from '../lib/api';
@@ -251,7 +251,11 @@ function SlotModal({ slot, onClose, onChanged }: { slot: MeetingSlot; onClose: (
                     <Text style={s.resName}>{(L && L.name) || r.name || 'Zájemce'}</Text>
                     <Text style={[s.pill, { color: ST_COLOR[r.status] || BS.text2, borderColor: (ST_COLOR[r.status] || BS.text2) + '88' }]}>{ST[r.status] || r.status}</Text>
                   </View>
-                  <Text style={s.resSub}>{[phone, email, L && L.city].filter(Boolean).join(' · ')}</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                    {phone ? <Text selectable onPress={() => Share.share({ message: phone })} style={[s.resSub, { color: BS.accent, textDecorationLine: 'underline' }]}>{phone}</Text> : null}
+                    {email ? <Text selectable onPress={() => Share.share({ message: email })} style={[s.resSub, { color: BS.accent, textDecorationLine: 'underline' }]}>{email}</Text> : null}
+                    {L && L.city ? <Text style={s.resSub}>{L.city}</Text> : null}
+                  </View>
                   <Text style={s.resSub}>{[r.mode && MODE[r.mode], r.financing_path && PATH[r.financing_path], r.compounder_lead_id ? 'lead #' + r.compounder_lead_id : ''].filter(Boolean).join(' · ')}</Text>
                   {r.note ? <Text style={s.resSub}>{r.note}</Text> : null}
                   <ResNote r={r} run={run} onChanged={onChanged} />
