@@ -1270,7 +1270,7 @@
       const by = field === 'order' ? inv.manual_order_by : inv.manual_receipt_by;
       const when = at ? fmtDateTime(at) : '';
       let title = field === 'order' ? 'Ručně potvrdit: faktura má objednávku' : 'Ručně potvrdit: zboží bylo přijato (má příjemku)';
-      if (!canEdit) title += ' — měnit smí jen admin, Radomír Bečka a Lucie Makalušová';
+      if (!canEdit) title += ' — měnit smí jen admin, Radomír Bečka a Lucie Makalousová';
       return '<label data-mm-title="' + escapeHtml(title) + '" onmouseenter="mmHistShow(this,' + inv.id + ',\'' + field + '\')" onmouseleave="mmHistHide()" style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;cursor:' + (locked ? 'default' : 'pointer') + ';">' +
         '<input type="checkbox" ' + (on ? 'checked ' : '') + (locked ? 'disabled ' : '') +
         'onchange="toggleManualMatch(' + inv.id + ',\'' + field + '\',this)" style="width:16px;height:16px;cursor:inherit;accent-color:#10b981;">' +

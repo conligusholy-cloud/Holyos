@@ -1131,13 +1131,13 @@ router.get('/invoices/:id/source-pdf', async (req, res, next) => {
 // Když má faktura obojí a je už schválená (approved), posune se rovnou do ready_to_pay.
 // Kdo smí škrtat: admin / super admin + jmenovitě povolené osoby (výchozí Radomír Bečka, Lucie Makalušová).
 // Seznam lze přepsat v AppSetting accounting.manual_match_people (JSON pole jmen).
-const MANUAL_MATCH_DEFAULT_PEOPLE = ['Radomír Bečka', 'Lucie Makalušová'];
+const MANUAL_MATCH_DEFAULT_PEOPLE = ['Radomír Bečka', 'Lucie Makalušová', 'Lucie Makalousová'];
 const normName = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
 async function canManualMatch(user) {
   if (!user) return false;
   if (user.isSuperAdmin || user.role === 'admin') return true;
   let list = MANUAL_MATCH_DEFAULT_PEOPLE;
-  try { const s = await require('../services/settings').getSetting('accounting.manual_match_people', { type: 'json', defaultValue: null }); if (Array.isArray(s) && s.length) list = s; } catch (e) { /* výchozí */ }
+  try { const s = await require('../services/settings').getSetting('accounting.manual_match_people', { type: 'json', defaultValue: null }); if (Array.isArray(s) && s.length) list = MANUAL_MATCH_DEFAULT_PEOPLE.concat(s); } catch (e) { /* výchozí */ }
   const allowed = list.map(normName);
   const p = user.person || {};
   const names = [
@@ -1177,7 +1177,7 @@ router.get('/invoices/:id/manual-match/history', async (req, res, next) => {
 
 router.post('/invoices/:id/manual-match', async (req, res, next) => {
   try {
-    if (!(await canManualMatch(req.user))) return res.status(403).json({ error: 'Ruční potvrzení objednávky/příjemky smí jen admin, Radomír Bečka a Lucie Makalušová' });
+    if (!(await canManualMatch(req.user))) return res.status(403).json({ error: 'Ruční potvrzení objednávky/příjemky smí jen admin, Radomír Bečka a Lucie Makalousová' });
     const id = parseInt(req.params.id, 10);
     const field = req.body?.field;
     if (!['order', 'receipt'].includes(field)) return res.status(400).json({ error: 'field musí být order nebo receipt' });
