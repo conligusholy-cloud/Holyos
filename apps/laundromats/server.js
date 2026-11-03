@@ -307,6 +307,26 @@ app.post('/admin/api/meetings/reservations/:id(\\d+)', requireAdmin, api((req) =
 app.post('/admin/api/leads/:id(\\d+)/hot', requireAdmin, api(async (req) => holyosSvc('POST', '/api/auth/bs2/leads/' + req.params.id + '/hot', { hot: !!(req.body || {}).hot })));
 app.get('/admin/api/users', requireAdmin, api(async () => ({ ok: true, users: (await holyosSvc('GET', '/api/auth/lm/accounts/list')).users || [] })));
 app.post('/admin/api/users/:id(\\d+)/disabled', requireAdmin, api((req) => holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/disabled', { disabled: !!(req.body || {}).disabled })));
+// Sloupcove filtry tabulek bereme primo z HolyOS (/js/column-filters.js), aby se admin
+// ovladal uplne stejne jako tabulky v HolyOS a nevznikala druha kopie kodu. Servirujeme
+// je ze stejne domeny (kvuli spolehlivosti) a drzime 10 minut v pameti; kdyz HolyOS
+// nejede, vratime prazdno a tabulky se vykresli aspon bez filtru.
+let _cf = { at: 0, body: '' };
+app.get('/admin/column-filters.js', requireAdmin, async (req, res) => {
+  res.type('application/javascript');
+  if (_cf.body && Date.now() - _cf.at < 10 * 60e3) return res.set('Cache-Control', 'private, max-age=600').send(_cf.body);
+  try {
+    const r = await fetch(HOLYOS_URL + '/js/column-filters.js', { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const t = await r.text();
+    if (!/ColFilters/.test(t)) throw new Error('neocekavany obsah');
+    _cf = { at: Date.now(), body: t };
+    res.set('Cache-Control', 'private, max-age=600').send(t);
+  } catch (e) {
+    res.set('Cache-Control', 'no-store').send('/* sloupcove filtry z HolyOS se nepodarilo nacist: ' + String(e.message).replace(/[*]\//g, '') + ' */');
+  }
+});
+
 app.get('/admin/api/hot-leads', requireAdmin, api(async () => ({ ok: true, leads: await holyosSvc('GET', '/api/auth/bs2/hot-leads') })));
 
 // ── Stránky Compounder + Prádlomaty (převzato z BS2, upraveno pro zájemce) ──

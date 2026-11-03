@@ -179,6 +179,15 @@ function autoModal(){
     q('.a-run').onclick=function(){this.disabled=true;msg('Uvolňuji…');api('/admin/api/meetings/auto',body()).then(function(){return api('/admin/api/meetings/auto/run',{});}).then(function(r){msg('Hotovo. Nově vytvořeno termínů: '+(r.created||0)+'.');q('.a-run').disabled=false;load();}).catch(function(e){msg(e.message);q('.a-run').disabled=false;});};
   }).catch(function(e){q('.mt-msg').textContent=e.message;});
 }
+// Kazda tabulka v administraci se filtruje a radi stejne jako tabulky v HolyOS:
+// sdilena komponenta ColFilters (servirovana z /admin/column-filters.js). Staci zavolat
+// dtable() a tabulka ma radek filtru, trojstavove razeni i pocitadlo radku.
+// Kdyby se komponenta nenacetla, vraci null a volajici vykresli prostou tabulku.
+function dtable(sel,cols,renderRow,noun,emptyText){
+  if(!window.ColFilters)return null;
+  return window.ColFilters.table({table:function(){return root.querySelector(sel);},
+    columns:cols,renderRow:renderRow,progressive:true,noun:noun,emptyText:emptyText});
+}
 // ── Jmenný seznam — kontakty označené v HolyOS jako „zajímavý kontakt“ ──
 // Filtry, řazení i počítadlo řádků dělá sdílená komponenta HolyOS (ColFilters,
 // /js/column-filters.js), aby se tabulka ovládala přesně stejně jako tabulky v HolyOS.
@@ -209,9 +218,7 @@ function hotRender(){
     +'<th>Jméno</th><th>Firma</th><th>Město</th><th>Telefon</th><th>E-mail</th><th>Stav</th><th>Obchodník</th><th>Naposledy voláno</th>'
     +'</tr></thead><tbody></tbody></table></div>';
   if(!window.ColFilters){box.querySelector('tbody').innerHTML=hot.map(hotRow).join('');return;}
-  hotT=window.ColFilters.table({
-    table:function(){return root.querySelector('.hot-dt');},
-    columns:[
+  hotT=dtable('.hot-dt',[
       {key:'name',label:'Jméno',get:function(l){return l.name||'';},ph:'Jméno…',enum:false},
       {key:'company',label:'Firma',get:function(l){return l.company||'';},ph:'Firma…'},
       {key:'city',label:'Město',get:function(l){return l.city||'';},ph:'Město…'},
@@ -220,12 +227,7 @@ function hotRender(){
       {key:'status',label:'Stav',get:function(l){return ST2[l.status]||l.status||'';},ph:'Vyber…',enum:true},
       {key:'owner',label:'Obchodník',get:function(l){return l.owner||'';},ph:'Vyber…',enum:true},
       {key:'last_called_at',label:'Naposledy voláno',type:'date',get:function(l){return l.last_called_at||null;}}
-    ],
-    renderRow:hotRow,
-    progressive:true,
-    noun:'kontaktů',
-    emptyText:'Zatím není žádný kontakt označený jako zajímavý.'
-  });
+    ],hotRow,'kontaktů','Zatím není žádný kontakt označený jako zajímavý.');
   hotT.setRows(hot);
 }
 // ── Uživatelé — účty registrované na laundromats.eu (/cesta/registrace) ──
@@ -257,9 +259,7 @@ function usrRender(){
   if(!usr.length){box.innerHTML='<div class="mt-empty">Zatím se nikdo nezaregistroval. Registrace je na laundromats.eu/cesta/registrace.</div>';return;}
   box.innerHTML='<div class="mt-tw"><table class="usr-dt"><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Firma</th><th>Registrace</th><th>Ověření</th><th>Poslední přihlášení</th><th>Přihlášení</th><th>Kontakt v HolyOS</th><th></th></tr></thead><tbody></tbody></table></div>';
   if(!window.ColFilters){box.querySelector('tbody').innerHTML=usr.map(usrRow).join('');return;}
-  usrT=window.ColFilters.table({
-    table:function(){return root.querySelector('.usr-dt');},
-    columns:[
+  usrT=dtable('.usr-dt',[
       {key:'name',label:'Jméno',get:function(u){return u.name||'';},ph:'Jméno…',enum:false},
       {key:'email',label:'E-mail',get:function(u){return u.email||'';},ph:'E-mail…',enum:false},
       {key:'phone',label:'Telefon',get:function(u){return u.phone||'';},ph:'Telefon…',enum:false},
@@ -270,9 +270,7 @@ function usrRender(){
       {key:'login_count',label:'Přihlášení',type:'number',get:function(u){return u.login_count||0;}},
       {key:'lead',label:'Kontakt v HolyOS',get:function(u){return u.compounder_lead_id?String(u.compounder_lead_id):'';},enum:false},
       {key:'act',label:'',get:function(u){return u.disabled?'zablokovaný':'aktivní';},enum:true}
-    ],
-    renderRow:usrRow, progressive:true, noun:'uživatelů', emptyText:'Žádný uživatel.'
-  });
+    ],usrRow,'uživatelů','Žádný uživatel.');
   usrT.setRows(usr);
 }
 root.addEventListener('click',function(e){var b=e.target.closest('[data-udis]');if(!b)return;e.stopPropagation();var id=+b.getAttribute('data-udis'),dis=b.getAttribute('data-on')==='1';
@@ -339,7 +337,7 @@ function meetingsPage({ admin, holyosUrl, error }) {
       <div class="mt-usrwrap card"></div>
     </div>
   </div></div>
-  ${holyosUrl ? `<script src="${holyosUrl}/js/column-filters.js"></script>` : ''}
+  <script src="/admin/column-filters.js"></script>
   <script>window.LM_HOLYOS=${JSON.stringify(holyosUrl || '')};</script><script>${JS}</script></body></html>`;
 }
 

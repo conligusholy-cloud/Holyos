@@ -17,7 +17,6 @@ function header(opts) {
   const m = o.absolute ? MAIN_URL() : '';
   const home = m + homeHref();
   const items = [
-    [home + '#proc', t.why, 'home'],
     [m + '/cesta/compounder', t.comp, 'compounder'],
     [m + '/cesta/pradlomaty', t.prad, 'pradlomaty'],
     [m + '/cesta/ucet/ekonomika', t.eco, 'ekonomika'],
