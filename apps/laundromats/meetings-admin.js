@@ -246,6 +246,53 @@ function stick(box){
   upd(); setTimeout(upd,60); setTimeout(upd,400);
   if(!tw._ro&&window.ResizeObserver){tw._ro=new ResizeObserver(upd);tw._ro.observe(t);tw._ro.observe(tw);}
 }
+
+// ── Detail uživatele: veškerý pohyb na laundromats.eu (návštěvy → stránky → akce) ──
+var PG={'/':'Úvodní stránka','/uvod':'Úvodní stránka','/cesta':'Cesta','/cesta/info':'Cesta · info','/cesta/vlastni-kapital':'Cesta · vlastní kapitál','/cesta/financovani':'Cesta · financování','/cesta/schuzka':'Cesta · schůzka','/cesta/ekonomika':'Ekonomika (cesta)','/cesta/ekonomika/podrobne':'Ekonomika – podrobně','/cesta/compounder':'Compounder','/cesta/pradlomaty':'Prádlomaty','/cesta/ucet':'Moje nástroje','/cesta/ucet/ekonomika':'Ekonomika','/cesta/ucet/nastaveni':'Můj účet','/cesta/hledat':'Najít místo','/cesta/zhodnotit':'Zhodnotit místo','/cesta/prihlaseni':'Přihlášení','/cesta/registrace':'Registrace'};
+function pgName(path){var p=String(path||'/').split('?')[0];if(p.length>1&&p.charAt(p.length-1)==='/')p=p.slice(0,-1);if(p.indexOf('/cesta/pl')===0)p='/cesta'+p.slice(9);return PG[p]||p;}
+function dur(ms){var s=Math.round((ms||0)/1000);if(s<60)return s+' s';var m=Math.round(s/60);if(m<60)return m+' min';return Math.floor(m/60)+' h '+(m%60)+' min';}
+function evLine(e){var p=e.props||{},q=function(x){return '„'+esc(x)+'“';};
+  switch(e.event){
+    case 'page_view':return ['📄','Otevřel stránku <b>'+esc(pgName(e.path))+'</b>'+(p.ref&&p.ref.indexOf('laundromats.eu')<0?' <span class="muted">· přišel z '+esc(String(p.ref).slice(0,60))+'</span>':'')];
+    case 'section_view':return ['👁','Prohlížel sekci '+q(p.section||'')+' <span class="muted">('+esc(pgName(e.path))+')</span>'];
+    case 'page_switch':return ['↔','Přepnul se zpět na stránku <b>'+esc(pgName(e.path))+'</b>'];
+    case 'visit_end':return ['⏱','Odešel ze stránky <b>'+esc(pgName(e.path))+'</b>'+(p.ms?' · na stránce '+dur(p.ms):'')+(p.depth?' · doscrolloval '+Math.round(p.depth)+' %':'')];
+    case 'app_search':return ['🔎','Najít místo: hledal '+q(p.area||'')];
+    case 'app_contact':return ['📇','Najít místo: dohledal kontakt na '+q(p.name||'')+(p.city?' ('+esc(p.city)+')':'')];
+    case 'app_evaluate':return ['🧠','Zhodnotil místo '+q(p.name||'')+(p.address?' – '+esc(p.address):'')+(p.result?' → <b>'+esc(p.result)+'</b>':'')];
+    case 'account_register':return ['🆕','Zaregistroval se'];
+    case 'account_verified':return ['✅','Potvrdil e-mail a přihlásil se'];
+    case 'account_login':return ['🔑','Přihlásil se'];
+    case 'account_logout':return ['↩','Odhlásil se'];
+    case 'lead_linked':return ['🔗','Prohlížeč spárován s kontaktem'];
+    case 'inquiry_submitted':return ['📩','Odeslal poptávku z úvodní stránky'];
+    default:return ['•',esc(e.event)+(e.path?' <span class="muted">'+esc(pgName(e.path))+'</span>':'')];
+  }
+}
+function usrActivity(id){
+  var u=(usr||[]).filter(function(x){return x.id===id;})[0]||{};
+  var ov=modal('<h3 style="margin:0 0 2px">'+esc(u.name||'Uživatel')+'</h3><div class="muted small">'+esc(u.email||'')+'</div><div class="ua-body" style="margin-top:12px"><div class="mt-empty">Načítám pohyb na stránkách…</div></div>');
+  var md=ov.querySelector('.mt-md'); if(md){md.style.width='860px';}
+  var body=ov.querySelector('.ua-body');
+  api('/admin/api/users/'+id+'/activity').then(function(j){
+    var ev=(j.events||[]).filter(function(e){return e.event!=='lead_linked';});
+    if(!ev.length){body.innerHTML='<div class="mt-empty">Zatím žádný zaznamenaný pohyb.</div>';return;}
+    // návštěvy = úseky s pauzou do 30 min
+    var visits=[],cur=null;
+    ev.forEach(function(e){var t=new Date(e.at).getTime();if(!cur||t-cur.end>30*60000){cur={start:t,end:t,items:[],ms:0,mobile:e.mobile,pages:{}};visits.push(cur);}cur.end=t;cur.items.push(e);if(e.event==='visit_end'&&e.props&&e.props.ms)cur.ms+=Number(e.props.ms)||0;if(e.event==='page_view')cur.pages[pgName(e.path)]=1;});
+    var pv={},tot=0;ev.forEach(function(e){if(e.event==='page_view'){var n=pgName(e.path);pv[n]=(pv[n]||0)+1;}if(e.event==='visit_end'&&e.props&&e.props.ms)tot+=Number(e.props.ms)||0;});
+    var top=Object.keys(pv).sort(function(a,b){return pv[b]-pv[a];}).slice(0,8);
+    var acts=ev.filter(function(e){return e.event.indexOf('app_')===0;}).length;
+    var html='<div class="mt-sum" style="margin:0 0 12px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
+      +[[visits.length,'návštěv'],[ev.filter(function(e){return e.event==='page_view';}).length,'zobrazených stránek'],[dur(tot),'čas na stránkách'],[acts,'akcí v aplikacích']].map(function(x){return '<div class="card" style="margin:0;padding:10px 12px"><div style="font-size:20px;font-weight:800">'+x[0]+'</div><div class="small muted">'+x[1]+'</div></div>';}).join('')+'</div>'
+      +'<div class="small" style="margin:0 0 14px"><span class="muted">Nejnavštěvovanější: </span>'+top.map(function(n){return '<span class="mt-pill" style="margin:0 4px 4px 0;display:inline-block">'+esc(n)+' · '+pv[n]+'×</span>';}).join('')+'</div>';
+    html+=visits.slice().reverse().map(function(v){var d=new Date(v.start),e2=new Date(v.end);
+      return '<div class="card" style="margin:0 0 10px;padding:12px 14px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px"><b>'+dlong(d)+' · '+hm(d)+'–'+hm(e2)+'</b><span class="small muted">'+(v.mobile?'📱 mobil':'💻 počítač')+' · '+Object.keys(v.pages).length+' stránek'+(v.ms?' · '+dur(v.ms):'')+'</span></div>'
+        +v.items.map(function(e){var L=evLine(e),t=new Date(e.at);return '<div style="display:flex;gap:10px;font-size:13px;padding:3px 0;border-top:1px dashed rgba(120,160,255,.08)"><span class="muted" style="width:42px;flex:none">'+hm(t)+'</span><span style="width:18px;flex:none;text-align:center">'+L[0]+'</span><span>'+L[1]+'</span></div>';}).join('')+'</div>';}).join('');
+    body.innerHTML=html;
+  }).catch(function(e){body.innerHTML='<div class="mt-empty" style="color:#ff8f8f">'+esc(e.message)+'</div>';});
+}
+root.addEventListener('click',function(e){var a=e.target.closest('[data-uact]');if(!a)return;e.preventDefault();e.stopPropagation();usrActivity(+a.getAttribute('data-uact'));},true);
 // ── Uživatelé — účty registrované na laundromats.eu (/cesta/registrace) ──
 var usr=null, usrT=null;
 function usrLoad(){
@@ -257,7 +304,7 @@ function usrLoad(){
 function dtm(v){if(!v)return '<span class="muted">—</span>';var d=new Date(v);return dlong(d)+' '+hm(d);}
 function usrRow(u){
   var lead=u.compounder_lead_id&&window.LM_HOLYOS?'<a href="'+window.LM_HOLYOS+'/modules/prodejni-objednavky/index.html?lead='+u.compounder_lead_id+'" target="_blank" rel="noopener" class="small">kontakt #'+u.compounder_lead_id+' ↗</a>':(u.compounder_lead_id?'<span class="small muted">#'+u.compounder_lead_id+'</span>':'<span class="muted">—</span>');
-  return '<tr'+(u.disabled?' style="opacity:.55"':'')+'><td><span class="nm">'+esc(u.name)+'</span></td>'
+  return '<tr'+(u.disabled?' style="opacity:.55"':'')+'><td><a href="#" class="nm" data-uact="'+u.id+'" title="Zobrazit pohyb na stránkách">'+esc(u.name)+'</a> <button class="btn sec sm" data-uact="'+u.id+'" title="Pohyb na stránkách">📈 Pohyb</button></td>'
     +'<td><a href="mailto:'+esc(u.email)+'">'+esc(u.email)+'</a></td>'
     +'<td>'+(u.phone?'<a href="tel:'+esc(u.phone)+'">'+esc(u.phone)+'</a>':'<span class="muted">—</span>')+'</td>'
     +hcell(u.company)

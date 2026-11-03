@@ -79,8 +79,17 @@ const cestaHtml = () => fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf
 
 app.use((req, res, next) => lmIdentity(req, res, next)); // identita návštěvníka v cookie (definice níž u /api/cesta/track)
 // Účty registrovaných uživatelů (lm-account.js): req.account na každém požadavku
-const ACC = require('./lm-account')({ HOLYOS_URL, LM_SECRET, PUBLIC_URL, rateLimited, cookies, ckDomain, sendMail: (p) => sendConfirmMail(p), adminOf: (req) => adminOf(req), render: (req, html) => lite(html, req) });
-app.use((req, res, next) => (/^\/(cesta|api\/location|uvod|$)/.test(req.path) ? ACC.attach(req, res, next) : next()));
+// Serverová událost (akce v aplikacích, přihlášení) do stejného deníku jako track.js
+function trackServer(req, event, props) {
+  try {
+    const sid = SID_RE.test(cookies(req).lm_sid || '') ? cookies(req).lm_sid : ('server:' + (req.account ? 'acc:' + req.account.id : 'anon'));
+    const p = Object.assign({ site: 'laundromats' }, props || {});
+    if (req.account) { p.account_id = req.account.id; if (req.account.lead_id) p.lead_id = req.account.lead_id; }
+    fetch(HOLYOS_URL + '/api/compounder/track', { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': req.headers['user-agent'] || 'laundromats', 'X-Forwarded-For': req.ip || '' }, body: JSON.stringify({ sid, event, path: req.path, lang: 'cs', props: p }), signal: AbortSignal.timeout(8000) }).catch(() => {});
+  } catch (e) { /* best-effort */ }
+}
+const ACC = require('./lm-account')({ HOLYOS_URL, LM_SECRET, PUBLIC_URL, rateLimited, cookies, ckDomain, sendMail: (p) => sendConfirmMail(p), adminOf: (req) => adminOf(req), render: (req, html) => lite(html, req), trackServer });
+app.use((req, res, next) => (/^\/(cesta|api\/location|api\/cesta|uvod|$)/.test(req.path) ? ACC.attach(req, res, next) : next()));
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /api/\n'));
 // Úvodní stránka značky (home-page.js). Náhled vždy na /uvod; na / až s LM_HOME_LIVE=1 (do té doby / → /cesta jako dřív).
@@ -148,6 +157,8 @@ app.post('/api/cesta/track', (req, res) => {
   // sid z prohlížeče = sid v cookie (návrat po smazání localStorage pak naváže na stejného návštěvníka)
   if (SID_RE.test(String(b0.sid || '')) && ck.lm_sid !== b0.sid) setCk(res, 'lm_sid', b0.sid, false);
   const p0 = b0.props && typeof b0.props === 'object' ? b0.props : null;
+  // Přihlášený uživatel: každá událost nese účet + kontakt → kompletní pohyb v detailu uživatele
+  if (p0 && req.account) { p0.account_id = req.account.id; if (req.account.lead_id) p0.lead_id = req.account.lead_id; }
   if (p0 && tlOk(p0.t, p0.l)) { const v = JSON.stringify({ t: p0.t || '', l: p0.l || '' }); if (ck.lm_tl !== v) setCk(res, 'lm_tl', v, true); }
   else if (p0 && ck.lm_tl) { try { const s = JSON.parse(ck.lm_tl); if (s && tlOk(s.t, s.l)) { if (s.t) p0.t = s.t; if (s.l) p0.l = s.l; p0.ident_via = 'cookie'; } } catch (_) {} }
   res.status(204).end();
@@ -327,6 +338,7 @@ app.get('/admin/column-filters.js', requireAdmin, async (req, res) => {
   }
 });
 
+app.get('/admin/api/users/:id(\\d+)/activity', requireAdmin, api(async (req) => holyosSvc('GET', '/api/auth/lm/accounts/' + req.params.id + '/activity')));
 app.get('/admin/api/hot-leads', requireAdmin, api(async () => ({ ok: true, leads: await holyosSvc('GET', '/api/auth/bs2/hot-leads') })));
 
 // ── Stránky Compounder + Prádlomaty (převzato z BS2, upraveno pro zájemce) ──
@@ -348,7 +360,7 @@ const COMP = require('./compounder-page');
 const PRAD = require('./pradlomaty-page');
 app.get('/cesta/compounder', ACC.requireAccount, (req, res) => send(res, lite(COMP.compounderPage(), req)));
 // Ekonomika pro přihlášené: stejný model jako /cesta/ekonomika (ten zůstává veřejný pro cestu z SMS), ale s menu
-app.get('/cesta/ucet/ekonomika', ACC.requireAccount, (req, res) => send(res, lite(String(EP.economyPage('cs')).replace('<a class="bx-back" data-keep href="/cesta">', '<a class="bx-back" href="/cesta/ucet">').replace('@@LHDR@@', LH.header({})).replace('</style>', LH.CSS + FOOT_CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</body>', '<script src="/cesta/track.js" defer></script></body>'), req)));
+app.get('/cesta/ucet/ekonomika', ACC.requireAccount, (req, res) => send(res, lite(String(EP.economyPage('cs')).replace('<a class="bx-back" data-keep href="/cesta">← zpět</a>', '<a class="bx-back" href="/cesta/ucet">← zpět na nástroje</a>').replace('@@LHDR@@', LH.header({})).replace('</style>', LH.CSS + FOOT_CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</body>', '<script src="/cesta/track.js" defer></script></body>'), req)));
 app.get('/cesta/pradlomaty', ACC.requireAccount, async (req, res) => { let list = []; try { list = await fetchProducts(); } catch (e) { console.warn('[laundromats] produkty:', e.message); if (_prod.data) list = _prod.data; } send(res, lite(PRAD.pradlomatyPage(list), req)); });
 app.get('/img/pradlomat.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(path.join(__dirname, 'pradlomat-flex.webp')));
 app.get('/img/product/:id(\\d+)', async (req, res) => {
@@ -362,7 +374,7 @@ app.get('/img/product/:id(\\d+)', async (req, res) => {
 });
 // ── Aplikace lokalit (/cesta/hledat, /cesta/zhodnotit) ──
 ACC.mount(app);
-require('./lm-apps')(app, { HOLYOS_URL, rateLimited, fetchProducts, requireAccount: ACC.requireAccount, render: (req, html) => lite(html, req) });
+require('./lm-apps')(app, { HOLYOS_URL, rateLimited, fetchProducts, requireAccount: ACC.requireAccount, render: (req, html) => lite(html, req), trackServer });
 
 app.use((req, res) => res.status(404).type('text/plain').send('Stránka nenalezena'));
 app.use((err, req, res, next) => { console.warn('[laundromats]', err && err.message); res.status(500).type('text/plain').send('Chyba serveru'); });

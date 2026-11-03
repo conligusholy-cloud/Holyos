@@ -20,6 +20,12 @@ module.exports = function createAccounts(ctx) {
       return { status: r.status, j: await r.json().catch(() => ({})) };
     } catch (e) { return { status: 502, j: { error: 'Služba je dočasně nedostupná, zkuste to prosím za chvíli.' } }; }
   }
+  // Napojení prohlížeče (sid) na kontakt + událost do deníku pohybu
+  function linkAndTrack(req, a, event) {
+    const sid = cookies(req).lm_sid;
+    if (sid) hos('POST', '/' + a.id + '/link-sid', { sids: [sid] }).catch(() => {});
+    if (ctx.trackServer) { const r2 = Object.assign({}, req, { account: a, headers: req.headers, path: req.path, ip: req.ip }); ctx.trackServer(r2, event, {}); }
+  }
   function setSession(req, res, a) {
     const t = jwt.sign({ sub: a.id, v: a.v, aud: 'lm-account', iss: 'laundromats' }, KEY, { expiresIn: AGE });
     res.append('Set-Cookie', CK + '=' + t + '; Path=/; Max-Age=' + AGE + '; HttpOnly; Secure; SameSite=Lax' + ckDomain(req));
@@ -57,7 +63,8 @@ module.exports = function createAccounts(ctx) {
   const box = (title, sub, inner) => CSS + `<div class="card acc-box"><div class="acc-logo">${LOGO}<span>Laundromats<b>.eu</b></span></div><h1>${title}</h1>${sub ? `<p class="muted" style="margin:0 0 6px">${sub}</p>` : ''}${inner}</div>`;
   const msgHtml = (err, ok) => (err ? `<div class="msg err">${esc(err)}</div>` : '') + (ok ? `<div class="msg ok">${esc(ok)}</div>` : '');
   const urlenc = require('express').urlencoded({ extended: false, limit: '20kb' });
-  const send = (req, res, title, body, code) => res.status(code || 200).set('Cache-Control', 'no-store').type('html').send(ctx.render(req, layout({ title, body })));
+  // opts se predava do layout() - rozcestnik si jim vypina vlastni odkaz 'zpet na nastroje'
+  const send = (req, res, title, body, code, opts) => res.status(code || 200).set('Cache-Control', 'no-store').type('html').send(ctx.render(req, layout(Object.assign({ title, body }, opts || {}))));
 
   const loginPage = (q, err, ok) => box('Přihlášení do prostředí', '', `${msgHtml(err, ok)}
     <form method="post" action="/cesta/prihlaseni"><input type="hidden" name="next" value="${esc(safeNext(q.next))}">
@@ -109,6 +116,7 @@ module.exports = function createAccounts(ctx) {
       }
       if (r.status !== 200 || !r.j.account) return send(req, res, 'Přihlášení', loginPage(b, r.j.error || 'Přihlášení se nepodařilo.'), r.status === 401 ? 401 : 400);
       setSession(req, res, r.j.account);
+      linkAndTrack(req, r.j.account, 'account_login');
       res.redirect(302, safeNext(b.next));
     }));
     app.get('/cesta/registrace', (req, res) => { if (req.account) return res.redirect(302, '/cesta/ucet'); send(req, res, 'Registrace', regPage(req.query)); });
@@ -128,6 +136,7 @@ module.exports = function createAccounts(ctx) {
       const r = await hos('POST', '/verify', { token: String(req.query.t || '') });
       if (r.status !== 200 || !r.j.account) return send(req, res, 'Ověření', box('Ověření e-mailu', '', msgHtml(r.j.error || 'Odkaz je neplatný.') + '<div class="acc-links"><a href="/cesta/prihlaseni">Přihlásit se</a></div>'), 400);
       setSession(req, res, r.j.account);
+      linkAndTrack(req, r.j.account, 'account_verified');
       res.redirect(302, '/cesta/ucet?vitejte=1');
     }));
     app.get('/cesta/zapomenute-heslo', (req, res) => send(req, res, 'Zapomenuté heslo', box('Zapomenuté heslo', 'Pošleme vám odkaz pro nastavení nového hesla.', `<form method="post" action="/cesta/zapomenute-heslo"><label>E-mail<input name="email" type="email" required maxlength="160" autocomplete="email"></label><button class="btn" type="submit">Poslat odkaz</button></form><div class="acc-links"><a href="/cesta/prihlaseni">← Zpět na přihlášení</a></div>`)));
@@ -149,7 +158,7 @@ module.exports = function createAccounts(ctx) {
       setSession(req, res, r.j.account);
       res.redirect(302, '/cesta/ucet/nastaveni?heslo=1');
     }));
-    const logout = (req, res) => { clearSession(req, res); res.redirect(302, '/'); };
+    const logout = (req, res) => { if (req.account && ctx.trackServer) ctx.trackServer(req, 'account_logout', {}); clearSession(req, res); res.redirect(302, '/'); };
     app.get('/cesta/odhlasit', logout); app.post('/cesta/odhlasit', logout);
 
     // Můj účet = rozcestník nástrojů + údaje + změna hesla
@@ -167,7 +176,7 @@ module.exports = function createAccounts(ctx) {
       const body = CSS + `<div class="hero" style="padding-bottom:6px"><span class="eyebrow"><i></i>Moje nástroje</span><h1>Dobrý den, <span class="g">${esc(String(a.name).split(/\s+/)[0])}</span></h1><p>Vaše nástroje Laundromats na jednom místě.</p></div>${msgHtml(err, welcome)}
         <div class="acc-tiles">${TILES.map(([h, i, t, d]) => `<a class="card acc-tile" href="${h}"><div class="ic">${IC[i]}</div><h3>${t}</h3><p>${d}</p></a>`).join('')}</div>
 `;
-      send(req, res, 'Moje nástroje', body);
+      send(req, res, 'Moje nástroje', body, 200, { back: false });
     });
     // Můj účet = údaje, změna hesla, odhlášení (z tlačítka 👤 v liště)
     app.get('/cesta/ucet/nastaveni', requireAccount, (req, res) => {

@@ -28,20 +28,26 @@ header .brand{font-weight:900;letter-spacing:.14em}
 .lm-cta .btn{white-space:nowrap}
 .lm-foot{max-width:1100px;margin:30px auto 0;padding:24px 22px 34px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:8px 24px;justify-content:space-between;color:var(--text3);font-size:13px}
 .lm-foot a{color:var(--text2);text-decoration:none}.lm-foot a:hover{color:var(--accent2)}
+.lm-back{display:inline-block;font-size:13px;color:var(--accent2);text-decoration:none;margin:0 0 14px;opacity:.85}
+.lm-back:hover{opacity:1;text-decoration:underline}
 `;
 /**
- * layout({ title, desc, body, active, absolute }) — celá HTML stránka ve vzhledu BS2 s navigací Laundromats.
+ * layout({ title, desc, body, active, absolute, back }) — celá HTML stránka ve vzhledu BS2 s navigací Laundromats.
+ * back: false jen na samotném rozcestníku (/cesta/ucet) — jinde se nahoře vykreslí odkaz zpět na něj.
  */
-function layout({ title, desc = '', body, active = '', absolute = false, head = '' }) {
+function layout({ title, desc = '', body, active = '', absolute = false, head = '', back = true }) {
   const nav = navItems({ absolute });
   const ctaHref = (absolute ? MAIN_URL() : '') + homeHref() + '#kontakt';
+  // Odkaz zpět na rozcestník nástrojů. Je v <!--PRIV-->, takže ho server (lite) nechá jen
+  // přihlášenému — nepřihlášený by stejně skončil na přihlašování.
+  const backHtml = back ? `<!--PRIV--><a class="lm-back" href="${absolute ? MAIN_URL() : ''}/cesta/ucet">← zpět na nástroje</a><!--/PRIV-->` : '';
   return `<!doctype html><html lang="cs"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#04060c">
 <title>${esc(title)} · Laundromats</title>${desc ? `<meta name="description" content="${esc(desc)}">` : ''}<link rel="icon" type="image/svg+xml" href="${absolute ? MAIN_URL() : ''}/favicon.svg">
 ${require('./lm-header').FONT}<style>${BS2_CSS}${LM_CSS}${require('./lm-header').CSS}.lhdr .in{width:100%}</style>${head}</head>
 <body><canvas id="net" aria-hidden="true"></canvas><div class="glow a"></div><div class="glow b"></div><div class="gridfx" aria-hidden="true"></div>
 ${require('./lm-header').header({ absolute })}
-<main>${body}</main>
+<main>${backHtml}${body}</main>
 <footer class="lm-foot"><span><b style="color:var(--text)">Laundromats</b> · Samoobslužné prádlomaty. Zkušenosti z provozu. Možnosti pro vaše podnikání.</span><span><a href="mailto:info@laundromats.eu">info@laundromats.eu</a> · <a href="${absolute ? MAIN_URL() : ''}/gdpr">Ochrana osobních údajů</a></span></footer>
 <script>${require('./home-page').NET_JS}</script>${absolute ? '' : '<script src="/cesta/track.js" defer></script>'}
 </body></html>`;

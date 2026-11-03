@@ -6,6 +6,7 @@ const { layout, esc, MAIN_URL } = require('./lm-layout');
 
 module.exports = function mountApps(app, ctx) {
   const { HOLYOS_URL, rateLimited, fetchProducts, requireAccount, render } = ctx;
+  const T = (req, ev, p) => { if (ctx.trackServer) ctx.trackServer(req, ev, p); };
   const gate = requireAccount; // přístup jen pro přihlášené (účty laundromats.eu) a správce z HolyOS
   const urlenc = require('express').urlencoded({ extended: false, limit: '60kb' });
 
@@ -29,6 +30,7 @@ module.exports = function mountApps(app, ctx) {
       const d = LAPP.clean(req.body || {});
       if (!d.name || !d.address) return res.status(400).type('html').send(render(req, LAPP.siteForm(S, null, d, 'Vyplňte název a adresu místa.', false, false, await products())));
       const c = LAPP.calc(d), ev = LAPP.evaluate(d, c);
+      T(req, 'app_evaluate', { name: String(d.name).slice(0, 120), address: String(d.address).slice(0, 200), city: d.city || null, result: ev.result, mid_cash: c && c.S && c.S.mid ? Math.round(c.S.mid.cash) : null });
       res.set('Cache-Control', 'no-store').type('html').send(render(req, reportPage(d, c, ev)));
     } catch (e) { next(e); }
   });
@@ -54,6 +56,7 @@ module.exports = function mountApps(app, ctx) {
   app.get('/api/location/area', gate, async (req, res) => {
     const area = String(req.query.area || '').trim().slice(0, 80); if (area.length < 2) return res.status(400).json({ error: 'Zadejte město.' });
     if (rateLimited('area:' + req.ip, 30, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho analýz, zkuste to za chvíli.' });
+    T(req, 'app_search', { area });
     send(res, await holyosPublic('/api/pradlomat-spots/public/area-analysis?area=' + encodeURIComponent(area) + '&radius_km=15'));
   });
   app.get('/api/location/candidates', gate, async (req, res) => {
@@ -67,6 +70,7 @@ module.exports = function mountApps(app, ctx) {
     const name = String(req.query.name || '').trim().slice(0, 120); if (name.length < 2) return res.status(400).json({ error: 'Chybí název místa.' });
     if (rateLimited('contact:' + req.ip, 15, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho dotazů, zkuste to za chvíli.' });
     const qs = ['name', 'city', 'lat', 'lon', 'kind', 'address'].filter((k) => req.query[k]).map((k) => k + '=' + encodeURIComponent(String(req.query[k]).slice(0, 200))).join('&');
+    T(req, 'app_contact', { name, city: String(req.query.city || '').slice(0, 80) });
     send(res, await holyosPublic('/api/pradlomat-spots/public/contact?' + qs));
   });
   let _ex = { at: 0, data: [] };

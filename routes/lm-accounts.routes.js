@@ -19,7 +19,7 @@ const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 const sha = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 const newToken = () => crypto.randomBytes(32).toString('hex');
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/;
-const pub = (a) => ({ id: a.id, email: a.email, name: a.name, phone: a.phone, company: a.company, plan: a.plan, v: a.token_version, verified: !!a.email_verified_at, created_at: a.created_at });
+const pub = (a) => ({ id: a.id, lead_id: a.compounder_lead_id || null, email: a.email, name: a.name, phone: a.phone, company: a.company, plan: a.plan, v: a.token_version, verified: !!a.email_verified_at, created_at: a.created_at });
 const pwErr = (p) => (String(p || '').length < 8 ? 'Heslo musí mít alespoň 8 znaků.' : String(p).length > 200 ? 'Heslo je příliš dlouhé.' : null);
 
 // Spáruje / založí kontakt v CRM (CompounderLead), ať obchod účet vidí
@@ -36,6 +36,7 @@ async function linkLead(acc, sid) {
     if (sid && /^lm-[a-z0-9]{4,60}$/.test(String(sid))) {
       try { await require('./compounder.routes')._linkSidToLead(String(sid), lead.id); } catch (e) { /* volitelné */ }
     }
+    prisma.compounderEvent.create({ data: { sid: String(sid || ('server:acc:' + acc.id)).slice(0, 64), event: 'account_register', path: '/cesta/registrace', props: { site: 'laundromats', lead_id: lead.id, account_id: acc.id } } }).catch(() => {});
     return lead.id;
   } catch (e) { console.warn('[lm-accounts] lead:', e.message); return null; }
 }
@@ -162,6 +163,35 @@ router.post('/:id(\\d+)/disabled', async (req, res, next) => {
   try {
     const upd = await prisma.lmAccount.update({ where: { id: parseInt(req.params.id, 10) }, data: { disabled: !!(req.body || {}).disabled, token_version: { increment: 1 } }, select: { id: true, disabled: true } });
     res.json({ ok: true, disabled: upd.disabled });
+  } catch (err) { next(err); }
+});
+
+// POST /:id/link-sid {sids:[…]} — prohlížeč(e) přihlášeného uživatele napojit na jeho kontakt (celá historie návštěv)
+router.post('/:id(\\d+)/link-sid', async (req, res, next) => {
+  try {
+    const acc = await prisma.lmAccount.findUnique({ where: { id: parseInt(req.params.id, 10) }, select: { compounder_lead_id: true } });
+    if (!acc || !acc.compounder_lead_id) return res.json({ ok: false });
+    const sids = [].concat((req.body || {}).sids || []).map(String).filter((x) => /^lm-[a-z0-9]{4,60}$/.test(x)).slice(0, 5);
+    const link = require('./compounder.routes')._linkSidToLead;
+    for (const sid of sids) await link(sid, acc.compounder_lead_id).catch(() => {});
+    res.json({ ok: true, linked: sids.length });
+  } catch (err) { next(err); }
+});
+// GET /:id/activity — veškerý pohyb uživatele na laundromats.eu (události kontaktu + napojených prohlížečů)
+router.get('/:id(\\d+)/activity', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const acc = await prisma.lmAccount.findUnique({ where: { id }, select: { id: true, compounder_lead_id: true } });
+    if (!acc) return res.status(404).json({ error: 'Účet nenalezen' });
+    const lid = acc.compounder_lead_id;
+    const or = [{ props: { path: ['account_id'], equals: id } }];
+    if (lid) {
+      or.push({ props: { path: ['lead_id'], equals: lid } });
+      const linked = await prisma.compounderEvent.findMany({ where: { event: 'lead_linked', props: { path: ['lead_id'], equals: lid } }, select: { sid: true }, distinct: ['sid'], take: 30 });
+      linked.forEach((x) => { if (x.sid) or.push({ sid: x.sid }); });
+    }
+    const events = (await prisma.compounderEvent.findMany({ where: { OR: or }, orderBy: { created_at: 'desc' }, take: 1500, select: { event: true, props: true, path: true, created_at: true, sid: true, ua: true } })).reverse();
+    res.json({ ok: true, lead_id: lid, events: events.map((e) => ({ event: e.event, props: e.props, path: e.path, at: e.created_at, sid: e.sid, mobile: /Mobi|Android|iPhone/i.test(e.ua || '') })) });
   } catch (err) { next(err); }
 });
 
