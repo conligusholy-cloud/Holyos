@@ -75,6 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: { username, password },
       skipAuth: true,
     });
+    if ((data as any).needs_2fa) {
+      throw new Error('Tento účet má zapnuté dvoufaktorové ověření — přihlaste se v HolyOS ve webovém prohlížeči (2FA zatím v aplikaci Sklad není).');
+    }
     setStoredToken(data.token);
     setUser(data.user);
     setStatus('authenticated');

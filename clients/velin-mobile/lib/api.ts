@@ -24,6 +24,8 @@ export class ApiError extends Error {
 }
 
 export type LoginResponse = {
+  needs_2fa?: boolean;
+  challenge?: string;
   token: string;
   user: {
     id: number;
@@ -304,6 +306,9 @@ export const api = {
   // HolyOS auth
   login: (username: string, password: string) =>
     request<LoginResponse>('POST', '/api/auth/login', { body: { username, password } }),
+  // 2. krok přihlášení u účtu s 2FA (kód z aplikace nebo záložní kód)
+  login2fa: (challenge: string, code: string) =>
+    request<LoginResponse>('POST', '/api/auth/login/2fa', { body: { challenge, code } }),
 
   // Velín — registrace push tokenu po loginu (vyžaduje JWT)
   registerDevice: (

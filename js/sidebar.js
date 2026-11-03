@@ -94,6 +94,10 @@ function renderSidebar(activeModule) {
   // Přihlášený uživatel + odhlášení
   html += '<div class="sidebar-user">';
   html += '  <div id="sidebar-user-info" style="padding:12px 20px; color:var(--text2); font-size:12px;">Načítám...</div>';
+  html += '  <a href="/security.html" class="sidebar-item" style="color:var(--text2); font-size:13px;">';
+  html += '    <div class="sidebar-icon" style="background:rgba(34,197,94,0.15); color:#22c55e;">&#128274;</div>';
+  html += '    <div class="sidebar-item-info"><div class="sidebar-item-name">Zabezpečení účtu</div></div>';
+  html += '  </a>';
   html += '  <a href="#" onclick="logoutUser(); return false;" class="sidebar-item" style="color:var(--text2); font-size:13px;">';
   html += '    <div class="sidebar-icon" style="background:rgba(239,68,68,0.15); color:#ef4444;">&#10005;</div>';
   html += '    <div class="sidebar-item-info"><div class="sidebar-item-name">Odhlásit se</div></div>';

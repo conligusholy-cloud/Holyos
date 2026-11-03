@@ -134,12 +134,17 @@
         <label for="password">Heslo</label>
         <input type="password" id="password" name="password" required autocomplete="current-password">
       </div>
+      <div class="form-group" id="tfa-group" style="display:none">
+        <label for="tfa-code">Ověřovací kód z aplikace (nebo záložní kód)</label>
+        <input type="text" id="tfa-code" name="tfa-code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
+      </div>
       <button type="submit" class="login-btn" id="login-btn">Přihlásit se</button>
     </form>
   </div>
 
   <script>
     var isSetupMode = false;
+    var tfaChallenge = null; // výzva z prvního kroku přihlášení (po zadání hesla u účtu s 2FA)
 
     // Pokud už je přihlášen, přesměruj na redirect (pokud je) nebo dashboard
     fetch('/api/auth/me', { credentials: 'include' })
@@ -173,6 +178,7 @@
 
       var url = isSetupMode ? '/api/auth/setup' : '/api/auth/login';
       var body = { username: username, password: password };
+      if (tfaChallenge) { url = '/api/auth/login/2fa'; body = { challenge: tfaChallenge, code: document.getElementById('tfa-code').value.trim() }; }
       if (isSetupMode && displayName) body.displayName = displayName;
 
       fetch(url, {
@@ -186,6 +192,16 @@
         return r.json();
       })
       .then(function(data) {
+        if (data && data.needs_2fa) {
+          // Heslo sedí, účet má 2FA → vyžádej kód
+          tfaChallenge = data.challenge;
+          document.getElementById('tfa-group').style.display = 'block';
+          document.getElementById('username').disabled = true; document.getElementById('password').disabled = true;
+          document.getElementById('tfa-code').focus();
+          document.getElementById('subtitle').textContent = 'Zadejte kód z ověřovací aplikace';
+          btn.disabled = false; btn.textContent = 'Ověřit a přihlásit se';
+          return;
+        }
         // Token je nastaven jako httpOnly cookie serverem.
         // Explicitní ?redirect= má přednost (návrat na konkrétní stránku, ze které se odhlásil).
         var redirect = new URLSearchParams(window.location.search).get('redirect');

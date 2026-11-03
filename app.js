@@ -175,7 +175,7 @@ function salesGateAllowed(pathname) {
   if (pathname === '/api/sites/my') return true;
   if (/^\/api\/sites\/\d+(\/communications)?$/.test(pathname)) return true;
   if (pathname.startsWith('/modules/obchodnik') || pathname.startsWith('/modules/vedouci-obchodu') || pathname.startsWith('/modules/podpis-smlouvy')) return true;
-  if (pathname === '/login.html' || pathname.startsWith('/login')) return true;
+  if (pathname === '/login.html' || pathname.startsWith('/login') || pathname === '/security.html') return true;
   if (pathname.startsWith('/css/') || pathname.startsWith('/js/') || pathname.startsWith('/dist/')) return true;
   if (/\.(css|js|mjs|png|jpe?g|gif|svg|ico|webp|webmanifest|woff2?|ttf|map)$/i.test(pathname)) return true;
   return false;

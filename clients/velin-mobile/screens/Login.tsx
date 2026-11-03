@@ -32,16 +32,28 @@ export default function Login({ navigation }: Props) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [challenge, setChallenge] = useState<string | null>(null); // výzva z 1. kroku (účet s 2FA)
+  const [code, setCode] = useState('');
 
   async function onSubmit() {
-    if (!username.trim() || !password) {
+    if (!challenge && (!username.trim() || !password)) {
       setError('Vyplň prosím jméno i heslo.');
+      return;
+    }
+    if (challenge && !code.trim()) {
+      setError('Zadej kód z ověřovací aplikace.');
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const loginRes = await api.login(username.trim(), password);
+      let loginRes = challenge ? await api.login2fa(challenge, code.trim()) : await api.login(username.trim(), password);
+      if (loginRes.needs_2fa && loginRes.challenge) {
+        // Heslo sedí, účet má 2FA → vyžádej kód
+        setChallenge(loginRes.challenge);
+        setLoading(false);
+        return;
+      }
       const user = loginRes.user;
       const personId = user.person?.id;
       if (!personId) {
@@ -91,6 +103,23 @@ export default function Login({ navigation }: Props) {
         <Text style={styles.brandSubtitle}>Tvůj kapesní HolyOS</Text>
       </View>
       <View style={styles.card}>
+        {challenge ? (
+          <>
+            <Text style={styles.label}>Ověřovací kód z aplikace (nebo záložní kód)</Text>
+            <TextInput
+              style={styles.input}
+              value={code}
+              onChangeText={setCode}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="number-pad"
+              placeholder="123456"
+              placeholderTextColor={colors.text2}
+            />
+          </>
+        ) : null}
+        {!challenge ? (
+          <>
         <Text style={styles.label}>Uživatelské jméno</Text>
         <TextInput
           style={styles.input}
@@ -110,6 +139,8 @@ export default function Login({ navigation }: Props) {
           placeholder="••••••••"
           placeholderTextColor={colors.text2}
         />
+          </>
+        ) : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}

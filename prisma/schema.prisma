@@ -27,6 +27,9 @@ model User {
   role           String   @default("user") @db.VarChar(20)
   is_super_admin Boolean  @default(false)
   token_version  Int      @default(0) // zvýšením se zneplatní všechny dříve vydané JWT tokeny uživatele
+  totp_secret       String?  @db.VarChar(255) // šifrovaný TOTP secret (AES-GCM)
+  totp_enabled      Boolean  @default(false)
+  totp_backup_codes Json? // hashe jednorázových záložních kódů
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 

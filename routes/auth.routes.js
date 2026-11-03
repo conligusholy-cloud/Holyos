@@ -92,6 +92,42 @@ router.post('/setup', async (req, res, next) => {
   }
 });
 
+// Dokončení přihlášení: vydá token + cookie a vrátí profil (společné pro heslo i 2FA krok)
+async function completeLogin(user, res) {
+  const access = await computeSalesAccess(user);
+  const token = generateToken(user, { sales_only: access.sales_only, sales_home: access.sales_home });
+
+  // Nastav cookie i vrať v body (podpora obou přístupů)
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000, // 24h
+  });
+
+  res.json({
+    token,
+    sales_only: access.sales_only,
+    home: access.sales_home,
+    user: {
+      id: user.id,
+      username: user.username,
+      displayName: user.display_name,
+      role: user.role,
+      isSuperAdmin: user.is_super_admin,
+      person: user.person ? {
+        id: user.person.id,
+        firstName: user.person.first_name,
+        lastName: user.person.last_name,
+        photoUrl: user.person.photo_url,
+        isSalesperson: !!user.person.is_salesperson,
+        canGiveDiscount: !!user.person.can_give_discount,
+        canAddIndividualOffers: !!user.person.can_add_individual_offers,
+      } : null,
+    },
+  });
+}
+
 // POST /api/auth/login
 router.post('/login', loginIpLimiter, async (req, res, next) => {
   try {
@@ -118,41 +154,113 @@ router.post('/login', loginIpLimiter, async (req, res, next) => {
     }
     loginFailLimiter.reset(fk);
 
-    const access = await computeSalesAccess(user);
-    const token = generateToken(user, { sales_only: access.sales_only, sales_home: access.sales_home });
-
-    // Nastav cookie i vrať v body (podpora obou přístupů)
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000, // 24h
-    });
-
-    res.json({
-      token,
-      sales_only: access.sales_only,
-      home: access.sales_home,
-      user: {
-        id: user.id,
-        username: user.username,
-        displayName: user.display_name,
-        role: user.role,
-        isSuperAdmin: user.is_super_admin,
-        person: user.person ? {
-          id: user.person.id,
-          firstName: user.person.first_name,
-          lastName: user.person.last_name,
-          photoUrl: user.person.photo_url,
-          isSalesperson: !!user.person.is_salesperson,
-          canGiveDiscount: !!user.person.can_give_discount,
-          canAddIndividualOffers: !!user.person.can_add_individual_offers,
-        } : null,
-      },
-    });
+    // Dvoufaktorové ověření: heslo sedí → místo tokenu vydáme krátkodobou výzvu (5 min), token až po kódu z aplikace
+    if (user.totp_enabled) {
+      const challenge = jwt.sign({ tfa: user.id, p: 'login' }, require('../config/secrets').jwtSecret(), { expiresIn: '5m' });
+      return res.json({ needs_2fa: true, challenge });
+    }
+    return completeLogin(user, res);
   } catch (err) {
     next(err);
   }
+});
+
+
+// ─── DVOUFAKTOROVÉ OVĚŘENÍ (TOTP) ───────────────────────────────────────────
+const totp = require('../services/totp');
+const tfaLimiter = createLimiter({ windowMs: 15 * 60000, max: 6, keyFn: (req) => 'tfa:' + (req.ip || '') , message: 'Příliš mnoho chybných kódů. Zkuste to za chvíli.' });
+const tfaUserLimiter = createLimiter({ windowMs: 15 * 60000, max: 8 });
+
+// Ověří kód z aplikace NEBO záložní kód (ten se spotřebuje). Vrací true/false.
+async function checkTwoFactorCode(user, code) {
+  const secret = totp.decrypt(user.totp_secret);
+  if (secret && totp.verify(secret, code)) return true;
+  const hash = totp.hashCode(code);
+  const list = Array.isArray(user.totp_backup_codes) ? user.totp_backup_codes : [];
+  if (list.includes(hash)) {
+    await prisma.user.update({ where: { id: user.id }, data: { totp_backup_codes: list.filter((h) => h !== hash) } });
+    return true;
+  }
+  return false;
+}
+
+// POST /api/auth/login/2fa { challenge, code } — druhý krok přihlášení
+router.post('/login/2fa', loginIpLimiter, tfaLimiter, async (req, res, next) => {
+  try {
+    const { challenge, code } = req.body || {};
+    let payload;
+    try { payload = jwt.verify(String(challenge || ''), require('../config/secrets').jwtSecret()); } catch (e) { return res.status(401).json({ error: 'Platnost přihlášení vypršela — zadejte heslo znovu.' }); }
+    if (!payload || payload.p !== 'login' || !payload.tfa) return res.status(401).json({ error: 'Neplatná výzva' });
+    const fk = 'tfa-u:' + payload.tfa;
+    const user = await prisma.user.findUnique({ where: { id: payload.tfa }, include: { person: true } });
+    if (!user || !user.totp_enabled) return res.status(401).json({ error: 'Neplatná výzva' });
+    if (!(await checkTwoFactorCode(user, code))) {
+      const r = tfaUserLimiter.take(fk);
+      if (r.blocked) { res.set('Retry-After', String(r.retryAfter)); return res.status(429).json({ error: 'Příliš mnoho chybných kódů. Zkuste to za chvíli.' }); }
+      return res.status(401).json({ error: 'Neplatný ověřovací kód' });
+    }
+    tfaUserLimiter.reset(fk);
+    return completeLogin(user, res);
+  } catch (err) { next(err); }
+});
+
+// GET /api/auth/2fa/status
+router.get('/2fa/status', requireAuth, async (req, res, next) => {
+  try {
+    const u = await prisma.user.findUnique({ where: { id: req.user.id }, select: { totp_enabled: true, totp_backup_codes: true } });
+    res.json({ enabled: !!(u && u.totp_enabled), backup_codes_left: Array.isArray(u && u.totp_backup_codes) ? u.totp_backup_codes.length : 0 });
+  } catch (err) { next(err); }
+});
+
+// POST /api/auth/2fa/setup — vygeneruje nový secret (zatím nezapnuto, čeká na potvrzení kódem)
+router.post('/2fa/setup', requireAuth, async (req, res, next) => {
+  try {
+    const u = await prisma.user.findUnique({ where: { id: req.user.id }, select: { totp_enabled: true, username: true } });
+    if (u.totp_enabled) return res.status(400).json({ error: '2FA už je zapnuté. Nejdřív ho vypněte.' });
+    const secret = totp.generateSecret();
+    await prisma.user.update({ where: { id: req.user.id }, data: { totp_secret: totp.encrypt(secret), totp_enabled: false } });
+    res.json({ secret, otpauth: totp.otpauthUri(secret, u.username, 'HolyOS') });
+  } catch (err) { next(err); }
+});
+
+// POST /api/auth/2fa/enable { code } — potvrdí kódem z aplikace, zapne 2FA a vrátí záložní kódy (zobrazí se jen jednou)
+router.post('/2fa/enable', requireAuth, tfaLimiter, async (req, res, next) => {
+  try {
+    const u = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const secret = totp.decrypt(u.totp_secret);
+    if (!secret || u.totp_enabled) return res.status(400).json({ error: 'Nejdřív spusťte nastavení 2FA.' });
+    if (!totp.verify(secret, (req.body || {}).code)) return res.status(400).json({ error: 'Kód nesouhlasí. Zkontrolujte čas v telefonu a zkuste to znovu.' });
+    const codes = totp.generateBackupCodes(8);
+    await prisma.user.update({ where: { id: u.id }, data: { totp_enabled: true, totp_backup_codes: codes.map(totp.hashCode) } });
+    require('../services/audit').logAudit({ action: 'update', entity: 'user', entity_id: u.id, description: 'Zapnuto dvoufaktorové ověření (2FA)', user: req.user }).catch(() => {});
+    res.json({ ok: true, backup_codes: codes });
+  } catch (err) { next(err); }
+});
+
+// POST /api/auth/2fa/disable { password, code } — vypnutí vyžaduje heslo i kód
+router.post('/2fa/disable', requireAuth, tfaLimiter, async (req, res, next) => {
+  try {
+    const { password, code } = req.body || {};
+    const u = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!u.totp_enabled) return res.json({ ok: true });
+    if (!password || !(await bcrypt.compare(password, u.password_hash))) return res.status(401).json({ error: 'Nesprávné heslo' });
+    if (!(await checkTwoFactorCode(u, code))) return res.status(401).json({ error: 'Neplatný ověřovací kód' });
+    await prisma.user.update({ where: { id: u.id }, data: { totp_enabled: false, totp_secret: null, totp_backup_codes: null, token_version: { increment: 1 } } });
+    require('../services/audit').logAudit({ action: 'update', entity: 'user', entity_id: u.id, description: 'Vypnuto dvoufaktorové ověření (2FA)', user: req.user }).catch(() => {});
+    res.clearCookie('token', process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {});
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/auth/users/:id/2fa-reset — super admin zruší 2FA uživateli (ztracený telefon i záložní kódy)
+router.post('/users/:id/2fa-reset', requireAuth, async (req, res, next) => {
+  try {
+    if (!req.user.isSuperAdmin) return res.status(403).json({ error: 'Jen super admin' });
+    const id = parseInt(req.params.id, 10);
+    await prisma.user.update({ where: { id }, data: { totp_enabled: false, totp_secret: null, totp_backup_codes: null, token_version: { increment: 1 } } });
+    require('../services/audit').logAudit({ action: 'update', entity: 'user', entity_id: id, description: 'Super admin zrušil 2FA uživateli', user: req.user }).catch(() => {});
+    res.json({ ok: true });
+  } catch (err) { next(err); }
 });
 
 // POST /api/auth/logout

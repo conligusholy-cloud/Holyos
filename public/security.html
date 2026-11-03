@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zabezpečení účtu — HolyOS</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;background:#0f1220;color:#e8ecf8;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;min-height:100vh;display:flex;justify-content:center;padding:24px 14px}
+    .card{background:#171b2e;border:1px solid #262c48;border-radius:16px;padding:26px;width:100%;max-width:520px;height:fit-content}
+    h1{margin:0 0 4px;font-size:21px} .sub{color:#8a93b8;font-size:13px;margin-bottom:18px}
+    label{display:block;font-size:12px;color:#8a93b8;margin:12px 0 5px}
+    input{width:100%;padding:11px 12px;background:#0f1220;border:1px solid #262c48;border-radius:9px;color:#e8ecf8;font-size:15px}
+    button{padding:11px 16px;border:0;border-radius:9px;font-weight:700;font-size:14px;cursor:pointer;background:linear-gradient(90deg,#2d7be0,#7c5cff);color:#fff;margin-top:14px}
+    button.sec{background:transparent;border:1px solid #3a4268;color:#e8ecf8} button.danger{background:#dc2626}
+    .badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700}
+    .on{background:rgba(34,197,94,.18);color:#4ade80} .off{background:rgba(239,68,68,.18);color:#f87171}
+    .err{color:#fca5a5;font-size:13px;margin-top:10px;min-height:16px} .ok{color:#86efac;font-size:13px;margin-top:10px}
+    .secret{font-family:ui-monospace,Consolas,monospace;background:#0f1220;border:1px dashed #3a4268;padding:10px;border-radius:9px;word-break:break-all;font-size:14px;margin-top:8px}
+    #qr{background:#fff;padding:10px;border-radius:10px;display:inline-block;margin-top:10px}
+    .codes{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px;font-family:ui-monospace,Consolas,monospace;font-size:15px}
+    .codes div{background:#0f1220;border:1px solid #262c48;border-radius:8px;padding:8px;text-align:center}
+    a{color:#7dd3fc} hr{border:0;border-top:1px solid #262c48;margin:20px 0}
+  </style>
+</head>
+<body>
+<div class="card">
+  <a href="/" style="font-size:13px;text-decoration:none">← Zpět do HolyOS</a>
+  <h1 style="margin-top:10px">🔒 Zabezpečení účtu</h1>
+  <div class="sub">Dvoufaktorové ověření (2FA) — po heslu se zadává kód z aplikace v telefonu (Google Authenticator, Microsoft Authenticator, Authy…).</div>
+
+  <div id="status">Načítám…</div>
+  <div id="area"></div>
+  <div class="err" id="err"></div>
+
+  <hr>
+  <div style="font-size:13px;color:#8a93b8">Ztratil jsi telefon nebo podezříváš, že někdo zná tvé heslo?</div>
+  <button class="sec" id="logoutAll">Odhlásit ze všech zařízení</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  function api(method, url, body){
+    return fetch(url, { method: method, credentials: 'include', headers: {'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : undefined })
+      .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ if(!r.ok) { var e=new Error(d.error||('Chyba '+r.status)); e.status=r.status; throw e; } return d; }); });
+  }
+  function err(e){ $('err').textContent = e ? (e.message||String(e)) : ''; }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  function load(){
+    err('');
+    api('GET','/api/auth/2fa/status').then(function(st){
+      if (st.enabled) {
+        $('status').innerHTML = '<span class="badge on">2FA je zapnuté</span> <span style="color:#8a93b8;font-size:13px">Zbývá záložních kódů: '+st.backup_codes_left+'</span>';
+        $('area').innerHTML = '<label>Pro vypnutí zadej heslo a kód z aplikace</label><input type="password" id="pw" placeholder="Heslo" autocomplete="current-password"><input type="text" id="cd" inputmode="numeric" placeholder="Kód z aplikace nebo záložní kód" style="margin-top:8px"><button class="danger" id="off">Vypnout 2FA</button>';
+        $('off').onclick = function(){ api('POST','/api/auth/2fa/disable',{password:$('pw').value, code:$('cd').value}).then(function(){ location.href='/login.html'; }).catch(err); };
+      } else {
+        $('status').innerHTML = '<span class="badge off">2FA není zapnuté</span>';
+        $('area').innerHTML = '<button id="start">Zapnout 2FA</button>';
+        $('start').onclick = setup;
+      }
+    }).catch(function(e){ if (e.status===401) { location.href='/login.html?redirect='+encodeURIComponent('/security.html'); } else err(e); });
+  }
+  function setup(){
+    err('');
+    api('POST','/api/auth/2fa/setup').then(function(d){
+      $('area').innerHTML = '<div style="font-size:14px;margin-top:6px"><b>1.</b> V aplikaci (Authenticator) přidej účet naskenováním QR kódu:</div><div id="qr"></div>'
+        + '<div style="font-size:13px;color:#8a93b8;margin-top:10px">Nebo zadej klíč ručně:</div><div class="secret">'+esc(d.secret)+'</div>'
+        + '<div style="font-size:14px;margin-top:14px"><b>2.</b> Opiš 6místný kód z aplikace:</div><input type="text" id="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456"><button id="enable">Potvrdit a zapnout</button>';
+      try { new QRCode($('qr'), { text: d.otpauth, width: 180, height: 180 }); } catch(e) { $('qr').remove(); }
+      $('enable').onclick = function(){
+        api('POST','/api/auth/2fa/enable',{code:$('code').value}).then(function(r){
+          $('status').innerHTML = '<span class="badge on">2FA je zapnuté</span>';
+          $('area').innerHTML = '<div class="ok">✅ Hotovo. Ulož si záložní kódy — každý jde použít jednou, když nemáš telefon. <b>Znovu se už nezobrazí.</b></div><div class="codes">'
+            + r.backup_codes.map(function(c){ return '<div>'+esc(c)+'</div>'; }).join('') + '</div>'
+            + '<button class="sec" id="copy">Zkopírovat kódy</button>';
+          $('copy').onclick = function(){ navigator.clipboard.writeText(r.backup_codes.join('\n')).then(function(){ $('copy').textContent='Zkopírováno'; }); };
+        }).catch(err);
+      };
+    }).catch(err);
+  }
+  $('logoutAll').onclick = function(){
+    if (!confirm('Odhlásit tento účet ze všech zařízení?')) return;
+    api('POST','/api/auth/logout-all').then(function(){ location.href='/login.html'; }).catch(err);
+  };
+  load();
+})();
+</script>
+</body>
+</html>
