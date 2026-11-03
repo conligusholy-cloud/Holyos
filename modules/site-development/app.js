@@ -526,7 +526,8 @@ function renderContactsTab(s){
       ${chk('Primární kontakt','contact_is_primary', false)}
     </div>
     ${txt('Poznámka','contact_note','')}
-    <button class="btn btn-secondary btn-sm" onclick="addContact()" style="margin-top:10px;">+ Přidat kontakt</button>`;
+    <button class="btn btn-secondary btn-sm" onclick="addContact()" style="margin-top:10px;">+ Přidat kontakt</button>
+    <div style="font-size:12px;color:var(--text2);margin-top:8px;">Vyplněný kontakt se uloží i hlavním tlačítkem <b>Uložit</b> dole.</div>`;
 }
 function renderCommTab(s){
   const list = (s.communications||[]).map(c => `
@@ -554,7 +555,8 @@ function renderCommTab(s){
       ${inp('Follow-up (volitelné)','comm_followup_at','', 'date')}
     </div>
     ${txt('Obsah / poznámka','comm_body','')}
-    <button class="btn btn-secondary btn-sm" onclick="addComm()" style="margin-top:10px;">+ Přidat záznam</button>`;
+    <button class="btn btn-secondary btn-sm" onclick="addComm()" style="margin-top:10px;">+ Přidat záznam</button>
+    <div style="font-size:12px;color:var(--text2);margin-top:8px;">Vyplněný záznam se uloží i hlavním tlačítkem <b>Uložit</b> dole.</div>`;
 }
 function renderPhotosTab(s){
   const photos = (s.photos||[]).map(p => `
@@ -815,6 +817,60 @@ function collectForm() {
   return out;
 }
 
+// Rozepsaný kontakt ve formuláři „Přidat kontakt" — vrátí data, nebo null.
+// POZOR: collectForm() pole contact_* záměrně přeskakuje (nepatří na lokalitu),
+// takže je musí uložit tenhle krok. Bez něj se při „Uložit" tiše zahodila.
+function rozepsanyKontakt() {
+  const v = (n) => { const el = document.querySelector('[name=' + n + ']'); return el ? el.value.trim() : ''; };
+  const jmeno = v('contact_name');
+  if (!jmeno) return null;
+  const chk = document.querySelector('[name=contact_is_primary]');
+  return {
+    name: jmeno,
+    role: v('contact_role') || null,
+    phone: v('contact_phone') || null,
+    email: v('contact_email') || null,
+    company: v('contact_company') || null,
+    note: v('contact_note') || null,
+    is_primary: !!(chk && chk.checked),
+  };
+}
+
+// Rozepsaný záznam komunikace — stejný případ jako u kontaktu.
+function rozepsanaKomunikace() {
+  const v = (n) => { const el = document.querySelector('[name=' + n + ']'); return el ? el.value.trim() : ''; };
+  const text = v('comm_body');
+  if (!text) return null;
+  return {
+    channel: v('comm_channel') || 'note',
+    subject: v('comm_subject') || null,
+    body: text,
+    occurred_at: v('comm_occurred_at') || null,
+    followup_at: v('comm_followup_at') || null,
+  };
+}
+
+// Uloží, co má uživatel rozepsané v podformulářích. Vrací text chyby, nebo null.
+async function ulozRozepsane(siteId) {
+  const kroky = [
+    { data: rozepsanyKontakt(),    url: '/api/sites/' + siteId + '/contacts',       co: 'kontakt' },
+    { data: rozepsanaKomunikace(), url: '/api/sites/' + siteId + '/communications', co: 'záznam komunikace' },
+  ];
+  for (const k of kroky) {
+    if (!k.data) continue;
+    try {
+      const r = await fetch(k.url, fetchOpts({ method: 'POST', body: JSON.stringify(k.data) }));
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        return 'Nepodařilo se uložit ' + k.co + ': ' + (e.error || ('HTTP ' + r.status));
+      }
+    } catch (err) {
+      return 'Nepodařilo se uložit ' + k.co + ': ' + err.message;
+    }
+  }
+  return null;
+}
+
 async function saveSite() {
   const data = collectForm();
   if (!data.name) { alert('Název je povinný'); switchTab('basic'); return; }
@@ -829,6 +885,16 @@ async function saveSite() {
       alert('Chyba uložení: ' + (e.error || r.status));
       return;
     }
+    // U nové lokality si vezmeme id z odpovědi, ať je kam kontakt uložit.
+    const ulozena = await r.json().catch(() => null);
+    const siteId = (currentSite && currentSite.id) || (ulozena && ulozena.id);
+
+    if (siteId) {
+      const chyba = await ulozRozepsane(siteId);
+      // Lokalita je uložená; modal nezavíráme, ať uživatel o rozepsaná data nepřijde.
+      if (chyba) { alert(chyba); return; }
+    }
+
     closeModal();
     loadSites();
   } catch (err) {
@@ -859,8 +925,14 @@ async function addContact() {
     is_primary: document.querySelector('[name=contact_is_primary]').checked,
   };
   if (!body.name) { alert('Jméno je povinné'); return; }
+  // U nové, ještě neuložené lokality není kam kontakt připnout.
+  if (!currentSite || !currentSite.id) { alert('Nejdřív ulož lokalitu, pak půjde přidat kontakt.'); return; }
   const r = await fetch('/api/sites/' + currentSite.id + '/contacts', fetchOpts({ method:'POST', body: JSON.stringify(body) }));
-  if (!r.ok) { alert('Chyba'); return; }
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    alert('Kontakt se nepodařilo uložit: ' + (e.error || ('HTTP ' + r.status)));
+    return;
+  }
   await refreshCurrent(); renderSiteModal(); switchTab('contacts');
 }
 window.addContact = addContact;
@@ -882,8 +954,13 @@ async function addComm() {
     followup_at: document.querySelector('[name=comm_followup_at]').value || null,
   };
   if (!body.body) { alert('Vyplň tělo komunikace'); return; }
+  if (!currentSite || !currentSite.id) { alert('Nejdřív ulož lokalitu, pak půjde přidat záznam.'); return; }
   const r = await fetch('/api/sites/' + currentSite.id + '/communications', fetchOpts({ method:'POST', body: JSON.stringify(body) }));
-  if (!r.ok) { alert('Chyba'); return; }
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    alert('Záznam se nepodařilo uložit: ' + (e.error || ('HTTP ' + r.status)));
+    return;
+  }
   await refreshCurrent(); renderSiteModal(); switchTab('comm');
 }
 window.addComm = addComm;
