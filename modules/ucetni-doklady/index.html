@@ -237,6 +237,15 @@
     .dv-note{margin-top:16px;background:var(--surface2);border-radius:10px;padding:10px 14px}
     .dv-note summary{cursor:pointer;font-weight:600}
     .dv-note div{margin-top:8px;max-height:260px;overflow:auto;line-height:1.5}
+    /* Interní poznámka — jen pro nás, na fakturu v PDF se netiskne. */
+    .dv-inote{margin-top:16px;background:var(--surface2);border-radius:10px;padding:10px 14px}
+    .dv-inote-head{font-weight:600;margin-bottom:8px}
+    .dv-inote textarea{width:100%;box-sizing:border-box;background:var(--bg);color:var(--text);
+      border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-family:inherit;
+      font-size:.95em;line-height:1.5;resize:vertical;min-height:62px}
+    .dv-inote textarea:focus{outline:none;border-color:var(--primary,#6c7bff)}
+    .dv-inote-foot{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
+    .dv-inote-ro{white-space:pre-wrap;line-height:1.5;margin-bottom:6px;max-height:260px;overflow:auto}
     .dv-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:20px;padding-top:14px;border-top:1px solid var(--border,#3a3a55)}
     .dv-actions-l,.dv-actions-r{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
     @media(max-width:800px){.dv-summary{grid-template-columns:1fr}.dv-money{text-align:left}}
@@ -1646,6 +1655,48 @@
         '<span style="flex:1"></span><button class="btn btn-secondary btn-sm" onclick="editPaymentNote(' + inv.id + ')" title="Upravit ručně">✏️</button>' +
         '<button class="btn btn-secondary btn-sm" onclick="editPaymentNote(' + inv.id + ',true)" title="Nechat AI shrnout z položek dokladu">🤖 Shrnout</button></div>';
     }
+    // ── Interní poznámka k dokladu ────────────────────────────────────────
+    // Pole `internal_note` — vidíme ji jen my, na fakturu v PDF se NETISKNE
+    // (to dělá pole `note`). Hodí se na stav úhrady, co hlídat, na čem se
+    // domluvili. Ukládá se přes PUT /api/accounting/invoices/:id.
+    // Server neumožní upravit doklad v koncovém stavu, takže tam ji ukážeme
+    // jen ke čtení — ať uživatel nepíše do pole, které se stejně neuloží.
+    const INV_LOCKED_STATUSES = ['paid', 'cancelled', 'written_off', 'archived'];
+    function invInternalNoteHtml(inv) {
+      const val = inv.internal_note || '';
+      const head = '<div class="dv-inote-head">🔒 Interní poznámka'
+        + ' <span class="dv-sub">— vidíme jen my, na fakturu se netiskne</span></div>';
+      if (INV_LOCKED_STATUSES.includes(inv.status)) {
+        return '<div class="dv-inote">' + head
+          + '<div class="dv-inote-ro">' + (val ? escapeHtml(val) : '<span style="color:var(--text2);">Prázdná</span>') + '</div>'
+          + '<div class="dv-sub">Doklad je ve stavu „' + escapeHtml(STATUS_LABEL[inv.status] || inv.status) + '" — upravovat ho už nelze.</div>'
+          + '</div>';
+      }
+      return '<div class="dv-inote">' + head
+        + '<textarea id="dv-inote-' + inv.id + '" rows="3" placeholder="Např. stav úhrady, na čem jsme se domluvili, co hlídat…">'
+        + escapeHtml(val) + '</textarea>'
+        + '<div class="dv-inote-foot">'
+        +   '<button class="btn btn-secondary btn-sm" onclick="saveInternalNote(' + inv.id + ')">💾 Uložit poznámku</button>'
+        +   '<span id="dv-inote-msg-' + inv.id + '" class="dv-sub"></span>'
+        + '</div></div>';
+    }
+    window.saveInternalNote = async function(id) {
+      const ta = document.getElementById('dv-inote-' + id);
+      const msg = document.getElementById('dv-inote-msg-' + id);
+      if (!ta) return;
+      const value = ta.value.trim();
+      function say(text, color) { if (msg) { msg.style.color = color || 'var(--text2)'; msg.textContent = text; } }
+      say('Ukládám…');
+      const r = await api('PUT', '/api/accounting/invoices/' + id, { internal_note: value || null });
+      if (r.status !== 200) return say('Nepodařilo se uložit: ' + (r.data?.error || r.status), '#f87171');
+      // Drž načtený detail v souladu s databází, ať se při dalším vykreslení
+      // (např. po jiné akci) neukáže stará poznámka.
+      const saved = (r.data && 'internal_note' in r.data) ? r.data.internal_note : (value || null);
+      ta.value = saved || '';
+      if (window._detailInv && window._detailInv.id === id) window._detailInv.internal_note = saved;
+      say('✅ Uloženo', '#34d399');
+      setTimeout(() => { if (msg && msg.textContent === '✅ Uloženo') msg.textContent = ''; }, 2500);
+    };
     function invPaymentsHtml(inv) {
       const allocs = inv.allocations || [];
       const total = Number(inv.total || 0), paid = Number(inv.paid_amount || 0);
@@ -1864,6 +1915,10 @@
               ? '<details class="dv-note"' + (noteLines <= 4 ? ' open' : '') + '><summary>📝 Poznámka na dokladu' + (noteLines > 4 ? ' <span class="dv-sub">(' + noteLines + ' řádků — klikni pro zobrazení)</span>' : '') + '</summary>' +
                 '<div style="white-space:pre-wrap;">' + escapeHtml(inv.note) + '</div></details>'
               : '') +
+
+            // Interní poznámka — editovatelná rovnou tady, ukazujeme ji vždy
+            // (i prázdnou), aby se vědělo, že tu je kam psát.
+            invInternalNoteHtml(inv) +
 
             (inv.order_id ? '<div id="order-history-panel" style="margin-top:18px;"><div style="color:#6b7280;font-size:12px;">Načítám historii objednávky…</div></div>' : '') +
 
