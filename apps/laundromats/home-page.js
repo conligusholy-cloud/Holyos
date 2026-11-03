@@ -317,6 +317,10 @@ function homePage(lang) {
   const n = L.nav;
   const NAV = [['proc', n.why], ['spoluprace', n.paths], ['sit', n.network], ['jak-zacit', n.start], ['otazky', n.faq]];
   const navLinks = NAV.map(([id, t]) => '<a href="#' + id + '">' + esc(t) + '</a>').join('');
+  // Podstránky webu + aplikace lokalit (zatím jen česky)
+  const APPS = String(process.env.LM_APPS_URL || 'https://lokality.laundromats.eu').replace(/\/$/, '');
+  const pageLinks = lg === 'cs' ? [['/compounder', 'Compounder'], ['/pradlomaty', 'Prádlomaty'], [APPS + '/hledat', 'Najít místo'], [APPS + '/zhodnotit', 'Zhodnotit místo']].map(([h, t]) => '<a href="' + h + '">' + esc(t) + '</a>').join('') : '';
+  const headLinks = (lg === 'cs' ? NAV.slice(0, 2) : NAV).map(([id, t]) => '<a href="#' + id + '">' + esc(t) + '</a>').join('') + pageLinks;
   const langSwitch = LANGS.length > 1 ? '<div class="langs" role="navigation" aria-label="Jazyk">' + LANGS.map((x) => '<a href="/' + (x === 'cs' ? '' : x) + '" hreflang="' + x + '"' + (x === lg ? ' aria-current="true"' : '') + '>' + x.toUpperCase() + '</a>').join('') + '</div>' : '';
   const logo = (sz) => '<svg width="' + sz + '" height="' + sz + '" viewBox="0 0 64 64" fill="none" aria-hidden="true"><defs><linearGradient id="lg' + sz + '" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff"/><stop offset=".55" stop-color="#3a6cf5"/><stop offset="1" stop-color="#7c5cff"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="17" fill="#0b1220"/><rect x="2.75" y="2.75" width="58.5" height="58.5" rx="16.5" stroke="url(#lg' + sz + ')" stroke-width="1.5"/><circle cx="32" cy="34" r="15" stroke="url(#lg' + sz + ')" stroke-width="3.5"/><circle cx="32" cy="34" r="8" stroke="url(#lg' + sz + ')" stroke-width="2.5" stroke-opacity=".6"/><circle cx="20" cy="16" r="2" fill="#4fd1ff"/><circle cx="27" cy="16" r="2" fill="#7c5cff"/></svg>';
   const kicker = (t) => '<div class="kicker">' + esc(t) + '</div>';
@@ -333,10 +337,10 @@ function homePage(lang) {
     + '<a class="skip" href="#obsah">' + esc(L.skip) + '</a>'
     // ── hlavička ──
     + '<header class="hdr" id="hdr"><div class="wrap"><a class="logo" href="#top" aria-label="Laundromats">' + logo(34) + '<span>LAUNDROMATS</span></a>'
-    + '<nav class="nav" aria-label="Hlavní navigace">' + navLinks + '</nav>' + langSwitch
+    + '<nav class="nav" aria-label="Hlavní navigace">' + headLinks + '</nav>' + langSwitch
     + '<a class="btn btn-p btn-s btn-cta" href="#kontakt">' + esc(n.cta) + '</a>'
     + '<button class="burger" id="burger" aria-expanded="false" aria-controls="mnav" aria-label="' + esc(n.menu) + '"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>'
-    + '<nav class="mnav" id="mnav" aria-label="Mobilní navigace">' + navLinks + '<a class="btn btn-p" href="#kontakt">' + esc(n.cta) + '</a></nav></header>'
+    + '<nav class="mnav" id="mnav" aria-label="Mobilní navigace">' + navLinks + pageLinks + '<a class="btn btn-p" href="#kontakt">' + esc(n.cta) + '</a></nav></header>'
     + '<main id="obsah">'
     // ── úvod ──
     + '<section class="hero" id="top"><div class="wrap"><div>'
@@ -400,7 +404,7 @@ function homePage(lang) {
     + '</main>'
     // ── patička ──
     + '<footer><div class="wrap"><div class="fgrid"><div><a class="logo" href="#top">' + logo(30) + '<span>LAUNDROMATS</span></a><p>' + esc(L.foot.claim) + '</p></div>'
-    + '<div><h4>Navigace</h4><nav aria-label="Navigace v patičce">' + navLinks + '</nav></div>'
+    + '<div><h4>Navigace</h4><nav aria-label="Navigace v patičce">' + navLinks + pageLinks + '</nav></div>'
     + '<div><h4>' + esc(L.foot.company) + '</h4><div class="fph">Firemní a kontaktní údaje doplníme</div>'
     + '<a class="fl" href="mailto:info@laundromats.eu" style="margin-top:12px">info@laundromats.eu</a><a class="fl" href="/gdpr">' + esc(L.foot.privacy) + '</a></div></div>'
     + '<div class="fbot"><span>' + esc(L.foot.rights) + ' ' + new Date().getFullYear() + ' Laundromats</span><span>' + esc(L.foot.claim) + '</span></div></div></footer>'

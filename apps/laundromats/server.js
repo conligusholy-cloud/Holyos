@@ -26,6 +26,23 @@ app.use((req, res, next) => {
   next();
 });
 
+// ── Subdoména aplikací (lokality.laundromats.eu): jen aplikace lokalit; ostatní cesty → hlavní web. Naopak /hledat a /zhodnotit z hlavní domény → subdoména.
+const APPS_PATH_RE = /^\/(hledat|zhodnotit|pristup|api\/location)(\/|$)/;
+const APPS_SHARED_RE = /^\/(api\/health|api\/inquiry|api\/presence|api\/cesta\/track|cesta\/track\.js|favicon|img\/|media\/|robots\.txt|gdpr)/;
+const appsUrl = () => String(process.env.LM_APPS_URL || 'https://lokality.laundromats.eu').replace(/\/$/, '');
+app.use((req, res, next) => {
+  const h = String(req.hostname || '').toLowerCase();
+  if (h.startsWith('lokality.')) {
+    if (req.path === '/') return res.redirect(302, '/hledat');
+    if (!APPS_PATH_RE.test(req.path) && !APPS_SHARED_RE.test(req.path) && !/^\/(sso|admin)/.test(req.path)) return res.redirect(302, PUBLIC_URL + req.originalUrl);
+  } else if (APPS_PATH_RE.test(req.path) && req.method === 'GET' && /(^|\.)laundromats\.eu$/.test(h)) {
+    return res.redirect(302, appsUrl() + req.originalUrl);
+  }
+  next();
+});
+// Cookie platná pro laundromats.eu i subdomény (identita návštěvníka + přístup do aplikací)
+const ckDomain = (req) => (/(^|\.)laundromats\.eu$/i.test(String((req && req.hostname) || '')) ? '; Domain=laundromats.eu' : '');
+
 // ── jednoduchý limiter (v paměti) ──
 const hits = new Map();
 function rateLimited(key, max, windowMs) {
@@ -113,12 +130,12 @@ app.get('/cesta/track.js', (req, res) => res.set('Cache-Control', 'no-cache').ty
 //   lm_sid — anonymní id prohlížeče (čte ho i track.js), lm_tl — t/l z jedinečného odkazu (jen server, HttpOnly).
 const CK_AGE = 400 * 86400; // max. doba, kterou prohlížeče u cookie dovolí
 function cookies(req) { const o = {}; String(req.headers.cookie || '').split(';').forEach((p) => { const i = p.indexOf('='); if (i > 0) { try { o[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim()); } catch (_) {} } }); return o; }
-function setCk(res, name, val, httpOnly) { res.append('Set-Cookie', name + '=' + encodeURIComponent(val) + '; Path=/; Max-Age=' + CK_AGE + '; SameSite=Lax; Secure' + (httpOnly ? '; HttpOnly' : '')); }
+function setCk(res, name, val, httpOnly) { res.append('Set-Cookie', name + '=' + encodeURIComponent(val) + '; Path=/; Max-Age=' + CK_AGE + '; SameSite=Lax; Secure' + ckDomain(res.req) + (httpOnly ? '; HttpOnly' : '')); }
 const SID_RE = /^lm-[a-z0-9]{4,60}$/;
 const tlOk = (t, l) => (t && /^[0-9]+\.[A-Za-z0-9._-]{8,200}$/.test(String(t))) || (l && /^[0-9a-z]+\.[A-Za-z0-9_-]{4,40}$/.test(String(l)));
 // Každá stránka: zapamatuj jedinečný odkaz (t/l) a zajisti trvalé sid (zapojeno nahoře před stránkami: app.use(lmIdentity))
 function lmIdentity(req, res, next) {
-  if (req.method === 'GET' && /^\/(cesta|pl|ekonomika|uvod|$)/.test(req.path)) {
+  if (req.method === 'GET' && /^\/(cesta|pl|ekonomika|uvod|compounder|pradlomaty|hledat|zhodnotit|$)/.test(req.path)) {
     const ck = cookies(req); const t = req.query.t, l = req.query.l;
     if (tlOk(t, l)) setCk(res, 'lm_tl', JSON.stringify({ t: t || '', l: l || '' }), true);
     if (!SID_RE.test(ck.lm_sid || '')) setCk(res, 'lm_sid', 'lm-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10), false);
@@ -254,11 +271,11 @@ app.get('/sso', (req, res) => {
     if (!LM_SECRET) return res.status(500).type('text/plain').send('Chybí LM_SSO_SECRET');
     const t = jwt.verify(String(req.query.t || ''), LM_SECRET, { audience: 'laundromats', issuer: 'holyos' });
     const session = jwt.sign({ name: t.name || '', aud: 'laundromats-admin', iss: 'laundromats' }, SESSION_KEY, { expiresIn: '8h' });
-    res.set('Set-Cookie', COOKIE + '=' + encodeURIComponent(session) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + 8 * 3600);
+    res.set('Set-Cookie', COOKIE + '=' + encodeURIComponent(session) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + 8 * 3600 + ckDomain(req));
     res.set('Cache-Control', 'no-store').redirect(302, '/admin/meetings');
   } catch (e) { res.status(401).type('text/plain').send('Přihlášení vypršelo. Otevři sekci Laundromats znovu z HolyOS.'); }
 });
-app.get('/admin/logout', (req, res) => { res.set('Set-Cookie', COOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'); res.redirect(302, '/cesta'); });
+app.get('/admin/logout', (req, res) => { res.set('Set-Cookie', COOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0' + ckDomain(req)); res.redirect(302, '/cesta'); });
 const requireAdmin = (req, res, next) => {
   const a = adminOf(req);
   if (a) { req.admin = a; return next(); }
@@ -285,6 +302,38 @@ app.post('/admin/api/meetings/slots', requireAdmin, api((req) => holyosSvc('POST
 app.post('/admin/api/meetings/slots/:id(\\d+)/update', requireAdmin, api((req) => holyosSvc('PATCH', P + '/slots/' + req.params.id, req.body || {})));
 app.post('/admin/api/meetings/slots/:id(\\d+)/delete', requireAdmin, api((req) => holyosSvc('DELETE', P + '/slots/' + req.params.id)));
 app.post('/admin/api/meetings/reservations/:id(\\d+)', requireAdmin, api((req) => holyosSvc('PATCH', P + '/reservations/' + req.params.id, { status: (req.body || {}).status })));
+
+// ── Stránky Compounder + Prádlomaty (převzato z BS2, upraveno pro zájemce) ──
+// Nabídka strojů z HolyOS (ceník, aktivní stroje). LM_PRODUCT_IDS = čárkami oddělená ID pro zúžení nabídky.
+let _prod = { at: 0, data: null };
+async function fetchProducts() {
+  if (_prod.data && Date.now() - _prod.at < 5 * 60e3) return _prod.data;
+  if (!LM_SECRET) throw new Error('Chybí LM_SSO_SECRET');
+  const token = jwt.sign({ aud: 'holyos-api', iss: 'laundromats' }, LM_SECRET, { expiresIn: '1m' });
+  const r = await fetch(HOLYOS_URL + '/api/auth/lm/products', { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(10000) });
+  if (!r.ok) throw new Error('HolyOS produkty HTTP ' + r.status);
+  let list = await r.json(); if (!Array.isArray(list)) list = [];
+  const ids = String(process.env.LM_PRODUCT_IDS || '').split(',').map((x) => parseInt(x, 10)).filter(Boolean);
+  if (ids.length) list = list.filter((p) => ids.includes(p.id)).sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+  _prod = { at: Date.now(), data: list };
+  return list;
+}
+const COMP = require('./compounder-page');
+const PRAD = require('./pradlomaty-page');
+app.get('/compounder', (req, res) => send(res, COMP.compounderPage()));
+app.get('/pradlomaty', async (req, res) => { let list = []; try { list = await fetchProducts(); } catch (e) { console.warn('[laundromats] produkty:', e.message); if (_prod.data) list = _prod.data; } send(res, PRAD.pradlomatyPage(list)); });
+app.get('/img/pradlomat.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(path.join(__dirname, 'pradlomat-flex.webp')));
+app.get('/img/product/:id(\\d+)', async (req, res) => {
+  try {
+    if (!LM_SECRET) return res.status(404).end();
+    const token = jwt.sign({ aud: 'holyos-api', iss: 'laundromats' }, LM_SECRET, { expiresIn: '1m' });
+    const r = await fetch(HOLYOS_URL + '/api/auth/lm/products/' + req.params.id + '/image', { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(15000) });
+    if (!r.ok) return res.status(404).end();
+    res.set('Content-Type', r.headers.get('content-type') || 'image/webp').set('Cache-Control', 'public, max-age=86400').send(Buffer.from(await r.arrayBuffer()));
+  } catch (e) { res.status(404).end(); }
+});
+// ── Aplikace lokalit (subdoména lokality.laundromats.eu) ──
+require('./lm-apps')(app, { HOLYOS_URL, LM_SECRET, rateLimited, cookies, adminOf, ckDomain, fetchProducts });
 
 app.use((req, res) => res.status(404).type('text/plain').send('Stránka nenalezena'));
 app.use((err, req, res, next) => { console.warn('[laundromats]', err && err.message); res.status(500).type('text/plain').send('Chyba serveru'); });

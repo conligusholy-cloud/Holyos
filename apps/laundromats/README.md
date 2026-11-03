@@ -15,3 +15,11 @@ Samostatný veřejný server pro NOVÉ zájemce o prádlomat. Oddělený od BS2 
 4. Settings → Networking → Custom Domain: `laundromats.eu` a `www.laundromats.eu`; u registrátora nastavit DNS podle hodnot z Railway (CNAME / A záznam).
 
 Texty stránek se drží shodné s apps/bs2 (cesta-*.js); při změně textu v BS2 je potřeba udělat stejnou změnu zde.
+
+## Podstránky a aplikace lokalit
+- `/compounder`, `/pradlomaty` — převzato z BS2, upraveno pro zájemce. Stroje z HolyOS `/api/auth/lm/products` (cache 5 min).
+  - `LM_SHOW_PRICES=1` zobrazí ceny, `LM_PRODUCT_IDS=1,2,3` zúží nabídku.
+- `lokality.laundromats.eu` (stejná služba, rozlišení podle hostu): `/hledat` (Najít místo), `/zhodnotit` (Zhodnotit místo).
+  - `lm-location-app.js` je odvozený z `apps/bs2/location-app.js` (bez kreditů, balíčků, Stripe, ukládání).
+  - Přístup `LM_APPS_ACCESS`: `open` | `code` (výchozí, kódy v `LM_APPS_CODES`) | `closed`. Správce přihlášený z HolyOS (/sso) má přístup vždy.
+  - `LM_APPS_URL` (výchozí https://lokality.laundromats.eu).
