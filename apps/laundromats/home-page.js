@@ -21,7 +21,7 @@ const T = {
       card: 'Přes 70 prádlomatů, které sami provozujeme v České republice.',
       imgAlt: 'Samoobslužný venkovní prádlomat se dvěma pračkami a sušičkou',
       sites: 'Skutečné provozovny',
-      siteList: [['/media/provozovna-1.webp', 'Česká republika · u čerpací stanice', 'Prádlomat u čerpací stanice ORLEN'], ['/media/provozovna-2.webp', 'Česká republika', 'Prádlomat Best Series u silnice ve městě'], ['/media/provozovna-3.webp', 'Irsko · partnerský provoz', 'Partnerský prádlomat u čerpací stanice v Irsku']],
+      siteList: [['/media/provozovna-1.webp', 'Česká republika · u čerpací stanice', 'Prádlomat u čerpací stanice ORLEN'], ['/media/provozovna-2.webp', 'Česká republika · obchodní centrum, Šumperk', 'Prádlomat Best Series u obchodního centra v Šumperku', 'center 25%'], ['/media/provozovna-3.webp', 'Irsko · partnerský provoz', 'Partnerský prádlomat u čerpací stanice v Irsku']],
     },
     why: {
       kicker: 'Proč prádlomat', h: 'Jednoduchá služba. Více možností pro vaše podnikání.',
@@ -345,7 +345,7 @@ function homePage(lang) {
     + '<div class="statcard"><b class="grad">70+</b><p>' + esc(L.hero.card) + '</p></div></div></div></section>'
     // ── skutečné provozovny (3 fotky s názvem města) — PH: doplnit skutečné fotografie + města ──
     + '<section id="provozovny" style="padding:10px 0 70px"><div class="wrap"><div class="kicker">' + esc(L.hero.sites) + '</div><div class="sites">'
-    + L.hero.siteList.map((x) => '<figure class="site rv"><img src="' + x[0] + '" alt="' + esc(x[2]) + '" loading="lazy" decoding="async" width="1200" height="900"><figcaption>' + svg('site', 16) + esc(x[1]) + '</figcaption></figure>').join('')
+    + L.hero.siteList.map((x) => '<figure class="site rv"><img src="' + x[0] + '" alt="' + esc(x[2]) + '"' + (x[3] ? ' style="object-position:' + x[3] + '"' : '') + ' loading="lazy" decoding="async" width="1200" height="900"><figcaption>' + svg('site', 16) + esc(x[1]) + '</figcaption></figure>').join('')
     + '</div></div></section>'
     // ── proč ──
     + '<section class="alt" id="proc"><div class="divline"></div><div class="wrap">' + kicker(L.why.kicker) + '<h2 class="rv">' + esc(L.why.h) + '</h2><p class="lead rv">' + esc(L.why.lead) + '</p>'

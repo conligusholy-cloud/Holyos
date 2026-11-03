@@ -378,6 +378,43 @@ async function deleteCalendarEvent(userPrincipalName, eventId) {
   return { ok: true };
 }
 
+/**
+ * Odeslání e-mailu s VELKOU přílohou (> 3 MB) přes Graph: koncept → upload session (po částech) → odeslat.
+ * Graph sendMail s přílohou v JSON zvládne jen ~3 MB; upload session až 150 MB (limit schránky bývá 25–35 MB).
+ * @param {string} fromUpn
+ * @param {{ to: string|string[], subject: string, htmlBody?: string, textBody?: string, file: { filename: string, buffer: Buffer, contentType?: string } }} args
+ */
+async function sendMailWithLargeAttachment(fromUpn, { to, subject, htmlBody, textBody, file }) {
+  if (!fromUpn) throw new Error('sendMailWithLargeAttachment: chybí fromUpn');
+  const recipients = (Array.isArray(to) ? to : String(to || '').split(',')).map((a) => String(a).trim()).filter(Boolean).map((address) => ({ emailAddress: { address } }));
+  if (!recipients.length) throw new Error('sendMailWithLargeAttachment: chybí příjemce');
+  const base = `${GRAPH_BASE}/users/${encodeURIComponent(fromUpn)}`;
+  const jsonHeaders = async () => ({ ...(await authHeaders()), 'Content-Type': 'application/json' });
+  // 1) koncept
+  let r = await fetch(`${base}/messages`, { method: 'POST', headers: await jsonHeaders(), body: JSON.stringify({ subject: subject || '(bez předmětu)', body: htmlBody ? { contentType: 'HTML', content: htmlBody } : { contentType: 'Text', content: textBody || '' }, toRecipients: recipients }) });
+  if (!r.ok) throw new Error(`Graph koncept selhal (${r.status}): ${(await r.text().catch(() => '')).slice(0, 300)}`);
+  const draft = await r.json();
+  try {
+    // 2) upload session
+    r = await fetch(`${base}/messages/${draft.id}/attachments/createUploadSession`, { method: 'POST', headers: await jsonHeaders(), body: JSON.stringify({ AttachmentItem: { attachmentType: 'file', name: file.filename, size: file.buffer.length, contentType: file.contentType || 'application/octet-stream' } }) });
+    if (!r.ok) throw new Error(`Graph upload session selhal (${r.status}): ${(await r.text().catch(() => '')).slice(0, 300)}`);
+    const { uploadUrl } = await r.json();
+    const CHUNK = 327680 * 12; // násobek 320 KiB (~3,75 MB)
+    for (let off = 0; off < file.buffer.length; off += CHUNK) {
+      const end = Math.min(off + CHUNK, file.buffer.length);
+      const pr = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Length': String(end - off), 'Content-Range': `bytes ${off}-${end - 1}/${file.buffer.length}` }, body: file.buffer.subarray(off, end) });
+      if (!pr.ok && pr.status !== 200 && pr.status !== 201 && pr.status !== 202) throw new Error(`Graph upload části selhal (${pr.status}): ${(await pr.text().catch(() => '')).slice(0, 300)}`);
+    }
+    // 3) odeslat
+    r = await fetch(`${base}/messages/${draft.id}/send`, { method: 'POST', headers: await authHeaders() });
+    if (!r.ok) throw new Error(`Graph odeslání konceptu selhalo (${r.status}): ${(await r.text().catch(() => '')).slice(0, 300)}`);
+    return { ok: true };
+  } catch (e) {
+    fetch(`${base}/messages/${draft.id}`, { method: 'DELETE', headers: await authHeaders() }).catch(() => {}); // úklid nepovedeného konceptu
+    throw e;
+  }
+}
+
 function isConfigured() {
   return msOAuth2.isConfigured() && !!process.env.INVOICE_IMAP_USER;
 }
@@ -391,6 +428,7 @@ module.exports = {
   markAsRead,
   sendReply,
   sendMailAs,
+  sendMailWithLargeAttachment,
   listCalendarView,
   createCalendarEvent,
   updateCalendarEvent,

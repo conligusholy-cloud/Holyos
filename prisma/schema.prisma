@@ -7435,3 +7435,54 @@ model PurchaseInquiryItem {
   @@index([material_id])
   @@map("purchase_inquiry_items")
 }
+
+// ─── Export dokladů pro účetní (Účetní doklady → 📦 Exporty) ─────────────────
+// Periodicky (nebo ručně) se zabalí přílohy dokladů za období do ZIPů (dělené podle max. velikosti e-mailu)
+// a odešlou účetním. Každé odeslání = 1 AccountingExport, každý doklad = 1 AccountingExportItem.
+model AccountingExport {
+  id                 Int      @id @default(autoincrement())
+  period_from        DateTime
+  period_to          DateTime
+  run_trigger        String   @default("manual") @map("trigger") @db.VarChar(20) // auto | manual | resend
+  status             String   @default("pending") @db.VarChar(20) // sent | partial | failed | empty | pending
+  recipients         String   @db.VarChar(1000)
+  sender             String?  @db.VarChar(255)
+  doc_count          Int      @default(0)
+  missing_count      Int      @default(0)
+  part_count         Int      @default(0)
+  total_bytes        Int      @default(0)
+  parts              Json? // [{ part, file, bytes, docs, sent, sent_at, via, error }]
+  error              String?  @db.Text
+  created_by_user_id Int?
+  created_at         DateTime @default(now())
+
+  items AccountingExportItem[]
+
+  @@index([period_from])
+  @@index([status])
+  @@map("accounting_exports")
+}
+
+model AccountingExportItem {
+  id              Int              @id @default(autoincrement())
+  export_id       Int
+  acc_export      AccountingExport @relation(fields: [export_id], references: [id], onDelete: Cascade)
+  invoice_id      Int
+  invoice_number  String           @db.VarChar(50)
+  external_number String?          @db.VarChar(100)
+  direction       String           @db.VarChar(2)
+  type            String?          @db.VarChar(30)
+  company_name    String?          @db.VarChar(255)
+  date_issued     DateTime?        @db.Date
+  total           Decimal?         @db.Decimal(14, 2)
+  currency        String?          @db.VarChar(3)
+  part            Int              @default(0)
+  file_name       String?          @db.VarChar(255)
+  file_bytes      Int              @default(0)
+  missing         Boolean          @default(false)
+  sent            Boolean          @default(false)
+
+  @@index([export_id])
+  @@index([invoice_id])
+  @@map("accounting_export_items")
+}
