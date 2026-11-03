@@ -1268,7 +1268,9 @@ const PORT = process.env.PORT || 3000;
 async function ensureAdminUser() {
   try {
     const bcrypt = require('bcryptjs');
-    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+    // Bezpečnost: žádné výchozí heslo a heslo existujícího správce se při startu NEPŘEPISUJE.
+    // Heslo se nastaví jen při prvním vytvoření správce, nebo když je výslovně zapnuto ADMIN_PASSWORD_RESET=1 (nouzová obnova).
+    const adminPassword = process.env.ADMIN_PASSWORD || '';
     const adminUsername = process.env.ADMIN_USERNAME || 'tomas.holy';
     const adminDisplayName = process.env.ADMIN_DISPLAY_NAME || 'Tomáš Holý';
 
@@ -1276,17 +1278,16 @@ async function ensureAdminUser() {
     const existing = await prisma.user.findUnique({ where: { username: adminUsername } });
 
     if (existing) {
-      // Update password hash to ensure it works with bcrypt
-      const hash = await bcrypt.hash(adminPassword, 12);
-      await prisma.user.update({
-        where: { username: adminUsername },
-        data: {
-          password_hash: hash,
-          role: 'admin',
-          is_super_admin: true,
-        },
-      });
-      console.log(`  ✅ Admin user '${adminUsername}' — password reset`);
+      const data = { role: 'admin', is_super_admin: true };
+      let msg = 'heslo beze změny';
+      if (process.env.ADMIN_PASSWORD_RESET === '1') {
+        if (adminPassword.length < 10) { console.warn("  ⚠ ADMIN_PASSWORD_RESET=1, ale ADMIN_PASSWORD má méně než 10 znaků — heslo NEBYLO změněno"); }
+        else { data.password_hash = await bcrypt.hash(adminPassword, 12); data.token_version = { increment: 1 }; msg = 'heslo obnoveno (ADMIN_PASSWORD_RESET=1 — po použití tuto proměnnou smaž!)'; }
+      }
+      await prisma.user.update({ where: { username: adminUsername }, data });
+      console.log(`  ✅ Admin user '${adminUsername}' — ${msg}`);
+    } else if (adminPassword.length < 10) {
+      console.warn(`  ⚠ Admin user '${adminUsername}' neexistuje a ADMIN_PASSWORD chybí / je kratší než 10 znaků — správce nevytvořen`);
     } else {
       // Create new admin
       const hash = await bcrypt.hash(adminPassword, 12);

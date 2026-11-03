@@ -793,6 +793,38 @@ router.get('/bs2/products/:id/image', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Laundromats (laundromats.eu/pradlomaty): ceník strojů + fotky. Ověření JWT s VLASTNÍM tajemstvím LM_SSO_SECRET (iss laundromats).
+function lmApiAuth(req, res) {
+  const secret = process.env.LM_SSO_SECRET; const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  if (!secret || !m) { res.status(401).json({ error: 'Neautorizováno' }); return false; }
+  try { jwt.verify(m[1], secret, { audience: 'holyos-api', issuer: 'laundromats' }); return true; } catch (e) { res.status(401).json({ error: 'Neplatný token' }); return false; }
+}
+router.get('/lm/products', async (req, res, next) => {
+  try {
+    if (!lmApiAuth(req, res)) return;
+    const items = await prisma.salesPricelistItem.findMany({
+      where: { active: true, kind: 'machine' },
+      orderBy: [{ model_version: 'asc' }, { model_variant: 'asc' }, { name_cs: 'asc' }],
+      select: { id: true, name_cs: true, name_en: true, price_czk: true, price_eur: true, model_version: true, model_variant: true, machine_code: true, image_ext: true, image_updated_at: true },
+    });
+    const fsx = require('fs'), pathx = require('path'); const imgDir = pathx.join(__dirname, '..', 'data', 'pricelist-images');
+    items.forEach((i) => { if (i.image_ext && !fsx.existsSync(pathx.join(imgDir, 'pl-' + i.id + '.' + i.image_ext))) { i.image_ext = null; i.image_updated_at = null; } });
+    res.json(items.map((i) => ({ ...i, price_czk: i.price_czk == null ? null : Number(i.price_czk), price_eur: i.price_eur == null ? null : Number(i.price_eur) })));
+  } catch (err) { next(err); }
+});
+router.get('/lm/products/:id/image', async (req, res, next) => {
+  try {
+    if (!lmApiAuth(req, res)) return;
+    const fs = require('fs'), path = require('path'); const id = parseInt(req.params.id, 10);
+    const it = await prisma.salesPricelistItem.findUnique({ where: { id }, select: { image_ext: true } });
+    if (!it || !it.image_ext) return res.status(404).json({ error: 'Bez obrázku' });
+    const file = path.join(__dirname, '..', 'data', 'pricelist-images', `pl-${id}.${it.image_ext}`);
+    if (!fs.existsSync(file)) return res.status(404).json({ error: 'Soubor chybí' });
+    res.set('Content-Type', { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }[it.image_ext] || 'application/octet-stream').set('Cache-Control', 'public, max-age=3600');
+    fs.createReadStream(file).pipe(res);
+  } catch (err) { next(err); }
+});
+
 // GET /api/auth/users — seznam uživatelů (admin)
 router.get('/users', requireAuth, requireAdmin, async (req, res, next) => {
   try {
