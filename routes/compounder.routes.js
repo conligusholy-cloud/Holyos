@@ -377,7 +377,7 @@ router.post('/meeting-reservation', async (req, res) => {
           const PLD = { Sunday: 'niedziela', Monday: 'poniedziałek', Tuesday: 'wtorek', Wednesday: 'środa', Thursday: 'czwartek', Friday: 'piątek', Saturday: 'sobota' };
           const pp = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Prague', weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(slot.starts_at).reduce((a, x) => (a[x.type] = x.value, a), {});
           const whenPl = PLD[pp.weekday] + ' ' + pp.day + ' ' + PLM[(+pp.month) - 1] + ' o ' + pp.hour + ':' + pp.minute;
-          smsText = 'Spotkanie potwierdzone: ' + whenPl + '. Będziemy się cieszyć na rozmowę i dobrze się przygotujemy. Rozmowa przez ' + chName + '. Potwierdzenie znajdziesz też w e-mailu. Gdyby coś się zmieniło, odpowiedz na ten e-mail.';
+          smsText = 'Spotkanie potwierdzone: ' + whenPl + '. Będziemy się cieszyć na rozmowę i dobrze się przygotujemy. Rozmowa przez ' + chName + (teamsUrl ? ': ' + teamsUrl : '') + '. Potwierdzenie znajdziesz też w e-mailu. Gdyby coś się zmieniło, odpowiedz na ten e-mail.';
         } else {
           const fmt = new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }).formatToParts(slot.starts_at).reduce((a, x) => (a[x.type] = x.value, a), {});
           const when = fmt.weekday + ' ' + fmt.day + '.' + fmt.month + '. v ' + fmt.hour + ':' + fmt.minute;
@@ -441,6 +441,28 @@ router.post('/leads/:id/owner-meeting', requireAuth, async (req, res) => {
     try { await prisma.compounderEvent.create({ data: { sid: 'server:meeting:' + leadId, event: 'meeting_booked', path: '/schuzka', props: { lead_id: leadId, reservation_id: resv.id, starts_at: slot.starts_at, mode: 'online', channel, by: who, by_person_id: bookerId || null, previous_owner_person_id: lead.owner_person_id || null } } }); } catch (e) { /* bonus */ }
     try { require('../services/meeting/notify').notifyMeetingBooked(prisma, { leadId, reservationId: resv.id, startsAt: slot.starts_at, mode: 'online', financingPath: null, rebooked: !!(canceled && canceled.count) }); } catch (e) { console.warn('[meeting-notify] init:', e.message); }
 
+    // Teams: událost v kalendáři majitele (Jan Holý) s Teams odkazem; pozvánka jde zákazníkovi i obchodníkovi, co schůzku domluvil
+    let teamsUrl = null; let teamsErr = null; let teamsOrganizer = null;
+    if (channel === 'teams') {
+      try {
+        const graph = require('../services/ms-graph-client');
+        if (!(graph.isConfigured && graph.isConfigured())) throw new Error('M365 není nakonfigurováno');
+        const ownId = await _blacklistOwnerId();
+        const own = ownId ? await prisma.person.findUnique({ where: { id: ownId }, select: { email: true } }) : null;
+        if (!own || !own.email) throw new Error('Majitel nemá e-mail (M365 schránku)');
+        const booker = bookerId ? await prisma.person.findUnique({ where: { id: bookerId }, select: { email: true } }).catch(() => null) : null;
+        const att = [lead.email, booker && booker.email].filter((x) => x && String(x).toLowerCase() !== String(own.email).toLowerCase());
+        const endAt = new Date(slot.starts_at.getTime() + (slot.duration_min || 17) * 60000);
+        const ev = await graph.createCalendarEvent(own.email, {
+          subject: 'Online schůzka – ' + name + ' (Laundromats)',
+          body: '<p>Online schůzka s majitelem přes Microsoft Teams.</p><p>Zákazník: ' + String(name).replace(/[<>&]/g, '') + (lead.phone ? ' · ' + lead.phone : '') + (lead.email ? ' · ' + lead.email : '') + '<br>Domluvil: ' + String(who).replace(/[<>&]/g, '') + '</p>',
+          start: slot.starts_at, end: endAt, attendees: att, teams: true,
+        });
+        teamsUrl = (ev && ev.onlineMeeting && ev.onlineMeeting.joinUrl) || null; teamsOrganizer = own.email;
+        if (teamsUrl) await prisma.meetingReservation.update({ where: { id: resv.id }, data: { note: ('Online video hovor (Teams) · rezervoval obchodník ' + who + ' · ' + teamsUrl).slice(0, 255) } }).catch(() => {});
+      } catch (e) { teamsErr = String((e && e.message) || e).slice(0, 300); console.warn('[owner-meeting] Teams událost:', teamsErr); }
+    }
+
     // Potvrzení zákazníkovi (jazyk dle leada)
     const pl = /^pl/i.test(String(lead.lang || '')); const dt = slot.starts_at; const durMin = slot.duration_min || 17;
     const PLM = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia'];
@@ -454,7 +476,7 @@ router.post('/leads/:id/owner-meeting', requireAuth, async (req, res) => {
       try {
         const first = require('../services/vocative').vocativeFirstName(name);
         const smsText = pl ? 'Spotkanie online z właścicielem potwierdzone: ' + when + '. Potwierdzenie znajdziesz też w e-mailu. Gdyby coś się zmieniło, odpowiedz na ten e-mail.'
-          : (first ? first + ', online' : 'Online') + ' schůzku s majitelem (' + chName + ') máme potvrzenou na ' + when + '. Potvrzení máte i v e-mailu. Kdyby se cokoli změnilo, odpovězte na něj.';
+          : (first ? first + ', online' : 'Online') + ' schůzku s majitelem (' + chName + ') máme potvrzenou na ' + when + (teamsUrl ? '. Odkaz: ' + teamsUrl : '') + '. Potvrzení máte i v e-mailu. Kdyby se cokoli změnilo, odpovězte na něj.';
         await require('../services/voice/sms').sendSms(lead.phone, smsText, { context: 'schuzka_potvrzeni', leadId });
         out.sms = true;
       } catch (e) { out.sms = false; console.warn('[owner-meeting] SMS:', e.message); }
@@ -466,16 +488,16 @@ router.post('/leads/:id/owner-meeting', requireAuth, async (req, res) => {
           'SUMMARY:' + (pl ? 'Spotkanie online z właścicielem – Laundromats' : 'Online schůzka s majitelem – Laundromats'), 'STATUS:CONFIRMED', 'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:' + (pl ? 'Spotkanie za godzinę' : 'Schůzka za hodinu'), 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
         const base = String(process.env.LM_URL || 'https://www.laundromats.eu').replace(/\/$/, '');
         const body = pl
-          ? 'Dzień dobry,\n\npotwierdzamy Twoje spotkanie online z właścicielem: ' + when + '. Potrwa około ' + durMin + ' minut. ' + (channel === 'whatsapp' ? 'Zadzwonimy do Ciebie przez WhatsApp (wideorozmowa) na ten numer telefonu.' : 'Link do spotkania w Microsoft Teams wyślemy przed spotkaniem.') + '\n\nZaproszenie do kalendarza znajdziesz w załączniku. Gdyby termin Ci nie odpowiadał, możesz go zmienić jednym kliknięciem za pomocą przycisku poniżej.\n\nLaundromats.eu'
-          : 'Dobrý den,\n\npotvrzujeme vaši online schůzku s majitelem: ' + when + '. Potrvá zhruba ' + durMin + ' minut. ' + (channel === 'whatsapp' ? 'Zavoláme vám přes WhatsApp (videohovor) na vaše telefonní číslo.' : 'Odkaz na schůzku v Microsoft Teams vám pošleme před schůzkou.') + '\n\nPozvánku do kalendáře najdete v příloze tohoto e-mailu. Kdyby vám termín nevyhovoval, můžete ho jedním kliknutím změnit tlačítkem níže.\n\nLaundromats.eu';
+          ? 'Dzień dobry,\n\npotwierdzamy Twoje spotkanie online z właścicielem: ' + when + '. Potrwa około ' + durMin + ' minut. ' + (channel === 'whatsapp' ? 'Zadzwonimy do Ciebie przez WhatsApp (wideorozmowa) na ten numer telefonu.' : (teamsUrl ? 'Dołącz do spotkania w Microsoft Teams: ' + teamsUrl : 'Link do spotkania w Microsoft Teams wyślemy przed spotkaniem.')) + '\n\nZaproszenie do kalendarza znajdziesz w załączniku. Gdyby termin Ci nie odpowiadał, możesz go zmienić jednym kliknięciem za pomocą przycisku poniżej.\n\nLaundromats.eu'
+          : 'Dobrý den,\n\npotvrzujeme vaši online schůzku s majitelem: ' + when + '. Potrvá zhruba ' + durMin + ' minut. ' + (channel === 'whatsapp' ? 'Zavoláme vám přes WhatsApp (videohovor) na vaše telefonní číslo.' : (teamsUrl ? 'Připojit se můžete přes Microsoft Teams: ' + teamsUrl : 'Odkaz na schůzku v Microsoft Teams vám pošleme před schůzkou.')) + '\n\nPozvánku do kalendáře najdete v příloze tohoto e-mailu. Kdyby vám termín nevyhovoval, můžete ho jedním kliknutím změnit tlačítkem níže.\n\nLaundromats.eu';
         const from = (await funnelMailFrom('schuzka', pl ? 'pl' : undefined).catch(() => null)) || process.env.COMPOUNDER_MAIL_FROM || undefined;
         const r = await require('../services/email').sendMail({ to: lead.email, from, brand: 'pradlomaty', fromName: '💧 PRÁDLOMATY 💧', subject: (pl ? 'Potwierdzenie spotkania ' : 'Potvrzení schůzky ') + when, body,
           link: base + (pl ? '/cesta/pl/schuzka' : '/cesta/schuzka') + '?zmena=' + encodeURIComponent(meetingChangeToken(resv.id)), linkLabel: pl ? 'Zmień termin' : 'Změnit termín',
-          attachments: [{ filename: 'schuzka.ics', content: ics, contentType: 'text/calendar; charset=utf-8; method=PUBLISH' }] });
+          attachments: teamsUrl ? undefined : [{ filename: 'schuzka.ics', content: ics, contentType: 'text/calendar; charset=utf-8; method=PUBLISH' }] });
         out.email = !!(r && r.sent);
       } catch (e) { out.email = false; console.warn('[owner-meeting] e-mail:', e.message); }
     }
-    res.status(201).json({ ok: true, id: resv.id, channel, starts_at: slot.starts_at, when, sms: out.sms, email: out.email, moved_to: movedTo, rebooked: !!(canceled && canceled.count) });
+    res.status(201).json({ ok: true, id: resv.id, channel, teams_url: teamsUrl, teams_error: teamsErr, starts_at: slot.starts_at, when, sms: out.sms, email: out.email, moved_to: movedTo, rebooked: !!(canceled && canceled.count) });
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
 

@@ -339,6 +339,8 @@ async function createCalendarEvent(userPrincipalName, ev) {
   if (Array.isArray(ev.attendees) && ev.attendees.length) {
     payload.attendees = ev.attendees.filter(Boolean).map((a) => ({ emailAddress: { address: a }, type: 'required' }));
   }
+  // Teams schůzka: Graph vygeneruje odkaz (onlineMeeting.joinUrl) a rozešle pozvánky účastníkům
+  if (ev.teams) { payload.isOnlineMeeting = true; payload.onlineMeetingProvider = 'teamsForBusiness'; }
   const url = `${GRAPH_BASE}/users/${encodeURIComponent(userPrincipalName)}/events`;
   const r = await fetch(url, { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   if (!r.ok) {
