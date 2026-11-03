@@ -1085,8 +1085,8 @@
     const ivDate = (s) => (s ? new Date(s) : null);
     const ivHas = (inv, field) => {
       const tags = Array.isArray(inv.tags) ? inv.tags : [];
-      if (field === 'order') return inv.order ? 'ano ' + inv.order.order_number : (tags.includes('manual_order') ? 'ano ručně' : 'ne');
-      return inv.warehouse_document ? 'ano ' + inv.warehouse_document.number : (tags.includes('manual_receipt') ? 'ano ručně' : 'ne');
+      if (field === 'order') return inv.order ? 'ano ' + inv.order.order_number : (tags.includes('manual_order') ? 'ano ručně' : (inv.order_na ? 'nevede se' : 'ne'));
+      return inv.warehouse_document ? 'ano ' + inv.warehouse_document.number : (tags.includes('manual_receipt') ? 'ano ručně' : (inv.receipt_na ? 'nevede se' : 'ne'));
     };
     // Odesláno do účetnictví — jen podle historie exportů.
     const ivUol = (inv) => (inv.uol_export_at ? 'ano' : 'ne');
@@ -1266,22 +1266,59 @@
     function manualMatchBox(inv, field) {
       if (inv.direction !== 'ap') return '—';
       const tags = Array.isArray(inv.tags) ? inv.tags : [];
-      if (tags.includes('service') || tags.includes('sluzba')) return '<span style="color:var(--text2);font-size:0.8em;" title="Služba — není potřeba">n/a</span>';
       const tag = field === 'order' ? 'manual_order' : 'manual_receipt';
       const on = tags.includes(tag);
       const canEdit = !!(window.currentUser && window.currentUser.canManualMatch);
       const locked = !canEdit || ['paid', 'cancelled', 'payment_queued', 'qr_pending'].includes(inv.status);
+      // „Nevede se" — jen tento doklad / vždy u dodavatele (služby, energie, software… příjemku ani objednávku nemají)
+      const na = (field === 'order' ? inv.order_na : inv.receipt_na) || ((tags.includes('service') || tags.includes('sluzba')) ? 'invoice' : null);
+      const what = field === 'order' ? 'Objednávka' : 'Příjemka';
+      const coName = (inv.company && inv.company.name) || '';
+      const menuArgs = inv.id + ',\'' + field + '\',\'' + (na || '') + '\',' + JSON.stringify(coName).replace(/"/g, '&quot;');
+      if (na) {
+        const t = what + ' se nevede' + (na === 'supplier' ? ' u žádného dokladu dodavatele ' + coName : ' — jen u tohoto dokladu') + (canEdit ? ' · klikni pro změnu' : '');
+        return '<span title="' + escapeHtml(t) + '"' + (canEdit && !locked ? ' onclick="mmNaMenu(event,' + menuArgs + ')"' : '') + ' style="display:inline-flex;flex-direction:column;gap:1px;cursor:' + (canEdit && !locked ? 'pointer' : 'default') + ';line-height:1.2;">'
+          + '<span style="font-size:0.72em;padding:2px 7px;border-radius:999px;border:1px dashed rgba(148,163,184,.5);color:var(--text2);white-space:nowrap;">⊘ nevede se</span>'
+          + (na === 'supplier' ? '<span style="font-size:0.66em;color:var(--text2);white-space:nowrap;">dodavatel</span>' : '') + '</span>';
+      }
       const at = field === 'order' ? inv.manual_order_at : inv.manual_receipt_at;
       const by = field === 'order' ? inv.manual_order_by : inv.manual_receipt_by;
       const when = at ? fmtDateTime(at) : '';
       let title = field === 'order' ? 'Ručně potvrdit: faktura má objednávku' : 'Ručně potvrdit: zboží bylo přijato (má příjemku)';
       if (!canEdit) title += ' — měnit smí jen admin, Radomír Bečka a Lucie Makalousová';
       return '<label data-mm-title="' + escapeHtml(title) + '" onmouseenter="mmHistShow(this,' + inv.id + ',\'' + field + '\')" onmouseleave="mmHistHide()" style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;cursor:' + (locked ? 'default' : 'pointer') + ';">' +
-        '<input type="checkbox" ' + (on ? 'checked ' : '') + (locked ? 'disabled ' : '') +
+        '<span style="display:inline-flex;align-items:center;gap:5px;"><input type="checkbox" ' + (on ? 'checked ' : '') + (locked ? 'disabled ' : '') +
         'onchange="toggleManualMatch(' + inv.id + ',\'' + field + '\',this)" style="width:16px;height:16px;cursor:inherit;accent-color:#10b981;">' +
+        (!locked && !on ? '<span role="button" title="' + escapeHtml(what) + ' se u tohoto dokladu nevede…" onclick="event.preventDefault();event.stopPropagation();mmNaMenu(event,' + menuArgs + ')" style="font-size:12px;color:var(--text2);opacity:.55;cursor:pointer;padding:0 2px;">⊘</span>' : '') + '</span>' +
         (at ? '<span style="color:' + (on ? '#10b981' : 'var(--text2)') + ';font-size:0.72em;white-space:nowrap;line-height:1.2;">' + escapeHtml(when) + (by ? '<br>' + escapeHtml(by) : '') + '</span>' : '') +
         '</label>';
     }
+    window.mmNaMenu = function(ev, id, field, state, coName) {
+      ev.preventDefault(); ev.stopPropagation();
+      let m = document.getElementById('mm-na-menu'); if (m) m.remove();
+      const what = field === 'order' ? 'Objednávka' : 'Příjemka';
+      const items = [];
+      if (state !== 'invoice' && state !== 'supplier') items.push(['invoice', true, '⊘ ' + what + ' se nevede — jen u tohoto dokladu']);
+      if (state === 'invoice') items.push(['invoice', false, '↺ Vyžadovat znovu (tento doklad)']);
+      if (state !== 'supplier' && coName) items.push(['supplier', true, '⊘ ' + what + ' se nevede nikdy u dodavatele ' + coName]);
+      if (state === 'supplier') items.push(['supplier', false, '↺ Vyžadovat znovu u dodavatele ' + coName]);
+      m = document.createElement('div'); m.id = 'mm-na-menu';
+      m.style.cssText = 'position:fixed;z-index:10000;background:var(--surface,#1e2235);border:1px solid var(--border,#3a3f5c);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);padding:6px;min-width:260px;font-size:13px';
+      m.innerHTML = items.map((it, i) => '<div data-i="' + i + '" style="padding:8px 10px;border-radius:7px;cursor:pointer;white-space:nowrap" onmouseover="this.style.background=\'rgba(255,255,255,.06)\'" onmouseout="this.style.background=\'\'">' + escapeHtml(it[2]) + '</div>').join('')
+        + '<div style="padding:6px 10px 2px;font-size:11px;color:var(--text2)">Doklad se pak v kontrole k platbě bere, jako by ' + (field === 'order' ? 'objednávku' : 'příjemku') + ' měl.</div>';
+      document.body.appendChild(m);
+      const x = Math.min(ev.clientX, window.innerWidth - m.offsetWidth - 10), y = Math.min(ev.clientY + 8, window.innerHeight - m.offsetHeight - 10);
+      m.style.left = x + 'px'; m.style.top = y + 'px';
+      m.addEventListener('click', async (e) => {
+        const d = e.target.closest('[data-i]'); if (!d) return;
+        const it = items[+d.getAttribute('data-i')]; m.remove();
+        if (it[0] === 'supplier' && !confirm((it[1] ? 'Nastavit, že se ' : 'Zrušit, že se ') + what.toLowerCase() + ' nevede u VŠECH dokladů dodavatele ' + coName + '?')) return;
+        const r = await api('POST', '/api/accounting/invoices/' + id + '/match-na', { field, scope: it[0], on: it[1] });
+        if (r.status !== 200) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
+        loadInvoices();
+      });
+      setTimeout(() => document.addEventListener('click', function h(e2) { if (!m.contains(e2.target)) { m.remove(); document.removeEventListener('click', h); } }), 0);
+    };
     // ─── Odesláno do účetnictví (ÚOL) ───────────────────────────────────────
     // Čistě z historie exportů pro účetní — ručně to nejde zaškrtnout ani
     // odškrtnout. Fajfka tak vždy znamená „doklad opravdu odešel v exportu",
@@ -6239,8 +6276,8 @@
       box.innerHTML='<div style="overflow:auto;max-height:340px"><table class="data-table" style="width:100%;font-size:13px"><thead><tr><th>Odesláno</th><th>Období (založeno)</th><th>Komu</th><th>Doklady</th><th>Soubory</th><th>Stav</th><th></th></tr></thead><tbody>'
         + L.map(function(e){ var s=ST[e.status]||[e.status,'']; var parts=Array.isArray(e.parts)?e.parts:[];
           return '<tr><td>'+dt(e.created_at)+'<div style="font-size:11px;color:var(--text2,#9aa)">'+ex(TRG[e.run_trigger]||e.run_trigger||'')+'</div></td><td>'+d8(e.period_from)+' – '+d8(new Date(new Date(e.period_to).getTime()-1))+'</td><td style="max-width:200px;word-break:break-all">'+ex(e.recipients)+'</td>'
-            + '<td><a href="#" onclick="expDetail('+e.id+');return false">'+e.doc_count+' dokladů</a>'+(e.missing_count?'<div style="font-size:11px;color:#eab308">'+e.missing_count+' bez přílohy</div>':'')+'</td>'
-            + '<td>'+(parts.map(function(p){ return '<a href="/api/accounting/exports/'+e.id+'/download?part='+p.part+'" title="'+ex(p.file)+'">⬇ ZIP '+(parts.length>1?p.part+'/'+parts.length:'')+'</a> <span style="font-size:11px;color:var(--text2,#9aa)">'+mb(p.bytes)+'</span>'+(p.sent?'':' <span style="color:#ef4444" title="'+ex(p.error||'')+'">✗</span>'); }).join('<br>')||'—')+'</td>'
+            + '<td><a style="color:#7dd3fc;text-decoration:underline" href="#" onclick="expDetail('+e.id+');return false">'+e.doc_count+' dokladů</a>'+(e.missing_count?'<div style="font-size:11px;color:#eab308">'+e.missing_count+' bez přílohy</div>':'')+'</td>'
+            + '<td>'+(parts.map(function(p){ return '<a style="color:#7dd3fc;text-decoration:underline" href="/api/accounting/exports/'+e.id+'/download?part='+p.part+'" title="'+ex(p.file)+'">⬇ ZIP '+(parts.length>1?p.part+'/'+parts.length:'')+'</a> <span style="font-size:11px;color:var(--text2,#9aa)">'+mb(p.bytes)+'</span>'+(p.sent?'':' <span style="color:#ef4444" title="'+ex(p.error||'')+'">✗</span>'); }).join('<br>')||'—')+'</td>'
             + '<td><span style="color:'+s[1]+';font-weight:700">'+s[0]+'</span>'+(e.error?'<div style="font-size:11px;color:#ef4444;max-width:220px">'+ex(e.error).slice(0,160)+'</div>':'')+'</td>'
             + '<td>'+((e.status==='failed'||e.status==='partial')?'<button class="btn btn-secondary btn-sm" onclick="expResend('+e.id+',false)">↻ Odeslat chybějící</button>':'')+(parts.length?'<button class="btn btn-secondary btn-sm" onclick="expResend('+e.id+',true)" title="Znovu poslat všechny ZIPy">↻ Znovu</button>':'')+'</td></tr>'; }).join('')
         + '</tbody></table></div><div id="exp-det" style="margin-top:10px"></div>';
@@ -6253,7 +6290,7 @@
       var box=document.getElementById('exp-det'); box.textContent='Načítám…'; var r=await api('GET','/api/accounting/exports/'+id);
       if(r.status!==200){ box.textContent='Chyba'; return; } var e=r.data;
       box.innerHTML='<div style="font-weight:700;margin-bottom:6px">Doklady v exportu #'+e.id+' ('+e.items.length+')</div><div style="overflow:auto;max-height:300px"><table class="data-table" style="width:100%;font-size:12.5px"><thead><tr><th>ZIP</th><th>Směr</th><th>Číslo</th><th>Ext. číslo</th><th>Firma</th><th>Vystaveno</th><th style="text-align:right">Částka</th><th>Soubor</th><th>Odesláno</th></tr></thead><tbody>'
-        + e.items.map(function(i){ return '<tr><td>'+(i.part||'—')+'</td><td>'+(i.direction==='ap'?'Přijatá':'Vydaná')+'</td><td><a href="#" onclick="closeModal();openDetail('+i.invoice_id+');return false">'+ex(i.invoice_number)+'</a></td><td>'+ex(i.external_number||'')+'</td><td>'+ex(i.company_name||'')+'</td><td>'+d8(i.date_issued)+'</td><td style="text-align:right">'+(i.total!=null?Number(i.total).toLocaleString('cs-CZ',{minimumFractionDigits:2})+' '+ex(i.currency||''):'')+'</td><td>'+(i.missing?'<span style="color:#eab308">bez přílohy</span>':ex(i.file_name||''))+'</td><td>'+(i.sent?'✅':'✗')+'</td></tr>'; }).join('')
+        + e.items.map(function(i){ return '<tr><td>'+(i.part||'—')+'</td><td>'+(i.direction==='ap'?'Přijatá':'Vydaná')+'</td><td><a style="color:#7dd3fc;text-decoration:underline" href="#" onclick="closeModal();openDetail('+i.invoice_id+');return false">'+ex(i.invoice_number)+'</a></td><td>'+ex(i.external_number||'')+'</td><td>'+ex(i.company_name||'')+'</td><td>'+d8(i.date_issued)+'</td><td style="text-align:right">'+(i.total!=null?Number(i.total).toLocaleString('cs-CZ',{minimumFractionDigits:2})+' '+ex(i.currency||''):'')+'</td><td>'+(i.missing?'<span style="color:#eab308">bez přílohy</span>':ex(i.file_name||''))+'</td><td>'+(i.sent?'✅':'✗')+'</td></tr>'; }).join('')
         + '</tbody></table></div>';
     };
 
