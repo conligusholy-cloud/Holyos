@@ -278,7 +278,7 @@ form.f{padding:34px;border-radius:24px;background:var(--card);border:1px solid v
 form.f .btn{width:100%}
 /* patička */
 footer{border-top:1px solid var(--line);padding:56px 0 34px;margin-top:40px}
-.fgrid{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:34px}
+.fgrid{display:grid;grid-template-columns:1.3fr auto;gap:34px;align-items:start}
 @media (max-width:800px){.fgrid{grid-template-columns:1fr}}
 .fgrid p{color:var(--tx2);font-size:14.5px;margin:14px 0 0;max-width:340px}
 .fgrid h4{margin:0 0 12px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--tx3)}
@@ -399,9 +399,7 @@ function homePage(lang) {
     + '</main>'
     // ── patička ──
     + '<footer><div class="wrap"><div class="fgrid"><div><a class="logo" href="#top">' + logo(30) + '<span>LAUNDROMATS</span></a><p>' + esc(L.foot.claim) + '</p></div>'
-    + '<div><h4>Navigace</h4><nav aria-label="Navigace v patičce">' + navLinks + pageLinks + '</nav></div>'
-    + '<div><h4>' + esc(L.foot.company) + '</h4><div class="fph">Firemní a kontaktní údaje doplníme</div>'
-    + '<a class="fl" href="mailto:info@laundromats.eu" style="margin-top:12px">info@laundromats.eu</a><a class="fl" href="/gdpr">' + esc(L.foot.privacy) + '</a></div></div>'
+    + '<div><a class="fl" href="mailto:info@laundromats.eu">info@laundromats.eu</a><a class="fl" href="/gdpr">' + esc(L.foot.privacy) + '</a></div></div>'
     + '<div class="fbot"><span>' + esc(L.foot.rights) + ' ' + new Date().getFullYear() + ' Laundromats</span><span>' + esc(L.foot.claim) + '</span></div></div></footer>'
     + '<script>' + clientJs(L) + '</script><script>' + NET_JS + '</script><script>' + LIGHTBOX_JS + '</script><script src="/cesta/track.js" defer></script></body></html>';
 }
