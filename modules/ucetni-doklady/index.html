@@ -330,7 +330,7 @@
         <div style="display:flex; gap:8px;">
           <button class="btn btn-secondary" id="btn-fetch-mails" onclick="fetchEmailsNow()" title="Stáhne nové faktury z IMAP schránky a spustí OCR">📧 Zkontrolovat maily</button>
           <button class="btn btn-secondary" onclick="openIngestList()" title="Přehled přijatých e-mailů a jejich OCR stav">📥 Příchozí e-maily</button>
-          <button class="btn btn-secondary" onclick="openExports()" title="Automatické odesílání příloh dokladů účetním (ZIP, období, historie)">📦 Exporty</button>
+          <button class="btn btn-secondary" id="btn-exports" onclick="openExports()" title="Automatické odesílání příloh dokladů účetním (ZIP, období, historie)">📦 Exporty…</button>
           <button class="btn btn-secondary" id="btn-ingest-stats" onclick="openIngestStats()" title="Jednodenní statistika příjmu faktur e-mailem, log problémů a AI návrh nastavení">📊 Dnes: …</button>
           <button class="btn btn-primary" onclick="openCreateModal('received')">+ Přijatá</button>
           <button class="btn btn-primary" onclick="openCreateModal('issued')">+ Vydaná</button>
@@ -1049,7 +1049,7 @@
           '<td style="white-space:nowrap;' + (isOverdue ? 'color:#ef4444;font-weight:600;' : (inv.status === 'qr_pending' ? 'color:#22d3ee;font-weight:600;' : '')) + '">' + fmtDate(inv.date_due) + '</td>' +
           '<td' + (inv.order ? '' : ' onclick="event.stopPropagation()"') + '>' + (inv.order ? '<span class="inline-code">' + escapeHtml(inv.order.order_number) + '</span>' : manualMatchBox(inv, 'order')) + '</td>' +
           '<td' + (inv.warehouse_document ? '' : ' onclick="event.stopPropagation()"') + '>' + (inv.warehouse_document ? '<span class="inline-code">' + escapeHtml(inv.warehouse_document.number) + '</span>' : manualMatchBox(inv, 'receipt')) + '</td>' +
-          '<td onclick="event.stopPropagation()">' + uolSentBox(inv) + '</td>' +
+          '<td>' + uolSentBox(inv) + '</td>' +
           '<td>' + escapeHtml(creatorLabel(inv)) + '</td>' +
           '<td style="color:var(--text2);font-size:0.88em;white-space:nowrap;">' + fmtDateTime(inv.created_at) + '</td>' +
           '<td onclick="event.stopPropagation()" style="white-space:nowrap;">' +
@@ -1088,12 +1088,8 @@
       if (field === 'order') return inv.order ? 'ano ' + inv.order.order_number : (tags.includes('manual_order') ? 'ano ručně' : 'ne');
       return inv.warehouse_document ? 'ano ' + inv.warehouse_document.number : (tags.includes('manual_receipt') ? 'ano ručně' : 'ne');
     };
-    // Odesláno do účetnictví: „ano exportem" (z historie exportů) / „ano ručně" / „ne"
-    const ivUol = (inv) => {
-      if (inv.uol_export_at) return 'ano exportem';
-      const tags = Array.isArray(inv.tags) ? inv.tags : [];
-      return tags.includes('uol_sent') ? 'ano ručně' : 'ne';
-    };
+    // Odesláno do účetnictví — jen podle historie exportů.
+    const ivUol = (inv) => (inv.uol_export_at ? 'ano' : 'ne');
     // Pořadí = pořadí sloupců tabulky (poslední sloupec s tlačítky filtr nemá)
     const IV_COLS = [
       { key: 'num', label: 'Číslo', type: 'text', ph: 'Číslo…', get: (i) => i.invoice_number + ' ' + (i.direction || '') },
@@ -1287,43 +1283,18 @@
         '</label>';
     }
     // ─── Odesláno do účetnictví (ÚOL) ───────────────────────────────────────
-    // Doklad, který prošel exportem pro účetní, má fajfku automaticky (a zamčenou —
-    // odškrtnutím by se historie exportu stejně nezměnila). Ostatní doklady, které
-    // se k účetní dostaly jinudy, jde zaškrtnout ručně; ukáže se kdo a kdy.
+    // Čistě z historie exportů pro účetní — ručně to nejde zaškrtnout ani
+    // odškrtnout. Fajfka tak vždy znamená „doklad opravdu odešel v exportu",
+    // ne „někdo si myslel, že odešel".
     function uolSentBox(inv) {
-      if (inv.uol_export_at) {
-        const when = fmtDateTime(inv.uol_export_at);
-        return '<span title="Odesláno účetní exportem ' + escapeHtml(when) + '" ' +
-          'style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;line-height:1.2;">' +
-          '<span style="color:#10b981;font-size:1.05em;">✅</span>' +
-          '<span style="color:#10b981;font-size:0.72em;white-space:nowrap;">' + escapeHtml(when) + '<br>exportem</span>' +
-          '</span>';
-      }
-      const tags = Array.isArray(inv.tags) ? inv.tags : [];
-      const on = tags.includes('uol_sent');
-      const when = inv.uol_sent_at ? fmtDateTime(inv.uol_sent_at) : '';
-      const by = inv.uol_sent_by || '';
-      return '<label title="Ručně označit: doklad byl odeslaný do účetnictví" ' +
-        'style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;cursor:pointer;">' +
-        '<input type="checkbox" ' + (on ? 'checked ' : '') +
-        'onchange="toggleUolSent(' + inv.id + ',this)" style="width:16px;height:16px;cursor:inherit;accent-color:#10b981;">' +
-        (when ? '<span style="color:' + (on ? '#10b981' : 'var(--text2)') + ';font-size:0.72em;white-space:nowrap;line-height:1.2;">' +
-          escapeHtml(when) + (by ? '<br>' + escapeHtml(by) : '') + '</span>' : '') +
-        '</label>';
+      if (!inv.uol_export_at) return '<span style="color:var(--text2);">—</span>';
+      const when = fmtDateTime(inv.uol_export_at);
+      return '<span title="Odesláno účetní exportem ' + escapeHtml(when) + '" ' +
+        'style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;line-height:1.2;">' +
+        '<span style="color:#10b981;font-size:1.05em;">✅</span>' +
+        '<span style="color:#10b981;font-size:0.72em;white-space:nowrap;">' + escapeHtml(when) + '</span>' +
+        '</span>';
     }
-    window.toggleUolSent = async function(id, el) {
-      const checked = !!el.checked;
-      el.disabled = true;
-      const r = await api('POST', '/api/accounting/invoices/' + id + '/uol-sent', { checked });
-      el.disabled = false;
-      if (r.status !== 200) {
-        el.checked = !checked;   // vrať zaškrtnutí zpátky, uložit se nepovedlo
-        alert('Nepodařilo se uložit: ' + (r.data?.error || r.status));
-        return;
-      }
-      if (typeof showToast === 'function') showToast(checked ? '✅ Označeno jako odeslané do účetnictví' : 'Odznačeno');
-      loadInvoices();
-    };
 
     // Hover → historie změn zaškrtávátka (kdo, kdy, co)
     const _mmHistCache = {};
@@ -6160,6 +6131,38 @@
     function iso(d){ var x=new Date(d); return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); }
     var ST = { sent:['✅ Odesláno','#22c55e'], partial:['⚠️ Částečně','#eab308'], failed:['❌ Chyba','#ef4444'], empty:['— Žádné doklady','#9aa0ad'], pending:['… Probíhá','#60a5fa'] };
     var TRG = { auto:'automaticky', manual:'ručně', resend:'znovu', test:'🧪 test' };
+    // Stav rovnou na tlačítku — ať je bez otevírání okna vidět, jestli automatika
+    // běží a jak často. Zelená tečka = odesílá se samo, červená = nikam nic nejde.
+    window.refreshExportsBtn = async function(){
+      var b=document.getElementById('btn-exports'); if(!b) return;
+      var r=await api('GET','/api/accounting/exports/config');
+      if(r.status!==200 || !r.data){ b.textContent='📦 Exporty'; return; }
+      var c=r.data.config||{}, iv=r.data.intervals||{}, np=r.data.next;
+      // „Zapnuto" nestačí — bez příjemce a bez data, odkdy posílat, automatika stejně nic nepošle.
+      var on = !!c.enabled && !!String(c.recipients||'').trim() && !!c.start_from;
+      // Tři stavy, ne dva: „zapnuto, ale chybí nastavení" vypadá jako zapnuté,
+      // přitom neodejde nic — to si zaslouží oranžovou, ne stejnou barvu jako vypnuto.
+      var barva = on ? '#22c55e' : (c.enabled ? '#eab308' : '#ef4444');
+      var kdy = (iv[c.interval]||c.interval||'') + (c.send_hour!=null ? ' · '+c.send_hour+':00' : '');
+      var popis = on ? kdy : (c.enabled ? 'chybí nastavení' : 'vypnuto');
+      b.innerHTML = '📦 Exporty <span style="color:'+barva+';">●</span> '
+        + '<span style="color:var(--text2);font-size:.92em">'+ex(popis)+'</span>';
+      var tip;
+      if (on) {
+        tip = 'Automatické odesílání je ZAPNUTÉ — ' + (iv[c.interval]||c.interval) + ', v ' + c.send_hour + ':00'
+          + '\nÚčetní: ' + (c.recipients||'—')
+          + (c.confirm_recipients ? '\nPotvrzení o odeslání: ' + c.confirm_recipients : '')
+          + (np ? '\nPříští období: ' + d8(np.from) + ' – ' + d8(new Date(new Date(np.to).getTime()-1)) + '\nOdejde: ' + dt(np.sendAt) : '');
+      } else if (c.enabled) {
+        tip = 'Automatické odesílání je sice zapnuté, ale chybí '
+          + (!String(c.recipients||'').trim() ? 'e-mail účetní' : 'datum „Odesílat doklady vytvořené od"')
+          + ' — doklady nikam neodcházejí. Klikni a doplň to.';
+      } else {
+        tip = 'Automatické odesílání je VYPNUTÉ — doklady účetní samy neodcházejí. Klikni pro nastavení.';
+      }
+      b.title = tip;
+    };
+
     window.openExports = async function(){
       document.getElementById('modal-root').insertAdjacentHTML('beforeend',
         '<div class="modal-overlay" id="exp-ov" onclick="if(event.target===this)closeModal()"><div class="modal wide" style="max-width:1100px;width:96vw">'
@@ -6199,6 +6202,7 @@
       var r=await api('PUT','/api/accounting/exports/config',body);
       if(r.status!==200){ m.innerHTML='<span style="color:#ef4444">'+ex(r.data&&r.data.error||'Chyba')+'</span>'; return; }
       await expLoadCfg(); var m2=document.getElementById('exp-cfg-msg'); if(m2) m2.innerHTML='<span style="color:#22c55e">Uloženo.</span>';
+      refreshExportsBtn();   // stav na tlačítku musí sedět hned, ne až po reloadu
     };
     function expRenderManual(){
       var box=document.getElementById('exp-man'); if(!box) return; var now=new Date(), wk=new Date(now); wk.setDate(now.getDate()-7);
@@ -6252,6 +6256,10 @@
         + e.items.map(function(i){ return '<tr><td>'+(i.part||'—')+'</td><td>'+(i.direction==='ap'?'Přijatá':'Vydaná')+'</td><td><a href="#" onclick="closeModal();openDetail('+i.invoice_id+');return false">'+ex(i.invoice_number)+'</a></td><td>'+ex(i.external_number||'')+'</td><td>'+ex(i.company_name||'')+'</td><td>'+d8(i.date_issued)+'</td><td style="text-align:right">'+(i.total!=null?Number(i.total).toLocaleString('cs-CZ',{minimumFractionDigits:2})+' '+ex(i.currency||''):'')+'</td><td>'+(i.missing?'<span style="color:#eab308">bez přílohy</span>':ex(i.file_name||''))+'</td><td>'+(i.sent?'✅':'✗')+'</td></tr>'; }).join('')
         + '</tbody></table></div>';
     };
+
+    // Stav na tlačítku hned po načtení stránky + občerstvení (posouvá se „příští odeslání").
+    setTimeout(refreshExportsBtn, 900);
+    setInterval(refreshExportsBtn, 10 * 60 * 1000);
   })();
   </script>
 </body>
