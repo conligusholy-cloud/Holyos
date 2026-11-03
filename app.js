@@ -165,7 +165,8 @@ app.use(cookieParser());
 // "Sales-only" uživatel (obchodník/vedoucí bez HolyOS práv) se dostane JEN na svou
 // obrazovku + /api/auth a /api/compounder. Admin/super-admin NIKDY dotčen.
 // Nouzový vypínač: env SALES_GATE_OFF=1.
-const { peekToken } = require('./middleware/auth');
+const { peekToken, requireAuth, requireAdmin } = require('./middleware/auth');
+const { requireModule } = require('./middleware/module-access');
 function salesGateAllowed(pathname) {
   if (pathname === '/api/health' || pathname === '/favicon.ico') return true;
   if (pathname.startsWith('/api/auth') || pathname.startsWith('/api/compounder') || pathname.startsWith('/api/sales') || pathname.startsWith('/api/lokality')) return true;
@@ -784,7 +785,7 @@ app.use('/api/admin-tasks', adminTasksRoutes);
 app.get('/api/admin/secrets-health', require('./middleware/auth').requireAuth, require('./middleware/auth').requireSuperAdmin, async (req, res, next) => {
   try { res.json(await require('./services/secrets-health').runAll()); } catch (err) { next(err); }
 });
-app.use('/api/audit', auditRoutes);
+app.use('/api/audit', requireAuth, requireAdmin, auditRoutes); // audit log obsahuje snapshoty citlivých dat → jen admin
 app.use('/api/ai', voiceRoutes);  // stt-check, transcribe, voice (bez auth)
 app.use('/api/ai', chatRoutes);   // chat endpoint (bez auth — pro panel)
 app.use('/api/ai', aiRoutes);     // asistenti, konverzace (s auth)
@@ -799,11 +800,11 @@ app.use('/api/messages', messagesRoutes);
 app.use('/api/fleet', fleetRoutes);
 app.use('/api/cad', cadRoutes);
 app.use('/api/print', printRoutes);
-app.use('/api/accounting', accountingRoutes);
+app.use('/api/accounting', requireAuth, requireModule(['ucetni-doklady', 'naklady', 'pokladna', 'prodejni-objednavky', 'obchod', 'banky']), accountingRoutes);
 app.use('/api/doc-templates', docTemplatesRoutes); // Šablony dokumentů — náhledy
-app.use('/api/banking', bankingRoutes);
-app.use('/api/cash', cashRegisterRoutes);
-app.use('/api/reports', reportsRoutes);
+app.use('/api/banking', requireAuth, requireModule(['banky', 'banka-pravidla', 'ucetni-doklady']), bankingRoutes);
+app.use('/api/cash', requireAuth, requireModule(['pokladna']), cashRegisterRoutes);
+app.use('/api/reports', requireAuth, requireModule(['naklady', 'reporty']), reportsRoutes);
 app.use('/api/normovani', normovaniRoutes);
 app.use('/api/directives', directivesRoutes);
 app.use('/api/agent', agentRoutes); // AI Vývojář (modul #13) — super-admin only
