@@ -6131,7 +6131,7 @@
       box.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px">'
         + row('Automatické odesílání', '<label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="exp-en"'+(c.enabled?' checked':'')+'> zapnuto</label>')
         + row('E-mail účetní (více oddělte čárkou)', '<input id="exp-to" value="'+ex(c.recipients)+'" placeholder="ucetni@firma.cz">')
-        + row('Od kdy', '<input type="date" id="exp-from" value="'+ex(c.start_from||'')+'">', 'Od tohoto dne se počítají období. Změnou se období začnou počítat znovu.')
+        + row('Odesílat doklady vytvořené od', '<input type="date" id="exp-from" value="'+ex(c.start_from||'')+'">', 'Datum vytvoření dokladu v HolyOS (sloupec „Založeno"). Doklady vytvořené od tohoto dne se odesílají automaticky po obdobích podle intervalu; starší se automaticky neposílají.')
         + row('Interval', '<select id="exp-iv">'+Object.keys(iv).map(function(k){return '<option value="'+k+'"'+(k===c.interval?' selected':'')+'>'+ex(iv[k])+'</option>';}).join('')+'</select>')
         + row('Odeslat v (hodina)', '<input type="number" min="0" max="23" id="exp-hr" value="'+ex(c.send_hour)+'">', 'Po skončení období v tuto hodinu.')
         + row('Max. velikost jednoho e-mailu (MB)', '<input type="number" min="2" max="30" step="1" id="exp-mb" value="'+ex(c.max_mb)+'">', 'Větší objem se rozdělí do více e-mailů (část 1/2, 2/2…). Běžný limit schránek je 20–25 MB.')
@@ -6139,14 +6139,14 @@
         + row('Doklady', '<label style="display:inline-flex;gap:6px;margin-right:14px"><input type="checkbox" id="exp-ap"'+((c.directions||[]).indexOf('ap')>=0?' checked':'')+'> přijaté</label><label style="display:inline-flex;gap:6px;margin-right:14px"><input type="checkbox" id="exp-ar"'+((c.directions||[]).indexOf('ar')>=0?' checked':'')+'> vydané</label><label style="display:inline-flex;gap:6px"><input type="checkbox" id="exp-pf"'+(c.include_proforma?' checked':'')+'> i zálohové</label>')
         + '</div>'
         + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px"><button class="btn btn-primary" onclick="expSaveCfg()">💾 Uložit nastavení</button><span id="exp-cfg-msg" style="font-size:13px"></span>'
-        + '<span style="margin-left:auto;font-size:13px;color:var(--text2,#9aa)">'+(np ? 'Příští automatické odeslání: <b>'+d8(np.from)+' – '+d8(new Date(new Date(np.to).getTime()-1))+'</b> → '+dt(np.sendAt)+(c.enabled?'':' (vypnuto)') : 'Nastavte „Od kdy" pro automatické odesílání.')+'</span></div>';
+        + '<span style="margin-left:auto;font-size:13px;color:var(--text2,#9aa)">'+(np ? 'Příští automatické odeslání: <b>'+d8(np.from)+' – '+d8(new Date(new Date(np.to).getTime()-1))+'</b> → '+dt(np.sendAt)+(c.enabled?'':' (vypnuto)') : 'Nastavte datum „Odesílat doklady vytvořené od" a uložte.')+'</span></div>';
     }
     window.expSaveCfg = async function(){
       var m=document.getElementById('exp-cfg-msg'); m.textContent='Ukládám…';
       var dirs=[]; if(document.getElementById('exp-ap').checked) dirs.push('ap'); if(document.getElementById('exp-ar').checked) dirs.push('ar');
       var body={ enabled:document.getElementById('exp-en').checked, recipients:document.getElementById('exp-to').value, start_from:document.getElementById('exp-from').value||null, interval:document.getElementById('exp-iv').value, send_hour:document.getElementById('exp-hr').value, max_mb:document.getElementById('exp-mb').value, sender:document.getElementById('exp-snd').value, directions:dirs, include_proforma:document.getElementById('exp-pf').checked };
       if(body.enabled && !body.recipients.trim()){ m.innerHTML='<span style="color:#ef4444">Vyplňte e-mail účetní.</span>'; return; }
-      if(body.enabled && !body.start_from){ m.innerHTML='<span style="color:#ef4444">Vyplňte „Od kdy".</span>'; return; }
+      if(body.enabled && !body.start_from){ m.innerHTML='<span style="color:#ef4444">Vyplňte datum, od kterého se mají doklady odesílat.</span>'; return; }
       var r=await api('PUT','/api/accounting/exports/config',body);
       if(r.status!==200){ m.innerHTML='<span style="color:#ef4444">'+ex(r.data&&r.data.error||'Chyba')+'</span>'; return; }
       await expLoadCfg(); var m2=document.getElementById('exp-cfg-msg'); if(m2) m2.innerHTML='<span style="color:#22c55e">Uloženo.</span>';
@@ -6154,7 +6154,7 @@
     function expRenderManual(){
       var box=document.getElementById('exp-man'); if(!box) return; var now=new Date(), wk=new Date(now); wk.setDate(now.getDate()-7);
       box.innerHTML='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
-        + '<div><label style="font-size:12px;display:block">Založeno od</label><input type="date" id="exm-from" value="'+iso(wk)+'"></div>'
+        + '<div><label style="font-size:12px;display:block">Vytvořeno od</label><input type="date" id="exm-from" value="'+iso(wk)+'"></div>'
         + '<div><label style="font-size:12px;display:block">do (včetně)</label><input type="date" id="exm-to" value="'+iso(now)+'"></div>'
         + '<div style="flex:1;min-width:220px"><label style="font-size:12px;display:block">Příjemci (prázdné = z nastavení)</label><input id="exm-rcp" placeholder="'+ex(X.cfg&&X.cfg.recipients||'')+'" style="width:100%"></div>'
         + '<label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="exm-all"> i už odeslané doklady</label>'
