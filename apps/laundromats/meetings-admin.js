@@ -50,6 +50,16 @@ const CSS = `
 .mt-act{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .mt-res{border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-top:10px}
 .mt-res .nm{font-weight:700}
+.mt-tabs{display:flex;gap:8px;margin:0 0 16px;flex-wrap:wrap}
+.mt-tabs button{background:transparent;border:1px solid var(--border2);color:var(--text2);border-radius:999px;padding:8px 16px;font:inherit;font-weight:700;cursor:pointer}
+.mt-tabs button.on{background:rgba(79,209,255,.14);border-color:var(--blue);color:var(--blue)}
+.mt-hot table{width:100%;border-collapse:collapse;font-size:13.5px}
+.mt-hot th,.mt-hot td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+.mt-hot th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text2)}
+.mt-hot tr:hover td{background:rgba(79,209,255,.05)}
+.mt-hot .nm{font-weight:700}
+.mt-hot-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 12px}
+.mt-hot-head input{flex:1;min-width:200px;background:rgba(8,13,26,.85);border:1px solid var(--border2);border-radius:9px;color:var(--text);padding:9px 11px;font:inherit}
 .mt-msg{margin-top:10px;font-size:13px}
 @media(max-width:900px){.mt-week{grid-template-columns:1fr}.mt-day{min-height:0}}
 `;
@@ -58,6 +68,7 @@ const JS = `(function(){
 var DN=['Ne','Po','Út','St','Čt','Pá','So'], MON=['ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
 var MODE={online:'💻 online',osobne:'👤 osobně'}, PATH={vlastni:'💰 vlastní kapitál',financovani:'🏦 financování'};
 var ST={booked:'rezervováno',done:'proběhla',canceled:'zrušeno',no_show:'nedorazil'};
+var ST2={new:'Nový',nedovolano:'Nedovoláno',volat_pristi:'Volat příště',contacted:'Kontaktován',access_sent:'Odeslán přístup',odeslan_specialista:'Odeslán specialista',psal_chatovi:'Psal s chatem',schuzka:'Domluvena schůzka',schuzka_online:'Schůzka online',qualified:'Kvalifikován',dosledovani:'Dosledování',slibeny_krok:'Slíbený krok',smlouva_odeslat:'Odeslat dokumentaci',smlouva_odeslana:'Dokumentace odeslána',poptavka_financovani:'Poptávka financování',odeslana_schuzka:'Odeslána schůzka',prodano:'Prodáno',converted:'Převeden',nezajem:'Nemá zájem',nelze_pouzit:'Nelze použít',rejected:'Zamítnut'};
 var week=0, data=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function sod(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
@@ -167,6 +178,52 @@ function autoModal(){
     q('.a-run').onclick=function(){this.disabled=true;msg('Uvolňuji…');api('/admin/api/meetings/auto',body()).then(function(){return api('/admin/api/meetings/auto/run',{});}).then(function(r){msg('Hotovo. Nově vytvořeno termínů: '+(r.created||0)+'.');q('.a-run').disabled=false;load();}).catch(function(e){msg(e.message);q('.a-run').disabled=false;});};
   }).catch(function(e){q('.mt-msg').textContent=e.message;});
 }
+// ── Jmenný seznam — kontakty označené v HolyOS jako „zajímavý kontakt" ──
+var hot=null, hotQ='';
+function hotLoad(){
+  var box=root.querySelector('.mt-hotwrap');
+  box.innerHTML='<div class="mt-empty">Načítám…</div>';
+  api('/admin/api/hot-leads').then(function(j){hot=j.leads||[];hotRender();})
+    .catch(function(e){box.innerHTML='<div class="mt-empty" style="color:#ff8f8f">'+esc(e.message)+'</div>';});
+}
+function hotRender(){
+  var box=root.querySelector('.mt-hotwrap');
+  if(!hot){box.innerHTML='';return;}
+  var q=hotQ.trim().toLowerCase();
+  var list=!q?hot:hot.filter(function(l){
+    return [l.name,l.company,l.city,l.email,l.phone,l.owner].some(function(v){return String(v||'').toLowerCase().indexOf(q)>=0;});
+  });
+  var head='<div class="mt-hot-head"><input class="mt-hot-q" placeholder="Hledat jméno, firmu, město, telefon…" value="'+esc(hotQ)+'">'
+    +'<span class="muted small">'+(q?list.length+' z '+hot.length:hot.length+' kontaktů')+'</span></div>';
+  if(!hot.length){box.innerHTML=head+'<div class="mt-empty">Zatím není žádný kontakt označený jako zajímavý. Označuje se hvězdičkou v kartě kontaktu v HolyOS.</div>';bindHotQ();return;}
+  if(!list.length){box.innerHTML=head+'<div class="mt-empty">Hledání nic nenašlo.</div>';bindHotQ();return;}
+  box.innerHTML=head+'<table><thead><tr><th>Jméno</th><th>Firma / město</th><th>Kontakt</th><th>Stav</th><th>Obchodník</th><th>Naposledy voláno</th></tr></thead><tbody>'
+    +list.map(function(l){
+      return '<tr><td><span class="nm">⭐ '+esc(l.name)+'</span>'+(l.only_polish?' <span class="mt-pill">🇵🇱 jen polsky</span>':'')+'</td>'
+        +'<td>'+esc(l.company||'—')+(l.city?'<div class="small muted">'+esc(l.city)+'</div>':'')+'</td>'
+        +'<td>'+(l.phone?'<a href="tel:'+esc(l.phone)+'">'+esc(l.phone)+'</a>':'')
+          +(l.email?'<div class="small"><a href="mailto:'+esc(l.email)+'">'+esc(l.email)+'</a></div>':'')
+          +(!l.phone&&!l.email?'<span class="muted">—</span>':'')+'</td>'
+        +'<td><span class="mt-pill">'+esc(ST2[l.status]||l.status||'—')+'</span></td>'
+        +'<td>'+esc(l.owner||'—')+'</td>'
+        +'<td>'+(l.last_called_at?dlong(new Date(l.last_called_at)):'<span class="muted">nevoláno</span>')+'</td></tr>';
+    }).join('')+'</tbody></table>';
+  bindHotQ();
+}
+function bindHotQ(){
+  var i=root.querySelector('.mt-hot-q'); if(!i)return;
+  i.oninput=function(){hotQ=this.value;var pos=this.selectionStart;hotRender();var n=root.querySelector('.mt-hot-q');if(n){n.focus();n.setSelectionRange(pos,pos);}};
+}
+// Přepínání záložek. Seznam se tahá ze serveru až při prvním otevření.
+function tab(name){
+  var isHot=name==='hot';
+  root.querySelectorAll('.mt-tabs button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-tab')===name);});
+  root.querySelector('.mt-meet').style.display=isHot?'none':'';
+  root.querySelector('.mt-hot').style.display=isHot?'':'none';
+  if(isHot&&hot===null)hotLoad();
+}
+root.querySelectorAll('.mt-tabs button').forEach(function(b){b.onclick=function(){tab(b.getAttribute('data-tab'));};});
+
 root.querySelector('.mt-auto').onclick=autoModal;
 root.addEventListener('click',function(e){var a=e.target.closest('[data-add]');if(a){e.stopPropagation();return addModal(a.getAttribute('data-add'));}var s=e.target.closest('[data-slot]');if(s)slotModal(+s.getAttribute('data-slot'));});
 root.querySelector('.mt-prev').onclick=function(){week--;render();if(week<-1)load();};
@@ -193,6 +250,8 @@ function meetingsPage({ admin, holyosUrl, error }) {
   <div class="top"><b>Laundromats<span>.eu</span></b><span class="muted">Administrace schůzek</span><span class="sp"></span><span class="who">${nm}</span>${holyosUrl ? `<a href="${holyosUrl}" class="small">← HolyOS</a>` : ''}<a href="/admin/logout" class="small">Odhlásit</a></div>
   <div class="wrap"><style>${CSS}</style>
   <div id="mt">
+    <div class="mt-tabs"><button data-tab="meet" class="on">📅 Schůzky</button><button data-tab="hot">⭐ Jmenný seznam</button></div>
+    <div class="mt-meet">
     <div class="mt-bar"><h2>📅 Kalendář schůzek</h2>
       <button class="btn sec sm mt-prev">←</button><span class="mt-range"></span><button class="btn sec sm mt-next">→</button>
       <button class="btn sec sm mt-today">Dnes</button><span style="flex:1"></span><button class="btn sec sm mt-auto" title="Automatické vypisování termínů dopředu">⚙ Automatika</button><button class="btn sm mt-new">+ Přidat termíny</button></div>
@@ -201,6 +260,12 @@ function meetingsPage({ admin, holyosUrl, error }) {
     <div class="mt-sum"></div>
     <div class="mt-weekwrap"></div>
     <div class="mt-up card"></div>
+    </div>
+    <div class="mt-hot" style="display:none">
+      <div class="mt-bar"><h2>⭐ Jmenný seznam</h2></div>
+      <p class="muted small" style="margin:-6px 0 14px">Kontakty, které jsou v HolyOS označené jako <b>zajímavý kontakt</b> (hvězdička v kartě kontaktu). Seznam se bere živě z HolyOS.</p>
+      <div class="mt-hotwrap card"></div>
+    </div>
   </div></div>
   <script>${JS}</script></body></html>`;
 }

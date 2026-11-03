@@ -715,6 +715,45 @@ router.get('/bs2/meetings', async (req, res, next) => {
     })));
   } catch (err) { next(err); }
 });
+// GET /api/auth/bs2/hot-leads — kontakty ručně označené jako „zajímavý kontakt"
+// (CompounderLead.is_hot). Slouží jmennému seznamu v administraci Laundromats,
+// aby obchodník viděl horké kontakty vedle kalendáře schůzek.
+router.get('/bs2/hot-leads', async (req, res, next) => {
+  try {
+    if (!verifyMeetingsToken(req, res)) return;
+    const leads = await prisma.compounderLead.findMany({
+      where: { is_hot: true, is_test: { not: true } },
+      orderBy: [{ last_called_at: 'desc' }, { created_at: 'desc' }],
+      take: 500,
+      select: {
+        id: true, name: true, first_name: true, last_name: true, company: true, city: true,
+        email: true, phone: true, status: true, lang: true, only_polish: true,
+        created_at: true, last_called_at: true, owner_person_id: true,
+      },
+    });
+    // Jméno obchodníka doplníme jedním dotazem (ne per kontakt).
+    const ownerIds = [...new Set(leads.map((l) => l.owner_person_id).filter(Boolean))];
+    const owners = ownerIds.length
+      ? await prisma.person.findMany({ where: { id: { in: ownerIds } }, select: { id: true, first_name: true, last_name: true } }).catch(() => [])
+      : [];
+    const om = new Map(owners.map((o) => [o.id, [o.first_name, o.last_name].filter(Boolean).join(' ').trim()]));
+    res.json(leads.map((l) => ({
+      id: l.id,
+      name: l.name || [l.first_name, l.last_name].filter(Boolean).join(' ').trim() || l.email || l.phone || '—',
+      company: l.company || null,
+      city: l.city || null,
+      email: l.email || null,
+      phone: l.phone || null,
+      status: l.status || 'new',
+      only_polish: !!l.only_polish,
+      lang: l.lang || null,
+      created_at: l.created_at,
+      last_called_at: l.last_called_at,
+      owner: l.owner_person_id ? (om.get(l.owner_person_id) || null) : null,
+    })));
+  } catch (err) { next(err); }
+});
+
 router.post('/bs2/meetings/slots', express.json({ limit: '200kb' }), async (req, res, next) => {
   try {
     if (!verifyMeetingsToken(req, res)) return;
