@@ -321,14 +321,19 @@ function zipPathFor(exp, part) {
 // se záznam i se soubory smaže sám.
 const TEST_KEEP_MINUTES = 5;
 // Rozdělaný test (status 'pending') běží — ten nemažeme, jinak by si běžící
-// export sáhl na smazaný řádek. Když zůstane viset hodinu, je po smrti.
-const TEST_PENDING_KEEP_MINUTES = 60;
+// export sáhl na smazaný řádek. Když zůstane viset 10 minut (typicky restart serveru uprostřed odesílání), je po smrti.
+const TEST_PENDING_KEEP_MINUTES = 10;
 
 async function cleanupTestExports() {
   const now = Date.now();
   const done = new Date(now - TEST_KEEP_MINUTES * 60000);
   const stuck = new Date(now - TEST_PENDING_KEEP_MINUTES * 60000);
   try {
+    // Ostrý export, který visí v „Probíhá" déle než 30 min, je přerušený (restart serveru) → označit jako chybu, ať jde znovu odeslat tlačítkem ↻
+    await prisma.accountingExport.updateMany({
+      where: { run_trigger: { not: 'test' }, status: 'pending', created_at: { lt: new Date(now - 30 * 60000) } },
+      data: { status: 'failed', error: 'Odesílání bylo přerušeno (pravděpodobně restart serveru) — odešlete znovu tlačítkem ↻' },
+    }).catch(() => {});
     const old = await prisma.accountingExport.findMany({
       where: {
         run_trigger: 'test',

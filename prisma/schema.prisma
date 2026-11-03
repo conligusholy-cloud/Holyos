@@ -3184,9 +3184,10 @@ model Invoice {
   manual_receipt_at DateTime?
   manual_receipt_by String?   @db.VarChar(150)
 
-  // Odesláno do účetnictví (ÚOL). Doklady odeslané exportem se poznají podle
-  // AccountingExportItem.sent — tahle pole jsou pro RUČNÍ označení dokladů,
-  // které se k účetní dostaly jinudy (štítek uol_sent drží stav zaškrtnutí).
+  // NEPOUŽÍVÁ SE. Sloupec „Odesláno ÚOL" se plní výhradně z historie exportů
+  // (AccountingExportItem.sent) — ručně ho zaškrtnout nejde, aby fajfka vždy
+  // znamenala skutečné odeslání. Pole zůstala po zrušeném ručním označování;
+  // nic je nečte ani nezapisuje, dají se kdykoliv zahodit samostatnou migrací.
   uol_sent_at DateTime?
   uol_sent_by String?   @db.VarChar(150)
 

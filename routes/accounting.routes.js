@@ -203,6 +203,7 @@ router.get('/invoices', async (req, res, next) => {
     // Anti-podvod kontrola: pro každou fakturu s vyplněným partner_bank_account
     // porovnej s Company.verified_bank_accounts (whitelist). UI zobrazí badge.
     const { normalizeAccount } = require('../services/banking/account-verification');
+    const nmSetsList = await noMatchSets();
     const result = invoices.map(inv => {
       let verification = null;
       if (inv.direction !== 'ar' && (inv.partner_bank_account || inv.partner_iban)) { // vydané: náš účet, neověřujeme
@@ -243,6 +244,9 @@ router.get('/invoices', async (req, res, next) => {
         bank_account_verification: verification,
         // Kdy doklad odešel účetní v exportu (null = exportem zatím neodešel).
         uol_export_at: uolSentAt.get(inv.id) || null,
+        // „nevede se": 'invoice' (jen tento doklad / služba) | 'supplier' (vždy u dodavatele) | null
+        receipt_na: matchNa(inv, 'receipt', nmSetsList),
+        order_na: matchNa(inv, 'order', nmSetsList),
       };
     });
 
@@ -998,8 +1002,8 @@ async function decideApproval(req, res, decision) {
       approvedById = decidingPersonId;
 
       // Pokud už je matched + goods_received, rovnou na ready_to_pay
-      const tg = Array.isArray(invoice.tags) ? invoice.tags : [];
-      if ((invoice.order_id || tg.includes('manual_order')) && (invoice.warehouse_document_id || tg.includes('manual_receipt'))) {
+      const nm = await noMatchSets();
+      if (matchOk(invoice, 'order', nm) && matchOk(invoice, 'receipt', nm)) {
         newStatus = 'ready_to_pay';
       }
     }
@@ -1047,9 +1051,9 @@ router.post('/invoices/:id/mark-ready-to-pay', async (req, res, next) => {
 
     const hardChecks = [];
     if (!isService) {
-      const tg = Array.isArray(invoice.tags) ? invoice.tags : [];
-      if (!invoice.order_id && !tg.includes('manual_order')) hardChecks.push('chybí objednávka (napoj ji, nebo ručně zaškrtni „má objednávku")');
-      if (!invoice.warehouse_document_id && !tg.includes('manual_receipt')) hardChecks.push('chybí příjemka (napoj ji, nebo ručně zaškrtni „má příjemku")');
+      const nm = await noMatchSets();
+      if (!matchOk(invoice, 'order', nm)) hardChecks.push('chybí objednávka (napoj ji, ručně zaškrtni „má objednávku", nebo označ „nevede se")');
+      if (!matchOk(invoice, 'receipt', nm)) hardChecks.push('chybí příjemka (napoj ji, ručně zaškrtni „má příjemku", nebo označ „nevede se")');
     }
     const allApproved = invoice.approval_steps.length > 0 &&
       invoice.approval_steps.filter(s => s.required).every(s => s.status === 'approved');
@@ -1150,6 +1154,30 @@ router.get('/invoices/:id/source-pdf', async (req, res, next) => {
 // Když má faktura obojí a je už schválená (approved), posune se rovnou do ready_to_pay.
 // Kdo smí škrtat: admin / super admin + jmenovitě povolené osoby (výchozí Radomír Bečka, Lucie Makalušová).
 // Seznam lze přepsat v AppSetting accounting.manual_match_people (JSON pole jmen).
+// ─── Příjemka / objednávka „nevede se" ───────────────────────────────────────
+// Některé doklady (služby, energie, telco, software, nájem…) příjemku ani objednávku nemají.
+//  • jen tento doklad: tag no_receipt / no_order (nebo service / sluzba = obojí)
+//  • vždy u dodavatele: AppSetting accounting.no_match_companies = { receipt: [company_id…], order: [company_id…] }
+// Takový doklad se v kontrole k platbě bere, jako by příjemku/objednávku měl.
+const NO_MATCH_KEY = 'accounting.no_match_companies';
+async function noMatchSets() {
+  let v = null; try { v = await require('../services/settings').getSetting(NO_MATCH_KEY, { type: 'json', defaultValue: null }); } catch (e) { /* */ }
+  v = v || {};
+  return { receipt: new Set((v.receipt || []).map(Number)), order: new Set((v.order || []).map(Number)) };
+}
+// → 'invoice' | 'supplier' | null (null = je potřeba)
+function matchNa(inv, field, sets) {
+  const tg = Array.isArray(inv.tags) ? inv.tags : [];
+  if (tg.includes('service') || tg.includes('sluzba') || tg.includes(field === 'order' ? 'no_order' : 'no_receipt')) return 'invoice';
+  if (sets && inv.company_id && sets[field] && sets[field].has(Number(inv.company_id))) return 'supplier';
+  return null;
+}
+function matchOk(inv, field, sets) {
+  const tg = Array.isArray(inv.tags) ? inv.tags : [];
+  if (field === 'order') return !!inv.order_id || tg.includes('manual_order') || !!matchNa(inv, 'order', sets);
+  return !!inv.warehouse_document_id || tg.includes('manual_receipt') || !!matchNa(inv, 'receipt', sets);
+}
+
 const MANUAL_MATCH_DEFAULT_PEOPLE = ['Radomír Bečka', 'Lucie Makalušová', 'Lucie Makalousová'];
 const normName = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
 async function canManualMatch(user) {
@@ -1202,13 +1230,14 @@ router.post('/invoices/:id/manual-match', async (req, res, next) => {
     if (!['order', 'receipt'].includes(field)) return res.status(400).json({ error: 'field musí být order nebo receipt' });
     const checked = req.body?.checked !== false;
     const tag = field === 'order' ? 'manual_order' : 'manual_receipt';
-    const invoice = await prisma.invoice.findUnique({ where: { id }, select: { id: true, tags: true, status: true, direction: true, invoice_number: true, order_id: true, warehouse_document_id: true } });
+    const invoice = await prisma.invoice.findUnique({ where: { id }, select: { id: true, tags: true, status: true, direction: true, invoice_number: true, order_id: true, warehouse_document_id: true, company_id: true } });
     if (!invoice) return res.status(404).json({ error: 'Faktura nenalezena' });
     if (['paid', 'cancelled', 'payment_queued', 'qr_pending'].includes(invoice.status)) return res.status(400).json({ error: 'U faktury v tomto stavu už nelze měnit' });
     const tags = (invoice.tags || []).filter(t => t !== tag);
     if (checked) tags.push(tag);
-    const hasOrder = !!invoice.order_id || tags.includes('manual_order');
-    const hasReceipt = !!invoice.warehouse_document_id || tags.includes('manual_receipt');
+    const nmSets = await noMatchSets();
+    const hasOrder = matchOk(Object.assign({}, invoice, { tags }), 'order', nmSets);
+    const hasReceipt = matchOk(Object.assign({}, invoice, { tags }), 'receipt', nmSets);
     const data = { tags };
     // Kdo a kdy — při zaškrtnutí i odškrtnutí (poslední změna)
     if (field === 'order') { data.manual_order_at = new Date(); data.manual_order_by = (checked ? '' : 'zrušil ') + userLabel(req.user); }
@@ -1226,36 +1255,43 @@ router.post('/invoices/:id/manual-match', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/accounting/invoices/:id/uol-sent — ruční označení „odesláno do účetnictví"
-// Body: { checked: bool }. Pro doklady, které se k účetní dostaly mimo export
-// (ty z exportu se poznají samy podle accounting_export_items.sent).
-const uolSentSchema = z.object({ checked: z.boolean().optional() });
-router.post('/invoices/:id/uol-sent', async (req, res, next) => {
+// POST /api/accounting/invoices/:id/match-na { field:'receipt'|'order', scope:'invoice'|'supplier', on:bool }
+// Označí, že se u dokladu (nebo u všech dokladů dodavatele) příjemka / objednávka NEVEDE. Přepočítá approved ↔ ready_to_pay.
+router.post('/invoices/:id/match-na', async (req, res, next) => {
   try {
+    if (!(await canManualMatch(req.user))) return res.status(403).json({ error: 'Měnit smí jen admin, Radomír Bečka a Lucie Makalousová' });
     const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné id' });
-    const parsed = uolSentSchema.safeParse(req.body || {});
-    if (!parsed.success) return res.status(400).json({ error: 'Neplatné tělo požadavku', details: parsed.error.issues });
-    const checked = parsed.data.checked !== false;
-
-    const invoice = await prisma.invoice.findUnique({ where: { id }, select: { id: true, tags: true, invoice_number: true } });
-    if (!invoice) return res.status(404).json({ error: 'Faktura nenalezena' });
-
-    const tags = (invoice.tags || []).filter((t) => t !== 'uol_sent');
-    if (checked) tags.push('uol_sent');
-    const updated = await prisma.invoice.update({
-      where: { id },
-      // Datum i jméno zapisujeme při zaškrtnutí i odškrtnutí — ať je vidět poslední změna.
-      data: { tags, uol_sent_at: new Date(), uol_sent_by: (checked ? '' : 'zrušil ') + userLabel(req.user) },
-      select: { id: true, tags: true, uol_sent_at: true, uol_sent_by: true },
-    });
-    logAudit({
-      action: 'update', entity: 'invoice', entity_id: id,
-      description: invoice.invoice_number + ': ručně ' + (checked ? 'označeno' : 'odznačeno') + ' jako odeslané do účetnictví',
-      changes: { uol_sent: { checked, by: userLabel(req.user) } },
-      user: req.user,
-    }).catch(() => {});
-    res.json(updated);
+    const b = req.body || {}; const field = b.field === 'order' ? 'order' : 'receipt'; const scope = b.scope === 'supplier' ? 'supplier' : 'invoice'; const on = b.on !== false;
+    const inv = await prisma.invoice.findUnique({ where: { id }, select: { id: true, tags: true, invoice_number: true, company_id: true, company: { select: { name: true } } } });
+    if (!inv) return res.status(404).json({ error: 'Faktura nenalezena' });
+    const { getSetting, setSetting } = require('../services/settings');
+    let affected = [id];
+    if (scope === 'supplier') {
+      if (!inv.company_id) return res.status(400).json({ error: 'Doklad nemá dodavatele' });
+      const cur = (await getSetting(NO_MATCH_KEY, { type: 'json', defaultValue: null }).catch(() => null)) || {};
+      const list = new Set((cur[field] || []).map(Number));
+      if (on) list.add(Number(inv.company_id)); else list.delete(Number(inv.company_id));
+      cur[field] = Array.from(list);
+      await setSetting(NO_MATCH_KEY, cur, { type: 'json', description: 'Účetní doklady — dodavatelé, u kterých se nevede příjemka / objednávka', scope: 'accounting', userId: req.user && req.user.id });
+      // Při vypnutí na úrovni dodavatele zrušit i případné „jen tento doklad" — ať se vrátí do běžné kontroly
+      const open = await prisma.invoice.findMany({ where: { company_id: inv.company_id, direction: 'ap', status: { in: ['approved', 'ready_to_pay'] } }, select: { id: true } });
+      affected = open.map((x) => x.id);
+    } else {
+      const tag = field === 'order' ? 'no_order' : 'no_receipt';
+      const tags = (inv.tags || []).filter((t) => t !== tag); if (on) tags.push(tag);
+      await prisma.invoice.update({ where: { id }, data: { tags } });
+    }
+    // přepočet stavu k platbě
+    const sets = await noMatchSets();
+    const rows = await prisma.invoice.findMany({ where: { id: { in: affected } }, select: { id: true, tags: true, status: true, direction: true, order_id: true, warehouse_document_id: true, company_id: true } });
+    for (const r of rows) {
+      const ok = matchOk(r, 'order', sets) && matchOk(r, 'receipt', sets);
+      if (r.direction === 'ap' && r.status === 'approved' && ok) await prisma.invoice.update({ where: { id: r.id }, data: { status: 'ready_to_pay' } });
+      else if (r.status === 'ready_to_pay' && !ok) await prisma.invoice.update({ where: { id: r.id }, data: { status: 'approved' } });
+    }
+    const what = field === 'order' ? 'objednávka' : 'příjemka';
+    logAudit({ action: 'update', entity: 'invoice', entity_id: id, description: inv.invoice_number + ': ' + what + ' ' + (on ? 'se nevede' : 'se zase vyžaduje') + (scope === 'supplier' ? ' — u všech dokladů dodavatele ' + ((inv.company && inv.company.name) || '') : ''), changes: { match_na: { field, scope, on, by: userLabel(req.user) } }, user: req.user }).catch(() => {});
+    res.json({ ok: true, field, scope, on, affected: affected.length });
   } catch (err) { next(err); }
 });
 
