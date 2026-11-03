@@ -26,6 +26,7 @@ model User {
   password_hash  String   @db.VarChar(255) // bcrypt hash (nahrazuje PBKDF2)
   role           String   @default("user") @db.VarChar(20)
   is_super_admin Boolean  @default(false)
+  token_version  Int      @default(0) // zvýšením se zneplatní všechny dříve vydané JWT tokeny uživatele
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 

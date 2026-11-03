@@ -50,6 +50,7 @@ async function authFromQueryOrHeader(req, res, next) {
     const decoded = jwt.verify(token, JWT_SECRET);
     const user = await prisma.user.findUnique({ where: { id: decoded.id } });
     if (!user) return res.status(401).json({ error: 'Uživatel neexistuje' });
+    if ((decoded.tv || 0) !== (user.token_version || 0)) return res.status(401).json({ error: 'Přihlášení vypršelo' });
 
     req.user = {
       id: user.id,

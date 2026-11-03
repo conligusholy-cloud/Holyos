@@ -161,6 +161,15 @@ router.post('/logout', (req, res) => {
   res.json({ ok: true });
 });
 
+// POST /api/auth/logout-all — odhlásí uživatele na VŠECH zařízeních (zneplatní všechny jeho tokeny)
+router.post('/logout-all', requireAuth, async (req, res, next) => {
+  try {
+    await prisma.user.update({ where: { id: req.user.id }, data: { token_version: { increment: 1 } } });
+    res.clearCookie('token', process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {});
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // GET /api/auth/me — aktuální uživatel
 // Vrátí i `allowed_modules` (mapa module_id → access_level), aby si sidebar
 // a další moduly mohly filtrovat viditelnost. Admin a super admin nemají
@@ -727,6 +736,8 @@ router.put('/users/:id', requireAuth, requireAdmin, async (req, res, next) => {
     if (role !== undefined) data.role = role;
     if (isSuperAdmin !== undefined) data.is_super_admin = isSuperAdmin;
     if (password) data.password_hash = await bcrypt.hash(password, 12);
+    // Změna hesla nebo role → všechny dříve vydané tokeny uživatele přestanou platit
+    if (password || role !== undefined || isSuperAdmin !== undefined) data.token_version = { increment: 1 };
 
     const user = await prisma.user.update({
       where: { id: parseInt(req.params.id) },

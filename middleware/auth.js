@@ -19,6 +19,7 @@ function generateToken(user, extra) {
       display_name: user.display_name || user.username,
       role: user.role,
       is_super_admin: user.is_super_admin,
+      tv: user.token_version || 0, // verze tokenu — po zvýšení u uživatele token přestane platit
     }, extra || {}),
     JWT_SECRET,
     { expiresIn: JWT_EXPIRY }
@@ -70,6 +71,10 @@ async function requireAuth(req, res, next) {
 
     if (!user) {
       return res.status(401).json({ error: 'Uživatel neexistuje' });
+    }
+    // Token vydaný před změnou hesla / role / „odhlásit všude" už neplatí (staré tokeny bez tv = verze 0)
+    if ((decoded.tv || 0) !== (user.token_version || 0)) {
+      return res.status(401).json({ error: 'Přihlášení vypršelo — přihlaste se znovu' });
     }
 
     // Přidej uživatele do requestu
@@ -157,7 +162,7 @@ async function optionalAuth(req, res, next) {
     if (token) {
       const decoded = jwt.verify(token, JWT_SECRET);
       const user = await prisma.user.findUnique({ where: { id: decoded.id }, include: { person: true } });
-      if (user) {
+      if (user && (decoded.tv || 0) === (user.token_version || 0)) {
         req.user = {
           id: user.id,
           username: user.username,
