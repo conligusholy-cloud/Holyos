@@ -21,7 +21,9 @@ const CSS = `
 .mt-slot{border:1px solid var(--border2);border-radius:10px;padding:7px 8px;font-size:12.5px;background:rgba(8,13,26,.6);cursor:pointer}
 .mt-slot:hover{border-color:var(--blue)}
 .mt-slot.free{border-left:3px solid #4fd1ff}
-.mt-slot.full{border-left:3px solid #2fe3a0;background:rgba(47,227,160,.08)}
+.mt-slot.part{border-left:3px solid #2fe3a0;border-color:rgba(47,227,160,.35);background:rgba(47,227,160,.10)}
+.mt-slot.full{border-left:4px solid #22c55e;border-color:rgba(34,197,94,.75);background:rgba(34,197,94,.30)}
+.mt-slot.full .w{color:#d1fae5}
 .mt-slot.off{opacity:.45;border-style:dashed}
 .mt-slot .t{font-weight:800;font-size:13.5px}
 .mt-slot .w{color:var(--text2);font-size:11.5px}
@@ -81,7 +83,7 @@ function render(){
     html+='<div class="mt-day'+(k===today?' today':'')+(d<sod(now)?' past':'')+'"><div class="mt-dh"><span>'+DN[d.getDay()]+' <b>'+d.getDate()+'.</b></span><button class="add" title="Přidat termín" data-add="'+d.toISOString()+'">+</button></div><div class="mt-slots">';
     if(!list.length)html+='<div class="mt-empty">—</div>';
     list.forEach(function(s){var b=s.booked||0,full=b>=s.capacity,r=(s.reservations||[]).filter(function(x){return x.status==='booked';});
-      html+='<div class="mt-slot '+(!s.active?'off':full?'full':'free')+'" data-slot="'+s.id+'"><div class="t">'+hm(new Date(s.starts_at))+' <span class="w">· '+s.duration_min+' min'+(s.mode?' · '+(MODE[s.mode]||s.mode):'')+'</span></div>'
+      html+='<div class="mt-slot '+(!s.active?'off':full?'full':b>0?'part':'free')+'" data-slot="'+s.id+'"><div class="t">'+hm(new Date(s.starts_at))+' <span class="w">· '+s.duration_min+' min'+(s.mode?' · '+(MODE[s.mode]||s.mode):'')+'</span></div>'
         +'<div class="w">'+(s.active?(b+'/'+s.capacity+' obsazeno'):'vypnuto')+'</div>'
         +r.map(function(x){return '<div class="who">'+esc((x.lead&&x.lead.name)||x.name||x.phone||x.email||'zájemce')+'</div>';}).join('')+'</div>';});
     html+='</div></div>';}
