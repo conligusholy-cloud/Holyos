@@ -1178,6 +1178,39 @@ function matchOk(inv, field, sets) {
   return !!inv.warehouse_document_id || tg.includes('manual_receipt') || !!matchNa(inv, 'receipt', sets);
 }
 
+// Ruční kontrola (dočasně místo schvalování): doklad je ZKONTROLOVÁN proti originálu (tag ocr_checked)
+// + má objednávku + má příjemku (nebo „nevede se") → stav ready_to_pay („Zkontrolováno – k platbě").
+// Když se některá z podmínek zruší, vrátí se zpět (auto_ready → draft, jinak approved).
+const CHECK_READY_FROM = ['draft', 'awaiting_po_match', 'po_matched', 'awaiting_goods_receipt', 'goods_received', 'approved'];
+async function syncCheckedStatus(id, user, sets) {
+  const inv = await prisma.invoice.findUnique({ where: { id }, select: { id: true, invoice_number: true, direction: true, status: true, tags: true, order_id: true, warehouse_document_id: true, company_id: true } });
+  if (!inv || inv.direction !== 'ap') return null;
+  const nm = sets || await noMatchSets();
+  const tg = Array.isArray(inv.tags) ? inv.tags : [];
+  const ok = tg.includes('ocr_checked') && matchOk(inv, 'order', nm) && matchOk(inv, 'receipt', nm);
+  let to = null, tags = tg;
+  if (ok && CHECK_READY_FROM.includes(inv.status)) { to = 'ready_to_pay'; if (inv.status !== 'approved' && !tg.includes('auto_ready')) tags = tg.concat('auto_ready'); }
+  else if (!ok && inv.status === 'ready_to_pay') {
+    const okOM = matchOk(inv, 'order', nm) && matchOk(inv, 'receipt', nm);
+    if (tg.includes('auto_ready')) { to = 'draft'; tags = tg.filter((t) => t !== 'auto_ready'); }
+    else if (!okOM) to = 'approved'; // schválený doklad bez objednávky/příjemky
+  }
+  if (!to) return inv.status;
+  await prisma.invoice.update({ where: { id }, data: { status: to, tags } });
+  logAudit({ action: 'update', entity: 'invoice', entity_id: id, description: inv.invoice_number + ': ' + (to === 'ready_to_pay' ? 'zkontrolováno (údaje + objednávka + příjemka) → k platbě' : 'kontrola zrušena → ' + to), changes: { checked_status: { from: inv.status, to } }, user }).catch(() => {});
+  return to;
+}
+
+// Jednorázově po startu: doklady, které už jsou zkontrolované a mají objednávku + příjemku, posunout na „k platbě".
+setTimeout(async () => {
+  try {
+    const rows = await prisma.invoice.findMany({ where: { direction: 'ap', status: { in: CHECK_READY_FROM }, tags: { has: 'ocr_checked' } }, select: { id: true }, take: 2000 });
+    const sets = await noMatchSets(); let n = 0;
+    for (const r of rows) { const st = await syncCheckedStatus(r.id, null, sets).catch(() => null); if (st === 'ready_to_pay') n++; }
+    if (n) console.log('[accounting] zkontrolované doklady posunuty k platbě:', n);
+  } catch (e) { console.warn('[accounting] backfill k platbě:', e.message); }
+}, 45000);
+
 const MANUAL_MATCH_DEFAULT_PEOPLE = ['Radomír Bečka', 'Lucie Makalušová', 'Lucie Makalousová'];
 const normName = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
 async function canManualMatch(user) {
@@ -1243,8 +1276,10 @@ router.post('/invoices/:id/manual-match', async (req, res, next) => {
     if (field === 'order') { data.manual_order_at = new Date(); data.manual_order_by = (checked ? '' : 'zrušil ') + userLabel(req.user); }
     else { data.manual_receipt_at = new Date(); data.manual_receipt_by = (checked ? '' : 'zrušil ') + userLabel(req.user); }
     if (invoice.direction === 'ap' && invoice.status === 'approved' && hasOrder && hasReceipt) data.status = 'ready_to_pay';
-    if (invoice.status === 'ready_to_pay' && !(hasOrder && hasReceipt)) data.status = 'approved';
-    const updated = await prisma.invoice.update({ where: { id }, data, select: { id: true, tags: true, status: true, manual_order_at: true, manual_order_by: true, manual_receipt_at: true, manual_receipt_by: true } });
+    if (invoice.status === 'ready_to_pay' && !(hasOrder && hasReceipt)) data.status = (invoice.tags || []).includes('auto_ready') ? 'draft' : 'approved';
+    let updated = await prisma.invoice.update({ where: { id }, data, select: { id: true, tags: true, status: true, manual_order_at: true, manual_order_by: true, manual_receipt_at: true, manual_receipt_by: true } });
+    const st2 = await syncCheckedStatus(id, req.user, nmSets).catch(() => null);
+    if (st2 && st2 !== updated.status) updated = Object.assign({}, updated, { status: st2 });
     logAudit({
       action: 'update', entity: 'invoice', entity_id: id,
       description: `${invoice.invoice_number}: ručně ${checked ? 'potvrzena' : 'zrušena'} ${field === 'order' ? 'objednávka' : 'příjemka'}${data.status ? ' → ' + data.status : ''}`,
@@ -1283,11 +1318,13 @@ router.post('/invoices/:id/match-na', async (req, res, next) => {
     }
     // přepočet stavu k platbě
     const sets = await noMatchSets();
+    if (scope === 'supplier') { const more = await prisma.invoice.findMany({ where: { company_id: inv.company_id, direction: 'ap', status: { in: CHECK_READY_FROM }, tags: { has: 'ocr_checked' } }, select: { id: true } }); affected = Array.from(new Set(affected.concat(more.map((x) => x.id)))); }
     const rows = await prisma.invoice.findMany({ where: { id: { in: affected } }, select: { id: true, tags: true, status: true, direction: true, order_id: true, warehouse_document_id: true, company_id: true } });
     for (const r of rows) {
       const ok = matchOk(r, 'order', sets) && matchOk(r, 'receipt', sets);
       if (r.direction === 'ap' && r.status === 'approved' && ok) await prisma.invoice.update({ where: { id: r.id }, data: { status: 'ready_to_pay' } });
-      else if (r.status === 'ready_to_pay' && !ok) await prisma.invoice.update({ where: { id: r.id }, data: { status: 'approved' } });
+      else if (r.status === 'ready_to_pay' && !ok && !(r.tags || []).includes('auto_ready')) await prisma.invoice.update({ where: { id: r.id }, data: { status: 'approved' } });
+      await syncCheckedStatus(r.id, req.user, sets).catch(() => null);
     }
     const what = field === 'order' ? 'objednávka' : 'příjemka';
     logAudit({ action: 'update', entity: 'invoice', entity_id: id, description: inv.invoice_number + ': ' + what + ' ' + (on ? 'se nevede' : 'se zase vyžaduje') + (scope === 'supplier' ? ' — u všech dokladů dodavatele ' + ((inv.company && inv.company.name) || '') : ''), changes: { match_na: { field, scope, on, by: userLabel(req.user) } }, user: req.user }).catch(() => {});
@@ -1527,8 +1564,10 @@ router.post('/invoices/:id/mark-checked', async (req, res, next) => {
     const updated = await prisma.invoice.update({
       where: { id },
       data: { tags, ...(checked ? { needs_human_review: false } : {}) },
-      select: { id: true, tags: true, needs_human_review: true },
+      select: { id: true, tags: true, needs_human_review: true, status: true },
     });
+    const st = await syncCheckedStatus(id, req.user).catch(() => null);
+    if (st) updated.status = st;
     logAudit({
       action: 'update', entity: 'invoice', entity_id: id,
       description: checked

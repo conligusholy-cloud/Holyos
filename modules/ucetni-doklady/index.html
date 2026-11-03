@@ -880,7 +880,7 @@
       goods_received: 'Zboží přijato',
       awaiting_approval: 'Čeká na schválení',
       approved: 'Schváleno',
-      ready_to_pay: 'K platbě',
+      ready_to_pay: 'Zkontrolováno – k platbě',
       payment_queued: 'V ABO frontě',
       qr_pending: 'Platí se přes QR',
       paid: 'Zaplaceno',
@@ -1385,7 +1385,7 @@
         const r = await api('POST', '/api/accounting/invoices/' + id + '/manual-match', { field, checked: el.checked });
         const d = r.data || {};
         if (r.status !== 200) throw new Error(d.error || ('HTTP ' + r.status));
-        if (typeof showToast === 'function') showToast(d.has_order && d.has_receipt ? '✅ Objednávka i příjemka potvrzeny — může jít k platbě' + (d.status === 'ready_to_pay' ? ' (přesunuto do K platbě)' : ' po schválení') : 'Uloženo');
+        if (typeof showToast === 'function') showToast(d.status === 'ready_to_pay' ? '✅ Zkontrolováno — doklad je připravený k platbě' : (d.has_order && d.has_receipt ? '✅ Objednávka i příjemka potvrzeny — po kontrole údajů (✅ Zkontrolováno) půjde k platbě' : 'Uloženo'));
         loadInvoices();
       } catch (e) {
         el.checked = !el.checked; el.disabled = false;
