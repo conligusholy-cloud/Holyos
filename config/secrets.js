@@ -18,4 +18,11 @@ function jwtSecret() {
   return devSecret;
 }
 
-module.exports = { jwtSecret };
+// Porovnání tajných hodnot v konstantním čase (proti odhadování klíče měřením času odpovědi)
+function safeEqual(a, b) {
+  const x = crypto.createHash('sha256').update(String(a == null ? '' : a)).digest();
+  const y = crypto.createHash('sha256').update(String(b == null ? '' : b)).digest();
+  return crypto.timingSafeEqual(x, y) && String(a || '').length > 0;
+}
+
+module.exports = { jwtSecret, safeEqual };

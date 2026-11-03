@@ -7315,7 +7315,7 @@ router.post('/fb-webhook', async (req, res, next) => {
     if (!apiKey) return res.status(503).json({ error: 'Webhook není nakonfigurován (chybí FB_WEBHOOK_API_KEY).' });
     const auth = req.headers.authorization || '';
     const provided = auth.startsWith('Bearer ') ? auth.slice(7) : (auth || req.query.api_key || req.headers['x-api-key'] || '');
-    if (provided !== apiKey) return res.status(401).json({ error: 'Neplatný API klíč' });
+    if (!require('../config/secrets').safeEqual(provided, apiKey)) return res.status(401).json({ error: 'Neplatný API klíč' });
 
     const formId = body.form_id || body.formId || null;
     const cfg = formId ? (formById[String(formId)] || null) : null;
@@ -7385,7 +7385,7 @@ router.post('/google-webhook', async (req, res, next) => {
     const KEY = process.env.GOOGLE_LEAD_WEBHOOK_KEY || process.env.GOOGLE_LEAD_VERIFY_TOKEN;
     if (!KEY) return res.status(503).json({ error: 'Webhook není nakonfigurován (chybí GOOGLE_LEAD_WEBHOOK_KEY).' });
     const provided = body.google_key || body.googleKey || req.headers['x-google-key'] || req.query.key || '';
-    if (provided !== KEY) {
+    if (!require('../config/secrets').safeEqual(provided, KEY)) {
       console.warn('[google-webhook] Neplatný google_key — odmítnuto');
       return res.status(401).json({ error: 'Neplatný klíč' });
     }

@@ -109,6 +109,15 @@ app.use(cors({
 }));
 
 // Parsování
+const _jsonParsers = { big: express.json({ limit: '50mb' }), mid: express.json({ limit: '25mb' }), small: express.json({ limit: '2mb' }) };
+function jsonParserFor(req) {
+  const h = req.headers || {};
+  const ck = String(h.cookie || '');
+  if (h.authorization || h['x-api-key'] || /(?:^|;\s*)(token|hugo_token)=/.test(ck)) return _jsonParsers.big;
+  const p = req.path || '';
+  if (p.startsWith('/api/public/po/') || p.startsWith('/api/hr/applicants')) return _jsonParsers.mid;
+  return _jsonParsers.small;
+}
 app.use((req, res, next) => {
   // Přeskočit JSON parsing pro /api/ai/transcribe (potřebuje raw multipart body)
   if (req.path === '/api/ai/transcribe') return next();
@@ -116,7 +125,9 @@ app.use((req, res, next) => {
   if (req.path === '/api/compounder/misto/stripe-webhook') return next();
   // SNS (Amazon SES události) posílá text/plain – čteme surový stream ve vlastním handleru
   if (req.path === '/webhooks/ses') return next();
-  express.json({ limit: '50mb' })(req, res, next);
+  // Limit těla podle důvěryhodnosti: s přihlášením/klíčem až 50 MB (nahrávání souborů), veřejně jen malé (2 MB),
+  // výjimka: dodavatelské nabídky s přílohou a webhook uchazečů (CV) 25 MB.
+  return jsonParserFor(req)(req, res, next);
 });
 
 // ── Amazon SES → SNS → webhook: potvrzení odběru + události (open/click/delivery/bounce/complaint). Veřejné, bez auth. ──

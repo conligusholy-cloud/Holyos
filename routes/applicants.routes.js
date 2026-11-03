@@ -165,7 +165,7 @@ router.post('/make-webhook', async (req, res, next) => {
     const provided = authHeader.startsWith('Bearer ')
       ? authHeader.slice(7)
       : (authHeader || req.query.api_key || req.headers['x-api-key'] || '');
-    if (provided !== apiKey) {
+    if (!require('../config/secrets').safeEqual(provided, apiKey)) {
       console.warn('[make-webhook] Neplatný API key', { providedPrefix: provided.slice(0, 8) });
       return res.status(401).json({ error: 'Neplatný API klíč' });
     }

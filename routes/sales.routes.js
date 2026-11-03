@@ -141,7 +141,7 @@ router.post('/webhook/linkedin', async (req, res) => {
     const SECRET = process.env.LINKEDIN_WEBHOOK_SECRET;
     if (SECRET) {
       const provided = req.headers['x-li-webhook-secret'];
-      if (provided !== SECRET) return res.status(401).json({ error: 'Neplatný secret' });
+      if (!require('../config/secrets').safeEqual(provided, SECRET)) return res.status(401).json({ error: 'Neplatný secret' });
     }
 
     const body = req.body || {};

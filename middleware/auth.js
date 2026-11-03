@@ -126,7 +126,7 @@ async function requireAuthOrApiKey(req, res, next) {
   const validApiKey = process.env.SLOT_CALENDAR_API_KEY;
   const providedKey = req.headers['x-api-key'];
 
-  if (validApiKey && providedKey && providedKey === validApiKey) {
+  if (validApiKey && providedKey && require('../config/secrets').safeEqual(providedKey, validApiKey)) {
     req.user = {
       id: null,
       username: 'api-key',
