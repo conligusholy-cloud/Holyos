@@ -24,10 +24,29 @@ const T = {
   pl: { apps: 'Moje narzędzia', why: 'Dlaczego pralnia', comp: 'Compounder', prad: 'Pralnie', eco: 'Ekonomika', find: 'Znajdź miejsce', eval: 'Oceń miejsce', cta: 'Omów mój plan' },
 };
 // opts: { absolute: odkazy na hlavní web absolutně (subdoména aplikací), lang: 'cs'|'pl' }
+// Přepínač jazyka v liště. Jazyk je v adrese (/en/…, /pl/…), aby šel odkaz poslat
+// i uložit do záložek a aby ho našly vyhledávače. Čeština je bez prefixu.
+const LANG_CSS = '.lhdr .llang{display:flex;gap:2px;align-items:center;border:1px solid var(--lm-bd,rgba(120,160,255,.22));border-radius:999px;padding:2px;margin-left:10px;flex:none}'
+  + '.lhdr .llang a{display:block;padding:3px 8px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.02em;color:var(--lm-t2,#8ea2c2);text-decoration:none;line-height:1.3}'
+  + '.lhdr .llang a:hover{color:#e8f0ff}.lhdr .llang a.on{background:rgba(79,209,255,.16);color:#4fd1ff}'
+  + '@media(max-width:560px){.lhdr .llang a{padding:3px 6px;font-size:11px}}';
+const LANGS = [['cs', 'CZ', ''], ['en', 'EN', '/en'], ['pl', 'PL', '/pl']];
+function langSwitch(lang) {
+  const akt = LANGS.some((x) => x[0] === lang) ? lang : 'cs';
+  return '<div class="llang" role="group" aria-label="Jazyk">'
+    + LANGS.map(([kod, popis, prefix]) => '<a href="#" data-lang="' + kod + '" data-prefix="' + prefix + '"'
+      + (kod === akt ? ' class="on" aria-current="true"' : '') + ' hreflang="' + kod + '">' + popis + '</a>').join('')
+    + '</div>'
+    // Odkaz se skládá až v prohlížeči, ať se zachová aktuální cesta i parametry.
+    + '<script>(function(){var p=location.pathname.replace(/^\\/(en|pl)(?=\\/|$)/,"")||"/";'
+    + 'document.querySelectorAll(".llang a").forEach(function(a){var h=(a.getAttribute("data-prefix")||"")+p;'
+    + 'a.setAttribute("href",h===""?"/":h+location.search+location.hash);});})();</script>';
+}
+
 function header(opts) {
   const o = opts || {}; const t = T[o.lang] || T.cs;
   // Cesta (funel /cesta…): bez menu a bez tlačítka — jen logo, štítek, počítadlo a přepínač jazyka
-  if (o.minimal) return '<header class="lhdr" id="lhdr"><div class="in"><a class="brand" href="' + (o.lang === 'pl' ? '/cesta/pl' : '/cesta') + '">' + LOGO + '<span class="name">Laundromats<span>.eu</span></span></a><span class="htag">Jak to u nás probíhá</span><span class="lsp"></span><span style="margin-left:auto"></span></div></header>';
+  if (o.minimal) return '<header class="lhdr" id="lhdr"><div class="in"><a class="brand" href="' + (o.lang && o.lang !== 'cs' ? '/' + o.lang + '/cesta' : '/cesta') + '">' + LOGO + '<span class="name">Laundromats<span>.eu</span></span></a><span class="htag">Jak to u nás probíhá</span><span class="lsp"></span><span style="margin-left:auto"></span>' + langSwitch(o.lang) + '</div></header>';
   const m = o.absolute ? MAIN_URL() : '';
   const home = m + homeHref();
   const items = [
@@ -44,7 +63,7 @@ function header(opts) {
       + '<!--PRIV--><a href="' + m + '/cesta/ucet" data-k="ucet">' + t.apps + '</a><!--/PRIV-->'
       + items.map(([h, l, k]) => '<!--PRIV:' + k + '--><a href="' + h + '" data-k="' + k + '">' + l + '</a><!--/PRIV-->').join('') + '</nav>'
     + '<span class="lsp"><!--PRIV--><span class="lver" title="' + esc(verTitle()) + '">' + esc(verText()) + '</span><!--/PRIV--></span><span style="margin-left:auto"></span>'
-    + '<!--LACC--></div></header>'
+    + langSwitch(o.lang) + '<!--LACC--></div></header>'
     + '<script>(function(){var p=location.pathname,k=/\\/cesta\\/ucet\\/?$/.test(p)?"ucet":/\\/compounder/.test(p)?"compounder":/\\/pradlomaty/.test(p)?"pradlomaty":/ekonomika/.test(p)?"ekonomika":/\\/hledat/.test(p)?"hledat":/\\/zhodnotit/.test(p)?"zhodnotit":"";if(k){var e=document.querySelector(\'.lnav a[data-k="\'+k+\'"]\');if(e)e.classList.add("on");}})();</script>';
 }
 const FONT = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">';
@@ -70,4 +89,4 @@ const CSS = '.lhdr{position:sticky;top:0;z-index:60;background:rgba(4,6,12,.72);
   + '.lhdr .htag{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#a9b8d6;border:1px solid rgba(120,160,255,.14);border-radius:999px;padding:3px 9px;background:rgba(255,255,255,.02);white-space:nowrap;margin-left:12px}@media(max-width:520px){.lhdr .htag{display:none}}'
   + '@media(max-width:1320px){.lhdr .in{flex-wrap:wrap;row-gap:8px}.lhdr .lnav{order:9;flex-basis:100%;margin:0 -18px;padding:0 18px;overflow-x:auto;scrollbar-width:none}.lhdr .lnav::-webkit-scrollbar{display:none}}'
   + '@media(max-width:520px){.lhdr .lcta{padding:6px 12px;font-size:12px}.lhdr .presence .pt{display:none}.lhdr .in{gap:8px}.lhdr .lmenu-b{right:-8px;min-width:210px}}';
-module.exports = { header, CSS, FONT, LOGO };
+module.exports = { header, CSS: CSS + LANG_CSS, FONT, LOGO, langSwitch };

@@ -103,7 +103,7 @@ const T = {
       opts: [['own', 'Chci vlastnit prádlomat'], ['partner', 'Chci provozovat nebo rozvíjet síť'], ['site', 'Mám vhodné místo'], ['visit', 'Chci vidět prádlomat v provozu']],
       req: 'povinné', submit: 'Probrat můj záměr', sending: 'Odesílám…',
       ok: 'Děkujeme, váš záměr máme. Ozveme se vám, abychom domluvili další postup.',
-      err: 'Odeslání se nepodařilo. Zkuste to prosím znovu, nebo nám napište na info@laundromats.eu.',
+      err: 'Odeslání se nepodařilo. Zkuste to prosím znovu.',
       invalid: 'Zkontrolujte prosím zvýrazněná pole.',
       eName: 'Vyplňte jméno.', eEmail: 'Zadejte platný e-mail.', ePhone: 'Zadejte telefon (alespoň 9 číslic).', eInterest: 'Vyberte, co vás zajímá.', ePlace: 'Vyplňte zemi a město nebo region.',
       privacy: 'Odesláním formuláře nám předáváte kontaktní údaje, abychom vás mohli kontaktovat ohledně vašeho záměru.',
@@ -394,7 +394,7 @@ function homePage(lang) {
     + '</main>'
     // ── patička ──
     + '<footer><div class="wrap"><div class="fgrid"><div><a class="logo" href="#top">' + logo(30) + '<span>LAUNDROMATS</span></a><p>' + esc(L.foot.claim) + '</p></div>'
-    + '<div><a class="fl" href="mailto:info@laundromats.eu">info@laundromats.eu</a><a class="fl" href="/gdpr">' + esc(L.foot.privacy) + '</a></div></div>'
+    + '<div><a class="fl" href="/gdpr">' + esc(L.foot.privacy) + '</a></div></div>'
     + '<div class="fbot"><span>' + esc(L.foot.rights) + ' ' + new Date().getFullYear() + ' Laundromats</span><span>' + esc(L.foot.claim) + '</span></div></div></footer>'
     + '<script>' + clientJs(L) + '</script><script>' + NETMAP_JS + '</script><script>' + NET_JS + '</script><script>' + LIGHTBOX_JS + '</script><script src="/cesta/track.js" defer></script></body></html>';
 }
@@ -406,8 +406,8 @@ const NETMAP_JS = "(function(){var el=document.getElementById('netmap');if(!el)r
   + "var j=document.createElement('script');j.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';j.onload=draw;document.head.appendChild(j);}"
   + "function e(t){return String(t).replace(/[&<>\"]/g,function(x){return{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[x];});}"
   + "function draw(){var m=L.map(el,{scrollWheelZoom:false,zoomControl:true,attributionControl:true});"
-  + "L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:18,attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(m);"
-  + "var b=[];S.forEach(function(p){var ll=[p[3],p[4]];b.push(ll);L.circleMarker(ll,{radius:6,color:'#4fd1ff',weight:2,fillColor:'#4fd1ff',fillOpacity:.55}).addTo(m).bindPopup('<b>'+e(p[0])+'</b><br><small>'+e(p[1])+'</small>');});"
+  + "var E='https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';L.tileLayer(E+'World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxZoom:16,attribution:'Tiles &copy; Esri'}).addTo(m);L.tileLayer(E+'World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',{maxZoom:16}).addTo(m);"
+  + "var b=[];S.forEach(function(p){var ll=[p[3],p[4]];b.push(ll);L.circleMarker(ll,{radius:5,color:'#4fd1ff',weight:1.5,fillColor:'#4fd1ff',fillOpacity:.55}).addTo(m).bindPopup('<b>'+e(p[0])+'</b><br><small>'+e(p[1])+'</small>');});"
   + "m.fitBounds(b,{padding:[24,24]});m.on('click',function(){m.scrollWheelZoom.enable();});}"
   + "if('IntersectionObserver'in window){var io=new IntersectionObserver(function(x){if(x[0].isIntersecting){io.disconnect();init();}},{rootMargin:'400px'});io.observe(el);}else init();})();";
 

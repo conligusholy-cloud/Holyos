@@ -14,6 +14,14 @@ const LM_SECRET = process.env.LM_SSO_SECRET || '';
 
 const app = express();
 app.set('trust proxy', true);
+// Jazykový prefix: /en/cesta → req.lang='en' + req.url='/cesta'. Musí být dřív než cokoli,
+// co se podle adresy rozhoduje (přesměrování, ACC.attach, routy).
+app.use((req, res, next) => {
+  const m = /^\/(en|pl)(\/|$)/.exec(req.path);
+  req.lang = m ? m[1] : 'cs';
+  if (m) req.url = (req.url.slice(m[0].length - (m[2] === '/' ? 1 : 0)) || '/');
+  next();
+});
 app.disable('x-powered-by');
 const _jsonSmall = express.json({ limit: '20kb' }), _jsonAdmin = express.json({ limit: '300kb' });
 app.use((req, res, next) => (req.path.startsWith('/admin/api/products') ? _jsonAdmin : _jsonSmall)(req, res, next)); // nastavení produktů = delší texty
@@ -46,12 +54,11 @@ function rateLimited(key, max, windowMs) {
   return a.length > max;
 }
 
-const CI18N = require('./cesta-i18n');
 const CP = require('./cesta-pages');
 const EP = require('./ekonomika-page');
 const FOOT_CSS = '.site-foot{margin-top:70px;padding:26px 0 8px;border-top:1px solid rgba(120,160,255,.14);display:flex;align-items:center;justify-content:space-between;gap:16px 28px;flex-wrap:wrap;font-size:13.5px;color:#58698a}.site-foot b{font-weight:800;background:linear-gradient(90deg,#4fd1ff,#7c5cff);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:15px}.site-foot nav{display:flex;flex-wrap:wrap;gap:6px 22px}.site-foot a{color:#7d93b8;text-decoration:none}.site-foot a:hover{color:#4fd1ff}';
 const LOGO = '<span style="margin-right:10px;display:inline-flex"><svg width="34" height="34" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="lmg" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff"/><stop offset=".55" stop-color="#3a6cf5"/><stop offset="1" stop-color="#7c5cff"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="17" fill="#0b1220"/><rect x="2.75" y="2.75" width="58.5" height="58.5" rx="16.5" stroke="url(#lmg)" stroke-width="1.5"/><circle cx="32" cy="34" r="15" stroke="url(#lmg)" stroke-width="3.5"/><circle cx="32" cy="34" r="8" stroke="url(#lmg)" stroke-width="2.5" stroke-opacity=".6"/><circle cx="20" cy="16" r="2" fill="#4fd1ff"/><circle cx="27" cy="16" r="2" fill="#7c5cff"/></svg></span>';
-const FOOTER = '<div style="max-width:720px;margin:0 auto;padding:0 22px 40px"><footer class="site-foot"><div><b>Laundromats.eu</b> &nbsp;© Best Series s.r.o.</div><nav><a href="/gdpr">Ochrana osobních údajů</a><a href="mailto:info@laundromats.eu">info@laundromats.eu</a></nav></footer></div>';
+const FOOTER = '<div style="max-width:720px;margin:0 auto;padding:0 22px 40px"><footer class="site-foot"><div><b>Laundromats.eu</b> &nbsp;© Best Series s.r.o.</div><nav><a href="/gdpr">Ochrana osobních údajů</a></nav></footer></div>';
 // ── počítadlo „právě si prohlíží" v záhlaví (jako na Best Series 2.0): anonymní sid z prohlížeče, držíme jen v paměti ──
 const PRES = new Map(); // sid → poslední ping (ms)
 const PRES_HTML = '<span class="presence" id="presence" title="Právě online + aktivní lidé za posledních 60 minut (klouzavé okno)"><i></i><span class="pt">právě si prohlíží </span><b id="pr-hour">–</b></span>';
@@ -74,8 +81,21 @@ const LH = require('./lm-header');
 // Stránky mimo /cesta (úvod, Compounder, Prádlomaty): stejná lišta + počítadlo, bez přepínače jazyka
 // Menu (<!--PRIV-->…<!--/PRIV-->) vidí jen přihlášený uživatel s účtem (správce z HolyOS se do nástrojů dostane přes „Správce“ → rozcestník)
 const lite = (html, req) => String(html).replace(/<!--PUB-->([\s\S]*?)<!--\/PUB-->/g, (m, a) => ((req && req.account) ? '' : a)).replace(/<!--PRIV(?::([a-z]+))?-->([\s\S]*?)<!--\/PRIV-->/g, (m, k, a) => ((req && req.account && (!k || ACC.canSee(req, k))) ? a : '')).replace('<!--LACC-->', ACC.headerSlot(req)).replace('</style>', PRES_CSS + '</style>').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>');
-const shell = (html, lang) => CI18N.addSwitch(String(html).replace('@@LHDR@@', LH.header({ lang, minimal: true })).replace('</style>', LH.CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</style>', FOOT_CSS + PRES_CSS + '</style>').replace('<!--PRESENCE-->', '').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>').replace('</body>', '<script src="/cesta/track.js" defer></script></body>'));
-const send = (res, html) => res.set('Cache-Control', 'no-cache').type('html').send(html);
+const shell = (html, lang) => (String(html).replace('@@LHDR@@', LH.header({ lang, minimal: true })).replace('</style>', LH.CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</style>', FOOT_CSS + PRES_CSS + '</style>').replace('<!--PRESENCE-->', '').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>').replace('</body>', '<script src="/cesta/track.js" defer></script></body>'));
+// ── Jazyk stránky ───────────────────────────────────────────────────────────
+// Jazyk je v adrese: /en/… a /pl/…, čeština bez prefixu. Prefix se tady odřízne,
+// zbytek adresy obslouží běžné routy a odpověď se na konci přeloží (i18n.js).
+// Chybějící překlad = text zůstane česky, stránka se nikdy nerozbije.
+const I18N = require('./i18n');
+const send = (res, html, req) => {
+  const lang = (req && req.lang) || 'cs';
+  return res.set('Cache-Control', 'no-cache').set('Vary', 'Accept-Language').type('html').send(lang === 'cs' ? html : I18N.apply(html, lang));
+};
+// Odpověď s JavaScriptem (booking, kalkulačka) — texty v něm se překládají taky.
+const sendJs = (res, js, req) => {
+  const lang = (req && req.lang) || 'cs';
+  return res.set('Cache-Control', 'no-cache').type('application/javascript').send(lang === 'cs' ? js : I18N.applyJs(js, lang));
+};
 const cestaHtml = () => fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8');
 
 app.use((req, res, next) => lmIdentity(req, res, next)); // identita návštěvníka v cookie (definice níž u /api/cesta/track)
@@ -97,10 +117,10 @@ app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\
 // Jedinečné odkazy ze SMS / e-mailu (?t= / ?l=) vedou dál na /cesta, ať funel zůstane beze změny.
 const HP = require('./home-page');
 const homeHtml = () => HP.homePage('cs');
-app.get('/uvod', (req, res) => send(res, lite(homeHtml(), req)));
+app.get('/uvod', (req, res) => send(res, lite(homeHtml(), req), req));
 app.get('/', (req, res) => {
   const q = req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '';
-  if (process.env.LM_HOME_LIVE === '1' && !req.query.t && !req.query.l) return send(res, lite(homeHtml(), req));
+  if (process.env.LM_HOME_LIVE === '1' && !req.query.t && !req.query.l) return send(res, lite(homeHtml(), req), req);
   res.redirect(302, '/cesta' + q);
 });
 // Poptávka z úvodní stránky → HolyOS (/api/compounder/lm-inquiry): založí / spáruje kontakt a upozorní vedení.
@@ -138,7 +158,7 @@ app.post('/api/cesta/pradlomat-zajem', async (req, res) => {
     res.status(e.status && e.status < 500 ? e.status : 502).json({ ok: false, error: 'Odeslání se nepodařilo' });
   }
 });
-app.get('/pl', (req, res) => res.redirect(302, '/cesta/pl' + (req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '')));
+
 app.get('/favicon.svg', (req, res) => res.set('Content-Type', 'image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(LOGO.replace(/^<span[^>]*>/, '').replace(/<\/span>$/, '').replace('width="34" height="34"', 'width="64" height="64"')));
 app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
 app.use('/media', express.static(path.join(__dirname, 'media'), { maxAge: '7d', fallthrough: false })); // fotky provozoven + videa (Range pro přehrávání)
@@ -146,13 +166,13 @@ app.get('/img/pradlomat-flex.webp', (req, res) => res.set('Cache-Control', 'publ
 app.get('/img/pradlomat-mini.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(path.join(__dirname, 'pradlomat-mini.webp')));
 
 // ── stránky cesty (CZ) ──
-app.get('/cesta', (req, res) => send(res, shell(cestaHtml())));
-app.get('/cesta/info', (req, res) => send(res, shell(CP.infoPage())));
-app.get('/cesta/vlastni-kapital', (req, res) => send(res, shell(CP.vlastniPage())));
-app.get('/cesta/financovani', (req, res) => send(res, shell(CP.financovaniPage())));
-app.get('/cesta/schuzka', (req, res) => send(res, shell(CP.schuzkaPage())));
-app.get('/cesta/ekonomika', (req, res) => send(res, shell(EP.economyPage('cs'))));
-app.get('/cesta/ekonomika/podrobne', (req, res) => send(res, shell(EP.economyDetailPage('cs'))));
+app.get('/cesta', (req, res) => send(res, shell(cestaHtml(), req.lang), req));
+app.get('/cesta/info', (req, res) => send(res, shell(CP.infoPage(), req.lang), req));
+app.get('/cesta/vlastni-kapital', (req, res) => send(res, shell(CP.vlastniPage(), req.lang), req));
+app.get('/cesta/financovani', (req, res) => send(res, shell(CP.financovaniPage(), req.lang), req));
+app.get('/cesta/schuzka', (req, res) => send(res, shell(CP.schuzkaPage(), req.lang), req));
+app.get('/cesta/ekonomika', (req, res) => send(res, shell(EP.economyPage('cs'), req.lang), req));
+app.get('/cesta/ekonomika/podrobne', (req, res) => send(res, shell(EP.economyDetailPage('cs'), req.lang), req));
 app.get('/ekonomika', (req, res) => res.redirect(302, '/cesta/ekonomika' + (req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '')));
 app.get('/cesta/track.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').sendFile(path.join(__dirname, 'track.js')));
 // Sledování chování → HolyOS (/api/compounder/track). Kontakt se pozná podle t/l (HolyOS ověří podpis); IP a prohlížeč se předávají dál.
@@ -209,25 +229,26 @@ app.get('/api/compounder/portal/machines', async (req, res) => {
   } catch (e) { _mach.at = Date.now() - 3000000; }
   res.set('Cache-Control', 'public, max-age=1800').json(_mach.data);
 });
-app.get('/cesta/booking.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').send(CP.bookingJs()));
+app.get('/cesta/booking.js', (req, res) => sendJs(res, CP.bookingJs(), req));
 // ── polská verze ──
-const plSend = (res, html) => send(res, CI18N.toPl(shell(html, 'pl')));
-app.get('/cesta/pl', (req, res) => plSend(res, cestaHtml()));
-app.get('/cesta/pl/ekonomika', (req, res) => plSend(res, EP.economyPage('pl')));
-app.get('/cesta/pl/ekonomika/podrobne', (req, res) => plSend(res, EP.economyDetailPage('pl')));
-app.get('/cesta/pl/info', (req, res) => plSend(res, CP.infoPage()));
-app.get('/cesta/pl/vlastni-kapital', (req, res) => plSend(res, CP.vlastniPage()));
-app.get('/cesta/pl/financovani', (req, res) => plSend(res, CP.financovaniPage()));
-app.get('/cesta/pl/schuzka', (req, res) => plSend(res, CP.schuzkaPage()));
+// Staré adresy /cesta/pl… vedou na nový jazykový prefix /pl/cesta… (jeden systém překladu).
+const plStara = (cil) => (req, res) => res.redirect(301, '/pl' + cil + (req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : ''));
+app.get('/cesta/pl', plStara('/cesta'));
+app.get('/cesta/pl/ekonomika', plStara('/cesta/ekonomika'));
+app.get('/cesta/pl/ekonomika/podrobne', plStara('/cesta/ekonomika/podrobne'));
+app.get('/cesta/pl/info', plStara('/cesta/info'));
+app.get('/cesta/pl/vlastni-kapital', plStara('/cesta/vlastni-kapital'));
+app.get('/cesta/pl/financovani', plStara('/cesta/financovani'));
+app.get('/cesta/pl/schuzka', plStara('/cesta/schuzka'));
 // Sledovaný odkaz ze SMS / e-mailu (viditelná doména laundromats.eu) → HolyOS zaloguje otevření a přesměruje zpět na stránku
 app.get('/r/:code/:variant?', (req, res) => {
   const qs = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
   res.redirect(302, HOLYOS_URL + '/r/' + encodeURIComponent(req.params.code) + (req.params.variant ? '/' + encodeURIComponent(req.params.variant) : '') + qs);
 });
-app.get('/cesta/booking.pl.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').send(CI18N.bookingToPl(CP.bookingJs())));
+app.get('/cesta/booking.pl.js', (req, res) => { req.lang = 'pl'; sendJs(res, CP.bookingJs(), req); });
 
 // Ochrana osobních údajů (stručné informace; správce Best Series s.r.o.)
-app.get('/gdpr', (req, res) => send(res, '<!DOCTYPE html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ochrana osobních údajů · Laundromats</title><style>body{font-family:Inter,Segoe UI,Arial,sans-serif;background:#04060c;color:#c9d6ee;max-width:720px;margin:0 auto;padding:40px 22px;line-height:1.6}h1{color:#fff}a{color:#4fd1ff}</style></head><body><p><a href="/cesta">← zpět</a></p><h1>Ochrana osobních údajů</h1><p>Správcem osobních údajů je Best Series s.r.o. Údaje, které vyplníte při rezervaci schůzky (jméno, příjmení, e-mail, telefon), zpracováváme pouze za účelem domluvení a vedení schůzky o prádlomatu a navazující komunikace. Údaje neposkytujeme třetím stranám mimo poskytovatele nezbytných služeb (e-mail, SMS, kalendář).</p><p>Máte právo na přístup, opravu a výmaz údajů a na podání námitky. Žádost nám pošlete na <a href="mailto:info@laundromats.eu">info@laundromats.eu</a>.</p></body></html>'));
+app.get('/gdpr', (req, res) => send(res, '<!DOCTYPE html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ochrana osobních údajů · Laundromats</title><style>body{font-family:Inter,Segoe UI,Arial,sans-serif;background:#04060c;color:#c9d6ee;max-width:720px;margin:0 auto;padding:40px 22px;line-height:1.6}h1{color:#fff}a{color:#4fd1ff}</style></head><body><p><a href="/cesta">← zpět</a></p><h1>Ochrana osobních údajů</h1><p>Správcem osobních údajů je Best Series s.r.o. Údaje, které vyplníte při rezervaci schůzky (jméno, příjmení, e-mail, telefon), zpracováváme pouze za účelem domluvení a vedení schůzky o prádlomatu a navazující komunikace. Údaje neposkytujeme třetím stranám mimo poskytovatele nezbytných služeb (e-mail, SMS, kalendář).</p><p>Máte právo na přístup, opravu a výmaz údajů a na podání námitky. Žádost nám pošlete na <a href="mailto:info@laundromats.eu">info@laundromats.eu</a>.</p></body></html>', req));
 
 // ── rezervace schůzky: veřejné endpointy HolyOS (termíny, kontakt, rezervace) ──
 async function holyosMeeting(req, res, method, sub) {
@@ -389,9 +410,9 @@ async function fetchProducts() {
 }
 const COMP = require('./compounder-page');
 const PRAD = require('./pradlomaty-page');
-app.get('/cesta/compounder', ACC.requirePage('compounder'), (req, res) => send(res, lite(COMP.compounderPage(), req)));
+app.get('/cesta/compounder', ACC.requirePage('compounder'), (req, res) => send(res, lite(COMP.compounderPage(), req), req));
 // Ekonomika pro přihlášené: stejný model jako /cesta/ekonomika (ten zůstává veřejný pro cestu z SMS), ale s menu
-app.get('/cesta/ucet/ekonomika', ACC.requirePage('ekonomika'), (req, res) => send(res, lite(String(EP.economyPage('cs')).replace(/<a class="bx-back"[^>]*>[^<]*<\/a>/, '<a class="bx-back" href="/cesta/ucet">← zpět na nástroje</a>').replace('@@LHDR@@', LH.header({})).replace('</style>', LH.CSS + FOOT_CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</body>', '<script src="/cesta/track.js" defer></script></body>'), req)));
+app.get('/cesta/ucet/ekonomika', ACC.requirePage('ekonomika'), (req, res) => send(res, lite(String(EP.economyPage('cs')).replace(/<a class="bx-back"[^>]*>[^<]*<\/a>/, '<a class="bx-back" href="/cesta/ucet">← zpět na nástroje</a>').replace('@@LHDR@@', LH.header({})).replace('</style>', LH.CSS + FOOT_CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</body>', '<script src="/cesta/track.js" defer></script></body>'), req), req));
 // Nastavení produktů z administrace (viditelnost, pořadí, texty, ceny) — HolyOS AppSetting, cache 1 min
 let _pcfg = { at: 0, data: null };
 async function fetchProdConfig() {
@@ -399,7 +420,7 @@ async function fetchProdConfig() {
   try { const j = await holyosSvc('GET', '/api/auth/lm/products-config'); _pcfg = { at: Date.now(), data: j.config || { items: {} } }; } catch (e) { if (!_pcfg.data) _pcfg = { at: Date.now() - 50e3, data: { items: {} } }; }
   return _pcfg.data;
 }
-app.get('/cesta/pradlomaty', ACC.requirePage('pradlomaty'), async (req, res) => { let list = []; try { list = await fetchProducts(); } catch (e) { console.warn('[laundromats] produkty:', e.message); if (_prod.data) list = _prod.data; } send(res, lite(PRAD.pradlomatyPage(list, await fetchProdConfig()), req)); });
+app.get('/cesta/pradlomaty', ACC.requirePage('pradlomaty'), async (req, res) => { let list = []; try { list = await fetchProducts(); } catch (e) { console.warn('[laundromats] produkty:', e.message); if (_prod.data) list = _prod.data; } send(res, lite(PRAD.pradlomatyPage(list, await fetchProdConfig()), req), req); });
 // ── Administrace → Produkty ──
 app.get('/admin/api/products', requireAdmin, api(async () => { _prod.at = 0; const products = await fetchProducts(); const j = await holyosSvc('GET', '/api/auth/lm/products-config'); return { ok: true, products, config: j.config || { items: {} } }; }));
 app.post('/admin/api/products/config', requireAdmin, api(async (req) => { const j = await holyosSvc('PUT', '/api/auth/lm/products-config', { config: (req.body || {}).config || {} }); _pcfg = { at: 0, data: null }; return j; }));

@@ -48,7 +48,7 @@ ${require('./lm-header').FONT}<style>${BS2_CSS}${LM_CSS}${require('./lm-header')
 <body><canvas id="net" aria-hidden="true"></canvas><div class="glow a"></div><div class="glow b"></div><div class="gridfx" aria-hidden="true"></div>
 ${require('./lm-header').header({ absolute })}
 <main>${backHtml}${body}</main>
-<footer class="lm-foot"><span><b style="color:var(--text)">Laundromats</b> · Samoobslužné prádlomaty. Zkušenosti z provozu. Možnosti pro vaše podnikání.</span><span><a href="mailto:info@laundromats.eu">info@laundromats.eu</a> · <a href="${absolute ? MAIN_URL() : ''}/gdpr">Ochrana osobních údajů</a></span></footer>
+<footer class="lm-foot"><span><b style="color:var(--text)">Laundromats</b> · Samoobslužné prádlomaty. Zkušenosti z provozu. Možnosti pro vaše podnikání.</span><span><a href="${absolute ? MAIN_URL() : ''}/gdpr">Ochrana osobních údajů</a></span></footer>
 <script>${require('./home-page').NET_JS}</script>${absolute ? '' : '<script src="/cesta/track.js" defer></script>'}
 </body></html>`;
 }
