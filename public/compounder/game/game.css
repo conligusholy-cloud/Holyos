@@ -262,3 +262,22 @@ main{padding-bottom:calc(66px + var(--safe-b))}
 .btn.sm.rush{padding:3px 9px;font-size:11px;background:rgba(255,216,102,.16);
   border:1px solid rgba(255,216,102,.5);color:var(--warn);box-shadow:none}
 .btn.sm.rush:disabled{opacity:.6}
+
+/* Přepínač v záložce Síť a žebříčky. */
+.seg{display:flex;gap:6px;margin:14px 0 4px}
+.seg button{flex:1;padding:8px 10px;border-radius:10px;border:1px solid var(--border);
+  background:var(--card);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer}
+.seg button.on{background:rgba(124,92,255,.18);border-color:var(--vio);color:var(--text)}
+.seg.sub button{font-size:12px;padding:6px 8px}
+.zeb{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.zeb-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--border)}
+.zeb-row:first-child{border-top:0}
+.zeb-row.ja{background:rgba(124,92,255,.14)}
+.zeb-row .poradi{font-style:normal;width:26px;flex:0 0 26px;text-align:center;font-size:12px;
+  color:var(--text3);font-variant-numeric:tabular-nums}
+.zeb-row .poradi.medaile{font-weight:800;color:#04301f;border-radius:50%;line-height:22px;height:22px}
+.zeb-row .poradi.m1{background:#ffd866}
+.zeb-row .poradi.m2{background:#cfd8e6}
+.zeb-row .poradi.m3{background:#e0a06a}
+.zeb-row .nick{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.zeb-row b{font-variant-numeric:tabular-nums;font-size:14px}

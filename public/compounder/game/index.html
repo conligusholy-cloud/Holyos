@@ -126,9 +126,22 @@
 
     <!-- PRÁDLOMATY -->
     <section id="v-net" class="view hidden">
-      <h2>Moje síť</h2>
-      <div id="net-sum" class="sum-grid"></div>
-      <div id="net-list"></div>
+      <div class="seg">
+        <button class="on" data-net="moje">Moje síť</button>
+        <button data-net="zebricek">Žebříček</button>
+      </div>
+      <div id="net-moje">
+        <div id="net-sum" class="sum-grid"></div>
+        <div id="net-list"></div>
+      </div>
+      <div id="net-zebricek" class="hidden">
+        <div class="seg sub">
+          <button class="on" data-zeb="pradlomaty">Prádlomaty</button>
+          <button data-zeb="zisk">Zisk</button>
+          <button data-zeb="pozvanky">Pozvánky</button>
+        </div>
+        <div id="zeb-body"></div>
+      </div>
     </section>
 
     <!-- BANKA -->

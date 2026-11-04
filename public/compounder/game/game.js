@@ -1109,11 +1109,52 @@ function paint() {
   $('t-rate').textContent = kc(monthlyProfit());
   $('t-count').textContent = S.units.length;
   if (!$('v-shop').classList.contains('hidden')) paintShop();
-  if (!$('v-net').classList.contains('hidden')) paintNet();
+  if (!$('v-net').classList.contains('hidden')) {
+    if ($('net-zebricek').classList.contains('hidden')) paintNet(); else paintZeb();
+  }
   if (!$('v-bank').classList.contains('hidden')) paintBank();
   if (!$('v-cards').classList.contains('hidden')) paintCards();
   if (!$('v-me').classList.contains('hidden')) paintMe();
 }
+// ─── Žebříčky ────────────────────────────────────────────────────────────────
+var ZEB = null, ZEB_KAT = 'pradlomaty';
+var ZEB_POPIS = {
+  pradlomaty: { nadpis: 'Nejvíc prádlomatů', jed: function (v) { return v + '×'; },
+    pod: 'Počítají se obsazená místa — to je jediné číslo, které hlídá server.' },
+  zisk: { nadpis: 'Nejvyšší měsíční zisk', jed: function (v) { return kcFull(v); },
+    pod: 'Podle poslední uložené sítě hráče.' },
+  pozvanky: { nadpis: 'Nejvíc pozvánek', jed: function (v) { return v + '×'; },
+    pod: 'Kolikrát někdo otevřel sdílený odkaz hráče.' }
+};
+function loadZeb() {
+  // Při výpadku nastavíme prázdný žebříček — jinak by panel zůstal viset
+  // na „Načítám…" a hráč by nevěděl, že se něco pokazilo.
+  var prazdny = { pradlomaty: [], zisk: [], pozvanky: [], ja: null, hracu: 0, chyba: true };
+  return api('/leaderboard')
+    .then(function (r) { ZEB = r.ok ? r.j : prazdny; })
+    .catch(function () { ZEB = prazdny; });
+}
+function paintZeb() {
+  var box = $('zeb-body');
+  if (!ZEB) { box.innerHTML = '<p class="muted small">Načítám…</p>'; return loadZeb().then(paintZeb); }
+  var list = ZEB[ZEB_KAT] || [], popis = ZEB_POPIS[ZEB_KAT];
+  var ja = ZEB.ja ? ZEB.ja[ZEB_KAT] : null;
+  box.innerHTML = '<h3 style="margin:14px 0 2px">' + popis.nadpis + '</h3>'
+    + '<p class="muted small" style="margin:0 0 10px">' + popis.pod + '</p>'
+    + (list.length
+      ? '<div class="zeb">' + list.map(function (x) {
+          return '<div class="zeb-row' + (x.ja ? ' ja' : '') + '">'
+            + '<i class="poradi' + (x.poradi <= 3 ? ' medaile m' + x.poradi : '') + '">' + x.poradi + '</i>'
+            + '<span class="nick">' + esc(x.nick) + '</span>'
+            + '<b>' + popis.jed(x.hodnota) + '</b></div>';
+        }).join('') + '</div>'
+      : '<div class="empty">' + (ZEB.chyba ? 'Žebříček se nepodařilo načíst. Zkus to za chvíli.' : 'Tady zatím nikdo není. Buď první.') + '</div>')
+    + (ja && ja.poradi > list.length
+      ? '<p class="muted small" style="margin-top:12px">Ty jsi ' + ja.poradi + '. z ' + ja.z + ' — ' + popis.jed(ja.hodnota) + '.</p>'
+      : '')
+    + (ZEB.hracu ? '<p class="fine">Hráčů se sítí: ' + ZEB.hracu + '</p>' : '');
+}
+
 function paintNet() {
   $('net-sum').innerHTML = '<div><span>Prádlomaty</span><b>' + S.units.length + '</b></div>'
     + '<div><span>Zisk / měsíc</span><b class="ok">' + kc(monthlyProfit()) + '</b></div>'
@@ -1223,6 +1264,23 @@ function switchTab(v) {
   b.onclick = function () { switchTab(b.getAttribute('data-v')); };
 });
 $('open-areas').onclick = areasSheet;
+// Přepínače v záložce Síť: moje síť vs. žebříček a kategorie žebříčku.
+[].forEach.call(document.querySelectorAll('[data-net]'), function (b) {
+  b.onclick = function () {
+    var zeb = b.getAttribute('data-net') === 'zebricek';
+    [].forEach.call(document.querySelectorAll('[data-net]'), function (x) { x.classList.toggle('on', x === b); });
+    $('net-moje').classList.toggle('hidden', zeb);
+    $('net-zebricek').classList.toggle('hidden', !zeb);
+    if (zeb) { ZEB = null; paintZeb(); } else paintNet();
+  };
+});
+[].forEach.call(document.querySelectorAll('[data-zeb]'), function (b) {
+  b.onclick = function () {
+    ZEB_KAT = b.getAttribute('data-zeb');
+    [].forEach.call(document.querySelectorAll('[data-zeb]'), function (x) { x.classList.toggle('on', x === b); });
+    paintZeb();
+  };
+});
 
 
 // ─── Účet hráče ──────────────────────────────────────────────────────────────

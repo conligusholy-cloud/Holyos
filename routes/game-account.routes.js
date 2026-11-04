@@ -312,6 +312,56 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
 });
 
 
+// ─── Žebříčky ────────────────────────────────────────────────────────────────
+// Tři pohledy: kdo má nejvíc prádlomatů (to ví server jistě, z obsazených míst),
+// kdo nejvíc vydělává a kdo nejvíc pozval. Zisk a pozvánky čteme z uloženého
+// stavu, který píše prohlížeč hráče — ber je jako hlášené, ne ověřené.
+const ZEB_TOP = 25;
+let _zeb = { at: 0, data: null };
+async function zebricky() {
+  if (Date.now() - _zeb.at < 30e3 && _zeb.data) return _zeb.data;
+  const [mista, hraci] = await Promise.all([
+    prisma.gameSpotClaim.groupBy({ by: ['player_id', 'nick'], _count: { _all: true } }),
+    prisma.gamePlayer.findMany({
+      where: { disabled: false, state: { not: null } },
+      orderBy: { state_at: 'desc' }, take: 500,
+      select: { id: true, nick: true, state: true },
+    }),
+  ]);
+  const poMistech = mista.map((m) => ({ id: m.player_id, nick: m.nick, hodnota: m._count._all }))
+    .sort((a, b) => b.hodnota - a.hodnota);
+
+  const zisk = [], pozvanky = [];
+  hraci.forEach((h) => {
+    const st = h.state || {};
+    const units = Array.isArray(st.units) ? st.units : [];
+    const mesicne = units.reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0);
+    if (mesicne > 0) zisk.push({ id: h.id, nick: h.nick, hodnota: Math.round(mesicne) });
+    if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, hodnota: st.refs });
+  });
+  zisk.sort((a, b) => b.hodnota - a.hodnota);
+  pozvanky.sort((a, b) => b.hodnota - a.hodnota);
+
+  _zeb = { at: Date.now(), data: { pradlomaty: poMistech, zisk, pozvanky } };
+  return _zeb.data;
+}
+// Moje příčka — ať ji hráč vidí, i když do první pětadvacítky nedosáhne.
+function moje(list, id) {
+  const i = list.findIndex((x) => x.id === id);
+  return i < 0 ? null : { poradi: i + 1, hodnota: list[i].hodnota, z: list.length };
+}
+router.get('/leaderboard', async (req, res, next) => {
+  try {
+    const p = await currentPlayer(req);
+    const z = await zebricky();
+    const orez = (l) => l.slice(0, ZEB_TOP).map((x, i) => ({ poradi: i + 1, nick: x.nick, hodnota: x.hodnota, ja: !!(p && x.id === p.id) }));
+    res.json({ ok: true,
+      pradlomaty: orez(z.pradlomaty), zisk: orez(z.zisk), pozvanky: orez(z.pozvanky),
+      ja: p ? { pradlomaty: moje(z.pradlomaty, p.id), zisk: moje(z.zisk, p.id), pozvanky: moje(z.pozvanky, p.id) } : null,
+      hracu: z.pradlomaty.length });
+  } catch (e) { next(e); }
+});
+
 // ─── Místa: kdo kde stojí ────────────────────────────────────────────────────
 // Na jednom místě smí stát jediný prádlomat. Kdo chce cizí, musí majiteli
 // pozemku nabídnout vyšší nájem — a protože výše nájmu je tajná, přihazuje
