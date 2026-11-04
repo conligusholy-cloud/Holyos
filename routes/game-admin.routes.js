@@ -83,6 +83,67 @@ router.post('/players/:id/disabled', api(async (req, res) => {
   res.json({ ok: true, disabled: p.disabled });
 }));
 
+// GET /players/:id → detail: co hráč vlastní, co utratil, kde stojí
+router.get('/players/:id', api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const p = await prisma.gamePlayer.findUnique({ where: { id } });
+  if (!p) return res.status(404).json({ error: 'Hráč nenalezen.' });
+  const [karty, nakupy, mista] = await Promise.all([
+    prisma.gameCard.findMany({ where: { player_id: id }, select: { kind: true, used_at: true, purchase_id: true } }),
+    prisma.gamePurchase.findMany({ where: { player_id: id }, orderBy: { created_at: 'desc' }, take: 50 }),
+    prisma.gameSpotClaim.findMany({ where: { player_id: id }, select: { spot_id: true, name: true, model: true, rent: true, takeovers: true } }),
+  ]);
+  const def = acct._defaults;
+  const polozky = Object.keys(def).map((kind) => {
+    const moje = karty.filter((c) => c.kind === kind);
+    return {
+      kind, name: def[kind].name, typ: def[kind].laundry ? 'penize' : 'karta',
+      laundry: def[kind].laundry || null,
+      nepouzito: moje.filter((c) => !c.used_at).length,
+      pouzito: moje.filter((c) => c.used_at).length,
+      darem: moje.filter((c) => !c.purchase_id).length,
+    };
+  });
+  const st = p.state || {};
+  res.json({ ok: true, player: {
+    id: p.id, nick: p.nick, email: p.email,
+    jmeno: [p.first_name, p.last_name].filter(Boolean).join(' ') || null,
+    created_at: p.created_at, last_login_at: p.last_login_at, disabled: p.disabled,
+    profil: st.profile || null,
+    hotovost: typeof st.cash === 'number' ? Math.round(st.cash) : null,
+    uver: typeof st.loan === 'number' ? Math.round(st.loan) : null,
+    pradlomatu: Array.isArray(st.units) ? st.units.length : 0,
+    pozvanek: st.refs || 0,
+  }, polozky, mista,
+  nakupy: nakupy.map((o) => ({ id: o.id, kind: o.kind, qty: o.qty, castka: o.amount_cents / 100,
+    status: o.status, created_at: o.created_at, paid_at: o.paid_at })) });
+}));
+
+// POST /players/:id/grant { kind, qty } — přidá balíčky zdarma
+// Karta bez vazby na nákup (purchase_id = null) je dárek; podle toho se pozná.
+router.post('/players/:id/grant', api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const kind = String((req.body || {}).kind || '');
+  const qty = Math.max(1, Math.min(50, parseInt((req.body || {}).qty, 10) || 1));
+  if (!acct._defaults[kind]) return res.status(400).json({ error: 'Taková položka není.' });
+  const p = await prisma.gamePlayer.findUnique({ where: { id }, select: { id: true, nick: true } });
+  if (!p) return res.status(404).json({ error: 'Hráč nenalezen.' });
+  await prisma.gameCard.createMany({ data: Array.from({ length: qty }, () => ({ player_id: id, kind })) });
+  const kdo = (req.user && (req.user.displayName || req.user.username)) || 'admin';
+  console.log('[game] dárek: ' + qty + '× ' + kind + ' → ' + p.nick + ' (přidal ' + kdo + ')');
+  res.json({ ok: true, qty });
+}));
+
+// POST /players/:id/revoke { kind } — odebere jeden nepoužitý kus (když se admin ukliknul)
+router.post('/players/:id/revoke', api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const kind = String((req.body || {}).kind || '');
+  const c = await prisma.gameCard.findFirst({ where: { player_id: id, kind, used_at: null, purchase_id: null }, orderBy: { id: 'desc' } });
+  if (!c) return res.status(409).json({ error: 'Není co odebrat — zbylé kusy hráč buď zaplatil, nebo už použil.' });
+  await prisma.gameCard.delete({ where: { id: c.id } });
+  res.json({ ok: true });
+}));
+
 // ─── Objednávky ──────────────────────────────────────────────────────────────
 router.get('/orders', api(async (req, res) => {
   const stav = String(req.query.status || '').trim();

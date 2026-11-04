@@ -47,6 +47,16 @@
     .chart { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px; }
     .price-in { width:92px; padding:5px 8px; border-radius:7px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:13px; text-align:right; }
     .price-in.wide { width:120px; }
+    .ov { position:fixed; inset:0; background:rgba(4,6,12,.72); display:none; align-items:center; justify-content:center; z-index:9000; padding:20px; }
+    .ov.open { display:flex; }
+    .dlg { width:min(860px,96vw); max-height:92vh; overflow:auto; background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:20px 22px; }
+    .dlg h2 { font-size:17px; margin:0 0 2px; }
+    .dlg .x { float:right; background:none; border:0; color:var(--text2); font-size:22px; cursor:pointer; line-height:1; }
+    .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; margin:14px 0 18px; }
+    .mini { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:9px 11px; }
+    .mini .v { font-size:16px; font-weight:700; }
+    .mini .l { font-size:10.5px; color:var(--text2); text-transform:uppercase; letter-spacing:.05em; }
+    .qty { width:58px; padding:4px 6px; border-radius:7px; border:1px solid var(--border); background:var(--surface2); color:var(--text); text-align:right; font-size:13px; }
   </style>
 </head>
 <body>
@@ -109,6 +119,8 @@
       </div>
     </div>
   </div>
+
+  <div class="ov" id="ov"><div class="dlg" id="dlg"></div></div>
 
   <script src="js/sidebar.js?v=2026-11-05-1"></script>
   <script>
@@ -186,7 +198,7 @@
           + '<th class="num">Měst</th><th class="num">Hotovost</th><th class="num">Úvěr</th><th class="num">Pozvánek</th>'
           + '<th class="num">Nákupů</th><th class="num">Utraceno</th><th>Naposledy</th><th></th></tr></thead><tbody>'
           + (j.players.length ? j.players.map(function (p) {
-            return '<tr' + (p.disabled ? ' style="opacity:.45"' : '') + '><td><b>' + esc(p.nick) + '</b>'
+            return '<tr' + (p.disabled ? ' style="opacity:.45"' : '') + '><td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + p.id + '">' + esc(p.nick) + '</b>'
               + (p.profil ? '<div class="note">' + esc(p.profil) + '</div>' : '') + '</td>'
               + '<td>' + (p.jmeno ? esc(p.jmeno) : '<span class="note">—</span>')
               + (p.email ? '<div class="note">' + esc(p.email) + '</div>' : '') + '</td>'
@@ -202,6 +214,9 @@
               + (p.disabled ? 'Odblokovat' : 'Zablokovat') + '</button></td></tr>';
           }).join('') : '<tr><td colspan="12" class="note" style="padding:20px">Zatím tu nikdo není.</td></tr>')
           + '</tbody>';
+        [].forEach.call(document.querySelectorAll('[data-detail]'), function (b) {
+          b.onclick = function () { detail(b.getAttribute('data-detail')); };
+        });
         [].forEach.call(document.querySelectorAll('[data-off]'), function (b) {
           b.onclick = function () {
             b.disabled = true;
@@ -211,6 +226,77 @@
         });
       }).catch(function (e) { document.getElementById('pl-tbl').innerHTML = '<tbody><tr><td class="note" style="color:#f87171;padding:20px">' + esc(e.message) + '</td></tr></tbody>'; });
     }
+
+    // ── Detail hráče ────────────────────────────────────────────────────────
+    var OV = document.getElementById('ov'), DLG = document.getElementById('dlg');
+    OV.onclick = function (e) { if (e.target === OV) OV.classList.remove('open'); };
+    function detail(id) {
+      OV.classList.add('open');
+      DLG.innerHTML = '<p class="note">Načítám…</p>';
+      get('/players/' + id).then(function (j) {
+        var p = j.player;
+        DLG.innerHTML = '<button class="x" data-close>×</button>'
+          + '<h2>' + esc(p.nick) + (p.disabled ? ' <span class="st">zablokován</span>' : '') + '</h2>'
+          + '<div class="note">' + esc(p.jmeno || 'jméno nevyplněno') + ' · ' + esc(p.email || 'bez e-mailu')
+          + ' · založeno ' + dt(p.created_at) + '</div>'
+          + '<div class="grid2">'
+          + mini(cz(p.pradlomatu), 'Prádlomatů') + mini(cz(j.mista.length), 'Obsazených míst')
+          + mini(p.hotovost == null ? '—' : cz(p.hotovost), 'Hotovost')
+          + mini(p.uver == null ? '—' : cz(p.uver), 'Úvěr')
+          + mini(cz(p.pozvanek), 'Pozvánek')
+          + mini(esc(p.profil || '—'), 'Profil')
+          + '</div>'
+          + '<h3 style="font-size:14px;margin:0 0 8px">Balíčky a karty</h3>'
+          + '<div class="tbl-wrap"><table class="data-table"><thead><tr><th>Položka</th><th>Druh</th>'
+          + '<th class="num">K dispozici</th><th class="num">Použito</th><th class="num">Z toho darem</th>'
+          + '<th>Přidat zdarma</th></tr></thead><tbody>'
+          + j.polozky.map(function (x) {
+            return '<tr><td><b>' + esc(x.name) + '</b>'
+              + (x.laundry ? '<div class="note">' + cz(x.laundry) + ' L$</div>' : '') + '</td>'
+              + '<td>' + (x.typ === 'penize' ? 'Peníze' : 'Karta') + '</td>'
+              + '<td class="num"><b>' + x.nepouzito + '</b></td>'
+              + '<td class="num note">' + x.pouzito + '</td>'
+              + '<td class="num note">' + x.darem + '</td>'
+              + '<td style="white-space:nowrap"><input class="qty" type="number" min="1" max="50" value="1" data-q="' + esc(x.kind) + '">'
+              + ' <button class="btn sm" data-grant="' + esc(x.kind) + '">Přidat</button>'
+              + (x.darem && x.nepouzito ? ' <button class="btn sm" data-revoke="' + esc(x.kind) + '" title="Odebere jeden darovaný nepoužitý kus">−1</button>' : '')
+              + '</td></tr>';
+          }).join('') + '</tbody></table></div>'
+          + (j.mista.length ? '<h3 style="font-size:14px;margin:18px 0 8px">Kde stojí</h3>'
+            + '<div class="tbl-wrap"><table class="data-table"><thead><tr><th>Místo</th><th>Model</th><th class="num">Nájem</th><th class="num">Přetažení</th></tr></thead><tbody>'
+            + j.mista.map(function (m) { return '<tr><td>' + esc(m.name || m.spot_id) + '</td><td>' + esc(m.model) + '</td>'
+              + '<td class="num">' + cz(m.rent) + ' L$</td><td class="num note">' + m.takeovers + '×</td></tr>'; }).join('')
+            + '</tbody></table></div>' : '')
+          + (j.nakupy.length ? '<h3 style="font-size:14px;margin:18px 0 8px">Nákupy</h3>'
+            + '<div class="tbl-wrap"><table class="data-table"><thead><tr><th>Kdy</th><th>Položka</th><th class="num">Ks</th><th class="num">Částka</th><th>Stav</th></tr></thead><tbody>'
+            + j.nakupy.map(function (o) { return '<tr><td class="note">' + dt(o.created_at) + '</td><td>' + esc(o.kind) + '</td>'
+              + '<td class="num">' + o.qty + '</td><td class="num">' + cz(o.castka) + ' Kč</td>'
+              + '<td><span class="st ' + esc(o.status) + '">' + esc(o.status) + '</span></td></tr>'; }).join('')
+            + '</tbody></table></div>' : '<p class="note" style="margin-top:16px">Zatím nic nekoupil.</p>');
+
+        DLG.querySelector('[data-close]').onclick = function () { OV.classList.remove('open'); };
+        [].forEach.call(DLG.querySelectorAll('[data-grant]'), function (b) {
+          b.onclick = function () {
+            var kind = b.getAttribute('data-grant');
+            var q = DLG.querySelector('[data-q="' + kind + '"]');
+            b.disabled = true; b.textContent = 'Přidávám…';
+            post('/players/' + id + '/grant', { kind: kind, qty: Number(q.value) || 1 })
+              .then(function () { detail(id); loadPlayers(); })
+              .catch(function (e) { b.disabled = false; b.textContent = 'Přidat'; alert(e.message); });
+          };
+        });
+        [].forEach.call(DLG.querySelectorAll('[data-revoke]'), function (b) {
+          b.onclick = function () {
+            b.disabled = true;
+            post('/players/' + id + '/revoke', { kind: b.getAttribute('data-revoke') })
+              .then(function () { detail(id); })
+              .catch(function (e) { b.disabled = false; alert(e.message); });
+          };
+        });
+      }).catch(function (e) { DLG.innerHTML = '<button class="x" data-close>×</button><p class="note" style="color:#f87171">' + esc(e.message) + '</p>';
+        DLG.querySelector('[data-close]').onclick = function () { OV.classList.remove('open'); }; });
+    }
+    function mini(v, l) { return '<div class="mini"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
 
     // ── Objednávky ──────────────────────────────────────────────────────────
     var STAV = '';
