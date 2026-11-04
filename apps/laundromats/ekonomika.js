@@ -11,7 +11,7 @@
   var PERMIT = 825;
   var RATES = { CZK: 1, EUR: 24.35, PLN: 1 / 0.1807 }; // CZK za 1 jednotku
   var SYM = { CZK: 'Kč', EUR: '€', PLN: 'zł' };
-  var PHOTOS = {};
+  var PHOTOS = { V4: '/media/provozovna-3.webp' }; // MAX: vlastní fotka (MINI/FLEX přijdou z HolyOS)
   function photo() { var im = $('ek-photo'); if (im && PHOTOS[VER] && im.getAttribute('src') !== PHOTOS[VER]) im.src = PHOTOS[VER]; }
   var CUR = T.defCur || 'CZK', VER = 'V2'; // výchozí MINI
   var M = { machine: 0, permit: 0, conn: 0, spend: 0, cost: 0, perday: 0, rent: null, spendSet: false }; // v EUR (perday ks); rent/spend zadané zákazníkem

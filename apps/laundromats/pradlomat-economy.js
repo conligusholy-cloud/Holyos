@@ -142,7 +142,7 @@
   var VER = 'V3';
   var SHOW_VER = true; // zobrazit přepínač V2/V3? (u leada jen když má povolené obě varianty)
   var NO_PRICE = false; // „jen provoz" — skrýt cenu/investici/návratnost, ukázat jen provoz
-  var PHOTOS = {}; // { V2: url, V3: url } — fotky verzí z HolyOS (načtou se z /portal/machines)
+  var PHOTOS = { V4: '/media/provozovna-3.webp' }; // MAX vlastní fotka; { V2: url, V3: url } — fotky verzí z HolyOS (načtou se z /portal/machines)
   var DISC_INFO = { active: false, endsAt: null, pctByVer: {} }; // sleva leada (pro vlaječku)
   var VARIANTS = {
     V3: { cena_pradlomatu: 52000, cena_pripojek: 2889, obrat_na_zakaznika: 11.33, najem: 165, truck: 47000, noSmall: false, zakazniku_za_den: 8 },
