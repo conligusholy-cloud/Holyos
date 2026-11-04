@@ -47,7 +47,7 @@ async function compute() {
   const [persons, events, reservations, leadsNew, leadsDeal, target] = await Promise.all([
     prisma.person.findMany({ where: { active: true, OR: [{ is_salesperson: true }, { is_sales_lead: true }] }, select: { id: true, first_name: true, last_name: true, is_sales_lead: true }, orderBy: [{ last_name: 'asc' }] }),
     prisma.compounderEvent.findMany({ where: { event: 'sales_action', created_at: { gte: since } }, select: { props: true, created_at: true }, take: 100000 }),
-    prisma.meetingReservation.findMany({ where: { OR: [{ created_at: { gte: since } }, { slot: { starts_at: { gte: since } } }] }, select: { booked_by_person_id: true, status: true, created_at: true, slot: { select: { starts_at: true } } }, take: 20000 }),
+    prisma.meetingReservation.findMany({ where: { AND: [{ OR: [{ created_at: { gte: since } }, { slot: { starts_at: { gte: since } } }] }, { OR: [{ mode: null }, { mode: { notIn: ['hala', 'hala_cont'] } }] }] }, select: { booked_by_person_id: true, status: true, created_at: true, slot: { select: { starts_at: true } } }, take: 20000 }),
     prisma.compounderLead.findMany({ where: { is_test: false, created_at: { gte: since } }, select: { owner_person_id: true, created_at: true }, take: 50000 }),
     prisma.compounderLead.findMany({ where: { is_test: false, status: { in: DEAL_STATUSES }, updated_at: { gte: since } }, select: { owner_person_id: true, updated_at: true }, take: 5000 }),
     ownerStats.getTarget().catch(() => 0),

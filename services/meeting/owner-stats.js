@@ -46,7 +46,7 @@ async function compute(prisma, days = 14) {
   const since = new Date(Date.now() - (days + 1) * 86400000);
   const now = Date.now();
   const rows = await prisma.meetingReservation.findMany({
-    where: { booked_by_person_id: { not: null }, created_at: { gte: since } },
+    where: { booked_by_person_id: { not: null }, created_at: { gte: since }, OR: [{ mode: null }, { mode: { notIn: ['hala', 'hala_cont'] } }] }, // schůzky na hale mají vlastní statistiku
     select: { status: true, created_at: true, booked_by_person_id: true, slot: { select: { starts_at: true } } },
   });
   const sellers = await prisma.person.findMany({ where: { active: true, is_salesperson: true }, select: { id: true, first_name: true, last_name: true } });

@@ -780,6 +780,66 @@
     }; });
   }
   window.obOwnerMeeting=obOwnerMeeting;
+  // ── Schůzka na hale (Ekologická 275, Rychnov nad Kněžnou): delší osobní schůzka → 2 nebo 3 navazující termíny ──
+  async function obHallMeeting(id){
+    var lead=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{};
+    var old=document.getElementById('ob-om'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.id='ob-om';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+    function close(){ ov.remove(); document.removeEventListener('keydown',onKey); }
+    function onKey(e){ if(e.key==='Escape') close(); }
+    document.addEventListener('keydown',onKey);
+    ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
+    var box=document.createElement('div');
+    box.style.cssText='background:#0f172a;color:#e8eefc;width:100%;max-width:520px;max-height:88vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px 24px;border:1px solid #1e293b';
+    ov.appendChild(box); document.body.appendChild(ov);
+    function head(extra){ return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:17px;font-weight:800;flex:1">🏭 Schůzka na hale</div><button id="ob-om-x" class="btn btn-g" style="padding:4px 10px">✕</button></div><div style="font-size:13px;color:#94a3b8;margin-bottom:12px">Zákazník: <b style="color:#e8eefc">'+esc(lead.name||lead.email||'kontakt')+'</b><br>📍 Ekologická 275, Rychnov nad Kněžnou'+(extra||'')+'</div>'; }
+    function bindX(){ var x=document.getElementById('ob-om-x'); if(x) x.onclick=close; }
+    if(!lead.email && !lead.phone){ box.innerHTML=head()+'<div style="color:#fca5a5">Kontakt nemá e-mail ani telefon — nemáme kam poslat potvrzení. Doplň údaje (⚙️) a zkus to znovu.</div>'; bindX(); return; }
+    box.innerHTML=head()+'<div style="color:#94a3b8">Načítám volné termíny…</div>'; bindX();
+    var slots=[];
+    try { var r=await api('/meeting-slots?days=45'); slots=(await r.json())||[]; } catch(e){ box.innerHTML=head()+'<div style="color:#fca5a5">Termíny se nepodařilo načíst.</div>'; bindX(); return; }
+    slots.sort(function(a,b){ return new Date(a.starts_at)-new Date(b.starts_at); });
+    var cnt=2;
+    var DN=['Ne','Po','Út','St','Čt','Pá','So'];
+    var hm=function(t){ return ('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2); };
+    // začátky, od kterých je N volných termínů hned za sebou
+    function starts(n){ var out=[];
+      for(var i=0;i<slots.length;i++){ var ch=[slots[i]];
+        for(var j=i+1;j<slots.length&&ch.length<n;j++){ var p=ch[ch.length-1], exp=new Date(p.starts_at).getTime()+(p.duration_min||17)*60000, t=new Date(slots[j].starts_at).getTime();
+          if(Math.abs(t-exp)<=120000) ch.push(slots[j]); else if(t>exp+120000) break; }
+        if(ch.length===n){ var l=ch[n-1]; out.push({ s:slots[i], end:new Date(new Date(l.starts_at).getTime()+(l.duration_min||17)*60000) }); } }
+      return out; }
+    function render(){
+      var list=starts(cnt), byDay={}, order=[];
+      list.forEach(function(x){ var d=new Date(x.s.starts_at); var k=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); if(!byDay[k]){ byDay[k]={d:d,items:[]}; order.push(k); } byDay[k].items.push(x); });
+      var html=head(lead.phone&&lead.email?'<br>Potvrzení dostane SMS i e-mailem (s pozvánkou do kalendáře).':(lead.phone?'<br>Potvrzení dostane SMS.':'<br>Potvrzení dostane e-mailem.'));
+      html+='<div style="font-weight:700;margin:4px 0 8px">Délka schůzky</div><div style="display:flex;gap:8px;margin-bottom:6px">'
+        +[2,3].map(function(n){ return '<button class="btn '+(n===cnt?'btn-p':'btn-g')+' ob-hm-n" data-n="'+n+'" style="flex:1;padding:12px 6px;font-weight:800">'+n+' termíny</button>'; }).join('')+'</div>'
+        +'<div style="font-size:12px;color:#94a3b8;margin-bottom:6px">Obsadí '+cnt+' navazující termíny z kalendáře schůzek. Vyber začátek:</div>';
+      if(!list.length) html+='<div style="color:#fca5a5;margin-top:10px">Nejsou volné '+cnt+' termíny za sebou. Zkus kratší délku, nebo ať majitel přidá termíny v administraci schůzek.</div>';
+      order.forEach(function(k){ var g=byDay[k], d=g.d;
+        html+='<div style="font-weight:700;margin:12px 0 6px;color:#fbbf24">'+DN[d.getDay()]+' '+d.getDate()+'. '+(d.getMonth()+1)+'.</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
+        g.items.forEach(function(x){ var t=new Date(x.s.starts_at); html+='<button class="btn btn-g ob-hm-slot" data-id="'+x.s.id+'" data-t="'+DN[t.getDay()]+' '+t.getDate()+'. '+(t.getMonth()+1)+'. '+hm(t)+'–'+hm(x.end)+'" style="padding:8px 12px;font-weight:700">'+hm(t)+'–'+hm(x.end)+'</button>'; });
+        html+='</div>'; });
+      box.innerHTML=html; bindX();
+      Array.prototype.forEach.call(box.querySelectorAll('.ob-hm-n'),function(b){ b.onclick=function(){ cnt=Number(b.getAttribute('data-n')); render(); }; });
+      Array.prototype.forEach.call(box.querySelectorAll('.ob-hm-slot'),function(b){ b.onclick=async function(){
+        if(!confirm('Rezervovat schůzku na hale '+b.getAttribute('data-t')+' pro '+(lead.name||lead.email)+'?\nObsadí se '+cnt+' termíny a zákazník dostane potvrzení s adresou.')) return;
+        box.innerHTML=head()+'<div style="color:#94a3b8">Rezervuji a odesílám potvrzení…</div>'; bindX();
+        try {
+          var rr=await api('/leads/'+id+'/hall-meeting',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slot_id:Number(b.getAttribute('data-id')),count:cnt})});
+          var j=await rr.json().catch(function(){return {};});
+          if(!rr.ok||!j.ok){ box.innerHTML=head()+'<div style="color:#fca5a5">'+esc(j.error||'Rezervace se nepodařila.')+'</div><button class="btn btn-g" style="margin-top:12px" onclick="obHallMeeting('+id+')">↻ Zkusit znovu</button>'; bindX(); return; }
+          var info=[]; if(j.sms===true) info.push('SMS odeslána'); if(j.sms===false) info.push('SMS se nepodařilo odeslat'); if(j.email===true) info.push('e-mail s pozvánkou odeslán'); if(j.email===false) info.push('e-mail se nepodařilo odeslat');
+          box.innerHTML=head()+'<div style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.5);border-radius:12px;padding:14px"><div style="font-weight:800;color:#fcd34d;font-size:16px">✅ Schůzka na hale: '+esc(j.when||'')+'</div><div style="font-size:13px;color:#cbd5e1;margin-top:6px">V kalendáři schůzek je obsazeno '+esc(String(j.slots||cnt))+' termínů. '+esc(info.join(' · '))+'.'+(j.rebooked?' Předchozí schůzka na hale byla zrušena.':'')+'</div></div><button class="btn btn-p" style="width:100%;margin-top:12px" id="ob-om-ok">Hotovo</button>';
+          bindX(); document.getElementById('ob-om-ok').onclick=function(){ close(); try{ load({silent:true}); }catch(e){} try{ loadUpcomingMeetings(); }catch(e){} };
+        } catch(e){ box.innerHTML=head()+'<div style="color:#fca5a5">Chyba spojení.</div>'; bindX(); }
+      }; });
+    }
+    render();
+  }
+  window.obHallMeeting=obHallMeeting;
   function meetingFromLead(id){ var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ title:'Schůzka – '+(l.name||l.email||'lead'), compounder_lead_id:id, attendees:(l.email||'') }); }
   function callFromLead(id){ obLogAction(id,'plan_call','📅 Naplánován hovor'); var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ _kind:'call', title:'Hovor – '+(l.name||l.email||'lead'), compounder_lead_id:id, attendees:(l.email||'') }); }
   // Dosledování + slíbený krok = jen do MÉHO kalendáře (bez pozvánky zákazníkovi).
@@ -1690,6 +1750,7 @@
       '<div class="detail">' +
         (l.phone ? '<div class="field" data-obk="call_main" style="margin-top:12px"><a class="btn" href="tel:'+esc(telClean)+'" onclick="return obCallClick(event,'+l.id+')" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;min-height:84px;background:#22c55e;color:#052e13;font-weight:900;font-size:30px;text-align:center;text-decoration:none;padding:24px 14px;border-radius:18px;box-shadow:0 4px 18px rgba(34,197,94,.35)">📞 Volat</a></div>' : '') +
         '<div class="field" data-obk="owner_meeting" style="margin-top:12px"><button class="btn" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;min-height:84px;font-size:26px;line-height:1.15;padding:20px 14px;border-radius:18px;background:linear-gradient(135deg,#1e86e0,#7c5cff);color:#fff;font-weight:900;box-shadow:0 4px 18px rgba(124,92,255,.4)" onclick="obOwnerMeeting('+l.id+')">👔 Online schůzka s majitelem</button></div>' +
+        '<div class="field" data-obk="hall_meeting" style="margin-top:10px"><button class="btn" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;min-height:64px;font-size:20px;line-height:1.15;padding:14px;border-radius:16px;background:linear-gradient(135deg,#f59e0b,#ea580c);color:#fff;font-weight:900;box-shadow:0 4px 16px rgba(234,88,12,.35)" onclick="obHallMeeting('+l.id+')">🏭 Schůzka na hale</button></div>' +
         '<div class="field" data-obk="only_polish" style="margin-top:10px"><button class="btn" id="pl-'+l.id+'" style="width:100%;font-size:14px;'+(l.only_polish?'background:#f43f5e;color:#fff;font-weight:800;border:1px solid #f43f5e':'background:transparent;border:1px solid #f43f5e;color:#fb7185;font-weight:700')+'" onclick="obToggleOnlyPolish('+l.id+',this)">'+(l.only_polish?'🇵🇱 Umí jen polsky ✓':'🇵🇱 Umí jen polsky')+'</button></div>' +
         '<div class="actions-row" data-obk="contact_actions" style="margin-top:12px">' +
           (waNum ? '<a href="https://wa.me/'+waNum+'" target="_blank" rel="noopener" onclick="return obLinkGate(event,'+l.id+')">💬 WhatsApp</a>' : '') +

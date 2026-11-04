@@ -17,7 +17,7 @@ const ALWAYS = [
   { first_name: 'Tomáš', last_name: 'Holý' },
 ];
 
-const MODE_LABEL = { online: 'online video hovor', osobne: 'osobní schůzka' };
+const MODE_LABEL = { online: 'online video hovor', osobne: 'osobní schůzka', hala: '🏭 schůzka na hale' };
 const PATH_LABEL = { vlastni: 'vlastní kapitál', financovani: 'financování' };
 
 async function alwaysPersonIds(prisma) {

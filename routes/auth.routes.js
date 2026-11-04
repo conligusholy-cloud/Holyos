@@ -834,11 +834,16 @@ router.get('/bs2/meetings-stats', async (req, res, next) => {
           : new Date(Date.now() + (fwd * 7 + 9) * 86400000);
     const rows = await prisma.meetingReservation.findMany({
       where: { slot: { starts_at: { gte: from, lt: to } } },
-      select: { status: true, email: true, booked_by_person_id: true, compounder_lead_id: true, slot: { select: { starts_at: true } } },
+      select: { status: true, email: true, mode: true, booked_by_person_id: true, compounder_lead_id: true, slot: { select: { starts_at: true } } },
     });
+    // Schůzky na hale (mode hala / hala_cont = navazující termíny) se do statistik online schůzek nepočítají — mají vlastní trychtýř níže
+    const hallRows = rows.filter((r) => r.mode === 'hala' && !mstInternal(r.email));
+    const rowsAll = rows; rows.splice(0, rows.length, ...rowsAll.filter((r) => r.mode !== 'hala' && r.mode !== 'hala_cont'));
     // Zdroje: kontakt (source) + jména obchodníků — dvěma dotazy, ne po řádcích
     const leadIds = [...new Set(rows.map((r) => r.compounder_lead_id).filter(Boolean))];
-    const leadSrc = new Map((leadIds.length ? await prisma.compounderLead.findMany({ where: { id: { in: leadIds } }, select: { id: true, source: true } }).catch(() => []) : []).map((l) => [l.id, l.source || '']));
+    const leadRows = leadIds.length ? await prisma.compounderLead.findMany({ where: { id: { in: leadIds } }, select: { id: true, source: true, status: true } }).catch(() => []) : [];
+    const leadSrc = new Map(leadRows.map((l) => [l.id, l.source || '']));
+    const leadStatus = new Map(leadRows.map((l) => [l.id, l.status || '']));
     const pIds = [...new Set(rows.map((r) => r.booked_by_person_id).filter(Boolean))];
     const pName = new Map((pIds.length ? await prisma.person.findMany({ where: { id: { in: pIds } }, select: { id: true, first_name: true, last_name: true } }).catch(() => []) : []).map((p) => [p.id, [p.first_name, p.last_name].filter(Boolean).join(' ')]));
     const src = String(req.query.src || 'all');
@@ -874,6 +879,17 @@ router.get('/bs2/meetings-stats', async (req, res, next) => {
       internal_skipped: internal,
       src,
       // Rozpad podle zdroje za celé zobrazené období: souhrn Obchodníci + po obchodnících, Reklama, Sám z webu
+      // Trychtýř: kontakty s online schůzkou v období → z nich schůzka na hale (kdykoli) → obchod (stav kontaktu)
+      funnel: await (async () => {
+        const WON = new Set(['won', 'prodano', 'converted']);
+        const on = new Map(); rows.forEach((r) => { if (!r.compounder_lead_id || mstInternal(r.email) || r.status === 'canceled') return; const x = on.get(r.compounder_lead_id) || { done: false }; if (r.status === 'done') x.done = true; on.set(r.compounder_lead_id, x); });
+        const ids = [...on.keys()];
+        const hall = ids.length ? await prisma.meetingReservation.findMany({ where: { compounder_lead_id: { in: ids }, mode: 'hala', status: { not: 'canceled' } }, select: { compounder_lead_id: true, status: true } }).catch(() => []) : [];
+        const hb = new Set(hall.map((h) => h.compounder_lead_id)), hd = new Set(hall.filter((h) => h.status === 'done').map((h) => h.compounder_lead_id));
+        const won = ids.filter((id) => WON.has(leadStatus.get(id)));
+        return { online_leads: ids.length, online_done: ids.filter((id) => on.get(id).done).length, hall_booked: hb.size, hall_done: hd.size, deals: won.length, deals_after_hall: won.filter((id) => hb.has(id)).length,
+          hall_in_period: hallRows.length, hall_in_period_done: hallRows.filter((r) => r.status === 'done').length };
+      })(),
       sources: (() => {
         const list = Object.values(bySrc);
         const sales = list.filter((x) => x.kind === 'sales');

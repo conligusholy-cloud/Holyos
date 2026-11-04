@@ -195,7 +195,7 @@ router.post('/track', async (req, res) => {
 // ─── VEŘEJNÉ: termíny schůzek + rezervace (pradlomaty.info „cesta k rozhodnutí") ──
 // Nejbližší rezervovatelný termín = 2 hodiny od aktuálního času.
 const MEETING_MIN_LEAD_MS = 2 * 3600000;
-const MEETING_MODE_LABEL = { online: 'Online video hovor', osobne: 'Osobní schůzka' };
+const MEETING_MODE_LABEL = { online: 'Online video hovor', osobne: 'Osobní schůzka', hala: 'Schůzka na hale', hala_cont: 'Schůzka na hale (pokračování)' };
 const FINANCING_PATH_LABEL = { vlastni: 'Vlastní kapitál', financovani: 'Financování' };
 
 // GET /api/compounder/meeting-slots — volné budoucí termíny (kapacita > počet rezervací).
@@ -315,12 +315,12 @@ router.post('/meeting-reservation', async (req, res) => {
       const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { name: true, email: true, phone: true } }).catch(() => null);
       if (lead) { name = name || lead.name; email = email || lead.email; phone = phone || lead.phone; }
       // Jeden lead = jedna aktivní rezervace: starší zrušíme (a zapamatujeme, že jde o přesun).
-      const canceled = await prisma.meetingReservation.updateMany({ where: { compounder_lead_id: leadId, status: 'booked' }, data: { status: 'canceled' } }).catch(() => ({ count: 0 }));
+      const canceled = await prisma.meetingReservation.updateMany({ where: { compounder_lead_id: leadId, status: 'booked', OR: [{ mode: null }, { mode: { notIn: ['hala', 'hala_cont'] } }] }, data: { status: 'canceled' } }).catch(() => ({ count: 0 }));
       req._meetingRebooked = !!(canceled && canceled.count);
     }
     if (!leadId && !email && !phone) return res.status(400).json({ ok: false, error: 'Zadejte prosím kontakt (e-mail nebo telefon)' });
     // Forma schůzky (online / osobně) + zvolená cesta pořízení (vlastní kapitál / financování) — musí být před použitím níže.
-    const mode = MEETING_MODE_LABEL[String(b.mode || '').trim()] ? String(b.mode).trim() : null;
+    const mode = ['online', 'osobne'].includes(String(b.mode || '').trim()) ? String(b.mode).trim() : null; // schůzku na hale domlouvá jen obchodník
     const path = FINANCING_PATH_LABEL[String(b.path || '').trim()] ? String(b.path).trim() : null;
     // Rezervace bez portálového tokenu (např. z Bestseries2 / pradlomaty.info): spáruj s existujícím kontaktem
     // podle e-mailu / telefonu, jinak založ nový — ať se člověk objeví v seznamu kontaktů Compounderu.
@@ -329,7 +329,7 @@ router.post('/meeting-reservation', async (req, res) => {
       const found = await _findOrCreateLeadForMeeting({ name, email, phone, mode, source: String(b.source || 'meeting_bs2').slice(0, 50), createIfMissing: b.existing_account !== true }).catch((e) => { console.warn('[meeting] lead:', e.message); return null; });
       if (found) {
         leadId = found.id;
-        const canceled = await prisma.meetingReservation.updateMany({ where: { compounder_lead_id: leadId, status: 'booked' }, data: { status: 'canceled' } }).catch(() => ({ count: 0 }));
+        const canceled = await prisma.meetingReservation.updateMany({ where: { compounder_lead_id: leadId, status: 'booked', OR: [{ mode: null }, { mode: { notIn: ['hala', 'hala_cont'] } }] }, data: { status: 'canceled' } }).catch(() => ({ count: 0 }));
         req._meetingRebooked = !!(canceled && canceled.count);
       }
     }
@@ -398,6 +398,80 @@ router.post('/meeting-reservation', async (req, res) => {
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
 
+// POST /api/compounder/leads/:id/hall-meeting { slot_id, count: 2|3 } — obchodník domluví zákazníkovi osobní SCHŮZKU NA HALE
+// (Ekologická 275, Rychnov nad Kněžnou). Je delší než online schůzka → obsadí 2–3 navazující termíny z kalendáře schůzek
+// od zvoleného začátku. Hlavní rezervace má mode='hala', navazující termíny mode='hala_cont' (jen blokují kalendář,
+// do statistik se nepočítají). Zákazník dostane potvrzení (SMS + e-mail s pozvánkou .ics), kontakt zůstává obchodníkovi.
+const HALL_ADDRESS = process.env.HALL_ADDRESS || 'Ekologická 275, 516 01 Rychnov nad Kněžnou';
+router.post('/leads/:id/hall-meeting', requireAuth, async (req, res) => {
+  try {
+    const leadId = parseInt(req.params.id, 10); const slotId = parseInt((req.body || {}).slot_id, 10);
+    const count = Math.min(3, Math.max(2, parseInt((req.body || {}).count, 10) || 2));
+    if (!Number.isInteger(leadId) || !Number.isInteger(slotId)) return res.status(400).json({ ok: false, error: 'Chybí kontakt nebo termín' });
+    const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { id: true, name: true, first_name: true, last_name: true, email: true, phone: true, lang: true, activity_log: true } });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Kontakt nenalezen' });
+    if (!lead.email && !lead.phone) return res.status(400).json({ ok: false, error: 'Kontakt nemá e-mail ani telefon — nemáme kam poslat potvrzení.' });
+    const first = await prisma.meetingSlot.findUnique({ where: { id: slotId } });
+    if (!first || !first.active) return res.status(404).json({ ok: false, error: 'Termín není dostupný' });
+    if (first.starts_at.getTime() < Date.now() + MEETING_MIN_LEAD_MS) return res.status(400).json({ ok: false, error: 'Termín je příliš brzy — vyberte čas alespoň 2 hodiny od teď' });
+    // Navazující termíny: každý další začíná tam, kde předchozí končí (tolerance 2 min)
+    const cand = await prisma.meetingSlot.findMany({ where: { active: true, starts_at: { gte: first.starts_at, lt: new Date(first.starts_at.getTime() + count * 120 * 60000) } }, orderBy: { starts_at: 'asc' }, include: { _count: { select: { reservations: true } } } });
+    const chain = [];
+    for (const sl of cand) {
+      if (!chain.length) { if (sl.id !== first.id) continue; }
+      else { const prev = chain[chain.length - 1]; const expect = prev.starts_at.getTime() + (prev.duration_min || 17) * 60000; if (Math.abs(sl.starts_at.getTime() - expect) > 2 * 60000) continue; }
+      if ((sl._count.reservations || 0) >= sl.capacity) break;
+      chain.push(sl); if (chain.length === count) break;
+    }
+    if (chain.length < count) return res.status(409).json({ ok: false, error: 'Od tohoto začátku není ' + count + ' volných termínů za sebou. Vyberte jiný začátek nebo kratší délku.' });
+    // Předchozí aktivní schůzka na hale tohoto kontaktu = přesun → zrušit (online schůzky se netýká)
+    const canceled = await prisma.meetingReservation.updateMany({ where: { compounder_lead_id: leadId, status: 'booked', mode: { in: ['hala', 'hala_cont'] } }, data: { status: 'canceled' } }).catch(() => ({ count: 0 }));
+    const who = (req.user && (req.user.display_name || req.user.displayName || req.user.username)) || 'obchodník';
+    const bookerId = salesMyPersonId(req);
+    const name = String(lead.name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || lead.email || lead.phone).slice(0, 255);
+    const startAt = chain[0].starts_at; const last = chain[chain.length - 1]; const endAt = new Date(last.starts_at.getTime() + (last.duration_min || 17) * 60000);
+    const durMin = Math.round((endAt - startAt) / 60000);
+    const resv = await prisma.meetingReservation.create({ data: { slot_id: chain[0].id, compounder_lead_id: leadId, name, email: lead.email || null, phone: lead.phone || null, status: 'booked', mode: 'hala',
+      note: ('Schůzka na hale (' + durMin + ' min, ' + count + ' termíny) · ' + HALL_ADDRESS + ' · domluvil ' + who).slice(0, 255), booked_by_person_id: bookerId || null }, select: { id: true } });
+    for (const sl of chain.slice(1)) {
+      await prisma.meetingReservation.create({ data: { slot_id: sl.id, compounder_lead_id: leadId, name, email: lead.email || null, phone: lead.phone || null, status: 'booked', mode: 'hala_cont', note: ('Schůzka na hale — pokračování (rezervace #' + resv.id + ')').slice(0, 255), booked_by_person_id: bookerId || null } });
+    }
+    const fmtP = (d) => new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }).format(d);
+    const hm = (d) => new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', hour: '2-digit', minute: '2-digit' }).format(d);
+    const when = fmtP(startAt) + '–' + hm(endAt);
+    try {
+      const line = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' · 🏭 Schůzka na hale domluvena (' + who + '): ' + when + ' · ' + HALL_ADDRESS;
+      await prisma.compounderLead.update({ where: { id: leadId }, data: { status: 'schuzka', schuzka_mode: 'osobne', activity_log: line + (lead.activity_log ? '\n' + lead.activity_log : '') } });
+    } catch (e) { console.warn('[hall-meeting] lead:', e.message); }
+    try { await prisma.compounderEvent.create({ data: { sid: 'server:meeting:' + leadId, event: 'meeting_booked', path: '/schuzka-hala', props: { lead_id: leadId, reservation_id: resv.id, starts_at: startAt, ends_at: endAt, mode: 'hala', slots: count, by: who, by_person_id: bookerId || null } } }); } catch (e) { /* best-effort */ }
+    try { require('../services/meeting/notify').notifyMeetingBooked(prisma, { leadId, reservationId: resv.id, startsAt: startAt, mode: 'hala', financingPath: null, rebooked: !!(canceled && canceled.count) }); } catch (e) { console.warn('[hall-meeting] notify:', e.message); }
+    // Potvrzení zákazníkovi
+    const out = { sms: null, email: null };
+    let firstName = ''; try { firstName = require('../services/vocative').vocativeFirstName(name) || ''; } catch (e) { firstName = ''; }
+    if (lead.phone) {
+      try {
+        const smsText = (firstName ? firstName + ', schůzku' : 'Schůzku') + ' u nás na hale máme potvrzenou na ' + when + '. Adresa: ' + HALL_ADDRESS + '. Potvrzení s pozvánkou máte i v e-mailu. Těšíme se na vás.';
+        await require('../services/voice/sms').sendSms(lead.phone, smsText, { context: 'schuzka_hala_potvrzeni', leadId });
+        out.sms = true;
+      } catch (e) { out.sms = false; console.warn('[hall-meeting] SMS:', e.message); }
+    }
+    if (lead.email) {
+      try {
+        const icsDt = (x) => x.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+        const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Laundromats//SchuzkaHala//CS', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT', 'UID:schuzka-hala-' + resv.id + '@laundromats.eu', 'DTSTAMP:' + icsDt(new Date()), 'DTSTART:' + icsDt(startAt), 'DTEND:' + icsDt(endAt),
+          'SUMMARY:Schůzka na hale – Laundromats', 'LOCATION:' + HALL_ADDRESS.replace(/,/g, '\\,'), 'STATUS:CONFIRMED', 'BEGIN:VALARM', 'TRIGGER:-PT2H', 'ACTION:DISPLAY', 'DESCRIPTION:Schůzka na hale za 2 hodiny', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+        const body = 'Dobrý den' + (firstName ? ' ' + firstName : '') + ',\n\npotvrzujeme vaši schůzku u nás na hale: ' + when + ' (zhruba ' + durMin + ' minut).\n\nAdresa: ' + HALL_ADDRESS + '\n\nUkážeme vám prádlomaty naživo, výrobu a projdeme spolu váš záměr. Pozvánku do kalendáře najdete v příloze.\n\nKdyby se cokoli změnilo, odpovězte prosím na tento e-mail.\n\nS pozdravem';
+        const from = (await funnelMailFrom('schuzka').catch(() => null)) || process.env.COMPOUNDER_MAIL_FROM || undefined;
+        const r = await require('../services/email').sendMail({ to: lead.email, from, brand: 'pradlomaty', fromName: '💧 PRÁDLOMATY 💧', subject: 'Potvrzení schůzky na hale ' + when, body,
+          link: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(HALL_ADDRESS), linkLabel: 'Navigovat na halu',
+          attachments: [{ filename: 'schuzka-hala.ics', content: ics, contentType: 'text/calendar; charset=utf-8; method=PUBLISH' }] });
+        out.email = !!(r && r.sent);
+      } catch (e) { out.email = false; console.warn('[hall-meeting] e-mail:', e.message); }
+    }
+    res.status(201).json({ ok: true, id: resv.id, starts_at: startAt, ends_at: endAt, when, slots: count, address: HALL_ADDRESS, sms: out.sms, email: out.email, rebooked: !!(canceled && canceled.count) });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+});
+
 // POST /api/compounder/leads/:id/owner-meeting — obchodník rezervuje zákazníkovi online schůzku s majitelem (aplikace obchodníka).
 // { slot_id }. Založí rezervaci (vidět v kalendáři schůzek), nastaví stav leada a pošle zákazníkovi potvrzení (SMS + e-mail s pozvánkou).
 router.post('/leads/:id/owner-meeting', requireAuth, async (req, res) => {
@@ -415,7 +489,7 @@ router.post('/leads/:id/owner-meeting', requireAuth, async (req, res) => {
     if (slot.starts_at.getTime() < Date.now() + MEETING_MIN_LEAD_MS) return res.status(400).json({ ok: false, error: 'Termín je příliš brzy — vyberte čas alespoň 2 hodiny od teď' });
     if ((slot._count.reservations || 0) >= slot.capacity) return res.status(409).json({ ok: false, error: 'Termín je již obsazený' });
     // Jeden kontakt = jedna aktivní rezervace (starší se zruší = přesun)
-    const canceled = await prisma.meetingReservation.updateMany({ where: { compounder_lead_id: leadId, status: 'booked' }, data: { status: 'canceled' } }).catch(() => ({ count: 0 }));
+    const canceled = await prisma.meetingReservation.updateMany({ where: { compounder_lead_id: leadId, status: 'booked', OR: [{ mode: null }, { mode: { notIn: ['hala', 'hala_cont'] } }] }, data: { status: 'canceled' } }).catch(() => ({ count: 0 }));
     const who = (req.user && (req.user.display_name || req.user.displayName || req.user.username)) || 'obchodník';
     const name = String(lead.name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || lead.email || lead.phone).slice(0, 255);
     const bookerId = salesMyPersonId(req);
@@ -585,7 +659,7 @@ router.get('/owner-meetings/stats', requireAuth, async (req, res) => {
     const days = Math.min(Math.max(parseInt(req.query.days, 10) || 90, 1), 730);
     const since = new Date(Date.now() - days * 86400000);
     const rows = await prisma.meetingReservation.findMany({
-      where: { booked_by_person_id: { not: null }, created_at: { gte: since } },
+      where: { booked_by_person_id: { not: null }, created_at: { gte: since }, OR: [{ mode: null }, { mode: { notIn: ['hala', 'hala_cont'] } }] },
       orderBy: { created_at: 'desc' },
       select: { id: true, name: true, compounder_lead_id: true, status: true, created_at: true, booked_by_person_id: true, previous_owner_person_id: true, slot: { select: { starts_at: true } } },
     });
@@ -4247,7 +4321,7 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
     if (req.query.status) where.status = String(req.query.status);
     // Online schůzky s majitelem, které jsem domluvil já (kontakt už je přiřazen majiteli)
     if (req.query.owner_meetings) {
-      const rs = await prisma.meetingReservation.findMany({ where: { booked_by_person_id: meId, compounder_lead_id: { not: null } }, select: { compounder_lead_id: true, status: true, slot: { select: { starts_at: true } } }, orderBy: { id: 'desc' }, take: 3000 });
+      const rs = await prisma.meetingReservation.findMany({ where: { booked_by_person_id: meId, compounder_lead_id: { not: null }, OR: [{ mode: null }, { mode: { notIn: ['hala', 'hala_cont'] } }] }, select: { compounder_lead_id: true, status: true, slot: { select: { starts_at: true } } }, orderBy: { id: 'desc' }, take: 3000 });
       const info = {}; rs.forEach((r) => { if (!info[r.compounder_lead_id]) info[r.compounder_lead_id] = r; });
       const ids = Object.keys(info).map(Number);
       if (!ids.length) return res.json([]);

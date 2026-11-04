@@ -82,7 +82,7 @@ const CSS = `
 
 const JS = `(function(){
 var DN=['Ne','Po','Út','St','Čt','Pá','So'], MON=['ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
-var MODE={online:'💻 online',osobne:'👤 osobně'}, PATH={vlastni:'💰 vlastní kapitál',financovani:'🏦 financování'};
+var MODE={online:'💻 online',osobne:'👤 osobně',hala:'🏭 schůzka na hale',hala_cont:'🏭 hala (pokračování)'}, PATH={vlastni:'💰 vlastní kapitál',financovani:'🏦 financování'};
 var ST={booked:'rezervováno',done:'proběhla',canceled:'zrušeno',no_show:'nedorazil'};
 var ST2={new:'Nový',nedovolano:'Nedovoláno',volat_pristi:'Volat příště',contacted:'Kontaktován',access_sent:'Odeslán přístup',odeslan_specialista:'Odeslán specialista',psal_chatovi:'Psal s chatem',schuzka:'Domluvena schůzka',schuzka_online:'Schůzka online',qualified:'Kvalifikován',dosledovani:'Dosledování',slibeny_krok:'Slíbený krok',smlouva_odeslat:'Odeslat dokumentaci',smlouva_odeslana:'Dokumentace odeslána',poptavka_financovani:'Poptávka financování',odeslana_schuzka:'Odeslána schůzka',prodano:'Prodáno',converted:'Převeden',nezajem:'Nemá zájem',nelze_pouzit:'Nelze použít',rejected:'Zamítnut'};
 var week=0, data=[];
@@ -436,12 +436,21 @@ function statRender(){
   var srcRows=(statData.sources||[]).map(function(x){var on=statSrc===x.key||(statSrc==='sales'&&x.key==='sales');
     return '<tr data-ssrc="'+esc(x.key)+'" data-slabel="'+esc(x.label)+'" style="cursor:pointer'+(on?';background:rgba(79,209,255,.1)':'')+'"><td'+(x.kind==='sales'?' style="padding-left:26px"':'')+'>'+(SK[x.kind]||'')+' <b>'+esc(x.label)+'</b></td><td>'+x.booked+'</td><td style="color:#2fe3a0">'+x.done+'</td><td>'+x.no_show+'</td><td>'+x.canceled+'</td><td>'+x.unmarked+'</td><td>'+x.upcoming+'</td>'
       +'<td>'+(x.rate!=null?'<b>'+x.rate+' %</b>':'<span class="muted">—</span>')+'</td></tr>';}).join('');
+  // Trychtýř: online schůzka → schůzka na hale → obchod
+  var F=statData.funnel||null, pc=function(a,b){return b?Math.round(a/b*100)+' %':'—';};
+  var fun=F?'<h3 style="margin:18px 0 6px">Trychtýř <span class="muted small" style="font-weight:500">· kontakty s online schůzkou v zobrazeném období → schůzka na hale → obchod</span></h3>'
+    +'<div class="mt-kpi" style="grid-template-columns:repeat(4,1fr)">'
+    +'<div><b>'+F.online_leads+'</b><span>Online schůzka (kontaktů)</span><small class="muted" style="display:block;font-size:11px;margin-top:2px">z toho proběhla '+F.online_done+'</small></div>'
+    +'<div><b style="color:#fbbf24">'+F.hall_booked+'</b><span>🏭 Schůzka na hale</span><small class="muted" style="display:block;font-size:11px;margin-top:2px">'+pc(F.hall_booked,F.online_leads)+' z online · proběhla '+F.hall_done+'</small></div>'
+    +'<div><b style="color:#2fe3a0">'+F.deals+'</b><span>Obchod</span><small class="muted" style="display:block;font-size:11px;margin-top:2px">'+pc(F.deals,F.online_leads)+' z online</small></div>'
+    +'<div><b style="color:#2fe3a0">'+F.deals_after_hall+'</b><span>Obchod po hale</span><small class="muted" style="display:block;font-size:11px;margin-top:2px">'+pc(F.deals_after_hall,F.hall_booked)+' ze schůzek na hale</small></div></div>'
+    +'<p class="muted small" style="margin:6px 0 0">Schůzky na hale v zobrazeném období (podle termínu): '+(F.hall_in_period||0)+', z toho proběhlo '+(F.hall_in_period_done||0)+'. Do čísel online schůzek nahoře se schůzky na hale nepočítají. Obchod = kontakt ve stavu Převeden / prodáno.</p>':'';
   var srcBox=srcRows?'<h3 style="margin:18px 0 6px">Úspěšnost podle zdroje <span class="muted small" style="font-weight:500">· kdo schůzku domluvil · klikněte na řádek pro filtr grafu</span></h3>'
     +(statSrc!=='all'?'<div style="margin:0 0 8px"><span class="mt-pill" style="border-color:#4fd1ff;color:#4fd1ff">Zobrazeno: '+esc(statSrcLabel||statSrc)+'</span> <button class="btn sec sm" data-ssrc="all">✕ Všechny zdroje</button></div>':'')
     +'<div class="mt-tw"><table><thead><tr><th>Zdroj</th><th>Domluveno</th><th>Proběhlo</th><th>Nedorazil</th><th>Zrušeno</th><th>Neoznačeno</th><th>Nadchází</th><th>Úspěšnost</th></tr></thead><tbody>'+srcRows+'</tbody></table></div>'
     +'<p class="muted small" style="margin:6px 0 0">Obchodník = schůzku zarezervoval v aplikaci obchodníka. Reklama = zákazník si termín vybral sám a kontakt přišel z reklamy (Meta / Google / LinkedIn). Sám z webu / odkazu = ostatní samostatné rezervace (cesta z SMS či e-mailu, bestseries2.cz…).</p>':'';
   box.innerHTML=kpi
-    +'<div class="mt-chart">'+statChart(b,avail)+'</div>'+leg+srcBox
+    +'<div class="mt-chart">'+statChart(b,avail)+'</div>'+leg+fun+srcBox
     +'<div class="mt-tw" style="margin-top:16px"><table><thead><tr><th>Období</th><th>Domluveno</th><th>Proběhlo</th><th>Nedorazil</th><th>Zrušeno</th><th>Neoznačeno</th><th>Nadchází</th><th>Úspěšnost</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +(statData.internal_skipped?'<p class="muted small" style="margin:10px 0 0">Nepočítá se '+statData.internal_skipped+' našich vlastních (testovacích) rezervací z firemních e-mailů.</p>':'');
   // Graf jde dál doprava než se vejde — odrolujeme tak, aby byl dnešek i kus dopředu vidět.

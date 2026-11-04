@@ -46,7 +46,7 @@ async function getState(personId) {
 
   const person = await prisma.person.findUnique({ where: { id: personId }, select: { id: true, first_name: true, last_name: true } });
   const rows = await prisma.meetingReservation.findMany({
-    where: { booked_by_person_id: personId, created_at: { gte: since90 } },
+    where: { booked_by_person_id: personId, created_at: { gte: since90 }, OR: [{ mode: null }, { mode: { notIn: ['hala', 'hala_cont'] } }] },
     orderBy: { created_at: 'desc' },
     select: { id: true, name: true, status: true, created_at: true, compounder_lead_id: true, slot: { select: { starts_at: true } } },
   });

@@ -30,10 +30,12 @@ async function tick() {
       if (reminded.indexOf(r.id) !== -1) continue;
       // Rezervace vytvořená méně než 15 min před začátkem — připomínka by byla zbytečná (SMS s potvrzením právě odešla).
       if (r.created_at && r.slot.starts_at.getTime() - new Date(r.created_at).getTime() < REMIND_BEFORE_MS) { reminded.push(r.id); changed = true; continue; }
-      if (!r.phone) { reminded.push(r.id); changed = true; continue; }
+      if (!r.phone || r.mode === 'hala_cont') { reminded.push(r.id); changed = true; continue; } // pokračování schůzky na hale = bez další SMS
       const t = new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', hour: '2-digit', minute: '2-digit' }).format(r.slot.starts_at);
       const first = vocativeFirstName(r.name);
-      const text = (first ? first + ', připomínáme' : 'Připomínáme') + ': schůzka dnes v ' + t + ', online videohovor. Těšíme se na Vás.';
+      const text = r.mode === 'hala'
+        ? (first ? first + ', připomínáme' : 'Připomínáme') + ': schůzka u nás na hale dnes v ' + t + ', ' + (process.env.HALL_ADDRESS || 'Ekologická 275, Rychnov nad Kněžnou') + '. Těšíme se na Vás.'
+        : (first ? first + ', připomínáme' : 'Připomínáme') + ': schůzka dnes v ' + t + ', online videohovor. Těšíme se na Vás.';
       // Nejdřív označit (ať se při pádu SMS nikdy neposílá dvakrát), pak odeslat
       reminded.push(r.id); changed = true;
       try {
