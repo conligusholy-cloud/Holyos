@@ -22,6 +22,13 @@ var MODELS = {
     desc: 'Dvě pračky a dvě sušičky. Pro místa, kde je o praní rvačka.' }
 };
 var MODEL_ORDER = ['mini', 'flex', 'max'];
+// Fotky strojů. MINI a FLEX jsou vyříznuté rendery (plavou na pozadí),
+// MAX je skutečná fotka provozovny, proto vyplní celý rámeček.
+var MODEL_IMG = {
+  mini: { src: '/game/mini.webp', photo: false },
+  flex: { src: '/game/flex.webp', photo: false },
+  max: { src: '/game/max.webp', photo: true }
+};
 // Jeden SKUTEČNÝ den = dva herní měsíce, herní rok tedy trvá 6 dní.
 var MONTH_MS = 43200000;         // 1 herní měsíc = 12 skutečných hodin
 var YEAR_MS = 12 * MONTH_MS;     // 1 herní rok = 6 skutečných dní
@@ -31,7 +38,7 @@ var BANK_PER_UNIT = 600000;      // o kolik rámec povyroste s každým prádlom
 var BANK_PER_DAY = 100000;       // co banka sama doplní za skutečný den
 var REVEAL_COST = 35000;         // prověření jednoho místa
 var SCOUT_COST = 20000;          // cesta do města a hledání vhodných míst
-var CASH_RESERVE = 60000;        // tolik hotovosti banka nenechá utratit — musí zbýt na průzkum a prověření
+var CASH_RESERVE = 120000;       // tolik hotovosti banka nenechá utratit — musí zbýt na prověření místa a instalaci
 var OPERATING_MAX = 150000;      // provozní úvěr nad rámec úvěrového stropu, aby hra nikdy neskončila ve slepé uličce
 
 // Lepší místo = víc zákazníků. Skóre dává hledač míst ze skutečných dat.
@@ -41,8 +48,10 @@ var COST_F = { mall: 1.25, hypermarket: 1.2, department_store: 1.15, supermarket
 var KIND_LABEL = { supermarket: 'Supermarket', hypermarket: 'Hypermarket', mall: 'Obchodní centrum',
   department_store: 'Obchodní dům', fuel: 'Benzínka', car_wash: 'Samoobslužná myčka' };
 
+// Ceník prádlomatů je o 25 % nad modelovou cenou; instalace zůstává na modelové ceně.
+var PRICE_MULT = 1.25;
 // Cena stroje (platí se v obchodě) a instalace na místě (projekt, povolení, přípojky).
-function machinePrice(m) { return Math.round(m.machine * EUR); }
+function machinePrice(m) { return Math.round(m.machine * EUR * PRICE_MULT); }
 function installPrice(m) { return Math.round((m.permit + m.conn) * EUR); }
 function investOf(m) { return machinePrice(m) + installPrice(m); }
 function economics(spot, modelKey) {
@@ -59,11 +68,11 @@ function economics(spot, modelKey) {
 
 // ─── Profily hráče ───────────────────────────────────────────────────────────
 var PROFILES = {
-  opatrny: { id: 'opatrny', name: 'Opatrný stavitel', cash: 500000, ltv: 0.70, rate: 0.049,
+  opatrny: { id: 'opatrny', name: 'Opatrný stavitel', cash: 500000, ltv: 0.70, rate: 0.096,
     desc: 'Nerad dlužíš. Banka ti proto půjčí míň, zato nejlevněji — a začínáš s nejtlustší peněženkou.' },
-  vyvazeny: { id: 'vyvazeny', name: 'Vyvážený podnikatel', cash: 350000, ltv: 0.85, rate: 0.064,
+  vyvazeny: { id: 'vyvazeny', name: 'Vyvážený podnikatel', cash: 350000, ltv: 0.85, rate: 0.114,
     desc: 'Riziko bereš jako nástroj, ne jako adrenalin. Rozumný úvěr, rozumný úrok.' },
-  dravy: { id: 'dravy', name: 'Dravý expanzista', cash: 200000, ltv: 1.00, rate: 0.079,
+  dravy: { id: 'dravy', name: 'Dravý expanzista', cash: 300000, ltv: 1.00, rate: 0.132,
     desc: 'Chceš růst rychle a na dluh. Banka ti zaplatí i celý prádlomat, ale nechá si za to zaplatit.' }
 };
 var QUIZ = [
@@ -438,7 +447,10 @@ function paintShop() {
   $('shop-stock').innerHTML = st ? '<div class="stock">' + st + '</div>' : '';
   $('shop-list').innerHTML = MODEL_ORDER.map(function (k) {
     var m = MODELS[k], price = machinePrice(m), f = canFinance(price);
-    return '<div class="card"><div class="row"><h3>' + m.name + '</h3><b>' + kc(price) + ' ' + CUR + '</b></div>'
+    var im = MODEL_IMG[k];
+    return '<div class="card">'
+      + '<div class="shop-img' + (im.photo ? ' photo' : '') + '"><img src="' + im.src + '" alt="Prádlomat ' + m.name + '" loading="lazy"></div>'
+      + '<div class="row" style="margin-top:12px"><h3>' + m.name + '</h3><b>' + kc(price) + ' ' + CUR + '</b></div>'
       + '<p class="muted small" style="margin:2px 0 8px">' + esc(m.desc) + '</p>'
       + '<div class="kv"><span>Zákazníků / den na průměrném místě</span><b>' + m.perday + '</b></div>'
       + '<div class="kv"><span>Provozní náklady / měsíc</span><b>' + kcFull(Math.round(m.cost * EUR)) + '</b></div>'
