@@ -299,7 +299,7 @@ footer{border-top:1px solid var(--line);padding:56px 0 34px;margin-top:40px}
 .netmap{position:relative;border-radius:18px;overflow:hidden;border:1px solid rgba(120,160,255,.25);min-height:320px;background:#0b1020}
 #netmap{position:absolute;inset:0}
 .nm-leg{position:absolute;left:12px;bottom:12px;z-index:500;background:rgba(6,10,20,.82);border:1px solid rgba(79,209,255,.3);border-radius:10px;padding:6px 10px;font-size:12.5px;color:var(--tx2,#c8d3ea)}.nm-leg b{color:#4fd1ff}
-.netmap .leaflet-tooltip.nm-tip{background:rgba(6,10,20,.78);border:1px solid rgba(79,209,255,.45);color:#e8eefc;font-weight:700;font-size:12px;padding:3px 7px;border-radius:8px;box-shadow:none;text-align:center;line-height:1.25}.netmap .leaflet-tooltip.nm-tip:before{display:none}.netmap .leaflet-tooltip.nm-tip.hq{border-color:#a78bfa;font-size:13px}.netmap .leaflet-tooltip.nm-tip small{color:#c4b5fd;font-weight:600}
+.nm-arcs{position:absolute;inset:0;z-index:450;pointer-events:none;overflow:visible}.netmap .leaflet-container{cursor:default}.nm-arc{fill:none;stroke:#4fd1ff;stroke-width:2;stroke-linecap:round;filter:drop-shadow(0 0 4px rgba(79,209,255,.7));animation:nmDraw 1.4s ease-out forwards}.nm-flow{fill:none;stroke:rgba(255,255,255,.55);stroke-width:1.2;stroke-dasharray:2 10;opacity:0;animation:nmFlow 1.6s linear infinite,nmIn .4s forwards}.nm-dot{fill:#fff;filter:drop-shadow(0 0 5px #4fd1ff)}.nm-end{fill:#4fd1ff;opacity:0;transform-box:fill-box;transform-origin:center;animation:nmPop .5s ease-out forwards,nmPulse 2.4s ease-in-out infinite}.nm-hq{fill:#a78bfa;filter:drop-shadow(0 0 8px #a78bfa)}.nm-ring{fill:none;stroke:#a78bfa;stroke-width:2;transform-box:fill-box;transform-origin:center;animation:nmRing 2.2s ease-out infinite}@keyframes nmDraw{to{stroke-dashoffset:0}}@keyframes nmFlow{to{stroke-dashoffset:-24}}@keyframes nmIn{to{opacity:1}}@keyframes nmPop{0%{opacity:0;transform:scale(.2)}70%{opacity:1;transform:scale(1.6)}100%{opacity:1;transform:scale(1)}}@keyframes nmPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.45)}}@keyframes nmRing{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(4)}}@media (prefers-reduced-motion:reduce){.nm-arc{animation:none;stroke-dashoffset:0!important}.nm-flow,.nm-ring{animation:none}.nm-end{opacity:1;animation:none}.nm-dot{display:none}}
 .netmap .leaflet-popup-content-wrapper,.netmap .leaflet-popup-tip{background:#0d1424;color:#e8eefc;border:1px solid rgba(79,209,255,.35)}.netmap .leaflet-popup-content{margin:9px 12px;font:13px/1.4 inherit}.netmap .leaflet-popup-content small{color:#93a3c4}.netmap .leaflet-container{background:#0b1020;font-family:inherit}.netmap .leaflet-control-attribution{background:rgba(6,10,20,.7);color:#7d8aa6}.netmap .leaflet-control-attribution a{color:#9fb4dc}
 @media (max-width:820px){.vids .netmap{grid-column:1/-1;min-height:320px}}
 .vid{margin:0}.vid video{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:18px;border:1px solid var(--line2);background:#0b1426;display:block}
@@ -400,26 +400,38 @@ function homePage(lang) {
     + '<script>' + clientJs(L) + '</script><script>' + NETMAP_JS + '</script><script>' + NET_JS + '</script><script>' + LIGHTBOX_JS + '</script><script src="/cesta/track.js" defer></script></body></html>';
 }
 
-// Mapa zemí, ve kterých působíme (centrála ČR). Leaflet + hranice zemí (Natural Earth 110m)
-// se načtou až když je mapa skoro vidět. ISO 3166 numerické kódy dle world-atlas.
+// Mapa zemí, ve kterých působíme (centrála ČR): statická mapa (bez posouvání/zoomu), vybarvené země
+// a animované oblouky z ČR do ostatních zemí. Leaflet + hranice (Natural Earth 110m) se načtou až když
+// je mapa skoro vidět. [ISO numerický kód (world-atlas), název, střed země lat, lng, centrála]
 const COUNTRIES = [
-  ['203', 'Česká republika', 1], ['616', 'Polsko'], ['703', 'Slovensko'], ['372', 'Irsko'],
-  ['826', 'Anglie'], ['620', 'Portugalsko'], ['008', 'Albánie'],
+  ['203', 'Česká republika', 49.8, 15.5, 1], ['616', 'Polsko', 52.1, 19.4], ['703', 'Slovensko', 48.7, 19.6],
+  ['372', 'Irsko', 53.2, -8.0], ['826', 'Anglie', 52.6, -1.5], ['620', 'Portugalsko', 39.7, -8.0], ['008', 'Albánie', 41.1, 20.0],
 ];
-const NETMAP_JS = "(function(){var el=document.getElementById('netmap');if(!el)return;var C=" + JSON.stringify(COUNTRIES) + ";var go=false;"
+const NETMAP_JS = "(function(){var el=document.getElementById('netmap');if(!el)return;var C=" + JSON.stringify(COUNTRIES) + ";var go=false,NS='http://www.w3.org/2000/svg';"
   + "function ld(src,cb){var j=document.createElement('script');j.src=src;j.onload=cb;document.head.appendChild(j);}"
   + "function init(){if(go)return;go=true;var c=document.createElement('link');c.rel='stylesheet';c.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';document.head.appendChild(c);"
   + "ld('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',function(){ld('https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js',draw);});}"
-  + "function draw(){var m=L.map(el,{maxZoom:7,minZoom:3,scrollWheelZoom:false,attributionControl:true});"
+  + "function mk(n,a,p){var e=document.createElementNS(NS,n);for(var k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}"
+  + "function draw(){var m=L.map(el,{zoomControl:false,dragging:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false,touchZoom:false,tap:false,attributionControl:true,zoomSnap:0.25});"
   + "L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxZoom:16,attribution:'Tiles &copy; Esri · Natural Earth'}).addTo(m);"
-  + "m.fitBounds([[36.8,-10.5],[58.7,24.2]],{padding:[10,10]});"
+  + "var B=[[37.2,-10.5],[57.5,24.5]];m.fitBounds(B,{padding:[8,8]});"
+  + "var svg=mk('svg',{class:'nm-arcs'});el.appendChild(svg);var hq=C.filter(function(x){return x[4];})[0];"
+  + "function arcs(){while(svg.firstChild)svg.removeChild(svg.firstChild);var w=el.clientWidth,h=el.clientHeight;svg.setAttribute('viewBox','0 0 '+w+' '+h);svg.setAttribute('width',w);svg.setAttribute('height',h);"
+  + "var o=m.latLngToContainerPoint([hq[2],hq[3]]);"
+  + "C.forEach(function(x,i){if(x[4])return;var d=m.latLngToContainerPoint([x[2],x[3]]),dx=d.x-o.x,dy=d.y-o.y,len=Math.sqrt(dx*dx+dy*dy)||1,k=Math.min(.45,40/len+.22);"
+  + "var cx=(o.x+d.x)/2+dy*k*(dx<0?1:-1),cy=(o.y+d.y)/2-Math.abs(dx)*k-len*.08;var pd='M'+o.x+','+o.y+' Q'+cx+','+cy+' '+d.x+','+d.y;"
+  + "var id='nma'+i,p=mk('path',{d:pd,id:id,class:'nm-arc'},svg),L2=p.getTotalLength();p.style.strokeDasharray=L2;p.style.strokeDashoffset=L2;p.style.animationDelay=(i*.35)+'s';"
+  + "mk('path',{d:pd,class:'nm-flow'},svg).style.animationDelay='0s,'+(1.4+i*.35)+'s';"
+  + "var t=mk('circle',{r:3.2,class:'nm-dot',cx:0,cy:0,opacity:0},svg);var am=mk('animateMotion',{dur:'2.6s',repeatCount:'indefinite',begin:(1.2+i*.35)+'s'},t);mk('mpath',{href:'#'+id},am);mk('set',{attributeName:'opacity',to:1,begin:(1.2+i*.35)+'s'},t);"
+  + "mk('circle',{cx:d.x,cy:d.y,r:4,class:'nm-end'},svg).style.animationDelay=(1.1+i*.35)+'s,'+(1.6+i*.35)+'s';});"
+  + "mk('circle',{cx:o.x,cy:o.y,r:6,class:'nm-ring'},svg);mk('circle',{cx:o.x,cy:o.y,r:6,class:'nm-hq'},svg);}"
+  + "arcs();m.on('resize zoomend',arcs);"
   + "fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json').then(function(r){return r.json();}).then(function(t){"
   + "var fc=topojson.feature(t,t.objects.countries),by={};C.forEach(function(x){by[x[0]]=x;});"
-  + "fc.features.forEach(function(f){var x=by[String(f.id)];if(!x)return;var hq=!!x[2];"
-  + "var g=L.geoJSON(f,{style:{color:hq?'#a78bfa':'#4fd1ff',weight:hq?2:1.4,fillColor:hq?'#7c5cff':'#4fd1ff',fillOpacity:hq?.55:.32}}).addTo(m);"
-  + "g.bindTooltip(hq?'<b>'+x[1]+'</b><br><small>centrála</small>':x[1],{permanent:true,direction:'center',className:'nm-tip'+(hq?' hq':'')});});"
+  + "fc.features.forEach(function(f){var x=by[String(f.id)];if(!x)return;var h=!!x[4];"
+  + "L.geoJSON(f,{interactive:false,style:{color:h?'#a78bfa':'#4fd1ff',weight:h?1.6:1,opacity:.8,fillColor:h?'#7c5cff':'#4fd1ff',fillOpacity:h?.45:.22}}).addTo(m);});"
   + "}).catch(function(){});}"
-  + "if('IntersectionObserver'in window){var io=new IntersectionObserver(function(x){if(x[0].isIntersecting){io.disconnect();init();}},{rootMargin:'400px'});io.observe(el);}else init();})();";
+  + "if('IntersectionObserver'in window){var io=new IntersectionObserver(function(x){if(x[0].isIntersecting){io.disconnect();init();}},{rootMargin:'0px',threshold:.35});io.observe(el);}else init();})();";
 
 function clientJs(L) {
   const f = L.form;
