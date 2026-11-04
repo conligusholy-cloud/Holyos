@@ -33,8 +33,12 @@ const LANG_CSS = '.lhdr .llang{display:flex;gap:2px;align-items:center;border:1p
 const LANGS = [['cs', 'CZ', ''], ['en', 'EN', '/en'], ['pl', 'PL', '/pl']];
 function langSwitch(lang) {
   const akt = LANGS.some((x) => x[0] === lang) ? lang : 'cs';
+  let dostupne;
+  try { dostupne = require('./i18n').available(); } catch (e) { dostupne = ['cs']; }
+  const nabidka = LANGS.filter(([kod]) => dostupne.indexOf(kod) > -1);
+  if (nabidka.length < 2) return ''; // jen čeština → přepínat není co
   return '<div class="llang" role="group" aria-label="Jazyk">'
-    + LANGS.map(([kod, popis, prefix]) => '<a href="#" data-lang="' + kod + '" data-prefix="' + prefix + '"'
+    + nabidka.map(([kod, popis, prefix]) => '<a href="#" data-lang="' + kod + '" data-prefix="' + prefix + '"'
       + (kod === akt ? ' class="on" aria-current="true"' : '') + ' hreflang="' + kod + '">' + popis + '</a>').join('')
     + '</div>'
     // Odkaz se skládá až v prohlížeči, ať se zachová aktuální cesta i parametry.

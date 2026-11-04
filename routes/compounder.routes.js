@@ -104,7 +104,7 @@ router.post('/register', async (req, res, next) => {
 // POST /api/compounder/lm-inquiry { name, email, phone, interest, place, note, lang?, sid?, t?, l? }
 // Spáruje existující kontakt (t/l z odkazu → e-mail → telefon), jinak založí nový (source laundromats_web).
 // Nový kontakt dostane Jan Holý (jako po domluvené schůzce); upozornění do Velína + zvonek Janovi a Tomášovi.
-const LM_INTEREST = { own: 'Chci vlastnit prádlomat', partner: 'Chci provozovat nebo rozvíjet síť', site: 'Mám vhodné místo', visit: 'Chci vidět prádlomat v provozu', apps: 'Žádost o přístup k aplikacím Najít / Zhodnotit místo' };
+const LM_INTEREST = { own: 'Chci vlastnit prádlomat', partner: 'Chci provozovat nebo rozvíjet síť', site: 'Mám vhodné místo', distributor: 'Chci se stát distributorem', visit: 'Chci vidět prádlomat v provozu', apps: 'Žádost o přístup k aplikacím Najít / Zhodnotit místo' };
 const _lmInqHits = new Map();
 router.post('/lm-inquiry', express.json({ limit: '20kb' }), async (req, res) => {
   try {

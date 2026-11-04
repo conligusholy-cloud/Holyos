@@ -127,6 +127,10 @@ async function prelozDavku(client, lang, vety) {
     }
     if (!chybi.length) { if (has('prune') && navic.length) ulozSlovnik(lang, d); continue; }
 
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.error('Chybí ANTHROPIC_API_KEY (.env nebo proměnná prostředí). Překlad nelze spustit.');
+      process.exit(2);
+    }
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     for (let i = 0; i < chybi.length; i += DAVKA) {
@@ -139,6 +143,17 @@ async function prelozDavku(client, lang, vety) {
         console.log('hotovo');
       } catch (e) {
         console.log('CHYBA: ' + e.message);
+        // Špatný klíč nebo došlý kredit se opakováním nespraví — nemá smysl mlátit do API.
+        if (/invalid x-api-key|authentication_error|401/.test(e.message)) {
+          console.error('\nKlíč ANTHROPIC_API_KEY není platný. Překlad zastaven, nic se nepoškodilo.');
+          console.error('Buď ho oprav v .env, nebo ho pro jedno spuštění předej takto (PowerShell):');
+          console.error('  $env:ANTHROPIC_API_KEY="sk-ant-..."; node scripts/laundromats-i18n.js');
+          process.exit(2);
+        }
+        if (/credit balance|insufficient/i.test(e.message)) {
+          console.error('\nDošel kredit na Anthropic API. Dobij ho v Console → Plans & Billing a spusť znovu.');
+          process.exit(3);
+        }
       }
     }
     ulozSlovnik(lang, d);

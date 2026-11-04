@@ -39,6 +39,7 @@ const T = {
         ['own', 'Chci vlastnit prádlomat', 'Zajímá vás vlastní zařízení, ekonomika provozu a možnosti zajištění každodenní péče? Společně projdeme váš záměr a vhodný způsob zapojení.', 'Zajímá mě vlastnictví'],
         ['partner', 'Chci provozovat a rozvíjet síť', 'Chcete aktivně vyhledávat místa, organizovat provoz a postupně budovat více lokalit? Pojďme probrat možnosti spolupráce ve vašem regionu nebo zemi.', 'Zajímá mě partnerství'],
         ['site', 'Mám vhodné místo', 'Máte pozemek nebo prostor u obchodu, čerpací stanice či jiné navštěvované lokality? Prověříme, zda by zde prádlomat mohl dávat smysl.', 'Chci nabídnout místo'],
+        ['distributor', 'Hledáme distributory', 'Máte obchodní síť, kontakty na provozovatele nebo zkušenost s prodejem technologií? Hledáme partnery, kteří pomohou s prodejem prádlomatů ve své zemi nebo regionu.', 'Chci být distributor'],
       ],
     },
     network: {
@@ -100,7 +101,7 @@ const T = {
       name: 'Jméno a příjmení', email: 'E-mail', phone: 'Telefon', interest: 'Co vás zajímá', place: 'Země a město nebo region', note: 'Poznámka',
       notePh: 'Například lokalita, kterou zvažujete, nebo cokoli, co bychom měli vědět', placePh: 'Např. Česko, Brno',
       choose: 'Vyberte možnost',
-      opts: [['own', 'Chci vlastnit prádlomat'], ['partner', 'Chci provozovat nebo rozvíjet síť'], ['site', 'Mám vhodné místo'], ['visit', 'Chci vidět prádlomat v provozu']],
+      opts: [['own', 'Chci vlastnit prádlomat'], ['partner', 'Chci provozovat nebo rozvíjet síť'], ['site', 'Mám vhodné místo'], ['distributor', 'Chci se stát distributorem'], ['visit', 'Chci vidět prádlomat v provozu']],
       req: 'povinné', submit: 'Probrat můj záměr', sending: 'Odesílám…',
       ok: 'Děkujeme, váš záměr máme. Ozveme se vám, abychom domluvili další postup.',
       err: 'Odeslání se nepodařilo. Zkuste to prosím znovu.',
@@ -128,6 +129,7 @@ const IC = {
   own: '<path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/>',
   partner: '<circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><circle cx="12" cy="6" r="2.5"/><path d="M8 15.5l3-7M16 15.5l-3-7M8.5 17h7"/>',
   site: '<path d="M12 21s-6-5.3-6-10.5A6 6 0 0 1 18 10.5C18 15.7 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.2"/>',
+  distributor: '<path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>',
   check: '<path d="M5 12.5l4.2 4.2L19 7"/>',
   arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
@@ -366,7 +368,7 @@ function homePage(lang) {
     + '<div class="grid g4">' + L.why.cards.map((c, i) => '<article class="card rv"><div class="ico">' + svg(['self', 'needs', 'you', 'grow'][i], 24) + '</div><h3>' + esc(c[0]) + '</h3><p>' + esc(c[1]) + '</p></article>').join('') + '</div></div></section>'
     // ── cesty ──
     + '<section id="spoluprace"><div class="wrap">' + kicker(L.paths.kicker) + '<h2 class="rv">' + esc(L.paths.h) + '</h2>'
-    + '<div class="grid g3">' + L.paths.cards.map((c) => '<article class="path rv"><div class="ico">' + svg(c[0], 24) + '</div><h3>' + esc(c[1]) + '</h3><p>' + esc(c[2]) + '</p>' + regBtn(c[0], c[3], 'btn-p btn-s') + '</article>').join('') + '</div></div></section>'
+    + '<div class="grid g4">' + L.paths.cards.map((c) => '<article class="path rv"><div class="ico">' + svg(c[0], 24) + '</div><h3>' + esc(c[1]) + '</h3><p>' + esc(c[2]) + '</p>' + regBtn(c[0], c[3], 'btn-p btn-s') + '</article>').join('') + '</div></div></section>'
     // ── síť ──
     + '<section class="alt" id="sit"><div class="divline"></div><div class="wrap"><div class="net"><div>' + kicker(L.network.kicker) + '<h2 class="rv">' + esc(L.network.h) + '</h2><p class="lead rv">' + esc(L.network.lead) + '</p>'
     + '<div class="big rv"><b class="grad">70+</b><span>' + esc(L.network.statUnit) + '<small>' + esc(L.network.note) + '</small></span></div>'

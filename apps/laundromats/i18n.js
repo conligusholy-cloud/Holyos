@@ -35,6 +35,16 @@ function dict(lang) {
 }
 function reload() { cache.clear(); }
 
+// Jazyky, které se nabídnou v přepínači. Jazyk s prázdným (nebo skoro prázdným)
+// slovníkem se nenabízí — návštěvník by klikl na EN a dostal českou stránku.
+// Prahem lze pohnout přes LM_I18N_MIN, seznam natvrdo určit přes LM_LANGS=cs,en.
+const MIN_KLICU = parseInt(process.env.LM_I18N_MIN || '150', 10);
+function available() {
+  const rucne = String(process.env.LM_LANGS || '').trim();
+  if (rucne) return rucne.split(',').map((x) => x.trim()).filter((x) => LANGS.includes(x));
+  return LANGS.filter((l) => l === 'cs' || Object.keys(dict(l) || {}).length >= MIN_KLICU);
+}
+
 // Klíč = česká věta bez okolních mezer, vnitřní bílé znaky sražené na jednu mezeru.
 const key = (t) => String(t).replace(/\s+/g, ' ').trim();
 // Co nemá smysl překládat: prázdné, bez písmen, samá čísla / značky / entity.
@@ -166,4 +176,4 @@ function apply(html, lang, missing) {
   return out.replace(/<html lang="cs"/i, '<html lang="' + lang + '"');
 }
 
-module.exports = { LANGS, LANG_LABEL, extract, extractJs, apply, applyJs, dict, reload, key, translatable, walk };
+module.exports = { LANGS, LANG_LABEL, available, extract, extractJs, apply, applyJs, dict, reload, key, translatable, walk };
