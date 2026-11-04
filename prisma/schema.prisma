@@ -7557,6 +7557,8 @@ model LmSupportMessage {
 model GamePlayer {
   id            Int       @id @default(autoincrement())
   nick          String    @db.VarChar(24)
+  // Jméno firmy, pod kterým hráč staví. Vidí ho konkurence na mapě i v žebříčku.
+  company       String?   @db.VarChar(60)
   nick_lower    String    @unique @db.VarChar(24)
   password_hash String    @db.VarChar(100)
   email         String?   @db.VarChar(160)

@@ -25,6 +25,8 @@ const TOKEN_DAYS = 180;
 const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/;
 const NICK_RE = /^[\p{L}\p{N}_.-]{3,24}$/u;
+const FIRMA_RE = /^[\p{L}\p{N} .,&'"()+-]{2,60}$/u;
+const firmaNebo = (f, nick) => (f && FIRMA_RE.test(f) ? f : nick + ' s.r.o.');
 const ipOf = (req) => String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.ip || '').trim();
 
 // ─── Limiter (v paměti, stejně jako ve zbytku hry) ───────────────────────────
@@ -159,7 +161,7 @@ async function pub(p) {
   CARD_KINDS.concat(CASH_KINDS).forEach((k) => { counts[k] = 0; });
   cards.forEach((c) => { if (counts[c.kind] != null) counts[c.kind]++; });
   return {
-    nick: p.nick, email: p.email || null,
+    nick: p.nick, company: p.company || (p.nick + ' s.r.o.'), email: p.email || null,
     first_name: p.first_name || null, last_name: p.last_name || null,
     has_details: !!(p.email && p.first_name && p.last_name),
     cards: counts, state_at: p.state_at
@@ -180,7 +182,8 @@ router.post('/account/register', async (req, res, next) => {
     const taken = await prisma.gamePlayer.findUnique({ where: { nick_lower: lower }, select: { id: true } });
     if (taken) return res.status(409).json({ error: 'Tenhle nick už někdo má. Vymysli jiný.' });
     const p = await prisma.gamePlayer.create({
-      data: { nick, nick_lower: lower, password_hash: await bcrypt.hash(pwd, 10), last_login_at: new Date() }
+      data: { nick, nick_lower: lower, company: firmaNebo(s((req.body || {}).company, 60), nick),
+        password_hash: await bcrypt.hash(pwd, 10), last_login_at: new Date() }
     });
     // Dárek do začátku: jedna od každé zrychlující karty. Dostane ho jen nový
     // účet — ne ten, kdo si hru resetuje, jinak by si karty takhle „vyráběl".
@@ -255,6 +258,17 @@ router.post('/account/reset', requirePlayer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// POST /account/company { company } — přejmenování firmy
+router.post('/account/company', requirePlayer, async (req, res, next) => {
+  try {
+    const f = s((req.body || {}).company, 60);
+    if (!FIRMA_RE.test(f)) return res.status(400).json({ error: 'Název firmy má 2–60 znaků, bez divokých symbolů.' });
+    const p = await prisma.gamePlayer.update({ where: { id: req.player.id }, data: { company: f } });
+    dropZeb();   // žebříček drží 30 s v paměti, po přejmenování ho zahodíme
+    res.json({ ok: true, player: await pub(p) });
+  } catch (e) { next(e); }
+});
+
 // ─── Stav hry ────────────────────────────────────────────────────────────────
 // PUT /account/state { state } — klient posílá celý stav, server ho jen uloží.
 // Simulace běží v prohlížeči; server je úložiště, ne rozhodčí. Jediné, co se
@@ -317,7 +331,16 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
 // kdo nejvíc vydělává a kdo nejvíc pozval. Zisk a pozvánky čteme z uloženého
 // stavu, který píše prohlížeč hráče — ber je jako hlášené, ne ověřené.
 const ZEB_TOP = 25;
+// Zábor si drží jen nick; firmu dotahujeme až při čtení, aby se přejmenování
+// projevilo všude najednou a nemuselo se přepisovat do každé řádky.
+async function firmyMapa() {
+  const m = {};
+  (await prisma.gamePlayer.findMany({ select: { id: true, company: true, nick: true } }))
+    .forEach((h) => { m[h.id] = h.company || (h.nick + ' s.r.o.'); });
+  return m;
+}
 let _zeb = { at: 0, data: null };
+function dropZeb() { _zeb = { at: 0, data: null }; }
 async function zebricky() {
   if (Date.now() - _zeb.at < 30e3 && _zeb.data) return _zeb.data;
   const [mista, hraci] = await Promise.all([
@@ -325,10 +348,12 @@ async function zebricky() {
     prisma.gamePlayer.findMany({
       where: { disabled: false, state: { not: null } },
       orderBy: { state_at: 'desc' }, take: 500,
-      select: { id: true, nick: true, state: true },
+      select: { id: true, nick: true, company: true, state: true },
     }),
   ]);
-  const poMistech = mista.map((m) => ({ id: m.player_id, nick: m.nick, hodnota: m._count._all }))
+  // Firmy doplníme k nickům z míst — v žebříčku chceme vidět, kdo je kdo.
+  const firmy = await firmyMapa();
+  const poMistech = mista.map((m) => ({ id: m.player_id, nick: m.nick, firma: firmy[m.player_id], hodnota: m._count._all }))
     .sort((a, b) => b.hodnota - a.hodnota);
 
   const zisk = [], pozvanky = [];
@@ -336,8 +361,9 @@ async function zebricky() {
     const st = h.state || {};
     const units = Array.isArray(st.units) ? st.units : [];
     const mesicne = units.reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0);
-    if (mesicne > 0) zisk.push({ id: h.id, nick: h.nick, hodnota: Math.round(mesicne) });
-    if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, hodnota: st.refs });
+    const fi = h.company || (h.nick + ' s.r.o.');
+    if (mesicne > 0) zisk.push({ id: h.id, nick: h.nick, firma: fi, hodnota: Math.round(mesicne) });
+    if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, firma: fi, hodnota: st.refs });
   });
   zisk.sort((a, b) => b.hodnota - a.hodnota);
   pozvanky.sort((a, b) => b.hodnota - a.hodnota);
@@ -354,7 +380,8 @@ router.get('/leaderboard', async (req, res, next) => {
   try {
     const p = await currentPlayer(req);
     const z = await zebricky();
-    const orez = (l) => l.slice(0, ZEB_TOP).map((x, i) => ({ poradi: i + 1, nick: x.nick, hodnota: x.hodnota, ja: !!(p && x.id === p.id) }));
+    const orez = (l) => l.slice(0, ZEB_TOP).map((x, i) => ({ poradi: i + 1, nick: x.nick,
+      firma: x.firma || (x.nick + ' s.r.o.'), hodnota: x.hodnota, ja: !!(p && x.id === p.id) }));
     res.json({ ok: true,
       pradlomaty: orez(z.pradlomaty), zisk: orez(z.zisk), pozvanky: orez(z.pozvanky),
       ja: p ? { pradlomaty: moje(z.pradlomaty, p.id), zisk: moje(z.zisk, p.id), pozvanky: moje(z.pozvanky, p.id) } : null,
@@ -372,8 +399,10 @@ router.get('/leaderboard', async (req, res, next) => {
 const TAKEOVER_MIN = 1.2;   // nabídka musí být aspoň o pětinu vyšší
 const BID_FEE = 5000;       // co stojí neúspěšné vyjednávání (informativní, strhne klient)
 
-const claimPub = (c, me) => ({
-  spot_id: c.spot_id, area_key: c.area_key, nick: c.nick, model: c.model, mine: c.player_id === me,
+const claimPub = (c, me, firmy) => ({
+  spot_id: c.spot_id, area_key: c.area_key, nick: c.nick,
+  firma: (firmy && firmy[c.player_id]) || (c.nick + ' s.r.o.'),
+  model: c.model, mine: c.player_id === me,
   takeovers: c.takeovers, name: c.name, lat: c.lat, lon: c.lon,
   // Nájem říkáme jen majiteli. Ostatní přihazují naslepo — v tom je to riziko.
   rent: c.player_id === me ? c.rent : null,
@@ -391,7 +420,8 @@ router.get('/spots', async (req, res, next) => {
       where: areas.length ? { area_key: { in: areas } } : {},
       orderBy: { updated_at: 'desc' }, take: 2000,
     });
-    res.json({ ok: true, min_bid: TAKEOVER_MIN, fee: BID_FEE, spots: rows.map((c) => claimPub(c, p ? p.id : 0)) });
+    const firmy = await firmyMapa();
+    res.json({ ok: true, min_bid: TAKEOVER_MIN, fee: BID_FEE, spots: rows.map((c) => claimPub(c, p ? p.id : 0, firmy)) });
   } catch (e) { next(e); }
 });
 
@@ -399,7 +429,8 @@ router.get('/spots', async (req, res, next) => {
 router.get('/spots/mine', requirePlayer, async (req, res, next) => {
   try {
     const rows = await prisma.gameSpotClaim.findMany({ where: { player_id: req.player.id } });
-    res.json({ ok: true, spots: rows.map((c) => claimPub(c, req.player.id)) });
+    const firmy = await firmyMapa();
+    res.json({ ok: true, spots: rows.map((c) => claimPub(c, req.player.id, firmy)) });
   } catch (e) { next(e); }
 });
 
@@ -414,14 +445,14 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
     if (taken) {
       return res.status(409).json({
         error: taken.player_id === req.player.id ? 'Tady už stojíš.' : 'Tohle místo mezitím obsadil ' + taken.nick + '.',
-        occupied: claimPub(taken, req.player.id),
+        occupied: claimPub(taken, req.player.id, await firmyMapa()),
       });
     }
     const c = await prisma.gameSpotClaim.create({
       data: { spot_id: spot, area_key: area, player_id: req.player.id, nick: req.player.nick,
         model, rent, name: s(b.name, 160) || null, lat: Number(b.lat) || null, lon: Number(b.lon) || null },
     });
-    res.json({ ok: true, spot: claimPub(c, req.player.id) });
+    res.json({ ok: true, spot: claimPub(c, req.player.id, await firmyMapa()) });
   } catch (e) {
     if (e && e.code === 'P2002') return res.status(409).json({ error: 'Tohle místo právě někdo obsadil.' });
     next(e);
@@ -448,7 +479,7 @@ router.post('/spots/bid', requirePlayer, async (req, res, next) => {
       data: { player_id: req.player.id, nick: req.player.nick, model: model || cur.model, rent: offer, takeovers: { increment: 1 } },
     });
     console.log('[game] přetažení místa:', spot, cur.nick, '→', req.player.nick, offer + ' L$');
-    res.json({ ok: true, won: true, spot: claimPub(upd, req.player.id), lost_by: cur.nick });
+    res.json({ ok: true, won: true, spot: claimPub(upd, req.player.id, await firmyMapa()), lost_by: cur.nick });
   } catch (e) { next(e); }
 });
 

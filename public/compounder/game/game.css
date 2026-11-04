@@ -281,3 +281,5 @@ main{padding-bottom:calc(66px + var(--safe-b))}
 .zeb-row .poradi.m3{background:#e0a06a}
 .zeb-row .nick{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
 .zeb-row b{font-variant-numeric:tabular-nums;font-size:14px}
+/* V žebříčku je hlavní firma, nick drobně pod ní. */
+.zeb-row .nick i{display:block;font-style:normal;font-size:11px;color:var(--text3)}

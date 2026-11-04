@@ -550,7 +550,7 @@ function rivalIcon(c) {
   var im = MODEL_IMG[c.model] || MODEL_IMG.flex;
   return L.divIcon({ className: '', iconSize: [44, 44], iconAnchor: [22, 22],
     html: '<div class="pin unit rival"><img src="' + esc(im.src) + '" alt="">'
-      + '<i class="pin-tag">' + esc(c.nick) + '</i></div>' });
+      + '<i class="pin-tag">' + esc(c.firma || c.nick) + '</i></div>' });
 }
 // Postavený prádlomat ukazuje přímo fotku toho stroje, který tam stojí —
 // na mapě je tak na první pohled vidět, jestli je to MINI, FLEX nebo MAX.
@@ -593,7 +593,8 @@ function drawMap() {
 function cizi(c) {
   var mesto = (c.area_key || '').replace(/(^|\s)\S/g, function (x) { return x.toUpperCase(); });
   sheet('<h3>' + esc(c.name || 'Cizí prádlomat') + '</h3>'
-    + '<p class="muted small">Tohle místo drží <b>' + esc(c.nick) + '</b> · ' + esc((MODELS[c.model] || {}).name || c.model)
+    + '<p class="muted small">Tohle místo drží <b>' + esc(c.firma || c.nick) + '</b> (' + esc(c.nick) + ') · '
+    + esc((MODELS[c.model] || {}).name || c.model)
     + (c.takeovers ? ' · už ' + c.takeovers + '× změnilo majitele' : '') + '</p>'
     + '<p class="muted small">' + (mesto ? esc(mesto) + ' jsi neprozkoumal' : 'Tohle město jsi neprozkoumal')
     + ' — bez toho nevíš, kolik tu chodí lidí ani jestli se sem vyplatí jít. '
@@ -978,7 +979,8 @@ function rivalSheet(sp, areaId, c) {
   var e = economics(sp, free[0] || 'flex');
   var odhad = rentOf(sp);
   sheet('<h3>' + esc(sp.name) + '</h3>'
-    + '<p class="muted small">Tohle místo drží <b>' + esc(c.nick) + '</b> · ' + esc((MODELS[c.model] || {}).name || c.model)
+    + '<p class="muted small">Tohle místo drží <b>' + esc(c.firma || c.nick) + '</b> (' + esc(c.nick) + ') · '
+    + esc((MODELS[c.model] || {}).name || c.model)
     + (c.takeovers ? ' · už ' + c.takeovers + '× změnilo majitele' : '') + '</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(sp.score) + '</div>'
     + '<p class="muted small">Majitel pozemku se tě nezeptá, kolik platí ten druhý — to je jeho věc. '
@@ -992,7 +994,10 @@ function rivalSheet(sp, areaId, c) {
         + free.map(function (k) { return '<option value="' + k + '">' + MODELS[k].name + ' (' + inStock(k) + '× skladem)</option>'; }).join('')
         + '</select></label>'
         + '<button class="btn big" id="do-bid">Zkusit přeplatit</button>'
-      : '<p class="fine err">Nemáš skladem žádný stroj, který bys sem postavil. Kup ho nejdřív v obchodě.</p>'));
+      : '<p class="fine err">Nemáš skladem žádný stroj, který bys sem postavil.</p>'
+        + '<button class="btn big" id="go-shop-bid">Koupit stroj v obchodě</button>'));
+  var gs = $('go-shop-bid');
+  if (gs) gs.onclick = function () { closeSheet(); switchTab('shop'); };
   var b = $('do-bid');
   if (b) b.onclick = function () {
     var amt = Math.max(0, Math.round(Number($('bid-amt').value) || 0));
@@ -1145,7 +1150,8 @@ function paintZeb() {
       ? '<div class="zeb">' + list.map(function (x) {
           return '<div class="zeb-row' + (x.ja ? ' ja' : '') + '">'
             + '<i class="poradi' + (x.poradi <= 3 ? ' medaile m' + x.poradi : '') + '">' + x.poradi + '</i>'
-            + '<span class="nick">' + esc(x.nick) + '</span>'
+            + '<span class="nick">' + esc(x.firma || x.nick)
+            + '<i>' + esc(x.nick) + '</i></span>'
             + '<b>' + popis.jed(x.hodnota) + '</b></div>';
         }).join('') + '</div>'
       : '<div class="empty">' + (ZEB.chyba ? 'Žebříček se nepodařilo načíst. Zkus to za chvíli.' : 'Tady zatím nikdo není. Buď první.') + '</div>')
@@ -1209,7 +1215,16 @@ function paintBank() {
 function paintMe() {
   var p = PROFILES[S.profile];
   var net = S.cash + investedTotal() - S.loan;
-  $('me-body').innerHTML = '<div class="card"><h3>' + esc(p.name) + '</h3>'
+  $('me-body').innerHTML = (ME
+    ? '<div class="card"><h3>' + esc(ME.company || ME.nick) + '</h3>'
+      + '<p class="muted small" style="margin:2px 0 8px">Hraješ jako <b>' + esc(ME.nick) + '</b>. '
+      + 'Pod jménem firmy tě vidí konkurence na mapě i v žebříčku.</p>'
+      + '<label class="fld"><span>Název firmy</span>'
+      + '<input id="me-firma" class="inp" type="text" maxlength="60" value="' + esc(ME.company || '') + '"></label>'
+      + '<button class="btn sec" id="me-firma-ulozit" style="width:100%;margin-top:8px">Přejmenovat firmu</button>'
+      + '</div>'
+    : '')
+    + '<div class="card"><h3>' + esc(p.name) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 8px">' + esc(p.desc) + '</p>'
     + '<div class="kv"><span>Herní rok</span><b>' + gameYear() + '</b></div>'
     + '<div class="kv"><span>Čisté jmění</span><b class="' + (net >= 0 ? 'ok' : 'err') + '">' + kcFull(net) + '</b></div>'
@@ -1230,6 +1245,19 @@ function paintMe() {
     + '<button class="btn big" id="do-share" style="margin-top:12px">' + (navigator.share ? 'Poslat odkaz' : 'Zkopírovat odkaz') + '</button>'
     + '</div>'
     + '<button class="btn sec big" id="do-reset">Začít znovu od nuly</button>';
+  var fb = $('me-firma-ulozit');
+  if (fb) fb.onclick = function () {
+    var f = $('me-firma').value.trim();
+    if (f.length < 2) return toast('Název firmy má aspoň 2 znaky.', 'err');
+    fb.disabled = true; fb.textContent = 'Ukládám…';
+    apiJson('/account/company', { company: f }).then(function (r) {
+      fb.disabled = false; fb.textContent = 'Přejmenovat firmu';
+      if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
+      ME = r.j.player;
+      ZEB = null; loadClaims(); paintMe();
+      toast('Firma se teď jmenuje ' + ME.company + '.', 'ok');
+    }).catch(function () { fb.disabled = false; fb.textContent = 'Přejmenovat firmu'; toast('Server neodpovídá.', 'err'); });
+  };
   $('do-share').onclick = function () { shareGame($('do-share')); };
   $('do-reset').onclick = function () {
     sheet('<h3>Začít znovu?</h3>'
@@ -1340,6 +1368,8 @@ function showAcct(mode) {
   $('ac-go').textContent = login ? 'Přihlásit a pokračovat' : 'Založit a hrát';
   $('ac-have').textContent = login ? 'Chci začít znovu s novým účtem' : 'Už účet mám — přihlásit se';
   $('ac-nick-hint').classList.toggle('hidden', login);
+  $('ac-firma-f').classList.toggle('hidden', login);
+  $('ac-firma-hint').classList.toggle('hidden', login);
   $('ac-pass').setAttribute('autocomplete', login ? 'current-password' : 'new-password');
   $('ac-err').classList.add('hidden');
   $('ac-have').onclick = function () { showAcct(login ? 'register' : 'login'); };
@@ -1352,7 +1382,10 @@ function doAcct(login) {
   if (nick.length < 3) return acctErr('Nick musí mít aspoň 3 znaky.');
   if (pass.length < 6) return acctErr('Heslo musí mít aspoň 6 znaků.');
   $('ac-go').disabled = true;
-  apiJson('/account/' + (login ? 'login' : 'register'), { nick: nick, password: pass }).then(function (r) {
+  var firma = $('ac-firma').value.trim();
+  if (!login && firma.length && firma.length < 2) return acctErr('Název firmy má aspoň 2 znaky.');
+  apiJson('/account/' + (login ? 'login' : 'register'),
+    { nick: nick, password: pass, company: firma }).then(function (r) {
     $('ac-go').disabled = false;
     if (!r.ok) return acctErr(r.j.error || 'Nepovedlo se.');
     ME = r.j.player;
