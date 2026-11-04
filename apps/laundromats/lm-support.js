@@ -106,7 +106,7 @@ tx.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.pre
 function b64(f){return new Promise(function(ok,ko){var r=new FileReader();r.onload=function(){ok(String(r.result).split(',')[1]||'');};r.onerror=ko;r.readAsDataURL(f);});}
 d.getElementById('sp-form').addEventListener('submit',function(e){e.preventDefault();var text=tx.value.trim();if(!text&&!file)return;er.textContent='';bt.disabled=true;bt.textContent='Odesílám…';
   (file?b64(file):Promise.resolve(null)).then(function(data){return fetch('/api/cesta/support/send',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:text,file:data?{name:file.name,data:data}:undefined})});})
-  .then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||'Odeslání se nepodařilo.');return j;});})
+  .then(function(r){return r.json().catch(function(){return {error:r.status===413?'Příloha je příliš velká (max 10 MB).':'Odeslání se nepodařilo ('+r.status+').'};}).then(function(j){if(!r.ok)throw new Error(j.error||'Odeslání se nepodařilo.');return j;});})
   .then(function(j){tx.value='';setFile(null);fi.value='';if(j.msg)add(j.msg);stick();try{window.lmTrack&&lmTrack('support_send',{});}catch(_){}})
   .catch(function(x){er.textContent=x.message||'Odeslání se nepodařilo.';}).finally(function(){bt.disabled=false;bt.textContent='Odeslat';});});
 poll();setInterval(function(){if(!d.hidden)poll();},4000);setInterval(function(){if(d.hidden)poll();},20000);})();`;
