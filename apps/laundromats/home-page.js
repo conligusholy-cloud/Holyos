@@ -299,6 +299,7 @@ footer{border-top:1px solid var(--line);padding:56px 0 34px;margin-top:40px}
 .netmap{position:relative;border-radius:18px;overflow:hidden;border:1px solid rgba(120,160,255,.25);min-height:320px;background:#0b1020}
 #netmap{position:absolute;inset:0}
 .nm-leg{position:absolute;left:12px;bottom:12px;z-index:500;background:rgba(6,10,20,.82);border:1px solid rgba(79,209,255,.3);border-radius:10px;padding:6px 10px;font-size:12.5px;color:var(--tx2,#c8d3ea)}.nm-leg b{color:#4fd1ff}
+.netmap .leaflet-tooltip.nm-tip{background:rgba(6,10,20,.78);border:1px solid rgba(79,209,255,.45);color:#e8eefc;font-weight:700;font-size:12px;padding:3px 7px;border-radius:8px;box-shadow:none;text-align:center;line-height:1.25}.netmap .leaflet-tooltip.nm-tip:before{display:none}.netmap .leaflet-tooltip.nm-tip.hq{border-color:#a78bfa;font-size:13px}.netmap .leaflet-tooltip.nm-tip small{color:#c4b5fd;font-weight:600}
 .netmap .leaflet-popup-content-wrapper,.netmap .leaflet-popup-tip{background:#0d1424;color:#e8eefc;border:1px solid rgba(79,209,255,.35)}.netmap .leaflet-popup-content{margin:9px 12px;font:13px/1.4 inherit}.netmap .leaflet-popup-content small{color:#93a3c4}.netmap .leaflet-container{background:#0b1020;font-family:inherit}.netmap .leaflet-control-attribution{background:rgba(6,10,20,.7);color:#7d8aa6}.netmap .leaflet-control-attribution a{color:#9fb4dc}
 @media (max-width:820px){.vids .netmap{grid-column:1/-1;min-height:320px}}
 .vid{margin:0}.vid video{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:18px;border:1px solid var(--line2);background:#0b1426;display:block}
@@ -375,7 +376,7 @@ function homePage(lang) {
     + '<div class="vids rv">'
     + '<figure class="vid"><video class="autovid" src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" muted loop playsinline preload="none" aria-label="' + esc(L.network.vid1) + '"></video><figcaption>' + esc(L.network.vid1) + '</figcaption></figure>'
     + '<figure class="vid pl"><video src="/media/krok.mp4" poster="/media/krok-poster.jpg" playsinline preload="none" aria-label="' + esc(L.network.vid2) + '"></video><figcaption>' + esc(L.network.vid2) + '</figcaption></figure>'
-    + '<div class="netmap" role="region" aria-label="Mapa provozovaných prádlomatů"><div id="netmap"></div><div class="nm-leg"><b>' + SITES.length + '</b> provozoven · ' + SITES.filter((x) => x[2] === 'CZ').length + ' Česko · ' + SITES.filter((x) => x[2] === 'PL').length + ' Polsko</div></div></div></div></section>'
+    + '<div class="netmap" role="region" aria-label="Země, ve kterých působíme"><div id="netmap"></div><div class="nm-leg"><b>' + COUNTRIES.length + '</b> zemí · centrála <b style="color:#a78bfa">Česká republika</b></div></div></div></div></section>'
     // ── vlastnictví ──
     + '<section id="vlastnictvi"><div class="wrap"><div class="own"><div>' + kicker(L.own.kicker) + '<h2 class="rv">' + esc(L.own.h) + '</h2><p class="lead rv">' + esc(L.own.lead) + '</p></div>'
     + '<div><ul class="tasks">' + L.own.items.map((x) => '<li class="rv"><span>' + svg('check', 16) + '</span>' + esc(x) + '</li>').join('') + '</ul><p class="ofoot rv">' + esc(L.own.foot) + '</p></div></div></div></section>'
@@ -399,16 +400,25 @@ function homePage(lang) {
     + '<script>' + clientJs(L) + '</script><script>' + NETMAP_JS + '</script><script>' + NET_JS + '</script><script>' + LIGHTBOX_JS + '</script><script src="/cesta/track.js" defer></script></body></html>';
 }
 
-// Mapa sítě: Leaflet se načte až když je mapa skoro vidět (nezdržuje úvodní stránku)
-const SITES = require('./network-sites');
-const NETMAP_JS = "(function(){var el=document.getElementById('netmap');if(!el)return;var S=" + JSON.stringify(SITES).replace(/</g, '\\u003c') + ";var go=false;"
+// Mapa zemí, ve kterých působíme (centrála ČR). Leaflet + hranice zemí (Natural Earth 110m)
+// se načtou až když je mapa skoro vidět. ISO 3166 numerické kódy dle world-atlas.
+const COUNTRIES = [
+  ['203', 'Česká republika', 1], ['616', 'Polsko'], ['703', 'Slovensko'], ['372', 'Irsko'],
+  ['826', 'Anglie'], ['620', 'Portugalsko'], ['008', 'Albánie'],
+];
+const NETMAP_JS = "(function(){var el=document.getElementById('netmap');if(!el)return;var C=" + JSON.stringify(COUNTRIES) + ";var go=false;"
+  + "function ld(src,cb){var j=document.createElement('script');j.src=src;j.onload=cb;document.head.appendChild(j);}"
   + "function init(){if(go)return;go=true;var c=document.createElement('link');c.rel='stylesheet';c.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';document.head.appendChild(c);"
-  + "var j=document.createElement('script');j.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';j.onload=draw;document.head.appendChild(j);}"
-  + "function e(t){return String(t).replace(/[&<>\"]/g,function(x){return{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[x];});}"
-  + "function draw(){var m=L.map(el,{maxZoom:10,minZoom:4,scrollWheelZoom:false,zoomControl:true,attributionControl:true});"
-  + "var E='https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';L.tileLayer(E+'World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxZoom:16,attribution:'Tiles &copy; Esri'}).addTo(m);L.tileLayer(E+'World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',{maxZoom:16}).addTo(m);"
-  + "var b=[];S.forEach(function(p){var ll=[p[3],p[4]];b.push(ll);L.circleMarker(ll,{radius:5,color:'#4fd1ff',weight:1.5,fillColor:'#4fd1ff',fillOpacity:.55}).addTo(m).bindPopup('<b>'+e(p[0])+'</b><br><small>'+e(p[1])+'</small>');});"
-  + "m.fitBounds(b,{padding:[24,24]});m.on('click',function(){m.scrollWheelZoom.enable();});}"
+  + "ld('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',function(){ld('https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js',draw);});}"
+  + "function draw(){var m=L.map(el,{maxZoom:7,minZoom:3,scrollWheelZoom:false,attributionControl:true});"
+  + "L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxZoom:16,attribution:'Tiles &copy; Esri · Natural Earth'}).addTo(m);"
+  + "m.fitBounds([[36.8,-10.5],[58.7,24.2]],{padding:[10,10]});"
+  + "fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json').then(function(r){return r.json();}).then(function(t){"
+  + "var fc=topojson.feature(t,t.objects.countries),by={};C.forEach(function(x){by[x[0]]=x;});"
+  + "fc.features.forEach(function(f){var x=by[String(f.id)];if(!x)return;var hq=!!x[2];"
+  + "var g=L.geoJSON(f,{style:{color:hq?'#a78bfa':'#4fd1ff',weight:hq?2:1.4,fillColor:hq?'#7c5cff':'#4fd1ff',fillOpacity:hq?.55:.32}}).addTo(m);"
+  + "g.bindTooltip(hq?'<b>'+x[1]+'</b><br><small>centrála</small>':x[1],{permanent:true,direction:'center',className:'nm-tip'+(hq?' hq':'')});});"
+  + "}).catch(function(){});}"
   + "if('IntersectionObserver'in window){var io=new IntersectionObserver(function(x){if(x[0].isIntersecting){io.disconnect();init();}},{rootMargin:'400px'});io.observe(el);}else init();})();";
 
 function clientJs(L) {
