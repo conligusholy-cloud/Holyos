@@ -495,6 +495,13 @@ function pinIcon(cls, txt) {
   return L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15],
     html: '<div class="pin ' + cls + '">' + txt + '</div>' });
 }
+// Cizí prádlomat: fotka taky, ale v barvách konkurence a s nickem majitele.
+function rivalIcon(c) {
+  var im = MODEL_IMG[c.model] || MODEL_IMG.flex;
+  return L.divIcon({ className: '', iconSize: [44, 44], iconAnchor: [22, 22],
+    html: '<div class="pin unit rival"><img src="' + esc(im.src) + '" alt="">'
+      + '<i class="pin-tag">' + esc(c.nick) + '</i></div>' });
+}
 // Postavený prádlomat ukazuje přímo fotku toho stroje, který tam stojí —
 // na mapě je tak na první pohled vidět, jestli je to MINI, FLEX nebo MAX.
 function unitIcon(u) {
@@ -512,11 +519,12 @@ function drawMap() {
     S.areas[aid].spots.forEach(function (sp) {
       any = true;
       var unit = S.units.filter(function (u) { return u.spotId === sp.id; })[0];
+      var rival = !unit && CLAIMS[sp.id] && !CLAIMS[sp.id].mine ? CLAIMS[sp.id] : null;
       var seen = !!S.revealed[sp.id];
-      var icon = unit ? unitIcon(unit) : pinIcon(seen ? 'known' : 'unknown', seen ? '★' : '?');
+      var icon = unit ? unitIcon(unit) : rival ? rivalIcon(rival) : pinIcon(seen ? 'known' : 'unknown', seen ? '★' : '?');
       L.marker([sp.lat, sp.lon], { icon: icon })
         .addTo(layer)
-        .on('click', function () { spotSheet(sp, aid); });
+        .on('click', function () { if (rival) return rivalSheet(sp, aid, rival); spotSheet(sp, aid); });
     });
   });
   $('map-hint').classList.toggle('hidden', any);
@@ -617,6 +625,7 @@ function scout(city, btn) {
         S.cash -= SCOUT_COST;
         S.areas[id] = { name: j.area.name, lat: j.area.lat, lon: j.area.lon, scoutedAt: Date.now(), spots: (j.spots || []).map(fixMetrics) };
         save(); paint(); drawMap(); closeSheet();
+        loadClaims();   // ať hráč hned vidí, kde už konkurence stojí
         if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], 12);
         toast(j.area.name + ': nalezeno ' + j.spots.length + ' míst.', 'ok');
       })
@@ -634,6 +643,8 @@ function scout(city, btn) {
 function spotSheet(sp, areaId) {
   var unit = S.units.filter(function (u) { return u.spotId === sp.id; })[0];
   if (unit) return unitSheet(unit);
+  var claim = CLAIMS[sp.id];
+  if (claim && !claim.mine) return rivalSheet(sp, areaId, claim);
 
   // 1. krok — obhlídka. Levná, jen se tam někdo zajede podívat.
   if (!S.revealed[sp.id]) {
@@ -808,12 +819,123 @@ function installSheet(sp, areaId, modelKey) {
     + (f.ok ? '' : '<p class="fine err">Na instalaci ti chybí ' + kcFull(f.need - f.canBorrow) + '.</p>'));
   var b = $('do-build');
   if (b) b.onclick = function () {
-    doFinance(f);
-    S.stock[modelKey] = inStock(modelKey) - 1;
-    S.units.push({ spotId: sp.id, areaId: areaId, name: sp.name, kind: sp.kind, score: sp.score,
-      lat: sp.lat, lon: sp.lon, builtAt: Date.now(), eco: e });
-    save(); paint(); drawMap(); closeSheet();
-    toast('Prádlomat stojí. Vydělává ' + kcFull(e.profit) + ' měsíčně.', 'ok');
+    // Místo si nejdřív zabereme na serveru — na jednom místě smí stát jen jeden.
+    b.disabled = true; b.textContent = 'Stavím…';
+    apiJson('/spots/claim', { spot_id: sp.id, area_key: areaId, model: modelKey,
+      rent: e.rent, name: sp.name, lat: sp.lat, lon: sp.lon }).then(function (r) {
+      b.disabled = false; b.textContent = 'Postavit';
+      if (!r.ok) {
+        if (r.j.occupied) CLAIMS[sp.id] = r.j.occupied;
+        drawMap(); closeSheet();
+        return toast(r.j.error || 'Místo je obsazené.', 'err');
+      }
+      CLAIMS[sp.id] = r.j.spot;
+      doFinance(f);
+      S.stock[modelKey] = inStock(modelKey) - 1;
+      S.units.push({ spotId: sp.id, areaId: areaId, name: sp.name, kind: sp.kind, score: sp.score,
+        lat: sp.lat, lon: sp.lon, builtAt: Date.now(), eco: e });
+      save(); paint(); drawMap(); closeSheet(); syncState(true);
+      toast('Prádlomat stojí. Vydělává ' + kcFull(e.profit) + ' měsíčně.', 'ok');
+    }).catch(function () { b.disabled = false; b.textContent = 'Postavit'; toast('Server neodpovídá.', 'err'); });
+  };
+}
+
+
+// ─── Konkurence: jedno místo, jeden prádlomat ───────────────────────────────
+// Kdo kde stojí, rozhoduje server — jinak by si dva hráči postavili na totéž
+// místo. Cizí prádlomaty vidíš na mapě i s nickem, ale NE s nájmem: přeplatit
+// konkurenta znamená nabídnout naslepo a za nepovedené vyjednávání zaplatit.
+var CLAIMS = {};          // id místa → { nick, model, mine, takeovers, rent }
+var BID_FEE = 5000;
+function areaKeys() { return Object.keys(S && S.areas ? S.areas : {}); }
+
+function loadClaims(then) {
+  var keys = areaKeys();
+  if (!keys.length) { if (then) then(); return; }
+  api('/spots?area=' + encodeURIComponent(keys.join(','))).then(function (r) {
+    if (!r.ok) return;
+    if (r.j.fee) BID_FEE = r.j.fee;
+    var next = {};
+    (r.j.spots || []).forEach(function (c) { next[c.spot_id] = c; });
+    CLAIMS = next;
+    reconcileUnits();
+    drawMap();
+    if (then) then();
+  }).catch(function () { if (then) then(); });
+}
+
+// Místo, o které hráč přišel, zmizí ze sítě a stroj se mu vrátí na sklad.
+function reconcileUnits() {
+  if (!S || !S.units.length) return;
+  var lost = [];
+  S.units = S.units.filter(function (u) {
+    var c = CLAIMS[u.spotId];
+    if (c && !c.mine) { lost.push({ u: u, nick: c.nick }); return false; }
+    return true;
+  });
+  if (!lost.length) return;
+  lost.forEach(function (x) {
+    S.stock[x.u.eco.model] = inStock(x.u.eco.model) + 1;
+  });
+  save(); paint();
+  var x = lost[0];
+  toast(lost.length === 1
+    ? x.nick + ' přeplatil nájem v místě ' + x.u.name + '. Stroj máš zpátky na skladě.'
+    : 'Přišel jsi o ' + lost.length + ' míst — konkurence přeplatila nájem. Stroje máš na skladě.', 'err');
+}
+
+// Panel cizího prádlomatu: koho přebíráš a za kolik to zkusíš.
+function rivalSheet(sp, areaId, c) {
+  var free = MODEL_ORDER.filter(function (k) { return inStock(k) > 0; });
+  var e = economics(sp, free[0] || 'flex');
+  var odhad = rentOf(sp);
+  sheet('<h3>' + esc(sp.name) + '</h3>'
+    + '<p class="muted small">Tohle místo drží <b>' + esc(c.nick) + '</b> · ' + esc((MODELS[c.model] || {}).name || c.model)
+    + (c.takeovers ? ' · už ' + c.takeovers + '× změnilo majitele' : '') + '</p>'
+    + '<div style="margin:8px 0 12px">' + verdictPill(sp.score) + '</div>'
+    + '<p class="muted small">Majitel pozemku se tě nezeptá, kolik platí ten druhý — to je jeho věc. '
+    + 'Nabídni víc a místo je tvoje; nabídni málo a přijdeš o ' + kcFull(BID_FEE) + ' za zbytečnou cestu.</p>'
+    + '<div class="kv"><span>Nájem v okolí bývá</span><b>kolem ' + kcFull(odhad) + '</b></div>'
+    + '<div class="kv"><span>Přípojky tu zaplatíš znovu</span><b>' + kcFull(connPrice(sp, free[0] || 'flex')) + '</b></div>'
+    + (free.length
+      ? '<label class="fld"><span>Co nabídneš majiteli / měsíc</span>'
+        + '<input id="bid-amt" class="inp" type="number" inputmode="numeric" min="0" step="500" value="' + Math.round(odhad * 1.4 / 500) * 500 + '"></label>'
+        + '<label class="fld"><span>Co tam postavíš</span><select id="bid-model" class="inp">'
+        + free.map(function (k) { return '<option value="' + k + '">' + MODELS[k].name + ' (' + inStock(k) + '× skladem)</option>'; }).join('')
+        + '</select></label>'
+        + '<button class="btn big" id="do-bid">Zkusit přeplatit</button>'
+      : '<p class="fine err">Nemáš skladem žádný stroj, který bys sem postavil. Kup ho nejdřív v obchodě.</p>'));
+  var b = $('do-bid');
+  if (b) b.onclick = function () {
+    var amt = Math.max(0, Math.round(Number($('bid-amt').value) || 0));
+    var model = $('bid-model').value;
+    var conn = connPrice(sp, model);
+    if (S.cash < BID_FEE) return toast('Na vyjednávání nemáš hotovost.', 'err');
+    b.disabled = true; b.textContent = 'Vyjednávám…';
+    apiJson('/spots/bid', { spot_id: sp.id, rent: amt, model: model }).then(function (r) {
+      b.disabled = false; b.textContent = 'Zkusit přeplatit';
+      if (!r.j.won) {
+        S.cash -= BID_FEE; save(); paint();
+        return toast(r.j.error || 'Nepovedlo se.', 'err');
+      }
+      // Vyhráli jsme: platíme přípojky a stavíme s nájmem, který jsme nabídli.
+      var f = canFinance(conn);
+      if (!f.ok) {
+        // Místo už máme, ale na přípojky nemáme — vrátíme ho, ať v něm neleží.
+        apiJson('/spots/release', { spot_id: sp.id });
+        return toast('Místo bys měl, ale na přípojky ti chybí ' + kcFull(f.need - f.canBorrow) + '.', 'err');
+      }
+      doFinance(f);
+      S.stock[model] = inStock(model) - 1;
+      var eco = economics(sp, model);
+      eco.rent = amt; eco.conn = conn; eco.install = conn;
+      eco.cost = eco.energy + eco.servis + amt;
+      eco.profit = eco.revenue - eco.cost;
+      S.units.push({ spotId: sp.id, areaId: areaId, name: sp.name, kind: sp.kind, score: sp.score,
+        lat: sp.lat, lon: sp.lon, builtAt: Date.now(), eco: eco });
+      save(); paint(); loadClaims(); closeSheet();
+      toast('Místo je tvoje — ' + esc(r.j.lost_by) + ' si stroj odváží.', 'ok');
+    }).catch(function () { b.disabled = false; b.textContent = 'Zkusit přeplatit'; toast('Server neodpovídá.', 'err'); });
   };
 }
 
@@ -829,7 +951,28 @@ function unitSheet(u) {
     + (u.eco.energy != null ? '<div class="kv"><span>Energie / měsíc (' + pct(ENERGY_SHARE) + ' obratu)</span><b>' + kcFull(u.eco.energy) + '</b></div>' : '')
     + (u.eco.servis != null ? '<div class="kv"><span>Servis a úklid / měsíc (' + pct(SERVIS_SHARE) + ' obratu)</span><b>' + kcFull(u.eco.servis) + '</b></div>' : '')
     + '<div class="kv"><span>Zisk / měsíc</span><b class="ok">' + kcFull(u.eco.profit) + '</b></div>'
-    + '<div class="kv"><span>Vydělal celkem</span><b>' + kcFull(u.eco.profit * 12 * years) + '</b></div>');
+    + '<div class="kv"><span>Vydělal celkem</span><b>' + kcFull(u.eco.profit * 12 * years) + '</b></div>'
+    + '<p class="muted small" style="margin-top:14px">Když je jinde líp, místo vypovíš a stroj si odvezeš na sklad. '
+    + 'Přípojky ani domluvený nájem se nevracejí a místo se hned uvolní konkurenci.</p>'
+    + '<button class="btn sec" id="do-release" style="width:100%">Vypovědět místo</button>');
+  var rb = $('do-release');
+  if (rb) rb.onclick = function () {
+    if (rb.getAttribute('data-sure') !== '1') {
+      rb.setAttribute('data-sure', '1');
+      rb.textContent = 'Opravdu? Klikni znovu';
+      rb.classList.add('warn');
+      return;
+    }
+    rb.disabled = true;
+    apiJson('/spots/release', { spot_id: u.spotId }).then(function (r) {
+      if (!r.ok) { rb.disabled = false; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
+      S.units = S.units.filter(function (x) { return x.spotId !== u.spotId; });
+      S.stock[u.eco.model] = inStock(u.eco.model) + 1;
+      delete CLAIMS[u.spotId];
+      save(); paint(); drawMap(); closeSheet(); syncState(true);
+      toast('Místo vypovězeno. ' + MODELS[u.eco.model].name + ' čeká na skladě.', 'ok');
+    }).catch(function () { rb.disabled = false; toast('Server neodpovídá.', 'err'); });
+  };
 }
 
 // ─── Pozvánky ────────────────────────────────────────────────────────────────
@@ -1184,13 +1327,16 @@ function startGame() {
   else if (gained > 1000) toast('Než ses vrátil, síť vydělala ' + kcFull(gained) + '.', 'ok');
   pullRefs();
   loadCards().then(function () { if (!$('v-cards').classList.contains('hidden')) paintCards(); });
+  loadClaims();
+  setInterval(loadClaims, 45000);
   checkPayment();
   setInterval(function () { tick(); save(); paint(); syncState(); }, 5000);
   // Vlastní, rychlejší tep jen pro naskakující čísla nad prádlomaty.
   setInterval(function () { tick(); dripTick(); }, 1000);
   setInterval(pullRefs, 60000);
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) { tick(); save(); paint(); } else { syncState(true); }
+    // Po návratu do hry se hned podíváme, jestli nám konkurence nevyfoukla místo.
+    if (!document.hidden) { tick(); save(); paint(); loadClaims(); } else { syncState(true); }
   });
   window.addEventListener('pagehide', function () { syncState(true); });
 }

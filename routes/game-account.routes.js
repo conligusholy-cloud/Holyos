@@ -233,6 +233,103 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+
+// ─── Místa: kdo kde stojí ────────────────────────────────────────────────────
+// Na jednom místě smí stát jediný prádlomat. Kdo chce cizí, musí majiteli
+// pozemku nabídnout vyšší nájem — a protože výše nájmu je tajná, přihazuje
+// naslepo. Neúspěšné vyjednávání ho stojí poplatek (odečte si ho klient).
+//
+// Tahle tabulka je jediná pravda o tom, kdo kde stojí. Hotovost a síť si hráč
+// drží v prohlížeči, ale místo mu nikdo nevezme ani nepodvrhne.
+const TAKEOVER_MIN = 1.2;   // nabídka musí být aspoň o pětinu vyšší
+const BID_FEE = 5000;       // co stojí neúspěšné vyjednávání (informativní, strhne klient)
+
+const claimPub = (c, me) => ({
+  spot_id: c.spot_id, nick: c.nick, model: c.model, mine: c.player_id === me,
+  takeovers: c.takeovers, name: c.name, lat: c.lat, lon: c.lon,
+  // Nájem říkáme jen majiteli. Ostatní přihazují naslepo — v tom je to riziko.
+  rent: c.player_id === me ? c.rent : null,
+  since: c.created_at,
+});
+
+// GET /spots?area=<klíč>[,<klíč>…] → kdo kde stojí
+router.get('/spots', async (req, res, next) => {
+  try {
+    const p = await currentPlayer(req);
+    const areas = String(req.query.area || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 20);
+    if (!areas.length) return res.json({ ok: true, spots: [] });
+    const rows = await prisma.gameSpotClaim.findMany({ where: { area_key: { in: areas } }, take: 2000 });
+    res.json({ ok: true, min_bid: TAKEOVER_MIN, fee: BID_FEE, spots: rows.map((c) => claimPub(c, p ? p.id : 0)) });
+  } catch (e) { next(e); }
+});
+
+// GET /spots/mine → vlastní místa (klient podle nich pozná, o které přišel)
+router.get('/spots/mine', requirePlayer, async (req, res, next) => {
+  try {
+    const rows = await prisma.gameSpotClaim.findMany({ where: { player_id: req.player.id } });
+    res.json({ ok: true, spots: rows.map((c) => claimPub(c, req.player.id)) });
+  } catch (e) { next(e); }
+});
+
+// POST /spots/claim { spot_id, area_key, model, rent, name, lat, lon } — zabrání volného místa
+router.post('/spots/claim', requirePlayer, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const spot = s(b.spot_id, 120), area = s(b.area_key, 80), model = s(b.model, 10);
+    const rent = Math.max(0, Math.round(Number(b.rent) || 0));
+    if (!spot || !area || !model) return res.status(400).json({ error: 'Chybí místo.' });
+    const taken = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
+    if (taken) {
+      return res.status(409).json({
+        error: taken.player_id === req.player.id ? 'Tady už stojíš.' : 'Tohle místo mezitím obsadil ' + taken.nick + '.',
+        occupied: claimPub(taken, req.player.id),
+      });
+    }
+    const c = await prisma.gameSpotClaim.create({
+      data: { spot_id: spot, area_key: area, player_id: req.player.id, nick: req.player.nick,
+        model, rent, name: s(b.name, 160) || null, lat: Number(b.lat) || null, lon: Number(b.lon) || null },
+    });
+    res.json({ ok: true, spot: claimPub(c, req.player.id) });
+  } catch (e) {
+    if (e && e.code === 'P2002') return res.status(409).json({ error: 'Tohle místo právě někdo obsadil.' });
+    next(e);
+  }
+});
+
+// POST /spots/bid { spot_id, rent, model } — přeplacení cizího nájmu
+router.post('/spots/bid', requirePlayer, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const spot = s(b.spot_id, 120);
+    const offer = Math.max(0, Math.round(Number(b.rent) || 0));
+    const model = s(b.model, 10);
+    const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
+    if (!cur) return res.status(404).json({ error: 'Tohle místo je volné — stav rovnou.' });
+    if (cur.player_id === req.player.id) return res.status(409).json({ error: 'Tady stojíš ty sám.' });
+    const need = Math.ceil(cur.rent * TAKEOVER_MIN);
+    if (offer < need) {
+      // Kolik bylo potřeba, neprozradíme — jinak by stačilo zkoušet po tisícovkách.
+      return res.status(409).json({ ok: false, won: false, fee: BID_FEE, error: 'Majitel pozemku tvoji nabídku odmítl. Nájemce platí víc.' });
+    }
+    const upd = await prisma.gameSpotClaim.update({
+      where: { spot_id: spot },
+      data: { player_id: req.player.id, nick: req.player.nick, model: model || cur.model, rent: offer, takeovers: { increment: 1 } },
+    });
+    console.log('[game] přetažení místa:', spot, cur.nick, '→', req.player.nick, offer + ' L$');
+    res.json({ ok: true, won: true, spot: claimPub(upd, req.player.id), lost_by: cur.nick });
+  } catch (e) { next(e); }
+});
+
+// POST /spots/release { spot_id } — výpověď z místa, stroj si hráč odveze
+router.post('/spots/release', requirePlayer, async (req, res, next) => {
+  try {
+    const spot = s((req.body || {}).spot_id, 120);
+    const done = await prisma.gameSpotClaim.deleteMany({ where: { spot_id: spot, player_id: req.player.id } });
+    if (!done.count) return res.status(409).json({ error: 'Tohle místo ti nepatří.' });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;
 module.exports._cards = CARDS;
 module.exports._currentPlayer = currentPlayer;

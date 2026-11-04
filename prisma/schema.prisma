@@ -7635,3 +7635,27 @@ model GameArea {
 
   @@map("game_areas")
 }
+
+// Obsazené místo ve hře. Na jednom místě stojí nejvýš jeden prádlomat — ať už
+// čí. Kdo chce cizí místo, musí majiteli pozemku nabídnout vyšší nájem; výše
+// nájmu je ale tajná, takže přihazuje naslepo.
+model GameSpotClaim {
+  id         Int      @id @default(autoincrement())
+  spot_id    String   @unique @db.VarChar(120)
+  area_key   String   @db.VarChar(80)
+  player_id  Int
+  nick       String   @db.VarChar(24)
+  model      String   @db.VarChar(10)
+  rent       Int
+  name       String?  @db.VarChar(160)
+  lat        Float?
+  lon        Float?
+  // Kolikrát už místo změnilo majitele — hráči to ukážeme jako „žádané místo".
+  takeovers  Int      @default(0)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([area_key])
+  @@index([player_id])
+  @@map("game_spot_claims")
+}

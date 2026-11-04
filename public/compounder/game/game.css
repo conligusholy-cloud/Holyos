@@ -223,3 +223,7 @@ main{padding-bottom:calc(66px + var(--safe-b))}
   15%{opacity:1;transform:translate(-50%,-150%) scale(1.05)}
   100%{opacity:0;transform:translate(-50%,-320%) scale(1)}
 }
+/* Cizí prádlomat na mapě — jiná barva, ať je konkurence poznat na první pohled. */
+.pin.unit.rival{border-color:rgba(255,93,108,.9)}
+.pin.unit.rival .pin-tag{background:var(--err);color:#2b0409}
+.btn.sec.warn{color:var(--err);border-color:var(--err)}
