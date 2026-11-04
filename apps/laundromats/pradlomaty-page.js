@@ -248,7 +248,19 @@ function pradlomatyPage(products, cfg) {
       ${showPrices && p._price && p.price_czk != null ? `<div style="font-size:24px;font-weight:800;margin-top:6px">${money(p.price_czk)} <span class="small muted" style="font-weight:500">bez DPH</span></div><div class="small muted">${money(Number(p.price_czk) * 1.21)} s DPH 21 %</div>` : `${p._desc ? '' : '<div class="small muted" style="margin-top:6px">Cenu a financování probereme podle vašeho místa.</div>'}`}
       <div style="margin-top:auto;padding-top:14px"><button type="button" class="btn sm" data-zajem="${esc(p.name_cs)}">Mám zájem →</button></div></div>`).join('') + `</div>`
     : `<div class="card muted">Nabídku strojů právě aktualizujeme. Napište nám a pošleme vám ji.</div>`;
-  const svc = `<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px">` + SERVICES.map((s) => `<div class="card" style="margin:0"><b style="font-size:16px">${esc(s[1])}</b><p class="muted" style="margin:8px 0 0">${esc(s[2])}</p></div>`).join('') + `</div>`;
+  // Služby řešíme až po pořízení prádlomatu → zamčené dlaždice (šedé + 🔒), klik = vysvětlení
+  const svc = `<style>.svc-lock{position:relative;margin:0;text-align:left;font:inherit;color:inherit;cursor:pointer;filter:grayscale(1);opacity:.55;transition:opacity .15s}.svc-lock:hover{opacity:.75}.svc-lock .svc-lk{position:absolute;top:12px;right:14px;font-size:15px}</style>
+  <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px">` + SERVICES.map((s) => `<button type="button" class="card svc-lock" data-svc="${esc(s[1])}"><span class="svc-lk" title="Zpřístupníme po pořízení prádlomatu">🔒</span><b style="font-size:16px;padding-right:22px">${esc(s[1])}</b><p class="muted" style="margin:8px 0 0">${esc(s[2])}</p></button>`).join('') + `</div>
+  <dialog class="helpdlg" id="svcDlg"><div class="hd-in">
+    <div class="hd-head"><span class="hd-q">🔒</span><h2><span id="svcName">Služba</span> zatím uzamčena</h2>
+      <button class="hd-x" type="button" data-svczavrit aria-label="Zavřít">✕</button></div>
+    <div class="hd-body"><p>Služby k prádlomatu řešíme až ve chvíli, kdy máte prádlomat pořízený. Nejdřív spolu vybereme stroj a místo — pak vám služby zpřístupníme.</p>
+      <div class="row" style="margin-top:14px;justify-content:flex-end"><button class="btn sec" type="button" data-svczavrit>Zavřít</button><a class="btn" href="/cesta/schuzka">📅 Domluvit online schůzku</a></div></div>
+  </div></dialog>
+  <script>(function(){var d=document.getElementById('svcDlg');if(!d)return;var cl=function(){if(d.close)d.close();else d.removeAttribute('open');};
+    document.addEventListener('click',function(e){var b=e.target.closest?e.target.closest('[data-svc]'):null;
+      if(b){document.getElementById('svcName').textContent=b.getAttribute('data-svc');if(d.showModal)d.showModal();else d.setAttribute('open','');try{if(window.lmTrack)lmTrack('locked_service',{service:b.getAttribute('data-svc')});}catch(x){}return;}
+      if(e.target===d||(e.target.closest&&e.target.closest('[data-svczavrit]')))cl();});})();<\/script>`;
   return layout({ title: 'Prádlomaty', desc: 'Samoobslužné venkovní prádlomaty — co všechno zajistíme a jaké stroje nabízíme.', active: 'pradlomaty', body: `
   ${valueHero({ flex: null, sym: 'Kč' })}
   <h2 style="margin:30px 0 12px;display:flex;align-items:center;gap:8px">${ico('box', 18)} Prádlomaty, které si můžete pořídit</h2>
