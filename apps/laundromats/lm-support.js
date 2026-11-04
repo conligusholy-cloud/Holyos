@@ -59,7 +59,7 @@ module.exports = function mountSupport(app, ctx) {
   return { unread: async (accId) => { try { return (await hos('GET', '/user/' + accId + '/unread')).unread || 0; } catch (e) { return 0; } } };
 };
 
-function PAGE(acc) {
+function PAGE() {
   return `<style>
 .sp-wrap{max-width:760px;margin:10px auto 0}.sp-head{display:flex;align-items:center;gap:12px;margin:0 0 12px}.sp-head h1{margin:0;font-size:26px}
 .sp-dot{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);border:1px solid var(--border);border-radius:999px;padding:4px 10px}.sp-dot i{width:8px;height:8px;border-radius:50%;background:#64748b}.sp-dot.on i{background:#2fe3a0;box-shadow:0 0 8px #2fe3a0}
@@ -77,7 +77,7 @@ function PAGE(acc) {
 .sp-err{color:#ff8f8f;font-size:13px;min-height:16px;margin-top:6px}
 </style>
 <div class="sp-wrap"><div class="sp-head"><h1>Podpora Laundromats</h1><span class="sp-dot" id="sp-st"><i></i><span>…</span></span></div>
-<p class="muted" style="margin:0 0 12px">Dobrý den ${esc(String(acc.name || '').split(/\s+/)[0])}, napište nám cokoli k prádlomatům, ekonomice nebo vašemu místu. Můžete přiložit i fotku nebo PDF.</p>
+<p class="muted" style="margin:0 0 12px">Napište nám cokoli k prádlomatům, ekonomice nebo vašemu místu. Můžete přiložit i fotku nebo PDF.</p>
 <div class="card sp-log" id="sp-log"><div class="sp-empty" id="sp-empty">Zatím tu nejsou žádné zprávy. Napište nám první — odpovíme co nejdříve.</div></div>
 <div class="sp-off" id="sp-off" hidden>Podpora teď není online. Zprávu nám klidně napište — odpovíme co nejdříve a dáme vám vědět e-mailem.</div>
 <form class="sp-form" id="sp-form"><button type="button" class="sp-ic" id="sp-pick" title="Přiložit soubor">📎</button><input type="file" id="sp-file" accept="image/*,application/pdf" hidden>
