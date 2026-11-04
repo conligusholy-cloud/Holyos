@@ -793,7 +793,7 @@
     var box=document.createElement('div');
     box.style.cssText='background:#0f172a;color:#e8eefc;width:100%;max-width:520px;max-height:88vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px 24px;border:1px solid #1e293b';
     ov.appendChild(box); document.body.appendChild(ov);
-    function head(extra){ return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:17px;font-weight:800;flex:1">🏭 Schůzka na hale</div><button id="ob-om-x" class="btn btn-g" style="padding:4px 10px">✕</button></div><div style="font-size:13px;color:#94a3b8;margin-bottom:12px">Zákazník: <b style="color:#e8eefc">'+esc(lead.name||lead.email||'kontakt')+'</b><br>📍 Ekologická 275, Rychnov nad Kněžnou'+(extra||'')+'</div>'; }
+    function head(extra){ return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:17px;font-weight:800;flex:1">🏭 Schůzka na hale</div><button id="ob-om-x" class="btn btn-g" style="padding:4px 10px">✕</button></div><div style="font-size:13px;color:#94a3b8;margin-bottom:12px">Zákazník: <b style="color:#e8eefc">'+esc(lead.name||lead.email||'kontakt')+'</b><br>📍 Sraz: Tesco, Štemberkova 1698, Rychnov nad Kněžnou'+(extra||'')+'</div>'; }
     function bindX(){ var x=document.getElementById('ob-om-x'); if(x) x.onclick=close; }
     if(!lead.email && !lead.phone){ box.innerHTML=head()+'<div style="color:#fca5a5">Kontakt nemá e-mail ani telefon — nemáme kam poslat potvrzení. Doplň údaje (⚙️) a zkus to znovu.</div>'; bindX(); return; }
     box.innerHTML=head()+'<div style="color:#94a3b8">Načítám volné termíny…</div>'; bindX();
@@ -826,7 +826,7 @@
       box.innerHTML=html; bindX();
       Array.prototype.forEach.call(box.querySelectorAll('.ob-hm-n'),function(b){ b.onclick=function(){ cnt=Number(b.getAttribute('data-n')); render(); }; });
       Array.prototype.forEach.call(box.querySelectorAll('.ob-hm-slot'),function(b){ b.onclick=async function(){
-        if(!confirm('Rezervovat schůzku na hale '+b.getAttribute('data-t')+' pro '+(lead.name||lead.email)+'?\nObsadí se '+cnt+' termíny a zákazník dostane potvrzení s adresou.')) return;
+        if(!confirm('Rezervovat schůzku na hale '+b.getAttribute('data-t')+' pro '+(lead.name||lead.email)+'?\nObsadí se '+cnt+' termíny a zákazník dostane potvrzení s místem setkání.')) return;
         box.innerHTML=head()+'<div style="color:#94a3b8">Rezervuji a odesílám potvrzení…</div>'; bindX();
         try {
           var rr=await api('/leads/'+id+'/hall-meeting',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slot_id:Number(b.getAttribute('data-id')),count:cnt})});

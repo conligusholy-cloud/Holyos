@@ -516,10 +516,11 @@ router.post('/meeting-reservation', async (req, res) => {
 });
 
 // POST /api/compounder/leads/:id/hall-meeting { slot_id, count: 2|3 } — obchodník domluví zákazníkovi osobní SCHŮZKU NA HALE
-// (Ekologická 275, Rychnov nad Kněžnou). Je delší než online schůzka → obsadí 2–3 navazující termíny z kalendáře schůzek
+// (sraz u Tesca v Rychnově nad Kněžnou, odtud na halu). Je delší než online schůzka → obsadí 2–3 navazující termíny z kalendáře schůzek
 // od zvoleného začátku. Hlavní rezervace má mode='hala', navazující termíny mode='hala_cont' (jen blokují kalendář,
 // do statistik se nepočítají). Zákazník dostane potvrzení (SMS + e-mail s pozvánkou .ics), kontakt zůstává obchodníkovi.
-const HALL_ADDRESS = process.env.HALL_ADDRESS || 'Ekologická 275, 516 01 Rychnov nad Kněžnou';
+// Místo setkání (schůzka na hale začíná u Tesca v Rychnově, odtud se jede na halu)
+const HALL_ADDRESS = process.env.HALL_ADDRESS || 'Tesco, Štemberkova 1698, 516 01 Rychnov nad Kněžnou';
 router.post('/leads/:id/hall-meeting', requireAuth, async (req, res) => {
   try {
     const leadId = parseInt(req.params.id, 10); const slotId = parseInt((req.body || {}).slot_id, 10);
@@ -568,7 +569,7 @@ router.post('/leads/:id/hall-meeting', requireAuth, async (req, res) => {
     let firstName = ''; try { firstName = require('../services/vocative').vocativeFirstName(name) || ''; } catch (e) { firstName = ''; }
     if (lead.phone) {
       try {
-        const smsText = (firstName ? firstName + ', schůzku' : 'Schůzku') + ' u nás na hale máme potvrzenou na ' + when + '. Adresa: ' + HALL_ADDRESS + '. Potvrzení s pozvánkou máte i v e-mailu. Těšíme se na vás.';
+        const smsText = (firstName ? firstName + ', schůzku' : 'Schůzku') + ' u nás na hale máme potvrzenou na ' + when + '. Sraz: ' + HALL_ADDRESS + '. Potvrzení s pozvánkou máte i v e-mailu. Těšíme se na vás.';
         await require('../services/voice/sms').sendSms(lead.phone, smsText, { context: 'schuzka_hala_potvrzeni', leadId });
         out.sms = true;
       } catch (e) { out.sms = false; console.warn('[hall-meeting] SMS:', e.message); }
@@ -578,10 +579,10 @@ router.post('/leads/:id/hall-meeting', requireAuth, async (req, res) => {
         const icsDt = (x) => x.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
         const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Laundromats//SchuzkaHala//CS', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT', 'UID:schuzka-hala-' + resv.id + '@laundromats.eu', 'DTSTAMP:' + icsDt(new Date()), 'DTSTART:' + icsDt(startAt), 'DTEND:' + icsDt(endAt),
           'SUMMARY:Schůzka na hale – Laundromats', 'LOCATION:' + HALL_ADDRESS.replace(/,/g, '\\,'), 'STATUS:CONFIRMED', 'BEGIN:VALARM', 'TRIGGER:-PT2H', 'ACTION:DISPLAY', 'DESCRIPTION:Schůzka na hale za 2 hodiny', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
-        const body = 'Dobrý den' + (firstName ? ' ' + firstName : '') + ',\n\npotvrzujeme vaši schůzku u nás na hale: ' + when + ' (zhruba ' + durMin + ' minut).\n\nAdresa: ' + HALL_ADDRESS + '\n\nUkážeme vám prádlomaty naživo, výrobu a projdeme spolu váš záměr. Pozvánku do kalendáře najdete v příloze.\n\nKdyby se cokoli změnilo, odpovězte prosím na tento e-mail.\n\nS pozdravem';
+        const body = 'Dobrý den' + (firstName ? ' ' + firstName : '') + ',\n\npotvrzujeme vaši schůzku u nás na hale: ' + when + ' (zhruba ' + durMin + ' minut).\n\nMísto setkání: ' + HALL_ADDRESS + ' — sejdeme se u Tesca a odtud pojedeme společně na halu.\n\nUkážeme vám prádlomaty naživo, výrobu a projdeme spolu váš záměr. Pozvánku do kalendáře najdete v příloze.\n\nKdyby se cokoli změnilo, odpovězte prosím na tento e-mail.\n\nS pozdravem';
         const from = (await funnelMailFrom('schuzka').catch(() => null)) || process.env.COMPOUNDER_MAIL_FROM || undefined;
         const r = await require('../services/email').sendMail({ to: lead.email, from, brand: 'pradlomaty', fromName: '💧 PRÁDLOMATY 💧', subject: 'Potvrzení schůzky na hale ' + when, body,
-          link: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(HALL_ADDRESS), linkLabel: 'Navigovat na halu',
+          link: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(HALL_ADDRESS), linkLabel: 'Navigovat na místo setkání',
           attachments: [{ filename: 'schuzka-hala.ics', content: ics, contentType: 'text/calendar; charset=utf-8; method=PUBLISH' }] });
         out.email = !!(r && r.sent);
       } catch (e) { out.email = false; console.warn('[hall-meeting] e-mail:', e.message); }

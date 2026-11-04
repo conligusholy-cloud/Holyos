@@ -34,7 +34,7 @@ async function tick() {
       const t = new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', hour: '2-digit', minute: '2-digit' }).format(r.slot.starts_at);
       const first = vocativeFirstName(r.name);
       const text = r.mode === 'hala'
-        ? (first ? first + ', připomínáme' : 'Připomínáme') + ': schůzka u nás na hale dnes v ' + t + ', ' + (process.env.HALL_ADDRESS || 'Ekologická 275, Rychnov nad Kněžnou') + '. Těšíme se na Vás.'
+        ? (first ? first + ', připomínáme' : 'Připomínáme') + ': schůzka u nás na hale dnes v ' + t + ', ' + 'sraz ' + (process.env.HALL_ADDRESS || 'Tesco, Štemberkova 1698, 516 01 Rychnov nad Kněžnou') + '. Těšíme se na Vás.'
         : (first ? first + ', připomínáme' : 'Připomínáme') + ': schůzka dnes v ' + t + ', online videohovor. Těšíme se na Vás.';
       // Nejdřív označit (ať se při pádu SMS nikdy neposílá dvakrát), pak odeslat
       reminded.push(r.id); changed = true;
