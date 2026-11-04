@@ -236,3 +236,11 @@ main{padding-bottom:calc(66px + var(--safe-b))}
 .attr-mini span{display:none;font-size:10px;color:var(--text3);background:rgba(4,8,16,.72);
   padding:3px 7px;border-radius:8px;white-space:nowrap}
 .attr-mini.open span{display:inline}
+
+/* Balíčky herních peněz v bance. */
+.pack{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--border)}
+.pack:first-of-type{border-top:0}
+.pack-l{display:flex;flex-direction:column;min-width:0;flex:1}
+.pack-l b{font-size:15px}
+.pack-l span{font-size:11px;color:var(--text2)}
+.pack .btn{flex:0 0 auto;min-width:86px}

@@ -1080,7 +1080,8 @@ function paintBank() {
     + (S.loan > 0 && S.cash >= 1 ? '<button class="btn big" id="do-repay">Splatit ' + kcFull(Math.min(S.cash, S.loan)) + '</button>' : '')
     + (S.loan > 0 && S.cash < 1 ? '<p class="fine">Splácet začneš, až síť něco vydělá.</p>' : '')
     + '</div>'
-    + '<div class="card"><h3>Dobít banku</h3><p class="muted small" style="margin:2px 0 0">Tady budou balíčky herních peněz. V téhle verzi se ještě neplatí — banka se doplňuje jen sama.</p></div>';
+    + cashPacksHtml();
+  bindCashPacks();
   var d = $('do-draw');
   if (d) d.onclick = function () {
     var take = cashDrawMax();
@@ -1120,11 +1121,23 @@ function paintMe() {
     + '<button class="btn sec big" id="do-reset">Začít znovu od nuly</button>';
   $('do-share').onclick = function () { shareGame($('do-share')); };
   $('do-reset').onclick = function () {
-    sheet('<h3>Začít znovu?</h3><p class="muted small">Přijdeš o celou síť i o peníze. Tohle se nedá vrátit.</p>'
+    sheet('<h3>Začít znovu?</h3>'
+      + '<p class="muted small">Přijdeš o celou síť, o peníze i o zabraná místa — ta se hned uvolní konkurenci. '
+      + 'Tohle se nedá vrátit. Účet i zaplacené karty ti zůstávají.</p>'
       + '<button class="btn big" id="yes-reset" style="background:linear-gradient(90deg,#b4263a,#ff5d6c)">Ano, smazat a začít znovu</button>'
       + '<button class="btn sec big" id="no-reset">Nechat být</button>');
     $('no-reset').onclick = closeSheet;
-    $('yes-reset').onclick = function () { try { localStorage.removeItem(KEY); } catch (e) {} location.reload(); };
+    $('yes-reset').onclick = function () {
+      var y = $('yes-reset'); y.disabled = true; y.textContent = 'Mažu…';
+      // Smazat jen prohlížeč nestačí — stav i zabraná místa drží server a po
+      // obnovení stránky by se hra vrátila přesně tam, kde byla.
+      apiJson('/account/reset', {}).then(function (r) {
+        if (!r.ok) { y.disabled = false; y.textContent = 'Ano, smazat a začít znovu'; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
+        wiped = true;
+        try { localStorage.removeItem(KEY); } catch (e) {}
+        location.replace(location.pathname);
+      }).catch(function () { y.disabled = false; y.textContent = 'Ano, smazat a začít znovu'; toast('Server neodpovídá.', 'err'); });
+    };
   };
 }
 
@@ -1159,8 +1172,9 @@ function apiJson(path, body, method) {
   return api(path, { method: method || 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
 }
 // Uložení na server. Neposíláme častěji než jednou za 15 s, ať to netluče zbytečně.
+var wiped = false;   // po smazání hry už nic na server neposíláme
 function syncState(force) {
-  if (!ME || syncBusy || !S) return Promise.resolve();
+  if (wiped || !ME || syncBusy || !S) return Promise.resolve();
   if (!force && Date.now() - syncAt < 15000) return Promise.resolve();
   syncBusy = true; syncAt = Date.now();
   return apiJson('/account/state', { state: S }, 'PUT')
@@ -1212,7 +1226,7 @@ var CARD_ART = {
 function loadCards() {
   return api('/cards').then(function (r) {
     if (!r.ok) return;
-    CARDS_CAT = r.j.catalog; PAYMENTS_ON = !!r.j.payments;
+    CARDS_CAT = r.j.catalog; CASH_CAT = r.j.cash || null; PAYMENTS_ON = !!r.j.payments;
     if (r.j.owned && ME) ME.cards = r.j.owned;
   }).catch(function () { });
 }
@@ -1268,6 +1282,72 @@ function applyCard(e) {
   }
 }
 
+// ─── Balíčky herních peněz ───────────────────────────────────────────────────
+// Laundry se kupují stejnou cestou jako karty: po zaplacení visí balíček na
+// účtu a klient si ho vyzvedne — díky tomu se peníze nepřipíšou dvakrát ani
+// se neztratí, když hráč zavře stránku hned po platbě.
+var CASH_CAT = null;
+function cashPacksHtml() {
+  if (!PAYMENTS_ON) {
+    return '<div class="card"><h3>Dobít banku</h3><p class="muted small" style="margin:2px 0 0">'
+      + 'Balíčky herních peněz se teprve spouštějí. Zatím se banka doplňuje jen sama.</p></div>';
+  }
+  if (!CASH_CAT) return '<div class="card"><h3>Dobít banku</h3><p class="muted small" style="margin:2px 0 0">Načítám…</p></div>';
+  return '<div class="card"><h3>Dobít banku</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">Laundry na ruku. Čím větší balík, tím víc jich dostaneš za korunu.</p>'
+    + CASH_CAT.map(function (c) {
+      return '<div class="pack" data-pack="' + c.kind + '">'
+        + '<div class="pack-l"><b>' + kcFull(c.laundry) + '</b>'
+        + '<span>' + esc(c.name) + (c.bonus > 0 ? ' · o ' + c.bonus + ' % výhodnější' : '') + '</span></div>'
+        + '<button class="btn sm">' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button></div>';
+    }).join('')
+    + '<p class="fine">Platbu zpracovává Stripe. Peníze se připíšou hned po zaplacení.</p></div>';
+}
+function bindCashPacks() {
+  [].forEach.call(document.querySelectorAll('#bank-body [data-pack]'), function (el) {
+    el.onclick = function () { buyCash(el.getAttribute('data-pack')); };
+  });
+}
+function buyCash(kind) {
+  var c = (CASH_CAT || []).filter(function (x) { return x.kind === kind; })[0];
+  if (!c) return;
+  if (!ME) return toast('Nejdřív se přihlas.', 'err');
+  if (!ME.has_details) return detailsSheet(null, kind);
+  sheet('<h3>' + esc(c.name) + '</h3>'
+    + '<div class="kv"><span>Dostaneš</span><b class="ok">' + kcFull(c.laundry) + '</b></div>'
+    + '<div class="kv"><span>Cena</span><b>' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</b></div>'
+    + '<div class="kv"><span>Za korunu</span><b>' + c.per_czk.toLocaleString('cs-CZ') + ' L$</b></div>'
+    + '<div class="kv"><span>Platí</span><b>' + esc(ME.first_name + ' ' + ME.last_name) + '</b></div>'
+    + '<button class="btn big" id="do-pay">Zaplatit kartou</button>'
+    + '<p class="fine">Laundry jsou herní měna bez jakékoli hodnoty a nejde je směnit zpět.</p>');
+  $('do-pay').onclick = function () {
+    $('do-pay').disabled = true;
+    apiJson('/stripe/checkout', { kind: kind, qty: 1 }).then(function (r) {
+      if (r.ok && r.j.url) { location.href = r.j.url; return; }
+      $('do-pay').disabled = false;
+      if (r.status === 428) return detailsSheet(null, kind);
+      toast(r.j.error || 'Platbu se nepodařilo založit.', 'err');
+    }).catch(function () { $('do-pay').disabled = false; toast('Server neodpovídá.', 'err'); });
+  };
+}
+// Zaplacené balíčky si vyzvedneme sami, hráč na nic klikat nemusí.
+function claimCash(then) {
+  if (!ME || !ME.cards || !CASH_CAT) { if (then) then(); return; }
+  var dluzne = CASH_CAT.filter(function (c) { return (ME.cards[c.kind] || 0) > 0; });
+  if (!dluzne.length) { if (then) then(); return; }
+  var k = dluzne[0].kind;
+  apiJson('/cards/use', { kind: k }).then(function (r) {
+    if (r.ok && r.j.result && r.j.result.effect === 'cash') {
+      S.cash += r.j.result.amount;
+      ME.cards = r.j.owned;
+      save(); paint(); syncState(true);
+      toast(r.j.result.msg, 'ok');
+      return claimCash(then);   // může jich čekat víc
+    }
+    if (then) then();
+  }).catch(function () { if (then) then(); });
+}
+
 // ─── Nákup karty ─────────────────────────────────────────────────────────────
 function buyCard(kind) {
   var c = (CARDS_CAT || []).filter(function (x) { return x.kind === kind; })[0];
@@ -1292,7 +1372,7 @@ function buyCard(kind) {
   };
 }
 // Jméno a e-mail chceme až tady — do té chvíle je hra úplně anonymní.
-function detailsSheet(thenKind) {
+function detailsSheet(thenKind, thenCash) {
   sheet('<h3>Ještě dva údaje</h3>'
     + '<p class="muted small">K platbě potřebujeme vědět, komu kartu připsat a kam poslat doklad.</p>'
     + '<label class="fld"><span>Jméno</span><input id="d-first" class="inp" type="text" maxlength="60" value="' + esc((ME && ME.first_name) || '') + '"></label>'
@@ -1306,6 +1386,7 @@ function detailsSheet(thenKind) {
       if (!r.ok) return toast(r.j.error || 'Nepovedlo se uložit.', 'err');
       ME = r.j.player; closeSheet();
       if (thenKind) buyCard(thenKind);
+      else if (thenCash) buyCash(thenCash);
     }).catch(function () { toast('Server neodpovídá.', 'err'); });
   };
 }
@@ -1323,6 +1404,9 @@ function checkPayment() {
     api('/stripe/status?s=' + encodeURIComponent(sid)).then(function (r) {
       if (r.ok && r.j.status === 'paid') {
         if (ME) ME.cards = r.j.owned;
+        if (/^cash/.test(r.j.kind || '')) {
+          return claimCash(function () { paintBank(); switchTab('bank'); });
+        }
         paintCards(); switchTab('cards');
         return toast('Zaplaceno — karta je tvoje.', 'ok');
       }
@@ -1344,7 +1428,11 @@ function startGame() {
   if (arrived) toast('Dorazilo ' + arrived + ' strojů — čekají na skladě v obchodě.', 'ok');
   else if (gained > 1000) toast('Než ses vrátil, síť vydělala ' + kcFull(gained) + '.', 'ok');
   pullRefs();
-  loadCards().then(function () { if (!$('v-cards').classList.contains('hidden')) paintCards(); });
+  loadCards().then(function () {
+    claimCash();   // co je zaplacené a nevyzvednuté, připíšeme hned
+    if (!$('v-cards').classList.contains('hidden')) paintCards();
+    if (!$('v-bank').classList.contains('hidden')) paintBank();
+  });
   loadClaims();
   setInterval(loadClaims, 45000);
   checkPayment();

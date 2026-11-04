@@ -62,6 +62,26 @@ const CARDS = {
   }
 };
 const CARD_KINDS = Object.keys(CARDS);
+
+// ─── Balíčky herních peněz ───────────────────────────────────────────────────
+// Ceny v haléřích, laundry na ruku. Čím větší balík, tím víc za korunu —
+// u stovky je to 1 000 L$/Kč, u dvoutisícovky 2 300 L$/Kč.
+const CASH = {
+  cash100:  { kind: 'cash100',  name: 'Hrst laundrů',   price: 10000,  laundry: 100000 },
+  cash200:  { kind: 'cash200',  name: 'Balík laundrů',  price: 20000,  laundry: 300000 },
+  cash500:  { kind: 'cash500',  name: 'Kufřík',         price: 50000,  laundry: 900000 },
+  cash1000: { kind: 'cash1000', name: 'Trezor',         price: 100000, laundry: 2000000 },
+  cash2000: { kind: 'cash2000', name: 'Obrněný vůz',    price: 200000, laundry: 4600000 },
+};
+const CASH_KINDS = Object.keys(CASH);
+const ALL = Object.assign({}, CARDS, CASH);
+// Kolik laundrů za korunu — ať hráč vidí, že se větší balík vyplatí.
+const perCzk = (c) => Math.round(c.laundry / (c.price / 100));
+const cashPublic = () => CASH_KINDS.map((k) => {
+  const c = CASH[k];
+  return { kind: c.kind, name: c.name, price_czk: c.price / 100, laundry: c.laundry, per_czk: perCzk(c),
+    bonus: Math.round((perCzk(c) / perCzk(CASH.cash100) - 1) * 100) };
+});
 const catalogPublic = () => CARD_KINDS.map((k) => {
   const c = CARDS[k];
   return { kind: c.kind, name: c.name, icon: c.icon, short: c.short, desc: c.desc, price_czk: c.price / 100 };
@@ -97,7 +117,7 @@ async function pub(p) {
     select: { kind: true }
   });
   const counts = {};
-  CARD_KINDS.forEach((k) => { counts[k] = 0; });
+  CARD_KINDS.concat(CASH_KINDS).forEach((k) => { counts[k] = 0; });
   cards.forEach((c) => { if (counts[c.kind] != null) counts[c.kind]++; });
   return {
     nick: p.nick, email: p.email || null,
@@ -180,6 +200,17 @@ router.post('/account/details', requirePlayer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// POST /account/reset — hráč začíná od nuly. Účet i zaplacené karty mu zůstávají
+// (ty si koupil za skutečné peníze), ale síť, uložený stav a zabraná místa mizí.
+// Bez téhle routy by se stav po obnovení stránky vrátil ze serveru.
+router.post('/account/reset', requirePlayer, async (req, res, next) => {
+  try {
+    const gone = await prisma.gameSpotClaim.deleteMany({ where: { player_id: req.player.id } });
+    await prisma.gamePlayer.update({ where: { id: req.player.id }, data: { state: null, state_at: null } });
+    res.json({ ok: true, released: gone.count });
+  } catch (e) { next(e); }
+});
+
 // ─── Stav hry ────────────────────────────────────────────────────────────────
 // PUT /account/state { state } — klient posílá celý stav, server ho jen uloží.
 // Simulace běží v prohlížeči; server je úložiště, ne rozhodčí. Jediné, co se
@@ -200,7 +231,7 @@ router.get('/cards', async (req, res, next) => {
   try {
     const p = await currentPlayer(req);
     res.json({
-      ok: true, catalog: catalogPublic(),
+      ok: true, catalog: catalogPublic(), cash: cashPublic(),
       payments: require('./game-stripe.routes')._paymentsOn(),
       owned: p ? (await pub(p)).cards : null
     });
@@ -218,7 +249,7 @@ const EFFECTS = {
 router.post('/cards/use', requirePlayer, async (req, res, next) => {
   try {
     const kind = s((req.body || {}).kind, 24);
-    if (!CARDS[kind]) return res.status(400).json({ error: 'Taková karta není.' });
+    if (!ALL[kind]) return res.status(400).json({ error: 'Taková karta není.' });
     const card = await prisma.gameCard.findFirst({
       where: { player_id: req.player.id, kind, used_at: null }, orderBy: { id: 'asc' }, select: { id: true }
     });
@@ -229,7 +260,10 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
       data: { used_at: new Date(), used_on: s((req.body || {}).on, 80) || null }
     });
     if (!done.count) return res.status(409).json({ error: 'Karta už byla použitá.' });
-    res.json({ ok: true, card: kind, result: EFFECTS[kind](), owned: (await pub(req.player)).cards });
+    const result = CASH[kind]
+      ? { effect: 'cash', amount: CASH[kind].laundry, msg: 'Na účet ti přistálo ' + CASH[kind].laundry.toLocaleString('cs-CZ') + ' L$.' }
+      : EFFECTS[kind]();
+    res.json({ ok: true, card: kind, result, owned: (await pub(req.player)).cards });
   } catch (e) { next(e); }
 });
 
@@ -331,7 +365,7 @@ router.post('/spots/release', requirePlayer, async (req, res, next) => {
 });
 
 module.exports = router;
-module.exports._cards = CARDS;
+module.exports._cards = ALL;
 module.exports._currentPlayer = currentPlayer;
 module.exports._requirePlayer = requirePlayer;
 module.exports._pub = pub;
