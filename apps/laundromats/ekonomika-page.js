@@ -137,7 +137,7 @@ function economyPage(lang) {
     <div class="bx-card"><div class="bx-in bx-center"><div class="bx-paths" style="grid-template-columns:1fr"><a class="bx-path" data-keep href="/cesta/schuzka">${t.cta}<small>→</small></a></div></div></div>
     <p class="bx-disc">${t.disc}</p>
     <script>window.EKO_T=${JSON.stringify({ years: t.years, months: t.months, loss: t.lossShort, custMo: t.custMo, paid: t.paid, lossNote: t.loss, defCur: pl ? 'PLN' : 'CZK' })};</script>
-    <script src="/cesta/ekonomika.js"></script>`;
+    <script src="/cesta/pradlomat-economy.js"></script><script src="/cesta/ekonomika.js"></script>`;
   return CP.page(t.title, t.desc, main, false);
 }
 

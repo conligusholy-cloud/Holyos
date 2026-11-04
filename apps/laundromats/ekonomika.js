@@ -29,12 +29,26 @@
     [].forEach.call(document.querySelectorAll('#ek-cur button'), function (b) { b.classList.toggle('on', b.getAttribute('data-c') === CUR); });
     photo(); calc();
   }
+  // Stejný výpočet jako „Podrobný přehled ekonomiky" (pradlomat-economy.js = model z Excelu):
+  // obrat na zákazníka bez DPH, náklad pracích cyklů roste s počtem zákazníků + měsíční fixní náklady.
+  // Bez enginu (nenačetl se) záložní zjednodušený výpočet.
+  function engine() {
+    var PT = window.PradlomatTool; if (!PT || !PT.compute || !PT.getState) return null;
+    try {
+      if (PT.getVersion && PT.getVersion() !== VER) PT.setVersion(VER);
+      var st = PT.getState(); // v EUR (nástroj není připojený → výchozí měna EUR)
+      var r = PT.compute(Object.assign({}, st, { cena_pradlomatu: M.machine, cena_projekt: M.permit, cena_pripojek: M.conn, zakazniku_za_den: M.perday }));
+      return { spend: st.obrat_na_zakaznika, revenue: r.obrat_mesic, cost: r.naklad_pracich_cyklu_mesic + r.fixni_mesic, profit: r.zisk };
+    } catch (e) { return null; }
+  }
   function calc() {
     var k = f(), S = ' ' + SYM[CUR];
     var invest = (M.machine + M.permit + M.conn) * k;
     var custMonth = M.perday * 30.5;
-    var revenue = custMonth * M.spend * k;
-    var profit = revenue - M.cost * k;
+    var E = engine();
+    if (E) { M.spend = E.spend; M.cost = E.cost; var es = $('i-spend'), ec = $('i-cost'); if (es) es.value = fmt(E.spend * k, 2); if (ec) ec.value = fmt(E.cost * k); }
+    var revenue = E ? E.revenue * k : custMonth * M.spend * k;
+    var profit = E ? E.profit * k : revenue - M.cost * k;
     var pbM = profit > 0 ? invest / profit : 0, pbY = pbM / 12;
     $('o-invest').value = fmt(invest); $('o-profit').value = fmt(profit);
     $('m-invest').textContent = fmt(invest) + S;
