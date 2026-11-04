@@ -4010,7 +4010,7 @@ router.post('/tasks', requireAuth, async (req, res, next) => {
     const u = req.user || {};
     let personId = salesMyPersonId(req);
     const b = req.body || {};
-    if (b.person_id && salesIsMgr(u)) personId = Number(b.person_id);
+    if (b.person_id && (salesIsMgr(u) || _canSeeAllLeads(req))) personId = Number(b.person_id);
     if (!personId) return res.status(400).json({ error: 'Uživatel nemá přiřazenou osobu' });
     const title = String(b.title || '').trim().slice(0, 480);
     if (!title) return res.status(400).json({ error: 'Chybí název úkolu' });
@@ -4269,8 +4269,15 @@ router.post('/leads/:id/economy-link', requireAuth, async (req, res, next) => {
     const ch = channel === 'whatsapp' ? 'wa' : channel; // označení zdroje v odkazu → vidíme, odkud kontakt přišel
     // Česky: zákazník dostane účet na laundromats.eu s rolí Ekonomika → odkaz vede na dokončení účtu (heslo),
     // pak rovnou na Ekonomiku v jeho účtu. Bez e-mailu (nebo polsky) zůstává veřejná stránka Ekonomiky jako dřív.
-    let acc = null;
-    if (!pl) { try { acc = await require('./lm-accounts.routes').ensureAccountForLead(Object.assign({}, lead, await prisma.compounderLead.findUnique({ where: { id: lead.id }, select: { last_name: true } }))); } catch (e) { console.warn('[economy-link] účet:', e.message); acc = null; } }
+    let acc = null, accErr = null;
+    if (!pl) { try { acc = await require('./lm-accounts.routes').ensureAccountForLead(Object.assign({}, lead, await prisma.compounderLead.findUnique({ where: { id: lead.id }, select: { last_name: true } }))); } catch (e) { console.warn('[economy-link] účet:', e.message); accErr = e.message; acc = null; } }
+    // Stav účtu posíláme zpátky do aplikace Obchodník — ať je na první pohled vidět,
+    // jestli zákazník dostal odkaz na dokončení účtu, nebo jen veřejnou stránku.
+    const ucet = pl
+      ? { stav: 'verejna_stranka', duvod: 'polský kontakt' }
+      : (acc && acc.ok)
+        ? { stav: acc.token ? (acc.created ? 'zalozen' : 'ceka_na_heslo') : 'existujici', needs_email: !!acc.needs_email, needs_phone: !!acc.needs_phone, account_id: acc.account_id }
+        : { stav: 'verejna_stranka', duvod: accErr || (acc && acc.reason) || 'neznámý důvod' };
     const tl = 'l=' + makeShortCode(lead.id) + '&ch=' + ch;
     const link = acc && acc.ok
       ? (acc.token ? base + '/cesta/aktivace?t=' + acc.token + '&' + tl : base + '/cesta/ucet/ekonomika?' + tl)
@@ -4293,14 +4300,14 @@ router.post('/leads/:id/economy-link', requireAuth, async (req, res, next) => {
       let wa = lead.phone ? String(lead.phone).replace(/[^\d]/g, '') : ''; if (wa.startsWith('00')) wa = wa.slice(2);
       if (!wa) return res.status(400).json({ error: 'Kontakt nemá telefon' });
       await log();
-      return res.json({ ok: true, phone: wa, message: text, link });
+      return res.json({ ok: true, phone: wa, message: text, link, ucet });
     }
     if (channel === 'sms') {
       if (!lead.phone) return res.status(400).json({ error: 'Kontakt nemá telefon' });
       const sid = await require('../services/voice/sms').sendSms(lead.phone, text, { context: 'ekonomika_odkaz', leadId: lead.id });
       await log({ msg_id: String(sid || '') });
       try { require('../services/ads/funnel-events').record('sms', lead.id, { variant: 'ekonomika', channel: 'sms', to: lead.phone, text: String(text).slice(0, 600), msg_id: String(sid || ''), link }); } catch (e) { /* best-effort */ }
-      return res.json({ ok: true, link });
+      return res.json({ ok: true, link, ucet });
     }
     if (!lead.email) return res.status(400).json({ error: 'Kontakt nemá e-mail' });
     const from = (await funnelMailFrom('schuzka', pl ? 'pl' : undefined).catch(() => null)) || process.env.COMPOUNDER_MAIL_FROM || undefined;
@@ -4311,7 +4318,7 @@ router.post('/leads/:id/economy-link', requireAuth, async (req, res, next) => {
     await sendMail({ to: lead.email, subject, body, from, fromName: '💧 PRÁDLOMATY 💧', link, linkLabel: pl ? 'Otwórz ekonomikę' : ((acc && acc.ok && acc.token) ? 'Nastavit heslo a otevřít ekonomiku' : 'Otevřít ekonomiku'), brand: 'pradlomaty', leadId: lead.id, campaignId: 'economy-link' });
     await log({ subject });
     try { require('../services/ads/funnel-events').record('email', lead.id, { variant: 'ekonomika', channel: 'email', to: lead.email, subject, text: body.slice(0, 1500), from, link }); } catch (e) { /* best-effort */ }
-    res.json({ ok: true, link });
+    res.json({ ok: true, link, ucet });
   } catch (err) { next(err); }
 });
 

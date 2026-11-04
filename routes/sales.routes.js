@@ -624,8 +624,19 @@ router.post('/events', async (req, res, next) => {
       contact_id, title, description, event_type = 'meeting',
       location, start_at, end_at, all_day = false,
       status = 'planned', reminder_min,
-      compounder_lead_id, site_id, attendees,
+      compounder_lead_id, site_id, attendees, organizer_person_id, keep_others,
     } = req.body || {};
+
+    // Komu se událost uloží do kalendáře: výchozí = přihlášený. Tomáš / Jan Holý (a admin)
+    // mohou uložit do kalendáře jiného obchodníka (např. „slíbený krok hlídá obchodník").
+    let organizerId = req.user.person ? req.user.person.id : null;
+    if (organizer_person_id && Number(organizer_person_id) !== organizerId) {
+      const p = req.user.person || {};
+      const nrm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+      const boss = req.user.isSuperAdmin || req.user.role === 'admin' || (nrm(p.lastName || p.last_name) === 'holy' && ['tomas', 'jan'].includes(nrm(p.firstName || p.first_name)));
+      if (!boss) return res.status(403).json({ error: 'Do cizího kalendáře může ukládat jen Tomáš nebo Jan Holý' });
+      organizerId = Number(organizer_person_id);
+    }
 
     if (!title || !title.trim()) return res.status(400).json({ error: 'Název je povinný' });
     if (!start_at)               return res.status(400).json({ error: 'Začátek je povinný' });
@@ -635,7 +646,7 @@ router.post('/events', async (req, res, next) => {
     const created = await prisma.salesEvent.create({
       data: {
         contact_id: contact_id ? parseInt(contact_id, 10) : null,
-        organizer_id: req.user.person ? req.user.person.id : null,
+        organizer_id: organizerId,
         title: title.trim(),
         description: description || null,
         event_type,
@@ -664,7 +675,8 @@ router.post('/events', async (req, res, next) => {
     });
     // POSLEDNÍ DOMLUVA VYHRÁVÁ: nová naplánovaná akce u kontaktu nahrazuje starší otevřené
     // kroky (dosledování/hovor) — aby systém neotravoval jindy, než jsme se domluvili.
-    if (created.compounder_lead_id) {
+    // keep_others: vlastní hlídání Tomáše/Jana nesmí rušit kroky obchodníka.
+    if (created.compounder_lead_id && !keep_others) {
       try {
         await prisma.salesEvent.updateMany({
           where: { compounder_lead_id: created.compounder_lead_id, status: 'planned', id: { not: created.id } },

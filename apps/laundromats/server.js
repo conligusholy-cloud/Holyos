@@ -329,7 +329,14 @@ const P = '/api/auth/bs2/meetings';
 app.get('/admin/api/meetings/auto', requireAdmin, api(() => holyosSvc('GET', '/api/auth/bs2/meetings-auto')));
 app.post('/admin/api/meetings/auto', requireAdmin, api((req) => holyosSvc('PUT', '/api/auth/bs2/meetings-auto', req.body || {})));
 app.post('/admin/api/meetings/auto/run', requireAdmin, api(() => holyosSvc('POST', '/api/auth/bs2/meetings-auto/run', {})));
-app.get('/admin/api/meetings', requireAdmin, api(async (req) => ({ ok: true, slots: await holyosSvc('GET', P + '?from=' + qs(req.query.from) + '&to=' + qs(req.query.to)) })));
+app.get('/admin/api/meetings', requireAdmin, api(async (req) => {
+  const range = '?from=' + qs(req.query.from) + '&to=' + qs(req.query.to);
+  const [slots, promises] = await Promise.all([
+    holyosSvc('GET', P + range),
+    holyosSvc('GET', '/api/auth/bs2/meetings-promises' + range).catch(() => []), // slíbené kroky Tomáše/Jana (žlutě); výpadek neshodí kalendář
+  ]);
+  return { ok: true, slots, promises: Array.isArray(promises) ? promises : [] };
+}));
 app.post('/admin/api/meetings/slots', requireAdmin, api((req) => holyosSvc('POST', P + '/slots', { slots: (req.body || {}).slots || [] })));
 app.post('/admin/api/meetings/slots/:id(\\d+)/update', requireAdmin, api((req) => holyosSvc('PATCH', P + '/slots/' + req.params.id, req.body || {})));
 app.post('/admin/api/meetings/slots/:id(\\d+)/delete', requireAdmin, api((req) => holyosSvc('DELETE', P + '/slots/' + req.params.id)));

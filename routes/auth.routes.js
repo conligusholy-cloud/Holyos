@@ -715,6 +715,37 @@ router.get('/bs2/meetings', async (req, res, next) => {
     })));
   } catch (err) { next(err); }
 });
+// GET /api/auth/bs2/meetings-promises?from&to — slíbené kroky, které si Tomáš / Jan Holý
+// hlídají sami (SalesEvent task u leada v jejich kalendáři). Administrace je ukáže žlutě ve Schůzkách.
+router.get('/bs2/meetings-promises', async (req, res, next) => {
+  try {
+    if (!verifyMeetingsToken(req, res)) return;
+    const from = req.query.from ? new Date(String(req.query.from)) : new Date(Date.now() - 7 * 86400000);
+    const to = req.query.to ? new Date(String(req.query.to)) : new Date(Date.now() + 60 * 86400000);
+    if (isNaN(from) || isNaN(to)) return res.status(400).json({ error: 'Neplatný rozsah' });
+    const nrm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+    const holys = await prisma.person.findMany({ where: { last_name: { in: ['Holý', 'Holy', 'HOLÝ', 'HOLY'] } }, select: { id: true, first_name: true, last_name: true } }).catch(() => []);
+    const bosses = holys.filter((p) => ['tomas', 'jan'].includes(nrm(p.first_name)));
+    if (!bosses.length) return res.json([]);
+    const bm = new Map(bosses.map((p) => [p.id, [p.first_name, p.last_name].filter(Boolean).join(' ')]));
+    const evs = await prisma.salesEvent.findMany({
+      where: { organizer_id: { in: bosses.map((p) => p.id) }, event_type: 'task', compounder_lead_id: { not: null }, status: { not: 'cancelled' }, start_at: { gte: from, lt: to } },
+      orderBy: { start_at: 'asc' }, take: 500,
+      select: { id: true, title: true, description: true, start_at: true, status: true, organizer_id: true, compounder_lead_id: true },
+    });
+    const lids = [...new Set(evs.map((e) => e.compounder_lead_id))];
+    const leads = lids.length ? await prisma.compounderLead.findMany({ where: { id: { in: lids } }, select: { id: true, name: true, phone: true, email: true, city: true, owner_person_id: true } }).catch(() => []) : [];
+    const lm = new Map(leads.map((l) => [l.id, l]));
+    const oids = [...new Set(leads.map((l) => l.owner_person_id).filter(Boolean))];
+    const owners = oids.length ? await prisma.person.findMany({ where: { id: { in: oids } }, select: { id: true, first_name: true, last_name: true } }).catch(() => []) : [];
+    const om = new Map(owners.map((o) => [o.id, [o.first_name, o.last_name].filter(Boolean).join(' ')]));
+    res.json(evs.map((e) => {
+      const l = lm.get(e.compounder_lead_id) || {};
+      return { id: e.id, starts_at: e.start_at, status: e.status, text: e.description || e.title, watcher: bm.get(e.organizer_id) || null,
+        lead: { id: e.compounder_lead_id, name: l.name || null, phone: l.phone || null, email: l.email || null, city: l.city || null, owner: l.owner_person_id ? (om.get(l.owner_person_id) || null) : null } };
+    }));
+  } catch (err) { next(err); }
+});
 // GET /api/auth/bs2/meetings-stats?group=day|week|month|year&n=12
 // Statistika schuzek pro administraci Laundromats: kolik schuzek na dane obdobi pripadlo
 // a kolik z nich probehlo. Schuzka patri do obdobi podle TERMINU (slot.starts_at), ne podle

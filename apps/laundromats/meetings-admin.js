@@ -25,6 +25,9 @@ const CSS = `
 .mt-slot.full{border-left:4px solid #22c55e;border-color:rgba(34,197,94,.75);background:rgba(34,197,94,.30)}
 .mt-slot.full .w{color:#d1fae5}
 .mt-slot.off{opacity:.45;border-style:dashed}
+.mt-slot.prom{border-left:4px solid #eab308;border-color:rgba(234,179,8,.6);background:rgba(234,179,8,.18)}
+.mt-slot.prom .w{color:#fde68a}
+.mt-slot.prom.pdone{opacity:.55}
 .mt-slot .t{font-weight:800;font-size:13.5px}
 .mt-slot .w{color:var(--text2);font-size:11.5px}
 .mt-slot .who{margin-top:3px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -85,7 +88,7 @@ var DN=['Ne','Po','Út','St','Čt','Pá','So'], MON=['ledna','února','března',
 var MODE={online:'💻 online',osobne:'👤 osobně',hala:'🏭 schůzka na hale',hala_cont:'🏭 hala (pokračování)'}, PATH={vlastni:'💰 vlastní kapitál',financovani:'🏦 financování'};
 var ST={booked:'rezervováno',done:'proběhla',canceled:'zrušeno',no_show:'nedorazil'};
 var ST2={new:'Nový',nedovolano:'Nedovoláno',volat_pristi:'Volat příště',contacted:'Kontaktován',access_sent:'Odeslán přístup',odeslan_specialista:'Odeslán specialista',psal_chatovi:'Psal s chatem',schuzka:'Domluvena schůzka',schuzka_online:'Schůzka online',qualified:'Kvalifikován',dosledovani:'Dosledování',slibeny_krok:'Slíbený krok',smlouva_odeslat:'Odeslat dokumentaci',smlouva_odeslana:'Dokumentace odeslána',poptavka_financovani:'Poptávka financování',odeslana_schuzka:'Odeslána schůzka',prodano:'Prodáno',converted:'Převeden',nezajem:'Nemá zájem',nelze_pouzit:'Nelze použít',rejected:'Zamítnut'};
-var week=0, data=[];
+var week=0, data=[], prom=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function sod(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
 function wstart(o){var m=sod(new Date());m.setDate(m.getDate()-((m.getDay()+6)%7)+7*o);return m;}
@@ -98,7 +101,7 @@ function load(){
   var upTo=new Date(); upTo.setDate(upTo.getDate()+60);
   var from=new Date(Math.min(mon.getTime(),sod(new Date()).getTime())), until=new Date(Math.max(to.getTime(),upTo.getTime()));
   root.querySelector('.mt-weekwrap').innerHTML='<div class="mt-empty">Načítám…</div>';
-  api('/admin/api/meetings?from='+encodeURIComponent(from.toISOString())+'&to='+encodeURIComponent(until.toISOString())).then(function(j){data=j.slots||[];render();}).catch(function(e){root.querySelector('.mt-weekwrap').innerHTML='<div class="mt-empty" style="color:#ff8f8f">'+esc(e.message)+'</div>';});
+  api('/admin/api/meetings?from='+encodeURIComponent(from.toISOString())+'&to='+encodeURIComponent(until.toISOString())).then(function(j){data=j.slots||[];prom=j.promises||[];render();}).catch(function(e){root.querySelector('.mt-weekwrap').innerHTML='<div class="mt-empty" style="color:#ff8f8f">'+esc(e.message)+'</div>';});
 }
 function render(){
   var mon=wstart(week), sun=new Date(mon); sun.setDate(mon.getDate()+7); var last=new Date(sun); last.setDate(last.getDate()-1);
@@ -107,9 +110,14 @@ function render(){
   var inWeek=data.filter(function(s){var d=new Date(s.starts_at);return d>=mon&&d<sun;});
   for(var i=0;i<7;i++){var d=new Date(mon);d.setDate(mon.getDate()+i);var k=d.toDateString();
     var list=inWeek.filter(function(s){return new Date(s.starts_at).toDateString()===k;});
+    var pl=prom.map(function(p,ix){return {p:p,ix:ix};}).filter(function(x){return new Date(x.p.starts_at).toDateString()===k;});
     html+='<div class="mt-day'+(k===today?' today':'')+(d<sod(now)?' past':'')+'"><div class="mt-dh"><span>'+DN[d.getDay()]+' <b>'+d.getDate()+'.</b></span><button class="add" title="Přidat termín" data-add="'+d.toISOString()+'">+</button></div><div class="mt-slots">';
-    if(!list.length)html+='<div class="mt-empty">—</div>';
-    list.forEach(function(s){var b=s.booked||0,full=b>=s.capacity,r=(s.reservations||[]).filter(function(x){return x.status==='booked';});
+    if(!list.length&&!pl.length)html+='<div class="mt-empty">—</div>';
+    // Slíbené kroky, které si Tomáš/Jan hlídají sami — žlutě, seřazené časově mezi termíny
+    var items=list.map(function(s){return {t:new Date(s.starts_at).getTime(),s:s};}).concat(pl.map(function(x){return {t:new Date(x.p.starts_at).getTime(),p:x.p,ix:x.ix};})).sort(function(a,b){return a.t-b.t;});
+    items.forEach(function(it){if(!it.p)return;var p=it.p;
+      it.html='<div class="mt-slot prom'+(p.status==='done'?' pdone':'')+'" data-prom="'+it.ix+'"><div class="t">'+hm(new Date(p.starts_at))+' <span class="w">· ✅ slíbený krok</span></div><div class="w">hlídá '+esc((p.watcher||'').split(' ')[0]||'—')+'</div><div class="who">'+esc((p.lead&&p.lead.name)||'kontakt')+'</div></div>';});
+    items.forEach(function(it){if(it.p){html+=it.html;return;}var s=it.s,b=s.booked||0,full=b>=s.capacity,r=(s.reservations||[]).filter(function(x){return x.status==='booked';});
       html+='<div class="mt-slot '+(!s.active?'off':full?'full':b>0?'part':'free')+'" data-slot="'+s.id+'"><div class="t">'+hm(new Date(s.starts_at))+' <span class="w">· '+s.duration_min+' min'+(s.mode?' · '+(MODE[s.mode]||s.mode):'')+'</span></div>'
         +'<div class="w">'+(s.active?(b+'/'+s.capacity+' obsazeno'):'vypnuto')+'</div>'
         +r.map(function(x){return '<div class="who">'+esc((x.lead&&x.lead.name)||x.name||x.phone||x.email||'zájemce')+'</div>';}).join('')+'</div>';});
@@ -624,7 +632,13 @@ root.querySelectorAll('.mt-tabs button').forEach(function(b){b.onclick=function(
 root.addEventListener('click',function(e){var b=e.target.closest('[data-sgrp]');if(b)try{sessionStorage.setItem('lmadm:sgrp',b.getAttribute('data-sgrp'));}catch(x){}});
 
 root.querySelector('.mt-auto').onclick=autoModal;
-root.addEventListener('click',function(e){var a=e.target.closest('[data-add]');if(a){e.stopPropagation();return addModal(a.getAttribute('data-add'));}var s=e.target.closest('[data-slot]');if(s)slotModal(+s.getAttribute('data-slot'));});
+root.addEventListener('click',function(e){var a=e.target.closest('[data-add]');if(a){e.stopPropagation();return addModal(a.getAttribute('data-add'));}var pr=e.target.closest('[data-prom]');if(pr)return promModal(prom[+pr.getAttribute('data-prom')]);var s=e.target.closest('[data-slot]');if(s)slotModal(+s.getAttribute('data-slot'));});
+// Detail slíbeného kroku (jen náhled; spravuje se v aplikaci Obchodník / kalendáři)
+function promModal(p){if(!p)return;var L=p.lead||{},d=new Date(p.starts_at);
+  modal('<h3 style="margin:0 0 4px">✅ Slíbený krok</h3><div class="muted" style="margin-bottom:12px">'+dlong(d)+' '+hm(d)+' · hlídá <b>'+esc(p.watcher||'—')+'</b>'+(p.status==='done'?' · splněno':'')+'</div>'
+    +'<div style="background:rgba(234,179,8,.12);border:1px solid rgba(234,179,8,.45);border-radius:10px;padding:10px 12px;white-space:pre-wrap">'+esc(p.text||'')+'</div>'
+    +'<div style="margin-top:12px"><b>'+esc(L.name||'kontakt')+'</b>'+(L.city?' <span class="muted">· '+esc(L.city)+'</span>':'')+(L.owner?'<div class="small muted">obchodník: '+esc(L.owner)+'</div>':'')
+    +(L.phone?'<div><a href="tel:'+esc(L.phone)+'">'+esc(L.phone)+'</a></div>':'')+(L.email?'<div class="small"><a href="mailto:'+esc(L.email)+'">'+esc(L.email)+'</a></div>':'')+'</div>');}
 root.querySelector('.mt-prev').onclick=function(){week--;render();if(week<-1)load();};
 root.querySelector('.mt-next').onclick=function(){week++;if(week>7)load();else render();};
 root.querySelector('.mt-today').onclick=function(){week=0;load();};
