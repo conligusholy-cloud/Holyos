@@ -549,8 +549,16 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
 // ────────────────────────────────────────────────────────────────────────────
 
 // Typ dokladu musí odpovídat směru: OCR občas vrátí „issued“ i u přijaté faktury (a naopak).
+// Daňový doklad k přijaté platbě (dodavatel ho pošle po zaplacení zálohy) — pozná se i z textu, kdyby ho OCR označilo jako fakturu
+const TAX_RECEIPT_RE = /da[ňn]ov[ýy]\s+doklad\s+(k|za)\s+(p[řr]ijat[ée]|zaplacen[ée])\s+platb|da[ňn]ov[ýy]\s+doklad\s+k\s+(z[áa]loze|platb[ěe])|doklad\s+o\s+p[řr]ijet[íi]\s+platby/i;
+function looksLikeTaxReceipt(result) {
+  const h = (result && result.header) || {};
+  const txt = [h.document_title, h.title, ...((result && result.items) || []).map((i) => i && i.description)].filter(Boolean).join(' | ');
+  return TAX_RECEIPT_RE.test(txt);
+}
 function typeForDirection(type, direction) {
   const t = String(type || '');
+  if (t.startsWith('tax_receipt')) return direction === 'ap' ? 'tax_receipt_received' : 'tax_receipt';
   const base = t.startsWith('credit_note') ? 'credit_note' : t.startsWith('proforma') ? 'proforma' : '';
   const suffix = direction === 'ap' ? 'received' : 'issued';
   return base ? `${base}_${suffix}` : suffix;
@@ -559,18 +567,21 @@ function typeForDirection(type, direction) {
 async function createInvoiceFromResult(result, ingest, opts = {}) {
   const h = Object.assign({}, result.header || {});
   const direction = result.direction;
+  if (direction === 'ap' && !String(h.type || '').startsWith('credit_note') && looksLikeTaxReceipt(result)) h.type = 'tax_receipt_received';
   h.type = typeForDirection(h.type, direction);
   const needsReview = result.recommendation === 'needs_review';
   // Přijatá faktura zaplacená kartou (Stripe, Anthropic, OpenAI…) → rovnou „zaplaceno", ať se nedostane do plateb a upomínek.
   const paidByCard = direction === 'ap' && (h.paid_by_card === true || h.payment_method === 'card' || !!opts.paidEvidence);
   // Hotovost = zaplaceno na místě (pokladní doklad, paragon) → také rovnou „zaplaceno".
   const paidByCash = direction === 'ap' && !paidByCard && h.payment_method === 'cash';
-  const paidNow = paidByCard || paidByCash;
+  // Přijatý daňový doklad k platbě = potvrzení už zaplacené zálohy → nic se neplatí, rovnou „zaplaceno"
+  const paidByTaxReceipt = direction === 'ap' && h.type === 'tax_receipt_received';
+  const paidNow = paidByCard || paidByCash || paidByTaxReceipt;
   const totalNum = Number(h.total || 0);
 
   const year = new Date().getFullYear();
   const prefix = direction === 'ap' ? 'FP' : 'FV';
-  const prefix2 = (h.type || '').startsWith('credit_note') ? (direction === 'ap' ? 'DP' : 'DV')
+  const prefix2 = h.type === 'tax_receipt_received' ? 'DDP' : (h.type || '').startsWith('credit_note') ? (direction === 'ap' ? 'DP' : 'DV')
     : (h.type || '').startsWith('proforma') ? (direction === 'ap' ? 'ZP' : 'ZV')
     : prefix;
   const yearPart = `${prefix2}-${year}-`;
@@ -633,7 +644,7 @@ async function createInvoiceFromResult(result, ingest, opts = {}) {
       ocr_passes_done: result.passes_count,
       needs_human_review: needsReview,
       source_file_path: result.attachment?.file_path || null,
-      note: [paidByCard ? 'Zaplaceno kartou (rozpoznáno z dokladu / účtenky) — automaticky označeno jako zaplacené.' : (paidByCash ? 'Zaplaceno hotově — automaticky označeno jako zaplacené.' : null), needsReview ? 'OCR vyhodnotilo středí důvěru — zkontrolovat údaje.' : null].filter(Boolean).join(' ') || null,
+      note: [paidByCard ? 'Zaplaceno kartou (rozpoznáno z dokladu / účtenky) — automaticky označeno jako zaplacené.' : (paidByCash ? 'Zaplaceno hotově — automaticky označeno jako zaplacené.' : (paidByTaxReceipt ? 'Daňový doklad k přijaté platbě — záloha už byla zaplacena, doklad se neplatí.' : null)), needsReview ? 'OCR vyhodnotilo středí důvěru — zkontrolovat údaje.' : null].filter(Boolean).join(' ') || null,
       items: { create: items },
     },
   });

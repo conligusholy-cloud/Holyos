@@ -32,6 +32,7 @@ const PREFIX_MAP = {
   proforma_received: 'ZP',
   proforma_issued: 'ZA',
   tax_receipt: 'DD',
+  tax_receipt_received: 'DDP', // přijatý daňový doklad k platbě (dodavatel ho vystaví po zaplacení zálohy)
   service_issued: 'FS', // servisní poplatky — vlastní řada
   software_issued: 'SW', // softwarová podpora — vlastní řada
   bs2_proforma: 'ZB', // Best Series 2.0 — zálohová faktura k objednávce produktu

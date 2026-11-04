@@ -88,6 +88,8 @@
     .type-badge.issued { background: #10b98122; color: #10b981; }
     .type-badge.credit_note_received, .type-badge.credit_note_issued { background: #a78bfa22; color: #a78bfa; }
     .type-badge.proforma_received, .type-badge.proforma_issued { background: #eab30822; color: #eab308; }
+    .type-badge.tax_receipt_received, .type-badge.tax_receipt { background: #22d3ee22; color: #22d3ee; }
+    .type-badge.dv-chg { cursor: pointer; } .type-badge.dv-chg:hover { outline: 1px solid currentColor; }
 
     .invoice-num { font-family: 'Consolas', monospace; font-weight: 600; font-size: 0.82em; white-space: nowrap; }
     #invoices-table td:first-child { white-space: nowrap; }
@@ -309,6 +311,8 @@
             <option value="credit_note_issued">Dobropis vydaný</option>
             <option value="proforma_received">Záloha přijatá</option>
             <option value="proforma_issued">Záloha vydaná</option>
+            <option value="tax_receipt_received">Daňový doklad k platbě (přijatý)</option>
+            <option value="tax_receipt">Daňový doklad k platbě (vydaný)</option>
           </select>
           <label>Stav:</label>
           <select id="f-status" onchange="loadInvoices()">
@@ -858,6 +862,42 @@
       if (token) h['Authorization'] = 'Bearer ' + token;
       return h;
     }
+    // Oprava druhu dokladu (OCR může např. „Daňový doklad k přijaté platbě" přečíst jako fakturu přijatou)
+    const DOC_TYPES = [
+      ['received', 'Faktura přijatá'], ['tax_receipt_received', 'Daňový doklad k platbě (přijatý) — po zaplacení zálohy'], ['proforma_received', 'Zálohová faktura přijatá'], ['credit_note_received', 'Dobropis přijatý'],
+      ['issued', 'Faktura vydaná'], ['tax_receipt', 'Daňový doklad k platbě (vydaný)'], ['proforma_issued', 'Zálohová faktura vydaná'], ['credit_note_issued', 'Dobropis vydaný'],
+    ];
+    async function changeDocType(invoiceId) {
+      const r0 = await api('GET', '/api/accounting/invoices/' + invoiceId);
+      if (r0.status !== 200) return alert('Nelze načíst doklad');
+      const inv = r0.data;
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10050;display:flex;align-items:center;justify-content:center;';
+      ov.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:520px;max-width:94vw;padding:20px 22px;position:relative;">'
+        + '<button class="ct-x" style="position:absolute;top:10px;right:12px;background:none;border:none;color:var(--text2);font-size:1.4em;cursor:pointer;">×</button>'
+        + '<h3 style="margin:0 0 6px;">Druh dokladu</h3>'
+        + '<div style="color:var(--text2);font-size:.9em;margin-bottom:12px;">' + escapeHtml(inv.invoice_number) + ' · ' + escapeHtml(inv.company?.name || '') + '</div>'
+        + '<select class="ct-t form-control" style="width:100%;margin-bottom:12px;">' + DOC_TYPES.map(([v, l]) => '<option value="' + v + '"' + (v === inv.type ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>'
+        + '<label class="ct-pw" style="display:none;gap:8px;align-items:flex-start;margin-bottom:10px;"><input type="checkbox" class="ct-p" checked style="margin-top:3px;"> <span>Záloha už je zaplacená — označit doklad jako <b>zaplacený</b> (nebude se platit znovu)</span></label>'
+        + '<div style="font-size:.85em;color:var(--text2);margin-bottom:14px;">Doklad dostane číslo v řadě nového druhu (např. FP → DDP) a změna se zapíše do historie.</div>'
+        + '<div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-secondary ct-cancel">Zrušit</button><button class="btn btn-primary ct-save">Uložit</button></div>'
+        + '<div class="ct-err" style="color:#ef4444;margin-top:8px;font-size:.88em;"></div></div>';
+      document.body.appendChild(ov);
+      const q = (c) => ov.querySelector(c), close = () => ov.remove();
+      const upd = () => { q('.ct-pw').style.display = (q('.ct-t').value === 'tax_receipt_received' && inv.status !== 'paid') ? 'flex' : 'none'; };
+      q('.ct-t').onchange = upd; upd();
+      q('.ct-x').onclick = close; q('.ct-cancel').onclick = close;
+      ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+      q('.ct-save').onclick = async () => {
+        const type = q('.ct-t').value;
+        if (type === inv.type) return close();
+        q('.ct-save').disabled = true;
+        const r = await api('POST', '/api/accounting/invoices/' + invoiceId + '/change-type', { type, mark_paid: q('.ct-p').checked });
+        if (r.status !== 200) { q('.ct-err').textContent = 'Chyba: ' + (r.data?.error || r.status); q('.ct-save').disabled = false; return; }
+        close(); openDetail(invoiceId); loadInvoices();
+      };
+    }
+
     async function api(method, path, body) {
       const opts = { method, credentials: 'include', headers: authHeaders() };
       if (body !== undefined) opts.body = JSON.stringify(body);
@@ -871,6 +911,7 @@
       received: 'Přijatá', issued: 'Vydaná',
       credit_note_received: 'Dobropis P', credit_note_issued: 'Dobropis V',
       proforma_received: 'Záloha P', proforma_issued: 'Záloha V',
+      tax_receipt_received: 'Daňový doklad P', tax_receipt: 'Daňový doklad V',
     };
     const STATUS_LABEL = {
       draft: 'Rozpracovaný',
@@ -1894,7 +1935,7 @@
           '<div class="modal wide" style="position:relative;">' +
             '<button type="button" onclick="closeModal()" title="Zavřít" class="dv-x">✕</button>' +
             '<div class="dv-title"><span class="invoice-num">' + escapeHtml(inv.invoice_number) + '</span>' +
-              ' <span class="type-badge ' + inv.type + '">' + (TYPE_LABEL[inv.type] || inv.type) + '</span>' +
+              ' <span class="type-badge dv-chg ' + inv.type + '" title="Změnit druh dokladu (např. daňový doklad k platbě místo faktury)" onclick="changeDocType(' + inv.id + ')">' + (TYPE_LABEL[inv.type] || inv.type) + ' ▾</span>' +
               (((String(inv.type || '').endsWith('_received') || inv.type === 'received') ? 'ap' : 'ar') !== inv.direction
                 ? ' <span title="Typ dokladu a směr (přijatá/vydaná) si neodpovídají — oprav typ v databázi nebo založ doklad znovu." style="background:rgba(239,68,68,.18);color:#f87171;border-radius:10px;padding:2px 10px;font-size:.7em;">⚠ typ ≠ směr (' + (inv.direction === 'ap' ? 'přijatá' : 'vydaná') + ')</span>' : '') +
               ' <span class="status-badge ' + inv.status + '">' + (STATUS_LABEL[inv.status] || inv.status) + '</span></div>' +
@@ -2632,6 +2673,7 @@
                 '<option value="credit_note_issued">Dobropis vydaný</option>' +
                 '<option value="proforma_received">Záloha přijatá</option>' +
                 '<option value="proforma_issued">Záloha vydaná</option>' +
+                '<option value="tax_receipt_received">Daňový doklad k platbě (přijatý)</option>' +
               '</select></div>' +
               '<div class="modal-row" style="grid-column: span 2;"><label>Firma <a href="/modules/nakup-sklad/index.html#company-new" target="_blank" rel="noopener" style="font-size:.85em;margin-left:8px;color:var(--primary,#8c97ff);">＋ nová společnost</a></label><select id="c-company" onchange="onCreateCompanyChange()">' + companyOpts + '</select></div>' +
             '</div>' +

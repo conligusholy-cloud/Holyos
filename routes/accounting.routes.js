@@ -328,6 +328,7 @@ const invoiceCreateSchema = z.object({
     'received', 'issued',
     'credit_note_received', 'credit_note_issued',
     'proforma_received', 'proforma_issued',
+    'tax_receipt_received',
   ]),
   company_id: z.number().int(),
   external_number: z.string().max(100).optional().nullable(),
@@ -493,6 +494,44 @@ router.post('/invoices', async (req, res, next) => {
     }).catch(() => {});
 
     res.status(201).json(invoice);
+  } catch (err) { next(err); }
+});
+
+// POST /api/accounting/invoices/:id/change-type { type, mark_paid? } — oprava druhu dokladu (např. OCR přečetlo
+// „Daňový doklad k přijaté platbě" jako fakturu přijatou). Přečísluje doklad do řady nového typu (FP → DDP…),
+// přepočte směr ap/ar. U přijatého daňového dokladu k platbě volitelně rovnou „zaplaceno" (záloha už je uhrazená).
+const CHANGEABLE_TYPES = {
+  received: 'Faktura přijatá', credit_note_received: 'Dobropis přijatý', proforma_received: 'Záloha přijatá', tax_receipt_received: 'Daňový doklad k platbě (přijatý)',
+  issued: 'Faktura vydaná', credit_note_issued: 'Dobropis vydaný', proforma_issued: 'Zálohová faktura vydaná', tax_receipt: 'Daňový doklad k platbě (vydaný)',
+};
+router.post('/invoices/:id/change-type', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const type = String((req.body || {}).type || '');
+    if (!CHANGEABLE_TYPES[type]) return res.status(400).json({ error: 'Neznámý typ dokladu' });
+    const before = await prisma.invoice.findUnique({ where: { id }, select: { id: true, type: true, direction: true, invoice_number: true, status: true, total: true, paid_amount: true, note: true, date_issued: true } });
+    if (!before) return res.status(404).json({ error: 'Doklad nenalezen' });
+    if (before.type === type) return res.json({ ok: true, unchanged: true, invoice_number: before.invoice_number });
+    if (['cancelled', 'written_off', 'archived'].includes(before.status)) return res.status(400).json({ error: 'Doklad ve stavu ' + before.status + ' nelze měnit' });
+    const direction = type === 'tax_receipt' ? 'ar' : directionFromType(type);
+    const { generateInvoiceNumber } = require('../services/accountant/invoice-numbering');
+    const data = { type, direction };
+    // Nové číslo v řadě nového typu (jen pokud se mění prefix řady)
+    const PFX = require('../services/accountant/invoice-numbering').PREFIX_MAP || {};
+    const oldPfx = String(before.invoice_number).split('-')[0];
+    if (PFX[type] && PFX[type] !== oldPfx) data.invoice_number = await generateInvoiceNumber(type, { prisma });
+    const markPaid = !!(req.body && req.body.mark_paid) && type === 'tax_receipt_received' && before.status !== 'paid';
+    if (markPaid) {
+      data.status = 'paid'; data.paid_amount = before.total;
+      data.note = [before.note, 'Daňový doklad k přijaté platbě — záloha už byla zaplacena, doklad se neplatí.'].filter(Boolean).join(' ');
+    }
+    const inv = await prisma.invoice.update({ where: { id }, data });
+    logAudit({
+      action: 'update', entity: 'invoice', entity_id: id,
+      description: 'Změna druhu dokladu ' + before.invoice_number + ': ' + (CHANGEABLE_TYPES[before.type] || before.type) + ' → ' + CHANGEABLE_TYPES[type] + (data.invoice_number ? ' (nové číslo ' + data.invoice_number + ')' : '') + (markPaid ? ', označeno zaplaceno' : ''),
+      user: req.user,
+    }).catch(() => {});
+    res.json({ ok: true, invoice_number: inv.invoice_number, type: inv.type, status: inv.status });
   } catch (err) { next(err); }
 });
 

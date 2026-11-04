@@ -223,7 +223,7 @@ const I18N = {
     outside: '<strong>Plnění mimo působnost české DPH.</strong> Dodání zákazníkovi ze třetí země (mimo EU) — místo plnění mimo tuzemsko (§ 9 zákona č. 235/2004 Sb.); DPH se neúčtuje (0 %).',
     direction_ar: 'FAKTURA — daňový doklad', direction_ap: 'FAKTURA PŘIJATÁ', direction_tax: 'DAŇOVÝ DOKLAD K PŘIJATÉ PLATBĚ', direction_proforma: 'ZÁLOHOVÁ FAKTURA', direction_proforma_sub: 'není daňový doklad',
     pm: { bank_transfer: 'Bankovním převodem', cash: 'Hotově', card: 'Kartou', barter: 'Zápočet' },
-    types: { received: 'Faktura přijatá', issued: 'Faktura vydaná', credit_note_received: 'Dobropis přijatý', credit_note_issued: 'Dobropis vydaný', proforma_received: 'Záloha přijatá', proforma_issued: 'Zálohová faktura', tax_receipt: 'Daňový doklad k platbě' },
+    types: { received: 'Faktura přijatá', issued: 'Faktura vydaná', credit_note_received: 'Dobropis přijatý', credit_note_issued: 'Dobropis vydaný', proforma_received: 'Záloha přijatá', tax_receipt_received: 'Daňový doklad k platbě (přijatý)', proforma_issued: 'Zálohová faktura', tax_receipt: 'Daňový doklad k platbě' },
     locale: 'cs-CZ',
   },
   en: {
@@ -237,7 +237,7 @@ const I18N = {
     outside: '<strong>Outside the scope of Czech VAT.</strong> Supply to a customer outside the European Union — the place of supply is outside the Czech Republic; VAT is not charged (0 %).',
     direction_ar: 'INVOICE — tax document', direction_ap: 'RECEIVED INVOICE', direction_tax: 'TAX DOCUMENT FOR RECEIVED PAYMENT', direction_proforma: 'PROFORMA INVOICE', direction_proforma_sub: 'not a tax document',
     pm: { bank_transfer: 'Bank transfer', cash: 'Cash', card: 'Card', barter: 'Offset' },
-    types: { received: 'Received invoice', issued: 'Invoice', credit_note_received: 'Received credit note', credit_note_issued: 'Credit note', proforma_received: 'Received proforma', proforma_issued: 'Proforma invoice', tax_receipt: 'Tax document for payment' },
+    types: { received: 'Received invoice', issued: 'Invoice', credit_note_received: 'Received credit note', credit_note_issued: 'Credit note', proforma_received: 'Received proforma', tax_receipt_received: 'Received tax document for payment', proforma_issued: 'Proforma invoice', tax_receipt: 'Tax document for payment' },
     locale: 'en-GB',
   },
 };
@@ -403,6 +403,7 @@ function typeLabel(t) {
     credit_note_received: 'Dobropis přijatý',
     credit_note_issued: 'Dobropis vydaný',
     proforma_received: 'Záloha přijatá',
+    tax_receipt_received: 'Daňový doklad k platbě (přijatý)',
     proforma_issued: 'Zálohová faktura',
     tax_receipt: 'Daňový doklad k platbě',
   };
