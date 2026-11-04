@@ -24,7 +24,7 @@ function header(opts) {
     [m + '/cesta/zhodnotit', t.eval, 'zhodnotit'],
   ];
   return '<header class="lhdr" id="lhdr"><div class="in"><a class="brand" href="' + home + '" aria-label="Laundromats">' + LOGO + '<span class="name">Laundromats<span>.eu</span></span></a>'
-    + '<nav class="lnav" aria-label="Navigace">' + items.map(([h, l, k]) => '<!--PRIV--><a href="' + h + '" data-k="' + k + '">' + l + '</a><!--/PRIV-->').join('') + '</nav>'
+    + '<nav class="lnav" aria-label="Navigace">' + items.map(([h, l, k]) => '<!--PRIV:' + k + '--><a href="' + h + '" data-k="' + k + '">' + l + '</a><!--/PRIV-->').join('') + '</nav>'
     + '<span class="lsp"></span><span style="margin-left:auto"></span>'
     + '<!--LACC--></div></header>'
     + '<script>(function(){var p=location.pathname,k=/\\/compounder/.test(p)?"compounder":/\\/pradlomaty/.test(p)?"pradlomaty":/ekonomika/.test(p)?"ekonomika":/\\/hledat/.test(p)?"hledat":/\\/zhodnotit/.test(p)?"zhodnotit":"";if(k){var e=document.querySelector(\'.lnav a[data-k="\'+k+\'"]\');if(e)e.classList.add("on");}})();</script>';

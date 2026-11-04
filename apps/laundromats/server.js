@@ -72,7 +72,7 @@ app.get('/api/presence', (req, res) => {
 const LH = require('./lm-header');
 // Stránky mimo /cesta (úvod, Compounder, Prádlomaty): stejná lišta + počítadlo, bez přepínače jazyka
 // Menu (<!--PRIV-->…<!--/PRIV-->) vidí jen přihlášený uživatel s účtem (správce z HolyOS se do nástrojů dostane přes „Správce“ → rozcestník)
-const lite = (html, req) => String(html).replace(/<!--PRIV-->([\s\S]*?)<!--\/PRIV-->/g, (m, a) => ((req && req.account) ? a : '')).replace('<!--LACC-->', ACC.headerSlot(req)).replace('</style>', PRES_CSS + '</style>').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>');
+const lite = (html, req) => String(html).replace(/<!--PRIV(?::([a-z]+))?-->([\s\S]*?)<!--\/PRIV-->/g, (m, k, a) => ((req && req.account && (!k || ACC.canSee(req, k))) ? a : '')).replace('<!--LACC-->', ACC.headerSlot(req)).replace('</style>', PRES_CSS + '</style>').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>');
 const shell = (html, lang) => CI18N.addSwitch(String(html).replace('@@LHDR@@', LH.header({ lang, minimal: true })).replace('</style>', LH.CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</style>', FOOT_CSS + PRES_CSS + '</style>').replace('<!--PRESENCE-->', '').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>').replace('</body>', '<script src="/cesta/track.js" defer></script></body>'));
 const send = (res, html) => res.set('Cache-Control', 'no-cache').type('html').send(html);
 const cestaHtml = () => fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8');
@@ -316,6 +316,7 @@ app.post('/admin/api/meetings/slots/:id(\\d+)/delete', requireAdmin, api((req) =
 app.post('/admin/api/meetings/reservations/:id(\\d+)', requireAdmin, api((req) => holyosSvc('PATCH', P + '/reservations/' + req.params.id, { status: (req.body || {}).status })));
 // Jmenný seznam — kontakty označené v HolyOS jako „zajímavý kontakt".
 app.post('/admin/api/leads/:id(\\d+)/hot', requireAdmin, api(async (req) => holyosSvc('POST', '/api/auth/bs2/leads/' + req.params.id + '/hot', { hot: !!(req.body || {}).hot })));
+app.post('/admin/api/users/:id(\\d+)/role', requireAdmin, api((req) => holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/plan', { plan: String((req.body || {}).plan || '') })));
 app.get('/admin/api/users', requireAdmin, api(async () => ({ ok: true, users: (await holyosSvc('GET', '/api/auth/lm/accounts/list')).users || [] })));
 app.post('/admin/api/users/:id(\\d+)/disabled', requireAdmin, api((req) => holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/disabled', { disabled: !!(req.body || {}).disabled })));
 // Sloupcove filtry tabulek bereme primo z HolyOS (/js/column-filters.js), aby se admin
@@ -361,10 +362,10 @@ async function fetchProducts() {
 }
 const COMP = require('./compounder-page');
 const PRAD = require('./pradlomaty-page');
-app.get('/cesta/compounder', ACC.requireAccount, (req, res) => send(res, lite(COMP.compounderPage(), req)));
+app.get('/cesta/compounder', ACC.requirePage('compounder'), (req, res) => send(res, lite(COMP.compounderPage(), req)));
 // Ekonomika pro přihlášené: stejný model jako /cesta/ekonomika (ten zůstává veřejný pro cestu z SMS), ale s menu
-app.get('/cesta/ucet/ekonomika', ACC.requireAccount, (req, res) => send(res, lite(String(EP.economyPage('cs')).replace('<a class="bx-back" data-keep href="/cesta">← zpět</a>', '<a class="bx-back" href="/cesta/ucet">← zpět na nástroje</a>').replace('@@LHDR@@', LH.header({})).replace('</style>', LH.CSS + FOOT_CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</body>', '<script src="/cesta/track.js" defer></script></body>'), req)));
-app.get('/cesta/pradlomaty', ACC.requireAccount, async (req, res) => { let list = []; try { list = await fetchProducts(); } catch (e) { console.warn('[laundromats] produkty:', e.message); if (_prod.data) list = _prod.data; } send(res, lite(PRAD.pradlomatyPage(list), req)); });
+app.get('/cesta/ucet/ekonomika', ACC.requirePage('ekonomika'), (req, res) => send(res, lite(String(EP.economyPage('cs')).replace('<a class="bx-back" data-keep href="/cesta">← zpět</a>', '<a class="bx-back" href="/cesta/ucet">← zpět na nástroje</a>').replace('@@LHDR@@', LH.header({})).replace('</style>', LH.CSS + FOOT_CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</body>', '<script src="/cesta/track.js" defer></script></body>'), req)));
+app.get('/cesta/pradlomaty', ACC.requirePage('pradlomaty'), async (req, res) => { let list = []; try { list = await fetchProducts(); } catch (e) { console.warn('[laundromats] produkty:', e.message); if (_prod.data) list = _prod.data; } send(res, lite(PRAD.pradlomatyPage(list), req)); });
 app.get('/img/pradlomat.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(path.join(__dirname, 'pradlomat-flex.webp')));
 app.get('/img/product/:id(\\d+)', async (req, res) => {
   try {
@@ -379,7 +380,7 @@ app.get('/img/product/:id(\\d+)', async (req, res) => {
 ACC.mount(app);
 // Videohovor s kompetentní osobou (/videocall) — WebRTC + SSE, upozornění přes HolyOS (Velín)
 require('./lm-videocall')(app, { HOLYOS_URL, LM_SECRET, rateLimited, render: (req, html) => lite(html, req), trackServer });
-require('./lm-apps')(app, { HOLYOS_URL, rateLimited, fetchProducts, requireAccount: ACC.requireAccount, render: (req, html) => lite(html, req), trackServer });
+require('./lm-apps')(app, { HOLYOS_URL, rateLimited, fetchProducts, requireAccount: ACC.requireAccount, requirePage: ACC.requirePage, render: (req, html) => lite(html, req), trackServer });
 
 app.use((req, res) => res.status(404).type('text/plain').send('Stránka nenalezena'));
 app.use((err, req, res, next) => { console.warn('[laundromats]', err && err.message); res.status(500).type('text/plain').send('Chyba serveru'); });

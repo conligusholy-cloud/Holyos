@@ -67,7 +67,7 @@ router.post('/register', async (req, res, next) => {
     if (exist && exist.email_verified_at) return res.status(409).json({ error: 'Účet s tímto e-mailem už existuje. Přihlaste se, nebo si obnovte heslo.' });
     const token = newToken();
     const data = { name, phone: phone || null, company: company || null, password_hash: await bcrypt.hash(String(b.password), 12), verify_token_hash: sha(token) };
-    const acc = exist ? await prisma.lmAccount.update({ where: { id: exist.id }, data }) : await prisma.lmAccount.create({ data: Object.assign({ email }, data) });
+    const acc = exist ? await prisma.lmAccount.update({ where: { id: exist.id }, data }) : await prisma.lmAccount.create({ data: Object.assign({ email, plan: 'beginner' }, data) });
     const leadId = await linkLead(acc, b.sid);
     if (!exist) notifyOwners(acc, leadId);
     console.log('[lm-accounts] registrace #' + acc.id + (exist ? ' (znovu, neověřený)' : ''));
@@ -159,6 +159,15 @@ router.get('/list', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 // POST /:id/disabled {disabled} — zablokovat / odblokovat účet (zablokovaný se odhlásí do 5 minut)
+// POST /:id/plan {plan} — role uživatele: beginner (Začátečník) | economy (Ekonomika) | full (Plný přístup)
+router.post('/:id(\\d+)/plan', async (req, res, next) => {
+  try {
+    const plan = String((req.body || {}).plan || '');
+    if (!['beginner', 'economy', 'full'].includes(plan)) return res.status(400).json({ error: 'Neznámá role' });
+    const upd = await prisma.lmAccount.update({ where: { id: parseInt(req.params.id, 10) }, data: { plan }, select: { id: true, plan: true } });
+    res.json({ ok: true, plan: upd.plan });
+  } catch (err) { next(err); }
+});
 router.post('/:id(\\d+)/disabled', async (req, res, next) => {
   try {
     const upd = await prisma.lmAccount.update({ where: { id: parseInt(req.params.id, 10) }, data: { disabled: !!(req.body || {}).disabled, token_version: { increment: 1 } }, select: { id: true, disabled: true } });

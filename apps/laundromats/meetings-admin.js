@@ -312,6 +312,11 @@ function usrLoad(){
     .catch(function(e){box.innerHTML='<div class="mt-empty" style="color:#ff8f8f">'+esc(e.message)+'</div>';});
 }
 function dtm(v){if(!v)return '<span class="muted">—</span>';var d=new Date(v);return dlong(d)+' '+hm(d);}
+var USR_ROLES=[['beginner','Začátečník'],['economy','Ekonomika'],['full','Plný přístup']];
+function roleKey(p){return p==='economy'||p==='full'?p:'beginner';}
+function roleLabel(p){var k=roleKey(p);for(var i=0;i<USR_ROLES.length;i++)if(USR_ROLES[i][0]===k)return USR_ROLES[i][1];return k;}
+document.addEventListener('change',function(e){var s=e.target.closest&&e.target.closest('[data-urole]');if(!s)return;var id=+s.getAttribute('data-urole'),plan=s.value;s.disabled=true;
+  api('/admin/api/users/'+id+'/role',{plan:plan}).then(function(){(usr||[]).forEach(function(u){if(u.id===id)u.plan=plan;});s.disabled=false;s.style.borderColor='#2fe3a0';setTimeout(function(){s.style.borderColor='';},1200);}).catch(function(er){s.disabled=false;alert(er.message);});});
 function usrRow(u){
   var lead=u.compounder_lead_id&&window.LM_HOLYOS?'<a href="'+window.LM_HOLYOS+'/modules/prodejni-objednavky/index.html?lead='+u.compounder_lead_id+'" target="_blank" rel="noopener" class="small">kontakt #'+u.compounder_lead_id+' ↗</a>':(u.compounder_lead_id?'<span class="small muted">#'+u.compounder_lead_id+'</span>':'<span class="muted">—</span>');
   return '<tr'+(u.disabled?' style="opacity:.55"':'')+'><td><a href="#" class="nm" data-uact="'+u.id+'" title="Zobrazit pohyb na stránkách">'+esc(u.name)+'</a> <button class="btn sec sm" data-uact="'+u.id+'" title="Pohyb na stránkách">📈 Pohyb</button></td>'
@@ -322,6 +327,7 @@ function usrRow(u){
     +'<td>'+(u.email_verified_at?'<span class="mt-pill" style="color:#4ade80;border-color:#4ade80">ověřen</span>':'<span class="mt-pill" style="color:#ffd866;border-color:#ffd866">čeká na ověření</span>')+'</td>'
     +'<td>'+dtm(u.last_login_at)+'</td><td style="text-align:right">'+(u.login_count||0)+'</td>'
     +'<td>'+lead+'</td>'
+    +'<td><select class="usr-role" data-urole="'+u.id+'" style="background:#0b1220;color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:5px 8px;font:inherit;font-size:12.5px">'+USR_ROLES.map(function(r){return '<option value="'+r[0]+'"'+(roleKey(u.plan)===r[0]?' selected':'')+'>'+r[1]+'</option>';}).join('')+'</select></td>'
     +'<td><button class="btn sec sm" data-udis="'+u.id+'" data-on="'+(u.disabled?0:1)+'"'+(u.disabled?'':' style="color:#ff8f8f"')+'>'+(u.disabled?'Odblokovat':'Zablokovat')+'</button></td></tr>';
 }
 function usrRender(){
@@ -330,7 +336,7 @@ function usrRender(){
   var ver=usr.filter(function(u){return u.email_verified_at;}).length;
   root.querySelector('.mt-usrsum').textContent=usr.length?('Celkem '+usr.length+' · ověřených '+ver+' · zablokovaných '+usr.filter(function(u){return u.disabled;}).length):'';
   if(!usr.length){box.innerHTML='<div class="mt-empty">Zatím se nikdo nezaregistroval. Registrace je na laundromats.eu/cesta/registrace.</div>';return;}
-  box.innerHTML='<div class="mt-tw"><table class="usr-dt"><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Firma</th><th>Registrace</th><th>Ověření</th><th>Poslední přihlášení</th><th>Přihlášení</th><th>V HolyOS</th><th>Účet</th></tr></thead><tbody></tbody></table></div>';
+  box.innerHTML='<div class="mt-tw"><table class="usr-dt"><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Firma</th><th>Registrace</th><th>Ověření</th><th>Poslední přihlášení</th><th>Přihlášení</th><th>V HolyOS</th><th>Role</th><th>Účet</th></tr></thead><tbody></tbody></table></div>';
   if(!window.ColFilters){box.querySelector('tbody').innerHTML=usr.map(usrRow).join('');return;}
   usrT=dtable('.usr-dt',[
       {key:'name',label:'Jméno',get:function(u){return u.name||'';},ph:'Jméno…',enum:false},
@@ -342,6 +348,7 @@ function usrRender(){
       {key:'last_login_at',label:'Poslední přihlášení',type:'date',get:function(u){return u.last_login_at||null;}},
       {key:'login_count',label:'Přihlášení',type:'num',get:function(u){return u.login_count||0;}},
       {key:'lead',label:'V HolyOS',get:function(u){return u.compounder_lead_id?String(u.compounder_lead_id):'';},enum:false},
+      {key:'role',label:'Role',get:function(u){return roleLabel(u.plan);},ph:'Vyber…',enum:true},
       {key:'act',label:'Účet',get:function(u){return u.disabled?'zablokovaný':'aktivní';},enum:true}
     ],usrRow,'uživatelů','Žádný uživatel.');
   usrT.setRows(usr);

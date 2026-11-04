@@ -49,6 +49,22 @@ module.exports = function createAccounts(ctx) {
     next();
   }
   const safeNext = (n) => (/^\/cesta\/[A-Za-z0-9/_.?=&%-]*$/.test(String(n || '')) && !/^\/cesta\/(prihlaseni|registrace|odhlasit)/.test(String(n)) ? String(n) : '/cesta/ucet');
+  // ── Role (LmAccount.plan): co uživatel uvidí. Nová registrace = Začátečník. Role nastavuje správce v administraci → Uživatelé.
+  const ROLES = {
+    beginner: { label: 'Začátečník', pages: ['compounder', 'pradlomaty'] },
+    economy: { label: 'Ekonomika', pages: ['compounder', 'pradlomaty', 'ekonomika'] },
+    full: { label: 'Plný přístup', pages: ['compounder', 'pradlomaty', 'ekonomika', 'hledat', 'zhodnotit'] },
+  };
+  const roleOf = (a) => (a && ROLES[a.plan] ? a.plan : 'beginner'); // 'free' (původní výchozí) = Začátečník
+  const canSee = (req, page) => !!(req && ((req.account && ROLES[roleOf(req.account)].pages.includes(page)) || (!req.account && adminOf(req))));
+  function requirePage(page) {
+    return (req, res, next) => {
+      if (!req.account && !adminOf(req)) return requireAccount(req, res, next);
+      if (canSee(req, page)) return next();
+      if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'Tato část není ve vašem přístupu.' });
+      send(req, res, 'Bez přístupu', box('Tato část zatím není ve vašem přístupu', '', '<p>Váš účet má roli <b>' + esc(ROLES[roleOf(req.account)].label) + '</b>. Přístup k dalším nástrojům vám rádi otevřeme – stačí se nám ozvat.</p><div class="acc-links"><a href="/cesta/ucet">← Moje nástroje</a><a href="/#kontakt">Napsat nám</a></div>'), 403);
+    };
+  }
   function requireAccount(req, res, next) {
     if (req.account || adminOf(req)) return next();
     if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Přihlaste se prosím.' });
@@ -174,7 +190,7 @@ module.exports = function createAccounts(ctx) {
       const welcome = req.query.vitejte === '1' ? 'Účet je potvrzený. Vítejte!' : '';
       const err = String(req.query.err || '').slice(0, 200);
       const body = CSS + `<div class="hero" style="padding-bottom:6px"><span class="eyebrow"><i></i>Moje nástroje</span><h1>Dobrý den, <span class="g">${esc(String(a.name).split(/\s+/)[0])}</span></h1><p>Vaše nástroje Laundromats na jednom místě.</p></div>${msgHtml(err, welcome)}
-        <div class="acc-tiles">${TILES.map(([h, i, t, d]) => `<a class="card acc-tile" href="${h}"><div class="ic">${IC[i]}</div><h3>${t}</h3><p>${d}</p></a>`).join('')}</div>
+        <div class="acc-tiles">${TILES.filter(([h, i]) => req.account ? canSee(req, i) : true).map(([h, i, t, d]) => `<a class="card acc-tile" href="${h}"><div class="ic">${IC[i]}</div><h3>${t}</h3><p>${d}</p></a>`).join('')}</div>
 `;
       send(req, res, 'Moje nástroje', body, 200, { back: false });
     });
@@ -219,5 +235,5 @@ module.exports = function createAccounts(ctx) {
     return '<a class="lcta" href="/cesta/prihlaseni">Přihlásit se</a>';
   }
   const attach = (req, res, next) => attachInner(req, res, next).catch((e) => { console.warn('[lm-acc] relace:', e.message); req.account = null; next(); });
-  return { attach, requireAccount, mount, headerSlot };
+  return { attach, requireAccount, requirePage, canSee, ROLES, mount, headerSlot };
 };

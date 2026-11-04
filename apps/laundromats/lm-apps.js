@@ -6,25 +6,26 @@ const { layout, esc, MAIN_URL } = require('./lm-layout');
 
 module.exports = function mountApps(app, ctx) {
   const { HOLYOS_URL, rateLimited, fetchProducts, requireAccount, render } = ctx;
+  const gH = ctx.requirePage ? ctx.requirePage('hledat') : requireAccount, gZ = ctx.requirePage ? ctx.requirePage('zhodnotit') : requireAccount; // role uživatele
   const T = (req, ev, p) => { if (ctx.trackServer) ctx.trackServer(req, ev, p); };
   const gate = requireAccount; // přístup jen pro přihlášené (účty laundromats.eu) a správce z HolyOS
   const urlenc = require('express').urlencoded({ extended: false, limit: '60kb' });
 
   // ── Najít místo ──
   const S = { nick: '' };
-  app.get('/cesta/hledat', gate, (req, res) => res.set('Cache-Control', 'no-store').type('html').send(render(req, LAPP.analyzerPage(S, String(req.query.q || '').slice(0, 80), null, ''))));
+  app.get('/cesta/hledat', gH, (req, res) => res.set('Cache-Control', 'no-store').type('html').send(render(req, LAPP.analyzerPage(S, String(req.query.q || '').slice(0, 80), null, ''))));
   // ── Zhodnotit místo (výpočet bez ukládání) ──
   async function products() {
     try { return (await fetchProducts()).map((p) => ({ id: p.id, name: p.name_cs, price_czk: p.price_czk })).filter((p) => p.price_czk > 0); } catch (e) { return []; }
   }
-  app.get('/cesta/zhodnotit', gate, async (req, res, next) => {
+  app.get('/cesta/zhodnotit', gZ, async (req, res, next) => {
     try {
       const pre = { city: String(req.query.city || '').slice(0, 120), address: String(req.query.address || '').slice(0, 300) };
       if (isFinite(+req.query.lat) && isFinite(+req.query.lng) && +req.query.lat) { pre.lat = String(+req.query.lat); pre.lng = String(+req.query.lng); if (pre.address) pre.name = pre.address; }
       res.set('Cache-Control', 'no-store').type('html').send(render(req, LAPP.siteForm(S, null, pre, '', false, false, await products())));
     } catch (e) { next(e); }
   });
-  app.post('/cesta/zhodnotit', gate, urlenc, async (req, res, next) => {
+  app.post('/cesta/zhodnotit', gZ, urlenc, async (req, res, next) => {
     try {
       if (rateLimited('eval:' + req.ip, 30, 3600e3)) return res.status(429).type('text/plain').send('Příliš mnoho vyhodnocení, zkuste to později.');
       const d = LAPP.clean(req.body || {});
@@ -46,27 +47,27 @@ module.exports = function mountApps(app, ctx) {
     <div class="lm-cta no-print"><div><h3>Chcete místo probrat s námi?</h3><p>Projdeme vyhodnocení, doplníme zkušenosti z provozu a navrhneme další postup.</p></div><a class="btn" href="${MAIN_URL()}${process.env.LM_HOME_LIVE === '1' ? '/' : '/uvod'}#kontakt">Probrat můj záměr →</a></div>`;
     return LAPP.page(S, 'Vyhodnocení – ' + (d.name || ''), 'loc', body, (d.lat && d.lng) ? LAPP.LEAFLET_HEAD : '');
   }
-  app.post('/cesta/zhodnotit/upravit', gate, urlenc, async (req, res, next) => {
+  app.post('/cesta/zhodnotit/upravit', gZ, urlenc, async (req, res, next) => {
     try { res.set('Cache-Control', 'no-store').type('html').send(render(req, LAPP.siteForm(S, null, LAPP.clean(req.body || {}), '', false, false, await products()))); } catch (e) { next(e); }
   });
 
   // ── API pro aplikace: proxy na veřejné API HolyOS (bez ukládání), limity per IP ──
   async function holyosPublic(p) { try { const r = await fetch(HOLYOS_URL + p, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(60000) }); const j = await r.json().catch(() => ({})); return { ok: r.ok, status: r.status, j }; } catch (e) { return { ok: false, status: 502, j: { error: 'Analýza momentálně není dostupná, zkuste to prosím později.' } }; } }
   const send = (res, r) => res.status(r.ok ? 200 : (r.status || 502)).json(r.j);
-  app.get('/api/location/area', gate, async (req, res) => {
+  app.get('/api/location/area', gH, async (req, res) => {
     const area = String(req.query.area || '').trim().slice(0, 80); if (area.length < 2) return res.status(400).json({ error: 'Zadejte město.' });
     if (rateLimited('area:' + req.ip, 30, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho analýz, zkuste to za chvíli.' });
     T(req, 'app_search', { area });
     send(res, await holyosPublic('/api/pradlomat-spots/public/area-analysis?area=' + encodeURIComponent(area) + '&radius_km=15'));
   });
-  app.get('/api/location/candidates', gate, async (req, res) => {
+  app.get('/api/location/candidates', gH, async (req, res) => {
     const area = String(req.query.area || '').trim().slice(0, 80); if (area.length < 2) return res.status(400).json({ error: 'Zadejte město.' });
     if (rateLimited('cand:' + req.ip, 30, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho dotazů, zkuste to za chvíli.' });
     const r = await holyosPublic('/api/pradlomat-spots/public/candidates?area=' + encodeURIComponent(area));
     if (r.ok && r.j && typeof r.j === 'object') r.j.contacts = r.j.contacts || {};
     send(res, r);
   });
-  app.get('/api/location/contact', gate, async (req, res) => {
+  app.get('/api/location/contact', gH, async (req, res) => {
     const name = String(req.query.name || '').trim().slice(0, 120); if (name.length < 2) return res.status(400).json({ error: 'Chybí název místa.' });
     if (rateLimited('contact:' + req.ip, 15, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho dotazů, zkuste to za chvíli.' });
     const qs = ['name', 'city', 'lat', 'lon', 'kind', 'address'].filter((k) => req.query[k]).map((k) => k + '=' + encodeURIComponent(String(req.query[k]).slice(0, 200))).join('&');
@@ -74,12 +75,12 @@ module.exports = function mountApps(app, ctx) {
     send(res, await holyosPublic('/api/pradlomat-spots/public/contact?' + qs));
   });
   let _ex = { at: 0, data: [] };
-  app.get('/api/location/existing', gate, async (req, res) => {
+  app.get('/api/location/existing', gH, async (req, res) => {
     if (Date.now() - _ex.at > 3600e3) { const r = await holyosPublic('/api/pradlomat-spots/public/existing-laundromats'); if (r.ok && Array.isArray(r.j)) _ex = { at: Date.now(), data: r.j }; }
     res.json(_ex.data);
   });
   // Geokódování: RÚIAN (ČÚZK) → Nominatim (záloha)
-  app.get('/api/location/geocode', gate, async (req, res) => {
+  app.get('/api/location/geocode', gZ, async (req, res) => {
     const addr = String(req.query.address || req.query.q || '').trim().slice(0, 200), city = String(req.query.city || '').trim().slice(0, 100);
     if (addr.length < 2 && city.length < 2) return res.status(400).json({ error: 'Zadejte adresu.' });
     if (rateLimited('geo:' + req.ip, 60, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho dotazů, zkuste to za chvíli.' });
