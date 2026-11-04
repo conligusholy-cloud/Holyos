@@ -365,7 +365,7 @@ const COMP = require('./compounder-page');
 const PRAD = require('./pradlomaty-page');
 app.get('/cesta/compounder', ACC.requirePage('compounder'), (req, res) => send(res, lite(COMP.compounderPage(), req)));
 // Ekonomika pro přihlášené: stejný model jako /cesta/ekonomika (ten zůstává veřejný pro cestu z SMS), ale s menu
-app.get('/cesta/ucet/ekonomika', ACC.requirePage('ekonomika'), (req, res) => send(res, lite(String(EP.economyPage('cs')).replace('<a class="bx-back" data-keep href="/cesta">← zpět</a>', '<a class="bx-back" href="/cesta/ucet">← zpět na nástroje</a>').replace('@@LHDR@@', LH.header({})).replace('</style>', LH.CSS + FOOT_CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</body>', '<script src="/cesta/track.js" defer></script></body>'), req)));
+app.get('/cesta/ucet/ekonomika', ACC.requirePage('ekonomika'), (req, res) => send(res, lite(String(EP.economyPage('cs')).replace(/<a class="bx-back"[^>]*>[^<]*<\/a>/, '<a class="bx-back" href="/cesta/ucet">← zpět na nástroje</a>').replace('@@LHDR@@', LH.header({})).replace('</style>', LH.CSS + FOOT_CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</body>', '<script src="/cesta/track.js" defer></script></body>'), req)));
 // Nastavení produktů z administrace (viditelnost, pořadí, texty, ceny) — HolyOS AppSetting, cache 1 min
 let _pcfg = { at: 0, data: null };
 async function fetchProdConfig() {

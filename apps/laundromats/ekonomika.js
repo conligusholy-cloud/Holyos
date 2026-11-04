@@ -12,7 +12,7 @@
   var SYM = { CZK: 'Kč', EUR: '€', PLN: 'zł' };
   var PHOTOS = {};
   function photo() { var im = $('ek-photo'); if (im && PHOTOS[VER] && im.getAttribute('src') !== PHOTOS[VER]) im.src = PHOTOS[VER]; }
-  var CUR = T.defCur || 'CZK', VER = 'V3';
+  var CUR = T.defCur || 'CZK', VER = 'V2'; // výchozí MINI
   var M = { machine: 0, permit: 0, conn: 0, spend: 0, cost: 0, perday: 0 }; // v EUR (perday ks)
   var $ = function (id) { return document.getElementById(id); };
   var f = function () { return RATES.EUR / RATES[CUR]; }; // EUR → zobrazená měna

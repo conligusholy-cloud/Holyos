@@ -152,7 +152,7 @@
   function verButtons() {
     if (!SHOW_VER) return ''; // přepínač skrytý (lead má povolenou jen jednu variantu)
     var html = '<span style="font-size:12px;color:var(--text2);margin:0 4px 0 2px">' + _t('Varianta') + ':</span>';
-    ['V3', 'V2'].forEach(function (v) {
+    ['V2', 'V3'].forEach(function (v) { // MINI první
       var on = v === VER;
       html += '<button type="button" class="btn btn-sm pe-chip' + (on ? ' pe-on' : '') + '" onclick="window.PradlomatTool._setVer(\'' + v + '\')" style="padding:6px 10px">' + (v === 'V3' ? 'FLEX' : 'MINI') + '</button>';
     });

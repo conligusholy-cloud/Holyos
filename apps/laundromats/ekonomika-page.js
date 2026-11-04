@@ -79,7 +79,7 @@ function economyPage(lang) {
   const t = TXT[lang] || TXT.cs;
   const pl = lang === 'pl';
   const main = `${CSS}
-    <a class="bx-back" data-keep href="/cesta">${t.back}</a>
+    <a class="bx-back" href="${pl ? '/cesta/pl' : (process.env.LM_HOME_LIVE === '1' ? '/' : '/uvod')}" onclick="try{if(document.referrer&&new URL(document.referrer).host===location.host&&history.length>1){history.back();return false;}}catch(e){}return true;">${t.back}</a>
     <img class="ek-photo" id="ek-photo" src="/img/pradlomat-mini.webp" alt="Prádlomat">
     <p class="bx-eyebrow">${t.eyebrow}</p>
     <h1>${t.h1}</h1>
@@ -94,7 +94,7 @@ function economyPage(lang) {
     </div>
 
     <div class="ek-bar">
-      <span class="ek-seg" id="ek-ver"><span>${t.variant}:</span><button type="button" data-v="V3" class="on" title="${t.v3}">FLEX</button><button type="button" data-v="V2" title="${t.v2}">MINI</button></span>
+      <span class="ek-seg" id="ek-ver"><span>${t.variant}:</span><button type="button" data-v="V2" class="on" title="${t.v2}">MINI</button><button type="button" data-v="V3" title="${t.v3}">FLEX</button></span>
       <span class="ek-seg" id="ek-cur"><span>${t.cur}:</span><button type="button" data-c="CZK">CZK</button><button type="button" data-c="EUR">EUR</button><button type="button" data-c="PLN">PLN</button></span>
       <button type="button" class="ek-reset" id="ek-reset">${t.reset}</button>
     </div>
@@ -199,7 +199,7 @@ function economyDetailPage(lang) {
     <p class="bx-lead" style="max-width:720px">${t.dLead}</p>
     <div id="pradlomat-tool-root"></div>
     <script src="/cesta/pradlomat-economy.js"></script>
-    <script>window.PradlomatTool.mount(document.getElementById('pradlomat-tool-root'),{version:'V3',showVerSwitch:true});
+    <script>window.PradlomatTool.mount(document.getElementById('pradlomat-tool-root'),{version:'V2',showVerSwitch:true});
     // Kurzy z ČNB (stejné jako na stránce Ekonomika) — jinak by podrobný přehled v Kč počítal s pevným kurzem 25 Kč/€
     fetch('/api/ekonomika/fx').then(function(r){return r.json();}).then(function(j){if(j&&j.rates&&j.rates.EUR>0&&window.PradlomatTool.setRates)window.PradlomatTool.setRates(Object.assign({EUR:25,USD:23,GBP:29},j.rates));}).catch(function(){});
     (function(){var r=document.getElementById('pradlomat-tool-root'),tm={};if(window.lmTrack)lmTrack('eco_open',{view:'detail'});
