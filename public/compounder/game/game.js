@@ -514,7 +514,7 @@ function areasSheet() {
 }
 // Hledání běží na serveru na pozadí, protože data z OpenStreetMap chodí pomalu.
 // Doptáváme se, dokud není hotovo, a mezitím hráči ukazujeme, jak dlouho to trvá.
-var SCOUT_MAX_WAIT = 150000;
+var SCOUT_MAX_WAIT = 240000;   // první hledání nového města trvá na OpenStreetMap i pár minut
 function scout(city, btn) {
   if (!city || city.length < 2) return toast('Napiš, do kterého města se má jet.', 'err');
   if (S.cash < SCOUT_COST) return toast('Na cestu nemáš dost hotovosti.', 'err');
@@ -550,7 +550,7 @@ function scout(city, btn) {
         if (j && j.pending) {
           var s = Math.round((Date.now() - started) / 1000);
           if (Date.now() - started > SCOUT_MAX_WAIT) {
-            return fail('Hledání trvá moc dlouho. Zkus to za chvíli znovu — mezitím běží dál a podruhé to bude hned.');
+            return fail('Zabralo to moc času, ale hledání běží dál na serveru. Zkus za minutu to samé město znovu — naskočí hned.');
           }
           progress(s);
           timer = setTimeout(poll, 2500);

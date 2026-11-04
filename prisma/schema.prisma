@@ -7617,3 +7617,21 @@ model GamePurchase {
   @@index([player_id])
   @@map("game_purchases")
 }
+
+// Prozkoumané město pro hru. Jedno hledání na OpenStreetMap trvá i dvě minuty,
+// proto si výsledek necháváme natrvalo — a hlavně společný pro všechny hráče.
+// Klíč je jméno bez diakritiky a malými písmeny, ať „Kneznou" a „Kněžnou" splynou.
+model GameArea {
+  id         Int      @id @default(autoincrement())
+  key        String   @unique @db.VarChar(80)
+  name       String   @db.VarChar(120)
+  lat        Float?
+  lon        Float?
+  population Int?
+  spots      Json
+  hits       Int      @default(0)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("game_areas")
+}

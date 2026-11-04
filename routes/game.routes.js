@@ -15,6 +15,7 @@
 const express = require('express');
 const router = express.Router();
 const finder = require('../services/spots/finder');
+const { prisma } = require('../config/database');
 
 // ─── Limiter (v paměti) ──────────────────────────────────────────────────────
 const hits = new Map();
@@ -63,11 +64,19 @@ function toSpot(c, i, areaId) {
 function normQuery(q) {
   return String(q || '').trim().replace(/\s+/g, ' ').slice(0, 60);
 }
+// Klíč do cache bez diakritiky a velkých písmen: „Rychnov Nad Kneznou" a
+// „Rychnov nad Kněžnou" je totéž město, a bylo by hloupé hledat ho dvakrát
+// (jedno hledání trvá i dvě minuty). Geokodéru posíláme pořád původní text.
+function cacheKey(q) {
+  return q.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
 const scoutJobs = new Map();
 const JOB_TTL = 5 * 60e3;
 function cleanJobs() {
   const now = Date.now();
-  for (const [k, j] of scoutJobs) if (now - j.at > JOB_TTL) scoutJobs.delete(k);
+  // Běžící úlohu nikdy nezahazujeme — jinak by se po pěti minutách rozjela
+  // znovu od začátku a hledání by se nikdy nedobralo konce.
+  for (const [k, j] of scoutJobs) if (j.state !== 'running' && now - j.at > JOB_TTL) scoutJobs.delete(k);
 }
 async function runScout(query, key, job) {
   try {
@@ -89,6 +98,15 @@ async function runScout(query, key, job) {
       spots,
     };
     scoutCache.set(key, { at: Date.now(), data });
+    // Do databáze, ať je město prozkoumané i po nasazení nové verze a pro všechny
+    // hráče najednou. Hledání na OpenStreetMap je drahé, výsledek se nemění.
+    try {
+      await prisma.gameArea.upsert({
+        where: { key },
+        create: { key, name: data.area.name, lat: data.area.lat, lon: data.area.lon, population: data.population, spots },
+        update: { name: data.area.name, lat: data.area.lat, lon: data.area.lon, population: data.population, spots },
+      });
+    } catch (e) { console.warn('[game] uložení města:', e.message); }
     job.state = 'done';
   } catch (e) {
     job.state = 'error';
@@ -101,11 +119,22 @@ router.get('/scout', async (req, res, next) => {
     const q = normQuery(req.query.q);
     if (q.length < 2) return res.status(400).json({ error: 'Napiš jméno města.' });
     if (!/^[\p{L}\p{N} .,'\-]+$/u.test(q)) return res.status(400).json({ error: 'Tohle jako jméno města nevypadá.' });
-    const key = q.toLowerCase();
+    const key = cacheKey(q);
 
     const hit = scoutCache.get(key);
     if (hit && Date.now() - hit.at < SCOUT_TTL) {
       return res.set('Cache-Control', 'public, max-age=600').json(hit.data);
+    }
+    // Město už někdo prohledal dřív — vrátíme ho okamžitě, bez OpenStreetMap.
+    const saved = await prisma.gameArea.findUnique({ where: { key } }).catch(() => null);
+    if (saved && Array.isArray(saved.spots) && saved.spots.length) {
+      const data = {
+        area: { id: key, name: saved.name, lat: saved.lat, lon: saved.lon },
+        population: saved.population, spots: saved.spots,
+      };
+      scoutCache.set(key, { at: Date.now(), data });
+      prisma.gameArea.update({ where: { key }, data: { hits: { increment: 1 } } }).catch(() => {});
+      return res.set('Cache-Control', 'public, max-age=600').json(data);
     }
     cleanJobs();
     let job = scoutJobs.get(key);
