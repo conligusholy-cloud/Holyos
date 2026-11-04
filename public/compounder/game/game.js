@@ -210,11 +210,81 @@ function verdictPill(score) {
   return '<span class="pill ' + c + '">' + score + '/100 · ' + t + '</span>';
 }
 
+// ─── Postavička ──────────────────────────────────────────────────────────────
+// Kreslí se z jednoho čísla: 0 = opatrný, 1 = vyvážený, 2 = dravý. Po každé
+// odpovědi se překreslí, takže hráč vidí, do koho se svými volbami proměňuje.
+var SKIN = '#e8b58e', SKIN2 = '#d19a73';
+var AVA = [
+  { accent: '#4fd1ff', suit: '#24466b', hair: '#3a4256', name: 'opatrný' },
+  { accent: '#7c5cff', suit: '#39306b', hair: '#2f3242', name: 'vyvážený' },
+  { accent: '#ff8a3d', suit: '#5a2f1c', hair: '#241f22', name: 'dravý' }
+];
+function avatarSvg(lvl) {
+  lvl = Math.max(0, Math.min(2, lvl | 0));
+  var c = AVA[lvl], id = 'av' + lvl;
+  var g = '<defs>'
+    + '<radialGradient id="h' + id + '" cx="50%" cy="45%" r="55%">'
+    + '<stop offset="0" stop-color="' + c.accent + '" stop-opacity=".34"/>'
+    + '<stop offset="1" stop-color="' + c.accent + '" stop-opacity="0"/></radialGradient>'
+    + '<linearGradient id="s' + id + '" x1="40" y1="108" x2="120" y2="158" gradientUnits="userSpaceOnUse">'
+    + '<stop stop-color="' + c.suit + '"/><stop offset="1" stop-color="' + c.accent + '" stop-opacity=".55"/></linearGradient>'
+    + '</defs>';
+  // svatozář + rameno + krk
+  g += '<circle cx="80" cy="80" r="76" fill="url(#h' + id + ')"/>'
+    + '<circle cx="80" cy="80" r="60" fill="none" stroke="' + c.accent + '" stroke-opacity=".3" stroke-width="1.5"/>'
+    + '<path d="M80 96c-26 0-44 14-50 38h100c-6-24-24-38-50-38z" fill="url(#s' + id + ')"/>'
+    + '<path d="M68 92h24v16c0 6-24 6-24 0z" fill="' + SKIN2 + '"/>';
+  // košile
+  g += '<path d="M69 97l11 13 11-13 9 5-20 20-20-20z" fill="#f2f6ff"/>';
+  // kravata / rozhalenka
+  if (lvl === 0) g += '<path d="M80 110l6 6-6 28-6-28z" fill="' + c.accent + '"/>';
+  else if (lvl === 1) g += '<path d="M80 110l5 5-5 17-5-17z" fill="' + c.accent + '"/>';
+  else g += '<path d="M80 112l-9 9 3 4 6-6 6 6 3-4z" fill="' + c.suit + '"/>';
+  // hlava
+  g += '<ellipse cx="80" cy="64" rx="26" ry="29" fill="' + SKIN + '"/>'
+    + '<path d="M58 70c-4 0-5 8 0 9M102 70c4 0 5 8 0 9" fill="' + SKIN + '"/>';
+  // vlasy podle typu
+  if (lvl === 0) g += '<path d="M54 60c0-18 12-27 26-27s26 9 26 27c0-9-10-13-26-13-9 0-14 3-18 8-3 4-8 3-8 5z" fill="' + c.hair + '"/>';
+  else if (lvl === 1) g += '<path d="M54 62c0-20 12-29 26-29s26 9 26 29c-3-12-11-17-26-17s-23 5-26 17z" fill="' + c.hair + '"/>';
+  else g += '<path d="M54 60c2-19 13-27 26-27s25 8 26 26c-5-7-9-11-14-9 2-4 1-6-2-7-2 5-7 7-13 6-7-1-13 1-16 5-3 3-5 4-7 6z" fill="' + c.hair + '"/>';
+  // obočí
+  var brow = lvl === 2 ? '<path d="M66 54l14 4M94 50l-13 6" stroke="' + c.hair + '" stroke-width="3.4" stroke-linecap="round"/>'
+    : '<path d="M67 55h13M93 55H80" stroke="' + c.hair + '" stroke-width="3.2" stroke-linecap="round"/>';
+  g += brow;
+  // oči
+  g += '<circle cx="71" cy="64" r="3.2" fill="#1b2235"/><circle cx="89" cy="64" r="3.2" fill="#1b2235"/>';
+  // brýle jen u opatrného
+  if (lvl === 0) g += '<g fill="none" stroke="' + c.accent + '" stroke-width="2.2">'
+    + '<circle cx="71" cy="64" r="8"/><circle cx="89" cy="64" r="8"/><path d="M79 64h2"/></g>';
+  // ústa
+  if (lvl === 0) g += '<path d="M73 78q7 4 14 0" stroke="#9c5f49" stroke-width="2.6" fill="none" stroke-linecap="round"/>';
+  else if (lvl === 1) g += '<path d="M72 77q8 7 16 0" stroke="#9c5f49" stroke-width="2.8" fill="none" stroke-linecap="round"/>';
+  else g += '<path d="M70 76q10 12 20 0z" fill="#8c4030"/><path d="M72 77h16l-2 2H74z" fill="#fff"/>';
+  // odznak s tím, co typ řeší
+  var bx = 124, by = 122;
+  g += '<circle cx="' + bx + '" cy="' + by + '" r="19" fill="#0b1222" stroke="' + c.accent + '" stroke-width="2"/>';
+  if (lvl === 0) g += '<circle cx="' + bx + '" cy="' + by + '" r="9" fill="none" stroke="#ffd866" stroke-width="2.4"/>'
+    + '<text x="' + bx + '" y="' + (by + 4) + '" text-anchor="middle" font-size="9" font-weight="700" fill="#ffd866">L$</text>';
+  else if (lvl === 1) g += '<g fill="' + c.accent + '"><rect x="' + (bx - 9) + '" y="' + (by - 1) + '" width="5" height="9" rx="1.5"/>'
+    + '<rect x="' + (bx - 2) + '" y="' + (by - 6) + '" width="5" height="14" rx="1.5"/>'
+    + '<rect x="' + (bx + 5) + '" y="' + (by - 10) + '" width="5" height="18" rx="1.5"/></g>';
+  else g += '<path d="M' + (bx - 9) + ' ' + (by + 7) + 'l6-7 5 4 7-10" fill="none" stroke="' + c.accent + '" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>'
+    + '<path d="M' + (bx + 4) + ' ' + (by - 6) + 'h6v6" fill="none" stroke="' + c.accent + '" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>';
+  return '<svg viewBox="0 0 160 160" role="img" aria-label="Postavička podnikatele">' + g + '</svg>';
+}
+// Z dosavadních odpovědí spočítá, ke komu má postavička blíž.
+function avaLevel(sc, answered) {
+  if (!answered) return 1;
+  var risk = (sc.dravy * 2 + sc.vyvazeny) / (answered * 2);
+  return Math.round(risk * 2);
+}
+
 // ─── Úvod a dotazník ─────────────────────────────────────────────────────────
 var qi = 0, qScore = { opatrny: 0, vyvazeny: 0, dravy: 0 };
 $('go-quiz').onclick = function () { $('intro').classList.add('hidden'); $('quiz').classList.remove('hidden'); renderQuiz(); };
 function renderQuiz() {
   var q = QUIZ[qi];
+  $('q-ava').innerHTML = avatarSvg(avaLevel(qScore, qi));
   $('q-title').textContent = 'Otázka ' + (qi + 1) + ' ze ' + QUIZ.length;
   $('q-text').textContent = q.q;
   $('q-opts').innerHTML = q.a.map(function (o, i) { return '<button data-i="' + i + '">' + esc(o[0]) + '</button>'; }).join('');
@@ -232,6 +302,7 @@ function renderQuiz() {
 function showRole(id) {
   var p = PROFILES[id];
   $('quiz').classList.add('hidden'); $('role').classList.remove('hidden');
+  $('role-ava').innerHTML = avatarSvg(['opatrny', 'vyvazeny', 'dravy'].indexOf(id));
   $('role-name').textContent = p.name;
   $('role-desc').textContent = p.desc;
   $('role-cash').textContent = kcFull(p.cash);

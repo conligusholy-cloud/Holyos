@@ -46,6 +46,11 @@ button{font:inherit;cursor:pointer}
   .intro-pts li{font-size:12.5px}
   .btn.big{padding:14px;margin-top:4px}
 }
+.ava{display:flex;justify-content:center}
+.ava svg{width:140px;height:140px;animation:avain .35s ease-out}
+.ava.big svg{width:170px;height:170px}
+@keyframes avain{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}}
+@media(max-height:720px){.ava svg{width:104px;height:104px}.ava.big svg{width:126px;height:126px}}
 .q-text{margin:0;font-size:18px;font-weight:600}
 .q-opts{display:flex;flex-direction:column;gap:10px;margin-top:6px}
 .q-opts button{text-align:left;background:var(--card);border:1px solid var(--border);border-radius:14px;
