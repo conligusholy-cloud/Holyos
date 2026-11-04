@@ -51,43 +51,74 @@ function toSpot(c, i, areaId) {
 }
 
 // Hledání v libovolném městě, které hráč napíše. Geokódování i vyhledání řeší
-// stejný hledač jako obchodní nástroj; my jen hlídáme rozumný vstup a cache.
+// stejný hledač jako obchodní nástroj (services/spots/finder.js).
+//
+// POZOR NA ČAS: hledač tahá data z OpenStreetMap přes Overpass a první dotaz na
+// nové město klidně trvá minutu i víc. Proto se na odpověď NEČEKÁ — požadavek
+// nastartuje úlohu na pozadí a hned vrátí 202 { pending: true }. Klient se pak
+// doptává, dokud není hotovo. Jakmile úloha doběhne, výsledek je v cache a další
+// hledání téhož města je okamžité.
 function normQuery(q) {
   return String(q || '').trim().replace(/\s+/g, ' ').slice(0, 60);
 }
-async function scoutQuery(query, res) {
-  const key = query.toLowerCase();
-  const hit = scoutCache.get(key);
-  if (hit && Date.now() - hit.at < SCOUT_TTL) {
-    return res.set('Cache-Control', 'public, max-age=600').json(hit.data);
+const scoutJobs = new Map();
+const JOB_TTL = 5 * 60e3;
+function cleanJobs() {
+  const now = Date.now();
+  for (const [k, j] of scoutJobs) if (now - j.at > JOB_TTL) scoutJobs.delete(k);
+}
+async function runScout(query, key, job) {
+  try {
+    const r = await finder.searchArea(query, {
+      // Ve hře chceme i benzínky a myčky, ne jen obchodní domy — hráč má co hledat.
+      candidate_types: ['supermarket', 'hypermarket', 'mall', 'department_store', 'fuel', 'car_wash'],
+      max_candidates: 40,
+    });
+    if (r && r.error) { job.state = 'error'; job.error = r.error; return; }
+    const spots = (r.candidates || []).map((c, i) => toSpot(c, i, key.replace(/[^a-z0-9]+/g, '-')));
+    const data = {
+      area: {
+        id: key,
+        name: (r.area && r.area.display_name ? String(r.area.display_name).split(',')[0].trim() : query),
+        lat: r.area ? r.area.lat : null,
+        lon: r.area ? r.area.lon : null,
+      },
+      population: r.population || null,
+      spots,
+    };
+    scoutCache.set(key, { at: Date.now(), data });
+    job.state = 'done';
+  } catch (e) {
+    job.state = 'error';
+    job.error = 'Hledání se nepovedlo: ' + (e && e.message ? e.message : 'neznámá chyba');
   }
-  const r = await finder.searchArea(query, {
-    // Ve hře chceme i benzínky a myčky, ne jen obchodní domy — hráč má co hledat.
-    candidate_types: ['supermarket', 'hypermarket', 'mall', 'department_store', 'fuel', 'car_wash'],
-    max_candidates: 40,
-  });
-  if (r && r.error) return res.status(503).json({ error: r.error });
-  const spots = (r.candidates || []).map((c, i) => toSpot(c, i, key.replace(/[^a-z0-9]+/g, '-')));
-  const data = {
-    area: { id: key, name: (r.area && r.area.display_name ? String(r.area.display_name).split(',')[0].trim() : query),
-      lat: r.area ? r.area.lat : null, lon: r.area ? r.area.lon : null },
-    population: r.population || null,
-    spots,
-  };
-  scoutCache.set(key, { at: Date.now(), data });
-  res.set('Cache-Control', 'public, max-age=600').json(data);
 }
 
-// Napsané město: /api/game/scout?q=Kolín
 router.get('/scout', async (req, res, next) => {
   try {
     const q = normQuery(req.query.q);
     if (q.length < 2) return res.status(400).json({ error: 'Napiš jméno města.' });
     if (!/^[\p{L}\p{N} .,'\-]+$/u.test(q)) return res.status(400).json({ error: 'Tohle jako jméno města nevypadá.' });
-    if (rateLimited('game:' + ipOf(req), 20, 10 * 60e3)) {
-      return res.status(429).json({ error: 'Moc rychle po sobě. Dej tomu chvilku.' });
+    const key = q.toLowerCase();
+
+    const hit = scoutCache.get(key);
+    if (hit && Date.now() - hit.at < SCOUT_TTL) {
+      return res.set('Cache-Control', 'public, max-age=600').json(hit.data);
     }
-    await scoutQuery(q, res);
+    cleanJobs();
+    let job = scoutJobs.get(key);
+    if (job && job.state === 'done') { scoutJobs.delete(key); return res.status(503).json({ error: 'Zkus to prosím ještě jednou.' }); }
+    if (job && job.state === 'error') { scoutJobs.delete(key); return res.status(503).json({ error: job.error }); }
+    if (!job) {
+      // Nová úloha se počítá do limitu; doptávání na běžící úlohu ne, jinak by si hráč limit vyčerpal čekáním.
+      if (rateLimited('game:' + ipOf(req), 20, 10 * 60e3)) {
+        return res.status(429).json({ error: 'Moc rychle po sobě. Dej tomu chvilku.' });
+      }
+      job = { at: Date.now(), state: 'running' };
+      scoutJobs.set(key, job);
+      runScout(q, key, job);
+    }
+    res.set('Cache-Control', 'no-store').status(202).json({ pending: true, waited_ms: Date.now() - job.at });
   } catch (err) { next(err); }
 });
 

@@ -394,6 +394,7 @@ function areasSheet() {
     + '<div class="row" style="gap:8px;margin:12px 0 10px">'
     + '<input id="city-q" class="inp" placeholder="Např. Kolín" autocomplete="off" autocapitalize="words" enterkeyhint="search">'
     + '<button class="btn" id="do-scout"' + (S.cash < SCOUT_COST ? ' disabled' : '') + '>Hledat</button></div>'
+    + '<p class="fine" id="city-note"></p>'
     + (S.cash < SCOUT_COST ? '<p class="fine err">Na cestu nemáš dost hotovosti.</p>' : '')
     + (done ? '<h3 style="margin-top:16px">Už prozkoumáno</h3>' + done : ''));
   var inp = $('city-q'), btn = $('do-scout');
@@ -407,30 +408,56 @@ function areasSheet() {
     };
   });
 }
+// Hledání běží na serveru na pozadí, protože data z OpenStreetMap chodí pomalu.
+// Doptáváme se, dokud není hotovo, a mezitím hráči ukazujeme, jak dlouho to trvá.
+var SCOUT_MAX_WAIT = 150000;
 function scout(city, btn) {
   if (!city || city.length < 2) return toast('Napiš, do kterého města se má jet.', 'err');
   if (S.cash < SCOUT_COST) return toast('Na cestu nemáš dost hotovosti.', 'err');
+  var started = Date.now(), stop = false;
+  var note = $('city-note');
+  var fail = function (msg) {
+    stop = true; btn.disabled = false; btn.textContent = 'Hledat';
+    if (note) note.textContent = '';
+    toast(msg, 'err');
+  };
   btn.disabled = true; btn.textContent = 'Hledám…';
-  fetch('/api/game/scout?q=' + encodeURIComponent(city))
-    .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('Chyba ' + r.status)); return j; }); })
-    .then(function (j) {
-      btn.disabled = false; btn.textContent = 'Hledat';
-      if (!j.spots || !j.spots.length) return toast('Tam se nic vhodného nenašlo. Peníze ti zůstávají.', 'err');
-      var id = j.area.id;
-      var known = S.areas[id] ? S.areas[id].spots.length : 0;
-      // Už prozkoumané město neúčtujeme znovu — jen hráče hodíme na mapu.
-      if (known >= j.spots.length) {
-        closeSheet();
+  if (note) note.textContent = 'Posílám tam člověka. Projít nové město může trvat i minutu.';
+
+  var poll = function () {
+    if (stop) return;
+    fetch('/api/game/scout?q=' + encodeURIComponent(city), { cache: 'no-store' })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok && r.status !== 202) throw new Error(j.error || ('Chyba ' + r.status)); return j; }); })
+      .then(function (j) {
+        if (stop) return;
+        if (j && j.pending) {
+          var s = Math.round((Date.now() - started) / 1000);
+          if (Date.now() - started > SCOUT_MAX_WAIT) {
+            return fail('Hledání trvá moc dlouho. Zkus to za chvíli znovu — mezitím běží dál a podruhé to bude hned.');
+          }
+          btn.textContent = 'Hledám… ' + s + ' s';
+          return setTimeout(poll, 2500);
+        }
+        btn.disabled = false; btn.textContent = 'Hledat';
+        if (note) note.textContent = '';
+        if (!j.spots || !j.spots.length) return toast('Tam se nic vhodného nenašlo. Peníze ti zůstávají.', 'err');
+        var id = j.area.id;
+        var known = S.areas[id] ? S.areas[id].spots.length : 0;
+        // Už prozkoumané město neúčtujeme znovu — jen hráče hodíme na mapu.
+        if (known >= j.spots.length) {
+          closeSheet();
+          if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], 12);
+          return toast(j.area.name + ' už máš prozkoumaný — koukni na mapu.', 'ok');
+        }
+        S.cash -= SCOUT_COST;
+        S.areas[id] = { name: j.area.name, lat: j.area.lat, lon: j.area.lon, scoutedAt: Date.now(), spots: j.spots };
+        save(); paint(); drawMap(); closeSheet();
         if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], 12);
-        return toast(j.area.name + ' už máš prozkoumaný — koukni na mapu.', 'ok');
-      }
-      S.cash -= SCOUT_COST;
-      S.areas[id] = { name: j.area.name, lat: j.area.lat, lon: j.area.lon, scoutedAt: Date.now(), spots: j.spots };
-      save(); paint(); drawMap(); closeSheet();
-      if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], 12);
-      toast(j.area.name + ': nalezeno ' + j.spots.length + ' míst.', 'ok');
-    })
-    .catch(function (e) { btn.disabled = false; btn.textContent = 'Hledat'; toast(e.message, 'err'); });
+        toast(j.area.name + ': nalezeno ' + j.spots.length + ' míst.', 'ok');
+      })
+      .catch(function (e) { fail(e.message); });
+  };
+  poll();
 }
 
 // ─── Panel: místo ────────────────────────────────────────────────────────────
