@@ -45,6 +45,8 @@ const APPS: HubApp[] = [
   { key: 'sales', title: 'Obchodník', icon: '🧭', tint: '#22c55e', screen: 'SalesWeb', salesOnly: true },
   // Výsledky obchodu — statistiky týmu a obchodníků (dnes / týden / měsíc) — jen Tomáš a Jan Holý
   { key: 'salesStats', title: 'Výsledky', icon: '📊', tint: '#f5c451', screen: 'SalesStats', adminOnly: true },
+  // Hra Laundromats Milionář (pradlomaty.info/game) — vlastní herní účet, vidí ji všichni
+  { key: 'milionar', title: 'Milionář', icon: '🎮', tint: '#7c5cff', screen: 'MilionarWeb' },
 ];
 
 function greeting(): string {

@@ -55,6 +55,7 @@ import SalesWeb from './screens/SalesWeb';
 import VideoCall from './screens/VideoCall';
 import VideoCalls from './screens/VideoCalls';
 import SalesStats from './screens/SalesStats';
+import MilionarWeb from './screens/MilionarWeb';
 import AdsLive from './screens/AdsLive';
 import AdsPage from './screens/AdsPage';
 import PayRequest from './screens/PayRequest';
@@ -100,6 +101,7 @@ export type RootStackParamList = {
   VideoCall: { url: string };
   VideoCalls: undefined;
   SalesStats: undefined;
+  MilionarWeb: undefined;
   AdsLive: undefined;
   AdsPage: { key: string; name: string; color?: string };
   PayRequest: { token: string };
@@ -461,6 +463,11 @@ export default function App() {
             name="SalesStats"
             component={SalesStats}
             options={{ animation: 'slide_from_right', headerShown: true, title: 'Výsledky obchodu', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text, headerShadowVisible: false }}
+          />
+          <Stack.Screen
+            name="MilionarWeb"
+            component={MilionarWeb}
+            options={{ animation: 'slide_from_right', headerShown: true, title: 'Laundromats Milionář', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text, headerShadowVisible: false }}
           />
           <Stack.Screen
             name="Meetings"
