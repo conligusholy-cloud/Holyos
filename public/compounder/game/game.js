@@ -202,6 +202,7 @@ function toast(msg, kind) {
 function sheet(html) { $('sheet-body').innerHTML = html; $('sheet').classList.remove('hidden'); }
 function closeSheet() { $('sheet').classList.add('hidden'); }
 $('sheet').addEventListener('click', function (e) { if (e.target.classList.contains('sheet-bg')) closeSheet(); });
+$('sheet-x').onclick = closeSheet;
 
 function verdictPill(score) {
   var c = score >= 70 ? 'good' : score >= 55 ? 'mid' : 'bad';
@@ -240,7 +241,7 @@ function showRole(id) {
 }
 
 // ─── Mapa ────────────────────────────────────────────────────────────────────
-var map = null, layer = null, AREAS = [];
+var map = null, layer = null;
 // Dlaždice NEBEREME z tile.openstreetmap.org — jejich pravidla to aplikacím zakazují
 // a servery nás zablokují (403 „App is not following the tile usage policy").
 // CARTO zase chce API klíč a bez něj vrací vodoznak s kódem 200, takže se chyba ani nepozná.
@@ -311,9 +312,6 @@ function drawMap() {
 // Hráč napíše město a pošle tam člověka, aby ho prošel a našel vhodná místa.
 // Cesta stojí pokaždé stejně, ať jde o Prahu nebo o Trutnov.
 function areasSheet() {
-  var chips = AREAS.map(function (a) {
-    return '<button class="btn sec sm" data-city="' + esc(a.name) + '" style="margin:0 6px 6px 0">' + esc(a.name) + '</button>';
-  }).join('');
   var done = Object.keys(S.areas).map(function (id) {
     return '<div class="area-item"><div><div class="nm">' + esc(S.areas[id].name) + '</div>'
       + '<div class="sub">nalezeno ' + S.areas[id].spots.length + ' míst</div></div>'
@@ -326,15 +324,11 @@ function areasSheet() {
     + '<input id="city-q" class="inp" placeholder="Např. Kolín" autocomplete="off" autocapitalize="words" enterkeyhint="search">'
     + '<button class="btn" id="do-scout"' + (S.cash < SCOUT_COST ? ' disabled' : '') + '>Hledat</button></div>'
     + (S.cash < SCOUT_COST ? '<p class="fine err">Na cestu nemáš dost hotovosti.</p>' : '')
-    + '<p class="fine" style="margin:2px 0 6px">Tipy:</p><div>' + chips + '</div>'
     + (done ? '<h3 style="margin-top:16px">Už prozkoumáno</h3>' + done : ''));
   var inp = $('city-q'), btn = $('do-scout');
   var run = function () { scout((inp.value || '').trim(), btn); };
   if (btn) btn.onclick = run;
   if (inp) inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); run(); } };
-  [].forEach.call($('sheet-body').querySelectorAll('[data-city]'), function (b) {
-    b.onclick = function () { inp.value = b.getAttribute('data-city'); run(); };
-  });
   [].forEach.call($('sheet-body').querySelectorAll('[data-go]'), function (b) {
     b.onclick = function () {
       var a = S.areas[b.getAttribute('data-go')];
@@ -641,8 +635,6 @@ function startGame() {
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { tick(); save(); paint(); } });
 }
 
-fetch('/api/game/areas').then(function (r) { return r.json(); }).then(function (j) { AREAS = j.areas || []; })
-  .catch(function () { AREAS = []; });
 loadMachinePhotos();
 
 S = load();

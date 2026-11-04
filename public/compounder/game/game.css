@@ -137,6 +137,11 @@ main{padding-bottom:calc(66px + var(--safe-b))}
   padding:8px 16px calc(20px + var(--safe-b));animation:up .22s ease-out}
 @keyframes up{from{transform:translateY(16px);opacity:.4}to{transform:none;opacity:1}}
 .sheet-grip{width:40px;height:4px;border-radius:3px;background:var(--border2);margin:4px auto 12px}
+.sheet-x{position:absolute;top:8px;right:10px;z-index:2;width:36px;height:36px;border-radius:50%;
+  background:rgba(120,160,255,.1);border:1px solid var(--border2);color:var(--text2);font-size:15px;line-height:1;
+  display:flex;align-items:center;justify-content:center}
+.sheet-x:active{color:var(--text);background:rgba(120,160,255,.22)}
+#sheet-body>h3:first-child{padding-right:40px}
 .sheet h3{font-size:18px;margin-bottom:4px}
 .area-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--border)}
 .area-item:first-of-type{border-top:0}
