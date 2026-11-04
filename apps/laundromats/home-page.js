@@ -405,7 +405,7 @@ const NETMAP_JS = "(function(){var el=document.getElementById('netmap');if(!el)r
   + "function init(){if(go)return;go=true;var c=document.createElement('link');c.rel='stylesheet';c.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';document.head.appendChild(c);"
   + "var j=document.createElement('script');j.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';j.onload=draw;document.head.appendChild(j);}"
   + "function e(t){return String(t).replace(/[&<>\"]/g,function(x){return{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[x];});}"
-  + "function draw(){var m=L.map(el,{scrollWheelZoom:false,zoomControl:true,attributionControl:true});"
+  + "function draw(){var m=L.map(el,{maxZoom:10,minZoom:4,scrollWheelZoom:false,zoomControl:true,attributionControl:true});"
   + "var E='https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';L.tileLayer(E+'World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxZoom:16,attribution:'Tiles &copy; Esri'}).addTo(m);L.tileLayer(E+'World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',{maxZoom:16}).addTo(m);"
   + "var b=[];S.forEach(function(p){var ll=[p[3],p[4]];b.push(ll);L.circleMarker(ll,{radius:5,color:'#4fd1ff',weight:1.5,fillColor:'#4fd1ff',fillOpacity:.55}).addTo(m).bindPopup('<b>'+e(p[0])+'</b><br><small>'+e(p[1])+'</small>');});"
   + "m.fitBounds(b,{padding:[24,24]});m.on('click',function(){m.scrollWheelZoom.enable();});}"
