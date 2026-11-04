@@ -323,20 +323,24 @@ const TAKEOVER_MIN = 1.2;   // nabídka musí být aspoň o pětinu vyšší
 const BID_FEE = 5000;       // co stojí neúspěšné vyjednávání (informativní, strhne klient)
 
 const claimPub = (c, me) => ({
-  spot_id: c.spot_id, nick: c.nick, model: c.model, mine: c.player_id === me,
+  spot_id: c.spot_id, area_key: c.area_key, nick: c.nick, model: c.model, mine: c.player_id === me,
   takeovers: c.takeovers, name: c.name, lat: c.lat, lon: c.lon,
   // Nájem říkáme jen majiteli. Ostatní přihazují naslepo — v tom je to riziko.
   rent: c.player_id === me ? c.rent : null,
   since: c.created_at,
 });
 
-// GET /spots?area=<klíč>[,<klíč>…] → kdo kde stojí
+// GET /spots → kdo kde stojí. Bez parametru vrátí VŠECHNY zábory: hráč má na
+// mapě vidět konkurenci i ve městech, která sám neprozkoumal — jinak by na ni
+// narazil až náhodou. Volná místa zůstávají schovaná, ta se musí najít.
 router.get('/spots', async (req, res, next) => {
   try {
     const p = await currentPlayer(req);
-    const areas = String(req.query.area || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 20);
-    if (!areas.length) return res.json({ ok: true, spots: [] });
-    const rows = await prisma.gameSpotClaim.findMany({ where: { area_key: { in: areas } }, take: 2000 });
+    const areas = String(req.query.area || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 40);
+    const rows = await prisma.gameSpotClaim.findMany({
+      where: areas.length ? { area_key: { in: areas } } : {},
+      orderBy: { updated_at: 'desc' }, take: 2000,
+    });
     res.json({ ok: true, min_bid: TAKEOVER_MIN, fee: BID_FEE, spots: rows.map((c) => claimPub(c, p ? p.id : 0)) });
   } catch (e) { next(e); }
 });

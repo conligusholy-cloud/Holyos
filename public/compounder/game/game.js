@@ -564,10 +564,10 @@ function unitIcon(u) {
 function drawMap() {
   if (!layer) return;
   layer.clearLayers();
-  var any = false;
+  var any = false, zname = {};
   Object.keys(S.areas).forEach(function (aid) {
     S.areas[aid].spots.forEach(function (sp) {
-      any = true;
+      any = true; zname[sp.id] = 1;
       var unit = S.units.filter(function (u) { return u.spotId === sp.id; })[0];
       var rival = !unit && CLAIMS[sp.id] && !CLAIMS[sp.id].mine ? CLAIMS[sp.id] : null;
       var seen = !!S.revealed[sp.id];
@@ -577,7 +577,36 @@ function drawMap() {
         .on('click', function () { if (rival) return rivalSheet(sp, aid, rival); spotSheet(sp, aid); });
     });
   });
+  // Cizí prádlomaty v městech, která jsme neprozkoumali. Víme o nich jen to, že
+  // tam někdo stojí — co to místo umí, zjistíme až průzkumem města.
+  Object.keys(CLAIMS).forEach(function (sid) {
+    var c = CLAIMS[sid];
+    if (c.mine || zname[sid] || c.lat == null) return;
+    any = true;
+    L.marker([c.lat, c.lon], { icon: rivalIcon(c) })
+      .addTo(layer)
+      .on('click', function () { cizi(c); });
+  });
   $('map-hint').classList.toggle('hidden', any);
+}
+// Panel cizího prádlomatu v neprozkoumaném městě.
+function cizi(c) {
+  var mesto = (c.area_key || '').replace(/(^|\s)\S/g, function (x) { return x.toUpperCase(); });
+  sheet('<h3>' + esc(c.name || 'Cizí prádlomat') + '</h3>'
+    + '<p class="muted small">Tohle místo drží <b>' + esc(c.nick) + '</b> · ' + esc((MODELS[c.model] || {}).name || c.model)
+    + (c.takeovers ? ' · už ' + c.takeovers + '× změnilo majitele' : '') + '</p>'
+    + '<p class="muted small">' + (mesto ? esc(mesto) + ' jsi neprozkoumal' : 'Tohle město jsi neprozkoumal')
+    + ' — bez toho nevíš, kolik tu chodí lidí ani jestli se sem vyplatí jít. '
+    + 'Pošli tam člověka a pak se můžeš pokusit nájem přeplatit.</p>'
+    + '<button class="btn big" id="go-scout-here">Prozkoumat ' + (mesto ? esc(mesto) : 'tohle město') + ' za ' + kcFull(SCOUT_COST) + '</button>'
+    + (S.cash < SCOUT_COST ? '<p class="fine err">Na cestu nemáš dost hotovosti.</p>' : ''));
+  var b = $('go-scout-here');
+  if (b) b.onclick = function () {
+    if (S.cash < SCOUT_COST) return toast('Na cestu nemáš dost hotovosti.', 'err');
+    areasSheet();
+    var inp = $('q-area');
+    if (inp) { inp.value = mesto || ''; scout(inp.value.trim(), $('do-scout')); }
+  };
 }
 
 // ─── Panel: průzkum města ────────────────────────────────────────────────────
@@ -909,9 +938,9 @@ var BID_FEE = 5000;
 function areaKeys() { return Object.keys(S && S.areas ? S.areas : {}); }
 
 function loadClaims(then) {
-  var keys = areaKeys();
-  if (!keys.length) { if (then) then(); return; }
-  api('/spots?area=' + encodeURIComponent(keys.join(','))).then(function (r) {
+  // Bez filtru na města — konkurenci chceme vidět na celé mapě, i tam, kam
+  // jsme ještě nikoho neposlali.
+  api('/spots').then(function (r) {
     if (!r.ok) return;
     if (r.j.fee) BID_FEE = r.j.fee;
     var next = {};
