@@ -431,6 +431,17 @@ app.post('/admin/api/products/:id(\\d+)/image', requireAdmin, express.raw({ type
 }));
 app.post('/admin/api/products/:id(\\d+)/image/delete', requireAdmin, api(async (req) => { const j = await holyosSvc('DELETE', '/api/auth/lm/products/' + req.params.id + '/lm-image'); _prod.at = 0; return j; }));
 app.get('/img/pradlomat.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(path.join(__dirname, 'pradlomat-flex.webp')));
+// Miniatura modelu (mini|flex|max) pro mapu na úvodní stránce — první stroj z ceníku s obrázkem, jehož
+// varianta/název obsahuje dané slovo (přednost CZ). Bez shody → obecný obrázek prádlomatu.
+app.get('/img/model/:kind(mini|flex|max)', async (req, res) => {
+  try {
+    const re = new RegExp('\\b' + req.params.kind + '\\b', 'i');
+    const list = (await fetchProducts()).filter((p) => p.image_ext && (re.test(p.model_variant || '') || re.test(p.name_cs || '')));
+    const p = list.find((x) => /\bCZ\b/.test(x.name_cs || '')) || list[0];
+    if (p) return res.redirect(302, '/img/product/' + p.id + '?v=' + encodeURIComponent(String(p.image_updated_at || '')));
+  } catch (e) { /* fallback níže */ }
+  res.redirect(302, '/img/pradlomat.webp');
+});
 app.get('/img/product/:id(\\d+)', async (req, res) => {
   try {
     if (!LM_SECRET) return res.status(404).end();
