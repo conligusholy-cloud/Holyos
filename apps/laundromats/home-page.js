@@ -376,7 +376,9 @@ function homePage(lang) {
     // Rozšíření později: doložené případové studie + kalkulačka (#eco-ext)
     + '<section id="ekonomika" style="padding-top:20px"><div class="wrap"><div class="eco rv">' + kicker(L.eco.kicker) + '<h2>' + esc(L.eco.h) + '</h2><p class="lead">' + esc(L.eco.lead) + '</p>'
     + '<div class="formula" aria-label="' + esc(L.eco.factors.join(' + ') + ' = ' + L.eco.result) + '">' + L.eco.factors.map((x, i) => (i ? '<span class="op" aria-hidden="true">+</span>' : '') + '<span class="fx">' + esc(x) + '</span>').join('') + '<span class="op" aria-hidden="true">=</span><span class="fx res">' + esc(L.eco.result) + '</span></div>'
-    + '<div id="eco-ext"></div>' + interestBtn('own', L.eco.cta, 'btn-p') + '</div></div></section>'
+    + '<div id="eco-ext"></div>'
+    + '<!--PUB--><a class="btn btn-p" href="/cesta/registrace">Vytvořit účet ' + svg('arrow', 18) + '</a><!--/PUB-->'
+    + '<!--PRIV-->' + interestBtn('own', L.eco.cta, 'btn-p') + '<!--/PRIV-->' + '</div></div></section>'
     // ── jak začít ──
     + '<section class="alt" id="jak-zacit"><div class="divline"></div><div class="wrap">' + kicker(L.start.kicker) + '<h2 class="rv">' + esc(L.start.h) + '</h2>'
     + '<ol class="steps" style="list-style:none;padding:0">' + L.start.steps.map((s, i) => '<li class="step rv"><div class="n">' + (i + 1) + '</div><h3>' + esc(s[0]) + '</h3><p>' + esc(s[1]) + '</p></li>').join('') + '</ol></div></section>'
