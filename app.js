@@ -1168,7 +1168,7 @@ app.get('/lokality', (req, res, next) => {
 app.get('/lokality/', serveLokalityHtml);
 app.use('/lokality', lokalityStatic);
 
-// ─── bestseries.cash — neznámé cesty přesměruj na /vybery ───────────────────
+// ─── bestseries.cash — neznámé cesty přesměruj na e-shop (/spare-parts; při zapnutých Výběrech na /vybery) ─
 // Na doméně bestseries.cash nemá kořen ani libovolná „naťukaná" cesta samostatný
 // obsah; posíláme návštěvníka rovnou na veřejnou stránku Výběry (ne na login HolyOS).
 // Necháme projít reálné stránky (/vybery, /hugo, /spare-parts, /share…), assety
@@ -1185,7 +1185,7 @@ app.use((req, res, next) => {
   if (/\.[a-z0-9]+$/i.test(p)) return next();
   // neredirectuj ne-navigační (ne-HTML) požadavky
   if (!req.accepts('html')) return next();
-  return res.redirect(302, '/vybery');
+  return res.redirect(302, VYBERY_ENABLED ? '/vybery' : '/spare-parts/'); // Výběry jsou vypnuté → e-shop náhradních dílů
 });
 
 app.use(express.static(path.join(__dirname, 'public'), staticOpts));
