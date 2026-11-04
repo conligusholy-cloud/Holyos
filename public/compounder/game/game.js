@@ -287,6 +287,17 @@ function toast(msg, kind) {
 }
 function sheet(html) { $('sheet-body').innerHTML = html; $('sheet').classList.remove('hidden'); }
 function closeSheet() { $('sheet').classList.add('hidden'); }
+// Když na telefonu vyjede klávesnice, okno se zmenší. Panel na to musí reagovat,
+// jinak mu pole s tlačítkem schová pod sebe.
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', function () {
+    var vv = window.visualViewport;
+    var kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    var sh = $('sheet');
+    sh.classList.toggle('kb', kb > 120);
+    sh.style.paddingBottom = kb > 120 ? kb + 'px' : '';
+  });
+}
 $('sheet').addEventListener('click', function (e) { if (e.target.classList.contains('sheet-bg')) closeSheet(); });
 $('sheet-x').onclick = closeSheet;
 
@@ -478,12 +489,19 @@ function areasSheet() {
     + '<p class="muted small">Napiš, kam poslat člověka. Projde město, obhlédne benzínky, obchodní centra a myčky a vrátí se se seznamem míst. '
     + 'Cesta stojí ' + kcFull(SCOUT_COST) + '. Co je na kterém místě, zjistíš až jeho prověřením.</p>'
     + '<div class="row" style="gap:8px;margin:12px 0 10px">'
-    + '<input id="city-q" class="inp" placeholder="Např. Kolín" autocomplete="off" autocapitalize="words" enterkeyhint="search">'
+    // Safari na iOS nabízí vyplnění adresy podle názvu a placeholderu pole. Proto
+    // type="search", neutrální name/id a žádný náznak města — lišta s klíčem,
+    // kartou a špendlíkem se pak nad klávesnicí neukáže.
+    + '<input id="q-area" name="hledat" type="search" class="inp" placeholder="Napiš sem" '
+    + 'autocomplete="off" autocorrect="off" spellcheck="false" autocapitalize="words" '
+    + 'enterkeyhint="search" aria-label="Kam poslat člověka">'
     + '<button class="btn" id="do-scout"' + (S.cash < SCOUT_COST ? ' disabled' : '') + '>Hledat</button></div>'
     + '<p class="fine" id="city-note"></p>'
     + (S.cash < SCOUT_COST ? '<p class="fine err">Na cestu nemáš dost hotovosti.</p>' : '')
     + (done ? '<h3 style="margin-top:16px">Už prozkoumáno</h3>' + done : ''));
-  var inp = $('city-q'), btn = $('do-scout');
+  var inp = $('q-area'), btn = $('do-scout');
+  // Na telefonu klávesnice ukousne půlku obrazovky — ať pole zůstane vidět.
+  if (inp) inp.onfocus = function () { setTimeout(function () { inp.scrollIntoView({ block: 'center' }); }, 250); };
   var run = function () { scout((inp.value || '').trim(), btn); };
   if (btn) btn.onclick = run;
   if (inp) inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); run(); } };

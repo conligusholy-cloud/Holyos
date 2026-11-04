@@ -195,3 +195,11 @@ main{padding-bottom:calc(66px + var(--safe-b))}
 .gcard-n{margin-left:auto;font-size:14px;color:var(--ok)}
 .gcard-act{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
 .gcard-act .btn{flex:1 1 auto}
+
+/* Leaflet dává svým prvkům z-index 1000, takže by zoom i podpis trčely přes
+   vysunutý panel. Panel má 900 → srazíme je na 800: pod panel, ale pořád nad
+   značkami a bublinami mapy (ty mají 600 a 700). */
+.leaflet-top,.leaflet-bottom{z-index:800}
+/* Klávesnice na iOS zmenší viditelnou část okna; panel se jí přizpůsobí. */
+.sheet-in{padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+.sheet.kb .sheet-in{max-height:70dvh}
