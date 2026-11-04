@@ -625,11 +625,18 @@ function operatingRoom() {
   return Math.max(0, p.ltv * assetsTotal() + OPERATING_MAX - S.loan);
 }
 function cashDrawMax() { return Math.max(0, Math.min(S.bank, operatingRoom(), OPERATING_MAX)); }
+// Podil z ceny v procentech - u akontace a uveru at je videt pomer, ne jen cislo.
+function pctNote(part, total) {
+  if (!total || part == null) return '';
+  var v = part / total * 100;
+  var t = (v >= 10 ? Math.round(v) : v.toFixed(1).replace('.', ','));
+  return ' <span class="pct">' + t + ' %</span>';
+}
 function financeRows(f) {
   var p = PROFILES[S.profile];
   return '<div class="kv"><span>Cena</span><b>' + kcFull(f.amount) + '</b></div>'
-    + '<div class="kv"><span>Z vlastní hotovosti</span><b>' + kcFull(f.own) + '</b></div>'
-    + '<div class="kv"><span>Doplatí banka (úvěr)</span><b class="' + (f.need > 0 ? 'warn' : '') + '">' + kcFull(f.need) + '</b></div>'
+    + '<div class="kv"><span>Z vlastní hotovosti (akontace)</span><b>' + kcFull(f.own) + pctNote(f.own, f.amount) + '</b></div>'
+    + '<div class="kv"><span>Doplatí banka (úvěr)</span><b class="' + (f.need > 0 ? 'warn' : '') + '">' + kcFull(f.need) + pctNote(f.need, f.amount) + '</b></div>'
     + (f.need > 0 ? '<div class="kv"><span>Úvěrový strop profilu</span><b>' + kcFull(f.ltvRoom) + '</b></div>'
       + '<div class="kv"><span>Volný rámec v bance</span><b>' + kcFull(S.bank) + '</b></div>'
       + '<div class="kv"><span>Úrok</span><b>' + (p.rate * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>' : '');
