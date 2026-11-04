@@ -76,6 +76,9 @@ const CASH = {
   cash2000: { kind: 'cash2000', name: 'Obrněný vůz',    price: 200000, laundry: 4600000 },
 };
 const CASH_KINDS = Object.keys(CASH);
+// Ručně přidaná hotovost z administrace. Není v nabídce, nedá se koupit —
+// vzniká jen tím, že ji někdo hráči přidá, a nese vlastní částku.
+const CASH_CUSTOM = 'cash_dar';
 const ALL = Object.assign({}, CARDS, CASH);
 
 // ─── Ceník z databáze ────────────────────────────────────────────────────────
@@ -158,7 +161,7 @@ async function pub(p) {
     select: { kind: true }
   });
   const counts = {};
-  CARD_KINDS.concat(CASH_KINDS).forEach((k) => { counts[k] = 0; });
+  CARD_KINDS.concat(CASH_KINDS).concat([CASH_CUSTOM]).forEach((k) => { counts[k] = 0; });
   cards.forEach((c) => { if (counts[c.kind] != null) counts[c.kind]++; });
   return {
     nick: p.nick, company: p.company || (p.nick + ' s.r.o.'), email: p.email || null,
@@ -307,9 +310,9 @@ const EFFECTS = {
 router.post('/cards/use', requirePlayer, async (req, res, next) => {
   try {
     const kind = s((req.body || {}).kind, 24);
-    if (!ALL[kind]) return res.status(400).json({ error: 'Taková karta není.' });
+    if (!ALL[kind] && kind !== CASH_CUSTOM) return res.status(400).json({ error: 'Taková karta není.' });
     const card = await prisma.gameCard.findFirst({
-      where: { player_id: req.player.id, kind, used_at: null }, orderBy: { id: 'asc' }, select: { id: true }
+      where: { player_id: req.player.id, kind, used_at: null }, orderBy: { id: 'asc' }, select: { id: true, amount: true }
     });
     if (!card) return res.status(409).json({ error: 'Tuhle kartu nemáš.' });
     // updateMany s podmínkou used_at: null — dvojklik ani dvě záložky kartu nespotřebují dvakrát
@@ -318,9 +321,17 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
       data: { used_at: new Date(), used_on: s((req.body || {}).on, 80) || null }
     });
     if (!done.count) return res.status(409).json({ error: 'Karta už byla použitá.' });
-    const result = CASH[kind]
-      ? { effect: 'cash', amount: CASH[kind].laundry, msg: 'Na účet ti přistálo ' + CASH[kind].laundry.toLocaleString('cs-CZ') + ' L$.' }
-      : EFFECTS[kind]();
+    let result;
+    if (kind === CASH_CUSTOM) {
+      const castka = Math.max(0, card.amount || 0);
+      result = { effect: 'cash', amount: castka, msg: 'Na účet ti přistálo ' + castka.toLocaleString('cs-CZ') + ' L$.' };
+    } else if (CASH[kind]) {
+      const c = await item(kind);
+      const castka = (c && c.laundry) || CASH[kind].laundry;
+      result = { effect: 'cash', amount: castka, msg: 'Na účet ti přistálo ' + castka.toLocaleString('cs-CZ') + ' L$.' };
+    } else {
+      result = EFFECTS[kind]();
+    }
     res.json({ ok: true, card: kind, result, owned: (await pub(req.player)).cards });
   } catch (e) { next(e); }
 });
@@ -501,3 +512,4 @@ module.exports._pub = pub;
 module.exports._item = item;
 module.exports._dropPrices = dropPrices;
 module.exports._defaults = ALL;
+module.exports._cashCustom = CASH_CUSTOM;

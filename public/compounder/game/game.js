@@ -1192,19 +1192,17 @@ function paintBank() {
     + '<div class="kv"><span>Úrok</span><b>' + (rateOf() * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>'
     + '<div class="kv"><span>Zaplaceno na úrocích</span><b>' + kcFull(S.stats.interest) + '</b></div>'
     + '<div class="kv"><span>Ještě si můžeš půjčit</span><b>' + kcFull(Math.min(room, S.bank)) + '</b></div>'
-    + (cashDrawMax() >= 1000 ? '<button class="btn sec big" id="do-draw">Vybrat ' + kcFull(cashDrawMax()) + ' na provoz</button>'
-        + '<p class="fine">Hotovost z banky na průzkum, prověřování a instalace. Připíše se k úvěru a úročí se stejně.</p>' : '')
+    + (cashDrawMax() >= 1000
+        ? '<button class="btn sec big" id="do-ask">Požádat o úvěr</button>'
+          + '<p class="fine">Banka se podívá, co máš, a řekne si podmínky. Než kývneš, uvidíš všechno dopředu.</p>'
+        : '<p class="fine">Banka ti teď nepůjčí — nemáš dost majetku v zástavě ani volný rámec.</p>')
     + (S.loan > 0 && S.cash >= 1 ? '<button class="btn big" id="do-repay">Splatit ' + kcFull(Math.min(S.cash, S.loan)) + '</button>' : '')
     + (S.loan > 0 && S.cash < 1 ? '<p class="fine">Splácet začneš, až síť něco vydělá.</p>' : '')
     + '</div>'
     + cashPacksHtml();
   bindCashPacks();
-  var d = $('do-draw');
-  if (d) d.onclick = function () {
-    var take = cashDrawMax();
-    S.bank -= take; S.loan += take; S.cash += take;
-    save(); paint(); toast('Vybráno ' + kcFull(take) + ' na provoz.', 'ok');
-  };
+  var d = $('do-ask');
+  if (d) d.onclick = function () { uverSheet(); };
   var b = $('do-repay');
   if (b) b.onclick = function () {
     var pay = Math.min(S.cash, S.loan);
@@ -1482,6 +1480,62 @@ function applyCard(e) {
   }
 }
 
+// ─── Úvěr: nabídka banky ─────────────────────────────────────────────────────
+// Banka se dívá na dvě věci: kolik máš v zástavě a jak jsi zadlužený. Čím víc
+// už dlužíš proti majetku, tím vyšší úrok a tím menší ochota půjčit.
+var UVER_POPLATEK = 0.01;   // jednorázově za sjednání
+function uverNabidka(chci) {
+  var p = PROFILES[S.profile];
+  var majetek = assetsTotal();
+  var strop = Math.max(0, p.ltv * majetek - S.loan);
+  var max = Math.max(0, Math.min(strop, S.bank, OPERATING_MAX + Math.max(0, p.ltv * majetek - S.loan)));
+  max = Math.round(Math.min(max, S.bank) / 1000) * 1000;
+  var castka = Math.max(0, Math.min(max, Math.round((chci == null ? max : chci) / 1000) * 1000));
+  // Zadluženost po načerpání — podle ní se hýbe úrok.
+  var pak = majetek > 0 ? (S.loan + castka) / majetek : 2;
+  var prirazka = pak <= 0.5 ? 0 : pak <= 0.8 ? 0.008 : pak <= 1 ? 0.018 : 0.03;
+  var sazba = rateOf() + prirazka;
+  var poplatek = Math.round(castka * UVER_POPLATEK);
+  return { max: max, castka: castka, sazba: sazba, prirazka: prirazka, poplatek: poplatek,
+    naruku: Math.max(0, castka - poplatek), mesicne: Math.round(castka * sazba / 12),
+    zadluzenost: pak };
+}
+function uverSheet(chci) {
+  var n = uverNabidka(chci);
+  if (n.max < 1000) { closeSheet(); return toast('Banka ti teď nepůjčí ani korunu.', 'err'); }
+  var hodnoceni = n.prirazka === 0 ? 'Máš u nás dobré jméno, sazbu nezvedáme.'
+    : n.prirazka <= 0.008 ? 'Dluh máš pod kontrolou, přirážka je malá.'
+    : n.prirazka <= 0.018 ? 'Jsi dost zadlužený, připočítáváme rizikovou přirážku.'
+    : 'Dlužíš skoro tolik, co máš. Půjčíme, ale draho.';
+  sheet('<h3>Nabídka banky</h3>'
+    + '<p class="muted small">' + hodnoceni + ' Podmínky platí, dokud je nepřijmeš — nic se neděje samo.</p>'
+    + '<label class="fld"><span>Kolik si chceš půjčit (nejvýš ' + kcFull(n.max) + ')</span>'
+    + '<input id="uv-amt" class="inp" type="number" min="1000" step="1000" max="' + n.max + '" value="' + n.castka + '"></label>'
+    + '<div class="kv"><span>Úrok</span><b>' + (n.sazba * 100).toFixed(1).replace('.', ',') + ' % ročně'
+    + (n.prirazka ? ' <span class="warn">(+' + (n.prirazka * 100).toFixed(1).replace('.', ',') + ' za riziko)</span>' : '') + '</b></div>'
+    + '<div class="kv"><span>Poplatek za sjednání (1 %)</span><b class="warn">' + kcFull(n.poplatek) + '</b></div>'
+    + '<div class="kv"><span>Dostaneš na ruku</span><b class="ok">' + kcFull(n.naruku) + '</b></div>'
+    + '<div class="kv"><span>Úrok tě bude stát</span><b>' + kcFull(n.mesicne) + ' / měsíc</b></div>'
+    + '<div class="kv"><span>Dluh po načerpání</span><b>' + kcFull(S.loan + n.castka) + '</b></div>'
+    + '<button class="btn big" id="uv-ano">Beru to</button>'
+    + '<button class="btn sec" id="uv-ne" style="width:100%;margin-top:8px">Díky, nechám si to projít hlavou</button>'
+    + '<p class="fine">Splácet můžeš kdykoli a bez sankcí. Dokud nesplatíš, úrok nabíhá každou vteřinu.</p>');
+  // Při změně částky přepočítáme celou nabídku — sazba se může hnout.
+  var inp = $('uv-amt');
+  if (inp) inp.onchange = function () { uverSheet(Number(inp.value) || 0); };
+  $('uv-ne').onclick = closeSheet;
+  $('uv-ano').onclick = function () {
+    var m = uverNabidka(Number(inp.value) || 0);
+    if (m.castka < 1000) return toast('Takhle malou částku banka neřeší.', 'err');
+    S.bank -= m.castka;
+    S.loan += m.castka;
+    S.cash += m.naruku;
+    S.stats.interest += m.poplatek;   // poplatek bereme jako náklad úvěru
+    save(); paint(); paintBank(); closeSheet(); syncState(true);
+    toast('Úvěr sjednán. Na účtu máš o ' + kcFull(m.naruku) + ' víc.', 'ok');
+  };
+}
+
 // ─── Balíčky herních peněz ───────────────────────────────────────────────────
 // Laundry se kupují stejnou cestou jako karty: po zaplacení visí balíček na
 // účtu a klient si ho vyzvedne — díky tomu se peníze nepřipíšou dvakrát ani
@@ -1532,10 +1586,15 @@ function buyCash(kind) {
 }
 // Zaplacené balíčky si vyzvedneme sami, hráč na nic klikat nemusí.
 function claimCash(then) {
-  if (!ME || !ME.cards || !CASH_CAT) { if (then) then(); return; }
-  var dluzne = CASH_CAT.filter(function (c) { return (ME.cards[c.kind] || 0) > 0; });
-  if (!dluzne.length) { if (then) then(); return; }
-  var k = dluzne[0].kind;
+  if (!ME || !ME.cards) { if (then) then(); return; }
+  // Nejdřív ručně přidaná hotovost z administrace, pak koupené balíčky.
+  var k = null;
+  if ((ME.cards.cash_dar || 0) > 0) k = 'cash_dar';
+  else if (CASH_CAT) {
+    var dluzne = CASH_CAT.filter(function (c) { return (ME.cards[c.kind] || 0) > 0; });
+    if (dluzne.length) k = dluzne[0].kind;
+  }
+  if (!k) { if (then) then(); return; }
   apiJson('/cards/use', { kind: k }).then(function (r) {
     if (r.ok && r.j.result && r.j.result.effect === 'cash') {
       S.cash += r.j.result.amount;

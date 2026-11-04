@@ -89,11 +89,13 @@ router.get('/players/:id', api(async (req, res) => {
   const p = await prisma.gamePlayer.findUnique({ where: { id } });
   if (!p) return res.status(404).json({ error: 'Hráč nenalezen.' });
   const [karty, nakupy, mista] = await Promise.all([
-    prisma.gameCard.findMany({ where: { player_id: id }, select: { kind: true, used_at: true, purchase_id: true } }),
+    prisma.gameCard.findMany({ where: { player_id: id }, select: { kind: true, used_at: true, purchase_id: true, amount: true } }),
     prisma.gamePurchase.findMany({ where: { player_id: id }, orderBy: { created_at: 'desc' }, take: 50 }),
     prisma.gameSpotClaim.findMany({ where: { player_id: id }, select: { spot_id: true, name: true, model: true, rent: true, takeovers: true } }),
   ]);
   const def = acct._defaults;
+  const cekaHotovost = karty.filter((c) => c.kind === acct._cashCustom && !c.used_at)
+    .reduce((a, c) => a + (c.amount || 0), 0);
   const polozky = Object.keys(def).map((kind) => {
     const moje = karty.filter((c) => c.kind === kind);
     return {
@@ -114,7 +116,7 @@ router.get('/players/:id', api(async (req, res) => {
     uver: typeof st.loan === 'number' ? Math.round(st.loan) : null,
     pradlomatu: Array.isArray(st.units) ? st.units.length : 0,
     pozvanek: st.refs || 0,
-  }, polozky, mista,
+  }, polozky, mista, ceka_hotovost: cekaHotovost,
   nakupy: nakupy.map((o) => ({ id: o.id, kind: o.kind, qty: o.qty, castka: o.amount_cents / 100,
     status: o.status, created_at: o.created_at, paid_at: o.paid_at })) });
 }));
@@ -132,6 +134,20 @@ router.post('/players/:id/grant', api(async (req, res) => {
   const kdo = (req.user && (req.user.displayName || req.user.username)) || 'admin';
   console.log('[game] dárek: ' + qty + '× ' + kind + ' → ' + p.nick + ' (přidal ' + kdo + ')');
   res.json({ ok: true, qty });
+}));
+
+// POST /players/:id/cash { amount } — přidá hotovost rovnou, bez balíčku.
+// Peníze čekají jako nevyzvednuté a hráči se připíšou, jakmile má hru otevřenou.
+router.post('/players/:id/cash', api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const castka = Math.round(Number((req.body || {}).amount) || 0);
+  if (!(castka > 0) || castka > 1000000000) return res.status(400).json({ error: 'Zadej částku mezi 1 a 1 000 000 000 L$.' });
+  const p = await prisma.gamePlayer.findUnique({ where: { id }, select: { id: true, nick: true } });
+  if (!p) return res.status(404).json({ error: 'Hráč nenalezen.' });
+  await prisma.gameCard.create({ data: { player_id: id, kind: acct._cashCustom, amount: castka } });
+  const kdo = (req.user && (req.user.displayName || req.user.username)) || 'admin';
+  console.log('[game] hotovost: ' + castka.toLocaleString('cs-CZ') + ' L$ → ' + p.nick + ' (přidal ' + kdo + ')');
+  res.json({ ok: true, amount: castka });
 }));
 
 // POST /players/:id/revoke { kind } — odebere jeden nepoužitý kus (když se admin ukliknul)

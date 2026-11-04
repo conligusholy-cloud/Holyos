@@ -246,6 +246,18 @@
           + mini(cz(p.pozvanek), 'Pozvánek')
           + mini(esc(p.profil || '—'), 'Profil')
           + '</div>'
+          + '<div class="tbl-wrap" style="padding:14px 16px;margin-bottom:18px">'
+          + '<h3 style="font-size:14px;margin:0 0 4px">Přidat hotovost</h3>'
+          + '<p class="note" style="margin:0 0 10px">Laundry se hráči připíšou, jakmile bude mít hru otevřenou. '
+          + 'Nic neplatí, nikde se to nezobrazí jako nákup.'
+          + (j.ceka_hotovost ? ' <b style="color:#f59e0b">Čeká na vyzvednutí ' + cz(j.ceka_hotovost) + ' L$.</b>' : '') + '</p>'
+          + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+          + '<input class="price-in wide" id="cash-amt" type="number" min="1" step="10000" value="100000">'
+          + '<span class="note">L$</span>'
+          + '<button class="btn sm" id="cash-go">Přidat hotovost</button>'
+          + ['100000', '500000', '1000000'].map(function (v) {
+              return '<button class="btn sm" data-cash="' + v + '">+' + cz(Number(v)) + '</button>'; }).join('')
+          + '</div></div>'
           + '<h3 style="font-size:14px;margin:0 0 8px">Balíčky a karty</h3>'
           + '<div class="tbl-wrap"><table class="data-table"><thead><tr><th>Položka</th><th>Druh</th>'
           + '<th class="num">K dispozici</th><th class="num">Použito</th><th class="num">Z toho darem</th>'
@@ -275,6 +287,17 @@
             + '</tbody></table></div>' : '<p class="note" style="margin-top:16px">Zatím nic nekoupil.</p>');
 
         DLG.querySelector('[data-close]').onclick = function () { OV.classList.remove('open'); };
+        var cg = DLG.querySelector('#cash-go');
+        var posliCash = function (castka, b) {
+          b.disabled = true;
+          post('/players/' + id + '/cash', { amount: castka })
+            .then(function () { detail(id); })
+            .catch(function (e) { b.disabled = false; alert(e.message); });
+        };
+        if (cg) cg.onclick = function () { posliCash(Number(DLG.querySelector('#cash-amt').value) || 0, cg); };
+        [].forEach.call(DLG.querySelectorAll('[data-cash]'), function (b) {
+          b.onclick = function () { posliCash(Number(b.getAttribute('data-cash')), b); };
+        });
         [].forEach.call(DLG.querySelectorAll('[data-grant]'), function (b) {
           b.onclick = function () {
             var kind = b.getAttribute('data-grant');
