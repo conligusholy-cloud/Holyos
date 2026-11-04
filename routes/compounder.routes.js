@@ -4221,11 +4221,17 @@ router.post('/leads/:id/activity-log', requireAuth, async (req, res, next) => {
 
 // GET /api/compounder/my-leads — kontakty přiřazené přihlášenému obchodníkovi.
 //   Používá obrazovka obchodníka (modules/obchodnik). Vrací jen vlastní kontakty.
+// „Všechny kontakty" v aplikaci Obchodník — jen Tomáš a Jan Holý
+const _myNorm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+function _canSeeAllLeads(req) { const p = req.user && req.user.person; return !!p && _myNorm(p.lastName || p.last_name) === 'holy' && ['tomas', 'jan'].includes(_myNorm(p.firstName || p.first_name)); }
+router.get('/my-leads/scope', requireAuth, (req, res) => res.json({ all: _canSeeAllLeads(req) }));
 router.get('/my-leads', requireAuth, async (req, res, next) => {
   try {
     const meId = (req.user && req.user.person) ? req.user.person.id : null;
     if (!meId) return res.json([]);
-    const where = { owner_person_id: meId, is_test: false };
+    const allScope = req.query.scope === 'all' && _canSeeAllLeads(req);
+    if (req.query.scope === 'all' && !allScope) return res.status(403).json({ error: 'Všechny kontakty vidí jen Tomáš a Jan Holý' });
+    const where = allScope ? { is_test: false } : { owner_person_id: meId, is_test: false };
     if (req.query.status) where.status = String(req.query.status);
     // Online schůzky s majitelem, které jsem domluvil já (kontakt už je přiřazen majiteli)
     if (req.query.owner_meetings) {
@@ -4243,7 +4249,7 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
     let leads;
     if (q && q.length >= 2) {
       // Chytré hledání: BEZ DIAKRITIKY, napříč jméno/e-mail/telefon/firma; ignoruje ostatní filtry.
-      const all = await prisma.compounderLead.findMany({ where: { owner_person_id: meId, is_test: false }, orderBy: { created_at: 'desc' }, take: 5000 });
+      const all = await prisma.compounderLead.findMany({ where: allScope ? { is_test: false } : { owner_person_id: meId, is_test: false }, orderBy: { created_at: 'desc' }, take: allScope ? 20000 : 5000 });
       const norm = (s) => (s == null ? '' : String(s)).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
       const nq = norm(q); const qd = q.replace(/\D/g, '');
       leads = all.filter((l) => {
@@ -4256,7 +4262,13 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
         return false;
       }).slice(0, 2000);
     } else {
-      leads = await prisma.compounderLead.findMany({ where, orderBy: { created_at: 'desc' }, take: 2000 });
+      leads = await prisma.compounderLead.findMany({ where, orderBy: { created_at: 'desc' }, take: allScope ? 3000 : 2000 });
+    }
+    if (allScope) {
+      // Komu kontakt patří (obchodník / externí zástupce) — jedním dotazem
+      const oids = [...new Set(leads.map((l) => l.owner_person_id).filter(Boolean))];
+      const om = new Map((oids.length ? await prisma.person.findMany({ where: { id: { in: oids } }, select: { id: true, first_name: true, last_name: true } }).catch(() => []) : []).map((p) => [p.id, [p.first_name, p.last_name].filter(Boolean).join(' ')]));
+      leads.forEach((l) => { l.owner_name = l.owner_person_id ? (om.get(l.owner_person_id) || ('#' + l.owner_person_id)) : null; });
     }
     await enrichWarmth(leads);
     await _annotateBlacklist(leads);

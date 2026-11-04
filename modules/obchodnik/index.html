@@ -122,6 +122,7 @@
       </div>
       <div style="display:flex;gap:8px;align-items:center">
         <a href="import-kontaktu.html" class="logout desktop-only" style="text-decoration:none" title="Import kontaktů (jen na PC)">&#128228; Import</a>
+        <button class="logout" id="btn-all" onclick="toggleAllScope()" title="Všechny kontakty v databázi (i kontakty obchodníků)" style="display:none">👥 Všechny</button>
         <button class="logout" onclick="appRefresh(this)" title="Obnovit data">&#128260; Obnovit</button>
         <button class="logout" onclick="openSettings()" title="Nastavení" style="padding:7px 11px">⚙️</button>
         <button class="logout" onclick="doLogout()">Odhlásit</button>
@@ -345,6 +346,8 @@
       // Schované bloky u kontaktu (nastavuje admin: Prodejní objednávky → Aplikace obchodníka). Při chybě se nic neschová.
       try { var _ui = await (await fetch(API + '/obchodnik-ui', { credentials:'include' })).json(); obApplyUi(_ui && _ui.hidden); } catch(e){}
       try { var _dt = localStorage.getItem('ob.defaultType'); if (_dt && ['all','lokality','compounder'].indexOf(_dt) !== -1) state.typeFilter = _dt; } catch(e){}
+      // Tomáš a Jan Holý: přepínač Moje / Všechny kontakty (i kontakty obchodníků)
+      try { var _sc = await (await fetch(API + '/my-leads/scope', { credentials:'include' })).json(); if (_sc && _sc.all) { window.__canAll = true; document.getElementById('btn-all').style.display = ''; try { state.allScope = localStorage.getItem('ob.allScope') === '1'; } catch(e){} applyScopeUi(); } } catch(e){}
       renderChips();
       buildLangOptions();
       await load();
@@ -1501,12 +1504,24 @@
     try { var tk = document.getElementById('tab-calendar'); if (tk && tk.classList.contains('active') && window._fcInst && window._fcInst.refetchEvents) window._fcInst.refetchEvents(); } catch(e){}
     if (btn){ btn.innerHTML = '✓ Hotovo'; setTimeout(function(){ try{ btn.innerHTML = orig; btn.disabled = false; }catch(e){} }, 1000); }
   };
+  function applyScopeUi(){
+    var b = document.getElementById('btn-all'), h = document.querySelector('.top h1');
+    if (b) { b.innerHTML = state.allScope ? '👤 Moje' : '👥 Všechny'; b.title = state.allScope ? 'Zpět na moje kontakty' : 'Všechny kontakty v databázi (i kontakty obchodníků)'; b.style.borderColor = state.allScope ? '#22c55e' : ''; b.style.color = state.allScope ? '#22c55e' : ''; }
+    if (h) h.textContent = state.allScope ? 'Všechny kontakty' : 'Moje kontakty';
+  }
+  window.toggleAllScope = function(){
+    if (!window.__canAll) return;
+    state.allScope = !state.allScope;
+    try { localStorage.setItem('ob.allScope', state.allScope ? '1' : '0'); } catch(e){}
+    applyScopeUi(); state.openId = null; load();
+  };
   async function load(opts){
     opts = opts || {};
     var box = document.getElementById('content');
     if (!opts.silent) box.innerHTML = '<div class="loading">Načítám…</div>';
     try {
-      var qs = new URLSearchParams({ status: '', search: state.search }).toString();
+      var qp = { status: '', search: state.search }; if (state.allScope) qp.scope = 'all';
+      var qs = new URLSearchParams(qp).toString();
       var r = await api('/my-leads?' + qs);
       if (!r.ok) throw new Error('HTTP '+r.status);
       state.leads = await r.json();
@@ -1667,7 +1682,7 @@
     return '<div class="card'+(open?' open':'')+(laToday?' today':'')+'" id="card-'+l.id+'">' +
       '<div class="card-main" onclick="toggle('+l.id+')">' +
         '<span class="dot" style="background:'+st.c+'"></span>' +
-        '<div class="card-body"><div class="card-name">'+(l.is_hot?'⭐ ':'')+(l.only_polish?'<span title="Umí jen polsky">🇵🇱</span> ':'')+esc(l.name||l.email)+blBadge+(l.extra_offers?' <span title="Individuální nabídka lokalit">🎯</span>':'')+'</div>'+invHtml+'<div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+obOverdueBadge(l)+calledBadge+chatBadge+chatEverHtml+obNextEventBadge(l.id)+'</div>' +
+        '<div class="card-body"><div class="card-name">'+(l.is_hot?'⭐ ':'')+(l.only_polish?'<span title="Umí jen polsky">🇵🇱</span> ':'')+esc(l.name||l.email)+blBadge+(l.extra_offers?' <span title="Individuální nabídka lokalit">🎯</span>':'')+'</div>'+(state.allScope?'<div style="font-size:11.5px;color:#a78bfa;margin-top:1px">👤 '+esc(l.owner_name||'bez obchodníka')+'</div>':'')+invHtml+'<div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+obOverdueBadge(l)+calledBadge+chatBadge+chatEverHtml+obNextEventBadge(l.id)+'</div>' +
         '<span class="badge" style="background:'+st.c+'22;color:'+st.c+';white-space:normal;text-align:center;line-height:1.2">'+st.l+((l.status==='dosledovani' && l.discount && l.discount.endsAt)?('<br><span style="font-weight:400;font-size:.85em;opacity:.85">do '+new Date(l.discount.endsAt).toLocaleDateString('cs-CZ')+'</span>'):'')+'</span>' +
         '<span class="gear" onclick="event.stopPropagation();openEdit('+l.id+')" title="Upravit údaje kontaktu">⚙️</span>' +
         '<span class="chev">▸</span>' +
