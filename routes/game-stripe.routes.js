@@ -24,8 +24,13 @@ const gameUrl = () => (process.env.PRADLOMATY_BASE_URL || 'https://pradlomaty.in
 // Tajemství je VLASTNÍ pro tenhle endpoint. Vzít to od /misto by nefungovalo —
 // každý webhook endpoint má ve Stripu svoje a podpis by nikdy neseděl.
 const hookSecret = () => process.env.STRIPE_WEBHOOK_SECRET_GAME || '';
+// Tajemství musí vypadat jako tajemství. Nestačí „je něco nastaveno" — omylem
+// vložený zástupný text by zapnul prodej, ale podpis by neprošel a zákazník by
+// zaplatil bez karty.
+const SECRET_RE = /^whsec_[A-Za-z0-9+/=_-]{16,}$/;
+const secretOk = () => SECRET_RE.test(hookSecret());
 // Prodávat smíme jen tehdy, když umíme i doručit, tedy ověřit webhook.
-const paymentsOn = () => !!(process.env.STRIPE_SECRET_KEY && hookSecret());
+const paymentsOn = () => !!(process.env.STRIPE_SECRET_KEY && secretOk());
 
 // ─── Volání Stripe API (form-encoded, jak ho Stripe chce) ────────────────────
 function flat(obj, prefix, out) {
@@ -121,7 +126,10 @@ function verify(raw, sigHeader, secret) {
 const webhook = [express.raw({ type: '*/*', limit: '1mb' }), async (req, res) => {
   // Bez tajemství podpis neověříme — pak by kdokoli mohl podvrhnout „zaplaceno".
   const secret = hookSecret();
-  if (!secret) { console.error('[game] chybí STRIPE_WEBHOOK_SECRET_GAME — webhook odmítnut'); return res.status(503).send('Webhook není nakonfigurován'); }
+  if (!secretOk()) {
+    console.error('[game] STRIPE_WEBHOOK_SECRET_GAME chybí nebo není platné whsec_ — webhook odmítnut');
+    return res.status(503).send('Webhook není nakonfigurován');
+  }
   const raw = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : String(req.body || '');
   if (!verify(raw, req.headers['stripe-signature'], secret)) return res.status(400).send('bad signature');
 
