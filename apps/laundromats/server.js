@@ -105,7 +105,16 @@ app.get('/api/presence', (req, res) => {
 const LH = require('./lm-header');
 // Stránky mimo /cesta (úvod, Compounder, Prádlomaty): stejná lišta + počítadlo, bez přepínače jazyka
 // Menu (<!--PRIV-->…<!--/PRIV-->) vidí jen přihlášený uživatel s účtem (správce z HolyOS se do nástrojů dostane přes „Správce“ → rozcestník)
-const lite = (html, req) => String(html).replace(/<!--PUB-->([\s\S]*?)<!--\/PUB-->/g, (m, a) => ((req && req.account) ? '' : a)).replace(/<!--PRIV(?::([a-z]+))?-->([\s\S]*?)<!--\/PRIV-->/g, (m, k, a) => ((req && req.account && (!k || ACC.canSee(req, k))) ? a : '')).replace('<!--LACC-->', ACC.headerSlot(req)).replace('</style>', PRES_CSS + '</style>').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>');
+// Správce z HolyOS se do zákaznických aplikací dostane i bez role — na to ten účet je.
+// Aby si to nikdo nespletl se stavem běžného zákazníka, vidí o tom nahoře pruh.
+const SPRAVCE_PRUH = '<div style="position:sticky;top:0;z-index:200;background:#422006;color:#fde68a;border-bottom:1px solid #a16207;padding:6px 16px;font:600 12.5px/1.4 Inter,system-ui,Arial,sans-serif;text-align:center">'
+  + '⚠️ Vidíte to jako <b>správce z HolyOS</b> — zákazník bez odpovídající role se sem nedostane.'
+  + ' <a href="/admin/logout" style="color:#fde68a;text-decoration:underline">Odhlásit správce</a></div>';
+const spravcePruh = (html, req) => ((req && !req.account && adminOf(req))
+  ? String(html).replace(/(<body[^>]*>)/, '$1' + SPRAVCE_PRUH)
+  : String(html));
+const liteRaw = (html, req) => String(html).replace(/<!--PUB-->([\s\S]*?)<!--\/PUB-->/g, (m, a) => ((req && req.account) ? '' : a)).replace(/<!--PRIV(?::([a-z]+))?-->([\s\S]*?)<!--\/PRIV-->/g, (m, k, a) => ((req && req.account && (!k || ACC.canSee(req, k))) ? a : '')).replace('<!--LACC-->', ACC.headerSlot(req)).replace('</style>', PRES_CSS + '</style>').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>');
+const lite = (html, req) => spravcePruh(liteRaw(html, req), req);
 const shell = (html, lang) => (String(html).replace('@@LHDR@@', LH.header({ lang, minimal: true })).replace('</style>', LH.CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</style>', FOOT_CSS + PRES_CSS + '</style>').replace('<!--PRESENCE-->', '').replace('<span style="margin-left:auto"></span>', PRES_HTML + '<span style="margin-left:auto"></span>').replace('</body>', '<script>' + PRES_JS + '</script></body>').replace('</body>', '<script src="/cesta/track.js" defer></script></body>'));
 // ── Jazyk stránky ───────────────────────────────────────────────────────────
 // Jazyk je v adrese: /en/… a /pl/…, čeština bez prefixu. Prefix se tady odřízne,
@@ -142,6 +151,31 @@ function trackServer(req, event, props) {
 }
 const ACC = require('./lm-account')({ HOLYOS_URL, LM_SECRET, PUBLIC_URL, rateLimited, cookies, ckDomain, sendMail: (p) => sendConfirmMail(p), adminOf: (req) => adminOf(req), render: (req, html) => lite(html, req), trackServer });
 app.use((req, res, next) => (/^\/(cesta|api\/location|api\/cesta|api\/vc|videocall|uvod|$)/.test(req.path) ? ACC.attach(req, res, next) : next()));
+
+// ── Záchranná brána: co není výslovně veřejné, chce přihlášení ──────────────
+// Dosud si každá routa hlídala přístup sama. Stačilo by u jedné nové zapomenout
+// `requirePage` a byla by otevřená všem. Tohle je druhá pojistka: seznam veřejných
+// adres je taxativní, všechno ostatní pod /cesta, /api/cesta a /api/location
+// projde přes requireAccount. Role (Začátečník / Ekonomika / Plný přístup) řeší
+// dál `requirePage` u konkrétní routy — tahle brána ji nenahrazuje, jen doplňuje.
+const VEREJNE = new Set([
+  '/cesta', '/cesta/info', '/cesta/vlastni-kapital', '/cesta/financovani', '/cesta/schuzka',
+  '/cesta/ekonomika', '/cesta/ekonomika/podrobne',
+  '/cesta/ekonomika.js', '/cesta/pradlomat-economy.js', '/cesta/track.js',
+  '/cesta/booking.js', '/cesta/booking.pl.js',
+  // přihlášení a vše kolem účtu, co nutně musí jít i nepřihlášenému
+  '/cesta/prihlaseni', '/cesta/registrace', '/cesta/overit', '/cesta/zapomenute-heslo',
+  '/cesta/nove-heslo', '/cesta/aktivace', '/cesta/odhlasit',
+  // měření a rezervace schůzky — zájemce ještě účet nemá
+  '/api/cesta/track', '/api/cesta/meeting-slots', '/api/cesta/meeting-contact', '/api/cesta/meeting-reservation',
+]);
+const VEREJNE_PREFIX = [/^\/cesta\/pl(\/|$)/, /^\/videocall(\/|$)/, /^\/api\/vc(\/|$)/];
+const HLIDANE = /^\/(cesta|api\/cesta|api\/location)(\/|$)/;
+app.use((req, res, next) => {
+  if (!HLIDANE.test(req.path)) return next();
+  if (VEREJNE.has(req.path) || VEREJNE_PREFIX.some((re) => re.test(req.path))) return next();
+  return ACC.requireAccount(req, res, next);
+});
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /api/\n'));
 // Úvodní stránka značky (home-page.js). Náhled vždy na /uvod; na / až s LM_HOME_LIVE=1 (do té doby / → /cesta jako dřív).
