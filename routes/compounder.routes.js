@@ -317,6 +317,11 @@ router.get('/meeting-slots', async (req, res) => {
     const now = new Date();
     const minStart = new Date(now.getTime() + MEETING_MIN_LEAD_MS);
     const until = new Date(now.getTime() + days * 86400000);
+    if (req.query.empty === '1') {
+      // Pro schůzku na hale: termín je volný, když v něm nikdo není (zrušené rezervace se nepočítají) — i online termíny
+      const sl = await prisma.meetingSlot.findMany({ where: { active: true, starts_at: { gte: minStart, lte: until } }, orderBy: { starts_at: 'asc' }, include: { reservations: { where: { status: { not: 'canceled' } }, select: { id: true } } } });
+      return res.json(sl.filter((s) => !s.reservations.length).map((s) => ({ id: s.id, starts_at: s.starts_at, duration_min: s.duration_min, mode: s.mode, remaining: s.capacity })));
+    }
     const slots = await prisma.meetingSlot.findMany({
       where: { active: true, starts_at: { gte: minStart, lte: until } },
       orderBy: { starts_at: 'asc' },
@@ -527,12 +532,13 @@ router.post('/leads/:id/hall-meeting', requireAuth, async (req, res) => {
     if (!first || !first.active) return res.status(404).json({ ok: false, error: 'Termín není dostupný' });
     if (first.starts_at.getTime() < Date.now() + MEETING_MIN_LEAD_MS) return res.status(400).json({ ok: false, error: 'Termín je příliš brzy — vyberte čas alespoň 2 hodiny od teď' });
     // Navazující termíny: každý další začíná tam, kde předchozí končí (tolerance 2 min)
-    const cand = await prisma.meetingSlot.findMany({ where: { active: true, starts_at: { gte: first.starts_at, lt: new Date(first.starts_at.getTime() + count * 120 * 60000) } }, orderBy: { starts_at: 'asc' }, include: { _count: { select: { reservations: true } } } });
+    // Navazující = další termín v rozpisu (začíná nejvýš 15 min po konci předchozího); volný = nikdo v něm není (i online termín)
+    const cand = await prisma.meetingSlot.findMany({ where: { active: true, starts_at: { gte: first.starts_at, lt: new Date(first.starts_at.getTime() + count * 120 * 60000) } }, orderBy: { starts_at: 'asc' }, include: { reservations: { where: { status: { not: 'canceled' } }, select: { id: true } } } });
     const chain = [];
     for (const sl of cand) {
       if (!chain.length) { if (sl.id !== first.id) continue; }
-      else { const prev = chain[chain.length - 1]; const expect = prev.starts_at.getTime() + (prev.duration_min || 17) * 60000; if (Math.abs(sl.starts_at.getTime() - expect) > 2 * 60000) continue; }
-      if ((sl._count.reservations || 0) >= sl.capacity) break;
+      else { const prev = chain[chain.length - 1]; const prevEnd = prev.starts_at.getTime() + (prev.duration_min || 17) * 60000; if (sl.starts_at.getTime() < prevEnd - 60000) continue; if (sl.starts_at.getTime() - prevEnd > 15 * 60000) break; }
+      if (sl.reservations.length) break;
       chain.push(sl); if (chain.length === count) break;
     }
     if (chain.length < count) return res.status(409).json({ ok: false, error: 'Od tohoto začátku není ' + count + ' volných termínů za sebou. Vyberte jiný začátek nebo kratší délku.' });

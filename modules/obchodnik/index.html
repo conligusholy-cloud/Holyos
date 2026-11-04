@@ -798,7 +798,7 @@
     if(!lead.email && !lead.phone){ box.innerHTML=head()+'<div style="color:#fca5a5">Kontakt nemá e-mail ani telefon — nemáme kam poslat potvrzení. Doplň údaje (⚙️) a zkus to znovu.</div>'; bindX(); return; }
     box.innerHTML=head()+'<div style="color:#94a3b8">Načítám volné termíny…</div>'; bindX();
     var slots=[];
-    try { var r=await api('/meeting-slots?days=45'); slots=(await r.json())||[]; } catch(e){ box.innerHTML=head()+'<div style="color:#fca5a5">Termíny se nepodařilo načíst.</div>'; bindX(); return; }
+    try { var r=await api('/meeting-slots?days=45&empty=1'); slots=(await r.json())||[]; } catch(e){ box.innerHTML=head()+'<div style="color:#fca5a5">Termíny se nepodařilo načíst.</div>'; bindX(); return; }
     slots.sort(function(a,b){ return new Date(a.starts_at)-new Date(b.starts_at); });
     var cnt=2;
     var DN=['Ne','Po','Út','St','Čt','Pá','So'];
@@ -806,8 +806,9 @@
     // začátky, od kterých je N volných termínů hned za sebou
     function starts(n){ var out=[];
       for(var i=0;i<slots.length;i++){ var ch=[slots[i]];
-        for(var j=i+1;j<slots.length&&ch.length<n;j++){ var p=ch[ch.length-1], exp=new Date(p.starts_at).getTime()+(p.duration_min||17)*60000, t=new Date(slots[j].starts_at).getTime();
-          if(Math.abs(t-exp)<=120000) ch.push(slots[j]); else if(t>exp+120000) break; }
+        // další termín v rozpisu = začíná nejvýš 15 min po konci předchozího (rozpis např. 10:00, 10:30, 11:00 po 17 min)
+        for(var j=i+1;j<slots.length&&ch.length<n;j++){ var p=ch[ch.length-1], pend=new Date(p.starts_at).getTime()+(p.duration_min||17)*60000, t=new Date(slots[j].starts_at).getTime();
+          if(t<pend-60000) continue; if(t-pend<=15*60000) ch.push(slots[j]); else break; }
         if(ch.length===n){ var l=ch[n-1]; out.push({ s:slots[i], end:new Date(new Date(l.starts_at).getTime()+(l.duration_min||17)*60000) }); } }
       return out; }
     function render(){
