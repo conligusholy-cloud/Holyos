@@ -296,6 +296,11 @@ footer{border-top:1px solid var(--line);padding:56px 0 34px;margin-top:40px}
 .site figcaption{display:flex;align-items:center;gap:7px;margin-top:10px;color:var(--tx2);font-size:14.5px;font-weight:600}.site figcaption svg{color:var(--az)}
 .vids{display:grid;grid-template-columns:minmax(0,270px) minmax(0,270px) 1fr;gap:16px;margin-top:44px;align-items:stretch}
 @media (max-width:820px){.vids{grid-template-columns:1fr 1fr}.vids .ph{grid-column:1/-1;min-height:160px}}
+.netmap{position:relative;border-radius:18px;overflow:hidden;border:1px solid rgba(120,160,255,.25);min-height:320px;background:#0b1020}
+#netmap{position:absolute;inset:0}
+.nm-leg{position:absolute;left:12px;bottom:12px;z-index:500;background:rgba(6,10,20,.82);border:1px solid rgba(79,209,255,.3);border-radius:10px;padding:6px 10px;font-size:12.5px;color:var(--tx2,#c8d3ea)}.nm-leg b{color:#4fd1ff}
+.netmap .leaflet-popup-content-wrapper,.netmap .leaflet-popup-tip{background:#0d1424;color:#e8eefc;border:1px solid rgba(79,209,255,.35)}.netmap .leaflet-popup-content{margin:9px 12px;font:13px/1.4 inherit}.netmap .leaflet-popup-content small{color:#93a3c4}.netmap .leaflet-container{background:#0b1020;font-family:inherit}.netmap .leaflet-control-attribution{background:rgba(6,10,20,.7);color:#7d8aa6}.netmap .leaflet-control-attribution a{color:#9fb4dc}
+@media (max-width:820px){.vids .netmap{grid-column:1/-1;min-height:320px}}
 .vid{margin:0}.vid video{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:18px;border:1px solid var(--line2);background:#0b1426;display:block}
 .vid figcaption{margin-top:10px;color:var(--tx2);font-size:14px;font-weight:600}
 .site img,.vid video{cursor:zoom-in;transition:filter .2s,transform .2s}.site img:hover,.vid video:hover{filter:brightness(1.08)}
@@ -370,7 +375,7 @@ function homePage(lang) {
     + '<div class="vids rv">'
     + '<figure class="vid"><video class="autovid" src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" muted loop playsinline preload="none" aria-label="' + esc(L.network.vid1) + '"></video><figcaption>' + esc(L.network.vid1) + '</figcaption></figure>'
     + '<figure class="vid pl"><video src="/media/krok.mp4" poster="/media/krok-poster.jpg" playsinline preload="none" aria-label="' + esc(L.network.vid2) + '"></video><figcaption>' + esc(L.network.vid2) + '</figcaption></figure>'
-    + '<div class="ph" role="img" aria-label="' + esc(L.network.map) + '">' + svg('map', 30) + '<span>' + esc(L.network.map) + '</span></div></div></div></section>'
+    + '<div class="netmap" role="region" aria-label="Mapa provozovaných prádlomatů"><div id="netmap"></div><div class="nm-leg"><b>' + SITES.length + '</b> provozoven · ' + SITES.filter((x) => x[2] === 'CZ').length + ' Česko · ' + SITES.filter((x) => x[2] === 'PL').length + ' Polsko</div></div></div></div></section>'
     // ── vlastnictví ──
     + '<section id="vlastnictvi"><div class="wrap"><div class="own"><div>' + kicker(L.own.kicker) + '<h2 class="rv">' + esc(L.own.h) + '</h2><p class="lead rv">' + esc(L.own.lead) + '</p></div>'
     + '<div><ul class="tasks">' + L.own.items.map((x) => '<li class="rv"><span>' + svg('check', 16) + '</span>' + esc(x) + '</li>').join('') + '</ul><p class="ofoot rv">' + esc(L.own.foot) + '</p></div></div></div></section>'
@@ -391,8 +396,20 @@ function homePage(lang) {
     + '<footer><div class="wrap"><div class="fgrid"><div><a class="logo" href="#top">' + logo(30) + '<span>LAUNDROMATS</span></a><p>' + esc(L.foot.claim) + '</p></div>'
     + '<div><a class="fl" href="mailto:info@laundromats.eu">info@laundromats.eu</a><a class="fl" href="/gdpr">' + esc(L.foot.privacy) + '</a></div></div>'
     + '<div class="fbot"><span>' + esc(L.foot.rights) + ' ' + new Date().getFullYear() + ' Laundromats</span><span>' + esc(L.foot.claim) + '</span></div></div></footer>'
-    + '<script>' + clientJs(L) + '</script><script>' + NET_JS + '</script><script>' + LIGHTBOX_JS + '</script><script src="/cesta/track.js" defer></script></body></html>';
+    + '<script>' + clientJs(L) + '</script><script>' + NETMAP_JS + '</script><script>' + NET_JS + '</script><script>' + LIGHTBOX_JS + '</script><script src="/cesta/track.js" defer></script></body></html>';
 }
+
+// Mapa sítě: Leaflet se načte až když je mapa skoro vidět (nezdržuje úvodní stránku)
+const SITES = require('./network-sites');
+const NETMAP_JS = "(function(){var el=document.getElementById('netmap');if(!el)return;var S=" + JSON.stringify(SITES).replace(/</g, '\\u003c') + ";var go=false;"
+  + "function init(){if(go)return;go=true;var c=document.createElement('link');c.rel='stylesheet';c.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';document.head.appendChild(c);"
+  + "var j=document.createElement('script');j.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';j.onload=draw;document.head.appendChild(j);}"
+  + "function e(t){return String(t).replace(/[&<>\"]/g,function(x){return{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[x];});}"
+  + "function draw(){var m=L.map(el,{scrollWheelZoom:false,zoomControl:true,attributionControl:true});"
+  + "L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:18,attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(m);"
+  + "var b=[];S.forEach(function(p){var ll=[p[3],p[4]];b.push(ll);L.circleMarker(ll,{radius:6,color:'#4fd1ff',weight:2,fillColor:'#4fd1ff',fillOpacity:.55}).addTo(m).bindPopup('<b>'+e(p[0])+'</b><br><small>'+e(p[1])+'</small>');});"
+  + "m.fitBounds(b,{padding:[24,24]});m.on('click',function(){m.scrollWheelZoom.enable();});}"
+  + "if('IntersectionObserver'in window){var io=new IntersectionObserver(function(x){if(x[0].isIntersecting){io.disconnect();init();}},{rootMargin:'400px'});io.observe(el);}else init();})();";
 
 function clientJs(L) {
   const f = L.form;
