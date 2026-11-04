@@ -30,7 +30,7 @@ const LANG_CSS = '.lhdr .llang{display:flex;gap:2px;align-items:center;border:1p
   + '.lhdr .llang a{display:block;padding:3px 8px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.02em;color:var(--lm-t2,#8ea2c2);text-decoration:none;line-height:1.3}'
   + '.lhdr .llang a:hover{color:#e8f0ff}.lhdr .llang a.on{background:rgba(79,209,255,.16);color:#4fd1ff}'
   + '@media(max-width:560px){.lhdr .llang a{padding:3px 6px;font-size:11px}}';
-const LANGS = [['cs', 'CZ', ''], ['en', 'EN', '/en'], ['pl', 'PL', '/pl']];
+const LANGS = [['cs', 'CZ', '/cs'], ['en', 'EN', '/en'], ['pl', 'PL', '/pl']]; // /cs/… server zapamatuje a přesměruje bez předpony
 function langSwitch(lang) {
   const akt = LANGS.some((x) => x[0] === lang) ? lang : 'cs';
   let dostupne;

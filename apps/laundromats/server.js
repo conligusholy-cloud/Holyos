@@ -21,15 +21,23 @@ const BEZ_JAZYKA = /^\/(api|admin|media|img|favicon|robots\.txt|sso|r\/)/;
 const LANG_CK = 'lm_lang';
 app.use((req, res, next) => {
   const I = require('./i18n');
+  // Volbu jazyka zapisujeme do obou podob cookie (s doménou i bez) — jinak se může
+  // stará hodnota z druhé podoby přebít a návrat na češtinu „nejde" (hlavně Safari v mobilu).
+  const setLang = (l) => { const base = LANG_CK + '=' + l + '; Path=/; Max-Age=31536000; SameSite=Lax'; res.append('Set-Cookie', base); const d = ckDomain(req); if (d) res.append('Set-Cookie', base + d); };
+  // /cs/… = výslovná volba češtiny z přepínače → zapamatovat a přesměrovat na adresu bez předpony
+  const c = /^\/cs(\/|$)/.exec(req.path);
+  if (c && req.method === 'GET') {
+    setLang('cs');
+    const rest = req.url.slice(3) || '/';
+    return res.redirect(302, rest.charAt(0) === '/' ? rest : '/' + rest);
+  }
   const m = /^\/(en|pl)(\/|$)/.exec(req.path);
   if (m) {
     // Jazyk je v adrese — ta rozhoduje. Volbu si zapamatujeme, ať při dalším
     // příchodu bez předpony nepřehodíme člověka zpátky.
     req.lang = m[1];
     req.url = (req.url.slice(m[0].length - (m[2] === '/' ? 1 : 0)) || '/');
-    if ((req.headers.cookie || '').indexOf(LANG_CK + '=' + m[1]) === -1) {
-      res.append('Set-Cookie', LANG_CK + '=' + m[1] + '; Path=/; Max-Age=31536000; SameSite=Lax' + ckDomain(req));
-    }
+    if (cookies(req)[LANG_CK] !== m[1] || (req.headers.cookie || '').split(LANG_CK + '=').length > 2) setLang(m[1]);
     return next();
   }
   req.lang = 'cs';
@@ -41,7 +49,7 @@ app.use((req, res, next) => {
   const { lang } = I.detekuj({ headers: req.headers, cookieLang: ck[LANG_CK] || null });
   if (lang === 'cs') {
     // Čeština se bere jako volba, ať se při dalším načtení nepřepíná pod rukama.
-    if (!ck[LANG_CK]) res.append('Set-Cookie', LANG_CK + '=cs; Path=/; Max-Age=31536000; SameSite=Lax' + ckDomain(req));
+    if (!ck[LANG_CK]) setLang('cs');
     return next();
   }
   const dotaz = req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '';
