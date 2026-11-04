@@ -443,7 +443,14 @@ function showRole(id) {
   $('role-cash').textContent = kcFull(p.cash);
   $('role-ltv').textContent = Math.round(p.ltv * 100) + ' % z ceny';
   $('role-rate').textContent = (p.rate * 100).toFixed(1).replace('.', ',') + ' % ročně';
-  $('go-game').onclick = function () { S = fresh(id); save(); showAcct('register'); };
+  // Kdo je přihlášený (třeba po „začít znovu"), už účet zakládat nemusí.
+  var hint = $('role-acct');
+  if (hint) hint.innerHTML = ME ? 'Hraješ jako <b>' + esc(ME.nick) + '</b>.' : '';
+  $('go-game').onclick = function () {
+    S = fresh(id); save();
+    if (ME) { startGame(); syncState(true); return; }
+    showAcct('register');
+  };
 }
 
 // ─── Mapa ────────────────────────────────────────────────────────────────────
