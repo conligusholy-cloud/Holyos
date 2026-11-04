@@ -877,7 +877,7 @@
         + '<button class="ct-x" style="position:absolute;top:10px;right:12px;background:none;border:none;color:var(--text2);font-size:1.4em;cursor:pointer;">×</button>'
         + '<h3 style="margin:0 0 6px;">Druh dokladu</h3>'
         + '<div style="color:var(--text2);font-size:.9em;margin-bottom:12px;">' + escapeHtml(inv.invoice_number) + ' · ' + escapeHtml(inv.company?.name || '') + '</div>'
-        + '<select class="ct-t form-control" style="width:100%;margin-bottom:12px;">' + DOC_TYPES.map(([v, l]) => '<option value="' + v + '"' + (v === inv.type ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>'
+        + '<select class="ct-t" style="width:100%;margin-bottom:12px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font:inherit;font-size:.95em;box-sizing:border-box;cursor:pointer;">' + DOC_TYPES.map(([v, l]) => '<option value="' + v + '"' + (v === inv.type ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>'
         + '<label class="ct-pw" style="display:none;gap:8px;align-items:flex-start;margin-bottom:10px;"><input type="checkbox" class="ct-p" checked style="margin-top:3px;"> <span>Záloha už je zaplacená — označit doklad jako <b>zaplacený</b> (nebude se platit znovu)</span></label>'
         + '<div style="font-size:.85em;color:var(--text2);margin-bottom:14px;">Doklad dostane číslo v řadě nového druhu (např. FP → DDP) a změna se zapíše do historie.</div>'
         + '<div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-secondary ct-cancel">Zrušit</button><button class="btn btn-primary ct-save">Uložit</button></div>'
