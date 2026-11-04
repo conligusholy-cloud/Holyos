@@ -85,8 +85,12 @@ function spotHash(id, salt) {
 function connPrice(sp, modelKey) {
   var base = CONN_MIN + spotHash(sp.id, 'c') * (CONN_MAX - CONN_MIN);
   if (modelKey === 'max') base *= CONN_MAX_MULT;
+  // Karta „Známý na úřadě" platí na jednu stavbu a spotřebuje se až při ní.
+  if (S && S.connDiscount) base *= (1 - S.connDiscount);
   return Math.round(base / 1000) * 1000;
 }
+// Úrok a rámec po případné kartě „Lepší bankéř".
+function rateOf() { return Math.max(0.02, PROFILES[S.profile].rate - (S.rateDrop || 0)); }
 // Měsíční nájem: lepší místo si řekne o víc, zbytek je o tom, jak se domluvíš.
 function rentOf(sp) {
   var attract = 0.7 + (Math.max(0, Math.min(100, sp.score)) / 100) * 0.8;
@@ -95,7 +99,9 @@ function rentOf(sp) {
 }
 
 // Kolik lidí ti otevřelo sdílený odkaz → o tolik víc zákazníků chodí.
-function traffic() { return Math.min(TRAFFIC_MAX, TRAFFIC_BASE + (S && S.refs ? S.refs : 0) * TRAFFIC_PER_REF); }
+// Strop návštěvnosti roste o to, co přidaly karty — jinak by zaplacená kampaň zapadla.
+function trafficMax() { return TRAFFIC_MAX + (S && S.boost ? S.boost : 0); }
+function traffic() { return Math.min(trafficMax(), TRAFFIC_BASE + (S && S.refs ? S.refs : 0) * TRAFFIC_PER_REF + (S && S.boost ? S.boost : 0)); }
 // Servis, praní a úklid se platí z obratu - cim vic lidi pere, tim vic prace.
 function economics(spot, modelKey) {
   var m = MODELS[modelKey] || MODELS.flex;
@@ -154,6 +160,10 @@ function fresh(profileId) {
     refs: 0,       // kolik lidí otevřelo sdílený odkaz
     orders: [],    // koupené stroje na cestě: { model, arrivesAt }
     stock: {},     // model → kolik kusů čeká na skladě
+    boost: 0,         // trvalé zvýšení návštěvnosti z karet
+    connDiscount: 0,  // sleva na přípojky na nejbližší stavbě
+    rateDrop: 0,      // snížení úroku z karty
+    bankBonus: 0,     // navýšení bankovního rámce z karty
     stats: { earned: 0, interest: 0 }
   };
 }
@@ -185,6 +195,7 @@ function load() {
     if (!o.leases) o.leases = {};
     if (!o.pid) o.pid = (Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)).slice(0, 12);
     if (typeof o.refs !== 'number') o.refs = 0;
+    ['boost', 'connDiscount', 'rateDrop', 'bankBonus'].forEach(function (k) { if (typeof o[k] !== 'number') o[k] = 0; });
     // Stara ulozena mista mela metriky jako objekty { count, nearest_m } - srovname je na cisla.
     Object.keys(o.areas || {}).forEach(function (id) {
       ((o.areas[id] || {}).spots || []).forEach(fixMetrics);
@@ -219,7 +230,7 @@ function etaText(ms) {
 // ─── Běh času ────────────────────────────────────────────────────────────────
 // Dopočítá všechno, co se stalo od minulého výpočtu: výnos sítě, úrok z úvěru
 // a doplnění bankovního rámce. Volá se při otevření hry i každých pár vteřin.
-function bankCap() { return BANK_BASE + BANK_PER_UNIT * S.units.length; }
+function bankCap() { return BANK_BASE + BANK_PER_UNIT * S.units.length + (S.bankBonus || 0); }
 // Navstevnost se meni podle pozvanek, takze uz postavene pradlomaty prepocitame.
 // Investice, pripojky a domluveny najem zustavaji - to je zaplacene a podepsane.
 function refreshUnits() {
@@ -246,7 +257,7 @@ function tick() {
   if (dt > 30 * YEAR_MS) dt = 30 * YEAR_MS;      // po měsíci nepřítomnosti dál nenabíhá
   var years = dt / YEAR_MS;
   var earned = yearlyProfit() * years;
-  var interest = S.loan * PROFILES[S.profile].rate * years;
+  var interest = S.loan * rateOf() * years;
   S.cash += earned - interest;
   S.loan += interest;
   S.stats.earned += Math.max(0, earned);
@@ -383,7 +394,7 @@ function showRole(id) {
   $('role-cash').textContent = kcFull(p.cash);
   $('role-ltv').textContent = Math.round(p.ltv * 100) + ' % z ceny';
   $('role-rate').textContent = (p.rate * 100).toFixed(1).replace('.', ',') + ' % ročně';
-  $('go-game').onclick = function () { S = fresh(id); save(); startGame(); };
+  $('go-game').onclick = function () { S = fresh(id); save(); showAcct('register'); };
 }
 
 // ─── Mapa ────────────────────────────────────────────────────────────────────
@@ -653,7 +664,7 @@ function financeRows(f) {
     + '<div class="kv"><span>Doplatí banka (úvěr)</span><b class="' + (f.need > 0 ? 'warn' : '') + '">' + kcFull(f.need) + pctNote(f.need, f.amount) + '</b></div>'
     + (f.need > 0 ? '<div class="kv"><span>Úvěrový strop profilu</span><b>' + kcFull(f.ltvRoom) + '</b></div>'
       + '<div class="kv"><span>Volný rámec v bance</span><b>' + kcFull(S.bank) + '</b></div>'
-      + '<div class="kv"><span>Úrok</span><b>' + (p.rate * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>' : '');
+      + '<div class="kv"><span>Úrok</span><b>' + (rateOf() * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>' : '');
 }
 
 // ─── Obchod ──────────────────────────────────────────────────────────────────
@@ -785,6 +796,7 @@ function paint() {
   if (!$('v-shop').classList.contains('hidden')) paintShop();
   if (!$('v-net').classList.contains('hidden')) paintNet();
   if (!$('v-bank').classList.contains('hidden')) paintBank();
+  if (!$('v-cards').classList.contains('hidden')) paintCards();
   if (!$('v-me').classList.contains('hidden')) paintMe();
 }
 function paintNet() {
@@ -815,7 +827,7 @@ function paintBank() {
     + '</div>'
     + '<div class="card"><h3>Úvěr</h3>'
     + '<div class="kv"><span>Dlužíš</span><b class="' + (S.loan > 0 ? 'warn' : '') + '">' + kcFull(S.loan) + '</b></div>'
-    + '<div class="kv"><span>Úrok</span><b>' + (p.rate * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>'
+    + '<div class="kv"><span>Úrok</span><b>' + (rateOf() * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>'
     + '<div class="kv"><span>Zaplaceno na úrocích</span><b>' + kcFull(S.stats.interest) + '</b></div>'
     + '<div class="kv"><span>Ještě si můžeš půjčit</span><b>' + kcFull(Math.min(room, S.bank)) + '</b></div>'
     + (cashDrawMax() >= 1000 ? '<button class="btn sec big" id="do-draw">Vybrat ' + kcFull(cashDrawMax()) + ' na provoz</button>'
@@ -856,8 +868,8 @@ function paintMe() {
     + 'Počítá se otevření odkazu někým jiným, ne samotné sdílení.</p>'
     + '<div class="kv"><span>Otevřeli tvůj odkaz</span><b class="ok">' + (S.refs || 0) + '×</b></div>'
     + '<div class="kv"><span>Návštěvnost</span><b>' + Math.round(traffic() * 100) + ' % '
-    + (traffic() >= TRAFFIC_MAX ? '(na maximu)' : '(z ' + Math.round(TRAFFIC_MAX * 100) + ' %)') + '</b></div>'
-    + '<div class="bar"><i style="width:' + Math.round(traffic() / TRAFFIC_MAX * 100) + '%"></i></div>'
+    + (traffic() >= trafficMax() ? '(na maximu)' : '(z ' + Math.round(trafficMax() * 100) + ' %)') + '</b></div>'
+    + '<div class="bar"><i style="width:' + Math.round(traffic() / trafficMax() * 100) + '%"></i></div>'
     + '<button class="btn big" id="do-share" style="margin-top:12px">' + (navigator.share ? 'Poslat odkaz' : 'Zkopírovat odkaz') + '</button>'
     + '</div>'
     + '<button class="btn sec big" id="do-reset">Začít znovu od nuly</button>';
@@ -872,7 +884,7 @@ function paintMe() {
 }
 
 // ─── Přepínání záložek ───────────────────────────────────────────────────────
-var TABS = ['map', 'shop', 'net', 'bank', 'me'];
+var TABS = ['map', 'shop', 'net', 'bank', 'cards', 'me'];
 function switchTab(v) {
   [].forEach.call(document.querySelectorAll('.tabs button'), function (x) { x.classList.toggle('on', x.getAttribute('data-v') === v); });
   TABS.forEach(function (k) { $('v-' + k).classList.toggle('hidden', k !== v); });
@@ -883,6 +895,197 @@ function switchTab(v) {
   b.onclick = function () { switchTab(b.getAttribute('data-v')); };
 });
 $('open-areas').onclick = areasSheet;
+
+
+// ─── Účet hráče ──────────────────────────────────────────────────────────────
+// Stav hry žije v prohlížeči, ale zrcadlíme ho na server. Důvod je prostý:
+// zrychlující karty se kupují za skutečné peníze, a ty nesmí zmizet s cache.
+// Karty samotné server drží ve vlastní tabulce a klient je nikdy nepřipisuje sám.
+var ME = null;            // { nick, email, cards: {…}, has_details }
+var CARDS_CAT = null;     // katalog ze serveru
+var PAYMENTS_ON = false;  // jsou nastavené klíče Stripe?
+var syncAt = 0, syncBusy = false;
+
+function api(path, opts) {
+  return fetch('/api/game' + path, Object.assign({ credentials: 'same-origin' }, opts || {}))
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); });
+}
+function apiJson(path, body, method) {
+  return api(path, { method: method || 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+}
+// Uložení na server. Neposíláme častěji než jednou za 15 s, ať to netluče zbytečně.
+function syncState(force) {
+  if (!ME || syncBusy || !S) return Promise.resolve();
+  if (!force && Date.now() - syncAt < 15000) return Promise.resolve();
+  syncBusy = true; syncAt = Date.now();
+  return apiJson('/account/state', { state: S }, 'PUT')
+    .catch(function () { /* offline — zkusí se příště */ })
+    .then(function () { syncBusy = false; });
+}
+
+// ─── Registrace / přihlášení ────────────────────────────────────────────────
+function showAcct(mode) {
+  ['intro', 'quiz', 'role'].forEach(function (id) { $(id).classList.add('hidden'); });
+  $('acct').classList.remove('hidden');
+  var login = mode === 'login';
+  $('acct').querySelector('h2').textContent = login ? 'Přihlas se ke své síti' : 'Vyber si herní nick';
+  $('ac-go').textContent = login ? 'Přihlásit a pokračovat' : 'Založit a hrát';
+  $('ac-have').textContent = login ? 'Chci začít znovu s novým účtem' : 'Už účet mám — přihlásit se';
+  $('ac-nick-hint').classList.toggle('hidden', login);
+  $('ac-pass').setAttribute('autocomplete', login ? 'current-password' : 'new-password');
+  $('ac-err').classList.add('hidden');
+  $('ac-have').onclick = function () { showAcct(login ? 'register' : 'login'); };
+  $('ac-go').onclick = function () { doAcct(login); };
+  setTimeout(function () { $('ac-nick').focus(); }, 60);
+}
+function acctErr(t) { var e = $('ac-err'); e.textContent = t; e.classList.remove('hidden'); }
+function doAcct(login) {
+  var nick = $('ac-nick').value.trim(), pass = $('ac-pass').value;
+  if (nick.length < 3) return acctErr('Nick musí mít aspoň 3 znaky.');
+  if (pass.length < 6) return acctErr('Heslo musí mít aspoň 6 znaků.');
+  $('ac-go').disabled = true;
+  apiJson('/account/' + (login ? 'login' : 'register'), { nick: nick, password: pass }).then(function (r) {
+    $('ac-go').disabled = false;
+    if (!r.ok) return acctErr(r.j.error || 'Nepovedlo se.');
+    ME = r.j.player;
+    if (login) {
+      // Na serveru je uložená síť — ta má přednost před tím, co je v prohlížeči.
+      if (r.j.state) { S = r.j.state; save(); }
+      else if (!S) return acctErr('K tomuhle účtu zatím žádná síť nepatří.');
+    }
+    $('acct').classList.add('hidden');
+    startGame();
+    syncState(true);
+  }).catch(function () { $('ac-go').disabled = false; acctErr('Server neodpovídá. Zkus to za chvíli.'); });
+}
+
+// ─── Karty ───────────────────────────────────────────────────────────────────
+var CARD_ART = {
+  rush: { emoji: '🚚', tone: 'blue' }, traffic: { emoji: '📣', tone: 'violet' },
+  connect: { emoji: '🔧', tone: 'green' }, credit: { emoji: '🏦', tone: 'gold' }
+};
+function loadCards() {
+  return api('/cards').then(function (r) {
+    if (!r.ok) return;
+    CARDS_CAT = r.j.catalog; PAYMENTS_ON = !!r.j.payments;
+    if (r.j.owned && ME) ME.cards = r.j.owned;
+  }).catch(function () { });
+}
+function ownedOf(kind) { return (ME && ME.cards && ME.cards[kind]) || 0; }
+function paintCards() {
+  var box = $('cards-body');
+  if (!CARDS_CAT) { box.innerHTML = '<p class="muted small">Načítám…</p>'; return loadCards().then(paintCards); }
+  var total = CARDS_CAT.reduce(function (a, c) { return a + ownedOf(c.kind); }, 0);
+  box.innerHTML = (total ? '' : '<p class="muted small">Zatím žádnou kartu nemáš.</p>')
+    + CARDS_CAT.map(function (c) {
+      var n = ownedOf(c.kind), art = CARD_ART[c.kind] || { emoji: '⚡', tone: 'blue' };
+      return '<div class="gcard ' + art.tone + '">'
+        + '<div class="gcard-top"><span class="gcard-ico">' + art.emoji + '</span>'
+        + '<div><h3>' + esc(c.name) + '</h3><p class="gcard-short">' + esc(c.short) + '</p></div>'
+        + (n ? '<b class="gcard-n">' + n + '×</b>' : '') + '</div>'
+        + '<p class="muted small">' + esc(c.desc) + '</p>'
+        + '<div class="gcard-act">'
+        + (n ? '<button class="btn sm" data-use="' + c.kind + '">Použít</button>' : '')
+        + (PAYMENTS_ON ? '<button class="btn sm ghost" data-buy-card="' + c.kind + '">Koupit za ' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button>'
+          : '<span class="fine">Prodej se teprve spouští.</span>')
+        + '</div></div>';
+    }).join('');
+  [].forEach.call(box.querySelectorAll('[data-use]'), function (b) { b.onclick = function () { useCard(b.getAttribute('data-use')); }; });
+  [].forEach.call(box.querySelectorAll('[data-buy-card]'), function (b) { b.onclick = function () { buyCard(b.getAttribute('data-buy-card')); }; });
+}
+
+// Karta se spotřebuje NA SERVERU a teprve pak se projeví ve hře.
+function useCard(kind) {
+  if (kind === 'rush' && !(S.orders || []).length) return toast('Nemáš nic na cestě — nejdřív si kup stroj v obchodě.', 'err');
+  if (kind === 'connect' && S.connDiscount) return toast('Slevu na přípojky už máš připravenou.', 'err');
+  apiJson('/cards/use', { kind: kind }).then(function (r) {
+    if (!r.ok) return toast(r.j.error || 'Kartu se nepovedlo použít.', 'err');
+    if (ME) ME.cards = r.j.owned;
+    applyCard(r.j.result);
+    save(); syncState(true); paint(); paintCards();
+    toast(r.j.result.msg, 'ok');
+  }).catch(function () { toast('Server neodpovídá.', 'err'); });
+}
+function applyCard(e) {
+  if (!e) return;
+  if (e.effect === 'rush') {
+    var next = (S.orders || []).slice().sort(function (a, b) { return a.arrivesAt - b.arrivesAt; })[0];
+    if (next) next.arrivesAt = Date.now() - 1;
+    deliverOrders();
+  } else if (e.effect === 'traffic') {
+    S.boost = (S.boost || 0) + (e.add || 0);
+  } else if (e.effect === 'connect') {
+    S.connDiscount = e.discount || 0;
+  } else if (e.effect === 'credit') {
+    S.rateDrop = (S.rateDrop || 0) + (e.rate_drop || 0);
+    S.bankBonus = (S.bankBonus || 0) + (e.room_add || 0);
+    S.bank += e.room_add || 0;
+  }
+}
+
+// ─── Nákup karty ─────────────────────────────────────────────────────────────
+function buyCard(kind) {
+  var c = (CARDS_CAT || []).filter(function (x) { return x.kind === kind; })[0];
+  if (!c) return;
+  if (!ME) return toast('Nejdřív se přihlas.', 'err');
+  if (!ME.has_details) return detailsSheet(kind);
+  sheet('<h3>' + esc(c.name) + '</h3>'
+    + '<p class="muted small">' + esc(c.desc) + '</p>'
+    + '<div class="kv"><span>Cena</span><b>' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</b></div>'
+    + '<div class="kv"><span>Platí</span><b>' + esc(ME.first_name + ' ' + ME.last_name) + '</b></div>'
+    + '<div class="kv"><span>E-mail</span><b>' + esc(ME.email) + '</b></div>'
+    + '<button class="btn big" id="do-pay">Zaplatit kartou</button>'
+    + '<p class="fine">Platbu zpracovává Stripe. Karta se ti připíše hned po zaplacení.</p>');
+  $('do-pay').onclick = function () {
+    $('do-pay').disabled = true;
+    apiJson('/stripe/checkout', { kind: kind, qty: 1 }).then(function (r) {
+      if (r.ok && r.j.url) { location.href = r.j.url; return; }
+      $('do-pay').disabled = false;
+      if (r.status === 428) return detailsSheet(kind);
+      toast(r.j.error || 'Platbu se nepodařilo založit.', 'err');
+    }).catch(function () { $('do-pay').disabled = false; toast('Server neodpovídá.', 'err'); });
+  };
+}
+// Jméno a e-mail chceme až tady — do té chvíle je hra úplně anonymní.
+function detailsSheet(thenKind) {
+  sheet('<h3>Ještě dva údaje</h3>'
+    + '<p class="muted small">K platbě potřebujeme vědět, komu kartu připsat a kam poslat doklad.</p>'
+    + '<label class="fld"><span>Jméno</span><input id="d-first" class="inp" type="text" maxlength="60" value="' + esc((ME && ME.first_name) || '') + '"></label>'
+    + '<label class="fld"><span>Příjmení</span><input id="d-last" class="inp" type="text" maxlength="60" value="' + esc((ME && ME.last_name) || '') + '"></label>'
+    + '<label class="fld"><span>E-mail</span><input id="d-mail" class="inp" type="email" maxlength="160" value="' + esc((ME && ME.email) || '') + '"></label>'
+    + '<button class="btn big" id="d-save">Uložit a pokračovat</button>');
+  $('d-save').onclick = function () {
+    apiJson('/account/details', {
+      first_name: $('d-first').value, last_name: $('d-last').value, email: $('d-mail').value
+    }).then(function (r) {
+      if (!r.ok) return toast(r.j.error || 'Nepovedlo se uložit.', 'err');
+      ME = r.j.player; closeSheet();
+      if (thenKind) buyCard(thenKind);
+    }).catch(function () { toast('Server neodpovídá.', 'err'); });
+  };
+}
+
+// Návrat z platby: ?platba=ok&s=cs_… — karta se připisuje na webhook, takže
+// chvíli počkáme, než se na serveru objeví.
+function checkPayment() {
+  var m = /[?&]platba=([a-z]+)/.exec(location.search);
+  if (!m) return;
+  var sid = (/[?&]s=([^&]+)/.exec(location.search) || [])[1];
+  history.replaceState(null, '', location.pathname);
+  if (m[1] !== 'ok' || !sid) return toast('Platba zrušená, nic se nestrhlo.', 'err');
+  var tries = 0;
+  (function poll() {
+    api('/stripe/status?s=' + encodeURIComponent(sid)).then(function (r) {
+      if (r.ok && r.j.status === 'paid') {
+        if (ME) ME.cards = r.j.owned;
+        paintCards(); switchTab('cards');
+        return toast('Zaplaceno — karta je tvoje.', 'ok');
+      }
+      if (++tries < 10) return setTimeout(poll, 1500);
+      toast('Platba se ještě potvrzuje. Karta se objeví během chvilky.', 'ok');
+    }).catch(function () { });
+  })();
+}
 
 // ─── Start ───────────────────────────────────────────────────────────────────
 function startGame() {
@@ -896,15 +1099,30 @@ function startGame() {
   if (arrived) toast('Dorazilo ' + arrived + ' strojů — čekají na skladě v obchodě.', 'ok');
   else if (gained > 1000) toast('Než ses vrátil, síť vydělala ' + kcFull(gained) + '.', 'ok');
   pullRefs();
-  setInterval(function () { tick(); save(); paint(); }, 5000);
+  loadCards().then(function () { if (!$('v-cards').classList.contains('hidden')) paintCards(); });
+  checkPayment();
+  setInterval(function () { tick(); save(); paint(); syncState(); }, 5000);
   setInterval(pullRefs, 60000);
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) { tick(); save(); paint(); } });
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) { tick(); save(); paint(); } else { syncState(true); }
+  });
+  window.addEventListener('pagehide', function () { syncState(true); });
 }
 
 loadMachinePhotos();
 
 countIncomingRef();   // ještě než se rozhodne, jestli je co rozehraného
 S = load();
-if (S) { startGame(); }
+// Přihlášený hráč má přednost: síť ze serveru přebije to, co leží v prohlížeči,
+// protože mohl mezitím hrát jinde.
+api('/account/me').then(function (r) {
+  if (r.ok && r.j.player) {
+    ME = r.j.player;
+    var srv = r.j.state;
+    if (srv && (!S || (srv.lastTick || 0) >= (S.lastTick || 0))) { S = srv; save(); }
+    if (S) return startGame();
+  }
+  if (S) startGame();          // rozehraná hra bez účtu (z doby před účty)
+}).catch(function () { if (S) startGame(); });
 
 })();

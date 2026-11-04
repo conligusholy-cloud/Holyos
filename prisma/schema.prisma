@@ -7550,3 +7550,70 @@ model LmSupportMessage {
   @@index([sender, read_by_agent])
   @@map("lm_support_messages")
 }
+
+// ─── Laundromats Milionář (hra na pradlomaty.info/game) ──────────────────────
+// Účet hráče. Přihlašuje se herním nickem a heslem; jméno a e-mail se doplňují
+// až před prvním nákupem, protože do té doby je hra úplně anonymní.
+model GamePlayer {
+  id            Int       @id @default(autoincrement())
+  nick          String    @db.VarChar(24)
+  nick_lower    String    @unique @db.VarChar(24)
+  password_hash String    @db.VarChar(100)
+  email         String?   @db.VarChar(160)
+  first_name    String?   @db.VarChar(60)
+  last_name     String?   @db.VarChar(60)
+  // Celý stav hry (hotovost, síť, objednávky). Díky tomu hráč pokračuje i na jiném zařízení.
+  state         Json?
+  state_at      DateTime?
+  token_version Int       @default(0)
+  disabled      Boolean   @default(false)
+  last_login_at DateTime?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  cards     GameCard[]
+  purchases GamePurchase[]
+
+  @@index([email])
+  @@map("game_players")
+}
+
+// Jedna řádka = jedna koupená karta. Vyplněné used_at znamená spotřebovanou.
+model GameCard {
+  id          Int       @id @default(autoincrement())
+  player_id   Int
+  kind        String    @db.VarChar(24) // rush | traffic | connect | credit
+  purchase_id Int?
+  used_at     DateTime?
+  used_on     String?   @db.VarChar(80)
+  created_at  DateTime  @default(now())
+
+  player   GamePlayer    @relation(fields: [player_id], references: [id], onDelete: Cascade)
+  purchase GamePurchase? @relation(fields: [purchase_id], references: [id])
+
+  @@index([player_id, used_at])
+  @@map("game_cards")
+}
+
+// Nákup přes Stripe. Karty se připisují teprve na potvrzený webhook, ne po návratu z platby.
+model GamePurchase {
+  id             Int       @id @default(autoincrement())
+  player_id      Int
+  kind           String    @db.VarChar(24)
+  qty            Int       @default(1)
+  amount_cents   Int
+  currency       String    @default("czk") @db.VarChar(3)
+  status         String    @default("pending") @db.VarChar(16) // pending | paid | failed
+  stripe_session String?   @unique @db.VarChar(100)
+  stripe_intent  String?   @db.VarChar(100)
+  email          String?   @db.VarChar(160)
+  paid_at        DateTime?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  player GamePlayer @relation(fields: [player_id], references: [id], onDelete: Cascade)
+  cards  GameCard[]
+
+  @@index([player_id])
+  @@map("game_purchases")
+}

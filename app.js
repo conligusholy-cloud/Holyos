@@ -157,6 +157,8 @@ app.use((req, res, next) => {
   if (req.path === '/api/ai/transcribe') return next();
   // Stripe webhook (/misto) potřebuje raw body kvůli ověření podpisu.
   if (req.path === '/api/compounder/misto/stripe-webhook') return next();
+  // Totéž pro webhook herních karet (Laundromats Milionář).
+  if (req.path === '/api/game/stripe/webhook') return next();
   // SNS (Amazon SES události) posílá text/plain – čteme surový stream ve vlastním handleru
   if (req.path === '/webhooks/ses') return next();
   // Limit těla podle důvěryhodnosti: s přihlášením/klíčem až 50 MB (nahrávání souborů), veřejně jen malé (2 MB),
@@ -900,6 +902,10 @@ app.use('/api/pradlomat-spots', require('./routes/pradlomat-spots.routes'));
 app.get('/api/stats', require('./middleware/auth').requireAuth, async (req, res, next) => { try { res.json(await require('./services/ses/email-log').stats(String(req.query.range || '30d'))); } catch (err) { next(err); } });
 app.use('/api/ads-center', require('./routes/ads-center.routes')); // Centrum reklamy (Soukromé) — přehled záchytných stránek a jejich výsledků // Předjednaná místa — veřejný přehled pradlomaty.info/location + interní správa
 app.use('/api/game', require('./routes/game.routes')); // Laundromats Milionář — veřejná hra na pradlomaty.info/game (bez auth, viz hlavička routeru)
+// Webhook musí být dřív než router, aby dostal raw body (viz výjimka v parsování výš).
+app.post('/api/game/stripe/webhook', require('./routes/game-stripe.routes')._webhook);
+app.use('/api/game', require('./routes/game-account.routes')); // účty hráčů, uložený stav a karty
+app.use('/api/game', require('./routes/game-stripe.routes'));  // nákup karet přes Stripe
 app.use('/api/leasing', require('./routes/leasing.routes')); // Leasing/financující společnosti (financování prádlomatu)
 if (VYBERY_ENABLED) app.use('/api/vybery', require('./routes/vybery.routes')); // Výběry (vypnuto, zapíná VYBERY_ENABLED=1) — veřejná stránka bestseries.cash/vybery (ověření black list + magic link + admin)
 app.use('/api/bank-plan', require('./routes/bank-plan.routes')); // Bankovní Business Plan — track record, unit economics, DSCR, crossover (data ze SIS snapshotu)

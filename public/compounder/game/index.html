@@ -79,6 +79,25 @@
   </div>
 </div>
 
+<!-- ÚČET -->
+<div id="acct" class="screen hidden">
+  <div class="intro-in">
+    <p class="eyebrow">Ještě jméno do síně slávy</p>
+    <h2>Vyber si herní nick</h2>
+    <p class="lead">Pod tímhle jménem ti poběží síť. Heslo potřebuješ proto, aby ses ke své síti dostal
+      i z jiného telefonu — a aby ti ji nikdo nepřevzal.</p>
+    <label class="fld"><span>Herní nick</span>
+      <input id="ac-nick" class="inp" type="text" maxlength="24" autocomplete="username" placeholder="např. PracíKrál"></label>
+    <p class="fine" id="ac-nick-hint">3–24 znaků. Musí být unikátní.</p>
+    <label class="fld"><span>Heslo</span>
+      <input id="ac-pass" class="inp" type="password" minlength="6" autocomplete="new-password" placeholder="aspoň 6 znaků"></label>
+    <p class="fine err hidden" id="ac-err"></p>
+    <button class="btn big" id="ac-go">Založit a hrát</button>
+    <button class="btn ghost" id="ac-have">Už účet mám — přihlásit se</button>
+    <p class="fine">Jméno ani e-mail teď nepotřebujeme. Doplníš je, až budeš chtít koupit kartu.</p>
+  </div>
+</div>
+
 <!-- HRA -->
 <div id="app" class="screen hidden">
   <header class="top">
@@ -117,6 +136,14 @@
       <div id="bank-body"></div>
     </section>
 
+    <!-- KARTY -->
+    <section id="v-cards" class="view hidden">
+      <h2>Karty</h2>
+      <p class="muted small">Zrychlující karty ti pomůžou přeskočit čekání. Kupují se za skutečné peníze
+        a zůstávají navázané na tvůj účet, ne na tenhle telefon.</p>
+      <div id="cards-body"></div>
+    </section>
+
     <!-- PROFIL -->
     <section id="v-me" class="view hidden">
       <h2>Já</h2>
@@ -129,6 +156,7 @@
     <button data-v="shop"><span>🛒</span>Obchod</button>
     <button data-v="net"><span>🧺</span>Síť</button>
     <button data-v="bank"><span>🏦</span>Banka</button>
+    <button data-v="cards"><span>⚡</span>Karty</button>
     <button data-v="me"><span>👤</span>Já</button>
   </nav>
 </div>
