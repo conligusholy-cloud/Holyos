@@ -210,7 +210,7 @@ module.exports = function createAccounts(ctx) {
     const TILES = [
       ['/cesta/compounder', 'compounder', 'Compounder', 'Jak roste síť prádlomatů a co znamená pro vaše podnikání.'],
       ['/cesta/pradlomaty', 'pradlomaty', 'Prádlomaty', 'Nabídka strojů a služby kolem nich.'],
-      ['/cesta/ucet/ekonomika', 'ekonomika', 'Ekonomika', 'Živý model: investice, obrat, zisk a návratnost.'],
+      ['/cesta/ucet/ekonomika', 'ekonomika', 'Ekonomika', 'Kalkulačka: vymodelujte si vlastní představu – investici, obrat i návratnost.'],
       ['/cesta/hledat', 'hledat', 'Najít místo', 'Spádová oblast, kapacita a provozované prádlomaty v okolí.'],
       ['/cesta/zhodnotit', 'zhodnotit', 'Zhodnotit místo', 'Orientační ekonomika vašeho konkrétního místa.'],
     ];

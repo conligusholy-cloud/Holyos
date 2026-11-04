@@ -13,13 +13,13 @@
   var PHOTOS = {};
   function photo() { var im = $('ek-photo'); if (im && PHOTOS[VER] && im.getAttribute('src') !== PHOTOS[VER]) im.src = PHOTOS[VER]; }
   var CUR = T.defCur || 'CZK', VER = 'V2'; // výchozí MINI
-  var M = { machine: 0, permit: 0, conn: 0, spend: 0, cost: 0, perday: 0 }; // v EUR (perday ks)
+  var M = { machine: 0, permit: 0, conn: 0, spend: 0, cost: 0, perday: 0, rent: null, spendSet: false }; // v EUR (perday ks); rent/spend zadané zákazníkem
   var $ = function (id) { return document.getElementById(id); };
   var f = function () { return RATES.EUR / RATES[CUR]; }; // EUR → zobrazená měna
   var fmt = function (v, d) { return (Number(v) || 0).toLocaleString(LOC, { maximumFractionDigits: d || 0, minimumFractionDigits: d || 0 }); };
   var parse = function (s) { var n = parseFloat(String(s).replace(/[\s ]/g, '').replace(',', '.')); return isNaN(n) ? 0 : n; };
 
-  function load(v) { var c = VARIANTS[v]; M.machine = c.machine; M.permit = PERMIT; M.conn = c.conn; M.spend = c.spend; M.cost = c.cost; M.perday = c.perday; }
+  function load(v) { var c = VARIANTS[v]; M.machine = c.machine; M.permit = PERMIT; M.conn = c.conn; M.spend = c.spend; M.cost = c.cost; M.perday = c.perday; M.rent = null; M.spendSet = false; }
   function show() {
     var k = f(), S = SYM[CUR];
     $('i-machine').value = fmt(M.machine * k); $('i-permit').value = fmt(M.permit * k); $('i-conn').value = fmt(M.conn * k);
@@ -37,8 +37,10 @@
     try {
       if (PT.getVersion && PT.getVersion() !== VER) PT.setVersion(VER);
       var st = PT.getState(); // v EUR (nástroj není připojený → výchozí měna EUR)
-      var r = PT.compute(Object.assign({}, st, { cena_pradlomatu: M.machine, cena_projekt: M.permit, cena_pripojek: M.conn, zakazniku_za_den: M.perday }));
-      return { spend: st.obrat_na_zakaznika, revenue: r.obrat_mesic, cost: r.naklad_pracich_cyklu_mesic + r.fixni_mesic, profit: r.zisk };
+      var inp = { cena_pradlomatu: M.machine, cena_projekt: M.permit, cena_pripojek: M.conn, zakazniku_za_den: M.perday };
+      if (M.spendSet) inp.obrat_na_zakaznika = M.spend; if (M.rent != null) inp.najem = M.rent;
+      var r = PT.compute(Object.assign({}, st, inp));
+      return { spend: M.spendSet ? M.spend : st.obrat_na_zakaznika, rent: M.rent != null ? M.rent : st.najem, revenue: r.obrat_mesic, cost: r.naklad_pracich_cyklu_mesic + r.fixni_mesic, profit: r.zisk };
     } catch (e) { return null; }
   }
   function calc() {
@@ -46,7 +48,7 @@
     var invest = (M.machine + M.permit + M.conn) * k;
     var custMonth = M.perday * 30.5;
     var E = engine();
-    if (E) { M.spend = E.spend; M.cost = E.cost; var es = $('i-spend'), ec = $('i-cost'); if (es) es.value = fmt(E.spend * k, 2); if (ec) ec.value = fmt(E.cost * k); }
+    if (E) { M.spend = E.spend; M.cost = E.cost; var es = $('i-spend'), ec = $('i-cost'), er = $('i-rent'); if (es && document.activeElement !== es) es.value = fmt(E.spend * k, 2); if (er && document.activeElement !== er) er.value = fmt(E.rent * k); if (ec) ec.value = fmt(E.cost * k); }
     var revenue = E ? E.revenue * k : custMonth * M.spend * k;
     var profit = E ? E.profit * k : revenue - M.cost * k;
     var pbM = profit > 0 ? invest / profit : 0, pbY = pbM / 12;
@@ -79,6 +81,11 @@
   [].forEach.call(document.querySelectorAll('#ek-cur button'), function (b) { b.addEventListener('click', function () { if (window.lmTrack) lmTrack('eco_edit', { key: 'currency', label: 'Měna', value: b.textContent }); }); });
   if (window.lmTrack) lmTrack('eco_open', { view: 'basic' });
   bind('i-machine', 'machine', true); bind('i-permit', 'permit', true); bind('i-conn', 'conn', true); bind('i-perday', 'perday', false);
+  // Útrata na zákazníka a nájem si zákazník zadává sám (modelovací kalkulačka)
+  (function () { var es = $('i-spend'), er = $('i-rent');
+    if (es) { es.addEventListener('input', function () { M.spend = parse(es.value) / f(); M.spendSet = true; calc(); }); es.addEventListener('blur', function () { setTimeout(calc, 0); }); es.addEventListener('change', function () { if (window.lmTrack) lmTrack('eco_edit', { key: 'i-spend', label: 'Ø útrata / zákazník', value: es.value + ' ' + SYM[CUR] }); }); }
+    if (er) { er.addEventListener('input', function () { M.rent = parse(er.value) / f(); calc(); }); er.addEventListener('blur', function () { setTimeout(calc, 0); }); er.addEventListener('change', function () { if (window.lmTrack) lmTrack('eco_edit', { key: 'i-rent', label: 'Nájem / měs', value: er.value + ' ' + SYM[CUR] }); }); }
+  })();
 
   [].forEach.call(document.querySelectorAll('#ek-ver button'), function (b) { b.addEventListener('click', function () { VER = b.getAttribute('data-v'); load(VER); show(); }); });
   [].forEach.call(document.querySelectorAll('#ek-cur button'), function (b) { b.addEventListener('click', function () { CUR = b.getAttribute('data-c'); show(); }); });

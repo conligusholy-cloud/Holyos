@@ -4,39 +4,39 @@ const CP = require('./cesta-pages');
 
 const TXT = {
   cs: {
-    title: 'Ekonomika jednoho prádlomatu', desc: 'Živý model ekonomiky prádlomatu: investice, obrat, zisk a návratnost. Upravte hodnoty podle své lokality.',
-    back: '← zpět', eyebrow: 'Ekonomika', h1: 'Ekonomika <span class="g">jednoho prádlomatu</span>',
-    lead: 'Živý model. Žlutá pole jsou vstupy — upravte je podle své lokality a okamžitě uvidíte obrat, zisk a návratnost. Hodnoty jsou orientační.',
-    vat: 'Všechny ceny jsou uvedené bez DPH.',
-    invest: 'Investice celkem', investSub: 'na jedno místo', rev: 'Obrat / měsíc', profit: 'Zisk / měsíc', profitSub: 'po všech nákladech', payback: 'Návratnost',
-    variant: 'Varianta', v3: 'FLEX — vyšší kapacita', v2: 'MINI — nižší investice', cur: 'Měna', reset: '↺ Obnovit výchozí hodnoty',
+    title: 'Kalkulačka ekonomiky prádlomatu', desc: 'Modelovací kalkulačka: zadejte vlastní předpoklady a spočítejte si investici, obrat, výsledek a návratnost prádlomatu.',
+    back: '← zpět', eyebrow: 'Kalkulačka', h1: 'Kalkulačka <span class="g">ekonomiky prádlomatu</span>',
+    lead: 'Modelovací nástroj pro vaši představu. Žlutá pole vyplňte podle svých předpokladů — kalkulačka hned spočítá obrat, výsledek a návratnost.',
+    vat: 'Předvyplněná čísla jsou jen ukázka. Výsledek odpovídá výhradně hodnotám, které zadáte — nejde o odhad ani příslib zisku. Všechny ceny jsou bez DPH.',
+    invest: 'Investice celkem', investSub: 'podle zadaných hodnot', rev: 'Obrat / měsíc', profit: 'Výsledek / měsíc', profitSub: 'podle zadaných hodnot, po nákladech', payback: 'Návratnost (model)',
+    variant: 'Varianta', v3: 'FLEX — vyšší kapacita', v2: 'MINI — nižší investice', cur: 'Měna', reset: '↺ Ukázkové hodnoty',
     invTitle: 'Investiční náklady (jednorázové)', machine: 'Cena prádlomatu', permit: 'Projekt + povolení', conn: 'Přípojky', invTotal: 'Investice celkem',
-    opTitle: 'Provoz (měsíčně)', perday: 'Zákazníků / den', spend: 'Ø útrata / zákazník', cost: 'Provozní náklady / měs', mprofit: 'Měsíční zisk',
-    opNote: 'Náklady = nájem + energie + servis + ostatní. Počítáme 30,5 dne/měsíc.', pcs: 'ks',
-    retEyebrow: 'Návratnost', retTitle: 'Kdy se prádlomat vrátí', retLead: 'Návratnost = investice ÷ měsíční zisk. Po jejím dosažení je cashflow čistý výnos.',
-    year: 'Roční zisk', yearSub: 'po návratnosti čistý', roi: 'Výnos p.a. (ROI)', roiSub: 'zisk / investice', five: 'Zisk za 5 let', fiveSub: 'jeden prádlomat',
-    barTitle: 'Splacení investice v čase', paid: 'Za první rok splaceno {pct} % investice.', loss: 'Při aktuálních hodnotách je provoz ve ztrátě.',
+    opTitle: 'Provoz (měsíčně)', perday: 'Zákazníků / den', spend: 'Ø útrata / zákazník (bez DPH)', rent: 'Nájem / měs', cost: 'Provozní náklady / měs', mprofit: 'Výsledek / měsíc',
+    opNote: 'Provozní náklady = nájem + energie a voda na praní (rostou s počtem zákazníků) + servis, software, pojištění a ostatní. Počítáme 30,5 dne/měsíc.', pcs: 'ks',
+    retEyebrow: 'Návratnost', retTitle: 'Kdy by se investice vrátila', retLead: 'Návratnost = investice ÷ měsíční výsledek z hodnot, které jste zadali.',
+    year: 'Roční výsledek', yearSub: 'podle zadaných hodnot', roi: 'Výnos p.a. (ROI)', roiSub: 'výsledek / investice', five: 'Výsledek za 5 let', fiveSub: 'po odečtení investice',
+    barTitle: 'Splacení investice v čase (model)', paid: 'Při zadaných hodnotách by se za první rok splatilo {pct} % investice.', loss: 'Při zadaných hodnotách vychází provoz ve ztrátě.',
     custMo: 'zákazníků / měs', years: 'let', months: 'měsíců', lossShort: 've ztrátě',
     ctaH: 'Chcete to <span class="g">probrat osobně?</span>', ctaP: 'Domluvte si online schůzku — projdeme čísla pro vaši konkrétní lokalitu.', cta: 'Domluvit schůzku',
-    disc: 'Orientační model, nejde o příslib výnosu. Skutečné výsledky závisí na lokalitě a vytížení.',
-    detail: 'Zobrazit podrobný přehled', detailNote: 'Podívejte se přesně, odkud tato čísla pocházejí — úplný, upravitelný model.', dTitle: 'Podrobný přehled ekonomiky', dBack: '← zpět na ekonomiku', dLead: 'Úplný, upravitelný model: žlutá pole jsou vstupy, vše ostatní se počítá automaticky. Hodnoty jsou orientační.',
+    disc: 'Kalkulačka je modelovací nástroj. Výsledky vycházejí pouze z hodnot, které zadáte, a nejsou odhadem, nabídkou ani příslibem zisku či návratnosti. Skutečné výsledky závisí na lokalitě, vytížení, cenách a dalších okolnostech.',
+    detail: 'Podrobná kalkulačka', detailNote: 'Všechny vstupy kalkulace v detailu — ceny služeb, energie, spotřeba i jednotlivé náklady si nastavíte sami.', dTitle: 'Podrobná kalkulačka ekonomiky', dBack: '← zpět na kalkulačku', dLead: 'Úplný modelovací nástroj: žlutá pole jsou vaše vstupy, vše ostatní se dopočítá. Výsledky odpovídají jen zadaným hodnotám — nejde o odhad ani příslib zisku.',
   },
   pl: {
-    title: 'Ekonomika jednego automatu pralniczego', desc: 'Interaktywny model ekonomiki automatu pralniczego: inwestycja, obrót, zysk i zwrot. Dostosuj wartości do swojej lokalizacji.',
-    back: '← wstecz', eyebrow: 'Ekonomika', h1: 'Ekonomika <span class="g">jednego automatu</span>',
-    lead: 'Model na żywo. Żółte pola to dane wejściowe — dostosuj je do swojej lokalizacji i od razu zobacz obrót, zysk i zwrot. Wartości są orientacyjne.',
-    vat: 'Wszystkie ceny podano bez VAT.',
-    invest: 'Inwestycja łącznie', investSub: 'na jedno miejsce', rev: 'Obrót / miesiąc', profit: 'Zysk / miesiąc', profitSub: 'po wszystkich kosztach', payback: 'Zwrot',
+    title: 'Kalkulator ekonomiki automatu pralniczego', desc: 'Interaktywny model ekonomiki automatu pralniczego: inwestycja, obrót, zysk i zwrot. Dostosuj wartości do swojej lokalizacji.',
+    back: '← wstecz', eyebrow: 'Ekonomika', h1: 'Kalkulator <span class="g">ekonomiki automatu</span>',
+    lead: 'Narzędzie do modelowania Twojego pomysłu. Wypełnij żółte pola według własnych założeń — kalkulator od razu policzy obrót, wynik i zwrot.',
+    vat: 'Wstępnie wpisane liczby to tylko przykład. Wynik zależy wyłącznie od wprowadzonych wartości — nie jest to prognoza ani obietnica zysku. Ceny bez VAT.',
+    invest: 'Inwestycja łącznie', investSub: 'na jedno miejsce', rev: 'Obrót / miesiąc', profit: 'Wynik / miesiąc', profitSub: 'według wprowadzonych wartości', payback: 'Zwrot (model)',
     variant: 'Wariant', v3: 'FLEX — większa wydajność', v2: 'MINI — niższa inwestycja', cur: 'Waluta', reset: '↺ Przywróć wartości domyślne',
     invTitle: 'Koszty inwestycyjne (jednorazowe)', machine: 'Cena automatu', permit: 'Projekt + pozwolenia', conn: 'Przyłącza', invTotal: 'Inwestycja łącznie',
-    opTitle: 'Działalność (miesięcznie)', perday: 'Klientów / dzień', spend: 'Ø wydatek / klient', cost: 'Koszty operacyjne / mies.', mprofit: 'Zysk miesięczny',
+    opTitle: 'Działalność (miesięcznie)', perday: 'Klientów / dzień', spend: 'Ø wydatek / klient (bez VAT)', rent: 'Czynsz / mies.', cost: 'Koszty operacyjne / mies.', mprofit: 'Wynik / miesiąc',
     opNote: 'Koszty = czynsz + energia + serwis + pozostałe. Przyjmujemy 30,5 dnia/miesiąc.', pcs: 'szt.',
     retEyebrow: 'Zwrot', retTitle: 'Kiedy automat się zwróci', retLead: 'Zwrot = inwestycja ÷ zysk miesięczny. Po jego osiągnięciu cashflow to czysty dochód.',
     year: 'Zysk roczny', yearSub: 'po zwrocie czysty', roi: 'Zwrot p.a. (ROI)', roiSub: 'zysk / inwestycja', five: 'Zysk za 5 lat', fiveSub: 'jeden automat',
     barTitle: 'Spłata inwestycji w czasie', paid: 'W pierwszym roku spłacono {pct} % inwestycji.', loss: 'Przy obecnych wartościach działalność przynosi stratę.',
     custMo: 'klientów / mies.', years: 'lat', months: 'miesięcy', lossShort: 'strata',
     ctaH: 'Chcesz to <span class="g">omówić osobiście?</span>', ctaP: 'Umów się na spotkanie online — przejdziemy przez liczby dla Twojej lokalizacji.', cta: 'Umów spotkanie',
-    disc: 'Model orientacyjny, nie stanowi obietnicy dochodu. Rzeczywiste wyniki zależą od lokalizacji i obłożenia.',
+    disc: 'Kalkulator to narzędzie do modelowania. Wyniki wynikają wyłącznie z wprowadzonych wartości i nie stanowią prognozy, oferty ani obietnicy zysku lub zwrotu.',
     detail: 'Pokaż szczegółowe zestawienie', detailNote: 'Zobacz dokładnie, skąd pochodzą te liczby — pełny, edytowalny model.', dTitle: 'Szczegółowa ekonomika', dBack: '← wróć do ekonomiki', dLead: 'Pełny, edytowalny model: żółte pola to dane wejściowe, reszta liczy się automatycznie. Wartości są orientacyjne.',
   },
 };
@@ -109,8 +109,9 @@ function economyPage(lang) {
     <div class="ek-panel">
       <h3>${t.opTitle}</h3>
       ${row('i-perday', t.perday, '8', t.pcs)}
-      ${row('i-spend', t.spend, '11.33', 'cur', true)}
-      ${row('i-cost', t.cost, '767', 'cur', true)}
+      ${row('i-spend', t.spend, '14.8', 'cur')}
+      ${row('i-rent', t.rent, '120', 'cur')}
+      ${row('i-cost', t.cost, '647', 'cur', true)}
       ${row('o-profit', t.mprofit, '', 'cur', true)}
       <p class="ek-note">${t.opNote}</p>
     </div>
