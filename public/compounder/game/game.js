@@ -54,7 +54,7 @@ var PROFILES = {
     desc: 'Chceš růst rychle a na dluh. Banka ti zaplatí i celý prádlomat, ale nechá si za to zaplatit.' }
 };
 var QUIZ = [
-  { q: 'Máš 1 000 000 a jeden prádlomat stojí 1 356 000. Co uděláš?',
+  { q: 'Máš 1 000 000 L$ a jeden prádlomat stojí 1 356 636 L$. Co uděláš?',
     a: [['Počkám, až našetřím celou částku.', 'opatrny'],
         ['Vezmu si menší úvěr a doplatím ze svého.', 'vyvazeny'],
         ['Vezmu maximální úvěr a hned stavím další.', 'dravy']] },
@@ -121,7 +121,9 @@ function kc(n) {
   if (Math.abs(n) >= 1e4) return Math.round(n / 1e3) + ' tis.';
   return n.toLocaleString('cs-CZ');
 }
-function kcFull(n) { return (Math.round(Number(n) || 0)).toLocaleString('cs-CZ') + ' Kč'; }
+// Herní měna se jmenuje laundr a píše se L$ — ať si ji nikdo neplete s korunami.
+var CUR = 'L$';
+function kcFull(n) { return (Math.round(Number(n) || 0)).toLocaleString('cs-CZ') + ' ' + CUR; }
 var toastT = null;
 function toast(msg, kind) {
   var el = $('toast'); el.textContent = msg; el.className = 'toast' + (kind ? ' ' + kind : '');
@@ -282,7 +284,7 @@ function spotSheet(sp, areaId) {
 }
 function modelCard(sp, e) {
   var m = MODELS[e.model];
-  return '<div class="card"><div class="row"><h3>' + m.name + '</h3><b>' + kc(e.invest) + ' Kč</b></div>'
+  return '<div class="card"><div class="row"><h3>' + m.name + '</h3><b>' + kc(e.invest) + ' ' + CUR + '</b></div>'
     + '<p class="muted small" style="margin:2px 0 8px">' + esc(m.desc) + '</p>'
     + '<div class="kv"><span>Zákazníků / den</span><b>' + String(e.perday).replace('.', ',') + '</b></div>'
     + '<div class="kv"><span>Obrat / měsíc</span><b>' + kcFull(e.revenue) + '</b></div>'
@@ -397,7 +399,8 @@ function paintMe() {
     + '</div>'
     + '<div class="card"><h3>Jak se hraje</h3>'
     + '<p class="muted small" style="margin:2px 0 0">Jeden skutečný den je ve hře rok. Prádlomaty vydělávají, i když hru zavřeš — po návratu se ti všechno dopočítá. '
-    + 'Místa na mapě jsou skutečná a jejich skóre počítá stejný nástroj, kterým Best Series hledá místa doopravdy.</p></div>'
+    + 'Místa na mapě jsou skutečná a jejich skóre počítá stejný nástroj, kterým Best Series hledá místa doopravdy. '
+    + 'Platí se v <b>laundrech (L$)</b> — herní měně, která nemá žádnou skutečnou hodnotu.</p></div>'
     + '<button class="btn sec big" id="do-reset">Začít znovu od nuly</button>';
   $('do-reset').onclick = function () {
     sheet('<h3>Začít znovu?</h3><p class="muted small">Přijdeš o celou síť i o peníze. Tohle se nedá vrátit.</p>'

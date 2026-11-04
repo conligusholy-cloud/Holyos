@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>Laundromats Milionář</title>
 <meta name="description" content="Hra: vybuduj největší síť venkovních prádlomatů. Skutečná místa, skutečná ekonomika.">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/svg+xml" href="/game/icon.svg">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="/game/game.css">
 </head>
@@ -16,17 +16,38 @@
 <!-- ÚVOD + vytvoření postavy -->
 <div id="intro" class="screen">
   <div class="intro-in">
-    <div class="logo-wrap"><span class="logo-badge">🧺</span></div>
-    <h1>Laundromats<br><span class="g">Milionář</span></h1>
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
+        <defs>
+          <linearGradient id="lg1" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#4fd1ff"/><stop offset=".55" stop-color="#3a6cf5"/><stop offset="1" stop-color="#7c5cff"/>
+          </linearGradient>
+          <linearGradient id="lg2" x1="20" y1="13" x2="46" y2="30" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#ffe9a8"/><stop offset=".55" stop-color="#ffd866"/><stop offset="1" stop-color="#f0a92b"/>
+          </linearGradient>
+        </defs>
+        <rect x="2" y="2" width="60" height="60" rx="18" fill="#0b1220"/>
+        <rect x="2.9" y="2.9" width="58.2" height="58.2" rx="17.1" fill="none" stroke="url(#lg1)" stroke-width="1.6"/>
+        <path d="M18.6 26.4 21.7 17 26.2 22.6 32 13.2 37.8 22.6 42.3 17 45.4 26.4Z" fill="url(#lg2)"/>
+        <rect x="19.3" y="27.4" width="25.4" height="2.4" rx="1.2" fill="url(#lg2)"/>
+        <circle cx="32" cy="43.6" r="11.2" fill="none" stroke="url(#lg1)" stroke-width="3.2"/>
+        <circle cx="32" cy="43.6" r="5.6" fill="none" stroke="url(#lg1)" stroke-width="2" stroke-opacity=".6"/>
+        <circle cx="24.2" cy="37.6" r="1.6" fill="#4fd1ff"/>
+        <path d="M26.8 40.2a7.4 7.4 0 0 1 4.2-3.2" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      <h1>Laundromats<br><span class="g">Milionář</span></h1>
+    </div>
+    <img class="hero-flex" src="/game/flex.webp" alt="Venkovní samoobslužný prádlomat FLEX" width="1100" height="896" fetchpriority="high">
     <p class="lead">Venkovní prádlomat vydělává nonstop a bez obsluhy. Jeden zvládneš.
       Ale dokážeš z něj vybudovat největší síť v zemi?</p>
     <ul class="intro-pts">
       <li><b>Skutečná místa.</b> Mapa je opravdová. Benzínky, obchodní domy a myčky taky — jen je musíš najít.</li>
       <li><b>Skutečná ekonomika.</b> Čísla jsou z reálného modelu prádlomatu, ne vymyšlená.</li>
       <li><b>Jeden den = jeden rok.</b> Prádlomaty vydělávají, i když hru zavřeš.</li>
+      <li><b>Platí se v laundrech (L$).</b> Herní měna, kterou si vyděláš nebo půjčíš od herní banky.</li>
     </ul>
     <button class="btn big" id="go-quiz">Začít podnikat</button>
-    <p class="fine">Hra. Herní peníze nemají žádnou hodnotu a nejde o nabídku investice.</p>
+    <p class="fine">Hra. Laundry (L$) jsou herní měna bez jakékoli hodnoty a nejde o nabídku investice.</p>
   </div>
 </div>
 
