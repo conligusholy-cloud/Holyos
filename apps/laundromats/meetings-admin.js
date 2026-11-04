@@ -298,9 +298,10 @@ function usrActivity(id){
     var html='<div class="mt-sum" style="margin:0 0 12px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
       +[[visits.length,'návštěv'],[ev.filter(function(e){return e.event==='page_view';}).length,'zobrazených stránek'],[dur(tot),'čas na stránkách'],[acts,'akcí v aplikacích']].map(function(x){return '<div class="card" style="margin:0;padding:10px 12px"><div style="font-size:20px;font-weight:800">'+x[0]+'</div><div class="small muted">'+x[1]+'</div></div>';}).join('')+'</div>'
       +'<div class="small" style="margin:0 0 14px"><span class="muted">Nejnavštěvovanější: </span>'+top.map(function(n){return '<span class="mt-pill" style="margin:0 4px 4px 0;display:inline-block">'+esc(n)+' · '+pv[n]+'×</span>';}).join('')+'</div>';
+    // Nejnovější nahoře — návštěvy i události uvnitř návštěvy (ať je poslední pohyb hned vidět).
     html+=visits.slice().reverse().map(function(v){var d=new Date(v.start),e2=new Date(v.end);
       return '<div class="card" style="margin:0 0 10px;padding:12px 14px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px"><b>'+dlong(d)+' · '+hm(d)+'–'+hm(e2)+'</b><span class="small muted">'+(v.mobile?'📱 mobil':'💻 počítač')+' · '+Object.keys(v.pages).length+' stránek'+(v.ms?' · '+dur(v.ms):'')+'</span></div>'
-        +v.items.map(function(e){var L=evLine(e),t=new Date(e.at);return '<div style="display:flex;gap:10px;font-size:13px;padding:3px 0;border-top:1px dashed rgba(120,160,255,.08)"><span class="muted" style="width:42px;flex:none">'+hm(t)+'</span><span style="width:18px;flex:none;text-align:center">'+L[0]+'</span><span>'+L[1]+'</span></div>';}).join('')+'</div>';}).join('');
+        +v.items.slice().reverse().map(function(e){var L=evLine(e),t=new Date(e.at);return '<div style="display:flex;gap:10px;font-size:13px;padding:3px 0;border-top:1px dashed rgba(120,160,255,.08)"><span class="muted" style="width:42px;flex:none">'+hm(t)+'</span><span style="width:18px;flex:none;text-align:center">'+L[0]+'</span><span>'+L[1]+'</span></div>';}).join('')+'</div>';}).join('');
     body.innerHTML=html;
   }).catch(function(e){body.innerHTML='<div class="mt-empty" style="color:#ff8f8f">'+esc(e.message)+'</div>';});
 }
@@ -381,7 +382,11 @@ function statLoad(){
 }
 // Sloupcový graf bez knihoven: domluveno vedle proběhlo, popisky period dole.
 function srcMeta(){var m={};(statData&&statData.sources||[]).forEach(function(x){m[x.key]={color:x.color||'#4fd1ff',label:x.label};});return m;}
-function statSegs(x){var m=srcMeta(),out=[];if(!x.by)return out;Object.keys(x.by).forEach(function(k){var mm=m[k]||{color:k==='ads'?'#3b82f6':'#94a3b8',label:k==='ads'?'Reklama':k==='self'?'Sám z webu / odkazu':k};out.push({key:k,n:x.by[k],color:mm.color,label:mm.label});});
+var statSplit=(function(){try{return sessionStorage.getItem('lmadm:split')==='1';}catch(e){return false;}})(); // false = 2 barvy (obchodník / zákazník sám), true = po obchodnících
+var C_SALES='#ef4444', C_SELF='#3b82f6';
+function statSegs(x,field){field=field||'by';var src=x[field];if(!src)return [];
+  if(!statSplit){var sa=0,se=0;Object.keys(src).forEach(function(k){if(k.indexOf('p:')===0)sa+=src[k];else se+=src[k];});var o=[];if(sa)o.push({key:'sales',n:sa,color:C_SALES,label:'Domluvil obchodník'});if(se)o.push({key:'self',n:se,color:C_SELF,label:'Zákazník sám (reklama / web)'});return o;}
+  var m=srcMeta(),out=[];Object.keys(src).forEach(function(k){var x0=src;var mm=m[k]||{color:k==='ads'?'#3b82f6':'#94a3b8',label:k==='ads'?'Reklama':k==='self'?'Sám z webu / odkazu':k};out.push({key:k,n:x0[k],color:mm.color,label:mm.label});});
   var ord=function(k){return k==='self'?2:k==='ads'?1:0;};out.sort(function(a,b){return ord(a.key)-ord(b.key)||b.n-a.n;});return out;}
 // Cíl týmu: domluvené online schůzky za den (podle data domluvení), posledních 14 dní, sloupce po zdrojích + čára cíle
 function goalChart(G){
@@ -415,10 +420,11 @@ function statChart(b,avail){
     var tip=x.future?(esc(x.title)+' — domluveno dopředu '+x.booked):(esc(x.title)+' — domluveno '+x.booked+', proběhlo '+x.done+(x.rate!=null?' ('+x.rate+' %)':''));
     // Sloupec „domluveno" rozdělený barvami podle toho, kdo schůzku domluvil (obchodníci, reklama, web)
     var segs=statSegs(x), yy=PT+ih;
-    if(segs.length){ segs.forEach(function(sg){ var hh=(sg.n/top)*ih; yy-=hh; g+='<rect x="'+(c-w-3)+'" y="'+yy+'" width="'+w+'" height="'+hh+'" fill="'+sg.color+'" opacity="'+(x.future?'.35':'.92')+'"'+(x.future?' stroke="'+sg.color+'" stroke-width="1" stroke-dasharray="3 2"':'')+'><title>'+esc(x.title)+' — '+esc(sg.label)+': '+sg.n+'</title></rect>'; }); }
+    if(segs.length){ segs.forEach(function(sg){ var hh=(sg.n/top)*ih; yy-=hh; g+='<rect x="'+(c-w-3)+'" y="'+yy+'" width="'+w+'" height="'+hh+'" fill="'+sg.color+'" opacity="'+(x.future?'.3':'.6')+'"'+(x.future?' stroke="'+sg.color+'" stroke-width="1" stroke-dasharray="3 2"':'')+'><title>'+esc(x.title)+' — '+esc(sg.label)+': '+sg.n+'</title></rect>'; }); }
     else g+='<rect x="'+(c-w-3)+'" y="'+(PT+ih-hb)+'" width="'+w+'" height="'+hb+'" rx="3" fill="#4fd1ff" opacity="'+(x.future?'.3':'.85')+'"'+(x.future?' stroke="#4fd1ff" stroke-width="1.2" stroke-dasharray="3 2"':'')+'><title>'+tip+'</title></rect>';
     g+=''
-      +(x.future?'':'<rect x="'+(c+3)+'" y="'+(PT+ih-hd)+'" width="'+w+'" height="'+hd+'" rx="3" fill="#2fe3a0" opacity=".9"><title>'+tip+'</title></rect>');
+      +(x.future?'':(function(){var ds=statSegs(x,'byDone'),y2=PT+ih,o='';if(!ds.length)return x.done?'<rect x="'+(c+3)+'" y="'+(PT+ih-hd)+'" width="'+w+'" height="'+hd+'" rx="3" fill="#2fe3a0" opacity=".9"><title>'+tip+'</title></rect>':'';
+        ds.forEach(function(sg){var hh=(sg.n/top)*ih;y2-=hh;o+='<rect x="'+(c+3)+'" y="'+y2+'" width="'+w+'" height="'+hh+'" fill="'+sg.color+'" stroke="#2fe3a0" stroke-width="1.6"><title>'+esc(x.title)+' — proběhlo · '+esc(sg.label)+': '+sg.n+'</title></rect>';});return o;})());
     if(x.booked)g+='<text x="'+c+'" y="'+(PT+ih-hb-6)+'" text-anchor="middle" fill="'+(x.future?'#8ea2c2':'#e8f0ff')+'" font-size="11" font-weight="700">'+x.booked+'</text>';
     g+='<text x="'+c+'" y="'+(H-(x.sub?26:12))+'" text-anchor="middle" fill="'+(x.future?'#58698a':(x.sub?'#e8f0ff':'#8ea2c2'))+'" font-size="11"'+(x.sub?' font-weight="700"':'')+'>'+esc(x.label)+'</text>'
       +(x.sub?'<text x="'+c+'" y="'+(H-11)+'" text-anchor="middle" fill="#8ea2c2" font-size="10.5">'+esc(x.sub)+'</text>':'');
@@ -447,7 +453,13 @@ function statRender(){
     +'<div><b style="color:#ff8f8f">'+(t.canceled||0)+'</b><span>Zrušeno</span></div>'
     +'<div><b style="color:#ffd866">'+(t.unmarked||0)+'</b><span>Neoznačeno</span></div>'
     +'<div><b style="color:#4fd1ff">'+(t.upcoming||0)+'</b><span>Nadchází</span></div></div>';
-  var leg='<div class="mt-leg">'+(statData.sources||[]).filter(function(x){return x.kind!=='sales_total';}).map(function(x){return '<span><i style="background:'+x.color+'"></i>'+esc(x.label)+'</span>';}).join('')+'<span><i style="background:#2fe3a0"></i>proběhlo</span>'
+  var SS=statData.sources||[], salesT=SS.filter(function(x){return x.kind==='sales_total';})[0], selfA=SS.filter(function(x){return x.kind==='ads'||x.kind==='self';});
+  var selfT=selfA.reduce(function(a,x){['booked','done','no_show','canceled','unmarked'].forEach(function(k){a[k]+=x[k]||0;});return a;},{booked:0,done:0,no_show:0,canceled:0,unmarked:0});
+  var rr=function(t){var r=t?(t.done+t.no_show+t.canceled+t.unmarked):0;return r?Math.round(t.done/r*1000)/10+' %':'—';};
+  var cmp='<div class="mt-kpi" style="grid-template-columns:repeat(2,1fr);margin-top:6px"><div style="border-color:'+C_SALES+'"><b style="color:'+C_SALES+'">'+rr(salesT)+'</b><span>Úspěšnost — domluvil obchodník</span><small class="muted" style="display:block;font-size:11px;margin-top:2px">domluveno '+(salesT?salesT.booked:0)+' · proběhlo '+(salesT?salesT.done:0)+'</small></div>'
+    +'<div style="border-color:'+C_SELF+'"><b style="color:'+C_SELF+'">'+rr(selfT)+'</b><span>Úspěšnost — zákazník sám (reklama / web)</span><small class="muted" style="display:block;font-size:11px;margin-top:2px">domluveno '+selfT.booked+' · proběhlo '+selfT.done+'</small></div></div>';
+  var legItems=statSplit?SS.filter(function(x){return x.kind!=='sales_total';}).map(function(x){return '<span><i style="background:'+x.color+'"></i>'+esc(x.label)+'</span>';}).join(''):'<span><i style="background:'+C_SALES+'"></i>domluvil obchodník</span><span><i style="background:'+C_SELF+'"></i>zákazník sám (reklama / web)</span>';
+  var leg='<div class="mt-leg">'+legItems+'<span>levý sloupec = domluveno (světlejší) · pravý = proběhlo (se zeleným okrajem)</span><button class="btn sec sm mt-split" style="margin-left:auto">'+(statSplit?'🎨 Jen obchodník / zákazník':'🎨 Rozdělit po obchodnících')+'</button>'+'<span><i style="background:#2fe3a0"></i>proběhlo</span>'
     +'<span><i style="background:rgba(79,209,255,.3);border:1px dashed #4fd1ff"></i>domluveno dopředu</span>'
     +'<span>Úspěšnost = proběhlé ze schůzek, které už mají výsledek. Nadcházející se nepočítají.</span></div>';
   var rows=b.slice().reverse().map(function(x){
@@ -482,7 +494,7 @@ function statRender(){
     +(statSrc!=='all'?'<div style="margin:0 0 8px"><span class="mt-pill" style="border-color:#4fd1ff;color:#4fd1ff">Zobrazeno: '+esc(statSrcLabel||statSrc)+'</span> <button class="btn sec sm" data-ssrc="all">✕ Všechny zdroje</button></div>':'')
     +'<div class="mt-tw"><table><thead><tr><th>Zdroj</th><th>Domluveno</th><th>Proběhlo</th><th>Nedorazil</th><th>Zrušeno</th><th>Neoznačeno</th><th>Nadchází</th><th>Úspěšnost</th></tr></thead><tbody>'+srcRows+'</tbody></table></div>'
     +'<p class="muted small" style="margin:6px 0 0">Obchodník = schůzku zarezervoval v aplikaci obchodníka. Reklama = zákazník si termín vybral sám a kontakt přišel z reklamy (Meta / Google / LinkedIn). Sám z webu / odkazu = ostatní samostatné rezervace (cesta z SMS či e-mailu, bestseries2.cz…).</p>':'';
-  box.innerHTML=kpi
+  box.innerHTML=kpi+cmp
     +'<div class="mt-chart">'+statChart(b,avail)+'</div>'+leg+gHtml+fun+srcBox
     +'<div class="mt-tw" style="margin-top:16px"><table><thead><tr><th>Období</th><th>Domluveno</th><th>Proběhlo</th><th>Nedorazil</th><th>Zrušeno</th><th>Neoznačeno</th><th>Nadchází</th><th>Úspěšnost</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +(statData.internal_skipped?'<p class="muted small" style="margin:10px 0 0">Nepočítá se '+statData.internal_skipped+' našich vlastních (testovacích) rezervací z firemních e-mailů.</p>':'');
@@ -492,6 +504,7 @@ function statRender(){
 }
 var statRz=null;
 window.addEventListener('resize',function(){if(!statData)return;clearTimeout(statRz);statRz=setTimeout(statRender,200);});
+root.addEventListener('click',function(e){var t=e.target.closest('.mt-split');if(!t)return;statSplit=!statSplit;try{sessionStorage.setItem('lmadm:split',statSplit?'1':'0');}catch(x){}statRender();});
 root.addEventListener('click',function(e){var r=e.target.closest('[data-ssrc]');if(!r)return;
   var k=r.getAttribute('data-ssrc');statSrc=(k===statSrc?'all':k);statSrcLabel=r.getAttribute('data-slabel')||'';statLoad();});
 root.addEventListener('click',function(e){var b=e.target.closest('[data-sgrp]');if(!b)return;
