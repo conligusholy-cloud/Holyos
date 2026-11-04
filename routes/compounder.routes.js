@@ -152,44 +152,50 @@ router.post('/lm-inquiry', express.json({ limit: '20kb' }), async (req, res) => 
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/compounder/lm-pradlomat-zajem { product, phone, name?, email?, sid?, t?, l? }
-// „Mám zájem" u karty prádlomatu na laundromats.eu. Zákazník jen potvrdí, že má
-// opravdový zájem — my mu do pár minut voláme. Proto NALÉHAVÁ notifikace do Velína.
+// POST /api/compounder/lm-pradlomat-zajem { account_id, product, sid? }
+// „Mám zájem" u karty prádlomatu na laundromats.eu. Stránka je za přihlášením,
+// takže zákazníka známe z jeho účtu — nic nevyplňuje, jen potvrdí zájem a my mu
+// voláme. Proto NALÉHAVÁ notifikace do Velína.
 //
-// Liší se od /lm-inquiry (kontaktní formulář): nechceme e-mail ani místo, stačí
-// telefon. U návštěvníka, kterého už známe z odkazu (t/l), nechceme ani ten.
+// Volá server laundromats.eu se servisním tokenem (stejný jako /api/auth/lm/*);
+// kontakt se dohledá z účtu, z těla requestu se nic o osobě nepřebírá.
 // ─────────────────────────────────────────────────────────────────────────────
-const _lmZajemHits = new Map();
+function _lmServiceAuth(req, res) {
+  const secret = process.env.LM_SSO_SECRET;
+  const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  if (!secret || !m) { res.status(401).json({ ok: false, error: 'Neautorizováno' }); return false; }
+  try {
+    require('jsonwebtoken').verify(m[1], secret, { audience: 'holyos-api', issuer: 'laundromats' });
+    return true;
+  } catch (e) { res.status(401).json({ ok: false, error: 'Neplatný token' }); return false; }
+}
 
 router.post('/lm-pradlomat-zajem', express.json({ limit: '10kb' }), async (req, res) => {
   try {
-    const ip = clientIp(req) || 'x'; const now = Date.now();
-    const hits = (_lmZajemHits.get(ip) || []).filter((t) => now - t < 3600e3); hits.push(now);
-    _lmZajemHits.set(ip, hits);
-    if (hits.length > 10) return res.status(429).json({ ok: false, error: 'Příliš mnoho odeslání' });
-    if (_lmZajemHits.size > 5000) _lmZajemHits.clear();
-
-    const b = req.body || {}; const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
-    const product = s(b.product, 120);
-    const phone = s(b.phone, 30);
-    const name = s(b.name, 120);
-    const email = s(b.email, 160).toLowerCase();
+    if (!_lmServiceAuth(req, res)) return;
+    const b = req.body || {};
+    const product = String(b.product == null ? '' : b.product).trim().slice(0, 120);
+    const accountId = parseInt(b.account_id, 10);
     if (product.length < 2) return res.status(400).json({ ok: false, error: 'Chybí prádlomat.' });
+    if (!accountId) return res.status(400).json({ ok: false, error: 'Chybí účet.' });
 
-    // Známý návštěvník (přišel z našeho odkazu) — kontakt už máme.
-    let leadId = _leadFromTL(b.t, b.l);
+    const acc = await prisma.lmAccount.findUnique({
+      where: { id: accountId },
+      select: { id: true, name: true, email: true, phone: true, company: true, compounder_lead_id: true },
+    });
+    if (!acc) return res.status(404).json({ ok: false, error: 'Účet nenalezen.' });
+
+    // Kontakt k účtu: primárně navázaný lead, jinak dohledáme podle e-mailu/telefonu.
+    let leadId = acc.compounder_lead_id || null;
     if (leadId && !(await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { id: true } }).catch(() => null))) leadId = null;
-    // Neznámého spárujeme podle telefonu / e-mailu, jinak založíme nový kontakt.
-    if (!leadId && (phone || email)) {
+    if (!leadId) {
       const or = [];
-      if (phone) or.push({ phone });
-      if (email) or.push({ email: { equals: email, mode: 'insensitive' } });
-      const ex = await prisma.compounderLead.findFirst({ where: { OR: or }, select: { id: true }, orderBy: { created_at: 'asc' } }).catch(() => null);
-      if (ex) leadId = ex.id;
-    }
-    // Bez kontaktu i bez známé identity nemáme komu volat — a to je celý smysl.
-    if (!leadId && phone.replace(/\D/g, '').length < 9) {
-      return res.status(400).json({ ok: false, error: 'Zadejte prosím telefon, ať se vám můžeme ozvat.' });
+      if (acc.email) or.push({ email: { equals: acc.email, mode: 'insensitive' } });
+      if (acc.phone) or.push({ phone: acc.phone });
+      if (or.length) {
+        const ex = await prisma.compounderLead.findFirst({ where: { OR: or }, select: { id: true }, orderBy: { created_at: 'asc' } }).catch(() => null);
+        if (ex) leadId = ex.id;
+      }
     }
 
     const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
@@ -202,40 +208,42 @@ router.post('/lm-pradlomat-zajem', express.json({ limit: '10kb' }), async (req, 
         where: { id: leadId },
         data: {
           activity_log: line + (l && l.activity_log ? '\n' + l.activity_log : ''),
-          phone: (l && l.phone) || phone || undefined,
-          email: (l && l.email) || email || undefined,
+          phone: (l && l.phone) || acc.phone || undefined,
+          email: (l && l.email) || acc.email || undefined,
           // Zájem o koupi posouvá kontakt dál, ale uzavřené stavy nepřepisujeme.
           status: (l && (l.status === 'new' || !l.status)) ? 'qualified' : undefined,
         },
       });
-      lead = Object.assign({}, l, { phone: (l && l.phone) || phone });
+      lead = Object.assign({}, l, { phone: (l && l.phone) || acc.phone });
     } else {
-      const parts = name.split(/\s+/).filter(Boolean);
+      const parts = String(acc.name || '').split(/\s+/).filter(Boolean);
       const ownerId = await _blacklistOwnerId();
       const c = await prisma.compounderLead.create({
         data: {
-          name: name || ('Zájemce ' + phone), first_name: parts[0] || null, last_name: parts.slice(1).join(' ') || null,
-          email: email || null, phone: phone || null, source: 'laundromats_pradlomat', status: 'qualified',
-          role: 'compounder', lang: 'cs', owner_person_id: ownerId || null, activity_log: line,
+          name: acc.name || acc.email || ('Účet #' + acc.id), first_name: parts[0] || null, last_name: parts.slice(1).join(' ') || null,
+          email: acc.email || null, phone: acc.phone || null, company: acc.company || null,
+          source: 'laundromats_pradlomat', status: 'qualified', role: 'compounder', lang: 'cs',
+          owner_person_id: ownerId || null, activity_log: line,
         },
         select: { id: true, name: true, email: true, phone: true },
       });
       leadId = c.id; created = true; lead = c;
+      await prisma.lmAccount.update({ where: { id: acc.id }, data: { compounder_lead_id: leadId } }).catch(() => {});
     }
 
     if (b.sid && /^lm-[a-z0-9]{4,60}$/.test(String(b.sid))) _linkSidToLead(String(b.sid), leadId).catch(() => {});
     prisma.compounderEvent.create({ data: {
       sid: String(b.sid || ('server:zajem:' + leadId)).slice(0, 64),
       event: 'pradlomat_zajem', path: '/cesta/pradlomaty',
-      props: { lead_id: leadId, product, created, site: 'laundromats' }, ip: clientIp(req),
+      props: { lead_id: leadId, account_id: acc.id, product, created, site: 'laundromats' }, ip: clientIp(req),
     } }).catch(() => {});
 
     // NALÉHAVÁ notifikace — tohle je horký zájemce, volat hned.
     try {
       const { notifyPerson } = require('../services/push/expo-push');
       const { createNotification } = require('./notifications.routes');
-      const who = (lead && lead.name) || name || phone || ('kontakt #' + leadId);
-      const tel = (lead && lead.phone) || phone || '(telefon neuveden)';
+      const who = (lead && lead.name) || acc.name || acc.email || ('kontakt #' + leadId);
+      const tel = (lead && lead.phone) || acc.phone || '(telefon neuveden)';
       const title = '‼️🔴 VOLAT HNED — zájem o ' + product;
       const body = who + ' chce koupit ' + product + '. Telefon: ' + tel
         + '. Čeká, že se mu do pár minut ozveme.' + (created ? '' : ' (existující kontakt)');
@@ -249,7 +257,7 @@ router.post('/lm-pradlomat-zajem', express.json({ limit: '10kb' }), async (req, 
       }
     } catch (e) { console.warn('[lm-zajem] upozornění:', e.message); }
 
-    console.log('[lm-zajem] lead', leadId, created ? '(nový)' : '(existující)', '—', product);
+    console.log('[lm-zajem] účet', acc.id, '→ lead', leadId, created ? '(nový)' : '(existující)', '—', product);
     res.json({ ok: true });
   } catch (err) { console.warn('[lm-zajem]', err.message); res.status(500).json({ ok: false, error: 'Odeslání se nepodařilo' }); }
 });

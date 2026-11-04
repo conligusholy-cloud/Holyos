@@ -165,31 +165,23 @@ const SERVICES = [
 
 
 // Okno „Mám zájem" — zákazník jen potvrdí opravdový zájem a my mu voláme.
-// Telefon chceme jen od návštěvníka, kterého ještě neznáme; u toho, kdo přišel
-// z našeho odkazu (?t=/?l=), si kontakt doplníme sami a stačí mu kliknout OK.
+// Stránka je za přihlášením, takže kontakt známe z účtu a nic se nevyplňuje.
 const ZAJEM_DLG = `
 <dialog class="helpdlg" id="zajemDlg"><div class="hd-in">
-  <div class="hd-head"><span class="hd-q">!</span><h2 id="zajemTitle">Máte opravdový zájem?</h2>
+  <div class="hd-head"><span class="hd-q">!</span><h2>Máte opravdový zájem?</h2>
     <button class="hd-x" type="button" data-zavrit aria-label="Zavřít">✕</button></div>
   <div class="hd-body">
     <div id="zajemForm">
       <p>Pokud máte o <b id="zajemProd">prádlomat</b> opravdový zájem, klikněte na <b>OK</b> — do několika minut se vám ozve kompetentní osoba.</p>
-      <div id="zajemTelWrap">
-        <label for="zajemTel">Telefon, na který se vám máme ozvat</label>
-        <input id="zajemTel" type="tel" inputmode="tel" autocomplete="tel" placeholder="+420 777 123 456">
-        <label for="zajemJmeno">Jméno (nepovinné)</label>
-        <input id="zajemJmeno" type="text" autocomplete="name" placeholder="Jan Novák">
-      </div>
       <div id="zajemErr" class="msg err" style="display:none"></div>
       <div class="row" style="margin-top:14px;justify-content:flex-end">
         <button class="btn sec" type="button" data-zavrit>Zrušit</button>
         <button class="btn" type="button" id="zajemOk">OK, mám zájem</button>
       </div>
-      <input type="text" id="zajemWeb" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
     </div>
     <div id="zajemDik" style="display:none">
       <p style="font-size:16px"><b>Děkujeme, máme to.</b></p>
-      <p>Ozveme se vám na uvedené číslo — obvykle do několika minut.</p>
+      <p>Ozveme se vám na číslo z vašeho účtu — obvykle do několika minut.</p>
       <div class="row" style="margin-top:14px;justify-content:flex-end"><button class="btn" type="button" data-zavrit>Zavřít</button></div>
     </div>
   </div>
@@ -199,19 +191,7 @@ const ZAJEM_DLG = `
   var dlg = document.getElementById('zajemDlg'); if (!dlg) return;
   var prod = '';
   var el = function(id){ return document.getElementById(id); };
-  var znamyKontakt = false;
-
-  // Známe už návštěvníka? Pak telefon nepotřebujeme a stačí potvrdit.
-  try {
-    fetch('/api/cesta/meeting-contact', { credentials: 'same-origin' })
-      .then(function(r){ return r.ok ? r.json() : null; })
-      .then(function(j){
-        if (j && j.ok && j.contact && (j.contact.phone || j.contact.email)) {
-          znamyKontakt = true;
-          var w = el('zajemTelWrap'); if (w) w.style.display = 'none';
-        }
-      }).catch(function(){});
-  } catch (e) {}
+  var zavri = function(){ if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); };
 
   document.addEventListener('click', function(e){
     var b = e.target.closest ? e.target.closest('[data-zajem]') : null;
@@ -224,24 +204,15 @@ const ZAJEM_DLG = `
       if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
       return;
     }
-    if (e.target.closest && e.target.closest('[data-zavrit]')) {
-      if (dlg.close) dlg.close(); else dlg.removeAttribute('open');
-    }
+    if (e.target.closest && e.target.closest('[data-zavrit]')) zavri();
   });
 
   el('zajemOk').addEventListener('click', function(){
-    var tel = (el('zajemTel').value || '').trim();
-    var jm = (el('zajemJmeno').value || '').trim();
     var err = el('zajemErr');
-    if (!znamyKontakt && tel.replace(/\D/g, '').length < 9) {
-      err.textContent = 'Zadejte prosím telefon, ať se vám můžeme ozvat.';
-      err.style.display = ''; el('zajemTel').focus(); return;
-    }
     var btn = el('zajemOk'); btn.disabled = true; btn.textContent = 'Odesílám…';
-    fetch('/api/pradlomat-zajem', {
+    fetch('/api/cesta/pradlomat-zajem', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-      body: JSON.stringify({ product: prod, phone: tel, name: jm, website: el('zajemWeb').value,
-        sid: (window.lmSid ? window.lmSid() : undefined) })
+      body: JSON.stringify({ product: prod, sid: (window.lmSid ? window.lmSid() : undefined) })
     }).then(function(r){ return r.json().catch(function(){ return {}; }); })
       .then(function(j){
         btn.disabled = false; btn.textContent = 'OK, mám zájem';
