@@ -448,17 +448,66 @@ root.addEventListener('click',function(e){var b=e.target.closest('[data-sgrp]');
   statGroup=b.getAttribute('data-sgrp');
   root.querySelectorAll('[data-sgrp]').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-sgrp')===statGroup);});
   statLoad();});
+
+// ── Produkty — nastavení stránky Prádlomaty na webu (viditelnost, pořadí, název, popis, cena, obrázek) ──
+var prod=null, pcfg=null, pDirty=false;
+function prodLoad(){
+  var box=root.querySelector('.mt-prodwrap'); box.innerHTML='<div class="mt-empty">Načítám…</div>';
+  api('/admin/api/products').then(function(j){prod=j.products||[];pcfg=j.config||{items:{}};if(!pcfg.items)pcfg.items={};pDirty=false;prodRender();})
+    .catch(function(e){box.innerHTML='<div class="mt-empty" style="color:#ff8f8f">'+esc(e.message)+'</div>';});
+}
+function pItem(id){var k=String(id);if(!pcfg.items[k])pcfg.items[k]={hidden:false,order:0,title:'',desc:'',show_price:null};return pcfg.items[k];}
+function pSorted(){return prod.slice().sort(function(a,b){var oa=pItem(a.id).order||0,ob=pItem(b.id).order||0;return (oa-ob)||(prod.indexOf(a)-prod.indexOf(b));});}
+function pMoney(n){return n==null?'—':Math.round(Number(n)).toLocaleString('cs-CZ')+' Kč';}
+function prodRender(){
+  var box=root.querySelector('.mt-prodwrap');
+  if(!prod.length){box.innerHTML='<div class="mt-empty">V ceníku HolyOS nejsou žádné aktivní stroje (Prodejní objednávky → Ceník).</div>';return;}
+  var list=pSorted();
+  box.innerHTML='<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" class="p-gprice"'+(pcfg.show_prices?' checked':'')+'> Zobrazovat ceny na webu <span class="muted small">(lze přepsat u každého produktu)</span></label><span style="flex:1"></span><span class="small p-st muted"></span><button class="btn sm p-save">💾 Uložit změny</button></div>'
+    +list.map(function(p,idx){var c=pItem(p.id);var img=p.image_ext?'/img/product/'+p.id+'?v='+encodeURIComponent(String(p.image_updated_at||''))+'&t='+Date.now():'';
+      return '<div class="card p-row" data-pid="'+p.id+'" style="margin:0 0 10px;display:grid;grid-template-columns:120px 1fr 210px;gap:14px;align-items:start'+(c.hidden?';opacity:.5':'')+'">'
+        +'<div><div style="width:120px;height:96px;border-radius:12px;border:1px solid var(--border);background:#0b1220;display:grid;place-items:center;overflow:hidden">'+(img?'<img src="'+img+'" style="max-width:100%;max-height:100%;object-fit:contain">':'<span class="muted small">bez obrázku</span>')+'</div>'
+        +'<label class="btn sec sm" style="margin-top:6px;width:100%;justify-content:center;cursor:pointer">📷 Nahrát<input type="file" accept="image/png,image/jpeg,image/webp" class="p-img" style="display:none"></label>'
+        +(p.lm_image?'<button class="btn sec sm p-imgdel" style="margin-top:4px;width:100%;justify-content:center;color:#ff8f8f">Vrátit obrázek z ceníku</button>':'')+'</div>'
+        +'<div><div class="small muted">V ceníku: <b style="color:var(--text)">'+esc(p.name_cs)+'</b>'+(p.machine_code?' · '+esc(p.machine_code):'')+'</div>'
+        +'<label class="small muted" style="display:block;margin-top:8px">Název na webu<input class="p-title" maxlength="120" value="'+esc(c.title||'')+'" placeholder="'+esc(p.name_cs)+'" style="width:100%;margin-top:3px"></label>'
+        +'<label class="small muted" style="display:block;margin-top:8px">Popis na kartě (místo „Cenu a financování probereme…“)<textarea class="p-desc" maxlength="600" rows="2" style="width:100%;margin-top:3px;resize:vertical">'+esc(c.desc||'')+'</textarea></label></div>'
+        +'<div><label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" class="p-show"'+(c.hidden?'':' checked')+'> <b>Zobrazit na webu</b></label>'
+        +'<div class="small muted" style="margin-top:10px">Cena v ceníku: <b style="color:var(--text)">'+pMoney(p.price_czk)+'</b> bez DPH</div>'
+        +'<label class="small muted" style="display:block;margin-top:4px">Cena na webu<select class="p-price" style="width:100%;margin-top:3px;background:#0b1220;color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:6px 8px;font:inherit"><option value=""'+(c.show_price==null?' selected':'')+'>podle globálního nastavení</option><option value="1"'+(c.show_price===true?' selected':'')+'>zobrazit</option><option value="0"'+(c.show_price===false?' selected':'')+'>skrýt</option></select></label>'
+        +'<div style="display:flex;gap:6px;margin-top:10px"><button class="btn sec sm p-up"'+(idx===0?' disabled':'')+' title="Posunout výš">↑</button><button class="btn sec sm p-dn"'+(idx===list.length-1?' disabled':'')+' title="Posunout níž">↓</button><span class="small muted" style="align-self:center">pořadí '+(idx+1)+'</span></div></div></div>';}).join('')
+    +'<p class="muted small" style="margin:6px 0 0">Stroje se berou z ceníku HolyOS (aktivní stroje). Změny se na webu projeví do minuty po uložení. Obrázek se ukládá jen pro web, ceník v HolyOS zůstane beze změny.</p>';
+  var st=box.querySelector('.p-st'); if(pDirty){st.textContent='Neuložené změny';st.style.color='#ffd866';}
+}
+function pMark(){pDirty=true;var st=root.querySelector('.mt-prodwrap .p-st');if(st){st.textContent='Neuložené změny';st.style.color='#ffd866';}}
+root.addEventListener('input',function(e){var r=e.target.closest('.p-row');if(!r)return;var c=pItem(r.getAttribute('data-pid'));if(e.target.classList.contains('p-title'))c.title=e.target.value;if(e.target.classList.contains('p-desc'))c.desc=e.target.value;pMark();});
+root.addEventListener('change',function(e){
+  if(e.target.classList.contains('p-gprice')){pcfg.show_prices=e.target.checked;pMark();return;}
+  var r=e.target.closest('.p-row');if(!r)return;var id=r.getAttribute('data-pid'),c=pItem(id);
+  if(e.target.classList.contains('p-show')){c.hidden=!e.target.checked;r.style.opacity=c.hidden?.5:1;pMark();}
+  if(e.target.classList.contains('p-price')){c.show_price=e.target.value===''?null:e.target.value==='1';pMark();}
+  if(e.target.classList.contains('p-img')&&e.target.files&&e.target.files[0]){var f=e.target.files[0];if(f.size>8*1024*1024)return alert('Obrázek je větší než 8 MB.');
+    fetch('/admin/api/products/'+id+'/image',{method:'POST',headers:{'Content-Type':f.type},body:f,credentials:'same-origin'}).then(function(x){return x.json();}).then(function(j){if(j.ok===false)throw new Error(j.error||'Nahrání se nepodařilo');var keep=pcfg;return api('/admin/api/products').then(function(k){prod=k.products||prod;pcfg=keep;prodRender();});}).catch(function(er){alert(er.message);});}
+});
+root.addEventListener('click',function(e){var b=e.target.closest('.p-up,.p-dn,.p-save,.p-imgdel');if(!b||!root.querySelector('.mt-prodwrap').contains(b))return;
+  if(b.classList.contains('p-save')){b.disabled=true;api('/admin/api/products/config',{config:pcfg}).then(function(j){pcfg=j.config||pcfg;pDirty=false;b.disabled=false;var st=root.querySelector('.mt-prodwrap .p-st');st.textContent='Uloženo ✓';st.style.color='#2fe3a0';}).catch(function(er){b.disabled=false;alert(er.message);});return;}
+  var r=b.closest('.p-row'),id=r.getAttribute('data-pid');
+  if(b.classList.contains('p-imgdel')){if(!confirm('Odebrat vlastní obrázek a použít obrázek z ceníku?'))return;var keep=pcfg;api('/admin/api/products/'+id+'/image/delete',{}).then(function(){return api('/admin/api/products');}).then(function(k){prod=k.products||prod;pcfg=keep;prodRender();}).catch(function(er){alert(er.message);});return;}
+  var list=pSorted();var i=list.findIndex(function(p){return String(p.id)===String(id);});var j2=b.classList.contains('p-up')?i-1:i+1;if(j2<0||j2>=list.length)return;
+  var t=list[i];list[i]=list[j2];list[j2]=t;list.forEach(function(p,k){pItem(p.id).order=(k+1)*10;});pMark();prodRender();});
 // Přepínání záložek. Seznam se tahá ze serveru až při prvním otevření.
 function tab(name){
-  var isHot=name==='hot', isUsr=name==='usr', isStat=name==='stat';
+  var isHot=name==='hot', isUsr=name==='usr', isStat=name==='stat', isProd=name==='prod';
   root.querySelectorAll('.mt-tabs button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-tab')===name);});
-  root.querySelector('.mt-meet').style.display=(isHot||isUsr||isStat)?'none':'';
+  root.querySelector('.mt-meet').style.display=(isHot||isUsr||isStat||isProd)?'none':'';
+  root.querySelector('.mt-prod').style.display=isProd?'':'none';
   root.querySelector('.mt-hot').style.display=isHot?'':'none';
   root.querySelector('.mt-usr').style.display=isUsr?'':'none';
   root.querySelector('.mt-stat').style.display=isStat?'':'none';
   if(isHot&&hot===null)hotLoad();
   if(isUsr&&usr===null)usrLoad();
   if(isStat&&statData===null)statLoad();
+  if(isProd&&prod===null)prodLoad();
 }
 root.querySelectorAll('.mt-tabs button').forEach(function(b){b.onclick=function(){tab(b.getAttribute('data-tab'));};});
 
@@ -488,7 +537,7 @@ function meetingsPage({ admin, holyosUrl, error }) {
   <div class="top"><b>Laundromats<span>.eu</span></b><span class="muted">Administrace schůzek</span><span class="sp"></span><span class="who">${nm}</span>${holyosUrl ? `<a href="${holyosUrl}" class="small">← HolyOS</a>` : ''}<a href="/admin/logout" class="small">Odhlásit</a></div>
   <div class="wrap"><style>${CSS}</style>
   <div id="mt">
-    <div class="mt-tabs"><button data-tab="meet" class="on">📅 Schůzky</button><button data-tab="hot">⭐ Jmenný seznam</button><button data-tab="usr">👤 Uživatelé</button><button data-tab="stat">📊 Statistiky</button></div>
+    <div class="mt-tabs"><button data-tab="meet" class="on">📅 Schůzky</button><button data-tab="hot">⭐ Jmenný seznam</button><button data-tab="usr">👤 Uživatelé</button><button data-tab="stat">📊 Statistiky</button><button data-tab="prod">📦 Produkty</button></div>
     <div class="mt-meet">
     <div class="mt-bar"><h2>📅 Kalendář schůzek</h2>
       <button class="btn sec sm mt-prev">←</button><span class="mt-range"></span><button class="btn sec sm mt-next">→</button>
@@ -508,6 +557,11 @@ function meetingsPage({ admin, holyosUrl, error }) {
       <div class="mt-bar"><h2>👤 Uživatelé</h2><span style="flex:1"></span><span class="muted small mt-usrsum"></span><button class="btn sec sm mt-usrreload">↻ Obnovit</button></div>
       <p class="muted small" style="margin:-6px 0 14px">Účty registrované na <a href="/cesta/registrace" target="_blank">laundromats.eu/cesta/registrace</a> – mají přístup ke Compounderu, Prádlomatům, Ekonomice, Najít místo a Zhodnotit místo. Každá registrace se zároveň spáruje s kontaktem v HolyOS.</p>
       <div class="mt-usrwrap card"></div>
+    </div>
+    <div class="mt-prod" style="display:none">
+      <div class="mt-bar"><h2>📦 Produkty</h2></div>
+      <p class="muted small" style="margin:-6px 0 14px">Co se ukáže na stránce <a href="/cesta/pradlomaty" target="_blank">Prádlomaty</a> v sekci „Prádlomaty, které si můžete pořídit“: které stroje, v jakém pořadí, s jakým názvem, popisem, cenou a obrázkem.</p>
+      <div class="mt-prodwrap"></div>
     </div>
     <div class="mt-stat" style="display:none">
       <div class="mt-bar"><h2>📊 Statistiky schůzek</h2><span style="flex:1"></span>

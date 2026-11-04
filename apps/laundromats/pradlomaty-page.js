@@ -163,14 +163,21 @@ const SERVICES = [
   ['extended_warranty', 'Prodloužená záruka', 'Záruka na prádlomat celkem 2 až 5 let. První rok je ze zákona zdarma.'],
 ];
 
-function pradlomatyPage(products) {
-  const showPrices = process.env.LM_SHOW_PRICES === '1';
+function pradlomatyPage(products, cfg) {
+  cfg = cfg || {}; const items = cfg.items || {};
+  const globalPrices = cfg.show_prices === true || process.env.LM_SHOW_PRICES === '1';
   const money = (n) => Math.round(Number(n)).toLocaleString('cs-CZ') + ' Kč';
-  const list = (Array.isArray(products) ? products : []);
+  // Nastavení z administrace: skryté pryč, pořadí, vlastní název a popis, cena per produkt (jinak globálně)
+  const list = (Array.isArray(products) ? products : []).map((p, i) => Object.assign({ _i: i, _c: items[p.id] || {} }, p))
+    .filter((p) => !p._c.hidden)
+    .sort((a, b) => ((a._c.order || 0) - (b._c.order || 0)) || (a._i - b._i))
+    .map((p) => Object.assign({}, p, { name_cs: p._c.title || p.name_cs, _desc: p._c.desc || '', _price: p._c.show_price === true || (p._c.show_price !== false && globalPrices) }));
+  const showPrices = true; // rozhoduje p._price
   const grid = list.length ? `<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">` + list.map((p) => `
     <div class="card" style="margin:0;display:flex;flex-direction:column">${p.image_ext ? `<div style="margin:-6px -6px 12px;padding:10px;border-radius:14px;background:radial-gradient(ellipse at 50% 60%,rgba(79,209,255,.16),transparent 70%)"><img src="/img/product/${p.id}?v=${encodeURIComponent(String(p.image_updated_at || ''))}" alt="${esc(p.name_cs)}" loading="lazy" style="width:100%;height:180px;object-fit:contain;display:block"></div>` : ''}
       <b style="font-size:17px">${esc(p.name_cs)}</b>
-      ${showPrices && p.price_czk != null ? `<div style="font-size:24px;font-weight:800;margin-top:6px">${money(p.price_czk)} <span class="small muted" style="font-weight:500">bez DPH</span></div><div class="small muted">${money(Number(p.price_czk) * 1.21)} s DPH 21 %</div>` : `<div class="small muted" style="margin-top:6px">Cenu a financování probereme podle vašeho místa.</div>`}
+      ${p._desc ? `<p class="muted" style="margin:6px 0 0;font-size:14px;line-height:1.5">${esc(p._desc)}</p>` : ''}
+      ${showPrices && p._price && p.price_czk != null ? `<div style="font-size:24px;font-weight:800;margin-top:6px">${money(p.price_czk)} <span class="small muted" style="font-weight:500">bez DPH</span></div><div class="small muted">${money(Number(p.price_czk) * 1.21)} s DPH 21 %</div>` : `${p._desc ? '' : '<div class="small muted" style="margin-top:6px">Cenu a financování probereme podle vašeho místa.</div>'}`}
       <div style="margin-top:auto;padding-top:14px"><a class="btn sm" href="${process.env.LM_HOME_LIVE === '1' ? '/' : '/uvod'}#kontakt">Mám zájem →</a></div></div>`).join('') + `</div>`
     : `<div class="card muted">Nabídku strojů právě aktualizujeme. Napište nám a pošleme vám ji.</div>`;
   const svc = `<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px">` + SERVICES.map((s) => `<div class="card" style="margin:0"><b style="font-size:16px">${esc(s[1])}</b><p class="muted" style="margin:8px 0 0">${esc(s[2])}</p></div>`).join('') + `</div>`;

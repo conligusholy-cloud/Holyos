@@ -15,7 +15,8 @@ const LM_SECRET = process.env.LM_SSO_SECRET || '';
 const app = express();
 app.set('trust proxy', true);
 app.disable('x-powered-by');
-app.use(express.json({ limit: '20kb' }));
+const _jsonSmall = express.json({ limit: '20kb' }), _jsonAdmin = express.json({ limit: '300kb' });
+app.use((req, res, next) => (req.path.startsWith('/admin/api/products') ? _jsonAdmin : _jsonSmall)(req, res, next)); // nastavení produktů = delší texty
 app.use((req, res, next) => {
   res.set({
     'X-Content-Type-Options': 'nosniff',
@@ -365,7 +366,23 @@ const PRAD = require('./pradlomaty-page');
 app.get('/cesta/compounder', ACC.requirePage('compounder'), (req, res) => send(res, lite(COMP.compounderPage(), req)));
 // Ekonomika pro přihlášené: stejný model jako /cesta/ekonomika (ten zůstává veřejný pro cestu z SMS), ale s menu
 app.get('/cesta/ucet/ekonomika', ACC.requirePage('ekonomika'), (req, res) => send(res, lite(String(EP.economyPage('cs')).replace('<a class="bx-back" data-keep href="/cesta">← zpět</a>', '<a class="bx-back" href="/cesta/ucet">← zpět na nástroje</a>').replace('@@LHDR@@', LH.header({})).replace('</style>', LH.CSS + FOOT_CSS + '</style>').replace('@@LOGO@@', LOGO).replace('@@FOOTER@@', FOOTER).replace('</body>', '<script src="/cesta/track.js" defer></script></body>'), req)));
-app.get('/cesta/pradlomaty', ACC.requirePage('pradlomaty'), async (req, res) => { let list = []; try { list = await fetchProducts(); } catch (e) { console.warn('[laundromats] produkty:', e.message); if (_prod.data) list = _prod.data; } send(res, lite(PRAD.pradlomatyPage(list), req)); });
+// Nastavení produktů z administrace (viditelnost, pořadí, texty, ceny) — HolyOS AppSetting, cache 1 min
+let _pcfg = { at: 0, data: null };
+async function fetchProdConfig() {
+  if (_pcfg.data && Date.now() - _pcfg.at < 60e3) return _pcfg.data;
+  try { const j = await holyosSvc('GET', '/api/auth/lm/products-config'); _pcfg = { at: Date.now(), data: j.config || { items: {} } }; } catch (e) { if (!_pcfg.data) _pcfg = { at: Date.now() - 50e3, data: { items: {} } }; }
+  return _pcfg.data;
+}
+app.get('/cesta/pradlomaty', ACC.requirePage('pradlomaty'), async (req, res) => { let list = []; try { list = await fetchProducts(); } catch (e) { console.warn('[laundromats] produkty:', e.message); if (_prod.data) list = _prod.data; } send(res, lite(PRAD.pradlomatyPage(list, await fetchProdConfig()), req)); });
+// ── Administrace → Produkty ──
+app.get('/admin/api/products', requireAdmin, api(async () => { _prod.at = 0; const products = await fetchProducts(); const j = await holyosSvc('GET', '/api/auth/lm/products-config'); return { ok: true, products, config: j.config || { items: {} } }; }));
+app.post('/admin/api/products/config', requireAdmin, api(async (req) => { const j = await holyosSvc('PUT', '/api/auth/lm/products-config', { config: (req.body || {}).config || {} }); _pcfg = { at: 0, data: null }; return j; }));
+app.post('/admin/api/products/:id(\\d+)/image', requireAdmin, express.raw({ type: ['image/png', 'image/jpeg', 'image/webp'], limit: '8mb' }), api(async (req) => {
+  if (!Buffer.isBuffer(req.body) || !req.body.length) { const e = new Error('Chybí obrázek (PNG, JPG nebo WebP)'); e.status = 400; throw e; }
+  const j = await holyosSvc('POST', '/api/auth/lm/products/' + req.params.id + '/lm-image', { mime: String(req.headers['content-type'] || '').split(';')[0], data: req.body.toString('base64') });
+  _prod.at = 0; return j;
+}));
+app.post('/admin/api/products/:id(\\d+)/image/delete', requireAdmin, api(async (req) => { const j = await holyosSvc('DELETE', '/api/auth/lm/products/' + req.params.id + '/lm-image'); _prod.at = 0; return j; }));
 app.get('/img/pradlomat.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(path.join(__dirname, 'pradlomat-flex.webp')));
 app.get('/img/product/:id(\\d+)', async (req, res) => {
   try {
