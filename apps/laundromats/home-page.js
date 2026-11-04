@@ -326,6 +326,8 @@ function homePage(lang) {
   const kicker = (t) => '<div class="kicker">' + esc(t) + '</div>';
   const f = L.form;
   const interestBtn = (key, label, cls) => '<a class="btn ' + (cls || 'btn-g btn-s') + '" href="#kontakt" data-interest="' + key + '">' + esc(label) + ' ' + svg('arrow', 18) + '</a>';
+  // Nepřihlášený → „Vytvořit účet“ (registrace), přihlášený → původní zájmové tlačítko
+  const regBtn = (key, label, cls) => '<!--PUB--><a class="btn ' + (cls || 'btn-g btn-s') + '" href="/cesta/registrace">Vytvořit účet ' + svg('arrow', 18) + '</a><!--/PUB--><!--PRIV-->' + interestBtn(key, label, cls) + '<!--/PRIV-->';
 
   return '<!doctype html><html lang="' + lg + '" class="no-js"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
     + '<title>' + esc(L.seoTitle) + '</title><meta name="description" content="' + esc(L.seoDesc) + '">'
@@ -358,11 +360,11 @@ function homePage(lang) {
     + '<div class="grid g4">' + L.why.cards.map((c, i) => '<article class="card rv"><div class="ico">' + svg(['self', 'needs', 'you', 'grow'][i], 24) + '</div><h3>' + esc(c[0]) + '</h3><p>' + esc(c[1]) + '</p></article>').join('') + '</div></div></section>'
     // ── cesty ──
     + '<section id="spoluprace"><div class="wrap">' + kicker(L.paths.kicker) + '<h2 class="rv">' + esc(L.paths.h) + '</h2>'
-    + '<div class="grid g3">' + L.paths.cards.map((c) => '<article class="path rv"><div class="ico">' + svg(c[0], 24) + '</div><h3>' + esc(c[1]) + '</h3><p>' + esc(c[2]) + '</p>' + interestBtn(c[0], c[3], 'btn-p btn-s') + '</article>').join('') + '</div></div></section>'
+    + '<div class="grid g3">' + L.paths.cards.map((c) => '<article class="path rv"><div class="ico">' + svg(c[0], 24) + '</div><h3>' + esc(c[1]) + '</h3><p>' + esc(c[2]) + '</p>' + regBtn(c[0], c[3], 'btn-p btn-s') + '</article>').join('') + '</div></div></section>'
     // ── síť ──
     + '<section class="alt" id="sit"><div class="divline"></div><div class="wrap"><div class="net"><div>' + kicker(L.network.kicker) + '<h2 class="rv">' + esc(L.network.h) + '</h2><p class="lead rv">' + esc(L.network.lead) + '</p>'
     + '<div class="big rv"><b class="grad">70+</b><span>' + esc(L.network.statUnit) + '<small>' + esc(L.network.note) + '</small></span></div>'
-    + '<div class="ctas rv">' + interestBtn('visit', L.network.cta, 'btn-g') + '</div></div>'
+    + '<div class="ctas rv">' + regBtn('visit', L.network.cta, 'btn-g') + '</div></div>'
     + '<div class="areas">' + L.network.areas.map((a, i) => '<div class="area rv"><div class="ico">' + svg(['site', 'self', 'you'][i], 22) + '</div><div><h3>' + esc(a[0]) + '</h3><p>' + esc(a[1]) + '</p></div></div>').join('') + '</div></div>'
     // PH: galerie skutečných provozoven + mapa (body až po dodání seznamu adres)
     + '<div class="vids rv">'
@@ -377,8 +379,7 @@ function homePage(lang) {
     + '<section id="ekonomika" style="padding-top:20px"><div class="wrap"><div class="eco rv">' + kicker(L.eco.kicker) + '<h2>' + esc(L.eco.h) + '</h2><p class="lead">' + esc(L.eco.lead) + '</p>'
     + '<div class="formula" aria-label="' + esc(L.eco.factors.join(' + ') + ' = ' + L.eco.result) + '">' + L.eco.factors.map((x, i) => (i ? '<span class="op" aria-hidden="true">+</span>' : '') + '<span class="fx">' + esc(x) + '</span>').join('') + '<span class="op" aria-hidden="true">=</span><span class="fx res">' + esc(L.eco.result) + '</span></div>'
     + '<div id="eco-ext"></div>'
-    + '<!--PUB--><a class="btn btn-p" href="/cesta/registrace">Vytvořit účet ' + svg('arrow', 18) + '</a><!--/PUB-->'
-    + '<!--PRIV-->' + interestBtn('own', L.eco.cta, 'btn-p') + '<!--/PRIV-->' + '</div></div></section>'
+    + regBtn('own', L.eco.cta, 'btn-p') + '</div></div></section>'
     // ── jak začít ──
     + '<section class="alt" id="jak-zacit"><div class="divline"></div><div class="wrap">' + kicker(L.start.kicker) + '<h2 class="rv">' + esc(L.start.h) + '</h2>'
     + '<ol class="steps" style="list-style:none;padding:0">' + L.start.steps.map((s, i) => '<li class="step rv"><div class="n">' + (i + 1) + '</div><h3>' + esc(s[0]) + '</h3><p>' + esc(s[1]) + '</p></li>').join('') + '</ol></div></section>'
