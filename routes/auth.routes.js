@@ -1038,13 +1038,68 @@ router.get('/lm/products', async (req, res, next) => {
     });
     const fsx = require('fs'), pathx = require('path'); const imgDir = pathx.join(__dirname, '..', 'data', 'pricelist-images');
     items.forEach((i) => { if (i.image_ext && !fsx.existsSync(pathx.join(imgDir, 'pl-' + i.id + '.' + i.image_ext))) { i.image_ext = null; i.image_updated_at = null; } });
+    // vlastní obrázek pro laundromats.eu má přednost
+    items.forEach((i) => { const own = lmOwnImage(i.id); if (own) { i.image_ext = own.ext; i.image_updated_at = new Date(own.mtime); i.lm_image = true; } });
     res.json(items.map((i) => ({ ...i, price_czk: i.price_czk == null ? null : Number(i.price_czk), price_eur: i.price_eur == null ? null : Number(i.price_eur) })));
+  } catch (err) { next(err); }
+});
+// ── Nastavení produktů pro laundromats.eu (administrace Laundromats → Produkty) ──
+// AppSetting `laundromats.products`: { show_prices, items: { [id]: { hidden, order, title, desc, show_price } } }
+// Vlastní obrázek pro web: data/lm-product-images/lm-<id>.<ext> (má přednost před obrázkem z ceníku).
+const LM_PROD_KEY = 'laundromats.products';
+const LM_IMG_DIR = () => require('path').join(__dirname, '..', 'data', 'lm-product-images');
+const LM_IMG_EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+function lmOwnImage(id) { const fs = require('fs'), path = require('path'); for (const e of ['webp', 'png', 'jpg']) { const f = path.join(LM_IMG_DIR(), 'lm-' + id + '.' + e); if (fs.existsSync(f)) return { file: f, ext: e, mtime: fs.statSync(f).mtimeMs }; } return null; }
+router.get('/lm/products-config', async (req, res, next) => {
+  try {
+    if (!lmApiAuth(req, res)) return;
+    const { getSetting } = require('../services/settings');
+    const cfg = (await getSetting(LM_PROD_KEY, { type: 'json', defaultValue: null }).catch(() => null)) || { show_prices: false, items: {} };
+    res.json({ ok: true, config: cfg });
+  } catch (err) { next(err); }
+});
+router.put('/lm/products-config', express.json({ limit: '200kb' }), async (req, res, next) => {
+  try {
+    if (!lmApiAuth(req, res)) return;
+    const b = (req.body && req.body.config) || {};
+    const items = {};
+    Object.entries(b.items || {}).slice(0, 500).forEach(([id, v]) => {
+      if (!/^\d+$/.test(id) || !v || typeof v !== 'object') return;
+      items[id] = { hidden: !!v.hidden, order: Number.isFinite(+v.order) ? Math.round(+v.order) : 0, title: String(v.title || '').trim().slice(0, 120), desc: String(v.desc || '').trim().slice(0, 600), show_price: v.show_price === true ? true : v.show_price === false ? false : null };
+    });
+    const cfg = { show_prices: !!b.show_prices, items };
+    const { setSetting } = require('../services/settings');
+    await setSetting(LM_PROD_KEY, cfg, { type: 'json', description: 'Laundromats.eu — produkty na stránce Prádlomaty (viditelnost, pořadí, texty, ceny)', scope: 'laundromats' });
+    res.json({ ok: true, config: cfg });
+  } catch (err) { next(err); }
+});
+// POST /lm/products/:id/lm-image {data: base64, mime} | DELETE — vlastní obrázek produktu pro web
+router.post('/lm/products/:id/lm-image', async (req, res, next) => {
+  try {
+    if (!lmApiAuth(req, res)) return;
+    const fs = require('fs'), path = require('path'); const id = parseInt(req.params.id, 10);
+    const ext = LM_IMG_EXT[String((req.body || {}).mime || '')]; if (!ext) return res.status(400).json({ error: 'Obrázek musí být PNG, JPG nebo WebP' });
+    const buf = Buffer.from(String((req.body || {}).data || ''), 'base64'); if (!buf.length || buf.length > 8 * 1024 * 1024) return res.status(400).json({ error: 'Obrázek je prázdný nebo větší než 8 MB' });
+    fs.mkdirSync(LM_IMG_DIR(), { recursive: true });
+    for (const e of ['webp', 'png', 'jpg']) { const f = path.join(LM_IMG_DIR(), 'lm-' + id + '.' + e); if (fs.existsSync(f)) fs.unlinkSync(f); }
+    fs.writeFileSync(path.join(LM_IMG_DIR(), 'lm-' + id + '.' + ext), buf);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+router.delete('/lm/products/:id/lm-image', async (req, res, next) => {
+  try {
+    if (!lmApiAuth(req, res)) return;
+    const fs = require('fs'), path = require('path'); const id = parseInt(req.params.id, 10);
+    for (const e of ['webp', 'png', 'jpg']) { const f = path.join(LM_IMG_DIR(), 'lm-' + id + '.' + e); if (fs.existsSync(f)) fs.unlinkSync(f); }
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 router.get('/lm/products/:id/image', async (req, res, next) => {
   try {
     if (!lmApiAuth(req, res)) return;
     const fs = require('fs'), path = require('path'); const id = parseInt(req.params.id, 10);
+    const own = lmOwnImage(id);
+    if (own) { res.set('Content-Type', { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' }[own.ext]).set('Cache-Control', 'public, max-age=3600'); return fs.createReadStream(own.file).pipe(res); }
     const it = await prisma.salesPricelistItem.findUnique({ where: { id }, select: { image_ext: true } });
     if (!it || !it.image_ext) return res.status(404).json({ error: 'Bez obrázku' });
     const file = path.join(__dirname, '..', 'data', 'pricelist-images', `pl-${id}.${it.image_ext}`);
