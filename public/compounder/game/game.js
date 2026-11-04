@@ -819,10 +819,17 @@ function paintShop() {
   MODEL_ORDER.forEach(function (k) {
     var n = inStock(k); if (n) st += '<b>' + n + '× ' + MODELS[k].name + ' skladem</b>';
   });
+  // Kdo má Expresní dovoz, ať ho může použít rovnou tady, ne až přes záložku Karty.
+  var mamRush = ownedOf('rush');
   (S.orders || []).slice().sort(function (a, b) { return a.arrivesAt - b.arrivesAt; }).forEach(function (o) {
-    st += '<b class="way">' + MODELS[o.model].name + ' na cestě · ' + etaText(o.arrivesAt - Date.now()) + '</b>';
+    st += '<b class="way">' + MODELS[o.model].name + ' na cestě · ' + etaText(o.arrivesAt - Date.now())
+      + (mamRush ? '<button class="btn sm rush" data-rush="' + o.orderedAt + '">⚡ Doručit hned</button>' : '')
+      + '</b>';
   });
   $('shop-stock').innerHTML = st ? '<div class="stock">' + st + '</div>' : '';
+  [].forEach.call($('shop-stock').querySelectorAll('[data-rush]'), function (b) {
+    b.onclick = function () { rushOrder(Number(b.getAttribute('data-rush')), b); };
+  });
   $('shop-list').innerHTML = MODEL_ORDER.map(function (k) {
     var m = MODELS[k], price = machinePrice(m), f = canFinance(price);
     var im = MODEL_IMG[k];
@@ -1312,6 +1319,21 @@ function paintCards() {
 }
 
 // Karta se spotřebuje NA SERVERU a teprve pak se projeví ve hře.
+// Zrychlí JEDNU vybranou zásilku, ne tu nejbližší — hráč si kliknul na konkrétní.
+function rushOrder(orderedAt, btn) {
+  var o = (S.orders || []).filter(function (x) { return x.orderedAt === orderedAt; })[0];
+  if (!o) return toast('Tahle zásilka už dorazila.', 'err');
+  if (!ownedOf('rush')) return toast('Nemáš kartu Expresní dovoz.', 'err');
+  if (btn) { btn.disabled = true; btn.textContent = 'Volám dopravci…'; }
+  apiJson('/cards/use', { kind: 'rush', on: o.model }).then(function (r) {
+    if (!r.ok) { if (btn) { btn.disabled = false; btn.textContent = '⚡ Doručit hned'; } return toast(r.j.error || 'Nepovedlo se.', 'err'); }
+    if (ME) ME.cards = r.j.owned;
+    o.arrivesAt = Date.now() - 1;
+    deliverOrders();
+    save(); syncState(true); paint(); paintShop();
+    toast(MODELS[o.model].name + ' je skladem — můžeš stavět.', 'ok');
+  }).catch(function () { if (btn) { btn.disabled = false; btn.textContent = '⚡ Doručit hned'; } toast('Server neodpovídá.', 'err'); });
+}
 function useCard(kind) {
   if (kind === 'rush' && !(S.orders || []).length) return toast('Nemáš nic na cestě — nejdřív si kup stroj v obchodě.', 'err');
   if (kind === 'connect' && S.connDiscount) return toast('Slevu na přípojky už máš připravenou.', 'err');

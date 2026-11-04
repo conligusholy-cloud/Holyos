@@ -257,3 +257,8 @@ main{padding-bottom:calc(66px + var(--safe-b))}
   20%{opacity:1;transform:translate(-50%,-2px)}
   100%{opacity:0;transform:translate(-50%,-14px)}
 }
+/* Zrychlení zásilky rovnou v obchodě. */
+.stock .way{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn.sm.rush{padding:3px 9px;font-size:11px;background:rgba(255,216,102,.16);
+  border:1px solid rgba(255,216,102,.5);color:var(--warn);box-shadow:none}
+.btn.sm.rush:disabled{opacity:.6}
