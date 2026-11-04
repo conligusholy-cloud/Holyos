@@ -863,6 +863,7 @@ router.get('/bs2/meetings-stats', async (req, res, next) => {
       mstAdd(bySrc[so.key], r.status, r.slot.starts_at, now);
       if (!srcMatch(so)) return;
       mstAdd(cells[i], r.status, r.slot.starts_at, now);
+      cells[i].by = cells[i].by || {}; cells[i].by[so.key] = (cells[i].by[so.key] || 0) + 1; // rozpad sloupce podle toho, kdo domluvil
       mstAdd(totals, r.status, r.slot.starts_at, now);
     });
     // U dnu schovavame prazdne vikendy (schuzky se delaji v pracovnich dnech).
@@ -879,6 +880,26 @@ router.get('/bs2/meetings-stats', async (req, res, next) => {
       internal_skipped: internal,
       src,
       // Rozpad podle zdroje za celé zobrazené období: souhrn Obchodníci + po obchodnících, Reklama, Sám z webu
+      // Cíl: 25 domluvených online schůzek denně za celý tým — počítá se podle DATA DOMLUVENÍ (created_at), posledních 14 dní
+      goal: await (async () => {
+        const perDay = Math.max(1, parseInt(process.env.MEETINGS_DAILY_GOAL, 10) || 25);
+        const since = new Date(Date.now() - 15 * 86400000);
+        const gr = await prisma.meetingReservation.findMany({ where: { created_at: { gte: since }, OR: [{ mode: null }, { mode: { notIn: ['hala', 'hala_cont'] } }] }, select: { created_at: true, email: true, booked_by_person_id: true, compounder_lead_id: true } }).catch(() => []);
+        const gl = [...new Set(gr.map((r) => r.compounder_lead_id).filter((x) => x && !leadSrc.has(x)))];
+        if (gl.length) (await prisma.compounderLead.findMany({ where: { id: { in: gl } }, select: { id: true, source: true } }).catch(() => [])).forEach((l) => leadSrc.set(l.id, l.source || ''));
+        const gp = [...new Set(gr.map((r) => r.booked_by_person_id).filter((x) => x && !pName.has(x)))];
+        if (gp.length) (await prisma.person.findMany({ where: { id: { in: gp } }, select: { id: true, first_name: true, last_name: true } }).catch(() => [])).forEach((p) => pName.set(p.id, [p.first_name, p.last_name].filter(Boolean).join(' ')));
+        const days = {}; const nowP2 = mstParts(Date.now());
+        for (let k = 13; k >= 0; k--) { const x = mstYmd(mstNoon(nowP2.y, nowP2.m, nowP2.d) - k * 86400000); const key = x.y + '-' + mst2(x.m) + '-' + mst2(x.d); days[key] = { date: key, dow: new Date(mstNoon(x.y, x.m, x.d)).getUTCDay(), total: 0, sales: 0, by: {} }; }
+        gr.forEach((r) => {
+          if (mstInternal(r.email)) return;
+          const pp = mstParts(r.created_at); const key = pp.y + '-' + mst2(pp.m) + '-' + mst2(pp.d); const d = days[key]; if (!d) return;
+          const so = mstSource(r, leadSrc.get(r.compounder_lead_id));
+          d.total++; if (so.kind === 'sales') d.sales++; d.by[so.key] = (d.by[so.key] || 0) + 1;
+        });
+        const names = {}; gr.forEach((r) => { if (r.booked_by_person_id) names['p:' + r.booked_by_person_id] = pName.get(r.booked_by_person_id) || ('Obchodník #' + r.booked_by_person_id); });
+        return { per_day: perDay, days: Object.values(days), names };
+      })(),
       // Trychtýř: kontakty s online schůzkou v období → z nich schůzka na hale (kdykoli) → obchod (stav kontaktu)
       funnel: await (async () => {
         const WON = new Set(['won', 'prodano', 'converted']);
@@ -900,6 +921,10 @@ router.get('/bs2/meetings-stats', async (req, res, next) => {
         sales.sort((a, b) => b.booked - a.booked).forEach((x) => out.push(withRate(x)));
         list.filter((x) => x.kind === 'ads').forEach((x) => out.push(withRate(x)));
         list.filter((x) => x.kind === 'self').forEach((x) => out.push(withRate(x)));
+        // Barvy do grafu: každý obchodník vlastní, reklama modrá, sám z webu šedá
+        const PAL = ['#f59e0b', '#22c55e', '#ec4899', '#a855f7', '#ef4444', '#14b8a6', '#eab308', '#f97316', '#84cc16', '#e879f9'];
+        const ids = out.filter((x) => x.kind === 'sales').map((x) => Number(String(x.key).slice(2))).sort((a, b) => a - b); // barva podle ID obchodníka = stabilní
+        out.forEach((x) => { x.color = x.kind === 'ads' ? '#3b82f6' : x.kind === 'self' ? '#94a3b8' : x.kind === 'sales_total' ? '#c084fc' : PAL[ids.indexOf(Number(String(x.key).slice(2))) % PAL.length]; });
         return out;
       })(),
     });

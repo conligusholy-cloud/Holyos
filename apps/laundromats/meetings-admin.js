@@ -380,6 +380,26 @@ function statLoad(){
     .catch(function(e){statBusy=false;box.innerHTML='<div class="mt-empty" style="color:#ff8f8f">'+esc(e.message)+'</div>';});
 }
 // Sloupcový graf bez knihoven: domluveno vedle proběhlo, popisky period dole.
+function srcMeta(){var m={};(statData&&statData.sources||[]).forEach(function(x){m[x.key]={color:x.color||'#4fd1ff',label:x.label};});return m;}
+function statSegs(x){var m=srcMeta(),out=[];if(!x.by)return out;Object.keys(x.by).forEach(function(k){var mm=m[k]||{color:k==='ads'?'#3b82f6':'#94a3b8',label:k==='ads'?'Reklama':k==='self'?'Sám z webu / odkazu':k};out.push({key:k,n:x.by[k],color:mm.color,label:mm.label});});
+  var ord=function(k){return k==='self'?2:k==='ads'?1:0;};out.sort(function(a,b){return ord(a.key)-ord(b.key)||b.n-a.n;});return out;}
+// Cíl týmu: domluvené online schůzky za den (podle data domluvení), posledních 14 dní, sloupce po zdrojích + čára cíle
+function goalChart(G){
+  var m=srcMeta(), names=G.names||{}, days=(G.days||[]).filter(function(d){return d.dow!==0&&d.dow!==6||d.total;});
+  var W=Math.max(520,days.length*48), H=200, PL=34, PR=10, PT=16, PB=30, iw=W-PL-PR, ih=H-PT-PB, bw=iw/Math.max(1,days.length);
+  var max=G.per_day; days.forEach(function(d){if(d.total>max)max=d.total;}); max=Math.ceil(max*1.1);
+  var g='', yG=PT+ih-(G.per_day/max)*ih, DN=['Ne','Po','Út','St','Čt','Pá','So'];
+  [0,Math.round(max/2),max].forEach(function(v){var y=PT+ih-(v/max)*ih;g+='<line x1="'+PL+'" y1="'+y+'" x2="'+(W-PR)+'" y2="'+y+'" stroke="rgba(120,160,255,.12)"/><text x="'+(PL-6)+'" y="'+(y+4)+'" text-anchor="end" fill="#8ea2c2" font-size="10.5">'+v+'</text>';});
+  days.forEach(function(d,i){var c=PL+bw*i+bw/2, w=Math.min(26,bw-12), yy=PT+ih;
+    Object.keys(d.by).map(function(k){var mm=m[k]||{color:k==='ads'?'#3b82f6':k==='self'?'#94a3b8':'#f59e0b',label:k==='ads'?'Reklama':k==='self'?'Sám z webu / odkazu':(names[k]||k)};return {k:k,n:d.by[k],c:mm.color,l:names[k]||mm.label};})
+      .sort(function(a,b){var o=function(k){return k==='self'?2:k==='ads'?1:0;};return o(a.k)-o(b.k)||b.n-a.n;})
+      .forEach(function(sg){var hh=(sg.n/max)*ih;yy-=hh;g+='<rect x="'+(c-w/2)+'" y="'+yy+'" width="'+w+'" height="'+hh+'" fill="'+sg.c+'" opacity=".92"><title>'+esc(sg.l)+': '+sg.n+'</title></rect>';});
+    var ok=d.total>=G.per_day, pd=d.date.split('-');
+    g+='<text x="'+c+'" y="'+(yy-5)+'" text-anchor="middle" fill="'+(ok?'#2fe3a0':'#e8f0ff')+'" font-size="11" font-weight="700">'+d.total+'</text>'
+      +'<text x="'+c+'" y="'+(H-16)+'" text-anchor="middle" fill="#e8f0ff" font-size="10.5" font-weight="700">'+DN[d.dow]+'</text><text x="'+c+'" y="'+(H-4)+'" text-anchor="middle" fill="#8ea2c2" font-size="10">'+(+pd[2])+'. '+(+pd[1])+'.</text>';});
+  g+='<line x1="'+PL+'" y1="'+yG+'" x2="'+(W-PR)+'" y2="'+yG+'" stroke="#ffd866" stroke-width="1.6" stroke-dasharray="6 4"/><text x="'+(W-PR)+'" y="'+(yG-5)+'" text-anchor="end" fill="#ffd866" font-size="11" font-weight="700">cíl '+G.per_day+' / den</text>';
+  return '<div style="overflow-x:auto"><svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block;max-width:none">'+g+'</svg></div>';
+}
 function statChart(b,avail){
   var dvaRadky=b.some(function(x){return !!x.sub;});
   var W=Math.max(560,Math.min(Math.max(560,(avail||0)-8),b.length*(dvaRadky?66:120))), H=dvaRadky?252:240, PL=46, PR=10, PT=18, PB=dvaRadky?46:34;
@@ -393,7 +413,11 @@ function statChart(b,avail){
     var c=PL+bw*i+bw/2, w=Math.max(10,Math.min(26,(bw-16)/2));
     var hb=(x.booked/top)*ih, hd=(x.done/top)*ih;
     var tip=x.future?(esc(x.title)+' — domluveno dopředu '+x.booked):(esc(x.title)+' — domluveno '+x.booked+', proběhlo '+x.done+(x.rate!=null?' ('+x.rate+' %)':''));
-    g+='<rect x="'+(c-w-3)+'" y="'+(PT+ih-hb)+'" width="'+w+'" height="'+hb+'" rx="3" fill="#4fd1ff" opacity="'+(x.future?'.3':'.85')+'"'+(x.future?' stroke="#4fd1ff" stroke-width="1.2" stroke-dasharray="3 2"':'')+'><title>'+tip+'</title></rect>'
+    // Sloupec „domluveno" rozdělený barvami podle toho, kdo schůzku domluvil (obchodníci, reklama, web)
+    var segs=statSegs(x), yy=PT+ih;
+    if(segs.length){ segs.forEach(function(sg){ var hh=(sg.n/top)*ih; yy-=hh; g+='<rect x="'+(c-w-3)+'" y="'+yy+'" width="'+w+'" height="'+hh+'" fill="'+sg.color+'" opacity="'+(x.future?'.35':'.92')+'"'+(x.future?' stroke="'+sg.color+'" stroke-width="1" stroke-dasharray="3 2"':'')+'><title>'+esc(x.title)+' — '+esc(sg.label)+': '+sg.n+'</title></rect>'; }); }
+    else g+='<rect x="'+(c-w-3)+'" y="'+(PT+ih-hb)+'" width="'+w+'" height="'+hb+'" rx="3" fill="#4fd1ff" opacity="'+(x.future?'.3':'.85')+'"'+(x.future?' stroke="#4fd1ff" stroke-width="1.2" stroke-dasharray="3 2"':'')+'><title>'+tip+'</title></rect>';
+    g+=''
       +(x.future?'':'<rect x="'+(c+3)+'" y="'+(PT+ih-hd)+'" width="'+w+'" height="'+hd+'" rx="3" fill="#2fe3a0" opacity=".9"><title>'+tip+'</title></rect>');
     if(x.booked)g+='<text x="'+c+'" y="'+(PT+ih-hb-6)+'" text-anchor="middle" fill="'+(x.future?'#8ea2c2':'#e8f0ff')+'" font-size="11" font-weight="700">'+x.booked+'</text>';
     g+='<text x="'+c+'" y="'+(H-(x.sub?26:12))+'" text-anchor="middle" fill="'+(x.future?'#58698a':(x.sub?'#e8f0ff':'#8ea2c2'))+'" font-size="11"'+(x.sub?' font-weight="700"':'')+'>'+esc(x.label)+'</text>'
@@ -423,7 +447,7 @@ function statRender(){
     +'<div><b style="color:#ff8f8f">'+(t.canceled||0)+'</b><span>Zrušeno</span></div>'
     +'<div><b style="color:#ffd866">'+(t.unmarked||0)+'</b><span>Neoznačeno</span></div>'
     +'<div><b style="color:#4fd1ff">'+(t.upcoming||0)+'</b><span>Nadchází</span></div></div>';
-  var leg='<div class="mt-leg"><span><i style="background:#4fd1ff"></i>domluveno</span><span><i style="background:#2fe3a0"></i>proběhlo</span>'
+  var leg='<div class="mt-leg">'+(statData.sources||[]).filter(function(x){return x.kind!=='sales_total';}).map(function(x){return '<span><i style="background:'+x.color+'"></i>'+esc(x.label)+'</span>';}).join('')+'<span><i style="background:#2fe3a0"></i>proběhlo</span>'
     +'<span><i style="background:rgba(79,209,255,.3);border:1px dashed #4fd1ff"></i>domluveno dopředu</span>'
     +'<span>Úspěšnost = proběhlé ze schůzek, které už mají výsledek. Nadcházející se nepočítají.</span></div>';
   var rows=b.slice().reverse().map(function(x){
@@ -434,8 +458,17 @@ function statRender(){
   // Rozpad podle zdroje: kdo schůzku domluvil (obchodníci / reklama / zákazník sám). Klik = filtr grafu i čísel nahoře.
   var SK={sales_total:'👥',sales:'🧑‍💼',ads:'📣',self:'🌐'};
   var srcRows=(statData.sources||[]).map(function(x){var on=statSrc===x.key||(statSrc==='sales'&&x.key==='sales');
-    return '<tr data-ssrc="'+esc(x.key)+'" data-slabel="'+esc(x.label)+'" style="cursor:pointer'+(on?';background:rgba(79,209,255,.1)':'')+'"><td'+(x.kind==='sales'?' style="padding-left:26px"':'')+'>'+(SK[x.kind]||'')+' <b>'+esc(x.label)+'</b></td><td>'+x.booked+'</td><td style="color:#2fe3a0">'+x.done+'</td><td>'+x.no_show+'</td><td>'+x.canceled+'</td><td>'+x.unmarked+'</td><td>'+x.upcoming+'</td>'
+    return '<tr data-ssrc="'+esc(x.key)+'" data-slabel="'+esc(x.label)+'" style="cursor:pointer'+(on?';background:rgba(79,209,255,.1)':'')+'"><td'+(x.kind==='sales'?' style="padding-left:26px"':'')+'>'+(x.color&&x.kind!=='sales_total'?'<i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:'+x.color+';margin-right:6px"></i>':'')+(SK[x.kind]||'')+' <b>'+esc(x.label)+'</b></td><td>'+x.booked+'</td><td style="color:#2fe3a0">'+x.done+'</td><td>'+x.no_show+'</td><td>'+x.canceled+'</td><td>'+x.unmarked+'</td><td>'+x.upcoming+'</td>'
       +'<td>'+(x.rate!=null?'<b>'+x.rate+' %</b>':'<span class="muted">—</span>')+'</td></tr>';}).join('');
+  // Cíl týmu (podle data domluvení)
+  var G=statData.goal||null, gHtml='';
+  if(G&&G.days&&G.days.length){ var td=G.days[G.days.length-1], wk=G.days.slice(-7).filter(function(d){return d.dow!==0&&d.dow!==6;}), avg=wk.length?Math.round(wk.reduce(function(a,d){return a+d.total;},0)/wk.length*10)/10:0;
+    var pct=Math.min(100,Math.round(td.total/G.per_day*100)), names=G.names||{}, mm=srcMeta();
+    var per=Object.keys(td.by).sort(function(a,b){return td.by[b]-td.by[a];}).map(function(k){var c=(mm[k]&&mm[k].color)||(k==='ads'?'#3b82f6':k==='self'?'#94a3b8':'#f59e0b');return '<span class="mt-pill" style="border-color:'+c+';color:'+c+';margin:0 4px 4px 0;display:inline-block">'+esc(k==='ads'?'Reklama':k==='self'?'Sám z webu':(names[k]||(mm[k]&&mm[k].label)||k))+' · '+td.by[k]+'</span>';}).join('');
+    gHtml='<h3 style="margin:18px 0 6px">🎯 Cíl týmu: '+G.per_day+' domluvených online schůzek denně <span class="muted small" style="font-weight:500">· počítá se podle dne, kdy byla schůzka domluvena</span></h3>'
+      +'<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><div style="font-size:26px;font-weight:800;color:'+(td.total>=G.per_day?'#2fe3a0':'#e8f0ff')+'">'+td.total+' / '+G.per_day+'</div><div style="flex:1;min-width:200px"><div style="height:10px;border-radius:6px;background:rgba(120,160,255,.14);overflow:hidden"><div style="height:100%;width:'+pct+'%;background:linear-gradient(90deg,#3ee08a,#4fd1ff)"></div></div><div class="small muted" style="margin-top:4px">dnes · z toho obchodníci '+td.sales+' · průměr posledních pracovních dnů '+avg+' / den</div></div></div>'
+      +(per?'<div style="margin-bottom:6px">'+per+'</div>':'')+goalChart(G);
+  }
   // Trychtýř: online schůzka → schůzka na hale → obchod
   var F=statData.funnel||null, pc=function(a,b){return b?Math.round(a/b*100)+' %':'—';};
   var fun=F?'<h3 style="margin:18px 0 6px">Trychtýř <span class="muted small" style="font-weight:500">· kontakty s online schůzkou v zobrazeném období → schůzka na hale → obchod</span></h3>'
@@ -450,7 +483,7 @@ function statRender(){
     +'<div class="mt-tw"><table><thead><tr><th>Zdroj</th><th>Domluveno</th><th>Proběhlo</th><th>Nedorazil</th><th>Zrušeno</th><th>Neoznačeno</th><th>Nadchází</th><th>Úspěšnost</th></tr></thead><tbody>'+srcRows+'</tbody></table></div>'
     +'<p class="muted small" style="margin:6px 0 0">Obchodník = schůzku zarezervoval v aplikaci obchodníka. Reklama = zákazník si termín vybral sám a kontakt přišel z reklamy (Meta / Google / LinkedIn). Sám z webu / odkazu = ostatní samostatné rezervace (cesta z SMS či e-mailu, bestseries2.cz…).</p>':'';
   box.innerHTML=kpi
-    +'<div class="mt-chart">'+statChart(b,avail)+'</div>'+leg+fun+srcBox
+    +'<div class="mt-chart">'+statChart(b,avail)+'</div>'+leg+gHtml+fun+srcBox
     +'<div class="mt-tw" style="margin-top:16px"><table><thead><tr><th>Období</th><th>Domluveno</th><th>Proběhlo</th><th>Nedorazil</th><th>Zrušeno</th><th>Neoznačeno</th><th>Nadchází</th><th>Úspěšnost</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +(statData.internal_skipped?'<p class="muted small" style="margin:10px 0 0">Nepočítá se '+statData.internal_skipped+' našich vlastních (testovacích) rezervací z firemních e-mailů.</p>':'');
   // Graf jde dál doprava než se vejde — odrolujeme tak, aby byl dnešek i kus dopředu vidět.
