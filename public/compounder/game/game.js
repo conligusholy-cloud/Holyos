@@ -14,16 +14,25 @@
 // jen přepočtená do korun. Když se změní skutečný model, změň i tohle.
 var EUR = 24.35;
 var MODELS = {
-  flex: { key: 'flex', name: 'FLEX', machine: 52000, permit: 825, conn: 2889, spend: 11.33, cost: 767, perday: 8,
-    desc: 'Velký kiosek. Dražší, ale utáhne víc lidí.' },
   mini: { key: 'mini', name: 'MINI', machine: 35000, permit: 825, conn: 1926, spend: 16.52, cost: 647, perday: 5,
-    desc: 'Menší a levnější. Hodí se tam, kde nechodí davy.' }
+    desc: 'Nejmenší a nejlevnější. Hodí se tam, kde nechodí davy.' },
+  flex: { key: 'flex', name: 'FLEX', machine: 52000, permit: 825, conn: 2889, spend: 11.33, cost: 767, perday: 8,
+    desc: 'Dvě pračky a sušička. Nejlepší poměr ceny a výkonu.' },
+  max: { key: 'max', name: 'MAX', machine: 67000, permit: 825, conn: 2889, spend: 11.33, cost: 900, perday: 10,
+    desc: 'Dvě pračky a dvě sušičky. Pro místa, kde je o praní rvačka.' }
 };
-var YEAR_MS = 86400000;          // 1 herní rok = 1 skutečný den
+var MODEL_ORDER = ['mini', 'flex', 'max'];
+// Jeden SKUTEČNÝ den = dva herní měsíce, herní rok tedy trvá 6 dní.
+var MONTH_MS = 43200000;         // 1 herní měsíc = 12 skutečných hodin
+var YEAR_MS = 12 * MONTH_MS;     // 1 herní rok = 6 skutečných dní
+var DELIVERY_MONTHS = 2;         // dodání prádlomatu = 2 herní měsíce (přesně 1 skutečný den)
 var BANK_BASE = 1000000;         // startovní rámec v bance
 var BANK_PER_UNIT = 600000;      // o kolik rámec povyroste s každým prádlomatem
 var BANK_PER_DAY = 100000;       // co banka sama doplní za skutečný den
 var REVEAL_COST = 35000;         // prověření jednoho místa
+var SCOUT_COST = 20000;          // cesta do města a hledání vhodných míst
+var CASH_RESERVE = 60000;        // tolik hotovosti banka nenechá utratit — musí zbýt na průzkum a prověření
+var OPERATING_MAX = 150000;      // provozní úvěr nad rámec úvěrového stropu, aby hra nikdy neskončila ve slepé uličce
 
 // Lepší místo = víc zákazníků. Skóre dává hledač míst ze skutečných dat.
 function placeFactor(score) { return Math.max(0.3, Math.min(1.7, 0.35 + (score / 100) * 1.25)); }
@@ -32,7 +41,10 @@ var COST_F = { mall: 1.25, hypermarket: 1.2, department_store: 1.15, supermarket
 var KIND_LABEL = { supermarket: 'Supermarket', hypermarket: 'Hypermarket', mall: 'Obchodní centrum',
   department_store: 'Obchodní dům', fuel: 'Benzínka', car_wash: 'Samoobslužná myčka' };
 
-function investOf(m) { return Math.round((m.machine + m.permit + m.conn) * EUR); }
+// Cena stroje (platí se v obchodě) a instalace na místě (projekt, povolení, přípojky).
+function machinePrice(m) { return Math.round(m.machine * EUR); }
+function installPrice(m) { return Math.round((m.permit + m.conn) * EUR); }
+function investOf(m) { return machinePrice(m) + installPrice(m); }
 function economics(spot, modelKey) {
   var m = MODELS[modelKey] || MODELS.flex;
   var perday = m.perday * placeFactor(spot.score);
@@ -40,7 +52,8 @@ function economics(spot, modelKey) {
   var cost = Math.round(m.cost * EUR * (COST_F[spot.kind] || 1));
   var profit = revenue - cost;
   var inv = investOf(m);
-  return { model: m.key, invest: inv, revenue: revenue, cost: cost, profit: profit,
+  return { model: m.key, invest: inv, machine: machinePrice(m), install: installPrice(m),
+    revenue: revenue, cost: cost, profit: profit,
     perday: Math.round(perday * 10) / 10, payback: profit > 0 ? inv / (profit * 12) : null };
 }
 
@@ -80,13 +93,44 @@ function fresh(profileId) {
     areas: {},     // id oblasti → { name, scoutedAt, spots:[…] }
     units: [],     // postavené prádlomaty
     revealed: {},  // id místa → true
+    orders: [],    // koupené stroje na cestě: { model, arrivesAt }
+    stock: {},     // model → kolik kusů čeká na skladě
     stats: { earned: 0, interest: 0 }
   };
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* plná paměť — hra běží dál */ } }
 function load() {
-  try { var raw = localStorage.getItem(KEY); if (!raw) return null; var o = JSON.parse(raw); return (o && o.v === 1) ? o : null; }
-  catch (e) { return null; }
+  try {
+    var raw = localStorage.getItem(KEY); if (!raw) return null;
+    var o = JSON.parse(raw); if (!o || !o.profile) return null;
+    // Rozehraná hra z verze bez obchodu — jen doplníme, co chybí, ať o síť nikdo nepřijde.
+    if (!o.orders) o.orders = [];
+    if (!o.stock) o.stock = {};
+    o.v = 2;
+    return o;
+  } catch (e) { return null; }
+}
+
+// ─── Sklad a objednávky ──────────────────────────────────────────────────────
+// Stroj se kupuje v obchodě, pak je „na cestě" a po dvou herních měsících padne na sklad.
+function deliverOrders() {
+  var now = Date.now(), arrived = 0;
+  S.orders = (S.orders || []).filter(function (o) {
+    if (o.arrivesAt > now) return true;
+    S.stock[o.model] = (S.stock[o.model] || 0) + 1; arrived++;
+    return false;
+  });
+  return arrived;
+}
+function inStock(modelKey) { return (S.stock && S.stock[modelKey]) || 0; }
+function onWay(modelKey) { return (S.orders || []).filter(function (o) { return o.model === modelKey; }).length; }
+// Zbývající čas dodání lidsky: „za 7 h 20 min"
+function etaText(ms) {
+  if (ms <= 0) return 'právě teď';
+  var mins = Math.max(1, Math.round(ms / 60000));   // zaokrouhlíme až minuty, jinak vyjde „23 h 60 min"
+  var h = Math.floor(mins / 60), m = mins % 60;
+  if (h >= 1) return 'za ' + h + ' h' + (m ? ' ' + m + ' min' : '');
+  return 'za ' + m + ' min';
 }
 
 // ─── Běh času ────────────────────────────────────────────────────────────────
@@ -109,6 +153,7 @@ function tick() {
   S.stats.interest += interest;
   S.bank = Math.min(bankCap(), S.bank + BANK_PER_DAY * (dt / 86400000));
   S.lastTick = now;
+  deliverOrders();
 }
 function gameYear() { return Math.floor((Date.now() - S.startedAt) / YEAR_MS) + 1; }
 
@@ -173,23 +218,28 @@ function showRole(id) {
 var map = null, layer = null, AREAS = [];
 // Dlaždice NEBEREME z tile.openstreetmap.org — jejich pravidla to aplikacím zakazují
 // a servery nás zablokují (403 „App is not following the tile usage policy").
-// Primárně tedy tmavá mapa z CARTO (sedí ke hře a CartoCDN už jinde v HolyOS používáme),
-// a kdyby nejela, přepneme se na Esri — stejný podklad, jaký má „Najít místo".
+// CARTO zase chce API klíč a bez něj vrací vodoznak s kódem 200, takže se chyba ani nepozná.
+// Zůstáváme proto u Esri — stejná služba, na které jede „Najít místo" i Site Development.
+// Primárně tmavá varianta (sedí ke hře), záloha je klasický silniční podklad.
 var BASEMAPS = [
-  { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    opts: { maxZoom: 19, subdomains: 'abcd', attribution: '&copy; OpenStreetMap, &copy; CARTO' } },
+  { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    labels: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+    opts: { maxZoom: 19, maxNativeZoom: 16, attribution: 'Tiles &copy; Esri' } },
   { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    labels: null,
     opts: { maxZoom: 19, attribution: 'Tiles &copy; Esri' } }
 ];
-var baseIdx = 0, baseLayer = null, tileErrs = 0;
+var baseIdx = 0, baseLayer = null, labelLayer = null, tileErrs = 0;
 function addBasemap() {
   var b = BASEMAPS[baseIdx];
-  if (baseLayer) { map.removeLayer(baseLayer); }
+  if (baseLayer) { map.removeLayer(baseLayer); baseLayer = null; }
+  if (labelLayer) { map.removeLayer(labelLayer); labelLayer = null; }
   tileErrs = 0;
   baseLayer = L.tileLayer(b.url, b.opts).addTo(map);
+  if (b.labels) labelLayer = L.tileLayer(b.labels, { maxZoom: b.opts.maxZoom, maxNativeZoom: b.opts.maxNativeZoom, opacity: 0.9 }).addTo(map);
   baseLayer.on('tileerror', function () {
     tileErrs++;
-    // Pár chybějících dlaždic je normální; až když padá celá vrstva, zkusíme další zdroj.
+    // Pár chybějících dlaždic je při rolování normální; až když padá celá vrstva, zkusíme další zdroj.
     if (tileErrs > 6 && baseIdx < BASEMAPS.length - 1) { baseIdx++; addBasemap(); }
   });
 }
@@ -232,46 +282,65 @@ function drawMap() {
   $('map-hint').classList.toggle('hidden', any);
 }
 
-// ─── Panel: výběr oblasti ────────────────────────────────────────────────────
+// ─── Panel: průzkum města ────────────────────────────────────────────────────
+// Hráč napíše město a pošle tam člověka, aby ho prošel a našel vhodná místa.
+// Cesta stojí pokaždé stejně, ať jde o Prahu nebo o Trutnov.
 function areasSheet() {
-  if (!AREAS.length) return toast('Seznam oblastí se nenačetl. Zkus to za chvíli.', 'err');
-  var rows = AREAS.map(function (a) {
-    var done = !!S.areas[a.id];
-    return '<div class="area-item"><div><div class="nm">' + esc(a.name) + '</div>'
-      + '<div class="sub">' + esc(a.size) + (done ? ' · prozkoumáno (' + S.areas[a.id].spots.length + ' míst)' : ' · průzkum ' + kcFull(a.cost)) + '</div></div>'
-      + (done
-        ? '<button class="btn sec sm" data-go="' + a.id + '">Na mapu</button>'
-        : '<button class="btn sm" data-scout="' + a.id + '"' + (S.cash < a.cost ? ' disabled' : '') + '>Prozkoumat</button>')
-      + '</div>';
+  var chips = AREAS.map(function (a) {
+    return '<button class="btn sec sm" data-city="' + esc(a.name) + '" style="margin:0 6px 6px 0">' + esc(a.name) + '</button>';
   }).join('');
-  sheet('<h3>Prozkoumat oblast</h3>'
-    + '<p class="muted small">Průzkum stojí peníze a odhalí, kde v oblasti vůbec jsou vhodná místa. Co je na nich, zjistíš až prověřením konkrétního místa.</p>'
-    + rows);
-  [].forEach.call($('sheet-body').querySelectorAll('[data-scout]'), function (b) {
-    b.onclick = function () { scout(b.getAttribute('data-scout'), b); };
+  var done = Object.keys(S.areas).map(function (id) {
+    return '<div class="area-item"><div><div class="nm">' + esc(S.areas[id].name) + '</div>'
+      + '<div class="sub">nalezeno ' + S.areas[id].spots.length + ' míst</div></div>'
+      + '<button class="btn sec sm" data-go="' + esc(id) + '">Na mapu</button></div>';
+  }).join('');
+  sheet('<h3>Prozkoumat město</h3>'
+    + '<p class="muted small">Napiš, kam poslat člověka. Projde město, obhlédne benzínky, obchodní centra a myčky a vrátí se se seznamem míst. '
+    + 'Cesta stojí ' + kcFull(SCOUT_COST) + '. Co je na kterém místě, zjistíš až jeho prověřením.</p>'
+    + '<div class="row" style="gap:8px;margin:12px 0 10px">'
+    + '<input id="city-q" class="inp" placeholder="Např. Kolín" autocomplete="off" autocapitalize="words" enterkeyhint="search">'
+    + '<button class="btn" id="do-scout"' + (S.cash < SCOUT_COST ? ' disabled' : '') + '>Hledat</button></div>'
+    + (S.cash < SCOUT_COST ? '<p class="fine err">Na cestu nemáš dost hotovosti.</p>' : '')
+    + '<p class="fine" style="margin:2px 0 6px">Tipy:</p><div>' + chips + '</div>'
+    + (done ? '<h3 style="margin-top:16px">Už prozkoumáno</h3>' + done : ''));
+  var inp = $('city-q'), btn = $('do-scout');
+  var run = function () { scout((inp.value || '').trim(), btn); };
+  if (btn) btn.onclick = run;
+  if (inp) inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); run(); } };
+  [].forEach.call($('sheet-body').querySelectorAll('[data-city]'), function (b) {
+    b.onclick = function () { inp.value = b.getAttribute('data-city'); run(); };
   });
   [].forEach.call($('sheet-body').querySelectorAll('[data-go]'), function (b) {
     b.onclick = function () {
-      var a = AREAS.filter(function (x) { return x.id === b.getAttribute('data-go'); })[0];
-      closeSheet(); if (map) map.setView([a.lat, a.lon], 13);
+      var a = S.areas[b.getAttribute('data-go')];
+      closeSheet(); if (map && a && a.lat) map.setView([a.lat, a.lon], 12);
     };
   });
 }
-function scout(areaId, btn) {
-  var a = AREAS.filter(function (x) { return x.id === areaId; })[0];
-  if (!a || S.cash < a.cost) return toast('Na průzkum nemáš dost hotovosti.', 'err');
+function scout(city, btn) {
+  if (!city || city.length < 2) return toast('Napiš, do kterého města se má jet.', 'err');
+  if (S.cash < SCOUT_COST) return toast('Na cestu nemáš dost hotovosti.', 'err');
   btn.disabled = true; btn.textContent = 'Hledám…';
-  fetch('/api/game/scout/' + encodeURIComponent(areaId))
+  fetch('/api/game/scout?q=' + encodeURIComponent(city))
     .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('Chyba ' + r.status)); return j; }); })
     .then(function (j) {
-      if (!j.spots || !j.spots.length) { btn.disabled = false; btn.textContent = 'Prozkoumat'; return toast('V téhle oblasti se nic vhodného nenašlo. Peníze ti zůstávají.', 'err'); }
-      S.cash -= a.cost;
-      S.areas[areaId] = { name: a.name, scoutedAt: Date.now(), spots: j.spots };
+      btn.disabled = false; btn.textContent = 'Hledat';
+      if (!j.spots || !j.spots.length) return toast('Tam se nic vhodného nenašlo. Peníze ti zůstávají.', 'err');
+      var id = j.area.id;
+      var known = S.areas[id] ? S.areas[id].spots.length : 0;
+      // Už prozkoumané město neúčtujeme znovu — jen hráče hodíme na mapu.
+      if (known >= j.spots.length) {
+        closeSheet();
+        if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], 12);
+        return toast(j.area.name + ' už máš prozkoumaný — koukni na mapu.', 'ok');
+      }
+      S.cash -= SCOUT_COST;
+      S.areas[id] = { name: j.area.name, lat: j.area.lat, lon: j.area.lon, scoutedAt: Date.now(), spots: j.spots };
       save(); paint(); drawMap(); closeSheet();
-      if (map) map.setView([a.lat, a.lon], 12);
-      toast('Oblast ' + a.name + ': nalezeno ' + j.spots.length + ' míst.', 'ok');
+      if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], 12);
+      toast(j.area.name + ': nalezeno ' + j.spots.length + ' míst.', 'ok');
     })
-    .catch(function (e) { btn.disabled = false; btn.textContent = 'Prozkoumat'; toast(e.message, 'err'); });
+    .catch(function (e) { btn.disabled = false; btn.textContent = 'Hledat'; toast(e.message, 'err'); });
 }
 
 // ─── Panel: místo ────────────────────────────────────────────────────────────
@@ -289,7 +358,6 @@ function spotSheet(sp, areaId) {
     if (b) b.onclick = function () { S.cash -= REVEAL_COST; S.revealed[sp.id] = true; save(); paint(); drawMap(); spotSheet(sp, areaId); };
     return;
   }
-  var e = economics(sp, 'flex'), e2 = economics(sp, 'mini');
   sheet('<h3>' + esc(sp.name) + '</h3>'
     + '<p class="muted small">' + esc(KIND_LABEL[sp.kind] || 'Místo') + ' · ' + esc(S.areas[areaId] ? S.areas[areaId].name : '') + '</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(sp.score) + '</div>'
@@ -297,45 +365,121 @@ function spotSheet(sp, areaId) {
     + '<div class="kv"><span>Konkurence do 1,5 km</span><b>' + (sp.competition != null ? sp.competition : '—') + '</b></div>'
     + '<div class="kv"><span>Tahouni provozu</span><b>' + (sp.anchors != null ? sp.anchors : '—') + '</b></div>'
     + '<h3 style="margin-top:18px">Co tu postavit</h3>'
-    + modelCard(sp, e) + modelCard(sp, e2));
+    + MODEL_ORDER.map(function (k) { return modelCard(sp, economics(sp, k)); }).join(''));
   [].forEach.call($('sheet-body').querySelectorAll('[data-build]'), function (b) {
-    b.onclick = function () { buildSheet(sp, areaId, b.getAttribute('data-build')); };
+    b.onclick = function () { installSheet(sp, areaId, b.getAttribute('data-build')); };
   });
+  var go = $('go-shop');
+  if (go) go.onclick = function () { closeSheet(); switchTab('shop'); };
 }
+// Karta modelu na konkrétním místě. Postavit jde jen to, co je skladem — jinak vede do obchodu.
 function modelCard(sp, e) {
-  var m = MODELS[e.model];
+  var m = MODELS[e.model], n = inStock(e.model), way = onWay(e.model);
+  var btn;
+  if (n > 0) btn = '<button class="btn sm" style="width:100%;margin-top:10px" data-build="' + e.model + '">Postavit (' + n + '× skladem)</button>';
+  else if (way > 0) btn = '<p class="fine warn" style="margin:10px 0 0">' + way + '× je na cestě — až dorazí, postavíš ho tady.</p>';
+  else btn = '<button class="btn sec sm" style="width:100%;margin-top:10px" id="go-shop">Není skladem — do obchodu</button>';
   return '<div class="card"><div class="row"><h3>' + m.name + '</h3><b>' + kc(e.invest) + ' ' + CUR + '</b></div>'
     + '<p class="muted small" style="margin:2px 0 8px">' + esc(m.desc) + '</p>'
     + '<div class="kv"><span>Zákazníků / den</span><b>' + String(e.perday).replace('.', ',') + '</b></div>'
     + '<div class="kv"><span>Obrat / měsíc</span><b>' + kcFull(e.revenue) + '</b></div>'
     + '<div class="kv"><span>Zisk / měsíc</span><b class="' + (e.profit > 0 ? 'ok' : 'err') + '">' + kcFull(e.profit) + '</b></div>'
     + '<div class="kv"><span>Návratnost</span><b>' + (e.payback ? e.payback.toFixed(1).replace('.', ',') + ' roku' : 'nikdy') + '</b></div>'
-    + '<button class="btn sm" style="width:100%;margin-top:10px" data-build="' + e.model + '">Postavit ' + m.name + '</button></div>';
+    + btn + '</div>';
 }
 
-// ─── Panel: stavba (hotovost + úvěr) ─────────────────────────────────────────
+// ─── Financování (hotovost + úvěr z banky) ───────────────────────────────────
+// Používá se stejně na nákup stroje v obchodě i na instalaci na místě, aby se
+// hráč nikdy nezasekl bez hotovosti a bez možnosti si půjčit.
 function investedTotal() { return S.units.reduce(function (a, u) { return a + u.eco.invest; }, 0); }
-function buildSheet(sp, areaId, modelKey) {
-  var e = economics(sp, modelKey);
+function stockValue() {
+  var v = 0;
+  MODEL_ORDER.forEach(function (k) { v += (inStock(k) + onWay(k)) * machinePrice(MODELS[k]); });
+  return v;
+}
+function assetsTotal() { return investedTotal() + stockValue(); }
+// Na nákupy se nesmí utratit úplně všechno — jinak by hráč zůstal bez hotovosti,
+// bez příjmu a bez možnosti cokoli prověřit.
+function canFinance(amount) {
   var p = PROFILES[S.profile];
-  var own = Math.min(S.cash, e.invest);
-  var need = e.invest - own;
-  var ltvRoom = Math.max(0, p.ltv * (investedTotal() + e.invest) - S.loan);
+  var own = Math.min(Math.max(0, S.cash - CASH_RESERVE), amount);
+  var need = amount - own;
+  var ltvRoom = Math.max(0, p.ltv * (assetsTotal() + amount) - S.loan);
   var canBorrow = Math.min(ltvRoom, S.bank);
-  var ok = need <= canBorrow + 0.5;
-  sheet('<h3>Postavit ' + MODELS[modelKey].name + '</h3>'
-    + '<p class="muted small">' + esc(sp.name) + '</p>'
-    + '<div class="kv"><span>Investice</span><b>' + kcFull(e.invest) + '</b></div>'
-    + '<div class="kv"><span>Z vlastní hotovosti</span><b>' + kcFull(own) + '</b></div>'
-    + '<div class="kv"><span>Doplatí banka (úvěr)</span><b class="' + (need > 0 ? 'warn' : '') + '">' + kcFull(need) + '</b></div>'
-    + '<div class="kv"><span>Úvěrový strop profilu</span><b>' + kcFull(ltvRoom) + '</b></div>'
-    + '<div class="kv"><span>Volný rámec v bance</span><b>' + kcFull(S.bank) + '</b></div>'
-    + '<div class="kv"><span>Úrok</span><b>' + (p.rate * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>'
-    + '<button class="btn big" id="do-build"' + (ok ? '' : ' disabled') + '>Postavit</button>'
-    + (ok ? '' : '<p class="fine err">Chybí ti ' + kcFull(need - canBorrow) + '. Počkej, až síť vydělá, nebo splať část úvěru.</p>'));
+  return { amount: amount, own: own, need: need, ltvRoom: ltvRoom, canBorrow: canBorrow, ok: need <= canBorrow + 0.5 };
+}
+function doFinance(f) { S.cash -= f.own; S.bank -= f.need; S.loan += f.need; }
+// Provozní úvěr: hotovost z banky na běžné výdaje. Nepodléhá úvěrovému stropu,
+// jen vlastnímu limitu — je to pojistka, aby hra nikdy nešla do slepé uličky.
+function operatingRoom() {
+  var p = PROFILES[S.profile];
+  return Math.max(0, p.ltv * assetsTotal() + OPERATING_MAX - S.loan);
+}
+function cashDrawMax() { return Math.max(0, Math.min(S.bank, operatingRoom(), OPERATING_MAX)); }
+function financeRows(f) {
+  var p = PROFILES[S.profile];
+  return '<div class="kv"><span>Cena</span><b>' + kcFull(f.amount) + '</b></div>'
+    + '<div class="kv"><span>Z vlastní hotovosti</span><b>' + kcFull(f.own) + '</b></div>'
+    + '<div class="kv"><span>Doplatí banka (úvěr)</span><b class="' + (f.need > 0 ? 'warn' : '') + '">' + kcFull(f.need) + '</b></div>'
+    + (f.need > 0 ? '<div class="kv"><span>Úvěrový strop profilu</span><b>' + kcFull(f.ltvRoom) + '</b></div>'
+      + '<div class="kv"><span>Volný rámec v bance</span><b>' + kcFull(S.bank) + '</b></div>'
+      + '<div class="kv"><span>Úrok</span><b>' + (p.rate * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>' : '');
+}
+
+// ─── Obchod ──────────────────────────────────────────────────────────────────
+function paintShop() {
+  var st = '';
+  MODEL_ORDER.forEach(function (k) {
+    var n = inStock(k); if (n) st += '<b>' + n + '× ' + MODELS[k].name + ' skladem</b>';
+  });
+  (S.orders || []).slice().sort(function (a, b) { return a.arrivesAt - b.arrivesAt; }).forEach(function (o) {
+    st += '<b class="way">' + MODELS[o.model].name + ' na cestě · ' + etaText(o.arrivesAt - Date.now()) + '</b>';
+  });
+  $('shop-stock').innerHTML = st ? '<div class="stock">' + st + '</div>' : '';
+  $('shop-list').innerHTML = MODEL_ORDER.map(function (k) {
+    var m = MODELS[k], price = machinePrice(m), f = canFinance(price);
+    return '<div class="card"><div class="row"><h3>' + m.name + '</h3><b>' + kc(price) + ' ' + CUR + '</b></div>'
+      + '<p class="muted small" style="margin:2px 0 8px">' + esc(m.desc) + '</p>'
+      + '<div class="kv"><span>Zákazníků / den na průměrném místě</span><b>' + m.perday + '</b></div>'
+      + '<div class="kv"><span>Provozní náklady / měsíc</span><b>' + kcFull(Math.round(m.cost * EUR)) + '</b></div>'
+      + '<div class="kv"><span>Instalace na místě (navíc)</span><b>' + kcFull(installPrice(m)) + '</b></div>'
+      + '<div class="kv"><span>Dodání</span><b>' + DELIVERY_MONTHS + ' herní měsíce (1 den)</b></div>'
+      + '<button class="btn sm" style="width:100%;margin-top:10px" data-buy="' + k + '"' + (f.ok ? '' : ' disabled') + '>'
+      + (f.ok ? 'Koupit ' + m.name : 'Nemáš na to') + '</button></div>';
+  }).join('');
+  [].forEach.call($('shop-list').querySelectorAll('[data-buy]'), function (b) {
+    b.onclick = function () { buySheet(b.getAttribute('data-buy')); };
+  });
+}
+function buySheet(modelKey) {
+  var m = MODELS[modelKey], f = canFinance(machinePrice(m));
+  sheet('<h3>Koupit ' + m.name + '</h3>'
+    + '<p class="muted small">Stroj ti přivezou za ' + DELIVERY_MONTHS + ' herní měsíce, tedy za jeden skutečný den. Do té doby je na cestě, pak čeká na skladě, než mu najdeš místo.</p>'
+    + financeRows(f)
+    + '<button class="btn big" id="do-buy"' + (f.ok ? '' : ' disabled') + '>Objednat</button>'
+    + (f.ok ? '' : '<p class="fine err">Chybí ti ' + kcFull(f.need - f.canBorrow) + '. Počkej, až síť vydělá, nebo splať část úvěru.</p>'));
+  var b = $('do-buy');
+  if (b) b.onclick = function () {
+    doFinance(f);
+    S.orders.push({ model: modelKey, orderedAt: Date.now(), arrivesAt: Date.now() + DELIVERY_MONTHS * MONTH_MS });
+    save(); paint(); closeSheet();
+    toast(m.name + ' objednán. Dorazí ' + etaText(DELIVERY_MONTHS * MONTH_MS) + '.', 'ok');
+  };
+}
+
+// ─── Panel: instalace stroje ze skladu na místo ──────────────────────────────
+function installSheet(sp, areaId, modelKey) {
+  var m = MODELS[modelKey], e = economics(sp, modelKey), f = canFinance(e.install);
+  sheet('<h3>Postavit ' + m.name + '</h3>'
+    + '<p class="muted small">' + esc(sp.name) + ' — projekt, povolení a přípojky. Stroj máš skladem.</p>'
+    + financeRows(f)
+    + '<div class="kv"><span>Zisk tohohle místa / měsíc</span><b class="ok">' + kcFull(e.profit) + '</b></div>'
+    + '<button class="btn big" id="do-build"' + (f.ok ? '' : ' disabled') + '>Postavit</button>'
+    + (f.ok ? '' : '<p class="fine err">Na instalaci ti chybí ' + kcFull(f.need - f.canBorrow) + '.</p>'));
   var b = $('do-build');
   if (b) b.onclick = function () {
-    S.cash -= own; S.bank -= need; S.loan += need;
+    doFinance(f);
+    S.stock[modelKey] = inStock(modelKey) - 1;
     S.units.push({ spotId: sp.id, areaId: areaId, name: sp.name, kind: sp.kind, score: sp.score,
       lat: sp.lat, lon: sp.lon, builtAt: Date.now(), eco: e });
     save(); paint(); drawMap(); closeSheet();
@@ -360,8 +504,9 @@ function unitSheet(u) {
 function paint() {
   $('t-year').textContent = gameYear();
   $('t-cash').textContent = kc(S.cash);
-  $('t-rate').textContent = kc(yearlyProfit());
+  $('t-rate').textContent = kc(monthlyProfit());
   $('t-count').textContent = S.units.length;
+  if (!$('v-shop').classList.contains('hidden')) paintShop();
   if (!$('v-net').classList.contains('hidden')) paintNet();
   if (!$('v-bank').classList.contains('hidden')) paintBank();
   if (!$('v-me').classList.contains('hidden')) paintMe();
@@ -384,7 +529,8 @@ function paintNet() {
 }
 function paintBank() {
   var p = PROFILES[S.profile];
-  var room = Math.max(0, p.ltv * investedTotal() - S.loan);
+  // Do majetku patří i stroje skladem a na cestě — banka je bere jako zástavu stejně jako postavené.
+  var room = Math.max(0, p.ltv * assetsTotal() - S.loan);
   $('bank-body').innerHTML = '<div class="card">'
     + '<div class="row"><span class="muted small">Hotovost</span><b>' + kcFull(S.cash) + '</b></div>'
     + '<div class="row"><span class="muted small">Volný rámec v bance</span><b>' + kcFull(S.bank) + '</b></div>'
@@ -396,10 +542,18 @@ function paintBank() {
     + '<div class="kv"><span>Úrok</span><b>' + (p.rate * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>'
     + '<div class="kv"><span>Zaplaceno na úrocích</span><b>' + kcFull(S.stats.interest) + '</b></div>'
     + '<div class="kv"><span>Ještě si můžeš půjčit</span><b>' + kcFull(Math.min(room, S.bank)) + '</b></div>'
+    + (cashDrawMax() >= 1000 ? '<button class="btn sec big" id="do-draw">Vybrat ' + kcFull(cashDrawMax()) + ' na provoz</button>'
+        + '<p class="fine">Hotovost z banky na průzkum, prověřování a instalace. Připíše se k úvěru a úročí se stejně.</p>' : '')
     + (S.loan > 0 && S.cash >= 1 ? '<button class="btn big" id="do-repay">Splatit ' + kcFull(Math.min(S.cash, S.loan)) + '</button>' : '')
     + (S.loan > 0 && S.cash < 1 ? '<p class="fine">Splácet začneš, až síť něco vydělá.</p>' : '')
     + '</div>'
     + '<div class="card"><h3>Dobít banku</h3><p class="muted small" style="margin:2px 0 0">Tady budou balíčky herních peněz. V téhle verzi se ještě neplatí — banka se doplňuje jen sama.</p></div>';
+  var d = $('do-draw');
+  if (d) d.onclick = function () {
+    var take = cashDrawMax();
+    S.bank -= take; S.loan += take; S.cash += take;
+    save(); paint(); toast('Vybráno ' + kcFull(take) + ' na provoz.', 'ok');
+  };
   var b = $('do-repay');
   if (b) b.onclick = function () {
     var pay = Math.min(S.cash, S.loan);
@@ -418,7 +572,7 @@ function paintMe() {
     + '<div class="kv"><span>Prověřených míst</span><b>' + Object.keys(S.revealed).length + '</b></div>'
     + '</div>'
     + '<div class="card"><h3>Jak se hraje</h3>'
-    + '<p class="muted small" style="margin:2px 0 0">Jeden skutečný den je ve hře rok. Prádlomaty vydělávají, i když hru zavřeš — po návratu se ti všechno dopočítá. '
+    + '<p class="muted small" style="margin:2px 0 0">Jeden skutečný den jsou ve hře dva měsíce, herní rok tedy trvá šest dní. Prádlomaty vydělávají, i když hru zavřeš — po návratu se ti všechno dopočítá. '
     + 'Místa na mapě jsou skutečná a jejich skóre počítá stejný nástroj, kterým Best Series hledá místa doopravdy. '
     + 'Platí se v <b>laundrech (L$)</b> — herní měně, která nemá žádnou skutečnou hodnotu.</p></div>'
     + '<button class="btn sec big" id="do-reset">Začít znovu od nuly</button>';
@@ -432,14 +586,15 @@ function paintMe() {
 }
 
 // ─── Přepínání záložek ───────────────────────────────────────────────────────
+var TABS = ['map', 'shop', 'net', 'bank', 'me'];
+function switchTab(v) {
+  [].forEach.call(document.querySelectorAll('.tabs button'), function (x) { x.classList.toggle('on', x.getAttribute('data-v') === v); });
+  TABS.forEach(function (k) { $('v-' + k).classList.toggle('hidden', k !== v); });
+  paint();
+  if (v === 'map' && map) setTimeout(function () { map.invalidateSize(); }, 50);
+}
 [].forEach.call(document.querySelectorAll('.tabs button'), function (b) {
-  b.onclick = function () {
-    var v = b.getAttribute('data-v');
-    [].forEach.call(document.querySelectorAll('.tabs button'), function (x) { x.classList.toggle('on', x === b); });
-    ['map', 'net', 'bank', 'me'].forEach(function (k) { $('v-' + k).classList.toggle('hidden', k !== v); });
-    paint();
-    if (v === 'map' && map) setTimeout(function () { map.invalidateSize(); }, 50);
-  };
+  b.onclick = function () { switchTab(b.getAttribute('data-v')); };
 });
 $('open-areas').onclick = areasSheet;
 
@@ -447,11 +602,13 @@ $('open-areas').onclick = areasSheet;
 function startGame() {
   ['intro', 'quiz', 'role'].forEach(function (id) { $(id).classList.add('hidden'); });
   $('app').classList.remove('hidden');
-  var before = S.cash;
+  var before = S.cash, waiting = (S.orders || []).length;
   tick(); save(); paint();
+  var arrived = waiting - (S.orders || []).length;
   initMap();
   var gained = S.cash - before;
-  if (gained > 1000) toast('Než ses vrátil, síť vydělala ' + kcFull(gained) + '.', 'ok');
+  if (arrived) toast('Dorazilo ' + arrived + ' strojů — čekají na skladě v obchodě.', 'ok');
+  else if (gained > 1000) toast('Než ses vrátil, síť vydělala ' + kcFull(gained) + '.', 'ok');
   setInterval(function () { tick(); save(); paint(); }, 5000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { tick(); save(); paint(); } });
 }

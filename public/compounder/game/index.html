@@ -43,7 +43,7 @@
     <ul class="intro-pts">
       <li><b>Skutečná místa.</b> Mapa je opravdová. Benzínky, obchodní domy a myčky taky — jen je musíš najít.</li>
       <li><b>Skutečná ekonomika.</b> Čísla jsou z reálného modelu prádlomatu, ne vymyšlená.</li>
-      <li><b>Jeden den = jeden rok.</b> Prádlomaty vydělávají, i když hru zavřeš.</li>
+      <li><b>Jeden den = dva herní měsíce.</b> Prádlomaty vydělávají, i když hru zavřeš.</li>
       <li><b>Platí se v laundrech (L$).</b> Herní měna, kterou si vyděláš nebo půjčíš od herní banky.</li>
     </ul>
     <button class="btn big" id="go-quiz">Začít podnikat</button>
@@ -82,7 +82,7 @@
   <header class="top">
     <div class="t-item"><span>Rok</span><b id="t-year">1</b></div>
     <div class="t-item"><span>Hotovost</span><b id="t-cash">0</b></div>
-    <div class="t-item"><span>Zisk / rok</span><b id="t-rate" class="ok">0</b></div>
+    <div class="t-item"><span>Zisk / měs</span><b id="t-rate" class="ok">0</b></div>
     <div class="t-item"><span>Prádlomaty</span><b id="t-count">0</b></div>
   </header>
 
@@ -90,8 +90,16 @@
     <!-- MAPA -->
     <section id="v-map" class="view">
       <div id="map"></div>
-      <div class="map-hint" id="map-hint">Vyber oblast a prozkoumej ji. Místa jsou schovaná — dokud oblast neprozkoumáš, nic na mapě neuvidíš.</div>
-      <button class="btn float" id="open-areas">🔎 Prozkoumat oblast</button>
+      <div class="map-hint" id="map-hint">Napiš město a pošli tam člověka, ať ho projde. Místa jsou schovaná — dokud město neprozkoumáš, nic na mapě neuvidíš.</div>
+      <button class="btn float" id="open-areas">🔎 Prozkoumat město</button>
+    </section>
+
+    <!-- OBCHOD -->
+    <section id="v-shop" class="view hidden">
+      <h2>Obchod</h2>
+      <p class="muted small" style="margin:-8px 0 14px">Prádlomat si kup i bez místa — počká ti na skladě. Dodání trvá dva herní měsíce, to je jeden skutečný den.</p>
+      <div id="shop-stock"></div>
+      <div id="shop-list"></div>
     </section>
 
     <!-- PRÁDLOMATY -->
@@ -116,6 +124,7 @@
 
   <nav class="tabs">
     <button data-v="map" class="on"><span>🗺</span>Mapa</button>
+    <button data-v="shop"><span>🛒</span>Obchod</button>
     <button data-v="net"><span>🧺</span>Síť</button>
     <button data-v="bank"><span>🏦</span>Banka</button>
     <button data-v="me"><span>👤</span>Já</button>

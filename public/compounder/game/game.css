@@ -99,6 +99,9 @@ main{padding-bottom:calc(66px + var(--safe-b))}
 .kv:first-of-type{border-top:0}
 .kv span{color:var(--text2)}
 .kv b{font-variant-numeric:tabular-nums}
+.inp{flex:1;min-width:0;background:rgba(4,8,16,.75);border:1px solid var(--border2);border-radius:12px;
+  color:var(--text);padding:12px 13px;font:inherit;font-size:16px;outline:none}
+.inp:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(79,209,255,.14)}
 .empty{text-align:center;color:var(--text3);padding:34px 16px;font-size:13.5px}
 .pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid var(--border2);color:var(--text2)}
 .pill.good{color:var(--ok);border-color:rgba(47,227,160,.5)}
@@ -106,14 +109,19 @@ main{padding-bottom:calc(66px + var(--safe-b))}
 .pill.bad{color:var(--err);border-color:rgba(255,93,108,.5)}
 .bar{height:7px;border-radius:5px;background:rgba(120,160,255,.14);overflow:hidden;margin-top:8px}
 .bar i{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,#3ee08a,var(--blue))}
+.stock{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.stock b{display:inline-flex;align-items:center;gap:6px;background:rgba(47,227,160,.1);border:1px solid rgba(47,227,160,.45);
+  color:var(--ok);border-radius:999px;padding:6px 13px;font-size:13px}
+.stock b.way{background:rgba(255,216,102,.08);border-color:rgba(255,216,102,.45);color:var(--warn)}
 
 /* ─── Spodní navigace ─── */
-.tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(4,1fr);
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(5,1fr);
   background:rgba(4,6,12,.96);border-top:1px solid var(--border);
   padding-bottom:var(--safe-b);backdrop-filter:blur(14px)}
 .tabs button{background:none;border:0;color:var(--text3);font-size:10.5px;font-weight:700;
   padding:8px 2px 9px;display:flex;flex-direction:column;align-items:center;gap:2px}
-.tabs button span{font-size:19px;line-height:1}
+.tabs button span{font-size:18px;line-height:1}
+.tabs button{font-size:10px}
 .tabs button.on{color:var(--blue)}
 
 /* ─── Spodní panel ─── */

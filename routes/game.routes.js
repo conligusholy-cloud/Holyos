@@ -56,7 +56,7 @@ const AREA_BY_ID = {}; AREAS.forEach((a) => { AREA_BY_ID[a.id] = a; });
 
 router.get('/areas', (req, res) => {
   res.set('Cache-Control', 'public, max-age=3600');
-  res.json({ areas: AREAS.map((a) => ({ id: a.id, name: a.name, lat: a.lat, lon: a.lon, size: a.size, cost: a.cost })) });
+  res.json({ areas: AREAS.map((a) => ({ id: a.id, name: a.name, lat: a.lat, lon: a.lon, size: a.size })) });
 });
 
 // ─── Průzkum oblasti ─────────────────────────────────────────────────────────
@@ -82,6 +82,48 @@ function toSpot(c, i, areaId) {
   };
 }
 
+// Hledání v libovolném městě, které hráč napíše. Geokódování i vyhledání řeší
+// stejný hledač jako obchodní nástroj; my jen hlídáme rozumný vstup a cache.
+function normQuery(q) {
+  return String(q || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+}
+async function scoutQuery(query, res) {
+  const key = query.toLowerCase();
+  const hit = scoutCache.get(key);
+  if (hit && Date.now() - hit.at < SCOUT_TTL) {
+    return res.set('Cache-Control', 'public, max-age=600').json(hit.data);
+  }
+  const r = await finder.searchArea(query, {
+    // Ve hře chceme i benzínky a myčky, ne jen obchodní domy — hráč má co hledat.
+    candidate_types: ['supermarket', 'hypermarket', 'mall', 'department_store', 'fuel', 'car_wash'],
+    max_candidates: 40,
+  });
+  if (r && r.error) return res.status(503).json({ error: r.error });
+  const spots = (r.candidates || []).map((c, i) => toSpot(c, i, key.replace(/[^a-z0-9]+/g, '-')));
+  const data = {
+    area: { id: key, name: (r.area && r.area.display_name ? String(r.area.display_name).split(',')[0].trim() : query),
+      lat: r.area ? r.area.lat : null, lon: r.area ? r.area.lon : null },
+    population: r.population || null,
+    spots,
+  };
+  scoutCache.set(key, { at: Date.now(), data });
+  res.set('Cache-Control', 'public, max-age=600').json(data);
+}
+
+// Napsané město: /api/game/scout?q=Kolín
+router.get('/scout', async (req, res, next) => {
+  try {
+    const q = normQuery(req.query.q);
+    if (q.length < 2) return res.status(400).json({ error: 'Napiš jméno města.' });
+    if (!/^[\p{L}\p{N} .,'\-]+$/u.test(q)) return res.status(400).json({ error: 'Tohle jako jméno města nevypadá.' });
+    if (rateLimited('game:' + ipOf(req), 20, 10 * 60e3)) {
+      return res.status(429).json({ error: 'Moc rychle po sobě. Dej tomu chvilku.' });
+    }
+    await scoutQuery(q, res);
+  } catch (err) { next(err); }
+});
+
+// Doporučená oblast ze seznamu: /api/game/scout/praha
 router.get('/scout/:areaId', async (req, res, next) => {
   try {
     const area = AREA_BY_ID[String(req.params.areaId || '')];
@@ -89,24 +131,7 @@ router.get('/scout/:areaId', async (req, res, next) => {
     if (rateLimited('game:' + ipOf(req), 20, 10 * 60e3)) {
       return res.status(429).json({ error: 'Moc rychle po sobě. Dej tomu chvilku.' });
     }
-    const hit = scoutCache.get(area.id);
-    if (hit && Date.now() - hit.at < SCOUT_TTL) {
-      return res.set('Cache-Control', 'public, max-age=600').json(hit.data);
-    }
-    const r = await finder.searchArea(area.query, {
-      // Ve hře chceme i benzínky a myčky, ne jen obchodní domy — hráč má co hledat.
-      candidate_types: ['supermarket', 'hypermarket', 'mall', 'department_store', 'fuel', 'car_wash'],
-      max_candidates: 40,
-    });
-    if (r && r.error) return res.status(503).json({ error: r.error });
-    const spots = (r.candidates || []).map((c, i) => toSpot(c, i, area.id));
-    const data = {
-      area: { id: area.id, name: area.name, lat: area.lat, lon: area.lon },
-      population: r.population || null,
-      spots,
-    };
-    scoutCache.set(area.id, { at: Date.now(), data });
-    res.set('Cache-Control', 'public, max-age=600').json(data);
+    await scoutQuery(area.query, res);
   } catch (err) { next(err); }
 });
 
