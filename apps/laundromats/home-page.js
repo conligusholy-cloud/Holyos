@@ -187,6 +187,7 @@ h3{font-size:20px;font-weight:700;letter-spacing:-.01em;line-height:1.25}
 .visual .glow{position:absolute;inset:8%;border-radius:50%;background:radial-gradient(circle,rgba(79,209,255,.35),rgba(58,108,245,.18) 45%,transparent 70%);filter:blur(10px)}
 .visual .ground{position:absolute;left:6%;right:6%;bottom:9%;height:14%;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.65),transparent)}
 .visual img{position:relative;width:100%;height:auto;margin-top:8%;filter:drop-shadow(0 30px 50px rgba(0,0,0,.55));animation:float 7s ease-in-out infinite}
+.visual .hvid{position:relative;display:block;width:58%;margin-top:2% !important;aspect-ratio:9/16;height:auto;object-fit:cover;margin:0 auto;border-radius:26px;border:1px solid var(--line2);background:#0b1220;box-shadow:0 30px 60px -20px rgba(0,0,0,.8),0 0 0 6px rgba(79,209,255,.06)}
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 .visual .note{position:absolute;right:4%;top:2%;font-size:11.5px;color:var(--tx3);letter-spacing:.04em}
 .statcard{position:absolute;left:-4%;bottom:4%;max-width:270px;padding:18px 20px;border-radius:18px;background:rgba(10,16,30,.82);border:1px solid var(--line2);backdrop-filter:blur(12px);box-shadow:0 20px 50px -20px rgba(0,0,0,.8)}
@@ -330,7 +331,7 @@ function homePage(lang) {
     + '<title>' + esc(L.seoTitle) + '</title><meta name="description" content="' + esc(L.seoDesc) + '">'
     + '<meta property="og:title" content="' + esc(L.seoTitle) + '"><meta property="og:description" content="' + esc(L.seoDesc) + '"><meta property="og:type" content="website"><meta property="og:image" content="/img/pradlomat-flex.webp">'
     + '<meta name="theme-color" content="#04060c"><link rel="icon" href="/favicon.svg" type="image/svg+xml">'
-    + '<link rel="preload" as="image" href="/img/pradlomat-flex.webp" fetchpriority="high">'
+    + '<link rel="preload" as="image" href="/media/provoz-poster.jpg" fetchpriority="high">'
     + require('./lm-header').FONT + '<style>' + CSS + require('./lm-header').CSS + '</style></head><body>'
     + '<canvas id="net" aria-hidden="true"></canvas><div class="bgglow a" aria-hidden="true"></div><div class="bgglow b" aria-hidden="true"></div><div class="gridfx" aria-hidden="true"></div>'
     + '<a class="skip" href="#obsah">' + esc(L.skip) + '</a>'
@@ -346,7 +347,7 @@ function homePage(lang) {
     + '<ul class="pts rv">' + L.hero.points.map((p) => '<li>' + svg('check', 18) + esc(p) + '</li>').join('') + '</ul></div>'
     + '<div class="visual rv"><div class="glow"></div><div class="ground"></div>'
     // PH: nahradit fotografií skutečného venkovního prádlomatu v reálném prostředí (WebP, ~1600 px, < 250 kB)
-    + '<img src="/img/pradlomat-flex.webp" width="1100" height="896" alt="' + esc(L.hero.imgAlt) + '" fetchpriority="high" decoding="async">'
+    + '<video class="hvid" src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" autoplay muted loop playsinline preload="auto" aria-label="' + esc(L.hero.imgAlt) + '"></video>'
     + '<div class="statcard"><b class="grad">70+</b><p>' + esc(L.hero.card) + '</p></div></div></div></section>'
     // ── skutečné provozovny (3 fotky s názvem města) — PH: doplnit skutečné fotografie + města ──
     + '<section id="provozovny" style="padding:10px 0 70px"><div class="wrap"><div class="kicker">' + esc(L.hero.sites) + '</div><div class="sites">'
