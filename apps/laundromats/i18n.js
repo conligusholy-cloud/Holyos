@@ -27,16 +27,26 @@ const ATTRS = ['title', 'alt', 'placeholder', 'aria-label', 'data-lock', 'data-s
 const META_RE = /<meta\s+[^>]*?(?:name|property)\s*=\s*"(description|og:title|og:description|twitter:title|twitter:description)"[^>]*>/gi;
 
 const cache = new Map();
+const overlay = { en: {}, pl: {} }; // automatické překlady z HolyOS (viz addOverlay)
 function dict(lang) {
   if (lang === 'cs' || !LANGS.includes(lang)) return null;
   if (cache.has(lang)) return cache.get(lang);
   let d = {};
   try { d = JSON.parse(fs.readFileSync(path.join(DICT_DIR, lang + '.json'), 'utf8')) || {}; }
   catch (e) { if (e.code !== 'ENOENT') console.warn('[i18n] ' + lang + '.json:', e.message); }
+  const ov = overlay[lang] || {};
+  for (const k in ov) if (d[k] == null || d[k] === '') d[k] = ov[k];
   cache.set(lang, d);
   return d;
 }
 function reload() { cache.clear(); }
+// Automatické překlady z HolyOS (i18n-auto.js) — doplňují slovník z repa; ruční překlad v *.json má přednost.
+function addOverlay(lang, map) {
+  if (!overlay[lang] || !map) return 0;
+  let n = 0; const d = dict(lang) || {};
+  for (const [k, v] of Object.entries(map)) { if (v && !overlay[lang][k]) { overlay[lang][k] = String(v); n++; } if (v && (d[k] == null || d[k] === '')) d[k] = String(v); }
+  return n;
+}
 
 // Jazyky, které se nabídnou v přepínači. Jazyk s prázdným (nebo skoro prázdným)
 // slovníkem se nenabízí — návštěvník by klikl na EN a dostal českou stránku.
@@ -247,4 +257,4 @@ function hreflangTags(cestaBezPredpony, verejnaAdresa) {
     + '<link rel="alternate" hreflang="x-default" href="' + zaklad + (cesta || '/') + '">';
 }
 
-module.exports = { LANGS, LANG_LABEL, available, detekuj, jeRobot, hreflangTags, jazykZProhlizece, zemeZHlavicek, extract, extractJs, apply, applyJs, dict, reload, key, translatable, walk };
+module.exports = { addOverlay, LANGS, LANG_LABEL, available, detekuj, jeRobot, hreflangTags, jazykZProhlizece, zemeZHlavicek, extract, extractJs, apply, applyJs, dict, reload, key, translatable, walk };

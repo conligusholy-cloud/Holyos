@@ -123,9 +123,12 @@ const shell = (html, lang) => (String(html).replace('@@LHDR@@', LH.header({ lang
 // zbytek adresy obslouží běžné routy a odpověď se na konci přeloží (i18n.js).
 // Chybějící překlad = text zůstane česky, stránka se nikdy nerozbije.
 const I18N = require('./i18n');
+// Nové texty bez překladu se automaticky přeloží přes HolyOS (Claude) — viz i18n-auto.js
+const I18N_AUTO = require('./i18n-auto')({ HOLYOS_URL, LM_SECRET });
+const trAuto = (html, lang, req, js) => { const miss = new Set(); const out = js ? I18N.applyJs(html, lang, miss) : I18N.apply(html, lang, miss); const a = req && req.account; I18N_AUTO.collect(lang, miss, a ? [a.name, a.email, a.phone, a.company] : []); return out; };
 const send = (res, html, req) => {
   const lang = (req && req.lang) || 'cs';
-  let out = lang === 'cs' ? String(html) : I18N.apply(html, lang);
+  let out = lang === 'cs' ? String(html) : trAuto(html, lang, req);
   // Odkazy na ostatní jazykové verze téže stránky — kvůli vyhledávačům, aby
   // nebraly překlady jako duplicitní obsah a aby každému nabídly tu jeho.
   if (req && !BEZ_JAZYKA.test(req.path) && out.indexOf('</head>') > 0 && out.indexOf('rel="alternate" hreflang=') === -1) {
@@ -136,7 +139,7 @@ const send = (res, html, req) => {
 // Odpověď s JavaScriptem (booking, kalkulačka) — texty v něm se překládají taky.
 const sendJs = (res, js, req) => {
   const lang = (req && req.lang) || 'cs';
-  return res.set('Cache-Control', 'no-cache').type('application/javascript').send(lang === 'cs' ? js : I18N.applyJs(js, lang));
+  return res.set('Cache-Control', 'no-cache').type('application/javascript').send(lang === 'cs' ? js : trAuto(js, lang, req, true));
 };
 const cestaHtml = () => fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8');
 
@@ -152,7 +155,7 @@ function trackServer(req, event, props) {
   } catch (e) { /* best-effort */ }
 }
 // Stránky účtu, podpory, aplikací a videohovoru: lite() + překlad do jazyka návštěvníka (/en, /pl)
-const lmRender = (req, html) => { const out = lite(html, req); const lang = (req && req.lang) || 'cs'; return lang === 'cs' ? out : I18N.apply(out, lang); };
+const lmRender = (req, html) => { const out = lite(html, req); const lang = (req && req.lang) || 'cs'; return lang === 'cs' ? out : trAuto(out, lang, req); };
 const ACC = require('./lm-account')({ HOLYOS_URL, LM_SECRET, PUBLIC_URL, rateLimited, cookies, ckDomain, sendMail: (p) => sendConfirmMail(p), adminOf: (req) => adminOf(req), render: lmRender, trackServer });
 app.use((req, res, next) => (/^\/(cesta|api\/location|api\/cesta|api\/vc|videocall|uvod|$)/.test(req.path) ? ACC.attach(req, res, next) : next()));
 
