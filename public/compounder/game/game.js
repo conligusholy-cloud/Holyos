@@ -171,6 +171,28 @@ function showRole(id) {
 
 // ─── Mapa ────────────────────────────────────────────────────────────────────
 var map = null, layer = null, AREAS = [];
+// Dlaždice NEBEREME z tile.openstreetmap.org — jejich pravidla to aplikacím zakazují
+// a servery nás zablokují (403 „App is not following the tile usage policy").
+// Primárně tedy tmavá mapa z CARTO (sedí ke hře a CartoCDN už jinde v HolyOS používáme),
+// a kdyby nejela, přepneme se na Esri — stejný podklad, jaký má „Najít místo".
+var BASEMAPS = [
+  { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    opts: { maxZoom: 19, subdomains: 'abcd', attribution: '&copy; OpenStreetMap, &copy; CARTO' } },
+  { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    opts: { maxZoom: 19, attribution: 'Tiles &copy; Esri' } }
+];
+var baseIdx = 0, baseLayer = null, tileErrs = 0;
+function addBasemap() {
+  var b = BASEMAPS[baseIdx];
+  if (baseLayer) { map.removeLayer(baseLayer); }
+  tileErrs = 0;
+  baseLayer = L.tileLayer(b.url, b.opts).addTo(map);
+  baseLayer.on('tileerror', function () {
+    tileErrs++;
+    // Pár chybějících dlaždic je normální; až když padá celá vrstva, zkusíme další zdroj.
+    if (tileErrs > 6 && baseIdx < BASEMAPS.length - 1) { baseIdx++; addBasemap(); }
+  });
+}
 function initMap() {
   if (map) return;
   // Mapa jede z CDN. Když se nenačte (slabá síť, blokovaný skript), hra musí běžet dál
@@ -182,9 +204,7 @@ function initMap() {
     return;
   }
   map = L.map('map', { zoomControl: false }).setView([49.82, 15.47], 7);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18, attribution: '&copy; OpenStreetMap'
-  }).addTo(map);
+  addBasemap();
   L.control.zoom({ position: 'bottomright' }).addTo(map);
   layer = L.layerGroup().addTo(map);
   drawMap();
