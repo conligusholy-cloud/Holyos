@@ -518,15 +518,27 @@ var SCOUT_MAX_WAIT = 150000;
 function scout(city, btn) {
   if (!city || city.length < 2) return toast('Napiš, do kterého města se má jet.', 'err');
   if (S.cash < SCOUT_COST) return toast('Na cestu nemáš dost hotovosti.', 'err');
-  var started = Date.now(), stop = false;
+  var started = Date.now(), stop = false, timer = null, netErr = 0;
   var note = $('city-note');
+  var done = function () { stop = true; clearTimeout(timer); document.removeEventListener('visibilitychange', wake); };
   var fail = function (msg) {
-    stop = true; btn.disabled = false; btn.textContent = 'Hledat';
+    done();
+    btn.disabled = false; btn.textContent = 'Hledat';
     if (note) note.textContent = '';
     toast(msg, 'err');
   };
   btn.disabled = true; btn.textContent = 'Hledám…';
   if (note) note.textContent = 'Posílám tam člověka. Projít nové město může trvat i minutu.';
+
+  // Postup píšeme i do poznámky pod polem — tlačítko bývá na mapě překryté.
+  var progress = function (s) {
+    btn.textContent = 'Hledám… ' + s + ' s';
+    if (note) note.textContent = 'Chodí po městě (' + s + ' s). Nech stránku otevřenou, může to trvat i minutu.';
+  };
+  // iOS uspí časovače, jakmile se přepne aplikace nebo zhasne displej. Po návratu
+  // se proto hned zeptáme znovu, ať se hledání nezasekne na půl cesty.
+  var wake = function () { if (!stop && !document.hidden) { clearTimeout(timer); timer = setTimeout(poll, 50); } };
+  document.addEventListener('visibilitychange', wake);
 
   var poll = function () {
     if (stop) return;
@@ -534,14 +546,17 @@ function scout(city, btn) {
       .then(function (r) { return r.json().then(function (j) { if (!r.ok && r.status !== 202) throw new Error(j.error || ('Chyba ' + r.status)); return j; }); })
       .then(function (j) {
         if (stop) return;
+        netErr = 0;
         if (j && j.pending) {
           var s = Math.round((Date.now() - started) / 1000);
           if (Date.now() - started > SCOUT_MAX_WAIT) {
             return fail('Hledání trvá moc dlouho. Zkus to za chvíli znovu — mezitím běží dál a podruhé to bude hned.');
           }
-          btn.textContent = 'Hledám… ' + s + ' s';
-          return setTimeout(poll, 2500);
+          progress(s);
+          timer = setTimeout(poll, 2500);
+          return;
         }
+        done();
         btn.disabled = false; btn.textContent = 'Hledat';
         if (note) note.textContent = '';
         if (!j.spots || !j.spots.length) return toast('Tam se nic vhodného nenašlo. Peníze ti zůstávají.', 'err');
@@ -559,7 +574,12 @@ function scout(city, btn) {
         if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], 12);
         toast(j.area.name + ': nalezeno ' + j.spots.length + ' míst.', 'ok');
       })
-      .catch(function (e) { fail(e.message); });
+      .catch(function (e) {
+        if (stop) return;
+        // Krátký výpadek sítě (tunel, přepnutí Wi-Fi) hledání nezabíjí — zkusíme to znovu.
+        if (++netErr <= 5 && Date.now() - started < SCOUT_MAX_WAIT) { timer = setTimeout(poll, 3000); return; }
+        fail(e.message || 'Spojení se serverem vázne.');
+      });
   };
   poll();
 }
