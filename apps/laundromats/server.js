@@ -248,7 +248,8 @@ app.get('/r/:code/:variant?', (req, res) => {
 app.get('/cesta/booking.pl.js', (req, res) => { req.lang = 'pl'; sendJs(res, CP.bookingJs(), req); });
 
 // Ochrana osobních údajů (stručné informace; správce Best Series s.r.o.)
-app.get('/gdpr', (req, res) => send(res, '<!DOCTYPE html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ochrana osobních údajů · Laundromats</title><style>body{font-family:Inter,Segoe UI,Arial,sans-serif;background:#04060c;color:#c9d6ee;max-width:720px;margin:0 auto;padding:40px 22px;line-height:1.6}h1{color:#fff}a{color:#4fd1ff}</style></head><body><p><a href="/cesta">← zpět</a></p><h1>Ochrana osobních údajů</h1><p>Správcem osobních údajů je Best Series s.r.o. Údaje, které vyplníte při rezervaci schůzky (jméno, příjmení, e-mail, telefon), zpracováváme pouze za účelem domluvení a vedení schůzky o prádlomatu a navazující komunikace. Údaje neposkytujeme třetím stranám mimo poskytovatele nezbytných služeb (e-mail, SMS, kalendář).</p><p>Máte právo na přístup, opravu a výmaz údajů a na podání námitky. Žádost nám pošlete na <a href="mailto:info@laundromats.eu">info@laundromats.eu</a>.</p></body></html>', req));
+const GDPR = require('./gdpr-page');
+app.get('/gdpr', (req, res) => send(res, GDPR.page(), req));
 
 // ── rezervace schůzky: veřejné endpointy HolyOS (termíny, kontakt, rezervace) ──
 async function holyosMeeting(req, res, method, sub) {
