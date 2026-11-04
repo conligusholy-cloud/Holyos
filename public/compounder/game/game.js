@@ -52,33 +52,50 @@ var DELIVERY_MONTHS = 2;         // dodání prádlomatu = 2 herní měsíce (p�
 var BANK_BASE = 1000000;         // startovní rámec v bance
 var BANK_PER_UNIT = 600000;      // o kolik rámec povyroste s každým prádlomatem
 var BANK_PER_DAY = 100000;       // co banka sama doplní za skutečný den
-var REVEAL_COST = 35000;         // prověření jednoho místa
+var REVEAL_COST = 5000;          // obhlídka místa — jen se tam někdo zajede podívat
+var CONN_MIN = 50000, CONN_MAX = 100000;  // přípojky se platí až po domluvě nájmu, podle místa
+var RENT_EUR = 165;              // základní měsíční nájem z reálného modelu (€)
 var SCOUT_COST = 20000;          // cesta do města a hledání vhodných míst
 var CASH_RESERVE = 120000;       // tolik hotovosti banka nenechá utratit — musí zbýt na prověření místa a instalaci
 var OPERATING_MAX = 150000;      // provozní úvěr nad rámec úvěrového stropu, aby hra nikdy neskončila ve slepé uličce
 
 // Lepší místo = víc zákazníků. Skóre dává hledač míst ze skutečných dat.
 function placeFactor(score) { return Math.max(0.3, Math.min(1.7, 0.35 + (score / 100) * 1.25)); }
-// Lukrativnější typ místa = vyšší nájem a provozní náklady.
-var COST_F = { mall: 1.25, hypermarket: 1.2, department_store: 1.15, supermarket: 1.1, fuel: 1, car_wash: 0.9 };
 var KIND_LABEL = { supermarket: 'Supermarket', hypermarket: 'Hypermarket', mall: 'Obchodní centrum',
   department_store: 'Obchodní dům', fuel: 'Benzínka', car_wash: 'Samoobslužná myčka' };
 
-// Ceník prádlomatů je o 25 % nad modelovou cenou; instalace zůstává na modelové ceně.
+// Ceník prádlomatů je o 25 % nad modelovou cenou.
 var PRICE_MULT = 1.25;
-// Cena stroje (platí se v obchodě) a instalace na místě (projekt, povolení, přípojky).
 function machinePrice(m) { return Math.round(m.machine * EUR * PRICE_MULT); }
-function installPrice(m) { return Math.round((m.permit + m.conn) * EUR); }
-function investOf(m) { return machinePrice(m) + installPrice(m); }
+
+// Každé místo má svoje podmínky, ale pořád ty samé — odvozují se z jeho id,
+// takže se při každém otevření nepřepočítají na něco jiného.
+function spotHash(id, salt) {
+  var t = String(id) + (salt || ''), h = 2166136261;
+  for (var i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return ((h >>> 0) % 10000) / 10000;
+}
+// Přípojky (voda, odpad, elektřina) — platí se až po domluvě nájmu.
+function connPrice(sp) { return Math.round((CONN_MIN + spotHash(sp.id, 'c') * (CONN_MAX - CONN_MIN)) / 1000) * 1000; }
+// Měsíční nájem: lepší místo si řekne o víc, zbytek je o tom, jak se domluvíš.
+function rentOf(sp) {
+  var attract = 0.7 + (Math.max(0, Math.min(100, sp.score)) / 100) * 0.8;
+  var deal = 0.9 + spotHash(sp.id, 'r') * 0.3;
+  return Math.round(RENT_EUR * EUR * attract * deal / 100) * 100;
+}
+function investOf(m, sp) { return machinePrice(m) + (sp ? connPrice(sp) : Math.round(CONN_MIN + (CONN_MAX - CONN_MIN) / 2)); }
 function economics(spot, modelKey) {
   var m = MODELS[modelKey] || MODELS.flex;
   var perday = m.perday * placeFactor(spot.score);
   var revenue = Math.round(perday * 30.5 * m.spend * EUR);
-  var cost = Math.round(m.cost * EUR * (COST_F[spot.kind] || 1));
+  var provoz = Math.round((m.cost - RENT_EUR) * EUR);   // energie, servis, úklid — bez nájmu
+  var rent = rentOf(spot);
+  var cost = provoz + rent;
   var profit = revenue - cost;
-  var inv = investOf(m);
-  return { model: m.key, invest: inv, machine: machinePrice(m), install: installPrice(m),
-    revenue: revenue, cost: cost, profit: profit,
+  var conn = connPrice(spot);
+  var inv = machinePrice(m) + conn;
+  return { model: m.key, invest: inv, machine: machinePrice(m), install: conn, conn: conn,
+    provoz: provoz, rent: rent, revenue: revenue, cost: cost, profit: profit,
     perday: Math.round(perday * 10) / 10, payback: profit > 0 ? inv / (profit * 12) : null };
 }
 
@@ -118,6 +135,7 @@ function fresh(profileId) {
     areas: {},     // id oblasti → { name, scoutedAt, spots:[…] }
     units: [],     // postavené prádlomaty
     revealed: {},  // id místa → true
+    leases: {},    // id místa → { rent, at } — domluvený nájem
     orders: [],    // koupené stroje na cestě: { model, arrivesAt }
     stock: {},     // model → kolik kusů čeká na skladě
     stats: { earned: 0, interest: 0 }
@@ -131,6 +149,7 @@ function load() {
     // Rozehraná hra z verze bez obchodu — jen doplníme, co chybí, ať o síť nikdo nepřijde.
     if (!o.orders) o.orders = [];
     if (!o.stock) o.stock = {};
+    if (!o.leases) o.leases = {};
     o.v = 2;
     return o;
   } catch (e) { return null; }
@@ -464,23 +483,49 @@ function scout(city, btn) {
 function spotSheet(sp, areaId) {
   var unit = S.units.filter(function (u) { return u.spotId === sp.id; })[0];
   if (unit) return unitSheet(unit);
+
+  // 1. krok — obhlídka. Levná, jen se tam někdo zajede podívat.
   if (!S.revealed[sp.id]) {
     sheet('<h3>Neprověřené místo</h3>'
-      + '<p class="muted small">Víš jen, že tu něco je. Prověření ti ukáže, kolik tu chodí lidí, jaká je konkurence a jestli se tu prádlomat vyplatí.</p>'
+      + '<p class="muted small">Víš jen, že tu něco je. Obhlídka ti ukáže, kolik tu chodí lidí, jaká je konkurence a jestli se tu prádlomat vyplatí.</p>'
       + '<div class="kv"><span>Typ místa</span><b>' + esc(KIND_LABEL[sp.kind] || 'Neznámý') + '</b></div>'
-      + '<div class="kv"><span>Cena prověření</span><b>' + kcFull(REVEAL_COST) + '</b></div>'
+      + '<div class="kv"><span>Cena obhlídky</span><b>' + kcFull(REVEAL_COST) + '</b></div>'
       + '<button class="btn big" id="do-reveal"' + (S.cash < REVEAL_COST ? ' disabled' : '') + '>Prověřit místo</button>'
-      + (S.cash < REVEAL_COST ? '<p class="fine">Na prověření nemáš dost hotovosti.</p>' : ''));
+      + (S.cash < REVEAL_COST ? '<p class="fine">Na obhlídku nemáš dost hotovosti.</p>' : ''));
     var b = $('do-reveal');
     if (b) b.onclick = function () { S.cash -= REVEAL_COST; S.revealed[sp.id] = true; save(); paint(); drawMap(); spotSheet(sp, areaId); };
     return;
   }
-  sheet('<h3>' + esc(sp.name) + '</h3>'
+
+  var lease = S.leases[sp.id];
+  var head = '<h3>' + esc(sp.name) + '</h3>'
     + '<p class="muted small">' + esc(KIND_LABEL[sp.kind] || 'Místo') + ' · ' + esc(S.areas[areaId] ? S.areas[areaId].name : '') + '</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(sp.score) + '</div>'
     + '<div class="kv"><span>Parkovacích ploch v okolí</span><b>' + (sp.parking != null ? sp.parking : '—') + '</b></div>'
     + '<div class="kv"><span>Konkurence do 1,5 km</span><b>' + (sp.competition != null ? sp.competition : '—') + '</b></div>'
-    + '<div class="kv"><span>Tahouni provozu</span><b>' + (sp.anchors != null ? sp.anchors : '—') + '</b></div>'
+    + '<div class="kv"><span>Tahouni provozu</span><b>' + (sp.anchors != null ? sp.anchors : '—') + '</b></div>';
+
+  // 2. krok — domluvit s majitelem nájem. Zadarmo, ale bez něj se stavět nedá.
+  if (!lease) {
+    sheet(head
+      + '<h3 style="margin-top:18px">Nájem</h3>'
+      + '<p class="muted small">Než sem něco postavíš, musíš se s majitelem pozemku dohodnout na nájmu. '
+      + 'Teprve pak se platí přípojky a staví.</p>'
+      + '<div class="kv"><span>Odhad nájmu</span><b>' + kcFull(Math.round(rentOf(sp) * 0.9)) + ' – ' + kcFull(Math.round(rentOf(sp) * 1.1)) + ' / měsíc</b></div>'
+      + '<button class="btn big" id="do-lease">Domluvit nájem</button>');
+    var l = $('do-lease');
+    if (l) l.onclick = function () {
+      S.leases[sp.id] = { rent: rentOf(sp), at: Date.now() };
+      save(); spotSheet(sp, areaId);
+      toast('Nájem domluven na ' + kcFull(S.leases[sp.id].rent) + ' měsíčně.', 'ok');
+    };
+    return;
+  }
+
+  // 3. krok — vybrat stroj a zaplatit přípojky.
+  sheet(head
+    + '<div class="kv"><span>Domluvený nájem</span><b class="ok">' + kcFull(lease.rent) + ' / měsíc</b></div>'
+    + '<div class="kv"><span>Přípojky na tomhle místě</span><b>' + kcFull(connPrice(sp)) + '</b></div>'
     + '<h3 style="margin-top:18px">Co tu postavit</h3>'
     + MODEL_ORDER.map(function (k) { return modelCard(sp, economics(sp, k)); }).join(''));
   [].forEach.call($('sheet-body').querySelectorAll('[data-build]'), function (b) {
@@ -500,6 +545,7 @@ function modelCard(sp, e) {
     + '<p class="muted small" style="margin:2px 0 8px">' + esc(m.desc) + '</p>'
     + '<div class="kv"><span>Zákazníků / den</span><b>' + String(e.perday).replace('.', ',') + '</b></div>'
     + '<div class="kv"><span>Obrat / měsíc</span><b>' + kcFull(e.revenue) + '</b></div>'
+    + '<div class="kv"><span>Provoz + nájem / měsíc</span><b>' + kcFull(e.cost) + '</b></div>'
     + '<div class="kv"><span>Zisk / měsíc</span><b class="' + (e.profit > 0 ? 'ok' : 'err') + '">' + kcFull(e.profit) + '</b></div>'
     + '<div class="kv"><span>Návratnost</span><b>' + (e.payback ? e.payback.toFixed(1).replace('.', ',') + ' roku' : 'nikdy') + '</b></div>'
     + btn + '</div>';
@@ -561,8 +607,8 @@ function paintShop() {
       + '<div class="row" style="margin-top:12px"><h3>' + m.name + '</h3><b>' + kc(price) + ' ' + CUR + '</b></div>'
       + '<p class="muted small" style="margin:2px 0 8px">' + esc(m.desc) + '</p>'
       + '<div class="kv"><span>Zákazníků / den na průměrném místě</span><b>' + m.perday + '</b></div>'
-      + '<div class="kv"><span>Provozní náklady / měsíc</span><b>' + kcFull(Math.round(m.cost * EUR)) + '</b></div>'
-      + '<div class="kv"><span>Instalace na místě (navíc)</span><b>' + kcFull(installPrice(m)) + '</b></div>'
+      + '<div class="kv"><span>Provoz / měsíc (bez nájmu)</span><b>' + kcFull(Math.round((m.cost - RENT_EUR) * EUR)) + '</b></div>'
+      + '<div class="kv"><span>Přípojky na místě (navíc)</span><b>' + kcFull(CONN_MIN) + ' – ' + kcFull(CONN_MAX) + '</b></div>'
       + '<div class="kv"><span>Dodání</span><b>' + DELIVERY_MONTHS + ' herní měsíce (1 den)</b></div>'
       + '<button class="btn sm" style="width:100%;margin-top:10px" data-buy="' + k + '"' + (f.ok ? '' : ' disabled') + '>'
       + (f.ok ? 'Koupit ' + m.name : 'Nemáš na to') + '</button></div>';
@@ -589,10 +635,11 @@ function buySheet(modelKey) {
 
 // ─── Panel: instalace stroje ze skladu na místo ──────────────────────────────
 function installSheet(sp, areaId, modelKey) {
-  var m = MODELS[modelKey], e = economics(sp, modelKey), f = canFinance(e.install);
+  var m = MODELS[modelKey], e = economics(sp, modelKey), f = canFinance(e.conn);
   sheet('<h3>Postavit ' + m.name + '</h3>'
-    + '<p class="muted small">' + esc(sp.name) + ' — projekt, povolení a přípojky. Stroj máš skladem.</p>'
+    + '<p class="muted small">' + esc(sp.name) + ' — teď se platí přípojky (voda, odpad, elektřina). Stroj máš skladem, nájem domluvený.</p>'
     + financeRows(f)
+    + '<div class="kv"><span>Domluvený nájem</span><b>' + kcFull(e.rent) + ' / měsíc</b></div>'
     + '<div class="kv"><span>Zisk tohohle místa / měsíc</span><b class="ok">' + kcFull(e.profit) + '</b></div>'
     + '<button class="btn big" id="do-build"' + (f.ok ? '' : ' disabled') + '>Postavit</button>'
     + (f.ok ? '' : '<p class="fine err">Na instalaci ti chybí ' + kcFull(f.need - f.canBorrow) + '.</p>'));
@@ -615,7 +662,8 @@ function unitSheet(u) {
     + '<div style="margin:8px 0 12px">' + verdictPill(u.score) + '</div>'
     + '<div class="kv"><span>Investice</span><b>' + kcFull(u.eco.invest) + '</b></div>'
     + '<div class="kv"><span>Obrat / měsíc</span><b>' + kcFull(u.eco.revenue) + '</b></div>'
-    + '<div class="kv"><span>Náklady / měsíc</span><b>' + kcFull(u.eco.cost) + '</b></div>'
+    + '<div class="kv"><span>Provoz / měsíc</span><b>' + kcFull(u.eco.provoz != null ? u.eco.provoz : u.eco.cost) + '</b></div>'
+    + (u.eco.rent != null ? '<div class="kv"><span>Nájem / měsíc</span><b>' + kcFull(u.eco.rent) + '</b></div>' : '')
     + '<div class="kv"><span>Zisk / měsíc</span><b class="ok">' + kcFull(u.eco.profit) + '</b></div>'
     + '<div class="kv"><span>Vydělal celkem</span><b>' + kcFull(u.eco.profit * 12 * years) + '</b></div>');
 }
