@@ -163,6 +163,103 @@ const SERVICES = [
   ['extended_warranty', 'Prodloužená záruka', 'Záruka na prádlomat celkem 2 až 5 let. První rok je ze zákona zdarma.'],
 ];
 
+
+// Okno „Mám zájem" — zákazník jen potvrdí opravdový zájem a my mu voláme.
+// Telefon chceme jen od návštěvníka, kterého ještě neznáme; u toho, kdo přišel
+// z našeho odkazu (?t=/?l=), si kontakt doplníme sami a stačí mu kliknout OK.
+const ZAJEM_DLG = `
+<dialog class="helpdlg" id="zajemDlg"><div class="hd-in">
+  <div class="hd-head"><span class="hd-q">!</span><h2 id="zajemTitle">Máte opravdový zájem?</h2>
+    <button class="hd-x" type="button" data-zavrit aria-label="Zavřít">✕</button></div>
+  <div class="hd-body">
+    <div id="zajemForm">
+      <p>Pokud máte o <b id="zajemProd">prádlomat</b> opravdový zájem, klikněte na <b>OK</b> — do několika minut se vám ozve kompetentní osoba.</p>
+      <div id="zajemTelWrap">
+        <label for="zajemTel">Telefon, na který se vám máme ozvat</label>
+        <input id="zajemTel" type="tel" inputmode="tel" autocomplete="tel" placeholder="+420 777 123 456">
+        <label for="zajemJmeno">Jméno (nepovinné)</label>
+        <input id="zajemJmeno" type="text" autocomplete="name" placeholder="Jan Novák">
+      </div>
+      <div id="zajemErr" class="msg err" style="display:none"></div>
+      <div class="row" style="margin-top:14px;justify-content:flex-end">
+        <button class="btn sec" type="button" data-zavrit>Zrušit</button>
+        <button class="btn" type="button" id="zajemOk">OK, mám zájem</button>
+      </div>
+      <input type="text" id="zajemWeb" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+    </div>
+    <div id="zajemDik" style="display:none">
+      <p style="font-size:16px"><b>Děkujeme, máme to.</b></p>
+      <p>Ozveme se vám na uvedené číslo — obvykle do několika minut.</p>
+      <div class="row" style="margin-top:14px;justify-content:flex-end"><button class="btn" type="button" data-zavrit>Zavřít</button></div>
+    </div>
+  </div>
+</div></dialog>
+<script>
+(function(){
+  var dlg = document.getElementById('zajemDlg'); if (!dlg) return;
+  var prod = '';
+  var el = function(id){ return document.getElementById(id); };
+  var znamyKontakt = false;
+
+  // Známe už návštěvníka? Pak telefon nepotřebujeme a stačí potvrdit.
+  try {
+    fetch('/api/cesta/meeting-contact', { credentials: 'same-origin' })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        if (j && j.ok && j.contact && (j.contact.phone || j.contact.email)) {
+          znamyKontakt = true;
+          var w = el('zajemTelWrap'); if (w) w.style.display = 'none';
+        }
+      }).catch(function(){});
+  } catch (e) {}
+
+  document.addEventListener('click', function(e){
+    var b = e.target.closest ? e.target.closest('[data-zajem]') : null;
+    if (b) {
+      prod = b.getAttribute('data-zajem') || 'prádlomat';
+      el('zajemProd').textContent = prod;
+      el('zajemErr').style.display = 'none';
+      el('zajemForm').style.display = '';
+      el('zajemDik').style.display = 'none';
+      if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+      return;
+    }
+    if (e.target.closest && e.target.closest('[data-zavrit]')) {
+      if (dlg.close) dlg.close(); else dlg.removeAttribute('open');
+    }
+  });
+
+  el('zajemOk').addEventListener('click', function(){
+    var tel = (el('zajemTel').value || '').trim();
+    var jm = (el('zajemJmeno').value || '').trim();
+    var err = el('zajemErr');
+    if (!znamyKontakt && tel.replace(/\D/g, '').length < 9) {
+      err.textContent = 'Zadejte prosím telefon, ať se vám můžeme ozvat.';
+      err.style.display = ''; el('zajemTel').focus(); return;
+    }
+    var btn = el('zajemOk'); btn.disabled = true; btn.textContent = 'Odesílám…';
+    fetch('/api/pradlomat-zajem', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({ product: prod, phone: tel, name: jm, website: el('zajemWeb').value,
+        sid: (window.lmSid ? window.lmSid() : undefined) })
+    }).then(function(r){ return r.json().catch(function(){ return {}; }); })
+      .then(function(j){
+        btn.disabled = false; btn.textContent = 'OK, mám zájem';
+        if (!j || !j.ok) {
+          err.textContent = (j && j.error) || 'Odeslání se nepodařilo, zkuste to prosím znovu.';
+          err.style.display = ''; return;
+        }
+        el('zajemForm').style.display = 'none';
+        el('zajemDik').style.display = '';
+      }).catch(function(){
+        btn.disabled = false; btn.textContent = 'OK, mám zájem';
+        err.textContent = 'Odeslání se nepodařilo, zkuste to prosím znovu.';
+        err.style.display = '';
+      });
+  });
+})();
+</script>`;
+
 function pradlomatyPage(products, cfg) {
   cfg = cfg || {}; const items = cfg.items || {};
   const globalPrices = cfg.show_prices === true || process.env.LM_SHOW_PRICES === '1';
@@ -178,7 +275,7 @@ function pradlomatyPage(products, cfg) {
       <b style="font-size:17px">${esc(p.name_cs)}</b>
       ${p._desc ? `<p class="muted" style="margin:6px 0 0;font-size:14px;line-height:1.5">${esc(p._desc)}</p>` : ''}
       ${showPrices && p._price && p.price_czk != null ? `<div style="font-size:24px;font-weight:800;margin-top:6px">${money(p.price_czk)} <span class="small muted" style="font-weight:500">bez DPH</span></div><div class="small muted">${money(Number(p.price_czk) * 1.21)} s DPH 21 %</div>` : `${p._desc ? '' : '<div class="small muted" style="margin-top:6px">Cenu a financování probereme podle vašeho místa.</div>'}`}
-      <div style="margin-top:auto;padding-top:14px"><a class="btn sm" href="${process.env.LM_HOME_LIVE === '1' ? '/' : '/uvod'}#kontakt">Mám zájem →</a></div></div>`).join('') + `</div>`
+      <div style="margin-top:auto;padding-top:14px"><button type="button" class="btn sm" data-zajem="${esc(p.name_cs)}">Mám zájem →</button></div></div>`).join('') + `</div>`
     : `<div class="card muted">Nabídku strojů právě aktualizujeme. Napište nám a pošleme vám ji.</div>`;
   const svc = `<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px">` + SERVICES.map((s) => `<div class="card" style="margin:0"><b style="font-size:16px">${esc(s[1])}</b><p class="muted" style="margin:8px 0 0">${esc(s[2])}</p></div>`).join('') + `</div>`;
   return layout({ title: 'Prádlomaty', desc: 'Samoobslužné venkovní prádlomaty — co všechno zajistíme a jaké stroje nabízíme.', active: 'pradlomaty', body: `
@@ -187,6 +284,7 @@ function pradlomatyPage(products, cfg) {
   ${grid}
   <h2 style="margin:34px 0 12px;display:flex;align-items:center;gap:8px">${ico('check', 18)} Služby k prádlomatu</h2>
   ${svc}
+  ${ZAJEM_DLG}
   ${cta('Který prádlomat se hodí na vaše místo?', 'Projdeme s vámi lokalitu, výběr stroje i financování.')}
   ` });
 }

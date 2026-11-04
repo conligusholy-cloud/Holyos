@@ -119,6 +119,25 @@ app.post('/api/inquiry', async (req, res) => {
     res.json({ ok: true });
   } catch (e) { res.status(502).json({ ok: false, error: 'Odeslání se nepodařilo' }); }
 });
+// „Mám zájem" u karty prádlomatu → HolyOS (/api/compounder/lm-pradlomat-zajem).
+// Zákazník jen potvrdí opravdový zájem, my mu voláme — proto naléhavá notifikace do Velína.
+app.post('/api/pradlomat-zajem', async (req, res) => {
+  const b = req.body || {};
+  if (b.website) return res.json({ ok: true }); // honeypot (bot)
+  if (rateLimited('zajem:' + req.ip, 5, 3600e3)) return res.status(429).json({ ok: false, error: 'Příliš mnoho odeslání, zkuste to později.' });
+  const ck = cookies(req); let tl = {}; try { tl = JSON.parse(ck.lm_tl || '{}') || {}; } catch (_) {}
+  const sid = SID_RE.test(String(b.sid || '')) ? b.sid : (SID_RE.test(ck.lm_sid || '') ? ck.lm_sid : undefined);
+  try {
+    const r = await fetch(HOLYOS_URL + '/api/compounder/lm-pradlomat-zajem', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': req.ip || '', 'User-Agent': req.headers['user-agent'] || 'laundromats' },
+      body: JSON.stringify({ product: b.product, phone: b.phone, name: b.name, email: b.email, sid,
+        t: tlOk(tl.t, null) ? tl.t : undefined, l: tlOk(null, tl.l) ? tl.l : undefined }),
+      signal: AbortSignal.timeout(15000) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) return res.status(r.status >= 400 ? r.status : 502).json({ ok: false, error: j.error || 'Odeslání se nepodařilo' });
+    res.json({ ok: true });
+  } catch (e) { res.status(502).json({ ok: false, error: 'Odeslání se nepodařilo' }); }
+});
 app.get('/pl', (req, res) => res.redirect(302, '/cesta/pl' + (req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '')));
 app.get('/favicon.svg', (req, res) => res.set('Content-Type', 'image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(LOGO.replace(/^<span[^>]*>/, '').replace(/<\/span>$/, '').replace('width="34" height="34"', 'width="64" height="64"')));
 app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));

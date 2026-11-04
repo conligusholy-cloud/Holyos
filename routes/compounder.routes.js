@@ -150,6 +150,110 @@ router.post('/lm-inquiry', express.json({ limit: '20kb' }), async (req, res) => 
   } catch (err) { console.warn('[lm-inquiry]', err.message); res.status(500).json({ ok: false, error: 'Odeslání se nepodařilo' }); }
 });
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/compounder/lm-pradlomat-zajem { product, phone, name?, email?, sid?, t?, l? }
+// „Mám zájem" u karty prádlomatu na laundromats.eu. Zákazník jen potvrdí, že má
+// opravdový zájem — my mu do pár minut voláme. Proto NALÉHAVÁ notifikace do Velína.
+//
+// Liší se od /lm-inquiry (kontaktní formulář): nechceme e-mail ani místo, stačí
+// telefon. U návštěvníka, kterého už známe z odkazu (t/l), nechceme ani ten.
+// ─────────────────────────────────────────────────────────────────────────────
+const _lmZajemHits = new Map();
+
+router.post('/lm-pradlomat-zajem', express.json({ limit: '10kb' }), async (req, res) => {
+  try {
+    const ip = clientIp(req) || 'x'; const now = Date.now();
+    const hits = (_lmZajemHits.get(ip) || []).filter((t) => now - t < 3600e3); hits.push(now);
+    _lmZajemHits.set(ip, hits);
+    if (hits.length > 10) return res.status(429).json({ ok: false, error: 'Příliš mnoho odeslání' });
+    if (_lmZajemHits.size > 5000) _lmZajemHits.clear();
+
+    const b = req.body || {}; const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+    const product = s(b.product, 120);
+    const phone = s(b.phone, 30);
+    const name = s(b.name, 120);
+    const email = s(b.email, 160).toLowerCase();
+    if (product.length < 2) return res.status(400).json({ ok: false, error: 'Chybí prádlomat.' });
+
+    // Známý návštěvník (přišel z našeho odkazu) — kontakt už máme.
+    let leadId = _leadFromTL(b.t, b.l);
+    if (leadId && !(await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { id: true } }).catch(() => null))) leadId = null;
+    // Neznámého spárujeme podle telefonu / e-mailu, jinak založíme nový kontakt.
+    if (!leadId && (phone || email)) {
+      const or = [];
+      if (phone) or.push({ phone });
+      if (email) or.push({ email: { equals: email, mode: 'insensitive' } });
+      const ex = await prisma.compounderLead.findFirst({ where: { OR: or }, select: { id: true }, orderBy: { created_at: 'asc' } }).catch(() => null);
+      if (ex) leadId = ex.id;
+    }
+    // Bez kontaktu i bez známé identity nemáme komu volat — a to je celý smysl.
+    if (!leadId && phone.replace(/\D/g, '').length < 9) {
+      return res.status(400).json({ ok: false, error: 'Zadejte prosím telefon, ať se vám můžeme ozvat.' });
+    }
+
+    const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
+    const line = stamp + ' · CHCE KOUPIT PRÁDLOMAT — ' + product + ' (laundromats.eu, žádá o zavolání)';
+
+    let created = false, lead = null;
+    if (leadId) {
+      const l = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { id: true, name: true, email: true, phone: true, status: true, activity_log: true } });
+      await prisma.compounderLead.update({
+        where: { id: leadId },
+        data: {
+          activity_log: line + (l && l.activity_log ? '\n' + l.activity_log : ''),
+          phone: (l && l.phone) || phone || undefined,
+          email: (l && l.email) || email || undefined,
+          // Zájem o koupi posouvá kontakt dál, ale uzavřené stavy nepřepisujeme.
+          status: (l && (l.status === 'new' || !l.status)) ? 'qualified' : undefined,
+        },
+      });
+      lead = Object.assign({}, l, { phone: (l && l.phone) || phone });
+    } else {
+      const parts = name.split(/\s+/).filter(Boolean);
+      const ownerId = await _blacklistOwnerId();
+      const c = await prisma.compounderLead.create({
+        data: {
+          name: name || ('Zájemce ' + phone), first_name: parts[0] || null, last_name: parts.slice(1).join(' ') || null,
+          email: email || null, phone: phone || null, source: 'laundromats_pradlomat', status: 'qualified',
+          role: 'compounder', lang: 'cs', owner_person_id: ownerId || null, activity_log: line,
+        },
+        select: { id: true, name: true, email: true, phone: true },
+      });
+      leadId = c.id; created = true; lead = c;
+    }
+
+    if (b.sid && /^lm-[a-z0-9]{4,60}$/.test(String(b.sid))) _linkSidToLead(String(b.sid), leadId).catch(() => {});
+    prisma.compounderEvent.create({ data: {
+      sid: String(b.sid || ('server:zajem:' + leadId)).slice(0, 64),
+      event: 'pradlomat_zajem', path: '/cesta/pradlomaty',
+      props: { lead_id: leadId, product, created, site: 'laundromats' }, ip: clientIp(req),
+    } }).catch(() => {});
+
+    // NALÉHAVÁ notifikace — tohle je horký zájemce, volat hned.
+    try {
+      const { notifyPerson } = require('../services/push/expo-push');
+      const { createNotification } = require('./notifications.routes');
+      const who = (lead && lead.name) || name || phone || ('kontakt #' + leadId);
+      const tel = (lead && lead.phone) || phone || '(telefon neuveden)';
+      const title = '‼️🔴 VOLAT HNED — zájem o ' + product;
+      const body = who + ' chce koupit ' + product + '. Telefon: ' + tel
+        + '. Čeká, že se mu do pár minut ozveme.' + (created ? '' : ' (existující kontakt)');
+      const ps = await prisma.person.findMany({
+        where: { active: true, last_name: { equals: 'Holý', mode: 'insensitive' }, first_name: { in: ['Jan', 'Tomáš'], mode: 'insensitive' } },
+        select: { id: true, user_id: true },
+      });
+      for (const p of ps) {
+        notifyPerson(prisma, p.id, { title, body, data: { type: 'lm_pradlomat_zajem', lead_id: leadId, urgent: true }, sound: 'default' }).catch(() => {});
+        if (p.user_id) createNotification({ userId: p.user_id, type: 'system', title, body, link: '/modules/prodejni-objednavky/index.html?lead=' + leadId, meta: { lead_id: leadId, urgent: true, product } }).catch(() => {});
+      }
+    } catch (e) { console.warn('[lm-zajem] upozornění:', e.message); }
+
+    console.log('[lm-zajem] lead', leadId, created ? '(nový)' : '(existující)', '—', product);
+    res.json({ ok: true });
+  } catch (err) { console.warn('[lm-zajem]', err.message); res.status(500).json({ ok: false, error: 'Odeslání se nepodařilo' }); }
+});
+
 const _sidLinked = new Set(); // cache „sid:lead" už napojených (ať se nedotazujeme při každém eventu)
 async function _linkSidToLead(sid, leadId) {
   const k = sid + ':' + leadId; if (_sidLinked.has(k)) return;
