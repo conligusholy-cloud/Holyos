@@ -365,7 +365,12 @@ function homePage(lang) {
     + '</div></div></section>'
     // ── proč ──
     + '<section class="alt" id="proc"><div class="divline"></div><div class="wrap">' + kicker(L.why.kicker) + '<h2 class="rv">' + esc(L.why.h) + '</h2><p class="lead rv">' + esc(L.why.lead) + '</p>'
-    + '<div class="grid g4">' + L.why.cards.map((c, i) => '<article class="card rv"><div class="ico">' + svg(['self', 'needs', 'you', 'grow'][i], 24) + '</div><h3>' + esc(c[0]) + '</h3><p>' + esc(c[1]) + '</p></article>').join('') + '</div></div></section>'
+    + '<div class="grid g4">' + L.why.cards.map((c, i) => '<article class="card rv"><div class="ico">' + svg(['self', 'needs', 'you', 'grow'][i], 24) + '</div><h3>' + esc(c[0]) + '</h3><p>' + esc(c[1]) + '</p></article>').join('') + '</div>'
+    // PH: galerie skutečných provozoven + mapa (body až po dodání seznamu adres)
+    + '<div class="vids rv">'
+    + '<figure class="vid"><video class="autovid" src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" muted loop playsinline preload="none" aria-label="' + esc(L.network.vid1) + '"></video><figcaption>' + esc(L.network.vid1) + '</figcaption></figure>'
+    + '<figure class="vid pl"><video src="/media/krok.mp4" poster="/media/krok-poster.jpg" playsinline preload="none" aria-label="' + esc(L.network.vid2) + '"></video><figcaption>' + esc(L.network.vid2) + '</figcaption></figure>'
+    + '<div class="netmap" role="region" aria-label="Země, ve kterých působíme"><div id="netmap"></div><div class="nm-leg"><b>' + COUNTRIES.length + '</b> zemí · centrála <b style="color:#a78bfa">Česká republika</b></div></div></div></div></section>'
     // ── cesty ──
     + '<section id="spoluprace"><div class="wrap">' + kicker(L.paths.kicker) + '<h2 class="rv">' + esc(L.paths.h) + '</h2>'
     + '<div class="grid g4">' + L.paths.cards.map((c) => '<article class="path rv"><div class="ico">' + svg(c[0], 24) + '</div><h3>' + esc(c[1]) + '</h3><p>' + esc(c[2]) + '</p>' + regBtn(c[0], c[3], 'btn-p btn-s') + '</article>').join('') + '</div></div></section>'
@@ -374,11 +379,7 @@ function homePage(lang) {
     + '<div class="big rv"><b class="grad">70+</b><span>' + esc(L.network.statUnit) + '<small>' + esc(L.network.note) + '</small></span></div>'
     + '<div class="ctas rv">' + regBtn('visit', L.network.cta, 'btn-g') + '</div></div>'
     + '<div class="areas">' + L.network.areas.map((a, i) => '<div class="area rv"><div class="ico">' + svg(['site', 'self', 'you'][i], 22) + '</div><div><h3>' + esc(a[0]) + '</h3><p>' + esc(a[1]) + '</p></div></div>').join('') + '</div></div>'
-    // PH: galerie skutečných provozoven + mapa (body až po dodání seznamu adres)
-    + '<div class="vids rv">'
-    + '<figure class="vid"><video class="autovid" src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" muted loop playsinline preload="none" aria-label="' + esc(L.network.vid1) + '"></video><figcaption>' + esc(L.network.vid1) + '</figcaption></figure>'
-    + '<figure class="vid pl"><video src="/media/krok.mp4" poster="/media/krok-poster.jpg" playsinline preload="none" aria-label="' + esc(L.network.vid2) + '"></video><figcaption>' + esc(L.network.vid2) + '</figcaption></figure>'
-    + '<div class="netmap" role="region" aria-label="Země, ve kterých působíme"><div id="netmap"></div><div class="nm-leg"><b>' + COUNTRIES.length + '</b> zemí · centrála <b style="color:#a78bfa">Česká republika</b></div></div></div></div></section>'
+    + '</div></section>'
     // ── vlastnictví ──
     + '<section id="vlastnictvi"><div class="wrap"><div class="own"><div>' + kicker(L.own.kicker) + '<h2 class="rv">' + esc(L.own.h) + '</h2><p class="lead rv">' + esc(L.own.lead) + '</p></div>'
     + '<div><ul class="tasks">' + L.own.items.map((x) => '<li class="rv"><span>' + svg('check', 16) + '</span>' + esc(x) + '</li>').join('') + '</ul><p class="ofoot rv">' + esc(L.own.foot) + '</p></div></div></div></section>'
