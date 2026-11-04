@@ -244,3 +244,16 @@ main{padding-bottom:calc(66px + var(--safe-b))}
 .pack-l b{font-size:15px}
 .pack-l span{font-size:11px;color:var(--text2)}
 .pack .btn{flex:0 0 auto;min-width:86px}
+
+/* Přírůstek a úbytek hotovosti v hlavičce — ať je vidět, že peníze tečou. */
+.t-item{position:relative}
+.hdrip{position:absolute;left:50%;top:2px;transform:translateX(-50%);pointer-events:none;
+  font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;
+  text-shadow:0 1px 4px rgba(0,0,0,.9);animation:hdripUp 1.4s ease-out forwards}
+.hdrip.up{color:var(--ok)}
+.hdrip.down{color:var(--err)}
+@keyframes hdripUp{
+  0%{opacity:0;transform:translate(-50%,6px)}
+  20%{opacity:1;transform:translate(-50%,-2px)}
+  100%{opacity:0;transform:translate(-50%,-14px)}
+}

@@ -294,16 +294,31 @@ function dripShow(text, cls, p) {
   $('map').appendChild(el);
   setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 1600);
 }
+// Bublina nad hotovostí v hlavičce — tu hráč vidí v každé záložce.
+function headDrip(text, cls) {
+  var host = $('t-cash').parentNode;
+  var el = document.createElement('div');
+  el.className = 'hdrip ' + cls;
+  el.textContent = text;
+  host.appendChild(el);
+  setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 1400);
+}
 function dripTick() {
-  if (!S || !S.units.length) return;
-  if ($('v-map').classList.contains('hidden') || document.hidden) { return; }
+  if (!S || document.hidden) return;
+  var naMape = !$('v-map').classList.contains('hidden');
   if (drip.earn >= 1) {
-    var p = dripPoint(drip.i++);
-    if (p) { dripShow('+' + Math.floor(drip.earn).toLocaleString('cs-CZ'), 'up', p); drip.earn -= Math.floor(drip.earn); }
+    var kolik = Math.floor(drip.earn), txt = '+' + kolik.toLocaleString('cs-CZ');
+    var p = naMape && S.units.length ? dripPoint(drip.i++) : null;
+    if (p) dripShow(txt, 'up', p);
+    headDrip(txt, 'up');
+    drip.earn -= kolik;
   }
   if (drip.pay >= 1) {
-    var q = dripPoint(drip.i++);
-    if (q) { dripShow('−' + Math.floor(drip.pay).toLocaleString('cs-CZ'), 'down', q); drip.pay -= Math.floor(drip.pay); }
+    var kolikP = Math.floor(drip.pay), txtP = '−' + kolikP.toLocaleString('cs-CZ');
+    var q = naMape && S.units.length ? dripPoint(drip.i++) : null;
+    if (q) dripShow(txtP, 'down', q);
+    headDrip(txtP, 'down');
+    drip.pay -= kolikP;
   }
 }
 function gameYear() { return Math.floor((Date.now() - S.startedAt) / YEAR_MS) + 1; }
@@ -315,6 +330,13 @@ function kc(n) {
   n = Math.round(Number(n) || 0);
   if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(Math.abs(n) >= 1e7 ? 0 : 1).replace('.', ',') + ' M';
   if (Math.abs(n) >= 1e4) return Math.round(n / 1e3) + ' tis.';
+  return n.toLocaleString('cs-CZ');
+}
+// V hlavičce chceme vidět, že peníze tečou. „120 tis." se hne jednou za půl
+// hodiny, proto pod milion píšeme přesné číslo — to se mění každou vteřinu.
+function kcHdr(n) {
+  n = Math.round(Number(n) || 0);
+  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(1).replace('.', ',') + ' M';
   return n.toLocaleString('cs-CZ');
 }
 // Herní měna se jmenuje laundr a píše se L$ — ať si ji nikdo neplete s korunami.
@@ -1047,7 +1069,7 @@ function shareGame(btn) {
 function paint() {
   refreshUnits();
   $('t-year').textContent = gameYear();
-  $('t-cash').textContent = kc(S.cash);
+  $('t-cash').textContent = kcHdr(S.cash);
   $('t-rate').textContent = kc(monthlyProfit());
   $('t-count').textContent = S.units.length;
   if (!$('v-shop').classList.contains('hidden')) paintShop();
