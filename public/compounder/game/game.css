@@ -203,3 +203,23 @@ main{padding-bottom:calc(66px + var(--safe-b))}
 /* Klávesnice na iOS zmenší viditelnou část okna; panel se jí přizpůsobí. */
 .sheet-in{padding-bottom:calc(16px + env(safe-area-inset-bottom))}
 .sheet.kb .sheet-in{max-height:70dvh}
+
+/* Značka postaveného prádlomatu — fotka stroje místo ikonky. */
+.pin.unit{width:44px;height:44px;padding:0;overflow:visible;background:#0b1424;
+  border:2px solid rgba(47,227,160,.9);box-shadow:0 2px 10px rgba(0,0,0,.5)}
+.pin.unit img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+.pin-tag{position:absolute;left:50%;top:100%;transform:translate(-50%,2px);font-style:normal;
+  font-size:9px;font-weight:700;letter-spacing:.4px;color:#04301f;background:var(--ok);
+  padding:1px 5px;border-radius:6px;white-space:nowrap}
+
+/* Naskakující čísla: zeleně co přiteklo, červeně co banka sebrala. */
+.drip{position:absolute;transform:translate(-50%,-50%);z-index:850;pointer-events:none;
+  font-weight:800;font-size:15px;text-shadow:0 2px 6px rgba(0,0,0,.8);
+  animation:dripUp 1.6s ease-out forwards}
+.drip.up{color:var(--ok)}
+.drip.down{color:var(--err)}
+@keyframes dripUp{
+  0%{opacity:0;transform:translate(-50%,-50%) scale(.8)}
+  15%{opacity:1;transform:translate(-50%,-150%) scale(1.05)}
+  100%{opacity:0;transform:translate(-50%,-320%) scale(1)}
+}

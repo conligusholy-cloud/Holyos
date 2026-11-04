@@ -258,6 +258,9 @@ function tick() {
   var years = dt / YEAR_MS;
   var earned = yearlyProfit() * years;
   var interest = S.loan * rateOf() * years;
+  // Do bubliny nad prádlomaty: zvlášť co přiteklo a co banka sebrala.
+  drip.earn += Math.max(0, earned);
+  drip.pay += Math.max(0, interest);
   S.cash += earned - interest;
   S.loan += interest;
   S.stats.earned += Math.max(0, earned);
@@ -265,6 +268,41 @@ function tick() {
   S.bank = Math.min(bankCap(), S.bank + BANK_PER_DAY * (dt / 86400000));
   S.lastTick = now;
   deliverOrders();
+}
+
+// ─── Čísla naskakující nad prádlomaty ───────────────────────────────────────
+// Za vteřinu přiteče pár laundrů, což je na samostatnou bublinu málo. Sčítáme
+// to proto a vypíšeme, až je z toho celé číslo — zeleně výnos, červeně úrok.
+var drip = { earn: 0, pay: 0, i: 0 };
+function dripPoint(i) {
+  if (!map || !S.units.length) return null;
+  var u = S.units[i % S.units.length];
+  if (u.lat == null) return null;
+  var p = map.latLngToContainerPoint([u.lat, u.lon]);
+  var box = $('map').getBoundingClientRect();
+  if (p.x < 0 || p.y < 0 || p.x > box.width || p.y > box.height) return null;
+  return p;
+}
+function dripShow(text, cls, p) {
+  var el = document.createElement('div');
+  el.className = 'drip ' + cls;
+  el.textContent = text;
+  el.style.left = p.x + 'px';
+  el.style.top = p.y + 'px';
+  $('map').appendChild(el);
+  setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 1600);
+}
+function dripTick() {
+  if (!S || !S.units.length) return;
+  if ($('v-map').classList.contains('hidden') || document.hidden) { return; }
+  if (drip.earn >= 1) {
+    var p = dripPoint(drip.i++);
+    if (p) { dripShow('+' + Math.floor(drip.earn).toLocaleString('cs-CZ'), 'up', p); drip.earn -= Math.floor(drip.earn); }
+  }
+  if (drip.pay >= 1) {
+    var q = dripPoint(drip.i++);
+    if (q) { dripShow('−' + Math.floor(drip.pay).toLocaleString('cs-CZ'), 'down', q); drip.pay -= Math.floor(drip.pay); }
+  }
 }
 function gameYear() { return Math.floor((Date.now() - S.startedAt) / YEAR_MS) + 1; }
 
@@ -457,6 +495,15 @@ function pinIcon(cls, txt) {
   return L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15],
     html: '<div class="pin ' + cls + '">' + txt + '</div>' });
 }
+// Postavený prádlomat ukazuje přímo fotku toho stroje, který tam stojí —
+// na mapě je tak na první pohled vidět, jestli je to MINI, FLEX nebo MAX.
+function unitIcon(u) {
+  var im = MODEL_IMG[u.eco && u.eco.model] || MODEL_IMG.flex;
+  return L.divIcon({ className: '', iconSize: [44, 44], iconAnchor: [22, 22],
+    html: '<div class="pin unit" data-unit="' + esc(u.spotId) + '">'
+      + '<img src="' + esc(im.src) + '" alt="">'
+      + '<i class="pin-tag">' + esc(MODELS[u.eco && u.eco.model] ? MODELS[u.eco.model].name : '') + '</i></div>' });
+}
 function drawMap() {
   if (!layer) return;
   layer.clearLayers();
@@ -464,11 +511,10 @@ function drawMap() {
   Object.keys(S.areas).forEach(function (aid) {
     S.areas[aid].spots.forEach(function (sp) {
       any = true;
-      var mine = S.units.some(function (u) { return u.spotId === sp.id; });
+      var unit = S.units.filter(function (u) { return u.spotId === sp.id; })[0];
       var seen = !!S.revealed[sp.id];
-      var cls = mine ? 'mine' : seen ? 'known' : 'unknown';
-      var txt = mine ? '\u{1F9FA}' : seen ? '★' : '?';
-      L.marker([sp.lat, sp.lon], { icon: pinIcon(cls, txt) })
+      var icon = unit ? unitIcon(unit) : pinIcon(seen ? 'known' : 'unknown', seen ? '★' : '?');
+      L.marker([sp.lat, sp.lon], { icon: icon })
         .addTo(layer)
         .on('click', function () { spotSheet(sp, aid); });
     });
@@ -1140,6 +1186,8 @@ function startGame() {
   loadCards().then(function () { if (!$('v-cards').classList.contains('hidden')) paintCards(); });
   checkPayment();
   setInterval(function () { tick(); save(); paint(); syncState(); }, 5000);
+  // Vlastní, rychlejší tep jen pro naskakující čísla nad prádlomaty.
+  setInterval(function () { tick(); dripTick(); }, 1000);
   setInterval(pullRefs, 60000);
   document.addEventListener('visibilitychange', function () {
     if (!document.hidden) { tick(); save(); paint(); } else { syncState(true); }
