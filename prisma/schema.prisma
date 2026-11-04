@@ -7659,3 +7659,19 @@ model GameSpotClaim {
   @@index([player_id])
   @@map("game_spot_claims")
 }
+
+// Ceník hry. Kdyby byl natvrdo v kódu, znamenala by každá změna ceny nasazení.
+// Takhle se mění v administraci a projeví se do minuty.
+model GamePrice {
+  id         Int      @id @default(autoincrement())
+  kind       String   @unique @db.VarChar(24)
+  price      Int      // v haléřích
+  laundry    Int?     // jen u balíčků peněz
+  name       String?  @db.VarChar(80)
+  active     Boolean  @default(true)
+  updated_by String?  @db.VarChar(80)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("game_prices")
+}

@@ -153,6 +153,24 @@ router.get('/scout', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Sledování ───────────────────────────────────────────────────────────────
+// Pár bodů v cestě hráče, ať je v administraci vidět, kde lidé odpadají.
+// Ukládáme do stejné tabulky jako zbytek webu (compounder_events), bez osobních
+// údajů — jen náhodné id návštěvy, krok a čas.
+const EVENTY = ['game_open', 'game_quiz', 'game_register', 'game_scout', 'game_build', 'game_paid'];
+router.post('/ev', express.json({ limit: '2kb' }), (req, res) => {
+  const b = req.body || {};
+  const event = String(b.event || '');
+  const sid = String(b.sid || '').slice(0, 64);
+  if (!EVENTY.includes(event) || !/^[a-z0-9-]{6,64}$/.test(sid)) return res.json({ ok: false });
+  if (rateLimited('ev:' + ipOf(req), 120, 10 * 60e3)) return res.json({ ok: false });
+  prisma.compounderEvent.create({ data: {
+    sid, event, path: '/game', lang: 'cs',
+    ua: String(req.headers['user-agent'] || '').slice(0, 1000) || null, ip: ipOf(req) || null,
+  } }).catch(() => {});
+  res.json({ ok: true });
+});
+
 // ─── Pozvánky ────────────────────────────────────────────────────────────────
 // Hráč sdílí odkaz s ?ref=<svoje id>. Kdo ho otevře, započítá se mu jedno
 // otevření a hráči tím roste návštěvnost jeho prádlomatů. Držíme to jen v paměti

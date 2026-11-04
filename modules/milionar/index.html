@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Milionář (hra) | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex:1; min-height:100vh; display:flex; flex-direction:column; }
+    .page-header { display:flex; align-items:center; gap:12px; padding:20px 24px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+    .page-header h1 { font-size:18px; font-weight:700; margin:0; }
+    .page-header .sub { font-size:12.5px; color:var(--text2); }
+    .content { padding:0 24px 32px; }
+    .module-tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); padding:0 24px; overflow-x:auto; }
+    .module-tab { padding:12px 18px; background:transparent; border:none; color:var(--text2); font-size:13px; font-weight:500; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; }
+    .module-tab:hover { color:var(--text); }
+    .module-tab.active { color:#7c5cff; border-bottom-color:#7c5cff; }
+    .module-panel { display:none; } .module-panel.active { display:block; }
+    .toolbar { display:flex; gap:10px; margin:16px 0; align-items:center; flex-wrap:wrap; }
+    .btn { padding:7px 14px; border-radius:8px; border:1px solid var(--border); font-size:13px; cursor:pointer; background:var(--surface2); color:var(--text); }
+    .btn:hover { background:var(--border); }
+    .btn.on { background:#7c5cff; color:#fff; border-color:#7c5cff; font-weight:700; }
+    .btn.sm { padding:4px 10px; font-size:12px; }
+    .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; margin:6px 0 18px; }
+    .kpi { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+    .kpi .v { font-size:24px; font-weight:800; }
+    .kpi .l { font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
+    .tbl-wrap { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:auto; }
+    .data-table { width:100%; border-collapse:separate; border-spacing:0; }
+    .data-table th { background:var(--surface2); padding:10px 12px; text-align:left; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:var(--text2); border-bottom:1px solid var(--border); white-space:nowrap; }
+    .data-table td { padding:10px 12px; font-size:13px; border-bottom:1px solid rgba(255,255,255,.05); }
+    .data-table tr:hover td { background:rgba(124,92,255,.06); }
+    .num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .st { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; background:rgba(142,162,194,.15); }
+    .st.paid { background:rgba(34,197,94,.18); color:#22c55e; }
+    .st.pending { background:rgba(245,158,11,.18); color:#f59e0b; }
+    .st.failed { background:rgba(239,68,68,.18); color:#f87171; }
+    .note { color:var(--text2); font-size:12px; }
+    .fn { display:flex; flex-direction:column; gap:6px; max-width:620px; }
+    .fn-row { display:flex; align-items:center; gap:10px; }
+    .fn-row .nm { width:190px; font-size:13px; }
+    .fn-bar { flex:1; height:22px; background:var(--surface2); border-radius:6px; overflow:hidden; }
+    .fn-bar i { display:block; height:100%; background:linear-gradient(90deg,#7c5cff,#4fd1ff); }
+    .fn-row b { width:120px; text-align:right; font-variant-numeric:tabular-nums; font-size:13px; }
+    .chart { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px; }
+    .price-in { width:92px; padding:5px 8px; border-radius:7px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:13px; text-align:right; }
+    .price-in.wide { width:120px; }
+  </style>
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-wrapper">
+    <div class="page-header">
+      <div>
+        <h1>🎮 Milionář — administrace hry</h1>
+        <div class="sub">Hráči, objednávky, ceník a statistiky hry na pradlomaty.info/game.</div>
+      </div>
+      <div class="toolbar" style="margin-left:auto">
+        <a class="btn" href="https://pradlomaty.info/game" target="_blank" rel="noopener">Otevřít hru ↗</a>
+        <button class="btn" id="reload">↻ Obnovit</button>
+      </div>
+    </div>
+
+    <div class="module-tabs">
+      <button class="module-tab active" data-tab="stats">Statistiky</button>
+      <button class="module-tab" data-tab="players">Hráči</button>
+      <button class="module-tab" data-tab="orders">Objednávky</button>
+      <button class="module-tab" data-tab="prices">Ceník</button>
+    </div>
+
+    <div class="content">
+      <div class="module-panel active" id="panel-stats">
+        <div class="toolbar">
+          <span class="note">Období:</span>
+          <button class="btn sm" data-dny="7">7 dní</button>
+          <button class="btn sm on" data-dny="30">30 dní</button>
+          <button class="btn sm" data-dny="90">90 dní</button>
+        </div>
+        <div class="kpis" id="st-kpis"></div>
+        <h3 style="font-size:14px;margin:18px 0 10px">Kudy hráči procházejí</h3>
+        <div class="fn" id="st-funnel"></div>
+        <h3 style="font-size:14px;margin:22px 0 10px">Den po dni</h3>
+        <div class="chart" id="st-chart"></div>
+      </div>
+
+      <div class="module-panel" id="panel-players">
+        <div class="toolbar">
+          <input id="pl-q" class="price-in wide" style="text-align:left;width:260px" placeholder="Hledat nick, e-mail, příjmení">
+          <button class="btn sm" id="pl-find">Hledat</button>
+        </div>
+        <div class="tbl-wrap"><table class="data-table" id="pl-tbl"></table></div>
+      </div>
+
+      <div class="module-panel" id="panel-orders">
+        <div class="toolbar">
+          <button class="btn sm on" data-stav="">Vše</button>
+          <button class="btn sm" data-stav="paid">Zaplacené</button>
+          <button class="btn sm" data-stav="pending">Nedokončené</button>
+        </div>
+        <div class="kpis" id="or-kpis"></div>
+        <div class="tbl-wrap"><table class="data-table" id="or-tbl"></table></div>
+      </div>
+
+      <div class="module-panel" id="panel-prices">
+        <p class="note" style="margin:16px 0">Změna se projeví ve hře do minuty. Už rozdělané platby doběhnou za starou cenu.</p>
+        <div class="tbl-wrap"><table class="data-table" id="pr-tbl"></table></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/sidebar.js?v=2026-11-05-1"></script>
+  <script>
+  (function () {
+    renderSidebar('milionar');
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    var cz = function (n) { return Number(n || 0).toLocaleString('cs-CZ'); };
+    var dt = function (d) { return d ? new Date(d).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'; };
+    function get(url) {
+      return fetch('/api/game-admin' + url, { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; }); });
+    }
+    function post(url, body) {
+      return fetch('/api/game-admin' + url, { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; }); });
+    }
+    function chyba(el, e) { document.getElementById(el).innerHTML = '<p class="note" style="color:#f87171">' + esc(e.message) + '</p>'; }
+
+    // ── Statistiky ──────────────────────────────────────────────────────────
+    var DNY = 30;
+    function loadStats() {
+      get('/stats?dny=' + DNY).then(function (j) {
+        var s = j.souhrn;
+        document.getElementById('st-kpis').innerHTML =
+          kpi(cz(s.hracu_celkem), 'Hráčů celkem') +
+          kpi(cz(s.obsazenych_mist), 'Obsazených míst') +
+          kpi(cz(s.trzba_obdobi) + ' Kč', 'Tržba za ' + j.dny + ' dní') +
+          kpi(cz(s.nakupu_obdobi), 'Nákupů za ' + j.dny + ' dní');
+        var max = Math.max.apply(null, j.trychtyr.map(function (x) { return x.pocet; }).concat([1]));
+        var prvni = j.trychtyr[0].pocet || 0;
+        document.getElementById('st-funnel').innerHTML = j.trychtyr.map(function (x) {
+          var pct = prvni ? Math.round(x.pocet / prvni * 100) : 0;
+          return '<div class="fn-row"><span class="nm">' + esc(x.krok) + '</span>'
+            + '<span class="fn-bar"><i style="width:' + Math.round(x.pocet / max * 100) + '%"></i></span>'
+            + '<b>' + cz(x.pocet) + (prvni ? ' <span class="note">(' + pct + ' %)</span>' : '') + '</b></div>';
+        }).join('');
+        document.getElementById('st-chart').innerHTML = graf(j.rady);
+      }).catch(function (e) { chyba('st-kpis', e); });
+    }
+    function kpi(v, l) { return '<div class="kpi"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
+    // Jednoduchý sloupcový graf v SVG — návštěvy, registrace a tržba den po dni.
+    function graf(rady) {
+      if (!rady.length) return '<p class="note">Zatím žádná data.</p>';
+      var W = Math.max(640, rady.length * 26), H = 190, pad = 28;
+      var maxN = Math.max.apply(null, rady.map(function (r) { return Math.max(r.navstev, r.registraci); }).concat([1]));
+      var maxT = Math.max.apply(null, rady.map(function (r) { return r.trzba; }).concat([1]));
+      var sw = (W - pad * 2) / rady.length;
+      var bars = rady.map(function (r, i) {
+        var x = pad + i * sw;
+        var hn = Math.round(r.navstev / maxN * (H - 50));
+        var hr = Math.round(r.registraci / maxN * (H - 50));
+        return '<rect x="' + (x + 2) + '" y="' + (H - 22 - hn) + '" width="' + (sw / 2 - 3) + '" height="' + hn + '" fill="#4fd1ff" opacity=".8"><title>' + r.den + ': ' + r.navstev + ' návštěv</title></rect>'
+          + '<rect x="' + (x + sw / 2) + '" y="' + (H - 22 - hr) + '" width="' + (sw / 2 - 3) + '" height="' + hr + '" fill="#7c5cff"><title>' + r.den + ': ' + r.registraci + ' registrací</title></rect>';
+      }).join('');
+      var body = rady.map(function (r, i) {
+        var x = pad + i * sw + sw / 2, y = H - 22 - Math.round(r.trzba / maxT * (H - 50));
+        return x + ',' + y;
+      }).join(' ');
+      var popisky = rady.map(function (r, i) {
+        if (rady.length > 16 && i % 3) return '';
+        return '<text x="' + (pad + i * sw + sw / 2) + '" y="' + (H - 6) + '" fill="#8ea2c2" font-size="9" text-anchor="middle">' + r.den.slice(8) + '.' + r.den.slice(5, 7) + '.</text>';
+      }).join('');
+      return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:' + H + 'px">' + bars
+        + '<polyline points="' + body + '" fill="none" stroke="#22c55e" stroke-width="2"/>' + popisky + '</svg>'
+        + '<p class="note" style="margin-top:8px"><span style="color:#4fd1ff">■</span> návštěvy &nbsp; <span style="color:#7c5cff">■</span> registrace &nbsp; <span style="color:#22c55e">—</span> tržba (max ' + cz(Math.round(maxT)) + ' Kč)</p>';
+    }
+
+    // ── Hráči ───────────────────────────────────────────────────────────────
+    function loadPlayers() {
+      var q = document.getElementById('pl-q').value.trim();
+      get('/players?limit=300' + (q ? '&q=' + encodeURIComponent(q) : '')).then(function (j) {
+        document.getElementById('pl-tbl').innerHTML =
+          '<thead><tr><th>Nick</th><th>Jméno a e-mail</th><th class="num">Prádlomatů</th><th class="num">Míst</th>'
+          + '<th class="num">Měst</th><th class="num">Hotovost</th><th class="num">Úvěr</th><th class="num">Pozvánek</th>'
+          + '<th class="num">Nákupů</th><th class="num">Utraceno</th><th>Naposledy</th><th></th></tr></thead><tbody>'
+          + (j.players.length ? j.players.map(function (p) {
+            return '<tr' + (p.disabled ? ' style="opacity:.45"' : '') + '><td><b>' + esc(p.nick) + '</b>'
+              + (p.profil ? '<div class="note">' + esc(p.profil) + '</div>' : '') + '</td>'
+              + '<td>' + (p.jmeno ? esc(p.jmeno) : '<span class="note">—</span>')
+              + (p.email ? '<div class="note">' + esc(p.email) + '</div>' : '') + '</td>'
+              + '<td class="num">' + cz(p.pradlomatu) + '</td><td class="num">' + cz(p.mist) + '</td>'
+              + '<td class="num">' + cz(p.mest) + '</td>'
+              + '<td class="num">' + (p.hotovost == null ? '—' : cz(p.hotovost)) + '</td>'
+              + '<td class="num">' + (p.uver == null ? '—' : cz(p.uver)) + '</td>'
+              + '<td class="num">' + cz(p.pozvanek) + '</td>'
+              + '<td class="num">' + cz(p.nakupu) + '</td>'
+              + '<td class="num"><b>' + cz(p.utraceno) + ' Kč</b></td>'
+              + '<td class="note">' + dt(p.last_login_at || p.created_at) + '</td>'
+              + '<td><button class="btn sm" data-off="' + p.id + '" data-v="' + (p.disabled ? '0' : '1') + '">'
+              + (p.disabled ? 'Odblokovat' : 'Zablokovat') + '</button></td></tr>';
+          }).join('') : '<tr><td colspan="12" class="note" style="padding:20px">Zatím tu nikdo není.</td></tr>')
+          + '</tbody>';
+        [].forEach.call(document.querySelectorAll('[data-off]'), function (b) {
+          b.onclick = function () {
+            b.disabled = true;
+            post('/players/' + b.getAttribute('data-off') + '/disabled', { disabled: b.getAttribute('data-v') === '1' })
+              .then(loadPlayers).catch(function (e) { b.disabled = false; alert(e.message); });
+          };
+        });
+      }).catch(function (e) { document.getElementById('pl-tbl').innerHTML = '<tbody><tr><td class="note" style="color:#f87171;padding:20px">' + esc(e.message) + '</td></tr></tbody>'; });
+    }
+
+    // ── Objednávky ──────────────────────────────────────────────────────────
+    var STAV = '';
+    function loadOrders() {
+      get('/orders?limit=300' + (STAV ? '&status=' + STAV : '')).then(function (j) {
+        document.getElementById('or-kpis').innerHTML =
+          kpi(cz(j.souhrn.zaplaceno_ks), 'Zaplacených objednávek') +
+          kpi(cz(j.souhrn.zaplaceno_kc) + ' Kč', 'Tržba celkem');
+        document.getElementById('or-tbl').innerHTML =
+          '<thead><tr><th>Kdy</th><th>Hráč</th><th>Položka</th><th class="num">Ks</th><th class="num">Částka</th><th>Stav</th><th>Stripe</th></tr></thead><tbody>'
+          + (j.orders.length ? j.orders.map(function (o) {
+            return '<tr><td class="note">' + dt(o.created_at) + '</td>'
+              + '<td>' + (o.nick ? '<b>' + esc(o.nick) + '</b>' : '<span class="note">—</span>')
+              + (o.email ? '<div class="note">' + esc(o.email) + '</div>' : '') + '</td>'
+              + '<td>' + esc(o.kind) + '</td><td class="num">' + o.qty + '</td>'
+              + '<td class="num"><b>' + cz(o.castka) + ' Kč</b></td>'
+              + '<td><span class="st ' + esc(o.status) + '">' + esc(o.status) + '</span>'
+              + (o.paid_at ? '<div class="note">' + dt(o.paid_at) + '</div>' : '') + '</td>'
+              + '<td class="note" style="font-family:monospace;font-size:11px">' + esc(o.session || '—') + '</td></tr>';
+          }).join('') : '<tr><td colspan="7" class="note" style="padding:20px">Zatím žádné objednávky.</td></tr>')
+          + '</tbody>';
+      }).catch(function (e) { chyba('or-kpis', e); });
+    }
+
+    // ── Ceník ───────────────────────────────────────────────────────────────
+    function loadPrices() {
+      get('/prices').then(function (j) {
+        document.getElementById('pr-tbl').innerHTML =
+          '<thead><tr><th>Položka</th><th>Druh</th><th class="num">Cena (Kč)</th><th class="num">Laundrů</th>'
+          + '<th class="num">Za korunu</th><th>Prodává se</th><th>Naposledy změnil</th><th></th></tr></thead><tbody>'
+          + j.prices.map(function (p) {
+            var perCzk = p.laundry ? Math.round(p.laundry / p.price_czk) : null;
+            return '<tr data-kind="' + esc(p.kind) + '"><td><b>' + esc(p.name) + '</b>'
+              + '<div class="note">' + esc(p.kind) + '</div></td>'
+              + '<td>' + (p.typ === 'penize' ? 'Peníze' : 'Karta') + '</td>'
+              + '<td class="num"><input class="price-in" type="number" min="1" step="1" value="' + p.price_czk + '" data-f="price"></td>'
+              + '<td class="num">' + (p.laundry != null
+                ? '<input class="price-in wide" type="number" min="1" step="1000" value="' + p.laundry + '" data-f="laundry">'
+                : '<span class="note">—</span>') + '</td>'
+              + '<td class="num note">' + (perCzk ? cz(perCzk) + ' L$' : '—') + '</td>'
+              + '<td><label class="note"><input type="checkbox" data-f="active"' + (p.active ? ' checked' : '') + '> ano</label></td>'
+              + '<td class="note">' + (p.zmeneno ? dt(p.zmeneno) + (p.kdo ? '<div>' + esc(p.kdo) + '</div>' : '') : 'výchozí z kódu') + '</td>'
+              + '<td><button class="btn sm" data-save>Uložit</button></td></tr>';
+          }).join('') + '</tbody>';
+        [].forEach.call(document.querySelectorAll('[data-save]'), function (b) {
+          b.onclick = function () {
+            var tr = b.closest('tr');
+            var val = function (f) { var el = tr.querySelector('[data-f="' + f + '"]'); return el ? (el.type === 'checkbox' ? el.checked : el.value) : undefined; };
+            b.disabled = true; b.textContent = 'Ukládám…';
+            post('/prices', { kind: tr.getAttribute('data-kind'), price_czk: Number(val('price')),
+              laundry: val('laundry') != null ? Number(val('laundry')) : undefined, active: val('active') })
+              .then(function () { b.textContent = 'Uloženo'; setTimeout(loadPrices, 700); })
+              .catch(function (e) { b.disabled = false; b.textContent = 'Uložit'; alert(e.message); });
+          };
+        });
+      }).catch(function (e) { document.getElementById('pr-tbl').innerHTML = '<tbody><tr><td class="note" style="color:#f87171;padding:20px">' + esc(e.message) + '</td></tr></tbody>'; });
+    }
+
+    // ── Záložky ─────────────────────────────────────────────────────────────
+    var LOADERY = { stats: loadStats, players: loadPlayers, orders: loadOrders, prices: loadPrices };
+    var AKTIVNI = 'stats';
+    [].forEach.call(document.querySelectorAll('.module-tab'), function (t) {
+      t.onclick = function () {
+        AKTIVNI = t.getAttribute('data-tab');
+        [].forEach.call(document.querySelectorAll('.module-tab'), function (x) { x.classList.toggle('active', x === t); });
+        [].forEach.call(document.querySelectorAll('.module-panel'), function (p) { p.classList.toggle('active', p.id === 'panel-' + AKTIVNI); });
+        LOADERY[AKTIVNI]();
+      };
+    });
+    [].forEach.call(document.querySelectorAll('[data-dny]'), function (b) {
+      b.onclick = function () {
+        DNY = parseInt(b.getAttribute('data-dny'), 10);
+        [].forEach.call(document.querySelectorAll('[data-dny]'), function (x) { x.classList.toggle('on', x === b); });
+        loadStats();
+      };
+    });
+    [].forEach.call(document.querySelectorAll('[data-stav]'), function (b) {
+      b.onclick = function () {
+        STAV = b.getAttribute('data-stav');
+        [].forEach.call(document.querySelectorAll('[data-stav]'), function (x) { x.classList.toggle('on', x === b); });
+        loadOrders();
+      };
+    });
+    document.getElementById('pl-find').onclick = loadPlayers;
+    document.getElementById('pl-q').onkeydown = function (e) { if (e.key === 'Enter') loadPlayers(); };
+    document.getElementById('reload').onclick = function () { LOADERY[AKTIVNI](); };
+    loadStats();
+  })();
+  </script>
+</body>
+</html>

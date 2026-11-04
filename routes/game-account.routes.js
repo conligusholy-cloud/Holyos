@@ -75,17 +75,56 @@ const CASH = {
 };
 const CASH_KINDS = Object.keys(CASH);
 const ALL = Object.assign({}, CARDS, CASH);
+
+// ─── Ceník z databáze ────────────────────────────────────────────────────────
+// Hodnoty výš jsou jen výchozí. Co platí doopravdy, je v tabulce game_prices —
+// ceny se tak mění v administraci bez nasazování. Držíme je minutu v paměti,
+// ať se kvůli každému výpisu nechodí do databáze.
+let _prices = { at: 0, map: {} };
+async function prices() {
+  if (Date.now() - _prices.at < 60e3) return _prices.map;
+  const m = {};
+  try {
+    const rows = await prisma.gamePrice.findMany();
+    rows.forEach((r) => { m[r.kind] = r; });
+  } catch (e) { console.warn('[game] ceník:', e.message); }
+  _prices = { at: Date.now(), map: m };
+  return m;
+}
+function dropPrices() { _prices = { at: 0, map: {} }; }
+// Položka s cenou podle ceníku; vrátí null, když je vypnutá.
+async function item(kind) {
+  const base = ALL[kind]; if (!base) return null;
+  const p = (await prices())[kind];
+  if (p && p.active === false) return null;
+  if (!p) return base;
+  return Object.assign({}, base, { price: p.price, laundry: p.laundry != null ? p.laundry : base.laundry, name: p.name || base.name });
+}
+async function activeKinds(list) {
+  const out = [];
+  for (const k of list) { if (await item(k)) out.push(k); }
+  return out;
+}
 // Kolik laundrů za korunu — ať hráč vidí, že se větší balík vyplatí.
 const perCzk = (c) => Math.round(c.laundry / (c.price / 100));
-const cashPublic = () => CASH_KINDS.map((k) => {
-  const c = CASH[k];
-  return { kind: c.kind, name: c.name, price_czk: c.price / 100, laundry: c.laundry, per_czk: perCzk(c),
-    bonus: Math.round((perCzk(c) / perCzk(CASH.cash100) - 1) * 100) };
-});
-const catalogPublic = () => CARD_KINDS.map((k) => {
-  const c = CARDS[k];
-  return { kind: c.kind, name: c.name, icon: c.icon, short: c.short, desc: c.desc, price_czk: c.price / 100 };
-});
+async function cashPublic() {
+  const out = [];
+  const zaklad = await item('cash100');
+  for (const k of CASH_KINDS) {
+    const c = await item(k); if (!c) continue;
+    out.push({ kind: c.kind, name: c.name, price_czk: c.price / 100, laundry: c.laundry, per_czk: perCzk(c),
+      bonus: zaklad ? Math.round((perCzk(c) / perCzk(zaklad) - 1) * 100) : 0 });
+  }
+  return out;
+}
+async function catalogPublic() {
+  const out = [];
+  for (const k of CARD_KINDS) {
+    const c = await item(k); if (!c) continue;
+    out.push({ kind: c.kind, name: c.name, icon: c.icon, short: c.short, desc: c.desc, price_czk: c.price / 100 });
+  }
+  return out;
+}
 
 // ─── Token ───────────────────────────────────────────────────────────────────
 function sign(p) { return jwt.sign({ pid: p.id, v: p.token_version }, JWT_SECRET, { expiresIn: TOKEN_DAYS + 'd', audience: 'lm-game' }); }
@@ -231,7 +270,7 @@ router.get('/cards', async (req, res, next) => {
   try {
     const p = await currentPlayer(req);
     res.json({
-      ok: true, catalog: catalogPublic(), cash: cashPublic(),
+      ok: true, catalog: await catalogPublic(), cash: await cashPublic(),
       payments: require('./game-stripe.routes')._paymentsOn(),
       owned: p ? (await pub(p)).cards : null
     });
@@ -369,3 +408,6 @@ module.exports._cards = ALL;
 module.exports._currentPlayer = currentPlayer;
 module.exports._requirePlayer = requirePlayer;
 module.exports._pub = pub;
+module.exports._item = item;
+module.exports._dropPrices = dropPrices;
+module.exports._defaults = ALL;

@@ -16,7 +16,7 @@ const { prisma } = require('../config/database');
 const acct = require('./game-account.routes');
 
 const router = express.Router();
-const CARDS = acct._cards;
+const itemOf = acct._item;
 const MAX_QTY = 10;
 
 const key = () => process.env.STRIPE_SECRET_KEY || '';
@@ -67,8 +67,8 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
       return res.status(428).json({ error: 'Nejdřív doplň jméno a e-mail.', need_details: true });
     }
     const kind = String((req.body || {}).kind || '');
-    const c = CARDS[kind];
-    if (!c) return res.status(400).json({ error: 'Taková karta není.' });
+    const c = await itemOf(kind);   // cena z ceníku, ne z kódu
+    if (!c) return res.status(400).json({ error: 'Tohle se teď neprodává.' });
     const qty = Math.max(1, Math.min(MAX_QTY, parseInt((req.body || {}).qty, 10) || 1));
 
     const purchase = await prisma.gamePurchase.create({
@@ -89,7 +89,8 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
         quantity: qty,
         price_data: {
           currency: 'czk', unit_amount: c.price,
-          product_data: { name: 'Laundromats Milionář — ' + c.name, description: c.short }
+          product_data: { name: 'Laundromats Milionář — ' + c.name,
+            description: c.short || (c.laundry ? c.laundry.toLocaleString('cs-CZ') + ' herních laundrů' : undefined) }
         }
       }]
     });

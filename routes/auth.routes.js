@@ -371,6 +371,7 @@ async function externalSectionsFor(user) {
     if (await bs2Allowed(user)) {
       out.push({ id: 'bs2', name: process.env.BS2_NAME || 'Best Series 2.0', icon: '&#128101;', color: '#1e86e0', href: '/api/auth/sso/bs2' });
       out.push({ id: 'ads', name: 'Centrum reklamy', icon: '&#128227;', color: '#f59e0b', href: '/modules/centrum-reklamy/index.html', internal: true });
+      out.push({ id: 'milionar', name: 'Milionář (hra)', icon: '&#127918;', color: '#7c5cff', href: '/modules/milionar/index.html', internal: true });
     }
   } catch (e) { /* bez sekce */ }
   return out;

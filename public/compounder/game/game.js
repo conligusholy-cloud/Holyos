@@ -430,6 +430,7 @@ function renderQuiz() {
       qi++;
       if (qi < QUIZ.length) return renderQuiz();
       var best = Object.keys(qScore).sort(function (a, c) { return qScore[c] - qScore[a]; })[0];
+      ev('game_quiz');
       showRole(best);
     };
   });
@@ -650,6 +651,7 @@ function scout(city, btn) {
         S.cash -= SCOUT_COST;
         S.areas[id] = { name: j.area.name, lat: j.area.lat, lon: j.area.lon, scoutedAt: Date.now(), spots: (j.spots || []).map(fixMetrics) };
         save(); paint(); drawMap(); closeSheet();
+        ev('game_scout');
         loadClaims();   // ať hráč hned vidí, kde už konkurence stojí
         if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], 12);
         toast(j.area.name + ': nalezeno ' + j.spots.length + ' míst.', 'ok');
@@ -859,6 +861,7 @@ function installSheet(sp, areaId, modelKey) {
       S.stock[modelKey] = inStock(modelKey) - 1;
       S.units.push({ spotId: sp.id, areaId: areaId, name: sp.name, kind: sp.kind, score: sp.score,
         lat: sp.lat, lon: sp.lon, builtAt: Date.now(), eco: e });
+      ev('game_build');
       save(); paint(); drawMap(); closeSheet(); syncState(true);
       toast('Prádlomat stojí. Vydělává ' + kcFull(e.profit) + ' měsíčně.', 'ok');
     }).catch(function () { b.disabled = false; b.textContent = 'Postavit'; toast('Server neodpovídá.', 'err'); });
@@ -1171,6 +1174,27 @@ var CARDS_CAT = null;     // katalog ze serveru
 var PAYMENTS_ON = false;  // jsou nastavené klíče Stripe?
 var syncAt = 0, syncBusy = false;
 
+// ─── Sledování cesty hráče ───────────────────────────────────────────────────
+// Posíláme jen krok a náhodné id návštěvy — podle toho je v administraci vidět,
+// kde lidé odpadají. Žádné osobní údaje.
+var VID_KEY = 'lm_vid';
+function visitId() {
+  try {
+    var v = localStorage.getItem(VID_KEY);
+    if (!v) { v = (Date.now().toString(36) + Math.random().toString(36).slice(2, 10)).toLowerCase(); localStorage.setItem(VID_KEY, v); }
+    return v;
+  } catch (e) { return 'anon' + Math.random().toString(36).slice(2, 10); }
+}
+var evDone = {};
+function ev(name, znovu) {
+  if (!znovu && evDone[name]) return;
+  evDone[name] = 1;
+  try {
+    fetch('/api/game/ev', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: name, sid: visitId() }), keepalive: true }).catch(function () {});
+  } catch (e) { /* sledování nikdy nesmí shodit hru */ }
+}
+
 function api(path, opts) {
   return fetch('/api/game' + path, Object.assign({ credentials: 'same-origin' }, opts || {}))
     .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); });
@@ -1214,6 +1238,7 @@ function doAcct(login) {
     $('ac-go').disabled = false;
     if (!r.ok) return acctErr(r.j.error || 'Nepovedlo se.');
     ME = r.j.player;
+    if (!login) ev('game_register');
     if (login) {
       // Na serveru je uložená síť — ta má přednost před tím, co je v prohlížeči.
       if (r.j.state) { S = r.j.state; save(); }
@@ -1410,6 +1435,7 @@ function checkPayment() {
   (function poll() {
     api('/stripe/status?s=' + encodeURIComponent(sid)).then(function (r) {
       if (r.ok && r.j.status === 'paid') {
+        ev('game_paid', true);
         if (ME) ME.cards = r.j.owned;
         if (/^cash/.test(r.j.kind || '')) {
           return claimCash(function () { paintBank(); switchTab('bank'); });
@@ -1454,6 +1480,7 @@ function startGame() {
   window.addEventListener('pagehide', function () { syncState(true); });
 }
 
+ev('game_open');
 loadMachinePhotos();
 
 countIncomingRef();   // ještě než se rozhodne, jestli je co rozehraného
