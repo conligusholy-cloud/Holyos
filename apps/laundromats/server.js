@@ -16,11 +16,36 @@ const app = express();
 app.set('trust proxy', true);
 // Jazykový prefix: /en/cesta → req.lang='en' + req.url='/cesta'. Musí být dřív než cokoli,
 // co se podle adresy rozhoduje (přesměrování, ACC.attach, routy).
+// Cesty, které se jazykem neřeší (API, administrace, soubory, média).
+const BEZ_JAZYKA = /^\/(api|admin|media|img|favicon|robots\.txt|sso|r\/)/;
+const LANG_CK = 'lm_lang';
 app.use((req, res, next) => {
+  const I = require('./i18n');
   const m = /^\/(en|pl)(\/|$)/.exec(req.path);
-  req.lang = m ? m[1] : 'cs';
-  if (m) req.url = (req.url.slice(m[0].length - (m[2] === '/' ? 1 : 0)) || '/');
-  next();
+  if (m) {
+    // Jazyk je v adrese — ta rozhoduje. Volbu si zapamatujeme, ať při dalším
+    // příchodu bez předpony nepřehodíme člověka zpátky.
+    req.lang = m[1];
+    req.url = (req.url.slice(m[0].length - (m[2] === '/' ? 1 : 0)) || '/');
+    if ((req.headers.cookie || '').indexOf(LANG_CK + '=' + m[1]) === -1) {
+      res.append('Set-Cookie', LANG_CK + '=' + m[1] + '; Path=/; Max-Age=31536000; SameSite=Lax' + ckDomain(req));
+    }
+    return next();
+  }
+  req.lang = 'cs';
+  // Bez předpony: komu čeština nesedí, nabídneme jeho jazyk. Jen u normálních
+  // stránek, jen GET a nikdy vyhledávačům — ty si mají zaindexovat každou verzi.
+  if (req.method !== 'GET' || BEZ_JAZYKA.test(req.path) || /\.[a-z0-9]{2,5}$/i.test(req.path)) return next();
+  if (I.jeRobot(req.headers['user-agent'])) return next();
+  const ck = cookies(req);
+  const { lang } = I.detekuj({ headers: req.headers, cookieLang: ck[LANG_CK] || null });
+  if (lang === 'cs') {
+    // Čeština se bere jako volba, ať se při dalším načtení nepřepíná pod rukama.
+    if (!ck[LANG_CK]) res.append('Set-Cookie', LANG_CK + '=cs; Path=/; Max-Age=31536000; SameSite=Lax' + ckDomain(req));
+    return next();
+  }
+  const dotaz = req.url.indexOf('?') >= 0 ? req.url.slice(req.url.indexOf('?')) : '';
+  return res.redirect(302, '/' + lang + (req.path === '/' ? '' : req.path) + dotaz);
 });
 app.disable('x-powered-by');
 const _jsonSmall = express.json({ limit: '20kb' }), _jsonAdmin = express.json({ limit: '300kb' });
@@ -89,7 +114,13 @@ const shell = (html, lang) => (String(html).replace('@@LHDR@@', LH.header({ lang
 const I18N = require('./i18n');
 const send = (res, html, req) => {
   const lang = (req && req.lang) || 'cs';
-  return res.set('Cache-Control', 'no-cache').set('Vary', 'Accept-Language').type('html').send(lang === 'cs' ? html : I18N.apply(html, lang));
+  let out = lang === 'cs' ? String(html) : I18N.apply(html, lang);
+  // Odkazy na ostatní jazykové verze téže stránky — kvůli vyhledávačům, aby
+  // nebraly překlady jako duplicitní obsah a aby každému nabídly tu jeho.
+  if (req && !BEZ_JAZYKA.test(req.path) && out.indexOf('</head>') > 0 && out.indexOf('rel="alternate" hreflang=') === -1) {
+    out = out.replace('</head>', I18N.hreflangTags(req.path, PUBLIC_URL) + '</head>');
+  }
+  return res.set('Cache-Control', 'no-cache').set('Vary', 'Accept-Language, Cookie').type('html').send(out);
 };
 // Odpověď s JavaScriptem (booking, kalkulačka) — texty v něm se překládají taky.
 const sendJs = (res, js, req) => {

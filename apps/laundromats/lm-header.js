@@ -60,6 +60,9 @@ function langSwitchClient() {
     var h = (a.getAttribute('data-prefix') || '') + p;
     a.setAttribute('href', h === '' ? '/' : h + location.search);
     a.addEventListener('click', function () {
+      // Kliknutí je vlastní volba jazyka — zapamatujeme ji, aby ji automatická
+      // detekce podle země při příštím příchodu nepřebila (hlavně návrat na češtinu).
+      try { document.cookie = 'lm_lang=' + a.getAttribute('data-lang') + '; Path=/; Max-Age=31536000; SameSite=Lax'; } catch (e) { /* bez cookie se jen příště znovu detekuje */ }
       try {
         var best = null;
         document.querySelectorAll('[id]').forEach(function (el) {

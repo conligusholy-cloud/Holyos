@@ -16,7 +16,10 @@ const path = require('path');
 
 const LANGS = ['cs', 'en', 'pl'];
 const LANG_LABEL = { cs: 'CZ', en: 'EN', pl: 'PL' };
-const DICT_DIR = path.join(__dirname, 'i18n');
+// Složku slovníků lze přesměrovat (LM_I18N_DIR) — testy tak nikdy nesáhnou na ostrá data.
+const DICT_DIR = process.env.LM_I18N_DIR
+  ? path.resolve(process.env.LM_I18N_DIR)
+  : path.join(__dirname, 'i18n');
 
 // Atributy, jejichž obsah uživatel vidí.
 const ATTRS = ['title', 'alt', 'placeholder', 'aria-label', 'data-lock', 'data-slabel'];
@@ -176,4 +179,72 @@ function apply(html, lang, missing) {
   return out.replace(/<html lang="cs"/i, '<html lang="' + lang + '"');
 }
 
-module.exports = { LANGS, LANG_LABEL, available, extract, extractJs, apply, applyJs, dict, reload, key, translatable, walk };
+// ── Jazyk podle návštěvníka ─────────────────────────────────────────────────
+// Pořadí: adresa (/en/…) → vlastní volba v cookie → země podle CDN hlavičky →
+// jazyk prohlížeče → angličtina. Čeština se nabídne jen Česku a Slovensku,
+// polština Polsku; kdo sem přijde odjinud, dostane angličtinu.
+const ZEME_JAZYK = { CZ: 'cs', SK: 'cs', PL: 'pl' };
+const PREDPONA_JAZYK = { cs: 'cs', cz: 'cs', sk: 'cs', pl: 'pl' };
+// Hlavičky, kterými CDN / proxy posílají zemi návštěvníka (Cloudflare, Vercel, Fastly…).
+const HLAVICKY_ZEME = ['cf-ipcountry', 'x-vercel-ip-country', 'x-country-code', 'fastly-client-country', 'x-geo-country'];
+// Vyhledávače nikam nepřesměrováváme — ať si každou jazykovou verzi zaindexují samy.
+const ROBOT = /(bot|crawler|spider|slurp|bingpreview|facebookexternalhit|embedly|quora link preview|showyoubot|outbrain|pinterest|whatsapp|telegram|vkshare|w3c_validator|lighthouse|headlesschrome)/i;
+const jeRobot = (ua) => ROBOT.test(String(ua || ''));
+
+function zemeZHlavicek(headers) {
+  const h = headers || {};
+  for (const jm of HLAVICKY_ZEME) {
+    const v = String(h[jm] || '').trim().toUpperCase();
+    if (/^[A-Z]{2}$/.test(v) && v !== 'XX' && v !== 'T1') return v;
+  }
+  return null;
+}
+// Accept-Language: "pl-PL,pl;q=0.9,en;q=0.8" → první jazyk, kterému rozumíme.
+function jazykZProhlizece(accept) {
+  const polozky = String(accept || '').split(',').map((x) => {
+    const [kod, ...p] = x.trim().split(';');
+    const q = p.map((y) => /q=([\d.]+)/.exec(y)).filter(Boolean)[0];
+    return { kod: String(kod || '').toLowerCase(), q: q ? parseFloat(q[1]) : 1 };
+  }).filter((x) => x.kod).sort((a, b) => b.q - a.q);
+  for (const { kod } of polozky) {
+    const zaklad = kod.split('-')[0];
+    if (PREDPONA_JAZYK[zaklad]) return PREDPONA_JAZYK[zaklad];
+    if (zaklad === 'en') return 'en';
+  }
+  return null;
+}
+
+/**
+ * Jaký jazyk nabídnout návštěvníkovi, který přišel bez jazykové předpony.
+ * @returns {{lang: string, podle: string}} podle = adresa | volba | zeme | prohlizec | vychozi
+ */
+function detekuj({ headers = {}, cookieLang = null } = {}) {
+  const dostupne = available();
+  const pouzitelny = (l) => l && dostupne.indexOf(l) > -1;
+
+  if (pouzitelny(cookieLang)) return { lang: cookieLang, podle: 'volba' };
+
+  const zeme = zemeZHlavicek(headers);
+  if (zeme) {
+    const z = ZEME_JAZYK[zeme];
+    // Země, kterou umíme → její jazyk. Jakákoli jiná země → angličtina.
+    if (pouzitelny(z)) return { lang: z, podle: 'zeme' };
+    if (pouzitelny('en')) return { lang: 'en', podle: 'zeme' };
+  }
+
+  const p = jazykZProhlizece(headers['accept-language']);
+  if (pouzitelny(p)) return { lang: p, podle: 'prohlizec' };
+
+  return { lang: pouzitelny('en') ? 'en' : 'cs', podle: 'vychozi' };
+}
+
+/** <link rel="alternate" hreflang> pro všechny jazyky — kvůli vyhledávačům. */
+function hreflangTags(cestaBezPredpony, verejnaAdresa) {
+  const zaklad = String(verejnaAdresa || '').replace(/\/+$/, '');
+  const cesta = cestaBezPredpony === '/' ? '' : cestaBezPredpony;
+  return available().map((l) => '<link rel="alternate" hreflang="' + (l === 'cs' ? 'cs' : l) + '" href="'
+    + zaklad + (l === 'cs' ? '' : '/' + l) + (cesta || '/') + '">').join('')
+    + '<link rel="alternate" hreflang="x-default" href="' + zaklad + (cesta || '/') + '">';
+}
+
+module.exports = { LANGS, LANG_LABEL, available, detekuj, jeRobot, hreflangTags, jazykZProhlizece, zemeZHlavicek, extract, extractJs, apply, applyJs, dict, reload, key, translatable, walk };
