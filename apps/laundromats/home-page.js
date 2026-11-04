@@ -325,7 +325,7 @@ function homePage(lang) {
   const logo = (sz) => '<svg width="' + sz + '" height="' + sz + '" viewBox="0 0 64 64" fill="none" aria-hidden="true"><defs><linearGradient id="lg' + sz + '" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff"/><stop offset=".55" stop-color="#3a6cf5"/><stop offset="1" stop-color="#7c5cff"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="17" fill="#0b1220"/><rect x="2.75" y="2.75" width="58.5" height="58.5" rx="16.5" stroke="url(#lg' + sz + ')" stroke-width="1.5"/><circle cx="32" cy="34" r="15" stroke="url(#lg' + sz + ')" stroke-width="3.5"/><circle cx="32" cy="34" r="8" stroke="url(#lg' + sz + ')" stroke-width="2.5" stroke-opacity=".6"/><circle cx="20" cy="16" r="2" fill="#4fd1ff"/><circle cx="27" cy="16" r="2" fill="#7c5cff"/></svg>';
   const kicker = (t) => '<div class="kicker">' + esc(t) + '</div>';
   const f = L.form;
-  const interestBtn = (key, label, cls) => '<a class="btn ' + (cls || 'btn-g btn-s') + '" href="#kontakt" data-interest="' + key + '">' + esc(label) + ' ' + svg('arrow', 18) + '</a>';
+  const interestBtn = (key, label, cls) => '<a class="btn ' + (cls || 'btn-g btn-s') + '" href="/cesta/schuzka" data-interest="' + key + '">' + esc(label) + ' ' + svg('arrow', 18) + '</a>';
   // Nepřihlášený → „Vytvořit účet“ (registrace), přihlášený → původní zájmové tlačítko
   const regBtn = (key, label, cls) => '<!--PUB--><a class="btn ' + (cls || 'btn-g btn-s') + '" href="/cesta/registrace">Vytvořit účet ' + svg('arrow', 18) + '</a><!--/PUB--><!--PRIV-->' + interestBtn(key, label, cls) + '<!--/PRIV-->';
 
@@ -386,20 +386,6 @@ function homePage(lang) {
     // ── FAQ ──
     + '<section class="alt" id="otazky"><div class="divline"></div><div class="wrap">' + kicker(L.faq.kicker) + '<h2 class="rv">' + esc(L.faq.h) + '</h2><div class="faq">'
     + L.faq.items.map((q) => '<details class="rv"><summary>' + esc(q[0]) + svg('plus', 22) + '</summary><p>' + esc(q[1]) + '</p></details>').join('') + '</div></div></section>'
-    // ── formulář ──
-    + '<section id="kontakt"><div class="wrap"><div class="fwrap"><div>' + kicker(f.kicker) + '<h2 class="rv">' + esc(f.h) + '</h2><p class="lead rv">' + esc(f.sub) + '</p></div>'
-    + '<form class="f rv" id="inq" novalidate>'
-    + '<div class="row"><div class="fld"><label for="f-name">' + esc(f.name) + ' <small>(' + esc(f.req) + ')</small></label><input id="f-name" name="name" autocomplete="name" required maxlength="120"><span class="er">' + esc(f.eName) + '</span></div>'
-    + '<div class="fld"><label for="f-phone">' + esc(f.phone) + ' <small>(' + esc(f.req) + ')</small></label><input id="f-phone" name="phone" type="tel" autocomplete="tel" required maxlength="30" inputmode="tel"><span class="er">' + esc(f.ePhone) + '</span></div></div>'
-    + '<div class="fld"><label for="f-email">' + esc(f.email) + ' <small>(' + esc(f.req) + ')</small></label><input id="f-email" name="email" type="email" autocomplete="email" required maxlength="160"><span class="er">' + esc(f.eEmail) + '</span></div>'
-    + '<div class="row"><div class="fld"><label for="f-int">' + esc(f.interest) + ' <small>(' + esc(f.req) + ')</small></label><select id="f-int" name="interest" required><option value="">' + esc(f.choose) + '</option>' + f.opts.map((o) => '<option value="' + o[0] + '">' + esc(o[1]) + '</option>').join('') + '</select><span class="er">' + esc(f.eInterest) + '</span></div>'
-    + '<div class="fld"><label for="f-place">' + esc(f.place) + ' <small>(' + esc(f.req) + ')</small></label><input id="f-place" name="place" autocomplete="address-level2" required maxlength="160" placeholder="' + esc(f.placePh) + '"><span class="er">' + esc(f.ePlace) + '</span></div></div>'
-    + '<div class="fld"><label for="f-note">' + esc(f.note) + '</label><textarea id="f-note" name="note" maxlength="2000" placeholder="' + esc(f.notePh) + '"></textarea></div>'
-    + '<div class="hp" aria-hidden="true"><label>Web<input name="website" tabindex="-1" autocomplete="off"></label></div>'
-    + '<button class="btn btn-p" type="submit" id="f-btn">' + esc(f.submit) + '</button>'
-    + '<div class="fmsg" id="f-msg" role="status" aria-live="polite"></div>'
-    // PH: identita správce osobních údajů + odkaz na zásady (doplní zadavatel)
-    + '<p class="priv">' + esc(f.privacy) + ' <a href="/gdpr">' + esc(f.privacyLink) + '</a></p></form></div></div></section>'
     + '</main>'
     // ── patička ──
     + '<footer><div class="wrap"><div class="fgrid"><div><a class="logo" href="#top">' + logo(30) + '<span>LAUNDROMATS</span></a><p>' + esc(L.foot.claim) + '</p></div>'
@@ -421,9 +407,9 @@ function clientJs(L) {
     // video v provozu: přehrávat jen ve viditelné části stránky (šetří data i baterii), ne při omezení pohybu
     + 'var av=d.querySelectorAll(".autovid"),red=matchMedia("(prefers-reduced-motion: reduce)").matches;if(!red&&"IntersectionObserver"in window){var vo=new IntersectionObserver(function(es){es.forEach(function(x){var v=x.target;if(x.isIntersecting){v.preload="auto";var p=v.play();if(p&&p.catch)p.catch(function(){});}else v.pause();});},{threshold:.35});av.forEach(function(v){vo.observe(v);});}else av.forEach(function(v){v.controls=true;});'
     // tlačítka s předvybraným zájmem
-    + 'var sel=d.getElementById("f-int");d.addEventListener("click",function(e){var a=e.target.closest("[data-interest]");if(!a)return;sel.value=a.getAttribute("data-interest");sel.closest(".fld").classList.remove("bad");setTimeout(function(){d.getElementById("f-name").focus({preventScroll:true});},450);});'
+    + 'var sel=d.getElementById("f-int");if(sel)d.addEventListener("click",function(e){var a=e.target.closest("[data-interest]");if(!a)return;sel.value=a.getAttribute("data-interest");sel.closest(".fld").classList.remove("bad");setTimeout(function(){d.getElementById("f-name").focus({preventScroll:true});},450);});'
     // formulář: validace → skutečné odeslání; úspěch jen při potvrzení serveru
-    + 'var fm=d.getElementById("inq"),bt=d.getElementById("f-btn"),ms=d.getElementById("f-msg");'
+    + 'var fm=d.getElementById("inq"),bt=d.getElementById("f-btn"),ms=d.getElementById("f-msg");if(fm)'
     + 'function v(id,ok){var e=d.getElementById(id).closest(".fld");e.classList.toggle("bad",!ok);return ok;}'
     + 'fm.addEventListener("submit",function(e){e.preventDefault();ms.className="fmsg";ms.textContent="";'
     + 'var g=function(id){return d.getElementById(id).value.trim();};'

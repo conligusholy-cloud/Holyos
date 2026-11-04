@@ -37,7 +37,7 @@ header .brand{font-weight:900;letter-spacing:.14em}
  */
 function layout({ title, desc = '', body, active = '', absolute = false, head = '', back = true }) {
   const nav = navItems({ absolute });
-  const ctaHref = (absolute ? MAIN_URL() : '') + homeHref() + '#kontakt';
+  const ctaHref = (absolute ? MAIN_URL() : '') + '/cesta/schuzka';
   // Odkaz zpět na rozcestník nástrojů. Je v <!--PRIV-->, takže ho server (lite) nechá jen
   // přihlášenému — nepřihlášený by stejně skončil na přihlašování.
   const backHtml = back ? `<!--PRIV--><a class="lm-back" href="${absolute ? MAIN_URL() : ''}/cesta/ucet">← zpět na nástroje</a><!--/PRIV-->` : '';
@@ -54,7 +54,7 @@ ${require('./lm-header').header({ absolute })}
 }
 // Výzva na konci stránek
 function cta(text, sub, absolute) {
-  const href = (absolute ? MAIN_URL() : '') + homeHref() + '#kontakt';
+  const href = (absolute ? MAIN_URL() : '') + '/cesta/schuzka'; // kontaktní formulář zrušen → online schůzka
   return `<div class="lm-cta"><div><h3>${esc(text)}</h3><p>${esc(sub || 'Napište nám svůj záměr. Projdeme s vámi možnosti a navrhneme další postup.')}</p></div><a class="btn" href="${href}">Probrat můj záměr →</a></div>`;
 }
 // Počítadlo „právě si prohlíží“ doplňuje server (server.js → lite) do mezery v liště — nepřidávat ho tady.

@@ -44,7 +44,7 @@ module.exports = function mountApps(app, ctx) {
     <div class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><div class="small muted">Orientační vyhodnocení místa · ${new Date().toLocaleDateString('cs-CZ')}</div><h1 style="margin:2px 0 4px">${esc(d.name)}</h1><div class="muted">${esc(d.address || '')}</div></div><span class="res ${ev.cls}">${esc(ev.result)}</span></div>
     <p class="small muted" style="margin:10px 0 0">Výpočet je orientační a vychází jen ze zadaných údajů a modelových předpokladů. Podrobnou studii místa s námi můžete probrat.</p></div>
     ${R.map}${R.scenarios}${R.facts}
-    <div class="lm-cta no-print"><div><h3>Chcete místo probrat s námi?</h3><p>Projdeme vyhodnocení, doplníme zkušenosti z provozu a navrhneme další postup.</p></div><a class="btn" href="${MAIN_URL()}${process.env.LM_HOME_LIVE === '1' ? '/' : '/uvod'}#kontakt">Probrat můj záměr →</a></div>`;
+    <div class="lm-cta no-print"><div><h3>Chcete místo probrat s námi?</h3><p>Projdeme vyhodnocení, doplníme zkušenosti z provozu a navrhneme další postup.</p></div><a class="btn" href="${MAIN_URL()}/cesta/schuzka">Probrat můj záměr →</a></div>`;
     return LAPP.page(S, 'Vyhodnocení – ' + (d.name || ''), 'loc', body, (d.lat && d.lng) ? LAPP.LEAFLET_HEAD : '');
   }
   app.post('/cesta/zhodnotit/upravit', gZ, urlenc, async (req, res, next) => {

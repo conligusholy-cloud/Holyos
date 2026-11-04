@@ -62,7 +62,7 @@ module.exports = function createAccounts(ctx) {
       if (!req.account && !adminOf(req)) return requireAccount(req, res, next);
       if (canSee(req, page)) return next();
       if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'Tato část není ve vašem přístupu.' });
-      send(req, res, 'Bez přístupu', box('Tato část zatím není ve vašem přístupu', '', '<p>Váš účet má roli <b>' + esc(ROLES[roleOf(req.account)].label) + '</b>. Přístup k dalším nástrojům vám rádi otevřeme – stačí se nám ozvat.</p><div class="acc-links"><a href="/cesta/ucet">← Moje nástroje</a><a href="/#kontakt">Napsat nám</a></div>'), 403);
+      send(req, res, 'Bez přístupu', box('Tato část zatím není ve vašem přístupu', '', '<p>Váš účet má roli <b>' + esc(ROLES[roleOf(req.account)].label) + '</b>. Přístup k dalším nástrojům vám rádi otevřeme – stačí se nám ozvat.</p><div class="acc-links"><a href="/cesta/ucet">← Moje nástroje</a><a href="/cesta/schuzka">Domluvit online schůzku</a></div>'), 403);
     };
   }
   function requireAccount(req, res, next) {
