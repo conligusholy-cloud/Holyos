@@ -899,6 +899,7 @@ app.use('/api/pradlomat-spots', require('./routes/pradlomat-spots.routes'));
 // Statistiky e-mailové brány SES (dle zadání: /api/stats?range=today|7d|30d|90d) – vyžaduje přihlášení
 app.get('/api/stats', require('./middleware/auth').requireAuth, async (req, res, next) => { try { res.json(await require('./services/ses/email-log').stats(String(req.query.range || '30d'))); } catch (err) { next(err); } });
 app.use('/api/ads-center', require('./routes/ads-center.routes')); // Centrum reklamy (Soukromé) — přehled záchytných stránek a jejich výsledků // Předjednaná místa — veřejný přehled pradlomaty.info/location + interní správa
+app.use('/api/game', require('./routes/game.routes')); // Laundromats Milionář — veřejná hra na pradlomaty.info/game (bez auth, viz hlavička routeru)
 app.use('/api/leasing', require('./routes/leasing.routes')); // Leasing/financující společnosti (financování prádlomatu)
 if (VYBERY_ENABLED) app.use('/api/vybery', require('./routes/vybery.routes')); // Výběry (vypnuto, zapíná VYBERY_ENABLED=1) — veřejná stránka bestseries.cash/vybery (ověření black list + magic link + admin)
 app.use('/api/bank-plan', require('./routes/bank-plan.routes')); // Bankovní Business Plan — track record, unit economics, DSCR, crossover (data ze SIS snapshotu)
@@ -1072,6 +1073,8 @@ app.use((req, res, next) => {
   if (req.path === '/portal' || req.path === '/portal/') return serveCompounderPortal(req, res);
   if (req.path === '/location' || req.path === '/location/') return serveLocationOverview(req, res);
   if (req.path === '/misto' || req.path === '/misto/') return serveMisto(req, res);
+  // Laundromats Milionář — hra o budování sítě prádlomatů (zatím jen na doménách prádlomatů).
+  if (req.path === '/game' || req.path === '/game/') return serveCompounderPage('game/index.html')(req, res);
   if (req.path === '/ai' || req.path === '/ai/') return serveAiSpecialist(req, res);
   // Zkrácený odkaz na AI specialistu: /s/<kód> → 302 na /ai?t=<token>.
   if (req.path.startsWith('/s/')) {

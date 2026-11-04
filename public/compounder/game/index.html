@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<meta name="theme-color" content="#04060c">
+<meta name="robots" content="noindex,nofollow">
+<title>Laundromats Milionář</title>
+<meta name="description" content="Hra: vybuduj největší síť venkovních prádlomatů. Skutečná místa, skutečná ekonomika.">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/game/game.css">
+</head>
+<body>
+
+<!-- ÚVOD + vytvoření postavy -->
+<div id="intro" class="screen">
+  <div class="intro-in">
+    <div class="logo-wrap"><span class="logo-badge">🧺</span></div>
+    <h1>Laundromats<br><span class="g">Milionář</span></h1>
+    <p class="lead">Venkovní prádlomat vydělává nonstop a bez obsluhy. Jeden zvládneš.
+      Ale dokážeš z něj vybudovat největší síť v zemi?</p>
+    <ul class="intro-pts">
+      <li><b>Skutečná místa.</b> Mapa je opravdová. Benzínky, obchodní domy a myčky taky — jen je musíš najít.</li>
+      <li><b>Skutečná ekonomika.</b> Čísla jsou z reálného modelu prádlomatu, ne vymyšlená.</li>
+      <li><b>Jeden den = jeden rok.</b> Prádlomaty vydělávají, i když hru zavřeš.</li>
+    </ul>
+    <button class="btn big" id="go-quiz">Začít podnikat</button>
+    <p class="fine">Hra. Herní peníze nemají žádnou hodnotu a nejde o nabídku investice.</p>
+  </div>
+</div>
+
+<!-- DOTAZNÍK → role -->
+<div id="quiz" class="screen hidden">
+  <div class="intro-in">
+    <p class="eyebrow">Než začneš</p>
+    <h2 id="q-title">Otázka 1 ze 3</h2>
+    <p class="q-text" id="q-text"></p>
+    <div id="q-opts" class="q-opts"></div>
+    <div class="q-dots" id="q-dots"></div>
+  </div>
+</div>
+
+<!-- VÝSLEDEK ROLE -->
+<div id="role" class="screen hidden">
+  <div class="intro-in">
+    <p class="eyebrow">Tvůj profil</p>
+    <h2 id="role-name"></h2>
+    <p class="lead" id="role-desc"></p>
+    <div class="role-box">
+      <div><span>Startovní hotovost</span><b id="role-cash"></b></div>
+      <div><span>Úvěrový strop</span><b id="role-ltv"></b></div>
+      <div><span>Úrok</span><b id="role-rate"></b></div>
+    </div>
+    <button class="btn big" id="go-game">Jdeme na to</button>
+  </div>
+</div>
+
+<!-- HRA -->
+<div id="app" class="screen hidden">
+  <header class="top">
+    <div class="t-item"><span>Rok</span><b id="t-year">1</b></div>
+    <div class="t-item"><span>Hotovost</span><b id="t-cash">0</b></div>
+    <div class="t-item"><span>Zisk / rok</span><b id="t-rate" class="ok">0</b></div>
+    <div class="t-item"><span>Prádlomaty</span><b id="t-count">0</b></div>
+  </header>
+
+  <main>
+    <!-- MAPA -->
+    <section id="v-map" class="view">
+      <div id="map"></div>
+      <div class="map-hint" id="map-hint">Vyber oblast a prozkoumej ji. Místa jsou schovaná — dokud oblast neprozkoumáš, nic na mapě neuvidíš.</div>
+      <button class="btn float" id="open-areas">🔎 Prozkoumat oblast</button>
+    </section>
+
+    <!-- PRÁDLOMATY -->
+    <section id="v-net" class="view hidden">
+      <h2>Moje síť</h2>
+      <div id="net-sum" class="sum-grid"></div>
+      <div id="net-list"></div>
+    </section>
+
+    <!-- BANKA -->
+    <section id="v-bank" class="view hidden">
+      <h2>Banka</h2>
+      <div id="bank-body"></div>
+    </section>
+
+    <!-- PROFIL -->
+    <section id="v-me" class="view hidden">
+      <h2>Já</h2>
+      <div id="me-body"></div>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button data-v="map" class="on"><span>🗺</span>Mapa</button>
+    <button data-v="net"><span>🧺</span>Síť</button>
+    <button data-v="bank"><span>🏦</span>Banka</button>
+    <button data-v="me"><span>👤</span>Já</button>
+  </nav>
+</div>
+
+<!-- SPODNÍ PANEL (detail místa, seznam oblastí, úvěr…) -->
+<div id="sheet" class="sheet hidden">
+  <div class="sheet-bg"></div>
+  <div class="sheet-in">
+    <div class="sheet-grip"></div>
+    <div id="sheet-body"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/game/game.js"></script>
+</body>
+</html>
