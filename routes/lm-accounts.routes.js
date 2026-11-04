@@ -154,8 +154,12 @@ router.post('/:id(\\d+)/password', async (req, res, next) => {
 router.get('/list', async (req, res, next) => {
   try {
     const rows = await prisma.lmAccount.findMany({ orderBy: { created_at: 'desc' }, take: 2000,
-      select: { id: true, email: true, name: true, phone: true, company: true, plan: true, disabled: true, email_verified_at: true, last_login_at: true, login_count: true, compounder_lead_id: true, created_at: true } });
-    res.json({ ok: true, users: rows });
+      select: { id: true, email: true, name: true, phone: true, company: true, plan: true, disabled: true, email_verified_at: true, last_login_at: true, login_count: true, compounder_lead_id: true, created_at: true, password_hash: true } });
+    // Kdo zákazníkovi poslal odkaz na Ekonomiku (aplikace Obchodník) — první odeslání ke kontaktu
+    const lids = [...new Set(rows.map((r) => r.compounder_lead_id).filter(Boolean))];
+    const sent = lids.length ? await prisma.compounderEvent.findMany({ where: { event: 'economy_link_sent', OR: lids.map((id) => ({ props: { path: ['lead_id'], equals: id } })) }, orderBy: { created_at: 'asc' }, select: { props: true, created_at: true }, take: 5000 }).catch(() => []) : [];
+    const inv = new Map(); sent.forEach((e) => { const p = e.props || {}; const k = Number(p.lead_id); if (!inv.has(k)) inv.set(k, { by: p.by || null, channel: p.channel || null, at: e.created_at, count: 0 }); inv.get(k).count++; inv.get(k).last_at = e.created_at; });
+    res.json({ ok: true, users: rows.map((r) => { const { password_hash, ...u } = r; return Object.assign(u, { pending_password: String(password_hash || '').startsWith('!setup:'), invited: r.compounder_lead_id ? (inv.get(r.compounder_lead_id) || null) : null }); }) });
   } catch (err) { next(err); }
 });
 // POST /:id/disabled {disabled} — zablokovat / odblokovat účet (zablokovaný se odhlásí do 5 minut)

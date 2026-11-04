@@ -271,6 +271,8 @@ function evLine(e){var p=e.props||{},q=function(x){return '„'+esc(x)+'“';};
     case 'app_contact':return ['📇','Najít místo: dohledal kontakt na '+q(p.name||'')+(p.city?' ('+esc(p.city)+')':'')];
     case 'app_evaluate':return ['🧠','Zhodnotil místo '+q(p.name||'')+(p.address?' – '+esc(p.address):'')+(p.result?' → <b>'+esc(p.result)+'</b>':'')];
     case 'account_register':return ['🆕','Zaregistroval se'];
+    case 'economy_link_sent':return ['📊','Dostal odkaz na Ekonomiku od <b>'+esc(p.by||'?')+'</b>'+(p.channel?' ('+esc(INV_CH[p.channel]||p.channel)+')':'')+(p.account==='created'?' · založen účet':'')];
+    case 'account_activated':return ['🔐','Nastavil heslo a dokončil účet'];
     case 'account_verified':return ['✅','Potvrdil e-mail a přihlásil se'];
     case 'account_login':return ['🔑','Přihlásil se'];
     case 'account_logout':return ['↩','Odhlásil se'];
@@ -317,6 +319,10 @@ function roleKey(p){return p==='economy'||p==='full'?p:'beginner';}
 function roleLabel(p){var k=roleKey(p);for(var i=0;i<USR_ROLES.length;i++)if(USR_ROLES[i][0]===k)return USR_ROLES[i][1];return k;}
 document.addEventListener('change',function(e){var s=e.target.closest&&e.target.closest('[data-urole]');if(!s)return;var id=+s.getAttribute('data-urole'),plan=s.value;s.disabled=true;
   api('/admin/api/users/'+id+'/role',{plan:plan}).then(function(){(usr||[]).forEach(function(u){if(u.id===id)u.plan=plan;});s.disabled=false;s.style.borderColor='#2fe3a0';setTimeout(function(){s.style.borderColor='';},1200);}).catch(function(er){s.disabled=false;alert(er.message);});});
+var INV_CH={whatsapp:'WhatsApp',sms:'SMS',email:'e-mail'};
+function usrInvText(u){var i=u.invited;return i?('📊 '+(i.by||'?')):'Sám (registrace)';}
+function usrInv(u){var i=u.invited;if(!i)return '<span class="muted small">sám (registrace)</span>';
+  return '<span title="Odkaz na Ekonomiku poprvé '+esc(dtm(i.at).replace(/<[^>]+>/g,''))+(i.count>1?' · odesláno '+i.count+'×':'')+'"><b>'+esc(i.by||'?')+'</b><br><span class="muted small">'+esc(INV_CH[i.channel]||i.channel||'')+' · '+dtm(i.at)+(i.count>1?' · '+i.count+'×':'')+'</span></span>';}
 function usrRow(u){
   var lead=u.compounder_lead_id&&window.LM_HOLYOS?'<a href="'+window.LM_HOLYOS+'/modules/prodejni-objednavky/index.html?lead='+u.compounder_lead_id+'" target="_blank" rel="noopener" class="small">kontakt #'+u.compounder_lead_id+' ↗</a>':(u.compounder_lead_id?'<span class="small muted">#'+u.compounder_lead_id+'</span>':'<span class="muted">—</span>');
   return '<tr'+(u.disabled?' style="opacity:.55"':'')+'><td><a href="#" class="nm" data-uact="'+u.id+'" title="Zobrazit pohyb na stránkách">'+esc(u.name)+'</a> <button class="btn sec sm" data-uact="'+u.id+'" title="Pohyb na stránkách">📈 Pohyb</button></td>'
@@ -324,7 +330,8 @@ function usrRow(u){
     +'<td>'+(u.phone?'<a href="tel:'+esc(u.phone)+'">'+esc(u.phone)+'</a>':'<span class="muted">—</span>')+'</td>'
     +hcell(u.company)
     +'<td>'+dtm(u.created_at)+'</td>'
-    +'<td>'+(u.email_verified_at?'<span class="mt-pill" style="color:#4ade80;border-color:#4ade80">ověřen</span>':'<span class="mt-pill" style="color:#ffd866;border-color:#ffd866">čeká na ověření</span>')+'</td>'
+    +'<td>'+(u.pending_password?'<span class="mt-pill" style="color:#a78bfa;border-color:#a78bfa" title="Účet založil obchod, zákazník si ještě nenastavil heslo">čeká na heslo</span>':u.email_verified_at?'<span class="mt-pill" style="color:#4ade80;border-color:#4ade80">ověřen</span>':'<span class="mt-pill" style="color:#ffd866;border-color:#ffd866">čeká na ověření</span>')+'</td>'
+    +'<td>'+usrInv(u)+'</td>'
     +'<td>'+dtm(u.last_login_at)+'</td><td style="text-align:right">'+(u.login_count||0)+'</td>'
     +'<td>'+lead+'</td>'
     +'<td><select class="usr-role" data-urole="'+u.id+'" style="background:#0b1220;color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:5px 8px;font:inherit;font-size:12.5px">'+USR_ROLES.map(function(r){return '<option value="'+r[0]+'"'+(roleKey(u.plan)===r[0]?' selected':'')+'>'+r[1]+'</option>';}).join('')+'</select></td>'
@@ -336,7 +343,7 @@ function usrRender(){
   var ver=usr.filter(function(u){return u.email_verified_at;}).length;
   root.querySelector('.mt-usrsum').textContent=usr.length?('Celkem '+usr.length+' · ověřených '+ver+' · zablokovaných '+usr.filter(function(u){return u.disabled;}).length):'';
   if(!usr.length){box.innerHTML='<div class="mt-empty">Zatím se nikdo nezaregistroval. Registrace je na laundromats.eu/cesta/registrace.</div>';return;}
-  box.innerHTML='<div class="mt-tw"><table class="usr-dt"><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Firma</th><th>Registrace</th><th>Ověření</th><th>Poslední přihlášení</th><th>Přihlášení</th><th>V HolyOS</th><th>Role</th><th>Účet</th></tr></thead><tbody></tbody></table></div>';
+  box.innerHTML='<div class="mt-tw"><table class="usr-dt"><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Firma</th><th>Registrace</th><th>Ověření</th><th>Pozval</th><th>Poslední přihlášení</th><th>Přihlášení</th><th>V HolyOS</th><th>Role</th><th>Účet</th></tr></thead><tbody></tbody></table></div>';
   if(!window.ColFilters){box.querySelector('tbody').innerHTML=usr.map(usrRow).join('');return;}
   usrT=dtable('.usr-dt',[
       {key:'name',label:'Jméno',get:function(u){return u.name||'';},ph:'Jméno…',enum:false},
@@ -344,7 +351,8 @@ function usrRender(){
       {key:'phone',label:'Telefon',get:function(u){return u.phone||'';},ph:'Telefon…',enum:false},
       {key:'company',label:'Firma',get:function(u){return u.company||'';},ph:'Firma…'},
       {key:'created_at',label:'Registrace',type:'date',get:function(u){return u.created_at||null;}},
-      {key:'verified',label:'Ověření',get:function(u){return u.email_verified_at?'ověřen':'čeká na ověření';},ph:'Vyber…',enum:true},
+      {key:'verified',label:'Ověření',get:function(u){return u.pending_password?'čeká na heslo':u.email_verified_at?'ověřen':'čeká na ověření';},ph:'Vyber…',enum:true},
+      {key:'invited',label:'Pozval',get:function(u){return u.invited?(u.invited.by||'?'):'sám (registrace)';},ph:'Vyber…',enum:true},
       {key:'last_login_at',label:'Poslední přihlášení',type:'date',get:function(u){return u.last_login_at||null;}},
       {key:'login_count',label:'Přihlášení',type:'num',get:function(u){return u.login_count||0;}},
       {key:'lead',label:'V HolyOS',get:function(u){return u.compounder_lead_id?String(u.compounder_lead_id):'';},enum:false},
