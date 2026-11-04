@@ -9704,8 +9704,8 @@ router.post('/contracts/:id(\\d+)/countersign', requireAuth, async (req, res, ne
 // ─── Portál: nabídka lokalit k prodeji (jen forSale, kurátorovaná ekonomika) ──
 // Kurzy z ČNB (CZK za 1 jednotku měny). Hodinová cache + fallback, když ČNB nedostupné.
 let _fxRates = null, _fxAt = 0;
-const FX_WANT = ['EUR', 'USD', 'GBP'];
-const FX_FALLBACK = { EUR: 25, USD: 23, GBP: 29 };
+const FX_WANT = ['EUR', 'USD', 'GBP', 'PLN']; // PLN pro polskou kalkulačku na laundromats.eu (kurz ČNB, ne pevný)
+const FX_FALLBACK = { EUR: 25, USD: 23, GBP: 29, PLN: 5.8 };
 async function fxRatesCzk() {
   if (_fxRates && (Date.now() - _fxAt) < 3600000) return _fxRates;
   try {
