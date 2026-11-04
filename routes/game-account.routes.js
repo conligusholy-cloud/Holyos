@@ -201,7 +201,7 @@ router.get('/cards', async (req, res, next) => {
     const p = await currentPlayer(req);
     res.json({
       ok: true, catalog: catalogPublic(),
-      payments: !!process.env.STRIPE_SECRET_KEY,
+      payments: require('./game-stripe.routes')._paymentsOn(),
       owned: p ? (await pub(p)).cards : null
     });
   } catch (e) { next(e); }

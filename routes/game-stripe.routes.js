@@ -21,7 +21,11 @@ const MAX_QTY = 10;
 
 const key = () => process.env.STRIPE_SECRET_KEY || '';
 const gameUrl = () => (process.env.PRADLOMATY_BASE_URL || 'https://pradlomaty.info').replace(/\/+$/, '') + '/game';
-const hookSecret = () => process.env.STRIPE_WEBHOOK_SECRET_GAME || process.env.STRIPE_WEBHOOK_SECRET || '';
+// Tajemství je VLASTNÍ pro tenhle endpoint. Vzít to od /misto by nefungovalo —
+// každý webhook endpoint má ve Stripu svoje a podpis by nikdy neseděl.
+const hookSecret = () => process.env.STRIPE_WEBHOOK_SECRET_GAME || '';
+// Prodávat smíme jen tehdy, když umíme i doručit, tedy ověřit webhook.
+const paymentsOn = () => !!(process.env.STRIPE_SECRET_KEY && hookSecret());
 
 // ─── Volání Stripe API (form-encoded, jak ho Stripe chce) ────────────────────
 function flat(obj, prefix, out) {
@@ -52,7 +56,7 @@ async function stripePost(path, body) {
 // POST /stripe/checkout { kind, qty } → { url }
 router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePlayer, async (req, res, next) => {
   try {
-    if (!key()) return res.status(503).json({ error: 'Platby zatím nejsou spuštěné.' });
+    if (!paymentsOn()) return res.status(503).json({ error: 'Platby zatím nejsou spuštěné.' });
     const p = req.player;
     if (!(p.email && p.first_name && p.last_name)) {
       return res.status(428).json({ error: 'Nejdřív doplň jméno a e-mail.', need_details: true });
@@ -148,3 +152,4 @@ const webhook = [express.raw({ type: '*/*', limit: '1mb' }), async (req, res) =>
 
 module.exports = router;
 module.exports._webhook = webhook;
+module.exports._paymentsOn = paymentsOn;
