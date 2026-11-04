@@ -161,6 +161,23 @@ function fresh(profileId) {
     stats: { earned: 0, interest: 0 }
   };
 }
+// Finder nekdy vraci metriky jako objekt { count, nearest_m, list } - potrebujeme z nich cislo.
+function mnum(v) {
+  if (v == null) return null;
+  if (typeof v === 'number') return v;
+  if (typeof v === 'object' && typeof v.count === 'number') return v.count;
+  return null;
+}
+function fixMetrics(sp) {
+  if (!sp) return sp;
+  if (sp.parking && typeof sp.parking === 'object' && sp.parking.nearest_m != null && sp.parking_m == null) {
+    sp.parking_m = Math.round(sp.parking.nearest_m);
+  }
+  sp.parking = mnum(sp.parking);
+  sp.competition = mnum(sp.competition);
+  sp.anchors = mnum(sp.anchors);
+  return sp;
+}
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* plná paměť — hra běží dál */ } }
 function load() {
   try {
@@ -172,6 +189,10 @@ function load() {
     if (!o.leases) o.leases = {};
     if (!o.pid) o.pid = (Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)).slice(0, 12);
     if (typeof o.refs !== 'number') o.refs = 0;
+    // Stara ulozena mista mela metriky jako objekty { count, nearest_m } - srovname je na cisla.
+    Object.keys(o.areas || {}).forEach(function (id) {
+      ((o.areas[id] || {}).spots || []).forEach(fixMetrics);
+    });
     o.v = 2;
     return o;
   } catch (e) { return null; }
@@ -491,7 +512,7 @@ function scout(city, btn) {
           return toast(j.area.name + ' už máš prozkoumaný — koukni na mapu.', 'ok');
         }
         S.cash -= SCOUT_COST;
-        S.areas[id] = { name: j.area.name, lat: j.area.lat, lon: j.area.lon, scoutedAt: Date.now(), spots: j.spots };
+        S.areas[id] = { name: j.area.name, lat: j.area.lat, lon: j.area.lon, scoutedAt: Date.now(), spots: (j.spots || []).map(fixMetrics) };
         save(); paint(); drawMap(); closeSheet();
         if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], 12);
         toast(j.area.name + ': nalezeno ' + j.spots.length + ' míst.', 'ok');
@@ -523,9 +544,9 @@ function spotSheet(sp, areaId) {
   var head = '<h3>' + esc(sp.name) + '</h3>'
     + '<p class="muted small">' + esc(KIND_LABEL[sp.kind] || 'Místo') + ' · ' + esc(S.areas[areaId] ? S.areas[areaId].name : '') + '</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(sp.score) + '</div>'
-    + '<div class="kv"><span>Parkovacích ploch v okolí</span><b>' + (sp.parking != null ? sp.parking + (sp.parking_m != null ? ' (' + sp.parking_m + ' m)' : '') : '—') + '</b></div>'
-    + '<div class="kv"><span>Konkurence do 1,5 km</span><b>' + (sp.competition != null ? sp.competition : '—') + '</b></div>'
-    + '<div class="kv"><span>Tahouni provozu</span><b>' + (sp.anchors != null ? sp.anchors : '—') + '</b></div>';
+    + '<div class="kv"><span>Parkovacích ploch v okolí</span><b>' + (mnum(sp.parking) != null ? mnum(sp.parking) + (sp.parking_m != null ? ' (' + sp.parking_m + ' m)' : '') : '—') + '</b></div>'
+    + '<div class="kv"><span>Konkurence do 1,5 km</span><b>' + (mnum(sp.competition) != null ? mnum(sp.competition) : '—') + '</b></div>'
+    + '<div class="kv"><span>Tahouni provozu</span><b>' + (mnum(sp.anchors) != null ? mnum(sp.anchors) : '—') + '</b></div>';
 
   // 2. krok — domluvit s majitelem nájem. Zadarmo, ale bez něj se stavět nedá.
   if (!lease) {
