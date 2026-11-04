@@ -151,7 +151,9 @@ function trackServer(req, event, props) {
     fetch(HOLYOS_URL + '/api/compounder/track', { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': req.headers['user-agent'] || 'laundromats', 'X-Forwarded-For': req.ip || '' }, body: JSON.stringify({ sid, event, path: req.path, lang: 'cs', props: p }), signal: AbortSignal.timeout(8000) }).catch(() => {});
   } catch (e) { /* best-effort */ }
 }
-const ACC = require('./lm-account')({ HOLYOS_URL, LM_SECRET, PUBLIC_URL, rateLimited, cookies, ckDomain, sendMail: (p) => sendConfirmMail(p), adminOf: (req) => adminOf(req), render: (req, html) => lite(html, req), trackServer });
+// Stránky účtu, podpory, aplikací a videohovoru: lite() + překlad do jazyka návštěvníka (/en, /pl)
+const lmRender = (req, html) => { const out = lite(html, req); const lang = (req && req.lang) || 'cs'; return lang === 'cs' ? out : I18N.apply(out, lang); };
+const ACC = require('./lm-account')({ HOLYOS_URL, LM_SECRET, PUBLIC_URL, rateLimited, cookies, ckDomain, sendMail: (p) => sendConfirmMail(p), adminOf: (req) => adminOf(req), render: lmRender, trackServer });
 app.use((req, res, next) => (/^\/(cesta|api\/location|api\/cesta|api\/vc|videocall|uvod|$)/.test(req.path) ? ACC.attach(req, res, next) : next()));
 
 // ── Záchranná brána: co není výslovně veřejné, chce přihlášení ──────────────
@@ -520,13 +522,13 @@ app.get('/img/product/:id(\\d+)', async (req, res) => {
   } catch (e) { res.status(404).end(); }
 });
 // ── Podpora Laundromats (chat /cesta/podpora + administrace → Podpora; data v HolyOS, odpovídá se i z Velínu) ──
-const SUP = require('./lm-support')(app, { HOLYOS_URL, LM_SECRET, requireAccount: ACC.requireAccount, requireAdmin, render: (req, html) => lite(html, req), trackServer });
+const SUP = require('./lm-support')(app, { HOLYOS_URL, LM_SECRET, requireAccount: ACC.requireAccount, requireAdmin, render: lmRender, trackServer });
 ACC.setSupportUnread(SUP.unread);
 // ── Aplikace lokalit (/cesta/hledat, /cesta/zhodnotit) ──
 ACC.mount(app);
 // Videohovor s kompetentní osobou (/videocall) — WebRTC + SSE, upozornění přes HolyOS (Velín)
-require('./lm-videocall')(app, { HOLYOS_URL, LM_SECRET, rateLimited, render: (req, html) => lite(html, req), trackServer });
-require('./lm-apps')(app, { HOLYOS_URL, rateLimited, fetchProducts, requireAccount: ACC.requireAccount, requirePage: ACC.requirePage, render: (req, html) => lite(html, req), trackServer });
+require('./lm-videocall')(app, { HOLYOS_URL, LM_SECRET, rateLimited, render: lmRender, trackServer });
+require('./lm-apps')(app, { HOLYOS_URL, rateLimited, fetchProducts, requireAccount: ACC.requireAccount, requirePage: ACC.requirePage, render: lmRender, trackServer });
 
 app.use((req, res) => res.status(404).type('text/plain').send('Stránka nenalezena'));
 app.use((err, req, res, next) => { console.warn('[laundromats]', err && err.message); res.status(500).type('text/plain').send('Chyba serveru'); });
