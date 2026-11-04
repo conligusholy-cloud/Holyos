@@ -343,7 +343,7 @@ function homePage(lang) {
     + '<div class="eyebrow rv"><i></i>' + esc(L.hero.eyebrow) + '</div>'
     + '<h1 class="rv"><span>' + esc(L.hero.h1a) + '</span><span class="grad">' + esc(L.hero.h1b) + '</span></h1>'
     + '<p class="lead rv">' + esc(L.hero.sub) + '</p>'
-    + '<div class="ctas rv"><a class="btn btn-p" href="#jak-zacit">' + esc(L.hero.cta1) + ' ' + svg('arrow', 18) + '</a><a class="btn btn-g" href="#provozovny">' + esc(L.hero.cta2) + '</a></div>'
+    + '<div class="ctas rv"><!--PUB--><a class="btn btn-p" href="/cesta/registrace">Vytvořit účet ' + svg('arrow', 18) + '</a><!--/PUB--><!--PRIV--><a class="btn btn-p" href="/cesta/ucet">Moje nástroje ' + svg('arrow', 18) + '</a><!--/PRIV--><a class="btn btn-g" href="#provozovny">' + esc(L.hero.cta2) + '</a></div>'
     + '<ul class="pts rv">' + L.hero.points.map((p) => '<li>' + svg('check', 18) + esc(p) + '</li>').join('') + '</ul></div>'
     + '<div class="visual rv"><div class="glow"></div><div class="ground"></div>'
     // PH: nahradit fotografií skutečného venkovního prádlomatu v reálném prostředí (WebP, ~1600 px, < 250 kB)
