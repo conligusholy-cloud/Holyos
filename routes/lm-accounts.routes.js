@@ -208,13 +208,72 @@ router.get('/:id(\\d+)/activity', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /setup-info {token} → { email, name } — kontrola odkazu „dokončit účet" (heslo ještě nenastavené)
+// POST /setup-info {token} → { email, name, phone, needs_email, needs_phone }
+// Kontrola odkazu „dokončit účet" (heslo ještě nenastavené). `needs_*` říká Laundromats,
+// které údaje musí zákazník na aktivační stránce doplnit — účet mohl vzniknout
+// u kontaktu, u kterého jsme e-mail ani telefon neměli.
 router.post('/setup-info', async (req, res, next) => {
   try {
     const t = s((req.body || {}).token, 100);
-    const acc = t.length >= 20 ? await prisma.lmAccount.findFirst({ where: { reset_token_hash: sha(t) }, select: { email: true, name: true, reset_expires_at: true, disabled: true } }) : null;
+    const acc = t.length >= 20 ? await prisma.lmAccount.findFirst({ where: { reset_token_hash: sha(t) }, select: { email: true, name: true, phone: true, reset_expires_at: true, disabled: true } }) : null;
     if (!acc || acc.disabled || !acc.reset_expires_at || acc.reset_expires_at < new Date()) return res.status(404).json({ error: 'Odkaz už byl použit nebo vypršel.' });
-    res.json({ ok: true, email: acc.email, name: acc.name });
+    res.json({ ok: true, email: acc.email || '', name: acc.name || '', phone: acc.phone || '', needs_email: !acc.email, needs_phone: !acc.phone });
+  } catch (err) { next(err); }
+});
+
+// POST /setup-complete {token, email, phone, name, password} → dokončení účtu z odkazu.
+// Oproti /reset umí doplnit chybějící e-mail (= přihlašovací jméno) a telefon a zapsat je
+// zpátky ke kontaktu v CRM. Údaje, které účet už má, se odsud nepřepisují.
+router.post('/setup-complete', async (req, res, next) => {
+  try {
+    const b = req.body || {}; const t = s(b.token, 100);
+    const acc = t.length >= 20 ? await prisma.lmAccount.findFirst({ where: { reset_token_hash: sha(t) } }) : null;
+    if (!acc || acc.disabled || !acc.reset_expires_at || acc.reset_expires_at < new Date()) return res.status(400).json({ error: 'Odkaz už byl použit nebo vypršel.' });
+
+    const data = {};
+    // E-mail = přihlašovací jméno. Doplňuje se jen tehdy, když ho účet ještě nemá.
+    if (!acc.email) {
+      const email = s(b.email, 160).toLowerCase();
+      if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Vyplňte prosím platný e-mail — bude to vaše přihlašovací jméno.' });
+      const obsazeno = await prisma.lmAccount.findUnique({ where: { email }, select: { id: true } });
+      if (obsazeno && obsazeno.id !== acc.id) return res.status(409).json({ error: 'Tento e-mail už je u nás registrovaný. Přihlaste se k původnímu účtu, nebo použijte jiný e-mail.' });
+      data.email = email;
+    }
+    // Telefon — povinný, pokud ho u účtu nemáme.
+    if (!acc.phone) {
+      const phone = s(b.phone, 40);
+      if (String(phone).replace(/\D/g, '').length < 9) return res.status(400).json({ error: 'Vyplňte prosím telefonní číslo.' });
+      data.phone = phone;
+    }
+    const name = s(b.name, 120);
+    if (name) data.name = name;
+
+    const pe = pwErr(b.password); if (pe) return res.status(400).json({ error: pe });
+    Object.assign(data, {
+      password_hash: await bcrypt.hash(String(b.password), 12),
+      reset_token_hash: null, reset_expires_at: null,
+      token_version: { increment: 1 },
+      email_verified_at: acc.email_verified_at || new Date(),
+      last_login_at: new Date(),
+    });
+    const upd = await prisma.lmAccount.update({ where: { id: acc.id }, data });
+
+    // Doplněné údaje zpátky ke kontaktu v CRM — ať je obchod má u sebe.
+    if (acc.compounder_lead_id && (data.email || data.phone)) {
+      try {
+        const lead = await prisma.compounderLead.findUnique({ where: { id: acc.compounder_lead_id }, select: { email: true, phone: true, activity_log: true } });
+        if (lead) {
+          const zmeny = {};
+          if (data.email && !lead.email) zmeny.email = data.email;
+          if (data.phone && !lead.phone) zmeny.phone = data.phone;
+          if (Object.keys(zmeny).length) {
+            const popis = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' · Zákazník doplnil při aktivaci účtu: ' + Object.keys(zmeny).map((k) => (k === 'email' ? 'e-mail' : 'telefon')).join(', ');
+            await prisma.compounderLead.update({ where: { id: acc.compounder_lead_id }, data: Object.assign(zmeny, { activity_log: popis + (lead.activity_log ? '\n' + lead.activity_log : '') }) });
+          }
+        }
+      } catch (e) { console.warn('[lm-accounts] doplnění kontaktu:', e.message); }
+    }
+    res.json({ ok: true, account: pub(upd) });
   } catch (err) { next(err); }
 });
 
@@ -226,17 +285,25 @@ module.exports = router;
 const SETUP_PREFIX = '!setup:';
 module.exports.ensureAccountForLead = async function ensureAccountForLead(lead) {
   const email = s(lead && lead.email, 160).toLowerCase();
-  if (!EMAIL_RE.test(email)) return { ok: false, reason: 'no_email' };
-  let acc = await prisma.lmAccount.findUnique({ where: { email } });
-  const name = s(lead.name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || email, 120);
+  const maEmail = EMAIL_RE.test(email);
+  // Účet vzniká i bez e-mailu a bez telefonu — zákazník si je doplní na aktivačním
+  // odkazu (/cesta/aktivace), kde si zároveň nastaví heslo. Bez e-mailu hledáme
+  // existující účet podle kontaktu, ať z opakovaného odeslání odkazu nevznikne druhý.
+  let acc = maEmail
+    ? await prisma.lmAccount.findUnique({ where: { email } })
+    : await prisma.lmAccount.findFirst({ where: { compounder_lead_id: lead.id }, orderBy: { created_at: 'desc' } });
+  const name = s(lead.name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || (maEmail ? email : '') || s(lead.phone, 40) || 'Zákazník', 120);
   let created = false;
   if (!acc) {
-    acc = await prisma.lmAccount.create({ data: { email, name, phone: s(lead.phone, 40) || null, password_hash: SETUP_PREFIX + crypto.randomBytes(12).toString('hex'), plan: 'economy', compounder_lead_id: lead.id } });
+    acc = await prisma.lmAccount.create({ data: { email: maEmail ? email : null, name, phone: s(lead.phone, 40) || null, password_hash: SETUP_PREFIX + crypto.randomBytes(12).toString('hex'), plan: 'economy', compounder_lead_id: lead.id } });
     created = true;
   } else {
     const data = {};
     if (!acc.plan || acc.plan === 'free' || acc.plan === 'beginner') data.plan = 'economy';
     if (!acc.compounder_lead_id) data.compounder_lead_id = lead.id;
+    // Co jsme se o kontaktu mezitím dozvěděli, doplníme (nikdy nepřepisujeme vyplněné).
+    if (!acc.email && maEmail) data.email = email;
+    if (!acc.phone && s(lead.phone, 40)) data.phone = s(lead.phone, 40);
     if (Object.keys(data).length) acc = await prisma.lmAccount.update({ where: { id: acc.id }, data });
   }
   if (acc.disabled) return { ok: false, reason: 'disabled' };
@@ -246,5 +313,6 @@ module.exports.ensureAccountForLead = async function ensureAccountForLead(lead) 
     token = newToken();
     await prisma.lmAccount.update({ where: { id: acc.id }, data: { reset_token_hash: sha(token), reset_expires_at: new Date(Date.now() + 30 * 86400e3) } });
   }
-  return { ok: true, created, needsPassword, token, account_id: acc.id, plan: acc.plan };
+  // Co po zákazníkovi bude aktivační stránka chtít — ať to obchodník ví dopředu.
+  return { ok: true, created, needsPassword, token, account_id: acc.id, plan: acc.plan, needs_email: !acc.email, needs_phone: !acc.phone };
 };

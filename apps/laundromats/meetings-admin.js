@@ -326,7 +326,7 @@ function usrInv(u){var i=u.invited;if(!i)return '<span class="muted small">sám 
 function usrRow(u){
   var lead=u.compounder_lead_id&&window.LM_HOLYOS?'<a href="'+window.LM_HOLYOS+'/modules/prodejni-objednavky/index.html?lead='+u.compounder_lead_id+'" target="_blank" rel="noopener" class="small">kontakt #'+u.compounder_lead_id+' ↗</a>':(u.compounder_lead_id?'<span class="small muted">#'+u.compounder_lead_id+'</span>':'<span class="muted">—</span>');
   return '<tr'+(u.disabled?' style="opacity:.55"':'')+'><td><a href="#" class="nm" data-uact="'+u.id+'" title="Zobrazit pohyb na stránkách">'+esc(u.name)+'</a> <button class="btn sec sm" data-uact="'+u.id+'" title="Pohyb na stránkách">📈 Pohyb</button></td>'
-    +'<td><a href="mailto:'+esc(u.email)+'">'+esc(u.email)+'</a></td>'
+    +'<td>'+(u.email?'<a href="mailto:'+esc(u.email)+'">'+esc(u.email)+'</a>':'<span class="muted" title="Účet zatím nemá e-mail — zákazník ho doplní na aktivačním odkazu">bez e-mailu</span>')+'</td>'
     +'<td>'+(u.phone?'<a href="tel:'+esc(u.phone)+'">'+esc(u.phone)+'</a>':'<span class="muted">—</span>')+'</td>'
     +hcell(u.company)
     +'<td>'+dtm(u.created_at)+'</td>'

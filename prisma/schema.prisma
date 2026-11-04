@@ -7502,7 +7502,9 @@ model AccountingExportItem {
 // Laundromats.eu — účty registrovaných uživatelů (přístup ke Compounder, Prádlomaty, Ekonomika, Najít / Zhodnotit místo)
 model LmAccount {
   id                 Int       @id @default(autoincrement())
-  email              String    @unique @db.VarChar(160)
+  // Nepovinný: účet smí vzniknout i pro kontakt, u kterého e-mail (zatím) nemáme —
+  // zákazník ho doplní na aktivačním odkazu a tím získá přihlašovací jméno.
+  email              String?   @unique @db.VarChar(160)
   name               String    @db.VarChar(120)
   phone              String?   @db.VarChar(40)
   company            String?   @db.VarChar(160)

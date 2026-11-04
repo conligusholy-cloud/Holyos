@@ -182,28 +182,46 @@ module.exports = function createAccounts(ctx) {
       res.redirect(302, '/cesta/ucet/nastaveni?heslo=1');
     }));
     // Dokončení účtu založeného obchodem (odkaz na Ekonomiku z aplikace Obchodník): zákazník si jen nastaví heslo
-    const actPage = (t, info, err) => box('Dokončete svůj účet', 'Účet jsme vám připravili, stačí si nastavit heslo. Pak se vám rovnou otevře ekonomika prádlomatu.', `${msgHtml(err)}
+    // Chybějící údaje (e-mail, telefon) si zákazník doplní rovnou tady — účet mu mohl
+    // obchod založit i tehdy, když jsme na něj kontakt neměli. Co už vyplněné je,
+    // ukážeme jen pro kontrolu a needitovatelně.
+    const actPage = (t, info, err, b) => {
+      b = b || {};
+      const podtitul = (info.needs_email || info.needs_phone)
+        ? 'Účet jsme vám připravili. Doplňte prosím chybějící údaje a nastavte si heslo — pak se vám rovnou otevře ekonomika prádlomatu.'
+        : 'Účet jsme vám připravili, stačí si nastavit heslo. Pak se vám rovnou otevře ekonomika prádlomatu.';
+      const poleEmail = info.needs_email
+        ? `<label>E-mail (bude to vaše přihlašovací jméno)<input name="email" type="email" required maxlength="160" autocomplete="email" value="${esc(b.email || '')}"></label>`
+        : `<label>E-mail (přihlašovací jméno)<input value="${esc(info.email)}" readonly style="opacity:.75"></label>`;
+      const poleTelefon = info.needs_phone
+        ? `<label>Telefon<input name="phone" type="tel" required maxlength="40" autocomplete="tel" value="${esc(b.phone || '')}"></label>`
+        : '';
+      const poleJmeno = info.needs_email
+        ? `<label>Jméno a příjmení<input name="name" required maxlength="120" value="${esc(b.name != null ? b.name : (info.name || ''))}"></label>`
+        : '';
+      return box('Dokončete svůj účet', podtitul, `${msgHtml(err)}
       <form method="post" action="/cesta/aktivace"><input type="hidden" name="t" value="${esc(t)}">
-      <label>E-mail (přihlašovací jméno)<input value="${esc(info.email)}" readonly style="opacity:.75"></label>
+      ${poleJmeno}${poleEmail}${poleTelefon}
       <label>Heslo<input name="password" type="password" required minlength="8" maxlength="200" autocomplete="new-password"><small class="muted">alespoň 8 znaků</small></label>
       <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--text2);margin-top:14px;white-space:nowrap"><input type="checkbox" name="gdpr" value="1" required style="width:auto;margin:0;flex:none"><span>Souhlasím se <a href="/gdpr" target="_blank">zpracováním osobních údajů</a></span></label>
       <button class="btn" type="submit">Nastavit heslo a otevřít ekonomiku</button></form>`);
+    };
     const actUsed = () => box('Odkaz už byl použit', '', '<p>Účet je už dokončený, nebo odkaz vypršel. Přihlaste se svým e-mailem a heslem.</p><div class="acc-links"><a href="/cesta/prihlaseni?next=%2Fcesta%2Fucet%2Fekonomika">Přihlásit se →</a><a href="/cesta/zapomenute-heslo">Zapomenuté heslo</a></div>');
     app.get('/cesta/aktivace', A(async (req, res) => {
       const t = String(req.query.t || '').slice(0, 100);
       if (req.account) return res.redirect(302, '/cesta/ucet/ekonomika');
       const r = await hos('POST', '/setup-info', { token: t });
-      if (r.status !== 200 || !r.j.email) return send(req, res, 'Dokončení účtu', actUsed());
+      if (r.status !== 200 || !r.j.ok) return send(req, res, 'Dokončení účtu', actUsed());
       send(req, res, 'Dokončení účtu', actPage(t, r.j));
     }));
     app.post('/cesta/aktivace', urlenc, A(async (req, res) => {
       const b = req.body || {}; const t = String(b.t || '').slice(0, 100);
       if (rateLimited('act:' + req.ip, 10, 3600e3)) return send(req, res, 'Dokončení účtu', box('Dokončení účtu', '', msgHtml('Příliš mnoho pokusů, zkuste to později.')), 429);
       const info = await hos('POST', '/setup-info', { token: t });
-      if (info.status !== 200 || !info.j.email) return send(req, res, 'Dokončení účtu', actUsed());
-      if (!b.gdpr) return send(req, res, 'Dokončení účtu', actPage(t, info.j, 'Potvrďte prosím souhlas se zpracováním údajů.'), 400);
-      const r = await hos('POST', '/reset', { token: t, password: String(b.password || '') });
-      if (r.status !== 200 || !r.j.account) return send(req, res, 'Dokončení účtu', actPage(t, info.j, r.j.error || 'Heslo se nepodařilo uložit.'), 400);
+      if (info.status !== 200 || !info.j.ok) return send(req, res, 'Dokončení účtu', actUsed());
+      if (!b.gdpr) return send(req, res, 'Dokončení účtu', actPage(t, info.j, 'Potvrďte prosím souhlas se zpracováním údajů.', b), 400);
+      const r = await hos('POST', '/setup-complete', { token: t, password: String(b.password || ''), email: b.email, phone: b.phone, name: b.name });
+      if (r.status !== 200 || !r.j.account) return send(req, res, 'Dokončení účtu', actPage(t, info.j, r.j.error || 'Účet se nepodařilo dokončit.', b), 400);
       setSession(req, res, r.j.account);
       linkAndTrack(req, r.j.account, 'account_activated');
       res.redirect(302, '/cesta/ucet/ekonomika?vitejte=1');
@@ -251,7 +269,7 @@ module.exports = function createAccounts(ctx) {
       const err = String(req.query.err || '').slice(0, 200);
       const body = CSS + `<div class="hero" style="padding-bottom:6px"><span class="eyebrow"><i></i>Můj účet</span><h1>${esc(a.name)}</h1><p>${esc(a.email || 'Správce přihlášený z HolyOS')}</p></div>${msgHtml(err, welcome)}
         ${req.account ? `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:10px">
-          <form class="card" method="post" action="/cesta/ucet/profil" style="margin:0"><h2 style="margin:0 0 4px">Moje údaje</h2><p class="small muted" style="margin:0">${esc(a.email)}</p>
+          <form class="card" method="post" action="/cesta/ucet/profil" style="margin:0"><h2 style="margin:0 0 4px">Moje údaje</h2><p class="small muted" style="margin:0">${a.email ? esc(a.email) : 'Účet zatím nemá e-mail'}</p>
             <label>Jméno a příjmení<input name="name" required maxlength="120" value="${esc(a.name)}"></label><label>Telefon<input name="phone" maxlength="40" value="${esc(a.phone || '')}"></label><label>Firma<input name="company" maxlength="160" value="${esc(a.company || '')}"></label>
             <div style="margin-top:14px"><button class="btn sec" type="submit">Uložit údaje</button></div></form>
           <form class="card" method="post" action="/cesta/ucet/heslo" style="margin:0"><h2 style="margin:0 0 4px">Změna hesla</h2><p class="small muted" style="margin:0">Po změně se odhlásí ostatní zařízení.</p>
