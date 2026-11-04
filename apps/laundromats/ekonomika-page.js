@@ -200,6 +200,8 @@ function economyDetailPage(lang) {
     <div id="pradlomat-tool-root"></div>
     <script src="/cesta/pradlomat-economy.js"></script>
     <script>window.PradlomatTool.mount(document.getElementById('pradlomat-tool-root'),{version:'V3',showVerSwitch:true});
+    // Kurzy z ČNB (stejné jako na stránce Ekonomika) — jinak by podrobný přehled v Kč počítal s pevným kurzem 25 Kč/€
+    fetch('/api/ekonomika/fx').then(function(r){return r.json();}).then(function(j){if(j&&j.rates&&j.rates.EUR>0&&window.PradlomatTool.setRates)window.PradlomatTool.setRates(Object.assign({EUR:25,USD:23,GBP:29},j.rates));}).catch(function(){});
     (function(){var r=document.getElementById('pradlomat-tool-root'),tm={};if(window.lmTrack)lmTrack('eco_open',{view:'detail'});
       r.addEventListener('change',function(ev){var i=ev.target;if(!i||!i.getAttribute)return;var k=i.getAttribute('data-key');if(!k)return;var row=i.closest('.pe-row'),lb=row&&row.querySelector('label');clearTimeout(tm[k]);tm[k]=setTimeout(function(){if(window.lmTrack)lmTrack('eco_edit',{key:k,label:lb?lb.textContent.trim().slice(0,60):k,value:i.value});},400);});})();</script>`;
   return CP.page(t.dTitle, t.desc, main, false);
