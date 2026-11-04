@@ -174,6 +174,33 @@ module.exports = function createAccounts(ctx) {
       setSession(req, res, r.j.account);
       res.redirect(302, '/cesta/ucet/nastaveni?heslo=1');
     }));
+    // Dokončení účtu založeného obchodem (odkaz na Ekonomiku z aplikace Obchodník): zákazník si jen nastaví heslo
+    const actPage = (t, info, err) => box('Dokončete svůj účet', 'Účet jsme vám připravili, stačí si nastavit heslo. Pak se vám rovnou otevře ekonomika prádlomatu.', `${msgHtml(err)}
+      <form method="post" action="/cesta/aktivace"><input type="hidden" name="t" value="${esc(t)}">
+      <label>E-mail (přihlašovací jméno)<input value="${esc(info.email)}" readonly style="opacity:.75"></label>
+      <label>Heslo<input name="password" type="password" required minlength="8" maxlength="200" autocomplete="new-password"><small class="muted">alespoň 8 znaků</small></label>
+      <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--text2);margin-top:14px;white-space:nowrap"><input type="checkbox" name="gdpr" value="1" required style="width:auto;margin:0;flex:none"><span>Souhlasím se <a href="/gdpr" target="_blank">zpracováním osobních údajů</a></span></label>
+      <button class="btn" type="submit">Nastavit heslo a otevřít ekonomiku</button></form>`);
+    const actUsed = () => box('Odkaz už byl použit', '', '<p>Účet je už dokončený, nebo odkaz vypršel. Přihlaste se svým e-mailem a heslem.</p><div class="acc-links"><a href="/cesta/prihlaseni?next=%2Fcesta%2Fucet%2Fekonomika">Přihlásit se →</a><a href="/cesta/zapomenute-heslo">Zapomenuté heslo</a></div>');
+    app.get('/cesta/aktivace', A(async (req, res) => {
+      const t = String(req.query.t || '').slice(0, 100);
+      if (req.account) return res.redirect(302, '/cesta/ucet/ekonomika');
+      const r = await hos('POST', '/setup-info', { token: t });
+      if (r.status !== 200 || !r.j.email) return send(req, res, 'Dokončení účtu', actUsed());
+      send(req, res, 'Dokončení účtu', actPage(t, r.j));
+    }));
+    app.post('/cesta/aktivace', urlenc, A(async (req, res) => {
+      const b = req.body || {}; const t = String(b.t || '').slice(0, 100);
+      if (rateLimited('act:' + req.ip, 10, 3600e3)) return send(req, res, 'Dokončení účtu', box('Dokončení účtu', '', msgHtml('Příliš mnoho pokusů, zkuste to později.')), 429);
+      const info = await hos('POST', '/setup-info', { token: t });
+      if (info.status !== 200 || !info.j.email) return send(req, res, 'Dokončení účtu', actUsed());
+      if (!b.gdpr) return send(req, res, 'Dokončení účtu', actPage(t, info.j, 'Potvrďte prosím souhlas se zpracováním údajů.'), 400);
+      const r = await hos('POST', '/reset', { token: t, password: String(b.password || '') });
+      if (r.status !== 200 || !r.j.account) return send(req, res, 'Dokončení účtu', actPage(t, info.j, r.j.error || 'Heslo se nepodařilo uložit.'), 400);
+      setSession(req, res, r.j.account);
+      linkAndTrack(req, r.j.account, 'account_activated');
+      res.redirect(302, '/cesta/ucet/ekonomika?vitejte=1');
+    }));
     const logout = (req, res) => { if (req.account && ctx.trackServer) ctx.trackServer(req, 'account_logout', {}); clearSession(req, res); res.redirect(302, '/'); };
     app.get('/cesta/odhlasit', logout); app.post('/cesta/odhlasit', logout);
 

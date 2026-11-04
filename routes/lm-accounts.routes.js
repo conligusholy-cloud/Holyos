@@ -89,7 +89,7 @@ router.post('/login', async (req, res, next) => {
   try {
     const b = req.body || {}; const email = s(b.email, 160).toLowerCase();
     const acc = EMAIL_RE.test(email) ? await prisma.lmAccount.findUnique({ where: { email } }) : null;
-    const ok = acc && !acc.disabled && await bcrypt.compare(String(b.password || ''), acc.password_hash);
+    const ok = acc && !acc.disabled && !String(acc.password_hash || '').startsWith('!setup:') && await bcrypt.compare(String(b.password || ''), acc.password_hash).catch(() => false);
     if (!ok) return res.status(401).json({ error: 'Nesprávný e-mail nebo heslo.' });
     if (!acc.email_verified_at) {
       const token = newToken();
@@ -204,4 +204,43 @@ router.get('/:id(\\d+)/activity', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /setup-info {token} → { email, name } — kontrola odkazu „dokončit účet" (heslo ještě nenastavené)
+router.post('/setup-info', async (req, res, next) => {
+  try {
+    const t = s((req.body || {}).token, 100);
+    const acc = t.length >= 20 ? await prisma.lmAccount.findFirst({ where: { reset_token_hash: sha(t) }, select: { email: true, name: true, reset_expires_at: true, disabled: true } }) : null;
+    if (!acc || acc.disabled || !acc.reset_expires_at || acc.reset_expires_at < new Date()) return res.status(404).json({ error: 'Odkaz už byl použit nebo vypršel.' });
+    res.json({ ok: true, email: acc.email, name: acc.name });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
+
+// Účet laundromats.eu pro kontakt, kterému posíláme odkaz na Ekonomiku (aplikace Obchodník).
+// Neexistuje → založí se s rolí Ekonomika a bez hesla; vrátí jednorázový token, se kterým si zákazník heslo nastaví
+// (/cesta/aktivace, platí 30 dní). Existuje → povýší roli Začátečník na Ekonomika; token jen když heslo ještě nemá.
+const SETUP_PREFIX = '!setup:';
+module.exports.ensureAccountForLead = async function ensureAccountForLead(lead) {
+  const email = s(lead && lead.email, 160).toLowerCase();
+  if (!EMAIL_RE.test(email)) return { ok: false, reason: 'no_email' };
+  let acc = await prisma.lmAccount.findUnique({ where: { email } });
+  const name = s(lead.name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || email, 120);
+  let created = false;
+  if (!acc) {
+    acc = await prisma.lmAccount.create({ data: { email, name, phone: s(lead.phone, 40) || null, password_hash: SETUP_PREFIX + crypto.randomBytes(12).toString('hex'), plan: 'economy', compounder_lead_id: lead.id } });
+    created = true;
+  } else {
+    const data = {};
+    if (!acc.plan || acc.plan === 'free' || acc.plan === 'beginner') data.plan = 'economy';
+    if (!acc.compounder_lead_id) data.compounder_lead_id = lead.id;
+    if (Object.keys(data).length) acc = await prisma.lmAccount.update({ where: { id: acc.id }, data });
+  }
+  if (acc.disabled) return { ok: false, reason: 'disabled' };
+  const needsPassword = String(acc.password_hash || '').startsWith(SETUP_PREFIX);
+  let token = null;
+  if (needsPassword) {
+    token = newToken();
+    await prisma.lmAccount.update({ where: { id: acc.id }, data: { reset_token_hash: sha(token), reset_expires_at: new Date(Date.now() + 30 * 86400e3) } });
+  }
+  return { ok: true, created, needsPassword, token, account_id: acc.id, plan: acc.plan };
+};

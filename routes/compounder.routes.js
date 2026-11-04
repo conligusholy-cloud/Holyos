@@ -4074,15 +4074,27 @@ router.post('/leads/:id/economy-link', requireAuth, async (req, res, next) => {
     const pl = String(lead.lang || '').toLowerCase().startsWith('pl') || /^(\+|00)48/.test(String(lead.phone || '').replace(/[\s()-]/g, ''));
     const base = String(process.env.LM_URL || 'https://laundromats.eu').replace(/\/+$/, '');
     const ch = channel === 'whatsapp' ? 'wa' : channel; // označení zdroje v odkazu → vidíme, odkud kontakt přišel
-    const link = base + (pl ? '/cesta/pl/ekonomika' : '/cesta/ekonomika') + '?l=' + makeShortCode(lead.id) + '&ch=' + ch;
+    // Česky: zákazník dostane účet na laundromats.eu s rolí Ekonomika → odkaz vede na dokončení účtu (heslo),
+    // pak rovnou na Ekonomiku v jeho účtu. Bez e-mailu (nebo polsky) zůstává veřejná stránka Ekonomiky jako dřív.
+    let acc = null;
+    if (!pl) { try { acc = await require('./lm-accounts.routes').ensureAccountForLead(Object.assign({}, lead, await prisma.compounderLead.findUnique({ where: { id: lead.id }, select: { last_name: true } }))); } catch (e) { console.warn('[economy-link] účet:', e.message); acc = null; } }
+    const tl = 'l=' + makeShortCode(lead.id) + '&ch=' + ch;
+    const link = acc && acc.ok
+      ? (acc.token ? base + '/cesta/aktivace?t=' + acc.token + '&' + tl : base + '/cesta/ucet/ekonomika?' + tl)
+      : base + (pl ? '/cesta/pl/ekonomika' : '/cesta/ekonomika') + '?' + tl;
+    if (acc && acc.ok && acc.created) {
+      try { const L0 = await prisma.compounderLead.findUnique({ where: { id: lead.id }, select: { activity_log: true } }); await prisma.compounderLead.update({ where: { id: lead.id }, data: { activity_log: new Date().toISOString().replace('T', ' ').slice(0, 16) + ' · Založen účet na laundromats.eu (role Ekonomika) — odkaz na dokončení účtu' + (L0 && L0.activity_log ? '\n' + L0.activity_log : '') } }); } catch (e) { /* best-effort */ }
+    }
     let first = String(lead.first_name || '').trim(); if (!first && lead.name) first = String(lead.name).trim().split(/\s+/)[0];
     let hello = first;
     if (!pl && first) { try { hello = require('../services/vocative').vocativeFirstName(first) || first; } catch (e) { hello = first; } }
     const text = pl
       ? (first ? 'Dzień dobry ' + first + ', ' : 'Dzień dobry, ') + 'przesyłam ekonomikę automatu pralniczego — możesz dostosować liczby do swojej lokalizacji: ' + link
-      : (hello ? 'Dobrý den ' + hello + ', ' : 'Dobrý den, ') + 'posílám vám ekonomiku prádlomatu — čísla si můžete upravit podle své lokality: ' + link;
+      : (acc && acc.ok && acc.token)
+        ? (hello ? 'Dobrý den ' + hello + ', ' : 'Dobrý den, ') + 'založili jsme vám přístup k ekonomice prádlomatu na laundromats.eu. Stačí si nastavit heslo a hned uvidíte čísla, která si upravíte podle své lokality: ' + link
+        : (hello ? 'Dobrý den ' + hello + ', ' : 'Dobrý den, ') + 'posílám vám ekonomiku prádlomatu — čísla si můžete upravit podle své lokality: ' + link;
     const by = (req.user && (req.user.display_name || req.user.username)) || null;
-    const log = (extra) => prisma.compounderEvent.create({ data: { sid: 'lead:' + lead.id, event: 'economy_link_sent', path: '/obchodnik', props: Object.assign({ lead_id: lead.id, channel, link, by, lang: pl ? 'pl' : 'cs' }, extra || {}) } }).catch(() => {});
+    const log = (extra) => prisma.compounderEvent.create({ data: { sid: 'lead:' + lead.id, event: 'economy_link_sent', path: '/obchodnik', props: Object.assign({ lead_id: lead.id, channel, link: String(link).replace(/([?&]t=)[^&]+/, '$1…'), by, lang: pl ? 'pl' : 'cs', account: acc && acc.ok ? (acc.created ? 'created' : acc.needsPassword ? 'pending_password' : 'existing') : null }, extra || {}) } }).catch(() => {});
 
     if (channel === 'whatsapp') {
       let wa = lead.phone ? String(lead.phone).replace(/[^\d]/g, '') : ''; if (wa.startsWith('00')) wa = wa.slice(2);
@@ -4102,8 +4114,8 @@ router.post('/leads/:id/economy-link', requireAuth, async (req, res, next) => {
     const subject = pl ? 'Ekonomika automatu pralniczego' : 'Ekonomika prádlomatu';
     const body = pl
       ? (first ? 'Dzień dobry ' + first + ',' : 'Dzień dobry,') + '\n\nprzesyłam interaktywny model ekonomiki automatu pralniczego. Żółte pola możesz dostosować do swojej lokalizacji i od razu zobaczysz obrót, zysk oraz zwrot inwestycji.\n\nZ poważaniem'
-      : (hello ? 'Dobrý den ' + hello + ',' : 'Dobrý den,') + '\n\nposílám vám interaktivní model ekonomiky prádlomatu. Žlutá pole si můžete upravit podle své lokality a okamžitě uvidíte obrat, zisk i návratnost.\n\nS pozdravem';
-    await sendMail({ to: lead.email, subject, body, from, fromName: '💧 PRÁDLOMATY 💧', link, linkLabel: pl ? 'Otwórz ekonomikę' : 'Otevřít ekonomiku', brand: 'pradlomaty', leadId: lead.id, campaignId: 'economy-link' });
+      : (hello ? 'Dobrý den ' + hello + ',' : 'Dobrý den,') + '\n\nposílám vám interaktivní model ekonomiky prádlomatu. Žlutá pole si můžete upravit podle své lokality a okamžitě uvidíte obrat, zisk i návratnost.' + ((acc && acc.ok && acc.token) ? '\n\nZaložili jsme vám k tomu účet na laundromats.eu (' + lead.email + '). Po kliknutí na tlačítko si jen nastavíte heslo a ekonomika se vám rovnou otevře — kdykoli se k ní pak vrátíte.' : '') + '\n\nS pozdravem';
+    await sendMail({ to: lead.email, subject, body, from, fromName: '💧 PRÁDLOMATY 💧', link, linkLabel: pl ? 'Otwórz ekonomikę' : ((acc && acc.ok && acc.token) ? 'Nastavit heslo a otevřít ekonomiku' : 'Otevřít ekonomiku'), brand: 'pradlomaty', leadId: lead.id, campaignId: 'economy-link' });
     await log({ subject });
     try { require('../services/ads/funnel-events').record('email', lead.id, { variant: 'ekonomika', channel: 'email', to: lead.email, subject, text: body.slice(0, 1500), from, link }); } catch (e) { /* best-effort */ }
     res.json({ ok: true, link });
