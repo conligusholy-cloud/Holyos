@@ -22,13 +22,29 @@ var MODELS = {
     desc: 'Dvě pračky a dvě sušičky. Pro místa, kde je o praní rvačka.' }
 };
 var MODEL_ORDER = ['mini', 'flex', 'max'];
-// Fotky strojů. MINI a FLEX jsou vyříznuté rendery (plavou na pozadí),
-// MAX je skutečná fotka provozovny, proto vyplní celý rámeček.
+// Fotky strojů. Lokální soubory jsou jen záloha — po startu se přepíšou tím,
+// co je u dané verze nastavené v HolyOS (Compounder → fotky verzí). Když tam
+// někdo nahraje hezčí render MAXu, objeví se sám i tady, v Ekonomice i v portálu.
 var MODEL_IMG = {
-  mini: { src: '/game/mini.webp', photo: false },
-  flex: { src: '/game/flex.webp', photo: false },
-  max: { src: '/game/max.webp', photo: true }
+  mini: { src: '/game/mini.webp' },
+  flex: { src: '/game/flex.webp' },
+  max: { src: '/game/max.webp' }
 };
+var VER_OF = { mini: 'V2', flex: 'V3', max: 'V4' };
+// Fotky z ceníku HolyOS bereme jen tam, kde nemáme hezčí vlastní výřez (MAX).
+var VER_PREFER_REMOTE = { max: true };
+function loadMachinePhotos() {
+  fetch('/api/compounder/portal/machines').then(function (r) { return r.json(); }).then(function (j) {
+    var changed = false;
+    (j.machines || []).forEach(function (m) {
+      MODEL_ORDER.forEach(function (k) {
+        if (VER_OF[k] !== m.ver || !m.photo || !VER_PREFER_REMOTE[k]) return;
+        if (MODEL_IMG[k].src !== m.photo) { MODEL_IMG[k] = { src: m.photo }; changed = true; }
+      });
+    });
+    if (changed && S && !$('v-shop').classList.contains('hidden')) paintShop();
+  }).catch(function () { /* ceník nedostupný — zůstanou lokální fotky */ });
+}
 // Jeden SKUTEČNÝ den = dva herní měsíce, herní rok tedy trvá 6 dní.
 var MONTH_MS = 43200000;         // 1 herní měsíc = 12 skutečných hodin
 var YEAR_MS = 12 * MONTH_MS;     // 1 herní rok = 6 skutečných dní
@@ -449,7 +465,7 @@ function paintShop() {
     var m = MODELS[k], price = machinePrice(m), f = canFinance(price);
     var im = MODEL_IMG[k];
     return '<div class="card">'
-      + '<div class="shop-img' + (im.photo ? ' photo' : '') + '"><img src="' + im.src + '" alt="Prádlomat ' + m.name + '" loading="lazy"></div>'
+      + '<div class="shop-img"><img src="' + esc(im.src) + '" alt="Prádlomat ' + m.name + '" loading="lazy"></div>'
       + '<div class="row" style="margin-top:12px"><h3>' + m.name + '</h3><b>' + kc(price) + ' ' + CUR + '</b></div>'
       + '<p class="muted small" style="margin:2px 0 8px">' + esc(m.desc) + '</p>'
       + '<div class="kv"><span>Zákazníků / den na průměrném místě</span><b>' + m.perday + '</b></div>'
@@ -627,6 +643,7 @@ function startGame() {
 
 fetch('/api/game/areas').then(function (r) { return r.json(); }).then(function (j) { AREAS = j.areas || []; })
   .catch(function () { AREAS = []; });
+loadMachinePhotos();
 
 S = load();
 if (S) { startGame(); }
