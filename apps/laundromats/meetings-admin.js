@@ -298,10 +298,9 @@ function usrActivity(id){
     var html='<div class="mt-sum" style="margin:0 0 12px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
       +[[visits.length,'návštěv'],[ev.filter(function(e){return e.event==='page_view';}).length,'zobrazených stránek'],[dur(tot),'čas na stránkách'],[acts,'akcí v aplikacích']].map(function(x){return '<div class="card" style="margin:0;padding:10px 12px"><div style="font-size:20px;font-weight:800">'+x[0]+'</div><div class="small muted">'+x[1]+'</div></div>';}).join('')+'</div>'
       +'<div class="small" style="margin:0 0 14px"><span class="muted">Nejnavštěvovanější: </span>'+top.map(function(n){return '<span class="mt-pill" style="margin:0 4px 4px 0;display:inline-block">'+esc(n)+' · '+pv[n]+'×</span>';}).join('')+'</div>';
-    // Nejnovější nahoře — návštěvy i události uvnitř návštěvy (ať je poslední pohyb hned vidět).
     html+=visits.slice().reverse().map(function(v){var d=new Date(v.start),e2=new Date(v.end);
       return '<div class="card" style="margin:0 0 10px;padding:12px 14px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px"><b>'+dlong(d)+' · '+hm(d)+'–'+hm(e2)+'</b><span class="small muted">'+(v.mobile?'📱 mobil':'💻 počítač')+' · '+Object.keys(v.pages).length+' stránek'+(v.ms?' · '+dur(v.ms):'')+'</span></div>'
-        +v.items.slice().reverse().map(function(e){var L=evLine(e),t=new Date(e.at);return '<div style="display:flex;gap:10px;font-size:13px;padding:3px 0;border-top:1px dashed rgba(120,160,255,.08)"><span class="muted" style="width:42px;flex:none">'+hm(t)+'</span><span style="width:18px;flex:none;text-align:center">'+L[0]+'</span><span>'+L[1]+'</span></div>';}).join('')+'</div>';}).join('');
+        +v.items.map(function(e){var L=evLine(e),t=new Date(e.at);return '<div style="display:flex;gap:10px;font-size:13px;padding:3px 0;border-top:1px dashed rgba(120,160,255,.08)"><span class="muted" style="width:42px;flex:none">'+hm(t)+'</span><span style="width:18px;flex:none;text-align:center">'+L[0]+'</span><span>'+L[1]+'</span></div>';}).join('')+'</div>';}).join('');
     body.innerHTML=html;
   }).catch(function(e){body.innerHTML='<div class="mt-empty" style="color:#ff8f8f">'+esc(e.message)+'</div>';});
 }
@@ -382,12 +381,12 @@ function statLoad(){
 }
 // Sloupcový graf bez knihoven: domluveno vedle proběhlo, popisky period dole.
 function srcMeta(){var m={};(statData&&statData.sources||[]).forEach(function(x){m[x.key]={color:x.color||'#4fd1ff',label:x.label};});return m;}
-var statSplit=(function(){try{return sessionStorage.getItem('lmadm:split')==='1';}catch(e){return false;}})(); // false = 2 barvy (obchodník / zákazník sám), true = po obchodnících
+var statSplit=(function(){try{return sessionStorage.getItem('lmadm:split')!=='0';}catch(e){return true;}})(); // výchozí: každý obchodník vlastní barvou, zákazník sám modře; false = obchodníci dohromady červeně
 var C_SALES='#ef4444', C_SELF='#3b82f6';
 function statSegs(x,field){field=field||'by';var src=x[field];if(!src)return [];
   if(!statSplit){var sa=0,se=0;Object.keys(src).forEach(function(k){if(k.indexOf('p:')===0)sa+=src[k];else se+=src[k];});var o=[];if(sa)o.push({key:'sales',n:sa,color:C_SALES,label:'Domluvil obchodník'});if(se)o.push({key:'self',n:se,color:C_SELF,label:'Zákazník sám (reklama / web)'});return o;}
-  var m=srcMeta(),out=[];Object.keys(src).forEach(function(k){var x0=src;var mm=m[k]||{color:k==='ads'?'#3b82f6':'#94a3b8',label:k==='ads'?'Reklama':k==='self'?'Sám z webu / odkazu':k};out.push({key:k,n:x0[k],color:mm.color,label:mm.label});});
-  var ord=function(k){return k==='self'?2:k==='ads'?1:0;};out.sort(function(a,b){return ord(a.key)-ord(b.key)||b.n-a.n;});return out;}
+  var m=srcMeta(),out=[],selfN=0;Object.keys(src).forEach(function(k){var x0=src;if(k.indexOf('p:')!==0){selfN+=x0[k];return;}var mm=m[k]||{color:k==='ads'?'#3b82f6':'#94a3b8',label:k==='ads'?'Reklama':k==='self'?'Sám z webu / odkazu':k};out.push({key:k,n:x0[k],color:mm.color,label:mm.label});});
+  out.sort(function(a,b){return b.n-a.n;});if(selfN)out.push({key:'self',n:selfN,color:C_SELF,label:'Zákazník sám (reklama / web)'});return out;}
 // Cíl týmu: domluvené online schůzky za den (podle data domluvení), posledních 14 dní, sloupce po zdrojích + čára cíle
 function goalChart(G){
   var m=srcMeta(), names=G.names||{}, days=(G.days||[]).filter(function(d){return d.dow!==0&&d.dow!==6||d.total;});
@@ -458,8 +457,8 @@ function statRender(){
   var rr=function(t){var r=t?(t.done+t.no_show+t.canceled+t.unmarked):0;return r?Math.round(t.done/r*1000)/10+' %':'—';};
   var cmp='<div class="mt-kpi" style="grid-template-columns:repeat(2,1fr);margin-top:6px"><div style="border-color:'+C_SALES+'"><b style="color:'+C_SALES+'">'+rr(salesT)+'</b><span>Úspěšnost — domluvil obchodník</span><small class="muted" style="display:block;font-size:11px;margin-top:2px">domluveno '+(salesT?salesT.booked:0)+' · proběhlo '+(salesT?salesT.done:0)+'</small></div>'
     +'<div style="border-color:'+C_SELF+'"><b style="color:'+C_SELF+'">'+rr(selfT)+'</b><span>Úspěšnost — zákazník sám (reklama / web)</span><small class="muted" style="display:block;font-size:11px;margin-top:2px">domluveno '+selfT.booked+' · proběhlo '+selfT.done+'</small></div></div>';
-  var legItems=statSplit?SS.filter(function(x){return x.kind!=='sales_total';}).map(function(x){return '<span><i style="background:'+x.color+'"></i>'+esc(x.label)+'</span>';}).join(''):'<span><i style="background:'+C_SALES+'"></i>domluvil obchodník</span><span><i style="background:'+C_SELF+'"></i>zákazník sám (reklama / web)</span>';
-  var leg='<div class="mt-leg">'+legItems+'<span>levý sloupec = domluveno (světlejší) · pravý = proběhlo (se zeleným okrajem)</span><button class="btn sec sm mt-split" style="margin-left:auto">'+(statSplit?'🎨 Jen obchodník / zákazník':'🎨 Rozdělit po obchodnících')+'</button>'+'<span><i style="background:#2fe3a0"></i>proběhlo</span>'
+  var legItems=statSplit?SS.filter(function(x){return x.kind==='sales';}).map(function(x){return '<span><i style="background:'+x.color+'"></i>'+esc(x.label)+'</span>';}).join('')+'<span><i style="background:'+C_SELF+'"></i>zákazník sám (reklama / web)</span>':'<span><i style="background:'+C_SALES+'"></i>domluvil obchodník</span><span><i style="background:'+C_SELF+'"></i>zákazník sám (reklama / web)</span>';
+  var leg='<div class="mt-leg">'+legItems+'<span>levý sloupec = domluveno (světlejší) · pravý = proběhlo (se zeleným okrajem)</span><button class="btn sec sm mt-split" style="margin-left:auto">'+(statSplit?'🎨 Obchodníci dohromady':'🎨 Rozdělit po obchodnících')+'</button>'+'<span><i style="background:#2fe3a0"></i>proběhlo</span>'
     +'<span><i style="background:rgba(79,209,255,.3);border:1px dashed #4fd1ff"></i>domluveno dopředu</span>'
     +'<span>Úspěšnost = proběhlé ze schůzek, které už mají výsledek. Nadcházející se nepočítají.</span></div>';
   var rows=b.slice().reverse().map(function(x){

@@ -864,6 +864,7 @@ router.get('/bs2/meetings-stats', async (req, res, next) => {
       if (!srcMatch(so)) return;
       mstAdd(cells[i], r.status, r.slot.starts_at, now);
       cells[i].by = cells[i].by || {}; cells[i].by[so.key] = (cells[i].by[so.key] || 0) + 1; // rozpad sloupce podle toho, kdo domluvil
+      if (r.status === 'done') { cells[i].byDone = cells[i].byDone || {}; cells[i].byDone[so.key] = (cells[i].byDone[so.key] || 0) + 1; }
       mstAdd(totals, r.status, r.slot.starts_at, now);
     });
     // U dnu schovavame prazdne vikendy (schuzky se delaji v pracovnich dnech).
@@ -922,7 +923,7 @@ router.get('/bs2/meetings-stats', async (req, res, next) => {
         list.filter((x) => x.kind === 'ads').forEach((x) => out.push(withRate(x)));
         list.filter((x) => x.kind === 'self').forEach((x) => out.push(withRate(x)));
         // Barvy do grafu: každý obchodník vlastní, reklama modrá, sám z webu šedá
-        const PAL = ['#f59e0b', '#22c55e', '#ec4899', '#a855f7', '#ef4444', '#14b8a6', '#eab308', '#f97316', '#84cc16', '#e879f9'];
+        const PAL = ['#ef4444', '#f59e0b', '#ec4899', '#22c55e', '#a855f7', '#f97316', '#eab308', '#14b8a6', '#84cc16', '#e879f9', '#fb7185', '#facc15']; // obchodníci — výrazné, ne modré (modrá = zákazník sám)
         const ids = out.filter((x) => x.kind === 'sales').map((x) => Number(String(x.key).slice(2))).sort((a, b) => a - b); // barva podle ID obchodníka = stabilní
         out.forEach((x) => { x.color = x.kind === 'ads' ? '#3b82f6' : x.kind === 'self' ? '#94a3b8' : x.kind === 'sales_total' ? '#c084fc' : PAL[ids.indexOf(Number(String(x.key).slice(2))) % PAL.length]; });
         return out;
