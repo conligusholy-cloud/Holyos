@@ -791,18 +791,28 @@ app.get('/obchodnik-ext', serveObchodnikExt);
 app.get('/obchodnik-ext/', serveObchodnikExt);
 
 // Výběry — veřejná stránka zákazníka (bestseries.cash/vybery) + admin správa.
+// Výběry jsou VYPNUTÉ (rušená agenda). Znovu zapnout lze proměnnou VYBERY_ENABLED=1 (kód, stránky i data zůstávají beze změny).
+const VYBERY_ENABLED = process.env.VYBERY_ENABLED === '1';
 function serveVybery(req, res) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'vybery', 'index.html'));
 }
-app.get('/vybery', serveVybery);
-app.get('/vybery/', serveVybery);
 function serveVyberyAdmin(req, res) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'vybery-admin', 'index.html'));
 }
-app.get('/vybery-admin', serveVyberyAdmin);
-app.get('/vybery-admin/', serveVyberyAdmin);
+if (VYBERY_ENABLED) {
+  app.get('/vybery', serveVybery);
+  app.get('/vybery/', serveVybery);
+  app.get('/vybery-admin', serveVyberyAdmin);
+  app.get('/vybery-admin/', serveVyberyAdmin);
+} else {
+  // 410 Gone pro stránky i API (včetně statických souborů z public/, které by jinak zůstaly dostupné)
+  app.use(['/vybery', '/vybery-admin'], (req, res) => {
+    res.status(410).set('Cache-Control', 'no-store').type('html').send('<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Služba ukončena</title></head><body style="font-family:system-ui,sans-serif;max-width:520px;margin:15vh auto;padding:0 20px;color:#222"><h1>Služba byla ukončena</h1><p>Tato stránka už není dostupná.</p></body></html>');
+  });
+  app.use('/api/vybery', (req, res) => res.status(410).json({ ok: false, error: 'Služba byla ukončena.' }));
+}
 
 // ─── API Routes ────────────────────────────────────────────────────────────
 
@@ -890,7 +900,7 @@ app.use('/api/pradlomat-spots', require('./routes/pradlomat-spots.routes'));
 app.get('/api/stats', require('./middleware/auth').requireAuth, async (req, res, next) => { try { res.json(await require('./services/ses/email-log').stats(String(req.query.range || '30d'))); } catch (err) { next(err); } });
 app.use('/api/ads-center', require('./routes/ads-center.routes')); // Centrum reklamy (Soukromé) — přehled záchytných stránek a jejich výsledků // Předjednaná místa — veřejný přehled pradlomaty.info/location + interní správa
 app.use('/api/leasing', require('./routes/leasing.routes')); // Leasing/financující společnosti (financování prádlomatu)
-app.use('/api/vybery', require('./routes/vybery.routes')); // Výběry — veřejná stránka bestseries.cash/vybery (ověření black list + magic link + admin)
+if (VYBERY_ENABLED) app.use('/api/vybery', require('./routes/vybery.routes')); // Výběry (vypnuto, zapíná VYBERY_ENABLED=1) — veřejná stránka bestseries.cash/vybery (ověření black list + magic link + admin)
 app.use('/api/bank-plan', require('./routes/bank-plan.routes')); // Bankovní Business Plan — track record, unit economics, DSCR, crossover (data ze SIS snapshotu)
 app.use('/api/voice', require('./routes/voice-agent.routes')); // Hlasový AI agent — Twilio ConversationRelay webhooky (příchozí hovory)
 app.use('/api/translator', require('./routes/translator.routes')); // Překladač — živý chatovací překladač na mobilu (Web Speech + AI překlad)
