@@ -5,6 +5,20 @@ const LOGO = '<span style="margin-right:10px;display:inline-flex"><svg width="34
 const MAIN_URL = () => String(process.env.PUBLIC_URL || 'https://laundromats.eu').replace(/\/$/, '');
 const APPS_URL = () => String(process.env.LM_APPS_URL || 'https://lokality.laundromats.eu').replace(/\/$/, '');
 const homeHref = () => (process.env.LM_HOME_LIVE === '1' ? '/' : '/uvod');
+// Verze aplikace do lišty: číslo z package.json + commit právě nasazeného buildu.
+// Číslo se mění, až ho zvýšíš v package.json; commit se mění každým nasazením,
+// takže podle něj poznáš, jestli na serveru běží to, co sis pushnul.
+function verText() {
+  let v = '';
+  try { v = require('./package.json').version || ''; } catch (e) { /* bez package.json */ }
+  const sha = String(process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7);
+  return (v ? 'v' + v : '') + (v && sha ? ' · ' : '') + sha;
+}
+function verTitle() {
+  const msg = String(process.env.RAILWAY_GIT_COMMIT_MESSAGE || '').split('\n')[0].slice(0, 120);
+  return 'Verze aplikace' + (msg ? ' — poslední nasazení: ' + msg : '');
+}
+const esc = (x) => String(x == null ? '' : x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const T = {
   cs: { apps: 'Moje nástroje', why: 'Proč prádlomat', comp: 'Compounder', prad: 'Prádlomaty', eco: 'Ekonomika', find: 'Najít místo', eval: 'Zhodnotit místo', cta: 'Probrat můj záměr' },
   pl: { apps: 'Moje narzędzia', why: 'Dlaczego pralnia', comp: 'Compounder', prad: 'Pralnie', eco: 'Ekonomika', find: 'Znajdź miejsce', eval: 'Oceń miejsce', cta: 'Omów mój plan' },
@@ -29,7 +43,7 @@ function header(opts) {
     + '<nav class="lnav" aria-label="Navigace">'
       + '<!--PRIV--><a href="' + m + '/cesta/ucet" data-k="ucet">' + t.apps + '</a><!--/PRIV-->'
       + items.map(([h, l, k]) => '<!--PRIV:' + k + '--><a href="' + h + '" data-k="' + k + '">' + l + '</a><!--/PRIV-->').join('') + '</nav>'
-    + '<span class="lsp"></span><span style="margin-left:auto"></span>'
+    + '<span class="lsp"><!--PRIV--><span class="lver" title="' + esc(verTitle()) + '">' + esc(verText()) + '</span><!--/PRIV--></span><span style="margin-left:auto"></span>'
     + '<!--LACC--></div></header>'
     + '<script>(function(){var p=location.pathname,k=/\\/cesta\\/ucet\\/?$/.test(p)?"ucet":/\\/compounder/.test(p)?"compounder":/\\/pradlomaty/.test(p)?"pradlomaty":/ekonomika/.test(p)?"ekonomika":/\\/hledat/.test(p)?"hledat":/\\/zhodnotit/.test(p)?"zhodnotit":"";if(k){var e=document.querySelector(\'.lnav a[data-k="\'+k+\'"]\');if(e)e.classList.add("on");}})();</script>';
 }
@@ -48,7 +62,10 @@ const CSS = '.lhdr{position:sticky;top:0;z-index:60;background:rgba(4,6,12,.72);
   + '.lhdr .lmenu-h{padding:8px 10px 10px;border-bottom:1px solid rgba(120,160,255,.14);margin-bottom:4px}.lhdr .lmenu-h b{display:block;font-size:13.5px}.lhdr .lmenu-h span{display:block;font-size:12px;color:#8ea2c4;overflow:hidden;text-overflow:ellipsis}'
   + '.lhdr .lmenu-b a,.lhdr .lmenu-b button{display:block;width:100%;text-align:left;padding:9px 10px;border-radius:9px;font:inherit;font-size:13.5px;color:#eaf1ff;text-decoration:none;background:none;border:0;cursor:pointer}.lhdr .lmenu-b a:hover,.lhdr .lmenu-b button:hover{background:rgba(79,209,255,.08)}.lhdr .lmenu-b form{margin:0}'
   + '.lhdr .lacc svg{width:15px;height:15px;vertical-align:-3px;margin-right:2px}.lhdr .lmenu-b svg{width:16px;height:16px;vertical-align:-3px;margin-right:9px;color:#7fd6ff}'
-  + '.lhdr .lsp{flex:1}.lhdr .lacc{flex:none;white-space:nowrap;padding:6px 11px;border-radius:999px;font-size:12.5px;font-weight:600;color:#eaf1ff;text-decoration:none;border:1px solid rgba(120,160,255,.28);background:rgba(255,255,255,.03)}.lhdr .lacc:hover{border-color:rgba(79,209,255,.55)}'
+  + '.lhdr .lsp{flex:1;display:flex;align-items:center;justify-content:center;min-width:0}'
+  + '.lhdr .lver{font-size:11.5px;color:#8ea2c4;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em;font-variant-numeric:tabular-nums}'
+  + '@media(max-width:860px){.lhdr .lver{display:none}}'
+  + '.lhdr .lacc{flex:none;white-space:nowrap;padding:6px 11px;border-radius:999px;font-size:12.5px;font-weight:600;color:#eaf1ff;text-decoration:none;border:1px solid rgba(120,160,255,.28);background:rgba(255,255,255,.03)}.lhdr .lacc:hover{border-color:rgba(79,209,255,.55)}'
   + '.lhdr .lcta{flex:none;white-space:nowrap;padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:700;color:#fff;text-decoration:none;background:linear-gradient(90deg,#1e86e0,#7c5cff);box-shadow:0 6px 20px -8px rgba(79,120,255,.7)}'
   + '.lhdr .htag{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#a9b8d6;border:1px solid rgba(120,160,255,.14);border-radius:999px;padding:3px 9px;background:rgba(255,255,255,.02);white-space:nowrap;margin-left:12px}@media(max-width:520px){.lhdr .htag{display:none}}'
   + '@media(max-width:1320px){.lhdr .in{flex-wrap:wrap;row-gap:8px}.lhdr .lnav{order:9;flex-basis:100%;margin:0 -18px;padding:0 18px;overflow-x:auto;scrollbar-width:none}.lhdr .lnav::-webkit-scrollbar{display:none}}'
