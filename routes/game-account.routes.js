@@ -51,9 +51,9 @@ const CARDS = {
     desc: 'Letáky, polep, místní rádio. Do všech tvých prádlomatů začne chodit víc lidí — a zůstane to tak.'
   },
   connect: {
-    kind: 'connect', name: 'Známý na úřadě', icon: 'wrench', price: 7900,
+    kind: 'connect', name: 'Známý řemeslník', icon: 'wrench', price: 7900,
     short: 'Přípojky o 40 % levněji',
-    desc: 'Jednou použiješ při stavbě a zaplatíš za vodu, odpad a elektřinu výrazně míň.'
+    desc: 'Udělá ti vodu, odpad i elektřinu za přátelskou cenu. Platí na jednu stavbu.'
   },
   credit: {
     kind: 'credit', name: 'Lepší bankéř', icon: 'bank', price: 12900,
@@ -182,6 +182,11 @@ router.post('/account/register', async (req, res, next) => {
     const p = await prisma.gamePlayer.create({
       data: { nick, nick_lower: lower, password_hash: await bcrypt.hash(pwd, 10), last_login_at: new Date() }
     });
+    // Dárek do začátku: jedna od každé zrychlující karty. Dostane ho jen nový
+    // účet — ne ten, kdo si hru resetuje, jinak by si karty takhle „vyráběl".
+    try {
+      await prisma.gameCard.createMany({ data: CARD_KINDS.map((k) => ({ player_id: p.id, kind: k })) });
+    } catch (e) { console.warn('[game] uvítací karty:', e.message); }
     setCookie(res, sign(p));
     res.json({ ok: true, player: await pub(p) });
   } catch (e) {

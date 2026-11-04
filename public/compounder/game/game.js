@@ -1291,7 +1291,9 @@ function paintCards() {
   var box = $('cards-body');
   if (!CARDS_CAT) { box.innerHTML = '<p class="muted small">Načítám…</p>'; return loadCards().then(paintCards); }
   var total = CARDS_CAT.reduce(function (a, c) { return a + ownedOf(c.kind); }, 0);
+  var vsechny = CARDS_CAT.length && CARDS_CAT.every(function (c) { return ownedOf(c.kind) >= 1; });
   box.innerHTML = (total ? '' : '<p class="muted small">Zatím žádnou kartu nemáš.</p>')
+    + (vsechny ? '<p class="muted small">Od každé karty máš jednu do začátku — jsou tvoje, použij je, kdy chceš.</p>' : '')
     + CARDS_CAT.map(function (c) {
       var n = ownedOf(c.kind), art = CARD_ART[c.kind] || { emoji: '⚡', tone: 'blue' };
       return '<div class="gcard ' + art.tone + '">'
