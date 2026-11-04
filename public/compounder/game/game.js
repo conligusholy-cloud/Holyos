@@ -31,8 +31,10 @@ var MODEL_IMG = {
   max: { src: '/game/max.webp' }
 };
 var VER_OF = { mini: 'V2', flex: 'V3', max: 'V4' };
-// Fotky z ceníku HolyOS bereme jen tam, kde nemáme hezčí vlastní výřez (MAX).
-var VER_PREFER_REMOTE = { max: true };
+// Fotky z ceníku HolyOS použijeme jen u verzí, pro které nemáme vlastní render.
+// Teď máme všechny tři, takže se z ceníku nebere nic — jinak by MAXu přebila
+// fotka skutečné instalace v cizím polepu.
+var VER_PREFER_REMOTE = {};
 function loadMachinePhotos() {
   fetch('/api/compounder/portal/machines').then(function (r) { return r.json(); }).then(function (j) {
     var changed = false;
