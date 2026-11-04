@@ -44,9 +44,11 @@ function toSpot(c, i, areaId) {
     kind: c.shop || null,
     score: Math.round(c.score || 0),
     verdict: c.verdict || null,
-    parking: m.parking != null ? m.parking : null,
-    competition: m.competition != null ? m.competition : null,
-    anchors: m.anchors != null ? m.anchors : null,
+    // Hledač vrací u každé metriky objekt { count, nearest_m, … } — do hry stačí počty.
+    parking: m.parking ? m.parking.count : null,
+    parking_m: m.parking && m.parking.nearest_m != null ? Math.round(m.parking.nearest_m) : null,
+    competition: m.competition ? m.competition.count : null,
+    anchors: m.anchors ? m.anchors.count : null,
   };
 }
 
@@ -120,6 +122,33 @@ router.get('/scout', async (req, res, next) => {
     }
     res.set('Cache-Control', 'no-store').status(202).json({ pending: true, waited_ms: Date.now() - job.at });
   } catch (err) { next(err); }
+});
+
+// ─── Pozvánky ────────────────────────────────────────────────────────────────
+// Hráč sdílí odkaz s ?ref=<svoje id>. Kdo ho otevře, započítá se mu jedno
+// otevření a hráči tím roste návštěvnost jeho prádlomatů. Držíme to jen v paměti
+// — je to prototyp, po nasazení nové verze se počítadla vynulují.
+const refs = new Map();           // id hráče → počet otevření
+const REF_MAX = 500;
+const okId = (x) => /^[a-z0-9]{6,24}$/.test(String(x || ''));
+
+router.post('/ref/:id', (req, res) => {
+  const id = String(req.params.id || '').toLowerCase();
+  if (!okId(id)) return res.status(400).json({ error: 'Neplatné id.' });
+  // Jedno otevření na adresu a hráče za den, ať se to nedá nasekat obnovováním stránky.
+  if (rateLimited('ref:' + id + ':' + ipOf(req), 1, 24 * 3600e3)) {
+    return res.json({ refs: refs.get(id) || 0, counted: false });
+  }
+  const n = Math.min(REF_MAX, (refs.get(id) || 0) + 1);
+  refs.set(id, n);
+  if (refs.size > 20000) refs.delete(refs.keys().next().value);
+  res.json({ refs: n, counted: true });
+});
+
+router.get('/ref/:id', (req, res) => {
+  const id = String(req.params.id || '').toLowerCase();
+  if (!okId(id)) return res.status(400).json({ error: 'Neplatné id.' });
+  res.set('Cache-Control', 'no-store').json({ refs: refs.get(id) || 0 });
 });
 
 module.exports = router;

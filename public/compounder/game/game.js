@@ -54,7 +54,12 @@ var BANK_PER_UNIT = 600000;      // o kolik rámec povyroste s každým prádlom
 var BANK_PER_DAY = 100000;       // co banka sama doplní za skutečný den
 var REVEAL_COST = 5000;          // obhlídka místa — jen se tam někdo zajede podívat
 var CONN_MIN = 50000, CONN_MAX = 100000;  // přípojky se platí až po domluvě nájmu, podle místa
+var CONN_MAX_MULT = 1.2;         // MAX má víc strojů, přípojky jsou o pětinu dražší
 var RENT_EUR = 165;              // základní měsíční nájem z reálného modelu (€)
+var ENERGY_SHARE = 0.09;         // energie ≈ 9 % obratu kiosku
+// Návštěvnost na začátku — s ní vychází návratnost kolem pěti let. Roste tím,
+// kolik lidí otevře odkaz, který hráč sdílí (viz pozvánky níž).
+var TRAFFIC_BASE = 0.45, TRAFFIC_PER_REF = 0.05, TRAFFIC_MAX = 1.1;
 var SCOUT_COST = 20000;          // cesta do města a hledání vhodných míst
 var CASH_RESERVE = 120000;       // tolik hotovosti banka nenechá utratit — musí zbýt na prověření místa a instalaci
 var OPERATING_MAX = 150000;      // provozní úvěr nad rámec úvěrového stropu, aby hra nikdy neskončila ve slepé uličce
@@ -76,26 +81,39 @@ function spotHash(id, salt) {
   return ((h >>> 0) % 10000) / 10000;
 }
 // Přípojky (voda, odpad, elektřina) — platí se až po domluvě nájmu.
-function connPrice(sp) { return Math.round((CONN_MIN + spotHash(sp.id, 'c') * (CONN_MAX - CONN_MIN)) / 1000) * 1000; }
+function connPrice(sp, modelKey) {
+  var base = CONN_MIN + spotHash(sp.id, 'c') * (CONN_MAX - CONN_MIN);
+  if (modelKey === 'max') base *= CONN_MAX_MULT;
+  return Math.round(base / 1000) * 1000;
+}
 // Měsíční nájem: lepší místo si řekne o víc, zbytek je o tom, jak se domluvíš.
 function rentOf(sp) {
   var attract = 0.7 + (Math.max(0, Math.min(100, sp.score)) / 100) * 0.8;
   var deal = 0.9 + spotHash(sp.id, 'r') * 0.3;
   return Math.round(RENT_EUR * EUR * attract * deal / 100) * 100;
 }
-function investOf(m, sp) { return machinePrice(m) + (sp ? connPrice(sp) : Math.round(CONN_MIN + (CONN_MAX - CONN_MIN) / 2)); }
+
+// Kolik lidí ti otevřelo sdílený odkaz → o tolik víc zákazníků chodí.
+function traffic() { return Math.min(TRAFFIC_MAX, TRAFFIC_BASE + (S && S.refs ? S.refs : 0) * TRAFFIC_PER_REF); }
+// Servis, praní a úklid: zbytek provozních nákladů z reálného modelu po odečtení
+// nájmu a energií, aby při plné návštěvnosti seděl součet s Ekonomikou.
+function servisOf(m) {
+  var baseRevenue = m.perday * 30.5 * m.spend * EUR;
+  return Math.max(0, Math.round((m.cost - RENT_EUR) * EUR - baseRevenue * ENERGY_SHARE));
+}
 function economics(spot, modelKey) {
   var m = MODELS[modelKey] || MODELS.flex;
-  var perday = m.perday * placeFactor(spot.score);
+  var perday = m.perday * placeFactor(spot.score) * traffic();
   var revenue = Math.round(perday * 30.5 * m.spend * EUR);
-  var provoz = Math.round((m.cost - RENT_EUR) * EUR);   // energie, servis, úklid — bez nájmu
+  var energy = Math.round(revenue * ENERGY_SHARE);
+  var servis = servisOf(m);
   var rent = rentOf(spot);
-  var cost = provoz + rent;
+  var cost = energy + servis + rent;
   var profit = revenue - cost;
-  var conn = connPrice(spot);
+  var conn = connPrice(spot, m.key);
   var inv = machinePrice(m) + conn;
   return { model: m.key, invest: inv, machine: machinePrice(m), install: conn, conn: conn,
-    provoz: provoz, rent: rent, revenue: revenue, cost: cost, profit: profit,
+    energy: energy, servis: servis, rent: rent, revenue: revenue, cost: cost, profit: profit,
     perday: Math.round(perday * 10) / 10, payback: profit > 0 ? inv / (profit * 12) : null };
 }
 
@@ -136,6 +154,8 @@ function fresh(profileId) {
     units: [],     // postavené prádlomaty
     revealed: {},  // id místa → true
     leases: {},    // id místa → { rent, at } — domluvený nájem
+    pid: (Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)).slice(0, 12),
+    refs: 0,       // kolik lidí otevřelo sdílený odkaz
     orders: [],    // koupené stroje na cestě: { model, arrivesAt }
     stock: {},     // model → kolik kusů čeká na skladě
     stats: { earned: 0, interest: 0 }
@@ -150,6 +170,8 @@ function load() {
     if (!o.orders) o.orders = [];
     if (!o.stock) o.stock = {};
     if (!o.leases) o.leases = {};
+    if (!o.pid) o.pid = (Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)).slice(0, 12);
+    if (typeof o.refs !== 'number') o.refs = 0;
     o.v = 2;
     return o;
   } catch (e) { return null; }
@@ -501,7 +523,7 @@ function spotSheet(sp, areaId) {
   var head = '<h3>' + esc(sp.name) + '</h3>'
     + '<p class="muted small">' + esc(KIND_LABEL[sp.kind] || 'Místo') + ' · ' + esc(S.areas[areaId] ? S.areas[areaId].name : '') + '</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(sp.score) + '</div>'
-    + '<div class="kv"><span>Parkovacích ploch v okolí</span><b>' + (sp.parking != null ? sp.parking : '—') + '</b></div>'
+    + '<div class="kv"><span>Parkovacích ploch v okolí</span><b>' + (sp.parking != null ? sp.parking + (sp.parking_m != null ? ' (' + sp.parking_m + ' m)' : '') : '—') + '</b></div>'
     + '<div class="kv"><span>Konkurence do 1,5 km</span><b>' + (sp.competition != null ? sp.competition : '—') + '</b></div>'
     + '<div class="kv"><span>Tahouni provozu</span><b>' + (sp.anchors != null ? sp.anchors : '—') + '</b></div>';
 
@@ -525,7 +547,7 @@ function spotSheet(sp, areaId) {
   // 3. krok — vybrat stroj a zaplatit přípojky.
   sheet(head
     + '<div class="kv"><span>Domluvený nájem</span><b class="ok">' + kcFull(lease.rent) + ' / měsíc</b></div>'
-    + '<div class="kv"><span>Přípojky na tomhle místě</span><b>' + kcFull(connPrice(sp)) + '</b></div>'
+    + '<div class="kv"><span>Přípojky na tomhle místě</span><b>' + kcFull(connPrice(sp, 'flex')) + '</b> <span class="muted small">(u MAXu o 20 % víc)</span></div>'
     + '<h3 style="margin-top:18px">Co tu postavit</h3>'
     + MODEL_ORDER.map(function (k) { return modelCard(sp, economics(sp, k)); }).join(''));
   [].forEach.call($('sheet-body').querySelectorAll('[data-build]'), function (b) {
@@ -545,8 +567,11 @@ function modelCard(sp, e) {
     + '<p class="muted small" style="margin:2px 0 8px">' + esc(m.desc) + '</p>'
     + '<div class="kv"><span>Zákazníků / den</span><b>' + String(e.perday).replace('.', ',') + '</b></div>'
     + '<div class="kv"><span>Obrat / měsíc</span><b>' + kcFull(e.revenue) + '</b></div>'
-    + '<div class="kv"><span>Provoz + nájem / měsíc</span><b>' + kcFull(e.cost) + '</b></div>'
+    + '<div class="kv"><span>Nájem / měsíc</span><b>' + kcFull(e.rent) + '</b></div>'
+    + '<div class="kv"><span>Energie / měsíc (9 % obratu)</span><b>' + kcFull(e.energy) + '</b></div>'
+    + '<div class="kv"><span>Servis a úklid / měsíc</span><b>' + kcFull(e.servis) + '</b></div>'
     + '<div class="kv"><span>Zisk / měsíc</span><b class="' + (e.profit > 0 ? 'ok' : 'err') + '">' + kcFull(e.profit) + '</b></div>'
+    + '<div class="kv"><span>Přípojky (jednorázově)</span><b>' + kcFull(e.conn) + '</b></div>'
     + '<div class="kv"><span>Návratnost</span><b>' + (e.payback ? e.payback.toFixed(1).replace('.', ',') + ' roku' : 'nikdy') + '</b></div>'
     + btn + '</div>';
 }
@@ -607,8 +632,9 @@ function paintShop() {
       + '<div class="row" style="margin-top:12px"><h3>' + m.name + '</h3><b>' + kc(price) + ' ' + CUR + '</b></div>'
       + '<p class="muted small" style="margin:2px 0 8px">' + esc(m.desc) + '</p>'
       + '<div class="kv"><span>Zákazníků / den na průměrném místě</span><b>' + m.perday + '</b></div>'
-      + '<div class="kv"><span>Provoz / měsíc (bez nájmu)</span><b>' + kcFull(Math.round((m.cost - RENT_EUR) * EUR)) + '</b></div>'
-      + '<div class="kv"><span>Přípojky na místě (navíc)</span><b>' + kcFull(CONN_MIN) + ' – ' + kcFull(CONN_MAX) + '</b></div>'
+      + '<div class="kv"><span>Servis a úklid / měsíc</span><b>' + kcFull(servisOf(m)) + '</b></div>'
+      + '<div class="kv"><span>Energie</span><b>9 % obratu</b></div>'
+      + '<div class="kv"><span>Přípojky na místě (navíc)</span><b>' + kcFull(Math.round(CONN_MIN * (k === 'max' ? CONN_MAX_MULT : 1))) + ' – ' + kcFull(Math.round(CONN_MAX * (k === 'max' ? CONN_MAX_MULT : 1))) + '</b></div>'
       + '<div class="kv"><span>Dodání</span><b>' + DELIVERY_MONTHS + ' herní měsíce (1 den)</b></div>'
       + '<button class="btn sm" style="width:100%;margin-top:10px" data-buy="' + k + '"' + (f.ok ? '' : ' disabled') + '>'
       + (f.ok ? 'Koupit ' + m.name : 'Nemáš na to') + '</button></div>';
@@ -662,10 +688,49 @@ function unitSheet(u) {
     + '<div style="margin:8px 0 12px">' + verdictPill(u.score) + '</div>'
     + '<div class="kv"><span>Investice</span><b>' + kcFull(u.eco.invest) + '</b></div>'
     + '<div class="kv"><span>Obrat / měsíc</span><b>' + kcFull(u.eco.revenue) + '</b></div>'
-    + '<div class="kv"><span>Provoz / měsíc</span><b>' + kcFull(u.eco.provoz != null ? u.eco.provoz : u.eco.cost) + '</b></div>'
     + (u.eco.rent != null ? '<div class="kv"><span>Nájem / měsíc</span><b>' + kcFull(u.eco.rent) + '</b></div>' : '')
+    + (u.eco.energy != null ? '<div class="kv"><span>Energie / měsíc</span><b>' + kcFull(u.eco.energy) + '</b></div>' : '')
+    + (u.eco.servis != null ? '<div class="kv"><span>Servis a úklid / měsíc</span><b>' + kcFull(u.eco.servis) + '</b></div>' : '')
     + '<div class="kv"><span>Zisk / měsíc</span><b class="ok">' + kcFull(u.eco.profit) + '</b></div>'
     + '<div class="kv"><span>Vydělal celkem</span><b>' + kcFull(u.eco.profit * 12 * years) + '</b></div>');
+}
+
+// ─── Pozvánky ────────────────────────────────────────────────────────────────
+// Čím víc lidí otevře odkaz, který hráč pošle dál, tím víc zákazníků mu chodí.
+// Počítá se otevření odkazu někým jiným, ne samotné kliknutí na „sdílet".
+function shareUrl() { return location.origin + '/game?ref=' + encodeURIComponent(S.pid); }
+function pullRefs() {
+  if (!S || !S.pid) return;
+  fetch('/api/game/ref/' + encodeURIComponent(S.pid), { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j || typeof j.refs !== 'number' || j.refs === S.refs) return;
+      S.refs = j.refs; save(); paint();
+    }).catch(function () { /* nevadí, zkusí se zas */ });
+}
+// Když někdo přijde přes cizí odkaz, započítáme to majiteli odkazu — jen jednou.
+// POZOR: musí se volat hned při načtení, ne až po startu hry. Ten, kdo na odkaz
+// klikne, totiž obvykle hru teprve poprvé otevírá a žádný rozehraný stav nemá.
+function countIncomingRef() {
+  var m = /[?&]ref=([a-z0-9]{6,24})/i.exec(location.search);
+  if (!m) return;
+  var id = m[1].toLowerCase();
+  var mine = null;
+  try { var raw = localStorage.getItem(KEY); if (raw) mine = (JSON.parse(raw) || {}).pid || null; } catch (e) { /* nevadí */ }
+  if (mine === id) return;                       // vlastní odkaz se nepočítá
+  try { if (localStorage.getItem('lm_ref_' + id)) return; localStorage.setItem('lm_ref_' + id, '1'); } catch (e) { /* nevadí */ }
+  fetch('/api/game/ref/' + id, { method: 'POST' }).catch(function () {});
+}
+function shareGame(btn) {
+  var url = shareUrl();
+  var txt = 'Stavím síť prádlomatů v Laundromats Milionáři. Zkus to taky — a mně tím přibydou zákazníci.';
+  if (navigator.share) {
+    navigator.share({ title: 'Laundromats Milionář', text: txt, url: url }).catch(function () {});
+    return;
+  }
+  var done = function () { btn.textContent = 'Odkaz zkopírován'; setTimeout(function () { btn.textContent = 'Zkopírovat odkaz'; }, 2000); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done).catch(function () { prompt('Zkopíruj odkaz:', url); });
+  else prompt('Zkopíruj odkaz:', url);
 }
 
 // ─── Obrazovky hry ───────────────────────────────────────────────────────────
@@ -743,7 +808,17 @@ function paintMe() {
     + '<p class="muted small" style="margin:2px 0 0">Jeden skutečný den jsou ve hře dva měsíce, herní rok tedy trvá šest dní. Prádlomaty vydělávají, i když hru zavřeš — po návratu se ti všechno dopočítá. '
     + 'Místa na mapě jsou skutečná a jejich skóre počítá stejný nástroj, kterým Best Series hledá místa doopravdy. '
     + 'Platí se v <b>laundrech (L$)</b> — herní měně, která nemá žádnou skutečnou hodnotu.</p></div>'
+    + '<div class="card"><h3>Pozvi lidi a přibydou ti zákazníci</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">Každý, kdo otevře tvůj odkaz, ti zvedne návštěvnost všech prádlomatů. '
+    + 'Počítá se otevření odkazu někým jiným, ne samotné sdílení.</p>'
+    + '<div class="kv"><span>Otevřeli tvůj odkaz</span><b class="ok">' + (S.refs || 0) + '×</b></div>'
+    + '<div class="kv"><span>Návštěvnost</span><b>' + Math.round(traffic() * 100) + ' % '
+    + (traffic() >= TRAFFIC_MAX ? '(na maximu)' : '(z ' + Math.round(TRAFFIC_MAX * 100) + ' %)') + '</b></div>'
+    + '<div class="bar"><i style="width:' + Math.round(traffic() / TRAFFIC_MAX * 100) + '%"></i></div>'
+    + '<button class="btn big" id="do-share" style="margin-top:12px">' + (navigator.share ? 'Poslat odkaz' : 'Zkopírovat odkaz') + '</button>'
+    + '</div>'
     + '<button class="btn sec big" id="do-reset">Začít znovu od nuly</button>';
+  $('do-share').onclick = function () { shareGame($('do-share')); };
   $('do-reset').onclick = function () {
     sheet('<h3>Začít znovu?</h3><p class="muted small">Přijdeš o celou síť i o peníze. Tohle se nedá vrátit.</p>'
       + '<button class="btn big" id="yes-reset" style="background:linear-gradient(90deg,#b4263a,#ff5d6c)">Ano, smazat a začít znovu</button>'
@@ -777,12 +852,15 @@ function startGame() {
   var gained = S.cash - before;
   if (arrived) toast('Dorazilo ' + arrived + ' strojů — čekají na skladě v obchodě.', 'ok');
   else if (gained > 1000) toast('Než ses vrátil, síť vydělala ' + kcFull(gained) + '.', 'ok');
+  pullRefs();
   setInterval(function () { tick(); save(); paint(); }, 5000);
+  setInterval(pullRefs, 60000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { tick(); save(); paint(); } });
 }
 
 loadMachinePhotos();
 
+countIncomingRef();   // ještě než se rozhodne, jestli je co rozehraného
 S = load();
 if (S) { startGame(); }
 
