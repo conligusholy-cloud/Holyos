@@ -517,7 +517,11 @@ function tab(name){
   if(isStat&&statData===null)statLoad();
   if(isProd&&prod===null)prodLoad();
 }
-root.querySelectorAll('.mt-tabs button').forEach(function(b){b.onclick=function(){tab(b.getAttribute('data-tab'));};});
+root.querySelectorAll('.mt-tabs button').forEach(function(b){b.onclick=function(){tab(b.getAttribute('data-tab'));try{sessionStorage.setItem('lmadm:tab',b.getAttribute('data-tab'));}catch(e){}};});
+// Standard HolyOS: po obnovení stránky (F5) zůstat na stejné záložce i podzáložce (statistiky Dny/Týdny/Měsíce/Roky)
+(function(){try{var sg=sessionStorage.getItem('lmadm:sgrp');if(sg&&['day','week','month','year'].indexOf(sg)!==-1){statGroup=sg;root.querySelectorAll('[data-sgrp]').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-sgrp')===sg);});}
+  var t=sessionStorage.getItem('lmadm:tab');if(t&&t!=='meet'&&root.querySelector('.mt-tabs button[data-tab="'+t+'"]'))tab(t);}catch(e){}})();
+root.addEventListener('click',function(e){var b=e.target.closest('[data-sgrp]');if(b)try{sessionStorage.setItem('lmadm:sgrp',b.getAttribute('data-sgrp'));}catch(x){}});
 
 root.querySelector('.mt-auto').onclick=autoModal;
 root.addEventListener('click',function(e){var a=e.target.closest('[data-add]');if(a){e.stopPropagation();return addModal(a.getAttribute('data-add'));}var s=e.target.closest('[data-slot]');if(s)slotModal(+s.getAttribute('data-slot'));});
