@@ -41,10 +41,53 @@ function langSwitch(lang) {
     + nabidka.map(([kod, popis, prefix]) => '<a href="#" data-lang="' + kod + '" data-prefix="' + prefix + '"'
       + (kod === akt ? ' class="on" aria-current="true"' : '') + ' hreflang="' + kod + '">' + popis + '</a>').join('')
     + '</div>'
-    // Odkaz se skládá až v prohlížeči, ať se zachová aktuální cesta i parametry.
-    + '<script>(function(){var p=location.pathname.replace(/^\\/(en|pl)(?=\\/|$)/,"")||"/";'
-    + 'document.querySelectorAll(".llang a").forEach(function(a){var h=(a.getAttribute("data-prefix")||"")+p;'
-    + 'a.setAttribute("href",h===""?"/":h+location.search+location.hash);});})();</script>';
+    + '<script>(' + langSwitchClient.toString() + ')();</script>';
+}
+
+// Běží v prohlížeči (vkládá se přes toString, ať není nutné escapovat regulární výrazy).
+// 1) Odkazy na jazyky se skládají podle aktuální cesty a parametrů (bez #kotvy, ta by skočila jinam).
+// 2) Zvýrazněný jazyk se určí podle adresy (/en, /pl, jinak čeština) — HTML se pro překlady generuje česky.
+// 3) Před přepnutím se zapamatuje místo na stránce (nejbližší sekce + odsazení) a po načtení se tam vrátíme.
+function langSwitchClient() {
+  var m = /^\/(en|pl)(\/|$)/.exec(location.pathname);
+  var cur = m ? m[1] : 'cs';
+  var p = location.pathname.replace(/^\/(en|pl)(?=\/|$)/, '') || '/';
+  var KEY = 'lm_ls';
+  document.querySelectorAll('.llang a').forEach(function (a) {
+    var on = a.getAttribute('data-lang') === cur;
+    a.classList.toggle('on', on);
+    if (on) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
+    var h = (a.getAttribute('data-prefix') || '') + p;
+    a.setAttribute('href', h === '' ? '/' : h + location.search);
+    a.addEventListener('click', function () {
+      try {
+        var best = null;
+        document.querySelectorAll('[id]').forEach(function (el) {
+          if (el.tagName !== 'SECTION' && el.tagName !== 'MAIN') return;
+          var t = el.getBoundingClientRect().top;
+          if (t <= 1 && (!best || t > best.t)) best = { id: el.id, t: t };
+        });
+        sessionStorage.setItem(KEY, JSON.stringify({ p: p, y: window.scrollY, id: best && best.id, off: best ? -best.t : 0, at: Date.now() }));
+      } catch (e) { /* bez uložení se jen otevře začátek stránky */ }
+    });
+  });
+  try {
+    var s = JSON.parse(sessionStorage.getItem(KEY) || 'null');
+    if (!s || s.p !== p || Date.now() - s.at > 10000) return;
+    sessionStorage.removeItem(KEY);
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    var moved = false;
+    ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach(function (ev) { window.addEventListener(ev, function () { moved = true; }, { once: true, passive: true }); });
+    var go = function () {
+      if (moved) return; // uživatel už sám scrolluje — nepřetahovat
+      var el = s.id && document.getElementById(s.id);
+      var y = el ? el.getBoundingClientRect().top + window.scrollY + s.off : s.y;
+      window.scrollTo({ top: y, left: 0, behavior: 'instant' });
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
+    window.addEventListener('load', go);
+    setTimeout(go, 400);
+  } catch (e) { /* ignore */ }
 }
 
 function header(opts) {
