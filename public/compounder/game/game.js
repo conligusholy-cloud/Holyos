@@ -57,6 +57,7 @@ var CONN_MIN = 50000, CONN_MAX = 100000;  // přípojky se platí až po domluv�
 var CONN_MAX_MULT = 1.2;         // MAX má víc strojů, přípojky jsou o pětinu dražší
 var RENT_EUR = 165;              // základní měsíční nájem z reálného modelu (€)
 var ENERGY_SHARE = 0.09;         // energie ≈ 9 % obratu kiosku
+var SERVIS_SHARE = 0.13;         // servis, praní a úklid ≈ 13 % obratu kiosku
 // Návštěvnost na začátku — s ní vychází návratnost kolem pěti let. Roste tím,
 // kolik lidí otevře odkaz, který hráč sdílí (viz pozvánky níž).
 var TRAFFIC_BASE = 0.45, TRAFFIC_PER_REF = 0.05, TRAFFIC_MAX = 1.1;
@@ -95,18 +96,13 @@ function rentOf(sp) {
 
 // Kolik lidí ti otevřelo sdílený odkaz → o tolik víc zákazníků chodí.
 function traffic() { return Math.min(TRAFFIC_MAX, TRAFFIC_BASE + (S && S.refs ? S.refs : 0) * TRAFFIC_PER_REF); }
-// Servis, praní a úklid: zbytek provozních nákladů z reálného modelu po odečtení
-// nájmu a energií, aby při plné návštěvnosti seděl součet s Ekonomikou.
-function servisOf(m) {
-  var baseRevenue = m.perday * 30.5 * m.spend * EUR;
-  return Math.max(0, Math.round((m.cost - RENT_EUR) * EUR - baseRevenue * ENERGY_SHARE));
-}
+// Servis, praní a úklid se platí z obratu - cim vic lidi pere, tim vic prace.
 function economics(spot, modelKey) {
   var m = MODELS[modelKey] || MODELS.flex;
   var perday = m.perday * placeFactor(spot.score) * traffic();
   var revenue = Math.round(perday * 30.5 * m.spend * EUR);
   var energy = Math.round(revenue * ENERGY_SHARE);
-  var servis = servisOf(m);
+  var servis = Math.round(revenue * SERVIS_SHARE);
   var rent = rentOf(spot);
   var cost = energy + servis + rent;
   var profit = revenue - cost;
@@ -224,9 +220,26 @@ function etaText(ms) {
 // Dopočítá všechno, co se stalo od minulého výpočtu: výnos sítě, úrok z úvěru
 // a doplnění bankovního rámce. Volá se při otevření hry i každých pár vteřin.
 function bankCap() { return BANK_BASE + BANK_PER_UNIT * S.units.length; }
+// Navstevnost se meni podle pozvanek, takze uz postavene pradlomaty prepocitame.
+// Investice, pripojky a domluveny najem zustavaji - to je zaplacene a podepsane.
+function refreshUnits() {
+  (S.units || []).forEach(function (u) {
+    var m = MODELS[u.eco.model]; if (!m) return;
+    var perday = m.perday * placeFactor(u.score) * traffic();
+    var revenue = Math.round(perday * 30.5 * m.spend * EUR);
+    u.eco.perday = Math.round(perday * 10) / 10;
+    u.eco.revenue = revenue;
+    u.eco.energy = Math.round(revenue * ENERGY_SHARE);
+    u.eco.servis = Math.round(revenue * SERVIS_SHARE);
+    u.eco.cost = u.eco.energy + u.eco.servis + u.eco.rent;
+    u.eco.profit = revenue - u.eco.cost;
+    u.eco.payback = u.eco.profit > 0 ? u.eco.invest / (u.eco.profit * 12) : null;
+  });
+}
 function monthlyProfit() { return S.units.reduce(function (a, u) { return a + u.eco.profit; }, 0); }
 function yearlyProfit() { return monthlyProfit() * 12; }
 function tick() {
+  refreshUnits();
   var now = Date.now();
   var dt = now - S.lastTick;
   if (dt < 0) { S.lastTick = now; return; }      // hráč si přetočil hodiny v telefonu
@@ -589,8 +602,8 @@ function modelCard(sp, e) {
     + '<div class="kv"><span>Zákazníků / den</span><b>' + String(e.perday).replace('.', ',') + '</b></div>'
     + '<div class="kv"><span>Obrat / měsíc</span><b>' + kcFull(e.revenue) + '</b></div>'
     + '<div class="kv"><span>Nájem / měsíc</span><b>' + kcFull(e.rent) + '</b></div>'
-    + '<div class="kv"><span>Energie / měsíc (9 % obratu)</span><b>' + kcFull(e.energy) + '</b></div>'
-    + '<div class="kv"><span>Servis a úklid / měsíc</span><b>' + kcFull(e.servis) + '</b></div>'
+    + '<div class="kv"><span>Energie / měsíc (' + pct(ENERGY_SHARE) + ' obratu)</span><b>' + kcFull(e.energy) + '</b></div>'
+    + '<div class="kv"><span>Servis a úklid / měsíc (' + pct(SERVIS_SHARE) + ' obratu)</span><b>' + kcFull(e.servis) + '</b></div>'
     + '<div class="kv"><span>Zisk / měsíc</span><b class="' + (e.profit > 0 ? 'ok' : 'err') + '">' + kcFull(e.profit) + '</b></div>'
     + '<div class="kv"><span>Přípojky (jednorázově)</span><b>' + kcFull(e.conn) + '</b></div>'
     + '<div class="kv"><span>Návratnost</span><b>' + (e.payback ? e.payback.toFixed(1).replace('.', ',') + ' roku' : 'nikdy') + '</b></div>'
@@ -626,6 +639,7 @@ function operatingRoom() {
 }
 function cashDrawMax() { return Math.max(0, Math.min(S.bank, operatingRoom(), OPERATING_MAX)); }
 // Podil z ceny v procentech - u akontace a uveru at je videt pomer, ne jen cislo.
+function pct(share) { return String(Math.round(share * 100)) + ' %'; }
 function pctNote(part, total) {
   if (!total || part == null) return '';
   var v = part / total * 100;
@@ -660,8 +674,8 @@ function paintShop() {
       + '<div class="row" style="margin-top:12px"><h3>' + m.name + '</h3><b>' + kc(price) + ' ' + CUR + '</b></div>'
       + '<p class="muted small" style="margin:2px 0 8px">' + esc(m.desc) + '</p>'
       + '<div class="kv"><span>Zákazníků / den na průměrném místě</span><b>' + m.perday + '</b></div>'
-      + '<div class="kv"><span>Servis a úklid / měsíc</span><b>' + kcFull(servisOf(m)) + '</b></div>'
-      + '<div class="kv"><span>Energie</span><b>9 % obratu</b></div>'
+      + '<div class="kv"><span>Servis a úklid</span><b>' + pct(SERVIS_SHARE) + ' obratu</b></div>'
+      + '<div class="kv"><span>Energie</span><b>' + pct(ENERGY_SHARE) + ' obratu</b></div>'
       + '<div class="kv"><span>Přípojky na místě (navíc)</span><b>' + kcFull(Math.round(CONN_MIN * (k === 'max' ? CONN_MAX_MULT : 1))) + ' – ' + kcFull(Math.round(CONN_MAX * (k === 'max' ? CONN_MAX_MULT : 1))) + '</b></div>'
       + '<div class="kv"><span>Dodání</span><b>' + DELIVERY_MONTHS + ' herní měsíce (1 den)</b></div>'
       + '<button class="btn sm" style="width:100%;margin-top:10px" data-buy="' + k + '"' + (f.ok ? '' : ' disabled') + '>'
@@ -717,8 +731,8 @@ function unitSheet(u) {
     + '<div class="kv"><span>Investice</span><b>' + kcFull(u.eco.invest) + '</b></div>'
     + '<div class="kv"><span>Obrat / měsíc</span><b>' + kcFull(u.eco.revenue) + '</b></div>'
     + (u.eco.rent != null ? '<div class="kv"><span>Nájem / měsíc</span><b>' + kcFull(u.eco.rent) + '</b></div>' : '')
-    + (u.eco.energy != null ? '<div class="kv"><span>Energie / měsíc</span><b>' + kcFull(u.eco.energy) + '</b></div>' : '')
-    + (u.eco.servis != null ? '<div class="kv"><span>Servis a úklid / měsíc</span><b>' + kcFull(u.eco.servis) + '</b></div>' : '')
+    + (u.eco.energy != null ? '<div class="kv"><span>Energie / měsíc (' + pct(ENERGY_SHARE) + ' obratu)</span><b>' + kcFull(u.eco.energy) + '</b></div>' : '')
+    + (u.eco.servis != null ? '<div class="kv"><span>Servis a úklid / měsíc (' + pct(SERVIS_SHARE) + ' obratu)</span><b>' + kcFull(u.eco.servis) + '</b></div>' : '')
     + '<div class="kv"><span>Zisk / měsíc</span><b class="ok">' + kcFull(u.eco.profit) + '</b></div>'
     + '<div class="kv"><span>Vydělal celkem</span><b>' + kcFull(u.eco.profit * 12 * years) + '</b></div>');
 }
@@ -763,6 +777,7 @@ function shareGame(btn) {
 
 // ─── Obrazovky hry ───────────────────────────────────────────────────────────
 function paint() {
+  refreshUnits();
   $('t-year').textContent = gameYear();
   $('t-cash').textContent = kc(S.cash);
   $('t-rate').textContent = kc(monthlyProfit());
