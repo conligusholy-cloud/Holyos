@@ -117,6 +117,10 @@ module.exports = function createAccounts(ctx) {
     ekonomika: SV('<path d="M3 3v18h18"/><path d="m6.5 15 4-4.5 3 3L20 6.5"/><path d="M15.5 6.5H20V11"/>'),
     hledat: SV('<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 1.1-.3 2.2-.7 3.2"/><circle cx="12" cy="10" r="2.3"/><circle cx="17.6" cy="17.6" r="2.6"/><path d="m19.5 19.5 2 2"/>'),
     zhodnotit: SV('<path d="M4.5 18a8.5 8.5 0 1 1 15 0"/><path d="m12 13.5 4-4.5"/><circle cx="12" cy="13.5" r="1.4"/><path d="M8 21h8"/>'),
+    sis: SV('<rect x="2.5" y="4" width="19" height="13" rx="2.5"/><path d="M8.5 20.5h7M12 17v3.5"/><path d="M6 12.2h2.2l1.6-3.4 2 5.4 1.7-3.6 1.2 1.6H18"/>'),
+    hugo: SV('<rect x="4" y="7.5" width="16" height="12" rx="3.5"/><path d="M12 7.5V4M10.3 2.8h3.4"/><circle cx="9" cy="13" r="1.2"/><circle cx="15" cy="13" r="1.2"/><path d="M9.5 16.6h5"/><path d="M1.8 11.5v4M22.2 11.5v4"/>'),
+    infolinka: SV('<path d="M4.5 13.5v-1.8a7.5 7.5 0 0 1 15 0v1.8"/><rect x="2.5" y="12.8" width="4" height="6" rx="1.8"/><rect x="17.5" y="12.8" width="4" height="6" rx="1.8"/><path d="M19.5 18.8v.7a2.5 2.5 0 0 1-2.5 2.5h-3"/>'),
+    udrzba: SV('<circle cx="9" cy="9" r="3.2"/><path d="M9 5.8V3M9 15v-2.8M5.8 9H3M15 9h-2.8M6.7 6.7 5 5M13 13l-1.7-1.7M11.3 6.7 13 5M5 13l1.7-1.7"/><path d="M15.2 14.3a2.6 2.6 0 0 0 3.5 3.5l3 3-1.7 1.7-3-3a2.6 2.6 0 0 1-3.5-3.5z"/>'),
     tools: SV('<rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/>'),
     user: SV('<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5c1.2-3.6 4-5.4 7.5-5.4s6.3 1.8 7.5 5.4"/>'),
     logout: SV('<path d="M14 4h3.5A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5H14"/><path d="M10 16.5 5.5 12 10 7.5M5.5 12H15"/>'),
@@ -210,16 +214,22 @@ module.exports = function createAccounts(ctx) {
     const TILES = [
       ['/cesta/compounder', 'compounder', 'Compounder', 'Jak roste síť prádlomatů a co znamená pro vaše podnikání.'],
       ['/cesta/pradlomaty', 'pradlomaty', 'Prádlomaty', 'Nabídka strojů a služby kolem nich.'],
+      ['', 'sis', 'SIS', 'Systém inteligentní správy v reálném čase: kompletní správa strojů, statistiky, doporučení, účetní exporty i API napojení na váš systém.', true],
       ['/cesta/ucet/ekonomika', 'ekonomika', 'Ekonomika', 'Kalkulačka: vymodelujte si vlastní představu – investici, obrat i návratnost.'],
       ['/cesta/hledat', 'hledat', 'Najít místo', 'Spádová oblast, kapacita a provozované prádlomaty v okolí.'],
       ['/cesta/zhodnotit', 'zhodnotit', 'Zhodnotit místo', 'Orientační ekonomika vašeho konkrétního místa.'],
+      // Chystané nástroje — pátý prvek `true` = dlaždice je zamčená vždy (i pro správce z HolyOS),
+      // protože v Laundromats zatím žádnou takovou stránku nemáme. Klik nabídne online schůzku jako u ostatních.
+      ['', 'hugo', 'HUGO', 'AI servisní asistent s chytrým e-shopem.', true],
+      ['', 'infolinka', 'Infolinka', 'Řízení infolinky: AI zpracování požadavku, delegování a řízení servisních požadavků.', true],
+      ['', 'udrzba', 'Údržba', 'Řízení údržbového plánu, intervalů, odečtů a personální řízení údržby.', true],
     ];
     app.get('/cesta/ucet', requireAccount, (req, res) => {
       const a = req.account || { name: (adminOf(req) || {}).name || 'Správce', email: '' };
       const welcome = req.query.vitejte === '1' ? 'Účet je potvrzený. Vítejte!' : '';
       const err = String(req.query.err || '').slice(0, 200);
       const body = CSS + `<div class="hero" style="padding-bottom:6px"><span class="eyebrow"><i></i>Moje nástroje</span><h1>Dobrý den, <span class="g">${esc(String(a.name).split(/\s+/)[0])}</span></h1><p>Vaše nástroje Laundromats na jednom místě.</p></div>${msgHtml(err, welcome)}
-        <div class="acc-tiles">${TILES.map(([h, i, t, d]) => (!req.account || canSee(req, i))
+        <div class="acc-tiles">${TILES.map(([h, i, t, d, lock]) => (!lock && (!req.account || canSee(req, i)))
           ? `<a class="card acc-tile" href="${h}"><div class="ic">${IC[i]}</div><h3>${t}</h3><p>${d}</p></a>`
           : `<button type="button" class="card acc-tile acc-lock" data-lock="${esc(t)}"><div class="ic">${IC[i]}</div><span class="acc-lk" title="Zatím uzamčeno">🔒</span><h3>${t}</h3><p>${d}</p></button>`).join('')}</div>
         <div class="acc-ov" id="acc-ov" hidden><div class="card acc-ovc"><button type="button" class="acc-x" aria-label="Zavřít">×</button><div class="ic" style="margin:0 auto 12px">${IC.user}</div>

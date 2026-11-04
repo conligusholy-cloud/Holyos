@@ -901,6 +901,53 @@ router.get('/bs2/meetings-stats', async (req, res, next) => {
         const names = {}; gr.forEach((r) => { if (r.booked_by_person_id) names['p:' + r.booked_by_person_id] = pName.get(r.booked_by_person_id) || ('Obchodník #' + r.booked_by_person_id); });
         return { per_day: perDay, days: Object.values(days), names };
       })(),
+      // Čas u telefonu: kolik času obchodníci strávili hovory — stejné okno jako cíl týmu (14 dní).
+      // Délku měří aplikace obchodníka: od kliknutí na „Volat" po jeho další akci v appce, strop 15 min
+      // (CompounderEvent event='sales_action', props.action='call', props.dur_min). Hovor, po kterém už
+      // obchodník nic neudělal, délku ještě nemá — vracíme ho zvlášť jako „open", ať čísla nelžou.
+      calls: await (async () => {
+        const CAP = 15;
+        const since = new Date(Date.now() - 15 * 86400000);
+        const ev = await prisma.compounderEvent.findMany({
+          where: { event: 'sales_action', created_at: { gte: since } },
+          select: { props: true, created_at: true }, take: 50000,
+        }).catch(() => []);
+        const callEv = ev.filter((e) => e.props && e.props.action === 'call' && e.props.person_id);
+        const cIds = [...new Set(callEv.map((e) => e.props.person_id).filter((x) => !pName.has(x)))];
+        if (cIds.length) (await prisma.person.findMany({ where: { id: { in: cIds } }, select: { id: true, first_name: true, last_name: true } }).catch(() => [])).forEach((p) => pName.set(p.id, [p.first_name, p.last_name].filter(Boolean).join(' ')));
+        const nowP3 = mstParts(Date.now());
+        const todayKey = nowP3.y + '-' + mst2(nowP3.m) + '-' + mst2(nowP3.d);
+        const days = {};
+        for (let k = 13; k >= 0; k--) {
+          const x = mstYmd(mstNoon(nowP3.y, nowP3.m, nowP3.d) - k * 86400000);
+          const key = x.y + '-' + mst2(x.m) + '-' + mst2(x.d);
+          days[key] = { date: key, dow: new Date(mstNoon(x.y, x.m, x.d)).getUTCDay(), calls: 0, talk_min: 0, by: {} };
+        }
+        const people = {}, names = {};
+        const pcell = () => ({ calls: 0, talk_min: 0, open: 0, today_calls: 0, today_talk_min: 0 });
+        callEv.forEach((e) => {
+          const pid = e.props.person_id, key = 'p:' + pid;
+          const pp = mstParts(e.created_at), dk = pp.y + '-' + mst2(pp.m) + '-' + mst2(pp.d);
+          const d = days[dk]; if (!d) return;
+          const min = Math.max(0, Number(e.props.dur_min) || 0);
+          names[key] = pName.get(pid) || ('Obchodník #' + pid);
+          const p = people[key] || (people[key] = pcell());
+          p.calls++; p.talk_min += min; if (!min) p.open++;
+          if (dk === todayKey) { p.today_calls++; p.today_talk_min += min; }
+          d.calls++; d.talk_min += min;
+          const db = d.by[key] || (d.by[key] = { calls: 0, talk_min: 0 });
+          db.calls++; db.talk_min += min;
+        });
+        const list = Object.keys(people).map((k) => {
+          const p = people[k], measured = p.calls - p.open;
+          return Object.assign({ key: k, name: names[k] }, p, { avg_min: measured > 0 ? Math.round((p.talk_min / measured) * 10) / 10 : null });
+        });
+        list.sort((a, b) => (b.talk_min - a.talk_min) || (b.calls - a.calls));
+        const total = list.reduce((a, x) => { a.calls += x.calls; a.talk_min += x.talk_min; a.open += x.open; a.today_calls += x.today_calls; a.today_talk_min += x.today_talk_min; return a; }, pcell());
+        const measuredT = total.calls - total.open;
+        total.avg_min = measuredT > 0 ? Math.round((total.talk_min / measuredT) * 10) / 10 : null;
+        return { cap_min: CAP, days: Object.values(days), people: list, total, names };
+      })(),
       // Trychtýř: kontakty s online schůzkou v období → z nich schůzka na hale (kdykoli) → obchod (stav kontaktu)
       funnel: await (async () => {
         const WON = new Set(['won', 'prodano', 'converted']);

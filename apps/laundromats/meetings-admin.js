@@ -387,6 +387,50 @@ function statSegs(x,field){field=field||'by';var src=x[field];if(!src)return [];
   if(!statSplit){var sa=0,se=0;Object.keys(src).forEach(function(k){if(k.indexOf('p:')===0)sa+=src[k];else se+=src[k];});var o=[];if(sa)o.push({key:'sales',n:sa,color:C_SALES,label:'Domluvil obchodník'});if(se)o.push({key:'self',n:se,color:C_SELF,label:'Zákazník sám (reklama / web)'});return o;}
   var m=srcMeta(),out=[],selfN=0;Object.keys(src).forEach(function(k){var x0=src;if(k.indexOf('p:')!==0){selfN+=x0[k];return;}var mm=m[k]||{color:k==='ads'?'#3b82f6':'#94a3b8',label:k==='ads'?'Reklama':k==='self'?'Sám z webu / odkazu':k};out.push({key:k,n:x0[k],color:mm.color,label:mm.label});});
   out.sort(function(a,b){return b.n-a.n;});if(selfN)out.push({key:'self',n:selfN,color:C_SELF,label:'Zákazník sám (reklama / web)'});return out;}
+// ── Čas u telefonu — kolik času obchodníci strávili hovory (stejné 14denní okno jako cíl týmu) ──
+// Délku hovoru měří aplikace obchodníka: od kliknutí na „Volat" po jeho další akci, strop 15 min.
+// Hovor, po kterém obchodník už nic neudělal, délku zatím nemá — píšeme to pod tabulku, ať čísla nelžou.
+function fmtMin(m){m=Math.round(Number(m)||0);if(m<60)return m+' min';var h=Math.floor(m/60);return h+' h'+(m%60?' '+(m%60)+' min':'');}
+// Barva obchodníka — stejná jako v grafech výše; kdo jen volá a nic nedomluvil, dostane barvu z palety.
+function callColor(k,i){var m=srcMeta();if(m[k]&&m[k].color)return m[k].color;var PAL=['#ef4444','#f59e0b','#ec4899','#22c55e','#a855f7','#f97316','#eab308','#14b8a6'];return PAL[i%PAL.length];}
+function callsChart(C,order){
+  var days=(C.days||[]).filter(function(d){return (d.dow!==0&&d.dow!==6)||d.talk_min||d.calls;});
+  if(!days.length)return '';
+  var W=Math.max(520,days.length*48), H=190, PL=42, PR=10, PT=16, PB=30, iw=W-PL-PR, ih=H-PT-PB, bw=iw/Math.max(1,days.length);
+  var max=30; days.forEach(function(d){if(d.talk_min>max)max=d.talk_min;}); max=Math.ceil(max*1.1/10)*10;
+  var g='', DN=['Ne','Po','Út','St','Čt','Pá','So'], col={};
+  order.forEach(function(k,i){col[k]=callColor(k,i);});
+  [0,Math.round(max/2),max].forEach(function(v){var y=PT+ih-(v/max)*ih;g+='<line x1="'+PL+'" y1="'+y+'" x2="'+(W-PR)+'" y2="'+y+'" stroke="rgba(120,160,255,.12)"/><text x="'+(PL-6)+'" y="'+(y+4)+'" text-anchor="end" fill="#8ea2c2" font-size="10.5">'+v+'</text>';});
+  days.forEach(function(d,i){var c=PL+bw*i+bw/2, w=Math.min(26,bw-12), yy=PT+ih;
+    Object.keys(d.by||{}).sort(function(a,b){return d.by[b].talk_min-d.by[a].talk_min;}).forEach(function(k){
+      var hh=(d.by[k].talk_min/max)*ih; if(hh<=0)return; yy-=hh;
+      g+='<rect x="'+(c-w/2)+'" y="'+yy+'" width="'+w+'" height="'+hh+'" fill="'+(col[k]||'#8ea2c2')+'" opacity=".92"><title>'+esc(C.names[k]||k)+': '+fmtMin(d.by[k].talk_min)+' · '+d.by[k].calls+' hovorů</title></rect>';});
+    var pd=d.date.split('-');
+    g+=(d.talk_min?'<text x="'+c+'" y="'+(yy-5)+'" text-anchor="middle" fill="#e8f0ff" font-size="10.5" font-weight="700">'+Math.round(d.talk_min)+'</text>':'')
+      +'<text x="'+c+'" y="'+(H-16)+'" text-anchor="middle" fill="#e8f0ff" font-size="10.5" font-weight="700">'+DN[d.dow]+'</text><text x="'+c+'" y="'+(H-4)+'" text-anchor="middle" fill="#8ea2c2" font-size="10">'+(+pd[2])+'. '+(+pd[1])+'.</text>';});
+  return '<div style="overflow-x:auto"><svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block;max-width:none">'+g+'</svg></div>';
+}
+function callsBox(C){
+  if(!C||!C.people||!C.people.length)return '';
+  var T=C.total||{}, order=C.people.map(function(x){return x.key;});
+  var chips=C.people.filter(function(x){return x.today_calls;}).map(function(x,i){var c=callColor(x.key,order.indexOf(x.key));
+    return '<span class="mt-pill" style="border-color:'+c+';color:'+c+';margin:0 4px 4px 0;display:inline-block">'+esc(x.name)+' · '+x.today_calls+' hovorů · '+fmtMin(x.today_talk_min)+'</span>';}).join('');
+  var rows=C.people.map(function(x,i){var c=callColor(x.key,i);
+    return '<tr><td><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:'+c+';margin-right:6px"></i><b>'+esc(x.name)+'</b></td>'
+      +'<td>'+x.calls+'</td><td style="color:#2fe3a0"><b>'+fmtMin(x.talk_min)+'</b></td><td>'+(x.avg_min!=null?x.avg_min+' min':'<span class="muted">—</span>')+'</td>'
+      +'<td>'+x.today_calls+'</td><td>'+fmtMin(x.today_talk_min)+'</td>'
+      +'<td>'+(x.open?'<span class="muted">'+x.open+'</span>':'<span class="muted">—</span>')+'</td></tr>';}).join('');
+  return '<h3 style="margin:18px 0 6px">⏱ Čas u telefonu <span class="muted small" style="font-weight:500">· obchodníci · posledních 14 dní</span></h3>'
+    +'<div class="mt-kpi" style="grid-template-columns:repeat(4,1fr)">'
+    +'<div><b>'+fmtMin(T.today_talk_min)+'</b><span>Dnes u telefonu</span><small class="muted" style="display:block;font-size:11px;margin-top:2px">'+(T.today_calls||0)+' hovorů</small></div>'
+    +'<div><b style="color:#2fe3a0">'+fmtMin(T.talk_min)+'</b><span>Za 14 dní</span><small class="muted" style="display:block;font-size:11px;margin-top:2px">'+(T.calls||0)+' hovorů</small></div>'
+    +'<div><b>'+(T.avg_min!=null?T.avg_min+' min':'—')+'</b><span>Ø na hovor</span></div>'
+    +'<div><b style="color:#4fd1ff">'+C.people.length+'</b><span>Obchodníků volalo</span></div></div>'
+    +(chips?'<div style="margin:8px 0 6px">'+chips+'</div>':'')
+    +callsChart(C,order)
+    +'<div class="mt-tw" style="margin-top:8px"><table><thead><tr><th>Obchodník</th><th>Hovorů</th><th>Čas u telefonu</th><th>Ø na hovor</th><th>Dnes hovorů</th><th>Dnes čas</th><th>Bez délky</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<p class="muted small" style="margin:6px 0 0">Čas se měří v aplikaci obchodníka: od kliknutí na „Volat" po jeho další akci v appce, nejvýš '+(C.cap_min||15)+' min na hovor. Je to tedy čas u telefonu včetně zápisu po hovoru, ne délka spojení od operátora. „Bez délky" = hovor, po kterém obchodník zatím nic dalšího neudělal — do času se nepočítá.</p>';
+}
 // Cíl týmu: domluvené online schůzky za den (podle data domluvení), posledních 14 dní, sloupce po zdrojích + čára cíle
 function goalChart(G){
   var m=srcMeta(), names=G.names||{}, days=(G.days||[]).filter(function(d){return d.dow!==0&&d.dow!==6||d.total;});
@@ -480,6 +524,8 @@ function statRender(){
       +'<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><div style="font-size:26px;font-weight:800;color:'+(td.total>=G.per_day?'#2fe3a0':'#e8f0ff')+'">'+td.total+' / '+G.per_day+'</div><div style="flex:1;min-width:200px"><div style="height:10px;border-radius:6px;background:rgba(120,160,255,.14);overflow:hidden"><div style="height:100%;width:'+pct+'%;background:linear-gradient(90deg,#3ee08a,#4fd1ff)"></div></div><div class="small muted" style="margin-top:4px">dnes · z toho obchodníci '+td.sales+' · průměr posledních pracovních dnů '+avg+' / den</div></div></div>'
       +(per?'<div style="margin-bottom:6px">'+per+'</div>':'')+goalChart(G);
   }
+  // Čas u telefonu (stejné okno jako cíl týmu)
+  var cHtml=callsBox(statData.calls);
   // Trychtýř: online schůzka → schůzka na hale → obchod
   var F=statData.funnel||null, pc=function(a,b){return b?Math.round(a/b*100)+' %':'—';};
   var fun=F?'<h3 style="margin:18px 0 6px">Trychtýř <span class="muted small" style="font-weight:500">· kontakty s online schůzkou v zobrazeném období → schůzka na hale → obchod</span></h3>'
@@ -494,7 +540,7 @@ function statRender(){
     +'<div class="mt-tw"><table><thead><tr><th>Zdroj</th><th>Domluveno</th><th>Proběhlo</th><th>Nedorazil</th><th>Zrušeno</th><th>Neoznačeno</th><th>Nadchází</th><th>Úspěšnost</th></tr></thead><tbody>'+srcRows+'</tbody></table></div>'
     +'<p class="muted small" style="margin:6px 0 0">Obchodník = schůzku zarezervoval v aplikaci obchodníka. Reklama = zákazník si termín vybral sám a kontakt přišel z reklamy (Meta / Google / LinkedIn). Sám z webu / odkazu = ostatní samostatné rezervace (cesta z SMS či e-mailu, bestseries2.cz…).</p>':'';
   box.innerHTML=kpi+cmp
-    +'<div class="mt-chart">'+statChart(b,avail)+'</div>'+leg+gHtml+fun+srcBox
+    +'<div class="mt-chart">'+statChart(b,avail)+'</div>'+leg+gHtml+cHtml+fun+srcBox
     +'<div class="mt-tw" style="margin-top:16px"><table><thead><tr><th>Období</th><th>Domluveno</th><th>Proběhlo</th><th>Nedorazil</th><th>Zrušeno</th><th>Neoznačeno</th><th>Nadchází</th><th>Úspěšnost</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +(statData.internal_skipped?'<p class="muted small" style="margin:10px 0 0">Nepočítá se '+statData.internal_skipped+' našich vlastních (testovacích) rezervací z firemních e-mailů.</p>':'');
   // Graf jde dál doprava než se vejde — odrolujeme tak, aby byl dnešek i kus dopředu vidět.
