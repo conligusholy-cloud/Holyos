@@ -24,27 +24,25 @@ function getTools() {
     {
       name: TOOL_NAME,
       description:
-        'Zjistí aktuální evidovaná omezení provozu (závady) na konkrétním prádlomatu. ' +
+        'Zjistí aktuální evidovaná omezení provozu (závady) na JEDNOM konkrétním prádlomatu. ' +
         'Zavolej VŽDY, jakmile znáš město a lokalitu prádlomatu, ještě než začneš radit, ' +
         'co má zákazník zkusit. Když si potřebuješ stav během hovoru ověřit znovu, zavolej nástroj znovu. ' +
-        'Bez parametru „lokalita" vrátí ÚPLNÝ seznam všech evidovaných omezení na všech prádlomatech — ' +
-        'použij to, když zákazník mluví obecně (např. shání nejbližší prádlomat) a ty si potřebuješ ověřit, ' +
-        'jestli je některá lokalita omezená. ' +
+        'Parametr „lokalita" je povinný — nástroj NIKDY nevrací závady z jiných prádlomatů. ' +
+        'Když lokalitu neznáš, nejdřív se na ni zeptej zákazníka. ' +
         'Vrací stav celého prádlomatu i jednotlivých zařízení (pračky, sušičky, platební terminál).',
       input_schema: {
         type: 'object',
         properties: {
           lokalita: {
             type: 'string',
-            description: 'Lokalita prádlomatu tak, jak ji zákazník řekl — obchod a město, např. „Tesco Rychnov nad Kněžnou". ' +
-              'Nevyplňuj, když chceš celý seznam omezení na všech prádlomatech.',
+            description: 'POVINNÉ. Lokalita prádlomatu tak, jak ji zákazník řekl — obchod a město, např. „Tesco Rychnov nad Kněžnou".',
           },
           zarizeni: {
             type: 'string',
             description: 'Volitelně konkrétní zařízení, o kterém zákazník mluví, např. „pračka 3" nebo „platební terminál".',
           },
         },
-        // „lokalita" je nepovinná — bez ní nástroj vrátí celý seznam omezení.
+        required: ['lokalita'],
       },
     },
   ];
@@ -79,115 +77,88 @@ function matchesDevice(items, zarizeni) {
   return { nalezeno: hit.length > 0, polozky: hit.map(publicItem) };
 }
 
-// Úplný seznam evidovaných omezení (všechny prádlomaty) v podobě pro zákazníka.
-// Používá ho jednak nástroj volaný bez lokality, jednak snímek v instrukcích hovoru.
-async function allRestrictions() {
-  try {
-    const { items } = await restrictions.listActiveRestrictions({});
-    const capped = items.slice(0, MAX_ITEMS);
-    return {
-      dostupnost: 'ok',
-      cely_seznam: true,
-      pocet_omezeni: items.length,
-      omezeni: capped.map((it) => Object.assign({ lokalita: it.location }, publicItem(it))),
-      zkraceno: items.length > capped.length ? ('zobrazeno ' + capped.length + ' z ' + items.length) : undefined,
-      pokyn: items.length
-        ? 'Tohle jsou JEDINÁ evidovaná omezení. O žádném jiném prádlomatu netvrď, že je mimo provoz.'
-        : 'Právě není evidované ŽÁDNÉ omezení. O žádném prádlomatu neříkej, že je mimo provoz nebo v opravě. '
-          + 'To ale neznamená, že všechno jistě funguje — neslibuj zákazníkovi bezchybný provoz.',
-    };
-  } catch (e) {
-    console.warn('[voice tools] seznam omezení se nepodařilo načíst:', e.message);
-    return {
-      dostupnost: 'nedostupne',
-      pokyn: 'Seznam omezení se teď nepodařilo načíst. NEŘÍKEJ, že žádná závada není evidovaná, '
-        + 'ani že některý prádlomat mimo provoz je. Pokračuj běžným postupem.',
-    };
-  }
+// Snímek omezení do instrukcí hovoru UŽ NEPOSÍLÁME (požadavek #130).
+// Dřív se na začátek hovoru vkládal seznam závad ze VŠECH prádlomatů. AI si pak
+// vzala závadu z cizí lokality (zákazník ze Svitav dostal odstávku z Uherského
+// Brodu) — mít cizí data v kontextu je samo o sobě riziko. Místo seznamu dostává
+// AI jen pravidlo: dokud pro KONKRÉTNÍ lokalitu nezavolá nástroj, o žádném
+// omezení nemluví.
+function buildRestrictionsBlock() {
+  return '=== OMEZENÍ PROVOZU — ODKUD JE BRÁT === '
+    + 'Jediný platný zdroj informací o odstávkách a závadách je nástroj zjisti_omezeni_provozu, '
+    + 'a to VŽDY pro tu konkrétní lokalitu, o které je řeč. Žádný seznam závad předem nemáš a mít nebudeš. '
+    + 'Dokud ti nástroj pro danou lokalitu nevrátí omezení, neříkej, že je tam něco mimo provoz, v opravě '
+    + 'nebo že na tom pracuje servis — ani náznakem, ani „asi", ani z toho, co jsi slyšela dřív v hovoru. '
+    + 'Závada z jedné lokality NIKDY neplatí pro jinou. Když nástroj vrátí „Žádné evidované omezení", '
+    + 'znamená to, že na té lokalitě nic evidovaného není — neslibuj ale zákazníkovi, že všechno jistě funguje.';
+}
+
+// Technický log jednoho dotazu na omezení (požadavek #130): co AI zadala,
+// jakou lokalitu z toho HolyOS identifikoval, co načetl a co AI skutečně dostala.
+// Ukládá se k hovoru do VoiceCall.restrictions_log.
+function logEntry(input, res, out) {
+  return {
+    at: new Date().toISOString(),
+    dotaz: { lokalita: (input && input.lokalita) || null, zarizeni: (input && (input.zarizeni || input.zařízení)) || null },
+    lokalita_rozpoznana: !!(res && res.resolved),
+    machine: (res && res.machine) ? { id: res.machine.id, name: res.machine.name } : null,
+    matched_by: (res && res.matched_by) || null,
+    // Co HolyOS načetl a jak to rozdělil — sem patří i zahozené cizí lokality,
+    // ať je při reklamaci vidět, že se k AI nedostaly.
+    nacteno: (res && res.diag) ? res.diag : null,
+    // Co skutečně dostala AI (bez interních poznámek — ty publicItem nepouští dál).
+    predano: out,
+  };
 }
 
 /**
- * Snímek všech evidovaných omezení jako text do instrukcí hovoru.
- * Staví se jednou na začátku hovoru, aby AI seznam měla i tehdy, když ji
- * nenapadne zavolat nástroj (přesně to se stalo u hovoru s dotazem na
- * nejbližší prádlomat — AI si „mimo provoz" domyslela).
- * Obsahuje jen to, co smí zaznít zákazníkovi — žádné interní poznámky
- * ani jména techniků (ta se do publicItem() nedostanou).
+ * Vykoná nástroj. `onLog` (volitelné) dostane záznam do technického logu hovoru.
  */
-async function buildRestrictionsBlock() {
-  const head = '=== EVIDOVANÁ OMEZENÍ PROVOZU K TÉTO CHVÍLI (jediný platný zdroj) === ';
-  let data;
-  try {
-    data = await allRestrictions();
-  } catch (e) {
-    data = { dostupnost: 'nedostupne' };
-  }
-  if (data.dostupnost === 'nedostupne') {
-    return head
-      + 'Seznam omezení se teď nepodařilo načíst. O ŽÁDNÉM prádlomatu neříkej, že je mimo provoz nebo v opravě, '
-      + 'a zároveň netvrď, že všechno funguje. Zkus nástroj zjisti_omezeni_provozu, nebo pokračuj běžným postupem.';
-  }
-  if (!data.pocet_omezeni) {
-    return head
-      + 'Právě NENÍ evidované žádné omezení provozu — ani jeden prádlomat není hlášený jako mimo provoz. '
-      + 'Proto o žádné lokalitě neříkej, že je mimo provoz, v opravě nebo že na ní pracuje servis. '
-      + 'Neznamená to, že je vše jistě v pořádku: zákazníkovu závadu normálně sepiš a předej servisu.';
-  }
-  const radky = data.omezeni.map((o) => {
-    const casti = [
-      o.lokalita || 'neznámá lokalita',
-      o.ceho_se_tyka,
-      o.stav,
-      o.popis_zavady ? ('závada: ' + o.popis_zavady) : null,
-      o.informace_pro_zakaznika ? ('pro zákazníka: ' + o.informace_pro_zakaznika) : null,
-    ].filter(Boolean);
-    return '- ' + casti.join(' — ');
-  });
-  return head
-    + 'Tohle je ÚPLNÝ seznam. Co v něm není, není mimo provoz a nesmíš to tak označit. '
-    + (data.zkraceno ? ('(' + data.zkraceno + ' — zbytek si vyžádej nástrojem.) ') : '')
-    + '\n' + radky.join('\n')
-    + '\nSeznam je z okamžiku začátku hovoru. Když si potřebuješ stav ověřit znovu, zavolej zjisti_omezeni_provozu.';
-}
-
-async function execute(name, input) {
+async function execute(name, input, onLog) {
+  const log = (res, out) => { try { if (typeof onLog === 'function') onLog(logEntry(input, res, out)); } catch (e) { /* log nikdy nesmí shodit hovor */ } return out; };
   if (name !== TOOL_NAME) return { chyba: 'Neznámý nástroj: ' + name };
 
   const lokalita = String((input && input.lokalita) || '').trim();
   const zarizeni = String((input && (input.zarizeni || input.zařízení)) || '').trim();
 
-  // Bez lokality → celý seznam omezení ze všech prádlomatů. Zákazník se často
-  // ptá obecně („kde je nejbližší prádlomat") a AI potřebuje vědět, jestli
-  // některá lokalita omezená JE — ne si to domýšlet.
-  if (!lokalita) return await allRestrictions();
+  // Bez lokality se neptáme na nic. Dřív se vracel seznam ze všech prádlomatů
+  // a AI si z něj vzala cizí závadu — přesně to řeší požadavek #130.
+  if (!lokalita) {
+    return log(null, {
+      dostupnost: 'ok',
+      lokalita_rozpoznana: false,
+      pokyn: 'Nezadala jsi lokalitu. Zeptej se zákazníka, o který prádlomat jde (obchod a město), a zavolej nástroj znovu. ' +
+        'Dokud lokalitu nemáš, o žádném omezení provozu nemluv — závady z jiných prádlomatů pro tenhle hovor neplatí.',
+    });
+  }
 
   const res = await restrictions.getActiveRestrictions({ location: lokalita });
 
   // Data se nepodařilo načíst — AI to MUSÍ poznat a nesmí tvrdit, že nic není.
   if (!res.available) {
-    return {
+    return log(res, {
       dostupnost: 'nedostupne',
       pokyn: 'Údaje o závadách se teď nepodařilo načíst. NEŘÍKEJ zákazníkovi, že žádná závada není evidovaná. ' +
         'Pokračuj běžným postupem podle znalostních podkladů, případně nabídni přepojení na kolegu.',
-    };
+    });
   }
 
   if (res.ambiguous) {
-    return {
+    return log(res, {
       dostupnost: 'ok',
       lokalita_rozpoznana: false,
       pokyn: 'Lokalita není jednoznačná — zeptej se zákazníka na město nebo přesnější označení prádlomatu. Nehádej.',
       moznosti: (res.candidates || []).map((c) => c.name),
-    };
+    });
   }
 
   if (!res.resolved) {
-    return {
+    return log(res, {
       dostupnost: 'ok',
       lokalita_rozpoznana: false,
       pokyn: 'Tuhle lokalitu neznám. Ujisti se, o který prádlomat jde (obchod a město). ' +
         'Dokud lokalitu nemáš, netvrď nic o tom, jestli tam závada je nebo není.',
-    };
+    });
   }
 
   const items = res.items;
@@ -195,6 +166,8 @@ async function execute(name, input) {
     dostupnost: 'ok',
     lokalita_rozpoznana: true,
     lokalita: res.machine ? res.machine.name : res.location,
+    // Pojistka proti záměně: AI vidí, pro kterou provozovnu data platí.
+    id_provozovny: res.machine ? res.machine.id : null,
     cely_pradlomat_mimo_provoz: res.site_out,
     pocet_omezeni: items.length,
     omezeni: items.map(publicItem),
@@ -205,17 +178,22 @@ async function execute(name, input) {
   if (res.site_out) {
     out.pokyn = 'Celý prádlomat je mimo provoz — řekni to zákazníkovi hned a nenabízej mu postupy, které s tím nepomůžou.';
   } else if (!items.length) {
-    out.pokyn = 'Na téhle lokalitě není evidovaná žádná závada. To ale NEZNAMENÁ, že všechno funguje — ' +
-      'neslibuj zákazníkovi, že je zařízení v pořádku. Pokračuj běžnou diagnostikou podle znalostních podkladů.';
+    out.stav = 'Žádné evidované omezení';
+    out.pokyn = 'Na lokalitě ' + out.lokalita + ' NENÍ evidované žádné omezení provozu. ' +
+      'Nepoužívej závadu z jiné lokality a žádnou odstávku si nedomýšlej. ' +
+      'Zároveň neslibuj zákazníkovi, že všechno funguje — evidence nemusí být úplná. ' +
+      'Pokračuj běžnou diagnostikou podle znalostních podkladů.';
   } else {
-    out.pokyn = 'Na lokalitě jsou evidovaná omezení. Pokud se týkají zařízení, o kterém zákazník mluví, ' +
-      'řekni mu to a nabídni funkční alternativu, je-li jistá. Zařízení označené jako mimo provoz nedoporučuj.';
+    out.pokyn = 'Tahle omezení platí POUZE pro lokalitu ' + out.lokalita + '. ' +
+      'Pokud se týkají zařízení, o kterém zákazník mluví, řekni mu to a nabídni funkční alternativu, je-li jistá. ' +
+      'Zařízení označené jako mimo provoz nedoporučuj.';
   }
 
-  return out;
+  return log(res, out);
 }
 
-// Toolset pro services/voice/agent.js
-const infolinkaToolset = { getTools, execute };
+// Toolset pro services/voice/agent.js. `onLog` sbírá technický log k hovoru.
+const createInfolinkaToolset = (onLog) => ({ getTools, execute: (name, input) => execute(name, input, onLog) });
+const infolinkaToolset = createInfolinkaToolset(null);
 
-module.exports = { infolinkaToolset, getTools, execute, TOOL_NAME, publicItem, matchesDevice, allRestrictions, buildRestrictionsBlock };
+module.exports = { infolinkaToolset, createInfolinkaToolset, getTools, execute, TOOL_NAME, publicItem, matchesDevice, buildRestrictionsBlock, logEntry };

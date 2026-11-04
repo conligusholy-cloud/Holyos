@@ -1091,6 +1091,7 @@ router.get('/calls', requireAuth, async (req, res, next) => {
         manual_sms_log: true,
         full_transcript: true,
         full_transcript_at: true,
+        restrictions_log: true, // co AI zjišťovala o omezeních provozu (technický log, požadavek #130)
       },
     });
     // PŘÍMÁ vazba: servisní požadavek založený tlačítkem „Servisní požadavek" u hovoru

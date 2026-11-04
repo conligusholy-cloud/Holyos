@@ -146,6 +146,33 @@
         .then(function(j){ if(j&&j.callback_log){ var box=document.getElementById('cb-'+id); if(box) box.innerHTML=cbBadges(j.callback_log); } })
         .catch(function(){});
     };
+    // Technický log omezení provozu (VoiceCall.restrictions_log, požadavek #130):
+    // na co se AI ptala, jakou lokalitu z toho HolyOS identifikoval, co načetl,
+    // co zahodil jako cizí lokalitu a co AI skutečně dostala. Slouží k dohledání,
+    // proč AI zákazníkovi řekla, co řekla.
+    function omzLogBlock(c){
+      var log = Array.isArray(c.restrictions_log) ? c.restrictions_log : [];
+      if(!log.length) return '';
+      var radky = log.map(function(z, i){
+        var d = z.dotaz || {}, m = z.machine, n = z.nacteno || {}, p = z.predano || {};
+        var hlava = '<b>'+(i+1)+') AI se ptala na:</b> '+esc(d.lokalita || '(bez lokality)')+(d.zarizeni? ' / '+esc(d.zarizeni) : '');
+        var ident = '<div>HolyOS identifikoval: '+(m? '<b>'+esc(m.name)+'</b> (ID '+esc(m.id)+')' : '<span style="color:#f59e0b">neidentifikováno</span>')
+          +(z.matched_by? ' · shoda podle '+esc(z.matched_by) : '')+'</div>';
+        var nacteno = '';
+        if(n.scanned != null){
+          nacteno = '<div>Načteno aktivních požadavků: '+esc(n.scanned)+'</div>'
+            + (n.matched||[]).map(function(x){ return '<div style="color:#22c55e">✔ patří sem: #'+esc(x.id)+' '+esc(x.location)+' ['+esc(x.impact)+']</div>'; }).join('')
+            + (n.rejected||[]).map(function(x){ return '<div style="color:#8b94a7">✘ zahozeno jako cizí lokalita: #'+esc(x.id)+' '+esc(x.location)+' ['+esc(x.impact)+']</div>'; }).join('');
+        }
+        var predano = '<div>Předáno AI: '+esc(p.lokalita || '—')
+          +' · omezení: '+esc(p.pocet_omezeni != null ? p.pocet_omezeni : '—')
+          +(p.cely_pradlomat_mimo_provoz? ' · <b style="color:#ef4444">CELÝ PRÁDLOMAT MIMO PROVOZ</b>' : '')
+          +(p.stav? ' · '+esc(p.stav) : '')+'</div>';
+        return '<div style="margin:6px 0;padding:6px 0;border-top:1px dashed var(--border)">'+hlava+ident+nacteno+predano+'</div>';
+      }).join('');
+      return '<button class="tr-toggle" onclick="var d=document.getElementById(\'omz-'+c.id+'\');d.style.display=d.style.display===\'block\'?\'none\':\'block\'">🔎 Co AI věděla o omezeních ('+log.length+')</button>'
+        +'<div class="transcript" id="omz-'+c.id+'">'+radky+'</div>';
+    }
     // Naformátuje celý přepis (řádky „AI:/Zákazník:/Technik:") na barevný dialog.
     function fmtFull(text){
       var lines=String(text||'').split(/\r?\n/).filter(function(l){return l.trim();});
@@ -420,6 +447,7 @@
                   : '<a class="call-btn" style="background:#22d3ee;color:#04222b;" href="/modules/servis/pozadavek.html?call='+encodeURIComponent(c.id)+'&phone='+encodeURIComponent(num||'')+'&desc='+encodeURIComponent(want||'')+'&loc='+encodeURIComponent(c.location||'')+'">🔧 Servisní požadavek</a>')
               +(rec||'')
               +transcriptBlock(c)
+              +omzLogBlock(c)
             +'</div>'
             +'<div class="cbwrap" id="cb-'+c.id+'">'+cbBadges(c.callback_log)+'</div>'
             +'<div class="cbwrap" id="sms-'+c.id+'">'+smsBadges(c.manual_sms_log)+'</div>'

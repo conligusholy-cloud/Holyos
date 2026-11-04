@@ -86,8 +86,12 @@ const RESTRICTIONS_RULES =
   'CO NESMÍŠ: ' +
   'Netvrď, že zařízení funguje, jen proto, že u něj není evidovaná závada — evidence nemusí být úplná. ' +
   'A NAOPAK: NIKDY neříkej, že je prádlomat nebo zařízení „mimo provoz", „v opravě" nebo že „na něm pracuje servis", ' +
-  'pokud to není v seznamu EVIDOVANÁ OMEZENÍ PROVOZU níže, nebo ti to v TOMTO hovoru nevrátil nástroj ' +
-  'zjisti_omezeni_provozu (cely_pradlomat_mimo_provoz nebo položka v omezeni). ' +
+  'pokud ti to v TOMTO hovoru nevrátil nástroj zjisti_omezeni_provozu PRÁVĚ PRO TUHLE LOKALITU ' +
+  '(cely_pradlomat_mimo_provoz nebo položka v omezeni). ' +
+  'Omezení platí vždy jen pro tu jednu provozovnu, kterou nástroj vrátil v poli „lokalita" — ' +
+  'závadu z jednoho prádlomatu NIKDY nepřenášej na jiný, ani když zní podobně. ' +
+  'Když se hovor přesune na jinou lokalitu, zavolej nástroj znovu pro ni. ' +
+  'Když nástroj vrátí „Žádné evidované omezení", je to jednoznačná odpověď: na té lokalitě nic evidované není. ' +
   'Znalostní podklady, web ani tvoje vlastní povědomí NEJSOU důkaz — evidence omezení je jediný platný zdroj. ' +
   'Platí to i u obecných dotazů typu „kde je nejbližší prádlomat": lokalitu klidně doporuč, ale o jejím omezení mlč, ' +
   'dokud ji v evidenci nevidíš. ' +
@@ -308,6 +312,7 @@ function attach(server) {
       handedOff: false,
       formSmsSent: false,
       smsLog: [],
+      restrictionsLog: [], // technický log dotazů na omezení provozu (co AI žádala a co dostala)
       targetId,
       target: null,
       campaign: null,
@@ -357,7 +362,13 @@ function attach(server) {
       if (/^osobni-/.test(String(line || '')) && getSetting) { try { const v = await getSetting(lineKey('use_knowledge')); if (v === false || v === 'false') knowledge = false; } catch (_) { /* default */ } }
       state.system = await aic.augmentSystem(state.system, { voice: true, scope, knowledge });
       // Infolinka prádlomatů: AI dostane nástroj na aktuální omezení provozu.
-      if (mode === 'inbound' && line === 'infolinka') state.toolset = voiceTools.infolinkaToolset;
+      // Toolset s logováním — ke každému dotazu na omezení si uložíme, jakou lokalitu
+      // AI zadala, co HolyOS načetl a co AI dostala (požadavek #130).
+      if (mode === 'inbound' && line === 'infolinka') {
+        state.toolset = voiceTools.createInfolinkaToolset
+          ? voiceTools.createInfolinkaToolset((e) => { if (state.restrictionsLog.length < 50) state.restrictionsLog.push(e); })
+          : voiceTools.infolinkaToolset;
+      }
       // Znalostní podklady jsou na konci dlouhé → zopakuj prioritu scénáře úplně nakonec (nejblíže odpovědi).
       state.system += '\n\n' + SCENARIO_REMINDER;
       // Vícejazyčnost linky (voice.<linka>.multilang)
@@ -367,10 +378,10 @@ function attach(server) {
       // Pravidla k omezením provozu jdou ÚPLNĚ NAKONEC — jsou to pojistky proti
       // špatné informaci zákazníkovi a nesmí je přebít připomenutí scénáře výš.
       if (state.toolset) state.system += '\n\n' + RESTRICTIONS_RULES;
-      // Seznam evidovaných omezení rovnou do instrukcí. Bez něj AI o omezení
-      // vůbec neví, dokud ji nenapadne zavolat nástroj — a u obecného dotazu
-      // („kde je nejbližší prádlomat") ji to nenapadne, takže si „mimo provoz"
-      // domyslí z podkladů. Snímek se staví pro každý hovor znovu.
+      // Pravidlo, odkud se omezení berou. Seznam závad ze VŠECH prádlomatů se do
+      // instrukcí záměrně NEVKLÁDÁ — AI si z něj brala cizí závadu (hovor ze Svitav
+      // dostal odstávku z Uherského Brodu, požadavek #130). Data si musí vyžádat
+      // nástrojem pro konkrétní lokalitu.
       if (state.toolset && voiceTools.buildRestrictionsBlock) {
         try {
           state.system += '\n\n' + (await voiceTools.buildRestrictionsBlock());
@@ -610,6 +621,7 @@ function attach(server) {
             location: (intents && intents.location) || null,
             campaign_target_id: state.targetId || null,
             sms_log: state.smsLog && state.smsLog.length ? state.smsLog : undefined,
+            restrictions_log: state.restrictionsLog && state.restrictionsLog.length ? state.restrictionsLog : undefined,
           };
           // Osobní asistent (linka osobni-<personId>) → přiřaď majitele hovoru.
           const _paM = /^osobni-(\d+)$/.exec(String(line || ''));

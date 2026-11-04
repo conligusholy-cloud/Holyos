@@ -6968,6 +6968,7 @@ model VoiceCall {
   full_transcript String?   @db.Text // celý přepis nahrávky (vč. části se zákazníkem a technikem) — OpenAI Whisper
   full_transcript_at DateTime?        // kdy byl celý přepis pořízen
   unhandled_person_ids Json?  // [personId] — kdo měl v době hovoru službu a hovor NIKDO nevyřídil (do hodnocení)
+  restrictions_log Json?    // [{ at, dotaz, lokalita_rozpoznana, machine, matched_by, nacteno, predano }] — co AI o omezeních žádala a co dostala (technický log)
   cost_usd        Decimal?  @db.Decimal(10, 4)
   created_at      DateTime  @default(now())
 

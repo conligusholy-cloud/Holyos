@@ -188,13 +188,18 @@ async function getActiveRestrictions({ machineId = null, location = null } = {})
     const name = machine ? machine.name : String(location || '');
     const id = machine ? machine.id : null;
 
-    // Primárně podle ID. Název je záloha pro požadavky zadané ručně (bez výběru
-    // stroje) a pro historická data z doby před zavedením machine_id.
-    const items = sortBySeverity(
-      rows
-        .filter((r) => (id && r.machine_id === id) || (!r.machine_id && locationMatches(r.problem, name)))
-        .map(toItem)
-    );
+    // Primárně podle ID provozovny. Název je záloha JEN pro požadavky zapsané ručně
+    // (bez výběru stroje) a pro historická data z doby před zavedením machine_id —
+    // požadavek s cizím machine_id se sem nikdy nesmí dostat, i kdyby se názvy podobaly.
+    // Když lokalitu známe podle ID a požadavek má jiné ID, je to jiný prádlomat. Tečka.
+    const matched = [], rejected = [];
+    rows.forEach((r) => {
+      const byId = id != null && r.machine_id === id;
+      const byName = r.machine_id == null && !!name && locationMatches(r.problem, name);
+      if (byId || byName) matched.push(Object.assign(toItem(r), { _match: byId ? 'id' : 'nazev' }));
+      else rejected.push({ id: r.id, machine_id: r.machine_id || null, location: r.problem, impact: r.impact });
+    });
+    const items = sortBySeverity(matched);
 
     const siteOut = items.filter((i) => i.site_out);
     const machineStatusOut = !!(machine && machine.status === 'mimo_provozu');
@@ -208,6 +213,16 @@ async function getActiveRestrictions({ machineId = null, location = null } = {})
       site_out: siteOut.length > 0 || machineStatusOut,
       items,
       counts: countBySeverity(items),
+      // Jednoznačná odpověď pro AI i pro log — prázdný seznam ≠ „nevím".
+      no_restrictions: items.length === 0 && !machineStatusOut,
+      message: items.length === 0 && !machineStatusOut ? 'Žádné evidované omezení' : null,
+      // Diagnostika do technického logu hovoru (požadavek #130): kolik aktivních
+      // požadavků se prošlo a které se k téhle lokalitě nehodily.
+      diag: {
+        scanned: rows.length,
+        matched: items.map((i) => ({ id: i.id, machine_id: i.machine_id, location: i.location, impact: i.impact, matched_by: i._match })),
+        rejected,
+      },
     };
   } catch (err) {
     // Nedostupnost dat ≠ žádné závady. Volající kód (a AI) to musí poznat.
