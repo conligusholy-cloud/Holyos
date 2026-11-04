@@ -485,11 +485,29 @@ function initMap() {
     h.classList.remove('hidden');
     return;
   }
-  map = L.map('map', { zoomControl: false }).setView([49.82, 15.47], 7);
+  // Vlastní, nenápadný podpis místo širokého pruhu přes půl mapy. Úplně ho
+  // smazat nejde — Esri nám dlaždice pouští zdarma právě proti uvedení zdroje.
+  map = L.map('map', { zoomControl: false, attributionControl: false }).setView([49.82, 15.47], 7);
   addBasemap();
   L.control.zoom({ position: 'bottomright' }).addTo(map);
+  addAttribution();
   layer = L.layerGroup().addTo(map);
   drawMap();
+}
+// Podpis zdroje map schovaný do malého „i". Po klepnutí se rozbalí.
+function addAttribution() {
+  var C = L.Control.extend({
+    options: { position: 'bottomleft' },
+    onAdd: function () {
+      var el = L.DomUtil.create('div', 'attr-mini');
+      el.innerHTML = '<button type="button" aria-label="Zdroj mapových podkladů">i</button>'
+        + '<span>Mapové podklady &copy; Esri · Leaflet</span>';
+      L.DomEvent.disableClickPropagation(el);
+      el.querySelector('button').onclick = function () { el.classList.toggle('open'); };
+      return el;
+    }
+  });
+  new C().addTo(map);
 }
 function pinIcon(cls, txt) {
   return L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15],

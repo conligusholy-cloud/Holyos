@@ -227,3 +227,12 @@ main{padding-bottom:calc(66px + var(--safe-b))}
 .pin.unit.rival{border-color:rgba(255,93,108,.9)}
 .pin.unit.rival .pin-tag{background:var(--err);color:#2b0409}
 .btn.sec.warn{color:var(--err);border-color:var(--err)}
+
+/* Zdroj mapových podkladů: malé „i" vlevo dole, rozbalí se až na klepnutí.
+   Uvedení zdroje je podmínka Esri, nejde smazat — ale nemusí zabírat půl mapy. */
+.attr-mini{display:flex;align-items:center;gap:6px;margin:0 0 6px 6px!important}
+.attr-mini button{width:22px;height:22px;flex:0 0 22px;border-radius:50%;border:1px solid rgba(255,255,255,.22);
+  background:rgba(4,8,16,.62);color:var(--text3);font:600 12px/1 system-ui;cursor:pointer;padding:0}
+.attr-mini span{display:none;font-size:10px;color:var(--text3);background:rgba(4,8,16,.72);
+  padding:3px 7px;border-radius:8px;white-space:nowrap}
+.attr-mini.open span{display:inline}
