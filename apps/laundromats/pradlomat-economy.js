@@ -146,15 +146,17 @@
   var DISC_INFO = { active: false, endsAt: null, pctByVer: {} }; // sleva leada (pro vlaječku)
   var VARIANTS = {
     V3: { cena_pradlomatu: 52000, cena_pripojek: 2889, obrat_na_zakaznika: 11.33, najem: 165, truck: 47000, noSmall: false, zakazniku_za_den: 8 },
-    V2: { cena_pradlomatu: 35000, cena_pripojek: 1926, obrat_na_zakaznika: 14.8, najem: 120, truck: 33000, noSmall: true, zakazniku_za_den: 5 }
+    V2: { cena_pradlomatu: 35000, cena_pripojek: 1926, obrat_na_zakaznika: 14.8, najem: 120, truck: 33000, noSmall: true, zakazniku_za_den: 5 },
+    // MAX = největší (2 pračky + 2 sušičky): cena 67 000 €, výchozích 10 zákazníků/den, nájem o 20 % vyšší než FLEX
+    V4: { cena_pradlomatu: 67000, cena_pripojek: 2889, obrat_na_zakaznika: 11.33, najem: 198, truck: 60500, noSmall: false, zakazniku_za_den: 10 }
   };
   // Přepínač varianty do lišty nástroje (vedle měny).
   function verButtons() {
     if (!SHOW_VER) return ''; // přepínač skrytý (lead má povolenou jen jednu variantu)
     var html = '<span style="font-size:12px;color:var(--text2);margin:0 4px 0 2px">' + _t('Varianta') + ':</span>';
-    ['V2', 'V3'].forEach(function (v) { // MINI první
+    ['V2', 'V3', 'V4'].forEach(function (v) { // MINI první, MAX poslední
       var on = v === VER;
-      html += '<button type="button" class="btn btn-sm pe-chip' + (on ? ' pe-on' : '') + '" onclick="window.PradlomatTool._setVer(\'' + v + '\')" style="padding:6px 10px">' + (v === 'V3' ? 'FLEX' : 'MINI') + '</button>';
+      html += '<button type="button" class="btn btn-sm pe-chip' + (on ? ' pe-on' : '') + '" onclick="window.PradlomatTool._setVer(\'' + v + '\')" style="padding:6px 10px">' + ({ V2: 'MINI', V3: 'FLEX', V4: 'MAX' }[v] || v) + '</button>';
     });
     return html;
   }

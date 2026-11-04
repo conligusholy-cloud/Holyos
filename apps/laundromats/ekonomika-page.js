@@ -9,7 +9,7 @@ const TXT = {
     lead: 'Modelovací nástroj pro vaši představu. Žlutá pole vyplňte podle svých předpokladů — kalkulačka hned spočítá obrat, výsledek a návratnost.',
     vat: 'Předvyplněná čísla jsou jen ukázka. Výsledek odpovídá výhradně hodnotám, které zadáte — nejde o odhad ani příslib zisku. Všechny ceny jsou bez DPH.',
     invest: 'Investice celkem', investSub: 'podle zadaných hodnot', rev: 'Obrat / měsíc', profit: 'Výsledek / měsíc', profitSub: 'podle zadaných hodnot, po nákladech', payback: 'Návratnost (model)',
-    variant: 'Varianta', v3: 'FLEX — vyšší kapacita', v2: 'MINI — nižší investice', cur: 'Měna', reset: '↺ Ukázkové hodnoty',
+    variant: 'Varianta', v3: 'FLEX — vyšší kapacita', v2: 'MINI — nižší investice', v4: 'MAX — nejvyšší kapacita', cur: 'Měna', reset: '↺ Ukázkové hodnoty',
     invTitle: 'Investiční náklady (jednorázové)', machine: 'Cena prádlomatu', permit: 'Projekt + povolení', conn: 'Přípojky', invTotal: 'Investice celkem',
     opTitle: 'Provoz (měsíčně)', perday: 'Zákazníků / den', spend: 'Ø útrata / zákazník (bez DPH)', rent: 'Nájem / měs', cost: 'Provozní náklady / měs', mprofit: 'Výsledek / měsíc',
     opNote: 'Provozní náklady = nájem + energie a voda na praní (rostou s počtem zákazníků) + servis, software, pojištění a ostatní. Počítáme 30,5 dne/měsíc.', pcs: 'ks',
@@ -27,7 +27,7 @@ const TXT = {
     lead: 'Narzędzie do modelowania Twojego pomysłu. Wypełnij żółte pola według własnych założeń — kalkulator od razu policzy obrót, wynik i zwrot.',
     vat: 'Wstępnie wpisane liczby to tylko przykład. Wynik zależy wyłącznie od wprowadzonych wartości — nie jest to prognoza ani obietnica zysku. Ceny bez VAT.',
     invest: 'Inwestycja łącznie', investSub: 'na jedno miejsce', rev: 'Obrót / miesiąc', profit: 'Wynik / miesiąc', profitSub: 'według wprowadzonych wartości', payback: 'Zwrot (model)',
-    variant: 'Wariant', v3: 'FLEX — większa wydajność', v2: 'MINI — niższa inwestycja', cur: 'Waluta', reset: '↺ Przywróć wartości domyślne',
+    variant: 'Wariant', v3: 'FLEX — większa wydajność', v2: 'MINI — niższa inwestycja', v4: 'MAX — największa wydajność', cur: 'Waluta', reset: '↺ Przywróć wartości domyślne',
     invTitle: 'Koszty inwestycyjne (jednorazowe)', machine: 'Cena automatu', permit: 'Projekt + pozwolenia', conn: 'Przyłącza', invTotal: 'Inwestycja łącznie',
     opTitle: 'Działalność (miesięcznie)', perday: 'Klientów / dzień', spend: 'Ø wydatek / klient (bez VAT)', rent: 'Czynsz / mies.', cost: 'Koszty operacyjne / mies.', mprofit: 'Wynik / miesiąc',
     opNote: 'Koszty = czynsz + energia + serwis + pozostałe. Przyjmujemy 30,5 dnia/miesiąc.', pcs: 'szt.',
@@ -94,7 +94,7 @@ function economyPage(lang) {
     </div>
 
     <div class="ek-bar">
-      <span class="ek-seg" id="ek-ver"><span>${t.variant}:</span><button type="button" data-v="V2" class="on" title="${t.v2}">MINI</button><button type="button" data-v="V3" title="${t.v3}">FLEX</button></span>
+      <span class="ek-seg" id="ek-ver"><span>${t.variant}:</span><button type="button" data-v="V2" class="on" title="${t.v2}">MINI</button><button type="button" data-v="V3" title="${t.v3}">FLEX</button><button type="button" data-v="V4" title="${t.v4}">MAX</button></span>
       <span class="ek-seg" id="ek-cur"><span>${t.cur}:</span><button type="button" data-c="CZK">CZK</button><button type="button" data-c="EUR">EUR</button><button type="button" data-c="PLN">PLN</button></span>
       <button type="button" class="ek-reset" id="ek-reset">${t.reset}</button>
     </div>

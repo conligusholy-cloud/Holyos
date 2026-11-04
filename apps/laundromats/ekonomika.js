@@ -5,7 +5,8 @@
   var LOC = (document.documentElement.lang === 'pl') ? 'pl-PL' : 'cs-CZ';
   var VARIANTS = {
     V3: { machine: 52000, conn: 2889, spend: 11.33, cost: 767, perday: 8 },
-    V2: { machine: 35000, conn: 1926, spend: 16.52, cost: 647, perday: 5 }
+    V2: { machine: 35000, conn: 1926, spend: 16.52, cost: 647, perday: 5 },
+    V4: { machine: 67000, conn: 2889, spend: 11.33, cost: 900, perday: 10 } // MAX (náklady i útratu dopočítá společný model)
   };
   var PERMIT = 825;
   var RATES = { CZK: 1, EUR: 24.35, PLN: 1 / 0.1807 }; // CZK za 1 jednotku
