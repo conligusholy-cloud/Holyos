@@ -7529,3 +7529,24 @@ model LmAccount {
   @@index([reset_token_hash])
   @@map("lm_accounts")
 }
+
+// Podpora Laundromats — chat mezi registrovaným uživatelem laundromats.eu a podporou (nezávislé na BS2).
+// Vlákno = všechny zprávy jednoho účtu. Přílohy v DB (max 10 MB).
+model LmSupportMessage {
+  id            Int      @id @default(autoincrement())
+  account_id    Int
+  sender        String   @db.VarChar(10) // user | agent
+  agent_name    String?  @db.VarChar(80)
+  body          String
+  read_by_agent Boolean  @default(false)
+  read_by_user  Boolean  @default(false)
+  file_name     String?  @db.VarChar(200)
+  file_type     String?  @db.VarChar(100)
+  file_size     Int?
+  file_data     Bytes?
+  created_at    DateTime @default(now())
+
+  @@index([account_id, created_at])
+  @@index([sender, read_by_agent])
+  @@map("lm_support_messages")
+}

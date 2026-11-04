@@ -56,6 +56,14 @@ const CSS = `
 .mt-tabs{display:flex;gap:8px;margin:0 0 16px;flex-wrap:wrap}
 .mt-tabs button{background:transparent;border:1px solid var(--border2);color:var(--text2);border-radius:999px;padding:8px 16px;font:inherit;font-weight:700;cursor:pointer}
 .mt-tabs button.on{background:rgba(79,209,255,.14);border-color:var(--blue);color:var(--blue)}
+.sup-n{display:inline-block;min-width:18px;padding:0 6px;border-radius:999px;background:#ef4444;color:#fff;font-size:11.5px;font-weight:800;text-align:center;margin-left:6px}
+.sup-grid{display:grid;grid-template-columns:320px 1fr;gap:14px}.sup-grid .card{margin-top:0}.sup-list{padding:6px;max-height:70vh;overflow:auto}
+.sup-t{display:block;width:100%;text-align:left;background:transparent;border:1px solid transparent;border-radius:10px;padding:9px 10px;color:var(--text);font:inherit;cursor:pointer}.sup-t:hover{background:rgba(79,209,255,.06)}.sup-t.cur{border-color:var(--blue);background:rgba(79,209,255,.1)}.sup-tn{display:flex;align-items:center;gap:6px}.sup-tb{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sup-chat{display:flex;flex-direction:column;min-height:60vh}.sup-hd{padding-bottom:10px;border-bottom:1px solid var(--border)}.sup-log{flex:1;overflow:auto;max-height:56vh;padding:12px 2px;display:flex;flex-direction:column;gap:8px}
+.sup-m{max-width:75%;padding:8px 12px;border-radius:12px;white-space:pre-wrap;word-wrap:break-word}.sup-m.us{align-self:flex-start;background:rgba(255,255,255,.06);border:1px solid var(--border)}.sup-m.ag{align-self:flex-end;background:linear-gradient(135deg,#1e86e0,#7c5cff);color:#fff}.sup-m img{max-width:100%;max-height:220px;border-radius:8px;display:block;margin-top:6px}.sup-m a{color:inherit}.sup-w{font-size:11px;font-weight:700;opacity:.8}.sup-tt{font-size:10.5px;opacity:.6;text-align:right;margin-top:3px}
+.sup-form{display:flex;gap:8px;align-items:flex-end;margin-top:8px}.sup-tx{flex:1;min-height:44px;max-height:150px;resize:vertical;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;color:var(--text);padding:9px 11px;font:inherit}
+.sup-agent{background:var(--surface2);border:1px solid var(--border2);border-radius:10px;color:var(--text);padding:6px 10px;font:inherit;font-size:13px;width:220px}.sup-tog.on{border-color:#2fe3a0;color:#2fe3a0}
+@media(max-width:900px){.sup-grid{grid-template-columns:1fr}}
 /* Společný vzhled VšECH tabulek administrace (obal .mt-tw) — jeden záznam = jeden řádek. */
 .mt-tw{overflow:auto;max-height:calc(100vh - 250px);min-height:240px}
 .mt-tw thead th,.mt-tw thead td{position:sticky;top:0;z-index:3;background:#0d1526}
@@ -611,11 +619,49 @@ root.addEventListener('click',function(e){var b=e.target.closest('.p-up,.p-dn,.p
   if(b.classList.contains('p-imgdel')){if(!confirm('Odebrat vlastní obrázek a použít obrázek z ceníku?'))return;var keep=pcfg;api('/admin/api/products/'+id+'/image/delete',{}).then(function(){return api('/admin/api/products');}).then(function(k){prod=k.products||prod;pcfg=keep;prodRender();}).catch(function(er){alert(er.message);});return;}
   var list=pSorted();var i=list.findIndex(function(p){return String(p.id)===String(id);});var j2=b.classList.contains('p-up')?i-1:i+1;if(j2<0||j2>=list.length)return;
   var t=list[i];list[i]=list[j2];list[j2]=t;list.forEach(function(p,k){pItem(p.id).order=(k+1)*10;});pMark();prodRender();});
+// ── Podpora Laundromats — chat s registrovanými uživateli (stejná data jako Velín → LM podpora) ──
+var sup=null,supCur=0,supLast=0,supSeen={},supFile=null,supT=null;
+function supName(t){return [t.first_name,t.last_name].filter(Boolean).join(' ')||t.email||('Účet #'+t.id);}
+function supTm(s){if(!s)return '';var x=new Date(s),n=new Date();return x.toDateString()===n.toDateString()?hm(x):(x.getDate()+'. '+(x.getMonth()+1)+'. '+hm(x));}
+function supBadge(){var n=(sup&&sup.threads||[]).reduce(function(a,t){return a+(t.unread||0);},0);var b=root.querySelector('.mt-tabs button[data-tab="sup"]');if(b)b.innerHTML='💬 Podpora'+(n?' <span class="sup-n">'+n+'</span>':'');}
+function supLoad(){return api('/admin/api/support/threads').then(function(j){sup=j;supRenderList();supBadge();}).catch(function(e){var w=root.querySelector('.sup-list');if(w)w.innerHTML='<div class="mt-empty" style="color:#ff8f8f">'+esc(e.message)+'</div>';});}
+function supRenderList(){var w=root.querySelector('.sup-list');if(!w||!sup)return;var on=!!sup.online;
+  var tg=root.querySelector('.sup-tog');tg.textContent=on?'🟢 Podpora ONLINE':'⚪ Podpora OFFLINE';tg.classList.toggle('on',on);root.querySelector('.sup-agent').value=sup.agent||'';
+  var th=sup.threads||[];if(!th.length){w.innerHTML='<div class="mt-empty">Zatím nikdo nenapsal.</div>';return;}
+  w.innerHTML=th.map(function(t){return '<button class="sup-t'+(t.id===supCur?' cur':'')+'" data-sup="'+t.id+'"><div class="sup-tn"><b>'+esc(supName(t))+'</b>'+(t.unread?'<span class="sup-n">'+t.unread+'</span>':'')+'<span class="muted small" style="margin-left:auto">'+supTm(t.last_at)+'</span></div><div class="muted small sup-tb">'+(t.last_sender==='agent'?'↩ ':'')+esc(String(t.last_body||'').slice(0,90))+'</div></button>';}).join('');}
+function supMsg(m){if(supSeen[m.id])return '';supSeen[m.id]=1;if(m.id>supLast)supLast=m.id;var ag=m.sender==='agent',fo=m.file_name&&m.body==='📎 '+m.file_name;
+  var f='';if(m.file_name){var u='/admin/support/file/'+m.id;f=/^image/.test(m.file_type||'')?'<a href="'+u+'" target="_blank"><img src="'+u+'" alt=""></a>':'<div><a href="'+u+'" target="_blank">📎 '+esc(m.file_name)+'</a></div>';}
+  return '<div class="sup-m '+(ag?'ag':'us')+'">'+(ag?'<div class="sup-w">'+esc(m.agent_name||'Podpora')+'</div>':'')+(fo?'':esc(m.body))+f+'<div class="sup-tt">'+supTm(m.created_at)+'</div></div>';}
+function supOpen(id){supCur=id;supLast=0;supSeen={};var box=root.querySelector('.sup-chat');box.innerHTML='<div class="mt-empty">Načítám…</div>';supRenderList();
+  api('/admin/api/support/threads/'+id).then(function(j){var w=j.who||{};
+    box.innerHTML='<div class="sup-hd"><b>'+esc(supName(w))+'</b>'+(w.email?' · <a href="mailto:'+esc(w.email)+'">'+esc(w.email)+'</a>':'')+(w.phone?' · <a href="tel:'+esc(w.phone)+'">'+esc(w.phone)+'</a>':'')+'</div><div class="sup-log"></div>'
+      +'<div class="sup-att muted small"></div><div class="sup-form"><button class="btn sec sm sup-pick" title="Přiložit soubor">📎</button><input type="file" class="sup-file" hidden accept="image/*,application/pdf"><textarea class="sup-tx" placeholder="Odpověď… (Enter odešle, Shift+Enter nový řádek)"></textarea><button class="btn sm sup-send">Odeslat</button></div><div class="sup-err small" style="color:#ff8f8f"></div>';
+    var lg=box.querySelector('.sup-log');lg.innerHTML=(j.msgs||[]).map(supMsg).join('')||'<div class="mt-empty">Bez zpráv.</div>';lg.scrollTop=lg.scrollHeight;
+    (sup&&sup.threads||[]).forEach(function(t){if(t.id===id)t.unread=0;});supRenderList();supBadge();
+    var tx=box.querySelector('.sup-tx'),fi=box.querySelector('.sup-file');box.querySelector('.sup-pick').onclick=function(){fi.click();};fi.onchange=function(){supSetFile(fi.files[0]);};
+    tx.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();supSend();}});
+    tx.addEventListener('paste',function(e){var it=(e.clipboardData||{}).items||[];for(var i=0;i<it.length;i++){if(it[i].kind==='file'){var f=it[i].getAsFile();if(f){supSetFile(f);e.preventDefault();}}}});
+    box.querySelector('.sup-send').onclick=supSend;tx.focus();
+  }).catch(function(e){box.innerHTML='<div class="mt-empty" style="color:#ff8f8f">'+esc(e.message)+'</div>';});}
+function supSetFile(f){if(f&&f.size>10485760){alert('Soubor je větší než 10 MB.');return;}supFile=f||null;var a=root.querySelector('.sup-att');if(a)a.innerHTML=supFile?'📎 '+esc(supFile.name||'snimek.png')+' <a href="#" class="sup-x">odebrat</a>':'';var x=root.querySelector('.sup-x');if(x)x.onclick=function(e){e.preventDefault();supSetFile(null);};}
+function supB64(f){return new Promise(function(ok,ko){var r=new FileReader();r.onload=function(){ok(String(r.result).split(',')[1]||'');};r.onerror=ko;r.readAsDataURL(f);});}
+function supSend(){var box=root.querySelector('.sup-chat'),tx=box.querySelector('.sup-tx'),bt=box.querySelector('.sup-send'),er=box.querySelector('.sup-err');var text=tx.value.trim();if(!text&&!supFile)return;bt.disabled=true;er.textContent='';var id=supCur,f=supFile;
+  (f?supB64(f):Promise.resolve(null)).then(function(d){return api('/admin/api/support/threads/'+id+'/send',{body:text,file:d?{name:f.name||('snimek-'+Date.now()+'.png'),data:d}:undefined});})
+  .then(function(j){tx.value='';supSetFile(null);var lg=box.querySelector('.sup-log');if(j.msg){var h=supMsg(j.msg);if(h){var em=lg.querySelector('.mt-empty');if(em)em.remove();lg.insertAdjacentHTML('beforeend',h);}}lg.scrollTop=lg.scrollHeight;})
+  .catch(function(e){er.textContent=e.message;}).finally(function(){bt.disabled=false;tx.focus();});}
+function supPoll(){if(root.querySelector('.mt-sup').style.display==='none'){supLoadQuiet();return;}supLoad();if(!supCur)return;
+  api('/admin/api/support/threads/'+supCur+'?after='+supLast).then(function(j){var lg=root.querySelector('.sup-chat .sup-log');if(!lg)return;var h=(j.msgs||[]).map(supMsg).join('');if(h){var em=lg.querySelector('.mt-empty');if(em)em.remove();var nb=lg.scrollHeight-lg.scrollTop-lg.clientHeight<80;lg.insertAdjacentHTML('beforeend',h);if(nb)lg.scrollTop=lg.scrollHeight;}}).catch(function(){});}
+function supLoadQuiet(){api('/admin/api/support/threads').then(function(j){sup=j;supBadge();}).catch(function(){});}
+root.addEventListener('click',function(e){var t=e.target.closest('[data-sup]');if(t){supOpen(+t.getAttribute('data-sup'));return;}
+  if(e.target.closest('.sup-tog')){var on=!(sup&&sup.online);api('/admin/api/support/online',{online:on,agent:root.querySelector('.sup-agent').value.trim()}).then(function(){if(sup)sup.online=on;supRenderList();}).catch(function(er){alert(er.message);});}});
+supLoadQuiet();setInterval(supPoll,5000);
 // Přepínání záložek. Seznam se tahá ze serveru až při prvním otevření.
 function tab(name){
-  var isHot=name==='hot', isUsr=name==='usr', isStat=name==='stat', isProd=name==='prod';
+  var isHot=name==='hot', isUsr=name==='usr', isStat=name==='stat', isProd=name==='prod', isSup=name==='sup';
   root.querySelectorAll('.mt-tabs button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-tab')===name);});
-  root.querySelector('.mt-meet').style.display=(isHot||isUsr||isStat||isProd)?'none':'';
+  root.querySelector('.mt-meet').style.display=(isHot||isUsr||isStat||isProd||isSup)?'none':'';
+  root.querySelector('.mt-sup').style.display=isSup?'':'none';
+  if(isSup)supLoad();
   root.querySelector('.mt-prod').style.display=isProd?'':'none';
   root.querySelector('.mt-hot').style.display=isHot?'':'none';
   root.querySelector('.mt-usr').style.display=isUsr?'':'none';
@@ -663,7 +709,7 @@ function meetingsPage({ admin, holyosUrl, error }) {
   <div class="top"><b>Laundromats<span>.eu</span></b><span class="muted">Administrace schůzek</span><span class="sp"></span><span class="who">${nm}</span>${holyosUrl ? `<a href="${holyosUrl}" class="small">← HolyOS</a>` : ''}<a href="/admin/logout" class="small">Odhlásit</a></div>
   <div class="wrap"><style>${CSS}</style>
   <div id="mt">
-    <div class="mt-tabs"><button data-tab="meet" class="on">📅 Schůzky</button><button data-tab="hot">⭐ Jmenný seznam</button><button data-tab="usr">👤 Uživatelé</button><button data-tab="stat">📊 Statistiky</button><button data-tab="prod">📦 Produkty</button></div>
+    <div class="mt-tabs"><button data-tab="meet" class="on">📅 Schůzky</button><button data-tab="hot">⭐ Jmenný seznam</button><button data-tab="usr">👤 Uživatelé</button><button data-tab="stat">📊 Statistiky</button><button data-tab="prod">📦 Produkty</button><button data-tab="sup">💬 Podpora</button></div>
     <div class="mt-meet">
     <div class="mt-bar"><h2>📅 Kalendář schůzek</h2>
       <button class="btn sec sm mt-prev">←</button><span class="mt-range"></span><button class="btn sec sm mt-next">→</button>
@@ -683,6 +729,11 @@ function meetingsPage({ admin, holyosUrl, error }) {
       <div class="mt-bar"><h2>👤 Uživatelé</h2><span style="flex:1"></span><span class="muted small mt-usrsum"></span><button class="btn sec sm mt-usrreload">↻ Obnovit</button></div>
       <p class="muted small" style="margin:-6px 0 14px">Účty registrované na <a href="/cesta/registrace" target="_blank">laundromats.eu/cesta/registrace</a> – mají přístup ke Compounderu, Prádlomatům, Ekonomice, Najít místo a Zhodnotit místo. Každá registrace se zároveň spáruje s kontaktem v HolyOS.</p>
       <div class="mt-usrwrap card"></div>
+    </div>
+    <div class="mt-sup" style="display:none">
+      <div class="mt-bar"><h2>💬 Podpora Laundromats</h2><span style="flex:1"></span><input class="sup-agent" placeholder="Jméno podpory (vidí zákazník)" maxlength="60"><button class="btn sec sm sup-tog">…</button></div>
+      <p class="muted small" style="margin:-6px 0 14px">Chat s uživateli <a href="/cesta/podpora" target="_blank">laundromats.eu/cesta/podpora</a>. Odpovídat jde i z Velínu (aplikace <b>LM podpora</b>) — data jsou společná. Nezávislé na podpoře Best Series 2.0.</p>
+      <div class="sup-grid"><div class="sup-list card"></div><div class="sup-chat card"><div class="mt-empty">Vyberte konverzaci vlevo.</div></div></div>
     </div>
     <div class="mt-prod" style="display:none">
       <div class="mt-bar"><h2>📦 Produkty</h2></div>

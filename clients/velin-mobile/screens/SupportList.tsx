@@ -18,7 +18,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api, ApiError, type SupportThread } from '../lib/api';
 import { loadAuth, clearAuth } from '../lib/auth';
@@ -52,6 +52,8 @@ function fmtTime(iso: string | null): string {
 
 export default function SupportList() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  // LM podpora (Podpora Laundromats) používá stejnou obrazovku s vlastními daty: params.lm = true
+  const lm = !!((useRoute().params as { lm?: boolean } | undefined)?.lm);
   const [threads, setThreads] = useState<SupportThread[]>([]);
   const [online, setOnline] = useState(false);
   const [agent, setAgent] = useState('');
@@ -71,7 +73,7 @@ export default function SupportList() {
       return;
     }
     try {
-      const r = await api.supportThreads(auth.jwt);
+      const r = await api.supportThreads(auth.jwt, lm);
       if (!mounted.current) return;
       setThreads(r.threads);
       setOnline(r.online);
@@ -88,7 +90,7 @@ export default function SupportList() {
     } finally {
       if (mounted.current) { setLoading(false); setRefreshing(false); }
     }
-  }, [navigation]);
+  }, [navigation, lm]);
 
   // Při zobrazení načti a pak obnovuj co 8 s
   useFocusEffect(useCallback(() => {
@@ -103,7 +105,7 @@ export default function SupportList() {
     if (!auth.jwt || toggling) return;
     setToggling(true);
     try {
-      const r = await api.supportSetOnline(auth.jwt, !online, agent || undefined);
+      const r = await api.supportSetOnline(auth.jwt, !online, agent || undefined, lm);
       setOnline(r.online);
     } catch (err) {
       Alert.alert('Nepodařilo se změnit stav', (err as Error).message);
@@ -133,16 +135,16 @@ export default function SupportList() {
     <SafeAreaView style={styles.container} edges={[]}>
       <View style={styles.headerRow}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.sub}>Best Series 2.0{agent ? ` · odpovídáš jako ${agent}` : ''}</Text>
+          <Text style={styles.sub}>{lm ? 'Podpora Laundromats' : 'Best Series 2.0'}{agent ? ` · odpovídáš jako ${agent}` : ''}</Text>
         </View>
-        <TouchableOpacity
+        {!lm && <TouchableOpacity
           style={[styles.statusPill, styles.pillOff, { marginRight: spacing.sm }]}
           onPress={() => navigation.navigate('SupportSound')}
           activeOpacity={0.7}
           accessibilityLabel="Zvuk notifikace"
         >
           <Text style={{ fontSize: 15 }}>🔔</Text>
-        </TouchableOpacity>
+        </TouchableOpacity>}
         <TouchableOpacity
           style={[styles.statusPill, online ? styles.pillOn : styles.pillOff]}
           onPress={toggleOnline}
@@ -226,7 +228,7 @@ export default function SupportList() {
             <TouchableOpacity
               style={styles.row}
               activeOpacity={0.65}
-              onPress={() => navigation.navigate('SupportThread', { supporterId: item.id, title: name })}
+              onPress={() => navigation.navigate('SupportThread', { supporterId: item.id, title: name, lm })}
             >
               <View style={styles.avWrap}>
                 <View style={styles.av}><Text style={styles.avText}>{initials(name)}</Text></View>

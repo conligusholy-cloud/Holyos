@@ -2030,6 +2030,21 @@ mobile.get('/support/file/:id(\\d+)', supportGuard, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── LM podpora (Podpora Laundromats) — samostatná aplikace ve Velínu, vlastní data (lm_support_messages) ──
+//   GET  /api/velin/lm-support/threads | /threads/:id?after= | POST /threads/:id/send {body} | POST /online {online,agent} | GET /file/:id
+const _lmSup = () => require('../services/lm-support');
+const _lmErr = (res, next) => (err) => (err.status ? res.status(err.status).json({ error: err.message }) : next(err));
+mobile.get('/lm-support/threads', supportGuard, (req, res, next) => _lmSup().threadsResponse().then((j) => res.set('Cache-Control', 'no-store').json(j)).catch(_lmErr(res, next)));
+mobile.get('/lm-support/threads/:id(\\d+)', supportGuard, (req, res, next) => { const a = parseInt(req.query.after, 10); _lmSup().thread(parseInt(req.params.id, 10), Number.isFinite(a) ? a : NaN).then((j) => res.set('Cache-Control', 'no-store').json(j)).catch(_lmErr(res, next)); });
+mobile.post('/lm-support/threads/:id(\\d+)/send', supportGuard, express.json({ limit: '50kb' }), (req, res, next) => {
+  const p = req.velin.person || {};
+  _lmSup().agentSend(parseInt(req.params.id, 10), (req.body || {}).body, null, [p.first_name, p.last_name].filter(Boolean).join(' ')).then((msg) => res.json({ ok: true, msg })).catch(_lmErr(res, next));
+});
+mobile.post('/lm-support/online', supportGuard, express.json({ limit: '5kb' }), (req, res, next) => _lmSup().setOnline(!!(req.body || {}).online, (req.body || {}).agent).then((j) => res.json(j)).catch(_lmErr(res, next)));
+mobile.get('/lm-support/file/:id(\\d+)', supportGuard, async (req, res, next) => {
+  try { const r = await _lmSup().agentFile(parseInt(req.params.id, 10)); if (!r) return res.status(404).end(); res.set('Content-Type', r.file_type || 'application/octet-stream').set('Cache-Control', 'private, max-age=3600').send(r.file_data); } catch (err) { next(err); }
+});
+
 // ── Zvuk notifikace Podpory (10 zvuků zabalených v aplikaci; volba je per osoba) ──
 const SUPPORT_SOUNDS = ['ding', 'chime', 'bell', 'marimba', 'pop', 'drop', 'harp', 'sonar', 'alert', 'fanfare'];
 async function supportSoundFor(personId) {

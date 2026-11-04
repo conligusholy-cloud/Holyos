@@ -483,6 +483,9 @@ app.get('/img/product/:id(\\d+)', async (req, res) => {
     res.set('Content-Type', r.headers.get('content-type') || 'image/webp').set('Cache-Control', 'public, max-age=86400').send(Buffer.from(await r.arrayBuffer()));
   } catch (e) { res.status(404).end(); }
 });
+// ── Podpora Laundromats (chat /cesta/podpora + administrace → Podpora; data v HolyOS, odpovídá se i z Velínu) ──
+const SUP = require('./lm-support')(app, { HOLYOS_URL, LM_SECRET, requireAccount: ACC.requireAccount, requireAdmin, render: (req, html) => lite(html, req), trackServer });
+ACC.setSupportUnread(SUP.unread);
 // ── Aplikace lokalit (/cesta/hledat, /cesta/zhodnotit) ──
 ACC.mount(app);
 // Videohovor s kompetentní osobou (/videocall) — WebRTC + SSE, upozornění přes HolyOS (Velín)

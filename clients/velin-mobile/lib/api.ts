@@ -466,28 +466,29 @@ export const api = {
   salesTeamStats: (jwt: string) =>
     request<SalesTeamStats>('GET', '/api/velin/sales/team-stats', { jwt }),
 
-  supportThreads: (jwt: string) =>
-    request<SupportThreadsResponse>('GET', '/api/velin/support/threads', {
+  // lm = true → Podpora Laundromats (aplikace LM podpora; vlastní data, stejný tvar odpovědí jako BS2)
+  supportThreads: (jwt: string, lm?: boolean) =>
+    request<SupportThreadsResponse>('GET', `/api/velin/${lm ? 'lm-support' : 'support'}/threads`, {
       jwt,
       timeoutMs: SLOW_ENDPOINT_TIMEOUT_MS,
     }),
 
-  supportThread: (jwt: string, id: number, after?: number) =>
+  supportThread: (jwt: string, id: number, after?: number, lm?: boolean) =>
     request<SupportThreadResponse>(
       'GET',
-      `/api/velin/support/threads/${id}${after != null ? `?after=${after}` : ''}`,
+      `/api/velin/${lm ? 'lm-support' : 'support'}/threads/${id}${after != null ? `?after=${after}` : ''}`,
       { jwt, timeoutMs: SLOW_ENDPOINT_TIMEOUT_MS }
     ),
 
-  supportSend: (jwt: string, id: number, body: string) =>
+  supportSend: (jwt: string, id: number, body: string, lm?: boolean) =>
     request<{ ok: boolean; msg: SupportMessage | null }>(
       'POST',
-      `/api/velin/support/threads/${id}/send`,
+      `/api/velin/${lm ? 'lm-support' : 'support'}/threads/${id}/send`,
       { jwt, body: { body }, timeoutMs: SLOW_ENDPOINT_TIMEOUT_MS }
     ),
 
-  supportSetOnline: (jwt: string, online: boolean, agent?: string) =>
-    request<{ ok: boolean; online: boolean }>('POST', '/api/velin/support/online', {
+  supportSetOnline: (jwt: string, online: boolean, agent?: string, lm?: boolean) =>
+    request<{ ok: boolean; online: boolean }>('POST', `/api/velin/${lm ? 'lm-support' : 'support'}/online`, {
       jwt,
       body: { online, agent },
     }),
@@ -497,7 +498,7 @@ export const api = {
   supportSoundSet: (jwt: string, sound: string) =>
     request<{ ok: boolean; sound: string }>('PUT', '/api/velin/support/sound', { jwt, body: { sound } }),
 
-  supportFileUrl: (id: number) => `${API_BASE}/api/velin/support/file/${id}`,
+  supportFileUrl: (id: number, lm?: boolean) => `${API_BASE}/api/velin/${lm ? 'lm-support' : 'support'}/file/${id}`,
 
   // ─── Večerní reflexe (Fáze 2) ────────────────────────────────────────────
   getEveningReflection: (jwt: string, date?: string) => {

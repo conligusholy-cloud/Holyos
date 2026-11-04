@@ -90,7 +90,8 @@ export type RootStackParamList = {
   NewGeoFence: undefined;
   SignContract: { contractId: number };
   MeProfile: undefined;
-  SupportThread: { supporterId: number; title?: string };
+  SupportThread: { supporterId: number; title?: string; lm?: boolean };
+  LmSupport: { lm?: boolean } | undefined;
   SupportSound: undefined;
   Meetings: undefined;
   Ads: undefined;
@@ -157,6 +158,9 @@ function handleNotificationTap(data: any) {
     target = { name: 'AssistantSettings', params: data.call_id != null ? { callId: String(data.call_id) } : undefined };
   } else if (data.type === 'compounder_contract' && data.contract_id != null) {
     target = { name: 'SignContract', params: { contractId: Number(data.contract_id) } };
+  } else if (data.type === 'lm_support' && data.account_id != null) {
+    // Zpráva od uživatele laundromats.eu do Podpory Laundromats → vlákno v aplikaci LM podpora
+    target = { name: 'SupportThread', params: { supporterId: Number(data.account_id), lm: true } };
   } else if (typeof data.link === 'string' && /\/admin\/podpora\?u=(\d+)/.test(data.link)) {
     // Zpráva od zákazníka BS2 do chatu podpory → konkrétní vlákno
     const m = /\/admin\/podpora\?u=(\d+)/.exec(data.link)!;
@@ -411,6 +415,12 @@ export default function App() {
             name="SupportThread"
             component={SupportThread}
             options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="LmSupport"
+            component={SupportList}
+            initialParams={{ lm: true }}
+            options={{ animation: 'slide_from_right', headerShown: true, title: 'LM podpora', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text, headerShadowVisible: false }}
           />
           <Stack.Screen
             name="Ads"

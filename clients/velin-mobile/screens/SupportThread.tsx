@@ -49,6 +49,7 @@ export default function SupportThread({ route }: Props) {
   const kbPad = useKeyboardPad(); // Android: pole pro psaní nad klávesnicí
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { supporterId, title } = route.params;
+  const lm = !!route.params.lm; // LM podpora (Podpora Laundromats)
 
   const [msgs, setMsgs] = useState<Local[]>([]);
   const [info, setInfo] = useState<SupportThreadResponse | null>(null);
@@ -87,7 +88,7 @@ export default function SupportThread({ route }: Props) {
     }
     setJwt(auth.jwt);
     try {
-      const r = await api.supportThread(auth.jwt, supporterId, initial ? undefined : lastId.current);
+      const r = await api.supportThread(auth.jwt, supporterId, initial ? undefined : lastId.current, lm);
       if (!mounted.current) return;
       setInfo((prev) => ({ ...(prev || r), ...r, msgs: [] }));
       if (initial) {
@@ -105,7 +106,7 @@ export default function SupportThread({ route }: Props) {
     } finally {
       if (mounted.current) setLoading(false);
     }
-  }, [navigation, supporterId, merge]);
+  }, [navigation, supporterId, merge, lm]);
 
   useEffect(() => { load(true); }, [load]);
   useFocusEffect(useCallback(() => {
@@ -130,7 +131,7 @@ export default function SupportThread({ route }: Props) {
       setMsgs((c) => c.map((m) => (m.id === tid ? { ...m, _status: 'sending' } : m)));
     }
     try {
-      const r = await api.supportSend(auth.jwt, supporterId, text);
+      const r = await api.supportSend(auth.jwt, supporterId, text, lm);
       if (!mounted.current) return;
       setMsgs((c) => {
         const without = c.filter((m) => m.id !== tid);
@@ -205,9 +206,9 @@ export default function SupportThread({ route }: Props) {
                   style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}
                 >
                   {isImg && item.id > 0 && (
-                    <TouchableOpacity onPress={() => setBigImage({ uri: api.supportFileUrl(item.id), headers: imgHeaders })}>
+                    <TouchableOpacity onPress={() => setBigImage({ uri: api.supportFileUrl(item.id, lm), headers: imgHeaders })}>
                       <Image
-                        source={{ uri: api.supportFileUrl(item.id), headers: imgHeaders }}
+                        source={{ uri: api.supportFileUrl(item.id, lm), headers: imgHeaders }}
                         style={styles.img}
                         resizeMode="cover"
                       />

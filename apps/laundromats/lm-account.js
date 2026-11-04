@@ -51,9 +51,9 @@ module.exports = function createAccounts(ctx) {
   const safeNext = (n) => (/^\/cesta\/[A-Za-z0-9/_.?=&%-]*$/.test(String(n || '')) && !/^\/cesta\/(prihlaseni|registrace|odhlasit)/.test(String(n)) ? String(n) : '/cesta/ucet');
   // ── Role (LmAccount.plan): co uživatel uvidí. Nová registrace = Začátečník. Role nastavuje správce v administraci → Uživatelé.
   const ROLES = {
-    beginner: { label: 'Začátečník', pages: ['compounder', 'pradlomaty'] },
-    economy: { label: 'Ekonomika', pages: ['compounder', 'pradlomaty', 'ekonomika'] },
-    full: { label: 'Plný přístup', pages: ['compounder', 'pradlomaty', 'ekonomika', 'hledat', 'zhodnotit'] },
+    beginner: { label: 'Začátečník', pages: ['podpora', 'compounder', 'pradlomaty'] },
+    economy: { label: 'Ekonomika', pages: ['podpora', 'compounder', 'pradlomaty', 'ekonomika'] },
+    full: { label: 'Plný přístup', pages: ['podpora', 'compounder', 'pradlomaty', 'ekonomika', 'hledat', 'zhodnotit'] },
   };
   const roleOf = (a) => (a && ROLES[a.plan] ? a.plan : 'beginner'); // 'free' (původní výchozí) = Začátečník
   const canSee = (req, page) => !!(req && ((req.account && ROLES[roleOf(req.account)].pages.includes(page)) || (!req.account && adminOf(req))));
@@ -74,7 +74,7 @@ module.exports = function createAccounts(ctx) {
   // ── stránky ──
   const CSS = `<style>.acc-box{max-width:460px;margin:30px auto 0}.acc-box h1{margin:0 0 6px;font-size:28px;text-align:center}.acc-box>p.muted{text-align:center}.acc-logo{display:flex;align-items:center;justify-content:center;gap:0;margin:4px 0 16px;font-weight:800;font-size:22px;letter-spacing:.01em}.acc-logo b{background:linear-gradient(90deg,#4fd1ff,#7c5cff);-webkit-background-clip:text;background-clip:text;color:transparent}.acc-box label{display:block;margin-top:12px}.acc-box .btn{width:100%;margin-top:18px;justify-content:center}
   .acc-links{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:14px}.acc-links a{color:var(--accent2)}
-  .acc-lock{position:relative;text-align:left;font:inherit;color:inherit;cursor:pointer;filter:grayscale(1);opacity:.5;width:100%}.acc-lock:hover{opacity:.75;transform:none}.acc-lock .ic{box-shadow:none}.acc-lk{position:absolute;top:14px;right:14px;font-size:18px}
+  .acc-lock{position:relative;text-align:left;font:inherit;color:inherit;cursor:pointer;filter:grayscale(1);opacity:.5;width:100%}.acc-lock:hover{opacity:.75;transform:none}.acc-lock .ic{box-shadow:none}.acc-lk{position:absolute;top:14px;right:14px;font-size:18px}.acc-tile{position:relative}.acc-badge{position:absolute;top:14px;right:14px;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:#ef4444;color:#fff;font-size:12px;font-weight:800;display:grid;place-items:center;box-shadow:0 0 0 3px rgba(239,68,68,.25)}
   .acc-ov{position:fixed;inset:0;z-index:9000;background:rgba(2,5,12,.78);display:flex;align-items:center;justify-content:center;padding:18px}.acc-ov[hidden]{display:none}.acc-ovc{position:relative;max-width:440px;width:100%;text-align:center;margin:0}.acc-x{position:absolute;top:8px;right:12px;background:none;border:0;color:var(--text2);font-size:24px;cursor:pointer}
   .acc-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:18px}.acc-tile{display:block;text-decoration:none;color:inherit;margin:0;transition:transform .15s,border-color .15s}.acc-tile:hover{transform:translateY(-2px);border-color:rgba(79,209,255,.45)}.acc-tile .ic{width:50px;height:50px;border-radius:15px;display:grid;place-items:center;color:#9fe6ff;background:linear-gradient(135deg,rgba(79,209,255,.18),rgba(124,92,255,.22));border:1px solid rgba(120,160,255,.32);box-shadow:0 10px 26px -12px rgba(79,140,255,.7),inset 0 1px 0 rgba(255,255,255,.06);transition:transform .2s,box-shadow .2s,color .2s}.acc-tile:hover .ic{transform:translateY(-1px) scale(1.04);color:#fff;box-shadow:0 14px 34px -12px rgba(124,92,255,.85),inset 0 1px 0 rgba(255,255,255,.08)}.acc-tile h3{margin-top:14px!important}.acc-tile h3{margin:8px 0 4px}.acc-tile p{margin:0;color:var(--text2);font-size:14px}</style>`;
   const LOGO = require('./lm-header').LOGO.replace('width="34" height="34"', 'width="46" height="46"');
@@ -112,6 +112,7 @@ module.exports = function createAccounts(ctx) {
   // Ikony dlaždic — tenké linky (stroke), barva z gradientu v odznaku; ladí s logem a sítí v pozadí
   const SV = (d) => '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
   const IC = {
+    podpora: SV('<path d="M20.5 11.5a8 8 0 0 1-11.6 7.2L3.5 20.5l1.8-4.9A8 8 0 1 1 20.5 11.5z"/><path d="M8.5 10.2h7M8.5 13.5h4.6"/>'),
     compounder: SV('<circle cx="12" cy="12" r="2.6"/><circle cx="4.5" cy="6" r="1.8"/><circle cx="19.5" cy="6" r="1.8"/><circle cx="4.5" cy="18" r="1.8"/><circle cx="19.5" cy="18" r="1.8"/><path d="M6.1 7.1 9.9 10.4M17.9 7.1l-3.8 3.3M6.1 16.9l3.8-3.3M17.9 16.9l-3.8-3.3"/>'),
     pradlomaty: SV('<rect x="4" y="2.5" width="16" height="19" rx="3"/><path d="M4 7h16"/><circle cx="7.3" cy="4.8" r=".5" fill="currentColor"/><circle cx="12" cy="14" r="4.6"/><path d="M8.6 14.6c1.2-1 2.2 1 3.4 0s2.2 1 3.4 0"/>'),
     ekonomika: SV('<path d="M3 3v18h18"/><path d="m6.5 15 4-4.5 3 3L20 6.5"/><path d="M15.5 6.5H20V11"/>'),
@@ -231,6 +232,7 @@ module.exports = function createAccounts(ctx) {
 
     // Můj účet = rozcestník nástrojů + údaje + změna hesla
     const TILES = [
+      ['/cesta/podpora', 'podpora', 'Podpora Laundromats', 'Máte dotaz? Napište nám do chatu — odpovíme co nejdříve.'],
       ['/cesta/compounder', 'compounder', 'Compounder', 'Jak roste síť prádlomatů a co znamená pro vaše podnikání.'],
       ['/cesta/pradlomaty', 'pradlomaty', 'Prádlomaty', 'Nabídka strojů a služby kolem nich.'],
       ['', 'sis', 'SIS', 'Systém inteligentní správy v reálném čase: kompletní správa strojů, statistiky, doporučení, účetní exporty i API napojení na váš systém.', true],
@@ -244,13 +246,14 @@ module.exports = function createAccounts(ctx) {
       ['', 'udrzba', 'Údržba', 'Řízení údržbového plánu, intervalů, odečtů a personální řízení údržby.', true],
       ['', 'pripojky', 'Přípojky', 'Odhad ceny přípojek a přesný postup při jejich zadání i realizaci.', true],
     ];
-    app.get('/cesta/ucet', requireAccount, (req, res) => {
+    app.get('/cesta/ucet', requireAccount, A(async (req, res) => {
+      const supUnread = req.account && supportUnread ? await supportUnread(req.account.id) : 0;
       const a = req.account || { name: (adminOf(req) || {}).name || 'Správce', email: '' };
       const welcome = req.query.vitejte === '1' ? 'Účet je potvrzený. Vítejte!' : '';
       const err = String(req.query.err || '').slice(0, 200);
       const body = CSS + `<div class="hero" style="padding-bottom:6px"><span class="eyebrow"><i></i>Moje nástroje</span><h1>Dobrý den, <span class="g">${esc(String(a.name).split(/\s+/)[0])}</span></h1><p>Vaše nástroje Laundromats na jednom místě.</p></div>${msgHtml(err, welcome)}
         <div class="acc-tiles">${TILES.map(([h, i, t, d, lock]) => (!lock && (!req.account || canSee(req, i)))
-          ? `<a class="card acc-tile" href="${h}"><div class="ic">${IC[i]}</div><h3>${t}</h3><p>${d}</p></a>`
+          ? `<a class="card acc-tile" href="${h}"><div class="ic">${IC[i]}</div>${i === 'podpora' && supUnread ? `<span class="acc-badge" title="Nepřečtené odpovědi">${supUnread}</span>` : ''}<h3>${t}</h3><p>${d}</p></a>`
           : `<button type="button" class="card acc-tile acc-lock" data-lock="${esc(t)}"><div class="ic">${IC[i]}</div><span class="acc-lk" title="Zatím uzamčeno">🔒</span><h3>${t}</h3><p>${d}</p></button>`).join('')}</div>
         <div class="acc-ov" id="acc-ov" hidden><div class="card acc-ovc"><button type="button" class="acc-x" aria-label="Zavřít">×</button><div class="ic" style="margin:0 auto 12px">${IC.user}</div>
           <h2 style="margin:0 0 6px"><span id="acc-ovt"></span> odemkneme na online schůzce</h2>
@@ -261,7 +264,7 @@ module.exports = function createAccounts(ctx) {
           function cl(){ov.hidden=true;}ov.addEventListener('click',function(e){if(e.target===ov||e.target.closest('.acc-x'))cl();});document.addEventListener('keydown',function(e){if(e.key==='Escape')cl();});})();</script>
 `;
       send(req, res, 'Moje nástroje', body, 200, { back: false });
-    });
+    }));
     // Můj účet = údaje, změna hesla, odhlášení (z tlačítka 👤 v liště)
     app.get('/cesta/ucet/nastaveni', requireAccount, (req, res) => {
       const a = req.account || { name: (adminOf(req) || {}).name || 'Správce', email: '' };
@@ -303,5 +306,6 @@ module.exports = function createAccounts(ctx) {
     return '<a class="lcta" href="/cesta/prihlaseni">Přihlásit se</a>';
   }
   const attach = (req, res, next) => attachInner(req, res, next).catch((e) => { console.warn('[lm-acc] relace:', e.message); req.account = null; next(); });
-  return { attach, requireAccount, requirePage, canSee, ROLES, mount, headerSlot };
+  let supportUnread = null; const setSupportUnread = (fn) => { supportUnread = fn; };
+  return { attach, requireAccount, requirePage, canSee, ROLES, mount, headerSlot, setSupportUnread };
 };

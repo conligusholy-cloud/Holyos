@@ -35,6 +35,7 @@ type HubApp = { key: string; title: string; icon: string; tint: string; screen: 
 const APPS: HubApp[] = [
   { key: 'assistant', title: 'Vzkazy', icon: '📞', tint: BS.accent, screen: 'AssistantSettings' },
   // Videohovory se zákazníky z laundromats.eu/videocall — jen Tomáš a Jan Holý
+  { key: 'lmSupport', title: 'LM podpora', icon: '💬', tint: '#4fd1ff', screen: 'LmSupport', params: { lm: true }, adminOnly: true },
   { key: 'videocalls', title: 'Videohovory', icon: '🎥', tint: '#2fe3a0', screen: 'VideoCalls', adminOnly: true },
   // Administrace schůzek — zatím jen Tomáš a Jan Holý (stejné oprávnění jako Podpora)
   { key: 'meetings', title: 'Schůzky', icon: '📅', tint: BS.vio, screen: 'Meetings', adminOnly: true },
