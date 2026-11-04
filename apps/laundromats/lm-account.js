@@ -74,6 +74,8 @@ module.exports = function createAccounts(ctx) {
   // ── stránky ──
   const CSS = `<style>.acc-box{max-width:460px;margin:30px auto 0}.acc-box h1{margin:0 0 6px;font-size:28px;text-align:center}.acc-box>p.muted{text-align:center}.acc-logo{display:flex;align-items:center;justify-content:center;gap:0;margin:4px 0 16px;font-weight:800;font-size:22px;letter-spacing:.01em}.acc-logo b{background:linear-gradient(90deg,#4fd1ff,#7c5cff);-webkit-background-clip:text;background-clip:text;color:transparent}.acc-box label{display:block;margin-top:12px}.acc-box .btn{width:100%;margin-top:18px;justify-content:center}
   .acc-links{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:14px}.acc-links a{color:var(--accent2)}
+  .acc-lock{position:relative;text-align:left;font:inherit;color:inherit;cursor:pointer;filter:grayscale(1);opacity:.5;width:100%}.acc-lock:hover{opacity:.75;transform:none}.acc-lock .ic{box-shadow:none}.acc-lk{position:absolute;top:14px;right:14px;font-size:18px}
+  .acc-ov{position:fixed;inset:0;z-index:9000;background:rgba(2,5,12,.78);display:flex;align-items:center;justify-content:center;padding:18px}.acc-ov[hidden]{display:none}.acc-ovc{position:relative;max-width:440px;width:100%;text-align:center;margin:0}.acc-x{position:absolute;top:8px;right:12px;background:none;border:0;color:var(--text2);font-size:24px;cursor:pointer}
   .acc-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:18px}.acc-tile{display:block;text-decoration:none;color:inherit;margin:0;transition:transform .15s,border-color .15s}.acc-tile:hover{transform:translateY(-2px);border-color:rgba(79,209,255,.45)}.acc-tile .ic{width:50px;height:50px;border-radius:15px;display:grid;place-items:center;color:#9fe6ff;background:linear-gradient(135deg,rgba(79,209,255,.18),rgba(124,92,255,.22));border:1px solid rgba(120,160,255,.32);box-shadow:0 10px 26px -12px rgba(79,140,255,.7),inset 0 1px 0 rgba(255,255,255,.06);transition:transform .2s,box-shadow .2s,color .2s}.acc-tile:hover .ic{transform:translateY(-1px) scale(1.04);color:#fff;box-shadow:0 14px 34px -12px rgba(124,92,255,.85),inset 0 1px 0 rgba(255,255,255,.08)}.acc-tile h3{margin-top:14px!important}.acc-tile h3{margin:8px 0 4px}.acc-tile p{margin:0;color:var(--text2);font-size:14px}</style>`;
   const LOGO = require('./lm-header').LOGO.replace('width="34" height="34"', 'width="46" height="46"');
   const box = (title, sub, inner) => CSS + `<div class="card acc-box"><div class="acc-logo">${LOGO}<span>Laundromats<b>.eu</b></span></div><h1>${title}</h1>${sub ? `<p class="muted" style="margin:0 0 6px">${sub}</p>` : ''}${inner}</div>`;
@@ -217,7 +219,16 @@ module.exports = function createAccounts(ctx) {
       const welcome = req.query.vitejte === '1' ? 'Účet je potvrzený. Vítejte!' : '';
       const err = String(req.query.err || '').slice(0, 200);
       const body = CSS + `<div class="hero" style="padding-bottom:6px"><span class="eyebrow"><i></i>Moje nástroje</span><h1>Dobrý den, <span class="g">${esc(String(a.name).split(/\s+/)[0])}</span></h1><p>Vaše nástroje Laundromats na jednom místě.</p></div>${msgHtml(err, welcome)}
-        <div class="acc-tiles">${TILES.filter(([h, i]) => req.account ? canSee(req, i) : true).map(([h, i, t, d]) => `<a class="card acc-tile" href="${h}"><div class="ic">${IC[i]}</div><h3>${t}</h3><p>${d}</p></a>`).join('')}</div>
+        <div class="acc-tiles">${TILES.map(([h, i, t, d]) => (!req.account || canSee(req, i))
+          ? `<a class="card acc-tile" href="${h}"><div class="ic">${IC[i]}</div><h3>${t}</h3><p>${d}</p></a>`
+          : `<button type="button" class="card acc-tile acc-lock" data-lock="${esc(t)}"><div class="ic">${IC[i]}</div><span class="acc-lk" title="Zatím uzamčeno">🔒</span><h3>${t}</h3><p>${d}</p></button>`).join('')}</div>
+        <div class="acc-ov" id="acc-ov" hidden><div class="card acc-ovc"><button type="button" class="acc-x" aria-label="Zavřít">×</button><div class="ic" style="margin:0 auto 12px">${IC.user}</div>
+          <h2 style="margin:0 0 6px"><span id="acc-ovt"></span> odemkneme na online schůzce</h2>
+          <p class="muted" style="margin:0 0 16px">Tento nástroj zpřístupňujeme po krátké online schůzce, na které spolu projdeme váš záměr. Vyberte si termín, který vám vyhovuje — trvá zhruba 17 minut.</p>
+          <a class="btn" href="/cesta/schuzka" style="width:100%;justify-content:center">📅 Domluvit online schůzku</a></div></div>
+        <script>(function(){var ov=document.getElementById('acc-ov'),t=document.getElementById('acc-ovt');if(!ov)return;
+          document.querySelectorAll('.acc-lock').forEach(function(b){b.addEventListener('click',function(){t.textContent=b.getAttribute('data-lock');ov.hidden=false;try{if(window.lmTrack)lmTrack('locked_tile',{tile:b.getAttribute('data-lock')});}catch(e){}});});
+          function cl(){ov.hidden=true;}ov.addEventListener('click',function(e){if(e.target===ov||e.target.closest('.acc-x'))cl();});document.addEventListener('keydown',function(e){if(e.key==='Escape')cl();});})();</script>
 `;
       send(req, res, 'Moje nástroje', body, 200, { back: false });
     });
