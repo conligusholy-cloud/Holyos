@@ -1831,7 +1831,7 @@
       var r = await api('/leads/'+id+'/access-link', { method:'POST' });
       var j = await r.json().catch(function(){return {};});
       if (!r.ok){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">'+esc(j.error||'Chyba')+'</span>'; return; }
-      window.open('https://wa.me/'+j.phone+'?text='+encodeURIComponent(j.message||''), '_blank');
+      obOpenWa('https://wa.me/'+j.phone+'?text='+encodeURIComponent(j.message||''));
       if (msg) msg.innerHTML = '<span style="color:var(--converted)">✓ WhatsApp otevřen — odešli zprávu.</span>';
       obLogAction(id,'send_access','✉️ Odeslán přístup do portálu (WhatsApp)');
       var lead = state.leads.find(function(x){return x.id===id;});
@@ -1888,6 +1888,14 @@
   // Otevře nativní SMS (z čísla obchodníka) s odkazem na specialistu; nejdřív nabídne uložení
   // kontaktu do telefonu a automaticky přepne stav na „Odeslán odkaz na specialistu".
   // Odeslání jedinečného odkazu na Ekonomiku (jen Jan a Tomáš Holý — kontrola i na serveru)
+  // WhatsApp po načtení odkazu ze serveru: window.open po await prohlížeč (iOS) i Velín (WebView) zablokují.
+  // Ve Velínu proto přejdeme na wa.me přímo (aplikace ho předá WhatsAppu), v prohlížeči okno a jako záloha totéž okno.
+  function obOpenWa(url){
+    if (window.ReactNativeWebView) { window.location.href = url; return; }
+    var w = null; try { w = window.open(url, '_blank'); } catch(e){}
+    if (!w) window.location.href = url;
+  }
+  window.obOpenWa = obOpenWa;
   async function obEconomyLink(id, channel, _skipGate){
     var msg = document.getElementById('eco-msg-'+id);
     var say = function(h){ if (msg) msg.innerHTML = h; };
@@ -1899,7 +1907,7 @@
       var r = await api('/leads/'+id+'/economy-link', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ channel: channel }) });
       var j = await r.json().catch(function(){return {};});
       if (!r.ok || !j.ok){ say('<span style="color:#fca5a5">'+esc(j.error||'Odeslání se nezdařilo.')+'</span>'); return; }
-      if (channel==='whatsapp'){ window.open('https://wa.me/'+j.phone+'?text='+encodeURIComponent(j.message||''), '_blank'); say('<span style="color:var(--converted)">✓ WhatsApp otevřen — odešli zprávu.</span>'); }
+      if (channel==='whatsapp'){ obOpenWa('https://wa.me/'+j.phone+'?text='+encodeURIComponent(j.message||'')); say('<span style="color:var(--converted)">✓ WhatsApp otevřen — odešli zprávu.</span>'); }
       else say('<span style="color:var(--converted)">✓ '+(channel==='sms'?'SMS odeslána.':'E-mail odeslán.')+'</span>');
     }catch(e){ say('<span style="color:#fca5a5">Odeslání se nezdařilo.</span>'); }
   }
