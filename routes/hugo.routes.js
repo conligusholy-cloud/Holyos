@@ -25,7 +25,10 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-router.post('/auth/login', async (req, res, next) => {
+const { createLimiter } = require('../middleware/rate-limit');
+const _loginIpLimiter = createLimiter({ windowMs: 15 * 60e3, max: 40, message: 'Příliš mnoho pokusů o přihlášení. Zkuste to za 15 minut.' });
+const _loginUserLimiter = createLimiter({ windowMs: 15 * 60e3, max: 10, keyFn: (req) => 'hugo:' + String((req.body && req.body.username) || '').toLowerCase().slice(0, 80), message: 'Příliš mnoho pokusů o přihlášení. Zkuste to za 15 minut.' });
+router.post('/auth/login', _loginIpLimiter, _loginUserLimiter, async (req, res, next) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Vyplň jméno a heslo' });

@@ -31,9 +31,17 @@ function errorHandler(err, req, res, next) {
     });
   }
 
-  // Obecná chyba
-  res.status(err.status || 500).json({
-    error: err.message || 'Interní chyba serveru',
+  // Obecná chyba. V produkci se vnitřní chyby (Prisma, databáze, síť, soubory) klientovi nepřeposílají —
+  // text může obsahovat dotaz, názvy tabulek nebo cesty; detail zůstává jen v logu serveru.
+  const status = err.status || 500;
+  const msg = String(err.message || '');
+  const internal = status >= 500 && (
+    /prisma|invalid `|ECONN|ETIMEDOUT|ENOTFOUND|ENOENT|EACCES|EPERM|relation "|column "|syntax error|at \S+ \(|\/app\/|node_modules/i.test(msg)
+    || String(err.name || '').startsWith('Prisma')
+    || /^P\d{4}$/.test(String(err.code || ''))
+  );
+  res.status(status).json({
+    error: (process.env.NODE_ENV === 'production' && internal) ? 'Interní chyba serveru' : (msg || 'Interní chyba serveru'),
   });
 }
 

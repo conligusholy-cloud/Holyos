@@ -11,6 +11,10 @@ const crypto = require('crypto');
 const router = express.Router();
 const { prisma } = require('../config/database');
 const { sendMail } = require('../services/email');
+const { createLimiter } = require('../middleware/rate-limit');
+// Ochrana veřejných endpointů (výběry = peníze): hádání admin hesla a hromadné ověřování e-mailů / rozesílání odkazů
+const adminLoginLimiter = createLimiter({ windowMs: 15 * 60e3, max: 8, message: 'Příliš mnoho pokusů o přihlášení. Zkuste to za 15 minut.' });
+const requestAccessLimiter = createLimiter({ windowMs: 60 * 60e3, max: 12, message: 'Příliš mnoho žádostí. Zkuste to později.' });
 
 // ── Stavy výběru (pipeline dle zadání) ──────────────────────────────────────
 const STATUSES = [
@@ -77,7 +81,7 @@ async function isAuthorized(email) {
 function baseUrl() { return (process.env.SHARE_BASE_URL || process.env.VYBERY_BASE_URL || 'https://bestseries.cash').replace(/\/+$/, ''); }
 
 // ── VEŘEJNÉ: žádost o přístup — ověří e-mail a pošle magic-link ─────────────
-router.post('/request-access', async (req, res, next) => {
+router.post('/request-access', requestAccessLimiter, async (req, res, next) => {
   try {
     const email = normEmail(req.body && req.body.email);
     if (!email || email.indexOf('@') < 0) return res.status(400).json({ ok: false, error: 'Zadejte platný e-mail.' });
@@ -110,7 +114,7 @@ router.post('/request-access', async (req, res, next) => {
       console.warn('[vybery] Primární odesílatel (' + primaryFrom + ') selhal — zkouším zálohu ' + fallbackFrom);
       sent = await trySend(fallbackFrom);
     }
-    if (!sent) console.warn('[vybery] E-mail se nepodařilo odeslat. Odkaz:', link);
+    if (!sent) console.warn('[vybery] E-mail se nepodařilo odeslat pro ' + email + ' (odkaz se z bezpečnostních důvodů nelogue).');
     res.json({ ok: true, authorized: true, sent });
   } catch (err) { next(err); }
 });
@@ -159,7 +163,7 @@ router.post('/me/request', async (req, res, next) => {
 });
 
 // ── ADMIN: přihlášení heslem (env VYBERY_ADMIN_PASSWORD) ────────────────────
-router.post('/admin/login', async (req, res, next) => {
+router.post('/admin/login', adminLoginLimiter, async (req, res, next) => {
   try {
     const pw = String((req.body && req.body.password) || '');
     const expected = process.env.VYBERY_ADMIN_PASSWORD || '';

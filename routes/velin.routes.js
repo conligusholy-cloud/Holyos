@@ -964,7 +964,10 @@ const loginSchema = z.object({
   pin: z.string(),
   expo_push_token: z.string(),
 });
-router.post('/devices/login', async (req, res, next) => {
+// PIN má málo kombinací → omezení pokusů per osoba (hádání PINu) i per IP
+const _pinIpLimiter = require('../middleware/rate-limit').createLimiter({ windowMs: 15 * 60e3, max: 40, message: 'Příliš mnoho pokusů. Zkuste to za 15 minut.' });
+const _pinPersonLimiter = require('../middleware/rate-limit').createLimiter({ windowMs: 15 * 60e3, max: 6, keyFn: (req) => 'pin:' + String((req.body && req.body.person_id) || '').slice(0, 12), message: 'Příliš mnoho chybných pokusů o PIN. Zkuste to za 15 minut.' });
+router.post('/devices/login', _pinIpLimiter, _pinPersonLimiter, async (req, res, next) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Neplatný vstup' });

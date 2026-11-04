@@ -2706,7 +2706,9 @@ const loginSchema = z.object({
   password: z.string().min(1).max(200).optional().nullable(),
   lang: z.string().trim().max(10).optional().nullable(),
 });
-router.post('/login', async (req, res, next) => {
+const _cmpLoginIpLimiter = require('../middleware/rate-limit').createLimiter({ windowMs: 15 * 60e3, max: 40, message: 'Příliš mnoho pokusů. Zkuste to za 15 minut.' });
+const _cmpLoginMailLimiter = require('../middleware/rate-limit').createLimiter({ windowMs: 15 * 60e3, max: 10, keyFn: (req) => 'cmp:' + String((req.body && req.body.email) || '').toLowerCase().slice(0, 120), message: 'Příliš mnoho pokusů. Zkuste to za 15 minut.' });
+router.post('/login', _cmpLoginIpLimiter, _cmpLoginMailLimiter, async (req, res, next) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ ok: false, error: 'Neplatný e-mail.' });
@@ -7650,7 +7652,9 @@ router.post('/external-reps', requireAuth, async (req, res, next) => {
 });
 
 // POST /api/compounder/external-reps/login — přihlášení externího obchodníka (veřejné)
-router.post('/external-reps/login', async (req, res, next) => {
+const _repLoginIpLimiter = require('../middleware/rate-limit').createLimiter({ windowMs: 15 * 60e3, max: 40, message: 'Příliš mnoho pokusů o přihlášení. Zkuste to za 15 minut.' });
+const _repLoginUserLimiter = require('../middleware/rate-limit').createLimiter({ windowMs: 15 * 60e3, max: 10, keyFn: (req) => 'rep:' + String((req.body && req.body.login) || '').toLowerCase().slice(0, 80), message: 'Příliš mnoho pokusů o přihlášení. Zkuste to za 15 minut.' });
+router.post('/external-reps/login', _repLoginIpLimiter, _repLoginUserLimiter, async (req, res, next) => {
   try {
     const login = String((req.body && req.body.login) || '').trim();
     const password = String((req.body && req.body.password) || '');
