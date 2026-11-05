@@ -15,8 +15,8 @@ module.exports = function mountMailing(app, ctx) {
   let _snd = { at: 0, v: null };
   async function senders() {
     if (_snd.v && Date.now() - _snd.at < 60e3) return _snd.v;
-    try { const r = await fetch(HOLYOS_URL + '/api/auth/bs2/bulk-senders', { headers: { Authorization: 'Bearer ' + svcToken() }, signal: AbortSignal.timeout(10000) }); const j = await r.json(); _snd = { at: Date.now(), v: { list: j.senders || [], def: j.default || 'info@bestseries.cz', configured: !!j.configured } }; }
-    catch (e) { if (!_snd.v) _snd = { at: Date.now() - 50e3, v: { list: [], def: 'info@bestseries.cz', configured: false, error: e.message } }; }
+    try { const r = await fetch(HOLYOS_URL + '/api/auth/bs2/bulk-senders', { headers: { Authorization: 'Bearer ' + svcToken() }, signal: AbortSignal.timeout(10000) }); const j = await r.json(); _snd = { at: Date.now(), v: { list: j.senders || [], def: j.default || 'info@bestseries2.cz', configured: !!j.configured } }; }
+    catch (e) { if (!_snd.v) _snd = { at: Date.now() - 50e3, v: { list: [], def: 'info@bestseries2.cz', configured: false, error: e.message } }; }
     return _snd.v;
   }
   // Přílohy kampaně (pro frontu držíme v paměti, ať se nenačítají z DB u každého e-mailu)
@@ -172,7 +172,7 @@ module.exports = function mountMailing(app, ctx) {
     const msg = req.query.msg ? `<div class="msg ok">${esc(req.query.msg)}</div>` : '';
     res.send(V.adminLayout('Rozesílky', 'mail', req.admin, CSS + `
   <div class="row" style="justify-content:space-between"><h1 style="margin:0">Rozesílky <span class="muted" style="font-size:14px;font-weight:500">hromadné e-maily</span></h1><a class="btn" href="/admin/rozesilky/new">+ Nová rozesílka</a></div>
-  <p class="muted small">Odesílá se přes Amazon SES z adresy <b>${esc(process.env.BS2_BULK_FROM_HINT || 'info@bestseries.cz')}</b>, postupně na pozadí (${RATE} e-mailů/s). Vyřazení uživatelé a blokované účty se nikdy neposílají.</p>${msg}
+  <p class="muted small">Odesílá se přes Amazon SES (výchozí odesílatel <b>${esc(process.env.BS2_BULK_FROM_HINT || 'info@bestseries2.cz')}</b>, odpovědi chodí na info@bestseries.cz), postupně na pozadí (${RATE} e-mailů/s). Vyřazení uživatelé a blokované účty se nikdy neposílají.</p>${msg}
   <div class="card"><div class="tbl-wrap"><table><thead><tr><th>Název</th><th>Předmět</th><th>Stav</th><th>Průběh</th><th>Vytvořeno</th></tr></thead><tbody>
   ${rows.map((c) => { const pct = c.total ? Math.round(((c.sent + c.failed) / c.total) * 100) : 0; return `<tr><td><a href="/admin/rozesilky/${c.id}"><b>${esc(c.name)}</b></a></td><td class="small">${esc(c.subject)}</td><td><span class="ml-st ${esc(c.status)}">${STATUS[c.status] || esc(c.status)}</span></td>
     <td style="min-width:160px">${c.total ? `<div class="ml-bar"><i style="width:${pct}%"></i></div><div class="small muted">${c.sent} odesláno${c.failed ? ' · ' + c.failed + ' chyb' : ''} / ${c.total}</div>` : '<span class="muted small">—</span>'}</td><td class="small muted">${fmt(c.created_at)}${c.created_by ? '<br>' + esc(c.created_by) : ''}</td></tr>`; }).join('') || '<tr><td colspan="5" class="muted">Zatím žádná rozesílka.</td></tr>'}
@@ -186,7 +186,7 @@ module.exports = function mountMailing(app, ctx) {
   const products = async () => (await q("SELECT product_name, count(*)::int AS c FROM orders GROUP BY product_name ORDER BY c DESC LIMIT 60")).rows;
 
   function editor(c, prods, admin, snd, files) {
-    snd = snd || { list: [], def: 'info@bestseries.cz' }; files = files || [];
+    snd = snd || { list: [], def: 'info@bestseries2.cz' }; files = files || [];
     const f = normFilter(c ? c.filter : { status: ['active', 'invited'] });
     const ro = c && c.status !== 'draft';
     const dis = ro ? ' disabled' : '';
