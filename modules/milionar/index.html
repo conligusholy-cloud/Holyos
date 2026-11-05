@@ -38,6 +38,7 @@
     .st.pending { background:rgba(245,158,11,.18); color:#f59e0b; }
     .st.failed { background:rgba(239,68,68,.18); color:#f87171; }
     .note { color:var(--text2); font-size:12px; }
+    .ok { color:#22c55e; }
     .fn { display:flex; flex-direction:column; gap:6px; max-width:620px; }
     .fn-row { display:flex; align-items:center; gap:10px; }
     .fn-row .nm { width:190px; font-size:13px; }
@@ -195,7 +196,8 @@
       get('/players?limit=300' + (q ? '&q=' + encodeURIComponent(q) : '')).then(function (j) {
         document.getElementById('pl-tbl').innerHTML =
           '<thead><tr><th>Nick</th><th>Jméno a e-mail</th><th class="num">Prádlomatů</th><th class="num">Míst</th>'
-          + '<th class="num">Měst</th><th class="num">Hotovost</th><th class="num">Úvěr</th><th class="num">Pozvánek</th>'
+          + '<th class="num">Měst</th><th class="num">Příjem / měsíc</th>'
+          + '<th class="num">Hotovost</th><th class="num">Úvěr</th><th class="num">Pozvánek</th>'
           + '<th class="num">Nákupů</th><th class="num">Utraceno</th><th>Naposledy</th><th></th></tr></thead><tbody>'
           + (j.players.length ? j.players.map(function (p) {
             return '<tr' + (p.disabled ? ' style="opacity:.45"' : '') + '><td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + p.id + '">' + esc(p.nick) + '</b>'
@@ -204,6 +206,7 @@
               + (p.email ? '<div class="note">' + esc(p.email) + '</div>' : '') + '</td>'
               + '<td class="num">' + cz(p.pradlomatu) + '</td><td class="num">' + cz(p.mist) + '</td>'
               + '<td class="num">' + cz(p.mest) + '</td>'
+              + '<td class="num"><b class="' + (p.prijem > 0 ? 'ok' : '') + '">' + cz(p.prijem) + ' L$</b></td>'
               + '<td class="num">' + (p.hotovost == null ? '—' : cz(p.hotovost)) + '</td>'
               + '<td class="num">' + (p.uver == null ? '—' : cz(p.uver)) + '</td>'
               + '<td class="num">' + cz(p.pozvanek) + '</td>'
@@ -212,7 +215,7 @@
               + '<td class="note">' + dt(p.last_login_at || p.created_at) + '</td>'
               + '<td><button class="btn sm" data-off="' + p.id + '" data-v="' + (p.disabled ? '0' : '1') + '">'
               + (p.disabled ? 'Odblokovat' : 'Zablokovat') + '</button></td></tr>';
-          }).join('') : '<tr><td colspan="12" class="note" style="padding:20px">Zatím tu nikdo není.</td></tr>')
+          }).join('') : '<tr><td colspan="13" class="note" style="padding:20px">Zatím tu nikdo není.</td></tr>')
           + '</tbody>';
         [].forEach.call(document.querySelectorAll('[data-detail]'), function (b) {
           b.onclick = function () { detail(b.getAttribute('data-detail')); };
@@ -243,6 +246,7 @@
           + mini(cz(p.pradlomatu), 'Prádlomatů') + mini(cz(j.mista.length), 'Obsazených míst')
           + mini(p.hotovost == null ? '—' : cz(p.hotovost), 'Hotovost')
           + mini(p.uver == null ? '—' : cz(p.uver), 'Úvěr')
+          + mini(cz(p.prijem || 0) + ' L$', 'Příjem / měsíc')
           + mini(cz(p.pozvanek), 'Pozvánek')
           + mini(esc(p.profil || '—'), 'Profil')
           + '</div>'
