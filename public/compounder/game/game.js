@@ -147,7 +147,19 @@ var QUIZ = [
 
 // ─── Stav hry ────────────────────────────────────────────────────────────────
 var KEY = 'lm_milionar_v1';
+var PID_KEY = 'lm_milionar_pid';
 var S = null;
+// Id pro pozvánky žije mimo rozehranou hru. Když si hráč dá „začít znovu",
+// sdílený odkaz musí platit dál — jinak přijde o pozvánky, které už rozeslal.
+function trvalePid() {
+  var id = null;
+  try { id = localStorage.getItem(PID_KEY); } catch (e) { /* nevadí */ }
+  if (!/^[a-z0-9]{6,24}$/.test(id || '')) {
+    id = (Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)).slice(0, 12);
+  }
+  try { localStorage.setItem(PID_KEY, id); } catch (e) { /* nevadí */ }
+  return id;
+}
 function fresh(profileId) {
   var p = PROFILES[profileId];
   var now = Date.now();
@@ -158,7 +170,7 @@ function fresh(profileId) {
     units: [],     // postavené prádlomaty
     revealed: {},  // id místa → true
     leases: {},    // id místa → { rent, at } — domluvený nájem
-    pid: (Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)).slice(0, 12),
+    pid: trvalePid(),
     refs: 0,       // kolik lidí otevřelo sdílený odkaz
     orders: [],    // koupené stroje na cestě: { model, arrivesAt }
     stock: {},     // model → kolik kusů čeká na skladě
@@ -195,7 +207,10 @@ function load() {
     if (!o.orders) o.orders = [];
     if (!o.stock) o.stock = {};
     if (!o.leases) o.leases = {};
-    if (!o.pid) o.pid = (Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)).slice(0, 12);
+    // Staré rozehrané hry mají pid uvnitř stavu — necháme jim ho a uložíme
+    // bokem, ať přežije i případný reset.
+    if (!/^[a-z0-9]{6,24}$/.test(o.pid || '')) o.pid = trvalePid();
+    else { try { localStorage.setItem(PID_KEY, o.pid); } catch (e) { /* nevadí */ } }
     if (typeof o.refs !== 'number') o.refs = 0;
     ['boost', 'connDiscount', 'rateDrop', 'bankBonus'].forEach(function (k) { if (typeof o[k] !== 'number') o[k] = 0; });
     // Stara ulozena mista mela metriky jako objekty { count, nearest_m } - srovname je na cisla.
@@ -1188,7 +1203,8 @@ function countIncomingRef() {
   if (!m) return;
   var id = m[1].toLowerCase();
   var mine = null;
-  try { var raw = localStorage.getItem(KEY); if (raw) mine = (JSON.parse(raw) || {}).pid || null; } catch (e) { /* nevadí */ }
+  try { mine = localStorage.getItem(PID_KEY); } catch (e) { /* nevadí */ }
+  if (!mine) { try { var raw = localStorage.getItem(KEY); if (raw) mine = (JSON.parse(raw) || {}).pid || null; } catch (e) { /* nevadí */ } }
   if (mine === id) return;                       // vlastní odkaz se nepočítá
   try { if (localStorage.getItem('lm_ref_' + id)) return; localStorage.setItem('lm_ref_' + id, '1'); } catch (e) { /* nevadí */ }
   fetch('/api/game/ref/' + id, { method: 'POST' }).catch(function () {});

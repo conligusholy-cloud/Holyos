@@ -7746,3 +7746,17 @@ model GameDelivery {
   @@index([player_id, claimed_at])
   @@map("game_deliveries")
 }
+
+// Pozvánky: kdo otevřel sdílený odkaz. Dřív to viselo v paměti serveru a každé
+// nasazení hráčům počítadlo vynulovalo — proto je to teď v databázi.
+// `visitor` je otisk adresy návštěvníka, ne adresa samotná.
+model GameRef {
+  id         Int      @id @default(autoincrement())
+  ref_id     String   @db.VarChar(24)
+  visitor    String   @db.VarChar(64)
+  created_at DateTime @default(now())
+
+  @@unique([ref_id, visitor])
+  @@index([ref_id])
+  @@map("game_refs")
+}

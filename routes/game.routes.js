@@ -16,6 +16,7 @@ const express = require('express');
 const router = express.Router();
 const finder = require('../services/spots/finder');
 const { prisma } = require('../config/database');
+const crypto = require('crypto');
 
 // ─── Limiter (v paměti) ──────────────────────────────────────────────────────
 const hits = new Map();
@@ -173,29 +174,44 @@ router.post('/ev', express.json({ limit: '2kb' }), (req, res) => {
 
 // ─── Pozvánky ────────────────────────────────────────────────────────────────
 // Hráč sdílí odkaz s ?ref=<svoje id>. Kdo ho otevře, započítá se mu jedno
-// otevření a hráči tím roste návštěvnost jeho prádlomatů. Držíme to jen v paměti
-// — je to prototyp, po nasazení nové verze se počítadla vynulují.
-const refs = new Map();           // id hráče → počet otevření
+// otevření a hráči tím roste návštěvnost jeho prádlomatů.
+// Počítadlo patří do databáze: dřív leželo v paměti serveru a každé nasazení
+// hráčům vynulovalo pozvánky, které si poctivě nasbírali.
 const REF_MAX = 500;
 const okId = (x) => /^[a-z0-9]{6,24}$/.test(String(x || ''));
 
-router.post('/ref/:id', (req, res) => {
-  const id = String(req.params.id || '').toLowerCase();
-  if (!okId(id)) return res.status(400).json({ error: 'Neplatné id.' });
-  // Jedno otevření na adresu a hráče za den, ať se to nedá nasekat obnovováním stránky.
-  if (rateLimited('ref:' + id + ':' + ipOf(req), 1, 24 * 3600e3)) {
-    return res.json({ refs: refs.get(id) || 0, counted: false });
-  }
-  const n = Math.min(REF_MAX, (refs.get(id) || 0) + 1);
-  refs.set(id, n);
-  if (refs.size > 20000) refs.delete(refs.keys().next().value);
-  res.json({ refs: n, counted: true });
+// Z adresy návštěvníka děláme jednosměrný otisk — na „jedno započtení na adresu"
+// to stačí a samotné IP nikde neleží.
+function refOtisk(req) {
+  const sul = process.env.GAME_REF_SALT || process.env.JWT_SECRET || 'milionar';
+  return crypto.createHash('sha256').update(sul + '|' + ipOf(req)).digest('hex').slice(0, 48);
+}
+async function refPocet(id) {
+  return Math.min(REF_MAX, await prisma.gameRef.count({ where: { ref_id: id } }));
+}
+
+router.post('/ref/:id', async (req, res, next) => {
+  try {
+    const id = String(req.params.id || '').toLowerCase();
+    if (!okId(id)) return res.status(400).json({ error: 'Neplatné id.' });
+    let counted = false;
+    try {
+      // Unikátní dvojice (odkaz, návštěvník) hlídá, že jedna adresa započte jednou.
+      await prisma.gameRef.create({ data: { ref_id: id, visitor: refOtisk(req) } });
+      counted = true;
+    } catch (e) {
+      if (!e || e.code !== 'P2002') throw e;
+    }
+    res.json({ refs: await refPocet(id), counted });
+  } catch (e) { next(e); }
 });
 
-router.get('/ref/:id', (req, res) => {
-  const id = String(req.params.id || '').toLowerCase();
-  if (!okId(id)) return res.status(400).json({ error: 'Neplatné id.' });
-  res.set('Cache-Control', 'no-store').json({ refs: refs.get(id) || 0 });
+router.get('/ref/:id', async (req, res, next) => {
+  try {
+    const id = String(req.params.id || '').toLowerCase();
+    if (!okId(id)) return res.status(400).json({ error: 'Neplatné id.' });
+    res.set('Cache-Control', 'no-store').json({ refs: await refPocet(id) });
+  } catch (e) { next(e); }
 });
 
 module.exports = router;
