@@ -904,7 +904,10 @@ function installSheet(sp, areaId, modelKey) {
     + '<div class="kv"><span>Domluvený nájem</span><b>' + kcFull(e.rent) + ' / měsíc</b></div>'
     + '<div class="kv"><span>Zisk tohohle místa / měsíc</span><b class="ok">' + kcFull(e.profit) + '</b></div>'
     + '<button class="btn big" id="do-build"' + (f.ok ? '' : ' disabled') + '>Postavit</button>'
-    + (f.ok ? '' : '<p class="fine err">Na instalaci ti chybí ' + kcFull(f.need - f.canBorrow) + '.</p>'));
+    + (f.ok ? '' : '<p class="fine err">Na instalaci ti chybí ' + kcFull(f.need - f.canBorrow) + '.</p>'
+        + '<button class="btn sec" id="go-bank" style="width:100%;margin-top:8px">Zkusit úvěr v bance</button>'));
+  var gb = $('go-bank');
+  if (gb) gb.onclick = function () { closeSheet(); switchTab('bank'); uverSheet(); };
   var b = $('do-build');
   if (b) b.onclick = function () {
     // Místo si nejdřív zabereme na serveru — na jednom místě smí stát jen jeden.
@@ -1008,6 +1011,14 @@ function rivalSheet(sp, areaId, c) {
     apiJson('/spots/bid', { spot_id: sp.id, rent: amt, model: model }).then(function (r) {
       b.disabled = false; b.textContent = 'Zkusit přeplatit';
       if (!r.j.won) {
+        // 404 = zábor mezitím zmizel (majitel vypověděl nebo si resetoval hru).
+        // Za to hráč platit nebude a rovnou ho pustíme stavět.
+        if (r.status === 404) {
+          delete CLAIMS[sp.id];
+          loadClaims();
+          toast('Místo se mezitím uvolnilo — můžeš stavět rovnou.', 'ok');
+          return spotSheet(sp, areaId);
+        }
         S.cash -= BID_FEE; save(); paint();
         return toast(r.j.error || 'Nepovedlo se.', 'err');
       }
@@ -1284,7 +1295,7 @@ function switchTab(v) {
   [].forEach.call(document.querySelectorAll('.tabs button'), function (x) { x.classList.toggle('on', x.getAttribute('data-v') === v); });
   TABS.forEach(function (k) { $('v-' + k).classList.toggle('hidden', k !== v); });
   paint();
-  if (v === 'map' && map) setTimeout(function () { map.invalidateSize(); }, 50);
+  if (v === 'map' && map) { setTimeout(function () { map.invalidateSize(); }, 50); loadClaims(); }
 }
 [].forEach.call(document.querySelectorAll('.tabs button'), function (b) {
   b.onclick = function () { switchTab(b.getAttribute('data-v')); };
