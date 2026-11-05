@@ -53,12 +53,18 @@ module.exports = function mountMailing(app, ctx) {
       support: ['any', 'has', 'none'].includes(f.support) ? f.support : 'any',
       manual: String(f.manual || '').slice(0, 200000),
       manual_only: !!f.manual_only && f.manual_only !== '0',
+      // Blacklist této rozesílky — id kontaktů, které se mají vynechat. Platí jen
+      // pro tuhle kampaň; trvalé odhlášení řeší odkaz v e-mailu (mail_optout).
+      exclude: [...new Set((Array.isArray(f.exclude) ? f.exclude : String(f.exclude || '').split(','))
+        .map((x) => parseInt(x, 10)).filter((x) => Number.isInteger(x) && x > 0))].slice(0, 20000),
     };
   }
   function whereFor(f) {
     const p = []; const w = ["s.status <> 'blocked'", 's.mail_optout = false', "s.email LIKE '%@%'"];
     const P = (v) => { p.push(v); return '$' + p.length; };
     const emails = [...new Set(String(f.manual || '').toLowerCase().split(/[\s,;]+/).filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)))];
+    // Vyřazení platí vždy — i když kontakt přijde přes ruční seznam.
+    if (f.exclude && f.exclude.length) w.push('s.id <> ALL(' + P(f.exclude) + '::int[])');
     if (f.manual_only) { w.push('lower(s.email) = ANY(' + P(emails) + '::text[])'); return { sql: w.join(' AND '), p, emails }; }
     if (f.status.length) w.push('s.status = ANY(' + P(f.status) + '::text[])');
     if (f.login === 'never') w.push('s.last_login_at IS NULL');
@@ -76,7 +82,10 @@ module.exports = function mountMailing(app, ctx) {
     if (f.support === 'none') w.push('NOT coalesce(' + STD + ', false)');
     if (f.location === 'has') w.push('s.location_package IS NOT NULL');
     if (f.location === 'none') w.push('s.location_package IS NULL');
-    if (emails.length) { const extra = w.splice(3); if (extra.length) w.push('((' + extra.join(' AND ') + ') OR lower(s.email) = ANY(' + P(emails) + '::text[]))'); } // ruční seznam = navíc k filtru
+    // Ruční seznam = navíc k filtru. Pevné podmínky (blokovaný, odhlášený, platný e-mail
+    // a blacklist této rozesílky) musí platit i pro něj, proto se z „nebo" vyjímají.
+    const PEVNYCH = 3 + ((f.exclude && f.exclude.length) ? 1 : 0);
+    if (emails.length) { const extra = w.splice(PEVNYCH); if (extra.length) w.push('((' + extra.join(' AND ') + ') OR lower(s.email) = ANY(' + P(emails) + '::text[]))'); }
     return { sql: w.join(' AND '), p, emails };
   }
   async function countFor(filter) {
@@ -84,9 +93,12 @@ module.exports = function mountMailing(app, ctx) {
     const c = (await q('SELECT count(*)::int AS c FROM supporters s WHERE ' + sql, p)).rows[0].c;
     const sample = (await q('SELECT s.email, s.first_name, s.last_name FROM supporters s WHERE ' + sql + ' ORDER BY s.id LIMIT 8', p)).rows;
     const optout = (await q('SELECT count(*)::int AS c FROM supporters WHERE mail_optout = true')).rows[0].c;
+    // Kolik z vybraných nemá křestní jméno — ti dostanou jen „Dobrý den,".
+    // Lepší to vědět teď než až z odeslané rozesílky.
+    const bezJmena = (await q("SELECT count(*)::int AS c FROM supporters s WHERE " + sql + " AND coalesce(trim(s.first_name), '') = ''", p)).rows[0].c;
     let unknown = [];
     if (emails.length) { const found = new Set((await q('SELECT lower(email) AS e FROM supporters WHERE lower(email) = ANY($1::text[])', [emails])).rows.map((r) => r.e)); unknown = emails.filter((e) => !found.has(e)).slice(0, 50); }
-    return { count: c, sample, optout, unknown };
+    return { count: c, sample, optout, unknown, excluded: (f.exclude || []).length, noname: bezJmena };
   }
 
   // ── Odeslání jednoho e-mailu přes HolyOS (Amazon SES) ──
@@ -102,6 +114,7 @@ module.exports = function mountMailing(app, ctx) {
   };
   const uklid = (t) => String(t || '')
     .replace(/[ \t]+([,.!?])/g, '$1')      // „Dobrý den ," → „Dobrý den,"
+    .replace(/([,;:])[ \t]*[,;:]+/g, '$1') // „Dobrý den,," → „Dobrý den," (čárka zbylá po jménu)
     .replace(/[ \t]{2,}/g, ' ')            // dvojité mezery po vypuštěném jménu
     .replace(/[ \t]+$/gm, '');
   const fill = (t, u) => uklid(String(t || '')
@@ -248,7 +261,12 @@ module.exports = function mountMailing(app, ctx) {
     <label>Ruční seznam e-mailů</label><textarea name="manual" rows="4" placeholder="jeden e-mail na řádek (nebo oddělené čárkou)"${dis}>${esc(f.manual)}</textarea>
     <div class="ml-chips" style="margin-top:6px"><label><input type="checkbox" name="manual_only" value="1"${f.manual_only ? ' checked' : ''}${dis}> Poslat JEN na ruční seznam (ignorovat filtry)</label></div>
     <div class="small muted">Bez zaškrtnutí se ruční seznam přidá k filtrům. E-mail musí patřit uživateli BS2.</div>
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)"><div class="row" style="justify-content:space-between"><span class="muted">Příjemců podle výběru</span><button type="button" class="btn sec sm" id="ml-count">↻ Spočítat</button></div>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)"><div class="row" style="justify-content:space-between"><span class="muted">Příjemců podle výběru</span>
+      <span style="display:inline-flex;border-radius:8px;overflow:hidden">
+        <button type="button" class="btn sec sm" id="ml-count" style="border-radius:8px 0 0 8px;border-right:0">↻ Spočítat</button>
+        <button type="button" class="btn sec sm" id="ml-bl" style="border-radius:0 8px 8px 0" title="Vybrat kontakty, které tuhle rozesílku nedostanou">🚫 Blacklist <span id="ml-bl-n">0</span></button>
+      </span></div>
+      <input type="hidden" name="exclude" id="ml-exclude" value="${(f.exclude || []).join(',')}">
       <div class="ml-cnt" id="ml-n">${c && c.total && ro ? c.total : '–'}</div><div class="small muted" id="ml-info"></div></div>
   </div></div>
   ${ro ? '' : `<div class="row" style="margin-top:4px"><button class="btn" type="submit">💾 Uložit koncept</button></div>`}
@@ -266,7 +284,66 @@ module.exports = function mountMailing(app, ctx) {
     fetch('/admin/rozesilky/ai',{method:'POST',credentials:'same-origin',body:fd}).then(function(r){return r.json();}).then(function(j){ai.disabled=false;if(j.error){st.textContent='⚠ '+j.error;return;}
       var S=f.querySelector('[name=subject]'),B=f.querySelector('[name=body]'),N=f.querySelector('[name=name]');if(S.value&&!confirm('Přepsat stávající předmět a text návrhem od AI?')){st.textContent='';return;}
       S.value=j.subject||'';B.value=j.body||'';if(N&&!N.value)N.value=j.subject||'';st.textContent='✓ Hotovo — zkontroluj a uprav text.';}).catch(function(){ai.disabled=false;st.textContent='⚠ Nepodařilo se.';});};
-  var seq=0;function count(){if(!b)return;var my=++seq;b.disabled=true;n.style.opacity='.45';fetch('/admin/rozesilky/count',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({filter:data()})}).then(function(r){return r.json();}).then(function(j){if(my!==seq)return;b.disabled=false;n.style.opacity='';if(j.error){inf.textContent=j.error;return;}n.textContent=j.count.toLocaleString('cs-CZ');inf.innerHTML=(j.sample.length?'např. '+j.sample.map(function(s){return esc(s.email);}).join(', ')+'<br>':'')+'Vyřazených z rozesílek celkem: '+j.optout+(j.unknown.length?'<br><span style="color:#ffd866">Nenalezeno v BS2: '+j.unknown.map(esc).join(', ')+'</span>':'');}).catch(function(){b.disabled=false;n.textContent='?';});}
+  // ── Blacklist této rozesílky ────────────────────────────────────────────
+  // Vyřazení platí jen pro tuhle kampaň (uloží se k ní do filtru). Trvalé
+  // odhlášení dál řeší odkaz v e-mailu.
+  var EX=document.getElementById('ml-exclude');
+  function exList(){return (EX.value||'').split(',').map(function(x){return parseInt(x,10);}).filter(Boolean);}
+  function exSet(a){EX.value=a.join(',');var n=document.getElementById('ml-bl-n');if(n)n.textContent=a.length;count();}
+  exSet(exList());
+  var blBtn=document.getElementById('ml-bl');
+  if(blBtn)blBtn.onclick=function(){
+    var vyb={};exList().forEach(function(id){vyb[id]=true;});
+    var ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;display:flex;align-items:center;justify-content:center;padding:18px';
+    ov.innerHTML='<div style="background:var(--card,#0e1526);border:1px solid var(--border);border-radius:14px;max-width:760px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">'
+      +'<div style="padding:16px 20px;border-bottom:1px solid var(--border)"><div style="font-size:19px;font-weight:800">🚫 Blacklist rozesílky</div>'
+      +'<div class="small muted" style="margin-top:3px">Zaškrtnutí kontakti tuhle rozesílku nedostanou. Platí jen pro ni — natrvalo se nikdo neodhlašuje.</div></div>'
+      +'<div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+        +'<input id="bl-q" placeholder="Hledat jméno nebo e-mail…" style="flex:1;min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg,#070b14);color:inherit">'
+        +'<span class="small muted" id="bl-info"></span></div>'
+      +'<div id="bl-list" style="overflow:auto;padding:6px 10px;flex:1"><div class="small muted" style="padding:14px">Načítám…</div></div>'
+      +'<div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+        +'<span class="small muted" id="bl-cnt"></span>'
+        +'<span style="display:flex;gap:8px"><button type="button" class="btn sec sm" id="bl-clear">Zrušit všechna vyřazení</button>'
+        +'<button type="button" class="btn sec sm" id="bl-x">Zavřít</button>'
+        +'<button type="button" class="btn sm" id="bl-ok">Použít</button></span></div></div>';
+    document.body.appendChild(ov);
+    var L=ov.querySelector('#bl-list'),Q=ov.querySelector('#bl-q'),INF=ov.querySelector('#bl-info'),CNT=ov.querySelector('#bl-cnt');
+    function pocet(){var n=Object.keys(vyb).filter(function(k){return vyb[k];}).length;CNT.textContent='Vyřazeno '+n+' kontaktů';}
+    function radek(r){var jm=[r.first_name,r.last_name].filter(Boolean).join(' ')||r.nick||'';
+      return '<label style="display:flex;gap:10px;align-items:center;padding:7px 10px;border-radius:8px;cursor:pointer">'
+        +'<input type="checkbox" data-id="'+r.id+'"'+(vyb[r.id]?' checked':'')+'>'
+        +'<span style="flex:1;min-width:0"><span style="font-weight:600">'+esc(jm||r.email)+'</span>'
+        +(jm?'<span class="small muted"> · '+esc(r.email)+'</span>':'')+'</span></label>';}
+    var t=null;
+    function nacti(){
+      var dotaz=Q.value;
+      fetch('/admin/rozesilky/recipients',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({filter:data(),q:dotaz})}).then(function(r){return r.json();}).then(function(j){
+        if(j.error){L.innerHTML='<div class="small" style="padding:14px;color:#ff8f8f">'+esc(j.error)+'</div>';return;}
+        var ids={};var html='';
+        (j.excluded||[]).forEach(function(r){ids[r.id]=1;});
+        if((j.excluded||[]).length){html+='<div class="small muted" style="padding:8px 10px 2px">Vyřazení</div>'+j.excluded.map(radek).join('');
+          html+='<div class="small muted" style="padding:10px 10px 2px;border-top:1px solid var(--border);margin-top:6px">Ostatní příjemci</div>';}
+        var zbytek=(j.rows||[]).filter(function(r){return !ids[r.id];});
+        html+=zbytek.length?zbytek.map(radek).join(''):'<div class="small muted" style="padding:14px">Nikdo neodpovídá.</div>';
+        L.innerHTML=html;
+        INF.textContent=j.total>j.limit?('zobrazeno '+j.limit+' z '+j.total+' — zbytek najdeš hledáním'):(j.total+' příjemců');
+        pocet();});
+    }
+    Q.oninput=function(){clearTimeout(t);t=setTimeout(nacti,250);};
+    L.addEventListener('change',function(e){var c=e.target.closest('input[type=checkbox]');if(!c)return;
+      var id=parseInt(c.getAttribute('data-id'),10);if(c.checked)vyb[id]=true;else delete vyb[id];pocet();});
+    ov.querySelector('#bl-clear').onclick=function(){vyb={};L.querySelectorAll('input[type=checkbox]').forEach(function(c){c.checked=false;});pocet();};
+    var zavri=function(){document.body.removeChild(ov);};
+    ov.querySelector('#bl-x').onclick=zavri;
+    ov.onclick=function(e){if(e.target===ov)zavri();};
+    ov.querySelector('#bl-ok').onclick=function(){exSet(Object.keys(vyb).filter(function(k){return vyb[k];}).map(Number));zavri();};
+    nacti();
+  };
+
+  var seq=0;function count(){if(!b)return;var my=++seq;b.disabled=true;n.style.opacity='.45';fetch('/admin/rozesilky/count',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({filter:data()})}).then(function(r){return r.json();}).then(function(j){if(my!==seq)return;b.disabled=false;n.style.opacity='';if(j.error){inf.textContent=j.error;return;}n.textContent=j.count.toLocaleString('cs-CZ');inf.innerHTML=(j.sample.length?'např. '+j.sample.map(function(s){return esc(s.email);}).join(', ')+'<br>':'')+(j.excluded?'<span style="color:#ffd866">Blacklist této rozesílky: '+j.excluded+' kontaktů</span><br>':'')+(j.noname?'<span style="color:#ffd866">Bez křestního jména: '+j.noname+' — dostanou jen „Dobrý den,“</span><br>':'')+'Trvale odhlášených z rozesílek: '+j.optout+(j.unknown.length?'<br><span style="color:#ffd866">Nenalezeno v BS2: '+j.unknown.map(esc).join(', ')+'</span>':'');}).catch(function(){b.disabled=false;n.textContent='?';});}
   // Přepočet při každé změně filtru (zaškrtávátka/výběry hned, psaní s krátkou prodlevou)
   var tmr=null;function later(ms){clearTimeout(tmr);tmr=setTimeout(count,ms);}
   var komu=b&&b.closest('.card');if(komu&&!${ro ? 'true' : 'false'}){komu.addEventListener('change',function(e){if(e.target.matches('input,select,textarea'))later(150);});komu.addEventListener('input',function(e){if(e.target.matches('input[type=number],input:not([type]),input[type=text],textarea'))later(600);});}
@@ -281,7 +358,7 @@ module.exports = function mountMailing(app, ctx) {
     const m = req.query.msg ? `<div class="msg ${req.query.err ? 'err' : 'ok'}">${esc(req.query.msg)}</div>` : '';
     res.send(V.adminLayout('Rozesílka', 'mail', req.admin, m + editor(c, await products(), req.admin, await senders(), await filesOf(c.id)), HOLYOS_URL));
   }));
-  const filterFromBody = (b) => normFilter({ status: b.status, types: b.types, login: b.login, login_days: b.login_days, orders: b.orders, product: b.product, location: b.location, support: b.support, manual: b.manual, manual_only: b.manual_only });
+  const filterFromBody = (b) => normFilter({ status: b.status, types: b.types, login: b.login, login_days: b.login_days, orders: b.orders, product: b.product, location: b.location, support: b.support, manual: b.manual, manual_only: b.manual_only, exclude: b.exclude });
   const fields = (b) => ({ name: String(b.name || '').trim().slice(0, 120) || 'Rozesílka', subject: String(b.subject || '').trim().slice(0, 200), body: String(b.body || '').slice(0, 20000), link: /^https:\/\//.test(String(b.link || '').trim()) ? String(b.link).trim().slice(0, 500) : null, link_label: String(b.link_label || '').trim().slice(0, 80) || null, sender: /^[^@\s<>]+@[^@\s<>]+\.[a-z]{2,}$/i.test(String(b.sender || '').trim()) ? String(b.sender).trim().slice(0, 160) : null });
   const multi = upload.array('files', 5);
   // Uloží nové přílohy / odebere zaškrtnuté; vrací chybovou hlášku nebo ''
@@ -373,6 +450,28 @@ module.exports = function mountMailing(app, ctx) {
       await log(req.admin, 'mail_campaign_ai', { files: files.length });
       res.json({ subject: String(o.subject).slice(0, 200), body: String(o.body).slice(0, 20000) });
     } catch (e) { res.status(502).json({ error: 'AI: ' + e.message }); }
+  }));
+  // Seznam příjemců pro okno „Blacklist" — podle stejného filtru jako počítadlo,
+  // ale BEZ vyřazení (ty vrátíme zvlášť, aby šly odškrtnout zpátky).
+  app.post('/admin/rozesilky/recipients', requireAdmin, wrap(async (req, res) => {
+    try {
+      const b = req.body || {};
+      const f = normFilter(Object.assign({}, b.filter, { exclude: [] }));
+      const { sql, p } = whereFor(f);
+      const hledat = String(b.q || '').trim().toLowerCase().slice(0, 100);
+      const pp = p.slice(); let w = sql;
+      if (hledat) { pp.push('%' + hledat + '%'); w += ' AND (lower(s.email) LIKE $' + pp.length + ' OR lower(coalesce(s.first_name,\'\') || \' \' || coalesce(s.last_name,\'\') || \' \' || coalesce(s.nick,\'\')) LIKE $' + pp.length + ')'; }
+      const LIMIT = 500;
+      const celkem = (await q('SELECT count(*)::int AS c FROM supporters s WHERE ' + w, pp)).rows[0].c;
+      const rows = (await q('SELECT s.id, s.email, s.first_name, s.last_name, s.nick FROM supporters s WHERE ' + w
+        + ' ORDER BY lower(coalesce(s.last_name, s.email)) LIMIT ' + LIMIT, pp)).rows;
+      // Už vyřazené ukážeme vždy, i kdyby je hledání nenašlo — jinak by nešly vrátit zpět.
+      const vyrazeno = normFilter(b.filter).exclude;
+      const vyrazeniRadky = vyrazeno.length
+        ? (await q('SELECT id, email, first_name, last_name, nick FROM supporters WHERE id = ANY($1::int[]) ORDER BY lower(coalesce(last_name, email))', [vyrazeno])).rows
+        : [];
+      res.json({ total: celkem, limit: LIMIT, rows, excluded: vyrazeniRadky });
+    } catch (e) { res.status(400).json({ error: e.message }); }
   }));
   app.post('/admin/rozesilky/count', requireAdmin, wrap(async (req, res) => { try { res.json(await countFor((req.body || {}).filter)); } catch (e) { res.status(400).json({ error: e.message }); } }));
   app.get('/admin/rozesilky/:id(\\d+)/status', requireAdmin, wrap(async (req, res) => { const c = await load(req.params.id); res.set('Cache-Control', 'no-store').json(c ? { status: c.status, total: c.total, sent: c.sent, failed: c.failed, last_error: c.last_error } : {}); }));
