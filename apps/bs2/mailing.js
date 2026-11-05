@@ -313,7 +313,8 @@ module.exports = function mountMailing(app, ctx) {
     var vyb={};exList().forEach(function(id){vyb[id]=true;});
     var ov=document.createElement('div');
     ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;display:flex;align-items:center;justify-content:center;padding:18px';
-    ov.innerHTML='<div style="background:#0e1526;border:1px solid rgba(120,160,255,.28);border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.6);max-width:780px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden">'
+    ov.innerHTML='<style>.bl-row:hover{background:rgba(120,160,255,.08)}</style>'
+      +'<div style="background:#0e1526;border:1px solid rgba(120,160,255,.28);border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.6);max-width:780px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden">'
       +'<div style="padding:16px 20px;border-bottom:1px solid rgba(120,160,255,.2);background:#0b1120"><div style="font-size:19px;font-weight:800">🚫 Blacklist rozesílky</div>'
       +'<div class="small muted" style="margin-top:3px">Zaškrtnuté kontakty tuhle rozesílku nedostanou. Platí jen pro ni — natrvalo se nikdo neodhlašuje.</div></div>'
       +'<div style="padding:12px 20px;border-bottom:1px solid rgba(120,160,255,.2);background:#0b1120;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
@@ -335,7 +336,7 @@ module.exports = function mountMailing(app, ctx) {
       +'<span></span><span>Jméno</span><span>Příjmení</span><span>E-mail</span></div>';}
     function radek(r){
       var prazdne='<span class="muted" style="opacity:.5">—</span>';
-      return '<label style="'+GRID+';border-radius:8px;cursor:pointer;border-bottom:1px solid rgba(120,160,255,.07)" onmouseover="this.style.background=\'rgba(120,160,255,.06)\'" onmouseout="this.style.background=\'\'">'
+      return '<label class="bl-row" style="'+GRID+';border-radius:8px;cursor:pointer;border-bottom:1px solid rgba(120,160,255,.07)">'
         +'<input type="checkbox" data-id="'+r.id+'"'+(vyb[r.id]?' checked':'')+' style="margin:0">'
         +'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(r.first_name?esc(r.first_name):prazdne)+'</span>'
         +'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">'+(r.last_name?esc(r.last_name):(r.nick?'<span class="muted">'+esc(r.nick)+'</span>':prazdne))+'</span>'
