@@ -45,8 +45,22 @@ async function notifyMeetingBooked(prisma, { leadId, reservationId, startsAt, mo
   try {
     const lead = leadId ? await prisma.compounderLead.findUnique({
       where: { id: leadId },
-      select: { id: true, name: true, phone: true, email: true, owner_person_id: true, is_test: true },
+      select: { id: true, name: true, phone: true, email: true, owner_person_id: true, is_test: true, source: true },
     }).catch(() => null) : null;
+
+    // Kdo schůzku domluvil — stejné pravidlo jako statistiky schůzek (Laundromats admin → Statistiky):
+    // obchodník = rezervace s booked_by_person_id, reklama = zákazník sám a kontakt přišel z reklamy, jinak sám z webu.
+    let origin = '';
+    try {
+      const resv = reservationId ? await prisma.meetingReservation.findUnique({ where: { id: reservationId }, select: { booked_by_person_id: true } }) : null;
+      if (resv && resv.booked_by_person_id) {
+        const bp = await prisma.person.findUnique({ where: { id: resv.booked_by_person_id }, select: { first_name: true, last_name: true } });
+        origin = '👤 domluvil ' + (bp ? [bp.first_name, bp.last_name].filter(Boolean).join(' ') : 'obchodník');
+      } else if (lead && lead.source && /(facebook|fb_|meta|google|gads|linkedin|instagram|tiktok|_ads$|^ads)/i.test(lead.source)) {
+        const src = /google|gads/i.test(lead.source) ? 'Google' : /linkedin/i.test(lead.source) ? 'LinkedIn' : /tiktok/i.test(lead.source) ? 'TikTok' : /instagram/i.test(lead.source) ? 'Instagram' : 'FB';
+        origin = '📣 z reklamy (' + src + ') — vybral sám';
+      } else origin = '🌐 vybral sám (web)';
+    } catch (e) { origin = ''; }
 
     const ids = new Set(await alwaysPersonIds(prisma));
     if (lead && lead.owner_person_id) ids.add(lead.owner_person_id);
@@ -58,7 +72,7 @@ async function notifyMeetingBooked(prisma, { leadId, reservationId, startsAt, mo
     if (mode && MODE_LABEL[mode]) parts.push(MODE_LABEL[mode]);
     if (financingPath && PATH_LABEL[financingPath]) parts.push(PATH_LABEL[financingPath]);
     if (lead && lead.phone) parts.push(lead.phone);
-    const body = parts.join(' · ');
+    const body = parts.join(' · ') + (origin ? '\n' + origin : '');
     const link = '/modules/prodejni-objednavky/index.html?gs_tab=terminy';
 
     const persons = await prisma.person.findMany({ where: { id: { in: Array.from(ids) } }, select: { id: true, user_id: true } });
