@@ -156,6 +156,14 @@ const webhook = [express.raw({ type: '*/*', limit: '1mb' }), async (req, res) =>
       })
     ]);
     console.log('[game] zaplaceno:', pu.qty + '× ' + pu.kind, '· hráč', pu.player_id);
+    // Majitelům do Velína — až tady, po ověřeném podpisu, takže jen na skutečné platby.
+    try {
+      const hrac = await prisma.gamePlayer.findUnique({
+        where: { id: pu.player_id }, select: { id: true, nick: true, company: true }
+      });
+      const polozka = await acct._item(pu.kind);
+      require('../services/game/notify').purchasePaid(prisma, pu, hrac, polozka && polozka.name);
+    } catch (e) { console.warn('[game] notifikace o nákupu:', e.message); }
   } catch (e) { console.error('[game] webhook:', e.message); }
 }];
 

@@ -200,6 +200,8 @@ router.post('/account/register', async (req, res, next) => {
     } catch (e) { console.warn('[game] uvítací karty:', e.message); }
     setCookie(res, sign(p));
     res.json({ ok: true, player: await pub(p) });
+    // Majitelé to mají vědět hned — do Velína i na zvonek. Nečekáme na to.
+    require('../services/game/notify').newPlayer(prisma, p);
   } catch (e) {
     if (e && e.code === 'P2002') return res.status(409).json({ error: 'Tenhle nick už někdo má. Vymysli jiný.' });
     next(e);
