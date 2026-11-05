@@ -521,14 +521,14 @@ router.post('/bs2/bulk-mail', express.json({ limit: '14mb' }), async (req, res, 
     const hostOk = (u) => { try { const h = new URL(u).host.replace(/^www\./, '').toLowerCase(); return /^https:\/\//.test(u) && /(^|\.)(bestseries2\.cz|bestseries\.cz|laundromats\.eu|pradlomaty\.info|compounder\.world)$/.test(h); } catch (e) { return false; } };
     const link = b.link && hostOk(String(b.link)) ? String(b.link) : undefined;
     const unsub = b.unsubUrl && hostOk(String(b.unsubUrl)) ? String(b.unsubUrl) : null;
-    const body = String(b.body || '').slice(0, 20000) + (unsub ? '\n\n—\nNechcete už od nás dostávat tyto e-maily? Odhlásit se můžete zde: ' + unsub : '');
+    const body = String(b.body || '').slice(0, 20000); // odhlášení = malý odkaz v patičce (sendMail, unsubscribe: <url>)
     // Přílohy (base64) — max 7 MB dohromady
     let attachments; let total = 0;
     if (Array.isArray(b.attachments) && b.attachments.length) {
       attachments = b.attachments.slice(0, 5).map((x) => { const content = Buffer.from(String(x.data || ''), 'base64'); total += content.length; return { filename: String(x.filename || 'priloha').replace(/[\r\n"\\/]/g, '_').slice(0, 150), content, contentType: String(x.contentType || 'application/octet-stream').slice(0, 100) }; }).filter((x) => x.content.length);
       if (total > 7 * 1024 * 1024) return res.status(400).json({ error: 'Přílohy jsou větší než 7 MB.' });
     }
-    const r = await require('../services/email').sendMail({ to, from, fromName: String(b.fromName || process.env.BS2_BULK_FROM_NAME || 'Best Series').slice(0, 80), brand: 'bs2', attachments, replyTo: process.env.BS2_BULK_REPLY_TO || 'info@bestseries.cz', subject: String(b.subject || 'Best Series').slice(0, 200), body, link, linkLabel: link && b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined, unsubscribe: false });
+    const r = await require('../services/email').sendMail({ to, from, fromName: String(b.fromName || process.env.BS2_BULK_FROM_NAME || 'Best Series').slice(0, 80), brand: 'bs2', attachments, replyTo: process.env.BS2_BULK_REPLY_TO || 'info@bestseries.cz', subject: String(b.subject || 'Best Series').slice(0, 200), body, link, linkLabel: link && b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined, unsubscribe: unsub || false });
     if (!r || !r.sent) return res.status(502).json({ error: (r && (r.error || r.skipped)) || 'E-mail se nepodařilo odeslat' });
     res.json({ ok: true, via: r.via || null, messageId: r.messageId || null });
   } catch (err) { next(err); }
