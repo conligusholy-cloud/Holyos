@@ -809,7 +809,10 @@ function stockValue() {
 function assetsTotal() { return investedTotal() + stockValue(); }
 // Na nákupy se nesmí utratit úplně všechno — jinak by hráč zůstal bez hotovosti,
 // bez příjmu a bez možnosti cokoli prověřit.
-function canFinance(amount) {
+// chci = kolik chce hráč zaplatit ze svého. Když se nezadá, vezme se rozumné
+// výchozí: nejdřív to, co přesahuje provozní rezervu, a doplatek do nutného
+// minima, když na úvěr nezbývá.
+function canFinance(amount, chci) {
   var p = PROFILES[S.profile];
   var ltvRoom = Math.max(0, p.ltv * (assetsTotal() + amount) - S.loan);
   var canBorrow = Math.min(ltvRoom, S.bank);
@@ -818,7 +821,11 @@ function canFinance(amount) {
   // s penězi v kapse a hláškou, že mu chybí.
   var zRezervy = Math.min(Math.max(0, S.cash - CASH_RESERVE), amount);
   var musiZKapsy = Math.max(0, amount - canBorrow);
-  var own = Math.min(S.cash, Math.max(zRezervy, musiZKapsy));
+  // Zaokrouhlíme, ať v políčku nesvítí 159796,95000000007.
+  var minOwn = Math.ceil(Math.min(S.cash, musiZKapsy));
+  var maxOwn = Math.floor(Math.min(S.cash, amount));
+  var vychozi = Math.min(S.cash, Math.max(zRezervy, musiZKapsy));
+  var own = chci == null ? vychozi : Math.max(minOwn, Math.min(maxOwn, Math.round(chci)));
   var need = Math.max(0, amount - own);
   var ok = own <= S.cash + 0.5 && need <= canBorrow + 0.5;
   // Důvod, proč to nejde — ať hráč nehádá, co má dělat.
@@ -833,7 +840,8 @@ function canFinance(amount) {
     } else duvod = 'Chybí ti ' + kcFull(chybi) + '.';
   }
   return { amount: amount, own: own, need: need, ltvRoom: ltvRoom, canBorrow: canBorrow,
-    cash: S.cash, ok: ok, duvod: duvod, dotkne_rezervy: own > zRezervy };
+    cash: S.cash, minOwn: minOwn, maxOwn: maxOwn, ok: ok, duvod: duvod,
+    dotkne_rezervy: own > zRezervy };
 }
 function doFinance(f) { S.cash -= f.own; S.bank -= f.need; S.loan += f.need; }
 // Provozní úvěr: hotovost z banky na běžné výdaje. Nepodléhá úvěrovému stropu,
@@ -844,6 +852,13 @@ function operatingRoom() {
 }
 function cashDrawMax() { return Math.max(0, Math.min(S.bank, operatingRoom(), OPERATING_MAX)); }
 // Podil z ceny v procentech - u akontace a uveru at je videt pomer, ne jen cislo.
+// Kolik chce hráč dát ze svého u právě otevřeného panelu. Null = nech to na hře.
+var FIN_OWN = null;
+function bindFinance(znovu) {
+  var el = $('fin-own');
+  if (!el) return;
+  el.onchange = function () { FIN_OWN = Number(el.value) || 0; znovu(); };
+}
 function pct(share) { return String(Math.round(share * 100)) + ' %'; }
 function pctNote(part, total) {
   if (!total || part == null) return '';
@@ -853,8 +868,15 @@ function pctNote(part, total) {
 }
 function financeRows(f) {
   var p = PROFILES[S.profile];
-  return '<div class="kv"><span>Cena</span><b>' + kcFull(f.amount) + '</b></div>'
-    + '<div class="kv"><span>Z vlastní hotovosti (akontace)</span><b>' + kcFull(f.own) + pctNote(f.own, f.amount) + '</b></div>'
+  var lze = f.maxOwn > f.minOwn;   // je vůbec co nastavovat?
+  return '<div class="kv"><span>Tvoje hotovost</span><b>' + kcFull(f.cash) + '</b></div>'
+    + '<div class="kv"><span>Cena</span><b>' + kcFull(f.amount) + '</b></div>'
+    + (lze
+      ? '<label class="fld"><span>Kolik dáš ze svého (akontace)' + pctNote(f.own, f.amount) + '</span>'
+        + '<input id="fin-own" class="inp" type="number" step="1000" min="' + f.minOwn + '" max="' + f.maxOwn + '" value="' + Math.round(f.own) + '"></label>'
+        + '<p class="fine">' + (f.minOwn > 0 ? 'Nejmíň ' + kcFull(f.minOwn) + ' musíš dát ze svého, ' : 'Můžeš dát od nuly ')
+        + 'nejvíc ' + kcFull(f.maxOwn) + '. Zbytek doplatí banka.</p>'
+      : '<div class="kv"><span>Z vlastní hotovosti (akontace)</span><b>' + kcFull(f.own) + pctNote(f.own, f.amount) + '</b></div>')
     + '<div class="kv"><span>Doplatí banka (úvěr)</span><b class="' + (f.need > 0 ? 'warn' : '') + '">' + kcFull(f.need) + pctNote(f.need, f.amount) + '</b></div>'
     + (f.need > 0 ? '<div class="kv"><span>Úvěrový strop profilu</span><b>' + kcFull(f.ltvRoom) + '</b></div>'
       + '<div class="kv"><span>Volný rámec v bance</span><b>' + kcFull(S.bank) + '</b></div>'
@@ -897,13 +919,15 @@ function paintShop() {
     b.onclick = function () { buySheet(b.getAttribute('data-buy')); };
   });
 }
-function buySheet(modelKey) {
-  var m = MODELS[modelKey], f = canFinance(machinePrice(m));
+function buySheet(modelKey, drz) {
+  if (!drz) FIN_OWN = null;
+  var m = MODELS[modelKey], f = canFinance(machinePrice(m), FIN_OWN);
   sheet('<h3>Koupit ' + m.name + '</h3>'
     + '<p class="muted small">Stroj ti přivezou za ' + DELIVERY_MONTHS + ' herní měsíce, tedy za jeden skutečný den. Do té doby je na cestě, pak čeká na skladě, než mu najdeš místo.</p>'
     + financeRows(f)
     + '<button class="btn big" id="do-buy"' + (f.ok ? '' : ' disabled') + '>Objednat</button>'
     + (f.ok ? '' : '<p class="fine err">' + esc(f.duvod || '') + ' Počkej, až síť vydělá, nebo splať část úvěru.</p>'));
+  bindFinance(function () { buySheet(modelKey, true); });
   var b = $('do-buy');
   if (b) b.onclick = function () {
     doFinance(f);
@@ -914,8 +938,9 @@ function buySheet(modelKey) {
 }
 
 // ─── Panel: instalace stroje ze skladu na místo ──────────────────────────────
-function installSheet(sp, areaId, modelKey) {
-  var m = MODELS[modelKey], e = economics(sp, modelKey), f = canFinance(e.conn);
+function installSheet(sp, areaId, modelKey, drz) {
+  if (!drz) FIN_OWN = null;
+  var m = MODELS[modelKey], e = economics(sp, modelKey), f = canFinance(e.conn, FIN_OWN);
   sheet('<h3>Postavit ' + m.name + '</h3>'
     + '<p class="muted small">' + esc(sp.name) + ' — teď se platí přípojky (voda, odpad, elektřina). Stroj máš skladem, nájem domluvený.</p>'
     + financeRows(f)
@@ -925,6 +950,7 @@ function installSheet(sp, areaId, modelKey) {
     + (f.ok ? (f.dotkne_rezervy ? '<p class="fine warn">Sáhneš i do provozní rezervy — po stavbě ti zbude ' + kcFull(S.cash - f.own) + '.</p>' : '')
         : '<p class="fine err">' + esc(f.duvod || '') + '</p>'
           + '<button class="btn sec" id="go-bank" style="width:100%;margin-top:8px">Zkusit úvěr v bance</button>'));
+  bindFinance(function () { installSheet(sp, areaId, modelKey, true); });
   var gb = $('go-bank');
   if (gb) gb.onclick = function () { closeSheet(); switchTab('bank'); uverSheet(); };
   var b = $('do-build');
