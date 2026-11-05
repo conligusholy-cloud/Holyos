@@ -90,7 +90,24 @@ module.exports = function mountMailing(app, ctx) {
   }
 
   // ── Odeslání jednoho e-mailu přes HolyOS (Amazon SES) ──
-  const fill = (t, u) => String(t || '').replace(/\{jmeno\}/g, (u && (u.first_name || u.nick)) || '').replace(/\{prijmeni\}/g, (u && u.last_name) || '').replace(/\{nick\}/g, (u && u.nick) || '');
+  // Oslovení skloňujeme do 5. pádu („Dobrý den Tomáši,"). Přezdívka se do {jmeno}
+  // NEDOSAZUJE — z „Dobrý den tomapXxER," je na první pohled strojový e-mail.
+  // Když křestní jméno neznáme, zůstane prostě „Dobrý den," (osiřelé mezery a čárky
+  // za prázdným jménem se uklidí níž).
+  const VOC = require('./vocative');
+  const osloveni = (u) => {
+    const f = String((u && u.first_name) || '').trim();
+    if (!f) return '';
+    try { return VOC.vocFirst(f, VOC.isFemale(f, (u && u.last_name) || '')) || f; } catch (e) { return f; }
+  };
+  const uklid = (t) => String(t || '')
+    .replace(/[ \t]+([,.!?])/g, '$1')      // „Dobrý den ," → „Dobrý den,"
+    .replace(/[ \t]{2,}/g, ' ')            // dvojité mezery po vypuštěném jménu
+    .replace(/[ \t]+$/gm, '');
+  const fill = (t, u) => uklid(String(t || '')
+    .replace(/\{jmeno\}/g, osloveni(u))
+    .replace(/\{prijmeni\}/g, (u && u.last_name) || '')
+    .replace(/\{nick\}/g, (u && u.nick) || ''));
   async function sendOne(c, u) {
     const attachments = c.id ? await filesOf(c.id, true) : [];
     const r = await fetch(HOLYOS_URL + '/api/auth/bs2/bulk-mail', { method: 'POST', headers: { Authorization: 'Bearer ' + svcToken(), 'Content-Type': 'application/json' },
@@ -212,7 +229,7 @@ module.exports = function mountMailing(app, ctx) {
     <label>Název rozesílky (jen pro vás)</label><input name="name" required maxlength="120" value="${esc(c ? c.name : '')}"${dis}>
     <label>Předmět</label><input name="subject" required maxlength="200" value="${esc(c ? c.subject : '')}"${dis}>
     <label>Text e-mailu</label><textarea name="body" rows="12" required maxlength="20000"${dis}>${esc(c ? c.body : 'Dobrý den {jmeno},\n\n')}</textarea>
-    <div class="small muted">Zástupné znaky: <code>{jmeno}</code> <code>{prijmeni}</code> <code>{nick}</code>. Prázdný řádek = nový odstavec. Odkaz na odhlášení se přidá na konec automaticky.</div>
+    <div class="small muted">Zástupné znaky: <code>{jmeno}</code> (křestní jméno v 5. pádě — „Tomáši“; komu jméno neznáme, zůstane jen „Dobrý den,“) <code>{prijmeni}</code> <code>{nick}</code>. Prázdný řádek = nový odstavec. Odkaz na odhlášení se přidá na konec automaticky.</div>
     <label>Tlačítko — odkaz (nepovinné)</label><input name="link" type="url" placeholder="https://www.bestseries2.cz/…" value="${esc(c ? c.link || '' : '')}"${dis}>
     <label>Tlačítko — text</label><input name="link_label" maxlength="80" placeholder="např. Otevřít Best Series" value="${esc(c ? c.link_label || '' : '')}"${dis}>
     <div class="small muted">Odkaz smí vést na bestseries2.cz, bestseries.cz, laundromats.eu, pradlomaty.info nebo compounder.world.</div>
@@ -290,7 +307,7 @@ module.exports = function mountMailing(app, ctx) {
       const to = String(b.test_to || '').trim().toLowerCase();
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.redirect('/admin/rozesilky/' + cid + '?err=1&msg=' + encodeURIComponent('Uloženo, ale pro test zadej platný e-mail.'));
       const c = await load(cid);
-      const u = (await q('SELECT id, email, first_name, last_name, nick FROM supporters WHERE lower(email)=$1', [to])).rows[0] || { id: null, email: to, first_name: (req.admin.name || '').split(' ')[0], last_name: '', nick: '' };
+      const u = (await q('SELECT id, email, first_name, last_name, nick FROM supporters WHERE lower(email)=$1', [to])).rows[0] || { id: null, email: to, first_name: (req.admin.name || '').split(' ')[0], last_name: (req.admin.name || '').split(' ').slice(1).join(' '), nick: '' };
       try { const r = await sendOne(Object.assign({}, c, { subject: '[TEST] ' + c.subject }), Object.assign({}, u, { email: to })); await log(req.admin, 'mail_campaign_test', { id: cid, to });
         return res.redirect('/admin/rozesilky/' + cid + '?msg=' + encodeURIComponent('Uloženo a test odeslán na ' + to + (r.via ? ' (' + r.via + ')' : '') + '.' + (fmsg ? ' ' + fmsg : '')));
       } catch (e) { return res.redirect('/admin/rozesilky/' + cid + '?err=1&msg=' + encodeURIComponent('Uloženo, ale test se nepodařilo odeslat: ' + e.message)); }
@@ -362,7 +379,7 @@ module.exports = function mountMailing(app, ctx) {
   app.post('/admin/rozesilky/:id(\\d+)/test', requireAdmin, wrap(async (req, res) => {
     const c = await load(req.params.id); const to = String((req.body || {}).to || '').trim().toLowerCase();
     if (!c || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.redirect('/admin/rozesilky/' + req.params.id + '?err=1&msg=' + encodeURIComponent('Zadej platný e-mail.'));
-    const u = (await q('SELECT id, email, first_name, last_name, nick FROM supporters WHERE lower(email)=$1', [to])).rows[0] || { id: null, email: to, first_name: (req.admin.name || '').split(' ')[0], last_name: '', nick: '' };
+    const u = (await q('SELECT id, email, first_name, last_name, nick FROM supporters WHERE lower(email)=$1', [to])).rows[0] || { id: null, email: to, first_name: (req.admin.name || '').split(' ')[0], last_name: (req.admin.name || '').split(' ').slice(1).join(' '), nick: '' };
     try { const r = await sendOne(Object.assign({}, c, { subject: '[TEST] ' + c.subject }), Object.assign({}, u, { email: to })); await log(req.admin, 'mail_campaign_test', { id: c.id, to });
       res.redirect('/admin/rozesilky/' + c.id + '?msg=' + encodeURIComponent('Test odeslán na ' + to + (r.via ? ' (' + r.via + ')' : '') + '.'));
     } catch (e) { res.redirect('/admin/rozesilky/' + c.id + '?err=1&msg=' + encodeURIComponent('Test se nepodařilo odeslat: ' + e.message)); }
