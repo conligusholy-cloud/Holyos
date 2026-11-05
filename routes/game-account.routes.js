@@ -27,6 +27,8 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/;
 const NICK_RE = /^[\p{L}\p{N}_.-]{3,24}$/u;
 const FIRMA_RE = /^[\p{L}\p{N} .,&'"()+-]{2,60}$/u;
 const firmaNebo = (f, nick) => (f && FIRMA_RE.test(f) ? f : nick + ' s.r.o.');
+// Znak je jen trojice čísel „tvar-paleta-symbol". Obrázek z nich složí prohlížeč.
+const ZNAK_RE = /^[0-9]{1,2}-[0-9]{1,2}-[0-9]{1,2}$/;
 const ipOf = (req) => String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.ip || '').trim();
 
 // ─── Limiter (v paměti, stejně jako ve zbytku hry) ───────────────────────────
@@ -166,7 +168,8 @@ async function pub(p) {
   CARD_KINDS.concat(CASH_KINDS).concat([CASH_CUSTOM]).forEach((k) => { counts[k] = 0; });
   cards.forEach((c) => { if (counts[c.kind] != null) counts[c.kind]++; });
   return {
-    nick: p.nick, company: p.company || (p.nick + ' s.r.o.'), email: p.email || null,
+    nick: p.nick, company: p.company || (p.nick + ' s.r.o.'), emblem: p.emblem || null,
+    email: p.email || null,
     first_name: p.first_name || null, last_name: p.last_name || null,
     has_details: !!(p.email && p.first_name && p.last_name),
     cards: counts, state_at: p.state_at
@@ -263,6 +266,17 @@ router.post('/account/reset', requirePlayer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// POST /account/emblem { emblem } — znak firmy
+router.post('/account/emblem', requirePlayer, async (req, res, next) => {
+  try {
+    const e = s((req.body || {}).emblem, 16);
+    if (e && !ZNAK_RE.test(e)) return res.status(400).json({ error: 'Neplatný znak.' });
+    const p = await prisma.gamePlayer.update({ where: { id: req.player.id }, data: { emblem: e || null } });
+    dropZeb();
+    res.json({ ok: true, player: await pub(p) });
+  } catch (e) { next(e); }
+});
+
 // POST /account/company { company } — přejmenování firmy
 router.post('/account/company', requirePlayer, async (req, res, next) => {
   try {
@@ -348,8 +362,8 @@ const ZEB_TOP = 25;
 // projevilo všude najednou a nemuselo se přepisovat do každé řádky.
 async function firmyMapa() {
   const m = {};
-  (await prisma.gamePlayer.findMany({ select: { id: true, company: true, nick: true } }))
-    .forEach((h) => { m[h.id] = h.company || (h.nick + ' s.r.o.'); });
+  (await prisma.gamePlayer.findMany({ select: { id: true, company: true, nick: true, emblem: true } }))
+    .forEach((h) => { m[h.id] = { firma: h.company || (h.nick + ' s.r.o.'), znak: h.emblem || null }; });
   return m;
 }
 let _zeb = { at: 0, data: null };
@@ -361,12 +375,14 @@ async function zebricky() {
     prisma.gamePlayer.findMany({
       where: { disabled: false, state: { not: null } },
       orderBy: { state_at: 'desc' }, take: 500,
-      select: { id: true, nick: true, company: true, state: true },
+      select: { id: true, nick: true, company: true, emblem: true, state: true },
     }),
   ]);
   // Firmy doplníme k nickům z míst — v žebříčku chceme vidět, kdo je kdo.
   const firmy = await firmyMapa();
-  const poMistech = mista.map((m) => ({ id: m.player_id, nick: m.nick, firma: firmy[m.player_id], hodnota: m._count._all }))
+  const poMistech = mista.map((m) => ({ id: m.player_id, nick: m.nick,
+    firma: firmy[m.player_id] && firmy[m.player_id].firma, znak: firmy[m.player_id] && firmy[m.player_id].znak,
+    hodnota: m._count._all }))
     .sort((a, b) => b.hodnota - a.hodnota);
 
   const zisk = [], pozvanky = [];
@@ -375,8 +391,8 @@ async function zebricky() {
     const units = Array.isArray(st.units) ? st.units : [];
     const mesicne = units.reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0);
     const fi = h.company || (h.nick + ' s.r.o.');
-    if (mesicne > 0) zisk.push({ id: h.id, nick: h.nick, firma: fi, hodnota: Math.round(mesicne) });
-    if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, firma: fi, hodnota: st.refs });
+    if (mesicne > 0) zisk.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, hodnota: Math.round(mesicne) });
+    if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, hodnota: st.refs });
   });
   zisk.sort((a, b) => b.hodnota - a.hodnota);
   pozvanky.sort((a, b) => b.hodnota - a.hodnota);
@@ -394,7 +410,8 @@ router.get('/leaderboard', async (req, res, next) => {
     const p = await currentPlayer(req);
     const z = await zebricky();
     const orez = (l) => l.slice(0, ZEB_TOP).map((x, i) => ({ poradi: i + 1, nick: x.nick,
-      firma: x.firma || (x.nick + ' s.r.o.'), hodnota: x.hodnota, ja: !!(p && x.id === p.id) }));
+      firma: x.firma || (x.nick + ' s.r.o.'), znak: x.znak || null,
+      hodnota: x.hodnota, ja: !!(p && x.id === p.id) }));
     res.json({ ok: true,
       pradlomaty: orez(z.pradlomaty), zisk: orez(z.zisk), pozvanky: orez(z.pozvanky),
       ja: p ? { pradlomaty: moje(z.pradlomaty, p.id), zisk: moje(z.zisk, p.id), pozvanky: moje(z.pozvanky, p.id) } : null,
@@ -414,7 +431,8 @@ const BID_FEE = 5000;       // co stojí neúspěšné vyjednávání (informati
 
 const claimPub = (c, me, firmy) => ({
   spot_id: c.spot_id, area_key: c.area_key, nick: c.nick,
-  firma: (firmy && firmy[c.player_id]) || (c.nick + ' s.r.o.'),
+  firma: (firmy && firmy[c.player_id] && firmy[c.player_id].firma) || (c.nick + ' s.r.o.'),
+  znak: (firmy && firmy[c.player_id] && firmy[c.player_id].znak) || null,
   model: c.model, mine: c.player_id === me,
   takeovers: c.takeovers, name: c.name, lat: c.lat, lon: c.lon,
   // Nájem říkáme jen majiteli. Ostatní přihazují naslepo — v tom je to riziko.

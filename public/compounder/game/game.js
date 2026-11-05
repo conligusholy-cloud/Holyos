@@ -595,7 +595,7 @@ function drawMap() {
 function cizi(c) {
   var mesto = (c.area_key || '').replace(/(^|\s)\S/g, function (x) { return x.toUpperCase(); });
   sheet('<h3>' + esc(c.name || 'Cizí prádlomat') + '</h3>'
-    + '<p class="muted small">Tohle místo drží <b>' + esc(c.firma || c.nick) + '</b> (' + esc(c.nick) + ') · '
+    + '<p class="muted small">' + (c.znak ? znakSvg(c.znak, 20) + ' ' : '') + 'Tohle místo drží <b>' + esc(c.firma || c.nick) + '</b> (' + esc(c.nick) + ') · '
     + esc((MODELS[c.model] || {}).name || c.model)
     + (c.takeovers ? ' · už ' + c.takeovers + '× změnilo majitele' : '') + '</p>'
     + '<p class="muted small">' + (mesto ? esc(mesto) + ' jsi neprozkoumal' : 'Tohle město jsi neprozkoumal')
@@ -1039,7 +1039,7 @@ function rivalSheet(sp, areaId, c) {
   var e = economics(sp, free[0] || 'flex');
   var odhad = rentOf(sp);
   sheet('<h3>' + esc(sp.name) + '</h3>'
-    + '<p class="muted small">Tohle místo drží <b>' + esc(c.firma || c.nick) + '</b> (' + esc(c.nick) + ') · '
+    + '<p class="muted small">' + (c.znak ? znakSvg(c.znak, 20) + ' ' : '') + 'Tohle místo drží <b>' + esc(c.firma || c.nick) + '</b> (' + esc(c.nick) + ') · '
     + esc((MODELS[c.model] || {}).name || c.model)
     + (c.takeovers ? ' · už ' + c.takeovers + '× změnilo majitele' : '') + '</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(sp.score) + '</div>'
@@ -1242,6 +1242,7 @@ function paintZeb() {
       ? '<div class="zeb">' + list.map(function (x) {
           return '<div class="zeb-row' + (x.ja ? ' ja' : '') + '">'
             + '<i class="poradi' + (x.poradi <= 3 ? ' medaile m' + x.poradi : '') + '">' + x.poradi + '</i>'
+            + (x.znak ? znakSvg(x.znak, 26) : '<i class="znak-mezera"></i>')
             + '<span class="nick">' + esc(x.firma || x.nick)
             + '<i>' + esc(x.nick) + '</i></span>'
             + '<b>' + popis.jed(x.hodnota) + '</b></div>';
@@ -1286,10 +1287,10 @@ function paintBank() {
     + kcFull(urokMesicne()) + '</b></div>'
     + '<div class="kv"><span>Zaplaceno na úrocích</span><b>' + kcFull(S.stats.interest) + '</b></div>'
     + '<div class="kv"><span>Ještě si můžeš půjčit</span><b>' + kcFull(Math.min(room, S.bank)) + '</b></div>'
-    + (cashDrawMax() >= 1000
+    + (uverNabidka(null).max >= 1000
         ? '<button class="btn sec big" id="do-ask">Požádat o úvěr</button>'
           + '<p class="fine">Banka se podívá, co máš, a řekne si podmínky. Než kývneš, uvidíš všechno dopředu.</p>'
-        : '<p class="fine">Banka ti teď nepůjčí — nemáš dost majetku v zástavě ani volný rámec.</p>')
+        : '<p class="fine">' + uverDuvod() + '</p>')
     + (S.loan > 0 && S.cash >= 1 ? '<button class="btn big" id="do-repay">Splatit ' + kcFull(Math.min(S.cash, S.loan)) + '</button>' : '')
     + (S.loan > 0 && S.cash < 1 ? '<p class="fine">Splácet začneš, až síť něco vydělá.</p>' : '')
     + '</div>'
@@ -1304,18 +1305,163 @@ function paintBank() {
     save(); paint(); syncState(true); toast('Splaceno ' + kcFull(pay) + '.', 'ok');
   };
 }
+// Klepnutí na hotovost v hlavičce. Když peníze dojdou, hráč nemá hledat,
+// kde se berou — tady je rovnou vidí všechny cesty, jak si přidat.
+function penizeSheet() {
+  var room = Math.max(0, PROFILES[S.profile].ltv * assetsTotal() - S.loan);
+  var muze = uverNabidka(null).max >= 1000;
+  sheet('<h3>Peníze</h3>'
+    + '<div class="kv"><span>Hotovost</span><b>' + kcFull(S.cash) + '</b></div>'
+    + '<div class="kv"><span>Dlužíš bance</span><b class="' + (S.loan > 0 ? 'warn' : '') + '">' + kcFull(S.loan) + '</b></div>'
+    + '<div class="kv"><span>Ještě si můžeš půjčit</span><b>' + kcFull(Math.min(room, S.bank)) + '</b></div>'
+    + '<p class="muted small" style="margin:10px 0 0">Hotovost roste sama tím, co vydělají prádlomaty. '
+    + 'Když potřebuješ víc hned, půjč si v bance — podmínky uvidíš dopředu'
+    + (PAYMENTS_ON ? ', nebo si dobij balíček laundry.' : '.') + '</p>'
+    + (muze
+        ? '<button class="btn big" id="pen-uver" style="margin-top:12px">Požádat banku o úvěr</button>'
+        : '<p class="fine" style="margin-top:12px">' + uverDuvod() + '</p>')
+    + (S.loan > 0 && S.cash >= 1
+        ? '<button class="btn sec" id="pen-splatit" style="width:100%;margin-top:8px">Splatit ' + kcFull(Math.min(S.cash, S.loan)) + '</button>' : '')
+    + (PAYMENTS_ON ? '<button class="btn sec" id="pen-balicek" style="width:100%;margin-top:8px">Dobít balíček laundry</button>' : '')
+    + '<button class="btn sec" id="pen-ceka" style="width:100%;margin-top:8px">Zkontrolovat, co na mě čeká</button>'
+    + '<p class="fine">Čekat může hotovost přidaná ručně nebo zaplacený balíček, který se ještě nestihl připsat.</p>');
+  var u = $('pen-uver');
+  if (u) u.onclick = function () { uverSheet(); };
+  var sp = $('pen-splatit');
+  if (sp) sp.onclick = function () {
+    var pay = Math.min(S.cash, S.loan);
+    S.cash -= pay; S.loan -= pay; S.bank = Math.min(bankCap(), S.bank + pay);
+    save(); paint(); syncState(true); closeSheet(); toast('Splaceno ' + kcFull(pay) + '.', 'ok');
+  };
+  var ba = $('pen-balicek');
+  if (ba) ba.onclick = function () { closeSheet(); switchTab('bank'); };
+  var ck = $('pen-ceka');
+  if (ck) ck.onclick = function () {
+    ck.disabled = true; ck.textContent = 'Koukám\u2026';
+    var pred = S.cash;
+    loadCards().then(function () {
+      claimCash(function () {
+        closeSheet();
+        if (S.cash <= pred) toast('Nic na tebe nečeká.');
+      });
+    });
+  };
+}
+// ---- Znak firmy ---------------------------------------------------------
+// Znak není obrázek, ale krátký kód „tvar-paleta-symbol“. Kreslí se tady
+// v prohlížeči, takže je hotový okamžitě a nikde neleží žádný soubor.
+var ZNAK_PAL = [
+  ['#3b82f6', '#1e3a8a', '#ffffff'],
+  ['#22c55e', '#14532d', '#ffffff'],
+  ['#ef4444', '#7f1d1d', '#ffffff'],
+  ['#a855f7', '#4c1d95', '#ffffff'],
+  ['#f97316', '#7c2d12', '#ffffff'],
+  ['#06b6d4', '#0b4a57', '#ffffff'],
+  ['#facc15', '#854d0e', '#3b2a05'],
+  ['#ec4899', '#831843', '#ffffff'],
+  ['#64748b', '#1e293b', '#ffffff'],
+  ['#84cc16', '#3f6212', '#ffffff']
+];
+var ZNAK_TVAR = [
+  '<path d="M50 3 L93 17 v33 c0 25-19 40-43 47 C26 90 7 75 7 50 V17z"/>',
+  '<circle cx="50" cy="50" r="46"/>',
+  '<rect x="5" y="5" width="90" height="90" rx="24"/>',
+  '<path d="M50 3 L89 26 v48 L50 97 11 74V26z"/>',
+  '<path d="M50 3 L97 50 50 97 3 50z"/>',
+  '<path d="M31 5h38l26 26v38l-26 26H31L5 69V31z"/>'
+];
+var ZNAK_SYM = [
+  '<rect x="27" y="24" width="46" height="54" rx="9" fill="%F%"/><circle cx="50" cy="56" r="15" fill="%D%"/><circle cx="50" cy="56" r="8" fill="%F%"/><rect x="33" y="31" width="10" height="7" rx="3.5" fill="%D%"/>',
+  '<path d="M50 18 c14 20 24 30 24 42 a24 24 0 0 1-48 0 c0-12 10-22 24-42z" fill="%F%"/>',
+  '<circle cx="42" cy="60" r="17" fill="%F%"/><circle cx="66" cy="43" r="11" fill="%F%"/><circle cx="69" cy="68" r="7" fill="%F%"/>',
+  '<path d="M58 16 L28 58 h17 l-5 28 30-42H53z" fill="%F%"/>',
+  '<path d="M50 16 l10 21 23 3-17 16 4 23-20-11-20 11 4-23-17-16 23-3z" fill="%F%"/>',
+  '<path d="M22 72 L18 30 l15 13 17-23 17 23 15-13-4 42z" fill="%F%"/>',
+  '<circle cx="50" cy="50" r="27" fill="%F%"/><circle cx="50" cy="50" r="18" fill="none" stroke="%D%" stroke-width="5"/><path d="M44 40 v20 h13" fill="none" stroke="%D%" stroke-width="5" stroke-linecap="round"/>',
+  '<path d="M18 56 q8-13 16 0 t16 0 t16 0 t16 0" fill="none" stroke="%F%" stroke-width="8" stroke-linecap="round"/><path d="M18 76 q8-13 16 0 t16 0 t16 0 t16 0" fill="none" stroke="%F%" stroke-width="8" stroke-linecap="round"/>',
+  '<path d="M50 22 a9 9 0 0 1 9 9 c0 6-5 8-9 10 v4" fill="none" stroke="%F%" stroke-width="6" stroke-linecap="round"/><path d="M50 47 L21 70 h58z" fill="none" stroke="%F%" stroke-width="7" stroke-linejoin="round"/>',
+  '<circle cx="50" cy="50" r="27" fill="%F%"/><circle cx="50" cy="50" r="9" fill="%D%"/><circle cx="50" cy="29" r="5" fill="%D%"/><circle cx="50" cy="71" r="5" fill="%D%"/><circle cx="29" cy="50" r="5" fill="%D%"/><circle cx="71" cy="50" r="5" fill="%D%"/>'
+];
+// Z kódu složí hotové SVG. Když kód chybí nebo je rozbitý, vrátí prázdné kolečko.
+function znakSvg(kod, px) {
+  px = px || 40;
+  var c = String(kod == null ? '' : kod).split('-').map(Number);
+  if (c.length !== 3 || c.some(function (n) { return !isFinite(n); })) {
+    return '<svg class="znak" width="' + px + '" height="' + px + '" viewBox="0 0 100 100" aria-hidden="true">'
+      + '<circle cx="50" cy="50" r="44" fill="none" stroke="#475569" stroke-width="5" stroke-dasharray="9 7"/></svg>';
+  }
+  var tvar = ZNAK_TVAR[c[0] % ZNAK_TVAR.length];
+  var pal = ZNAK_PAL[c[1] % ZNAK_PAL.length];
+  var sym = ZNAK_SYM[c[2] % ZNAK_SYM.length];
+  var gid = 'zg' + c.join('');
+  return '<svg class="znak" width="' + px + '" height="' + px + '" viewBox="0 0 100 100" aria-hidden="true">'
+    + '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1">'
+    + '<stop offset="0" stop-color="' + pal[0] + '"/><stop offset="1" stop-color="' + pal[1] + '"/></linearGradient></defs>'
+    + '<g fill="url(#' + gid + ')">' + tvar + '</g>'
+    + sym.split('%F%').join(pal[2]).split('%D%').join(pal[1])
+    + '</svg>';
+}
+// Výběr znaku — nabídne dvanáct náhodných a dá zamíchat další.
+function znakSheet() {
+  var navrhy = [], vybrano = ME && ME.emblem ? ME.emblem : null;
+  function zamichej() {
+    // Zamícháme symboly i palety a bereme je po řadě, aby v nabídce nebyl
+    // třikrát ten samý symbol jen v jiné barvě.
+    function michej(n) {
+      var a = [], i;
+      for (i = 0; i < n; i++) a.push(i);
+      for (i = n - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; }
+      return a;
+    }
+    var sy = michej(ZNAK_SYM.length), pa = michej(ZNAK_PAL.length);
+    navrhy = [];
+    for (var i = 0; i < 12; i++) {
+      navrhy.push(Math.floor(Math.random() * ZNAK_TVAR.length) + '-' + pa[i % pa.length] + '-' + sy[i % sy.length]);
+    }
+    if (vybrano && navrhy.indexOf(vybrano) < 0) navrhy[0] = vybrano;
+  }
+  zamichej();
+  function kresli() {
+    sheet('<h3>Znak firmy</h3>'
+      + '<p class="muted small">Vyber si znak pro <b>' + esc((ME && (ME.company || ME.nick)) || 'svou firmu') + '</b>. '
+      + 'Uvidí ho konkurence v žebříčku i u tvých míst na mapě.</p>'
+      + '<div class="znak-grid">' + navrhy.map(function (k) {
+          return '<button class="znak-opt' + (k === vybrano ? ' on' : '') + '" data-k="' + esc(k) + '">' + znakSvg(k, 54) + '</button>';
+        }).join('') + '</div>'
+      + '<button class="btn sec" id="znak-mix" style="width:100%;margin-top:12px">Zamíchat jiné</button>'
+      + '<button class="btn big" id="znak-ulozit" style="margin-top:8px"' + (vybrano ? '' : ' disabled') + '>Použít tenhle znak</button>');
+    Array.prototype.forEach.call(document.querySelectorAll('.znak-opt'), function (b) {
+      b.onclick = function () { vybrano = b.getAttribute('data-k'); kresli(); };
+    });
+    $('znak-mix').onclick = function () { zamichej(); kresli(); };
+    $('znak-ulozit').onclick = function () {
+      var b = $('znak-ulozit');
+      if (!vybrano) return;
+      b.disabled = true; b.textContent = 'Ukládám…';
+      apiJson('/account/emblem', { emblem: vybrano }).then(function (r) {
+        if (!r.ok) { b.disabled = false; b.textContent = 'Použít tenhle znak'; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
+        ME = r.j.player; ZEB = null; closeSheet(); loadClaims(); paintMe();
+        toast('Znak firmy je nastavený.', 'ok');
+      }).catch(function () { b.disabled = false; b.textContent = 'Použít tenhle znak'; toast('Server neodpovídá.', 'err'); });
+    };
+  }
+  kresli();
+}
 function paintMe() {
   var p = PROFILES[S.profile];
   // Co má hráč rozepsané, přežije překreslení.
   var drzFirma = $('me-firma') ? $('me-firma').value : null;
   var net = S.cash + investedTotal() - S.loan;
   $('me-body').innerHTML = (ME
-    ? '<div class="card"><h3>' + esc(ME.company || ME.nick) + '</h3>'
-      + '<p class="muted small" style="margin:2px 0 8px">Hraješ jako <b>' + esc(ME.nick) + '</b>. '
-      + 'Pod jménem firmy tě vidí konkurence na mapě i v žebříčku.</p>'
+    ? '<div class="card"><div class="znak-hlava">' + znakSvg(ME.emblem, 56)
+      + '<div><h3 style="margin:0">' + esc(ME.company || ME.nick) + '</h3>'
+      + '<p class="muted small" style="margin:3px 0 0">Hraješ jako <b>' + esc(ME.nick) + '</b></p></div></div>'
+      + '<p class="muted small" style="margin:10px 0 8px">Pod jménem a znakem firmy tě vidí konkurence na mapě i v žebříčku.</p>'
       + '<label class="fld"><span>Název firmy</span>'
       + '<input id="me-firma" class="inp" type="text" maxlength="60" value="' + esc(ME.company || '') + '"></label>'
       + '<button class="btn sec" id="me-firma-ulozit" style="width:100%;margin-top:8px">Přejmenovat firmu</button>'
+      + '<button class="btn sec" id="me-znak" style="width:100%;margin-top:8px">'
+      + (ME.emblem ? 'Změnit znak firmy' : 'Vygenerovat znak firmy') + '</button>'
       + '</div>'
     : '')
     + '<div class="card"><h3>' + esc(p.name) + '</h3>'
@@ -1353,6 +1499,8 @@ function paintMe() {
       toast('Firma se teď jmenuje ' + ME.company + '.', 'ok');
     }).catch(function () { fb.disabled = false; fb.textContent = 'Přejmenovat firmu'; toast('Server neodpovídá.', 'err'); });
   };
+  var zb = $('me-znak');
+  if (zb) zb.onclick = function () { znakSheet(); };
   $('do-share').onclick = function () { shareGame($('do-share')); };
   $('do-reset').onclick = function () {
     sheet('<h3>Začít znovu?</h3>'
@@ -1663,6 +1811,8 @@ function switchTab(v) {
   b.onclick = function () { switchTab(b.getAttribute('data-v')); };
 });
 $('open-areas').onclick = areasSheet;
+// Hotovost v hlavičce je tlačítko — odtud se hráč dostane k penězům.
+if ($('t-penize')) $('t-penize').onclick = function () { penizeSheet(); };
 $('burza-nova').onclick = novaNabidkaSheet;
 // Přepínače v záložce Síť: moje síť vs. žebříček a kategorie žebříčku.
 [].forEach.call(document.querySelectorAll('[data-net]'), function (b) {
@@ -1885,6 +2035,20 @@ function uverNabidka(chci) {
     naruku: Math.max(0, castka - poplatek), mesicne: Math.round(castka * sazba / 12),
     zadluzenost: pak };
 }
+// Proč banka nepůjčí. Hráč má vždycky vědět, co s tím může udělat.
+function uverDuvod() {
+  var p = PROFILES[S.profile];
+  var majetek = assetsTotal();
+  var strop = Math.max(0, p.ltv * majetek - S.loan);
+  if (majetek <= 0) return 'Banka půjčuje proti majetku a ty zatím žádný nemáš. Kup první prádlomat a rámec se otevře.';
+  if (strop < 1000) {
+    return 'Banka ti půjčí nejvýš ' + Math.round(p.ltv * 100) + ' % hodnoty majetku, což je '
+      + kcFull(Math.round(p.ltv * majetek)) + ' — a tolik už dlužíš. Splať část úvěru, nebo přikup prádlomat; '
+      + 'tím ti strop povyroste.';
+  }
+  return 'Volný rámec v bance je vyčerpaný. Sám dorůstá o ' + kcFull(BANK_PER_DAY)
+    + ' za den — nebo ho doplníš tím, že splatíš část úvěru.';
+}
 function uverSheet(chci) {
   var n = uverNabidka(chci);
   if (n.max < 1000) { closeSheet(); return toast('Banka ti teď nepůjčí ani korunu.', 'err'); }
@@ -2082,7 +2246,7 @@ function startGame() {
   setInterval(loadClaims, 45000);
   vyzvedniNasledky();
   loadTrades();
-  setInterval(function () { loadTrades(); vyzvedniNasledky(); }, 60000);
+  setInterval(function () { loadTrades(); vyzvedniNasledky(); loadCards().then(function () { claimCash(); }); }, 60000);
   checkPayment();
   setInterval(function () { tick(); save(); paint(); syncState(); }, 5000);
   // Vlastní, rychlejší tep jen pro naskakující čísla nad prádlomaty.
@@ -2090,7 +2254,7 @@ function startGame() {
   setInterval(pullRefs, 60000);
   document.addEventListener('visibilitychange', function () {
     // Po návratu do hry se hned podíváme, jestli nám konkurence nevyfoukla místo.
-    if (!document.hidden) { tick(); save(); paint(); loadClaims(); loadTrades(); vyzvedniNasledky(); }
+    if (!document.hidden) { tick(); save(); paint(); loadClaims(); loadTrades(); vyzvedniNasledky(); loadCards().then(function () { claimCash(); }); }
     else { syncState(true); }
   });
   window.addEventListener('pagehide', function () { syncState(true); });

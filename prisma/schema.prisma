@@ -7559,6 +7559,8 @@ model GamePlayer {
   nick          String    @db.VarChar(24)
   // Jméno firmy, pod kterým hráč staví. Vidí ho konkurence na mapě i v žebříčku.
   company       String?   @db.VarChar(60)
+  // Znak firmy — jen krátký kód „tvar-paleta-symbol", obrázek se kreslí v prohlížeči.
+  emblem        String?   @db.VarChar(16)
   nick_lower    String    @unique @db.VarChar(24)
   password_hash String    @db.VarChar(100)
   email         String?   @db.VarChar(160)
