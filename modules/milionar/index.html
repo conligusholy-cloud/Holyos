@@ -197,7 +197,8 @@
         document.getElementById('pl-tbl').innerHTML =
           '<thead><tr><th>Nick</th><th>Jméno a e-mail</th><th class="num">Prádlomatů</th><th class="num">Míst</th>'
           + '<th class="num">Měst</th><th class="num">Příjem / měsíc</th>'
-          + '<th class="num">Hotovost</th><th class="num">Úvěr</th><th class="num">Pozvánek</th>'
+          + '<th class="num">Hotovost</th><th class="num">Úvěr</th><th class="num">Otevření</th>'
+          + '<th class="num">Přivedl</th>'
           + '<th class="num">Nákupů</th><th class="num">Utraceno</th><th>Naposledy</th><th></th></tr></thead><tbody>'
           + (j.players.length ? j.players.map(function (p) {
             return '<tr' + (p.disabled ? ' style="opacity:.45"' : '') + '><td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + p.id + '">' + esc(p.nick) + '</b>'
@@ -210,12 +211,14 @@
               + '<td class="num">' + (p.hotovost == null ? '—' : cz(p.hotovost)) + '</td>'
               + '<td class="num">' + (p.uver == null ? '—' : cz(p.uver)) + '</td>'
               + '<td class="num">' + cz(p.pozvanek) + '</td>'
+              + '<td class="num"><b class="' + (p.privedl > 0 ? 'ok' : '') + '">' + cz(p.privedl || 0) + '</b>'
+              + (p.privedl_me ? '<div class="note">od ' + esc(p.privedl_me) + '</div>' : '') + '</td>'
               + '<td class="num">' + cz(p.nakupu) + '</td>'
               + '<td class="num"><b>' + cz(p.utraceno) + ' Kč</b></td>'
               + '<td class="note">' + dt(p.last_login_at || p.created_at) + '</td>'
               + '<td><button class="btn sm" data-off="' + p.id + '" data-v="' + (p.disabled ? '0' : '1') + '">'
               + (p.disabled ? 'Odblokovat' : 'Zablokovat') + '</button></td></tr>';
-          }).join('') : '<tr><td colspan="13" class="note" style="padding:20px">Zatím tu nikdo není.</td></tr>')
+          }).join('') : '<tr><td colspan="14" class="note" style="padding:20px">Zatím tu nikdo není.</td></tr>')
           + '</tbody>';
         [].forEach.call(document.querySelectorAll('[data-detail]'), function (b) {
           b.onclick = function () { detail(b.getAttribute('data-detail')); };
@@ -247,7 +250,8 @@
           + mini(p.hotovost == null ? '—' : cz(p.hotovost), 'Hotovost')
           + mini(p.uver == null ? '—' : cz(p.uver), 'Úvěr')
           + mini(cz(p.prijem || 0) + ' L$', 'Příjem / měsíc')
-          + mini(cz(p.pozvanek), 'Pozvánek')
+          + mini(cz(p.pozvanek), 'Otevření odkazu')
+          + mini(cz((j.privedeni || []).length), 'Přivedl hráčů')
           + mini(esc(p.profil || '—'), 'Profil')
           + '</div>'
           + '<div class="tbl-wrap" style="padding:14px 16px;margin-bottom:18px">'
@@ -278,6 +282,21 @@
               + (x.darem && x.nepouzito ? ' <button class="btn sm" data-revoke="' + esc(x.kind) + '" title="Odebere jeden darovaný nepoužitý kus">−1</button>' : '')
               + '</td></tr>';
           }).join('') + '</tbody></table></div>'
+          + '<h3 style="font-size:14px;margin:18px 0 8px">Koho přivedl do hry'
+          + (p.privedl_me ? ' <span class="note" style="font-weight:400">· sám přišel od ' + esc(p.privedl_me.firma) + '</span>' : '')
+          + '</h3>'
+          + ((j.privedeni || []).length
+            ? '<div class="tbl-wrap"><table class="data-table"><thead><tr><th>Hráč</th><th>Kdy přišel</th>'
+              + '<th>Naposledy ve hře</th><th class="num">Utratil</th></tr></thead><tbody>'
+              + j.privedeni.map(function (h) {
+                  return '<tr><td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + h.id + '">'
+                    + esc(h.firma) + '</b><div class="note">' + esc(h.nick) + '</div></td>'
+                    + '<td class="note">' + dt(h.kdy) + '</td>'
+                    + '<td class="note">' + (h.posledne ? dt(h.posledne) : '—') + '</td>'
+                    + '<td class="num"><b>' + cz(h.utratil) + ' Kč</b></td></tr>';
+                }).join('')
+              + '</tbody></table></div>'
+            : '<p class="note">Zatím nikoho nepřivedl.</p>')
           + (j.mista.length ? '<h3 style="font-size:14px;margin:18px 0 8px">Kde stojí</h3>'
             + '<div class="tbl-wrap"><table class="data-table"><thead><tr><th>Místo</th><th>Model</th><th class="num">Nájem</th><th class="num">Přetažení</th></tr></thead><tbody>'
             + j.mista.map(function (m) { return '<tr><td>' + esc(m.name || m.spot_id) + '</td><td>' + esc(m.model) + '</td>'
@@ -291,6 +310,10 @@
             + '</tbody></table></div>' : '<p class="note" style="margin-top:16px">Zatím nic nekoupil.</p>');
 
         DLG.querySelector('[data-close]').onclick = function () { OV.classList.remove('open'); };
+        // Ze seznamu přivedených se dá rovnou prokliknout na jejich detail.
+        [].forEach.call(DLG.querySelectorAll('[data-detail]'), function (b) {
+          b.onclick = function () { detail(b.getAttribute('data-detail')); };
+        });
         var cg = DLG.querySelector('#cash-go');
         var posliCash = function (castka, b) {
           b.disabled = true;

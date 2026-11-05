@@ -45,14 +45,19 @@ router.get('/players', api(async (req, res) => {
   } : {};
   const rows = await prisma.gamePlayer.findMany({ where, orderBy: { created_at: 'desc' }, take });
   const ids = rows.map((r) => r.id);
-  const [spots, cards, pays] = await Promise.all([
+  const [spots, cards, pays, privedl, zvouci] = await Promise.all([
     prisma.gameSpotClaim.groupBy({ by: ['player_id'], where: { player_id: { in: ids } }, _count: { _all: true } }),
     prisma.gameCard.groupBy({ by: ['player_id'], where: { player_id: { in: ids } }, _count: { _all: true } }),
     prisma.gamePurchase.groupBy({ by: ['player_id'], where: { player_id: { in: ids }, status: 'paid' },
       _sum: { amount_cents: true }, _count: { _all: true } }),
+    // Kolik hráčů kdo přivedl — základ pro distributorský program.
+    prisma.gamePlayer.groupBy({ by: ['invited_by_id'], where: { invited_by_id: { in: ids } }, _count: { _all: true } }),
+    prisma.gamePlayer.findMany({ where: { invited: { some: { id: { in: ids } } } }, select: { id: true, nick: true, company: true } }),
   ]);
   const by = (arr) => { const m = {}; arr.forEach((x) => { m[x.player_id] = x; }); return m; };
   const S = by(spots), C = by(cards), P = by(pays);
+  const PRIV = {}; privedl.forEach((x) => { PRIV[x.invited_by_id] = x._count._all; });
+  const ZVOU = {}; zvouci.forEach((z) => { ZVOU[z.id] = z.company || z.nick; });
   res.json({ ok: true, players: rows.map((p) => {
     const st = p.state || {};
     const units = Array.isArray(st.units) ? st.units : [];
@@ -69,6 +74,8 @@ router.get('/players', api(async (req, res) => {
       pradlomatu: units.length,
       mest: st.areas ? Object.keys(st.areas).length : 0,
       pozvanek: st.refs || 0,
+      privedl: PRIV[p.id] || 0,
+      privedl_me: p.invited_by_id ? (ZVOU[p.invited_by_id] || ('hráč #' + p.invited_by_id)) : null,
       mist: (S[p.id] && S[p.id]._count._all) || 0,
       karet: (C[p.id] && C[p.id]._count._all) || 0,
       nakupu: (P[p.id] && P[p.id]._count._all) || 0,
@@ -92,10 +99,19 @@ router.get('/players/:id', api(async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const p = await prisma.gamePlayer.findUnique({ where: { id } });
   if (!p) return res.status(404).json({ error: 'Hráč nenalezen.' });
-  const [karty, nakupy, mista] = await Promise.all([
+  const [karty, nakupy, mista, privedeni, zvouci] = await Promise.all([
     prisma.gameCard.findMany({ where: { player_id: id }, select: { kind: true, used_at: true, purchase_id: true, amount: true } }),
     prisma.gamePurchase.findMany({ where: { player_id: id }, orderBy: { created_at: 'desc' }, take: 50 }),
     prisma.gameSpotClaim.findMany({ where: { player_id: id }, select: { spot_id: true, name: true, model: true, rent: true, takeovers: true } }),
+    // Koho hráč přivedl, včetně toho, kolik u nás každý z nich utratil.
+    prisma.gamePlayer.findMany({
+      where: { invited_by_id: id }, orderBy: { created_at: 'desc' }, take: 200,
+      select: { id: true, nick: true, company: true, created_at: true, invited_at: true, last_login_at: true,
+        purchases: { where: { status: 'paid' }, select: { amount_cents: true } } },
+    }),
+    p.invited_by_id
+      ? prisma.gamePlayer.findUnique({ where: { id: p.invited_by_id }, select: { id: true, nick: true, company: true } })
+      : null,
   ]);
   const def = acct._defaults;
   const cekaHotovost = karty.filter((c) => c.kind === acct._cashCustom && !c.used_at)
@@ -122,7 +138,14 @@ router.get('/players/:id', api(async (req, res) => {
     prijem: Math.round((Array.isArray(st.units) ? st.units : [])
       .reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0)),
     pozvanek: st.refs || 0,
+    ref: p.ref_id || null,
+    privedl_me: zvouci ? { id: zvouci.id, nick: zvouci.nick, firma: zvouci.company || zvouci.nick } : null,
   }, polozky, mista, ceka_hotovost: cekaHotovost,
+  privedeni: privedeni.map((h) => ({
+    id: h.id, nick: h.nick, firma: h.company || (h.nick + ' s.r.o.'),
+    kdy: h.invited_at || h.created_at, posledne: h.last_login_at,
+    utratil: h.purchases.reduce((a, x) => a + x.amount_cents, 0) / 100,
+  })),
   nakupy: nakupy.map((o) => ({ id: o.id, kind: o.kind, qty: o.qty, castka: o.amount_cents / 100,
     status: o.status, created_at: o.created_at, paid_at: o.paid_at })) });
 }));

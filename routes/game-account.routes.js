@@ -169,11 +169,53 @@ async function pub(p) {
   cards.forEach((c) => { if (counts[c.kind] != null) counts[c.kind]++; });
   return {
     nick: p.nick, company: p.company || (p.nick + ' s.r.o.'), emblem: p.emblem || null,
+    ref: p.ref_id || null,
     email: p.email || null,
     first_name: p.first_name || null, last_name: p.last_name || null,
     has_details: !!(p.email && p.first_name && p.last_name),
     cards: counts, state_at: p.state_at
   };
+}
+
+// ─── Pozvánky ────────────────────────────────────────────────────────────────
+// Každý hráč má svoje id do sdíleného odkazu (ref_id). Kdo přijde přes cizí
+// odkaz a založí si účet, zůstane u zvoucího zapsaný natrvalo — z toho se dá
+// později postavit distributorský program s odměnami.
+const REF_RE = /^[a-z0-9]{6,24}$/;
+
+// Hráč si nárokuje svoje sdílené id. Platí „kdo dřív přijde": jedno id patří
+// jednomu účtu a už se nepřepisuje, jinak by si hráč přihlášením na novém
+// zařízení přepsal odkaz, který má rozeslaný. Zároveň doplníme účet všem,
+// koho přivedl dřív, než se sám zaregistroval.
+async function narokujRef(player, ref) {
+  const id = String(ref || '').toLowerCase();
+  if (!REF_RE.test(id)) return player;
+  let p = player;
+  if (player.ref_id !== id) {
+    if (player.ref_id) return player;                       // svoje id už má
+    const obsazeno = await prisma.gamePlayer.findUnique({ where: { ref_id: id }, select: { id: true } });
+    if (obsazeno) return player;                            // id patří někomu jinému
+    try { p = await prisma.gamePlayer.update({ where: { id: player.id }, data: { ref_id: id } }); }
+    catch (e) { return player; }                            // závod dvou zařízení
+  }
+  await prisma.gamePlayer.updateMany({
+    where: { invited_by_ref: id, invited_by_id: null, NOT: { id: p.id } },
+    data: { invited_by_id: p.id }
+  });
+  return p;
+}
+
+// Zapíše, kdo nového hráče přivedl. Jen při registraci — vazba se později
+// nepřepisuje, aby se nedala vyrobit zpětně.
+async function zapisPozvani(player, odkud) {
+  const id = String(odkud || '').toLowerCase();
+  if (!REF_RE.test(id) || id === player.ref_id) return player;
+  const zvouci = await prisma.gamePlayer.findUnique({ where: { ref_id: id }, select: { id: true } });
+  if (zvouci && zvouci.id === player.id) return player;     // vlastní odkaz se nepočítá
+  return prisma.gamePlayer.update({
+    where: { id: player.id },
+    data: { invited_by_ref: id, invited_by_id: zvouci ? zvouci.id : null, invited_at: new Date() }
+  });
 }
 
 // ─── Registrace ──────────────────────────────────────────────────────────────
@@ -198,10 +240,16 @@ router.post('/account/register', async (req, res, next) => {
     try {
       await prisma.gameCard.createMany({ data: CARD_KINDS.map((k) => ({ player_id: p.id, kind: k })) });
     } catch (e) { console.warn('[game] uvítací karty:', e.message); }
-    setCookie(res, sign(p));
-    res.json({ ok: true, player: await pub(p) });
+    // Pozvánky: hráč si drží svoje sdílené id a zapíšeme, kdo ho přivedl.
+    let hrac = p;
+    try {
+      hrac = await narokujRef(hrac, (req.body || {}).ref);
+      hrac = await zapisPozvani(hrac, (req.body || {}).odkud);
+    } catch (e) { console.warn('[game] pozvánky při registraci:', e.message); }
+    setCookie(res, sign(hrac));
+    res.json({ ok: true, player: await pub(hrac) });
     // Majitelé to mají vědět hned — do Velína i na zvonek. Nečekáme na to.
-    require('../services/game/notify').newPlayer(prisma, p);
+    require('../services/game/notify').newPlayer(prisma, hrac);
   } catch (e) {
     if (e && e.code === 'P2002') return res.status(409).json({ error: 'Tenhle nick už někdo má. Vymysli jiný.' });
     next(e);
@@ -227,9 +275,12 @@ router.post('/account/login', async (req, res, next) => {
     const p = await prisma.gamePlayer.findUnique({ where: { nick_lower: nick.toLowerCase() } });
     const ok = p && !p.disabled && await bcrypt.compare(pwd, p.password_hash);
     if (!ok) return res.status(401).json({ error: 'Nick nebo heslo nesedí.' });
-    await prisma.gamePlayer.update({ where: { id: p.id }, data: { last_login_at: new Date() } });
-    setCookie(res, sign(p));
-    res.json({ ok: true, player: await pub(p), state: p.state || null });
+    let hrac = await prisma.gamePlayer.update({ where: { id: p.id }, data: { last_login_at: new Date() } });
+    // Účty z doby před pozvánkami si při prvním přihlášení nárokují svoje sdílené id.
+    try { hrac = await narokujRef(hrac, (req.body || {}).ref); }
+    catch (e) { console.warn('[game] pozvánky při přihlášení:', e.message); }
+    setCookie(res, sign(hrac));
+    res.json({ ok: true, player: await pub(hrac), state: hrac.state || null });
   } catch (e) { next(e); }
 });
 
@@ -265,6 +316,30 @@ router.post('/account/reset', requirePlayer, async (req, res, next) => {
     const gone = await prisma.gameSpotClaim.deleteMany({ where: { player_id: req.player.id } });
     await prisma.gamePlayer.update({ where: { id: req.player.id }, data: { state: null, state_at: null } });
     res.json({ ok: true, released: gone.count });
+  } catch (e) { next(e); }
+});
+
+// GET /account/invited → koho hráč přivedl do hry
+// Přesný seznam, ne jen počet — na tomhle se dá postavit odměna pro „distributory".
+router.get('/account/invited', requirePlayer, async (req, res, next) => {
+  try {
+    const me = await prisma.gamePlayer.findUnique({
+      where: { id: req.player.id }, select: { ref_id: true }
+    });
+    const lide = me && me.ref_id
+      ? await prisma.gamePlayer.findMany({
+          where: { invited_by_id: req.player.id },
+          select: { id: true, nick: true, company: true, emblem: true, invited_at: true, created_at: true },
+          orderBy: { created_at: 'desc' }, take: 200
+        })
+      : [];
+    res.json({
+      ok: true, ref: (me && me.ref_id) || null,
+      lide: lide.map((h) => ({
+        nick: h.nick, firma: h.company || (h.nick + ' s.r.o.'), znak: h.emblem || null,
+        kdy: h.invited_at || h.created_at
+      }))
+    });
   } catch (e) { next(e); }
 });
 

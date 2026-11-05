@@ -7586,10 +7586,23 @@ model GamePlayer {
   created_at    DateTime  @default(now())
   updated_at    DateTime  @updatedAt
 
+  // Pozvánky: vlastní id do sdíleného odkazu a kdo hráče do hry přivedl.
+  // Když pozvaný dorazí dřív, než si zvoucí založí účet, zůstane tu zatím
+  // jen samotný kód (invited_by_ref) a účet se doplní, až si ho zvoucí nárokuje.
+  ref_id         String?   @unique @db.VarChar(24)
+  invited_by_id  Int?
+  invited_by_ref String?   @db.VarChar(24)
+  invited_at     DateTime?
+
   cards     GameCard[]
   purchases GamePurchase[]
 
+  invited_by GamePlayer?  @relation("GamePozvani", fields: [invited_by_id], references: [id], onDelete: SetNull)
+  invited    GamePlayer[] @relation("GamePozvani")
+
   @@index([email])
+  @@index([invited_by_id])
+  @@index([invited_by_ref])
   @@map("game_players")
 }
 

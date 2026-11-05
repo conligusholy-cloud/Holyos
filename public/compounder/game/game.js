@@ -148,6 +148,7 @@ var QUIZ = [
 // ─── Stav hry ────────────────────────────────────────────────────────────────
 var KEY = 'lm_milionar_v1';
 var PID_KEY = 'lm_milionar_pid';
+var REF_FROM_KEY = 'lm_ref_from';   // přes čí odkaz jsem do hry přišel
 var S = null;
 // Id pro pozvánky žije mimo rozehranou hru. Když si hráč dá „začít znovu",
 // sdílený odkaz musí platit dál — jinak přijde o pozvánky, které už rozeslal.
@@ -1186,6 +1187,18 @@ function unitSheet(u) {
 // Čím víc lidí otevře odkaz, který hráč pošle dál, tím víc zákazníků mu chodí.
 // Počítá se otevření odkazu někým jiným, ne samotné kliknutí na „sdílet".
 function shareUrl() { return location.origin + '/game?ref=' + encodeURIComponent(S.pid); }
+function prichoziRef() { try { return localStorage.getItem(REF_FROM_KEY) || ''; } catch (e) { return ''; } }
+// Sdílené id patří účtu, ne zařízení. Na novém telefonu si hra vezme to, které
+// má účet na serveru — jinak by hráč rozesílal dva různé odkazy.
+function srovnejRef() {
+  if (!ME || !ME.ref) return;
+  try { localStorage.setItem(PID_KEY, ME.ref); } catch (e) { /* nevadí */ }
+  if (S && S.pid !== ME.ref) { S.pid = ME.ref; save(); pullRefs(); }
+}
+function datumKratce(x) {
+  try { return new Date(x).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' }); }
+  catch (e) { return ''; }
+}
 function pullRefs() {
   if (!S || !S.pid) return;
   fetch('/api/game/ref/' + encodeURIComponent(S.pid), { cache: 'no-store' })
@@ -1206,6 +1219,9 @@ function countIncomingRef() {
   try { mine = localStorage.getItem(PID_KEY); } catch (e) { /* nevadí */ }
   if (!mine) { try { var raw = localStorage.getItem(KEY); if (raw) mine = (JSON.parse(raw) || {}).pid || null; } catch (e) { /* nevadí */ } }
   if (mine === id) return;                       // vlastní odkaz se nepočítá
+  // Zapamatujeme si, kdo nás přivedl. Při registraci to pošleme na server a
+  // zvoucí hráč tím dostane pozvaného napevno do své „sítě".
+  try { if (!localStorage.getItem(REF_FROM_KEY)) localStorage.setItem(REF_FROM_KEY, id); } catch (e) { /* nevadí */ }
   try { if (localStorage.getItem('lm_ref_' + id)) return; localStorage.setItem('lm_ref_' + id, '1'); } catch (e) { /* nevadí */ }
   fetch('/api/game/ref/' + id, { method: 'POST' }).catch(function () {});
 }
@@ -1482,6 +1498,28 @@ function znakSheet() {
   }
   kresli();
 }
+// Koho hráč přivedl do hry — přesná jména, ne jen počítadlo otevření.
+var POZVANI = null;
+function loadPozvani() {
+  if (!ME) { POZVANI = []; return Promise.resolve(); }
+  return api('/account/invited')
+    .then(function (r) { POZVANI = (r.ok && r.j.lide) || []; })
+    .catch(function () { POZVANI = []; });
+}
+function pozvaniHtml() {
+  if (!ME) return '<p class="fine">Přihlášeným hráčům se tady vypíše, koho konkrétně přivedli.</p>';
+  if (POZVANI == null) return '<p class="fine">Načítám…</p>';
+  if (!POZVANI.length) return '<p class="fine">Přes tvůj odkaz se zatím nikdo nezaregistroval. '
+    + 'Otevření odkazu ti zvedá návštěvnost hned, ale do sítě se počítá až založený účet.</p>';
+  return '<p class="fine" style="margin-bottom:8px">Ve tvé síti '
+    + mn(POZVANI.length, 'je', 'jsou', 'je') + ' ' + POZVANI.length + ' '
+    + mn(POZVANI.length, 'hráč', 'hráči', 'hráčů') + ':</p>'
+    + '<div class="zeb">' + POZVANI.map(function (h) {
+        return '<div class="zeb-row">' + (h.znak ? znakSvg(h.znak, 24) : '<i class="znak-mezera"></i>')
+          + '<span class="nick">' + esc(h.firma) + '<i>' + esc(h.nick) + '</i></span>'
+          + '<b class="muted">' + datumKratce(h.kdy) + '</b></div>';
+      }).join('') + '</div>';
+}
 function paintMe() {
   var p = PROFILES[S.profile];
   // Co má hráč rozepsané, přežije překreslení.
@@ -1519,6 +1557,10 @@ function paintMe() {
     + '<div class="bar"><i style="width:' + Math.round(traffic() / trafficMax() * 100) + '%"></i></div>'
     + '<button class="btn big" id="do-share" style="margin-top:12px">' + (navigator.share ? 'Poslat odkaz' : 'Zkopírovat odkaz') + '</button>'
     + '</div>'
+    + '<div class="card"><h3>Tvoje síť hráčů</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">Kdo si přes tvůj odkaz založil účet. '
+    + 'Tohle zůstává zapsané natrvalo.</p>'
+    + pozvaniHtml() + '</div>'
     + '<button class="btn sec big" id="do-reset">Začít znovu od nuly</button>';
   if (drzFirma != null && $('me-firma')) $('me-firma').value = drzFirma;
   var fb = $('me-firma-ulozit');
@@ -1841,6 +1883,7 @@ function switchTab(v) {
   if (v === 'map' && map) { setTimeout(function () { map.invalidateSize(); }, 50); loadClaims(); }
   // Burza se musí ptát serveru pokaždé — nabídka mohla přijít před vteřinou.
   if (v === 'burza') loadTrades(paintBurza);
+  if (v === 'me' && POZVANI == null) loadPozvani().then(paintMe);
 }
 [].forEach.call(document.querySelectorAll('.tabs button'), function (b) {
   b.onclick = function () { switchTab(b.getAttribute('data-v')); };
@@ -1948,10 +1991,12 @@ function doAcct(login) {
   var firma = $('ac-firma').value.trim();
   if (!login && firma.length && firma.length < 2) return acctErr('Název firmy má aspoň 2 znaky.');
   apiJson('/account/' + (login ? 'login' : 'register'),
-    { nick: nick, password: pass, company: firma }).then(function (r) {
+    { nick: nick, password: pass, company: firma, ref: trvalePid(), odkud: prichoziRef() }).then(function (r) {
     $('ac-go').disabled = false;
     if (!r.ok) return acctErr(r.j.error || 'Nepovedlo se.');
     ME = r.j.player;
+    srovnejRef();
+    POZVANI = null;
     if (!login) ev('game_register');
     if (login) {
       // Na serveru je uložená síť — ta má přednost před tím, co je v prohlížeči.
@@ -1964,6 +2009,7 @@ function doAcct(login) {
       }
     }
     $('acct').classList.add('hidden');
+    srovnejRef();   // znovu: po přihlášení mohl přijít stav se starým pid
     startGame();
     syncState(true);
   }).catch(function () { $('ac-go').disabled = false; acctErr('Server neodpovídá. Zkus to za chvíli.'); });
@@ -2307,6 +2353,7 @@ api('/account/me').then(function (r) {
     ME = r.j.player;
     var srv = r.j.state;
     if (srv && (!S || (srv.lastTick || 0) >= (S.lastTick || 0))) { S = srv; save(); }
+    srovnejRef();   // až tady: stav ze serveru může mít staré pid
     if (S) return startGame();
   }
   if (S) startGame();          // rozehraná hra bez účtu (z doby před účty)
