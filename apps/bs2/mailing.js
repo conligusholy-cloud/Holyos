@@ -319,17 +319,19 @@ module.exports = function mountMailing(app, ctx) {
     ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;display:flex;align-items:center;justify-content:center;padding:18px';
     ov.innerHTML='<style>.bl-row:hover{background:rgba(120,160,255,.08)}</style>'
       +'<div style="background:#0e1526;border:1px solid rgba(120,160,255,.28);border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.6);max-width:780px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden">'
-      +'<div style="padding:16px 20px;border-bottom:1px solid rgba(120,160,255,.2);background:#0b1120"><div style="font-size:19px;font-weight:800">🚫 Blacklist rozesílky</div>'
-      +'<div class="small muted" style="margin-top:3px">Zaškrtnuté kontakty tuhle rozesílku nedostanou. Platí jen pro ni — natrvalo se nikdo neodhlašuje.</div></div>'
+      +'<div style="padding:16px 20px;border-bottom:1px solid rgba(120,160,255,.2);background:#0b1120;position:relative">'
+        +'<button type="button" id="bl-x" title="Zavřít" style="position:absolute;top:12px;right:14px;background:none;border:0;color:#8ea2c2;font-size:22px;line-height:1;cursor:pointer;padding:4px 8px">✕</button>'
+        +'<div style="font-size:19px;font-weight:800;padding-right:34px">🚫 Blacklist rozesílky</div>'
+        +'<div class="small muted" style="margin-top:3px;padding-right:34px">Zaškrtnuté kontakty tuhle rozesílku nedostanou. Platí jen pro ni — natrvalo se nikdo neodhlašuje.</div></div>'
       +'<div style="padding:12px 20px;border-bottom:1px solid rgba(120,160,255,.2);background:#0b1120;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
         +'<input id="bl-q" placeholder="Hledat jméno nebo e-mail…" style="flex:1;min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg,#070b14);color:inherit">'
         +'<span class="small muted" id="bl-info"></span></div>'
       +'<div id="bl-list" style="overflow-y:auto;overflow-x:hidden;flex:1;min-height:0"><div class="small muted" style="padding:14px">Načítám…</div></div>'
       +'<div style="padding:12px 20px;border-top:1px solid rgba(120,160,255,.2);background:#0b1120;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
         +'<span class="small muted" id="bl-cnt"></span>'
-        +'<span style="display:flex;gap:8px"><button type="button" class="btn sec sm" id="bl-clear">Zrušit všechna vyřazení</button>'
-        +'<button type="button" class="btn sec sm" id="bl-x">Zavřít</button>'
-        +'<button type="button" class="btn sm" id="bl-ok">Použít</button></span></div></div>';
+        +'<span style="display:flex;gap:8px;align-items:center"><span class="small" id="bl-msg"></span>'
+        +'<button type="button" class="btn sec sm" id="bl-clear">Zrušit všechna vyřazení</button>'
+        +'<button type="button" class="btn sm" id="bl-ok">Použít a uložit</button></span></div></div>';
     var puvodniScroll=document.body.style.overflow;document.body.style.overflow='hidden';
     document.body.appendChild(ov);
     var L=ov.querySelector('#bl-list'),Q=ov.querySelector('#bl-q'),INF=ov.querySelector('#bl-info'),CNT=ov.querySelector('#bl-cnt');
@@ -366,9 +368,27 @@ module.exports = function mountMailing(app, ctx) {
       var id=parseInt(c.getAttribute('data-id'),10);if(c.checked)vyb[id]=true;else delete vyb[id];pocet();});
     ov.querySelector('#bl-clear').onclick=function(){vyb={};L.querySelectorAll('input[type=checkbox]').forEach(function(c){c.checked=false;});pocet();};
     var zavri=function(){document.body.style.overflow=puvodniScroll;document.body.removeChild(ov);};
-    ov.querySelector('#bl-x').onclick=zavri;
-    ov.onclick=function(e){if(e.target===ov)zavri();};
-    ov.querySelector('#bl-ok').onclick=function(){exSet(Object.keys(vyb).filter(function(k){return vyb[k];}).map(Number));zavri();};
+    // Klik vedle okna nic nezavírá — jde o vyklikaný seznam, o který je škoda přijít.
+    ov.onclick=function(e){e.stopPropagation();};
+    function vybrane(){return Object.keys(vyb).filter(function(k){return vyb[k];}).map(Number);}
+    function zmeneno(){var a=vybrane().slice().sort(),b=exList().slice().sort();return a.length!==b.length||a.some(function(x,i){return x!==b[i];});}
+    ov.querySelector('#bl-x').onclick=function(){
+      if(zmeneno()&&!confirm('Zavřít bez uložení? Zaškrtnuté změny se zahodí.'))return;
+      zavri();
+    };
+    // „Použít a uložit" zapíše blacklist rovnou do rozesílky, ne jen do formuláře
+    ov.querySelector('#bl-ok').onclick=function(){
+      var ids=vybrane(),ok=ov.querySelector('#bl-ok'),m=ov.querySelector('#bl-msg');
+      exSet(ids);
+      var cid='${c ? c.id : 0}';
+      if(!cid||cid==='0'){zavri();return;}      // nová rozesílka ještě nemá id — uloží se až s konceptem
+      ok.disabled=true;m.style.color='';m.textContent='Ukládám…';
+      fetch('/admin/rozesilky/'+cid+'/exclude',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({exclude:ids})})
+        .then(function(r){return r.json();}).then(function(j){
+          if(j&&j.ok){zavri();return;}
+          ok.disabled=false;m.style.color='#ff8f8f';m.textContent=(j&&j.error)||'Nepodařilo se uložit.';
+        }).catch(function(){ok.disabled=false;m.style.color='#ff8f8f';m.textContent='Server neodpověděl — zkus to znovu.';});
+    };
     nacti();
   };
 
@@ -397,8 +417,23 @@ module.exports = function mountMailing(app, ctx) {
     stBox.innerHTML='<span class="muted">Načítám…</span>';
     fetch('/admin/rozesilky/${c ? c.id : 0}/stats',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){
       if(j.error){stBox.innerHTML='<span style="color:#ff8f8f">⚠ Statistiky se nepodařilo načíst: '+esc(j.error)+'</span>';return;}
-      if(!j.zaznamu){stBox.innerHTML='<span class="muted">Zatím se neodeslal žádný e-mail — statistiky naskočí během chvíle po spuštění.</span>';return;}
-      var h='<div class="ml-stg">'
+      var h='';
+      // Průběh odesílání — hned po spuštění je vidět, kolik je venku a kolik čeká ve frontě
+      var P=j.prubeh;
+      if(P){
+        var hotovo=(P.sent||0)+(P.failed||0),celkem=P.total||0,pct=celkem?Math.round(hotovo/celkem*100):0;
+        var popis=P.status==='sending'?'Odesílá se…':P.status==='paused'?'Pozastaveno':P.status==='canceled'?'Zrušeno':P.status==='done'?'Odesláno':'Čeká na spuštění';
+        var detail=[(P.sent||0).toLocaleString('cs-CZ')+' z '+celkem.toLocaleString('cs-CZ')];
+        if(P.fronta&&P.fronta.queued)detail.push('ve frontě '+P.fronta.queued.toLocaleString('cs-CZ'));
+        if(P.fronta&&P.fronta.skipped)detail.push('přeskočeno '+P.fronta.skipped);
+        if(P.failed)detail.push('<span style="color:#ff8f8f">chyb '+P.failed+'</span>');
+        h+='<div style="margin-bottom:14px"><div class="row" style="justify-content:space-between"><b>'+popis+'</b><span class="small muted">'+detail.join(' · ')+'</span></div>'
+          +'<div class="ml-bar" style="margin-top:7px"><i style="width:'+pct+'%"></i></div>'
+          +(P.last_error?'<div class="small" style="color:#ff8f8f;margin-top:6px">'+esc(P.last_error)+'</div>':'')+'</div>';
+      }
+      if(j.chyba_logu)h+='<div class="small" style="color:#ffd866;margin-bottom:10px">⚠ Statistiky doručení se nepodařilo načíst z HolyOS: '+esc(j.chyba_logu)+'</div>';
+      if(!j.zaznamu){stBox.innerHTML=h+'<span class="muted">Zatím se neodeslal žádný e-mail — doručení a otevření naskočí do minuty po prvním odeslání.</span>';stPlan(P);return;}
+      h+='<div class="ml-stg">'
         +stDl('Odesláno',j.odeslano,null,'')
         +stDl('Doručeno',j.doruceno,j.mira_doruceni,'#5ad48b')
         +stDl('Otevřeno',j.otevreno,j.mira_otevreni,'#4fd1ff')
@@ -414,9 +449,13 @@ module.exports = function mountMailing(app, ctx) {
         +'<div class="tbl-wrap" style="max-height:420px;overflow:auto;margin-top:8px"><table><thead><tr><th>E-mail</th><th>Stav</th><th>Naposledy</th></tr></thead><tbody>'
         +j.prijemci.map(stRadek).join('')+'</tbody></table></div></details>';
       stBox.innerHTML=h;
+      stPlan(P);
     }).catch(function(){stBox.innerHTML='<span style="color:#ff8f8f">⚠ Server neodpověděl — zkus Obnovit.</span>';});
   }
-  var stRef=document.getElementById('ml-st-ref');if(stRef)stRef.onclick=stNacti;
+  // dokud se odesílá, přehled se obnovuje sám (jinak jen na tlačítko Obnovit)
+  var stTimer=null;
+  function stPlan(P){clearTimeout(stTimer);if(P&&P.status==='sending')stTimer=setTimeout(stNacti,5000);}
+  var stRef=document.getElementById('ml-st-ref');if(stRef)stRef.onclick=function(){clearTimeout(stTimer);stNacti();};
   if(stBox)stNacti();
   ${c && ['sending', 'paused'].includes(c.status) ? `setInterval(function(){fetch('/admin/rozesilky/${c.id}/status',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){var p=j.total?Math.round((j.sent+j.failed)/j.total*100):0;document.getElementById('ml-pbar').style.width=p+'%';document.getElementById('ml-ptxt').textContent=j.sent+' odesláno · '+j.failed+' chyb / '+j.total;if(j.status!=='${c.status}')location.reload();});},3000);` : ''}
   })();<\/script>`;
@@ -537,6 +576,16 @@ module.exports = function mountMailing(app, ctx) {
 
   // Seznam příjemců pro okno „Blacklist" — podle stejného filtru jako počítadlo,
   // ale BEZ vyřazení (ty vrátíme zvlášť, aby šly odškrtnout zpátky).
+  // Blacklist se ukládá rovnou po „Použít". Dřív žil jen ve skrytém poli formuláře,
+  // takže kdo okno zavřel a koncept neuložil, o vyklikané kontakty přišel.
+  app.post('/admin/rozesilky/:id(\\d+)/exclude', requireAdmin, wrap(async (req, res) => {
+    const c = await load(req.params.id);
+    if (!c) return res.status(404).json({ error: 'Rozesílka neexistuje' });
+    if (c.status !== 'draft') return res.status(409).json({ error: 'Rozesílka už není koncept — blacklist se nedá měnit.' });
+    const f = normFilter(Object.assign({}, c.filter, { exclude: (req.body || {}).exclude }));
+    await q('UPDATE mail_campaigns SET filter=$2, updated_at=now() WHERE id=$1', [c.id, JSON.stringify(f)]);
+    res.json({ ok: true, exclude: f.exclude });
+  }));
   app.post('/admin/rozesilky/recipients', requireAdmin, wrap(async (req, res) => {
     try {
       const b = req.body || {};
@@ -559,14 +608,26 @@ module.exports = function mountMailing(app, ctx) {
   }));
   app.post('/admin/rozesilky/count', requireAdmin, wrap(async (req, res) => { try { res.json(await countFor((req.body || {}).filter)); } catch (e) { console.warn('[bs2 rozesílky] počet příjemců:', e.message); res.status(400).json({ error: e.message }); } }));
   app.get('/admin/rozesilky/:id(\\d+)/status', requireAdmin, wrap(async (req, res) => { const c = await load(req.params.id); res.set('Cache-Control', 'no-store').json(c ? { status: c.status, total: c.total, sent: c.sent, failed: c.failed, last_error: c.last_error } : {}); }));
-  // Statistiky rozesílky — log e-mailů žije v HolyOS (EmailMessage), BS2 si ho jen vyžádá přes servisní token
+  // Statistiky rozesílky — průběh fronty je v BS2, log e-mailů (doručení/otevření/kliky)
+  // žije v HolyOS (EmailMessage) a BS2 si ho vyžádá přes servisní token. Když HolyOS neodpoví,
+  // průběh se ukáže i tak — ať je po spuštění vidět, jak odesílání postupuje.
   app.get('/admin/rozesilky/:id(\\d+)/stats', requireAdmin, wrap(async (req, res) => {
+    const c = await load(req.params.id);
+    if (!c) return res.status(404).json({ error: 'Rozesílka neexistuje' });
+    const fronta = { queued: 0, sent: 0, failed: 0, skipped: 0 };
     try {
-      const r = await fetch(HOLYOS_URL + '/api/auth/bs2/mail-stats/' + req.params.id, { headers: { Authorization: 'Bearer ' + svcToken() }, signal: AbortSignal.timeout(25000) });
+      (await q('SELECT status, count(*)::int AS n FROM mail_campaign_recipients WHERE campaign_id=$1 GROUP BY status', [c.id])).rows
+        .forEach((r) => { if (fronta[r.status] != null) fronta[r.status] = r.n; });
+    } catch (e) { console.warn('[bs2 rozesílky] fronta:', e.message); }
+    const prubeh = { status: c.status, total: c.total, sent: c.sent, failed: c.failed, fronta,
+      started_at: c.started_at, finished_at: c.finished_at, last_error: c.last_error || null };
+    let log = {}; let chybaLogu = null;
+    try {
+      const r = await fetch(HOLYOS_URL + '/api/auth/bs2/mail-stats/' + c.id, { headers: { Authorization: 'Bearer ' + svcToken() }, signal: AbortSignal.timeout(25000) });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) return res.status(502).json({ error: j.error || ('HolyOS ' + r.status) });
-      res.set('Cache-Control', 'no-store').json(j);
-    } catch (e) { console.warn('[bs2 rozesílky] statistiky:', e.message); res.status(502).json({ error: 'HolyOS neodpověděl: ' + e.message }); }
+      if (r.ok) log = j; else chybaLogu = j.error || ('HolyOS ' + r.status);
+    } catch (e) { console.warn('[bs2 rozesílky] statistiky:', e.message); chybaLogu = 'HolyOS neodpověděl: ' + e.message; }
+    res.set('Cache-Control', 'no-store').json(Object.assign({ prubeh, chyba_logu: chybaLogu }, log));
   }));
   app.post('/admin/rozesilky/:id(\\d+)/test', requireAdmin, wrap(async (req, res) => {
     const c = await load(req.params.id); const to = String((req.body || {}).to || '').trim().toLowerCase();
