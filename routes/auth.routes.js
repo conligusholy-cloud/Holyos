@@ -530,7 +530,7 @@ router.post('/bs2/bulk-mail', express.json({ limit: '14mb' }), async (req, res, 
     }
     // campaignId z BS2 (id rozesílky) → EmailMessage.campaignId = "bs2-<id>"; podle něj se pak počítají statistiky kampaně (testovací e-maily ho neposílají)
     const campaignId = b.campaignId ? ('bs2-' + String(b.campaignId).replace(/[^0-9a-zA-Z_-]/g, '').slice(0, 60)) : undefined;
-    const r = await require('../services/email').sendMail({ to, from, fromName: String(b.fromName || process.env.BS2_BULK_FROM_NAME || 'Best Series').slice(0, 80), brand: 'bs2', attachments, replyTo: process.env.BS2_BULK_REPLY_TO || 'info@bestseries.cz', subject: String(b.subject || 'Best Series').slice(0, 200), body, link, linkLabel: link && b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined, unsubscribe: unsub || false, campaignId });
+    const r = await require('../services/email').sendMail({ to, from, fromName: String(b.fromName || process.env.BS2_BULK_FROM_NAME || 'Best Series').slice(0, 80), brand: 'bs2', attachments, replyTo: process.env.BS2_BULK_REPLY_TO || 'info@bestseries.cz', subject: String(b.subject || 'Best Series').slice(0, 200), body, link, linkLabel: link && b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined, unsubscribe: unsub || false, campaignId, onlySes: true });
     if (!r || !r.sent) return res.status(502).json({ error: (r && (r.error || r.skipped)) || 'E-mail se nepodařilo odeslat' });
     res.json({ ok: true, via: r.via || null, messageId: r.messageId || null });
   } catch (err) { next(err); }

@@ -342,7 +342,7 @@ async function isCustomerMailPaused() {
   try { const { getSetting } = require('./settings'); return (await getSetting(CUSTOMER_MAIL_PAUSE_KEY, { type: 'boolean', defaultValue: false })) === true; } catch (e) { return false; }
 }
 
-async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, deliveryReceipt, audience, leadId, campaignId, unsubscribe, lang }) {
+async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, deliveryReceipt, audience, leadId, campaignId, unsubscribe, lang, onlySes }) {
   if (!to) return { sent: false, skipped: 'no-recipient' };
   // Prádlomaty mimo Česko → značka LAUNDROMATS (hlavička šablony i jméno odesílatele)
   let unsubLabel = 'Odhlásit odběr';
@@ -354,11 +354,21 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
 
   // 00) Amazon SES brána (env SMTP_* + SES_CONFIGURATION_SET, src/mailer.js): jen e-maily od adresy SMTP_FROM
   try { const M = require('./ses/mailer'); if (M.isConfigured()) { const sesS = from ? await M.sesSenderFor(from) : null; const sf = sesS ? sesS.raw : M.smtpConf().from; const useSes = !!sesS; // SES jen pro odesílatele SES (SMTP_FROM + další v Nastavení) – ostatní cesty (M365 Graph) beze změny
-    if (useSes) { const EL = require('./ses/email-log'); const unsubUrl = unsubscribe === false ? null : (typeof unsubscribe === 'string' && /^https:\/\//.test(unsubscribe) ? unsubscribe : EL.unsubscribeUrl(to)); // string = vlastní odhlašovací odkaz (rozesílky BS2) let html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand, trackingPixel, flyerUrl, rawHtml }); if (unsubUrl) html = html.replace(/<\/body>/i, '<div style="text-align:center;font-size:11px;color:#8ea2c2;padding:10px 0 18px"><a href="' + unsubUrl + '" style="color:#8ea2c2;text-decoration:underline">' + escapeHtml(unsubLabel) + '</a></div></body>');
+    if (useSes) {
+      const EL = require('./ses/email-log');
+      // unsubscribe: false = bez patičky, string s https = vlastní odhlašovací odkaz (rozesílky BS2 mají svůj seznam vyřazených)
+      const unsubUrl = unsubscribe === false ? null : (typeof unsubscribe === 'string' && /^https:\/\//.test(unsubscribe) ? unsubscribe : EL.unsubscribeUrl(to));
+      let html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand, trackingPixel, flyerUrl, rawHtml });
+      if (unsubUrl) html = html.replace(/<\/body>/i, '<div style="text-align:center;font-size:11px;color:#8ea2c2;padding:10px 0 18px"><a href="' + unsubUrl + '" style="color:#8ea2c2;text-decoration:underline">' + escapeHtml(unsubLabel) + '</a></div></body>');
       const fa = parseAddrLite(sf); const fromHeader = fromName ? '"' + String(fromName).replace(/"/g, '') + '" <' + fa.address + '>' : sf;
       const r = await M.sendEmail({ to, subject, html, from: fromHeader, replyTo, inlineImages: [], attachments }); await EL.logMessage(r, { to, subject, campaignId: campaignId || (brand ? 'brand:' + brand : null), leadId });
       if (r.ok) { console.log('[Email] odesláno přes Amazon SES → ' + to + (r.simulated ? ' (simulace)' : '')); return { sent: true, via: 'ses', from: fa.address, messageId: r.messageId, sesMessageId: r.sesMessageId, simulated: !!r.simulated }; }
-      console.error('[Email] SES odeslání selhalo, zkouším další cestu:', r.error); } } } catch (e) { console.error('[Email] SES:', e.message); }
+      console.error('[Email] SES odeslání selhalo:', r.error);
+      // onlySes = hromadná rozesílka: nesmí se tiše přelít do M365 ani SMTP zálohy (jiná cesta = jiný
+      // odesílatel, žádné sledování a rozbité odhlašování) a volající musí vidět SKUTEČNOU chybu SES,
+      // ne až „535" ze záložního SMTP, které ji dřív přebíjelo.
+      if (onlySes) return { sent: false, via: 'ses', error: 'Amazon SES: ' + (r.error || 'odeslání selhalo') };
+    } else if (onlySes) { return { sent: false, error: 'Odesílatel ' + (from || '—') + ' není mezi odesílateli Amazon SES.' }; } } else if (onlySes) { return { sent: false, error: 'Amazon SES není nastavené.' }; } } catch (e) { console.error('[Email] SES:', e.message); if (onlySes) return { sent: false, error: 'Amazon SES: ' + e.message }; }
 
   // 0) SMTP brána z Centra reklamy (Brevo / Amazon SES / M365 SMTP) – pokud je `from` její adresa (nebo from chybí a brána je výchozí)
   try { const gw = await getGateway(); if (gw && gw.host && gw.from && (!from || sameAddr(from, gw.from) || (gw.default_for_all && !from))) { const r = await sendViaGateway(gw, { to, cc, subject, body, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, fromName }); if (r.sent) return r; console.error('[Email] SMTP brána selhala, zkouším další cestu:', r.error); } } catch (e) { console.error('[Email] SMTP brána:', e.message); }

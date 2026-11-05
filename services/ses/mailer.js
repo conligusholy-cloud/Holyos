@@ -6,12 +6,15 @@ const nodemailer = require('nodemailer');
 
 function smtpConf() {
   const env = process.env;
+  // Stejné čištění jako u API klíčů: při kopírování z AWS se do proměnné občas dostanou
+  // uvozovky nebo mezera na konci a SES pak vrací „535 Authentication Credentials Invalid".
+  const clean = (v) => String(v == null ? '' : v).trim().replace(/^['"]|['"]$/g, '').trim();
   return {
-    host: env.SMTP_HOST || '',
+    host: clean(env.SMTP_HOST),
     port: Number(env.SMTP_PORT || 587),
     secure: env.SMTP_SECURE === 'true',
-    user: env.SMTP_USER || '',
-    pass: env.SMTP_PASS || '',
+    user: clean(env.SMTP_USER),
+    pass: clean(env.SMTP_PASS),
     from: env.SMTP_FROM || 'Best Series <noreply@mail.bestseries.cz>',
   };
 }
@@ -163,7 +166,13 @@ async function sendEmail({ to, subject, text, html, preheader, inlineImages, uns
     const info = await transport.sendMail(mailOpts);
     const sesId = (info && info.response && (String(info.response).match(/\bOk\s+([0-9a-fA-F-]{10,})/) || [])[1]) || '';
     return { ok: true, simulated: false, messageId: (info && info.messageId) || '', sesMessageId: sesId };
-  } catch (e) { return { ok: false, error: e.message }; }
+  } catch (e) {
+    // SMTP přihlášení odmítnuto → rovnou napsat, co s tím (jinak je hláška slepá ulička)
+    if (/535|Invalid login|Authentication Credentials Invalid/i.test(e.message || '')) {
+      return { ok: false, error: e.message + ' — Amazon SES odmítl přihlašovací údaje SMTP (SMTP_USER / SMTP_PASS). Vytvoř v AWS SES → SMTP settings nové SMTP credentials a přepiš je v Railway (pozor: nejsou to klíče IAM), nebo nastav SES_ACCESS_KEY_ID a SES_SECRET_ACCESS_KEY a posílej přes API.' };
+    }
+    return { ok: false, error: e.message };
+  }
 }
 
 // ── Odesílatelé přes SES: SMTP_FROM + další adresy (AppSetting ads_center.ses_senders) ──
