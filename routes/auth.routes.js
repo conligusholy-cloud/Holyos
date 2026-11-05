@@ -528,9 +528,48 @@ router.post('/bs2/bulk-mail', express.json({ limit: '14mb' }), async (req, res, 
       attachments = b.attachments.slice(0, 5).map((x) => { const content = Buffer.from(String(x.data || ''), 'base64'); total += content.length; return { filename: String(x.filename || 'priloha').replace(/[\r\n"\\/]/g, '_').slice(0, 150), content, contentType: String(x.contentType || 'application/octet-stream').slice(0, 100) }; }).filter((x) => x.content.length);
       if (total > 7 * 1024 * 1024) return res.status(400).json({ error: 'Přílohy jsou větší než 7 MB.' });
     }
-    const r = await require('../services/email').sendMail({ to, from, fromName: String(b.fromName || process.env.BS2_BULK_FROM_NAME || 'Best Series').slice(0, 80), brand: 'bs2', attachments, replyTo: process.env.BS2_BULK_REPLY_TO || 'info@bestseries.cz', subject: String(b.subject || 'Best Series').slice(0, 200), body, link, linkLabel: link && b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined, unsubscribe: unsub || false });
+    // campaignId z BS2 (id rozesílky) → EmailMessage.campaignId = "bs2-<id>"; podle něj se pak počítají statistiky kampaně (testovací e-maily ho neposílají)
+    const campaignId = b.campaignId ? ('bs2-' + String(b.campaignId).replace(/[^0-9a-zA-Z_-]/g, '').slice(0, 60)) : undefined;
+    const r = await require('../services/email').sendMail({ to, from, fromName: String(b.fromName || process.env.BS2_BULK_FROM_NAME || 'Best Series').slice(0, 80), brand: 'bs2', attachments, replyTo: process.env.BS2_BULK_REPLY_TO || 'info@bestseries.cz', subject: String(b.subject || 'Best Series').slice(0, 200), body, link, linkLabel: link && b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined, unsubscribe: unsub || false, campaignId });
     if (!r || !r.sent) return res.status(502).json({ error: (r && (r.error || r.skipped)) || 'E-mail se nepodařilo odeslat' });
     res.json({ ok: true, via: r.via || null, messageId: r.messageId || null });
+  } catch (err) { next(err); }
+});
+
+// GET /api/auth/bs2/mail-stats/:id — statistiky jedné rozesílky BS2 (EmailMessage s campaignId "bs2-<id>")
+// Doručení/otevření/kliknutí hlásí Amazon SES do SNS webhooku; bez SES_CONFIGURATION_SET se otevření a kliky neměří.
+router.get('/bs2/mail-stats/:id(\\d+)', async (req, res, next) => {
+  try {
+    if (!verifyBs2Token(req, res)) return;
+    const camp = 'bs2-' + String(req.params.id);
+    const rows = await prisma.emailMessage.findMany({
+      where: { campaignId: camp },
+      select: { to: true, status: true, delivered: true, opened: true, clicked: true, bounced: true, unsubscribed: true, openedAt: true, clickedAt: true, createdAt: true, note: true },
+      orderBy: { createdAt: 'asc' },
+      take: 10000,
+    });
+    const n = (f) => rows.filter(f).length;
+    const odeslano = rows.filter((r) => /^odesláno/.test(r.status || ''));
+    const pct = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : null);
+    const doruceno = n((r) => r.delivered), otevreno = n((r) => r.opened), kliknuto = n((r) => r.clicked);
+    res.set('Cache-Control', 'no-store').json({
+      ok: true,
+      tracking: !!process.env.SES_CONFIGURATION_SET,
+      zaznamu: rows.length,
+      odeslano: odeslano.length,
+      doruceno, otevreno, kliknuto,
+      odmitnuto: n((r) => r.bounced),
+      odhlaseno: n((r) => r.unsubscribed),
+      chyby: n((r) => r.status === 'chyba'),
+      mira_doruceni: pct(doruceno, odeslano.length),
+      mira_otevreni: pct(otevreno, doruceno || odeslano.length),
+      mira_kliku: pct(kliknuto, doruceno || odeslano.length),
+      prijemci: rows.map((r) => ({
+        email: r.to, stav: r.status, doruceno: r.delivered, otevreno: r.opened, kliknuto: r.clicked,
+        odmitnuto: r.bounced, odhlaseno: r.unsubscribed,
+        otevreno_kdy: r.openedAt, kliknuto_kdy: r.clickedAt, odeslano_kdy: r.createdAt, poznamka: r.note || null,
+      })),
+    });
   } catch (err) { next(err); }
 });
 

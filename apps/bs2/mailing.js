@@ -123,10 +123,11 @@ module.exports = function mountMailing(app, ctx) {
     .replace(/\{jmeno\}/g, osloveni(u))
     .replace(/\{prijmeni\}/g, (u && u.last_name) || '')
     .replace(/\{nick\}/g, (u && u.nick) || ''));
+  // c.test = true → e-mail se neposílá s campaignId, aby testy nekazily statistiky rozesílky
   async function sendOne(c, u) {
     const attachments = c.id ? await filesOf(c.id, true) : [];
     const r = await fetch(HOLYOS_URL + '/api/auth/bs2/bulk-mail', { method: 'POST', headers: { Authorization: 'Bearer ' + svcToken(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to: u.email, from: c.sender || undefined, subject: fill(c.subject, u), body: fill(c.body, u), link: c.link || undefined, linkLabel: c.link_label || undefined, unsubUrl: u.id ? unsubUrl(u.id) : undefined, campaignId: c.id, attachments: attachments.length ? attachments : undefined }), signal: AbortSignal.timeout(60000) });
+      body: JSON.stringify({ to: u.email, from: c.sender || undefined, subject: fill(c.subject, u), body: fill(c.body, u), link: c.link || undefined, linkLabel: c.link_label || undefined, unsubUrl: u.id ? unsubUrl(u.id) : undefined, campaignId: c.test ? undefined : c.id, attachments: attachments.length ? attachments : undefined }), signal: AbortSignal.timeout(60000) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { const e = new Error(j.error || ('HolyOS ' + r.status)); e.code = j.code; e.status = r.status; throw e; }
     return j;
@@ -195,6 +196,7 @@ module.exports = function mountMailing(app, ctx) {
 .ml-st{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 9px;border:1px solid var(--border2)}.ml-st.sending{color:#4fd1ff;border-color:#4fd1ff}.ml-st.done{color:var(--ok);border-color:var(--ok)}.ml-st.paused{color:#ffd866;border-color:#ffd866}.ml-st.canceled{color:var(--err);border-color:var(--err)}
 .ml-bar{height:10px;border-radius:999px;background:rgba(120,160,255,.12);overflow:hidden}.ml-bar i{display:block;height:100%;background:linear-gradient(90deg,#1e86e0,#7c5cff)}
 .ml-ai,.ml-test{margin-top:14px;padding:12px;border-radius:12px;border:1px dashed rgba(124,92,255,.45);background:rgba(124,92,255,.06)}.ml-test{border-color:rgba(79,209,255,.35);background:rgba(79,209,255,.05)}.ml-files{display:flex;flex-direction:column;gap:4px;margin-bottom:6px}.ml-file{display:flex;gap:8px;align-items:center;margin:0;font-size:13.5px;color:var(--text)}.ml-file input{width:auto;margin:0}
+.ml-stg{display:grid;grid-template-columns:repeat(auto-fit,minmax(124px,1fr));gap:10px;margin-top:10px}.ml-stt{border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:rgba(4,8,16,.45)}.ml-stt-n{font-size:24px;font-weight:800;letter-spacing:-.02em}
 .ml-cnt{font-size:34px;font-weight:800;letter-spacing:-.02em}.ml-prev{white-space:pre-wrap;background:rgba(4,8,16,.6);border:1px solid var(--border);border-radius:12px;padding:12px;font-size:14px;max-height:340px;overflow:auto}</style>`;
 
   app.get('/admin/rozesilky', requireAdmin, wrap(async (req, res) => {
@@ -231,6 +233,8 @@ module.exports = function mountMailing(app, ctx) {
     ${c.last_error ? `<div class="msg err small" id="ml-perr">${esc(c.last_error)}</div>` : '<div id="ml-perr"></div>'}
     <div class="row">${c.status === 'sending' ? `<form method="post" action="/admin/rozesilky/${c.id}/pause"><button class="btn sec sm">⏸ Pozastavit</button></form>` : ''}${c.status === 'paused' ? `<form method="post" action="/admin/rozesilky/${c.id}/resume"><button class="btn sm">▶ Pokračovat</button></form>` : ''}${['sending', 'paused'].includes(c.status) ? `<form method="post" action="/admin/rozesilky/${c.id}/cancel" onsubmit="return confirm('Zrušit rozesílku? Zbylé e-maily se už nepošlou.')"><button class="btn danger sm">✕ Zrušit</button></form>` : ''}</div>
     <div class="small muted" style="margin-top:8px">Spuštěno: ${fmt(c.started_at)}${c.finished_at ? ' · dokončeno: ' + fmt(c.finished_at) : ''}</div></div>` : ''}
+  ${c && c.status !== 'draft' ? `<div class="card" id="ml-stats"><div class="row" style="justify-content:space-between"><b>📊 Statistiky e-mailů</b><button type="button" class="btn sec sm" id="ml-st-ref">Obnovit</button></div>
+    <div id="ml-st-body" class="small muted" style="margin-top:10px">Načítám…</div></div>` : ''}
   <form method="post" action="/admin/rozesilky/${c ? c.id : 'new'}" id="ml-form" enctype="multipart/form-data"><div class="ml-grid">
   <div class="card"><h2 style="margin-top:0">E-mail</h2>
     <label>Odesílatel</label>${(() => { const cur = (c && c.sender) || snd.def; const opts = snd.list.map((x) => x.address); if (cur && opts.indexOf(cur) < 0) opts.unshift(cur); return `<select name="sender"${dis}>${opts.map((a) => `<option value="${esc(a)}"${a === cur ? ' selected' : ''}>${esc(a)}${snd.list.some((x) => x.address === a) ? '' : ' — není v Amazon SES!'}</option>`).join('')}</select>`; })()}
@@ -373,6 +377,47 @@ module.exports = function mountMailing(app, ctx) {
   var tmr=null;function later(ms){clearTimeout(tmr);tmr=setTimeout(count,ms);}
   var komu=b&&b.closest('.card');if(komu&&!${ro ? 'true' : 'false'}){komu.addEventListener('change',function(e){if(e.target.matches('input,select,textarea'))later(150);});komu.addEventListener('input',function(e){if(e.target.matches('input[type=number],input:not([type]),input[type=text],textarea'))later(600);});}
   if(b){b.onclick=count;${ro ? '' : 'count();'}}
+  // ── Statistiky rozesílky (z logu e-mailů v HolyOS, události hlásí Amazon SES) ──
+  var stBox=document.getElementById('ml-st-body');
+  function stCas(x){if(!x)return '';try{return new Date(x).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
+  // procento na vlastním řádku, ať se popisek nezalamuje a dlaždice mají stejnou výšku
+  function stDl(l,v,pr,barva){return '<div class="ml-stt"><div class="ml-stt-n"'+(barva?' style="color:'+barva+'"':'')+'>'+v+'</div><div class="small muted">'+l+'</div><div class="small muted" style="opacity:.65">'+(pr!=null?String(pr).replace('.',',')+' %':'&nbsp;')+'</div></div>';}
+  function stRadek(r){
+    var zn=[];
+    if(r.odmitnuto)zn.push('<span style="color:#ff8f8f">odmítnuto</span>');
+    if(r.odhlaseno)zn.push('<span style="color:#ffd866">odhlášeno</span>');
+    if(r.kliknuto)zn.push('<span style="color:#b39bff">kliknul na odkaz</span>');
+    else if(r.otevreno)zn.push('<span style="color:#5ad48b">otevřel</span>');
+    else if(r.doruceno)zn.push('doručeno');
+    if(!zn.length)zn.push('<span class="muted">'+esc(r.stav)+'</span>');
+    return '<tr><td class="small">'+esc(r.email)+'</td><td class="small">'+zn.join(' · ')+'</td><td class="small muted">'+esc(stCas(r.kliknuto_kdy||r.otevreno_kdy||r.odeslano_kdy))+'</td></tr>';
+  }
+  function stNacti(){
+    if(!stBox)return;
+    stBox.innerHTML='<span class="muted">Načítám…</span>';
+    fetch('/admin/rozesilky/${c ? c.id : 0}/stats',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){
+      if(j.error){stBox.innerHTML='<span style="color:#ff8f8f">⚠ Statistiky se nepodařilo načíst: '+esc(j.error)+'</span>';return;}
+      if(!j.zaznamu){stBox.innerHTML='<span class="muted">Zatím se neodeslal žádný e-mail — statistiky naskočí během chvíle po spuštění.</span>';return;}
+      var h='<div class="ml-stg">'
+        +stDl('Odesláno',j.odeslano,null,'')
+        +stDl('Doručeno',j.doruceno,j.mira_doruceni,'#5ad48b')
+        +stDl('Otevřeno',j.otevreno,j.mira_otevreni,'#4fd1ff')
+        +stDl('Kliknutí',j.kliknuto,j.mira_kliku,'#b39bff')
+        +stDl('Odmítnuto',j.odmitnuto,null,j.odmitnuto?'#ff8f8f':'')
+        +stDl('Odhlášeno',j.odhlaseno,null,j.odhlaseno?'#ffd866':'')
+        +(j.chyby?stDl('Chyby',j.chyby,null,'#ff8f8f'):'')
+        +'</div>';
+      h+='<div class="small muted" style="margin-top:10px">'+(j.tracking
+        ?'Otevření měří Amazon SES neviditelným obrázkem v e-mailu — poštovní klienti (Apple Mail, Gmail) ho někdy načtou samy a jindy vůbec, takže otevření je orientační. Kliknutí na odkaz se měří spolehlivě.'
+        :'<span style="color:#ffd866">⚠ Měření otevření a kliknutí není zapnuté</span> — v HolyOS chybí proměnná SES_CONFIGURATION_SET (konfigurační sada Amazon SES s událostmi). Zatím se počítá jen odeslání, doručení a odmítnutí.')+'</div>';
+      h+='<details style="margin-top:12px"><summary class="small" style="cursor:pointer">Detail příjemců ('+j.zaznamu+')</summary>'
+        +'<div class="tbl-wrap" style="max-height:420px;overflow:auto;margin-top:8px"><table><thead><tr><th>E-mail</th><th>Stav</th><th>Naposledy</th></tr></thead><tbody>'
+        +j.prijemci.map(stRadek).join('')+'</tbody></table></div></details>';
+      stBox.innerHTML=h;
+    }).catch(function(){stBox.innerHTML='<span style="color:#ff8f8f">⚠ Server neodpověděl — zkus Obnovit.</span>';});
+  }
+  var stRef=document.getElementById('ml-st-ref');if(stRef)stRef.onclick=stNacti;
+  if(stBox)stNacti();
   ${c && ['sending', 'paused'].includes(c.status) ? `setInterval(function(){fetch('/admin/rozesilky/${c.id}/status',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){var p=j.total?Math.round((j.sent+j.failed)/j.total*100):0;document.getElementById('ml-pbar').style.width=p+'%';document.getElementById('ml-ptxt').textContent=j.sent+' odesláno · '+j.failed+' chyb / '+j.total;if(j.status!=='${c.status}')location.reload();});},3000);` : ''}
   })();<\/script>`;
   }
@@ -410,7 +455,7 @@ module.exports = function mountMailing(app, ctx) {
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.redirect('/admin/rozesilky/' + cid + '?err=1&msg=' + encodeURIComponent('Uloženo, ale pro test zadej platný e-mail.'));
       const c = await load(cid);
       const u = (await q('SELECT id, email, first_name, last_name, nick FROM supporters WHERE lower(email)=$1', [to])).rows[0] || { id: null, email: to, first_name: (req.admin.name || '').split(' ')[0], last_name: (req.admin.name || '').split(' ').slice(1).join(' '), nick: '' };
-      try { const r = await sendOne(Object.assign({}, c, { subject: '[TEST] ' + c.subject }), Object.assign({}, u, { email: to })); await log(req.admin, 'mail_campaign_test', { id: cid, to });
+      try { const r = await sendOne(Object.assign({}, c, { subject: '[TEST] ' + c.subject, test: true }), Object.assign({}, u, { email: to })); await log(req.admin, 'mail_campaign_test', { id: cid, to });
         return res.redirect('/admin/rozesilky/' + cid + '?msg=' + encodeURIComponent('Uloženo a test odeslán na ' + to + (r.via ? ' (' + r.via + ')' : '') + '.' + (fmsg ? ' ' + fmsg : '')));
       } catch (e) { return res.redirect('/admin/rozesilky/' + cid + '?err=1&msg=' + encodeURIComponent('Uloženo, ale test se nepodařilo odeslat: ' + e.message)); }
     }
@@ -514,11 +559,20 @@ module.exports = function mountMailing(app, ctx) {
   }));
   app.post('/admin/rozesilky/count', requireAdmin, wrap(async (req, res) => { try { res.json(await countFor((req.body || {}).filter)); } catch (e) { console.warn('[bs2 rozesílky] počet příjemců:', e.message); res.status(400).json({ error: e.message }); } }));
   app.get('/admin/rozesilky/:id(\\d+)/status', requireAdmin, wrap(async (req, res) => { const c = await load(req.params.id); res.set('Cache-Control', 'no-store').json(c ? { status: c.status, total: c.total, sent: c.sent, failed: c.failed, last_error: c.last_error } : {}); }));
+  // Statistiky rozesílky — log e-mailů žije v HolyOS (EmailMessage), BS2 si ho jen vyžádá přes servisní token
+  app.get('/admin/rozesilky/:id(\\d+)/stats', requireAdmin, wrap(async (req, res) => {
+    try {
+      const r = await fetch(HOLYOS_URL + '/api/auth/bs2/mail-stats/' + req.params.id, { headers: { Authorization: 'Bearer ' + svcToken() }, signal: AbortSignal.timeout(25000) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return res.status(502).json({ error: j.error || ('HolyOS ' + r.status) });
+      res.set('Cache-Control', 'no-store').json(j);
+    } catch (e) { console.warn('[bs2 rozesílky] statistiky:', e.message); res.status(502).json({ error: 'HolyOS neodpověděl: ' + e.message }); }
+  }));
   app.post('/admin/rozesilky/:id(\\d+)/test', requireAdmin, wrap(async (req, res) => {
     const c = await load(req.params.id); const to = String((req.body || {}).to || '').trim().toLowerCase();
     if (!c || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.redirect('/admin/rozesilky/' + req.params.id + '?err=1&msg=' + encodeURIComponent('Zadej platný e-mail.'));
     const u = (await q('SELECT id, email, first_name, last_name, nick FROM supporters WHERE lower(email)=$1', [to])).rows[0] || { id: null, email: to, first_name: (req.admin.name || '').split(' ')[0], last_name: (req.admin.name || '').split(' ').slice(1).join(' '), nick: '' };
-    try { const r = await sendOne(Object.assign({}, c, { subject: '[TEST] ' + c.subject }), Object.assign({}, u, { email: to })); await log(req.admin, 'mail_campaign_test', { id: c.id, to });
+    try { const r = await sendOne(Object.assign({}, c, { subject: '[TEST] ' + c.subject, test: true }), Object.assign({}, u, { email: to })); await log(req.admin, 'mail_campaign_test', { id: c.id, to });
       res.redirect('/admin/rozesilky/' + c.id + '?msg=' + encodeURIComponent('Test odeslán na ' + to + (r.via ? ' (' + r.via + ')' : '') + '.'));
     } catch (e) { res.redirect('/admin/rozesilky/' + c.id + '?err=1&msg=' + encodeURIComponent('Test se nepodařilo odeslat: ' + e.message)); }
   }));
