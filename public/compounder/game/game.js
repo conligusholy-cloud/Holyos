@@ -1166,12 +1166,23 @@ function shareGame(btn) {
 }
 
 // ─── Obrazovky hry ───────────────────────────────────────────────────────────
+// Píše právě hráč do nějakého pole uvnitř záložky? Pak panel nepřekreslujeme —
+// jinak mu rozepsaný text zmizí pod rukama (stávalo se to u názvu firmy).
+function pisePrave() {
+  var el = document.activeElement;
+  if (!el) return false;
+  var tag = (el.tagName || '').toLowerCase();
+  if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') return false;
+  return !!(el.closest && el.closest('.view'));
+}
 function paint() {
   refreshUnits();
   $('t-year').textContent = gameYear();
   $('t-cash').textContent = kcHdr(S.cash);
   $('t-rate').textContent = kc(monthlyProfit());
   $('t-count').textContent = S.units.length;
+  // Hlavička se hýbe pořád, obsah záložky počká, až hráč dopíše.
+  if (pisePrave()) return;
   if (!$('v-shop').classList.contains('hidden')) paintShop();
   if (!$('v-net').classList.contains('hidden')) {
     if ($('net-zebricek').classList.contains('hidden')) paintNet(); else paintZeb();
@@ -1272,6 +1283,8 @@ function paintBank() {
 }
 function paintMe() {
   var p = PROFILES[S.profile];
+  // Co má hráč rozepsané, přežije překreslení.
+  var drzFirma = $('me-firma') ? $('me-firma').value : null;
   var net = S.cash + investedTotal() - S.loan;
   $('me-body').innerHTML = (ME
     ? '<div class="card"><h3>' + esc(ME.company || ME.nick) + '</h3>'
@@ -1303,6 +1316,7 @@ function paintMe() {
     + '<button class="btn big" id="do-share" style="margin-top:12px">' + (navigator.share ? 'Poslat odkaz' : 'Zkopírovat odkaz') + '</button>'
     + '</div>'
     + '<button class="btn sec big" id="do-reset">Začít znovu od nuly</button>';
+  if (drzFirma != null && $('me-firma')) $('me-firma').value = drzFirma;
   var fb = $('me-firma-ulozit');
   if (fb) fb.onclick = function () {
     var f = $('me-firma').value.trim();
