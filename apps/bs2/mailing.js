@@ -95,7 +95,9 @@ module.exports = function mountMailing(app, ctx) {
     const optout = (await q('SELECT count(*)::int AS c FROM supporters WHERE mail_optout = true')).rows[0].c;
     // Kolik z vybraných nemá křestní jméno — ti dostanou jen „Dobrý den,".
     // Lepší to vědět teď než až z odeslané rozesílky.
-    const bezJmena = (await q("SELECT count(*)::int AS c FROM supporters s WHERE " + sql + " AND coalesce(trim(s.first_name), '') = ''", p)).rows[0].c;
+    let bezJmena = 0;
+    try { bezJmena = (await q("SELECT count(*)::int AS c FROM supporters s WHERE " + sql + " AND coalesce(trim(s.first_name), '') = ''", p)).rows[0].c; }
+    catch (e) { console.warn('[bs2 rozesílky] počet bez jména:', e.message); } // informativní údaj nesmí shodit počítadlo
     let unknown = [];
     if (emails.length) { const found = new Set((await q('SELECT lower(email) AS e FROM supporters WHERE lower(email) = ANY($1::text[])', [emails])).rows.map((r) => r.e)); unknown = emails.filter((e) => !found.has(e)).slice(0, 50); }
     return { count: c, sample, optout, unknown, excluded: (f.exclude || []).length, noname: bezJmena };
@@ -365,7 +367,7 @@ module.exports = function mountMailing(app, ctx) {
     nacti();
   };
 
-  var seq=0;function count(){if(!b)return;var my=++seq;b.disabled=true;n.style.opacity='.45';fetch('/admin/rozesilky/count',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({filter:data()})}).then(function(r){return r.json();}).then(function(j){if(my!==seq)return;b.disabled=false;n.style.opacity='';if(j.error){inf.textContent=j.error;return;}n.textContent=j.count.toLocaleString('cs-CZ');inf.innerHTML=(j.sample.length?'např. '+j.sample.map(function(s){return esc(s.email);}).join(', ')+'<br>':'')+(j.excluded?'<span style="color:#ffd866">Blacklist této rozesílky: '+j.excluded+' kontaktů</span><br>':'')+(j.noname?'<span style="color:#ffd866">Bez křestního jména: '+j.noname+' — dostanou jen „Dobrý den,“</span><br>':'')+'Trvale odhlášených z rozesílek: '+j.optout+(j.unknown.length?'<br><span style="color:#ffd866">Nenalezeno v BS2: '+j.unknown.map(esc).join(', ')+'</span>':'');}).catch(function(){b.disabled=false;n.textContent='?';});}
+  var seq=0;function count(){if(!b)return;var my=++seq;b.disabled=true;n.style.opacity='.45';fetch('/admin/rozesilky/count',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({filter:data()})}).then(function(r){return r.json();}).then(function(j){if(my!==seq)return;b.disabled=false;n.style.opacity='';if(j.error){n.textContent='—';inf.innerHTML='<span style="color:#ff8f8f;font-weight:700">⚠ Počet se nepodařilo spočítat:</span> <span style="color:#ff8f8f">'+esc(j.error)+'</span>';return;}n.textContent=j.count.toLocaleString('cs-CZ');inf.innerHTML=(j.sample.length?'např. '+j.sample.map(function(s){return esc(s.email);}).join(', ')+'<br>':'')+(j.excluded?'<span style="color:#ffd866">Blacklist této rozesílky: '+j.excluded+' kontaktů</span><br>':'')+(j.noname?'<span style="color:#ffd866">Bez křestního jména: '+j.noname+' — dostanou jen „Dobrý den,“</span><br>':'')+'Trvale odhlášených z rozesílek: '+j.optout+(j.unknown.length?'<br><span style="color:#ffd866">Nenalezeno v BS2: '+j.unknown.map(esc).join(', ')+'</span>':'');}).catch(function(){b.disabled=false;n.style.opacity='';n.textContent='—';inf.innerHTML='<span style="color:#ff8f8f;font-weight:700">⚠ Server neodpověděl — zkus Spočítat znovu.</span>';});}
   // Přepočet při každé změně filtru (zaškrtávátka/výběry hned, psaní s krátkou prodlevou)
   var tmr=null;function later(ms){clearTimeout(tmr);tmr=setTimeout(count,ms);}
   var komu=b&&b.closest('.card');if(komu&&!${ro ? 'true' : 'false'}){komu.addEventListener('change',function(e){if(e.target.matches('input,select,textarea'))later(150);});komu.addEventListener('input',function(e){if(e.target.matches('input[type=number],input:not([type]),input[type=text],textarea'))later(600);});}
@@ -509,7 +511,7 @@ module.exports = function mountMailing(app, ctx) {
       res.json({ total: celkem, limit: LIMIT, rows, excluded: vyrazeniRadky });
     } catch (e) { res.status(400).json({ error: e.message }); }
   }));
-  app.post('/admin/rozesilky/count', requireAdmin, wrap(async (req, res) => { try { res.json(await countFor((req.body || {}).filter)); } catch (e) { res.status(400).json({ error: e.message }); } }));
+  app.post('/admin/rozesilky/count', requireAdmin, wrap(async (req, res) => { try { res.json(await countFor((req.body || {}).filter)); } catch (e) { console.warn('[bs2 rozesílky] počet příjemců:', e.message); res.status(400).json({ error: e.message }); } }));
   app.get('/admin/rozesilky/:id(\\d+)/status', requireAdmin, wrap(async (req, res) => { const c = await load(req.params.id); res.set('Cache-Control', 'no-store').json(c ? { status: c.status, total: c.total, sent: c.sent, failed: c.failed, last_error: c.last_error } : {}); }));
   app.post('/admin/rozesilky/:id(\\d+)/test', requireAdmin, wrap(async (req, res) => {
     const c = await load(req.params.id); const to = String((req.body || {}).to || '').trim().toLowerCase();
