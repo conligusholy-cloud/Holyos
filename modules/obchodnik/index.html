@@ -1605,6 +1605,10 @@
       if (!r.ok) throw new Error('HTTP '+r.status);
       state.leads = await r.json();
       try { var r2 = await api('/my-leads?owner_meetings=1'); state.omLeads = r2.ok ? await r2.json() : []; } catch(e){ state.omLeads = state.omLeads || []; }
+      // Kontakty z „Online schůzky s majitelem" (patří už majiteli) přidáme i do state.leads, ať s nimi jdou dělat
+      // všechny akce (poznámka, slíbený krok, stav, hovor…) — v běžném seznamu se ale nezobrazují (_om).
+      (state.omLeads || []).forEach(function(o){ var ex = state.leads.find(function(x){ return x.id === o.id; }); if (ex){ ex.owner_meeting_status = o.owner_meeting_status; ex.owner_meeting_at = o.owner_meeting_at; } else { o._om = true; state.leads.push(o); } });
+      state.omLeads = (state.omLeads || []).map(function(o){ return state.leads.find(function(x){ return x.id === o.id; }) || o; });
       render(); // otevřená karta zůstane otevřená (řídí state.openId)
       if (opts.keepScrollY != null) { try { window.scrollTo(0, opts.keepScrollY); setTimeout(function(){ window.scrollTo(0, opts.keepScrollY); }, 60); } catch(e){} }
     } catch(e){ if (!opts.silent) box.innerHTML = '<div class="err">Nepodařilo se načíst kontakty: '+esc(e.message)+'</div>'; }
@@ -1615,7 +1619,7 @@
     var searching = !!(state.search && state.search.length);
     // Při hledání ignorujeme záložku i filtry (chytré vyhledávání napříč vším).
     if (!searching && (state.typeFilter || 'all') === 'lokality'){ box.innerHTML = ''; return; }
-    var leads = (state.ownerMeetOnly && !searching) ? (state.omLeads || []) : (state.leads || []);
+    var leads = (state.ownerMeetOnly && !searching) ? (state.omLeads || []) : (state.leads || []).filter(function(l){ return !l._om; });
     if (!leads.length && !state.ownerMeetOnly){ box.innerHTML = '<div class="empty">'+(searching?'Nic nenalezeno.':'Zatím žádné přiřazené kontakty.')+'</div>'; return; }
     var head, filtered;
     if (searching){
