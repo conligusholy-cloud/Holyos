@@ -370,6 +370,25 @@ async function migrate() {
       fetched_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
       PRIMARY KEY (supporter_id, section)
     );
+    -- Hromadné e-maily (Rozesílky): vyřazení uživatele + kampaně + fronta příjemců
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mail_optout BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mail_optout_at TIMESTAMPTZ;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mail_optout_by TEXT; -- 'user' (odkaz v e-mailu) | jméno správce
+    CREATE TABLE IF NOT EXISTS mail_campaigns (
+      id SERIAL PRIMARY KEY, name TEXT NOT NULL, subject TEXT NOT NULL, body TEXT NOT NULL,
+      link TEXT, link_label TEXT, filter JSONB NOT NULL DEFAULT '{}'::jsonb,
+      status TEXT NOT NULL DEFAULT 'draft', -- draft | sending | paused | done | canceled
+      total INT NOT NULL DEFAULT 0, sent INT NOT NULL DEFAULT 0, failed INT NOT NULL DEFAULT 0,
+      created_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      started_at TIMESTAMPTZ, finished_at TIMESTAMPTZ, last_error TEXT
+    );
+    CREATE TABLE IF NOT EXISTS mail_campaign_recipients (
+      id SERIAL PRIMARY KEY, campaign_id INT NOT NULL REFERENCES mail_campaigns(id) ON DELETE CASCADE,
+      supporter_id INT REFERENCES supporters(id) ON DELETE SET NULL, email TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'queued', -- queued | sent | failed | skipped
+      error TEXT, sent_at TIMESTAMPTZ, UNIQUE (campaign_id, email)
+    );
+    CREATE INDEX IF NOT EXISTS mail_rcpt_queue_idx ON mail_campaign_recipients (campaign_id, status, id);
   `);
 }
 

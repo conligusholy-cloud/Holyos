@@ -497,6 +497,28 @@ router.post('/lm/send-mail', express.json({ limit: '50kb' }), async (req, res, n
   } catch (err) { next(err); }
 });
 
+// POST /api/auth/bs2/bulk-mail — jeden e-mail hromadné rozesílky z BS2 (Rozesílky). Odesílá se VÝHRADNĚ přes
+// Amazon SES z adresy BS2_BULK_FROM (výchozí info@bestseries.cz) — adresa musí být v Nastavení → odesílatelé SES
+// a doména ověřená v SES. Odkaz na odhlášení vkládá BS2 sám (vlastní seznam vyřazených), proto unsubscribe:false.
+router.post('/bs2/bulk-mail', express.json({ limit: '100kb' }), async (req, res, next) => {
+  try {
+    if (!verifyBs2Token(req, res)) return;
+    const b = req.body || {};
+    const to = String(b.to || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: 'Neplatný příjemce' });
+    const from = process.env.BS2_BULK_FROM || 'info@bestseries.cz';
+    const M = require('../services/ses/mailer');
+    if (!M.isConfigured() || !(await M.sesSenderFor(from))) return res.status(503).json({ error: 'Odesílatel ' + from + ' není nastavený v Amazon SES (HolyOS → Nastavení → odesílatelé SES + ověřená doména).', code: 'no_ses_sender' });
+    const hostOk = (u) => { try { const h = new URL(u).host.replace(/^www\./, '').toLowerCase(); return /^https:\/\//.test(u) && /(^|\.)(bestseries2\.cz|bestseries\.cz|laundromats\.eu|pradlomaty\.info|compounder\.world)$/.test(h); } catch (e) { return false; } };
+    const link = b.link && hostOk(String(b.link)) ? String(b.link) : undefined;
+    const unsub = b.unsubUrl && hostOk(String(b.unsubUrl)) ? String(b.unsubUrl) : null;
+    const body = String(b.body || '').slice(0, 20000) + (unsub ? '\n\n—\nNechcete už od nás dostávat tyto e-maily? Odhlásit se můžete zde: ' + unsub : '');
+    const r = await require('../services/email').sendMail({ to, from, fromName: process.env.BS2_BULK_FROM_NAME || 'Best Series', brand: 'bs2', subject: String(b.subject || 'Best Series').slice(0, 200), body, link, linkLabel: link && b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined, unsubscribe: false });
+    if (!r || !r.sent) return res.status(502).json({ error: (r && (r.error || r.skipped)) || 'E-mail se nepodařilo odeslat' });
+    res.json({ ok: true, via: r.via || null, messageId: r.messageId || null });
+  } catch (err) { next(err); }
+});
+
 // POST /api/auth/bs2/invoice/proforma — BS2 odešle objednávku produktu → zálohová faktura (splatnost 3 dny) + e-mail zákazníkovi
 // POST /api/auth/bs2/invoice/online   — BS2 odešle zaplacenou online objednávku (Stripe) → faktura + e-mail
 function verifyBs2Token(req, res) {

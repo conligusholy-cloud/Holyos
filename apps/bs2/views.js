@@ -1483,6 +1483,7 @@ const ADMIN_NAV = [
   { id: 'sug', href: '/admin/suggestions', label: 'Podněty', icon: 'bolt' },
   { id: 'ai', href: '/admin/ai-chat', label: 'AI chat', icon: 'bolt' },
   { id: 'sup2', href: '/admin/podpora', label: 'Podpora', icon: 'chat' },
+  { id: 'mail', href: '/admin/rozesilky', label: 'Rozesílky', icon: 'chat' },
   { id: 'imp', href: '/admin/import', label: 'Import', icon: 'upload', right: true },
 ];
 function adminLayout(title, active, admin, body, holyosUrl) {
@@ -2220,6 +2221,7 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
     </div></details>
     ${isNew ? '' : `<details class="card sec" data-sec="ucet" open><summary>Účet <span class="chev">▶</span></summary><div class="sec-body">
       <div class="list-item"><span class="muted">Stav</span><span class="badge ${esc(s.status)}">${s.status}</span></div>
+      <div class="list-item" style="align-items:center"><span class="muted">Hromadné e-maily</span><form method="post" action="/admin/supporters/${s.id}/mail-optout" style="display:flex;gap:8px;align-items:center;margin:0">${s.mail_optout ? `<span class="badge blocked" title="${s.mail_optout_at ? 'od ' + new Date(s.mail_optout_at).toLocaleString('cs-CZ') : ''}${s.mail_optout_by ? ' · ' + (s.mail_optout_by === 'user' ? 'odhlásil se sám' : esc(s.mail_optout_by)) : ''}">vyřazen z rozesílek</span><input type="hidden" name="optout" value="0"><button class="btn sec sm" type="submit">Zařadit zpět</button>` : `<span class="badge active">dostává</span><input type="hidden" name="optout" value="1"><button class="btn sec sm" type="submit" onclick="return confirm('Vyřadit uživatele z hromadných e-mailů?')">Vyřadit ze seznamu</button>`}</form></div>
       <div class="list-item"><span class="muted">Nick</span><b>${esc(s.nick || '—')}</b></div>
       <div class="list-item"><span class="muted">Aktivován</span><span>${fmtDT(s.activated_at)}</span></div>
       <div class="list-item"><span class="muted">Poslední přihlášení</span><span>${fmtDT(s.last_login_at)}</span></div>

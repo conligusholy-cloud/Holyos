@@ -224,7 +224,7 @@ app.use((req, res, next) => {
   const adm = readCookie(req, ADMIN_COOKIE); if (adm && adm.kind === 'admin') return next();
   // Přihlášení, SSO z HolyOS a nastavení 2FA musí projít vždy. Bez toho vznikala smyčka
   // (/sso → /lokalita → /2fa → /lokalita …) a prohlížeč hlásil ERR_TOO_MANY_REDIRECTS.
-  if (!/^\/(lokalita|password|podpora|api\/support|support\/file|login|logout|sso|2fa|souhlas|api\/track|api\/presence|location|findlocation|lp\/|cesta|api\/cesta)/.test(req.path) && !req.path.startsWith('/admin') && !req.path.startsWith('/api/health') && !req.path.startsWith('/img') && !req.path.startsWith('/api/location')) {
+  if (!/^\/(odhlasit-rozesilku|lokalita|password|podpora|api\/support|support\/file|login|logout|sso|2fa|souhlas|api\/track|api\/presence|location|findlocation|lp\/|cesta|api\/cesta)/.test(req.path) && !req.path.startsWith('/admin') && !req.path.startsWith('/api/health') && !req.path.startsWith('/img') && !req.path.startsWith('/api/location')) {
     return q('SELECT user_type FROM supporters WHERE id=$1', [s.sid]).then((r) => { const u = r.rows[0]; if (u && u.user_type === 'location') return res.redirect('/lokalita'); next(); }).catch(() => next());
   }
   next();
@@ -2196,6 +2196,9 @@ app.get('/admin/podpora/poll', requireAdmin, wrap(async (req, res) => {
   if (sid && Number.isFinite(after)) { msgs = (await q('SELECT ' + SUP_COLS + ' FROM support_messages WHERE supporter_id=$1 AND id>$2 ORDER BY id', [sid, after])).rows; if (msgs.length) await q("UPDATE support_messages SET read_by_agent=true WHERE supporter_id=$1 AND sender='user'", [sid]); }
   res.set('Cache-Control', 'no-store').json({ unread, msgs });
 }));
+
+// ── Rozesílky (hromadné e-maily přes Amazon SES) + odhlášení z rozesílek ──
+require('./mailing')(app, { q, requireAdmin, wrap, V, PUBLIC_URL, HOLYOS_URL, SSO_SECRET, log, esc: (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) });
 
 // ── Podněty na vylepšení ──────────────────────────────────────────────
 app.post('/api/suggestion', wrap(async (req, res) => {
