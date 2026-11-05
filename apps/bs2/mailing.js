@@ -233,7 +233,7 @@ module.exports = function mountMailing(app, ctx) {
   <div class="card"><h2 style="margin-top:0">E-mail</h2>
     <label>Odesílatel</label>${(() => { const cur = (c && c.sender) || snd.def; const opts = snd.list.map((x) => x.address); if (cur && opts.indexOf(cur) < 0) opts.unshift(cur); return `<select name="sender"${dis}>${opts.map((a) => `<option value="${esc(a)}"${a === cur ? ' selected' : ''}>${esc(a)}${snd.list.some((x) => x.address === a) ? '' : ' — není v Amazon SES!'}</option>`).join('')}</select>`; })()}
     <div class="small muted">Adresy z HolyOS → Centrum reklamy → Amazon SES (další odesílatelé). ${snd.configured === false ? '<span style="color:#ffd866">Amazon SES v HolyOS není nastavený.</span>' : ''}</div>
-    <label>Přílohy</label>${files.length ? `<div class="ml-files">${files.map((f) => `<label class="ml-file">📎 <a href="/admin/rozesilky/file/${f.id}" target="_blank">${esc(f.filename)}</a> <span class="small muted">${Math.round(f.size / 1024)} kB</span>${ro ? '' : ` <span class="small"><input type="checkbox" name="remove_files" value="${f.id}"> odebrat</span>`}</label>`).join('')}</div>` : ''}
+    <label>Přílohy</label>${files.length ? `<div class="ml-files">${files.map((f) => `<label class="ml-file">📎 <a href="/admin/rozesilky/file/${f.id}" target="_blank">${esc(f.filename)}</a> <span class="small muted">${Math.round(f.size / 1024)} kB</span>${ro ? '' : ` <button type="button" class="ml-rmfile" data-file="${f.id}" data-name="${esc(f.filename)}" title="Odebrat přílohu" style="margin-left:8px;background:none;border:0;color:#ff8f8f;font-size:15px;line-height:1;cursor:pointer;padding:2px 6px">✕</button>`}</label>`).join('')}</div>` : ''}
     ${ro ? '' : `<input type="file" name="files" id="ml-files" multiple accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip">
     <div class="small muted">PDF, obrázky, Word, Excel, PowerPoint, TXT/CSV, ZIP · max 5 souborů a 7 MB dohromady. Příloha se posílá každému příjemci — u velkých souborů radši odkaz.</div>
     <div class="ml-ai"><b>✨ Vytvořit e-mail pomocí AI</b><div class="small muted">Podle vybraných/nahraných příloh (PDF, obrázek, Word, Excel, text) navrhne předmět i text. Můžeš doplnit pokyn.</div>
@@ -284,6 +284,21 @@ module.exports = function mountMailing(app, ctx) {
     fetch('/admin/rozesilky/ai',{method:'POST',credentials:'same-origin',body:fd}).then(function(r){return r.json();}).then(function(j){ai.disabled=false;if(j.error){st.textContent='⚠ '+j.error;return;}
       var S=f.querySelector('[name=subject]'),B=f.querySelector('[name=body]'),N=f.querySelector('[name=name]');if(S.value&&!confirm('Přepsat stávající předmět a text návrhem od AI?')){st.textContent='';return;}
       S.value=j.subject||'';B.value=j.body||'';if(N&&!N.value)N.value=j.subject||'';st.textContent='✓ Hotovo — zkontroluj a uprav text.';}).catch(function(){ai.disabled=false;st.textContent='⚠ Nepodařilo se.';});};
+  // Příloha se odebere hned po kliknutí na ✕ — dřív se musela zaškrtnout a teprve
+  // uložit celý formulář, což vypadalo, že odebrání nefunguje.
+  document.querySelectorAll('.ml-rmfile').forEach(function(b){
+    b.onclick=function(){
+      if(!confirm('Odebrat přílohu „'+b.getAttribute('data-name')+'“?'))return;
+      b.disabled=true;
+      fetch('/admin/rozesilky/${c ? c.id : 0}/file/'+b.getAttribute('data-file')+'/delete',{method:'POST',credentials:'same-origin'})
+        .then(function(r){return r.json();}).then(function(j){
+          if(j&&j.ok){var w=b.closest('.ml-file');if(w)w.remove();
+            var box=document.querySelector('.ml-files');if(box&&!box.querySelector('.ml-file'))box.remove();}
+          else{b.disabled=false;alert((j&&j.error)||'Přílohu se nepodařilo odebrat.');}
+        }).catch(function(){b.disabled=false;alert('Přílohu se nepodařilo odebrat.');});
+    };
+  });
+
   // ── Blacklist této rozesílky ────────────────────────────────────────────
   // Vyřazení platí jen pro tuhle kampaň (uloží se k ní do filtru). Trvalé
   // odhlášení dál řeší odkaz v e-mailu.
@@ -458,6 +473,20 @@ module.exports = function mountMailing(app, ctx) {
       res.json({ subject: String(o.subject).slice(0, 200), body: String(o.body).slice(0, 20000) });
     } catch (e) { res.status(502).json({ error: 'AI: ' + e.message }); }
   }));
+  // Odebrání jedné přílohy (✕ u seznamu příloh). Maže se rovnou, ať se nemusí
+  // ukládat celý formulář — rozepsaný text tím zůstane nedotčený.
+  app.post('/admin/rozesilky/:id(\\d+)/file/:fid(\\d+)/delete', requireAdmin, wrap(async (req, res) => {
+    const cid = parseInt(req.params.id, 10), fid = parseInt(req.params.fid, 10);
+    const c = await load(cid);
+    if (!c) return res.status(404).json({ error: 'Rozesílka nenalezena.' });
+    if (c.status !== 'draft') return res.status(400).json({ error: 'Rozeslanou kampaň už měnit nejde.' });
+    const r = await q('DELETE FROM mail_campaign_files WHERE campaign_id=$1 AND id=$2 RETURNING filename', [cid, fid]);
+    if (!r.rowCount) return res.status(404).json({ error: 'Příloha nenalezena.' });
+    _files.delete(cid);
+    await log(req.admin, 'mail_campaign_file_delete', { id: cid, file: r.rows[0].filename });
+    res.json({ ok: true });
+  }));
+
   // Seznam příjemců pro okno „Blacklist" — podle stejného filtru jako počítadlo,
   // ale BEZ vyřazení (ty vrátíme zvlášť, aby šly odškrtnout zpátky).
   app.post('/admin/rozesilky/recipients', requireAdmin, wrap(async (req, res) => {
