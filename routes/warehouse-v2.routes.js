@@ -1049,12 +1049,23 @@ router.post('/pwa/receive/orders/:id', async (req, res, next) => {
     if (!o || !['purchase', 'cooperation'].includes(o.type)) return res.status(404).json({ error: 'Nákupní objednávka nenalezena' });
     const lines = (Array.isArray(b.lines) ? b.lines : []).map((l) => ({ id: parseInt(l.order_item_id, 10), qty: Number(String(l.quantity).replace(',', '.')) })).filter((l) => l.id && l.qty > 0);
     if (!lines.length) return res.status(400).json({ error: 'Zadejte přijaté množství aspoň u jedné položky.' });
+    // Spotřební materiál a služby skladem neprochází — příjemka se u nich nedělá,
+    // i kdyby položka náhodou měla skladovou kartu.
+    const OK = require('../services/purchase/order-kinds');
+    const druh = OK.orderKind(o);
+    if (druh && !druh.stock) {
+      return res.status(400).json({ error: 'Objednávka „' + druh.label + '" skladem neprochází — příjemka se u ní nedělá.' });
+    }
     const byId = Object.fromEntries(o.items.map((it) => [it.id, it]));
     for (const l of lines) {
       const it = byId[l.id];
       if (!it) return res.status(400).json({ error: 'Položka #' + l.id + ' nepatří k objednávce.' });
+      if (OK.isCostLine(it)) return res.status(400).json({ error: '„' + it.name + '" je vedlejší náklad (' + (OK.COST_KINDS[it.cost_kind] || {}).label + ') — na sklad se nepřijímá, jeho hodnota se rozpustí do ceny zboží.' });
       if (!it.material_id) return res.status(400).json({ error: 'Položka „' + it.name + '" nemá skladovou kartu — příjem na sklad nejde. Napoj ji na zboží v objednávce.' });
     }
+    // Doprava, recyklační poplatek a dobírka nejsou zboží, ale zaplatili jsme je —
+    // jejich hodnota patří do pořizovací ceny. Rozpočítá se váženě podle hodnoty položek.
+    const vedlejsi = OK.spreadOverhead(o.items);
     const personId = await resolvePersonIdForUser(req.user).catch(() => null);
     // 1) Příjemka
     const doc = await createDocument({ type: 'receipt_doc', partner_id: o.company_id || null, reference: o.order_number, note: (String(b.note || '').trim() || ('Příjem k objednávce ' + o.order_number)).slice(0, 2000), created_by: personId });
@@ -1065,7 +1076,7 @@ router.post('/pwa/receive/orders/:id', async (req, res, next) => {
       const it = byId[l.id];
       const r = await createMove({
         type: 'receipt', material_id: it.material_id, warehouse_id: loc.warehouse_id, quantity: l.qty,
-        location_id: loc.id, to_location_id: loc.id, document_id: doc.id, unit_price: (o.currency || 'CZK') === 'CZK' ? (it.confirmed_price != null ? Number(it.confirmed_price) : (it.unit_price != null ? Number(it.unit_price) : undefined)) : undefined, // vážená cena se vede v CZK
+        location_id: loc.id, to_location_id: loc.id, document_id: doc.id, unit_price: (o.currency || 'CZK') === 'CZK' ? vedlejsi.unitPrice(it) : undefined, // vážená cena se vede v CZK, vč. podílu dopravy a poplatků
         reference_type: 'order_item', reference_id: it.id, created_by: personId,
         client_uuid: b.client_uuid ? lineUuid(String(b.client_uuid), it.id) : undefined, note: 'Objednávka ' + o.order_number,
       });
@@ -1079,6 +1090,12 @@ router.post('/pwa/receive/orders/:id', async (req, res, next) => {
       // Nic nepřijato → zrušit prázdnou příjemku, ať v systému nezůstane viset koncept
       if (!moved.length) { await cancelDocument(doc.id).catch(() => {}); }
       throw e;
+    }
+    // Do poznámky příjemky napíšeme, kolik se rozpustilo — ať je to na dokladu dohledatelné.
+    if (vedlejsi.overhead > 0 && vedlejsi.ratio > 0) {
+      const procent = Math.round(vedlejsi.ratio * 1000) / 10;
+      await prisma.warehouseDocument.update({ where: { id: doc.id },
+        data: { note: (doc.note ? doc.note + ' · ' : '') + 'Vedlejší náklady ' + Math.round(vedlejsi.overhead) + ' Kč rozpuštěny do skladové ceny (+' + procent + ' %)' } }).catch(() => {});
     }
     await completeDocument(doc.id, personId).catch(() => {});
     // Kdo přijímal — jméno osoby (pro sloupec „Doručeno" v Nákupních objednávkách)

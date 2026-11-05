@@ -1092,11 +1092,22 @@ router.post('/invoices/:id/mark-ready-to-pay', async (req, res, next) => {
       invoice.tags.includes('service') || invoice.tags.includes('sluzba')
     );
 
+    // Objednávka typu Spotřeba nebo Služba skladem neprochází — příjemka u ní
+    // z povahy věci neexistuje a nemá smysl ji po účetní chtít.
+    let bezPrijemky = false;
+    if (invoice.order_id) {
+      try {
+        const OK = require('../services/purchase/order-kinds');
+        const ord = await prisma.order.findUnique({ where: { id: invoice.order_id }, select: { type: true, purchase_kind: true } });
+        bezPrijemky = !!ord && !OK.requiresReceipt(ord);
+      } catch (e) { /* při chybě raději příjemku vyžadujeme */ }
+    }
+
     const hardChecks = [];
     if (!isService) {
       const nm = await noMatchSets();
       if (!matchOk(invoice, 'order', nm)) hardChecks.push('chybí objednávka (napoj ji, ručně zaškrtni „má objednávku", nebo označ „nevede se")');
-      if (!matchOk(invoice, 'receipt', nm)) hardChecks.push('chybí příjemka (napoj ji, ručně zaškrtni „má příjemku", nebo označ „nevede se")');
+      if (!bezPrijemky && !matchOk(invoice, 'receipt', nm)) hardChecks.push('chybí příjemka (napoj ji, ručně zaškrtni „má příjemku", nebo označ „nevede se")');
     }
     const allApproved = invoice.approval_steps.length > 0 &&
       invoice.approval_steps.filter(s => s.required).every(s => s.status === 'approved');

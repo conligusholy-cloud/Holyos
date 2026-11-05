@@ -931,11 +931,27 @@ router.post('/orders', async (req, res, next) => {
   try {
     const { items, items_count, total_amount, ...rest } = req.body;
 
+    // Druh nákupní objednávky (kooperace | vyroba | spotreba | sluzba) určuje typ dokladu
+    // i to, jestli se zboží vybírá ze skladu a jestli se bude čekat příjemka.
+    const OK = require('../services/purchase/order-kinds');
+    const druh = OK.kind(rest.purchase_kind);
+    const typObjednavky = druh ? druh.orderType : rest.type;
+
     // Nákupní/kooperační objednávka: číslo se přidělí automaticky, položky se založí společně s hlavičkou
-    if (['purchase', 'cooperation'].includes(rest.type)) {
+    if (['purchase', 'cooperation'].includes(typObjednavky)) {
       const cid = parseInt(rest.company_id);
       if (!cid || isNaN(cid)) return res.status(400).json({ error: 'Vyberte dodavatele.' });
+      if (rest.purchase_kind && !druh) return res.status(400).json({ error: 'Neznámý druh objednávky.' });
       const list = (Array.isArray(items) ? items : []).filter((i) => i && String(i.name || '').trim());
+      // Skladová objednávka (kooperace, do výroby): položka musí mít skladovou kartu.
+      // Výjimkou jsou vedlejší náklady — doprava, recyklační poplatek, dobírka.
+      if (druh && druh.stock) {
+        const bezKarty = list.filter((i) => !i.material_id && !OK.COST_KINDS[i.cost_kind]);
+        if (bezKarty.length) {
+          return res.status(400).json({ error: 'U objednávky „' + druh.label + '" zboží prochází skladem, takže položky musí být vybrané ze zboží. Bez skladové karty jsou: '
+            + bezKarty.map((i) => i.name).slice(0, 5).join(', ') + (bezKarty.length > 5 ? ' …' : '') + '.' });
+        }
+      }
       const po = {}; if (rest.po_data && typeof rest.po_data === 'object') for (const [k, v] of Object.entries(rest.po_data)) if (/^[a-z_]{1,40}$/.test(k) && String(v || '').trim()) po[k] = String(v).slice(0, 2000);
       // Každá položka musí mít cenu: ručně zadaná, jinak z nákupního ceníku dodavatele (tier podle množství)
       const needPrice = list.filter((i) => !(parseFloat(i.unit_price) > 0) && i.material_id);
@@ -945,10 +961,10 @@ router.post('/orders', async (req, res, next) => {
       }
       const noPrice = list.filter((i) => !(parseFloat(i.unit_price) > 0));
       if (noPrice.length) return res.status(400).json({ error: 'Položky bez ceny: ' + noPrice.map((i) => i.name).slice(0, 5).join(', ') + (noPrice.length > 5 ? ' …' : '') + '. Doplň cenu ručně (v nákupním ceníku dodavatele není).' });
-      const mk = list.map((i) => { const q = parseFloat(i.quantity) || 1; const up = parseFloat(i.unit_price) || 0; return { name: String(i.name).slice(0, 255), material_id: i.material_id ? parseInt(i.material_id) : null, quantity: q, unit: i.unit || 'ks', unit_price: up, total_price: Math.round(q * up * 100) / 100, expected_delivery: parseDate(i.expected_delivery), needed_by: parseDate(i.needed_by), vat_rate: i.vat_rate !== undefined && i.vat_rate !== null && i.vat_rate !== '' ? parseFloat(i.vat_rate) : null, spec: i.spec ? String(i.spec).trim() || null : null, production_ref: i.production_ref ? String(i.production_ref).slice(0, 100) : null }; });
+      const mk = list.map((i) => { const q = parseFloat(i.quantity) || 1; const up = parseFloat(i.unit_price) || 0; return { name: String(i.name).slice(0, 255), cost_kind: OK.COST_KINDS[i.cost_kind] ? i.cost_kind : null, material_id: (i.material_id && !OK.COST_KINDS[i.cost_kind]) ? parseInt(i.material_id) : null, quantity: q, unit: i.unit || 'ks', unit_price: up, total_price: Math.round(q * up * 100) / 100, expected_delivery: parseDate(i.expected_delivery), needed_by: parseDate(i.needed_by), vat_rate: i.vat_rate !== undefined && i.vat_rate !== null && i.vat_rate !== '' ? parseFloat(i.vat_rate) : null, spec: i.spec ? String(i.spec).trim() || null : null, production_ref: i.production_ref ? String(i.production_ref).slice(0, 100) : null }; });
       const created = await prisma.order.create({
         data: {
-          order_number: await nextPurchaseNumber(), type: rest.type, company_id: cid, status: rest.status || 'new', currency: rest.currency === 'EUR' ? 'EUR' : 'CZK',
+          order_number: await nextPurchaseNumber(), type: typObjednavky, purchase_kind: druh ? druh.key : null, company_id: cid, status: rest.status || 'new', currency: rest.currency === 'EUR' ? 'EUR' : 'CZK',
           note: rest.note || null, expected_delivery: parseDate(rest.expected_delivery), expected_delivery_manual: !!parseDate(rest.expected_delivery),
           created_by: (req.user && req.user.person && req.user.person.id) || null, po_data: Object.keys(po).length ? po : undefined,
           items_count: mk.length, total_amount: mk.reduce((s, i) => s + i.total_price, 0), items: { create: mk },

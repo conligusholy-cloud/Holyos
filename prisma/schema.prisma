@@ -658,6 +658,13 @@ model Order {
   confirmed_delivery  DateTime? @db.Date
   po_data             Json?
 
+  // Druh nákupní objednávky (volí se jako první krok v „Nová objednávka"):
+  //   kooperace | vyroba   — zboží prochází skladem, vyžaduje příjemku, položky jen ze zboží
+  //   spotreba  | sluzba   — skladem neprochází, příjemka se nevyžaduje, položky smí být textem
+  // `type` zůstává 'cooperation' u kooperace a 'purchase' u zbylých tří, ať stávající
+  // přehledy a vazby fungují beze změny.
+  purchase_kind       String?   @db.VarChar(20)
+
   // Zákaznické potvrzení objednávky přes veřejný odkaz /order/<token>
   // Tok: awaiting_customer → signed (zákazník podepsal, čeká na autorizaci) → confirmed (Tomáš/Jan autorizoval).
   customer_email         String?   @db.VarChar(255)
@@ -806,6 +813,10 @@ model OrderItem {
   delivery_place     String?   @db.VarChar(255)
   production_ref     String?   @db.VarChar(100)
   deliveries         Json? // rozpis dílčích dodávek [{qty, requested, confirmed}]
+  // Vedlejší pořizovací náklad místo zboží: shipping (doprava) | recycling (recyklační
+  // poplatek) | cod (dobírka). Na sklad se nepřijímá — jeho hodnota se při příjmu
+  // rozpočítá váženě podle hodnoty do skladové ceny přijatých položek.
+  cost_kind          String?   @db.VarChar(20)
 
   // Factorify migrace
   factorify_id                 String? @db.VarChar(100) // PurchaseOrderItem.id
