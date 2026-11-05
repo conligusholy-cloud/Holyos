@@ -93,6 +93,28 @@ function connPrice(sp, modelKey) {
 }
 // Úrok a rámec po případné kartě „Lepší bankéř".
 function rateOf() { return Math.max(0.02, PROFILES[S.profile].rate - (S.rateDrop || 0)); }
+// Skutečná sazba, kterou hráč platí ze svého dluhu. Banka si u každé půjčky
+// řekne přirážku podle zadluženosti a ta pak na tom dluhu zůstane — stejně jako
+// doopravdy. Při další půjčce se sazby zprůměrují podle částek.
+function urokSazba() { return Math.max(0.02, rateOf() + (S.loanPrem || 0)); }
+// Riziková přirážka za novou tranši: rozhoduje zadluženost PO načerpání.
+function prirazkaZa(castka) {
+  var majetek = assetsTotal();
+  var pak = majetek > 0 ? (S.loan + Math.max(0, castka)) / majetek : 2;
+  return pak <= 0.5 ? 0 : pak <= 0.8 ? 0.008 : pak <= 1 ? 0.018 : 0.03;
+}
+// Přičte nový dluh a spočítá novou průměrnou přirážku.
+function pricistDluh(castka, prirazka) {
+  if (!(castka > 0)) return;
+  var pred = S.loan, prem = S.loanPrem || 0;
+  S.loan = pred + castka;
+  S.loanPrem = (pred * prem + castka * (prirazka || 0)) / S.loan;
+}
+// Po splacení do nuly přirážka mizí — další půjčka se posoudí znovu.
+function splatitDluh(castka) {
+  S.loan = Math.max(0, S.loan - Math.max(0, castka));
+  if (S.loan < 1) { S.loan = 0; S.loanPrem = 0; }
+}
 // Měsíční nájem: lepší místo si řekne o víc, zbytek je o tom, jak se domluvíš.
 function rentOf(sp) {
   var attract = 0.7 + (Math.max(0, Math.min(100, sp.score)) / 100) * 0.8;
@@ -167,6 +189,7 @@ function fresh(profileId) {
   return {
     v: 1, profile: profileId, startedAt: now, lastTick: now,
     cash: p.cash, bank: BANK_BASE, loan: 0,
+    loanPrem: 0,   // průměrná riziková přirážka na dluhu
     areas: {},     // id oblasti → { name, scoutedAt, spots:[…] }
     units: [],     // postavené prádlomaty
     revealed: {},  // id místa → true
@@ -213,7 +236,7 @@ function load() {
     if (!/^[a-z0-9]{6,24}$/.test(o.pid || '')) o.pid = trvalePid();
     else { try { localStorage.setItem(PID_KEY, o.pid); } catch (e) { /* nevadí */ } }
     if (typeof o.refs !== 'number') o.refs = 0;
-    ['boost', 'connDiscount', 'rateDrop', 'bankBonus'].forEach(function (k) { if (typeof o[k] !== 'number') o[k] = 0; });
+    ['boost', 'connDiscount', 'rateDrop', 'bankBonus', 'loanPrem'].forEach(function (k) { if (typeof o[k] !== 'number') o[k] = 0; });
     // Stara ulozena mista mela metriky jako objekty { count, nearest_m } - srovname je na cisla.
     Object.keys(o.areas || {}).forEach(function (id) {
       ((o.areas[id] || {}).spots || []).forEach(fixMetrics);
@@ -275,7 +298,7 @@ function tick() {
   if (dt > 30 * YEAR_MS) dt = 30 * YEAR_MS;      // po měsíci nepřítomnosti dál nenabíhá
   var years = dt / YEAR_MS;
   var earned = yearlyProfit() * years;
-  var interest = S.loan * rateOf() * years;
+  var interest = S.loan * urokSazba() * years;
   // Do bubliny nad prádlomaty: zvlášť co přiteklo a co banka sebrala.
   drip.earn += Math.max(0, earned);
   drip.pay += Math.max(0, interest);
@@ -876,9 +899,9 @@ function dohnat(chybi) {
     + mesicu + ' ' + mn(mesicu, 'herní měsíc', 'herní měsíce', 'herních měsíců')
     + ', tedy asi za ' + dni + ' ' + mn(dni, 'den', 'dny', 'dní') + '.';
 }
-function doFinance(f) { S.cash -= f.own; S.bank -= f.need; S.loan += f.need; }
+function doFinance(f) { S.cash -= f.own; S.bank -= f.need; pricistDluh(f.need, prirazkaZa(f.need)); }
 // Kolik banka ukousne každý měsíc na úrocích z celého dluhu.
-function urokMesicne() { return Math.round(S.loan * rateOf() / 12); }
+function urokMesicne() { return Math.round(S.loan * urokSazba() / 12); }
 // Kolik z toho připadá na jedno konkrétní místo — podle toho, jak velká část
 // investice do sítě v něm leží. Jinak by se nedalo říct, co které místo vydělá.
 function urokMista(u) {
@@ -922,7 +945,10 @@ function financeRows(f) {
     + '<div class="kv"><span>Doplatí banka (úvěr)</span><b class="' + (f.need > 0 ? 'warn' : '') + '">' + kcFull(f.need) + pctNote(f.need, f.amount) + '</b></div>'
     + (f.need > 0 ? '<div class="kv"><span>Úvěrový strop profilu</span><b>' + kcFull(f.ltvRoom) + '</b></div>'
       + '<div class="kv"><span>Volný rámec v bance</span><b>' + kcFull(S.bank) + '</b></div>'
-      + '<div class="kv"><span>Úrok</span><b>' + (rateOf() * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>' : '');
+      + '<div class="kv"><span>Úrok z této půjčky</span><b>'
+      + ((rateOf() + prirazkaZa(f.need)) * 100).toFixed(1).replace('.', ',') + ' % ročně'
+      + (prirazkaZa(f.need) ? ' <span class="warn">(+' + (prirazkaZa(f.need) * 100).toFixed(1).replace('.', ',') + ' za riziko)</span>' : '')
+      + '</b></div>' : '');
 }
 
 // ─── Obchod ──────────────────────────────────────────────────────────────────
@@ -1333,7 +1359,11 @@ function paintBank() {
     + '</div>'
     + '<div class="card"><h3>Úvěr</h3>'
     + '<div class="kv"><span>Dlužíš</span><b class="' + (S.loan > 0 ? 'warn' : '') + '">' + kcFull(S.loan) + '</b></div>'
-    + '<div class="kv"><span>Úrok</span><b>' + (rateOf() * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>'
+    + '<div class="kv"><span>' + (S.loan > 0 ? 'Úrok z tvého dluhu' : 'Základní sazba') + '</span><b>'
+    + ((S.loan > 0 ? urokSazba() : rateOf()) * 100).toFixed(1).replace('.', ',') + ' % ročně'
+    + (S.loan > 0 && S.loanPrem > 0.0005
+        ? ' <span class="warn">(+' + (S.loanPrem * 100).toFixed(1).replace('.', ',') + ' za riziko)</span>' : '')
+    + '</b></div>'
     + '<div class="kv"><span>Splátka úroku / měsíc</span><b class="' + (urokMesicne() > 0 ? 'warn' : '') + '">'
     + kcFull(urokMesicne()) + '</b></div>'
     + '<div class="kv"><span>Zaplaceno na úrocích</span><b>' + kcFull(S.stats.interest) + '</b></div>'
@@ -1352,7 +1382,7 @@ function paintBank() {
   var b = $('do-repay');
   if (b) b.onclick = function () {
     var pay = Math.min(S.cash, S.loan);
-    S.cash -= pay; S.loan -= pay; S.bank = Math.min(bankCap(), S.bank + pay);
+    S.cash -= pay; splatitDluh(pay); S.bank = Math.min(bankCap(), S.bank + pay);
     save(); paint(); syncState(true); toast('Splaceno ' + kcFull(pay) + '.', 'ok');
   };
 }
@@ -1381,7 +1411,7 @@ function penizeSheet() {
   var sp = $('pen-splatit');
   if (sp) sp.onclick = function () {
     var pay = Math.min(S.cash, S.loan);
-    S.cash -= pay; S.loan -= pay; S.bank = Math.min(bankCap(), S.bank + pay);
+    S.cash -= pay; splatitDluh(pay); S.bank = Math.min(bankCap(), S.bank + pay);
     save(); paint(); syncState(true); closeSheet(); toast('Splaceno ' + kcFull(pay) + '.', 'ok');
   };
   var ba = $('pen-balicek');
@@ -1845,7 +1875,7 @@ function vyzvedniNasledky(then) {
         S.cash += x.amount || 0;
         // Kdyby mezitím peníze utratil, schodek pokryje banka — ať hra neskončí
         // v záporné hotovosti, ze které není cesta ven.
-        if (S.cash < 0) { S.loan += -S.cash; S.bank = Math.max(0, S.bank + S.cash); S.cash = 0; }
+        if (S.cash < 0) { pricistDluh(-S.cash, prirazkaZa(-S.cash)); S.bank = Math.max(0, S.bank + S.cash); S.cash = 0; }
       }
       else if (x.kind === 'stock') { S.stock[x.model] = Math.max(0, inStock(x.model) + (x.amount || 0)); }
       else if (x.kind === 'unit_remove') {
@@ -2107,14 +2137,21 @@ function uverNabidka(chci) {
   var max = Math.max(0, Math.min(strop, S.bank, OPERATING_MAX + Math.max(0, p.ltv * majetek - S.loan)));
   max = Math.round(Math.min(max, S.bank) / 1000) * 1000;
   var castka = Math.max(0, Math.min(max, Math.round((chci == null ? max : chci) / 1000) * 1000));
-  // Zadluženost po načerpání — podle ní se hýbe úrok.
+  // Zadluženost po načerpání — podle ní si banka říká přirážku.
+  var ted = majetek > 0 ? S.loan / majetek : 0;
   var pak = majetek > 0 ? (S.loan + castka) / majetek : 2;
-  var prirazka = pak <= 0.5 ? 0 : pak <= 0.8 ? 0.008 : pak <= 1 ? 0.018 : 0.03;
+  var prirazka = prirazkaZa(castka);
   var sazba = rateOf() + prirazka;
   var poplatek = Math.round(castka * UVER_POPLATEK);
+  // Kolik si může půjčit, aby ještě zůstal v levnějším pásmu — ať ví, kde je hranice.
+  var bezPrirazky = Math.max(0, Math.floor((0.5 * majetek - S.loan) / 1000) * 1000);
+  var levnejsi = Math.max(0, Math.floor((0.8 * majetek - S.loan) / 1000) * 1000);
   return { max: max, castka: castka, sazba: sazba, prirazka: prirazka, poplatek: poplatek,
     naruku: Math.max(0, castka - poplatek), mesicne: Math.round(castka * sazba / 12),
-    zadluzenost: pak };
+    ted: ted, zadluzenost: pak, majetek: majetek,
+    // Sazba, kterou hráč ponese na celém dluhu po načerpání (vážený průměr).
+    poSjednani: Math.max(0.02, rateOf() + ((S.loan * (S.loanPrem || 0) + castka * prirazka) / Math.max(1, S.loan + castka))),
+    bezPrirazky: bezPrirazky, levnejsi: levnejsi };
 }
 // Proč banka nepůjčí. Hráč má vždycky vědět, co s tím může udělat.
 function uverDuvod() {
@@ -2133,12 +2170,26 @@ function uverDuvod() {
 function uverSheet(chci) {
   var n = uverNabidka(chci);
   if (n.max < 1000) { closeSheet(); return toast('Banka ti teď nepůjčí ani korunu.', 'err'); }
-  var hodnoceni = n.prirazka === 0 ? 'Máš u nás dobré jméno, sazbu nezvedáme.'
-    : n.prirazka <= 0.008 ? 'Dluh máš pod kontrolou, přirážka je malá.'
-    : n.prirazka <= 0.018 ? 'Jsi dost zadlužený, připočítáváme rizikovou přirážku.'
-    : 'Dlužíš skoro tolik, co máš. Půjčíme, ale draho.';
+  // Hodnotíme PŮJČKU, ne hráče: přirážka se řídí tím, jak bude zadlužený až
+  // si tuhle částku vezme. Dřív tu stálo „jsi zadlužený" i tomu, kdo neměl ani korunu dluhu.
+  var po = Math.round(n.zadluzenost * 100);
+  var hodnoceni = n.prirazka === 0
+      ? 'Při téhle částce budeš dlužit ' + po + ' % hodnoty svého majetku. To je pro banku v klidu, sazbu nezvedáme.'
+    : n.prirazka <= 0.008
+      ? 'Po načerpání budeš dlužit ' + po + ' % hodnoty majetku. Ještě dobré, přirážka je malá.'
+    : n.prirazka <= 0.018
+      ? 'Po načerpání budeš dlužit ' + po + ' % hodnoty majetku — to už banka bere jako riziko a připočítá si přirážku.'
+      : 'Po načerpání budeš dlužit ' + po + ' % hodnoty majetku, skoro tolik co máš. Půjčíme, ale draho.';
+  var rada = n.prirazka > 0 && n.bezPrirazky >= 1000 && n.bezPrirazky < n.castka
+      ? 'Do ' + kcFull(n.bezPrirazky) + ' je sazba bez přirážky.'
+    : n.prirazka > 0.008 && n.levnejsi >= 1000 && n.levnejsi < n.castka
+      ? 'Do ' + kcFull(n.levnejsi) + ' by byla přirážka jen 0,8 bodu.'
+    : '';
   sheet('<h3>Nabídka banky</h3>'
-    + '<p class="muted small">' + hodnoceni + ' Podmínky platí, dokud je nepřijmeš — nic se neděje samo.</p>'
+    + '<p class="muted small">' + hodnoceni + (rada ? ' ' + rada : '')
+    + ' Podmínky platí, dokud je nepřijmeš — nic se neděje samo.</p>'
+    + '<div class="kv"><span>Dnes dlužíš</span><b' + (S.loan > 0 ? ' class="warn"' : '') + '>' + kcFull(S.loan)
+    + (S.loan > 0 ? ' · ' + Math.round(n.ted * 100) + ' % majetku' : '') + '</b></div>'
     + '<label class="fld"><span>Kolik si chceš půjčit (nejvýš ' + kcFull(n.max) + ')</span>'
     + '<input id="uv-amt" class="inp" type="number" min="1000" step="1000" max="' + n.max + '" value="' + n.castka + '"></label>'
     + '<div class="kv"><span>Úrok</span><b>' + (n.sazba * 100).toFixed(1).replace('.', ',') + ' % ročně'
@@ -2147,6 +2198,11 @@ function uverSheet(chci) {
     + '<div class="kv"><span>Dostaneš na ruku</span><b class="ok">' + kcFull(n.naruku) + '</b></div>'
     + '<div class="kv"><span>Úrok tě bude stát</span><b>' + kcFull(n.mesicne) + ' / měsíc</b></div>'
     + '<div class="kv"><span>Dluh po načerpání</span><b>' + kcFull(S.loan + n.castka) + '</b></div>'
+    + (S.loan > 0 && Math.abs(n.poSjednani - n.sazba) > 0.0005
+        ? '<div class="kv"><span>Sazba z celého dluhu</span><b>'
+          + (n.poSjednani * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>'
+          + '<p class="fine">Starý dluh má svoji sazbu, nová půjčka svoji — banka je zprůměruje podle částek.</p>'
+        : '')
     + '<button class="btn big" id="uv-ano">Beru to</button>'
     + '<button class="btn sec" id="uv-ne" style="width:100%;margin-top:8px">Díky, nechám si to projít hlavou</button>'
     + '<p class="fine">Splácet můžeš kdykoli a bez sankcí. Dokud nesplatíš, úrok nabíhá každou vteřinu.</p>');
@@ -2158,7 +2214,7 @@ function uverSheet(chci) {
     var m = uverNabidka(Number(inp.value) || 0);
     if (m.castka < 1000) return toast('Takhle malou částku banka neřeší.', 'err');
     S.bank -= m.castka;
-    S.loan += m.castka;
+    pricistDluh(m.castka, m.prirazka);
     S.cash += m.naruku;
     S.stats.interest += m.poplatek;   // poplatek bereme jako náklad úvěru
     save(); paint(); paintBank(); closeSheet(); syncState(true);
