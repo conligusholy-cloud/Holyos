@@ -103,7 +103,9 @@ async function item(kind) {
   const p = (await prices())[kind];
   if (p && p.active === false) return null;
   if (!p) return base;
-  return Object.assign({}, base, { price: p.price, laundry: p.laundry != null ? p.laundry : base.laundry, name: p.name || base.name });
+  // Z ceníku bereme jen cenu, počet laundrů a jestli se prodává. Název a popis
+  // patří ke kódu — jinak by v databázi uvízl starý název z dřívějšího seedu.
+  return Object.assign({}, base, { price: p.price, laundry: p.laundry != null ? p.laundry : base.laundry });
 }
 async function activeKinds(list) {
   const out = [];

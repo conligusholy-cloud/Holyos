@@ -193,7 +193,7 @@ router.get('/prices', api(async (req, res) => {
   res.json({ ok: true, prices: Object.keys(def).map((k) => {
     const d = def[k], u = m[k];
     return {
-      kind: k, name: (u && u.name) || d.name,
+      kind: k, name: d.name,   // název je z kódu, ceník drží jen cenu
       typ: d.laundry ? 'penize' : 'karta',
       price_czk: (u ? u.price : d.price) / 100,
       vychozi_czk: d.price / 100,

@@ -1045,8 +1045,9 @@ function rivalSheet(sp, areaId, c) {
         + free.map(function (k) { return '<option value="' + k + '">' + MODELS[k].name + ' (' + inStock(k) + '× skladem)</option>'; }).join('')
         + '</select></label>'
         + '<button class="btn big" id="do-bid">Zkusit přeplatit</button>'
-      : '<p class="fine err">Nemáš skladem žádný stroj, který bys sem postavil.</p>'
-        + '<button class="btn big" id="go-shop-bid">Koupit stroj v obchodě</button>'));
+      : '<p class="fine err">Nemáš na skladě žádný prádlomat. Abys tohle místo přebral, '
+        + 'musíš mít volný stroj — konkurenta vystřídáš jedině tak, že na jeho místo hned postavíš svůj.</p>'
+        + '<button class="btn big" id="go-shop-bid">Koupit prádlomat v obchodě</button>'));
   var gs = $('go-shop-bid');
   if (gs) gs.onclick = function () { closeSheet(); switchTab('shop'); };
   var b = $('do-bid');
