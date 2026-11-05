@@ -2198,7 +2198,7 @@ app.get('/admin/podpora/poll', requireAdmin, wrap(async (req, res) => {
 }));
 
 // ── Rozesílky (hromadné e-maily přes Amazon SES) + odhlášení z rozesílek ──
-require('./mailing')(app, { q, requireAdmin, wrap, V, PUBLIC_URL, HOLYOS_URL, SSO_SECRET, log, esc: (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) });
+require('./mailing')(app, { q, requireAdmin, wrap, V, PUBLIC_URL, HOLYOS_URL, SSO_SECRET, log, upload, esc: (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) });
 
 // ── Podněty na vylepšení ──────────────────────────────────────────────
 app.post('/api/suggestion', wrap(async (req, res) => {

@@ -500,20 +500,35 @@ router.post('/lm/send-mail', express.json({ limit: '50kb' }), async (req, res, n
 // POST /api/auth/bs2/bulk-mail — jeden e-mail hromadné rozesílky z BS2 (Rozesílky). Odesílá se VÝHRADNĚ přes
 // Amazon SES z adresy BS2_BULK_FROM (výchozí info@bestseries.cz) — adresa musí být v Nastavení → odesílatelé SES
 // a doména ověřená v SES. Odkaz na odhlášení vkládá BS2 sám (vlastní seznam vyřazených), proto unsubscribe:false.
-router.post('/bs2/bulk-mail', express.json({ limit: '100kb' }), async (req, res, next) => {
+// GET /api/auth/bs2/bulk-senders — odesílatelé, ze kterých smí jít rozesílka (= odesílatelé Amazon SES z Centra reklamy)
+router.get('/bs2/bulk-senders', async (req, res, next) => {
+  try {
+    if (!verifyBs2Token(req, res)) return;
+    const M = require('../services/ses/mailer');
+    const list = M.isConfigured() ? (await M.sesSenders()).map((x) => ({ address: x.address, name: x.name || '' })) : [];
+    res.json({ senders: list, default: process.env.BS2_BULK_FROM || 'info@bestseries.cz', configured: M.isConfigured() });
+  } catch (err) { next(err); }
+});
+router.post('/bs2/bulk-mail', express.json({ limit: '14mb' }), async (req, res, next) => {
   try {
     if (!verifyBs2Token(req, res)) return;
     const b = req.body || {};
     const to = String(b.to || '').trim();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: 'Neplatný příjemce' });
-    const from = process.env.BS2_BULK_FROM || 'info@bestseries.cz';
     const M = require('../services/ses/mailer');
+    const from = (b.from && /^[^@\s<>]+@[^@\s<>]+\.[a-z]{2,}$/i.test(String(b.from).trim())) ? String(b.from).trim() : (process.env.BS2_BULK_FROM || 'info@bestseries.cz');
     if (!M.isConfigured() || !(await M.sesSenderFor(from))) return res.status(503).json({ error: 'Odesílatel ' + from + ' není nastavený v Amazon SES (HolyOS → Nastavení → odesílatelé SES + ověřená doména).', code: 'no_ses_sender' });
     const hostOk = (u) => { try { const h = new URL(u).host.replace(/^www\./, '').toLowerCase(); return /^https:\/\//.test(u) && /(^|\.)(bestseries2\.cz|bestseries\.cz|laundromats\.eu|pradlomaty\.info|compounder\.world)$/.test(h); } catch (e) { return false; } };
     const link = b.link && hostOk(String(b.link)) ? String(b.link) : undefined;
     const unsub = b.unsubUrl && hostOk(String(b.unsubUrl)) ? String(b.unsubUrl) : null;
     const body = String(b.body || '').slice(0, 20000) + (unsub ? '\n\n—\nNechcete už od nás dostávat tyto e-maily? Odhlásit se můžete zde: ' + unsub : '');
-    const r = await require('../services/email').sendMail({ to, from, fromName: process.env.BS2_BULK_FROM_NAME || 'Best Series', brand: 'bs2', subject: String(b.subject || 'Best Series').slice(0, 200), body, link, linkLabel: link && b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined, unsubscribe: false });
+    // Přílohy (base64) — max 7 MB dohromady
+    let attachments; let total = 0;
+    if (Array.isArray(b.attachments) && b.attachments.length) {
+      attachments = b.attachments.slice(0, 5).map((x) => { const content = Buffer.from(String(x.data || ''), 'base64'); total += content.length; return { filename: String(x.filename || 'priloha').replace(/[\r\n"\\/]/g, '_').slice(0, 150), content, contentType: String(x.contentType || 'application/octet-stream').slice(0, 100) }; }).filter((x) => x.content.length);
+      if (total > 7 * 1024 * 1024) return res.status(400).json({ error: 'Přílohy jsou větší než 7 MB.' });
+    }
+    const r = await require('../services/email').sendMail({ to, from, fromName: String(b.fromName || process.env.BS2_BULK_FROM_NAME || 'Best Series').slice(0, 80), brand: 'bs2', attachments, subject: String(b.subject || 'Best Series').slice(0, 200), body, link, linkLabel: link && b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined, unsubscribe: false });
     if (!r || !r.sent) return res.status(502).json({ error: (r && (r.error || r.skipped)) || 'E-mail se nepodařilo odeslat' });
     res.json({ ok: true, via: r.via || null, messageId: r.messageId || null });
   } catch (err) { next(err); }

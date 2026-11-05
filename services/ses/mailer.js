@@ -124,7 +124,7 @@ function textToHtml(text, preheader, opts = {}) {
 }
 
 // vrací { ok, simulated, error, messageId, sesMessageId }
-async function sendEmail({ to, subject, text, html, preheader, inlineImages, unsubscribeUrl, from, replyTo }) {
+async function sendEmail({ to, subject, text, html, preheader, inlineImages, unsubscribeUrl, from, replyTo, attachments: extraAtt }) {
   const s = smtpConf();
   if (!isConfigured()) return { ok: true, simulated: true };   // simulační režim
   try {
@@ -134,6 +134,7 @@ async function sendEmail({ to, subject, text, html, preheader, inlineImages, uns
     const attachments = imgs.map((im, i) => ({ filename: im.filename || ('foto' + (i + 1) + '.jpg'), path: im.path, cid: 'img' + i }));
     const htmlBody = html || textToHtml(text, preheader, { imageCids: attachments.map((a) => a.cid), unsubscribeUrl });
     const cfgSet = configSet();
+    if (Array.isArray(extraAtt)) extraAtt.filter((x) => x && x.filename && x.content).forEach((x) => attachments.push({ filename: x.filename, content: x.content, contentType: x.contentType || undefined })); // běžné přílohy (rozesílky)
     const mailOpts = { from: from || s.from, to, subject, html: htmlBody, attachments, replyTo: replyTo || undefined };
     if (cfgSet) mailOpts.headers = { 'X-SES-CONFIGURATION-SET': cfgSet };   // DŮLEŽITÉ pro tracking
     if (useApi()) {

@@ -389,6 +389,12 @@ async function migrate() {
       error TEXT, sent_at TIMESTAMPTZ, UNIQUE (campaign_id, email)
     );
     CREATE INDEX IF NOT EXISTS mail_rcpt_queue_idx ON mail_campaign_recipients (campaign_id, status, id);
+    ALTER TABLE mail_campaigns ADD COLUMN IF NOT EXISTS sender TEXT; -- odesílací adresa (Amazon SES)
+    CREATE TABLE IF NOT EXISTS mail_campaign_files (
+      id SERIAL PRIMARY KEY, campaign_id INT NOT NULL REFERENCES mail_campaigns(id) ON DELETE CASCADE,
+      filename TEXT NOT NULL, content_type TEXT, size INT NOT NULL DEFAULT 0, data BYTEA NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS mail_campaign_files_c_idx ON mail_campaign_files (campaign_id);
   `);
 }
 
