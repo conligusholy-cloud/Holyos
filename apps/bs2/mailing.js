@@ -26,7 +26,7 @@ module.exports = function mountMailing(app, ctx) {
     const arr = (v) => (Array.isArray(v) ? v : v ? [v] : []).map(String);
     return {
       status: arr(f.status).filter((x) => ['active', 'invited'].includes(x)),
-      types: arr(f.types).filter((x) => TYPES[x]),
+      types: arr(f.types).filter((x) => TYPES[x] || x === 'supporter'), // supporter = Podporovatel (má standardní podporu)
       login: ['any', 'never', 'within', 'not_within'].includes(f.login) ? f.login : 'any',
       login_days: Math.max(1, Math.min(3650, parseInt(f.login_days, 10) || 30)),
       orders: ['any', 'has', 'none'].includes(f.orders) ? f.orders : 'any',
@@ -43,7 +43,6 @@ module.exports = function mountMailing(app, ctx) {
     const emails = [...new Set(String(f.manual || '').toLowerCase().split(/[\s,;]+/).filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)))];
     if (f.manual_only) { w.push('lower(s.email) = ANY(' + P(emails) + '::text[])'); return { sql: w.join(' AND '), p, emails }; }
     if (f.status.length) w.push('s.status = ANY(' + P(f.status) + '::text[])');
-    if (f.types.length) w.push('s.user_type = ANY(' + P(f.types) + '::text[])');
     if (f.login === 'never') w.push('s.last_login_at IS NULL');
     if (f.login === 'within') w.push('s.last_login_at >= now() - make_interval(days => ' + P(f.login_days) + '::int)');
     if (f.login === 'not_within') w.push('(s.last_login_at IS NULL OR s.last_login_at < now() - make_interval(days => ' + P(f.login_days) + '::int))');
@@ -52,6 +51,9 @@ module.exports = function mountMailing(app, ctx) {
     if (f.orders === 'none') w.push("NOT EXISTS (SELECT 1 FROM orders o WHERE o.supporter_id = s.id AND o.status <> 'cancelled'" + prod + ')');
     // Podporovatelé = mají standardní podporu (partner_support.std_total > 0) — stejně jako „se std. podporou“ v Uživatelích
     const STD = "(CASE WHEN s.partner_support->>'std_total' ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (s.partner_support->>'std_total')::numeric ELSE 0 END > 0)";
+    // Typ uživatele (zaškrtnuté typy platí NEBO); „Podporovatel“ = má standardní podporu
+    const realTypes = f.types.filter((x) => x !== 'supporter'), wantSup = f.types.includes('supporter');
+    if (realTypes.length || wantSup) w.push('(' + [realTypes.length ? 's.user_type = ANY(' + P(realTypes) + '::text[])' : null, wantSup ? STD : null].filter(Boolean).join(' OR ') + ')');
     if (f.support === 'has') w.push(STD);
     if (f.support === 'none') w.push('NOT coalesce(' + STD + ', false)');
     if (f.location === 'has') w.push('s.location_package IS NOT NULL');
@@ -190,13 +192,11 @@ module.exports = function mountMailing(app, ctx) {
   <div class="card"><h2 style="margin-top:0">Komu</h2>
     <label>Stav účtu</label><div class="ml-chips">${chk('status', 'active', f.status.includes('active'), 'Aktivní')}${chk('status', 'invited', f.status.includes('invited'), 'Čeká na první přihlášení')}</div>
     <div class="small muted">Nic nezaškrtnuto = oba stavy. Blokovaní se neposílají nikdy.</div>
-    <label>Typ uživatele</label><div class="ml-chips">${Object.entries(TYPES).map(([k, l]) => chk('types', k, f.types.includes(k), l)).join('')}</div>
-    <div class="small muted">Nic nezaškrtnuto = všechny typy.</div>
+    <label>Typ uživatele</label><div class="ml-chips">${Object.entries(TYPES).map(([k, l]) => chk('types', k, f.types.includes(k), l)).join('')}${chk('types', 'supporter', f.types.includes('supporter'), '💙 Podporovatel')}</div>
+    <div class="small muted">Nic nezaškrtnuto = všechny typy. Zaškrtnuté platí „nebo“. Podporovatel = má standardní podporu (jako „se std. podporou“ v Uživatelích).</div>
     <label>Přihlášení</label><div class="row">${sel('login', f.login, [['any', 'kdykoli / nikdy'], ['never', 'nikdy se nepřihlásil'], ['within', 'přihlášen za posledních'], ['not_within', 'nepřihlášen posledních']])}<input name="login_days" type="number" min="1" max="3650" style="width:90px" value="${f.login_days}"${dis}> <span class="muted small">dní</span></div>
     <label>Objednávky</label><div class="row">${sel('orders', f.orders, [['any', 'nerozhoduje'], ['has', 'má objednávku'], ['none', 'nemá objednávku']])}
       <input name="product" list="ml-prods" placeholder="produkt (nepovinné)" style="flex:1;min-width:160px" value="${esc(f.product)}"${dis}><datalist id="ml-prods">${prods.map((p) => `<option value="${esc(p.product_name)}">${p.c}×</option>`).join('')}</datalist></div>
-    <label>Podporovatelé</label>${sel('support', f.support, [['any', 'nerozhoduje'], ['has', 'mají standardní podporu'], ['none', 'nemají podporu']])}
-    <div class="small muted">Podle načtené podpory ze starého portálu (jako „se std. podporou“ v Uživatelích).</div>
     <label>Balíček Prověření lokality</label>${sel('location', f.location, [['any', 'nerozhoduje'], ['has', 'má balíček'], ['none', 'nemá balíček']])}
     <label>Ruční seznam e-mailů</label><textarea name="manual" rows="4" placeholder="jeden e-mail na řádek (nebo oddělené čárkou)"${dis}>${esc(f.manual)}</textarea>
     <div class="ml-chips" style="margin-top:6px"><label><input type="checkbox" name="manual_only" value="1"${f.manual_only ? ' checked' : ''}${dis}> Poslat JEN na ruční seznam (ignorovat filtry)</label></div>
