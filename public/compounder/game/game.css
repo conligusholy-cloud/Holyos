@@ -125,7 +125,7 @@ main{padding-bottom:calc(66px + var(--safe-b))}
 .stock b.way{background:rgba(255,216,102,.08);border-color:rgba(255,216,102,.45);color:var(--warn)}
 
 /* ─── Spodní navigace ─── */
-.tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(6,1fr);
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(7,1fr);
   background:rgba(4,6,12,.96);border-top:1px solid var(--border);
   padding-bottom:var(--safe-b);backdrop-filter:blur(14px)}
 .tabs button{background:none;border:0;color:var(--text3);font-size:10.5px;font-weight:700;
@@ -283,3 +283,25 @@ main{padding-bottom:calc(66px + var(--safe-b))}
 .zeb-row b{font-variant-numeric:tabular-nums;font-size:14px}
 /* V žebříčku je hlavní firma, nick drobně pod ní. */
 .zeb-row .nick i{display:block;font-style:normal;font-size:11px;color:var(--text3)}
+
+/* Burza — sedmá záložka, proto menší písmo v liště. */
+.tabs button{font-size:9.5px}
+.tabs button span{font-size:17px}
+.tab-dot{position:absolute;top:4px;right:50%;transform:translateX(16px);width:8px;height:8px;
+  border-radius:50%;background:var(--err);box-shadow:0 0 0 2px rgba(4,6,12,.9)}
+.tabs button{position:relative}
+.trade{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin:10px 0}
+.trade.na-tahu{border-color:var(--vio);box-shadow:0 0 0 1px rgba(124,92,255,.3)}
+.trade h4{margin:0 0 2px;font-size:14px}
+.trade .kdo{font-size:12px;color:var(--text2);margin:0 0 8px}
+.trade .cena{font-size:16px;font-weight:800}
+.trade .akce{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.trade .akce .btn{flex:1 1 auto}
+.stav{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;background:rgba(142,162,194,.15)}
+.stav.prijato{background:rgba(47,227,160,.18);color:var(--ok)}
+.stav.odmitnuto,.stav.zruseno,.stav.neplatne{background:rgba(255,93,108,.16);color:var(--err)}
+.stav.protinavrh{background:rgba(124,92,255,.2);color:#c4b5fd}
+.vyber{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.vyber button{padding:6px 10px;border-radius:9px;border:1px solid var(--border);
+  background:var(--card);color:var(--text2);font-size:12px;cursor:pointer}
+.vyber button.on{background:rgba(124,92,255,.2);border-color:var(--vio);color:var(--text)}

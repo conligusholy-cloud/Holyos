@@ -7679,3 +7679,57 @@ model GamePrice {
 
   @@map("game_prices")
 }
+
+// ─── Burza: obchody mezi hráči ───────────────────────────────────────────────
+// Nabídka putuje tam a zpět, dokud ji někdo nepřijme nebo neodmítne. Každý
+// protinávrh je nový řádek s odkazem na ten předchozí, takže je vidět celé
+// smlouvání.
+model GameTrade {
+  id            Int       @id @default(autoincrement())
+  from_id       Int
+  from_nick     String    @db.VarChar(24)
+  to_id         Int
+  to_nick       String    @db.VarChar(24)
+  // koupim = chci od něj jeho věc · prodam = nabízím mu svoji
+  smer          String    @db.VarChar(8)
+  // stroj (ze skladu) | pradlomat (i s místem) | karta
+  predmet       String    @db.VarChar(12)
+  model         String?   @db.VarChar(10)
+  spot_id       String?   @db.VarChar(120)
+  card_kind     String?   @db.VarChar(24)
+  // Cena v laundrech a k tomu případně přihozené karty (pole druhů).
+  cena          Int       @default(0)
+  karty         Json?
+  vzkaz         String?   @db.VarChar(200)
+  // ceka | protinavrh | prijato | odmitnuto | zruseno | neplatne
+  stav          String    @default("ceka") @db.VarChar(12)
+  parent_id     Int?
+  resolved_at   DateTime?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  @@index([to_id, stav])
+  @@index([from_id, stav])
+  @@map("game_trades")
+}
+
+// Co si hráč musí po uzavřeném obchodu vyzvednout do své rozehrané hry.
+// Hotovost, stroje a postavené prádlomaty žijí v prohlížeči, takže server
+// jen zapíše, co se má stát, a klient to při nejbližším otevření provede.
+model GameDelivery {
+  id         Int       @id @default(autoincrement())
+  player_id  Int
+  trade_id   Int?
+  // cash | stock | unit_add | unit_remove
+  kind       String    @db.VarChar(12)
+  model      String?   @db.VarChar(10)
+  amount     Int?
+  spot_id    String?   @db.VarChar(120)
+  data       Json?
+  popis      String?   @db.VarChar(200)
+  claimed_at DateTime?
+  created_at DateTime  @default(now())
+
+  @@index([player_id, claimed_at])
+  @@map("game_deliveries")
+}

@@ -55,14 +55,18 @@ router.get('/players', api(async (req, res) => {
   const S = by(spots), C = by(cards), P = by(pays);
   res.json({ ok: true, players: rows.map((p) => {
     const st = p.state || {};
+    const units = Array.isArray(st.units) ? st.units : [];
+    // Měsíční příjem = součet zisků jednotlivých prádlomatů z poslední uložené sítě.
+    const prijem = units.reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0);
     return {
       id: p.id, nick: p.nick, email: p.email,
+      prijem: Math.round(prijem),
       jmeno: [p.first_name, p.last_name].filter(Boolean).join(' ') || null,
       created_at: p.created_at, last_login_at: p.last_login_at, state_at: p.state_at,
       profil: st.profile || null,
       hotovost: typeof st.cash === 'number' ? Math.round(st.cash) : null,
       uver: typeof st.loan === 'number' ? Math.round(st.loan) : null,
-      pradlomatu: Array.isArray(st.units) ? st.units.length : 0,
+      pradlomatu: units.length,
       mest: st.areas ? Object.keys(st.areas).length : 0,
       pozvanek: st.refs || 0,
       mist: (S[p.id] && S[p.id]._count._all) || 0,
@@ -115,6 +119,8 @@ router.get('/players/:id', api(async (req, res) => {
     hotovost: typeof st.cash === 'number' ? Math.round(st.cash) : null,
     uver: typeof st.loan === 'number' ? Math.round(st.loan) : null,
     pradlomatu: Array.isArray(st.units) ? st.units.length : 0,
+    prijem: Math.round((Array.isArray(st.units) ? st.units : [])
+      .reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0)),
     pozvanek: st.refs || 0,
   }, polozky, mista, ceka_hotovost: cekaHotovost,
   nakupy: nakupy.map((o) => ({ id: o.id, kind: o.kind, qty: o.qty, castka: o.amount_cents / 100,

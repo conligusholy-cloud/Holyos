@@ -906,6 +906,7 @@ app.use('/api/game', require('./routes/game.routes')); // Laundromats Milionář
 app.post('/api/game/stripe/webhook', require('./routes/game-stripe.routes')._webhook);
 app.use('/api/game', require('./routes/game-account.routes')); // účty hráčů, uložený stav a karty
 app.use('/api/game', require('./routes/game-stripe.routes'));  // nákup karet přes Stripe
+app.use('/api/game', require('./routes/game-trade.routes'));   // burza — obchody mezi hráči
 app.use('/api/game-admin', require('./routes/game-admin.routes')); // administrace hry (sekce Soukromé)
 app.use('/api/leasing', require('./routes/leasing.routes')); // Leasing/financující společnosti (financování prádlomatu)
 if (VYBERY_ENABLED) app.use('/api/vybery', require('./routes/vybery.routes')); // Výběry (vypnuto, zapíná VYBERY_ENABLED=1) — veřejná stránka bestseries.cash/vybery (ověření black list + magic link + admin)
