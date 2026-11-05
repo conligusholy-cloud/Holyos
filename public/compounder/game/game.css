@@ -76,7 +76,7 @@ button{font:inherit;cursor:pointer}
 .btn.float{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:500;box-shadow:0 12px 32px rgba(0,0,0,.5)}
 
 /* ─── Horní lišta ─── */
-.top{position:sticky;top:0;z-index:20;display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+.top{position:relative;z-index:20;display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
   background:var(--border);border-bottom:1px solid var(--border);
   padding-top:env(safe-area-inset-top)}
 .t-item{background:rgba(4,6,12,.95);padding:8px 6px;text-align:center;min-width:0}
@@ -84,9 +84,14 @@ button{font:inherit;cursor:pointer}
 .t-item b{display:block;font-size:14.5px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* ─── Obsah ─── */
-main{padding-bottom:calc(66px + var(--safe-b))}
+/* Hra je přesně na výšku okna: hlavička nahoře, obsah uprostřed roluje sám
+   v sobě, lišta dole. Dřív byla lišta position:fixed a ve WebView na iOS při
+   rolování ujížděla doprostřed stránky — takhle nemá kam ujet. */
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
+#app>main{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .view{padding:16px 14px 10px}
-#v-map{padding:0;position:relative;height:calc(100dvh - 66px - var(--safe-b) - 52px - env(safe-area-inset-top))}
+#v-map{padding:0;position:relative;height:100%}
 #map{position:absolute;inset:0;background:#0a1120}
 .map-hint{position:absolute;left:10px;right:10px;top:10px;z-index:500;background:rgba(4,6,12,.86);
   border:1px solid var(--border);border-radius:12px;padding:9px 12px;font-size:12.5px;color:var(--text2);
@@ -125,7 +130,7 @@ main{padding-bottom:calc(66px + var(--safe-b))}
 .stock b.way{background:rgba(255,216,102,.08);border-color:rgba(255,216,102,.45);color:var(--warn)}
 
 /* ─── Spodní navigace ─── */
-.tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(7,1fr);
+.tabs{position:relative;z-index:30;flex:0 0 auto;display:grid;grid-template-columns:repeat(7,1fr);
   background:rgba(4,6,12,.96);border-top:1px solid var(--border);
   padding-bottom:var(--safe-b);backdrop-filter:blur(14px)}
 .tabs button{background:none;border:0;color:var(--text3);font-size:10.5px;font-weight:700;
@@ -169,8 +174,11 @@ main{padding-bottom:calc(66px + var(--safe-b))}
 .toast.ok{border-color:rgba(47,227,160,.5);color:#a9f5d9}
 
 @media(min-width:720px){
-  .view,.top{max-width:720px;margin-left:auto;margin-right:auto}
-  .tabs{max-width:720px;left:50%;transform:translateX(-50%);border-left:1px solid var(--border);border-right:1px solid var(--border)}
+  /* Hlavička i lišta jsou položky flexu — bez width:100% by je automatické
+     okraje smrskly na obsah místo toho, aby je vycentrovaly. */
+  .view{max-width:720px;margin-left:auto;margin-right:auto}
+  .top,.tabs{width:100%;max-width:720px;margin-left:auto;margin-right:auto}
+  .tabs{border-left:1px solid var(--border);border-right:1px solid var(--border)}
   .sheet-in{max-width:620px;margin:0 auto;border-radius:20px;margin-bottom:20px}
   .sheet{align-items:center;justify-content:center}
 }
@@ -327,7 +335,7 @@ main{padding-bottom:calc(66px + var(--safe-b))}
 .t-klik { border: 0; font: inherit; color: inherit; cursor: pointer; }
 .t-klik:active { background: rgba(124, 92, 255, .22); }
 .t-plus {
-  position: absolute; top: 5px; right: 6px; font-style: normal; font-size: 11px;
-  line-height: 14px; width: 14px; height: 14px; border-radius: 50%;
+  position: absolute; top: 4px; right: 3px; font-style: normal; font-size: 9.5px;
+  line-height: 12px; width: 12px; height: 12px; border-radius: 50%;
   background: var(--vio); color: #fff; font-weight: 700;
 }
