@@ -296,36 +296,43 @@ module.exports = function mountMailing(app, ctx) {
     var vyb={};exList().forEach(function(id){vyb[id]=true;});
     var ov=document.createElement('div');
     ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;display:flex;align-items:center;justify-content:center;padding:18px';
-    ov.innerHTML='<div style="background:var(--card,#0e1526);border:1px solid var(--border);border-radius:14px;max-width:760px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">'
-      +'<div style="padding:16px 20px;border-bottom:1px solid var(--border)"><div style="font-size:19px;font-weight:800">🚫 Blacklist rozesílky</div>'
-      +'<div class="small muted" style="margin-top:3px">Zaškrtnutí kontakti tuhle rozesílku nedostanou. Platí jen pro ni — natrvalo se nikdo neodhlašuje.</div></div>'
-      +'<div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+    ov.innerHTML='<div style="background:#0e1526;border:1px solid rgba(120,160,255,.28);border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.6);max-width:780px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden">'
+      +'<div style="padding:16px 20px;border-bottom:1px solid rgba(120,160,255,.2);background:#0b1120"><div style="font-size:19px;font-weight:800">🚫 Blacklist rozesílky</div>'
+      +'<div class="small muted" style="margin-top:3px">Zaškrtnuté kontakty tuhle rozesílku nedostanou. Platí jen pro ni — natrvalo se nikdo neodhlašuje.</div></div>'
+      +'<div style="padding:12px 20px;border-bottom:1px solid rgba(120,160,255,.2);background:#0b1120;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
         +'<input id="bl-q" placeholder="Hledat jméno nebo e-mail…" style="flex:1;min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg,#070b14);color:inherit">'
         +'<span class="small muted" id="bl-info"></span></div>'
-      +'<div id="bl-list" style="overflow:auto;padding:6px 10px;flex:1"><div class="small muted" style="padding:14px">Načítám…</div></div>'
-      +'<div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+      +'<div id="bl-list" style="overflow-y:auto;overflow-x:hidden;flex:1;min-height:0"><div class="small muted" style="padding:14px">Načítám…</div></div>'
+      +'<div style="padding:12px 20px;border-top:1px solid rgba(120,160,255,.2);background:#0b1120;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
         +'<span class="small muted" id="bl-cnt"></span>'
         +'<span style="display:flex;gap:8px"><button type="button" class="btn sec sm" id="bl-clear">Zrušit všechna vyřazení</button>'
         +'<button type="button" class="btn sec sm" id="bl-x">Zavřít</button>'
         +'<button type="button" class="btn sm" id="bl-ok">Použít</button></span></div></div>';
+    var puvodniScroll=document.body.style.overflow;document.body.style.overflow='hidden';
     document.body.appendChild(ov);
     var L=ov.querySelector('#bl-list'),Q=ov.querySelector('#bl-q'),INF=ov.querySelector('#bl-info'),CNT=ov.querySelector('#bl-cnt');
     function pocet(){var n=Object.keys(vyb).filter(function(k){return vyb[k];}).length;CNT.textContent='Vyřazeno '+n+' kontaktů';}
-    function radek(r){var jm=[r.first_name,r.last_name].filter(Boolean).join(' ')||r.nick||'';
-      return '<label style="display:flex;gap:10px;align-items:center;padding:7px 10px;border-radius:8px;cursor:pointer">'
-        +'<input type="checkbox" data-id="'+r.id+'"'+(vyb[r.id]?' checked':'')+'>'
-        +'<span style="flex:1;min-width:0"><span style="font-weight:600">'+esc(jm||r.email)+'</span>'
-        +(jm?'<span class="small muted"> · '+esc(r.email)+'</span>':'')+'</span></label>';}
+    // Jeden příjemce = jeden řádek ve sloupcích: zaškrtávátko | jméno | příjmení | e-mail.
+    var GRID='display:grid;grid-template-columns:24px minmax(90px,1fr) minmax(110px,1.2fr) minmax(170px,2fr);gap:10px;align-items:center;padding:6px 10px';
+    function hlavicka(){return '<div class="small muted" style="'+GRID+';position:sticky;top:0;background:#0e1526;border-bottom:1px solid rgba(120,160,255,.2);padding-top:8px;padding-bottom:8px;z-index:1">'
+      +'<span></span><span>Jméno</span><span>Příjmení</span><span>E-mail</span></div>';}
+    function radek(r){
+      var prazdne='<span class="muted" style="opacity:.5">—</span>';
+      return '<label style="'+GRID+';border-radius:8px;cursor:pointer;border-bottom:1px solid rgba(120,160,255,.07)" onmouseover="this.style.background=\'rgba(120,160,255,.06)\'" onmouseout="this.style.background=\'\'">'
+        +'<input type="checkbox" data-id="'+r.id+'"'+(vyb[r.id]?' checked':'')+' style="margin:0">'
+        +'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(r.first_name?esc(r.first_name):prazdne)+'</span>'
+        +'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">'+(r.last_name?esc(r.last_name):(r.nick?'<span class="muted">'+esc(r.nick)+'</span>':prazdne))+'</span>'
+        +'<span class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.85">'+esc(r.email)+'</span></label>';}
     var t=null;
     function nacti(){
       var dotaz=Q.value;
       fetch('/admin/rozesilky/recipients',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({filter:data(),q:dotaz})}).then(function(r){return r.json();}).then(function(j){
         if(j.error){L.innerHTML='<div class="small" style="padding:14px;color:#ff8f8f">'+esc(j.error)+'</div>';return;}
-        var ids={};var html='';
+        var ids={};var html=hlavicka();
         (j.excluded||[]).forEach(function(r){ids[r.id]=1;});
-        if((j.excluded||[]).length){html+='<div class="small muted" style="padding:8px 10px 2px">Vyřazení</div>'+j.excluded.map(radek).join('');
-          html+='<div class="small muted" style="padding:10px 10px 2px;border-top:1px solid var(--border);margin-top:6px">Ostatní příjemci</div>';}
+        if((j.excluded||[]).length){html+='<div class="small" style="padding:9px 10px 4px;color:#ffd866;font-weight:700">Vyřazení z této rozesílky ('+j.excluded.length+')</div>'+j.excluded.map(radek).join('');
+          html+='<div class="small muted" style="padding:12px 10px 4px;font-weight:700">Ostatní příjemci</div>';}
         var zbytek=(j.rows||[]).filter(function(r){return !ids[r.id];});
         html+=zbytek.length?zbytek.map(radek).join(''):'<div class="small muted" style="padding:14px">Nikdo neodpovídá.</div>';
         L.innerHTML=html;
@@ -336,7 +343,7 @@ module.exports = function mountMailing(app, ctx) {
     L.addEventListener('change',function(e){var c=e.target.closest('input[type=checkbox]');if(!c)return;
       var id=parseInt(c.getAttribute('data-id'),10);if(c.checked)vyb[id]=true;else delete vyb[id];pocet();});
     ov.querySelector('#bl-clear').onclick=function(){vyb={};L.querySelectorAll('input[type=checkbox]').forEach(function(c){c.checked=false;});pocet();};
-    var zavri=function(){document.body.removeChild(ov);};
+    var zavri=function(){document.body.style.overflow=puvodniScroll;document.body.removeChild(ov);};
     ov.querySelector('#bl-x').onclick=zavri;
     ov.onclick=function(e){if(e.target===ov)zavri();};
     ov.querySelector('#bl-ok').onclick=function(){exSet(Object.keys(vyb).filter(function(k){return vyb[k];}).map(Number));zavri();};
