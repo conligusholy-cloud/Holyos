@@ -412,9 +412,49 @@ module.exports = function mountMailing(app, ctx) {
     if(!zn.length)zn.push('<span class="muted">'+esc(r.stav)+'</span>');
     return '<tr><td class="small">'+esc(r.email)+'</td><td class="small">'+zn.join(' · ')+'</td><td class="small muted">'+esc(stCas(r.kliknuto_kdy||r.otevreno_kdy||r.odeslano_kdy))+'</td></tr>';
   }
+  // ── Chytré hledání v detailu příjemců ───────────────────────────────────
+  // Filtruje tabulku odeslaných (e-mail, bez ohledu na diakritiku a velikost písmen + filtr stavu)
+  // a zároveň se ptá serveru na frontu kampaně (čeká / odesláno / přeskočeno / chyba) i podle jména.
+  var stData=[],stQ='',stF='',stOpen=false,stLoaded=false,stTmr=null,stSeq=0;
+  function nz(s){return String(s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim();}
+  var FQ={doruceno:'doruceno',otevreno:'otevreno',kliknuto:'kliknuto',odmitnuto:'odmitnuto',odhlaseno:'odhlaseno'};
+  function stFiltr(){
+    var tb=document.getElementById('ml-st-tb'),cn=document.getElementById('ml-qc');if(!tb)return;
+    var qn=nz(stQ),out=[];
+    for(var i=0;i<stData.length;i++){var r=stData[i];if(stF&&!r[FQ[stF]])continue;if(qn&&nz(r.email).indexOf(qn)<0)continue;out.push(r);}
+    var MAX=400,shown=out.slice(0,MAX);
+    tb.innerHTML=shown.length?shown.map(stRadek).join(''):'<tr><td colspan="3" class="small muted">Nic nenalezeno mezi odeslanými.</td></tr>';
+    cn.textContent=(qn||stF)?('Nalezeno '+out.length+' z '+stData.length+(out.length>MAX?' — zobrazeno prvních '+MAX+', zpřesni hledání':'')):('Odeslaných celkem '+stData.length+(stData.length>MAX?' — zobrazeno prvních '+MAX+', hledej nebo filtruj':''));
+  }
+  var QL={queued:['⏳ čeká ve frontě','#ffd866'],sent:['✅ odesláno','#5ad48b'],failed:['❌ chyba odeslání','#ff8f8f'],skipped:['⏭ přeskočeno','#b39bff']};
+  function stFronta(){
+    var box=document.getElementById('ml-qq');if(!box)return;
+    var qn=nz(stQ);if(qn.length<2){box.innerHTML='';return;}
+    var my=++stSeq;
+    fetch('/admin/rozesilky/${c ? c.id : 0}/hledat?q='+encodeURIComponent(stQ.trim()),{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){
+      if(my!==stSeq)return;var v=j.vysledky||[];
+      if(!v.length){box.innerHTML='<div class="small muted" style="margin:4px 0 8px">Ve frontě kampaně není nikdo, kdo by odpovídal „'+esc(stQ)+'“.</div>';return;}
+      box.innerHTML='<div class="small" style="margin:6px 0 4px;font-weight:700">Stav ve frontě kampaně</div>'+v.map(function(x){
+        var l=QL[x.stav]||[esc(x.stav),'#9aa'],jm=((x.jmeno||'')+(x.nick?' ('+x.nick+')':'')).trim();
+        var pozn=x.stav==='skipped'?(x.vyrazen?' · vyřazen z rozesílek':x.blokovan?' · blokovaný účet':''):(x.vyrazen&&x.stav==='queued'?' · vyřazen z rozesílek — nebude odesláno':'');
+        return '<div class="small" style="padding:7px 10px;margin-bottom:5px;border:1px solid rgba(255,255,255,.1);border-radius:8px;display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between"><span><b>'+esc(x.email)+'</b>'+(jm?' · '+esc(jm):'')+'</span><span style="color:'+l[1]+'">'+l[0]+esc(pozn)+(x.stav==='failed'&&x.chyba?' — '+esc(x.chyba):'')+(x.kdy?' · '+esc(stCas(x.kdy)):'')+'</span></div>';
+      }).join('');
+    }).catch(function(){});
+  }
+  function stBind(){
+    var qi=document.getElementById('ml-q'),qf=document.getElementById('ml-qf'),dt=document.getElementById('ml-det');
+    if(!qi)return;
+    qi.value=stQ;qf.value=stF;if(dt&&stOpen)dt.open=true;
+    qi.oninput=function(){stQ=qi.value;stFiltr();clearTimeout(stTmr);stTmr=setTimeout(stFronta,250);};
+    qf.onchange=function(){stF=qf.value;stFiltr();};
+    if(dt)dt.ontoggle=function(){stOpen=dt.open;};
+    stFiltr();stFronta();
+  }
   function stNacti(){
     if(!stBox)return;
-    stBox.innerHTML='<span class="muted">Načítám…</span>';
+    // při automatickém obnovení se nepřepisuje obrazovka, když uživatel právě píše do hledání
+    if(stLoaded&&document.activeElement&&document.activeElement.id==='ml-q'){clearTimeout(stTimer);stTimer=setTimeout(stNacti,5000);return;}
+    if(!stLoaded)stBox.innerHTML='<span class="muted">Načítám…</span>';
     fetch('/admin/rozesilky/${c ? c.id : 0}/stats',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){
       if(j.error){stBox.innerHTML='<span style="color:#ff8f8f">⚠ Statistiky se nepodařilo načíst: '+esc(j.error)+'</span>';return;}
       var h='';
@@ -445,10 +485,15 @@ module.exports = function mountMailing(app, ctx) {
       h+='<div class="small muted" style="margin-top:10px">'+(j.tracking
         ?'Otevření měří Amazon SES neviditelným obrázkem v e-mailu — poštovní klienti (Apple Mail, Gmail) ho někdy načtou samy a jindy vůbec, takže otevření je orientační. Kliknutí na odkaz se měří spolehlivě.'
         :'<span style="color:#ffd866">⚠ Měření otevření a kliknutí není zapnuté</span> — v HolyOS chybí proměnná SES_CONFIGURATION_SET (konfigurační sada Amazon SES s událostmi). Zatím se počítá jen odeslání, doručení a odmítnutí.')+'</div>';
-      h+='<details style="margin-top:12px"><summary class="small" style="cursor:pointer">Detail příjemců ('+j.zaznamu+')</summary>'
-        +'<div class="tbl-wrap" style="max-height:420px;overflow:auto;margin-top:8px"><table><thead><tr><th>E-mail</th><th>Stav</th><th>Naposledy</th></tr></thead><tbody>'
-        +j.prijemci.map(stRadek).join('')+'</tbody></table></div></details>';
+      stData=j.prijemci||[];
+      h+='<details id="ml-det" style="margin-top:12px"><summary class="small" style="cursor:pointer">Detail příjemců ('+j.zaznamu+')</summary>'
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">'
+        +'<input type="search" id="ml-q" placeholder="🔎 Hledat e-mail nebo jméno (např. oralek, gmail…)" autocomplete="off" style="flex:1;min-width:220px">'
+        +'<select id="ml-qf" style="max-width:190px"><option value="">Všechny stavy</option><option value="doruceno">Doručeno</option><option value="otevreno">Otevřeno</option><option value="kliknuto">Kliknuto</option><option value="odmitnuto">Odmítnuto</option><option value="odhlaseno">Odhlášeno</option></select></div>'
+        +'<div class="small muted" id="ml-qc" style="margin:8px 0 4px"></div><div id="ml-qq"></div>'
+        +'<div class="tbl-wrap" style="max-height:420px;overflow:auto;margin-top:8px"><table><thead><tr><th>E-mail</th><th>Stav</th><th>Naposledy</th></tr></thead><tbody id="ml-st-tb"></tbody></table></div></details>';
       stBox.innerHTML=h;
+      stLoaded=true;stBind();
       stPlan(P);
     }).catch(function(){stBox.innerHTML='<span style="color:#ff8f8f">⚠ Server neodpověděl — zkus Obnovit.</span>';});
   }
@@ -628,6 +673,26 @@ module.exports = function mountMailing(app, ctx) {
       if (r.ok) log = j; else chybaLogu = j.error || ('HolyOS ' + r.status);
     } catch (e) { console.warn('[bs2 rozesílky] statistiky:', e.message); chybaLogu = 'HolyOS neodpověděl: ' + e.message; }
     res.set('Cache-Control', 'no-store').json(Object.assign({ prubeh, chyba_logu: chybaLogu }, log));
+  }));
+  // Hledání příjemce ve frontě kampaně: e-mail / jméno / přezdívka, bez ohledu na diakritiku a velikost písmen.
+  // Odpoví na „je ještě ve frontě?" — stavy queued (čeká) · sent (odesláno) · failed (chyba) · skipped (přeskočeno).
+  app.get('/admin/rozesilky/:id(\\d+)/hledat', requireAdmin, wrap(async (req, res) => {
+    const c = await load(req.params.id);
+    if (!c) return res.status(404).json({ error: 'Rozesílka neexistuje' });
+    const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().slice(0, 80);
+    const qn = norm(req.query.q);
+    if (qn.length < 2) return res.json({ vysledky: [] });
+    const like = '%' + qn.replace(/[\\%_]/g, '\\$&') + '%';
+    const T = (x) => "translate(lower(coalesce(" + x + ",'')),'áäčďéěëíňóöřšťúůüýž','aacdeeeinoorstuuuyz')";
+    const rows = (await q(`SELECT r.email, r.status, r.error, r.sent_at, s.first_name, s.last_name, s.nick, s.mail_optout, s.status AS sstatus
+      FROM mail_campaign_recipients r LEFT JOIN supporters s ON s.id = r.supporter_id
+      WHERE r.campaign_id = $1 AND (${T('r.email')} LIKE $2 OR ${T("concat_ws(' ', s.first_name, s.last_name)")} LIKE $2 OR ${T("concat_ws(' ', s.last_name, s.first_name)")} LIKE $2 OR ${T('s.nick')} LIKE $2)
+      ORDER BY r.id LIMIT 30`, [c.id, like])).rows;
+    res.set('Cache-Control', 'no-store').json({ vysledky: rows.map((r) => ({
+      email: r.email, stav: r.status, chyba: r.error || null, kdy: r.sent_at || null,
+      jmeno: [r.first_name, r.last_name].filter(Boolean).join(' '), nick: r.nick || null,
+      vyrazen: !!r.mail_optout, blokovan: r.sstatus === 'blocked',
+    })) });
   }));
   app.post('/admin/rozesilky/:id(\\d+)/test', requireAdmin, wrap(async (req, res) => {
     const c = await load(req.params.id); const to = String((req.body || {}).to || '').trim().toLowerCase();

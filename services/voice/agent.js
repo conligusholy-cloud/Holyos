@@ -60,7 +60,17 @@ async function runTurn({ system, history = [], userText, toolset = null, maxToke
     };
     if (tools && tools.length) params.tools = tools;
 
-    const resp = await messagesCreate(client, params, { label: 'voice' });
+    let resp;
+    try { resp = await messagesCreate(client, params, { label: 'voice' }); }
+    catch (e) {
+      // Záložní model: když hlavní model selže (přetížení, vyřazený model, výpadek), zkus jiný — volající nesmí zůstat bez odpovědi.
+      const st = Number(e && e.status || 0);
+      const FALLBACK = process.env.VOICE_FALLBACK_MODEL || 'claude-sonnet-4-6';
+      if (FALLBACK && FALLBACK !== params.model && (st === 404 || st === 429 || st >= 500 || !st)) {
+        console.warn('[voice] model ' + params.model + ' selhal (' + (st || e.message) + ') → zkouším ' + FALLBACK);
+        resp = await messagesCreate(client, Object.assign({}, params, { model: FALLBACK }), { label: 'voice-fallback' });
+      } else throw e;
+    }
     const blocks = resp.content || [];
     const toolUses = blocks.filter((b) => b.type === 'tool_use');
 

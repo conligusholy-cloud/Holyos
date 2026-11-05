@@ -1013,8 +1013,37 @@
         + '</div></div>';
     }
 
+    // Dodavatele se nevybírá z dlouhého rozbalovacího seznamu — napíšeš pár písmen z názvu
+    // (stačí kousek ze středu, na diakritice nezáleží) a klikneš na nalezenou firmu.
+    function pnNorm(v) { return String(v == null ? '' : v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+    // Řazení shody: celý název < začátek názvu < začátek slova < kdekoliv; při stejné shodě kratší název napřed.
+    function pnHledejFirmy(dotaz) {
+      const q = pnNorm(dotaz).trim(); if (q.length < 2) return [];
+      return companies.map((c) => {
+        const n = pnNorm(c.name); const ico = String(c.ico || '');
+        let skore = -1;
+        if (n === q) skore = 0;
+        else if (n.indexOf(q) === 0) skore = 1;
+        else if (new RegExp('(^|[^a-z0-9])' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(n)) skore = 2;
+        else if (n.indexOf(q) > -1) skore = 3;
+        else if (ico.indexOf(q) === 0) skore = 4;
+        else if (pnNorm(c.city).indexOf(q) === 0) skore = 5;
+        return skore < 0 ? null : { c, skore };
+      }).filter(Boolean).sort((a, b) => (a.skore - b.skore) || (a.c.name.length - b.c.name.length) || a.c.name.localeCompare(b.c.name, 'cs')).slice(0, 12).map((x) => x.c);
+    }
+    function pnSupHtml() {
+      const vybrany = PN.supplier ? companies.find((c) => c.id === PN.supplier) : null;
+      if (vybrany) return '<div class="pn-row" style="gap:10px;align-items:center;margin:0">'
+        + '<b style="font-size:16px">' + poTxt(vybrany.name) + '</b>'
+        + (vybrany.city ? '<span class="pn-muted">' + poTxt(vybrany.city) + '</span>' : '')
+        + '<button type="button" class="po-btn" data-pn="sup-zmenit">změnit</button></div>';
+      return '<div style="position:relative">'
+        + '<input class="po-sel" id="pn-sup-q" autocomplete="off" placeholder="Napiš část názvu dodavatele (stačí tři písmena)…" style="font-weight:700;padding:9px 10px;width:100%">'
+        + '<div id="pn-sup-list" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:30;margin-top:4px;max-height:280px;overflow:auto;background:#0e1526;border:1px solid rgba(120,160,255,.28);border-radius:10px;box-shadow:0 18px 50px rgba(0,0,0,.55)"></div></div>'
+        + '<div class="pn-muted" id="pn-sup-hint" style="margin-top:6px;font-size:12px">Hledá se kdekoliv v názvu, na háčcích a čárkách nezáleží. Najít jde i podle IČO nebo města.</div>';
+    }
+
     function pnRender() {
-      const supOpts = '<option value="">— vyber dodavatele —</option>' + companies.map((c) => '<option value="' + c.id + '"' + (PN.supplier === c.id ? ' selected' : '') + '>' + poTxt(c.name) + '</option>').join('');
       const chipOf = (s, kind) => { const c = companies.find((x) => x.id === s.supplier_id); if (!c) return ''; return kind === 'prod'
         ? '<span class="pn-chip" data-pn-sup="' + c.id + '">' + poTxt(c.name) + ' <span class="pn-muted">' + s.prod + ' pro výrobu</span>' + (s.prod_late ? ' <b class="c">' + s.prod_late + '× už pozdě</b>' : '') + '</span>'
         : '<span class="pn-chip" data-pn-sup="' + c.id + '">' + poTxt(c.name) + ' <span class="pn-muted">' + s.min + ' pod minimem</span>' + (s.min_critical ? ' <b class="c">' + s.min_critical + '× došlo</b>' : '') + '</span>'; };
@@ -1075,7 +1104,7 @@
         '<div class="po-kicker">NOVÁ OBJEDNÁVKA</div><div class="po-num" style="font-size:26px;margin-bottom:6px">' + dr.icon + ' ' + dr.label +
           ' <button type="button" class="po-btn" data-pn-kind-back="1" style="font-size:12px;padding:4px 10px;vertical-align:middle;margin-left:8px">změnit</button></div>' +
         '<div class="pn-muted" style="margin-bottom:16px">' + dr.hint + '</div>' +
-        '<div class="pn-box"><div class="pn-h"><span class="n">1</span>Dodavatel</div><select class="po-sel" id="pn-sup" style="font-weight:700;padding:9px 10px">' + supOpts + '</select>' +
+        '<div class="pn-box"><div class="pn-h"><span class="n">1</span>Dodavatel</div>' + pnSupHtml() +
           (PN_KINDS[PN.kind].stock
             ? (chips ? '<div style="margin-top:10px"><div class="pn-muted" style="margin-bottom:6px">Doporučeno — tam je zboží pod minimální zásobou:</div>' + chips + '</div>' : (!PN.supplier && !PN.overview.length ? '<div class="pn-muted" style="margin-top:8px">Žádné zboží s dodavatelem není pod minimem.</div>' : ''))
             : '') + '</div>' +
@@ -1090,7 +1119,35 @@
       sh.addEventListener('click', pnClick); sh.addEventListener('change', pnChange);
       const s = document.getElementById('pn-search');
       if (s) s.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); pnAddFromSearch(s.value); } });
-      document.getElementById('pn-sup').addEventListener('change', (e) => pnPickSupplier(e.target.value));
+      pnSupNavaz();
+    }
+    // Obsluha našeptávače dodavatele: psaní, šipky, Enter, klik. Mimo kliknutí se seznam schová.
+    function pnSupNavaz() {
+      const vst = document.getElementById('pn-sup-q'); if (!vst) return;
+      const box = document.getElementById('pn-sup-list');
+      let nalezene = [], kurzor = -1;
+      const schovej = () => { box.style.display = 'none'; kurzor = -1; };
+      const vykresli = () => {
+        if (!nalezene.length) {
+          box.innerHTML = '<div class="pn-muted" style="padding:10px 12px">Nic takového tu není. Zkus kratší nebo jinou část názvu.</div>';
+          box.style.display = pnNorm(vst.value).trim().length >= 2 ? 'block' : 'none'; return;
+        }
+        box.innerHTML = nalezene.map((c, i) => '<div class="pn-sup-polozka" data-i="' + i + '" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(120,160,255,.08)'
+          + (i === kurzor ? ';background:rgba(120,160,255,.14)' : '') + '"><b>' + poTxt(c.name) + '</b>'
+          + (c.city || c.ico ? ' <span class="pn-muted" style="font-size:12px">' + poTxt([c.city, c.ico ? 'IČO ' + c.ico : ''].filter(Boolean).join(' · ')) + '</span>' : '') + '</div>').join('');
+        box.style.display = 'block';
+      };
+      const hledej = () => { nalezene = pnHledejFirmy(vst.value); kurzor = nalezene.length ? 0 : -1; vykresli(); };
+      vst.addEventListener('input', hledej);
+      vst.addEventListener('focus', () => { if (vst.value.trim()) hledej(); });
+      vst.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { if (!nalezene.length) return; e.preventDefault(); kurzor = (kurzor + (e.key === 'ArrowDown' ? 1 : nalezene.length - 1)) % nalezene.length; vykresli(); const a = box.querySelector('[data-i="' + kurzor + '"]'); if (a && a.scrollIntoView) a.scrollIntoView({ block: 'nearest' }); return; }
+        if (e.key === 'Enter') { e.preventDefault(); if (nalezene[kurzor]) pnPickSupplier(nalezene[kurzor].id); return; }
+        if (e.key === 'Escape') { schovej(); }
+      });
+      box.addEventListener('mousedown', (e) => { const r = e.target.closest('[data-i]'); if (!r) return; e.preventDefault(); const c = nalezene[Number(r.dataset.i)]; if (c) pnPickSupplier(c.id); });
+      vst.addEventListener('blur', () => setTimeout(schovej, 120));
+      setTimeout(() => { try { vst.focus(); } catch (e) { /* bez fokusu */ } }, 30);
     }
     function pnAddFromSearch(v) {
       const name = String(v || '').trim(); if (!name) return;
@@ -1125,6 +1182,7 @@
         pnAdd({ name: c.label, cost_kind: k, quantity: 1, unit: 'ks', unit_price: 0, expected_delivery: PN.expected || pnToday(7) });
         return pnRender();
       }
+      if (e.target.closest('[data-pn="sup-zmenit"]')) return pnPickSupplier('');
       const chip = e.target.closest('[data-pn-sup]'); if (chip) return pnPickSupplier(chip.dataset.pnSup);
       if (e.target.id === 'pn-create') return pnCreate();
       if (e.target.id === 'pn-inquiry') return pnInquiryOpen();

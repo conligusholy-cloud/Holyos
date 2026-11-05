@@ -14,6 +14,8 @@
 const { WebSocketServer } = require('ws');
 const { prisma } = require('../../config/database');
 const agent = require('./agent');
+const aiGuard = require('./ai-guard');
+aiGuard.startWatchdog(); // co 15 min test Claude API → upozornění dřív, než zavolá zákazník
 const voiceTools = require('./tools');
 
 let getSetting = null;
@@ -579,6 +581,8 @@ function attach(server) {
         } catch (e) {
           state.failCount = (state.failCount || 0) + 1;
           console.warn('[voice] runTurn selhal (' + state.failCount + '× za sebou):', e && (e.status || ''), e && e.message);
+          const why = aiGuard.callFailed(e, { line: mode === 'outbound' ? 'kampaň' : line, from: state.from }); // push Tomášovi a Janovi
+          (state.aiErrors = state.aiErrors || []).push({ at: new Date().toISOString(), kind: why.kind, text: why.text });
           // Dvakrát za sebou nic → nezacyklit se v omlouvání: přepojit na člověka, jinak slušně ukončit.
           if (state.failCount >= 2 && !state.handedOff && !state.ended) {
             if (transferAllowed) {
@@ -624,7 +628,10 @@ function attach(server) {
         }
       } catch (e) {
         console.warn('[voice] shrnutí selhalo:', e.message);
+        (state.aiErrors = state.aiErrors || []).push({ at: new Date().toISOString(), kind: aiGuard.classify(e).kind, text: 'shrnutí: ' + aiGuard.classify(e).text });
       }
+      // Když AI během hovoru selhala, ať je v přehledu hovorů vidět proč (místo „bez shrnutí")
+      if (state.aiErrors && state.aiErrors.length && !summary) summary = '⚠ AI během hovoru selhala: ' + state.aiErrors[0].text;
 
       let saved = null;
       try {
