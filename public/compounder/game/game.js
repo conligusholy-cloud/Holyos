@@ -843,7 +843,22 @@ function canFinance(amount, chci) {
   }
   return { amount: amount, own: own, need: need, ltvRoom: ltvRoom, canBorrow: canBorrow,
     cash: S.cash, minOwn: minOwn, maxOwn: maxOwn, ok: ok, duvod: duvod,
+    chybi: ok ? 0 : Math.max(0, Math.round(amount - S.cash - canBorrow)),
     dotkne_rezervy: own > zRezervy };
+}
+// České množné číslo — 1 den, 2 dny, 5 dní.
+function mn(n, a, b, c) { return n === 1 ? a : (n >= 2 && n <= 4) ? b : c; }
+// Kolik ještě chybí a za jak dlouho to hráč vydělá, když nic nezmění.
+// Bez téhle věty vidí jen zašedlé tlačítko a neví, jestli má čekat, nebo něco dělat.
+function dohnat(chybi) {
+  if (!(chybi > 0)) return '';
+  var zisk = monthlyProfit();
+  if (!(zisk > 0)) return 'Zatím ti nic nepřitéká — postav první prádlomat, nebo si půjč v bance.';
+  var mesicu = Math.ceil(chybi / zisk);
+  var dni = Math.max(1, Math.round(mesicu / 2));
+  return 'Při zisku ' + kcFull(zisk) + ' za měsíc na to budeš mít za '
+    + mesicu + ' ' + mn(mesicu, 'herní měsíc', 'herní měsíce', 'herních měsíců')
+    + ', tedy asi za ' + dni + ' ' + mn(dni, 'den', 'dny', 'dní') + '.';
 }
 function doFinance(f) { S.cash -= f.own; S.bank -= f.need; S.loan += f.need; }
 // Kolik banka ukousne každý měsíc na úrocích z celého dluhu.
@@ -923,8 +938,10 @@ function paintShop() {
       + '<div class="kv"><span>Energie</span><b>' + pct(ENERGY_SHARE) + ' obratu</b></div>'
       + '<div class="kv"><span>Přípojky na místě (navíc)</span><b>' + kcFull(Math.round(CONN_MIN * (k === 'max' ? CONN_MAX_MULT : 1))) + ' – ' + kcFull(Math.round(CONN_MAX * (k === 'max' ? CONN_MAX_MULT : 1))) + '</b></div>'
       + '<div class="kv"><span>Dodání</span><b>' + DELIVERY_MONTHS + ' herní měsíce (1 den)</b></div>'
-      + '<button class="btn sm" style="width:100%;margin-top:10px" data-buy="' + k + '"' + (f.ok ? '' : ' disabled') + '>'
-      + (f.ok ? 'Koupit ' + m.name : 'Nemáš na to') + '</button></div>';
+      + '<button class="btn sm' + (f.ok ? '' : ' sec') + '" style="width:100%;margin-top:10px" data-buy="' + k + '">'
+      + (f.ok ? 'Koupit ' + m.name : 'Chybí ti ' + kcFull(f.chybi)) + '</button>'
+      + (f.ok ? '' : '<p class="fine">' + esc(dohnat(f.chybi)) + '</p>')
+      + '</div>';
   }).join('');
   [].forEach.call($('shop-list').querySelectorAll('[data-buy]'), function (b) {
     b.onclick = function () { buySheet(b.getAttribute('data-buy')); };
@@ -937,7 +954,8 @@ function buySheet(modelKey, drz) {
     + '<p class="muted small">Stroj ti přivezou za ' + DELIVERY_MONTHS + ' herní měsíce, tedy za jeden skutečný den. Do té doby je na cestě, pak čeká na skladě, než mu najdeš místo.</p>'
     + financeRows(f)
     + '<button class="btn big" id="do-buy"' + (f.ok ? '' : ' disabled') + '>Objednat</button>'
-    + (f.ok ? '' : '<p class="fine err">' + esc(f.duvod || '') + ' Počkej, až síť vydělá, nebo splať část úvěru.</p>'));
+    + (f.ok ? '' : '<p class="fine err">' + esc(f.duvod || '') + '</p>'
+        + '<p class="fine">' + esc(dohnat(f.chybi)) + ' Nebo splať část úvěru — tím se ti uvolní rámec.</p>'));
   bindFinance(function () { buySheet(modelKey, true); });
   var b = $('do-buy');
   if (b) b.onclick = function () {
@@ -960,6 +978,7 @@ function installSheet(sp, areaId, modelKey, drz) {
     + '<button class="btn big" id="do-build"' + (f.ok ? '' : ' disabled') + '>Postavit</button>'
     + (f.ok ? (f.dotkne_rezervy ? '<p class="fine warn">Sáhneš i do provozní rezervy — po stavbě ti zbude ' + kcFull(S.cash - f.own) + '.</p>' : '')
         : '<p class="fine err">' + esc(f.duvod || '') + '</p>'
+          + '<p class="fine">' + esc(dohnat(f.chybi)) + '</p>'
           + '<button class="btn sec" id="go-bank" style="width:100%;margin-top:8px">Zkusit úvěr v bance</button>'));
   bindFinance(function () { installSheet(sp, areaId, modelKey, true); });
   var gb = $('go-bank');
