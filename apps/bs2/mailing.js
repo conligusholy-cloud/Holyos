@@ -336,7 +336,18 @@ module.exports = function mountMailing(app, ctx) {
     content.push({ type: 'text', text: 'Napiš hromadný e-mail pro uživatele Best Series 2.0 (podporovatelé a zákazníci české firmy Best Series, která vyrábí a provozuje samoobslužné prádlomaty). Vycházej z příloh výše' + (hint ? ' a z tohoto pokynu: ' + hint : '') + '.\nPravidla: česky, vykání, věcně a srozumitelně, bez přehnaných marketingových frází, nevymýšlej fakta, která v podkladech nejsou. Text začni oslovením „Dobrý den {jmeno},“ (zástupný znak nech přesně takto). Odstavce odděluj prázdným řádkem, žádné HTML ani markdown. Nepiš patičku s odhlášením (přidá se sama). Pokud je příloha součástí e-mailu, zmiň ji („v příloze najdete…“).\nVrať POUZE JSON: {"subject":"…","body":"…"}' });
     try {
       const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ model: process.env.BS2_MAIL_AI_MODEL || 'claude-sonnet-4-6', max_tokens: 3000, messages: [{ role: 'user', content }] }), signal: AbortSignal.timeout(110000) });
-      const j = await r.json(); if (!r.ok) return res.status(502).json({ error: (j.error && j.error.message) || ('AI ' + r.status) });
+      const j = await r.json();
+      if (!r.ok) {
+        // Syrové „invalid x-api-key" nikomu nic neřekne — přeložíme to do češtiny.
+        const zprava = (j.error && j.error.message) || ('AI ' + r.status);
+        if (r.status === 401 || r.status === 403 || /invalid x-api-key|authentication_error/i.test(zprava)) {
+          return res.status(502).json({ error: 'Klíč k AI není platný — nastav platný ANTHROPIC_API_KEY (Railway → projekt BS2 → Variables). Týká se to všech funkcí s AI, nejen rozesílek.' });
+        }
+        if (/credit balance|insufficient/i.test(zprava)) {
+          return res.status(502).json({ error: 'Došel kredit na AI. Dobij ho v Anthropic Console (Plans & Billing).' });
+        }
+        return res.status(502).json({ error: zprava });
+      }
       const text = (j.content || []).filter((x) => x.type === 'text').map((x) => x.text).join(''); const a = text.indexOf('{'), b = text.lastIndexOf('}');
       // JSON od modelu: když obsahuje syrové konce řádků uvnitř řetězců, opravíme je
       const fixJson = (t) => { let o = '', str = false, esc2 = false; for (const ch of t) { if (str) { if (esc2) { esc2 = false; o += ch; continue; } if (ch === '\\') { esc2 = true; o += ch; continue; } if (ch === '"') str = false; o += ch === '\n' ? '\\n' : ch === '\r' ? '' : ch === '\t' ? '\\t' : ch; } else { if (ch === '"') str = true; o += ch; } } return o; };
