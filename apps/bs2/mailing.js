@@ -32,6 +32,7 @@ module.exports = function mountMailing(app, ctx) {
       orders: ['any', 'has', 'none'].includes(f.orders) ? f.orders : 'any',
       product: String(f.product || '').slice(0, 200),
       location: ['any', 'has', 'none'].includes(f.location) ? f.location : 'any',
+      support: ['any', 'has', 'none'].includes(f.support) ? f.support : 'any',
       manual: String(f.manual || '').slice(0, 200000),
       manual_only: !!f.manual_only && f.manual_only !== '0',
     };
@@ -49,6 +50,10 @@ module.exports = function mountMailing(app, ctx) {
     const prod = f.product ? ' AND o.product_name ILIKE ' + P('%' + f.product + '%') : '';
     if (f.orders === 'has' || (f.orders === 'any' && f.product)) w.push("EXISTS (SELECT 1 FROM orders o WHERE o.supporter_id = s.id AND o.status <> 'cancelled'" + prod + ')');
     if (f.orders === 'none') w.push("NOT EXISTS (SELECT 1 FROM orders o WHERE o.supporter_id = s.id AND o.status <> 'cancelled'" + prod + ')');
+    // Podporovatelé = mají standardní podporu (partner_support.std_total > 0) — stejně jako „se std. podporou“ v Uživatelích
+    const STD = "(CASE WHEN s.partner_support->>'std_total' ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (s.partner_support->>'std_total')::numeric ELSE 0 END > 0)";
+    if (f.support === 'has') w.push(STD);
+    if (f.support === 'none') w.push('NOT coalesce(' + STD + ', false)');
     if (f.location === 'has') w.push('s.location_package IS NOT NULL');
     if (f.location === 'none') w.push('s.location_package IS NULL');
     if (emails.length) { const extra = w.splice(3); if (extra.length) w.push('((' + extra.join(' AND ') + ') OR lower(s.email) = ANY(' + P(emails) + '::text[]))'); } // ruční seznam = navíc k filtru
@@ -190,6 +195,8 @@ module.exports = function mountMailing(app, ctx) {
     <label>Přihlášení</label><div class="row">${sel('login', f.login, [['any', 'kdykoli / nikdy'], ['never', 'nikdy se nepřihlásil'], ['within', 'přihlášen za posledních'], ['not_within', 'nepřihlášen posledních']])}<input name="login_days" type="number" min="1" max="3650" style="width:90px" value="${f.login_days}"${dis}> <span class="muted small">dní</span></div>
     <label>Objednávky</label><div class="row">${sel('orders', f.orders, [['any', 'nerozhoduje'], ['has', 'má objednávku'], ['none', 'nemá objednávku']])}
       <input name="product" list="ml-prods" placeholder="produkt (nepovinné)" style="flex:1;min-width:160px" value="${esc(f.product)}"${dis}><datalist id="ml-prods">${prods.map((p) => `<option value="${esc(p.product_name)}">${p.c}×</option>`).join('')}</datalist></div>
+    <label>Podporovatelé</label>${sel('support', f.support, [['any', 'nerozhoduje'], ['has', 'mají standardní podporu'], ['none', 'nemají podporu']])}
+    <div class="small muted">Podle načtené podpory ze starého portálu (jako „se std. podporou“ v Uživatelích).</div>
     <label>Balíček Prověření lokality</label>${sel('location', f.location, [['any', 'nerozhoduje'], ['has', 'má balíček'], ['none', 'nemá balíček']])}
     <label>Ruční seznam e-mailů</label><textarea name="manual" rows="4" placeholder="jeden e-mail na řádek (nebo oddělené čárkou)"${dis}>${esc(f.manual)}</textarea>
     <div class="ml-chips" style="margin-top:6px"><label><input type="checkbox" name="manual_only" value="1"${f.manual_only ? ' checked' : ''}${dis}> Poslat JEN na ruční seznam (ignorovat filtry)</label></div>
@@ -223,7 +230,7 @@ module.exports = function mountMailing(app, ctx) {
     const m = req.query.msg ? `<div class="msg ${req.query.err ? 'err' : 'ok'}">${esc(req.query.msg)}</div>` : '';
     res.send(V.adminLayout('Rozesílka', 'mail', req.admin, m + editor(c, await products(), req.admin), HOLYOS_URL));
   }));
-  const filterFromBody = (b) => normFilter({ status: b.status, types: b.types, login: b.login, login_days: b.login_days, orders: b.orders, product: b.product, location: b.location, manual: b.manual, manual_only: b.manual_only });
+  const filterFromBody = (b) => normFilter({ status: b.status, types: b.types, login: b.login, login_days: b.login_days, orders: b.orders, product: b.product, location: b.location, support: b.support, manual: b.manual, manual_only: b.manual_only });
   const fields = (b) => ({ name: String(b.name || '').trim().slice(0, 120) || 'Rozesílka', subject: String(b.subject || '').trim().slice(0, 200), body: String(b.body || '').slice(0, 20000), link: /^https:\/\//.test(String(b.link || '').trim()) ? String(b.link).trim().slice(0, 500) : null, link_label: String(b.link_label || '').trim().slice(0, 80) || null });
   app.post('/admin/rozesilky/new', requireAdmin, wrap(async (req, res) => {
     const x = fields(req.body || {}); if (!x.subject || !x.body.trim()) return res.redirect('/admin/rozesilky/new');
