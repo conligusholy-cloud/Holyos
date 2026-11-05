@@ -441,6 +441,8 @@ function avaLevel(sc, answered) {
 // ─── Úvod a dotazník ─────────────────────────────────────────────────────────
 var qi = 0, qScore = { opatrny: 0, vyvazeny: 0, dravy: 0 };
 $('go-quiz').onclick = function () { $('intro').classList.add('hidden'); $('quiz').classList.remove('hidden'); renderQuiz(); };
+// Kdo už hraje, se musel dřív prokousat celým dotazníkem. Teď jde rovnou sem.
+$('go-login').onclick = function () { showAcct('login'); };
 function renderQuiz() {
   var q = QUIZ[qi];
   $('q-ava').innerHTML = avatarSvg(avaLevel(qScore, qi));
@@ -704,7 +706,7 @@ function scout(city, btn) {
         }
         S.cash -= SCOUT_COST;
         S.areas[id] = { name: j.area.name, lat: j.area.lat, lon: j.area.lon, scoutedAt: Date.now(), spots: (j.spots || []).map(fixMetrics) };
-        save(); paint(); drawMap(); closeSheet();
+        save(); paint(); drawMap(); closeSheet(); syncState(true);
         ev('game_scout');
         loadClaims();   // ať hráč hned vidí, kde už konkurence stojí
         if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], 12);
@@ -736,7 +738,7 @@ function spotSheet(sp, areaId) {
       + '<button class="btn big" id="do-reveal"' + (S.cash < REVEAL_COST ? ' disabled' : '') + '>Prověřit místo</button>'
       + (S.cash < REVEAL_COST ? '<p class="fine">Na obhlídku nemáš dost hotovosti.</p>' : ''));
     var b = $('do-reveal');
-    if (b) b.onclick = function () { S.cash -= REVEAL_COST; S.revealed[sp.id] = true; save(); paint(); drawMap(); spotSheet(sp, areaId); };
+    if (b) b.onclick = function () { S.cash -= REVEAL_COST; S.revealed[sp.id] = true; save(); paint(); drawMap(); syncState(true); spotSheet(sp, areaId); };
     return;
   }
 
@@ -932,7 +934,7 @@ function buySheet(modelKey, drz) {
   if (b) b.onclick = function () {
     doFinance(f);
     S.orders.push({ model: modelKey, orderedAt: Date.now(), arrivesAt: Date.now() + DELIVERY_MONTHS * MONTH_MS });
-    save(); paint(); closeSheet();
+    save(); paint(); closeSheet(); syncState(true);
     toast(m.name + ' objednán. Dorazí ' + etaText(DELIVERY_MONTHS * MONTH_MS) + '.', 'ok');
   };
 }
@@ -1265,7 +1267,7 @@ function paintBank() {
   if (b) b.onclick = function () {
     var pay = Math.min(S.cash, S.loan);
     S.cash -= pay; S.loan -= pay; S.bank = Math.min(bankCap(), S.bank + pay);
-    save(); paint(); toast('Splaceno ' + kcFull(pay) + '.', 'ok');
+    save(); paint(); syncState(true); toast('Splaceno ' + kcFull(pay) + '.', 'ok');
   };
 }
 function paintMe() {
@@ -1706,6 +1708,12 @@ function showAcct(mode) {
   $('ac-pass').setAttribute('autocomplete', login ? 'current-password' : 'new-password');
   $('ac-err').classList.add('hidden');
   $('ac-have').onclick = function () { showAcct(login ? 'register' : 'login'); };
+  var zp = $('ac-zpet');
+  if (zp) zp.onclick = function () {
+    $('acct').classList.add('hidden');
+    // Bez rozehrané hry se vracíme na úvod, jinak zpátky k výběru profilu.
+    $(S ? 'role' : 'intro').classList.remove('hidden');
+  };
   $('ac-go').onclick = function () { doAcct(login); };
   setTimeout(function () { $('ac-nick').focus(); }, 60);
 }
@@ -1726,7 +1734,12 @@ function doAcct(login) {
     if (login) {
       // Na serveru je uložená síť — ta má přednost před tím, co je v prohlížeči.
       if (r.j.state) { S = r.j.state; save(); }
-      else if (!S) return acctErr('K tomuhle účtu zatím žádná síť nepatří.');
+      else if (!S) {
+        // Účet existuje, ale rozehraná hra k němu není — pošleme ho vybrat profil.
+        $('acct').classList.add('hidden');
+        $('intro').classList.remove('hidden');
+        return toast('Přihlášeno. Teď si ještě vyber, jaký jsi podnikatel.', 'ok');
+      }
     }
     $('acct').classList.add('hidden');
     startGame();
