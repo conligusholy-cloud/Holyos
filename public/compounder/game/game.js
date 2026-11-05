@@ -846,6 +846,15 @@ function canFinance(amount, chci) {
     dotkne_rezervy: own > zRezervy };
 }
 function doFinance(f) { S.cash -= f.own; S.bank -= f.need; S.loan += f.need; }
+// Kolik banka ukousne každý měsíc na úrocích z celého dluhu.
+function urokMesicne() { return Math.round(S.loan * rateOf() / 12); }
+// Kolik z toho připadá na jedno konkrétní místo — podle toho, jak velká část
+// investice do sítě v něm leží. Jinak by se nedalo říct, co které místo vydělá.
+function urokMista(u) {
+  var celkem = investedTotal();
+  if (!celkem || !u.eco.invest) return 0;
+  return Math.round(urokMesicne() * (u.eco.invest / celkem));
+}
 // Provozní úvěr: hotovost z banky na běžné výdaje. Nepodléhá úvěrovému stropu,
 // jen vlastnímu limitu — je to pojistka, aby hra nikdy nešla do slepé uličky.
 function operatingRoom() {
@@ -1098,13 +1107,24 @@ function unitSheet(u) {
   sheet('<h3>' + esc(u.name) + '</h3>'
     + '<p class="muted small">' + esc(KIND_LABEL[u.kind] || 'Místo') + ' · ' + MODELS[u.eco.model].name + ' · v provozu ' + years.toFixed(1).replace('.', ',') + ' roku</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(u.score) + '</div>'
+    + '<h3 style="margin:16px 0 4px">Co to měsíčně dělá</h3>'
+    + '<div class="kv"><span>Obrat</span><b>' + kcFull(u.eco.revenue) + '</b></div>'
+    + (u.eco.rent != null ? '<div class="kv"><span>− Nájem</span><b class="warn">' + kcFull(u.eco.rent) + '</b></div>' : '')
+    + (u.eco.energy != null ? '<div class="kv"><span>− Energie (' + pct(ENERGY_SHARE) + ' obratu)</span><b class="warn">' + kcFull(u.eco.energy) + '</b></div>' : '')
+    + (u.eco.servis != null ? '<div class="kv"><span>− Servis a úklid (' + pct(SERVIS_SHARE) + ' obratu)</span><b class="warn">' + kcFull(u.eco.servis) + '</b></div>' : '')
+    + '<div class="kv souhrn"><span>Provozní zisk</span><b class="ok">' + kcFull(u.eco.profit) + '</b></div>'
+    + (urokMista(u) > 0
+      ? '<div class="kv"><span>− Úrok z úvěru (podíl tohohle místa)</span><b class="warn">' + kcFull(urokMista(u)) + '</b></div>'
+        + '<div class="kv souhrn"><span>Čistý výdělek</span><b class="' + (u.eco.profit - urokMista(u) >= 0 ? 'ok' : 'err') + '">'
+        + kcFull(u.eco.profit - urokMista(u)) + '</b></div>'
+        + '<p class="fine">Úrok se dělí mezi místa podle toho, kolik do kterého padlo peněz. '
+        + 'Až dluh splatíš, zůstane ti celý provozní zisk.</p>'
+      : '<p class="fine">Nemáš dluh, takže provozní zisk je zároveň čistý výdělek.</p>')
+    + '<h3 style="margin:16px 0 4px">Souhrn</h3>'
     + '<div class="kv"><span>Investice</span><b>' + kcFull(u.eco.invest) + '</b></div>'
-    + '<div class="kv"><span>Obrat / měsíc</span><b>' + kcFull(u.eco.revenue) + '</b></div>'
-    + (u.eco.rent != null ? '<div class="kv"><span>Nájem / měsíc</span><b>' + kcFull(u.eco.rent) + '</b></div>' : '')
-    + (u.eco.energy != null ? '<div class="kv"><span>Energie / měsíc (' + pct(ENERGY_SHARE) + ' obratu)</span><b>' + kcFull(u.eco.energy) + '</b></div>' : '')
-    + (u.eco.servis != null ? '<div class="kv"><span>Servis a úklid / měsíc (' + pct(SERVIS_SHARE) + ' obratu)</span><b>' + kcFull(u.eco.servis) + '</b></div>' : '')
-    + '<div class="kv"><span>Zisk / měsíc</span><b class="ok">' + kcFull(u.eco.profit) + '</b></div>'
     + '<div class="kv"><span>Vydělal celkem</span><b>' + kcFull(u.eco.profit * 12 * years) + '</b></div>'
+    + (u.eco.profit > 0 ? '<div class="kv"><span>Návratnost</span><b>'
+      + (u.eco.invest / (u.eco.profit * 12)).toFixed(1).replace('.', ',') + ' roku</b></div>' : '')
     + '<p class="muted small" style="margin-top:14px">Když je jinde líp, místo vypovíš a stroj si odvezeš na sklad. '
     + 'Přípojky ani domluvený nájem se nevracejí a místo se hned uvolní konkurenci.</p>'
     + '<button class="btn sec" id="do-release" style="width:100%">Vypovědět místo</button>');
@@ -1262,6 +1282,8 @@ function paintBank() {
     + '<div class="card"><h3>Úvěr</h3>'
     + '<div class="kv"><span>Dlužíš</span><b class="' + (S.loan > 0 ? 'warn' : '') + '">' + kcFull(S.loan) + '</b></div>'
     + '<div class="kv"><span>Úrok</span><b>' + (rateOf() * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>'
+    + '<div class="kv"><span>Splátka úroku / měsíc</span><b class="' + (urokMesicne() > 0 ? 'warn' : '') + '">'
+    + kcFull(urokMesicne()) + '</b></div>'
     + '<div class="kv"><span>Zaplaceno na úrocích</span><b>' + kcFull(S.stats.interest) + '</b></div>'
     + '<div class="kv"><span>Ještě si můžeš půjčit</span><b>' + kcFull(Math.min(room, S.bank)) + '</b></div>'
     + (cashDrawMax() >= 1000
