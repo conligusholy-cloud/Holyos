@@ -21,9 +21,33 @@ function getClient() {
 // Odbaví jedno kolo: vstup = text volajícího, výstup = { text, messages }.
 // `messages` vrací aktualizovanou historii (předej ji do dalšího kola).
 // toolset: null | { getTools: () => [...], execute: async (name, input) => any }
+// Oprava historie před voláním API: prázdné zprávy a osamocené tool_use (bez tool_result) API odmítne
+// chybou 400 — a protože se historie nese dál, selhal by pak KAŽDÝ další tah (asistent se dokola omlouval).
+function sanitizeHistory(hist) {
+  const ok = (m) => m && (m.role === 'user' || m.role === 'assistant') && (typeof m.content === 'string' ? m.content.trim().length > 0 : Array.isArray(m.content) && m.content.length > 0);
+  const src = (hist || []).filter(ok);
+  const out = [];
+  for (let i = 0; i < src.length; i++) {
+    const m = src[i];
+    const hasToolUse = Array.isArray(m.content) && m.content.some((b) => b && b.type === 'tool_use');
+    if (m.role === 'assistant' && hasToolUse) {
+      const next = src[i + 1];
+      const answered = next && next.role === 'user' && Array.isArray(next.content) && next.content.some((b) => b && b.type === 'tool_result');
+      if (!answered) { const txt = m.content.filter((b) => b && b.type === 'text' && String(b.text || '').trim()); if (txt.length) out.push({ role: 'assistant', content: txt }); continue; }
+    }
+    if (m.role === 'user' && Array.isArray(m.content) && m.content.some((b) => b && b.type === 'tool_result')) {
+      const prev = out[out.length - 1];
+      if (!prev || prev.role !== 'assistant' || !Array.isArray(prev.content) || !prev.content.some((b) => b && b.type === 'tool_use')) continue; // tool_result bez tool_use
+    }
+    out.push(m);
+  }
+  if (out.length && out[0].role !== 'user') out.unshift({ role: 'user', content: '(Hovor byl spojen.)' });
+  return out;
+}
+
 async function runTurn({ system, history = [], userText, toolset = null, maxTokens = 300, temperature = 0.4 }) {
   const client = getClient();
-  const messages = [...history, { role: 'user', content: userText }];
+  const messages = [...sanitizeHistory(history), { role: 'user', content: userText }];
   const tools = toolset ? toolset.getTools() : undefined;
 
   for (let i = 0; i < MAX_TOOL_ITERS; i++) {
@@ -46,7 +70,8 @@ async function runTurn({ system, history = [], userText, toolset = null, maxToke
         .map((b) => b.text)
         .join(' ')
         .trim();
-      messages.push({ role: 'assistant', content: blocks });
+      // Prázdnou odpověď do historie nedávat (další volání by spadlo na 400)
+      if (text) messages.push({ role: 'assistant', content: blocks.filter((b) => b.type !== 'text' || String(b.text || '').trim()) });
       return { text, messages };
     }
 
@@ -172,4 +197,4 @@ async function summarizeStructured(transcript = [], opts = {}) {
   }
 }
 
-module.exports = { runTurn, summarize, summarizeStructured, VOICE_MODEL };
+module.exports = { sanitizeHistory, runTurn, summarize, summarizeStructured, VOICE_MODEL };

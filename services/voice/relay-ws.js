@@ -520,14 +520,24 @@ function attach(server) {
         }
 
         try {
-          const { text, messages } = await agent.runTurn({
+          const turn = (hist) => agent.runTurn({
             system: state.system,
-            history: state.history,
+            history: hist,
             userText,
             toolset: state.toolset,
             maxTokens: 300,
             temperature: 0.2, // přesnější dodržování scénáře (méně improvizace)
           });
+          let res;
+          try { res = await turn(state.history); }
+          catch (e1) {
+            // Pojistka proti zacyklení: zkus to hned znovu s očištěnou a zkrácenou historií (posledních pár výměn)
+            console.warn('[voice] runTurn selhal (1. pokus, zkouším s kratší historií):', e1 && (e1.status || '') , e1 && e1.message);
+            const short = agent.sanitizeHistory ? agent.sanitizeHistory(state.history).slice(-6) : [];
+            res = await turn(short);
+          }
+          const { text, messages } = res;
+          state.failCount = 0;
           state.history = messages;
           // Značka jazyka [[lang:xx]] → přepnout řeč + přepis, značku z textu odstranit
           let outText = String(text || '');
@@ -567,12 +577,27 @@ function attach(server) {
             })();
           }
         } catch (e) {
-          console.warn('[voice] runTurn selhal:', e.message);
-          send(ws, {
-            type: 'text',
-            token: 'Omlouvám se, můžete to prosím zopakovat?',
-            last: true,
-          });
+          state.failCount = (state.failCount || 0) + 1;
+          console.warn('[voice] runTurn selhal (' + state.failCount + '× za sebou):', e && (e.status || ''), e && e.message);
+          // Dvakrát za sebou nic → nezacyklit se v omlouvání: přepojit na člověka, jinak slušně ukončit.
+          if (state.failCount >= 2 && !state.handedOff && !state.ended) {
+            if (transferAllowed) {
+              const line2 = 'Omlouvám se, mám teď technický problém. Přepojím vás na kolegu, moment prosím.';
+              state.transcript.push({ role: 'agent', text: line2, ts: Date.now() });
+              send(ws, { type: 'text', token: line2, last: true });
+              startHandoff(line2);
+            } else {
+              state.ended = true;
+              const line2 = 'Omlouvám se, mám teď technický problém. Zavolejte nám prosím za chvíli znovu. Na shledanou.';
+              state.transcript.push({ role: 'agent', text: line2, ts: Date.now() });
+              send(ws, { type: 'text', token: line2, last: true });
+              setTimeout(() => { try { send(ws, { type: 'end', handoffData: JSON.stringify({ reason: 'ai_error' }) }); } catch (_) { /* zavřeno */ } }, 6000);
+            }
+            return;
+          }
+          const sorry = 'Omlouvám se, můžete to prosím zopakovat?';
+          state.transcript.push({ role: 'agent', text: sorry, ts: Date.now() });
+          send(ws, { type: 'text', token: sorry, last: true });
         }
         return;
       }
