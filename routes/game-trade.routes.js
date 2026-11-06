@@ -19,7 +19,7 @@ router.use(express.json({ limit: '32kb' }));
 
 const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 const MODELY = ['mini', 'flex', 'max'];
-const PREDMETY = ['stroj', 'pradlomat', 'karta'];
+const PREDMETY = ['stroj', 'pradlomat', 'karta', 'pobocka'];
 const MAX_CENA = 2000000000;
 
 function hrac(req, res, next) {
@@ -64,6 +64,8 @@ router.get('/trade/assets/:id', hrac, api(async (req, res) => {
     sklad: skladu(st),
     pradlomaty: mista.map((m) => ({ spot_id: m.spot_id, name: m.name, model: m.model, rent: m.rent,
       area_key: m.area_key, zisk: zisky[m.spot_id] != null ? zisky[m.spot_id] : null })),
+    pobocky: (Array.isArray(st.pobocky) ? st.pobocky : [])
+      .filter((x) => x && x.name).map((x) => ({ name: x.name, lat: x.lat, lon: x.lon })),
     karty: k });
 }));
 
@@ -111,6 +113,10 @@ async function zkontroluj(nab, prodavajici) {
   } else if (nab.predmet === 'karta') {
     const k = await prisma.gameCard.count({ where: { player_id: prodavajici.id, kind: nab.card_kind || '', used_at: null } });
     if (!k) return 'Prodávající tu kartu nemá.';
+  } else if (nab.predmet === 'pobocka') {
+    // Pobočky žijí ve stavu hry, ne v tabulce — hledáme ji podle názvu.
+    const pob = Array.isArray(st.pobocky) ? st.pobocky : [];
+    if (!pob.some((x) => x && x.name === nab.pobocka)) return 'Prodávající takovou pobočku nemá.';
   } else return 'Tohle se obchodovat nedá.';
   return null;
 }
@@ -131,7 +137,8 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
   const druhy = await prisma.gamePlayer.findUnique({ where: { id: to_id } });
   if (!druhy || druhy.disabled) return res.status(404).json({ error: 'Takový hráč tu není.' });
 
-  const nab = { predmet, model: s(b.model, 10) || null, spot_id: s(b.spot_id, 120) || null, card_kind: s(b.card_kind, 24) || null };
+  const nab = { predmet, model: s(b.model, 10) || null, spot_id: s(b.spot_id, 120) || null,
+    card_kind: s(b.card_kind, 24) || null, pobocka: s(b.pobocka, 80) || null };
   // Kdo věc má: u „koupim" ji má ten druhý, u „prodam" ji mám já.
   const chyba = await zkontroluj(nab, smer === 'koupim' ? druhy : req.player);
   if (chyba) return res.status(409).json({ error: chyba });
@@ -144,7 +151,9 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
 
   const t = await prisma.gameTrade.create({ data: {
     from_id: req.player.id, from_nick: req.player.nick, to_id, to_nick: druhy.nick,
-    smer, predmet, model: nab.model, spot_id: nab.spot_id, card_kind: nab.card_kind,
+    smer, predmet, model: nab.model,
+    // U pobočky nese její název sloupec spot_id — nový sloupec kvůli tomu nezakládáme.
+    spot_id: predmet === 'pobocka' ? nab.pobocka : nab.spot_id, card_kind: nab.card_kind,
     cena, karty, vzkaz: s(b.vzkaz, 200) || null,
   } });
   res.json({ ok: true, trade: verejny(t, req.player.id) });
@@ -212,7 +221,8 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
 
   const karty = Array.isArray(t.karty) ? t.karty : [];
   const popisPredmetu = t.predmet === 'stroj' ? (t.model || '').toUpperCase()
-    : t.predmet === 'pradlomat' ? 'prádlomat' : 'karta';
+    : t.predmet === 'pradlomat' ? 'prádlomat'
+    : t.predmet === 'pobocka' ? ('pobočku ' + (t.spot_id || '')) : 'karta';
 
   await prisma.$transaction(async (tx) => {
     // 1. karty přihozené k ceně → od kupujícího prodávajícímu
@@ -239,6 +249,14 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
         { player_id: kupujici.id, trade_id: t.id, kind: 'unit_add', spot_id: t.spot_id, model: c.model,
           data: { name: c.name, lat: c.lat, lon: c.lon, rent: c.rent, area_key: c.area_key },
           popis: 'Koupil jsi prádlomat ' + (c.name || '') },
+      ] });
+    } else if (t.predmet === 'pobocka') {
+      // Pobočka se přesouvá přes doručenky — stav hry si ji přepíše sám.
+      await tx.gameDelivery.createMany({ data: [
+        { player_id: prodavajici.id, trade_id: t.id, kind: 'pobocka_remove', spot_id: t.spot_id,
+          popis: 'Prodal jsi pobočku ' + (t.spot_id || '') },
+        { player_id: kupujici.id, trade_id: t.id, kind: 'pobocka_add', spot_id: t.spot_id,
+          popis: 'Koupil jsi pobočku ' + (t.spot_id || '') },
       ] });
     }
     // 3. peníze
@@ -276,6 +294,94 @@ router.post('/trade/deliveries/claim', hrac, api(async (req, res) => {
     data: { claimed_at: new Date() },
   });
   res.json({ ok: true, claimed: r.count });
+}));
+
+// ─── Konkurzní rozprodej ────────────────────────────────────────────────────
+// Majetek zkrachovalé firmy je herní měsíc na Burze. Cena začíná na 80 %
+// hodnoty a lineárně klesá ke 40 % — kdo chce jistotu, kupuje dřív a dráž.
+const AUKCE_OD = 0.8, AUKCE_DO = 0.4;
+const AUKCE_MESIC = 43200000;      // herní měsíc = 12 skutečných hodin
+function aukceCena(a, ted) {
+  const cely = Math.max(1, new Date(a.do).getTime() - new Date(a.od).getTime());
+  const ubehlo = Math.min(1, Math.max(0, ((ted || Date.now()) - new Date(a.od).getTime()) / cely));
+  const podil = AUKCE_OD - (AUKCE_OD - AUKCE_DO) * ubehlo;
+  return Math.max(1000, Math.round(a.hodnota * podil / 1000) * 1000);
+}
+function aukcePub(a, ted) {
+  return { id: a.id, nick: a.nick, predmet: a.predmet, model: a.model, spot_id: a.spot_id,
+    card_kind: a.card_kind, popis: a.popis, hodnota: a.hodnota, cena: aukceCena(a, ted),
+    konci: a.do, moje: false };
+}
+
+// POST /trade/konkurz { polozky:[{predmet,model,spot_id,card_kind,popis,hodnota,data}] }
+// Hlásí klient ve chvíli, kdy jeho firma padla. Server z toho udělá nabídky.
+router.post('/trade/konkurz', hrac, api(async (req, res) => {
+  const polozky = Array.isArray((req.body || {}).polozky) ? (req.body || {}).polozky.slice(0, 60) : [];
+  if (!polozky.length) return res.json({ ok: true, zalozeno: 0 });
+  const konec = new Date(Date.now() + AUKCE_MESIC);
+  const data = polozky.map((x) => ({
+    player_id: req.player.id, nick: req.player.nick,
+    predmet: String(x.predmet || 'stroj').slice(0, 12),
+    model: x.model ? String(x.model).slice(0, 10) : null,
+    spot_id: x.spot_id ? String(x.spot_id).slice(0, 120) : null,
+    card_kind: x.card_kind ? String(x.card_kind).slice(0, 24) : null,
+    popis: String(x.popis || 'majetek').slice(0, 160),
+    hodnota: Math.max(1000, Math.round(Number(x.hodnota) || 0)),
+    data: x.data || null, do: konec,
+  }));
+  await prisma.gameAuction.createMany({ data });
+  console.log('[game] konkurz ' + req.player.nick + ': ' + data.length + ' položek na burze');
+  res.json({ ok: true, zalozeno: data.length });
+}));
+
+// GET /trade/aukce → co je teď v rozprodeji
+router.get('/trade/aukce', hrac, api(async (req, res) => {
+  const ted = Date.now();
+  const rows = await prisma.gameAuction.findMany({
+    where: { koupil_id: null, do: { gt: new Date(ted) } },
+    orderBy: { do: 'asc' }, take: 200,
+  });
+  res.json({ ok: true, aukce: rows.map((a) => {
+    const v = aukcePub(a, ted);
+    v.moje = a.player_id === req.player.id;
+    return v;
+  }) });
+}));
+
+// POST /trade/aukce/:id/koupit → kupující platí, majetek jde přes doručenky
+router.post('/trade/aukce/:id/koupit', hrac, api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const a = await prisma.gameAuction.findUnique({ where: { id } });
+  if (!a || a.koupil_id) return res.status(409).json({ error: 'Tohle už někdo koupil.' });
+  if (new Date(a.do).getTime() < Date.now()) return res.status(409).json({ error: 'Rozprodej už skončil.' });
+  if (a.player_id === req.player.id) return res.status(400).json({ error: 'Vlastní majetek si zpátky nekoupíš.' });
+  const cena = aukceCena(a);
+
+  await prisma.$transaction(async (tx) => {
+    const zabrano = await tx.gameAuction.updateMany({
+      where: { id: a.id, koupil_id: null },
+      data: { koupil_id: req.player.id, koupil_za: cena, koupeno_at: new Date() },
+    });
+    if (!zabrano.count) throw Object.assign(new Error('Tohle už někdo koupil.'), { stav: 409 });
+
+    const dorucenky = [
+      { player_id: req.player.id, kind: 'cash', amount: -cena, popis: 'Koupil jsi z konkurzu: ' + a.popis },
+      { player_id: a.player_id, kind: 'cash', amount: cena, popis: 'Z konkurzu se prodalo: ' + a.popis },
+    ];
+    if (a.predmet === 'stroj') {
+      dorucenky.push({ player_id: req.player.id, kind: 'stock', model: a.model, amount: 1, popis: 'Z konkurzu: ' + a.popis });
+    } else if (a.predmet === 'pobocka') {
+      dorucenky.push({ player_id: req.player.id, kind: 'pobocka_add', spot_id: a.spot_id, popis: 'Z konkurzu: ' + a.popis });
+    } else if (a.predmet === 'pradlomat') {
+      // Místo po zkrachovalém je volné — kupující ho musí zabrat jako každé jiné,
+      // ale stroj dostane na sklad.
+      dorucenky.push({ player_id: req.player.id, kind: 'stock', model: a.model || 'mini', amount: 1,
+        popis: 'Z konkurzu stroj z místa ' + a.popis });
+    }
+    await tx.gameDelivery.createMany({ data: dorucenky });
+  });
+
+  res.json({ ok: true, cena });
 }));
 
 module.exports = router;

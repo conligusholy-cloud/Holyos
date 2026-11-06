@@ -7784,3 +7784,27 @@ model GameSpotBuilt {
   @@index([area_key])
   @@map("game_spots_built")
 }
+
+// Konkurzní rozprodej: majetek zkrachovalé firmy je měsíc na Burze a jeho cena
+// během té doby klesá z 80 % na 40 % hodnoty. Kdo chce jistotu, kupuje dřív.
+model GameAuction {
+  id         Int       @id @default(autoincrement())
+  player_id  Int
+  nick       String    @db.VarChar(24)
+  predmet    String    @db.VarChar(12)
+  model      String?   @db.VarChar(10)
+  spot_id    String?   @db.VarChar(120)
+  card_kind  String?   @db.VarChar(24)
+  popis      String    @db.VarChar(160)
+  hodnota    Int
+  data       Json?
+  od         DateTime  @default(now())
+  do         DateTime
+  koupil_id  Int?
+  koupil_za  Int?
+  koupeno_at DateTime?
+
+  @@index([koupil_id])
+  @@index([do])
+  @@map("game_auctions")
+}

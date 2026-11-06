@@ -260,21 +260,30 @@ function hlidejKrach() {
 // jsou zasíťovaná, někdo je postaví lacino.
 var KRACH_PODIL = 0.6;   // střed rozmezí, ve kterém se majetek v konkurzu prodává
 function provedKonkurz() {
-  var utrzeno = 0;
+  // Majetek jde na burzu — cena tam klesá z 80 % na 40 % během herního měsíce.
+  // Co se neprodá, propadne; hráči se připisují peníze průběžně, jak kdo kupuje.
+  var polozky = [];
   S.units.forEach(function (u) {
-    utrzeno += (u.eco && u.eco.invest ? u.eco.invest : 0) * KRACH_PODIL;
+    polozky.push({ predmet: 'pradlomat', model: u.eco.model, spot_id: u.spotId,
+      popis: u.name || 'prádlomat', hodnota: Math.round(u.eco.invest || machinePrice(MODELS[u.eco.model])) });
     apiJson('/spots/release', { spot_id: u.spotId });   // místo se uvolní konkurenci
   });
   MODEL_ORDER.forEach(function (k) {
-    utrzeno += inStock(k) * machinePrice(MODELS[k]) * KRACH_PODIL;
+    for (var i = 0; i < inStock(k); i++) {
+      polozky.push({ predmet: 'stroj', model: k, popis: 'stroj ' + MODELS[k].name, hodnota: machinePrice(MODELS[k]) });
+    }
   });
   (S.orders || []).forEach(function (o) {
-    utrzeno += machinePrice(MODELS[o.model]) * KRACH_PODIL;
+    polozky.push({ predmet: 'stroj', model: o.model, popis: 'stroj ' + MODELS[o.model].name + ' (na cestě)',
+      hodnota: machinePrice(MODELS[o.model]) });
   });
-  (S.pobocky || []).forEach(function () { utrzeno += POBOCKA_CENA * KRACH_PODIL; });
-  if (maCetu()) utrzeno += CETA_CENA * KRACH_PODIL;
+  (S.pobocky || []).forEach(function (b) {
+    polozky.push({ predmet: 'pobocka', spot_id: b.name, popis: 'pobočka ' + b.name, hodnota: POBOCKA_CENA });
+  });
+  if (polozky.length) apiJson('/trade/konkurz', { polozky: polozky });
 
-  utrzeno = Math.round(utrzeno);
+  // Technika čety se prodá rovnou, na tu se na burze kupec nehledá.
+  var utrzeno = maCetu() ? Math.round(CETA_CENA * KRACH_PODIL) : 0;
   var mel = S.units.length;
   S.units = []; S.stock = {}; S.orders = []; S.pobocky = []; S.ceta = null;
   CLAIMS = {};
@@ -317,9 +326,11 @@ function krachSheet() {
       + '<div class="kv"><span>Z toho bance</span><b class="warn">' + kcFull(v.naDluh) + '</b></div>'
       + '<div class="kv souhrn"><span>Zbylo ti</span><b class="ok">' + kcFull(v.zbylo) + '</b></div>'
       + (v.odepsano > 0 ? '<div class="kv"><span>Banka odepsala</span><b>' + kcFull(v.odepsano) + '</b></div>' : '')
-      + '<p class="muted small" style="margin-top:12px">' + v.mel + ' ' + mn(v.mel, 'místo se uvolnilo', 'místa se uvolnila', 'míst se uvolnilo')
-      + ' konkurenci. Zůstala tam ale tvoje síť přípojek, takže je někdo postaví lacino. '
-      + 'Banka ti herní rok nepůjčí — budeš muset vystačit s tím, co máš.</p>'
+      + '<p class="muted small" style="margin-top:12px">Tvůj majetek je teď herní měsíc na Burze — '
+      + 'cena klesá z 80 % na 40 % hodnoty a co se prodá, připíše se ti průběžně. '
+      + v.mel + ' ' + mn(v.mel, 'místo se uvolnilo', 'místa se uvolnila', 'míst se uvolnilo')
+      + ' konkurenci; zůstala tam ale síť přípojek, takže je někdo postaví lacino. '
+      + 'Banka ti herní rok nepůjčí.</p>'
       + '<button class="btn big" id="krach-ok">Rozumím</button>');
     $('krach-ok').onclick = closeSheet;
   };
@@ -2555,6 +2566,41 @@ function cenaPopis(t) {
   return casti.join(' + ') || '—';
 }
 
+// Konkurzní rozprodej — kdo zkrachoval, toho majetek je tu měsíc za klesající cenu.
+var AUKCE = null;
+function loadAukce(then) {
+  api('/trade/aukce').then(function (r) { AUKCE = (r.ok && r.j.aukce) || []; if (then) then(); })
+    .catch(function () { AUKCE = []; if (then) then(); });
+}
+function aukceHtml() {
+  if (!AUKCE || !AUKCE.length) return '';
+  return '<div class="card"><h3>Konkurzní rozprodej</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">Majetek firem, které padly. Cena klesá z 80 % na 40 % '
+    + 'hodnoty — kdo si počká, koupí levněji, ale riskuje, že to mezitím vezme někdo jiný.</p>'
+    + AUKCE.map(function (a) {
+        return '<div class="trade"><div class="row"><b>' + esc(a.popis) + '</b>'
+          + '<b class="ok">' + kcFull(a.cena) + '</b></div>'
+          + '<p class="muted small" style="margin:2px 0 6px">po ' + esc(a.nick) + ' · hodnota ' + kcFull(a.hodnota)
+          + ' · končí ' + etaText(new Date(a.konci).getTime() - Date.now()) + '</p>'
+          + (a.moje ? '<p class="fine">Tohle je tvůj majetek z konkurzu.</p>'
+            : S.cash < a.cena ? '<p class="fine err">Chybí ti ' + kcFull(a.cena - S.cash) + '.</p>'
+            : '<button class="btn sm" data-aukce="' + a.id + '">Koupit za ' + kcFull(a.cena) + '</button>')
+          + '</div>';
+      }).join('')
+    + '</div>';
+}
+function bindAukce() {
+  [].forEach.call(document.querySelectorAll('[data-aukce]'), function (b) {
+    b.onclick = function () {
+      b.disabled = true; b.textContent = 'Kupuju…';
+      apiJson('/trade/aukce/' + b.getAttribute('data-aukce') + '/koupit', {}).then(function (r) {
+        if (!r.ok) { b.disabled = false; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
+        toast('Koupeno za ' + kcFull(r.j.cena) + '.', 'ok');
+        loadAukce(function () { vyzvedniNasledky(); paintBurza(); });
+      }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+    };
+  });
+}
 function paintBurza() {
   var box = $('burza-body');
   if (!TRADES) { box.innerHTML = '<p class="muted small">Načítám…</p>'; return loadTrades(paintBurza); }
@@ -2563,9 +2609,13 @@ function paintBurza() {
   var naMe = ceka.filter(function (t) { return t.na_tahu; });
   var odeslane = ceka.filter(function (t) { return !t.na_tahu; });
 
-  box.innerHTML = sekce('Čeká na tvoji odpověď', naMe, 'Nikdo ti teď nic nenabízí.')
+  if (AUKCE == null) loadAukce(paintBurza);
+
+  box.innerHTML = aukceHtml()
+    + sekce('Čeká na tvoji odpověď', naMe, 'Nikdo ti teď nic nenabízí.')
     + sekce('Čekáš na odpověď', odeslane, 'Nemáš rozjednanou žádnou nabídku.')
     + (hotove.length ? sekce('Uzavřené', hotove, '') : '');
+  bindAukce();
 
   [].forEach.call(box.querySelectorAll('[data-tr]'), function (b) {
     b.onclick = function () {
@@ -2688,6 +2738,10 @@ function majetekSheet(id) {
         popis: esc(m.name || m.spot_id), pod: (MODELS[m.model] || {}).name + ' · nájem ' + kcFull(m.rent)
           + (m.zisk != null ? ' · zisk ' + kcFull(m.zisk) + '/měs' : '') });
     });
+    (a.pobocky || []).forEach(function (b) {
+      polozky.push({ smer: 'koupim', predmet: 'pobocka', pobocka: b.name,
+        popis: 'pobočka ' + esc(b.name), pod: 'základna pro dopravu a četu' });
+    });
     Object.keys(a.karty || {}).forEach(function (k) {
       var c = (CARDS_CAT || []).filter(function (x) { return x.kind === k; })[0];
       if (c && a.karty[k] > 0) polozky.push({ smer: 'koupim', predmet: 'karta', card_kind: k,
@@ -2702,6 +2756,10 @@ function majetekSheet(id) {
     S.units.forEach(function (u) {
       moje.push({ smer: 'prodam', predmet: 'pradlomat', spot_id: u.spotId, model: u.eco.model,
         popis: 'můj ' + esc(u.name), pod: MODELS[u.eco.model].name + ' · zisk ' + kcFull(u.eco.profit) + '/měs' });
+    });
+    (S.pobocky || []).forEach(function (b) {
+      moje.push({ smer: 'prodam', predmet: 'pobocka', pobocka: b.name,
+        popis: 'moje pobočka ' + esc(b.name), pod: 'provoz tě stojí ' + kcFull(POBOCKA_MESICNE) + ' / měsíc' });
     });
     (CARDS_CAT || []).forEach(function (c) {
       if (ownedOf(c.kind) > 0) moje.push({ smer: 'prodam', predmet: 'karta', card_kind: c.kind,
@@ -2743,7 +2801,7 @@ function cenaSheet(toId, kdo, x) {
   $('na-ok').onclick = function () {
     var b = $('na-ok'); b.disabled = true;
     apiJson('/trade/offer', { to_id: toId, smer: x.smer, predmet: x.predmet, model: x.model || null,
-      spot_id: x.spot_id || null, card_kind: x.card_kind || null,
+      spot_id: x.spot_id || null, card_kind: x.card_kind || null, pobocka: x.pobocka || null,
       cena: Number($('na-cena').value) || 0, karty: vybrane(), vzkaz: $('na-vzkaz').value })
       .then(function (r) {
         b.disabled = false;
@@ -2774,6 +2832,20 @@ function vyzvedniNasledky(then) {
         S.prodano = S.prodano || {};
         S.prodano[x.spot_id] = 1;   // ať se stroj nevrátí na sklad jako při přetažení
         S.units = S.units.filter(function (u) { return u.spotId !== x.spot_id; });
+      } else if (x.kind === 'pobocka_remove') {
+        S.pobocky = (S.pobocky || []).filter(function (b) { return b.name !== x.spot_id; });
+      } else if (x.kind === 'pobocka_add') {
+        if (!(S.pobocky || []).some(function (b) { return b.name === x.spot_id; })) {
+          // Souřadnice vezmeme z prozkoumaného města stejného jména, jinak od sídla.
+          var mesto = null;
+          Object.keys(S.areas || {}).forEach(function (aid) {
+            var ar = S.areas[aid];
+            if (!mesto && ar && (ar.name || aid) === x.spot_id) mesto = stredOblasti(ar);
+          });
+          if (!mesto && S.sidlo) mesto = { lat: S.sidlo.lat, lon: S.sidlo.lon };
+          S.pobocky = S.pobocky || [];
+          S.pobocky.push({ name: x.spot_id, lat: mesto ? mesto.lat : null, lon: mesto ? mesto.lon : null, od: Date.now() });
+        }
       } else if (x.kind === 'unit_add') {
         var dd = x.data || {};
         if (!S.units.some(function (u) { return u.spotId === x.spot_id; })) {
@@ -2804,7 +2876,7 @@ function switchTab(v) {
   paint();
   if (v === 'map' && map) { setTimeout(function () { map.invalidateSize(); }, 50); loadClaims(); }
   // Burza se musí ptát serveru pokaždé — nabídka mohla přijít před vteřinou.
-  if (v === 'burza') loadTrades(paintBurza);
+  if (v === 'burza') { AUKCE = null; loadTrades(paintBurza); }
   if (v === 'me' && POZVANI == null) loadPozvani().then(paintMe);
 }
 [].forEach.call(document.querySelectorAll('.tabs button'), function (b) {
