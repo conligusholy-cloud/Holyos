@@ -2692,7 +2692,11 @@ app.post('/admin/supporters/:id(\\d+)/partner-piv', requireAdmin, wrap(async (re
 let EXP_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, eligible: 0, errors: [], started_at: null, finished_at: null };
 app.post('/admin/partner-support/expansion/sync-all', requireAdmin, wrap(async (req, res) => {
   if (EXP_JOB.running) return res.json(EXP_JOB);
-  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'exp_checked_at' IS NULL OR (partner_support->>'exp_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
+  // Účet se zpracuje, pokud potřebuje nový úrok z expanze (starší než 24 h) NEBO přepočet nákupů po letech (std_v < 3 = ještě nečteno po jednotlivých nákupech)
+  const rows = (await q(`SELECT id,email,nick,
+      (partner_support IS NULL OR partner_support->>'exp_checked_at' IS NULL OR (partner_support->>'exp_checked_at')::timestamptz < now() - interval '24 hours') AS need_exp,
+      (partner_support IS NULL OR partner_support->>'std_checked_at' IS NULL OR coalesce(partner_support->>'std_v','1') <> '3') AS need_std
+    FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'exp_checked_at' IS NULL OR (partner_support->>'exp_checked_at')::timestamptz < now() - interval '24 hours' OR partner_support->>'std_checked_at' IS NULL OR coalesce(partner_support->>'std_v','1') <> '3') ORDER BY id`)).rows;
   EXP_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, eligible: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
   await log(req.admin, 'partner_expansion_sync_all', { total: rows.length });
   res.json(EXP_JOB);
@@ -2704,11 +2708,21 @@ app.post('/admin/partner-support/expansion/sync-all', requireAdmin, wrap(async (
       while (queue.length && !stop) {
         const s = queue.shift();
         try {
-          const r = await LEGACY.fetchLegacyExpansion(s.email);
-          if (r.ok) {
-            await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify(r.data)]);
-            EXP_JOB.ok++; if (r.data.exp_eligible) EXP_JOB.eligible++;
-          } else { EXP_JOB.failed++; if (EXP_JOB.errors.length < 50) EXP_JOB.errors.push((s.nick || s.email) + ': ' + r.error); }
+          let okAny = false, errMsg = null;
+          if (s.need_exp) {
+            const r = await LEGACY.fetchLegacyExpansion(s.email);
+            if (r.ok) {
+              await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify(r.data)]);
+              okAny = true; if (r.data.exp_eligible) EXP_JOB.eligible++;
+            } else errMsg = r.error;
+          }
+          // EX podpora = součet všech nákupů expanze po letech (čtení jednotlivých řádků + kontrola proti „Celkem“)
+          if (s.need_std) {
+            const r2 = await LEGACY.fetchLegacyStandard(s.email);
+            if (r2.ok) { await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify(r2.data)]); okAny = true; }
+            else errMsg = r2.error;
+          }
+          if (okAny) EXP_JOB.ok++; else { EXP_JOB.failed++; if (EXP_JOB.errors.length < 50) EXP_JOB.errors.push((s.nick || s.email) + ': ' + (errMsg || 'nic k načtení')); }
         } catch (e) { EXP_JOB.failed++; if (EXP_JOB.errors.length < 50) EXP_JOB.errors.push((s.nick || s.email) + ': ' + e.message); }
         EXP_JOB.done++; EXP_JOB.last = s.nick || s.email;
         await new Promise((r) => setTimeout(r, 100));
@@ -2734,7 +2748,7 @@ app.post('/admin/supporters/:id(\\d+)/partner-expansion', requireAdmin, wrap(asy
 let STD_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, errors: [], started_at: null, finished_at: null };
 app.post('/admin/partner-support/standard/sync-all', requireAdmin, wrap(async (req, res) => {
   if (STD_JOB.running) return res.json(STD_JOB);
-  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'std_checked_at' IS NULL OR coalesce(partner_support->>'std_v','1') <> '2' OR (partner_support->>'std_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
+  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'std_checked_at' IS NULL OR coalesce(partner_support->>'std_v','1') <> '3' OR (partner_support->>'std_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
   STD_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
   await log(req.admin, 'partner_standard_sync_all', { total: rows.length });
   res.json(STD_JOB);

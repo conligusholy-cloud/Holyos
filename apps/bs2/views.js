@@ -1664,7 +1664,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
           b.onclick=function(){ if(!confirm('Projít u všech uživatelů s nenulovým obratem Přehled podpory za všechny roky a sečíst palety + opakovačky? Běží na pozadí (desítky minut).')) return;
             fetch('/admin/partner-support/standard/sync-all',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
           poll(); })();
-      </script><button type="button" class="btn sec sm" id="exp-all" title="U všech s nenulovým obratem načte z Přehledu starého portálu úrok z EXPANZE — vloženo v expanzi, nárok od ø, % úroku, návštěvnost (na pozadí, přeskočí načtené za 24 h)">📈 Expanze všech</button><span id="exp-all-st" class="small muted"></span>
+      </script><button type="button" class="btn sec sm" id="exp-all" title="U všech s nenulovým obratem projde Přehled podpory za VŠECHNY roky, přečte jednotlivé nákupy EXPANZE a sečte je (kontrola proti „Celkem“ portálu), a načte úrok z expanze — nárok od ø, % úroku, návštěvnost (na pozadí)">📈 Expanze všech</button><span id="exp-all-st" class="small muted"></span>
       <script>
         (function(){ var b=document.getElementById('exp-all'), st=document.getElementById('exp-all-st'); if(!b) return;
           function f(n){ return Math.round(Number(n)||0).toLocaleString('cs-CZ'); }

@@ -228,7 +228,7 @@ async function fetchLegacyStandardWithJar(jar) {
       if (rec.palety || rec.opakovacky || rec.balicky || rec.likvidni || rec.ostatni || rec.expanze || rec.neurawash || rec.total_year) by[y] = rec;
     }
     const sum = (k) => Math.round(Object.values(by).reduce((a, r) => a + (Number(r[k]) || 0), 0) * 100) / 100;
-    const data = { std_by_year: by, std_years: years, std_palety_all: sum('palety'), std_opakovacky_all: sum('opakovacky'), std_expanze_all: sum('expanze'), std_neurawash_all: sum('neurawash'), std_balicky_all: sum('balicky'), std_likvidni_all: sum('likvidni'), std_ostatni_all: sum('ostatni'), std_v: 2, std_currency: cur || 'CZK', std_checked_at: new Date().toISOString(), std_check: { ok: bad.length === 0, bad } };
+    const data = { std_by_year: by, std_years: years, std_palety_all: sum('palety'), std_opakovacky_all: sum('opakovacky'), std_expanze_all: sum('expanze'), std_neurawash_all: sum('neurawash'), std_balicky_all: sum('balicky'), std_likvidni_all: sum('likvidni'), std_ostatni_all: sum('ostatni'), std_v: 3, std_currency: cur || 'CZK', std_checked_at: new Date().toISOString(), std_check: { ok: bad.length === 0, bad } };
     // Standardní podpora = palety + opakovačky (všechny roky). Balíčky, likvidní a ostatní se do součtu nezapočítávají.
     data.std_total = Math.round((data.std_palety_all + data.std_opakovacky_all) * 100) / 100;
     if (data.std_currency === 'EUR') { try { const c = await cnbEurRate(); data.std_total_czk = Math.round(data.std_total * c.rate * 100) / 100; data.std_eur_rate = c.rate; data.std_eur_rate_date = c.date; } catch (e) { /* bez kurzu */ } }
