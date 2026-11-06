@@ -1718,10 +1718,8 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
     </div>
     ${supportStats ? (() => { const st = supportStats, n0 = (v) => Math.round(Number(v) || 0).toLocaleString('cs-CZ'); const box = (lbl, val, sub, hl) => `<div class="card" style="flex:1;min-width:170px;padding:10px 14px;margin:0${hl ? ';border-color:var(--primary,#3b82f6)' : ''}"><div class="small muted">${lbl}</div><div style="font-size:20px;font-weight:800;white-space:nowrap">${val}</div><div class="small muted">${sub}</div></div>`;
       return `<div class="row" style="gap:10px;margin:10px 0 4px;flex-wrap:wrap">
-        ${box('Podpořili v Kč', n0(st.czk_sum) + ' Kč', n0(st.czk_n) + ' korunových účtů')}
-        ${box('Podpořili v eurech', n0(st.eur_sum) + ' €', n0(st.eur_n) + ' eurových účtů · ≈ ' + n0(st.eur_czk) + ' Kč')}
-        ${box('Expanze + standardní podpora', n0((st.exp_czk || 0) + (st.std_czk || 0)) + ' Kč', 'expanze ' + n0(st.exp_czk) + ' · standardní ' + n0(st.std_czk) + ' · ' + n0(st.es_n) + ' účtů')}
-        ${box('Celkem v Kč', n0(st.total_czk) + ' Kč', 'eura přepočtena kurzem ČNB' + (st.rate_date ? ' (' + esc(st.rate_date) + ')' : '') + (st.partial ? ' · část eur bez kurzu' : ''), true)}
+        ${box('ST podpora celkem', n0(st.std_czk) + ' Kč', 'palety + opakovačky, všechny roky · ' + n0(st.es_n) + ' účtů')}
+        ${box('EX podpora celkem', n0(st.exp_czk) + ' Kč', 'expanze, všechny roky · ' + n0(st.es_n) + ' účtů', true)}
       </div>`; })() : ''}
     ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
     <form method="get" class="row" style="margin:10px 0 14px">
