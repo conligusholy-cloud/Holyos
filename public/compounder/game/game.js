@@ -1295,6 +1295,8 @@ function initMap() {
   // Vlastní, nenápadný podpis místo širokého pruhu přes půl mapy. Úplně ho
   // smazat nejde — Esri nám dlaždice pouští zdarma právě proti uvedení zdroje.
   map = L.map('map', { zoomControl: false, attributionControl: false }).setView([49.82, 15.47], 7);
+  // Změna přiblížení rozhoduje, jestli se volná místa kreslí — překreslíme.
+  map.on('zoomend', function () { drawMap(); });
   addBasemap();
   L.control.zoom({ position: 'bottomright' }).addTo(map);
   addAttribution();
@@ -1355,15 +1357,21 @@ function unitIcon(u) {
       + '<img src="' + esc(im.src) + '" alt="">'
       + '<i class="pin-tag">' + esc(MODELS[u.eco && u.eco.model] ? MODELS[u.eco.model].name : '') + '</i></div>' });
 }
+// Z dálky mají v mapě být jen prádlomaty, sídlo a pobočky. Volná místa je
+// v tomhle měřítku stejně nejde rozlišit — slepí se do hromádky otačníků.
+var MISTA_ZOOM = 12;
 function drawMap() {
   if (!layer) return;
   layer.clearLayers();
-  var any = false, zname = {};
+  var any = false, zname = {}, skryto = 0;
+  var blizko = !map || map.getZoom() >= MISTA_ZOOM;
   Object.keys(S.areas).forEach(function (aid) {
     S.areas[aid].spots.forEach(function (sp) {
       any = true; zname[sp.id] = 1;
       var unit = S.units.filter(function (u) { return u.spotId === sp.id; })[0];
       var rival = !unit && CLAIMS[sp.id] && !CLAIMS[sp.id].mine ? CLAIMS[sp.id] : null;
+      // Volné místo je jen tip, ne stavba — ukazuje se až při přiblížení.
+      if (!unit && !rival && !blizko) { skryto++; return; }
       var seen = !!S.revealed[sp.id];
       var icon = unit ? unitIcon(unit) : rival ? rivalIcon(rival) : pinIcon(seen ? 'known' : 'unknown', seen ? '★' : '?');
       L.marker([sp.lat, sp.lon], { icon: icon })
@@ -1391,7 +1399,15 @@ function drawMap() {
     L.marker([b.lat, b.lon], { icon: domIcon(false, b.name) })
       .addTo(layer).on('click', function () { zakladnaSheet(b, false); });
   });
-  $('map-hint').classList.toggle('hidden', any);
+  // Nápověda pod mapou říká buď „začni průzkumem“, nebo „přibliž, místa jsou schovaná“.
+  var h = $('map-hint');
+  if (!any) {
+    h.textContent = 'Napiš město a pošli tam člověka, ať ho projde. Místa jsou schovaná — dokud město neprozkoumáš, nic na mapě neuvidíš.';
+    h.classList.remove('hidden');
+  } else if (skryto) {
+    h.textContent = 'Přibliž mapu, ať uvidíš volná místa — teď jich je schovaných ' + skryto + '.';
+    h.classList.remove('hidden');
+  } else h.classList.add('hidden');
 }
 // Panel cizího prádlomatu v neprozkoumaném městě.
 function cizi(c) {
