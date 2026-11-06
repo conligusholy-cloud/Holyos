@@ -1547,6 +1547,16 @@ const BASE_COLS = [
   { key: 'source', label: 'Zdroj importu', render: (r) => `<span class="muted small">${esc(r.source || '—')}</span>` },
   { key: 'support_snapshot', label: 'Screenshot podpory', render: (r) => r.support_snapshot_at ? `<a href="/admin/supporters/${r.id}/support-snapshot.png" target="_blank" rel="noopener" class="small" data-lightbox="1">${fmtDT(r.support_snapshot_at)}</a>` : '<span class="muted small">—</span>' },
 ];
+// Admin → Výběry: přehled uživatelů s podporou (Pozice, PIV, Expanze, Standardní podpora, Expanze + standardní)
+function adminVybery({ admin, rows, qstr = '', holyosUrl }) {
+  const cols = ['legacy_position', 'piv', 'expansion', 'standard', 'exp_std'].map(k => BASE_COLS.find(c => c.key === k));
+  const sumCzk = rows.reduce((a, r) => a + (r.exp_std_czk != null ? Number(r.exp_std_czk) : 0), 0);
+  const body = rows.map(r => `<tr><td data-l="Jméno" class="nm"><b>${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b><div class="small muted">${esc(r.email)}</div></td>${cols.map(c => `<td data-l="${esc(c.label)}">${c.render(r)}</td>`).join('')}<td class="actions"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a></td></tr>`).join('');
+  return adminLayout('Výběry', 'vyb', admin, `
+  <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 style="margin:0">Výběry <span class="muted" style="font-size:14px;font-weight:500">${rows.length} uživatelů · Expanze + standardní celkem ${Math.round(sumCzk).toLocaleString('cs-CZ')} Kč</span></h1>
+  <form method="get" action="/admin/vybery" class="row" style="gap:8px"><input name="q" value="${esc(qstr)}" placeholder="Hledat jméno / e-mail / nick" style="min-width:240px"><button class="btn sec" type="submit">Hledat</button></form></div>
+  <div class="card" style="overflow-x:auto;margin-top:14px"><table><thead><tr><th>Jméno</th>${cols.map(c => `<th>${esc(c.label)}</th>`).join('')}<th></th></tr></thead><tbody>${body || '<tr><td colspan="' + (cols.length + 2) + '" class="muted">Nikdo nenalezen.</td></tr>'}</tbody></table></div>`, holyosUrl);
+}
 const DEFAULT_COLS = ['email', 'nick', 'legacy_position', 'support_czk', 'standard', 'expansion', 'exp_std', 'piv', 'user_type', 'status', 'tfa', 'last_login_at', 'x:obrat', 'support_snapshot'];
 // Přihlášení za uživatele ve starém systému (partner.bestseries.cz).
 // Bez `to`: přímý odkaz na fake-login.php (přistane na výchozím dashboardu) — funguje spolehlivě,
@@ -2396,4 +2406,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { userTfaLoginPage, tfaPage, adminPartnerSupport, presenceWidget, PRESENCE_HTML, PRESENCE_CSS, PRESENCE_JS, locVopPage, locGdprPage, adminLayout, ADMIN_NAV, adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterVybery, vyberyVisible, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { userTfaLoginPage, tfaPage, adminPartnerSupport, presenceWidget, PRESENCE_HTML, PRESENCE_CSS, PRESENCE_JS, locVopPage, locGdprPage, adminLayout, ADMIN_NAV, adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterVybery, vyberyVisible, adminVybery, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };

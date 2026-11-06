@@ -2248,9 +2248,16 @@ app.get('/admin/stats/user/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
 }));
 // Výběry — admin sekce zatím jako zástupná stránka (funkce se připravuje)
 app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
-  res.send(V.adminLayout('Výběry', 'vyb', req.admin, `
-  <h1 style="margin:0 0 14px">Výběry <span class="muted" style="font-size:14px;font-weight:500">správa žádostí o výběr</span></h1>
-  <div class="card" style="max-width:640px"><b>V přípravě</b><p class="muted" style="margin:8px 0 0">Správa výběrů se připravuje a testuje. Uživatelům se zobrazuje informace, že funkce bude dostupná během 7. 11. 2026.</p></div>`, HOLYOS_URL));
+  const qs = String(req.query.q || '').trim().slice(0, 80);
+  const params = [], where = ["status='active'"];
+  if (qs) { params.push('%' + qs.toLowerCase() + '%'); where.push(`(lower(email) LIKE $1 OR lower(coalesce(first_name,'')) LIKE $1 OR lower(coalesce(last_name,'')) LIKE $1 OR lower(coalesce(nick,'')) LIKE $1)`); }
+  const rows = (await q(`SELECT id,email,first_name,last_name,nick,
+    partner_support->>'position' AS legacy_position, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_rate' AS piv_rate, partner_support->>'piv_tier_visits' AS piv_tier_visits,
+    partner_support->>'exp_invested' AS exp_invested, partner_support->>'exp_currency' AS exp_currency, partner_support->>'exp_rate' AS exp_rate, partner_support->>'exp_limit_from' AS exp_limit_from, partner_support->>'exp_eligible' AS exp_eligible,
+    partner_support->>'std_total' AS std_total, partner_support->>'std_currency' AS std_currency, partner_support->>'std_palety_all' AS std_palety_all, partner_support->>'std_opakovacky_all' AS std_opakovacky_all,
+    CASE WHEN partner_support->>'exp_invested_czk' ~ '^-?[0-9.]+$' OR partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN coalesce(CASE WHEN partner_support->>'exp_invested_czk' ~ '^-?[0-9.]+$' THEN (partner_support->>'exp_invested_czk')::numeric END,0) + coalesce(CASE WHEN partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total_czk')::numeric END,0) END AS exp_std_czk
+    FROM supporters WHERE ${where.join(' AND ')} ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 1000`, params)).rows;
+  res.send(V.adminVybery({ admin: req.admin, rows, qstr: qs, holyosUrl: HOLYOS_URL }));
 }));
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
