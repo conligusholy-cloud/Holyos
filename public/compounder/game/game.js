@@ -645,6 +645,24 @@ function zastavaStrop(majetekNavic) {
   return PROFILES[S.profile].ltv * (assetsTotal() + (majetekNavic || 0))
     + Math.max(0, (S && S.duvera) || 0);
 }
+// Startovní úvěr na stroj. Firma bez historie nemá žádný výdělek, který by
+// banka posoudila — jenže stroj je zástava, kterou si v případě problému
+// odveze a prodá. Takže první stroj půjčuje proti němu samému, jako leasing.
+// Výdělek chce vidět až u přípojek — ty z místa vytrhnout nejdou.
+function jeZacatek() {
+  if (!S || maSkraloup()) return false;
+  if (S.units && S.units.length) return false;
+  if (S.orders && S.orders.length) return false;
+  if (S.loan > 0) return false;
+  for (var k in (S.stock || {})) if (S.stock[k] > 0) return false;
+  return true;
+}
+// Strop pro první stroj: tolik, kolik unese zástava. Null = posuď to běžně,
+// podle toho, co firma vydělává.
+function zamerStrop(modelKey, castka) {
+  if (!jeZacatek()) return null;
+  return Math.max(0, zastavaStrop(castka) - S.loan);
+}
 // Strop pro konkrétní úvěr. `zisk` je měsíční zisk toho, co se financuje —
 // u místa jeho vlastní, u stroje bez místa a u provozního úvěru celá firma.
 function stropPodleZisku(zisk, odhadCastky) {
@@ -1516,6 +1534,7 @@ function canFinance(amount, chci, strop) {
         + (dscr <= ltvRoom && dscr <= S.bank
             ? ' — zástava by dovolila ' + kcFull(Math.min(ltvRoom, S.bank)) + ', ale tolik by neuneslo splátku. '
               + 'Banka chce vidět, že výdělek pokryje splátku aspoň ' + KRYTI_MIN.toFixed(2).replace('.', ',') + '×.'
+              + (jeZacatek() ? ' Začni menším strojem, nebo místem, které víc vydělá.' : '')
           : S.bank < ltvRoom
             ? ' — víc jí teď ve volném rámci nezbývá, ten roste každý den.'
             : ' — na víc nemáš zástavu, úvěrový strop je ' + kcFull(ltvRoom) + '.');
@@ -1626,7 +1645,7 @@ function paintShop() {
     b.onclick = function () { rushOrder(Number(b.getAttribute('data-rush')), b); };
   });
   $('shop-list').innerHTML = MODEL_ORDER.map(function (k) {
-    var m = MODELS[k], price = machinePrice(m), f = canFinance(price);
+    var m = MODELS[k], price = machinePrice(m), f = canFinance(price, null, zamerStrop(k, price));
     var im = MODEL_IMG[k];
     return '<div class="card">'
       + '<div class="shop-img"><img src="' + esc(im.src) + '" alt="Prádlomat ' + m.name + '" loading="lazy"></div>'
@@ -1648,9 +1667,13 @@ function paintShop() {
 }
 function buySheet(modelKey, drz) {
   if (!drz) FIN_OWN = null;
-  var m = MODELS[modelKey], f = canFinance(machinePrice(m), FIN_OWN);
+  var cena = machinePrice(MODELS[modelKey]);
+  var m = MODELS[modelKey], f = canFinance(cena, FIN_OWN, zamerStrop(modelKey, cena));
   sheet('<h3>Koupit ' + m.name + '</h3>'
     + '<p class="muted small">Stroj ti přivezou za ' + DELIVERY_MONTHS + ' herní měsíce, tedy za jeden skutečný den. Do té doby je na cestě, pak čeká na skladě, než mu najdeš místo.</p>'
+    + (jeZacatek() ? '<p class="fine ok">Na první stroj ti banka půjčí proti němu samému — '
+        + 'ještě nemáš co vykázat, ale stroj si v případě problému odveze a prodá. '
+        + 'U přípojek na místě už bude koukat na to, co vyděláš.</p>' : '')
     + financeRows(f)
     + '<button class="btn big" id="do-buy"' + (f.ok ? '' : ' disabled') + '>Objednat</button>'
     + (f.ok ? '' : '<p class="fine err">' + esc(f.duvod || '') + '</p>'
@@ -1689,6 +1712,11 @@ function installSheet(sp, areaId, modelKey, drz) {
     + financeRows(f)
     + '<div class="kv"><span>Domluvený nájem</span><b>' + kcFull(e.rent) + ' / měsíc</b></div>'
     + '<div class="kv"><span>Zisk tohohle místa / měsíc</span><b class="ok">' + kcFull(e.profit) + '</b></div>'
+    + (splatkyMesicne() > monthlyProfit() + e.profit
+        ? '<p class="fine warn">I s tímhle místem vyděláš ' + kcFull(Math.round(monthlyProfit() + e.profit))
+          + ' měsíčně, ale na splátkách platíš ' + kcFull(splatkyMesicne())
+          + ' — a přibude ještě splátka za přípojky. Rozdíl ti ubírá z hotovosti, dokud nepřidáš další prádlomat.</p>'
+        : '')
     + '<button class="btn big" id="do-build"' + (f.ok ? '' : ' disabled') + '>Postavit</button>'
     + (f.ok ? (f.dotkne_rezervy ? '<p class="fine warn">Sáhneš i do provozní rezervy — po stavbě ti zbude ' + kcFull(S.cash - f.own) + '.</p>' : '')
         : '<p class="fine err">' + esc(f.duvod || '') + '</p>'
