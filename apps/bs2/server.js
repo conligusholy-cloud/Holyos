@@ -2253,6 +2253,8 @@ app.get('/admin/stats/user/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
 app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   const qs = String(req.query.q || '').trim().slice(0, 80);
   const params = [], where = ["status='active'"];
+  const onlySup = req.query.s === '1';
+  if (onlySup) where.push(`(coalesce(CASE WHEN partner_support->>'std_total' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total')::numeric END,0) > 0 OR coalesce(${EX_CZK},0) > 0)`);
   if (qs) { params.push('%' + qs.toLowerCase() + '%'); where.push(`(lower(email) LIKE $1 OR lower(coalesce(first_name,'')) LIKE $1 OR lower(coalesce(last_name,'')) LIKE $1 OR lower(coalesce(nick,'')) LIKE $1)`); }
   const rows = (await q(`SELECT id,email,first_name,last_name,nick,
     partner_support->>'position' AS legacy_position, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_rate' AS piv_rate, partner_support->>'piv_tier_visits' AS piv_tier_visits,
@@ -2260,7 +2262,7 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
     partner_support->>'std_total' AS std_total, partner_support->>'std_currency' AS std_currency, partner_support->>'std_palety_all' AS std_palety_all, partner_support->>'std_opakovacky_all' AS std_opakovacky_all, partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->'std_check'->>'ok' AS std_check_ok, partner_support->'std_check'->>'bad' AS std_check_bad,
     CASE WHEN ${EX_CZK} IS NOT NULL OR partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN coalesce(${EX_CZK},0) + coalesce(CASE WHEN partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total_czk')::numeric END,0) END AS exp_std_czk
     FROM supporters WHERE ${where.join(' AND ')} ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 1000`, params)).rows;
-  res.send(V.adminVybery({ admin: req.admin, rows, qstr: qs, holyosUrl: HOLYOS_URL }));
+  res.send(V.adminVybery({ admin: req.admin, rows, qstr: qs, onlySup, holyosUrl: HOLYOS_URL }));
 }));
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
