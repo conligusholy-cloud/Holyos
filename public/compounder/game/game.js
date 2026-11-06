@@ -566,6 +566,25 @@ function zmenitSplatnost(id, i) {
   return n;
 }
 
+// Za jak dlouho se strže další splátka. Hráč to musí vidět — jinak neví,
+// do kdy má mít hotovost na účtu.
+function dalsiSplatkaZa() {
+  return Math.max(0, (S.splatkyAt || Date.now()) + MONTH_MS - Date.now());
+}
+// Řádek „další splátka“ i s tím, jestli na ni hráč má. Červeně, když nemá.
+function dalsiSplatkaHtml() {
+  var kolik = splatkyMesicne();
+  if (!(kolik > 0)) return '';
+  var ma = S.cash >= kolik;
+  return '<div class="kv"><span>Další splátka</span><b class="' + (ma ? 'ok' : 'err') + '">'
+    + etaText(dalsiSplatkaZa()) + '</b></div>'
+    + '<p class="fine' + (ma ? '' : ' err') + '">' + (ma
+        ? 'Do té doby musí být na účtu ' + kcFull(kolik) + '. Máš ' + kcFull(S.cash) + ', takže klid.'
+        : 'Do té doby musí být na účtu ' + kcFull(kolik) + ', a máš jen ' + kcFull(S.cash)
+          + '. Chybí ' + kcFull(kolik - S.cash) + ' — co nezaplatíš, přičte se k dluhu a počítá se jako nezaplacená splátka.')
+    + '</p>';
+}
+
 // Měsíční splátka všech úvěrů. Co hráč nemá, zůstává viset na dluhu a počítá
 // se jako zmeškaná splátka — z toho jednou vyroste krach.
 function mesicniSplatka() {
@@ -2693,6 +2712,7 @@ function paintBank() {
     + '</b></div>'
     + '<div class="kv"><span>Splátka / měsíc</span><b class="' + (splatkyMesicne() > 0 ? 'warn' : '') + '">'
     + kcFull(splatkyMesicne()) + (urokMesicne() > 0 ? ' <span class="muted">(z toho úrok ' + kcFull(urokMesicne()) + ')</span>' : '') + '</b></div>'
+    + dalsiSplatkaHtml()
     + '<div class="kv"><span>Zaplaceno na úrocích</span><b>' + kcFull(S.stats.interest) + '</b></div>'
     + ((S.stats.splaceno || 0) > 0 ? '<div class="kv"><span>Splacených úvěrů</span><b class="ok">'
       + S.stats.splaceno + '</b></div>' : '')
@@ -2737,6 +2757,7 @@ function penizeSheet() {
     + '<div class="kv"><span>Hotovost</span><b>' + kcFull(S.cash) + '</b></div>'
     + '<div class="kv"><span>Dlužíš bance</span><b class="' + (S.loan > 0 ? 'warn' : '') + '">' + kcFull(S.loan) + '</b></div>'
     + '<div class="kv"><span>Ještě si můžeš půjčit</span><b>' + kcFull(Math.min(room, S.bank)) + '</b></div>'
+    + dalsiSplatkaHtml()
     + '<p class="muted small" style="margin:10px 0 0">Hotovost roste sama tím, co vydělají prádlomaty. '
     + 'Když potřebuješ víc hned, půjč si v bance — podmínky uvidíš dopředu'
     + (PAYMENTS_ON ? ', nebo si dobij balíček laundry.' : '.') + '</p>'
