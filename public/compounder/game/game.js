@@ -789,7 +789,15 @@ function load() {
     }
     if (!o.splatkyAt) o.splatkyAt = Date.now();
     if (!Array.isArray(o.pobocky)) o.pobocky = [];
-    if (o.sidlo === undefined) o.sidlo = null;
+    // Rozehraná hra z doby před sídly: za sídlo bereme místo, kde hráč postavil
+    // první prádlomat. Bez toho by mu doprava vycházela zdarma a pobočku by
+    // si nikdy nemohl zřídit.
+    if (!o.sidlo) {
+      var prvni = (o.units || []).slice().sort(function (a, b) { return (a.builtAt || 0) - (b.builtAt || 0); })[0];
+      o.sidlo = prvni && prvni.lat != null
+        ? { name: prvni.name || 'sídlo', lat: prvni.lat, lon: prvni.lon, od: prvni.builtAt || Date.now() }
+        : null;
+    }
     if (o.ceta === undefined) o.ceta = null;
     if (o.ramec === undefined) o.ramec = null;
     if (typeof o.stats.splacenoMist !== 'number') o.stats.splacenoMist = 0;
