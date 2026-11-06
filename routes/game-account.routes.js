@@ -413,8 +413,17 @@ router.post('/account/login', async (req, res, next) => {
 router.post('/account/logout', (req, res) => { res.clearCookie(COOKIE, { path: '/' }); res.json({ ok: true }); });
 
 // GET /account/me → { player, state } nebo 401
+// Sdílené id se narokuůje i tady, ne jen při přihlášení. Kdo zůstává
+// přihlášený cookie a znovu se nepřihlásil, by ho jinak nedostal nikdy —
+// rozesílal by odkaz s id, které na serveru nikomu nepatří, a nikdo z těch,
+// kdo přes něj přišli, by se mu nezapsal do sítě.
 router.get('/account/me', requirePlayer, async (req, res, next) => {
-  try { res.json({ ok: true, player: await pub(req.player), state: req.player.state || null }); } catch (e) { next(e); }
+  try {
+    let p = req.player;
+    try { p = await narokujRef(p, req.query.ref); }
+    catch (e) { console.warn('[game] narokovani ref v /me:', e.message); }
+    res.json({ ok: true, player: await pub(p), state: p.state || null });
+  } catch (e) { next(e); }
 });
 
 // POST /account/details { email, first_name, last_name } — doplnění před nákupem
