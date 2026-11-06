@@ -2262,7 +2262,10 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
     partner_support->>'std_total' AS std_total, partner_support->>'std_currency' AS std_currency, partner_support->>'std_palety_all' AS std_palety_all, partner_support->>'std_opakovacky_all' AS std_opakovacky_all, partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->'std_check'->>'ok' AS std_check_ok, partner_support->'std_check'->>'bad' AS std_check_bad,
     CASE WHEN ${EX_CZK} IS NOT NULL OR partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN coalesce(${EX_CZK},0) + coalesce(CASE WHEN partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total_czk')::numeric END,0) END AS exp_std_czk
     FROM supporters WHERE ${where.join(' AND ')} ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 1000`, params)).rows;
-  res.send(V.adminVybery({ admin: req.admin, rows, qstr: qs, onlySup, holyosUrl: HOLYOS_URL }));
+  // počty podle pozice (za celý filtr, ne jen za zobrazených 1000 řádků)
+  const posCounts = {}; let totalCount = 0;
+  try { (await q(`SELECT coalesce(partner_support->>'position','—') AS pos, count(*)::int AS n FROM supporters WHERE ${where.join(' AND ')} GROUP BY 1`, params)).rows.forEach(r => { posCounts[r.pos] = r.n; totalCount += r.n; }); } catch (e) { /* jen info */ }
+  res.send(V.adminVybery({ admin: req.admin, rows, qstr: qs, onlySup, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
 }));
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';

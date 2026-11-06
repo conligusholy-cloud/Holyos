@@ -1560,12 +1560,17 @@ const BASE_COLS = BASE_COLS_ALL.filter(c => c.key !== 'expansion' && c.key !== '
 function adminVybery({ admin, rows, qstr = '', onlySup = false, holyosUrl }) {
   const cols = ['legacy_position', 'piv', 'ex_podpora', 'st_podpora', 'exp_std', 'std_check'].map(k => BASE_COLS.find(c => c.key === k));
   const sumCzk = rows.reduce((a, r) => a + (r.exp_std_czk != null ? Number(r.exp_std_czk) : 0), 0);
-  const body = rows.map(r => `<tr><td data-l="Jméno" class="nm"><b>${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b><div class="small muted">${esc(r.email)}</div></td>${cols.map(c => `<td data-l="${esc(c.label)}">${c.render(r)}</td>`).join('')}<td class="actions"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a></td></tr>`).join('');
+  const body = rows.map(r => `<tr><td data-l="Jméno" class="nm"><b>${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b><div class="small muted">${esc(r.email)}</div></td>${cols.map(c => `<td data-l="${esc(c.label)}">${c.render(r)}</td>`).join('')}<td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a><button type="button" class="btn sec sm legacy-btn" data-email="${esc(r.email)}" data-to="/cs/bo/my-invests/" title="Přihlásit se jako tento uživatel do starého portálu a otevřít rovnou Přehled podpory">Stránka podpory</button></div></td></tr>`).join('');
   return adminLayout('Výběry', 'vyb', admin, `
   <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 style="margin:0">Výběry <span class="muted" style="font-size:14px;font-weight:500">${rows.length} uživatelů · Expanze + standardní celkem ${Math.round(sumCzk).toLocaleString('cs-CZ')} Kč</span></h1>
   <div class="row" style="gap:8px"><a class="btn sec" href="/admin/vip.xlsx" title="VIP a VIP 2 členové do Excelu (se ST a EX podporou)">⬇ VIP do Excelu</a></div>
   <form method="get" action="/admin/vybery" class="row" style="gap:8px"><input name="q" value="${esc(qstr)}" placeholder="Hledat jméno / e-mail / nick" style="min-width:240px"><label class="small" style="display:flex;align-items:center;gap:6px;white-space:nowrap;cursor:pointer"><input type="checkbox" name="s" value="1"${onlySup ? ' checked' : ''} onchange="this.form.submit()" style="width:auto;margin:0"> jen s podporou</label><button class="btn sec" type="submit">Hledat</button></form></div>
-  <div class="card" style="overflow-x:auto;margin-top:14px"><table><thead><tr><th>Jméno</th>${cols.map(c => `<th>${esc(c.label)}</th>`).join('')}<th></th></tr></thead><tbody>${body || '<tr><td colspan="' + (cols.length + 2) + '" class="muted">Nikdo nenalezen.</td></tr>'}</tbody></table></div>`, holyosUrl);
+  <div class="card" style="overflow-x:auto;margin-top:14px"><table><thead><tr><th>Jméno</th>${cols.map(c => `<th>${esc(c.label)}</th>`).join('')}<th></th></tr></thead><tbody>${body || '<tr><td colspan="' + (cols.length + 2) + '" class="muted">Nikdo nenalezen.</td></tr>'}</tbody></table></div>
+  <script>
+    document.addEventListener('click', function (e) { var b = e.target.closest('.legacy-btn'); if (!b) return;
+      var w = window.open('https://partner.bestseries.cz/php-action/fake-login.php?email=' + encodeURIComponent(b.dataset.email), '_blank');
+      if (w) setTimeout(function () { try { w.location.href = 'https://partner.bestseries.cz' + b.dataset.to; } catch (x) {} }, 2500); });
+  </script>`, holyosUrl);
 }
 const DEFAULT_COLS = ['email', 'nick', 'legacy_position', 'support_czk', 'ex_podpora', 'st_podpora', 'exp_std', 'std_check', 'piv', 'user_type', 'status', 'tfa', 'last_login_at', 'x:obrat', 'support_snapshot'];
 // Přihlášení za uživatele ve starém systému (partner.bestseries.cz).
