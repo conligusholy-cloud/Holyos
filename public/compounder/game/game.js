@@ -136,6 +136,104 @@ function pobockaOd() {
 }
 function pobockaLze() { return Date.now() >= pobockaOd(); }
 
+// ─── Pohovor s rizikořem ────────────────────────────────────────────────────
+// Deset otázek při otevření nebo navýšení rámce, tři při běžném čerpání.
+// Každá má opatrnou, vyváženou a odvážnou odpověď. Odvážná může dostat víc,
+// ale dráž — a hlavně se odpovědi ověřují proti skutečnému stavu hry: kdo si
+// vymýšlí, dopadne hůř, než kdyby odpověděl popravdě.
+var OTAZKY = [
+  { q: 'Na co ty peníze budou?', a: [
+    { t: 'Na konkrétní místo, které mám prověřené.', b: 2, overit: function () { return Object.keys(S.revealed || {}).length >= 1; } },
+    { t: 'Na rozšíření sítě, místo teprve najdu.', b: 1 },
+    { t: 'Chci rezervu, uvidí se.', b: 0 } ] },
+  { q: 'Co uděláte, když tržby spadnou o pětinu?', a: [
+    { t: 'Mám rezervu, půl roku to utáhnu.', b: 2, overit: function () { return S.cash >= splatkyMesicne() * 6; } },
+    { t: 'Utáhnu opasek a omezím výdaje.', b: 1 },
+    { t: 'Půjčím si víc.', b: -1 } ] },
+  { q: 'Jakou máte provozní rezervu?', a: [
+    { t: 'Víc než tři splátky dopředu.', b: 2, overit: function () { return S.cash >= splatkyMesicne() * 3; } },
+    { t: 'Zhruba jednu splátku.', b: 1, overit: function () { return S.cash >= splatkyMesicne(); } },
+    { t: 'Upřímně žádnou.', b: 0 } ] },
+  { q: 'Kdo vám stroje servisuje?', a: [
+    { t: 'Mám na to lidi a smlouvu.', b: 1, overit: function () { return maCetu(); } },
+    { t: 'Řeším to vždycky ad hoc.', b: 0 },
+    { t: 'Zatím to neřeším.', b: -1 } ] },
+  { q: 'Co když vám majitel vypoví místo?', a: [
+    { t: 'Mám prověřená náhradní místa.', b: 2, overit: function () { return Object.keys(S.revealed || {}).length >= 3; } },
+    { t: 'Najdu jiné, chvíli to potrvá.', b: 1 },
+    { t: 'To se mi stát nemůže.', b: -1 } ] },
+  { q: 'Z čeho budete splácet?', a: [
+    { t: 'Z provozu, splátka je pod polovinou zisku.', b: 2, overit: function () { return monthlyProfit() > 0 && splatkyMesicne() < monthlyProfit() * 0.5; } },
+    { t: 'Z provozu, ale bude to těsné.', b: 1 },
+    { t: 'Z dalšího úvěru.', b: -2 } ] },
+  { q: 'Sledujete, kde staví konkurence?', a: [
+    { t: 'Ano, mapu si hlídám.', b: 1 },
+    { t: 'Moc ne.', b: 0 } ] },
+  { q: 'Kolik prádlomatů chcete mít za rok?', a: [
+    { t: 'O pár víc, než mám teď.', b: 2 },
+    { t: 'Rád bych síť zdvojnásobil.', b: 1 },
+    { t: 'Desetkrát tolik.', b: -1 } ] },
+  { q: 'Máte s provozem zkušenost?', a: [
+    { t: 'Pár prádlomatů už mi běží.', b: 2, overit: function () { return S.units.length >= 3; } },
+    { t: 'Začínám, učím se za pochodu.', b: 1 },
+    { t: 'Žádnou.', b: 0 } ] },
+  { q: 'A kdyby se splácet nedařilo?', a: [
+    { t: 'Prodám část sítě a dluh srovnám.', b: 2 },
+    { t: 'Přijdu se s vámi domluvit.', b: 1 },
+    { t: 'To nevím.', b: -1 } ] }
+];
+// Hodnocení pohovoru: kolik bodů, co to udělá s limitem a se sazbou.
+function pohovorStupen(body, otazek) {
+  var max = otazek * 2;
+  var podil = max > 0 ? body / max : 0;
+  if (podil >= 0.7) return { nazev: 'výborné', limit: 1.2, sazba: -0.003, ok: true,
+    slovo: 'Takhle připravené klienty máme rádi. Dáme vám lepší sazbu i vyšší limit.' };
+  if (podil >= 0.4) return { nazev: 'dobré', limit: 1, sazba: 0, ok: true,
+    slovo: 'Nic mimořádného, ale drží to pohromadě. Podmínky standardní.' };
+  if (podil >= 0.15) return { nazev: 'slabé', limit: 0.8, sazba: 0.003, ok: true,
+    slovo: 'Mám z toho rozpaky. Půjčíme míň a dráž.' };
+  return { nazev: 'nedostatečné', limit: 0, sazba: 0, ok: false,
+    slovo: 'Takhle ne. Vraťte se, až budete mít věci srovnané.' };
+}
+// Vlastní pohovor. `kolik` otázek, `hotovo` dostane výsledek.
+function pohovorSheet(kolik, nadpis, hotovo) {
+  var poradi = OTAZKY.map(function (o, i) { return i; });
+  for (var i = poradi.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1)), t = poradi[i]; poradi[i] = poradi[j]; poradi[j] = t;
+  }
+  poradi = poradi.slice(0, Math.min(kolik, OTAZKY.length));
+  var krok = 0, body = 0, prichyceno = 0;
+  function dalsi() {
+    if (krok >= poradi.length) {
+      var st = pohovorStupen(body, poradi.length);
+      sheet('<h3>' + esc(nadpis) + '</h3>'
+        + '<div class="nalada"><b>Hodnocení: ' + st.nazev + '</b><span>' + esc(st.slovo) + '</span></div>'
+        + (prichyceno ? '<p class="fine err">Rizikoř si ' + prichyceno + '× ověřil, co jste říkal, a nesedělo to. '
+          + 'To s hodnocením zamávalo víc, než kdybyste odpověděl na rovinu.</p>' : '')
+        + '<button class="btn big" id="poh-ok">Pokračovat</button>');
+      $('poh-ok').onclick = function () { closeSheet(); hotovo(st); };
+      return;
+    }
+    var o = OTAZKY[poradi[krok]];
+    sheet('<h3>' + esc(nadpis) + '</h3>'
+      + '<p class="fine">Otázka ' + (krok + 1) + ' z ' + poradi.length + '</p>'
+      + '<p class="muted small" style="margin:6px 0 12px;font-size:15px;color:var(--text)">' + esc(o.q) + '</p>'
+      + o.a.map(function (x, i) {
+          return '<button class="btn sec" style="width:100%;margin-top:8px;text-align:left" data-odp="' + i + '">' + esc(x.t) + '</button>';
+        }).join(''));
+    [].forEach.call(document.querySelectorAll('[data-odp]'), function (b) {
+      b.onclick = function () {
+        var x = o.a[Number(b.getAttribute('data-odp'))];
+        // Kdo tvrdí něco, co stav hry vyvrací, dostane mínus místo plusu.
+        if (x.overit && !x.overit()) { body -= 2; prichyceno++; }
+        else body += x.b;
+        krok++; dalsi();
+      };
+    });
+  }
+  dalsi();
+}
+
 // ─── Krach ──────────────────────────────────────────────────────────────────
 // Tři neuhrazené splátky po sobě a je po firmě. Varování chodí předem, takže
 // hráč má čas něco prodat a zachránit se — a protože se to ví, je komu prodat.
@@ -370,7 +468,7 @@ function splatitDluh(castka) {
     if (castka <= 0 || l.zbyva <= 0) return;
     var dam = Math.min(castka, l.zbyva);
     l.zbyva -= dam; castka -= dam; splaceno += dam;
-    if (l.zbyva < 1) { l.zbyva = 0; dosplaceno++; }
+    if (l.zbyva < 1) { l.zbyva = 0; dosplaceno++; zapisDoplacene(l); }
   });
   if (dosplaceno) {
     S.stats.splaceno = (S.stats.splaceno || 0) + dosplaceno;
@@ -401,14 +499,70 @@ function mesicniSplatka() {
       l.zmeskano = 0;                                  // doplatil, karta čistá
     }
     l.zbyvaMesicu = Math.max(0, (l.zbyvaMesicu || 0) - 1);
-    if (l.zbyva < 1) { l.zbyva = 0; dosplaceno++; }
+    if (l.zbyva < 1) { l.zbyva = 0; dosplaceno++; zapisDoplacene(l); }
   });
   if (dosplaceno) {
     S.stats.splaceno = (S.stats.splaceno || 0) + dosplaceno;
     S.loans = S.loans.filter(function (l) { return l.zbyva > 0; });
   }
   prepocitejDluh();
+  hlidejRamec();
 }
+// ─── Rámcový úvěr ───────────────────────────────────────────────────────────
+// Schválený objem, ze kterého hráč čerpá na další prádlomaty bez nového
+// pohovoru — dokud mu síť plní podmínky. Musí si ho zasloužit: dva plně
+// doplacené prádlomaty.
+var RAMEC_ZA_MISTO = 1200000;     // o kolik limit povyroste s každým doplaceným místem
+var RAMEC_KRYTI = 1.0;            // pod tímhle pokrytím je místo pod vodou
+var RAMEC_LHUTA = YEAR_MS;        // jak dlouho smí být síť slabá, než rámec padne
+function doplacenychMist() { return (S.stats && S.stats.splacenoMist) || 0; }
+function maRamec() { return !!(S.ramec && S.ramec.limit > 0 && !S.ramec.zavreny); }
+function ramecLze() { return !maSkraloup() && doplacenychMist() >= 2; }
+// Doplacený prádlomat — na tom stojí cesta k rámcovému úvěru.
+function zapisDoplacene(l) {
+  if (l && l.spotId) S.stats.splacenoMist = (S.stats.splacenoMist || 0) + 1;
+}
+// Kolik z rámce zbývá k čerpání — vždy ještě omezené tím, co firma unese.
+function ramecVolny() {
+  if (!maRamec() || S.ramec.slabyOd) return 0;
+  var zbyva = Math.max(0, S.ramec.limit - (S.ramec.cerpano || 0));
+  return Math.min(zbyva, stropPodleZisku(monthlyProfit() - splatkyMesicne(), zbyva));
+}
+// Základní limit podle historie a výdělku.
+function ramecNavrh() {
+  var podleHistorie = RAMEC_ZA_MISTO * Math.max(1, doplacenychMist() - 1);
+  return Math.max(0, Math.round(Math.min(podleHistorie,
+    stropPodleZisku(monthlyProfit() - splatkyMesicne(), podleHistorie)) / 10000) * 10000);
+}
+// Místa, která nevydělají ani na svou splátku.
+function slabaMista() {
+  return S.units.filter(function (u) {
+    var l = uverMista(u);
+    if (!l) return false;
+    var splatka = Math.min(l.splatka, l.zbyva + l.zbyva * l.sazba / 12);
+    return splatka > 0 && u.eco.profit / splatka < RAMEC_KRYTI;
+  });
+}
+// Hlídání podmínek. Varování → zastavené čerpání → po roce zavřený rámec.
+function hlidejRamec() {
+  if (!maRamec()) return;
+  var slabych = slabaMista().length;
+  if (!slabych) {
+    if (S.ramec.slabyOd) { S.ramec.slabyOd = null; toast('Síť je zase v pořádku, rámec máš otevřený.', 'ok'); }
+    return;
+  }
+  if (!S.ramec.slabyOd) {
+    S.ramec.slabyOd = Date.now();
+    toast(slabych + ' ' + mn(slabych, 'místo nevydělá', 'místa nevydělají', 'míst nevydělá')
+      + ' na svou splátku. Dokud to trvá, z rámce čerpat nemůžeš.', 'err');
+    return;
+  }
+  if (Date.now() - S.ramec.slabyOd > RAMEC_LHUTA) {
+    S.ramec.zavreny = Date.now();
+    toast('Banka ti zavřela rámec — síť rok nesplňovala podmínky. Co je načerpané, splácíš dál.', 'err');
+  }
+}
+
 // ─── Rizikoř ────────────────────────────────────────────────────────────────
 // Má den ode dne jinou náladu a dá ji najevo hned, jak hráč vejde. Nálada je
 // daná hráčem a herním měsícem, takže se nedá překlikat obnovením stránky —
@@ -557,6 +711,7 @@ function fresh(profileId) {
     loans: [],        // jednotlivé úvěry: každý se svou sazbou a splátkou
     sidlo: null,      // { name, lat, lon } — vybere se při první stavbě
     ceta: null,       // vlastní stavební parta: { od, shanec, mesic, hotovo, phm }
+    ramec: null,      // rámcový úvěr: { limit, cerpano, od, slabyOd, zavreny }
     pobocky: [],      // další základny, ze kterých se počítá doprava
     splatkyAt: now,   // odkdy se počítají měsíční splátky
     areas: {},     // id oblasti → { name, scoutedAt, spots:[…] }
@@ -625,6 +780,8 @@ function load() {
     if (!Array.isArray(o.pobocky)) o.pobocky = [];
     if (o.sidlo === undefined) o.sidlo = null;
     if (o.ceta === undefined) o.ceta = null;
+    if (o.ramec === undefined) o.ramec = null;
+    if (typeof o.stats.splacenoMist !== 'number') o.stats.splacenoMist = 0;
     if (typeof o.stats.splaceno !== 'number') o.stats.splaceno = 0;
     if (typeof o.stats.zmeskano !== 'number') o.stats.zmeskano = 0;
     ['boost', 'connDiscount', 'rateDrop', 'bankBonus', 'loanPrem'].forEach(function (k) { if (typeof o[k] !== 'number') o[k] = 0; });
@@ -1966,6 +2123,92 @@ function bindZakladny() {
   };
 }
 // Přehled jednotlivých úvěrů — co je na co, za kolik a kolik ještě zbývá.
+// Rámcový úvěr v bance: cesta k němu, stav a čerpání.
+function ramecHtml() {
+  if (maRamec()) {
+    var volny = ramecVolny();
+    return '<div class="card"><h3>Rámcový úvěr</h3>'
+      + '<div class="kv"><span>Schválený limit</span><b>' + kcFull(S.ramec.limit) + '</b></div>'
+      + '<div class="kv"><span>Načerpáno</span><b>' + kcFull(S.ramec.cerpano || 0) + '</b></div>'
+      + '<div class="kv"><span>K čerpání</span><b class="' + (volny > 0 ? 'ok' : 'warn') + '">' + kcFull(volny) + '</b></div>'
+      + (S.ramec.slabyOd
+          ? '<p class="fine err">Čerpání je zastavené — ' + slabaMista().length + ' '
+            + mn(slabaMista().length, 'místo nevydělá', 'místa nevydělají', 'míst nevydělá')
+            + ' na svou splátku. Banka dá rámci ' + etaText(S.ramec.slabyOd + RAMEC_LHUTA - Date.now())
+            + ', pak ho zavře. Sprav to, nebo slabá místa prodej.</p>'
+          : '<p class="fine">Čerpat můžeš bez dalšího pohovoru — jen krátké tři otázky. '
+            + 'Podmínka je, že každý prádlomat vydělá aspoň na svou splátku.</p>')
+      + (volny >= 1000 ? '<button class="btn sec big" id="do-cerpat">Čerpat z rámce</button>' : '')
+      + '</div>';
+  }
+  if (S.ramec && S.ramec.zavreny) {
+    return '<div class="card"><h3>Rámcový úvěr</h3>'
+      + '<p class="muted small" style="margin:2px 0 0">Banka ti rámec zavřela, protože síť rok nevydělávala na splátky. '
+      + 'Co je načerpané, splácíš dál. Nový rámec si můžeš zasloužit znovu — stejnou cestou.</p></div>';
+  }
+  var doplaceno = doplacenychMist();
+  return '<div class="card"><h3>Rámcový úvěr</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">Schválený objem, ze kterého čerpáš na další prádlomaty '
+    + 'bez nového pohovoru. Banka ho otevře tomu, kdo už dokázal úvěr splatit.</p>'
+    + '<div class="kv"><span>Plně doplacených prádlomatů</span><b class="' + (doplaceno >= 2 ? 'ok' : '') + '">'
+    + doplaceno + ' ze 2</b></div>'
+    + (maSkraloup() ? '<p class="fine err">Po konkurzu ti banka herní rok nepůjčí.</p>' : '')
+    + (ramecLze()
+        ? '<p class="fine">Máš na něj nárok. Čeká tě pohovor s rizikořem — deset otázek.</p>'
+          + '<button class="btn sec big" id="do-ramec">Požádat o rámec</button>'
+        : '<p class="fine">Splať nejdřív dva prádlomaty do konce. Pak se přijď bavit o rámci.</p>')
+    + '</div>';
+}
+function ramecSheet() {
+  pohovorSheet(10, 'Pohovor o rámci', function (st) {
+    if (!st.ok) { toast('Rizikoř to zamítl. Zkus to, až budeš mít věci srovnané.', 'err'); return; }
+    var limit = Math.round(ramecNavrh() * st.limit / 10000) * 10000;
+    if (limit < 10000) { toast('Na rámec zatím nevyděláváš dost. Vrať se, až síť povyroste.', 'err'); return; }
+    sheet('<h3>Rámec schválen</h3>'
+      + '<div class="kv"><span>Limit</span><b class="ok">' + kcFull(limit) + '</b></div>'
+      + '<div class="kv"><span>Hodnocení pohovoru</span><b>' + esc(st.nazev) + '</b></div>'
+      + '<p class="muted small" style="margin-top:10px">Čerpat můžeš po částech, vždycky jen do výše, '
+      + 'kterou unese výdělek. Podmínka je, že každý prádlomat vydělá aspoň na svou splátku — '
+      + 'když to rok neplatí, banka rámec zavře.</p>'
+      + '<button class="btn big" id="ram-ok">Beru</button>');
+    $('ram-ok').onclick = function () {
+      S.ramec = { limit: limit, cerpano: 0, od: Date.now(), slabyOd: null, zavreny: null, bonus: st.sazba };
+      save(); paint(); closeSheet(); syncState(true);
+      toast('Rámec ' + kcFull(limit) + ' je schválený.', 'ok');
+    };
+  });
+}
+function cerpatSheet(chci) {
+  var volny = ramecVolny();
+  if (volny < 1000) { closeSheet(); return toast('Z rámce teď čerpat nemůžeš.', 'err'); }
+  var castka = Math.max(1000, Math.min(volny, Math.round((chci == null ? volny : chci) / 1000) * 1000));
+  var prirazka = prirazkaZa(castka) + (S.ramec.bonus || 0);
+  var sazba = Math.max(0.02, rateOf() + prirazka);
+  var splatka = anuita(castka, sazba, UVER_MESICU);
+  sheet('<h3>Čerpání z rámce</h3>'
+    + '<div class="kv"><span>K dispozici</span><b>' + kcFull(volny) + '</b></div>'
+    + '<label class="fld"><span>Kolik si vezmeš</span>'
+    + '<input id="cer-amt" class="inp" type="number" min="1000" step="1000" max="' + volny + '" value="' + castka + '"></label>'
+    + '<div class="kv"><span>Úrok</span><b>' + (sazba * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>'
+    + '<div class="kv souhrn"><span>Splátka</span><b class="warn">' + kcFull(splatka) + ' / měsíc po 5 let</b></div>'
+    + '<button class="btn big" id="cer-ano">Čerpat</button>'
+    + '<button class="btn sec" id="cer-ne" style="width:100%;margin-top:8px">Zpátky</button>');
+  var inp = $('cer-amt');
+  if (inp) inp.onchange = function () { cerpatSheet(Number(inp.value) || 0); };
+  $('cer-ne').onclick = closeSheet;
+  $('cer-ano').onclick = function () {
+    var c = Math.max(1000, Math.min(ramecVolny(), Math.round((Number(inp.value) || 0) / 1000) * 1000));
+    // Krátký pohovor — tři otázky, ať to po desáté neotravuje.
+    pohovorSheet(3, 'Krátká kontrola', function (st) {
+      if (!st.ok) { toast('Rizikoř čerpání zastavil. Zkus to, až se věci srovnají.', 'err'); return; }
+      S.ramec.cerpano = (S.ramec.cerpano || 0) + c;
+      S.cash += c;
+      pricistDluh(c, prirazkaZa(c) + (S.ramec.bonus || 0), { druh: 'ramec', popis: 'Čerpání z rámce' });
+      save(); paint(); syncState(true);
+      toast('Načerpáno ' + kcFull(c) + '.', 'ok');
+    });
+  };
+}
 function uveryHtml() {
   var l = (S.loans || []).slice().sort(function (a, b) { return b.zbyva - a.zbyva; });
   if (!l.length) return '';
@@ -2018,11 +2261,16 @@ function paintBank() {
         + '<p class="fine">Mimořádná splátka jde nejdřív na nejdražší úvěr. Běžné splátky se strhávají samy každý herní měsíc.</p>' : '')
     + (S.loan > 0 && S.cash < 1 ? '<p class="fine">Splácet začneš, až síť něco vydělá.</p>' : '')
     + '</div>'
+    + ramecHtml()
     + uveryHtml()
     + cashPacksHtml();
   bindCashPacks();
   var d = $('do-ask');
   if (d) d.onclick = function () { uverSheet(); };
+  var r = $('do-ramec');
+  if (r) r.onclick = function () { ramecSheet(); };
+  var c = $('do-cerpat');
+  if (c) c.onclick = function () { cerpatSheet(); };
   var b = $('do-repay');
   if (b) b.onclick = function () {
     var pay = Math.min(S.cash, S.loan);
