@@ -411,12 +411,18 @@ function forgotPage({ email = '', error = '', done = false } = {}) {
 }
 const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: 'home' }, { id: 'acc', href: '/password', label: 'Můj účet', icon: 'user', right: true }];
 // Prodejci (user_type = seller) mají navíc záložku Můj tým
+// Výběry jsou ve vývoji — vidí je jen testeři (nicky v env VYBERY_TESTERS, výchozí holytom). Pro všechny: VYBERY_TESTERS=*
+const vyberyVisible = (s) => {
+  const list = String(process.env.VYBERY_TESTERS || 'holytom').toLowerCase().split(/[\s,;]+/).filter(Boolean);
+  return !!s && (list.includes('*') || list.includes(String(s.nick || '').toLowerCase()));
+};
 const userNav = (s) => {
   if (s && s.user_type === 'location') return [{ id: 'loc', href: '/lokalita', label: 'Moje lokality', icon: 'box' }, { id: 'anal', href: '/lokalita/analyza', label: 'Vyhledávač míst', icon: 'network' }, USER_NAV[1]];
   const nav = [USER_NAV[0], { id: 'cmp', href: '/compounder', label: 'Compounder', icon: 'sprout' }, { id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }];
   if (s && ['seller', 'standard'].includes(s.user_type)) nav.push({ id: 'team', href: '/team', label: 'Moje doporučení', icon: 'users' });
   if (s && ['seller', 'standard'].includes(s.user_type)) nav.push({ id: 'net', href: '/sit', label: 'Partnerská síť', icon: 'network' });
-  nav.push({ id: 'mine', href: '/moje-pradlomaty', label: 'Moje svoboda', icon: 'sun', dot: !!(s && s.new_docs > 0), pay: !!(s && s.unpaid_docs > 0) }, { id: 'credit', href: '/discount-credit', label: 'Discount Credit', icon: 'bolt' }, { id: 'vybery', href: '/vybery', label: 'Výběry', icon: 'wallet' });
+  nav.push({ id: 'mine', href: '/moje-pradlomaty', label: 'Moje svoboda', icon: 'sun', dot: !!(s && s.new_docs > 0), pay: !!(s && s.unpaid_docs > 0) }, { id: 'credit', href: '/discount-credit', label: 'Discount Credit', icon: 'bolt' });
+  if (vyberyVisible(s)) nav.push({ id: 'vybery', href: '/vybery', label: 'Výběry', icon: 'wallet' });
   if (s && s.ai_chat_on) nav.push({ id: 'aichat', href: '/ai-chat', label: 'AI chat', icon: 'chat' });
   nav.push(USER_NAV[1]);
   return nav;
@@ -2392,4 +2398,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { userTfaLoginPage, tfaPage, adminPartnerSupport, presenceWidget, PRESENCE_HTML, PRESENCE_CSS, PRESENCE_JS, locVopPage, locGdprPage, adminLayout, ADMIN_NAV, adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterVybery, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { userTfaLoginPage, tfaPage, adminPartnerSupport, presenceWidget, PRESENCE_HTML, PRESENCE_CSS, PRESENCE_JS, locVopPage, locGdprPage, adminLayout, ADMIN_NAV, adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterVybery, vyberyVisible, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };

@@ -1680,6 +1680,7 @@ app.get('/moje-pradlomaty/doklad/:id(\\d+)/pdf', wrap(requireUser), wrap(async (
   res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + String(d.number || 'doklad').replace(/[^\w.-]/g, '_') + '.pdf"' }).send(Buffer.from(await r.arrayBuffer()));
 }));
 app.get('/vybery', wrap(requireUser), wrap(async (req, res) => {
+  if (!V.vyberyVisible(req.user)) return res.status(404).send(V.errorPage('Stránka nenalezena', 'Tato stránka neexistuje.', '/'));
   res.send(V.supporterVybery(req.user));
 }));
 app.get('/discount-credit', wrap(requireUser), wrap(async (req, res) => {
