@@ -2872,6 +2872,17 @@ app.get('/admin/partner-support/export.xlsx', requireAdmin, wrap(async (req, res
   res.setHeader('Content-Disposition', `attachment; filename="podpora-uzivatelu-${new Date().toISOString().slice(0, 10)}.xlsx"`);
   res.send(buf);
 }));
+// Diagnostika: které sekce Přehledu podpory BS2 u uživatelů našlo (součet a počet lidí podle názvu sekce)
+app.get('/admin/support-sections', requireAdmin, wrap(async (req, res) => {
+  const rows = (await q(`SELECT sec.name AS name, count(DISTINCT s.id)::int AS users, count(*)::int AS year_rows, coalesce(sum(CASE WHEN sec.val ~ '^-?[0-9.]+$' THEN sec.val::numeric END),0)::float AS total
+    FROM supporters s, jsonb_each(s.partner_support->'std_by_year') y(year, rec), jsonb_each_text(y.rec->'sections') sec(name, val)
+    WHERE s.partner_support ? 'std_by_year' GROUP BY sec.name ORDER BY total DESC`)).rows;
+  const n0 = (v) => Math.round(Number(v) || 0).toLocaleString('cs-CZ');
+  const known = { palety: 'ST (palety)', 'opakovačky': 'ST (opakovačky)', opakovacky: 'ST (opakovačky)', expanze: 'EX (expanze)', neurawash: 'NeuraWash (mimo ST i EX)' };
+  res.send(V.adminLayout('Sekce podpory', 'vyb', req.admin, `<h1 style="margin:0 0 6px">Sekce Přehledu podpory <span class="muted" style="font-size:14px;font-weight:500">co BS2 našlo u uživatelů</span></h1>
+  <p class="small muted">Součty za všechny roky a uživatele podle názvu sekce na starém portálu. Do ST podpory se počítají jen palety a opakovačky, do EX jen expanze. Cokoli jiného (balíčky, likvidní, neznámé názvy) se nezapočítává.</p>
+  <div class="card" style="overflow-x:auto"><table><thead><tr><th>Název sekce na portálu</th><th>Započítá se jako</th><th style="text-align:right">Uživatelů</th><th style="text-align:right">Součet (měna účtu)</th></tr></thead><tbody>${rows.map(r => `<tr><td><b>${V.esc(r.name)}</b></td><td>${V.esc(known[String(r.name).toLowerCase()] || 'NEZAPOČÍTÁVÁ SE')}</td><td style="text-align:right">${n0(r.users)}</td><td style="text-align:right">${n0(r.total)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Žádná data.</td></tr>'}</tbody></table></div>`, HOLYOS_URL));
+}));
 // Export VIP a VIP 2 členů (pozice ze starého portálu) do Excelu — s ST podporou, EX podporou a součtem
 app.get('/admin/vip.xlsx', requireAdmin, wrap(async (req, res) => {
   const XLSX = require('xlsx');
