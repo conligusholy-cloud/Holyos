@@ -200,8 +200,8 @@ async function fetchLegacyStandardWithJar(jar) {
     }
     const sum = (k) => Math.round(Object.values(by).reduce((a, r) => a + (Number(r[k]) || 0), 0) * 100) / 100;
     const data = { std_by_year: by, std_years: years, std_palety_all: sum('palety'), std_opakovacky_all: sum('opakovacky'), std_expanze_all: sum('expanze'), std_neurawash_all: sum('neurawash'), std_balicky_all: sum('balicky'), std_likvidni_all: sum('likvidni'), std_ostatni_all: sum('ostatni'), std_v: 2, std_currency: cur || 'CZK', std_checked_at: new Date().toISOString() };
-    // Standardní podpora = všechny sekce Přehledu podpory kromě expanze a NeuraWash (palety, opakovačky, balíčky, likvidní, ostatní)
-    data.std_total = Math.round((data.std_palety_all + data.std_opakovacky_all + data.std_balicky_all + data.std_likvidni_all + data.std_ostatni_all) * 100) / 100;
+    // Standardní podpora = palety + opakovačky (všechny roky). Balíčky, likvidní a ostatní se do součtu nezapočítávají.
+    data.std_total = Math.round((data.std_palety_all + data.std_opakovacky_all) * 100) / 100;
     if (data.std_currency === 'EUR') { try { const c = await cnbEurRate(); data.std_total_czk = Math.round(data.std_total * c.rate * 100) / 100; data.std_eur_rate = c.rate; data.std_eur_rate_date = c.date; } catch (e) { /* bez kurzu */ } }
     else data.std_total_czk = data.std_total;
     return { ok: true, data };

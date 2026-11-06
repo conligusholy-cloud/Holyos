@@ -117,6 +117,15 @@ async function migrate() {
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'CZK';
     -- Tester: vidí funkce ve vývoji (např. záložku Výběry)
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS vybery_tester BOOLEAN NOT NULL DEFAULT false;
+    -- Standardní podpora = palety + opakovačky: přepočet už uložených hodnot (idempotentní)
+    UPDATE supporters SET partner_support = partner_support || jsonb_build_object(
+        'std_total', round(((partner_support->>'std_palety_all')::numeric + (partner_support->>'std_opakovacky_all')::numeric), 2),
+        'std_total_czk', CASE WHEN partner_support->>'std_currency' = 'EUR'
+            THEN CASE WHEN partner_support->>'std_eur_rate' ~ '^[0-9.]+$' THEN round(((partner_support->>'std_palety_all')::numeric + (partner_support->>'std_opakovacky_all')::numeric) * (partner_support->>'std_eur_rate')::numeric, 2) ELSE partner_support->'std_total_czk' END
+            ELSE round(((partner_support->>'std_palety_all')::numeric + (partner_support->>'std_opakovacky_all')::numeric), 2) END)
+      WHERE partner_support->>'std_palety_all' ~ '^-?[0-9.]+$' AND partner_support->>'std_opakovacky_all' ~ '^-?[0-9.]+$'
+        AND (partner_support->>'std_total' IS DISTINCT FROM round(((partner_support->>'std_palety_all')::numeric + (partner_support->>'std_opakovacky_all')::numeric), 2)::text
+             AND NOT (partner_support->>'std_total' ~ '^-?[0-9.]+$' AND (partner_support->>'std_total')::numeric = round(((partner_support->>'std_palety_all')::numeric + (partner_support->>'std_opakovacky_all')::numeric), 2)));
 
     -- Objednávky z Prádlomatů (Koupit): admin potvrdí → vznikne nákup + provize; zrušením se vrátí uplatněné DC
     CREATE TABLE IF NOT EXISTS orders (
