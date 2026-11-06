@@ -909,10 +909,12 @@ function refreshUnits() {
   });
 }
 function monthlyProfit() { return S.units.reduce(function (a, u) { return a + u.eco.profit; }, 0); }
-// Co hráči z provozu opravdu zbyde: síť vydělá, banka si vezme úrok.
-// Pozor: do tick() patří dál monthlyProfit(), tam se úrok odečítá zvlášť —
-// kdyby se počítalo s čistým ziskem, strhl by se dvakrát.
-function cistyZisk() { return monthlyProfit() - urokMesicne() - pobockyMesicne() - cetaMesicne(); }
+// Co hráči na konci měsíce opravdu zbyde: co síť vydělá, minus všechno, co
+// se platí pořád — celá splátka bance (úrok i jistina), pobočky a četa.
+// Jedno číslo, jedna definice: stejně se počítá v hlavičce i v panelu Síť.
+// Pozor: do tick() patří dál monthlyProfit(), tam se splátky stráhají zvlášť —
+// kdyby se počítalo s čistým ziskem, strhly by se dvakrát.
+function cistyZisk() { return monthlyProfit() - splatkyMesicne() - pobockyMesicne() - cetaMesicne(); }
 function yearlyProfit() { return monthlyProfit() * 12; }
 function tick() {
   refreshUnits();
@@ -2291,17 +2293,28 @@ function pobockaSheet() {
   });
 }
 function paintNet() {
+  // Dlaždice se čtou shora dolů jako výpis: co síť vydělá, co z toho odteče,
+  // a co zbyde. Aby to sedělo, musí každé číslo vycházet ze stejného základu.
+  var zbyde = cistyZisk();
   $('net-sum').innerHTML = '<div><span>Prádlomaty</span><b>' + S.units.length + '</b></div>'
-    + '<div><span>Zisk / měsíc</span><b class="' + (cistyZisk() < 0 ? 'err' : 'ok') + '">' + kc(cistyZisk()) + '</b></div>'
+    + '<div><span>Zisk prádlomatů</span><b class="' + (monthlyProfit() < 0 ? 'err' : 'ok') + '">' + kc(monthlyProfit()) + '</b></div>'
     + (splatkyMesicne() > 0
         ? '<div><span>Splátky bance</span><b class="warn">' + kc(-splatkyMesicne()) + '</b></div>' : '')
     + (pobockyMesicne() > 0
         ? '<div><span>Provoz poboček</span><b class="warn">' + kc(-pobockyMesicne()) + '</b></div>' : '')
-    + (splatkyMesicne() + pobockyMesicne() > 0
-        ? '<div><span>Zbyde měsíčně</span><b class="' + (monthlyProfit() - splatkyMesicne() - pobockyMesicne() >= 0 ? 'ok' : 'err') + '">'
-          + kc(monthlyProfit() - splatkyMesicne() - pobockyMesicne()) + '</b></div>' : '')
+    + (cetaMesicne() > 0
+        ? '<div><span>Vlastní četa</span><b class="warn">' + kc(-cetaMesicne()) + '</b></div>' : '')
+    + '<div><span>Zbyde měsíčně</span><b class="' + (zbyde >= 0 ? 'ok' : 'err') + '">' + kc(zbyde) + '</b></div>'
     + '<div><span>Investováno</span><b>' + kc(investedTotal()) + '</b></div>'
     + '<div><span>Vyděláno celkem</span><b>' + kc(S.stats.earned) + '</b></div>';
+  var note = $('net-note');
+  if (note) {
+    note.textContent = splatkyMesicne() > 0
+      ? 'Ze splátky ' + kcFull(splatkyMesicne()) + ' je úrok ' + kcFull(urokMesicne())
+        + ' — ten je navždy pryč. Zbytek, ' + kcFull(Math.max(0, splatkyMesicne() - urokMesicne()))
+        + ', umazává dluh, takže se ti o to zvyšuje majetek. „Zbyde měsíčně“ je to samé číslo, co svítí nahoře v hlavičce.'
+      : 'Nikomu nic nesplácíš, takže ti zůstává celý zisk prádlomatů.';
+  }
   if (!S.units.length) {
     $('net-list').innerHTML = zakladnyHtml() + cetaHtml()
       + '<div class="empty">Zatím nemáš ani jeden prádlomat.<br>Začni tím, že na mapě prozkoumáš oblast.</div>';
