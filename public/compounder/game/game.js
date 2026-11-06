@@ -4032,8 +4032,9 @@ countIncomingRef();   // ještě než se rozhodne, jestli je co rozehraného
 S = load();
 // Přihlášený hráč má přednost: síť ze serveru přebije to, co leží v prohlížeči,
 // protože mohl mezitím hrát jinde.
-// Posíláme svoje sdílené id — server si ho zabere, pokud ještě žádné nemáme.
-api('/account/me?ref=' + encodeURIComponent(trvalePid())).then(function (r) {
+// Posíláme id, které nesou naše rozeslané odkazy — server si ho zabere, pokud
+// ještě žádné nemáme, a doplní všem, kdo přes něj přišli, vazbu na nás.
+api('/account/me?ref=' + encodeURIComponent((S && S.pid) || trvalePid())).then(function (r) {
   if (r.ok && r.j.player) {
     ME = r.j.player;
     var srv = r.j.state;
