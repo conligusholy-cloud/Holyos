@@ -3332,7 +3332,8 @@ function cashPacksHtml() {
   }
   if (!CASH_CAT) return '<div class="card"><h3>Dobít banku</h3><p class="muted small" style="margin:2px 0 0">Načítám…</p></div>';
   return '<div class="card"><h3>Dobít banku</h3>'
-    + '<p class="muted small" style="margin:2px 0 10px">Laundry na ruku. Čím větší balík, tím víc jich dostaneš za korunu.</p>'
+    + '<p class="muted small" style="margin:2px 0 10px">Zvedne ti volný rámec v bance — peníze si pak půjčíš, '
+    + 'jak budeš potřebovat. Čím větší balík, tím víc laundrů za korunu.</p>'
     + CASH_CAT.map(function (c) {
       return '<div class="pack" data-pack="' + c.kind + '">'
         + '<div class="pack-l"><b>' + kcFull(c.laundry) + '</b>'
@@ -3352,7 +3353,7 @@ function buyCash(kind) {
   if (!ME) return toast('Nejdřív se přihlas.', 'err');
   if (!ME.has_details) return detailsSheet(null, kind);
   sheet('<h3>' + esc(c.name) + '</h3>'
-    + '<div class="kv"><span>Dostaneš</span><b class="ok">' + kcFull(c.laundry) + '</b></div>'
+    + '<div class="kv"><span>Rámec v bance se zvedne o</span><b class="ok">' + kcFull(c.laundry) + '</b></div>'
     + '<div class="kv"><span>Cena</span><b>' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</b></div>'
     + '<div class="kv"><span>Za korunu</span><b>' + c.per_czk.toLocaleString('cs-CZ') + ' L$</b></div>'
     + '<div class="kv"><span>Platí</span><b>' + esc(ME.first_name + ' ' + ME.last_name) + '</b></div>'
@@ -3380,11 +3381,14 @@ function claimCash(then) {
   }
   if (!k) { if (then) then(); return; }
   apiJson('/cards/use', { kind: k }).then(function (r) {
-    if (r.ok && r.j.result && r.j.result.effect === 'cash') {
-      S.cash += r.j.result.amount;
+    var v = r.ok && r.j.result;
+    if (v && (v.effect === 'cash' || v.effect === 'ramec')) {
+      // Hotovost přidaná z administrace jde do kapsy, koupený balíček do rámce.
+      if (v.effect === 'ramec') S.bank += v.amount;
+      else S.cash += v.amount;
       ME.cards = r.j.owned;
       save(); paint(); syncState(true);
-      toast(r.j.result.msg, 'ok');
+      toast(v.msg, 'ok');
       return claimCash(then);   // může jich čekat víc
     }
     if (then) then();

@@ -496,9 +496,12 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
       const castka = Math.max(0, card.amount || 0);
       result = { effect: 'cash', amount: castka, msg: 'Na účet ti přistálo ' + castka.toLocaleString('cs-CZ') + ' L$.' };
     } else if (CASH[kind]) {
+      // Zakoupené balíčky dobíjejí rámec v bance, ne hotovost — proto se to
+      // jmenuje „Dobít banku". Hráč si pak peníze půjčí, jak potřebuje.
       const c = await item(kind);
       const castka = (c && c.laundry) || CASH[kind].laundry;
-      result = { effect: 'cash', amount: castka, msg: 'Na účet ti přistálo ' + castka.toLocaleString('cs-CZ') + ' L$.' };
+      result = { effect: 'ramec', amount: castka,
+        msg: 'Rámec v bance se zvedl o ' + castka.toLocaleString('cs-CZ') + ' L$.' };
     } else {
       result = EFFECTS[kind]();
     }
