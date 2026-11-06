@@ -710,6 +710,8 @@ const TAKEOVER_MIN = 1.2;   // nabídka musí být aspoň o pětinu vyšší
 const BID_FEE = 5000;       // co stojí neúspěšné vyjednávání (informativní, strhne klient)
 
 const claimPub = (c, me, firmy) => ({
+  // Id majitele potřebuje klient na to, aby mu šlo napsat do chatu.
+  id: c.player_id,
   spot_id: c.spot_id, area_key: c.area_key, nick: c.nick,
   firma: (firmy && firmy[c.player_id] && firmy[c.player_id].firma) || (c.nick + ' s.r.o.'),
   znak: (firmy && firmy[c.player_id] && firmy[c.player_id].znak) || null,

@@ -1421,7 +1421,10 @@ function cizi(c) {
     + ' — bez toho nevíš, kolik tu chodí lidí ani jestli se sem vyplatí jít. '
     + 'Pošli tam člověka a pak se můžeš pokusit nájem přeplatit.</p>'
     + '<button class="btn big" id="go-scout-here">Prozkoumat ' + (mesto ? esc(mesto) : 'tohle město') + ' za ' + kcFull(SCOUT_COST) + '</button>'
-    + (S.cash < SCOUT_COST ? '<p class="fine err">Na cestu nemáš dost hotovosti.</p>' : ''));
+    + (S.cash < SCOUT_COST ? '<p class="fine err">Na cestu nemáš dost hotovosti.</p>' : '')
+    + (c.id ? '<button class="btn ghost" id="cizi-napsat" style="width:100%;margin-top:8px">Napsat majiteli</button>' : ''));
+  var cn = $('cizi-napsat');
+  if (cn) cn.onclick = function () { chatSheet(c.id); };
   var b = $('go-scout-here');
   if (b) b.onclick = function () {
     if (S.cash < SCOUT_COST) return toast('Na cestu nemáš dost hotovosti.', 'err');
@@ -1971,7 +1974,11 @@ function rivalSheet(sp, areaId, c) {
         + '<button class="btn big" id="do-bid">Zkusit přeplatit</button>'
       : '<p class="fine err">Nemáš na skladě žádný prádlomat. Abys tohle místo přebral, '
         + 'musíš mít volný stroj — konkurenta vystřídáš jedině tak, že na jeho místo hned postavíš svůj.</p>'
-        + '<button class="btn big" id="go-shop-bid">Koupit prádlomat v obchodě</button>'));
+        + '<button class="btn big" id="go-shop-bid">Koupit prádlomat v obchodě</button>')
+    + (c.id ? '<button class="btn ghost" id="bid-napsat" style="width:100%;margin-top:8px">Napsat majiteli</button>'
+        + '<p class="fine">Místo jde i koupit po dobrém — dohodni se s ním ve zprávách.</p>' : ''));
+  var bn = $('bid-napsat');
+  if (bn) bn.onclick = function () { chatSheet(c.id); };
   var gs = $('go-shop-bid');
   if (gs) gs.onclick = function () { closeSheet(); switchTab('shop'); };
   var b = $('do-bid');
