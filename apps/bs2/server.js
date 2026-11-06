@@ -2872,6 +2872,39 @@ app.get('/admin/partner-support/export.xlsx', requireAdmin, wrap(async (req, res
   res.setHeader('Content-Disposition', `attachment; filename="podpora-uzivatelu-${new Date().toISOString().slice(0, 10)}.xlsx"`);
   res.send(buf);
 }));
+// Export VIP a VIP 2 členů (pozice ze starého portálu) do Excelu — s ST podporou, EX podporou a součtem
+app.get('/admin/vip.xlsx', requireAdmin, wrap(async (req, res) => {
+  const XLSX = require('xlsx');
+  const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,
+      partner_support->>'position' AS pos, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency,
+      partner_support->>'std_total' AS std_total, partner_support->>'std_currency' AS std_currency, partner_support->>'std_total_czk' AS std_total_czk,
+      partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->>'exp_invested' AS exp_invested,
+      ${EX_CZK} AS ex_czk,
+      CASE WHEN partner_support->>'currency'='EUR' THEN partner_support->>'total_all_czk' ELSE partner_support->>'total_all' END AS celkem_czk,
+      partner_support->'std_check'->>'ok' AS std_check_ok
+      FROM supporters WHERE partner_support->>'position' IN ('VIP','VIP 2') ORDER BY partner_support->>'position' DESC, lower(coalesce(last_name,'')), lower(coalesce(first_name,''))`)).rows;
+  const ENT = { aacute: 'á', eacute: 'é', iacute: 'í', oacute: 'ó', uacute: 'ú', yacute: 'ý', Aacute: 'Á', Eacute: 'É', Iacute: 'Í', Oacute: 'Ó', Uacute: 'Ú', Yacute: 'Ý', scaron: 'š', Scaron: 'Š', ccaron: 'č', Ccaron: 'Č', rcaron: 'ř', Rcaron: 'Ř', zcaron: 'ž', Zcaron: 'Ž', ecaron: 'ě', Ecaron: 'Ě', ncaron: 'ň', Ncaron: 'Ň', tcaron: 'ť', Tcaron: 'Ť', dcaron: 'ď', Dcaron: 'Ď', uring: 'ů', Uring: 'Ů', ouml: 'ö', uuml: 'ü', auml: 'ä', amp: '&', quot: '"', apos: "'", nbsp: ' ' };
+  const txt = (v) => { const s = String(v == null ? '' : v).replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (m, e) => e[0] === '#' ? String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)) : (ENT[e] || m)).trim(); return /^null$/i.test(s) ? '' : s; };
+  const n = (v) => (v == null || v === '' || !isFinite(Number(v)) ? null : Number(v));
+  const data = rows.map((r, i) => {
+    const st = n(r.std_total_czk), ex = n(r.ex_czk);
+    return { '#': i + 1, 'Pozice': r.pos, 'Příjmení': txt(r.last_name), 'Jméno': txt(r.first_name), 'Nick': txt(r.nick), 'E-mail': r.email, 'Stav účtu': r.status,
+      'ST podpora (Kč)': st, 'EX podpora (Kč)': ex, 'EX + ST podpora (Kč)': (st != null || ex != null) ? (st || 0) + (ex || 0) : null,
+      'PIV vloženo (v měně účtu)': n(r.piv_total), 'Měna PIV': r.piv_total != null ? (r.piv_currency || 'CZK') : '',
+      'Celkem podpořil (Kč)': n(r.celkem_czk), 'Kontrola čtení': r.std_check_ok === 'true' ? 'sedí' : r.std_check_ok === 'false' ? 'NESEDÍ' : 'neověřeno',
+      'Odkaz BS2': (process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz') + '/admin/supporters/' + r.id };
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [4, 8, 18, 14, 16, 30, 9, 16, 16, 18, 16, 8, 16, 12, 42].map((w) => ({ wch: w }));
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: data.length, c: Object.keys(data[0] || { a: 1 }).length - 1 } }) };
+  XLSX.utils.book_append_sheet(wb, ws, 'VIP');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  await log(req.admin, 'vip_export', { rows: data.length });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="vip-clenove-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+  res.send(buf);
+}));
 app.get('/admin/partner-support', requireAdmin, wrap(async (req, res) => {
   const qs = String(req.query.q || '').trim(); const onlyDiff = req.query.diff === '1';
   const params = []; let where = "partner_support->>'synced_at' IS NOT NULL";

@@ -38,6 +38,23 @@ const num = (s) => { const t = String(s || '').replace(/[^\d,-]/g, '').replace('
 // měna: účty ze SK/EU mají podporu v eurech („535 eur"), CZ v korunách („1 582 czk")
 const CUR = '(czk|kč|kc|eur|€)';
 const curOf = (s) => (/eur|€/i.test(String(s || '')) ? 'EUR' : 'CZK');
+// Řádky nákupů v sekci: „typ [kiosek] částka czk datum“ (buňky tabulky jsou po htmlToText na samostatných řádcích).
+// U palet kód typu nese částku (P500 = 500 Kč, P12500 = 12 500 Kč) → tím se odliší číslo kiosku od částky
+// („P500 43 500 czk“ = kiosek 43, 500 Kč; „P36500 36 500 czk“ = bez kiosku, 36 500 Kč).
+function parseRows(block) {
+  const flat = String(block || '').replace(/[\s ]+/g, ' ');
+  const re = new RegExp('(\\p{L}+\\d*)\\s+([\\d ]+?)\\s*' + CUR + '\\s+(\\d{2}\\.\\d{2}\\.\\d{4})', 'giu');
+  const rows = []; let issues = 0; let m;
+  while ((m = re.exec(flat))) {
+    const type = m[1], tail = m[2].replace(/ /g, ''), pm = /^P(\d+)$/i.exec(type);
+    let amount = null;
+    if (pm) { const N = pm[1]; if (tail === N || tail.endsWith(N)) amount = Number(N); else { amount = Number(tail); issues++; } }
+    else amount = Number(tail);
+    if (!isFinite(amount)) { amount = 0; issues++; }
+    rows.push({ type, amount, date: m[5] });
+  }
+  return { rows, issues, sum: Math.round(rows.reduce((a, r) => a + r.amount, 0) * 100) / 100 };
+}
 function parseInvests(text) {
   const out = {};
   let m = text.match(new RegExp('(\\d{4}) jste podpořili:\\s*\\n?\\s*([\\d\\s ,.]+)\\s*' + CUR, 'i'));
@@ -49,7 +66,16 @@ function parseInvests(text) {
   out.sections = {};
   const re = new RegExp('Seznam vaší podpory\\s*-\\s*([^:\\n]+):([\\s\\S]*?)Celkem:\\s*([\\d\\s ,.]+)\\s*' + CUR, 'gi');
   let s;
-  while ((s = re.exec(text))) { const name = s[1].trim(); const k = map[name.toLowerCase()]; const v = num(s[3]); out.sections[name] = (out.sections[name] || 0) + (v || 0); if (k) out[k] = (out[k] || 0) + (v || 0); }
+  out.row_checks = []; // kontrola po řádcích: součet jednotlivých nákupů vs. „Celkem“ sekce
+  while ((s = re.exec(text))) {
+    const name = s[1].trim(); const k = map[name.toLowerCase()]; const celkem = num(s[3]) || 0;
+    const pr = parseRows(s[2]);
+    // hodnota sekce = součet jednotlivých nákupů (pokud se řádky přečetly bez problémů), jinak „Celkem“ portálu
+    const useRows = pr.rows.length > 0 && pr.issues === 0;
+    const v = useRows ? pr.sum : celkem;
+    out.row_checks.push({ section: name, rows: pr.rows.length, rows_sum: pr.sum, portal: celkem, issues: pr.issues, ok: useRows && Math.abs(pr.sum - celkem) <= 0.5 });
+    out.sections[name] = (out.sections[name] || 0) + v; if (k) out[k] = (out[k] || 0) + v;
+  }
   for (const k of ['palety', 'expanze', 'neurawash', 'opakovacky', 'balicky', 'likvidni']) if (out[k] == null) out[k] = 0;
   if (!out.currency) out.currency = 'CZK';
   return out;
@@ -196,7 +222,8 @@ async function fetchLegacyStandardWithJar(jar) {
       // „ostatni“ = sekce, které neznáme jménem — započtou se do standardní podpory (vše kromě expanze a NeuraWash)
       const known = (d.palety || 0) + (d.opakovacky || 0) + (d.expanze || 0) + (d.neurawash || 0) + (d.balicky || 0) + (d.likvidni || 0);
       const secSum = Object.values(d.sections || {}).reduce((a, v) => a + (v || 0), 0);
-      const rec = { palety: d.palety || 0, opakovacky: d.opakovacky || 0, balicky: d.balicky || 0, likvidni: d.likvidni || 0, ostatni: Math.round((secSum - known) * 100) / 100, expanze: d.expanze || 0, neurawash: d.neurawash || 0, total_year: d.total_year || 0, sections: d.sections || {} };
+      const rec = { palety: d.palety || 0, opakovacky: d.opakovacky || 0, balicky: d.balicky || 0, likvidni: d.likvidni || 0, ostatni: Math.round((secSum - known) * 100) / 100, expanze: d.expanze || 0, neurawash: d.neurawash || 0, total_year: d.total_year || 0, sections: d.sections || {}, checks: (d.row_checks || []).map((c) => ({ s: c.section, n: c.rows, sum: c.rows_sum, p: c.portal, ok: !!c.ok })) };
+      for (const c of (d.row_checks || [])) if (!c.ok) bad.push({ y, section: c.section, portal: c.portal, parsed: c.rows_sum, diff: Math.round((c.portal - c.rows_sum) * 100) / 100, rows: c.rows, issues: c.issues });
       if (d.total_year != null && Math.abs(Number(d.total_year) - secSum) > 0.5) bad.push({ y, portal: Number(d.total_year), parsed: Math.round(secSum * 100) / 100, diff: Math.round((Number(d.total_year) - secSum) * 100) / 100 });
       if (rec.palety || rec.opakovacky || rec.balicky || rec.likvidni || rec.ostatni || rec.expanze || rec.neurawash || rec.total_year) by[y] = rec;
     }
