@@ -1048,6 +1048,25 @@ function serveCompounderPage(file) {
     res.sendFile(path.join(COMPOUNDER_DIR, file));
   };
 }
+// Laundromats Milionář — hra se mění často a WebView ve Velínu si soubory drží
+// v mezipaměti. Do adresy skriptu a stylu proto vkládáme verzi podle času jejich
+// poslední změny: po každém nasazení je adresa jiná a nikdo nekouká na starou hru.
+function serveGamePage(req, res) {
+  const dir = path.join(COMPOUNDER_DIR, 'game');
+  let v = '1';
+  try {
+    const js = fs.statSync(path.join(dir, 'game.js')).mtimeMs;
+    const css = fs.statSync(path.join(dir, 'game.css')).mtimeMs;
+    v = String(Math.round(Math.max(js, css)));
+  } catch (e) { /* když se čas nepovede zjistit, stránku pošleme beze změny */ }
+  fs.readFile(path.join(dir, 'index.html'), 'utf8', (err, html) => {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    if (err) return res.sendFile(path.join(dir, 'index.html'));
+    res.type('html').send(html
+      .replace('/game/game.css', '/game/game.css?v=' + v)
+      .replace('/game/game.js', '/game/game.js?v=' + v));
+  });
+}
 const serveVlastniKapital = serveCompounderPage('vlastni-kapital.html');
 const serveFinancovani = serveCompounderPage('financovani.html');
 const serveSchuzka = serveCompounderPage('schuzka.html');
@@ -1082,7 +1101,7 @@ app.use((req, res, next) => {
   if (req.path === '/location' || req.path === '/location/') return serveLocationOverview(req, res);
   if (req.path === '/misto' || req.path === '/misto/') return serveMisto(req, res);
   // Laundromats Milionář — hra o budování sítě prádlomatů (zatím jen na doménách prádlomatů).
-  if (req.path === '/game' || req.path === '/game/') return serveCompounderPage('game/index.html')(req, res);
+  if (req.path === '/game' || req.path === '/game/') return serveGamePage(req, res);
   if (req.path === '/ai' || req.path === '/ai/') return serveAiSpecialist(req, res);
   // Zkrácený odkaz na AI specialistu: /s/<kód> → 302 na /ai?t=<token>.
   if (req.path.startsWith('/s/')) {
