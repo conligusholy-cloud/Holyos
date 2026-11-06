@@ -2296,15 +2296,21 @@ function paintNet() {
   // Dlaždice se čtou shora dolů jako výpis: co síť vydělá, co z toho odteče,
   // a co zbyde. Aby to sedělo, musí každé číslo vycházet ze stejného základu.
   var zbyde = cistyZisk();
+  var odtece = splatkyMesicne() + pobockyMesicne() + cetaMesicne();
   $('net-sum').innerHTML = '<div><span>Prádlomaty</span><b>' + S.units.length + '</b></div>'
-    + '<div><span>Zisk prádlomatů</span><b class="' + (monthlyProfit() < 0 ? 'err' : 'ok') + '">' + kc(monthlyProfit()) + '</b></div>'
+    // Dokud se nemá co odečítat, je zisk prádlomatů zároveň tím, co zbyde —
+    // dvě stejná čísla vedle sebe by jen pletla.
+    + (odtece > 0
+        ? '<div><span>Zisk před splátkou</span><b class="' + (monthlyProfit() < 0 ? 'err' : 'ok') + '">' + kc(monthlyProfit()) + '</b></div>'
+        : '<div><span>Zisk / měsíc</span><b class="' + (zbyde < 0 ? 'err' : 'ok') + '">' + kc(zbyde) + '</b></div>')
     + (splatkyMesicne() > 0
         ? '<div><span>Splátky bance</span><b class="warn">' + kc(-splatkyMesicne()) + '</b></div>' : '')
     + (pobockyMesicne() > 0
         ? '<div><span>Provoz poboček</span><b class="warn">' + kc(-pobockyMesicne()) + '</b></div>' : '')
     + (cetaMesicne() > 0
         ? '<div><span>Vlastní četa</span><b class="warn">' + kc(-cetaMesicne()) + '</b></div>' : '')
-    + '<div><span>Zbyde měsíčně</span><b class="' + (zbyde >= 0 ? 'ok' : 'err') + '">' + kc(zbyde) + '</b></div>'
+    + (odtece > 0
+        ? '<div><span>Zbyde měsíčně</span><b class="' + (zbyde >= 0 ? 'ok' : 'err') + '">' + kc(zbyde) + '</b></div>' : '')
     + '<div><span>Investováno</span><b>' + kc(investedTotal()) + '</b></div>'
     + '<div><span>Vyděláno celkem</span><b>' + kc(S.stats.earned) + '</b></div>';
   var note = $('net-note');
@@ -2325,7 +2331,18 @@ function paintNet() {
     return '<div class="card" data-unit="' + esc(u.spotId) + '">'
       + '<div class="row"><h3>' + esc(u.name) + '</h3>' + verdictPill(u.score) + '</div>'
       + '<p class="muted small" style="margin:2px 0 6px">' + esc(KIND_LABEL[u.kind] || 'Místo') + ' · ' + MODELS[u.eco.model].name + '</p>'
-      + '<div class="row"><span class="muted small">Zisk / měsíc</span><b class="ok">' + kcFull(u.eco.profit) + '</b></div></div>';
+      + (function () {
+        var l = uverMista(u);
+        if (!l) return '<div class="row"><span class="muted small">Zisk / měsíc</span><b class="ok">' + kcFull(u.eco.profit) + '</b></div></div>';
+        // Místo na dluh: číslo před splátkou je jen mezikrok, rozhoduje to pod ním.
+        var urok = l.zbyva * l.sazba / 12;
+        var splatka = Math.min(l.splatka, l.zbyva + urok);
+        var cisty = u.eco.profit - splatka;
+        return '<div class="row"><span class="muted small">Zisk před splátkou</span><b>' + kcFull(u.eco.profit) + '</b></div>'
+          + '<div class="row"><span class="muted small">− Splátka úvěru</span><b class="warn">' + kcFull(Math.round(splatka)) + '</b></div>'
+          + '<div class="row"><span class="muted small">Zbyde z místa</span><b class="' + (cisty >= 0 ? 'ok' : 'err') + '">'
+          + kcFull(Math.round(cisty)) + '</b></div></div>';
+      })();
   }).join('');
   [].forEach.call($('net-list').querySelectorAll('[data-unit]'), function (c) {
     c.onclick = function () { unitSheet(S.units.filter(function (u) { return u.spotId === c.getAttribute('data-unit'); })[0]); };

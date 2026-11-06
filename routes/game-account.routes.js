@@ -178,8 +178,7 @@ async function pub(p) {
 }
 
 // Sazby profilů — musí sedět s PROFILES v public/compounder/game/game.js.
-// Server je potřebuje jen na to, aby žebříček počítal zisk po úrocích stejně
-// jako hra v prohlížeči.
+// Server je potřebuje jen tehdy, když uložená síť ještě nemá rozepsané úvěry.
 const PROFIL_SAZBA = { opatrny: 0.096, vyvazeny: 0.114, dravy: 0.132 };
 function urokMesicne(st) {
   const dluh = Number(st && st.loan) || 0;
@@ -187,6 +186,18 @@ function urokMesicne(st) {
   const zaklad = PROFIL_SAZBA[st.profile] != null ? PROFIL_SAZBA[st.profile] : 0.114;
   const sazba = Math.max(0.02, zaklad - (Number(st.rateDrop) || 0) + (Number(st.loanPrem) || 0));
   return Math.round(dluh * sazba / 12);
+}
+// Celá měsíční splátka — úrok i jistina, stejně jako splatkyMesicne() ve hře.
+// Stará síť bez pole `loans` umí nanejvýš úrok, takže se vrátí aspoň ten.
+function splatkyMesicne(st) {
+  const uvery = Array.isArray(st && st.loans) ? st.loans : null;
+  if (!uvery) return urokMesicne(st);
+  return Math.round(uvery.reduce((a, l) => {
+    const zbyva = Number(l && l.zbyva) || 0;
+    if (zbyva <= 0) return a;
+    const urok = zbyva * (Number(l.sazba) || 0) / 12;
+    return a + Math.min(Number(l.splatka) || 0, zbyva + urok);
+  }, 0));
 }
 
 // ─── Distributor ────────────────────────────────────────────────────────────
@@ -564,11 +575,14 @@ async function zebricky() {
   hraci.forEach((h) => {
     const st = h.state || {};
     const units = Array.isArray(st.units) ? st.units : [];
-    // Zisk po úrocích — kdo staví na dluh, má menší skutečný výdělek.
-    // Musí se počítat stejně jako v prohlížeči, jinak by žebříček ukazoval něco
-    // jiného než hráčova hlavička.
+    // To, co hráči opravdu zbyde: provozní zisk minus celá splátka, pobočky
+    // a četa. Musí to být to samé číslo, co mu svítí v hlavičce jako „Zbyde“ —
+    // jinak by žebříček říkal něco jiného než hra.
     const provozni = units.reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0);
-    const mesicne = provozni - urokMesicne(st);
+    const pobocky = (Array.isArray(st.pobocky) ? st.pobocky.length : 0) * 15000;
+    const ceta = (st.ceta && st.ceta.od)
+      ? 80000 + (st.ceta.shanec ? 50000 : 0) + (Number(st.ceta.phm) || 0) : 0;
+    const mesicne = provozni - splatkyMesicne(st) - pobocky - ceta;
     const fi = h.company || (h.nick + ' s.r.o.');
     if (mesicne > 0) zisk.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, hodnota: Math.round(mesicne) });
     if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, hodnota: st.refs });
