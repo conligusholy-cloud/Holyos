@@ -339,3 +339,10 @@ button{font:inherit;cursor:pointer}
   line-height: 12px; width: 12px; height: 12px; border-radius: 50%;
   background: var(--vio); color: #fff; font-weight: 700;
 }
+
+/* ---- Jednotlivé úvěry v bance ----------------------------------------- */
+.uver { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-top: 10px; }
+.uver.dluzi { border-color: rgba(255, 93, 108, .55); }
+.uver-hl { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.uver-hl b { font-size: 14px; }
+.uver-hl span { font-size: 12px; color: var(--text2); font-variant-numeric: tabular-nums; }
