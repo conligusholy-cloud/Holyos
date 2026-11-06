@@ -252,66 +252,71 @@ async function kdoPrivedl(stavitel) {
   return zvouci;
 }
 
-// Vyplatí provizi tomu, kdo stavitele do hry přivedl. Peníze přijdou jako
-// doručenka, kterou si hráč vyzvedne při nejbližším otevření hry.
-async function vyplatProvizi(stavitel, model, nazevMista, spotId) {
-  const zvouci = await kdoPrivedl(stavitel);
-  if (!zvouci) {
-    console.log('[game] provize: ' + (stavitel && stavitel.nick) + ' nema zapsaneho zvouciho');
-    return;
-  }
-  if (!distAktivni(zvouci)) {
-    console.log('[game] provize: ' + zvouci.nick + ' nema aktivni distribuci (do ' + zvouci.distributor_do + ')');
-    return;
-  }
-  const cena = CENY_STROJU[model] || CENY_STROJU.mini;
-  const provize = Math.round(cena * DIST_PROVIZE);
-  await prisma.gameDelivery.create({
-    data: { player_id: zvouci.id, kind: 'cash', amount: provize, spot_id: spotId || null,
-      popis: 'Provize ' + provize.toLocaleString('cs-CZ') + ' L$ — ' + stavitel.nick
-        + ' postavil ' + String(model).toUpperCase() + (nazevMista ? ' (' + nazevMista + ')' : '') },
-  });
-  await prisma.gamePlayer.update({ where: { id: zvouci.id },
-    data: { provize_celkem: { increment: provize } } });
-  console.log('[game] provize ' + provize + ' L$ pro ' + zvouci.nick + ' za stavbu ' + stavitel.nick);
+// Provize se platí za koupený stroj — hned, ne až když ho někdo postaví.
+// Stroje čteme z uložené sítě pozvaného: co už stojí, co je na cestě a co
+// čeká skladem. Každý kus se platí nejvýš jednou — doručenka si pamatuje klíč.
+function strojeHrace(st) {
+  if (!st) return [];
+  const out = [];
+  (Array.isArray(st.units) ? st.units : []).forEach((u) => out.push((u && u.eco && u.eco.model) || 'mini'));
+  (Array.isArray(st.orders) ? st.orders : []).forEach((o) => out.push((o && o.model) || 'mini'));
+  const sk = (st.stock && typeof st.stock === 'object') ? st.stock : {};
+  Object.keys(sk).forEach((k) => { for (let i = 0; i < (Number(sk[k]) || 0); i++) out.push(k); });
+  return out;
 }
-
-// Dorovná provize, které nevznikly v okamžiku stavby. Stává se to, když se
-// vazba „kdo koho přivedl“ doplnila až později — pak už byl prádlomat dávno
-// postavený. Počítá se jen to, co vzniklo v průběhu zaplaceného období, a
-// každé místo nejvýš jednou — doručenka si pamatuje, za které místo to bylo.
+// Dopočítá všechno, co zvoucímu ještě nebylo vyplaceno. Běží při každém nákupu
+// stroje v jeho síti i při otevření záložky Já, takže dohná i to, co vzniklo
+// dřív, než si distribuci zaplatil.
 async function dorovnejProvize(zvouci) {
   if (!distAktivni(zvouci)) return 0;
-  const od = new Date(new Date(zvouci.distributor_do).getTime() - MESIC_MS);
   const lide = await prisma.gamePlayer.findMany({
-    where: { invited_by_id: zvouci.id }, select: { id: true, nick: true } });
+    where: { invited_by_id: zvouci.id }, select: { id: true, nick: true, state: true } });
   if (!lide.length) return 0;
-  const mista = await prisma.gameSpotClaim.findMany({
-    where: { player_id: { in: lide.map((h) => h.id) }, created_at: { gte: od } } });
-  if (!mista.length) return 0;
   const hotove = await prisma.gameDelivery.findMany({
-    where: { player_id: zvouci.id, kind: 'cash', spot_id: { in: mista.map((m) => m.spot_id) } },
+    where: { player_id: zvouci.id, kind: 'cash', popis: { startsWith: 'Provize' } },
     select: { spot_id: true } });
-  const jiz = new Set(hotove.map((d) => d.spot_id));
+  const klice = new Set(hotove.map((d) => d.spot_id).filter(Boolean));
   let celkem = 0;
-  for (const m of mista) {
-    if (jiz.has(m.spot_id)) continue;
-    const kdo = lide.find((h) => h.id === m.player_id);
-    const castka = Math.round((CENY_STROJU[m.model] || CENY_STROJU.mini) * DIST_PROVIZE);
-    await prisma.gameDelivery.create({
-      data: { player_id: zvouci.id, kind: 'cash', amount: castka, spot_id: m.spot_id,
-        popis: 'Provize ' + castka.toLocaleString('cs-CZ') + ' L$ — ' + ((kdo && kdo.nick) || 'hráč')
-          + ' postavil ' + String(m.model).toUpperCase() + (m.name ? ' (' + m.name + ')' : '') },
-    });
-    celkem += castka;
+  for (const h of lide) {
+    const stroje = strojeHrace(h.state);
+    if (!stroje.length) continue;
+    // Co se dřív vyplatilo za postavené místo, je týž stroj — nesmí se platit znovu.
+    const mista = await prisma.gameSpotClaim.findMany({
+      where: { player_id: h.id }, select: { spot_id: true } });
+    let preskoc = mista.filter((m) => klice.has(m.spot_id)).length;
+    for (let i = 0; i < stroje.length; i++) {
+      const klic = 'nakup:' + h.id + ':' + i;
+      if (klice.has(klic)) continue;
+      if (preskoc > 0) { preskoc--; continue; }
+      const model = stroje[i];
+      const castka = Math.round((CENY_STROJU[model] || CENY_STROJU.mini) * DIST_PROVIZE);
+      await prisma.gameDelivery.create({
+        data: { player_id: zvouci.id, kind: 'cash', amount: castka, spot_id: klic,
+          popis: 'Provize ' + castka.toLocaleString('cs-CZ') + ' L$ — ' + h.nick
+            + ' koupil ' + String(model).toUpperCase() },
+      });
+      klice.add(klic);
+      celkem += castka;
+    }
   }
   if (celkem) {
     await prisma.gamePlayer.update({ where: { id: zvouci.id },
       data: { provize_celkem: { increment: celkem } } });
-    console.log('[game] dorovnano ' + celkem + ' L$ provizi pro ' + zvouci.nick);
+    console.log('[game] provize ' + celkem + ' L$ pro ' + zvouci.nick);
   }
   return celkem;
 }
+
+// POST /account/nakup — hráč právě koupil stroj. Kdo ho do hry přivedl a platí
+// si distribuci, dostane provizi hned, bez čekání na dovoz a stavbu.
+// Částka se neposílá z klienta — server si ji spočítá z uložené sítě.
+router.post('/account/nakup', requirePlayer, async (req, res, next) => {
+  try {
+    const zvouci = await kdoPrivedl(req.player);
+    const vyplaceno = zvouci ? await dorovnejProvize(zvouci) : 0;
+    res.json({ ok: true, vyplaceno });
+  } catch (e) { next(e); }
+});
 
 // GET /account/distributor → stav programu
 router.get('/account/distributor', requirePlayer, async (req, res, next) => {
@@ -769,9 +774,7 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
         where: { spot_id: spot }, create: { spot_id: spot, area_key: area }, update: {},
       });
     } catch (e) { console.warn('[game] zasíťování místa:', e.message); }
-    // Provize tomu, kdo hráče do hry přivedl — jen když si platí distribuci.
-    try { await vyplatProvizi(req.player, model, s(b.name, 160), spot); }
-    catch (e) { console.warn('[game] provize:', e.message); }
+    // Provize se už neplatí za stavbu, ale za nákup stroje — viz /account/nakup.
     res.json({ ok: true, spot: claimPub(c, req.player.id, await firmyMapa()) });
   } catch (e) {
     if (e && e.code === 'P2002') return res.status(409).json({ error: 'Tohle místo právě někdo obsadil.' });

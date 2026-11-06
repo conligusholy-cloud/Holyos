@@ -1816,7 +1816,13 @@ function buySheet(modelKey, drz) {
   if (b) b.onclick = function () {
     doFinance(f, { druh: 'stroj', popis: 'Prádlomat ' + m.name });
     S.orders.push({ model: modelKey, orderedAt: Date.now(), arrivesAt: Date.now() + DELIVERY_MONTHS * MONTH_MS });
-    save(); paint(); closeSheet(); syncState(true);
+    save(); paint(); closeSheet();
+    // Nejdřív uložíme síť (je v ní nová objednávka) a pak řekneme serveru, že
+    // se kupovalo — ten z ní spočte provizi tomu, kdo nás do hry přivedl.
+    // Provize se platí hned při nákupu, ne až až stroj dorazí a postaví se.
+    syncState(true).then(function () {
+      if (ME) apiJson('/account/nakup', { model: modelKey }).catch(function () { /* zkusí se přiště */ });
+    });
     toast(m.name + ' objednán. Dorazí ' + etaText(DELIVERY_MONTHS * MONTH_MS) + '.', 'ok');
   };
 }
@@ -2927,8 +2933,9 @@ function distHtml() {
   var aktivni = DIST.aktivni, rezie = DIST.rezie;
   return '<div class="card"><h3>Distributor prádlomatů</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Platíš měsíční režii a bereš '
-    + Math.round(DIST.provize * 100) + ' % z ceny každého prádlomatu, který postaví hráč, '
-    + 'kterého jsi do hry přivedl. Platí to i na jeho druhý, třetí a každý další.</p>'
+    + Math.round(DIST.provize * 100) + ' % z ceny každého prádlomatu, který si koupí hráč, '
+    + 'kterého jsi do hry přivedl. Vyplácí se hned při nákupu — nečeká se na dovoz ani stavbu. '
+    + 'Platí to i na jeho druhý, třetí a každý další.</p>'
     + '<div class="kv"><span>Stav</span><b class="' + (aktivni ? 'ok' : 'warn') + '">'
     + (aktivni ? 'aktivní, končí ' + etaText(new Date(DIST.do).getTime() - Date.now()) : 'neaktivní') + '</b></div>'
     + '<div class="kv"><span>Přivedených hráčů</span><b>' + DIST.privedeno + '</b></div>'
