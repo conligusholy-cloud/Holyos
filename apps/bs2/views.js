@@ -411,11 +411,8 @@ function forgotPage({ email = '', error = '', done = false } = {}) {
 }
 const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: 'home' }, { id: 'acc', href: '/password', label: 'Můj účet', icon: 'user', right: true }];
 // Prodejci (user_type = seller) mají navíc záložku Můj tým
-// Výběry jsou ve vývoji — vidí je jen testeři (nicky v env VYBERY_TESTERS, výchozí holytom). Pro všechny: VYBERY_TESTERS=*
-const vyberyVisible = (s) => {
-  const list = String(process.env.VYBERY_TESTERS || 'holytom').toLowerCase().split(/[\s,;]+/).filter(Boolean);
-  return !!s && (list.includes('*') || list.includes(String(s.nick || '').toLowerCase()));
-};
+// Výběry jsou ve vývoji — vidí je jen uživatelé se zaškrtnutým „Tester" (Admin → Uživatel → detail)
+const vyberyVisible = (s) => !!(s && s.vybery_tester);
 const userNav = (s) => {
   if (s && s.user_type === 'location') return [{ id: 'loc', href: '/lokalita', label: 'Moje lokality', icon: 'box' }, { id: 'anal', href: '/lokalita/analyza', label: 'Vyhledávač míst', icon: 'network' }, USER_NAV[1]];
   const nav = [USER_NAV[0], { id: 'cmp', href: '/compounder', label: 'Compounder', icon: 'sprout' }, { id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }];
@@ -2230,6 +2227,7 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
         <label>Jméno</label><input name="first_name" value="${esc(s ? s.first_name : '')}">
         <label>Příjmení</label><input name="last_name" value="${esc(s ? s.last_name : '')}">
         ${isNew ? '' : `<label>Typ uživatele</label>${typeSelect(s.user_type)}<div class="small muted" style="margin-top:4px">Nový · Stávající · Koupil prádlomat · Může prodávat · Prověření lokality (vidí jen aplikaci /lokalita)</div>
+        <label style="margin-top:12px;display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" name="vybery_tester" value="1" style="width:auto;margin:0"${s.vybery_tester ? ' checked' : ''}> Tester (vidí funkce ve vývoji, např. záložku Výběry)</label>
         <label style="margin-top:12px">Balíček Prověření lokality</label><select name="location_package" style="width:auto"><option value="">— žádný —</option>${['basic', 'plus', 'premium'].map(k => `<option value="${k}"${s.location_package === k ? ' selected' : ''}>${({ basic: 'Základ (3 lokality)', plus: 'Plus (10)', premium: 'Premium (10 + šetření)' })[k]}</option>`).join('')}</select>
         <div class="small muted" style="margin-top:4px">Platnost: <b>${s.location_expires_at ? new Date(s.location_expires_at).toLocaleDateString('cs-CZ') : '—'}</b> · při zvolení balíčku bez platnosti se nastaví 12 měsíců od teď. Po zaplacení na /location se vyplňuje samo.</div>
         <label style="margin-top:12px">Discount Credit (zůstatek)</label><div style="display:flex;gap:8px;align-items:center"><input name="dc_balance" inputmode="decimal" value="${credits.reduce((a, c) => a + Number(c.amount_czk), 0).toLocaleString('cs-CZ').replace(/\u00a0/g, ' ')}" style="max-width:180px;text-align:right;font-weight:700"><span class="muted">DC</span></div><div class="small muted" style="margin-top:4px">Přepiš číslo a ulož — rozdíl se zapíše jako pohyb do historie DC níže a hned se promítne do účtu uživatele.</div>`}

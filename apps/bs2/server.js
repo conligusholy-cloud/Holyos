@@ -2503,7 +2503,8 @@ app.post('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
       if (lp) await q("UPDATE supporters SET location_package=$2, location_expires_at=CASE WHEN location_expires_at IS NULL OR location_expires_at < now() THEN now() + interval '12 months' ELSE location_expires_at END WHERE id=$1", [s.id, lp]);
       else await q('UPDATE supporters SET location_package=NULL WHERE id=$1', [s.id]);
     }
-    await log(req.admin, 'update', { id: s.id, email, user_type: utype });
+    await q('UPDATE supporters SET vybery_tester=$2 WHERE id=$1', [s.id, req.body.vybery_tester === '1']);
+    await log(req.admin, 'update', { id: s.id, email, user_type: utype, vybery_tester: req.body.vybery_tester === '1' });
     // Ruční nastavení zůstatku DC: rozdíl proti aktuálnímu zůstatku se zapíše jako pohyb v credits (historie zůstává)
     let dcMsg = '';
     if (req.body.dc_balance != null && String(req.body.dc_balance).trim() !== '') {

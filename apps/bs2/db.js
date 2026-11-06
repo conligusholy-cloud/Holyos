@@ -115,6 +115,8 @@ async function migrate() {
 
     -- Zobrazovací měna uživatele (CZK / EUR) na stránkách Prádlomaty a Discount Credit
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'CZK';
+    -- Tester: vidí funkce ve vývoji (např. záložku Výběry)
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS vybery_tester BOOLEAN NOT NULL DEFAULT false;
 
     -- Objednávky z Prádlomatů (Koupit): admin potvrdí → vznikne nákup + provize; zrušením se vrátí uplatněné DC
     CREATE TABLE IF NOT EXISTS orders (
