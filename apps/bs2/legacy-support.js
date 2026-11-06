@@ -187,6 +187,7 @@ async function fetchLegacyStandardWithJar(jar) {
     if (!years.length) { const y0 = new Date().getFullYear(); years = []; for (let y = y0; y >= 2018; y--) years.push(y); }
     years = [...new Set(years)].sort((a, b) => b - a);
     const by = {}; let cur = null;
+    const bad = []; // roky, kde součet přečtených sekcí nesedí s celkem, které uvádí sám portál (kontrola správnosti čtení)
     for (const y of years) {
       const pg = y === years[0] && /selected/.test(sel) && new RegExp('value="' + y + '"[^>]*selected').test(sel) ? first : await get(BASE + '/cs/bo/my-invests/?y=' + y, jar);
       const d = parseInvests(htmlToText(pg.html));
@@ -196,10 +197,11 @@ async function fetchLegacyStandardWithJar(jar) {
       const known = (d.palety || 0) + (d.opakovacky || 0) + (d.expanze || 0) + (d.neurawash || 0) + (d.balicky || 0) + (d.likvidni || 0);
       const secSum = Object.values(d.sections || {}).reduce((a, v) => a + (v || 0), 0);
       const rec = { palety: d.palety || 0, opakovacky: d.opakovacky || 0, balicky: d.balicky || 0, likvidni: d.likvidni || 0, ostatni: Math.round((secSum - known) * 100) / 100, expanze: d.expanze || 0, neurawash: d.neurawash || 0, total_year: d.total_year || 0, sections: d.sections || {} };
+      if (d.total_year != null && Math.abs(Number(d.total_year) - secSum) > 0.5) bad.push({ y, portal: Number(d.total_year), parsed: Math.round(secSum * 100) / 100, diff: Math.round((Number(d.total_year) - secSum) * 100) / 100 });
       if (rec.palety || rec.opakovacky || rec.balicky || rec.likvidni || rec.ostatni || rec.expanze || rec.neurawash || rec.total_year) by[y] = rec;
     }
     const sum = (k) => Math.round(Object.values(by).reduce((a, r) => a + (Number(r[k]) || 0), 0) * 100) / 100;
-    const data = { std_by_year: by, std_years: years, std_palety_all: sum('palety'), std_opakovacky_all: sum('opakovacky'), std_expanze_all: sum('expanze'), std_neurawash_all: sum('neurawash'), std_balicky_all: sum('balicky'), std_likvidni_all: sum('likvidni'), std_ostatni_all: sum('ostatni'), std_v: 2, std_currency: cur || 'CZK', std_checked_at: new Date().toISOString() };
+    const data = { std_by_year: by, std_years: years, std_palety_all: sum('palety'), std_opakovacky_all: sum('opakovacky'), std_expanze_all: sum('expanze'), std_neurawash_all: sum('neurawash'), std_balicky_all: sum('balicky'), std_likvidni_all: sum('likvidni'), std_ostatni_all: sum('ostatni'), std_v: 2, std_currency: cur || 'CZK', std_checked_at: new Date().toISOString(), std_check: { ok: bad.length === 0, bad } };
     // Standardní podpora = palety + opakovačky (všechny roky). Balíčky, likvidní a ostatní se do součtu nezapočítávají.
     data.std_total = Math.round((data.std_palety_all + data.std_opakovacky_all) * 100) / 100;
     if (data.std_currency === 'EUR') { try { const c = await cnbEurRate(); data.std_total_czk = Math.round(data.std_total * c.rate * 100) / 100; data.std_eur_rate = c.rate; data.std_eur_rate_date = c.date; } catch (e) { /* bez kurzu */ } }
