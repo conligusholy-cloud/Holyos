@@ -83,6 +83,59 @@ function spotHash(id, salt) {
   return ((h >>> 0) % 10000) / 10000;
 }
 // Přípojky (voda, odpad, elektřina) — platí se až po domluvě nájmu.
+// ─── Sídlo, pobočky a doprava ───────────────────────────────────────────────
+// Stroj někdo musí přivézt. Počítá se to od nejbližšího sídla nebo pobočky,
+// takže expanze dostane směr: stavět daleko se prodraží.
+var DOPRAVA_PAUSAL = 8000;      // výjezd party, ať je to blízko nebo daleko
+var DOPRAVA_KM = 120;           // za kilometr
+var SILNICE = 1.3;              // silnice nejsou vzdušnou čarou
+var POBOCKA_CENA = 500000;
+var POBOCKA_MESICNE = 15000;    // sklad a člověk
+var POBOCKA_PAUZA = 3 * YEAR_MS;   // zřídit další jde jednou za tři herní roky
+// Vzdálenost dvou bodů na mapě v kilometrech (po povrchu Země).
+function kmMezi(a, b) {
+  if (!a || !b || a.lat == null || b.lat == null) return 0;
+  var R = 6371, dLat = (b.lat - a.lat) * Math.PI / 180, dLon = (b.lon - a.lon) * Math.PI / 180;
+  var la1 = a.lat * Math.PI / 180, la2 = b.lat * Math.PI / 180;
+  var h = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+    + Math.cos(la1) * Math.cos(la2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+// Všechna místa, odkud se dá vyjet: sídlo a pobočky.
+function zakladny() {
+  var z = [];
+  if (S.sidlo) z.push(S.sidlo);
+  (S.pobocky || []).forEach(function (x) { z.push(x); });
+  return z;
+}
+// Nejbližší základna k danému místu a kolik je to kilometrů.
+function nejblizsiZakladna(sp) {
+  var z = zakladny();
+  if (!z.length) return null;
+  var nej = null;
+  z.forEach(function (b) {
+    var km = kmMezi(b, sp) * SILNICE;
+    if (!nej || km < nej.km) nej = { zakladna: b, km: km };
+  });
+  return nej;
+}
+// Doprava stroje na místo. Bez sídla ještě nevíme odkud, tak nic neúčtujeme.
+function dopravaNa(sp, modelKey) {
+  var n = nejblizsiZakladna(sp);
+  if (!n) return 0;
+  var cena = DOPRAVA_PAUSAL + n.km * DOPRAVA_KM;
+  if (modelKey === 'max') cena *= 1.5;      // MAX je rozměrný, potřebuje větší vůz
+  return Math.round(cena / 100) * 100;
+}
+// Co pobočky stojí každý měsíc — dobře umístěná se zaplatí, špatná krade.
+function pobockyMesicne() { return (S.pobocky || []).length * POBOCKA_MESICNE; }
+// Kdy si hráč může zřídit další pobočku.
+function pobockaOd() {
+  var posledni = (S.pobocky || []).reduce(function (a, x) { return Math.max(a, x.od || 0); }, 0);
+  return Math.max(S.startedAt || 0, posledni) + POBOCKA_PAUZA;
+}
+function pobockaLze() { return Date.now() >= pobockaOd(); }
+
 // Místa, kde už někdy stál prádlomat — přípojky tam zůstaly. Plní se ze serveru.
 var ZASITOVANE = {};
 function jeZasitovane(sp) { return !!ZASITOVANE[sp && sp.id]; }
@@ -351,6 +404,8 @@ function fresh(profileId) {
     cash: p.cash, bank: BANK_BASE, loan: 0,
     loanPrem: 0,      // dopočítaná průměrná přirážka na dluhu
     loans: [],        // jednotlivé úvěry: každý se svou sazbou a splátkou
+    sidlo: null,      // { name, lat, lon } — vybere se při první stavbě
+    pobocky: [],      // další základny, ze kterých se počítá doprava
     splatkyAt: now,   // odkdy se počítají měsíční splátky
     areas: {},     // id oblasti → { name, scoutedAt, spots:[…] }
     units: [],     // postavené prádlomaty
@@ -415,6 +470,8 @@ function load() {
       }
     }
     if (!o.splatkyAt) o.splatkyAt = Date.now();
+    if (!Array.isArray(o.pobocky)) o.pobocky = [];
+    if (o.sidlo === undefined) o.sidlo = null;
     if (typeof o.stats.splaceno !== 'number') o.stats.splaceno = 0;
     if (typeof o.stats.zmeskano !== 'number') o.stats.zmeskano = 0;
     ['boost', 'connDiscount', 'rateDrop', 'bankBonus', 'loanPrem'].forEach(function (k) { if (typeof o[k] !== 'number') o[k] = 0; });
@@ -476,7 +533,7 @@ function monthlyProfit() { return S.units.reduce(function (a, u) { return a + u.
 // Co hráči z provozu opravdu zbyde: síť vydělá, banka si vezme úrok.
 // Pozor: do tick() patří dál monthlyProfit(), tam se úrok odečítá zvlášť —
 // kdyby se počítalo s čistým ziskem, strhl by se dvakrát.
-function cistyZisk() { return monthlyProfit() - urokMesicne(); }
+function cistyZisk() { return monthlyProfit() - urokMesicne() - pobockyMesicne(); }
 function yearlyProfit() { return monthlyProfit() * 12; }
 function tick() {
   refreshUnits();
@@ -485,7 +542,8 @@ function tick() {
   if (dt < 0) { S.lastTick = now; return; }      // hráč si přetočil hodiny v telefonu
   if (dt > 30 * YEAR_MS) dt = 30 * YEAR_MS;      // po měsíci nepřítomnosti dál nenabíhá
   var years = dt / YEAR_MS;
-  var earned = yearlyProfit() * years;
+  // Pobočky stojí každý měsíc bez ohledu na to, jestli se staví.
+  var earned = (yearlyProfit() - pobockyMesicne() * 12) * years;
   // Do bubliny nad prádlomaty: zvlášť co přiteklo a co banka sebrala.
   drip.earn += Math.max(0, earned);
   S.cash += earned;
@@ -1231,10 +1289,20 @@ function buySheet(modelKey, drz) {
 function installSheet(sp, areaId, modelKey, drz) {
   if (!drz) FIN_OWN = null;
   var m = MODELS[modelKey], e = economics(sp, modelKey);
+  var doprava = dopravaNa(sp, modelKey);
+  var celkem = e.conn + doprava;
   // Banka tohle místo posuzuje podle toho, co vydělá ono samo.
-  var f = canFinance(e.conn, FIN_OWN, stropPodleZisku(e.profit, e.conn));
+  var f = canFinance(celkem, FIN_OWN, stropPodleZisku(e.profit, celkem));
+  var n = nejblizsiZakladna(sp);
   sheet('<h3>Postavit ' + m.name + '</h3>'
-    + '<p class="muted small">' + esc(sp.name) + ' — teď se platí přípojky (voda, odpad, elektřina). Stroj máš skladem, nájem domluvený.</p>'
+    + '<p class="muted small">' + esc(sp.name) + ' — teď se platí '
+    + (jeZasitovane(sp) ? 'instalace stroje' : 'přípojky (voda, odpad, elektřina)')
+    + ' a doprava. Stroj máš skladem, nájem domluvený.</p>'
+    + (!S.sidlo ? '<p class="fine ok">Tady vznikne sídlo tvojí firmy. Od něj se pak počítá doprava všech dalších strojů, '
+        + 'tak si rozmysli, kde začínáš.</p>' : '')
+    + '<div class="kv"><span>' + (jeZasitovane(sp) ? 'Instalace' : 'Přípojky') + '</span><b>' + kcFull(e.conn) + '</b></div>'
+    + '<div class="kv"><span>Doprava stroje' + (n ? ' (' + Math.round(n.km) + ' km)' : '') + '</span><b'
+    + (doprava > 0 ? ' class="warn"' : '') + '>' + (doprava > 0 ? kcFull(doprava) : 'zdarma — sídlo vzniká tady') + '</b></div>'
     + financeRows(f)
     + '<div class="kv"><span>Domluvený nájem</span><b>' + kcFull(e.rent) + ' / měsíc</b></div>'
     + '<div class="kv"><span>Zisk tohohle místa / měsíc</span><b class="ok">' + kcFull(e.profit) + '</b></div>'
@@ -1261,6 +1329,11 @@ function installSheet(sp, areaId, modelKey, drz) {
       CLAIMS[sp.id] = r.j.spot;
       doFinance(f, { druh: 'misto', spotId: sp.id, popis: 'Přípojky — ' + sp.name });
       pripojUverKeStroji(sp.id, sp.name);
+      // První postavený prádlomat zakládá sídlo firmy.
+      if (!S.sidlo) {
+        S.sidlo = { name: sp.name, lat: sp.lat, lon: sp.lon, od: Date.now() };
+        toast('Tady vzniklo sídlo tvojí firmy.', 'ok');
+      }
       S.stock[modelKey] = inStock(modelKey) - 1;
       S.units.push({ spotId: sp.id, areaId: areaId, name: sp.name, kind: sp.kind, score: sp.score,
         lat: sp.lat, lon: sp.lon, builtAt: Date.now(), eco: e });
@@ -1580,18 +1653,86 @@ function paintZeb() {
     + (ZEB.hracu ? '<p class="fine">Hráčů se sítí: ' + ZEB.hracu + '</p>' : '');
 }
 
+// Střed prozkoumaného města — odtud se dá zřídit pobočka.
+function stredOblasti(a) {
+  var sp = (a && a.spots) || [];
+  if (!sp.length) return null;
+  var la = 0, lo = 0, n = 0;
+  sp.forEach(function (x) { if (x.lat != null) { la += x.lat; lo += x.lon; n++; } });
+  return n ? { lat: la / n, lon: lo / n } : null;
+}
+// Sídlo a pobočky: odkud se vyjíždí na stavby.
+function zakladnyHtml() {
+  if (!S.sidlo) return '<div class="card"><h3>Sídlo firmy</h3>'
+    + '<p class="muted small" style="margin:2px 0 0">Vznikne tam, kde postavíš první prádlomat. '
+    + 'Od sídla se pak počítá doprava všech dalších strojů.</p></div>';
+  var lze = pobockaLze();
+  return '<div class="card"><h3>Sídlo a pobočky</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">Doprava stroje se počítá od nejbližší základny. '
+    + 'Pobočka stojí ' + kcFull(POBOCKA_CENA) + ' a ' + kcFull(POBOCKA_MESICNE) + ' měsíčně.</p>'
+    + '<div class="kv"><span>Sídlo</span><b>' + esc(S.sidlo.name || 'neznámé') + '</b></div>'
+    + (S.pobocky || []).map(function (b) {
+        return '<div class="kv"><span>Pobočka</span><b>' + esc(b.name || 'pobočka') + '</b></div>';
+      }).join('')
+    + (pobockyMesicne() > 0 ? '<div class="kv"><span>Provoz poboček</span><b class="warn">'
+      + kcFull(pobockyMesicne()) + ' / měsíc</b></div>' : '')
+    + (lze
+        ? '<button class="btn sec" id="do-pobocka" style="width:100%;margin-top:10px">Zřídit pobočku za ' + kcFull(POBOCKA_CENA) + '</button>'
+        : '<p class="fine">Další pobočku si můžeš zřídit za ' + etaText(pobockaOd() - Date.now())
+          + '. Koupit ji od jiného hráče na Burze můžeš kdykoli.</p>')
+    + '</div>';
+}
+// Výběr města pro pobočku — jen z toho, co hráč prozkoumal.
+function pobockaSheet() {
+  var mesta = Object.keys(S.areas || {}).map(function (id) {
+    var a = S.areas[id], str = stredOblasti(a);
+    if (!str) return null;
+    var uz = zakladny().some(function (b) { return kmMezi(b, str) < 8; });
+    return { id: id, name: a.name || id, lat: str.lat, lon: str.lon, uz: uz };
+  }).filter(Boolean);
+  sheet('<h3>Zřídit pobočku</h3>'
+    + '<p class="muted small">Stojí ' + kcFull(POBOCKA_CENA) + ' a ' + kcFull(POBOCKA_MESICNE)
+    + ' měsíčně. Vyplatí se tam, kde chceš stavět — doprava se pak počítá odsud. '
+    + 'Další půjde zřídit až za tři herní roky.</p>'
+    + (S.cash < POBOCKA_CENA ? '<p class="fine err">Na pobočku teď nemáš — chybí ti ' + kcFull(POBOCKA_CENA - S.cash) + '.</p>' : '')
+    + (mesta.length
+      ? '<div class="zeb">' + mesta.map(function (m) {
+          return '<div class="zeb-row"><span class="nick">' + esc(m.name)
+            + '<i>' + (m.uz ? 'tady už základnu máš' : 'prozkoumané město') + '</i></span>'
+            + (m.uz || S.cash < POBOCKA_CENA ? '' : '<button class="btn sm" data-pob="' + esc(m.id) + '">Zřídit</button>')
+            + '</div>';
+        }).join('') + '</div>'
+      : '<div class="empty">Nemáš prozkoumané žádné město.</div>'));
+  [].forEach.call(document.querySelectorAll('[data-pob]'), function (b) {
+    b.onclick = function () {
+      var m = mesta.filter(function (x) { return x.id === b.getAttribute('data-pob'); })[0];
+      if (!m || S.cash < POBOCKA_CENA || !pobockaLze()) return;
+      S.cash -= POBOCKA_CENA;
+      S.pobocky.push({ name: m.name, lat: m.lat, lon: m.lon, od: Date.now() });
+      save(); paint(); closeSheet(); syncState(true);
+      toast('Pobočka v ' + m.name + ' otevřená.', 'ok');
+    };
+  });
+}
 function paintNet() {
   $('net-sum').innerHTML = '<div><span>Prádlomaty</span><b>' + S.units.length + '</b></div>'
     + '<div><span>Zisk / měsíc</span><b class="' + (cistyZisk() < 0 ? 'err' : 'ok') + '">' + kc(cistyZisk()) + '</b></div>'
     + (splatkyMesicne() > 0
-        ? '<div><span>Splátky bance</span><b class="warn">' + kc(-splatkyMesicne()) + '</b></div>'
-          + '<div><span>Zbyde měsíčně</span><b class="' + (monthlyProfit() - splatkyMesicne() >= 0 ? 'ok' : 'err') + '">'
-          + kc(monthlyProfit() - splatkyMesicne()) + '</b></div>'
-        : '')
+        ? '<div><span>Splátky bance</span><b class="warn">' + kc(-splatkyMesicne()) + '</b></div>' : '')
+    + (pobockyMesicne() > 0
+        ? '<div><span>Provoz poboček</span><b class="warn">' + kc(-pobockyMesicne()) + '</b></div>' : '')
+    + (splatkyMesicne() + pobockyMesicne() > 0
+        ? '<div><span>Zbyde měsíčně</span><b class="' + (monthlyProfit() - splatkyMesicne() - pobockyMesicne() >= 0 ? 'ok' : 'err') + '">'
+          + kc(monthlyProfit() - splatkyMesicne() - pobockyMesicne()) + '</b></div>' : '')
     + '<div><span>Investováno</span><b>' + kc(investedTotal()) + '</b></div>'
     + '<div><span>Vyděláno celkem</span><b>' + kc(S.stats.earned) + '</b></div>';
-  if (!S.units.length) { $('net-list').innerHTML = '<div class="empty">Zatím nemáš ani jeden prádlomat.<br>Začni tím, že na mapě prozkoumáš oblast.</div>'; return; }
-  $('net-list').innerHTML = S.units.slice().sort(function (a, b) { return b.eco.profit - a.eco.profit; }).map(function (u) {
+  if (!S.units.length) {
+    $('net-list').innerHTML = zakladnyHtml()
+      + '<div class="empty">Zatím nemáš ani jeden prádlomat.<br>Začni tím, že na mapě prozkoumáš oblast.</div>';
+    bindZakladny();
+    return;
+  }
+  $('net-list').innerHTML = zakladnyHtml() + S.units.slice().sort(function (a, b) { return b.eco.profit - a.eco.profit; }).map(function (u) {
     return '<div class="card" data-unit="' + esc(u.spotId) + '">'
       + '<div class="row"><h3>' + esc(u.name) + '</h3>' + verdictPill(u.score) + '</div>'
       + '<p class="muted small" style="margin:2px 0 6px">' + esc(KIND_LABEL[u.kind] || 'Místo') + ' · ' + MODELS[u.eco.model].name + '</p>'
@@ -1600,6 +1741,11 @@ function paintNet() {
   [].forEach.call($('net-list').querySelectorAll('[data-unit]'), function (c) {
     c.onclick = function () { unitSheet(S.units.filter(function (u) { return u.spotId === c.getAttribute('data-unit'); })[0]); };
   });
+  bindZakladny();
+}
+function bindZakladny() {
+  var b = $('do-pobocka');
+  if (b) b.onclick = function () { pobockaSheet(); };
 }
 // Přehled jednotlivých úvěrů — co je na co, za kolik a kolik ještě zbývá.
 function uveryHtml() {
