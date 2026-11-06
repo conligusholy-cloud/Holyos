@@ -630,13 +630,28 @@ function uneseDluh(mesicniZisk, sazba) {
 function firmaUneseDluh(sazba) {
   return uneseDluh(monthlyProfit() - splatkyMesicne(), sazba);
 }
+// Zástava v hotovosti, kterou si hráč koupil v „Dobít banku“. Takový úvěr je
+// krytý 1:1, takže u něj banka nekouká na výdělek — ale jen do výše zástavy.
+// Volná je ta část, kterou ještě nespotřeboval dluh nad to, co uživí zisk.
+function duveraVolna() {
+  var cela = Math.max(0, (S && S.duvera) || 0);
+  if (cela <= 0) return 0;
+  var unese = uneseDluh(monthlyProfit(), Math.max(0.02, rateOf() + (S.loanPrem || 0)));
+  return Math.max(0, cela - Math.max(0, S.loan - unese));
+}
+// Co banka bere jako krytí: majetek pořízený podle LTV profilu plus
+// hotovostní zástava, která kryje úvěr 1:1.
+function zastavaStrop(majetekNavic) {
+  return PROFILES[S.profile].ltv * (assetsTotal() + (majetekNavic || 0))
+    + Math.max(0, (S && S.duvera) || 0);
+}
 // Strop pro konkrétní úvěr. `zisk` je měsíční zisk toho, co se financuje —
 // u místa jeho vlastní, u stroje bez místa a u provozního úvěru celá firma.
 function stropPodleZisku(zisk, odhadCastky) {
   var sazba = Math.max(0.02, rateOf() + prirazkaZa(odhadCastky || 0));
   var strop = uneseDluh(zisk, sazba);
   // Menší úvěr má menší přirážku, takže strop ještě jednou zpřesníme.
-  return uneseDluh(zisk, Math.max(0.02, rateOf() + prirazkaZa(strop)));
+  return uneseDluh(zisk, Math.max(0.02, rateOf() + prirazkaZa(strop))) + duveraVolna();
 }
 
 // Úvěr, který patří ke konkrétnímu místu.
@@ -1473,7 +1488,7 @@ function assetsTotal() { return investedTotal() + stockValue(); }
 // minima, když na úvěr nezbývá.
 function canFinance(amount, chci, strop) {
   var p = PROFILES[S.profile];
-  var ltvRoom = Math.max(0, p.ltv * (assetsTotal() + amount) - S.loan);
+  var ltvRoom = Math.max(0, zastavaStrop(amount) - S.loan);
   // Strop podle výdělku: banka nepůjčí víc, než co unese splátka. Když ho
   // volající nedá, posuzuje se cash flow celé firmy.
   var dscr = maSkraloup() ? 0
@@ -1550,7 +1565,7 @@ function splatkyMesicne() {
 // jen vlastnímu limitu — je to pojistka, aby hra nikdy nešla do slepé uličky.
 function operatingRoom() {
   var p = PROFILES[S.profile];
-  return Math.max(0, p.ltv * assetsTotal() + OPERATING_MAX - S.loan);
+  return Math.max(0, zastavaStrop() + OPERATING_MAX - S.loan);
 }
 function cashDrawMax() { return Math.max(0, Math.min(S.bank, operatingRoom(), OPERATING_MAX)); }
 // Podil z ceny v procentech - u akontace a uveru at je videt pomer, ne jen cislo.
@@ -2289,10 +2304,12 @@ function uveryHtml() {
 function paintBank() {
   var p = PROFILES[S.profile];
   // Do majetku patří i stroje skladem a na cestě — banka je bere jako zástavu stejně jako postavené.
-  var room = Math.max(0, p.ltv * assetsTotal() - S.loan);
+  var room = Math.max(0, zastavaStrop() - S.loan);
   $('bank-body').innerHTML = '<div class="card">'
     + '<div class="row"><span class="muted small">Hotovost</span><b>' + kcFull(S.cash) + '</b></div>'
     + '<div class="row"><span class="muted small">Volný rámec v bance</span><b>' + kcFull(S.bank) + '</b></div>'
+    + ((S.duvera || 0) > 0 ? '<div class="row"><span class="muted small">Složená zástava</span><b>' + kcFull(S.duvera)
+        + (duveraVolna() < S.duvera ? ' <span class="muted">(volná ' + kcFull(duveraVolna()) + ')</span>' : '') + '</b></div>' : '')
     + '<p class="fine" style="margin-top:6px">Rámec sám roste o ' + kcFull(BANK_PER_DAY)
     + ' za den a nemá strop. Kolik si půjčíš, ale rozhoduje zástava — majetek, kterým ručíš.</p>'
     + '</div>'
@@ -2337,7 +2354,7 @@ function paintBank() {
 // Klepnutí na hotovost v hlavičce. Když peníze dojdou, hráč nemá hledat,
 // kde se berou — tady je rovnou vidí všechny cesty, jak si přidat.
 function penizeSheet() {
-  var room = Math.max(0, PROFILES[S.profile].ltv * assetsTotal() - S.loan);
+  var room = Math.max(0, zastavaStrop() - S.loan);
   var muze = uverNabidka(null).max >= 1000;
   sheet('<h3>Peníze</h3>'
     + '<div class="kv"><span>Hotovost</span><b>' + kcFull(S.cash) + '</b></div>'
@@ -3195,9 +3212,10 @@ function uverNabidka(chci, iSplatnosti) {
   var nalada = naladaDnes();
   var iS = Math.max(0, Math.min(maxSplatnost(), iSplatnosti == null ? 0 : iSplatnosti));
   var sp = SPLATNOSTI[iS];
-  var majetek = assetsTotal();
-  var strop = Math.max(0, p.ltv * majetek - S.loan);
-  var max = Math.max(0, Math.min(strop, S.bank, OPERATING_MAX + Math.max(0, p.ltv * majetek - S.loan)));
+  // Složená zástava je také majetek — bez ní by zadluženost vyšla nesmyslně vysoká.
+  var majetek = assetsTotal() + Math.max(0, (S && S.duvera) || 0);
+  var strop = Math.max(0, zastavaStrop() - S.loan);
+  var max = Math.max(0, Math.min(strop, S.bank, OPERATING_MAX + strop));
   // Provozní úvěr banka posuzuje podle cash flow celé firmy: co síť vydělá
   // minus splátky, které už běží.
   var dscr = maSkraloup() ? 0 : stropPodleZisku(monthlyProfit() - splatkyMesicne(), max);
@@ -3231,8 +3249,8 @@ function uverDuvod() {
   }
   var p = PROFILES[S.profile];
   var majetek = assetsTotal();
-  var strop = Math.max(0, p.ltv * majetek - S.loan);
-  if (majetek <= 0) return 'Banka půjčuje proti majetku a ty zatím žádný nemáš. Kup první prádlomat a rámec se otevře.';
+  var strop = Math.max(0, zastavaStrop() - S.loan);
+  if (majetek <= 0 && strop < 1000) return 'Banka půjčuje proti majetku a ty zatím žádný nemáš. Kup první prádlomat — nebo slož zástavu přes Dobít banku — a rámec se otevře.';
   if (strop < 1000) {
     return 'Banka ti půjčí nejvýš ' + Math.round(p.ltv * 100) + ' % hodnoty majetku, což je '
       + kcFull(Math.round(p.ltv * majetek)) + ' — a tolik už dlužíš. Splať část úvěru, nebo přikup prádlomat; '
@@ -3274,6 +3292,9 @@ function uverSheet(chci, iSplatnosti) {
     + (n.brzdiVydelek ? '<div class="kv"><span>Strop podle výdělku firmy</span><b class="warn">' + kcFull(n.dscr) + '</b></div>'
         + '<p class="fine">Zástava by dovolila víc, ale banka chce, aby ti na splátku zbývalo aspoň '
         + KRYTI_MIN.toFixed(2).replace('.', ',') + '× tolik, co splátka dělá.</p>' : '')
+    + (duveraVolna() > 0 ? '<div class="kv"><span>Z toho proti zástavě</span><b class="ok">'
+        + kcFull(duveraVolna()) + '</b></div>'
+        + '<p class="fine">Tolik ti banka půjčí i bez výdělku — složená zástava úvěr kryje.</p>' : '')
     + '<div class="kv"><span>Dnes dlužíš</span><b' + (S.loan > 0 ? ' class="warn"' : '') + '>' + kcFull(S.loan)
     + (S.loan > 0 ? ' · ' + Math.round(n.ted * 100) + ' % majetku' : '') + '</b></div>'
     + '<label class="fld"><span>Kolik si chceš půjčit (nejvýš ' + kcFull(n.max) + ')</span>'
@@ -3332,8 +3353,8 @@ function cashPacksHtml() {
   }
   if (!CASH_CAT) return '<div class="card"><h3>Dobít banku</h3><p class="muted small" style="margin:2px 0 0">Načítám…</p></div>';
   return '<div class="card"><h3>Dobít banku</h3>'
-    + '<p class="muted small" style="margin:2px 0 10px">Zvedne ti volný rámec v bance — peníze si pak půjčíš, '
-    + 'jak budeš potřebovat. Čím větší balík, tím víc laundrů za korunu.</p>'
+    + '<p class="muted small" style="margin:2px 0 10px">Zvedne ti volný rámec v bance a složí se jako zástava — '
+    + 'banka proti ní půjčí, i když na to ještě nevyděláváš. Čím větší balík, tím víc laundrů za korunu.</p>'
     + CASH_CAT.map(function (c) {
       return '<div class="pack" data-pack="' + c.kind + '">'
         + '<div class="pack-l"><b>' + kcFull(c.laundry) + '</b>'
@@ -3353,7 +3374,7 @@ function buyCash(kind) {
   if (!ME) return toast('Nejdřív se přihlas.', 'err');
   if (!ME.has_details) return detailsSheet(null, kind);
   sheet('<h3>' + esc(c.name) + '</h3>'
-    + '<div class="kv"><span>Rámec v bance se zvedne o</span><b class="ok">' + kcFull(c.laundry) + '</b></div>'
+    + '<div class="kv"><span>Rámec a zástava v bance</span><b class="ok">+' + kcFull(c.laundry) + '</b></div>'
     + '<div class="kv"><span>Cena</span><b>' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</b></div>'
     + '<div class="kv"><span>Za korunu</span><b>' + c.per_czk.toLocaleString('cs-CZ') + ' L$</b></div>'
     + '<div class="kv"><span>Platí</span><b>' + esc(ME.first_name + ' ' + ME.last_name) + '</b></div>'
@@ -3384,7 +3405,8 @@ function claimCash(then) {
     var v = r.ok && r.j.result;
     if (v && (v.effect === 'cash' || v.effect === 'ramec')) {
       // Hotovost přidaná z administrace jde do kapsy, koupený balíček do rámce.
-      if (v.effect === 'ramec') S.bank += v.amount;
+      // Koupený balík je zároveň zástava: banka proti němu půjčí i bez výdělku.
+      if (v.effect === 'ramec') { S.bank += v.amount; S.duvera = (S.duvera || 0) + v.amount; }
       else S.cash += v.amount;
       ME.cards = r.j.owned;
       save(); paint(); syncState(true);
