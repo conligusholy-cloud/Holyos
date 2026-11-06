@@ -2111,6 +2111,13 @@ function partnerSupportCard(s) {
       <div class="row" style="gap:10px;align-items:flex-end;margin-top:6px">
         ${inp('network_all', 'Obrat sítě od počátku', p.network_all)}${inp('network_year', 'Obrat sítě v roce', p.network_year)}
       </div>
+      ${(() => {
+        const pal = Number(p.std_palety_all != null ? p.std_palety_all : p.palety) || 0, opa = Number(p.std_opakovacky_all != null ? p.std_opakovacky_all : p.opakovacky) || 0, exv = Number(p.std_expanze_all != null ? p.std_expanze_all : p.expanze) || 0;
+        const f = (n) => Math.round(n * 100) / 100;
+        const fm = (n) => f(n).toLocaleString('cs-CZ');
+        return `<div class="card" id="stex-box" style="margin-top:10px;padding:10px 12px"><div class="small"><b>ST podpora</b> <span class="muted">(palety + opakovačky)</span> = <b id="st-val">${fm(pal + opa)}</b> ${cur}</div><div class="small" style="margin-top:4px"><b>EX podpora</b> <span class="muted">(expanze)</span> = <b id="ex-val">${fm(exv)}</b> ${cur}</div></div>
+        <script>(function(){var b=document.getElementById('stex-box');if(!b)return;var fo=b.closest('form');if(!fo)return;function n(k){var e=fo.elements[k];return e?(Number(String(e.value).replace(/\\s/g,'').replace(',','.'))||0):0}function fm(x){return (Math.round(x*100)/100).toLocaleString('cs-CZ')}function upd(){document.getElementById('st-val').textContent=fm(n('palety')+n('opakovacky'));document.getElementById('ex-val').textContent=fm(n('expanze'))}['palety','opakovacky','expanze'].forEach(function(k){var e=fo.elements[k];if(e)e.addEventListener('input',upd)})})();</script>`;
+      })()}
       <label style="margin-top:6px">Poznámka</label><input name="note" value="${esc(p.note || '')}" placeholder="např. Expanze obsahuje i palety a opakovačky">
       ${sumYear ? `<div class="small muted" style="margin-top:6px">Součet palety + expanze + NeuraWash + opakovačky = <b>${sumYear.toLocaleString('cs-CZ')} ${cur}</b>${p.total_year != null && Math.abs(sumYear - Number(p.total_year)) > 0.5 ? ' (≠ „Podpořil v roce")' : ''}</div>` : ''}
       ${p.currency === 'EUR' ? `<div class="card" style="margin-top:8px;padding:10px 12px;background:var(--bg2,#f6f7f9)"><div class="small"><b>Přepočet na Kč</b> <span class="muted">${p.eur_rate ? 'kurz ČNB ' + Number(p.eur_rate).toLocaleString('cs-CZ', { maximumFractionDigits: 3 }) + ' Kč/€' + (p.eur_rate_date ? ' ze dne ' + esc(p.eur_rate_date) : '') : esc(p.eur_rate_error || 'kurz zatím nenačten')}</span></div>
