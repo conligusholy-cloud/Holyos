@@ -196,7 +196,7 @@
       get('/players?limit=300' + (q ? '&q=' + encodeURIComponent(q) : '')).then(function (j) {
         document.getElementById('pl-tbl').innerHTML =
           '<thead><tr><th>Nick</th><th>Jméno a e-mail</th><th class="num">Prádlomatů</th><th class="num">Míst</th>'
-          + '<th class="num">Měst</th><th class="num">Příjem / měsíc</th>'
+          + '<th class="num">Měst</th><th class="num">Zbyde / měsíc</th>'
           + '<th class="num">Hotovost</th><th class="num">Úvěr</th><th class="num">Otevření</th>'
           + '<th class="num">Přivedl</th>'
           + '<th class="num">Nákupů</th><th class="num">Utraceno</th><th>Naposledy</th><th></th></tr></thead><tbody>'
@@ -249,7 +249,7 @@
           + mini(cz(p.pradlomatu), 'Prádlomatů') + mini(cz(j.mista.length), 'Obsazených míst')
           + mini(p.hotovost == null ? '—' : cz(p.hotovost), 'Hotovost')
           + mini(p.uver == null ? '—' : cz(p.uver), 'Úvěr')
-          + mini(cz(p.prijem || 0) + ' L$', 'Příjem / měsíc')
+          + mini(cz(p.prijem || 0) + ' L$', 'Zbyde / měsíc')
           + mini(cz(p.pozvanek), 'Otevření odkazu')
           + mini(cz((j.privedeni || []).length), 'Přivedl hráčů')
           + mini(esc(p.profil || '—'), 'Profil')

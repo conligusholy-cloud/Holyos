@@ -61,8 +61,9 @@ router.get('/players', api(async (req, res) => {
   res.json({ ok: true, players: rows.map((p) => {
     const st = p.state || {};
     const units = Array.isArray(st.units) ? st.units : [];
-    // Měsíční příjem = zisk prádlomatů z poslední uložené sítě, po úrocích z úvěru.
-    const prijem = units.reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0) - acct._urokMesicne(st);
+    // Co hráči měsíčně zbyde po celých splátkách, pobočkách a četě — to samé
+    // číslo, které vidí v hlavičce hry. Jinak si stěžuje, že Velín lže.
+    const prijem = acct._zbydeMesicne(st);
     return {
       id: p.id, nick: p.nick, email: p.email,
       prijem: Math.round(prijem),
@@ -135,8 +136,7 @@ router.get('/players/:id', api(async (req, res) => {
     hotovost: typeof st.cash === 'number' ? Math.round(st.cash) : null,
     uver: typeof st.loan === 'number' ? Math.round(st.loan) : null,
     pradlomatu: Array.isArray(st.units) ? st.units.length : 0,
-    prijem: Math.round((Array.isArray(st.units) ? st.units : [])
-      .reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0) - acct._urokMesicne(st)),
+    prijem: acct._zbydeMesicne(st),
     pozvanek: st.refs || 0,
     ref: p.ref_id || null,
     privedl_me: zvouci ? { id: zvouci.id, nick: zvouci.nick, firma: zvouci.company || zvouci.nick } : null,

@@ -199,6 +199,19 @@ function splatkyMesicne(st) {
     return a + Math.min(Number(l.splatka) || 0, zbyva + urok);
   }, 0));
 }
+// Co hráči měsíčně opravdu zbyde — jediná definice pro žebříček i Velín.
+// Musí dávat to samé číslo jako cistyZisk() v public/compounder/game/game.js,
+// jinak by administrace ukazovala něco jiného než hráč vidí v hlavičce.
+const POBOCKA_MESICNE = 15000, CETA_MZDY = 80000, SHANEC_MZDA = 50000;
+function zbydeMesicne(st) {
+  if (!st) return 0;
+  const units = Array.isArray(st.units) ? st.units : [];
+  const provozni = units.reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0);
+  const pobocky = (Array.isArray(st.pobocky) ? st.pobocky.length : 0) * POBOCKA_MESICNE;
+  const ceta = (st.ceta && st.ceta.od)
+    ? CETA_MZDY + (st.ceta.shanec ? SHANEC_MZDA : 0) + (Number(st.ceta.phm) || 0) : 0;
+  return Math.round(provozni - splatkyMesicne(st) - pobocky - ceta);
+}
 
 // ─── Distributor ────────────────────────────────────────────────────────────
 // Kdo si platí měsíční režii, dostává 10 % z ceny každého prádlomatu, který
@@ -574,15 +587,8 @@ async function zebricky() {
   const zisk = [], pozvanky = [];
   hraci.forEach((h) => {
     const st = h.state || {};
-    const units = Array.isArray(st.units) ? st.units : [];
-    // To, co hráči opravdu zbyde: provozní zisk minus celá splátka, pobočky
-    // a četa. Musí to být to samé číslo, co mu svítí v hlavičce jako „Zbyde“ —
-    // jinak by žebříček říkal něco jiného než hra.
-    const provozni = units.reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0);
-    const pobocky = (Array.isArray(st.pobocky) ? st.pobocky.length : 0) * 15000;
-    const ceta = (st.ceta && st.ceta.od)
-      ? 80000 + (st.ceta.shanec ? 50000 : 0) + (Number(st.ceta.phm) || 0) : 0;
-    const mesicne = provozni - splatkyMesicne(st) - pobocky - ceta;
+    // To, co hráči opravdu zbyde — stejně jako mu to svítí v hlavičce hry.
+    const mesicne = zbydeMesicne(st);
     const fi = h.company || (h.nick + ' s.r.o.');
     if (mesicne > 0) zisk.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, hodnota: Math.round(mesicne) });
     if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, hodnota: st.refs });
@@ -743,3 +749,4 @@ module.exports._dropPrices = dropPrices;
 module.exports._defaults = ALL;
 module.exports._cashCustom = CASH_CUSTOM;
 module.exports._urokMesicne = urokMesicne;
+module.exports._zbydeMesicne = zbydeMesicne;
