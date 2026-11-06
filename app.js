@@ -1385,6 +1385,13 @@ server.listen(PORT, async () => {
   } catch (err) {
     console.error('[app] ensureInvoiceSchema selhal:', err.message);
   }
+  // Hra: dorovná startovní hotovost hráčům, kteří začali před tutoriálem.
+  // Idempotentní — každý to dostane nejvýš jednou.
+  try {
+    await require('./services/game/vyrovnani').vyrovnejStartovniHotovost();
+  } catch (err) {
+    console.error('[app] vyrovnani startovni hotovosti selhalo:', err.message);
+  }
   // Šifrování citlivých polí osob: po startu zašifruje stávající záznamy (jen s FIELD_ENC_KEY, idempotentní)
   try {
     const fc = require('./services/field-crypto');

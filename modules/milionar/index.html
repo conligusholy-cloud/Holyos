@@ -282,9 +282,14 @@
               + (x.darem && x.nepouzito ? ' <button class="btn sm" data-revoke="' + esc(x.kind) + '" title="Odebere jeden darovaný nepoužitý kus">−1</button>' : '')
               + '</td></tr>';
           }).join('') + '</tbody></table></div>'
-          + '<h3 style="font-size:14px;margin:18px 0 8px">Koho přivedl do hry'
-          + (p.privedl_me ? ' <span class="note" style="font-weight:400">· sám přišel od ' + esc(p.privedl_me.firma) + '</span>' : '')
-          + '</h3>'
+          + '<h3 style="font-size:14px;margin:18px 0 8px">Kdo přivedl jeho</h3>'
+          + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+          + '<select id="zvouci-sel" class="qty" style="min-width:220px"><option value="">— nikdo —</option></select>'
+          + '<button class="btn sm" id="zvouci-go">Zapsat</button>'
+          + '<span class="note" id="zvouci-stav">' + (p.privedl_me ? 'teď: ' + esc(p.privedl_me.firma) : 'zatím nikdo') + '</span>'
+          + '</div>'
+          + '<p class="note" style="margin:6px 0 0">Provize za už koupené stroje doběhnou zvoucímu samy, až otevře záložku Já.</p>'
+          + '<h3 style="font-size:14px;margin:18px 0 8px">Koho přivedl do hry</h3>'
           + ((j.privedeni || []).length
             ? '<div class="tbl-wrap"><table class="data-table"><thead><tr><th>Hráč</th><th>Kdy přišel</th>'
               + '<th>Naposledy ve hře</th><th class="num">Utratil</th></tr></thead><tbody>'
@@ -314,6 +319,27 @@
         [].forEach.call(DLG.querySelectorAll('[data-detail]'), function (b) {
           b.onclick = function () { detail(b.getAttribute('data-detail')); };
         });
+        // Výběr zvoucího: seznam hráčů se dočte až teď, ať detail nablíká hned.
+        var sel = DLG.querySelector('#zvouci-sel');
+        if (sel) {
+          get('/players-vyber').then(function (v) {
+            (v.players || []).forEach(function (h) {
+              if (h.id === Number(id)) return;
+              var o = document.createElement('option');
+              o.value = h.id;
+              o.textContent = h.firma + '  (' + h.nick + ')';
+              if (p.privedl_me && p.privedl_me.id === h.id) o.selected = true;
+              sel.appendChild(o);
+            });
+          }).catch(function () { /* nevadí, zůstane prázdný */ });
+          var zg = DLG.querySelector('#zvouci-go');
+          zg.onclick = function () {
+            zg.disabled = true; zg.textContent = 'Zapisuji…';
+            post('/players/' + id + '/privedl', { zvouci_id: sel.value ? Number(sel.value) : null })
+              .then(function () { detail(id); loadPlayers(); })
+              .catch(function (e) { zg.disabled = false; zg.textContent = 'Zapsat'; alert(e.message); });
+          };
+        }
         var cg = DLG.querySelector('#cash-go');
         var posliCash = function (castka, b) {
           b.disabled = true;

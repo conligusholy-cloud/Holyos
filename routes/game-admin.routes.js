@@ -95,6 +95,44 @@ router.post('/players/:id/disabled', api(async (req, res) => {
   res.json({ ok: true, disabled: p.disabled });
 }));
 
+// POST /players/:id/privedl { zvouci_id } — ruční oprava sítě: kdo tohohle hráče
+// do hry přivedl. Prázdné zvouci_id vazbu zruší. Provize za už koupené stroje
+// pak zvoucímu doběhnou samy, až otevře záložku Já.
+router.post('/players/:id/privedl', api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const zvouciId = parseInt((req.body || {}).zvouci_id, 10);
+  const p = await prisma.gamePlayer.findUnique({ where: { id } });
+  if (!p) return res.status(404).json({ error: 'Hráč nenalezen.' });
+  if (!Number.isFinite(zvouciId)) {
+    await prisma.gamePlayer.update({ where: { id }, data: { invited_by_id: null } });
+    return res.json({ ok: true, privedl_me: null });
+  }
+  if (zvouciId === id) return res.status(400).json({ error: 'Hráč nemůže přivést sám sebe.' });
+  const z = await prisma.gamePlayer.findUnique({ where: { id: zvouciId },
+    select: { id: true, nick: true, company: true } });
+  if (!z) return res.status(404).json({ error: 'Zvoucí hráč nenalezen.' });
+  // Kruh by rozbil počítání sítě — zvoucí nesmí být někým, koho přivedl tenhle hráč.
+  let chod = z, kroku = 0;
+  while (chod && chod.invited_by_id && kroku++ < 50) {
+    if (chod.invited_by_id === id) return res.status(400).json({ error: 'To by udělalo kruh.' });
+    chod = await prisma.gamePlayer.findUnique({ where: { id: chod.invited_by_id },
+      select: { id: true, invited_by_id: true } });
+  }
+  await prisma.gamePlayer.update({ where: { id },
+    data: { invited_by_id: z.id, invited_at: p.invited_at || new Date() } });
+  res.json({ ok: true, privedl_me: { id: z.id, nick: z.nick, firma: z.company || z.nick } });
+}));
+
+// GET /players → pro výběr zvoucího stačí nick a firma (lehký seznam)
+router.get('/players-vyber', api(async (req, res) => {
+  const rows = await prisma.gamePlayer.findMany({
+    where: { disabled: false }, orderBy: { nick: 'asc' },
+    select: { id: true, nick: true, company: true },
+  });
+  res.json({ ok: true, players: rows.map((p) => ({ id: p.id, nick: p.nick,
+    firma: p.company || (p.nick + ' s.r.o.') })) });
+}));
+
 // GET /players/:id → detail: co hráč vlastní, co utratil, kde stojí
 router.get('/players/:id', api(async (req, res) => {
   const id = parseInt(req.params.id, 10);
