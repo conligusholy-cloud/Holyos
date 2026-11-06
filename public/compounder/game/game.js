@@ -2913,8 +2913,13 @@ function znakSheet() {
 var DIST = null;
 function loadDist(then) {
   if (!ME) { DIST = null; if (then) then(); return; }
-  api('/account/distributor').then(function (r) { DIST = r.ok ? r.j : null; if (then) then(); })
-    .catch(function () { if (then) then(); });
+  api('/account/distributor').then(function (r) {
+    DIST = r.ok ? r.j : null;
+    if (then) then();
+    // Server mohl právě teď dorovnat provize, které nevznikly včas. Vyzvedneme
+    // je hned — čekat na minutový tep by vypadalo, že peníze nepřišly.
+    vyzvedniNasledky(function () { if (!$('v-me').classList.contains('hidden')) paintMe(); });
+  }).catch(function () { if (then) then(); });
 }
 function distHtml() {
   if (!ME) return '';
