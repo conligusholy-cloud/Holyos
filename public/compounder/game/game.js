@@ -794,9 +794,14 @@ function load() {
     // si nikdy nemohl zřídit.
     if (!o.sidlo) {
       var prvni = (o.units || []).slice().sort(function (a, b) { return (a.builtAt || 0) - (b.builtAt || 0); })[0];
-      o.sidlo = prvni && prvni.lat != null
-        ? { name: prvni.name || 'sídlo', lat: prvni.lat, lon: prvni.lon, od: prvni.builtAt || Date.now() }
-        : null;
+      if (prvni && prvni.lat != null) {
+        var ob = o.areas && o.areas[prvni.areaId];
+        var sp2 = (ob && ob.spots) || [];
+        var la = 0, lo = 0, n = 0;
+        sp2.forEach(function (x) { if (x.lat != null) { la += x.lat; lo += x.lon; n++; } });
+        o.sidlo = { name: (ob && ob.name) || prvni.name || 'sídlo',
+          lat: n ? la / n : prvni.lat, lon: n ? lo / n : prvni.lon, od: prvni.builtAt || Date.now() };
+      } else o.sidlo = null;
     }
     if (o.ceta === undefined) o.ceta = null;
     if (o.ramec === undefined) o.ramec = null;
@@ -1163,6 +1168,25 @@ function addAttribution() {
   });
   new C().addTo(map);
 }
+// Sídlo a pobočky na mapě. Sídlo má větší domeček, provozovna menší.
+function domIcon(velke, nazev) {
+  var r = velke ? 38 : 28;
+  return L.divIcon({ className: '', iconSize: [r, r], iconAnchor: [r / 2, r / 2],
+    html: '<div class="pin dum' + (velke ? '' : ' mala') + '">'
+      + '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.5 11h2.2v9h5.1v-5.6h4.4V20h5.1v-9h2.2z"/></svg>'
+      + '<i class="pin-tag">' + esc(nazev || (velke ? 'Sídlo' : 'Pobočka')) + '</i></div>' });
+}
+// Co se dá se základnou dělat — zatím jen přehled, pobočku jde prodat na Burze.
+function zakladnaSheet(z, jeSidlo) {
+  sheet('<h3>' + esc(z.name || (jeSidlo ? 'Sídlo firmy' : 'Pobočka')) + '</h3>'
+    + '<p class="muted small">' + (jeSidlo
+        ? 'Odsud vyjíždí doprava strojů i stavební četa. Sídlo se nemění.'
+        : 'Provozovna — doprava se počítá od ní, když je blíž než sídlo.') + '</p>'
+    + (jeSidlo ? '' : '<div class="kv"><span>Provoz</span><b class="warn">' + kcFull(POBOCKA_MESICNE) + ' / měsíc</b></div>')
+    + '<div class="kv"><span>Prádlomatů do 30 km</span><b>'
+    + S.units.filter(function (u) { return u.lat != null && kmMezi(z, u) <= 30; }).length + '</b></div>'
+    + (jeSidlo ? '' : '<p class="fine">Prodat ji můžeš na Burze jako cokoli jiného.</p>'));
+}
 function pinIcon(cls, txt) {
   return L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15],
     html: '<div class="pin ' + cls + '">' + txt + '</div>' });
@@ -1208,6 +1232,16 @@ function drawMap() {
     L.marker([c.lat, c.lon], { icon: rivalIcon(c) })
       .addTo(layer)
       .on('click', function () { cizi(c); });
+  });
+  // Sídlo a provozovny: velký domeček pro sídlo, menší pro pobočku.
+  if (S.sidlo && S.sidlo.lat != null) {
+    L.marker([S.sidlo.lat, S.sidlo.lon], { icon: domIcon(true, S.sidlo.name) })
+      .addTo(layer).on('click', function () { zakladnaSheet(S.sidlo, true); });
+  }
+  (S.pobocky || []).forEach(function (b) {
+    if (b.lat == null) return;
+    L.marker([b.lat, b.lon], { icon: domIcon(false, b.name) })
+      .addTo(layer).on('click', function () { zakladnaSheet(b, false); });
   });
   $('map-hint').classList.toggle('hidden', any);
 }
@@ -1629,8 +1663,8 @@ function installSheet(sp, areaId, modelKey, drz) {
     + '<p class="muted small">' + esc(sp.name) + ' — teď se platí '
     + (jeZasitovane(sp) ? 'instalace stroje' : 'přípojky (voda, odpad, elektřina)')
     + ' a doprava. Stroj máš skladem, nájem domluvený.</p>'
-    + (!S.sidlo ? '<p class="fine ok">Tady vznikne sídlo tvojí firmy. Od něj se pak počítá doprava všech dalších strojů, '
-        + 'tak si rozmysli, kde začínáš.</p>' : '')
+    + (!S.sidlo ? '<p class="fine ok">Touhle stavbou vznikne sídlo tvojí firmy — ve městě, ne na téhle adrese. '
+        + 'Od něj se pak počítá doprava všech dalších strojů, tak si rozmysli, kde začínáš.</p>' : '')
     + '<div class="kv"><span>' + (jeZasitovane(sp) ? 'Instalace' : cetaZvladne(sp) ? 'Přípojky vlastní četou' : 'Přípojky') + '</span><b'
     + (cetaZvladne(sp) ? ' class="ok"' : '') + '>' + kcFull(e.conn) + '</b></div>'
     + (cetaZvladne(sp) ? '<p class="fine ok">Staví tvoje parta za ' + Math.round(CETA_PODIL * 100)
@@ -1664,10 +1698,13 @@ function installSheet(sp, areaId, modelKey, drz) {
       doFinance(f, { druh: 'misto', spotId: sp.id, popis: 'Přípojky — ' + sp.name });
       pripojUverKeStroji(sp.id, sp.name);
       if (cetaZvladne(sp)) cetaPostavila(sp);
-      // První postavený prádlomat zakládá sídlo firmy.
+      // První stavba zakládá sídlo — ale ve městě, ne na adrese prádlomatu.
+      // Firma má vlastní adresu; sdílet ji s provozovnou by nedávalo smysl.
       if (!S.sidlo) {
-        S.sidlo = { name: sp.name, lat: sp.lat, lon: sp.lon, od: Date.now() };
-        toast('Tady vzniklo sídlo tvojí firmy.', 'ok');
+        var a = S.areas[areaId], str = stredOblasti(a);
+        S.sidlo = { name: (a && a.name) || sp.name, lat: str ? str.lat : sp.lat,
+          lon: str ? str.lon : sp.lon, od: Date.now() };
+        toast('Sídlo firmy máš v ' + S.sidlo.name + '. Změnit se nedá.', 'ok');
       }
       S.stock[modelKey] = inStock(modelKey) - 1;
       S.units.push({ spotId: sp.id, areaId: areaId, name: sp.name, kind: sp.kind, score: sp.score,

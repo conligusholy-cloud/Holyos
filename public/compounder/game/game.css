@@ -362,3 +362,13 @@ button{font:inherit;cursor:pointer}
 .splat-b span { font-size: 11px; color: var(--text2); font-variant-numeric: tabular-nums; }
 .splat-b.on { border-color: var(--vio); background: rgba(124,92,255,.16); }
 .splat-b.zamceno { opacity: .4; }
+
+/* ---- Sídlo a provozovny na mapě --------------------------------------- */
+.pin.dum {
+  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; background: linear-gradient(160deg, #2b3f6b, #141f36);
+  border: 2px solid var(--blue); box-shadow: 0 6px 16px rgba(0, 0, 0, .5); position: relative;
+}
+.pin.dum svg { width: 64%; height: 64%; fill: var(--blue); }
+.pin.dum.mala { border-color: var(--text2); border-radius: 8px; }
+.pin.dum.mala svg { fill: var(--text2); width: 62%; height: 62%; }
