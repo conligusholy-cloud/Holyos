@@ -177,6 +177,18 @@ async function pub(p) {
   };
 }
 
+// Sazby profilů — musí sedět s PROFILES v public/compounder/game/game.js.
+// Server je potřebuje jen na to, aby žebříček počítal zisk po úrocích stejně
+// jako hra v prohlížeči.
+const PROFIL_SAZBA = { opatrny: 0.096, vyvazeny: 0.114, dravy: 0.132 };
+function urokMesicne(st) {
+  const dluh = Number(st && st.loan) || 0;
+  if (dluh <= 0) return 0;
+  const zaklad = PROFIL_SAZBA[st.profile] != null ? PROFIL_SAZBA[st.profile] : 0.114;
+  const sazba = Math.max(0.02, zaklad - (Number(st.rateDrop) || 0) + (Number(st.loanPrem) || 0));
+  return Math.round(dluh * sazba / 12);
+}
+
 // ─── Pozvánky ────────────────────────────────────────────────────────────────
 // Každý hráč má svoje id do sdíleného odkazu (ref_id). Kdo přijde přes cizí
 // odkaz a založí si účet, zůstane u zvoucího zapsaný natrvalo — z toho se dá
@@ -466,7 +478,11 @@ async function zebricky() {
   hraci.forEach((h) => {
     const st = h.state || {};
     const units = Array.isArray(st.units) ? st.units : [];
-    const mesicne = units.reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0);
+    // Zisk po úrocích — kdo staví na dluh, má menší skutečný výdělek.
+    // Musí se počítat stejně jako v prohlížeči, jinak by žebříček ukazoval něco
+    // jiného než hráčova hlavička.
+    const provozni = units.reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0);
+    const mesicne = provozni - urokMesicne(st);
     const fi = h.company || (h.nick + ' s.r.o.');
     if (mesicne > 0) zisk.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, hodnota: Math.round(mesicne) });
     if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, hodnota: st.refs });
@@ -610,3 +626,4 @@ module.exports._item = item;
 module.exports._dropPrices = dropPrices;
 module.exports._defaults = ALL;
 module.exports._cashCustom = CASH_CUSTOM;
+module.exports._urokMesicne = urokMesicne;

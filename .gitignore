@@ -69,3 +69,7 @@ scripts/out/
 
 # Laundromats — originály fotek a videí (na web jdou zmenšené verze z apps/laundromats/media)
 apps/laundromats/foto/
+.gh-token.tmp
+.env
+.env.*
+*.env.bak

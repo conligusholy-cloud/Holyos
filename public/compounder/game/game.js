@@ -52,8 +52,7 @@ var MONTH_MS = 43200000;         // 1 herní měsíc = 12 skutečných hodin
 var YEAR_MS = 12 * MONTH_MS;     // 1 herní rok = 6 skutečných dní
 var DELIVERY_MONTHS = 2;         // dodání prádlomatu = 2 herní měsíce (přesně 1 skutečný den)
 var BANK_BASE = 1000000;         // startovní rámec v bance
-var BANK_PER_UNIT = 600000;      // o kolik rámec povyroste s každým prádlomatem
-var BANK_PER_DAY = 100000;       // co banka sama doplní za skutečný den
+var BANK_PER_DAY = 500000;       // co banka sama doplní za skutečný den
 var REVEAL_COST = 5000;          // obhlídka místa — jen se tam někdo zajede podívat
 var CONN_MIN = 50000, CONN_MAX = 100000;  // přípojky se platí až po domluvě nájmu, podle místa
 var CONN_MAX_MULT = 1.2;         // MAX má víc strojů, přípojky jsou o pětinu dražší
@@ -271,7 +270,10 @@ function etaText(ms) {
 // ─── Běh času ────────────────────────────────────────────────────────────────
 // Dopočítá všechno, co se stalo od minulého výpočtu: výnos sítě, úrok z úvěru
 // a doplnění bankovního rámce. Volá se při otevření hry i každých pár vteřin.
-function bankCap() { return BANK_BASE + BANK_PER_UNIT * S.units.length + (S.bankBonus || 0); }
+// Rámec už nemá strop — jen narůstá. Jedinou brzdou je zástava, tedy kolik
+// banka půjčí proti majetku. Dřív tu byl umělý hrnec, který hru brzdil i tomu,
+// kdo měl čím ručit.
+function bankCap() { return Infinity; }
 // Navstevnost se meni podle pozvanek, takze uz postavene pradlomaty prepocitame.
 // Investice, pripojky a domluveny najem zustavaji - to je zaplacene a podepsane.
 function refreshUnits() {
@@ -289,6 +291,10 @@ function refreshUnits() {
   });
 }
 function monthlyProfit() { return S.units.reduce(function (a, u) { return a + u.eco.profit; }, 0); }
+// Co hráči z provozu opravdu zbyde: síť vydělá, banka si vezme úrok.
+// Pozor: do tick() patří dál monthlyProfit(), tam se úrok odečítá zvlášť —
+// kdyby se počítalo s čistým ziskem, strhl by se dvakrát.
+function cistyZisk() { return monthlyProfit() - urokMesicne(); }
 function yearlyProfit() { return monthlyProfit() * 12; }
 function tick() {
   refreshUnits();
@@ -891,7 +897,7 @@ function mn(n, a, b, c) { return n === 1 ? a : (n >= 2 && n <= 4) ? b : c; }
 // Bez téhle věty vidí jen zašedlé tlačítko a neví, jestli má čekat, nebo něco dělat.
 function dohnat(chybi) {
   if (!(chybi > 0)) return '';
-  var zisk = monthlyProfit();
+  var zisk = cistyZisk();
   if (!(zisk > 0)) return 'Zatím ti nic nepřitéká — postav první prádlomat, nebo si půjč v bance.';
   var mesicu = Math.ceil(chybi / zisk);
   var dni = Math.max(1, Math.round(mesicu / 2));
@@ -1277,7 +1283,9 @@ function paint() {
   refreshUnits();
   $('t-year').textContent = gameYear();
   $('t-cash').textContent = kcHdr(S.cash);
-  $('t-rate').textContent = kc(monthlyProfit());
+  var cz = cistyZisk();
+  $('t-rate').textContent = kc(cz);
+  $('t-rate').className = cz < 0 ? 'err' : 'ok';
   $('t-count').textContent = S.units.length;
   // Hlavička se hýbe pořád, obsah záložky počká, až hráč dopíše.
   if (pisePrave()) return;
@@ -1333,7 +1341,8 @@ function paintZeb() {
 
 function paintNet() {
   $('net-sum').innerHTML = '<div><span>Prádlomaty</span><b>' + S.units.length + '</b></div>'
-    + '<div><span>Zisk / měsíc</span><b class="ok">' + kc(monthlyProfit()) + '</b></div>'
+    + '<div><span>Zisk / měsíc</span><b class="' + (cistyZisk() < 0 ? 'err' : 'ok') + '">' + kc(cistyZisk()) + '</b></div>'
+    + (urokMesicne() > 0 ? '<div><span>Z toho bance</span><b class="warn">' + kc(-urokMesicne()) + '</b></div>' : '')
     + '<div><span>Investováno</span><b>' + kc(investedTotal()) + '</b></div>'
     + '<div><span>Vyděláno celkem</span><b>' + kc(S.stats.earned) + '</b></div>';
   if (!S.units.length) { $('net-list').innerHTML = '<div class="empty">Zatím nemáš ani jeden prádlomat.<br>Začni tím, že na mapě prozkoumáš oblast.</div>'; return; }
@@ -1354,8 +1363,8 @@ function paintBank() {
   $('bank-body').innerHTML = '<div class="card">'
     + '<div class="row"><span class="muted small">Hotovost</span><b>' + kcFull(S.cash) + '</b></div>'
     + '<div class="row"><span class="muted small">Volný rámec v bance</span><b>' + kcFull(S.bank) + '</b></div>'
-    + '<div class="bar"><i style="width:' + Math.round(Math.min(1, S.bank / bankCap()) * 100) + '%"></i></div>'
-    + '<p class="fine" style="margin-top:6px">Rámec sám roste o ' + kcFull(BANK_PER_DAY) + ' za den, nejvýš do ' + kcFull(bankCap()) + '. Strop roste s každým postaveným prádlomatem.</p>'
+    + '<p class="fine" style="margin-top:6px">Rámec sám roste o ' + kcFull(BANK_PER_DAY)
+    + ' za den a nemá strop. Kolik si půjčíš, ale rozhoduje zástava — majetek, kterým ručíš.</p>'
     + '</div>'
     + '<div class="card"><h3>Úvěr</h3>'
     + '<div class="kv"><span>Dlužíš</span><b class="' + (S.loan > 0 ? 'warn' : '') + '">' + kcFull(S.loan) + '</b></div>'
