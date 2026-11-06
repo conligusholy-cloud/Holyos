@@ -2106,7 +2106,7 @@ function partnerSupportCard(s) {
         ${inp('total_year', 'Podpořil v roce', p.total_year)}
       </div>
       <div class="row" style="gap:10px;align-items:flex-end;margin-top:6px">
-        ${inp('palety', 'Palety', p.std_palety_all != null ? p.std_palety_all : p.palety)}${inp('expanze', 'Expanze', p.expanze)}${inp('neurawash', 'NeuraWash', p.neurawash)}${inp('opakovacky', 'Opakovačky', p.std_opakovacky_all != null ? p.std_opakovacky_all : p.opakovacky)}
+        ${inp('palety', 'Palety', p.std_palety_all != null ? p.std_palety_all : p.palety)}${inp('expanze', 'Expanze', p.std_expanze_all != null ? p.std_expanze_all : p.expanze)}${inp('neurawash', 'NeuraWash', p.std_neurawash_all != null ? p.std_neurawash_all : p.neurawash)}${inp('opakovacky', 'Opakovačky', p.std_opakovacky_all != null ? p.std_opakovacky_all : p.opakovacky)}
       </div>
       <div class="row" style="gap:10px;align-items:flex-end;margin-top:6px">
         ${inp('network_all', 'Obrat sítě od počátku', p.network_all)}${inp('network_year', 'Obrat sítě v roce', p.network_year)}
