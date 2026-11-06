@@ -511,9 +511,11 @@ function splatitUver(id, castka) {
   return dam;
 }
 
-// ─── Prodloužení splatnosti běžícího úvěru ────────────────────────────
-// Rozložit zbytek do delšího času srazí splátku, ale zaplatí se víc na úrocích
-// — a banka to nedá každému. Rozhoduje táž historie jako u nového úvěru.
+// ─── Změna délky splácení běžícího úvěru ─────────────────────────
+// Delší splatnost srazí splátku, ale zaplatí se víc na úrocích — a banka ji
+// nedá každému; rozhoduje táž historie jako u nového úvěru. Kratší splatnost
+// splátku zvedne, ale úvěr je dřív z krku a stojí méně — tu banka dá vždycky,
+// pro ni je to jistota navíc, a ještě srazí přirážku.
 var PRODLOUZENI_POPLATEK = 0.005;   // za přepsání smlouvy, z nesplacené jistiny
 // Na kterém stupni žebříčku splatností úvěr teď stojí.
 function splatnostIdx(l) {
@@ -521,38 +523,45 @@ function splatnostIdx(l) {
   for (var i = SPLATNOSTI.length - 1; i >= 0; i--) if (SPLATNOSTI[i].mesicu <= m) return i;
   return 0;
 }
-// Jak by úvěr vypadal po přepsaní na delší splatnost.
-function prodlouzeniNavrh(l, i) {
+// Jak by úvěr vypadal po přepsání na jinou délku splácení.
+function zmenaNavrh(l, i) {
   var ted = splatnostIdx(l);
   var nova = SPLATNOSTI[i], stara = SPLATNOSTI[ted];
   var nalada = naladaDnes();
-  // Doplatek přirážky za delší splatnost plus to, jak je rizikoř naladěný dnes.
-  var sazba = Math.max(0.02, l.sazba + (nova.prirazka - stara.prirazka) + nalada.sazba);
+  var delsi = i > ted;
+  // Rozdíl přirážky za splatnost. U delší do toho mluví i nálada rizikoře,
+  // u kratší ne — to je pro banku jen dobře, nemá proč přitvrzovat.
+  var sazba = Math.max(0.02, l.sazba + (nova.prirazka - stara.prirazka) + (delsi ? nalada.sazba : 0));
   var splatka = anuita(l.zbyva, sazba, nova.mesicu);
-  var urokTed = Math.max(0, Math.min(l.splatka, l.zbyva) * (l.zbyvaMesicu || 0) - l.zbyva);
+  var splatkaTed = Math.min(l.splatka, l.zbyva);
+  var urokTed = Math.max(0, splatkaTed * (l.zbyvaMesicu || 0) - l.zbyva);
   var urokPak = Math.max(0, splatka * nova.mesicu - l.zbyva);
-  return { i: i, mesicu: nova.mesicu, nazev: nova.nazev, sazba: sazba, splatka: splatka,
+  return { i: i, delsi: delsi, mesicu: nova.mesicu, nazev: nova.nazev, sazba: sazba, splatka: splatka,
     poplatek: Math.round(l.zbyva * PRODLOUZENI_POPLATEK), nalada: nalada,
-    uspora: Math.max(0, Math.min(l.splatka, l.zbyva) - splatka),
+    rozdilSplatky: Math.round(splatka - splatkaTed),
+    rozdilUroku: Math.round(urokPak - urokTed),
     urokTed: Math.round(urokTed), urokPak: Math.round(urokPak) };
 }
-// Stupně, které banka tomuhle úvěru dnes povolí. Prázdné = zatím nic.
-function prodlouzeniLze(l) {
+// Stupně, na které jde úvěr dnes přepsat. Kratší vždycky, delší podle historie.
+function splatnostiLze(l) {
   var ted = splatnostIdx(l), strop = maxSplatnost(), out = [];
-  for (var i = ted + 1; i <= strop && i < SPLATNOSTI.length; i++) out.push(i);
+  for (var i = 0; i < SPLATNOSTI.length; i++) {
+    if (i === ted) continue;
+    if (i < ted || i <= strop) out.push(i);
+  }
   return out;
 }
-function prodlouzitUver(id, i) {
+function zmenitSplatnost(id, i) {
   var l = (S.loans || []).filter(function (x) { return x.id === id; })[0];
   if (!l) return null;
-  var n = prodlouzeniNavrh(l, i);
+  var n = zmenaNavrh(l, i);
   if (S.cash < n.poplatek) return null;
   S.cash -= n.poplatek;
   l.sazba = n.sazba;
   l.mesicu = n.mesicu;
   l.zbyvaMesicu = n.mesicu;
   l.splatka = n.splatka;
-  l.prodlouzeno = (l.prodlouzeno || 0) + 1;
+  l.prepsano = (l.prepsano || 0) + 1;
   prepocitejDluh();
   return n;
 }
@@ -665,22 +674,28 @@ function naladaDnes() {
 // Delší splatnost sráží splátku, ale prodraží se na úrocích — a banka ji nedá
 // každému. Rozhoduje historie splacených úvěrů, ne náhoda.
 var SPLATNOSTI = [
+  { mesicu: 24, nazev: '2 roky', prirazka: -0.008 },
+  { mesicu: 36, nazev: '3 roky', prirazka: -0.005 },
   { mesicu: 60, nazev: '5 let', prirazka: 0 },
   { mesicu: 84, nazev: '7 let', prirazka: 0.004 },
   { mesicu: 120, nazev: '10 let', prirazka: 0.009 }
 ];
+// Nový úvěr začíná na pěti letech. Kratší stupně jsou až pro přepsání
+// běžícího úvěru — kdo ho chce mít z krku dřív, zaplatí víc měsíčně,
+// ale méně na úrocích. Banka proti tomu nic nemá, takže to nepodmíňuje.
+var SPL_ZAKLAD = 2;
 function maxSplatnost() {
   var splacenych = (S.stats && S.stats.splaceno) || 0;
   var stupen = splacenych >= 2 ? 2 : splacenych >= 1 ? 1 : 0;
   stupen += naladaDnes().splatnost;
-  return Math.max(0, Math.min(SPLATNOSTI.length - 1, stupen));
+  return Math.max(SPL_ZAKLAD, Math.min(SPLATNOSTI.length - 1, SPL_ZAKLAD + stupen));
 }
 // Proč delší splatnost nedostane — vždycky i s tím, za co by to bylo ano.
 function splatnostDuvod(i) {
   var splacenych = (S.stats && S.stats.splaceno) || 0;
   if (naladaDnes().id === 'audit') return 'Dneska je rizikoř po auditu a drží se základní splatnosti. Zkus to zítra.';
   if (splacenych === 0) return 'Nemáš za sebou jediný splacený úvěr, takže banka nemá podle čeho soudit. Splať první úvěr a vrať se.';
-  if (splacenych === 1 && i >= 2) return 'S jedním splaceným úvěrem ti banka dá nejvýš sedm let. Na deset se vrať, až budeš mít dva.';
+  if (splacenych === 1 && i >= SPL_ZAKLAD + 2) return 'S jedním splaceným úvěrem ti banka dá nejvýš sedm let. Na deset se vrať, až budeš mít dva.';
   return 'Na tuhle splatnost zatím nedosáhneš.';
 }
 
@@ -2520,7 +2535,7 @@ function uveryHtml() {
   if (!l.length) return '';
   return '<div class="card"><h3>Tvoje úvěry</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Každý má svoji sazbu a pevnou splátku. '
-    + 'Kterýkoli můžeš kdykoli předčasně splatit bez sankce — nebo si u něj vyjednat delší splatnost a srazit splátku.</p>'
+    + 'Kterýkoli můžeš kdykoli předčasně splatit bez sankce — nebo si u něj vyjednat jinou délku splácení: delší srazí splátku, kratší ušetří na úrocích.</p>'
     + l.map(function (u) {
         var urok = Math.round(u.zbyva * u.sazba / 12);
         var splatka = Math.min(u.splatka, u.zbyva + urok);
@@ -2531,12 +2546,12 @@ function uveryHtml() {
           + '<div class="kv"><span>Splátka / měsíc</span><b class="warn">' + kcFull(splatka)
           + ' <span class="muted">(úrok ' + kcFull(urok) + ')</span></b></div>'
           + '<div class="kv"><span>Zbývá měsíců</span><b>' + (u.zbyvaMesicu || 0) + ' z ' + (u.mesicu || 60) + '</b></div>'
-          + (u.prodlouzeno ? '<p class="fine">Splatnost už jsi jednou vyjednával'
-              + (u.prodlouzeno > 1 ? ' (' + u.prodlouzeno + '×)' : '') + '.</p>' : '')
+          + ((u.prepsano || u.prodlouzeno) ? '<p class="fine">Délku splácení už jsi jednou vyjednával'
+              + ((u.prepsano || u.prodlouzeno) > 1 ? ' (' + (u.prepsano || u.prodlouzeno) + '×)' : '') + '.</p>' : '')
           + (u.zmeskano ? '<p class="fine err">Neuhrazené splátky: ' + u.zmeskano + '. Banka to sleduje.</p>' : '')
           + '<div class="uver-akce">'
           + '<button class="btn sec sm" data-splatit="' + esc(u.id) + '"' + (S.cash < 1 ? ' disabled' : '') + '>Splatit tenhle</button>'
-          + '<button class="btn sec sm" data-prodlouzit="' + esc(u.id) + '">Prodloužit splatnost</button>'
+          + '<button class="btn sec sm" data-prodlouzit="' + esc(u.id) + '">Změnit splatnost</button>'
           + '</div>'
           + '</div>';
       }).join('')
@@ -2579,44 +2594,63 @@ function splatitUverSheet(id) {
 function prodlouzitSheet(id, vybrany) {
   var l = (S.loans || []).filter(function (x) { return x.id === id; })[0];
   if (!l) return;
-  var lze = prodlouzeniLze(l);
+  var lze = splatnostiLze(l);
   var nalada = naladaDnes();
+  var ted = splatnostIdx(l);
   if (!lze.length) {
-    sheet('<h3>Prodloužit splatnost</h3>'
+    sheet('<h3>Změnit délku splácení</h3>'
       + '<div class="nalada ' + nalada.id + '"><b>' + nalada.nazev + '</b><span>' + esc(nalada.slovo) + '</span></div>'
-      + '<p class="muted small">' + esc(splatnostIdx(l) >= SPLATNOSTI.length - 1
-          ? 'Tenhle úvěr už běží na nejdelší splatnost, kterou banka dává. Dél už ne.'
-          : splatnostDuvod(splatnostIdx(l) + 1)) + '</p>'
+      + '<p class="muted small">Tenhle úvěr už není kam přepsat.</p>'
       + '<button class="btn sec big" id="pr-zavrit">Rozumím</button>');
     var zx = $('pr-zavrit');
     if (zx) zx.onclick = closeSheet;
     return;
   }
-  var i = vybrany == null ? lze[0] : vybrany;
-  var n = prodlouzeniNavrh(l, i);
+  // Předvybere nejbližší delší stupeň — pro něj sem hráč chodí nejčastěji.
+  // Když delší není, nabídne nejbližší kratší.
+  var i = vybrany;
+  if (i == null) {
+    var delsi = lze.filter(function (k) { return k > ted; });
+    i = delsi.length ? delsi[0] : lze[lze.length - 1];
+  }
+  var n = zmenaNavrh(l, i);
   var splatkaTed = Math.min(l.splatka, l.zbyva);
-  sheet('<h3>Prodloužit splatnost</h3>'
-    + '<p class="muted small">' + esc(l.popis || 'Úvěr') + ' — zbývá ' + kcFull(l.zbyva) + '</p>'
+  var zbydePak = Math.round(cistyZisk() - n.rozdilSplatky);
+  var strop = maxSplatnost();
+  sheet('<h3>Změnit délku splácení</h3>'
+    + '<p class="muted small">' + esc(l.popis || 'Úvěr') + ' — zbývá ' + kcFull(l.zbyva)
+    + ', teď na ' + SPLATNOSTI[ted].nazev + '</p>'
     + '<div class="nalada ' + nalada.id + '"><b>' + nalada.nazev + '</b><span>' + esc(nalada.slovo) + '</span></div>'
-    + '<label class="fld"><span>Na jak dlouho</span></label>'
+    + '<label class="fld"><span>Na jak dlouho — krátká stojí míň, dlouhá uleví měsíčně</span></label>'
     + '<div class="splat">'
-    + lze.map(function (k) {
-        var m = prodlouzeniNavrh(l, k);
+    + SPLATNOSTI.map(function (x, k) {
+        if (k === ted) return '<button class="splat-b ted" disabled><b>' + x.nazev + '</b><span>teď</span></button>';
+        var moznost = lze.indexOf(k) >= 0;
+        if (!moznost) return '<button class="splat-b zamceno" disabled><b>' + x.nazev + '</b><span>zamčeno</span></button>';
+        var m = zmenaNavrh(l, k);
         return '<button class="splat-b' + (k === i ? ' on' : '') + '" data-pr-sp="' + k + '">'
-          + '<b>' + SPLATNOSTI[k].nazev + '</b><span>' + kcFull(m.splatka) + ' / měs</span></button>';
+          + '<b>' + x.nazev + '</b><span>' + kcFull(m.splatka) + ' / měs</span></button>';
       }).join('')
     + '</div>'
+    + (strop < SPLATNOSTI.length - 1 ? '<p class="fine">Zkrátit můžeš vždycky. Na delší splatnost zatím nedosáhneš: '
+        + esc(splatnostDuvod(strop + 1)) + '</p>' : '')
     + '<div class="kv"><span>Splátka teď</span><b>' + kcFull(splatkaTed) + ' / měsíc</b></div>'
-    + '<div class="kv"><span>Splátka po přepsaní</span><b class="ok">' + kcFull(n.splatka) + ' / měsíc</b></div>'
-    + '<div class="kv souhrn"><span>Ušetříš každý měsíc</span><b class="ok">' + kcFull(Math.round(n.uspora)) + '</b></div>'
+    + '<div class="kv"><span>Splátka po přepsání</span><b class="' + (n.rozdilSplatky <= 0 ? 'ok' : 'warn') + '">'
+    + kcFull(n.splatka) + ' / měsíc</b></div>'
+    + '<div class="kv souhrn"><span>' + (n.rozdilSplatky <= 0 ? 'Ušetříš každý měsíc' : 'Zaplatíš každý měsíc navíc') + '</span>'
+    + '<b class="' + (n.rozdilSplatky <= 0 ? 'ok' : 'warn') + '">' + kcFull(Math.abs(n.rozdilSplatky)) + '</b></div>'
     + '<div class="kv"><span>Úrok</span><b>' + (l.sazba * 100).toFixed(1).replace('.', ',') + ' % → '
     + (n.sazba * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>'
-    + '<div class="kv"><span>Na úrocích zaplatíš navíc</span><b class="warn">'
-    + kcFull(Math.max(0, n.urokPak - n.urokTed)) + '</b></div>'
+    + '<div class="kv"><span>' + (n.rozdilUroku <= 0 ? 'Na úrocích ušetříš celkem' : 'Na úrocích zaplatíš navíc') + '</span>'
+    + '<b class="' + (n.rozdilUroku <= 0 ? 'ok' : 'warn') + '">' + kcFull(Math.abs(n.rozdilUroku)) + '</b></div>'
     + '<div class="kv"><span>Poplatek za přepsání (' + (PRODLOUZENI_POPLATEK * 100).toFixed(1).replace('.', ',') + ' %)</span><b class="warn">'
     + kcFull(n.poplatek) + '</b></div>'
-    + '<p class="fine">Splátka klesne hned, ale úvěr poběží ' + n.mesicu + ' měsíců místo '
-    + (l.zbyvaMesicu || 0) + '. Banka na tom vydělá — proto ti to ráda dá.</p>'
+    + '<p class="fine' + (zbydePak < 0 ? ' err' : '') + '">' + (n.delsi
+        ? 'Splátka klesne hned, ale úvěr poběží ' + n.mesicu + ' měsíců místo ' + (l.zbyvaMesicu || 0)
+          + '. Banka na tom vydělá — proto ti to ráda dá.'
+        : 'Úvěr budeš mít z krku za ' + n.mesicu + ' měsíců místo ' + (l.zbyvaMesicu || 0)
+          + ' a ještě ti srazí přirážku. Zaplatíš ale víc každý měsíc.')
+    + ' Po přepsání ti měsíčně zbyde ' + kcFull(zbydePak) + '.</p>'
     + '<button class="btn big" id="pr-go"' + (S.cash < n.poplatek ? ' disabled' : '') + '>Přepsat na ' + SPLATNOSTI[i].nazev + '</button>'
     + (S.cash < n.poplatek ? '<p class="fine err">Na poplatek ' + kcFull(n.poplatek) + ' teď nemáš hotovost.</p>' : '')
     + '<button class="btn ghost" id="pr-zavrit">Nechám to tak</button>');
@@ -2627,10 +2661,10 @@ function prodlouzitSheet(id, vybrany) {
   });
   var g = $('pr-go');
   if (g) g.onclick = function () {
-    var r = prodlouzitUver(id, i);
+    var r = zmenitSplatnost(id, i);
     if (!r) return toast('Na poplatek nemáš hotovost.', 'err');
     save(); paint(); paintBank(); closeSheet(); syncState(true);
-    toast('Splátka klesla na ' + kcFull(r.splatka) + ' měsíčně.', 'ok');
+    toast('Přepsáno na ' + r.nazev + ' — splátka ' + kcFull(r.splatka) + ' měsíčně.', 'ok');
   };
 }
 function paintBank() {
@@ -3637,7 +3671,7 @@ var UVER_POPLATEK = 0.01;   // jednorázově za sjednání
 function uverNabidka(chci, iSplatnosti) {
   var p = PROFILES[S.profile];
   var nalada = naladaDnes();
-  var iS = Math.max(0, Math.min(maxSplatnost(), iSplatnosti == null ? 0 : iSplatnosti));
+  var iS = Math.max(SPL_ZAKLAD, Math.min(maxSplatnost(), iSplatnosti == null ? SPL_ZAKLAD : iSplatnosti));
   var sp = SPLATNOSTI[iS];
   // Složená zástava je také majetek — bez ní by zadluženost vyšla nesmyslně vysoká.
   var majetek = assetsTotal() + Math.max(0, (S && S.duvera) || 0);
@@ -3727,8 +3761,8 @@ function uverSheet(chci, iSplatnosti) {
     + '<label class="fld"><span>Kolik si chceš půjčit (nejvýš ' + kcFull(n.max) + ')</span>'
     + '<input id="uv-amt" class="inp" type="number" min="1000" step="1000" max="' + n.max + '" value="' + n.castka + '"></label>'
     + '<label class="fld"><span>Na jak dlouho</span></label>'
-    + '<div class="splat">' + SPLATNOSTI.map(function (x, i) {
-        var lze = i <= maxS;
+    + '<div class="splat">' + SPLATNOSTI.slice(SPL_ZAKLAD).map(function (x, j) {
+        var i = SPL_ZAKLAD + j, lze = i <= maxS;
         return '<button class="splat-b' + (i === n.iSplatnosti ? ' on' : '') + (lze ? '' : ' zamceno')
           + '" data-splat="' + i + '"' + (lze ? '' : ' disabled') + '>'
           + '<b>' + x.nazev + '</b><span>' + (lze ? kcFull(anuita(n.castka, Math.max(0.02, rateOf() + prirazkaZa(n.castka) + x.prirazka + n.nalada.sazba), x.mesicu)) + ' / měs' : 'zamčeno') + '</span></button>';
