@@ -1359,7 +1359,7 @@ function unitIcon(u) {
 }
 // Z dálky mají v mapě být jen prádlomaty, sídlo a pobočky. Volná místa je
 // v tomhle měřítku stejně nejde rozlišit — slepí se do hromádky otačníků.
-var MISTA_ZOOM = 12;
+var MISTA_ZOOM = 14;
 function drawMap() {
   if (!layer) return;
   layer.clearLayers();
@@ -1405,7 +1405,8 @@ function drawMap() {
     h.textContent = 'Napiš město a pošli tam člověka, ať ho projde. Místa jsou schovaná — dokud město neprozkoumáš, nic na mapě neuvidíš.';
     h.classList.remove('hidden');
   } else if (skryto) {
-    h.textContent = 'Přibliž mapu, ať uvidíš volná místa — teď jich je schovaných ' + skryto + '.';
+    h.textContent = 'Přibliž mapu na úroveň ulic, ať uvidíš volná místa — teď jich je schovaných '
+      + skryto + '. Ze seznamu oblastí tě hra skočí rovnou k nim.';
     h.classList.remove('hidden');
   } else h.classList.add('hidden');
 }
@@ -1462,7 +1463,7 @@ function areasSheet() {
   [].forEach.call($('sheet-body').querySelectorAll('[data-go]'), function (b) {
     b.onclick = function () {
       var a = S.areas[b.getAttribute('data-go')];
-      closeSheet(); if (map && a && a.lat) map.setView([a.lat, a.lon], 12);
+      closeSheet(); if (map && a && a.lat) map.setView([a.lat, a.lon], MISTA_ZOOM);
     };
   });
 }
@@ -1520,7 +1521,7 @@ function scout(city, btn) {
         if (known >= j.spots.length) {
           zalozSidlo(j.area);
           closeSheet();
-          if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], 12);
+          if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], MISTA_ZOOM);
           return toast(j.area.name + ' už máš prozkoumaný — koukni na mapu.', 'ok');
         }
         S.cash -= SCOUT_COST;
@@ -1529,7 +1530,7 @@ function scout(city, btn) {
         save(); paint(); drawMap(); closeSheet(); syncState(true);
         ev('game_scout');
         loadClaims();   // ať hráč hned vidí, kde už konkurence stojí
-        if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], 12);
+        if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], MISTA_ZOOM);
         toast(j.area.name + ': nalezeno ' + j.spots.length + ' míst.', 'ok');
       })
       .catch(function (e) {
