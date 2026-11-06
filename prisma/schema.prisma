@@ -7773,3 +7773,14 @@ model GameRef {
   @@index([ref_id])
   @@map("game_refs")
 }
+
+// Místa, kde už někdy stál prádlomat. Přípojky tam zůstávají, takže další
+// stavba je levná — a tahle stopa musí přežít i to, že místo zůstane prázdné.
+model GameSpotBuilt {
+  spot_id  String   @id @db.VarChar(120)
+  area_key String   @db.VarChar(80)
+  first_at DateTime @default(now())
+
+  @@index([area_key])
+  @@map("game_spots_built")
+}

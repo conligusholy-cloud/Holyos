@@ -83,10 +83,17 @@ function spotHash(id, salt) {
   return ((h >>> 0) % 10000) / 10000;
 }
 // Přípojky (voda, odpad, elektřina) — platí se až po domluvě nájmu.
+// Místa, kde už někdy stál prádlomat — přípojky tam zůstaly. Plní se ze serveru.
+var ZASITOVANE = {};
+function jeZasitovane(sp) { return !!ZASITOVANE[sp && sp.id]; }
+// Podíl z plné ceny přípojek, který platí ten, kdo staví na zasíťované místo.
+var INSTALACE_PODIL = 0.1;
 function connPrice(sp, modelKey) {
   var base = CONN_MIN + spotHash(sp.id, 'c') * (CONN_MAX - CONN_MIN);
   if (modelKey === 'max') base *= CONN_MAX_MULT;
-  // Karta „Známý na úřadě" platí na jednu stavbu a spotřebuje se až při ní.
+  // Voda, odpad i elektřina tu už jsou — platí se jen postavení a zapojení stroje.
+  if (jeZasitovane(sp)) base *= INSTALACE_PODIL;
+  // Karta „Známý řemeslník" platí na jednu stavbu a spotřebuje se až při ní.
   if (S && S.connDiscount) base *= (1 - S.connDiscount);
   return Math.round(base / 1000) * 1000;
 }
@@ -995,7 +1002,10 @@ function spotSheet(sp, areaId) {
   // 3. krok — vybrat stroj a zaplatit přípojky.
   sheet(head
     + '<div class="kv"><span>Domluvený nájem</span><b class="ok">' + kcFull(lease.rent) + ' / měsíc</b></div>'
-    + '<div class="kv"><span>Přípojky na tomhle místě</span><b>' + kcFull(connPrice(sp, 'flex')) + '</b> <span class="muted small">(u MAXu o 20 % víc)</span></div>'
+    + '<div class="kv"><span>' + (jeZasitovane(sp) ? 'Instalace na tomhle místě' : 'Přípojky na tomhle místě') + '</span><b'
+    + (jeZasitovane(sp) ? ' class="ok"' : '') + '>' + kcFull(connPrice(sp, 'flex')) + '</b> <span class="muted small">(u MAXu o 20 % víc)</span></div>'
+    + (jeZasitovane(sp) ? '<p class="fine ok">Zasíťované místo — voda, odpad i elektřina už tu jsou. '
+      + 'Platíš jen ' + Math.round(INSTALACE_PODIL * 100) + ' % toho, co stály přípojky.</p>' : '')
     + '<h3 style="margin-top:18px">Co tu postavit</h3>'
     + MODEL_ORDER.map(function (k) { return modelCard(sp, economics(sp, k)); }).join(''));
   [].forEach.call($('sheet-body').querySelectorAll('[data-build]'), function (b) {
@@ -1279,6 +1289,9 @@ function loadClaims(then) {
     var next = {};
     (r.j.spots || []).forEach(function (c) { next[c.spot_id] = c; });
     CLAIMS = next;
+    var zas = {};
+    (r.j.zasitovana || []).forEach(function (id) { zas[id] = 1; });
+    ZASITOVANE = zas;
     reconcileUnits();
     drawMap();
     if (then) then();
@@ -1319,7 +1332,8 @@ function rivalSheet(sp, areaId, c) {
     + '<p class="muted small">Majitel pozemku se tě nezeptá, kolik platí ten druhý — to je jeho věc. '
     + 'Nabídni víc a místo je tvoje; nabídni málo a přijdeš o ' + kcFull(BID_FEE) + ' za zbytečnou cestu.</p>'
     + '<div class="kv"><span>Nájem v okolí bývá</span><b>kolem ' + kcFull(odhad) + '</b></div>'
-    + '<div class="kv"><span>Přípojky tu zaplatíš znovu</span><b>' + kcFull(connPrice(sp, free[0] || 'flex')) + '</b></div>'
+    + '<div class="kv"><span>Instalace tvého stroje</span><b class="ok">' + kcFull(connPrice(sp, free[0] || 'flex')) + '</b></div>'
+    + '<p class="fine ok">Přípojky tu už jsou po předchozím majiteli — platíš jen postavení svého stroje.</p>'
     + (free.length
       ? '<label class="fld"><span>Co nabídneš majiteli / měsíc</span>'
         + '<input id="bid-amt" class="inp" type="number" inputmode="numeric" min="0" step="500" value="' + Math.round(odhad * 1.4 / 500) * 500 + '"></label>'

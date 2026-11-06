@@ -545,7 +545,14 @@ router.get('/spots', async (req, res, next) => {
       orderBy: { updated_at: 'desc' }, take: 2000,
     });
     const firmy = await firmyMapa();
-    res.json({ ok: true, min_bid: TAKEOVER_MIN, fee: BID_FEE, spots: rows.map((c) => claimPub(c, p ? p.id : 0, firmy)) });
+    // Zasíťovaná místa: kde už přípojky jsou, platí další stavitel jen instalaci.
+    const built = await prisma.gameSpotBuilt.findMany({
+      where: areas.length ? { area_key: { in: areas } } : {},
+      select: { spot_id: true }, take: 4000,
+    });
+    res.json({ ok: true, min_bid: TAKEOVER_MIN, fee: BID_FEE,
+      zasitovana: built.map((x) => x.spot_id),
+      spots: rows.map((c) => claimPub(c, p ? p.id : 0, firmy)) });
   } catch (e) { next(e); }
 });
 
@@ -576,6 +583,12 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
       data: { spot_id: spot, area_key: area, player_id: req.player.id, nick: req.player.nick,
         model, rent, name: s(b.name, 160) || null, lat: Number(b.lat) || null, lon: Number(b.lon) || null },
     });
+    // Od téhle chvíle je místo zasíťované napořád, i kdyby ho hráč zítra opustil.
+    try {
+      await prisma.gameSpotBuilt.upsert({
+        where: { spot_id: spot }, create: { spot_id: spot, area_key: area }, update: {},
+      });
+    } catch (e) { console.warn('[game] zasíťování místa:', e.message); }
     res.json({ ok: true, spot: claimPub(c, req.player.id, await firmyMapa()) });
   } catch (e) {
     if (e && e.code === 'P2002') return res.status(409).json({ error: 'Tohle místo právě někdo obsadil.' });
