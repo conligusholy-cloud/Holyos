@@ -452,3 +452,12 @@ button{font:inherit;cursor:pointer}
   display: block; font-style: normal; font-size: 10.5px; color: var(--text3);
   text-align: right; margin-top: 2px;
 }
+
+/* Praporek na nahlášení cizí zprávy a stav po nahlášení. */
+.chat-vlajka {
+  background: none; border: 0; color: var(--text3); cursor: pointer;
+  font-size: 11px; padding: 0 0 0 7px; line-height: 1;
+}
+.chat-vlajka:hover { color: #fbbf24; }
+.chat-vlajka.ptam { color: #fbbf24; font-weight: 600; }
+.chat-nahl { font-weight: 400; font-style: normal; color: #fbbf24; padding-left: 7px; }

@@ -7817,14 +7817,31 @@ model GameAuction {
 // Zprávy mezi hráči. Jedna řádka = jedna zpráva; konverzace je dvojice lidí.
 // Čtení si poznamenává jen příjemce — odesílatel má svoje zprávy přečtené vždy.
 model GameMessage {
-  id         Int       @id @default(autoincrement())
-  from_id    Int
-  to_id      Int
-  text       String    @db.VarChar(800)
-  read_at    DateTime?
-  created_at DateTime  @default(now())
+  id          Int       @id @default(autoincrement())
+  from_id     Int
+  to_id       Int
+  text        String    @db.VarChar(800)
+  read_at     DateTime?
+  // Nahlášení: kdo a kdy si stěžoval a jestli už to někdo vyřídil.
+  reported_at DateTime?
+  reported_by Int?
+  resolved_at DateTime?
+  created_at  DateTime  @default(now())
 
   @@index([to_id, read_at])
   @@index([from_id, to_id, id])
+  @@index([reported_at])
   @@map("game_messages")
+}
+
+// Koho hráč nechce slyšet. Platí jednostranně: kdo blokuje, tomu už nic nepřijde.
+model GameBlock {
+  id         Int      @id @default(autoincrement())
+  blocker_id Int
+  blocked_id Int
+  created_at DateTime @default(now())
+
+  @@unique([blocker_id, blocked_id])
+  @@index([blocked_id])
+  @@map("game_blocks")
 }

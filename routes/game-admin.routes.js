@@ -123,6 +123,37 @@ router.post('/players/:id/privedl', api(async (req, res) => {
   res.json({ ok: true, privedl_me: { id: z.id, nick: z.nick, firma: z.company || z.nick } });
 }));
 
+// GET /nahlasene → zprávy, na které si někdo stěžoval
+router.get('/nahlasene', api(async (req, res) => {
+  const vse = String(req.query.vse || '') === '1';
+  const rows = await prisma.gameMessage.findMany({
+    where: vse ? { reported_at: { not: null } } : { reported_at: { not: null }, resolved_at: null },
+    orderBy: { reported_at: 'desc' }, take: 200,
+  });
+  const ids = [...new Set(rows.flatMap((m) => [m.from_id, m.to_id, m.reported_by].filter(Boolean)))];
+  const lide = ids.length
+    ? await prisma.gamePlayer.findMany({ where: { id: { in: ids } },
+        select: { id: true, nick: true, company: true, disabled: true } })
+    : [];
+  const kdo = new Map(lide.map((p) => [p.id, p]));
+  const jm = (id) => {
+    const p = kdo.get(id);
+    return p ? { id: p.id, nick: p.nick, firma: p.company || (p.nick + ' s.r.o.'), disabled: p.disabled } : null;
+  };
+  res.json({ ok: true, zpravy: rows.map((m) => ({
+    id: m.id, text: m.text, kdy: m.created_at, nahlaseno: m.reported_at, vyrizeno: m.resolved_at,
+    od: jm(m.from_id), komu: jm(m.to_id), nahlasil: jm(m.reported_by),
+  })) });
+}));
+
+// POST /nahlasene/:id/vyrizeno { zpet } — označí nahlášení za vyřízené
+router.post('/nahlasene/:id/vyrizeno', api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const zpet = !!(req.body || {}).zpet;
+  await prisma.gameMessage.update({ where: { id }, data: { resolved_at: zpet ? null : new Date() } });
+  res.json({ ok: true });
+}));
+
 // GET /players → pro výběr zvoucího stačí nick a firma (lehký seznam)
 router.get('/players-vyber', api(async (req, res) => {
   const rows = await prisma.gamePlayer.findMany({

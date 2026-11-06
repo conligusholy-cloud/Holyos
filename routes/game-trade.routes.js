@@ -421,8 +421,19 @@ function prilisCasto(id) {
 }
 const zpravaPub = (m, ja) => ({
   id: m.id, text: m.text, moje: m.from_id === ja,
-  kdy: m.created_at, precteno: !!m.read_at,
+  kdy: m.created_at, precteno: !!m.read_at, nahlasena: !!m.reported_at,
 });
+// Koho tenhle hráč blokuje a kdo blokuje jeho — obojí je potřeba: jeho bloky
+// schovávají konverzace, cizí bloky mu brání psát.
+async function blokyKolem(ja) {
+  const rows = await prisma.gameBlock.findMany({
+    where: { OR: [{ blocker_id: ja }, { blocked_id: ja }] },
+  });
+  return {
+    blokuju: new Set(rows.filter((b) => b.blocker_id === ja).map((b) => b.blocked_id)),
+    blokujiMe: new Set(rows.filter((b) => b.blocked_id === ja).map((b) => b.blocker_id)),
+  };
+}
 
 // POST /chat/send { to_id, text } → pošle zprávu druhému hráči
 router.post('/chat/send', hrac, api(async (req, res) => {
@@ -438,6 +449,13 @@ router.post('/chat/send', hrac, api(async (req, res) => {
   const komu = await prisma.gamePlayer.findUnique({ where: { id: to },
     select: { id: true, disabled: true } });
   if (!komu || komu.disabled) return res.status(404).json({ error: 'Takový hráč tu není.' });
+  const bloky = await blokyKolem(req.player.id);
+  if (bloky.blokuju.has(to)) {
+    return res.status(403).json({ error: 'Tohohle hráče máš zablokovaného. Odblokuj ho a píš dál.' });
+  }
+  if (bloky.blokujiMe.has(to)) {
+    return res.status(403).json({ error: 'Tomuhle hráči už psát nemůžeš.' });
+  }
   const m = await prisma.gameMessage.create({
     data: { from_id: req.player.id, to_id: to, text },
   });
@@ -447,6 +465,7 @@ router.post('/chat/send', hrac, api(async (req, res) => {
 // GET /chat/threads → s kým si píšu, poslední zpráva a kolik nepřečtených
 router.get('/chat/threads', hrac, api(async (req, res) => {
   const ja = req.player.id;
+  const bloky = await blokyKolem(ja);
   const rows = await prisma.gameMessage.findMany({
     where: { OR: [{ from_id: ja }, { to_id: ja }] },
     orderBy: { id: 'desc' }, take: 400,
@@ -454,6 +473,7 @@ router.get('/chat/threads', hrac, api(async (req, res) => {
   const podle = new Map();
   rows.forEach((m) => {
     const druhy = m.from_id === ja ? m.to_id : m.from_id;
+    if (bloky.blokuju.has(druhy)) return;   // koho blokuju, toho nevidím
     let t = podle.get(druhy);
     if (!t) { t = { id: druhy, posledni: m, neprectenych: 0 }; podle.set(druhy, t); }
     if (m.to_id === ja && !m.read_at) t.neprectenych++;
@@ -493,9 +513,46 @@ router.get('/chat/with/:id', hrac, api(async (req, res) => {
   await prisma.gameMessage.updateMany({
     where: { from_id: druhy, to_id: ja, read_at: null }, data: { read_at: new Date() },
   });
+  const bloky = await blokyKolem(ja);
   res.json({ ok: true,
     hrac: { id: p.id, nick: p.nick, firma: p.company || (p.nick + ' s.r.o.'), znak: p.emblem || null },
+    blokuju: bloky.blokuju.has(druhy),
+    blokuje_me: bloky.blokujiMe.has(druhy),
     zpravy: rows.map((m) => zpravaPub(m, ja)) });
+}));
+
+// POST /chat/block { id, zrusit } — koho nechci slyšet
+router.post('/chat/block', hrac, api(async (req, res) => {
+  const ja = req.player.id;
+  const koho = parseInt((req.body || {}).id, 10);
+  const zrusit = !!(req.body || {}).zrusit;
+  if (!Number.isFinite(koho) || koho === ja) return res.status(400).json({ error: 'Koho?' });
+  if (zrusit) {
+    await prisma.gameBlock.deleteMany({ where: { blocker_id: ja, blocked_id: koho } });
+    return res.json({ ok: true, blokuju: false });
+  }
+  const je = await prisma.gamePlayer.findUnique({ where: { id: koho }, select: { id: true } });
+  if (!je) return res.status(404).json({ error: 'Takový hráč tu není.' });
+  try {
+    await prisma.gameBlock.create({ data: { blocker_id: ja, blocked_id: koho } });
+  } catch (e) { /* už zablokovaný — nevadí */ }
+  res.json({ ok: true, blokuju: true });
+}));
+
+// POST /chat/report { id } — nahlášení jedné zprávy. Nahlásit jde jen to,
+// co přišlo mně — na vlastní zprávy si stěžovat není proč.
+router.post('/chat/report', hrac, api(async (req, res) => {
+  const ja = req.player.id;
+  const id = parseInt((req.body || {}).id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Kterou zprávu?' });
+  const m = await prisma.gameMessage.findUnique({ where: { id } });
+  if (!m || m.to_id !== ja) return res.status(404).json({ error: 'Taková zpráva tu není.' });
+  if (!m.reported_at) {
+    await prisma.gameMessage.update({ where: { id },
+      data: { reported_at: new Date(), reported_by: ja } });
+    console.log('[game] nahlasena zprava ' + id + ' od hrace ' + m.from_id);
+  }
+  res.json({ ok: true });
 }));
 
 module.exports = router;

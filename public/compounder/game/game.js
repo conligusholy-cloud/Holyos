@@ -3171,16 +3171,39 @@ function chatSheet(id) {
   api('/chat/with/' + id).then(function (r) {
     if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
     var h = r.j.hrac;
+    var blokuju = !!r.j.blokuju, blokujeMe = !!r.j.blokuje_me;
     sheet('<h3>' + (h.znak ? znakSvg(h.znak, 20) + ' ' : '') + esc(h.firma) + '</h3>'
       + '<p class="muted small">' + esc(h.nick) + '</p>'
+      + (blokuju ? '<p class="fine err">Tohohle hráče máš zablokovaného — nic ti od něj nepřijde a ani mu nenapíšeš.</p>' : '')
+      + (blokujeMe && !blokuju ? '<p class="fine err">Tenhle hráč si psát nepřeje.</p>' : '')
       + '<div class="chat-okno" id="chat-okno">' + chatZpravyHtml(r.j.zpravy) + '</div>'
-      + '<label class="fld"><span>Napsat</span>'
-      + '<input id="chat-text" class="inp" type="text" maxlength="800" placeholder="Napiš zprávu…"></label>'
-      + '<button class="btn big" id="chat-send">Odeslat</button>'
-      + '<button class="btn ghost" id="chat-nabidka" style="width:100%;margin-top:8px">Nabídnout mu obchod</button>');
+      + (blokuju || blokujeMe ? ''
+          : '<label class="fld"><span>Napsat</span>'
+            + '<input id="chat-text" class="inp" type="text" maxlength="800" placeholder="Napiš zprávu…"></label>'
+            + '<button class="btn big" id="chat-send">Odeslat</button>')
+      + '<button class="btn ghost" id="chat-nabidka" style="width:100%;margin-top:8px">Nabídnout mu obchod</button>'
+      + '<button class="btn ghost" id="chat-blok" style="width:100%;margin-top:8px">'
+      + (blokuju ? 'Odblokovat' : 'Zablokovat hráče') + '</button>'
+      + (blokuju ? '' : '<p class="fine">Zablokovaný hráč ti už nenapíše. Nevhodnou zprávu nahlásíš praporkem u ní.</p>'));
     var okno = $('chat-okno');
-    if (okno) okno.scrollTop = okno.scrollHeight;
+    if (okno) { okno.scrollTop = okno.scrollHeight; bindNahlas(okno); }
+    var bl = $('chat-blok');
+    if (bl) bl.onclick = function () {
+      if (!blokuju && bl.getAttribute('data-jist') !== '1') {
+        bl.setAttribute('data-jist', '1');
+        bl.textContent = 'Opravdu zablokovat? Klepni znovu';
+        return;
+      }
+      bl.disabled = true;
+      apiJson('/chat/block', { id: id, zrusit: blokuju }).then(function (rr) {
+        if (!rr.ok) { bl.disabled = false; return toast(rr.j.error || 'Nepovedlo se.', 'err'); }
+        toast(blokuju ? 'Odblokováno.' : 'Zablokováno. Už ti nenapíše.', 'ok');
+        loadChat(function () { if (!$('v-burza').classList.contains('hidden')) paintBurza(); });
+        chatSheet(id);
+      }).catch(function () { bl.disabled = false; toast('Server neodpovídá.', 'err'); });
+    };
     var inp = $('chat-text'), b = $('chat-send');
+    if (!inp || !b) { var nb0 = $('chat-nabidka'); if (nb0) nb0.onclick = function () { majetekSheet(id); }; return; }
     var odesli = function () {
       var t = (inp.value || '').trim();
       if (!t) return;
@@ -3193,6 +3216,7 @@ function chatSheet(id) {
         var pr = okno.querySelector('p.fine');
         if (pr) okno.innerHTML = '';
         okno.insertAdjacentHTML('beforeend', chatZpravyHtml([rr.j.zprava]));
+        bindNahlas(okno);
         okno.scrollTop = okno.scrollHeight;
         loadChat(function () { if (!$('v-burza').classList.contains('hidden')) paintBurza(); });
       }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
@@ -3208,9 +3232,33 @@ function chatSheet(id) {
 function chatZpravyHtml(zpravy) {
   if (!zpravy.length) return '<p class="fine" style="margin:0">Ještě jste si nic nenapsali. Začni.</p>';
   return zpravy.map(function (m) {
+    // Nahlásit jde jen to, co přišlo mně — u svojí zprávy praporek není.
+    var vlajka = m.moje ? ''
+      : (m.nahlasena
+          ? '<b class="chat-nahl" title="Už nahlášeno">\u2691 nahlášeno</b>'
+          : '<button class="chat-vlajka" data-nahlas="' + m.id + '" title="Nahlásit zprávu">\u2691</button>');
     return '<div class="chat-b' + (m.moje ? ' ja' : '') + '">' + esc(m.text)
-      + '<i>' + kdyKratce(m.kdy) + '</i></div>';
+      + '<i>' + kdyKratce(m.kdy) + vlajka + '</i></div>';
   }).join('');
+}
+// Praporky se naviazují po každém překreslení okna.
+function bindNahlas(okno) {
+  [].forEach.call(okno.querySelectorAll('[data-nahlas]'), function (b) {
+    b.onclick = function () {
+      if (b.getAttribute('data-jist') !== '1') {
+        b.setAttribute('data-jist', '1');
+        b.textContent = 'opravdu?';
+        b.classList.add('ptam');
+        return;
+      }
+      b.disabled = true;
+      apiJson('/chat/report', { id: Number(b.getAttribute('data-nahlas')) }).then(function (r) {
+        if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
+        b.outerHTML = '<b class="chat-nahl">\u2691 nahlášeno</b>';
+        toast('Zpráva nahlášená. Podíváme se na to.', 'ok');
+      }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+    };
+  });
 }
 
 function predmetPopis(t) {

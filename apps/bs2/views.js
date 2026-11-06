@@ -416,7 +416,7 @@ const userNav = (s) => {
   const nav = [USER_NAV[0], { id: 'cmp', href: '/compounder', label: 'Compounder', icon: 'sprout' }, { id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }];
   if (s && ['seller', 'standard'].includes(s.user_type)) nav.push({ id: 'team', href: '/team', label: 'Moje doporučení', icon: 'users' });
   if (s && ['seller', 'standard'].includes(s.user_type)) nav.push({ id: 'net', href: '/sit', label: 'Partnerská síť', icon: 'network' });
-  nav.push({ id: 'mine', href: '/moje-pradlomaty', label: 'Moje svoboda', icon: 'sun', dot: !!(s && s.new_docs > 0), pay: !!(s && s.unpaid_docs > 0) }, { id: 'credit', href: '/discount-credit', label: 'Discount Credit', icon: 'bolt' });
+  nav.push({ id: 'mine', href: '/moje-pradlomaty', label: 'Moje svoboda', icon: 'sun', dot: !!(s && s.new_docs > 0), pay: !!(s && s.unpaid_docs > 0) }, { id: 'credit', href: '/discount-credit', label: 'Discount Credit', icon: 'bolt' }, { id: 'vybery', href: '/vybery', label: 'Výběry', icon: 'wallet' });
   if (s && s.ai_chat_on) nav.push({ id: 'aichat', href: '/ai-chat', label: 'AI chat', icon: 'chat' });
   nav.push(USER_NAV[1]);
   return nav;
@@ -1369,6 +1369,16 @@ function supporterCredit(s, { rows = [], sellable = [], rate = 25, transfers = [
   <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Datum</th><th>Popis</th><th>Částka</th></tr></thead><tbody>
     ${rows.map(r => `<tr><td data-l="Datum" class="small muted">${fmtDT(r.created_at)}</td><td data-l="Popis">${esc(r.note || '—')}</td><td data-l="Částka"><b style="color:${Number(r.amount_czk) < 0 ? 'var(--err)' : 'var(--ok)'}">${Number(r.amount_czk) > 0 ? '+' : ''}${money(conv(r.amount_czk), 'DC')}</b></td></tr>`).join('')}</tbody></table>`
     : '<p class="muted" style="margin:0">Zatím žádné pohyby na kreditním účtu.</p>'}</div>` });
+}
+// Výběry — zatím jen informační stránka (funkce se testuje)
+function supporterVybery(s) {
+  return layout({ title: 'Výběry', user: s.nick, nav: userNav(s), active: 'vybery', help: null, body: `
+  <h2 style="display:flex;align-items:center;gap:8px;margin:22px 0 14px">${ico('wallet', 18)} Výběry</h2>
+  <div class="card" style="max-width:640px">
+    <div style="font-size:18px;font-weight:800;margin-bottom:8px">Připravujeme</div>
+    <p style="margin:0 0 8px">Tato sekce je v přípravě a právě se testuje.</p>
+    <p style="margin:0">Funkční bude během <b>7. 11. 2026</b>.</p>
+  </div>` });
 }
 function supporterMine(s, { rows = [], orders = [], msg = '' } = {}) {
   const sum = rows.reduce((acc, r) => acc + (r.price_czk == null ? 0 : Number(r.price_czk)), 0);
@@ -2381,4 +2391,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { userTfaLoginPage, tfaPage, adminPartnerSupport, presenceWidget, PRESENCE_HTML, PRESENCE_CSS, PRESENCE_JS, locVopPage, locGdprPage, adminLayout, ADMIN_NAV, adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { userTfaLoginPage, tfaPage, adminPartnerSupport, presenceWidget, PRESENCE_HTML, PRESENCE_CSS, PRESENCE_JS, locVopPage, locGdprPage, adminLayout, ADMIN_NAV, adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterVybery, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };

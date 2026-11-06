@@ -1679,6 +1679,9 @@ app.get('/moje-pradlomaty/doklad/:id(\\d+)/pdf', wrap(requireUser), wrap(async (
   const d = docs.find(x => x.id === id);
   res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + String(d.number || 'doklad').replace(/[^\w.-]/g, '_') + '.pdf"' }).send(Buffer.from(await r.arrayBuffer()));
 }));
+app.get('/vybery', wrap(requireUser), wrap(async (req, res) => {
+  res.send(V.supporterVybery(req.user));
+}));
 app.get('/discount-credit', wrap(requireUser), wrap(async (req, res) => {
   const rows = (await q('SELECT * FROM credits WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC LIMIT 500', [req.user.id])).rows;
   let sellable = [];

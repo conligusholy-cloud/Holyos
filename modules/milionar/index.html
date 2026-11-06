@@ -79,6 +79,7 @@
       <button class="module-tab" data-tab="players">Hráči</button>
       <button class="module-tab" data-tab="orders">Objednávky</button>
       <button class="module-tab" data-tab="prices">Ceník</button>
+      <button class="module-tab" data-tab="nahlasene">Nahlášené<span id="nahl-pocet"></span></button>
     </div>
 
     <div class="content">
@@ -112,6 +113,15 @@
         </div>
         <div class="kpis" id="or-kpis"></div>
         <div class="tbl-wrap"><table class="data-table" id="or-tbl"></table></div>
+      </div>
+
+      <div class="module-panel" id="panel-nahlasene">
+        <div class="toolbar">
+          <button class="btn sm on" data-nahl="">Nevyřízené</button>
+          <button class="btn sm" data-nahl="1">Všechna nahlášení</button>
+        </div>
+        <p class="note" style="margin:0 0 12px">Zprávy, na které si někdo stěžoval. Odesílatele zablokuješ v jeho detailu.</p>
+        <div id="nahl-body"></div>
       </div>
 
       <div class="module-panel" id="panel-prices">
@@ -432,7 +442,58 @@
     }
 
     // ── Záložky ─────────────────────────────────────────────────────────────
-    var LOADERY = { stats: loadStats, players: loadPlayers, orders: loadOrders, prices: loadPrices };
+    // ── Nahlášené zprávy ───────────────────────────────────────
+    var NAHL_VSE = '';
+    function loadNahlasene() {
+      var box = document.getElementById('nahl-body');
+      box.innerHTML = '<p class="note">Načítám…</p>';
+      get('/nahlasene' + (NAHL_VSE ? '?vse=1' : '')).then(function (j) {
+        var z = j.zpravy || [];
+        var cekaji = z.filter(function (m) { return !m.vyrizeno; }).length;
+        var odzn = document.getElementById('nahl-pocet');
+        if (odzn) odzn.textContent = cekaji ? ' ' + cekaji : '';
+        if (!z.length) { box.innerHTML = '<p class="note">Nic nahlášeného.</p>'; return; }
+        box.innerHTML = '<div class="tbl-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Zpráva</th><th>Od koho</th><th>Komu</th><th>Nahlášeno</th><th></th>'
+          + '</tr></thead><tbody>'
+          + z.map(function (m) {
+              var od = m.od || { firma: 'neznámý', nick: '?', id: 0, disabled: false };
+              return '<tr' + (m.vyrizeno ? ' style="opacity:.55"' : '') + '>'
+                + '<td style="max-width:420px"><div style="white-space:pre-wrap">' + esc(m.text) + '</div>'
+                + '<div class="note">' + dt(m.kdy) + '</div></td>'
+                + '<td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + od.id + '">'
+                + esc(od.firma) + '</b><div class="note">' + esc(od.nick)
+                + (od.disabled ? ' \u00b7 zablokovaný' : '') + '</div></td>'
+                + '<td>' + esc(m.komu ? m.komu.firma : '\u2014') + '</td>'
+                + '<td class="note">' + dt(m.nahlaseno) + '</td>'
+                + '<td style="white-space:nowrap"><button class="btn sm" data-vyr="' + m.id + '" data-zpet="'
+                + (m.vyrizeno ? '1' : '') + '">' + (m.vyrizeno ? 'Vrátit' : 'Vyřízeno') + '</button></td></tr>';
+            }).join('')
+          + '</tbody></table></div>';
+        [].forEach.call(box.querySelectorAll('[data-detail]'), function (b) {
+          b.onclick = function () { detail(b.getAttribute('data-detail')); };
+        });
+        [].forEach.call(box.querySelectorAll('[data-vyr]'), function (b) {
+          b.onclick = function () {
+            b.disabled = true;
+            post('/nahlasene/' + b.getAttribute('data-vyr') + '/vyrizeno',
+              { zpet: b.getAttribute('data-zpet') === '1' })
+              .then(loadNahlasene)
+              .catch(function (e) { b.disabled = false; alert(e.message); });
+          };
+        });
+      }).catch(function (e) { chyba('nahl-body', e); });
+    }
+    [].forEach.call(document.querySelectorAll('[data-nahl]'), function (b) {
+      b.onclick = function () {
+        NAHL_VSE = b.getAttribute('data-nahl');
+        [].forEach.call(document.querySelectorAll('[data-nahl]'), function (x) { x.classList.toggle('on', x === b); });
+        loadNahlasene();
+      };
+    });
+
+    var LOADERY = { stats: loadStats, players: loadPlayers, orders: loadOrders,
+      prices: loadPrices, nahlasene: loadNahlasene };
     var AKTIVNI = 'stats';
     [].forEach.call(document.querySelectorAll('.module-tab'), function (t) {
       t.onclick = function () {
