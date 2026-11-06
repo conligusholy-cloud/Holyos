@@ -3156,6 +3156,28 @@ function bindKartyVyber(pref) {
 }
 
 // ─── Nová nabídka ────────────────────────────────────────────────────────────
+// ─── Co se na burze za co platí ──────────────────────────────────
+// Bez orientační ceny střílí hráč naslepo a nabídka je lotérie. Počítá se
+// z toho, co věc vydělává: čtyřnásobek ročního zisku je cena, při které se
+// kupujícímu vrátí za čtyři roky. Shora i zdola ji drží to, co stavba stála.
+var CENA_NASOBEK = 4;
+function cenaPradlomatu(zisk, invest) {
+  var podleZisku = Math.max(0, Math.round((zisk || 0) * 12 * CENA_NASOBEK));
+  if (!(invest > 0)) return podleZisku;
+  return Math.max(Math.round(invest * 0.5), Math.min(Math.round(invest * 1.2), podleZisku));
+}
+// Orientační cena čehokoli, co jde na burze nabídnout. Null = trh to nemá podé čeho ocenit.
+function cenaPredmetu(x) {
+  if (x.predmet === 'pradlomat') return cenaPradlomatu(x.zisk, x.invest);
+  if (x.predmet === 'stroj') return Math.round(machinePrice(MODELS[x.model] || MODELS.mini) * 0.85);
+  if (x.predmet === 'pobocka') return Math.round(POBOCKA_CENA * 0.8);
+  return null;
+}
+function rokyNavratnosti(cena, zisk) {
+  if (!(zisk > 0) || !(cena > 0)) return null;
+  return cena / (zisk * 12);
+}
+
 function novaNabidkaSheet() {
   sheet('<h3>Komu chceš nabídnout</h3><p class="muted small">Načítám hráče…</p>');
   api('/trade/players').then(function (r) {
@@ -3185,8 +3207,14 @@ function majetekSheet(id) {
     });
     (a.pradlomaty || []).forEach(function (m) {
       polozky.push({ smer: 'koupim', predmet: 'pradlomat', spot_id: m.spot_id, model: m.model,
-        popis: esc(m.name || m.spot_id), pod: (MODELS[m.model] || {}).name + ' · nájem ' + kcFull(m.rent)
-          + (m.zisk != null ? ' · zisk ' + kcFull(m.zisk) + '/měs' : '') });
+        zisk: m.zisk, invest: m.invest, obrat: m.obrat, skore: m.skore, rent: m.rent,
+        dluh: m.dluh || 0, splatka: m.splatka || 0, postaveno: m.postaveno,
+        popis: esc(m.name || m.spot_id), pod: (MODELS[m.model] || {}).name
+          + (m.skore != null ? ' · ' + m.skore + '/100' : '')
+          + ' · nájem ' + kcFull(m.rent)
+          + (m.zisk != null ? ' · zisk ' + kcFull(m.zisk) + '/měs' : '')
+          + (m.zisk != null ? '<br><i class="cena">orientačně ' + kcFull(cenaPradlomatu(m.zisk, m.invest)) + '</i>' : '')
+          + ((m.dluh || 0) > 0 ? '<i class="cena dluh">visí na něm úvěr ' + kcFull(m.dluh) + '</i>' : '') });
     });
     (a.pobocky || []).forEach(function (b) {
       polozky.push({ smer: 'koupim', predmet: 'pobocka', pobocka: b.name,
@@ -3204,8 +3232,14 @@ function majetekSheet(id) {
         popis: 'můj stroj ' + MODELS[k].name, pod: inStock(k) + '× skladem' });
     });
     S.units.forEach(function (u) {
+      var l = uverMista(u), dluh = l ? Math.round(l.zbyva) : 0;
       moje.push({ smer: 'prodam', predmet: 'pradlomat', spot_id: u.spotId, model: u.eco.model,
-        popis: 'můj ' + esc(u.name), pod: MODELS[u.eco.model].name + ' · zisk ' + kcFull(u.eco.profit) + '/měs' });
+        zisk: u.eco.profit, invest: u.eco.invest, obrat: u.eco.revenue, skore: u.score, rent: u.eco.rent,
+        dluh: dluh, splatka: l ? Math.round(l.splatka) : 0,
+        popis: 'můj ' + esc(u.name), pod: MODELS[u.eco.model].name
+          + ' · ' + Math.round(u.score) + '/100 · zisk ' + kcFull(u.eco.profit) + '/měs'
+          + '<br><i class="cena">orientačně ' + kcFull(cenaPradlomatu(u.eco.profit, u.eco.invest)) + '</i>'
+          + (dluh > 0 ? '<i class="cena dluh">visí na něm úvěr ' + kcFull(dluh) + '</i>' : '') });
     });
     (S.pobocky || []).forEach(function (b) {
       moje.push({ smer: 'prodam', predmet: 'pobocka', pobocka: b.name,
@@ -3239,14 +3273,68 @@ function majetekSheet(id) {
 
 function cenaSheet(toId, kdo, x) {
   var jaPlatim = x.smer === 'koupim';
+  var orient = cenaPredmetu(x);
+  // Protistrana je hráč, ne automat — ale už při psaní částky má být vidět,
+  // co ta cena znamená pro něj a co pro mě. Jinak je každá nabídka lotérie.
   sheet('<h3>' + (jaPlatim ? 'Nabídka na odkup' : 'Nabídka k prodeji') + '</h3>'
-    + '<p class="muted small">' + esc(x.popis) + ' · ' + esc(kdo.firma) + '</p>'
-    + '<p class="muted small">' + (jaPlatim ? 'Platíš ty.' : 'Platí on — ty dostaneš, co si řekneš.') + '</p>'
+    + '<p class="muted small">' + x.popis + ' · ' + esc(kdo.firma) + '</p>'
+    + (x.predmet === 'pradlomat'
+        ? '<div class="kv"><span>Zisk / měsíc</span><b class="ok">' + kcFull(x.zisk || 0) + '</b></div>'
+          + (x.obrat ? '<div class="kv"><span>Obrat / měsíc</span><b>' + kcFull(x.obrat) + '</b></div>' : '')
+          + (x.rent ? '<div class="kv"><span>Nájem / měsíc</span><b class="warn">' + kcFull(x.rent) + '</b></div>' : '')
+          + (x.skore != null ? '<div class="kv"><span>Skóre místa</span><b>' + Math.round(x.skore) + '/100</b></div>' : '')
+          + (x.invest ? '<div class="kv"><span>Stavba stála</span><b>' + kcFull(x.invest) + '</b></div>' : '')
+          + ((x.dluh || 0) > 0
+              ? '<div class="kv"><span>Úvěr na místě</span><b class="warn">' + kcFull(x.dluh)
+                + (x.splatka ? ' <span class="muted">(' + kcFull(x.splatka) + '/měs)</span>' : '') + '</b></div>'
+              : '<div class="kv"><span>Úvěr na místě</span><b class="ok">žádný</b></div>')
+        : '')
+    + (orient != null
+        ? '<div class="kv souhrn"><span>Orientační cena</span><b>' + kcFull(orient) + '</b></div>'
+          + '<p class="fine">' + (x.predmet === 'pradlomat'
+              ? 'Tolik dává trh za prádlomat s tímhle ziskem — kupujícímu se vrátí za ' + CENA_NASOBEK + ' roky.'
+              : 'Tolik se za to na burze běžně platí.') + '</p>'
+        : '<p class="fine">Tohle trh nemá jak ocenit — cena je čistě na dohodě.</p>')
     + '<label class="fld"><span>Cena (L$)</span>'
-    + '<input id="na-cena" class="inp" type="number" min="0" step="1000" value="0"></label>'
+    + '<input id="na-cena" class="inp" type="number" min="0" step="1000" value="' + (orient || 0) + '"></label>'
+    + '<p class="fine" id="na-verdikt"></p>'
     + (jaPlatim ? kartyVyber('na') : '')
     + '<label class="fld"><span>Vzkaz (nepovinný)</span><input id="na-vzkaz" class="inp" type="text" maxlength="200"></label>'
-    + '<button class="btn big" id="na-ok">Odeslat nabídku</button>');
+    + '<button class="btn big" id="na-ok">Odeslat nabídku</button>'
+    + '<p class="fine">Rozhodne protistrana — nabídku může přijmout i odmítnout.</p>');
+  // Verdikt se přepíše při každém úderu do klávesnice.
+  var ci = $('na-cena'), vd = $('na-verdikt');
+  var verdikt = function () {
+    var c = Math.max(0, Math.round(Number(ci.value) || 0));
+    var t = [], tr = 'fine';
+    if (orient != null && orient > 0) {
+      var o = Math.round((c - orient) / orient * 100);
+      t.push(Math.abs(o) < 3 ? 'Sedí na orientační ceně.'
+        : o > 0 ? 'O ' + o + ' % nad orientační cenou.' : 'O ' + (-o) + ' % pod orientační cenou.');
+    }
+    if (x.predmet === 'pradlomat' && x.zisk > 0) {
+      var r = rokyNavratnosti(c, x.zisk);
+      if (r) t.push((jaPlatim ? 'Vrátí se ti za ' : 'Jemu se to vrátí za ')
+        + r.toFixed(1).replace('.', ',') + ' roku.');
+    }
+    // Pod dluh, který na místě visí, prodávající nepůjde — doplácel by ze svého.
+    var dluh = x.dluh || 0;
+    if (dluh > 0) {
+      if (c < dluh) {
+        t.push(jaPlatim
+          ? 'Pod úvěr, který na místě visí — musel by ' + kcFull(dluh - c) + ' doplatit ze svého. Nejspíš odmítne.'
+          : 'Pod úvěr, který na místě visí — ' + kcFull(dluh - c) + ' bys doplácel ze svého.');
+        tr = 'fine err';
+      } else {
+        t.push(jaPlatim ? 'Úvěr mu to pokryje a ještě ' + kcFull(c - dluh) + ' zbyde.'
+          : 'Úvěr to pokryje a ještě ti ' + kcFull(c - dluh) + ' zbyde.');
+      }
+    }
+    if (jaPlatim && c > S.cash) { t.push('Tolik hotovosti nemáš — máš ' + kcFull(S.cash) + '.'); tr = 'fine err'; }
+    vd.className = tr;
+    vd.textContent = t.join(' ');
+  };
+  ci.oninput = verdikt; verdikt();
   var vybrane = jaPlatim ? bindKartyVyber('na') : function () { return []; };
   $('na-ok').onclick = function () {
     var b = $('na-ok'); b.disabled = true;

@@ -416,3 +416,9 @@ button{font:inherit;cursor:pointer}
 /* Tlačítka u jednotlivých úvěrů — splatit konkrétní, vyjednat splatnost. */
 .uver-akce { display: flex; gap: 8px; margin-top: 10px; }
 .uver-akce .btn { flex: 1 1 0; min-width: 0; }
+
+/* Burza: orientační cena a visící úvěr pod položkou. */
+.area-item .sub i.cena {
+  display: block; font-style: normal; font-size: 11.5px; color: #93c5fd; margin-top: 2px;
+}
+.area-item .sub i.cena.dluh { color: #fbbf24; }
