@@ -121,6 +121,8 @@ function nejblizsiZakladna(sp) {
 }
 // Doprava stroje na místo. Bez sídla ještě nevíme odkud, tak nic neúčtujeme.
 function dopravaNa(sp, modelKey) {
+  // První stroj veze dodavatel rovnou na místo — firma ještě nemá odkud vozit.
+  if (!(S.units || []).length) return 0;
   var n = nejblizsiZakladna(sp);
   if (!n) return 0;
   var cena = DOPRAVA_PAUSAL + n.km * DOPRAVA_KM;
@@ -707,12 +709,12 @@ function economics(spot, modelKey) {
 
 // ─── Profily hráče ───────────────────────────────────────────────────────────
 var PROFILES = {
-  opatrny: { id: 'opatrny', name: 'Opatrný stavitel', cash: 500000, ltv: 0.70, rate: 0.096,
+  opatrny: { id: 'opatrny', name: 'Opatrný stavitel', cash: 1500000, ltv: 0.70, rate: 0.096,
     desc: 'Nerad dlužíš. Banka ti proto půjčí míň, zato nejlevněji — a začínáš s nejtlustší peněženkou.' },
-  vyvazeny: { id: 'vyvazeny', name: 'Vyvážený podnikatel', cash: 350000, ltv: 0.85, rate: 0.114,
+  vyvazeny: { id: 'vyvazeny', name: 'Vyvážený podnikatel', cash: 1400000, ltv: 0.85, rate: 0.114,
     desc: 'Riziko bereš jako nástroj, ne jako adrenalin. Rozumný úvěr, rozumný úrok.' },
-  dravy: { id: 'dravy', name: 'Dravý expanzista', cash: 300000, ltv: 1.00, rate: 0.132,
-    desc: 'Chceš růst rychle a na dluh. Banka ti zaplatí i celý prádlomat, ale nechá si za to zaplatit.' }
+  dravy: { id: 'dravy', name: 'Dravý expanzista', cash: 1300000, ltv: 1.00, rate: 0.132,
+    desc: 'Chceš růst rychle a na dluh. Banka ti zaplatí i celý prádlomat, ale nechá si za to zaplatit. Na první prádlomat máš i tak dost — začíná se bez dluhu.' }
 };
 var QUIZ = [
   { q: 'Máš 1 000 000 L$ a jeden prádlomat stojí 1 356 636 L$. Co uděláš?',
@@ -753,7 +755,8 @@ function fresh(profileId) {
     cash: p.cash, bank: BANK_BASE, loan: 0,
     loanPrem: 0,      // dopočítaná průměrná přirážka na dluhu
     loans: [],        // jednotlivé úvěry: každý se svou sazbou a splátkou
-    sidlo: null,      // { name, lat, lon } — vybere se při první stavbě
+    sidlo: null,      // { name, lat, lon } — vybere se hned na začátku
+    tut: 1,           // krok tutoriálu; 'done' = má to za sebou
     ceta: null,       // vlastní stavební parta: { od, shanec, mesic, hotovo, phm }
     ramec: null,      // rámcový úvěr: { limit, cerpano, od, slabyOd, zavreny }
     pobocky: [],      // další základny, ze kterých se počítá doprava
@@ -791,10 +794,11 @@ function fixMetrics(sp) {
   return sp;
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* plná paměť — hra běží dál */ } }
-function load() {
+// Doplňuje, co starší uložené hře chybí. Projde tím i síť ze serveru — ta
+// mohla naposled běžet na starém klientovi a jinak by se migrace přeskočily.
+function dosypStav(o) {
   try {
-    var raw = localStorage.getItem(KEY); if (!raw) return null;
-    var o = JSON.parse(raw); if (!o || !o.profile) return null;
+    if (!o || !o.profile) return null;
     // Rozehraná hra z verze bez obchodu — jen doplníme, co chybí, ať o síť nikdo nepřijde.
     if (!o.orders) o.orders = [];
     if (!o.stock) o.stock = {};
@@ -836,6 +840,8 @@ function load() {
           lat: n ? la / n : prvni.lat, lon: n ? lo / n : prvni.lon, od: prvni.builtAt || Date.now() };
       } else o.sidlo = null;
     }
+    // Kdo už něco postavil, tutoriál nepotřebuje. Kdo ne, dostane ho teď.
+    if (o.tut == null) o.tut = (o.units || []).length ? 'done' : 1;
     if (o.ceta === undefined) o.ceta = null;
     if (o.ramec === undefined) o.ramec = null;
     if (typeof o.stats.splacenoMist !== 'number') o.stats.splacenoMist = 0;
@@ -848,6 +854,12 @@ function load() {
     });
     o.v = 2;
     return o;
+  } catch (e) { return null; }
+}
+function load() {
+  try {
+    var raw = localStorage.getItem(KEY); if (!raw) return null;
+    return dosypStav(JSON.parse(raw));
   } catch (e) { return null; }
 }
 
@@ -1387,12 +1399,14 @@ function scout(city, btn) {
         var known = S.areas[id] ? S.areas[id].spots.length : 0;
         // Už prozkoumané město neúčtujeme znovu — jen hráče hodíme na mapu.
         if (known >= j.spots.length) {
+          zalozSidlo(j.area);
           closeSheet();
           if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], 12);
           return toast(j.area.name + ' už máš prozkoumaný — koukni na mapu.', 'ok');
         }
         S.cash -= SCOUT_COST;
         S.areas[id] = { name: j.area.name, lat: j.area.lat, lon: j.area.lon, scoutedAt: Date.now(), spots: (j.spots || []).map(fixMetrics) };
+        zalozSidlo(j.area);
         save(); paint(); drawMap(); closeSheet(); syncState(true);
         ev('game_scout');
         loadClaims();   // ať hráč hned vidí, kde už konkurence stojí
@@ -1448,7 +1462,7 @@ function spotSheet(sp, areaId) {
     var l = $('do-lease');
     if (l) l.onclick = function () {
       S.leases[sp.id] = { rent: rentOf(sp), at: Date.now() };
-      save(); spotSheet(sp, areaId);
+      save(); paint(); spotSheet(sp, areaId);
       toast('Nájem domluven na ' + kcFull(S.leases[sp.id].rent) + ' měsíčně.', 'ok');
     };
     return;
@@ -2008,6 +2022,101 @@ function pisePrave() {
   if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') return false;
   return !!(el.closest && el.closest('.view'));
 }
+// ─── Tutoriál ───────────────────────────────────────────────────────
+// První prádlomat postaví hráč s doprovodem: lišta nahoře řekne, co teď, a
+// zvýrazní to, na co má klepnout. Krok se neukládá — počítá se ze stavu hry,
+// takže se tutoriál nemůže zaseknout ani když hráč udělá kroky naposřed.
+var TUT_KROKU = 5;
+// Sídlo založíme z prvního prozkoumaného města — ve městě, ne na adrese místa.
+function zalozSidlo(area) {
+  if (S.sidlo || !area || area.lat == null) return;
+  S.sidlo = { name: area.name, lat: area.lat, lon: area.lon, od: Date.now() };
+  toast('Sídlo firmy máš v ' + S.sidlo.name + '. Změnit se nedá.', 'ok');
+}
+function mamStroj() {
+  return MODEL_ORDER.some(function (k) { return inStock(k) > 0; });
+}
+function tutAktivni() { return !!S && S.tut !== 'done' && S.tut != null; }
+// Krok se odvozuje ze stavu hry, ne z klikání. 0 = už není co ukazovat.
+function tutKrok() {
+  if (!tutAktivni()) return 0;
+  if ((S.units || []).length) return 0;   // první prádlomat stojí — hotovo
+  if (!S.sidlo) return 1;
+  if (!Object.keys(S.leases || {}).length) return 2;
+  if (!(S.orders || []).length && !mamStroj()) return 3;
+  if (!mamStroj()) return 4;
+  return 5;
+}
+function tutText(k) {
+  if (k === 1) return { t: 'Vyber město', p: 'Kde bude mít firma sídlo? Pošli tam člověka, ať město projde a najde volná místa.', cil: '#open-areas' };
+  if (k === 2) {
+    var proveril = Object.keys(S.revealed || {}).length > 0;
+    return proveril
+      ? { t: 'Domluv nájem', p: 'Vybral sis místo — teď se s majitelem dohodni na nájmu. Zadarmo, ale bez něj se stavět nedá.', cil: null }
+      : { t: 'Vytypuj lokalitu', p: 'Klepni na doměček na mapě a prověř místo — uvidíš nájem, obrat i zisk. Čím vyšší skóre, tím líp.', cil: null };
+  }
+  if (k === 3) return { t: 'Kup prádlomat', p: 'V obchodě vezmi MINI — na ten máš peníze a nemusíš si půjčovat.', cil: '#tab-shop' };
+  if (k === 4) return { t: 'Doruč ho hned', p: 'Dodací lhůta je jeden skutečný den. Máš ale kartu Expresní dovoz — použij ji a stroj je hned skladem.',
+    cil: document.querySelector('#v-shop .btn.rush') ? '#v-shop .btn.rush' : '#tab-shop' };
+  if (k === 5) return { t: 'Postav prádlomat', p: 'Vrať se na mapu, klepni na místo s domluveným nájmem a postav na něm stroj ze skladu.', cil: '#tab-map' };
+  return null;
+}
+var TUT_CIL = null;
+function tutPaint() {
+  var bar = $('tut');
+  if (!bar) return;
+  if (TUT_CIL) { var o = document.querySelector(TUT_CIL); if (o) o.classList.remove('tut-on'); TUT_CIL = null; }
+  var k = tutKrok(), info = k ? tutText(k) : null;
+  if (!info) {
+    bar.classList.add('hidden');
+    // První prádlomat stojí — tutoriál skončil sám.
+    if (tutAktivni() && (S.units || []).length) {
+      S.tut = 'done'; save();
+      toast('První prádlomat stojí. Teď už to znáš — další si postavíš sám.', 'ok');
+    }
+    return;
+  }
+  bar.classList.remove('hidden');
+  $('tut-krok').textContent = 'Krok ' + k + ' z ' + TUT_KROKU;
+  $('tut-titul').textContent = info.t;
+  $('tut-text').textContent = info.p;
+  $('tut-fill').style.width = Math.round((k - 1) / TUT_KROKU * 100) + '%';
+  if (info.cil) { var c = document.querySelector(info.cil); if (c) { c.classList.add('tut-on'); TUT_CIL = info.cil; } }
+}
+function tutSkip() {
+  if (!tutAktivni()) return;
+  S.tut = 'done'; save(); tutPaint(); syncState(true);
+  toast('Tutoriál vypnutý. Našeptávat už ti nebudu.', 'ok');
+}
+// První krok otevřeme sami — bez sídla není co dělat.
+function tutStart() {
+  if (!tutAktivni()) return;
+  // Bez karty Expresní dovoz by hráč po koupi čekal celý den. Server ji vydá
+  // jen tomu, kdo ještě nic nepostavil — stávající hráči ji tak dostanou taky.
+  if (ME && !ownedOf('rush')) {
+    apiJson('/account/tutorial-card', {}).then(function (r) {
+      if (r.ok && r.j.owned && ME) { ME.cards = r.j.owned; paint(); }
+    }).catch(function () { /* karta počká, tutoriál běží dál */ });
+  }
+  if (tutKrok() !== 1) return;
+  switchTab('map');
+  sidloSheet();
+}
+function sidloSheet() {
+  sheet('<h3>Kde bude mít firma sídlo?</h3>'
+    + '<p class="muted small">Napiš město. Pošleme tam člověka, projde ho a najde místa, kde by prádlomat vydělával. '
+    + 'První prozkoumané město se stane sídlem tvojí firmy — ve městě, ne na adrese prádlomatu — a od něj se pak počítá doprava strojů.</p>'
+    + '<label class="fld"><span>Město</span>'
+    + '<input id="sidlo-mesto" class="inp" type="text" maxlength="60" placeholder="např. Pardubice"></label>'
+    + '<p class="fine" id="city-note"></p>'
+    + '<button class="btn big" id="sidlo-go">Poslat tam člověka</button>'
+    + '<p class="fine">Cesta stojí ' + kcFull(SCOUT_COST) + '. Měst můžeš později projít kolik chceš, ale sídlo zůstane tam, kde začneš.</p>');
+  var i = $('sidlo-mesto'), b = $('sidlo-go');
+  b.onclick = function () { scout((i.value || '').trim(), b); };
+  i.onkeydown = function (e) { if (e.key === 'Enter') b.click(); };
+  setTimeout(function () { i.focus(); }, 60);
+}
+
 function paint() {
   refreshUnits();
   $('t-year').textContent = gameYear();
@@ -2026,6 +2135,7 @@ function paint() {
   if (!$('v-cards').classList.contains('hidden')) paintCards();
   if (!$('v-burza').classList.contains('hidden')) paintBurza();
   if (!$('v-me').classList.contains('hidden')) paintMe();
+  tutPaint();
 }
 // ─── Žebříčky ────────────────────────────────────────────────────────────────
 var ZEB = null, ZEB_KAT = 'pradlomaty';
@@ -3024,6 +3134,7 @@ function switchTab(v) {
   b.onclick = function () { switchTab(b.getAttribute('data-v')); };
 });
 $('open-areas').onclick = areasSheet;
+if ($('tut-skip')) $('tut-skip').onclick = tutSkip;
 // Hotovost v hlavičce je tlačítko — odtud se hráč dostane k penězům.
 if ($('t-penize')) $('t-penize').onclick = function () { penizeSheet(); };
 $('burza-nova').onclick = novaNabidkaSheet;
@@ -3522,6 +3633,7 @@ function startGame() {
   tick(); save(); paint();
   var arrived = waiting - (S.orders || []).length;
   initMap();
+  tutStart();
   var gained = S.cash - before;
   if (arrived) toast('Dorazilo ' + arrived + ' strojů — čekají na skladě v obchodě.', 'ok');
   else if (gained > 1000) toast('Než ses vrátil, síť vydělala ' + kcFull(gained) + '.', 'ok');
@@ -3560,7 +3672,7 @@ api('/account/me').then(function (r) {
   if (r.ok && r.j.player) {
     ME = r.j.player;
     var srv = r.j.state;
-    if (srv && (!S || (srv.lastTick || 0) >= (S.lastTick || 0))) { S = srv; save(); }
+    if (srv && (!S || (srv.lastTick || 0) >= (S.lastTick || 0))) { S = dosypStav(srv) || S; save(); }
     srovnejRef();   // až tady: stav ze serveru může mít staré pid
     if (S) return startGame();
   }

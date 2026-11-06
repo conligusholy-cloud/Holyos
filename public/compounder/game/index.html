@@ -113,6 +113,19 @@
     <div class="t-item"><span>Prádlomaty</span><b id="t-count">0</b></div>
   </header>
 
+  <!-- TUTORIÁL — první prádlomat krok za krokem -->
+  <div id="tut" class="tut hidden">
+    <div class="tut-row">
+      <div class="tut-txt">
+        <b id="tut-krok"></b>
+        <strong id="tut-titul"></strong>
+        <span id="tut-text"></span>
+      </div>
+      <button class="tut-x" id="tut-skip" type="button">Přeskočit</button>
+    </div>
+    <div class="tut-bar"><i id="tut-fill"></i></div>
+  </div>
+
   <main>
     <!-- MAPA -->
     <section id="v-map" class="view">
@@ -180,10 +193,10 @@
   </main>
 
   <nav class="tabs">
-    <button data-v="map" class="on"><span>🗺</span>Mapa</button>
-    <button data-v="shop"><span>🛒</span>Obchod</button>
-    <button data-v="net"><span>🧺</span>Síť</button>
-    <button data-v="bank"><span>🏦</span>Banka</button>
+    <button data-v="map" id="tab-map" class="on"><span>🗺</span>Mapa</button>
+    <button data-v="shop" id="tab-shop"><span>🛒</span>Obchod</button>
+    <button data-v="net" id="tab-net"><span>🧺</span>Síť</button>
+    <button data-v="bank" id="tab-bank"><span>🏦</span>Banka</button>
     <button data-v="cards"><span>⚡</span>Karty</button>
     <button data-v="burza"><span>🤝</span>Burza<i class="tab-dot hidden" id="burza-dot"></i></button>
     <button data-v="me"><span>👤</span>Já</button>

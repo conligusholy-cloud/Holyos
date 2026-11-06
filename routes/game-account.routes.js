@@ -457,6 +457,24 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
 });
 
 // ─── Karty ───────────────────────────────────────────────────────────────────
+// POST /account/tutorial-card → kdo ještě nic nepostavil a nemá Expresní dovoz,
+// dostane jeden kus. Tutoriál na něm stojí — bez něj by hráč čekal celý den.
+// Hráči, který si už něco postavil, se nevydá nic.
+router.post('/account/tutorial-card', requirePlayer, async (req, res, next) => {
+  try {
+    const stoji = await prisma.gameSpotClaim.count({ where: { player_id: req.player.id } });
+    const vsechny = await prisma.gameCard.count({ where: { player_id: req.player.id, kind: 'rush' } });
+    const volne = await prisma.gameCard.count({
+      where: { player_id: req.player.id, kind: 'rush', used_at: null }
+    });
+    // Strop na tři kusy, ať se karta nedá vyrábět opakovaným použitím.
+    if (stoji === 0 && volne === 0 && vsechny < 3) {
+      await prisma.gameCard.create({ data: { player_id: req.player.id, kind: 'rush' } });
+    }
+    res.json({ ok: true, owned: (await pub(req.player)).cards });
+  } catch (e) { next(e); }
+});
+
 // GET /cards → katalog + co hráč vlastní
 router.get('/cards', async (req, res, next) => {
   try {

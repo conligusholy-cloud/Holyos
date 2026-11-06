@@ -372,3 +372,43 @@ button{font:inherit;cursor:pointer}
 .pin.dum svg { width: 64%; height: 64%; fill: var(--blue); }
 .pin.dum.mala { border-color: var(--text2); border-radius: 8px; }
 .pin.dum.mala svg { fill: var(--text2); width: 62%; height: 62%; }
+
+/* ─── Tutoriál ────────────────────────────────────────────────────────────── */
+/* Lišta pod hlavičkou vede hráče k prvnímu prádlomatu. Nic nepřekrývá —
+   je součástí sloupce, takže se mapa i obsah posunou pod ní. */
+.tut {
+  flex: 0 0 auto;
+  background: linear-gradient(180deg, rgba(99,102,241,.22), rgba(99,102,241,.10));
+  border-bottom: 1px solid rgba(129,140,248,.35);
+  padding: 10px 14px 0;
+}
+.tut-row { display: flex; align-items: flex-start; gap: 10px; }
+.tut-txt { flex: 1 1 auto; min-width: 0; }
+.tut-txt b {
+  display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  color: #a5b4fc; margin-bottom: 1px;
+}
+.tut-txt strong { display: block; font-size: 15px; line-height: 1.25; }
+.tut-txt span { display: block; font-size: 12.5px; line-height: 1.35; color: var(--muted); margin-top: 2px; }
+.tut-x {
+  flex: 0 0 auto; background: none; border: 0; color: var(--muted);
+  font-size: 12px; padding: 2px 0 2px 8px; cursor: pointer;
+}
+.tut-x:hover { color: #e5e7eb; }
+.tut-bar { height: 3px; border-radius: 2px; background: rgba(255,255,255,.10); margin: 9px 0 0; overflow: hidden; }
+.tut-bar i { display: block; height: 100%; background: #818cf8; transition: width .35s ease; }
+
+/* Na co má hráč klepnout. Pulzuje, dokud krok nedokončí. */
+.tut-on { position: relative; animation: tutPuls 1.6s ease-in-out infinite; }
+.tut-on::after {
+  content: ''; position: absolute; inset: -3px; border-radius: 12px;
+  border: 2px solid #818cf8; pointer-events: none;
+}
+@keyframes tutPuls {
+  0%, 100% { filter: none; }
+  50% { filter: brightness(1.35); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tut-on { animation: none; }
+  .tut-bar i { transition: none; }
+}
