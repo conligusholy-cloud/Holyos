@@ -2939,14 +2939,20 @@ function distHtml() {
     + '<div class="kv"><span>Stav</span><b class="' + (aktivni ? 'ok' : 'warn') + '">'
     + (aktivni ? 'aktivní, končí ' + etaText(new Date(DIST.do).getTime() - Date.now()) : 'neaktivní') + '</b></div>'
     + '<div class="kv"><span>Přivedených hráčů</span><b>' + DIST.privedeno + '</b></div>'
-    + '<div class="kv"><span>Režie na měsíc</span><b class="warn">' + kcFull(rezie) + '</b></div>'
+    + '<div class="kv"><span>Režie na měsíc</span><b class="' + (rezie > 0 ? 'warn' : 'ok') + '">'
+    + (rezie > 0 ? kcFull(rezie) : 'zdarma') + '</b></div>'
     + (DIST.provize_celkem > 0 ? '<div class="kv"><span>Vyděláno na provizích</span><b class="ok">'
       + kcFull(DIST.provize_celkem) + '</b></div>' : '')
-    + '<p class="fine">Režie roste o ' + kcFull(40000) + ' s každými pěti přivedenými hráči — '
-    + 'čím větší síť, tím dražší provoz.</p>'
+    + '<p class="fine">' + (rezie > 0
+        ? 'Režie roste o ' + kcFull(40000) + ' s každými pěti přivedenými hráči — čím větší síť, tím dražší provoz.'
+        : 'Do pěti přivedených hráčů je distribuce zdarma. Od pátého začneš platit '
+          + kcFull(40000) + ' za herní měsíc a dál to roste po stejných dávkách.')
+    + ' Obnovit se musí každý herní měsíc, jinak výhoda spadne.</p>'
     + (S.cash >= rezie
         ? '<button class="btn sec" id="do-dist" style="width:100%;margin-top:8px">'
-          + (aktivni ? 'Prodloužit o měsíc za ' : 'Zaplatit měsíc za ') + kcFull(rezie) + '</button>'
+          + (aktivni
+              ? 'Prodloužit o měsíc' + (rezie > 0 ? ' za ' + kcFull(rezie) : ' zdarma')
+              : 'Zapnout na měsíc' + (rezie > 0 ? ' za ' + kcFull(rezie) : ' zdarma')) + '</button>'
         : '<p class="fine err">Na režii ti chybí ' + kcFull(rezie - S.cash) + '.</p>')
     + '</div>';
 }
@@ -2962,7 +2968,8 @@ function bindDist() {
       S.cash -= rezie;
       save(); syncState(true);
       loadDist(function () { paintMe(); });
-      toast('Distribuce zaplacená na další herní měsíc.', 'ok');
+      toast(rezie > 0 ? 'Distribuce zaplacená na další herní měsíc.'
+        : 'Distribuce zapnutá na další herní měsíc — zdarma.', 'ok');
     }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
   };
 }

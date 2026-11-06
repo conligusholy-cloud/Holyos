@@ -217,8 +217,8 @@ function zbydeMesicne(st) {
 // Kdo si platí měsíční režii, dostává 10 % z ceny každého prádlomatu, který
 // postaví hráč, jehož do hry přivedl. Není to automatické — režie se musí
 // každý herní měsíc obnovit, jinak výhoda spadne.
-const DIST_REZIE = 40000;         // základní režie za herní měsíc
-const DIST_NA_HRACU = 5;          // s každými pěti přivedenými režie o jednu dávku roste
+const DIST_REZIE = 40000;         // dávka režie za herní měsíc
+const DIST_NA_HRACU = 5;          // za každých pět přivedených jedna dávka
 const DIST_PROVIZE = 0.10;        // podíl z ceny prádlomatu
 const MESIC_MS = 43200000;        // herní měsíc = 12 skutečných hodin
 // Ceny strojů musí sedět s MODELS v public/compounder/game/game.js.
@@ -227,8 +227,10 @@ const CENY_STROJU = { mini: Math.round(35000 * 24.35 * 1.25), flex: Math.round(5
 async function privedenych(id) {
   return prisma.gamePlayer.count({ where: { invited_by_id: id } });
 }
+// Do pěti přivedených je distribuce zdarma — jinak odrazuje dřív, než
+// stačí něco vydělat. Od pátého se platí dávka za každých začatých pět.
 function distRezie(privedeno) {
-  return DIST_REZIE * (1 + Math.floor(privedeno / DIST_NA_HRACU));
+  return DIST_REZIE * Math.floor((Number(privedeno) || 0) / DIST_NA_HRACU);
 }
 function distAktivni(p) {
   return !!(p && p.distributor_do && new Date(p.distributor_do).getTime() > Date.now());
