@@ -679,6 +679,7 @@
         <button class="btn" style="display:none" onclick="cmpStartDiscountAll(this)" title="Spustí akční cenu (slevu) od dneška všem leadům, kteří už byli na portálu">🏷️ Akce všem</button>
         <button class="btn" style="display:none" onclick="cmpDiscountFollowup(this)" title="Hromadně přepnout všechny leady s aktivní slevou na stav Dosledování">🗓️ Ve slevě → Dosledování</button>
         <button class="btn" onclick="openAiInstructions()" title="Upravit pokyny AI, která sestavuje denní plán obchodníkům">🧠 AI pokyny</button>
+        <button class="btn" onclick="openBulkMove()" title="Hromadně přesunout kontakty jednoho obchodníka (dle stavu, část v %) jinému obchodníkovi">🔀 Hromadný přesun</button>
         <button class="btn btn-primary" onclick="openAddLead()">➕ Přidat kontakt</button>
       </div>
       <div id="cmp-summary" style="margin-bottom:14px;"></div>
@@ -4234,6 +4235,78 @@
       }catch(e){ document.getElementById('ai-instr-msg').innerHTML='<span style="color:#f87171">Uložení selhalo: '+(e.message||'')+'</span>'; }
       finally{ btn.disabled=false; btn.textContent=old; }
     }
+    // ─── Hromadný přesun kontaktů mezi obchodníky ───────────────────────────
+    var _bmIds = [];
+    async function openBulkMove(){
+      var root = document.getElementById('modal-root');
+      if (CMP_SELLERS === null) {
+        try { var sr = await fetch('/api/compounder/sellers', { credentials: 'include' }); CMP_SELLERS = sr.ok ? await sr.json() : []; }
+        catch (e) { CMP_SELLERS = []; }
+      }
+      var sel = 'background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;width:100%;box-sizing:border-box;';
+      var sellers = (CMP_SELLERS || []).map(function(s){ return { id: s.id, n: ((s.first_name||'') + ' ' + (s.last_name||'')).trim() }; });
+      var optS = function(extra){ return (extra||'') + sellers.map(function(s){ return '<option value="' + s.id + '">' + cmpEsc(s.n) + '</option>'; }).join(''); };
+      var stOpts = Array.prototype.map.call(document.querySelectorAll('#cmp-status-filter option'), function(o){
+        return '<option value="' + cmpEsc(o.value) + '">' + (o.value ? cmpEsc(o.textContent) : 'Všechny stavy') + '</option>';
+      }).join('');
+      var lbl = 'display:block;font-size:12px;color:var(--text2);margin:10px 0 4px;';
+      root.innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:480px;max-width:96vw;">' +
+        '<h2>🔀 Hromadný přesun kontaktů</h2>' +
+        '<label style="' + lbl + '">Od obchodníka</label><select id="bm-from" style="' + sel + '" onchange="bmPreview()">' + optS('<option value="none">— bez obchodníka —</option>') + '</select>' +
+        '<label style="' + lbl + '">Ve stavu</label><select id="bm-status" style="' + sel + '" onchange="bmPreview()">' + stOpts + '</select>' +
+        '<label style="' + lbl + '">Kolik přesunout (%)</label><input type="number" id="bm-pct" min="1" max="100" value="50" style="' + sel + '" oninput="bmPreview()">' +
+        '<label style="' + lbl + '">Které vybrat</label><select id="bm-order" style="' + sel + '" onchange="bmPreview()"><option value="random">Náhodně</option><option value="newest">Nejnovější první</option><option value="oldest">Nejstarší první</option></select>' +
+        '<label style="' + lbl + '">K obchodníkovi</label><select id="bm-to" style="' + sel + '" onchange="bmPreview()"><option value="">— vyber —</option>' + optS() + '</select>' +
+        '<div id="bm-info" style="margin-top:14px;font-size:13px;color:var(--text2)">Vyber obchodníka a stav.</div>' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">' +
+          '<button class="btn" onclick="closeModal()">Zavřít</button>' +
+          '<button class="btn btn-primary" id="bm-go" onclick="bmRun(this)" disabled>Přesunout</button>' +
+        '</div></div></div>';
+      _bmIds = [];
+    }
+    var _bmTimer = null;
+    function bmPreview(){ if (_bmTimer) clearTimeout(_bmTimer); _bmTimer = setTimeout(_bmDoPreview, 200); }
+    async function _bmDoPreview(){
+      var from = document.getElementById('bm-from'), info = document.getElementById('bm-info'), go = document.getElementById('bm-go');
+      if (!from || !info) return;
+      go.disabled = true; _bmIds = [];
+      var st = document.getElementById('bm-status').value, pct = Number(document.getElementById('bm-pct').value), to = document.getElementById('bm-to').value;
+      var order = document.getElementById('bm-order').value;
+      info.textContent = 'Počítám…';
+      try {
+        var r = await fetch('/api/compounder/leads?' + new URLSearchParams({ owner: from.value, status: st }).toString(), { credentials: 'include' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        var leads = await r.json();
+        if (!document.getElementById('bm-info')) return;
+        var total = leads.length;
+        if (!total) { info.textContent = 'Žádné odpovídající kontakty.'; return; }
+        if (order === 'oldest') leads.reverse();
+        else if (order === 'random') { for (var i = leads.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = leads[i]; leads[i] = leads[j]; leads[j] = t; } }
+        var n = (pct > 0 && pct <= 100) ? Math.max(1, Math.round(total * pct / 100)) : 0;
+        _bmIds = leads.slice(0, n).map(function(l){ return l.id; });
+        var toName = to ? document.getElementById('bm-to').selectedOptions[0].textContent : '…';
+        var fromName = from.selectedOptions[0].textContent;
+        info.innerHTML = 'Nalezeno <b>' + total + '</b> kontaktů, přesune se <b>' + n + '</b> (' + pct + ' %) z <b>' + cmpEsc(fromName) + '</b> k <b>' + cmpEsc(toName) + '</b>.';
+        if (to && n && to !== from.value) go.disabled = false;
+        else if (to && to === from.value) info.innerHTML += '<br><span style="color:#f87171">Zdrojový a cílový obchodník je stejný.</span>';
+      } catch (e) { info.innerHTML = '<span style="color:#f87171">Chyba: ' + cmpEsc(e.message) + '</span>'; }
+    }
+    async function bmRun(btn){
+      var to = Number(document.getElementById('bm-to').value);
+      if (!_bmIds.length || !to) return;
+      if (!confirm('Přesunout ' + _bmIds.length + ' kontaktů?')) return;
+      var old = btn.textContent; btn.disabled = true; btn.textContent = 'Přesouvám…';
+      try {
+        var r = await fetch('/api/compounder/leads/bulk-owner', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lead_ids: _bmIds, owner_person_id: to }) });
+        var j = await r.json().catch(function(){ return {}; });
+        if (!r.ok) throw new Error(j.error || 'Chyba');
+        document.getElementById('bm-info').innerHTML = '<span style="color:#22c55e">✓ Přesunuto ' + j.updated + ' kontaktů.</span>';
+        _bmIds = [];
+        loadCompounderLeads();
+      } catch (e) { document.getElementById('bm-info').innerHTML = '<span style="color:#f87171">Selhalo: ' + cmpEsc(e.message) + '</span>'; btn.disabled = false; }
+      finally { btn.textContent = old; }
+    }
+    window.openBulkMove = openBulkMove; window.bmPreview = bmPreview; window.bmRun = bmRun;
     function openAddLead(){
       document.getElementById('modal-root').innerHTML =
         '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +

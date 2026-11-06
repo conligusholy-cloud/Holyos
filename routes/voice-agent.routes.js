@@ -304,11 +304,12 @@ async function resolveTransferPlan(mode, targetId, line) {
     const enRaw = get ? await get(cfgKey(line, 'transfer_enabled')) : true;
     enabled = enRaw === undefined || enRaw === null ? true : (enRaw === true || enRaw === 'true' || enRaw === 1 || enRaw === '1');
     timeout = get ? parseInt(await get(cfgKey(line, 'transfer_ring_timeout')), 10) || 20 : 20;
-    rounds = get ? parseInt(await get(cfgKey(line, 'transfer_rounds')), 10) || 2 : 2;
-    // Infolinka: JEDNO kolečko — každý z rozpisu zazvoní právě jednou (20 s),
-    // a když to nikdo nevezme, zákazník hned slyší hlášku. Opakovat celý rozpis
-    // by znamenalo i dvě minuty vyzvánění do ticha.
-    if (normLine(line) === 'infolinka') rounds = 1;
+    const roundsRaw = get ? parseInt(await get(cfgKey(line, 'transfer_rounds')), 10) : NaN;
+    rounds = roundsRaw || 2;
+    // Infolinka: rozpis se projde AŽ TŘIKRÁT (každý z rozpisu zazvoní v každém kolečku znovu).
+    // Až když to nikdo nevezme ani ve třetím kolečku, zákazník uslyší hlášku. Hodnota
+    // voice.infolinka.transfer_rounds ji může zvýšit (max. 5), nikdy ne snížit pod 3.
+    if (normLine(line) === 'infolinka') rounds = Math.max(3, roundsRaw || 3);
     // 0) Aktuální směna z rozpisu — PRIMÁRNÍ zdroj operátorů pro přepojení.
     //    Který řádek rozpisu a které role platí, počítá services/voice/shift-window.js
     //    (pásma Po–Čt / Pá / So / Ne včetně nočních přesahů, vše v Europe/Prague).
