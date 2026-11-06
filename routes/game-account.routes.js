@@ -234,12 +234,36 @@ function distAktivni(p) {
   return !!(p && p.distributor_do && new Date(p.distributor_do).getTime() > Date.now());
 }
 
+// Kdo stavitele do hry přivedl. Normálně to řeší invited_by_id, ale účet
+// se může zapsat dřív, než si zvoucí narokoval svoje sdílené id — pak zůstane
+// jen invited_by_ref. Dohledáme ho podle něj a vazbu rovnou doplníme,
+// aby se to příště nemuselo řešit.
+async function kdoPrivedl(stavitel) {
+  if (!stavitel) return null;
+  if (stavitel.invited_by_id) {
+    return prisma.gamePlayer.findUnique({ where: { id: stavitel.invited_by_id } });
+  }
+  if (!stavitel.invited_by_ref) return null;
+  const zvouci = await prisma.gamePlayer.findUnique({ where: { ref_id: stavitel.invited_by_ref } });
+  if (!zvouci || zvouci.id === stavitel.id) return null;
+  try {
+    await prisma.gamePlayer.update({ where: { id: stavitel.id }, data: { invited_by_id: zvouci.id } });
+  } catch (e) { console.warn('[game] doplneni vazby pozvani:', e.message); }
+  return zvouci;
+}
+
 // Vyplatí provizi tomu, kdo stavitele do hry přivedl. Peníze přijdou jako
 // doručenka, kterou si hráč vyzvedne při nejbližším otevření hry.
 async function vyplatProvizi(stavitel, model, nazevMista) {
-  if (!stavitel || !stavitel.invited_by_id) return;
-  const zvouci = await prisma.gamePlayer.findUnique({ where: { id: stavitel.invited_by_id } });
-  if (!distAktivni(zvouci)) return;
+  const zvouci = await kdoPrivedl(stavitel);
+  if (!zvouci) {
+    console.log('[game] provize: ' + (stavitel && stavitel.nick) + ' nema zapsaneho zvouciho');
+    return;
+  }
+  if (!distAktivni(zvouci)) {
+    console.log('[game] provize: ' + zvouci.nick + ' nema aktivni distribuci (do ' + zvouci.distributor_do + ')');
+    return;
+  }
   const cena = CENY_STROJU[model] || CENY_STROJU.mini;
   const provize = Math.round(cena * DIST_PROVIZE);
   await prisma.gameDelivery.create({
@@ -750,3 +774,6 @@ module.exports._defaults = ALL;
 module.exports._cashCustom = CASH_CUSTOM;
 module.exports._urokMesicne = urokMesicne;
 module.exports._zbydeMesicne = zbydeMesicne;
+module.exports._kdoPrivedl = kdoPrivedl;
+module.exports._distAktivni = distAktivni;
+module.exports._distRezie = distRezie;

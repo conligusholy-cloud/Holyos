@@ -3610,7 +3610,7 @@ function doAcct(login) {
     if (!login) ev('game_register');
     if (login) {
       // Na serveru je uložená síť — ta má přednost před tím, co je v prohlížeči.
-      if (r.j.state) { S = r.j.state; save(); }
+      if (r.j.state) { S = dosypStav(r.j.state) || S; save(); }
       else if (!S) {
         // Účet existuje, ale rozehraná hra k němu není — pošleme ho vybrat profil.
         $('acct').classList.add('hidden');
