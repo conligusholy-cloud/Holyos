@@ -130,7 +130,7 @@ function prepocitejDluh() {
   S.loanPrem = celkem > 0 ? Math.max(0, (urokRok / celkem) - rateOf()) : 0;
 }
 // Nový úvěr. `vazba` říká, na co je — podle toho se pozná doplacený prádlomat.
-function pricistDluh(castka, prirazka, vazba) {
+function pricistDluh(castka, prirazka, vazba, mesicu) {
   castka = Math.round(castka || 0);
   if (!(castka > 0)) return null;
   if (!S.loans) S.loans = [];
@@ -141,8 +141,8 @@ function pricistDluh(castka, prirazka, vazba) {
     spotId: (vazba && vazba.spotId) || null,
     popis: (vazba && vazba.popis) || 'Provozní úvěr',
     puvodni: castka, zbyva: castka, sazba: sazba,
-    mesicu: UVER_MESICU, zbyvaMesicu: UVER_MESICU,
-    splatka: anuita(castka, sazba, UVER_MESICU),
+    mesicu: mesicu || UVER_MESICU, zbyvaMesicu: mesicu || UVER_MESICU,
+    splatka: anuita(castka, sazba, mesicu || UVER_MESICU),
     zalozen: Date.now(), zmeskano: 0
   };
   S.loans.push(l);
@@ -198,6 +198,47 @@ function mesicniSplatka() {
   }
   prepocitejDluh();
 }
+// ─── Rizikoř ────────────────────────────────────────────────────────────────
+// Má den ode dne jinou náladu a dá ji najevo hned, jak hráč vejde. Nálada je
+// daná hráčem a herním měsícem, takže se nedá překlikat obnovením stránky —
+// a nikdy neobejde tvrdá pravidla, hýbe jen cenou a ochotou.
+var NALADY = [
+  { id: 'vstricny', nazev: 'Vstřícný den', slovo: 'Dneska mám dobrý den, tak se domluvíme.',
+    sazba: -0.0015, castka: 1.05, splatnost: 1 },
+  { id: 'bezny', nazev: 'Běžný den', slovo: 'Jedeme podle pravidel, nic víc, nic míň.',
+    sazba: 0, castka: 1, splatnost: 0 },
+  { id: 'prisny', nazev: 'Přísný den', slovo: 'Dneska jsem opatrný, tak se nedivte.',
+    sazba: 0.0015, castka: 0.95, splatnost: 0 },
+  { id: 'audit', nazev: 'Po auditu', slovo: 'Máme po kontrole. Držím se předpisů do písmene.',
+    sazba: 0.0015, castka: 0.95, splatnost: -1 }
+];
+function naladaDnes() {
+  var mesic = Math.floor(Date.now() / MONTH_MS);
+  var h = spotHash((S && S.pid ? S.pid : 'x') + ':' + mesic, 'nalada');
+  return NALADY[Math.min(NALADY.length - 1, Math.floor(h * NALADY.length))];
+}
+// Delší splatnost sráží splátku, ale prodraží se na úrocích — a banka ji nedá
+// každému. Rozhoduje historie splacených úvěrů, ne náhoda.
+var SPLATNOSTI = [
+  { mesicu: 60, nazev: '5 let', prirazka: 0 },
+  { mesicu: 84, nazev: '7 let', prirazka: 0.004 },
+  { mesicu: 120, nazev: '10 let', prirazka: 0.009 }
+];
+function maxSplatnost() {
+  var splacenych = (S.stats && S.stats.splaceno) || 0;
+  var stupen = splacenych >= 2 ? 2 : splacenych >= 1 ? 1 : 0;
+  stupen += naladaDnes().splatnost;
+  return Math.max(0, Math.min(SPLATNOSTI.length - 1, stupen));
+}
+// Proč delší splatnost nedostane — vždycky i s tím, za co by to bylo ano.
+function splatnostDuvod(i) {
+  var splacenych = (S.stats && S.stats.splaceno) || 0;
+  if (naladaDnes().id === 'audit') return 'Dneska je rizikoř po auditu a drží se základní splatnosti. Zkus to zítra.';
+  if (splacenych === 0) return 'Nemáš za sebou jediný splacený úvěr, takže banka nemá podle čeho soudit. Splať první úvěr a vrať se.';
+  if (splacenych === 1 && i >= 2) return 'S jedním splaceným úvěrem ti banka dá nejvýš sedm let. Na deset se vrať, až budeš mít dva.';
+  return 'Na tuhle splatnost zatím nedosáhneš.';
+}
+
 // Banka nepůjčí podle toho, co máš, ale podle toho, co to uživí. Kolik musí
 // zisk pokrýt splátku, aby úvěr dala — stejné číslo, jaké se ukazuje u místa.
 var KRYTI_MIN = 1.25;
@@ -2355,8 +2396,11 @@ function applyCard(e) {
 // Banka se dívá na dvě věci: kolik máš v zástavě a jak jsi zadlužený. Čím víc
 // už dlužíš proti majetku, tím vyšší úrok a tím menší ochota půjčit.
 var UVER_POPLATEK = 0.01;   // jednorázově za sjednání
-function uverNabidka(chci) {
+function uverNabidka(chci, iSplatnosti) {
   var p = PROFILES[S.profile];
+  var nalada = naladaDnes();
+  var iS = Math.max(0, Math.min(maxSplatnost(), iSplatnosti == null ? 0 : iSplatnosti));
+  var sp = SPLATNOSTI[iS];
   var majetek = assetsTotal();
   var strop = Math.max(0, p.ltv * majetek - S.loan);
   var max = Math.max(0, Math.min(strop, S.bank, OPERATING_MAX + Math.max(0, p.ltv * majetek - S.loan)));
@@ -2364,20 +2408,23 @@ function uverNabidka(chci) {
   // minus splátky, které už běží.
   var dscr = stropPodleZisku(monthlyProfit() - splatkyMesicne(), max);
   var brzdiVydelek = dscr < max;
-  max = Math.round(Math.min(max, dscr, S.bank) / 1000) * 1000;
+  max = Math.round(Math.min(max * nalada.castka, dscr, S.bank) / 1000) * 1000;
   var castka = Math.max(0, Math.min(max, Math.round((chci == null ? max : chci) / 1000) * 1000));
   // Zadluženost po načerpání — podle ní si banka říká přirážku.
   var ted = majetek > 0 ? S.loan / majetek : 0;
   var pak = majetek > 0 ? (S.loan + castka) / majetek : 2;
-  var prirazka = prirazkaZa(castka);
-  var sazba = rateOf() + prirazka;
+  var prirazka = prirazkaZa(castka) + sp.prirazka + nalada.sazba;
+  var sazba = Math.max(0.02, rateOf() + prirazka);
   var poplatek = Math.round(castka * UVER_POPLATEK);
+  var splatkaMes = anuita(castka, sazba, sp.mesicu);
+  var celkemUrok = Math.max(0, splatkaMes * sp.mesicu - castka);
   // Kolik si může půjčit, aby ještě zůstal v levnějším pásmu — ať ví, kde je hranice.
   var bezPrirazky = Math.max(0, Math.floor((0.5 * majetek - S.loan) / 1000) * 1000);
   var levnejsi = Math.max(0, Math.floor((0.8 * majetek - S.loan) / 1000) * 1000);
   return { max: max, castka: castka, sazba: sazba, prirazka: prirazka, poplatek: poplatek,
     naruku: Math.max(0, castka - poplatek), mesicne: Math.round(castka * sazba / 12),
     ted: ted, zadluzenost: pak, majetek: majetek, dscr: dscr, brzdiVydelek: brzdiVydelek,
+    nalada: nalada, iSplatnosti: iS, splatnost: sp, splatkaMes: splatkaMes, celkemUrok: celkemUrok,
     // Sazba, kterou hráč ponese na celém dluhu po načerpání (vážený průměr).
     poSjednani: Math.max(0.02, rateOf() + ((S.loan * (S.loanPrem || 0) + castka * prirazka) / Math.max(1, S.loan + castka))),
     bezPrirazky: bezPrirazky, levnejsi: levnejsi };
@@ -2402,8 +2449,8 @@ function uverDuvod() {
   return 'Volný rámec v bance je vyčerpaný. Sám dorůstá o ' + kcFull(BANK_PER_DAY)
     + ' za den — nebo ho doplníš tím, že splatíš část úvěru.';
 }
-function uverSheet(chci) {
-  var n = uverNabidka(chci);
+function uverSheet(chci, iSplatnosti) {
+  var n = uverNabidka(chci, iSplatnosti);
   if (n.max < 1000) { closeSheet(); return toast('Banka ti teď nepůjčí ani korunu.', 'err'); }
   // Hodnotíme PŮJČKU, ne hráče: přirážka se řídí tím, jak bude zadlužený až
   // si tuhle částku vezme. Dřív tu stálo „jsi zadlužený" i tomu, kdo neměl ani korunu dluhu.
@@ -2420,7 +2467,10 @@ function uverSheet(chci) {
     : n.prirazka > 0.008 && n.levnejsi >= 1000 && n.levnejsi < n.castka
       ? 'Do ' + kcFull(n.levnejsi) + ' by byla přirážka jen 0,8 bodu.'
     : '';
+  var maxS = maxSplatnost();
   sheet('<h3>Nabídka banky</h3>'
+    + '<div class="nalada ' + n.nalada.id + '"><b>' + n.nalada.nazev + '</b>'
+    + '<span>' + esc(n.nalada.slovo) + '</span></div>'
     + '<p class="muted small">' + hodnoceni + (rada ? ' ' + rada : '')
     + ' Podmínky platí, dokud je nepřijmeš — nic se neděje samo.</p>'
     + (n.brzdiVydelek ? '<div class="kv"><span>Strop podle výdělku firmy</span><b class="warn">' + kcFull(n.dscr) + '</b></div>'
@@ -2430,11 +2480,20 @@ function uverSheet(chci) {
     + (S.loan > 0 ? ' · ' + Math.round(n.ted * 100) + ' % majetku' : '') + '</b></div>'
     + '<label class="fld"><span>Kolik si chceš půjčit (nejvýš ' + kcFull(n.max) + ')</span>'
     + '<input id="uv-amt" class="inp" type="number" min="1000" step="1000" max="' + n.max + '" value="' + n.castka + '"></label>'
+    + '<label class="fld"><span>Na jak dlouho</span></label>'
+    + '<div class="splat">' + SPLATNOSTI.map(function (x, i) {
+        var lze = i <= maxS;
+        return '<button class="splat-b' + (i === n.iSplatnosti ? ' on' : '') + (lze ? '' : ' zamceno')
+          + '" data-splat="' + i + '"' + (lze ? '' : ' disabled') + '>'
+          + '<b>' + x.nazev + '</b><span>' + (lze ? kcFull(anuita(n.castka, Math.max(0.02, rateOf() + prirazkaZa(n.castka) + x.prirazka + n.nalada.sazba), x.mesicu)) + ' / měs' : 'zamčeno') + '</span></button>';
+      }).join('') + '</div>'
+    + (maxS < SPLATNOSTI.length - 1 ? '<p class="fine">' + esc(splatnostDuvod(maxS + 1)) + '</p>' : '')
     + '<div class="kv"><span>Úrok</span><b>' + (n.sazba * 100).toFixed(1).replace('.', ',') + ' % ročně'
-    + (n.prirazka ? ' <span class="warn">(+' + (n.prirazka * 100).toFixed(1).replace('.', ',') + ' za riziko)</span>' : '') + '</b></div>'
+    + (n.prirazka > 0.0005 ? ' <span class="warn">(+' + (n.prirazka * 100).toFixed(1).replace('.', ',') + ' za riziko a splatnost)</span>' : '') + '</b></div>'
     + '<div class="kv"><span>Poplatek za sjednání (1 %)</span><b class="warn">' + kcFull(n.poplatek) + '</b></div>'
     + '<div class="kv"><span>Dostaneš na ruku</span><b class="ok">' + kcFull(n.naruku) + '</b></div>'
-    + '<div class="kv"><span>Úrok tě bude stát</span><b>' + kcFull(n.mesicne) + ' / měsíc</b></div>'
+    + '<div class="kv souhrn"><span>Splátka</span><b class="warn">' + kcFull(n.splatkaMes) + ' / měsíc po ' + n.splatnost.nazev + '</b></div>'
+    + '<div class="kv"><span>Celkem na úrocích zaplatíš</span><b>' + kcFull(n.celkemUrok) + '</b></div>'
     + '<div class="kv"><span>Dluh po načerpání</span><b>' + kcFull(S.loan + n.castka) + '</b></div>'
     + (S.loan > 0 && Math.abs(n.poSjednani - n.sazba) > 0.0005
         ? '<div class="kv"><span>Sazba z celého dluhu</span><b>'
@@ -2443,16 +2502,19 @@ function uverSheet(chci) {
         : '')
     + '<button class="btn big" id="uv-ano">Beru to</button>'
     + '<button class="btn sec" id="uv-ne" style="width:100%;margin-top:8px">Díky, nechám si to projít hlavou</button>'
-    + '<p class="fine">Splácet můžeš kdykoli a bez sankcí. Dokud nesplatíš, úrok nabíhá každou vteřinu.</p>');
+    + '<p class="fine">Splátka se strhne každý herní měsíc sama. Doplatit zbytek můžeš kdykoli a bez sankcí.</p>');
   // Při změně částky přepočítáme celou nabídku — sazba se může hnout.
   var inp = $('uv-amt');
-  if (inp) inp.onchange = function () { uverSheet(Number(inp.value) || 0); };
+  if (inp) inp.onchange = function () { uverSheet(Number(inp.value) || 0, n.iSplatnosti); };
+  [].forEach.call(document.querySelectorAll('[data-splat]'), function (b) {
+    b.onclick = function () { uverSheet(Number(inp.value) || 0, Number(b.getAttribute('data-splat'))); };
+  });
   $('uv-ne').onclick = closeSheet;
   $('uv-ano').onclick = function () {
-    var m = uverNabidka(Number(inp.value) || 0);
+    var m = uverNabidka(Number(inp.value) || 0, n.iSplatnosti);
     if (m.castka < 1000) return toast('Takhle malou částku banka neřeší.', 'err');
     S.bank -= m.castka;
-    pricistDluh(m.castka, m.prirazka, { druh: 'provoz', popis: 'Úvěr z banky' });
+    pricistDluh(m.castka, m.prirazka, { druh: 'provoz', popis: 'Úvěr z banky na ' + m.splatnost.nazev }, m.splatnost.mesicu);
     S.cash += m.naruku;
     S.stats.interest += m.poplatek;   // poplatek bereme jako náklad úvěru
     save(); paint(); paintBank(); closeSheet(); syncState(true);

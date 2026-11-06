@@ -346,3 +346,19 @@ button{font:inherit;cursor:pointer}
 .uver-hl { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
 .uver-hl b { font-size: 14px; }
 .uver-hl span { font-size: 12px; color: var(--text2); font-variant-numeric: tabular-nums; }
+
+/* ---- Rizikoř: nálada a výběr splatnosti ------------------------------- */
+.nalada { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px;
+  margin: 2px 0 12px; border: 1px solid var(--border); background: rgba(255,255,255,.04); }
+.nalada b { font-size: 13px; }
+.nalada span { font-size: 12.5px; color: var(--text2); }
+.nalada.vstricny { border-color: rgba(47,227,160,.45); }
+.nalada.prisny { border-color: rgba(255,216,102,.45); }
+.nalada.audit { border-color: rgba(255,93,108,.5); }
+.splat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 10px; }
+.splat-b { display: flex; flex-direction: column; gap: 2px; padding: 9px 4px; border-radius: 12px;
+  border: 2px solid transparent; background: rgba(255,255,255,.05); color: inherit; }
+.splat-b b { font-size: 13px; }
+.splat-b span { font-size: 11px; color: var(--text2); font-variant-numeric: tabular-nums; }
+.splat-b.on { border-color: var(--vio); background: rgba(124,92,255,.16); }
+.splat-b.zamceno { opacity: .4; }
