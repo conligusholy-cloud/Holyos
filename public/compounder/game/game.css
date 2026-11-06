@@ -412,3 +412,7 @@ button{font:inherit;cursor:pointer}
   .tut-on { animation: none; }
   .tut-bar i { transition: none; }
 }
+
+/* Tlačítka u jednotlivých úvěrů — splatit konkrétní, vyjednat splatnost. */
+.uver-akce { display: flex; gap: 8px; margin-top: 10px; }
+.uver-akce .btn { flex: 1 1 0; min-width: 0; }
