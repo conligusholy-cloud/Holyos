@@ -2476,6 +2476,54 @@ function znakSheet() {
   }
   kresli();
 }
+// ─── Distributor ────────────────────────────────────────────────────────────
+// Kdo si platí měsíční režii, bere 10 % z ceny každého prádlomatu, který
+// postaví hráč, jehož do hry přivedl. Režie se musí každý herní měsíc obnovit.
+var DIST = null;
+function loadDist(then) {
+  if (!ME) { DIST = null; if (then) then(); return; }
+  api('/account/distributor').then(function (r) { DIST = r.ok ? r.j : null; if (then) then(); })
+    .catch(function () { if (then) then(); });
+}
+function distHtml() {
+  if (!ME) return '';
+  if (!DIST) return '<div class="card"><h3>Distributor</h3><p class="fine">Načítám…</p></div>';
+  var aktivni = DIST.aktivni, rezie = DIST.rezie;
+  return '<div class="card"><h3>Distributor prádlomatů</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">Platíš měsíční režii a bereš '
+    + Math.round(DIST.provize * 100) + ' % z ceny každého prádlomatu, který postaví hráč, '
+    + 'kterého jsi do hry přivedl. Platí to i na jeho druhý, třetí a každý další.</p>'
+    + '<div class="kv"><span>Stav</span><b class="' + (aktivni ? 'ok' : 'warn') + '">'
+    + (aktivni ? 'aktivní, končí ' + etaText(new Date(DIST.do).getTime() - Date.now()) : 'neaktivní') + '</b></div>'
+    + '<div class="kv"><span>Přivedených hráčů</span><b>' + DIST.privedeno + '</b></div>'
+    + '<div class="kv"><span>Režie na měsíc</span><b class="warn">' + kcFull(rezie) + '</b></div>'
+    + (DIST.provize_celkem > 0 ? '<div class="kv"><span>Vyděláno na provizích</span><b class="ok">'
+      + kcFull(DIST.provize_celkem) + '</b></div>' : '')
+    + '<p class="fine">Režie roste o ' + kcFull(40000) + ' s každými pěti přivedenými hráči — '
+    + 'čím větší síť, tím dražší provoz.</p>'
+    + (S.cash >= rezie
+        ? '<button class="btn sec" id="do-dist" style="width:100%;margin-top:8px">'
+          + (aktivni ? 'Prodloužit o měsíc za ' : 'Zaplatit měsíc za ') + kcFull(rezie) + '</button>'
+        : '<p class="fine err">Na režii ti chybí ' + kcFull(rezie - S.cash) + '.</p>')
+    + '</div>';
+}
+function bindDist() {
+  var b = $('do-dist');
+  if (!b) return;
+  b.onclick = function () {
+    if (!DIST || S.cash < DIST.rezie) return;
+    b.disabled = true; b.textContent = 'Platím…';
+    var rezie = DIST.rezie;
+    apiJson('/account/distributor', {}).then(function (r) {
+      if (!r.ok) { b.disabled = false; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
+      S.cash -= rezie;
+      save(); syncState(true);
+      loadDist(function () { paintMe(); });
+      toast('Distribuce zaplacená na další herní měsíc.', 'ok');
+    }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+  };
+}
+
 // Koho hráč přivedl do hry — přesná jména, ne jen počítadlo otevření.
 var POZVANI = null;
 function loadPozvani() {
@@ -2539,6 +2587,7 @@ function paintMe() {
     + '<p class="muted small" style="margin:2px 0 10px">Kdo si přes tvůj odkaz založil účet. '
     + 'Tohle zůstává zapsané natrvalo.</p>'
     + pozvaniHtml() + '</div>'
+    + distHtml()
     + '<button class="btn sec big" id="do-reset">Začít znovu od nuly</button>';
   if (drzFirma != null && $('me-firma')) $('me-firma').value = drzFirma;
   var fb = $('me-firma-ulozit');
@@ -2554,6 +2603,7 @@ function paintMe() {
       toast('Firma se teď jmenuje ' + ME.company + '.', 'ok');
     }).catch(function () { fb.disabled = false; fb.textContent = 'Přejmenovat firmu'; toast('Server neodpovídá.', 'err'); });
   };
+  bindDist();
   var zb = $('me-znak');
   if (zb) zb.onclick = function () { znakSheet(); };
   $('do-share').onclick = function () { shareGame($('do-share')); };
@@ -2923,6 +2973,7 @@ function switchTab(v) {
   // Burza se musí ptát serveru pokaždé — nabídka mohla přijít před vteřinou.
   if (v === 'burza') { AUKCE = null; loadTrades(paintBurza); }
   if (v === 'me' && POZVANI == null) loadPozvani().then(paintMe);
+  if (v === 'me' && DIST == null) loadDist(paintMe);
 }
 [].forEach.call(document.querySelectorAll('.tabs button'), function (b) {
   b.onclick = function () { switchTab(b.getAttribute('data-v')); };

@@ -189,6 +189,71 @@ function urokMesicne(st) {
   return Math.round(dluh * sazba / 12);
 }
 
+// ─── Distributor ────────────────────────────────────────────────────────────
+// Kdo si platí měsíční režii, dostává 10 % z ceny každého prádlomatu, který
+// postaví hráč, jehož do hry přivedl. Není to automatické — režie se musí
+// každý herní měsíc obnovit, jinak výhoda spadne.
+const DIST_REZIE = 40000;         // základní režie za herní měsíc
+const DIST_NA_HRACU = 5;          // s každými pěti přivedenými režie o jednu dávku roste
+const DIST_PROVIZE = 0.10;        // podíl z ceny prádlomatu
+const MESIC_MS = 43200000;        // herní měsíc = 12 skutečných hodin
+// Ceny strojů musí sedět s MODELS v public/compounder/game/game.js.
+const CENY_STROJU = { mini: Math.round(35000 * 24.35 * 1.25), flex: Math.round(52000 * 24.35 * 1.25),
+  max: Math.round(67000 * 24.35 * 1.25) };
+async function privedenych(id) {
+  return prisma.gamePlayer.count({ where: { invited_by_id: id } });
+}
+function distRezie(privedeno) {
+  return DIST_REZIE * (1 + Math.floor(privedeno / DIST_NA_HRACU));
+}
+function distAktivni(p) {
+  return !!(p && p.distributor_do && new Date(p.distributor_do).getTime() > Date.now());
+}
+
+// Vyplatí provizi tomu, kdo stavitele do hry přivedl. Peníze přijdou jako
+// doručenka, kterou si hráč vyzvedne při nejbližším otevření hry.
+async function vyplatProvizi(stavitel, model, nazevMista) {
+  if (!stavitel || !stavitel.invited_by_id) return;
+  const zvouci = await prisma.gamePlayer.findUnique({ where: { id: stavitel.invited_by_id } });
+  if (!distAktivni(zvouci)) return;
+  const cena = CENY_STROJU[model] || CENY_STROJU.mini;
+  const provize = Math.round(cena * DIST_PROVIZE);
+  await prisma.gameDelivery.create({
+    data: { player_id: zvouci.id, kind: 'cash', amount: provize,
+      popis: 'Provize ' + provize.toLocaleString('cs-CZ') + ' L$ — ' + stavitel.nick
+        + ' postavil ' + String(model).toUpperCase() + (nazevMista ? ' (' + nazevMista + ')' : '') },
+  });
+  await prisma.gamePlayer.update({ where: { id: zvouci.id },
+    data: { provize_celkem: { increment: provize } } });
+  console.log('[game] provize ' + provize + ' L$ pro ' + zvouci.nick + ' za stavbu ' + stavitel.nick);
+}
+
+// GET /account/distributor → stav programu
+router.get('/account/distributor', requirePlayer, async (req, res, next) => {
+  try {
+    const p = await prisma.gamePlayer.findUnique({ where: { id: req.player.id } });
+    const privedeno = await privedenych(p.id);
+    res.json({ ok: true, aktivni: distAktivni(p), do: p.distributor_do,
+      privedeno, rezie: distRezie(privedeno), provize: DIST_PROVIZE,
+      provize_celkem: p.provize_celkem || 0, mesic_ms: MESIC_MS });
+  } catch (e) { next(e); }
+});
+
+// POST /account/distributor → obnovení na další herní měsíc
+// Peníze strhává klient ze své hotovosti, server hlídá jen období a cenu.
+router.post('/account/distributor', requirePlayer, async (req, res, next) => {
+  try {
+    const p = await prisma.gamePlayer.findUnique({ where: { id: req.player.id } });
+    const privedeno = await privedenych(p.id);
+    const rezie = distRezie(privedeno);
+    // Navazujeme na dosud zaplacené období, ať hráč nepřijde o zbytek měsíce.
+    const od = distAktivni(p) ? new Date(p.distributor_do).getTime() : Date.now();
+    const doKdy = new Date(od + MESIC_MS);
+    const up = await prisma.gamePlayer.update({ where: { id: p.id }, data: { distributor_do: doKdy } });
+    res.json({ ok: true, do: up.distributor_do, rezie, privedeno });
+  } catch (e) { next(e); }
+});
+
 // ─── Pozvánky ────────────────────────────────────────────────────────────────
 // Každý hráč má svoje id do sdíleného odkazu (ref_id). Kdo přijde přes cizí
 // odkaz a založí si účet, zůstane u zvoucího zapsaný natrvalo — z toho se dá
@@ -589,6 +654,9 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
         where: { spot_id: spot }, create: { spot_id: spot, area_key: area }, update: {},
       });
     } catch (e) { console.warn('[game] zasíťování místa:', e.message); }
+    // Provize tomu, kdo hráče do hry přivedl — jen když si platí distribuci.
+    try { await vyplatProvizi(req.player, model, s(b.name, 160)); }
+    catch (e) { console.warn('[game] provize:', e.message); }
     res.json({ ok: true, spot: claimPub(c, req.player.id, await firmyMapa()) });
   } catch (e) {
     if (e && e.code === 'P2002') return res.status(409).json({ error: 'Tohle místo právě někdo obsadil.' });

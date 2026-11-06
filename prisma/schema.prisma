@@ -7589,6 +7589,11 @@ model GamePlayer {
   // Pozvánky: vlastní id do sdíleného odkazu a kdo hráče do hry přivedl.
   // Když pozvaný dorazí dřív, než si zvoucí založí účet, zůstane tu zatím
   // jen samotný kód (invited_by_ref) a účet se doplní, až si ho zvoucí nárokuje.
+  // Distributor: kdo si platí měsíční režii, dostává provizi z prádlomatů,
+  // které postaví hráči, jež do hry přivedl.
+  distributor_do DateTime?
+  provize_celkem Int       @default(0)
+
   ref_id         String?   @unique @db.VarChar(24)
   invited_by_id  Int?
   invited_by_ref String?   @db.VarChar(24)
