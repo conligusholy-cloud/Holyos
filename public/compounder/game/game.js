@@ -136,6 +136,53 @@ function pobockaOd() {
 }
 function pobockaLze() { return Date.now() >= pobockaOd(); }
 
+// ─── Vlastní stavební četa ──────────────────────────────────────────────────
+// Technika a dva lidi v sídle nebo na pobočce. Četa staví přípojky za pětinu
+// ceny a zvládne čtyři místa za herní měsíc — vyplatí se jen tomu, kdo opravdu
+// expanduje. Pod dvě místa měsíčně prodělává.
+var CETA_TECHNIKA = [
+  { id: 'bagr', nazev: 'Minibagr', cena: 800000 },
+  { id: 'dodavka', nazev: 'Dodávka', cena: 600000 },
+  { id: 'vrtacka', nazev: 'Jádrová vrtačka', cena: 80000 },
+  { id: 'deska', nazev: 'Vibrační deska', cena: 50000 }
+];
+var CETA_CENA = CETA_TECHNIKA.reduce(function (a, x) { return a + x.cena; }, 0);  // 1 530 000
+var CETA_MZDY = 80000;            // dva lidi po 40 tisících
+var CETA_PHM_KM = 15;             // za kilometr tam a zpět
+var CETA_PODIL = 0.2;             // přípojky za pětinu ceny
+var CETA_MIST = 4;                // kolik míst zvládne za herní měsíc
+var SHANEC_MZDA = 50000;          // kdo místa vyhledává a domlouvá sám
+
+function maCetu() { return !!(S.ceta && S.ceta.od); }
+function maShanece() { return !!(S.ceta && S.ceta.shanec); }
+// Měsíční režie čety: mzdy, případný sháněč a PHM za připravená místa.
+function cetaMesicne() {
+  if (!maCetu()) return 0;
+  return CETA_MZDY + (maShanece() ? SHANEC_MZDA : 0) + (S.ceta.phm || 0);
+}
+// Kolik stála poslední jízda na tohle místo — platí se za každé připravené.
+function cetaPhmNa(sp) {
+  var n = nejblizsiZakladna(sp);
+  if (!n) return 0;
+  return Math.round(n.km * 2 * CETA_PHM_KM);
+}
+// Kolik míst četa tenhle herní měsíc ještě zvládne.
+function cetaZbyva() {
+  if (!maCetu()) return 0;
+  var mesic = Math.floor(Date.now() / MONTH_MS);
+  if (S.ceta.mesic !== mesic) { S.ceta.mesic = mesic; S.ceta.hotovo = 0; S.ceta.phm = 0; }
+  return Math.max(0, CETA_MIST - (S.ceta.hotovo || 0));
+}
+// Může četa postavit přípojky na tomhle místě? Na zasíťovaném nemá co dělat —
+// to stojí 10 % i bez ní.
+function cetaZvladne(sp) { return maCetu() && !jeZasitovane(sp) && cetaZbyva() > 0; }
+// Zapíše, že četa jedno místo připravila.
+function cetaPostavila(sp) {
+  if (!maCetu() || cetaZbyva() <= 0) return;
+  S.ceta.hotovo = (S.ceta.hotovo || 0) + 1;
+  S.ceta.phm = (S.ceta.phm || 0) + cetaPhmNa(sp);
+}
+
 // Místa, kde už někdy stál prádlomat — přípojky tam zůstaly. Plní se ze serveru.
 var ZASITOVANE = {};
 function jeZasitovane(sp) { return !!ZASITOVANE[sp && sp.id]; }
@@ -146,6 +193,8 @@ function connPrice(sp, modelKey) {
   if (modelKey === 'max') base *= CONN_MAX_MULT;
   // Voda, odpad i elektřina tu už jsou — platí se jen postavení a zapojení stroje.
   if (jeZasitovane(sp)) base *= INSTALACE_PODIL;
+  // Vlastní četa to udělá za pětinu — ale jen na panenském místě a dokud má kapacitu.
+  else if (cetaZvladne(sp)) base *= CETA_PODIL;
   // Karta „Známý řemeslník" platí na jednu stavbu a spotřebuje se až při ní.
   if (S && S.connDiscount) base *= (1 - S.connDiscount);
   return Math.round(base / 1000) * 1000;
@@ -405,6 +454,7 @@ function fresh(profileId) {
     loanPrem: 0,      // dopočítaná průměrná přirážka na dluhu
     loans: [],        // jednotlivé úvěry: každý se svou sazbou a splátkou
     sidlo: null,      // { name, lat, lon } — vybere se při první stavbě
+    ceta: null,       // vlastní stavební parta: { od, shanec, mesic, hotovo, phm }
     pobocky: [],      // další základny, ze kterých se počítá doprava
     splatkyAt: now,   // odkdy se počítají měsíční splátky
     areas: {},     // id oblasti → { name, scoutedAt, spots:[…] }
@@ -472,6 +522,7 @@ function load() {
     if (!o.splatkyAt) o.splatkyAt = Date.now();
     if (!Array.isArray(o.pobocky)) o.pobocky = [];
     if (o.sidlo === undefined) o.sidlo = null;
+    if (o.ceta === undefined) o.ceta = null;
     if (typeof o.stats.splaceno !== 'number') o.stats.splaceno = 0;
     if (typeof o.stats.zmeskano !== 'number') o.stats.zmeskano = 0;
     ['boost', 'connDiscount', 'rateDrop', 'bankBonus', 'loanPrem'].forEach(function (k) { if (typeof o[k] !== 'number') o[k] = 0; });
@@ -533,7 +584,7 @@ function monthlyProfit() { return S.units.reduce(function (a, u) { return a + u.
 // Co hráči z provozu opravdu zbyde: síť vydělá, banka si vezme úrok.
 // Pozor: do tick() patří dál monthlyProfit(), tam se úrok odečítá zvlášť —
 // kdyby se počítalo s čistým ziskem, strhl by se dvakrát.
-function cistyZisk() { return monthlyProfit() - urokMesicne() - pobockyMesicne(); }
+function cistyZisk() { return monthlyProfit() - urokMesicne() - pobockyMesicne() - cetaMesicne(); }
 function yearlyProfit() { return monthlyProfit() * 12; }
 function tick() {
   refreshUnits();
@@ -542,8 +593,8 @@ function tick() {
   if (dt < 0) { S.lastTick = now; return; }      // hráč si přetočil hodiny v telefonu
   if (dt > 30 * YEAR_MS) dt = 30 * YEAR_MS;      // po měsíci nepřítomnosti dál nenabíhá
   var years = dt / YEAR_MS;
-  // Pobočky stojí každý měsíc bez ohledu na to, jestli se staví.
-  var earned = (yearlyProfit() - pobockyMesicne() * 12) * years;
+  // Pobočky i četa stojí každý měsíc bez ohledu na to, jestli se staví.
+  var earned = (yearlyProfit() - (pobockyMesicne() + cetaMesicne()) * 12) * years;
   // Do bubliny nad prádlomaty: zvlášť co přiteklo a co banka sebrala.
   drip.earn += Math.max(0, earned);
   S.cash += earned;
@@ -1300,7 +1351,10 @@ function installSheet(sp, areaId, modelKey, drz) {
     + ' a doprava. Stroj máš skladem, nájem domluvený.</p>'
     + (!S.sidlo ? '<p class="fine ok">Tady vznikne sídlo tvojí firmy. Od něj se pak počítá doprava všech dalších strojů, '
         + 'tak si rozmysli, kde začínáš.</p>' : '')
-    + '<div class="kv"><span>' + (jeZasitovane(sp) ? 'Instalace' : 'Přípojky') + '</span><b>' + kcFull(e.conn) + '</b></div>'
+    + '<div class="kv"><span>' + (jeZasitovane(sp) ? 'Instalace' : cetaZvladne(sp) ? 'Přípojky vlastní četou' : 'Přípojky') + '</span><b'
+    + (cetaZvladne(sp) ? ' class="ok"' : '') + '>' + kcFull(e.conn) + '</b></div>'
+    + (cetaZvladne(sp) ? '<p class="fine ok">Staví tvoje parta za ' + Math.round(CETA_PODIL * 100)
+      + ' % ceny. Tenhle měsíc jí zbývá ' + cetaZbyva() + ' z ' + CETA_MIST + ' míst.</p>' : '')
     + '<div class="kv"><span>Doprava stroje' + (n ? ' (' + Math.round(n.km) + ' km)' : '') + '</span><b'
     + (doprava > 0 ? ' class="warn"' : '') + '>' + (doprava > 0 ? kcFull(doprava) : 'zdarma — sídlo vzniká tady') + '</b></div>'
     + financeRows(f)
@@ -1329,6 +1383,7 @@ function installSheet(sp, areaId, modelKey, drz) {
       CLAIMS[sp.id] = r.j.spot;
       doFinance(f, { druh: 'misto', spotId: sp.id, popis: 'Přípojky — ' + sp.name });
       pripojUverKeStroji(sp.id, sp.name);
+      if (cetaZvladne(sp)) cetaPostavila(sp);
       // První postavený prádlomat zakládá sídlo firmy.
       if (!S.sidlo) {
         S.sidlo = { name: sp.name, lat: sp.lat, lon: sp.lon, od: Date.now() };
@@ -1678,9 +1733,60 @@ function zakladnyHtml() {
       + kcFull(pobockyMesicne()) + ' / měsíc</b></div>' : '')
     + (lze
         ? '<button class="btn sec" id="do-pobocka" style="width:100%;margin-top:10px">Zřídit pobočku za ' + kcFull(POBOCKA_CENA) + '</button>'
-        : '<p class="fine">Další pobočku si můžeš zřídit za ' + etaText(pobockaOd() - Date.now())
+        : '<p class="fine">Další pobočku si můžeš zřídit ' + etaText(pobockaOd() - Date.now())
           + '. Koupit ji od jiného hráče na Burze můžeš kdykoli.</p>')
     + '</div>';
+}
+// Vlastní stavební četa — karta v Síti.
+function cetaHtml() {
+  if (!S.sidlo) return '';
+  if (!maCetu()) {
+    return '<div class="card"><h3>Vlastní stavební četa</h3>'
+      + '<p class="muted small" style="margin:2px 0 10px">Technika a dva lidi v sídle. Přípojky pak stavíš za '
+      + Math.round(CETA_PODIL * 100) + ' % ceny a zvládneš ' + CETA_MIST + ' místa za herní měsíc. '
+      + 'Vyplatí se od dvou míst měsíčně — pod to prodělává.</p>'
+      + '<div class="kv"><span>Technika</span><b>' + kcFull(CETA_CENA) + '</b></div>'
+      + '<div class="kv"><span>Mzdy dvou lidí</span><b class="warn">' + kcFull(CETA_MZDY) + ' / měsíc</b></div>'
+      + '<button class="btn sec" id="do-ceta" style="width:100%;margin-top:10px">Pořídit četu</button></div>';
+  }
+  var zbyva = cetaZbyva();
+  return '<div class="card"><h3>Vlastní stavební četa</h3>'
+    + '<div class="kv"><span>Volná kapacita tenhle měsíc</span><b class="' + (zbyva ? 'ok' : 'warn') + '">'
+    + zbyva + ' z ' + CETA_MIST + ' míst</b></div>'
+    + '<div class="kv"><span>Mzdy</span><b class="warn">' + kcFull(CETA_MZDY) + ' / měsíc</b></div>'
+    + (maShanece() ? '<div class="kv"><span>Sháněč míst</span><b class="warn">' + kcFull(SHANEC_MZDA) + ' / měsíc</b></div>' : '')
+    + ((S.ceta.phm || 0) > 0 ? '<div class="kv"><span>PHM tenhle měsíc</span><b class="warn">' + kcFull(S.ceta.phm) + '</b></div>' : '')
+    + '<p class="fine">Přípojky na panenském místě ti četa postaví za ' + Math.round(CETA_PODIL * 100)
+    + ' % ceny. Na zasíťovaná místa ji posílat nemusíš — ta stojí ' + Math.round(INSTALACE_PODIL * 100) + ' % i bez ní.</p>'
+    + (maShanece()
+        ? '<button class="btn sec" id="do-shanec" style="width:100%;margin-top:8px">Propustit sháněče</button>'
+        : '<button class="btn sec" id="do-shanec" style="width:100%;margin-top:8px">Najmout sháněče míst za ' + kcFull(SHANEC_MZDA) + ' / měsíc</button>')
+    + '</div>';
+}
+function cetaSheet() {
+  var f = canFinance(CETA_CENA, FIN_OWN);
+  sheet('<h3>Pořídit stavební četu</h3>'
+    + '<p class="muted small">Technika patří k sídlu a lidi jedou odtud. Banka techniku financuje, '
+    + 'ale posuzuje ji podle cash flow celé firmy — nestojí za ní místo, které vydělává.</p>'
+    + CETA_TECHNIKA.map(function (t) {
+        return '<div class="kv"><span>' + esc(t.nazev) + '</span><b>' + kcFull(t.cena) + '</b></div>';
+      }).join('')
+    + financeRows(f)
+    + '<div class="kv souhrn"><span>Mzdy dvou lidí</span><b class="warn">' + kcFull(CETA_MZDY) + ' / měsíc</b></div>'
+    + '<p class="fine">Při čtyřech místech měsíčně ušetříš kolem 240 tisíc a četa stojí kolem 120 — '
+    + 'při jednom místě naopak prodělává. Je to sázka na vlastní tempo.</p>'
+    + '<button class="btn big" id="do-ceta-ano"' + (f.ok ? '' : ' disabled') + '>Pořídit</button>'
+    + (f.ok ? '' : '<p class="fine err">' + esc(f.duvod || '') + '</p>'));
+  bindFinance(function () { cetaSheet(); });
+  var b = $('do-ceta-ano');
+  if (b) b.onclick = function () {
+    var g = canFinance(CETA_CENA, FIN_OWN);
+    if (!g.ok) return;
+    doFinance(g, { druh: 'technika', popis: 'Stavební technika' });
+    S.ceta = { od: Date.now(), shanec: false, mesic: Math.floor(Date.now() / MONTH_MS), hotovo: 0, phm: 0 };
+    save(); paint(); closeSheet(); syncState(true);
+    toast('Četa je tvoje. Přípojky teď stavíš za pětinu.', 'ok');
+  };
 }
 // Výběr města pro pobočku — jen z toho, co hráč prozkoumal.
 function pobockaSheet() {
@@ -1727,12 +1833,12 @@ function paintNet() {
     + '<div><span>Investováno</span><b>' + kc(investedTotal()) + '</b></div>'
     + '<div><span>Vyděláno celkem</span><b>' + kc(S.stats.earned) + '</b></div>';
   if (!S.units.length) {
-    $('net-list').innerHTML = zakladnyHtml()
+    $('net-list').innerHTML = zakladnyHtml() + cetaHtml()
       + '<div class="empty">Zatím nemáš ani jeden prádlomat.<br>Začni tím, že na mapě prozkoumáš oblast.</div>';
     bindZakladny();
     return;
   }
-  $('net-list').innerHTML = zakladnyHtml() + S.units.slice().sort(function (a, b) { return b.eco.profit - a.eco.profit; }).map(function (u) {
+  $('net-list').innerHTML = zakladnyHtml() + cetaHtml() + S.units.slice().sort(function (a, b) { return b.eco.profit - a.eco.profit; }).map(function (u) {
     return '<div class="card" data-unit="' + esc(u.spotId) + '">'
       + '<div class="row"><h3>' + esc(u.name) + '</h3>' + verdictPill(u.score) + '</div>'
       + '<p class="muted small" style="margin:2px 0 6px">' + esc(KIND_LABEL[u.kind] || 'Místo') + ' · ' + MODELS[u.eco.model].name + '</p>'
@@ -1746,6 +1852,14 @@ function paintNet() {
 function bindZakladny() {
   var b = $('do-pobocka');
   if (b) b.onclick = function () { pobockaSheet(); };
+  var c = $('do-ceta');
+  if (c) c.onclick = function () { FIN_OWN = null; cetaSheet(); };
+  var sh = $('do-shanec');
+  if (sh) sh.onclick = function () {
+    S.ceta.shanec = !S.ceta.shanec;
+    save(); paint(); syncState(true);
+    toast(S.ceta.shanec ? 'Sháněč nastoupil — místa bude hledat sám.' : 'Sháněč skončil.', 'ok');
+  };
 }
 // Přehled jednotlivých úvěrů — co je na co, za kolik a kolik ještě zbývá.
 function uveryHtml() {
