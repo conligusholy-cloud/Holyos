@@ -2548,7 +2548,12 @@ function uveryHtml() {
           + '<div class="kv"><span>Zbývá měsíců</span><b>' + (u.zbyvaMesicu || 0) + ' z ' + (u.mesicu || 60) + '</b></div>'
           + ((u.prepsano || u.prodlouzeno) ? '<p class="fine">Délku splácení už jsi jednou vyjednával'
               + ((u.prepsano || u.prodlouzeno) > 1 ? ' (' + (u.prepsano || u.prodlouzeno) + '×)' : '') + '.</p>' : '')
-          + (u.zmeskano ? '<p class="fine err">Neuhrazené splátky: ' + u.zmeskano + '. Banka to sleduje.</p>' : '')
+          + (u.zmeskano ? '<p class="fine err">Nezaplacená splátka: ' + u.zmeskano + ' ze ' + KRACH_SPLATEK
+              + '. Když přišla splátka, neměl jsi na ni hotovost — co jsi nezaplatil, přičetlo se k dluhu. '
+              + (u.zmeskano >= KRACH_SPLATEK - 1
+                  ? 'Ještě jedna a banka pošle firmu do konkurzu. '
+                  : 'Při třetí jde firma do konkurzu. ')
+              + 'Jakmile jednu splátku zaplatíš celou, počítadlo se vynuluje.</p>' : '')
           + '<div class="uver-akce">'
           + '<button class="btn sec sm" data-splatit="' + esc(u.id) + '"' + (S.cash < 1 ? ' disabled' : '') + '>Splatit tenhle</button>'
           + '<button class="btn sec sm" data-prodlouzit="' + esc(u.id) + '">Změnit splatnost</button>'
