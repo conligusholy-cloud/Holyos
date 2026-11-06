@@ -1818,8 +1818,8 @@ function readCols(req) {
   if (!cols.includes('_seen_czk') && !cols.includes('support_czk')) cols = cols.concat('support_czk');
   if (!cols.includes('_seen_pos') && !cols.includes('legacy_position')) cols = cols.concat('legacy_position');
   if (!cols.includes('_seen_piv') && !cols.includes('piv')) cols = cols.concat('piv');
-  if (!cols.includes('_seen_exp') && !cols.includes('expansion')) cols = cols.concat('expansion');
-  if (!cols.includes('_seen_std') && !cols.includes('standard')) cols = cols.concat('standard');
+  // „Expanze" a „Standardní podpora" nahradily sloupce EX podpora / ST podpora → ze starých uložených výběrů je vyřadit
+  cols = cols.filter(c => c !== 'expansion' && c !== 'standard');
   if (!cols.includes('_seen_es') && !cols.includes('exp_std')) cols = cols.concat('exp_std');
   if (!cols.includes('_seen_stex')) { if (!cols.includes('st_podpora')) cols = cols.concat('st_podpora'); if (!cols.includes('ex_podpora')) cols = cols.concat('ex_podpora'); }
   if (!cols.includes('_seen_tfa') && !cols.includes('tfa')) cols = cols.concat('tfa');
