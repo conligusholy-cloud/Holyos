@@ -198,6 +198,30 @@ function mesicniSplatka() {
   }
   prepocitejDluh();
 }
+// Banka nepůjčí podle toho, co máš, ale podle toho, co to uživí. Kolik musí
+// zisk pokrýt splátku, aby úvěr dala — stejné číslo, jaké se ukazuje u místa.
+var KRYTI_MIN = 1.25;
+// Z měsíčního zisku spočítá, jak velkou jistinu jeho splátka unese.
+function uneseDluh(mesicniZisk, sazba) {
+  var splatka = Math.max(0, mesicniZisk) / KRYTI_MIN;
+  if (!(splatka > 0)) return 0;
+  var r = sazba / 12;
+  if (r <= 0) return Math.floor(splatka * UVER_MESICU);
+  return Math.floor(splatka * (1 - Math.pow(1 + r, -UVER_MESICU)) / r);
+}
+// Totéž za celou firmu: co síť vydělá, minus splátky, které už běží.
+function firmaUneseDluh(sazba) {
+  return uneseDluh(monthlyProfit() - splatkyMesicne(), sazba);
+}
+// Strop pro konkrétní úvěr. `zisk` je měsíční zisk toho, co se financuje —
+// u místa jeho vlastní, u stroje bez místa a u provozního úvěru celá firma.
+function stropPodleZisku(zisk, odhadCastky) {
+  var sazba = Math.max(0.02, rateOf() + prirazkaZa(odhadCastky || 0));
+  var strop = uneseDluh(zisk, sazba);
+  // Menší úvěr má menší přirážku, takže strop ještě jednou zpřesníme.
+  return uneseDluh(zisk, Math.max(0.02, rateOf() + prirazkaZa(strop)));
+}
+
 // Úvěr, který patří ke konkrétnímu místu.
 function uverMista(u) {
   if (!u || !S.loans) return null;
@@ -974,10 +998,13 @@ function assetsTotal() { return investedTotal() + stockValue(); }
 // chci = kolik chce hráč zaplatit ze svého. Když se nezadá, vezme se rozumné
 // výchozí: nejdřív to, co přesahuje provozní rezervu, a doplatek do nutného
 // minima, když na úvěr nezbývá.
-function canFinance(amount, chci) {
+function canFinance(amount, chci, strop) {
   var p = PROFILES[S.profile];
   var ltvRoom = Math.max(0, p.ltv * (assetsTotal() + amount) - S.loan);
-  var canBorrow = Math.min(ltvRoom, S.bank);
+  // Strop podle výdělku: banka nepůjčí víc, než co unese splátka. Když ho
+  // volající nedá, posuzuje se cash flow celé firmy.
+  var dscr = strop == null ? stropPodleZisku(monthlyProfit() - splatkyMesicne(), amount) : Math.max(0, Math.round(strop));
+  var canBorrow = Math.min(ltvRoom, S.bank, dscr);
   // Rezervu si normálně necháváme stranou, ale nesmí být důvodem, proč nákup
   // neprojde — když na úvěr nezbývá, sáhneme i do ní. Dřív tady hráč uvízl
   // s penězi v kapse a hláškou, že mu chybí.
@@ -996,12 +1023,16 @@ function canFinance(amount, chci) {
     var chybi = Math.round(amount - S.cash - canBorrow);
     if (S.cash + canBorrow < amount) {
       duvod = 'Chybí ti ' + kcFull(chybi) + '. Máš ' + kcFull(S.cash) + ' v hotovosti a banka doplatí nejvýš '
-        + kcFull(canBorrow) + (S.bank < ltvRoom
-          ? ' — víc jí teď ve volném rámci nezbývá, ten roste každý den.'
-          : ' — na víc nemáš zástavu, úvěrový strop je ' + kcFull(ltvRoom) + '.');
+        + kcFull(canBorrow)
+        + (dscr <= ltvRoom && dscr <= S.bank
+            ? ' — zástava by dovolila ' + kcFull(Math.min(ltvRoom, S.bank)) + ', ale tolik by neuneslo splátku. '
+              + 'Banka chce vidět, že výdělek pokryje splátku aspoň ' + KRYTI_MIN.toFixed(2).replace('.', ',') + '×.'
+          : S.bank < ltvRoom
+            ? ' — víc jí teď ve volném rámci nezbývá, ten roste každý den.'
+            : ' — na víc nemáš zástavu, úvěrový strop je ' + kcFull(ltvRoom) + '.');
     } else duvod = 'Chybí ti ' + kcFull(chybi) + '.';
   }
-  return { amount: amount, own: own, need: need, ltvRoom: ltvRoom, canBorrow: canBorrow,
+  return { amount: amount, own: own, need: need, ltvRoom: ltvRoom, canBorrow: canBorrow, dscr: dscr,
     cash: S.cash, minOwn: minOwn, maxOwn: maxOwn, ok: ok, duvod: duvod,
     chybi: ok ? 0 : Math.max(0, Math.round(amount - S.cash - canBorrow)),
     dotkne_rezervy: own > zRezervy };
@@ -1076,6 +1107,11 @@ function financeRows(f) {
       : '<div class="kv"><span>Z vlastní hotovosti (akontace)</span><b>' + kcFull(f.own) + pctNote(f.own, f.amount) + '</b></div>')
     + '<div class="kv"><span>Doplatí banka (úvěr)</span><b class="' + (f.need > 0 ? 'warn' : '') + '">' + kcFull(f.need) + pctNote(f.need, f.amount) + '</b></div>'
     + (f.need > 0 ? '<div class="kv"><span>Úvěrový strop profilu</span><b>' + kcFull(f.ltvRoom) + '</b></div>'
+      + (f.dscr != null && f.dscr < Math.min(f.ltvRoom, S.bank)
+          ? '<div class="kv"><span>Strop podle výdělku</span><b class="warn">' + kcFull(f.dscr) + '</b></div>'
+            + '<p class="fine">Zástava by dovolila víc, ale banka chce, aby výdělek pokryl splátku aspoň '
+            + KRYTI_MIN.toFixed(2).replace('.', ',') + '×. Víc ti na tohle teď nepůjčí.</p>'
+          : '')
       + '<div class="kv"><span>Volný rámec v bance</span><b>' + kcFull(S.bank) + '</b></div>'
       + '<div class="kv"><span>Úrok z této půjčky</span><b>'
       + ((rateOf() + prirazkaZa(f.need)) * 100).toFixed(1).replace('.', ',') + ' % ročně'
@@ -1143,7 +1179,9 @@ function buySheet(modelKey, drz) {
 // ─── Panel: instalace stroje ze skladu na místo ──────────────────────────────
 function installSheet(sp, areaId, modelKey, drz) {
   if (!drz) FIN_OWN = null;
-  var m = MODELS[modelKey], e = economics(sp, modelKey), f = canFinance(e.conn, FIN_OWN);
+  var m = MODELS[modelKey], e = economics(sp, modelKey);
+  // Banka tohle místo posuzuje podle toho, co vydělá ono samo.
+  var f = canFinance(e.conn, FIN_OWN, stropPodleZisku(e.profit, e.conn));
   sheet('<h3>Postavit ' + m.name + '</h3>'
     + '<p class="muted small">' + esc(sp.name) + ' — teď se platí přípojky (voda, odpad, elektřina). Stroj máš skladem, nájem domluvený.</p>'
     + financeRows(f)
@@ -1275,7 +1313,7 @@ function rivalSheet(sp, areaId, c) {
         return toast(r.j.error || 'Nepovedlo se.', 'err');
       }
       // Vyhráli jsme: platíme přípojky a stavíme s nájmem, který jsme nabídli.
-      var f = canFinance(conn);
+      var f = canFinance(conn, null, stropPodleZisku(economics(sp, model).profit, conn));
       if (!f.ok) {
         // Místo už máme, ale na přípojky nemáme — vrátíme ho, ať v něm neleží.
         apiJson('/spots/release', { spot_id: sp.id });
@@ -2322,7 +2360,11 @@ function uverNabidka(chci) {
   var majetek = assetsTotal();
   var strop = Math.max(0, p.ltv * majetek - S.loan);
   var max = Math.max(0, Math.min(strop, S.bank, OPERATING_MAX + Math.max(0, p.ltv * majetek - S.loan)));
-  max = Math.round(Math.min(max, S.bank) / 1000) * 1000;
+  // Provozní úvěr banka posuzuje podle cash flow celé firmy: co síť vydělá
+  // minus splátky, které už běží.
+  var dscr = stropPodleZisku(monthlyProfit() - splatkyMesicne(), max);
+  var brzdiVydelek = dscr < max;
+  max = Math.round(Math.min(max, dscr, S.bank) / 1000) * 1000;
   var castka = Math.max(0, Math.min(max, Math.round((chci == null ? max : chci) / 1000) * 1000));
   // Zadluženost po načerpání — podle ní si banka říká přirážku.
   var ted = majetek > 0 ? S.loan / majetek : 0;
@@ -2335,7 +2377,7 @@ function uverNabidka(chci) {
   var levnejsi = Math.max(0, Math.floor((0.8 * majetek - S.loan) / 1000) * 1000);
   return { max: max, castka: castka, sazba: sazba, prirazka: prirazka, poplatek: poplatek,
     naruku: Math.max(0, castka - poplatek), mesicne: Math.round(castka * sazba / 12),
-    ted: ted, zadluzenost: pak, majetek: majetek,
+    ted: ted, zadluzenost: pak, majetek: majetek, dscr: dscr, brzdiVydelek: brzdiVydelek,
     // Sazba, kterou hráč ponese na celém dluhu po načerpání (vážený průměr).
     poSjednani: Math.max(0.02, rateOf() + ((S.loan * (S.loanPrem || 0) + castka * prirazka) / Math.max(1, S.loan + castka))),
     bezPrirazky: bezPrirazky, levnejsi: levnejsi };
@@ -2350,6 +2392,12 @@ function uverDuvod() {
     return 'Banka ti půjčí nejvýš ' + Math.round(p.ltv * 100) + ' % hodnoty majetku, což je '
       + kcFull(Math.round(p.ltv * majetek)) + ' — a tolik už dlužíš. Splať část úvěru, nebo přikup prádlomat; '
       + 'tím ti strop povyroste.';
+  }
+  var zbyva = monthlyProfit() - splatkyMesicne();
+  if (stropPodleZisku(zbyva, 0) < 1000) {
+    return 'Banka se dívá na to, co ti po splátkách zbývá — a to je '
+      + kcFull(Math.max(0, zbyva)) + ' měsíčně. Na další splátku to nestačí. '
+      + 'Postav další prádlomat, nebo splať část úvěru a vrať se.';
   }
   return 'Volný rámec v bance je vyčerpaný. Sám dorůstá o ' + kcFull(BANK_PER_DAY)
     + ' za den — nebo ho doplníš tím, že splatíš část úvěru.';
@@ -2375,6 +2423,9 @@ function uverSheet(chci) {
   sheet('<h3>Nabídka banky</h3>'
     + '<p class="muted small">' + hodnoceni + (rada ? ' ' + rada : '')
     + ' Podmínky platí, dokud je nepřijmeš — nic se neděje samo.</p>'
+    + (n.brzdiVydelek ? '<div class="kv"><span>Strop podle výdělku firmy</span><b class="warn">' + kcFull(n.dscr) + '</b></div>'
+        + '<p class="fine">Zástava by dovolila víc, ale banka chce, aby ti na splátku zbývalo aspoň '
+        + KRYTI_MIN.toFixed(2).replace('.', ',') + '× tolik, co splátka dělá.</p>' : '')
     + '<div class="kv"><span>Dnes dlužíš</span><b' + (S.loan > 0 ? ' class="warn"' : '') + '>' + kcFull(S.loan)
     + (S.loan > 0 ? ' · ' + Math.round(n.ted * 100) + ' % majetku' : '') + '</b></div>'
     + '<label class="fld"><span>Kolik si chceš půjčit (nejvýš ' + kcFull(n.max) + ')</span>'
