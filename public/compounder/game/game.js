@@ -3081,11 +3081,128 @@ function loadTrades(then) {
   return api('/trade/list').then(function (r) {
     if (r.ok) {
       TRADES = r.j.trades || [];
-      var dot = $('burza-dot');
-      if (dot) dot.classList.toggle('hidden', !r.j.ceka_na_me);
+      CEKA_NABIDKA = !!r.j.ceka_na_me;
+      chatOdznak();
     } else TRADES = [];
     if (then) then();
   }).catch(function () { TRADES = TRADES || []; if (then) then(); });
+}
+
+// ─── Zprávy mezi hráči ─────────────────────────────────────────
+// Text od cizího hráče se do stránky nikdy nevkládá jako HTML — vždy přes esc().
+var CHAT = null;
+function loadChat(then) {
+  if (!ME) { CHAT = { threads: [], neprectenych: 0 }; if (then) then(); return; }
+  api('/chat/threads').then(function (r) {
+    CHAT = r.ok ? r.j : { threads: [], neprectenych: 0 };
+    chatOdznak();
+    if (then) then();
+  }).catch(function () { CHAT = CHAT || { threads: [], neprectenych: 0 }; if (then) then(); });
+}
+// Tečka na záložce svítí, když čeká nabídka nebo nepřečtená zpráva.
+var CEKA_NABIDKA = false;
+function chatOdznak() {
+  var dot = $('burza-dot');
+  if (!dot) return;
+  var neprectene = CHAT && CHAT.neprectenych > 0;
+  dot.classList.toggle('hidden', !(CEKA_NABIDKA || neprectene));
+}
+function kdyKratce(x) {
+  var d = new Date(x), ted = new Date();
+  var dnes = d.toDateString() === ted.toDateString();
+  try {
+    return dnes ? d.toLocaleTimeString('cs-CZ', { hour: 'numeric', minute: '2-digit' })
+      : d.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' });
+  } catch (e) { return ''; }
+}
+function chatHtml() {
+  if (!ME) return '';
+  if (!CHAT) return '<div class="card"><h3>Zprávy</h3><p class="fine">Načítám…</p></div>';
+  var t = CHAT.threads || [];
+  return '<div class="card"><h3>Zprávy'
+    + (CHAT.neprectenych ? ' <i class="pocet">' + CHAT.neprectenych + '</i>' : '') + '</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">Napiš komukoli, s kým chceš domluvit obchod.</p>'
+    + (t.length ? t.map(function (x) {
+        return '<div class="area-item chat-r' + (x.neprectenych ? ' nove' : '') + '" data-chat="' + x.id + '">'
+          + '<div><div class="nm">' + (x.znak ? znakSvg(x.znak, 16) + ' ' : '') + esc(x.firma) + '</div>'
+          + '<div class="sub">' + (x.posledni.moje ? 'Ty: ' : '') + esc(x.posledni.text) + '</div></div>'
+          + '<div class="chat-p"><span class="muted small">' + kdyKratce(x.posledni.kdy) + '</span>'
+          + (x.neprectenych ? '<i class="pocet">' + x.neprectenych + '</i>' : '') + '</div></div>';
+      }).join('') : '<p class="fine">Zatím sis s nikým nepsal.</p>')
+    + '<button class="btn sec" id="chat-novy" style="width:100%;margin-top:10px">Napsat hráči</button>'
+    + '</div>';
+}
+function bindChat(box) {
+  [].forEach.call(box.querySelectorAll('[data-chat]'), function (b) {
+    b.onclick = function () { chatSheet(Number(b.getAttribute('data-chat'))); };
+  });
+  var n = $('chat-novy');
+  if (n) n.onclick = function () { chatVyberSheet(); };
+}
+// Komu napsat — seznam všech hráčů, stejný jako u nabídky.
+function chatVyberSheet() {
+  sheet('<h3>Komu napsat</h3><p class="muted small">Načítám hráče…</p>');
+  api('/trade/players').then(function (r) {
+    if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
+    var hraci = r.j.players || [];
+    if (!hraci.length) return sheet('<h3>Zatím není komu</h3><p class="muted small">Až přibude další hráč, objeví se tady.</p>');
+    sheet('<h3>Komu napsat</h3>'
+      + hraci.map(function (h) {
+          return '<div class="area-item"><div><div class="nm">' + esc(h.firma) + '</div>'
+            + '<div class="sub">' + esc(h.nick) + '</div></div>'
+            + '<button class="btn sec sm" data-ch="' + h.id + '">Napsat</button></div>';
+        }).join(''));
+    [].forEach.call($('sheet-body').querySelectorAll('[data-ch]'), function (b) {
+      b.onclick = function () { chatSheet(Number(b.getAttribute('data-ch'))); };
+    });
+  }).catch(function () { toast('Server neodpovídá.', 'err'); });
+}
+// Jedna konverzace. Po otevření se všechno příchozí označí za přečtené.
+function chatSheet(id) {
+  sheet('<h3>Zprávy</h3><p class="muted small">Načítám…</p>');
+  api('/chat/with/' + id).then(function (r) {
+    if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
+    var h = r.j.hrac;
+    sheet('<h3>' + (h.znak ? znakSvg(h.znak, 20) + ' ' : '') + esc(h.firma) + '</h3>'
+      + '<p class="muted small">' + esc(h.nick) + '</p>'
+      + '<div class="chat-okno" id="chat-okno">' + chatZpravyHtml(r.j.zpravy) + '</div>'
+      + '<label class="fld"><span>Napsat</span>'
+      + '<input id="chat-text" class="inp" type="text" maxlength="800" placeholder="Napiš zprávu…"></label>'
+      + '<button class="btn big" id="chat-send">Odeslat</button>'
+      + '<button class="btn ghost" id="chat-nabidka" style="width:100%;margin-top:8px">Nabídnout mu obchod</button>');
+    var okno = $('chat-okno');
+    if (okno) okno.scrollTop = okno.scrollHeight;
+    var inp = $('chat-text'), b = $('chat-send');
+    var odesli = function () {
+      var t = (inp.value || '').trim();
+      if (!t) return;
+      b.disabled = true;
+      apiJson('/chat/send', { to_id: id, text: t }).then(function (rr) {
+        b.disabled = false;
+        if (!rr.ok) return toast(rr.j.error || 'Nepovedlo se odeslat.', 'err');
+        inp.value = '';
+        // Z prázdného okna nejdřív zmizí hláška, že si ještě nic nenapsali.
+        var pr = okno.querySelector('p.fine');
+        if (pr) okno.innerHTML = '';
+        okno.insertAdjacentHTML('beforeend', chatZpravyHtml([rr.j.zprava]));
+        okno.scrollTop = okno.scrollHeight;
+        loadChat(function () { if (!$('v-burza').classList.contains('hidden')) paintBurza(); });
+      }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+    };
+    b.onclick = odesli;
+    inp.onkeydown = function (e) { if (e.key === 'Enter') odesli(); };
+    var nb = $('chat-nabidka');
+    if (nb) nb.onclick = function () { majetekSheet(id); };
+    setTimeout(function () { inp.focus(); }, 60);
+    loadChat(function () { if (!$('v-burza').classList.contains('hidden')) paintBurza(); });
+  }).catch(function () { toast('Server neodpovídá.', 'err'); });
+}
+function chatZpravyHtml(zpravy) {
+  if (!zpravy.length) return '<p class="fine" style="margin:0">Ještě jste si nic nenapsali. Začni.</p>';
+  return zpravy.map(function (m) {
+    return '<div class="chat-b' + (m.moje ? ' ja' : '') + '">' + esc(m.text)
+      + '<i>' + kdyKratce(m.kdy) + '</i></div>';
+  }).join('');
 }
 
 function predmetPopis(t) {
@@ -3149,10 +3266,14 @@ function paintBurza() {
 
   if (AUKCE == null) loadAukce(paintBurza);
 
-  box.innerHTML = aukceHtml()
+  if (CHAT == null) loadChat(paintBurza);
+
+  box.innerHTML = chatHtml()
+    + aukceHtml()
     + sekce('Čeká na tvoji odpověď', naMe, 'Nikdo ti teď nic nenabízí.')
     + sekce('Čekáš na odpověď', odeslane, 'Nemáš rozjednanou žádnou nabídku.')
     + (hotove.length ? sekce('Uzavřené', hotove, '') : '');
+  bindChat(box);
   bindAukce();
 
   [].forEach.call(box.querySelectorAll('[data-tr]'), function (b) {
@@ -4023,7 +4144,8 @@ function startGame() {
   setInterval(loadClaims, 45000);
   vyzvedniNasledky();
   loadTrades();
-  setInterval(function () { loadTrades(); vyzvedniNasledky(); loadCards().then(function () { claimCash(); }); }, 60000);
+  loadChat();
+  setInterval(function () { loadTrades(); loadChat(); vyzvedniNasledky(); loadCards().then(function () { claimCash(); }); }, 60000);
   checkPayment();
   setInterval(function () { tick(); save(); paint(); syncState(); }, 5000);
   // Vlastní, rychlejší tep jen pro naskakující čísla nad prádlomaty.
@@ -4031,7 +4153,7 @@ function startGame() {
   setInterval(pullRefs, 60000);
   document.addEventListener('visibilitychange', function () {
     // Po návratu do hry se hned podíváme, jestli nám konkurence nevyfoukla místo.
-    if (!document.hidden) { tick(); save(); paint(); loadClaims(); loadTrades(); vyzvedniNasledky(); loadCards().then(function () { claimCash(); }); }
+    if (!document.hidden) { tick(); save(); paint(); loadClaims(); loadTrades(); loadChat(); vyzvedniNasledky(); loadCards().then(function () { claimCash(); }); }
     else { syncState(true); }
   });
   window.addEventListener('pagehide', function () { syncState(true); });

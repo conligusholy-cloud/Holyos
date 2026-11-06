@@ -402,4 +402,100 @@ router.post('/trade/aukce/:id/koupit', hrac, api(async (req, res) => {
   res.json({ ok: true, cena });
 }));
 
+// ─── Zprávy mezi hráči ─────────────────────────────────────────
+// Prostý chat jeden na jednoho. Konverzace není vlastní záznam — je to prostě
+// všechno, co si dva lidi poslali. Text se nikdy nevkládá do stránky jako HTML,
+// klient ho escápuje; tady hlídáme jen délku a frekvenci.
+const ZPRAVA_MAX = 800;
+const ZPRAV_ZA_MINUTU = 20;
+const zpravyLog = new Map();
+function prilisCasto(id) {
+  const ted = Date.now();
+  const a = (zpravyLog.get(id) || []).filter((t) => ted - t < 60000);
+  a.push(ted);
+  zpravyLog.set(id, a);
+  if (zpravyLog.size > 2000) {
+    for (const [k, v] of zpravyLog) if (!v.some((t) => ted - t < 60000)) zpravyLog.delete(k);
+  }
+  return a.length > ZPRAV_ZA_MINUTU;
+}
+const zpravaPub = (m, ja) => ({
+  id: m.id, text: m.text, moje: m.from_id === ja,
+  kdy: m.created_at, precteno: !!m.read_at,
+});
+
+// POST /chat/send { to_id, text } → pošle zprávu druhému hráči
+router.post('/chat/send', hrac, api(async (req, res) => {
+  const to = parseInt((req.body || {}).to_id, 10);
+  const text = s((req.body || {}).text, ZPRAVA_MAX);
+  if (!text) return res.status(400).json({ error: 'Napiš něco.' });
+  if (!Number.isFinite(to) || to === req.player.id) {
+    return res.status(400).json({ error: 'Komu to má jít?' });
+  }
+  if (prilisCasto(req.player.id)) {
+    return res.status(429).json({ error: 'Moc zpráv po sobě. Dá si chvilku pauzu.' });
+  }
+  const komu = await prisma.gamePlayer.findUnique({ where: { id: to },
+    select: { id: true, disabled: true } });
+  if (!komu || komu.disabled) return res.status(404).json({ error: 'Takový hráč tu není.' });
+  const m = await prisma.gameMessage.create({
+    data: { from_id: req.player.id, to_id: to, text },
+  });
+  res.json({ ok: true, zprava: zpravaPub(m, req.player.id) });
+}));
+
+// GET /chat/threads → s kým si píšu, poslední zpráva a kolik nepřečtených
+router.get('/chat/threads', hrac, api(async (req, res) => {
+  const ja = req.player.id;
+  const rows = await prisma.gameMessage.findMany({
+    where: { OR: [{ from_id: ja }, { to_id: ja }] },
+    orderBy: { id: 'desc' }, take: 400,
+  });
+  const podle = new Map();
+  rows.forEach((m) => {
+    const druhy = m.from_id === ja ? m.to_id : m.from_id;
+    let t = podle.get(druhy);
+    if (!t) { t = { id: druhy, posledni: m, neprectenych: 0 }; podle.set(druhy, t); }
+    if (m.to_id === ja && !m.read_at) t.neprectenych++;
+  });
+  const ids = [...podle.keys()];
+  const lide = ids.length
+    ? await prisma.gamePlayer.findMany({ where: { id: { in: ids } },
+        select: { id: true, nick: true, company: true, emblem: true } })
+    : [];
+  const kdo = new Map(lide.map((p) => [p.id, p]));
+  const threads = [...podle.values()].map((t) => {
+    const p = kdo.get(t.id);
+    return {
+      id: t.id, nick: p ? p.nick : 'neznámý',
+      firma: p ? (p.company || p.nick + ' s.r.o.') : 'neznámá firma',
+      znak: p ? p.emblem || null : null,
+      neprectenych: t.neprectenych,
+      posledni: zpravaPub(t.posledni, ja),
+    };
+  }).sort((a, b) => new Date(b.posledni.kdy) - new Date(a.posledni.kdy));
+  const neprectenych = threads.reduce((a, t) => a + t.neprectenych, 0);
+  res.json({ ok: true, threads, neprectenych });
+}));
+
+// GET /chat/with/:id → celá konverzace; co přišlo mně, rovnou označíme za přečtené
+router.get('/chat/with/:id', hrac, api(async (req, res) => {
+  const ja = req.player.id;
+  const druhy = parseInt(req.params.id, 10);
+  if (!Number.isFinite(druhy)) return res.status(400).json({ error: 'Který hráč?' });
+  const p = await prisma.gamePlayer.findUnique({ where: { id: druhy },
+    select: { id: true, nick: true, company: true, emblem: true, disabled: true } });
+  if (!p || p.disabled) return res.status(404).json({ error: 'Takový hráč tu není.' });
+  const rows = await prisma.gameMessage.findMany({
+    where: { OR: [{ from_id: ja, to_id: druhy }, { from_id: druhy, to_id: ja }] },
+    orderBy: { id: 'asc' }, take: 200,
+  });
+  await prisma.gameMessage.updateMany({
+    where: { from_id: druhy, to_id: ja, read_at: null }, data: { read_at: new Date() },
+  });
+  res.json({ ok: true,
+    hrac: { id: p.id, nick: p.nick, firma: p.company || (p.nick + ' s.r.o.'), znak: p.emblem || null },
+    zpravy: rows.map((m) => zpravaPub(m, ja)) });
+}));
+
 module.exports = router;

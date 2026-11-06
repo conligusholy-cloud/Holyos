@@ -7813,3 +7813,18 @@ model GameAuction {
   @@index([do])
   @@map("game_auctions")
 }
+
+// Zprávy mezi hráči. Jedna řádka = jedna zpráva; konverzace je dvojice lidí.
+// Čtení si poznamenává jen příjemce — odesílatel má svoje zprávy přečtené vždy.
+model GameMessage {
+  id         Int       @id @default(autoincrement())
+  from_id    Int
+  to_id      Int
+  text       String    @db.VarChar(800)
+  read_at    DateTime?
+  created_at DateTime  @default(now())
+
+  @@index([to_id, read_at])
+  @@index([from_id, to_id, id])
+  @@map("game_messages")
+}
