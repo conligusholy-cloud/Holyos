@@ -1494,6 +1494,7 @@ const ADMIN_NAV = [
   { id: 'ai', href: '/admin/ai-chat', label: 'AI chat', icon: 'bolt' },
   { id: 'sup2', href: '/admin/podpora', label: 'Podpora', icon: 'chat' },
   { id: 'mail', href: '/admin/rozesilky', label: 'Rozesílky', icon: 'chat' },
+  { id: 'vyb', href: '/admin/vybery', label: 'Výběry', icon: 'wallet' },
   { id: 'imp', href: '/admin/import', label: 'Import', icon: 'upload', right: true },
 ];
 function adminLayout(title, active, admin, body, holyosUrl) {

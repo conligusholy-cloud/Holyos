@@ -2245,6 +2245,12 @@ app.get('/admin/stats/user/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   if (!data) return res.status(404).send(V.errorPage('Uživatel nenalezen', 'Takový uživatel neexistuje.', '/admin/stats'));
   res.send(V.adminStatsUser({ admin: req.admin, data, days, holyosUrl: HOLYOS_URL }));
 }));
+// Výběry — admin sekce zatím jako zástupná stránka (funkce se připravuje)
+app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
+  res.send(V.adminLayout('Výběry', 'vyb', req.admin, `
+  <h1 style="margin:0 0 14px">Výběry <span class="muted" style="font-size:14px;font-weight:500">správa žádostí o výběr</span></h1>
+  <div class="card" style="max-width:640px"><b>V přípravě</b><p class="muted" style="margin:8px 0 0">Správa výběrů se připravuje a testuje. Uživatelům se zobrazuje informace, že funkce bude dostupná během 7. 11. 2026.</p></div>`, HOLYOS_URL));
+}));
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
   const rows = (await q("SELECT t.*, s.first_name, s.last_name, s.email, s.nick FROM support_transfers t JOIN supporters s ON s.id=t.supporter_id " + (status ? 'WHERE t.status=$1 ' : '') + "ORDER BY (t.status='pending') DESC, t.created_at DESC LIMIT 500", status ? [status] : [])).rows;
