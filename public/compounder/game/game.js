@@ -136,6 +136,108 @@ function pobockaOd() {
 }
 function pobockaLze() { return Date.now() >= pobockaOd(); }
 
+// ─── Krach ──────────────────────────────────────────────────────────────────
+// Tři neuhrazené splátky po sobě a je po firmě. Varování chodí předem, takže
+// hráč má čas něco prodat a zachránit se — a protože se to ví, je komu prodat.
+var KRACH_SPLATEK = 3;
+// Nejvyšší počet zmeškaných splátek, který na některém úvěru visí.
+function zmeskanoNejvic() {
+  return (S.loans || []).reduce(function (a, l) { return Math.max(a, l.zmeskano || 0); }, 0);
+}
+function hroziKrach() { return zmeskanoNejvic() > 0 && zmeskanoNejvic() < KRACH_SPLATEK; }
+function jeKrach() { return zmeskanoNejvic() >= KRACH_SPLATEK; }
+// Varování se ukáže jen jednou za každý stupeň, ať neotravuje každých pár vteřin.
+function hlidejKrach() {
+  var z = zmeskanoNejvic();
+  if (!z) { S.krachVarovano = 0; return; }
+  if ((S.krachVarovano || 0) >= z) return;
+  S.krachVarovano = z;
+  if (z >= KRACH_SPLATEK) { krachSheet(); return; }
+  toast(z === 1
+    ? 'Nezaplatil jsi splátku. Prodej něco na Burze, nebo splať, než to banka zvedne.'
+    : 'Druhá neuhrazená splátka. Ještě jedna a banka pošle firmu do konkurzu.', 'err');
+}
+// Rozprodej majetku. Prádlomaty i stroje jdou z ruky za zlomek hodnoty,
+// výtěžek nejdřív bance a co zbude, patří hráči. Místa se uvolní — a protože
+// jsou zasíťovaná, někdo je postaví lacino.
+var KRACH_PODIL = 0.6;   // střed rozmezí, ve kterém se majetek v konkurzu prodává
+function provedKonkurz() {
+  var utrzeno = 0;
+  S.units.forEach(function (u) {
+    utrzeno += (u.eco && u.eco.invest ? u.eco.invest : 0) * KRACH_PODIL;
+    apiJson('/spots/release', { spot_id: u.spotId });   // místo se uvolní konkurenci
+  });
+  MODEL_ORDER.forEach(function (k) {
+    utrzeno += inStock(k) * machinePrice(MODELS[k]) * KRACH_PODIL;
+  });
+  (S.orders || []).forEach(function (o) {
+    utrzeno += machinePrice(MODELS[o.model]) * KRACH_PODIL;
+  });
+  (S.pobocky || []).forEach(function () { utrzeno += POBOCKA_CENA * KRACH_PODIL; });
+  if (maCetu()) utrzeno += CETA_CENA * KRACH_PODIL;
+
+  utrzeno = Math.round(utrzeno);
+  var mel = S.units.length;
+  S.units = []; S.stock = {}; S.orders = []; S.pobocky = []; S.ceta = null;
+  CLAIMS = {};
+
+  // Nejdřív banka, zbytek hráči.
+  var naDluh = Math.min(utrzeno + Math.max(0, S.cash), S.loan);
+  var zdroje = utrzeno + Math.max(0, S.cash);
+  splatitDluh(naDluh);
+  S.cash = Math.max(0, zdroje - naDluh);
+  // Co se z majetku nepokrylo, banka odepíše — to je smysl konkurzu. Jinak by
+  // hráč vyšel bez sítě a s dluhem, na který nemá z čeho platit, a spadl hned znovu.
+  var odepsano = S.loan;
+  S.loans = [];
+  prepocitejDluh();
+  S.krachVarovano = 0;
+  save(); paint(); syncState(true);
+  return { utrzeno: utrzeno, naDluh: naDluh, zbylo: S.cash, odepsano: odepsano, mel: mel };
+}
+function krachSheet() {
+  sheet('<h3>Konkurz</h3>'
+    + '<p class="muted small">Tři splátky po sobě neuhrazené. Banka firmu poslala do konkurzu '
+    + 'a tvůj majetek jde na měsíc na Burzu — stroje, prádlomaty i s místy, pobočky i karty. '
+    + 'Cena začíná na 80 % hodnoty a během herního měsíce klesá ke 40 %.</p>'
+    + '<div class="kv"><span>Dlužíš</span><b class="err">' + kcFull(S.loan) + '</b></div>'
+    + '<div class="kv"><span>Prádlomatů v síti</span><b>' + S.units.length + '</b></div>'
+    + '<p class="muted small" style="margin-top:12px">Co se prodá, jde nejdřív bance. Co zbude, je tvoje. '
+    + 'Můžeš hrát dál se škraloupem — herní rok bez úvěru, pak jen na jeden prádlomat s vyšší akontací — '
+    + 'nebo začít znovu s čistou úvěrovou historií. Účet, firma, znak i zaplacené karty ti zůstanou tak jako tak.</p>'
+    + '<button class="btn sec big" id="krach-dal">Hrát dál se škraloupem</button>'
+    + '<button class="btn big" id="krach-znovu" style="margin-top:8px;background:linear-gradient(90deg,#b4263a,#ff5d6c)">Začít znovu s čistým štítem</button>');
+  $('krach-dal').onclick = function () {
+    var v = provedKonkurz();
+    // Škraloup: rok bez úvěru. Zmeškané splátky vynulujeme, ať se konkurz
+    // nespustí znovu hned v dalším měsíci.
+    S.skraloupDo = Date.now() + YEAR_MS;
+    (S.loans || []).forEach(function (l) { l.zmeskano = 0; });
+    save(); paint();
+    sheet('<h3>Po konkurzu</h3>'
+      + '<div class="kv"><span>Rozprodáno</span><b>' + kcFull(v.utrzeno) + '</b></div>'
+      + '<div class="kv"><span>Z toho bance</span><b class="warn">' + kcFull(v.naDluh) + '</b></div>'
+      + '<div class="kv souhrn"><span>Zbylo ti</span><b class="ok">' + kcFull(v.zbylo) + '</b></div>'
+      + (v.odepsano > 0 ? '<div class="kv"><span>Banka odepsala</span><b>' + kcFull(v.odepsano) + '</b></div>' : '')
+      + '<p class="muted small" style="margin-top:12px">' + v.mel + ' ' + mn(v.mel, 'místo se uvolnilo', 'místa se uvolnila', 'míst se uvolnilo')
+      + ' konkurenci. Zůstala tam ale tvoje síť přípojek, takže je někdo postaví lacino. '
+      + 'Banka ti herní rok nepůjčí — budeš muset vystačit s tím, co máš.</p>'
+      + '<button class="btn big" id="krach-ok">Rozumím</button>');
+    $('krach-ok').onclick = closeSheet;
+  };
+  $('krach-znovu').onclick = function () {
+    var y = $('krach-znovu'); y.disabled = true; y.textContent = 'Mažu…';
+    apiJson('/account/reset', {}).then(function (r) {
+      if (!r.ok) { y.disabled = false; y.textContent = 'Začít znovu s čistým štítem'; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
+      wiped = true;
+      try { localStorage.removeItem(KEY); } catch (e) { /* nevadí */ }
+      location.replace(location.pathname);
+    }).catch(function () { y.disabled = false; y.textContent = 'Začít znovu s čistým štítem'; toast('Server neodpovídá.', 'err'); });
+  };
+}
+// Po krachu banka rok nepůjčí.
+function maSkraloup() { return (S.skraloupDo || 0) > Date.now(); }
+
 // ─── Vlastní stavební četa ──────────────────────────────────────────────────
 // Technika a dva lidi v sídle nebo na pobočce. Četa staví přípojky za pětinu
 // ceny a zvládne čtyři místa za herní měsíc — vyplatí se jen tomu, kdo opravdu
@@ -609,6 +711,7 @@ function tick() {
     if (mesicu > 120) { mesicu = 120; S.splatkyAt = now; }   // po dlouhé pauze nedoháníme donekonečna
     else S.splatkyAt += mesicu * MONTH_MS;
     for (var i = 0; i < mesicu; i++) mesicniSplatka();
+    hlidejKrach();
   }
   deliverOrders();
 }
@@ -1163,7 +1266,8 @@ function canFinance(amount, chci, strop) {
   var ltvRoom = Math.max(0, p.ltv * (assetsTotal() + amount) - S.loan);
   // Strop podle výdělku: banka nepůjčí víc, než co unese splátka. Když ho
   // volající nedá, posuzuje se cash flow celé firmy.
-  var dscr = strop == null ? stropPodleZisku(monthlyProfit() - splatkyMesicne(), amount) : Math.max(0, Math.round(strop));
+  var dscr = maSkraloup() ? 0
+    : strop == null ? stropPodleZisku(monthlyProfit() - splatkyMesicne(), amount) : Math.max(0, Math.round(strop));
   var canBorrow = Math.min(ltvRoom, S.bank, dscr);
   // Rezervu si normálně necháváme stranou, ale nesmí být důvodem, proč nákup
   // neprojde — když na úvěr nezbývá, sáhneme i do ní. Dřív tady hráč uvízl
@@ -2680,7 +2784,7 @@ function uverNabidka(chci, iSplatnosti) {
   var max = Math.max(0, Math.min(strop, S.bank, OPERATING_MAX + Math.max(0, p.ltv * majetek - S.loan)));
   // Provozní úvěr banka posuzuje podle cash flow celé firmy: co síť vydělá
   // minus splátky, které už běží.
-  var dscr = stropPodleZisku(monthlyProfit() - splatkyMesicne(), max);
+  var dscr = maSkraloup() ? 0 : stropPodleZisku(monthlyProfit() - splatkyMesicne(), max);
   var brzdiVydelek = dscr < max;
   max = Math.round(Math.min(max * nalada.castka, dscr, S.bank) / 1000) * 1000;
   var castka = Math.max(0, Math.min(max, Math.round((chci == null ? max : chci) / 1000) * 1000));
@@ -2705,6 +2809,10 @@ function uverNabidka(chci, iSplatnosti) {
 }
 // Proč banka nepůjčí. Hráč má vždycky vědět, co s tím může udělat.
 function uverDuvod() {
+  if (maSkraloup()) {
+    return 'Po konkurzu ti banka herní rok nepůjčí. Zbývá ' + etaText((S.skraloupDo || 0) - Date.now())
+      + '. Do té doby musíš vystačit s tím, co síť vydělá.';
+  }
   var p = PROFILES[S.profile];
   var majetek = assetsTotal();
   var strop = Math.max(0, p.ltv * majetek - S.loan);
