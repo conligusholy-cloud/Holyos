@@ -1900,7 +1900,7 @@ app.get('/admin/supporters', requireAdmin, wrap(async (req, res) => {
   const keys = await extraKeys();
   const needExtra = cols.some(c => c.startsWith('x:'));
   const total = (await q('SELECT count(*)::int AS c ' + sql, params)).rows[0].c;
-  const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,user_type,totp_enabled,last_login_at,activated_at,created_at,source,support_snapshot_at,partner_support->>'currency' AS support_currency, partner_support->>'position' AS legacy_position, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_total_czk' AS piv_total_czk, partner_support->>'piv_rate' AS piv_rate, partner_support->>'piv_tier_visits' AS piv_tier_visits, partner_support->>'exp_invested' AS exp_invested, partner_support->>'exp_currency' AS exp_currency, partner_support->>'exp_rate' AS exp_rate, partner_support->>'exp_limit_from' AS exp_limit_from, partner_support->>'exp_eligible' AS exp_eligible, partner_support->>'std_total' AS std_total, partner_support->>'std_currency' AS std_currency, partner_support->>'std_palety_all' AS std_palety_all, partner_support->>'std_opakovacky_all' AS std_opakovacky_all, partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->'std_check'->>'ok' AS std_check_ok, partner_support->'std_check'->>'bad' AS std_check_bad, CASE WHEN ${EX_CZK} IS NOT NULL OR partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN coalesce(${EX_CZK},0) + coalesce(CASE WHEN partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total_czk')::numeric END,0) END AS exp_std_czk, CASE WHEN partner_support->>'currency'='EUR' THEN partner_support->>'total_all_czk' ELSE partner_support->>'total_all' END AS support_czk${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
+  const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,user_type,totp_enabled,last_login_at,activated_at,created_at,source,support_snapshot_at,partner_support->>'currency' AS support_currency, partner_support->>'position' AS legacy_position, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_total_czk' AS piv_total_czk, partner_support->>'piv_rate' AS piv_rate, partner_support->>'piv_tier_visits' AS piv_tier_visits, partner_support->>'exp_invested' AS exp_invested, partner_support->>'exp_currency' AS exp_currency, partner_support->>'exp_rate' AS exp_rate, partner_support->>'exp_limit_from' AS exp_limit_from, partner_support->>'exp_eligible' AS exp_eligible, partner_support->>'std_total' AS std_total, partner_support->>'std_currency' AS std_currency, partner_support->>'std_palety_all' AS std_palety_all, partner_support->>'std_opakovacky_all' AS std_opakovacky_all, partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->'std_check'->>'ok' AS std_check_ok, partner_support->'std_check'->>'bad' AS std_check_bad, partner_support->>'std_cur_mismatch' AS std_cur_mismatch, partner_support->>'std_cur_flags' AS std_cur_flags, CASE WHEN ${EX_CZK} IS NOT NULL OR partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN coalesce(${EX_CZK},0) + coalesce(CASE WHEN partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total_czk')::numeric END,0) END AS exp_std_czk, CASE WHEN partner_support->>'currency'='EUR' THEN partner_support->>'total_all_czk' ELSE partner_support->>'total_all' END AS support_czk${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
   res.send(V.adminSupporters({ admin: req.admin, rows, qstr: qs, status, utype, total, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, cols, extraKeys: keys, supportStats: await supportStats() }));
 }));
 // Produkty = aktivní stroje z prodejního ceníku HolyOS (jen čtení; cache 5 min)
@@ -2336,12 +2336,14 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   if (onlySup) where.push(`(coalesce(CASE WHEN partner_support->>'std_total' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total')::numeric END,0) > 0 OR coalesce(${EX_CZK},0) > 0)`);
   const onlyBad = req.query.n === '1';
   if (onlyBad) where.push(`partner_support->'std_check'->>'ok' = 'false'`);
+  const onlyCur = req.query.c === '1';
+  if (onlyCur) where.push(`partner_support->>'std_cur_mismatch' = 'true'`);
   if (qs) { params.push('%' + qs.toLowerCase() + '%'); where.push(`(lower(email) LIKE $1 OR lower(coalesce(first_name,'')) LIKE $1 OR lower(coalesce(last_name,'')) LIKE $1 OR lower(coalesce(nick,'')) LIKE $1)`); }
   const rows = (await q(`SELECT id,email,first_name,last_name,nick,
     partner_support->>'position' AS legacy_position, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_rate' AS piv_rate, partner_support->>'piv_tier_visits' AS piv_tier_visits,
     partner_support->>'exp_invested' AS exp_invested, partner_support->>'exp_currency' AS exp_currency, partner_support->>'exp_rate' AS exp_rate, partner_support->>'exp_limit_from' AS exp_limit_from, partner_support->>'exp_eligible' AS exp_eligible,
     ${EX_CZK} AS ex_czk, partner_support->>'std_total_czk' AS std_total_czk,
-    partner_support->>'std_total' AS std_total, partner_support->>'std_currency' AS std_currency, partner_support->>'std_palety_all' AS std_palety_all, partner_support->>'std_opakovacky_all' AS std_opakovacky_all, partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->'std_check'->>'ok' AS std_check_ok, partner_support->'std_check'->>'bad' AS std_check_bad,
+    partner_support->>'std_total' AS std_total, partner_support->>'std_currency' AS std_currency, partner_support->>'std_palety_all' AS std_palety_all, partner_support->>'std_opakovacky_all' AS std_opakovacky_all, partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->'std_check'->>'ok' AS std_check_ok, partner_support->'std_check'->>'bad' AS std_check_bad, partner_support->>'std_cur_mismatch' AS std_cur_mismatch, partner_support->>'std_cur_flags' AS std_cur_flags,
     CASE WHEN ${EX_CZK} IS NOT NULL OR partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN coalesce(${EX_CZK},0) + coalesce(CASE WHEN partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total_czk')::numeric END,0) END AS exp_std_czk
     FROM supporters WHERE ${where.join(' AND ')} ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 10000`, params)).rows;
   // počty podle pozice (za celý filtr, ne jen za zobrazených 1000 řádků)
@@ -2349,7 +2351,8 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   try { (await q(`SELECT coalesce(partner_support->>'position','—') AS pos, count(*)::int AS n FROM supporters WHERE ${where.join(' AND ')} GROUP BY 1`, params)).rows.forEach(r => { posCounts[r.pos] = r.n; totalCount += r.n; }); } catch (e) { /* jen info */ }
   let badKinds = {};
   try { badKinds = (await q(`SELECT count(*) FILTER (WHERE ex AND NOT st)::int AS ex, count(*) FILTER (WHERE st AND NOT ex)::int AS st, count(*) FILTER (WHERE ex AND st)::int AS both, count(*) FILTER (WHERE NOT ex AND NOT st)::int AS yr, count(*)::int AS n FROM (SELECT bool_or(coalesce(b->>'section','') ~* 'expanz') AS ex, bool_or(coalesce(b->>'section','') <> '' AND coalesce(b->>'section','') !~* 'expanz') AS st, bool_or(coalesce(b->>'section','') = '') AS yr FROM supporters s, jsonb_array_elements(CASE WHEN jsonb_typeof(s.partner_support->'std_check'->'bad')='array' THEN s.partner_support->'std_check'->'bad' ELSE '[]'::jsonb END) b WHERE s.partner_support->'std_check'->>'ok'='false' GROUP BY s.id) t`)).rows[0]; } catch (e) { /* jen info */ }
-  res.send(V.adminVybery({ pendingCount: req.vyberyPending || 0, badKinds, admin: req.admin, rows, qstr: qs, onlySup, onlyBad, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
+  let curN = null; try { curN = (await q(`SELECT count(*) FILTER (WHERE partner_support->>'std_cur_mismatch'='true')::int AS n, count(*) FILTER (WHERE partner_support->>'std_v' = '8')::int AS read8 FROM supporters WHERE partner_support IS NOT NULL`)).rows[0]; } catch (e) { /* jen info */ }
+  res.send(V.adminVybery({ curN, onlyCur, pendingCount: req.vyberyPending || 0, badKinds, admin: req.admin, rows, qstr: qs, onlySup, onlyBad, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
 }));
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
@@ -2818,7 +2821,7 @@ app.post('/admin/supporters/:id(\\d+)/partner-expansion', requireAdmin, wrap(asy
 let STD_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, errors: [], started_at: null, finished_at: null };
 app.post('/admin/partner-support/standard/sync-all', requireAdmin, wrap(async (req, res) => {
   if (STD_JOB.running) return res.json(STD_JOB);
-  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'std_checked_at' IS NULL OR coalesce(partner_support->>'std_v','1') <> '7' OR (partner_support->>'std_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
+  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'std_checked_at' IS NULL OR coalesce(partner_support->>'std_v','1') <> '8' OR (partner_support->>'std_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
   STD_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
   await log(req.admin, 'partner_standard_sync_all', { total: rows.length });
   res.json(STD_JOB);
@@ -2853,7 +2856,7 @@ let EXN_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, errors: [],
 app.post('/admin/partner-support/expanze/sync-all', requireAdmin, wrap(async (req, res) => {
   if (EXN_JOB.running) return res.json(EXN_JOB);
   const onlyBadRun = req.query.only === 'bad';
-  const rows = onlyBadRun ? (await q(`SELECT id,email,nick FROM supporters WHERE partner_support->'std_check'->>'ok' = 'false' ORDER BY id`)).rows : (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'ex_checked_at' IS NULL OR coalesce(partner_support->>'ex_v','1') <> '7' OR (partner_support->>'ex_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
+  const rows = onlyBadRun ? (await q(`SELECT id,email,nick FROM supporters WHERE partner_support->'std_check'->>'ok' = 'false' ORDER BY id`)).rows : (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'ex_checked_at' IS NULL OR coalesce(partner_support->>'ex_v','1') <> '8' OR (partner_support->>'ex_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
   EXN_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, sedi: 0, nesedi: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
   await log(req.admin, 'partner_expanze_sync_all', { total: rows.length });
   res.json(EXN_JOB);
@@ -2866,7 +2869,7 @@ app.post('/admin/partner-support/expanze/sync-all', requireAdmin, wrap(async (re
         const s = queue.shift();
         try {
           const r = await LEGACY.fetchLegacyStandard(s.email);
-          if (r.ok) { await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify({ ...r.data, ex_v: 7, ex_checked_at: new Date().toISOString() })]); EXN_JOB.ok++; if (r.data.std_check && r.data.std_check.ok) EXN_JOB.sedi++; else EXN_JOB.nesedi++; }
+          if (r.ok) { await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify({ ...r.data, ex_v: 8, ex_checked_at: new Date().toISOString() })]); EXN_JOB.ok++; if (r.data.std_check && r.data.std_check.ok) EXN_JOB.sedi++; else EXN_JOB.nesedi++; }
           else { EXN_JOB.failed++; if (EXN_JOB.errors.length < 50) EXN_JOB.errors.push((s.nick || s.email) + ': ' + r.error); }
         } catch (e) { EXN_JOB.failed++; if (EXN_JOB.errors.length < 50) EXN_JOB.errors.push((s.nick || s.email) + ': ' + e.message); }
         EXN_JOB.done++; EXN_JOB.last = s.nick || s.email;
@@ -3105,7 +3108,9 @@ app.get('/admin/vybery-diag', requireAdmin, wrap(async (req, res) => {
   }
   samples.sort((a, b2) => Math.abs(b2.diff || 0) - Math.abs(a.diff || 0));
   const withSample = samples.filter((x) => x.sample);
-  res.json({ users_nesedi: rows.length, entries, by_section: bySec, samples_with_text: withSample.slice(0, 25), samples_largest_diff: samples.slice(0, 15) });
+  const cm = (await q(`SELECT id,nick,partner_support->>'std_currency' AS cur, partner_support->'std_cur_flags' AS f FROM supporters WHERE partner_support->>'std_cur_mismatch'='true' ORDER BY id LIMIT 300`)).rows;
+  const curMismatch = cm.map((r) => ({ id: r.id, nick: r.nick, cur: r.cur, flags: r.f }));
+  res.json({ cur_mismatch_users: curMismatch.length, cur_mismatch: curMismatch.slice(0, 40), users_nesedi: rows.length, entries, by_section: bySec, samples_with_text: withSample.slice(0, 25), samples_largest_diff: samples.slice(0, 15) });
 }));
 // Export seznamu Výběry s aktuálním filtrem (q, s=jen s podporou, n=jen nesedí) do Excelu
 app.get('/admin/vybery.xlsx', requireAdmin, wrap(async (req, res) => {
@@ -3114,8 +3119,9 @@ app.get('/admin/vybery.xlsx', requireAdmin, wrap(async (req, res) => {
   const params = [], where = ["status='active'"];
   if (req.query.s === '1') where.push(`(coalesce(CASE WHEN partner_support->>'std_total' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total')::numeric END,0) > 0 OR coalesce(${EX_CZK},0) > 0)`);
   if (req.query.n === '1') where.push(`partner_support->'std_check'->>'ok' = 'false'`);
+  if (req.query.c === '1') where.push(`partner_support->>'std_cur_mismatch' = 'true'`);
   if (qs) { params.push('%' + qs.toLowerCase() + '%'); where.push(`(lower(email) LIKE $1 OR lower(coalesce(first_name,'')) LIKE $1 OR lower(coalesce(last_name,'')) LIKE $1 OR lower(coalesce(nick,'')) LIKE $1)`); }
-  const rows = (await q(`SELECT id,email,first_name,last_name,nick,
+  const rows = (await q(`SELECT id,email,first_name,last_name,nick, partner_support->>'std_cur_mismatch' AS cur_mm, partner_support->'std_cur_flags' AS cur_flags,
       partner_support->>'position' AS pos, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency,
       partner_support->>'std_currency' AS cur, partner_support->>'std_total' AS std_total, partner_support->>'std_total_czk' AS std_total_czk,
       partner_support->>'std_palety_all' AS palety, partner_support->>'std_opakovacky_all' AS opak, partner_support->>'std_expanze_all' AS expanze,
@@ -3129,12 +3135,12 @@ app.get('/admin/vybery.xlsx', requireAdmin, wrap(async (req, res) => {
       'Měna účtu': r.cur || 'CZK', 'Palety (měna účtu)': n(r.palety), 'Opakovačky (měna účtu)': n(r.opak), 'ST podpora (měna účtu)': n(r.std_total), 'Expanze / EX (měna účtu)': n(r.expanze),
       'ST podpora (Kč)': st, 'EX podpora (Kč)': ex, 'EX + ST podpora (Kč)': (st != null || ex != null) ? (st || 0) + (ex || 0) : null,
       'EX + ST podpora (EUR, jen účty v EUR)': r.cur === 'EUR' ? Math.round(((n(r.expanze) || 0) + (n(r.std_total) || 0)) * 100) / 100 : null,
-      'PIV vloženo': n(r.piv_total), 'Kontrola čtení': r.std_check_ok === 'true' ? 'sedí' : r.std_check_ok === 'false' ? 'NESEDÍ' : 'neověřeno', 'Detail nesouladu': bad,
+      'PIV vloženo': n(r.piv_total), 'Kontrola čtení': r.std_check_ok === 'true' ? 'sedí' : r.std_check_ok === 'false' ? 'NESEDÍ' : 'neověřeno', 'Detail nesouladu': bad, 'Nesoulad měn (řádky × Celkem)': r.cur_mm === 'true' ? 'ANO' : '', 'Detail měn': Array.isArray(r.cur_flags) ? r.cur_flags.map((f) => `${f.y} ${f.section}: řádky ${f.rows}, Celkem ${f.celkem}`).join(' | ') : '',
       'Odkaz BS2': (process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz') + '/admin/supporters/' + r.id };
   });
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [4, 8, 18, 14, 16, 30, 8, 16, 16, 16, 16, 16, 16, 18, 20, 14, 14, 50, 42].map((w) => ({ wch: w }));
+  ws['!cols'] = [4, 8, 18, 14, 16, 30, 8, 16, 16, 16, 16, 16, 16, 18, 20, 14, 14, 50, 18, 50, 42].map((w) => ({ wch: w }));
   ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: data.length, c: Object.keys(data[0] || { a: 1 }).length - 1 } }) };
   XLSX.utils.book_append_sheet(wb, ws, 'Výběry');
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });

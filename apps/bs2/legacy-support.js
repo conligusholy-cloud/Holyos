@@ -49,7 +49,7 @@ function parseRows(block, celkem) {
   flat = flat.replace(/^\s*Typ podpory\s+Podpořený kiosek\s+Podpořená částka\s+Datum\s*/i, '');
   // Řádek končí „měna datum“; před ním je souvislá řada číselných tokenů (kiosek + částka), před tou je typ („X1 +“, „10 let“, „P500“, „TESTER“…)
   const endRe = new RegExp('(?:' + CUR + '\\s+)?(\\d{2}\\.\\d{2}\\.\\d{4})', 'giu');
-  const raw = []; let issues = 0; let m; let prev = 0;
+  const raw = []; let issues = 0; let m; let prev = 0; const rowCurs = new Set();
   while ((m = endRe.exec(flat))) {
     const text = flat.slice(prev, m.index).trim(); prev = m.index + m[0].length;
     const toks = text.split(' ').filter(Boolean);
@@ -62,6 +62,7 @@ function parseRows(block, celkem) {
     const pm = /^P(\d+)$/i.exec(type);
     let fixed = null;
     if (pm) { const N = pm[1], tail = tokens.join(''); if (tail === N || tail.endsWith(N)) fixed = Number(N); }
+    if (m[1]) rowCurs.add(curOf(m[1]));
     raw.push({ type, tokens, fixed, date: m[2] });
   }
   const amt = (r, mode) => { if (r.fixed != null) return r.fixed; const t = (mode === 'B' && r.tokens.length > 1 ? r.tokens.slice(1) : r.tokens).join(''); const n = Number(t.replace(',', '.')); return isFinite(n) ? n : 0; };
@@ -98,7 +99,7 @@ function parseRows(block, celkem) {
       sum = Math.round(picks.reduce((a, c) => a + c, 0)) / 100; mode = 'DP'; matches = true;
     }
   }
-  return { rows, issues, sum, mode, matches, sample: matches ? undefined : flat.slice(0, 1200) };
+  return { rowCurs: [...rowCurs], rows, issues, sum, mode, matches, sample: matches ? undefined : flat.slice(0, 1200) };
 }
 function parseInvests(text) {
   const out = {};
@@ -117,6 +118,7 @@ function parseInvests(text) {
     const pr = parseRows(s[2], celkem);
     // hodnota sekce = součet jednotlivých nákupů JEN když sedí s „Celkem“ portálu; jinak se použije „Celkem“ a sekce se označí ⚠ (nesedí)
     const v = celkem; // řádky slouží ke kontrole; hodnotou je „Celkem“ sekce (řádky jsou na portálu zaokrouhlené na celá čísla, Celkem je přesné)
+    { const celCur = curOf(s[4]); out.cur_flags = out.cur_flags || []; if (pr.rowCurs.length && (pr.rowCurs.length > 1 || pr.rowCurs[0] !== celCur)) out.cur_flags.push({ section: name, rows: pr.rowCurs.join('+'), celkem: celCur, n: pr.rows.length, portal: celkem, sum: pr.sum }); }
     out.row_checks.push({ section: name, rows: pr.rows.length, rows_sum: pr.sum, portal: celkem, issues: pr.issues, ok: pr.matches, sample: pr.sample });
     out.sections[name] = (out.sections[name] || 0) + v; if (k) { out[k] = (out[k] || 0) + v; out.cur_k = out.cur_k || {}; if (v) out.cur_k[k] = curOf(s[4]); }
     // jednotlivé nákupy expanze (datum, částka) — uložíme pro audit a export
@@ -259,6 +261,7 @@ async function fetchLegacyStandardWithJar(jar) {
     if (!years.length) { const y0 = new Date().getFullYear(); years = []; for (let y = y0; y >= 2018; y--) years.push(y); }
     years = [...new Set(years)].sort((a, b) => b - a);
     const by = {}; let cur = null;
+    const curFlags = []; // sekce, kde se měna u řádků liší od měny „Celkem“ (nebo řádky mají smíšené měny)
     const bad = []; // roky, kde součet přečtených sekcí nesedí s celkem, které uvádí sám portál (kontrola správnosti čtení)
     for (const y of years) {
       const pg = y === years[0] && /selected/.test(sel) && new RegExp('value="' + y + '"[^>]*selected').test(sel) ? first : await get(BASE + '/cs/bo/my-invests/?y=' + y, jar);
@@ -271,6 +274,7 @@ async function fetchLegacyStandardWithJar(jar) {
       // měna po sekcích — jeden uživatel může mít některé nákupy v Kč a jiné v EUR
       const ck = {}; for (const k of ['palety', 'opakovacky', 'balicky', 'expanze']) ck[k] = (d.cur_k && d.cur_k[k]) || d.currency || 'CZK';
       const rec = { palety: d.palety || 0, opakovacky: d.opakovacky || 0, balicky: d.balicky || 0, likvidni: d.likvidni || 0, ostatni: Math.round((secSum - known) * 100) / 100, expanze: d.expanze || 0, neurawash: d.neurawash || 0, total_year: d.total_year || 0, cur: ck, sections: d.sections || {}, expanze_rows: d.expanze_rows || [], checks: (d.row_checks || []).map((c) => ({ s: c.section, n: c.rows, sum: c.rows_sum, p: c.portal, ok: !!c.ok })) };
+      for (const f of (d.cur_flags || [])) curFlags.push({ y, ...f });
       for (const c of (d.row_checks || [])) if (!c.ok) bad.push({ y, section: c.section, portal: c.portal, parsed: c.rows_sum, diff: Math.round((c.portal - c.rows_sum) * 100) / 100, rows: c.rows, issues: c.issues, sample: c.sample });
       const yearCurs = new Set(Object.entries(d.cur_k || {}).map(([, v]) => v));
       const nRows = (d.row_checks || []).reduce((a, c) => a + (c.rows || 0), 0);
@@ -287,7 +291,7 @@ async function fetchLegacyStandardWithJar(jar) {
     if (hasEur) { const c = await cnbEurRate(); rate = c.rate; rateDate = c.date; }
     const czkSum = (k) => Math.round(Object.values(by).reduce((a, r) => a + (Number(r[k]) || 0) * (r.cur[k] === 'EUR' ? rate : 1), 0) * 100) / 100;
     const mixed = hasEur && hasCzk;
-    const data = { std_by_year: by, std_years: years, std_neurawash_all: sum('neurawash'), std_likvidni_all: sum('likvidni'), std_ostatni_all: sum('ostatni'), std_v: 7, std_checked_at: new Date().toISOString(), std_check: { ok: bad.length === 0, bad }, std_mixed: mixed };
+    const data = { std_by_year: by, std_years: years, std_neurawash_all: sum('neurawash'), std_likvidni_all: sum('likvidni'), std_ostatni_all: sum('ostatni'), std_v: 8, std_checked_at: new Date().toISOString(), std_check: { ok: bad.length === 0, bad }, std_mixed: mixed, std_cur_mismatch: curFlags.length > 0, std_cur_flags: curFlags.slice(0, 40) };
     if (mixed) { // smíšené měny → vše v Kč
       data.std_currency = 'CZK';
       for (const k of KS) data['std_' + k + '_all'] = czkSum(k);
