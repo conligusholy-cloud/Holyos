@@ -1681,7 +1681,19 @@ app.get('/moje-pradlomaty/doklad/:id(\\d+)/pdf', wrap(requireUser), wrap(async (
 }));
 app.get('/vybery', wrap(requireUser), wrap(async (req, res) => {
   if (!V.vyberyVisible(req.user)) return res.status(404).send(V.errorPage('Stránka nenalezena', 'Tato stránka neexistuje.', '/'));
-  res.send(V.supporterVybery(req.user));
+  const rows = (await q(`SELECT * FROM withdrawal_requests WHERE supporter_id=$1 ORDER BY id DESC LIMIT 100`, [req.user.id])).rows;
+  res.send(V.supporterVybery(req.user, { rows, msg: String(req.query.msg || '').slice(0, 200), err: String(req.query.err || '').slice(0, 200) }));
+// Žádost o výběr (tester) — měna podle účtu: Kč u korunových, € u eurových
+app.post('/vybery/request', wrap(requireUser), wrap(async (req, res) => {
+  if (!V.vyberyVisible(req.user)) return res.status(404).send(V.errorPage('Stránka nenalezena', 'Tato stránka neexistuje.', '/'));
+  const amount = Math.round(Number(String(req.body.amount || '').replace(/\s/g, '').replace(',', '.')) * 100) / 100;
+  if (!isFinite(amount) || amount <= 0 || amount > 10000000) return res.redirect('/vybery?err=' + encodeURIComponent('Zadejte platnou částku.'));
+  const pending = (await q(`SELECT count(*)::int AS n FROM withdrawal_requests WHERE supporter_id=$1 AND status='requested'`, [req.user.id])).rows[0].n;
+  if (pending >= 3) return res.redirect('/vybery?err=' + encodeURIComponent('Máte už 3 nevyřízené žádosti. Počkejte na jejich vyřízení.'));
+  const cur = req.user.currency === 'EUR' ? 'EUR' : 'CZK';
+  await q(`INSERT INTO withdrawal_requests (supporter_id, amount, currency, note) VALUES ($1,$2,$3,$4)`, [req.user.id, amount, cur, String(req.body.note || '').trim().slice(0, 300) || null]);
+  res.redirect('/vybery?msg=' + encodeURIComponent('Žádost o výběr byla odeslána.'));
+}));
 }));
 app.get('/discount-credit', wrap(requireUser), wrap(async (req, res) => {
   const rows = (await q('SELECT * FROM credits WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC LIMIT 500', [req.user.id])).rows;
@@ -2251,6 +2263,53 @@ app.get('/admin/stats/user/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   res.send(V.adminStatsUser({ admin: req.admin, data, days, holyosUrl: HOLYOS_URL }));
 }));
 // Výběry — admin sekce zatím jako zástupná stránka (funkce se připravuje)
+const VYBERY_PAY_SQL = `SELECT w.*, s.email, s.nick, s.first_name, s.last_name, to_char(w.requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM') AS req_month, to_char(w.paid_at AT TIME ZONE 'Europe/Prague','YYYY-MM') AS paid_month FROM withdrawal_requests w JOIN supporters s ON s.id = w.supporter_id`;
+async function vyberyPayoutRows(tab, m) {
+  const curM = (await q(`SELECT to_char(now() AT TIME ZONE 'Europe/Prague','YYYY-MM') AS m`)).rows[0].m;
+  const month = /^\d{4}-\d{2}$/.test(m || '') ? m : (m === 'all' ? 'all' : (tab === 'vyplata' ? curM : 'all'));
+  let rows;
+  if (tab === 'vyplata') rows = (await q(`${VYBERY_PAY_SQL} WHERE w.status='requested' ${month === 'all' ? '' : `AND to_char(w.requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM') = '${month}'`} ORDER BY w.requested_at, w.id LIMIT 2000`)).rows;
+  else rows = (await q(`${VYBERY_PAY_SQL} WHERE w.status IN ('paid','rejected') ${month === 'all' ? '' : `AND to_char(coalesce(w.paid_at, w.decided_at) AT TIME ZONE 'Europe/Prague','YYYY-MM') = '${month}'`} ORDER BY coalesce(w.paid_at, w.decided_at) DESC, w.id DESC LIMIT 2000`)).rows;
+  return { rows, month, curM };
+}
+app.get('/admin/vybery', requireAdmin, wrap(async (req, res, next) => {
+  const tab = ['vyplata', 'vyplaceno'].includes(req.query.tab) ? req.query.tab : 'seznam';
+  const pendingCount = (await q(`SELECT count(*)::int AS n FROM withdrawal_requests WHERE status='requested'`)).rows[0].n;
+  req.vyberyPending = pendingCount;
+  if (tab === 'seznam') return next();
+  const { rows, month, curM } = await vyberyPayoutRows(tab, req.query.m);
+  const sums = {}; rows.forEach((r) => { const v = Number(tab === 'vyplaceno' && r.status === 'paid' ? (r.paid_amount != null ? r.paid_amount : r.amount) : r.amount); if (tab === 'vyplaceno' && r.status !== 'paid') return; sums[r.currency] = (sums[r.currency] || 0) + v; });
+  const olderPending = tab === 'vyplata' && month === curM ? (await q(`SELECT count(*)::int AS n FROM withdrawal_requests WHERE status='requested' AND to_char(requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM') <> $1`, [curM])).rows[0].n : 0;
+  res.send(V.adminVyberyPayouts({ admin: req.admin, tab, rows, month, curM, sums, olderPending, pendingCount, msg: String(req.query.msg || '').slice(0, 200), holyosUrl: HOLYOS_URL }));
+}));
+app.post('/admin/vybery/request/:id(\\d+)/pay', requireAdmin, wrap(async (req, res) => {
+  const method = String(req.body.pay_method || '').trim().slice(0, 40) || null;
+  const note = String(req.body.pay_note || '').trim().slice(0, 300) || null;
+  const amt = req.body.paid_amount ? Math.round(Number(String(req.body.paid_amount).replace(/\s/g, '').replace(',', '.')) * 100) / 100 : null;
+  const who = String((req.admin && (req.admin.email || req.admin.name || req.admin.username)) || 'admin').slice(0, 80);
+  const r = await q(`UPDATE withdrawal_requests SET status='paid', paid_at=now(), decided_at=now(), paid_by=$2, pay_method=$3, pay_note=$4, paid_amount=coalesce($5, amount) WHERE id=$1 AND status='requested' RETURNING id`, [req.params.id, who, method, note, amt && amt > 0 ? amt : null]);
+  await log(req.admin, 'vybery_paid', { id: Number(req.params.id), ok: !!r.rows.length });
+  res.redirect('/admin/vybery?tab=vyplata&msg=' + encodeURIComponent(r.rows.length ? 'Označeno jako vyplaceno.' : 'Žádost už byla vyřízena.'));
+}));
+app.post('/admin/vybery/request/:id(\\d+)/reject', requireAdmin, wrap(async (req, res) => {
+  const reason = String(req.body.reason || '').trim().slice(0, 300) || null;
+  const r = await q(`UPDATE withdrawal_requests SET status='rejected', decided_at=now(), reject_reason=$2 WHERE id=$1 AND status='requested' RETURNING id`, [req.params.id, reason]);
+  await log(req.admin, 'vybery_rejected', { id: Number(req.params.id), ok: !!r.rows.length });
+  res.redirect('/admin/vybery?tab=vyplata&msg=' + encodeURIComponent(r.rows.length ? 'Žádost zamítnuta.' : 'Žádost už byla vyřízena.'));
+}));
+app.get('/admin/vybery-vyplaty.xlsx', requireAdmin, wrap(async (req, res) => {
+  const XLSX = require('xlsx');
+  const tab = req.query.tab === 'vyplaceno' ? 'vyplaceno' : 'vyplata';
+  const { rows } = await vyberyPayoutRows(tab, req.query.m);
+  const fmt = (d) => (d ? new Date(d).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' }) : '');
+  const data = rows.map((r, i) => ({ '#': i + 1, 'Příjmení': r.last_name || '', 'Jméno': r.first_name || '', 'Nick': r.nick || '', 'E-mail': r.email, 'Částka': Number(r.status === 'paid' && r.paid_amount != null ? r.paid_amount : r.amount), 'Měna': r.currency, 'Stav': r.status === 'requested' ? 'čeká na výplatu' : r.status === 'paid' ? 'vyplaceno' : 'zamítnuto', 'Žádost podána': fmt(r.requested_at), 'Poznámka uživatele': r.note || '', 'Vyplaceno': fmt(r.paid_at), 'Způsob výplaty': r.pay_method || '', 'Poznámka k výplatě': r.pay_note || r.reject_reason || '', 'Vyplatil': r.paid_by || '' }));
+  const wb = XLSX.utils.book_new(); const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [4, 16, 14, 16, 30, 12, 6, 16, 20, 30, 20, 16, 30, 24].map((w) => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, ws, tab === 'vyplata' ? 'Výplata' : 'Vyplaceno');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="vybery-${tab}-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+  res.send(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+}));
 app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   const qs = String(req.query.q || '').trim().slice(0, 80);
   const params = [], where = ["status='active'"];
@@ -2270,7 +2329,7 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   try { (await q(`SELECT coalesce(partner_support->>'position','—') AS pos, count(*)::int AS n FROM supporters WHERE ${where.join(' AND ')} GROUP BY 1`, params)).rows.forEach(r => { posCounts[r.pos] = r.n; totalCount += r.n; }); } catch (e) { /* jen info */ }
   let badKinds = {};
   try { badKinds = (await q(`SELECT count(*) FILTER (WHERE ex AND NOT st)::int AS ex, count(*) FILTER (WHERE st AND NOT ex)::int AS st, count(*) FILTER (WHERE ex AND st)::int AS both, count(*) FILTER (WHERE NOT ex AND NOT st)::int AS yr, count(*)::int AS n FROM (SELECT bool_or(coalesce(b->>'section','') ~* 'expanz') AS ex, bool_or(coalesce(b->>'section','') <> '' AND coalesce(b->>'section','') !~* 'expanz') AS st, bool_or(coalesce(b->>'section','') = '') AS yr FROM supporters s, jsonb_array_elements(CASE WHEN jsonb_typeof(s.partner_support->'std_check'->'bad')='array' THEN s.partner_support->'std_check'->'bad' ELSE '[]'::jsonb END) b WHERE s.partner_support->'std_check'->>'ok'='false' GROUP BY s.id) t`)).rows[0]; } catch (e) { /* jen info */ }
-  res.send(V.adminVybery({ badKinds, admin: req.admin, rows, qstr: qs, onlySup, onlyBad, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
+  res.send(V.adminVybery({ pendingCount: req.vyberyPending || 0, badKinds, admin: req.admin, rows, qstr: qs, onlySup, onlyBad, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
 }));
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';

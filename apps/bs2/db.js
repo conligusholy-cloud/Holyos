@@ -117,6 +117,25 @@ async function migrate() {
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'CZK';
     -- Tester: vidí funkce ve vývoji (např. záložku Výběry)
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS vybery_tester BOOLEAN NOT NULL DEFAULT false;
+    -- Výběry: žádosti o výběr (status: requested = čeká na výplatu, paid = vyplaceno, rejected = zamítnuto)
+    CREATE TABLE IF NOT EXISTS withdrawal_requests (
+      id            SERIAL PRIMARY KEY,
+      supporter_id  INTEGER NOT NULL REFERENCES supporters(id) ON DELETE CASCADE,
+      amount        NUMERIC(14,2) NOT NULL CHECK (amount > 0),
+      currency      TEXT NOT NULL DEFAULT 'CZK',
+      note          TEXT,
+      status        TEXT NOT NULL DEFAULT 'requested',
+      requested_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+      paid_at       TIMESTAMPTZ,
+      paid_by       TEXT,
+      paid_amount   NUMERIC(14,2),
+      pay_method    TEXT,
+      pay_note      TEXT,
+      reject_reason TEXT,
+      decided_at    TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS withdrawal_requests_status_idx ON withdrawal_requests (status, requested_at);
+    CREATE INDEX IF NOT EXISTS withdrawal_requests_supporter_idx ON withdrawal_requests (supporter_id);
     -- (Standardní podpora = palety + opakovačky + balíčky se počítá při načtení ze starého portálu; zpětný přepočet v DB už není)
 
     -- Objednávky z Prádlomatů (Koupit): admin potvrdí → vznikne nákup + provize; zrušením se vrátí uplatněné DC
