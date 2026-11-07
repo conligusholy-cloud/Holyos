@@ -874,7 +874,8 @@ function fresh(profileId) {
     connDiscount: 0,  // sleva na přípojky na nejbližší stavbě
     rateDrop: 0,      // snížení úroku z karty
     bankBonus: 0,     // navýšení bankovního rámce z karty
-    stats: { earned: 0, interest: 0 }
+    stats: { earned: 0, interest: 0 },
+    hist: []          // vývoj po herních měsících — tržby, zisk, dluh, počet prádlomatů
   };
 }
 // Finder nekdy vraci metriky jako objekt { count, nearest_m, list } - potrebujeme z nich cislo.
@@ -1017,6 +1018,83 @@ function monthlyProfit() { return S.units.reduce(function (a, u) { return a + u.
 // kdyby se počítalo s čistým ziskem, strhly by se dvakrát.
 function cistyZisk() { return monthlyProfit() - splatkyMesicne() - pobockyMesicne() - cetaMesicne(); }
 function yearlyProfit() { return monthlyProfit() * 12; }
+
+// ─── Vývoj v čase ───────────────────────────────────────────────────────
+// Za každý herní měsíc jeden řádek: tržby, zisk, co se platí, dluh a počet
+// prádlomatů. Pár čísel, ale je z toho vidět celá cesta od začátku.
+var HIST_MAX = 300;      // víc bodů už se jen prořídí, ať stav nenaroste do nebes
+function histMesic() { return Math.floor((Date.now() - S.startedAt) / MONTH_MS); }
+function histZaznam(m) {
+  return {
+    m: m,
+    t: Math.round(S.units.reduce(function (a, u) { return a + ((u.eco && u.eco.revenue) || 0); }, 0)),
+    z: Math.round(monthlyProfit()),
+    s: Math.round(splatkyMesicne() + pobockyMesicne() + cetaMesicne()),
+    d: Math.round(S.loan),
+    p: S.units.length,
+    h: Math.round(S.cash)
+  };
+}
+// Běžící měsíc se přepisuje, hotové zůstávají. Poslední bod grafu je tím vždy
+// „ted“ a nemusí se čekat půl dne, než se něco pohne.
+function zapisHistorii() {
+  // Kdo hrál dřív, než se vývoj začal zapisovat, dostane ho dopočítaný. Dělá se
+  // to až tady, v tick(), protože tou dobou už má každé místo spočtenou ekonomiku.
+  if (!Array.isArray(S.hist)) S.hist = dopocitejHistorii(S);
+  var m = histMesic();
+  if (!(m >= 0)) return;
+  var z = histZaznam(m);
+  var posl = S.hist[S.hist.length - 1];
+  if (posl && posl.m === m) { S.hist[S.hist.length - 1] = z; return; }
+  // Po pauze chybí měsíce mezi tím — doplníme je tím, v jakém stavu hra zůstala.
+  if (posl) for (var k = Math.max(posl.m + 1, m - 60); k < m; k++) {
+    S.hist.push({ m: k, t: posl.t, z: posl.z, s: posl.s, d: posl.d, p: posl.p, h: posl.h });
+  }
+  S.hist.push(z);
+  // Když už je bodů moc, nezahazujeme začátek — starší polovinu jen prořídíme
+  // na každý druhý měsíc. Graf si tím nechá celý rozsah od prvního dne.
+  if (S.hist.length > HIST_MAX) {
+    var pul = Math.floor(S.hist.length / 2), nove = [];
+    for (var j = 0; j < pul; j += 2) nove.push(S.hist[j]);
+    S.hist = nove.concat(S.hist.slice(pul));
+  }
+}
+// Kolik z úvěru zbývalo po tolika měsících splácení.
+function zbytekUveru(l, mesicu) {
+  var j = Number(l.puvodni) || 0, i = (Number(l.sazba) || 0) / 12, spl = Number(l.splatka) || 0;
+  if (!(spl > 0)) return Math.round(j);
+  for (var k = 0; k < mesicu && j > 0; k++) j = j + j * i - spl;
+  return Math.max(0, Math.round(j));
+}
+// Dopočet zpětně pro hry rozehrané dřív, než se vývoj začal zapisovat. Počet
+// prádlomatů a tržby bereme podle toho, co kdy už stálo, dluh umoříme u každého
+// úvěru jeho vlastní anuitou od data, kdy vznikl. Úvěry, které už jsou splacené,
+// ve stavu nejsou — v dopočtu tedy chybí. Tvar křivky sedí, čísla jsou odhad.
+function dopocitejHistorii(o) {
+  var h = [];
+  if (!o || !o.startedAt) return h;
+  var ted = Math.floor((Date.now() - o.startedAt) / MONTH_MS);
+  if (!(ted >= 0)) return h;
+  for (var m = Math.max(0, ted - HIST_MAX + 1); m <= ted; m++) {
+    var cas = o.startedAt + m * MONTH_MS, t = 0, z = 0, p = 0, d = 0, spl = 0;
+    (o.units || []).forEach(function (u) {
+      if ((u.builtAt || 0) > cas) return;
+      p++;
+      t += (u.eco && u.eco.revenue) || 0;
+      z += (u.eco && u.eco.profit) || 0;
+    });
+    (o.loans || []).forEach(function (l) {
+      if ((l.zalozen || 0) > cas) return;
+      var zbyvalo = zbytekUveru(l, Math.floor((cas - (l.zalozen || 0)) / MONTH_MS));
+      if (zbyvalo <= 0) return;
+      d += zbyvalo;
+      spl += Math.min(l.splatka || 0, zbyvalo + zbyvalo * (l.sazba || 0) / 12);
+    });
+    h.push({ m: m, t: Math.round(t), z: Math.round(z), s: Math.round(spl),
+      d: Math.round(d), p: p, h: null, r: 1 });
+  }
+  return h;
+}
 function tick() {
   refreshUnits();
   var now = Date.now();
@@ -1043,6 +1121,7 @@ function tick() {
     hlidejKrach();
   }
   deliverOrders();
+  zapisHistorii();
 }
 
 // ─── Čísla naskakující nad prádlomaty ───────────────────────────────────────
@@ -2284,13 +2363,119 @@ function paint() {
   if (pisePrave()) return;
   if (!$('v-shop').classList.contains('hidden')) paintShop();
   if (!$('v-net').classList.contains('hidden')) {
-    if ($('net-zebricek').classList.contains('hidden')) paintNet(); else paintZeb();
+    if (!$('net-zebricek').classList.contains('hidden')) paintZeb();
+    else if (!$('net-vyvoj').classList.contains('hidden')) paintVyvoj();
+    else paintNet();
   }
   if (!$('v-bank').classList.contains('hidden')) paintBank();
   if (!$('v-cards').classList.contains('hidden')) paintCards();
   if (!$('v-burza').classList.contains('hidden')) paintBurza();
   if (!$('v-me').classList.contains('hidden')) paintMe();
   tutPaint();
+}
+// ─── Grafy vývoje ──────────────────────────────────────────────────
+// Kreslíme je přímo do SVG — žádná knihovna, hra se nemá čím zdržovat. Šířku
+// grafu roztahuje prohlížeč svěřeným viewBoxem, tloušťka čáry zůstává stejná.
+var GRAF_W = 320, GRAF_H = 104, GRAF_P = 8, GRAF_ID = 0;
+function grafSvg(body, barva, schody, mezniky) {
+  var n = body.length;
+  if (n < 2) return '';
+  var max = 0, min = 0;
+  body.forEach(function (v) { if (v > max) max = v; if (v < min) min = v; });
+  if (max === min) max = min + 1;
+  var px = function (i) { return GRAF_P + i * (GRAF_W - 2 * GRAF_P) / (n - 1); };
+  var py = function (v) { return GRAF_P + (max - v) * (GRAF_H - 2 * GRAF_P) / (max - min); };
+  var d = '';
+  for (var i = 0; i < n; i++) {
+    var x = px(i).toFixed(1), y = py(body[i]).toFixed(1);
+    if (!i) d += 'M' + x + ' ' + y;
+    else if (schody) d += ' L' + x + ' ' + py(body[i - 1]).toFixed(1) + ' L' + x + ' ' + y;
+    else d += ' L' + x + ' ' + y;
+  }
+  var dno = py(min).toFixed(1);
+  var plocha = d + ' L' + px(n - 1).toFixed(1) + ' ' + dno + ' L' + px(0).toFixed(1) + ' ' + dno + ' Z';
+  var gid = 'graf-v' + (++GRAF_ID);
+  // Tenká svislá čára na přelomu herního roku — ať je poznat, jak dlouhý úsek to je.
+  var cary = (mezniky || []).map(function (i) {
+    return '<line x1="' + px(i).toFixed(1) + '" y1="0" x2="' + px(i).toFixed(1) + '" y2="' + GRAF_H
+      + '" stroke="rgba(120,160,255,.22)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+  }).join('');
+  return '<svg class="graf" viewBox="0 0 ' + GRAF_W + ' ' + GRAF_H + '" preserveAspectRatio="none" aria-hidden="true">'
+    + '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1">'
+    + '<stop offset="0" stop-color="' + barva + '" stop-opacity=".34"/>'
+    + '<stop offset="1" stop-color="' + barva + '" stop-opacity="0"/></linearGradient></defs>'
+    + cary
+    + '<path d="' + plocha + '" fill="url(#' + gid + ')"/>'
+    + '<path d="' + d + '" fill="none" stroke="' + barva + '" stroke-width="2" '
+    + 'vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>'
+    + '<circle cx="' + px(n - 1).toFixed(1) + '" cy="' + py(body[n - 1]).toFixed(1) + '" r="3" fill="' + barva + '"/>'
+    + '</svg>';
+}
+// Jedna kartika: nadpis, dnešní hodnota, změna od začátku a pod tím graf.
+function grafKarta(o) {
+  var dolu = o.dobreNahoru === false;
+  var lepsi = dolu ? o.zmena < 0 : o.zmena > 0;
+  var zm = !o.zmena ? 'beze změny od začátku'
+    : (o.zmena > 0 ? '▲ +' : '▼ −') + o.jed(Math.abs(o.zmena)) + ' od začátku';
+  return '<div class="card graf-karta">'
+    + '<div class="row"><h3>' + o.nadpis + '</h3><b>' + o.jed(o.ted) + '</b></div>'
+    + '<p class="graf-zmena ' + (!o.zmena ? 'muted' : (lepsi ? 'ok' : 'err')) + '">' + zm + '</p>'
+    + grafSvg(o.body, o.barva, !!o.schody, o.mezniky)
+    + '<p class="fine" style="margin:7px 0 0">' + o.pod + '</p></div>';
+}
+// Přepnutí mezi „Moje síť“, „Vývoj“ a „Žebříček“ — volá se i z odkazu pod dlaždicemi.
+function netZalozka(kam) {
+  [].forEach.call(document.querySelectorAll('[data-net]'), function (x) {
+    x.classList.toggle('on', x.getAttribute('data-net') === kam);
+  });
+  $('net-moje').classList.toggle('hidden', kam !== 'moje');
+  $('net-vyvoj').classList.toggle('hidden', kam !== 'vyvoj');
+  $('net-zebricek').classList.toggle('hidden', kam !== 'zebricek');
+  if (kam === 'zebricek') { ZEB = null; paintZeb(); }
+  else if (kam === 'vyvoj') paintVyvoj();
+  else paintNet();
+}
+function paintVyvoj() {
+  var el = $('net-vyvoj-body');
+  if (!el) return;
+  var h = (S.hist || []).slice();
+  if (h.length < 2) {
+    el.innerHTML = '<div class="empty">Na graf je ještě brzo.<br>'
+      + 'Bod přibývá každý herní měsíc, to je dvakrát za den.</div>';
+    return;
+  }
+  // Na telefon se pár set bodů nevejde — delší historii prořídíme, tvar zůstane.
+  if (h.length > 120) {
+    var krok = Math.ceil(h.length / 120), r = [];
+    for (var i = 0; i < h.length; i += krok) r.push(h[i]);
+    if (r[r.length - 1] !== h[h.length - 1]) r.push(h[h.length - 1]);
+    h = r;
+  }
+  var vzit = function (k) { return h.map(function (x) { return Math.round(Number(x[k]) || 0); }); };
+  var prvni = h[0], posl = h[h.length - 1];
+  var kus = function (v) { return v.toLocaleString('cs-CZ') + '×'; };
+  var mez = [];
+  h.forEach(function (x, i) { if (i && x.m % 12 === 0) mez.push(i); });
+  el.innerHTML =
+      grafKarta({ nadpis: 'Tržby prádlomatů', body: vzit('t'), barva: '#4fd1ff', jed: kcFull,
+        ted: posl.t, zmena: posl.t - prvni.t,
+        pod: 'Co prádlomaty za měsíc vyberou, než se z toho cokoli zaplatí.', mezniky: mez })
+    + grafKarta({ nadpis: 'Zisk před splátkou', body: vzit('z'), barva: '#2fe3a0', jed: kcFull,
+        ted: posl.z, zmena: posl.z - prvni.z,
+        pod: 'Tržby minus energie, servis a nájmy. Splátky bance v tom ještě nejsou.', mezniky: mez })
+    + grafKarta({ nadpis: 'Závazky bance', body: vzit('d'), barva: '#ff5d6c', jed: kcFull,
+        ted: posl.d, zmena: posl.d - prvni.d, dobreNahoru: false,
+        pod: 'Kolik ještě zbývá splatit. Měsíčně na to teď jde ' + kcFull(posl.s) + '.', mezniky: mez })
+    + grafKarta({ nadpis: 'Prádlomaty', body: vzit('p'), barva: '#7c5cff', jed: kus, schody: true,
+        ted: posl.p, zmena: posl.p - prvni.p,
+        pod: 'Kolik jich v síti stálo.', mezniky: mez })
+    + '<p class="fine" style="margin:4px 2px 0">Jeden bod je jeden herní měsíc, tedy 12 hodin. '
+    + 'Graf začíná v herním roce ' + (Math.floor(prvni.m / 12) + 1) + '.'
+    + (h.some(function (x) { return x.r; })
+        ? ' Část před dneškem je dopočítaná ze staveb a úvěrů, které máš — úvěry, '
+          + 'co už máš splacené, v ní nejsou, takže dluh vzadu vychází níž.'
+        : '')
+    + '</p>';
 }
 // ─── Žebříčky ────────────────────────────────────────────────────────────────
 var ZEB = null, ZEB_KAT = 'pradlomaty';
@@ -2477,6 +2662,9 @@ function paintNet() {
         + ', umazává dluh, takže se ti o to zvyšuje majetek. „Zbyde měsíčně“ je to samé číslo, co svítí nahoře v hlavičce.'
       : 'Nikomu nic nesplácíš, takže ti zůstává celý zisk prádlomatů.';
   }
+  // Odkaz na grafy — čísla nahoře jsou dnešní stav, tohle je cesta k němu.
+  var vyv = $('net-do-vyvoje');
+  if (vyv) vyv.onclick = function () { netZalozka('vyvoj'); };
   if (!S.units.length) {
     $('net-list').innerHTML = zakladnyHtml() + cetaHtml()
       + '<div class="empty">Zatím nemáš ani jeden prádlomat.<br>Začni tím, že na mapě prozkoumáš oblast.</div>';
@@ -3719,13 +3907,7 @@ if ($('t-penize')) $('t-penize').onclick = function () { penizeSheet(); };
 $('burza-nova').onclick = novaNabidkaSheet;
 // Přepínače v záložce Síť: moje síť vs. žebříček a kategorie žebříčku.
 [].forEach.call(document.querySelectorAll('[data-net]'), function (b) {
-  b.onclick = function () {
-    var zeb = b.getAttribute('data-net') === 'zebricek';
-    [].forEach.call(document.querySelectorAll('[data-net]'), function (x) { x.classList.toggle('on', x === b); });
-    $('net-moje').classList.toggle('hidden', zeb);
-    $('net-zebricek').classList.toggle('hidden', !zeb);
-    if (zeb) { ZEB = null; paintZeb(); } else paintNet();
-  };
+  b.onclick = function () { netZalozka(b.getAttribute('data-net')); };
 });
 [].forEach.call(document.querySelectorAll('[data-zeb]'), function (b) {
   b.onclick = function () {

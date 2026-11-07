@@ -146,12 +146,17 @@
     <section id="v-net" class="view hidden">
       <div class="seg">
         <button class="on" data-net="moje">Moje síť</button>
+        <button data-net="vyvoj">Vývoj</button>
         <button data-net="zebricek">Žebříček</button>
       </div>
       <div id="net-moje">
         <div id="net-sum" class="sum-grid"></div>
-        <p class="fine" id="net-note" style="margin:-8px 0 14px"></p>
+        <p class="fine" id="net-note" style="margin:-8px 0 8px"></p>
+        <button class="odkaz" id="net-do-vyvoje">Jak si vedu od začátku →</button>
         <div id="net-list"></div>
+      </div>
+      <div id="net-vyvoj" class="hidden">
+        <div id="net-vyvoj-body"></div>
       </div>
       <div id="net-zebricek" class="hidden">
         <div class="seg sub">
