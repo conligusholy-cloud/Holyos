@@ -1402,7 +1402,8 @@ function supporterVyberyGate(s, { u = {}, positions = [], fields = [], err = '' 
   <div class="card" style="max-width:640px;border-color:#f59e0b">
     <div style="font-size:18px;font-weight:800;margin-bottom:6px">⏳ Údaje kontrolujeme</div>
     <p style="margin:0 0 8px">Děkujeme za vyplnění. Některé hodnoty se neshodují s údaji, které máme ze starého systému, proto je teď ručně zkontrolujeme.</p>
-    <p class="small muted" style="margin:0">Jakmile kontrolu dokončíme, výběry se vám odemknou. Nemusíte nic dalšího dělat.</p>
+    <p style="margin:0 0 6px"><b>Kontrolu dokončíme nejpozději do 1 pracovního dne.</b></p>
+    <p class="small muted" style="margin:0">Jakmile ji dokončíme, výběry se vám odemknou. Nemusíte nic dalšího dělat.</p>
   </div>` : `
   <div class="card" style="max-width:640px">
     <div style="font-size:18px;font-weight:800;margin-bottom:10px">Než požádáte o první výběr</div>
