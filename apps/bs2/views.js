@@ -1812,7 +1812,7 @@ function adminVyberyPayouts({ verified = [], booked = 0, vyr = { pct: 30, rate: 
   ${tab === 'vyplata' ? (() => { const cs = (r) => (r.std_mixed === 'true' ? 'SMÍŠENÉ' : r.std_currency === 'EUR' ? 'EUR' : 'CZK'); const cur = (r) => (r.std_currency === 'EUR' ? '€' : 'Kč');
     const num = (v, r) => (v != null && v !== '' && isFinite(Number(v)) ? Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' ' + cur(r) : '—');
     const vb = verified.map((r) => `<tr><td data-l="Uživatel" class="nm"><b>${nm(r)}</b><div class="small muted">${esc(r.email)}</div></td>
-      <td data-l="Ověření">${r.mig_status === 'ok' ? '<span class="badge active" title="Vyplněné údaje se shodují se systémem">✓ shoda se systémem</span>' : '<span class="badge active" title="' + esc('Ověřil ' + (r.mig_reviewed_by || '—')) + '">✓ ověřeno ručně</span>'}</td>
+      <td data-l="Ověření">${r.mig_status === 'ok' ? '<span class="badge active" style="white-space:nowrap" title="Vyplněné údaje se shodují se systémem">✓ shoda</span>' : '<span class="badge active" style="white-space:nowrap" title="' + esc('Ověřeno ručně · ' + (r.mig_reviewed_by || '—')) + '">✓ ručně</span>'}</td>
       <td data-l="Pozice">${(r.legacy_position || r.mig_position) ? posBadge(r.legacy_position || r.mig_position) : '—'}</td>
       <td data-l="Měna účtu"><span class="badge ${cs(r) === 'EUR' ? 'invited' : 'active'}">${cs(r)}</span></td>
       <td data-l="ST podpora"><b style="white-space:nowrap">${num(r.std_total, r)}</b></td>
