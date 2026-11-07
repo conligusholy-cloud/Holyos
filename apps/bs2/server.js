@@ -2292,6 +2292,36 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res, next) => {
   }
   res.send(V.adminVyberyPayouts({ period, periodRow, admin: req.admin, tab, rows, month, curM, sums, olderPending, pendingCount, msg: String(req.query.msg || '').slice(0, 200), holyosUrl: HOLYOS_URL }));
 }));
+// Ruční hodnoty ST/EX u účtu (přežijí nové načtení z portálu) + označení „skontrolováno“
+app.post('/admin/vybery/override/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
+  const b = req.body || {}; const id = Number(req.params.id);
+  const sp = (await q(`SELECT id,email,partner_support AS p FROM supporters WHERE id=$1`, [id])).rows[0];
+  if (!sp) return res.status(404).json({ ok: false, error: 'Uživatel nenalezen' });
+  const who = String((req.admin && (req.admin.email || req.admin.name || req.admin.username)) || 'admin').slice(0, 80);
+  const num = (v) => { if (v == null || v === '') return null; const x = Number(String(v).replace(/\s/g, '').replace(',', '.')); return isFinite(x) ? Math.round(x * 100) / 100 : null; };
+  if (b.clear) {
+    await q(`UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) - 'ov_ex' - 'ov_st' - 'ov_cur' - 'ov_rate' - 'ov_by' - 'ov_at' WHERE id=$1`, [id]);
+    let reread = false;
+    try { const r = await LEGACY.fetchLegacyStandard(sp.email); if (r.ok) { await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [id, JSON.stringify({ ...r.data, ex_v: 8, ex_checked_at: new Date().toISOString() })]); reread = true; } } catch (e) { /* bez znovunačtení */ }
+    await log(req.admin, 'vybery_override_clear', { id, reread });
+    return res.json({ ok: true, reread });
+  }
+  const patch = {};
+  if (b.ex != null || b.st != null) {
+    const ex = num(b.ex), st = num(b.st);
+    if (ex == null || st == null || ex < 0 || st < 0) return res.status(400).json({ ok: false, error: 'Zadejte EX i ST podporu (čísla).' });
+    const cur = b.cur === 'EUR' ? 'EUR' : 'CZK';
+    let rate = null;
+    if (cur === 'EUR') { rate = Number(sp.p && sp.p.std_eur_rate) || null; if (!rate) { try { rate = (await LEGACY.cnbEurRate()).rate; } catch (e) { /* níž */ } } if (!rate) return res.status(400).json({ ok: false, error: 'Kurz ČNB není dostupný, zkuste to za chvíli.' }); }
+    Object.assign(patch, { ov_ex: ex, ov_st: st, ov_cur: cur, ov_rate: rate, ov_by: who, ov_at: new Date().toISOString() });
+  }
+  if (b.checked !== undefined) { patch.man_checked = b.checked ? 'true' : 'false'; if (b.checked) { patch.man_checked_at = new Date().toISOString(); patch.man_checked_by = who; } }
+  if (b.note !== undefined) patch.man_note = String(b.note || '').slice(0, 300);
+  if (!Object.keys(patch).length) return res.json({ ok: true });
+  await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [id, JSON.stringify(patch)]);
+  await log(req.admin, 'vybery_override', { id, ov: patch.ov_st != null, checked: patch.man_checked || null });
+  res.json({ ok: true });
+}));
 app.post('/admin/vybery/period', requireAdmin, wrap(async (req, res) => {
   const period = String(req.body.period || '');
   const avg = Number(String(req.body.avg_visits || '').replace(/\s/g, '').replace(',', '.'));
@@ -2338,6 +2368,8 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   if (onlyBad) where.push(`partner_support->'std_check'->>'ok' = 'false'`);
   const onlyCur = req.query.c === '1';
   if (onlyCur) where.push(`partner_support->>'std_cur_mismatch' = 'true'`);
+  const onlyUnchk = req.query.u === '1';
+  if (onlyUnchk) where.push(`coalesce(partner_support->>'man_checked','false') <> 'true'`);
   const onlyEur = req.query.e === '1';
   if (onlyEur) where.push(`(partner_support->>'std_currency' = 'EUR' OR partner_support->>'currency' = 'EUR' OR partner_support->>'std_mixed' = 'true' OR partner_support->>'std_cur_mismatch' = 'true')`);
   if (qs) { params.push('%' + qs.toLowerCase() + '%'); where.push(`(lower(email) LIKE $1 OR lower(coalesce(first_name,'')) LIKE $1 OR lower(coalesce(last_name,'')) LIKE $1 OR lower(coalesce(nick,'')) LIKE $1)`); }
@@ -2345,7 +2377,7 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
     partner_support->>'position' AS legacy_position, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_rate' AS piv_rate, partner_support->>'piv_tier_visits' AS piv_tier_visits,
     partner_support->>'exp_invested' AS exp_invested, partner_support->>'exp_currency' AS exp_currency, partner_support->>'exp_rate' AS exp_rate, partner_support->>'exp_limit_from' AS exp_limit_from, partner_support->>'exp_eligible' AS exp_eligible,
     ${EX_CZK} AS ex_czk, partner_support->>'std_total_czk' AS std_total_czk,
-    partner_support->>'std_total' AS std_total, partner_support->>'std_currency' AS std_currency, partner_support->>'std_palety_all' AS std_palety_all, partner_support->>'std_opakovacky_all' AS std_opakovacky_all, partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->'std_check'->>'ok' AS std_check_ok, partner_support->'std_check'->>'bad' AS std_check_bad, partner_support->>'std_cur_mismatch' AS std_cur_mismatch, partner_support->>'std_cur_flags' AS std_cur_flags,
+    partner_support->>'std_total' AS std_total, partner_support->>'std_currency' AS std_currency, partner_support->>'std_palety_all' AS std_palety_all, partner_support->>'std_opakovacky_all' AS std_opakovacky_all, partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->'std_check'->>'ok' AS std_check_ok, partner_support->'std_check'->>'bad' AS std_check_bad, partner_support->>'std_cur_mismatch' AS std_cur_mismatch, partner_support->>'std_cur_flags' AS std_cur_flags, partner_support->>'ov_ex' AS ov_ex, partner_support->>'ov_st' AS ov_st, partner_support->>'ov_cur' AS ov_cur, partner_support->>'man_checked' AS man_checked, partner_support->>'man_checked_at' AS man_checked_at, partner_support->>'man_note' AS man_note,
     CASE WHEN ${EX_CZK} IS NOT NULL OR partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN coalesce(${EX_CZK},0) + coalesce(CASE WHEN partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total_czk')::numeric END,0) END AS exp_std_czk
     FROM supporters WHERE ${where.join(' AND ')} ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 10000`, params)).rows;
   // počty podle pozice (za celý filtr, ne jen za zobrazených 1000 řádků)
@@ -2358,9 +2390,11 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   try { fc = (await q(`SELECT count(*) FILTER (WHERE (coalesce(CASE WHEN partner_support->>'std_total' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total')::numeric END,0) > 0 OR coalesce(${EX_CZK},0) > 0))::int AS sup,
       count(*) FILTER (WHERE partner_support->'std_check'->>'ok' = 'false')::int AS bad,
       count(*) FILTER (WHERE (partner_support->>'std_currency' = 'EUR' OR partner_support->>'currency' = 'EUR' OR partner_support->>'std_mixed' = 'true' OR partner_support->>'std_cur_mismatch' = 'true'))::int AS eur,
-      count(*) FILTER (WHERE partner_support->>'std_cur_mismatch' = 'true')::int AS cur
+      count(*) FILTER (WHERE partner_support->>'std_cur_mismatch' = 'true')::int AS cur,
+      count(*) FILTER (WHERE coalesce(partner_support->>'man_checked','false') <> 'true')::int AS unchk,
+      count(*) FILTER (WHERE partner_support->>'man_checked' = 'true')::int AS chk
       FROM supporters WHERE status='active'`)).rows[0]; } catch (e) { /* jen info */ }
-  res.send(V.adminVybery({ fc, curN, onlyCur, onlyEur, pendingCount: req.vyberyPending || 0, badKinds, admin: req.admin, rows, qstr: qs, onlySup, onlyBad, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
+  res.send(V.adminVybery({ fc, onlyUnchk, curN, onlyCur, onlyEur, pendingCount: req.vyberyPending || 0, badKinds, admin: req.admin, rows, qstr: qs, onlySup, onlyBad, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
 }));
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
@@ -3128,9 +3162,10 @@ app.get('/admin/vybery.xlsx', requireAdmin, wrap(async (req, res) => {
   if (req.query.s === '1') where.push(`(coalesce(CASE WHEN partner_support->>'std_total' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total')::numeric END,0) > 0 OR coalesce(${EX_CZK},0) > 0)`);
   if (req.query.n === '1') where.push(`partner_support->'std_check'->>'ok' = 'false'`);
   if (req.query.c === '1') where.push(`partner_support->>'std_cur_mismatch' = 'true'`);
+  if (req.query.u === '1') where.push(`coalesce(partner_support->>'man_checked','false') <> 'true'`);
   if (req.query.e === '1') where.push(`(partner_support->>'std_currency' = 'EUR' OR partner_support->>'currency' = 'EUR' OR partner_support->>'std_mixed' = 'true' OR partner_support->>'std_cur_mismatch' = 'true')`);
   if (qs) { params.push('%' + qs.toLowerCase() + '%'); where.push(`(lower(email) LIKE $1 OR lower(coalesce(first_name,'')) LIKE $1 OR lower(coalesce(last_name,'')) LIKE $1 OR lower(coalesce(nick,'')) LIKE $1)`); }
-  const rows = (await q(`SELECT id,email,first_name,last_name,nick, partner_support->>'std_cur_mismatch' AS cur_mm, partner_support->'std_cur_flags' AS cur_flags,
+  const rows = (await q(`SELECT id,email,first_name,last_name,nick, partner_support->>'std_cur_mismatch' AS cur_mm, partner_support->'std_cur_flags' AS cur_flags, partner_support->>'ov_st' AS ov_st, partner_support->>'man_checked' AS man_checked, partner_support->>'man_checked_at' AS man_at, partner_support->>'man_note' AS man_note,
       partner_support->>'position' AS pos, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency,
       partner_support->>'std_currency' AS cur, partner_support->>'std_total' AS std_total, partner_support->>'std_total_czk' AS std_total_czk,
       partner_support->>'std_palety_all' AS palety, partner_support->>'std_opakovacky_all' AS opak, partner_support->>'std_expanze_all' AS expanze,
@@ -3144,12 +3179,12 @@ app.get('/admin/vybery.xlsx', requireAdmin, wrap(async (req, res) => {
       'Měna účtu': r.cur || 'CZK', 'Palety (měna účtu)': n(r.palety), 'Opakovačky (měna účtu)': n(r.opak), 'ST podpora (měna účtu)': n(r.std_total), 'Expanze / EX (měna účtu)': n(r.expanze),
       'ST podpora (Kč)': st, 'EX podpora (Kč)': ex, 'EX + ST podpora (Kč)': (st != null || ex != null) ? (st || 0) + (ex || 0) : null,
       'EX + ST podpora (EUR, jen účty v EUR)': r.cur === 'EUR' ? Math.round(((n(r.expanze) || 0) + (n(r.std_total) || 0)) * 100) / 100 : null,
-      'PIV vloženo': n(r.piv_total), 'Kontrola čtení': r.std_check_ok === 'true' ? 'sedí' : r.std_check_ok === 'false' ? 'NESEDÍ' : 'neověřeno', 'Detail nesouladu': bad, 'Nesoulad měn (řádky × Celkem)': r.cur_mm === 'true' ? 'ANO' : '', 'Detail měn': Array.isArray(r.cur_flags) ? r.cur_flags.map((f) => `${f.y} ${f.section}: řádky ${f.rows}, Celkem ${f.celkem}`).join(' | ') : '',
+      'PIV vloženo': n(r.piv_total), 'Kontrola čtení': r.std_check_ok === 'true' ? 'sedí' : r.std_check_ok === 'false' ? 'NESEDÍ' : 'neověřeno', 'Detail nesouladu': bad, 'Nesoulad měn (řádky × Celkem)': r.cur_mm === 'true' ? 'ANO' : '', 'Ruční hodnoty ST/EX': r.ov_st != null ? 'ANO' : '', 'Skontrolováno ručně': r.man_checked === 'true' ? 'ANO ' + (r.man_at ? new Date(r.man_at).toLocaleDateString('cs-CZ') : '') : '', 'Poznámka ke kontrole': r.man_note || '', 'Detail měn': Array.isArray(r.cur_flags) ? r.cur_flags.map((f) => `${f.y} ${f.section}: řádky ${f.rows}, Celkem ${f.celkem}`).join(' | ') : '',
       'Odkaz BS2': (process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz') + '/admin/supporters/' + r.id };
   });
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [4, 8, 18, 14, 16, 30, 8, 16, 16, 16, 16, 16, 16, 18, 20, 14, 14, 50, 18, 50, 42].map((w) => ({ wch: w }));
+  ws['!cols'] = [4, 8, 18, 14, 16, 30, 8, 16, 16, 16, 16, 16, 16, 18, 20, 14, 14, 50, 18, 50, 16, 18, 30, 42].map((w) => ({ wch: w }));
   ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: data.length, c: Object.keys(data[0] || { a: 1 }).length - 1 } }) };
   XLSX.utils.book_append_sheet(wb, ws, 'Výběry');
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });

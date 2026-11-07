@@ -136,6 +136,23 @@ async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS withdrawal_requests_status_idx ON withdrawal_requests (status, requested_at);
     CREATE INDEX IF NOT EXISTS withdrawal_requests_supporter_idx ON withdrawal_requests (supporter_id);
+    -- Ruční hodnoty ST/EX podpory (ov_ex, ov_st, ov_cur, ov_rate v partner_support): trigger je po každém uložení promítne do std_* polí,
+    -- takže je nepřepíše žádné další načtení ze starého portálu a všechny součty/exporty je používají.
+    CREATE OR REPLACE FUNCTION bs2_apply_support_override() RETURNS trigger AS $$
+    DECLARE p jsonb := NEW.partner_support; cur text; rate numeric; ex numeric; st numeric;
+    BEGIN
+      IF p IS NULL OR (p->>'ov_ex' IS NULL AND p->>'ov_st' IS NULL) THEN RETURN NEW; END IF;
+      cur := coalesce(p->>'ov_cur', p->>'std_currency', 'CZK');
+      rate := CASE WHEN cur = 'EUR' THEN coalesce(NULLIF(p->>'ov_rate','')::numeric, NULLIF(p->>'std_eur_rate','')::numeric, 1) ELSE 1 END;
+      p := p || jsonb_build_object('std_currency', cur, 'std_mixed', false);
+      IF p->>'ov_ex' IS NOT NULL THEN ex := (p->>'ov_ex')::numeric; p := p || jsonb_build_object('std_expanze_all', ex, 'std_expanze_czk', round(ex * rate, 2)); END IF;
+      IF p->>'ov_st' IS NOT NULL THEN st := (p->>'ov_st')::numeric; p := p || jsonb_build_object('std_total', st, 'std_total_czk', round(st * rate, 2)); END IF;
+      NEW.partner_support := p;
+      RETURN NEW;
+    END; $$ LANGUAGE plpgsql;
+    DROP TRIGGER IF EXISTS bs2_support_override_trg ON supporters;
+    CREATE TRIGGER bs2_support_override_trg BEFORE INSERT OR UPDATE OF partner_support ON supporters FOR EACH ROW EXECUTE FUNCTION bs2_apply_support_override();
+
     -- Výplata za měsíc: ručně zadané údaje za období (period = měsíc, za který se vyplácí, např. 2026-10 se vyplácí 7. 11. 2026)
     CREATE TABLE IF NOT EXISTS vybery_periods (
       period      TEXT PRIMARY KEY,
