@@ -121,7 +121,29 @@ module.exports = function mountVyrovnavaci(app, ctx) {
     res.redirect('/admin/vybery?tab=vyplata&msg=' + encodeURIComponent(`Vyrovnávací účty za ${period}: připsáno ${nCredit}×, zhodnocení ${nInt}×` + (skipped ? `, přeskočeno ${skipped} (nic k připsání nebo už zaúčtováno)` : '')));
   }));
 
-  return { DEFAULT_PCT, RATE_PA, pctOf, split, balances, detailHtml,
+  // Částka k výplatě pro uživatele (stránka /vybery): za minulý měsíc (vyplácí se v aktuálním),
+  // v měně účtu, už po rozdělení výplata / vyrovnávací účet; minus žádosti podané v aktuálním měsíci.
+  async function payoutFor(id) {
+    const per = (await q(`SELECT to_char((now() AT TIME ZONE 'Europe/Prague') - interval '1 month', 'YYYY-MM') AS p, to_char(now() AT TIME ZONE 'Europe/Prague','YYYY-MM') AS m`)).rows[0];
+    const u = (await q(`SELECT s.id, s.mig_position, s.payout_pct, partner_support->>'std_currency' AS std_currency, partner_support->>'std_total' AS std_total,
+      partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->>'exp_invested' AS exp_invested, partner_support->>'position' AS legacy_position
+      FROM supporters s WHERE s.id=$1`, [id])).rows[0];
+    if (!u) return null;
+    const cur = u.std_currency === 'EUR' ? 'EUR' : 'CZK';
+    const pr = (await q('SELECT avg_visits FROM vybery_periods WHERE period=$1', [per.p])).rows[0];
+    const bal = ((await balances([id])).get(id) || {})[cur] || 0;
+    const out = { period: per.p, month: per.m, cur, pct: pctOf(u), total: null, pay: null, toBalance: null, balance: bal, requested: 0, available: null };
+    if (!pr || pr.avg_visits == null) return out; // návštěvnost za měsíc ještě není zadaná
+    const p = V.provizeVyplaty(u, { period: per.p, avgVisits: Number(pr.avg_visits) });
+    const sp = split(p.total, out.pct);
+    out.total = p.total; out.pay = sp.pay; out.toBalance = sp.bal;
+    out.requested = r2((await q(`SELECT coalesce(sum(CASE WHEN status='paid' AND paid_amount IS NOT NULL THEN paid_amount ELSE amount END),0) AS s FROM withdrawal_requests
+      WHERE supporter_id=$1 AND status IN ('requested','paid') AND currency=$2 AND to_char(requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM')=$3`, [id, cur, per.m])).rows[0].s);
+    out.available = sp.pay == null ? null : Math.max(0, r2(sp.pay - out.requested));
+    return out;
+  }
+
+  return { DEFAULT_PCT, RATE_PA, pctOf, split, balances, detailHtml, payoutFor,
     async bookedPeriod(period) { return (await q("SELECT count(*)::int AS n FROM balance_entries WHERE period=$1 AND kind='credit'", [period])).rows[0].n; } };
 };
 module.exports.DEFAULT_PCT = DEFAULT_PCT;

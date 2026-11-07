@@ -1683,7 +1683,8 @@ app.get('/vybery', wrap(requireUser), wrap(async (req, res) => {
   if (!V.vyberyVisible(req.user)) return res.status(404).send(V.errorPage('Stránka nenalezena', 'Tato stránka neexistuje.', '/'));
   if (await VYB_CHECK.gate(req, res)) return; // nejdřív kontrola údajů ze starého portálu (vybery-check.js)
   const rows = (await q(`SELECT * FROM withdrawal_requests WHERE supporter_id=$1 ORDER BY id DESC LIMIT 100`, [req.user.id])).rows;
-  res.send(V.supporterVybery(req.user, { rows, msg: String(req.query.msg || '').slice(0, 200), err: String(req.query.err || '').slice(0, 200) }));
+  let payout = null; try { payout = await VYR.payoutFor(req.user.id); } catch (e) { console.warn('[bs2] payoutFor:', e.message); }
+  res.send(V.supporterVybery(req.user, { rows, payout, msg: String(req.query.msg || '').slice(0, 200), err: String(req.query.err || '').slice(0, 200) }));
 // Žádost o výběr (tester) — měna podle účtu: Kč u korunových, € u eurových
 app.post('/vybery/request', wrap(requireUser), wrap(async (req, res) => {
   if (!V.vyberyVisible(req.user)) return res.status(404).send(V.errorPage('Stránka nenalezena', 'Tato stránka neexistuje.', '/'));
@@ -1692,7 +1693,11 @@ app.post('/vybery/request', wrap(requireUser), wrap(async (req, res) => {
   if (!isFinite(amount) || amount <= 0 || amount > 10000000) return res.redirect('/vybery?err=' + encodeURIComponent('Zadejte platnou částku.'));
   const pending = (await q(`SELECT count(*)::int AS n FROM withdrawal_requests WHERE supporter_id=$1 AND status='requested'`, [req.user.id])).rows[0].n;
   if (pending >= 3) return res.redirect('/vybery?err=' + encodeURIComponent('Máte už 3 nevyřízené žádosti. Počkejte na jejich vyřízení.'));
-  const cur = req.user.currency === 'EUR' ? 'EUR' : 'CZK';
+  // Měna = měna účtu ze starého portálu; částka nejvýš to, co je k výplatě za minulý měsíc (krizový režim: jen podíl výplaty)
+  let po = null; try { po = await VYR.payoutFor(req.user.id); } catch (e) { /* bez limitu */ }
+  const cur = po ? po.cur : (req.user.currency === 'EUR' ? 'EUR' : 'CZK');
+  if (po && po.available != null && amount > po.available + 0.005) return res.redirect('/vybery?err=' + encodeURIComponent('Můžete požádat nejvýš o ' + po.available.toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + (cur === 'EUR' ? ' €' : ' Kč') + '.'));
+  if (po && po.available == null) return res.redirect('/vybery?err=' + encodeURIComponent('Částka k výplatě za ' + po.period + ' ještě není spočítaná. Zkuste to prosím později.'));
   await q(`INSERT INTO withdrawal_requests (supporter_id, amount, currency, note) VALUES ($1,$2,$3,$4)`, [req.user.id, amount, cur, String(req.body.note || '').trim().slice(0, 300) || null]);
   res.redirect('/vybery?msg=' + encodeURIComponent('Žádost o výběr byla odeslána.'));
 }));
