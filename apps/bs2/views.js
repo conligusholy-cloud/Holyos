@@ -1408,6 +1408,7 @@ function supporterVybery(s, { rows = [], payout = null, msg = '', err = '' } = {
       <div class="small muted" style="font-size:12px">Vyrovnávací účet — celkem</div>
       <div style="font-size:16px;font-weight:700;color:var(--muted);margin:2px 0">${money(payout.balance || 0, cur)}</div>
       <div class="small muted" style="font-size:11px">vč. zhodnocení 5,68 % p.a. ode dne převodu</div>
+      <div class="small" style="font-size:11px;margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);color:var(--muted)">ⓘ Závazek z minulých měsíců zatím není zpracovaný — doplníme ho na vyrovnávací účet dodatečně.</div>
     </div>
     <div class="card" style="padding:10px 14px;border-color:var(--border);background:transparent">
       <div class="small muted" style="font-size:12px">Jde na vyrovnávací účet${payout.period ? ' za ' + (['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'][Number(payout.period.split('-')[1]) - 1] + ' ' + payout.period.split('-')[0]) : ''}</div>
