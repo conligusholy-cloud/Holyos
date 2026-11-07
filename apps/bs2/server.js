@@ -2734,7 +2734,7 @@ app.post('/admin/supporters/:id(\\d+)/partner-expansion', requireAdmin, wrap(asy
 let STD_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, errors: [], started_at: null, finished_at: null };
 app.post('/admin/partner-support/standard/sync-all', requireAdmin, wrap(async (req, res) => {
   if (STD_JOB.running) return res.json(STD_JOB);
-  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'std_checked_at' IS NULL OR coalesce(partner_support->>'std_v','1') <> '5' OR (partner_support->>'std_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
+  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'std_checked_at' IS NULL OR coalesce(partner_support->>'std_v','1') <> '6' OR (partner_support->>'std_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
   STD_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
   await log(req.admin, 'partner_standard_sync_all', { total: rows.length });
   res.json(STD_JOB);
@@ -2768,7 +2768,7 @@ app.get('/admin/partner-support/standard/sync-all', requireAdmin, wrap(async (re
 let EXN_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, errors: [], started_at: null, finished_at: null };
 app.post('/admin/partner-support/expanze/sync-all', requireAdmin, wrap(async (req, res) => {
   if (EXN_JOB.running) return res.json(EXN_JOB);
-  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'ex_checked_at' IS NULL OR coalesce(partner_support->>'ex_v','1') <> '5' OR (partner_support->>'ex_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
+  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'ex_checked_at' IS NULL OR coalesce(partner_support->>'ex_v','1') <> '6' OR (partner_support->>'ex_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
   EXN_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
   await log(req.admin, 'partner_expanze_sync_all', { total: rows.length });
   res.json(EXN_JOB);
@@ -2781,7 +2781,7 @@ app.post('/admin/partner-support/expanze/sync-all', requireAdmin, wrap(async (re
         const s = queue.shift();
         try {
           const r = await LEGACY.fetchLegacyStandard(s.email);
-          if (r.ok) { await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify({ ...r.data, ex_v: 5, ex_checked_at: new Date().toISOString() })]); EXN_JOB.ok++; }
+          if (r.ok) { await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify({ ...r.data, ex_v: 6, ex_checked_at: new Date().toISOString() })]); EXN_JOB.ok++; }
           else { EXN_JOB.failed++; if (EXN_JOB.errors.length < 50) EXN_JOB.errors.push((s.nick || s.email) + ': ' + r.error); }
         } catch (e) { EXN_JOB.failed++; if (EXN_JOB.errors.length < 50) EXN_JOB.errors.push((s.nick || s.email) + ': ' + e.message); }
         EXN_JOB.done++; EXN_JOB.last = s.nick || s.email;
