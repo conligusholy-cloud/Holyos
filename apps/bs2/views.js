@@ -1982,10 +1982,17 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
     .colpick-i{display:flex;align-items:center;gap:8px;font-size:14px;margin:0;padding:5px 0;color:var(--text);cursor:pointer} .colpick-i input{width:auto;margin:0}
     .colpick-scroll{max-height:40vh;overflow:auto;padding-right:4px}
     #sup-top{position:sticky;top:var(--hh,52px);z-index:6;background:var(--bg);padding-top:14px;margin-top:-14px}
+    #sup-top.tools-off > .row:first-child > :not(h1):not(.tools-tg){display:none!important}
+    #sup-top.tools-off .sup-stats{display:none!important}
+    .tools-tg{margin-left:10px}
   </style>
-  <div id="sup-top">
+  <div id="sup-top" class="tools-off">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
       <h1 style="margin:0">Uživatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
+      <button type="button" class="btn sec sm tools-tg" id="tools-tg" title="Zobrazit / schovat nástroje (načítání podpory, přenos dat, import, souhrny)">⚙ Nástroje ▸</button>
+      <script>(function(){ var t=document.getElementById('sup-top'), b=document.getElementById('tools-tg'); var on=false; try{ on=localStorage.getItem('bs2_sup_tools')==='1'; }catch(e){}
+        function set(v){ on=v; t.classList.toggle('tools-off',!v); b.textContent=v?'⚙ Nástroje ▾':'⚙ Nástroje ▸'; try{ localStorage.setItem('bs2_sup_tools',v?'1':'0'); }catch(e){} }
+        set(on); b.onclick=function(){ set(!on); }; })();<\/script>
       <button type="button" class="btn sec sm" id="ps-sync-all" title="U všech uživatelů s nenulovým obratem načte podporu ze starého portálu (palety, expanze, NeuraWash, opakovačky, celkem) do detailu">🔄 Načíst podporu (obrat ≠ 0)</button><a class="btn sec sm" href="/admin/partner-support" title="Načtená podpora všech uživatelů — ruční kontrola, průběh načítání, eurové účty">📋 Kontrola podpory</a><a class="btn sec sm" href="/admin/partner-support/export.xlsx" title="Všichni uživatelé s nenulovou podporou do Excelu">⬇ Excel</a><span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px solid var(--primary,#3b82f6);border-radius:10px;padding:4px 8px"><button type="button" class="btn sm" id="lg-all" title="U všech uživatelů načte ze starého portálu VŠECHNA data (všechny stránky menu, podpora po letech, PIV, VIP, úroky, provize, obraty, síť, kiosky, opakovačky, objednávky, wallet, podíly, výběry, laundry, profil). Běží na pozadí.">🗄 Přenést všechna data</button><label class="small" style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" id="lg-all-zero" style="width:auto;margin:0"> i s nulovým obratem</label><label class="small" style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" id="lg-all-force" style="width:auto;margin:0"> znovu i načtené</label><span id="lg-all-st" class="small muted"></span></span>
       <script>
         (function(){ var b=document.getElementById('lg-all'), st=document.getElementById('lg-all-st'); if(!b) return;
@@ -2071,7 +2078,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
       <div class="row"><a class="btn" href="/admin/import">${ico('upload', 17)} Import CSV / Excel</a><a class="btn sec" href="/admin/supporters/new">+ Přidat ručně</a>${picker}</div>
     </div>
     ${supportStats ? (() => { const st = supportStats, n0 = (v) => Math.round(Number(v) || 0).toLocaleString('cs-CZ'); const box = (lbl, val, sub, hl) => `<div class="card" style="flex:1;min-width:170px;padding:10px 14px;margin:0${hl ? ';border-color:var(--primary,#3b82f6)' : ''}"><div class="small muted">${lbl}</div><div style="font-size:20px;font-weight:800;white-space:nowrap">${val}</div><div class="small muted">${sub}</div></div>`;
-      return `<div class="row" style="gap:10px;margin:10px 0 4px;flex-wrap:wrap">
+      return `<div class="row sup-stats" style="gap:10px;margin:10px 0 4px;flex-wrap:wrap">
         ${box('ST podpora celkem', n0(st.std_czk) + ' Kč', 'palety + opakovačky + balíčky, všechny roky · ' + n0(st.es_n) + ' účtů')}
         ${box('EX podpora celkem', n0(st.exp_czk) + ' Kč', 'expanze, všechny roky · ' + n0(st.es_n) + ' účtů', true)}
       </div>`; })() : ''}
