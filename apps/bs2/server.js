@@ -1681,11 +1681,13 @@ app.get('/moje-pradlomaty/doklad/:id(\\d+)/pdf', wrap(requireUser), wrap(async (
 }));
 app.get('/vybery', wrap(requireUser), wrap(async (req, res) => {
   if (!V.vyberyVisible(req.user)) return res.status(404).send(V.errorPage('Stránka nenalezena', 'Tato stránka neexistuje.', '/'));
+  if (await VYB_CHECK.gate(req, res)) return; // nejdřív kontrola údajů ze starého portálu (vybery-check.js)
   const rows = (await q(`SELECT * FROM withdrawal_requests WHERE supporter_id=$1 ORDER BY id DESC LIMIT 100`, [req.user.id])).rows;
   res.send(V.supporterVybery(req.user, { rows, msg: String(req.query.msg || '').slice(0, 200), err: String(req.query.err || '').slice(0, 200) }));
 // Žádost o výběr (tester) — měna podle účtu: Kč u korunových, € u eurových
 app.post('/vybery/request', wrap(requireUser), wrap(async (req, res) => {
   if (!V.vyberyVisible(req.user)) return res.status(404).send(V.errorPage('Stránka nenalezena', 'Tato stránka neexistuje.', '/'));
+  if (!(await VYB_CHECK.allowed(req.user.id))) return res.redirect('/vybery');
   const amount = Math.round(Number(String(req.body.amount || '').replace(/\s/g, '').replace(',', '.')) * 100) / 100;
   if (!isFinite(amount) || amount <= 0 || amount > 10000000) return res.redirect('/vybery?err=' + encodeURIComponent('Zadejte platnou částku.'));
   const pending = (await q(`SELECT count(*)::int AS n FROM withdrawal_requests WHERE supporter_id=$1 AND status='requested'`, [req.user.id])).rows[0].n;
@@ -2217,6 +2219,8 @@ app.get('/admin/podpora/poll', requireAdmin, wrap(async (req, res) => {
   res.set('Cache-Control', 'no-store').json({ unread, msgs });
 }));
 
+// ── Výběry: kontrola údajů ze starého portálu před prvním výběrem ──
+const VYB_CHECK = require('./vybery-check')(app, { q, wrap, requireUser, requireAdmin, V, log, notifyVelin });
 // ── Rozesílky (hromadné e-maily přes Amazon SES) + odhlášení z rozesílek ──
 require('./mailing')(app, { q, requireAdmin, wrap, V, PUBLIC_URL, HOLYOS_URL, SSO_SECRET, log, upload, esc: (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) });
 
@@ -2300,7 +2304,7 @@ app.post('/admin/vybery/override/:id(\\d+)', requireAdmin, wrap(async (req, res)
   const who = String((req.admin && (req.admin.email || req.admin.name || req.admin.username)) || 'admin').slice(0, 80);
   const num = (v) => { if (v == null || v === '') return null; const x = Number(String(v).replace(/\s/g, '').replace(',', '.')); return isFinite(x) ? Math.round(x * 100) / 100 : null; };
   if (b.clear) {
-    await q(`UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) - 'ov_ex' - 'ov_st' - 'ov_cur' - 'ov_rate' - 'ov_by' - 'ov_at' WHERE id=$1`, [id]);
+    await q(`UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) - 'ov_ex' - 'ov_st' - 'ov_cur' - 'ov_rate' - 'ov_by' - 'ov_at' - 'ov_pos' WHERE id=$1`, [id]);
     let reread = false;
     try { const r = await LEGACY.fetchLegacyStandard(sp.email); if (r.ok) { await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [id, JSON.stringify({ ...r.data, ex_v: 8, ex_checked_at: new Date().toISOString() })]); reread = true; } } catch (e) { /* bez znovunačtení */ }
     await log(req.admin, 'vybery_override_clear', { id, reread });
@@ -2314,6 +2318,12 @@ app.post('/admin/vybery/override/:id(\\d+)', requireAdmin, wrap(async (req, res)
     let rate = null;
     if (cur === 'EUR') { rate = Number(sp.p && sp.p.std_eur_rate) || null; if (!rate) { try { rate = (await LEGACY.cnbEurRate()).rate; } catch (e) { /* níž */ } } if (!rate) return res.status(400).json({ ok: false, error: 'Kurz ČNB není dostupný, zkuste to za chvíli.' }); }
     Object.assign(patch, { ov_ex: ex, ov_st: st, ov_cur: cur, ov_rate: rate, ov_by: who, ov_at: new Date().toISOString() });
+  }
+  if (b.pos !== undefined) {
+    const P = String(b.pos || '').trim();
+    if (P && !['Partner', 'VIP', 'VIP 2'].includes(P)) return res.status(400).json({ ok: false, error: 'Neplatná pozice.' });
+    if (P) { patch.ov_pos = P; patch.position = P; }
+    else { await q(`UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) - 'ov_pos' WHERE id=$1`, [id]); if (!Object.keys(patch).length && b.checked === undefined && b.note === undefined) return res.json({ ok: true }); }
   }
   if (b.checked !== undefined) { patch.man_checked = b.checked ? 'true' : 'false'; if (b.checked) { patch.man_checked_at = new Date().toISOString(); patch.man_checked_by = who; } }
   if (b.note !== undefined) patch.man_note = String(b.note || '').slice(0, 300);
@@ -2370,11 +2380,13 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   if (onlyCur) where.push(`partner_support->>'std_cur_mismatch' = 'true'`);
   const onlyUnchk = req.query.u === '1';
   if (onlyUnchk) where.push(`coalesce(partner_support->>'man_checked','false') <> 'true'`);
+  const onlyMig = req.query.mig === '1';
+  if (onlyMig) where.push(`mig_status = 'mismatch'`);
   const onlyEur = req.query.e === '1';
   if (onlyEur) where.push(`(partner_support->>'std_currency' = 'EUR' OR partner_support->>'currency' = 'EUR' OR partner_support->>'std_mixed' = 'true' OR partner_support->>'std_cur_mismatch' = 'true')`);
   if (qs) { params.push('%' + qs.toLowerCase() + '%'); where.push(`(lower(email) LIKE $1 OR lower(coalesce(first_name,'')) LIKE $1 OR lower(coalesce(last_name,'')) LIKE $1 OR lower(coalesce(nick,'')) LIKE $1)`); }
-  const rows = (await q(`SELECT id,email,first_name,last_name,nick,
-    partner_support->>'position' AS legacy_position, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_rate' AS piv_rate, partner_support->>'piv_tier_visits' AS piv_tier_visits,
+  const rows = (await q(`SELECT id,email,first_name,last_name,nick,mig_status,mig_diff,mig_at,
+    partner_support->>'position' AS legacy_position, partner_support->>'ov_pos' AS ov_pos, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_rate' AS piv_rate, partner_support->>'piv_tier_visits' AS piv_tier_visits,
     partner_support->>'exp_invested' AS exp_invested, partner_support->>'exp_currency' AS exp_currency, partner_support->>'exp_rate' AS exp_rate, partner_support->>'exp_limit_from' AS exp_limit_from, partner_support->>'exp_eligible' AS exp_eligible,
     ${EX_CZK} AS ex_czk, partner_support->>'std_total_czk' AS std_total_czk,
     partner_support->>'std_total' AS std_total, partner_support->>'std_currency' AS std_currency, partner_support->>'std_palety_all' AS std_palety_all, partner_support->>'std_opakovacky_all' AS std_opakovacky_all, partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->'std_check'->>'ok' AS std_check_ok, partner_support->'std_check'->>'bad' AS std_check_bad, partner_support->>'std_cur_mismatch' AS std_cur_mismatch, partner_support->>'std_cur_flags' AS std_cur_flags, partner_support->>'ov_ex' AS ov_ex, partner_support->>'ov_st' AS ov_st, partner_support->>'ov_cur' AS ov_cur, partner_support->>'man_checked' AS man_checked, partner_support->>'man_checked_at' AS man_checked_at, partner_support->>'man_note' AS man_note,

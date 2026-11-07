@@ -141,7 +141,9 @@ async function migrate() {
     CREATE OR REPLACE FUNCTION bs2_apply_support_override() RETURNS trigger AS $$
     DECLARE p jsonb := NEW.partner_support; cur text; rate numeric; ex numeric; st numeric;
     BEGIN
-      IF p IS NULL OR (p->>'ov_ex' IS NULL AND p->>'ov_st' IS NULL) THEN RETURN NEW; END IF;
+      IF p IS NULL OR (p->>'ov_ex' IS NULL AND p->>'ov_st' IS NULL AND p->>'ov_pos' IS NULL) THEN RETURN NEW; END IF;
+      IF p->>'ov_pos' IS NOT NULL THEN p := p || jsonb_build_object('position', p->>'ov_pos'); END IF;
+      IF p->>'ov_ex' IS NULL AND p->>'ov_st' IS NULL THEN NEW.partner_support := p; RETURN NEW; END IF;
       cur := coalesce(p->>'ov_cur', p->>'std_currency', 'CZK');
       rate := CASE WHEN cur = 'EUR' THEN coalesce(NULLIF(p->>'ov_rate','')::numeric, NULLIF(p->>'std_eur_rate','')::numeric, 1) ELSE 1 END;
       p := p || jsonb_build_object('std_currency', cur, 'std_mixed', false);
@@ -442,6 +444,19 @@ async function migrate() {
       filename TEXT NOT NULL, content_type TEXT, size INT NOT NULL DEFAULT 0, data BYTEA NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS mail_campaign_files_c_idx ON mail_campaign_files (campaign_id);
+    -- Kontrola údajů před prvním výběrem: co uživatel opsal ze starého portálu + výsledek porovnání
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_palety_czk NUMERIC(14,2);
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_palety_eur NUMERIC(14,2);
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_expanze_czk NUMERIC(14,2);
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_expanze_eur NUMERIC(14,2);
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_balicky_czk NUMERIC(14,2);
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_balicky_eur NUMERIC(14,2);
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_position TEXT;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_at TIMESTAMPTZ;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_status TEXT; -- ok | mismatch | reviewed (NULL = nevyplněno)
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_diff JSONB;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_reviewed_by TEXT;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_reviewed_at TIMESTAMPTZ;
   `);
 }
 

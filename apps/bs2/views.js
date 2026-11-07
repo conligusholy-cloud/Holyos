@@ -1394,6 +1394,31 @@ function supporterVybery(s, { rows = [], msg = '', err = '' } = {}) {
   <h3 style="margin:20px 0 8px">Moje žádosti</h3>
   <div class="card tbl-wrap">${hist}</div>` });
 }
+// Výběry — kontrola údajů před prvním výběrem (formulář / čeká na ruční kontrolu)
+function supporterVyberyGate(s, { u = {}, positions = [], fields = [], err = '' } = {}) {
+  const waiting = u.mig_status === 'mismatch';
+  const v = (k) => (u[k] != null && Number(u[k]) ? String(Number(u[k])) : '');
+  const body = waiting ? `
+  <div class="card" style="max-width:640px;border-color:#f59e0b">
+    <div style="font-size:18px;font-weight:800;margin-bottom:6px">⏳ Údaje kontrolujeme</div>
+    <p style="margin:0 0 8px">Děkujeme za vyplnění. Některé hodnoty se neshodují s údaji, které máme ze starého systému, proto je teď ručně zkontrolujeme.</p>
+    <p class="small muted" style="margin:0">Jakmile kontrolu dokončíme, výběry se vám odemknou. Nemusíte nic dalšího dělat.</p>
+  </div>` : `
+  <div class="card" style="max-width:640px">
+    <div style="font-size:18px;font-weight:800;margin-bottom:6px">Než požádáte o první výběr</div>
+    <p style="margin:0 0 6px">V rámci převodu ze starého systému si prosím otevřete <b>starý partnerský portál</b> a opište z něj tyto údaje. Slouží jen ke kontrole, že je máme převedené správně.</p>
+    <p class="small muted" style="margin:0 0 12px">Částky zadávejte celkem za všechny roky. Pokud danou položku v Kč nebo v EUR nemáte, nechte pole prázdné.</p>
+    ${err ? `<div class="msg err">${esc(err)}</div>` : ''}
+    <form method="post" action="/vybery/kontrola">
+      ${fields.map(([k, label]) => `<div style="margin-top:12px"><b>${esc(label)}</b><div class="row" style="gap:10px;margin-top:4px"><label style="flex:1;margin:0">v Kč<input name="${k}_czk" inputmode="decimal" placeholder="0" value="${esc(v('mig_' + k + '_czk'))}"></label><label style="flex:1;margin:0">v EUR<input name="${k}_eur" inputmode="decimal" placeholder="0" value="${esc(v('mig_' + k + '_eur'))}"></label></div></div>`).join('')}
+      <div style="margin-top:14px"><b>Moje pozice ve starém portálu</b><div class="row" style="gap:8px;margin-top:6px;flex-wrap:wrap">${positions.map((p) => `<label style="display:inline-flex;align-items:center;gap:6px;margin:0;padding:8px 12px;border:1px solid var(--border2);border-radius:10px;cursor:pointer"><input type="radio" name="position" value="${esc(p)}" style="width:auto;margin:0"${u.mig_position === p ? ' checked' : ''} required> ${esc(p)}</label>`).join('')}</div></div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:14px"><input type="checkbox" name="confirm" value="1" required style="width:auto;margin:0"> Potvrzuji, že údaje odpovídají starému partnerskému portálu.</label>
+      <div style="height:12px"></div><button class="btn" type="submit">Odeslat ke kontrole</button>
+    </form>
+  </div>`;
+  return layout({ title: 'Výběry', user: s.nick, nav: userNav(s), active: 'vybery', help: null, body: `
+  <h2 style="display:flex;align-items:center;gap:8px;margin:22px 0 14px">${ico('wallet', 18)} Výběry</h2>${body}` });
+}
 function supporterMine(s, { rows = [], orders = [], msg = '' } = {}) {
   const sum = rows.reduce((acc, r) => acc + (r.price_czk == null ? 0 : Number(r.price_czk)), 0);
   const dt = (d) => (d ? new Date(d).toLocaleDateString('cs-CZ') : '—');
@@ -1543,12 +1568,15 @@ function adminDash({ admin, stats, recent, history = [], holyosUrl }) {
 const BASE_COLS_ALL = [
   { key: 'email', label: 'E-mail', render: (r) => `<a href="mailto:${esc(r.email)}">${esc(r.email)}</a>` },
   { key: 'nick', label: 'Nick', render: (r) => r.nick ? esc(r.nick) : '<span class="muted">—</span>' },
-  { key: 'legacy_position', label: 'Pozice', render: (r) => r.legacy_position ? posBadge(r.legacy_position) : '<span class="muted small">—</span>' },
+  { key: 'legacy_position', label: 'Pozice', render: (r) => r.legacy_position ? posBadge(r.legacy_position) + (r.ov_pos ? ' <span title="Ručně nastavená pozice" style="cursor:help">🔒</span>' : '') : '<span class="muted small">—</span>' },
   { key: 'piv', label: 'PIV vloženo', render: (r) => r.piv_total != null && Number(r.piv_total) > 0 ? `<span style="white-space:nowrap" title="${r.piv_rate ? 'Zvýhodněný úrok ' + esc(r.piv_rate) : ''}"><b>${Number(r.piv_total).toLocaleString('cs-CZ', { maximumFractionDigits: 0 })}</b> ${r.piv_currency === 'EUR' ? '€' : 'Kč'}${r.piv_rate ? ' <span class="small" style="color:#22c55e" title="Měsíční zhodnocení">' + esc(r.piv_rate) + '/měs.</span>' : ''}${r.piv_tier_visits ? ' <span class="muted small">od ø' + esc(r.piv_tier_visits) + '</span>' : ''}</span>` : (r.piv_total != null ? '<span class="muted small">0</span>' : '<span class="muted small">—</span>') },
   { key: 'expansion', label: 'Expanze', render: (r) => r.exp_invested != null ? `<span style="white-space:nowrap" title="${r.exp_limit_from ? 'Nárok od ø ' + esc(r.exp_limit_from) : ''}${r.exp_eligible === 'true' ? ' · tento měsíc má nárok' : r.exp_eligible === 'false' ? ' · tento měsíc nárok nemá' : ''}"><b>${Number(r.exp_invested).toLocaleString('cs-CZ', { maximumFractionDigits: 0 })}</b> ${r.exp_currency === 'EUR' ? '€' : 'Kč'}${r.exp_rate ? ' <span class="small" style="color:' + (r.exp_eligible === 'true' ? '#22c55e' : '#94a3b8') + '" title="Měsíční zhodnocení">' + esc(r.exp_rate) + '/měs.</span>' : ''}${r.exp_limit_from ? ' <span class="muted small">od ø' + esc(r.exp_limit_from) + '</span>' : ''}</span>` : '<span class="muted small">—</span>' },
   { key: 'standard', label: 'Standardní podpora', render: (r) => r.std_total != null ? `<span style="white-space:nowrap" title="Palety ${Number(r.std_palety_all || 0).toLocaleString('cs-CZ')} + opakovačky ${Number(r.std_opakovacky_all || 0).toLocaleString('cs-CZ')} (všechny roky)"><b>${Number(r.std_total).toLocaleString('cs-CZ', { maximumFractionDigits: 0 })}</b> ${r.std_currency === 'EUR' ? '€' : 'Kč'}</span>` : '<span class="muted small">—</span>' },
   { key: 'st_podpora', label: 'ST podpora', render: (r) => { const v = r.std_total != null ? Number(r.std_total) : null; return v != null && isFinite(v) ? `<span style="white-space:nowrap" title="ST podpora = palety ${Number(r.std_palety_all || 0).toLocaleString('cs-CZ')} + opakovačky ${Number(r.std_opakovacky_all || 0).toLocaleString('cs-CZ')}"><b>${v.toLocaleString('cs-CZ', { maximumFractionDigits: 0 })}</b> ${r.std_currency === 'EUR' ? '€' : 'Kč'}${r.ov_st != null ? ' <span title="Ručně zadaná hodnota" style="cursor:help">🔒</span>' : ''}</span>` : '<span class="muted small">—</span>'; } },
   { key: 'ex_podpora', label: 'EX podpora', render: (r) => { const raw = r.std_expanze_all != null ? r.std_expanze_all : r.exp_invested; const v = raw != null ? Number(raw) : null; return v != null && isFinite(v) ? `<span style="white-space:nowrap" title="EX podpora = expanze (součet všech let)${r.exp_limit_from ? ' · nárok od ø ' + esc(r.exp_limit_from) : ''}${r.exp_eligible === 'true' ? ' · tento měsíc má nárok' : r.exp_eligible === 'false' ? ' · tento měsíc nárok nemá' : ''}"><b>${v.toLocaleString('cs-CZ', { maximumFractionDigits: 0 })}</b> ${(r.std_expanze_all != null ? r.std_currency : r.exp_currency) === 'EUR' ? '€' : 'Kč'}${r.exp_rate ? ' <span class="small" style="color:' + (r.exp_eligible === 'true' ? '#22c55e' : '#94a3b8') + '" title="Měsíční zhodnocení">' + esc(r.exp_rate) + '/měs.</span>' : ''}${r.exp_limit_from ? ' <span class="muted small">od ø' + esc(r.exp_limit_from) + '</span>' : ''}${r.ov_ex != null ? ' <span title="Ručně zadaná hodnota" style="cursor:help">🔒</span>' : ''}</span>` : '<span class="muted small">—</span>'; } },
+  { key: 'mig_check', label: 'Kontrola údajů', render: (r) => { const t = (() => { try { const d = typeof r.mig_diff === 'string' ? JSON.parse(r.mig_diff) : r.mig_diff; return ((d && d.diffs) || []).map((x) => x.label ? x.label + ': uživatel ' + x.declared + ', systém ' + x.ours : (x.text || '')).join(' | '); } catch (e) { return ''; } })();
+    const b = r.mig_status === 'ok' ? '<span class="badge active">✓ shoda</span>' : r.mig_status === 'reviewed' ? '<span class="badge active">✓ ověřeno ručně</span>' : r.mig_status === 'mismatch' ? '<span class="badge blocked" title="' + esc(t) + '">⚠ nesedí</span>' : '<span class="muted small">nevyplněno</span>';
+    return r.mig_status ? '<a href="/admin/vybery/kontrola/' + r.id + '" style="text-decoration:none">' + b + '</a>' : b; } },
   { key: 'std_check', label: 'Kontrola čtení', render: (r) => {
     const curBadge = r.std_cur_mismatch === 'true' ? ` <span class="badge blocked" title="${esc((() => { try { return JSON.parse(r.std_cur_flags || '[]').map(f => f.y + ' ' + f.section + ': řádky ' + f.rows + ', Celkem ' + f.celkem).join(' | '); } catch (e) { return 'Měna u řádků se liší od měny Celkem'; } })())}">⚠ měny</span>` : '';
     if (r.std_check_ok === 'true') return '<span class="badge active" title="Součet přečtených sekcí v každém roce sedí s celkem, které uvádí starý portál">✓ sedí</span>' + curBadge;
@@ -1605,12 +1633,12 @@ function adminVyberyPayouts({ admin, tab, rows, month, curM, period = null, peri
   <div class="card" style="overflow-x:auto;margin-top:10px"><table><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols}" class="muted">${tab === 'vyplata' ? 'Žádné žádosti o výběr.' : 'Zatím nic vyplaceno.'}</td></tr>`}</tbody></table></div>`, holyosUrl);
 }
 function adminVybery({ admin, rows, qstr = '', onlySup = false, onlyBad = false, onlyCur = false, onlyEur = false, onlyUnchk = false, fc = null, curN = null, badKinds = {}, pendingCount = 0, posCounts = {}, totalCount = null, holyosUrl }) {
-  const cols = ['legacy_position', 'piv', 'ex_podpora', 'st_podpora', 'exp_std', 'exp_std_eur', 'std_check'].map(k => BASE_COLS.find(c => c.key === k));
+  const cols = ['legacy_position', 'piv', 'ex_podpora', 'st_podpora', 'exp_std', 'exp_std_eur', 'std_check', 'mig_check'].map(k => BASE_COLS.find(c => c.key === k));
   const sumCzk = rows.reduce((a, r) => a + (r.exp_std_czk != null ? Number(r.exp_std_czk) : 0), 0);
   const trOf = (r) => `<tr><td data-l="Jméno" class="nm"><b>${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b><div class="small muted">${esc(r.email)}</div></td>${cols.map(c => `<td data-l="${esc(c.label)}">${c.render(r)}</td>`).join('')}<td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a><button type="button" class="btn sec sm legacy-btn" data-email="${esc(r.email)}" data-to="/cs/bo/my-invests/" title="Přihlásit se jako tento uživatel do starého portálu a otevřít rovnou Přehled podpory">Stránka podpory</button><button type="button" class="btn sec sm vb-edit" data-id="${r.id}" title="Ručně přepsat ST a EX podporu a označit účet jako skontrolovaný">✏️ Upravit</button></div></td></tr>`;
   const ccy = (r) => (r.std_currency === 'EUR' ? 'EUR' : 'CZK');
   const nz = (v) => (v == null || v === '' || !isFinite(Number(v)) ? null : Number(v));
-  const vbData = rows.map(r => { const exN = nz(r.std_expanze_all), stN = nz(r.std_total); return { html: trOf(r), name: [r.last_name, r.first_name, r.nick, r.email].filter(Boolean).join(' '), pos: r.legacy_position || '—', piv: nz(r.piv_total), ex: nz(r.ex_czk), st: nz(r.std_total_czk), exst: nz(r.exp_std_czk), eur: ccy(r) === 'EUR' && (exN != null || stN != null) ? Math.round(((exN || 0) + (stN || 0)) * 100) / 100 : null, chk: (r.std_check_ok === 'true' ? 'sedí' : r.std_check_ok === 'false' ? 'nesedí' : 'neověřeno') + (r.man_checked === 'true' ? ' · zkontrolováno ručně' : ''), id: r.id, nm: [r.last_name, r.first_name].filter(Boolean).join(' ') || r.email, exN: nz(r.std_expanze_all), stN: nz(r.std_total), cur: ccy(r), ov: r.ov_st != null || r.ov_ex != null, mc: r.man_checked === 'true', note: r.man_note || '' }; });
+  const vbData = rows.map(r => { const exN = nz(r.std_expanze_all), stN = nz(r.std_total); return { html: trOf(r), name: [r.last_name, r.first_name, r.nick, r.email].filter(Boolean).join(' '), pos: r.legacy_position || '—', piv: nz(r.piv_total), ex: nz(r.ex_czk), st: nz(r.std_total_czk), exst: nz(r.exp_std_czk), eur: ccy(r) === 'EUR' && (exN != null || stN != null) ? Math.round(((exN || 0) + (stN || 0)) * 100) / 100 : null, chk: (r.std_check_ok === 'true' ? 'sedí' : r.std_check_ok === 'false' ? 'nesedí' : 'neověřeno') + (r.man_checked === 'true' ? ' · zkontrolováno ručně' : ''), mig: ({ ok: 'shoda', mismatch: 'nesedí', reviewed: 'ověřeno ručně' })[r.mig_status] || 'nevyplněno', id: r.id, nm: [r.last_name, r.first_name].filter(Boolean).join(' ') || r.email, exN: nz(r.std_expanze_all), stN: nz(r.std_total), cur: ccy(r), ov: r.ov_st != null || r.ov_ex != null || r.ov_pos != null, pp: r.ov_pos || r.legacy_position || '', mc: r.man_checked === 'true', note: r.man_note || '' }; });
   const vbJson = JSON.stringify(vbData).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
   return adminLayout('Výběry', 'vyb', admin, `
   <style>main{max-width:none!important;padding-left:24px;padding-right:24px}main .card table{width:100%}main .card{max-width:none}</style>
@@ -1631,6 +1659,7 @@ function adminVybery({ admin, rows, qstr = '', onlySup = false, onlyBad = false,
         {key:'exst',label:'EX + ST (Kč)',type:'num',ph:'Kč…',get:function(r){return r.exst}},
         {key:'eur',label:'EX + ST (EUR)',type:'num',ph:'€…',get:function(r){return r.eur}},
         {key:'chk',label:'Kontrola',type:'text',ph:'Kontrola…',get:function(r){return r.chk},enum:true},
+        {key:'mig',label:'Kontrola údajů',type:'text',ph:'Vyber…',get:function(r){return r.mig},enum:true},
         null ] });
     T.setRows(D);
     // Paměť stránky: po F5 vrátit filtry sloupců, řazení i polohu rolování
@@ -1648,7 +1677,8 @@ function adminVybery({ admin, rows, qstr = '', onlySup = false, onlyBad = false,
       var esc=function(x){return String(x==null?'':x).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')};
       o.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:14px;padding:18px 20px;width:420px;max-width:94vw;color:#e5e7eb">'+
         '<div style="font-size:17px;font-weight:800;margin-bottom:4px">'+esc(r.nm)+'</div><div class="small muted" style="margin-bottom:10px">Ručně přepsat ST a EX podporu. Hodnoty se po dalším načtení z portálu nepřepíšou.</div>'+
-        '<label>EX podpora (expanze)</label><input id="vo-ex" inputmode="decimal" value="'+esc(r.exN==null?'':r.exN)+'">'+
+        '<label>Pozice</label><select id="vo-pos"><option value="">'+(r.ov_pos?'— zpět na hodnotu z portálu —':'(beze změny)')+'</option>'+['Partner','VIP','VIP 2'].map(function(x){return '<option value="'+x+'"'+(r.pp===x?' selected':'')+'>'+x+'</option>'}).join('')+'</select>'+
+        '<label style="margin-top:8px">EX podpora (expanze)</label><input id="vo-ex" inputmode="decimal" value="'+esc(r.exN==null?'':r.exN)+'">'+
         '<label style="margin-top:8px">ST podpora (palety + opakovačky + balíčky)</label><input id="vo-st" inputmode="decimal" value="'+esc(r.stN==null?'':r.stN)+'">'+
         '<label style="margin-top:8px">Měna</label><select id="vo-cur"><option value="CZK"'+(r.cur==='CZK'?' selected':'')+'>Kč</option><option value="EUR"'+(r.cur==='EUR'?' selected':'')+'>EUR (€)</option></select>'+
         '<label style="margin-top:8px">Poznámka</label><input id="vo-note" maxlength="300" value="'+esc(r.note)+'" placeholder="např. ověřeno podle portálu">'+
@@ -1659,7 +1689,7 @@ function adminVybery({ admin, rows, qstr = '', onlySup = false, onlyBad = false,
       var $=function(id){return o.querySelector('#'+id)}, msg=function(t){$('vo-msg').textContent=t};
       var send=function(body){ fetch('/admin/vybery/override/'+r.id,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(x){return x.json()}).then(function(j){ if(!j.ok){msg(j.error||'Chyba');return} location.reload(); }).catch(function(){msg('Chyba spojení')}); };
       $('vo-close').onclick=function(){o.remove()}; o.addEventListener('click',function(ev){if(ev.target===o)o.remove()});
-      $('vo-save').onclick=function(){ send({ex:$('vo-ex').value,st:$('vo-st').value,cur:$('vo-cur').value,note:$('vo-note').value,checked:$('vo-chk').checked}); };
+      $('vo-save').onclick=function(){ var pv=$('vo-pos').value, body={ex:$('vo-ex').value,st:$('vo-st').value,cur:$('vo-cur').value,note:$('vo-note').value,checked:$('vo-chk').checked}; if(pv!==r.pp) body.pos=pv; send(body); };
       $('vo-chkonly').onclick=function(){ send({note:$('vo-note').value,checked:true}); };
       var c=$('vo-clear'); if(c) c.onclick=function(){ if(confirm('Zrušit ruční hodnoty a znovu načíst z portálu?')) send({clear:true}); };
     });
@@ -2524,4 +2554,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { adminVyberyPayouts, userTfaLoginPage, tfaPage, adminPartnerSupport, presenceWidget, PRESENCE_HTML, PRESENCE_CSS, PRESENCE_JS, locVopPage, locGdprPage, adminLayout, ADMIN_NAV, adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterVybery, vyberyVisible, adminVybery, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { supporterVyberyGate, adminVyberyPayouts, userTfaLoginPage, tfaPage, adminPartnerSupport, presenceWidget, PRESENCE_HTML, PRESENCE_CSS, PRESENCE_JS, locVopPage, locGdprPage, adminLayout, ADMIN_NAV, adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterVybery, vyberyVisible, adminVybery, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
