@@ -48,7 +48,7 @@ function parseRows(block, celkem) {
   let flat = String(block || '').replace(/[\s\u00a0]+/g, ' ');
   flat = flat.replace(/^\s*Typ podpory\s+Podpořený kiosek\s+Podpořená částka\s+Datum\s*/i, '');
   // Řádek končí „měna datum“; před ním je souvislá řada číselných tokenů (kiosek + částka), před tou je typ („X1 +“, „10 let“, „P500“, „TESTER“…)
-  const endRe = new RegExp(CUR + '\\s+(\\d{2}\\.\\d{2}\\.\\d{4})', 'giu');
+  const endRe = new RegExp('(?:' + CUR + '\\s+)?(\\d{2}\\.\\d{2}\\.\\d{4})', 'giu');
   const raw = []; let issues = 0; let m; let prev = 0;
   while ((m = endRe.exec(flat))) {
     const text = flat.slice(prev, m.index).trim(); prev = m.index + m[0].length;
@@ -65,11 +65,13 @@ function parseRows(block, celkem) {
     raw.push({ type, tokens, fixed, date: m[2] });
   }
   const amt = (r, mode) => { if (r.fixed != null) return r.fixed; const t = (mode === 'B' && r.tokens.length > 1 ? r.tokens.slice(1) : r.tokens).join(''); const n = Number(t.replace(',', '.')); return isFinite(n) ? n : 0; };
+  // Portál zaokrouhluje u balíčků/přepočtů → „Celkem“ se od součtu řádků liší o drobné (±1 Kč, u dlouhých seznamů o pár Kč). Tolerance roste s počtem řádků.
+  const tol = Math.min(Math.max(1.01, 0.5 * raw.length + 0.5), 0.002 * Math.abs(celkem) + 1.01);
   const sumOf = (mode) => Math.round(raw.reduce((a, r) => a + amt(r, mode), 0) * 100) / 100;
   let mode = 'A', sum = sumOf('A');
-  if (raw.length && Math.abs(sum - celkem) > 0.5) { const sB = sumOf('B'); if (Math.abs(sB - celkem) <= 0.5) { mode = 'B'; sum = sB; } }
+  if (raw.length && Math.abs(sum - celkem) > tol) { const sB = sumOf('B'); if (Math.abs(sB - celkem) <= tol) { mode = 'B'; sum = sB; } }
   let rows = raw.map((r) => ({ type: r.type, amount: amt(r, mode), date: r.date }));
-  let matches = raw.length > 0 && issues === 0 && Math.abs(sum - celkem) <= 0.5;
+  let matches = raw.length > 0 && issues === 0 && Math.abs(sum - celkem) <= tol;
   // Záloha: každý řádek může být čtený víc způsoby (celé číslo / bez kiosku / kód typu) → hledá se kombinace, jejíž součet sedí s „Celkem“
   if (!matches && raw.length > 0 && raw.length <= 400 && issues === 0) {
     const toC = (x) => Math.round(x * 100);
@@ -87,8 +89,10 @@ function parseRows(block, celkem) {
       if (next.size > 60000) { ok = false; break; }
       layers.push(next);
     }
-    if (ok && layers[cand.length] && layers[cand.length].has(target)) {
-      const picks = new Array(cand.length); let cur = target;
+    let hit = null;
+    if (ok && layers[cand.length]) { let bestD = Infinity; for (const key of layers[cand.length].keys()) { const d = Math.abs(key - target); if (d <= tol * 100 && d < bestD) { bestD = d; hit = key; } } }
+    if (hit != null) {
+      const picks = new Array(cand.length); let cur = hit;
       for (let i = cand.length; i >= 1; i--) { const [prev, c] = layers[i].get(cur); picks[i - 1] = c; cur = prev; }
       rows = raw.map((r, i) => ({ type: r.type, amount: picks[i] / 100, date: r.date }));
       sum = Math.round(picks.reduce((a, c) => a + c, 0)) / 100; mode = 'DP'; matches = true;
@@ -269,7 +273,9 @@ async function fetchLegacyStandardWithJar(jar) {
       const rec = { palety: d.palety || 0, opakovacky: d.opakovacky || 0, balicky: d.balicky || 0, likvidni: d.likvidni || 0, ostatni: Math.round((secSum - known) * 100) / 100, expanze: d.expanze || 0, neurawash: d.neurawash || 0, total_year: d.total_year || 0, cur: ck, sections: d.sections || {}, expanze_rows: d.expanze_rows || [], checks: (d.row_checks || []).map((c) => ({ s: c.section, n: c.rows, sum: c.rows_sum, p: c.portal, ok: !!c.ok })) };
       for (const c of (d.row_checks || [])) if (!c.ok) bad.push({ y, section: c.section, portal: c.portal, parsed: c.rows_sum, diff: Math.round((c.portal - c.rows_sum) * 100) / 100, rows: c.rows, issues: c.issues, sample: c.sample });
       const yearCurs = new Set(Object.entries(d.cur_k || {}).map(([, v]) => v));
-      if (yearCurs.size <= 1 && d.total_year != null && Math.abs(Number(d.total_year) - secSum) > 0.5) bad.push({ y, portal: Number(d.total_year), parsed: Math.round(secSum * 100) / 100, diff: Math.round((Number(d.total_year) - secSum) * 100) / 100 });
+      const nRows = (d.row_checks || []).reduce((a, c) => a + (c.rows || 0), 0);
+      const yTol = Math.min(Math.max(1.01, 0.5 * nRows + 0.5), 0.002 * Math.abs(Number(d.total_year) || 0) + 1.01);
+      if (yearCurs.size <= 1 && d.total_year != null && Math.abs(Number(d.total_year) - secSum) > yTol) bad.push({ y, portal: Number(d.total_year), parsed: Math.round(secSum * 100) / 100, diff: Math.round((Number(d.total_year) - secSum) * 100) / 100 });
       if (rec.palety || rec.opakovacky || rec.balicky || rec.likvidni || rec.ostatni || rec.expanze || rec.neurawash || rec.total_year) by[y] = rec;
     }
     const sum = (k) => Math.round(Object.values(by).reduce((a, r) => a + (Number(r[k]) || 0), 0) * 100) / 100;

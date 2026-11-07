@@ -2267,7 +2267,9 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   // počty podle pozice (za celý filtr, ne jen za zobrazených 1000 řádků)
   const posCounts = {}; let totalCount = 0;
   try { (await q(`SELECT coalesce(partner_support->>'position','—') AS pos, count(*)::int AS n FROM supporters WHERE ${where.join(' AND ')} GROUP BY 1`, params)).rows.forEach(r => { posCounts[r.pos] = r.n; totalCount += r.n; }); } catch (e) { /* jen info */ }
-  res.send(V.adminVybery({ admin: req.admin, rows, qstr: qs, onlySup, onlyBad, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
+  let badKinds = {};
+  try { badKinds = (await q(`SELECT count(*) FILTER (WHERE ex)::int AS ex, count(*) FILTER (WHERE st)::int AS st, count(*) FILTER (WHERE yr)::int AS yr, count(*)::int AS n FROM (SELECT bool_or(coalesce(b->>'section','') ~* 'expanz') AS ex, bool_or(coalesce(b->>'section','') <> '' AND coalesce(b->>'section','') !~* 'expanz') AS st, bool_or(coalesce(b->>'section','') = '') AS yr FROM supporters s, jsonb_array_elements(CASE WHEN jsonb_typeof(s.partner_support->'std_check'->'bad')='array' THEN s.partner_support->'std_check'->'bad' ELSE '[]'::jsonb END) b WHERE s.partner_support->'std_check'->>'ok'='false' GROUP BY s.id) t`)).rows[0]; } catch (e) { /* jen info */ }
+  res.send(V.adminVybery({ badKinds, admin: req.admin, rows, qstr: qs, onlySup, onlyBad, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
 }));
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
@@ -2772,7 +2774,7 @@ app.post('/admin/partner-support/expanze/sync-all', requireAdmin, wrap(async (re
   if (EXN_JOB.running) return res.json(EXN_JOB);
   const onlyBadRun = req.query.only === 'bad';
   const rows = onlyBadRun ? (await q(`SELECT id,email,nick FROM supporters WHERE partner_support->'std_check'->>'ok' = 'false' ORDER BY id`)).rows : (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'ex_checked_at' IS NULL OR coalesce(partner_support->>'ex_v','1') <> '7' OR (partner_support->>'ex_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
-  EXN_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
+  EXN_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, sedi: 0, nesedi: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
   await log(req.admin, 'partner_expanze_sync_all', { total: rows.length });
   res.json(EXN_JOB);
   (async () => {
@@ -2784,7 +2786,7 @@ app.post('/admin/partner-support/expanze/sync-all', requireAdmin, wrap(async (re
         const s = queue.shift();
         try {
           const r = await LEGACY.fetchLegacyStandard(s.email);
-          if (r.ok) { await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify({ ...r.data, ex_v: 7, ex_checked_at: new Date().toISOString() })]); EXN_JOB.ok++; }
+          if (r.ok) { await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify({ ...r.data, ex_v: 7, ex_checked_at: new Date().toISOString() })]); EXN_JOB.ok++; if (r.data.std_check && r.data.std_check.ok) EXN_JOB.sedi++; else EXN_JOB.nesedi++; }
           else { EXN_JOB.failed++; if (EXN_JOB.errors.length < 50) EXN_JOB.errors.push((s.nick || s.email) + ': ' + r.error); }
         } catch (e) { EXN_JOB.failed++; if (EXN_JOB.errors.length < 50) EXN_JOB.errors.push((s.nick || s.email) + ': ' + e.message); }
         EXN_JOB.done++; EXN_JOB.last = s.nick || s.email;
@@ -2803,7 +2805,7 @@ app.post('/admin/partner-support/sync-stop', requireAdmin, wrap(async (req, res)
 }));
 app.get('/admin/partner-support/expanze/sync-all', requireAdmin, wrap(async (req, res) => {
   let overall = {};
-  try { overall = (await q(`SELECT count(*) FILTER (WHERE ${EX_CZK} > 0)::int AS n, coalesce(sum(${EX_CZK}),0)::float AS sum_czk FROM supporters WHERE partner_support IS NOT NULL`)).rows[0]; } catch (e) { /* jen info */ }
+  try { overall = (await q(`SELECT count(*) FILTER (WHERE ${EX_CZK} > 0)::int AS n, coalesce(sum(${EX_CZK}),0)::float AS sum_czk, count(*) FILTER (WHERE partner_support->'std_check'->>'ok' = 'true')::int AS chk_ok, count(*) FILTER (WHERE partner_support->'std_check'->>'ok' = 'false')::int AS chk_bad, count(*) FILTER (WHERE partner_support->'std_check' IS NULL AND partner_support->>'std_checked_at' IS NOT NULL)::int AS chk_none FROM supporters WHERE partner_support IS NOT NULL`)).rows[0]; } catch (e) { /* jen info */ }
   res.json({ ...EXN_JOB, overall });
 }));
 app.post('/admin/supporters/:id(\\d+)/partner-standard', requireAdmin, wrap(async (req, res) => {
