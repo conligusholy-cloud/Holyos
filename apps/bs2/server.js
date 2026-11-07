@@ -2294,11 +2294,12 @@ async function vyberyPayoutRows(tab, m) {
   const month = /^\d{4}-\d{2}$/.test(m || '') ? m : (m === 'all' ? 'all' : (tab === 'vyplata' ? curM : 'all'));
   let rows;
   if (tab === 'vyplata') rows = (await q(`${VYBERY_PAY_SQL} WHERE w.status='requested' ${month === 'all' ? '' : `AND to_char(w.requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM') = '${month}'`} ORDER BY w.requested_at, w.id LIMIT 2000`)).rows;
+  else if (tab === 'zadosti') rows = (await q(`${VYBERY_PAY_SQL} ${month === 'all' ? '' : `WHERE to_char(w.requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM') = '${month}'`} ORDER BY w.requested_at DESC, w.id DESC LIMIT 5000`)).rows;
   else rows = (await q(`${VYBERY_PAY_SQL} WHERE w.status IN ('paid','rejected') ${month === 'all' ? '' : `AND to_char(coalesce(w.paid_at, w.decided_at) AT TIME ZONE 'Europe/Prague','YYYY-MM') = '${month}'`} ORDER BY coalesce(w.paid_at, w.decided_at) DESC, w.id DESC LIMIT 2000`)).rows;
   return { rows, month, curM };
 }
 app.get('/admin/vybery', requireAdmin, wrap(async (req, res, next) => {
-  const tab = ['vyplata', 'vyplaceno'].includes(req.query.tab) ? req.query.tab : 'seznam';
+  const tab = ['vyplata', 'vyplaceno', 'zadosti'].includes(req.query.tab) ? req.query.tab : 'seznam';
   const pendingCount = (await q(`SELECT count(*)::int AS n FROM withdrawal_requests WHERE status='requested'`)).rows[0].n;
   req.vyberyPending = pendingCount;
   if (tab === 'seznam') return next();
@@ -2386,13 +2387,13 @@ app.post('/admin/vybery/request/:id(\\d+)/reject', requireAdmin, wrap(async (req
 }));
 app.get('/admin/vybery-vyplaty.xlsx', requireAdmin, wrap(async (req, res) => {
   const XLSX = require('xlsx');
-  const tab = req.query.tab === 'vyplaceno' ? 'vyplaceno' : 'vyplata';
+  const tab = ['vyplaceno', 'zadosti'].includes(req.query.tab) ? req.query.tab : 'vyplata';
   const { rows } = await vyberyPayoutRows(tab, req.query.m);
   const fmt = (d) => (d ? new Date(d).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' }) : '');
   const data = rows.map((r, i) => ({ '#': i + 1, 'Příjmení': r.last_name || '', 'Jméno': r.first_name || '', 'Nick': r.nick || '', 'E-mail': r.email, 'Částka': Number(r.status === 'paid' && r.paid_amount != null ? r.paid_amount : r.amount), 'Měna': r.currency, 'Účet / IBAN': r.account || '', 'Variabilní symbol': r.vs || '', 'Stav': r.status === 'requested' ? 'čeká na výplatu' : r.status === 'paid' ? 'vyplaceno' : 'zamítnuto', 'Žádost podána': fmt(r.requested_at), 'Poznámka uživatele': r.note || '', 'Vyplaceno': fmt(r.paid_at), 'Způsob výplaty': r.pay_method || '', 'Poznámka k výplatě': r.pay_note || r.reject_reason || '', 'Vyplatil': r.paid_by || '' }));
   const wb = XLSX.utils.book_new(); const ws = XLSX.utils.json_to_sheet(data);
   ws['!cols'] = [4, 16, 14, 16, 30, 12, 6, 30, 14, 16, 20, 30, 20, 16, 30, 24].map((w) => ({ wch: w }));
-  XLSX.utils.book_append_sheet(wb, ws, tab === 'vyplata' ? 'Výplata' : 'Vyplaceno');
+  XLSX.utils.book_append_sheet(wb, ws, tab === 'vyplata' ? 'Výplata' : tab === 'zadosti' ? 'Žádosti' : 'Vyplaceno');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="vybery-${tab}-${new Date().toISOString().slice(0, 10)}.xlsx"`);
   res.send(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
