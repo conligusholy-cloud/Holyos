@@ -1707,6 +1707,8 @@ app.post('/vybery/request', wrap(requireUser), wrap(async (req, res) => {
   const ins = await q(`INSERT INTO withdrawal_requests (supporter_id, amount, currency, note, account) VALUES ($1,$2,$3,$4,$5) RETURNING id`, [req.user.id, amount, cur, String(req.body.note || '').trim().slice(0, 300) || null, account]);
   const vs = VYRM.vsFor(ins.rows[0].id);
   await q('UPDATE withdrawal_requests SET vs=$2 WHERE id=$1', [ins.rows[0].id, vs]);
+  // Vyrovnávací účet: zbytek z K výplatě (+ zhodnocení zůstatku) se připíše automaticky při žádosti (za měsíc jen jednou)
+  try { await VYR.bookOnRequest(req.user.id); } catch (e) { console.warn('[bs2] vyrovnávací účet při žádosti:', e.message); }
   res.redirect('/vybery?msg=' + encodeURIComponent('Žádost o výběr byla odeslána. Variabilní symbol platby: ' + vs));
 }));
 }));

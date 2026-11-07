@@ -1,6 +1,6 @@
 // Best Series 2.0 — Vyrovnávací účet (krizový režim výplat).
 // Z částky „K výplatě" se vyplácí jen podíl (výchozí 30 %), zbytek (70 %) se připíše na vyrovnávací účet uživatele,
-// který se zhodnocuje 5,68 % p.a. (měsíčně 5,68 / 12 z zůstatku). Poměr jde u uživatele změnit v detailu
+// který se zhodnocuje 5,68 % p.a. — průběžně od data každého pohybu (denně, act/365, bez skládání). Poměr jde u uživatele změnit v detailu
 // (výplata % + vyrovnávací účet % = vždy 100 %). Pohyby: credit (připsání za měsíc), interest (zhodnocení za měsíc),
 // deposit / withdraw (ruční). Připsání + zhodnocení za měsíc se zaúčtuje tlačítkem ve Výběry → Výplata (jen jednou).
 'use strict';
@@ -43,12 +43,16 @@ module.exports = function mountVyrovnavaci(app, ctx) {
   const esc = V.esc;
   const money = (v, cur) => Number(v || 0).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (cur === 'EUR' ? ' €' : ' Kč');
 
+  // Zůstatek = jistina (součet pohybů) + zhodnocení: každý pohyb se úročí RATE_PA od okamžiku, kdy proběhl
+  // (výběr = záporný pohyb, od svého data úročení té části zastaví). m.get(id)[cur] = celkem, m.get(id)['_' + cur] = rozpad.
+  const ACCR_SQL = `amount * GREATEST(0, EXTRACT(EPOCH FROM (now() - created_at))) / 86400.0 / 365.0 * ${RATE_PA} / 100.0`;
   async function balances(ids) {
     const m = new Map(); if (!ids.length) return m;
-    (await q('SELECT supporter_id, currency, sum(amount) AS bal FROM balance_entries WHERE supporter_id = ANY($1::int[]) GROUP BY supporter_id, currency', [ids])).rows
-      .forEach((x) => { const o = m.get(x.supporter_id) || {}; o[x.currency] = r2(x.bal); m.set(x.supporter_id, o); });
+    (await q(`SELECT supporter_id, currency, sum(amount) AS bal, sum(CASE WHEN kind <> 'interest' THEN ${ACCR_SQL} ELSE 0 END) AS accr FROM balance_entries WHERE supporter_id = ANY($1::int[]) GROUP BY supporter_id, currency`, [ids])).rows
+      .forEach((x) => { const o = m.get(x.supporter_id) || {}; const pr = r2(x.bal), ac = r2(x.accr); o[x.currency] = r2(pr + ac); o['_' + x.currency] = { principal: pr, accrued: ac }; m.set(x.supporter_id, o); });
     return m;
   }
+  const accrOf = (e) => (e.kind === 'interest' ? 0 : Number(e.amount) * Math.max(0, (Date.now() - new Date(e.created_at).getTime()) / 864e5) / 365 * RATE_PA / 100);
 
   // Sekce do detailu uživatele (HTML)
   async function detailHtml(s) {
@@ -56,13 +60,13 @@ module.exports = function mountVyrovnavaci(app, ctx) {
     const ps = s.partner_support || {};
     const cur = ps.std_currency === 'EUR' ? 'EUR' : 'CZK';
     const rows = (await q('SELECT * FROM balance_entries WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC LIMIT 300', [s.id])).rows;
-    const bal = {}; rows.forEach((e) => { bal[e.currency] = r2((bal[e.currency] || 0) + Number(e.amount)); });
+    const bal = {}, acc = {}; rows.forEach((e) => { bal[e.currency] = (bal[e.currency] || 0) + Number(e.amount); acc[e.currency] = (acc[e.currency] || 0) + accrOf(e); });
     const pct = pctOf(s);
-    const balTxt = Object.keys(bal).length ? Object.keys(bal).map((c) => '<b>' + money(bal[c], c) + '</b>').join(' + ') : '<b>' + money(0, cur) + '</b>';
+    const balTxt = Object.keys(bal).length ? Object.keys(bal).map((c) => '<b>' + money(r2(bal[c] + acc[c]), c) + '</b><div class="small muted" style="font-size:12px">jistina ' + money(r2(bal[c]), c) + ' + zhodnocení k dnešku ' + money(r2(acc[c]), c) + '</div>').join('') : '<b>' + money(0, cur) + '</b>';
     return `<div class="card" id="vyrovnavaci" style="margin-top:14px;border-color:rgba(167,139,250,.45)">
       <h3 style="margin:0 0 8px">🏦 Vyrovnávací účet <span class="muted" style="font-size:13px;font-weight:500">zhodnocení ${String(RATE_PA).replace('.', ',')} % p.a.</span></h3>
       <div class="row" style="gap:18px;flex-wrap:wrap;align-items:flex-end">
-        <div><div class="small muted">Zůstatek</div><div style="font-size:20px">${balTxt}</div></div>
+        <div><div class="small muted">Zůstatek vč. zhodnocení</div><div style="font-size:20px">${balTxt}</div></div>
         <form method="post" action="/admin/supporters/${s.id}/payout-pct" class="row" style="gap:8px;align-items:flex-end;margin:0;flex-wrap:wrap">
           <div><label class="small">Výplata %</label><input name="pct" id="vy-pct" type="number" min="0" max="100" step="1" value="${esc(String(pct))}" style="width:90px" oninput="var v=Math.max(0,Math.min(100,Number(this.value)||0));document.getElementById('vy-bal').value=100-v"></div>
           <div><label class="small">Vyrovnávací účet %</label><input id="vy-bal" type="number" value="${esc(String(100 - pct))}" style="width:90px" disabled></div>
@@ -77,8 +81,8 @@ module.exports = function mountVyrovnavaci(app, ctx) {
         <div style="flex:1;min-width:180px"><label class="small">Poznámka</label><input name="note" placeholder="např. výplata převodem"></div>
         <button class="btn sec sm" type="submit" onclick="return confirm('Zapsat pohyb na vyrovnávací účet?')">Zapsat</button>
       </form>
-      <div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>Datum</th><th>Měsíc</th><th>Pohyb</th><th style="text-align:right">Částka</th><th>Poznámka</th></tr></thead><tbody>
-      ${rows.map((e) => `<tr><td class="small muted">${new Date(e.created_at).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' })}</td><td class="small">${esc(e.period || '—')}</td><td>${esc(KIND[e.kind] || e.kind)}</td><td style="text-align:right;white-space:nowrap;color:${Number(e.amount) < 0 ? '#f87171' : '#22c55e'}"><b>${Number(e.amount) > 0 ? '+' : ''}${money(e.amount, e.currency)}</b></td><td class="small">${esc(e.note || '')}${e.created_by ? `<div class="muted">${esc(e.created_by)}</div>` : ''}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Zatím žádné pohyby.</td></tr>'}
+      <div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>Datum</th><th>Měsíc</th><th>Pohyb</th><th style="text-align:right">Částka</th><th style="text-align:right" title="Zhodnocení tohoto pohybu od jeho data do dneška">Zhodnocení k dnešku</th><th>Poznámka</th></tr></thead><tbody>
+      ${rows.map((e) => `<tr><td class="small muted">${new Date(e.created_at).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' })}</td><td class="small">${esc(e.period || '—')}</td><td>${esc(KIND[e.kind] || e.kind)}</td><td style="text-align:right;white-space:nowrap;color:${Number(e.amount) < 0 ? '#f87171' : '#22c55e'}"><b>${Number(e.amount) > 0 ? '+' : ''}${money(e.amount, e.currency)}</b></td><td style="text-align:right;white-space:nowrap" class="small">${e.kind === 'interest' ? '—' : (accrOf(e) >= 0 ? '+' : '') + money(r2(accrOf(e)), e.currency)}</td><td class="small">${esc(e.note || '')}${e.created_by ? `<div class="muted">${esc(e.created_by)}</div>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Zatím žádné pohyby.</td></tr>'}
       </tbody></table></div></div>`;
   }
 
@@ -109,7 +113,32 @@ module.exports = function mountVyrovnavaci(app, ctx) {
     res.redirect('/admin/supporters/' + id + '?msg=' + encodeURIComponent('Pohyb zapsán') + '#vyrovnavaci');
   }));
 
-  // Zaúčtování měsíce: u každého, kdo je „možno vyplácet", nejdřív zhodnocení dosavadního zůstatku
+  // Zaúčtování jednoho uživatele za měsíc (idempotentní — každý měsíc jen jednou):
+  // připsání podílu pro vyrovnávací účet z K výplatě (zhodnocení běží průběžně od data připsání).
+  async function bookUser(u, period, avgVisits, who) {
+    const cur = u.std_currency === 'EUR' ? 'EUR' : 'CZK';
+    const out = { interest: false, credit: false }; // zhodnocení se počítá průběžně od data pohybu, neúčtuje se měsíčně
+    const p = V.provizeVyplaty(u, { period, avgVisits });
+    const sp = split(p.total, pctOf(u));
+    if (sp.bal != null && sp.bal > 0) {
+      const rc = await q(`INSERT INTO balance_entries (supporter_id, period, kind, amount, currency, note, created_by) VALUES ($1,$2,'credit',$3,$4,$5,$6) ON CONFLICT DO NOTHING RETURNING id`,
+        [u.id, period, sp.bal, cur, (100 - sp.pct) + ' % z K výplatě ' + money(p.total, cur) + ' (výplata ' + sp.pct + ' % = ' + money(sp.pay, cur) + ')', who]);
+      out.credit = !!rc.rowCount;
+    }
+    return out;
+  }
+  // Zaúčtování po odeslání žádosti o výběr (volá /vybery/request) — za měsíc, za který se vyplácí
+  async function bookOnRequest(id) {
+    const per = (await q(`SELECT to_char((now() AT TIME ZONE 'Europe/Prague') - interval '1 month', 'YYYY-MM') AS p`)).rows[0].p;
+    const pr = (await q('SELECT avg_visits FROM vybery_periods WHERE period=$1', [per])).rows[0];
+    if (!pr || pr.avg_visits == null) return null;
+    const u = (await q(`SELECT s.id, s.mig_position, s.payout_pct, partner_support->>'std_currency' AS std_currency, partner_support->>'std_total' AS std_total,
+      partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->>'exp_invested' AS exp_invested, partner_support->>'position' AS legacy_position
+      FROM supporters s WHERE s.id=$1`, [id])).rows[0];
+    return u ? bookUser(u, per, Number(pr.avg_visits), 'automaticky při žádosti o výběr') : null;
+  }
+
+  // Zaúčtování měsíce (pro ty, kdo nepožádali o výběr): připsání podílu pro vyrovnávací účet
   // (5,68 % p.a. ÷ 12), pak připsání podílu pro vyrovnávací účet z částky K výplatě. Každý měsíc jen jednou.
   app.post('/admin/vybery/vyrovnavaci/zauctovat', requireAdmin, wrap(async (req, res) => {
     const period = String(req.body.period || '');
@@ -119,27 +148,11 @@ module.exports = function mountVyrovnavaci(app, ctx) {
     const users = (await q(`SELECT s.id, s.mig_position, s.payout_pct, partner_support->>'std_currency' AS std_currency, partner_support->>'std_total' AS std_total,
       partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->>'exp_invested' AS exp_invested, partner_support->>'position' AS legacy_position
       FROM supporters s WHERE s.mig_status IN ('ok','reviewed')`)).rows;
-    const bals = await balances(users.map((u) => u.id));
     const who = (req.admin && req.admin.name) || 'správce';
     let nCredit = 0, nInt = 0, skipped = 0;
-    for (const u of users) {
-      const cur = u.std_currency === 'EUR' ? 'EUR' : 'CZK';
-      const before = (bals.get(u.id) || {})[cur] || 0;
-      const interest = r2(before * RATE_PA / 100 / 12);
-      if (interest > 0) {
-        const ri = await q(`INSERT INTO balance_entries (supporter_id, period, kind, amount, currency, note, created_by) VALUES ($1,$2,'interest',$3,$4,$5,$6) ON CONFLICT DO NOTHING RETURNING id`,
-          [u.id, period, interest, cur, 'Zhodnocení ' + String(RATE_PA).replace('.', ',') + ' % p.a. ÷ 12 ze zůstatku ' + money(before, cur), who]);
-        if (ri.rowCount) nInt++;
-      }
-      const p = V.provizeVyplaty(u, { period, avgVisits: Number(pr.avg_visits) });
-      const sp = split(p.total, pctOf(u));
-      if (sp.bal == null || sp.bal <= 0) { skipped++; continue; }
-      const rc = await q(`INSERT INTO balance_entries (supporter_id, period, kind, amount, currency, note, created_by) VALUES ($1,$2,'credit',$3,$4,$5,$6) ON CONFLICT DO NOTHING RETURNING id`,
-        [u.id, period, sp.bal, cur, (100 - sp.pct) + ' % z K výplatě ' + money(p.total, cur) + ' (výplata ' + sp.pct + ' % = ' + money(sp.pay, cur) + ')', who]);
-      if (rc.rowCount) nCredit++; else skipped++;
-    }
+    for (const u of users) { const r = await bookUser(u, period, Number(pr.avg_visits), who); if (r.interest) nInt++; if (r.credit) nCredit++; else skipped++; }
     await log(req.admin, 'balance_book_period', { period, credited: nCredit, interest: nInt });
-    res.redirect('/admin/vybery?tab=vyplata&msg=' + encodeURIComponent(`Vyrovnávací účty za ${period}: připsáno ${nCredit}×, zhodnocení ${nInt}×` + (skipped ? `, přeskočeno ${skipped} (nic k připsání nebo už zaúčtováno)` : '')));
+    res.redirect('/admin/vybery?tab=vyplata&msg=' + encodeURIComponent(`Vyrovnávací účty za ${period}: připsáno ${nCredit}×` + (skipped ? `, přeskočeno ${skipped} (nic k připsání nebo už zaúčtováno)` : '')));
   }));
 
   // Částka k výplatě pro uživatele (stránka /vybery): za minulý měsíc (vyplácí se v aktuálním),
@@ -164,7 +177,7 @@ module.exports = function mountVyrovnavaci(app, ctx) {
     return out;
   }
 
-  return { DEFAULT_PCT, RATE_PA, pctOf, split, balances, detailHtml, payoutFor,
+  return { DEFAULT_PCT, RATE_PA, pctOf, split, balances, detailHtml, payoutFor, bookOnRequest,
     async bookedPeriod(period) { return (await q("SELECT count(*)::int AS n FROM balance_entries WHERE period=$1 AND kind='credit'", [period])).rows[0].n; } };
 };
 module.exports.DEFAULT_PCT = DEFAULT_PCT;
