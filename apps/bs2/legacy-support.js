@@ -45,14 +45,24 @@ const curOf = (s) => (/eur|€/i.test(String(s || '')) ? 'EUR' : 'CZK');
 // Zkusí se dvě čtení — A: bez kiosku, B: první číslo je kiosek — a přijme se jen to, jehož součet sedí s „Celkem“ sekce.
 // Když nesedí ani jedno, vrací se matches:false a volající použije „Celkem“ portálu (zkreslený součet nikdy nejde do čísel).
 function parseRows(block, celkem) {
-  const flat = String(block || '').replace(/[\s\u00a0]+/g, ' ');
-  const re = new RegExp('(\\p{L}+\\d*)\\s+([\\d ]+?(?:[.,]\\d{1,2})?)\\s*' + CUR + '\\s+(\\d{2}\\.\\d{2}\\.\\d{4})', 'giu');
-  const raw = []; let issues = 0; let m;
-  while ((m = re.exec(flat))) {
-    const type = m[1], tokens = m[2].trim().split(' ').filter(Boolean), pm = /^P(\d+)$/i.exec(type);
+  let flat = String(block || '').replace(/[\s\u00a0]+/g, ' ');
+  flat = flat.replace(/^\s*Typ podpory\s+Podpořený kiosek\s+Podpořená částka\s+Datum\s*/i, '');
+  // Řádek končí „měna datum“; před ním je souvislá řada číselných tokenů (kiosek + částka), před tou je typ („X1 +“, „10 let“, „P500“, „TESTER“…)
+  const endRe = new RegExp(CUR + '\\s+(\\d{2}\\.\\d{2}\\.\\d{4})', 'giu');
+  const raw = []; let issues = 0; let m; let prev = 0;
+  while ((m = endRe.exec(flat))) {
+    const text = flat.slice(prev, m.index).trim(); prev = m.index + m[0].length;
+    const toks = text.split(' ').filter(Boolean);
+    let k = toks.length;
+    if (k > 0 && /^\d+[.,]\d{1,2}$/.test(toks[k - 1])) k--; // poslední token může být s desetinami („040,50“)
+    while (k > 0 && /^\d+$/.test(toks[k - 1])) k--;
+    const tokens = toks.slice(k);
+    const type = toks.slice(0, k).join(' ');
+    if (!tokens.length) { issues++; continue; }
+    const pm = /^P(\d+)$/i.exec(type);
     let fixed = null;
-    if (pm) { const N = pm[1], tail = tokens.join(''); if (tail === N || tail.endsWith(N)) fixed = Number(N); /* u eurových účtů kód typu nemusí odpovídat částce → čte se jako ostatní typy (A/B proti Celkem) */ }
-    raw.push({ type, tokens, fixed, date: m[4] });
+    if (pm) { const N = pm[1], tail = tokens.join(''); if (tail === N || tail.endsWith(N)) fixed = Number(N); }
+    raw.push({ type, tokens, fixed, date: m[2] });
   }
   const amt = (r, mode) => { if (r.fixed != null) return r.fixed; const t = (mode === 'B' && r.tokens.length > 1 ? r.tokens.slice(1) : r.tokens).join(''); const n = Number(t.replace(',', '.')); return isFinite(n) ? n : 0; };
   const sumOf = (mode) => Math.round(raw.reduce((a, r) => a + amt(r, mode), 0) * 100) / 100;
@@ -84,7 +94,7 @@ function parseRows(block, celkem) {
       sum = Math.round(picks.reduce((a, c) => a + c, 0)) / 100; mode = 'DP'; matches = true;
     }
   }
-  return { rows, issues, sum, mode, matches, sample: matches ? undefined : flat.slice(0, 260) };
+  return { rows, issues, sum, mode, matches, sample: matches ? undefined : flat.slice(0, 1200) };
 }
 function parseInvests(text) {
   const out = {};
