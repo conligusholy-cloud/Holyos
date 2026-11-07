@@ -8,6 +8,7 @@
 const FIELDS = [['palety', 'Podpora palety celkem'], ['expanze', 'Expanze celkem'], ['balicky', 'Podpora balíčky celkem'], ['opakovacky', 'Opakovačky celkem']];
 const POSITIONS = ['Partner', 'VIP', 'VIP 2'];
 const TOL = 1; // tolerance zaokrouhlení (Kč / €)
+const CHECK_V = 3; // verze pravidel kontroly — při změně se všechna vyplnění automaticky přepočítají (recheckStale)
 
 const num = (v) => { if (v == null || String(v).trim() === '') return 0; const n = Number(String(v).replace(/\s/g, '').replace(/ /g, '').replace(',', '.')); return isFinite(n) ? Math.round(n * 100) / 100 : NaN; };
 const normPos = (p) => String(p || '').trim().toUpperCase().replace(/\s+/g, ' ').replace(/^VIP ?1$/, 'VIP').replace(/^VIP2$/, 'VIP 2');
@@ -93,7 +94,7 @@ module.exports = function mountVyberyCheck(app, ctx) {
       [req.user.id, vals.palety_czk, vals.palety_eur, vals.expanze_czk, vals.expanze_eur, vals.balicky_czk, vals.balicky_eur, pos, vals.opakovacky_czk, vals.opakovacky_eur]);
     const row = await load(req.user.id); const r = compare(row);
     const status = r.status === 'ok' ? 'ok' : 'mismatch';
-    await q('UPDATE supporters SET mig_status=$2, mig_diff=$3 WHERE id=$1', [req.user.id, status, JSON.stringify({ diffs: r.diffs, ours: r.ours || null, checked_at: new Date().toISOString(), kind: r.status })]);
+    await q('UPDATE supporters SET mig_status=$2, mig_diff=$3 WHERE id=$1', [req.user.id, status, JSON.stringify({ v: CHECK_V, diffs: r.diffs, ours: r.ours || null, checked_at: new Date().toISOString(), kind: r.status })]);
     await log({ name: req.user.nick || String(req.user.id) }, 'vybery_mig_check', { id: req.user.id, status, diffs: r.diffs.length });
     if (status !== 'ok' && notifyVelin) { try { notifyVelin('⚠️ Výběry: údaje nesedí', (row.nick || row.email) + ' — ' + r.diffs.map((d) => d.label).join(', '), '/admin/vybery?mig=1', 'vybery'); } catch (e) { /* upozornění není kritické */ } }
     res.redirect('/vybery' + (status === 'ok' ? '?msg=' + encodeURIComponent('Děkujeme, údaje sedí. Výběry máte odemčené.') : ''));
@@ -128,12 +129,28 @@ module.exports = function mountVyberyCheck(app, ctx) {
     const id = Number(req.params.id); const a = String((req.body || {}).action || ''); const who = String((req.admin && (req.admin.name || req.admin.username)) || 'admin').slice(0, 80);
     if (a === 'ok') await q("UPDATE supporters SET mig_status='reviewed', mig_reviewed_by=$2, mig_reviewed_at=now() WHERE id=$1 AND mig_at IS NOT NULL", [id, who]);
     else if (a === 'reset') await q('UPDATE supporters SET mig_status=NULL, mig_at=NULL, mig_diff=NULL, mig_reviewed_by=NULL, mig_reviewed_at=NULL WHERE id=$1', [id]);
-    else if (a === 'recheck') { const u = await load(id); if (u && u.mig_at) { const r = compare(u); const st = r.status === 'ok' ? 'ok' : (u.mig_status === 'reviewed' ? 'reviewed' : 'mismatch'); await q('UPDATE supporters SET mig_status=$2, mig_diff=$3 WHERE id=$1', [id, st, JSON.stringify({ diffs: r.diffs, ours: r.ours || null, checked_at: new Date().toISOString(), kind: r.status })]); } }
+    else if (a === 'recheck') { const u = await load(id); if (u && u.mig_at) { const r = compare(u); const st = r.status === 'ok' ? 'ok' : (u.mig_status === 'reviewed' ? 'reviewed' : 'mismatch'); await q('UPDATE supporters SET mig_status=$2, mig_diff=$3 WHERE id=$1', [id, st, JSON.stringify({ v: CHECK_V, diffs: r.diffs, ours: r.ours || null, checked_at: new Date().toISOString(), kind: r.status })]); } }
     await log(req.admin, 'vybery_mig_' + (a || '?'), { id });
     res.redirect('/admin/vybery/kontrola/' + id);
   }));
 
-  return { gate, allowed, compare, ours };
+  // Přepočet vyplnění podle aktuálních pravidel (po změně pravidel nebo novém načtení podpory).
+  // Ručně ověřené („reviewed") zůstávají ověřené; ostatní dostanou ok / mismatch podle nového porovnání.
+  let _rcAt = 0;
+  async function recheckStale(force) {
+    if (!force && Date.now() - _rcAt < 60e3) return 0; _rcAt = Date.now();
+    const ids = (await q(`SELECT id FROM supporters WHERE mig_at IS NOT NULL AND (${force ? 'true' : "coalesce(mig_diff->>'v','0') <> $1"}) LIMIT 5000`, force ? [] : [String(CHECK_V)])).rows.map((r) => r.id);
+    for (const id of ids) {
+      const u = await load(id); if (!u) continue; const r = compare(u);
+      const st = r.status === 'ok' ? 'ok' : (u.mig_status === 'reviewed' ? 'reviewed' : 'mismatch');
+      await q('UPDATE supporters SET mig_status=$2, mig_diff=$3 WHERE id=$1', [id, st, JSON.stringify({ v: CHECK_V, diffs: r.diffs, ours: r.ours || null, checked_at: new Date().toISOString(), kind: r.status })]);
+    }
+    if (ids.length) console.log('[vybery-check] přepočteno ' + ids.length + ' vyplnění podle pravidel v' + CHECK_V);
+    return ids.length;
+  }
+  setTimeout(() => recheckStale(true).catch((e) => console.warn('[vybery-check] přepočet:', e.message)), 20e3);
+
+  return { gate, allowed, compare, ours, recheckStale };
 };
 module.exports.FIELDS = FIELDS;
 module.exports.POSITIONS = POSITIONS;

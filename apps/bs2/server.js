@@ -2370,6 +2370,7 @@ app.get('/admin/vybery-vyplaty.xlsx', requireAdmin, wrap(async (req, res) => {
   res.send(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
 }));
 app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
+  try { await VYB_CHECK.recheckStale(false); } catch (e) { /* přepočet kontrol není kritický */ }
   const qs = String(req.query.q || '').trim().slice(0, 80);
   const params = [], where = ["status='active'"];
   const onlySup = req.query.s === '1';
