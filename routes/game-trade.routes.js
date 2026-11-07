@@ -54,34 +54,14 @@ router.get('/trade/assets/:id', hrac, api(async (req, res) => {
   ]);
   const k = {};
   karty.forEach((x) => { k[x.kind] = x._count._all; });
-  // Parametry prádlomatu bereme z jeho uložené sítě — kupující má vědět, co
-  // kupuje, a hlavně nemá střílet cenu naslepo. Na burze je tohle veřejné.
-  const info = {};
-  (Array.isArray(st.units) ? st.units : []).forEach((u) => {
-    if (!u || !u.spotId) return;
-    const e = u.eco || {};
-    info[u.spotId] = {
-      zisk: Math.round(e.profit || 0),
-      obrat: Math.round(e.revenue || 0),
-      invest: Math.round(e.invest || 0),
-      skore: typeof u.score === 'number' ? Math.round(u.score) : null,
-      postaveno: u.builtAt || null,
-    };
-  });
-  // Kolik mu na tom kterém místě ještě visí úvěr. Pod tuhle částku prodávat
-  // nechce — doplácel by ze svého. Kupující to má vědět předem.
-  (Array.isArray(st.loans) ? st.loans : []).forEach((l) => {
-    if (!l || !l.spotId || !info[l.spotId]) return;
-    const zbyva = Math.round(Number(l.zbyva) || 0);
-    if (zbyva <= 0) return;
-    info[l.spotId].dluh = (info[l.spotId].dluh || 0) + zbyva;
-    info[l.spotId].splatka = (info[l.spotId].splatka || 0) + Math.round(Number(l.splatka) || 0);
-  });
+  // Jak si cizí firma stojí, je její věc. Ven jde jen to, co je stejně vidět
+  // na mapě: kde to stojí a jaký je tam stroj. Nájem, obrat, zisk ani úvěry
+  // nikoli — kdo chce vědět víc, má se majitele zeptat ve zprávách.
   res.json({ ok: true,
     hrac: { id: p.id, nick: p.nick, firma: p.company || (p.nick + ' s.r.o.') },
     sklad: skladu(st),
-    pradlomaty: mista.map((m) => Object.assign({ spot_id: m.spot_id, name: m.name, model: m.model,
-      rent: m.rent, area_key: m.area_key, zisk: null, dluh: 0, splatka: 0 }, info[m.spot_id] || {})),
+    pradlomaty: mista.map((m) => ({ spot_id: m.spot_id, name: m.name,
+      model: m.model, area_key: m.area_key })),
     pobocky: (Array.isArray(st.pobocky) ? st.pobocky : [])
       .filter((x) => x && x.name).map((x) => ({ name: x.name, lat: x.lat, lon: x.lon })),
     karty: k });

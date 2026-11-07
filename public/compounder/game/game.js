@@ -3481,15 +3481,9 @@ function majetekSheet(id) {
         popis: 'stroj ' + MODELS[k].name, pod: a.sklad[k] + '× skladem' });
     });
     (a.pradlomaty || []).forEach(function (m) {
+      // Co cizí místo vydělává a za kolik tam má nájem, je věc majitele.
       polozky.push({ smer: 'koupim', predmet: 'pradlomat', spot_id: m.spot_id, model: m.model,
-        zisk: m.zisk, invest: m.invest, obrat: m.obrat, skore: m.skore, rent: m.rent,
-        dluh: m.dluh || 0, splatka: m.splatka || 0, postaveno: m.postaveno,
-        popis: esc(m.name || m.spot_id), pod: (MODELS[m.model] || {}).name
-          + (m.skore != null ? ' · ' + m.skore + '/100' : '')
-          + ' · nájem ' + kcFull(m.rent)
-          + (m.zisk != null ? ' · zisk ' + kcFull(m.zisk) + '/měs' : '')
-          + (m.zisk != null ? '<br><i class="cena">orientačně ' + kcFull(cenaPradlomatu(m.zisk, m.invest)) + '</i>' : '')
-          + ((m.dluh || 0) > 0 ? '<i class="cena dluh">visí na něm úvěr ' + kcFull(m.dluh) + '</i>' : '') });
+        popis: esc(m.name || m.spot_id), pod: (MODELS[m.model] || {}).name + ' · postavený prádlomat' });
     });
     (a.pobocky || []).forEach(function (b) {
       polozky.push({ smer: 'koupim', predmet: 'pobocka', pobocka: b.name,
@@ -3548,21 +3542,23 @@ function majetekSheet(id) {
 
 function cenaSheet(toId, kdo, x) {
   var jaPlatim = x.smer === 'koupim';
-  var orient = cenaPredmetu(x);
-  // Protistrana je hráč, ne automat — ale už při psaní částky má být vidět,
-  // co ta cena znamená pro něj a co pro mě. Jinak je každá nabídka lotérie.
+  // U cizího prádlomatu neumíme nic počítat — a neměli bychom: jeho čísla
+  // zná jen majitel. U vlastního majetku a u strojů cena dává smysl.
+  var orient = (jaPlatim && x.predmet === 'pradlomat') ? null : cenaPredmetu(x);
   sheet('<h3>' + (jaPlatim ? 'Nabídka na odkup' : 'Nabídka k prodeji') + '</h3>'
     + '<p class="muted small">' + x.popis + ' · ' + esc(kdo.firma) + '</p>'
-    + (x.predmet === 'pradlomat'
+    + (x.predmet === 'pradlomat' && !jaPlatim
         ? '<div class="kv"><span>Zisk / měsíc</span><b class="ok">' + kcFull(x.zisk || 0) + '</b></div>'
           + (x.obrat ? '<div class="kv"><span>Obrat / měsíc</span><b>' + kcFull(x.obrat) + '</b></div>' : '')
           + (x.rent ? '<div class="kv"><span>Nájem / měsíc</span><b class="warn">' + kcFull(x.rent) + '</b></div>' : '')
           + (x.skore != null ? '<div class="kv"><span>Skóre místa</span><b>' + Math.round(x.skore) + '/100</b></div>' : '')
-          + (x.invest ? '<div class="kv"><span>Stavba stála</span><b>' + kcFull(x.invest) + '</b></div>' : '')
           + ((x.dluh || 0) > 0
-              ? '<div class="kv"><span>Úvěr na místě</span><b class="warn">' + kcFull(x.dluh)
-                + (x.splatka ? ' <span class="muted">(' + kcFull(x.splatka) + '/měs)</span>' : '') + '</b></div>'
-              : '<div class="kv"><span>Úvěr na místě</span><b class="ok">žádný</b></div>')
+              ? '<div class="kv"><span>Úvěr na místě</span><b class="warn">' + kcFull(x.dluh) + '</b></div>' : '')
+        : '')
+    + (x.predmet === 'pradlomat' && jaPlatim
+        ? '<p class="fine">Co to místo vydělává a kolik tam platí nájem, ví jen majitel. '
+          + 'Zeptej se ho ve zprávách, než něco nabídneš.</p>'
+          + '<button class="btn ghost" id="na-napsat" style="width:100%;margin:4px 0 10px">Napsat majiteli</button>'
         : '')
     + (orient != null
         ? '<div class="kv souhrn"><span>Orientační cena</span><b>' + kcFull(orient) + '</b></div>'
@@ -3587,22 +3583,18 @@ function cenaSheet(toId, kdo, x) {
       t.push(Math.abs(o) < 3 ? 'Sedí na orientační ceně.'
         : o > 0 ? 'O ' + o + ' % nad orientační cenou.' : 'O ' + (-o) + ' % pod orientační cenou.');
     }
-    if (x.predmet === 'pradlomat' && x.zisk > 0) {
+    if (x.predmet === 'pradlomat' && x.zisk > 0 && !jaPlatim) {
       var r = rokyNavratnosti(c, x.zisk);
-      if (r) t.push((jaPlatim ? 'Vrátí se ti za ' : 'Jemu se to vrátí za ')
-        + r.toFixed(1).replace('.', ',') + ' roku.');
+      if (r) t.push('Jemu se to vrátí za ' + r.toFixed(1).replace('.', ',') + ' roku.');
     }
     // Pod dluh, který na místě visí, prodávající nepůjde — doplácel by ze svého.
-    var dluh = x.dluh || 0;
+    var dluh = jaPlatim ? 0 : (x.dluh || 0);
     if (dluh > 0) {
       if (c < dluh) {
-        t.push(jaPlatim
-          ? 'Pod úvěr, který na místě visí — musel by ' + kcFull(dluh - c) + ' doplatit ze svého. Nejspíš odmítne.'
-          : 'Pod úvěr, který na místě visí — ' + kcFull(dluh - c) + ' bys doplácel ze svého.');
+        t.push('Pod úvěr, který na místě visí — ' + kcFull(dluh - c) + ' bys doplácel ze svého.');
         tr = 'fine err';
       } else {
-        t.push(jaPlatim ? 'Úvěr mu to pokryje a ještě ' + kcFull(c - dluh) + ' zbyde.'
-          : 'Úvěr to pokryje a ještě ti ' + kcFull(c - dluh) + ' zbyde.');
+        t.push('Úvěr to pokryje a ještě ti ' + kcFull(c - dluh) + ' zbyde.');
       }
     }
     if (jaPlatim && c > S.cash) { t.push('Tolik hotovosti nemáš — máš ' + kcFull(S.cash) + '.'); tr = 'fine err'; }
@@ -3610,6 +3602,8 @@ function cenaSheet(toId, kdo, x) {
     vd.textContent = t.join(' ');
   };
   ci.oninput = verdikt; verdikt();
+  var nn = $('na-napsat');
+  if (nn) nn.onclick = function () { chatSheet(toId); };
   var vybrane = jaPlatim ? bindKartyVyber('na') : function () { return []; };
   $('na-ok').onclick = function () {
     var b = $('na-ok'); b.disabled = true;
