@@ -1049,6 +1049,10 @@ function tick() {
 // Za vteřinu přiteče pár laundrů, což je na samostatnou bublinu málo. Sčítáme
 // to proto a vypíšeme, až je z toho celé číslo — zeleně výnos, červeně úrok.
 var drip = { earn: 0, pay: 0, i: 0 };
+// Hotovost, se kterou jsme napošledí kreslili hlavičku. Rozdíl proti ní
+// probléskne nad částkou — zeleně přírůstek, červeně úbytek. Tím se ukáže
+// i to, co se strže najednou: nákup stroje, přípojky, splátka, průzkum města.
+var dripCash = null;
 function dripPoint(i) {
   if (!map || !S.units.length) return null;
   var u = S.units[i % S.units.length];
@@ -1083,16 +1087,28 @@ function dripTick() {
     var kolik = Math.floor(drip.earn), txt = '+' + kolik.toLocaleString('cs-CZ');
     var p = naMape && S.units.length ? dripPoint(drip.i++) : null;
     if (p) dripShow(txt, 'up', p);
-    headDrip(txt, 'up');
     drip.earn -= kolik;
   }
   if (drip.pay >= 1) {
     var kolikP = Math.floor(drip.pay), txtP = '−' + kolikP.toLocaleString('cs-CZ');
     var q = naMape && S.units.length ? dripPoint(drip.i++) : null;
     if (q) dripShow(txtP, 'down', q);
-    headDrip(txtP, 'down');
     drip.pay -= kolikP;
   }
+  hlavickaDrip();
+}
+// Nad hotovostí probléskne, o kolik se právě změnila — ať už přitečla po
+// kapkách, nebo odtečla naráz.
+function hlavickaDrip() {
+  var ted = Math.round(S.cash);
+  if (dripCash == null) { dripCash = ted; paintHlavicka(); return; }
+  var zmena = ted - dripCash;
+  if (!zmena) return;
+  dripCash = ted;
+  paintHlavicka();
+  if (Math.abs(zmena) < 1) return;
+  headDrip((zmena > 0 ? '+' : '−') + Math.abs(zmena).toLocaleString('cs-CZ'),
+    zmena > 0 ? 'up' : 'down');
 }
 function gameYear() { return Math.floor((Date.now() - S.startedAt) / YEAR_MS) + 1; }
 
@@ -2250,14 +2266,20 @@ function sidloSheet() {
   setTimeout(function () { i.focus(); }, 60);
 }
 
-function paint() {
-  refreshUnits();
+// Hlavička se překresluje každou vteřinu, aby hotovost naskákala spolu
+// s čísly, která nad ní probléskní. Zbytek záložky stačí jednou za pět.
+function paintHlavicka() {
+  if (!S) return;
   $('t-year').textContent = gameYear();
   $('t-cash').textContent = kcHdr(S.cash);
   var cz = cistyZisk();
   $('t-rate').textContent = kc(cz);
   $('t-rate').className = cz < 0 ? 'err' : 'ok';
   $('t-count').textContent = S.units.length;
+}
+function paint() {
+  refreshUnits();
+  paintHlavicka();
   // Hlavička se hýbe pořád, obsah záložky počká, až hráč dopíše.
   if (pisePrave()) return;
   if (!$('v-shop').classList.contains('hidden')) paintShop();
@@ -4194,7 +4216,7 @@ function startGame() {
   ['intro', 'quiz', 'role'].forEach(function (id) { $(id).classList.add('hidden'); });
   $('app').classList.remove('hidden');
   var before = S.cash, waiting = (S.orders || []).length;
-  tick(); save(); paint();
+  tick(); save(); dripCash = Math.round(S.cash); paint();
   var arrived = waiting - (S.orders || []).length;
   initMap();
   tutStart();
