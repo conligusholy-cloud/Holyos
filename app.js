@@ -1392,6 +1392,10 @@ server.listen(PORT, async () => {
   } catch (err) {
     console.error('[app] vyrovnani startovni hotovosti selhalo:', err.message);
   }
+  // Hra: k městům, která se prozkoumala dřív, než se ukládala země, ji doplníme.
+  // Běží na pozadí — geokodér je pomalý a start serveru na něj nemá čekat.
+  require('./services/game/zeme').doplnZemeMest()
+    .catch((err) => console.error('[app] doplnění zemí měst selhalo:', err.message));
   // Šifrování citlivých polí osob: po startu zašifruje stávající záznamy (jen s FIELD_ENC_KEY, idempotentní)
   try {
     const fc = require('./services/field-crypto');

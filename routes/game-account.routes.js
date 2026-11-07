@@ -709,23 +709,50 @@ async function firmyMapa() {
     .forEach((h) => { m[h.id] = { firma: h.company || (h.nick + ' s.r.o.'), znak: h.emblem || null }; });
   return m;
 }
+// Ke každému hráči země, ve kterých mu stojí prádlomaty — od té, kde jich má
+// nejvíc. Země visí na prozkoumaném městě, takže stačí spojit zábory s městy.
+// „xx“ značí město, u kterého se zemi nepodařilo zjistit — to vlaječku nedostane.
+const ZEME_MAX = 6;
+async function zemeHracu() {
+  const [zabory, mesta] = await Promise.all([
+    prisma.gameSpotClaim.findMany({ select: { player_id: true, area_key: true } }),
+    prisma.gameArea.findMany({ where: { country: { not: null } }, select: { key: true, country: true } }),
+  ]);
+  const zeme = {};
+  mesta.forEach((m) => { if (m.country && m.country !== 'xx') zeme[m.key] = m.country; });
+  const pocty = {};
+  zabory.forEach((z) => {
+    const cc = zeme[z.area_key];
+    if (!cc) return;
+    const k = pocty[z.player_id] || (pocty[z.player_id] = {});
+    k[cc] = (k[cc] || 0) + 1;
+  });
+  const out = {};
+  Object.keys(pocty).forEach((id) => {
+    out[id] = Object.keys(pocty[id]).sort((a, b) => pocty[id][b] - pocty[id][a]).slice(0, ZEME_MAX);
+  });
+  return out;
+}
 let _zeb = { at: 0, data: null };
 function dropZeb() { _zeb = { at: 0, data: null }; }
 async function zebricky() {
   if (Date.now() - _zeb.at < 30e3 && _zeb.data) return _zeb.data;
-  const [mista, hraci] = await Promise.all([
+  const [mista, hraci, zemeMap] = await Promise.all([
     prisma.gameSpotClaim.groupBy({ by: ['player_id', 'nick'], _count: { _all: true } }),
     prisma.gamePlayer.findMany({
       where: { disabled: false, state: { not: null } },
       orderBy: { state_at: 'desc' }, take: 500,
       select: { id: true, nick: true, company: true, emblem: true, state: true },
     }),
+    // Kdyby sloupec se zemí ještě nebyl v databázi, žebříček kvůli vlaječkám
+    // spadnout nesmí — prostě se nevykreslí.
+    zemeHracu().catch(() => ({})),
   ]);
   // Firmy doplníme k nickům z míst — v žebříčku chceme vidět, kdo je kdo.
   const firmy = await firmyMapa();
   const poMistech = mista.map((m) => ({ id: m.player_id, nick: m.nick,
     firma: firmy[m.player_id] && firmy[m.player_id].firma, znak: firmy[m.player_id] && firmy[m.player_id].znak,
-    hodnota: m._count._all }))
+    zeme: zemeMap[m.player_id] || [], hodnota: m._count._all }))
     .sort((a, b) => b.hodnota - a.hodnota);
 
   const zisk = [], pozvanky = [], jmeni = [];
@@ -734,10 +761,11 @@ async function zebricky() {
     // To, co hráči opravdu zbyde — stejně jako mu to svítí v hlavičce hry.
     const mesicne = zbydeMesicne(st);
     const fi = h.company || (h.nick + ' s.r.o.');
-    if (mesicne > 0) zisk.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, hodnota: Math.round(mesicne) });
-    if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, hodnota: st.refs });
+    const zm = zemeMap[h.id] || [];
+    if (mesicne > 0) zisk.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm, hodnota: Math.round(mesicne) });
+    if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm, hodnota: st.refs });
     // Do žebříčku jmění patří i ten, kdo je v minusu — právě to je vidět.
-    if (st.profile) jmeni.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, hodnota: cisteJmeni(st) });
+    if (st.profile) jmeni.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm, hodnota: cisteJmeni(st) });
   });
   zisk.sort((a, b) => b.hodnota - a.hodnota);
   pozvanky.sort((a, b) => b.hodnota - a.hodnota);
@@ -756,7 +784,7 @@ router.get('/leaderboard', async (req, res, next) => {
     const p = await currentPlayer(req);
     const z = await zebricky();
     const orez = (l) => l.slice(0, ZEB_TOP).map((x, i) => ({ poradi: i + 1, nick: x.nick,
-      firma: x.firma || (x.nick + ' s.r.o.'), znak: x.znak || null,
+      firma: x.firma || (x.nick + ' s.r.o.'), znak: x.znak || null, zeme: x.zeme || [],
       hodnota: x.hodnota, ja: !!(p && x.id === p.id) }));
     res.json({ ok: true,
       pradlomaty: orez(z.pradlomaty), zisk: orez(z.zisk), pozvanky: orez(z.pozvanky), jmeni: orez(z.jmeni),

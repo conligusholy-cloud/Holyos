@@ -273,7 +273,8 @@ async function searchArea(query, rawCfg) {
   }).sort((a, b) => b.score - a.score);
 
   return {
-    area: { lat: area.lat, lon: area.lon, display_name: area.display_name, bbox: area.bbox },
+    area: { lat: area.lat, lon: area.lon, display_name: area.display_name, bbox: area.bbox,
+      country_code: area.country_code || null },
     config: cfg,
     population: population,
     population_source: pop ? pop.source : null,

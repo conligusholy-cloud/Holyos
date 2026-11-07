@@ -2498,6 +2498,31 @@ function loadZeb() {
     .then(function (r) { ZEB = r.ok ? r.j : prazdny; })
     .catch(function () { ZEB = prazdny; });
 }
+// ─── Vlaječky zemí ─────────────────────────────────────────────────
+// Vlajka je dvojice znaků „regional indicator“ — telefon z nich slöží obrázek
+// vlajky sám. Kde na to písmo není (Windows), ukáže aspoň kód země, což stačí.
+var ZEME_NAZEV = { cz: 'Česko', sk: 'Slovensko', pl: 'Polsko', de: 'Německo', at: 'Rakousko',
+  hu: 'Maďarsko', si: 'Slovinsko', hr: 'Chorvatsko', it: 'Itálie', es: 'Španělsko',
+  fr: 'Francie', nl: 'Nizozemsko', be: 'Belgie', ch: 'Švýcarsko', gb: 'Velká Británie',
+  ie: 'Irsko', dk: 'Dánsko', se: 'Švédsko', no: 'Norsko', fi: 'Finsko', pt: 'Portugalsko',
+  ro: 'Rumunsko', bg: 'Bulharsko', gr: 'Řecko', ua: 'Ukrajina', us: 'Spojené státy',
+  ca: 'Kanada' };
+function vlajka(kod) {
+  var k = String(kod || '').toUpperCase();
+  if (!/^[A-Z]{2}$/.test(k)) return '';
+  return String.fromCodePoint(0x1F1E6 + k.charCodeAt(0) - 65, 0x1F1E6 + k.charCodeAt(1) - 65);
+}
+function zemeNazev(kod) {
+  var k = String(kod || '').toLowerCase();
+  return ZEME_NAZEV[k] || k.toUpperCase();
+}
+// Vlaječky zemí, ve kterých hráči stojí prádlomaty — od té, kde jich má nejvíc.
+function vlajkyHtml(zeme) {
+  var z = (zeme || []).filter(function (k) { return vlajka(k); });
+  if (!z.length) return '';
+  return '<i class="vlajky" title="' + esc(z.map(zemeNazev).join(', ')) + '">'
+    + z.map(function (k) { return '<i>' + vlajka(k) + '</i>'; }).join('') + '</i>';
+}
 function paintZeb() {
   var box = $('zeb-body');
   if (!ZEB) { box.innerHTML = '<p class="muted small">Načítám…</p>'; return loadZeb().then(paintZeb); }
@@ -2512,6 +2537,7 @@ function paintZeb() {
             + (x.znak ? znakSvg(x.znak, 26) : '<i class="znak-mezera"></i>')
             + '<span class="nick">' + esc(x.firma || x.nick)
             + '<i>' + esc(x.nick) + '</i></span>'
+            + vlajkyHtml(x.zeme)
             + '<b>' + popis.jed(x.hodnota) + '</b></div>';
         }).join('') + '</div>'
       : '<div class="empty">' + (ZEB.chyba ? 'Žebříček se nepodařilo načíst. Zkus to za chvíli.' : 'Tady zatím nikdo není. Buď první.') + '</div>')

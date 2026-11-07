@@ -88,10 +88,14 @@ async function runScout(query, key, job) {
     });
     if (r && r.error) { job.state = 'error'; job.error = r.error; return; }
     const spots = (r.candidates || []).map((c, i) => toSpot(c, i, key.replace(/[^a-z0-9]+/g, '-')));
+    // Dvoupismenný kód země — ve hře z něj jsou vlaječky u hráčů v žebříčku.
+    const zeme = r.area && r.area.country_code
+      ? String(r.area.country_code).toLowerCase().slice(0, 2) : null;
     const data = {
       area: {
         id: key,
         name: (r.area && r.area.display_name ? String(r.area.display_name).split(',')[0].trim() : query),
+        country: zeme,
         lat: r.area ? r.area.lat : null,
         lon: r.area ? r.area.lon : null,
       },
@@ -104,8 +108,8 @@ async function runScout(query, key, job) {
     try {
       await prisma.gameArea.upsert({
         where: { key },
-        create: { key, name: data.area.name, lat: data.area.lat, lon: data.area.lon, population: data.population, spots },
-        update: { name: data.area.name, lat: data.area.lat, lon: data.area.lon, population: data.population, spots },
+        create: { key, name: data.area.name, country: zeme, lat: data.area.lat, lon: data.area.lon, population: data.population, spots },
+        update: { name: data.area.name, country: zeme, lat: data.area.lat, lon: data.area.lon, population: data.population, spots },
       });
     } catch (e) { console.warn('[game] uložení města:', e.message); }
     job.state = 'done';
@@ -130,7 +134,7 @@ router.get('/scout', async (req, res, next) => {
     const saved = await prisma.gameArea.findUnique({ where: { key } }).catch(() => null);
     if (saved && Array.isArray(saved.spots) && saved.spots.length) {
       const data = {
-        area: { id: key, name: saved.name, lat: saved.lat, lon: saved.lon },
+        area: { id: key, name: saved.name, country: saved.country || null, lat: saved.lat, lon: saved.lon },
         population: saved.population, spots: saved.spots,
       };
       scoutCache.set(key, { at: Date.now(), data });
