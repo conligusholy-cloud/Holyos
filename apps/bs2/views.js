@@ -1377,7 +1377,7 @@ function supporterCredit(s, { rows = [], sellable = [], rate = 25, transfers = [
 function supporterVybery(s, { rows = [], payout = null, msg = '', err = '' } = {}) {
   const cur = payout ? payout.cur : (s.currency === 'EUR' ? 'EUR' : 'CZK'), sym = cur === 'EUR' ? '€' : 'Kč';
   const money = (v, c) => Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' ' + (c === 'EUR' ? '€' : 'Kč');
-  const st = { requested: ['invited', 'čeká na výplatu'], paid: ['active', 'vyplaceno'], rejected: ['blocked', 'zamítnuto'] };
+  const st = { requested: ['invited', 'zpracovává se'], paid: ['active', 'vyplaceno'], rejected: ['blocked', 'zamítnuto'] };
   const MNs = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
   const forMonth = (d) => { if (!d) return '—'; const x = new Date(new Date(d).toLocaleString('en-US', { timeZone: 'Europe/Prague' })); x.setDate(1); x.setMonth(x.getMonth() - 1); return MNs[x.getMonth()] + ' ' + x.getFullYear(); };
   const hist = rows.length ? `<table class="cards"><thead><tr><th>Podáno</th><th>Za měsíc</th><th>Částka</th><th>VS</th><th>Účet</th><th>Stav</th><th>Vyřízeno</th><th>Poznámka</th></tr></thead><tbody>${rows.map(r => { const S = st[r.status] || st.requested; const paidAmt = r.status === 'paid' && r.paid_amount != null ? r.paid_amount : r.amount;
@@ -1385,7 +1385,7 @@ function supporterVybery(s, { rows = [], payout = null, msg = '', err = '' } = {
     <td data-l="Částka"><b style="white-space:nowrap">${money(paidAmt, r.currency)}</b>${r.status === 'paid' && r.paid_amount != null && Number(r.paid_amount) !== Number(r.amount) ? `<div class="small muted">žádáno ${money(r.amount, r.currency)}</div>` : ''}</td>
     <td data-l="VS" class="small">${r.vs ? `<b>${esc(r.vs)}</b>` : '—'}</td><td data-l="Účet" class="small" style="white-space:nowrap">${esc(r.account || '—')}</td>
     <td data-l="Stav"><span class="badge ${S[0]}">${S[1]}</span></td>
-    <td data-l="Vyřízeno" class="small muted">${r.status === 'requested' ? 'zpracujeme v tomto měsíci' : fmtDT(r.paid_at || r.decided_at)}${r.status === 'paid' && r.pay_method ? `<div>${esc(r.pay_method)}</div>` : ''}</td>
+    <td data-l="Vyřízeno" class="small muted">${r.status === 'requested' ? '—' : fmtDT(r.paid_at || r.decided_at)}${r.status === 'paid' && r.pay_method ? `<div>${esc(r.pay_method)}</div>` : ''}</td>
     <td data-l="Poznámka" class="small">${r.status === 'rejected' && r.reject_reason ? `<span style="color:var(--err)">Důvod: ${esc(r.reject_reason)}</span>` : esc(r.note || '—')}</td></tr>`; }).join('')}</tbody></table>` : '<p class="muted" style="margin:0">Zatím jste nepodali žádnou žádost o výběr.</p>';
   return layout({ title: 'Výběry', user: s.nick, nav: userNav(s), active: 'vybery', help: null, body: `
   <h2 style="display:flex;align-items:center;gap:8px;margin:22px 0 14px">${ico('wallet', 18)} Výběry</h2>
