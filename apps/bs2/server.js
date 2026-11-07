@@ -2354,7 +2354,13 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   let badKinds = {};
   try { badKinds = (await q(`SELECT count(*) FILTER (WHERE ex AND NOT st)::int AS ex, count(*) FILTER (WHERE st AND NOT ex)::int AS st, count(*) FILTER (WHERE ex AND st)::int AS both, count(*) FILTER (WHERE NOT ex AND NOT st)::int AS yr, count(*)::int AS n FROM (SELECT bool_or(coalesce(b->>'section','') ~* 'expanz') AS ex, bool_or(coalesce(b->>'section','') <> '' AND coalesce(b->>'section','') !~* 'expanz') AS st, bool_or(coalesce(b->>'section','') = '') AS yr FROM supporters s, jsonb_array_elements(CASE WHEN jsonb_typeof(s.partner_support->'std_check'->'bad')='array' THEN s.partner_support->'std_check'->'bad' ELSE '[]'::jsonb END) b WHERE s.partner_support->'std_check'->>'ok'='false' GROUP BY s.id) t`)).rows[0]; } catch (e) { /* jen info */ }
   let curN = null; try { curN = (await q(`SELECT count(*) FILTER (WHERE partner_support->>'std_cur_mismatch'='true')::int AS n, count(*) FILTER (WHERE partner_support->>'std_v' = '8')::int AS read8 FROM supporters WHERE partner_support IS NOT NULL`)).rows[0]; } catch (e) { /* jen info */ }
-  res.send(V.adminVybery({ curN, onlyCur, onlyEur, pendingCount: req.vyberyPending || 0, badKinds, admin: req.admin, rows, qstr: qs, onlySup, onlyBad, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
+  let fc = null;
+  try { fc = (await q(`SELECT count(*) FILTER (WHERE (coalesce(CASE WHEN partner_support->>'std_total' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total')::numeric END,0) > 0 OR coalesce(${EX_CZK},0) > 0))::int AS sup,
+      count(*) FILTER (WHERE partner_support->'std_check'->>'ok' = 'false')::int AS bad,
+      count(*) FILTER (WHERE (partner_support->>'std_currency' = 'EUR' OR partner_support->>'currency' = 'EUR' OR partner_support->>'std_mixed' = 'true' OR partner_support->>'std_cur_mismatch' = 'true'))::int AS eur,
+      count(*) FILTER (WHERE partner_support->>'std_cur_mismatch' = 'true')::int AS cur
+      FROM supporters WHERE status='active'`)).rows[0]; } catch (e) { /* jen info */ }
+  res.send(V.adminVybery({ fc, curN, onlyCur, onlyEur, pendingCount: req.vyberyPending || 0, badKinds, admin: req.admin, rows, qstr: qs, onlySup, onlyBad, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
 }));
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
