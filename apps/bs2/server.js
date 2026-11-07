@@ -2338,6 +2338,8 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   if (onlyBad) where.push(`partner_support->'std_check'->>'ok' = 'false'`);
   const onlyCur = req.query.c === '1';
   if (onlyCur) where.push(`partner_support->>'std_cur_mismatch' = 'true'`);
+  const onlyEur = req.query.e === '1';
+  if (onlyEur) where.push(`(partner_support->>'std_currency' = 'EUR' OR partner_support->>'currency' = 'EUR' OR partner_support->>'std_mixed' = 'true' OR partner_support->>'std_cur_mismatch' = 'true')`);
   if (qs) { params.push('%' + qs.toLowerCase() + '%'); where.push(`(lower(email) LIKE $1 OR lower(coalesce(first_name,'')) LIKE $1 OR lower(coalesce(last_name,'')) LIKE $1 OR lower(coalesce(nick,'')) LIKE $1)`); }
   const rows = (await q(`SELECT id,email,first_name,last_name,nick,
     partner_support->>'position' AS legacy_position, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_rate' AS piv_rate, partner_support->>'piv_tier_visits' AS piv_tier_visits,
@@ -2352,7 +2354,7 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   let badKinds = {};
   try { badKinds = (await q(`SELECT count(*) FILTER (WHERE ex AND NOT st)::int AS ex, count(*) FILTER (WHERE st AND NOT ex)::int AS st, count(*) FILTER (WHERE ex AND st)::int AS both, count(*) FILTER (WHERE NOT ex AND NOT st)::int AS yr, count(*)::int AS n FROM (SELECT bool_or(coalesce(b->>'section','') ~* 'expanz') AS ex, bool_or(coalesce(b->>'section','') <> '' AND coalesce(b->>'section','') !~* 'expanz') AS st, bool_or(coalesce(b->>'section','') = '') AS yr FROM supporters s, jsonb_array_elements(CASE WHEN jsonb_typeof(s.partner_support->'std_check'->'bad')='array' THEN s.partner_support->'std_check'->'bad' ELSE '[]'::jsonb END) b WHERE s.partner_support->'std_check'->>'ok'='false' GROUP BY s.id) t`)).rows[0]; } catch (e) { /* jen info */ }
   let curN = null; try { curN = (await q(`SELECT count(*) FILTER (WHERE partner_support->>'std_cur_mismatch'='true')::int AS n, count(*) FILTER (WHERE partner_support->>'std_v' = '8')::int AS read8 FROM supporters WHERE partner_support IS NOT NULL`)).rows[0]; } catch (e) { /* jen info */ }
-  res.send(V.adminVybery({ curN, onlyCur, pendingCount: req.vyberyPending || 0, badKinds, admin: req.admin, rows, qstr: qs, onlySup, onlyBad, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
+  res.send(V.adminVybery({ curN, onlyCur, onlyEur, pendingCount: req.vyberyPending || 0, badKinds, admin: req.admin, rows, qstr: qs, onlySup, onlyBad, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
 }));
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
@@ -3120,6 +3122,7 @@ app.get('/admin/vybery.xlsx', requireAdmin, wrap(async (req, res) => {
   if (req.query.s === '1') where.push(`(coalesce(CASE WHEN partner_support->>'std_total' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total')::numeric END,0) > 0 OR coalesce(${EX_CZK},0) > 0)`);
   if (req.query.n === '1') where.push(`partner_support->'std_check'->>'ok' = 'false'`);
   if (req.query.c === '1') where.push(`partner_support->>'std_cur_mismatch' = 'true'`);
+  if (req.query.e === '1') where.push(`(partner_support->>'std_currency' = 'EUR' OR partner_support->>'currency' = 'EUR' OR partner_support->>'std_mixed' = 'true' OR partner_support->>'std_cur_mismatch' = 'true')`);
   if (qs) { params.push('%' + qs.toLowerCase() + '%'); where.push(`(lower(email) LIKE $1 OR lower(coalesce(first_name,'')) LIKE $1 OR lower(coalesce(last_name,'')) LIKE $1 OR lower(coalesce(nick,'')) LIKE $1)`); }
   const rows = (await q(`SELECT id,email,first_name,last_name,nick, partner_support->>'std_cur_mismatch' AS cur_mm, partner_support->'std_cur_flags' AS cur_flags,
       partner_support->>'position' AS pos, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency,
