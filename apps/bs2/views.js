@@ -1394,7 +1394,7 @@ function supporterVybery(s, { rows = [], payout = null, msg = '', err = '' } = {
         ${payout.requested > 0 ? `<div class="small" style="margin-top:4px">Už požádáno tento měsíc: <b>${money(payout.requested, cur)}</b> · zbývá <b>${money(payout.available, cur)}</b></div>` : ''}</div>`; })() : ''}
     <p class="small muted" style="margin:0 0 10px">Funkce se testuje. Žádost uvidí administrátor a výplatu zpracuje v daném měsíci. Vyplácí se v ${sym}.</p>
     <form method="post" action="/vybery/request">
-      <label>Částka (${sym})</label><input name="amount" inputmode="decimal" required placeholder="např. 5000"${payout && payout.available != null ? ` value="${String(payout.available).replace('.', ',')}" data-max="${payout.available}"` : ''}>
+      ${payout && payout.available != null ? `<input type="hidden" name="amount" value="${payout.available}">` : `<label>Částka (${sym})</label><input name="amount" inputmode="decimal" required placeholder="např. 5000">`}
       <label style="margin-top:8px">Poznámka (nepovinné)</label><input name="note" maxlength="300" placeholder="např. číslo účtu pro výplatu">
       <div style="height:10px"></div><button class="btn" type="submit">Odeslat žádost</button>
     </form>
