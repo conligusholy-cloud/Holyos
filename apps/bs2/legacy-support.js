@@ -79,7 +79,7 @@ function parseInvests(text) {
     // hodnota sekce = součet jednotlivých nákupů JEN když sedí s „Celkem“ portálu; jinak se použije „Celkem“ a sekce se označí ⚠ (nesedí)
     const v = pr.matches ? pr.sum : celkem;
     out.row_checks.push({ section: name, rows: pr.rows.length, rows_sum: pr.sum, portal: celkem, issues: pr.issues, ok: pr.matches });
-    out.sections[name] = (out.sections[name] || 0) + v; if (k) out[k] = (out[k] || 0) + v;
+    out.sections[name] = (out.sections[name] || 0) + v; if (k) { out[k] = (out[k] || 0) + v; out.cur_k = out.cur_k || {}; if (v) out.cur_k[k] = curOf(s[4]); }
     // jednotlivé nákupy expanze (datum, částka) — uložíme pro audit a export
     if (k === 'expanze' && pr.matches) out.expanze_rows = (out.expanze_rows || []).concat(pr.rows.map((r) => [r.date, r.amount]));
   }
@@ -226,20 +226,38 @@ async function fetchLegacyStandardWithJar(jar) {
       const d = parseInvests(htmlToText(pg.html));
       if (d.year && d.year !== y) continue; // stránka vrátila jiný rok — nepočítat dvakrát
       if (!cur && d.currency) cur = d.currency;
-      // „ostatni“ = sekce, které neznáme jménem — započtou se do standardní podpory (vše kromě expanze a NeuraWash)
+      // „ostatni“ = sekce, které neznáme jménem (do ST se nezapočítávají)
       const known = (d.palety || 0) + (d.opakovacky || 0) + (d.expanze || 0) + (d.neurawash || 0) + (d.balicky || 0) + (d.likvidni || 0);
       const secSum = Object.values(d.sections || {}).reduce((a, v) => a + (v || 0), 0);
-      const rec = { palety: d.palety || 0, opakovacky: d.opakovacky || 0, balicky: d.balicky || 0, likvidni: d.likvidni || 0, ostatni: Math.round((secSum - known) * 100) / 100, expanze: d.expanze || 0, neurawash: d.neurawash || 0, total_year: d.total_year || 0, sections: d.sections || {}, expanze_rows: d.expanze_rows || [], checks: (d.row_checks || []).map((c) => ({ s: c.section, n: c.rows, sum: c.rows_sum, p: c.portal, ok: !!c.ok })) };
+      // měna po sekcích — jeden uživatel může mít některé nákupy v Kč a jiné v EUR
+      const ck = {}; for (const k of ['palety', 'opakovacky', 'balicky', 'expanze']) ck[k] = (d.cur_k && d.cur_k[k]) || d.currency || 'CZK';
+      const rec = { palety: d.palety || 0, opakovacky: d.opakovacky || 0, balicky: d.balicky || 0, likvidni: d.likvidni || 0, ostatni: Math.round((secSum - known) * 100) / 100, expanze: d.expanze || 0, neurawash: d.neurawash || 0, total_year: d.total_year || 0, cur: ck, sections: d.sections || {}, expanze_rows: d.expanze_rows || [], checks: (d.row_checks || []).map((c) => ({ s: c.section, n: c.rows, sum: c.rows_sum, p: c.portal, ok: !!c.ok })) };
       for (const c of (d.row_checks || [])) if (!c.ok) bad.push({ y, section: c.section, portal: c.portal, parsed: c.rows_sum, diff: Math.round((c.portal - c.rows_sum) * 100) / 100, rows: c.rows, issues: c.issues });
-      if (d.total_year != null && Math.abs(Number(d.total_year) - secSum) > 0.5) bad.push({ y, portal: Number(d.total_year), parsed: Math.round(secSum * 100) / 100, diff: Math.round((Number(d.total_year) - secSum) * 100) / 100 });
+      const yearCurs = new Set(Object.entries(d.cur_k || {}).map(([, v]) => v));
+      if (yearCurs.size <= 1 && d.total_year != null && Math.abs(Number(d.total_year) - secSum) > 0.5) bad.push({ y, portal: Number(d.total_year), parsed: Math.round(secSum * 100) / 100, diff: Math.round((Number(d.total_year) - secSum) * 100) / 100 });
       if (rec.palety || rec.opakovacky || rec.balicky || rec.likvidni || rec.ostatni || rec.expanze || rec.neurawash || rec.total_year) by[y] = rec;
     }
     const sum = (k) => Math.round(Object.values(by).reduce((a, r) => a + (Number(r[k]) || 0), 0) * 100) / 100;
-    const data = { std_by_year: by, std_years: years, std_palety_all: sum('palety'), std_opakovacky_all: sum('opakovacky'), std_expanze_all: sum('expanze'), std_neurawash_all: sum('neurawash'), std_balicky_all: sum('balicky'), std_likvidni_all: sum('likvidni'), std_ostatni_all: sum('ostatni'), std_v: 6, std_currency: cur || 'CZK', std_checked_at: new Date().toISOString(), std_check: { ok: bad.length === 0, bad } };
-    // Standardní podpora = palety + opakovačky (všechny roky). Balíčky, likvidní a ostatní se do součtu nezapočítávají.
-    data.std_total = Math.round((data.std_palety_all + data.std_opakovacky_all) * 100) / 100;
-    if (data.std_currency === 'EUR') { try { const c = await cnbEurRate(); data.std_total_czk = Math.round(data.std_total * c.rate * 100) / 100; data.std_eur_rate = c.rate; data.std_eur_rate_date = c.date; } catch (e) { /* bez kurzu */ } }
-    else data.std_total_czk = data.std_total;
+    // ST = palety + opakovačky + balíčky; EX = jen expanze. Při směsi měn se každá sekce v každém roce přepočte na Kč kurzem ČNB.
+    const KS = ['palety', 'opakovacky', 'balicky', 'expanze'];
+    let hasEur = false, hasCzk = false;
+    for (const r of Object.values(by)) for (const k of KS) if (Number(r[k])) { if (r.cur[k] === 'EUR') hasEur = true; else hasCzk = true; }
+    let rate = null, rateDate = null;
+    if (hasEur) { const c = await cnbEurRate(); rate = c.rate; rateDate = c.date; }
+    const czkSum = (k) => Math.round(Object.values(by).reduce((a, r) => a + (Number(r[k]) || 0) * (r.cur[k] === 'EUR' ? rate : 1), 0) * 100) / 100;
+    const mixed = hasEur && hasCzk;
+    const data = { std_by_year: by, std_years: years, std_neurawash_all: sum('neurawash'), std_likvidni_all: sum('likvidni'), std_ostatni_all: sum('ostatni'), std_v: 7, std_checked_at: new Date().toISOString(), std_check: { ok: bad.length === 0, bad }, std_mixed: mixed };
+    if (mixed) { // smíšené měny → vše v Kč
+      data.std_currency = 'CZK';
+      for (const k of KS) data['std_' + k + '_all'] = czkSum(k);
+    } else {
+      data.std_currency = hasEur ? 'EUR' : (cur || 'CZK');
+      for (const k of KS) data['std_' + k + '_all'] = sum(k);
+    }
+    data.std_total = Math.round((data.std_palety_all + data.std_opakovacky_all + data.std_balicky_all) * 100) / 100;
+    data.std_total_czk = Math.round((czkSum('palety') + czkSum('opakovacky') + czkSum('balicky')) * 100) / 100;
+    data.std_expanze_czk = czkSum('expanze');
+    if (rate) { data.std_eur_rate = rate; data.std_eur_rate_date = rateDate; }
     return { ok: true, data };
   } catch (e) { return { ok: false, error: e.message }; }
 }
