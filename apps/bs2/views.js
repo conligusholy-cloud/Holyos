@@ -1643,9 +1643,18 @@ function vyberyTabs(active, pending = 0) {
 // Admin → Výběry → Výplata (žádosti, aktuální měsíc) a Vyplaceno (historie)
 // Provize k výplatě (měsíčně). Pravidla se doplňují postupně — dokud pravidlo není, vrací null (zobrazí se „—“).
 // r = uživatel (std_total, std_expanze_all, exp_invested, mig_position, std_currency…), ctx = { period: 'RRRR-MM', avgVisits }
+// Tabulka „Návštěvnost → úrok p.a." pro ST podporu: do 2,00 nic, od 2,10 úrok = návštěvnost (krok 0,1), strop 18,60
+function stRateFromVisits(avg) {
+  const v = Math.floor(Math.round(Number(avg) * 1000) / 100) / 10; // na 0,1 dolů (4,27 → 4,2)
+  if (!isFinite(v) || v <= 2) return 0;
+  return Math.min(v, 18.6);
+}
 function provizeVyplaty(r, ctx) {
   const p = { st: null, expanze: null, vip: null, vip2: null };
-  // TODO pravidlo ST podpora
+  // ST podpora: úrok p.a. podle tabulky návštěvnosti (ø ≤ 2,00 → 0 %; ø 2,10–18,60 → úrok p.a. = ø, po 0,1),
+  // měsíční výplata = ST podpora × úrok p.a. / 100 / 12 (v měně účtu)
+  const st = Number(r.std_total), avg = ctx && ctx.avgVisits != null ? Number(ctx.avgVisits) : NaN;
+  if (isFinite(st) && r.std_total != null && isFinite(avg)) { p.st = Math.round(st * stRateFromVisits(avg) / 100 / 12 * 100) / 100; p.st_rate = stRateFromVisits(avg); }
   // TODO pravidlo Expanze
   // TODO pravidlo VIP
   // TODO pravidlo VIP 2
@@ -1690,8 +1699,8 @@ function adminVyberyPayouts({ verified = [], admin, tab, rows, month, curM, peri
       <td data-l="Měna účtu"><span class="badge ${cs(r) === 'EUR' ? 'invited' : 'active'}">${cs(r)}</span></td>
       <td data-l="ST podpora"><b style="white-space:nowrap">${num(r.std_total, r)}</b></td>
       <td data-l="EX podpora"><b style="white-space:nowrap">${num(r.std_expanze_all != null ? r.std_expanze_all : r.exp_invested, r)}</b></td>
-      ${(() => { const p = provizeVyplaty(r, { period, avgVisits: periodRow && periodRow.avg_visits != null ? Number(periodRow.avg_visits) : null }); const td = (l, v, strong) => `<td data-l="${l}" style="${PROV_TD}${strong ? ';background:rgba(167,139,250,.20)' : ''}">${v == null ? '<span class="muted small" title="Pravidlo výpočtu zatím není nastavené">—</span>' : `<b style="white-space:nowrap${strong ? ';color:#c4b5fd' : ''}">${Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 })} ${cur(r)}</b>`}</td>`;
-        return td('Provize ST podpora', p.st) + td('Provize Expanze', p.expanze) + td('Provize VIP', p.vip) + td('Provize VIP 2', p.vip2) + td('K výplatě', p.total, true); })()}
+      ${(() => { const p = provizeVyplaty(r, { period, avgVisits: periodRow && periodRow.avg_visits != null ? Number(periodRow.avg_visits) : null }); const td = (l, v, strong, tip) => `<td data-l="${l}" style="${PROV_TD}${strong ? ';background:rgba(167,139,250,.20)' : ''}"${tip ? ` title="${esc(tip)}"` : ''}>${v == null ? '<span class="muted small" title="Pravidlo výpočtu zatím není nastavené">—</span>' : `<b style="white-space:nowrap${strong ? ';color:#c4b5fd' : ''}">${Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 })} ${cur(r)}</b>`}</td>`;
+        return td('Provize ST podpora', p.st, false, p.st != null ? 'ST podpora ' + Number(r.std_total).toLocaleString('cs-CZ') + ' × ' + String(p.st_rate).replace('.', ',') + ' % p.a. ÷ 12 (ø návštěvnost ' + String(periodRow && periodRow.avg_visits).replace('.', ',') + ')' : 'Zadejte průměrnou návštěvnost za měsíc') + td('Provize Expanze', p.expanze) + td('Provize VIP', p.vip) + td('Provize VIP 2', p.vip2) + td('K výplatě', p.total, true); })()}
       <td data-l="Žádost">${r.pending ? '<span class="badge invited" style="color:#fbbf24">čeká ' + r.pending + '×</span>' : '<span class="muted small">zatím nežádal</span>'}</td>
       <td class="actions"><a class="btn sec sm" href="/admin/vybery/kontrola/${r.id}">Kontrola</a> <a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a></td></tr>`).join('');
     return `<h2 style="margin:22px 0 6px">💸 Možno vyplácet <span class="muted" style="font-size:14px;font-weight:500">${verified.length} uživatelů · vyplnili kontrolu a sedí se systémem, nebo byli ověřeni ručně</span></h2>
