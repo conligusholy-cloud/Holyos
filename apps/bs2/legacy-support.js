@@ -41,19 +41,25 @@ const curOf = (s) => (/eur|€/i.test(String(s || '')) ? 'EUR' : 'CZK');
 // Řádky nákupů v sekci: „typ [kiosek] částka czk datum“ (buňky tabulky jsou po htmlToText na samostatných řádcích).
 // U palet kód typu nese částku (P500 = 500 Kč, P12500 = 12 500 Kč) → tím se odliší číslo kiosku od částky
 // („P500 43 500 czk“ = kiosek 43, 500 Kč; „P36500 36 500 czk“ = bez kiosku, 36 500 Kč).
-function parseRows(block) {
-  const flat = String(block || '').replace(/[\s ]+/g, ' ');
+// U ostatních typů (expanze, opakovačky…) nelze poznat, zda první číslo je kiosek, nebo část částky („47 1 000“).
+// Zkusí se dvě čtení — A: bez kiosku, B: první číslo je kiosek — a přijme se jen to, jehož součet sedí s „Celkem“ sekce.
+// Když nesedí ani jedno, vrací se matches:false a volající použije „Celkem“ portálu (zkreslený součet nikdy nejde do čísel).
+function parseRows(block, celkem) {
+  const flat = String(block || '').replace(/[\s\u00a0]+/g, ' ');
   const re = new RegExp('(\\p{L}+\\d*)\\s+([\\d ]+?)\\s*' + CUR + '\\s+(\\d{2}\\.\\d{2}\\.\\d{4})', 'giu');
-  const rows = []; let issues = 0; let m;
+  const raw = []; let issues = 0; let m;
   while ((m = re.exec(flat))) {
-    const type = m[1], tail = m[2].replace(/ /g, ''), pm = /^P(\d+)$/i.exec(type);
-    let amount = null;
-    if (pm) { const N = pm[1]; if (tail === N || tail.endsWith(N)) amount = Number(N); else { amount = Number(tail); issues++; } }
-    else amount = Number(tail);
-    if (!isFinite(amount)) { amount = 0; issues++; }
-    rows.push({ type, amount, date: m[4] });
+    const type = m[1], tokens = m[2].trim().split(' ').filter(Boolean), pm = /^P(\d+)$/i.exec(type);
+    let fixed = null;
+    if (pm) { const N = pm[1], tail = tokens.join(''); if (tail === N || tail.endsWith(N)) fixed = Number(N); else issues++; }
+    raw.push({ type, tokens, fixed, date: m[4] });
   }
-  return { rows, issues, sum: Math.round(rows.reduce((a, r) => a + r.amount, 0) * 100) / 100 };
+  const amt = (r, mode) => { if (r.fixed != null) return r.fixed; const t = (mode === 'B' && r.tokens.length > 1 ? r.tokens.slice(1) : r.tokens).join(''); const n = Number(t); return isFinite(n) ? n : 0; };
+  const sumOf = (mode) => Math.round(raw.reduce((a, r) => a + amt(r, mode), 0) * 100) / 100;
+  let mode = 'A', sum = sumOf('A');
+  if (raw.length && Math.abs(sum - celkem) > 0.5) { const sB = sumOf('B'); if (Math.abs(sB - celkem) <= 0.5) { mode = 'B'; sum = sB; } }
+  const rows = raw.map((r) => ({ type: r.type, amount: amt(r, mode), date: r.date }));
+  return { rows, issues, sum, mode, matches: raw.length > 0 && issues === 0 && Math.abs(sum - celkem) <= 0.5 };
 }
 function parseInvests(text) {
   const out = {};
@@ -69,14 +75,13 @@ function parseInvests(text) {
   out.row_checks = []; // kontrola po řádcích: součet jednotlivých nákupů vs. „Celkem“ sekce
   while ((s = re.exec(text))) {
     const name = s[1].trim(); const k = map[name.toLowerCase()]; const celkem = num(s[3]) || 0;
-    const pr = parseRows(s[2]);
-    // hodnota sekce = součet jednotlivých nákupů (pokud se řádky přečetly bez problémů), jinak „Celkem“ portálu
-    const useRows = pr.rows.length > 0 && pr.issues === 0;
-    const v = useRows ? pr.sum : celkem;
-    out.row_checks.push({ section: name, rows: pr.rows.length, rows_sum: pr.sum, portal: celkem, issues: pr.issues, ok: useRows && Math.abs(pr.sum - celkem) <= 0.5 });
+    const pr = parseRows(s[2], celkem);
+    // hodnota sekce = součet jednotlivých nákupů JEN když sedí s „Celkem“ portálu; jinak se použije „Celkem“ a sekce se označí ⚠ (nesedí)
+    const v = pr.matches ? pr.sum : celkem;
+    out.row_checks.push({ section: name, rows: pr.rows.length, rows_sum: pr.sum, portal: celkem, issues: pr.issues, ok: pr.matches });
     out.sections[name] = (out.sections[name] || 0) + v; if (k) out[k] = (out[k] || 0) + v;
     // jednotlivé nákupy expanze (datum, částka) — uložíme pro audit a export
-    if (k === 'expanze') out.expanze_rows = (out.expanze_rows || []).concat(pr.rows.map((r) => [r.date, r.amount]));
+    if (k === 'expanze' && pr.matches) out.expanze_rows = (out.expanze_rows || []).concat(pr.rows.map((r) => [r.date, r.amount]));
   }
   for (const k of ['palety', 'expanze', 'neurawash', 'opakovacky', 'balicky', 'likvidni']) if (out[k] == null) out[k] = 0;
   if (!out.currency) out.currency = 'CZK';
@@ -230,7 +235,7 @@ async function fetchLegacyStandardWithJar(jar) {
       if (rec.palety || rec.opakovacky || rec.balicky || rec.likvidni || rec.ostatni || rec.expanze || rec.neurawash || rec.total_year) by[y] = rec;
     }
     const sum = (k) => Math.round(Object.values(by).reduce((a, r) => a + (Number(r[k]) || 0), 0) * 100) / 100;
-    const data = { std_by_year: by, std_years: years, std_palety_all: sum('palety'), std_opakovacky_all: sum('opakovacky'), std_expanze_all: sum('expanze'), std_neurawash_all: sum('neurawash'), std_balicky_all: sum('balicky'), std_likvidni_all: sum('likvidni'), std_ostatni_all: sum('ostatni'), std_v: 4, std_currency: cur || 'CZK', std_checked_at: new Date().toISOString(), std_check: { ok: bad.length === 0, bad } };
+    const data = { std_by_year: by, std_years: years, std_palety_all: sum('palety'), std_opakovacky_all: sum('opakovacky'), std_expanze_all: sum('expanze'), std_neurawash_all: sum('neurawash'), std_balicky_all: sum('balicky'), std_likvidni_all: sum('likvidni'), std_ostatni_all: sum('ostatni'), std_v: 5, std_currency: cur || 'CZK', std_checked_at: new Date().toISOString(), std_check: { ok: bad.length === 0, bad } };
     // Standardní podpora = palety + opakovačky (všechny roky). Balíčky, likvidní a ostatní se do součtu nezapočítávají.
     data.std_total = Math.round((data.std_palety_all + data.std_opakovacky_all) * 100) / 100;
     if (data.std_currency === 'EUR') { try { const c = await cnbEurRate(); data.std_total_czk = Math.round(data.std_total * c.rate * 100) / 100; data.std_eur_rate = c.rate; data.std_eur_rate_date = c.date; } catch (e) { /* bez kurzu */ } }
