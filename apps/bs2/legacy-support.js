@@ -46,20 +46,21 @@ const curOf = (s) => (/eur|€/i.test(String(s || '')) ? 'EUR' : 'CZK');
 // Když nesedí ani jedno, vrací se matches:false a volající použije „Celkem“ portálu (zkreslený součet nikdy nejde do čísel).
 function parseRows(block, celkem) {
   const flat = String(block || '').replace(/[\s\u00a0]+/g, ' ');
-  const re = new RegExp('(\\p{L}+\\d*)\\s+([\\d ]+?)\\s*' + CUR + '\\s+(\\d{2}\\.\\d{2}\\.\\d{4})', 'giu');
+  const re = new RegExp('(\\p{L}+\\d*)\\s+([\\d ]+?(?:[.,]\\d{1,2})?)\\s*' + CUR + '\\s+(\\d{2}\\.\\d{2}\\.\\d{4})', 'giu');
   const raw = []; let issues = 0; let m;
   while ((m = re.exec(flat))) {
     const type = m[1], tokens = m[2].trim().split(' ').filter(Boolean), pm = /^P(\d+)$/i.exec(type);
     let fixed = null;
-    if (pm) { const N = pm[1], tail = tokens.join(''); if (tail === N || tail.endsWith(N)) fixed = Number(N); else issues++; }
+    if (pm) { const N = pm[1], tail = tokens.join(''); if (tail === N || tail.endsWith(N)) fixed = Number(N); /* u eurových účtů kód typu nemusí odpovídat částce → čte se jako ostatní typy (A/B proti Celkem) */ }
     raw.push({ type, tokens, fixed, date: m[4] });
   }
-  const amt = (r, mode) => { if (r.fixed != null) return r.fixed; const t = (mode === 'B' && r.tokens.length > 1 ? r.tokens.slice(1) : r.tokens).join(''); const n = Number(t); return isFinite(n) ? n : 0; };
+  const amt = (r, mode) => { if (r.fixed != null) return r.fixed; const t = (mode === 'B' && r.tokens.length > 1 ? r.tokens.slice(1) : r.tokens).join(''); const n = Number(t.replace(',', '.')); return isFinite(n) ? n : 0; };
   const sumOf = (mode) => Math.round(raw.reduce((a, r) => a + amt(r, mode), 0) * 100) / 100;
   let mode = 'A', sum = sumOf('A');
   if (raw.length && Math.abs(sum - celkem) > 0.5) { const sB = sumOf('B'); if (Math.abs(sB - celkem) <= 0.5) { mode = 'B'; sum = sB; } }
   const rows = raw.map((r) => ({ type: r.type, amount: amt(r, mode), date: r.date }));
-  return { rows, issues, sum, mode, matches: raw.length > 0 && issues === 0 && Math.abs(sum - celkem) <= 0.5 };
+  const matches = raw.length > 0 && issues === 0 && Math.abs(sum - celkem) <= 0.5;
+  return { rows, issues, sum, mode, matches, sample: matches ? undefined : flat.slice(0, 260) };
 }
 function parseInvests(text) {
   const out = {};
@@ -78,7 +79,7 @@ function parseInvests(text) {
     const pr = parseRows(s[2], celkem);
     // hodnota sekce = součet jednotlivých nákupů JEN když sedí s „Celkem“ portálu; jinak se použije „Celkem“ a sekce se označí ⚠ (nesedí)
     const v = pr.matches ? pr.sum : celkem;
-    out.row_checks.push({ section: name, rows: pr.rows.length, rows_sum: pr.sum, portal: celkem, issues: pr.issues, ok: pr.matches });
+    out.row_checks.push({ section: name, rows: pr.rows.length, rows_sum: pr.sum, portal: celkem, issues: pr.issues, ok: pr.matches, sample: pr.sample });
     out.sections[name] = (out.sections[name] || 0) + v; if (k) { out[k] = (out[k] || 0) + v; out.cur_k = out.cur_k || {}; if (v) out.cur_k[k] = curOf(s[4]); }
     // jednotlivé nákupy expanze (datum, částka) — uložíme pro audit a export
     if (k === 'expanze' && pr.matches) out.expanze_rows = (out.expanze_rows || []).concat(pr.rows.map((r) => [r.date, r.amount]));
@@ -232,7 +233,7 @@ async function fetchLegacyStandardWithJar(jar) {
       // měna po sekcích — jeden uživatel může mít některé nákupy v Kč a jiné v EUR
       const ck = {}; for (const k of ['palety', 'opakovacky', 'balicky', 'expanze']) ck[k] = (d.cur_k && d.cur_k[k]) || d.currency || 'CZK';
       const rec = { palety: d.palety || 0, opakovacky: d.opakovacky || 0, balicky: d.balicky || 0, likvidni: d.likvidni || 0, ostatni: Math.round((secSum - known) * 100) / 100, expanze: d.expanze || 0, neurawash: d.neurawash || 0, total_year: d.total_year || 0, cur: ck, sections: d.sections || {}, expanze_rows: d.expanze_rows || [], checks: (d.row_checks || []).map((c) => ({ s: c.section, n: c.rows, sum: c.rows_sum, p: c.portal, ok: !!c.ok })) };
-      for (const c of (d.row_checks || [])) if (!c.ok) bad.push({ y, section: c.section, portal: c.portal, parsed: c.rows_sum, diff: Math.round((c.portal - c.rows_sum) * 100) / 100, rows: c.rows, issues: c.issues });
+      for (const c of (d.row_checks || [])) if (!c.ok) bad.push({ y, section: c.section, portal: c.portal, parsed: c.rows_sum, diff: Math.round((c.portal - c.rows_sum) * 100) / 100, rows: c.rows, issues: c.issues, sample: c.sample });
       const yearCurs = new Set(Object.entries(d.cur_k || {}).map(([, v]) => v));
       if (yearCurs.size <= 1 && d.total_year != null && Math.abs(Number(d.total_year) - secSum) > 0.5) bad.push({ y, portal: Number(d.total_year), parsed: Math.round(secSum * 100) / 100, diff: Math.round((Number(d.total_year) - secSum) * 100) / 100 });
       if (rec.palety || rec.opakovacky || rec.balicky || rec.likvidni || rec.ostatni || rec.expanze || rec.neurawash || rec.total_year) by[y] = rec;

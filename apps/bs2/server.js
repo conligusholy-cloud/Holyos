@@ -2770,7 +2770,8 @@ app.get('/admin/partner-support/standard/sync-all', requireAdmin, wrap(async (re
 let EXN_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, errors: [], started_at: null, finished_at: null };
 app.post('/admin/partner-support/expanze/sync-all', requireAdmin, wrap(async (req, res) => {
   if (EXN_JOB.running) return res.json(EXN_JOB);
-  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'ex_checked_at' IS NULL OR coalesce(partner_support->>'ex_v','1') <> '7' OR (partner_support->>'ex_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
+  const onlyBadRun = req.query.only === 'bad';
+  const rows = onlyBadRun ? (await q(`SELECT id,email,nick FROM supporters WHERE partner_support->'std_check'->>'ok' = 'false' ORDER BY id`)).rows : (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'ex_checked_at' IS NULL OR coalesce(partner_support->>'ex_v','1') <> '7' OR (partner_support->>'ex_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
   EXN_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
   await log(req.admin, 'partner_expanze_sync_all', { total: rows.length });
   res.json(EXN_JOB);
