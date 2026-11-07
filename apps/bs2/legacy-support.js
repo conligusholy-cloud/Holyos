@@ -58,8 +58,32 @@ function parseRows(block, celkem) {
   const sumOf = (mode) => Math.round(raw.reduce((a, r) => a + amt(r, mode), 0) * 100) / 100;
   let mode = 'A', sum = sumOf('A');
   if (raw.length && Math.abs(sum - celkem) > 0.5) { const sB = sumOf('B'); if (Math.abs(sB - celkem) <= 0.5) { mode = 'B'; sum = sB; } }
-  const rows = raw.map((r) => ({ type: r.type, amount: amt(r, mode), date: r.date }));
-  const matches = raw.length > 0 && issues === 0 && Math.abs(sum - celkem) <= 0.5;
+  let rows = raw.map((r) => ({ type: r.type, amount: amt(r, mode), date: r.date }));
+  let matches = raw.length > 0 && issues === 0 && Math.abs(sum - celkem) <= 0.5;
+  // Záloha: každý řádek může být čtený víc způsoby (celé číslo / bez kiosku / kód typu) → hledá se kombinace, jejíž součet sedí s „Celkem“
+  if (!matches && raw.length > 0 && raw.length <= 400 && issues === 0) {
+    const toC = (x) => Math.round(x * 100);
+    const cand = raw.map((r) => {
+      const set = new Set(); const t = r.tokens;
+      for (let k = 0; k < Math.min(t.length, 3); k++) { const n = Number(t.slice(k).join('').replace(',', '.')); if (isFinite(n)) set.add(toC(n)); }
+      if (r.fixed != null) set.add(toC(r.fixed));
+      return [...set];
+    });
+    const target = toC(celkem);
+    let layers = [new Map([[0, null]])]; let ok = true;
+    for (let i = 0; i < cand.length && ok; i++) {
+      const next = new Map();
+      for (const [sm] of layers[i]) for (const c of cand[i]) { const ns = sm + c; if (ns <= target && !next.has(ns)) next.set(ns, [sm, c]); }
+      if (next.size > 60000) { ok = false; break; }
+      layers.push(next);
+    }
+    if (ok && layers[cand.length] && layers[cand.length].has(target)) {
+      const picks = new Array(cand.length); let cur = target;
+      for (let i = cand.length; i >= 1; i--) { const [prev, c] = layers[i].get(cur); picks[i - 1] = c; cur = prev; }
+      rows = raw.map((r, i) => ({ type: r.type, amount: picks[i] / 100, date: r.date }));
+      sum = Math.round(picks.reduce((a, c) => a + c, 0)) / 100; mode = 'DP'; matches = true;
+    }
+  }
   return { rows, issues, sum, mode, matches, sample: matches ? undefined : flat.slice(0, 260) };
 }
 function parseInvests(text) {

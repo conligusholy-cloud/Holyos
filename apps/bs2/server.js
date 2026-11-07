@@ -2974,6 +2974,20 @@ app.get('/admin/expanze.xlsx', requireAdmin, wrap(async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="expanze-nakupy-${new Date().toISOString().slice(0, 10)}.xlsx"`);
   res.send(buf);
 }));
+// Diagnostika nesedících: souhrn podle sekce + vzorky řádků, které se nepodařilo přečíst (JSON)
+app.get('/admin/vybery-diag', requireAdmin, wrap(async (req, res) => {
+  const rows = (await q(`SELECT id,nick,email,partner_support->>'std_currency' AS cur, partner_support->'std_check'->'bad' AS bad FROM supporters WHERE partner_support->'std_check'->>'ok' = 'false'`)).rows;
+  const bySec = {}, samples = []; let entries = 0;
+  for (const r of rows) for (const b of (Array.isArray(r.bad) ? r.bad : [])) {
+    entries++;
+    const key = (b.section || '(rok celkem)') + ' · ' + (r.cur || 'CZK');
+    bySec[key] = (bySec[key] || 0) + 1;
+    samples.push({ id: r.id, nick: r.nick, cur: r.cur, y: b.y, section: b.section, portal: b.portal, parsed: b.parsed, diff: b.diff, rows: b.rows, sample: b.sample || null });
+  }
+  samples.sort((a, b2) => Math.abs(b2.diff || 0) - Math.abs(a.diff || 0));
+  const withSample = samples.filter((x) => x.sample);
+  res.json({ users_nesedi: rows.length, entries, by_section: bySec, samples_with_text: withSample.slice(0, 25), samples_largest_diff: samples.slice(0, 15) });
+}));
 // Export seznamu Výběry s aktuálním filtrem (q, s=jen s podporou, n=jen nesedí) do Excelu
 app.get('/admin/vybery.xlsx', requireAdmin, wrap(async (req, res) => {
   const XLSX = require('xlsx');
