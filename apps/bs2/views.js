@@ -1406,8 +1406,20 @@ function supporterVyberyGate(s, { u = {}, positions = [], fields = [], err = '' 
   </div>` : `
   <div class="card" style="max-width:640px">
     <div style="font-size:18px;font-weight:800;margin-bottom:6px">Než požádáte o první výběr</div>
-    <p style="margin:0 0 6px">V rámci převodu ze starého systému si prosím otevřete <b>starý partnerský portál</b> a opište z něj tyto údaje. Slouží jen ke kontrole, že je máme převedené správně.</p>
-    <p class="small muted" style="margin:0 0 12px">Částky zadávejte celkem za všechny roky. Pokud danou položku v Kč nebo v EUR nemáte, nechte pole prázdné.</p>
+    <p style="margin:0 0 10px">V rámci převodu ze starého systému si prosím otevřete <b>starý partnerský portál</b> a opište z něj tyto údaje. Slouží jen ke kontrole, že je máme převedené správně.</p>
+    <details open style="margin:0 0 12px;padding:12px 14px;border:1px solid rgba(79,209,255,.35);border-radius:12px;background:rgba(79,209,255,.06)"><summary style="cursor:pointer;font-weight:800">📋 Návod — kde údaje najdete</summary>
+      <ol style="margin:10px 0 0;padding-left:20px;line-height:1.6">
+        <li>Přihlaste se do starého portálu <a href="https://partner.bestseries.cz/cs/bo/my-invests/" target="_blank" rel="noopener">partner.bestseries.cz</a>.</li>
+        <li>V levém menu otevřete <b>Nákupy → Přehled podpory</b>.</li>
+        <li>Nahoře vyberte <b>rok</b>. Přehled ukazuje vždy jen jeden rok — projděte postupně <b>všechny roky</b>, ve kterých jste nakupovali.</li>
+        <li>V každém roce sečtěte <b>nákup po nákupu</b> zvlášť:
+          <ul style="margin:4px 0;padding-left:18px"><li><b>Palety</b> (podpora palet),</li><li><b>Expanze</b>,</li><li><b>Balíčky</b>.</li></ul>
+          Částky v <b>Kč</b> a v <b>EUR</b> sčítejte odděleně, nepřepočítávejte je.</li>
+        <li>Součty ze všech let sečtěte dohromady a <b>celkovou sumu</b> zapište do políček níže. Položku, kterou nemáte, nechte prázdnou.</li>
+        <li>Nakonec označte svou <b>pozici</b> (Partner / VIP / VIP 2), jak ji vidíte ve starém portálu.</li>
+      </ol>
+      <p class="small muted" style="margin:8px 0 0">Tip: součty si můžete psát bokem na papír nebo do kalkulačky rok po roku. Pokud se něco nebude shodovat, ozveme se vám — nic se tím nezkazí.</p>
+    </details>
     ${err ? `<div class="msg err">${esc(err)}</div>` : ''}
     <form method="post" action="/vybery/kontrola">
       ${fields.map(([k, label]) => `<div style="margin-top:12px"><b>${esc(label)}</b><div class="row" style="gap:10px;margin-top:4px"><label style="flex:1;margin:0">v Kč<input name="${k}_czk" inputmode="decimal" placeholder="0" value="${esc(v('mig_' + k + '_czk'))}"></label><label style="flex:1;margin:0">v EUR<input name="${k}_eur" inputmode="decimal" placeholder="0" value="${esc(v('mig_' + k + '_eur'))}"></label></div></div>`).join('')}
