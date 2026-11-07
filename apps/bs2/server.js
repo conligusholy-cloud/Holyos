@@ -2255,6 +2255,8 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   const params = [], where = ["status='active'"];
   const onlySup = req.query.s === '1';
   if (onlySup) where.push(`(coalesce(CASE WHEN partner_support->>'std_total' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total')::numeric END,0) > 0 OR coalesce(${EX_CZK},0) > 0)`);
+  const onlyBad = req.query.n === '1';
+  if (onlyBad) where.push(`partner_support->'std_check'->>'ok' = 'false'`);
   if (qs) { params.push('%' + qs.toLowerCase() + '%'); where.push(`(lower(email) LIKE $1 OR lower(coalesce(first_name,'')) LIKE $1 OR lower(coalesce(last_name,'')) LIKE $1 OR lower(coalesce(nick,'')) LIKE $1)`); }
   const rows = (await q(`SELECT id,email,first_name,last_name,nick,
     partner_support->>'position' AS legacy_position, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_rate' AS piv_rate, partner_support->>'piv_tier_visits' AS piv_tier_visits,
@@ -2265,7 +2267,7 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   // počty podle pozice (za celý filtr, ne jen za zobrazených 1000 řádků)
   const posCounts = {}; let totalCount = 0;
   try { (await q(`SELECT coalesce(partner_support->>'position','—') AS pos, count(*)::int AS n FROM supporters WHERE ${where.join(' AND ')} GROUP BY 1`, params)).rows.forEach(r => { posCounts[r.pos] = r.n; totalCount += r.n; }); } catch (e) { /* jen info */ }
-  res.send(V.adminVybery({ admin: req.admin, rows, qstr: qs, onlySup, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
+  res.send(V.adminVybery({ admin: req.admin, rows, qstr: qs, onlySup, onlyBad, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
 }));
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
