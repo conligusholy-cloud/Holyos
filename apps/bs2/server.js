@@ -2263,6 +2263,11 @@ app.get('/admin/stats/user/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   res.send(V.adminStatsUser({ admin: req.admin, data, days, holyosUrl: HOLYOS_URL }));
 }));
 // Výběry — admin sekce zatím jako zástupná stránka (funkce se připravuje)
+// Sdílený filtr tabulek (kopie js/column-filters.js z HolyOS) — standardní filtry a řazení
+app.get('/column-filters.js', (req, res) => {
+  try { res.type('application/javascript').set('Cache-Control', 'public, max-age=3600').send(require('fs').readFileSync(require('path').join(__dirname, 'column-filters.js'), 'utf8')); }
+  catch (e) { res.status(404).type('application/javascript').send('/* column-filters.js nenalezen */'); }
+});
 const VYBERY_PAY_SQL = `SELECT w.*, s.email, s.nick, s.first_name, s.last_name, to_char(w.requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM') AS req_month, to_char(w.paid_at AT TIME ZONE 'Europe/Prague','YYYY-MM') AS paid_month FROM withdrawal_requests w JOIN supporters s ON s.id = w.supporter_id`;
 async function vyberyPayoutRows(tab, m) {
   const curM = (await q(`SELECT to_char(now() AT TIME ZONE 'Europe/Prague','YYYY-MM') AS m`)).rows[0].m;
@@ -2280,7 +2285,21 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res, next) => {
   const { rows, month, curM } = await vyberyPayoutRows(tab, req.query.m);
   const sums = {}; rows.forEach((r) => { const v = Number(tab === 'vyplaceno' && r.status === 'paid' ? (r.paid_amount != null ? r.paid_amount : r.amount) : r.amount); if (tab === 'vyplaceno' && r.status !== 'paid') return; sums[r.currency] = (sums[r.currency] || 0) + v; });
   const olderPending = tab === 'vyplata' && month === curM ? (await q(`SELECT count(*)::int AS n FROM withdrawal_requests WHERE status='requested' AND to_char(requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM') <> $1`, [curM])).rows[0].n : 0;
-  res.send(V.adminVyberyPayouts({ admin: req.admin, tab, rows, month, curM, sums, olderPending, pendingCount, msg: String(req.query.msg || '').slice(0, 200), holyosUrl: HOLYOS_URL }));
+  let period = null, periodRow = null;
+  if (tab === 'vyplata') {
+    period = (await q(`SELECT to_char((now() AT TIME ZONE 'Europe/Prague') - interval '1 month', 'YYYY-MM') AS p`)).rows[0].p;
+    periodRow = (await q(`SELECT * FROM vybery_periods WHERE period=$1`, [period])).rows[0] || null;
+  }
+  res.send(V.adminVyberyPayouts({ period, periodRow, admin: req.admin, tab, rows, month, curM, sums, olderPending, pendingCount, msg: String(req.query.msg || '').slice(0, 200), holyosUrl: HOLYOS_URL }));
+}));
+app.post('/admin/vybery/period', requireAdmin, wrap(async (req, res) => {
+  const period = String(req.body.period || '');
+  const avg = Number(String(req.body.avg_visits || '').replace(/\s/g, '').replace(',', '.'));
+  if (!/^\d{4}-\d{2}$/.test(period) || !isFinite(avg) || avg < 0 || avg > 1000) return res.redirect('/admin/vybery?tab=vyplata&msg=' + encodeURIComponent('Zadejte platnou průměrnou návštěvnost.'));
+  const who = String((req.admin && (req.admin.email || req.admin.name || req.admin.username)) || 'admin').slice(0, 80);
+  await q(`INSERT INTO vybery_periods (period, avg_visits, updated_by) VALUES ($1,$2,$3) ON CONFLICT (period) DO UPDATE SET avg_visits=EXCLUDED.avg_visits, updated_at=now(), updated_by=EXCLUDED.updated_by`, [period, Math.round(avg * 100) / 100, who]);
+  await log(req.admin, 'vybery_period', { period, avg });
+  res.redirect('/admin/vybery?tab=vyplata&msg=' + encodeURIComponent('Průměrná návštěvnost za ' + period + ' uložena.'));
 }));
 app.post('/admin/vybery/request/:id(\\d+)/pay', requireAdmin, wrap(async (req, res) => {
   const method = String(req.body.pay_method || '').trim().slice(0, 40) || null;
@@ -2321,6 +2340,7 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   const rows = (await q(`SELECT id,email,first_name,last_name,nick,
     partner_support->>'position' AS legacy_position, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_rate' AS piv_rate, partner_support->>'piv_tier_visits' AS piv_tier_visits,
     partner_support->>'exp_invested' AS exp_invested, partner_support->>'exp_currency' AS exp_currency, partner_support->>'exp_rate' AS exp_rate, partner_support->>'exp_limit_from' AS exp_limit_from, partner_support->>'exp_eligible' AS exp_eligible,
+    ${EX_CZK} AS ex_czk, partner_support->>'std_total_czk' AS std_total_czk,
     partner_support->>'std_total' AS std_total, partner_support->>'std_currency' AS std_currency, partner_support->>'std_palety_all' AS std_palety_all, partner_support->>'std_opakovacky_all' AS std_opakovacky_all, partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->'std_check'->>'ok' AS std_check_ok, partner_support->'std_check'->>'bad' AS std_check_bad,
     CASE WHEN ${EX_CZK} IS NOT NULL OR partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN coalesce(${EX_CZK},0) + coalesce(CASE WHEN partner_support->>'std_total_czk' ~ '^-?[0-9.]+$' THEN (partner_support->>'std_total_czk')::numeric END,0) END AS exp_std_czk
     FROM supporters WHERE ${where.join(' AND ')} ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 10000`, params)).rows;

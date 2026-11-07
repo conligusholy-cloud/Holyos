@@ -136,6 +136,14 @@ async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS withdrawal_requests_status_idx ON withdrawal_requests (status, requested_at);
     CREATE INDEX IF NOT EXISTS withdrawal_requests_supporter_idx ON withdrawal_requests (supporter_id);
+    -- Výplata za měsíc: ručně zadané údaje za období (period = měsíc, za který se vyplácí, např. 2026-10 se vyplácí 7. 11. 2026)
+    CREATE TABLE IF NOT EXISTS vybery_periods (
+      period      TEXT PRIMARY KEY,
+      avg_visits  NUMERIC(8,2),
+      note        TEXT,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_by  TEXT
+    );
     -- (Standardní podpora = palety + opakovačky + balíčky se počítá při načtení ze starého portálu; zpětný přepočet v DB už není)
 
     -- Objednávky z Prádlomatů (Koupit): admin potvrdí → vznikne nákup + provize; zrušením se vrátí uplatněné DC
