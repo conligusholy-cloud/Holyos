@@ -1649,17 +1649,40 @@ function stRateFromVisits(avg) {
   if (!isFinite(v) || v <= 2) return 0;
   return Math.min(v, 18.6);
 }
+// Expanze — sazby od 1. 11. 2023 podle výše podpory (Kč), zhodnocení měsíčně (p.m.)
+const EXP_BANDS = [{ from: 0, to: 100000, rate: 0.8 }, { from: 100001, to: 250000, rate: 1.1 }, { from: 250001, to: 400000, rate: 1.4 }, { from: 400001, to: 750000, rate: 1.7 }, { from: 750001, to: null, rate: 2 }];
+// Expanze — potřebná min. denní ø návštěvnost kiosků podle investované částky (Kč)
+const EXP_VISITS = [[50, 4], [30000, 3.9], [70000, 3.8], [150000, 3.7], [300000, 3.6], [500000, 3.5], [750000, 3.4], [1100000, 3.3], [1400000, 3.2], [1800000, 3.1], [2500000, 3.0], [7500000, 2.9]].map(([from, min]) => ({ from, min }));
+const EXP_EUR_RATE = 25; // přepočet hranic pro účty v EUR (Kč za 1 €)
+function expRulesHtml() {
+  const f = (v, eur) => Math.round(eur ? v / EXP_EUR_RATE : v).toLocaleString('cs-CZ') + (eur ? ' €' : ' Kč');
+  const tb = (h, rows) => `<table style="width:100%;border-collapse:collapse;font-size:12px;margin:4px 0 10px"><thead><tr>${h.map((x) => `<th style="text-align:left;padding:3px 6px;border-bottom:1px solid #334155;color:#c4b5fd">${x}</th>`).join('')}</tr></thead><tbody>${rows.map((rw) => `<tr>${rw.map((x) => `<td style="padding:3px 6px;border-bottom:1px solid #1e293b">${x}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  return `<div style="font-weight:800;margin-bottom:4px">Zhodnocení expanze (p.m.) podle objemu EX podpory</div>`
+    + tb(['Objem (Kč)', 'Objem (€)', '% p.m.'], EXP_BANDS.map((b) => [b.to == null ? f(b.from) + ' +' : f(b.from) + ' – ' + f(b.to), b.to == null ? f(b.from, 1) + ' +' : f(b.from, 1) + ' – ' + f(b.to, 1), String(b.rate).replace('.', ',') + ' %']))
+    + `<div style="font-weight:800;margin-bottom:4px">Podmínka: min. ø návštěvnost podle objemu</div>`
+    + tb(['Od (Kč)', 'Od (€)', 'Min. ø'], EXP_VISITS.map((t) => [f(t.from), f(t.from, 1), 'ø ' + t.min.toFixed(1).replace('.', ',')]))
+    + `<div class="small muted">Provize = EX podpora × % p.m. (celý objem jednou sazbou). Při nesplnění návštěvnosti 0. Hranice v € = Kč ÷ ${EXP_EUR_RATE}.</div>`;
+}
 function provizeVyplaty(r, ctx) {
   const p = { st: null, expanze: null, vip: null, vip2: null };
   // ST podpora: úrok p.a. podle tabulky návštěvnosti (ø ≤ 2,00 → 0 %; ø 2,10–18,60 → úrok p.a. = ø, po 0,1),
   // měsíční výplata = ST podpora × úrok p.a. / 100 / 12 (v měně účtu)
   const st = Number(r.std_total), avg = ctx && ctx.avgVisits != null ? Number(ctx.avgVisits) : NaN;
   if (isFinite(st) && r.std_total != null && isFinite(avg)) { p.st = Math.round(st * stRateFromVisits(avg) / 100 / 12 * 100) / 100; p.st_rate = stRateFromVisits(avg); }
-  // Expanze: definované procento zhodnocení (měsíční, ze starého portálu „x % úrok z EXPANZE") × objem EX podpory
-  const exV = Number(r.std_expanze_all != null ? r.std_expanze_all : r.exp_invested);
-  const exR = parseFloat(String(r.exp_rate == null ? '' : r.exp_rate).replace(',', '.'));
-  if (isFinite(exR)) p.exp_rate = exR;
-  if (isFinite(exR) && isFinite(exV) && (r.std_expanze_all != null || r.exp_invested != null)) p.expanze = Math.round(exV * exR / 100 * 100) / 100;
+  // Expanze: % zhodnocení (p.m.) podle objemu EX podpory (EXP_BANDS) × objem; vyplácí se jen při splnění
+  // minimální ø návštěvnosti pro daný objem (EXP_VISITS). U EUR účtů hranice v eurech (Kč ÷ EXP_EUR_RATE).
+  const exRaw = r.std_expanze_all != null ? r.std_expanze_all : r.exp_invested;
+  const exV = Number(exRaw);
+  if (exRaw != null && exRaw !== '' && isFinite(exV)) {
+    const eur = r.std_currency === 'EUR', k = eur ? 1 / EXP_EUR_RATE : 1;
+    const band = EXP_BANDS.find((b) => b.to == null || exV <= b.to * k);
+    p.exp_rate = band.rate;
+    const vt = EXP_VISITS.filter((t) => exV >= t.from * k).pop(); // nejvyšší dosažený řádek tabulky návštěvnosti
+    p.exp_min_visits = vt ? vt.min : null;
+    if (!isFinite(avg)) p.expanze = null;
+    else if (!vt) { p.expanze = 0; p.exp_ok = false; }
+    else { p.exp_ok = avg >= vt.min; p.expanze = p.exp_ok ? Math.round(exV * band.rate / 100 * 100) / 100 : 0; }
+  }
   // TODO pravidlo VIP
   // TODO pravidlo VIP 2
   const parts = [p.st, p.expanze, p.vip, p.vip2].filter((v) => v != null && isFinite(v));
@@ -1704,12 +1727,17 @@ function adminVyberyPayouts({ verified = [], admin, tab, rows, month, curM, peri
       <td data-l="ST podpora"><b style="white-space:nowrap">${num(r.std_total, r)}</b></td>
       <td data-l="EX podpora"><b style="white-space:nowrap">${num(r.std_expanze_all != null ? r.std_expanze_all : r.exp_invested, r)}</b></td>
       ${(() => { const p = provizeVyplaty(r, { period, avgVisits: periodRow && periodRow.avg_visits != null ? Number(periodRow.avg_visits) : null }); const td = (l, v, strong, tip) => `<td data-l="${l}" style="${PROV_TD}${strong ? ';background:rgba(167,139,250,.20)' : ''}"${tip ? ` title="${esc(tip)}"` : ''}>${v == null ? '<span class="muted small" title="Pravidlo výpočtu zatím není nastavené">—</span>' : `<b style="white-space:nowrap${strong ? ';color:#c4b5fd' : ''}">${Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 })} ${cur(r)}</b>`}</td>`;
-        return td('Provize ST podpora', p.st, false, p.st != null ? 'ST podpora ' + Number(r.std_total).toLocaleString('cs-CZ') + ' × ' + String(p.st_rate).replace('.', ',') + ' % p.a. ÷ 12 (ø návštěvnost ' + String(periodRow && periodRow.avg_visits).replace('.', ',') + ')' : 'Zadejte průměrnou návštěvnost za měsíc') + `<td data-l="Zhodnocení expanze" style="${PROV_TD}" title="Definované procento zhodnocení expanze (měsíčně, ze starého portálu)">${p.exp_rate != null ? `<b style="white-space:nowrap">${String(p.exp_rate).replace('.', ',')} %</b>` : '<span class="muted small">—</span>'}</td>`
-          + td('Provize Expanze', p.expanze, false, p.expanze != null ? 'EX podpora ' + Number(r.std_expanze_all != null ? r.std_expanze_all : r.exp_invested).toLocaleString('cs-CZ') + ' × ' + String(p.exp_rate).replace('.', ',') + ' %' : 'Chybí procento zhodnocení nebo EX podpora') + td('Provize VIP', p.vip) + td('Provize VIP 2', p.vip2) + td('K výplatě', p.total, true); })()}
+        return td('Provize ST podpora', p.st, false, p.st != null ? 'ST podpora ' + Number(r.std_total).toLocaleString('cs-CZ') + ' × ' + String(p.st_rate).replace('.', ',') + ' % p.a. ÷ 12 (ø návštěvnost ' + String(periodRow && periodRow.avg_visits).replace('.', ',') + ')' : 'Zadejte průměrnou návštěvnost za měsíc') + `<td data-l="Zhodnocení expanze" style="${PROV_TD}">${p.exp_rate != null ? `<b style="white-space:nowrap">${String(p.exp_rate).replace('.', ',')} % p.m.</b>` + (p.exp_min_visits != null ? `<div class="small" style="white-space:nowrap;color:${p.exp_ok === false ? '#f87171' : p.exp_ok ? '#22c55e' : 'var(--muted)'}" title="Potřebná min. ø návštěvnost pro tento objem${p.exp_ok === false ? ' — nesplněno, provize 0' : ''}">ø ≥ ${p.exp_min_visits.toFixed(1).replace('.', ',')} ${p.exp_ok === false ? '✗' : p.exp_ok ? '✓' : ''}</div>` : (Number(r.std_expanze_all != null ? r.std_expanze_all : r.exp_invested) > 0 ? '<div class="small" style="color:#f87171">pod 50 Kč</div>' : '')) : '<span class="muted small">—</span>'}</td>`
+          + td('Provize Expanze', p.expanze, false, p.expanze != null ? 'EX podpora ' + Number(r.std_expanze_all != null ? r.std_expanze_all : r.exp_invested).toLocaleString('cs-CZ') + ' × ' + String(p.exp_rate).replace('.', ',') + ' %' + (p.exp_ok === false ? ' — nesplněna návštěvnost (potřeba ø ' + String(p.exp_min_visits).replace('.', ',') + '), proto 0' : '') : 'Zadejte průměrnou návštěvnost za měsíc') + td('Provize VIP', p.vip) + td('Provize VIP 2', p.vip2) + td('K výplatě', p.total, true); })()}
       <td data-l="Žádost">${r.pending ? '<span class="badge invited" style="color:#fbbf24">čeká ' + r.pending + '×</span>' : '<span class="muted small">zatím nežádal</span>'}</td>
       <td class="actions"><a class="btn sec sm" href="/admin/vybery/kontrola/${r.id}">Kontrola</a> <a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a></td></tr>`).join('');
     return `<h2 style="margin:22px 0 6px">💸 Možno vyplácet <span class="muted" style="font-size:14px;font-weight:500">${verified.length} uživatelů · vyplnili kontrolu a sedí se systémem, nebo byli ověřeni ručně</span></h2>
-    <div class="card" style="overflow-x:auto;margin-top:6px"><table><thead><tr><th>Uživatel</th><th>Ověření</th><th>Pozice</th><th>Měna účtu</th><th>ST podpora</th><th>EX podpora</th><th style="${PROV_TH}">💜 Provize ST podpora</th><th style="${PROV_TH}">💜 Zhodnocení expanze %</th><th style="${PROV_TH}">💜 Provize Expanze</th><th style="${PROV_TH}">💜 Provize VIP</th><th style="${PROV_TH}">💜 Provize VIP 2</th><th style="${PROV_TH};background:rgba(167,139,250,.28)">💜 K výplatě</th><th>Žádost o výběr</th><th>Akce</th></tr></thead><tbody>${vb || '<tr><td colspan="14" class="muted">Zatím nikdo neprošel kontrolou.</td></tr>'}</tbody></table></div>`; })() : ''}`, holyosUrl);
+    <div class="card" style="overflow-x:auto;margin-top:6px"><table><thead><tr><th>Uživatel</th><th>Ověření</th><th>Pozice</th><th>Měna účtu</th><th>ST podpora</th><th>EX podpora</th><th style="${PROV_TH}">💜 Provize ST podpora</th><th style="${PROV_TH};white-space:nowrap">💜 Zhodnocení expanze % <span class="exp-help" style="display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;border:1px solid #c4b5fd;font-size:11px;cursor:help;margin-left:3px">?</span></th><th style="${PROV_TH}">💜 Provize Expanze</th><th style="${PROV_TH}">💜 Provize VIP</th><th style="${PROV_TH}">💜 Provize VIP 2</th><th style="${PROV_TH};background:rgba(167,139,250,.28)">💜 K výplatě</th><th>Žádost o výběr</th><th>Akce</th></tr></thead><tbody>${vb || '<tr><td colspan="14" class="muted">Zatím nikdo neprošel kontrolou.</td></tr>'}</tbody></table></div>
+    <div id="exp-help-pop" style="display:none;position:fixed;z-index:9999;width:420px;max-width:92vw;background:#0f172a;border:1px solid rgba(167,139,250,.5);border-radius:12px;padding:12px 14px;box-shadow:0 12px 40px rgba(0,0,0,.6);text-transform:none;letter-spacing:0;font-weight:400;color:#e2e8f0">${expRulesHtml()}</div>
+    <script>(function(){ var pop=document.getElementById('exp-help-pop'); document.querySelectorAll('.exp-help').forEach(function(h){
+      h.addEventListener('mouseenter',function(){ var b=h.getBoundingClientRect(); pop.style.display='block'; var w=pop.offsetWidth, hh=pop.offsetHeight; var x=Math.min(Math.max(8,b.left-w/2), window.innerWidth-w-8); var y=b.bottom+8; if(y+hh>window.innerHeight-8) y=Math.max(8,b.top-hh-8); pop.style.left=x+'px'; pop.style.top=y+'px'; });
+      h.addEventListener('mouseleave',function(){ pop.style.display='none'; });
+      h.addEventListener('click',function(e){ e.stopPropagation(); pop.style.display = pop.style.display==='block' ? 'none' : 'block'; }); }); })();<\/script>`; })() : ''}`, holyosUrl);
 }
 function adminVybery({ admin, rows, qstr = '', onlySup = false, onlyBad = false, onlyCur = false, onlyEur = false, onlyUnchk = false, fc = null, curN = null, badKinds = {}, pendingCount = 0, posCounts = {}, totalCount = null, holyosUrl }) {
   const cols = ['legacy_position', 'piv', 'ex_podpora', 'st_podpora', 'exp_std', 'exp_std_eur', 'std_check', 'acc_cur', 'mig_palety_czk', 'mig_palety_eur', 'mig_expanze_czk', 'mig_expanze_eur', 'mig_balicky_czk', 'mig_balicky_eur', 'mig_opakovacky_czk', 'mig_opakovacky_eur', 'mig_position', 'mig_pos_ok', 'mig_pay', 'mig_check'].map(k => BASE_COLS.find(c => c.key === k));
