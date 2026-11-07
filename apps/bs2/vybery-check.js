@@ -134,6 +134,22 @@ module.exports = function mountVyberyCheck(app, ctx) {
     res.redirect('/admin/vybery/kontrola/' + id);
   }));
 
+  // Ruční kontrola ze seznamu Výběry (zaškrtávátko): zaškrtnuto = „ověřeno ručně" → připraven k výplatě
+  // (i bez vyplněného formuláře). Odškrtnutí vrátí stav podle automatického porovnání, bez vyplnění na „nevyplněno".
+  app.post('/admin/vybery/rucne/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
+    const id = Number(req.params.id); const on = String((req.body || {}).on || '') === '1';
+    const who = String((req.admin && (req.admin.name || req.admin.username)) || 'admin').slice(0, 80);
+    if (on) await q("UPDATE supporters SET mig_status='reviewed', mig_reviewed_by=$2, mig_reviewed_at=now() WHERE id=$1", [id, who]);
+    else {
+      const u = await load(id);
+      if (u && u.mig_at) { const r = compare(u); await q('UPDATE supporters SET mig_status=$2, mig_diff=$3, mig_reviewed_by=NULL, mig_reviewed_at=NULL WHERE id=$1', [id, r.status === 'ok' ? 'ok' : 'mismatch', JSON.stringify({ v: CHECK_V, diffs: r.diffs, ours: r.ours || null, checked_at: new Date().toISOString(), kind: r.status })]); }
+      else await q('UPDATE supporters SET mig_status=NULL, mig_reviewed_by=NULL, mig_reviewed_at=NULL WHERE id=$1', [id]);
+    }
+    await log(req.admin, on ? 'vybery_manual_ok' : 'vybery_manual_off', { id });
+    if (req.get('X-Requested-With') === 'fetch') return res.json({ ok: true });
+    const back = String(req.get('Referer') || '/admin/vybery'); res.redirect(/\/admin\/vybery/.test(back) ? back : '/admin/vybery');
+  }));
+
   // Přepočet vyplnění podle aktuálních pravidel (po změně pravidel nebo novém načtení podpory).
   // Ručně ověřené („reviewed") zůstávají ověřené; ostatní dostanou ok / mismatch podle nového porovnání.
   let _rcAt = 0;
