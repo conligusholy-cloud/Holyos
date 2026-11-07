@@ -2278,12 +2278,15 @@ var ZEB_POPIS = {
   zisk: { nadpis: 'Nejvyšší měsíční zisk', jed: function (v) { return kcFull(v); },
     pod: 'Podle poslední uložené sítě hráče.' },
   pozvanky: { nadpis: 'Nejvíc pozvánek', jed: function (v) { return v + '×'; },
-    pod: 'Kolikrát někdo otevřel sdílený odkaz hráče.' }
+    pod: 'Kolikrát někdo otevřel sdílený odkaz hráče.' },
+  jmeni: { nadpis: 'Největší čisté jmění', jed: function (v) { return kcFull(v); },
+    pod: 'Co hráč má, minus co dluží: prádlomaty, stroje skladem, pobočky a technika '
+      + 'v pořizovací ceně, plus hotovost, minus úvěr. V minusu se může být.' }
 };
 function loadZeb() {
   // Při výpadku nastavíme prázdný žebříček — jinak by panel zůstal viset
   // na „Načítám…" a hráč by nevěděl, že se něco pokazilo.
-  var prazdny = { pradlomaty: [], zisk: [], pozvanky: [], ja: null, hracu: 0, chyba: true };
+  var prazdny = { pradlomaty: [], zisk: [], pozvanky: [], jmeni: [], ja: null, hracu: 0, chyba: true };
   return api('/leaderboard')
     .then(function (r) { ZEB = r.ok ? r.j : prazdny; })
     .catch(function () { ZEB = prazdny; });

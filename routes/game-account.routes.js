@@ -199,6 +199,26 @@ function splatkyMesicne(st) {
     return a + Math.min(Number(l.splatka) || 0, zbyva + urok);
   }, 0));
 }
+// Čisté jmění: co hráč má, minus co dluží. Postavené prádlomaty, stroje
+// skladem i na cestě, pobočky a technika čety v pořizovací ceně, plus hotovost,
+// minus nesplacený úvěr. Rámec v bance se nepočítá — to nejsou jeho peníze.
+const POBOCKA_CENA = 500000, CETA_CENA = 1530000;
+function cisteJmeni(st) {
+  if (!st) return 0;
+  const units = Array.isArray(st.units) ? st.units : [];
+  let majetek = units.reduce((a, u) => a + ((u && u.eco && u.eco.invest) || 0), 0);
+  const sk = (st.stock && typeof st.stock === 'object') ? st.stock : {};
+  Object.keys(sk).forEach((k) => {
+    majetek += (Number(sk[k]) || 0) * (CENY_STROJU[k] || CENY_STROJU.mini);
+  });
+  (Array.isArray(st.orders) ? st.orders : []).forEach((o) => {
+    majetek += CENY_STROJU[(o && o.model)] || CENY_STROJU.mini;
+  });
+  majetek += (Array.isArray(st.pobocky) ? st.pobocky.length : 0) * POBOCKA_CENA;
+  if (st.ceta && st.ceta.od) majetek += CETA_CENA;
+  return Math.round(majetek + (Number(st.cash) || 0) - (Number(st.loan) || 0));
+}
+
 // Co hráči měsíčně opravdu zbyde — jediná definice pro žebříček i Velín.
 // Musí dávat to samé číslo jako cistyZisk() v public/compounder/game/game.js,
 // jinak by administrace ukazovala něco jiného než hráč vidí v hlavičce.
@@ -665,7 +685,7 @@ async function zebricky() {
     hodnota: m._count._all }))
     .sort((a, b) => b.hodnota - a.hodnota);
 
-  const zisk = [], pozvanky = [];
+  const zisk = [], pozvanky = [], jmeni = [];
   hraci.forEach((h) => {
     const st = h.state || {};
     // To, co hráči opravdu zbyde — stejně jako mu to svítí v hlavičce hry.
@@ -673,11 +693,14 @@ async function zebricky() {
     const fi = h.company || (h.nick + ' s.r.o.');
     if (mesicne > 0) zisk.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, hodnota: Math.round(mesicne) });
     if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, hodnota: st.refs });
+    // Do žebříčku jmění patří i ten, kdo je v minusu — právě to je vidět.
+    if (st.profile) jmeni.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, hodnota: cisteJmeni(st) });
   });
   zisk.sort((a, b) => b.hodnota - a.hodnota);
   pozvanky.sort((a, b) => b.hodnota - a.hodnota);
+  jmeni.sort((a, b) => b.hodnota - a.hodnota);
 
-  _zeb = { at: Date.now(), data: { pradlomaty: poMistech, zisk, pozvanky } };
+  _zeb = { at: Date.now(), data: { pradlomaty: poMistech, zisk, pozvanky, jmeni } };
   return _zeb.data;
 }
 // Moje příčka — ať ji hráč vidí, i když do první pětadvacítky nedosáhne.
@@ -693,8 +716,9 @@ router.get('/leaderboard', async (req, res, next) => {
       firma: x.firma || (x.nick + ' s.r.o.'), znak: x.znak || null,
       hodnota: x.hodnota, ja: !!(p && x.id === p.id) }));
     res.json({ ok: true,
-      pradlomaty: orez(z.pradlomaty), zisk: orez(z.zisk), pozvanky: orez(z.pozvanky),
-      ja: p ? { pradlomaty: moje(z.pradlomaty, p.id), zisk: moje(z.zisk, p.id), pozvanky: moje(z.pozvanky, p.id) } : null,
+      pradlomaty: orez(z.pradlomaty), zisk: orez(z.zisk), pozvanky: orez(z.pozvanky), jmeni: orez(z.jmeni),
+      ja: p ? { pradlomaty: moje(z.pradlomaty, p.id), zisk: moje(z.zisk, p.id),
+        pozvanky: moje(z.pozvanky, p.id), jmeni: moje(z.jmeni, p.id) } : null,
       hracu: z.pradlomaty.length });
   } catch (e) { next(e); }
 });
@@ -831,6 +855,7 @@ module.exports._defaults = ALL;
 module.exports._cashCustom = CASH_CUSTOM;
 module.exports._urokMesicne = urokMesicne;
 module.exports._zbydeMesicne = zbydeMesicne;
+module.exports._cisteJmeni = cisteJmeni;
 module.exports._kdoPrivedl = kdoPrivedl;
 module.exports._dorovnejProvize = dorovnejProvize;
 module.exports._distAktivni = distAktivni;
