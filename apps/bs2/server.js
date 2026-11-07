@@ -2743,7 +2743,7 @@ app.post('/admin/partner-support/standard/sync-all', requireAdmin, wrap(async (r
     const workers = Math.max(1, Math.min(10, parseInt(process.env.LEGACY_SYNC_CONCURRENCY || '6', 10) || 6));
     let stop = false;
     await Promise.all(Array.from({ length: workers }, async () => {
-      while (queue.length && !stop) {
+      while (queue.length && !stop && !STD_JOB.cancel) {
         const s = queue.shift();
         try {
           const r = await LEGACY.fetchLegacyStandard(s.email);
@@ -2777,7 +2777,7 @@ app.post('/admin/partner-support/expanze/sync-all', requireAdmin, wrap(async (re
     const workers = Math.max(1, Math.min(10, parseInt(process.env.LEGACY_SYNC_CONCURRENCY || '6', 10) || 6));
     let stop = false;
     await Promise.all(Array.from({ length: workers }, async () => {
-      while (queue.length && !stop) {
+      while (queue.length && !stop && !EXN_JOB.cancel) {
         const s = queue.shift();
         try {
           const r = await LEGACY.fetchLegacyStandard(s.email);
@@ -2792,6 +2792,11 @@ app.post('/admin/partner-support/expanze/sync-all', requireAdmin, wrap(async (re
     EXN_JOB.running = false; EXN_JOB.finished_at = new Date().toISOString();
     console.log('[bs2] EX podpora hotovo', JSON.stringify({ ...EXN_JOB, errors: EXN_JOB.errors.slice(0, 5) }));
   })().catch((e) => { EXN_JOB.running = false; EXN_JOB.finished_at = new Date().toISOString(); EXN_JOB.errors.push(e.message); });
+}));
+// Zastavení běžící úlohy ST/EX (dokončí rozdělané účty a skončí)
+app.post('/admin/partner-support/sync-stop', requireAdmin, wrap(async (req, res) => {
+  STD_JOB.cancel = true; EXN_JOB.cancel = true;
+  res.json({ ok: true });
 }));
 app.get('/admin/partner-support/expanze/sync-all', requireAdmin, wrap(async (req, res) => {
   let overall = {};
