@@ -1641,7 +1641,7 @@ function vyberyTabs(active, pending = 0) {
   return `<div class="row" style="gap:6px;margin:4px 0 14px;flex-wrap:wrap">${t.map(([k, l, h]) => `<a class="btn ${k === active ? '' : 'sec'}" href="${h}">${esc(l)}</a>`).join('')}</div>`;
 }
 // Admin → Výběry → Výplata (žádosti, aktuální měsíc) a Vyplaceno (historie)
-function adminVyberyPayouts({ admin, tab, rows, month, curM, period = null, periodRow = null, sums = {}, olderPending = 0, pendingCount = 0, msg = '', holyosUrl }) {
+function adminVyberyPayouts({ verified = [], admin, tab, rows, month, curM, period = null, periodRow = null, sums = {}, olderPending = 0, pendingCount = 0, msg = '', holyosUrl }) {
   const money = (v, c) => Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' ' + (c === 'EUR' ? '€' : 'Kč');
   const nm = (r) => esc([r.last_name, r.first_name].filter(Boolean).join(' ') || r.nick || r.email);
   const sumTxt = Object.keys(sums).map(c => '<b>' + money(sums[c], c) + '</b>').join(' + ') || '0';
@@ -1667,7 +1667,20 @@ function adminVyberyPayouts({ admin, tab, rows, month, curM, period = null, peri
     <form method="post" action="/admin/vybery/period" class="row" style="gap:8px;align-items:flex-end;flex-wrap:wrap;margin:0"><input type="hidden" name="period" value="${esc(period)}"><div><label>Průměrná návštěvnost za ${MN[Number(pm) - 1]} ${py}</label><input name="avg_visits" inputmode="decimal" value="${periodRow && periodRow.avg_visits != null ? esc(String(periodRow.avg_visits)) : ''}" placeholder="např. 3,5" style="width:160px"></div><button class="btn sm" type="submit">Uložit</button>${periodRow && periodRow.updated_at ? `<span class="small muted">uloženo ${fmtDT(periodRow.updated_at)}${periodRow.updated_by ? ' · ' + esc(periodRow.updated_by) : ''}</span>` : '<span class="small muted">zatím nezadáno</span>'}</form></div>`; })() : ''}
   <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px"><span>${tab === 'vyplata' ? 'K výplatě' : 'Vyplaceno'} (${esc(mLabel)}): ${sumTxt} · ${rows.length} ${tab === 'vyplata' ? 'žádostí' : 'položek'}</span>${monthNav}<a class="btn sec sm" href="/admin/vybery-vyplaty.xlsx?tab=${tab}&m=${encodeURIComponent(month)}">⬇ Do Excelu</a></div>
   ${olderPending ? `<div class="small" style="margin-bottom:8px">Pozor: dalších <b>${olderPending}</b> nevyřízených žádostí je z dřívějších měsíců — <a href="/admin/vybery?tab=vyplata&m=all">zobrazit všechny nevyřízené</a>.</div>` : ''}
-  <div class="card" style="overflow-x:auto;margin-top:10px"><table><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols}" class="muted">${tab === 'vyplata' ? 'Žádné žádosti o výběr.' : 'Zatím nic vyplaceno.'}</td></tr>`}</tbody></table></div>`, holyosUrl);
+  <div class="card" style="overflow-x:auto;margin-top:10px"><table><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols}" class="muted">${tab === 'vyplata' ? 'Žádné žádosti o výběr.' : 'Zatím nic vyplaceno.'}</td></tr>`}</tbody></table></div>
+  ${tab === 'vyplata' ? (() => { const cs = (r) => (r.std_mixed === 'true' ? 'SMÍŠENÉ' : r.std_currency === 'EUR' ? 'EUR' : 'CZK'); const cur = (r) => (r.std_currency === 'EUR' ? '€' : 'Kč');
+    const num = (v, r) => (v != null && v !== '' && isFinite(Number(v)) ? Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' ' + cur(r) : '—');
+    const vb = verified.map((r) => `<tr><td data-l="Uživatel" class="nm"><b>${nm(r)}</b><div class="small muted">${esc(r.email)}</div></td>
+      <td data-l="Ověření">${r.mig_status === 'ok' ? '<span class="badge active" title="Vyplněné údaje se shodují se systémem">✓ shoda se systémem</span>' : '<span class="badge active" title="' + esc('Ověřil ' + (r.mig_reviewed_by || '—')) + '">✓ ověřeno ručně</span>'}</td>
+      <td data-l="Kdy" class="small muted">${fmtDT(r.mig_status === 'reviewed' && r.mig_reviewed_at ? r.mig_reviewed_at : r.mig_at)}${r.mig_status === 'reviewed' && r.mig_reviewed_by ? `<div>${esc(r.mig_reviewed_by)}</div>` : ''}</td>
+      <td data-l="Pozice">${r.mig_position ? posBadge(r.mig_position) : '—'}</td>
+      <td data-l="Měna účtu"><span class="badge ${cs(r) === 'EUR' ? 'invited' : 'active'}">${cs(r)}</span></td>
+      <td data-l="ST podpora"><b style="white-space:nowrap">${num(r.std_total, r)}</b></td>
+      <td data-l="EX podpora"><b style="white-space:nowrap">${num(r.std_expanze_all != null ? r.std_expanze_all : r.exp_invested, r)}</b></td>
+      <td data-l="Žádost">${r.pending ? '<span class="badge invited" style="color:#fbbf24">čeká ' + r.pending + '×</span>' : '<span class="muted small">zatím nežádal</span>'}</td>
+      <td class="actions"><a class="btn sec sm" href="/admin/vybery/kontrola/${r.id}">Kontrola</a> <a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a></td></tr>`).join('');
+    return `<h2 style="margin:22px 0 6px">💸 Možno vyplácet <span class="muted" style="font-size:14px;font-weight:500">${verified.length} uživatelů · vyplnili kontrolu a sedí se systémem, nebo byli ověřeni ručně</span></h2>
+    <div class="card" style="overflow-x:auto;margin-top:6px"><table><thead><tr><th>Uživatel</th><th>Ověření</th><th>Kdy</th><th>Pozice</th><th>Měna účtu</th><th>ST podpora</th><th>EX podpora</th><th>Žádost o výběr</th><th>Akce</th></tr></thead><tbody>${vb || '<tr><td colspan="9" class="muted">Zatím nikdo neprošel kontrolou.</td></tr>'}</tbody></table></div>`; })() : ''}`, holyosUrl);
 }
 function adminVybery({ admin, rows, qstr = '', onlySup = false, onlyBad = false, onlyCur = false, onlyEur = false, onlyUnchk = false, fc = null, curN = null, badKinds = {}, pendingCount = 0, posCounts = {}, totalCount = null, holyosUrl }) {
   const cols = ['legacy_position', 'piv', 'ex_podpora', 'st_podpora', 'exp_std', 'exp_std_eur', 'std_check', 'acc_cur', 'mig_palety_czk', 'mig_palety_eur', 'mig_expanze_czk', 'mig_expanze_eur', 'mig_balicky_czk', 'mig_balicky_eur', 'mig_opakovacky_czk', 'mig_opakovacky_eur', 'mig_position', 'mig_pos_ok', 'mig_pay', 'mig_check'].map(k => BASE_COLS.find(c => c.key === k));

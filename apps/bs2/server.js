@@ -2294,7 +2294,16 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res, next) => {
     period = (await q(`SELECT to_char((now() AT TIME ZONE 'Europe/Prague') - interval '1 month', 'YYYY-MM') AS p`)).rows[0].p;
     periodRow = (await q(`SELECT * FROM vybery_periods WHERE period=$1`, [period])).rows[0] || null;
   }
-  res.send(V.adminVyberyPayouts({ period, periodRow, admin: req.admin, tab, rows, month, curM, sums, olderPending, pendingCount, msg: String(req.query.msg || '').slice(0, 200), holyosUrl: HOLYOS_URL }));
+  // Uživatelé, kteří vyplnili kontrolu a sedí se systémem / byli ručně ověřeni → možno vyplácet
+  let verified = [];
+  if (tab === 'vyplata') {
+    try { await VYB_CHECK.recheckStale(false); } catch (e) { /* přepočet nevadí */ }
+    verified = (await q(`SELECT s.id, s.email, s.nick, s.first_name, s.last_name, s.mig_status, s.mig_at, s.mig_reviewed_by, s.mig_reviewed_at, s.mig_position,
+      partner_support->>'std_currency' AS std_currency, partner_support->>'std_mixed' AS std_mixed, partner_support->>'std_total' AS std_total, partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->>'exp_invested' AS exp_invested,
+      (SELECT count(*)::int FROM withdrawal_requests w WHERE w.supporter_id = s.id AND w.status = 'requested') AS pending
+      FROM supporters s WHERE s.mig_status IN ('ok','reviewed') ORDER BY coalesce(s.mig_reviewed_at, s.mig_at) DESC LIMIT 2000`)).rows;
+  }
+  res.send(V.adminVyberyPayouts({ verified, period, periodRow, admin: req.admin, tab, rows, month, curM, sums, olderPending, pendingCount, msg: String(req.query.msg || '').slice(0, 200), holyosUrl: HOLYOS_URL }));
 }));
 // Ruční hodnoty ST/EX u účtu (přežijí nové načtení z portálu) + označení „skontrolováno“
 app.post('/admin/vybery/override/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
