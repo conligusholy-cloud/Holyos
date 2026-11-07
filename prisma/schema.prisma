@@ -7598,6 +7598,8 @@ model GamePlayer {
   invited_by_id  Int?
   invited_by_ref String?   @db.VarChar(24)
   invited_at     DateTime?
+  // Odkdy se počítá další Expresní dovoz zdarma (jeden za dva herní měsíce).
+  rush_zdarma_at DateTime?
 
   cards     GameCard[]
   purchases GamePurchase[]

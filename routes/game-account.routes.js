@@ -600,14 +600,57 @@ router.post('/account/tutorial-card', requirePlayer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ─── Expresní dovoz zdarma ─────────────────────────────────────
+// Každé dva herní měsíce (jeden skutečný den) přibude jedna karta zdarma, ať
+// hráč nemusí čekat den na každý stroj. Nepoužité se hromadí jen do pěti —
+// čas běží dál, ale zásoba nenabývá donekonečna.
+const RUSH_ZDARMA_MS = 2 * MESIC_MS;
+const RUSH_ZDARMA_MAX = 5;
+async function dosypExpresniDovoz(p) {
+  if (!p) return null;
+  const ted = Date.now();
+  if (!p.rush_zdarma_at) {
+    // První pohled: začínáme počítat teď, ne zpětně od založení účtu.
+    return prisma.gamePlayer.update({ where: { id: p.id }, data: { rush_zdarma_at: new Date(ted) } });
+  }
+  const od = new Date(p.rush_zdarma_at).getTime();
+  const period = Math.floor((ted - od) / RUSH_ZDARMA_MS);
+  if (period < 1) return p;
+  const volnych = await prisma.gameCard.count({
+    where: { player_id: p.id, kind: 'rush', used_at: null },
+  });
+  const dat = Math.max(0, Math.min(period, RUSH_ZDARMA_MAX - volnych));
+  if (dat > 0) {
+    await prisma.gameCard.createMany({
+      data: Array.from({ length: dat }, () => ({ player_id: p.id, kind: 'rush' })),
+    });
+    console.log('[game] expresni dovoz zdarma: ' + dat + ' ks pro ' + p.nick);
+  }
+  // Čas posuneme vždycky, i když už měl plné zásoby — jinak by se bankovalo.
+  return prisma.gamePlayer.update({ where: { id: p.id },
+    data: { rush_zdarma_at: new Date(od + period * RUSH_ZDARMA_MS) } });
+}
+// Za jak dlouho přijde další.
+function rushZdarmaZa(p) {
+  if (!p || !p.rush_zdarma_at) return RUSH_ZDARMA_MS;
+  const zbyva = new Date(p.rush_zdarma_at).getTime() + RUSH_ZDARMA_MS - Date.now();
+  return Math.max(0, zbyva);
+}
+
 // GET /cards → katalog + co hráč vlastní
 router.get('/cards', async (req, res, next) => {
   try {
-    const p = await currentPlayer(req);
+    let p = await currentPlayer(req);
+    if (p) {
+      try { p = await dosypExpresniDovoz(p) || p; }
+      catch (e) { console.warn('[game] expresni dovoz zdarma:', e.message); }
+    }
     res.json({
       ok: true, catalog: await catalogPublic(), cash: await cashPublic(),
       payments: require('./game-stripe.routes')._paymentsOn(),
-      owned: p ? (await pub(p)).cards : null
+      owned: p ? (await pub(p)).cards : null,
+      rush_zdarma_za: p ? rushZdarmaZa(p) : null,
+      rush_zdarma_max: RUSH_ZDARMA_MAX,
     });
   } catch (e) { next(e); }
 });

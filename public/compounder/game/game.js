@@ -3827,10 +3827,13 @@ function loadCards() {
   return api('/cards').then(function (r) {
     if (!r.ok) return;
     CARDS_CAT = r.j.catalog; CASH_CAT = r.j.cash || null; PAYMENTS_ON = !!r.j.payments;
+    RUSH_ZA = r.j.rush_zdarma_za; RUSH_MAX = r.j.rush_zdarma_max || 5;
     if (r.j.owned && ME) ME.cards = r.j.owned;
   }).catch(function () { });
 }
 function ownedOf(kind) { return (ME && ME.cards && ME.cards[kind]) || 0; }
+// Kdy přibude další Expresní dovoz zdarma. Počítá to server, klient jen ukazuje.
+var RUSH_ZA = null, RUSH_MAX = 5;
 function paintCards() {
   var box = $('cards-body');
   if (!CARDS_CAT) { box.innerHTML = '<p class="muted small">Načítám…</p>'; return loadCards().then(paintCards); }
@@ -3845,6 +3848,10 @@ function paintCards() {
         + '<div><h3>' + esc(c.name) + '</h3><p class="gcard-short">' + esc(c.short) + '</p></div>'
         + (n ? '<b class="gcard-n">' + n + '×</b>' : '') + '</div>'
         + '<p class="muted small">' + esc(c.desc) + '</p>'
+        + (c.kind === 'rush' && RUSH_ZA != null
+            ? '<p class="fine ok">Jedna ti přibude zdarma každé dva herní měsíce — další '
+              + etaText(RUSH_ZA) + (n >= RUSH_MAX ? '. Víc než ' + RUSH_MAX + ' si jich ale neuložíš.' : '.') + '</p>'
+            : '')
         + '<div class="gcard-act">'
         + (n ? '<button class="btn sm" data-use="' + c.kind + '">Použít</button>' : '')
         + (PAYMENTS_ON ? '<button class="btn sm ghost" data-buy-card="' + c.kind + '">Koupit za ' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button>'
