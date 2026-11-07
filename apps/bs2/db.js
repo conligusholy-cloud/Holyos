@@ -451,6 +451,8 @@ async function migrate() {
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_expanze_eur NUMERIC(14,2);
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_balicky_czk NUMERIC(14,2);
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_balicky_eur NUMERIC(14,2);
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_opakovacky_czk NUMERIC(14,2);
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_opakovacky_eur NUMERIC(14,2);
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_position TEXT;
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_at TIMESTAMPTZ;
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mig_status TEXT; -- ok | mismatch | reviewed (NULL = nevyplněno)

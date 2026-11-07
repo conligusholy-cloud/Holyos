@@ -1,11 +1,11 @@
 // Best Series 2.0 — kontrola údajů před prvním výběrem (migrace ze starého portálu).
 // Než uživatel uvidí žádost o výběr, sám opíše ze starého portálu: Podpora palety celkem, Expanze celkem,
-// Podpora balíčky celkem (každé v Kč i v EUR) a svou pozici (Partner / VIP / VIP 2). Uloží se do samostatných
+// Podpora balíčky celkem, Opakovačky celkem (každé v Kč i v EUR) a svou pozici (Partner / VIP / VIP 2). Uloží se do samostatných
 // sloupců (supporters.mig_*), hned se automaticky porovnají s načtenými daty (partner_support.std_by_year
 // + position). Shoda → výběry odemčené. Neshoda → „čeká na ruční kontrolu" (admin ověří v Admin → Výběry).
 'use strict';
 
-const FIELDS = [['palety', 'Podpora palety celkem'], ['expanze', 'Expanze celkem'], ['balicky', 'Podpora balíčky celkem']];
+const FIELDS = [['palety', 'Podpora palety celkem'], ['expanze', 'Expanze celkem'], ['balicky', 'Podpora balíčky celkem'], ['opakovacky', 'Opakovačky celkem']];
 const POSITIONS = ['Partner', 'VIP', 'VIP 2'];
 const TOL = 1; // tolerance zaokrouhlení (Kč / €)
 
@@ -43,7 +43,7 @@ module.exports = function mountVyberyCheck(app, ctx) {
   const { q, wrap, requireUser, requireAdmin, V, log, notifyVelin } = ctx;
   const esc = V.esc;
 
-  async function load(id) { return (await q('SELECT id, email, nick, first_name, last_name, currency, partner_support, mig_palety_czk, mig_palety_eur, mig_expanze_czk, mig_expanze_eur, mig_balicky_czk, mig_balicky_eur, mig_position, mig_at, mig_status, mig_diff, mig_reviewed_by, mig_reviewed_at FROM supporters WHERE id=$1', [id])).rows[0] || null; }
+  async function load(id) { return (await q('SELECT id, email, nick, first_name, last_name, currency, partner_support, mig_palety_czk, mig_palety_eur, mig_expanze_czk, mig_expanze_eur, mig_balicky_czk, mig_balicky_eur, mig_opakovacky_czk, mig_opakovacky_eur, mig_position, mig_at, mig_status, mig_diff, mig_reviewed_by, mig_reviewed_at FROM supporters WHERE id=$1', [id])).rows[0] || null; }
   // Smí uživatel žádat o výběr? (vyplnil a sedí, nebo ručně ověřeno)
   async function allowed(id) { const r = (await q('SELECT mig_status FROM supporters WHERE id=$1', [id])).rows[0]; return !!r && (r.mig_status === 'ok' || r.mig_status === 'reviewed'); }
 
@@ -64,8 +64,8 @@ module.exports = function mountVyberyCheck(app, ctx) {
     const pos = POSITIONS.includes(String(b.position)) ? String(b.position) : null;
     if (!pos) return res.redirect('/vybery?err=' + encodeURIComponent('Vyberte prosím svou pozici.'));
     if (String(b.confirm) !== '1') return res.redirect('/vybery?err=' + encodeURIComponent('Potvrďte prosím, že údaje odpovídají starému portálu.'));
-    await q(`UPDATE supporters SET mig_palety_czk=$2, mig_palety_eur=$3, mig_expanze_czk=$4, mig_expanze_eur=$5, mig_balicky_czk=$6, mig_balicky_eur=$7, mig_position=$8, mig_at=now() WHERE id=$1`,
-      [req.user.id, vals.palety_czk, vals.palety_eur, vals.expanze_czk, vals.expanze_eur, vals.balicky_czk, vals.balicky_eur, pos]);
+    await q(`UPDATE supporters SET mig_palety_czk=$2, mig_palety_eur=$3, mig_expanze_czk=$4, mig_expanze_eur=$5, mig_balicky_czk=$6, mig_balicky_eur=$7, mig_opakovacky_czk=$9, mig_opakovacky_eur=$10, mig_position=$8, mig_at=now() WHERE id=$1`,
+      [req.user.id, vals.palety_czk, vals.palety_eur, vals.expanze_czk, vals.expanze_eur, vals.balicky_czk, vals.balicky_eur, pos, vals.opakovacky_czk, vals.opakovacky_eur]);
     const row = await load(req.user.id); const r = compare(row);
     const status = r.status === 'ok' ? 'ok' : 'mismatch';
     await q('UPDATE supporters SET mig_status=$2, mig_diff=$3 WHERE id=$1', [req.user.id, status, JSON.stringify({ diffs: r.diffs, ours: r.ours || null, checked_at: new Date().toISOString(), kind: r.status })]);
