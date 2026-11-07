@@ -32,14 +32,32 @@ function ours(p) {
   return out;
 }
 
+const ST_KEYS = ['palety', 'opakovacky', 'balicky'];
+// ST podpora po měnách: std_total (příp. ruční přepis ov_st) v měně účtu = sloupec ST PODPORA v Admin → Výběry.
+// Smíšené měny (vše přepočtené na Kč) → součet palet, opakovaček a balíčků z rozpadu po letech, Kč a € zvlášť.
+function stOurs(p, o) {
+  const n = (v) => (v != null && v !== '' && isFinite(Number(v)) ? Number(v) : null);
+  const tot = n(p && p.std_total);
+  if (tot != null && !(p.std_mixed === true && p.ov_st == null)) { const r = { czk: 0, eur: 0 }; r[p.std_currency === 'EUR' ? 'eur' : 'czk'] = Math.round(tot * 100) / 100; return r; }
+  const r = { czk: 0, eur: 0 }; if (o) for (const k of ST_KEYS) { r.czk += o[k].czk || 0; r.eur += o[k].eur || 0; }
+  return { czk: Math.round(r.czk * 100) / 100, eur: Math.round(r.eur * 100) / 100 };
+}
+
 function compare(row) {
   const p = row.partner_support || {};
   const o = ours(p);
   const diffs = [];
   if (!o) return { status: 'no_data', diffs: [{ field: 'data', text: 'K účtu nemáme načtenou podporu ze starého portálu.' }] };
-  for (const [k, label] of FIELDS) for (const c of ['czk', 'eur']) {
-    const d = Number(row['mig_' + k + '_' + c]) || 0, s = o[k][c] || 0;
-    if (Math.abs(d - s) > TOL) diffs.push({ field: k, cur: c, label: label + (c === 'eur' ? ' (EUR)' : ' (Kč)'), declared: d, ours: s });
+  // ST podpora = palety + opakovačky + balíčky → porovnává se SOUČET se sloupcem ST PODPORA, zvlášť v Kč a v EUR
+  const st = stOurs(p, o);
+  for (const c of ['czk', 'eur']) {
+    const d = Math.round(ST_KEYS.reduce((a2, k) => a2 + (Number(row['mig_' + k + '_' + c]) || 0), 0) * 100) / 100, s2 = st[c] || 0;
+    if (Math.abs(d - s2) > TOL) diffs.push({ field: 'st', cur: c, label: 'ST podpora — palety + opakovačky + balíčky' + (c === 'eur' ? ' (EUR)' : ' (Kč)'), declared: d, ours: s2 });
+  }
+  // Expanze = sloupec EX PODPORA ve stejné měně
+  for (const c of ['czk', 'eur']) {
+    const d = Number(row['mig_expanze_' + c]) || 0, s2 = o.expanze[c] || 0;
+    if (Math.abs(d - s2) > TOL) diffs.push({ field: 'expanze', cur: c, label: 'Expanze celkem' + (c === 'eur' ? ' (EUR)' : ' (Kč)'), declared: d, ours: s2 });
   }
   const sp = normPos(p.position), dp = normPos(row.mig_position);
   if (!sp || sp !== dp) diffs.push({ field: 'position', label: 'Pozice', declared: row.mig_position || '—', ours: p.position || '— (nezjištěno)' });
@@ -86,9 +104,16 @@ module.exports = function mountVyberyCheck(app, ctx) {
     const u = await load(req.params.id); if (!u) return res.status(404).send('Nenalezeno');
     const r = u.mig_at ? compare(u) : null; const o = r && r.ours;
     const m = (v, c) => (v == null ? '—' : Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + (c === 'eur' ? ' €' : ' Kč'));
-    const rowsHtml = FIELDS.map(([k, label]) => ['czk', 'eur'].map((c) => { const d = u['mig_' + k + '_' + c], s = o ? o[k][c] : null; const ok = o && Math.abs((Number(d) || 0) - (s || 0)) <= TOL;
-      return `<tr><td>${esc(label)} <span class="muted small">${c === 'eur' ? 'EUR' : 'Kč'}</span></td><td><b>${m(d, c)}</b></td><td>${o ? m(s, c) : '—'}</td><td>${!u.mig_at ? '' : ok ? '<span class="badge active">✓</span>' : '<span class="badge blocked">≠</span>'}</td></tr>`; }).join('')).join('')
-      + `<tr><td>Pozice</td><td><b>${esc(u.mig_position || '—')}</b></td><td>${esc((u.partner_support || {}).position || '—')}</td><td>${!u.mig_at ? '' : normPos(u.mig_position) === normPos((u.partner_support || {}).position) ? '<span class="badge active">✓</span>' : '<span class="badge blocked">≠</span>'}</td></tr>`;
+    const stO = r && r.ours ? stOurs(u.partner_support || {}, r.ours) : null;
+    const mark = (ok) => (!u.mig_at ? '' : ok ? '<span class="badge active">✓</span>' : '<span class="badge blocked">≠</span>');
+    const rowsHtml = ['czk', 'eur'].map((c) => {
+      const items = ST_KEYS.map((k) => `<tr><td style="padding-left:22px" class="muted">${esc((FIELDS.find((f) => f[0] === k) || [k, k])[1])} <span class="small">${c === 'eur' ? 'EUR' : 'Kč'}</span></td><td>${m(u['mig_' + k + '_' + c], c)}</td><td class="muted small">${o ? m(o[k][c], c) : '—'}</td><td></td></tr>`).join('');
+      const dSum = Math.round(ST_KEYS.reduce((a2, k) => a2 + (Number(u['mig_' + k + '_' + c]) || 0), 0) * 100) / 100;
+      const sSum = stO ? stO[c] : null;
+      return `<tr><td><b>ST podpora</b> = palety + opakovačky + balíčky <span class="muted small">${c === 'eur' ? 'EUR' : 'Kč'}</span></td><td><b>${m(dSum, c)}</b></td><td><b>${sSum == null ? '—' : m(sSum, c)}</b></td><td>${mark(sSum != null && Math.abs(dSum - sSum) <= TOL)}</td></tr>` + items;
+    }).join('') + ['czk', 'eur'].map((c) => { const d = u['mig_expanze_' + c], s2 = o ? o.expanze[c] : null;
+      return `<tr><td><b>Expanze</b> = EX podpora <span class="muted small">${c === 'eur' ? 'EUR' : 'Kč'}</span></td><td><b>${m(d, c)}</b></td><td><b>${s2 == null ? '—' : m(s2, c)}</b></td><td>${mark(s2 != null && Math.abs((Number(d) || 0) - s2) <= TOL)}</td></tr>`; }).join('')
+      + `<tr><td><b>Pozice</b></td><td><b>${esc(u.mig_position || '—')}</b></td><td>${esc((u.partner_support || {}).position || '—')}</td><td>${mark(normPos(u.mig_position) === normPos((u.partner_support || {}).position))}</td></tr>`;
     const st = { ok: '✓ sedí', mismatch: '⚠ nesedí — čeká na ruční kontrolu', reviewed: '✓ ověřeno ručně' }[u.mig_status] || 'nevyplněno';
     res.send(V.adminLayout('Kontrola údajů', 'vyb', req.admin, `
       <div class="row" style="justify-content:space-between"><h1 style="margin:0">Kontrola údajů — ${esc([u.last_name, u.first_name].filter(Boolean).join(' ') || u.nick || u.email)}</h1><a class="btn sec sm" href="/admin/vybery">← Výběry</a></div>
@@ -114,3 +139,4 @@ module.exports.FIELDS = FIELDS;
 module.exports.POSITIONS = POSITIONS;
 module.exports.compare = compare;
 module.exports.ours = ours;
+module.exports.stOurs = stOurs;
