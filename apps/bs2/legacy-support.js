@@ -66,7 +66,7 @@ function parseRows(block, celkem) {
   }
   const amt = (r, mode) => { if (r.fixed != null) return r.fixed; const t = (mode === 'B' && r.tokens.length > 1 ? r.tokens.slice(1) : r.tokens).join(''); const n = Number(t.replace(',', '.')); return isFinite(n) ? n : 0; };
   // Portál zaokrouhluje u balíčků/přepočtů → „Celkem“ se od součtu řádků liší o drobné (±1 Kč, u dlouhých seznamů o pár Kč). Tolerance roste s počtem řádků.
-  const tol = Math.min(Math.max(1.01, 0.5 * raw.length + 0.5), 0.002 * Math.abs(celkem) + 1.01);
+  const tol = Math.max(1.01, 0.5 * raw.length + 0.5); // každý řádek může být zaokrouhlený o ≤ 0,5
   const sumOf = (mode) => Math.round(raw.reduce((a, r) => a + amt(r, mode), 0) * 100) / 100;
   let mode = 'A', sum = sumOf('A');
   if (raw.length && Math.abs(sum - celkem) > tol) { const sB = sumOf('B'); if (Math.abs(sB - celkem) <= tol) { mode = 'B'; sum = sB; } }
@@ -116,7 +116,7 @@ function parseInvests(text) {
     const name = s[1].trim(); const k = map[name.toLowerCase()]; const celkem = num(s[3]) || 0;
     const pr = parseRows(s[2], celkem);
     // hodnota sekce = součet jednotlivých nákupů JEN když sedí s „Celkem“ portálu; jinak se použije „Celkem“ a sekce se označí ⚠ (nesedí)
-    const v = pr.matches ? pr.sum : celkem;
+    const v = celkem; // řádky slouží ke kontrole; hodnotou je „Celkem“ sekce (řádky jsou na portálu zaokrouhlené na celá čísla, Celkem je přesné)
     out.row_checks.push({ section: name, rows: pr.rows.length, rows_sum: pr.sum, portal: celkem, issues: pr.issues, ok: pr.matches, sample: pr.sample });
     out.sections[name] = (out.sections[name] || 0) + v; if (k) { out[k] = (out[k] || 0) + v; out.cur_k = out.cur_k || {}; if (v) out.cur_k[k] = curOf(s[4]); }
     // jednotlivé nákupy expanze (datum, částka) — uložíme pro audit a export
@@ -274,7 +274,7 @@ async function fetchLegacyStandardWithJar(jar) {
       for (const c of (d.row_checks || [])) if (!c.ok) bad.push({ y, section: c.section, portal: c.portal, parsed: c.rows_sum, diff: Math.round((c.portal - c.rows_sum) * 100) / 100, rows: c.rows, issues: c.issues, sample: c.sample });
       const yearCurs = new Set(Object.entries(d.cur_k || {}).map(([, v]) => v));
       const nRows = (d.row_checks || []).reduce((a, c) => a + (c.rows || 0), 0);
-      const yTol = Math.min(Math.max(1.01, 0.5 * nRows + 0.5), 0.002 * Math.abs(Number(d.total_year) || 0) + 1.01);
+      const yTol = Math.max(1.01, 0.5 * nRows + 0.5);
       if (yearCurs.size <= 1 && d.total_year != null && Math.abs(Number(d.total_year) - secSum) > yTol) bad.push({ y, portal: Number(d.total_year), parsed: Math.round(secSum * 100) / 100, diff: Math.round((Number(d.total_year) - secSum) * 100) / 100 });
       if (rec.palety || rec.opakovacky || rec.balicky || rec.likvidni || rec.ostatni || rec.expanze || rec.neurawash || rec.total_year) by[y] = rec;
     }
