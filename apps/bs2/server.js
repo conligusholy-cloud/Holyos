@@ -2221,6 +2221,7 @@ app.get('/admin/podpora/poll', requireAdmin, wrap(async (req, res) => {
 
 // ── Výběry: kontrola údajů ze starého portálu před prvním výběrem ──
 const VYB_CHECK = require('./vybery-check')(app, { q, wrap, requireUser, requireAdmin, V, log, notifyVelin });
+const VYR = require('./vyrovnavaci')(app, { q, wrap, requireAdmin, V, log }); // vyrovnávací účet (krizový režim výplat)
 // ── Rozesílky (hromadné e-maily přes Amazon SES) + odhlášení z rozesílek ──
 require('./mailing')(app, { q, requireAdmin, wrap, V, PUBLIC_URL, HOLYOS_URL, SSO_SECRET, log, upload, esc: (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) });
 
@@ -2298,13 +2299,15 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res, next) => {
   let verified = [];
   if (tab === 'vyplata') {
     try { await VYB_CHECK.recheckStale(false); } catch (e) { /* přepočet nevadí */ }
-    verified = (await q(`SELECT s.id, s.email, s.nick, s.first_name, s.last_name, s.mig_status, s.mig_at, s.mig_reviewed_by, s.mig_reviewed_at, s.mig_position,
+    verified = (await q(`SELECT s.id, s.email, s.nick, s.first_name, s.last_name, s.mig_status, s.mig_at, s.mig_reviewed_by, s.mig_reviewed_at, s.mig_position, s.payout_pct,
       partner_support->>'std_currency' AS std_currency, partner_support->>'std_mixed' AS std_mixed, partner_support->>'std_total' AS std_total, partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->>'exp_invested' AS exp_invested,
       partner_support->>'exp_rate' AS exp_rate, partner_support->>'exp_limit_from' AS exp_limit_from, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_rate' AS piv_rate, partner_support->>'piv_tier_visits' AS piv_tier_visits, partner_support->>'position' AS legacy_position,
       (SELECT count(*)::int FROM withdrawal_requests w WHERE w.supporter_id = s.id AND w.status = 'requested') AS pending
       FROM supporters s WHERE s.mig_status IN ('ok','reviewed') ORDER BY coalesce(s.mig_reviewed_at, s.mig_at) DESC LIMIT 2000`)).rows;
+    try { const bm = await VYR.balances(verified.map((v) => v.id)); verified.forEach((v) => { v.balance = bm.get(v.id) || {}; }); } catch (e) { /* tabulka ještě není */ }
   }
-  res.send(V.adminVyberyPayouts({ verified, period, periodRow, admin: req.admin, tab, rows, month, curM, sums, olderPending, pendingCount, msg: String(req.query.msg || '').slice(0, 200), holyosUrl: HOLYOS_URL }));
+  let booked = 0; if (tab === 'vyplata' && period) { try { booked = await VYR.bookedPeriod(period); } catch (e) { /* tabulka ještě není */ } }
+  res.send(V.adminVyberyPayouts({ verified, booked, vyr: { pct: VYR.DEFAULT_PCT, rate: VYR.RATE_PA }, period, periodRow, admin: req.admin, tab, rows, month, curM, sums, olderPending, pendingCount, msg: String(req.query.msg || '').slice(0, 200), holyosUrl: HOLYOS_URL }));
 }));
 // Ruční hodnoty ST/EX u účtu (přežijí nové načtení z portálu) + označení „skontrolováno“
 app.post('/admin/vybery/override/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
@@ -2570,7 +2573,8 @@ app.get('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   const credits = (await q('SELECT * FROM credits WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC', [s.id])).rows;
   let timeline = []; try { timeline = await loadTimeline(s); } catch (e) { console.warn('[bs2] timeline:', e.message); }
   let legacy = []; try { legacy = (await q('SELECT section, data, fetched_at FROM legacy_snapshots WHERE supporter_id=$1', [s.id])).rows; } catch (e) { /* tabulka ještě není */ }
-  res.send(V.adminSupporterDetail({ admin: req.admin, s, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, firstLine, purchases, machines, credits, timeline, legacy, legacySections: COLLECT.SECTIONS }));
+  let vyrHtml = ''; try { vyrHtml = await VYR.detailHtml(s); } catch (e) { console.warn('[bs2] vyrovnávací účet:', e.message); }
+  res.send(V.adminSupporterDetail({ admin: req.admin, s, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, firstLine, purchases, machines, credits, timeline, legacy, legacySections: COLLECT.SECTIONS, vyrHtml }));
 }));
 // Kompletní časová osa aktivity uživatele: přihlášení, chování na webu, chat, e-maily, objednávky, převody, DC, podněty, zásahy admina
 const EV_TXT = { login: 'Přihlášení', login_fail: 'Neúspěšné přihlášení', logout: 'Odhlášení', consent: 'Souhlas s VOP a GDPR', reset_request: 'Žádost o obnovu hesla', suggestion: 'Podnět na vylepšení', pageview: 'Zobrazil stránku', click: 'Klikl', section: 'Četl sekci', interact: 'Použil prvek' };

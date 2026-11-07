@@ -423,6 +423,22 @@ async function migrate() {
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mail_optout BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mail_optout_at TIMESTAMPTZ;
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mail_optout_by TEXT; -- 'user' (odkaz v e-mailu) | jméno správce
+    -- Krizový režim výplat: podíl k výplatě v % (NULL = výchozí 30 %), zbytek jde na vyrovnávací účet
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS payout_pct NUMERIC(5,2);
+    -- Vyrovnávací účet: pohyby (připsání 70 %, zhodnocení 5,68 % p.a., ruční vklad/výběr)
+    CREATE TABLE IF NOT EXISTS balance_entries (
+      id SERIAL PRIMARY KEY,
+      supporter_id INT NOT NULL REFERENCES supporters(id) ON DELETE CASCADE,
+      period TEXT,                       -- 'RRRR-MM' (za jaký měsíc), u ručních pohybů může být NULL
+      kind TEXT NOT NULL,                -- credit | interest | deposit | withdraw
+      amount NUMERIC(14,2) NOT NULL,     -- + připsáno, − vybráno
+      currency TEXT NOT NULL DEFAULT 'CZK',
+      note TEXT,
+      created_by TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS balance_entries_sup_idx ON balance_entries (supporter_id, created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS balance_entries_auto_uq ON balance_entries (supporter_id, period, kind) WHERE kind IN ('credit','interest');
     CREATE TABLE IF NOT EXISTS mail_campaigns (
       id SERIAL PRIMARY KEY, name TEXT NOT NULL, subject TEXT NOT NULL, body TEXT NOT NULL,
       link TEXT, link_label TEXT, filter JSONB NOT NULL DEFAULT '{}'::jsonb,
