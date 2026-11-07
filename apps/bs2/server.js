@@ -1685,6 +1685,7 @@ app.get('/vybery', wrap(requireUser), wrap(async (req, res) => {
   const rows = (await q(`SELECT * FROM withdrawal_requests WHERE supporter_id=$1 ORDER BY id DESC LIMIT 100`, [req.user.id])).rows;
   let payout = null; try { payout = await VYR.payoutFor(req.user.id); } catch (e) { console.warn('[bs2] payoutFor:', e.message); }
   res.send(V.supporterVybery(req.user, { rows, payout, msg: String(req.query.msg || '').slice(0, 200), err: String(req.query.err || '').slice(0, 200) }));
+}));
 // Žádost o výběr (tester) — měna podle účtu: Kč u korunových, € u eurových
 app.post('/vybery/request', wrap(requireUser), wrap(async (req, res) => {
   if (!V.vyberyVisible(req.user)) return res.status(404).send(V.errorPage('Stránka nenalezena', 'Tato stránka neexistuje.', '/'));
@@ -1710,7 +1711,6 @@ app.post('/vybery/request', wrap(requireUser), wrap(async (req, res) => {
   // Vyrovnávací účet: zbytek z K výplatě (+ zhodnocení zůstatku) se připíše automaticky při žádosti (za měsíc jen jednou)
   try { await VYR.bookOnRequest(req.user.id); } catch (e) { console.warn('[bs2] vyrovnávací účet při žádosti:', e.message); }
   res.redirect('/vybery?msg=' + encodeURIComponent('Žádost o výběr byla odeslána. Variabilní symbol platby: ' + vs));
-}));
 }));
 app.get('/discount-credit', wrap(requireUser), wrap(async (req, res) => {
   const rows = (await q('SELECT * FROM credits WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC LIMIT 500', [req.user.id])).rows;
