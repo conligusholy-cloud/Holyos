@@ -2377,13 +2377,27 @@ app.post('/admin/vybery/request/:id(\\d+)/pay', requireAdmin, wrap(async (req, r
   const who = String((req.admin && (req.admin.email || req.admin.name || req.admin.username)) || 'admin').slice(0, 80);
   const r = await q(`UPDATE withdrawal_requests SET status='paid', paid_at=now(), decided_at=now(), paid_by=$2, pay_method=$3, pay_note=$4, paid_amount=coalesce($5, amount) WHERE id=$1 AND status='requested' RETURNING id`, [req.params.id, who, method, note, amt && amt > 0 ? amt : null]);
   await log(req.admin, 'vybery_paid', { id: Number(req.params.id), ok: !!r.rows.length });
-  res.redirect('/admin/vybery?tab=vyplata&msg=' + encodeURIComponent(r.rows.length ? 'Označeno jako vyplaceno.' : 'Žádost už byla vyřízena.'));
+  res.redirect(vyberyBack(req) + 'msg=' + encodeURIComponent(r.rows.length ? 'Označeno jako vyplaceno.' : 'Žádost už byla vyřízena.'));
 }));
 app.post('/admin/vybery/request/:id(\\d+)/reject', requireAdmin, wrap(async (req, res) => {
   const reason = String(req.body.reason || '').trim().slice(0, 300) || null;
   const r = await q(`UPDATE withdrawal_requests SET status='rejected', decided_at=now(), reject_reason=$2 WHERE id=$1 AND status='requested' RETURNING id`, [req.params.id, reason]);
   await log(req.admin, 'vybery_rejected', { id: Number(req.params.id), ok: !!r.rows.length });
-  res.redirect('/admin/vybery?tab=vyplata&msg=' + encodeURIComponent(r.rows.length ? 'Žádost zamítnuta.' : 'Žádost už byla vyřízena.'));
+  res.redirect(vyberyBack(req) + 'msg=' + encodeURIComponent(r.rows.length ? 'Žádost zamítnuta.' : 'Žádost už byla vyřízena.'));
+}));
+// Zpět na záložku, ze které akce přišla (Výplata / Žádosti)
+function vyberyBack(req) { const ref = String(req.get('Referer') || ''); return '/admin/vybery?tab=' + (/tab=zadosti/.test(ref) ? 'zadosti' : 'vyplata') + '&'; }
+// Smazání čekající žádosti (po potvrzení): uživatel může znovu požádat; automatické připsání na vyrovnávací účet
+// za daný měsíc se vrátí, pokud mu nezůstala jiná žádost ze stejného měsíce.
+app.post('/admin/vybery/request/:id(\\d+)/delete', requireAdmin, wrap(async (req, res) => {
+  const w = (await q(`SELECT id, supporter_id, amount, currency, vs, to_char(requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM') AS m, to_char((requested_at AT TIME ZONE 'Europe/Prague') - interval '1 month','YYYY-MM') AS p FROM withdrawal_requests WHERE id=$1 AND status='requested'`, [req.params.id])).rows[0];
+  if (!w) return res.redirect(vyberyBack(req) + 'msg=' + encodeURIComponent('Smazat jde jen čekající žádost.'));
+  await q('DELETE FROM withdrawal_requests WHERE id=$1', [w.id]);
+  const left = (await q(`SELECT count(*)::int AS n FROM withdrawal_requests WHERE supporter_id=$1 AND status IN ('requested','paid') AND to_char(requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM')=$2`, [w.supporter_id, w.m])).rows[0].n;
+  let unbooked = 0;
+  if (!left) unbooked = (await q(`DELETE FROM balance_entries WHERE supporter_id=$1 AND period=$2 AND kind='credit' AND created_by='automaticky při žádosti o výběr'`, [w.supporter_id, w.p])).rowCount;
+  await log(req.admin, 'vybery_request_deleted', { id: w.id, supporter_id: w.supporter_id, amount: Number(w.amount), currency: w.currency, vs: w.vs, unbooked });
+  res.redirect(vyberyBack(req) + 'msg=' + encodeURIComponent('Žádost VS ' + (w.vs || w.id) + ' smazána — uživatel může znovu požádat o výběr.' + (unbooked ? ' Připsání na vyrovnávací účet za ' + w.p + ' vráceno.' : '')));
 }));
 app.get('/admin/vybery-vyplaty.xlsx', requireAdmin, wrap(async (req, res) => {
   const XLSX = require('xlsx');
