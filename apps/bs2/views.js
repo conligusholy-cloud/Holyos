@@ -1631,7 +1631,7 @@ function adminVybery({ admin, rows, qstr = '', onlySup = false, onlyBad = false,
         {key:'eur',label:'EX + ST (EUR)',type:'num',ph:'€…',get:function(r){return r.eur}},
         {key:'chk',label:'Kontrola',type:'text',ph:'Kontrola…',get:function(r){return r.chk},enum:true},
         null ] });
-    T.setRows(D); })();
+    T.setRows(D); })();</script>
   <script>
     document.addEventListener('click', function (e) { var b = e.target.closest('.legacy-btn'); if (!b) return;
       var w = window.open('https://partner.bestseries.cz/php-action/fake-login.php?email=' + encodeURIComponent(b.dataset.email), '_blank');
