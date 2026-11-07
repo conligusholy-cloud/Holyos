@@ -1564,7 +1564,7 @@ function adminVybery({ admin, rows, qstr = '', onlySup = false, posCounts = {}, 
   return adminLayout('Výběry', 'vyb', admin, `
   <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 style="margin:0">Výběry <span class="muted" style="font-size:14px;font-weight:500">${rows.length}${totalCount != null && totalCount > rows.length ? ' z ' + totalCount : ''} uživatelů · Expanze + standardní celkem ${Math.round(sumCzk).toLocaleString('cs-CZ')} Kč</span></h1>
   <div class="small" style="margin-top:6px"><b>VIP ${Number(posCounts['VIP'] || 0).toLocaleString('cs-CZ')}</b> · <b>VIP 2 ${Number(posCounts['VIP 2'] || 0).toLocaleString('cs-CZ')}</b> · celkem VIP <b>${(Number(posCounts['VIP'] || 0) + Number(posCounts['VIP 2'] || 0)).toLocaleString('cs-CZ')}</b> <span class="muted">· Partner ${Number(posCounts['Partner'] || 0).toLocaleString('cs-CZ')}${posCounts['—'] ? ' · bez pozice ' + Number(posCounts['—']).toLocaleString('cs-CZ') : ''}</span></div>
-  <div class="row" style="gap:8px"><a class="btn sec" href="/admin/vip.xlsx" title="VIP a VIP 2 členové do Excelu (se ST a EX podporou)">⬇ VIP do Excelu</a></div>
+  <div class="row" style="gap:8px"><a class="btn sec" href="/admin/vip.xlsx" title="VIP a VIP 2 členové do Excelu (se ST a EX podporou)">⬇ VIP do Excelu</a><a class="btn sec" href="/admin/expanze.xlsx" title="Součet nákupů expanze po letech u každého uživatele + list se všemi jednotlivými nákupy (datum, částka)">⬇ Nákupy expanze do Excelu</a></div>
   <form method="get" action="/admin/vybery" class="row" style="gap:8px"><input name="q" value="${esc(qstr)}" placeholder="Hledat jméno / e-mail / nick" style="min-width:240px"><label class="small" style="display:flex;align-items:center;gap:6px;white-space:nowrap;cursor:pointer"><input type="checkbox" name="s" value="1"${onlySup ? ' checked' : ''} onchange="this.form.submit()" style="width:auto;margin:0"> jen s podporou</label><button class="btn sec" type="submit">Hledat</button></form></div>
   <div class="card" style="overflow-x:auto;margin-top:14px"><table><thead><tr><th>Jméno</th>${cols.map(c => `<th>${esc(c.label)}</th>`).join('')}<th></th></tr></thead><tbody>${body || '<tr><td colspan="' + (cols.length + 2) + '" class="muted">Nikdo nenalezen.</td></tr>'}</tbody></table></div>
   <script>
@@ -1654,7 +1654,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
             if(!confirm('Přenést VŠECHNA data ze starého portálu u '+(all?'VŠECH uživatelů':'všech uživatelů s nenulovým obratem')+(force?' (i těch už načtených)':'')+'? Běží na pozadí, může to trvat několik hodin.')) return;
             fetch('/admin/legacy/collect-all',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({all:all,force:force})}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
           poll(); })();
-      </script><button type="button" class="btn sec sm" id="std-all" title="U všech s nenulovým obratem projde Přehled podpory za VŠECHNY roky a sečte palety + opakovačky (na pozadí, přeskočí načtené za 24 h)">📦 Standardní podpora všech</button><span id="std-all-st" class="small muted"></span>
+      </script><button type="button" class="btn sec sm" id="std-all" title="U všech s nenulovým obratem projde Přehled podpory za VŠECHNY roky, přečte JEDNOTLIVÉ NÁKUPY palet a opakovaček a sečte je (ST podpora = palety + opakovačky). Každý rok a sekci zkontroluje proti „Celkem“ portálu. Expanze má vlastní tlačítko. Běží na pozadí.">📦 ST podpora všech</button><span id="std-all-st" class="small muted"></span>
       <script>
         (function(){ var b=document.getElementById('std-all'), st=document.getElementById('std-all-st'); if(!b) return;
           function f(n){ return Math.round(Number(n)||0).toLocaleString('cs-CZ'); }
@@ -1664,15 +1664,15 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
           b.onclick=function(){ if(!confirm('Projít u všech uživatelů s nenulovým obratem Přehled podpory za všechny roky a sečíst palety + opakovačky? Běží na pozadí (desítky minut).')) return;
             fetch('/admin/partner-support/standard/sync-all',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
           poll(); })();
-      </script><button type="button" class="btn sec sm" id="exp-all" title="U všech s nenulovým obratem projde Přehled podpory za VŠECHNY roky, přečte jednotlivé nákupy EXPANZE a sečte je (kontrola proti „Celkem“ portálu), a načte úrok z expanze — nárok od ø, % úroku, návštěvnost (na pozadí)">📈 Expanze všech</button><span id="exp-all-st" class="small muted"></span>
+      </script><button type="button" class="btn sec sm" id="exp-all" title="U všech s nenulovým obratem projde Přehled podpory za VŠECHNY roky a sečte JEDNOTLIVÉ NÁKUPY EXPANZE (EX podpora). Každý rok zkontroluje proti „Celkem“ expanze na portálu (✓ sedí / ⚠ nesedí). Běží na pozadí.">📈 EX podpora všech</button><span id="exp-all-st" class="small muted"></span>
       <script>
         (function(){ var b=document.getElementById('exp-all'), st=document.getElementById('exp-all-st'); if(!b) return;
           function f(n){ return Math.round(Number(n)||0).toLocaleString('cs-CZ'); }
           function show(j){ var t=''; if(j.total){ var el=((j.finished_at?new Date(j.finished_at):new Date())-new Date(j.started_at))/1000, per=j.done?el/j.done:0; t=' 📈 '+(j.running?'běží ':'hotovo ')+j.done+'/'+j.total+(j.failed?' · chyby '+j.failed:'')+(j.running&&per?' · zbývá cca '+Math.max(1,Math.round(per*(j.total-j.done)/60))+' min':''); }
-            var o=j.overall||{}; st.textContent=t+(o.n?' | v expanzi '+f(o.n)+' · nárok '+f(o.eligible)+' · celkem '+f(o.sum_czk)+' Kč':''); st.title=(j.errors||[]).join(' | '); b.disabled=!!j.running; }
-          function poll(){ fetch('/admin/partner-support/expansion/sync-all').then(function(r){return r.json()}).then(function(j){ show(j); if(j.running) setTimeout(poll,3000); }).catch(function(){}); }
-          b.onclick=function(){ if(!confirm('Načíst úrok z EXPANZE (vloženo, nárok od ø, %) u všech uživatelů s nenulovým obratem? Běží na pozadí.')) return;
-            fetch('/admin/partner-support/expansion/sync-all',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
+            var o=j.overall||{}; st.textContent=t+(o.n?' | s expanzí '+f(o.n)+' · EX podpora celkem '+f(o.sum_czk)+' Kč':''); st.title=(j.errors||[]).join(' | '); b.disabled=!!j.running; }
+          function poll(){ fetch('/admin/partner-support/expanze/sync-all').then(function(r){return r.json()}).then(function(j){ show(j); if(j.running) setTimeout(poll,3000); }).catch(function(){}); }
+          b.onclick=function(){ if(!confirm('Projít u všech uživatelů s nenulovým obratem Přehled podpory za všechny roky a sečíst jednotlivé nákupy EXPANZE? Běží na pozadí (desítky minut).')) return;
+            fetch('/admin/partner-support/expanze/sync-all',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
           poll(); })();
       </script><button type="button" class="btn sec sm" id="piv-all" title="U všech s nenulovým obratem načte ze stránky PIV starého portálu „Máte vloženo" a aktivní úroveň (na pozadí, přeskočí načtené za posledních 24 h)">💠 PIV všech</button><span id="piv-all-st" class="small muted"></span>
       <script>

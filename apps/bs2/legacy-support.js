@@ -51,7 +51,7 @@ function parseRows(block) {
     if (pm) { const N = pm[1]; if (tail === N || tail.endsWith(N)) amount = Number(N); else { amount = Number(tail); issues++; } }
     else amount = Number(tail);
     if (!isFinite(amount)) { amount = 0; issues++; }
-    rows.push({ type, amount, date: m[5] });
+    rows.push({ type, amount, date: m[4] });
   }
   return { rows, issues, sum: Math.round(rows.reduce((a, r) => a + r.amount, 0) * 100) / 100 };
 }
@@ -75,6 +75,8 @@ function parseInvests(text) {
     const v = useRows ? pr.sum : celkem;
     out.row_checks.push({ section: name, rows: pr.rows.length, rows_sum: pr.sum, portal: celkem, issues: pr.issues, ok: useRows && Math.abs(pr.sum - celkem) <= 0.5 });
     out.sections[name] = (out.sections[name] || 0) + v; if (k) out[k] = (out[k] || 0) + v;
+    // jednotlivé nákupy expanze (datum, částka) — uložíme pro audit a export
+    if (k === 'expanze') out.expanze_rows = (out.expanze_rows || []).concat(pr.rows.map((r) => [r.date, r.amount]));
   }
   for (const k of ['palety', 'expanze', 'neurawash', 'opakovacky', 'balicky', 'likvidni']) if (out[k] == null) out[k] = 0;
   if (!out.currency) out.currency = 'CZK';
@@ -222,13 +224,13 @@ async function fetchLegacyStandardWithJar(jar) {
       // „ostatni“ = sekce, které neznáme jménem — započtou se do standardní podpory (vše kromě expanze a NeuraWash)
       const known = (d.palety || 0) + (d.opakovacky || 0) + (d.expanze || 0) + (d.neurawash || 0) + (d.balicky || 0) + (d.likvidni || 0);
       const secSum = Object.values(d.sections || {}).reduce((a, v) => a + (v || 0), 0);
-      const rec = { palety: d.palety || 0, opakovacky: d.opakovacky || 0, balicky: d.balicky || 0, likvidni: d.likvidni || 0, ostatni: Math.round((secSum - known) * 100) / 100, expanze: d.expanze || 0, neurawash: d.neurawash || 0, total_year: d.total_year || 0, sections: d.sections || {}, checks: (d.row_checks || []).map((c) => ({ s: c.section, n: c.rows, sum: c.rows_sum, p: c.portal, ok: !!c.ok })) };
+      const rec = { palety: d.palety || 0, opakovacky: d.opakovacky || 0, balicky: d.balicky || 0, likvidni: d.likvidni || 0, ostatni: Math.round((secSum - known) * 100) / 100, expanze: d.expanze || 0, neurawash: d.neurawash || 0, total_year: d.total_year || 0, sections: d.sections || {}, expanze_rows: d.expanze_rows || [], checks: (d.row_checks || []).map((c) => ({ s: c.section, n: c.rows, sum: c.rows_sum, p: c.portal, ok: !!c.ok })) };
       for (const c of (d.row_checks || [])) if (!c.ok) bad.push({ y, section: c.section, portal: c.portal, parsed: c.rows_sum, diff: Math.round((c.portal - c.rows_sum) * 100) / 100, rows: c.rows, issues: c.issues });
       if (d.total_year != null && Math.abs(Number(d.total_year) - secSum) > 0.5) bad.push({ y, portal: Number(d.total_year), parsed: Math.round(secSum * 100) / 100, diff: Math.round((Number(d.total_year) - secSum) * 100) / 100 });
       if (rec.palety || rec.opakovacky || rec.balicky || rec.likvidni || rec.ostatni || rec.expanze || rec.neurawash || rec.total_year) by[y] = rec;
     }
     const sum = (k) => Math.round(Object.values(by).reduce((a, r) => a + (Number(r[k]) || 0), 0) * 100) / 100;
-    const data = { std_by_year: by, std_years: years, std_palety_all: sum('palety'), std_opakovacky_all: sum('opakovacky'), std_expanze_all: sum('expanze'), std_neurawash_all: sum('neurawash'), std_balicky_all: sum('balicky'), std_likvidni_all: sum('likvidni'), std_ostatni_all: sum('ostatni'), std_v: 3, std_currency: cur || 'CZK', std_checked_at: new Date().toISOString(), std_check: { ok: bad.length === 0, bad } };
+    const data = { std_by_year: by, std_years: years, std_palety_all: sum('palety'), std_opakovacky_all: sum('opakovacky'), std_expanze_all: sum('expanze'), std_neurawash_all: sum('neurawash'), std_balicky_all: sum('balicky'), std_likvidni_all: sum('likvidni'), std_ostatni_all: sum('ostatni'), std_v: 4, std_currency: cur || 'CZK', std_checked_at: new Date().toISOString(), std_check: { ok: bad.length === 0, bad } };
     // Standardní podpora = palety + opakovačky (všechny roky). Balíčky, likvidní a ostatní se do součtu nezapočítávají.
     data.std_total = Math.round((data.std_palety_all + data.std_opakovacky_all) * 100) / 100;
     if (data.std_currency === 'EUR') { try { const c = await cnbEurRate(); data.std_total_czk = Math.round(data.std_total * c.rate * 100) / 100; data.std_eur_rate = c.rate; data.std_eur_rate_date = c.date; } catch (e) { /* bez kurzu */ } }

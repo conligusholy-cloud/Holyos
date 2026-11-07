@@ -2692,11 +2692,7 @@ app.post('/admin/supporters/:id(\\d+)/partner-piv', requireAdmin, wrap(async (re
 let EXP_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, eligible: 0, errors: [], started_at: null, finished_at: null };
 app.post('/admin/partner-support/expansion/sync-all', requireAdmin, wrap(async (req, res) => {
   if (EXP_JOB.running) return res.json(EXP_JOB);
-  // Účet se zpracuje, pokud potřebuje nový úrok z expanze (starší než 24 h) NEBO přepočet nákupů po letech (std_v < 3 = ještě nečteno po jednotlivých nákupech)
-  const rows = (await q(`SELECT id,email,nick,
-      (partner_support IS NULL OR partner_support->>'exp_checked_at' IS NULL OR (partner_support->>'exp_checked_at')::timestamptz < now() - interval '24 hours') AS need_exp,
-      (partner_support IS NULL OR partner_support->>'std_checked_at' IS NULL OR coalesce(partner_support->>'std_v','1') <> '3') AS need_std
-    FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'exp_checked_at' IS NULL OR (partner_support->>'exp_checked_at')::timestamptz < now() - interval '24 hours' OR partner_support->>'std_checked_at' IS NULL OR coalesce(partner_support->>'std_v','1') <> '3') ORDER BY id`)).rows;
+  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'exp_checked_at' IS NULL OR (partner_support->>'exp_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
   EXP_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, eligible: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
   await log(req.admin, 'partner_expansion_sync_all', { total: rows.length });
   res.json(EXP_JOB);
@@ -2708,21 +2704,11 @@ app.post('/admin/partner-support/expansion/sync-all', requireAdmin, wrap(async (
       while (queue.length && !stop) {
         const s = queue.shift();
         try {
-          let okAny = false, errMsg = null;
-          if (s.need_exp) {
-            const r = await LEGACY.fetchLegacyExpansion(s.email);
-            if (r.ok) {
-              await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify(r.data)]);
-              okAny = true; if (r.data.exp_eligible) EXP_JOB.eligible++;
-            } else errMsg = r.error;
-          }
-          // EX podpora = součet všech nákupů expanze po letech (čtení jednotlivých řádků + kontrola proti „Celkem“)
-          if (s.need_std) {
-            const r2 = await LEGACY.fetchLegacyStandard(s.email);
-            if (r2.ok) { await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify(r2.data)]); okAny = true; }
-            else errMsg = r2.error;
-          }
-          if (okAny) EXP_JOB.ok++; else { EXP_JOB.failed++; if (EXP_JOB.errors.length < 50) EXP_JOB.errors.push((s.nick || s.email) + ': ' + (errMsg || 'nic k načtení')); }
+          const r = await LEGACY.fetchLegacyExpansion(s.email);
+          if (r.ok) {
+            await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify(r.data)]);
+            EXP_JOB.ok++; if (r.data.exp_eligible) EXP_JOB.eligible++;
+          } else { EXP_JOB.failed++; if (EXP_JOB.errors.length < 50) EXP_JOB.errors.push((s.nick || s.email) + ': ' + r.error); }
         } catch (e) { EXP_JOB.failed++; if (EXP_JOB.errors.length < 50) EXP_JOB.errors.push((s.nick || s.email) + ': ' + e.message); }
         EXP_JOB.done++; EXP_JOB.last = s.nick || s.email;
         await new Promise((r) => setTimeout(r, 100));
@@ -2748,7 +2734,7 @@ app.post('/admin/supporters/:id(\\d+)/partner-expansion', requireAdmin, wrap(asy
 let STD_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, errors: [], started_at: null, finished_at: null };
 app.post('/admin/partner-support/standard/sync-all', requireAdmin, wrap(async (req, res) => {
   if (STD_JOB.running) return res.json(STD_JOB);
-  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'std_checked_at' IS NULL OR coalesce(partner_support->>'std_v','1') <> '3' OR (partner_support->>'std_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
+  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'std_checked_at' IS NULL OR coalesce(partner_support->>'std_v','1') <> '4' OR (partner_support->>'std_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
   STD_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
   await log(req.admin, 'partner_standard_sync_all', { total: rows.length });
   res.json(STD_JOB);
@@ -2777,6 +2763,40 @@ app.get('/admin/partner-support/standard/sync-all', requireAdmin, wrap(async (re
   let overall = {};
   try { overall = (await q(`SELECT count(*) FILTER (WHERE (partner_support->>'std_total')::numeric > 0)::int AS n, coalesce(sum((partner_support->>'std_total_czk')::numeric),0)::float AS sum_czk FROM supporters WHERE partner_support->>'std_total' ~ '^-?[0-9.]+$'`)).rows[0]; } catch (e) { /* jen info */ }
   res.json({ ...STD_JOB, overall });
+}));
+// Hromadný součet nákupů EXPANZE (EX podpora) — samostatná úloha; čte stejný Přehled podpory po letech, ale značí si vlastní průchod (ex_v / ex_checked_at)
+let EXN_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, errors: [], started_at: null, finished_at: null };
+app.post('/admin/partner-support/expanze/sync-all', requireAdmin, wrap(async (req, res) => {
+  if (EXN_JOB.running) return res.json(EXN_JOB);
+  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (partner_support IS NULL OR partner_support->>'ex_checked_at' IS NULL OR coalesce(partner_support->>'ex_v','1') <> '4' OR (partner_support->>'ex_checked_at')::timestamptz < now() - interval '24 hours') ORDER BY id`)).rows;
+  EXN_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
+  await log(req.admin, 'partner_expanze_sync_all', { total: rows.length });
+  res.json(EXN_JOB);
+  (async () => {
+    const queue = rows.slice();
+    const workers = Math.max(1, Math.min(10, parseInt(process.env.LEGACY_SYNC_CONCURRENCY || '6', 10) || 6));
+    let stop = false;
+    await Promise.all(Array.from({ length: workers }, async () => {
+      while (queue.length && !stop) {
+        const s = queue.shift();
+        try {
+          const r = await LEGACY.fetchLegacyStandard(s.email);
+          if (r.ok) { await q("UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) || $2::jsonb WHERE id=$1", [s.id, JSON.stringify({ ...r.data, ex_v: 4, ex_checked_at: new Date().toISOString() })]); EXN_JOB.ok++; }
+          else { EXN_JOB.failed++; if (EXN_JOB.errors.length < 50) EXN_JOB.errors.push((s.nick || s.email) + ': ' + r.error); }
+        } catch (e) { EXN_JOB.failed++; if (EXN_JOB.errors.length < 50) EXN_JOB.errors.push((s.nick || s.email) + ': ' + e.message); }
+        EXN_JOB.done++; EXN_JOB.last = s.nick || s.email;
+        await new Promise((r) => setTimeout(r, 100));
+        if (EXN_JOB.failed >= 10 && EXN_JOB.ok === 0) { stop = true; EXN_JOB.errors.push('Zastaveno — prvních 10 pokusů selhalo.'); }
+      }
+    }));
+    EXN_JOB.running = false; EXN_JOB.finished_at = new Date().toISOString();
+    console.log('[bs2] EX podpora hotovo', JSON.stringify({ ...EXN_JOB, errors: EXN_JOB.errors.slice(0, 5) }));
+  })().catch((e) => { EXN_JOB.running = false; EXN_JOB.finished_at = new Date().toISOString(); EXN_JOB.errors.push(e.message); });
+}));
+app.get('/admin/partner-support/expanze/sync-all', requireAdmin, wrap(async (req, res) => {
+  let overall = {};
+  try { overall = (await q(`SELECT count(*) FILTER (WHERE ${EX_CZK} > 0)::int AS n, coalesce(sum(${EX_CZK}),0)::float AS sum_czk FROM supporters WHERE partner_support IS NOT NULL`)).rows[0]; } catch (e) { /* jen info */ }
+  res.json({ ...EXN_JOB, overall });
 }));
 app.post('/admin/supporters/:id(\\d+)/partner-standard', requireAdmin, wrap(async (req, res) => {
   const s = await loadSupporter(req.params.id); if (!s) return res.redirect('/admin/supporters');
@@ -2901,6 +2921,50 @@ app.get('/admin/support-sections', requireAdmin, wrap(async (req, res) => {
   res.send(V.adminLayout('Sekce podpory', 'vyb', req.admin, `<h1 style="margin:0 0 6px">Sekce Přehledu podpory <span class="muted" style="font-size:14px;font-weight:500">co BS2 našlo u uživatelů</span></h1>
   <p class="small muted">Součty za všechny roky a uživatele podle názvu sekce na starém portálu. Do ST podpory se počítají jen palety a opakovačky, do EX jen expanze. Cokoli jiného (balíčky, likvidní, neznámé názvy) se nezapočítává.</p>
   <div class="card" style="overflow-x:auto"><table><thead><tr><th>Název sekce na portálu</th><th>Započítá se jako</th><th style="text-align:right">Uživatelů</th><th style="text-align:right">Součet (měna účtu)</th></tr></thead><tbody>${rows.map(r => `<tr><td><b>${V.esc(r.name)}</b></td><td>${V.esc(known[String(r.name).toLowerCase()] || 'NEZAPOČÍTÁVÁ SE')}</td><td style="text-align:right">${n0(r.users)}</td><td style="text-align:right">${n0(r.total)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Žádná data.</td></tr>'}</tbody></table></div>`, HOLYOS_URL));
+}));
+// Export nákupů EXPANZE: list „Souhrn" (součet po letech, kontrola proti „Celkem" portálu) + list „Nákupy" (každý jednotlivý nákup)
+app.get('/admin/expanze.xlsx', requireAdmin, wrap(async (req, res) => {
+  const XLSX = require('xlsx');
+  const rows = (await q("SELECT id,email,first_name,last_name,nick,partner_support AS p FROM supporters WHERE partner_support ? 'std_by_year' ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email")).rows;
+  const ENT = { aacute: 'á', eacute: 'é', iacute: 'í', oacute: 'ó', uacute: 'ú', yacute: 'ý', Aacute: 'Á', Eacute: 'É', Iacute: 'Í', Oacute: 'Ó', Uacute: 'Ú', Yacute: 'Ý', scaron: 'š', Scaron: 'Š', ccaron: 'č', Ccaron: 'Č', rcaron: 'ř', Rcaron: 'Ř', zcaron: 'ž', Zcaron: 'Ž', ecaron: 'ě', Ecaron: 'Ě', ncaron: 'ň', Ncaron: 'Ň', tcaron: 'ť', Tcaron: 'Ť', dcaron: 'ď', Dcaron: 'Ď', uring: 'ů', Uring: 'Ů', amp: '&', quot: '"', apos: "'", nbsp: ' ' };
+  const txt = (v) => { const s = String(v == null ? '' : v).replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (m, e) => e[0] === '#' ? String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)) : (ENT[e] || m)).trim(); return /^null$/i.test(s) ? '' : s; };
+  const r2 = (n) => Math.round(Number(n) * 100) / 100;
+  const yearSet = new Set(); rows.forEach(r => Object.keys((r.p && r.p.std_by_year) || {}).forEach(y => yearSet.add(y)));
+  const years = [...yearSet].sort();
+  const summary = [], purchases = [];
+  for (const r of rows) {
+    const p = r.p || {}, by = p.std_by_year || {};
+    const rec = { 'Příjmení': txt(r.last_name), 'Jméno': txt(r.first_name), 'E-mail': r.email, 'Měna': p.std_currency || 'CZK' };
+    let total = 0, count = 0, portal = 0, bad = false, haveRows = true;
+    for (const y of years) {
+      const yr = by[y];
+      if (!yr) { rec['EX ' + y] = null; continue; }
+      const er = Array.isArray(yr.expanze_rows) ? yr.expanze_rows : null;
+      let sum;
+      if (er && er.length) { sum = r2(er.reduce((a, x) => a + Number(x[1] || 0), 0)); er.forEach(x => purchases.push({ 'E-mail': r.email, 'Příjmení': txt(r.last_name), 'Jméno': txt(r.first_name), 'Rok': Number(y), 'Datum': x[0], 'Částka': Number(x[1]) })); count += er.length; }
+      else { sum = r2(yr.expanze || 0); if (sum > 0) haveRows = false; }
+      rec['EX ' + y] = sum; total += sum;
+      const chk = (yr.checks || []).find(c => /^expanze$/i.test(c.s));
+      if (chk) { portal += Number(chk.p || 0); if (!chk.ok) bad = true; } else if (sum > 0) { haveRows = false; }
+    }
+    rec['EX podpora celkem (součet nákupů)'] = r2(total); rec['Počet nákupů'] = count;
+    rec['Celkem expanze podle portálu (součet „Celkem" sekcí)'] = r2(portal); rec['Rozdíl (portál − součet nákupů)'] = r2(portal - total);
+    rec['Kontrola'] = !haveRows ? 'neověřeno (načti znovu)' : (bad || Math.abs(portal - total) > 0.5) ? 'NESEDÍ' : 'sedí';
+    rec['Odkaz BS2'] = (process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz') + '/admin/supporters/' + r.id;
+    summary.push(rec);
+  }
+  const wb = XLSX.utils.book_new();
+  const ws1 = XLSX.utils.json_to_sheet(summary);
+  ws1['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: summary.length, c: Object.keys(summary[0] || { a: 1 }).length - 1 } }) };
+  XLSX.utils.book_append_sheet(wb, ws1, 'Souhrn');
+  const ws2 = XLSX.utils.json_to_sheet(purchases);
+  ws2['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: purchases.length, c: 5 } }) };
+  XLSX.utils.book_append_sheet(wb, ws2, 'Nákupy');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  await log(req.admin, 'expanze_export', { users: summary.length, purchases: purchases.length });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="expanze-nakupy-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+  res.send(buf);
 }));
 // Export VIP a VIP 2 členů (pozice ze starého portálu) do Excelu — s ST podporou, EX podporou a součtem
 app.get('/admin/vip.xlsx', requireAdmin, wrap(async (req, res) => {
