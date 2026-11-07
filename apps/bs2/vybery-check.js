@@ -15,13 +15,20 @@ const normPos = (p) => String(p || '').trim().toUpperCase().replace(/\s+/g, ' ')
 // Naše hodnoty po měnách ze std_by_year (každá sekce v každém roce má svou měnu r.cur[k])
 function ours(p) {
   const by = p && p.std_by_year && typeof p.std_by_year === 'object' ? p.std_by_year : null;
-  if (!by || !Object.keys(by).length) return null;
+  const n = (v) => (v != null && v !== '' && isFinite(Number(v)) ? Number(v) : null);
+  // Expanze = sloupec EX PODPORA v Admin → Výběry (std_expanze_all, příp. ruční přepis ov_ex; jinak vloženo v expanzi)
+  // v měně účtu — porovnává se jen ve stejné měně (eurový účet → Expanze €, korunový → Expanze Kč).
+  const exVal = n(p && p.std_expanze_all) != null ? n(p.std_expanze_all) : n(p && p.exp_invested);
+  const exCur = (n(p && p.std_expanze_all) != null ? p.std_currency : (p && (p.exp_currency || p.std_currency))) === 'EUR' ? 'eur' : 'czk';
+  const exFromEx = exVal != null && !(p && p.std_mixed === true && p.ov_ex == null); // smíšené měny (vše přepočteno na Kč) → rozpad po letech
+  if ((!by || !Object.keys(by).length) && !exFromEx) return null;
   const out = {}; for (const [k] of FIELDS) out[k] = { czk: 0, eur: 0 };
-  for (const r of Object.values(by)) for (const [k] of FIELDS) {
+  for (const r of Object.values(by || {})) for (const [k] of FIELDS) {
     const v = Number(r && r[k]) || 0; if (!v) continue;
     const cur = (r.cur && r.cur[k]) === 'EUR' ? 'eur' : 'czk';
     out[k][cur] = Math.round((out[k][cur] + v) * 100) / 100;
   }
+  if (exFromEx) { out.expanze = { czk: 0, eur: 0 }; out.expanze[exCur] = Math.round(exVal * 100) / 100; }
   return out;
 }
 
