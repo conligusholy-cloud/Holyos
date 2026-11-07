@@ -1390,6 +1390,7 @@ function supporterVybery(s, { rows = [], payout = null, msg = '', err = '' } = {
   return layout({ title: 'Výběry', user: s.nick, nav: userNav(s), active: 'vybery', help: null, body: `
   <h2 style="display:flex;align-items:center;gap:8px;margin:22px 0 14px">${ico('wallet', 18)} Výběry</h2>
   ${msg ? `<div class="card" style="border-color:var(--ok);margin-bottom:12px">${esc(msg)}</div>` : ''}${err ? `<div class="card" style="border-color:var(--err);margin-bottom:12px">${esc(err)}</div>` : ''}
+  ${msg || err ? `<script>try{var u=new URL(location.href);u.searchParams.delete('msg');u.searchParams.delete('err');history.replaceState(null,'',u.pathname+(u.search||'')+u.hash)}catch(e){}<\/script>` : ''}
   <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
   <div class="card" style="max-width:560px;flex:1 1 420px">
     <div style="font-size:18px;font-weight:800;margin-bottom:8px">Požádat o výběr</div>
@@ -1400,6 +1401,8 @@ function supporterVybery(s, { rows = [], payout = null, msg = '', err = '' } = {
         <div style="font-size:26px;font-weight:800;color:#5eead4;margin:2px 0">${money(payout.pay, cur)}</div>
         ${payout.toBalance > 0 ? `<div class="small muted">Celkem ${money(payout.total, cur)} — vyplácí se ${payout.pct} %, zbylých ${Math.round((100 - payout.pct) * 100) / 100} % (${money(payout.toBalance, cur)}) jde na váš vyrovnávací účet se zhodnocením 5,68 % p.a.</div>` : ''}
         ${payout.requested > 0 ? `<div class="small" style="margin-top:4px">Už požádáno tento měsíc: <b>${money(payout.requested, cur)}</b> · zbývá <b>${money(payout.available, cur)}</b></div>` : ''}</div>`; })() : ''}
+    ${payout && payout.available != null && payout.available <= 0 ? (() => { const MN = ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince']; const [y, m] = payout.month.split('-').map(Number); const nm = m === 12 ? 1 : m + 1, ny = m === 12 ? y + 1 : y;
+      return `<div class="card" style="margin:0;padding:12px 14px;background:var(--card2)"><div style="font-weight:700">Teď není nic k výplatě.</div><div class="small muted" style="margin-top:4px">${payout.requested > 0 ? 'O výplatu za tento měsíc jste už požádali. ' : ''}Vyplácíme jednou měsíčně — další připsání bude <b>7. ${MN[nm - 1]} ${ny}</b>.</div></div>`; })() : `
     <p class="small muted" style="margin:0 0 10px">Funkce se testuje. Žádost uvidí administrátor a výplatu zpracuje v daném měsíci. Vyplácí se v ${sym}.</p>
     <form method="post" action="/vybery/request">
       ${payout && payout.available != null ? `<input type="hidden" name="amount" value="${payout.available}">` : `<label>Částka (${sym})</label><input name="amount" inputmode="decimal" required placeholder="např. 5000">`}
@@ -1409,7 +1412,7 @@ function supporterVybery(s, { rows = [], payout = null, msg = '', err = '' } = {
       <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:500;cursor:pointer"><input type="checkbox" name="save_account" value="1" style="width:auto;margin:0" checked> Uložit účet k mému profilu${saved ? ' (přepíše uložený)' : ''}</label>`; })()}
       <label style="margin-top:8px">Poznámka (nepovinné)</label><input name="note" maxlength="300" placeholder="např. zpráva pro příjemce">
       <div style="height:10px"></div><button class="btn" type="submit">Odeslat žádost o výběr</button>
-    </form>
+    </form>`}
   </div>
   ${payout ? `<div style="display:flex;flex-direction:column;gap:8px;flex:1 1 240px;max-width:300px">
     <div class="card" style="padding:10px 14px;border-color:var(--border);background:transparent">
