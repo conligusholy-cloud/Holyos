@@ -2977,6 +2977,43 @@ app.get('/admin/expanze.xlsx', requireAdmin, wrap(async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="expanze-nakupy-${new Date().toISOString().slice(0, 10)}.xlsx"`);
   res.send(buf);
 }));
+// Náhodný vzorek účtů k ruční kontrole proti portálu (Excel: souhrn + rozpis po letech) — míchá korunové, eurové a smíšené účty
+app.get('/admin/vybery-vzorek.xlsx', requireAdmin, wrap(async (req, res) => {
+  const XLSX = require('xlsx');
+  const n = Math.min(40, Math.max(3, parseInt(req.query.n || '15', 10) || 15));
+  const base = `partner_support->>'std_checked_at' IS NOT NULL AND partner_support->'std_by_year' IS NOT NULL`;
+  const pick = async (cond, lim) => (await q(`SELECT id,nick,email,first_name,last_name, partner_support AS p FROM supporters WHERE ${base} AND ${cond} AND (coalesce((partner_support->>'std_total')::numeric,0) > 0 OR coalesce((partner_support->>'std_expanze_all')::numeric,0) > 0) ORDER BY random() LIMIT ${lim}`)).rows;
+  const nMixed = Math.max(1, Math.round(n / 5)), nEur = Math.round(n * 0.4);
+  let rows = await pick(`(partner_support->>'std_mixed') = 'true'`, nMixed);
+  rows = rows.concat(await pick(`coalesce(partner_support->>'std_mixed','false') <> 'true' AND partner_support->>'std_currency' = 'EUR'`, nEur));
+  const have = new Set(rows.map((r) => r.id));
+  const czk = (await pick(`coalesce(partner_support->>'std_mixed','false') <> 'true' AND coalesce(partner_support->>'std_currency','CZK') <> 'EUR'`, n)).filter((r) => !have.has(r.id));
+  rows = rows.concat(czk).slice(0, n);
+  const nn = (v) => (v == null || v === '' || !isFinite(Number(v)) ? null : Number(v));
+  const sum = [], years = [];
+  rows.forEach((r, i) => {
+    const p = r.p || {};
+    sum.push({ '#': i + 1, 'Jméno': [r.last_name, r.first_name].filter(Boolean).join(' '), 'Nick': r.nick || '', 'E-mail': r.email, 'Měna účtu': p.std_mixed ? 'SMÍŠENÉ (v Kč)' : (p.std_currency || 'CZK'),
+      'ST podpora (měna)': nn(p.std_total), 'EX podpora (měna)': nn(p.std_expanze_all), 'ST podpora (Kč)': nn(p.std_total_czk), 'EX podpora (Kč)': nn(p.std_expanze_czk != null ? p.std_expanze_czk : p.std_expanze_all),
+      'Palety': nn(p.std_palety_all), 'Opakovačky': nn(p.std_opakovacky_all), 'Balíčky': nn(p.std_balicky_all), 'Likvidní (není v ST)': nn(p.std_likvidni_all), 'Ostatní (není v ST)': nn(p.std_ostatni_all), 'NeuraWash (není v ST)': nn(p.std_neurawash_all),
+      'Kontrola čtení': p.std_check && p.std_check.ok ? 'sedí' : 'NESEDÍ',
+      'ST podle portálu (vyplnit)': '', 'EX podle portálu (vyplnit)': '', 'Sedí? (ano/ne)': '' });
+    const by = p.std_by_year || {};
+    for (const y of Object.keys(by).sort()) { const b = by[y]; const cur = b.cur || {};
+      years.push({ '#': i + 1, 'Nick': r.nick || r.email, 'Rok': Number(y), 'Měna palet': cur.palety || '', 'Palety': nn(b.palety), 'Opakovačky': nn(b.opakovacky), 'Balíčky': nn(b.balicky), 'ST součet (palety+opak.+balíčky)': (nn(b.palety) || 0) + (nn(b.opakovacky) || 0) + (nn(b.balicky) || 0),
+        'Likvidní': nn(b.likvidni), 'Ostatní': nn(b.ostatni), 'Expanze (EX)': nn(b.expanze), 'NeuraWash': nn(b.neurawash), 'Podpořil v roce (portál)': nn(b.total_year),
+        'Kontrola sekcí': Array.isArray(b.checks) ? b.checks.map((c) => `${c.s}: ${c.n}× ${c.ok ? 'sedí' : 'NESEDÍ'}`).join('; ') : '' }); }
+  });
+  const wb = XLSX.utils.book_new();
+  const w1 = XLSX.utils.json_to_sheet(sum); w1['!cols'] = [4, 24, 16, 30, 14, 14, 14, 14, 14, 12, 12, 12, 14, 14, 14, 12, 16, 16, 12].map((w) => ({ wch: w }));
+  const w2 = XLSX.utils.json_to_sheet(years); w2['!cols'] = [4, 18, 7, 10, 12, 12, 12, 16, 12, 12, 14, 12, 16, 50].map((w) => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, w1, 'Vzorek'); XLSX.utils.book_append_sheet(wb, w2, 'Po letech');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  await log(req.admin, 'vybery_vzorek_export', { n: rows.length });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="vybery-vzorek-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+  res.send(buf);
+}));
 // Diagnostika nesedících: souhrn podle sekce + vzorky řádků, které se nepodařilo přečíst (JSON)
 app.get('/admin/vybery-diag', requireAdmin, wrap(async (req, res) => {
   const rows = (await q(`SELECT id,nick,email,partner_support->>'std_currency' AS cur, partner_support->'std_check'->'bad' AS bad FROM supporters WHERE partner_support->'std_check'->>'ok' = 'false'`)).rows;
