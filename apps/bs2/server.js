@@ -1822,6 +1822,7 @@ function readCols(req) {
   cols = cols.filter(c => c !== 'expansion' && c !== 'standard');
   if (!cols.includes('_seen_es') && !cols.includes('exp_std')) cols = cols.concat('exp_std');
   if (!cols.includes('_seen_stex')) { if (!cols.includes('st_podpora')) cols = cols.concat('st_podpora'); if (!cols.includes('ex_podpora')) cols = cols.concat('ex_podpora'); }
+  if (!cols.includes('_seen_eur') && !cols.includes('exp_std_eur')) cols = cols.concat('exp_std_eur');
   if (!cols.includes('_seen_tfa') && !cols.includes('tfa')) cols = cols.concat('tfa');
   return cols;
 }
@@ -3011,12 +3012,13 @@ app.get('/admin/vybery.xlsx', requireAdmin, wrap(async (req, res) => {
     return { '#': i + 1, 'Pozice': r.pos || '', 'Příjmení': r.last_name || '', 'Jméno': r.first_name || '', 'Nick': r.nick || '', 'E-mail': r.email,
       'Měna účtu': r.cur || 'CZK', 'Palety (měna účtu)': n(r.palety), 'Opakovačky (měna účtu)': n(r.opak), 'ST podpora (měna účtu)': n(r.std_total), 'Expanze / EX (měna účtu)': n(r.expanze),
       'ST podpora (Kč)': st, 'EX podpora (Kč)': ex, 'EX + ST podpora (Kč)': (st != null || ex != null) ? (st || 0) + (ex || 0) : null,
+      'EX + ST podpora (EUR, jen účty v EUR)': r.cur === 'EUR' ? Math.round(((n(r.expanze) || 0) + (n(r.std_total) || 0)) * 100) / 100 : null,
       'PIV vloženo': n(r.piv_total), 'Kontrola čtení': r.std_check_ok === 'true' ? 'sedí' : r.std_check_ok === 'false' ? 'NESEDÍ' : 'neověřeno', 'Detail nesouladu': bad,
       'Odkaz BS2': (process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz') + '/admin/supporters/' + r.id };
   });
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [4, 8, 18, 14, 16, 30, 8, 16, 16, 16, 16, 16, 16, 18, 14, 14, 50, 42].map((w) => ({ wch: w }));
+  ws['!cols'] = [4, 8, 18, 14, 16, 30, 8, 16, 16, 16, 16, 16, 16, 18, 20, 14, 14, 50, 42].map((w) => ({ wch: w }));
   ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: data.length, c: Object.keys(data[0] || { a: 1 }).length - 1 } }) };
   XLSX.utils.book_append_sheet(wb, ws, 'Výběry');
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
