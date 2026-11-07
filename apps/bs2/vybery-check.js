@@ -96,7 +96,7 @@ module.exports = function mountVyberyCheck(app, ctx) {
     const status = r.status === 'ok' ? 'ok' : 'mismatch';
     await q('UPDATE supporters SET mig_status=$2, mig_diff=$3 WHERE id=$1', [req.user.id, status, JSON.stringify({ v: CHECK_V, diffs: r.diffs, ours: r.ours || null, checked_at: new Date().toISOString(), kind: r.status })]);
     await log({ name: req.user.nick || String(req.user.id) }, 'vybery_mig_check', { id: req.user.id, status, diffs: r.diffs.length });
-    if (status !== 'ok' && notifyVelin) { try { notifyVelin('⚠️ Výběry: údaje nesedí', (row.nick || row.email) + ' — ' + r.diffs.map((d) => d.label).join(', '), '/admin/vybery?mig=1', 'vybery'); } catch (e) { /* upozornění není kritické */ } }
+    if (status !== 'ok' && notifyVelin) { try { notifyVelin('🔎 Výběry: požadavek na ruční kontrolu', ([row.last_name, row.first_name].filter(Boolean).join(' ') || row.nick || row.email) + ' (' + row.email + ') — nesedí: ' + (r.diffs.map((d) => d.label).filter(Boolean).join(', ') || 'údaje'), '/admin/vybery/kontrola/' + row.id, 'vybery'); } catch (e) { /* upozornění není kritické */ } }
     res.redirect('/vybery' + (status === 'ok' ? '?msg=' + encodeURIComponent('Děkujeme, údaje sedí. Výběry máte odemčené.') : ''));
   }));
 
