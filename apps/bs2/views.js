@@ -1641,6 +1641,20 @@ function vyberyTabs(active, pending = 0) {
   return `<div class="row" style="gap:6px;margin:4px 0 14px;flex-wrap:wrap">${t.map(([k, l, h]) => `<a class="btn ${k === active ? '' : 'sec'}" href="${h}">${esc(l)}</a>`).join('')}</div>`;
 }
 // Admin → Výběry → Výplata (žádosti, aktuální měsíc) a Vyplaceno (historie)
+// Provize k výplatě (měsíčně). Pravidla se doplňují postupně — dokud pravidlo není, vrací null (zobrazí se „—“).
+// r = uživatel (std_total, std_expanze_all, exp_invested, mig_position, std_currency…), ctx = { period: 'RRRR-MM', avgVisits }
+function provizeVyplaty(r, ctx) {
+  const p = { st: null, expanze: null, vip: null, vip2: null };
+  // TODO pravidlo ST podpora
+  // TODO pravidlo Expanze
+  // TODO pravidlo VIP
+  // TODO pravidlo VIP 2
+  const parts = [p.st, p.expanze, p.vip, p.vip2].filter((v) => v != null && isFinite(v));
+  p.total = parts.length ? Math.round(parts.reduce((a, v) => a + v, 0) * 100) / 100 : null;
+  return p;
+}
+const PROV_TH = 'background:rgba(167,139,250,.16);color:#c4b5fd;border-left:1px solid rgba(167,139,250,.30)';
+const PROV_TD = 'background:rgba(167,139,250,.08);border-left:1px solid rgba(167,139,250,.22)';
 function adminVyberyPayouts({ verified = [], admin, tab, rows, month, curM, period = null, periodRow = null, sums = {}, olderPending = 0, pendingCount = 0, msg = '', holyosUrl }) {
   const money = (v, c) => Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' ' + (c === 'EUR' ? '€' : 'Kč');
   const nm = (r) => esc([r.last_name, r.first_name].filter(Boolean).join(' ') || r.nick || r.email);
@@ -1672,15 +1686,16 @@ function adminVyberyPayouts({ verified = [], admin, tab, rows, month, curM, peri
     const num = (v, r) => (v != null && v !== '' && isFinite(Number(v)) ? Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' ' + cur(r) : '—');
     const vb = verified.map((r) => `<tr><td data-l="Uživatel" class="nm"><b>${nm(r)}</b><div class="small muted">${esc(r.email)}</div></td>
       <td data-l="Ověření">${r.mig_status === 'ok' ? '<span class="badge active" title="Vyplněné údaje se shodují se systémem">✓ shoda se systémem</span>' : '<span class="badge active" title="' + esc('Ověřil ' + (r.mig_reviewed_by || '—')) + '">✓ ověřeno ručně</span>'}</td>
-      <td data-l="Kdy" class="small muted">${fmtDT(r.mig_status === 'reviewed' && r.mig_reviewed_at ? r.mig_reviewed_at : r.mig_at)}${r.mig_status === 'reviewed' && r.mig_reviewed_by ? `<div>${esc(r.mig_reviewed_by)}</div>` : ''}</td>
       <td data-l="Pozice">${r.mig_position ? posBadge(r.mig_position) : '—'}</td>
       <td data-l="Měna účtu"><span class="badge ${cs(r) === 'EUR' ? 'invited' : 'active'}">${cs(r)}</span></td>
       <td data-l="ST podpora"><b style="white-space:nowrap">${num(r.std_total, r)}</b></td>
       <td data-l="EX podpora"><b style="white-space:nowrap">${num(r.std_expanze_all != null ? r.std_expanze_all : r.exp_invested, r)}</b></td>
+      ${(() => { const p = provizeVyplaty(r, { period, avgVisits: periodRow && periodRow.avg_visits != null ? Number(periodRow.avg_visits) : null }); const td = (l, v, strong) => `<td data-l="${l}" style="${PROV_TD}${strong ? ';background:rgba(167,139,250,.20)' : ''}">${v == null ? '<span class="muted small" title="Pravidlo výpočtu zatím není nastavené">—</span>' : `<b style="white-space:nowrap${strong ? ';color:#c4b5fd' : ''}">${Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 })} ${cur(r)}</b>`}</td>`;
+        return td('Provize ST podpora', p.st) + td('Provize Expanze', p.expanze) + td('Provize VIP', p.vip) + td('Provize VIP 2', p.vip2) + td('K výplatě', p.total, true); })()}
       <td data-l="Žádost">${r.pending ? '<span class="badge invited" style="color:#fbbf24">čeká ' + r.pending + '×</span>' : '<span class="muted small">zatím nežádal</span>'}</td>
       <td class="actions"><a class="btn sec sm" href="/admin/vybery/kontrola/${r.id}">Kontrola</a> <a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a></td></tr>`).join('');
     return `<h2 style="margin:22px 0 6px">💸 Možno vyplácet <span class="muted" style="font-size:14px;font-weight:500">${verified.length} uživatelů · vyplnili kontrolu a sedí se systémem, nebo byli ověřeni ručně</span></h2>
-    <div class="card" style="overflow-x:auto;margin-top:6px"><table><thead><tr><th>Uživatel</th><th>Ověření</th><th>Kdy</th><th>Pozice</th><th>Měna účtu</th><th>ST podpora</th><th>EX podpora</th><th>Žádost o výběr</th><th>Akce</th></tr></thead><tbody>${vb || '<tr><td colspan="9" class="muted">Zatím nikdo neprošel kontrolou.</td></tr>'}</tbody></table></div>`; })() : ''}`, holyosUrl);
+    <div class="card" style="overflow-x:auto;margin-top:6px"><table><thead><tr><th>Uživatel</th><th>Ověření</th><th>Pozice</th><th>Měna účtu</th><th>ST podpora</th><th>EX podpora</th><th style="${PROV_TH}">💜 Provize ST podpora</th><th style="${PROV_TH}">💜 Provize Expanze</th><th style="${PROV_TH}">💜 Provize VIP</th><th style="${PROV_TH}">💜 Provize VIP 2</th><th style="${PROV_TH};background:rgba(167,139,250,.28)">💜 K výplatě</th><th>Žádost o výběr</th><th>Akce</th></tr></thead><tbody>${vb || '<tr><td colspan="13" class="muted">Zatím nikdo neprošel kontrolou.</td></tr>'}</tbody></table></div>`; })() : ''}`, holyosUrl);
 }
 function adminVybery({ admin, rows, qstr = '', onlySup = false, onlyBad = false, onlyCur = false, onlyEur = false, onlyUnchk = false, fc = null, curN = null, badKinds = {}, pendingCount = 0, posCounts = {}, totalCount = null, holyosUrl }) {
   const cols = ['legacy_position', 'piv', 'ex_podpora', 'st_podpora', 'exp_std', 'exp_std_eur', 'std_check', 'acc_cur', 'mig_palety_czk', 'mig_palety_eur', 'mig_expanze_czk', 'mig_expanze_eur', 'mig_balicky_czk', 'mig_balicky_eur', 'mig_opakovacky_czk', 'mig_opakovacky_eur', 'mig_position', 'mig_pos_ok', 'mig_pay', 'mig_check'].map(k => BASE_COLS.find(c => c.key === k));

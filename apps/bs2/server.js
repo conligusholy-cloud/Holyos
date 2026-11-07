@@ -2300,6 +2300,7 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res, next) => {
     try { await VYB_CHECK.recheckStale(false); } catch (e) { /* přepočet nevadí */ }
     verified = (await q(`SELECT s.id, s.email, s.nick, s.first_name, s.last_name, s.mig_status, s.mig_at, s.mig_reviewed_by, s.mig_reviewed_at, s.mig_position,
       partner_support->>'std_currency' AS std_currency, partner_support->>'std_mixed' AS std_mixed, partner_support->>'std_total' AS std_total, partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->>'exp_invested' AS exp_invested,
+      partner_support->>'exp_rate' AS exp_rate, partner_support->>'exp_limit_from' AS exp_limit_from, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_rate' AS piv_rate, partner_support->>'piv_tier_visits' AS piv_tier_visits, partner_support->>'position' AS legacy_position,
       (SELECT count(*)::int FROM withdrawal_requests w WHERE w.supporter_id = s.id AND w.status = 'requested') AS pending
       FROM supporters s WHERE s.mig_status IN ('ok','reviewed') ORDER BY coalesce(s.mig_reviewed_at, s.mig_at) DESC LIMIT 2000`)).rows;
   }
