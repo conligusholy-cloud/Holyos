@@ -423,6 +423,13 @@ async function migrate() {
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mail_optout BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mail_optout_at TIMESTAMPTZ;
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS mail_optout_by TEXT; -- 'user' (odkaz v e-mailu) | jméno správce
+    -- Bankovní účet pro výplaty (uložený u uživatele): CZK = číslo účtu/kód banky, EUR = IBAN
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS payout_account TEXT;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS payout_iban TEXT;
+    -- Žádost o výběr: účet, na který se platí, a variabilní symbol (identifikátor platby v databázi výplat)
+    ALTER TABLE withdrawal_requests ADD COLUMN IF NOT EXISTS account TEXT;
+    ALTER TABLE withdrawal_requests ADD COLUMN IF NOT EXISTS vs TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS withdrawal_requests_vs_uq ON withdrawal_requests (vs) WHERE vs IS NOT NULL;
     -- Krizový režim výplat: podíl k výplatě v % (NULL = výchozí 30 %), zbytek jde na vyrovnávací účet
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS payout_pct NUMERIC(5,2);
     -- Vyrovnávací účet: pohyby (připsání 70 %, zhodnocení 5,68 % p.a., ruční vklad/výběr)

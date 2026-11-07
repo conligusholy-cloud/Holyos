@@ -1378,11 +1378,12 @@ function supporterVybery(s, { rows = [], payout = null, msg = '', err = '' } = {
   const cur = payout ? payout.cur : (s.currency === 'EUR' ? 'EUR' : 'CZK'), sym = cur === 'EUR' ? '€' : 'Kč';
   const money = (v, c) => Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' ' + (c === 'EUR' ? '€' : 'Kč');
   const st = { requested: ['invited', 'čeká na výplatu'], paid: ['active', 'vyplaceno'], rejected: ['blocked', 'zamítnuto'] };
-  const hist = rows.length ? `<table class="cards"><thead><tr><th>Podáno</th><th>Částka</th><th>Stav</th><th>Poznámka</th></tr></thead><tbody>${rows.map(r => `<tr><td data-l="Podáno" class="small muted">${fmtDT(r.requested_at)}</td><td data-l="Částka"><b>${money(r.status === 'paid' && r.paid_amount != null ? r.paid_amount : r.amount, r.currency)}</b></td><td data-l="Stav"><span class="badge ${(st[r.status] || st.requested)[0]}">${(st[r.status] || st.requested)[1]}</span>${r.paid_at ? ` <span class="small muted">${fmtDT(r.paid_at)}</span>` : ''}</td><td data-l="Poznámka" class="small">${esc(r.reject_reason || r.note || '—')}</td></tr>`).join('')}</tbody></table>` : '<p class="muted" style="margin:0">Zatím jste nepodali žádnou žádost o výběr.</p>';
+  const hist = rows.length ? `<table class="cards"><thead><tr><th>Podáno</th><th>Částka</th><th>VS / účet</th><th>Stav</th><th>Poznámka</th></tr></thead><tbody>${rows.map(r => `<tr><td data-l="Podáno" class="small muted">${fmtDT(r.requested_at)}</td><td data-l="Částka"><b>${money(r.status === 'paid' && r.paid_amount != null ? r.paid_amount : r.amount, r.currency)}</b></td><td data-l="VS / účet" class="small">${r.vs ? `VS <b>${esc(r.vs)}</b>` : '—'}${r.account ? `<div class="muted">${esc(r.account)}</div>` : ''}</td><td data-l="Stav"><span class="badge ${(st[r.status] || st.requested)[0]}">${(st[r.status] || st.requested)[1]}</span>${r.paid_at ? ` <span class="small muted">${fmtDT(r.paid_at)}</span>` : ''}</td><td data-l="Poznámka" class="small">${esc(r.reject_reason || r.note || '—')}</td></tr>`).join('')}</tbody></table>` : '<p class="muted" style="margin:0">Zatím jste nepodali žádnou žádost o výběr.</p>';
   return layout({ title: 'Výběry', user: s.nick, nav: userNav(s), active: 'vybery', help: null, body: `
   <h2 style="display:flex;align-items:center;gap:8px;margin:22px 0 14px">${ico('wallet', 18)} Výběry</h2>
   ${msg ? `<div class="card" style="border-color:var(--ok);margin-bottom:12px">${esc(msg)}</div>` : ''}${err ? `<div class="card" style="border-color:var(--err);margin-bottom:12px">${esc(err)}</div>` : ''}
-  <div class="card" style="max-width:560px">
+  <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+  <div class="card" style="max-width:560px;flex:1 1 420px">
     <div style="font-size:18px;font-weight:800;margin-bottom:8px">Požádat o výběr</div>
     ${payout ? (() => { const MN = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec']; const [py, pm] = payout.period.split('-'); const mz = MN[Number(pm) - 1] + ' ' + py;
       return payout.pay == null ? `<div class="card" style="margin:0 0 12px;padding:12px 14px;background:var(--card2)"><div class="small muted">Výplata za ${mz}</div><div style="font-weight:700">Částka se připravuje — zkuste to prosím později.</div><div class="small muted" style="margin-top:4px">Měna účtu: <b>${cur}</b></div></div>`
@@ -1390,14 +1391,30 @@ function supporterVybery(s, { rows = [], payout = null, msg = '', err = '' } = {
         <div class="small muted">K výplatě za ${mz} · měna účtu <b>${cur}</b></div>
         <div style="font-size:26px;font-weight:800;color:#5eead4;margin:2px 0">${money(payout.pay, cur)}</div>
         ${payout.toBalance > 0 ? `<div class="small muted">Celkem ${money(payout.total, cur)} — vyplácí se ${payout.pct} %, zbylých ${Math.round((100 - payout.pct) * 100) / 100} % (${money(payout.toBalance, cur)}) jde na váš vyrovnávací účet se zhodnocením 5,68 % p.a.</div>` : ''}
-        ${payout.balance ? `<div class="small" style="margin-top:4px">Vyrovnávací účet: <b>${money(payout.balance, cur)}</b></div>` : ''}
         ${payout.requested > 0 ? `<div class="small" style="margin-top:4px">Už požádáno tento měsíc: <b>${money(payout.requested, cur)}</b> · zbývá <b>${money(payout.available, cur)}</b></div>` : ''}</div>`; })() : ''}
     <p class="small muted" style="margin:0 0 10px">Funkce se testuje. Žádost uvidí administrátor a výplatu zpracuje v daném měsíci. Vyplácí se v ${sym}.</p>
     <form method="post" action="/vybery/request">
       ${payout && payout.available != null ? `<input type="hidden" name="amount" value="${payout.available}">` : `<label>Částka (${sym})</label><input name="amount" inputmode="decimal" required placeholder="např. 5000">`}
-      <label style="margin-top:8px">Poznámka (nepovinné)</label><input name="note" maxlength="300" placeholder="např. číslo účtu pro výplatu">
+      ${(() => { const saved = cur === 'EUR' ? s.payout_iban : s.payout_account; return `<label style="margin-top:8px">${cur === 'EUR' ? 'IBAN pro výplatu' : 'Číslo účtu pro výplatu'}</label>
+      <input name="account" required maxlength="42" value="${esc(saved || '')}" placeholder="${cur === 'EUR' ? 'např. CZ65 0800 0000 1920 0014 5399' : 'např. 19-2000145399/0800'}" autocomplete="off">
+      <div class="small muted" style="margin-top:4px">${cur === 'EUR' ? 'Výplata v eurech — zadejte IBAN.' : 'Výplata v Kč — číslo účtu ve tvaru [předčíslí-]číslo/kód banky.'}</div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:500;cursor:pointer"><input type="checkbox" name="save_account" value="1" style="width:auto;margin:0" checked> Uložit účet k mému profilu${saved ? ' (přepíše uložený)' : ''}</label>`; })()}
+      <label style="margin-top:8px">Poznámka (nepovinné)</label><input name="note" maxlength="300" placeholder="např. zpráva pro příjemce">
       <div style="height:10px"></div><button class="btn" type="submit">Odeslat žádost</button>
     </form>
+  </div>
+  ${payout ? `<div style="display:flex;flex-direction:column;gap:16px;flex:1 1 300px;max-width:420px">
+    <div class="card" style="border-color:rgba(251,191,36,.45)">
+      <div class="small muted">🏦 Vyrovnávací účet — celkem</div>
+      <div style="font-size:26px;font-weight:800;color:#fcd34d;margin:4px 0">${money(payout.balance || 0, cur)}</div>
+      <div class="small muted">Zhodnocení 5,68 % p.a., připisuje se měsíčně.</div>
+    </div>
+    <div class="card" style="border-color:rgba(251,191,36,.30)">
+      <div class="small muted">➜ Jde na vyrovnávací účet${payout.period ? ' za ' + (['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'][Number(payout.period.split('-')[1]) - 1] + ' ' + payout.period.split('-')[0]) : ''}</div>
+      <div style="font-size:26px;font-weight:800;color:#fcd34d;margin:4px 0">${payout.toBalance != null ? money(payout.toBalance, cur) : '—'}</div>
+      <div class="small muted">${payout.toBalance != null ? Math.round((100 - payout.pct) * 100) / 100 + ' % z celkové částky ' + money(payout.total, cur) : 'Částka se připravuje.'}</div>
+    </div>
+  </div>` : ''}
   </div>
   <h3 style="margin:20px 0 8px">Moje žádosti</h3>
   <div class="card tbl-wrap">${hist}</div>` });
@@ -1749,11 +1766,11 @@ function adminVyberyPayouts({ verified = [], booked = 0, vyr = { pct: 30, rate: 
     ? `<a class="btn sec sm" href="/admin/vybery?tab=vyplata">Aktuální měsíc (${esc(curM)})</a> <a class="btn sec sm" href="/admin/vybery?tab=vyplata&m=all">Všechny nevyřízené</a>`
     : `<form method="get" action="/admin/vybery" class="row" style="gap:6px;display:inline-flex"><input type="hidden" name="tab" value="vyplaceno"><input name="m" value="${month === 'all' ? '' : esc(month)}" placeholder="RRRR-MM (prázdné = vše)" style="width:190px"><button class="btn sec sm" type="submit">Zobrazit</button></form>`;
   const body = rows.map(r => {
-    if (tab === 'vyplata') return `<tr><td data-l="Uživatel" class="nm"><b>${nm(r)}</b><div class="small muted">${esc(r.email)}</div></td><td data-l="Částka"><b style="white-space:nowrap">${money(r.amount, r.currency)}</b></td><td data-l="Podáno" class="small muted">${fmtDT(r.requested_at)}</td><td data-l="Poznámka" class="small">${esc(r.note || '—')}</td>
+    if (tab === 'vyplata') return `<tr><td data-l="Uživatel" class="nm"><b>${nm(r)}</b><div class="small muted">${esc(r.email)}</div></td><td data-l="Částka"><b style="white-space:nowrap">${money(r.amount, r.currency)}</b>${r.vs ? `<div class="small">VS <b>${esc(r.vs)}</b></div>` : ''}${r.account ? `<div class="small muted" style="white-space:nowrap">${esc(r.account)}</div>` : ''}</td><td data-l="Podáno" class="small muted">${fmtDT(r.requested_at)}</td><td data-l="Poznámka" class="small">${esc(r.note || '—')}</td>
       <td class="actions"><form method="post" action="/admin/vybery/request/${r.id}/pay" class="row" style="gap:6px;flex-wrap:wrap;margin:0"><input name="paid_amount" value="${esc(String(r.amount))}" style="width:100px" title="Skutečně vyplacená částka"><select name="pay_method" style="width:150px"><option value="QR kód">QR kód</option><option value="Příkaz v bance">Příkaz v bance</option><option value="Jinak">Jinak</option></select><input name="pay_note" placeholder="Poznámka k výplatě" style="width:160px"><button class="btn sm" type="submit" onclick="return confirm('Označit jako vyplaceno?')">Označit jako vyplaceno</button></form>
       <form method="post" action="/admin/vybery/request/${r.id}/reject" class="row" style="gap:6px;margin:6px 0 0"><input name="reason" placeholder="Důvod zamítnutí" style="width:200px"><button class="btn sec sm" type="submit" onclick="return confirm('Zamítnout žádost?')">Zamítnout</button></form></td></tr>`;
     const paid = r.status === 'paid';
-    return `<tr><td data-l="Uživatel" class="nm"><b>${nm(r)}</b><div class="small muted">${esc(r.email)}</div></td><td data-l="Částka"><b style="white-space:nowrap">${money(paid && r.paid_amount != null ? r.paid_amount : r.amount, r.currency)}</b>${paid && r.paid_amount != null && Number(r.paid_amount) !== Number(r.amount) ? `<div class="small muted">žádáno ${money(r.amount, r.currency)}</div>` : ''}</td><td data-l="Stav"><span class="badge ${paid ? 'active' : 'blocked'}">${paid ? 'vyplaceno' : 'zamítnuto'}</span></td><td data-l="Vyřízeno" class="small muted">${fmtDT(r.paid_at || r.decided_at)}</td><td data-l="Způsob" class="small">${esc(r.pay_method || '—')}</td><td data-l="Poznámka" class="small">${esc(r.pay_note || r.reject_reason || r.note || '—')}${r.paid_by ? `<div class="muted">${esc(r.paid_by)}</div>` : ''}</td></tr>`;
+    return `<tr><td data-l="Uživatel" class="nm"><b>${nm(r)}</b><div class="small muted">${esc(r.email)}</div></td><td data-l="Částka"><b style="white-space:nowrap">${money(paid && r.paid_amount != null ? r.paid_amount : r.amount, r.currency)}</b>${r.vs ? `<div class="small">VS <b>${esc(r.vs)}</b></div>` : ''}${r.account ? `<div class="small muted" style="white-space:nowrap">${esc(r.account)}</div>` : ''}${paid && r.paid_amount != null && Number(r.paid_amount) !== Number(r.amount) ? `<div class="small muted">žádáno ${money(r.amount, r.currency)}</div>` : ''}</td><td data-l="Stav"><span class="badge ${paid ? 'active' : 'blocked'}">${paid ? 'vyplaceno' : 'zamítnuto'}</span></td><td data-l="Vyřízeno" class="small muted">${fmtDT(r.paid_at || r.decided_at)}</td><td data-l="Způsob" class="small">${esc(r.pay_method || '—')}</td><td data-l="Poznámka" class="small">${esc(r.pay_note || r.reject_reason || r.note || '—')}${r.paid_by ? `<div class="muted">${esc(r.paid_by)}</div>` : ''}</td></tr>`;
   }).join('');
   const head = tab === 'vyplata' ? '<th>Uživatel</th><th>Částka</th><th>Podáno</th><th>Poznámka</th><th>Akce</th>' : '<th>Uživatel</th><th>Částka</th><th>Stav</th><th>Vyřízeno</th><th>Způsob</th><th>Poznámka</th>';
   const cols = tab === 'vyplata' ? 5 : 6;

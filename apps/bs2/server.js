@@ -1698,8 +1698,16 @@ app.post('/vybery/request', wrap(requireUser), wrap(async (req, res) => {
   const cur = po ? po.cur : (req.user.currency === 'EUR' ? 'EUR' : 'CZK');
   if (po && po.available != null && amount > po.available + 0.005) return res.redirect('/vybery?err=' + encodeURIComponent('Můžete požádat nejvýš o ' + po.available.toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + (cur === 'EUR' ? ' €' : ' Kč') + '.'));
   if (po && po.available == null) return res.redirect('/vybery?err=' + encodeURIComponent('Částka k výplatě za ' + po.period + ' ještě není spočítaná. Zkuste to prosím později.'));
-  await q(`INSERT INTO withdrawal_requests (supporter_id, amount, currency, note) VALUES ($1,$2,$3,$4)`, [req.user.id, amount, cur, String(req.body.note || '').trim().slice(0, 300) || null]);
-  res.redirect('/vybery?msg=' + encodeURIComponent('Žádost o výběr byla odeslána.'));
+  // Bankovní účet: CZK = číslo účtu/kód banky, EUR = IBAN; volitelně uložit k účtu uživatele
+  const VYRM = require('./vyrovnavaci');
+  const accRaw = String(req.body.account || '').trim();
+  const account = cur === 'EUR' ? VYRM.normIban(accRaw) : VYRM.normCzAccount(accRaw);
+  if (!account) return res.redirect('/vybery?err=' + encodeURIComponent(cur === 'EUR' ? 'Zadejte platný IBAN (např. CZ65 0800 0000 1920 0014 5399).' : 'Zadejte platné číslo účtu ve tvaru 123456789/0100 (případně s předčíslím 19-123456789/0100).'));
+  if (req.body.save_account) await q(`UPDATE supporters SET ${cur === 'EUR' ? 'payout_iban' : 'payout_account'}=$2 WHERE id=$1`, [req.user.id, account]);
+  const ins = await q(`INSERT INTO withdrawal_requests (supporter_id, amount, currency, note, account) VALUES ($1,$2,$3,$4,$5) RETURNING id`, [req.user.id, amount, cur, String(req.body.note || '').trim().slice(0, 300) || null, account]);
+  const vs = VYRM.vsFor(ins.rows[0].id);
+  await q('UPDATE withdrawal_requests SET vs=$2 WHERE id=$1', [ins.rows[0].id, vs]);
+  res.redirect('/vybery?msg=' + encodeURIComponent('Žádost o výběr byla odeslána. Variabilní symbol platby: ' + vs));
 }));
 }));
 app.get('/discount-credit', wrap(requireUser), wrap(async (req, res) => {
@@ -2379,9 +2387,9 @@ app.get('/admin/vybery-vyplaty.xlsx', requireAdmin, wrap(async (req, res) => {
   const tab = req.query.tab === 'vyplaceno' ? 'vyplaceno' : 'vyplata';
   const { rows } = await vyberyPayoutRows(tab, req.query.m);
   const fmt = (d) => (d ? new Date(d).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' }) : '');
-  const data = rows.map((r, i) => ({ '#': i + 1, 'Příjmení': r.last_name || '', 'Jméno': r.first_name || '', 'Nick': r.nick || '', 'E-mail': r.email, 'Částka': Number(r.status === 'paid' && r.paid_amount != null ? r.paid_amount : r.amount), 'Měna': r.currency, 'Stav': r.status === 'requested' ? 'čeká na výplatu' : r.status === 'paid' ? 'vyplaceno' : 'zamítnuto', 'Žádost podána': fmt(r.requested_at), 'Poznámka uživatele': r.note || '', 'Vyplaceno': fmt(r.paid_at), 'Způsob výplaty': r.pay_method || '', 'Poznámka k výplatě': r.pay_note || r.reject_reason || '', 'Vyplatil': r.paid_by || '' }));
+  const data = rows.map((r, i) => ({ '#': i + 1, 'Příjmení': r.last_name || '', 'Jméno': r.first_name || '', 'Nick': r.nick || '', 'E-mail': r.email, 'Částka': Number(r.status === 'paid' && r.paid_amount != null ? r.paid_amount : r.amount), 'Měna': r.currency, 'Účet / IBAN': r.account || '', 'Variabilní symbol': r.vs || '', 'Stav': r.status === 'requested' ? 'čeká na výplatu' : r.status === 'paid' ? 'vyplaceno' : 'zamítnuto', 'Žádost podána': fmt(r.requested_at), 'Poznámka uživatele': r.note || '', 'Vyplaceno': fmt(r.paid_at), 'Způsob výplaty': r.pay_method || '', 'Poznámka k výplatě': r.pay_note || r.reject_reason || '', 'Vyplatil': r.paid_by || '' }));
   const wb = XLSX.utils.book_new(); const ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [4, 16, 14, 16, 30, 12, 6, 16, 20, 30, 20, 16, 30, 24].map((w) => ({ wch: w }));
+  ws['!cols'] = [4, 16, 14, 16, 30, 12, 6, 30, 14, 16, 20, 30, 20, 16, 30, 24].map((w) => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, ws, tab === 'vyplata' ? 'Výplata' : 'Vyplaceno');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="vybery-${tab}-${new Date().toISOString().slice(0, 10)}.xlsx"`);

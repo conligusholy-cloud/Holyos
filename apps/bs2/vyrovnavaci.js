@@ -17,6 +17,27 @@ function split(total, pct) {
   return { pay, bal: r2(Number(total) - pay), pct };
 }
 
+// ── Bankovní účet pro výplatu ──
+// CZK: [předčíslí-]číslo/kód banky (kontrola modulo 11), EUR: IBAN (kontrola modulo 97)
+function normCzAccount(v) {
+  const s = String(v || '').replace(/\s/g, '');
+  const m = s.match(/^(?:(\d{1,6})-)?(\d{2,10})\/(\d{4})$/);
+  if (!m) return null;
+  const mod11 = (num, len) => { const w = [6, 3, 7, 9, 10, 5, 8, 4, 2, 1].slice(10 - len); const d = num.padStart(len, '0').split('').map(Number); return d.reduce((a, x, i) => a + x * w[i], 0) % 11 === 0; };
+  if (m[1] && !mod11(m[1], 6)) return null;
+  if (!mod11(m[2], 10)) return null;
+  return (m[1] ? m[1].replace(/^0+/, '') + '-' : '') + m[2].replace(/^0+/, '') + '/' + m[3];
+}
+function normIban(v) {
+  const s = String(v || '').replace(/\s/g, '').toUpperCase();
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(s)) return null;
+  const r = (s.slice(4) + s.slice(0, 4)).replace(/[A-Z]/g, (c) => String(c.charCodeAt(0) - 55));
+  let mod = 0; for (const ch of r) mod = (mod * 10 + Number(ch)) % 97;
+  return mod === 1 ? s.replace(/(.{4})/g, '$1 ').trim() : null;
+}
+// Variabilní symbol výplaty z id žádosti: 7 + id na 9 míst (10 číslic, unikátní)
+const vsFor = (id) => '7' + String(id).padStart(9, '0');
+
 module.exports = function mountVyrovnavaci(app, ctx) {
   const { q, requireAdmin, wrap, V, log } = ctx;
   const esc = V.esc;
@@ -150,3 +171,6 @@ module.exports.DEFAULT_PCT = DEFAULT_PCT;
 module.exports.RATE_PA = RATE_PA;
 module.exports.split = split;
 module.exports.pctOf = pctOf;
+module.exports.normCzAccount = normCzAccount;
+module.exports.normIban = normIban;
+module.exports.vsFor = vsFor;
