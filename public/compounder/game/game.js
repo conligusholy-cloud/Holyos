@@ -2119,7 +2119,9 @@ function bindGlobus() {
     var dx = e.clientX - posl.x, dy = e.clientY - posl.y;
     posl = { x: e.clientX, y: e.clientY };
     ujelo += Math.abs(dx) + Math.abs(dy);
-    G.lam += dx / G.r * 0.9;
+    // Koule se točí za prstem: tah doprava žene pevniny doprava, proto mínus —
+    // lam je zeměpisná délka středu pohledu, a ta se musí posunout na opačnou stranu.
+    G.lam -= dx / G.r * 0.9;
     G.phi = Math.max(-1.4, Math.min(1.4, G.phi + dy / G.r * 0.9));
     globusKresli();
   });
