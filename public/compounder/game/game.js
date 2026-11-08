@@ -4456,10 +4456,21 @@ function pozvaniHtml() {
     + mn(POZVANI.length, 'je', 'jsou', 'je') + ' ' + POZVANI.length + ' '
     + mn(POZVANI.length, 'hráč', 'hráči', 'hráčů') + ':</p>'
     + '<div class="zeb">' + POZVANI.map(function (h) {
+        // U každého je vidět, kolik má strojů a za kolik z nich už provize přišla.
+        // Když se čísla rozcházejí, je hned jasné, u koho to vázne.
+        var stroju = h.stroju || 0, provizi = h.provizi || 0;
+        var chybi = stroju > provizi;
         return '<div class="zeb-row">' + (h.znak ? znakSvg(h.znak, 24) : '<i class="znak-mezera"></i>')
-          + '<span class="nick">' + esc(h.firma) + '<i>' + esc(h.nick) + '</i></span>'
-          + '<b class="muted">' + datumKratce(h.kdy) + '</b></div>';
-      }).join('') + '</div>';
+          + '<span class="nick">' + esc(h.firma)
+          + '<i>' + esc(h.nick) + ' · ' + stroju + ' '
+          + mn(stroju, 'stroj', 'stroje', 'strojů') + ' · provize z ' + provizi + '</i></span>'
+          + '<b class="' + (h.provize ? 'ok' : (chybi ? 'warn' : 'muted')) + '">'
+          + (h.provize ? kc(h.provize) : datumKratce(h.kdy)) + '</b></div>';
+      }).join('') + '</div>'
+    + (POZVANI.some(function (h) { return (h.stroju || 0) > (h.provizi || 0); })
+        ? '<p class="fine" style="margin-top:8px">U někoho máš míň provizí než strojů. '
+          + 'Provize se platí jen za stroje koupené v době, kdy jsi měl distribuci zapnutou — '
+          + 'co si pořídil dřív nebo během pauzy, se zpětně neplatí.</p>' : '');
 }
 function paintMe() {
   var p = PROFILES[S.profile];

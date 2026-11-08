@@ -244,8 +244,29 @@ const MESIC_MS = 43200000;        // herní měsíc = 12 skutečných hodin
 // Ceny strojů musí sedět s MODELS v public/compounder/game/game.js.
 const CENY_STROJU = { mini: Math.round(35000 * 24.35 * 1.25), flex: Math.round(52000 * 24.35 * 1.25),
   max: Math.round(67000 * 24.35 * 1.25) };
+// Koho hráč přivedl. Počítají se i ti, u kterých se vazba zapsala jen přes odkaz
+// (invited_by_ref) a nikdy se nedopočítala napevno — jinak by hráč přišel o provize
+// za člověka, kterého prokazatelně přivedl. Při té přížitosti vazbu srovnáme.
+async function privedeniHraci(zvouci, select) {
+  if (!zvouci) return [];
+  const kde = [{ invited_by_id: zvouci.id }];
+  if (zvouci.ref_id) kde.push({ invited_by_ref: zvouci.ref_id, invited_by_id: null });
+  const lide = await prisma.gamePlayer.findMany({
+    where: { OR: kde, NOT: { id: zvouci.id } },
+    select: Object.assign({ id: true, invited_by_id: true }, select || {}),
+    orderBy: { created_at: 'asc' }, take: 500,
+  });
+  const utrzene = lide.filter((h) => !h.invited_by_id).map((h) => h.id);
+  if (utrzene.length) {
+    await prisma.gamePlayer.updateMany({
+      where: { id: { in: utrzene } }, data: { invited_by_id: zvouci.id },
+    }).catch((e) => console.warn('[game] doplneni vazby pozvani:', e.message));
+  }
+  return lide;
+}
 async function privedenych(id) {
-  return prisma.gamePlayer.count({ where: { invited_by_id: id } });
+  const p = await prisma.gamePlayer.findUnique({ where: { id }, select: { id: true, ref_id: true } });
+  return (await privedeniHraci(p)).length;
 }
 // Do pěti přivedených je distribuce zdarma — jinak odrazuje dřív, než
 // stačí něco vydělat. Od pátého se platí dávka za každých začatých pět.
@@ -291,8 +312,7 @@ function strojeHrace(st) {
 // dřív, než si distribuci zaplatil.
 async function dorovnejProvize(zvouci) {
   if (!distAktivni(zvouci)) return 0;
-  const lide = await prisma.gamePlayer.findMany({
-    where: { invited_by_id: zvouci.id }, select: { id: true, nick: true, state: true } });
+  const lide = await privedeniHraci(zvouci, { nick: true, state: true });
   if (!lide.length) return 0;
   const hotove = await prisma.gameDelivery.findMany({
     where: { player_id: zvouci.id, kind: 'cash', popis: { startsWith: 'Provize' } },
@@ -545,20 +565,42 @@ router.post('/account/reset', requirePlayer, async (req, res, next) => {
 router.get('/account/invited', requirePlayer, async (req, res, next) => {
   try {
     const me = await prisma.gamePlayer.findUnique({
-      where: { id: req.player.id }, select: { ref_id: true }
+      where: { id: req.player.id }, select: { id: true, ref_id: true }
     });
-    const lide = me && me.ref_id
-      ? await prisma.gamePlayer.findMany({
-          where: { invited_by_id: req.player.id },
-          select: { id: true, nick: true, company: true, emblem: true, invited_at: true, created_at: true },
-          orderBy: { created_at: 'desc' }, take: 200
+    const lide = await privedeniHraci(me, {
+      nick: true, company: true, emblem: true, invited_at: true, created_at: true, state: true,
+    });
+    // U každého je vidět, kolik má strojů a kolik z něj už přišlo — když někde
+    // provize vázne, hráč hned vidí u koho, místo aby hádal.
+    const dorucenky = await prisma.gameDelivery.findMany({
+      where: { player_id: req.player.id, kind: 'cash', popis: { startsWith: 'Provize' } },
+      select: { amount: true, spot_id: true }, take: 1000,
+    });
+    const zabory = lide.length
+      ? await prisma.gameSpotClaim.findMany({
+          where: { player_id: { in: lide.map((h) => h.id) } },
+          select: { player_id: true, spot_id: true }, take: 2000,
         })
       : [];
+    const mistoHrace = {};
+    zabory.forEach((z) => { mistoHrace[z.spot_id] = z.player_id; });
+    const podleHrace = {};
+    dorucenky.forEach((d) => {
+      const k = String(d.spot_id || '');
+      // Novější provize mají klíč „nakup:<id hráče>:<pořadí>“, starší id místa.
+      const id = k.indexOf('nakup:') === 0 ? Number(k.split(':')[1]) : mistoHrace[k];
+      if (!id) return;
+      const z = podleHrace[id] || (podleHrace[id] = { pocet: 0, castka: 0 });
+      z.pocet++; z.castka += d.amount || 0;
+    });
     res.json({
       ok: true, ref: (me && me.ref_id) || null,
       lide: lide.map((h) => ({
         nick: h.nick, firma: h.company || (h.nick + ' s.r.o.'), znak: h.emblem || null,
-        kdy: h.invited_at || h.created_at
+        kdy: h.invited_at || h.created_at,
+        stroju: strojeHrace(h.state).length,
+        provizi: (podleHrace[h.id] || {}).pocet || 0,
+        provize: (podleHrace[h.id] || {}).castka || 0,
       }))
     });
   } catch (e) { next(e); }
