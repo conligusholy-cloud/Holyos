@@ -1765,7 +1765,9 @@ function drawMap() {
   if (!any) {
     h.textContent = 'Napiš město a pošli tam člověka, ať ho projde. Místa jsou schovaná — dokud město neprozkoumáš, nic na mapě neuvidíš.';
     h.classList.remove('hidden');
-  } else if (skryto) {
+  // Nápověda o schovaných místech patří k prvnímu rozkoukání. Po herním měsíci
+  // už hráč ví, jak se mapa chová, a lišta přes půl obrazovky by jen překážela.
+  } else if (skryto && Date.now() - (S.startedAt || 0) < MONTH_MS) {
     h.textContent = 'Přibliž mapu na úroveň ulic, ať uvidíš volná místa — teď jich je schovaných '
       + skryto + '. Ze seznamu oblastí tě hra skočí rovnou k nim.';
     h.classList.remove('hidden');
