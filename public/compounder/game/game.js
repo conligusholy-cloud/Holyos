@@ -1016,7 +1016,7 @@ function fresh(profileId) {
     povest: 0,        // jak si hráč vede na infolince, −100 až +100
     hovoru: 0,        // kolik hovorů už má za sebou — bez nich se do žebříčku nepočítá
     hovorZa: null,    // za jak dlouho strávených ve hře zazvoní další hovor
-    otazkyPosl: [],   // otázky, které už padly — ať se hned neopakují
+    hovoryPosl: [],   // rozhovory, které už padly — ať se hned neopakují
     stats: { earned: 0, interest: 0 },
     hist: []          // vývoj po herních měsících — tržby, zisk, dluh, počet prádlomatů
   };
@@ -1073,7 +1073,8 @@ function dosypStav(o) {
     if (!Array.isArray(o.pobocky)) o.pobocky = [];
     if (typeof o.povest !== 'number') o.povest = 0;
     if (typeof o.hovoru !== 'number') o.hovoru = 0;
-    if (!Array.isArray(o.otazkyPosl)) o.otazkyPosl = [];
+    if (!Array.isArray(o.hovoryPosl)) o.hovoryPosl = [];
+    delete o.otazkyPosl;   // dřív se pamatovaly jednotlivé otázky, teď celé rozhovory
     // Rozehraná hra z doby před sídly: za sídlo bereme místo, kde hráč postavil
     // první prádlomat. Bez toho by mu doprava vycházela zdarma a pobočku by
     // si nikdy nemohl zřídit.
@@ -1412,128 +1413,189 @@ var HOVOR_ZVONI_MS = 5000;       // pět vteřin a zákazník to pokládá — n
 var HOVOR_ODMITNUTI = -6;        // co stojí nebraný hovor
 var POVEST_DOLU = 0.2;           // při nejhorší pověsti spadne návštěvnost o pětinu
 var POVEST_NAHORU = 0.1;         // při nejlepší stoupne o desetinu
-var OTAZEK_PAMET = 12;           // kolik posledních otázek se neopakuje
-var HOVOR_JMENA = ['paní Nováková', 'pan Svoboda', 'paní Dvořáková', 'pan Černý', 'paní Procházková', 'pan Kučera', 'paní Veselá', 'pan Horák', 'paní Maršíková', 'pan Pospíšil', 'paní Králová', 'pan Beneš', 'pan Fiala', 'pan Zeman', 'slečna Vaněková', 'pan Richter'];
-var HOVOR_OTAZKY = [
-  { id: 'pero', t: 'Dobrý den, mám tu péřovou bundu. Můžu ji u vás vyprat?', o: [
-    { t: 'Jde to — velká pračka na 30 °C a do sušičky k ní hoďte dva tenisáky, peří se rozfouká.', b: 2, r: 'Super, to jsem nevěděl. Díky!' },
-    { t: 'Péřovky radši do čistírny, my na to nejsme.', b: 0, r: 'Hm, tak jo.' },
-    { t: 'To je vaše věc, my za nic neručíme.', b: -2, r: 'No dovolte.' },
+var SCENARU_PAMET = 5;           // kolik posledních rozhovorů se neopakuje
+var HOVOR_ZENY = ['paní Nováková', 'paní Dvořáková', 'paní Procházková', 'paní Veselá', 'paní Maršíková', 'paní Králová', 'slečna Vaněková', 'paní Horáková'];
+var HOVOR_MUZI = ['pan Svoboda', 'pan Černý', 'pan Kučera', 'pan Horák', 'pan Pospíšil', 'pan Beneš', 'pan Fiala', 'pan Zeman', 'pan Richter'];
+var HOVOR_SCENARE = [
+  { id: 'stovka', rod: '', kroky: [
+    { t: 'Dobrý den, váš automat mi spolkl stovku a nic se nespustilo.', o: [
+      { t: 'Mrzí mě to. Pošlu vám ji zpátky na účet.', b: 2, r: 'Dobře, to je fér.' },
+      { t: 'Bez dokladu nic nevracíme, to je u samoobsluhy běžné.', b: -2, r: 'Takže mě okradete a je to?' },
+      { t: 'To se občas stane, zkuste to znovu a snad to projde — mincovníky někdy naberou vlhkost a zasekne se jim mechanika.', b: -1, r: 'Takže mám hodit další stovku?' },
+    ] },
+    { t: 'A jak dlouho to trvá, než mi ty peníze přijdou?', o: [
+      { t: 'Do dvou dnů. Kdyby ne, ozvěte se mi přímo.', b: 2, r: 'Beru.' },
+      { t: 'Těžko říct, to má na starosti účetní.', b: -1, r: 'No super.' },
+      { t: 'Obvykle to bývá rychlé.', b: 0, r: 'Hm.' },
+    ] },
+    { t: 'A co teď? Potřebuju to vyprat dneska.', o: [
+      { t: 'Pustím vám stroj na dálku, za minutu naskočí.', b: 2, r: 'Vy jste zlato, děkuju!' },
+      { t: 'Tak přijďte zítra.', b: -2, r: 'Zítra mi to je k ničemu.' },
+      { t: 'Zkuste ten vedlejší, tam jde platit i kartou, ale jestli je volný, to vám odsud neřeknu.', b: 1, r: 'Tak to zkusím.' },
+    ] },
   ] },
-  { id: 'nedopralo', t: 'Pračka mi nedoprala, prádlo je pořád špinavé.', o: [
-    { t: 'Omlouvám se. Napište mi číslo stroje, pošlu tam technika a praní máte zdarma.', b: 2, r: 'To je slovo do pranice, děkuju.' },
-    { t: 'Nejspíš jste ji přecpal. Příště dejte míň prádla.', b: -1, r: 'Takže za to můžu já?' },
-    { t: 'To není možné, naše stroje perou dobře.', b: -2, r: 'Takhle se mnou nemluvte.' },
+  { id: 'svetr', rod: 'z', kroky: [
+    { t: 'Prala jsem u vás vlněný svetr a je z něj dětská velikost.', o: [
+      { t: 'To je mi líto. Co jste na něj dala za program?', b: 2, r: 'Hned se ptáte věcně, to je dobré.' },
+      { t: 'Vlna do automatu nepatří, to je vaše chyba.', b: -2, r: 'Tak to mi teda pomohlo.' },
+      { t: 'Za sražení neručíme, máte to napsané na stroji i v podmínkách na webu, podívejte se tam.', b: -2, r: 'Volám kvůli svetru, ne kvůli podmínkám.' },
+    ] },
+    { t: 'Dala jsem šedesát, bylo to předvolené.', o: [
+      { t: 'Tak to je na vlnu moc. Dám k tomu stroji lepší popisek, ať to nepotká dalšího.', b: 2, r: 'Aspoň něco.' },
+      { t: 'No vidíte, tak to je jasné.', b: -1, r: 'To mě teda potěšilo.' },
+      { t: 'Šedesát je standard, to nemůže nikomu uškodit.', b: -2, r: 'Tak proč mám ze svetru hadr?' },
+    ] },
+    { t: 'A kdo mi ten svetr zaplatí?', o: [
+      { t: 'Pošlete mi fotku a účtenku, domluvíme se.', b: 2, r: 'Dobře, pošlu.' },
+      { t: 'Nikdo, prala jste si sama a na stroji je napsané, co do něj patří.', b: -2, r: 'Končím s váma.' },
+      { t: 'Můžu vám dát praní zdarma, víc bohužel ne.', b: 1, r: 'No, lepší než nic.' },
+    ] },
+    { t: 'Dobře. A jak to mám prát příště?', o: [
+      { t: 'Třicet a nikdy do sušičky.', b: 2, r: 'Zapsáno. Děkuju.' },
+      { t: 'Nějak to zkuste, od toho je to samoobsluha.', b: -2, r: 'To myslíte vážně?' },
+      { t: 'Vlnu bych radši doma v ruce, v automatu je to vždycky risk, i když dáte nejnižší program a pomalé otáčky.', b: 0, r: 'Tak to k vám s vlnou nepůjdu.' },
+    ] },
   ] },
-  { id: 'mince', t: 'Automat mi spolkl stovku a nic se nestalo.', o: [
-    { t: 'Mrzí mě to, pošlu vám ji zpátky na účet, nebo vám dám praní zdarma — co je vám milejší?', b: 2, r: 'Stačí to praní, dík.' },
-    { t: 'Napište to na e-mail, někdo se na to podívá.', b: -1, r: 'A kdy asi tak?' },
-    { t: 'Bez dokladu nic nevracíme.', b: -2, r: 'To je k vzteku.' },
+  { id: 'drahe', rod: '', kroky: [
+    { t: 'Jste moc drazí. Za rohem perou levněji.', o: [
+      { t: 'Kolik tam platíte?', b: 2, r: 'Ptáte se správně.' },
+      { t: 'Tak jděte za roh, nikdo vás tu nedrží.', b: -2, r: 'Nebojte, půjdu.' },
+      { t: 'Naše ceny vycházejí z toho, že máme nové stroje, otevřeno nonstop a technika do druhého dne.', b: 1, r: 'To zní jako z letáku.' },
+    ] },
+    { t: 'Sto třicet za pračku. U vás dvě stě.', o: [
+      { t: 'U nás vyperete osmnáct kilo naráz, tam nejspíš šest.', b: 2, r: 'Hm, to mě nenapadlo.' },
+      { t: 'To nejde porovnávat, každý má jiné stroje, jinou vodu i jiné náklady, takže cenu za cyklus fakt neřešte.', b: -1, r: 'Proč ne?' },
+      { t: 'Tak si tam jděte.', b: -2, r: 'Však jo.' },
+    ] },
+    { t: 'Hm. A dáte mi slevu, nebo vám napíšu recenzi?', o: [
+      { t: 'Recenzi si napište. Jedno praní vám dám zdarma, ať to zkusíte.', b: 2, r: 'Tak dobře, zkusím to.' },
+      { t: 'Dám vám padesát procent napořád.', b: -1, r: 'Beru! A řeknu to všem.' },
+      { t: 'Tak si pište.', b: -2, r: 'Spolehněte se.' },
+    ] },
   ] },
-  { id: 'prasek', t: 'Kolik mám dát pracího prášku?', o: [
-    { t: 'Odměřený díl z dávkovače stačí. Víc prášku prádlo líp nevypere, jen se hůř vymáchá.', b: 2, r: 'Aha, tak to dělám blbě už roky.' },
-    { t: 'Kolik myslíte, že je potřeba.', b: 0, r: 'No... díky.' },
-    { t: 'To si přečtěte na obalu.', b: -2, r: 'Dík za nic.' },
+  { id: 'dvirka', rod: 'z', kroky: [
+    { t: 'Nejdou mi otevřít dvířka a mám uvnitř všechno prádlo.', o: [
+      { t: 'Dotáčí se a odpouští vodu. Dvě minuty a povolí.', b: 2, r: 'Aha, tak počkám.' },
+      { t: 'Zatáhněte za ně pořádně.', b: -2, r: 'Já vám je ulomím!' },
+      { t: 'Zámek je bezpečnostní a nejde s ním nic dělat, technik přijede nejdřív zítra, do té doby to tam asi zůstane.', b: -1, r: 'Zítra?!' },
+    ] },
+    { t: 'Už to povolilo. Ale prádlo je úplně mokré.', o: [
+      { t: 'Neproběhlo odstřeďování. Sušičku máte u mě zdarma, kód pošlu SMSkou.', b: 2, r: 'To je slušné, děkuju.' },
+      { t: 'Tak to dejte do sušičky, je vedle.', b: 0, r: 'Za další peníze?' },
+      { t: 'To se stává, odstřeďování občas vynechá a nic se tím nezkazí, prádlo doschne doma na balkoně.', b: -2, r: 'To mi nestačí.' },
+    ] },
+    { t: 'A proč to vůbec spadlo?', o: [
+      { t: 'Mrknu do stroje. Jestli je to závada, pošlu tam dnes technika.', b: 2, r: 'Dobře, díky.' },
+      { t: 'Nejspíš jste ji přecpala.', b: -1, r: 'Zase si to můžu za všechno sama.' },
+      { t: 'Netuším.', b: -2, r: 'Tak to je mi platné.' },
+    ] },
   ] },
-  { id: 'pes', t: 'Můžu u vás vyprat deku po psovi?', o: [
-    { t: 'Klidně, do osmnáctky a pak do sušičky. Buben se po každém cyklu proplachuje.', b: 2, r: 'Výborně, jedu k vám.' },
-    { t: 'Radši ne, stěžovali by si ostatní.', b: 0, r: 'Tak jo, no.' },
-    { t: 'Zvířecí věci u nás neperem.', b: -1, r: 'Tak to jdu jinam.' },
+  { id: 'novy', rod: '', kroky: [
+    { t: 'Dobrý den, jdu kolem a nevím, jak to funguje. Je to prádelna?', o: [
+      { t: 'Samoobsluha. Naházíte prádlo, zaplatíte a za 35 minut máte hotovo.', b: 2, r: 'Aha, tak to zkusím.' },
+      { t: 'Je to přece jasné z názvu, kdyby to byla prádelna, stál by tam někdo za pultem a bral vám to prádlo.', b: -2, r: 'Tohle je zbytečné.' },
+      { t: 'Samoobsluha.', b: 0, r: 'No... dobře.' },
+    ] },
+    { t: 'A prášek si mám přinést?', o: [
+      { t: 'Nemusíte, dávkovač je ve stroji.', b: 2, r: 'Výborně.' },
+      { t: 'To je na vás, každý si to dělá po svém.', b: 0, r: 'Tak co mi radíte?' },
+      { t: 'Jasně, bez vlastního prášku to nemá cenu, náš dávkovač stejně dávkuje málo a prádlo pak není pořádně vyprané.', b: -2, r: 'Tak to je skvělá reklama.' },
+    ] },
+    { t: 'Kolik ho mám dát?', o: [
+      { t: 'Odměřený díl. Víc prášku líp nevypere.', b: 2, r: 'Dobrá rada.' },
+      { t: 'Co myslíte, že je potřeba. Já u toho stroje nestojím.', b: -1, r: 'Proto se ptám vás.' },
+      { t: 'Přečtěte si to na obalu, je tam tabulka podle tvrdosti vody a míry zašpinění.', b: -1, r: 'Stojím u stroje, ne doma.' },
+    ] },
+    { t: 'A kde zaplatím?', o: [
+      { t: 'Kartou na terminálu u dvířek, nebo mincemi.', b: 2, r: 'Super, jdu na to.' },
+      { t: 'Někde tam to je.', b: -2, r: 'To mi teda pomohlo.' },
+      { t: 'Platí se až po doprání.', b: -2, r: 'Tak to mi stroj nenaskočil.' },
+    ] },
   ] },
-  { id: 'svetr', t: 'Srazil se mi u vás vlněný svetr. Co s tím?', o: [
-    { t: 'Mrzí mě to. Vlna patří na 30 °C a nikdy do sušičky — napište mi, co se stalo, a domluvíme se na náhradě.', b: 2, r: 'Děkuju, že to neházíte na mě.' },
-    { t: 'Vlnu se do automatu dávat nemá, to je vaše chyba.', b: -1, r: 'To jste mi měli napsat na stroj.' },
-    { t: 'Za to neručíme, máte to v podmínkách.', b: -2, r: 'Tak tohle dám na internet.' },
+  { id: 'pes', rod: '', kroky: [
+    { t: 'Můžu u vás vyprat deku po psovi? Nechci si zanést vlastní pračku.', o: [
+      { t: 'Klidně. Přesně na to to je.', b: 2, r: 'Super.' },
+      { t: 'Zvířecí věci u nás neperem.', b: -1, r: 'Tak to jdu jinam.' },
+      { t: 'To je mi jedno, perte si co chcete.', b: -2, r: 'Pěkný přístup.' },
+    ] },
+    { t: 'A nebude to vadit tomu, kdo bude prát po mně?', o: [
+      { t: 'Nebude, stroj mezi cykly vypláchne buben sám.', b: 2, r: 'To je dobře vymyšlené.' },
+      { t: 'To nevím, nikdo si zatím nestěžoval, ale asi by jim to vadit mohlo, kdyby to věděli.', b: -1, r: 'Vy nevíte, jak funguje váš stroj?' },
+      { t: 'Těm je to jedno.', b: -2, r: 'Mně by to jedno nebylo.' },
+    ] },
+    { t: 'A dám ji potom do sušičky?', o: [
+      { t: 'Klidně, chlupy padají do filtru.', b: 2, r: 'Děkuju za radu.' },
+      { t: 'Sušičku radši ne.', b: 0, r: 'Aha, tak jo.' },
+      { t: 'Dělejte si, co chcete.', b: -2, r: 'To jsem si mohl ušetřit telefon.' },
+    ] },
   ] },
-  { id: 'drahe', t: 'Jste nějak drazí, za rohem to mají levnější.', o: [
-    { t: 'Chápu. U nás platíte za nonstop provoz a nové stroje — zkuste to jednou a porovnejte.', b: 2, r: 'To zní férově.' },
-    { t: 'Tak jděte za roh.', b: -2, r: 'To si pamatuju.' },
-    { t: 'Ceny nenastavuju já.', b: -1, r: 'A kdo teda?' },
+  { id: 'smrad', rod: '', kroky: [
+    { t: 'Prádlo mi po praní smrdí. To není normální.', o: [
+      { t: 'To opravdu není. Který stroj to byl?', b: 2, r: 'Dobře, že se ptáte.' },
+      { t: 'Smrdělo asi už předtím, stroj za to nemůže.', b: -2, r: 'To je neuvěřitelné.' },
+      { t: 'Zkuste přidat víc aviváže, to to obvykle přebije a prádlo pak voní i několik dní.', b: -2, r: 'Já nechci přebít smrad, chci ho nemít.' },
+    ] },
+    { t: 'Ten krajní, u silnice.', o: [
+      { t: 'Díky. Nechám mu vyčistit buben a praní máte u mě zdarma.', b: 2, r: 'To je slušné.' },
+      { t: 'Podíváme se na to někdy, až tam technik pojede kvůli něčemu jinému.', b: -1, r: 'Někdy?' },
+      { t: 'Na ten si nikdo nestěžoval.', b: -2, r: 'Tak já jsem první.' },
+    ] },
+    { t: 'A jak poznám, že je to spravené?', o: [
+      { t: 'Dám vám vědět, až to technik udělá.', b: 2, r: 'Budu čekat, děkuju.' },
+      { t: 'Prostě to zkusíte.', b: -1, r: 'Za svoje peníze.' },
+      { t: 'To poznáte.', b: -2, r: 'Díky za nic.' },
+    ] },
   ] },
-  { id: 'doba', t: 'Jak dlouho u vás trvá jeden cyklus?', o: [
-    { t: 'Praní zhruba 35 minut, sušení 15 minut za padesátikorunu.', b: 2, r: 'Super, to stihnu.' },
-    { t: 'Chvilku.', b: -1, r: 'To mi moc nepomohlo.' },
-    { t: 'Je to napsané na stroji.', b: 0, r: 'No jo, ale ptám se vás.' },
+  { id: 'penzion', rod: '', kroky: [
+    { t: 'Mám penzion a potřebuju prát povlečení. Zvládnete to?', o: [
+      { t: 'Zvládneme. Kolik toho týdně je?', b: 2, r: 'Hned k věci, to se mi líbí.' },
+      { t: 'Přijďte jako každý jiný, rezervace neděláme a pořadí se tu nedrží.', b: 0, r: 'Tak to asi ne.' },
+      { t: 'To nás nezajímá, jedeme na samoobsluhu a ne na firmy.', b: -2, r: 'Škoda pro vás.' },
+    ] },
+    { t: 'Asi sto kilo týdně.', o: [
+      { t: 'To je pět praní. Domluvím vám pevnou cenu a stroje podržím.', b: 2, r: 'To zní výborně.' },
+      { t: 'Tak to vám bude chvíli trvat, pět praní po pětatřiceti minutách jsou skoro tři hodiny, počítejte s tím.', b: -1, r: 'To mi moc nepomohlo.' },
+      { t: 'Tolik toho nepereme.', b: -2, r: 'Na co tam ty stroje máte?' },
+    ] },
+    { t: 'A co když bude obsazeno?', o: [
+      { t: 'Dám vám číslo, zavoláte a já vám stroj uvolním.', b: 2, r: 'Beru, ozvu se.' },
+      { t: 'Tak počkáte.', b: -2, r: 'S prádlem z penzionu?' },
+      { t: 'To se nestává.', b: -1, r: 'To mi nestačí.' },
+    ] },
   ] },
-  { id: 'dvirka', t: 'Zabouchla jsem si tam prádlo a dvířka nejdou otevřít.', o: [
-    { t: 'Nelekejte se, buben se musí dotočit a odpustit vodu. Za dvě minuty to povolí — kdyby ne, hned tam někoho pošlu.', b: 2, r: 'Jé, už to povolilo. Děkuju!' },
-    { t: 'Zatáhněte za ně pořádně.', b: -2, r: 'Já je vám tam ulomím!' },
-    { t: 'Počkejte do zítřka, přijede technik.', b: -1, r: 'Zítra? Mám tam všechno oblečení.' },
+  { id: 'soused', rod: '', kroky: [
+    { t: 'Váš prádlomat stojí pod mými okny a v noci hučí.', o: [
+      { t: 'To mě mrzí. V kolik vás to budí nejvíc?', b: 2, r: 'Aspoň někdo poslouchá.' },
+      { t: 'Máme na to povolení od města i hlukovou studii, takže z naší strany je všechno v pořádku.', b: -1, r: 'To mě netěší.' },
+      { t: 'To je váš problém, měl jste se dívat, co se vám staví pod okny.', b: -2, r: 'Uvidíme, čí to bude problém.' },
+    ] },
+    { t: 'Kolem jedenácté, kdy jdou lidi z práce.', o: [
+      { t: 'Dám tam noční režim s nižšími otáčkami. Vyzkoušíme to týden.', b: 2, r: 'To by pomohlo.' },
+      { t: 'S tím nic nenadělám, stroje běží jak běží a vypínat je na noc kvůli jednomu člověku nebudu.', b: -2, r: 'Tak to budu řešit jinde.' },
+      { t: 'Lidi musí taky prát.', b: -1, r: 'A já musím spát.' },
+    ] },
+    { t: 'A když to nepomůže?', o: [
+      { t: 'Přijdu se podívat a změříme to.', b: 2, r: 'Tak to beru.' },
+      { t: 'Tak si stěžujte.', b: -2, r: 'Spolehněte se.' },
+      { t: 'Pomůže.', b: -1, r: 'To uvidíme.' },
+    ] },
   ] },
-  { id: 'vlastni', t: 'Můžu si přinést vlastní prášek?', o: [
-    { t: 'Klidně, dávkovač je přístupný. Jen prosím ne gel na ruční praní, dělá moc pěny.', b: 2, r: 'Dobře vědět, díky.' },
-    { t: 'Ne, používejte náš.', b: -1, r: 'A proč jako?' },
-    { t: 'To je mi jedno.', b: -1, r: 'Tak to jsem si mohl ušetřit telefon.' },
-  ] },
-  { id: 'hodne', t: 'Potřebuju vyprat asi dvacet kilo prádla. Vejde se to?', o: [
-    { t: 'Vezměte si dvě pračky naráz, bude to rychlejší i levnější než dvakrát po sobě.', b: 2, r: 'To mě nenapadlo, díky.' },
-    { t: 'Tak přijďte dvakrát.', b: 0, r: 'No jo.' },
-    { t: 'Tolik toho nepereme.', b: -2, r: 'Tak na co tam ty stroje máte?' },
-  ] },
-  { id: 'noc', t: 'Je u vás v noci bezpečno? Bojím se tam jít sama.', o: [
-    { t: 'Je tam kamera a nasvíceno, a přes den tam chodí náš člověk. Kdyby cokoli, volejte rovnou mně.', b: 2, r: 'To mě uklidnilo.' },
-    { t: 'Nikdy si nikdo nestěžoval.', b: 0, r: 'Hm.' },
-    { t: 'To si musíte posoudit sama.', b: -2, r: 'Děkuju za ochotu.' },
-  ] },
-  { id: 'penzion', t: 'Mám malý penzion. Perete i pro firmy?', o: [
-    { t: 'Ozvěte se mi, pro pravidelné praní umíme udělat cenu i podržet stroje.', b: 2, r: 'Výborně, ozvu se.' },
-    { t: 'Přijďte jako každý jiný.', b: 0, r: 'Dobře teda.' },
-    { t: 'To nás nezajímá.', b: -2, r: 'Tak to je škoda pro vás.' },
-  ] },
-  { id: 'zapomnel', t: 'Zapomněl jsem si u vás prádlo. Je tam ještě?', o: [
-    { t: 'Mrknu na kameru a nechám ho odložit stranou. Stavte se pro něj, kdy chcete.', b: 2, r: 'Zachránil jste mi den.' },
-    { t: 'To už je nejspíš pryč.', b: -1, r: 'Vy se ani nepodíváte?' },
-    { t: 'Za odložené prádlo neručíme.', b: -2, r: 'To je teda přístup.' },
-  ] },
-  { id: 'boty', t: 'Můžu u vás vyprat tenisky?', o: [
-    { t: 'Ano, do sáčku a na 30 °C. Do sušičky je ale nedávejte, rozlepilo by je to.', b: 2, r: 'Dík za varování!' },
-    { t: 'Boty ne.', b: -1, r: 'Aha, škoda.' },
-    { t: 'Zkuste to, uvidíte.', b: -2, r: 'To mi teda pomohlo.' },
-  ] },
-  { id: 'karta', t: 'Nefunguje mi u vás platba kartou.', o: [
-    { t: 'Zkuste přiložit ještě jednou a kdyby to nešlo, zavolejte mi — stroj vám pustím na dálku.', b: 2, r: 'Už to vzalo, děkuju.' },
-    { t: 'Tak zaplaťte mincemi.', b: 0, r: 'Ty zrovna nemám.' },
-    { t: 'To bude problém u vás v bance.', b: -2, r: 'Jinde mi karta jde.' },
-  ] },
-  { id: 'smrdi', t: 'Prádlo mi po praní smrdí. Chci to reklamovat.', o: [
-    { t: 'To opravdu nemá. Nechám buben vyčistit a praní máte zdarma — kdy se stavíte?', b: 2, r: 'Děkuju, to je slušné.' },
-    { t: 'Smrdělo asi už předtím.', b: -2, r: 'Vy jste neuvěřitelný.' },
-    { t: 'Dejte víc aviváže.', b: -1, r: 'To nic neřeší.' },
-  ] },
-  { id: 'vozik', t: 'Jsem na vozíku. Dostanu se k vám dovnitř?', o: [
-    { t: 'Ano, je to bezbariérové a dvířka jsou v dosahu. Kdyby cokoli, zavolejte a přijdu pomoct.', b: 2, r: 'Moc děkuju.' },
-    { t: 'Myslím, že jo.', b: 0, r: 'Tak to risknu.' },
-    { t: 'To nevím.', b: -2, r: 'Tak to radši nepojedu.' },
-  ] },
-  { id: 'prenoc', t: 'Můžu nechat prádlo v sušičce přes noc?', o: [
-    { t: 'Radši ne, blokovalo by to stroj ostatním. Ale můžu vám ho odložit stranou, dejte mi vědět.', b: 2, r: 'Rozumím, díky.' },
-    { t: 'Dělejte si, co chcete.', b: -1, r: 'Vy to máte fakt jedno.' },
-    { t: 'Když to tam necháte, vyhodíme to.', b: -2, r: 'Cože?!' },
-  ] },
-  { id: 'jakto', t: 'Je to prádelna, nebo si to peru sám?', o: [
-    { t: 'Samoobsluha — naházíte prádlo, zaplatíte a za 35 minut máte hotovo. Projdu to s vámi po telefonu, jestli chcete.', b: 2, r: 'To bych uvítala, děkuju.' },
-    { t: 'Samoobsluha.', b: 0, r: 'Aha.' },
-    { t: 'To je přece jasné z názvu.', b: -2, r: 'Nemusíte být nepříjemný.' },
-  ] },
-  { id: 'sleva', t: 'Chci slevu, jinak půjdu jinam a napíšu vám recenzi.', o: [
-    { t: 'Recenzi si klidně napište. Nabídnu vám jedno praní zdarma, ať to zkusíte v klidu.', b: 2, r: 'Tak dobře, zkusím to.' },
-    { t: 'Tak si pište, co chcete.', b: -2, r: 'Spolehněte se.' },
-    { t: 'Dobře, dám vám padesát procent napořád.', b: -1, r: 'Beru! A řeknu to známým.' },
-  ] },
-  { id: 'penezenka', t: 'Nechal jsem si tam peněženku. Můžete mi otevřít?', o: [
-    { t: 'Prádlomat je otevřený nonstop, dojděte tam. Kdyby byl problém, volejte mi a přijedu.', b: 2, r: 'Jdu tam hned, díky.' },
-    { t: 'To si vyřešte sám.', b: -2, r: 'Jste neuvěřitelní.' },
-    { t: 'Zkuste zavolat policii.', b: -1, r: 'To myslíte vážně?' },
-  ] },
-  { id: 'urad', t: 'Váš prádlomat kazí vzhled náměstí. Budu si stěžovat na úřadě.', o: [
-    { t: 'Beru to vážně. Rád se sejdeme a probereme, co by se s tím dalo udělat.', b: 2, r: 'Tak to mě překvapilo. Ozvu se.' },
-    { t: 'Máme na to povolení, tak si stěžujte.', b: -1, r: 'Spolehněte se, že budu.' },
-    { t: 'To je váš problém.', b: -2, r: 'Uvidíme, čí to bude problém.' },
-  ] },
-  { id: 'devadesat', t: 'Pere se u vás na devadesát? Mám kojenecké prádlo.', o: [
-    { t: 'Jde to, ale na kojenecké bohatě stačí 60 °C s dobrým práškem — ušetříte a prádlo vydrží.', b: 2, r: 'Dobrá rada, děkuju.' },
-    { t: 'Devadesát tam je, dejte to tam.', b: 0, r: 'Tak jo.' },
-    { t: 'Tak vysoko to nejde.', b: -1, r: 'A kam teda mám jít?' },
+  { id: 'tenisky', rod: '', kroky: [
+    { t: 'Můžu u vás vyprat tenisky?', o: [
+      { t: 'Můžete. Do sáčku a na třicet.', b: 2, r: 'Super, díky.' },
+      { t: 'Boty ne.', b: -1, r: 'Aha, škoda.' },
+      { t: 'Zkuste to, uvidíte, já vám to nezakazuju ani nedoporučuju.', b: -2, r: 'To mi teda pomohlo.' },
+    ] },
+    { t: 'A do sušičky?', o: [
+      { t: 'Ty ne, rozlepily by se. Nechte je doschnout doma.', b: 2, r: 'Dobře, že to vím.' },
+      { t: 'Klidně.', b: -2, r: 'Tak to mi je zničíte.' },
+      { t: 'Jak chcete.', b: -1, r: 'Ptám se, co je lepší.' },
+    ] },
+    { t: 'A nezničí mi to buben?', o: [
+      { t: 'Ne, proto ten sáček.', b: 2, r: 'Jasně. Děkuju.' },
+      { t: 'Může, podrážky jsou tvrdé a buben je plech.', b: -1, r: 'Tak to tam nedám.' },
+      { t: 'To nevím, nikdy jsem to nezkoušel, ale podrážky jsou tvrdé, takže bych se asi nedivil, kdyby jo.', b: -1, r: 'Tak to mě teda uklidnilo.' },
+    ] },
   ] },
 ];
 function povest() { return Math.max(-100, Math.min(100, (S && S.povest) || 0)); }
@@ -1566,17 +1628,32 @@ function zmenPovest(o) {
 function naplanujHovor() {
   S.hovorZa = HOVOR_ZA_MIN + Math.random() * (HOVOR_ZA_MAX - HOVOR_ZA_MIN);
 }
-var HOVOR = null;                // { jmeno, otazky, i, body, stav, zvoniDo }
-// Otázky, které už nedávno padly, přeskočíme — ať se hovory neopakují.
-function vyberOtazky(kolik) {
-  var posl = S.otazkyPosl || [];
-  var fond = HOVOR_OTAZKY.filter(function (q) { return posl.indexOf(q.id) < 0; });
-  if (fond.length < kolik) fond = HOVOR_OTAZKY.slice();
-  var vyber = [];
-  while (vyber.length < kolik && fond.length) {
-    vyber.push(fond.splice(Math.floor(Math.random() * fond.length), 1)[0]);
+var HOVOR = null;                // { jmeno, scenar, kroky, poradi, i, body, stav, zvoniDo }
+// Jeden hovor je jeden rozhovor na jedno téma — zákazník se dál ptá podle toho,
+// co už padlo. Poslední rozhovory přeskočíme, ať se nevrací hned dokola.
+// Jméno volajícího musí sedět s tím, jak o sobě v rozhovoru mluví — u scénáře,
+// kde zákazník říká „prala jsem“, nemůže volat pan.
+function hovorJmeno(rod) {
+  var fond = rod === 'z' ? HOVOR_ZENY
+    : (rod === 'm' ? HOVOR_MUZI : HOVOR_ZENY.concat(HOVOR_MUZI));
+  return fond[Math.floor(Math.random() * fond.length)];
+}
+function vyberScenar() {
+  var posl = S.hovoryPosl || [];
+  var fond = HOVOR_SCENARE.filter(function (x) { return posl.indexOf(x.id) < 0; });
+  if (!fond.length) fond = HOVOR_SCENARE.slice();
+  return fond[Math.floor(Math.random() * fond.length)];
+}
+// Pořadí odpovědí se kříže pro každý krok zvlášť — aby ta správná nebyla
+// pořád první. Délka odpovědi taky nic neprozrazuje, to hlídá už sama banka.
+function zamichej(n) {
+  var a = [], i, j, t;
+  for (i = 0; i < n; i++) a.push(i);
+  for (i = n - 1; i > 0; i--) {
+    j = Math.floor(Math.random() * (i + 1));
+    t = a[i]; a[i] = a[j]; a[j] = t;
   }
-  return vyber;
+  return a;
 }
 // Může to teď zazvonit? Ne během tutoriálu, ne když hráč píše nebo má otevřený
 // panel, a ne když ještě nemá jediný prádlomat — to by neměl kdo volat.
@@ -1596,11 +1673,14 @@ function hovorTik(dt) {
   zacniHovor();
 }
 function zacniHovor() {
+  var sc = vyberScenar();
   HOVOR = {
-    jmeno: HOVOR_JMENA[Math.floor(Math.random() * HOVOR_JMENA.length)],
-    otazky: vyberOtazky(3 + Math.floor(Math.random() * 3)),   // tři až pět otázek
+    jmeno: hovorJmeno(sc.rod),
+    scenar: sc.id, kroky: sc.kroky,
+    poradi: sc.kroky.map(function (k) { return zamichej(k.o.length); }),
     i: 0, body: 0, odpovedi: [], stav: 'zvoni', zvoniDo: Date.now() + HOVOR_ZVONI_MS
   };
+  S.hovoryPosl = (S.hovoryPosl || []).concat([sc.id]).slice(-SCENARU_PAMET);
   paintHovor();
 }
 function hovorHlidej() {
@@ -1628,21 +1708,21 @@ function vezmiHovor() {
   HOVOR.stav = 'otazka';
   paintHovor();
 }
+// i je pořadí tlačítka na obrazovce, ne pořadí v bance — přeložíme přes míchání.
 function odpovez(i) {
   if (!HOVOR || HOVOR.stav !== 'otazka') return;
-  var q = HOVOR.otazky[HOVOR.i];
-  var o = q.o[i];
+  var k = HOVOR.kroky[HOVOR.i];
+  var o = k.o[HOVOR.poradi[HOVOR.i][i]];
   if (!o) return;
   HOVOR.body += o.b;
-  HOVOR.odpovedi.push({ q: q.id, b: o.b, r: o.r });
-  S.otazkyPosl = (S.otazkyPosl || []).concat([q.id]).slice(-OTAZEK_PAMET);
+  HOVOR.odpovedi.push({ b: o.b, r: o.r });
   HOVOR.stav = 'reakce';
   paintHovor();
 }
 function hovorDal() {
   if (!HOVOR) return;
   HOVOR.i++;
-  HOVOR.stav = HOVOR.i < HOVOR.otazky.length ? 'otazka' : 'konec';
+  HOVOR.stav = HOVOR.i < HOVOR.kroky.length ? 'otazka' : 'konec';
   if (HOVOR.stav === 'konec') {
     zmenPovest(HOVOR.body);
     S.hovoru = (S.hovoru || 0) + 1;
@@ -1682,13 +1762,13 @@ function paintHovor() {
       + '</div>'
       + '<p class="fine">Kdo hovory nebere, přichází o návštěvnost.</p></div>';
   } else if (h.stav === 'otazka') {
-    var q = h.otazky[h.i];
+    var k = h.kroky[h.i], por = h.poradi[h.i];
     html = '<div class="hov-in">'
-      + '<p class="hov-popis">' + esc(h.jmeno) + ' · otázka ' + (h.i + 1) + ' z ' + h.otazky.length + '</p>'
-      + '<p class="hov-rec">„' + esc(q.t) + '“</p>'
+      + '<p class="hov-popis">' + esc(h.jmeno) + ' · ' + (h.i + 1) + ' z ' + h.kroky.length + '</p>'
+      + '<p class="hov-rec">„' + esc(k.t) + '“</p>'
       + '<div class="hov-odp">'
-      + q.o.map(function (o, i) {
-          return '<button data-odp="' + i + '">' + esc(o.t) + '</button>';
+      + por.map(function (ix, i) {
+          return '<button data-odp="' + i + '">' + esc(k.o[ix].t) + '</button>';
         }).join('')
       + '</div></div>';
   } else if (h.stav === 'reakce') {
@@ -1699,7 +1779,7 @@ function paintHovor() {
       + '<p class="hov-rec ' + tr + '">„' + esc(posl.r) + '“</p>'
       + '<p class="hov-bod ' + tr + '">' + (posl.b > 0 ? '+' : '') + posl.b + ' k pověsti</p>'
       + '<button class="btn big" id="hov-dal" style="width:100%">'
-      + (h.i + 1 < h.otazky.length ? 'Poslouchat dál' : 'Dokončit hovor') + '</button></div>';
+      + (h.i + 1 < h.kroky.length ? 'Poslouchat dál' : 'Dokončit hovor') + '</button></div>';
   } else {
     var b = h.body;
     var tr2 = b > 0 ? 'ok' : (b < 0 ? 'err' : 'muted');
