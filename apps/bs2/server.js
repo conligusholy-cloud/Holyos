@@ -2302,7 +2302,7 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res, next) => {
   const tab = ['vyplata', 'vyplaceno', 'zadosti', 'schvaleni'].includes(req.query.tab) ? req.query.tab : 'seznam';
   const pendingCount = (await q(`SELECT count(*)::int AS n FROM withdrawal_requests WHERE status='requested'`)).rows[0].n;
   req.vyberyPending = pendingCount;
-  try { req.vyberyMig = (await q(`SELECT count(*)::int AS n FROM supporters WHERE mig_status='mismatch'`)).rows[0].n; } catch (e) { req.vyberyMig = 0; }
+  try { const c = (await q(`SELECT count(*) FILTER (WHERE mig_status='mismatch')::int AS mig, count(*) FILTER (WHERE mig_status IN ('ok','reviewed'))::int AS ok FROM supporters`)).rows[0]; req.vyberyMig = c.mig; req.vyberyOk = c.ok; } catch (e) { req.vyberyMig = 0; req.vyberyOk = 0; }
   if (tab === 'seznam' || tab === 'schvaleni') return next();
   const { rows, month, curM } = await vyberyPayoutRows(tab, req.query.m);
   const sums = {}; rows.forEach((r) => { const v = Number(tab === 'vyplaceno' && r.status === 'paid' ? (r.paid_amount != null ? r.paid_amount : r.amount) : r.amount); if (tab === 'vyplaceno' && r.status !== 'paid') return; sums[r.currency] = (sums[r.currency] || 0) + v; });
@@ -2324,7 +2324,7 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res, next) => {
     try { const bm = await VYR.balances(verified.map((v) => v.id)); verified.forEach((v) => { v.balance = bm.get(v.id) || {}; }); } catch (e) { /* tabulka ještě není */ }
   }
   let booked = 0; if (tab === 'vyplata' && period) { try { booked = await VYR.bookedPeriod(period); } catch (e) { /* tabulka ještě není */ } }
-  res.send(V.adminVyberyPayouts({ migCount: req.vyberyMig || 0, verified, booked, vyr: { pct: VYR.DEFAULT_PCT, rate: VYR.RATE_PA }, period, periodRow, admin: req.admin, tab, rows, month, curM, sums, olderPending, pendingCount, msg: String(req.query.msg || '').slice(0, 200), holyosUrl: HOLYOS_URL }));
+  res.send(V.adminVyberyPayouts({ migCount: req.vyberyMig || 0, okCount: req.vyberyOk || 0, verified, booked, vyr: { pct: VYR.DEFAULT_PCT, rate: VYR.RATE_PA }, period, periodRow, admin: req.admin, tab, rows, month, curM, sums, olderPending, pendingCount, msg: String(req.query.msg || '').slice(0, 200), holyosUrl: HOLYOS_URL }));
 }));
 // Ruční hodnoty ST/EX u účtu (přežijí nové načtení z portálu) + označení „skontrolováno“
 app.post('/admin/vybery/override/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
@@ -2451,7 +2451,7 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
       count(*) FILTER (WHERE coalesce(partner_support->>'man_checked','false') <> 'true')::int AS unchk,
       count(*) FILTER (WHERE partner_support->>'man_checked' = 'true')::int AS chk
       FROM supporters WHERE status='active'`)).rows[0]; } catch (e) { /* jen info */ }
-  res.send(V.adminVybery({ activeTab: req.query.tab === 'schvaleni' ? 'schvaleni' : 'seznam', migCount: req.vyberyMig || 0, fc, onlyUnchk, curN, onlyCur, onlyEur, pendingCount: req.vyberyPending || 0, badKinds, admin: req.admin, rows, qstr: qs, onlySup, onlyBad, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
+  res.send(V.adminVybery({ activeTab: req.query.tab === 'schvaleni' ? 'schvaleni' : 'seznam', migCount: req.vyberyMig || 0, okCount: req.vyberyOk || 0, fc, onlyUnchk, curN, onlyCur, onlyEur, pendingCount: req.vyberyPending || 0, badKinds, admin: req.admin, rows, qstr: qs, onlySup, onlyBad, posCounts, totalCount, holyosUrl: HOLYOS_URL }));
 }));
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
