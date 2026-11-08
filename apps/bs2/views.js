@@ -1677,7 +1677,7 @@ const BASE_COLS = BASE_COLS_ALL.filter(c => c.key !== 'expansion' && c.key !== '
 { const _c = BASE_COLS.find(c => c.key === 'std_check'); if (_c && !_c._man) { const _r = _c.render; _c._man = true; _c.render = (r) => _r(r) + (r.man_checked === 'true' ? ` <span class="badge active" title="${esc('Ručně zkontrolováno' + (r.man_checked_at ? ' ' + new Date(r.man_checked_at).toLocaleDateString('cs-CZ') : '') + (r.man_note ? ' · ' + r.man_note : ''))}">✔ zkontrolováno</span>` : ''); } }
 // Admin → Výběry: přehled uživatelů s podporou (Pozice, PIV, Expanze, Standardní podpora, Expanze + standardní)
 function vyberyTabs(active, pending = 0, mig = 0) {
-  const t = [['seznam', 'Seznam', '/admin/vybery'], ['schvaleni', 'Ke schválení' + (mig ? ' (' + mig + ')' : ''), '/admin/vybery?tab=schvaleni'], ['vyplata', 'Výplata' + (pending ? ' (' + pending + ')' : ''), '/admin/vybery?tab=vyplata'], ['zadosti', 'Žádosti', '/admin/vybery?tab=zadosti'], ['vyplaceno', 'Vyplaceno', '/admin/vybery?tab=vyplaceno']];
+  const t = [['seznam', 'Seznam', '/admin/vybery'], ['schvaleni', 'K ruční kontrole' + (mig ? ' (' + mig + ')' : ''), '/admin/vybery?tab=schvaleni'], ['vyplata', 'Výplata' + (pending ? ' (' + pending + ')' : ''), '/admin/vybery?tab=vyplata'], ['zadosti', 'Žádosti', '/admin/vybery?tab=zadosti'], ['vyplaceno', 'Vyplaceno', '/admin/vybery?tab=vyplaceno']];
   return `<div class="row" style="gap:6px;margin:4px 0 14px;flex-wrap:wrap">${t.map(([k, l, h]) => `<a class="btn ${k === active ? '' : 'sec'}" href="${h}">${esc(l)}</a>`).join('')}</div>`;
 }
 // Admin → Výběry → Výplata (žádosti, aktuální měsíc) a Vyplaceno (historie)
