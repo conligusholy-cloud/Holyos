@@ -82,6 +82,12 @@ button{font:inherit;cursor:pointer}
 .t-item{background:rgba(4,6,12,.95);padding:8px 6px;text-align:center;min-width:0}
 .t-item span{display:block;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)}
 .t-item b{display:block;font-size:14.5px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Doplňkový řádek pod číslem (stroje skladem). Místo si drží, i když je prázdný,
+   aby hlavička při změně skladu neposkakovala. */
+.t-pod{display:block;min-height:12px;font-style:normal;font-size:9.5px;font-weight:700;
+  line-height:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t-pod.ok{color:var(--ok)}
+.t-pod.warn{color:var(--warn)}
 
 /* ─── Obsah ─── */
 /* Hra je přesně na výšku okna: hlavička nahoře, obsah uprostřed roluje sám

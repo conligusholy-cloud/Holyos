@@ -2657,6 +2657,15 @@ function paintHlavicka() {
   $('t-rate').textContent = kc(cz);
   $('t-rate').className = cz < 0 ? 'err' : 'ok';
   $('t-count').textContent = S.units.length;
+  // Pod počtem postavených ještě to, co leží na skladě nebo se zrovna veze —
+  // jinak by hráč na koupený stroj čekající na místo klidně zapomněl.
+  var pod = $('t-sklad');
+  if (pod) {
+    var sklad = MODEL_ORDER.reduce(function (a, k) { return a + inStock(k); }, 0);
+    var vezou = (S.orders || []).length;
+    pod.textContent = sklad ? sklad + ' skladem' : (vezou ? vezou + ' na cestě' : '');
+    pod.className = 't-pod' + (sklad ? ' ok' : (vezou ? ' warn' : ''));
+  }
 }
 function paint() {
   refreshUnits();
