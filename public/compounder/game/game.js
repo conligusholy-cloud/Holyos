@@ -456,16 +456,122 @@ function hlidejPoruchy(dt) {
     toast(u.name + ': ' + z.text.toLowerCase() + '. Pošli tam technika.', 'err');
   });
 }
+// ─── Za mořem ────────────────────────────────────────────────────────────────
+// Technik nemůže dojet autem všude. Když prádlomat stojí na jiné pevnině, musí
+// přes vodu — buď trajektem, nebo, když je to daleko, letadlem s autem na místě.
+// Pevninu poznáme z polohy: ostrovy mají svoje obdélníky, zbytek rozhodne
+// poledník. Je to hrubé, ale pro hru to stačí a hlavně je to předvídatelné.
+var TRAJEKT_REZIE = 6;           // hodiny navíc: čekání v přístavu a plavba
+// Trajektem jede technik i s dodávkou, takže po silnici jede stejně rychle
+// jako jinde — navíc má jen čas strávený v přístavu a na lodi.
+var LETADLO_KMH = 700;
+var LETADLO_REZIE = 6;           // na letiště, odbavení a pak auto na místě
+var TRAJEKT_MAX_KM = 1500;       // dál už se lodí nejezdí, letí se
+var LETADLO_OD_KM = 2000;        // i po souši se přes dva tisíce kilometrů letí
+var OSTROVY = [
+  { k: 'britanie', lat: [49.5, 61.2], lon: [-11.5, 2.2] },
+  { k: 'island', lat: [62.5, 67.5], lon: [-25.5, -12.5] },
+  { k: 'gronsko', lat: [59.0, 84.0], lon: [-73.0, -11.0] },
+  { k: 'sicilie', lat: [36.5, 38.4], lon: [12.3, 15.7] },
+  { k: 'sardinie', lat: [38.8, 43.1], lon: [8.1, 9.9] },
+  { k: 'baleary', lat: [38.6, 40.2], lon: [1.1, 4.4] },
+  { k: 'malta', lat: [35.7, 36.2], lon: [14.1, 14.6] },
+  { k: 'kreta', lat: [34.8, 35.8], lon: [23.4, 26.4] },
+  { k: 'kypr', lat: [34.5, 35.8], lon: [32.2, 34.7] },
+  { k: 'kanary', lat: [27.5, 29.5], lon: [-18.3, -13.3] },
+  { k: 'japonsko', lat: [30.5, 45.8], lon: [128.5, 146.5] },
+  { k: 'tchajwan', lat: [21.8, 25.4], lon: [119.9, 122.1] },
+  { k: 'filipiny', lat: [4.5, 19.5], lon: [117.0, 127.0] },
+  { k: 'indonesie', lat: [-11.0, 2.5], lon: [95.0, 141.0] },
+  { k: 'srilanka', lat: [5.8, 10.0], lon: [79.5, 82.0] },
+  { k: 'madagaskar', lat: [-26.0, -11.5], lon: [43.0, 51.0] },
+  { k: 'kuba', lat: [19.5, 23.4], lon: [-85.2, -73.8] },
+  { k: 'hispaniola', lat: [17.4, 20.1], lon: [-78.5, -65.0] },
+  { k: 'bahamy', lat: [20.9, 27.3], lon: [-79.0, -72.5] },
+  { k: 'antily', lat: [10.0, 18.7], lon: [-64.0, -59.0] },
+  { k: 'hawaii', lat: [18.5, 22.5], lon: [-161.0, -154.0] },
+  { k: 'australie', lat: [-44.0, -10.0], lon: [112.0, 154.0] },
+  { k: 'novyzeland', lat: [-47.5, -34.0], lon: [166.0, 179.5] }
+];
+// Na které pevnině bod leží. Amerika je jeden celek (Panama), Evropa, Asie
+// a Afrika taky — mezi nimi se dá dojet.
+function pevnina(b) {
+  if (!b || b.lat == null) return '';
+  for (var i = 0; i < OSTROVY.length; i++) {
+    var o = OSTROVY[i];
+    if (b.lat >= o.lat[0] && b.lat <= o.lat[1] && b.lon >= o.lon[0] && b.lon <= o.lon[1]) return o.k;
+  }
+  if (b.lon <= -34 && b.lon >= -170) return 'amerika';
+  return 'afroeurasie';
+}
+// Čím technik pojede a co ho to stojí navíc. Stejná pevnina znamená auto.
+function zpusobCesty(a, b, km) {
+  var letadlo = { kod: 'letadlo', nazev: 'letecky', znak: '✈',
+    kmh: LETADLO_KMH, rezie: LETADLO_REZIE, silnice: false };
+  if (pevnina(a) === pevnina(b)) {
+    // Po vlastní ose jen do rozumné dálky. Přes půl kontinentu se letí a auto
+    // si technik půjčí na místě — jinak by jediný výjezd trval týden.
+    if (km > LETADLO_OD_KM) return letadlo;
+    return { kod: 'auto', nazev: 'autem', znak: '🚐', kmh: TECHNIK_KMH, rezie: 0, silnice: true };
+  }
+  if (km <= TRAJEKT_MAX_KM) {
+    return { kod: 'trajekt', nazev: 'trajektem', znak: '⛴', kmh: TECHNIK_KMH, rezie: TRAJEKT_REZIE, silnice: true };
+  }
+  return letadlo;
+}
+// Kolik hodin zabere cesta jedním směrem.
+function cestaHodin(km, zp) {
+  return zp.rezie + Math.max(0.5, km / zp.kmh);
+}
+// Jeden prádlomat je, dva jsou — ať věta nedrhne.
+function zaMoremSlovy(n) {
+  return n === 1 ? 'Jeden prádlomat máš' : (n >= 2 && n <= 4 ? n + ' prádlomaty máš' : n + ' prádlomatů máš');
+}
+// Prádlomaty, ke kterým se technik nedostane autem — od každé základny jen
+// přes vodu. Právě u nich se vyplatí pobočka za mořem.
+function zaMorem() {
+  var zs = zakladny().filter(function (b) { return b && b.lat != null; });
+  if (!zs.length) return [];
+  return (S.units || []).filter(function (u) {
+    if (u.lat == null) return false;
+    return !zs.some(function (b) { return pevnina(b) === pevnina(u); });
+  });
+}
+// Věta, která hráči poradí, co s tím. Ukazuje rozdíl v čase, ne jen fakt.
+function zaMoremRada(u, v) {
+  if (!v || !v.zpusob || v.zpusob.kod === 'auto') return '';
+  return '<p class="fine warn" style="margin:8px 0 0">Tenhle prádlomat je za mořem — technik tam '
+    + (v.zpusob.kod === 'letadlo' ? 'musí letět' : 'jede trajektem')
+    + '. S pobočkou v jeho okolí by výjezd trval '
+    + etaText(vyjezdZblizka(u)).replace('za ', '') + ' místo '
+    + etaText(v.celkem).replace('za ', '') + '.</p>';
+}
 // Kolik bude výjezd trvat, než ho hráč potvrdí.
 function vyjezdOdhad(u) {
-  var z = nejblizsiZakladna(u);
-  if (!z || z.zakladna.lat == null) return null;
-  var km = z.km;
-  // Půl hodiny má každá cesta i za rohem — technik musí naložit a vyjet.
-  // Bez toho by u blízkého stroje autíčko po mapě jen probliklo.
-  var jizda = Math.max(0.5, km / TECHNIK_KMH) * HODINA_MS;
+  if (!u || u.lat == null) return null;
+  var zs = zakladny().filter(function (b) { return b && b.lat != null; });
+  if (!zs.length) return null;
+  // Nebereme nejbližší základnu, ale nejrychlejší: pobočka o kus dál na téže
+  // pevnině porazí tu, ke které se musí přes moře.
+  var nej = null;
+  zs.forEach(function (b) {
+    var vzduch = kmMezi(b, u);
+    var zp = zpusobCesty(b, u, vzduch);
+    var km = zp.silnice ? vzduch * SILNICE : vzduch;
+    // Půl hodiny má každá cesta i za rohem — technik musí naložit a vyjet.
+    // Bez toho by u blízkého stroje autíčko po mapě jen probliklo.
+    var jizda = cestaHodin(km, zp) * HODINA_MS;
+    if (!nej || jizda < nej.jizda) nej = { zakladna: b, km: km, zp: zp, jizda: jizda };
+  });
   var oprava = ((u.porucha && u.porucha.zav) || 1) * HODINA_MS;
-  return { zakladna: z.zakladna, km: km, jizda: jizda, oprava: oprava, celkem: 2 * jizda + oprava };
+  return { zakladna: nej.zakladna, km: nej.km, zpusob: nej.zp, jizda: nej.jizda,
+    oprava: oprava, celkem: 2 * nej.jizda + oprava };
+}
+// Kolik by výjezd trval, kdyby hráč měl základnu přímo u prádlomatu. Z rozdílu
+// se počítá doporučení postavit pobočku za mořem.
+function vyjezdZblizka(u) {
+  var oprava = ((u.porucha && u.porucha.zav) || 1) * HODINA_MS;
+  return 2 * 0.5 * HODINA_MS + oprava;
 }
 function vyslatTechnika(u) {
   if (!u || !jeVPoruse(u) || u.technik) return;
@@ -474,11 +580,11 @@ function vyslatTechnika(u) {
   var ted = Date.now();
   u.technik = {
     z: { lat: v.zakladna.lat, lon: v.zakladna.lon, name: v.zakladna.name || 'sídlo' },
-    km: Math.round(v.km), start: ted, prijezd: ted + v.jizda,
+    km: Math.round(v.km), zpusob: v.zpusob.kod, start: ted, prijezd: ted + v.jizda,
     hotovo: ted + v.jizda + v.oprava, navrat: ted + 2 * v.jizda + v.oprava
   };
   save(); paint(); drawMap(); drawAuta(); syncState(true);
-  toast('Technik vyjel, na místě bude ' + etaText(v.jizda) + '.', 'ok');
+  toast('Technik vyrazil ' + v.zpusob.nazev + ', na místě bude ' + etaText(v.jizda) + '.', 'ok');
 }
 // Výjezdy posouvá čas: jakmile je oprava hotová, stroj zase jede; až se auto
 // vrátí na základnu, zmizí z mapy.
@@ -2510,10 +2616,12 @@ function addAttribution() {
 // Sídlo a pobočky na mapě. Sídlo má větší domeček, provozovna menší.
 // Servisní auto jezdí po mapě každou vteřinu, takže má vlastní vrstvu — není
 // proč kvůli němu překreslovat všechny pinŭky.
-function autoIcon(opravuje) {
+// Po moři nejede auto — ikona se mění podle toho, čím technik cestuje.
+var ZNAK_CESTY = { auto: '\uD83D\uDE90', trajekt: '\u26F4', letadlo: '\u2708' };
+function autoIcon(opravuje, zpusob) {
   return L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15],
     html: '<div class="pin auto' + (opravuje ? ' dela' : '') + '">'
-      + (opravuje ? '\uD83D\uDD27' : '\uD83D\uDE90') + '</div>' });
+      + (opravuje ? '\uD83D\uDD27' : (ZNAK_CESTY[zpusob] || ZNAK_CESTY.auto)) + '</div>' });
 }
 function drawAuta() {
   if (!map || typeof L === 'undefined') return;
@@ -2522,7 +2630,7 @@ function drawAuta() {
   (S.units || []).forEach(function (u) {
     var p = autoPoloha(u);
     if (!p) return;
-    L.marker([p.lat, p.lon], { icon: autoIcon(p.opravuje), zIndexOffset: 1000 })
+    L.marker([p.lat, p.lon], { icon: autoIcon(p.opravuje, u.technik && u.technik.zpusob), zIndexOffset: 1000 })
       .addTo(autaLayer)
       .on('click', function () { unitSheet(u); });
   });
@@ -2604,10 +2712,12 @@ function servisRadek(u) {
   if (jeVPoruse(u) && !t) {
     var v = vyjezdOdhad(u);
     tr = 'err';
-    stav = u.porucha.text + (v ? ' — ' + Math.round(v.km) + ' km, oprava na ' + u.porucha.zav + ' h' : '');
+    stav = u.porucha.text + (v ? ' — ' + Math.round(v.km) + ' km ' + v.zpusob.nazev
+      + ', oprava na ' + u.porucha.zav + ' h' : '');
     akce = v ? '<button class="btn sec maly" data-vada="' + esc(u.spotId) + '">Vyslat</button>' : '';
   } else if (t && ted < t.prijezd) {
-    tr = 'warn'; stav = u.porucha.text + ' — technik přijede ' + etaText(t.prijezd - ted);
+    tr = 'warn'; stav = u.porucha.text + ' — ' + (ZNAK_CESTY[t.zpusob] || ZNAK_CESTY.auto)
+      + ' technik přijede ' + etaText(t.prijezd - ted);
   } else if (t && jeVPoruse(u)) {
     tr = 'warn'; stav = u.porucha.text + ' — technik na místě, hotovo ' + etaText(t.hotovo - ted);
   } else if (t) {
@@ -2641,6 +2751,11 @@ function servisSheet() {
     + (poradi.length
         ? '<div class="srv">' + poradi.map(servisRadek).join('') + '</div>'
         : '<div class="empty">Zatím nemáš žádný prádlomat.</div>')
+    + (zaMorem().length
+        ? '<p class="fine warn" style="margin-top:12px">' + zaMoremSlovy(zaMorem().length)
+          + ' za mořem — technik tam jede trajektem nebo letí. Pobočka v jejich okolí '
+          + 'zkrátí každý výjezd na pár hodin a vyplatí se dřív, než to vypadá.</p>'
+        : '')
     + '<p class="fine" style="margin-top:12px">Každý stroj se v průměru dvakrát za herní rok '
     + 'porouchá. MINI při poruše stojí celé, FLEX a MAX jedou na půl — je v nich strojů víc.</p>');
   var vs = $('do-vsechny');
@@ -3393,8 +3508,10 @@ function poruchaHtml(u) {
               : 'na místě, hotovo ' + etaText(t.hotovo - ted)) + '</b></div>'
           : (v
               ? '<div class="kv"><span>Odkud pojede</span><b>' + esc(v.zakladna.name || 'základna') + '</b></div>'
-                + '<div class="kv"><span>Vzdálenost</span><b>' + Math.round(v.km) + ' km</b></div>'
+                + '<div class="kv"><span>Vzdálenost</span><b>' + Math.round(v.km) + ' km '
+                  + v.zpusob.znak + ' ' + v.zpusob.nazev + '</b></div>'
                 + '<div class="kv"><span>Cesta a oprava</span><b>' + etaText(v.celkem).replace('za ', '') + '</b></div>'
+                + zaMoremRada(u, v)
                 + '<button class="btn big" id="do-technik" style="width:100%;margin-top:10px">Vyslat technika</button>'
               : '<p class="fine err">Nemáš základnu, odkud technika poslat.</p>'))
       + '</div>';
@@ -4089,6 +4206,12 @@ function zakladnyHtml() {
       }).join('')
     + (pobockyMesicne() > 0 ? '<div class="kv"><span>Provoz poboček</span><b class="warn">'
       + kcFull(pobockyMesicne()) + ' / měsíc</b></div>' : '')
+    + (zaMorem().length
+        ? '<p class="fine warn" style="margin-top:8px">' + zaMoremSlovy(zaMorem().length)
+          + ' za mořem (' + esc(zaMorem().map(function (u) { return u.name; }).slice(0, 3).join(', '))
+          + '). Servis tam musí trajektem nebo letadlem — pobočka na té straně se zaplatí '
+          + 'už na ušetřeném čase výjezdů.</p>'
+        : '')
     + (lze
         ? '<button class="btn sec" id="do-pobocka" style="width:100%;margin-top:10px">Zřídit pobočku za ' + kcFull(POBOCKA_CENA) + '</button>'
         : '<p class="fine">Další pobočku si můžeš zřídit ' + etaText(pobockaOd() - Date.now())

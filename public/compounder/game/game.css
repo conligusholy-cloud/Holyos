@@ -35,6 +35,8 @@ button{font:inherit;cursor:pointer}
 .intro-pts li:before{content:"";position:absolute;left:0;top:9px;width:6px;height:6px;border-radius:50%;background:var(--blue)}
 .intro-pts b{color:var(--text)}
 .fine{margin:0;font-size:11.5px;color:var(--text3)}
+.fine.warn{color:var(--warn)}
+.fine.err{color:var(--err)}
 /* Nízké telefony (iPhone SE apod.) — ať je tlačítko vidět bez rolování. */
 @media(max-height:720px){
   .intro-in{gap:10px;padding-top:14px;padding-bottom:18px}
