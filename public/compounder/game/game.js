@@ -2646,6 +2646,20 @@ function modelCard(sp, e) {
 // Používá se stejně na nákup stroje v obchodě i na instalaci na místě, aby se
 // hráč nikdy nezasekl bez hotovosti a bez možnosti si půjčit.
 function investedTotal() { return S.units.reduce(function (a, u) { return a + u.eco.invest; }, 0); }
+// Čisté jmění: co hráč má, minus co dluží. Kromě postavených prádlomatů se počítají
+// i stroje na skladě a na cestě, pobočky a technika čety — to všechno už je zaplacené.
+// Musí sedět s cisteJmeni() v routes/game-account.routes.js, podle kterého se staví
+// žebříček. Když se vzorce rozejdou, hráč vidí dvě různá čísla pro tutéž věc.
+function cisteJmeni() {
+  var majetek = investedTotal();
+  MODEL_ORDER.forEach(function (k) { majetek += inStock(k) * machinePrice(MODELS[k]); });
+  (S.orders || []).forEach(function (o) {
+    majetek += machinePrice(MODELS[o && o.model] || MODELS.mini);
+  });
+  majetek += (S.pobocky || []).length * POBOCKA_CENA;
+  if (maCetu()) majetek += CETA_CENA;
+  return Math.round(majetek + S.cash - S.loan);
+}
 function stockValue() {
   var v = 0;
   MODEL_ORDER.forEach(function (k) { v += (inStock(k) + onWay(k)) * machinePrice(MODELS[k]); });
@@ -4476,7 +4490,7 @@ function paintMe() {
   var p = PROFILES[S.profile];
   // Co má hráč rozepsané, přežije překreslení.
   var drzFirma = $('me-firma') ? $('me-firma').value : null;
-  var net = S.cash + investedTotal() - S.loan;
+  var net = cisteJmeni();
   $('me-body').innerHTML = (ME
     ? '<div class="card"><div class="znak-hlava">' + znakSvg(ME.emblem, 56)
       + '<div><h3 style="margin:0">' + esc(ME.company || ME.nick) + '</h3>'

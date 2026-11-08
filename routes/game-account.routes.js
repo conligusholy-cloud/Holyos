@@ -203,6 +203,8 @@ function splatkyMesicne(st) {
 // skladem i na cestě, pobočky a technika čety v pořizovací ceně, plus hotovost,
 // minus nesplacený úvěr. Rámec v bance se nepočítá — to nejsou jeho peníze.
 const POBOCKA_CENA = 500000, CETA_CENA = 1530000;
+// Musí sedět s cisteJmeni() v public/compounder/game/game.js — hráč vidí totéž
+// číslo v záložce Já i v žebříčku a nesmí se lišit.
 function cisteJmeni(st) {
   if (!st) return 0;
   const units = Array.isArray(st.units) ? st.units : [];
