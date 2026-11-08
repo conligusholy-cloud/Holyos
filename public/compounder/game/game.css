@@ -562,3 +562,43 @@ button{font:inherit;cursor:pointer}
 /* Textový odkaz pod dlaždicemi — vypadá jako odkaz, ne jako další tlačítko. */
 .odkaz{display:inline-block;background:none;border:0;padding:0;margin:0 0 14px;
   color:var(--blue);font-size:13px;font-weight:700}
+
+/* Pás pověsti: vlevo mizerná, vpravo výborná, uprostřed normál. */
+.povest-pas{position:relative;height:6px;border-radius:3px;margin:10px 0 12px;
+  background:linear-gradient(90deg,var(--err),rgba(120,160,255,.28) 50%,var(--ok))}
+.povest-pas i{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;
+  border-radius:50%;background:var(--text);border:2px solid var(--bg);
+  box-shadow:0 2px 8px rgba(0,0,0,.6)}
+/* ─── Infolinka ─── */
+/* Překryv přes celou hru — hovor se nedá přehlédnout a nejde ho obejít.
+   Zavřít se dá jen tlačítkem, ať je jasné, že odmítnutí něco stojí. */
+.hovor{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;
+  padding:20px;background:rgba(2,4,10,.82);backdrop-filter:blur(6px)}
+.hov-in{width:100%;max-width:420px;background:var(--card2);border:1px solid var(--border2);
+  border-radius:20px;padding:20px 18px;text-align:center;
+  box-shadow:0 24px 60px rgba(0,0,0,.7)}
+.hov-in h3{font-size:19px;margin-bottom:2px}
+.hov-popis{margin:0 0 6px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
+.hov-stav{margin:4px 0 0;font-size:13px;color:var(--text2)}
+/* Zvonící telefon. Pulzuje, ale nehýbe layoutem — jen září. */
+.hov-tel{display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;
+  margin-bottom:10px;border-radius:50%;font-size:30px;font-style:normal;
+  background:rgba(47,227,160,.14);animation:hov-zvoni 1.1s infinite}
+@keyframes hov-zvoni{0%,100%{box-shadow:0 0 0 0 rgba(47,227,160,.45)}
+  70%{box-shadow:0 0 0 16px rgba(47,227,160,0)}}
+.hov-tlacitka{display:flex;gap:26px;justify-content:center;margin:20px 0 14px}
+.hov-kolo{width:62px;height:62px;border-radius:50%;border:0;font-size:26px;font-weight:700;
+  color:#04140d;box-shadow:0 10px 24px rgba(0,0,0,.5)}
+.hov-kolo.ano{background:var(--ok)}
+.hov-kolo.ne{background:var(--err);color:#2b0409}
+.hov-kolo:active{transform:scale(.94)}
+/* Co zákazník říká. */
+.hov-rec{margin:6px 0 14px;font-size:15.5px;line-height:1.45;text-align:left}
+.hov-rec.ok{color:var(--ok)} .hov-rec.err{color:var(--err)}
+.hov-bod{margin:0 0 14px;font-size:13px;font-weight:800}
+.hov-odp{display:flex;flex-direction:column;gap:8px}
+.hov-odp button{text-align:left;background:var(--card);border:1px solid var(--border);
+  color:var(--text);border-radius:13px;padding:12px 13px;font-size:14px;line-height:1.4}
+.hov-odp button:active{border-color:var(--vio);background:rgba(124,92,255,.16)}
+.hov-in .kv:first-of-type{border-top:1px solid var(--border)}
+.hov-in .fine{margin-top:4px}

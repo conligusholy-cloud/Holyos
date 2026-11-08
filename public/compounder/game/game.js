@@ -920,7 +920,13 @@ function rentOf(sp) {
 // Kolik lidí ti otevřelo sdílený odkaz → o tolik víc zákazníků chodí.
 // Strop návštěvnosti roste o to, co přidaly karty — jinak by zaplacená kampaň zapadla.
 function trafficMax() { return TRAFFIC_MAX + (S && S.boost ? S.boost : 0); }
-function traffic() { return Math.min(trafficMax(), TRAFFIC_BASE + (S && S.refs ? S.refs : 0) * TRAFFIC_PER_REF + (S && S.boost ? S.boost : 0)); }
+// Pověst z infolinky násobí výsledek až na konci — ať platí celý rozsah
+// i tomu, kdo už má návštěvnost na stropu.
+function traffic() {
+  var t = Math.min(trafficMax(),
+    TRAFFIC_BASE + (S && S.refs ? S.refs : 0) * TRAFFIC_PER_REF + (S && S.boost ? S.boost : 0));
+  return t * povestKoef();
+}
 // Servis, praní a úklid se platí z obratu - cim vic lidi pere, tim vic prace.
 function economics(spot, modelKey) {
   var m = MODELS[modelKey] || MODELS.flex;
@@ -1007,6 +1013,9 @@ function fresh(profileId) {
     connDiscount: 0,  // sleva na přípojky na nejbližší stavbě
     rateDrop: 0,      // snížení úroku z karty
     bankBonus: 0,     // navýšení bankovního rámce z karty
+    povest: 0,        // jak si hráč vede na infolince, −100 až +100
+    hovorZa: null,    // za jak dlouho strávených ve hře zazvoní další hovor
+    otazkyPosl: [],   // otázky, které už padly — ať se hned neopakují
     stats: { earned: 0, interest: 0 },
     hist: []          // vývoj po herních měsících — tržby, zisk, dluh, počet prádlomatů
   };
@@ -1061,6 +1070,8 @@ function dosypStav(o) {
     }
     if (!o.splatkyAt) o.splatkyAt = Date.now();
     if (!Array.isArray(o.pobocky)) o.pobocky = [];
+    if (typeof o.povest !== 'number') o.povest = 0;
+    if (!Array.isArray(o.otazkyPosl)) o.otazkyPosl = [];
     // Rozehraná hra z doby před sídly: za sídlo bereme místo, kde hráč postavil
     // první prádlomat. Bez toho by mu doprava vycházela zdarma a pobočku by
     // si nikdy nemohl zřídit.
@@ -1326,6 +1337,7 @@ function dripTick() {
   }
   hlavickaDrip();
   if (!$('v-map').classList.contains('hidden')) { drawAuta(); paintServis(); }
+  hovorTik(1000);
 }
 // Nad hotovostí probléskne, o kolik se právě změnila — ať už přitečla po
 // kapkách, nebo odtečla naráz.
@@ -1388,6 +1400,321 @@ function verdictPill(score) {
   return '<span class="pill ' + c + '">' + score + '/100 · ' + t + '</span>';
 }
 
+// ─── Infolinka ────────────────────────────────────────────────────
+// Zákazníci volá jen tomu, kdo je zrovna ve hře — odpočítává se čas strávený
+// v aplikaci, ne čas skutečný. Kdo hovory bere a umí poradit, má lepší pověst
+// a chodí mu víc lidí. Kdo je odmítá nebo odbyde, přijde až o pětinu návštěvnosti.
+var HOVOR_ZA_MIN = 150000;       // nejdřív za dvě a půl minuty ve hře
+var HOVOR_ZA_MAX = 420000;       // nejpozději za sedm
+var HOVOR_ZVONI_MS = 20000;      // jak dlouho to zvoní, než to zákazník položí
+var HOVOR_ODMITNUTI = -6;        // co stojí nebraný hovor
+var POVEST_DOLU = 0.2;           // při nejhorší pověsti spadne návštěvnost o pětinu
+var POVEST_NAHORU = 0.1;         // při nejlepší stoupne o desetinu
+var OTAZEK_PAMET = 12;           // kolik posledních otázek se neopakuje
+var HOVOR_JMENA = ['paní Nováková', 'pan Svoboda', 'paní Dvořáková', 'pan Černý', 'paní Procházková', 'pan Kučera', 'paní Veselá', 'pan Horák', 'paní Maršíková', 'pan Pospíšil', 'paní Králová', 'pan Beneš', 'pan Fiala', 'pan Zeman', 'slečna Vaněková', 'pan Richter'];
+var HOVOR_OTAZKY = [
+  { id: 'pero', t: 'Dobrý den, mám tu péřovou bundu. Můžu ji u vás vyprat?', o: [
+    { t: 'Jde to — velká pračka na 30 °C a do sušičky k ní hoďte dva tenisáky, peří se rozfouká.', b: 2, r: 'Super, to jsem nevěděl. Díky!' },
+    { t: 'Péřovky radši do čistírny, my na to nejsme.', b: 0, r: 'Hm, tak jo.' },
+    { t: 'To je vaše věc, my za nic neručíme.', b: -2, r: 'No dovolte.' },
+  ] },
+  { id: 'nedopralo', t: 'Pračka mi nedoprala, prádlo je pořád špinavé.', o: [
+    { t: 'Omlouvám se. Napište mi číslo stroje, pošlu tam technika a praní máte zdarma.', b: 2, r: 'To je slovo do pranice, děkuju.' },
+    { t: 'Nejspíš jste ji přecpal. Příště dejte míň prádla.', b: -1, r: 'Takže za to můžu já?' },
+    { t: 'To není možné, naše stroje perou dobře.', b: -2, r: 'Takhle se mnou nemluvte.' },
+  ] },
+  { id: 'mince', t: 'Automat mi spolkl stovku a nic se nestalo.', o: [
+    { t: 'Mrzí mě to, pošlu vám ji zpátky na účet, nebo vám dám praní zdarma — co je vám milejší?', b: 2, r: 'Stačí to praní, dík.' },
+    { t: 'Napište to na e-mail, někdo se na to podívá.', b: -1, r: 'A kdy asi tak?' },
+    { t: 'Bez dokladu nic nevracíme.', b: -2, r: 'To je k vzteku.' },
+  ] },
+  { id: 'prasek', t: 'Kolik mám dát pracího prášku?', o: [
+    { t: 'Odměřený díl z dávkovače stačí. Víc prášku prádlo líp nevypere, jen se hůř vymáchá.', b: 2, r: 'Aha, tak to dělám blbě už roky.' },
+    { t: 'Kolik myslíte, že je potřeba.', b: 0, r: 'No... díky.' },
+    { t: 'To si přečtěte na obalu.', b: -2, r: 'Dík za nic.' },
+  ] },
+  { id: 'pes', t: 'Můžu u vás vyprat deku po psovi?', o: [
+    { t: 'Klidně, do osmnáctky a pak do sušičky. Buben se po každém cyklu proplachuje.', b: 2, r: 'Výborně, jedu k vám.' },
+    { t: 'Radši ne, stěžovali by si ostatní.', b: 0, r: 'Tak jo, no.' },
+    { t: 'Zvířecí věci u nás neperem.', b: -1, r: 'Tak to jdu jinam.' },
+  ] },
+  { id: 'svetr', t: 'Srazil se mi u vás vlněný svetr. Co s tím?', o: [
+    { t: 'Mrzí mě to. Vlna patří na 30 °C a nikdy do sušičky — napište mi, co se stalo, a domluvíme se na náhradě.', b: 2, r: 'Děkuju, že to neházíte na mě.' },
+    { t: 'Vlnu se do automatu dávat nemá, to je vaše chyba.', b: -1, r: 'To jste mi měli napsat na stroj.' },
+    { t: 'Za to neručíme, máte to v podmínkách.', b: -2, r: 'Tak tohle dám na internet.' },
+  ] },
+  { id: 'drahe', t: 'Jste nějak drazí, za rohem to mají levnější.', o: [
+    { t: 'Chápu. U nás platíte za nonstop provoz a nové stroje — zkuste to jednou a porovnejte.', b: 2, r: 'To zní férově.' },
+    { t: 'Tak jděte za roh.', b: -2, r: 'To si pamatuju.' },
+    { t: 'Ceny nenastavuju já.', b: -1, r: 'A kdo teda?' },
+  ] },
+  { id: 'doba', t: 'Jak dlouho u vás trvá jeden cyklus?', o: [
+    { t: 'Praní zhruba 35 minut, sušení 15 minut za padesátikorunu.', b: 2, r: 'Super, to stihnu.' },
+    { t: 'Chvilku.', b: -1, r: 'To mi moc nepomohlo.' },
+    { t: 'Je to napsané na stroji.', b: 0, r: 'No jo, ale ptám se vás.' },
+  ] },
+  { id: 'dvirka', t: 'Zabouchla jsem si tam prádlo a dvířka nejdou otevřít.', o: [
+    { t: 'Nelekejte se, buben se musí dotočit a odpustit vodu. Za dvě minuty to povolí — kdyby ne, hned tam někoho pošlu.', b: 2, r: 'Jé, už to povolilo. Děkuju!' },
+    { t: 'Zatáhněte za ně pořádně.', b: -2, r: 'Já je vám tam ulomím!' },
+    { t: 'Počkejte do zítřka, přijede technik.', b: -1, r: 'Zítra? Mám tam všechno oblečení.' },
+  ] },
+  { id: 'vlastni', t: 'Můžu si přinést vlastní prášek?', o: [
+    { t: 'Klidně, dávkovač je přístupný. Jen prosím ne gel na ruční praní, dělá moc pěny.', b: 2, r: 'Dobře vědět, díky.' },
+    { t: 'Ne, používejte náš.', b: -1, r: 'A proč jako?' },
+    { t: 'To je mi jedno.', b: -1, r: 'Tak to jsem si mohl ušetřit telefon.' },
+  ] },
+  { id: 'hodne', t: 'Potřebuju vyprat asi dvacet kilo prádla. Vejde se to?', o: [
+    { t: 'Vezměte si dvě pračky naráz, bude to rychlejší i levnější než dvakrát po sobě.', b: 2, r: 'To mě nenapadlo, díky.' },
+    { t: 'Tak přijďte dvakrát.', b: 0, r: 'No jo.' },
+    { t: 'Tolik toho nepereme.', b: -2, r: 'Tak na co tam ty stroje máte?' },
+  ] },
+  { id: 'noc', t: 'Je u vás v noci bezpečno? Bojím se tam jít sama.', o: [
+    { t: 'Je tam kamera a nasvíceno, a přes den tam chodí náš člověk. Kdyby cokoli, volejte rovnou mně.', b: 2, r: 'To mě uklidnilo.' },
+    { t: 'Nikdy si nikdo nestěžoval.', b: 0, r: 'Hm.' },
+    { t: 'To si musíte posoudit sama.', b: -2, r: 'Děkuju za ochotu.' },
+  ] },
+  { id: 'penzion', t: 'Mám malý penzion. Perete i pro firmy?', o: [
+    { t: 'Ozvěte se mi, pro pravidelné praní umíme udělat cenu i podržet stroje.', b: 2, r: 'Výborně, ozvu se.' },
+    { t: 'Přijďte jako každý jiný.', b: 0, r: 'Dobře teda.' },
+    { t: 'To nás nezajímá.', b: -2, r: 'Tak to je škoda pro vás.' },
+  ] },
+  { id: 'zapomnel', t: 'Zapomněl jsem si u vás prádlo. Je tam ještě?', o: [
+    { t: 'Mrknu na kameru a nechám ho odložit stranou. Stavte se pro něj, kdy chcete.', b: 2, r: 'Zachránil jste mi den.' },
+    { t: 'To už je nejspíš pryč.', b: -1, r: 'Vy se ani nepodíváte?' },
+    { t: 'Za odložené prádlo neručíme.', b: -2, r: 'To je teda přístup.' },
+  ] },
+  { id: 'boty', t: 'Můžu u vás vyprat tenisky?', o: [
+    { t: 'Ano, do sáčku a na 30 °C. Do sušičky je ale nedávejte, rozlepilo by je to.', b: 2, r: 'Dík za varování!' },
+    { t: 'Boty ne.', b: -1, r: 'Aha, škoda.' },
+    { t: 'Zkuste to, uvidíte.', b: -2, r: 'To mi teda pomohlo.' },
+  ] },
+  { id: 'karta', t: 'Nefunguje mi u vás platba kartou.', o: [
+    { t: 'Zkuste přiložit ještě jednou a kdyby to nešlo, zavolejte mi — stroj vám pustím na dálku.', b: 2, r: 'Už to vzalo, děkuju.' },
+    { t: 'Tak zaplaťte mincemi.', b: 0, r: 'Ty zrovna nemám.' },
+    { t: 'To bude problém u vás v bance.', b: -2, r: 'Jinde mi karta jde.' },
+  ] },
+  { id: 'smrdi', t: 'Prádlo mi po praní smrdí. Chci to reklamovat.', o: [
+    { t: 'To opravdu nemá. Nechám buben vyčistit a praní máte zdarma — kdy se stavíte?', b: 2, r: 'Děkuju, to je slušné.' },
+    { t: 'Smrdělo asi už předtím.', b: -2, r: 'Vy jste neuvěřitelný.' },
+    { t: 'Dejte víc aviváže.', b: -1, r: 'To nic neřeší.' },
+  ] },
+  { id: 'vozik', t: 'Jsem na vozíku. Dostanu se k vám dovnitř?', o: [
+    { t: 'Ano, je to bezbariérové a dvířka jsou v dosahu. Kdyby cokoli, zavolejte a přijdu pomoct.', b: 2, r: 'Moc děkuju.' },
+    { t: 'Myslím, že jo.', b: 0, r: 'Tak to risknu.' },
+    { t: 'To nevím.', b: -2, r: 'Tak to radši nepojedu.' },
+  ] },
+  { id: 'prenoc', t: 'Můžu nechat prádlo v sušičce přes noc?', o: [
+    { t: 'Radši ne, blokovalo by to stroj ostatním. Ale můžu vám ho odložit stranou, dejte mi vědět.', b: 2, r: 'Rozumím, díky.' },
+    { t: 'Dělejte si, co chcete.', b: -1, r: 'Vy to máte fakt jedno.' },
+    { t: 'Když to tam necháte, vyhodíme to.', b: -2, r: 'Cože?!' },
+  ] },
+  { id: 'jakto', t: 'Je to prádelna, nebo si to peru sám?', o: [
+    { t: 'Samoobsluha — naházíte prádlo, zaplatíte a za 35 minut máte hotovo. Projdu to s vámi po telefonu, jestli chcete.', b: 2, r: 'To bych uvítala, děkuju.' },
+    { t: 'Samoobsluha.', b: 0, r: 'Aha.' },
+    { t: 'To je přece jasné z názvu.', b: -2, r: 'Nemusíte být nepříjemný.' },
+  ] },
+  { id: 'sleva', t: 'Chci slevu, jinak půjdu jinam a napíšu vám recenzi.', o: [
+    { t: 'Recenzi si klidně napište. Nabídnu vám jedno praní zdarma, ať to zkusíte v klidu.', b: 2, r: 'Tak dobře, zkusím to.' },
+    { t: 'Tak si pište, co chcete.', b: -2, r: 'Spolehněte se.' },
+    { t: 'Dobře, dám vám padesát procent napořád.', b: -1, r: 'Beru! A řeknu to známým.' },
+  ] },
+  { id: 'penezenka', t: 'Nechal jsem si tam peněženku. Můžete mi otevřít?', o: [
+    { t: 'Prádlomat je otevřený nonstop, dojděte tam. Kdyby byl problém, volejte mi a přijedu.', b: 2, r: 'Jdu tam hned, díky.' },
+    { t: 'To si vyřešte sám.', b: -2, r: 'Jste neuvěřitelní.' },
+    { t: 'Zkuste zavolat policii.', b: -1, r: 'To myslíte vážně?' },
+  ] },
+  { id: 'urad', t: 'Váš prádlomat kazí vzhled náměstí. Budu si stěžovat na úřadě.', o: [
+    { t: 'Beru to vážně. Rád se sejdeme a probereme, co by se s tím dalo udělat.', b: 2, r: 'Tak to mě překvapilo. Ozvu se.' },
+    { t: 'Máme na to povolení, tak si stěžujte.', b: -1, r: 'Spolehněte se, že budu.' },
+    { t: 'To je váš problém.', b: -2, r: 'Uvidíme, čí to bude problém.' },
+  ] },
+  { id: 'devadesat', t: 'Pere se u vás na devadesát? Mám kojenecké prádlo.', o: [
+    { t: 'Jde to, ale na kojenecké bohatě stačí 60 °C s dobrým práškem — ušetříte a prádlo vydrží.', b: 2, r: 'Dobrá rada, děkuju.' },
+    { t: 'Devadesát tam je, dejte to tam.', b: 0, r: 'Tak jo.' },
+    { t: 'Tak vysoko to nejde.', b: -1, r: 'A kam teda mám jít?' },
+  ] },
+];
+function povest() { return Math.max(-100, Math.min(100, (S && S.povest) || 0)); }
+// Násobitel návštěvnosti podle pověsti. Nula je normál, záporná pověst bolí víc,
+// než kladná pomůže — špatná pověst se roznese rychleji.
+function povestKoef() {
+  var p = povest();
+  return 1 + (p < 0 ? p / 100 * POVEST_DOLU : p / 100 * POVEST_NAHORU);
+}
+function povestSlovy() {
+  var p = povest();
+  if (p >= 60) return 'výborná';
+  if (p >= 20) return 'dobrá';
+  if (p > -20) return 'průměrná';
+  if (p > -60) return 'špatná';
+  return 'mizerná';
+}
+function zmenPovest(o) {
+  S.povest = Math.max(-100, Math.min(100, povest() + o));
+}
+// Další hovor naplánujeme na náhodnou dobu strávenou ve hře.
+function naplanujHovor() {
+  S.hovorZa = HOVOR_ZA_MIN + Math.random() * (HOVOR_ZA_MAX - HOVOR_ZA_MIN);
+}
+var HOVOR = null;                // { jmeno, otazky, i, body, stav, zvoniDo }
+// Otázky, které už nedávno padly, přeskočíme — ať se hovory neopakují.
+function vyberOtazky(kolik) {
+  var posl = S.otazkyPosl || [];
+  var fond = HOVOR_OTAZKY.filter(function (q) { return posl.indexOf(q.id) < 0; });
+  if (fond.length < kolik) fond = HOVOR_OTAZKY.slice();
+  var vyber = [];
+  while (vyber.length < kolik && fond.length) {
+    vyber.push(fond.splice(Math.floor(Math.random() * fond.length), 1)[0]);
+  }
+  return vyber;
+}
+// Může to teď zazvonit? Ne během tutoriálu, ne když hráč píše nebo má otevřený
+// panel, a ne když ještě nemá jediný prádlomat — to by neměl kdo volat.
+function hovorLze() {
+  return !!S && S.tut === 'done' && (S.units || []).length > 0 && !HOVOR
+    && !document.hidden && !pisePrave()
+    && $('sheet').classList.contains('hidden');
+}
+function hovorTik(dt) {
+  if (!S || document.hidden) return;
+  if (HOVOR) { hovorHlidej(); return; }
+  if (S.tut !== 'done' || !(S.units || []).length) return;
+  if (typeof S.hovorZa !== 'number') { naplanujHovor(); return; }
+  S.hovorZa -= dt;
+  if (S.hovorZa > 0) return;
+  if (!hovorLze()) return;              // později to zazvoní znovu
+  zacniHovor();
+}
+function zacniHovor() {
+  HOVOR = {
+    jmeno: HOVOR_JMENA[Math.floor(Math.random() * HOVOR_JMENA.length)],
+    otazky: vyberOtazky(3 + Math.floor(Math.random() * 3)),   // tři až pět otázek
+    i: 0, body: 0, odpovedi: [], stav: 'zvoni', zvoniDo: Date.now() + HOVOR_ZVONI_MS
+  };
+  paintHovor();
+}
+function hovorHlidej() {
+  if (!HOVOR || HOVOR.stav !== 'zvoni') return;
+  if (Date.now() >= HOVOR.zvoniDo) { odmitniHovor(true); return; }
+  // Překreslit celé okno by pokaždé restartovalo pulzování telefonu — za běhu
+  // zvonění tedy měníme jen odpočet.
+  var od = $('hov-odpocet');
+  if (od) od.textContent = String(Math.max(0, Math.ceil((HOVOR.zvoniDo - Date.now()) / 1000)));
+  else paintHovor();
+}
+function odmitniHovor(samo) {
+  if (!HOVOR) return;
+  zmenPovest(HOVOR_ODMITNUTI);
+  HOVOR = null;
+  naplanujHovor();
+  zavriHovor();
+  save(); paint(); syncState(true);
+  toast(samo ? 'Zákazník se nedčekal a položil to. Pověst klesla.'
+             : 'Hovor jsi nevzal. Pověst klesla.', 'err');
+}
+function vezmiHovor() {
+  if (!HOVOR) return;
+  HOVOR.stav = 'otazka';
+  paintHovor();
+}
+function odpovez(i) {
+  if (!HOVOR || HOVOR.stav !== 'otazka') return;
+  var q = HOVOR.otazky[HOVOR.i];
+  var o = q.o[i];
+  if (!o) return;
+  HOVOR.body += o.b;
+  HOVOR.odpovedi.push({ q: q.id, b: o.b, r: o.r });
+  S.otazkyPosl = (S.otazkyPosl || []).concat([q.id]).slice(-OTAZEK_PAMET);
+  HOVOR.stav = 'reakce';
+  paintHovor();
+}
+function hovorDal() {
+  if (!HOVOR) return;
+  HOVOR.i++;
+  HOVOR.stav = HOVOR.i < HOVOR.otazky.length ? 'otazka' : 'konec';
+  if (HOVOR.stav === 'konec') {
+    zmenPovest(HOVOR.body);
+    save(); paint(); syncState(true);
+  }
+  paintHovor();
+}
+function zavesHovor() {
+  HOVOR = null;
+  naplanujHovor();
+  zavriHovor();
+  save(); paint(); syncState(true);
+}
+// Okno hovoru. Zvonění, otázka s třemi odpověďmi, reakce zákazníka a nakonec
+// shrnutí. Všechno v jednom překryvu, ať je jasné, že se čeká právě na hráče.
+function zavriHovor() {
+  var el = $('hovor');
+  if (el) { el.classList.add('hidden'); el.innerHTML = ''; }
+}
+function hovorBtn(id, tr, text) {
+  return '<button class="' + tr + '" id="' + id + '">' + text + '</button>';
+}
+function paintHovor() {
+  var el = $('hovor');
+  if (!el || !HOVOR) return;
+  var h = HOVOR, html;
+  if (h.stav === 'zvoni') {
+    var zbyva = Math.max(0, Math.ceil((h.zvoniDo - Date.now()) / 1000));
+    html = '<div class="hov-in zvoni">'
+      + '<i class="hov-tel">📞</i>'
+      + '<p class="hov-popis">Infolinka</p>'
+      + '<h3>' + esc(h.jmeno) + '</h3>'
+      + '<p class="hov-stav">volá … položí to za <b id="hov-odpocet">' + zbyva + '</b> s</p>'
+      + '<div class="hov-tlacitka">'
+      + hovorBtn('hov-ne', 'hov-kolo ne', '✕')
+      + hovorBtn('hov-ano', 'hov-kolo ano', '✓')
+      + '</div>'
+      + '<p class="fine">Kdo hovory nebere, přichází o návštěvnost.</p></div>';
+  } else if (h.stav === 'otazka') {
+    var q = h.otazky[h.i];
+    html = '<div class="hov-in">'
+      + '<p class="hov-popis">' + esc(h.jmeno) + ' · otázka ' + (h.i + 1) + ' z ' + h.otazky.length + '</p>'
+      + '<p class="hov-rec">„' + esc(q.t) + '“</p>'
+      + '<div class="hov-odp">'
+      + q.o.map(function (o, i) {
+          return '<button data-odp="' + i + '">' + esc(o.t) + '</button>';
+        }).join('')
+      + '</div></div>';
+  } else if (h.stav === 'reakce') {
+    var posl = h.odpovedi[h.odpovedi.length - 1];
+    var tr = posl.b > 0 ? 'ok' : (posl.b < 0 ? 'err' : 'muted');
+    html = '<div class="hov-in">'
+      + '<p class="hov-popis">' + esc(h.jmeno) + '</p>'
+      + '<p class="hov-rec ' + tr + '">„' + esc(posl.r) + '“</p>'
+      + '<p class="hov-bod ' + tr + '">' + (posl.b > 0 ? '+' : '') + posl.b + ' k pověsti</p>'
+      + '<button class="btn big" id="hov-dal" style="width:100%">'
+      + (h.i + 1 < h.otazky.length ? 'Poslouchat dál' : 'Dokončit hovor') + '</button></div>';
+  } else {
+    var b = h.body;
+    var tr2 = b > 0 ? 'ok' : (b < 0 ? 'err' : 'muted');
+    var soud = b >= 6 ? 'Zákazník zavěsil nadšený a řekne to dál.'
+      : b >= 2 ? 'Zákazník byl spokojený.'
+      : b > -2 ? 'Zákazník zavěsil, ale nijak nadšený nebyl.'
+      : b > -6 ? 'Zákazník odchází nespokojený.'
+      : 'Zákazník prásknul telefonem. Tohle se roznese.';
+    html = '<div class="hov-in">'
+      + '<p class="hov-popis">Hovor skončil</p>'
+      + '<h3 class="' + tr2 + '">' + (b > 0 ? '+' : '') + b + ' k pověsti</h3>'
+      + '<p class="hov-stav">' + soud + '</p>'
+      + '<div class="kv"><span>Pověst u zákazníků</span><b>' + povestSlovy() + '</b></div>'
+      + '<div class="kv"><span>Návštěvnost</span><b class="' + (povest() >= 0 ? 'ok' : 'err') + '">'
+      + (povest() >= 0 ? '+' : '') + Math.round((povestKoef() - 1) * 100) + ' %</b></div>'
+      + '<button class="btn big" id="hov-konec" style="width:100%;margin-top:12px">Zavěsit</button></div>';
+  }
+  el.innerHTML = html;
+  el.classList.remove('hidden');
+  if ($('hov-ano')) $('hov-ano').onclick = vezmiHovor;
+  if ($('hov-ne')) $('hov-ne').onclick = function () { odmitniHovor(false); };
+  if ($('hov-dal')) $('hov-dal').onclick = hovorDal;
+  if ($('hov-konec')) $('hov-konec').onclick = zavesHovor;
+  [].forEach.call(el.querySelectorAll('[data-odp]'), function (b2) {
+    b2.onclick = function () { odpovez(Number(b2.getAttribute('data-odp'))); };
+  });
+}
 // ─── Postavička ──────────────────────────────────────────────────────────────
 // Kreslí se z jednoho čísla: 0 = opatrný, 1 = vyvážený, 2 = dravý. Po každé
 // odpovědi se překreslí, takže hráč vidí, do koho se svými volbami proměňuje.
@@ -3076,6 +3403,19 @@ function paintZeb() {
     + (ZEB.hracu ? '<p class="fine">Hráčů se sítí: ' + ZEB.hracu + '</p>' : '');
 }
 
+// Pověst z infolinky — ať je vidět i mimo hovor, co to s návštěvností dělá.
+function povestHtml() {
+  var p = povest();
+  var zmena = Math.round((povestKoef() - 1) * 100);
+  return '<div class="card"><div class="row"><h3>Infolinka</h3>'
+    + '<b class="' + (p > 0 ? 'ok' : (p < 0 ? 'err' : '')) + '">' + povestSlovy() + '</b></div>'
+    + '<div class="povest-pas"><i style="left:' + ((p + 100) / 2) + '%"></i></div>'
+    + '<div class="kv"><span>Návštěvnost z pověsti</span><b class="'
+    + (zmena > 0 ? 'ok' : (zmena < 0 ? 'err' : '')) + '">' + (zmena > 0 ? '+' : '') + zmena + ' %</b></div>'
+    + '<p class="fine" style="margin-top:8px">Zákazníci volí, jen když jsi ve hře. '
+    + 'Kdo hovor vezme a umí poradit, má v prádlomatech víc lidí — až o desetinu. '
+    + 'Kdo je odmítá nebo odbyde, přijde až o pětinu návštěvnosti.</p></div>';
+}
 // Střed prozkoumaného města — odtud se dá zřídit pobočka.
 function stredOblasti(a) {
   var sp = (a && a.spots) || [];
@@ -3221,12 +3561,12 @@ function paintNet() {
   var vyv = $('net-do-vyvoje');
   if (vyv) vyv.onclick = function () { netZalozka('vyvoj'); };
   if (!S.units.length) {
-    $('net-list').innerHTML = zakladnyHtml() + cetaHtml()
+    $('net-list').innerHTML = povestHtml() + zakladnyHtml() + cetaHtml()
       + '<div class="empty">Zatím nemáš ani jeden prádlomat.<br>Začni tím, že na mapě prozkoumáš oblast.</div>';
     bindZakladny();
     return;
   }
-  $('net-list').innerHTML = zakladnyHtml() + cetaHtml() + S.units.slice().sort(function (a, b) { return b.eco.profit - a.eco.profit; }).map(function (u) {
+  $('net-list').innerHTML = povestHtml() + zakladnyHtml() + cetaHtml() + S.units.slice().sort(function (a, b) { return b.eco.profit - a.eco.profit; }).map(function (u) {
     return '<div class="card" data-unit="' + esc(u.spotId) + '">'
       + '<div class="row"><h3>' + esc(u.name) + '</h3>' + verdictPill(u.score) + '</div>'
       + '<p class="muted small" style="margin:2px 0 6px">' + esc(KIND_LABEL[u.kind] || 'Místo') + ' · ' + MODELS[u.eco.model].name + '</p>'
