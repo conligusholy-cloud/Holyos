@@ -130,7 +130,11 @@
     <!-- MAPA -->
     <section id="v-map" class="view">
       <div id="map"></div>
-      <div class="map-hint" id="map-hint">Napiš město a pošli tam člověka, ať ho projde. Místa jsou schovaná — dokud město neprozkoumáš, nic na mapě neuvidíš.</div>
+      <!-- Nad mapou stojí pod sebou proužek s poruchami a nápověda. -->
+      <div class="map-vrstva">
+        <div class="map-vada hidden" id="map-vada"></div>
+        <div class="map-hint" id="map-hint">Napiš město a pošli tam člověka, ať ho projde. Místa jsou schovaná — dokud město neprozkoumáš, nic na mapě neuvidíš.</div>
+      </div>
       <button class="btn float" id="open-areas">🔎 Prozkoumat město</button>
     </section>
 

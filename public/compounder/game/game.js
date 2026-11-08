@@ -401,6 +401,117 @@ var ZASITOVANE = {};
 function jeZasitovane(sp) { return !!ZASITOVANE[sp && sp.id]; }
 // Podíl z plné ceny přípojek, který platí ten, kdo staví na zasíťované místo.
 var INSTALACE_PODIL = 0.1;
+// ─── Poruchy a servis ──────────────────────────────────────────────
+// Každý prádlomat se v průměru dvakrát za herní rok porouchá. Hráč na něj musí
+// poslat technika — a po mapě mu tam opravdu jede autíčko ze sídla nebo pobočky.
+//
+// Čas počítáme z opravdových čísel: auto jede 60 km/h a oprava zabere 1 až 5 hodin
+// podle závažnosti. Zrychlení obstará herní čas sám — herní hodina je skutečná
+// minuta, takže celý výjezd trvá pár minut a je vidět, jak auto jede.
+var PORUCHA_ROCNE = 2;                    // kolikrát za herní rok se stroj v průměru porouchá
+var HODINA_MS = MONTH_MS / 30 / 24;       // herní hodina = skutečná minuta
+var TECHNIK_KMH = 60;                     // průměrná rychlost servisního auta
+// Když stojí MINI, stojí celý prádlomat — je v něm jedna pračka a jedna sušička.
+// Ve FLEXu a MAXu je strojů víc, takže půlka jede dál. Nájem, servis a splátky
+// běží vždycky celé — ty se za odstavený stroj neodpouštějí.
+var PORUCHA_CHOD = { mini: 0, flex: 0.5, max: 0.5 };
+// Závažnost je rovnou počet hodin opravy. Drobností je v seznamu nejvíc, takže
+// většina poruch vyjde na hodinu až tři.
+var ZAVADY = [
+  { zav: 1, text: 'Zasekl se mincovník' },
+  { zav: 1, text: 'Nejde platební terminál' },
+  { zav: 1, text: 'Vypadlo osvětlení' },
+  { zav: 1, text: 'Ucpaný filtr sušičky' },
+  { zav: 1, text: 'Zasekla se dávkovací pumpička' },
+  { zav: 2, text: 'Netěsní přívodní hadice' },
+  { zav: 2, text: 'Nedovírají dvířka pračky' },
+  { zav: 2, text: 'Vypadl jistič sušičky' },
+  { zav: 2, text: 'Nejde ohřev vody' },
+  { zav: 3, text: 'Vadné vypouštěcí čerpadlo' },
+  { zav: 3, text: 'Prasklý řemen bubnu' },
+  { zav: 3, text: 'Zavodnila se elektronika' },
+  { zav: 4, text: 'Shořel motor sušičky' },
+  { zav: 4, text: 'Rozbité ložisko bubnu' },
+  { zav: 5, text: 'Vytopená technická místnost' }
+];
+function jeVPoruse(u) { return !!(u && u.porucha); }
+// Kolik z plného provozu stroj zvládá, dokud není spravený.
+function chodStroje(u) {
+  if (!jeVPoruse(u)) return 1;
+  var k = PORUCHA_CHOD[u.eco && u.eco.model];
+  return k == null ? 0 : k;
+}
+function poruchy() { return (S.units || []).filter(jeVPoruse); }
+// Závada přibývá průběžně, ne v pevných intervalech — šance se počítá z toho,
+// kolik času uběhlo. Po dlouhé pauze strop hlídá, ať se nerozbije všechno naráz.
+function hlidejPoruchy(dt) {
+  if (!(dt > 0)) return;
+  var sance = Math.min(0.5, dt / (YEAR_MS / PORUCHA_ROCNE));
+  (S.units || []).forEach(function (u) {
+    if (jeVPoruse(u) || u.technik) return;
+    if (Math.random() >= sance) return;
+    var z = ZAVADY[Math.floor(Math.random() * ZAVADY.length)];
+    u.porucha = { od: Date.now(), zav: z.zav, text: z.text };
+    toast(u.name + ': ' + z.text.toLowerCase() + '. Pošli tam technika.', 'err');
+  });
+}
+// Kolik bude výjezd trvat, než ho hráč potvrdí.
+function vyjezdOdhad(u) {
+  var z = nejblizsiZakladna(u);
+  if (!z || z.zakladna.lat == null) return null;
+  var km = z.km;
+  // Půl hodiny má každá cesta i za rohem — technik musí naložit a vyjet.
+  // Bez toho by u blízkého stroje autíčko po mapě jen probliklo.
+  var jizda = Math.max(0.5, km / TECHNIK_KMH) * HODINA_MS;
+  var oprava = ((u.porucha && u.porucha.zav) || 1) * HODINA_MS;
+  return { zakladna: z.zakladna, km: km, jizda: jizda, oprava: oprava, celkem: 2 * jizda + oprava };
+}
+function vyslatTechnika(u) {
+  if (!u || !jeVPoruse(u) || u.technik) return;
+  var v = vyjezdOdhad(u);
+  if (!v) { toast('Nemáš základnu, odkud technika poslat.', 'err'); return; }
+  var ted = Date.now();
+  u.technik = {
+    z: { lat: v.zakladna.lat, lon: v.zakladna.lon, name: v.zakladna.name || 'sídlo' },
+    km: Math.round(v.km), start: ted, prijezd: ted + v.jizda,
+    hotovo: ted + v.jizda + v.oprava, navrat: ted + 2 * v.jizda + v.oprava
+  };
+  save(); paint(); drawMap(); drawAuta(); syncState(true);
+  toast('Technik vyjel, na místě bude ' + etaText(v.jizda) + '.', 'ok');
+}
+// Výjezdy posouvá čas: jakmile je oprava hotová, stroj zase jede; až se auto
+// vrátí na základnu, zmizí z mapy.
+function hlidejServis() {
+  var ted = Date.now();
+  (S.units || []).forEach(function (u) {
+    var t = u.technik;
+    if (!t) return;
+    if (ted >= t.hotovo && u.porucha) {
+      delete u.porucha;
+      toast(u.name + ' je spravený a zase vydělává.', 'ok');
+    }
+    if (ted >= t.navrat) delete u.technik;
+  });
+}
+// Bod mezi dvěma místy — odtud se bere poloha autíčka na mapě.
+function mezibod(a, b, t) {
+  t = Math.max(0, Math.min(1, t));
+  return { lat: a.lat + (b.lat - a.lat) * t, lon: a.lon + (b.lon - a.lon) * t };
+}
+// Kde je teď servisní auto: na cestě tam, u stroje, nebo na cestě zpátky.
+function autoPoloha(u) {
+  var t = u && u.technik;
+  if (!t || u.lat == null || t.z.lat == null) return null;
+  var ted = Date.now(), a = t.z, b = { lat: u.lat, lon: u.lon };
+  if (ted < t.prijezd) {
+    return mezibod(a, b, t.prijezd > t.start ? (ted - t.start) / (t.prijezd - t.start) : 1);
+  }
+  if (ted < t.hotovo) return { lat: b.lat, lon: b.lon, opravuje: true };
+  if (ted < t.navrat) {
+    return mezibod(b, a, t.navrat > t.hotovo ? (ted - t.hotovo) / (t.navrat - t.hotovo) : 1);
+  }
+  return null;
+}
 function connPrice(sp, modelKey) {
   var base = CONN_MIN + spotHash(sp.id, 'c') * (CONN_MAX - CONN_MIN);
   if (modelKey === 'max') base *= CONN_MAX_MULT;
@@ -1000,14 +1111,23 @@ function refreshUnits() {
   (S.units || []).forEach(function (u) {
     var m = MODELS[u.eco.model]; if (!m) return;
     var perday = m.perday * placeFactor(u.score) * traffic();
-    var revenue = Math.round(perday * 30.5 * m.spend * EUR);
-    u.eco.perday = Math.round(perday * 10) / 10;
+    var plne = Math.round(perday * 30.5 * m.spend * EUR);
+    // Porouchaný stroj nevydělává (nebo jen půlku), ale servis a nájem běží dál.
+    // Z výjezdů technika se platí právě ten servisní poplatek, takže ten
+    // počítáme pořád z plného obratu. Energie jde dolů s tím, co opravdu běží.
+    var chod = chodStroje(u);
+    var revenue = Math.round(plne * chod);
+    u.eco.chod = chod;
+    u.eco.perday = Math.round(perday * chod * 10) / 10;
     u.eco.revenue = revenue;
     u.eco.energy = Math.round(revenue * ENERGY_SHARE);
-    u.eco.servis = Math.round(revenue * SERVIS_SHARE);
+    u.eco.servis = Math.round(plne * SERVIS_SHARE);
     u.eco.cost = u.eco.energy + u.eco.servis + u.eco.rent;
     u.eco.profit = revenue - u.eco.cost;
-    u.eco.payback = u.eco.profit > 0 ? u.eco.invest / (u.eco.profit * 12) : null;
+    // Zisk, kdyby stroj jel naplno. Podle něj počítáme návratnost a co už místo
+    // vydělalo — jinak by týdenní porucha přepisovala celá léta provozu.
+    u.eco.ziskPlny = plne - (Math.round(plne * ENERGY_SHARE) + u.eco.servis + u.eco.rent);
+    u.eco.payback = u.eco.ziskPlny > 0 ? u.eco.invest / (u.eco.ziskPlny * 12) : null;
   });
 }
 function monthlyProfit() { return S.units.reduce(function (a, u) { return a + u.eco.profit; }, 0); }
@@ -1127,6 +1247,8 @@ function tick() {
     hlidejKrach();
   }
   deliverOrders();
+  hlidejPoruchy(dt);
+  hlidejServis();
   zapisHistorii();
 }
 
@@ -1181,6 +1303,7 @@ function dripTick() {
     drip.pay -= kolikP;
   }
   hlavickaDrip();
+  if (!$('v-map').classList.contains('hidden')) { drawAuta(); paintVady(); }
 }
 // Nad hotovostí probléskne, o kolik se právě změnila — ať už přitečla po
 // kapkách, nebo odtečla naráz.
@@ -1383,6 +1506,7 @@ function addBasemap() {
     if (tileErrs > 6 && baseIdx < BASEMAPS.length - 1) { baseIdx++; addBasemap(); }
   });
 }
+var autaLayer = null;
 function initMap() {
   if (map) return;
   // Mapa jede z CDN. Když se nenačte (slabá síť, blokovaný skript), hra musí běžet dál
@@ -1402,7 +1526,9 @@ function initMap() {
   L.control.zoom({ position: 'bottomright' }).addTo(map);
   addAttribution();
   layer = L.layerGroup().addTo(map);
+  autaLayer = L.layerGroup().addTo(map);
   drawMap();
+  drawAuta();
 }
 // Podpis zdroje map schovaný do malého „i". Po klepnutí se rozbalí.
 function addAttribution() {
@@ -1420,6 +1546,25 @@ function addAttribution() {
   new C().addTo(map);
 }
 // Sídlo a pobočky na mapě. Sídlo má větší domeček, provozovna menší.
+// Servisní auto jezdí po mapě každou vteřinu, takže má vlastní vrstvu — není
+// proč kvůli němu překreslovat všechny pinŭky.
+function autoIcon(opravuje) {
+  return L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15],
+    html: '<div class="pin auto' + (opravuje ? ' dela' : '') + '">'
+      + (opravuje ? '\uD83D\uDD27' : '\uD83D\uDE90') + '</div>' });
+}
+function drawAuta() {
+  if (!map || typeof L === 'undefined') return;
+  if (!autaLayer) autaLayer = L.layerGroup().addTo(map);
+  autaLayer.clearLayers();
+  (S.units || []).forEach(function (u) {
+    var p = autoPoloha(u);
+    if (!p) return;
+    L.marker([p.lat, p.lon], { icon: autoIcon(p.opravuje), zIndexOffset: 1000 })
+      .addTo(autaLayer)
+      .on('click', function () { unitSheet(u); });
+  });
+}
 function domIcon(velke, nazev) {
   var r = velke ? 38 : 28;
   return L.divIcon({ className: '', iconSize: [r, r], iconAnchor: [r / 2, r / 2],
@@ -1453,14 +1598,53 @@ function rivalIcon(c) {
 // na mapě je tak na první pohled vidět, jestli je to MINI, FLEX nebo MAX.
 function unitIcon(u) {
   var im = MODEL_IMG[u.eco && u.eco.model] || MODEL_IMG.flex;
+  var vada = jeVPoruse(u);
   return L.divIcon({ className: '', iconSize: [44, 44], iconAnchor: [22, 22],
-    html: '<div class="pin unit" data-unit="' + esc(u.spotId) + '">'
+    html: '<div class="pin unit' + (vada ? ' vada' : '') + '" data-unit="' + esc(u.spotId) + '">'
       + '<img src="' + esc(im.src) + '" alt="">'
-      + '<i class="pin-tag">' + esc(MODELS[u.eco && u.eco.model] ? MODELS[u.eco.model].name : '') + '</i></div>' });
+      + (vada ? '<i class="pin-vada">!</i>' : '')
+      + '<i class="pin-tag">' + esc(vada ? u.porucha.text
+          : (MODELS[u.eco && u.eco.model] ? MODELS[u.eco.model].name : '')) + '</i></div>' });
 }
 // Z dálky mají v mapě být jen prádlomaty, sídlo a pobočky. Volná místa je
 // v tomhle měřítku stejně nejde rozlišit — slepí se do hromádky otačníků.
 var MISTA_ZOOM = 14;
+// Proužek nad mapou: co právě stojí a kam už technik jede. Odtud se také
+// výjezd posílá — hráč nemusí hledat piník na mapě.
+function vadaRadek(u) {
+  var t = u.technik;
+  if (t) {
+    var ted = Date.now();
+    var stav = ted < t.prijezd ? 'technik je na cestě, přijede ' + etaText(t.prijezd - ted)
+      : (ted < t.hotovo ? 'technik na místě, hotovo ' + etaText(t.hotovo - ted)
+        : 'spraveno, technik jede zpátky');
+    return '<div class="vada-radek"><span><b>' + esc(u.name) + '</b> ' + esc(stav) + '</span></div>';
+  }
+  var v = vyjezdOdhad(u);
+  return '<div class="vada-radek"><span><b>' + esc(u.name) + '</b> ' + esc(u.porucha.text)
+    + (v ? ' — ' + Math.round(v.km) + ' km, oprava na ' + u.porucha.zav + ' h' : '') + '</span>'
+    + '<button class="btn sec maly" data-vada="' + esc(u.spotId) + '">Vyslat technika</button></div>';
+}
+function paintVady() {
+  var el = $('map-vada');
+  if (!el) return;
+  var vadne = (S.units || []).filter(function (u) { return jeVPoruse(u) || u.technik; });
+  if (!vadne.length) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  // Nejdřív to, co ještě stojí bez technika — to hráče stále stává peníze.
+  vadne.sort(function (a, b) { return (a.technik ? 1 : 0) - (b.technik ? 1 : 0); });
+  var stoji = vadne.filter(jeVPoruse).length;
+  el.innerHTML = '<p class="vada-hlava">' + (stoji
+      ? '⚠️ ' + stoji + ' ' + mn(stoji, 'prádlomat stojí', 'prádlomaty stojí', 'prádlomatů stojí')
+      : '🔧 Servis to dodělává') + '</p>'
+    + vadne.slice(0, 4).map(vadaRadek).join('')
+    + (vadne.length > 4 ? '<p class="fine">… a další ' + (vadne.length - 4) + '</p>' : '');
+  el.classList.remove('hidden');
+  [].forEach.call(el.querySelectorAll('[data-vada]'), function (b) {
+    b.onclick = function () {
+      vyslatTechnika((S.units || []).filter(function (u) { return u.spotId === b.getAttribute('data-vada'); })[0]);
+    };
+  });
+}
 function drawMap() {
   if (!layer) return;
   layer.clearLayers();
@@ -1510,6 +1694,7 @@ function drawMap() {
       + skryto + '. Ze seznamu oblastí tě hra skočí rovnou k nim.';
     h.classList.remove('hidden');
   } else h.classList.add('hidden');
+  paintVady();
 }
 // Panel cizího prádlomatu v neprozkoumaném městě.
 function cizi(c) {
@@ -2152,26 +2337,59 @@ function mistoUverHtml(u) {
           : 'Tohle místo na svou splátku nevydělá a doplácíš na něj z ostatních.')
     + ' Zbývá splatit ' + kcFull(l.zbyva) + ', ještě ' + (l.zbyvaMesicu || 0) + ' měsíců.</p>';
 }
+// Co se o závadě píše v panelu místa — včetně toho, o kolik tržeb hráč přichází.
+function poruchaHtml(u) {
+  if (!jeVPoruse(u) && !u.technik) return '';
+  var t = u.technik, ted = Date.now();
+  if (jeVPoruse(u)) {
+    var chod = chodStroje(u);
+    var v = t ? null : vyjezdOdhad(u);
+    return '<div class="card vada-karta"><div class="row"><h3>⚠️ ' + esc(u.porucha.text) + '</h3>'
+      + '<b class="err">' + (chod ? 'půl provozu' : 'stojí') + '</b></div>'
+      + '<p class="muted small" style="margin:4px 0 8px">'
+      + (chod ? 'Část strojů jede dál, ale tržba je na polovině. '
+              : 'Prádlomat nevydělává vůbec nic. ')
+      + 'Nájem, servis i splátka běží dál — výjezd technika už máš v servisním poplatku zaplacený.</p>'
+      + (t
+          ? '<div class="kv"><span>Technik</span><b>' + esc(ted < t.prijezd
+              ? 'na cestě, přijede ' + etaText(t.prijezd - ted)
+              : 'na místě, hotovo ' + etaText(t.hotovo - ted)) + '</b></div>'
+          : (v
+              ? '<div class="kv"><span>Odkud pojede</span><b>' + esc(v.zakladna.name || 'základna') + '</b></div>'
+                + '<div class="kv"><span>Vzdálenost</span><b>' + Math.round(v.km) + ' km</b></div>'
+                + '<div class="kv"><span>Cesta a oprava</span><b>' + etaText(v.celkem).replace('za ', '') + '</b></div>'
+                + '<button class="btn big" id="do-technik" style="width:100%;margin-top:10px">Vyslat technika</button>'
+              : '<p class="fine err">Nemáš základnu, odkud technika poslat.</p>'))
+      + '</div>';
+  }
+  return '<div class="card vada-karta"><div class="row"><h3>🔧 Spraveno</h3>'
+    + '<b class="ok">zase jede</b></div>'
+    + '<p class="muted small" style="margin:4px 0 0">Technik jede zpátky na základnu.</p></div>';
+}
 function unitSheet(u) {
   var years = (Date.now() - u.builtAt) / YEAR_MS;
   sheet('<h3>' + esc(u.name) + '</h3>'
     + '<p class="muted small">' + esc(KIND_LABEL[u.kind] || 'Místo') + ' · ' + MODELS[u.eco.model].name + ' · v provozu ' + years.toFixed(1).replace('.', ',') + ' roku</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(u.score) + '</div>'
+    + poruchaHtml(u)
     + '<h3 style="margin:16px 0 4px">Co to měsíčně dělá</h3>'
     + '<div class="kv"><span>Obrat</span><b>' + kcFull(u.eco.revenue) + '</b></div>'
     + (u.eco.rent != null ? '<div class="kv"><span>− Nájem</span><b class="warn">' + kcFull(u.eco.rent) + '</b></div>' : '')
     + (u.eco.energy != null ? '<div class="kv"><span>− Energie (' + pct(ENERGY_SHARE) + ' obratu)</span><b class="warn">' + kcFull(u.eco.energy) + '</b></div>' : '')
     + (u.eco.servis != null ? '<div class="kv"><span>− Servis a úklid (' + pct(SERVIS_SHARE) + ' obratu)</span><b class="warn">' + kcFull(u.eco.servis) + '</b></div>' : '')
-    + '<div class="kv souhrn"><span>Provozní zisk</span><b class="ok">' + kcFull(u.eco.profit) + '</b></div>'
+    + '<div class="kv souhrn"><span>Provozní zisk</span><b class="'
+      + (u.eco.profit >= 0 ? 'ok' : 'err') + '">' + kcFull(u.eco.profit) + '</b></div>'
     + mistoUverHtml(u)
     + '<h3 style="margin:16px 0 4px">Souhrn</h3>'
     + '<div class="kv"><span>Investice</span><b>' + kcFull(u.eco.invest) + '</b></div>'
-    + '<div class="kv"><span>Vydělal celkem</span><b>' + kcFull(u.eco.profit * 12 * years) + '</b></div>'
-    + (u.eco.profit > 0 ? '<div class="kv"><span>Návratnost</span><b>'
-      + (u.eco.invest / (u.eco.profit * 12)).toFixed(1).replace('.', ',') + ' roku</b></div>' : '')
+    + '<div class="kv"><span>Vydělal celkem</span><b>' + kcFull(u.eco.ziskPlny * 12 * years) + '</b></div>'
+    + (u.eco.ziskPlny > 0 ? '<div class="kv"><span>Návratnost</span><b>'
+      + (u.eco.invest / (u.eco.ziskPlny * 12)).toFixed(1).replace('.', ',') + ' roku</b></div>' : '')
     + '<p class="muted small" style="margin-top:14px">Když je jinde líp, místo vypovíš a stroj si odvezeš na sklad. '
     + 'Přípojky ani domluvený nájem se nevracejí a místo se hned uvolní konkurenci.</p>'
     + '<button class="btn sec" id="do-release" style="width:100%">Vypovědět místo</button>');
+  var tb = $('do-technik');
+  if (tb) tb.onclick = function () { vyslatTechnika(u); closeSheet(); switchTab('map'); };
   var rb = $('do-release');
   if (rb) rb.onclick = function () {
     if (rb.getAttribute('data-sure') !== '1') {

@@ -113,6 +113,23 @@ button{font:inherit;cursor:pointer}
   color:var(--text);padding:12px 13px;font:inherit;font-size:16px;outline:none}
 .inp:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(79,209,255,.14)}
 .empty{text-align:center;color:var(--text3);padding:34px 16px;font-size:13.5px}
+/* Proužek nad mapou s poruchami. Sedí pod hlavičkou a mapa pod ním běží dál. */
+.map-vrstva{position:absolute;left:10px;right:10px;top:10px;z-index:500;
+  display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.map-vrstva>*{pointer-events:auto}
+.map-vrstva .map-hint,.map-vrstva .map-vada{position:static;left:auto;right:auto;top:auto}
+.map-vada{background:rgba(8,13,26,.94);border:1px solid rgba(255,93,108,.5);border-radius:14px;
+  padding:10px 12px;backdrop-filter:blur(10px);box-shadow:0 10px 26px rgba(0,0,0,.5)}
+.vada-hlava{margin:0 0 6px;font-size:13px;font-weight:800;color:var(--err)}
+.vada-radek{display:flex;align-items:center;gap:10px;justify-content:space-between;
+  font-size:12.5px;color:var(--text2);padding:4px 0}
+.vada-radek+.vada-radek{border-top:1px solid var(--border)}
+.vada-radek b{color:var(--text)}
+.vada-radek span{min-width:0}
+.btn.sec.maly{flex:none;padding:5px 10px;font-size:12px;border-radius:9px}
+/* Závada v panelu místa. */
+.vada-karta{border-color:rgba(255,93,108,.45);background:rgba(40,14,22,.5)}
+
 .pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid var(--border2);color:var(--text2)}
 .pill.good{color:var(--ok);border-color:rgba(47,227,160,.5)}
 .pill.mid{color:var(--warn);border-color:rgba(255,216,102,.5)}
@@ -165,6 +182,19 @@ button{font:inherit;cursor:pointer}
 .pin.known{background:#1e86e0;color:#fff}
 .pin.mine{background:var(--ok);color:#04301f}
 .leaflet-container{background:#0a1120;font:inherit}
+/* Porouchaný prádlomat: červený rámeček a vykřičník, pod ním místo názvu modelu
+   rovnou, co se stalo. */
+.pin.unit.vada{border-color:rgba(255,93,108,.95)}
+.pin.unit.vada img{filter:grayscale(.75) brightness(.72)}
+.pin.unit.vada .pin-tag{background:var(--err);color:#2b0409}
+.pin-vada{position:absolute;right:-5px;top:-5px;width:19px;height:19px;border-radius:50%;
+  background:var(--err);color:#2b0409;font-style:normal;font-weight:900;font-size:13px;
+  line-height:19px;text-align:center;border:2px solid #0b1424;animation:vada-tep 1.4s infinite}
+@keyframes vada-tep{0%,100%{transform:scale(1)}50%{transform:scale(1.22)}}
+/* Servisní auto. Nemá kočečko ani rámeček, ať je vidět, že jede. */
+.pin.auto{background:rgba(11,20,36,.9);border-color:var(--warn);font-size:16px}
+.pin.auto.dela{border-color:var(--ok);animation:vada-tep 1.1s infinite}
+
 
 /* ─── Hláška ─── */
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(78px + var(--safe-b));z-index:1000;
