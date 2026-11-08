@@ -363,6 +363,17 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .zeb-row b{font-variant-numeric:tabular-nums;font-size:14px}
 /* V žebříčku je hlavní firma, nick drobně pod ní. */
 .zeb-row .nick i{display:block;font-style:normal;font-size:11px;color:var(--text3)}
+/* Řádka země: velká vlaječka místo znaku firmy a pod názvem rozpis po modelích.
+   Nuly jsou šedé, ať je na první pohled vidět, co v té zemi opravdu stojí. */
+.zeb-row .zeb-vlaj{flex:0 0 28px;width:28px;text-align:center;font-style:normal;font-size:21px;
+  line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+.zeb-row.zeme .nick{font-weight:600}
+.zeme-mod{display:flex!important;flex-wrap:wrap;gap:5px;align-items:center;margin-top:3px}
+.zeme-mod i{font-style:normal;font-size:10px;letter-spacing:.04em;padding:1px 5px;border-radius:5px;
+  border:1px solid var(--border);font-variant-numeric:tabular-nums}
+.zeme-mod i.je{color:var(--text2);background:var(--card2)}
+.zeme-mod i.nic{color:var(--text3);opacity:.5}
+.zeme-mod b{font-size:10.5px;font-weight:500;color:var(--text3)}
 
 /* Burza — sedmá záložka, proto menší písmo v liště. */
 .tabs button{font-size:9.5px}

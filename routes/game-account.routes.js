@@ -854,16 +854,40 @@ function moje(list, id) {
   const i = list.findIndex((x) => x.id === id);
   return i < 0 ? null : { poradi: i + 1, hodnota: list[i].hodnota, z: list.length };
 }
+// Kolik prádlomatů stojí v které zemi a jakých modelů — přes všechny hráče.
+// Země se bere z města, ve kterém místo leží; města bez známé země vypadnou.
+async function zemeSPocty() {
+  const [zabory, mesta] = await Promise.all([
+    prisma.gameSpotClaim.findMany({ select: { area_key: true, model: true, player_id: true } }),
+    prisma.gameArea.findMany({ where: { country: { not: null } }, select: { key: true, country: true } }),
+  ]);
+  const kod = {};
+  mesta.forEach((m) => { if (m.country && m.country !== 'xx') kod[m.key] = m.country; });
+  const out = {};
+  zabory.forEach((z) => {
+    const cc = kod[z.area_key];
+    if (!cc) return;
+    const r = out[cc] || (out[cc] = { kod: cc, mini: 0, flex: 0, max: 0, celkem: 0, hraci: new Set() });
+    const m = String(z.model || 'mini').toLowerCase();
+    if (m === 'flex' || m === 'max') r[m] += 1; else r.mini += 1;
+    r.celkem += 1;
+    r.hraci.add(z.player_id);
+  });
+  return Object.keys(out).map((k) => ({ kod: out[k].kod, mini: out[k].mini, flex: out[k].flex,
+    max: out[k].max, celkem: out[k].celkem, hracu: out[k].hraci.size }))
+    .sort((a, b) => b.celkem - a.celkem || a.kod.localeCompare(b.kod));
+}
+
 router.get('/leaderboard', async (req, res, next) => {
   try {
     const p = await currentPlayer(req);
-    const z = await zebricky();
+    const [z, zeme] = await Promise.all([zebricky(), zemeSPocty()]);
     const orez = (l) => l.slice(0, ZEB_TOP).map((x, i) => ({ poradi: i + 1, nick: x.nick,
       firma: x.firma || (x.nick + ' s.r.o.'), znak: x.znak || null, zeme: x.zeme || [],
       hodnota: x.hodnota, ja: !!(p && x.id === p.id) }));
     res.json({ ok: true,
       pradlomaty: orez(z.pradlomaty), zisk: orez(z.zisk), pozvanky: orez(z.pozvanky),
-      jmeni: orez(z.jmeni), hvezdy: orez(z.hvezdy),
+      jmeni: orez(z.jmeni), hvezdy: orez(z.hvezdy), zeme: zeme,
       ja: p ? { pradlomaty: moje(z.pradlomaty, p.id), zisk: moje(z.zisk, p.id),
         pozvanky: moje(z.pozvanky, p.id), jmeni: moje(z.jmeni, p.id),
         hvezdy: moje(z.hvezdy, p.id) } : null,

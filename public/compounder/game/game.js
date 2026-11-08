@@ -3704,6 +3704,9 @@ var ZEB_POPIS = {
       + 'Kdo ještě žádný hovor neměl, v žebříčku není.' },
   pozvanky: { nadpis: 'Nejvíc pozvánek', jed: function (v) { return v + '×'; },
     pod: 'Kolikrát někdo otevřel sdílený odkaz hráče.' },
+  zeme: { nadpis: 'Prádlomaty po zemích', jed: function (v) { return v + '×'; },
+    pod: 'Kolik prádlomatů stojí v které zemi — všech hráčů dohromady, '
+      + 'rozepsané po modelích.' },
   jmeni: { nadpis: 'Největší čisté jmění', jed: function (v) { return kcFull(v); },
     pod: 'Co hráč má, minus co dluží: prádlomaty, stroje skladem, pobočky a technika '
       + 'v pořizovací ceně, plus hotovost, minus úvěr. V minusu se může být.' }
@@ -3711,7 +3714,8 @@ var ZEB_POPIS = {
 function loadZeb() {
   // Při výpadku nastavíme prázdný žebříček — jinak by panel zůstal viset
   // na „Načítám…" a hráč by nevěděl, že se něco pokazilo.
-  var prazdny = { pradlomaty: [], zisk: [], pozvanky: [], jmeni: [], ja: null, hracu: 0, chyba: true };
+  var prazdny = { pradlomaty: [], zisk: [], pozvanky: [], jmeni: [], hvezdy: [], zeme: [],
+    ja: null, hracu: 0, chyba: true };
   return api('/leaderboard')
     .then(function (r) { ZEB = r.ok ? r.j : prazdny; })
     .catch(function () { ZEB = prazdny; });
@@ -3741,10 +3745,37 @@ function vlajkyHtml(zeme) {
   return '<i class="vlajky" title="' + esc(z.map(zemeNazev).join(', ')) + '">'
     + z.map(function (k) { return '<i>' + vlajka(k) + '</i>'; }).join('') + '</i>';
 }
+// Čeština má tři tvary — jeden hráč, dva hráči, pět hráčů.
+function hracuSlovy(n) {
+  return n + (n === 1 ? ' hráč' : (n >= 2 && n <= 4 ? ' hráči' : ' hráčů'));
+}
+// Země místo hráčů: vlaječka, název, rozpis po modelích a celkový počet.
+function zemeRadek(z) {
+  var mod = ['mini', 'flex', 'max'].map(function (k) {
+    return '<i class="' + (z[k] ? 'je' : 'nic') + '">' + k.toUpperCase() + ' ' + (z[k] || 0) + '</i>';
+  }).join('');
+  return '<div class="zeb-row zeme">'
+    + '<i class="zeb-vlaj">' + (vlajka(z.kod) || esc(String(z.kod || '').toUpperCase())) + '</i>'
+    + '<span class="nick">' + esc(zemeNazev(z.kod))
+    + '<i class="zeme-mod">' + mod + '<b>' + hracuSlovy(z.hracu) + '</b></i></span>'
+    + '<b>' + z.celkem + '×</b></div>';
+}
 function paintZeb() {
   var box = $('zeb-body');
   if (!ZEB) { box.innerHTML = '<p class="muted small">Načítám…</p>'; return loadZeb().then(paintZeb); }
   var list = ZEB[ZEB_KAT] || [], popis = ZEB_POPIS[ZEB_KAT];
+  if (ZEB_KAT === 'zeme') {
+    box.innerHTML = '<h3 style="margin:14px 0 2px">' + popis.nadpis + '</h3>'
+      + '<p class="muted small" style="margin:0 0 10px">' + popis.pod + '</p>'
+      + (list.length
+        ? '<div class="zeb">' + list.map(zemeRadek).join('') + '</div>'
+        : '<div class="empty">' + (ZEB.chyba
+            ? 'Žebříček se nepodařilo načíst. Zkus to za chvíli.'
+            : 'Zatím nikde nic nestojí.') + '</div>')
+      + (list.length ? '<p class="fine">Celkem ' + list.reduce(function (a, z) { return a + z.celkem; }, 0)
+          + ' prádlomatů v ' + list.length + (list.length === 1 ? ' zemi.' : (list.length <= 4 ? ' zemích.' : ' zemích.')) + '</p>' : '');
+    return;
+  }
   var ja = ZEB.ja ? ZEB.ja[ZEB_KAT] : null;
   box.innerHTML = '<h3 style="margin:14px 0 2px">' + popis.nadpis + '</h3>'
     + '<p class="muted small" style="margin:0 0 10px">' + popis.pod + '</p>'
