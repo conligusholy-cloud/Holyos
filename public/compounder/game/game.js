@@ -452,6 +452,7 @@ function hlidejPoruchy(dt) {
     if (Math.random() >= sance) return;
     var z = ZAVADY[Math.floor(Math.random() * ZAVADY.length)];
     u.porucha = { od: Date.now(), zav: z.zav, text: z.text };
+    u.vady = (u.vady || 0) + 1;
     toast(u.name + ': ' + z.text.toLowerCase() + '. Pošli tam technika.', 'err');
   });
 }
@@ -487,6 +488,8 @@ function hlidejServis() {
     var t = u.technik;
     if (!t) return;
     if (ted >= t.hotovo && u.porucha) {
+      // Kolik času stroj celkem prostál — z toho je pak výpis spolehlivosti.
+      u.vadyMs = (u.vadyMs || 0) + Math.max(0, ted - (u.porucha.od || ted));
       delete u.porucha;
       toast(u.name + ' je spravený a zase vydělává.', 'ok');
     }
@@ -887,6 +890,22 @@ function stropPodleZisku(zisk, odhadCastky) {
 }
 
 // Úvěr, který patří ke konkrétnímu místu.
+// Splátka, která na tom místě visí. Místo bez úvěru nesplaci nic.
+function splatkaMista(u) {
+  var l = uverMista(u);
+  if (!l) return 0;
+  return Math.min(l.splatka, l.zbyva + l.zbyva * l.sazba / 12);
+}
+// Co z místa zbyde, když se zaplatí jeho vlastní úvěr.
+function zbydeZMista(u) { return Math.round(u.eco.profit - splatkaMista(u)); }
+// Kolik času od postavení stroj šlapal bez poruchy. Právě probíhající porucha
+// se počítá taky — jinak by číslo stálo, dokud hráč nepošle technika.
+function spolehlivost(u) {
+  var zije = Date.now() - (u.builtAt || Date.now());
+  if (!(zije > 0)) return 1;
+  var mimo = (u.vadyMs || 0) + (u.porucha ? Date.now() - (u.porucha.od || Date.now()) : 0);
+  return Math.max(0, Math.min(1, 1 - mimo / zije));
+}
 function uverMista(u) {
   if (!u || !S.loans) return null;
   return S.loans.filter(function (l) { return l.spotId && l.spotId === u.spotId; })[0] || null;
@@ -2676,6 +2695,7 @@ function paint() {
   if (!$('v-net').classList.contains('hidden')) {
     if (!$('net-zebricek').classList.contains('hidden')) paintZeb();
     else if (!$('net-vyvoj').classList.contains('hidden')) paintVyvoj();
+    else if (!$('net-stroje').classList.contains('hidden')) paintStroje();
     else paintNet();
   }
   if (!$('v-bank').classList.contains('hidden')) paintBank();
@@ -2750,10 +2770,12 @@ function netZalozka(kam) {
     x.classList.toggle('on', x.getAttribute('data-net') === kam);
   });
   $('net-moje').classList.toggle('hidden', kam !== 'moje');
+  $('net-stroje').classList.toggle('hidden', kam !== 'stroje');
   $('net-vyvoj').classList.toggle('hidden', kam !== 'vyvoj');
   $('net-zebricek').classList.toggle('hidden', kam !== 'zebricek');
   if (kam === 'zebricek') { ZEB = null; paintZeb(); }
   else if (kam === 'vyvoj') paintVyvoj();
+  else if (kam === 'stroje') paintStroje();
   else paintNet();
 }
 // Souhrnný graf: tržby, zisk a to, co každý měsíc odteče, v jedné ose. Mezera
@@ -2908,6 +2930,81 @@ function paintVyvoj() {
           + 'co už máš splacené, v ní nejsou, takže dluh vzadu vychází níž.'
         : '')
     + '</p>';
+}
+// ─── Žebříček vlastních strojů ──────────────────────────────────────
+// Které místo táhne a které se jen veze. Řadí se podle vybraného sloupce, ale
+// každá řádka ukáže všechno podstatné najednou, ať se nemusí přebírat záložkami.
+var STROJE_KAT = 'zisk';
+var STROJE_POPIS = {
+  zisk: { nadpis: 'Co který stroj vydělá', vic: 'nejvíc nahoře',
+    pod: 'Zisk místa po zaplacení jeho vlastní splátky — to, co ti z něj opravdu zbyde.',
+    hodnota: function (u) { return zbydeZMista(u); }, jed: kcFull, dolu: false,
+    shrn: function (a, b) { return 'Nejvíc vydělá ' + a + ', nejméně ' + b + '.'; } },
+  trzby: { nadpis: 'Největší tržby', vic: 'nejvíc nahoře',
+    pod: 'Co stroj za měsíc vybere, než se z toho zaplatí energie, servis a nájem.',
+    hodnota: function (u) { return u.eco.revenue; }, jed: kcFull, dolu: false,
+    shrn: function (a, b) { return 'Největší tržbu má ' + a + ', nejmenší ' + b + '.'; } },
+  poruchy: { nadpis: 'Nejvíc poruch', vic: 'nejhorší nahoře',
+    pod: 'Kolikrát se stroj od postavení porouchal. Vedle je, kolik času od té doby šlapal bez závady.',
+    hodnota: function (u) { return u.vady || 0; },
+    jed: function (n) { return n + '×'; }, dolu: false,
+    shrn: function (a, b) { return 'Nejvíc poruch má ' + a + ', nejméně ' + b + '.'; } },
+  navratnost: { nadpis: 'Nejrychlejší návratnost', vic: 'nejkratší nahoře',
+    pod: 'Za jak dlouho se investice do místa vrátí při plném provozu. Kratší je lepší.',
+    hodnota: function (u) { return u.eco.payback == null ? 1e9 : u.eco.payback; },
+    jed: function (v) { return v >= 1e8 ? '—' : v.toFixed(1).replace('.', ',') + ' roku'; }, dolu: true,
+    shrn: function (a, b) { return 'Nejrychleji se vrátí ' + a + ', nejpomaleji ' + b + '.'; } }
+};
+function strojRadek(u, i) {
+  var popis = STROJE_POPIS[STROJE_KAT];
+  var im = MODEL_IMG[u.eco && u.eco.model] || MODEL_IMG.flex;
+  var m = MODELS[u.eco && u.eco.model];
+  var vada = jeVPoruse(u);
+  var spl = Math.round(spolehlivost(u) * 100);
+  var hod = popis.hodnota(u);
+  var zisk = zbydeZMista(u);
+  // Pod názvem jedna řádka se vším podstatným — model, tržba, poruchy, spolehlivost.
+  var vady = u.vady || 0;
+  var detail = (m ? m.name : '') + ' · tržba ' + kc(u.eco.revenue)
+    + ' · ' + vady + ' ' + mn(vady, 'porucha', 'poruchy', 'poruch')
+    + ' · bez závady ' + spl + ' %';
+  return '<div class="zeb-row stroj' + (vada ? ' vada' : '') + '" data-stroj-id="' + esc(u.spotId) + '">'
+    + '<i class="poradi' + (i < 3 ? ' medaile m' + (i + 1) : '') + '">' + (i + 1) + '</i>'
+    + '<img class="stroj-foto" src="' + esc(im.src) + '" alt="">'
+    + '<span class="nick">' + esc(u.name) + (vada ? ' <em class="vada-znak">⚠️</em>' : '')
+    + '<i>' + esc(detail) + '</i></span>'
+    + '<b class="' + (STROJE_KAT === 'zisk' ? (zisk >= 0 ? 'ok' : 'err')
+        : (STROJE_KAT === 'poruchy' && hod ? 'warn' : '')) + '">' + popis.jed(hod) + '</b></div>';
+}
+function paintStroje() {
+  var box = $('stroje-body');
+  if (!box) return;
+  var popis = STROJE_POPIS[STROJE_KAT] || STROJE_POPIS.zisk;
+  var list = (S.units || []).slice().sort(function (a, b) {
+    var r = popis.hodnota(b) - popis.hodnota(a);
+    if (popis.dolu) r = -r;
+    return r || (a.builtAt || 0) - (b.builtAt || 0);
+  });
+  if (!list.length) {
+    box.innerHTML = '<div class="empty">Zatím nemáš ani jeden prádlomat.<br>'
+      + 'Začni tím, že na mapě prozkoumáš oblast.</div>';
+    return;
+  }
+  var vad = list.reduce(function (a, u) { return a + (u.vady || 0); }, 0);
+  var nej = list[0], posl = list[list.length - 1];
+  box.innerHTML = '<h3 style="margin:14px 0 2px">' + popis.nadpis
+    + ' <span class="muted small" style="font-weight:600">(' + popis.vic + ')</span></h3>'
+    + '<p class="muted small" style="margin:0 0 10px">' + popis.pod + '</p>'
+    + '<div class="zeb">' + list.map(strojRadek).join('') + '</div>'
+    + '<p class="fine" style="margin-top:12px">Dohromady ' + list.length + ' '
+    + mn(list.length, 'stroj', 'stroje', 'strojů') + ' a ' + vad + ' '
+    + mn(vad, 'porucha', 'poruchy', 'poruch') + ' od postavení.'
+    + (list.length > 1 && popis.hodnota(nej) !== popis.hodnota(posl)
+        ? ' ' + popis.shrn(esc(nej.name), esc(posl.name)) : '')
+    + '</p>';
+  [].forEach.call(box.querySelectorAll('[data-stroj-id]'), function (r) {
+    r.onclick = function () { unitSheet(najdiJednotku(r.getAttribute('data-stroj-id'))); };
+  });
 }
 // ─── Žebříčky ────────────────────────────────────────────────────────────────
 var ZEB = null, ZEB_KAT = 'pradlomaty';
@@ -3137,9 +3234,8 @@ function paintNet() {
         var l = uverMista(u);
         if (!l) return '<div class="row"><span class="muted small">Zisk / měsíc</span><b class="ok">' + kcFull(u.eco.profit) + '</b></div></div>';
         // Místo na dluh: číslo před splátkou je jen mezikrok, rozhoduje to pod ním.
-        var urok = l.zbyva * l.sazba / 12;
-        var splatka = Math.min(l.splatka, l.zbyva + urok);
-        var cisty = u.eco.profit - splatka;
+        var splatka = splatkaMista(u);
+        var cisty = zbydeZMista(u);
         return '<div class="row"><span class="muted small">Zisk před splátkou</span><b>' + kcFull(u.eco.profit) + '</b></div>'
           + '<div class="row"><span class="muted small">− Splátka úvěru</span><b class="warn">' + kcFull(Math.round(splatka)) + '</b></div>'
           + '<div class="row"><span class="muted small">Zbyde z místa</span><b class="' + (cisty >= 0 ? 'ok' : 'err') + '">'
@@ -4371,6 +4467,13 @@ $('burza-nova').onclick = novaNabidkaSheet;
 [].forEach.call(document.querySelectorAll('[data-mapa]'), function (b) {
   b.classList.toggle('on', (b.getAttribute('data-mapa') === 'moje') === MAPA_MOJE);
   b.onclick = function () { mapaPohled(b.getAttribute('data-mapa') === 'moje'); };
+});
+[].forEach.call(document.querySelectorAll('[data-stroj]'), function (b) {
+  b.onclick = function () {
+    STROJE_KAT = b.getAttribute('data-stroj');
+    [].forEach.call(document.querySelectorAll('[data-stroj]'), function (x) { x.classList.toggle('on', x === b); });
+    paintStroje();
+  };
 });
 [].forEach.call(document.querySelectorAll('[data-zeb]'), function (b) {
   b.onclick = function () {

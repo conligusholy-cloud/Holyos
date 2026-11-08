@@ -398,6 +398,22 @@ button{font:inherit;cursor:pointer}
 .znak-opt.on { border-color: var(--ok, #22c55e); background: rgba(34, 197, 94, .12); }
 .zeb-row .znak { margin: -2px 0; }
 .zeb-row .znak-mezera { width: 26px; flex: 0 0 26px; }
+/* Řádka v žebříčku vlastních strojů. Místo znaku firmy je tu fotka stroje — je
+   z ní hned poznat, jestli je to MINI, FLEX nebo MAX. */
+.zeb-row.stroj{cursor:pointer;align-items:flex-start}
+/* Podrobnosti o stroji se na telefon na jednu řádku nevejdou — ať se radši
+   zalomí, než aby se uřízly třemi tečkami. */
+.zeb-row.stroj .nick{white-space:normal}
+.zeb-row.stroj .nick i{white-space:normal;line-height:1.35;margin-top:1px}
+.zeb-row.stroj b,.zeb-row.stroj .poradi,.zeb-row.stroj .stroj-foto{margin-top:1px}
+.stroj-foto{width:30px;height:30px;flex:0 0 30px;border-radius:50%;object-fit:cover;
+  background:#0b1424;border:1.5px solid rgba(47,227,160,.75)}
+.zeb-row.stroj.vada .stroj-foto{border-color:rgba(255,93,108,.9);filter:grayscale(.7) brightness(.75)}
+.vada-znak{font-style:normal;font-size:11px;margin-left:3px}
+/* Čtyři záložky se na úzký telefon vejdou jen s menším písmem. */
+.seg button{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:430px){.seg button{font-size:12px;padding:8px 4px}
+  .seg.sub button{font-size:11.5px;padding:6px 3px}}
 
 /* Hotovost v hlavičce je tlačítko — vede na úvěr a dobití. */
 .t-klik { border: 0; font: inherit; color: inherit; cursor: pointer; }
