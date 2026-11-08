@@ -25,12 +25,30 @@
   input{width:100%;background:var(--card2);border:1px solid var(--bd);color:var(--tx);
     border-radius:11px;padding:10px 12px;font-size:15px;margin-bottom:12px}
   a{color:var(--vio)}
+  .nastroje{display:flex;gap:8px;margin-bottom:12px}
+  .nastroje button{flex:1;background:var(--vio);border:0;color:#fff;border-radius:11px;
+    padding:11px 12px;font-size:14px;font-weight:700}
+  .nastroje button.sec{background:var(--card2);border:1px solid var(--bd);color:var(--tx)}
+  .nastroje button:disabled{opacity:.5}
+  .hlas{margin-bottom:12px;padding:11px 13px;border-radius:12px;font-size:13.5px;
+    background:rgba(47,227,160,.1);border:1px solid rgba(47,227,160,.35)}
+  .hlas.warn{background:rgba(255,194,75,.1);border-color:rgba(255,194,75,.4)}
+  .hidden{display:none}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:6px 4px;border-top:1px solid var(--bd)}
+  th{color:var(--tx3);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  td.c{text-align:right;font-variant-numeric:tabular-nums}
   .chyba{background:rgba(255,80,80,.1);border:1px solid rgba(255,80,80,.35);border-radius:12px;padding:14px}
 </style>
 </head>
 <body>
 <h1>Kniha provizí</h1>
 <p class="pod">Komu, za koho a kdy se provize připsala. Fialový pruh = připsáno dnes.</p>
+<div class="nastroje">
+  <button id="dorovnat">Dorovnat provize teď</button>
+  <button id="kontrola" class="sec">Kontrola počtů</button>
+</div>
+<div id="hlas" class="hlas hidden"></div>
 <input id="q" placeholder="filtr podle hráče (nick nebo firma)" autocomplete="off">
 <div id="out" class="mal tx3">Načítám…</div>
 <script>
@@ -80,6 +98,54 @@
     h += '</div>';
     out.innerHTML = h;
   }
+  var hlas = document.getElementById('hlas');
+  function zprava(text, druh) {
+    hlas.className = 'hlas' + (druh === 'warn' ? ' warn' : '');
+    hlas.innerHTML = text;
+  }
+  // Ručně spuštěné dorovnání — stejná úloha, která jinak běží při startu serveru.
+  document.getElementById('dorovnat').onclick = function () {
+    var b = this;
+    b.disabled = true; zprava('Dorovnávám…');
+    fetch('/api/game-admin/provize/dorovnat', { method: 'POST', credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        b.disabled = false;
+        if (!d.ok) return zprava('Nepovedlo se: ' + esc(d.error || 'neznámá chyba'), 'warn');
+        zprava(d.celkem
+          ? 'Dopsáno <b>' + cis(d.celkem) + ' L$</b> provizí pro ' + d.komu + ' z ' + d.distributoru + ' distributorů.'
+          : 'Nic k dorovnání — všem ' + d.distributoru + ' distributorům je vyplaceno všechno.',
+          d.celkem ? '' : 'warn');
+        nacti();
+      })
+      .catch(function (e) { b.disabled = false; zprava('Nepovedlo se: ' + esc(e.message), 'warn'); });
+  };
+  // Kontrola: kolik má kdo strojů a kolik za něj zvoucí dostal provizí.
+  document.getElementById('kontrola').onclick = function () {
+    var b = this;
+    b.disabled = true; out.innerHTML = 'Počítám…';
+    fetch('/api/game-admin/provize/kontrola', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        b.disabled = false;
+        if (!d.ok) { out.innerHTML = '<div class="chyba">Nepovedlo se.</div>'; return; }
+        zprava(d.chybi_celkem
+          ? '<b>' + d.chybi_celkem + '</b> strojů má aktivní distributor nezaplacených — zkus Dorovnat.'
+          : 'Všem distributorům s aktivní distribucí je vyplaceno všechno.'
+            + (d.chybi_bez_distribuce ? ' (' + d.chybi_bez_distribuce + ' strojů patří pod zvoucí bez distribuce, za ty se neplatí.)' : ''),
+          d.chybi_celkem ? 'warn' : '');
+        out.innerHTML = '<div class="karta"><table><tr><th>Pozvaný</th><th>Zvoucí</th>'
+          + '<th class="c">Strojů</th><th class="c">Provizí</th><th class="c">Chybí</th></tr>'
+          + d.radky.map(function (r) {
+              return '<tr><td>' + esc(r.pozvany) + '<div class="cas">' + esc(r.vazba) + '</div></td>'
+                + '<td>' + esc(r.zvouci) + '<div class="cas">' + (r.distribuce ? 'distribuce běží' : 'bez distribuce') + '</div></td>'
+                + '<td class="c">' + r.stroju + '</td><td class="c">' + r.provizi + '</td>'
+                + '<td class="c ' + (r.chybi && r.distribuce ? 'warn' : 'tx3') + '">' + (r.chybi || '—') + '</td></tr>';
+            }).join('')
+          + '</table></div>';
+      })
+      .catch(function () { b.disabled = false; out.innerHTML = '<div class="chyba">Nepovedlo se.</div>'; });
+  };
   q.addEventListener('input', function () { clearTimeout(cas); cas = setTimeout(nacti, 350); });
   nacti();
 })();

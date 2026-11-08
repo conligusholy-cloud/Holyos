@@ -1030,5 +1030,7 @@ module.exports._zbydeMesicne = zbydeMesicne;
 module.exports._cisteJmeni = cisteJmeni;
 module.exports._kdoPrivedl = kdoPrivedl;
 module.exports._dorovnejProvize = dorovnejProvize;
+module.exports._strojeHrace = strojeHrace;
+module.exports._privedeniHraci = privedeniHraci;
 module.exports._distAktivni = distAktivni;
 module.exports._distRezie = distRezie;

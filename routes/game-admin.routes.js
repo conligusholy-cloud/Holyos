@@ -362,6 +362,61 @@ router.get('/provize', api(async (req, res) => {
     }) });
 }));
 
+// POST /provize/dorovnat → dopočítá a připočte všechno, co ještě nebylo vyplaceno.
+// Stejná úloha, která jinak běží při startu serveru — jen se dá spustit ručně,
+// když se nemá čekat na restart. Je idempotentní, opakovaný běh nic nepřiplatí.
+router.post('/provize/dorovnat', api(async (req, res) => {
+  const vysledek = await require('../services/game/provize').dorovnejVsem();
+  res.json({ ok: true, ...vysledek });
+}));
+
+// GET /provize/kontrola → kde se počty rozcházejí. Za každýho pozvaného se
+// spočítá, kolik má strojů (postavené, na cestě i skladem) a kolik provizí za něj
+// zvoucí dostal. Co nesedí, je buď k dorovnání, nebo distribuce nebyla zapnutá.
+router.get('/provize/kontrola', api(async (req, res) => {
+  const [hraci, davky, mista] = await Promise.all([
+    prisma.gamePlayer.findMany({ where: { disabled: false },
+      select: { id: true, nick: true, company: true, ref_id: true, state: true,
+        invited_by_id: true, invited_by_ref: true, distributor_do: true } }),
+    prisma.gameDelivery.findMany({ where: { kind: 'cash', popis: { startsWith: 'Provize' } },
+      select: { player_id: true, spot_id: true } }),
+    prisma.gameSpotClaim.findMany({ select: { player_id: true, spot_id: true } }),
+  ]);
+  // Čí je které místo — starší provize mají v klíči id místa, ne id hráče.
+  const majitelMista = {};
+  mista.forEach((m) => { majitelMista[m.spot_id] = m.player_id; });
+  const podleId = {}, podleRef = {};
+  hraci.forEach((h) => { podleId[h.id] = h; if (h.ref_id) podleRef[h.ref_id] = h; });
+  // Klíče provizí: „nakup:<id pozvaného>:<pořadí>“, starší jsou id místa.
+  const zaplaceno = {};
+  davky.forEach((d) => {
+    const klic = String(d.spot_id || '');
+    const m = /^nakup:(\d+):/.exec(klic);
+    const za = m ? Number(m[1]) : majitelMista[klic];
+    if (!za) return;
+    const k = d.player_id + '|' + za;
+    zaplaceno[k] = (zaplaceno[k] || 0) + 1;
+  });
+  const ted = new Date();
+  const radky = [];
+  hraci.forEach((h) => {
+    const zvouci = podleId[h.invited_by_id] || podleRef[h.invited_by_ref];
+    if (!zvouci || zvouci.id === h.id) return;
+    const stroju = acct._strojeHrace(h.state).length;
+    if (!stroju) return;
+    const vyplaceno = zaplaceno[zvouci.id + '|' + h.id] || 0;
+    radky.push({ pozvany: h.nick, firma: h.company || null, zvouci: zvouci.nick,
+      vazba: h.invited_by_id ? 'napevno' : 'přes odkaz',
+      stroju, provizi: vyplaceno, chybi: Math.max(0, stroju - vyplaceno),
+      distribuce: !!(zvouci.distributor_do && new Date(zvouci.distributor_do) > ted) });
+  });
+  radky.sort((a, b) => b.chybi - a.chybi || a.zvouci.localeCompare(b.zvouci));
+  res.json({ ok: true,
+    chybi_celkem: radky.reduce((a, r) => a + (r.distribuce ? r.chybi : 0), 0),
+    chybi_bez_distribuce: radky.reduce((a, r) => a + (r.distribuce ? 0 : r.chybi), 0),
+    radky });
+}));
+
 router.get('/stats', api(async (req, res) => {
   const dny = Math.min(180, Math.max(7, parseInt(req.query.dny, 10) || 30));
   const od = new Date(Date.now() - dny * 86400e3);
