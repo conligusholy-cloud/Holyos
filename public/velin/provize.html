@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Velín — provize</title>
+<style>
+  :root{--bg:#06080f;--card:#0d1220;--card2:#121a2c;--bd:#1e2940;--tx:#e8edf7;--tx2:#97a3bd;
+    --tx3:#6b7793;--ok:#2fe3a0;--warn:#ffc24b;--vio:#7c5cff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 -apple-system,BlinkMacSystemFont,
+    "Segoe UI",Roboto,sans-serif;padding:16px 14px 48px}
+  h1{font-size:19px;margin:0 0 2px}
+  .pod{margin:0 0 16px;font-size:12.5px;color:var(--tx3)}
+  .karta{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px 13px;margin-bottom:10px}
+  .radek{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--bd)}
+  .radek:first-child{border-top:0}
+  .jm{font-weight:700}
+  .mal{font-size:12.5px;color:var(--tx2)}
+  .cas{font-size:11.5px;color:var(--tx3)}
+  .castka{font-weight:800;white-space:nowrap}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .tx3{color:var(--tx3)}
+  .dnes{border-left:3px solid var(--vio);padding-left:9px;margin-left:-12px}
+  .nadpis{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx3);margin:18px 0 7px}
+  input{width:100%;background:var(--card2);border:1px solid var(--bd);color:var(--tx);
+    border-radius:11px;padding:10px 12px;font-size:15px;margin-bottom:12px}
+  a{color:var(--vio)}
+  .chyba{background:rgba(255,80,80,.1);border:1px solid rgba(255,80,80,.35);border-radius:12px;padding:14px}
+</style>
+</head>
+<body>
+<h1>Kniha provizí</h1>
+<p class="pod">Komu, za koho a kdy se provize připsala. Fialový pruh = připsáno dnes.</p>
+<input id="q" placeholder="filtr podle hráče (nick nebo firma)" autocomplete="off">
+<div id="out" class="mal tx3">Načítám…</div>
+<script>
+(function () {
+  var out = document.getElementById('out'), q = document.getElementById('q'), cas = null;
+  function cis(n) { return (n || 0).toLocaleString('cs-CZ'); }
+  function kdy(x) {
+    if (!x) return '';
+    var d = new Date(x);
+    return d.toLocaleDateString('cs-CZ') + ' ' + d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+  }
+  function dnes(x) { return x && new Date(x).toDateString() === new Date().toDateString(); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function nacti() {
+    var url = '/api/game-admin/provize?limit=300' + (q.value.trim() ? '&nick=' + encodeURIComponent(q.value.trim()) : '');
+    out.innerHTML = 'Načítám…';
+    fetch(url, { credentials: 'same-origin' }).then(function (r) {
+      if (r.status === 401) throw new Error('nepřihlášen');
+      if (r.status === 403) throw new Error('bez přístupu');
+      return r.json();
+    }).then(vykresli).catch(function (e) {
+      out.innerHTML = '<div class="chyba">' + (e.message === 'nepřihlášen'
+        ? 'Nejsi přihlášený. <a href="/login.html">Přihlas se</a> a vrať se sem.'
+        : 'Nepovedlo se načíst: ' + esc(e.message)) + '</div>';
+    });
+  }
+  function vykresli(d) {
+    if (!d || !d.ok) { out.innerHTML = '<div class="chyba">Server vrátil chybu.</div>'; return; }
+    var h = '';
+    h += '<div class="nadpis">Souhrn po hráčích</div><div class="karta">';
+    if (!d.souhrn.length) h += '<div class="mal tx3">Zatím žádná provize.</div>';
+    d.souhrn.forEach(function (s) {
+      h += '<div class="radek"><div><div class="jm">' + esc(s.nick) + '</div>'
+        + '<div class="mal">' + s.kusu + '× · nevyzvednuto ' + cis(s.nevyzvednuto) + ' L$</div></div>'
+        + '<div class="castka ok">' + cis(s.castka) + ' L$</div></div>';
+    });
+    h += '</div><div class="nadpis">Jednotlivé provize (' + d.celkem + ')</div><div class="karta">';
+    d.provize.forEach(function (p) {
+      h += '<div class="radek' + (dnes(p.kdy) ? ' dnes' : '') + '"><div>'
+        + '<div class="jm">' + esc(p.komu) + '</div>'
+        + '<div class="mal">' + esc(p.za) + '</div>'
+        + '<div class="cas">' + kdy(p.kdy)
+        + (p.vyzvednuto ? ' · vyzvednuto' : ' · <span class="warn">čeká na vyzvednutí</span>') + '</div></div>'
+        + '<div class="castka">' + cis(p.castka) + ' L$</div></div>';
+    });
+    h += '</div>';
+    out.innerHTML = h;
+  }
+  q.addEventListener('input', function () { clearTimeout(cas); cas = setTimeout(nacti, 350); });
+  nacti();
+})();
+</script>
+</body>
+</html>
