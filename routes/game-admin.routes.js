@@ -315,6 +315,53 @@ router.post('/prices', api(async (req, res) => {
 
 // ─── Statistiky ──────────────────────────────────────────────────────────────
 // GET /stats?dny=30 → návštěvy, registrace, tržby a trychtýř
+// ─── Provize ─────────────────────────────────────────────────────────
+// GET /provize?nick=&limit= → kompletní kniha vyplacených provizí. Komu se co
+// připsalo, za koho a kdy — včetně toho, jestli si to hráč už vyzvedl ve hře.
+// Dorovnání po startu serveru se tu pozná podle data: je pozdější než nákup.
+router.get('/provize', api(async (req, res) => {
+  const nick = String(req.query.nick || '').trim().slice(0, 60);
+  const take = Math.min(500, Math.max(10, parseInt(req.query.limit, 10) || 200));
+  const kde = { kind: 'cash', popis: { startsWith: 'Provize' } };
+  if (nick) {
+    const kdo = await prisma.gamePlayer.findMany({
+      where: { OR: [{ nick: { contains: nick, mode: 'insensitive' } },
+                    { company: { contains: nick, mode: 'insensitive' } }] },
+      select: { id: true } });
+    kde.player_id = { in: kdo.map((x) => x.id) };
+  }
+  const rows = await prisma.gameDelivery.findMany({
+    where: kde, orderBy: { id: 'desc' }, take,
+    select: { id: true, player_id: true, amount: true, popis: true, spot_id: true,
+      created_at: true, claimed_at: true } });
+  const hraci = await prisma.gamePlayer.findMany({
+    where: { id: { in: [...new Set(rows.map((r) => r.player_id))] } },
+    select: { id: true, nick: true, company: true, provize_celkem: true, distributor_do: true } });
+  const podleId = {};
+  hraci.forEach((h) => { podleId[h.id] = h; });
+  const souhrn = {};
+  rows.forEach((r) => {
+    const h = podleId[r.player_id] || {};
+    const k = h.nick || ('#' + r.player_id);
+    if (!souhrn[k]) souhrn[k] = { nick: k, firma: h.firma || h.company || null, kusu: 0, castka: 0,
+      nevyzvednuto: 0, provize_celkem: h.provize_celkem || 0, distributor_do: h.distributor_do || null };
+    souhrn[k].kusu++;
+    souhrn[k].castka += r.amount || 0;
+    if (!r.claimed_at) souhrn[k].nevyzvednuto += r.amount || 0;
+  });
+  res.json({ ok: true, celkem: rows.length,
+    souhrn: Object.keys(souhrn).map((k) => souhrn[k]).sort((a, b) => b.castka - a.castka),
+    provize: rows.map((r) => {
+      const h = podleId[r.player_id] || {};
+      return { id: r.id, komu: h.nick || ('#' + r.player_id), firma: h.company || null,
+        castka: r.amount,
+        // V popisu je za pomlčkou „Kdo koupil co“ — přesně to, co chceme vidět.
+        za: (String(r.popis || '').split(' \u2014 ')[1] || String(r.popis || '')).trim(),
+        klic: r.spot_id || null,
+        kdy: r.created_at, vyzvednuto: r.claimed_at || null };
+    }) });
+}));
+
 router.get('/stats', api(async (req, res) => {
   const dny = Math.min(180, Math.max(7, parseInt(req.query.dny, 10) || 30));
   const od = new Date(Date.now() - dny * 86400e3);
