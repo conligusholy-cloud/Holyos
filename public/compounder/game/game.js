@@ -1306,7 +1306,7 @@ function dripTick() {
     drip.pay -= kolikP;
   }
   hlavickaDrip();
-  if (!$('v-map').classList.contains('hidden')) { drawAuta(); paintVady(); }
+  if (!$('v-map').classList.contains('hidden')) { drawAuta(); paintServis(); }
 }
 // Nad hotovostí probléskne, o kolik se právě změnila — ať už přitečla po
 // kapkách, nebo odtečla naráz.
@@ -1626,41 +1626,96 @@ function unitIcon(u) {
 // Z dálky mají v mapě být jen prádlomaty, sídlo a pobočky. Volná místa je
 // v tomhle měřítku stejně nejde rozlišit — slepí se do hromádky otačníků.
 var MISTA_ZOOM = 14;
-// Proužek nad mapou: co právě stojí a kam už technik jede. Odtud se také
-// výjezd posílá — hráč nemusí hledat piník na mapě.
-function vadaRadek(u) {
-  var t = u.technik;
-  if (t) {
-    var ted = Date.now();
-    var stav = ted < t.prijezd ? 'technik je na cestě, přijede ' + etaText(t.prijezd - ted)
-      : (ted < t.hotovo ? 'technik na místě, hotovo ' + etaText(t.hotovo - ted)
-        : 'spraveno, technik jede zpátky');
-    return '<div class="vada-radek"><span><b>' + esc(u.name) + '</b> ' + esc(stav) + '</span></div>';
-  }
-  var v = vyjezdOdhad(u);
-  return '<div class="vada-radek"><span><b>' + esc(u.name) + '</b> ' + esc(u.porucha.text)
-    + (v ? ' — ' + Math.round(v.km) + ' km, oprava na ' + u.porucha.zav + ' h' : '') + '</span>'
-    + '<button class="btn sec maly" data-vada="' + esc(u.spotId) + '">Vyslat technika</button></div>';
+// ─── Správa servisu ──────────────────────────────────────────────
+// Odznak vlevo nahoře nad mapou řekne jedním pohledem, jak síť jede. Po klepnutí
+// se otevře celý přehled — který stroj stojí, kde je technik a kdy bude hotovo.
+function servisStav() {
+  var vse = S.units || [];
+  var stoji = vse.filter(function (u) { return jeVPoruse(u) && !u.technik; });
+  var resi = vse.filter(function (u) { return jeVPoruse(u) && u.technik; });
+  var vraci = vse.filter(function (u) { return !jeVPoruse(u) && u.technik; });
+  return { vse: vse, stoji: stoji, resi: resi, vraci: vraci,
+    jede: vse.length - stoji.length - resi.length };
 }
-function paintVady() {
-  var el = $('map-vada');
+function paintServis() {
+  var el = $('map-servis');
   if (!el) return;
-  var vadne = (S.units || []).filter(function (u) { return jeVPoruse(u) || u.technik; });
-  if (!vadne.length) { el.classList.add('hidden'); el.innerHTML = ''; return; }
-  // Nejdřív to, co ještě stojí bez technika — to hráče stále stává peníze.
-  vadne.sort(function (a, b) { return (a.technik ? 1 : 0) - (b.technik ? 1 : 0); });
-  var stoji = vadne.filter(jeVPoruse).length;
-  el.innerHTML = '<p class="vada-hlava">' + (stoji
-      ? '⚠️ ' + stoji + ' ' + mn(stoji, 'prádlomat stojí', 'prádlomaty stojí', 'prádlomatů stojí')
-      : '🔧 Servis to dodělává') + '</p>'
-    + vadne.slice(0, 4).map(vadaRadek).join('')
-    + (vadne.length > 4 ? '<p class="fine">… a další ' + (vadne.length - 4) + '</p>' : '');
+  var st = servisStav();
+  if (!st.vse.length) { el.classList.add('hidden'); return; }
   el.classList.remove('hidden');
-  [].forEach.call(el.querySelectorAll('[data-vada]'), function (b) {
-    b.onclick = function () {
-      vyslatTechnika((S.units || []).filter(function (u) { return u.spotId === b.getAttribute('data-vada'); })[0]);
+  var tr = st.stoji.length ? 'vada' : (st.resi.length || st.vraci.length ? 'jede' : 'ok');
+  el.className = 'map-servis ' + tr;
+  el.innerHTML = tr === 'vada'
+      ? '<i>⚠️</i><b>' + st.stoji.length + '</b>'
+      : (tr === 'jede' ? '<i>🔧</i><b>' + (st.resi.length + st.vraci.length) + '</b>'
+                       : '<i>🔧</i><b>' + st.jede + '/' + st.vse.length + '</b>');
+  el.title = 'Správa servisu';
+  el.onclick = servisSheet;
+}
+// Jedna řádka přehledu. Pořadí: co stojí bez technika, co se právě řeší, co jede.
+function servisRadek(u) {
+  var t = u.technik, ted = Date.now(), m = MODELS[u.eco && u.eco.model];
+  var stav, tr, akce = '';
+  if (jeVPoruse(u) && !t) {
+    var v = vyjezdOdhad(u);
+    tr = 'err';
+    stav = u.porucha.text + (v ? ' — ' + Math.round(v.km) + ' km, oprava na ' + u.porucha.zav + ' h' : '');
+    akce = v ? '<button class="btn sec maly" data-vada="' + esc(u.spotId) + '">Vyslat</button>' : '';
+  } else if (t && ted < t.prijezd) {
+    tr = 'warn'; stav = u.porucha.text + ' — technik přijede ' + etaText(t.prijezd - ted);
+  } else if (t && jeVPoruse(u)) {
+    tr = 'warn'; stav = u.porucha.text + ' — technik na místě, hotovo ' + etaText(t.hotovo - ted);
+  } else if (t) {
+    tr = 'ok'; stav = 'Spraveno, technik jede zpátky';
+  } else {
+    tr = 'ok'; stav = 'Jede — ' + kcFull(u.eco.profit) + ' / měsíc';
+  }
+  return '<div class="srv-radek" data-srv="' + esc(u.spotId) + '">'
+    + '<i class="srv-tecka ' + tr + '"></i>'
+    + '<span><b>' + esc(u.name) + '</b> <i>' + esc((m ? m.name : '') + ' · ' + stav) + '</i></span>'
+    + akce + '</div>';
+}
+function servisSheet() {
+  var st = servisStav();
+  var poradi = st.stoji.concat(st.resi, st.vraci,
+    st.vse.filter(function (u) { return !jeVPoruse(u) && !u.technik; }));
+  sheet('<h3>Správa servisu</h3>'
+    + '<p class="muted small">Výjezdy máš zaplacené v servisním poplatku, takže technika '
+    + 'můžeš poslat kam chceš a kolik jich chceš naráz. Dokud stroj stojí, nájem, '
+    + 'servis i splátka běží dál — čekáním se nic neušetří.</p>'
+    + '<div class="sum-grid" style="margin:12px 0">'
+    + '<div><span>Jede</span><b class="ok">' + st.jede + ' z ' + st.vse.length + '</b></div>'
+    + '<div><span>Stojí</span><b class="' + (st.stoji.length ? 'err' : '') + '">' + st.stoji.length + '</b></div>'
+    + '<div><span>Techniků na cestě</span><b class="' + (st.resi.length + st.vraci.length ? 'warn' : '') + '">'
+    + (st.resi.length + st.vraci.length) + '</b></div>'
+    + '</div>'
+    + (st.stoji.length > 1
+        ? '<button class="btn big" id="do-vsechny" style="width:100%;margin-bottom:12px">'
+          + 'Vyslat techniky na všechny (' + st.stoji.length + ')</button>'
+        : '')
+    + (poradi.length
+        ? '<div class="srv">' + poradi.map(servisRadek).join('') + '</div>'
+        : '<div class="empty">Zatím nemáš žádný prádlomat.</div>')
+    + '<p class="fine" style="margin-top:12px">Každý stroj se v průměru dvakrát za herní rok '
+    + 'porouchá. MINI při poruše stojí celé, FLEX a MAX jedou na půl — je v nich strojů víc.</p>');
+  var vs = $('do-vsechny');
+  if (vs) vs.onclick = function () {
+    servisStav().stoji.forEach(vyslatTechnika);
+    servisSheet();
+  };
+  [].forEach.call(document.querySelectorAll('#sheet-body [data-vada]'), function (b) {
+    b.onclick = function (e) {
+      e.stopPropagation();
+      vyslatTechnika(najdiJednotku(b.getAttribute('data-vada')));
+      servisSheet();
     };
   });
+  [].forEach.call(document.querySelectorAll('#sheet-body [data-srv]'), function (r) {
+    r.onclick = function () { unitSheet(najdiJednotku(r.getAttribute('data-srv'))); };
+  });
+}
+function najdiJednotku(id) {
+  return (S.units || []).filter(function (u) { return u.spotId === id; })[0];
 }
 function drawMap() {
   if (!layer) return;
@@ -1715,7 +1770,7 @@ function drawMap() {
       + skryto + '. Ze seznamu oblastí tě hra skočí rovnou k nim.';
     h.classList.remove('hidden');
   } else h.classList.add('hidden');
-  paintVady();
+  paintServis();
 }
 // Panel cizího prádlomatu v neprozkoumaném městě.
 function cizi(c) {

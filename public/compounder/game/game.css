@@ -113,26 +113,46 @@ button{font:inherit;cursor:pointer}
   color:var(--text);padding:12px 13px;font:inherit;font-size:16px;outline:none}
 .inp:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(79,209,255,.14)}
 .empty{text-align:center;color:var(--text3);padding:34px 16px;font-size:13.5px}
-/* Proužek nad mapou s poruchami. Sedí pod hlavičkou a mapa pod ním běží dál. */
+/* Nad mapou stojí pod sebou lišta (odznak servisu + přepínač) a nápověda. */
 .map-vrstva{position:absolute;left:10px;right:10px;top:10px;z-index:500;
   display:flex;flex-direction:column;gap:8px;pointer-events:none}
 .map-vrstva>*{pointer-events:auto}
-/* Přepínač pohledu. Sedí vpravo nahoře, ať nebere šířku nápovědě pod ním. */
-.map-prep{align-self:flex-end;display:flex;gap:3px;padding:3px;border-radius:11px;
+.map-vrstva .map-hint{position:static;left:auto;right:auto;top:auto}
+/* Přepínač pohledu vpravo. */
+.map-prep{display:flex;gap:3px;padding:3px;border-radius:11px;pointer-events:auto;
   background:rgba(4,6,12,.9);border:1px solid var(--border);backdrop-filter:blur(10px);
   box-shadow:0 8px 20px rgba(0,0,0,.45)}
 .map-prep button{background:none;border:0;color:var(--text2);font-size:12px;font-weight:700;
   padding:5px 11px;border-radius:8px}
 .map-prep button.on{background:rgba(124,92,255,.26);color:var(--text)}
-.map-vrstva .map-hint,.map-vrstva .map-vada{position:static;left:auto;right:auto;top:auto}
-.map-vada{background:rgba(8,13,26,.94);border:1px solid rgba(255,93,108,.5);border-radius:14px;
-  padding:10px 12px;backdrop-filter:blur(10px);box-shadow:0 10px 26px rgba(0,0,0,.5)}
-.vada-hlava{margin:0 0 6px;font-size:13px;font-weight:800;color:var(--err)}
-.vada-radek{display:flex;align-items:center;gap:10px;justify-content:space-between;
-  font-size:12.5px;color:var(--text2);padding:4px 0}
-.vada-radek+.vada-radek{border-top:1px solid var(--border)}
-.vada-radek b{color:var(--text)}
-.vada-radek span{min-width:0}
+/* Odznak servisu vlevo nad mapou. Jedním pohledem řekne, jestli všechno jede. */
+.map-lista{pointer-events:none;display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.map-lista>*{pointer-events:auto}
+/* Když odznak není, přepínač zůstane vpravo. */
+.map-servis.hidden+.map-prep{margin-left:auto}
+.map-servis{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:11px;
+  background:rgba(4,6,12,.9);border:1px solid var(--border);backdrop-filter:blur(10px);
+  color:var(--text2);font-size:12px;font-weight:800;box-shadow:0 8px 20px rgba(0,0,0,.45)}
+.map-servis i{font-style:normal;font-size:14px;line-height:1}
+.map-servis b{font-variant-numeric:tabular-nums}
+/* Odznak nepulzuje zvětšováním — posouval by vedle sebe přepínač. Místo toho
+   mu kolem dokola problískne červená záře. */
+@keyframes srv-tep{0%,100%{box-shadow:0 8px 20px rgba(0,0,0,.45)}
+  50%{box-shadow:0 8px 20px rgba(0,0,0,.45),0 0 0 4px rgba(255,93,108,.2)}}
+.map-servis.vada{border-color:rgba(255,93,108,.7);color:var(--err);animation:srv-tep 1.6s infinite}
+.map-servis.jede{border-color:rgba(255,216,102,.6);color:var(--warn)}
+.map-servis.ok{color:var(--text3)}
+/* Přehled servisu v panelu. */
+.srv{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.srv-radek{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--border)}
+.srv-radek:first-child{border-top:0}
+.srv-radek span{flex:1;min-width:0;font-size:13.5px}
+.srv-radek span i{display:block;font-style:normal;font-size:11.5px;color:var(--text2);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srv-tecka{width:9px;height:9px;flex:none;border-radius:50%;background:var(--text3)}
+.srv-tecka.ok{background:var(--ok)}
+.srv-tecka.warn{background:var(--warn)}
+.srv-tecka.err{background:var(--err);animation:vada-tep 1.4s infinite}
 .btn.sec.maly{flex:none;padding:5px 10px;font-size:12px;border-radius:9px}
 /* Závada v panelu místa. */
 .vada-karta{border-color:rgba(255,93,108,.45);background:rgba(40,14,22,.5)}

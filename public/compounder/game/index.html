@@ -130,13 +130,15 @@
     <!-- MAPA -->
     <section id="v-map" class="view">
       <div id="map"></div>
-      <!-- Nad mapou stojí pod sebou proužek s poruchami a nápověda. -->
+      <!-- Nad mapou: vlevo odznak servisu, vpravo přepínač pohledu, pod tím nápověda. -->
       <div class="map-vrstva">
-        <div class="map-prep">
-          <button class="on" data-mapa="vse">Všechno</button>
-          <button data-mapa="moje">Jen moje</button>
+        <div class="map-lista">
+          <button class="map-servis hidden" id="map-servis"></button>
+          <div class="map-prep">
+            <button class="on" data-mapa="vse">Všechno</button>
+            <button data-mapa="moje">Jen moje</button>
+          </div>
         </div>
-        <div class="map-vada hidden" id="map-vada"></div>
         <div class="map-hint" id="map-hint">Napiš město a pošli tam člověka, ať ho projde. Místa jsou schovaná — dokud město neprozkoumáš, nic na mapě neuvidíš.</div>
       </div>
       <button class="btn float" id="open-areas">🔎 Prozkoumat město</button>
