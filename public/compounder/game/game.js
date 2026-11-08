@@ -1860,13 +1860,218 @@ function addBasemap() {
   if (baseLayer) { map.removeLayer(baseLayer); baseLayer = null; }
   if (labelLayer) { map.removeLayer(labelLayer); labelLayer = null; }
   tileErrs = 0;
-  baseLayer = L.tileLayer(b.url, b.opts).addTo(map);
-  if (b.labels) labelLayer = L.tileLayer(b.labels, { maxZoom: b.opts.maxZoom, maxNativeZoom: b.opts.maxNativeZoom, opacity: 0.9 }).addTo(map);
+  // noWrap: svět se na šířku neopakuje — už tak se z dálky kouká na glóbus.
+  baseLayer = L.tileLayer(b.url, Object.assign({ noWrap: true }, b.opts)).addTo(map);
+  if (b.labels) labelLayer = L.tileLayer(b.labels, { maxZoom: b.opts.maxZoom,
+    maxNativeZoom: b.opts.maxNativeZoom, opacity: 0.9, noWrap: true }).addTo(map);
   baseLayer.on('tileerror', function () {
     tileErrs++;
     // Pár chybějících dlaždic je při rolování normální; až když padá celá vrstva, zkusíme další zdroj.
     if (tileErrs > 6 && baseIdx < BASEMAPS.length - 1) { baseIdx++; addBasemap(); }
   });
+}
+// ─── Glóbus ──────────────────────────────────────────────────────
+// Oddálená mapa se rozloží do plochy a vypadá to divně. Místo toho se z dálky
+// ukáže planeta: pravopísná ortografická projekce do canvasu, obrysy pevnin
+// jsou v svet.js. Tažením se glóbus točí, klepnutím hra zaletí na to místo.
+var GLOBUS_ZOOM = 4;              // pod tímhle přiblížením už mapa není k ničemu
+var GLOBUS_PRILET = 6;            // kam hra zaletí, když na glóbus klepneš
+var G = { on: false, lam: 0.26, phi: 0.87, r: 0, cx: 0, cy: 0, body: [] };
+function globusJe() { return G.on; }
+// Střed, na který glóbus kouká při otevření: sídlo, jinak první stroj, jinak Evropa.
+function globusStred() {
+  if (S && S.sidlo && S.sidlo.lat != null) return { lat: S.sidlo.lat, lon: S.sidlo.lon };
+  var u = (S && S.units || []).filter(function (x) { return x.lat != null; })[0];
+  if (u) return { lat: u.lat, lon: u.lon };
+  return { lat: 50, lon: 15 };
+}
+function globusOtevri() {
+  var st = globusStred();
+  G.lam = st.lon * Math.PI / 180;
+  G.phi = st.lat * Math.PI / 180;
+  G.on = true;
+  $('globus').classList.remove('hidden');
+  $('globus-zpet').classList.remove('hidden');
+  $('open-areas').classList.add('hidden');
+  $('map-globus').classList.add('on');
+  globusKresli();
+}
+function globusZavri() {
+  G.on = false;
+  $('globus').classList.add('hidden');
+  $('globus-zpet').classList.add('hidden');
+  $('open-areas').classList.remove('hidden');
+  $('map-globus').classList.remove('on');
+}
+// Body na kouli: moje stavby, základny a (když nejsou schované) konkurence.
+function globusBody() {
+  var b = [];
+  (S.units || []).forEach(function (u) {
+    if (u.lat == null) return;
+    b.push({ lat: u.lat, lon: u.lon, barva: jeVPoruse(u) ? '#ff5d6c' : '#2fe3a0', r: 4, u: u });
+  });
+  if (S.sidlo && S.sidlo.lat != null) b.push({ lat: S.sidlo.lat, lon: S.sidlo.lon, barva: '#4fd1ff', r: 5 });
+  (S.pobocky || []).forEach(function (x) {
+    if (x.lat != null) b.push({ lat: x.lat, lon: x.lon, barva: '#4fd1ff', r: 4 });
+  });
+  if (!MAPA_MOJE) {
+    Object.keys(CLAIMS).forEach(function (k) {
+      var c = CLAIMS[k];
+      if (c.mine || c.lat == null) return;
+      b.push({ lat: c.lat, lon: c.lon, barva: 'rgba(255,93,108,.65)', r: 3 });
+    });
+  }
+  return b;
+}
+function globusKresli() {
+  var cv = $('globus');
+  if (!cv || !G.on) return;
+  var box = cv.parentNode.getBoundingClientRect();
+  var w = Math.max(80, Math.round(box.width)), h = Math.max(80, Math.round(box.height));
+  var dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+  var g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  var R = Math.min(w, h) * 0.43;
+  var cx = w / 2, cy = h / 2;
+  G.r = R; G.cx = cx; G.cy = cy;
+  var sp = Math.sin(G.phi), cp = Math.cos(G.phi);
+  function proj(lo, la) {
+    var dl = lo - G.lam, cla = Math.cos(la), sla = Math.sin(la), cd = Math.cos(dl);
+    return { x: cx + R * cla * Math.sin(dl), y: cy - R * (cp * sla - sp * cla * cd),
+      v: sp * sla + cp * cla * cd >= 0 };
+  }
+  // Koule: přísvět zleva nahoře, ať to vypadá kulatě.
+  var oc = g.createRadialGradient(cx - R * 0.35, cy - R * 0.4, R * 0.1, cx, cy, R);
+  oc.addColorStop(0, '#16243f'); oc.addColorStop(0.7, '#0c1427'); oc.addColorStop(1, '#060b16');
+  g.save();
+  g.beginPath(); g.arc(cx, cy, R, 0, 6.2832); g.clip();
+  g.fillStyle = oc; g.fillRect(0, 0, w, h);
+  // Poledníky a rovnoběžky po třiceti stupních.
+  g.strokeStyle = 'rgba(120,160,255,.10)'; g.lineWidth = 1;
+  var la, lo, p, zac;
+  for (la = -60; la <= 60; la += 30) {
+    g.beginPath(); zac = true;
+    for (lo = -180; lo <= 180; lo += 4) {
+      p = proj(lo * Math.PI / 180, la * Math.PI / 180);
+      if (!p.v) { zac = true; continue; }
+      if (zac) { g.moveTo(p.x, p.y); zac = false; } else g.lineTo(p.x, p.y);
+    }
+    g.stroke();
+  }
+  for (lo = -180; lo < 180; lo += 30) {
+    g.beginPath(); zac = true;
+    for (la = -90; la <= 90; la += 4) {
+      p = proj(lo * Math.PI / 180, la * Math.PI / 180);
+      if (!p.v) { zac = true; continue; }
+      if (zac) { g.moveTo(p.x, p.y); zac = false; } else g.lineTo(p.x, p.y);
+    }
+    g.stroke();
+  }
+  // Pevniny. Body za obzorem se přitisknou na okraj koule — silueta tak sedí
+  // i u kontinentů, které přes obzor přebíhají.
+  if (typeof SVET_PEVNINA !== 'undefined') {
+    g.fillStyle = '#2e3a52'; g.strokeStyle = 'rgba(150,180,230,.35)'; g.lineWidth = 0.7;
+    for (var i = 0; i < SVET_PEVNINA.length; i++) {
+      var r = SVET_PEVNINA[i], lo2 = r[0], la2 = r[1], vid = false, cesta = [];
+      var q = proj(lo2 / 10 * Math.PI / 180, la2 / 10 * Math.PI / 180);
+      cesta.push(q); if (q.v) vid = true;
+      for (var j = 2; j < r.length; j += 2) {
+        lo2 += r[j]; la2 += r[j + 1];
+        q = proj(lo2 / 10 * Math.PI / 180, la2 / 10 * Math.PI / 180);
+        cesta.push(q); if (q.v) vid = true;
+      }
+      if (!vid) continue;
+      g.beginPath();
+      for (var m = 0; m < cesta.length; m++) {
+        var c = cesta[m], x = c.x, y = c.y;
+        if (!c.v) {
+          var dx = x - cx, dy = y - cy, d = Math.sqrt(dx * dx + dy * dy) || 1;
+          x = cx + dx / d * R; y = cy + dy / d * R;
+        }
+        if (m === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.closePath(); g.fill(); g.stroke();
+    }
+  }
+  // Moje síť na kouli.
+  G.body = [];
+  globusBody().forEach(function (b) {
+    var pp = proj(b.lon * Math.PI / 180, b.lat * Math.PI / 180);
+    if (!pp.v) return;
+    G.body.push({ x: pp.x, y: pp.y, lat: b.lat, lon: b.lon, u: b.u });
+    g.beginPath(); g.arc(pp.x, pp.y, b.r + 2.5, 0, 6.2832);
+    g.fillStyle = 'rgba(0,0,0,.45)'; g.fill();
+    g.beginPath(); g.arc(pp.x, pp.y, b.r, 0, 6.2832);
+    g.fillStyle = b.barva; g.fill();
+  });
+  g.restore();
+  g.beginPath(); g.arc(cx, cy, R, 0, 6.2832);
+  g.strokeStyle = 'rgba(120,180,255,.45)'; g.lineWidth = 1.2; g.stroke();
+}
+// Z bodu na kouli zpátky na zeměpisné souřadnice — podle toho hra ví, kam zaletět.
+function globusMisto(x, y) {
+  var dx = (x - G.cx) / G.r, dy = -(y - G.cy) / G.r;
+  var rho = Math.sqrt(dx * dx + dy * dy);
+  if (rho > 1) return null;
+  var c = Math.asin(rho), sc = Math.sin(c), cc = Math.cos(c);
+  var lat = Math.asin(cc * Math.sin(G.phi) + (rho ? dy * sc * Math.cos(G.phi) / rho : 0));
+  var lon = G.lam + Math.atan2(dx * sc, rho * Math.cos(G.phi) * cc - dy * Math.sin(G.phi) * sc);
+  return { lat: lat * 180 / Math.PI, lon: ((lon * 180 / Math.PI + 540) % 360) - 180 };
+}
+function globusPrilet(lat, lon) {
+  globusZavri();
+  if (map) map.setView([lat, lon], Math.max(GLOBUS_PRILET, GLOBUS_ZOOM + 1));
+  drawMap(); drawAuta();
+}
+// Ovládání: tažením se točí, krátkým klepnutím hra zaletí na to místo.
+function bindGlobus() {
+  var cv = $('globus');
+  if (!cv) return;
+  var tahne = false, posl = null, ujelo = 0;
+  cv.addEventListener('pointerdown', function (e) {
+    tahne = true; ujelo = 0; posl = { x: e.clientX, y: e.clientY };
+    if (cv.setPointerCapture) { try { cv.setPointerCapture(e.pointerId); } catch (x) { /* nevadí */ } }
+  });
+  cv.addEventListener('pointermove', function (e) {
+    if (!tahne) return;
+    var dx = e.clientX - posl.x, dy = e.clientY - posl.y;
+    posl = { x: e.clientX, y: e.clientY };
+    ujelo += Math.abs(dx) + Math.abs(dy);
+    G.lam += dx / G.r * 0.9;
+    G.phi = Math.max(-1.4, Math.min(1.4, G.phi + dy / G.r * 0.9));
+    globusKresli();
+  });
+  function pusteno(e) {
+    if (!tahne) return;
+    tahne = false;
+    if (ujelo > 8) return;                      // to bylo tažení, ne klepnutí
+    var box = cv.getBoundingClientRect();
+    var x = e.clientX - box.left, y = e.clientY - box.top;
+    // Nejdřív zkusíme, jestli hráč netrefil některou svou stavbu.
+    var nej = null, nejd = 22;
+    G.body.forEach(function (b) {
+      var d = Math.sqrt((b.x - x) * (b.x - x) + (b.y - y) * (b.y - y));
+      if (d < nejd) { nejd = d; nej = b; }
+    });
+    if (nej) return globusPrilet(nej.lat, nej.lon);
+    var m = globusMisto(x, y);
+    if (m) globusPrilet(m.lat, m.lon);
+  }
+  cv.addEventListener('pointerup', pusteno);
+  cv.addEventListener('pointercancel', function () { tahne = false; });
+  if ($('globus-zpet')) $('globus-zpet').onclick = function () {
+    globusZavri();
+    if (map && map.getZoom() <= GLOBUS_ZOOM) map.setView(map.getCenter(), GLOBUS_ZOOM + 1);
+  };
+  if ($('map-globus')) $('map-globus').onclick = function () {
+    if (G.on) {
+      globusZavri();
+      if (map && map.getZoom() <= GLOBUS_ZOOM) map.setView(map.getCenter(), GLOBUS_ZOOM + 1);
+    } else globusOtevri();
+  };
+  window.addEventListener('resize', function () { if (G.on) globusKresli(); });
 }
 var autaLayer = null;
 var MAPA_MOJE = (function () {
@@ -1895,14 +2100,20 @@ function initMap() {
   }
   // Vlastní, nenápadný podpis místo širokého pruhu přes půl mapy. Úplně ho
   // smazat nejde — Esri nám dlaždice pouští zdarma právě proti uvedení zdroje.
-  map = L.map('map', { zoomControl: false, attributionControl: false }).setView([49.82, 15.47], 7);
+  map = L.map('map', { zoomControl: false, attributionControl: false, minZoom: GLOBUS_ZOOM })
+    .setView([49.82, 15.47], 7);
   // Změna přiblížení rozhoduje, jestli se volná místa kreslí — překreslíme.
-  map.on('zoomend', function () { drawMap(); });
+  // A kdo se oddálí až na doraz, dostane místo rozložené mapy glóbus.
+  map.on('zoomend', function () {
+    drawMap();
+    if (map.getZoom() <= GLOBUS_ZOOM && !G.on) globusOtevri();
+  });
   addBasemap();
   L.control.zoom({ position: 'bottomright' }).addTo(map);
   addAttribution();
   layer = L.layerGroup().addTo(map);
   autaLayer = L.layerGroup().addTo(map);
+  bindGlobus();
   drawMap();
   drawAuta();
 }

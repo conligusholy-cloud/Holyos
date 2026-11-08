@@ -134,8 +134,8 @@ button{font:inherit;cursor:pointer}
 /* Odznak servisu vlevo nad mapou. Jedním pohledem řekne, jestli všechno jede. */
 .map-lista{pointer-events:none;display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
 .map-lista>*{pointer-events:auto}
-/* Když odznak není, přepínač zůstane vpravo. */
-.map-servis.hidden+.map-prep{margin-left:auto}
+/* Vlevo stojí odznak servisu a glóbus, vpravo přepínač pohledu. */
+.map-vlevo{display:flex;gap:6px;align-items:flex-start}
 .map-servis{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:11px;
   background:rgba(4,6,12,.9);border:1px solid var(--border);backdrop-filter:blur(10px);
   color:var(--text2);font-size:12px;font-weight:800;box-shadow:0 8px 20px rgba(0,0,0,.45)}
@@ -602,3 +602,15 @@ button{font:inherit;cursor:pointer}
 .hov-odp button:active{border-color:var(--vio);background:rgba(124,92,255,.16)}
 .hov-in .kv:first-of-type{border-top:1px solid var(--border)}
 .hov-in .fine{margin-top:4px}
+
+/* ─── Glóbus ─── */
+/* Oddálená mapa se rozloží do plochy a vypadá to divně — místo toho ukážeme
+   planetu. Kreslí se do canvasu, obrysy pevnin jsou v svet.js. */
+.globus{position:absolute;inset:0;z-index:420;width:100%;height:100%;display:block;
+  background:radial-gradient(circle at 50% 42%,#0a1020,#04060c 70%);touch-action:none}
+.globus-zpet{z-index:520;bottom:14px}
+.map-globus{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;
+  border-radius:11px;background:rgba(4,6,12,.9);border:1px solid var(--border);
+  backdrop-filter:blur(10px);font-size:17px;line-height:1;padding:0;
+  box-shadow:0 8px 20px rgba(0,0,0,.45)}
+.map-globus.on{border-color:var(--blue);background:rgba(79,209,255,.18)}
