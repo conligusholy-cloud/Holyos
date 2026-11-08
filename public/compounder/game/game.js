@@ -1360,11 +1360,16 @@ function gameYear() { return Math.floor((Date.now() - S.startedAt) / YEAR_MS) + 
 // ─── Pomůcky ─────────────────────────────────────────────────────────────────
 var $ = function (id) { return document.getElementById(id); };
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+// Zkrácená částka. Zásadní je, že zaokrouhlení nesmí přetéct do dalšího řádu —
+// 999 800 se zaokrouhlí na tisíc tisíců a to se nepíše, to je milion.
 function kc(n) {
   n = Math.round(Number(n) || 0);
-  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(Math.abs(n) >= 1e7 ? 0 : 1).replace('.', ',') + ' M';
-  if (Math.abs(n) >= 1e4) return Math.round(n / 1e3) + ' tis.';
-  return n.toLocaleString('cs-CZ');
+  if (Math.abs(n) < 1e4) return n.toLocaleString('cs-CZ');
+  var tis = Math.round(n / 1e3);
+  if (Math.abs(tis) < 1000) return tis + ' tis.';
+  var mil = n / 1e6, des = Math.abs(mil) >= 10 ? 0 : 1;
+  if (Math.abs(Number(mil.toFixed(des))) < 1000) return mil.toFixed(des).replace('.', ',') + ' M';
+  return (n / 1e9).toFixed(1).replace('.', ',') + ' mld.';
 }
 // V hlavičce chceme vidět, že peníze tečou. „120 tis." se hne jednou za půl
 // hodiny, proto pod milion píšeme přesné číslo — to se mění každou vteřinu.
