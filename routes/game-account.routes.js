@@ -733,6 +733,12 @@ async function zemeHracu() {
   });
   return out;
 }
+// Hvězdičky z infolinky: pověst −100 je jedna hvězda, 0 tři, +100 pět.
+// Musí sedět s hvezdy() v public/compounder/game/game.js.
+function hvezdyZPovesti(st) {
+  const p = Math.max(-100, Math.min(100, Number(st && st.povest) || 0));
+  return Math.round((3 + p / 50) * 10) / 10;
+}
 let _zeb = { at: 0, data: null };
 function dropZeb() { _zeb = { at: 0, data: null }; }
 async function zebricky() {
@@ -755,7 +761,7 @@ async function zebricky() {
     zeme: zemeMap[m.player_id] || [], hodnota: m._count._all }))
     .sort((a, b) => b.hodnota - a.hodnota);
 
-  const zisk = [], pozvanky = [], jmeni = [];
+  const zisk = [], pozvanky = [], jmeni = [], hvezdy = [];
   hraci.forEach((h) => {
     const st = h.state || {};
     // To, co hráči opravdu zbyde — stejně jako mu to svítí v hlavičce hry.
@@ -766,12 +772,18 @@ async function zebricky() {
     if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm, hodnota: st.refs });
     // Do žebříčku jmění patří i ten, kdo je v minusu — právě to je vidět.
     if (st.profile) jmeni.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm, hodnota: cisteJmeni(st) });
+    // Kdo ještě žádný hovor neměl, nemá se podle čeho hodnotit — startuje se na třech.
+    if (st.profile && (st.hovoru || 0) > 0) {
+      hvezdy.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm,
+        hodnota: hvezdyZPovesti(st) });
+    }
   });
   zisk.sort((a, b) => b.hodnota - a.hodnota);
   pozvanky.sort((a, b) => b.hodnota - a.hodnota);
   jmeni.sort((a, b) => b.hodnota - a.hodnota);
+  hvezdy.sort((a, b) => b.hodnota - a.hodnota);
 
-  _zeb = { at: Date.now(), data: { pradlomaty: poMistech, zisk, pozvanky, jmeni } };
+  _zeb = { at: Date.now(), data: { pradlomaty: poMistech, zisk, pozvanky, jmeni, hvezdy } };
   return _zeb.data;
 }
 // Moje příčka — ať ji hráč vidí, i když do první pětadvacítky nedosáhne.
@@ -787,9 +799,11 @@ router.get('/leaderboard', async (req, res, next) => {
       firma: x.firma || (x.nick + ' s.r.o.'), znak: x.znak || null, zeme: x.zeme || [],
       hodnota: x.hodnota, ja: !!(p && x.id === p.id) }));
     res.json({ ok: true,
-      pradlomaty: orez(z.pradlomaty), zisk: orez(z.zisk), pozvanky: orez(z.pozvanky), jmeni: orez(z.jmeni),
+      pradlomaty: orez(z.pradlomaty), zisk: orez(z.zisk), pozvanky: orez(z.pozvanky),
+      jmeni: orez(z.jmeni), hvezdy: orez(z.hvezdy),
       ja: p ? { pradlomaty: moje(z.pradlomaty, p.id), zisk: moje(z.zisk, p.id),
-        pozvanky: moje(z.pozvanky, p.id), jmeni: moje(z.jmeni, p.id) } : null,
+        pozvanky: moje(z.pozvanky, p.id), jmeni: moje(z.jmeni, p.id),
+        hvezdy: moje(z.hvezdy, p.id) } : null,
       hracu: z.pradlomaty.length });
   } catch (e) { next(e); }
 });

@@ -1014,6 +1014,7 @@ function fresh(profileId) {
     rateDrop: 0,      // snížení úroku z karty
     bankBonus: 0,     // navýšení bankovního rámce z karty
     povest: 0,        // jak si hráč vede na infolince, −100 až +100
+    hovoru: 0,        // kolik hovorů už má za sebou — bez nich se do žebříčku nepočítá
     hovorZa: null,    // za jak dlouho strávených ve hře zazvoní další hovor
     otazkyPosl: [],   // otázky, které už padly — ať se hned neopakují
     stats: { earned: 0, interest: 0 },
@@ -1071,6 +1072,7 @@ function dosypStav(o) {
     if (!o.splatkyAt) o.splatkyAt = Date.now();
     if (!Array.isArray(o.pobocky)) o.pobocky = [];
     if (typeof o.povest !== 'number') o.povest = 0;
+    if (typeof o.hovoru !== 'number') o.hovoru = 0;
     if (!Array.isArray(o.otazkyPosl)) o.otazkyPosl = [];
     // Rozehraná hra z doby před sídly: za sídlo bereme místo, kde hráč postavil
     // první prádlomat. Bez toho by mu doprava vycházela zdarma a pobočku by
@@ -1406,7 +1408,7 @@ function verdictPill(score) {
 // a chodí mu víc lidí. Kdo je odmítá nebo odbyde, přijde až o pětinu návštěvnosti.
 var HOVOR_ZA_MIN = 150000;       // nejdřív za dvě a půl minuty ve hře
 var HOVOR_ZA_MAX = 420000;       // nejpozději za sedm
-var HOVOR_ZVONI_MS = 20000;      // jak dlouho to zvoní, než to zákazník položí
+var HOVOR_ZVONI_MS = 5000;       // pět vteřin a zákazník to pokládá — nevyřízený hovor
 var HOVOR_ODMITNUTI = -6;        // co stojí nebraný hovor
 var POVEST_DOLU = 0.2;           // při nejhorší pověsti spadne návštěvnost o pětinu
 var POVEST_NAHORU = 0.1;         // při nejlepší stoupne o desetinu
@@ -1541,6 +1543,14 @@ function povestKoef() {
   var p = povest();
   return 1 + (p < 0 ? p / 100 * POVEST_DOLU : p / 100 * POVEST_NAHORU);
 }
+// Hodnocení, jaké hráči dávají zákazníci: jedna až pět hvězdiček po desetinách.
+// Mizerná pověst je jedna hvězda, nedotčená tři, nejlepší pět.
+function hvezdy() {
+  return Math.round((3 + povest() / 50) * 10) / 10;
+}
+function hvezdyText(h) {
+  return (h == null ? hvezdy() : h).toFixed(1).replace('.', ',') + ' ★';
+}
 function povestSlovy() {
   var p = povest();
   if (p >= 60) return 'výborná';
@@ -1605,6 +1615,7 @@ function hovorHlidej() {
 function odmitniHovor(samo) {
   if (!HOVOR) return;
   zmenPovest(HOVOR_ODMITNUTI);
+  S.hovoru = (S.hovoru || 0) + 1;
   HOVOR = null;
   naplanujHovor();
   zavriHovor();
@@ -1634,6 +1645,7 @@ function hovorDal() {
   HOVOR.stav = HOVOR.i < HOVOR.otazky.length ? 'otazka' : 'konec';
   if (HOVOR.stav === 'konec') {
     zmenPovest(HOVOR.body);
+    S.hovoru = (S.hovoru || 0) + 1;
     save(); paint(); syncState(true);
   }
   paintHovor();
@@ -1700,7 +1712,8 @@ function paintHovor() {
       + '<p class="hov-popis">Hovor skončil</p>'
       + '<h3 class="' + tr2 + '">' + (b > 0 ? '+' : '') + b + ' k pověsti</h3>'
       + '<p class="hov-stav">' + soud + '</p>'
-      + '<div class="kv"><span>Pověst u zákazníků</span><b>' + povestSlovy() + '</b></div>'
+      + '<div class="kv"><span>Hodnocení zákazníků</span><b>' + hvezdyText() + '</b></div>'
+      + '<div class="kv"><span>Pověst</span><b>' + povestSlovy() + '</b></div>'
       + '<div class="kv"><span>Návštěvnost</span><b class="' + (povest() >= 0 ? 'ok' : 'err') + '">'
       + (povest() >= 0 ? '+' : '') + Math.round((povestKoef() - 1) * 100) + ' %</b></div>'
       + '<button class="btn big" id="hov-konec" style="width:100%;margin-top:12px">Zavěsit</button></div>';
@@ -3340,6 +3353,10 @@ var ZEB_POPIS = {
     pod: 'Počítají se obsazená místa — to je jediné číslo, které hlídá server.' },
   zisk: { nadpis: 'Nejvyšší měsíční zisk', jed: function (v) { return kcFull(v); },
     pod: 'Podle poslední uložené sítě hráče.' },
+  hvezdy: { nadpis: 'Nejlepší hodnocení zákazníků',
+    jed: function (v) { return hvezdyText(v); },
+    pod: 'Jedna až pět hvězdiček podle toho, jak si hráč vede na infolince. '
+      + 'Kdo ještě žádný hovor neměl, v žebříčku není.' },
   pozvanky: { nadpis: 'Nejvíc pozvánek', jed: function (v) { return v + '×'; },
     pod: 'Kolikrát někdo otevřel sdílený odkaz hráče.' },
   jmeni: { nadpis: 'Největší čisté jmění', jed: function (v) { return kcFull(v); },
@@ -3408,13 +3425,15 @@ function povestHtml() {
   var p = povest();
   var zmena = Math.round((povestKoef() - 1) * 100);
   return '<div class="card"><div class="row"><h3>Infolinka</h3>'
-    + '<b class="' + (p > 0 ? 'ok' : (p < 0 ? 'err' : '')) + '">' + povestSlovy() + '</b></div>'
+    + '<b class="' + (p > 0 ? 'ok' : (p < 0 ? 'err' : '')) + '">' + hvezdyText() + '</b></div>'
+    + '<p class="muted small" style="margin:2px 0 0">Pověst u zákazníků je ' + povestSlovy() + '.</p>'
     + '<div class="povest-pas"><i style="left:' + ((p + 100) / 2) + '%"></i></div>'
     + '<div class="kv"><span>Návštěvnost z pověsti</span><b class="'
     + (zmena > 0 ? 'ok' : (zmena < 0 ? 'err' : '')) + '">' + (zmena > 0 ? '+' : '') + zmena + ' %</b></div>'
     + '<p class="fine" style="margin-top:8px">Zákazníci volí, jen když jsi ve hře. '
     + 'Kdo hovor vezme a umí poradit, má v prádlomatech víc lidí — až o desetinu. '
-    + 'Kdo je odmítá nebo odbyde, přijde až o pětinu návštěvnosti.</p></div>';
+    + 'Kdo je odmítá nebo odbyde, přijde až o pětinu návštěvnosti. Zvoní to jen pět vteřin — '
+    + 'co se nevezme, bere se jako nevyřízený hovor.</p></div>';
 }
 // Střed prozkoumaného města — odtud se dá zřídit pobočka.
 function stredOblasti(a) {
