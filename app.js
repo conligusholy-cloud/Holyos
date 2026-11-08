@@ -1396,6 +1396,13 @@ server.listen(PORT, async () => {
   // Běží na pozadí — geokodér je pomalý a start serveru na něj nemá čekat.
   require('./services/game/zeme').doplnZemeMest()
     .catch((err) => console.error('[app] doplnění zemí měst selhalo:', err.message));
+  // Hra: doplatí provize, které nevznikly kvůli špatně zapsané vazbě pozvání.
+  // Idempotentní — každá provize má svůj klíč, opakovaný běh nic nepřiplatí.
+  try {
+    await require('./services/game/provize').dorovnejVsem();
+  } catch (err) {
+    console.error('[app] dorovnani provizi selhalo:', err.message);
+  }
   // Šifrování citlivých polí osob: po startu zašifruje stávající záznamy (jen s FIELD_ENC_KEY, idempotentní)
   try {
     const fc = require('./services/field-crypto');
