@@ -1673,8 +1673,9 @@ function drawMap() {
       any = true; zname[sp.id] = 1;
       var unit = S.units.filter(function (u) { return u.spotId === sp.id; })[0];
       var rival = !unit && CLAIMS[sp.id] && !CLAIMS[sp.id].mine ? CLAIMS[sp.id] : null;
-      // V pohledu „jen moje“ necháme na mapě opravdu jen vlastní stavby.
-      if (moje && !unit) return;
+      // V pohledu „jen moje“ mizí konkurence. Prozkoumaná i volná místa zůstávají
+      // — právě na nich se staví, bez nich by mapa k ničemu nebyla.
+      if (moje && rival) return;
       // Volné místo je jen tip, ne stavba — ukazuje se až při přiblížení.
       if (!unit && !rival && !blizko) { skryto++; return; }
       var seen = !!S.revealed[sp.id];
@@ -1706,14 +1707,7 @@ function drawMap() {
   });
   // Nápověda pod mapou říká buď „začni průzkumem“, nebo „přibliž, místa jsou schovaná“.
   var h = $('map-hint');
-  if (moje) {
-    // Přepínač nad mapou mluví sám za sebe — nápověda patří jen tomu, kdo nic nemá.
-    if ((S.units || []).length) h.classList.add('hidden');
-    else {
-      h.textContent = 'Zatím nemáš žádný prádlomat. Přepni na Všechno a najdi si místo.';
-      h.classList.remove('hidden');
-    }
-  } else if (!any) {
+  if (!any) {
     h.textContent = 'Napiš město a pošli tam člověka, ať ho projde. Místa jsou schovaná — dokud město neprozkoumáš, nic na mapě neuvidíš.';
     h.classList.remove('hidden');
   } else if (skryto) {
