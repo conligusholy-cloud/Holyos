@@ -4469,8 +4469,8 @@ function pozvaniHtml() {
       }).join('') + '</div>'
     + (POZVANI.some(function (h) { return (h.stroju || 0) > (h.provizi || 0); })
         ? '<p class="fine" style="margin-top:8px">U někoho máš míň provizí než strojů. '
-          + 'Provize se platí jen za stroje koupené v době, kdy jsi měl distribuci zapnutou — '
-          + 'co si pořídil dřív nebo během pauzy, se zpětně neplatí.</p>' : '');
+          + 'Dorovná se to samo, jakmile tuhle záložku otevřeš — ale jen když máš distribuci '
+          + 'zapnutou. S vypnutou se nedoplatí nic, dokud ji nezapneš.</p>' : '');
 }
 function paintMe() {
   var p = PROFILES[S.profile];
