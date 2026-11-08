@@ -136,8 +136,9 @@ async function requireUser(req, res, next, skipConsent) {
   if (!u || u.status !== 'active') { res.clearCookie(USER_COOKIE); return res.redirect('/login'); }
   // Změna hesla / 2FA odvolá všechny starší relace
   if (u.pw_changed_at && s.iat && s.iat * 1000 < new Date(u.pw_changed_at).getTime() - 2000) { res.clearCookie(USER_COOKIE); return res.redirect('/login'); }
+  // (/souhlas musí projít i bez 2FA — jinak smyčka /2fa → /souhlas → /2fa = ERR_TOO_MANY_REDIRECTS)
   // Povinné 2FA: kdo ho nemá, smí jen nastavit 2FA, zobrazit podmínky a odhlásit se (hned při dalším požadavku i u už přihlášených)
-  if (USER_2FA_REQUIRED && !u.totp_enabled && !/^\/(2fa(\/|$)|logout|vop|gdpr|img\/|favicon)/.test(req.path)) {
+  if (USER_2FA_REQUIRED && !u.totp_enabled && !/^\/(2fa(\/|$)|souhlas|logout|vop|gdpr|img\/|favicon)/.test(req.path)) {
     if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'Nejdřív si zapni dvoufázové ověření.', redirect: '/2fa' });
     return res.redirect('/2fa');
   }
