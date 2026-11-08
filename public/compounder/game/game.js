@@ -719,6 +719,7 @@ function splatitUver(id, castka) {
   var dam = Math.min(Math.max(0, Math.round(castka || 0)), Math.round(l.zbyva), Math.floor(S.cash));
   if (!(dam > 0)) return 0;
   S.cash -= dam;
+  zapis('splatka', 'Mimořádná splátka — ' + (l.popis || 'úvěr'), -dam);
   l.zbyva = Math.max(0, l.zbyva - dam);
   S.bank = Math.min(bankCap(), S.bank + dam);   // splácením se uvolňuje rámec
   if (l.zbyva < 1) {
@@ -777,6 +778,7 @@ function zmenitSplatnost(id, i) {
   var n = zmenaNavrh(l, i);
   if (S.cash < n.poplatek) return null;
   S.cash -= n.poplatek;
+  zapis('poplatek', 'Změna splatnosti — ' + (l.popis || 'úvěr'), -n.poplatek);
   l.sazba = n.sazba;
   l.mesicu = n.mesicu;
   l.zbyvaMesicu = n.mesicu;
@@ -817,6 +819,7 @@ function mesicniSplatka() {
     var ma = Math.max(0, S.cash);
     var dal = Math.min(chce, ma);
     S.cash -= dal;
+    knihaProvoz(-dal, 'splatka');
     l.zbyva = Math.max(0, l.zbyva + urok - dal);
     drip.pay += dal;
     S.stats.interest += urok;
@@ -1322,6 +1325,168 @@ function zapisHistorii() {
     S.hist = nove.concat(S.hist.slice(pul));
   }
 }
+// ─── Účetní kniha ────────────────────────────────────────────────────────────
+// Každý pohyb peněz má svůj řádek: kdy, za co, kolik a kolik po tom zbylo.
+// Jednorázové věci (nákup stroje, přípojky, pobočka, úvěr, provize) se zapisují
+// hned. Provoz a splátky bance tečou průběžně, ty se sčítají za herní měsíc a
+// zapíšou jedním řádkem — jinak by v knize byly tisíce drobných přírůstků.
+var KNIHA_MAX = 600;              // starší řádky se zahazují, ať stav hry nenabobtná
+var KNIHA_DRUH = {
+  nakup: { nazev: 'Nákupy a stavba', kat: 'nakup' },
+  pruzkum: { nazev: 'Průzkum', kat: 'provoz' },
+  poplatek: { nazev: 'Poplatky', kat: 'provoz' },
+  provoz: { nazev: 'Provoz sítě', kat: 'provoz' },
+  uver: { nazev: 'Z banky', kat: 'banka' },
+  splatka: { nazev: 'Splátky', kat: 'banka' },
+  prijem: { nazev: 'Příjmy', kat: 'prijem' }
+};
+function knihaKat(d) { return (KNIHA_DRUH[d] || KNIHA_DRUH.prijem).kat; }
+// Zapíše jeden pohyb. Volá se až PO změně hotovosti, aby seděl zůstatek.
+// u = kolik z toho zaplatila banka (u nákupu na úvěr), jen pro informaci.
+function zapis(d, p, c, u) {
+  if (!S) return;
+  c = Math.round(c || 0);
+  if (!c) return;
+  if (!Array.isArray(S.kniha)) S.kniha = [];
+  var r = { t: Date.now(), d: d, p: String(p || ''), c: c, z: Math.round(S.cash) };
+  if (u) r.u = Math.round(u);
+  S.kniha.push(r);
+  if (S.kniha.length > KNIHA_MAX) S.kniha = S.kniha.slice(-KNIHA_MAX);
+}
+// Průběžné toky se sčítají za měsíc. Jakmile se měsíc přehoupne, uzavřou se.
+function knihaProvoz(castka, druh) {
+  if (!S || !castka) return;
+  var m = histMesic();
+  if (!(m >= 0)) return;
+  if (!S.knihaMes || S.knihaMes.m !== m) { knihaUzavri(); S.knihaMes = { m: m, provoz: 0, splatky: 0 }; }
+  if (druh === 'splatka') S.knihaMes.splatky += castka;
+  else S.knihaMes.provoz += castka;
+}
+// Uzavře rozepsaný měsíc do dvou řádků: co síť vydělala a co sebrala banka.
+function knihaUzavri() {
+  var b = S.knihaMes;
+  if (!b) return;
+  S.knihaMes = null;
+  if (Math.round(b.provoz)) zapis('provoz', 'Provoz sítě za měsíc', b.provoz);
+  if (Math.round(b.splatky)) zapis('splatka', 'Splátky úvěrů za měsíc', b.splatky);
+}
+// Kdo hrál dřív, než se kniha začala vést, dostane začátek dopočítaný z toho,
+// co ve hře stojí. U těchhle řádků neznáme zůstatek ani rozdělení na hotovost
+// a úvěr, proto jsou označené jako dopočítané.
+function dopocitejKnihu(o) {
+  var k = [], p = PROFILES[o.profile];
+  if (p) k.push({ t: o.startedAt, d: 'prijem', p: 'Startovní kapitál', c: Math.round(p.cash), r: 1 });
+  (o.units || []).forEach(function (u) {
+    var m = MODELS[u.eco && u.eco.model];
+    k.push({ t: u.builtAt || o.startedAt, d: 'nakup', r: 1,
+      p: 'Prádlomat ' + (u.name || 'místo') + (m ? ' (' + m.name + ')' : ''),
+      c: -Math.round((u.eco && u.eco.invest) || 0) });
+  });
+  (o.pobocky || []).forEach(function (b) {
+    k.push({ t: b.od || o.startedAt, d: 'nakup', p: 'Pobočka ' + (b.name || ''), c: -POBOCKA_CENA, r: 1 });
+  });
+  if (o.ceta) k.push({ t: o.ceta.od || o.startedAt, d: 'nakup', p: 'Stavební technika', c: -CETA_CENA, r: 1 });
+  k.sort(function (a, b) { return a.t - b.t; });
+  return k;
+}
+function knihaZaloz() {
+  if (!S) return;
+  if (!Array.isArray(S.kniha)) {
+    S.kniha = dopocitejKnihu(S);
+    S.knihaOd = Date.now();
+  }
+}
+// Herní měsíc, do kterého řádek patří — podle toho se kniha dělí na období.
+function knihaMesic(t) {
+  return Math.max(0, Math.floor(((t || 0) - (S.startedAt || 0)) / MONTH_MS));
+}
+function mesicNazev(m) {
+  return 'Rok ' + (Math.floor(m / 12) + 1) + ' · měsíc ' + (m % 12 + 1);
+}
+function knihaRadek(r) {
+  var kl = r.c > 0 ? 'ok' : 'err';
+  return '<div class="kn-radek"><i class="kn-tecka ' + knihaKat(r.d) + '"></i>'
+    + '<span><b>' + esc(r.p) + '</b><i>' + datumCas(r.t)
+    + (r.u ? ' · z toho úvěr ' + kcFull(r.u) : '')
+    + (r.r ? ' · dopočítáno' : (r.z != null ? ' · zůstatek ' + kcFull(r.z) : '')) + '</i></span>'
+    + '<b class="' + kl + '">' + (r.c > 0 ? '+' : '−') + kcFull(Math.abs(r.c)) + '</b></div>';
+}
+var KNIHA_FILTR = 'vse';
+var KNIHA_FILTRY = [
+  { k: 'vse', n: 'Vše' }, { k: 'nakup', n: 'Nákupy' }, { k: 'provoz', n: 'Provoz' },
+  { k: 'banka', n: 'Banka' }, { k: 'prijem', n: 'Příjmy' }
+];
+function knihaSheet() {
+  knihaZaloz();
+  knihaSrovnej();
+  var vse = (S.kniha || []).slice().sort(function (a, b) { return b.t - a.t; });
+  var list = KNIHA_FILTR === 'vse' ? vse
+    : vse.filter(function (r) { return knihaKat(r.d) === KNIHA_FILTR; });
+  var prijmy = 0, vydaje = 0;
+  vse.forEach(function (r) { if (r.c > 0) prijmy += r.c; else vydaje -= r.c; });
+  // Rozepsaný měsíc ukážeme zvlášť, aby bylo vidět, co se zrovna sbírá.
+  var b = S.knihaMes, bezi = '';
+  if (b && (Math.round(b.provoz) || Math.round(b.splatky))) {
+    bezi = '<div class="kn-bezi"><b>Rozepsaný měsíc</b>'
+      + '<span>Provoz <i class="' + (b.provoz >= 0 ? 'ok' : 'err') + '">'
+      + (b.provoz >= 0 ? '+' : '−') + kcFull(Math.abs(Math.round(b.provoz))) + '</i></span>'
+      + (Math.round(b.splatky) ? '<span>Splátky <i class="err">−'
+          + kcFull(Math.abs(Math.round(b.splatky))) + '</i></span>' : '') + '</div>';
+  }
+  var mesic = -1, html = '';
+  list.forEach(function (r) {
+    var m = knihaMesic(r.t);
+    if (m !== mesic) {
+      mesic = m;
+      var cist = list.filter(function (x) { return knihaMesic(x.t) === m; })
+        .reduce(function (a, x) { return a + x.c; }, 0);
+      html += '<div class="kn-mesic"><span>' + mesicNazev(m) + '</span>'
+        + '<b class="' + (cist >= 0 ? 'ok' : 'err') + '">' + (cist >= 0 ? '+' : '−')
+        + kcFull(Math.abs(cist)) + '</b></div>';
+    }
+    html += knihaRadek(r);
+  });
+  sheet('<h3>Účetní kniha</h3>'
+    + '<p class="muted small">Každý pohyb peněz od začátku hry. Provoz sítě a splátky '
+    + 'bance se sčítají za herní měsíc, všechno ostatní má svůj řádek.</p>'
+    + '<div class="sum-grid" style="margin:12px 0">'
+    + '<div><span>Příjmy</span><b class="ok">' + kc(prijmy) + ' ' + CUR + '</b></div>'
+    + '<div><span>Výdaje</span><b class="err">' + kc(vydaje) + ' ' + CUR + '</b></div>'
+    + '<div><span>Hotovost</span><b>' + kc(S.cash) + ' ' + CUR + '</b></div>'
+    + '</div>'
+    + bezi
+    + '<div class="seg kn-filtr">' + KNIHA_FILTRY.map(function (f) {
+        return '<button class="' + (f.k === KNIHA_FILTR ? 'on' : '') + '" data-knf="' + f.k + '">'
+          + f.n + '</button>';
+      }).join('') + '</div>'
+    + (html ? '<div class="kn">' + html + '</div>'
+            : '<div class="empty">V tomhle období nic není.</div>')
+    + (S.knihaOd
+        ? '<p class="fine" style="margin-top:12px">Řádky označené „dopočítáno" jsou z doby, '
+          + 'kdy se kniha ještě nevedla — poskládali jsme je z toho, co ti ve hře stojí, '
+          + 'takže u nich neznáme zůstatek ani kolik z toho šlo na úvěr.</p>'
+        : ''));
+  [].forEach.call(document.querySelectorAll('#sheet-body [data-knf]'), function (x) {
+    x.onclick = function () { KNIHA_FILTR = x.getAttribute('data-knf'); knihaSheet(); };
+  });
+}
+// Když se mezitím přehoupl měsíc, uzavřeme ho — ať kniha nekončí u rozepsaného.
+function knihaSrovnej() {
+  if (S.knihaMes && S.knihaMes.m !== histMesic()) knihaUzavri();
+}
+function knihaHtml() {
+  knihaZaloz();
+  var vse = S.kniha || [];
+  var prijmy = 0, vydaje = 0;
+  vse.forEach(function (r) { if (r.c > 0) prijmy += r.c; else vydaje -= r.c; });
+  return '<button class="card kv-karta" id="do-kniha">'
+    + '<div class="row"><h3>Účetní kniha</h3><b class="muted">' + vse.length + ' zápisů ›</b></div>'
+    + '<p class="muted small" style="margin:2px 0 8px">Co jsi kdy koupil, co ti přiteklo a co '
+    + 'sebrala banka — od prvního dne.</p>'
+    + '<div class="kv"><span>Příjmy celkem</span><b class="ok">' + kcFull(prijmy) + '</b></div>'
+    + '<div class="kv"><span>Výdaje celkem</span><b class="err">' + kcFull(vydaje) + '</b></div>'
+    + '</button>';
+}
 // Kolik z úvěru zbývalo po tolika měsících splácení.
 function zbytekUveru(l, mesicu) {
   var j = Number(l.puvodni) || 0, i = (Number(l.sazba) || 0) / 12, spl = Number(l.splatka) || 0;
@@ -1375,6 +1540,7 @@ function tick() {
   // Do bubliny nad prádlomaty: zvlášť co přiteklo a co banka sebrala.
   drip.earn += Math.max(0, earned);
   S.cash += earned;
+  knihaProvoz(earned, 'provoz');
   S.stats.earned += Math.max(0, earned);
   S.bank = Math.min(bankCap(), S.bank + BANK_PER_DAY * (dt / 86400000));
   S.lastTick = now;
@@ -2952,6 +3118,7 @@ function scout(city, btn) {
           return toast(j.area.name + ' už máš prozkoumaný — koukni na mapu.', 'ok');
         }
         S.cash -= SCOUT_COST;
+        zapis('pruzkum', 'Průzkum města — ' + j.area.name, -SCOUT_COST);
         S.areas[id] = { name: j.area.name, lat: j.area.lat, lon: j.area.lon, scoutedAt: Date.now(), spots: (j.spots || []).map(fixMetrics) };
         zalozSidlo(j.area);
         save(); paint(); drawMap(); closeSheet(); syncState(true);
@@ -2986,7 +3153,11 @@ function spotSheet(sp, areaId) {
       + '<button class="btn big" id="do-reveal"' + (S.cash < REVEAL_COST ? ' disabled' : '') + '>Prověřit místo</button>'
       + (S.cash < REVEAL_COST ? '<p class="fine">Na obhlídku nemáš dost hotovosti.</p>' : ''));
     var b = $('do-reveal');
-    if (b) b.onclick = function () { S.cash -= REVEAL_COST; S.revealed[sp.id] = true; save(); paint(); drawMap(); syncState(true); spotSheet(sp, areaId); };
+    if (b) b.onclick = function () {
+      S.cash -= REVEAL_COST;
+      zapis('pruzkum', 'Prověření místa — ' + (sp.name || ''), -REVEAL_COST);
+      S.revealed[sp.id] = true; save(); paint(); drawMap(); syncState(true); spotSheet(sp, areaId);
+    };
     return;
   }
 
@@ -3134,7 +3305,10 @@ function dohnat(chybi) {
     + mesicu + ' ' + mn(mesicu, 'herní měsíc', 'herní měsíce', 'herních měsíců')
     + ', tedy asi za ' + dni + ' ' + mn(dni, 'den', 'dny', 'dní') + '.';
 }
-function doFinance(f, vazba) { S.cash -= f.own; S.bank -= f.need; pricistDluh(f.need, prirazkaZa(f.need), vazba); }
+function doFinance(f, vazba) {
+  S.cash -= f.own; S.bank -= f.need; pricistDluh(f.need, prirazkaZa(f.need), vazba);
+  zapis('nakup', (vazba && vazba.popis) || 'Nákup', -f.own, f.need);
+}
 // Stroj se kupuje dřív, než ví, kde bude stát. Až se postaví, úvěr na něj
 // přivážeme k tomu místu — jinak by nešlo říct, že je ten prádlomat doplacený.
 function pripojUverKeStroji(spotId, nazev) {
@@ -3437,7 +3611,9 @@ function rivalSheet(sp, areaId, c) {
           toast('Místo se mezitím uvolnilo — můžeš stavět rovnou.', 'ok');
           return spotSheet(sp, areaId);
         }
-        S.cash -= BID_FEE; save(); paint();
+        S.cash -= BID_FEE;
+        zapis('poplatek', 'Neúspěšné vyjednávání — ' + (sp.name || ''), -BID_FEE);
+        save(); paint();
         return toast(r.j.error || 'Nepovedlo se.', 'err');
       }
       // Vyhráli jsme: platíme přípojky a stavíme s nájmem, který jsme nabídli.
@@ -4295,6 +4471,7 @@ function pobockaSheet() {
       var m = mesta.filter(function (x) { return x.id === b.getAttribute('data-pob'); })[0];
       if (!m || S.cash < POBOCKA_CENA || !pobockaLze()) return;
       S.cash -= POBOCKA_CENA;
+      zapis('nakup', 'Pobočka ' + m.name, -POBOCKA_CENA);
       S.pobocky.push({ name: m.name, lat: m.lat, lon: m.lon, od: Date.now() });
       save(); paint(); closeSheet(); syncState(true);
       toast('Pobočka v ' + m.name + ' otevřená.', 'ok');
@@ -4453,6 +4630,7 @@ function cerpatSheet(chci) {
       if (!st.ok) { toast('Rizikoř čerpání zastavil. Zkus to, až se věci srovnají.', 'err'); return; }
       S.ramec.cerpano = (S.ramec.cerpano || 0) + c;
       S.cash += c;
+      zapis('uver', 'Čerpání z rámce', c);
       pricistDluh(c, prirazkaZa(c) + (S.ramec.bonus || 0), { druh: 'ramec', popis: 'Čerpání z rámce' });
       save(); paint(); syncState(true);
       toast('Načerpáno ' + kcFull(c) + '.', 'ok');
@@ -4655,6 +4833,7 @@ function paintBank() {
   if (b) b.onclick = function () {
     var pay = Math.min(S.cash, S.loan);
     S.cash -= pay; splatitDluh(pay); S.bank = Math.min(bankCap(), S.bank + pay);
+    zapis('splatka', 'Doplacení úvěrů', -pay);
     save(); paint(); syncState(true); toast('Splaceno ' + kcFull(pay) + '.', 'ok');
   };
 }
@@ -4685,6 +4864,7 @@ function penizeSheet() {
   if (sp) sp.onclick = function () {
     var pay = Math.min(S.cash, S.loan);
     S.cash -= pay; splatitDluh(pay); S.bank = Math.min(bankCap(), S.bank + pay);
+    zapis('splatka', 'Doplacení úvěrů', -pay);
     save(); paint(); syncState(true); closeSheet(); toast('Splaceno ' + kcFull(pay) + '.', 'ok');
   };
   var ba = $('pen-balicek');
@@ -4892,6 +5072,7 @@ function bindDist() {
     apiJson('/account/distributor', {}).then(function (r) {
       if (!r.ok) { b.disabled = false; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
       S.cash -= rezie;
+      zapis('poplatek', 'Distributorský program — měsíční režie', -rezie);
       save(); syncState(true);
       loadDist(function () { paintMe(); });
       toast(rezie > 0 ? 'Distribuce zaplacená na další herní měsíc.'
@@ -4974,6 +5155,7 @@ function paintMe() {
     + '<p class="muted small" style="margin:2px 0 10px">Kdo si přes tvůj odkaz založil účet. '
     + 'Tohle zůstává zapsané natrvalo.</p>'
     + pozvaniHtml() + '</div>'
+    + knihaHtml()
     + distHtml()
     + '<button class="btn sec big" id="do-reset">Začít znovu od nuly</button>';
   if (drzFirma != null && $('me-firma')) $('me-firma').value = drzFirma;
@@ -4991,6 +5173,8 @@ function paintMe() {
     }).catch(function () { fb.disabled = false; fb.textContent = 'Přejmenovat firmu'; toast('Server neodpovídá.', 'err'); });
   };
   bindDist();
+  var kn = $('do-kniha');
+  if (kn) kn.onclick = function () { KNIHA_FILTR = 'vse'; knihaSheet(); };
   var zb = $('me-znak');
   if (zb) zb.onclick = function () { znakSheet(); };
   $('do-share').onclick = function () { shareGame($('do-share')); };
@@ -5556,6 +5740,7 @@ function vyzvedniNasledky(then) {
     d.forEach(function (x) {
       if (x.kind === 'cash') {
         S.cash += x.amount || 0;
+        zapis('prijem', x.popis || 'Připsáno na účet', x.amount || 0);
         // Kdyby mezitím peníze utratil, schodek pokryje banka — ať hra neskončí
         // v záporné hotovosti, ze které není cesta ven.
         if (S.cash < 0) { pricistDluh(-S.cash, prirazkaZa(-S.cash)); S.bank = Math.max(0, S.bank + S.cash); S.cash = 0; }
@@ -5970,6 +6155,7 @@ function uverSheet(chci, iSplatnosti) {
     S.bank -= m.castka;
     pricistDluh(m.castka, m.prirazka, { druh: 'provoz', popis: 'Úvěr z banky na ' + m.splatnost.nazev }, m.splatnost.mesicu);
     S.cash += m.naruku;
+    zapis('uver', 'Úvěr z banky na ' + m.splatnost.nazev, m.naruku);
     S.stats.interest += m.poplatek;   // poplatek bereme jako náklad úvěru
     save(); paint(); paintBank(); closeSheet(); syncState(true);
     toast('Úvěr sjednán. Na účtu máš o ' + kcFull(m.naruku) + ' víc.', 'ok');
@@ -6042,7 +6228,7 @@ function claimCash(then) {
       // Hotovost přidaná z administrace jde do kapsy, koupený balíček do rámce.
       // Koupený balík je zároveň zástava: banka proti němu půjčí i bez výdělku.
       if (v.effect === 'ramec') { S.bank += v.amount; S.duvera = (S.duvera || 0) + v.amount; }
-      else S.cash += v.amount;
+      else { S.cash += v.amount; zapis('prijem', 'Karta — ' + (v.name || 'hotovost'), v.amount); }
       ME.cards = r.j.owned;
       save(); paint(); syncState(true);
       toast(v.msg, 'ok');

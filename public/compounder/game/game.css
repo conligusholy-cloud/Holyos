@@ -110,6 +110,9 @@ button{font:inherit;cursor:pointer}
 .sum-grid b{display:block;font-size:19px;font-variant-numeric:tabular-nums}
 .sum-grid span{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text3)}
 .card{background:var(--card);border:1px solid var(--border);border-radius:15px;padding:14px;margin-bottom:10px}
+/* Karta, na kterou se dá klepnout — vypadá jako ostatní, jen reaguje na dotek. */
+button.card{display:block;width:100%;text-align:left;color:var(--text);font:inherit}
+button.card:active{border-color:var(--vio);background:rgba(124,92,255,.1)}
 .card h3{font-size:15.5px;margin-bottom:3px}
 .row{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .row+.row{margin-top:7px}
@@ -341,6 +344,31 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .btn.sm.rush:disabled{opacity:.6}
 
 /* Přepínač v záložce Síť a žebříčky. */
+/* ─── Účetní kniha ─── */
+/* Barevná tečka říká, do čeho pohyb patří: nákup, provoz, banka, příjem.
+   Řádek je tři sloupce — tečka, popis s datem, částka vpravo. */
+.kn{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.kn-radek{display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:1px solid var(--border)}
+.kn-radek span{flex:1;min-width:0}
+.kn-radek b{font-size:13.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.kn-radek span b{display:block;font-weight:600;font-size:13.5px;white-space:normal}
+.kn-radek span i{display:block;font-style:normal;font-size:11px;color:var(--text3);margin-top:1px}
+.kn-tecka{flex:0 0 8px;width:8px;height:8px;border-radius:50%;background:var(--text3)}
+.kn-tecka.nakup{background:var(--vio)}
+.kn-tecka.provoz{background:#4aa3ff}
+.kn-tecka.banka{background:var(--warn)}
+.kn-tecka.prijem{background:var(--ok)}
+.kn-mesic{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:8px 12px;background:var(--card2);border-top:1px solid var(--border);
+  font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)}
+.kn-mesic b{font-size:12px;letter-spacing:0;text-transform:none;font-variant-numeric:tabular-nums}
+.kn-bezi{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;margin:0 0 4px;
+  padding:10px 12px;border:1px dashed var(--border2);border-radius:12px}
+.kn-bezi > b{width:100%;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)}
+.kn-bezi span{font-size:13px;color:var(--text2)}
+.kn-bezi i{font-style:normal;font-weight:700;font-variant-numeric:tabular-nums}
+.kn-filtr{margin:10px 0 8px}
+.kn-filtr button{font-size:12px;padding:7px 6px}
 .seg{display:flex;gap:6px;margin:14px 0 4px}
 .seg button{flex:1;padding:8px 10px;border-radius:10px;border:1px solid var(--border);
   background:var(--card);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer}
