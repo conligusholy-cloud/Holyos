@@ -115,6 +115,10 @@ button{font:inherit;cursor:pointer}
 .kv:first-of-type{border-top:0}
 .kv span{color:var(--text2)}
 .kv b{font-variant-numeric:tabular-nums}
+/* Řádek, který se dá rozkliknout — vypadá jako ostatní, jen reaguje na klepnutí. */
+button.kv{width:100%;background:none;border-left:0;border-right:0;border-bottom:0;
+  color:inherit;font:inherit;text-align:left;cursor:pointer}
+button.kv:active{background:rgba(124,92,255,.12)}
 .inp{flex:1;min-width:0;background:rgba(4,8,16,.75);border:1px solid var(--border2);border-radius:12px;
   color:var(--text);padding:12px 13px;font:inherit;font-size:16px;outline:none}
 .inp:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(79,209,255,.14)}

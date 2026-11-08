@@ -340,6 +340,25 @@ router.post('/account/nakup', requirePlayer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /account/provize → z čeho se vydělané provize složily. Komu a kdy se co
+// připsalo — hráč má mít čím si to zkontrolovat, ne jen jedno velké číslo.
+router.get('/account/provize', requirePlayer, async (req, res, next) => {
+  try {
+    const rows = await prisma.gameDelivery.findMany({
+      where: { player_id: req.player.id, kind: 'cash', popis: { startsWith: 'Provize' } },
+      orderBy: { id: 'desc' }, take: 200,
+      select: { amount: true, popis: true, created_at: true, claimed_at: true },
+    });
+    res.json({ ok: true, provize: rows.map((d) => ({
+      castka: d.amount,
+      // V popisu je za pomlčkou „Kdo koupil co“ — to je přesně, co chceme ukázat.
+      zac: (String(d.popis || '').split(' — ')[1] || String(d.popis || '')).trim(),
+      kdy: d.created_at,
+      vyzvednuto: d.claimed_at || null,
+    })) });
+  } catch (e) { next(e); }
+});
+
 // GET /account/distributor → stav programu
 router.get('/account/distributor', requirePlayer, async (req, res, next) => {
   try {

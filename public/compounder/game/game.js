@@ -4344,6 +4344,41 @@ function znakSheet() {
 // Kdo si platí měsíční režii, bere 10 % z ceny každého prádlomatu, který
 // postaví hráč, jehož do hry přivedl. Režie se musí každý herní měsíc obnovit.
 var DIST = null;
+// Rozpis provizí: kdy, od koho a za co. Tažíme ho ze serveru až při otevření —
+// ve stavu hry není, protože provize vznikají u zvoucího, ne u hráče.
+// Datum a čas lidsky — u provizí je důležité obojí, hráči jich chodí víc za den.
+function datumCas(x) {
+  try {
+    return new Date(x).toLocaleString('cs-CZ',
+      { day: 'numeric', month: 'numeric', hour: 'numeric', minute: '2-digit' });
+  } catch (e) { return ''; }
+}
+function provizeSheet() {
+  sheet('<h3>Provize</h3><p class="muted small">Načítám…</p>');
+  api('/account/provize').then(function (r) {
+    var list = (r.ok && r.j.provize) || [];
+    var celkem = list.reduce(function (a, x) { return a + (x.castka || 0); }, 0);
+    sheet('<h3>Provize</h3>'
+      + '<p class="muted small">Deset procent z ceny každého stroje, který si koupil někdo '
+      + 'z tvé sítě. Vyplácí se hned při nákupu.</p>'
+      + (list.length
+          ? '<div class="sum-grid" style="margin:12px 0">'
+            + '<div><span>Dohromady</span><b class="ok">' + kcFull(celkem) + '</b></div>'
+            + '<div><span>Provizí</span><b>' + list.length + '×</b></div></div>'
+            + '<div class="srv">' + list.map(function (x) {
+                return '<div class="srv-radek">'
+                  + '<i class="srv-tecka ' + (x.vyzvednuto ? 'ok' : 'warn') + '"></i>'
+                  + '<span><b>' + esc(x.zac || 'provize') + '</b>'
+                  + '<i>' + esc(datumCas(x.kdy)) + (x.vyzvednuto ? '' : ' · čeká na vyzvednutí') + '</i></span>'
+                  + '<b class="ok">' + kcFull(x.castka) + '</b></div>';
+              }).join('') + '</div>'
+          : '<div class="empty">Zatím žádná provize.<br>Přiveď někoho do hry a dostaneš '
+            + 'desetinu z každého stroje, který si koupí.</div>')
+      + (list.length >= 200 ? '<p class="fine">Ukazuje se posledních 200.</p>' : ''));
+  }).catch(function () {
+    sheet('<h3>Provize</h3><p class="muted small">Rozpis se nepodařilo načíst. Zkus to za chvíli.</p>');
+  });
+}
 function loadDist(then) {
   if (!ME) { DIST = null; if (then) then(); return; }
   api('/account/distributor').then(function (r) {
@@ -4368,8 +4403,9 @@ function distHtml() {
     + '<div class="kv"><span>Přivedených hráčů</span><b>' + DIST.privedeno + '</b></div>'
     + '<div class="kv"><span>Režie na měsíc</span><b class="' + (rezie > 0 ? 'warn' : 'ok') + '">'
     + (rezie > 0 ? kcFull(rezie) : 'zdarma') + '</b></div>'
-    + (DIST.provize_celkem > 0 ? '<div class="kv"><span>Vyděláno na provizích</span><b class="ok">'
-      + kcFull(DIST.provize_celkem) + '</b></div>' : '')
+    + (DIST.provize_celkem > 0
+        ? '<button class="kv kv-klik" id="do-provize"><span>Vyděláno na provizích</span>'
+          + '<b class="ok">' + kcFull(DIST.provize_celkem) + ' ›</b></button>' : '')
     + '<p class="fine">' + (rezie > 0
         ? 'Režie roste o ' + kcFull(40000) + ' s každými pěti přivedenými hráči — čím větší síť, tím dražší provoz.'
         : 'Do pěti přivedených hráčů je distribuce zdarma. Od pátého začneš platit '
@@ -4384,6 +4420,8 @@ function distHtml() {
     + '</div>';
 }
 function bindDist() {
+  var pr = $('do-provize');
+  if (pr) pr.onclick = provizeSheet;
   var b = $('do-dist');
   if (!b) return;
   b.onclick = function () {
