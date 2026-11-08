@@ -1628,7 +1628,7 @@ function zmenPovest(o) {
 function naplanujHovor() {
   S.hovorZa = HOVOR_ZA_MIN + Math.random() * (HOVOR_ZA_MAX - HOVOR_ZA_MIN);
 }
-var HOVOR = null;                // { jmeno, scenar, kroky, poradi, i, body, stav, zvoniDo }
+var HOVOR = null;                // { jmeno, scenar, kroky, poradi, i, body, prepis, ceka, stav, zvoniDo }
 // Jeden hovor je jeden rozhovor na jedno téma — zákazník se dál ptá podle toho,
 // co už padlo. Poslední rozhovory přeskočíme, ať se nevrací hned dokola.
 // Jméno volajícího musí sedět s tím, jak o sobě v rozhovoru mluví — u scénáře,
@@ -1678,7 +1678,8 @@ function zacniHovor() {
     jmeno: hovorJmeno(sc.rod),
     scenar: sc.id, kroky: sc.kroky,
     poradi: sc.kroky.map(function (k) { return zamichej(k.o.length); }),
-    i: 0, body: 0, odpovedi: [], stav: 'zvoni', zvoniDo: Date.now() + HOVOR_ZVONI_MS
+    i: 0, body: 0, odpovedi: [], prepis: [], ceka: false,
+    hvPred: hvezdy(), stav: 'zvoni', zvoniDo: Date.now() + HOVOR_ZVONI_MS
   };
   S.hovoryPosl = (S.hovoryPosl || []).concat([sc.id]).slice(-SCENARU_PAMET);
   paintHovor();
@@ -1705,25 +1706,41 @@ function odmitniHovor(samo) {
 }
 function vezmiHovor() {
   if (!HOVOR) return;
-  HOVOR.stav = 'otazka';
+  HOVOR.stav = 'hovor';
+  HOVOR.prepis.push({ k: 'z', t: HOVOR.kroky[0].t });
   paintHovor();
 }
+// Hovor teče jako rozhovor: co hráč vybere, zůstane v přepisu, zákazník na to
+// zareaguje a sam od sebe se pta dál. Mezi replikami je krátká pauza s tečkami,
+// ať to neskače naráz. Body se během hovoru neukazují — zákazník taky neříká
+// do telefonu, kolik zrovna přičetl; sečtou se až na konci.
+var HOVOR_PAUZA_REAKCE = 700, HOVOR_PAUZA_OTAZKA = 900;
 // i je pořadí tlačítka na obrazovce, ne pořadí v bance — přeložíme přes míchání.
 function odpovez(i) {
-  if (!HOVOR || HOVOR.stav !== 'otazka') return;
-  var k = HOVOR.kroky[HOVOR.i];
-  var o = k.o[HOVOR.poradi[HOVOR.i][i]];
+  if (!HOVOR || HOVOR.stav !== 'hovor' || HOVOR.ceka) return;
+  var h = HOVOR, o = h.kroky[h.i].o[h.poradi[h.i][i]];
   if (!o) return;
-  HOVOR.body += o.b;
-  HOVOR.odpovedi.push({ b: o.b, r: o.r });
-  HOVOR.stav = 'reakce';
+  h.body += o.b;
+  h.odpovedi.push({ b: o.b, r: o.r });
+  h.prepis.push({ k: 'ja', t: o.t });
+  h.ceka = true;
   paintHovor();
+  setTimeout(function () {
+    if (HOVOR !== h) return;
+    h.prepis.push({ k: 'z', t: o.r });
+    paintHovor();
+    setTimeout(function () { if (HOVOR === h) hovorDal(); }, HOVOR_PAUZA_OTAZKA);
+  }, HOVOR_PAUZA_REAKCE);
 }
+// Další otázka, nebo konec hovoru — až tady se pověst opravdu mění.
 function hovorDal() {
   if (!HOVOR) return;
   HOVOR.i++;
-  HOVOR.stav = HOVOR.i < HOVOR.kroky.length ? 'otazka' : 'konec';
-  if (HOVOR.stav === 'konec') {
+  HOVOR.ceka = false;
+  if (HOVOR.i < HOVOR.kroky.length) {
+    HOVOR.prepis.push({ k: 'z', t: HOVOR.kroky[HOVOR.i].t });
+  } else {
+    HOVOR.stav = 'konec';
     zmenPovest(HOVOR.body);
     S.hovoru = (S.hovoru || 0) + 1;
     save(); paint(); syncState(true);
@@ -1741,6 +1758,16 @@ function zavesHovor() {
 function zavriHovor() {
   var el = $('hovor');
   if (el) { el.classList.add('hidden'); el.innerHTML = ''; }
+}
+// Přepis rozhovoru: zákazník vlevo, hráčovy odpovědi vpravo. Na konci hovoru
+// zůstává celý vidět, ať si hráč může přečíst, co vlastně nasliboval.
+function hovorPrepis(h) {
+  return '<div class="hov-prepis" id="hov-prepis">'
+    + h.prepis.map(function (r) {
+        return '<p class="hov-b ' + (r.k === 'ja' ? 'ja' : 'z') + '">' + esc(r.t) + '</p>';
+      }).join('')
+    + (h.ceka ? '<p class="hov-b z hov-pise"><i></i><i></i><i></i></p>' : '')
+    + '</div>';
 }
 function hovorBtn(id, tr, text) {
   return '<button class="' + tr + '" id="' + id + '">' + text + '</button>';
@@ -1761,25 +1788,17 @@ function paintHovor() {
       + hovorBtn('hov-ano', 'hov-kolo ano', '✓')
       + '</div>'
       + '<p class="fine">Kdo hovory nebere, přichází o návštěvnost.</p></div>';
-  } else if (h.stav === 'otazka') {
-    var k = h.kroky[h.i], por = h.poradi[h.i];
-    html = '<div class="hov-in">'
-      + '<p class="hov-popis">' + esc(h.jmeno) + ' · ' + (h.i + 1) + ' z ' + h.kroky.length + '</p>'
-      + '<p class="hov-rec">„' + esc(k.t) + '“</p>'
-      + '<div class="hov-odp">'
-      + por.map(function (ix, i) {
-          return '<button data-odp="' + i + '">' + esc(k.o[ix].t) + '</button>';
-        }).join('')
-      + '</div></div>';
-  } else if (h.stav === 'reakce') {
-    var posl = h.odpovedi[h.odpovedi.length - 1];
-    var tr = posl.b > 0 ? 'ok' : (posl.b < 0 ? 'err' : 'muted');
-    html = '<div class="hov-in">'
-      + '<p class="hov-popis">' + esc(h.jmeno) + '</p>'
-      + '<p class="hov-rec ' + tr + '">„' + esc(posl.r) + '“</p>'
-      + '<p class="hov-bod ' + tr + '">' + (posl.b > 0 ? '+' : '') + posl.b + ' k pověsti</p>'
-      + '<button class="btn big" id="hov-dal" style="width:100%">'
-      + (h.i + 1 < h.kroky.length ? 'Poslouchat dál' : 'Dokončit hovor') + '</button></div>';
+  } else if (h.stav === 'hovor') {
+    html = '<div class="hov-in hov-chat">'
+      + '<p class="hov-popis">' + esc(h.jmeno) + ' · infolinka</p>'
+      + hovorPrepis(h)
+      + (h.ceka ? '' : '<div class="hov-vyber"><p class="hov-popis">Co odpovíte?</p>'
+          + '<div class="hov-odp">'
+          + h.poradi[h.i].map(function (ix, i) {
+              return '<button data-odp="' + i + '">' + esc(h.kroky[h.i].o[ix].t) + '</button>';
+            }).join('')
+          + '</div></div>')
+      + '</div>';
   } else {
     var b = h.body;
     var tr2 = b > 0 ? 'ok' : (b < 0 ? 'err' : 'muted');
@@ -1788,21 +1807,35 @@ function paintHovor() {
       : b > -2 ? 'Zákazník zavěsil, ale nijak nadšený nebyl.'
       : b > -6 ? 'Zákazník odchází nespokojený.'
       : 'Zákazník prásknul telefonem. Tohle se roznese.';
-    html = '<div class="hov-in">'
+    // Co hovor udělal, ukážeme v tom, čemu hráč rozumí: v hvězdičkách a
+    // v návštěvnosti. Body pověsti se objeví jen jednou a rovnou se stupnicí,
+    // ať je jasné, že jedna odpověď s tím pohne o kousek, ne o polovinu.
+    var dh = Math.round((hvezdy() - h.hvPred) * 10) / 10;
+    var navs = Math.round((povestKoef() - 1) * 1000) / 10;
+    html = '<div class="hov-in hov-chat">'
       + '<p class="hov-popis">Hovor skončil</p>'
-      + '<h3 class="' + tr2 + '">' + (b > 0 ? '+' : '') + b + ' k pověsti</h3>'
-      + '<p class="hov-stav">' + soud + '</p>'
-      + '<div class="kv"><span>Hodnocení zákazníků</span><b>' + hvezdyText() + '</b></div>'
-      + '<div class="kv"><span>Pověst</span><b>' + povestSlovy() + '</b></div>'
+      + hovorPrepis(h)
+      + '<p class="hov-stav ' + tr2 + '">' + soud + '</p>'
+      + '<div class="kv"><span>Hodnocení zákazníků</span><b>' + hvezdyText()
+      + (dh ? ' <span class="' + tr2 + '">(' + (dh > 0 ? '+' : '−')
+          + Math.abs(dh).toFixed(1).replace('.', ',') + ')</span>' : '') + '</b></div>'
+      + '<div class="kv"><span>Pověst</span><b>' + povestSlovy()
+      + ' <span class="' + tr2 + '">(' + (b > 0 ? '+' : (b < 0 ? '−' : ''))
+      + Math.abs(b) + ')</span></b></div>'
       + '<div class="kv"><span>Návštěvnost</span><b class="' + (povest() >= 0 ? 'ok' : 'err') + '">'
-      + (povest() >= 0 ? '+' : '') + Math.round((povestKoef() - 1) * 100) + ' %</b></div>'
-      + '<button class="btn big" id="hov-konec" style="width:100%;margin-top:12px">Zavěsit</button></div>';
+      + (navs >= 0 ? '+' : '−') + Math.abs(navs).toFixed(1).replace('.', ',') + ' %</b></div>'
+      + '<p class="fine">Pověst jde od −100 do +100. Každý hovor s ní pohne o pár bodů '
+      + 'a podle ní se počítá hodnocení zákazníků i návštěvnost prádlomatů.</p>'
+      + '<button class="btn big" id="hov-konec" style="width:100%;margin-top:10px">Zavěsit</button></div>';
   }
   el.innerHTML = html;
   el.classList.remove('hidden');
+  // Přepis dorůstá odspodu — vždy ukazujeme poslední repliku.
+  var pr = $('hov-prepis');
+  if (pr) pr.scrollTop = pr.scrollHeight;
   if ($('hov-ano')) $('hov-ano').onclick = vezmiHovor;
   if ($('hov-ne')) $('hov-ne').onclick = function () { odmitniHovor(false); };
-  if ($('hov-dal')) $('hov-dal').onclick = hovorDal;
+
   if ($('hov-konec')) $('hov-konec').onclick = zavesHovor;
   [].forEach.call(el.querySelectorAll('[data-odp]'), function (b2) {
     b2.onclick = function () { odpovez(Number(b2.getAttribute('data-odp'))); };

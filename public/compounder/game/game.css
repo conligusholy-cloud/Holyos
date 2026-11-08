@@ -596,14 +596,33 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .hov-kolo.ano{background:var(--ok)}
 .hov-kolo.ne{background:var(--err);color:#2b0409}
 .hov-kolo:active{transform:scale(.94)}
-/* Co zákazník říká. */
-.hov-rec{margin:6px 0 14px;font-size:15.5px;line-height:1.45;text-align:left}
-.hov-rec.ok{color:var(--ok)} .hov-rec.err{color:var(--err)}
-.hov-bod{margin:0 0 14px;font-size:13px;font-weight:800}
 .hov-odp{display:flex;flex-direction:column;gap:8px}
 .hov-odp button{text-align:left;background:var(--card);border:1px solid var(--border);
   color:var(--text);border-radius:13px;padding:12px 13px;font-size:14px;line-height:1.4}
 .hov-odp button:active{border-color:var(--vio);background:rgba(124,92,255,.16)}
+/* Rozhovor běží jako přepis — zákazník vlevo, hráč vpravo. Výška je omezená,
+   ať se okno nerozlije přes celou obrazovku, a roluje se vždy na poslední repliku. */
+.hov-chat{text-align:left}
+.hov-prepis{display:flex;flex-direction:column;gap:7px;max-height:42vh;overflow-y:auto;
+  margin:0 0 12px;padding-right:2px}
+.hov-b{margin:0;max-width:86%;padding:9px 12px;border-radius:14px;font-size:14.5px;line-height:1.42}
+.hov-b.z{align-self:flex-start;background:var(--card);border:1px solid var(--border);
+  border-bottom-left-radius:5px}
+.hov-b.ja{align-self:flex-end;background:rgba(124,92,255,.2);
+  border:1px solid rgba(124,92,255,.42);border-bottom-right-radius:5px}
+/* Tečky, dokud zákazník odpovídá — pauza mezi replikami není prázdné ticho. */
+.hov-pise{display:flex;gap:4px;align-items:center;padding:12px 14px}
+.hov-pise i{width:5px;height:5px;border-radius:50%;background:var(--text3);
+  animation:hov-pise 1s infinite}
+.hov-pise i:nth-child(2){animation-delay:.15s}
+.hov-pise i:nth-child(3){animation-delay:.3s}
+@keyframes hov-pise{0%,60%,100%{opacity:.25}30%{opacity:1}}
+/* Vlastní odpovědi musí být na první pohled něco jiného než to, co říká
+   zákazník — proto oddělovací linka, popisek a fialový nádech jako u bublin hráče. */
+.hov-vyber{border-top:1px solid var(--border);padding-top:11px;margin-top:2px}
+.hov-chat .hov-odp button{background:rgba(124,92,255,.1);border-color:rgba(124,92,255,.32)}
+.hov-chat .hov-stav{margin:2px 0 10px;font-weight:600}
+.hov-stav.ok{color:var(--ok)} .hov-stav.err{color:var(--err)}
 .hov-in .kv:first-of-type{border-top:1px solid var(--border)}
 .hov-in .fine{margin-top:4px}
 
