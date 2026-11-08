@@ -946,6 +946,9 @@ var QUIZ = [
 // ─── Stav hry ────────────────────────────────────────────────────────────────
 var KEY = 'lm_milionar_v1';
 var PID_KEY = 'lm_milionar_pid';
+// Jestli má mapa ukazovat jen vlastní síť. Je to věc pohledu, ne rozehrané hry,
+// takže to držíme bokem od stavu — jen v tomhle prohlížeči.
+var MAPA_KEY = 'lm_milionar_mapa_moje';
 var REF_FROM_KEY = 'lm_ref_from';   // přes čí odkaz jsem do hry přišel
 var S = null;
 // Id pro pozvánky žije mimo rozehranou hru. Když si hráč dá „začít znovu",
@@ -1507,6 +1510,20 @@ function addBasemap() {
   });
 }
 var autaLayer = null;
+var MAPA_MOJE = (function () {
+  try { return localStorage.getItem(MAPA_KEY) === '1'; } catch (e) { return false; }
+})();
+// Přepínač nad mapou: buď všechno včetně konkurence a volných míst, nebo jen
+// vlastní prádlomaty, sídlo a pobočky — když je míst moc, nejde se v tom vyznat.
+function mapaPohled(moje) {
+  MAPA_MOJE = !!moje;
+  try { localStorage.setItem(MAPA_KEY, MAPA_MOJE ? '1' : '0'); } catch (e) { /* nevadí */ }
+  [].forEach.call(document.querySelectorAll('[data-mapa]'), function (b) {
+    b.classList.toggle('on', (b.getAttribute('data-mapa') === 'moje') === MAPA_MOJE);
+  });
+  drawMap();
+  drawAuta();
+}
 function initMap() {
   if (map) return;
   // Mapa jede z CDN. Když se nenačte (slabá síť, blokovaný skript), hra musí běžet dál
@@ -1650,11 +1667,14 @@ function drawMap() {
   layer.clearLayers();
   var any = false, zname = {}, skryto = 0;
   var blizko = !map || map.getZoom() >= MISTA_ZOOM;
+  var moje = MAPA_MOJE;
   Object.keys(S.areas).forEach(function (aid) {
     S.areas[aid].spots.forEach(function (sp) {
       any = true; zname[sp.id] = 1;
       var unit = S.units.filter(function (u) { return u.spotId === sp.id; })[0];
       var rival = !unit && CLAIMS[sp.id] && !CLAIMS[sp.id].mine ? CLAIMS[sp.id] : null;
+      // V pohledu „jen moje“ necháme na mapě opravdu jen vlastní stavby.
+      if (moje && !unit) return;
       // Volné místo je jen tip, ne stavba — ukazuje se až při přiblížení.
       if (!unit && !rival && !blizko) { skryto++; return; }
       var seen = !!S.revealed[sp.id];
@@ -1668,7 +1688,7 @@ function drawMap() {
   // tam někdo stojí — co to místo umí, zjistíme až průzkumem města.
   Object.keys(CLAIMS).forEach(function (sid) {
     var c = CLAIMS[sid];
-    if (c.mine || zname[sid] || c.lat == null) return;
+    if (moje || c.mine || zname[sid] || c.lat == null) return;
     any = true;
     L.marker([c.lat, c.lon], { icon: rivalIcon(c) })
       .addTo(layer)
@@ -1686,7 +1706,14 @@ function drawMap() {
   });
   // Nápověda pod mapou říká buď „začni průzkumem“, nebo „přibliž, místa jsou schovaná“.
   var h = $('map-hint');
-  if (!any) {
+  if (moje) {
+    // Přepínač nad mapou mluví sám za sebe — nápověda patří jen tomu, kdo nic nemá.
+    if ((S.units || []).length) h.classList.add('hidden');
+    else {
+      h.textContent = 'Zatím nemáš žádný prádlomat. Přepni na Všechno a najdi si místo.';
+      h.classList.remove('hidden');
+    }
+  } else if (!any) {
     h.textContent = 'Napiš město a pošli tam člověka, ať ho projde. Místa jsou schovaná — dokud město neprozkoumáš, nic na mapě neuvidíš.';
     h.classList.remove('hidden');
   } else if (skryto) {
@@ -4279,6 +4306,11 @@ $('burza-nova').onclick = novaNabidkaSheet;
 // Přepínače v záložce Síť: moje síť vs. žebříček a kategorie žebříčku.
 [].forEach.call(document.querySelectorAll('[data-net]'), function (b) {
   b.onclick = function () { netZalozka(b.getAttribute('data-net')); };
+});
+// Přepínač nad mapou: všechno včetně konkurence, nebo jen vlastní síť.
+[].forEach.call(document.querySelectorAll('[data-mapa]'), function (b) {
+  b.classList.toggle('on', (b.getAttribute('data-mapa') === 'moje') === MAPA_MOJE);
+  b.onclick = function () { mapaPohled(b.getAttribute('data-mapa') === 'moje'); };
 });
 [].forEach.call(document.querySelectorAll('[data-zeb]'), function (b) {
   b.onclick = function () {
