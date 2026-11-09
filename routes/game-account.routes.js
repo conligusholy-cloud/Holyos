@@ -223,6 +223,8 @@ function cisteJmeni(st) {
   // Musí sedět s pozemkyHodnota() v public/compounder/game/game.js.
   (Array.isArray(st.pozemky) ? st.pozemky : []).forEach((z) => {
     majetek += (z && Number(z.cena)) || 0;
+    // Příprava plochy zaplacená dopředu, ještě bez stroje, drží u pozemku.
+    majetek += (z && Number(z.priprava)) || 0;
   });
   return Math.round(majetek + (Number(st.cash) || 0) - (Number(st.loan) || 0));
 }

@@ -670,7 +670,10 @@ function autoPoloha(u) {
 function connPrice(sp, modelKey) {
   // Na pozemku platí hráč přesně to, co si navrhl — ne paušál.
   var plan = planMista(sp.id);
-  if (plan && plan.hotovo && plan.model === modelKey && plan.cena) return plan.cena;
+  if (plan && plan.hotovo && plan.model === modelKey && plan.cena) {
+    // Co si hráč nechal udělat a zaplatil dopředu, se při stavbě už neúčtuje.
+    return plan.zaplaceno ? Math.max(0, Math.round(plan.cena - plan.zaplaceno)) : plan.cena;
+  }
   var base = CONN_MIN + spotHash(sp.id, 'c') * (CONN_MAX - CONN_MIN);
   if (modelKey === 'max') base *= CONN_MAX_MULT;
   // Dokud plán není, ukazujeme hrubý odhad přípravy zelené louky.
@@ -3393,18 +3396,47 @@ function spotSheet(sp, areaId) {
   // Na vlastním pozemku se rovnou staví — zem je zaplacená.
   if (mamPozemek(sp.id)) {
     var zem0 = pozemky().filter(function (z) { return z.spotId === sp.id; })[0] || {};
+    // Zaplacená příprava drží u plánu — stroj u ní být nemusí.
+    var pl0 = planMista(sp.id);
+    var hot0 = pl0 && pl0.hotovo && pl0.zaplaceno ? pl0 : null;
     sheet(head
       + '<div class="card"><div class="row"><h3>Tvůj pozemek</h3><b class="ok">' + (zem0.m2 || pozemekM2(sp)) + ' m²</b></div>'
       + '<p class="muted small" style="margin:4px 0 0">Zem máš koupenou za ' + kcFull(zem0.cena || pozemekCena(sp))
       + '. Nájem neplatíš a nikdo tě odtud nevyhodí — zbývá připravit plochu a postavit.</p></div>'
+      + (hot0
+          ? '<div class="card"><div class="row"><h3>Plocha je připravená</h3><b class="ok">'
+            + kcFull(hot0.zaplaceno) + '</b></div>'
+            + '<p class="muted small" style="margin:4px 0 0">Cesta, parkování, dlažba i přípojky pro '
+            + esc((MODELS[hot0.model] || {}).name || '') + ' jsou hotové a zaplacené. Až stroj dorazí, '
+            + 'zaplatíš u stavby jen dopravu.</p></div>'
+          : '<p class="fine">Přípojky a zázemí si můžeš nechat udělat a zaplatit hned — stroj skladem mít '
+            + 'nemusíš. Až ho vyrobí nebo koupíš, přiveze se na hotovou plochu.</p>')
       + '<h3 style="margin-top:18px">Co tu postavit</h3>'
-      + MODEL_ORDER.map(function (k) { return modelCard(sp, economics(sp, k)); }).join(''));
+      + MODEL_ORDER.map(function (k) {
+          var hotovy = hot0 && hot0.model === k;
+          var pridej = (hotovy
+              ? '<p class="fine ok" style="margin:8px 0 0">Plocha pro tenhle model je zaplacená — '
+                + 'při stavbě platíš už jen dopravu.</p>'
+              : '')
+            + '<button class="btn sec sm" style="width:100%;margin-top:6px" data-prep="' + k + '">'
+            + (hotovy ? 'Upravit návrh plochy' : 'Připravit plochu předem') + '</button>';
+          return modelCard(sp, economics(sp, k), pridej);
+        }).join(''));
     [].forEach.call($('sheet-body').querySelectorAll('[data-build]'), function (b2) {
       b2.onclick = function () {
         var mk = b2.getAttribute('data-build');
+        if (hot0 && hot0.model === mk) return installSheet(sp, areaId, mk);
         planEditor(sp, areaId, mk, function () { installSheet(sp, areaId, mk); });
       };
     });
+    [].forEach.call($('sheet-body').querySelectorAll('[data-prep]'), function (b3) {
+      b3.onclick = function () {
+        var mk = b3.getAttribute('data-prep');
+        planEditor(sp, areaId, mk, function () { pripravaSheet(sp, areaId, mk); });
+      };
+    });
+    var go0 = $('go-shop');
+    if (go0) go0.onclick = function () { closeSheet(); switchTab('shop'); };
     return;
   }
   if (!lease) {
@@ -3487,7 +3519,7 @@ function spotSheet(sp, areaId) {
   if (go) go.onclick = function () { closeSheet(); switchTab('shop'); };
 }
 // Karta modelu na konkrétním místě. Postavit jde jen to, co je skladem — jinak vede do obchodu.
-function modelCard(sp, e) {
+function modelCard(sp, e, pridej) {
   var m = MODELS[e.model], n = inStock(e.model), way = onWay(e.model);
   var btn;
   if (n > 0) btn = '<button class="btn sm" style="width:100%;margin-top:10px" data-build="' + e.model + '">Postavit (' + n + '× skladem)</button>';
@@ -3503,7 +3535,7 @@ function modelCard(sp, e) {
     + '<div class="kv"><span>Zisk / měsíc</span><b class="' + (e.profit > 0 ? 'ok' : 'err') + '">' + kcFull(e.profit) + '</b></div>'
     + '<div class="kv"><span>Přípojky (jednorázově)</span><b>' + kcFull(e.conn) + '</b></div>'
     + '<div class="kv"><span>Návratnost</span><b>' + (e.payback ? e.payback.toFixed(1).replace('.', ',') + ' roku' : 'nikdy') + '</b></div>'
-    + btn + '</div>';
+    + btn + (pridej || '') + '</div>';
 }
 
 // ─── Financování (hotovost + úvěr z banky) ───────────────────────────────────
@@ -3730,6 +3762,54 @@ function buySheet(modelKey, drz) {
 }
 
 // ─── Panel: instalace stroje ze skladu na místo ──────────────────────────────
+// Příprava plochy bez stroje. Pozemek je můj, tak si na něm můžu nechat udělat
+// cestu, parkování, dlažbu i přípojky dřív, než prádlomat vůbec existuje — a
+// zaplatit to hned. Hotová plocha je součást nemovitosti: počítá se do majetku,
+// banka ji bere jako zástavu a při stavbě se pak platí už jen doprava stroje.
+function pripravaSheet(sp, areaId, modelKey, drz) {
+  if (!drz) FIN_OWN = null;
+  var plan = planMista(sp.id);
+  if (!plan || !plan.hotovo) return spotSheet(sp, areaId);
+  var jiz = Math.round(Number(plan.zaplaceno) || 0);
+  var cena = Math.max(0, Math.round(plan.cena || 0) - jiz);
+  var m0 = MODELS[modelKey] || {};
+  if (!cena) {
+    plan.model = modelKey; save();
+    toast('Plochu máš zaplacenou, nic se nedoplácí.', 'ok');
+    return spotSheet(sp, areaId);
+  }
+  // Banka to posuzuje jako zhodnocení pozemku, ne jako výdělek místa — stroj tu
+  // zatím žádný není, takže se nedá půjčovat proti jeho zisku.
+  var f = canFinance(cena, FIN_OWN, cena);
+  sheet('<h3>Připravit plochu</h3>'
+    + '<p class="muted small">' + esc(sp.name) + ' — cesta, parkování, dlažba a přípojky podle tvého návrhu pro '
+    + esc(m0.name || '') + '. Stroj mít nemusíš: plocha počká, až ho vyrobíš nebo koupíš.</p>'
+    + (jiz
+        ? '<div class="kv"><span>Příprava podle návrhu</span><b>' + kcFull(plan.cena) + '</b></div>'
+          + '<div class="kv"><span>Zaplaceno dřív</span><b class="ok">−' + kcFull(jiz) + '</b></div>'
+          + '<div class="kv souhrn"><span>Doplatek</span><b>' + kcFull(cena) + '</b></div>'
+        : '<div class="kv souhrn"><span>Příprava celkem</span><b>' + kcFull(cena) + '</b></div>')
+    + financeRows(f)
+    + '<p class="fine">Hotová plocha zůstane u pozemku — počítá se do majetku a banka ji bere jako zástavu. '
+    + 'Při stavbě pak platíš jen dopravu stroje.</p>'
+    + '<button class="btn big" id="do-priprava"' + (f.ok ? '' : ' disabled')
+    + ' style="width:100%;margin-top:10px">Nechat udělat</button>'
+    + (f.ok ? (f.dotkne_rezervy ? '<p class="fine warn">Sáhneš i do provozní rezervy — po zaplacení ti zbude '
+          + kcFull(S.cash - f.own) + '.</p>' : '')
+        : '<p class="fine err">' + esc(f.duvod || '') + '</p>'
+          + '<p class="fine">' + esc(dohnat(f.chybi)) + '</p>'));
+  bindFinance(function () { pripravaSheet(sp, areaId, modelKey, true); });
+  var bp = $('do-priprava');
+  if (bp) bp.onclick = function () {
+    doFinance(f, { druh: 'misto', spotId: sp.id, popis: 'Příprava plochy — ' + sp.name });
+    plan.zaplaceno = Math.round(plan.cena || 0);
+    plan.model = modelKey;
+    pozemky().forEach(function (z) { if (z.spotId === sp.id) z.priprava = plan.zaplaceno; });
+    save(); paint(); drawMap(); syncState(true);
+    toast('Plocha je připravená. Až stroj dorazí, zaplatíš jen dopravu.', 'ok');
+    spotSheet(sp, areaId);
+  };
+}
 function installSheet(sp, areaId, modelKey, drz) {
   if (!drz) FIN_OWN = null;
   var m = MODELS[modelKey], e = economics(sp, modelKey);
@@ -3744,17 +3824,21 @@ function installSheet(sp, areaId, modelKey, drz) {
   var n = nejblizsiZakladna(sp);
   sheet('<h3>Postavit ' + m.name + '</h3>'
     + '<p class="muted small">' + esc(sp.name) + ' — teď se platí '
-    + (zem ? 'pozemek, příprava plochy podle tvého návrhu'
-          : vlastni ? 'příprava plochy podle tvého návrhu'
-          : (jeZasitovane(sp) ? 'instalace stroje' : 'přípojky (voda, odpad, elektřina)'))
-    + ' a doprava. Stroj máš skladem' + (vlastni ? '.' : ', nájem domluvený.') + '</p>'
+    + (vlastni && !e.conn
+        ? 'jen doprava stroje; plochu máš hotovou a zaplacenou'
+        : (zem ? 'pozemek, příprava plochy podle tvého návrhu'
+            : vlastni ? 'příprava plochy podle tvého návrhu'
+            : (jeZasitovane(sp) ? 'instalace stroje' : 'přípojky (voda, odpad, elektřina)'))
+          + ' a doprava')
+    + '. Stroj máš skladem' + (vlastni ? '.' : ', nájem domluvený.') + '</p>'
     + (!S.sidlo ? '<p class="fine ok">Touhle stavbou vznikne sídlo tvojí firmy — ve městě, ne na téhle adrese. '
         + 'Od něj se pak počítá doprava všech dalších strojů, tak si rozmysli, kde začínáš.</p>' : '')
     + (zem ? '<div class="kv"><span>Pozemek (' + (lease0.m2 || pozemekM2(sp)) + ' m² × '
         + kcFull(pozemekZaM2(sp)) + ')</span><b>' + kcFull(zem) + '</b></div>' : '')
     + '<div class="kv"><span>' + (vlastni ? 'Příprava plochy a přípojky'
         : jeZasitovane(sp) ? 'Instalace' : cetaZvladne(sp) ? 'Přípojky vlastní četou' : 'Přípojky') + '</span><b'
-    + (cetaZvladne(sp) ? ' class="ok"' : '') + '>' + kcFull(e.conn) + '</b></div>'
+    + (cetaZvladne(sp) || (vlastni && !e.conn) ? ' class="ok"' : '') + '>'
+    + (vlastni && !e.conn ? 'zaplaceno předem' : kcFull(e.conn)) + '</b></div>'
     + (cetaZvladne(sp) ? '<p class="fine ok">Staví tvoje parta za ' + Math.round(CETA_PODIL * 100)
       + ' % ceny. Tenhle měsíc jí zbývá ' + cetaZbyva() + ' z ' + CETA_MIST + ' míst.</p>' : '')
     + '<div class="kv"><span>Doprava stroje' + (n ? ' (' + Math.round(n.km) + ' km)' : '') + '</span><b'
@@ -3805,7 +3889,8 @@ function installSheet(sp, areaId, modelKey, drz) {
         pozemky().forEach(function (z) { if (z.spotId === sp.id) z.zastaveno = 1; });
       }
       doFinance(f, { druh: 'misto', spotId: sp.id,
-        popis: (sml.pozemek ? 'Pozemek a příprava — ' : mam ? 'Příprava plochy — ' : 'Přípojky — ') + sp.name });
+        popis: (sml.pozemek ? 'Pozemek a příprava — '
+          : mam ? (e.conn ? 'Příprava plochy — ' : 'Doprava stroje — ') : 'Přípojky — ') + sp.name });
       pripojUverKeStroji(sp.id, sp.name);
       if (cetaZvladne(sp)) cetaPostavila(sp);
       // První stavba zakládá sídlo — ale ve městě, ne na adrese prádlomatu.
@@ -3872,10 +3957,11 @@ function pozemky() {
 function mamPozemek(spotId) {
   return pozemky().some(function (z) { return z.spotId === spotId; });
 }
-// Do majetku patří všechna koupená zem, i ta pod stojícím prádlomatem —
-// v investici místa je jen stroj a příprava plochy, ne cena pozemku.
+// Do majetku patří všechna koupená zem, i ta pod stojícím prádlomatem — a k ní
+// příprava plochy, pokud ji hráč zaplatil dopředu, ještě bez stroje. V investici
+// místa je jen stroj a to, co se dodělávalo až při stavbě.
 function pozemkyHodnota() {
-  return pozemky().reduce(function (a, z) { return a + (z.cena || 0); }, 0);
+  return pozemky().reduce(function (a, z) { return a + (z.cena || 0) + (z.priprava || 0); }, 0);
 }
 function pozemkyPrazdne() {
   return pozemky().filter(function (z) { return !z.zastaveno; });
@@ -4116,7 +4202,13 @@ var PLAN_STAVI = false;      // true = další klepnutí umístí stroj
 function planEditor(sp, areaId, modelKey, hotovo) {
   var vse = planyVse();
   var p = vse[sp.id];
-  if (!p || p.model !== modelKey) { p = planNovy(sp, modelKey); vse[sp.id] = p; }
+  if (!p || p.model !== modelKey) {
+    // Zaplacená příprava se nepromazává — při změně modelu se doplácí jen rozdíl.
+    var zapl0 = p && p.zaplaceno ? p.zaplaceno : 0;
+    p = planNovy(sp, modelKey);
+    if (zapl0) p.zaplaceno = zapl0;
+    vse[sp.id] = p;
+  }
   PLAN_STAVI = !p.stroj;
   var rozmer = PLAN_ROZMERY[modelKey] || PLAN_ROZMERY.mini;
 
@@ -4164,7 +4256,7 @@ function planEditor(sp, areaId, modelKey, hotovo) {
           : '<p class="fine ok" style="margin-top:10px">Plocha je hotová: dojede se sem, zaparkuje se tu a '
             + 'přípojky mají kudy vést ' + cen.delka + ' m od sloupku.</p>')
       + '<button class="btn big" id="plan-hotovo"' + (chyby.length ? ' disabled' : '')
-      + ' style="width:100%;margin-top:12px">Hotovo — spočítat stavbu</button>'
+      + ' style="width:100%;margin-top:12px">Hotovo — spočítat cenu</button>'
       + '<button class="btn sec" id="plan-smazat" style="width:100%;margin-top:8px">Začít návrh znovu</button>');
     var pl = $('sheet-body').querySelector('.plan-plocha');
     if (pl) {
@@ -4189,7 +4281,12 @@ function planEditor(sp, areaId, modelKey, hotovo) {
       b2.onclick = function () { PLAN_STAVI = false; PLAN_NARADI_AKT = b2.getAttribute('data-plan-n'); vykresli(); };
     });
     var sm = $('plan-smazat');
-    if (sm) sm.onclick = function () { vse[sp.id] = planNovy(sp, modelKey); p = vse[sp.id]; PLAN_STAVI = true; save(); vykresli(); };
+    if (sm) sm.onclick = function () {
+      var zapl1 = p && p.zaplaceno ? p.zaplaceno : 0;
+      vse[sp.id] = planNovy(sp, modelKey); p = vse[sp.id];
+      if (zapl1) p.zaplaceno = zapl1;
+      PLAN_STAVI = true; save(); vykresli();
+    };
     var hb = $('plan-hotovo');
     if (hb) hb.onclick = function () {
       p.cena = planCena(p).celkem;
