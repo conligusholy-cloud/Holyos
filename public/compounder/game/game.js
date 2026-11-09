@@ -28,7 +28,7 @@ var MODEL_ORDER = ['mini', 'flex', 'max'];
 var MODEL_IMG = {
   mini: { src: '/game/mini.webp' },
   flex: { src: '/game/flex.webp' },
-  max: { src: '/game/max.webp?v=2' }
+  max: { src: '/game/max.webp?v=3' }
 };
 var VER_OF = { mini: 'V2', flex: 'V3', max: 'V4' };
 // Fotky z ceníku HolyOS použijeme jen u verzí, pro které nemáme vlastní render.
