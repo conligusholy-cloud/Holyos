@@ -671,6 +671,13 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .hov-in .kv:first-of-type{border-top:1px solid var(--border)}
 .hov-in .fine{margin-top:4px}
 
+/* ─── Shluk značek ─── */
+/* Při oddálení se značky slučují do bubliny s počtem. Fialová znamená, že je
+   v ní aspoň jeden tvůj prádlomat, šedá čistě konkurenci. */
+.pin.shluk{background:rgba(32,38,58,.95);color:#cdd7ee;border:2px solid #4a5880;
+  font-weight:800;font-size:13px;box-shadow:0 6px 18px rgba(0,0,0,.55)}
+.pin.shluk.moje{background:rgba(124,92,255,.95);color:#fff;border-color:#b3a0ff}
+
 /* ─── Plán pozemku ─── */
 /* Mřížka po metrech. Tráva je tmavě zelená, zpevněné plochy šedé, stroj modrý.
    Kreslí se klepnutím nebo tažením, proto plocha nesmí chytat výběr textu. */

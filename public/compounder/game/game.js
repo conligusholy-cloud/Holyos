@@ -3081,10 +3081,52 @@ function servisSheet() {
 function najdiJednotku(id) {
   return (S.units || []).filter(function (u) { return u.spotId === id; })[0];
 }
+// ─── Shlukování značek ───────────────────────────────────────────────────────
+// Čím víc hráčů, tím hustší mapa: prádlomaty i cedulky s firmami se začnou
+// překrývat. Při oddálení se proto značky, které by si lezly do zorného pole,
+// sloučí do jedné bubliny s počtem. Klepnutí na bublinu mapu přiblíží a shluk
+// se rozpadne na jednotlivé značky — žádné schovávání, jen jiný detail.
+var SHLUK_PX = 54;               // mřížka v obrazovkových bodech
+var SHLUK_OD_ZOOMU = 16;         // od úrovně ulic se už nic neslučuje
+function shlukIcon(n, moje) {
+  var r = n > 99 ? 46 : n > 9 ? 42 : 38;
+  return L.divIcon({ className: '', iconSize: [r, r], iconAnchor: [r / 2, r / 2],
+    html: '<div class="pin shluk' + (moje ? ' moje' : '') + '">' + n + '</div>' });
+}
+// Rozdělí značky do mřížky podle jejich polohy na obrazovce.
+function shlukuj(kusy) {
+  if (!map || map.getZoom() >= SHLUK_OD_ZOOMU) return kusy.map(function (k) { return [k]; });
+  var bunky = {}, poradi = [];
+  kusy.forEach(function (k) {
+    var p;
+    try { p = map.latLngToContainerPoint([k.lat, k.lon]); } catch (e) { p = null; }
+    if (!p) { poradi.push([k]); return; }
+    var klic = Math.floor(p.x / SHLUK_PX) + ':' + Math.floor(p.y / SHLUK_PX);
+    if (!bunky[klic]) { bunky[klic] = []; poradi.push(bunky[klic]); }
+    bunky[klic].push(k);
+  });
+  return poradi;
+}
+// Vykreslí shluky: co je samo, nakreslí se normálně, co se sešlo, dostane bublinu.
+function vykresliShluky(kusy, vrstva) {
+  shlukuj(kusy).forEach(function (sk) {
+    if (sk.length === 1) return sk[0].kresli();
+    var lat = 0, lon = 0, moje = 0;
+    sk.forEach(function (k) { lat += k.lat; lon += k.lon; if (k.moje) moje++; });
+    var stred = [lat / sk.length, lon / sk.length];
+    L.marker(stred, { icon: shlukIcon(sk.length, moje > 0) })
+      .addTo(vrstva)
+      .on('click', function () {
+        if (!map) return;
+        // Přiblížení o dvě úrovně shluk spolehlivě rozpadne i v centru města.
+        map.setView(stred, Math.min(18, map.getZoom() + 2));
+      });
+  });
+}
 function drawMap() {
   if (!layer) return;
   layer.clearLayers();
-  var any = false, zname = {}, skryto = 0;
+  var any = false, zname = {}, skryto = 0, kusy = [];
   var blizko = !map || map.getZoom() >= MISTA_ZOOM;
   var moje = MAPA_MOJE;
   Object.keys(S.areas).forEach(function (aid) {
@@ -3103,9 +3145,11 @@ function drawMap() {
       var icon = unit ? unitIcon(unit) : rival ? rivalIcon(rival)
         : jePozemek(sp) ? pinIcon('pozemek' + (seen ? ' known' : ''), '\u2302')
         : pinIcon(seen ? 'known' : 'unknown', seen ? '\u2605' : '?');
-      L.marker([sp.lat, sp.lon], { icon: icon })
-        .addTo(layer)
-        .on('click', function () { if (rival) return rivalSheet(sp, aid, rival); spotSheet(sp, aid); });
+      kusy.push({ lat: sp.lat, lon: sp.lon, moje: !!unit, kresli: function () {
+        L.marker([sp.lat, sp.lon], { icon: icon })
+          .addTo(layer)
+          .on('click', function () { if (rival) return rivalSheet(sp, aid, rival); spotSheet(sp, aid); });
+      } });
     });
   });
   // Cizí prádlomaty v městech, která jsme neprozkoumali. Víme o nich jen to, že
@@ -3114,10 +3158,14 @@ function drawMap() {
     var c = CLAIMS[sid];
     if (moje || c.mine || zname[sid] || c.lat == null) return;
     any = true;
-    L.marker([c.lat, c.lon], { icon: rivalIcon(c) })
-      .addTo(layer)
-      .on('click', function () { cizi(c); });
+    kusy.push({ lat: c.lat, lon: c.lon, moje: false, kresli: function () {
+      L.marker([c.lat, c.lon], { icon: rivalIcon(c) })
+        .addTo(layer)
+        .on('click', function () { cizi(c); });
+    } });
   });
+  // Teprve teď se rozhodne, co se vykreslí samostatně a co se sloučí.
+  vykresliShluky(kusy, layer);
   // Sídlo a provozovny: velký domeček pro sídlo, menší pro pobočku.
   if (S.sidlo && S.sidlo.lat != null) {
     L.marker([S.sidlo.lat, S.sidlo.lon], { icon: domIcon(true, S.sidlo.name) })
