@@ -1483,6 +1483,10 @@ var KNIHA_FILTRY = [
 function knihaSheet() {
   knihaZaloz();
   knihaSrovnej();
+  // Doběhne na pozadí; když něco doplní, kniha se překreslí sama.
+  doplnVznikProvizi(function (zmena) {
+    if (zmena && $('sheet') && !$('sheet').classList.contains('hidden')) knihaSheet();
+  });
   var vse = (S.kniha || []).slice().sort(function (a, b) { return b.t - a.t; });
   var list = KNIHA_FILTR === 'vse' ? vse
     : vse.filter(function (r) { return knihaKat(r.d) === KNIHA_FILTR; });
@@ -1533,6 +1537,36 @@ function knihaSheet() {
   [].forEach.call(document.querySelectorAll('#sheet-body [data-knf]'), function (x) {
     x.onclick = function () { KNIHA_FILTR = x.getAttribute('data-knf'); knihaSheet(); };
   });
+}
+// Starým zápisům o provizi doplní datum vzniku. Server u každé provize ví, kdy
+// ji připsal a kdy si ji hráč vyzvedl — podle vyzvednutí je spárujeme se zápisy
+// z doby, kdy kniha čas vzniku ještě neukládala. Jinak dvě provize, které
+// čekaly na vyzvednutí, navždy vypadají jako jedna zaúčtovaná dvakrát.
+function doplnVznikProvizi(hotovo) {
+  if (!S || S.knihaProvizeOk || !Array.isArray(S.kniha)) return hotovo && hotovo(false);
+  var chybi = S.kniha.filter(function (r) {
+    return r.d === 'prijem' && !r.v && /^Provize/.test(r.p || '');
+  });
+  if (!chybi.length) { S.knihaProvizeOk = 1; return hotovo && hotovo(false); }
+  api('/account/provize').then(function (res) {
+    var pr = ((res.ok && res.j && res.j.provize) || []).slice();
+    var pouzite = [], zmena = false;
+    chybi.forEach(function (r) {
+      var nej = null, nejI = -1;
+      pr.forEach(function (p, i) {
+        if (pouzite[i] || p.castka !== r.c || !p.vyzvednuto) return;
+        var d = Math.abs(new Date(p.vyzvednuto).getTime() - r.t);
+        if (d < 300000 && (!nej || d < nej.d)) { nej = { d: d, kdy: p.kdy }; nejI = i; }
+      });
+      if (!nej) return;
+      pouzite[nejI] = 1;
+      var v = new Date(nej.kdy).getTime();
+      if (v && r.t - v > 600000) { r.v = v; zmena = true; }
+    });
+    S.knihaProvizeOk = 1;
+    if (zmena) save();
+    if (hotovo) hotovo(zmena);
+  }).catch(function () { if (hotovo) hotovo(false); });
 }
 // Když se mezitím přehoupl měsíc, uzavřeme ho — ať kniha nekončí u rozepsaného.
 function knihaSrovnej() {
