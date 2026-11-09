@@ -7708,12 +7708,24 @@ model GameSpotClaim {
   vyzyvatel_rent  Int?
   vyzyvatel_model String?   @db.VarChar(10)
 
+  // Pronájem vlastního pozemku jinému hráči. Majitel vypíše měsíční nájem a
+  // jestli je plocha připravená (pak si nájemce přípojky nestaví ani neplatí).
+  // najem_do říká, do kdy je nájem vyúčtovaný — od toho se počítá, co se
+  // majiteli připíše.
+  pronajem_cena   Int?
+  pronajem_sit    Boolean   @default(false)
+  najemce_id      Int?
+  najemce_nick    String?   @db.VarChar(24)
+  najem_od        DateTime?
+  najem_do        DateTime?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
   @@index([area_key])
   @@index([player_id])
   @@index([vypoved_do])
+  @@index([najemce_id])
   @@map("game_spot_claims")
 }
 

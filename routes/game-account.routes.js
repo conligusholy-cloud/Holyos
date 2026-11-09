@@ -984,6 +984,15 @@ const claimPub = (c, me, firmy) => ({
     ? { nick: c.vyzyvatel_nick, rent: c.vyzyvatel_rent } : null,
   // A tomu, kdo přihodil, že na místo čeká. Datum ne — to by prozradilo smlouvu.
   moje_nabidka: (c.vyzyvatel_id && c.vyzyvatel_id === me) ? { rent: c.vyzyvatel_rent } : null,
+  // Nabídka pronájmu pozemku je naopak veřejná — je to inzerát, má ji vidět
+  // každý. Stejně tak kdo si pozemek pronajal.
+  pronajem: (c.pozemek && c.pronajem_cena > 0 && !c.najemce_id)
+    ? { cena: c.pronajem_cena, sit: !!c.pronajem_sit } : null,
+  najemce: c.najemce_id
+    ? { id: c.najemce_id, nick: c.najemce_nick,
+        firma: (firmy && firmy[c.najemce_id] && firmy[c.najemce_id].firma) || (c.najemce_nick + ' s.r.o.'),
+        cena: c.pronajem_cena, sit: !!c.pronajem_sit, ja: c.najemce_id === me }
+    : null,
   since: c.created_at,
 });
 
@@ -1111,6 +1120,7 @@ router.post('/spots/stavba', requirePlayer, async (req, res, next) => {
     const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
     if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: 'Tohle místo ti nepatří.' });
     if (cur.model) return res.status(409).json({ error: 'Tady už něco stojí.' });
+    if (cur.najemce_id) return res.status(409).json({ error: 'Pozemek máš pronajatý — nejdřív ukonči nájem.' });
     const upd = await prisma.gameSpotClaim.update({ where: { spot_id: spot }, data: { model } });
     res.json({ ok: true, spot: claimPub(upd, req.player.id, await firmyMapa()) });
   } catch (e) { next(e); }
@@ -1135,6 +1145,115 @@ router.post('/spots/dorovnat', requirePlayer, async (req, res, next) => {
     });
     console.log('[game] nájemce dorovnal:', spot, req.player.nick, novy + ' L$');
     res.json({ ok: true, rent: novy, spot: claimPub(upd, req.player.id, await firmyMapa()) });
+  } catch (e) { next(e); }
+});
+
+// ─── Pronájem vlastního pozemku jinému hráči ────────────────────────────────
+// Kdo má zem, nemusí na ní stavět — může ji pronajmout. Buď jako holou parcelu
+// (nájemce si přípojky vybuduje a zaplatí sám), nebo s připravenou plochou; za
+// tu si majitel řekne víc, protože do ní dal peníze. Nájem se majiteli připisuje
+// po herních měsících, stejně jako provize ze sítě.
+const NAJEM_MAX = 5000000;
+
+// POST /spots/pronajem { spot_id, cena, sit } — vypsat nebo stáhnout nabídku.
+router.post('/spots/pronajem', requirePlayer, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const spot = s(b.spot_id, 120);
+    const cena = Math.max(0, Math.min(NAJEM_MAX, Math.round(Number(b.cena) || 0)));
+    const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
+    if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: 'Tenhle pozemek ti nepatří.' });
+    if (!cur.pozemek) return res.status(409).json({ error: 'Pronajmout jde jen vlastní pozemek.' });
+    if (cur.najemce_id) return res.status(409).json({ error: 'Pozemek už je pronajatý.' });
+    if (cur.model) return res.status(409).json({ error: 'Nejdřív odvez vlastní prádlomat.' });
+    const upd = await prisma.gameSpotClaim.update({
+      where: { spot_id: spot },
+      data: { pronajem_cena: cena > 0 ? cena : null, pronajem_sit: cena > 0 ? !!b.sit : false },
+    });
+    res.json({ ok: true, spot: claimPub(upd, req.player.id, await firmyMapa()) });
+  } catch (e) { next(e); }
+});
+
+// POST /spots/najmout { spot_id } — cizí hráč si pozemek pronajme.
+router.post('/spots/najmout', requirePlayer, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const spot = s(b.spot_id, 120);
+    const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
+    if (!cur || !cur.pozemek) return res.status(404).json({ error: 'Takový pozemek neexistuje.' });
+    if (cur.player_id === req.player.id) return res.status(409).json({ error: 'Tohle je tvůj vlastní pozemek.' });
+    if (!cur.pronajem_cena) return res.status(409).json({ error: 'Majitel pozemek nenabízí.' });
+    if (cur.najemce_id) return res.status(409).json({ error: 'Pozemek si mezitím pronajal někdo jiný.' });
+    const ted = new Date();
+    const upd = await prisma.gameSpotClaim.update({
+      where: { spot_id: spot },
+      data: { najemce_id: req.player.id, najemce_nick: req.player.nick, najem_od: ted, najem_do: ted },
+    });
+    console.log('[game] pronájem pozemku:', spot, cur.nick, '→', req.player.nick, cur.pronajem_cena + ' L$');
+    res.json({ ok: true, spot: claimPub(upd, req.player.id, await firmyMapa()) });
+  } catch (e) { next(e); }
+});
+
+// POST /spots/najem-konec { spot_id } — nájemce se pozemku vzdá, nebo ho majitel
+// uvolní. Stroj nájemce stojí na vlastním záboru, ten se maže zvlášť přes release.
+router.post('/spots/najem-konec', requirePlayer, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const spot = s(b.spot_id, 120);
+    const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
+    if (!cur) return res.status(404).json({ error: 'Takový pozemek neexistuje.' });
+    const muj = cur.player_id === req.player.id, najemce = cur.najemce_id === req.player.id;
+    if (!muj && !najemce) return res.status(409).json({ error: 'S tímhle pozemkem nemáš co do činění.' });
+    // Co nájemci doběhlo do konce, majitel ještě dostane.
+    await dorovnejNajmy({ id: cur.player_id, nick: cur.nick });
+    const upd = await prisma.gameSpotClaim.update({
+      where: { spot_id: spot },
+      data: { najemce_id: null, najemce_nick: null, najem_od: null, najem_do: null,
+        pronajem_cena: muj ? null : cur.pronajem_cena, pronajem_sit: muj ? false : cur.pronajem_sit },
+    });
+    res.json({ ok: true, spot: claimPub(upd, req.player.id, await firmyMapa()) });
+  } catch (e) { next(e); }
+});
+
+// Dopočítá nájmy, které majiteli ještě nebyly připsané. Běží při otevření hry
+// i záložky Já — stejně jako provize, aby se nic neztratilo, i když se majitel
+// týden nepodívá.
+async function dorovnejNajmy(majitel) {
+  if (!majitel || !majitel.id) return 0;
+  const rows = await prisma.gameSpotClaim.findMany({
+    where: { player_id: majitel.id, najemce_id: { not: null } },
+  });
+  let celkem = 0;
+  for (const c of rows) {
+    const cena = Math.max(0, Math.round(c.pronajem_cena || 0));
+    if (!cena) continue;
+    const od = new Date(c.najem_do || c.najem_od || c.created_at).getTime();
+    const mesicu = Math.floor((Date.now() - od) / MESIC_MS);
+    if (mesicu < 1) continue;
+    const castka = cena * mesicu;
+    await prisma.gameDelivery.create({
+      data: { player_id: majitel.id, kind: 'cash', amount: castka,
+        spot_id: 'najem:' + c.spot_id + ':' + Math.round(od / MESIC_MS),
+        popis: 'Nájem ' + castka.toLocaleString('cs-CZ') + ' L$ — ' + (c.name || 'pozemek')
+          + ' (' + c.najemce_nick + ')' },
+    });
+    await prisma.gameSpotClaim.update({
+      where: { spot_id: c.spot_id }, data: { najem_do: new Date(od + mesicu * MESIC_MS) },
+    });
+    celkem += castka;
+  }
+  return celkem;
+}
+
+// GET /spots/najmy → co mi nájemci dluží a co se právě připsalo.
+router.get('/spots/najmy', requirePlayer, async (req, res, next) => {
+  try {
+    const pripsano = await dorovnejNajmy(req.player);
+    const rows = await prisma.gameSpotClaim.findMany({
+      where: { player_id: req.player.id, pozemek: true, OR: [{ najemce_id: { not: null } }, { pronajem_cena: { gt: 0 } }] },
+    });
+    const firmy = await firmyMapa();
+    res.json({ ok: true, pripsano, pozemky: rows.map((c) => claimPub(c, req.player.id, firmy)) });
   } catch (e) { next(e); }
 });
 

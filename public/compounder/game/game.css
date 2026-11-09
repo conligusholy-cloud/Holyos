@@ -228,6 +228,11 @@ button.kv:active{background:rgba(124,92,255,.12)}
 /* Koupený pozemek: bílý rámeček jako ostatní můj majetek a cedulka pod značkou,
    ať se moje zem nedá splést s další nabídkou na prodej. */
 .pin.pozemek.moje{background:#2fe3a0;color:#04301f;border-color:#fff;overflow:visible}
+/* Cizí zem: šedá. Když ji majitel nabízí k pronájmu, svítí jako inzerát. */
+.pin.pozemek.cizi{background:#3a4360;color:#c9d4ee;border-color:#8a97bb;overflow:visible}
+.pin.pozemek.cizi .pin-tag{background:#8a97bb;color:#0b1020}
+.pin.pozemek.cizi.nabidka{background:#7c5cff;color:#fff;border-color:#c3b4ff}
+.pin.pozemek.cizi.nabidka .pin-tag{background:#7c5cff;color:#fff}
 .pin.pozemek.moje .pin-tag{background:#2fe3a0;color:#04301f}
 .pin.mine{background:var(--ok);color:#04301f}
 .leaflet-container{background:#0a1120;font:inherit}
