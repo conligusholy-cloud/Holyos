@@ -1402,13 +1402,17 @@ var KNIHA_DRUH = {
 function knihaKat(d) { return (KNIHA_DRUH[d] || KNIHA_DRUH.prijem).kat; }
 // Zapíše jeden pohyb. Volá se až PO změně hotovosti, aby seděl zůstatek.
 // u = kolik z toho zaplatila banka (u nákupu na úvěr), jen pro informaci.
-function zapis(d, p, c, u) {
+function zapis(d, p, c, u, vzniklo) {
   if (!S) return;
   c = Math.round(c || 0);
   if (!c) return;
   if (!Array.isArray(S.kniha)) S.kniha = [];
   var r = { t: Date.now(), d: d, p: String(p || ''), c: c, z: Math.round(S.cash) };
   if (u) r.u = Math.round(u);
+  // Doručenka mohla čekat, než si ji hráč vyzvedl — pak je vedle data připsání
+  // i den, kdy provize vznikla. Jinak to vypadá, že přišly dvě naráz za jeden stroj.
+  var v = vzniklo ? new Date(vzniklo).getTime() : 0;
+  if (v && Date.now() - v > 600000) r.v = v;
   S.kniha.push(r);
   if (S.kniha.length > KNIHA_MAX) S.kniha = S.kniha.slice(-KNIHA_MAX);
 }
@@ -1467,6 +1471,7 @@ function knihaRadek(r) {
   return '<div class="kn-radek"><i class="kn-tecka ' + knihaKat(r.d) + '"></i>'
     + '<span><b>' + esc(r.p) + '</b><i>' + datumCas(r.t)
     + (r.u ? ' · z toho úvěr ' + kcFull(r.u) : '')
+    + (r.v ? ' · vzniklo ' + datumCas(r.v) : '')
     + (r.r ? ' · dopočítáno' : (r.z != null ? ' · zůstatek ' + kcFull(r.z) : '')) + '</i></span>'
     + '<b class="' + kl + '">' + (r.c > 0 ? '+' : '−') + kcFull(Math.abs(r.c)) + '</b></div>';
 }
@@ -5805,7 +5810,7 @@ function vyzvedniNasledky(then) {
     d.forEach(function (x) {
       if (x.kind === 'cash') {
         S.cash += x.amount || 0;
-        zapis('prijem', x.popis || 'Připsáno na účet', x.amount || 0);
+        zapis('prijem', x.popis || 'Připsáno na účet', x.amount || 0, 0, x.vzniklo);
         // Kdyby mezitím peníze utratil, schodek pokryje banka — ať hra neskončí
         // v záporné hotovosti, ze které není cesta ven.
         if (S.cash < 0) { pricistDluh(-S.cash, prirazkaZa(-S.cash)); S.bank = Math.max(0, S.bank + S.cash); S.cash = 0; }

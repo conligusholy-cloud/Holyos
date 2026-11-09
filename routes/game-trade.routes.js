@@ -278,8 +278,11 @@ router.get('/trade/deliveries', hrac, api(async (req, res) => {
   const rows = await prisma.gameDelivery.findMany({
     where: { player_id: req.player.id, claimed_at: null }, orderBy: { id: 'asc' }, take: 50,
   });
+  // created_at posíláme kvůli účetní knize: doručenka mohla čekat i půl dne,
+  // než si ji hráč vyzvedl, a v knize má být vidět, kdy ta provize vznikla.
   res.json({ ok: true, deliveries: rows.map((d) => ({ id: d.id, kind: d.kind, model: d.model,
-    amount: d.amount, spot_id: d.spot_id, data: d.data || null, popis: d.popis })) });
+    amount: d.amount, spot_id: d.spot_id, data: d.data || null, popis: d.popis,
+    vzniklo: d.created_at })) });
 }));
 
 // POST /trade/deliveries/claim { ids: [] } — klient potvrdí, že to zapsal
