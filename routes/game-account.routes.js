@@ -905,6 +905,48 @@ router.get('/leaderboard', async (req, res, next) => {
 const TAKEOVER_MIN = 1.2;   // nabídka musí být aspoň o pětinu vyšší
 const BID_FEE = 5000;       // co stojí neúspěšné vyjednávání (informativní, strhne klient)
 
+// ─── Nájemní smlouva ─────────────────────────────────────────────────────────
+// Hráč se s majitelem pozemku domlouvá na dvou věcech: na jak dlouho se váže
+// a jakou má výpovědní dobu. Vázanost ho chrání před přeplacením — dokud běží,
+// majitel s ním vypovědět nemůže. Výpovědní doba je lhůta, po kterou místo
+// vydělává dál jemu, i když už někdo nabídl víc; během ní může nabídku dorovnat
+// a zůstat. Za jistotu se platí vyšším nájmem (počítá klient, viz game.js).
+// Konkurent nevidí ani nájem, ani podmínky — přihazuje naslepo.
+const VYPOVED_MAX = 12;          // nejdelší výpovědní doba v herních měsících
+const VAZANOST_MAX = 60;         // nejdelší vázanost v herních měsících (5 let)
+const ODSTUPNE_MAX = 6;          // vlastní výpověď z doby určité stojí nejvýš 6 nájmů
+function mesicu(n, max) {
+  const v = Math.round(Number(n) || 0);
+  return Math.max(0, Math.min(max, v));
+}
+// Doběhlé výpovědi: místo přechází na toho, kdo nabídl víc. Spouští se při
+// každém čtení míst, takže se to stane i bez hráče, který o místo přišel.
+async function dobehleVypovedi() {
+  const ted = new Date();
+  const hotove = await prisma.gameSpotClaim.findMany({
+    where: { vypoved_do: { not: null, lte: ted }, vyzyvatel_id: { not: null } },
+    take: 100,
+  });
+  for (const c of hotove) {
+    try {
+      await prisma.gameSpotClaim.update({
+        where: { spot_id: c.spot_id },
+        data: {
+          player_id: c.vyzyvatel_id, nick: c.vyzyvatel_nick || '?',
+          model: c.vyzyvatel_model || c.model, rent: c.vyzyvatel_rent || c.rent,
+          takeovers: { increment: 1 },
+          // Nový nájemce začíná na holé smlouvě — podmínky si sjedná sám.
+          vazano_do: null, vypoved_mesicu: 1,
+          vypoved_do: null, vyzyvatel_id: null, vyzyvatel_nick: null,
+          vyzyvatel_rent: null, vyzyvatel_model: null,
+        },
+      });
+      console.log('[game] místo přešlo po výpovědi:', c.spot_id, c.nick, '→', c.vyzyvatel_nick);
+    } catch (e) { console.warn('[game] dobehnuti vypovedi:', e.message); }
+  }
+  return hotove.length;
+}
+
 const claimPub = (c, me, firmy) => ({
   // Id majitele potřebuje klient na to, aby mu šlo napsat do chatu.
   id: c.player_id,
@@ -915,6 +957,15 @@ const claimPub = (c, me, firmy) => ({
   takeovers: c.takeovers, name: c.name, lat: c.lat, lon: c.lon,
   // Nájem říkáme jen majiteli. Ostatní přihazují naslepo — v tom je to riziko.
   rent: c.player_id === me ? c.rent : null,
+  // Stejně tak podmínky smlouvy: kdo přihazuje, nesmí vědět, jak je nájemce krytý.
+  vazano_do: c.player_id === me ? c.vazano_do : null,
+  vypoved_mesicu: c.player_id === me ? c.vypoved_mesicu : null,
+  vypoved_do: c.player_id === me ? c.vypoved_do : null,
+  // Nájemci řekneme, kolik mu konkurent nabídl — bez toho by neměl co dorovnat.
+  vyzyva: (c.player_id === me && c.vypoved_do)
+    ? { nick: c.vyzyvatel_nick, rent: c.vyzyvatel_rent } : null,
+  // A tomu, kdo přihodil, že na místo čeká. Datum ne — to by prozradilo smlouvu.
+  moje_nabidka: (c.vyzyvatel_id && c.vyzyvatel_id === me) ? { rent: c.vyzyvatel_rent } : null,
   since: c.created_at,
 });
 
@@ -930,6 +981,7 @@ router.get('/spots', async (req, res, next) => {
       orderBy: { updated_at: 'desc' }, take: 2000,
     });
     const firmy = await firmyMapa();
+    await dobehleVypovedi();
     // Zasíťovaná místa: kde už přípojky jsou, platí další stavitel jen instalaci.
     const built = await prisma.gameSpotBuilt.findMany({
       where: areas.length ? { area_key: { in: areas } } : {},
@@ -944,6 +996,7 @@ router.get('/spots', async (req, res, next) => {
 // GET /spots/mine → vlastní místa (klient podle nich pozná, o které přišel)
 router.get('/spots/mine', requirePlayer, async (req, res, next) => {
   try {
+    await dobehleVypovedi();
     const rows = await prisma.gameSpotClaim.findMany({ where: { player_id: req.player.id } });
     const firmy = await firmyMapa();
     res.json({ ok: true, spots: rows.map((c) => claimPub(c, req.player.id, firmy)) });
@@ -964,9 +1017,12 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
         occupied: claimPub(taken, req.player.id, await firmyMapa()),
       });
     }
+    const vaz = mesicu(b.doba_mesicu, VAZANOST_MAX);
+    const vyp = Math.max(1, mesicu(b.vypoved_mesicu, VYPOVED_MAX));
     const c = await prisma.gameSpotClaim.create({
       data: { spot_id: spot, area_key: area, player_id: req.player.id, nick: req.player.nick,
-        model, rent, name: s(b.name, 160) || null, lat: Number(b.lat) || null, lon: Number(b.lon) || null },
+        model, rent, name: s(b.name, 160) || null, lat: Number(b.lat) || null, lon: Number(b.lon) || null,
+        vazano_do: vaz ? new Date(Date.now() + vaz * MESIC_MS) : null, vypoved_mesicu: vyp },
     });
     // Od téhle chvíle je místo zasíťované napořád, i kdyby ho hráč zítra opustil.
     try {
@@ -989,30 +1045,75 @@ router.post('/spots/bid', requirePlayer, async (req, res, next) => {
     const spot = s(b.spot_id, 120);
     const offer = Math.max(0, Math.round(Number(b.rent) || 0));
     const model = s(b.model, 10);
+    await dobehleVypovedi();
     const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
     if (!cur) return res.status(404).json({ error: 'Tohle místo je volné — stav rovnou.' });
     if (cur.player_id === req.player.id) return res.status(409).json({ error: 'Tady stojíš ty sám.' });
     const need = Math.ceil(cur.rent * TAKEOVER_MIN);
-    if (offer < need) {
+    const ted = Date.now();
+    // Smlouva na dobu určitou drží. Útočník se nedozví proč — odmítnutí vypadá
+    // stejně jako málo peněz, jinak by si vyjednané podmínky mohl odvodit.
+    const kryty = cur.vazano_do && new Date(cur.vazano_do).getTime() > ted;
+    // Když už jedna výpověď běží, přebít ji jde zase jen o pětinu výš.
+    const nadNabidkou = cur.vypoved_do ? offer >= Math.ceil((cur.vyzyvatel_rent || 0) * TAKEOVER_MIN) : true;
+    if (offer < need || kryty || !nadNabidkou) {
       // Kolik bylo potřeba, neprozradíme — jinak by stačilo zkoušet po tisícovkách.
       return res.status(409).json({ ok: false, won: false, fee: BID_FEE, error: 'Majitel pozemku tvoji nabídku odmítl. Nájemce platí víc.' });
     }
+    // Nájemce má výpovědní dobu: místo mu vydělává dál a může nabídku dorovnat.
+    const doKdy = new Date(ted + Math.max(1, cur.vypoved_mesicu || 1) * MESIC_MS);
     const upd = await prisma.gameSpotClaim.update({
       where: { spot_id: spot },
-      data: { player_id: req.player.id, nick: req.player.nick, model: model || cur.model, rent: offer, takeovers: { increment: 1 } },
+      data: { vypoved_do: doKdy, vyzyvatel_id: req.player.id, vyzyvatel_nick: req.player.nick,
+        vyzyvatel_rent: offer, vyzyvatel_model: model || cur.model },
     });
-    console.log('[game] přetažení místa:', spot, cur.nick, '→', req.player.nick, offer + ' L$');
-    res.json({ ok: true, won: true, spot: claimPub(upd, req.player.id, await firmyMapa()), lost_by: cur.nick });
+    console.log('[game] výpověď z místa:', spot, cur.nick, '→', req.player.nick, offer + ' L$');
+    // Datum neposíláme — z něj by šla vyčíst délka výpovědní doby.
+    res.json({ ok: true, won: true, ceka: true,
+      spot: claimPub(upd, req.player.id, await firmyMapa()), lost_by: cur.nick });
   } catch (e) { next(e); }
 });
 
-// POST /spots/release { spot_id } — výpověď z místa, stroj si hráč odveze
-router.post('/spots/release', requirePlayer, async (req, res, next) => {
+// POST /spots/dorovnat { spot_id } — nájemce dorovná nabídku konkurenta a zůstává.
+// Tohle je ta pojistka, kvůli které má smysl si vyjednat delší výpovědní dobu.
+router.post('/spots/dorovnat', requirePlayer, async (req, res, next) => {
   try {
     const spot = s((req.body || {}).spot_id, 120);
-    const done = await prisma.gameSpotClaim.deleteMany({ where: { spot_id: spot, player_id: req.player.id } });
-    if (!done.count) return res.status(409).json({ error: 'Tohle místo ti nepatří.' });
-    res.json({ ok: true });
+    const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
+    if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: 'Tohle místo ti nepatří.' });
+    if (!cur.vypoved_do) return res.status(409).json({ error: 'Žádná výpověď tu neběží.' });
+    if (new Date(cur.vypoved_do).getTime() <= Date.now()) {
+      return res.status(409).json({ error: 'Výpovědní doba už uběhla.' });
+    }
+    const novy = Math.max(cur.rent, cur.vyzyvatel_rent || cur.rent);
+    const upd = await prisma.gameSpotClaim.update({
+      where: { spot_id: spot },
+      data: { rent: novy, vypoved_do: null, vyzyvatel_id: null, vyzyvatel_nick: null,
+        vyzyvatel_rent: null, vyzyvatel_model: null },
+    });
+    console.log('[game] nájemce dorovnal:', spot, req.player.nick, novy + ' L$');
+    res.json({ ok: true, rent: novy, spot: claimPub(upd, req.player.id, await firmyMapa()) });
+  } catch (e) { next(e); }
+});
+
+// POST /spots/release { spot_id, odstupne } — výpověď z místa, stroj si hráč odveze.
+// Z doby určité se dá odejít taky, ale majiteli pozemku se doplácí zbytek nájmu
+// (nejvýš ODSTUPNE_MAX nájmů) — klient částku strhne, server ji jen spočítá.
+router.post('/spots/release', requirePlayer, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const spot = s(b.spot_id, 120);
+    const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
+    if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: 'Tohle místo ti nepatří.' });
+    const zbyva = cur.vazano_do
+      ? Math.ceil(Math.max(0, new Date(cur.vazano_do).getTime() - Date.now()) / MESIC_MS) : 0;
+    const odstupne = Math.round(cur.rent * Math.min(zbyva, ODSTUPNE_MAX));
+    if (odstupne > 0 && !b.odstupne) {
+      return res.status(409).json({ ok: false, odstupne, zbyva,
+        error: 'Smlouva je na dobu určitou. Odejít jde, ale doplatíš odstupné.' });
+    }
+    await prisma.gameSpotClaim.deleteMany({ where: { spot_id: spot, player_id: req.player.id } });
+    res.json({ ok: true, odstupne });
   } catch (e) { next(e); }
 });
 

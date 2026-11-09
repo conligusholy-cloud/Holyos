@@ -3303,18 +3303,55 @@ function spotSheet(sp, areaId) {
 
   // 2. krok — domluvit s majitelem nájem. Zadarmo, ale bez něj se stavět nedá.
   if (!lease) {
-    sheet(head
-      + '<h3 style="margin-top:18px">Nájem</h3>'
-      + '<p class="muted small">Než sem něco postavíš, musíš se s majitelem pozemku dohodnout na nájmu. '
-      + 'Teprve pak se platí přípojky a staví.</p>'
-      + '<div class="kv"><span>Odhad nájmu</span><b>' + kcFull(Math.round(rentOf(sp) * 0.9)) + ' – ' + kcFull(Math.round(rentOf(sp) * 1.1)) + ' / měsíc</b></div>'
-      + '<button class="btn big" id="do-lease">Domluvit nájem</button>');
-    var l = $('do-lease');
-    if (l) l.onclick = function () {
-      S.leases[sp.id] = { rent: rentOf(sp), at: Date.now() };
-      save(); paint(); spotSheet(sp, areaId);
-      toast('Nájem domluven na ' + kcFull(S.leases[sp.id].rent) + ' měsíčně.', 'ok');
+    // Podmínky se vybírají tady, při vyjednávání — pak už se smlouva nemění.
+    if (S.najemVolba == null) S.najemVolba = { doba: 0, vypoved: 1 };
+    var nv = S.najemVolba;
+    var vykresli = function () {
+      var cena = najemSPodminkami(sp, nv.doba, nv.vypoved);
+      var popis = '';
+      NAJEM_DOBY.forEach(function (d) { if (d.m === nv.doba) popis = d.p; });
+      sheet(head
+        + '<h3 style="margin-top:18px">Nájemní smlouva</h3>'
+        + '<p class="muted small">Než sem něco postavíš, musíš se s majitelem pozemku dohodnout. '
+        + 'Čím delší jistotu chceš, tím dražší nájem — ale tím hůř se ti někdo dostane na místo.</p>'
+        + '<p class="muted small" style="margin:10px 0 4px"><b>Na jak dlouho se vážeš</b></p>'
+        + '<div class="seg sub najem-seg">' + NAJEM_DOBY.map(function (d) {
+            return '<button class="' + (d.m === nv.doba ? 'on' : '') + '" data-doba="' + d.m + '">'
+              + (d.m ? (d.m / 12) + (d.m === 12 ? ' rok' : (d.m < 60 ? ' roky' : ' let')) : 'Neurčito') + '</button>';
+          }).join('') + '</div>'
+        + '<p class="fine">' + esc(popis) + '</p>'
+        + '<p class="muted small" style="margin:12px 0 4px"><b>Výpovědní doba</b></p>'
+        + '<div class="seg sub najem-seg">' + NAJEM_VYPOVEDI.map(function (m) {
+            return '<button class="' + (m === nv.vypoved ? 'on' : '') + '" data-vyp="' + m + '">'
+              + m + ' měs.</button>';
+          }).join('') + '</div>'
+        + '<p class="fine">Když tě někdo přeplatí, tolik herních měsíců ti místo ještě vydělává — '
+        + 'a celou tu dobu můžeš jeho nabídku dorovnat a zůstat.</p>'
+        + '<div class="kv" style="margin-top:14px"><span>Nájem za těchhle podmínek</span><b class="'
+        + (cena > rentOf(sp) ? 'warn' : 'ok') + '">' + kcFull(cena) + ' / měsíc</b></div>'
+        + (cena > rentOf(sp)
+            ? '<div class="kv"><span>Příplatek za jistotu</span><b>+' + kcFull(cena - rentOf(sp))
+              + ' (' + Math.round((najemKoef(nv.doba, nv.vypoved) - 1) * 100) + ' %)</b></div>'
+            : '')
+        + '<button class="btn big" id="do-lease" style="width:100%;margin-top:12px">Domluvit nájem</button>'
+        + '<p class="fine">Z doby určité se dá odejít i dřív, ale doplatíš odstupné — zbytek nájmu '
+        + 'do konce smlouvy, nejvýš za ' + ODSTUPNE_MAX + ' měsíce.</p>');
+      [].forEach.call($('sheet-body').querySelectorAll('[data-doba]'), function (x) {
+        x.onclick = function () { nv.doba = Number(x.getAttribute('data-doba')); save(); vykresli(); };
+      });
+      [].forEach.call($('sheet-body').querySelectorAll('[data-vyp]'), function (x) {
+        x.onclick = function () { nv.vypoved = Number(x.getAttribute('data-vyp')); save(); vykresli(); };
+      });
+      var l = $('do-lease');
+      if (l) l.onclick = function () {
+        S.leases[sp.id] = { rent: najemSPodminkami(sp, nv.doba, nv.vypoved), at: Date.now(),
+          doba: nv.doba, vypoved: nv.vypoved };
+        save(); paint(); spotSheet(sp, areaId);
+        toast('Nájem domluven na ' + kcFull(S.leases[sp.id].rent) + ' měsíčně, '
+          + dobaNazev(nv.doba).toLowerCase() + ', výpověď ' + vypovedNazev(nv.vypoved) + '.', 'ok');
+      };
     };
+    vykresli();
     return;
   }
 
@@ -3616,8 +3653,10 @@ function installSheet(sp, areaId, modelKey, drz) {
   if (b) b.onclick = function () {
     // Místo si nejdřív zabereme na serveru — na jednom místě smí stát jen jeden.
     b.disabled = true; b.textContent = 'Stavím…';
+    var sml = S.leases[sp.id] || {};
     apiJson('/spots/claim', { spot_id: sp.id, area_key: areaId, model: modelKey,
-      rent: e.rent, name: sp.name, lat: sp.lat, lon: sp.lon }).then(function (r) {
+      rent: e.rent, name: sp.name, lat: sp.lat, lon: sp.lon,
+      doba_mesicu: sml.doba || 0, vypoved_mesicu: sml.vypoved || 1 }).then(function (r) {
       b.disabled = false; b.textContent = 'Postavit';
       if (!r.ok) {
         if (r.j.occupied) CLAIMS[sp.id] = r.j.occupied;
@@ -3655,6 +3694,77 @@ var CLAIMS = {};          // id místa → { nick, model, mine, takeovers, rent 
 var BID_FEE = 5000;
 function areaKeys() { return Object.keys(S && S.areas ? S.areas : {}); }
 
+// ─── Nájemní smlouva ─────────────────────────────────────────────────────────
+// S majitelem pozemku se domlouvají dvě věci: na jak dlouho se hráč zaváže a
+// jakou bude mít výpovědní dobu. Vázanost ho chrání — dokud běží, nikdo ho
+// nepřeplatí. Výpovědní doba je lhůta, po kterou místo vydělává dál jemu, i
+// když už někdo nabídl víc; do jejího konce může nabídku dorovnat a zůstat.
+// Za jistotu se platí vyšším nájmem. Konkurent podmínky nevidí, stejně jako
+// nevidí nájem — přihazuje naslepo a nikdy neví, jak dobře je soused krytý.
+var NAJEM_DOBY = [
+  { m: 0, n: 'Na dobu neurčitou', p: 'Nejlevnější. Kdokoli tě může kdykoli přeplatit.' },
+  { m: 12, n: '1 rok', p: 'Rok klidu. Pak se smlouva mění na dobu neurčitou.' },
+  { m: 36, n: '3 roky', p: 'Tři roky tě nikdo nevystrnadí.' },
+  { m: 60, n: '5 let', p: 'Nejdražší jistota. Pět herních let nedotknutelný.' }
+];
+var NAJEM_VYPOVEDI = [1, 3, 6, 12];
+var NAJEM_ZA_ROK = 0.05;        // +5 % nájmu za každý rok vázanosti
+var NAJEM_ZA_MESIC = 0.03;      // +3 % za každý měsíc výpovědní doby nad jeden
+var ODSTUPNE_MAX = 6;           // odejít z doby určité stojí nejvýš šest nájmů
+// Kolikrát dražší je nájem s vyjednanými podmínkami. Minimum (neurčito a měsíc
+// výpovědi) je základní cena, všechno nad to si majitel pozemku nechá zaplatit.
+function najemKoef(dobaM, vypM) {
+  return 1 + (Math.max(0, dobaM) / 12) * NAJEM_ZA_ROK
+    + Math.max(0, (vypM || 1) - 1) * NAJEM_ZA_MESIC;
+}
+function najemSPodminkami(sp, dobaM, vypM) {
+  return Math.round(rentOf(sp) * najemKoef(dobaM, vypM));
+}
+function dobaNazev(m) {
+  for (var i = 0; i < NAJEM_DOBY.length; i++) if (NAJEM_DOBY[i].m === m) return NAJEM_DOBY[i].n;
+  return Math.round(m / 12) + ' let';
+}
+function vypovedNazev(m) {
+  return m + ' ' + mn(m, 'měsíc', 'měsíce', 'měsíců');
+}
+// Běžící výpověď na mém místě — vrací data, ze kterých se staví varování.
+function vyzvaNaMiste(spotId) {
+  var c = CLAIMS[spotId];
+  if (!c || !c.mine || !c.vypoved_do || !c.vyzyva) return null;
+  var do_ = new Date(c.vypoved_do).getTime();
+  if (!(do_ > Date.now())) return null;
+  return { do: do_, nick: c.vyzyva.nick || 'konkurent', rent: c.vyzyva.rent || 0 };
+}
+// Karta s výpovědí v detailu prádlomatu. Dorovnání je ta pojistka, kvůli které
+// má smysl vyjednat si delší výpovědní dobu.
+function vypovedHtml(u) {
+  var v = vyzvaNaMiste(u.spotId);
+  if (!v) return '';
+  var rozdil = Math.max(0, v.rent - (u.eco.rent || 0));
+  return '<div class="card vada-karta"><div class="row"><h3>⚠️ Výpověď z místa</h3>'
+    + '<b class="err">' + etaText(v.do - Date.now()).replace('za ', 'zbývá ') + '</b></div>'
+    + '<p class="muted small" style="margin:4px 0 8px">' + esc(v.nick) + ' nabídl majiteli pozemku '
+    + 'vyšší nájem. Do konce výpovědní doby tu vyděláváš dál — a když nabídku dorovnáš, '
+    + 'místo ti zůstane.</p>'
+    + '<div class="kv"><span>Platíš teď</span><b>' + kcFull(u.eco.rent) + ' / měsíc</b></div>'
+    + '<div class="kv"><span>Nabídka konkurenta</span><b class="warn">' + kcFull(v.rent) + ' / měsíc</b></div>'
+    + '<div class="kv"><span>Zdraží tě to o</span><b class="err">' + kcFull(rozdil) + ' / měsíc</b></div>'
+    + '<button class="btn big" id="do-dorovnat" style="width:100%;margin-top:10px">Dorovnat a zůstat</button>'
+    + '</div>';
+}
+// Jak je místo nasmlouvané — vidí jen nájemce.
+function smlouvaHtml(u) {
+  var c = CLAIMS[u.spotId];
+  if (!c || !c.mine || !c.vypoved_mesicu) return '';
+  var vaz = c.vazano_do ? new Date(c.vazano_do).getTime() : 0;
+  var kryty = vaz > Date.now();
+  return '<h3 style="margin:16px 0 4px">Nájemní smlouva</h3>'
+    + '<div class="kv"><span>Vázanost</span><b class="' + (kryty ? 'ok' : '') + '">'
+    + (kryty ? 'do ' + datumCas(vaz).split(' ')[0] + ' (nikdo tě nepřeplatí)' : 'na dobu neurčitou') + '</b></div>'
+    + '<div class="kv"><span>Výpovědní doba</span><b>' + vypovedNazev(c.vypoved_mesicu) + '</b></div>'
+    + '<p class="fine">Konkurence tvoje podmínky nevidí. Dokud vázanost běží, přihazovat na tvoje '
+    + 'místo nemá smysl — majitel pozemku je nabídku nucen odmítnout.</p>';
+}
 function loadClaims(then) {
   // Bez filtru na města — konkurenci chceme vidět na celé mapě, i tam, kam
   // jsme ještě nikoho neposlali.
@@ -3668,11 +3778,62 @@ function loadClaims(then) {
     (r.j.zasitovana || []).forEach(function (id) { zas[id] = 1; });
     ZASITOVANE = zas;
     reconcileUnits();
+    prevezmiMista();
+    hlidejVypovedi();
     drawMap();
     if (then) then();
   }).catch(function () { if (then) then(); });
 }
 
+// Na která místa čekám, až doběhne výpovědní doba souseda. Drží se ve stavu
+// hry, protože mezi přihozením a převzetím může hráč hru klidně zavřít.
+function cekam() {
+  if (!S.cekam || typeof S.cekam !== 'object') S.cekam = {};
+  return S.cekam;
+}
+// Místo, které mi mezitím připadlo, se musí dostavět — stroj na něj držím skladem.
+function prevezmiMista() {
+  if (!S) return;
+  var fronta = cekam();
+  Object.keys(fronta).forEach(function (id) {
+    var c = CLAIMS[id], ceka = fronta[id];
+    if (!c || !c.mine) return;                       // ještě to nedoběhlo
+    if (S.units.some(function (u) { return u.spotId === id; })) { delete fronta[id]; return; }
+    var a = S.areas[ceka.areaId], sp = null;
+    if (a) (a.spots || []).forEach(function (x) { if (x.id === id) sp = x; });
+    if (!sp) { delete fronta[id]; return; }
+    if (inStock(ceka.model) < 1) {
+      toast('Místo ' + sp.name + ' je tvoje, ale nemáš volný ' + MODELS[ceka.model].name + '.', 'err');
+      return;                                        // zkusíme to zas, až stroj bude
+    }
+    var conn = connPrice(sp, ceka.model);
+    var f = canFinance(conn, null, stropPodleZisku(economics(sp, ceka.model).profit, conn));
+    if (!f.ok) { toast('Místo ' + sp.name + ' je tvoje, ale na přípojky ti chybí hotovost.', 'err'); return; }
+    delete fronta[id];
+    doFinance(f, { druh: 'misto', spotId: id, popis: 'Přípojky — ' + sp.name });
+    pripojUverKeStroji(id, sp.name);
+    S.stock[ceka.model] = inStock(ceka.model) - 1;
+    var eco = economics(sp, ceka.model);
+    eco.rent = ceka.rent; eco.conn = conn; eco.install = conn;
+    eco.cost = eco.energy + eco.servis + eco.rent;
+    eco.profit = eco.revenue - eco.cost;
+    S.units.push({ spotId: id, areaId: ceka.areaId, name: sp.name, kind: sp.kind, score: sp.score,
+      lat: sp.lat, lon: sp.lon, builtAt: Date.now(), eco: eco });
+    save(); paint(); drawMap(); syncState(true);
+    toast('Výpovědní doba doběhla — ' + sp.name + ' je tvoje a stroj na něm stojí.', 'ok');
+  });
+}
+// Nová výpověď na mém místě se nesmí přehlédnout — hráč na ni má omezený čas.
+var VYPOVEDI_ZNAME = {};
+function hlidejVypovedi() {
+  (S.units || []).forEach(function (u) {
+    var v = vyzvaNaMiste(u.spotId);
+    if (!v) { delete VYPOVEDI_ZNAME[u.spotId]; return; }
+    if (VYPOVEDI_ZNAME[u.spotId]) return;
+    VYPOVEDI_ZNAME[u.spotId] = 1;
+    toast(v.nick + ' přeplatil nájem na místě ' + u.name + '. Do konce výpovědní doby to můžeš dorovnat.', 'err');
+  });
+}
 // Místo, o které hráč přišel, zmizí ze sítě a stroj se mu vrátí na sklad.
 function reconcileUnits() {
   if (!S || !S.units.length) return;
@@ -3747,6 +3908,14 @@ function rivalSheet(sp, areaId, c) {
         zapis('poplatek', 'Neúspěšné vyjednávání — ' + (sp.name || ''), -BID_FEE);
         save(); paint();
         return toast(r.j.error || 'Nepovedlo se.', 'err');
+      }
+      // Majitel kývl, ale nájemce má výpovědní dobu — místo bude naše až po ní.
+      // Datum neznáme (podmínky soused tají), takže se čeká na převzetí.
+      if (r.j.ceka) {
+        cekam()[sp.id] = { rent: amt, model: model, areaId: areaId };
+        save(); loadClaims(); closeSheet();
+        return toast('Majitel pozemku kývl. ' + esc(r.j.lost_by) + ' má ale výpovědní lhůtu — '
+          + 'až doběhne, místo je tvoje. Nech si na něj volný ' + MODELS[model].name + '.', 'ok');
       }
       // Vyhráli jsme: platíme přípojky a stavíme s nájmem, který jsme nabídli.
       var f = canFinance(conn, null, stropPodleZisku(economics(sp, model).profit, conn));
@@ -3833,6 +4002,7 @@ function unitSheet(u) {
   sheet('<h3>' + esc(u.name) + '</h3>'
     + '<p class="muted small">' + esc(KIND_LABEL[u.kind] || 'Místo') + ' · ' + MODELS[u.eco.model].name + ' · v provozu ' + years.toFixed(1).replace('.', ',') + ' roku</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(u.score) + '</div>'
+    + vypovedHtml(u)
     + poruchaHtml(u)
     + '<h3 style="margin:16px 0 4px">Co to měsíčně dělá</h3>'
     + '<div class="kv"><span>Obrat</span><b>' + kcFull(u.eco.revenue) + '</b></div>'
@@ -3842,6 +4012,7 @@ function unitSheet(u) {
     + '<div class="kv souhrn"><span>Provozní zisk</span><b class="'
       + (u.eco.profit >= 0 ? 'ok' : 'err') + '">' + kcFull(u.eco.profit) + '</b></div>'
     + mistoUverHtml(u)
+    + smlouvaHtml(u)
     + '<h3 style="margin:16px 0 4px">Souhrn</h3>'
     + '<div class="kv"><span>Investice</span><b>' + kcFull(u.eco.invest) + '</b></div>'
     + '<div class="kv"><span>Vydělal celkem</span><b>' + kcFull(u.eco.ziskPlny * 12 * years) + '</b></div>'
@@ -3852,6 +4023,22 @@ function unitSheet(u) {
     + '<button class="btn sec" id="do-release" style="width:100%">Vypovědět místo</button>');
   var tb = $('do-technik');
   if (tb) tb.onclick = function () { vyslatTechnika(u); closeSheet(); switchTab('map'); };
+  var db = $('do-dorovnat');
+  if (db) db.onclick = function () {
+    var v = vyzvaNaMiste(u.spotId);
+    if (!v) return;
+    db.disabled = true; db.textContent = 'Jednám s majitelem…';
+    apiJson('/spots/dorovnat', { spot_id: u.spotId }).then(function (r) {
+      db.disabled = false; db.textContent = 'Dorovnat a zůstat';
+      if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
+      // Nový nájem se musí propsat i do ekonomiky místa, jinak by zisk lhal.
+      u.eco.rent = r.j.rent;
+      u.eco.cost = u.eco.energy + u.eco.servis + u.eco.rent;
+      u.eco.profit = u.eco.revenue - u.eco.cost;
+      save(); paint(); loadClaims(); unitSheet(u); syncState(true);
+      toast('Dorovnáno. Místo zůstává tvoje, nájem je teď ' + kcFull(r.j.rent) + '.', 'ok');
+    }).catch(function () { db.disabled = false; db.textContent = 'Dorovnat a zůstat'; toast('Server neodpovídá.', 'err'); });
+  };
   var rb = $('do-release');
   if (rb) rb.onclick = function () {
     if (rb.getAttribute('data-sure') !== '1') {
@@ -3861,15 +4048,44 @@ function unitSheet(u) {
       return;
     }
     rb.disabled = true;
-    apiJson('/spots/release', { spot_id: u.spotId }).then(function (r) {
-      if (!r.ok) { rb.disabled = false; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
+    vypovedMisto(u, false, rb);
+  };
+}
+// Výpověď z místa. Ze smlouvy na dobu určitou jde odejít taky, ale majiteli
+// pozemku se doplácí odstupné — server ho spočítá, hráč ho musí potvrdit.
+function vypovedMisto(u, sOdstupnym, rb) {
+  apiJson('/spots/release', { spot_id: u.spotId, odstupne: !!sOdstupnym }).then(function (r) {
+      if (!r.ok && r.j && r.j.odstupne > 0 && !sOdstupnym) {
+        if (rb) { rb.disabled = false; rb.textContent = 'Vypovědět místo'; rb.classList.remove('warn'); }
+        if (S.cash < r.j.odstupne) {
+          return toast('Odstupné je ' + kcFull(r.j.odstupne) + ' a tolik hotovosti nemáš.', 'err');
+        }
+        sheet('<h3>Odstupné</h3>'
+          + '<p class="muted small">Smlouva je na dobu určitou, do konce zbývá ' + r.j.zbyva + ' '
+          + mn(r.j.zbyva, 'měsíc', 'měsíce', 'měsíců') + '. Majitel pozemku tě pustí, ale chce '
+          + 'doplatit nájem — nejvýš za ' + ODSTUPNE_MAX + ' měsíce.</p>'
+          + '<div class="kv"><span>Odstupné</span><b class="err">' + kcFull(r.j.odstupne) + '</b></div>'
+          + '<div class="kv"><span>Zbude ti</span><b>' + kcFull(S.cash - r.j.odstupne) + '</b></div>'
+          + '<button class="btn big" id="do-odstupne" style="width:100%;margin-top:12px">Zaplatit a odejít</button>'
+          + '<button class="btn sec" id="do-zustat" style="width:100%;margin-top:8px">Nechat být</button>');
+        var o = $('do-odstupne');
+        if (o) o.onclick = function () {
+          o.disabled = true;
+          S.cash -= r.j.odstupne;
+          zapis('poplatek', 'Odstupné z nájmu — ' + (u.name || ''), -r.j.odstupne);
+          vypovedMisto(u, true, null);
+        };
+        var z = $('do-zustat');
+        if (z) z.onclick = function () { closeSheet(); };
+        return;
+      }
+      if (!r.ok) { if (rb) rb.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
       S.units = S.units.filter(function (x) { return x.spotId !== u.spotId; });
       S.stock[u.eco.model] = inStock(u.eco.model) + 1;
       delete CLAIMS[u.spotId];
       save(); paint(); drawMap(); closeSheet(); syncState(true);
       toast('Místo vypovězeno. ' + MODELS[u.eco.model].name + ' čeká na skladě.', 'ok');
-    }).catch(function () { rb.disabled = false; toast('Server neodpovídá.', 'err'); });
-  };
+  }).catch(function () { if (rb) rb.disabled = false; toast('Server neodpovídá.', 'err'); });
 }
 
 // ─── Pozvánky ────────────────────────────────────────────────────────────────

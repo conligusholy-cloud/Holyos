@@ -7691,11 +7691,26 @@ model GameSpotClaim {
   lon        Float?
   // Kolikrát už místo změnilo majitele — hráči to ukážeme jako „žádané místo".
   takeovers  Int      @default(0)
+
+  // Nájemní smlouva. Vázanost drží majitele pozemku — dokud běží, nájemce se
+  // vypovědět nedá. Výpovědní doba je lhůta, po kterou místo ještě vydělává
+  // dosavadnímu nájemci, i když už ho někdo přeplatil. Podmínky vidí jen nájemce;
+  // konkurent se o nich nedozví nic, stejně jako nezná výši nájmu.
+  vazano_do       DateTime?   // konec doby určité (null = na dobu neurčitou)
+  vypoved_mesicu  Int       @default(1)   // výpovědní doba v herních měsících
+  // Běžící výpověď, kterou spustilo přeplacení.
+  vypoved_do      DateTime?
+  vyzyvatel_id    Int?
+  vyzyvatel_nick  String?   @db.VarChar(24)
+  vyzyvatel_rent  Int?
+  vyzyvatel_model String?   @db.VarChar(10)
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
   @@index([area_key])
   @@index([player_id])
+  @@index([vypoved_do])
   @@map("game_spot_claims")
 }
 
