@@ -716,6 +716,8 @@ function prepocitejDluh() {
   loans.forEach(function (l) { celkem += l.zbyva; urokRok += l.zbyva * l.sazba; });
   S.loan = Math.round(celkem);
   S.loanPrem = celkem > 0 ? Math.max(0, (urokRok / celkem) - rateOf()) : 0;
+  // Rámec se přepočítá se stejným dechem jako dluh — splátka ho hned uvolní.
+  if (S.ramec) ramecCerpano();
 }
 // Nový úvěr. `vazba` říká, na co je — podle toho se pozná doplacený prádlomat.
 function pricistDluh(castka, prirazka, vazba, mesicu) {
@@ -899,10 +901,21 @@ function ramecLze() { return !maSkraloup() && doplacenychMist() >= 2; }
 function zapisDoplacene(l) {
   if (l && l.spotId) S.stats.splacenoMist = (S.stats.splacenoMist || 0) + 1;
 }
+// Kolik z rámce je právě vyčerpáno. Rámec je revolvingový: co z něj hráč
+// splatí, může čerpat znovu. Počítá se ze zůstatků úvěrů, které z rámce
+// vznikly, ne z načítaného čísla — jinak by se to po splátkách rozešlo a
+// u vyčerpaného rámce by napořád svítilo „k čerpání 0".
+function ramecCerpano() {
+  var c = (S.loans || []).reduce(function (a, l) {
+    return a + (l && l.druh === 'ramec' ? Math.max(0, Math.round(l.zbyva || 0)) : 0);
+  }, 0);
+  if (S.ramec) S.ramec.cerpano = c;
+  return c;
+}
 // Kolik z rámce zbývá k čerpání — vždy ještě omezené tím, co firma unese.
 function ramecVolny() {
   if (!maRamec() || S.ramec.slabyOd) return 0;
-  var zbyva = Math.max(0, S.ramec.limit - (S.ramec.cerpano || 0));
+  var zbyva = Math.max(0, S.ramec.limit - ramecCerpano());
   return Math.min(zbyva, stropPodleZisku(monthlyProfit() - splatkyMesicne(), zbyva));
 }
 // Základní limit podle historie a výdělku.
@@ -4609,7 +4622,7 @@ function ramecHtml() {
     var volny = ramecVolny();
     return '<div class="card"><h3>Rámcový úvěr</h3>'
       + '<div class="kv"><span>Schválený limit</span><b>' + kcFull(S.ramec.limit) + '</b></div>'
-      + '<div class="kv"><span>Načerpáno</span><b>' + kcFull(S.ramec.cerpano || 0) + '</b></div>'
+      + '<div class="kv"><span>Vyčerpáno</span><b>' + kcFull(ramecCerpano()) + '</b></div>'
       + '<div class="kv"><span>K čerpání</span><b class="' + (volny > 0 ? 'ok' : 'warn') + '">' + kcFull(volny) + '</b></div>'
       + (S.ramec.slabyOd
           ? '<p class="fine err">Čerpání je zastavené — ' + slabaMista().length + ' '
@@ -4681,7 +4694,6 @@ function cerpatSheet(chci) {
     // Krátký pohovor — tři otázky, ať to po desáté neotravuje.
     pohovorSheet(3, 'Krátká kontrola', function (st) {
       if (!st.ok) { toast('Rizikoř čerpání zastavil. Zkus to, až se věci srovnají.', 'err'); return; }
-      S.ramec.cerpano = (S.ramec.cerpano || 0) + c;
       S.cash += c;
       zapis('uver', 'Čerpání z rámce', c);
       pricistDluh(c, prirazkaZa(c) + (S.ramec.bonus || 0), { druh: 'ramec', popis: 'Čerpání z rámce' });
