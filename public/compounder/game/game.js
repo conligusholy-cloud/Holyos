@@ -1789,8 +1789,28 @@ var HOVOR_ODMITNUTI = -6;        // co stojí nebraný hovor
 var POVEST_DOLU = 0.2;           // při nejhorší pověsti spadne návštěvnost o pětinu
 var POVEST_NAHORU = 0.1;         // při nejlepší stoupne o desetinu
 var SCENARU_PAMET = 12;          // kolik posledních rozhovorů se neopakuje
-var HOVOR_ZENY = ['paní Nováková', 'paní Dvořáková', 'paní Procházková', 'paní Veselá', 'paní Maršíková', 'paní Králová', 'slečna Vaněková', 'paní Horáková'];
-var HOVOR_MUZI = ['pan Svoboda', 'pan Černý', 'pan Kučera', 'pan Horák', 'pan Pospíšil', 'pan Beneš', 'pan Fiala', 'pan Zeman', 'pan Richter'];
+var JMEN_PAMET = 30;             // tolik posledních jmen se neopakuje
+var HOVOR_ZENY = ['paní Nováková', 'paní Svobodová', 'paní Dvořáková', 'paní Černá',
+  'paní Procházková', 'paní Kučerová', 'paní Veselá', 'paní Horáková', 'paní Němcová',
+  'paní Marková', 'paní Pospíšilová', 'paní Pokorná', 'paní Hájková', 'paní Jelínková',
+  'paní Králová', 'paní Růžičková', 'paní Benešová', 'paní Fialová', 'paní Sedláčková',
+  'paní Doležalová', 'paní Zemanová', 'paní Kolářová', 'paní Navrátilová', 'paní Čermáková',
+  'paní Vaňková', 'paní Urbanová', 'paní Blažková', 'paní Křížová', 'paní Kovářová',
+  'paní Bartošová', 'paní Vlčková', 'paní Štěpánková', 'paní Poláková', 'paní Konečná',
+  'paní Mašková', 'paní Musilová', 'paní Šimková', 'paní Holubová', 'paní Kratochvílová',
+  'paní Kadlecová', 'paní Machová', 'paní Lišková', 'paní Soukupová', 'paní Bláhová',
+  'slečna Matoušková', 'slečna Burešová', 'slečna Kopecká', 'slečna Malá', 'slečna Dostálová',
+  'slečna Šťastná', 'slečna Tichá', 'slečna Vaněčková', 'slečna Hrubá', 'slečna Beránková'];
+var HOVOR_MUZI = ['pan Novák', 'pan Svoboda', 'pan Dvořák', 'pan Černý', 'pan Procházka',
+  'pan Kučera', 'pan Veselý', 'pan Horák', 'pan Němec', 'pan Marek', 'pan Pospíšil',
+  'pan Pokorný', 'pan Hájek', 'pan Jelínek', 'pan Král', 'pan Růžička', 'pan Beneš',
+  'pan Fiala', 'pan Sedláček', 'pan Doležal', 'pan Zeman', 'pan Kolář', 'pan Navrátil',
+  'pan Čermák', 'pan Vaněk', 'pan Urban', 'pan Blažek', 'pan Kříž', 'pan Kovář',
+  'pan Bartoš', 'pan Vlček', 'pan Štěpánek', 'pan Polák', 'pan Konečný', 'pan Mašek',
+  'pan Musil', 'pan Šimek', 'pan Holub', 'pan Kratochvíl', 'pan Kadlec', 'pan Mach',
+  'pan Liška', 'pan Soukup', 'pan Bláha', 'pan Matoušek', 'pan Bureš', 'pan Kopecký',
+  'pan Malý', 'pan Dostál', 'pan Šťastný', 'pan Tichý', 'pan Richter', 'pan Hruška',
+  'pan Beránek', 'pan Vávra'];
 var HOVOR_SCENARE = [
   { id: 'stovka', rod: '', kroky: [
     { t: 'Dobrý den, váš automat mi spolkl stovku a nic se nespustilo.', o: [
@@ -2263,10 +2283,17 @@ var HOVOR = null;                // { jmeno, scenar, kroky, poradi, i, body, pre
 // co už padlo. Poslední rozhovory přeskočíme, ať se nevrací hned dokola.
 // Jméno volajícího musí sedět s tím, jak o sobě v rozhovoru mluví — u scénáře,
 // kde zákazník říká „prala jsem“, nemůže volat pan.
+// Jméno volajícího se nesmí vracet pořád dokola — posledních pár desítek si
+// hra pamatuje a vybírá jen ze zbytku. Kdyby se fond vyčerpal, bere se celý.
 function hovorJmeno(rod) {
   var fond = rod === 'z' ? HOVOR_ZENY
     : (rod === 'm' ? HOVOR_MUZI : HOVOR_ZENY.concat(HOVOR_MUZI));
-  return fond[Math.floor(Math.random() * fond.length)];
+  var posl = S.jmenaPosl || [];
+  var volne = fond.filter(function (j) { return posl.indexOf(j) < 0; });
+  if (!volne.length) volne = fond;
+  var jmeno = volne[Math.floor(Math.random() * volne.length)];
+  S.jmenaPosl = posl.concat([jmeno]).slice(-JMEN_PAMET);
+  return jmeno;
 }
 function vyberScenar() {
   var posl = S.hovoryPosl || [];
