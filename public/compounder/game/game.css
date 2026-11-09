@@ -691,15 +691,23 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .plan-b{stroke:rgba(255,255,255,.07);stroke-width:.25}
 .plan-trava{fill:#1b3326}
 .plan-dlazba{fill:#6b7183}
-.plan-cesta{fill:#3f4455}
+.plan-cesta{fill:#191c24}
 .plan-stani{fill:#9aa3bb}
 .plan-ulice{fill:#14161f}
 /* Stroj, sloupek i popisky jen leží navrchu — klepnutí musí projít na políčko
    pod nimi, jinak by se stání nedalo sundat ani přemalovat. */
 .plan-stroj{fill:#1e86e0;stroke:#9fd2ff;stroke-width:.4;pointer-events:none}
-.plan-prip{fill:#ffc24b;stroke:#2b2000;stroke-width:.3;pointer-events:none}
+.plan-prip{stroke:#0b0f18;stroke-width:.3;pointer-events:none}
 .plan-popis{fill:var(--text3);font-size:2.6px;text-anchor:middle;font-family:inherit;pointer-events:none}
 .plan-popis.bily{fill:#fff;font-size:3px;font-weight:700}
+/* Vozovka a parkování vypadají jako doopravdy: černý asfalt a bílé čáry. */
+.plan-cara{stroke:#e9eefc;stroke-width:.16;stroke-linecap:round;opacity:.75;pointer-events:none}
+.plan-stani-p{fill:#15181f;stroke:#e9eefc;stroke-width:.22;pointer-events:none}
+.plan-cara-p{stroke:#e9eefc;stroke-width:.18;opacity:.85;pointer-events:none}
+/* Výkop každého média má svou barvu — vidíš, kudy která síť jde. */
+.plan-vykop{fill:none;stroke-width:.42;stroke-dasharray:1.2 .8;stroke-linecap:round;opacity:.95;pointer-events:none}
+.plan-legenda{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px}
+.plan-legenda i{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:3px;vertical-align:-1px}
 /* Vjezd a přípojky: bez nich hráč neví, kde má začít kreslit. */
 .plan-popis.zluty{fill:#ffc24b;font-weight:700}
 .plan-hrana{stroke:#9fd2ff;stroke-width:.45;stroke-dasharray:2 1.4;opacity:.8}
