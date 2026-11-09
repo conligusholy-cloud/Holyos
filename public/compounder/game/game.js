@@ -1154,6 +1154,7 @@ var QUIZ = [
 ];
 
 // ─── Stav hry ────────────────────────────────────────────────────────────────
+var HRA_NAZEV = 'Laundromat Tycoon';
 var KEY = 'lm_milionar_v1';
 var PID_KEY = 'lm_milionar_pid';
 // Jestli má mapa ukazovat jen vlastní síť. Je to věc pohledu, ne rozehrané hry,
@@ -8087,7 +8088,14 @@ function checkPayment() {
 }
 
 // ─── Start ───────────────────────────────────────────────────────────────────
+// Název karty v prohlížeči. Aplikace, které hru otevírají ve vlastní kartě,
+// si titulek drží z chvíle, kdy se karta založila — po přejmenování hry by na
+// ní tak zůstal starý název. Přepíšeme ho při každém startu.
+function nastavTitulek() {
+  try { document.title = HRA_NAZEV; } catch (e) {}
+}
 function startGame() {
+  nastavTitulek();
   ['intro', 'quiz', 'role'].forEach(function (id) { $(id).classList.add('hidden'); });
   $('app').classList.remove('hidden');
   var before = S.cash, waiting = (S.orders || []).length;
@@ -8124,6 +8132,7 @@ function startGame() {
 }
 
 ev('game_open');
+nastavTitulek();
 loadMachinePhotos();
 
 countIncomingRef();   // ještě než se rozhodne, jestli je co rozehraného

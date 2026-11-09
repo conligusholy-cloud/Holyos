@@ -157,7 +157,7 @@ app.use((req, res, next) => {
   if (req.path === '/api/ai/transcribe') return next();
   // Stripe webhook (/misto) potřebuje raw body kvůli ověření podpisu.
   if (req.path === '/api/compounder/misto/stripe-webhook') return next();
-  // Totéž pro webhook herních karet (Laundromats Milionář).
+  // Totéž pro webhook herních karet (Laundromat Tycoon).
   if (req.path === '/api/game/stripe/webhook') return next();
   // SNS (Amazon SES události) posílá text/plain – čteme surový stream ve vlastním handleru
   if (req.path === '/webhooks/ses') return next();
@@ -901,7 +901,7 @@ app.use('/api/pradlomat-spots', require('./routes/pradlomat-spots.routes'));
 // Statistiky e-mailové brány SES (dle zadání: /api/stats?range=today|7d|30d|90d) – vyžaduje přihlášení
 app.get('/api/stats', require('./middleware/auth').requireAuth, async (req, res, next) => { try { res.json(await require('./services/ses/email-log').stats(String(req.query.range || '30d'))); } catch (err) { next(err); } });
 app.use('/api/ads-center', require('./routes/ads-center.routes')); // Centrum reklamy (Soukromé) — přehled záchytných stránek a jejich výsledků // Předjednaná místa — veřejný přehled pradlomaty.info/location + interní správa
-app.use('/api/game', require('./routes/game.routes')); // Laundromats Milionář — veřejná hra na pradlomaty.info/game (bez auth, viz hlavička routeru)
+app.use('/api/game', require('./routes/game.routes')); // Laundromat Tycoon — veřejná hra na pradlomaty.info/game (bez auth, viz hlavička routeru)
 // Webhook musí být dřív než router, aby dostal raw body (viz výjimka v parsování výš).
 app.post('/api/game/stripe/webhook', require('./routes/game-stripe.routes')._webhook);
 app.use('/api/game', require('./routes/game-account.routes')); // účty hráčů, uložený stav a karty
@@ -1048,7 +1048,7 @@ function serveCompounderPage(file) {
     res.sendFile(path.join(COMPOUNDER_DIR, file));
   };
 }
-// Laundromats Milionář — hra se mění často a WebView ve Velínu si soubory drží
+// Laundromat Tycoon — hra se mění často a WebView ve Velínu si soubory drží
 // v mezipaměti. Do adresy skriptu a stylu proto vkládáme verzi podle času jejich
 // poslední změny: po každém nasazení je adresa jiná a nikdo nekouká na starou hru.
 function serveGamePage(req, res) {
@@ -1100,7 +1100,7 @@ app.use((req, res, next) => {
   if (req.path === '/portal' || req.path === '/portal/') return serveCompounderPortal(req, res);
   if (req.path === '/location' || req.path === '/location/') return serveLocationOverview(req, res);
   if (req.path === '/misto' || req.path === '/misto/') return serveMisto(req, res);
-  // Laundromats Milionář — hra o budování sítě prádlomatů (zatím jen na doménách prádlomatů).
+  // Laundromat Tycoon — hra o budování sítě prádlomatů (zatím jen na doménách prádlomatů).
   if (req.path === '/game' || req.path === '/game/') return serveGamePage(req, res);
   if (req.path === '/ai' || req.path === '/ai/') return serveAiSpecialist(req, res);
   // Zkrácený odkaz na AI specialistu: /s/<kód> → 302 na /ai?t=<token>.
