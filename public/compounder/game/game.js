@@ -3390,7 +3390,9 @@ function spotSheet(sp, areaId) {
   var lease = S.leases[sp.id];
   var head = '<h3>' + esc(sp.name) + '</h3>'
     + '<p class="muted small">' + esc(KIND_LABEL[sp.kind] || 'Místo') + ' · ' + esc(S.areas[areaId] ? S.areas[areaId].name : '')
-    + (jePozemek(sp) ? ' · <b class="ok">pozemek na prodej</b>' : '') + '</p>'
+    // Co hráč koupil, se mu už nenabízí — v hlavičce stojí, že zem je jeho.
+    + (mamPozemek(sp.id) ? ' · <b class="ok">tvůj pozemek</b>'
+        : jePozemek(sp) ? ' · <b class="ok">pozemek na prodej</b>' : '') + '</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(sp.score) + '</div>'
     + '<div class="kv"><span>Parkovacích ploch v okolí</span><b>' + (mnum(sp.parking) != null ? mnum(sp.parking) + (sp.parking_m != null ? ' (' + sp.parking_m + ' m)' : '') : '—') + '</b></div>'
     + '<div class="kv"><span>Konkurence do 1,5 km</span><b>' + (mnum(sp.competition) != null ? mnum(sp.competition) : '—') + '</b></div>'
