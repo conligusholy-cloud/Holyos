@@ -7696,6 +7696,9 @@ model GameSpotClaim {
   // vypovědět nedá. Výpovědní doba je lhůta, po kterou místo ještě vydělává
   // dosavadnímu nájemci, i když už ho někdo přeplatil. Podmínky vidí jen nájemce;
   // konkurent se o nich nedozví nic, stejně jako nezná výši nájmu.
+  // Místo na vlastním pozemku: hráč zem koupil, neplatí nájem a nejde ho
+  // odtud dostat — přeplatit se dá jen pronájem, ne cizí majetek.
+  pozemek         Boolean   @default(false)
   vazano_do       DateTime?   // konec doby určité (null = na dobu neurčitou)
   vypoved_mesicu  Int       @default(1)   // výpovědní doba v herních měsících
   // Běžící výpověď, kterou spustilo přeplacení.

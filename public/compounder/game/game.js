@@ -670,6 +670,8 @@ function autoPoloha(u) {
 function connPrice(sp, modelKey) {
   var base = CONN_MIN + spotHash(sp.id, 'c') * (CONN_MAX - CONN_MIN);
   if (modelKey === 'max') base *= CONN_MAX_MULT;
+  // Na pozemku se staví od nuly: cesta, parkování, přivedení sítí a dlažba.
+  if (jePozemek(sp) && !jeZasitovane(sp)) base *= POZEMEK_STAVBA;
   // Voda, odpad i elektřina tu už jsou — platí se jen postavení a zapojení stroje.
   if (jeZasitovane(sp)) base *= INSTALACE_PODIL;
   // Vlastní četa to udělá za pětinu — ale jen na panenském místě a dokud má kapacitu.
@@ -1102,7 +1104,8 @@ function economics(spot, modelKey) {
   var revenue = Math.round(perday * 30.5 * m.spend * EUR);
   var energy = Math.round(revenue * ENERGY_SHARE);
   var servis = Math.round(revenue * SERVIS_SHARE);
-  var rent = rentOf(spot);
+  // Na vlastním pozemku se nájem neplatí — zem je hráčova.
+  var rent = jePozemek(spot) ? 0 : rentOf(spot);
   var cost = energy + servis + rent;
   var profit = revenue - cost;
   var conn = connPrice(spot, m.key);
@@ -3092,7 +3095,10 @@ function drawMap() {
       // Volné místo je jen tip, ne stavba — ukazuje se až při přiblížení.
       if (!unit && !rival && !blizko) { skryto++; return; }
       var seen = !!S.revealed[sp.id];
-      var icon = unit ? unitIcon(unit) : rival ? rivalIcon(rival) : pinIcon(seen ? 'known' : 'unknown', seen ? '★' : '?');
+      // Prověřený pozemek na prodej má svůj pin — jde o jinou nabídku než nájem.
+      var icon = unit ? unitIcon(unit) : rival ? rivalIcon(rival)
+        : (seen && jePozemek(sp)) ? pinIcon('known pozemek', '\u2302')
+        : pinIcon(seen ? 'known' : 'unknown', seen ? '\u2605' : '?');
       L.marker([sp.lat, sp.lon], { icon: icon })
         .addTo(layer)
         .on('click', function () { if (rival) return rivalSheet(sp, aid, rival); spotSheet(sp, aid); });
@@ -3295,13 +3301,27 @@ function spotSheet(sp, areaId) {
 
   var lease = S.leases[sp.id];
   var head = '<h3>' + esc(sp.name) + '</h3>'
-    + '<p class="muted small">' + esc(KIND_LABEL[sp.kind] || 'Místo') + ' · ' + esc(S.areas[areaId] ? S.areas[areaId].name : '') + '</p>'
+    + '<p class="muted small">' + esc(KIND_LABEL[sp.kind] || 'Místo') + ' · ' + esc(S.areas[areaId] ? S.areas[areaId].name : '')
+    + (jePozemek(sp) ? ' · <b class="ok">pozemek na prodej</b>' : '') + '</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(sp.score) + '</div>'
     + '<div class="kv"><span>Parkovacích ploch v okolí</span><b>' + (mnum(sp.parking) != null ? mnum(sp.parking) + (sp.parking_m != null ? ' (' + sp.parking_m + ' m)' : '') : '—') + '</b></div>'
     + '<div class="kv"><span>Konkurence do 1,5 km</span><b>' + (mnum(sp.competition) != null ? mnum(sp.competition) : '—') + '</b></div>'
     + '<div class="kv"><span>Tahouni provozu</span><b>' + (mnum(sp.anchors) != null ? mnum(sp.anchors) : '—') + '</b></div>';
 
   // 2. krok — domluvit s majitelem nájem. Zadarmo, ale bez něj se stavět nedá.
+  if (!lease && jePozemek(sp)) {
+    sheet(head + pozemekKarta(sp)
+      + '<button class="btn big" id="do-pozemek" style="width:100%;margin-top:12px">Vybrat stroj</button>'
+      + '<p class="fine">Pozemek i přípravu zaplatíš až se strojem, jednou transakcí — '
+      + 'dokud nestavíš, nic tě to nestojí.</p>');
+    var pb = $('do-pozemek');
+    if (pb) pb.onclick = function () {
+      S.leases[sp.id] = { rent: 0, at: Date.now(), pozemek: 1,
+        m2: pozemekM2(sp), cena: pozemekCena(sp) };
+      save(); spotSheet(sp, areaId);
+    };
+    return;
+  }
   if (!lease) {
     // Podmínky se vybírají tady, při vyjednávání — pak už se smlouva nemění.
     if (S.najemVolba == null) S.najemVolba = { doba: 0, vypoved: 1 };
@@ -3357,8 +3377,12 @@ function spotSheet(sp, areaId) {
 
   // 3. krok — vybrat stroj a zaplatit přípojky.
   sheet(head
-    + '<div class="kv"><span>Domluvený nájem</span><b class="ok">' + kcFull(lease.rent) + ' / měsíc</b></div>'
-    + '<div class="kv"><span>' + (jeZasitovane(sp) ? 'Instalace na tomhle místě' : 'Přípojky na tomhle místě') + '</span><b'
+    + (lease.pozemek
+        ? '<div class="kv"><span>Pozemek ' + lease.m2 + ' m²</span><b>' + kcFull(lease.cena) + '</b></div>'
+          + '<div class="kv"><span>Nájem</span><b class="ok">žádný — zem bude tvoje</b></div>'
+        : '<div class="kv"><span>Domluvený nájem</span><b class="ok">' + kcFull(lease.rent) + ' / měsíc</b></div>')
+    + '<div class="kv"><span>' + (lease.pozemek ? 'Příprava plochy a přípojky'
+        : jeZasitovane(sp) ? 'Instalace na tomhle místě' : 'Přípojky na tomhle místě') + '</span><b'
     + (jeZasitovane(sp) ? ' class="ok"' : '') + '>' + kcFull(connPrice(sp, 'flex')) + '</b> <span class="muted small">(u MAXu o 20 % víc)</span></div>'
     + (jeZasitovane(sp) ? '<p class="fine ok">Zasíťované místo — voda, odpad i elektřina už tu jsou. '
       + 'Platíš jen ' + Math.round(INSTALACE_PODIL * 100) + ' % toho, co stály přípojky.</p>' : '')
@@ -3617,24 +3641,31 @@ function installSheet(sp, areaId, modelKey, drz) {
   if (!drz) FIN_OWN = null;
   var m = MODELS[modelKey], e = economics(sp, modelKey);
   var doprava = dopravaNa(sp, modelKey);
-  var celkem = e.conn + doprava;
+  var lease0 = S.leases[sp.id] || {};
+  var zem = lease0.pozemek ? (lease0.cena || pozemekCena(sp)) : 0;
+  var celkem = e.conn + doprava + zem;
   // Banka tohle místo posuzuje podle toho, co vydělá ono samo.
   var f = canFinance(celkem, FIN_OWN, stropPodleZisku(e.profit, celkem));
   var n = nejblizsiZakladna(sp);
   sheet('<h3>Postavit ' + m.name + '</h3>'
     + '<p class="muted small">' + esc(sp.name) + ' — teď se platí '
-    + (jeZasitovane(sp) ? 'instalace stroje' : 'přípojky (voda, odpad, elektřina)')
-    + ' a doprava. Stroj máš skladem, nájem domluvený.</p>'
+    + (zem ? 'pozemek, příprava plochy (cesta, parkování, přípojky, dlažba)'
+          : (jeZasitovane(sp) ? 'instalace stroje' : 'přípojky (voda, odpad, elektřina)'))
+    + ' a doprava. Stroj máš skladem' + (zem ? '.' : ', nájem domluvený.') + '</p>'
     + (!S.sidlo ? '<p class="fine ok">Touhle stavbou vznikne sídlo tvojí firmy — ve městě, ne na téhle adrese. '
         + 'Od něj se pak počítá doprava všech dalších strojů, tak si rozmysli, kde začínáš.</p>' : '')
-    + '<div class="kv"><span>' + (jeZasitovane(sp) ? 'Instalace' : cetaZvladne(sp) ? 'Přípojky vlastní četou' : 'Přípojky') + '</span><b'
+    + (zem ? '<div class="kv"><span>Pozemek (' + (lease0.m2 || pozemekM2(sp)) + ' m² × '
+        + kcFull(pozemekZaM2(sp)) + ')</span><b>' + kcFull(zem) + '</b></div>' : '')
+    + '<div class="kv"><span>' + (zem ? 'Příprava plochy a přípojky'
+        : jeZasitovane(sp) ? 'Instalace' : cetaZvladne(sp) ? 'Přípojky vlastní četou' : 'Přípojky') + '</span><b'
     + (cetaZvladne(sp) ? ' class="ok"' : '') + '>' + kcFull(e.conn) + '</b></div>'
     + (cetaZvladne(sp) ? '<p class="fine ok">Staví tvoje parta za ' + Math.round(CETA_PODIL * 100)
       + ' % ceny. Tenhle měsíc jí zbývá ' + cetaZbyva() + ' z ' + CETA_MIST + ' míst.</p>' : '')
     + '<div class="kv"><span>Doprava stroje' + (n ? ' (' + Math.round(n.km) + ' km)' : '') + '</span><b'
     + (doprava > 0 ? ' class="warn"' : '') + '>' + (doprava > 0 ? kcFull(doprava) : 'zdarma — sídlo vzniká tady') + '</b></div>'
     + financeRows(f)
-    + '<div class="kv"><span>Domluvený nájem</span><b>' + kcFull(e.rent) + ' / měsíc</b></div>'
+    + (zem ? '<div class="kv"><span>Nájem</span><b class="ok">žádný — zem je tvoje</b></div>'
+        : '<div class="kv"><span>Domluvený nájem</span><b>' + kcFull(e.rent) + ' / měsíc</b></div>')
     + '<div class="kv"><span>Zisk tohohle místa / měsíc</span><b class="ok">' + kcFull(e.profit) + '</b></div>'
     + (splatkyMesicne() > monthlyProfit() + e.profit
         ? '<p class="fine warn">I s tímhle místem vyděláš ' + kcFull(Math.round(monthlyProfit() + e.profit))
@@ -3655,7 +3686,7 @@ function installSheet(sp, areaId, modelKey, drz) {
     b.disabled = true; b.textContent = 'Stavím…';
     var sml = S.leases[sp.id] || {};
     apiJson('/spots/claim', { spot_id: sp.id, area_key: areaId, model: modelKey,
-      rent: e.rent, name: sp.name, lat: sp.lat, lon: sp.lon,
+      rent: e.rent, name: sp.name, lat: sp.lat, lon: sp.lon, pozemek: !!sml.pozemek,
       doba_mesicu: sml.doba || 0, vypoved_mesicu: sml.vypoved || 1 }).then(function (r) {
       b.disabled = false; b.textContent = 'Postavit';
       if (!r.ok) {
@@ -3664,7 +3695,8 @@ function installSheet(sp, areaId, modelKey, drz) {
         return toast(r.j.error || 'Místo je obsazené.', 'err');
       }
       CLAIMS[sp.id] = r.j.spot;
-      doFinance(f, { druh: 'misto', spotId: sp.id, popis: 'Přípojky — ' + sp.name });
+      doFinance(f, { druh: 'misto', spotId: sp.id,
+        popis: (sml.pozemek ? 'Pozemek a příprava — ' : 'Přípojky — ') + sp.name });
       pripojUverKeStroji(sp.id, sp.name);
       if (cetaZvladne(sp)) cetaPostavila(sp);
       // První stavba zakládá sídlo — ale ve městě, ne na adrese prádlomatu.
@@ -3694,6 +3726,49 @@ var CLAIMS = {};          // id místa → { nick, model, mine, takeovers, rent 
 var BID_FEE = 5000;
 function areaKeys() { return Object.keys(S && S.areas ? S.areas : {}); }
 
+// ─── Pozemky na prodej ───────────────────────────────────────────────────────
+// Pětina nalezených míst se nepronajímá — prodává se. Kdo si pozemek koupí,
+// neplatí žádný nájem a nikdo ho odtamtud nevyhodí: nedá se přeplatit, protože
+// zem je jeho. Zaplatí to ale jednou a pořádně — samotnou zem podle výměry
+// a k tomu přípravu zelené louky: příjezdovou cestu, parkování, přivedení
+// elektřiny, vody a odpadu a vydlážděnou plochu pod prádlomat.
+//
+// Které místo je pozemek, se počítá z jeho id, ne z nálezu — takže se pozemky
+// objeví i ve městech, která má hráč prozkoumaná odedávna.
+var POZEMKU_PODIL = 0.20;        // pětina míst je na prodej
+var POZEMEK_M2_MIN = 180, POZEMEK_M2_MAX = 420;
+var POZEMEK_ZA_M2_MIN = 300, POZEMEK_ZA_M2_MAX = 1200;
+var POZEMEK_STAVBA = 2.2;        // příprava louky proti běžným přípojkám
+function jePozemek(sp) { return !!sp && spotHash(sp.id, 'poz') < POZEMKU_PODIL; }
+function pozemekM2(sp) {
+  return Math.round((POZEMEK_M2_MIN + spotHash(sp.id, 'm2') * (POZEMEK_M2_MAX - POZEMEK_M2_MIN)) / 10) * 10;
+}
+// Lepší adresa, dražší zem. K tomu trocha náhody podle konkrétního pozemku.
+function pozemekZaM2(sp) {
+  var lukrativ = 0.6 + (Math.max(0, Math.min(100, sp.score)) / 100) * 0.6;
+  var zaklad = POZEMEK_ZA_M2_MIN + spotHash(sp.id, 'cm') * (POZEMEK_ZA_M2_MAX - POZEMEK_ZA_M2_MIN);
+  return Math.round(zaklad * lukrativ / 50) * 50;
+}
+function pozemekCena(sp) { return pozemekM2(sp) * pozemekZaM2(sp); }
+// Vlastní pozemek pod prádlomatem — zjistí se z toho, co o místě ví server.
+function maPozemek(spotId) {
+  var c = CLAIMS[spotId];
+  return !!(c && c.pozemek);
+}
+function pozemekKarta(sp) {
+  var m2 = pozemekM2(sp), zaM2 = pozemekZaM2(sp);
+  return '<h3 style="margin-top:18px">Pozemek na prodej</h3>'
+    + '<p class="muted small">Tohle místo se nepronajímá, prodává se. Když ho koupíš, neplatíš '
+    + 'žádný nájem a nikdo tě odtud nevyhodí — zem je tvoje. Je to ale holá parcela: '
+    + 'příjezdovou cestu, parkování, přípojky i dlažbu pod stroj zaplatíš ty.</p>'
+    + '<div class="kv"><span>Výměra</span><b>' + m2 + ' m²</b></div>'
+    + '<div class="kv"><span>Cena za m²</span><b>' + kcFull(zaM2) + '</b></div>'
+    + '<div class="kv souhrn"><span>Pozemek celkem</span><b>' + kcFull(m2 * zaM2) + '</b></div>'
+    + '<div class="kv"><span>Nájem</span><b class="ok">žádný</b></div>'
+    + '<p class="fine">Příprava louky je zhruba ' + POZEMEK_STAVBA.toFixed(1).replace('.', ',')
+    + '× dražší než napojení na hotovém místě. Zaplatí se to tím, že za tohle místo '
+    + 'nikdy nikomu nic neplatíš a nikdo ti ho nevezme.</p>';
+}
 // ─── Nájemní smlouva ─────────────────────────────────────────────────────────
 // S majitelem pozemku se domlouvají dvě věci: na jak dlouho se hráč zaváže a
 // jakou bude mít výpovědní dobu. Vázanost ho chrání — dokud běží, nikdo ho
@@ -3730,7 +3805,7 @@ function vypovedNazev(m) {
 // Běžící výpověď na mém místě — vrací data, ze kterých se staví varování.
 function vyzvaNaMiste(spotId) {
   var c = CLAIMS[spotId];
-  if (!c || !c.mine || !c.vypoved_do || !c.vyzyva) return null;
+  if (!c || !c.mine || c.pozemek || !c.vypoved_do || !c.vyzyva) return null;
   var do_ = new Date(c.vypoved_do).getTime();
   if (!(do_ > Date.now())) return null;
   return { do: do_, nick: c.vyzyva.nick || 'konkurent', rent: c.vyzyva.rent || 0 };
@@ -3755,6 +3830,13 @@ function vypovedHtml(u) {
 // Jak je místo nasmlouvané — vidí jen nájemce.
 function smlouvaHtml(u) {
   var c = CLAIMS[u.spotId];
+  if (c && c.mine && c.pozemek) {
+    return '<h3 style="margin:16px 0 4px">Vlastní pozemek</h3>'
+      + '<div class="kv"><span>Nájem</span><b class="ok">neplatíš žádný</b></div>'
+      + '<div class="kv"><span>Může tě odsud někdo dostat?</span><b class="ok">ne</b></div>'
+      + '<p class="fine">Zem je tvoje, takže tohle místo nejde přeplatit ani vypovědět. '
+      + 'Prodat se dá jedině se strojem.</p>';
+  }
   if (!c || !c.mine || !c.vypoved_mesicu) return '';
   var vaz = c.vazano_do ? new Date(c.vazano_do).getTime() : 0;
   var kryty = vaz > Date.now();
@@ -3857,6 +3939,22 @@ function reconcileUnits() {
 
 // Panel cizího prádlomatu: koho přebíráš a za kolik to zkusíš.
 function rivalSheet(sp, areaId, c) {
+  // Pozemek se nepřeplácí — zem patří majiteli a ten ji prodávat nemusí.
+  if (c.pozemek) {
+    sheet('<h3>' + esc(sp.name) + '</h3>'
+      + '<p class="muted small">' + (c.znak ? znakSvg(c.znak, 20) + ' ' : '')
+      + 'Tohle místo drží <b>' + esc(c.firma || c.nick) + '</b> (' + esc(c.nick) + ') · '
+      + esc((MODELS[c.model] || {}).name || c.model) + '</p>'
+      + '<div style="margin:8px 0 12px">' + verdictPill(sp.score) + '</div>'
+      + '<div class="card"><div class="row"><h3>Vlastní pozemek</h3><b class="warn">nelze přeplatit</b></div>'
+      + '<p class="muted small" style="margin:4px 0 0">Majitel tu nemá nájem — zem koupil. '
+      + 'Nabídnout majiteli pozemku víc nejde, protože žádný majitel pozemku není. '
+      + 'Jediná cesta je domluvit se s ním ve zprávách.</p></div>'
+      + (c.id ? '<button class="btn big" id="bid-napsat" style="width:100%">Napsat majiteli</button>' : ''));
+    var bn0 = $('bid-napsat');
+    if (bn0) bn0.onclick = function () { chatSheet(c.id); };
+    return;
+  }
   var free = MODEL_ORDER.filter(function (k) { return inStock(k) > 0; });
   var e = economics(sp, free[0] || 'flex');
   var odhad = rentOf(sp);

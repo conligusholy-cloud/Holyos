@@ -954,6 +954,9 @@ const claimPub = (c, me, firmy) => ({
   firma: (firmy && firmy[c.player_id] && firmy[c.player_id].firma) || (c.nick + ' s.r.o.'),
   znak: (firmy && firmy[c.player_id] && firmy[c.player_id].znak) || null,
   model: c.model, mine: c.player_id === me,
+  // Že místo stojí na vlastním pozemku, je veřejná věc — konkurence musí vědět,
+  // že tam přihazovat nemá smysl.
+  pozemek: !!c.pozemek,
   takeovers: c.takeovers, name: c.name, lat: c.lat, lon: c.lon,
   // Nájem říkáme jen majiteli. Ostatní přihazují naslepo — v tom je to riziko.
   rent: c.player_id === me ? c.rent : null,
@@ -1017,11 +1020,13 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
         occupied: claimPub(taken, req.player.id, await firmyMapa()),
       });
     }
-    const vaz = mesicu(b.doba_mesicu, VAZANOST_MAX);
-    const vyp = Math.max(1, mesicu(b.vypoved_mesicu, VYPOVED_MAX));
+    const pozemek = !!b.pozemek;
+    const vaz = pozemek ? 0 : mesicu(b.doba_mesicu, VAZANOST_MAX);
+    const vyp = pozemek ? 1 : Math.max(1, mesicu(b.vypoved_mesicu, VYPOVED_MAX));
     const c = await prisma.gameSpotClaim.create({
       data: { spot_id: spot, area_key: area, player_id: req.player.id, nick: req.player.nick,
-        model, rent, name: s(b.name, 160) || null, lat: Number(b.lat) || null, lon: Number(b.lon) || null,
+        model, rent: pozemek ? 0 : rent, name: s(b.name, 160) || null,
+        lat: Number(b.lat) || null, lon: Number(b.lon) || null, pozemek,
         vazano_do: vaz ? new Date(Date.now() + vaz * MESIC_MS) : null, vypoved_mesicu: vyp },
     });
     // Od téhle chvíle je místo zasíťované napořád, i kdyby ho hráč zítra opustil.
@@ -1049,6 +1054,12 @@ router.post('/spots/bid', requirePlayer, async (req, res, next) => {
     const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
     if (!cur) return res.status(404).json({ error: 'Tohle místo je volné — stav rovnou.' });
     if (cur.player_id === req.player.id) return res.status(409).json({ error: 'Tady stojíš ty sám.' });
+    // Vlastní pozemek se nepřeplácí — není komu nabízet nájem. Tohle hráči
+    // řekneme na rovinu, ať zbytečně neplatí za cestu; je to veřejná informace.
+    if (cur.pozemek) {
+      return res.status(409).json({ ok: false, won: false, nelze: true,
+        error: 'Tohle místo stojí na vlastním pozemku. Přeplatit ho nejde.' });
+    }
     const need = Math.ceil(cur.rent * TAKEOVER_MIN);
     const ted = Date.now();
     // Smlouva na dobu určitou drží. Útočník se nedozví proč — odmítnutí vypadá
