@@ -685,12 +685,16 @@ button.kv:active{background:rgba(124,92,255,.12)}
 /* ─── Plán pozemku ─── */
 /* Mřížka po metrech. Tráva je tmavě zelená, zpevněné plochy šedé, stroj modrý.
    Kreslí se klepnutím nebo tažením, proto plocha nesmí chytat výběr textu. */
-.plan-ram{background:var(--card);border:1px solid var(--border);border-radius:14px;
-  padding:10px;margin:10px 0 4px}
-.plan-plocha{display:block;width:100%;height:auto;touch-action:none;user-select:none}
-.plan-b{stroke:rgba(255,255,255,.07);stroke-width:.25}
-.plan-trava{fill:#1b3326}
-.plan-dlazba{fill:#6b7183}
+.plan-ram{background:linear-gradient(180deg,rgba(120,160,255,.06),rgba(10,16,30,.5));
+  border:1px solid var(--border2);border-radius:18px;padding:10px;margin:10px 0 4px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 8px 20px rgba(0,0,0,.35)}
+.plan-plocha{display:block;width:100%;height:auto;touch-action:none;user-select:none;
+  border-radius:12px;overflow:hidden}
+.plan-b{stroke:rgba(255,255,255,.05);stroke-width:.2}
+/* Tráva v jemné šachovnici, ať je na plánu poznat měřítko. */
+.plan-trava{fill:#1e3a2a}
+.plan-trava.sude{fill:#21402e}
+.plan-dlazba{fill:#767d90}
 .plan-cesta{fill:#191c24}
 .plan-stani{fill:#9aa3bb}
 .plan-ulice{fill:#14161f}
@@ -701,8 +705,18 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .plan-popis{fill:var(--text3);font-size:2.6px;text-anchor:middle;font-family:inherit;pointer-events:none}
 .plan-popis.bily{fill:#fff;font-size:3px;font-weight:700}
 /* Vozovka a parkování vypadají jako doopravdy: černý asfalt a bílé čáry. */
-.plan-cara{stroke:#e9eefc;stroke-width:.16;stroke-linecap:round;opacity:.75;pointer-events:none}
+.plan-cara{stroke:#e9eefc;stroke-width:.17;stroke-linecap:butt;stroke-dasharray:1.1 .9;
+  opacity:.8;pointer-events:none}
 .plan-stani-p{fill:#15181f;stroke:#e9eefc;stroke-width:.22;pointer-events:none}
+.plan-stani-p.chyba,.plan-stroj.chyba{stroke:#ff5d6c;stroke-dasharray:1.2 .8}
+/* Vzorky v nářadí: hráč vidí barvu dřív, než klepne. */
+.plan-seg .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;
+  vertical-align:-1px;border:1px solid rgba(255,255,255,.35)}
+.sw-stroj{background:linear-gradient(180deg,#48a7ff,#1668c4)}
+.sw-stani{background:#15181f}
+.sw-cesta{background:#191c24}
+.sw-dlazba{background:#767d90}
+.sw-guma{background:#1d3828}
 .plan-cara-p{stroke:#e9eefc;stroke-width:.18;opacity:.85;pointer-events:none}
 /* Výkop každého média má svou barvu — vidíš, kudy která síť jde. */
 .plan-vykop{fill:none;stroke-width:.42;stroke-dasharray:1.2 .8;stroke-linecap:round;opacity:.95;pointer-events:none}

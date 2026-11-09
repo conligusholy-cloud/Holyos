@@ -4099,7 +4099,7 @@ var PLAN_ROZMERY = { mini: [3, 3], flex: [6, 3], max: [8, 3] };
 var PLAN_STANI_ROZMER = [2, 5];
 // Vozovka: jednosměrka má 3 m, obousměrná 6 m. Štětec kreslí rovnou celou šířku,
 // aby se cesta nekreslila po metrech.
-var PLAN_CESTA_SIRKY = [3, 6];
+var PLAN_CESTA_SIRKY = [3, 5];
 // Každé médium se táhne zvlášť a z jiného místa ulice — v reálu nevede voda,
 // elektřina a kanalizace jedním výkopem od jednoho sloupku. Ceny za metr dávají
 // dohromady to, co dřív stál jeden společný výkop.
@@ -4225,8 +4225,9 @@ function planZpet(rodic, k) {
   while (k) { out.push(k); k = rodic[k]; }
   return out;
 }
-// Výkop k jednomu stroji: nejkratší cesta po zpevněné ploše od toho, co už je
-// vykopané. Vrací délku v metrech a políčka, kudy vede — další odbočka se na ně
+// Výkop k jednomu stroji: nejkratší trasa od toho, co už je vykopané. Kope se
+// kudykoli po parcele — bagr nepotřebuje asfalt, jen se nedá kopat pod jiným
+// strojem. Vrací délku v metrech a políčka, kudy vede; další odbočka se na ně
 // napojí, takže se společný kus výkopu neplatí dvakrát.
 function planVykopKStani(p, zdroj, st, blok) {
   var cil = {}, i;
@@ -4247,8 +4248,7 @@ function planVykopKStani(p, zdroj, st, blok) {
       // Stroj v mřížce nestojí (drží se zvlášť), ale výkop k němu dojít musí.
       if (cil[k2]) return { delka: t[2] + 1, cesta: planZpet(rodic, tk) };
       if (blok[k2]) continue;
-      var bun = planBunka(p, x, y);
-      if (bun === -1 || bun === PLAN_PRAZDNO) continue;
+      if (planBunka(p, x, y) === -1) continue;
       videl[k2] = 1; rodic[k2] = tk;
       fronta.push([x, y, t[2] + 1]);
     }
@@ -4262,7 +4262,6 @@ function planVykopy(p) {
   PLAN_MEDIA.forEach(function (md) {
     var sl = planSloupek(p, md.k);
     var res = { delka: 0, trasy: [], ok: pady.length > 0 };
-    if (res.ok && planBunka(p, sl, p.h - 1) === PLAN_PRAZDNO) res.ok = false;
     if (res.ok) {
       var zdroj = {};
       zdroj[sl + ':' + (p.h - 1)] = 1;
@@ -4365,8 +4364,7 @@ function planChyby(p) {
     var v = planVykopy(p);
     PLAN_MEDIA.forEach(function (md) {
       if (!v[md.k].ok) {
-        ch.push(md.n + ' nemá kudy vést — od jejího sloupku u ulice musí ke každému stroji '
-          + 'vést souvislá zpevněná plocha.');
+        ch.push(md.n + ' se ke stroji nedostane — výkop nemá kudy obejít druhý stroj.');
       }
     });
   }
@@ -4442,25 +4440,48 @@ PLAN_BARVY[PLAN_PRAZDNO] = 'plan-trava';
 PLAN_BARVY[PLAN_DLAZBA] = 'plan-dlazba';
 PLAN_BARVY[PLAN_CESTA] = 'plan-cesta';
 PLAN_BARVY[PLAN_STANI_B] = 'plan-stani';
-// Čárkovaný střed vozovky. Kreslí se doprostřed pruhu, takže jednosměrka má
-// jednu čáru a široká cesta taky — ne čáru v každém metru.
-function planCaryCesty(p) {
-  var out = [];
-  function je(x, y) { return planBunka(p, x, y) === PLAN_CESTA; }
-  for (var y = 0; y < p.h; y++) {
-    for (var x = 0; x < p.w; x++) {
-      if (!je(x, y)) continue;
-      var x0 = x, x1 = x, y0 = y, y1 = y;
-      while (je(x0 - 1, y)) x0--;
-      while (je(x1 + 1, y)) x1++;
-      while (je(x, y0 - 1)) y0--;
-      while (je(x, y1 + 1)) y1++;
-      var vodo = (x1 - x0) >= (y1 - y0);
-      if (vodo && y === Math.floor((y0 + y1) / 2)) out.push([x, y, 1]);
-      else if (!vodo && x === Math.floor((x0 + x1) / 2)) out.push([x, y, 0]);
+// Osa vozovky. Spočítá se vzdálenost od kraje asfaltu a čára se vede po hřebeni
+// — proto nevynechá ani zatáčku a na široké vozovce vede jedna čára, ne dvě.
+function planOsaCesty(p) {
+  var d = [], fronta = [], i, x, y;
+  for (i = 0; i < p.w * p.h; i++) d.push(p.b[i] === PLAN_CESTA ? -1 : 0);
+  for (i = 0; i < p.w * p.h; i++) if (d[i] === 0) fronta.push(i);
+  // Okraj parcely je taky kraj vozovky.
+  for (x = 0; x < p.w; x++) {
+    [0, p.h - 1].forEach(function (yy) {
+      var k = planIndex(p, x, yy);
+      if (d[k] === -1) { d[k] = 1; fronta.push(k); }
+    });
+  }
+  for (y = 0; y < p.h; y++) {
+    [0, p.w - 1].forEach(function (xx) {
+      var k = planIndex(p, xx, y);
+      if (d[k] === -1) { d[k] = 1; fronta.push(k); }
+    });
+  }
+  var qi = 0;
+  while (qi < fronta.length) {
+    var k2 = fronta[qi++], kx = k2 % p.w, ky = Math.floor(k2 / p.w);
+    [[kx + 1, ky], [kx - 1, ky], [kx, ky + 1], [kx, ky - 1]].forEach(function (c) {
+      if (c[0] < 0 || c[1] < 0 || c[0] >= p.w || c[1] >= p.h) return;
+      var k3 = planIndex(p, c[0], c[1]);
+      if (d[k3] !== -1) return;
+      d[k3] = d[k2] + 1;
+      fronta.push(k3);
+    });
+  }
+  var osa = {};
+  function dd(x2, y2) { return (x2 < 0 || y2 < 0 || x2 >= p.w || y2 >= p.h) ? 0 : d[planIndex(p, x2, y2)]; }
+  for (y = 0; y < p.h; y++) {
+    for (x = 0; x < p.w; x++) {
+      var v = d[planIndex(p, x, y)];
+      if (v <= 0) continue;
+      var l = dd(x - 1, y), r = dd(x + 1, y), u = dd(x, y - 1), dn = dd(x, y + 1);
+      if (v < l || v < r || v < u || v < dn) continue;
+      osa[x + ':' + y] = 1;
     }
   }
-  return out;
+  return osa;
 }
 function planSvg(p) {
   var sirka = 100, krok = sirka / p.w, vyska = krok * p.h;
@@ -4468,27 +4489,45 @@ function planSvg(p) {
   // a hráč hned vidí, odkud se na parcelu jezdí a odkud se táhnou sítě.
   var pas = Math.max(krok * 1.4, 5);
   var s = '<svg class="plan-plocha" viewBox="0 0 ' + sirka + ' ' + (vyska + pas)
-    + '" preserveAspectRatio="xMidYMid meet">';
+    + '" preserveAspectRatio="xMidYMid meet">'
+    + '<defs><linearGradient id="pg-stroj" x1="0" y1="0" x2="0" y2="1">'
+    + '<stop offset="0" stop-color="#48a7ff"></stop><stop offset="1" stop-color="#1668c4"></stop></linearGradient>'
+    + '<linearGradient id="pg-ulice" x1="0" y1="0" x2="0" y2="1">'
+    + '<stop offset="0" stop-color="#1b1f2a"></stop><stop offset="1" stop-color="#0d1017"></stop></linearGradient>'
+    + '</defs>';
   s += '<rect x="0" y="' + vyska + '" width="' + sirka + '" height="' + pas
-    + '" class="plan-ulice"></rect>'
+    + '" class="plan-ulice" fill="url(#pg-ulice)"></rect>'
     + '<text x="' + (sirka * 0.06) + '" y="' + (vyska + pas * 0.62) + '" class="plan-popis">ulice</text>';
   for (var y = 0; y < p.h; y++) {
     for (var x = 0; x < p.w; x++) {
+      // Tráva má jemnou šachovnici, ať plán nevypadá jako kus zeleného papíru.
+      var bun = planBunka(p, x, y);
+      var lich = bun === PLAN_PRAZDNO && (x + y) % 2 ? ' sude' : '';
       s += '<rect data-bx="' + x + '" data-by="' + y + '" x="' + (x * krok) + '" y="' + (y * krok)
-        + '" width="' + krok + '" height="' + krok + '" class="plan-b ' + PLAN_BARVY[planBunka(p, x, y)] + '"></rect>';
+        + '" width="' + krok + '" height="' + krok + '" class="plan-b ' + PLAN_BARVY[bun] + lich + '"></rect>';
     }
   }
-  // Vodorovné značení vozovky.
-  planCaryCesty(p).forEach(function (c) {
-    var cx = (c[0] + 0.5) * krok, cy = (c[1] + 0.5) * krok;
-    s += c[2]
-      ? '<line x1="' + (cx - krok * 0.3) + '" y1="' + cy + '" x2="' + (cx + krok * 0.3) + '" y2="' + cy + '" class="plan-cara"></line>'
-      : '<line x1="' + cx + '" y1="' + (cy - krok * 0.3) + '" x2="' + cx + '" y2="' + (cy + krok * 0.3) + '" class="plan-cara"></line>';
+  // Vodorovné značení: čára se táhne po ose vozovky, zatáčky včetně.
+  var osa = planOsaCesty(p);
+  Object.keys(osa).forEach(function (k) {
+    var xy = k.split(':'), ox = Number(xy[0]), oy = Number(xy[1]);
+    var cx = (ox + 0.5) * krok, cy = (oy + 0.5) * krok;
+    // Osamělý hřeben v rohu vozovky by byl jen tečka uprostřed asfaltu — ten
+    // se nekreslí, čára má smysl jen tam, kde někam vede.
+    if (osa[(ox + 1) + ':' + oy]) {
+      s += '<line x1="' + cx + '" y1="' + cy + '" x2="' + (cx + krok) + '" y2="' + cy + '" class="plan-cara"></line>';
+    }
+    if (osa[ox + ':' + (oy + 1)]) {
+      s += '<line x1="' + cx + '" y1="' + cy + '" x2="' + cx + '" y2="' + (cy + krok) + '" class="plan-cara"></line>';
+    }
   });
-  // Parkovací stání: černý asfalt s bílými čárami.
+  // Parkovací stání: černý asfalt s bílými čárami. Co nemá u sebe cestu,
+  // svítí červeně — tam se nezaparkuje.
+  var dosah = planCestaOdUlice(p);
   planStani(p).forEach(function (st) {
     s += '<rect x="' + (st.x * krok) + '" y="' + (st.y * krok) + '" width="' + (st.w * krok)
-      + '" height="' + (st.h * krok) + '" class="plan-stani-p"></rect>';
+      + '" height="' + (st.h * krok) + '" rx="' + (krok * 0.12) + '" class="plan-stani-p'
+      + (planSousediCesta(dosah, st) ? '' : ' chyba') + '"></rect>';
   });
   // Výkopy médií — tři barevné trasy od svých sloupků.
   var vyk = planVykopy(p);
@@ -4507,7 +4546,8 @@ function planSvg(p) {
   });
   planStroje(p).forEach(function (st) {
     s += '<rect x="' + (st.x * krok) + '" y="' + (st.y * krok) + '" width="' + (st.w * krok)
-      + '" height="' + (st.h * krok) + '" class="plan-stroj" rx="' + (krok * 0.25) + '"></rect>'
+      + '" height="' + (st.h * krok) + '" class="plan-stroj' + (planSousediCesta(dosah, st) ? '' : ' chyba')
+      + '" fill="url(#pg-stroj)" rx="' + (krok * 0.25) + '"></rect>'
       + '<text x="' + ((st.x + st.w / 2) * krok) + '" y="' + ((st.y + st.h / 2 + 0.3) * krok)
       + '" class="plan-popis bily">' + esc((MODELS[st.model] || {}).name || '') + '</text>';
   });
@@ -4623,13 +4663,16 @@ function planEditor(sp, areaId, hotovo) {
       + '<p class="fine plan-legenda">' + PLAN_MEDIA.map(function (md) {
           return '<span><i style="background:' + md.b + '"></i>' + esc(md.n) + '</span>';
         }).join('') + '</p>'
-      + '<p class="fine">Každé médium má na ulici svůj sloupek a vlastní výkop. Vjezd je po celé spodní '
-      + 'hraně u ulice.</p>'
+      + '<p class="fine">Každé médium má na ulici svůj sloupek a kope se k němu vlastní výkop — ten vede '
+      + 'kudykoli po parcele, platí se po metru. Vjezd je po celé spodní hraně u ulice.</p>'
       + '<div class="seg sub plan-seg">'
-      + '<button class="' + (PLAN_NASTROJ === 'stroj' ? 'on' : '') + '" data-plan-t="stroj">Stroj</button>'
-      + '<button class="' + (PLAN_NASTROJ === 'stani' ? 'on' : '') + '" data-plan-t="stani">Stání</button>'
+      + '<button class="' + (PLAN_NASTROJ === 'stroj' ? 'on' : '') + '" data-plan-t="stroj">'
+      + '<i class="sw sw-stroj"></i>Stroj</button>'
+      + '<button class="' + (PLAN_NASTROJ === 'stani' ? 'on' : '') + '" data-plan-t="stani">'
+      + '<i class="sw sw-stani"></i>Stání</button>'
       + PLAN_NARADI.map(function (t) {
-          return '<button class="' + (t.k === PLAN_NASTROJ ? 'on' : '') + '" data-plan-t="' + t.k + '">' + t.n + '</button>';
+          return '<button class="' + (t.k === PLAN_NASTROJ ? 'on' : '') + '" data-plan-t="' + t.k + '">'
+            + '<i class="sw sw-' + t.k + '"></i>' + t.n + '</button>';
         }).join('') + '</div>'
       + (PLAN_NASTROJ === 'stroj'
           ? '<div class="seg sub plan-seg" style="margin-top:6px">'
