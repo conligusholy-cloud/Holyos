@@ -584,6 +584,7 @@ function vyslatTechnika(u) {
     hotovo: ted + v.jizda + v.oprava, navrat: ted + 2 * v.jizda + v.oprava
   };
   save(); paint(); drawMap(); drawAuta(); syncState(true);
+  nactiTrasu(u);
   toast('Technik vyrazil ' + v.zpusob.nazev + ', na místě bude ' + etaText(v.jizda) + '.', 'ok');
 }
 // Výjezdy posouvá čas: jakmile je oprava hotová, stroj zase jede; až se auto
@@ -602,6 +603,49 @@ function hlidejServis() {
     if (ted >= t.navrat) delete u.technik;
   });
 }
+// ─── Trasa po silnici ────────────────────────────────────────────────────────
+// Servisní auto nemá jet vzdušnou čarou přes pole a vodu. Trasu spočítá server
+// podle skutečných silnic a klient si ji uloží k výjezdu; dokud nedorazí (nebo
+// když se nepovede), jede autíčko napřímo jako dřív. Letadlo letí vždy přímo.
+function nactiTrasu(u) {
+  var t = u && u.technik;
+  if (!t || t.trasa || t.zpusob === 'letadlo' || u.lat == null || t.z.lat == null) return;
+  if (t.trasaZkusena) return;
+  t.trasaZkusena = 1;
+  api('/trasa?z=' + t.z.lat.toFixed(5) + ',' + t.z.lon.toFixed(5)
+    + '&k=' + u.lat.toFixed(5) + ',' + u.lon.toFixed(5)).then(function (r) {
+      if (!r.ok || !r.j || !r.j.ok || !Array.isArray(r.j.body) || r.j.body.length < 2) return;
+      // Mezitím se mohl výjezd ukončit nebo začít jiný — pak už trasa nepatří k němu.
+      if (!u.technik || u.technik.start !== t.start) return;
+      u.technik.trasa = r.j.body;
+      if (r.j.km) u.technik.km = r.j.km;
+      save(); drawMap(); drawAuta();
+    }).catch(function () { /* bez trasy se jede napřímo */ });
+}
+// Kolik kilometrů je na trasu po jednotlivých bodech — podle toho se auto
+// posouvá rovnoměrně, ne po úsecích stejně dlouhých v čase.
+function trasaDelky(tr) {
+  var d = [0], c = 0;
+  for (var i = 1; i < tr.length; i++) {
+    c += kmMezi({ lat: tr[i - 1][0], lon: tr[i - 1][1] }, { lat: tr[i][0], lon: tr[i][1] });
+    d.push(c);
+  }
+  return d;
+}
+// Bod na trase v daném podílu ujeté vzdálenosti (0 = start, 1 = cíl).
+function trasaBod(tr, f) {
+  if (!tr || tr.length < 2) return null;
+  var d = trasaDelky(tr), celk = d[d.length - 1];
+  if (!(celk > 0)) return { lat: tr[0][0], lon: tr[0][1] };
+  var cil = Math.max(0, Math.min(1, f)) * celk;
+  for (var i = 1; i < d.length; i++) {
+    if (d[i] >= cil) {
+      var k = (cil - d[i - 1]) / Math.max(1e-9, d[i] - d[i - 1]);
+      return mezibod({ lat: tr[i - 1][0], lon: tr[i - 1][1] }, { lat: tr[i][0], lon: tr[i][1] }, k);
+    }
+  }
+  return { lat: tr[tr.length - 1][0], lon: tr[tr.length - 1][1] };
+}
 // Bod mezi dvěma místy — odtud se bere poloha autíčka na mapě.
 function mezibod(a, b, t) {
   t = Math.max(0, Math.min(1, t));
@@ -613,11 +657,13 @@ function autoPoloha(u) {
   if (!t || u.lat == null || t.z.lat == null) return null;
   var ted = Date.now(), a = t.z, b = { lat: u.lat, lon: u.lon };
   if (ted < t.prijezd) {
-    return mezibod(a, b, t.prijezd > t.start ? (ted - t.start) / (t.prijezd - t.start) : 1);
+    var f = t.prijezd > t.start ? (ted - t.start) / (t.prijezd - t.start) : 1;
+    return (t.trasa && trasaBod(t.trasa, f)) || mezibod(a, b, f);
   }
   if (ted < t.hotovo) return { lat: b.lat, lon: b.lon, opravuje: true };
   if (ted < t.navrat) {
-    return mezibod(b, a, t.navrat > t.hotovo ? (ted - t.hotovo) / (t.navrat - t.hotovo) : 1);
+    var g = t.navrat > t.hotovo ? (ted - t.hotovo) / (t.navrat - t.hotovo) : 1;
+    return (t.trasa && trasaBod(t.trasa, 1 - g)) || mezibod(b, a, g);
   }
   return null;
 }
@@ -2796,6 +2842,13 @@ function drawAuta() {
   (S.units || []).forEach(function (u) {
     var p = autoPoloha(u);
     if (!p) return;
+    // Hra se mohla mezitím zavřít a otevřít — trasu si doptáme i dodatečně.
+    if (u.technik && !u.technik.trasa) nactiTrasu(u);
+    // Kudy technik jede. Čárkovaně, ať to nepřebije vlastní mapu.
+    if (u.technik && u.technik.trasa && u.technik.trasa.length > 1 && L.polyline) {
+      L.polyline(u.technik.trasa, { className: 'trasa', color: '#7c5cff', weight: 3,
+        opacity: 0.75, dashArray: '6 6' }).addTo(autaLayer);
+    }
     L.marker([p.lat, p.lon], { icon: autoIcon(p.opravuje, u.technik && u.technik.zpusob), zIndexOffset: 1000 })
       .addTo(autaLayer)
       .on('click', function () { unitSheet(u); });

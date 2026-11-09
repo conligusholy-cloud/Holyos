@@ -29,6 +29,58 @@ function rateLimited(key, max, windowMs) {
 }
 const ipOf = (req) => String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.ip || '').trim();
 
+// ─── Trasa servisního auta ───────────────────────────────────────────────────
+// GET /trasa?z=lat,lon&k=lat,lon → body cesty po silnici.
+// Servisní auto ve hře nemá jezdit vzdušnou čarou přes pole a vodu. Trasu
+// spočítá veřejný OSRM a výsledek si držíme v paměti — silnice se nemění a na
+// stejnou dvojici se hra ptá znovu při každé poruše. Když router nevyjde,
+// klient jede napřímo jako dřív, takže se tím hra nikdy nezasekne.
+const TRASY = new Map();
+const TRASA_MAX = 800;
+const TRASA_BODU = 200;          // víc bodů autíčko na mapě stejně nevyužije
+function trasaBodZ(s) {
+  const d = String(s || '').split(',').map(Number);
+  if (d.length !== 2 || !Number.isFinite(d[0]) || !Number.isFinite(d[1])) return null;
+  if (Math.abs(d[0]) > 90 || Math.abs(d[1]) > 180) return null;
+  return [Number(d[0].toFixed(5)), Number(d[1].toFixed(5))];
+}
+router.get('/trasa', async (req, res, next) => {
+  try {
+    const z = trasaBodZ(req.query.z), k = trasaBodZ(req.query.k);
+    if (!z || !k) return res.status(400).json({ error: 'Chybí souřadnice.' });
+    const klic = z.join(',') + ';' + k.join(',');
+    if (TRASY.has(klic)) {
+      return res.set('Cache-Control', 'public, max-age=86400')
+        .json({ ok: true, ...TRASY.get(klic), cache: true });
+    }
+    if (rateLimited('trasa:' + ipOf(req), 60, 60e3)) {
+      return res.status(429).json({ ok: false, duvod: 'moc dotazů' });
+    }
+    const url = 'https://router.project-osrm.org/route/v1/driving/'
+      + z[1] + ',' + z[0] + ';' + k[1] + ',' + k[0] + '?overview=full&geometries=geojson';
+    let j = null;
+    try {
+      const r = await fetch(url, { headers: { 'User-Agent': 'LaundromatsMilionar/1.0' },
+        signal: AbortSignal.timeout(8000) });
+      if (r.ok) j = await r.json();
+    } catch (e) { /* router neodpověděl — pro hru to není chyba */ }
+    const cesta = j && Array.isArray(j.routes) && j.routes[0];
+    if (!cesta || !cesta.geometry || !Array.isArray(cesta.geometry.coordinates)) {
+      return res.json({ ok: false, duvod: 'bez trasy' });
+    }
+    const sour = cesta.geometry.coordinates;
+    const krok = Math.max(1, Math.ceil(sour.length / TRASA_BODU));
+    const body = sour
+      .filter((_, i) => i % krok === 0 || i === sour.length - 1)
+      .map((c) => [Number(c[1].toFixed(5)), Number(c[0].toFixed(5))]);
+    const out = { body, km: Math.round((cesta.distance || 0) / 1000) };
+    TRASY.set(klic, out);
+    // Nejstarší záznam ven, ať paměť neroste donekonečna.
+    if (TRASY.size > TRASA_MAX) TRASY.delete(TRASY.keys().next().value);
+    res.set('Cache-Control', 'public, max-age=86400').json({ ok: true, ...out });
+  } catch (e) { next(e); }
+});
+
 // ─── Průzkum města ─────────────────────────────────────────────────────────
 // Výsledek držíme 6 hodin v paměti; samotný hledač si navíc cachuje Overpass na 24 h,
 // takže opakovaný průzkum stejného města už na OpenStreetMap vůbec nejde.
