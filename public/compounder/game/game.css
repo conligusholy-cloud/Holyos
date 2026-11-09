@@ -671,6 +671,26 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .hov-in .kv:first-of-type{border-top:1px solid var(--border)}
 .hov-in .fine{margin-top:4px}
 
+/* ─── Plán pozemku ─── */
+/* Mřížka po metrech. Tráva je tmavě zelená, zpevněné plochy šedé, stroj modrý.
+   Kreslí se klepnutím nebo tažením, proto plocha nesmí chytat výběr textu. */
+.plan-ram{background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:10px;margin:10px 0 4px}
+.plan-plocha{display:block;width:100%;height:auto;touch-action:none;user-select:none}
+.plan-b{stroke:rgba(255,255,255,.07);stroke-width:.25}
+.plan-trava{fill:#1b3326}
+.plan-dlazba{fill:#6b7183}
+.plan-cesta{fill:#3f4455}
+.plan-stani{fill:#9aa3bb}
+.plan-ulice{fill:#14161f}
+.plan-stroj{fill:#1e86e0;stroke:#9fd2ff;stroke-width:.4}
+.plan-prip{fill:#ffc24b;stroke:#2b2000;stroke-width:.3}
+.plan-popis{fill:var(--text3);font-size:2.6px;text-anchor:middle;font-family:inherit}
+.plan-popis.bily{fill:#fff;font-size:3px;font-weight:700}
+.plan-seg{flex-wrap:wrap}
+.plan-seg button{flex:1 1 20%;font-size:11.5px;padding:7px 4px}
+.kv span i{font-style:normal}
+
 /* ─── Glóbus ─── */
 /* Oddálená mapa se rozloží do plochy a vypadá to divně — místo toho ukážeme
    planetu. Kreslí se do canvasu, obrysy pevnin jsou v svet.js. */

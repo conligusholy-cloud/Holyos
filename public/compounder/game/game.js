@@ -668,9 +668,12 @@ function autoPoloha(u) {
   return null;
 }
 function connPrice(sp, modelKey) {
+  // Na pozemku platí hráč přesně to, co si navrhl — ne paušál.
+  var plan = planMista(sp.id);
+  if (plan && plan.hotovo && plan.model === modelKey && plan.cena) return plan.cena;
   var base = CONN_MIN + spotHash(sp.id, 'c') * (CONN_MAX - CONN_MIN);
   if (modelKey === 'max') base *= CONN_MAX_MULT;
-  // Na pozemku se staví od nuly: cesta, parkování, přivedení sítí a dlažba.
+  // Dokud plán není, ukazujeme hrubý odhad přípravy zelené louky.
   if (jePozemek(sp) && !jeZasitovane(sp)) base *= POZEMEK_STAVBA;
   // Voda, odpad i elektřina tu už jsou — platí se jen postavení a zapojení stroje.
   if (jeZasitovane(sp)) base *= INSTALACE_PODIL;
@@ -3349,7 +3352,10 @@ function spotSheet(sp, areaId) {
       + '<h3 style="margin-top:18px">Co tu postavit</h3>'
       + MODEL_ORDER.map(function (k) { return modelCard(sp, economics(sp, k)); }).join(''));
     [].forEach.call($('sheet-body').querySelectorAll('[data-build]'), function (b2) {
-      b2.onclick = function () { installSheet(sp, areaId, b2.getAttribute('data-build')); };
+      b2.onclick = function () {
+        var mk = b2.getAttribute('data-build');
+        planEditor(sp, areaId, mk, function () { installSheet(sp, areaId, mk); });
+      };
     });
     return;
   }
@@ -3420,7 +3426,14 @@ function spotSheet(sp, areaId) {
     + '<h3 style="margin-top:18px">Co tu postavit</h3>'
     + MODEL_ORDER.map(function (k) { return modelCard(sp, economics(sp, k)); }).join(''));
   [].forEach.call($('sheet-body').querySelectorAll('[data-build]'), function (b) {
-    b.onclick = function () { installSheet(sp, areaId, b.getAttribute('data-build')); };
+    b.onclick = function () {
+      var mk = b.getAttribute('data-build');
+      // Na zelené louce se nejdřív navrhne plocha, teprve pak se počítá stavba.
+      if (lease.pozemek || mamPozemek(sp.id)) {
+        return planEditor(sp, areaId, mk, function () { installSheet(sp, areaId, mk); });
+      }
+      installSheet(sp, areaId, mk);
+    };
   });
   var go = $('go-shop');
   if (go) go.onclick = function () { closeSheet(); switchTab('shop'); };
@@ -3675,20 +3688,23 @@ function installSheet(sp, areaId, modelKey, drz) {
   var doprava = dopravaNa(sp, modelKey);
   var lease0 = S.leases[sp.id] || {};
   var zem = lease0.pozemek ? (lease0.cena || pozemekCena(sp)) : 0;
+  // Vlastní zem: buď ji kupuje teď se strojem, nebo ji koupil dřív.
+  var vlastni = !!lease0.pozemek || mamPozemek(sp.id);
   var celkem = e.conn + doprava + zem;
   // Banka tohle místo posuzuje podle toho, co vydělá ono samo.
   var f = canFinance(celkem, FIN_OWN, stropPodleZisku(e.profit, celkem));
   var n = nejblizsiZakladna(sp);
   sheet('<h3>Postavit ' + m.name + '</h3>'
     + '<p class="muted small">' + esc(sp.name) + ' — teď se platí '
-    + (zem ? 'pozemek, příprava plochy (cesta, parkování, přípojky, dlažba)'
+    + (zem ? 'pozemek, příprava plochy podle tvého návrhu'
+          : vlastni ? 'příprava plochy podle tvého návrhu'
           : (jeZasitovane(sp) ? 'instalace stroje' : 'přípojky (voda, odpad, elektřina)'))
-    + ' a doprava. Stroj máš skladem' + (zem ? '.' : ', nájem domluvený.') + '</p>'
+    + ' a doprava. Stroj máš skladem' + (vlastni ? '.' : ', nájem domluvený.') + '</p>'
     + (!S.sidlo ? '<p class="fine ok">Touhle stavbou vznikne sídlo tvojí firmy — ve městě, ne na téhle adrese. '
         + 'Od něj se pak počítá doprava všech dalších strojů, tak si rozmysli, kde začínáš.</p>' : '')
     + (zem ? '<div class="kv"><span>Pozemek (' + (lease0.m2 || pozemekM2(sp)) + ' m² × '
         + kcFull(pozemekZaM2(sp)) + ')</span><b>' + kcFull(zem) + '</b></div>' : '')
-    + '<div class="kv"><span>' + (zem ? 'Příprava plochy a přípojky'
+    + '<div class="kv"><span>' + (vlastni ? 'Příprava plochy a přípojky'
         : jeZasitovane(sp) ? 'Instalace' : cetaZvladne(sp) ? 'Přípojky vlastní četou' : 'Přípojky') + '</span><b'
     + (cetaZvladne(sp) ? ' class="ok"' : '') + '>' + kcFull(e.conn) + '</b></div>'
     + (cetaZvladne(sp) ? '<p class="fine ok">Staví tvoje parta za ' + Math.round(CETA_PODIL * 100)
@@ -3696,7 +3712,7 @@ function installSheet(sp, areaId, modelKey, drz) {
     + '<div class="kv"><span>Doprava stroje' + (n ? ' (' + Math.round(n.km) + ' km)' : '') + '</span><b'
     + (doprava > 0 ? ' class="warn"' : '') + '>' + (doprava > 0 ? kcFull(doprava) : 'zdarma — sídlo vzniká tady') + '</b></div>'
     + financeRows(f)
-    + (zem ? '<div class="kv"><span>Nájem</span><b class="ok">žádný — zem je tvoje</b></div>'
+    + (vlastni ? '<div class="kv"><span>Nájem</span><b class="ok">žádný — zem je tvoje</b></div>'
         : '<div class="kv"><span>Domluvený nájem</span><b>' + kcFull(e.rent) + ' / měsíc</b></div>')
     + '<div class="kv"><span>Zisk tohohle místa / měsíc</span><b class="ok">' + kcFull(e.profit) + '</b></div>'
     + (splatkyMesicne() > monthlyProfit() + e.profit
@@ -3786,7 +3802,11 @@ var POZEMEK_ZA_M2_MIN = 300, POZEMEK_ZA_M2_MAX = 1200;
 var POZEMEK_STAVBA = 2.2;        // příprava louky proti běžným přípojkám
 function jePozemek(sp) { return !!sp && spotHash(sp.id, 'poz') < POZEMKU_PODIL; }
 function pozemekM2(sp) {
-  return Math.round((POZEMEK_M2_MIN + spotHash(sp.id, 'm2') * (POZEMEK_M2_MAX - POZEMEK_M2_MIN)) / 10) * 10;
+  // Zaokrouhlíme na celé metry mřížky, aby výměra v nabídce seděla s plánem,
+  // na kterém pak hráč staví.
+  var hrube = POZEMEK_M2_MIN + spotHash(sp.id, 'm2') * (POZEMEK_M2_MAX - POZEMEK_M2_MIN);
+  var r = planRozmer(hrube);
+  return r.w * r.h;
 }
 // Lepší adresa, dražší zem. K tomu trocha náhody podle konkrétního pozemku.
 function pozemekZaM2(sp) {
@@ -3856,6 +3876,281 @@ function pozemekKarta(sp) {
     + '<p class="fine">Příprava louky je zhruba ' + POZEMEK_STAVBA.toFixed(1).replace('.', ',')
     + '× dražší než napojení na hotovém místě. Zaplatí se to tím, že za tohle místo '
     + 'nikdy nikomu nic neplatíš a nikdo ti ho nevezme.</p>';
+}
+// ─── Příprava pozemku ────────────────────────────────────────────────────────
+// Koupená zem je jen tráva. Než na ní může stát prádlomat, musí hráč sám
+// navrhnout, jak to tam bude vypadat: kudy se přijede, kde se zaparkuje, kam
+// přijde stroj a jak daleko se k němu musí natáhnout elektřina, voda a odpad.
+// Cena přípravy se počítá z toho, co doopravdy nakreslí — čím dál od ulice
+// stroj posadí, tím delší přípojky a tím dražší místo.
+//
+// Plán je mřížka po metrech. Spodní řada plochy sousedí s ulicí; tam je i bod,
+// odkud se přípojky táhnou.
+var PLAN_DLAZBA_M2 = 1200;       // zámková dlažba kolem stroje
+var PLAN_CESTA_M2 = 1800;        // zpevněná příjezdová cesta
+var PLAN_STANI = 12000;          // jedno parkovací stání i s vodorovným značením
+var PLAN_PRIPOJKY_M = 6600;      // elektřina + voda + odpad dohromady, za metr výkopu
+var PLAN_POPLATKY = 60000;       // připojovací poplatky, ať je trasa jakkoli dlouhá
+var PLAN_STANI_MIN = 2;          // bez dvou stání to město nezkolauduje
+var PLAN_ROZMERY = { mini: [3, 3], flex: [6, 3], max: [8, 3] };
+var PLAN_PRAZDNO = 0, PLAN_DLAZBA = 1, PLAN_CESTA = 2, PLAN_STANI_B = 3, PLAN_STROJ = 9;
+var PLAN_NARADI = [
+  { k: 'cesta', n: 'Cesta', b: PLAN_CESTA, p: 'Zpevněná plocha, po které se k prádlomatu dojede. Musí navazovat na ulici.' },
+  { k: 'stani', n: 'Parkování', b: PLAN_STANI_B, p: 'Jedno stání je 1 × 2 m. Potřebuješ aspoň ' + PLAN_STANI_MIN + ' a musí přiléhat k cestě.' },
+  { k: 'dlazba', n: 'Dlažba', b: PLAN_DLAZBA, p: 'Zámková dlažba okolo stroje, aby se nechodilo v blátě.' },
+  { k: 'guma', n: 'Guma', b: PLAN_PRAZDNO, p: 'Smaže, co jsi nakreslil. Tráva nic nestojí.' }
+];
+// Rozměry parcely v metrech. Držíme ji obdélníkovou, mírně do šířky k ulici.
+function planRozmer(m2) {
+  var w = Math.max(8, Math.round(Math.sqrt(m2 * 1.6)));
+  var h = Math.max(6, Math.round(m2 / w));
+  return { w: w, h: h };
+}
+// Kde na ulici je přípojkový sloupek. Pro každý pozemek stejný, ať se plán
+// po znovuotevření nemění.
+function planPripojka(sp, w) {
+  return Math.max(1, Math.min(w - 2, Math.round(spatHashBezpecne(sp) * (w - 2))));
+}
+function spatHashBezpecne(sp) { return spotHash(sp && sp.id, 'prip'); }
+function planyVse() {
+  if (!S.plany || typeof S.plany !== 'object') S.plany = {};
+  return S.plany;
+}
+function planMista(spotId) { return planyVse()[spotId] || null; }
+// Prázdný plán: samá tráva, stroj zatím nikde.
+function planNovy(sp, modelKey) {
+  var m2 = pozemekM2(sp), r = planRozmer(m2);
+  var b = [];
+  for (var i = 0; i < r.w * r.h; i++) b.push(PLAN_PRAZDNO);
+  return { w: r.w, h: r.h, b: b, model: modelKey, stroj: null, prip: planPripojka(sp, r.w) };
+}
+function planIndex(p, x, y) { return y * p.w + x; }
+function planBunka(p, x, y) {
+  if (x < 0 || y < 0 || x >= p.w || y >= p.h) return -1;
+  return p.b[planIndex(p, x, y)];
+}
+// Políčka, na kterých stojí stroj i s metrem dlažby okolo.
+function planStrojBunky(p) {
+  var out = [];
+  if (!p.stroj) return out;
+  for (var y = p.stroj.y; y < p.stroj.y + p.stroj.h; y++) {
+    for (var x = p.stroj.x; x < p.stroj.x + p.stroj.w; x++) out.push([x, y]);
+  }
+  return out;
+}
+// Nejkratší cesta po zpevněné ploše od přípojky k nejbližšímu rohu stroje.
+// Měří se v metrech, protože přesně za tolik se kope výkop.
+function planPripojkaDelka(p) {
+  if (!p.stroj) return null;
+  var start = [p.prip, p.h - 1];
+  if (planBunka(p, start[0], start[1]) === PLAN_PRAZDNO) return null;
+  var cil = {}, i;
+  planStrojBunky(p).forEach(function (c) { cil[c[0] + ':' + c[1]] = 1; });
+  var fronta = [[start[0], start[1], 0]], videl = {};
+  videl[start[0] + ':' + start[1]] = 1;
+  while (fronta.length) {
+    var t = fronta.shift();
+    if (cil[t[0] + ':' + t[1]]) return t[2];
+    var sousedi = [[t[0] + 1, t[1]], [t[0] - 1, t[1]], [t[0], t[1] + 1], [t[0], t[1] - 1]];
+    for (i = 0; i < sousedi.length; i++) {
+      var x = sousedi[i][0], y = sousedi[i][1], k = x + ':' + y;
+      if (videl[k]) continue;
+      // Stroj v mřížce nestojí (drží se zvlášť), ale výkop k němu dojít musí.
+      if (cil[k]) return t[2] + 1;
+      var bun = planBunka(p, x, y);
+      if (bun === -1 || bun === PLAN_PRAZDNO) continue;
+      videl[k] = 1;
+      fronta.push([x, y, t[2] + 1]);
+    }
+  }
+  return null;
+}
+// Dojede se k prádlomatu? Cesta musí začínat u ulice a končit u stroje.
+function planDojezd(p) {
+  if (!p.stroj) return false;
+  var start = [], x;
+  for (x = 0; x < p.w; x++) if (planBunka(p, x, p.h - 1) === PLAN_CESTA) start.push([x, p.h - 1]);
+  if (!start.length) return false;
+  var cil = {};
+  planStrojBunky(p).forEach(function (c) {
+    [[c[0] + 1, c[1]], [c[0] - 1, c[1]], [c[0], c[1] + 1], [c[0], c[1] - 1]].forEach(function (s) {
+      cil[s[0] + ':' + s[1]] = 1;
+    });
+  });
+  var fronta = start.slice(), videl = {};
+  start.forEach(function (s) { videl[s[0] + ':' + s[1]] = 1; });
+  while (fronta.length) {
+    var t = fronta.shift();
+    if (cil[t[0] + ':' + t[1]]) return true;
+    var sousedi = [[t[0] + 1, t[1]], [t[0] - 1, t[1]], [t[0], t[1] + 1], [t[0], t[1] - 1]];
+    for (var i = 0; i < sousedi.length; i++) {
+      var sx = sousedi[i][0], sy = sousedi[i][1], k = sx + ':' + sy;
+      if (videl[k]) continue;
+      if (planBunka(p, sx, sy) !== PLAN_CESTA) continue;
+      videl[k] = 1;
+      fronta.push([sx, sy]);
+    }
+  }
+  return false;
+}
+function planPocty(p) {
+  var c = { dlazba: 0, cesta: 0, stani: 0 };
+  for (var i = 0; i < p.b.length; i++) {
+    if (p.b[i] === PLAN_DLAZBA) c.dlazba++;
+    else if (p.b[i] === PLAN_CESTA) c.cesta++;
+    else if (p.b[i] === PLAN_STANI_B) c.stani++;
+  }
+  // Pod strojem je dlažba vždycky — platí se, i když ji hráč nekreslil.
+  c.podStrojem = planStrojBunky(p).length;
+  c.stanixKs = Math.floor(c.stani / 2);     // jedno stání jsou dvě políčka
+  return c;
+}
+function planCena(p) {
+  var c = planPocty(p), d = planPripojkaDelka(p);
+  var polozky = [
+    { n: 'Zpevněná cesta', m: c.cesta + ' m²', v: c.cesta * PLAN_CESTA_M2 },
+    { n: 'Parkovací stání', m: c.stanixKs + '×', v: c.stanixKs * PLAN_STANI },
+    { n: 'Zámková dlažba', m: (c.dlazba + c.podStrojem) + ' m²', v: (c.dlazba + c.podStrojem) * PLAN_DLAZBA_M2 },
+    { n: 'Přípojky (elektřina, voda, odpad)', m: (d == null ? '—' : d + ' m'), v: (d || 0) * PLAN_PRIPOJKY_M },
+    { n: 'Připojovací poplatky', m: '', v: PLAN_POPLATKY }
+  ];
+  var celkem = polozky.reduce(function (a, x) { return a + x.v; }, 0);
+  return { polozky: polozky, celkem: Math.round(celkem), delka: d };
+}
+// Co ještě chybí, aby se dalo stavět. Hráč má vědět proč, ne jen že to nejde.
+function planChyby(p) {
+  var ch = [], c = planPocty(p);
+  if (!p.stroj) ch.push('Umísti prádlomat — klepni na Stroj a pak na plochu.');
+  if (c.stanixKs < PLAN_STANI_MIN) {
+    ch.push('Chybí parkování: máš ' + c.stanixKs + ' z ' + PLAN_STANI_MIN + ' stání (jedno jsou dvě políčka nad sebou).');
+  }
+  if (p.stroj && !planDojezd(p)) ch.push('K prádlomatu se nedá dojet — veď cestu od ulice až k němu.');
+  if (p.stroj && planPripojkaDelka(p) == null) {
+    ch.push('Přípojky nemají kudy vést — od sloupku u ulice musí k stroji vést souvislá zpevněná plocha.');
+  }
+  return ch;
+}
+// ─── Kreslení plánu ──────────────────────────────────────────────────────────
+var PLAN_BARVY = {};
+PLAN_BARVY[PLAN_PRAZDNO] = 'plan-trava';
+PLAN_BARVY[PLAN_DLAZBA] = 'plan-dlazba';
+PLAN_BARVY[PLAN_CESTA] = 'plan-cesta';
+PLAN_BARVY[PLAN_STANI_B] = 'plan-stani';
+function planSvg(p) {
+  var sirka = 100, krok = sirka / p.w, vyska = krok * p.h;
+  var s = '<svg class="plan-plocha" viewBox="0 0 ' + sirka + ' ' + (vyska + krok * 0.9)
+    + '" preserveAspectRatio="xMidYMid meet">';
+  // Ulice pod parcelou.
+  s += '<rect x="0" y="' + vyska + '" width="' + sirka + '" height="' + (krok * 0.9)
+    + '" class="plan-ulice"></rect>'
+    + '<text x="' + (sirka / 2) + '" y="' + (vyska + krok * 0.62) + '" class="plan-popis">ulice</text>';
+  for (var y = 0; y < p.h; y++) {
+    for (var x = 0; x < p.w; x++) {
+      s += '<rect data-bx="' + x + '" data-by="' + y + '" x="' + (x * krok) + '" y="' + (y * krok)
+        + '" width="' + krok + '" height="' + krok + '" class="plan-b ' + PLAN_BARVY[planBunka(p, x, y)] + '"></rect>';
+    }
+  }
+  if (p.stroj) {
+    s += '<rect x="' + (p.stroj.x * krok) + '" y="' + (p.stroj.y * krok) + '" width="' + (p.stroj.w * krok)
+      + '" height="' + (p.stroj.h * krok) + '" class="plan-stroj" rx="' + (krok * 0.25) + '"></rect>'
+      + '<text x="' + ((p.stroj.x + p.stroj.w / 2) * krok) + '" y="' + ((p.stroj.y + p.stroj.h / 2 + 0.3) * krok)
+      + '" class="plan-popis bily">' + esc((MODELS[p.model] || {}).name || '') + '</text>';
+  }
+  // Sloupek s přípojkami.
+  s += '<circle cx="' + ((p.prip + 0.5) * krok) + '" cy="' + (vyska + krok * 0.45) + '" r="' + (krok * 0.3)
+    + '" class="plan-prip"></circle>';
+  return s + '</svg>';
+}
+var PLAN_NARADI_AKT = 'cesta';
+var PLAN_STAVI = false;      // true = další klepnutí umístí stroj
+// Editor pozemku. Po dokončení se plán uloží k místu a jeho cena se použije
+// místo paušální přípravy.
+function planEditor(sp, areaId, modelKey, hotovo) {
+  var vse = planyVse();
+  var p = vse[sp.id];
+  if (!p || p.model !== modelKey) { p = planNovy(sp, modelKey); vse[sp.id] = p; }
+  PLAN_STAVI = !p.stroj;
+  var rozmer = PLAN_ROZMERY[modelKey] || PLAN_ROZMERY.mini;
+
+  function polozStroj(x, y) {
+    var sx = Math.max(0, Math.min(p.w - rozmer[0], x));
+    var sy = Math.max(0, Math.min(p.h - rozmer[1], y));
+    p.stroj = { x: sx, y: sy, w: rozmer[0], h: rozmer[1] };
+    PLAN_STAVI = false;
+    save(); vykresli();
+  }
+  function maluj(x, y) {
+    if (PLAN_STAVI) return polozStroj(x, y);
+    // Pod strojem se kreslit nedá — ten má dlažbu sám o sobě.
+    if (p.stroj && x >= p.stroj.x && x < p.stroj.x + p.stroj.w
+      && y >= p.stroj.y && y < p.stroj.y + p.stroj.h) return;
+    var n = PLAN_NARADI.filter(function (t) { return t.k === PLAN_NARADI_AKT; })[0];
+    if (!n) return;
+    p.b[planIndex(p, x, y)] = n.b;
+    save(); vykresli();
+  }
+  function vykresli() {
+    var cen = planCena(p), chyby = planChyby(p), c = planPocty(p);
+    var naradi = PLAN_NARADI.filter(function (t) { return t.k === PLAN_NARADI_AKT; })[0] || PLAN_NARADI[0];
+    sheet('<h3>Příprava pozemku</h3>'
+      + '<p class="muted small">' + esc(sp.name) + ' · ' + p.w + ' × ' + p.h + ' m · '
+      + esc((MODELS[modelKey] || {}).name || '') + ' zabere ' + rozmer[0] + ' × ' + rozmer[1] + ' m</p>'
+      + '<div class="plan-ram">' + planSvg(p) + '</div>'
+      + '<div class="seg sub plan-seg">'
+      + '<button class="' + (PLAN_STAVI ? 'on' : '') + '" data-plan-stroj="1">Stroj</button>'
+      + PLAN_NARADI.map(function (t) {
+          return '<button class="' + (!PLAN_STAVI && t.k === PLAN_NARADI_AKT ? 'on' : '') + '" data-plan-n="' + t.k + '">' + t.n + '</button>';
+        }).join('') + '</div>'
+      + '<p class="fine">' + esc(PLAN_STAVI ? 'Klepni na plochu a prádlomat se tam postaví.' : naradi.p) + '</p>'
+      + '<h3 style="margin:14px 0 4px">Co to bude stát</h3>'
+      + cen.polozky.map(function (x) {
+          return '<div class="kv"><span>' + esc(x.n) + (x.m ? ' <i class="muted small">' + esc(x.m) + '</i>' : '')
+            + '</span><b>' + kcFull(x.v) + '</b></div>';
+        }).join('')
+      + '<div class="kv souhrn"><span>Příprava celkem</span><b class="' + (cen.celkem ? 'warn' : '') + '">'
+      + kcFull(cen.celkem) + '</b></div>'
+      + (chyby.length
+          ? '<div class="card vada-karta" style="margin-top:12px"><h3>⚠️ Ještě to nejde</h3>'
+            + chyby.map(function (x) { return '<p class="muted small" style="margin:6px 0 0">' + esc(x) + '</p>'; }).join('')
+            + '</div>'
+          : '<p class="fine ok" style="margin-top:10px">Plocha je hotová: dojede se sem, zaparkuje se tu a '
+            + 'přípojky mají kudy vést ' + cen.delka + ' m od sloupku.</p>')
+      + '<button class="btn big" id="plan-hotovo"' + (chyby.length ? ' disabled' : '')
+      + ' style="width:100%;margin-top:12px">Hotovo — spočítat stavbu</button>'
+      + '<button class="btn sec" id="plan-smazat" style="width:100%;margin-top:8px">Začít návrh znovu</button>');
+    var pl = $('sheet-body').querySelector('.plan-plocha');
+    if (pl) {
+      var kresli = function (ev) {
+        var t = ev.target;
+        if (!t || !t.getAttribute) return;
+        var bx = t.getAttribute('data-bx'), by = t.getAttribute('data-by');
+        if (bx == null || by == null) return;
+        maluj(Number(bx), Number(by));
+      };
+      pl.addEventListener('click', kresli);
+      // Tažením se kreslí rychleji než klepáním po metrech.
+      pl.addEventListener('pointermove', function (ev) {
+        if (!ev.buttons || PLAN_STAVI) return;
+        var el = document.elementFromPoint(ev.clientX, ev.clientY);
+        if (el) kresli({ target: el });
+      });
+    }
+    var sb = $('sheet-body').querySelector('[data-plan-stroj]');
+    if (sb) sb.onclick = function () { PLAN_STAVI = true; vykresli(); };
+    [].forEach.call($('sheet-body').querySelectorAll('[data-plan-n]'), function (b2) {
+      b2.onclick = function () { PLAN_STAVI = false; PLAN_NARADI_AKT = b2.getAttribute('data-plan-n'); vykresli(); };
+    });
+    var sm = $('plan-smazat');
+    if (sm) sm.onclick = function () { vse[sp.id] = planNovy(sp, modelKey); p = vse[sp.id]; PLAN_STAVI = true; save(); vykresli(); };
+    var hb = $('plan-hotovo');
+    if (hb) hb.onclick = function () {
+      p.cena = planCena(p).celkem;
+      p.hotovo = 1;
+      save();
+      if (hotovo) hotovo(p);
+    };
+  }
+  vykresli();
 }
 // ─── Nájemní smlouva ─────────────────────────────────────────────────────────
 // S majitelem pozemku se domlouvají dvě věci: na jak dlouho se hráč zaváže a
