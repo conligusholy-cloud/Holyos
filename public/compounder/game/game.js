@@ -3095,9 +3095,10 @@ function drawMap() {
       // Volné místo je jen tip, ne stavba — ukazuje se až při přiblížení.
       if (!unit && !rival && !blizko) { skryto++; return; }
       var seen = !!S.revealed[sp.id];
-      // Prověřený pozemek na prodej má svůj pin — jde o jinou nabídku než nájem.
+      // Pozemek na prodej má svůj pin, i když tam hráč ještě nebyl — cedule
+      // „na prodej" je na parcele vidět z ulice, na rozdíl od výše nájmu.
       var icon = unit ? unitIcon(unit) : rival ? rivalIcon(rival)
-        : (seen && jePozemek(sp)) ? pinIcon('known pozemek', '\u2302')
+        : jePozemek(sp) ? pinIcon('pozemek' + (seen ? ' known' : ''), '\u2302')
         : pinIcon(seen ? 'known' : 'unknown', seen ? '\u2605' : '?');
       L.marker([sp.lat, sp.lon], { icon: icon })
         .addTo(layer)
@@ -3284,9 +3285,16 @@ function spotSheet(sp, areaId) {
 
   // 1. krok — obhlídka. Levná, jen se tam někdo zajede podívat.
   if (!S.revealed[sp.id]) {
-    sheet('<h3>Neprověřené místo</h3>'
-      + '<p class="muted small">Víš jen, že tu něco je. Obhlídka ti ukáže, kolik tu chodí lidí, jaká je konkurence a jestli se tu prádlomat vyplatí.</p>'
+    var poz0 = jePozemek(sp);
+    sheet('<h3>' + (poz0 ? 'Pozemek na prodej' : 'Neprověřené místo') + '</h3>'
+      + '<p class="muted small">' + (poz0
+          ? 'Na parcele je cedule, takže výměru i cenu znáš. Co tu ale chodí lidí a jestli se '
+            + 'sem prádlomat vyplatí, zjistíš až obhlídkou.'
+          : 'Víš jen, že tu něco je. Obhlídka ti ukáže, kolik tu chodí lidí, jaká je konkurence a jestli se tu prádlomat vyplatí.') + '</p>'
       + '<div class="kv"><span>Typ místa</span><b>' + esc(KIND_LABEL[sp.kind] || 'Neznámý') + '</b></div>'
+      + (poz0 ? '<div class="kv"><span>Výměra</span><b>' + pozemekM2(sp) + ' m²</b></div>'
+          + '<div class="kv"><span>Cena pozemku</span><b>' + kcFull(pozemekCena(sp))
+          + '</b> <span class="muted small">(' + kcFull(pozemekZaM2(sp)) + ' / m²)</span></div>' : '')
       + '<div class="kv"><span>Cena obhlídky</span><b>' + kcFull(REVEAL_COST) + '</b></div>'
       + '<button class="btn big" id="do-reveal"' + (S.cash < REVEAL_COST ? ' disabled' : '') + '>Prověřit místo</button>'
       + (S.cash < REVEAL_COST ? '<p class="fine">Na obhlídku nemáš dost hotovosti.</p>' : ''));

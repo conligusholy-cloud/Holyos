@@ -223,7 +223,8 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .pin.unknown{background:#2a3350;color:#8ea2c2;border-color:#4a5880}
 .pin.known{background:#1e86e0;color:#fff}
 /* Pozemek na prodej — jiná nabídka než nájem, tak má i jinou barvu. */
-.pin.known.pozemek{background:#2fe3a0;color:#04301f;font-weight:800}
+.pin.pozemek{background:#1d6b52;color:#9df0cc;border-color:#2fe3a0;font-weight:800}
+.pin.pozemek.known{background:#2fe3a0;color:#04301f}
 .pin.mine{background:var(--ok);color:#04301f}
 .leaflet-container{background:#0a1120;font:inherit}
 /* Porouchaný prádlomat: červený rámeček a vykřičník, pod ním místo názvu modelu
