@@ -5424,7 +5424,7 @@ function paintStroje() {
 var ZEB = null, ZEB_KAT = 'pradlomaty';
 var ZEB_POPIS = {
   pradlomaty: { nadpis: 'Nejvíc prádlomatů', jed: function (v) { return v + '×'; },
-    pod: 'Počítají se obsazená místa — to je jediné číslo, které hlídá server.' },
+    pod: 'Počítají se postavené prádlomaty — to je jediné číslo, které hlídá server. Koupený pozemek bez stroje se nepočítá.' },
   zisk: { nadpis: 'Nejvyšší měsíční zisk', jed: function (v) { return kcFull(v); },
     pod: 'Podle poslední uložené sítě hráče.' },
   hvezdy: { nadpis: 'Nejlepší hodnocení zákazníků',

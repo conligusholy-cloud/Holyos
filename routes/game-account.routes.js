@@ -786,7 +786,10 @@ async function firmyMapa() {
 const ZEME_MAX = 6;
 async function zemeHracu() {
   const [zabory, mesta] = await Promise.all([
-    prisma.gameSpotClaim.findMany({ select: { player_id: true, area_key: true } }),
+    // Jen místa, kde opravdu stojí stroj. Koupený pozemek bez prádlomatu
+    // vlaječku nedělá — hráč tam zatím nic neprovozuje.
+    prisma.gameSpotClaim.findMany({ where: { model: { not: '' } },
+      select: { player_id: true, area_key: true } }),
     prisma.gameArea.findMany({ where: { country: { not: null } }, select: { key: true, country: true } }),
   ]);
   const zeme = {};
@@ -815,7 +818,10 @@ function dropZeb() { _zeb = { at: 0, data: null }; }
 async function zebricky() {
   if (Date.now() - _zeb.at < 30e3 && _zeb.data) return _zeb.data;
   const [mista, hraci, zemeMap] = await Promise.all([
-    prisma.gameSpotClaim.groupBy({ by: ['player_id', 'nick'], _count: { _all: true } }),
+    // Počítají se postavené prádlomaty, ne zabraná místa — prázdný pozemek
+    // do žebříčku nepatří.
+    prisma.gameSpotClaim.groupBy({ by: ['player_id', 'nick'], _count: { _all: true },
+      where: { model: { not: '' } } }),
     prisma.gamePlayer.findMany({
       where: { disabled: false, state: { not: null } },
       orderBy: { state_at: 'desc' }, take: 500,
@@ -866,7 +872,8 @@ function moje(list, id) {
 // Země se bere z města, ve kterém místo leží; města bez známé země vypadnou.
 async function zemeSPocty() {
   const [zabory, mesta] = await Promise.all([
-    prisma.gameSpotClaim.findMany({ select: { area_key: true, model: true, player_id: true } }),
+    prisma.gameSpotClaim.findMany({ where: { model: { not: '' } },
+      select: { area_key: true, model: true, player_id: true } }),
     prisma.gameArea.findMany({ where: { country: { not: null } }, select: { key: true, country: true } }),
   ]);
   const kod = {};
