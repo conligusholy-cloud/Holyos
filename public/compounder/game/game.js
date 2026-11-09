@@ -3388,6 +3388,14 @@ function spotSheet(sp, areaId) {
   }
 
   var lease = S.leases[sp.id];
+  // Dřív se pozemek „pronajímal“ spolu se strojem a při výběru stroje vznikl
+  // nájem za nula. Kdo takový rozdělaný záznam má, zůstal by kvůli němu viset
+  // na kartě nájmu a zem by si koupit nemohl — tak ho zahodíme.
+  if (lease && lease.pozemek && !mamPozemek(sp.id)) {
+    delete S.leases[sp.id];
+    lease = null;
+    save();
+  }
   var head = '<h3>' + esc(sp.name) + '</h3>'
     + '<p class="muted small">' + esc(KIND_LABEL[sp.kind] || 'Místo') + ' · ' + esc(S.areas[areaId] ? S.areas[areaId].name : '')
     // Co hráč koupil, se mu už nenabízí — v hlavičce stojí, že zem je jeho.
