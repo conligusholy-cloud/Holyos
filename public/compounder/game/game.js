@@ -3735,7 +3735,7 @@ var BID_FEE = 5000;
 function areaKeys() { return Object.keys(S && S.areas ? S.areas : {}); }
 
 // ─── Pozemky na prodej ───────────────────────────────────────────────────────
-// Pětina nalezených míst se nepronajímá — prodává se. Kdo si pozemek koupí,
+// Dvě pětiny nalezených míst se nepronajímají — prodávají se. Kdo si pozemek koupí,
 // neplatí žádný nájem a nikdo ho odtamtud nevyhodí: nedá se přeplatit, protože
 // zem je jeho. Zaplatí to ale jednou a pořádně — samotnou zem podle výměry
 // a k tomu přípravu zelené louky: příjezdovou cestu, parkování, přivedení
@@ -3743,7 +3743,7 @@ function areaKeys() { return Object.keys(S && S.areas ? S.areas : {}); }
 //
 // Které místo je pozemek, se počítá z jeho id, ne z nálezu — takže se pozemky
 // objeví i ve městech, která má hráč prozkoumaná odedávna.
-var POZEMKU_PODIL = 0.20;        // pětina míst je na prodej
+var POZEMKU_PODIL = 0.40;        // dvě pětiny míst jsou na prodej
 var POZEMEK_M2_MIN = 180, POZEMEK_M2_MAX = 420;
 var POZEMEK_ZA_M2_MIN = 300, POZEMEK_ZA_M2_MAX = 1200;
 var POZEMEK_STAVBA = 2.2;        // příprava louky proti běžným přípojkám
