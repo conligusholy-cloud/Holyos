@@ -4271,6 +4271,34 @@ function planChyby(p) {
   }
   return ch;
 }
+// Je na tomhle políčku stání?
+function planPodStrojem(p, x, y) {
+  return planStroje(p).some(function (st) {
+    return x >= st.x && x < st.x + st.w && y >= st.y && y < st.y + st.h;
+  });
+}
+// Návrh za hráče. Udělá to, co by udělal projektant: cestu po celé hraně
+// u ulice, od ní odbočku ke každému stání a parkování hned vedle.
+function planAutoNavrh(p) {
+  var st = planStroje(p), x, y;
+  if (!st.length) return false;
+  for (x = 0; x < p.w; x++) if (!planPodStrojem(p, x, p.h - 1)) p.b[planIndex(p, x, p.h - 1)] = PLAN_CESTA;
+  st.forEach(function (s0) {
+    var sx = Math.min(p.w - 1, Math.max(0, s0.x + Math.floor(s0.w / 2)));
+    for (var yy = p.h - 1; yy >= s0.y + s0.h; yy--) {
+      if (!planPodStrojem(p, sx, yy)) p.b[planIndex(p, sx, yy)] = PLAN_CESTA;
+    }
+  });
+  var potreba = PLAN_STANI_MIN * st.length, dano = 0;
+  for (x = 0; x < p.w && dano < potreba && p.h >= 3; x++) {
+    var a = planIndex(p, x, p.h - 2), b = planIndex(p, x, p.h - 3);
+    if (planPodStrojem(p, x, p.h - 2) || planPodStrojem(p, x, p.h - 3)) continue;
+    if (p.b[a] === PLAN_CESTA || p.b[b] === PLAN_CESTA) continue;
+    p.b[a] = PLAN_STANI_B; p.b[b] = PLAN_STANI_B;
+    dano++;
+  }
+  return true;
+}
 // ─── Kreslení plánu ──────────────────────────────────────────────────────────
 var PLAN_BARVY = {};
 PLAN_BARVY[PLAN_PRAZDNO] = 'plan-trava';
@@ -4279,12 +4307,14 @@ PLAN_BARVY[PLAN_CESTA] = 'plan-cesta';
 PLAN_BARVY[PLAN_STANI_B] = 'plan-stani';
 function planSvg(p) {
   var sirka = 100, krok = sirka / p.w, vyska = krok * p.h;
-  var s = '<svg class="plan-plocha" viewBox="0 0 ' + sirka + ' ' + (vyska + krok * 0.9)
+  // Pruh ulice je schválně vyšší — vejde se do něj popisek i sloupek s přípojkami,
+  // a hráč hned vidí, odkud se na parcelu jezdí a odkud se táhnou sítě.
+  var pas = Math.max(krok * 1.4, 5);
+  var s = '<svg class="plan-plocha" viewBox="0 0 ' + sirka + ' ' + (vyska + pas)
     + '" preserveAspectRatio="xMidYMid meet">';
-  // Ulice pod parcelou.
-  s += '<rect x="0" y="' + vyska + '" width="' + sirka + '" height="' + (krok * 0.9)
+  s += '<rect x="0" y="' + vyska + '" width="' + sirka + '" height="' + pas
     + '" class="plan-ulice"></rect>'
-    + '<text x="' + (sirka / 2) + '" y="' + (vyska + krok * 0.62) + '" class="plan-popis">ulice</text>';
+    + '<text x="' + (sirka * 0.26) + '" y="' + (vyska + pas * 0.6) + '" class="plan-popis">ULICE \u2014 odtud se vjíždí</text>';
   for (var y = 0; y < p.h; y++) {
     for (var x = 0; x < p.w; x++) {
       s += '<rect data-bx="' + x + '" data-by="' + y + '" x="' + (x * krok) + '" y="' + (y * krok)
@@ -4297,9 +4327,15 @@ function planSvg(p) {
       + '<text x="' + ((st.x + st.w / 2) * krok) + '" y="' + ((st.y + st.h / 2 + 0.3) * krok)
       + '" class="plan-popis bily">' + esc((MODELS[st.model] || {}).name || '') + '</text>';
   });
-  // Sloupek s přípojkami.
-  s += '<circle cx="' + ((p.prip + 0.5) * krok) + '" cy="' + (vyska + krok * 0.45) + '" r="' + (krok * 0.3)
-    + '" class="plan-prip"></circle>';
+  // Spodní hrana: tady se vjíždí, odtud musí cesta začínat.
+  s += '<line x1="0" y1="' + vyska + '" x2="' + sirka + '" y2="' + vyska + '" class="plan-hrana"></line>';
+  // Sloupek s přípojkami a políčko, kudy výkop vstupuje na parcelu.
+  var px = Math.min(Math.max((p.prip + 0.5) * krok, 9), sirka - 9);
+  s += '<rect x="' + (p.prip * krok) + '" y="' + ((p.h - 1) * krok) + '" width="' + krok
+    + '" height="' + krok + '" class="plan-vstup"></rect>'
+    + '<circle cx="' + ((p.prip + 0.5) * krok) + '" cy="' + (vyska + pas * 0.42) + '" r="' + Math.max(krok * 0.3, 1.2)
+    + '" class="plan-prip"></circle>'
+    + '<text x="' + px + '" y="' + (vyska + pas * 0.95) + '" class="plan-popis zluty">voda \u00b7 elektřina \u00b7 kanalizace</text>';
   return s + '</svg>';
 }
 var PLAN_NARADI_AKT = 'cesta';
@@ -4363,6 +4399,8 @@ function planEditor(sp, areaId, hotovo) {
       + PLAN_NARADI.map(function (t) {
           return '<button class="' + (!PLAN_STAVI && t.k === PLAN_NARADI_AKT ? 'on' : '') + '" data-plan-n="' + t.k + '">' + t.n + '</button>';
         }).join('') + '</div>'
+      + '<p class="fine">Vjezd je po celé spodní hraně u ulice. Žlutý sloupek je přípojka vody, elektřiny '
+      + 'a kanalizace — od něj musí ke každému stroji vést souvislá zpevněná plocha.</p>'
       + (PLAN_STAVI
           ? '<div class="seg sub plan-seg" style="margin-top:6px">'
             + MODEL_ORDER.map(function (k) {
@@ -4396,8 +4434,9 @@ function planEditor(sp, areaId, hotovo) {
             + '</div>'
           : '<p class="fine ok" style="margin-top:10px">Plocha je hotová: dojede se sem, zaparkuje se tu a '
             + 'přípojky mají kudy vést ' + cen.delka + ' m od sloupku.</p>')
+      + '<button class="btn sec" id="plan-auto" style="width:100%;margin-top:12px">Navrhnout za mě</button>'
       + '<button class="btn big" id="plan-hotovo"' + (chyby.length ? ' disabled' : '')
-      + ' style="width:100%;margin-top:12px">Hotovo — spočítat přípravu</button>'
+      + ' style="width:100%;margin-top:8px">Hotovo — spočítat přípravu</button>'
       + (stoji ? '' : '<button class="btn sec" id="plan-smazat" style="width:100%;margin-top:8px">Začít návrh znovu</button>'));
     var pl = $('sheet-body').querySelector('.plan-plocha');
     if (pl) {
@@ -4424,6 +4463,21 @@ function planEditor(sp, areaId, hotovo) {
     [].forEach.call($('sheet-body').querySelectorAll('[data-plan-m]'), function (b3) {
       b3.onclick = function () { PLAN_MODEL = b3.getAttribute('data-plan-m'); vykresli(); };
     });
+    var au = $('plan-auto');
+    if (au) au.onclick = function () {
+      // Bez stroje není co napojovat — jeden rovnou položíme doprostřed parcely.
+      var st0 = planStroje(p);
+      if (!st0.length) {
+        var r0 = PLAN_ROZMERY[PLAN_MODEL] || PLAN_ROZMERY.mini;
+        st0.push({ x: Math.max(0, Math.floor((p.w - r0[0]) / 2)), y: Math.max(0, Math.floor((p.h - r0[1]) / 2) - 1),
+          w: r0[0], h: r0[1], model: PLAN_MODEL });
+        padBunky(st0[0]).forEach(function (c) { p.b[planIndex(p, c[0], c[1])] = PLAN_PRAZDNO; });
+      }
+      planAutoNavrh(p);
+      PLAN_STAVI = false;
+      save(); vykresli();
+      toast('Hotový návrh. Doladit ho můžeš po svém.', 'ok');
+    };
     var sm = $('plan-smazat');
     if (sm) sm.onclick = function () {
       // Zaplacená příprava se nepromazává — doplácí se jen rozdíl proti ní.

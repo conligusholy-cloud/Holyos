@@ -700,6 +700,10 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .plan-prip{fill:#ffc24b;stroke:#2b2000;stroke-width:.3;pointer-events:none}
 .plan-popis{fill:var(--text3);font-size:2.6px;text-anchor:middle;font-family:inherit;pointer-events:none}
 .plan-popis.bily{fill:#fff;font-size:3px;font-weight:700}
+/* Vjezd a přípojky: bez nich hráč neví, kde má začít kreslit. */
+.plan-popis.zluty{fill:#ffc24b;font-weight:700}
+.plan-hrana{stroke:#9fd2ff;stroke-width:.45;stroke-dasharray:2 1.4;opacity:.8}
+.plan-vstup{fill:none;stroke:#ffc24b;stroke-width:.5;stroke-dasharray:1.3 .9;pointer-events:none}
 .plan-seg{flex-wrap:wrap}
 .plan-seg button{flex:1 1 20%;font-size:11.5px;padding:7px 4px}
 .kv span i{font-style:normal}
