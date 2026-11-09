@@ -4094,7 +4094,9 @@ var PLAN_CESTA_M2 = 1800;        // asfaltová příjezdová cesta
 var PLAN_STANI = 12000;          // jedno parkovací stání i s vodorovným značením
 var PLAN_POPLATKY = 60000;       // připojovací poplatky, ať jsou trasy jakkoli dlouhé
 var PLAN_STANI_MIN = 2;          // bez dvou stání to město nezkolauduje
-var PLAN_ROZMERY = { mini: [3, 3], flex: [6, 3], max: [8, 3] };
+// Skutečné rozměry prádlomatů: hloubka je u všech stejná, liší se šířka.
+// Před strojem ještě zbyde metr na dlažbu, aby se nestoupalo z trávy.
+var PLAN_ROZMERY = { mini: [2.4, 2], flex: [3.15, 2], max: [4.2, 2] };
 // Kolmé stání se značí 2,5 × 5 m; v metrové mřížce z toho je 2 × 5 m.
 var PLAN_STANI_ROZMER = [2, 5];
 // Vozovka: jednosměrka má 3 m, obousměrná 6 m. Štětec kreslí rovnou celou šířku,
@@ -4180,10 +4182,24 @@ function planStani(p) {
   }
   return p.stani;
 }
+// Stroj nemá rozměry na celé metry, mřížka ano — tak zabere tolik políček,
+// kolik jich opravdu překryje.
+function planCely(v) { return Math.max(1, Math.ceil(Number(v) - 0.001)); }
+function cisloM(v) { return String(Math.round(Number(v) * 100) / 100).replace('.', ','); }
 function padBunky(st) {
-  var out = [];
-  for (var y = st.y; y < st.y + st.h; y++) for (var x = st.x; x < st.x + st.w; x++) out.push([x, y]);
+  var out = [], w = planCely(st.w), h = planCely(st.h);
+  for (var y = st.y; y < st.y + h; y++) for (var x = st.x; x < st.x + w; x++) out.push([x, y]);
   return out;
+}
+// Otočení o 90°. Na úzkou parcelu se stroj i stání musí dát postavit nadél.
+var PLAN_OTOCENO = false;
+function planRozmerStroje(k) {
+  var r = PLAN_ROZMERY[k] || PLAN_ROZMERY.mini;
+  return PLAN_OTOCENO ? [r[1], r[0]] : [r[0], r[1]];
+}
+function planRozmerStani() {
+  var r = PLAN_STANI_ROZMER;
+  return PLAN_OTOCENO ? [r[1], r[0]] : [r[0], r[1]];
 }
 function planIndex(p, x, y) { return y * p.w + x; }
 function planBunka(p, x, y) {
@@ -4354,7 +4370,7 @@ function planChyby(p) {
   var potreba = PLAN_STANI_MIN * Math.max(1, n);
   if (c.stanixKs < potreba) {
     ch.push('Chybí parkování: máš ' + c.stanixKs + ' z ' + potreba + ' stání (na každý prádlomat dvě, '
-      + 'jedno stání je ' + PLAN_STANI_ROZMER[0] + ' × ' + PLAN_STANI_ROZMER[1] + ' m).');
+      + 'jedno stání je ' + cisloM(PLAN_STANI_ROZMER[0]) + ' × ' + cisloM(PLAN_STANI_ROZMER[1]) + ' m).');
   }
   var videl = planCestaOdUlice(p);
   if (n && !planDojezd(p)) ch.push('Ke každému prádlomatu se musí dát dojet — veď cestu od ulice až k němu.');
@@ -4384,7 +4400,7 @@ function planAutoNavrh(p) {
     od = Math.min(od, sl); doX = Math.max(doX, sl);
   });
   st.forEach(function (s0) {
-    var o = Math.max(0, Math.min(p.w - sirka, s0.x + Math.floor((s0.w - sirka) / 2)));
+    var o = Math.max(0, Math.min(p.w - sirka, s0.x + Math.floor((planCely(s0.w) - sirka) / 2)));
     od = Math.min(od, o); doX = Math.max(doX, o + sirka - 1);
   });
   var mistaSir = PLAN_STANI_MIN * st.length * PLAN_STANI_ROZMER[0];
@@ -4399,8 +4415,9 @@ function planAutoNavrh(p) {
     var prekryv = st0.x <= vcesteDo && st0.x + st0.w - 1 >= vcesteOd && st0.y + st0.h - 1 >= pas;
     if (prekryv) return false;
     return !st.some(function (s1) {
-      var o = Math.max(0, Math.min(p.w - sirka, s1.x + Math.floor((s1.w - sirka) / 2)));
-      return st0.x <= o + sirka - 1 && st0.x + st0.w - 1 >= o && st0.y + st0.h - 1 >= s1.y + s1.h;
+      var o = Math.max(0, Math.min(p.w - sirka, s1.x + Math.floor((planCely(s1.w) - sirka) / 2)));
+      return st0.x <= o + sirka - 1 && st0.x + planCely(st0.w) - 1 >= o
+        && st0.y + planCely(st0.h) - 1 >= s1.y + planCely(s1.h);
     });
   });
   for (y = pas; y < p.h; y++) {
@@ -4408,9 +4425,9 @@ function planAutoNavrh(p) {
   }
   // Od pruhu u ulice odbočka ke každému stroji, taky na šířku jednosměrky.
   st.forEach(function (s0) {
-    var od = Math.max(0, Math.min(p.w - sirka, s0.x + Math.floor((s0.w - sirka) / 2)));
-    for (y = pas - 1; y >= s0.y + s0.h; y--) {
-      for (x = od; x < od + sirka; x++) if (!planObsazeno(p, x, y)) p.b[planIndex(p, x, y)] = PLAN_CESTA;
+    var od2 = Math.max(0, Math.min(p.w - sirka, s0.x + Math.floor((planCely(s0.w) - sirka) / 2)));
+    for (y = pas - 1; y >= s0.y + planCely(s0.h); y--) {
+      for (x = od2; x < od2 + sirka; x++) if (!planObsazeno(p, x, y)) p.b[planIndex(p, x, y)] = PLAN_CESTA;
     }
   });
   // Parkování: stání v řadě nad vozovkou, ať se k nim dá zacouvat.
@@ -4571,26 +4588,27 @@ function planEditor(sp, areaId, hotovo) {
   function padNa(x, y) {
     var st = planStroje(p);
     for (var i = 0; i < st.length; i++) {
-      if (x >= st[i].x && x < st[i].x + st[i].w && y >= st[i].y && y < st[i].y + st[i].h) return i;
+      if (x >= st[i].x && x < st[i].x + planCely(st[i].w) && y >= st[i].y && y < st[i].y + planCely(st[i].h)) return i;
     }
     return -1;
   }
   function staniNa(x, y) {
     var st = planStani(p);
     for (var i = 0; i < st.length; i++) {
-      if (x >= st[i].x && x < st[i].x + st[i].w && y >= st[i].y && y < st[i].y + st[i].h) return i;
+      if (x >= st[i].x && x < st[i].x + planCely(st[i].w) && y >= st[i].y && y < st[i].y + planCely(st[i].h)) return i;
     }
     return -1;
   }
   function volno(sx, sy, w, h, krome) {
-    if (sx < 0 || sy < 0 || sx + w > p.w || sy + h > p.h) return false;
+    var cw = planCely(w), ch = planCely(h);
+    if (sx < 0 || sy < 0 || sx + cw > p.w || sy + ch > p.h) return false;
     var kolize = planStroje(p).some(function (o) {
-      return sx < o.x + o.w && sx + w > o.x && sy < o.y + o.h && sy + h > o.y;
+      return sx < o.x + planCely(o.w) && sx + cw > o.x && sy < o.y + planCely(o.h) && sy + ch > o.y;
     });
     if (kolize) return false;
     return !planStani(p).some(function (o, i) {
       if (i === krome) return false;
-      return sx < o.x + o.w && sx + w > o.x && sy < o.y + o.h && sy + h > o.y;
+      return sx < o.x + planCely(o.w) && sx + cw > o.x && sy < o.y + planCely(o.h) && sy + ch > o.y;
     });
   }
   function vycisti(st) {
@@ -4602,8 +4620,9 @@ function planEditor(sp, areaId, hotovo) {
       if (padObsazen(sp, byl)) return toast('Na tomhle stání už prádlomat stojí.', 'err');
       st.splice(byl, 1); save(); return vykresli();
     }
-    var r = PLAN_ROZMERY[PLAN_MODEL] || PLAN_ROZMERY.mini;
-    var sx = Math.max(0, Math.min(p.w - r[0], x)), sy = Math.max(0, Math.min(p.h - r[1], y));
+    var r = planRozmerStroje(PLAN_MODEL);
+    var sx = Math.max(0, Math.min(p.w - planCely(r[0]), x));
+    var sy = Math.max(0, Math.min(p.h - planCely(r[1]), y));
     if (!volno(sx, sy, r[0], r[1])) return toast('Tady už něco je.', 'err');
     st.push({ x: sx, y: sy, w: r[0], h: r[1], model: PLAN_MODEL });
     // Pod strojem je dlažba sama o sobě — co tam hráč nakreslil dřív, se nepočítá dvakrát.
@@ -4613,12 +4632,12 @@ function planEditor(sp, areaId, hotovo) {
   function polozStani(x, y) {
     var st = planStani(p), byl = staniNa(x, y);
     if (byl >= 0) { st.splice(byl, 1); save(); return vykresli(); }
-    var w = PLAN_STANI_ROZMER[0], h = PLAN_STANI_ROZMER[1];
-    var sx = Math.max(0, Math.min(p.w - w, x)), sy = Math.max(0, Math.min(p.h - h, y));
-    // Na mělké parcele se stání položí nadél, ať se vejde.
+    var r2 = planRozmerStani(), w = r2[0], h = r2[1];
+    var sx = Math.max(0, Math.min(p.w - planCely(w), x)), sy = Math.max(0, Math.min(p.h - planCely(h), y));
+    // Když to takhle nejde, zkusíme stání otočené — ať se hráč nemusí trefovat.
     if (!volno(sx, sy, w, h)) {
-      w = PLAN_STANI_ROZMER[1]; h = PLAN_STANI_ROZMER[0];
-      sx = Math.max(0, Math.min(p.w - w, x)); sy = Math.max(0, Math.min(p.h - h, y));
+      w = r2[1]; h = r2[0];
+      sx = Math.max(0, Math.min(p.w - planCely(w), x)); sy = Math.max(0, Math.min(p.h - planCely(h), y));
       if (!volno(sx, sy, w, h)) return toast('Stání se sem nevejde.', 'err');
     }
     st.push({ x: sx, y: sy, w: w, h: h });
@@ -4652,7 +4671,7 @@ function planEditor(sp, areaId, hotovo) {
     var popis = PLAN_NASTROJ === 'stroj'
         ? 'Klepni na plochu a stání pro stroj se tam položí. Klepnutím na hotové ho zase sundáš.'
       : PLAN_NASTROJ === 'stani'
-        ? 'Parkovací stání je ' + PLAN_STANI_ROZMER[0] + ' × ' + PLAN_STANI_ROZMER[1]
+        ? 'Parkovací stání je ' + cisloM(planRozmerStani()[0]) + ' × ' + cisloM(planRozmerStani()[1])
           + ' m. Musí přiléhat k cestě; klepnutím na hotové ho sundáš.'
       : (naradi || {}).p || '';
     sheet('<h3>Příprava plochy</h3>'
@@ -4677,10 +4696,14 @@ function planEditor(sp, areaId, hotovo) {
       + (PLAN_NASTROJ === 'stroj'
           ? '<div class="seg sub plan-seg" style="margin-top:6px">'
             + MODEL_ORDER.map(function (k) {
-                var r = PLAN_ROZMERY[k] || PLAN_ROZMERY.mini;
+                var r = planRozmerStroje(k);
                 return '<button class="' + (k === PLAN_MODEL ? 'on' : '') + '" data-plan-m="' + k + '">'
-                  + esc(MODELS[k].name) + ' ' + r[0] + '×' + r[1] + '</button>';
+                  + esc(MODELS[k].name) + ' ' + cisloM(r[0]) + '×' + cisloM(r[1]) + '</button>';
               }).join('') + '</div>'
+          : '')
+      + (PLAN_NASTROJ === 'stroj' || PLAN_NASTROJ === 'stani'
+          ? '<button class="btn sec sm" id="plan-otocit" style="width:100%;margin-top:6px">↻ Otočit o 90° '
+            + '(teď ' + (PLAN_OTOCENO ? 'nadél' : 'čelem k cestě') + ')</button>'
           : '')
       + (PLAN_NASTROJ === 'cesta'
           ? '<div class="seg sub plan-seg" style="margin-top:6px">'
@@ -4695,7 +4718,7 @@ function planEditor(sp, areaId, hotovo) {
           ? st.map(function (x, i) {
               return '<div class="kv"><span>' + (i + 1) + '. stání · ' + esc((MODELS[x.model] || {}).name || '')
                 + '</span><b class="' + (padObsazen(sp, i) ? 'ok' : '') + '">'
-                + (padObsazen(sp, i) ? 'prádlomat stojí' : x.w + ' × ' + x.h + ' m') + '</b></div>';
+                + (padObsazen(sp, i) ? 'prádlomat stojí' : cisloM(x.w) + ' × ' + cisloM(x.h) + ' m') + '</b></div>';
             }).join('')
           : '<p class="fine">Zatím žádné. Klepni na Stroj a pak na parcelu.</p>')
       + '<div class="kv"><span>Parkovacích stání</span><b class="'
@@ -4740,6 +4763,8 @@ function planEditor(sp, areaId, hotovo) {
     [].forEach.call($('sheet-body').querySelectorAll('[data-plan-t]'), function (b2) {
       b2.onclick = function () { PLAN_NASTROJ = b2.getAttribute('data-plan-t'); vykresli(); };
     });
+    var ot = $('plan-otocit');
+    if (ot) ot.onclick = function () { PLAN_OTOCENO = !PLAN_OTOCENO; vykresli(); };
     [].forEach.call($('sheet-body').querySelectorAll('[data-plan-m]'), function (b3) {
       b3.onclick = function () { PLAN_MODEL = b3.getAttribute('data-plan-m'); vykresli(); };
     });
@@ -4751,8 +4776,9 @@ function planEditor(sp, areaId, hotovo) {
       // Bez stroje není co napojovat — jeden rovnou položíme doprostřed parcely.
       var st0 = planStroje(p);
       if (!st0.length) {
-        var r0 = PLAN_ROZMERY[PLAN_MODEL] || PLAN_ROZMERY.mini;
-        st0.push({ x: Math.max(0, Math.floor((p.w - r0[0]) / 2)), y: 1, w: r0[0], h: r0[1], model: PLAN_MODEL });
+        var r0 = planRozmerStroje(PLAN_MODEL);
+        st0.push({ x: Math.max(0, Math.floor((p.w - planCely(r0[0])) / 2)), y: 1,
+          w: r0[0], h: r0[1], model: PLAN_MODEL });
         vycisti(st0[0]);
       }
       planAutoNavrh(p);
