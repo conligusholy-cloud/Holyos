@@ -1,5 +1,5 @@
 // =============================================================================
-// Laundromats Milionář — administrace (HolyOS, sekce Soukromé)
+// Laundromat Tycoon — administrace (HolyOS, sekce Soukromé)
 // =============================================================================
 // Přehled hráčů, objednávek, ceník a statistiky. Vidí to jen lidé, kteří mají
 // přístup do soukromých sekcí (stejné pravidlo jako Best Series 2.0).

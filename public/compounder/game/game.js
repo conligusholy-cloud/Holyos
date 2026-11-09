@@ -1,5 +1,5 @@
 // =============================================================================
-// Laundromats Milionář — herní logika (běží celá v prohlížeči)
+// Laundromat Tycoon — herní logika (běží celá v prohlížeči)
 // =============================================================================
 // Stav hry je JEDEN objekt uložený v localStorage. Až hra dostane účty a platby,
 // stačí ten samý objekt posílat na server — proto nic neukládáme po kouskách.
@@ -5265,9 +5265,9 @@ function countIncomingRef() {
 }
 function shareGame(btn) {
   var url = shareUrl();
-  var txt = 'Stavím síť prádlomatů v Laundromats Milionáři. Zkus to taky — a mně tím přibydou zákazníci.';
+  var txt = 'Stavím síť prádlomatů v Laundromat Tycoonu. Zkus to taky — a mně tím přibydou zákazníci.';
   if (navigator.share) {
-    navigator.share({ title: 'Laundromats Milionář', text: txt, url: url }).catch(function () {});
+    navigator.share({ title: 'Laundromat Tycoon', text: txt, url: url }).catch(function () {});
     return;
   }
   var done = function () { btn.textContent = 'Odkaz zkopírován'; setTimeout(function () { btn.textContent = 'Zkopírovat odkaz'; }, 2000); };

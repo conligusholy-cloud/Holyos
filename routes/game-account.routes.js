@@ -1,5 +1,5 @@
 // =============================================================================
-// Laundromats Milionář — účty hráčů, karty a nákupy
+// Laundromat Tycoon — účty hráčů, karty a nákupy
 // =============================================================================
 // Hra samotná je veřejná (viz game.routes.js). Tenhle router přidává účet:
 // hráč si na začátku vymyslí herní nick a heslo, stav hry se ukládá na server

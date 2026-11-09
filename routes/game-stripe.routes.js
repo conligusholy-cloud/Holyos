@@ -1,5 +1,5 @@
 // =============================================================================
-// Laundromats Milionář — platby za zrychlující karty (Stripe Checkout)
+// Laundromat Tycoon — platby za zrychlující karty (Stripe Checkout)
 // =============================================================================
 // Stejný postup jako Stripe u /misto (compounder.routes.js): REST API přes
 // fetch, bez SDK, podpis webhooku ověřený ručně. STRIPE_SECRET_KEY už v projektu
@@ -89,7 +89,7 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
         quantity: qty,
         price_data: {
           currency: 'czk', unit_amount: c.price,
-          product_data: { name: 'Laundromats Milionář — ' + c.name,
+          product_data: { name: 'Laundromat Tycoon — ' + c.name,
             description: c.short || (c.laundry ? c.laundry.toLocaleString('cs-CZ') + ' herních laundrů' : undefined) }
         }
       }]

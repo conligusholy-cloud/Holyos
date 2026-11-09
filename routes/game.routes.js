@@ -1,5 +1,5 @@
 // =============================================================================
-// Laundromats Milionář — herní API (pradlomaty.info/game)
+// Laundromat Tycoon — herní API (pradlomaty.info/game)
 // =============================================================================
 // Hra je VEŘEJNÁ, takže tyhle routy záměrně nemají requireAuth (stejně jako
 // /api/ai chat nebo veřejné stránky cesty). Místo přihlášení je chrání limiter
@@ -60,7 +60,7 @@ router.get('/trasa', async (req, res, next) => {
       + z[1] + ',' + z[0] + ';' + k[1] + ',' + k[0] + '?overview=full&geometries=geojson';
     let j = null;
     try {
-      const r = await fetch(url, { headers: { 'User-Agent': 'LaundromatsMilionar/1.0' },
+      const r = await fetch(url, { headers: { 'User-Agent': 'LaundromatTycoon/1.0' },
         signal: AbortSignal.timeout(8000) });
       if (r.ok) j = await r.json();
     } catch (e) { /* router neodpověděl — pro hru to není chyba */ }

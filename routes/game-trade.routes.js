@@ -1,5 +1,5 @@
 // =============================================================================
-// Laundromats Milionář — burza: obchody mezi hráči
+// Laundromat Tycoon — burza: obchody mezi hráči
 // =============================================================================
 // Hráč může druhému nabídnout, že od něj něco koupí, nebo že mu něco prodá.
 // Druhý přijme, odmítne, nebo pošle protinávrh — a smlouvá se dál.
