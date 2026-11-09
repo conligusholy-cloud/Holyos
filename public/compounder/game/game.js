@@ -2960,6 +2960,15 @@ function zakladnaSheet(z, jeSidlo) {
     + S.units.filter(function (u) { return u.lat != null && kmMezi(z, u) <= 30; }).length + '</b></div>'
     + (jeSidlo ? '' : '<p class="fine">Prodat ji můžeš na Burze jako cokoli jiného.</p>'));
 }
+// Koupený pozemek. Na mapě musí být na první pohled poznat, že zem je moje —
+// a jestli je plocha připravená, nebo je to pořád louka.
+function pozemekIcon(sp) {
+  var pl = planMista(sp.id);
+  var hotovo = pl && pl.hotovo && pl.zaplaceno;
+  return L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15],
+    html: '<div class="pin pozemek moje">\u2302<i class="pin-tag">'
+      + (hotovo ? 'PLOCHA HOTOVÁ' : 'MŮJ POZEMEK') + '</i></div>' });
+}
 function pinIcon(cls, txt) {
   return L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15],
     html: '<div class="pin ' + cls + '">' + txt + '</div>' });
@@ -3145,10 +3154,12 @@ function drawMap() {
       var seen = !!S.revealed[sp.id];
       // Pozemek na prodej má svůj pin, i když tam hráč ještě nebyl — cedule
       // „na prodej" je na parcele vidět z ulice, na rozdíl od výše nájmu.
+      var mujPoz = !unit && mamPozemek(sp.id);
       var icon = unit ? unitIcon(unit) : rival ? rivalIcon(rival)
+        : mujPoz ? pozemekIcon(sp)
         : jePozemek(sp) ? pinIcon('pozemek' + (seen ? ' known' : ''), '\u2302')
         : pinIcon(seen ? 'known' : 'unknown', seen ? '\u2605' : '?');
-      kusy.push({ lat: sp.lat, lon: sp.lon, moje: !!unit, kresli: function () {
+      kusy.push({ lat: sp.lat, lon: sp.lon, moje: !!unit || mujPoz, kresli: function () {
         L.marker([sp.lat, sp.lon], { icon: icon })
           .addTo(layer)
           .on('click', function () { if (rival) return rivalSheet(sp, aid, rival); spotSheet(sp, aid); });
@@ -6087,6 +6098,70 @@ function pozvaniHtml() {
           + 'Dorovná se to samo, jakmile tuhle záložku otevřeš — ale jen když máš distribuci '
           + 'zapnutou. S vypnutou se nedoplatí nic, dokud ji nezapneš.</p>' : '');
 }
+// Místo na mapě podle id — ať se dá z přehledu majetku skočit rovnou na něj.
+function spotPodle(spotId) {
+  var nalez = null;
+  Object.keys(S.areas || {}).forEach(function (aid) {
+    ((S.areas[aid] || {}).spots || []).forEach(function (sp) {
+      if (sp.id === spotId) nalez = { sp: sp, areaId: aid };
+    });
+  });
+  return nalez;
+}
+// ─── Můj majetek ─────────────────────────────────────────────────────────────
+// Rozvaha na jedné kartě: co hráč vlastní, co za to dluží a co mu zbývá. Bez ní
+// se dá snadno zapomenout, že někde leží koupená zem, na které se nestaví.
+function majetekHtml() {
+  var zem = pozemky();
+  var skladem = 0, cesta = 0;
+  MODEL_ORDER.forEach(function (k) { skladem += inStock(k); cesta += onWay(k); });
+  var zazemi = (S.pobocky || []).length * POBOCKA_CENA + (maCetu() ? CETA_CENA : 0);
+  var majetek = assetsTotal() + zazemi;
+  var polozky = [
+    { n: 'Postavené prádlomaty', m: S.units.length + '×', v: investedTotal() },
+    { n: 'Stroje skladem a na cestě', m: skladem + '× skladem' + (cesta ? ', ' + cesta + '× na cestě' : ''), v: stockValue() },
+    { n: 'Pozemky a zaplacené plochy', m: zem.length + '×', v: pozemkyHodnota() },
+    { n: 'Pobočky a servisní četa', m: (S.pobocky || []).length + '× pobočka' + (maCetu() ? ', četa' : ''), v: zazemi }
+  ];
+  return '<div class="card"><h3>Můj majetek</h3>'
+    + '<p class="muted small" style="margin:2px 0 8px">Co všechno vlastníš a kolik z toho zbude, až se odečte banka.</p>'
+    + polozky.map(function (x) {
+        return '<div class="kv"><span>' + esc(x.n) + ' <i class="muted small">' + esc(x.m) + '</i></span><b>'
+          + kcFull(x.v) + '</b></div>';
+      }).join('')
+    + '<div class="kv souhrn"><span>Majetek celkem</span><b>' + kcFull(majetek) + '</b></div>'
+    + '<div class="kv"><span>Hotovost</span><b>' + kcFull(S.cash) + '</b></div>'
+    + '<div class="kv"><span>Dluh u banky</span><b class="' + (S.loan ? 'err' : '') + '">'
+    + (S.loan ? '\u2212' + kcFull(S.loan) : kcFull(0)) + '</b></div>'
+    + '<div class="kv souhrn"><span>Čisté jmění</span><b class="' + (cisteJmeni() >= 0 ? 'ok' : 'err') + '">'
+    + kcFull(cisteJmeni()) + '</b></div>'
+    + '<h3 style="margin:16px 0 4px">Moje pozemky</h3>'
+    + (zem.length
+        ? zem.map(function (z) {
+            var pl = planMista(z.spotId);
+            var stav = z.zastaveno ? 'stojí tu prádlomat'
+              : (pl && pl.hotovo && pl.zaplaceno) ? 'plocha připravená, čeká na stroj'
+              : 'holá parcela — plocha se musí připravit';
+            return '<div class="area-item" data-zem="' + esc(z.spotId) + '">'
+              + '<div><div class="nm">\u2302 ' + esc(z.name || 'Pozemek') + '</div>'
+              + '<div class="sub">' + (z.m2 || '?') + ' m\u00b2 · ' + stav + '</div></div>'
+              + '<b>' + kcFull((z.cena || 0) + (z.priprava || 0)) + '</b></div>';
+          }).join('')
+        : '<p class="fine">Zatím žádný. Na mapě poznáš pozemky na prodej podle zelené značky s domečkem — '
+          + 'koupená zem pak má bílý rámeček a cedulku „můj pozemek".</p>')
+    + '</div>';
+}
+function bindMajetek() {
+  [].forEach.call(document.querySelectorAll('[data-zem]'), function (r) {
+    r.onclick = function () {
+      var n = spotPodle(r.getAttribute('data-zem'));
+      if (!n) return toast('Tenhle pozemek je v městě, které zrovna není načtené.', 'err');
+      switchTab('map');
+      if (map) map.setView([n.sp.lat, n.sp.lon], Math.max(16, map.getZoom()));
+      spotSheet(n.sp, n.areaId);
+    };
+  });
+}
 function paintMe() {
   var p = PROFILES[S.profile];
   // Co má hráč rozepsané, přežije překreslení.
@@ -6111,6 +6186,7 @@ function paintMe() {
     + '<div class="kv"><span>Prozkoumaných oblastí</span><b>' + Object.keys(S.areas).length + '</b></div>'
     + '<div class="kv"><span>Prověřených míst</span><b>' + Object.keys(S.revealed).length + '</b></div>'
     + '</div>'
+    + majetekHtml()
     + '<div class="card"><h3>Jak se hraje</h3>'
     + '<p class="muted small" style="margin:2px 0 0">Jeden skutečný den jsou ve hře dva měsíce, herní rok tedy trvá šest dní. Prádlomaty vydělávají, i když hru zavřeš — po návratu se ti všechno dopočítá. '
     + 'Místa na mapě jsou skutečná a jejich skóre počítá stejný nástroj, kterým Best Series hledá místa doopravdy. '
@@ -6146,6 +6222,7 @@ function paintMe() {
     }).catch(function () { fb.disabled = false; fb.textContent = 'Přejmenovat firmu'; toast('Server neodpovídá.', 'err'); });
   };
   bindDist();
+  bindMajetek();
   var kn = $('do-kniha');
   if (kn) kn.onclick = function () { KNIHA_FILTR = 'vse'; knihaSheet(); };
   var zb = $('me-znak');

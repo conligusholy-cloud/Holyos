@@ -225,6 +225,10 @@ button.kv:active{background:rgba(124,92,255,.12)}
 /* Pozemek na prodej — jiná nabídka než nájem, tak má i jinou barvu. */
 .pin.pozemek{background:#1d6b52;color:#9df0cc;border-color:#2fe3a0;font-weight:800}
 .pin.pozemek.known{background:#2fe3a0;color:#04301f}
+/* Koupený pozemek: bílý rámeček jako ostatní můj majetek a cedulka pod značkou,
+   ať se moje zem nedá splést s další nabídkou na prodej. */
+.pin.pozemek.moje{background:#2fe3a0;color:#04301f;border-color:#fff;overflow:visible}
+.pin.pozemek.moje .pin-tag{background:#2fe3a0;color:#04301f}
 .pin.mine{background:var(--ok);color:#04301f}
 .leaflet-container{background:#0a1120;font:inherit}
 /* Porouchaný prádlomat: červený rámeček a vykřičník, pod ním místo názvu modelu
