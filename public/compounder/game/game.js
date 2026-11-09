@@ -3317,17 +3317,40 @@ function spotSheet(sp, areaId) {
     + '<div class="kv"><span>Tahouni provozu</span><b>' + (mnum(sp.anchors) != null ? mnum(sp.anchors) : '—') + '</b></div>';
 
   // 2. krok — domluvit s majitelem nájem. Zadarmo, ale bez něj se stavět nedá.
-  if (!lease && jePozemek(sp)) {
+  if (!lease && jePozemek(sp) && !mamPozemek(sp.id)) {
+    var cenaZ = pozemekCena(sp);
+    var fz = canFinance(cenaZ, null, cenaZ);   // zem je zástava sama o sobě
     sheet(head + pozemekKarta(sp)
-      + '<button class="btn big" id="do-pozemek" style="width:100%;margin-top:12px">Vybrat stroj</button>'
-      + '<p class="fine">Pozemek i přípravu zaplatíš až se strojem, jednou transakcí — '
-      + 'dokud nestavíš, nic tě to nestojí.</p>');
+      + '<button class="btn big" id="do-pozemek" style="width:100%;margin-top:12px">Vybrat stroj a stavět</button>'
+      + '<p class="fine">Pozemek i přípravu zaplatíš se strojem, jednou transakcí.</p>'
+      + '<div class="kv" style="margin-top:14px"><span>Jen koupit pozemek</span><b>' + kcFull(cenaZ) + '</b></div>'
+      + '<p class="fine">Zem můžeš koupit i bez stroje — leží, nikdo ti ji nevezme a banka proti ní '
+      + 'půjčí, protože je to nemovitost. Postavit na ní můžeš kdykoli později.</p>'
+      + '<button class="btn sec" id="do-koupit-zem"' + (fz.ok ? '' : ' disabled')
+      + ' style="width:100%;margin-top:6px">Koupit pozemek bez stroje</button>'
+      + (fz.ok ? '' : '<p class="fine err">' + esc(fz.duvod || 'Na pozemek zatím nemáš.') + '</p>'));
     var pb = $('do-pozemek');
     if (pb) pb.onclick = function () {
       S.leases[sp.id] = { rent: 0, at: Date.now(), pozemek: 1,
         m2: pozemekM2(sp), cena: pozemekCena(sp) };
       save(); spotSheet(sp, areaId);
     };
+    var kz = $('do-koupit-zem');
+    if (kz) kz.onclick = function () { koupitPozemek(sp, areaId, kz); };
+    return;
+  }
+  // Na vlastním pozemku se rovnou staví — zem je zaplacená.
+  if (mamPozemek(sp.id)) {
+    var zem0 = pozemky().filter(function (z) { return z.spotId === sp.id; })[0] || {};
+    sheet(head
+      + '<div class="card"><div class="row"><h3>Tvůj pozemek</h3><b class="ok">' + (zem0.m2 || pozemekM2(sp)) + ' m²</b></div>'
+      + '<p class="muted small" style="margin:4px 0 0">Zem máš koupenou za ' + kcFull(zem0.cena || pozemekCena(sp))
+      + '. Nájem neplatíš a nikdo tě odtud nevyhodí — zbývá připravit plochu a postavit.</p></div>'
+      + '<h3 style="margin-top:18px">Co tu postavit</h3>'
+      + MODEL_ORDER.map(function (k) { return modelCard(sp, economics(sp, k)); }).join(''));
+    [].forEach.call($('sheet-body').querySelectorAll('[data-build]'), function (b2) {
+      b2.onclick = function () { installSheet(sp, areaId, b2.getAttribute('data-build')); };
+    });
     return;
   }
   if (!lease) {
@@ -3438,6 +3461,7 @@ function cisteJmeni() {
   });
   majetek += (S.pobocky || []).length * POBOCKA_CENA;
   if (maCetu()) majetek += CETA_CENA;
+  majetek += pozemkyHodnota();
   return Math.round(majetek + S.cash - S.loan);
 }
 function stockValue() {
@@ -3445,7 +3469,7 @@ function stockValue() {
   MODEL_ORDER.forEach(function (k) { v += (inStock(k) + onWay(k)) * machinePrice(MODELS[k]); });
   return v;
 }
-function assetsTotal() { return investedTotal() + stockValue(); }
+function assetsTotal() { return investedTotal() + stockValue() + pozemkyHodnota(); }
 // Na nákupy se nesmí utratit úplně všechno — jinak by hráč zůstal bez hotovosti,
 // bez příjmu a bez možnosti cokoli prověřit.
 // chci = kolik chce hráč zaplatit ze svého. Když se nezadá, vezme se rozumné
@@ -3693,9 +3717,14 @@ function installSheet(sp, areaId, modelKey, drz) {
     // Místo si nejdřív zabereme na serveru — na jednom místě smí stát jen jeden.
     b.disabled = true; b.textContent = 'Stavím…';
     var sml = S.leases[sp.id] || {};
-    apiJson('/spots/claim', { spot_id: sp.id, area_key: areaId, model: modelKey,
-      rent: e.rent, name: sp.name, lat: sp.lat, lon: sp.lon, pozemek: !!sml.pozemek,
-      doba_mesicu: sml.doba || 0, vypoved_mesicu: sml.vypoved || 1 }).then(function (r) {
+    var mam = mamPozemek(sp.id);
+    // Na vlastním pozemku zábor už existuje — jen se do něj dopíše stroj.
+    var volani = mam
+      ? apiJson('/spots/stavba', { spot_id: sp.id, model: modelKey })
+      : apiJson('/spots/claim', { spot_id: sp.id, area_key: areaId, model: modelKey,
+          rent: e.rent, name: sp.name, lat: sp.lat, lon: sp.lon, pozemek: !!sml.pozemek,
+          doba_mesicu: sml.doba || 0, vypoved_mesicu: sml.vypoved || 1 });
+    volani.then(function (r) {
       b.disabled = false; b.textContent = 'Postavit';
       if (!r.ok) {
         if (r.j.occupied) CLAIMS[sp.id] = r.j.occupied;
@@ -3703,8 +3732,16 @@ function installSheet(sp, areaId, modelKey, drz) {
         return toast(r.j.error || 'Místo je obsazené.', 'err');
       }
       CLAIMS[sp.id] = r.j.spot;
+      // Zem koupenou spolu se stavbou je potřeba zapsat do majetku — v investici
+      // místa je jen stroj a příprava plochy.
+      if (sml.pozemek && !mam) {
+        pozemky().push({ spotId: sp.id, areaId: areaId, name: sp.name, lat: sp.lat, lon: sp.lon,
+          m2: sml.m2 || pozemekM2(sp), cena: sml.cena || pozemekCena(sp), od: Date.now(), zastaveno: 1 });
+      } else if (mam) {
+        pozemky().forEach(function (z) { if (z.spotId === sp.id) z.zastaveno = 1; });
+      }
       doFinance(f, { druh: 'misto', spotId: sp.id,
-        popis: (sml.pozemek ? 'Pozemek a příprava — ' : 'Přípojky — ') + sp.name });
+        popis: (sml.pozemek ? 'Pozemek a příprava — ' : mam ? 'Příprava plochy — ' : 'Přípojky — ') + sp.name });
       pripojUverKeStroji(sp.id, sp.name);
       if (cetaZvladne(sp)) cetaPostavila(sp);
       // První stavba zakládá sídlo — ale ve městě, ne na adrese prádlomatu.
@@ -3758,10 +3795,53 @@ function pozemekZaM2(sp) {
   return Math.round(zaklad * lukrativ / 50) * 50;
 }
 function pozemekCena(sp) { return pozemekM2(sp) * pozemekZaM2(sp); }
+// Koupené pozemky. Zem je nemovitost: patří do majetku i prázdná a banka proti
+// ní půjčí stejně jako proti strojům — proto se počítá do zástavy.
+function pozemky() {
+  if (!Array.isArray(S.pozemky)) S.pozemky = [];
+  return S.pozemky;
+}
+function mamPozemek(spotId) {
+  return pozemky().some(function (z) { return z.spotId === spotId; });
+}
+// Do majetku patří všechna koupená zem, i ta pod stojícím prádlomatem —
+// v investici místa je jen stroj a příprava plochy, ne cena pozemku.
+function pozemkyHodnota() {
+  return pozemky().reduce(function (a, z) { return a + (z.cena || 0); }, 0);
+}
+function pozemkyPrazdne() {
+  return pozemky().filter(function (z) { return !z.zastaveno; });
+}
 // Vlastní pozemek pod prádlomatem — zjistí se z toho, co o místě ví server.
 function maPozemek(spotId) {
   var c = CLAIMS[spotId];
   return !!(c && c.pozemek);
+}
+// Koupě samotné země. Zábor na serveru vznikne hned, i když na něm zatím nic
+// nestojí — jinak by pozemek pod rukama koupil někdo jiný.
+function koupitPozemek(sp, areaId, btn) {
+  var cena = pozemekCena(sp);
+  var f = canFinance(cena, null, cena);
+  if (!f.ok) return toast(f.duvod || 'Na pozemek zatím nemáš.', 'err');
+  if (btn) { btn.disabled = true; btn.textContent = 'Kupuji…'; }
+  apiJson('/spots/claim', { spot_id: sp.id, area_key: areaId, model: '', rent: 0,
+    name: sp.name, lat: sp.lat, lon: sp.lon, pozemek: true }).then(function (r) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Koupit pozemek bez stroje'; }
+    if (!r.ok) {
+      if (r.j.occupied) CLAIMS[sp.id] = r.j.occupied;
+      drawMap(); closeSheet();
+      return toast(r.j.error || 'Místo je obsazené.', 'err');
+    }
+    CLAIMS[sp.id] = r.j.spot;
+    doFinance(f, { druh: 'pozemek', spotId: sp.id, popis: 'Pozemek — ' + sp.name });
+    pozemky().push({ spotId: sp.id, areaId: areaId, name: sp.name, lat: sp.lat, lon: sp.lon,
+      m2: pozemekM2(sp), cena: cena, od: Date.now() });
+    save(); paint(); drawMap(); closeSheet(); syncState(true);
+    toast('Pozemek je tvůj. Postavit na něm můžeš, až budeš chtít.', 'ok');
+  }).catch(function () {
+    if (btn) { btn.disabled = false; btn.textContent = 'Koupit pozemek bez stroje'; }
+    toast('Server neodpovídá.', 'err');
+  });
 }
 function pozemekKarta(sp) {
   var m2 = pozemekM2(sp), zaM2 = pozemekZaM2(sp);

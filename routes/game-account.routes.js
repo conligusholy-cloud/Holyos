@@ -218,6 +218,12 @@ function cisteJmeni(st) {
   });
   majetek += (Array.isArray(st.pobocky) ? st.pobocky.length : 0) * POBOCKA_CENA;
   if (st.ceta && st.ceta.od) majetek += CETA_CENA;
+  // Koupené pozemky jsou nemovitost a patří do majetku vždy — i prázdné, i ty
+  // pod stojícím prádlomatem. V eco.invest je jen stroj a příprava plochy.
+  // Musí sedět s pozemkyHodnota() v public/compounder/game/game.js.
+  (Array.isArray(st.pozemky) ? st.pozemky : []).forEach((z) => {
+    majetek += (z && Number(z.cena)) || 0;
+  });
   return Math.round(majetek + (Number(st.cash) || 0) - (Number(st.loan) || 0));
 }
 
@@ -1012,7 +1018,8 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
     const b = req.body || {};
     const spot = s(b.spot_id, 120), area = s(b.area_key, 80), model = s(b.model, 10);
     const rent = Math.max(0, Math.round(Number(b.rent) || 0));
-    if (!spot || !area || !model) return res.status(400).json({ error: 'Chybí místo.' });
+    // Pozemek se dá koupit i bez stroje — leží a čeká, až na něj hráč něco postaví.
+    if (!spot || !area || (!model && !b.pozemek)) return res.status(400).json({ error: 'Chybí místo.' });
     const taken = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
     if (taken) {
       return res.status(409).json({
@@ -1082,6 +1089,21 @@ router.post('/spots/bid', requirePlayer, async (req, res, next) => {
     // Datum neposíláme — z něj by šla vyčíst délka výpovědní doby.
     res.json({ ok: true, won: true, ceka: true,
       spot: claimPub(upd, req.player.id, await firmyMapa()), lost_by: cur.nick });
+  } catch (e) { next(e); }
+});
+
+// POST /spots/stavba { spot_id, model } — na koupený pozemek se staví až teď.
+// Zábor už existuje, jen na něm dosud nic nestálo.
+router.post('/spots/stavba', requirePlayer, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const spot = s(b.spot_id, 120), model = s(b.model, 10);
+    if (!spot || !model) return res.status(400).json({ error: 'Chybí stroj.' });
+    const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
+    if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: 'Tohle místo ti nepatří.' });
+    if (cur.model) return res.status(409).json({ error: 'Tady už něco stojí.' });
+    const upd = await prisma.gameSpotClaim.update({ where: { spot_id: spot }, data: { model } });
+    res.json({ ok: true, spot: claimPub(upd, req.player.id, await firmyMapa()) });
   } catch (e) { next(e); }
 });
 
