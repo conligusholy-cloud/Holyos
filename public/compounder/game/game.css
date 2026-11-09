@@ -707,6 +707,7 @@ button.kv:active{background:rgba(124,92,255,.12)}
 /* Vozovka a parkování vypadají jako doopravdy: černý asfalt a bílé čáry. */
 .plan-cara{stroke:#e9eefc;stroke-width:.17;stroke-linecap:butt;stroke-dasharray:1.1 .9;
   opacity:.8;pointer-events:none}
+.plan-kraj{stroke:#e9eefc;stroke-width:.14;opacity:.45;pointer-events:none}
 .plan-stani-p{fill:#15181f;stroke:#e9eefc;stroke-width:.22;pointer-events:none}
 .plan-stani-p.chyba,.plan-stroj.chyba{stroke:#ff5d6c;stroke-dasharray:1.2 .8}
 /* Vzorky v nářadí: hráč vidí barvu dřív, než klepne. */
