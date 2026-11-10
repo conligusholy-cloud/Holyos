@@ -8176,6 +8176,12 @@ function startGame() {
 }
 
 ev('game_open');
+// Dokud má hráč hru otevřenou, posíláme každých pět minut tichou stopu. Jen
+// z toho se dá poznat, kolik lidí je na hře právě teď — otevření stránky samo
+// o sobě neřekne, jestli u ní někdo ještě sedí.
+setInterval(function () {
+  if (!document.hidden) ev('game_zije', true);
+}, 300000);
 nastavTitulek();
 loadMachinePhotos();
 

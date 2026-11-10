@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Milionář (hra) | HOLYOS</title>
+  <title>Laundromat Tycoon (hra) | HOLYOS</title>
   <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
@@ -38,6 +38,8 @@
     .st.pending { background:rgba(245,158,11,.18); color:#f59e0b; }
     .st.failed { background:rgba(239,68,68,.18); color:#f87171; }
     .note { color:var(--text2); font-size:12px; }
+    /* Provoz: dvě tabulky vedle sebe, na užším okně pod sebou. */
+    .pv-sloupce { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
     .ok { color:#22c55e; }
     .fn { display:flex; flex-direction:column; gap:6px; max-width:620px; }
     .fn-row { display:flex; align-items:center; gap:10px; }
@@ -65,7 +67,7 @@
   <div class="main-wrapper">
     <div class="page-header">
       <div>
-        <h1>🎮 Milionář — administrace hry</h1>
+        <h1>🎮 Laundromat Tycoon — administrace hry</h1>
         <div class="sub">Hráči, objednávky, ceník a statistiky hry na pradlomaty.info/game.</div>
       </div>
       <div class="toolbar" style="margin-left:auto">
@@ -95,6 +97,15 @@
         <div class="fn" id="st-funnel"></div>
         <h3 style="font-size:14px;margin:22px 0 10px">Den po dni</h3>
         <div class="chart" id="st-chart"></div>
+        <h3 style="font-size:14px;margin:26px 0 10px">Provoz právě teď <span class="note" id="pv-cas"></span></h3>
+        <div class="kpis" id="pv-kpis"></div>
+        <div class="chart" id="pv-chart" style="margin-top:14px"></div>
+        <div class="pv-sloupce">
+          <div><h3 style="font-size:14px;margin:18px 0 8px">Hráči u hry</h3>
+            <div class="tbl-wrap"><table class="data-table" id="pv-online"></table></div></div>
+          <div><h3 style="font-size:14px;margin:18px 0 8px">Poslední dění</h3>
+            <div class="tbl-wrap"><table class="data-table" id="pv-last"></table></div></div>
+        </div>
       </div>
 
       <div class="module-panel" id="panel-players">
@@ -153,7 +164,14 @@
 
     // ── Statistiky ──────────────────────────────────────────────────────────
     var DNY = 30;
+    // Provoz se obnovuje sám, dokud je karta Statistiky otevřená — jinak by
+    // „právě teď" ukazovalo stav z chvíle, kdy se stránka načetla.
+    setInterval(function () {
+      var panel = document.getElementById('panel-stats');
+      if (panel && panel.classList.contains('active') && !document.hidden) loadProvoz();
+    }, 30000);
     function loadStats() {
+      loadProvoz();
       get('/stats?dny=' + DNY).then(function (j) {
         var s = j.souhrn;
         document.getElementById('st-kpis').innerHTML =
@@ -173,6 +191,68 @@
       }).catch(function (e) { chyba('st-kpis', e); });
     }
     function kpi(v, l) { return '<div class="kpi"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
+
+    // ── Provoz: kolik lidí je na hře teď ────────────────────────────────────
+    var UDALOST_NAZEV = { game_open: 'Otevřel hru', game_zije: 'Hraje', game_quiz: 'Dotazník',
+      game_register: 'Založil účet', game_scout: 'Prozkoumal město', game_build: 'Postavil prádlomat',
+      game_paid: 'Zaplatil' };
+    function nazevUdalosti(e) { return UDALOST_NAZEV[e] || e.replace('game_', ''); }
+    function pred(min) {
+      if (min < 1) return 'teď';
+      if (min < 60) return 'před ' + min + ' min';
+      var h = Math.round(min / 60);
+      return 'před ' + h + ' h';
+    }
+    function loadProvoz() {
+      get('/stats/provoz').then(function (j) {
+        document.getElementById('pv-cas').textContent = '(k ' + new Date(j.ted).toLocaleTimeString('cs-CZ') + ')';
+        document.getElementById('pv-kpis').innerHTML =
+          kpi(cz(j.ted5), 'Na hře právě teď') +
+          kpi(cz(j.hracu_online), 'Přihlášených hráčů hraje') +
+          kpi(cz(j.hodina), 'Za poslední hodinu') +
+          kpi(cz(j.den), 'Za 24 hodin');
+        document.getElementById('pv-chart').innerHTML = grafHodin(j.hodiny);
+        document.getElementById('pv-online').innerHTML =
+          '<thead><tr><th>Hráč</th><th>Firma</th><th class="num">Naposled</th></tr></thead><tbody>'
+          + (j.online.length ? j.online.map(function (h) {
+              return '<tr><td><b>' + esc(h.nick) + '</b></td><td>' + esc(h.firma || '') + '</td>'
+                + '<td class="num">' + pred(h.pred) + '</td></tr>';
+            }).join('') : '<tr><td colspan="3" class="note">Nikdo není u hry.</td></tr>')
+          + '</tbody>';
+        document.getElementById('pv-last').innerHTML =
+          '<thead><tr><th>Čas</th><th>Co se stalo</th><th>Návštěva</th></tr></thead><tbody>'
+          + (j.posledni.length ? j.posledni.map(function (e) {
+              return '<tr><td>' + new Date(e.kdy).toLocaleTimeString('cs-CZ') + '</td>'
+                + '<td>' + esc(nazevUdalosti(e.event)) + '</td>'
+                + '<td class="note">' + esc(e.sid) + '</td></tr>';
+            }).join('') : '<tr><td colspan="3" class="note">Zatím nic.</td></tr>')
+          + '</tbody>';
+      }).catch(function (e) { chyba('pv-kpis', e); });
+    }
+    // Sloupce po hodinách: kolik různých návštěv a kolik akcí.
+    function grafHodin(hodiny) {
+      if (!hodiny || !hodiny.length) return '<p class="note">Zatím žádná data.</p>';
+      var W = 640, H = 150, pad = 24;
+      var max = Math.max.apply(null, hodiny.map(function (h) { return Math.max(h.navstev, h.akci); }).concat([1]));
+      var sw = (W - pad * 2) / hodiny.length;
+      var bars = hodiny.map(function (h, i) {
+        var x = pad + i * sw;
+        var hn = Math.round(h.navstev / max * (H - 46));
+        var ha = Math.round(h.akci / max * (H - 46));
+        return '<rect x="' + (x + 1) + '" y="' + (H - 20 - hn) + '" width="' + (sw / 2 - 2) + '" height="' + hn
+          + '" fill="#4fd1ff" opacity=".85"><title>' + h.hodina + ':00 — ' + h.navstev + ' návštěv</title></rect>'
+          + '<rect x="' + (x + sw / 2) + '" y="' + (H - 20 - ha) + '" width="' + (sw / 2 - 2) + '" height="' + ha
+          + '" fill="#7c5cff"><title>' + h.hodina + ':00 — ' + h.akci + ' akcí</title></rect>';
+      }).join('');
+      var popisky = hodiny.map(function (h, i) {
+        if (i % 3) return '';
+        return '<text x="' + (pad + i * sw + sw / 2) + '" y="' + (H - 5) + '" fill="#8ea2c2" font-size="9" text-anchor="middle">'
+          + h.hodina + '</text>';
+      }).join('');
+      return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:' + H + 'px">' + bars + popisky + '</svg>'
+        + '<p class="note" style="margin-top:8px"><span style="color:#4fd1ff">■</span> návštěvy &nbsp; '
+        + '<span style="color:#7c5cff">■</span> akce ve hře &nbsp; (hodiny za poslední den)</p>';
+    }
     // Jednoduchý sloupcový graf v SVG — návštěvy, registrace a tržba den po dni.
     function graf(rady) {
       if (!rady.length) return '<p class="note">Zatím žádná data.</p>';

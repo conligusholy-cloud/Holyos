@@ -465,4 +465,49 @@ router.get('/stats', api(async (req, res) => {
   });
 }));
 
+// GET /stats/provoz → kdo je na hře právě teď. Návštěvy se poznají podle stop,
+// které hra posílá (otevření a pak každých pár minut, dokud ji má hráč
+// otevřenou), hráči podle toho, kdy si naposled uložili stav.
+router.get('/stats/provoz', api(async (req, res) => {
+  const ted = Date.now();
+  const od24 = new Date(ted - 24 * 3600e3);
+  const [udalosti, hraci, posledni] = await Promise.all([
+    prisma.compounderEvent.findMany({
+      where: { created_at: { gte: od24 }, event: { startsWith: 'game_' } },
+      select: { created_at: true, event: true, sid: true } }),
+    prisma.gamePlayer.findMany({
+      where: { state_at: { gte: new Date(ted - 60 * 60e3) }, disabled: false },
+      select: { id: true, nick: true, company: true, state_at: true } }),
+    prisma.compounderEvent.findMany({
+      where: { event: { startsWith: 'game_' } },
+      orderBy: { created_at: 'desc' }, take: 30,
+      select: { created_at: true, event: true, sid: true } }),
+  ]);
+  const cas = (e) => new Date(e.created_at).getTime();
+  const unikat = (ms) => new Set(udalosti.filter((e) => ted - cas(e) <= ms).map((e) => e.sid)).size;
+  // Po hodinách za posledních 24 hodin — ať je vidět, kdy se hraje.
+  const hodiny = [];
+  for (let i = 23; i >= 0; i--) {
+    const konec = ted - i * 3600e3, zacatek = konec - 3600e3;
+    const v = udalosti.filter((e) => cas(e) > zacatek && cas(e) <= konec);
+    hodiny.push({ hodina: new Date(konec).getHours(),
+      navstev: new Set(v.map((e) => e.sid)).size,
+      akci: v.filter((e) => e.event !== 'game_zije').length });
+  }
+  const podleUdalosti = {};
+  udalosti.forEach((e) => { podleUdalosti[e.event] = (podleUdalosti[e.event] || 0) + 1; });
+  res.json({ ok: true, ted: new Date().toISOString(),
+    ted5: unikat(6 * 60e3), hodina: unikat(3600e3), den: unikat(24 * 3600e3),
+    hracu_online: hraci.filter((h) => ted - new Date(h.state_at).getTime() <= 10 * 60e3).length,
+    online: hraci
+      .sort((a, b) => new Date(b.state_at).getTime() - new Date(a.state_at).getTime())
+      .slice(0, 25)
+      .map((h) => ({ id: h.id, nick: h.nick, firma: h.company,
+        pred: Math.max(0, Math.round((ted - new Date(h.state_at).getTime()) / 60000)) })),
+    hodiny,
+    udalosti: podleUdalosti,
+    posledni: posledni.map((e) => ({ kdy: e.created_at, event: e.event, sid: String(e.sid || '').slice(0, 6) })),
+  });
+}));
+
 module.exports = router;
