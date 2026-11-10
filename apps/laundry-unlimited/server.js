@@ -82,58 +82,85 @@ function logoHtml(h) {
 }
 
 // ── Šablona stránek ────────────────────────────────────────────────────────
-const CSS = `
-:root{--bg:#050a14;--bg2:#0a1424;--card:#0d1b30;--line:#1b2d4a;--text:#e8eef7;--mut:#9fb0c6;--cy:#00e5ff;--bl:#1e7cff;--or:#d97b34;--gr:#1f9d8a}
+// Veřejný web: světlý „papírový“ vzhled s fotkami reálných prádlomatů (serif nadpisy, tenké linky, plochá tlačítka).
+// Administrace má vlastní tmavé CSS (ADMIN_CSS) níž.
+const ADMIN_CSS = `
+:root{--bg:#050a14;--bg2:#0a1424;--card:#0d1b30;--line:#1b2d4a;--text:#e8eef7;--mut:#9fb0c6;--cy:#00e5ff;--bl:#1e7cff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 Inter,"Segoe UI",system-ui,-apple-system,Arial,sans-serif}
+a{color:var(--cy)}h2{font-size:24px;margin:0;font-weight:700}
+.btn{display:inline-block;background:linear-gradient(135deg,var(--bl),var(--cy));color:#03101f;font-weight:800;border:0;border-radius:10px;padding:11px 20px;font-size:15px;text-decoration:none;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}.btn.sm{padding:7px 13px;font-size:13px;border-radius:9px}
+input,select,textarea{width:100%;background:#07111f;border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px 12px;font:inherit}
+`;
+const SITE_CSS = `
+:root{--paper:#f2f0ea;--paper2:#e9e6dd;--white:#fbfaf7;--ink:#1b1e23;--gr:#2a2d33;--mut:#5d636d;--rule:#d5d1c6;--acc:#c94616;--blue:#1b7fc4;--serif:"Iowan Old Style","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif}
 *{box-sizing:border-box}html{scroll-behavior:smooth}
-body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,rgba(30,124,255,.18),transparent 60%),radial-gradient(900px 500px at -10% 20%,rgba(0,229,255,.1),transparent 55%),var(--bg);color:var(--text);font:16px/1.6 Inter,"Segoe UI",system-ui,-apple-system,Arial,sans-serif}
-a{color:var(--cy)}
-.wrap{max-width:1120px;margin:0 auto;padding:0 22px}
-header.top{position:sticky;top:0;z-index:20;background:rgba(5,10,20,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
-header.top .wrap{display:flex;align-items:center;gap:18px;height:68px}
-header.top nav{margin-left:auto;display:flex;align-items:center;gap:20px;font-size:14px}
-header.top nav a{color:var(--mut);text-decoration:none}header.top nav a:hover{color:var(--text)}
-.lang{display:flex;gap:2px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.lang a{padding:4px 9px;font-size:12px;font-weight:700;color:var(--mut)!important}.lang a.on{background:var(--bl);color:#fff!important}
-.btn{display:inline-block;background:linear-gradient(135deg,var(--bl),var(--cy));color:#03101f;font-weight:800;border:0;border-radius:12px;padding:13px 24px;font-size:16px;text-decoration:none;cursor:pointer;box-shadow:0 10px 30px rgba(0,229,255,.2)}
-.btn:hover{filter:brightness(1.08)}.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line);box-shadow:none}
-.btn.sm{padding:8px 14px;font-size:13px;border-radius:9px}
-.hero{padding:72px 0 56px}.hero .wrap{display:grid;grid-template-columns:1.25fr 1fr;gap:48px;align-items:center}.hero .side{display:flex;flex-direction:column;gap:14px}.hero .side .stat{font-size:16px;color:var(--text);padding:20px 22px;border-left:3px solid var(--cy);background:linear-gradient(90deg,rgba(0,229,255,.08),rgba(13,27,48,.6))}.hero .side .stat:nth-child(2){border-left-color:var(--bl)}.hero .side .stat:nth-child(3){border-left-color:#7c5cff}
-.kick{display:inline-block;color:var(--cy);font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin-bottom:14px}
-h1{font-size:clamp(32px,4.6vw,52px);line-height:1.12;margin:0 0 18px;font-weight:700;letter-spacing:0}
-h2{font-size:clamp(24px,3vw,34px);margin:0 0 12px;font-weight:700;letter-spacing:0}
-h3{margin:0 0 6px;font-size:18px}
-.lead{font-size:18px;color:var(--mut);max-width:720px;margin:0 0 28px}
-.cta{display:flex;gap:12px;flex-wrap:wrap}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:48px}
-.stat{border:1px solid var(--line);background:rgba(13,27,48,.6);border-radius:16px;padding:18px 20px;color:var(--mut);font-size:15px}
-section{padding:60px 0}section.alt{background:rgba(10,20,36,.55);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-.sub{color:var(--mut);max-width:780px;margin:0 0 30px}
-.pyr{display:flex;flex-direction:column;gap:14px;align-items:center}
-.pyr .l1{width:min(620px,100%);background:linear-gradient(160deg,#1c3a5a,#102640);border:1px solid #2b5079;border-radius:18px;padding:20px;text-align:center}
-.pyr .l2{width:100%;background:linear-gradient(160deg,#245f8c,#1a4a72);border:1px solid #3a78a8;border-radius:18px;padding:20px 26px;text-align:center}
-.pyr b{display:block;font-size:20px;margin-bottom:4px}.pyr span{color:#c9d9ea;font-size:15px}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:18px;width:100%}
-.opt{background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden}
-.opt .h{padding:14px 20px;font-weight:800;color:#fff;font-size:17px}.opt.a .h{background:var(--or)}.opt.b .h{background:var(--gr)}
-.opt .p{padding:12px 20px 0;color:var(--mut);font-size:14px;font-weight:700}
-.opt ul{margin:10px 0 0;padding:0 20px 18px 38px;color:#cfdbea}.opt li{margin:7px 0}
-.market{margin-top:18px;width:100%;border:1px solid #3f3470;background:rgba(124,92,255,.1);border-radius:16px;padding:16px 22px}.market b{color:#b7a6ff;letter-spacing:.06em;text-transform:uppercase;margin-right:10px}
-.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px}.card p{margin:0;color:var(--mut);font-size:15px}
-.num{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--bl),var(--cy));color:#03101f;font-weight:800;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
-form.box{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px;max-width:720px}
-label{display:block;font-size:14px;font-weight:700;margin:14px 0 6px;color:#cfdbea}
-input,select,textarea{width:100%;background:#07111f;border:1px solid var(--line);color:var(--text);border-radius:10px;padding:12px 14px;font:inherit}
-input:focus,select:focus,textarea:focus{outline:2px solid var(--bl);border-color:transparent}
-textarea{min-height:110px;resize:vertical}
-.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.chk{display:flex;gap:10px;align-items:flex-start;font-weight:400;color:var(--mut);font-size:14px;margin:18px 0 6px}.chk input{width:auto;margin-top:5px}
-.opts{display:flex;flex-wrap:wrap;gap:8px}.opts label{margin:0;border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-weight:500;cursor:pointer;display:flex;gap:8px;align-items:center;background:#07111f}
-.opts input{width:auto}
-.err{color:#ff8a8a;margin:10px 0;font-size:14px}
+body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.7 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px}
+.bar{background:var(--gr);color:#fff;position:sticky;top:0;z-index:20}
+.bar .wrap{display:flex;align-items:center;gap:26px;height:74px}
+.bar nav{margin-left:auto;display:flex;align-items:center;gap:26px;font-size:14px}
+.bar nav a{color:#c9ccd2;text-decoration:none}.bar nav a:hover{color:#fff}
+.lang{display:flex;gap:12px;font-size:12px;letter-spacing:.08em}.lang a{opacity:.55;text-decoration:none}.lang a.on{opacity:1;border-bottom:2px solid var(--acc);padding-bottom:2px}
+.btn{display:inline-block;background:var(--acc);color:#fff;font:600 15px/1 "Segoe UI",system-ui,sans-serif;letter-spacing:.02em;border:0;padding:17px 28px;text-decoration:none;cursor:pointer;border-radius:0}
+.btn:hover{background:#a83a12}.btn.dark{background:var(--ink)}.btn.dark:hover{background:#000}
+.btn.line{background:transparent;color:var(--ink);border:1.5px solid var(--ink)}.btn.line:hover{background:var(--ink);color:#fff}
+.bar .btn{padding:11px 18px;font-size:13px}
+.label{font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--acc)}
+h1,h2,h3{font-family:var(--serif);font-weight:400;color:var(--ink);margin:0}
+h1{font-size:clamp(40px,5.2vw,72px);line-height:1.05;letter-spacing:-.01em;margin:14px 0 26px}
+h2{font-size:clamp(30px,3.6vw,46px);line-height:1.12;margin:10px 0 18px}
+h3{font-size:22px;line-height:1.25;margin-bottom:8px}
+p{margin:0 0 14px}
+.lead{font-size:20px;line-height:1.6;color:#3a3f48;max-width:560px;margin-bottom:34px}
+.cta{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.hero{padding:96px 0 0}
+.hero h1{max-width:980px;font-size:clamp(42px,6vw,84px)}.hero .lead{max-width:680px}
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:40px;margin-top:72px;padding:26px 0 8px;border-top:1px solid var(--ink)}
+.facts div{font-family:var(--serif);font-size:21px;line-height:1.35}
+section{padding:96px 0}
+section.tint{background:var(--paper2)}section.white{background:var(--white)}
+.head{display:grid;grid-template-columns:5fr 7fr;gap:64px;margin-bottom:56px;align-items:end}.head p{color:#3a3f48;margin:0}
+.brands{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:6px}
+.brands img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}
+.tiers{border-top:1px solid var(--ink)}
+.tier{display:grid;grid-template-columns:5fr 7fr;gap:64px;padding:22px 0;border-bottom:1px solid var(--rule)}
+.tier h3{margin:0}.tier p{margin:0;color:#3a3f48}
+.ab{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:56px;border-top:1px solid var(--ink)}
+.ab>div{padding:34px 40px 12px 0}.ab>div+div{padding:34px 0 12px 40px;border-left:1px solid var(--rule)}
+.ab .big{font-family:var(--serif);font-size:84px;line-height:.9;color:var(--acc);display:block;margin-bottom:14px}
+.ab small{display:block;font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin:6px 0 16px}
+.ab ul{list-style:none;margin:0;padding:0}.ab li{padding:12px 0;border-top:1px solid var(--rule);color:#2e333b}
+.market{margin-top:40px;background:var(--gr);color:#e9e7e1;padding:30px 36px;display:grid;grid-template-columns:auto 1fr;gap:36px;align-items:center}
+.market b{font-family:var(--serif);font-weight:400;font-size:26px;color:#fff}.market p{margin:0;color:#c9ccd2}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--ink)}
+.grid.g4{grid-template-columns:repeat(4,1fr)}
+.cell{padding:30px 32px 34px 0;border-bottom:1px solid var(--rule)}.cell+.cell{padding-left:32px;border-left:1px solid var(--rule)}
+.grid .cell:nth-child(3n+1){padding-left:0;border-left:0}.grid.g4 .cell:nth-child(3n+1){padding-left:32px;border-left:1px solid var(--rule)}.grid.g4 .cell:nth-child(4n+1){padding-left:0;border-left:0}
+.cell .n{font-family:var(--serif);color:var(--acc);font-size:15px;display:block;margin-bottom:10px;letter-spacing:.04em}
+.cell p{margin:0;color:#3a3f48;font-size:16px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:48px}
+.steps .n{font-family:var(--serif);font-size:96px;line-height:1;color:var(--acc);display:block;margin-bottom:6px}
+.steps p{color:#3a3f48}
+.band{background:var(--gr);color:#fff;padding:84px 0}.band h2{color:#fff;margin:0 0 26px;max-width:760px}.band .btn{background:var(--acc)}
+form.box{background:var(--white);border:1px solid var(--rule);padding:38px 40px;max-width:760px}
+label{display:block;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin:22px 0 8px;color:#3a3f48}
+input,select,textarea{width:100%;background:#fff;border:1px solid #bdb8ab;color:var(--ink);padding:14px 15px;font:inherit;border-radius:0}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--ink);outline-offset:-1px;border-color:var(--ink)}
+textarea{min-height:120px;resize:vertical}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.chk{display:flex;gap:12px;align-items:flex-start;font-weight:400;text-transform:none;letter-spacing:0;color:#3a3f48;font-size:15px;margin:26px 0 6px}.chk input{width:auto;margin-top:6px}
+.opts{display:flex;flex-wrap:wrap;gap:10px}.opts label{margin:0;border:1px solid #bdb8ab;padding:11px 16px;font-weight:500;text-transform:none;letter-spacing:0;font-size:15px;cursor:pointer;display:flex;gap:10px;align-items:center;background:#fff;color:var(--ink)}
+.opts label:has(input:checked){border-color:var(--ink);background:var(--ink);color:#fff}.opts input{width:auto;accent-color:var(--acc)}
+.err{background:#f9e3da;border-left:4px solid var(--acc);padding:12px 16px;margin:0 0 6px;font-size:15px}
 .hp{position:absolute;left:-9999px;opacity:0;height:0;overflow:hidden}
-footer{border-top:1px solid var(--line);padding:30px 0;color:var(--mut);font-size:14px}
-@media(max-width:860px){.hero .wrap{grid-template-columns:1fr;gap:28px}.two,.grid3,.grid4,.stats,.row2{grid-template-columns:1fr}.hero{padding:48px 0 30px}header.top nav a.hide{display:none}}
+.page{padding:84px 0 110px}.page .sub{color:#3a3f48;max-width:640px;margin:0 0 38px;font-size:19px}
+footer{background:var(--ink);color:#9ea3ac;padding:40px 0;font-size:14px}footer b{color:#fff;font-weight:600}
+@media(max-width:900px){.head,.tier,.ab,.market,.steps,.facts,.brands{grid-template-columns:1fr}.hero{padding-top:44px}.facts{gap:18px;margin-top:44px}
+.ab>div,.ab>div+div{padding:26px 0 10px;border-left:0}.ab>div+div{border-top:1px solid var(--ink)}.grid,.grid.g4{grid-template-columns:1fr}.grid .cell,.grid .cell+.cell,.grid.g4 .cell:nth-child(n){padding:24px 0;border-left:0}
+section{padding:60px 0}.head{gap:14px;margin-bottom:30px}.tier{gap:6px}.market{gap:10px}.bar nav a.hide{display:none}.bar .wrap{gap:14px;height:66px}.row2{grid-template-columns:1fr}form.box{padding:26px 20px}.steps{gap:26px}.page{padding:48px 0 70px}}
 `;
 
 function page({ lang, title, desc, body, canonicalPath, noindex }) {
@@ -143,59 +170,65 @@ function page({ lang, title, desc, body, canonicalPath, noindex }) {
   const base = lang === 'en' ? '' : '/' + lang;
   return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title || t.title)}</title><meta name="description" content="${esc(desc || t.desc)}">
-${noindex ? '<meta name="robots" content="noindex">' : alts}<meta name="theme-color" content="#050a14">
-<meta property="og:title" content="${esc(title || t.title)}"><meta property="og:description" content="${esc(desc || t.desc)}"><meta property="og:type" content="website">
-<style>${CSS}</style></head><body>
-<header class="top"><div class="wrap"><a href="${base || '/'}" style="display:block">${logoHtml(46)}</a>
+${noindex ? '<meta name="robots" content="noindex">' : alts}<meta name="theme-color" content="#2a2d33">
+<meta property="og:title" content="${esc(title || t.title)}"><meta property="og:description" content="${esc(desc || t.desc)}"><meta property="og:type" content="website"><meta property="og:image" content="${PUBLIC_URL}/img/ireland.webp">
+<style>${SITE_CSS}</style></head><body>
+<div class="bar"><div class="wrap"><a href="${base || '/'}" style="display:block">${logoHtml(44)}</a>
 <nav><a class="hide" href="${base}/#model">${esc(t.nav_model)}</a><a class="hide" href="${base}/#offer">${esc(t.nav_offer)}</a><a class="hide" href="${base}/#who">${esc(t.nav_who)}</a>
-<div class="lang">${sw}</div><a class="btn sm" href="${base}/apply" style="color:#03101f">${esc(t.nav_apply)}</a></nav></div></header>
+<div class="lang">${sw}</div><a class="btn" href="${base}/apply" style="color:#fff">${esc(t.nav_apply)}</a></nav></div></div>
 ${body}
-<footer><div class="wrap">${esc(t.foot)}<br>${esc(t.gdpr)}</div></footer></body></html>`;
+<footer><div class="wrap"><b>Laundry Unlimited</b> — ${esc(t.foot.replace(/^Laundry Unlimited\s*·\s*/, ''))}<br>${esc(t.gdpr)}</div></footer></body></html>`;
 }
 
 function landing(lang) {
   const t = T[lang]; const base = lang === 'en' ? '' : '/' + lang;
   const li = (a) => a.map((x) => `<li>${esc(x)}</li>`).join('');
+  const nn = (i) => String(i + 1).padStart(2, '0');
   const body = `
-<div class="hero"><div class="wrap"><div><span class="kick">${esc(t.hero_kicker)}</span><h1>${esc(t.hero_h)}</h1><p class="lead">${esc(t.hero_p)}</p>
-<div class="cta"><a class="btn" href="${base}/apply">${esc(t.hero_cta)}</a><a class="btn ghost" href="#model">${esc(t.hero_cta2)}</a></div></div>
-<div class="side"><div class="stat">${esc(t.stat1)}</div><div class="stat">${esc(t.stat2)}</div><div class="stat">${esc(t.stat3)}</div></div></div></div>
-<section id="model" class="alt"><div class="wrap"><h2>${esc(t.model_h)}</h2><p class="sub">${esc(t.model_p)}</p>
-<div class="pyr"><div class="l1"><b>${esc(t.top_h)}</b><span>${esc(t.top_p)}</span></div>
-<div class="l2"><b>${esc(t.mid_h)}</b><span>${esc(t.mid_p)}</span></div>
-<div class="two"><div class="opt a"><div class="h">${esc(t.a_h)}</div><div class="p">${esc(t.a_p)}</div><ul>${li(t.a_li)}</ul></div>
-<div class="opt b"><div class="h">${esc(t.b_h)}</div><div class="p">${esc(t.b_p)}</div><ul>${li(t.b_li)}</ul></div></div>
-<div class="market"><b>${esc(t.market_h)}</b>${esc(t.market_p)}</div></div></div></section>
-<section id="offer"><div class="wrap"><h2>${esc(t.offer_h)}</h2><div class="grid3" style="margin-top:22px">${t.offer.map((o) => `<div class="card"><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div>`).join('')}</div></div></section>
-<section id="who" class="alt"><div class="wrap"><h2>${esc(t.who_h)}</h2><div class="grid4" style="margin-top:22px">${t.who.map((o) => `<div class="card"><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div>`).join('')}</div></div></section>
-<section><div class="wrap"><h2>${esc(t.steps_h)}</h2><div class="grid3" style="margin-top:22px">${t.steps.map((o, i) => `<div class="card"><div class="num">${i + 1}</div><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div>`).join('')}</div>
-<div style="margin-top:34px"><a class="btn" href="${base}/apply">${esc(t.hero_cta)}</a></div></div></section>`;
+<div class="hero"><div class="wrap"><div><span class="label">${esc(t.hero_kicker)}</span><h1>${esc(t.hero_h)}</h1><p class="lead">${esc(t.hero_p)}</p>
+<div class="cta"><a class="btn" href="${base}/apply">${esc(t.hero_cta)} &rarr;</a><a class="btn line" href="#model">${esc(t.hero_cta2)}</a></div></div>
+</div>
+<div class="wrap"><div class="facts"><div>${esc(t.stat1)}</div><div>${esc(t.stat2)}</div><div>${esc(t.stat3)}</div></div></div></div>
+<section><div class="wrap"><div class="head"><div><span class="label">${esc(t.brands_h)}</span><h2>${esc(t.brands_h)}</h2></div><p>${esc(t.brands_p)}</p></div>
+<div class="brands"><img src="/img/orlen.webp" alt="" loading="lazy" width="1200" height="900"><img src="/img/blue.webp" alt="" loading="lazy" width="900" height="1200"><img src="/img/ireland.webp" alt="" loading="lazy" width="1200" height="900"></div></div></section>
+<section id="model" class="white"><div class="wrap"><div class="head"><div><span class="label">${esc(t.nav_model)}</span><h2>${esc(t.model_h)}</h2></div><p>${esc(t.model_p)}</p></div>
+<div class="tiers"><div class="tier"><h3>${esc(t.top_h)}</h3><p>${esc(t.top_p)}</p></div><div class="tier"><h3>${esc(t.mid_h)}</h3><p>${esc(t.mid_p)}</p></div></div>
+<div class="ab"><div><span class="big">A</span><h3>${esc(t.a_h.replace(/^A\s+/, ''))}</h3><small>${esc(t.a_p)}</small><ul>${li(t.a_li)}</ul></div>
+<div><span class="big">B</span><h3>${esc(t.b_h.replace(/^B\s+/, ''))}</h3><small>${esc(t.b_p)}</small><ul>${li(t.b_li)}</ul></div></div>
+<div class="market"><b>${esc(t.market_h)}</b><p>${esc(t.market_p)}</p></div></div></section>
+<section id="offer"><div class="wrap"><div class="head"><div><span class="label">${esc(t.nav_offer)}</span><h2>${esc(t.offer_h)}</h2></div><p></p></div>
+<div class="grid">${t.offer.map((o, i) => `<div class="cell"><span class="n">${nn(i)}</span><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div>`).join('')}</div></div></section>
+<section id="who" class="tint"><div class="wrap"><div class="head"><div><span class="label">${esc(t.nav_who)}</span><h2>${esc(t.who_h)}</h2></div><p></p></div>
+<div class="grid g4">${t.who.map((o, i) => `<div class="cell"><span class="n">${nn(i)}</span><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div>`).join('')}</div></div></section>
+<section><div class="wrap"><div class="head"><div><span class="label">${esc(t.steps_h)}</span><h2>${esc(t.steps_h)}</h2></div><p></p></div>
+<div class="steps">${t.steps.map((o, i) => `<div><span class="n">${i + 1}</span><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div>`).join('')}</div></div></section>
+<div class="band"><div class="wrap"><h2>${esc(t.cta_h)}</h2><a class="btn" href="${base}/apply">${esc(t.hero_cta)} &rarr;</a></div></div>`;
   return page({ lang, body, canonicalPath: '/' });
 }
 
 function applyPage(lang, err, v) {
   const t = T[lang]; const base = lang === 'en' ? '' : '/' + lang; v = v || {};
-  const body = `<section><div class="wrap"><h2>${esc(t.form_h)}</h2><p class="sub">${esc(t.form_p)}</p>
+  const body = `<div class="page"><div class="wrap"><span class="label">${esc(t.nav_apply)}</span><h2>${esc(t.form_h)}</h2><p class="sub">${esc(t.form_p)}</p>
 <form class="box" method="post" action="${base}/apply" id="f">${err ? `<div class="err">${esc(err)}</div>` : ''}
 <div class="hp"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div>
-<label>${esc(t.f_name)} *</label><input name="name" required maxlength="120" value="${esc(v.name)}" autocomplete="name">
+<label style="margin-top:0">${esc(t.f_name)} *</label><input name="name" required maxlength="120" value="${esc(v.name)}" autocomplete="name">
 <div class="row2"><div><label>${esc(t.f_email)} *</label><input name="email" type="email" required maxlength="160" value="${esc(v.email)}" autocomplete="email"></div>
 <div><label>${esc(t.f_phone)}</label><input name="phone" maxlength="40" value="${esc(v.phone)}" autocomplete="tel"></div></div>
 <div class="row2"><div><label>${esc(t.f_company)}</label><input name="company" maxlength="160" value="${esc(v.company)}" autocomplete="organization"></div>
 <div><label>${esc(t.f_country)}</label><input name="country" maxlength="80" value="${esc(v.country)}" autocomplete="country-name"></div></div>
 <label class="chk"><input type="checkbox" name="consent" value="1" required> <span>${esc(t.f_consent)}</span></label>
-<input type="hidden" name="utm" id="utm" value=""><div style="margin-top:20px"><button class="btn" type="submit">${esc(t.f_submit)}</button></div></form></div></section>
+<input type="hidden" name="utm" id="utm" value=""><div style="margin-top:26px"><button class="btn" type="submit">${esc(t.f_submit)} &rarr;</button></div></form></div></div>
 <script>try{var u={},p=new URLSearchParams(location.search);['utm_source','utm_medium','utm_campaign','gclid','fbclid'].forEach(function(k){if(p.get(k))u[k]=p.get(k)});if(document.referrer)u.ref=document.referrer.slice(0,200);document.getElementById('utm').value=JSON.stringify(u)}catch(e){}</script>`;
   return page({ lang, title: t.form_h + ' — Laundry Unlimited', body, canonicalPath: '/apply' });
 }
 
 function questionnairePage(lang, token, err) {
   const t = T[lang]; const base = lang === 'en' ? '' : '/' + lang;
-  const radios = (name, opts) => `<div class="opts">${opts.map((o, i) => `<label><input type="radio" name="${name}" value="${esc(o)}"${i === 0 ? '' : ''}> ${esc(o)}</label>`).join('')}</div>`;
+  const radios = (name, opts) => `<div class="opts">${opts.map((o) => `<label><input type="radio" name="${name}" value="${esc(o)}"> ${esc(o)}</label>`).join('')}</div>`;
   const checks = (name, opts) => `<div class="opts">${opts.map((o) => `<label><input type="checkbox" name="${name}" value="${esc(o)}"> ${esc(o)}</label>`).join('')}</div>`;
-  const body = `<section><div class="wrap"><h2>${esc(t.q_h)}</h2><p class="sub">${esc(t.q_p)}</p>
+  const body = `<div class="page"><div class="wrap"><span class="label">${esc(t.nav_apply)}</span><h2>${esc(t.q_h)}</h2><p class="sub">${esc(t.q_p)}</p>
 <form class="box" method="post" action="${base}/questionnaire/${esc(token)}">${err ? `<div class="err">${esc(err)}</div>` : ''}
-<label>${esc(t.q_territory)}</label><input name="territory" maxlength="200">
+<label style="margin-top:0">${esc(t.q_territory)}</label><input name="territory" maxlength="200">
 <label>${esc(t.q_exp)}</label>${radios('experience', t.q_exp_o)}
 <label>${esc(t.q_team)}</label>${radios('team', t.q_team_o)}
 <label>${esc(t.q_invest)}</label>${radios('investment', t.q_invest_o)}
@@ -203,13 +236,13 @@ function questionnairePage(lang, token, err) {
 <label>${esc(t.q_when)}</label>${radios('start', t.q_when_o)}
 <label>${esc(t.q_heard)}</label>${radios('heard', t.q_heard_o)}
 <label>${esc(t.q_msg)}</label><textarea name="message" maxlength="3000"></textarea>
-<div style="margin-top:22px;display:flex;gap:12px;flex-wrap:wrap"><button class="btn" type="submit">${esc(t.q_submit)}</button><a class="btn ghost" href="${base}/thanks">${esc(t.q_skip)}</a></div></form></div></section>`;
+<div style="margin-top:28px;display:flex;gap:14px;flex-wrap:wrap;align-items:center"><button class="btn" type="submit">${esc(t.q_submit)} &rarr;</button><a class="btn line" href="${base}/thanks">${esc(t.q_skip)}</a></div></form></div></div>`;
   return page({ lang, title: t.q_h + ' — Laundry Unlimited', body, canonicalPath: '/questionnaire', noindex: true });
 }
 
 function simplePage(lang, h, p, path0, noindex) {
   const t = T[lang]; const base = lang === 'en' ? '' : '/' + lang;
-  return page({ lang, title: h + ' — Laundry Unlimited', body: `<section><div class="wrap"><h2>${esc(h)}</h2><p class="sub">${esc(p)}</p><a class="btn" href="${base || '/'}">${esc(t.back)}</a></div></section>`, canonicalPath: path0, noindex: noindex !== false });
+  return page({ lang, title: h + ' — Laundry Unlimited', body: `<div class="page"><div class="wrap"><h2>${esc(h)}</h2><p class="sub">${esc(p)}</p><a class="btn dark" href="${base || '/'}">${esc(t.back)}</a></div></div>`, canonicalPath: path0, noindex: noindex !== false });
 }
 
 // ── Jazyk: / = EN, /cs /pl /de ─────────────────────────────────────────────
@@ -315,7 +348,7 @@ app.get('/admin', requireAdmin, async (req, res) => {
 <input class="note" data-id="${r.id}" placeholder="Poznámka…" value="${esc(r.note || '')}"><button class="btn sm save" data-id="${r.id}">Uložit</button><button class="btn sm ghost del" data-id="${r.id}" title="Smazat poptávku">Smazat</button><span class="msg"></span></div></div></details>`).join('');
   const chips = [['', 'Vše (' + total + ')']].concat(STATUSES.map((x) => [x[0], x[1] + ' (' + (counts[x[0]] || 0) + ')'])).map((x) => `<a class="chip${st === x[0] ? ' on' : ''}" href="/admin?s=${x[0]}${qs ? '&q=' + encodeURIComponent(qs) : ''}">${esc(x[1])}</a>`).join('');
   res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Laundry Unlimited — administrace</title>
-<style>${CSS}.adm{max-width:1100px;margin:0 auto;padding:22px}.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}.chip{border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;color:var(--text);text-decoration:none;background:#07111f}.chip.on{background:var(--bl)}.chip.ok{border-color:#22c55e;color:#86efac}
+<style>${ADMIN_CSS}.adm{max-width:1100px;margin:0 auto;padding:22px}.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}.chip{border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;color:var(--text);text-decoration:none;background:#07111f}.chip.on{background:var(--bl)}.chip.ok{border-color:#22c55e;color:#86efac}
 .r{border:1px solid var(--line);border-radius:14px;background:var(--card);margin:8px 0}.r summary{list-style:none;cursor:pointer;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px}.r summary::-webkit-details-marker{display:none}.sp{flex:1}
 .dot{width:10px;height:10px;border-radius:50%}.mut{color:var(--mut);font-size:13px}.small{font-size:12px}.det{padding:0 16px 16px;border-top:1px solid var(--line)}.g{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}.k{color:var(--mut);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-right:6px}
 .ans div{margin:4px 0}.act{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px}.act select{width:auto}.act .note{flex:1;min-width:180px}.msg{font-size:13px;color:#86efac}</style></head><body><div class="adm">
