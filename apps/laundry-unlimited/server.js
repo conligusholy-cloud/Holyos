@@ -152,7 +152,7 @@ section{padding:130px 0;position:relative}
 .ab>div:after{content:"";position:absolute;left:0;top:0;height:2px;width:100%;background:var(--grad)}
 .ab .big{font:200 clamp(90px,9vw,140px)/.9 "Segoe UI Light","Segoe UI",sans-serif;display:block;margin-bottom:22px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 .ab small{display:block;font:500 11.5px/1.5 "Segoe UI",sans-serif;letter-spacing:.2em;text-transform:uppercase;color:var(--cy);margin:6px 0 22px}
-.ab ul{list-style:none;margin:0;padding:0}.ab li{padding:15px 0 15px 30px;border-top:1px solid var(--line);color:#c4cfde;position:relative;font-size:16.5px}
+.ab.one{grid-template-columns:1fr}.ab.one>div{padding:50px 52px 30px}.ab.one h3{font-size:clamp(26px,3vw,42px)}.ab.one ul{columns:2;column-gap:60px}.ab.one li{break-inside:avoid}.ab ul{list-style:none;margin:0;padding:0}.ab li{padding:15px 0 15px 30px;border-top:1px solid var(--line);color:#c4cfde;position:relative;font-size:16.5px}
 .ab li:before{content:"";position:absolute;left:0;top:25px;width:14px;height:1px;background:var(--cy);box-shadow:0 0 8px var(--cy)}
 .market{margin-top:22px;border:1px solid var(--line);padding:38px 46px;display:grid;grid-template-columns:auto 1fr;gap:56px;align-items:center;background:linear-gradient(100deg,rgba(30,124,255,.2),rgba(0,229,255,.05))}
 .market b{font:200 clamp(28px,3vw,42px)/1 "Segoe UI Light","Segoe UI",sans-serif;color:#fff}.market p{margin:0;color:#c4cfde;font-size:18px}
@@ -186,7 +186,7 @@ textarea{min-height:130px;resize:vertical}
 footer{background:#02050a;color:#7a879c;padding:50px 0;font-size:13.5px;letter-spacing:.02em;border-top:1px solid var(--line)}footer b{color:#fff;font-weight:500}
 .js .rv{opacity:0;transform:translateY(46px);transition:opacity .9s var(--ease),transform 1s var(--ease)}.js .rv.in{opacity:1;transform:none}
 @media(prefers-reduced-motion:reduce){.hero:before,.sl,.hero h1,.hero .lead,.hero .cta,.hero .lbl{animation:none}.sl{display:none}.js .rv{opacity:1;transform:none;transition:none}}
-@media(max-width:900px){.facts,.steps,.ab,.market,.tier,.brands,.grid,.grid.g4,.row2{grid-template-columns:1fr}
+@media(max-width:900px){.ab.one ul{columns:1}.ab.one>div{padding:34px 26px 14px}.facts,.steps,.ab,.market,.tier,.brands,.grid,.grid.g4,.row2{grid-template-columns:1fr}
 .facts>div{border-right:0;margin-right:0;border-bottom:1px solid var(--line);padding:24px 0}.facts>div:last-child{border-bottom:0}
 .steps:before{display:none}.steps>div{padding:46px 0 10px}.steps>div:before{top:0}
 section{padding:80px 0}.hero{padding-top:64px;padding-bottom:calc(100px + 4vw)}.facts{margin-top:54px}.sec-h{margin-bottom:40px;gap:18px}.tier{gap:6px;padding:26px 0}.market{gap:14px;padding:28px}
@@ -229,8 +229,7 @@ function landing(lang) {
 <div class="brands rv"><figure><img src="/img/ireland.webp" alt="" loading="lazy" width="1200" height="900"></figure><figure><img src="/img/blue.webp" alt="" loading="lazy" width="900" height="1200"></figure><figure><img src="/img/orlen.webp" alt="" loading="lazy" width="1200" height="900"></figure></div></div></section>
 <section id="model"><div class="wrap"><div class="sec-h rv"><div><span class="lbl">${esc(t.nav_model)}</span><h2>${esc(t.model_h)}</h2></div><p>${esc(t.model_p)}</p></div>
 <div class="tiers rv"><div class="tier"><h3>${esc(t.top_h)}</h3><p>${esc(t.top_p)}</p></div><div class="tier"><h3>${esc(t.mid_h)}</h3><p>${esc(t.mid_p)}</p></div></div>
-<div class="ab"><div class="rv"><span class="big">A</span><h3>${esc(t.a_h.replace(/^A\s+/, ''))}</h3><small>${esc(t.a_p)}</small><ul>${li(t.a_li)}</ul></div>
-<div class="rv"><span class="big">B</span><h3>${esc(t.b_h.replace(/^B\s+/, ''))}</h3><small>${esc(t.b_p)}</small><ul>${li(t.b_li)}</ul></div></div>
+<div class="ab one"><div class="rv"><h3>${esc(t.b_h.replace(/^B\s+/, ''))}</h3><small>${esc(t.b_p)}</small><ul>${li(t.b_li)}</ul></div></div>
 <div class="market rv"><b>${esc(t.market_h)}</b><p>${esc(t.market_p)}</p></div></div></section>
 <section id="offer" class="light"><div class="wrap"><div class="sec-h rv"><div><span class="lbl">${esc(t.nav_offer)}</span><h2>${esc(t.offer_h)}</h2></div></div>
 <div class="grid rv">${t.offer.map((o, i) => `<div class="cell"><span class="n">${nn(i)}</span><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div>`).join('')}</div></div></section>
