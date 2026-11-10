@@ -241,6 +241,13 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .pin.unit.vada{border-color:rgba(255,93,108,.95)}
 .pin.unit.vada img{filter:grayscale(.75) brightness(.72)}
 .pin.unit.vada .pin-tag{background:var(--err);color:#2b0409}
+/* Domeček u stroje: na čí zemi stojí. Zeleně vlastní, fialově pronajatá. */
+.pin-zem{position:absolute;left:-5px;top:-5px;width:19px;height:19px;border-radius:50%;
+  background:var(--ok);color:#04301f;font-style:normal;font-weight:900;font-size:12px;
+  line-height:19px;text-align:center;border:2px solid #0b1424}
+.pin.unit.zem-moje{border-color:#fff}
+.pin.unit.zem-najem .pin-zem{background:#7c5cff;color:#fff}
+.pin.unit.zem-najem{border-color:#c3b4ff}
 .pin-vada{position:absolute;right:-5px;top:-5px;width:19px;height:19px;border-radius:50%;
   background:var(--err);color:#2b0409;font-style:normal;font-weight:900;font-size:13px;
   line-height:19px;text-align:center;border:2px solid #0b1424;animation:vada-tep 1.4s infinite}

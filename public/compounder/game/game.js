@@ -3000,13 +3000,34 @@ function rivalIcon(c) {
 }
 // Postavený prádlomat ukazuje přímo fotku toho stroje, který tam stojí —
 // na mapě je tak na první pohled vidět, jestli je to MINI, FLEX nebo MAX.
+// Druhé stání na pozemku má id s mřížkou — pozemek se pozná podle základního.
+function zakladniSpotId(id) {
+  var t = String(id || ''), i = t.indexOf('#');
+  return i < 0 ? t : t.slice(0, i);
+}
+// Na čí zemi prádlomat stojí: moje koupená, cizí pronajatá, nebo běžný nájem.
+function zemUnit(u) {
+  var zak = zakladniSpotId(u && u.spotId);
+  if (!zak) return '';
+  if (mamPozemek(zak)) return 'moje';
+  var l = S.leases && S.leases[zak];
+  if (l && l.pronajem) return 'najem';
+  var c = CLAIMS[zak];
+  if (c && c.najemce && c.najemce.ja) return 'najem';
+  return '';
+}
 function unitIcon(u) {
   var im = MODEL_IMG[u.eco && u.eco.model] || MODEL_IMG.flex;
   var vada = jeVPoruse(u);
+  // Domeček v rohu říká, že stroj stojí na pozemku — zeleně na vlastním,
+  // fialově na pronajatém. Bez domečku je to běžný nájem místa.
+  var zem = zemUnit(u);
   return L.divIcon({ className: '', iconSize: [44, 44], iconAnchor: [22, 22],
-    html: '<div class="pin unit' + (vada ? ' vada' : '') + '" data-unit="' + esc(u.spotId) + '">'
+    html: '<div class="pin unit' + (vada ? ' vada' : '') + (zem ? ' zem-' + zem : '')
+      + '" data-unit="' + esc(u.spotId) + '">'
       + '<img src="' + esc(im.src) + '" alt="">'
       + (vada ? '<i class="pin-vada">!</i>' : '')
+      + (zem ? '<i class="pin-zem">\u2302</i>' : '')
       + '<i class="pin-tag">' + esc(vada ? u.porucha.text
           : (MODELS[u.eco && u.eco.model] ? MODELS[u.eco.model].name : '')) + '</i></div>' });
 }
@@ -5359,7 +5380,10 @@ function poruchaHtml(u) {
 function unitSheet(u) {
   var years = (Date.now() - u.builtAt) / YEAR_MS;
   sheet('<h3>' + esc(u.name) + '</h3>'
-    + '<p class="muted small">' + esc(KIND_LABEL[u.kind] || 'Místo') + ' · ' + MODELS[u.eco.model].name + ' · v provozu ' + years.toFixed(1).replace('.', ',') + ' roku</p>'
+    + '<p class="muted small">' + esc(KIND_LABEL[u.kind] || 'Místo') + ' · ' + MODELS[u.eco.model].name
+    + ' · v provozu ' + years.toFixed(1).replace('.', ',') + ' roku'
+    + (zemUnit(u) === 'moje' ? ' · <b class="ok">tvůj pozemek</b>'
+        : zemUnit(u) === 'najem' ? ' · <b class="ok">pronajatý pozemek</b>' : '') + '</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(u.score) + '</div>'
     + vypovedHtml(u)
     + poruchaHtml(u)
@@ -5905,7 +5929,9 @@ function strojRadek(u, i) {
   var zisk = zbydeZMista(u);
   // Pod názvem jedna řádka se vším podstatným — model, tržba, poruchy, spolehlivost.
   var vady = u.vady || 0;
-  var detail = (m ? m.name : '') + ' · tržba ' + kc(u.eco.revenue)
+  var zem = zemUnit(u);
+  var detail = (m ? m.name : '') + (zem === 'moje' ? ' · na tvém pozemku' : zem === 'najem' ? ' · na pronajatém pozemku' : '')
+    + ' · tržba ' + kc(u.eco.revenue)
     + ' · ' + vady + ' ' + mn(vady, 'porucha', 'poruchy', 'poruch')
     + ' · bez závady ' + spl + ' %';
   return '<div class="zeb-row stroj' + (vada ? ' vada' : '') + '" data-stroj-id="' + esc(u.spotId) + '">'
