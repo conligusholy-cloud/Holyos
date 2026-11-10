@@ -228,6 +228,40 @@ router.post('/ev', express.json({ limit: '2kb' }), (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Záznam první minuty ─────────────────────────────────────────────────────
+// Z první návštěvy se nahrává prvních šedesát vteřin — ne obraz, ale popis
+// toho, co se na stránce dělo (co se vykreslilo, kam člověk klepl, kam
+// scroloval). Z toho se pak v administraci dá přehrát, jak kdo hru poprvé
+// potkal a kde se zasekl. Vyplňované texty se nenahrávají, nick ani heslo
+// se tedy nikam neuloží.
+// Chodí to po částech, aby se nic neztratilo, když návštěvník odejde dřív.
+const ZAZNAM_CASTI = 8;              // víc než osm částí na návštěvu nebereme
+const ZAZNAM_LIMIT = '900kb';        // strop na jednu část
+router.post('/zaznam', express.json({ limit: ZAZNAM_LIMIT }), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const sid = String(b.sid || '').slice(0, 64);
+    const poradi = Math.max(0, Math.min(ZAZNAM_CASTI - 1, parseInt(b.poradi, 10) || 0));
+    const udalosti = b.udalosti;
+    if (!/^[a-z0-9-]{6,64}$/.test(sid)) return res.json({ ok: false });
+    if (!Array.isArray(udalosti) || !udalosti.length) return res.json({ ok: false });
+    if (rateLimited('zaznam:' + ipOf(req), 40, 10 * 60e3)) return res.json({ ok: false });
+    const bajtu = JSON.stringify(udalosti).length;
+    await prisma.gameReplay.upsert({
+      where: { sid_poradi: { sid, poradi } },
+      update: { udalosti, bajtu, ms: Math.max(0, parseInt(b.ms, 10) || 0) },
+      create: { sid, poradi, udalosti, bajtu, ms: Math.max(0, parseInt(b.ms, 10) || 0),
+        ua: String(req.headers['user-agent'] || '').slice(0, 500) || null },
+    });
+    // Úklid: záznamy starší měsíce už nikdo neotevře, ať databáze nebobtná.
+    if (poradi === 0) {
+      prisma.gameReplay.deleteMany({
+        where: { created_at: { lt: new Date(Date.now() - 30 * 86400e3) } } }).catch(() => {});
+    }
+    res.json({ ok: true });
+  } catch (e) { res.json({ ok: false }); }
+});
+
 // ─── Pozvánky ────────────────────────────────────────────────────────────────
 // Hráč sdílí odkaz s ?ref=<svoje id>. Kdo ho otevře, započítá se mu jedno
 // otevření a hráči tím roste návštěvnost jeho prádlomatů.

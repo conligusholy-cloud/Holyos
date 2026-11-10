@@ -210,6 +210,9 @@ router.get('/players/:id', api(async (req, res) => {
     prijem: acct._zbydeMesicne(st),
     pozvanek: st.refs || 0,
     ref: p.ref_id || null,
+    sid: p.sid || null,
+    // Záznam první minuty, jestli se k účtu najde.
+    zaznam: p.sid ? await zaznamInfo(p.sid) : null,
     privedl_me: zvouci ? { id: zvouci.id, nick: zvouci.nick, firma: zvouci.company || zvouci.nick } : null,
   }, polozky, mista, ceka_hotovost: cekaHotovost,
   privedeni: privedeni.map((h) => ({
@@ -554,6 +557,61 @@ router.get('/stats/provoz', api(async (req, res) => {
     udalosti: podleUdalosti,
     posledni: posledni.map((e) => ({ kdy: e.created_at, event: e.event, sid: String(e.sid || '').slice(0, 6) })),
   });
+}));
+
+// ─── Záznamy první minuty ────────────────────────────────────────────────────
+// Z první návštěvy se nahrává prvních šedesát vteřin dění na stránce. Tady se
+// to jen čte: seznam záznamů a pak všechny části jednoho záznamu za sebou.
+async function zaznamInfo(sid) {
+  const casti = await prisma.gameReplay.findMany({
+    where: { sid }, orderBy: { poradi: 'asc' },
+    select: { poradi: true, ms: true, bajtu: true, created_at: true } });
+  if (!casti.length) return null;
+  return { sid, casti: casti.length, ms: Math.max.apply(null, casti.map((c) => c.ms || 0)),
+    bajtu: casti.reduce((a, c) => a + (c.bajtu || 0), 0), kdy: casti[0].created_at };
+}
+
+// GET /zaznamy → poslední nahrané první minuty, i od návštěvníků bez účtu.
+router.get('/zaznamy', api(async (req, res) => {
+  const take = Math.min(100, Math.max(5, parseInt(req.query.limit, 10) || 40));
+  const prvni = await prisma.gameReplay.findMany({
+    where: { poradi: 0 }, orderBy: { created_at: 'desc' }, take,
+    select: { sid: true, created_at: true, ua: true } });
+  const sidy = prvni.map((r) => r.sid);
+  const [casti, hraci] = await Promise.all([
+    prisma.gameReplay.findMany({ where: { sid: { in: sidy } },
+      select: { sid: true, ms: true, bajtu: true } }),
+    prisma.gamePlayer.findMany({ where: { sid: { in: sidy } },
+      select: { id: true, nick: true, company: true, sid: true, zdroj: true, created_at: true } }),
+  ]);
+  const H = {}; hraci.forEach((h) => { H[h.sid] = h; });
+  res.json({ ok: true, zaznamy: prvni.map((r) => {
+    const moje = casti.filter((c) => c.sid === r.sid);
+    const h = H[r.sid] || null;
+    return {
+      sid: r.sid, kdy: r.created_at,
+      ms: Math.max.apply(null, moje.map((c) => c.ms || 0).concat([0])),
+      bajtu: moje.reduce((a, c) => a + (c.bajtu || 0), 0),
+      casti: moje.length,
+      mobil: /Mobile|Android|iPhone/i.test(String(r.ua || '')),
+      hrac: h ? { id: h.id, nick: h.nick, firma: h.company, zdroj: h.zdroj,
+        zalozil_po_ms: new Date(h.created_at).getTime() - new Date(r.created_at).getTime() } : null,
+    };
+  }) });
+}));
+
+// GET /zaznam?sid=… → všechny části jednoho záznamu slepené za sebou.
+router.get('/zaznam', api(async (req, res) => {
+  const sid = String(req.query.sid || '').slice(0, 64);
+  if (!/^[a-z0-9-]{6,64}$/.test(sid)) return res.status(400).json({ error: 'Chybí sid.' });
+  const casti = await prisma.gameReplay.findMany({ where: { sid }, orderBy: { poradi: 'asc' } });
+  if (!casti.length) return res.status(404).json({ error: 'Záznam tu není.' });
+  let udalosti = [];
+  casti.forEach((c) => { if (Array.isArray(c.udalosti)) udalosti = udalosti.concat(c.udalosti); });
+  const hrac = await prisma.gamePlayer.findFirst({ where: { sid },
+    select: { id: true, nick: true, company: true } });
+  res.json({ ok: true, sid, kdy: casti[0].created_at, casti: casti.length,
+    ms: Math.max.apply(null, casti.map((c) => c.ms || 0)), hrac, udalosti });
 }));
 
 module.exports = router;

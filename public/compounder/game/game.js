@@ -7928,6 +7928,63 @@ function visitId() {
   } catch (e) { return 'anon' + Math.random().toString(36).slice(2, 10); }
 }
 var evDone = {};
+
+// ─── Záznam první minuty ─────────────────────────────────────────────────────
+// Z úplně první návštěvy se nahraje prvních šedesát vteřin. Není to video —
+// ukládá se popis toho, co se na stránce dělo (co se vykreslilo, kam člověk
+// klepl, kam scroloval), takže je to malé a dá se to v administraci přehrát.
+// Vyplňované texty se nenahrávají, nick ani heslo se tedy nikam neuloží.
+// Posílá se po částech, ať se nic neztratí, když návštěvník odejde dřív.
+var ZAZNAM_KEY = 'lm_zaznam';     // značka, že první návštěva už se nahrála
+var ZAZNAM_DELKA = 60000;
+var ZAZNAM_CAST = 15000;
+var ZAZNAM_CASTI_MAX = 8;
+function zaznamStart() {
+  try {
+    if (localStorage.getItem(ZAZNAM_KEY)) return;   // není to první návštěva
+    localStorage.setItem(ZAZNAM_KEY, '1');          // ani po obnovení stránky už podruhé
+  } catch (e) { return; }                           // bez úložiště se nenahrává
+  var sc = document.createElement('script');
+  sc.src = '/game/vendor/rrweb-record.min.js';
+  sc.async = true;
+  sc.onload = zaznamJed;
+  document.head.appendChild(sc);
+}
+function zaznamJed() {
+  var R = window.rrwebRecord && window.rrwebRecord.record;
+  if (!R) return;
+  var buf = [], cast = 0, start = Date.now(), stop = null, konec = false;
+  function posli(posledni) {
+    if (!buf.length || cast >= ZAZNAM_CASTI_MAX) return;
+    var davka = buf; buf = [];
+    var telo = JSON.stringify({ sid: visitId(), poradi: cast, ms: Date.now() - start, udalosti: davka });
+    cast++;
+    try {
+      fetch('/api/game/zaznam', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: telo, keepalive: !!posledni && telo.length < 60000 }).catch(function () {});
+    } catch (e) { /* nahrávání nikdy nesmí shodit hru */ }
+  }
+  try {
+    stop = R({
+      emit: function (e) { if (!konec) buf.push(e); },
+      maskAllInputs: true,                 // co kdo píše, se nenahrává
+      maskInputOptions: { password: true },
+      sampling: { mousemove: 100, scroll: 150, media: 1000 },
+      recordCanvas: false, collectFonts: false
+    });
+  } catch (e) { return; }
+  var t = setInterval(function () { posli(false); }, ZAZNAM_CAST);
+  function dokonci() {
+    if (konec) return;
+    konec = true;
+    clearInterval(t);
+    try { if (stop) stop(); } catch (e) { /* nevadí */ }
+    posli(true);
+  }
+  setTimeout(dokonci, ZAZNAM_DELKA);
+  window.addEventListener('pagehide', function () { posli(true); });
+}
+
 // Odkud hráč přišel. Bereme z adresy při první návštěvě a držíme to v
 // prohlížeči — registrace přijde třeba až za dva dny a to už v adrese nic není.
 var ZDROJ_KEY = 'lm_zdroj';
@@ -8008,7 +8065,7 @@ function doAcct(login) {
   if (!login && firma.length && firma.length < 2) return acctErr('Název firmy má aspoň 2 znaky.');
   apiJson('/account/' + (login ? 'login' : 'register'),
     { nick: nick, password: pass, company: firma, ref: trvalePid(), odkud: prichoziRef(),
-      zdroj: zjistiZdroj() }).then(function (r) {
+      zdroj: zjistiZdroj(), sid: visitId() }).then(function (r) {
     $('ac-go').disabled = false;
     if (!r.ok) return acctErr(r.j.error || 'Nepovedlo se.');
     ME = r.j.player;
@@ -8450,6 +8507,7 @@ function startGame() {
 
 ev('game_open');
 zjistiZdroj();
+zaznamStart();
 // Dokud má hráč hru otevřenou, posíláme každých pět minut tichou stopu. Jen
 // z toho se dá poznat, kolik lidí je na hře právě teď — otevření stránky samo
 // o sobě neřekne, jestli u ní někdo ještě sedí.

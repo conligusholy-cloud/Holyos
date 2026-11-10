@@ -477,7 +477,10 @@ router.post('/account/register', async (req, res, next) => {
       data: { nick, nick_lower: lower, company: firmaNebo(s((req.body || {}).company, 60), nick),
         password_hash: await bcrypt.hash(pwd, 10), last_login_at: new Date(),
         // Odkud přišel: hra si to zapamatuje z adresy při první návštěvě.
-        zdroj: s((req.body || {}).zdroj, 80) || null }
+        zdroj: s((req.body || {}).zdroj, 80) || null,
+        // Id první návštěvy — podle něj se k účtu najde záznam první minuty.
+        sid: /^[a-z0-9-]{6,64}$/.test(String((req.body || {}).sid || ''))
+          ? String((req.body || {}).sid) : null }
     });
     // Dárek do začátku: jedna od každé zrychlující karty. Dostane ho jen nový
     // účet — ne ten, kdo si hru resetuje, jinak by si karty takhle „vyráběl".

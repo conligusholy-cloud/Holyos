@@ -7620,6 +7620,9 @@ model GamePlayer {
   hra_den       String?   @db.VarChar(10)
   hra_at        DateTime?
 
+  // Id první návštěvy. Podle něj se k účtu najde záznam první minuty ve hře.
+  sid           String?   @db.VarChar(64)
+
   cards     GameCard[]
   purchases GamePurchase[]
 
@@ -7629,7 +7632,27 @@ model GamePlayer {
   @@index([email])
   @@index([invited_by_id])
   @@index([invited_by_ref])
+  @@index([sid])
   @@map("game_players")
+}
+
+// Záznam první minuty návštěvy — co se na stránce dělo a kam návštěvník klikal.
+// Jedna řádka je jedna část záznamu (pár vteřin), aby se nic neztratilo, když
+// člověk odejde dřív. Vyplňované texty se nenahrávají. Sid je náhodné id
+// návštěvy; když si návštěvník založí účet, uloží se stejné sid i k němu.
+model GameReplay {
+  id         Int      @id @default(autoincrement())
+  sid        String   @db.VarChar(64)
+  poradi     Int      @default(0)
+  udalosti   Json
+  bajtu      Int      @default(0)
+  ms         Int      @default(0)
+  ua         String?  @db.Text
+  created_at DateTime @default(now())
+
+  @@unique([sid, poradi])
+  @@index([created_at])
+  @@map("game_replays")
 }
 
 // Jedna řádka = jedna koupená karta. Vyplněné used_at znamená spotřebovanou.

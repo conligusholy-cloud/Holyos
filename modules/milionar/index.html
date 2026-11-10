@@ -59,6 +59,13 @@
     .mini { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:9px 11px; }
     .mini .v { font-size:16px; font-weight:700; }
     .mini .l { font-size:10.5px; color:var(--text2); text-transform:uppercase; letter-spacing:.05em; }
+    /* Přehrávač první minuty. rrweb vykreslí do rámečku vlastní iframe
+       v původní velikosti telefonu — zmenšíme ho na šířku okna. */
+    .rr-box { position:relative; overflow:hidden; background:#04060c; border:1px solid var(--border);
+      border-radius:12px; margin:12px 0 10px; }
+    .rr-box .replayer-wrapper { transform-origin:top left; }
+    .rr-ovl { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .rr-ovl input[type=range] { flex:1; min-width:140px; accent-color:#7c5cff; }
     .qty { width:58px; padding:4px 6px; border-radius:7px; border:1px solid var(--border); background:var(--surface2); color:var(--text); text-align:right; font-size:13px; }
   </style>
 </head>
@@ -110,6 +117,11 @@
         </div>
         <h3 style="font-size:14px;margin:22px 0 10px">Čas ve hře <span class="note" id="pv-cas-note"></span></h3>
         <div class="tbl-wrap"><table class="data-table" id="pv-casy"></table></div>
+        <h3 style="font-size:14px;margin:26px 0 6px">První minuty</h3>
+        <p class="note" style="margin:0 0 10px">Záznam prvních šedesáti vteřin první návštěvy — i od lidí,
+          co si účet nakonec nezaložili. Není to video obrazovky: ukládá se, co se na stránce vykreslilo
+          a kam člověk klepl. Vyplňované texty se nenahrávají. Po třiceti dnech se záznam maže.</p>
+        <div class="tbl-wrap"><table class="data-table" id="pv-zaznamy"></table></div>
       </div>
 
       <div class="module-panel" id="panel-players">
@@ -290,6 +302,120 @@
             }).join('') : '<tr><td colspan="6" class="note">Zatím se nenasbíral žádný čas. Počítá se od nasazení této změny.</td></tr>')
           + '</tbody>';
       }).catch(function (e) { chyba('pv-kpis', e); });
+      loadZaznamy();
+    }
+    // Seznam nahraných prvních minut.
+    function loadZaznamy() {
+      get('/zaznamy?limit=40').then(function (j) {
+        var z = j.zaznamy || [];
+        document.getElementById('pv-zaznamy').innerHTML =
+          '<thead><tr><th>Kdy</th><th>Kdo</th><th>Odkud</th><th class="num">Délka</th>'
+          + '<th class="num">Zařízení</th><th></th></tr></thead><tbody>'
+          + (z.length ? z.map(function (r) {
+              return '<tr><td class="note">' + dt(r.kdy) + '</td>'
+                + '<td>' + (r.hrac
+                    ? '<b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + r.hrac.id + '">'
+                      + esc(r.hrac.nick) + '</b><div class="note">účet založil po '
+                      + doba(Math.max(0, r.hrac.zalozil_po_ms) / 1000) + '</div>'
+                    : '<span class="note">bez účtu</span>') + '</td>'
+                + '<td class="note">' + esc((r.hrac && r.hrac.zdroj) || '—') + '</td>'
+                + '<td class="num">' + doba((r.ms || 0) / 1000) + '</td>'
+                + '<td class="num note">' + (r.mobil ? 'mobil' : 'počítač') + '</td>'
+                + '<td><button class="btn sm" data-prehrat="' + esc(r.sid) + '">Přehrát</button></td></tr>';
+            }).join('') : '<tr><td colspan="6" class="note">Zatím žádný záznam. Nahrává se první návštěva, '
+              + 'takže se objeví, až přijde někdo nový.</td></tr>')
+          + '</tbody>';
+        [].forEach.call(document.querySelectorAll('[data-prehrat]'), function (b) {
+          b.onclick = function () { prehraj(b.getAttribute('data-prehrat')); };
+        });
+        [].forEach.call(document.querySelectorAll('#pv-zaznamy [data-detail]'), function (b) {
+          b.onclick = function () { detail(b.getAttribute('data-detail')); };
+        });
+      }).catch(function (e) { chyba('pv-zaznamy', e); });
+    }
+    // ─── Přehrávač první minuty ───────────────────────────────────────────────
+    // rrweb se stahuje až při prvním přehrání — je to 280 kB a většinu času
+    // ho nikdo nepotřebuje.
+    var RRWEB = null;
+    function nactiRrweb() {
+      if (RRWEB) return RRWEB;
+      RRWEB = new Promise(function (hotovo, chyba2) {
+        var css = document.createElement('link');
+        css.rel = 'stylesheet'; css.href = 'vendor/rrweb-style.min.css';
+        document.head.appendChild(css);
+        var sc = document.createElement('script');
+        sc.src = 'vendor/rrweb.min.js';
+        sc.onload = function () { hotovo(); };
+        sc.onerror = function () { RRWEB = null; chyba2(new Error('Přehrávač se nepodařilo načíst.')); };
+        document.head.appendChild(sc);
+      });
+      return RRWEB;
+    }
+    var PREHRAVAC = null;
+    function zavriPrehravac() {
+      if (!PREHRAVAC) return;
+      try { PREHRAVAC.pause(); } catch (e) { /* nevadí */ }
+      PREHRAVAC = null;
+    }
+    function prehraj(sid) {
+      OV.classList.add('open');
+      DLG.innerHTML = '<p class="note">Načítám záznam…</p>';
+      Promise.all([nactiRrweb(), get('/zaznam?sid=' + encodeURIComponent(sid))]).then(function (v) {
+        var j = v[1], ud = j.udalosti || [];
+        var meta = (ud.filter(function (e) { return e.type === 4; })[0] || {}).data || { width: 390, height: 844 };
+        DLG.innerHTML = '<button class="x" data-close>×</button><h2>První minuta</h2>'
+          + '<div class="note">' + dt(j.kdy) + ' · '
+          + (j.hrac ? 'účet <b>' + esc(j.hrac.nick) + '</b>' : 'návštěva bez účtu')
+          + ' · ' + doba((j.ms || 0) / 1000) + ' · ' + cz(ud.length) + ' záznamů dění</div>'
+          + '<div class="rr-box" id="rr-box"></div>'
+          + '<div class="rr-ovl"><button class="btn sm" id="rr-play">Pauza</button>'
+          + '<input type="range" id="rr-pos" min="0" max="1000" value="0">'
+          + '<span class="note" id="rr-cas">0:00</span>'
+          + [1, 2, 4].map(function (r) {
+              return '<button class="btn sm' + (r === 1 ? ' on' : '') + '" data-rych="' + r + '">' + r + '×</button>';
+            }).join('') + '</div>';
+        DLG.querySelector('[data-close]').onclick = function () { zavriPrehravac(); OV.classList.remove('open'); };
+        var box = document.getElementById('rr-box');
+        var k = Math.min(1, (box.clientWidth || 600) / (meta.width || 390),
+          (window.innerHeight * 0.58) / (meta.height || 844));
+        box.style.height = Math.round((meta.height || 844) * k) + 'px';
+        PREHRAVAC = new rrweb.Replayer(ud, { root: box, speed: 1, skipInactive: false,
+          showWarning: false, mouseTail: { duration: 700 } });
+        var wrap = box.querySelector('.replayer-wrapper');
+        if (wrap) { wrap.style.transform = 'scale(' + k + ')'; wrap.style.transformOrigin = 'top left'; }
+        var celkem = (PREHRAVAC.getMetaData && PREHRAVAC.getMetaData().totalTime) || j.ms || 60000;
+        PREHRAVAC.play();
+        var tl = document.getElementById('rr-pos'), cas = document.getElementById('rr-cas');
+        var tik = setInterval(function () {
+          if (!PREHRAVAC || !OV.classList.contains('open')) { clearInterval(tik); return; }
+          var t = (PREHRAVAC.getCurrentTime && PREHRAVAC.getCurrentTime()) || 0;
+          tl.value = Math.max(0, Math.min(1000, Math.round(t / celkem * 1000)));
+          cas.textContent = Math.floor(t / 60000) + ':' + ('0' + Math.floor(t / 1000) % 60).slice(-2);
+        }, 250);
+        var pb = document.getElementById('rr-play'), bezi = true;
+        pb.onclick = function () {
+          if (!PREHRAVAC) return;
+          bezi = !bezi;
+          if (bezi) PREHRAVAC.play(PREHRAVAC.getCurrentTime()); else PREHRAVAC.pause();
+          pb.textContent = bezi ? 'Pauza' : 'Přehrát';
+        };
+        tl.oninput = function () {
+          if (!PREHRAVAC) return;
+          var t = Number(tl.value) / 1000 * celkem;
+          if (bezi) PREHRAVAC.play(t); else PREHRAVAC.pause(t);
+        };
+        [].forEach.call(DLG.querySelectorAll('[data-rych]'), function (b) {
+          b.onclick = function () {
+            [].forEach.call(DLG.querySelectorAll('[data-rych]'), function (x) { x.classList.remove('on'); });
+            b.classList.add('on');
+            if (PREHRAVAC) PREHRAVAC.setConfig({ speed: Number(b.getAttribute('data-rych')) });
+          };
+        });
+      }).catch(function (e) {
+        DLG.innerHTML = '<button class="x" data-close>×</button><p class="note" style="color:#f87171">'
+          + esc(e.message) + '</p>';
+        DLG.querySelector('[data-close]').onclick = function () { OV.classList.remove('open'); };
+      });
     }
     // Sloupce po hodinách: kolik různých návštěv a kolik akcí.
     function grafHodin(hodiny) {
@@ -391,7 +517,7 @@
 
     // ── Detail hráče ────────────────────────────────────────────────────────
     var OV = document.getElementById('ov'), DLG = document.getElementById('dlg');
-    OV.onclick = function (e) { if (e.target === OV) OV.classList.remove('open'); };
+    OV.onclick = function (e) { if (e.target === OV) { zavriPrehravac(); OV.classList.remove('open'); } };
     function detail(id) {
       OV.classList.add('open');
       DLG.innerHTML = '<p class="note">Načítám…</p>';
@@ -471,6 +597,8 @@
             + '</tbody></table></div>' : '<p class="note" style="margin-top:16px">Zatím nic nekoupil.</p>');
 
         DLG.querySelector('[data-close]').onclick = function () { OV.classList.remove('open'); };
+        var pd = DLG.querySelector('[data-prehrat-d]');
+        if (pd) pd.onclick = function () { prehraj(pd.getAttribute('data-prehrat-d')); };
         // Ze seznamu přivedených se dá rovnou prokliknout na jejich detail.
         [].forEach.call(DLG.querySelectorAll('[data-detail]'), function (b) {
           b.onclick = function () { detail(b.getAttribute('data-detail')); };
