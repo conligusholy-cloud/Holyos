@@ -3180,16 +3180,19 @@ function unitIcon(u) {
   var zem = zemUnit(u);
   // Běžící výpověď od majitele je oranžová — stroj jede dál, ale má spočítané dny.
   var vyp = !vada && jeVeVypovedi(u);
+  var natrhu = !vada && !vyp ? trhMoje(u.spotId) : null;
   return L.divIcon({ className: '', iconSize: [44, 44], iconAnchor: [22, 22],
     html: '<div class="pin unit' + (vada ? ' vada' : '') + (vyp ? ' vypoved' : '')
-      + (zem ? ' zem-' + zem : '')
+      + (natrhu ? ' trh' : '') + (zem ? ' zem-' + zem : '')
       + '" data-unit="' + esc(u.spotId) + '">'
       + '<img src="' + esc(im.src) + '" alt="">'
       + (vada ? '<i class="pin-vada">!</i>' : '')
       + (vyp ? '<i class="pin-vyp">\u29D6</i>' : '')
+      + (natrhu ? '<i class="pin-trh">\u20AC</i>' : '')
       + (zem ? '<i class="pin-zem">\u2302</i>' : '')
       + '<i class="pin-tag">' + esc(vada ? u.porucha.text
           : (vyp ? 'Výpověď — ' + etaText(Math.max(0, u.vypoved.do - Date.now())).replace('za ', '')
+          : natrhu ? 'Na prodej · ' + kcFull(natrhu.cena)
           : (MODELS[u.eco && u.eco.model] ? MODELS[u.eco.model].name : ''))) + '</i></div>' });
 }
 // Z dálky mají v mapě být jen prádlomaty, sídlo a pobočky. Volná místa je
@@ -3344,6 +3347,7 @@ function drawMap() {
   var any = false, zname = {}, skryto = 0, skrytoCizi = 0, kusy = [];
   var blizko = !map || map.getZoom() >= MISTA_ZOOM;
   var moje = MAPA_MOJE;
+  var naProdej = trhPodleMist();
   Object.keys(S.areas).forEach(function (aid) {
     S.areas[aid].spots.forEach(function (sp) {
       any = true; zname[sp.id] = 1;
@@ -3351,7 +3355,9 @@ function drawMap() {
       var rival = !unit && CLAIMS[sp.id] && !CLAIMS[sp.id].mine ? CLAIMS[sp.id] : null;
       // V pohledu „jen moje“ mizí konkurence. Prozkoumaná i volná místa zůstávají
       // — právě na nich se staví, bez nich by mapa k ničemu nebyla.
-      if (moje && rival) { skrytoCizi++; return; }
+      // Cizí prádlomat na tržišti je nabídka, ne konkurence — ten ukážeme i ve
+      // filtru „jen moje", jinak by hráč o koupi vedle sebe nevěděl.
+      if (moje && rival && !naProdej[sp.id]) { skrytoCizi++; return; }
       // Volné místo je jen tip, ne stavba — ukazuje se až při přiblížení.
       if (!unit && !rival && !blizko) { skryto++; return; }
       var seen = !!S.revealed[sp.id];
@@ -3362,7 +3368,9 @@ function drawMap() {
       // a když ji majitel nabízí, je to vidět.
       var ciziPoz = rival && rival.pozemek && !rival.model ? rival : null;
       if (ciziPoz && ciziPoz.najemce && ciziPoz.najemce.ja) return;
+      var nabidka = !unit && naProdej[sp.id] ? naProdej[sp.id] : null;
       var icon = unit ? unitIcon(unit)
+        : nabidka ? trhIcon(nabidka)
         : ciziPoz ? ciziPozemekIcon(ciziPoz)
         : rival ? rivalIcon(rival)
         : mujPoz ? pozemekIcon(sp)
@@ -3371,7 +3379,11 @@ function drawMap() {
       kusy.push({ lat: sp.lat, lon: sp.lon, moje: !!unit || mujPoz, kresli: function () {
         L.marker([sp.lat, sp.lon], { icon: icon })
           .addTo(layer)
-          .on('click', function () { if (rival) return rivalSheet(sp, aid, rival); spotSheet(sp, aid); });
+          .on('click', function () {
+            if (nabidka) return trhKoupitSheet(nabidka);
+            if (rival) return rivalSheet(sp, aid, rival);
+            spotSheet(sp, aid);
+          });
       } });
     });
   });
@@ -3382,12 +3394,13 @@ function drawMap() {
     var c = CLAIMS[sid];
     if (c.mine || zname[sid] || c.lat == null) return;
     any = true;
-    if (moje) { skrytoCizi++; return; }
+    if (moje && !naProdej[sid]) { skrytoCizi++; return; }
     var zem = c.pozemek && !c.model;
+    var nab = naProdej[sid] || null;
     kusy.push({ lat: c.lat, lon: c.lon, moje: false, kresli: function () {
-      L.marker([c.lat, c.lon], { icon: zem ? ciziPozemekIcon(c) : rivalIcon(c) })
+      L.marker([c.lat, c.lon], { icon: nab ? trhIcon(nab) : zem ? ciziPozemekIcon(c) : rivalIcon(c) })
         .addTo(layer)
-        .on('click', function () { cizi(c); });
+        .on('click', function () { if (nab) return trhKoupitSheet(nab); cizi(c); });
     } });
   });
   // Další stání na témže pozemku nejsou v seznamu míst — mají ale vlastní
@@ -3431,6 +3444,7 @@ function drawMap() {
     h.classList.remove('hidden');
   } else h.classList.add('hidden');
   paintServis();
+  paintTrhBadge();
 }
 // Panel cizího prádlomatu v neprozkoumaném městě.
 function cizi(c) {
@@ -7636,6 +7650,61 @@ function trhHtml() {
       }).join('')
     + '</div>';
 }
+// Prádlomat, který někdo nabízí na tržišti. Na mapě je zlatý, s cenovkou —
+// ať je na první pohled poznat, že se dá koupit hned i s místem.
+function trhIcon(n) {
+  var im = MODEL_IMG[n.model] || MODEL_IMG.flex;
+  return L.divIcon({ className: '', iconSize: [44, 44], iconAnchor: [22, 22],
+    html: '<div class="pin unit trh" data-trh="' + esc(n.spot_id) + '">'
+      + '<img src="' + esc(im.src) + '" alt="">'
+      + '<i class="pin-trh">\u20AC</i>'
+      + '<i class="pin-tag">' + esc(kcFull(n.cena)) + '</i></div>' });
+}
+// Co je na tržišti, podle místa — mapa si tím vybírá špendlík.
+function trhPodleMist() {
+  var m = {};
+  (TRH || []).forEach(function (n) { if (!n.moje && n.spot_id) m[n.spot_id] = n; });
+  return m;
+}
+function paintTrhBadge() {
+  var el = $('map-trh');
+  if (!el) return;
+  var kolik = (TRH || []).filter(function (n) { return !n.moje; }).length;
+  el.classList.toggle('hidden', !kolik);
+  if (!kolik) return;
+  el.innerHTML = '<i>\uD83E\uDD1D</i><b>' + kolik + '</b>';
+  el.title = 'Tržiště — ' + kolik + ' ' + mn(kolik, 'hotová provozovna', 'hotové provozovny', 'hotových provozoven')
+    + ' na prodej';
+  el.onclick = trhSeznamSheet;
+}
+// Celé tržiště v panelu — otevře se z mapy, ať se nemusí chodit na Burzu.
+function trhSeznamSheet() {
+  var k = (TRH || []).filter(function (n) { return !n.moje; });
+  sheet('<h3>Tržiště</h3>'
+    + '<p class="muted small">Hotové provozovny od ostatních hráčů: stroj, nájemní smlouva, přípojky '
+    + 'i rozvržení plochy. Vydělává hned, nečekáš na výrobu.</p>'
+    + (k.length ? '<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">'
+        + k.map(function (n) {
+            var m = MODELS[n.model] || { name: n.model };
+            return '<button class="btn sec" style="width:100%;text-align:left" data-trh-n="' + n.id + '">'
+              + '<b>' + esc(n.name || 'Místo') + '</b> · ' + esc(m.name) + ' · ' + kcFull(n.cena)
+              + '<br><i class="muted small">u tebe ' + kcFull(Math.round(trhZiskUMe(n).profit))
+              + ' / měsíc · od ' + esc(n.firma || n.nick) + '</i></button>';
+          }).join('') + '</div>'
+      : '<p class="muted small" style="margin-top:12px">Zrovna tu nikdo nic nenabízí.</p>')
+    + ((S.units || []).length
+        ? '<button class="btn" id="trh-nabidnout-2" style="width:100%;margin-top:12px">Nabídnout vlastní prádlomat</button>'
+        : ''));
+  [].forEach.call($('sheet-body').querySelectorAll('[data-trh-n]'), function (b) {
+    b.onclick = function () {
+      var n = (TRH || []).filter(function (x) { return String(x.id) === b.getAttribute('data-trh-n'); })[0];
+      if (n) trhKoupitSheet(n);
+    };
+  });
+  var nb = $('trh-nabidnout-2');
+  if (nb) nb.onclick = trhVyberSheet;
+}
+
 // Výběr, který prádlomat chci vystavit — ať se to nemusí hledat po mapě.
 function trhVyberSheet() {
   var u = (S.units || []).slice();
@@ -8831,10 +8900,12 @@ function startGame() {
   });
   loadClaims();
   setInterval(loadClaims, 45000);
+  // Tržiště chceme mít i na mapě, ne až po otevření Burzy.
+  loadTrh(drawMap);
   vyzvedniNasledky();
   loadTrades();
   loadChat();
-  setInterval(function () { loadTrades(); loadChat(); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }, 60000);
+  setInterval(function () { loadTrades(); loadChat(); loadTrh(drawMap); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }, 60000);
   checkPayment();
   setInterval(function () { tick(); save(); paint(); syncState(); }, 5000);
   // Vlastní, rychlejší tep jen pro naskakující čísla nad prádlomaty.
