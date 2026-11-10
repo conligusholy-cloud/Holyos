@@ -7610,11 +7610,17 @@ function trhZiskUMe(n) {
   return eco;
 }
 function trhHtml() {
-  if (!TRH || !TRH.length) return '';
+  if (TRH == null) return '';
+  var moje = (S.units || []).length;
   return '<div class="card"><h3>Tržiště — hotové provozovny</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Prádlomat i s místem, nájemní smlouvou a přípojkami. '
     + 'Vydělává hned — nečekáš na výrobu ani nehledáš místo. Banka to financuje jako obchodní '
     + 'příležitost, ale chce spoluúčast ' + Math.round(TRH_SPOLUUCAST * 100) + ' %.</p>'
+    + (TRH.length ? '' : '<p class="muted small" style="margin:0 0 10px">Zrovna tu nikdo nic nenabízí. '
+        + (moje ? 'Můžeš být první — vystav vlastní prádlomat a řekni si cenu.'
+                : 'Až budeš mít prádlomat, můžeš ho sem dát i ty.') + '</p>')
+    + (moje ? '<button class="btn sec sm" id="trh-nabidnout" style="width:100%;margin-bottom:10px">'
+        + 'Nabídnout vlastní prádlomat</button>' : '')
     + TRH.map(function (n) {
         var m = MODELS[n.model] || { name: n.model };
         return '<div class="trade"><div class="row"><b>' + esc(n.name || 'Místo') + '</b>'
@@ -7630,7 +7636,34 @@ function trhHtml() {
       }).join('')
     + '</div>';
 }
+// Výběr, který prádlomat chci vystavit — ať se to nemusí hledat po mapě.
+function trhVyberSheet() {
+  var u = (S.units || []).slice();
+  if (!u.length) return toast('Nemáš co nabídnout — zatím nic nestojí.', 'err');
+  sheet('<h3>Který prádlomat nabídnout</h3>'
+    + '<p class="muted small">Prodáváš celou provozovnu: stroj, nájemní smlouvu, přípojky i rozvržení '
+    + 'plochy. Dokud se neprodá, vydělává dál tobě.</p>'
+    + '<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">'
+    + u.map(function (x) {
+        var n = trhMoje(x.spotId);
+        return '<button class="btn sec" style="width:100%;text-align:left" data-trh-u="' + esc(x.spotId) + '">'
+          + '<b>' + esc(x.name) + '</b> · ' + esc((MODELS[x.eco.model] || {}).name || '')
+          + ' · ' + kcFull(x.eco.profit) + ' / měsíc'
+          + (n ? '<br><i class="muted small">už visí na tržišti za ' + kcFull(n.cena) + '</i>' : '')
+          + '</button>';
+      }).join('')
+    + '</div>');
+  [].forEach.call($('sheet-body').querySelectorAll('[data-trh-u]'), function (b) {
+    b.onclick = function () {
+      var id = b.getAttribute('data-trh-u');
+      var x = (S.units || []).filter(function (y) { return y.spotId === id; })[0];
+      if (x) trhProdejSheet(x);
+    };
+  });
+}
 function bindTrh(box) {
+  var nb = (box || document).querySelector('#trh-nabidnout');
+  if (nb) nb.onclick = trhVyberSheet;
   [].forEach.call((box || document).querySelectorAll('[data-trh-koupit]'), function (b) {
     b.onclick = function () {
       var n = (TRH || []).filter(function (x) { return String(x.id) === b.getAttribute('data-trh-koupit'); })[0];
