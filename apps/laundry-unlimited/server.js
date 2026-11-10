@@ -190,7 +190,7 @@ textarea{min-height:130px;resize:vertical}
 footer{background:#02050a;color:#7a879c;padding:50px 0;font-size:13.5px;letter-spacing:.02em;border-top:1px solid var(--line)}footer b{color:#fff;font-weight:500}
 .js .rv{opacity:0;transform:translateY(46px);transition:opacity .9s var(--ease),transform 1s var(--ease)}.js .rv.in{opacity:1;transform:none}
 @media(prefers-reduced-motion:reduce){.hero:before,.sl,.hero h1,.hero .lead,.hero .cta,.hero .lbl{animation:none}.fx{display:none}.js .rv{opacity:1;transform:none;transition:none}}
-@media(max-width:900px){.moon{width:90px;right:6%;top:6%;opacity:.55}.duo{grid-template-columns:1fr;gap:44px}.ab.one ul{columns:1}.ab.one>div{padding:34px 26px 14px}.facts,.steps,.ab,.market,.tier,.brands,.grid,.grid.g4,.row2{grid-template-columns:1fr}
+@media(max-width:900px){.fx{display:none}.moon{width:90px;right:6%;top:6%;opacity:.55}.duo{grid-template-columns:1fr;gap:44px}.ab.one ul{columns:1}.ab.one>div{padding:34px 26px 14px}.facts,.steps,.ab,.market,.tier,.brands,.grid,.grid.g4,.row2{grid-template-columns:1fr}
 .facts>div{border-right:0;margin-right:0;border-bottom:1px solid var(--line);padding:24px 0}.facts>div:last-child{border-bottom:0}
 .steps:before{display:none}.steps>div{padding:46px 0 10px}.steps>div:before{top:0}
 section{padding:80px 0}.hero{padding-top:64px;padding-bottom:calc(100px + 4vw)}.facts{margin-top:54px}.sec-h{margin-bottom:40px;gap:18px}.tier{gap:6px;padding:26px 0}.market{gap:14px;padding:28px}
@@ -243,7 +243,7 @@ ${cr}
 })();
 
 const FX_JS = `(function(){var cv=document.getElementById('fx');if(!cv)return;var hero=cv.parentNode;
-if(window.matchMedia&&matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+if(window.matchMedia&&(matchMedia('(prefers-reduced-motion:reduce)').matches||matchMedia('(max-width:900px)').matches))return;
 var ctx=cv.getContext('2d'),W=0,H=0,S=[],L=[],mo={x:0,y:0,R:40},stars=null,trail=[],T0=0,CYC=13000,CH0=300,RUN0=2600,RUN=2600,lastI=0;
 function cr(a,b,c,d,t){var t2=t*t,t3=t2*t;return .5*((2*b)+(-a+c)*t+(2*a-5*b+4*c-d)*t2+(-a+3*b-3*c+d)*t3)}
 function build(){var m=hero.querySelector('.moon').getBoundingClientRect(),r=hero.getBoundingClientRect();
