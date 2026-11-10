@@ -2663,19 +2663,34 @@ var START_BONUS_MS = 30000;
 var startBonusDo = 0;
 function startBonusPlati() { return startBonusDo > 0 && Date.now() < startBonusDo; }
 function startBonusOdpocet() {
-  var cas = $('sb-cas'), radek = $('sb-bonus');
-  if (!cas || !radek) return;
+  var cas = $('sb-cas'), pruh = $('sb-bonus'), bar = $('sb-bar'), suma = $('sb-suma');
+  var pod = $('sb-bonus-pod'), hl = $('sb-bonus-hl'), box = $('sb'), hrat = $('go-quiz');
+  if (!cas || !pruh) return;
+  var zakladni = PROFILES.vyvazeny.cash;
+  var hratText = hrat ? hrat.textContent : '';
+  if (suma) suma.textContent = (zakladni + START_BONUS).toLocaleString('cs-CZ');
+  if (hrat) hrat.textContent = 'Hrát a vzít ' + kcFull(START_BONUS);
   startBonusDo = Date.now() + START_BONUS_MS;
   var tik = function () {
     var zbyva = Math.max(0, startBonusDo - Date.now());
     var s = Math.ceil(zbyva / 1000);
     cas.textContent = Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
+    if (bar) bar.style.width = Math.round(zbyva / START_BONUS_MS * 100) + '%';
+    // Posledních deset vteřin odpočet tepe — je to jediná věc, co opravdu mizí.
+    cas.classList.toggle('pulz', zbyva > 0 && zbyva <= 10000);
+    if (pod && zbyva > 0) pod.textContent = 'Je tvůj, když začneš do ' + s + ' '
+      + mn(s, 'vteřiny', 'vteřin', 'vteřin');
     if (zbyva > 0) return;
     clearInterval(t);
     cas.textContent = 'vypršel';
+    cas.classList.remove('pulz');
     cas.classList.add('pryc');
-    radek.classList.add('pryc');
-    radek.innerHTML = '<b>Bonus za rychlý start</b> propadl. Všechno ostatní dostaneš pořád.';
+    pruh.classList.add('pryc');
+    if (box) box.classList.add('pryc');
+    if (hl) hl.textContent = 'Bonus za rychlý start propadl';
+    if (pod) pod.textContent = 'Všechno ostatní dostaneš pořád.';
+    if (suma) suma.textContent = zakladni.toLocaleString('cs-CZ');
+    if (hrat) hrat.textContent = hratText || 'Hrát — bez registrace';
   };
   var t = setInterval(tik, 250);
   tik();

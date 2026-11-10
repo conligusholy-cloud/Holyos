@@ -36,21 +36,41 @@ button{font:inherit;cursor:pointer}
 .intro-pts b{color:var(--text)}
 /* Co hráč dostane hned, než vůbec začne. Odpočet je tu kvůli bonusu, který
    opravdu vyprší — zbytek dostane každý bez ohledu na čas. */
-.sb{border:1px solid rgba(120,160,255,.2);background:rgba(14,22,40,.72);border-radius:14px;
-  padding:12px 14px;display:flex;flex-direction:column;gap:8px}
-.sb-hl{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.sb-hl b{font-size:13.5px}
-.sb-cas{font-variant-numeric:tabular-nums;font-weight:800;font-size:13.5px;color:var(--warn);
-  border:1px solid rgba(255,216,102,.35);background:rgba(255,216,102,.1);border-radius:999px;padding:2px 10px}
-.sb-cas.pryc{color:var(--text3);border-color:rgba(120,160,255,.2);background:transparent}
-.sb-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
-.sb-list li{padding-left:15px;position:relative;color:var(--text2);font-size:12.5px;line-height:1.4}
-.sb-list li:before{content:"";position:absolute;left:0;top:7px;width:5px;height:5px;border-radius:50%;background:var(--ok)}
-.sb-list li.sb-bonus{color:var(--text)}
-.sb-list li.sb-bonus:before{background:var(--warn)}
-.sb-list li.sb-bonus b{color:var(--warn)}
-.sb-list li.sb-bonus.pryc{color:var(--text3)}
-.sb-list li.sb-bonus.pryc:before{background:var(--text3)}
+.sb{position:relative;border-radius:16px;padding:13px 14px 14px;display:flex;flex-direction:column;gap:10px;
+  background:linear-gradient(180deg,rgba(124,92,255,.16),rgba(79,209,255,.05)),rgba(9,14,26,.92);
+  border:1px solid rgba(124,92,255,.4);box-shadow:0 16px 38px rgba(58,108,245,.2)}
+.sb.pryc{border-color:rgba(120,160,255,.18);box-shadow:none;
+  background:linear-gradient(180deg,rgba(120,160,255,.06),rgba(120,160,255,.02)),rgba(9,14,26,.92)}
+.sb-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.sb-eyebrow{font-size:10.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--blue)}
+.sb-cas{font-variant-numeric:tabular-nums;font-weight:800;font-size:13px;color:#2b1a04;
+  background:var(--warn);border-radius:999px;padding:3px 11px;box-shadow:0 0 0 4px rgba(255,216,102,.14)}
+.sb-cas.pulz{animation:sb-tep 1s infinite}
+.sb-cas.pryc{background:transparent;color:var(--text3);box-shadow:none;font-weight:700}
+@keyframes sb-tep{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+.sb-big{display:flex;align-items:baseline;gap:7px;line-height:1}
+.sb-big b{font-size:clamp(26px,7.4vw,34px);font-weight:900;letter-spacing:-.02em;
+  background:linear-gradient(90deg,#4fd1ff,#7c5cff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sb-big span{font-size:13px;color:var(--text2);font-weight:600}
+/* Pruh s bonusem — jediná věc, která doopravdy vyprší. */
+.sb-strip{border-radius:12px;padding:9px 10px;display:flex;flex-direction:column;gap:7px;
+  background:rgba(255,216,102,.1);border:1px solid rgba(255,216,102,.34)}
+.sb-strip-in{display:flex;align-items:center;gap:9px}
+.sb-blesk{font-style:normal;font-size:17px;line-height:1}
+.sb-strip-txt{display:flex;flex-direction:column;gap:1px;min-width:0}
+.sb-strip-txt b{font-size:13.5px;color:var(--warn)}
+.sb-strip-txt i{font-style:normal;font-size:11.5px;color:var(--text2)}
+.sb-bar{height:4px;border-radius:999px;background:rgba(255,216,102,.16);overflow:hidden}
+.sb-bar i{display:block;height:100%;width:100%;border-radius:999px;background:var(--warn);
+  transition:width .25s linear}
+.sb-strip.pryc{background:rgba(120,160,255,.05);border-color:rgba(120,160,255,.16)}
+.sb-strip.pryc .sb-strip-txt b{color:var(--text3)}
+.sb-strip.pryc .sb-blesk{filter:grayscale(1);opacity:.5}
+.sb-strip.pryc .sb-bar{display:none}
+.sb-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
+.sb-list li{padding-left:18px;position:relative;color:var(--text2);font-size:12.5px;line-height:1.4}
+.sb-list li b{color:var(--text);font-weight:700}
+.sb-list li:before{content:"✓";position:absolute;left:0;top:0;font-size:11px;font-weight:900;color:var(--ok)}
 .fine{margin:0;font-size:11.5px;color:var(--text3)}
 .fine.warn{color:var(--warn)}
 .fine.err{color:var(--err)}
@@ -62,8 +82,10 @@ button{font:inherit;cursor:pointer}
   .hero-flex{max-height:20dvh;margin-top:0}
   .lead{font-size:14px}
   .intro-pts{gap:7px}
-  .sb{padding:10px 12px;gap:6px}
+  .sb{padding:10px 12px;gap:7px}
+  .sb-big b{font-size:clamp(23px,6.6vw,28px)}
   .sb-list li{font-size:12px}
+  .sb-list{gap:4px}
   .intro-pts li{font-size:12.5px}
   .btn.big{padding:14px;margin-top:4px}
 }
