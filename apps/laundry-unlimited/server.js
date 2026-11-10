@@ -286,7 +286,7 @@ function landing(lang) {
   const li = (a) => a.map((x) => `<li>${esc(x)}</li>`).join('');
   const nn = (i) => String(i + 1).padStart(2, '0');
   let sd = 11; const rnd = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
-  let sl = '<canvas id="fx" class="fx"></canvas>' + MOON;
+  let sl = MOON;
   for (let i = 0; i < 30; i++) {
     sl += `<i class="sd" style="left:${(rnd() * 100).toFixed(1)}%;top:${(2 + rnd() * 94).toFixed(1)}%;animation-delay:-${(rnd() * 6).toFixed(1)}s"></i>`;
   }
@@ -307,7 +307,6 @@ function landing(lang) {
 <div><h3 class="col">${esc(t.who_exp)}</h3>${t.exp.map((o, i) => `<div class="it"><span class="n">${nn(i)}</span><div><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div></div>`).join('')}</div></div></div></section>
 <section class="light"><div class="wrap"><div class="sec-h rv"><div><span class="lbl">${esc(t.steps_h)}</span><h2>${esc(t.steps_h)}</h2></div></div>
 <div class="steps rv">${t.steps.map((o, i) => `<div><span class="n">${i + 1}</span><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div>`).join('')}</div></div></section>
-<script>${FX_JS}</script>
 <div class="band"><div class="wrap"><h2>${esc(t.cta_h)}</h2><a class="btn" href="${base}/apply"><span>${esc(t.hero_cta)}${CHEV}</span></a></div></div>`;
   return page({ lang, body, canonicalPath: '/' });
 }
