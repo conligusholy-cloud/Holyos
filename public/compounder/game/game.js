@@ -2652,10 +2652,45 @@ var qi = 0, qScore = { opatrny: 0, vyvazeny: 0, dravy: 0 };
 var DOTAZNIK_PO = false;
 // Úvod → rovnou do hry. Profil se zatím nastaví na vyvážený; po prvním
 // prádlomatu si ho hráč v dotazníku změní a rozdíl v hotovosti mu dorovnáme.
+// ─── Bonus za rychlý start ───────────────────────────────────────────────────
+// Na úvodce běží odpočet. Všechno ostatní — startovní kapitál, rámec, obhlídka
+// zdarma i karty k účtu — dostane každý bez ohledu na čas; expirovat může jen
+// tenhle jeden bonus, a ten opravdu expiruje. Slibovat, že propadne i zbytek,
+// by byla lež, kterou hráč odhalí prvním obnovením stránky.
+var START_BONUS = 150000;
+var START_BONUS_MS = 30000;
+var startBonusDo = 0;
+function startBonusPlati() { return startBonusDo > 0 && Date.now() < startBonusDo; }
+function startBonusOdpocet() {
+  var cas = $('sb-cas'), radek = $('sb-bonus');
+  if (!cas || !radek) return;
+  startBonusDo = Date.now() + START_BONUS_MS;
+  var tik = function () {
+    var zbyva = Math.max(0, startBonusDo - Date.now());
+    var s = Math.ceil(zbyva / 1000);
+    cas.textContent = Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
+    if (zbyva > 0) return;
+    clearInterval(t);
+    cas.textContent = 'vypršel';
+    cas.classList.add('pryc');
+    radek.classList.add('pryc');
+    radek.innerHTML = '<b>Bonus za rychlý start</b> propadl. Všechno ostatní dostaneš pořád.';
+  };
+  var t = setInterval(tik, 250);
+  tik();
+}
+
 $('go-quiz').onclick = function () {
+  var bonus = startBonusPlati();
   S = fresh('vyvazeny');
+  if (bonus) S.cash += START_BONUS;
   save();
   startGame();
+  if (bonus) {
+    zapis('bonus', 'Bonus za rychlý start', START_BONUS);
+    save(); paint();
+    toast('Stihl jsi to! Bonus za rychlý start +' + kcFull(START_BONUS) + '.', 'ok');
+  }
   if (ME) syncState(true);
 };
 // Profil se mění za běhu — hráč už hraje, tak mu hotovost nikdy nebereme.
@@ -8508,6 +8543,7 @@ function startGame() {
 ev('game_open');
 zjistiZdroj();
 zaznamStart();
+startBonusOdpocet();
 // Dokud má hráč hru otevřenou, posíláme každých pět minut tichou stopu. Jen
 // z toho se dá poznat, kolik lidí je na hře právě teď — otevření stránky samo
 // o sobě neřekne, jestli u ní někdo ještě sedí.
