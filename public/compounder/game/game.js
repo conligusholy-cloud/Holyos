@@ -7828,6 +7828,83 @@ function trhKoupitSheet(n) {
     });
   };
 }
+// Rozvaha jednoho místa: co do něj šlo, co z něj zatím přiteklo a kde je
+// hranice, pod kterou se prodej nevyplatí. Provozní čísla jsou odhad z doby
+// provozu — hra si pro každý stroj zvlášť účetnictví nevede, ale měsíční
+// čísla a doba běhu jsou přesné, takže je to blízko.
+function rozvahaMista(u) {
+  var eco = u.eco || {};
+  var mesicu = Math.max(0, (Date.now() - (u.builtAt || Date.now())) / MONTH_MS);
+  var zak = zakladniSpotId(u.spotId);
+  var poz = pozemky().filter(function (z) { return z.spotId === zak; })[0] || null;
+  var stroj = Math.round(eco.machine || 0);
+  var pripojky = Math.round(eco.conn || eco.install || 0);
+  var obhlidka = S.revealed && S.revealed[zak] ? REVEAL_COST : 0;
+  var pozemek = poz ? Math.round((poz.cena || 0) + (poz.priprava || 0)) : 0;
+  var vlozeno = stroj + pripojky + obhlidka + pozemek;
+  // Kolik stroj za tu dobu opravdu šlapal — porouchaný nevydělával.
+  var chod = spolehlivost(u);
+  var obrat = Math.round((eco.revenue || 0) * mesicu * chod);
+  var najem = Math.round((eco.rent || 0) * mesicu);
+  var energie = Math.round((eco.energy || 0) * mesicu * chod);
+  var servis = Math.round((eco.servis || 0) * mesicu);
+  var vydelal = obrat - najem - energie - servis;
+  var uvery = (S.loans || []).filter(function (l) { return l.spotId === u.spotId; });
+  var dluh = Math.round(uvery.reduce(function (a, l) { return a + l.zbyva; }, 0));
+  return { mesicu: mesicu, vlozeno: vlozeno, stroj: stroj, pripojky: pripojky, obhlidka: obhlidka,
+    pozemek: pozemek, obrat: obrat, najem: najem, energie: energie, servis: servis,
+    vydelal: vydelal, dluh: dluh, vady: u.vady || 0,
+    // Pod tuhle cenu se prodej nevyplatí: zbytek vložených peněz, co se ještě
+    // nevrátil provozem. Co je nad ní, je čistý výdělek z celého místa.
+    nula: Math.max(0, vlozeno - vydelal) };
+}
+// Doba provozu po česku: do roku v měsících, dál v letech. Desetinné číslo
+// má vždycky „roku" (1,2 roku), celé se skloňuje normálně.
+function dobaProvozu(mesicu) {
+  if (mesicu < 12) {
+    var m = Math.max(1, Math.round(mesicu));
+    return m + ' ' + mn(m, 'herní měsíc', 'herní měsíce', 'herních měsíců');
+  }
+  var roky = mesicu / 12;
+  var cele = Math.round(roky);
+  if (Math.abs(roky - cele) < 0.05) return cele + ' ' + mn(cele, 'rok', 'roky', 'let');
+  return cisloM(Math.round(roky * 10) / 10) + ' roku';
+}
+function rozvahaHtml(r) {
+  return '<div class="card">'
+    + '<div class="row"><h3>Co tě to stálo</h3><b>' + kcFull(r.vlozeno) + '</b></div>'
+    + '<div class="kv"><span>Stroj</span><b>' + kcFull(r.stroj) + '</b></div>'
+    + '<div class="kv"><span>Přípojky a instalace</span><b>' + kcFull(r.pripojky) + '</b></div>'
+    + (r.obhlidka ? '<div class="kv"><span>Obhlídka místa</span><b>' + kcFull(r.obhlidka) + '</b></div>' : '')
+    + (r.pozemek ? '<div class="kv"><span>Pozemek a příprava plochy</span><b>' + kcFull(r.pozemek) + '</b></div>' : '')
+    + '</div>'
+    + '<div class="card">'
+    + '<div class="row"><h3>Co to zatím vydělalo</h3><b class="' + (r.vydelal >= 0 ? 'ok' : 'err') + '">'
+      + kcFull(r.vydelal) + '</b></div>'
+    + '<p class="muted small" style="margin:2px 0 8px">Za ' + dobaProvozu(r.mesicu) + ' provozu'
+      + (r.vady ? ' · ' + r.vady + ' ' + mn(r.vady, 'porucha', 'poruchy', 'poruch') : '') + '</p>'
+    + '<div class="kv"><span>Obrat</span><b>' + kcFull(r.obrat) + '</b></div>'
+    + '<div class="kv"><span>− Nájem</span><b class="warn">' + kcFull(r.najem) + '</b></div>'
+    + '<div class="kv"><span>− Energie</span><b class="warn">' + kcFull(r.energie) + '</b></div>'
+    + '<div class="kv"><span>− Servis a úklid</span><b class="warn">' + kcFull(r.servis) + '</b></div>'
+    + '<p class="fine">Odhad z měsíčních čísel a doby provozu — hra každému stroji zvlášť pokladnu nevede. '
+    + 'Doba, kdy stál porouchaný, je už odečtená.</p>'
+    + '</div>'
+    + '<div class="card">'
+    + '<div class="row"><h3>Kde je nula</h3><b class="' + (r.nula > 0 ? 'warn' : 'ok') + '">'
+      + (r.nula > 0 ? kcFull(r.nula) : 'už je zaplacený') + '</b></div>'
+    + '<p class="muted small" style="margin:2px 0 0">'
+    + (r.nula > 0
+        ? 'Tolik z vložených peněz se ti provozem ještě nevrátilo. Prodej dráž a jsi v plusu, '
+          + 'prodej levněji a tohle místo tě celkem stálo víc, než dalo.'
+        : 'Provoz už vložené peníze vrátil celé. Cokoli utržíš, je čistý zisk z téhle provozovny.')
+    + '</p>'
+    + (r.dluh ? '<div class="kv" style="margin-top:8px"><span>Zbývá splatit úvěr na místě</span>'
+        + '<b class="err">' + kcFull(r.dluh) + '</b></div>'
+        + '<p class="fine">Úvěr prodejem nezmizí — zůstává tobě. Počítej s ním v ceně.</p>' : '')
+    + '</div>';
+}
+
 // Nabídnutí vlastního prádlomatu na tržiště.
 function trhProdejSheet(u) {
   var bezi = trhMoje(u.spotId);
@@ -7850,13 +7927,15 @@ function trhProdejSheet(u) {
   }
   if (S.trhVolba == null) S.trhVolba = { mesicu: 3 };
   var cena = trhNavrhCeny(u);
+  var r = rozvahaMista(u);
   var vykresli = function () {
     sheet('<h3>Nabídnout na tržišti</h3>'
       + '<p class="muted small">' + esc(u.name) + ' — prodáváš celou provozovnu: stroj, nájemní smlouvu, '
       + 'přípojky i rozvržení plochy. Dokud se neprodá, vydělává dál tobě.</p>'
-      + '<div class="card" style="margin-top:12px">'
-        + '<div class="kv"><span>Do místa jsi dal</span><b>' + kcFull((u.eco && u.eco.invest) || 0) + '</b></div>'
+      + rozvahaHtml(r)
+      + '<div class="card">'
         + '<div class="kv"><span>Vydělá měsíčně</span><b class="ok">' + kcFull(u.eco.profit) + '</b></div>'
+        + '<div class="kv"><span>Za rok</span><b class="ok">' + kcFull(Math.round(u.eco.profit * 12)) + '</b></div>'
         + (splatkyMista(u.spotId) ? '<div class="kv"><span>Splátky na místě</span><b class="warn">'
             + kcFull(splatkyMista(u.spotId)) + ' / měsíc</b></div>' : '')
       + '</div>'
@@ -7865,7 +7944,8 @@ function trhProdejSheet(u) {
         + '<input class="inp" id="trh-cena" type="number" inputmode="numeric" min="1000" step="10000" value="' + cena + '">'
         + '<span class="muted small">L$</span></div>'
       + '<p class="fine">Napovídáme ' + kcFull(trhNavrhCeny(u)) + ' — co jsi do místa dal plus roční zisk. '
-      + 'Cena je na tobě; kupující vidí, co místo vydělává.</p>'
+      + 'Cena je na tobě; kupující vidí, co místo vydělává.'
+      + (r.nula > 0 ? ' Pod ' + kcFull(r.nula) + ' bys prodělal.' : ' Cokoli utržíš, je čistý zisk.') + '</p>'
       + '<p class="muted small" style="margin:12px 0 4px"><b>Jak dlouho má nabídka viset</b></p>'
       + '<div class="seg sub najem-seg">' + TRH_MESICE.map(function (mm) {
           return '<button class="' + (mm === S.trhVolba.mesicu ? 'on' : '') + '" data-trh-m="' + mm + '">'
