@@ -158,6 +158,9 @@ model Person {
   // Dovolená
   leave_entitlement_days Int?
   leave_carryover        Int?
+  // Datum, od kterého nárok platí („K DATU" v kartě zaměstnance). Ruční úprava
+  // v kartě platí jen pro tohoto člověka; hromadný přepočet ji k danému dni přepíše.
+  leave_entitlement_from DateTime? @db.Date
 
   // FK
   department_id Int?
@@ -424,9 +427,14 @@ model Permission {
 model LeaveSettings {
   id                       Int     @id @default(1)
   default_entitlement_days Int     @default(20)
-  year                     Int     @default(2026)
+  year                     Int     @default(2026) // historické pole, UI ho už nepoužívá (nahrazeno effective_from)
   carryover_allowed        Boolean @default(true)
   carryover_max_days       Int     @default(5)
+
+  // Datum, ke kterému se nárok hromadně přepočítá všem zaměstnancům.
+  effective_from    DateTime? @db.Date
+  // Datum posledního provedeného přepočtu — hlídá, aby neproběhl dvakrát.
+  last_applied_from DateTime? @db.Date
 
   @@map("leave_settings")
 }

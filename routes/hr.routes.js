@@ -6,7 +6,7 @@ const express = require('express');
 const router = express.Router();
 const { prisma } = require('../config/database');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
-const { requireHrWrite, stripSensitive, canSeeSensitive } = require('../middleware/hr-access');
+const { requireHrWrite, stripSensitive, canSeeSensitive, requireLeaveEdit, canEditLeave } = require('../middleware/hr-access');
 const { logAudit: _logAuditHr } = require('../services/audit');
 const { logAudit, diffObjects, makeSnapshot } = require('../services/audit');
 const { z } = require('zod');
@@ -735,7 +735,7 @@ function sanitizePersonData(body, currentUser, opts = {}) {
     if (f in body) data[f] = body[f] || null;
   }
   // Datum pole — chráněna v update režimu před nechtěným smazáním
-  const dateFields = ['hire_date', 'end_date', 'birth_date'];
+  const dateFields = ['hire_date', 'end_date', 'birth_date', 'leave_entitlement_from'];
   const clearList = Array.isArray(body.__clear_dates) ? body.__clear_dates : [];
   for (const f of dateFields) {
     if (!(f in body)) continue;
@@ -826,6 +826,27 @@ router.post('/people', requireHrWrite, async (req, res, next) => {
 router.put('/people/:id', requireHrWrite, async (req, res, next) => {
   try {
     const before = await prisma.person.findUnique({ where: { id: parseInt(req.params.id) } });
+
+    // Nárok na dovolenou smí měnit jen role s právem na modul „hr-dovolena"
+    // (požadavek #139). Když se pole neposílají nebo se nemění, nic neřešíme.
+    const poleDovolene = ['leave_entitlement_days', 'leave_carryover', 'leave_entitlement_from'];
+    const meniDovolenou = poleDovolene.some((f) => {
+      if (!(f in req.body)) return false;
+      const nova = req.body[f];
+      const stara = before ? before[f] : null;
+      if (f === 'leave_entitlement_from') {
+        const a = nova ? new Date(nova).toISOString().slice(0, 10) : null;
+        const b = stara ? new Date(stara).toISOString().slice(0, 10) : null;
+        return a !== b;
+      }
+      const a = nova === '' || nova == null ? null : parseInt(nova, 10);
+      const b = stara == null ? null : parseInt(stara, 10);
+      return a !== b;
+    });
+    if (meniDovolenou && !(await canEditLeave(req.user))) {
+      return res.status(403).json({ error: 'Na úpravu nároku na dovolenou nemáte oprávnění.' });
+    }
+
     const person = await prisma.person.update({
       where: { id: parseInt(req.params.id) },
       data: ensureFormerEndDate(sanitizePersonData(req.body, req.user, { mode: 'update' }), before),
@@ -1442,13 +1463,23 @@ router.get('/leave-requests', async (req, res, next) => {
     const requests = await prisma.leaveRequest.findMany({
       where,
       include: {
-        person: { select: { id: true, first_name: true, last_name: true } },
+        person: { select: { id: true, first_name: true, last_name: true, supervisor_id: true } },
         approver: { select: { id: true, first_name: true, last_name: true } },
       },
       orderBy: { created_at: 'desc' },
     });
 
-    res.json(requests);
+    // can_approve = smí o žádosti rozhodnout přihlášený uživatel? Frontend podle
+    // toho ukáže nebo schová tlačítka, aby lidé neklikali na něco, co jim server
+    // stejně odmítne. (Požadavek #136)
+    const osoba = await prihlasenaOsoba(req.user);
+    const reditel = jeReditel(osoba);
+    const smiRozhodnout = (r) => {
+      if (!osoba || r.status !== 'pending' || r.person_id === osoba.id) return false;
+      return reditel || (r.person && r.person.supervisor_id === osoba.id);
+    };
+
+    res.json(requests.map(r => ({ ...r, can_approve: smiRozhodnout(r) })));
   } catch (err) {
     next(err);
   }
@@ -1750,7 +1781,7 @@ router.get('/leave-balances', async (req, res, next) => {
       orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }],
       select: {
         id: true, first_name: true, last_name: true,
-        leave_entitlement_days: true, leave_carryover: true,
+        leave_entitlement_days: true, leave_carryover: true, leave_entitlement_from: true,
         leave_requests: {
           where: {
             status: 'approved',
@@ -1797,6 +1828,7 @@ router.get('/leave-balances', async (req, res, next) => {
         carryover: carryover,
         total: entitlement + carryover,
         used: usedDays,
+        entitlement_from: p.leave_entitlement_from,
         company_leave_days: companyLeaveDays,
         remaining: entitlement + carryover - usedDays,
       };
@@ -1826,14 +1858,89 @@ router.get('/leave-settings', async (req, res, next) => {
 });
 
 // POST /api/hr/leave-settings
-router.post('/leave-settings', async (req, res, next) => {
+// Uloží nastavení a — pokud už je zadané datum dosažené — rovnou přepočítá
+// nárok všem zaměstnancům. Datum v budoucnu počká na worker.
+router.post('/leave-settings', requireLeaveEdit, async (req, res, next) => {
   try {
+    const schema = z.object({
+      default_entitlement_days: z.coerce.number().int().min(0).max(366),
+      effective_from: z.string().min(8, 'Zadej datum, od kterého má nastavení platit.'),
+      carryover_allowed: z.coerce.boolean(),
+      carryover_max_days: z.coerce.number().int().min(0).max(366),
+    });
+    const parsed = schema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues.map((i) => i.message).join(' ') });
+    }
+    const d = new Date(parsed.data.effective_from);
+    if (isNaN(d.getTime())) return res.status(400).json({ error: 'Datum platnosti není platné.' });
+    const ucinnost = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+
+    const data = {
+      default_entitlement_days: parsed.data.default_entitlement_days,
+      carryover_allowed: parsed.data.carryover_allowed,
+      carryover_max_days: parsed.data.carryover_max_days,
+      effective_from: ucinnost,
+    };
+    // Změna data = přepočet pro nové datum ještě neproběhl.
+    const puvodni = await prisma.leaveSettings.findFirst({ where: { id: 1 } });
+    const jineDatum = !puvodni || !puvodni.effective_from
+      || new Date(puvodni.effective_from).getTime() !== ucinnost.getTime();
+    if (jineDatum) data.last_applied_from = null;
+
     const settings = await prisma.leaveSettings.upsert({
       where: { id: 1 },
-      update: req.body,
-      create: { id: 1, ...req.body },
+      update: data,
+      create: { id: 1, ...data },
     });
-    res.json(settings);
+
+    // Datum už nastalo → přepočítáme hned, ať to uživatel vidí.
+    let prepocet = null;
+    try {
+      prepocet = await require('../services/hr/leave-rollover').spustPokudJeCas();
+    } catch (e) {
+      console.warn('[hr] přepočet nároku selhal:', e.message);
+      return res.status(500).json({ error: 'Nastavení uloženo, ale přepočet selhal: ' + e.message });
+    }
+
+    await logAudit({
+      action: 'update', entity: 'leave_settings', entity_id: 1,
+      description: 'Změna nastavení dovolených, platnost od ' + ucinnost.toISOString().slice(0, 10)
+        + (prepocet ? ` (přepočteno ${prepocet.pocet} zaměstnanců)` : ' (přepočet proběhne k datu)'),
+      user: req.user,
+    });
+
+    res.json({ ...settings, prepocet });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/hr/leave-settings/can-edit — smí přihlášený upravovat nárok?
+// Frontend podle toho zamkne pole v kartě zaměstnance i v nastavení.
+router.get('/leave-settings/can-edit', async (req, res, next) => {
+  try {
+    res.json({ can_edit: await canEditLeave(req.user) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/hr/leave-settings/apply — ruční spuštění přepočtu (např. po opravě dat)
+router.post('/leave-settings/apply', requireLeaveEdit, async (req, res, next) => {
+  try {
+    const settings = await prisma.leaveSettings.findFirst({ where: { id: 1 } });
+    if (!settings || !settings.effective_from) {
+      return res.status(400).json({ error: 'Nejdřív nastav datum platnosti.' });
+    }
+    const rollover = require('../services/hr/leave-rollover');
+    const r = await rollover.prepocitej(settings.effective_from, settings);
+    await logAudit({
+      action: 'update', entity: 'leave_settings', entity_id: 1,
+      description: `Ruční přepočet nároku na dovolenou — ${r.pocet} zaměstnanců`,
+      user: req.user,
+    });
+    res.json(r);
   } catch (err) {
     next(err);
   }

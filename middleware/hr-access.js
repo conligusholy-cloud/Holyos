@@ -30,6 +30,34 @@ function requireHrWrite(req, res, next) {
   }).catch(next);
 }
 
+// ─── Právo editovat nárok na dovolenou (požadavek #139) ──────────────────────
+// Vlastní modul v „Role a oprávnění", aby šlo nárok svěřit jen vybraným rolím.
+// Když role nemá pro tento modul nic nastaveného, platí její úroveň na lide-hr —
+// stávající role tím o nic nepřijdou.
+const LEAVE_MODULE = 'hr-dovolena';
+
+async function canEditLeave(user) {
+  if (!user) return false;
+  if (user.isSuperAdmin || user.role === 'admin') return true;
+  try {
+    const person = await prisma.person.findFirst({
+      where: { user_id: user.id },
+      select: { role: { select: { permissions: { where: { module_id: LEAVE_MODULE }, select: { access_level: true } } } } },
+    });
+    const p = person && person.role && person.role.permissions && person.role.permissions[0];
+    if (p && p.access_level) return p.access_level === 'write';
+  } catch (e) { /* spadneme na úroveň lide-hr níž */ }
+  const l = await hrLevel(user);
+  return l === 'admin' || l === 'write';
+}
+
+function requireLeaveEdit(req, res, next) {
+  canEditLeave(req.user).then((ok) => {
+    if (ok) return next();
+    res.status(403).json({ error: 'Na úpravu nároku na dovolenou nemáte oprávnění.' });
+  }).catch(next);
+}
+
 // Citlivé údaje osoby (rodné číslo, OP, účet, mzda) — jen admin, HR s právem úpravy, nebo osoba sama
 const SENSITIVE_PERSON_FIELDS = ['birth_number', 'id_card_number', 'bank_account', 'hourly_rate', 'monthly_salary', 'birth_date'];
 function stripSensitive(person) {
@@ -44,4 +72,7 @@ async function canSeeSensitive(user, personId) {
   return !!(user && user.person && personId && user.person.id === personId);
 }
 
-module.exports = { hrLevel, requireHrWrite, stripSensitive, canSeeSensitive, SENSITIVE_PERSON_FIELDS };
+module.exports = {
+  hrLevel, requireHrWrite, stripSensitive, canSeeSensitive, SENSITIVE_PERSON_FIELDS,
+  canEditLeave, requireLeaveEdit, LEAVE_MODULE,
+};

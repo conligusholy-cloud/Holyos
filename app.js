@@ -1461,6 +1461,12 @@ server.listen(PORT, async () => {
     console.error('[app] final-invoice-worker nelze spustit:', err.message);
   }
   try {
+    // Hromadný přepočet nároku na dovolenou k nastavenému datu (požadavek #139)
+    require('./services/hr/leave-rollover-worker').start();
+  } catch (err) {
+    console.error('[app] leave-rollover worker nelze spustit:', err.message);
+  }
+  try {
     const slotReservationWorker = require('./services/slot-reservation-worker');
     slotReservationWorker.start();
   } catch (err) {
