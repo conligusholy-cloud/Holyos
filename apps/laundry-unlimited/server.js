@@ -173,7 +173,7 @@ function page({ lang, title, desc, body, canonicalPath, noindex }) {
 ${noindex ? '<meta name="robots" content="noindex">' : alts}<meta name="theme-color" content="#2a2d33">
 <meta property="og:title" content="${esc(title || t.title)}"><meta property="og:description" content="${esc(desc || t.desc)}"><meta property="og:type" content="website"><meta property="og:image" content="${PUBLIC_URL}/img/ireland.webp">
 <style>${SITE_CSS}</style></head><body>
-<div class="bar"><div class="wrap"><a href="${base || '/'}" style="display:block">${logoHtml(44)}</a>
+<div class="bar"><div class="wrap"><a href="${base || '/'}" style="display:block">${logoHtml(52)}</a>
 <nav><a class="hide" href="${base}/#model">${esc(t.nav_model)}</a><a class="hide" href="${base}/#offer">${esc(t.nav_offer)}</a><a class="hide" href="${base}/#who">${esc(t.nav_who)}</a>
 <div class="lang">${sw}</div><a class="btn" href="${base}/apply" style="color:#fff">${esc(t.nav_apply)}</a></nav></div></div>
 ${body}
