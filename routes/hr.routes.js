@@ -1251,7 +1251,185 @@ router.put('/attendance/:id', async (req, res, next) => {
   }
 });
 
-// ─── ŽÁDOSTI O DOVOLENOU ──────────────────────────────────────────────────
+// ─── ŽÁDOSTI O VOLNO ──────────────────────────────────────────────────────
+//
+// Požadavek #136: žádost se po odeslání musí objevit v seznamu, schválit ji smí
+// přímý nadřízený žádajícího nebo ředitel a po schválení se absence promítne do
+// plánování výroby (plánovač nepřítomného nikomu nenabídne).
+//
+// Dřív se tělo requestu posílalo do Prismy syrové (`data: req.body`) — datum
+// z <input type="date"> přišlo jako "2026-11-10", což Prisma u DateTime pole
+// odmítne, request skončil 500 a frontend chybu zahodil. Odtud „žádost se
+// nikde neobjeví".
+
+const leaveRequestSchema = z.object({
+  person_id: z.coerce.number().int().positive('Vyberte zaměstnance'),
+  type: z.string().trim().min(1, 'Vyberte typ volna').max(50, 'Typ volna je příliš dlouhý'),
+  date_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Datum „Od" musí být ve tvaru RRRR-MM-DD'),
+  date_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Datum „Do" musí být ve tvaru RRRR-MM-DD'),
+  note: z.string().trim().max(2000, 'Poznámka je příliš dlouhá').nullish(),
+}).refine((d) => d.date_to >= d.date_from, {
+  message: 'Datum „Do" nemůže být dřív než „Od"',
+  path: ['date_to'],
+});
+
+// 'YYYY-MM-DD' → půlnoc v UTC. Pole je Prisma @db.Date, tak se uloží holý den
+// bez posunu o časovou zónu (na Windows i na Railway stejně).
+function denNaDatum(s) {
+  return new Date(`${s}T00:00:00.000Z`);
+}
+
+function denCesky(d) {
+  return new Date(d).toLocaleDateString('cs-CZ', { timeZone: 'UTC' });
+}
+
+// Osoba přihlášeného uživatele včetně pozice — potřeba pro kontrolu, kdo smí schvalovat.
+async function prihlasenaOsoba(user) {
+  if (!user || !user.person) return null;
+  return prisma.person.findUnique({
+    where: { id: user.person.id },
+    select: { id: true, first_name: true, last_name: true, supervisor_id: true, role: { select: { name: true } } },
+  });
+}
+
+// Ředitel = osoba, jejíž pozice (Role) má v názvu „ředitel" (bez ohledu na
+// diakritiku a velikost písmen — projde „Ředitel", „výrobní ředitelka" i „RETIZEL" ne).
+function jeReditel(osoba) {
+  const nazev = osoba && osoba.role && osoba.role.name ? osoba.role.name : '';
+  return nazev
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .includes('reditel');
+}
+
+// Smí přihlášený uživatel rozhodnout o téhle žádosti?
+// Povolení má přímý nadřízený žadatele nebo ředitel. (Požadavek #136)
+async function overSchvalovatele(user, zadost) {
+  const osoba = await prihlasenaOsoba(user);
+  if (!osoba) {
+    return { ok: false, chyba: 'Váš účet nemá navázanou osobu v HR, nemůžete schvalovat žádosti.' };
+  }
+  if (zadost.person_id === osoba.id) {
+    return { ok: false, chyba: 'Vlastní žádost o volno si schválit nemůžete — rozhodne nadřízený nebo ředitel.' };
+  }
+  const nadrizeny = zadost.person && zadost.person.supervisor_id === osoba.id;
+  if (nadrizeny || jeReditel(osoba)) return { ok: true, osoba };
+  return { ok: false, chyba: 'Žádost smí schválit nebo zamítnout jen přímý nadřízený žadatele nebo ředitel.' };
+}
+
+// Komu dát vědět o nové žádosti: přímý nadřízený + ředitelé (jejich uživatelské účty).
+async function schvalovateleUserIds(zadost) {
+  const ids = new Set();
+  try {
+    const kandidati = await prisma.person.findMany({
+      where: {
+        active: true,
+        user_id: { not: null },
+        OR: [
+          zadost.person && zadost.person.supervisor_id ? { id: zadost.person.supervisor_id } : { id: -1 },
+          { role: { name: { contains: 'editel', mode: 'insensitive' } } },
+        ],
+      },
+      select: { id: true, user_id: true },
+    });
+    for (const k of kandidati) if (k.user_id && k.id !== zadost.person_id) ids.add(k.user_id);
+  } catch (e) {
+    console.warn('[hr] schvalovatele žádosti o volno:', e.message);
+  }
+  return [...ids];
+}
+
+function jmenoOsoby(p) {
+  if (!p) return 'Neznámý';
+  return `${p.last_name || ''} ${p.first_name || ''}`.trim() || ('#' + p.id);
+}
+
+// Žádost i s osobou žadatele — potřeba pro kontrolu nadřízeného.
+async function nactiZadost(id) {
+  return prisma.leaveRequest.findUnique({
+    where: { id },
+    include: { person: { select: { id: true, first_name: true, last_name: true, supervisor_id: true, user_id: true } } },
+  });
+}
+
+// Upozornění nadřízenému a ředitelům na novou žádost.
+async function notifikujSchvalovatele(request, zamestnanec) {
+  try {
+    const { createNotification } = require('./notifications.routes');
+    const prijemci = await schvalovateleUserIds(request);
+    for (const uid of prijemci) {
+      await createNotification({
+        userId: uid,
+        type: 'leave_request',
+        title: `📝 Žádost o volno: ${jmenoOsoby(zamestnanec)}`,
+        body: `${request.type} · ${denCesky(request.date_from)} – ${denCesky(request.date_to)}${request.note ? '\n' + request.note : ''}`,
+        link: '/modules/lide-hr/index.html',
+        meta: { leave_request_id: request.id, person_id: request.person_id },
+      });
+    }
+  } catch (e) {
+    console.warn('[hr] notifikace o žádosti o volno:', e.message);
+  }
+}
+
+// Vyrozumění žadatele o výsledku (jen když má uživatelský účet).
+async function oznamZadateli(request, osoba, vysledek) {
+  try {
+    if (!osoba || !osoba.user_id) return;
+    const { createNotification } = require('./notifications.routes');
+    const schvaleno = vysledek === 'approved';
+    await createNotification({
+      userId: osoba.user_id,
+      type: 'leave_request',
+      title: schvaleno ? '✅ Volno schváleno' : '❌ Volno zamítnuto',
+      body: `${request.type} · ${denCesky(request.date_from)} – ${denCesky(request.date_to)}`,
+      link: '/modules/lide-hr/index.html',
+      meta: { leave_request_id: request.id },
+    });
+  } catch (e) {
+    console.warn('[hr] vyrozumění žadatele o volnu:', e.message);
+  }
+}
+
+/**
+ * Promítnutí schválené absence do plánování výroby. (Požadavek #136)
+ *
+ * Dopředu to řeší plánovač sám — services/planning/absence.js načítá schválené
+ * žádosti a scheduler i Mistr dispečer nepřítomného přeskočí. Tady dořešíme
+ * situaci, kdy je volno schválené až na týden, který je UŽ rozplánovaný:
+ * plán nepřepisujeme (to by rozhodilo termíny), ale najdeme kolizní operace
+ * a pošleme je nadřízenému a ředitelům k přeobsazení.
+ */
+async function resiPlanPoSchvaleni(request) {
+  try {
+    const { findPlannedConflicts } = require('../services/planning/absence');
+    const kolize = await findPlannedConflicts(prisma, request);
+    if (!kolize.length) return [];
+
+    const jmeno = jmenoOsoby(request.person);
+    const seznam = kolize.slice(0, 10)
+      .map(k => `• ${k.batch_number} — ${k.name} (${new Date(k.planned_start).toLocaleString('cs-CZ')})`)
+      .join('\n');
+    const vic = kolize.length > 10 ? `\n…a dalších ${kolize.length - 10}` : '';
+
+    const { createNotification } = require('./notifications.routes');
+    const prijemci = await schvalovateleUserIds(request);
+    for (const uid of prijemci) {
+      await createNotification({
+        userId: uid,
+        type: 'task_status',
+        title: `⚠️ ${jmeno} má volno na ${kolize.length} naplánovaných operací`,
+        body: `Schválené volno ${denCesky(request.date_from)} – ${denCesky(request.date_to)} se kryje s už naplánovanou prací:\n${seznam}${vic}\n\nOperace je potřeba přeobsadit.`,
+        link: '/modules/planovani-vyroby',
+        meta: { leave_request_id: request.id, person_id: request.person_id, operation_ids: kolize.map(k => k.operation_id) },
+      });
+    }
+    return kolize;
+  } catch (e) {
+    console.warn('[hr] kontrola plánu po schválení volna:', e.message);
+    return [];
+  }
+}
 
 // GET /api/hr/leave-requests
 router.get('/leave-requests', async (req, res, next) => {
@@ -1331,24 +1509,78 @@ async function syncLeaveRequestToAttendance(request) {
 }
 
 // POST /api/hr/leave-requests
+//
+// Dřív se tělo requestu posílalo do Prismy syrové (`data: req.body`). Datum
+// z <input type="date"> přijde jako "2026-11-10", což Prisma u DateTime pole
+// odmítne — request skončil chybou, frontend ji zahodil a žádost se „nikde
+// neobjevila". Teď se tělo validuje zodem a datumy převedou na Date.
+// (Požadavek #136)
 router.post('/leave-requests', async (req, res, next) => {
   try {
-    const request = await prisma.leaveRequest.create({
-      data: req.body,
-      include: { person: true },
+    const parsed = leaveRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: firstZodMessage(parsed.error), details: parsed.error.issues });
+    }
+    const d = parsed.data;
+
+    const zamestnanec = await prisma.person.findUnique({
+      where: { id: d.person_id },
+      select: { id: true, first_name: true, last_name: true, supervisor_id: true },
     });
+    if (!zamestnanec) return res.status(400).json({ error: 'Zaměstnanec neexistuje' });
+
+    const request = await prisma.leaveRequest.create({
+      data: {
+        person_id: d.person_id,
+        type: d.type,
+        date_from: denNaDatum(d.date_from),
+        date_to: denNaDatum(d.date_to),
+        note: d.note || null,
+        status: 'pending',
+      },
+      include: { person: { select: { id: true, first_name: true, last_name: true, supervisor_id: true } } },
+    });
+
+    await logAudit({
+      action: 'create', entity: 'leave_request', entity_id: request.id,
+      description: `Nová žádost o volno: ${jmenoOsoby(zamestnanec)} ${denCesky(request.date_from)}–${denCesky(request.date_to)}`,
+      snapshot: makeSnapshot(request), user: req.user,
+    });
+
+    // Nadřízený a ředitelé se o žádosti dozví hned, ať na ni nikdo nečeká.
+    await notifikujSchvalovatele(request, zamestnanec);
+
     res.status(201).json(request);
   } catch (err) {
     next(err);
   }
 });
 
-// PUT /api/hr/leave-requests/:id (schválení/zamítnutí)
+// PUT /api/hr/leave-requests/:id — úprava žádosti (poznámka, typ, termín).
+// O stavu se rozhoduje jen přes /approve a /reject, kde se kontroluje
+// oprávnění schvalovatele. (Požadavek #136)
 router.put('/leave-requests/:id', async (req, res, next) => {
   try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID žádosti' });
+    if ('status' in req.body) {
+      return res.status(400).json({ error: 'Stav žádosti se mění přes schválení nebo zamítnutí.' });
+    }
+    const data = {};
+    if ('note' in req.body) data.note = req.body.note || null;
+    if ('type' in req.body) data.type = String(req.body.type).slice(0, 50);
+    for (const f of ['date_from', 'date_to']) {
+      if (!(f in req.body)) continue;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(req.body[f] || ''))) {
+        return res.status(400).json({ error: 'Datum musí být ve tvaru RRRR-MM-DD' });
+      }
+      data[f] = denNaDatum(req.body[f]);
+    }
+    if (!Object.keys(data).length) return res.status(400).json({ error: 'Není co měnit' });
+
     const request = await prisma.leaveRequest.update({
-      where: { id: parseInt(req.params.id) },
-      data: req.body,
+      where: { id },
+      data,
     });
     // Stav nebo termín se mohl změnit → docházku přegenerujeme načisto.
     try {
@@ -1408,40 +1640,82 @@ router.get('/presence', async (req, res, next) => {
 // ─── SCHVÁLENÍ / ZAMÍTNUTÍ DOVOLENÉ ───────────────────────────────────────
 
 // PUT /api/hr/leave-requests/:id/approve
+// Schválit smí přímý nadřízený žadatele nebo ředitel. Schvalovatel se bere
+// z přihlášení, ne z těla requestu (dřív tam chodil string 'admin', který se
+// do číselného pole approved_by nevešel a zápis selhal). (Požadavek #136)
 router.put('/leave-requests/:id/approve', async (req, res, next) => {
   try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID žádosti' });
+
+    const zadost = await nactiZadost(id);
+    if (!zadost) return res.status(404).json({ error: 'Žádost nenalezena' });
+    if (zadost.status === 'approved') return res.status(409).json({ error: 'Žádost už je schválená' });
+
+    const opravneni = await overSchvalovatele(req.user, zadost);
+    if (!opravneni.ok) return res.status(403).json({ error: opravneni.chyba });
+
     const request = await prisma.leaveRequest.update({
-      where: { id: parseInt(req.params.id) },
-      data: {
-        status: 'approved',
-        approved_by: req.body.approved_by || null,
-      },
+      where: { id },
+      data: { status: 'approved', approved_by: opravneni.osoba.id },
+      include: { person: { select: { id: true, first_name: true, last_name: true, supervisor_id: true } } },
     });
+
+    await logAudit({
+      action: 'update', entity: 'leave_request', entity_id: request.id,
+      description: `Schváleno volno: ${jmenoOsoby(zadost.person)} ${denCesky(request.date_from)}–${denCesky(request.date_to)} (schválil ${jmenoOsoby(opravneni.osoba)})`,
+      changes: { status: { from: zadost.status, to: 'approved' } },
+      snapshot: makeSnapshot(zadost), user: req.user,
+    });
+
     // Schválená dovolená se propíše zaměstnanci do docházky.
     let attendance_days = 0;
     try {
       await clearLeaveRequestAttendance(request.id);
       attendance_days = await syncLeaveRequestToAttendance(request);
     } catch (e) { console.warn('[hr] propis schválené dovolené do docházky:', e.message); }
-    res.json({ ...request, attendance_days });
+
+    // …a do plánování výroby: plánovač od teď nepřítomného nikomu nenabídne
+    // (services/planning/absence.js). Operace, které už na ty dny naplánované
+    // jsou, se nepřepisují — jen se na ně upozorní nadřízený a ředitelé.
+    const plan_conflicts = await resiPlanPoSchvaleni(request);
+
+    await oznamZadateli(request, zadost.person, 'approved');
+    res.json({ ...request, attendance_days, plan_conflicts });
   } catch (err) {
     next(err);
   }
 });
 
-// PUT /api/hr/leave-requests/:id/reject
+// PUT /api/hr/leave-requests/:id/reject — stejné oprávnění jako schválení.
 router.put('/leave-requests/:id/reject', async (req, res, next) => {
   try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID žádosti' });
+
+    const zadost = await nactiZadost(id);
+    if (!zadost) return res.status(404).json({ error: 'Žádost nenalezena' });
+
+    const opravneni = await overSchvalovatele(req.user, zadost);
+    if (!opravneni.ok) return res.status(403).json({ error: opravneni.chyba });
+
     const request = await prisma.leaveRequest.update({
-      where: { id: parseInt(req.params.id) },
-      data: {
-        status: 'rejected',
-        approved_by: req.body.approved_by || null,
-      },
+      where: { id },
+      data: { status: 'rejected', approved_by: opravneni.osoba.id },
     });
+
+    await logAudit({
+      action: 'update', entity: 'leave_request', entity_id: request.id,
+      description: `Zamítnuto volno: ${jmenoOsoby(zadost.person)} ${denCesky(request.date_from)}–${denCesky(request.date_to)} (zamítl ${jmenoOsoby(opravneni.osoba)})`,
+      changes: { status: { from: zadost.status, to: 'rejected' } },
+      snapshot: makeSnapshot(zadost), user: req.user,
+    });
+
     // Zamítnutá dovolená nemá v docházce co dělat.
     try { await clearLeaveRequestAttendance(request.id); }
     catch (e) { console.warn('[hr] úklid docházky po zamítnutí:', e.message); }
+
+    await oznamZadateli(request, zadost.person, 'rejected');
     res.json(request);
   } catch (err) {
     next(err);
