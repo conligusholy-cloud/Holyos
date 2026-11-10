@@ -308,7 +308,8 @@
           + '<th class="num">Nákupů</th><th class="num">Utraceno</th><th>Naposledy</th><th></th></tr></thead><tbody>'
           + (j.players.length ? j.players.map(function (p) {
             return '<tr' + (p.disabled ? ' style="opacity:.45"' : '') + '><td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + p.id + '">' + esc(p.nick) + '</b>'
-              + (p.profil ? '<div class="note">' + esc(p.profil) + '</div>' : '') + '</td>'
+              + (p.profil ? '<div class="note">' + esc(p.profil) + '</div>' : '')
+              + (p.zdroj ? '<div class="note">z: ' + esc(p.zdroj) + '</div>' : '') + '</td>'
               + '<td>' + (p.jmeno ? esc(p.jmeno) : '<span class="note">—</span>')
               + (p.email ? '<div class="note">' + esc(p.email) + '</div>' : '') + '</td>'
               + '<td class="num">' + cz(p.pradlomatu) + '</td><td class="num">' + cz(p.mist) + '</td>'

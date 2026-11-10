@@ -75,9 +75,23 @@ async function newPlayer(prisma, player) {
   try {
     let celkem = null;
     try { celkem = await prisma.gamePlayer.count(); } catch (e) { /* počet není důležitý */ }
+    // Odkud přišel, je to první, co chceme vědět — jestli ho někdo přivedl,
+    // nebo přišel z reklamy. Bez toho se nedá poznat, co nábor dělá.
+    let odkud = ' Nikdo ho nepozval — přišel sám.';
+    try {
+      if (player.invited_by_id) {
+        const z = await prisma.gamePlayer.findUnique({
+          where: { id: player.invited_by_id }, select: { nick: true, company: true } });
+        odkud = z ? ' Přivedl ho ' + kdoJe(z) + '.' : ' Přišel přes cizí odkaz.';
+      } else if (player.invited_by_ref) {
+        odkud = ' Přišel přes odkaz ' + player.invited_by_ref + ' (zvoucí účet zatím neznáme).';
+      } else if (player.zdroj) {
+        odkud = ' Přišel z: ' + player.zdroj + '.';
+      }
+    } catch (e) { /* původ je bonus, notifikace musí odejít tak jako tak */ }
     await dispatch(prisma, {
-      title: '🎮 Nový hráč v Milionáři',
-      body: kdoJe(player) + ' si právě založil(a) účet.'
+      title: '🎮 Nový hráč v Laundromat Tycoonu',
+      body: kdoJe(player) + ' si právě založil(a) účet.' + odkud
         + (celkem ? ' Hráčů celkem: ' + celkem + '.' : ''),
       data: { udalost: 'milionar_novy_hrac', player_id: player.id }
     });

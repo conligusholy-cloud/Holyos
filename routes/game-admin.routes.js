@@ -77,6 +77,8 @@ router.get('/players', api(async (req, res) => {
       pozvanek: st.refs || 0,
       privedl: PRIV[p.id] || 0,
       privedl_me: p.invited_by_id ? (ZVOU[p.invited_by_id] || ('hráč #' + p.invited_by_id)) : null,
+      // Odkud přišel, když ho nikdo nepozval — z reklamy, z odkazu, sám.
+      zdroj: p.zdroj || null,
       mist: (S[p.id] && S[p.id]._count._all) || 0,
       karet: (C[p.id] && C[p.id]._count._all) || 0,
       nakupu: (P[p.id] && P[p.id]._count._all) || 0,

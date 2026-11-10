@@ -7748,6 +7748,21 @@ function visitId() {
   } catch (e) { return 'anon' + Math.random().toString(36).slice(2, 10); }
 }
 var evDone = {};
+// Odkud hráč přišel. Bereme z adresy při první návštěvě a držíme to v
+// prohlížeči — registrace přijde třeba až za dva dny a to už v adrese nic není.
+var ZDROJ_KEY = 'lm_zdroj';
+function zjistiZdroj() {
+  try {
+    var q = new URLSearchParams(location.search);
+    var z = q.get('utm_source') || q.get('zdroj') || (q.get('fbclid') ? 'facebook' : '');
+    var m = q.get('utm_medium') || '', k = q.get('utm_campaign') || '';
+    if (z) {
+      var cely = [z, m, k].filter(Boolean).join(' / ').slice(0, 80);
+      if (!localStorage.getItem(ZDROJ_KEY)) localStorage.setItem(ZDROJ_KEY, cely);
+    }
+    return localStorage.getItem(ZDROJ_KEY) || '';
+  } catch (e) { return ''; }
+}
 function ev(name, znovu) {
   if (!znovu && evDone[name]) return;
   evDone[name] = 1;
@@ -7810,7 +7825,8 @@ function doAcct(login) {
   var firma = $('ac-firma').value.trim();
   if (!login && firma.length && firma.length < 2) return acctErr('Název firmy má aspoň 2 znaky.');
   apiJson('/account/' + (login ? 'login' : 'register'),
-    { nick: nick, password: pass, company: firma, ref: trvalePid(), odkud: prichoziRef() }).then(function (r) {
+    { nick: nick, password: pass, company: firma, ref: trvalePid(), odkud: prichoziRef(),
+      zdroj: zjistiZdroj() }).then(function (r) {
     $('ac-go').disabled = false;
     if (!r.ok) return acctErr(r.j.error || 'Nepovedlo se.');
     ME = r.j.player;
@@ -8251,6 +8267,7 @@ function startGame() {
 }
 
 ev('game_open');
+zjistiZdroj();
 // Dokud má hráč hru otevřenou, posíláme každých pět minut tichou stopu. Jen
 // z toho se dá poznat, kolik lidí je na hře právě teď — otevření stránky samo
 // o sobě neřekne, jestli u ní někdo ještě sedí.

@@ -7605,6 +7605,9 @@ model GamePlayer {
   ref_id         String?   @unique @db.VarChar(24)
   invited_by_id  Int?
   invited_by_ref String?   @db.VarChar(24)
+  // Odkud hráč přišel, když ho nikdo nepozval: utm_source z reklamy, fbclid
+  // z Facebooku a podobně. Bere se z adresy při první návštěvě.
+  zdroj          String?   @db.VarChar(80)
   invited_at     DateTime?
   // Odkdy se počítá další Expresní dovoz zdarma (jeden za dva herní měsíce).
   rush_zdarma_at DateTime?

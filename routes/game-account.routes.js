@@ -475,7 +475,9 @@ router.post('/account/register', async (req, res, next) => {
     if (taken) return res.status(409).json({ error: 'Tenhle nick už někdo má. Vymysli jiný.' });
     const p = await prisma.gamePlayer.create({
       data: { nick, nick_lower: lower, company: firmaNebo(s((req.body || {}).company, 60), nick),
-        password_hash: await bcrypt.hash(pwd, 10), last_login_at: new Date() }
+        password_hash: await bcrypt.hash(pwd, 10), last_login_at: new Date(),
+        // Odkud přišel: hra si to zapamatuje z adresy při první návštěvě.
+        zdroj: s((req.body || {}).zdroj, 80) || null }
     });
     // Dárek do začátku: jedna od každé zrychlující karty. Dostane ho jen nový
     // účet — ne ten, kdo si hru resetuje, jinak by si karty takhle „vyráběl".
