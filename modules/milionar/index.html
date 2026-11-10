@@ -59,6 +59,25 @@
     .mini { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:9px 11px; }
     .mini .v { font-size:16px; font-weight:700; }
     .mini .l { font-size:10.5px; color:var(--text2); text-transform:uppercase; letter-spacing:.05em; }
+    /* Mobil ve Velíně: stránka běží ve WebView telefonu (adresa ...?embed=1&mobil=1).
+       Sidebar a horní lištu schová už embed režim, tady jen stáhneme odsazení
+       a srovnáme dlaždice do dvou sloupců, ať se to na displeji dá číst. */
+    body.mobil .page-header { padding:12px 14px; }
+    body.mobil .page-header h1 { font-size:16px; }
+    body.mobil .page-header .sub { font-size:11.5px; }
+    body.mobil .module-tabs { padding:0 6px; }
+    body.mobil .module-tab { padding:11px 12px; font-size:12.5px; }
+    body.mobil .content { padding:0 12px 28px; }
+    body.mobil .kpis { grid-template-columns:repeat(2,1fr); gap:8px; }
+    body.mobil .kpi { padding:11px 12px; }
+    body.mobil .kpi .v { font-size:19px; }
+    body.mobil .kpi .l { font-size:10px; }
+    body.mobil .fn-row .nm { width:118px; font-size:12px; }
+    body.mobil .fn-row b { width:86px; font-size:12px; }
+    body.mobil .pv-sloupce { grid-template-columns:1fr; }
+    body.mobil .dlg { width:96vw; padding:14px 14px 18px; }
+    body.mobil .ov { padding:8px; }
+    body.mobil .toolbar { margin:12px 0; }
     /* Přehrávač první minuty. rrweb vykreslí do rámečku vlastní iframe
        v původní velikosti telefonu — zmenšíme ho na šířku okna. */
     .rr-box { position:relative; overflow:hidden; background:#04060c; border:1px solid var(--border);
@@ -163,6 +182,9 @@
   <script src="js/sidebar.js?v=2026-11-05-1"></script>
   <script>
   (function () {
+    // Ve Velíně (mobil) běží stránka ve WebView — užší odsazení a dvousloupcové
+    // dlaždice. Zapíná se adresou ...index.html?embed=1&mobil=1.
+    if (/[?&]mobil=1(&|$)/.test(location.search)) document.body.classList.add('mobil');
     renderSidebar('milionar');
     var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
     var cz = function (n) { return Number(n || 0).toLocaleString('cs-CZ'); };

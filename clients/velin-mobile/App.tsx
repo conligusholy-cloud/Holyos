@@ -56,6 +56,7 @@ import VideoCall from './screens/VideoCall';
 import VideoCalls from './screens/VideoCalls';
 import SalesStats from './screens/SalesStats';
 import MilionarWeb from './screens/MilionarWeb';
+import GameAdminWeb from './screens/GameAdminWeb';
 import AdsLive from './screens/AdsLive';
 import AdsPage from './screens/AdsPage';
 import PayRequest from './screens/PayRequest';
@@ -102,6 +103,7 @@ export type RootStackParamList = {
   VideoCalls: undefined;
   SalesStats: undefined;
   MilionarWeb: undefined;
+  GameAdminWeb: undefined;
   AdsLive: undefined;
   AdsPage: { key: string; name: string; color?: string };
   PayRequest: { token: string };
@@ -468,6 +470,11 @@ export default function App() {
             name="MilionarWeb"
             component={MilionarWeb}
             options={{ animation: 'slide_from_right', headerShown: true, title: 'Laundromats Milionář', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text, headerShadowVisible: false }}
+          />
+          <Stack.Screen
+            name="GameAdminWeb"
+            component={GameAdminWeb}
+            options={{ animation: 'slide_from_right', headerShown: true, title: 'Správa hry', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text, headerShadowVisible: false }}
           />
           <Stack.Screen
             name="Meetings"

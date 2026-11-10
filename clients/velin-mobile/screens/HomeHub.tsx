@@ -47,6 +47,8 @@ const APPS: HubApp[] = [
   { key: 'salesStats', title: 'Výsledky', icon: '📊', tint: '#f5c451', screen: 'SalesStats', adminOnly: true },
   // Hra Laundromats Milionář (pradlomaty.info/game) — vlastní herní účet, vidí ji všichni
   { key: 'milionar', title: 'Milionář', icon: '🎮', tint: '#7c5cff', screen: 'MilionarWeb' },
+  // Administrace hry (hráči, objednávky, statistiky, záznamy první minuty) — jen Tomáš a Jan Holý
+  { key: 'gameAdmin', title: 'Správa hry', icon: '🛠️', tint: '#f5c451', screen: 'GameAdminWeb', adminOnly: true },
 ];
 
 function greeting(): string {
