@@ -1089,6 +1089,25 @@ function uverMista(u) {
   if (!u || !S.loans) return null;
   return S.loans.filter(function (l) { return l.spotId && l.spotId === u.spotId; })[0] || null;
 }
+// Kolik na tomhle místě každý měsíc ukousne banka. Úvěrů může být víc — jeden
+// na stroj, druhý na přípojky.
+function splatkaMista(spotId) {
+  if (!spotId || !S.loans) return 0;
+  return Math.round(S.loans.filter(function (l) { return l.spotId === spotId; })
+    .reduce(function (a, l) { return a + Math.min(l.splatka, l.zbyva + l.zbyva * l.sazba / 12); }, 0));
+}
+// Když o místo přijdeme — výpovědí, přeplacením nebo vlastním odchodem — úvěry
+// na něj nezmizí. Banka chce svoje dál, i když stroj mezitím leží na skladě a
+// nevydělává; jen přestanou patřit ke konkrétnímu místu.
+function osirelyUver(spotId) {
+  var splatka = splatkaMista(spotId);
+  (S.loans || []).forEach(function (l) {
+    if (l.spotId !== spotId) return;
+    l.spotId = null;
+    if (String(l.popis || '').indexOf('místo zrušeno') < 0) l.popis = (l.popis || 'Úvěr') + ' (místo zrušeno)';
+  });
+  return splatka;
+}
 // Měsíční nájem: lepší místo si řekne o víc, zbytek je o tom, jak se domluvíš.
 function rentOf(sp) {
   var attract = 0.7 + (Math.max(0, Math.min(100, sp.score)) / 100) * 0.8;
@@ -5311,6 +5330,7 @@ function reconcileUnits() {
   if (!lost.length) return;
   lost.forEach(function (x) {
     S.stock[x.u.eco.model] = inStock(x.u.eco.model) + 1;
+    osirelyUver(x.u.spotId);
   });
   save(); paint();
   var x = lost[0];
@@ -5370,10 +5390,12 @@ function hlidejStehovani() {
   konci.forEach(function (u) {
     S.units = S.units.filter(function (x) { return x.spotId !== u.spotId; });
     S.stock[u.eco.model] = inStock(u.eco.model) + 1;
+    var spl = osirelyUver(u.spotId);
     delete CLAIMS[u.spotId];
     if (ME) apiJson('/spots/release', { spot_id: u.spotId, odstupne: true }).catch(function () {});
     toast('Nájem v místě ' + u.name + ' skončil. ' + ((MODELS[u.eco.model] || {}).name || 'Prádlomat')
-      + ' máš na skladě — najdi mu nové místo a udělej přípojky.', 'err');
+      + ' máš na skladě — najdi mu nové místo a udělej přípojky.'
+      + (spl ? ' Splátky ' + kcFull(spl) + ' měsíčně běží dál.' : ''), 'err');
   });
   save(); paint(); drawMap(); syncState(true);
 }
@@ -5387,6 +5409,13 @@ function vypovedMajiteleHtml(u) {
     + '<p class="muted small" style="margin:4px 0 8px"><b>' + esc(v.t) + '.</b> ' + esc(v.p)
     + ' Výpovědní doba je ' + vypovedNazev(v.mesicu) + '; do jejího konce prádlomat vydělává dál. '
     + 'Pak se musí odvézt — skončí na skladě a nové místo bude chtít i nové přípojky.</p>';
+  var spl = splatkaMista(u.spotId);
+  if (spl > 0) {
+    h += '<div class="kv"><span>Splátky úvěru na tohle místo</span><b class="err">'
+      + kcFull(spl) + ' / měsíc</b></div>'
+      + '<p class="fine err" style="margin:4px 0 8px">Ty běží dál. Na skladě stroj nevydělává nic, '
+      + 'ale bance se platí stejně — proto se vyplatí mít nové místo nachystané dřív, než lhůta doběhne.</p>';
+  }
   if (v.navyseni > 0) {
     h += '<div class="kv"><span>Platíš teď</span><b>' + kcFull(u.eco.rent || 0) + ' / měsíc</b></div>'
       + '<div class="kv"><span>Majitel chce</span><b class="warn">' + kcFull(novy) + ' / měsíc</b></div>'
@@ -5584,7 +5613,8 @@ function unitSheet(u) {
     + (u.eco.ziskPlny > 0 ? '<div class="kv"><span>Návratnost</span><b>'
       + (u.eco.invest / (u.eco.ziskPlny * 12)).toFixed(1).replace('.', ',') + ' roku</b></div>' : '')
     + '<p class="muted small" style="margin-top:14px">Když je jinde líp, místo vypovíš a stroj si odvezeš na sklad. '
-    + 'Přípojky ani domluvený nájem se nevracejí a místo se hned uvolní konkurenci.</p>'
+    + 'Přípojky ani domluvený nájem se nevracejí, místo se hned uvolní konkurenci a splátky '
+    + 'úvěru na něj běží dál.</p>'
     + '<button class="btn sec" id="do-release" style="width:100%">Vypovědět místo</button>');
   var tb = $('do-technik');
   if (tb) tb.onclick = function () { vyslatTechnika(u); closeSheet(); switchTab('map'); };
@@ -5667,6 +5697,7 @@ function vypovedMisto(u, sOdstupnym, rb) {
       if (!r.ok) { if (rb) rb.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
       S.units = S.units.filter(function (x) { return x.spotId !== u.spotId; });
       S.stock[u.eco.model] = inStock(u.eco.model) + 1;
+      osirelyUver(u.spotId);
       delete CLAIMS[u.spotId];
       save(); paint(); drawMap(); closeSheet(); syncState(true);
       toast('Místo vypovězeno. ' + MODELS[u.eco.model].name + ' čeká na skladě.', 'ok');
