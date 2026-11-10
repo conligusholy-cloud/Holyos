@@ -364,10 +364,21 @@ async function lmAllowed(user) {
   const fn = String(person.first_name || '').trim().toLowerCase(), ln = String(person.last_name || '').trim().toLowerCase();
   return ln === 'holý' && (fn === 'tomáš' || fn === 'jan');
 }
+// Laundry Unlimited (laundry-unlimited.com) — samostatný web + administrace poptávek master franšízantů (LU_URL + LU_SSO_SECRET).
+async function luAllowed(user) {
+  if (!process.env.LU_URL || !process.env.LU_SSO_SECRET) return false;
+  const person = user && user.person;
+  if (!person) return false;
+  const ids = String(process.env.LU_ALLOWED_PERSON_IDS || process.env.BS2_ALLOWED_PERSON_IDS || '').split(',').map(s => parseInt(s.trim(), 10)).filter(Number.isFinite);
+  if (ids.length) return ids.includes(person.id);
+  const fn = String(person.first_name || '').trim().toLowerCase(), ln = String(person.last_name || '').trim().toLowerCase();
+  return ln === 'holý' && (fn === 'tomáš' || fn === 'jan');
+}
 async function externalSectionsFor(user) {
   const out = [];
   try {
     if (await lmAllowed(user)) out.push({ id: 'laundromats', name: process.env.LM_NAME || 'Laundromats', icon: '&#129530;', color: '#3a6cf5', href: '/api/auth/sso/laundromats' });
+    if (await luAllowed(user)) out.push({ id: 'laundry-unlimited', name: process.env.LU_NAME || 'Laundry Unlimited', icon: '&#127758;', color: '#00b8d9', href: '/api/auth/sso/laundry-unlimited' });
     if (await bs2Allowed(user)) {
       out.push({ id: 'bs2', name: process.env.BS2_NAME || 'Best Series 2.0', icon: '&#128101;', color: '#1e86e0', href: '/api/auth/sso/bs2' });
       out.push({ id: 'ads', name: 'Centrum reklamy', icon: '&#128227;', color: '#f59e0b', href: '/modules/centrum-reklamy/index.html', internal: true });
@@ -402,6 +413,41 @@ router.get('/sso/laundromats', requireAuth, async (req, res, next) => {
     const p = req.user.person;
     const token = jwt.sign({ uid: req.user.id, pid: p.id, name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), aud: 'laundromats', iss: 'holyos' }, process.env.LM_SSO_SECRET, { expiresIn: '2m' });
     res.redirect(String(process.env.LM_URL).replace(/\/$/, '') + '/sso?t=' + encodeURIComponent(token));
+  } catch (err) { next(err); }
+});
+
+// GET /api/auth/sso/laundry-unlimited — přesměrování do administrace Laundry Unlimited s jednorázovým tokenem (platnost 2 min)
+router.get('/sso/laundry-unlimited', requireAuth, async (req, res, next) => {
+  try {
+    if (!(await luAllowed(req.user))) return res.status(403).send('Do této sekce nemáš přístup.');
+    const p = req.user.person;
+    const token = jwt.sign({ uid: req.user.id, pid: p.id, name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), aud: 'laundry-unlimited', iss: 'holyos' }, process.env.LU_SSO_SECRET, { expiresIn: '2m' });
+    res.redirect(String(process.env.LU_URL).replace(/\/$/, '') + '/sso?t=' + encodeURIComponent(token));
+  } catch (err) { next(err); }
+});
+
+// POST /api/auth/lu/notify — nová poptávka master franšízanta z Laundry Unlimited → Velín + zvoneček (Tomáš, Jan). VLASTNÍ tajemství LU_SSO_SECRET.
+router.post('/lu/notify', express.json({ limit: '20kb' }), async (req, res, next) => {
+  try {
+    const secret = process.env.LU_SSO_SECRET;
+    const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+    if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
+    try { jwt.verify(m[1], secret, { audience: 'holyos-api', issuer: 'laundry-unlimited' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
+    const b = req.body || {};
+    const title = String(b.title || 'Laundry Unlimited').slice(0, 120);
+    const body = String(b.body || '').slice(0, 300);
+    const persons = await prisma.person.findMany({
+      where: { active: true, last_name: { equals: 'Holý', mode: 'insensitive' }, first_name: { in: ['Tomáš', 'Jan'], mode: 'insensitive' } },
+      select: { id: true, user_id: true },
+    });
+    const { notifyPerson } = require('../services/push/expo-push');
+    const { createNotification } = require('./notifications.routes');
+    const link = String(process.env.LU_URL || 'https://laundry-unlimited.com').replace(/\/$/, '') + '/admin';
+    for (const p of persons) {
+      notifyPerson(prisma, p.id, { title, body, data: { type: 'lu_inquiry', link }, sound: 'default', channelId: 'default' }).catch((e) => console.warn('[lu notify] push', p.id, e.message));
+      if (p.user_id) createNotification({ userId: p.user_id, type: 'system', title, body, link }).catch((e) => console.warn('[lu notify] zvonek', p.user_id, e.message));
+    }
+    res.json({ ok: true, recipients: persons.length });
   } catch (err) { next(err); }
 });
 
