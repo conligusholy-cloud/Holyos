@@ -117,7 +117,7 @@ a{color:inherit}
 .lbl:before{content:"";width:34px;height:1px;background:var(--grad)}
 .tag{display:inline-flex;align-items:center;gap:14px;font:500 11.5px/1 "Segoe UI",sans-serif;letter-spacing:.28em;text-transform:uppercase;color:var(--cy);background:none;padding:0;transform:none}.tag:before{content:"";width:34px;height:1px;background:var(--grad)}.tag.w{color:var(--cy)}
 h1,h2,h3{font-weight:200;margin:0;letter-spacing:-.025em;text-transform:none;font-family:"Segoe UI Light","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;color:#fff}
-h1{font-size:clamp(44px,6.8vw,108px);line-height:1.02;margin:30px 0 32px;max-width:1000px}
+h1{font-size:clamp(38px,5.2vw,84px);line-height:1.06;margin:30px 0 32px;max-width:1080px}
 h2{font-size:clamp(34px,4.4vw,64px);line-height:1.06;margin:22px 0 0}
 h3{font-size:clamp(20px,1.9vw,26px);line-height:1.25;font-weight:300;margin-bottom:12px;letter-spacing:-.01em}
 p{margin:0 0 14px}
