@@ -7687,33 +7687,6 @@ function trhZiskUMe(n) {
   eco.profit = eco.revenue - eco.cost;
   return eco;
 }
-function trhHtml() {
-  if (TRH == null) return '';
-  var moje = (S.units || []).length;
-  return '<div class="card"><h3>Tržiště — hotové provozovny</h3>'
-    + '<p class="muted small" style="margin:2px 0 10px">Prádlomat i s místem, nájemní smlouvou a přípojkami. '
-    + 'Vydělává hned — nečekáš na výrobu ani nehledáš místo. Banka to financuje jako obchodní '
-    + 'příležitost, ale chce spoluúčast ' + Math.round(TRH_SPOLUUCAST * 100) + ' %.</p>'
-    + (TRH.length ? '' : '<p class="muted small" style="margin:0 0 10px">Zrovna tu nikdo nic nenabízí. '
-        + (moje ? 'Můžeš být první — vystav vlastní prádlomat a řekni si cenu.'
-                : 'Až budeš mít prádlomat, můžeš ho sem dát i ty.') + '</p>')
-    + (moje ? '<button class="btn sec sm" id="trh-nabidnout" style="width:100%;margin-bottom:10px">'
-        + 'Nabídnout vlastní prádlomat</button>' : '')
-    + TRH.map(function (n) {
-        var m = MODELS[n.model] || { name: n.model };
-        return '<div class="trade"><div class="row"><b>' + esc(n.name || 'Místo') + '</b>'
-          + '<b class="ok">' + kcFull(n.cena) + '</b></div>'
-          + '<p class="muted small" style="margin:2px 0 6px">' + esc(m.name) + ' · '
-          + esc(n.firma || n.nick) + ' · u tebe ' + kcFull(Math.round(trhZiskUMe(n).profit))
-          + ' / měsíc · nájem ' + kcFull(n.rent) + ' · končí '
-          + etaText(new Date(n.konci).getTime() - Date.now()) + '</p>'
-          + (n.moje
-              ? '<button class="btn sec sm" data-trh-stop="' + n.id + '">Stáhnout z nabídky</button>'
-              : '<button class="btn sm" data-trh-koupit="' + n.id + '">Prohlédnout a koupit</button>')
-          + '</div>';
-      }).join('')
-    + '</div>';
-}
 // Prádlomat, který někdo nabízí na tržišti. Na mapě je zlatý, s cenovkou —
 // ať je na první pohled poznat, že se dá koupit hned i s místem.
 function trhIcon(n) {
@@ -7794,26 +7767,6 @@ function trhVyberSheet() {
       var id = b.getAttribute('data-trh-u');
       var x = (S.units || []).filter(function (y) { return y.spotId === id; })[0];
       if (x) trhProdejSheet(x);
-    };
-  });
-}
-function bindTrh(box) {
-  var nb = (box || document).querySelector('#trh-nabidnout');
-  if (nb) nb.onclick = trhVyberSheet;
-  [].forEach.call((box || document).querySelectorAll('[data-trh-koupit]'), function (b) {
-    b.onclick = function () {
-      var n = (TRH || []).filter(function (x) { return String(x.id) === b.getAttribute('data-trh-koupit'); })[0];
-      if (n) trhKoupitSheet(n);
-    };
-  });
-  [].forEach.call((box || document).querySelectorAll('[data-trh-stop]'), function (b) {
-    b.onclick = function () {
-      b.disabled = true;
-      apiJson('/trade/trh/' + b.getAttribute('data-trh-stop') + '/stahnout', {}).then(function (r) {
-        if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
-        toast('Nabídka stažena.', 'ok');
-        loadTrh(paintBurza);
-      }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
     };
   });
 }
@@ -8067,19 +8020,16 @@ function paintBurza() {
   var odeslane = ceka.filter(function (t) { return !t.na_tahu; });
 
   if (AUKCE == null) loadAukce(paintBurza);
-  if (TRH == null) loadTrh(paintBurza);
 
   if (CHAT == null) loadChat(paintBurza);
 
   box.innerHTML = chatHtml()
-    + trhHtml()
     + aukceHtml()
     + sekce('Čeká na tvoji odpověď', naMe, 'Nikdo ti teď nic nenabízí.')
     + sekce('Čekáš na odpověď', odeslane, 'Nemáš rozjednanou žádnou nabídku.')
     + (hotove.length ? sekce('Uzavřené', hotove, '') : '');
   bindChat(box);
   bindAukce();
-  bindTrh(box);
 
   [].forEach.call(box.querySelectorAll('[data-tr]'), function (b) {
     b.onclick = function () {
@@ -8415,7 +8365,7 @@ function switchTab(v) {
   paint();
   if (v === 'map' && map) { setTimeout(function () { map.invalidateSize(); }, 50); loadClaims(); }
   // Burza se musí ptát serveru pokaždé — nabídka mohla přijít před vteřinou.
-  if (v === 'burza') { AUKCE = null; TRH = null; loadTrades(paintBurza); }
+  if (v === 'burza') { AUKCE = null; loadTrades(paintBurza); }
   if (v === 'me' && POZVANI == null) loadPozvani().then(paintMe);
   if (v === 'me' && DIST == null) loadDist(paintMe);
 }
