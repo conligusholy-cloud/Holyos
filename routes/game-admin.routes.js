@@ -450,7 +450,31 @@ router.get('/stats', api(async (req, res) => {
   const podleDruhu = {};
   nakupy.forEach((n) => { podleDruhu[n.kind] = (podleDruhu[n.kind] || 0) + n.amount_cents / 100; });
 
-  res.json({ ok: true, dny,
+  // Retence: vrátil se hráč den po registraci? A po týdnu? Bereme to podle
+  // toho, kdy si naposledy uložil stav — hra ukládá průběžně, takže „poslední
+  // uložení" je spolehlivá stopa toho, dokdy hrál.
+  const vsichni = await prisma.gamePlayer.findMany({
+    where: { disabled: false }, select: { created_at: true, state_at: true } });
+  const zil = (h, dnu) => h.state_at
+    && new Date(h.state_at).getTime() - new Date(h.created_at).getTime() >= dnu * 86400e3;
+  const tydny = {};
+  vsichni.forEach((h) => {
+    const t = new Date(h.created_at);
+    const pon = new Date(t.getTime() - ((t.getDay() + 6) % 7) * 86400e3);
+    const k = den(pon);
+    const r = tydny[k] || (tydny[k] = { tyden: k, registraci: 0, d1: 0, d7: 0 });
+    r.registraci++;
+    if (zil(h, 1)) r.d1++;
+    if (zil(h, 7)) r.d7++;
+  });
+  const retence = {
+    registraci: vsichni.length,
+    d1: vsichni.filter((h) => zil(h, 1)).length,
+    d7: vsichni.filter((h) => zil(h, 7)).length,
+    cohorty: Object.values(tydny).sort((a, b) => (a.tyden < b.tyden ? 1 : -1)).slice(0, 8),
+  };
+
+  res.json({ ok: true, dny, retence,
     souhrn: { hracu_celkem: celkem, obsazenych_mist: mista, trzba_obdobi: Math.round(trzbaCelkem), nakupu_obdobi: nakupy.length },
     trychtyr: [
       { krok: 'Otevřeli hru', pocet: sidy.size },

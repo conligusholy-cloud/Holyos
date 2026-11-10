@@ -1191,6 +1191,7 @@ function fresh(profileId) {
     units: [],     // postavené prádlomaty
     revealed: {},  // id místa → true
     leases: {},    // id místa → { rent, at } — domluvený nájem
+    profilVybran: 0,  // dotazník na profil přijde až po prvním prádlomatu
     pid: trvalePid(),
     refs: 0,       // kolik lidí otevřelo sdílený odkaz
     orders: [],    // koupené stroje na cestě: { model, arrivesAt }
@@ -2589,7 +2590,38 @@ function avaLevel(sc, answered) {
 
 // ─── Úvod a dotazník ─────────────────────────────────────────────────────────
 var qi = 0, qScore = { opatrny: 0, vyvazeny: 0, dravy: 0 };
-$('go-quiz').onclick = function () { $('intro').classList.add('hidden'); $('quiz').classList.remove('hidden'); renderQuiz(); };
+// Dotazník se hráči ukáže až po prvním postaveném prádlomatu. Dřív stál hned
+// na začátku a dokončilo ho jen sedm lidí ze sta — zbytek odešel dřív, než
+// vůbec viděl mapu.
+var DOTAZNIK_PO = false;
+// Úvod → rovnou do hry. Profil se zatím nastaví na vyvážený; po prvním
+// prádlomatu si ho hráč v dotazníku změní a rozdíl v hotovosti mu dorovnáme.
+$('go-quiz').onclick = function () {
+  S = fresh('vyvazeny');
+  save();
+  startGame();
+  if (ME) syncState(true);
+};
+// Profil se mění za běhu — hráč už hraje, tak mu hotovost nikdy nebereme.
+function nastavProfil(id) {
+  var stary = PROFILES[S.profile] || PROFILES.vyvazeny, novy = PROFILES[id];
+  if (!novy) return 0;
+  var pridat = Math.max(0, novy.cash - stary.cash);
+  S.profile = id;
+  S.profilVybran = 1;
+  if (pridat) { S.cash += pridat; zapis('bonus', 'Startovní kapitál — ' + novy.name, pridat); }
+  save(); paint();
+  return pridat;
+}
+function otevriDotaznik() {
+  if (!S || S.profilVybran) return;
+  DOTAZNIK_PO = true;
+  qi = 0; qScore = { opatrny: 0, vyvazeny: 0, dravy: 0 };
+  closeSheet();
+  $('app').classList.add('hidden');
+  $('quiz').classList.remove('hidden');
+  renderQuiz();
+}
 // Kdo už hraje, se musel dřív prokousat celým dotazníkem. Teď jde rovnou sem.
 $('go-login').onclick = function () { showAcct('login'); };
 function renderQuiz() {
@@ -2616,13 +2648,30 @@ function showRole(id) {
   $('role-ava').innerHTML = avatarSvg(['opatrny', 'vyvazeny', 'dravy'].indexOf(id));
   $('role-name').textContent = p.name;
   $('role-desc').textContent = p.desc;
-  $('role-cash').textContent = kcFull(p.cash);
+  // Po prvním prádlomatu už hráč hotovost má — ukážeme, co dostane navíc.
+  var popisek = $('role-cash').parentNode.firstChild;
+  if (DOTAZNIK_PO) {
+    var stary0 = PROFILES[S && S.profile] || PROFILES.vyvazeny;
+    if (popisek) popisek.textContent = 'Hotovost navíc';
+    $('role-cash').textContent = kcFull(Math.max(0, p.cash - stary0.cash));
+  } else {
+    if (popisek) popisek.textContent = 'Startovní hotovost';
+    $('role-cash').textContent = kcFull(p.cash);
+  }
   $('role-ltv').textContent = Math.round(p.ltv * 100) + ' % z ceny';
   $('role-rate').textContent = (p.rate * 100).toFixed(1).replace('.', ',') + ' % ročně';
   // Kdo je přihlášený (třeba po „začít znovu"), už účet zakládat nemusí.
   var hint = $('role-acct');
   if (hint) hint.innerHTML = ME ? 'Hraješ jako <b>' + esc(ME.nick) + '</b>.' : '';
   $('go-game').onclick = function () {
+    // Po prvním prádlomatu jen přepneme profil rozehrané hře.
+    if (DOTAZNIK_PO) {
+      nastavProfil(id);
+      $('role').classList.add('hidden');
+      if (!ME) return showAcct('register');
+      startGame(); syncState(true);
+      return;
+    }
     S = fresh(id); save();
     if (ME) { startGame(); syncState(true); return; }
     showAcct('register');
@@ -3402,6 +3451,9 @@ function scout(city, btn) {
         loadClaims();   // ať hráč hned vidí, kde už konkurence stojí
         if (map && j.area.lat) map.setView([j.area.lat, j.area.lon], MISTA_ZOOM);
         toast(j.area.name + ': nalezeno ' + j.spots.length + ' míst.', 'ok');
+        // Na začátku hráče nenecháme hádat, do čeho klepnout: nejlepší místo
+        // mu obhlídneme zdarma a rovnou ukážeme i s čísly.
+        prvniMisto(id);
       })
       .catch(function (e) {
         if (stop) return;
@@ -3411,6 +3463,24 @@ function scout(city, btn) {
       });
   };
   poll();
+}
+
+// Nejlepší místo z prvního průzkumu — obhlídka zdarma a hned otevřený detail.
+// Nový hráč tak do minuty vidí skutečná čísla, ne prázdnou mapu.
+function prvniMisto(areaId) {
+  if (!tutAktivni() || (S.units || []).length) return;
+  if (Object.keys(S.revealed || {}).length) return;
+  var a = S.areas[areaId];
+  if (!a || !a.spots || !a.spots.length) return;
+  var nej = a.spots.slice().sort(function (x, y) { return (y.score || 0) - (x.score || 0); })[0];
+  if (!nej) return;
+  S.revealed[nej.id] = true;
+  save(); drawMap(); tutPaint(); syncState(true);
+  setTimeout(function () {
+    if (map && nej.lat != null) map.setView([nej.lat, nej.lon], 16);
+    spotSheet(nej, areaId);
+    toast('Nejlepší místo ve městě jsme ti obhlédli zdarma.', 'ok');
+  }, 400);
 }
 
 // ─── Panel: místo ────────────────────────────────────────────────────────────
@@ -5604,6 +5674,8 @@ function tutPaint() {
     if (tutAktivni() && (S.units || []).length) {
       S.tut = 'done'; save();
       toast('První prádlomat stojí. Teď už to znáš — další si postavíš sám.', 'ok');
+      // Teď má smysl se ptát, jaký je podnikatel — a nabídnout účet.
+      if (!S.profilVybran) setTimeout(otevriDotaznik, 1400);
     }
     return;
   }
@@ -7718,8 +7790,11 @@ function showAcct(mode) {
   $('ac-err').classList.add('hidden');
   $('ac-have').onclick = function () { showAcct(login ? 'register' : 'login'); };
   var zp = $('ac-zpet');
+  // Kdo už hraje, se účtem nesmí být zdržený — hra běží i bez něj.
+  if (zp) zp.textContent = (S && S.units && S.units.length) ? 'Teď ne — hrát dál' : 'Zpět';
   if (zp) zp.onclick = function () {
     $('acct').classList.add('hidden');
+    if (S && S.units && S.units.length) return startGame();
     // Bez rozehrané hry se vracíme na úvod, jinak zpátky k výběru profilu.
     $(S ? 'role' : 'intro').classList.remove('hidden');
   };

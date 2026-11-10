@@ -95,6 +95,8 @@
         <div class="kpis" id="st-kpis"></div>
         <h3 style="font-size:14px;margin:18px 0 10px">Kudy hráči procházejí</h3>
         <div class="fn" id="st-funnel"></div>
+        <h3 style="font-size:14px;margin:22px 0 10px">Vrátili se? <span class="note">(podle posledního uložení hry)</span></h3>
+        <div class="tbl-wrap"><table class="data-table" id="st-retence"></table></div>
         <h3 style="font-size:14px;margin:22px 0 10px">Den po dni</h3>
         <div class="chart" id="st-chart"></div>
         <h3 style="font-size:14px;margin:26px 0 10px">Provoz právě teď <span class="note" id="pv-cas"></span></h3>
@@ -188,6 +190,20 @@
             + '<b>' + cz(x.pocet) + (prvni ? ' <span class="note">(' + pct + ' %)</span>' : '') + '</b></div>';
         }).join('');
         document.getElementById('st-chart').innerHTML = graf(j.rady);
+        var r = j.retence || { cohorty: [] };
+        var pct = function (a, b) { return b ? Math.round(a / b * 100) + ' %' : '—'; };
+        document.getElementById('st-retence').innerHTML =
+          '<thead><tr><th>Týden registrace</th><th class="num">Registrací</th>'
+          + '<th class="num">Hráli i druhý den</th><th class="num">Hráli i po týdnu</th></tr></thead><tbody>'
+          + '<tr><td><b>Celkem</b></td><td class="num">' + cz(r.registraci || 0) + '</td>'
+          + '<td class="num">' + cz(r.d1 || 0) + ' <span class="note">(' + pct(r.d1, r.registraci) + ')</span></td>'
+          + '<td class="num">' + cz(r.d7 || 0) + ' <span class="note">(' + pct(r.d7, r.registraci) + ')</span></td></tr>'
+          + (r.cohorty || []).map(function (c) {
+              return '<tr><td>' + c.tyden + '</td><td class="num">' + cz(c.registraci) + '</td>'
+                + '<td class="num">' + cz(c.d1) + ' <span class="note">(' + pct(c.d1, c.registraci) + ')</span></td>'
+                + '<td class="num">' + cz(c.d7) + ' <span class="note">(' + pct(c.d7, c.registraci) + ')</span></td></tr>';
+            }).join('')
+          + '</tbody>';
       }).catch(function (e) { chyba('st-kpis', e); });
     }
     function kpi(v, l) { return '<div class="kpi"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
