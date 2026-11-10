@@ -60,7 +60,7 @@ export default function SupportList() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'unread' | 'waiting' | 'online'>('all');
+  const [filter, setFilter] = useState<'all' | 'unread' | 'waiting' | 'online' | 'followup'>('all');
   const [toggling, setToggling] = useState(false);
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
@@ -119,10 +119,12 @@ export default function SupportList() {
   const isWaiting = (t: SupportThread) => t.unread === 0 && t.last_sender === 'user';
   const waitingCount = threads.filter(isWaiting).length;
   const onlineCount = threads.filter((t) => t.online).length;
+  const followupCount = threads.filter((t) => t.followup).length;
   const byNewest = (a: SupportThread, b: SupportThread) => (b.last_at ? new Date(b.last_at).getTime() : 0) - (a.last_at ? new Date(a.last_at).getTime() : 0); // od nejnovější zprávy po nejstarší
   const shown = (filter === 'unread' ? threads.filter((t) => t.unread > 0)
     : filter === 'waiting' ? threads.filter(isWaiting)
-    : filter === 'online' ? threads.filter((t) => t.online) : threads.filter((t) => t.last_at)).slice().sort(byNewest); // „Vše" = jen ti, kdo už psali
+    : filter === 'online' ? threads.filter((t) => t.online)
+    : filter === 'followup' ? threads.filter((t) => t.followup) : threads.filter((t) => t.last_at)).slice().sort(byNewest); // „Vše" = jen ti, kdo už psali
 
   if (loading && threads.length === 0) {
     return (
@@ -183,6 +185,16 @@ export default function SupportList() {
             Čeká na odpověď{waitingCount > 0 ? ` ${waitingCount}` : ''}
           </Text>
         </TouchableOpacity>
+        {!lm && (
+          <TouchableOpacity
+            style={[styles.chip, filter === 'followup' && styles.chipOn]}
+            onPress={() => setFilter('followup')}
+          >
+            <Text style={[styles.chipText, filter === 'followup' && styles.chipTextOn]}>
+              📌 Dořešit{followupCount > 0 ? ` ${followupCount}` : ''}
+            </Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={[styles.chip, filter === 'online' && styles.chipOn]}
           onPress={() => setFilter('online')}
@@ -219,7 +231,7 @@ export default function SupportList() {
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>{filter === 'unread' ? 'Žádné nepřečtené zprávy.' : filter === 'waiting' ? 'Na všechny je odpovězeno.' : filter === 'online' ? 'Právě není nikdo na webu.' : 'Zatím nikdo nepsal.'}</Text>
+            <Text style={styles.emptyText}>{filter === 'unread' ? 'Žádné nepřečtené zprávy.' : filter === 'waiting' ? 'Na všechny je odpovězeno.' : filter === 'online' ? 'Právě není nikdo na webu.' : filter === 'followup' ? 'Nic k dořešení.' : 'Zatím nikdo nepsal.'}</Text>
           </View>
         }
         renderItem={({ item }) => {
@@ -241,7 +253,7 @@ export default function SupportList() {
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <View style={styles.rowHead}>
-                  <Text style={[styles.name, item.unread > 0 && styles.nameUnread]} numberOfLines={1}>{name}</Text>
+                  <Text style={[styles.name, item.unread > 0 && styles.nameUnread]} numberOfLines={1}>{item.followup ? '📌 ' : ''}{name}</Text>
                   <Text style={styles.time}>{fmtTime(item.last_at)}</Text>
                 </View>
                 {filter === 'online' && item.online ? (

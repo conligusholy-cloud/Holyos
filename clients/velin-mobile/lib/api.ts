@@ -78,6 +78,7 @@ export type SupportThread = {
   last_body: string | null;
   last_sender: 'user' | 'agent' | null;
   online?: boolean; // zákazník je právě na webu BS2
+  followup?: boolean; // chat označený „dořešit“
   page_path?: string | null; // na které stránce právě je
   page_since?: string | null; // na webu od
   device?: string | null;
@@ -101,6 +102,7 @@ export type SupportThreadResponse = {
   };
   msgs: SupportMessage[];
   orders: number;
+  followup?: boolean;
   online: boolean;
   supportOnline: boolean;
   agent: string;
@@ -486,6 +488,9 @@ export const api = {
       `/api/velin/${lm ? 'lm-support' : 'support'}/threads/${id}/send`,
       { jwt, body: { body }, timeoutMs: SLOW_ENDPOINT_TIMEOUT_MS }
     ),
+
+  supportFollowup: (jwt: string, id: number, on: boolean) =>
+    request<{ ok: boolean; followup: boolean }>('POST', `/api/velin/support/threads/${id}/followup`, { jwt, body: { on } }),
 
   supportSetOnline: (jwt: string, online: boolean, agent?: string, lm?: boolean) =>
     request<{ ok: boolean; online: boolean }>('POST', `/api/velin/${lm ? 'lm-support' : 'support'}/online`, {

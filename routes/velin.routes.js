@@ -2015,6 +2015,9 @@ mobile.post('/support/threads/:id(\\d+)/send', supportGuard, express.json({ limi
     res.json(await bs2Support(req.velin.person, 'POST', '/threads/' + req.params.id + '/send', { body }));
   } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
 });
+mobile.post('/support/threads/:id(\\d+)/followup', supportGuard, express.json({ limit: '5kb' }), async (req, res, next) => {
+  try { res.json(await bs2Support(req.velin.person, 'POST', '/threads/' + req.params.id + '/followup', { on: !!(req.body || {}).on })); } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
+});
 mobile.post('/support/online', supportGuard, express.json({ limit: '5kb' }), async (req, res, next) => {
   try {
     const b = req.body || {};

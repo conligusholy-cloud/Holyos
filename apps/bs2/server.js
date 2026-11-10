@@ -2187,13 +2187,14 @@ app.get('/api/svc/support/threads', requireSvc, wrap(async (req, res) => {
       (SELECT count(*)::int FROM support_messages m WHERE m.supporter_id=s.id AND m.sender='user' AND m.read_by_agent=false) AS unread,
       (SELECT max(created_at) FROM support_messages m WHERE m.supporter_id=s.id) AS last_at,
       (SELECT body FROM support_messages m WHERE m.supporter_id=s.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_body,
-      (SELECT sender FROM support_messages m WHERE m.supporter_id=s.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_sender
+      (SELECT sender FROM support_messages m WHERE m.supporter_id=s.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_sender,
+      (s.support_followup_at IS NOT NULL) AS followup
     FROM supporters s WHERE EXISTS (SELECT 1 FROM support_messages m WHERE m.supporter_id=s.id) ORDER BY last_at DESC NULLS LAST LIMIT 200`)).rows;
   threads.forEach((t) => { t.online = ST.isOnline(t.id); }); // je zákazník právě na webu (ping do 90 s)
   // Právě přihlášení na webu, kteří ještě nikdy nepsali – aby jim šlo napsat první (filtr „Online" ve Velínu)
   try {
     const have = new Set(threads.map((t) => t.id)); const ids = ST.onlineIds().map(Number).filter((n) => Number.isInteger(n) && !have.has(n));
-    if (ids.length) (await q('SELECT id, nick, first_name, last_name, email FROM supporters WHERE id = ANY($1::int[])', [ids])).rows.forEach((u) => threads.push({ id: u.id, nick: u.nick, first_name: u.first_name, last_name: u.last_name, email: u.email, unread: 0, last_at: null, last_body: null, last_sender: null, online: true }));
+    if (ids.length) (await q('SELECT id, nick, first_name, last_name, email FROM supporters WHERE id = ANY($1::int[])', [ids])).rows.forEach((u) => threads.push({ id: u.id, nick: u.nick, first_name: u.first_name, last_name: u.last_name, email: u.email, unread: 0, last_at: null, last_body: null, last_sender: null, followup: false, online: true }));
   } catch (e) { /* online bez vlákna je jen bonus */ }
   // Kde právě je (stránka, od kdy, zařízení) – pro „Na stránce" ve Velínu
   threads.forEach((t) => { if (t.online) { const p = ST.presenceOf(t.id); if (p) { t.page_path = p.path; t.page_since = p.since ? new Date(p.since).toISOString() : null; t.device = p.device; } } });
@@ -2208,13 +2209,19 @@ app.get('/api/svc/support/threads/:id(\\d+)', requireSvc, wrap(async (req, res) 
     : (await q('SELECT ' + SUP_COLS + ' FROM (SELECT ' + SUP_COLS + ' FROM support_messages WHERE supporter_id=$1 ORDER BY id DESC LIMIT 200) t ORDER BY id', [sid])).rows;
   await q("UPDATE support_messages SET read_by_agent=true WHERE supporter_id=$1 AND sender='user' AND read_by_agent=false", [sid]);
   const orders = Number(((await q('SELECT count(*)::int AS c FROM orders WHERE supporter_id=$1', [sid])).rows[0] || {}).c || 0);
-  res.set('Cache-Control', 'no-store').json({ who, msgs, orders, online: ST.isOnline(sid), supportOnline: await supportOnline(), agent: await supportAgent() });
+  const followup = !!((await q('SELECT support_followup_at FROM supporters WHERE id=$1', [sid])).rows[0] || {}).support_followup_at;
+  res.set('Cache-Control', 'no-store').json({ who, msgs, orders, followup, online: ST.isOnline(sid), supportOnline: await supportOnline(), agent: await supportAgent() });
 }));
 app.post('/api/svc/support/threads/:id(\\d+)/send', requireSvc, wrap(async (req, res) => {
   const sid = parseInt(req.params.id, 10); const body = String((req.body || {}).body || '').trim().slice(0, 4000);
   if (!body) return res.status(400).json({ error: 'Prázdná zpráva' });
   const row = await agentSend(sid, body, parseInt((req.body || {}).order_id, 10), null, req.svc.name);
   res.json({ ok: true, msg: row });
+}));
+app.post('/api/svc/support/threads/:id(\\d+)/followup', requireSvc, wrap(async (req, res) => {
+  const sid = parseInt(req.params.id, 10); const on = !!(req.body || {}).on;
+  await q('UPDATE supporters SET support_followup_at = ' + (on ? 'now()' : 'NULL') + ' WHERE id=$1', [sid]);
+  res.json({ ok: true, followup: on });
 }));
 app.post('/api/svc/support/online', requireSvc, wrap(async (req, res) => {
   const on = !!(req.body || {}).online;

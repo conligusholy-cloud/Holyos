@@ -144,6 +144,15 @@ export default function SupportThread({ route }: Props) {
     }
   }
 
+  async function toggleFollowup() {
+    const auth = await loadAuth();
+    if (!auth.jwt || !info) return;
+    const next = !info.followup;
+    setInfo({ ...info, followup: next });
+    try { await api.supportFollowup(auth.jwt, supporterId, next); }
+    catch (err) { setInfo((p) => (p ? { ...p, followup: !next } : p)); Alert.alert('Nepodařilo se uložit', (err as Error).message); }
+  }
+
   const name = info ? supportName(info.who) : title || 'Podpora';
   const imgHeaders: Record<string, string> = jwt ? { Authorization: `Bearer ${jwt}` } : {};
 
@@ -167,6 +176,11 @@ export default function SupportThread({ route }: Props) {
             {info?.online ? '● právě na webu' : 'není na webu'}{info?.who.email ? ` · ${info.who.email}` : ''}
           </Text>
         </TouchableOpacity>
+        {!lm && (
+          <TouchableOpacity onPress={toggleFollowup} hitSlop={12} style={{ marginRight: 14 }}>
+            <Text style={[styles.infoBtn, { opacity: info?.followup ? 1 : 0.45 }]}>{info?.followup ? '📌' : '📍'}</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity onPress={() => setShowInfo((v) => !v)} hitSlop={12}>
           <Text style={styles.infoBtn}>{showInfo ? '▴' : 'ⓘ'}</Text>
         </TouchableOpacity>

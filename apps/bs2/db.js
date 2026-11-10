@@ -432,6 +432,8 @@ async function migrate() {
     CREATE UNIQUE INDEX IF NOT EXISTS withdrawal_requests_vs_uq ON withdrawal_requests (vs) WHERE vs IS NOT NULL;
     -- Krizový režim výplat: podíl k výplatě v % (NULL = výchozí 30 %), zbytek jde na vyrovnávací účet
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS payout_pct NUMERIC(5,2);
+    -- Podpora (Velín): chat označený „dořešit“
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS support_followup_at TIMESTAMPTZ;
     -- Vyrovnávací účet: pohyby (připsání 70 %, zhodnocení 5,68 % p.a., ruční vklad/výběr)
     CREATE TABLE IF NOT EXISTS balance_entries (
       id SERIAL PRIMARY KEY,
