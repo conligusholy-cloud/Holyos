@@ -124,13 +124,17 @@ p{margin:0 0 14px}
 .lead{font-size:clamp(18px,1.5vw,21px);line-height:1.65;color:var(--mut);max-width:620px;margin-bottom:44px}
 .cta{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
 .hero{position:relative;overflow:hidden;padding:110px 0 0;background:radial-gradient(1100px 620px at 88% 8%,rgba(30,124,255,.38),transparent 60%),radial-gradient(700px 420px at 8% 100%,rgba(0,229,255,.12),transparent 60%),linear-gradient(180deg,#04080f,#071327);clip-path:polygon(0 0,100% 0,100% calc(100% - 4vw),0 100%);padding-bottom:calc(150px + 4vw)}
-.hero:before{content:"";position:absolute;top:-20%;left:-30%;width:34%;height:150%;background:linear-gradient(90deg,transparent,rgba(120,190,255,.16),transparent);transform:skewX(-22deg);animation:beam 7s var(--ease) infinite;z-index:1}
+.hero:before{content:"";position:absolute;top:-20%;left:-30%;width:34%;height:150%;background:linear-gradient(90deg,transparent,rgba(120,190,255,.16),transparent);transform:skewX(-22deg);animation:beam 3.6s var(--ease) infinite;z-index:1}
 @keyframes beam{0%{left:-40%}60%,100%{left:130%}}
 .hero .wrap{position:relative;z-index:3}
 .hero h1,.hero .lead,.hero .cta,.hero .lbl{animation:wipe 1.1s var(--ease) both}.hero h1{animation-delay:.1s}.hero .lead{animation-delay:.22s}.hero .cta{animation-delay:.34s}
 @keyframes wipe{from{opacity:0;clip-path:inset(0 100% 0 0);transform:translateX(-40px)}to{opacity:1;clip-path:inset(0 -2% 0 0);transform:none}}
-.sl{position:absolute;right:-40%;height:1px;background:linear-gradient(90deg,transparent,rgba(120,200,255,.55) 70%,#fff);animation:zoom linear infinite;z-index:2;opacity:.9;border-radius:1px}
-@keyframes zoom{from{transform:translateX(0)}to{transform:translateX(-230vw)}}
+.sl{position:absolute;right:-45%;height:1px;background:linear-gradient(270deg,transparent,rgba(90,170,255,.45) 55%,#fff);animation:zoom linear infinite;z-index:2;border-radius:2px;filter:drop-shadow(0 0 6px rgba(0,229,255,.9))}
+.sl:before{content:"";position:absolute;left:-2px;top:50%;width:9px;height:9px;margin-top:-4.5px;border-radius:50%;background:#fff;box-shadow:0 0 14px 5px rgba(0,229,255,.95),0 0 34px 10px rgba(30,124,255,.6)}
+.sl.c{background:linear-gradient(270deg,transparent,rgba(0,229,255,.5) 55%,#bff8ff)}
+@keyframes zoom{0%{transform:translateX(0) rotate(var(--r,0deg));opacity:0}6%{opacity:1}92%{opacity:1}100%{transform:translateX(-240vw) rotate(var(--r,0deg));opacity:0}}
+.sp{position:absolute;right:-5%;border-radius:50%;background:#fff;box-shadow:0 0 10px 3px rgba(0,229,255,.95),0 0 22px 6px rgba(30,124,255,.55);animation:spark linear infinite;z-index:2}
+@keyframes spark{0%{transform:translate(0,0) scale(.4);opacity:0}8%{opacity:1}30%{transform:translate(-40vw,-14px) scale(1)}55%{transform:translate(-80vw,10px) scale(.7)}80%{transform:translate(-125vw,-18px) scale(1)}100%{transform:translate(-160vw,6px) scale(.2);opacity:0}}
 .facts{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);margin-top:86px}
 .facts>div{padding:30px 34px 0 0;font:300 clamp(16px,1.35vw,19px)/1.5 "Segoe UI",sans-serif;color:var(--txt);border-right:1px solid var(--line);margin-right:34px}
 .facts>div:last-child{border-right:0}.facts b{display:block;font:200 52px/1 "Segoe UI Light","Segoe UI",sans-serif;margin-bottom:14px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-.02em}
@@ -161,6 +165,7 @@ section{padding:130px 0;position:relative}
 .cell:hover{background:#fff}.cell:before{content:"";position:absolute;left:0;top:0;width:0;height:2px;background:var(--grad);transition:width .5s var(--ease)}.cell:hover:before{width:100%}
 .cell .n{font:200 22px/1 "Segoe UI Light","Segoe UI",sans-serif;display:block;margin-bottom:34px;color:#0a6ad6;letter-spacing:.14em}
 .cell p{margin:0;font-size:16.5px;color:var(--inkm)}
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:70px}.duo h3.col{font:500 11.5px/1 'Segoe UI',sans-serif;letter-spacing:.28em;text-transform:uppercase;color:var(--cy);padding-bottom:22px;border-bottom:1px solid var(--cy);margin-bottom:0}.duo .it{display:grid;grid-template-columns:54px 1fr;gap:10px;padding:28px 0;border-bottom:1px solid var(--line)}.duo .n{font:200 20px/1.4 'Segoe UI Light','Segoe UI',sans-serif;color:var(--cy);letter-spacing:.1em}.duo .it h3{font-size:22px;margin-bottom:8px}.duo .it p{margin:0;color:var(--mut);font-size:16.5px}
 .dk .grid{border-color:var(--line)}.dk .cell{border-color:var(--line)}.dk .cell:hover{background:rgba(255,255,255,.04)}.dk .cell .n{color:var(--cy)}.dk .cell p{color:var(--mut)}.dk .cell h3{color:#fff}
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:0;position:relative}
 .steps:before{content:"";position:absolute;left:0;right:0;top:9px;height:1px;background:linear-gradient(90deg,rgba(8,17,31,.25),rgba(8,17,31,.05))}
@@ -185,8 +190,8 @@ textarea{min-height:130px;resize:vertical}
 .page{padding:110px 0 140px;background:radial-gradient(900px 500px at 85% 0%,rgba(30,124,255,.28),transparent 60%),var(--bg)}.page .sub{max-width:660px;margin:22px 0 50px;font-size:20px;color:var(--mut)}
 footer{background:#02050a;color:#7a879c;padding:50px 0;font-size:13.5px;letter-spacing:.02em;border-top:1px solid var(--line)}footer b{color:#fff;font-weight:500}
 .js .rv{opacity:0;transform:translateY(46px);transition:opacity .9s var(--ease),transform 1s var(--ease)}.js .rv.in{opacity:1;transform:none}
-@media(prefers-reduced-motion:reduce){.hero:before,.sl,.hero h1,.hero .lead,.hero .cta,.hero .lbl{animation:none}.sl{display:none}.js .rv{opacity:1;transform:none;transition:none}}
-@media(max-width:900px){.ab.one ul{columns:1}.ab.one>div{padding:34px 26px 14px}.facts,.steps,.ab,.market,.tier,.brands,.grid,.grid.g4,.row2{grid-template-columns:1fr}
+@media(prefers-reduced-motion:reduce){.hero:before,.sl,.hero h1,.hero .lead,.hero .cta,.hero .lbl{animation:none}.sl,.sp{display:none}.js .rv{opacity:1;transform:none;transition:none}}
+@media(max-width:900px){.duo{grid-template-columns:1fr;gap:44px}.ab.one ul{columns:1}.ab.one>div{padding:34px 26px 14px}.facts,.steps,.ab,.market,.tier,.brands,.grid,.grid.g4,.row2{grid-template-columns:1fr}
 .facts>div{border-right:0;margin-right:0;border-bottom:1px solid var(--line);padding:24px 0}.facts>div:last-child{border-bottom:0}
 .steps:before{display:none}.steps>div{padding:46px 0 10px}.steps>div:before{top:0}
 section{padding:80px 0}.hero{padding-top:64px;padding-bottom:calc(100px + 4vw)}.facts{margin-top:54px}.sec-h{margin-bottom:40px;gap:18px}.tier{gap:6px;padding:26px 0}.market{gap:14px;padding:28px}
@@ -219,8 +224,17 @@ function landing(lang) {
   const t = T[lang]; const base = lang === 'en' ? '' : '/' + lang;
   const li = (a) => a.map((x) => `<li>${esc(x)}</li>`).join('');
   const nn = (i) => String(i + 1).padStart(2, '0');
-  const sl = [[11,22,1.7,0.2],[19,36,2.3,1.3],[27,16,1.3,0.7],[35,30,2.0,0.1],[43,44,2.6,1.9],[52,20,1.5,0.4],[61,34,2.1,1.5],[70,26,1.8,0.9],[79,40,2.4,0.3],[88,18,1.4,1.2]]
-    .map(([tp, w, d, l]) => `<i class="sl" style="top:${tp}%;width:${w}vw;animation-duration:${d}s;animation-delay:-${l}s"></i>`).join('');
+  let sd = 7; const rnd = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
+  let sl = '';
+  for (let i = 0; i < 34; i++) {
+    const tp = (4 + rnd() * 90).toFixed(1), w = (10 + rnd() * 42).toFixed(0), d = (0.9 + rnd() * 2.6).toFixed(2), l = (rnd() * 6).toFixed(2);
+    const r = (-3 + rnd() * 6).toFixed(1), h = rnd() < 0.2 ? 3 : rnd() < 0.5 ? 2 : 1, c = rnd() < 0.3 ? ' c' : '';
+    sl += `<i class="sl${c}" style="top:${tp}%;width:${w}vw;height:${h}px;--r:${r}deg;animation-duration:${d}s;animation-delay:-${l}s"></i>`;
+  }
+  for (let i = 0; i < 22; i++) {
+    const tp = (6 + rnd() * 88).toFixed(1), d = (0.6 + rnd() * 1.8).toFixed(2), l = (rnd() * 5).toFixed(2), z = (2 + rnd() * 4).toFixed(0);
+    sl += `<i class="sp" style="top:${tp}%;width:${z}px;height:${z}px;animation-duration:${d}s;animation-delay:-${l}s"></i>`;
+  }
   const body = `
 <div class="hero">${sl}<div class="wrap"><span class="lbl">${esc(t.hero_kicker)}</span><h1>${esc(t.hero_h)}</h1><p class="lead">${esc(t.hero_p)}</p>
 <div class="cta"><a class="btn" href="${base}/apply"><span>${esc(t.hero_cta)}${CHEV}</span></a><a class="btn line" href="#model"><span>${esc(t.hero_cta2)}</span></a></div>
@@ -234,7 +248,8 @@ function landing(lang) {
 <section id="offer" class="light"><div class="wrap"><div class="sec-h rv"><div><span class="lbl">${esc(t.nav_offer)}</span><h2>${esc(t.offer_h)}</h2></div></div>
 <div class="grid rv">${t.offer.map((o, i) => `<div class="cell"><span class="n">${nn(i)}</span><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div>`).join('')}</div></div></section>
 <section id="who" class="dk"><div class="wrap"><div class="sec-h rv"><div><span class="lbl">${esc(t.nav_who)}</span><h2>${esc(t.who_h)}</h2></div></div>
-<div class="grid g4 rv">${t.who.map((o, i) => `<div class="cell"><span class="n">${nn(i)}</span><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div>`).join('')}</div></div></section>
+<div class="duo rv"><div><h3 class="col">${esc(t.who_do)}</h3>${t.who.map((o, i) => `<div class="it"><span class="n">${nn(i)}</span><div><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div></div>`).join('')}</div>
+<div><h3 class="col">${esc(t.who_exp)}</h3>${t.exp.map((o, i) => `<div class="it"><span class="n">${nn(i)}</span><div><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div></div>`).join('')}</div></div></div></section>
 <section class="light"><div class="wrap"><div class="sec-h rv"><div><span class="lbl">${esc(t.steps_h)}</span><h2>${esc(t.steps_h)}</h2></div></div>
 <div class="steps rv">${t.steps.map((o, i) => `<div><span class="n">${i + 1}</span><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div>`).join('')}</div></div></section>
 <div class="band"><div class="wrap"><h2>${esc(t.cta_h)}</h2><a class="btn" href="${base}/apply"><span>${esc(t.hero_cta)}${CHEV}</span></a></div></div>`;
