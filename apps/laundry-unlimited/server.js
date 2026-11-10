@@ -353,6 +353,8 @@ function simplePage(lang, h, p, path0, noindex) {
 
 // ── Jazyk: / = EN, /cs /pl /de ─────────────────────────────────────────────
 app.get('/api/health', async (req, res) => { let db = false; try { await q('SELECT 1'); db = true; } catch (e) { /* bez DB */ } res.json({ ok: true, app: 'laundry-unlimited', db }); });
+// HTML stránky se nikdy necachují, aby se po nasazení hned projevily změny
+app.use((req, res, next) => { if (!/\.(webp|png|jpe?g|svg|ico|css|js|woff2?)$/i.test(req.path)) res.set('Cache-Control', 'no-cache'); next(); });
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h', index: false }));
 const BEZ_JAZYKA = /^\/(api|admin|sso|robots\.txt|sitemap\.xml)/;
 app.use((req, res, next) => {
