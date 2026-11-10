@@ -356,16 +356,27 @@ router.post('/kiosk/leave-request', async (req, res, next) => {
       return res.status(400).json({ error: 'Chybí povinné údaje (person_id, type, date_from, date_to)' });
     }
 
+    const zamestnanec = await prisma.person.findUnique({
+      where: { id: parseInt(person_id) },
+      select: { id: true, first_name: true, last_name: true, supervisor_id: true },
+    });
+    if (!zamestnanec) return res.status(400).json({ error: 'Zaměstnanec neexistuje' });
+
     const request = await prisma.leaveRequest.create({
       data: {
-        person_id: parseInt(person_id),
+        person_id: zamestnanec.id,
         type,
         date_from: new Date(date_from),
         date_to: new Date(date_to),
         note: note || null,
         status: 'pending',
       },
+      include: { person: { select: { id: true, first_name: true, last_name: true, supervisor_id: true } } },
     });
+
+    // Stejně jako u žádosti z webu — jinak o žádosti z kiosku nikdo neví,
+    // dokud si někdo sám neotevře seznam. (Požadavek #136)
+    await notifikujSchvalovatele(request, zamestnanec);
 
     res.status(201).json(request);
   } catch (err) {
@@ -1074,9 +1085,9 @@ function normalizeShiftBody(body) {
 }
 
 // První chybová hláška ze zod — aby uživatel viděl konkrétní důvod
-function firstZodMessage(error) {
+function firstZodMessage(error, fallback) {
   const issue = error.issues && error.issues[0];
-  return issue ? issue.message : 'Neplatná data směny';
+  return issue ? issue.message : (fallback || 'Neplatná data');
 }
 
 // GET /api/hr/shifts
@@ -1284,7 +1295,7 @@ router.put('/attendance/:id', async (req, res, next) => {
 // nikde neobjeví".
 
 const leaveRequestSchema = z.object({
-  person_id: z.coerce.number().int().positive('Vyberte zaměstnance'),
+  person_id: z.coerce.number({ error: 'Vyberte zaměstnance' }).int().positive('Vyberte zaměstnance'),
   type: z.string().trim().min(1, 'Vyberte typ volna').max(50, 'Typ volna je příliš dlouhý'),
   date_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Datum „Od" musí být ve tvaru RRRR-MM-DD'),
   date_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Datum „Do" musí být ve tvaru RRRR-MM-DD'),
@@ -1550,7 +1561,7 @@ router.post('/leave-requests', async (req, res, next) => {
   try {
     const parsed = leaveRequestSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: firstZodMessage(parsed.error), details: parsed.error.issues });
+      return res.status(400).json({ error: firstZodMessage(parsed.error, 'Neplatná data žádosti o volno'), details: parsed.error.issues });
     }
     const d = parsed.data;
 
@@ -1597,9 +1608,29 @@ router.put('/leave-requests/:id', async (req, res, next) => {
     if ('status' in req.body) {
       return res.status(400).json({ error: 'Stav žádosti se mění přes schválení nebo zamítnutí.' });
     }
+
+    const zadost = await nactiZadost(id);
+    if (!zadost) return res.status(404).json({ error: 'Žádost nenalezena' });
+
+    // Upravovat smí žadatel (dokud žádost čeká) nebo ten, kdo o ní rozhoduje.
+    // Bez téhle kontroly by si šlo schválit jeden den a pak si termín přepsat
+    // na měsíc — schvalování by nic neznamenalo.
+    const osoba = await prihlasenaOsoba(req.user);
+    const vlastni = !!(osoba && zadost.person_id === osoba.id);
+    if (!(vlastni || (await overSchvalovatele(req.user, zadost)).ok)) {
+      return res.status(403).json({ error: 'Upravit žádost smí jen žadatel, jeho nadřízený nebo ředitel.' });
+    }
+    if (zadost.status !== 'pending') {
+      return res.status(409).json({ error: 'O žádosti už bylo rozhodnuto — upravit ji nelze.' });
+    }
+
     const data = {};
     if ('note' in req.body) data.note = req.body.note || null;
-    if ('type' in req.body) data.type = String(req.body.type).slice(0, 50);
+    if ('type' in req.body) {
+      const typ = String(req.body.type || '').trim().slice(0, 50);
+      if (!typ) return res.status(400).json({ error: 'Vyberte typ volna' });
+      data.type = typ;
+    }
     for (const f of ['date_from', 'date_to']) {
       if (!(f in req.body)) continue;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(String(req.body[f] || ''))) {
@@ -1608,6 +1639,11 @@ router.put('/leave-requests/:id', async (req, res, next) => {
       data[f] = denNaDatum(req.body[f]);
     }
     if (!Object.keys(data).length) return res.status(400).json({ error: 'Není co měnit' });
+    const od = data.date_from || zadost.date_from;
+    const doData = data.date_to || zadost.date_to;
+    if (new Date(doData) < new Date(od)) {
+      return res.status(400).json({ error: 'Datum „Do" nemůže být dřív než „Od"' });
+    }
 
     const request = await prisma.leaveRequest.update({
       where: { id },
@@ -1681,7 +1717,9 @@ router.put('/leave-requests/:id/approve', async (req, res, next) => {
 
     const zadost = await nactiZadost(id);
     if (!zadost) return res.status(404).json({ error: 'Žádost nenalezena' });
-    if (zadost.status === 'approved') return res.status(409).json({ error: 'Žádost už je schválená' });
+    if (zadost.status !== 'pending') {
+      return res.status(409).json({ error: zadost.status === 'approved' ? 'Žádost už je schválená.' : 'Žádost už byla zamítnuta.' });
+    }
 
     const opravneni = await overSchvalovatele(req.user, zadost);
     if (!opravneni.ok) return res.status(403).json({ error: opravneni.chyba });
@@ -1726,6 +1764,11 @@ router.put('/leave-requests/:id/reject', async (req, res, next) => {
 
     const zadost = await nactiZadost(id);
     if (!zadost) return res.status(404).json({ error: 'Žádost nenalezena' });
+    // O žádosti se rozhoduje jen jednou — jinak by šlo zamítnout už schválené
+    // volno, smazat k němu docházku a nechat plán výroby v rozporu.
+    if (zadost.status !== 'pending') {
+      return res.status(409).json({ error: zadost.status === 'approved' ? 'Žádost už je schválená.' : 'Žádost už byla zamítnuta.' });
+    }
 
     const opravneni = await overSchvalovatele(req.user, zadost);
     if (!opravneni.ok) return res.status(403).json({ error: opravneni.chyba });

@@ -2206,11 +2206,16 @@
       let url = '/api/hr/leave-requests?';
       if (status) url += 'status=' + status;
       try {
-        const res = await fetch(url);
-        const reqs = await res.json();
+        const reqs = await leaveApi(url);
         await loadPeopleData();
-        renderLeaveRequests(reqs);
-      } catch (e) { console.error(e); }
+        renderLeaveRequests(Array.isArray(reqs) ? reqs : []);
+      } catch (e) {
+        // Chyba se nesmí tvářit jako prázdný seznam — to byl původní symptom
+        // „žádost se nikde neobjeví". (Požadavek #136)
+        console.error(e);
+        const el = document.getElementById('leave-table');
+        if (el) el.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Žádosti se nepodařilo načíst</h3><p>' + escHtml(e.message) + '</p></div>';
+      }
     }
 
     function renderLeaveRequests(reqs) {
@@ -2222,7 +2227,8 @@
       const statusLabels = { pending: 'Čekající', approved: 'Schváleno', rejected: 'Zamítnuto' };
       let html = '<table class="data-table" id="hr-leave-dt"><thead><tr><th>Zaměstnanec</th><th>Typ</th><th>Od</th><th>Do</th><th>Poznámka</th><th>Stav</th><th></th></tr></thead><tbody>';
       const __rowFn = (r) => { let html = '';
-        const person = people.find(p => p.id === r.person_id);
+        // Jméno primárně z odpovědi serveru — v `people` chybí bývalí zaměstnanci.
+        const person = r.person || people.find(p => p.id === r.person_id);
         const personName = person ? `${person.last_name} ${person.first_name}` : `#${r.person_id}`;
         // Tlačítka vidí jen ten, kdo o žádosti smí rozhodnout — přímý nadřízený
         // žadatele nebo ředitel (server to posílá jako can_approve). (Požadavek #136)
@@ -2232,12 +2238,12 @@
           <button class="btn btn-sm btn-danger" onclick="rejectLeave(${r.id})">✕ Zamítnout</button>
         ` : '<span style="color:var(--text2);font-size:11px;">čeká na nadřízeného</span>');
         html += `<tr>
-          <td class="person-name">${personName}</td>
-          <td>${r.type}</td>
+          <td class="person-name">${escHtml(personName)}</td>
+          <td>${escHtml(HR_ATT_TYPE[r.type] || r.type || '')}</td>
           <td>${formatDate(r.date_from)}</td>
           <td>${formatDate(r.date_to)}</td>
-          <td>${r.note || ''}</td>
-          <td><span class="leave-status ${r.status}">${statusLabels[r.status] || r.status}</span></td>
+          <td>${escHtml(r.note || '')}</td>
+          <td><span class="leave-status ${escHtml(r.status)}">${escHtml(statusLabels[r.status] || r.status)}</span></td>
           <td>${actions}</td>
         </tr>`;
         return html;
