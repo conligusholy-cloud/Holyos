@@ -341,10 +341,12 @@
       if (RRWEB) return RRWEB;
       RRWEB = new Promise(function (hotovo, chyba2) {
         var css = document.createElement('link');
-        css.rel = 'stylesheet'; css.href = 'vendor/rrweb-style.min.css';
+        // Absolutní cesta schválně: stránka má <base href="/">, takže relativní
+        // „vendor/…" by skončilo na /vendor/… a server by vrátil index.html.
+        css.rel = 'stylesheet'; css.href = '/modules/milionar/vendor/rrweb-style.min.css';
         document.head.appendChild(css);
         var sc = document.createElement('script');
-        sc.src = 'vendor/rrweb.min.js';
+        sc.src = '/modules/milionar/vendor/rrweb.min.js';
         sc.onload = function () { hotovo(); };
         sc.onerror = function () { RRWEB = null; chyba2(new Error('Přehrávač se nepodařilo načíst.')); };
         document.head.appendChild(sc);
