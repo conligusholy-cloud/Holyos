@@ -248,6 +248,13 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .pin.unit.zem-moje{border-color:#fff}
 .pin.unit.zem-najem .pin-zem{background:#7c5cff;color:#fff}
 .pin.unit.zem-najem{border-color:#c3b4ff}
+/* Běží výpověď od majitele pozemku: oranžový rámeček a přesýpací hodiny.
+   Stroj jede dál, ale má spočítané dny — proto varování, ne porucha. */
+.pin.unit.vypoved{border-color:rgba(255,197,84,.95)}
+.pin.unit.vypoved .pin-tag{background:var(--warn);color:#2b1a04}
+.pin-vyp{position:absolute;right:-5px;top:-5px;width:19px;height:19px;border-radius:50%;
+  background:var(--warn);color:#2b1a04;font-style:normal;font-weight:900;font-size:12px;
+  line-height:19px;text-align:center;border:2px solid #0b1424}
 .pin-vada{position:absolute;right:-5px;top:-5px;width:19px;height:19px;border-radius:50%;
   background:var(--err);color:#2b0409;font-style:normal;font-weight:900;font-size:13px;
   line-height:19px;text-align:center;border:2px solid #0b1424;animation:vada-tep 1.4s infinite}

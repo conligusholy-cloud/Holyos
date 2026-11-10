@@ -1675,6 +1675,8 @@ function tick() {
   }
   deliverOrders();
   hlidejPoruchy(dt);
+  hlidejVypovedMajitele(dt);
+  hlidejStehovani();
   hlidejServis();
   zapisHistorii();
 }
@@ -3071,14 +3073,19 @@ function unitIcon(u) {
   // Domeček v rohu říká, že stroj stojí na pozemku — zeleně na vlastním,
   // fialově na pronajatém. Bez domečku je to běžný nájem místa.
   var zem = zemUnit(u);
+  // Běžící výpověď od majitele je oranžová — stroj jede dál, ale má spočítané dny.
+  var vyp = !vada && jeVeVypovedi(u);
   return L.divIcon({ className: '', iconSize: [44, 44], iconAnchor: [22, 22],
-    html: '<div class="pin unit' + (vada ? ' vada' : '') + (zem ? ' zem-' + zem : '')
+    html: '<div class="pin unit' + (vada ? ' vada' : '') + (vyp ? ' vypoved' : '')
+      + (zem ? ' zem-' + zem : '')
       + '" data-unit="' + esc(u.spotId) + '">'
       + '<img src="' + esc(im.src) + '" alt="">'
       + (vada ? '<i class="pin-vada">!</i>' : '')
+      + (vyp ? '<i class="pin-vyp">\u29D6</i>' : '')
       + (zem ? '<i class="pin-zem">\u2302</i>' : '')
       + '<i class="pin-tag">' + esc(vada ? u.porucha.text
-          : (MODELS[u.eco && u.eco.model] ? MODELS[u.eco.model].name : '')) + '</i></div>' });
+          : (vyp ? 'Výpověď — ' + etaText(Math.max(0, u.vypoved.do - Date.now())).replace('za ', '')
+          : (MODELS[u.eco && u.eco.model] ? MODELS[u.eco.model].name : ''))) + '</i></div>' });
 }
 // Z dálky mají v mapě být jen prádlomaty, sídlo a pobočky. Volná místa je
 // v tomhle měřítku stejně nejde rozlišit — slepí se do hromádky otačníků.
@@ -3126,6 +3133,9 @@ function servisRadek(u) {
     tr = 'warn'; stav = u.porucha.text + ' — technik na místě, hotovo ' + etaText(t.hotovo - ted);
   } else if (t) {
     tr = 'ok'; stav = 'Spraveno, technik jede zpátky';
+  } else if (jeVeVypovedi(u)) {
+    tr = 'warn'; stav = 'Výpověď z místa — odvoz na sklad '
+      + etaText(Math.max(0, u.vypoved.do - Date.now()));
   } else {
     tr = 'ok'; stav = 'Jede — ' + kcFull(u.eco.profit) + ' / měsíc';
   }
@@ -3660,7 +3670,8 @@ function spotSheet(sp, areaId) {
               + m + ' měs.</button>';
           }).join('') + '</div>'
         + '<p class="fine">Když tě někdo přeplatí, tolik herních měsíců ti místo ještě vydělává — '
-        + 'a celou tu dobu můžeš jeho nabídku dorovnat a zůstat.</p>'
+        + 'a celou tu dobu můžeš jeho nabídku dorovnat a zůstat. Stejnou lhůtu musí dodržet '
+        + 'i majitel pozemku, když vypoví sám — tolik času pak máš na nové místo pro stroj.</p>'
         + '<div class="kv" style="margin-top:14px"><span>Nájem za těchhle podmínek</span><b class="'
         + (cena > rentOf(sp) ? 'warn' : 'ok') + '">' + kcFull(cena) + ' / měsíc</b></div>'
         + (cena > rentOf(sp)
@@ -5215,7 +5226,8 @@ function smlouvaHtml(u) {
     + (kryty ? 'do ' + datumCas(vaz).split(' ')[0] + ' (nikdo tě nepřeplatí)' : 'na dobu neurčitou') + '</b></div>'
     + '<div class="kv"><span>Výpovědní doba</span><b>' + vypovedNazev(c.vypoved_mesicu) + '</b></div>'
     + '<p class="fine">Konkurence tvoje podmínky nevidí. Dokud vázanost běží, přihazovat na tvoje '
-    + 'místo nemá smysl — majitel pozemku je nabídku nucen odmítnout.</p>';
+    + 'místo nemá smysl — majitel pozemku je nabídku nucen odmítnout a vypovědět nesmí ani sám. '
+    + 'Na dobu neurčitou vypovědět může: stroj se pak po výpovědní době stěhuje na sklad.</p>';
 }
 function loadClaims(then) {
   // Bez filtru na města — konkurenci chceme vidět na celé mapě, i tam, kam
@@ -5305,6 +5317,87 @@ function reconcileUnits() {
   toast(lost.length === 1
     ? x.nick + ' přeplatil nájem v místě ' + x.u.name + '. Stroj máš zpátky na skladě.'
     : 'Přišel jsi o ' + lost.length + ' míst — konkurence přeplatila nájem. Stroje máš na skladě.', 'err');
+}
+
+// ─── Výpověď od majitele pozemku ─────────────────────────────────────────────
+// Nájem není jistota. Stejně jako se stroj porouchá, může majitel pozemku sám
+// vypovědět smlouvu — pozemek prodá, postaví si tam vlastní věc nebo si to
+// rozmyslí. Prádlomat se pak musí odvézt: skončí na skladě a hráč mu hledá nové
+// místo i nové přípojky. Vázanost smlouvy tomu brání (za to se platí) a
+// vyjednaná výpovědní doba rozhoduje, kolik času na stěhování zbude.
+var VYPOVED_ROCNE = 0.08;          // průměrně jednou za ~12 herních let na stroj
+var VYPOVED_DUVODY = [
+  { t: 'Majitel pozemek prodal', p: 'Nový vlastník s prádlomatem nepočítá.', jednat: false },
+  { t: 'Majitel si plochu bere pro sebe', p: 'Chystá tam vlastní stavbu.', jednat: false },
+  { t: 'Benzínka ruší podnájmy', p: 'Vedení sítě zrušilo pronájmy ploch plošně.', jednat: false },
+  { t: 'Obchod mění provozovatele', p: 'Nový nájemce objektu chce plochu pro sebe.', jednat: true },
+  { t: 'Majitel má lepší nabídku', p: 'Za plochu mu někdo nabídl víc, než platíš ty.', jednat: true },
+  { t: 'Stížnosti sousedů', p: 'Majiteli vadí noční provoz. Dá se to ukecat, ale ne zadarmo.', jednat: true }
+];
+var VYPOVED_PRIHOZENI = [0.25, 0.35, 0.5];   // o kolik si majitel řekne víc, když se dá jednat
+function jeVeVypovedi(u) { return !!(u && u.vypoved); }
+// Vypovědět jde jen běžně pronajaté místo: vlastní zem ani pozemek od jiného
+// hráče sem nepatří a vázanou smlouvu musí majitel dodržet.
+function lzeVypovedet(u) {
+  if (!u || u.vypoved || zemUnit(u) !== '') return false;
+  var c = CLAIMS[u.spotId];
+  if (!c || !c.mine || c.pozemek) return false;
+  if (c.vypoved_do) return false;    // už běží výpověď kvůli konkurentovi
+  if (c.vazano_do && new Date(c.vazano_do).getTime() > Date.now()) return false;
+  return true;
+}
+function hlidejVypovedMajitele(dt) {
+  if (!(dt > 0) || !ME) return;
+  var sance = Math.min(0.2, dt / (YEAR_MS / VYPOVED_ROCNE));
+  (S.units || []).forEach(function (u) {
+    if (!lzeVypovedet(u)) return;
+    if (Math.random() >= sance) return;
+    var c = CLAIMS[u.spotId];
+    var d = VYPOVED_DUVODY[Math.floor(Math.random() * VYPOVED_DUVODY.length)];
+    var mesicu = Math.max(1, (c && c.vypoved_mesicu) || 1);
+    u.vypoved = { od: Date.now(), do: Date.now() + mesicu * MONTH_MS, mesicu: mesicu,
+      t: d.t, p: d.p,
+      navyseni: d.jednat ? VYPOVED_PRIHOZENI[Math.floor(Math.random() * VYPOVED_PRIHOZENI.length)] : 0 };
+    toast(u.name + ': majitel pozemku dal výpověď — ' + d.t.toLowerCase() + '.', 'err');
+  });
+}
+// Doběhlá výpovědní doba: prádlomat se odveze na sklad a místo se uvolní.
+// Přípojky zůstanou v zemi majiteli — na novém místě se dělají (a platí) znovu.
+function hlidejStehovani() {
+  var ted = Date.now();
+  var konci = (S.units || []).filter(function (u) { return u.vypoved && ted >= u.vypoved.do; });
+  if (!konci.length) return;
+  konci.forEach(function (u) {
+    S.units = S.units.filter(function (x) { return x.spotId !== u.spotId; });
+    S.stock[u.eco.model] = inStock(u.eco.model) + 1;
+    delete CLAIMS[u.spotId];
+    if (ME) apiJson('/spots/release', { spot_id: u.spotId, odstupne: true }).catch(function () {});
+    toast('Nájem v místě ' + u.name + ' skončil. ' + ((MODELS[u.eco.model] || {}).name || 'Prádlomat')
+      + ' máš na skladě — najdi mu nové místo a udělej přípojky.', 'err');
+  });
+  save(); paint(); drawMap(); syncState(true);
+}
+// Karta výpovědi v detailu prádlomatu.
+function vypovedMajiteleHtml(u) {
+  var v = u && u.vypoved;
+  if (!v) return '';
+  var novy = Math.round((u.eco.rent || 0) * (1 + (v.navyseni || 0)));
+  var h = '<div class="card vada-karta"><div class="row"><h3>⚠️ Výpověď od majitele</h3>'
+    + '<b class="err">' + etaText(Math.max(0, v.do - Date.now())).replace('za ', 'zbývá ') + '</b></div>'
+    + '<p class="muted small" style="margin:4px 0 8px"><b>' + esc(v.t) + '.</b> ' + esc(v.p)
+    + ' Výpovědní doba je ' + vypovedNazev(v.mesicu) + '; do jejího konce prádlomat vydělává dál. '
+    + 'Pak se musí odvézt — skončí na skladě a nové místo bude chtít i nové přípojky.</p>';
+  if (v.navyseni > 0) {
+    h += '<div class="kv"><span>Platíš teď</span><b>' + kcFull(u.eco.rent || 0) + ' / měsíc</b></div>'
+      + '<div class="kv"><span>Majitel chce</span><b class="warn">' + kcFull(novy) + ' / měsíc</b></div>'
+      + '<div class="kv"><span>Zdraží tě to o</span><b class="err">'
+      + kcFull(Math.max(0, novy - (u.eco.rent || 0))) + ' / měsíc</b></div>'
+      + '<button class="btn big" id="do-navyseni" style="width:100%;margin-top:10px">Přisadit a zůstat</button>';
+  } else {
+    h += '<p class="fine err">Tahle výpověď se vyjednat nedá. Hledej nové místo včas — '
+      + 'stroj na skladě nevydělává.</p>';
+  }
+  return h + '</div>';
 }
 
 // Panel cizího prádlomatu: koho přebíráš a za kolik to zkusíš.
@@ -5474,6 +5567,7 @@ function unitSheet(u) {
         : zemUnit(u) === 'najem' ? ' · <b class="ok">pronajatý pozemek</b>' : '') + '</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(u.score) + '</div>'
     + vypovedHtml(u)
+    + vypovedMajiteleHtml(u)
     + poruchaHtml(u)
     + '<h3 style="margin:16px 0 4px">Co to měsíčně dělá</h3>'
     + '<div class="kv"><span>Obrat</span><b>' + kcFull(u.eco.revenue) + '</b></div>'
@@ -5509,6 +5603,26 @@ function unitSheet(u) {
       save(); paint(); loadClaims(); unitSheet(u); syncState(true);
       toast('Dorovnáno. Místo zůstává tvoje, nájem je teď ' + kcFull(r.j.rent) + '.', 'ok');
     }).catch(function () { db.disabled = false; db.textContent = 'Dorovnat a zůstat'; toast('Server neodpovídá.', 'err'); });
+  };
+  var nb = $('do-navyseni');
+  if (nb) nb.onclick = function () {
+    var v = u.vypoved;
+    if (!v || !v.navyseni) return;
+    var novy = Math.round((u.eco.rent || 0) * (1 + v.navyseni));
+    nb.disabled = true; nb.textContent = 'Jednám s majitelem…';
+    apiJson('/spots/navyseni', { spot_id: u.spotId, rent: novy }).then(function (r) {
+      nb.disabled = false; nb.textContent = 'Přisadit a zůstat';
+      if (!r.ok) return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err');
+      delete u.vypoved;
+      // Vyšší nájem se musí propsat i do ekonomiky místa, jinak by zisk lhal.
+      u.eco.rent = r.j.rent;
+      u.eco.cost = u.eco.energy + u.eco.servis + u.eco.rent;
+      u.eco.profit = u.eco.revenue - u.eco.cost;
+      save(); paint(); loadClaims(); unitSheet(u); syncState(true);
+      toast('Domluveno. Místo zůstává tvoje, nájem je teď ' + kcFull(r.j.rent) + ' měsíčně.', 'ok');
+    }).catch(function () {
+      nb.disabled = false; nb.textContent = 'Přisadit a zůstat'; toast('Server neodpovídá.', 'err');
+    });
   };
   var rb = $('do-release');
   if (rb) rb.onclick = function () {

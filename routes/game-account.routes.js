@@ -1286,6 +1286,29 @@ router.get('/spots/najmy', requirePlayer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// POST /spots/navyseni { spot_id, rent } — majitel pozemku dal výpověď a pustí
+// nájemce dál jen za víc peněz. Výpověď samotnou spustila hra v prohlížeči (je
+// to náhoda jako porucha, ne tah konkurence), server tu jen zapíše vyšší nájem,
+// ať sedí ekonomika i to, co o místě vědí ostatní.
+const NAVYSENI_MAX = 2;   // víc než dvojnásobek si majitel neřekne
+router.post('/spots/navyseni', requirePlayer, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const spot = s(b.spot_id, 120);
+    const rent = Math.round(Number(b.rent) || 0);
+    const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
+    if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: 'Tohle místo ti nepatří.' });
+    if (cur.pozemek) return res.status(409).json({ error: 'Na vlastním pozemku se nájem neplatí.' });
+    if (!(rent > cur.rent)) return res.status(400).json({ error: 'Nová částka musí být vyšší než dosavadní nájem.' });
+    if (rent > cur.rent * NAVYSENI_MAX || rent > 5000000) {
+      return res.status(400).json({ error: 'Tolik si majitel neřekl.' });
+    }
+    const upd = await prisma.gameSpotClaim.update({ where: { spot_id: spot }, data: { rent } });
+    console.log('[game] nájemce přisadil po výpovědi:', spot, req.player.nick, rent + ' L$');
+    res.json({ ok: true, rent: upd.rent, spot: claimPub(upd, req.player.id, await firmyMapa()) });
+  } catch (e) { next(e); }
+});
+
 // POST /spots/release { spot_id, odstupne } — výpověď z místa, stroj si hráč odveze.
 // Z doby určité se dá odejít taky, ale majiteli pozemku se doplácí zbytek nájmu
 // (nejvýš ODSTUPNE_MAX nájmů) — klient částku strhne, server ji jen spočítá.
