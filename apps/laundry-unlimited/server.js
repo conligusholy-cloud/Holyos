@@ -129,12 +129,21 @@ p{margin:0 0 14px}
 .hero .wrap{position:relative;z-index:3}
 .hero h1,.hero .lead,.hero .cta,.hero .lbl{animation:wipe 1.1s var(--ease) both}.hero h1{animation-delay:.1s}.hero .lead{animation-delay:.22s}.hero .cta{animation-delay:.34s}
 @keyframes wipe{from{opacity:0;clip-path:inset(0 100% 0 0);transform:translateX(-40px)}to{opacity:1;clip-path:inset(0 -2% 0 0);transform:none}}
-.sl{position:absolute;right:-45%;height:1px;background:linear-gradient(270deg,transparent,rgba(90,170,255,.45) 55%,#fff);animation:zoom linear infinite;z-index:2;border-radius:2px;filter:drop-shadow(0 0 6px rgba(0,229,255,.9))}
-.sl:before{content:"";position:absolute;left:-2px;top:50%;width:9px;height:9px;margin-top:-4.5px;border-radius:50%;background:#fff;box-shadow:0 0 14px 5px rgba(0,229,255,.95),0 0 34px 10px rgba(30,124,255,.6)}
-.sl.c{background:linear-gradient(270deg,transparent,rgba(0,229,255,.5) 55%,#bff8ff)}
-@keyframes zoom{0%{transform:translateX(0) rotate(var(--r,0deg));opacity:0}6%{opacity:1}92%{opacity:1}100%{transform:translateX(-240vw) rotate(var(--r,0deg));opacity:0}}
-.sp{position:absolute;right:-5%;border-radius:50%;background:#fff;box-shadow:0 0 10px 3px rgba(0,229,255,.95),0 0 22px 6px rgba(30,124,255,.55);animation:spark linear infinite;z-index:2}
-@keyframes spark{0%{transform:translate(0,0) scale(.4);opacity:0}8%{opacity:1}30%{transform:translate(-40vw,-14px) scale(1)}55%{transform:translate(-80vw,10px) scale(.7)}80%{transform:translate(-125vw,-18px) scale(1)}100%{transform:translate(-160vw,6px) scale(.2);opacity:0}}
+.sl{position:absolute;left:-40vw;height:1px;background:linear-gradient(90deg,transparent,rgba(90,170,255,.35) 60%,rgba(220,245,255,.9));animation:run linear infinite;z-index:2;opacity:0}
+@keyframes run{0%{transform:translateX(0);opacity:0}10%{opacity:.8}90%{opacity:.8}100%{transform:translateX(190vw);opacity:0}}
+.ln{position:absolute;left:0;width:100%;height:0;transform-origin:4% 0;rotate:var(--r,0deg);z-index:2}
+.moon{position:absolute;right:9%;top:17%;width:clamp(110px,10vw,200px);aspect-ratio:1;border-radius:50%;z-index:1;background:radial-gradient(circle at 34% 30%,#fff,#d6eaff 36%,#86b6ff 72%,#3b6fd8);box-shadow:0 0 50px 8px rgba(130,195,255,.4),0 0 170px 40px rgba(30,124,255,.3);animation:moonp 6s ease-in-out infinite}
+.moon:before{content:"";position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 62% 38%,rgba(40,90,190,.28) 0 9%,transparent 10%),radial-gradient(circle at 40% 66%,rgba(40,90,190,.22) 0 13%,transparent 14%),radial-gradient(circle at 70% 70%,rgba(40,90,190,.2) 0 6%,transparent 7%)}
+@keyframes moonp{50%{box-shadow:0 0 64px 12px rgba(130,195,255,.5),0 0 200px 52px rgba(30,124,255,.36)}}
+.st{position:absolute;border-radius:50%;background:#fff;box-shadow:0 0 10px 3px rgba(0,229,255,.9);opacity:0;z-index:2;animation:star 12s infinite}
+.st.big{box-shadow:0 0 16px 6px rgba(0,229,255,.95),0 0 40px 12px rgba(30,124,255,.6)}
+@keyframes star{0%,49%{opacity:0;transform:scale(0)}51%{opacity:1;transform:scale(1.9)}54%{opacity:.35;transform:scale(.8)}57%{opacity:1;transform:scale(1.5)}61%{opacity:.3;transform:scale(.8)}65%{opacity:1;transform:scale(1.3)}74%{opacity:.5;transform:scale(1)}90%{opacity:.5}100%{opacity:0;transform:scale(0)}}
+.sd{position:absolute;width:2px;height:2px;border-radius:50%;background:#9fd2ff;opacity:.15;z-index:1;animation:tw 3.5s ease-in-out infinite}
+@keyframes tw{50%{opacity:.7}}
+.rn{position:absolute;top:0;left:4%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#fff;box-shadow:0 0 16px 6px rgba(0,229,255,.95),0 0 44px 14px rgba(30,124,255,.6);z-index:3;opacity:0;animation:dash 12s infinite}
+@keyframes dash{0%{left:4%;opacity:0;transform:scale(.3)}8%{opacity:1;transform:scale(.8)}20%{transform:scale(1.1)}30%{transform:scale(1.3)}38%{left:4%;transform:scale(1.9);animation-timing-function:cubic-bezier(.75,0,1,.5)}50%{left:106%;opacity:1;transform:scale(1)}51%,100%{left:106%;opacity:0}}
+.tr{position:absolute;top:0;left:4%;width:102%;height:3px;margin-top:-1px;transform-origin:left center;background:linear-gradient(90deg,transparent,rgba(30,124,255,.5) 40%,rgba(0,229,255,.9) 85%,#fff);filter:drop-shadow(0 0 8px rgba(0,229,255,.9));opacity:0;z-index:2;animation:trail 12s infinite}
+@keyframes trail{0%,38%{opacity:0;transform:scaleX(0)}39%{opacity:1;transform:scaleX(0)}50%{opacity:1;transform:scaleX(1)}85%{opacity:.25;transform:scaleX(1)}100%{opacity:0;transform:scaleX(1)}}
 .facts{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);margin-top:86px}
 .facts>div{padding:30px 34px 0 0;font:300 clamp(16px,1.35vw,19px)/1.5 "Segoe UI",sans-serif;color:var(--txt);border-right:1px solid var(--line);margin-right:34px}
 .facts>div:last-child{border-right:0}.facts b{display:block;font:200 52px/1 "Segoe UI Light","Segoe UI",sans-serif;margin-bottom:14px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-.02em}
@@ -190,8 +199,8 @@ textarea{min-height:130px;resize:vertical}
 .page{padding:110px 0 140px;background:radial-gradient(900px 500px at 85% 0%,rgba(30,124,255,.28),transparent 60%),var(--bg)}.page .sub{max-width:660px;margin:22px 0 50px;font-size:20px;color:var(--mut)}
 footer{background:#02050a;color:#7a879c;padding:50px 0;font-size:13.5px;letter-spacing:.02em;border-top:1px solid var(--line)}footer b{color:#fff;font-weight:500}
 .js .rv{opacity:0;transform:translateY(46px);transition:opacity .9s var(--ease),transform 1s var(--ease)}.js .rv.in{opacity:1;transform:none}
-@media(prefers-reduced-motion:reduce){.hero:before,.sl,.hero h1,.hero .lead,.hero .cta,.hero .lbl{animation:none}.sl,.sp{display:none}.js .rv{opacity:1;transform:none;transition:none}}
-@media(max-width:900px){.duo{grid-template-columns:1fr;gap:44px}.ab.one ul{columns:1}.ab.one>div{padding:34px 26px 14px}.facts,.steps,.ab,.market,.tier,.brands,.grid,.grid.g4,.row2{grid-template-columns:1fr}
+@media(prefers-reduced-motion:reduce){.hero:before,.sl,.hero h1,.hero .lead,.hero .cta,.hero .lbl{animation:none}.sl,.rn,.tr,.st{display:none}.moon{animation:none}.js .rv{opacity:1;transform:none;transition:none}}
+@media(max-width:900px){.moon{width:90px;right:6%;top:6%;opacity:.55}.duo{grid-template-columns:1fr;gap:44px}.ab.one ul{columns:1}.ab.one>div{padding:34px 26px 14px}.facts,.steps,.ab,.market,.tier,.brands,.grid,.grid.g4,.row2{grid-template-columns:1fr}
 .facts>div{border-right:0;margin-right:0;border-bottom:1px solid var(--line);padding:24px 0}.facts>div:last-child{border-bottom:0}
 .steps:before{display:none}.steps>div{padding:46px 0 10px}.steps>div:before{top:0}
 section{padding:80px 0}.hero{padding-top:64px;padding-bottom:calc(100px + 4vw)}.facts{margin-top:54px}.sec-h{margin-bottom:40px;gap:18px}.tier{gap:6px;padding:26px 0}.market{gap:14px;padding:28px}
@@ -224,16 +233,24 @@ function landing(lang) {
   const t = T[lang]; const base = lang === 'en' ? '' : '/' + lang;
   const li = (a) => a.map((x) => `<li>${esc(x)}</li>`).join('');
   const nn = (i) => String(i + 1).padStart(2, '0');
-  let sd = 7; const rnd = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
+  let sd = 11; const rnd = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
   let sl = '';
+  [[9, 0, 1.6], [88, 4, 1.1], [80, 8, -1.2]].forEach(([tp, dl, r]) => {
+    sl += `<div class="ln" style="top:${tp}%;--r:${r}deg"><i class="tr" style="animation-delay:${dl}s"></i><i class="rn" style="animation-delay:${dl}s"></i></div>`;
+  });
+  let stars = '';
   for (let i = 0; i < 34; i++) {
-    const tp = (4 + rnd() * 90).toFixed(1), w = (10 + rnd() * 42).toFixed(0), d = (0.9 + rnd() * 2.6).toFixed(2), l = (rnd() * 6).toFixed(2);
-    const r = (-3 + rnd() * 6).toFixed(1), h = rnd() < 0.2 ? 3 : rnd() < 0.5 ? 2 : 1, c = rnd() < 0.3 ? ' c' : '';
-    sl += `<i class="sl${c}" style="top:${tp}%;width:${w}vw;height:${h}px;--r:${r}deg;animation-duration:${d}s;animation-delay:-${l}s"></i>`;
+    const x = (45 + rnd() * 53).toFixed(1), y = (3 + rnd() * 40).toFixed(1), z = (2 + rnd() * 3).toFixed(1), o = (rnd() * 1.4).toFixed(2), big = rnd() < 0.22 ? ' big' : '';
+    stars += `<i class="st${big}" style="left:${x}%;top:${y}%;width:${z}px;height:${z}px;animation-delay:${o}s"></i>`;
   }
-  for (let i = 0; i < 22; i++) {
-    const tp = (6 + rnd() * 88).toFixed(1), d = (0.6 + rnd() * 1.8).toFixed(2), l = (rnd() * 5).toFixed(2), z = (2 + rnd() * 4).toFixed(0);
-    sl += `<i class="sp" style="top:${tp}%;width:${z}px;height:${z}px;animation-duration:${d}s;animation-delay:-${l}s"></i>`;
+  for (let i = 0; i < 26; i++) {
+    const x = (rnd() * 100).toFixed(1), y = (2 + rnd() * 94).toFixed(1), o = (rnd() * 6).toFixed(1);
+    stars += `<i class="sd" style="left:${x}%;top:${y}%;animation-delay:-${o}s"></i>`;
+  }
+  sl += '<div class="moon"></div>' + stars;
+  for (let i = 0; i < 9; i++) {
+    const tp = (i % 2 ? 76 + rnd() * 20 : 3 + rnd() * 14).toFixed(1), w = (12 + rnd() * 26).toFixed(0), d = (1.1 + rnd() * 1.4).toFixed(2), l = (rnd() * 9).toFixed(2);
+    sl += `<i class="sl" style="top:${tp}%;width:${w}vw;animation-duration:${d}s;animation-delay:-${l}s"></i>`;
   }
   const body = `
 <div class="hero">${sl}<div class="wrap"><span class="lbl">${esc(t.hero_kicker)}</span><h1>${esc(t.hero_h)}</h1><p class="lead">${esc(t.hero_p)}</p>
