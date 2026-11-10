@@ -2357,6 +2357,18 @@ app.post('/admin/vybery/override/:id(\\d+)', requireAdmin, wrap(async (req, res)
     return res.json({ ok: true, reread });
   }
   const patch = {};
+  if (b.exrate !== undefined) { // ruční % zhodnocení expanze (p.m.); prázdné = zpět na automatické pásmo
+    if (b.exrate === '' || b.exrate === null) {
+      await q(`UPDATE supporters SET partner_support = coalesce(partner_support,'{}'::jsonb) - 'ov_exrate' - 'ov_exrate_by' - 'ov_exrate_at' WHERE id=$1`, [id]);
+      await log(req.admin, 'vybery_exrate_clear', { id });
+      if (b.ex == null && b.st == null && b.pos === undefined && b.checked === undefined && b.note === undefined) return res.json({ ok: true });
+    } else {
+      const x = num(b.exrate);
+      if (x == null || x < 0 || x > 20) return res.status(400).json({ ok: false, error: 'Zadejte % zhodnocení expanze p.m. (0 – 20).' });
+      patch.ov_exrate = x; patch.ov_exrate_by = who; patch.ov_exrate_at = new Date().toISOString();
+      await log(req.admin, 'vybery_exrate', { id, rate: x });
+    }
+  }
   if (b.ex != null || b.st != null) {
     const ex = num(b.ex), st = num(b.st);
     if (ex == null || st == null || ex < 0 || st < 0) return res.status(400).json({ ok: false, error: 'Zadejte EX i ST podporu (čísla).' });
@@ -2447,7 +2459,7 @@ app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   if (onlyEur) where.push(`(partner_support->>'std_currency' = 'EUR' OR partner_support->>'currency' = 'EUR' OR partner_support->>'std_mixed' = 'true' OR partner_support->>'std_cur_mismatch' = 'true')`);
   if (qs) { params.push('%' + qs.toLowerCase() + '%'); where.push(`(lower(email) LIKE $1 OR lower(coalesce(first_name,'')) LIKE $1 OR lower(coalesce(last_name,'')) LIKE $1 OR lower(coalesce(nick,'')) LIKE $1)`); }
   const rows = (await q(`SELECT id,email,first_name,last_name,nick,mig_status,mig_diff,mig_at,mig_palety_czk,mig_palety_eur,mig_expanze_czk,mig_expanze_eur,mig_balicky_czk,mig_balicky_eur,mig_opakovacky_czk,mig_opakovacky_eur,mig_position,mig_reviewed_by,mig_reviewed_at, partner_support->>'std_mixed' AS std_mixed,
-    partner_support->>'position' AS legacy_position, partner_support->>'ov_pos' AS ov_pos, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_rate' AS piv_rate, partner_support->>'piv_tier_visits' AS piv_tier_visits,
+    partner_support->>'position' AS legacy_position, partner_support->>'ov_pos' AS ov_pos, partner_support->>'ov_exrate' AS ov_exrate, partner_support->>'piv_total' AS piv_total, partner_support->>'piv_currency' AS piv_currency, partner_support->>'piv_rate' AS piv_rate, partner_support->>'piv_tier_visits' AS piv_tier_visits,
     partner_support->>'exp_invested' AS exp_invested, partner_support->>'exp_currency' AS exp_currency, partner_support->>'exp_rate' AS exp_rate, partner_support->>'exp_limit_from' AS exp_limit_from, partner_support->>'exp_eligible' AS exp_eligible,
     ${EX_CZK} AS ex_czk, partner_support->>'std_total_czk' AS std_total_czk,
     partner_support->>'std_total' AS std_total, partner_support->>'std_currency' AS std_currency, partner_support->>'std_palety_all' AS std_palety_all, partner_support->>'std_opakovacky_all' AS std_opakovacky_all, partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->'std_check'->>'ok' AS std_check_ok, partner_support->'std_check'->>'bad' AS std_check_bad, partner_support->>'std_cur_mismatch' AS std_cur_mismatch, partner_support->>'std_cur_flags' AS std_cur_flags, partner_support->>'ov_ex' AS ov_ex, partner_support->>'ov_st' AS ov_st, partner_support->>'ov_cur' AS ov_cur, partner_support->>'man_checked' AS man_checked, partner_support->>'man_checked_at' AS man_checked_at, partner_support->>'man_note' AS man_note,
