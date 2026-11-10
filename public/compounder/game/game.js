@@ -3211,14 +3211,16 @@ function drawMap() {
       } });
     });
   });
-  // Cizí prádlomaty v městech, která jsme neprozkoumali. Víme o nich jen to, že
-  // tam někdo stojí — co to místo umí, zjistíme až průzkumem města.
+  // Cizí zábory v městech, která jsme neprozkoumali. Víme o nich jen to, že tam
+  // někdo něco drží — co to místo umí, zjistíme až průzkumem města. Koupený
+  // pozemek bez stroje není prádlomat, tak ani nevypadá jako prádlomat.
   Object.keys(CLAIMS).forEach(function (sid) {
     var c = CLAIMS[sid];
     if (moje || c.mine || zname[sid] || c.lat == null) return;
     any = true;
+    var zem = c.pozemek && !c.model;
     kusy.push({ lat: c.lat, lon: c.lon, moje: false, kresli: function () {
-      L.marker([c.lat, c.lon], { icon: rivalIcon(c) })
+      L.marker([c.lat, c.lon], { icon: zem ? ciziPozemekIcon(c) : rivalIcon(c) })
         .addTo(layer)
         .on('click', function () { cizi(c); });
     } });
@@ -3261,13 +3263,21 @@ function drawMap() {
 // Panel cizího prádlomatu v neprozkoumaném městě.
 function cizi(c) {
   var mesto = (c.area_key || '').replace(/(^|\s)\S/g, function (x) { return x.toUpperCase(); });
-  sheet('<h3>' + esc(c.name || 'Cizí prádlomat') + '</h3>'
-    + '<p class="muted small">' + (c.znak ? znakSvg(c.znak, 20) + ' ' : '') + 'Tohle místo drží <b>' + esc(c.firma || c.nick) + '</b> (' + esc(c.nick) + ') · '
-    + esc((MODELS[c.model] || {}).name || c.model)
+  var zem = c.pozemek && !c.model;
+  sheet('<h3>' + esc(c.name || (zem ? 'Cizí pozemek' : 'Cizí prádlomat')) + '</h3>'
+    + '<p class="muted small">' + (c.znak ? znakSvg(c.znak, 20) + ' ' : '')
+    + (zem ? 'Tenhle pozemek vlastní <b>' : 'Tohle místo drží <b>') + esc(c.firma || c.nick) + '</b> (' + esc(c.nick) + ')'
+    + (zem ? '' : ' · ' + esc((MODELS[c.model] || {}).name || c.model))
     + (c.takeovers ? ' · už ' + c.takeovers + '× změnilo majitele' : '') + '</p>'
+    + (zem ? '<p class="muted small">Prádlomat tu zatím nestojí — je to koupená zem. '
+        + (c.pronajem ? 'Majitel ji nabízí k pronájmu za ' + kcFull(c.pronajem.cena) + ' měsíčně'
+            + (c.pronajem.sit ? ' i s připravenou plochou' : ' jako holou parcelu') + '. '
+            + 'Pronajmout si ji můžeš, až město prozkoumáš.'
+          : 'Majitel ji zatím nikomu nenabízí.') + '</p>' : '')
     + '<p class="muted small">' + (mesto ? esc(mesto) + ' jsi neprozkoumal' : 'Tohle město jsi neprozkoumal')
     + ' — bez toho nevíš, kolik tu chodí lidí ani jestli se sem vyplatí jít. '
-    + 'Pošli tam člověka a pak se můžeš pokusit nájem přeplatit.</p>'
+    + (zem ? 'Pošli tam člověka a pak uvidíš i okolní místa.'
+          : 'Pošli tam člověka a pak se můžeš pokusit nájem přeplatit.') + '</p>'
     + '<button class="btn big" id="go-scout-here">Prozkoumat ' + (mesto ? esc(mesto) : 'tohle město') + ' za ' + kcFull(SCOUT_COST) + '</button>'
     + (S.cash < SCOUT_COST ? '<p class="fine err">Na cestu nemáš dost hotovosti.</p>' : '')
     + (c.id ? '<button class="btn ghost" id="cizi-napsat" style="width:100%;margin-top:8px">Napsat majiteli</button>' : ''));
