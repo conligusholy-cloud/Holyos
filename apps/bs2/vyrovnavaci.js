@@ -133,7 +133,7 @@ module.exports = function mountVyrovnavaci(app, ctx) {
     const pr = (await q('SELECT avg_visits FROM vybery_periods WHERE period=$1', [per])).rows[0];
     if (!pr || pr.avg_visits == null) return null;
     const u = (await q(`SELECT s.id, s.mig_position, s.payout_pct, partner_support->>'std_currency' AS std_currency, partner_support->>'std_total' AS std_total,
-      partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->>'exp_invested' AS exp_invested, partner_support->>'position' AS legacy_position
+      partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->>'exp_invested' AS exp_invested, partner_support->>'position' AS legacy_position, partner_support->>'ov_exrate' AS ov_exrate
       FROM supporters s WHERE s.id=$1`, [id])).rows[0];
     return u ? bookUser(u, per, Number(pr.avg_visits), 'automaticky při žádosti o výběr') : null;
   }
@@ -146,7 +146,7 @@ module.exports = function mountVyrovnavaci(app, ctx) {
     const pr = (await q('SELECT avg_visits FROM vybery_periods WHERE period=$1', [period])).rows[0];
     if (!pr || pr.avg_visits == null) return res.redirect('/admin/vybery?tab=vyplata&msg=' + encodeURIComponent('Nejdřív zadejte průměrnou návštěvnost za ' + period));
     const users = (await q(`SELECT s.id, s.mig_position, s.payout_pct, partner_support->>'std_currency' AS std_currency, partner_support->>'std_total' AS std_total,
-      partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->>'exp_invested' AS exp_invested, partner_support->>'position' AS legacy_position
+      partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->>'exp_invested' AS exp_invested, partner_support->>'position' AS legacy_position, partner_support->>'ov_exrate' AS ov_exrate
       FROM supporters s WHERE s.mig_status IN ('ok','reviewed')`)).rows;
     const who = (req.admin && req.admin.name) || 'správce';
     let nCredit = 0, nInt = 0, skipped = 0;
@@ -160,7 +160,7 @@ module.exports = function mountVyrovnavaci(app, ctx) {
   async function payoutFor(id) {
     const per = (await q(`SELECT to_char((now() AT TIME ZONE 'Europe/Prague') - interval '1 month', 'YYYY-MM') AS p, to_char(now() AT TIME ZONE 'Europe/Prague','YYYY-MM') AS m`)).rows[0];
     const u = (await q(`SELECT s.id, s.mig_position, s.payout_pct, partner_support->>'std_currency' AS std_currency, partner_support->>'std_total' AS std_total,
-      partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->>'exp_invested' AS exp_invested, partner_support->>'position' AS legacy_position
+      partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->>'exp_invested' AS exp_invested, partner_support->>'position' AS legacy_position, partner_support->>'ov_exrate' AS ov_exrate
       FROM supporters s WHERE s.id=$1`, [id])).rows[0];
     if (!u) return null;
     const cur = u.std_currency === 'EUR' ? 'EUR' : 'CZK';
