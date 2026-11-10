@@ -7417,23 +7417,92 @@ function bindChat(box) {
   var n = $('chat-novy');
   if (n) n.onclick = function () { chatVyberSheet(); };
 }
-// Komu napsat — seznam všech hráčů, stejný jako u nabídky.
-function chatVyberSheet() {
-  sheet('<h3>Komu napsat</h3><p class="muted small">Načítám hráče…</p>');
+// ─── Výběr hráče ─────────────────────────────────────────────────────────────
+// Používá se dvakrát: komu napsat a komu nabídnout obchod. Kdo je zrovna u hry,
+// odpoví hned — proto filtr a stav u každého jména. Řazení dělá server podle
+// posledního uložení hry, takže nahoře jsou ti nejčerstvější.
+var ONLINE_MS = 10 * 60000;       // kdo si uložil hru za posledních deset minut
+var DNES_MS = 24 * 3600000;
+function hracStav(h) {
+  var t = h.naposledy ? new Date(h.naposledy).getTime() : 0;
+  if (!t) return { kde: 'nikdy', text: 'ještě nehrál', tr: '' };
+  var pred = Date.now() - t;
+  if (pred <= ONLINE_MS) return { kde: 'online', text: 'u hry teď', tr: 'ok' };
+  if (pred <= DNES_MS) {
+    var min = Math.round(pred / 60000);
+    return { kde: 'dnes', text: min < 60 ? 'před ' + min + ' min' : 'před ' + Math.round(min / 60) + ' h', tr: 'warn' };
+  }
+  var dnu = Math.round(pred / 86400000);
+  return { kde: 'dav', text: 'před ' + dnu + ' ' + mn(dnu, 'dnem', 'dny', 'dny'), tr: '' };
+}
+function hraciVyberSheet(nadpis, popisTlacitka, pak) {
+  sheet('<h3>' + esc(nadpis) + '</h3><p class="muted small">Načítám hráče…</p>');
   api('/trade/players').then(function (r) {
     if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
     var hraci = r.j.players || [];
-    if (!hraci.length) return sheet('<h3>Zatím není komu</h3><p class="muted small">Až přibude další hráč, objeví se tady.</p>');
-    sheet('<h3>Komu napsat</h3>'
-      + hraci.map(function (h) {
-          return '<div class="area-item"><div><div class="nm">' + esc(h.firma) + '</div>'
-            + '<div class="sub">' + esc(h.nick) + '</div></div>'
-            + '<button class="btn sec sm" data-ch="' + h.id + '">Napsat</button></div>';
-        }).join(''));
-    [].forEach.call($('sheet-body').querySelectorAll('[data-ch]'), function (b) {
-      b.onclick = function () { chatSheet(Number(b.getAttribute('data-ch'))); };
-    });
+    if (!hraci.length) {
+      return sheet('<h3>Zatím není komu</h3><p class="muted small">Až přibude další hráč, objeví se tady.</p>');
+    }
+    var online = hraci.filter(function (h) { return hracStav(h).kde === 'online'; }).length;
+    var dnes = hraci.filter(function (h) { return hracStav(h).kde !== 'nikdy' && hracStav(h).kde !== 'dav'; }).length;
+    // Když je někdo u hry, začínáme u něj — obchod se domluví nejrychleji s tím,
+    // kdo je zrovna online.
+    var filtr = online ? 'online' : 'vse', hledam = '';
+    var vykresli = function () {
+      var k = hraci.filter(function (h) {
+        var st = hracStav(h);
+        if (filtr === 'online' && st.kde !== 'online') return false;
+        if (filtr === 'dnes' && (st.kde === 'dav' || st.kde === 'nikdy')) return false;
+        if (hledam) {
+          var t = (h.firma + ' ' + h.nick).toLowerCase();
+          if (t.indexOf(hledam.toLowerCase()) < 0) return false;
+        }
+        return true;
+      });
+      sheet('<h3>' + esc(nadpis) + '</h3>'
+        + '<div class="seg sub najem-seg" style="margin-top:4px">'
+          + '<button class="' + (filtr === 'online' ? 'on' : '') + '" data-f="online">U hry teď'
+            + (online ? ' (' + online + ')' : '') + '</button>'
+          + '<button class="' + (filtr === 'dnes' ? 'on' : '') + '" data-f="dnes">Dnes'
+            + (dnes ? ' (' + dnes + ')' : '') + '</button>'
+          + '<button class="' + (filtr === 'vse' ? 'on' : '') + '" data-f="vse">Všichni ('
+            + hraci.length + ')</button>'
+        + '</div>'
+        + '<input id="hr-hledat" class="inp" type="text" placeholder="Hledat firmu nebo nick…" '
+          + 'style="width:100%;margin:10px 0 4px" value="' + esc(hledam) + '">'
+        + (k.length ? k.map(function (h) {
+            var st = hracStav(h);
+            return '<div class="area-item"><div><div class="nm">' + esc(h.firma) + '</div>'
+              + '<div class="sub">' + esc(h.nick) + ' · <i class="' + st.tr + '">'
+              + (st.kde === 'online' ? '● ' : '') + esc(st.text) + '</i></div></div>'
+              + '<button class="btn sec sm" data-h="' + h.id + '">' + esc(popisTlacitka) + '</button></div>';
+          }).join('')
+          : '<p class="muted small" style="margin-top:14px">'
+            + (filtr === 'online' ? 'Zrovna nikdo u hry není. Zkus Dnes nebo Všichni — zprávu si přečte, až se vrátí.'
+               : 'Nikdo takový tu není.') + '</p>'));
+      [].forEach.call($('sheet-body').querySelectorAll('[data-f]'), function (b) {
+        b.onclick = function () { filtr = b.getAttribute('data-f'); vykresli(); };
+      });
+      var inp = $('hr-hledat');
+      if (inp) {
+        inp.oninput = function () {
+          hledam = inp.value;
+          var kurzor = inp.selectionStart;
+          vykresli();
+          var novy = $('hr-hledat');
+          if (novy) { novy.focus(); try { novy.setSelectionRange(kurzor, kurzor); } catch (e) { /* nevadí */ } }
+        };
+      }
+      [].forEach.call($('sheet-body').querySelectorAll('[data-h]'), function (b) {
+        b.onclick = function () { pak(Number(b.getAttribute('data-h'))); };
+      });
+    };
+    vykresli();
   }).catch(function () { toast('Server neodpovídá.', 'err'); });
+}
+// Komu napsat — seznam všech hráčů, stejný jako u nabídky.
+function chatVyberSheet() {
+  hraciVyberSheet('Komu napsat', 'Napsat', function (id) { chatSheet(id); });
 }
 // Jedna konverzace. Po otevření se všechno příchozí označí za přečtené.
 function chatSheet(id) {
@@ -8124,21 +8193,7 @@ function rokyNavratnosti(cena, zisk) {
 }
 
 function novaNabidkaSheet() {
-  sheet('<h3>Komu chceš nabídnout</h3><p class="muted small">Načítám hráče…</p>');
-  api('/trade/players').then(function (r) {
-    if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
-    var hraci = r.j.players || [];
-    if (!hraci.length) return sheet('<h3>Zatím není s kým</h3><p class="muted small">Až přibude další hráč, objeví se tady.</p>');
-    sheet('<h3>Komu chceš nabídnout</h3>'
-      + hraci.map(function (h) {
-          return '<div class="area-item"><div><div class="nm">' + esc(h.firma) + '</div>'
-            + '<div class="sub">' + esc(h.nick) + '</div></div>'
-            + '<button class="btn sec sm" data-h="' + h.id + '">Vybrat</button></div>';
-        }).join(''));
-    [].forEach.call($('sheet-body').querySelectorAll('[data-h]'), function (b) {
-      b.onclick = function () { majetekSheet(Number(b.getAttribute('data-h'))); };
-    });
-  }).catch(function () { toast('Server neodpovídá.', 'err'); });
+  hraciVyberSheet('Komu chceš nabídnout', 'Vybrat', function (id) { majetekSheet(id); });
 }
 
 function majetekSheet(id) {
