@@ -408,7 +408,7 @@ var INSTALACE_PODIL = 0.1;
 // Čas počítáme z opravdových čísel: auto jede 60 km/h a oprava zabere 1 až 5 hodin
 // podle závažnosti. Zrychlení obstará herní čas sám — herní hodina je skutečná
 // minuta, takže celý výjezd trvá pár minut a je vidět, jak auto jede.
-var PORUCHA_ROCNE = 2;                    // kolikrát za herní rok se stroj v průměru porouchá
+var PORUCHA_ROCNE = 4;                    // kolikrát za herní rok se stroj v průměru porouchá
 var HODINA_MS = MONTH_MS / 30 / 24;       // herní hodina = skutečná minuta
 var TECHNIK_KMH = 60;                     // průměrná rychlost servisního auta
 // Když stojí MINI, stojí celý prádlomat — je v něm jedna pračka a jedna sušička.
@@ -442,19 +442,51 @@ function chodStroje(u) {
   return k == null ? 0 : k;
 }
 function poruchy() { return (S.units || []).filter(jeVPoruse); }
+// Jak dlouho stroj stojí. Krátké prostoje v hodinách, delší v herních měsících —
+// v nich hráč počítá nájem i splátky.
+function dobaProstoje(ms) {
+  if (ms >= MONTH_MS) {
+    var m = Math.max(1, Math.round(ms / MONTH_MS));
+    return m + ' ' + mn(m, 'herní měsíc', 'herní měsíce', 'herních měsíců');
+  }
+  if (ms >= MONTH_MS / 30) {
+    var d = Math.max(1, Math.round(ms / (MONTH_MS / 30)));
+    return d + ' ' + mn(d, 'herní den', 'herní dny', 'herních dnů');
+  }
+  var h = Math.max(1, Math.round(ms / HODINA_MS));
+  return h + ' ' + mn(h, 'herní hodinu', 'herní hodiny', 'herních hodin');
+}
 // Závada přibývá průběžně, ne v pevných intervalech — šance se počítá z toho,
 // kolik času uběhlo. Po dlouhé pauze strop hlídá, ať se nerozbije všechno naráz.
+// Porucha nepočká, až se hráč vrátí: spadne někam doprostřed doby, co byl pryč,
+// a od té chvíle stroj nevydělává. O ten výdělek hráč přijde — vrací se funkce,
+// kolik to dělá dohromady, aby se to dalo odečíst z výnosu za celé období.
+// Zpětně jdeme nejvýš PORUCHA_ZPETNE_MAX, ať dvoutýdenní pauza nesmaže všechno.
+var PORUCHA_ZPETNE_MAX = 6 * MONTH_MS;    // nejvýš půl herního roku zpětně
 function hlidejPoruchy(dt) {
-  if (!(dt > 0)) return;
+  if (!(dt > 0)) return 0;
   var sance = Math.min(0.5, dt / (YEAR_MS / PORUCHA_ROCNE));
+  var ted = Date.now(), ztrata = 0;
   (S.units || []).forEach(function (u) {
     if (jeVPoruse(u) || u.technik) return;
     if (Math.random() >= sance) return;
     var z = ZAVADY[Math.floor(Math.random() * ZAVADY.length)];
-    u.porucha = { od: Date.now(), zav: z.zav, text: z.text };
+    var zpet = Math.random() * Math.min(dt, PORUCHA_ZPETNE_MAX);
+    u.porucha = { od: ted - zpet, zav: z.zav, text: z.text };
     u.vady = (u.vady || 0) + 1;
-    toast(u.name + ': ' + z.text.toLowerCase() + '. Pošli tam technika.', 'err');
+    // Co stroj za tu dobu nevydělal: plný obrat bez energie (ta se stojícím
+    // strojem nejede), nájem a servis platí hráč tak jako tak.
+    var vypadek = Math.round(((u.eco && u.eco.revenue) || 0) * (1 - ENERGY_SHARE)
+      * (1 - chodStroje(u)) * (zpet / MONTH_MS));
+    ztrata += Math.max(0, vypadek);
+    if (zpet > HODINA_MS * 12 && vypadek > 0) {
+      toast(u.name + ': ' + z.text.toLowerCase() + '. Stojí ' + dobaProstoje(zpet)
+        + ' a přišel jsi o ' + kcFull(vypadek) + '. Pošli tam technika.', 'err');
+    } else {
+      toast(u.name + ': ' + z.text.toLowerCase() + '. Pošli tam technika.', 'err');
+    }
   });
+  return ztrata;
 }
 // ─── Za mořem ────────────────────────────────────────────────────────────────
 // Technik nemůže dojet autem všude. Když prádlomat stojí na jiné pevnině, musí
@@ -1673,8 +1705,12 @@ function tick() {
   if (dt < 0) { S.lastTick = now; return; }      // hráč si přetočil hodiny v telefonu
   if (dt > 30 * YEAR_MS) dt = 30 * YEAR_MS;      // po měsíci nepřítomnosti dál nenabíhá
   var years = dt / YEAR_MS;
+  // Poruchy se řeší dřív, než se spočítá výnos: stroj, který praskl někdy
+  // uprostřed doby, co byl hráč pryč, od té chvíle nevydělával. Jinak by byla
+  // nepřítomnost zadarmo a porucha by začala až návratem.
+  var ztrataPoruch = hlidejPoruchy(dt);
   // Pobočky i četa stojí každý měsíc bez ohledu na to, jestli se staví.
-  var earned = (yearlyProfit() - (pobockyMesicne() + cetaMesicne()) * 12) * years;
+  var earned = (yearlyProfit() - (pobockyMesicne() + cetaMesicne()) * 12) * years - ztrataPoruch;
   // Do bubliny nad prádlomaty: zvlášť co přiteklo a co banka sebrala.
   drip.earn += Math.max(0, earned);
   S.cash += earned;
@@ -1693,7 +1729,6 @@ function tick() {
     hlidejKrach();
   }
   deliverOrders();
-  hlidejPoruchy(dt);
   hlidejVypovedMajitele(dt);
   hlidejStehovani();
   hlidejServis();
