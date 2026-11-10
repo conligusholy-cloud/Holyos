@@ -1121,9 +1121,10 @@ function uverMista(u) {
   if (!u || !S.loans) return null;
   return S.loans.filter(function (l) { return l.spotId && l.spotId === u.spotId; })[0] || null;
 }
-// Kolik na tomhle místě každý měsíc ukousne banka. Úvěrů může být víc — jeden
-// na stroj, druhý na přípojky.
-function splatkaMista(spotId) {
+// Kolik na tomhle místě každý měsíc ukousne banka dohromady. Úvěrů může být
+// víc — jeden na stroj, druhý na přípojky. (splatkaMista(u) výš počítá jen
+// ten první; tahle je součet za celé místo.)
+function splatkyMista(spotId) {
   if (!spotId || !S.loans) return 0;
   return Math.round(S.loans.filter(function (l) { return l.spotId === spotId; })
     .reduce(function (a, l) { return a + Math.min(l.splatka, l.zbyva + l.zbyva * l.sazba / 12); }, 0));
@@ -1132,7 +1133,7 @@ function splatkaMista(spotId) {
 // na něj nezmizí. Banka chce svoje dál, i když stroj mezitím leží na skladě a
 // nevydělává; jen přestanou patřit ke konkrétnímu místu.
 function osirelyUver(spotId) {
-  var splatka = splatkaMista(spotId);
+  var splatka = splatkyMista(spotId);
   (S.loans || []).forEach(function (l) {
     if (l.spotId !== spotId) return;
     l.spotId = null;
@@ -5479,7 +5480,7 @@ function vypovedMajiteleHtml(u) {
     + '<p class="muted small" style="margin:4px 0 8px"><b>' + esc(v.t) + '.</b> ' + esc(v.p)
     + ' Výpovědní doba je ' + vypovedNazev(v.mesicu) + '; do jejího konce prádlomat vydělává dál. '
     + 'Pak se musí odvézt — skončí na skladě a nové místo bude chtít i nové přípojky.</p>';
-  var spl = splatkaMista(u.spotId);
+  var spl = splatkyMista(u.spotId);
   if (spl > 0) {
     h += '<div class="kv"><span>Splátky úvěru na tohle místo</span><b class="err">'
       + kcFull(spl) + ' / měsíc</b></div>'
@@ -5682,6 +5683,15 @@ function unitSheet(u) {
     + '<div class="kv"><span>Vydělal celkem</span><b>' + kcFull(u.eco.ziskPlny * 12 * years) + '</b></div>'
     + (u.eco.ziskPlny > 0 ? '<div class="kv"><span>Návratnost</span><b>'
       + (u.eco.invest / (u.eco.ziskPlny * 12)).toFixed(1).replace('.', ',') + ' roku</b></div>' : '')
+    + '<h3 style="margin:18px 0 4px">Prodat celou provozovnu</h3>'
+    + (trhMoje(u.spotId)
+        ? '<p class="muted small">Na tržišti za <b>' + kcFull(trhMoje(u.spotId).cena) + '</b>, nabídka končí '
+          + etaText(new Date(trhMoje(u.spotId).konci).getTime() - Date.now())
+          + '. Do té doby ti prádlomat normálně vydělává.</p>'
+        : '<p class="muted small">Stroj, nájemní smlouvu i přípojky můžeš nabídnout komukoli na tržišti. '
+          + 'Kupující má hotovou provozovnu hned, ty peníze na ruku.</p>')
+    + '<button class="btn sec" id="do-trh" style="width:100%">'
+    + (trhMoje(u.spotId) ? 'Upravit nabídku na tržišti' : 'Nabídnout na tržišti') + '</button>'
     + '<p class="muted small" style="margin-top:14px">Když je jinde líp, místo vypovíš a stroj si odvezeš na sklad. '
     + 'Přípojky ani domluvený nájem se nevracejí, místo se hned uvolní konkurenci a splátky '
     + 'úvěru na něj běží dál.</p>'
@@ -5703,6 +5713,11 @@ function unitSheet(u) {
       save(); paint(); loadClaims(); unitSheet(u); syncState(true);
       toast('Dorovnáno. Místo zůstává tvoje, nájem je teď ' + kcFull(r.j.rent) + '.', 'ok');
     }).catch(function () { db.disabled = false; db.textContent = 'Dorovnat a zůstat'; toast('Server neodpovídá.', 'err'); });
+  };
+  var tb2 = $('do-trh');
+  if (tb2) tb2.onclick = function () {
+    if (TRH == null) return loadTrh(function () { trhProdejSheet(u); });
+    trhProdejSheet(u);
   };
   var nb = $('do-navyseni');
   if (nb) nb.onclick = function () {
@@ -7543,6 +7558,242 @@ function bindAukce() {
     };
   });
 }
+// ─── Tržiště ─────────────────────────────────────────────────────────────────
+// Hotová provozovna na prodej: stroj, nájemní smlouva, přípojky i rozvržení
+// plochy v jednom. Kupující má všechno hned — neplatí dva herní měsíce čekání
+// na výrobu ani hledání místa. Zaplatí za to vyšší cenu, kterou si řekne
+// prodávající; dokud se neprodá, prádlomat dál vydělává prodávajícímu.
+var TRH = null;
+var TRH_MESICE = [1, 3, 6, 12];
+var TRH_SPOLUUCAST = 0.2;    // banka na hotovou provozovnu dá nejvýš 80 % ceny
+function loadTrh(then) {
+  api('/trade/trh').then(function (r) {
+    TRH = (r.ok && r.j.trh) || [];
+    if (then) then();
+  }).catch(function () { TRH = TRH || []; if (then) then(); });
+}
+function trhMoje(spotId) {
+  return (TRH || []).filter(function (n) { return n.moje && n.spot_id === spotId; })[0] || null;
+}
+// Cena, kterou hra napoví: co do místa šlo plus roční zisk. Prodávající si ji
+// může přepsat, tohle je jen rozumný začátek.
+function trhNavrhCeny(u) {
+  var invest = (u.eco && u.eco.invest) || 0;
+  var rocne = Math.max(0, Math.round((u.eco && u.eco.profit) || 0) * 12);
+  return Math.max(1000, Math.round((invest + rocne) / 1000) * 1000);
+}
+// Co z toho místa vyždímeš TY. Návštěvnost se počítá z tvojí pověsti a karet,
+// takže stejné místo nemusí u kupujícího vydělávat tolik co u prodávajícího.
+// Banka i návratnost se řídí tímhle číslem, ne cizím slibem.
+function trhZiskUMe(n) {
+  var sp = { id: n.spot_id, name: n.name, kind: n.kind || 'unknown',
+    score: n.score != null ? n.score : 60, lat: n.lat, lon: n.lon };
+  var eco = economics(sp, n.model || 'mini');
+  eco.rent = n.rent || eco.rent;
+  eco.cost = eco.energy + eco.servis + eco.rent;
+  eco.profit = eco.revenue - eco.cost;
+  return eco;
+}
+function trhHtml() {
+  if (!TRH || !TRH.length) return '';
+  return '<div class="card"><h3>Tržiště — hotové provozovny</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">Prádlomat i s místem, nájemní smlouvou a přípojkami. '
+    + 'Vydělává hned — nečekáš na výrobu ani nehledáš místo. Banka to financuje jako obchodní '
+    + 'příležitost, ale chce spoluúčast ' + Math.round(TRH_SPOLUUCAST * 100) + ' %.</p>'
+    + TRH.map(function (n) {
+        var m = MODELS[n.model] || { name: n.model };
+        return '<div class="trade"><div class="row"><b>' + esc(n.name || 'Místo') + '</b>'
+          + '<b class="ok">' + kcFull(n.cena) + '</b></div>'
+          + '<p class="muted small" style="margin:2px 0 6px">' + esc(m.name) + ' · '
+          + esc(n.firma || n.nick) + ' · u tebe ' + kcFull(Math.round(trhZiskUMe(n).profit))
+          + ' / měsíc · nájem ' + kcFull(n.rent) + ' · končí '
+          + etaText(new Date(n.konci).getTime() - Date.now()) + '</p>'
+          + (n.moje
+              ? '<button class="btn sec sm" data-trh-stop="' + n.id + '">Stáhnout z nabídky</button>'
+              : '<button class="btn sm" data-trh-koupit="' + n.id + '">Prohlédnout a koupit</button>')
+          + '</div>';
+      }).join('')
+    + '</div>';
+}
+function bindTrh(box) {
+  [].forEach.call((box || document).querySelectorAll('[data-trh-koupit]'), function (b) {
+    b.onclick = function () {
+      var n = (TRH || []).filter(function (x) { return String(x.id) === b.getAttribute('data-trh-koupit'); })[0];
+      if (n) trhKoupitSheet(n);
+    };
+  });
+  [].forEach.call((box || document).querySelectorAll('[data-trh-stop]'), function (b) {
+    b.onclick = function () {
+      b.disabled = true;
+      apiJson('/trade/trh/' + b.getAttribute('data-trh-stop') + '/stahnout', {}).then(function (r) {
+        if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
+        toast('Nabídka stažena.', 'ok');
+        loadTrh(paintBurza);
+      }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+    };
+  });
+}
+// Co banka na hotovou provozovnu půjčí. Na rozdíl od stavby na zelené louce
+// tu je vidět, co místo vydělává — půjčuje se tedy proti jeho zisku, ale vždy
+// jen do 80 % ceny. Zbytek je spoluúčast kupujícího.
+function trhFinance(n, chci) {
+  var minVlastni = Math.ceil(n.cena * TRH_SPOLUUCAST);
+  var zisk = Math.round(trhZiskUMe(n).profit);
+  var f = canFinance(n.cena, chci == null ? minVlastni : Math.max(minVlastni, chci),
+    stropPodleZisku(Math.max(0, zisk), n.cena));
+  f.minVlastni = minVlastni;
+  if (f.own < minVlastni - 0.5) {
+    f.ok = false;
+    f.duvod = 'Banka chce spoluúčast aspoň ' + kcFull(minVlastni) + ' (' + Math.round(TRH_SPOLUUCAST * 100)
+      + ' %) a tolik hotovosti nemáš.';
+  }
+  return f;
+}
+function trhKoupitSheet(n) {
+  var m = MODELS[n.model] || { name: n.model };
+  var f = trhFinance(n, null);
+  var muj = Math.round(trhZiskUMe(n).profit);
+  var navratnost = muj > 0 ? (n.cena / (muj * 12)) : null;
+  sheet('<h3>' + esc(n.name || 'Místo') + '</h3>'
+    + '<p class="muted small">' + esc(m.name) + ' · ' + esc(n.firma || n.nick)
+    + ' · nabídka končí ' + etaText(new Date(n.konci).getTime() - Date.now()) + '</p>'
+    + '<div class="card" style="margin-top:12px">'
+      + '<div class="kv"><span>Cena</span><b>' + kcFull(n.cena) + '</b></div>'
+      + '<div class="kv"><span>U tebe vydělá</span><b class="' + (muj > 0 ? 'ok' : 'err') + '">'
+        + kcFull(muj) + ' / měsíc</b></div>'
+      + '<div class="kv"><span>U prodávajícího vydělává</span><b>' + kcFull(n.zisk) + ' / měsíc</b></div>'
+      + '<div class="kv"><span>Z toho nájem</span><b>' + kcFull(n.rent) + ' / měsíc</b></div>'
+      + (navratnost ? '<div class="kv"><span>Návratnost</span><b>'
+          + (Math.round(navratnost * 10) / 10).toString().replace('.', ',') + ' roku</b></div>' : '')
+      + (Math.abs(muj - n.zisk) > Math.max(500, n.zisk * 0.08)
+          ? '<p class="fine warn">Čísla se liší, protože návštěvnost roste s pověstí a kartami majitele. '
+            + 'Počítej s tím svým.</p>' : '')
+      + '<p class="fine">Dostaneš stroj, nájemní smlouvu, přípojky i rozvržení plochy. '
+      + 'Vydělává od první minuty — na nic se nečeká.</p>'
+    + '</div>'
+    + '<div class="card">'
+      + '<div class="kv"><span>Zaplatíš ze svého</span><b>' + kcFull(f.own) + '</b></div>'
+      + '<div class="kv"><span>Doplatí banka</span><b class="' + (f.need ? 'warn' : '') + '">'
+        + kcFull(f.need) + '</b></div>'
+      + (f.need ? '<div class="kv"><span>Splátka</span><b>'
+          + kcFull(anuita(f.need, Math.max(0.02, rateOf() + prirazkaZa(f.need)), UVER_MESICU))
+          + ' / měsíc</b></div>' : '')
+      + '<p class="fine">Banka tohle bere jako obchodní příležitost — půjčí proti tomu, co místo '
+      + 'vydělá, ale chce spoluúčast ' + Math.round(TRH_SPOLUUCAST * 100) + ' %, tedy aspoň '
+      + kcFull(f.minVlastni) + '.</p>'
+    + '</div>'
+    + (f.ok
+        ? '<button class="btn big" id="trh-go" style="width:100%">Koupit za ' + kcFull(n.cena) + '</button>'
+        : '<p class="fine err">' + esc(f.duvod || 'Na tohle banka nepůjčí.') + '</p>'));
+  var g = $('trh-go');
+  if (g) g.onclick = function () {
+    g.disabled = true; g.textContent = 'Kupuju…';
+    apiJson('/trade/trh/' + n.id + '/koupit', {}).then(function (r) {
+      if (!r.ok) {
+        g.disabled = false; g.textContent = 'Koupit za ' + kcFull(n.cena);
+        return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err');
+      }
+      // Celou cenu strhne doručenka ze serveru. Z našeho tu přibude jen to, co
+      // na nákup půjčila banka — jinak by hráč platil i tu část, kterou nedal.
+      var f2 = trhFinance(n, null);
+      if (f2.need > 0) {
+        S.bank -= f2.need;
+        pricistDluh(f2.need, prirazkaZa(f2.need), { druh: 'misto', spotId: n.spot_id,
+          popis: 'Prádlomat z tržiště — ' + (n.name || '') });
+        S.cash += f2.need;
+        zapis('uver', 'Úvěr na prádlomat z tržiště — ' + (n.name || ''), f2.need);
+      }
+      save();
+      closeSheet();
+      toast('Koupeno. ' + (n.name || 'Prádlomat') + ' je tvůj a hned vydělává.', 'ok');
+      loadTrh(function () { vyzvedniNasledky(function () { loadClaims(); paintBurza(); }); });
+    }).catch(function () {
+      g.disabled = false; g.textContent = 'Koupit za ' + kcFull(n.cena);
+      toast('Server neodpovídá.', 'err');
+    });
+  };
+}
+// Nabídnutí vlastního prádlomatu na tržiště.
+function trhProdejSheet(u) {
+  var bezi = trhMoje(u.spotId);
+  if (bezi) {
+    sheet('<h3>Na tržišti</h3>'
+      + '<p class="muted small">' + esc(u.name) + ' nabízíš za <b>' + kcFull(bezi.cena) + '</b>. '
+      + 'Nabídka končí ' + etaText(new Date(bezi.konci).getTime() - Date.now()) + '. '
+      + 'Do té doby prádlomat normálně vydělává tobě.</p>'
+      + '<button class="btn sec" id="trh-stop" style="width:100%;margin-top:12px">Stáhnout z nabídky</button>');
+    var st = $('trh-stop');
+    if (st) st.onclick = function () {
+      st.disabled = true;
+      apiJson('/trade/trh/' + bezi.id + '/stahnout', {}).then(function (r) {
+        if (!r.ok) { st.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
+        loadTrh(function () { closeSheet(); unitSheet(u); });
+        toast('Nabídka stažena.', 'ok');
+      }).catch(function () { st.disabled = false; toast('Server neodpovídá.', 'err'); });
+    };
+    return;
+  }
+  if (S.trhVolba == null) S.trhVolba = { mesicu: 3 };
+  var cena = trhNavrhCeny(u);
+  var vykresli = function () {
+    sheet('<h3>Nabídnout na tržišti</h3>'
+      + '<p class="muted small">' + esc(u.name) + ' — prodáváš celou provozovnu: stroj, nájemní smlouvu, '
+      + 'přípojky i rozvržení plochy. Dokud se neprodá, vydělává dál tobě.</p>'
+      + '<div class="card" style="margin-top:12px">'
+        + '<div class="kv"><span>Do místa jsi dal</span><b>' + kcFull((u.eco && u.eco.invest) || 0) + '</b></div>'
+        + '<div class="kv"><span>Vydělá měsíčně</span><b class="ok">' + kcFull(u.eco.profit) + '</b></div>'
+        + (splatkyMista(u.spotId) ? '<div class="kv"><span>Splátky na místě</span><b class="warn">'
+            + kcFull(splatkyMista(u.spotId)) + ' / měsíc</b></div>' : '')
+      + '</div>'
+      + '<p class="muted small" style="margin:12px 0 4px"><b>Za kolik</b></p>'
+      + '<div style="display:flex;gap:8px;align-items:center">'
+        + '<input class="inp" id="trh-cena" type="number" inputmode="numeric" min="1000" step="10000" value="' + cena + '">'
+        + '<span class="muted small">L$</span></div>'
+      + '<p class="fine">Napovídáme ' + kcFull(trhNavrhCeny(u)) + ' — co jsi do místa dal plus roční zisk. '
+      + 'Cena je na tobě; kupující vidí, co místo vydělává.</p>'
+      + '<p class="muted small" style="margin:12px 0 4px"><b>Jak dlouho má nabídka viset</b></p>'
+      + '<div class="seg sub najem-seg">' + TRH_MESICE.map(function (mm) {
+          return '<button class="' + (mm === S.trhVolba.mesicu ? 'on' : '') + '" data-trh-m="' + mm + '">'
+            + mm + ' měs.</button>';
+        }).join('') + '</div>'
+      + '<p class="fine">' + S.trhVolba.mesicu + ' herních měsíců = '
+      + Math.round(S.trhVolba.mesicu * 12) + ' skutečných hodin. Po uplynutí nabídka zmizí, '
+      + 'prádlomat zůstává tvůj.</p>'
+      + '<button class="btn big" id="trh-dat" style="width:100%;margin-top:12px">Vystavit na tržišti</button>'
+      + '<p class="fine">Jakmile někdo koupí, peníze máš hned a místo i stroj přejdou na něj. '
+      + 'Úvěr, který na místě visí, zůstává tobě — splácíš ho dál.</p>');
+    [].forEach.call($('sheet-body').querySelectorAll('[data-trh-m]'), function (x) {
+      x.onclick = function () {
+        S.trhVolba.mesicu = Number(x.getAttribute('data-trh-m'));
+        cena = Math.max(1000, Math.round(Number(($('trh-cena') || {}).value) || cena));
+        save(); vykresli();
+      };
+    });
+    var d = $('trh-dat');
+    if (d) d.onclick = function () {
+      var c = Math.round(Number($('trh-cena').value) || 0);
+      if (!(c >= 1000)) return toast('Cena musí být aspoň 1 000 L$.', 'err');
+      d.disabled = true; d.textContent = 'Vystavuju…';
+      apiJson('/trade/trh', { spot_id: u.spotId, cena: c, mesicu: S.trhVolba.mesicu,
+        zisk: Math.round(u.eco.profit), obrat: Math.round(u.eco.revenue),
+        investice: Math.round((u.eco && u.eco.invest) || 0),
+        kind: u.kind, score: u.score, plan: planMista(zakladniSpotId(u.spotId)) || null
+      }).then(function (r) {
+        if (!r.ok) {
+          d.disabled = false; d.textContent = 'Vystavit na tržišti';
+          return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err');
+        }
+        loadTrh(function () { closeSheet(); paint(); });
+        toast('Vystaveno na tržišti za ' + kcFull(c) + '.', 'ok');
+      }).catch(function () {
+        d.disabled = false; d.textContent = 'Vystavit na tržišti';
+        toast('Server neodpovídá.', 'err');
+      });
+    };
+  };
+  vykresli();
+}
+
 function paintBurza() {
   var box = $('burza-body');
   if (!TRADES) { box.innerHTML = '<p class="muted small">Načítám…</p>'; return loadTrades(paintBurza); }
@@ -7552,16 +7803,19 @@ function paintBurza() {
   var odeslane = ceka.filter(function (t) { return !t.na_tahu; });
 
   if (AUKCE == null) loadAukce(paintBurza);
+  if (TRH == null) loadTrh(paintBurza);
 
   if (CHAT == null) loadChat(paintBurza);
 
   box.innerHTML = chatHtml()
+    + trhHtml()
     + aukceHtml()
     + sekce('Čeká na tvoji odpověď', naMe, 'Nikdo ti teď nic nenabízí.')
     + sekce('Čekáš na odpověď', odeslane, 'Nemáš rozjednanou žádnou nabídku.')
     + (hotove.length ? sekce('Uzavřené', hotove, '') : '');
   bindChat(box);
   bindAukce();
+  bindTrh(box);
 
   [].forEach.call(box.querySelectorAll('[data-tr]'), function (b) {
     b.onclick = function () {
@@ -7878,14 +8132,20 @@ function vyzvedniNasledky(then) {
       } else if (x.kind === 'unit_add') {
         var dd = x.data || {};
         if (!S.units.some(function (u) { return u.spotId === x.spot_id; })) {
-          var sp = { id: x.spot_id, name: dd.name || 'Koupený prádlomat', kind: 'unknown',
-            score: 60, lat: dd.lat, lon: dd.lon };
+          var sp = { id: x.spot_id, name: dd.name || 'Koupený prádlomat', kind: dd.kind || 'unknown',
+            score: dd.score != null ? dd.score : 60, lat: dd.lat, lon: dd.lon };
           var eco = economics(sp, x.model || 'mini');
           eco.rent = dd.rent || eco.rent;
           eco.cost = eco.energy + eco.servis + eco.rent;
           eco.profit = eco.revenue - eco.cost;
+          // Investicí je to, co za místo hráč opravdu dal — podle toho se pak
+          // počítá návratnost, ne podle ceny stavby na zelené louce.
+          if (dd.invest) { eco.invest = Math.round(dd.invest); eco.install = 0; eco.conn = 0; }
           S.units.push({ spotId: x.spot_id, areaId: dd.area_key || '', name: sp.name, kind: sp.kind,
             score: sp.score, lat: sp.lat, lon: sp.lon, builtAt: Date.now(), eco: eco });
+          // Rozvržení plochy po předchozím majiteli — přípojky jsou v zemi,
+          // kupující je nestaví znovu.
+          if (dd.plan) { S.plany = S.plany || {}; S.plany[zakladniSpotId(x.spot_id)] = dd.plan; }
         }
       }
       if (x.popis) zpravy.push(x.popis);
@@ -7905,7 +8165,7 @@ function switchTab(v) {
   paint();
   if (v === 'map' && map) { setTimeout(function () { map.invalidateSize(); }, 50); loadClaims(); }
   // Burza se musí ptát serveru pokaždé — nabídka mohla přijít před vteřinou.
-  if (v === 'burza') { AUKCE = null; loadTrades(paintBurza); }
+  if (v === 'burza') { AUKCE = null; TRH = null; loadTrades(paintBurza); }
   if (v === 'me' && POZVANI == null) loadPozvani().then(paintMe);
   if (v === 'me' && DIST == null) loadDist(paintMe);
 }

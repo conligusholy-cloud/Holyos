@@ -385,6 +385,119 @@ router.post('/trade/aukce/:id/koupit', hrac, api(async (req, res) => {
   res.json({ ok: true, cena });
 }));
 
+// ─── Tržiště ─────────────────────────────────────────────────────────────────
+// Hráč veřejně nabídne postavený prádlomat i s místem za cenu, kterou si řekne.
+// Dokud se nabídka neprodá, prádlomat dál patří jemu a normálně vydělává —
+// nabídka je jen inzerát. Kdo ji koupí, dostane stroj, nájemní smlouvu,
+// přípojky i rozvržení plochy a vydělává hned, bez čekání na výrobu.
+const TRH_MESICU = [1, 3, 6, 12];      // na jak dlouho se dá vystavit (herní měsíce)
+const TRH_MESIC_MS = 43200000;         // herní měsíc = 12 skutečných hodin
+const TRH_MAX_NABIDEK = 12;            // kolik nabídek může mít jeden hráč naráz
+
+function trhPub(m, ja) {
+  return {
+    id: m.id, nick: m.nick, firma: m.firma || (m.nick + ' s.r.o.'),
+    spot_id: m.spot_id, name: m.name, model: m.model, kind: m.kind, score: m.score,
+    lat: m.lat, lon: m.lon, rent: m.rent, zisk: m.zisk, obrat: m.obrat,
+    investice: m.investice, cena: m.cena, od: m.od, konci: m.do,
+    moje: m.player_id === ja,
+  };
+}
+
+// GET /trade/trh → co je právě na tržišti
+router.get('/trade/trh', hrac, api(async (req, res) => {
+  const rows = await prisma.gameMarket.findMany({
+    where: { koupil_id: null, zruseno_at: null, do: { gt: new Date() } },
+    orderBy: { created_at: 'desc' }, take: 200,
+  });
+  res.json({ ok: true, trh: rows.map((m) => trhPub(m, req.player.id)) });
+}));
+
+// POST /trade/trh { spot_id, cena, mesicu, zisk, obrat, investice, plan }
+// Vystavení vlastního prádlomatu. Místo musí pořád patřit prodávajícímu a musí
+// na něm opravdu stroj stát — holý pozemek se takhle neprodává.
+router.post('/trade/trh', hrac, api(async (req, res) => {
+  const b = req.body || {};
+  const spot = s(b.spot_id, 120);
+  const cena = Math.round(Number(b.cena) || 0);
+  const mesicu = TRH_MESICU.includes(parseInt(b.mesicu, 10)) ? parseInt(b.mesicu, 10) : 3;
+  if (!spot) return res.status(400).json({ error: 'Které místo?' });
+  if (!(cena >= 1000) || cena > MAX_CENA) return res.status(400).json({ error: 'Cena musí být aspoň 1 000 L$.' });
+  const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
+  if (!c || c.player_id !== req.player.id) return res.status(409).json({ error: 'Tohle místo ti nepatří.' });
+  if (!c.model) return res.status(400).json({ error: 'Na tomhle místě žádný prádlomat nestojí.' });
+  if (c.najemce_id) return res.status(409).json({ error: 'Pozemek máš pronajatý jinému hráči.' });
+  const bezi = await prisma.gameMarket.findFirst({
+    where: { spot_id: spot, koupil_id: null, zruseno_at: null, do: { gt: new Date() } } });
+  if (bezi) return res.status(409).json({ error: 'Tohle místo už na tržišti je.' });
+  const kolik = await prisma.gameMarket.count({
+    where: { player_id: req.player.id, koupil_id: null, zruseno_at: null, do: { gt: new Date() } } });
+  if (kolik >= TRH_MAX_NABIDEK) return res.status(429).json({ error: 'Víc než ' + TRH_MAX_NABIDEK + ' nabídek naráz mít nemůžeš.' });
+
+  const m = await prisma.gameMarket.create({ data: {
+    player_id: req.player.id, nick: req.player.nick, firma: req.player.company,
+    spot_id: spot, area_key: c.area_key, name: c.name, model: c.model,
+    kind: s(b.kind, 40) || null, score: Math.max(0, Math.min(100, Math.round(Number(b.score) || 60))),
+    lat: c.lat, lon: c.lon, rent: Math.max(0, Math.round(c.rent || 0)),
+    zisk: Math.round(Number(b.zisk) || 0), obrat: Math.max(0, Math.round(Number(b.obrat) || 0)),
+    investice: Math.max(0, Math.round(Number(b.investice) || 0)),
+    cena, plan: b.plan || null,
+    do: new Date(Date.now() + mesicu * TRH_MESIC_MS),
+  } });
+  console.log('[game] tržiště: ' + req.player.nick + ' nabízí ' + (c.name || spot) + ' za ' + cena + ' L$');
+  res.json({ ok: true, nabidka: trhPub(m, req.player.id) });
+}));
+
+// POST /trade/trh/:id/stahnout → vlastní nabídku jde kdykoli stáhnout
+router.post('/trade/trh/:id/stahnout', hrac, api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const m = await prisma.gameMarket.findUnique({ where: { id } });
+  if (!m || m.player_id !== req.player.id) return res.status(404).json({ error: 'Taková nabídka tu není.' });
+  if (m.koupil_id) return res.status(409).json({ error: 'Tohle už někdo koupil.' });
+  await prisma.gameMarket.update({ where: { id }, data: { zruseno_at: new Date() } });
+  res.json({ ok: true });
+}));
+
+// POST /trade/trh/:id/koupit → kupující platí, místo i stroj mění majitele
+router.post('/trade/trh/:id/koupit', hrac, api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const m = await prisma.gameMarket.findUnique({ where: { id } });
+  if (!m || m.zruseno_at) return res.status(404).json({ error: 'Taková nabídka tu není.' });
+  if (m.koupil_id) return res.status(409).json({ error: 'Tohle už někdo koupil.' });
+  if (new Date(m.do).getTime() < Date.now()) return res.status(409).json({ error: 'Nabídka už vypršela.' });
+  if (m.player_id === req.player.id) return res.status(400).json({ error: 'Vlastní nabídku si nekoupíš.' });
+  // Mezitím mohl prodávající místo prodat jinak nebo o něj přijít.
+  const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: m.spot_id } });
+  if (!c || c.player_id !== m.player_id || !c.model) {
+    await prisma.gameMarket.update({ where: { id }, data: { zruseno_at: new Date() } });
+    return res.status(409).json({ error: 'Prádlomat už prodávajícímu nepatří. Nabídku jsme stáhli.' });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const zabrano = await tx.gameMarket.updateMany({
+      where: { id: m.id, koupil_id: null, zruseno_at: null },
+      data: { koupil_id: req.player.id, koupil_nick: req.player.nick, koupeno_at: new Date() },
+    });
+    if (!zabrano.count) throw Object.assign(new Error('Tohle už někdo koupil.'), { stav: 409 });
+    await tx.gameSpotClaim.update({ where: { spot_id: m.spot_id },
+      data: { player_id: req.player.id, nick: req.player.nick } });
+    const popis = 'prádlomat ' + (m.name || m.spot_id) + ' z tržiště';
+    await tx.gameDelivery.createMany({ data: [
+      { player_id: m.player_id, kind: 'unit_remove', spot_id: m.spot_id,
+        popis: 'Prodal jsi ' + popis + ' hráči ' + req.player.nick },
+      { player_id: req.player.id, kind: 'unit_add', spot_id: m.spot_id, model: m.model,
+        data: { name: m.name, lat: m.lat, lon: m.lon, rent: m.rent, area_key: m.area_key,
+          kind: m.kind, score: m.score, invest: m.cena, plan: m.plan || null },
+        popis: 'Koupil jsi ' + popis },
+      { player_id: req.player.id, kind: 'cash', amount: -m.cena, popis: 'Zaplatil jsi za ' + popis },
+      { player_id: m.player_id, kind: 'cash', amount: m.cena, popis: 'Utržil jsi za ' + popis },
+    ] });
+  });
+
+  console.log('[game] tržiště prodej: ' + m.nick + ' → ' + req.player.nick + ' · ' + (m.name || m.spot_id) + ' za ' + m.cena + ' L$');
+  res.json({ ok: true, cena: m.cena });
+}));
+
 // ─── Zprávy mezi hráči ─────────────────────────────────────────
 // Prostý chat jeden na jednoho. Konverzace není vlastní záznam — je to prostě
 // všechno, co si dva lidi poslali. Text se nikdy nevkládá do stránky jako HTML,

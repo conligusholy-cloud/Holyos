@@ -7866,6 +7866,45 @@ model GameSpotBuilt {
   @@map("game_spots_built")
 }
 
+// Tržiště: hráč veřejně nabídne postavený prádlomat i s místem za svoji cenu.
+// Kdo ho koupí, dostane stroj, nájemní smlouvu i přípojky a vydělává hned —
+// nečeká na výrobu ani nehledá místo. Dokud se nabídka neprodá, prádlomat dál
+// patří prodávajícímu a normálně vydělává; nabídka je jen inzerát.
+model GameMarket {
+  id          Int       @id @default(autoincrement())
+  player_id   Int
+  nick        String    @db.VarChar(24)
+  firma       String?   @db.VarChar(60)
+  spot_id     String    @db.VarChar(120)
+  area_key    String?   @db.VarChar(80)
+  name        String?   @db.VarChar(160)
+  model       String    @db.VarChar(10)
+  kind        String?   @db.VarChar(40)
+  score       Int       @default(60)
+  lat         Float?
+  lon         Float?
+  rent        Int       @default(0)
+  // Co místo měsíčně vydělá — podle toho kupující počítá a banka financuje.
+  zisk        Int       @default(0)
+  obrat       Int       @default(0)
+  investice   Int       @default(0)
+  cena        Int       @default(0)
+  // Rozvržení plochy, ať kupující dostane i to, co prodávající nakreslil.
+  plan        Json?
+  od          DateTime  @default(now())
+  do          DateTime
+  koupil_id   Int?
+  koupil_nick String?   @db.VarChar(24)
+  koupeno_at  DateTime?
+  zruseno_at  DateTime?
+  created_at  DateTime  @default(now())
+
+  @@index([do])
+  @@index([player_id])
+  @@index([spot_id])
+  @@map("game_market")
+}
+
 // Konkurzní rozprodej: majetek zkrachovalé firmy je měsíc na Burze a jeho cena
 // během té doby klesá z 80 % na 40 % hodnoty. Kdo chce jistotu, kupuje dřív.
 model GameAuction {
