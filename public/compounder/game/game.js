@@ -8500,7 +8500,10 @@ function ev(name, znovu) {
   evDone[name] = 1;
   try {
     fetch('/api/game/ev', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event: name, sid: visitId() }), keepalive: true }).catch(function () {});
+      // Zdroj posíláme s sebou: u návštěvníka bez účtu je to jediné místo,
+      // odkud se dá poznat, jestli přišel z reklamy.
+      body: JSON.stringify({ event: name, sid: visitId(), zdroj: zjistiZdroj() }),
+      keepalive: true }).catch(function () {});
   } catch (e) { /* sledování nikdy nesmí shodit hru */ }
 }
 

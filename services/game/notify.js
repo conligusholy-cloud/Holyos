@@ -116,6 +116,23 @@ async function newPlayer(prisma, player) {
   } catch (e) { console.warn('[milionar-notify] nový hráč:', e.message); }
 }
 
+// Někdo hraje bez účtu. Posíláme to až ve chvíli, kdy se do hry opravdu pustil
+// — prozkoumal město nebo postavil prádlomat. Otevřít a zavřít stránku umí
+// kdekdo, tohle už je zájem, který stojí za vědění. Jednou za návštěvu.
+async function anonymHraje(prisma, { event, sid, zdroj }) {
+  try {
+    const co = event === 'game_build' ? 'Postavil první prádlomat'
+      : event === 'game_scout' ? 'Prozkoumal první město' : 'Pustil se do hry';
+    const odkud = zdroj ? ' Přišel ' + zdrojLidsky(zdroj) + '.' : '';
+    await dispatch(prisma, {
+      title: '👀 Někdo hraje bez účtu',
+      body: co + '.' + odkud + ' Účet zatím nemá — ve Velíně je z něj záznam první minuty ('
+        + String(sid || '').slice(0, 6) + ').',
+      data: { udalost: 'milionar_anonym_hraje', sid: sid || null },
+    });
+  } catch (e) { console.warn('[milionar-notify] anonym:', e.message); }
+}
+
 // Zaplacený nákup (karta nebo balíček laundry). Voláme až po ověřeném webhooku,
 // takže notifikace chodí jen na peníze, které opravdu přišly.
 async function purchasePaid(prisma, purchase, player, nazevPolozky) {
@@ -138,4 +155,4 @@ async function purchasePaid(prisma, purchase, player, nazevPolozky) {
   } catch (e) { console.warn('[milionar-notify] nákup:', e.message); }
 }
 
-module.exports = { newPlayer, purchasePaid, NOTIFY_SETTING_KEY };
+module.exports = { newPlayer, anonymHraje, purchasePaid, NOTIFY_SETTING_KEY };
