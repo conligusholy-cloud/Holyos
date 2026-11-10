@@ -3431,13 +3431,8 @@ function drawMap() {
     h.classList.remove('hidden');
   // Nápověda o schovaných místech patří k prvnímu rozkoukání. Po herním měsíci
   // už hráč ví, jak se mapa chová, a lišta přes půl obrazovky by jen překážela.
-  // Filtr „jen moje“ schová konkurenci úplně — bez téhle hlášky to vypadá, že
-  // na mapě nikdo jiný není, i když tam zrovna někdo postavil.
-  } else if (moje && skrytoCizi) {
-    h.textContent = 'Vidíš jen svoje. Konkurence je schovaná — ' + skrytoCizi + ' '
-      + mn(skrytoCizi, 'cizí místo', 'cizí místa', 'cizích míst')
-      + '. Přepni nahoře na Všechno, ať je vidíš.';
-    h.classList.remove('hidden');
+  // Že filtr „jen moje" schovává konkurenci, je vidět z přepínače nad mapou —
+  // hlášku o tom hráč po pár minutách jen odklikává.
   } else if (skryto && Date.now() - (S.startedAt || 0) < MONTH_MS) {
     h.textContent = 'Přibliž mapu na úroveň ulic, ať uvidíš volná místa — teď jich je schovaných '
       + skryto + '. Ze seznamu oblastí tě hra skočí rovnou k nim.';
@@ -7670,11 +7665,14 @@ function paintTrhBadge() {
   var el = $('map-trh');
   if (!el) return;
   var kolik = (TRH || []).filter(function (n) { return !n.moje; }).length;
-  el.classList.toggle('hidden', !kolik);
-  if (!kolik) return;
-  el.innerHTML = '<i>\uD83E\uDD1D</i><b>' + kolik + '</b>';
-  el.title = 'Tržiště — ' + kolik + ' ' + mn(kolik, 'hotová provozovna', 'hotové provozovny', 'hotových provozoven')
-    + ' na prodej';
+  // Odznak svítí pořád — i prázdné tržiště musí jít otevřít, jinak by hráč
+  // neměl kudy vystavit vlastní prádlomat.
+  el.classList.remove('hidden');
+  el.classList.toggle('prazdne', !kolik);
+  el.innerHTML = '<i>\uD83E\uDD1D</i><b>' + (kolik || 'Tržiště') + '</b>';
+  el.title = kolik
+    ? 'Tržiště — ' + kolik + ' ' + mn(kolik, 'hotová provozovna', 'hotové provozovny', 'hotových provozoven') + ' na prodej'
+    : 'Tržiště — zrovna nikdo nic nenabízí';
   el.onclick = trhSeznamSheet;
 }
 // Celé tržiště v panelu — otevře se z mapy, ať se nemusí chodit na Burzu.
@@ -8901,6 +8899,7 @@ function startGame() {
   loadClaims();
   setInterval(loadClaims, 45000);
   // Tržiště chceme mít i na mapě, ne až po otevření Burzy.
+  paintTrhBadge();
   loadTrh(drawMap);
   vyzvedniNasledky();
   loadTrades();

@@ -203,6 +203,7 @@ button.kv:active{background:rgba(124,92,255,.12)}
   background:rgba(4,6,12,.9);border:1px solid rgba(255,216,102,.55);backdrop-filter:blur(10px);
   color:var(--warn);font-size:12px;font-weight:800;box-shadow:0 8px 20px rgba(0,0,0,.45)}
 .map-trh i{font-style:normal;font-size:14px;line-height:1}
+.map-trh.prazdne{border-color:var(--border);color:var(--text2)}
 .map-trh b{font-variant-numeric:tabular-nums}
 /* Špendlík prádlomatu, který je na prodej. */
 .pin.unit.trh{border-color:rgba(255,216,102,.95)}
