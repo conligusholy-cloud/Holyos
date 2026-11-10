@@ -72,12 +72,13 @@ function notifyHolyos(title, body, p) {
 // Pokud existuje public/logo.png (nebo .svg / .webp), použije se; jinak vektorová náhrada.
 function logoHtml(h) {
   for (const ext of ['png', 'svg', 'webp', 'jpg']) if (fs.existsSync(path.join(__dirname, 'public', 'logo.' + ext))) return `<img src="/logo.${ext}" alt="Laundry Unlimited" style="height:${h}px;width:auto;display:block">`;
-  return `<svg height="${h}" viewBox="0 0 520 110" role="img" aria-label="Laundry Unlimited" xmlns="http://www.w3.org/2000/svg">
-  <path d="M96 22 A44 44 0 1 0 98 62" fill="none" stroke="#00e5ff" stroke-width="7" stroke-linecap="butt"/>
-  <path d="M30 72 A28 28 0 0 1 72 34" fill="none" stroke="#1e7cff" stroke-width="7"/>
-  <rect x="90" y="14" width="9" height="9" fill="#00e5ff"/>
-  <text x="124" y="60" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="40" font-weight="300" letter-spacing="3" fill="#e8eef7">LAUNDRY</text>
-  <text x="126" y="90" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="15" font-weight="300" letter-spacing="9" fill="#9fb0c6">UNLIMITED</text></svg>`;
+  return `<svg height="${h}" viewBox="0 0 580 140" role="img" aria-label="Laundry Unlimited" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#b9c4d2"/></linearGradient></defs>
+  <path d="M89 17.4 A56 56 0 1 0 124 84.5" fill="none" stroke="#00e5ff" stroke-width="8"/>
+  <path d="M79.3 35.2 A36 36 0 0 0 46.9 97.6" fill="none" stroke="#1e7cff" stroke-width="8"/>
+  <rect x="94" y="8" width="11" height="11" fill="#00e5ff"/>
+  <text x="152" y="78" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="52" font-weight="300" letter-spacing="5" fill="url(#lg)">LAUNDRY</text>
+  <text x="156" y="116" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17" font-weight="300" letter-spacing="13" fill="#a9b6c7">UNLIMITED</text></svg>`;
 }
 
 // ── Šablona stránek ────────────────────────────────────────────────────────
@@ -96,12 +97,12 @@ header.top nav a{color:var(--mut);text-decoration:none}header.top nav a:hover{co
 .btn{display:inline-block;background:linear-gradient(135deg,var(--bl),var(--cy));color:#03101f;font-weight:800;border:0;border-radius:12px;padding:13px 24px;font-size:16px;text-decoration:none;cursor:pointer;box-shadow:0 10px 30px rgba(0,229,255,.2)}
 .btn:hover{filter:brightness(1.08)}.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line);box-shadow:none}
 .btn.sm{padding:8px 14px;font-size:13px;border-radius:9px}
-.hero{padding:84px 0 56px}
-.kick{display:inline-block;color:var(--cy);font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;margin-bottom:14px}
-h1{font-size:clamp(34px,5.4vw,58px);line-height:1.08;margin:0 0 18px;font-weight:800;letter-spacing:-.02em}
-h2{font-size:clamp(26px,3.4vw,38px);margin:0 0 12px;font-weight:800;letter-spacing:-.01em}
+.hero{padding:72px 0 56px}.hero .wrap{display:grid;grid-template-columns:1.25fr 1fr;gap:48px;align-items:center}.hero .side{display:flex;flex-direction:column;gap:14px}.hero .side .stat{font-size:16px;color:var(--text);padding:20px 22px;border-left:3px solid var(--cy);background:linear-gradient(90deg,rgba(0,229,255,.08),rgba(13,27,48,.6))}.hero .side .stat:nth-child(2){border-left-color:var(--bl)}.hero .side .stat:nth-child(3){border-left-color:#7c5cff}
+.kick{display:inline-block;color:var(--cy);font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin-bottom:14px}
+h1{font-size:clamp(32px,4.6vw,52px);line-height:1.12;margin:0 0 18px;font-weight:700;letter-spacing:0}
+h2{font-size:clamp(24px,3vw,34px);margin:0 0 12px;font-weight:700;letter-spacing:0}
 h3{margin:0 0 6px;font-size:18px}
-.lead{font-size:19px;color:var(--mut);max-width:720px;margin:0 0 28px}
+.lead{font-size:18px;color:var(--mut);max-width:720px;margin:0 0 28px}
 .cta{display:flex;gap:12px;flex-wrap:wrap}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:48px}
 .stat{border:1px solid var(--line);background:rgba(13,27,48,.6);border-radius:16px;padding:18px 20px;color:var(--mut);font-size:15px}
@@ -132,7 +133,7 @@ textarea{min-height:110px;resize:vertical}
 .err{color:#ff8a8a;margin:10px 0;font-size:14px}
 .hp{position:absolute;left:-9999px;opacity:0;height:0;overflow:hidden}
 footer{border-top:1px solid var(--line);padding:30px 0;color:var(--mut);font-size:14px}
-@media(max-width:860px){.two,.grid3,.grid4,.stats,.row2{grid-template-columns:1fr}.hero{padding:48px 0 30px}header.top nav a.hide{display:none}}
+@media(max-width:860px){.hero .wrap{grid-template-columns:1fr;gap:28px}.two,.grid3,.grid4,.stats,.row2{grid-template-columns:1fr}.hero{padding:48px 0 30px}header.top nav a.hide{display:none}}
 `;
 
 function page({ lang, title, desc, body, canonicalPath, noindex }) {
@@ -145,7 +146,7 @@ function page({ lang, title, desc, body, canonicalPath, noindex }) {
 ${noindex ? '<meta name="robots" content="noindex">' : alts}<meta name="theme-color" content="#050a14">
 <meta property="og:title" content="${esc(title || t.title)}"><meta property="og:description" content="${esc(desc || t.desc)}"><meta property="og:type" content="website">
 <style>${CSS}</style></head><body>
-<header class="top"><div class="wrap"><a href="${base || '/'}" style="display:block">${logoHtml(40)}</a>
+<header class="top"><div class="wrap"><a href="${base || '/'}" style="display:block">${logoHtml(46)}</a>
 <nav><a class="hide" href="${base}/#model">${esc(t.nav_model)}</a><a class="hide" href="${base}/#offer">${esc(t.nav_offer)}</a><a class="hide" href="${base}/#who">${esc(t.nav_who)}</a>
 <div class="lang">${sw}</div><a class="btn sm" href="${base}/apply" style="color:#03101f">${esc(t.nav_apply)}</a></nav></div></header>
 ${body}
@@ -156,9 +157,9 @@ function landing(lang) {
   const t = T[lang]; const base = lang === 'en' ? '' : '/' + lang;
   const li = (a) => a.map((x) => `<li>${esc(x)}</li>`).join('');
   const body = `
-<div class="hero"><div class="wrap"><span class="kick">${esc(t.hero_kicker)}</span><h1>${esc(t.hero_h)}</h1><p class="lead">${esc(t.hero_p)}</p>
-<div class="cta"><a class="btn" href="${base}/apply">${esc(t.hero_cta)}</a><a class="btn ghost" href="#model">${esc(t.hero_cta2)}</a></div>
-<div class="stats"><div class="stat">${esc(t.stat1)}</div><div class="stat">${esc(t.stat2)}</div><div class="stat">${esc(t.stat3)}</div></div></div></div>
+<div class="hero"><div class="wrap"><div><span class="kick">${esc(t.hero_kicker)}</span><h1>${esc(t.hero_h)}</h1><p class="lead">${esc(t.hero_p)}</p>
+<div class="cta"><a class="btn" href="${base}/apply">${esc(t.hero_cta)}</a><a class="btn ghost" href="#model">${esc(t.hero_cta2)}</a></div></div>
+<div class="side"><div class="stat">${esc(t.stat1)}</div><div class="stat">${esc(t.stat2)}</div><div class="stat">${esc(t.stat3)}</div></div></div></div>
 <section id="model" class="alt"><div class="wrap"><h2>${esc(t.model_h)}</h2><p class="sub">${esc(t.model_p)}</p>
 <div class="pyr"><div class="l1"><b>${esc(t.top_h)}</b><span>${esc(t.top_p)}</span></div>
 <div class="l2"><b>${esc(t.mid_h)}</b><span>${esc(t.mid_p)}</span></div>
