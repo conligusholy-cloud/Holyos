@@ -1093,9 +1093,9 @@
       // Platnost směny pro daný den — musí odpovídat services/voice/shift-window.js
       // (podle toho se reálně vybírají operátoři pro přepojení).
       function shWindowLabel(dow){
-        if(dow===6) return 'So 0:00 – Ne 7:00';
+        if(dow===6) return 'So 7:00 – Ne 7:00';
         if(dow===0) return 'Ne 7:00 – Po 7:00';
-        if(dow===5) return '7:00–15:00 · 15:00 – So 0:00';
+        if(dow===5) return '7:00–15:00 · 15:00 – So 7:00';
         return '7:00–15:00 · 15:00–7:00';
       }
       var _weekOffset=0;

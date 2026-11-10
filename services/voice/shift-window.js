@@ -9,13 +9,14 @@
 //   Po–Čt  7:00–15:00   → řádek toho dne,      V práci → Hlavní → Záložní
 //   Po–Čt 15:00–7:00    → řádek toho dne,      Hlavní → Záložní   (noc přesahuje do dalšího dne)
 //   Pá     7:00–15:00   → řádek pátku,         V práci → Hlavní → Záložní
-//   Pá    15:00–So 0:00 → řádek pátku,         Hlavní → Záložní
-//   So     0:00–Ne 7:00 → řádek soboty,        Hlavní → Záložní
+//   Pá    15:00–So 7:00 → řádek pátku,         Hlavní → Záložní
+//   So     7:00–Ne 7:00 → řádek soboty,        Hlavní → Záložní
 //   Ne     7:00–Po 7:00 → řádek neděle,        Hlavní → Záložní
 //
-// POZOR na noční přesahy: v úterý ve 2:00 platí PONDĚLNÍ řádek, v neděli
-// v 5:00 platí SOBOTNÍ a v pondělí v 5:00 NEDĚLNÍ. Proto se nestačí podívat
-// na dnešní datum — viz rosterDate níže.
+// POZOR na noční přesahy: v úterý ve 2:00 platí PONDĚLNÍ řádek, v sobotu
+// v 5:00 PÁTEČNÍ, v neděli v 5:00 SOBOTNÍ a v pondělí v 5:00 NEDĚLNÍ. Proto
+// se nestačí podívat na dnešní datum — viz rosterDate níže.
+// Všechny směny na sebe navazují od 7:00 do 7:00. (Požadavek #133)
 //
 // Časy schválně NEčteme ze serverového času (Railway běží v UTC) — den i hodinu
 // bereme přes Intl v pražském pásmu, takže sedí i přes přechod na letní čas.
@@ -79,15 +80,19 @@ function resolveShiftWindow(now) {
   }
   // Neděle 0:00–7:00 → ještě sobotní služba
   if (p.dow === 7 && beforeMorning) {
-    return { rosterDate: shiftYmd(p.ymd, -1), roles: ROLES_NIGHT, mode: 'saturday', label: 'So 0:00 – Ne 7:00', dow: p.dow };
+    return { rosterDate: shiftYmd(p.ymd, -1), roles: ROLES_NIGHT, mode: 'saturday', label: 'So 7:00 – Ne 7:00', dow: p.dow };
+  }
+  // Sobota 0:00–7:00 → ještě PÁTEČNÍ noční služba (pátek 15:00 → sobota 7:00)
+  if (p.dow === 6 && beforeMorning) {
+    return { rosterDate: shiftYmd(p.ymd, -1), roles: ROLES_NIGHT, mode: 'weekday_night', label: 'Pá 15:00 – So 7:00', dow: p.dow };
   }
   // Neděle od 7:00 → nedělní služba (běží do pondělí 7:00)
   if (p.dow === 7) {
     return { rosterDate: p.ymd, roles: ROLES_NIGHT, mode: 'sunday', label: 'Ne 7:00 – Po 7:00', dow: p.dow };
   }
-  // Sobota celý den → sobotní služba (běží do neděle 7:00)
+  // Sobota od 7:00 → sobotní služba (běží do neděle 7:00)
   if (p.dow === 6) {
-    return { rosterDate: p.ymd, roles: ROLES_NIGHT, mode: 'saturday', label: 'So 0:00 – Ne 7:00', dow: p.dow };
+    return { rosterDate: p.ymd, roles: ROLES_NIGHT, mode: 'saturday', label: 'So 7:00 – Ne 7:00', dow: p.dow };
   }
   // Út–Pá 0:00–7:00 → noční část PŘEDCHOZÍHO pracovního dne
   if (beforeMorning) {
@@ -97,12 +102,12 @@ function resolveShiftWindow(now) {
   if (inWorkBand) {
     return { rosterDate: p.ymd, roles: ROLES_DAY, mode: 'weekday_day', label: '7:00 – 15:00', dow: p.dow };
   }
-  // Po–Čt 15:00–24:00 → noční pásmo téhož dne; pátek 15:00–24:00 končí sobotní půlnocí
+  // Po–Pá 15:00–24:00 → noční pásmo téhož dne; páteční noc běží až do soboty 7:00
   return {
     rosterDate: p.ymd,
     roles: ROLES_NIGHT,
     mode: 'weekday_night',
-    label: p.dow === 5 ? 'Pá 15:00 – So 0:00' : '15:00 – 7:00',
+    label: p.dow === 5 ? 'Pá 15:00 – So 7:00' : '15:00 – 7:00',
     dow: p.dow,
   };
 }
@@ -110,9 +115,9 @@ function resolveShiftWindow(now) {
 // Popis platnosti směny pro daný kalendářní den — do tabulky rozpisu.
 // dow: ISO 1..7
 function windowLabelForDay(dow) {
-  if (dow === 6) return 'So 0:00 – Ne 7:00';
+  if (dow === 6) return 'So 7:00 – Ne 7:00';
   if (dow === 7) return 'Ne 7:00 – Po 7:00';
-  if (dow === 5) return '7:00–15:00 · 15:00 – So 0:00';
+  if (dow === 5) return '7:00–15:00 · 15:00 – So 7:00';
   return '7:00–15:00 · 15:00–7:00';
 }
 

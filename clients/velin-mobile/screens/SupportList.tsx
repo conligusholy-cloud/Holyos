@@ -119,9 +119,10 @@ export default function SupportList() {
   const isWaiting = (t: SupportThread) => t.unread === 0 && t.last_sender === 'user';
   const waitingCount = threads.filter(isWaiting).length;
   const onlineCount = threads.filter((t) => t.online).length;
-  const shown = filter === 'unread' ? threads.filter((t) => t.unread > 0)
+  const byNewest = (a: SupportThread, b: SupportThread) => (b.last_at ? new Date(b.last_at).getTime() : 0) - (a.last_at ? new Date(a.last_at).getTime() : 0); // od nejnovější zprávy po nejstarší
+  const shown = (filter === 'unread' ? threads.filter((t) => t.unread > 0)
     : filter === 'waiting' ? threads.filter(isWaiting)
-    : filter === 'online' ? threads.filter((t) => t.online) : threads.filter((t) => t.last_at); // „Vše" = jen ti, kdo už psali
+    : filter === 'online' ? threads.filter((t) => t.online) : threads.filter((t) => t.last_at)).slice().sort(byNewest); // „Vše" = jen ti, kdo už psali
 
   if (loading && threads.length === 0) {
     return (

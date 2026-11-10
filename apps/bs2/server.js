@@ -2188,7 +2188,7 @@ app.get('/api/svc/support/threads', requireSvc, wrap(async (req, res) => {
       (SELECT max(created_at) FROM support_messages m WHERE m.supporter_id=s.id) AS last_at,
       (SELECT body FROM support_messages m WHERE m.supporter_id=s.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_body,
       (SELECT sender FROM support_messages m WHERE m.supporter_id=s.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_sender
-    FROM supporters s WHERE EXISTS (SELECT 1 FROM support_messages m WHERE m.supporter_id=s.id) ORDER BY unread DESC, last_at DESC LIMIT 200`)).rows;
+    FROM supporters s WHERE EXISTS (SELECT 1 FROM support_messages m WHERE m.supporter_id=s.id) ORDER BY last_at DESC NULLS LAST LIMIT 200`)).rows;
   threads.forEach((t) => { t.online = ST.isOnline(t.id); }); // je zákazník právě na webu (ping do 90 s)
   // Právě přihlášení na webu, kteří ještě nikdy nepsali – aby jim šlo napsat první (filtr „Online" ve Velínu)
   try {
