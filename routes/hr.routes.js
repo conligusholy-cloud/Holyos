@@ -626,7 +626,7 @@ router.use(requireAuth);
 // → zpět 'employee'. Volá se před čtením lidí/statistik, ať je stav vždy aktuální
 // bez nutnosti cronu. (Požadavek #102)
 async function reconcileFormerEmployees() {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const { today } = nowInPrague(); // pražský den, ne lokální půlnoc procesu (Požadavek #134)
   try {
     await prisma.person.updateMany({
       where: { type: 'employee', end_date: { lt: today } },
@@ -782,7 +782,7 @@ function ensureFormerEndDate(data, before) {
   if (data.type !== 'former') return data;
   const existing = data.end_date !== undefined ? data.end_date : (before ? before.end_date : null);
   if (!existing) {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const { today } = nowInPrague(); // pražský den, ne lokální půlnoc procesu (Požadavek #134)
     data.end_date = today;
   }
   return data;
@@ -1276,6 +1276,60 @@ router.get('/leave-requests', async (req, res, next) => {
   }
 });
 
+// ─── Propis schválené dovolené do docházky ────────────────────────────────
+// Schválená žádost se propíše do docházky zaměstnance (pracovní dny po–pá).
+// Vygenerované záznamy poznáme podle markeru `[DOV#<id>]` v poznámce, takže
+// při zamítnutí nebo změně termínu je umíme zase uklidit.
+const LEAVE_REQ_TAG = (id) => `[DOV#${id}]`;
+// Typ žádosti → typ docházky (v docházce rozlišujeme práci, dovolenou a nemoc).
+function attendanceTypeForLeave(type) {
+  const t = String(type || '').toLowerCase();
+  if (t === 'sick' || t === 'nemoc') return 'sick';
+  if (t === 'vacation' || t === 'dovolena' || t === 'dovolená') return 'vacation';
+  return 'other';
+}
+
+async function clearLeaveRequestAttendance(requestId) {
+  try {
+    await prisma.attendance.deleteMany({ where: { note: { startsWith: LEAVE_REQ_TAG(requestId) } } });
+  } catch (e) {
+    console.warn('[hr] úklid docházky dovolené:', e.message);
+  }
+}
+
+// Zapíše schválenou dovolenou do docházky. Den s už zapsaným příchodem
+// nepřepisujeme — reálně odpracovaný den má přednost.
+async function syncLeaveRequestToAttendance(request) {
+  if (!request || request.status !== 'approved') return 0;
+  const from = parseDateOnly(request.date_from);
+  const to = parseDateOnly(request.date_to);
+  if (!from || !to) return 0;
+  const days = workdaysBetween(from, to);
+  if (!days.length) return 0;
+
+  const typ = attendanceTypeForLeave(request.type);
+  const note = `${LEAVE_REQ_TAG(request.id)} Schválená dovolená`;
+  const existing = await prisma.attendance.findMany({
+    where: { person_id: request.person_id, date: { in: days } },
+    select: { id: true, date: true, clock_in: true },
+  });
+  const obsazeno = new Map(existing.map((a) => [new Date(a.date).toISOString().slice(0, 10), a]));
+
+  const toCreate = [];
+  const toUpdate = [];
+  for (const d of days) {
+    const found = obsazeno.get(d.toISOString().slice(0, 10));
+    if (!found) { toCreate.push({ person_id: request.person_id, date: d, type: typ, note }); continue; }
+    if (found.clock_in) continue;
+    toUpdate.push(found.id);
+  }
+  if (toCreate.length) await prisma.attendance.createMany({ data: toCreate, skipDuplicates: true });
+  if (toUpdate.length) {
+    await prisma.attendance.updateMany({ where: { id: { in: toUpdate } }, data: { type: typ, note } });
+  }
+  return toCreate.length + toUpdate.length;
+}
+
 // POST /api/hr/leave-requests
 router.post('/leave-requests', async (req, res, next) => {
   try {
@@ -1296,6 +1350,11 @@ router.put('/leave-requests/:id', async (req, res, next) => {
       where: { id: parseInt(req.params.id) },
       data: req.body,
     });
+    // Stav nebo termín se mohl změnit → docházku přegenerujeme načisto.
+    try {
+      await clearLeaveRequestAttendance(request.id);
+      await syncLeaveRequestToAttendance(request);
+    } catch (e) { console.warn('[hr] propis dovolené do docházky:', e.message); }
     res.json(request);
   } catch (err) {
     next(err);
@@ -1319,8 +1378,8 @@ router.delete('/attendance/:id', async (req, res, next) => {
 // GET /api/hr/presence
 router.get('/presence', async (req, res, next) => {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Pražský kalendářní den, ne lokální půlnoc procesu — viz /stats. (Požadavek #134)
+    const { today } = nowInPrague();
 
     const records = await prisma.attendance.findMany({
       where: {
@@ -1358,7 +1417,13 @@ router.put('/leave-requests/:id/approve', async (req, res, next) => {
         approved_by: req.body.approved_by || null,
       },
     });
-    res.json(request);
+    // Schválená dovolená se propíše zaměstnanci do docházky.
+    let attendance_days = 0;
+    try {
+      await clearLeaveRequestAttendance(request.id);
+      attendance_days = await syncLeaveRequestToAttendance(request);
+    } catch (e) { console.warn('[hr] propis schválené dovolené do docházky:', e.message); }
+    res.json({ ...request, attendance_days });
   } catch (err) {
     next(err);
   }
@@ -1374,6 +1439,9 @@ router.put('/leave-requests/:id/reject', async (req, res, next) => {
         approved_by: req.body.approved_by || null,
       },
     });
+    // Zamítnutá dovolená nemá v docházce co dělat.
+    try { await clearLeaveRequestAttendance(request.id); }
+    catch (e) { console.warn('[hr] úklid docházky po zamítnutí:', e.message); }
     res.json(request);
   } catch (err) {
     next(err);
@@ -1385,18 +1453,52 @@ router.put('/leave-requests/:id/reject', async (req, res, next) => {
 // GET /api/hr/leave-balances
 router.get('/leave-balances', async (req, res, next) => {
   try {
+    // Rok z filtru nad tabulkou; bez něj aktuální (dřív se query ignorovala).
+    const rok = parseInt(req.query.year, 10) || new Date().getFullYear();
+    const zacatekRoku = new Date(Date.UTC(rok, 0, 1));
+    const konecRoku = new Date(Date.UTC(rok, 11, 31, 23, 59, 59, 999));
+
+    // Dny v UTC, ať se do počtu nepromítne letní čas.
+    const DEN = 24 * 60 * 60 * 1000;
+    const denCislo = (d) => {
+      const x = new Date(d);
+      return Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate()) / DEN;
+    };
+    // Počet dní úseku oříznutého na vybraný rok (včetně obou krajních dnů).
+    const dnuVRoce = (od, doData) => {
+      const a = Math.max(denCislo(od), denCislo(zacatekRoku));
+      const b = Math.min(denCislo(doData), denCislo(konecRoku));
+      return b >= a ? b - a + 1 : 0;
+    };
+
     const people = await prisma.person.findMany({
       where: { active: true, type: 'employee' },
+      orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }],
       select: {
         id: true, first_name: true, last_name: true,
         leave_entitlement_days: true, leave_carryover: true,
         leave_requests: {
           where: {
             status: 'approved',
-            date_from: { gte: new Date(new Date().getFullYear(), 0, 1) },
+            date_from: { lte: konecRoku },
+            date_to: { gte: zacatekRoku },
           },
         },
       },
+    });
+
+    // Celozávodní dovolená zasahující do vybraného roku. Je to jen INFORMATIVNÍ
+    // sloupec — kryje se z běžného nároku, takže se do „čerpané" nepřičítá.
+    const celozavodni = await prisma.companyLeave.findMany({
+      where: { date_from: { lte: konecRoku }, date_to: { gte: zacatekRoku } },
+      select: { date_from: true, date_to: true, excluded_person_ids: true },
+    });
+    // excluded_person_ids je Json — může přijít jako pole, string i null.
+    const vyjimky = celozavodni.map((cl) => {
+      let ids = cl.excluded_person_ids;
+      if (typeof ids === 'string') { try { ids = JSON.parse(ids); } catch (_) { ids = []; } }
+      const set = new Set((Array.isArray(ids) ? ids : []).map((x) => parseInt(x, 10)));
+      return { dny: dnuVRoce(cl.date_from, cl.date_to), vynechani: set };
     });
 
     const balances = people.map(p => {
@@ -1404,18 +1506,24 @@ router.get('/leave-balances', async (req, res, next) => {
       const carryover = p.leave_carryover || 0;
       let usedDays = 0;
       for (const lr of p.leave_requests) {
-        const from = new Date(lr.date_from);
-        const to = new Date(lr.date_to);
-        usedDays += Math.ceil((to - from) / (1000 * 60 * 60 * 24)) + 1;
+        usedDays += dnuVRoce(lr.date_from, lr.date_to);
+      }
+      // Dny celozávodní dovolené, které na tohoto člověka dopadají.
+      let companyLeaveDays = 0;
+      for (const cl of vyjimky) {
+        if (!cl.vynechani.has(p.id)) companyLeaveDays += cl.dny;
       }
       return {
         person_id: p.id,
         first_name: p.first_name,
         last_name: p.last_name,
+        // Tabulka v modulu čte person_name — dřív ho route neposílala a svítilo „undefined".
+        person_name: `${p.last_name || ''} ${p.first_name || ''}`.trim(),
         entitlement: entitlement,
         carryover: carryover,
         total: entitlement + carryover,
         used: usedDays,
+        company_leave_days: companyLeaveDays,
         remaining: entitlement + carryover - usedDays,
       };
     });
@@ -1532,6 +1640,118 @@ router.post('/overtime-settings', async (req, res, next) => {
 });
 
 // ─── CELOZÁVODNÍ DOVOLENÁ ─────────────────────────────────────────────────
+// Celozávodní dovolená platí pro všechny aktivní zaměstnance kromě výjimek.
+// Kromě záznamu v tabulce se propíše i do DOCHÁZKY — na každý pracovní den
+// (po–pá) vznikne záznam typu 'vacation'. Vygenerované záznamy poznáme podle
+// poznámky s markerem `[CZD#<id>]`, takže je umíme při změně i smazání uklidit.
+
+// Datum z formuláře („2026-12-28") → DateTime pro Prisma (@db.Date = půlnoc UTC).
+// Prisma holý „YYYY-MM-DD" nepřijme a vyhodí validační chybu — proto převod.
+function parseDateOnly(v) {
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
+  const m = String(v || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// Seznam pracovních dnů (po–pá) v rozsahu od–do, jako UTC půlnoci.
+function workdaysBetween(from, to) {
+  const out = [];
+  const d = new Date(from.getTime());
+  while (d.getTime() <= to.getTime()) {
+    const dow = d.getUTCDay(); // 0 = neděle, 6 = sobota
+    if (dow !== 0 && dow !== 6) out.push(new Date(d.getTime()));
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return out;
+}
+
+const COMPANY_LEAVE_TAG = (id) => `[CZD#${id}]`;
+
+const companyLeaveSchema = z.object({
+  name: z.string().trim().min(1, 'Vyplň název celozávodní dovolené.').max(255),
+  date_from: z.union([z.string(), z.date()]),
+  date_to: z.union([z.string(), z.date()]),
+  excluded_person_ids: z.array(z.coerce.number().int()).nullable().optional(),
+});
+
+// Připraví data pro Prisma + ohlídá, že „do" není dřív než „od".
+function parseCompanyLeaveBody(body) {
+  const b = body || {};
+  // Rychlá kontrola povinných polí, ať uživatel dostane českou hlášku.
+  if (!String(b.name || '').trim()) return { error: 'Vyplň název celozávodní dovolené.' };
+  if (!b.date_from || !b.date_to) return { error: 'Vyplň datum od a do.' };
+  const parsed = companyLeaveSchema.safeParse(b);
+  if (!parsed.success) {
+    const issue = parsed.error.issues && parsed.error.issues[0];
+    return { error: (issue && issue.message) || 'Neplatná data celozávodní dovolené.' };
+  }
+  const from = parseDateOnly(parsed.data.date_from);
+  const to = parseDateOnly(parsed.data.date_to);
+  if (!from || !to) return { error: 'Zadej platné datum od a do (formát RRRR-MM-DD).' };
+  if (to.getTime() < from.getTime()) return { error: 'Datum „do" nemůže být dřív než „od".' };
+  return {
+    data: {
+      name: parsed.data.name,
+      date_from: from,
+      date_to: to,
+      excluded_person_ids: parsed.data.excluded_person_ids || [],
+    },
+  };
+}
+
+// Smaže docházkové záznamy vygenerované danou celozávodní dovolenou.
+async function clearCompanyLeaveAttendance(leaveId) {
+  try {
+    await prisma.attendance.deleteMany({ where: { note: { startsWith: COMPANY_LEAVE_TAG(leaveId) } } });
+  } catch (e) {
+    console.warn('[hr] úklid docházky celozávodní dovolené:', e.message);
+  }
+}
+
+// Propíše celozávodní dovolenou do docházky všech aktivních zaměstnanců
+// (kromě výjimek). Den, kdy už má člověk zapsaný příchod, se nepřepisuje —
+// reálně odpracovaný den má přednost. Vrací počet založených záznamů.
+async function syncCompanyLeaveToAttendance(leave) {
+  const excluded = Array.isArray(leave.excluded_person_ids) ? leave.excluded_person_ids.map(Number) : [];
+  const people = await prisma.person.findMany({
+    where: { active: true, type: 'employee', ...(excluded.length ? { id: { notIn: excluded } } : {}) },
+    select: { id: true },
+  });
+  if (!people.length) return 0;
+  const days = workdaysBetween(leave.date_from, leave.date_to);
+  if (!days.length) return 0;
+
+  const note = `${COMPANY_LEAVE_TAG(leave.id)} Celozávodní dovolená: ${leave.name}`;
+  // Co už v těch dnech v docházce je — ať nepřepisujeme odpracované dny.
+  const existing = await prisma.attendance.findMany({
+    where: { person_id: { in: people.map((p) => p.id) }, date: { in: days } },
+    select: { id: true, person_id: true, date: true, clock_in: true, note: true },
+  });
+  const key = (pid, date) => `${pid}|${new Date(date).toISOString().slice(0, 10)}`;
+  const byKey = new Map(existing.map((a) => [key(a.person_id, a.date), a]));
+
+  const toCreate = [];
+  const toUpdate = [];
+  for (const p of people) {
+    for (const d of days) {
+      const found = byKey.get(key(p.id, d));
+      if (!found) { toCreate.push({ person_id: p.id, date: d, type: 'vacation', note }); continue; }
+      // Zapsaný příchod = člověk ten den pracoval → necháváme být.
+      if (found.clock_in) continue;
+      if (found.type !== 'vacation' || found.note !== note) toUpdate.push({ id: found.id });
+    }
+  }
+  if (toCreate.length) await prisma.attendance.createMany({ data: toCreate, skipDuplicates: true });
+  if (toUpdate.length) {
+    await prisma.attendance.updateMany({
+      where: { id: { in: toUpdate.map((u) => u.id) } },
+      data: { type: 'vacation', note },
+    });
+  }
+  return toCreate.length + toUpdate.length;
+}
 
 // GET /api/hr/company-leave
 router.get('/company-leave', async (req, res, next) => {
@@ -1546,8 +1766,13 @@ router.get('/company-leave', async (req, res, next) => {
 // POST /api/hr/company-leave
 router.post('/company-leave', async (req, res, next) => {
   try {
-    const leave = await prisma.companyLeave.create({ data: req.body });
-    res.status(201).json(leave);
+    const { error, data } = parseCompanyLeaveBody(req.body);
+    if (error) return res.status(400).json({ error });
+    const leave = await prisma.companyLeave.create({ data });
+    let attendance_days = 0;
+    try { attendance_days = await syncCompanyLeaveToAttendance(leave); }
+    catch (e) { console.warn('[hr] propis celozávodní dovolené do docházky:', e.message); }
+    res.status(201).json({ ...leave, attendance_days });
   } catch (err) {
     next(err);
   }
@@ -1556,11 +1781,18 @@ router.post('/company-leave', async (req, res, next) => {
 // PUT /api/hr/company-leave/:id
 router.put('/company-leave/:id', async (req, res, next) => {
   try {
-    const leave = await prisma.companyLeave.update({
-      where: { id: parseInt(req.params.id) },
-      data: req.body,
-    });
-    res.json(leave);
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'Neplatné ID.' });
+    const { error, data } = parseCompanyLeaveBody(req.body);
+    if (error) return res.status(400).json({ error });
+    const leave = await prisma.companyLeave.update({ where: { id }, data });
+    // Termín nebo výjimky se mohly změnit → docházku přegenerujeme načisto.
+    let attendance_days = 0;
+    try {
+      await clearCompanyLeaveAttendance(id);
+      attendance_days = await syncCompanyLeaveToAttendance(leave);
+    } catch (e) { console.warn('[hr] přepis docházky celozávodní dovolené:', e.message); }
+    res.json({ ...leave, attendance_days });
   } catch (err) {
     next(err);
   }
@@ -1569,7 +1801,10 @@ router.put('/company-leave/:id', async (req, res, next) => {
 // DELETE /api/hr/company-leave/:id
 router.delete('/company-leave/:id', async (req, res, next) => {
   try {
-    await prisma.companyLeave.delete({ where: { id: parseInt(req.params.id) } });
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'Neplatné ID.' });
+    await clearCompanyLeaveAttendance(id);
+    await prisma.companyLeave.delete({ where: { id } });
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -1652,19 +1887,28 @@ router.post('/permissions/:roleId', requireAdmin, async (req, res, next) => {
 // GET /api/hr/stats
 router.get('/stats', async (req, res, next) => {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // POZOR: ne new Date().setHours(0,0,0,0) — proces běží s TZ=Europe/Prague,
+    // takže by to vyšlo na 23:00 UTC předešlého dne a karta „Dnes přítomno"
+    // by počítala VČEREJŠEK. nowInPrague() vrací UTC půlnoc pražského dne,
+    // což je přesně to, co Prisma čeká u @db.Date. (Požadavek #134)
+    const { today } = nowInPrague();
     await reconcileFormerEmployees(); // bývalí (skončený poměr) → 'former', ať se nepočítají
 
-    const [employees, contacts, departments, presentToday] = await Promise.all([
+    const [employees, contacts, departments, presentRows] = await Promise.all([
       prisma.person.count({ where: { active: true, type: 'employee' } }),
       // Bývalí zaměstnanci se nepočítají ani do „kontaktů".
       prisma.person.count({ where: { active: true, type: { notIn: ['employee', 'former'] } } }),
       prisma.department.count(),
-      prisma.attendance.count({ where: { date: today, clock_in: { not: null }, clock_out: null } }),
+      // Přítomný = má dnes příchod a nemá odchod. Jen type 'work' (otevřená
+      // přestávka je samostatný řádek) a distinct, ať se nikdo nepočítá dvakrát.
+      prisma.attendance.findMany({
+        where: { date: today, type: 'work', clock_in: { not: null }, clock_out: null },
+        select: { person_id: true },
+        distinct: ['person_id'],
+      }),
     ]);
 
-    res.json({ employees, contacts, departments, presentToday });
+    res.json({ employees, contacts, departments, presentToday: presentRows.length });
   } catch (err) {
     next(err);
   }

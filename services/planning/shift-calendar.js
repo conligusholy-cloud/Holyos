@@ -32,7 +32,30 @@ function normalizeConfig(raw) {
     .map(b => ({ start: parseTime(b.start), end: parseTime(b.end), s: b.start, e: b.end }))
     .filter(b => b.start && b.end && (b.end.h * 60 + b.end.m) > (b.start.h * 60 + b.start.m))
     .sort((a, b) => (a.start.h * 60 + a.start.m) - (b.start.h * 60 + b.start.m));
-  return { start, end, workDays, breaks, enabled: !!(start && end && workDays && workDays.length > 0) };
+  // closedDays = dny, kdy stojí celý závod (celozávodní dovolená) — klíče 'YYYY-MM-DD'.
+  const closedDays = (raw && raw.closedDays instanceof Set) ? raw.closedDays : new Set();
+  return { start, end, workDays, breaks, closedDays, enabled: !!(start && end && workDays && workDays.length > 0) };
+}
+
+/** Lokální kalendářní den jako klíč 'YYYY-MM-DD' (stejná TZ jako zbytek modulu). */
+function dayKey(date) {
+  const d = new Date(date);
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/**
+ * Je `date` pracovní den? Bere v úvahu nastavené pracovní dny i celozávodní
+ * dovolenou (closedDays). ZJEDNODUŠENÍ: celozávodní dovolená se bere jako
+ * úplné zastavení výroby i tehdy, když má pár výjimek — plán se tím posune
+ * dozadu, nikdy dopředu, což je bezpečnější než plánovat do prázdné dílny.
+ */
+function isWorkDay(date, cfg) {
+  if (!cfg || !cfg.workDays) return true;
+  if (!cfg.workDays.includes(isoDow(date))) return false;
+  if (cfg.closedDays && cfg.closedDays.size && cfg.closedDays.has(dayKey(date))) return false;
+  return true;
 }
 
 /**
@@ -49,13 +72,46 @@ function getShiftConfig(env = process.env) {
 
 /** Asynchronně: AppSetting production.shift → env → výchozí. */
 async function loadShiftConfig() {
+  const closedDays = await loadCompanyClosedDays();
   try {
     const { getSetting } = require('../settings');
     const raw = await getSetting('production.shift', { type: 'json', defaultValue: null });
-    if (raw && raw.start && raw.end) return normalizeConfig(raw);
-    if (raw && raw.mode === '24_7') return { start: null, end: null, workDays: null, breaks: [], enabled: false };
+    if (raw && raw.start && raw.end) return normalizeConfig({ ...raw, closedDays });
+    if (raw && raw.mode === '24_7') return { start: null, end: null, workDays: null, breaks: [], closedDays, enabled: false };
   } catch (e) { /* bez DB → env/default */ }
-  return getShiftConfig();
+  const cfg = getShiftConfig();
+  cfg.closedDays = closedDays;
+  return cfg;
+}
+
+/**
+ * Dny celozávodní dovolené (Lidé a HR → Docházka → Celozávodní) jako Set
+ * 'YYYY-MM-DD'. Díky tomu plánovač přes celozávodní dovolenou nic nenaplánuje.
+ * Při jakékoli chybě vrací prázdnou množinu — plánovač pak jede jako dřív.
+ */
+async function loadCompanyClosedDays() {
+  const out = new Set();
+  try {
+    const { prisma } = require('../../config/database');
+    if (!prisma || !prisma.companyLeave) return out;
+    // Stačí dovolené, které ještě můžou ovlivnit plán (od včerejška dál).
+    const od = new Date();
+    od.setDate(od.getDate() - 1);
+    od.setHours(0, 0, 0, 0);
+    const leaves = await prisma.companyLeave.findMany({ where: { date_to: { gte: od } }, select: { date_from: true, date_to: true } });
+    for (const l of leaves) {
+      const cursor = new Date(l.date_from);
+      const konec = new Date(l.date_to);
+      // Pojistka proti nesmyslně dlouhému rozsahu (max 2 roky dnů).
+      for (let i = 0; i < 730 && cursor <= konec; i++) {
+        out.add(dayKey(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    }
+  } catch (e) {
+    console.warn('[planning] celozávodní dovolená pro plánovač:', e.message);
+  }
+  return out;
 }
 
 /** Parse 'HH:MM' -> { h, m }, vrátí null při chybě. */
@@ -94,7 +150,7 @@ function addDays(date, n) {
  */
 function isInShift(date, cfg) {
   if (!cfg.enabled) return true;
-  if (!cfg.workDays.includes(isoDow(date))) return false;
+  if (!isWorkDay(date, cfg)) return false;
   const s = parseTime(cfg.start);
   const e = parseTime(cfg.end);
   if (!s || !e) return true;
@@ -138,7 +194,7 @@ function nextShiftStart(from, cfg) {
 
   let cursor = new Date(from);
   for (let i = 0; i < 14; i++) {
-    if (cfg.workDays.includes(isoDow(cursor))) {
+    if (isWorkDay(cursor, cfg)) {
       const shiftStart = withTimeOfDay(cursor, s.h, s.m);
       if (cursor < shiftStart) return shiftStart;
       // Uvnitř směny v přestávce → konec přestávky
@@ -224,7 +280,7 @@ function prevShiftEnd(from, cfg) {
   const s = parseTime(cfg.start), e = parseTime(cfg.end);
   let cursor = new Date(from);
   for (let i = 0; i < 14; i++) {
-    if (cfg.workDays.includes(isoDow(cursor))) {
+    if (isWorkDay(cursor, cfg)) {
       const shiftStart = withTimeOfDay(cursor, s.h, s.m), shiftEnd = withTimeOfDay(cursor, e.h, e.m);
       if (cursor > shiftEnd) return shiftEnd;
       if (cursor >= shiftStart && cursor <= shiftEnd) {
@@ -275,6 +331,9 @@ module.exports = {
   parseTime,
   isoDow,
   isInShift,
+  isWorkDay,
+  dayKey,
+  loadCompanyClosedDays,
   nextShiftStart,
   consumeShift,
   withTimeOfDay,

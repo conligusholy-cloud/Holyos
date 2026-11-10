@@ -886,7 +886,7 @@
         { key: 'carry', label: 'Převod', type: 'num', ph: '', get: (i) => i.carryover },
         { key: 'total', label: 'Celkem', type: 'num', ph: '', get: (i) => (i.entitlement || 0) + (i.carryover || 0) },
         { key: 'used', label: 'Čerpaná', type: 'num', ph: '', get: (i) => i.used },
-        { key: 'company', label: 'Celozávodní', type: 'num', ph: '', get: (i) => i.company_leave_days },
+        { key: 'company', label: 'Celozávodní', type: 'num', ph: '', get: (i) => i.company_leave_days || 0 },
         { key: 'remaining', label: 'Zbývá', type: 'num', ph: '', get: (i) => i.remaining },
         { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (i) => i.remaining <= 0 ? 'Vyčerpáno' : (i.remaining <= 3 ? 'Málo' : 'OK') },
       ] },
@@ -3089,12 +3089,12 @@
         const barColor = remaining <= 0 ? '#ef4444' : (remaining <= 3 ? '#f59e0b' : '#10b981');
 
         html += '<tr>';
-        html += '<td class="person-name">' + item.person_name + '</td>';
+        html += '<td class="person-name">' + (item.person_name || ((item.last_name || '') + ' ' + (item.first_name || '')).trim() || '—') + '</td>';
         html += '<td>' + item.entitlement + '</td>';
         html += '<td>' + item.carryover + '</td>';
         html += '<td style="font-weight:600;">' + total + '</td>';
         html += '<td>' + item.used + '</td>';
-        html += '<td>' + item.company_leave_days + '</td>';
+        html += '<td>' + (item.company_leave_days || 0) + '</td>';
         html += '<td><div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;"><div style="width:' + barPct + '%;height:100%;background:' + barColor + ';border-radius:4px;"></div></div><strong style="white-space:nowrap;">' + remaining + ' dní</strong></div></td>';
         html += '<td>' + statusBadge + '</td>';
         html += '</tr>';
@@ -3104,7 +3104,7 @@
 
       // Summary
       const totalEntitlement = data.reduce((s, d) => s + d.entitlement + d.carryover, 0);
-      const totalUsed = data.reduce((s, d) => s + d.used + d.company_leave_days, 0);
+      const totalUsed = data.reduce((s, d) => s + (d.used || 0), 0);
       const totalRemaining = data.reduce((s, d) => s + d.remaining, 0);
       const exhausted = data.filter(d => d.remaining <= 0).length;
 
@@ -3123,11 +3123,16 @@
     // COMPANY-WIDE LEAVE
     // ============================================================
     async function loadCompanyLeave() {
+      const el = document.getElementById('company-leave-table');
       try {
         const res = await fetch('/api/hr/company-leave');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         renderCompanyLeave(data);
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error(e);
+        if (el) el.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Seznam se nepodařilo načíst</h3><p>' + e.message + '</p></div>';
+      }
     }
 
     function renderCompanyLeave(data) {
@@ -3141,17 +3146,17 @@
       html += '</tr></thead><tbody>';
 
       const __rowFn = (item) => { let html = '';
-        const from = new Date(item.date_from);
-        const to = new Date(item.date_to);
-        const days = Math.ceil((to - from) / 86400000) + 1;
+        // Rozsah počítáme v UTC, ať do počtu dní nespadne letní čas.
+        const denCislo = (d) => { const x = new Date(d); return Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate()) / 86400000; };
+        const days = denCislo(item.date_to) - denCislo(item.date_from) + 1;
         const excluded = item.excluded_person_ids && item.excluded_person_ids.length > 0
           ? item.excluded_person_ids.length + ' zaměstnanců'
           : 'Žádné';
 
         html += '<tr>';
         html += '<td class="person-name">' + item.name + '</td>';
-        html += '<td>' + item.date_from + '</td>';
-        html += '<td>' + item.date_to + '</td>';
+        html += '<td>' + formatDate(item.date_from) + '</td>';
+        html += '<td>' + formatDate(item.date_to) + '</td>';
         html += '<td style="font-weight:600;">' + days + '</td>';
         html += '<td>' + excluded + '</td>';
         html += '<td><button class="btn btn-danger btn-sm" onclick="deleteCompanyLeave(' + item.id + ')">🗑️ Smazat</button></td>';
@@ -3206,14 +3211,30 @@
         date_to: form.get('date_to'),
         excluded_person_ids: excluded,
       };
-      await fetch('/api/hr/company-leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-      closeModal();
-      loadCompanyLeave();
+      try {
+        const res = await fetch('/api/hr/company-leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        if (!res.ok) {
+          let msg = 'HTTP ' + res.status;
+          try { const j = await res.json(); if (j && j.error) msg = j.error; } catch (_) {}
+          alert('Celozávodní dovolenou se nepodařilo uložit: ' + msg);
+          return; // formulář necháme otevřený, ať se zadané údaje neztratí
+        }
+        const saved = await res.json().catch(() => null);
+        closeModal();
+        await loadCompanyLeave();
+        // Propis do docházky dělá server — rovnou řekneme, kolik dní zapsal.
+        if (saved && saved.attendance_days) {
+          alert('Celozávodní dovolená uložena. Do docházky zapsáno ' + saved.attendance_days + ' dní.');
+        }
+      } catch (err) {
+        alert('Celozávodní dovolenou se nepodařilo uložit: ' + err.message);
+      }
     }
 
     async function deleteCompanyLeave(id) {
       if (!confirm('Smazat celozávodní dovolenou?')) return;
-      await fetch('/api/hr/company-leave/' + id, { method: 'DELETE' });
+      const res = await fetch('/api/hr/company-leave/' + id, { method: 'DELETE' });
+      if (!res.ok) { alert('Smazání se nepovedlo (HTTP ' + res.status + ').'); return; }
       loadCompanyLeave();
     }
 
