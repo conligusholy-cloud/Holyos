@@ -3177,7 +3177,7 @@ function vykresliShluky(kusy, vrstva) {
 function drawMap() {
   if (!layer) return;
   layer.clearLayers();
-  var any = false, zname = {}, skryto = 0, kusy = [];
+  var any = false, zname = {}, skryto = 0, skrytoCizi = 0, kusy = [];
   var blizko = !map || map.getZoom() >= MISTA_ZOOM;
   var moje = MAPA_MOJE;
   Object.keys(S.areas).forEach(function (aid) {
@@ -3187,7 +3187,7 @@ function drawMap() {
       var rival = !unit && CLAIMS[sp.id] && !CLAIMS[sp.id].mine ? CLAIMS[sp.id] : null;
       // V pohledu „jen moje“ mizí konkurence. Prozkoumaná i volná místa zůstávají
       // — právě na nich se staví, bez nich by mapa k ničemu nebyla.
-      if (moje && rival) return;
+      if (moje && rival) { skrytoCizi++; return; }
       // Volné místo je jen tip, ne stavba — ukazuje se až při přiblížení.
       if (!unit && !rival && !blizko) { skryto++; return; }
       var seen = !!S.revealed[sp.id];
@@ -3216,8 +3216,9 @@ function drawMap() {
   // pozemek bez stroje není prádlomat, tak ani nevypadá jako prádlomat.
   Object.keys(CLAIMS).forEach(function (sid) {
     var c = CLAIMS[sid];
-    if (moje || c.mine || zname[sid] || c.lat == null) return;
+    if (c.mine || zname[sid] || c.lat == null) return;
     any = true;
+    if (moje) { skrytoCizi++; return; }
     var zem = c.pozemek && !c.model;
     kusy.push({ lat: c.lat, lon: c.lon, moje: false, kresli: function () {
       L.marker([c.lat, c.lon], { icon: zem ? ciziPozemekIcon(c) : rivalIcon(c) })
@@ -3253,6 +3254,13 @@ function drawMap() {
     h.classList.remove('hidden');
   // Nápověda o schovaných místech patří k prvnímu rozkoukání. Po herním měsíci
   // už hráč ví, jak se mapa chová, a lišta přes půl obrazovky by jen překážela.
+  // Filtr „jen moje“ schová konkurenci úplně — bez téhle hlášky to vypadá, že
+  // na mapě nikdo jiný není, i když tam zrovna někdo postavil.
+  } else if (moje && skrytoCizi) {
+    h.textContent = 'Vidíš jen svoje. Konkurence je schovaná — ' + skrytoCizi + ' '
+      + mn(skrytoCizi, 'cizí místo', 'cizí místa', 'cizích míst')
+      + '. Přepni nahoře na Všechno, ať je vidíš.';
+    h.classList.remove('hidden');
   } else if (skryto && Date.now() - (S.startedAt || 0) < MONTH_MS) {
     h.textContent = 'Přibliž mapu na úroveň ulic, ať uvidíš volná místa — teď jich je schovaných '
       + skryto + '. Ze seznamu oblastí tě hra skočí rovnou k nim.';
