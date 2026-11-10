@@ -130,7 +130,7 @@ p{margin:0 0 14px}
 .hero h1,.hero .lead,.hero .cta,.hero .lbl{animation:wipe 1.1s var(--ease) both}.hero h1{animation-delay:.1s}.hero .lead{animation-delay:.22s}.hero .cta{animation-delay:.34s}
 @keyframes wipe{from{opacity:0;clip-path:inset(0 100% 0 0);transform:translateX(-40px)}to{opacity:1;clip-path:inset(0 -2% 0 0);transform:none}}
 .fx{position:absolute;left:0;top:0;width:100%;height:100%;z-index:2;pointer-events:none}
-.moon{position:absolute;right:9%;top:17%;width:clamp(110px,10vw,200px);aspect-ratio:1;border-radius:50%;z-index:1;box-shadow:0 0 50px 4px rgba(205,222,255,.22),0 0 170px 36px rgba(50,115,255,.2)}
+.moon{position:absolute;right:9%;top:17%;width:clamp(120px,11vw,220px);aspect-ratio:1;border-radius:50%;z-index:1;box-shadow:0 0 50px 4px rgba(205,222,255,.22),0 0 170px 36px rgba(50,115,255,.2)}
 .moon svg{display:block;width:100%;height:100%;border-radius:50%}
 .sd{position:absolute;width:2px;height:2px;border-radius:50%;background:#bcd8ff;opacity:.15;z-index:1;animation:tw 3.5s ease-in-out infinite}
 @keyframes tw{50%{opacity:.7}}
@@ -219,15 +219,28 @@ ${body}
 </body></html>`;
 }
 
-const MOON = `<div class="moon"><svg viewBox="0 0 200 200" aria-hidden="true"><defs><clipPath id="mc"><circle cx="100" cy="100" r="100"/></clipPath>
-<radialGradient id="mb" cx="38%" cy="34%" r="78%"><stop offset="0" stop-color="#f6f3ea"/><stop offset=".55" stop-color="#d2cec3"/><stop offset=".86" stop-color="#97958f"/><stop offset="1" stop-color="#55555b"/></radialGradient>
-<radialGradient id="ms" cx="30%" cy="27%" r="88%"><stop offset=".42" stop-color="#020611" stop-opacity="0"/><stop offset="1" stop-color="#020611" stop-opacity=".82"/></radialGradient>
-<radialGradient id="cr"><stop offset="0" stop-color="#3a3a40" stop-opacity=".3"/><stop offset=".72" stop-color="#3a3a40" stop-opacity=".2"/><stop offset=".88" stop-color="#fff" stop-opacity=".4"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
-<filter id="mm" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".011 .015" numOctaves="4" seed="12"/><feColorMatrix type="matrix" values="0 0 0 0 .2  0 0 0 0 .21  0 0 0 0 .25  5 0 0 0 -2.6"/></filter>
-<filter id="mg" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".75" numOctaves="2" seed="3"/><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 -.42"/></filter></defs>
-<g clip-path="url(#mc)"><circle cx="100" cy="100" r="100" fill="url(#mb)"/><rect width="200" height="200" filter="url(#mm)" opacity=".7"/>
-<circle cx="62" cy="58" r="15" fill="url(#cr)"/><circle cx="128" cy="44" r="9" fill="url(#cr)"/><circle cx="150" cy="96" r="19" fill="url(#cr)"/><circle cx="96" cy="132" r="13" fill="url(#cr)"/><circle cx="52" cy="112" r="8" fill="url(#cr)"/><circle cx="122" cy="156" r="10" fill="url(#cr)"/><circle cx="78" cy="30" r="6" fill="url(#cr)"/><circle cx="170" cy="140" r="7" fill="url(#cr)"/><circle cx="34" cy="78" r="6" fill="url(#cr)"/><circle cx="108" cy="86" r="5" fill="url(#cr)"/><circle cx="72" cy="160" r="6" fill="url(#cr)"/><circle cx="144" cy="62" r="5" fill="url(#cr)"/>
-<rect width="200" height="200" filter="url(#mg)" opacity=".45"/><circle cx="100" cy="100" r="100" fill="url(#ms)"/></g></svg></div>`;
+const MOON = (() => {
+  let sd = 5; const r = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
+  let cr = '';
+  for (let i = 0; i < 34; i++) {
+    const a = r() * 6.283, d = Math.sqrt(r()) * 92, rad = i < 4 ? 8 + r() * 6 : i < 14 ? 3.5 + r() * 4 : 1.2 + r() * 2.4;
+    cr += `<circle cx="${(100 + Math.cos(a) * d).toFixed(1)}" cy="${(100 + Math.sin(a) * d).toFixed(1)}" r="${rad.toFixed(1)}" fill="url(#cr)"/>`;
+  }
+  return `<div class="moon"><svg viewBox="0 0 200 200" aria-hidden="true"><defs><clipPath id="mc"><circle cx="100" cy="100" r="100"/></clipPath>
+<radialGradient id="mb" cx="40%" cy="36%" r="75%"><stop offset="0" stop-color="#f1eee6"/><stop offset=".6" stop-color="#cfcac0"/><stop offset=".9" stop-color="#9a978f"/><stop offset="1" stop-color="#6a6a70"/></radialGradient>
+<radialGradient id="ms" cx="31%" cy="28%" r="92%"><stop offset=".4" stop-color="#030816" stop-opacity="0"/><stop offset=".8" stop-color="#030816" stop-opacity=".55"/><stop offset="1" stop-color="#030816" stop-opacity=".92"/></radialGradient>
+<radialGradient id="cr" cx=".5" cy=".5" r=".5" fx=".3" fy=".3"><stop offset="0" stop-color="#1e1e22" stop-opacity=".6"/><stop offset=".72" stop-color="#3c3c42" stop-opacity=".28"/><stop offset=".9" stop-color="#fff" stop-opacity=".5"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+<radialGradient id="ty"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset=".15" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+<filter id="rl" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".05" numOctaves="6" seed="8" result="n"/><feDiffuseLighting in="n" lighting-color="#ffffff" surfaceScale="2.6" diffuseConstant="1.1"><feDistantLight azimuth="225" elevation="46"/></feDiffuseLighting></filter>
+<filter id="ma" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="3" seed="4" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="9"/><feGaussianBlur stdDeviation="1.6"/></filter>
+<filter id="rr" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation=".7"/></filter></defs>
+<g clip-path="url(#mc)"><circle cx="100" cy="100" r="100" fill="url(#mb)"/>
+<g filter="url(#ma)" fill="#5f5e66" opacity=".58"><ellipse cx="76" cy="58" rx="30" ry="23"/><circle cx="118" cy="60" r="14"/><ellipse cx="138" cy="92" rx="19" ry="15"/><ellipse cx="170" cy="72" rx="8" ry="6"/><ellipse cx="46" cy="102" rx="21" ry="36"/><circle cx="82" cy="140" r="12"/><circle cx="54" cy="138" r="8"/><ellipse cx="160" cy="116" rx="7" ry="13"/><ellipse cx="104" cy="96" rx="12" ry="8"/></g>
+<rect width="200" height="200" filter="url(#rl)" style="mix-blend-mode:multiply" opacity=".55"/>
+${cr}
+<g filter="url(#rr)"><circle cx="102" cy="166" r="26" fill="url(#ty)"/><g stroke="#fff" stroke-opacity=".3" stroke-width="1.1"><line x1="102" y1="166" x2="60" y2="108"/><line x1="102" y1="166" x2="150" y2="104"/><line x1="102" y1="166" x2="30" y2="150"/><line x1="102" y1="166" x2="178" y2="150"/><line x1="102" y1="166" x2="100" y2="92"/></g></g>
+<circle cx="100" cy="100" r="100" fill="url(#ms)"/></g></svg></div>`;
+})();
 
 const FX_JS = `(function(){var cv=document.getElementById('fx');if(!cv)return;var hero=cv.parentNode;
 if(window.matchMedia&&matchMedia('(prefers-reduced-motion:reduce)').matches)return;
@@ -235,8 +248,9 @@ var ctx=cv.getContext('2d'),W=0,H=0,S=[],L=[],mo={x:0,y:0,R:40},stars=null,trail
 function cr(a,b,c,d,t){var t2=t*t,t3=t2*t;return .5*((2*b)+(-a+c)*t+(2*a-5*b+4*c-d)*t2+(-a+3*b-3*c+d)*t3)}
 function build(){var m=hero.querySelector('.moon').getBoundingClientRect(),r=hero.getBoundingClientRect();
 mo={x:m.left-r.left+m.width/2,y:m.top-r.top+m.height/2,R:m.width/2};var R=mo.R;
-var P=[[.2,.79],[.3,.71],[.45,.7],[.58,.72],[.62,.53],[.72,.58],[.8,.56]].map(function(p){return[p[0]*W,p[1]*H]});
-P.push([mo.x-2.3*R,mo.y+2.6*R],[mo.x-.4*R,mo.y+1.9*R],[mo.x+1.2*R,mo.y+1.1*R],[mo.x+3*R,mo.y-.6*R],[mo.x+5.5*R,mo.y-3*R]);
+var wr=hero.querySelector('.wrap').getBoundingClientRect().right-r.left,x2=Math.min(wr+.03*W,mo.x-3.4*R);if(x2<.55*W)x2=.55*W;
+var P=[[.03*W,.95*H],[.2*W,.93*H],[.42*W,.925*H],[x2-.08*W,.915*H],[x2-.015*W,.86*H],[x2,.66*H],[x2+.5*(mo.x-2.2*R-x2),mo.y+3.6*R]];
+P.push([mo.x-1.7*R,mo.y+1.9*R],[mo.x+.7*R,mo.y+1.55*R],[mo.x+3*R,mo.y-.4*R],[mo.x+5.5*R,mo.y-3*R]);
 var Q=[P[0]].concat(P,[P[P.length-1]]);S=[];L=[0];
 for(var i=1;i<Q.length-2;i++){for(var k=0;k<40;k++){var t=k/40;S.push([cr(Q[i-1][0],Q[i][0],Q[i+1][0],Q[i+2][0],t),cr(Q[i-1][1],Q[i][1],Q[i+1][1],Q[i+2][1],t)])}}
 S.push(P[P.length-1]);for(i=1;i<S.length;i++){L.push(L[i-1]+Math.hypot(S[i][0]-S[i-1][0],S[i][1]-S[i-1][1]))}}
@@ -248,19 +262,21 @@ var big=Math.random()<.14;stars.push({x:x,y:y,d:Math.random()*1500,life:2200+Mat
 function drawStars(c){var t0=RUN0+RUN-500;if(!stars)return;for(var i=0;i<stars.length;i++){var s=stars[i],a=c-t0-s.d;if(a<0||a>s.life)continue;var env=Math.sin(Math.PI*a/s.life),fl=.65+.35*Math.sin(a/65+s.ph),k=env*fl*(1+1.8*Math.exp(-a/160));
 glow(s.x,s.y,s.s*5*k+2,'rgba(255,226,120,'+Math.min(.9,.85*env)+')','rgba(255,190,60,0)');glow(s.x,s.y,s.s*1.3,'rgba(255,255,235,'+Math.min(1,env*1.2)+')','rgba(255,240,180,0)');
 if(s.big){var l=s.s*6*k;ctx.strokeStyle='rgba(255,236,160,'+(.8*env)+')';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(s.x-l,s.y);ctx.lineTo(s.x+l,s.y);ctx.moveTo(s.x,s.y-l);ctx.lineTo(s.x,s.y+l);ctx.stroke()}}}
-function drawTrail(now){for(var i=1;i<trail.length;i++){var a=trail[i],b=trail[i-1],f=1-(now-a.t)/4300;if(f<=0)continue;f=Math.pow(f,1.4);
+function drawTrail(now){for(var i=1;i<trail.length;i++){var a=trail[i],b=trail[i-1],f=1-(now-a.t)/3800;if(f<=0)continue;f=Math.pow(f,1.4);
 ctx.lineCap='round';ctx.beginPath();ctx.moveTo(b.x,b.y);ctx.lineTo(a.x,a.y);ctx.strokeStyle='rgba(255,170,40,'+(f*.2)+')';ctx.lineWidth=4+20*f;ctx.stroke();
 ctx.strokeStyle='rgba(255,215,100,'+(f*.55)+')';ctx.lineWidth=1.5+6*f;ctx.stroke();ctx.strokeStyle='rgba(255,250,220,'+(f*.9)+')';ctx.lineWidth=.5+2*f;ctx.stroke()}}
-function head(x,y,r,al){glow(x,y,r*3.2,'rgba(255,190,60,'+(.5*al)+')','rgba(255,160,30,0)');glow(x,y,r*1.5,'rgba(255,225,120,'+(.85*al)+')','rgba(255,200,70,0)');glow(x,y,r*.55,'rgba(255,255,240,'+al+')','rgba(255,245,200,0)');
+function head(x,y,r,al){glow(x,y,r*4.2,'rgba(255,190,60,'+(.5*al)+')','rgba(255,160,30,0)');glow(x,y,r*1.5,'rgba(255,225,120,'+(.85*al)+')','rgba(255,200,70,0)');glow(x,y,r*.55,'rgba(255,255,240,'+al+')','rgba(255,245,200,0)');
 ctx.strokeStyle='rgba(255,236,170,'+(.7*al)+')';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x-r*3,y);ctx.lineTo(x+r*3,y);ctx.moveTo(x,y-r*3);ctx.lineTo(x,y+r*3);ctx.stroke()}
+var parts=[];function dust(x,y){for(var i=0;i<3;i++){var a=Math.random()*6.283,v=.3+Math.random()*1.2;parts.push({x:x,y:y,vx:Math.cos(a)*v-.6,vy:Math.sin(a)*v,t:performance.now(),l:700+Math.random()*900,s:.6+Math.random()*1.4})}}
+function drawParts(now){for(var i=parts.length-1;i>=0;i--){var p=parts[i],f=1-(now-p.t)/p.l;if(f<=0){parts.splice(i,1);continue}p.x+=p.vx;p.y+=p.vy;glow(p.x,p.y,p.s*3,'rgba(255,215,100,'+(.8*f)+')','rgba(255,170,40,0)')}}
 var prevC=-1;
 function frame(now){requestAnimationFrame(frame);if(!W)return;var t=now-T0;if(t<0)return;ctx.clearRect(0,0,W,H);ctx.globalCompositeOperation='lighter';var c=t%CYC;
 if(c<prevC){trail=[];stars=null;lastI=0}prevC=c;
 if(c>=CH0&&c<RUN0){var u=(c-CH0)/(RUN0-CH0),p=S[0],r=9+13*u+2.5*Math.sin(c/85);head(p[0],p[1],r,Math.min(1,(c-CH0)/400))}
 else if(c>=RUN0&&c<RUN0+RUN){var u2=(c-RUN0)/RUN,s=Math.pow(u2,2.3),h=at(s);
-for(var i=lastI+1;i<=h[2];i++){trail.push({x:S[i][0],y:S[i][1],t:now})}lastI=h[2];trail.push({x:h[0],y:h[1],t:now});head(h[0],h[1],15,1)}
+for(var i=lastI+1;i<=h[2];i++){trail.push({x:S[i][0],y:S[i][1],t:now})}lastI=h[2];trail.push({x:h[0],y:h[1],t:now});head(h[0],h[1],17,1);dust(h[0],h[1])}
 if(c>=RUN0+RUN-500&&!stars)spawn();
-drawTrail(now);drawStars(c);ctx.globalCompositeOperation='source-over'}
+drawTrail(now);drawParts(now);drawStars(c);ctx.globalCompositeOperation='source-over'}
 size();T0=performance.now()+700;requestAnimationFrame(frame);
 var rt;window.addEventListener('resize',function(){clearTimeout(rt);rt=setTimeout(size,150)});
 })();`;
