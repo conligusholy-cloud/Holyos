@@ -7768,27 +7768,71 @@ function paintTrhBadge() {
   el.onclick = trhSeznamSheet;
 }
 // Celé tržiště v panelu — otevře se z mapy, ať se nemusí chodit na Burzu.
+// Jedna položka = jedna hotová provozovna: fotka stroje, cena a co vydělá.
+// Vlastní nabídky jsou dole zvlášť, ať je hráč vidí a může je stáhnout.
+// „za 144 h" nikdo nečte. Delší lhůty říkáme ve dnech.
+function trhKonci(ms) {
+  ms = Math.max(0, ms);
+  if (ms >= 48 * 3600e3) {
+    var d = Math.round(ms / 86400e3);
+    return 'za ' + d + ' ' + mn(d, 'den', 'dny', 'dní');
+  }
+  return etaText(ms);
+}
+function trhPolozka(n, moje) {
+  var m = MODELS[n.model] || { name: n.model };
+  var im = MODEL_IMG[n.model] || MODEL_IMG.flex;
+  var konci = trhKonci(new Date(n.konci).getTime() - Date.now());
+  return '<div class="trh-p">'
+    + '<img class="trh-foto" src="' + esc(im.src) + '" alt="' + esc(m.name) + '">'
+    + '<div class="trh-txt">'
+      + '<div class="trh-hl"><b>' + esc(n.name || 'Místo') + '</b>'
+      + '<b class="' + (moje ? 'warn' : 'ok') + '">' + kcFull(n.cena) + '</b></div>'
+      + '<i>' + esc(m.name) + (moje ? '' : ' · ' + esc(n.firma || n.nick)) + '</i>'
+      + '<i>' + (moje ? 'vydělává ti ' + kcFull(n.zisk)
+                      : 'u tebe ' + kcFull(Math.round(trhZiskUMe(n).profit)))
+      + ' / měsíc · končí ' + konci + '</i>'
+      + '<button class="btn ' + (moje ? 'sec ' : '') + 'sm" style="width:100%;margin-top:7px" '
+      + (moje ? 'data-trh-stop="' + n.id + '">Stáhnout z nabídky' : 'data-trh-n="' + n.id + '">Prohlédnout a koupit')
+      + '</button>'
+    + '</div></div>';
+}
 function trhSeznamSheet() {
-  var k = (TRH || []).filter(function (n) { return !n.moje; });
+  var vse = TRH || [];
+  var cizi = vse.filter(function (n) { return !n.moje; });
+  var moje = vse.filter(function (n) { return n.moje; });
   sheet('<h3>Tržiště</h3>'
-    + '<p class="muted small">Hotové provozovny od ostatních hráčů: stroj, nájemní smlouva, přípojky '
-    + 'i rozvržení plochy. Vydělává hned, nečekáš na výrobu.</p>'
-    + (k.length ? '<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">'
-        + k.map(function (n) {
-            var m = MODELS[n.model] || { name: n.model };
-            return '<button class="btn sec" style="width:100%;text-align:left" data-trh-n="' + n.id + '">'
-              + '<b>' + esc(n.name || 'Místo') + '</b> · ' + esc(m.name) + ' · ' + kcFull(n.cena)
-              + '<br><i class="muted small">u tebe ' + kcFull(Math.round(trhZiskUMe(n).profit))
-              + ' / měsíc · od ' + esc(n.firma || n.nick) + '</i></button>';
-          }).join('') + '</div>'
-      : '<p class="muted small" style="margin-top:12px">Zrovna tu nikdo nic nenabízí.</p>')
+    + '<p class="muted small">Hotové provozovny: stroj, nájemní smlouva, přípojky i rozvržení plochy. '
+    + 'Vydělává hned — nečekáš na výrobu ani nehledáš místo. Banka to financuje jako obchodní '
+    + 'příležitost, ale chce spoluúčast ' + Math.round(TRH_SPOLUUCAST * 100) + ' %.</p>'
+    + (cizi.length
+        ? '<div class="trh-seznam">' + cizi.map(function (n) { return trhPolozka(n, false); }).join('') + '</div>'
+        : '<p class="muted small" style="margin-top:12px">Zrovna tu nikdo nic nenabízí.</p>')
+    + (moje.length
+        ? '<h3 style="margin:18px 0 6px">Tvoje nabídky</h3>'
+          + '<p class="muted small" style="margin:0 0 8px">Dokud se neprodají, vydělávají dál tobě.</p>'
+          + '<div class="trh-seznam">' + moje.map(function (n) { return trhPolozka(n, true); }).join('') + '</div>'
+        : '')
     + ((S.units || []).length
-        ? '<button class="btn" id="trh-nabidnout-2" style="width:100%;margin-top:12px">Nabídnout vlastní prádlomat</button>'
+        ? '<button class="btn" id="trh-nabidnout-2" style="width:100%;margin-top:14px">'
+          + (moje.length ? 'Nabídnout další prádlomat' : 'Nabídnout vlastní prádlomat') + '</button>'
         : ''));
   [].forEach.call($('sheet-body').querySelectorAll('[data-trh-n]'), function (b) {
     b.onclick = function () {
       var n = (TRH || []).filter(function (x) { return String(x.id) === b.getAttribute('data-trh-n'); })[0];
       if (n) trhKoupitSheet(n);
+    };
+  });
+  [].forEach.call($('sheet-body').querySelectorAll('[data-trh-stop]'), function (b) {
+    b.onclick = function () {
+      b.disabled = true; b.textContent = 'Stahuju…';
+      apiJson('/trade/trh/' + b.getAttribute('data-trh-stop') + '/stahnout', {}).then(function (r) {
+        if (!r.ok) { b.disabled = false; b.textContent = 'Stáhnout z nabídky';
+          return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
+        toast('Nabídka stažena.', 'ok');
+        loadTrh(function () { drawMap(); trhSeznamSheet(); });
+      }).catch(function () { b.disabled = false; b.textContent = 'Stáhnout z nabídky';
+        toast('Server neodpovídá.', 'err'); });
     };
   });
   var nb = $('trh-nabidnout-2');
