@@ -67,7 +67,25 @@ function fmtCzk(n) { return (Math.round(Number(n) || 0)).toLocaleString('cs-CZ')
 function kdoJe(player) {
   if (!player) return 'někdo';
   const firma = (player.company || '').trim();
-  return firma && firma !== player.nick ? firma + ' (' + player.nick + ')' : player.nick;
+  // Nick napřed — podle něj hráče najdeme ve Velínu. Firma je jen doplněk.
+  return firma && firma !== player.nick ? player.nick + ' (' + firma + ')' : player.nick;
+}
+
+// Z utm značek udělá něco, co se dá na mobilu přečíst: „z FB reklamy" místo
+// „meta / paid_social / laundromat_tycoon_cz". Co neznáme, zkrátíme aspoň na
+// první díl.
+function zdrojLidsky(zdroj) {
+  const cely = String(zdroj || '').trim();
+  if (!cely) return '';
+  const z = cely.toLowerCase();
+  const placene = /paid|cpc|ppc|ads|reklam/.test(z);
+  if (/facebook|meta|instagram|fbclid|\bfb\b|\big\b/.test(z)) return placene ? 'z FB reklamy' : 'z Facebooku';
+  if (/google|adwords|gads/.test(z)) return placene ? 'z Google reklamy' : 'z Google';
+  if (/seznam|sklik/.test(z)) return placene ? 'ze Skliku' : 'ze Seznamu';
+  if (/tiktok/.test(z)) return placene ? 'z TikTok reklamy' : 'z TikToku';
+  if (/youtube/.test(z)) return 'z YouTube';
+  if (/mail|newsletter/.test(z)) return 'z e-mailu';
+  return 'z „' + cely.split('/')[0].trim() + '"';
 }
 
 // Nový účet ve hře.
@@ -86,7 +104,7 @@ async function newPlayer(prisma, player) {
       } else if (player.invited_by_ref) {
         odkud = ' Přišel přes odkaz ' + player.invited_by_ref + ' (zvoucí účet zatím neznáme).';
       } else if (player.zdroj) {
-        odkud = ' Přišel z: ' + player.zdroj + '.';
+        odkud = ' Přišel ' + zdrojLidsky(player.zdroj) + '.';
       }
     } catch (e) { /* původ je bonus, notifikace musí odejít tak jako tak */ }
     await dispatch(prisma, {
