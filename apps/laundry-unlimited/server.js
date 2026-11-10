@@ -1,4 +1,4 @@
-// Laundry Unlimited — veřejný web pro hledání master franšízantů + administrace poptávek.
+// Laundry Unlimited — veřejný web pro hledání regionálních partnerů + administrace poptávek.
 // Samostatná Railway služba s vlastní databází (PostgreSQL). Admin se otevírá přes SSO z HolyOS (LU_SSO_SECRET).
 const express = require('express');
 const crypto = require('crypto');
@@ -214,7 +214,7 @@ ${noindex ? '<meta name="robots" content="noindex">' : alts}<meta name="theme-co
 <nav><a class="hide" href="${base}/#model">${esc(t.nav_model)}</a><a class="hide" href="${base}/#offer">${esc(t.nav_offer)}</a><a class="hide" href="${base}/#who">${esc(t.nav_who)}</a>
 <div class="lang">${sw}</div><a class="btn" href="${base}/apply"><span>${esc(t.nav_apply)}${CHEV}</span></a></nav></div></div>
 ${body}
-<footer><div class="wrap"><b>Laundry Unlimited</b> — ${esc(t.foot.replace(/^Laundry Unlimited\s*·\s*/, ''))}<br>${esc(t.gdpr)}</div></footer>
+<footer><div class="wrap"><b>Laundry Unlimited</b> — ${esc(t.foot.replace(/^Laundry Unlimited\s*·\s*/, ''))}</div></footer>
 <script>(function(){var els=[].slice.call(document.querySelectorAll('.rv'));if(!('IntersectionObserver' in window)){els.forEach(function(e){e.classList.add('in')});return}var pg=document.getElementById('prog');function up(){var h=document.documentElement.scrollHeight-innerHeight;pg.style.width=(h>0?scrollY/h*100:0)+'%'}addEventListener('scroll',up,{passive:true});up();var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{threshold:.12});els.forEach(function(e){io.observe(e)})})()</script>
 </body></html>`;
 }
@@ -391,7 +391,7 @@ app.post('/apply', form, async (req, res) => {
     const token = crypto.randomBytes(18).toString('base64url');
     let utm = null; try { const u = JSON.parse(String(b.utm || '{}')); if (u && typeof u === 'object') utm = JSON.stringify(u).slice(0, 1000); } catch (e) { /* bez UTM */ }
     await q('INSERT INTO inquiries (token, lang, name, email, phone, company, country, ip, user_agent, utm) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)', [token, lang, v.name, v.email, v.phone || null, v.company || null, v.country || null, req.ip, String(req.headers['user-agent'] || '').slice(0, 300), utm]);
-    notifyHolyos('🧺 Nová poptávka master franšízanta', v.name + (v.country ? ' · ' + v.country : '') + ' · ' + v.email, '/');
+    notifyHolyos('🧺 Nová poptávka (územní exkluzivita)', v.name + (v.country ? ' · ' + v.country : '') + ' · ' + v.email, '/');
     res.redirect(303, (lang === 'en' ? '' : '/' + lang) + '/questionnaire/' + token);
   } catch (e) { console.error('[lu] apply:', e.message); res.status(500).send(applyPage(lang, t.f_err_server, v)); }
 });
@@ -410,7 +410,7 @@ app.post('/questionnaire/:token', form, async (req, res) => {
     const scope = [].concat(b.scope || []).map((x) => s(x, 120)).slice(0, 12);
     const answers = { territory: s(b.territory, 200), experience: s(b.experience, 120), team: s(b.team, 80), investment: s(b.investment, 80), scope, start: s(b.start, 80), heard: s(b.heard, 80), message: s(b.message, 3000) };
     await q("UPDATE inquiries SET answers=$2::jsonb, answered_at=now(), updated_at=now() WHERE id=$1", [row.id, JSON.stringify(answers)]);
-    notifyHolyos('🧺 Dotazník master franšízanta vyplněn', (answers.territory || '—') + (answers.investment ? ' · ' + answers.investment : ''), '/');
+    notifyHolyos('🧺 Dotazník vyplněn', (answers.territory || '—') + (answers.investment ? ' · ' + answers.investment : ''), '/');
     res.redirect(303, (lang === 'en' ? '' : '/' + lang) + '/thanks');
   } catch (e) { console.error('[lu] questionnaire:', e.message); res.status(500).send(questionnairePage(lang, req.params.token, T[lang].f_err_server)); }
 });
@@ -433,7 +433,7 @@ const requireAdmin = (req, res, next) => {
   if (req.path.startsWith('/admin/api/')) return res.status(401).json({ ok: false, error: 'Přihlášení vypršelo. Otevři sekci znovu z HolyOS.' });
   res.redirect(302, toHolyos());
 };
-const STATUSES = [['new', 'Nová'], ['contacted', 'Kontaktován'], ['talks', 'Jednání'], ['won', 'Master franšízant'], ['lost', 'Ztraceno'], ['spam', 'Spam']];
+const STATUSES = [['new', 'Nová'], ['contacted', 'Kontaktován'], ['talks', 'Jednání'], ['won', 'Partner'], ['lost', 'Ztraceno'], ['spam', 'Spam']];
 const stLabel = (s) => (STATUSES.find((x) => x[0] === s) || [s, s])[1];
 const stColor = { new: '#22d3ee', contacted: '#60a5fa', talks: '#f59e0b', won: '#22c55e', lost: '#94a3b8', spam: '#ef4444' };
 const fmtDt = (d) => d ? new Date(d).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague', day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -459,7 +459,7 @@ app.get('/admin', requireAdmin, async (req, res) => {
 .r{border:1px solid var(--line);border-radius:14px;background:var(--card);margin:8px 0}.r summary{list-style:none;cursor:pointer;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px}.r summary::-webkit-details-marker{display:none}.sp{flex:1}
 .dot{width:10px;height:10px;border-radius:50%}.mut{color:var(--mut);font-size:13px}.small{font-size:12px}.det{padding:0 16px 16px;border-top:1px solid var(--line)}.g{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}.k{color:var(--mut);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-right:6px}
 .ans div{margin:4px 0}.act{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px}.act select{width:auto}.act .note{flex:1;min-width:180px}.msg{font-size:13px;color:#86efac}</style></head><body><div class="adm">
-<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">${logoHtml(36)}<h2 style="margin:0">Poptávky master franšízantů</h2><span class="sp"></span><a class="btn sm ghost" href="/admin/export.csv"><span>⬇ CSV</span></a><a class="btn sm ghost" href="${HOLYOS_URL}"><span>← HolyOS</span></a></div>
+<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">${logoHtml(36)}<h2 style="margin:0">Poptávky</h2><span class="sp"></span><a class="btn sm ghost" href="/admin/export.csv"><span>⬇ CSV</span></a><a class="btn sm ghost" href="${HOLYOS_URL}"><span>← HolyOS</span></a></div>
 <div class="bar">${chips}<form method="get" action="/admin" style="margin-left:auto;display:flex;gap:6px"><input type="hidden" name="s" value="${esc(st)}"><input name="q" value="${esc(qs)}" placeholder="Hledat jméno, e-mail, zemi…" style="width:240px"><button class="btn sm">Hledat</button></form></div>
 ${tr || '<p class="mut">Zatím žádné poptávky.</p>'}</div>
 <script>

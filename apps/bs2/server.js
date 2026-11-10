@@ -2116,18 +2116,21 @@ app.get('/admin/podpora', requireAdmin, wrap(async (req, res) => {
   const threads = (await q(`SELECT s.id, s.nick, s.first_name, s.last_name, s.email,
       (SELECT count(*)::int FROM support_messages m WHERE m.supporter_id=s.id AND m.sender='user' AND m.read_by_agent=false) AS unread,
       (SELECT max(created_at) FROM support_messages m WHERE m.supporter_id=s.id) AS last_at,
-      (SELECT body FROM support_messages m WHERE m.supporter_id=s.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_body
+      (SELECT body FROM support_messages m WHERE m.supporter_id=s.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_body,
+      (s.support_followup_at IS NOT NULL) AS followup
     FROM supporters s WHERE EXISTS (SELECT 1 FROM support_messages m WHERE m.supporter_id=s.id) ORDER BY unread DESC, last_at DESC LIMIT 200`)).rows;
-  const sid = parseInt(req.query.u, 10) || (threads[0] && threads[0].id) || null;
+  const fu = req.query.f === '1', fuCount = threads.filter((t) => t.followup).length;
+  const shown = fu ? threads.filter((t) => t.followup) : threads;
+  const sid = parseInt(req.query.u, 10) || (shown[0] && shown[0].id) || null;
   let msgs = [], who = null;
   if (sid) {
-    who = (await q('SELECT id, nick, first_name, last_name, email, phone FROM supporters WHERE id=$1', [sid])).rows[0] || null;
+    who = (await q('SELECT id, nick, first_name, last_name, email, phone, (support_followup_at IS NOT NULL) AS followup FROM supporters WHERE id=$1', [sid])).rows[0] || null;
     msgs = (await q('SELECT ' + SUP_COLS + ' FROM support_messages WHERE supporter_id=$1 ORDER BY created_at, id', [sid])).rows;
     await q("UPDATE support_messages SET read_by_agent=true WHERE supporter_id=$1 AND sender='user' AND read_by_agent=false", [sid]);
   }
   let ord = null; const oid = parseInt(req.query.order, 10);
   if (sid && Number.isFinite(oid)) ord = (await q('SELECT id, product_name FROM orders WHERE id=$1 AND supporter_id=$2', [oid, sid])).rows[0] || null;
-  res.send(V.adminSupport({ admin: req.admin, online, threads, who, msgs, holyosUrl: HOLYOS_URL, msg: req.query.msg || '', agents: await supportAgents(), agent: await supportAgent(), order: ord }));
+  res.send(V.adminSupport({ admin: req.admin, online, threads: shown, fu, fuCount, who, msgs, holyosUrl: HOLYOS_URL, msg: req.query.msg || '', agents: await supportAgents(), agent: await supportAgent(), order: ord }));
 }));
 app.post('/admin/podpora/agents', requireAdmin, wrap(async (req, res) => {
   const b = req.body || {}; let agents = await supportAgents();
@@ -2234,6 +2237,11 @@ app.get('/api/svc/support/file/:id(\\d+)', requireSvc, wrap(async (req, res) => 
   const r = (await q('SELECT file_name, file_type, file_data FROM support_messages WHERE id=$1', [parseInt(req.params.id, 10)])).rows[0];
   if (!r || !r.file_data) return res.status(404).end();
   res.set('Content-Type', r.file_type || 'application/octet-stream').set('Cache-Control', 'private, max-age=3600').send(r.file_data);
+}));
+app.post('/admin/podpora/:id(\\d+)/followup', requireAdmin, wrap(async (req, res) => {
+  const on = !!(req.body && (req.body.on === true || req.body.on === '1' || req.body.on === 1 || req.body.on === 'true'));
+  await q('UPDATE supporters SET support_followup_at = ' + (on ? 'now()' : 'NULL') + ' WHERE id=$1', [parseInt(req.params.id, 10)]);
+  res.json({ ok: true, followup: on });
 }));
 app.get('/admin/podpora/poll', requireAdmin, wrap(async (req, res) => {
   const unread = Number(((await q("SELECT count(*)::int AS c FROM support_messages WHERE sender='user' AND read_by_agent=false")).rows[0] || {}).c || 0);
