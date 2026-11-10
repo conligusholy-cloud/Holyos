@@ -76,6 +76,9 @@ async function simulateProduction(p) {
       if (count('no_assignee_found')) bottlenecks.push({ type: 'people', severity: 'warn', text: count('no_assignee_found') + ' operací bez dostupného člověka' + (noPeopleOps ? ' (' + noPeopleOps + ' operací nemá definováno, kdo je smí dělat)' : '') });
       if (count('people_short')) bottlenecks.push({ type: 'people', severity: 'warn', text: count('people_short') + ' operací nemá dost lidí najednou (chybí druhý/třetí pracovník)' });
       if (count('person_busy')) bottlenecks.push({ type: 'people', severity: 'info', text: count('person_busy') + '× přiřazen člověk, který má v tu dobu jinou práci' });
+      // Schválené volno (Požadavek #136)
+      if (count('assigned_on_leave')) bottlenecks.push({ type: 'people', severity: 'warn', text: count('assigned_on_leave') + ' operací má ručně přiřazeného člověka, který má v tu dobu schválené volno' });
+      if (count('person_on_leave')) bottlenecks.push({ type: 'people', severity: 'info', text: count('person_on_leave') + '× plánovač vynechal člověka se schválenou dovolenou/nemocí' });
       if (count('no_workstation_assigned')) bottlenecks.push({ type: 'workstation', severity: 'warn', text: count('no_workstation_assigned') + ' operací bez pracoviště' });
       if (count('group_all_busy_waiting') || count('pushed_by_queue')) bottlenecks.push({ type: 'queue', severity: 'info', text: 'Čekání na obsazená pracoviště: ' + (count('pushed_by_queue') + count('group_all_busy_waiting')) + '× (fronta jiných dávek)' });
       if (count('parallel_overflow')) bottlenecks.push({ type: 'parallel', severity: 'warn', text: count('parallel_overflow') + ' paralelních operací přesahuje své okno' });

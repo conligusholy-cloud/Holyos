@@ -1903,12 +1903,15 @@
       var warn = (sch.op_warnings || []).flatMap(function (w) { return w.warnings || []; });
       var noPeople = warn.filter(function (w) { return w === 'no_assignee_found'; }).length;
       var noWs = warn.filter(function (w) { return w === 'no_workstation_assigned'; }).length;
+      // Operace s ručně přiřazeným člověkem, který má na ten termín schválené volno (Požadavek #136)
+      var onLeave = warn.filter(function (w) { return String(w).indexOf('assigned_on_leave') === 0; }).length;
       res.className = 'pf-result ok';
       var dueTxt = due ? (new Date(sch.plan_end) <= new Date(due) ? ' · <b style="color:#22c55e;">stíhá termín ' + pv2DT(due) + '</b>' : ' · <b style="color:#ef4444;">NESTÍHÁ termín ' + pv2DT(due) + '</b>') : '';
       res.innerHTML = '<b>✅ Naplánováno:</b> dávka <b>' + pv2Esc(b.batch_number) + '</b>' + (b.config_code ? ' · výrobní kód <b style="font-family:ui-monospace,Consolas,monospace;color:#22c55e;">' + pv2Esc(b.config_code) + '</b>' : '') + (isTest ? ' <span style="color:#c084fc;">🧪 testovací</span>' : '') + (ignoreStock ? ' <span style="color:#f59e0b;">⏩ bez skladu</span>' : '') + ' · ' + pv2Esc(pfSelected.code) + ' ' + pv2Esc(pfSelected.name) + ' × ' + qty + ' ks' + dueTxt + '<br>' +
         '⏱ ' + pv2DT(sch.plan_start) + ' → ' + pv2DT(sch.plan_end) + ' · ' + sch.operations_scheduled + ' operací · práce ' + Math.round((sch.work_minutes || 0) / 60 * 10) / 10 + ' h' + (sch.wait_minutes ? ' · čekání ' + Math.round(sch.wait_minutes / 60 * 10) / 10 + ' h' : '') + assignTxt +
         (noPeople ? '<br><span style="color:#f59e0b;">⚠️ ' + noPeople + ' operací bez člověka — doplň „kdo smí operaci dělat" v postupu nebo přiřaď ručně.</span>' : '') +
         (noWs ? '<br><span style="color:#f59e0b;">⚠️ ' + noWs + ' operací bez pracoviště.</span>' : '') +
+        (onLeave ? '<br><span style="color:#f59e0b;">⚠️ ' + onLeave + ' operací má přiřazeného člověka se schválenou dovolenou/nemocí — přeobsaď je.</span>' : '') +
         pv2FeedersHtml(sch, b.feeders) +
         '<br><a href="#" onclick="pv2Loaded={};pv2Show(\'work\');return false;" style="color:#14b8a6;">→ Otevřít Plán práce</a> · <a href="#" onclick="pv2Loaded={};pv2Show(\'batches\');return false;" style="color:#14b8a6;">→ Výrobní dávky</a>';
       pv2Loaded = {}; pv2LoadRecent();

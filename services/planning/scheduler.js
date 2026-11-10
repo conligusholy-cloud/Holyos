@@ -29,6 +29,7 @@
 
 const { prisma: defaultPrisma } = require('../../config/database');
 const { getShiftConfig, loadShiftConfig, consumeShift, nextShiftStart } = require('./shift-calendar');
+const { loadApprovedAbsences, isAway } = require('./absence');
 
 const ACTIVE_BATCH_STATUSES = ['planned', 'released', 'in_progress', 'paused'];
 
@@ -168,15 +169,20 @@ function pickAssignee(op, ctx) { const c = rankCandidates(op, ctx); return c.len
  * (personBusy = Map person_id → [{start,end}] z tohoto plánování + už naplánovaných operací jiných dávek).
  * Když volných není dost, doplní obsazené a vrátí warning person_busy.
  */
-function pickAssignees(op, ctx, n, start, end, personBusy) {
-  const ranked = rankCandidates(op, ctx);
+function pickAssignees(op, ctx, n, start, end, personBusy, absences) {
+  const rankedAll = rankCandidates(op, ctx);
+  // Schválená dovolená/nemoc je TVRDÁ překážka — na rozdíl od „obsazenosti" jinou
+  // dávkou se takový člověk nenabídne ani jako nouzová varianta, protože v práci
+  // prostě nebude. (Požadavek #136)
+  const ranked = absences ? rankedAll.filter(p => !isAway(absences, p.id, start, end)) : rankedAll;
+  const awaySkipped = rankedAll.length - ranked.length;
   const isFree = (pid) => !(personBusy.get(pid) || []).some(iv => iv.start < end && iv.end > start);
   const free = ranked.filter(p => isFree(p.id));
   const busy = ranked.filter(p => !isFree(p.id));
   const chosen = free.slice(0, n);
   let busyUsed = 0;
   for (const p of busy) { if (chosen.length >= n) break; chosen.push(p); busyUsed++; }
-  return { people: chosen, short: Math.max(0, n - chosen.length), busyUsed };
+  return { people: chosen, short: Math.max(0, n - chosen.length), busyUsed, awaySkipped };
 }
 
 /**
@@ -374,6 +380,11 @@ async function scheduleBatch(batchId, opts = {}) {
     }
   }
 
+  // Schválené žádosti o volno — kdo má dovolenou/nemoc, toho plánovač v těch dnech
+  // nikomu nenabídne. Platí i v exclusive režimu: absence není „jiná dávka", ale
+  // nepřítomnost člověka v práci. (Požadavek #136)
+  const absences = await loadApprovedAbsences(tx);
+
   const anchor = opts.anchor ? new Date(opts.anchor) : (batch.planned_start ? new Date(batch.planned_start) : new Date());
   // Příprava materiálu: od TEĎ musí skladník stihnout rezervu (pracovních minut) → dřív nemůže žádná operace začít.
   // (Když je dávka naplánovaná do budoucna, nic to neposune.)
@@ -561,7 +572,8 @@ async function scheduleBatch(batchId, opts = {}) {
     let assignedPerson = null;
     let workerIds;
     if (!op.assigned_person_id) {
-      const pick = pickAssignees({ ...op, workstation_id: wsId }, assignCtx, needPeople, start, end, personBusy);
+      const pick = pickAssignees({ ...op, workstation_id: wsId }, assignCtx, needPeople, start, end, personBusy, absences);
+      if (pick.awaySkipped) warnings.push(`person_on_leave:${pick.awaySkipped}`);
       if (!pick.people.length) warnings.push('no_assignee_found');
       else {
         assignedPerson = pick.people[0];
@@ -573,8 +585,13 @@ async function scheduleBatch(batchId, opts = {}) {
     } else {
       // ručně přiřazený člověk zůstává; dopočítej zbytek do N
       const keep = (op.workers && op.workers.length ? op.workers.map(w => w.person_id) : [op.assigned_person_id]);
+      // Ruční volbu nepřepisujeme ani kvůli dovolené — jen na ni upozorníme,
+      // ať to plánovač vidí a může přeobsadit. (Požadavek #136)
+      const keepAway = keep.filter(pid => isAway(absences, pid, start, end)).length;
+      if (keepAway) warnings.push(`assigned_on_leave:${keepAway}`);
       if (keep.length < needPeople) {
-        const pick = pickAssignees({ ...op, workstation_id: wsId }, assignCtx, needPeople, start, end, personBusy);
+        const pick = pickAssignees({ ...op, workstation_id: wsId }, assignCtx, needPeople, start, end, personBusy, absences);
+        if (pick.awaySkipped) warnings.push(`person_on_leave:${pick.awaySkipped}`);
         const extra = pick.people.map(p => p.id).filter(pid => !keep.includes(pid)).slice(0, needPeople - keep.length);
         workerIds = keep.concat(extra);
       } else workerIds = keep;

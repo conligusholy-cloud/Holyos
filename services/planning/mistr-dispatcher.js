@@ -18,6 +18,7 @@
 const { prisma: defaultPrisma } = require('../../config/database');
 const { scoreCandidate } = require('../../mcp-servers/people-server');
 const { syncBatchOperationToVelin } = require('./velin-bridge');
+const { loadApprovedAbsences, isAway } = require('./absence');
 
 // Minimální skóre, aby se kandidát automaticky přiřadil. Pod tímto prahem
 // Mistr nepřiřadí a označí operaci jako "nezbyl vhodný kolega" — admin se
@@ -45,6 +46,7 @@ async function autoAssignBatch(batchId, opts = {}) {
     select: {
       id: true,
       planned_start: true,
+      planned_end: true,
       operation: { select: { id: true, name: true, description: true } },
       workstation: { select: { id: true, name: true } },
     },
@@ -80,12 +82,23 @@ async function autoAssignBatch(batchId, opts = {}) {
   // dalo rozšířit per-den, ale to bychom načítali zbytečně moc dat)
   const wlMap = await loadTodayWorkloadMap(prisma, people.map(p => p.id));
 
+  // Schválené volno — kdo má na termín operace dovolenou/nemoc, toho Mistr
+  // vůbec nenabídne. Bez tohohle by poslal úkol člověku na dovolené.
+  // (Požadavek #136)
+  const absences = await loadApprovedAbsences(prisma, { personIds: people.map(p => p.id) });
+
   const assigned = [];
   const skipped = [];
 
   // 4) Iteruj operace, vyhodnoť kandidáty
   for (const op of ops) {
-    const scored = people.map(p => {
+    // Okno operace — bez naplánovaného termínu se bere dnešek.
+    const opStart = op.planned_start ? new Date(op.planned_start) : new Date();
+    const opEnd = op.planned_end ? new Date(op.planned_end) : opStart;
+    const dostupni = people.filter(p => !isAway(absences, p.id, opStart, opEnd));
+    const naVolnu = people.length - dostupni.length;
+
+    const scored = dostupni.map(p => {
       const { score, reasons } = scoreCandidate(p, op.operation, wlMap);
       return { person_id: p.id, name: `${p.first_name} ${p.last_name}`.trim(), score, reasons };
     });
@@ -93,12 +106,13 @@ async function autoAssignBatch(batchId, opts = {}) {
     const best = scored[0];
 
     if (!best || best.score < MIN_AUTO_ASSIGN_SCORE) {
+      const duvodVolno = naVolnu ? ` (${naVolnu} kolegů má na ten termín schválené volno)` : '';
       skipped.push({
         op_id: op.id,
         op_name: op.operation?.name || null,
-        reason: best
+        reason: (best
           ? `Nejlepší kandidát ${best.name} má skóre jen ${best.score} (pod prahem ${MIN_AUTO_ASSIGN_SCORE})`
-          : 'Žádní kandidáti',
+          : 'Žádní kandidáti') + duvodVolno,
         top: scored.slice(0, 3),
       });
       continue;
