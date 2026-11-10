@@ -7785,7 +7785,9 @@ function syncState(force) {
   if (wiped || !ME || syncBusy || !S) return Promise.resolve();
   if (!force && Date.now() - syncAt < 15000) return Promise.resolve();
   syncBusy = true; syncAt = Date.now();
-  return apiJson('/account/state', { state: S }, 'PUT')
+  // aktivni říká serveru, jestli má hráč hru doopravdy před sebou — podle toho
+  // se počítá čas strávený ve hře.
+  return apiJson('/account/state', { state: S, aktivni: !document.hidden }, 'PUT')
     .catch(function () { /* offline — zkusí se příště */ })
     .then(function () { syncBusy = false; });
 }

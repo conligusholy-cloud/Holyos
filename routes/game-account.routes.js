@@ -641,6 +641,29 @@ router.post('/account/company', requirePlayer, async (req, res, next) => {
 });
 
 // ─── Stav hry ────────────────────────────────────────────────────────────────
+// Kolik času hráč ve hře opravdu strávil. Klient se ozývá zhruba co patnáct
+// vteřin, dokud má hru otevřenou — tak se dá sčítat mezera od minulého
+// ozvání. Delší mezera znamená, že hru mezitím zavřel, a nepočítá se.
+// Když je hra jen na pozadí (jiná záložka), čas neběží, ale značku posouváme,
+// ať se po návratu nepřipočte celá pauza.
+const CAS_MEZERA_S = 150;   // delší ticho = hráč byl pryč
+function denPrahy(d) { return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' }); }
+function odehranyCas(p, ted, aktivni) {
+  let pridat = 0;
+  if (aktivni && p.hra_at) {
+    const s = Math.round((ted.getTime() - new Date(p.hra_at).getTime()) / 1000);
+    if (s > 0 && s <= CAS_MEZERA_S) pridat = s;
+  }
+  const den = denPrahy(ted);
+  const dnesek = p.hra_den === den ? (p.hra_s_den || 0) : 0;
+  return {
+    hra_at: ted,
+    hra_den: den,
+    hra_s_den: dnesek + pridat,
+    hra_s_celkem: (p.hra_s_celkem || 0) + pridat,
+  };
+}
+
 // PUT /account/state { state } — klient posílá celý stav, server ho jen uloží.
 // Simulace běží v prohlížeči; server je úložiště, ne rozhodčí. Jediné, co se
 // podvrhnout nedá, jsou karty — ty žijí ve vlastní tabulce.
@@ -649,7 +672,11 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
     const st = (req.body || {}).state;
     if (!st || typeof st !== 'object') return res.status(400).json({ error: 'Chybí stav.' });
     if (JSON.stringify(st).length > 400000) return res.status(413).json({ error: 'Stav hry je moc velký.' });
-    await prisma.gamePlayer.update({ where: { id: req.player.id }, data: { state: st, state_at: new Date() } });
+    const ted = new Date();
+    await prisma.gamePlayer.update({
+      where: { id: req.player.id },
+      data: Object.assign({ state: st, state_at: ted }, odehranyCas(req.player, ted, (req.body || {}).aktivni !== false)),
+    });
     res.json({ ok: true });
   } catch (e) { next(e); }
 });

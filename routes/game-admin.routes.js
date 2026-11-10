@@ -497,7 +497,7 @@ router.get('/stats', api(async (req, res) => {
 router.get('/stats/provoz', api(async (req, res) => {
   const ted = Date.now();
   const od24 = new Date(ted - 24 * 3600e3);
-  const [udalosti, hraci, posledni] = await Promise.all([
+  const [udalosti, hraci, posledni, casy] = await Promise.all([
     prisma.compounderEvent.findMany({
       where: { created_at: { gte: od24 }, event: { startsWith: 'game_' } },
       select: { created_at: true, event: true, sid: true } }),
@@ -508,7 +508,21 @@ router.get('/stats/provoz', api(async (req, res) => {
       where: { event: { startsWith: 'game_' } },
       orderBy: { created_at: 'desc' }, take: 30,
       select: { created_at: true, event: true, sid: true } }),
+    // Čas ve hře: server ho sčítá hráčům při ukládání stavu.
+    prisma.gamePlayer.findMany({
+      where: { disabled: false, hra_s_celkem: { gt: 0 } },
+      orderBy: { hra_s_celkem: 'desc' }, take: 50,
+      select: { id: true, nick: true, company: true, hra_s_den: true, hra_s_celkem: true,
+        hra_den: true, hra_at: true, created_at: true } }),
   ]);
+  const dnesek = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
+  const casyVen = casy.map((h) => ({
+    id: h.id, nick: h.nick, firma: h.company,
+    dnes: h.hra_den === dnesek ? (h.hra_s_den || 0) : 0,
+    celkem: h.hra_s_celkem || 0,
+    dni: Math.max(1, Math.round((ted - new Date(h.created_at).getTime()) / 86400e3)),
+    naposled: h.hra_at,
+  }));
   const cas = (e) => new Date(e.created_at).getTime();
   const unikat = (ms) => new Set(udalosti.filter((e) => ted - cas(e) <= ms).map((e) => e.sid)).size;
   // Po hodinách za posledních 24 hodin — ať je vidět, kdy se hraje.
@@ -531,6 +545,12 @@ router.get('/stats/provoz', api(async (req, res) => {
       .map((h) => ({ id: h.id, nick: h.nick, firma: h.company,
         pred: Math.max(0, Math.round((ted - new Date(h.state_at).getTime()) / 60000)) })),
     hodiny,
+    casy: casyVen.slice().sort((a, b) => (b.dnes - a.dnes) || (b.celkem - a.celkem)),
+    cas_souhrn: {
+      dnes: casyVen.reduce((a, h) => a + h.dnes, 0),
+      celkem: casyVen.reduce((a, h) => a + h.celkem, 0),
+      hracu_dnes: casyVen.filter((h) => h.dnes > 0).length,
+    },
     udalosti: podleUdalosti,
     posledni: posledni.map((e) => ({ kdy: e.created_at, event: e.event, sid: String(e.sid || '').slice(0, 6) })),
   });

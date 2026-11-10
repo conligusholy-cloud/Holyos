@@ -108,6 +108,8 @@
           <div><h3 style="font-size:14px;margin:18px 0 8px">Poslední dění</h3>
             <div class="tbl-wrap"><table class="data-table" id="pv-last"></table></div></div>
         </div>
+        <h3 style="font-size:14px;margin:22px 0 10px">Čas ve hře <span class="note" id="pv-cas-note"></span></h3>
+        <div class="tbl-wrap"><table class="data-table" id="pv-casy"></table></div>
       </div>
 
       <div class="module-panel" id="panel-players">
@@ -219,6 +221,15 @@
       var h = Math.round(min / 60);
       return 'před ' + h + ' h';
     }
+    // Čas po lidsku: 2 h 05 min, 14 min, 40 s.
+    function doba(sek) {
+      sek = Math.max(0, Math.round(sek || 0));
+      if (sek < 60) return sek + ' s';
+      var m = Math.round(sek / 60);
+      if (m < 60) return m + ' min';
+      var h = Math.floor(m / 60), zb = m % 60;
+      return h + ' h ' + (zb < 10 ? '0' : '') + zb + ' min';
+    }
     function loadProvoz() {
       get('/stats/provoz').then(function (j) {
         document.getElementById('pv-cas').textContent = '(k ' + new Date(j.ted).toLocaleTimeString('cs-CZ') + ')';
@@ -242,6 +253,20 @@
                 + '<td>' + esc(nazevUdalosti(e.event)) + '</td>'
                 + '<td class="note">' + esc(e.sid) + '</td></tr>';
             }).join('') : '<tr><td colspan="3" class="note">Zatím nic.</td></tr>')
+          + '</tbody>';
+        var c = j.cas_souhrn || { dnes: 0, celkem: 0, hracu_dnes: 0 };
+        document.getElementById('pv-cas-note').textContent =
+          '(dnes ' + doba(c.dnes) + ' od ' + cz(c.hracu_dnes) + ' hráčů · celkem ' + doba(c.celkem) + ')';
+        document.getElementById('pv-casy').innerHTML =
+          '<thead><tr><th>Hráč</th><th>Firma</th><th class="num">Dnes</th><th class="num">Celkem</th>'
+          + '<th class="num">Ø na den</th><th class="num">Naposled</th></tr></thead><tbody>'
+          + ((j.casy && j.casy.length) ? j.casy.map(function (h) {
+              return '<tr><td><b>' + esc(h.nick) + '</b></td><td>' + esc(h.firma || '') + '</td>'
+                + '<td class="num">' + (h.dnes ? doba(h.dnes) : '<span class="note">—</span>') + '</td>'
+                + '<td class="num">' + doba(h.celkem) + '</td>'
+                + '<td class="num note">' + doba(h.celkem / (h.dni || 1)) + '</td>'
+                + '<td class="num note">' + (h.naposled ? new Date(h.naposled).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—') + '</td></tr>';
+            }).join('') : '<tr><td colspan="6" class="note">Zatím se nenasbíral žádný čas. Počítá se od nasazení této změny.</td></tr>')
           + '</tbody>';
       }).catch(function (e) { chyba('pv-kpis', e); });
     }

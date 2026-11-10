@@ -7612,6 +7612,14 @@ model GamePlayer {
   // Odkdy se počítá další Expresní dovoz zdarma (jeden za dva herní měsíce).
   rush_zdarma_at DateTime?
 
+  // Čas strávený ve hře (v sekundách). Server ho sčítá při každém uložení
+  // stavu: přičte jen mezeru od minulého uložení, a jen když měl hráč hru
+  // otevřenou na popředí. hra_den drží den (Praha), za který platí hra_s_den.
+  hra_s_celkem  Int       @default(0)
+  hra_s_den     Int       @default(0)
+  hra_den       String?   @db.VarChar(10)
+  hra_at        DateTime?
+
   cards     GameCard[]
   purchases GamePurchase[]
 
