@@ -7374,8 +7374,58 @@ function loadChat(then) {
   api('/chat/threads').then(function (r) {
     CHAT = r.ok ? r.j : { threads: [], neprectenych: 0 };
     chatOdznak();
+    hlidejZpravy();
     if (then) then();
   }).catch(function () { CHAT = CHAT || { threads: [], neprectenych: 0 }; if (then) then(); });
+}
+// ─── Zpráva od hráče doprostřed obrazovky ────────────────────────────────────
+// Když někdo napíše, zatímco hráč hraje, nestačí tečka na záložce — obchod se
+// domlouvá teď a odpověď za hodinu je k ničemu. Chová se to proto jako hovor
+// z infolinky: okno přes celou obrazovku, dokud ho hráč neodbaví. Nestohuje se
+// s hovorem a jednu zprávu neukáže dvakrát ani po obnovení stránky.
+var ZPRAVA_OKNO = null;
+function hlidejZpravy() {
+  if (!ME || !S || !CHAT || !CHAT.threads || !CHAT.threads.length) return;
+  if (HOVOR || ZPRAVA_OKNO) return;
+  // Poprvé si jen zapamatujeme, co už ve schránce leží. Jinak by hráči po
+  // otevření hry vyskočilo okno se zprávou, kterou si přečetl předevčírem.
+  if (S.zpravaVidena == null) {
+    S.zpravaVidena = CHAT.threads.reduce(function (a, t) {
+      return Math.max(a, (t.posledni && t.posledni.id) || 0); }, 0);
+    save();
+    return;
+  }
+  var nove = CHAT.threads.filter(function (t) {
+    return t.neprectenych > 0 && t.posledni && !t.posledni.moje
+      && t.posledni.id > (S.zpravaVidena || 0);
+  });
+  if (!nove.length) return;
+  S.zpravaVidena = nove.reduce(function (a, t) { return Math.max(a, t.posledni.id); }, S.zpravaVidena || 0);
+  save();
+  ukazZpravu(nove[0], nove.length - 1);
+}
+function ukazZpravu(t, dalsich) {
+  var el = $('zprava');
+  if (!el) return;
+  ZPRAVA_OKNO = t;
+  el.innerHTML = '<div class="zpr-in">'
+    + '<p class="hov-popis">Zpráva od hráče</p>'
+    + '<div class="zpr-kdo">' + (t.znak ? znakSvg(t.znak, 34) : '')
+      + '<div><b>' + esc(t.firma) + '</b><i>' + esc(t.nick) + '</i></div></div>'
+    + '<p class="zpr-text">' + esc(t.posledni.text) + '</p>'
+    + (dalsich > 0 ? '<p class="fine">A ještě ' + dalsich + ' '
+        + mn(dalsich, 'další zpráva', 'další zprávy', 'dalších zpráv') + ' od jiných.</p>' : '')
+    + '<div class="zpr-tl">'
+      + '<button class="btn sec" id="zpr-ne">Teď ne</button>'
+      + '<button class="btn" id="zpr-ano">Odpovědět</button>'
+    + '</div></div>';
+  el.classList.remove('hidden');
+  try { if (navigator.vibrate) navigator.vibrate([40, 60, 40]); } catch (e) { /* nevadí */ }
+  var zavri = function () { el.classList.add('hidden'); el.innerHTML = ''; ZPRAVA_OKNO = null; };
+  var ne = $('zpr-ne');
+  if (ne) ne.onclick = zavri;
+  var ano = $('zpr-ano');
+  if (ano) ano.onclick = function () { zavri(); chatSheet(t.id); };
 }
 // Tečka na záložce svítí, když čeká nabídka nebo nepřečtená zpráva.
 var CEKA_NABIDKA = false;
@@ -8992,7 +9042,10 @@ function startGame() {
   vyzvedniNasledky();
   loadTrades();
   loadChat();
-  setInterval(function () { loadTrades(); loadChat(); loadTrh(drawMap); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }, 60000);
+  setInterval(function () { loadTrades(); loadTrh(drawMap); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }, 60000);
+  // Zprávy od hráčů chodí živě: ptáme se každých dvacet vteřin, ale jen když má
+  // hráč hru doopravdy před sebou.
+  setInterval(function () { if (!document.hidden) loadChat(); }, 20000);
   checkPayment();
   setInterval(function () { tick(); save(); paint(); syncState(); }, 5000);
   // Vlastní, rychlejší tep jen pro naskakující čísla nad prádlomaty.
