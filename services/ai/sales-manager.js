@@ -525,6 +525,23 @@ function buildLeadTasks(ctx) {
   // Mrtvé leady (nemá zájem / nelze použít / zamítnuto) — do úkolů NEPATŘÍ ani přes kalendář.
   const DEAD = ['nezajem', 'nelze_pouzit', 'rejected'];
   const deadLeads = new Set((ctx.leads || []).filter((l) => DEAD.indexOf(l.status) >= 0).map((l) => l.id));
+  // Kontakty s DOMLUVENOU SCHŮZKOU — buď podle stavu, nebo podle otevřené události
+  // typu schůzka/demo (dnes i do budoucna). Takovému kontaktu se nevolá ani se
+  // nedosleduje: dalším krokem je ta schůzka. Staré otevřené „zavolej/dosleduj"
+  // kroky jsou tím bezpředmětné a do plánu dne nepatří.
+  const MEETING_EV = ['meeting', 'demo'];
+  const isMeetingEv = (m) => MEETING_EV.indexOf(String((m && m.type) || '')) >= 0;
+  const CALL_EV = ['call', 'followup']; // „slíbený krok" (task) se NEruší — ten se má splnit i před schůzkou
+  const isCallEv = (m) => CALL_EV.indexOf(String((m && m.type) || '')) >= 0;
+  const meetingLeads = new Set(
+    (ctx.leads || []).filter((l) => l.status === 'schuzka' || l.status === 'schuzka_online').map((l) => l.id),
+  );
+  (ctx.meetings_today || []).concat(ctx.meetings_upcoming_7d || []).forEach((m) => {
+    const st = String((m && m.status) || 'planned').toLowerCase();
+    if (m && m.lead_id && isMeetingEv(m) && st !== 'done' && st !== 'cancelled' && st !== 'canceled') meetingLeads.add(m.lead_id);
+  });
+  // Kontakt má domluvenou schůzku a tenhle krok není ta schůzka → přeskoč.
+  const prebijaSchuzka = (m) => !!(m && m.lead_id && meetingLeads.has(m.lead_id) && isCallEv(m));
   // Otevřené kalendářní kroky (přeskoč hotové/zrušené) + deduplikace na JEDEN krok na kontakt:
   // „poslední domluva vyhrává" — když má kontakt víc událostí, ponech tu nejnovější (dle ts=created_at).
   const dedupeByLead = (list) => {
@@ -533,7 +550,11 @@ function buildLeadTasks(ctx) {
     open.forEach((m) => {
       if (!m.lead_id) { noLead.push(m); return; }
       const cur = byLead.get(m.lead_id);
-      if (!cur || (Number(m.ts) || 0) >= (Number(cur.ts) || 0)) byLead.set(m.lead_id, m);
+      // Schůzka/demo přebíjí hovor i dosledování bez ohledu na stáří domluvy —
+      // jinak by novější „dosleduj" vytlačil z plánu samotnou schůzku.
+      if (!cur) { byLead.set(m.lead_id, m); return; }
+      if (isMeetingEv(m) !== isMeetingEv(cur)) { if (isMeetingEv(m)) byLead.set(m.lead_id, m); return; }
+      if ((Number(m.ts) || 0) >= (Number(cur.ts) || 0)) byLead.set(m.lead_id, m);
     });
     return noLead.concat(Array.from(byLead.values())).sort((a, b) => (a.when ? new Date(a.when).getTime() : 0) - (b.when ? new Date(b.when).getTime() : 0));
   };
@@ -541,6 +562,7 @@ function buildLeadTasks(ctx) {
   // pojmenované dle typu (hovor/schůzka/dosledování/slíbený krok).
   dedupeByLead(ctx.meetings_today).forEach((m) => {
     if (m.lead_id && (covered.has(m.lead_id) || deadLeads.has(m.lead_id))) return;
+    if (prebijaSchuzka(m)) { covered.add(m.lead_id); return; }
     const meta = evMeta(m); const hh = evHH(m);
     tasks.push({ kind: meta.kind, title: meta.verb + (hh ? ' ' + hh : '') + ' – ' + (m.title || ''), detail: meta.do + (m.location ? ' Místo: ' + m.location + '.' : ''), reasoning: 'Dnešní naplánovaný krok z kalendáře.', priority: 1, est_min: meta.est, lead_id: m.lead_id || null, source_event_id: m.id || null });
     if (m.lead_id) covered.add(m.lead_id);
@@ -548,6 +570,9 @@ function buildLeadTasks(ctx) {
   // (A0) PROŠVIHNUTÉ slíbené kroky — hned za dnešními, priorita 1. Dokud je obchodník neodklikne, drží se.
   dedupeByLead(ctx.meetings_overdue).forEach((m) => {
     if (m.lead_id && (covered.has(m.lead_id) || deadLeads.has(m.lead_id))) return;
+    // Prošvihnutý hovor u kontaktu, se kterým je mezitím domluvená schůzka,
+    // už nemá smysl — schůzka je ten další krok.
+    if (prebijaSchuzka(m)) { covered.add(m.lead_id); return; }
     const meta = evMeta(m);
     tasks.push({ kind: meta.kind, title: '⏰ PROŠVIHNUTO (' + evDM(m) + ') — ' + meta.verb.replace(/^[^ ]+ /, '') + ': ' + (m.title || '') , detail: 'Termín už uplynul. ' + meta.do + ' Domluv nový termín, ať nedržíš zákazníka v nejistotě.', reasoning: 'Prošvihnutý slíbený krok z ' + evDM(m) + ' — drží se, dokud ho nesplníš.', priority: 1, est_min: meta.est, lead_id: m.lead_id || null, source_event_id: m.id || null });
     if (m.lead_id) covered.add(m.lead_id);

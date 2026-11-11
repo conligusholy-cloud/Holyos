@@ -468,6 +468,9 @@ router.post('/meeting-reservation', async (req, res) => {
       if (mode) data.schuzka_mode = mode;
       if (path) data.financing_path = path;
       await prisma.compounderLead.update({ where: { id: leadId }, data }).catch(() => {});
+      // Domluvená schůzka přebíjí starší otevřené hovory a dosledování — jinak
+      // plánovač dál nutí obchodníka volat někomu, s kým už je schůzka domluvená.
+      await _superseduj(leadId);
       // Záchytná stránka funelu může mít nastaveno: po domluvení schůzky přiřadit leada (např. Janu Holému) a odebrat ho obchodníkovi.
       await _applyMeetingOwner(leadId).catch((e) => console.warn('[meeting] přiřazení po schůzce:', e.message));
       // Zaznamenat do cesty zákazníka (timeline u leada).
@@ -561,6 +564,7 @@ router.post('/leads/:id/hall-meeting', requireAuth, async (req, res) => {
     try {
       const line = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' · 🏭 Schůzka na hale domluvena (' + who + '): ' + when + ' · ' + HALL_ADDRESS;
       await prisma.compounderLead.update({ where: { id: leadId }, data: { status: 'schuzka', schuzka_mode: 'osobne', activity_log: line + (lead.activity_log ? '\n' + lead.activity_log : '') } });
+      await _superseduj(leadId);
     } catch (e) { console.warn('[hall-meeting] lead:', e.message); }
     try { await prisma.compounderEvent.create({ data: { sid: 'server:meeting:' + leadId, event: 'meeting_booked', path: '/schuzka-hala', props: { lead_id: leadId, reservation_id: resv.id, starts_at: startAt, ends_at: endAt, mode: 'hala', slots: count, by: who, by_person_id: bookerId || null } } }); } catch (e) { /* best-effort */ }
     try { require('../services/meeting/notify').notifyMeetingBooked(prisma, { leadId, reservationId: resv.id, startsAt: startAt, mode: 'hala', financingPath: null, rebooked: !!(canceled && canceled.count) }); } catch (e) { console.warn('[hall-meeting] notify:', e.message); }
@@ -618,6 +622,7 @@ router.post('/leads/:id/owner-meeting', requireAuth, async (req, res) => {
       select: { id: true },
     });
     await prisma.compounderLead.update({ where: { id: leadId }, data: { status: 'schuzka_online', schuzka_mode: 'online' } }).catch(() => {});
+    await _superseduj(leadId);
     // Kontakt přechází k majiteli (Jan Holý) a odebírá se obchodníkovi; vazba „kdo schůzku domluvil" zůstává na rezervaci (booked_by_person_id) + v záznamu aktivit.
     let movedTo = null;
     try {
@@ -3935,6 +3940,18 @@ router.get('/sales/stats-history', requireAuth, async (req, res, next) => {
     res.json({ ok: true, metric, period, series, total });
   } catch (err) { next(err); }
 });
+
+// Domluvená schůzka zavře u kontaktu starší otevřené hovory a dosledování
+// (slíbené kroky zůstávají). Bez toho visí staré „Dosledovat (nedovoláno)"
+// jako PROŠVIHNUTO a plánovač dne ho obchodníkovi pořád podstrkuje, přestože
+// je schůzka naplánovaná. `POST /api/sales/events` tohle dělá už dávno —
+// rezervace schůzky z webu / od majitele jdou ale jinudy.
+async function _superseduj(leadId) {
+  try {
+    const { closeStepsSupersededByMeeting } = require('../services/sales/supersede');
+    await closeStepsSupersededByMeeting(leadId, { prisma });
+  } catch (e) { console.warn('[meeting] úklid starších kroků:', e.message); }
+}
 
 // Po splnění/přeskočení úkolu ZAVŘI podkladovou kalendářní událost, aby se prošvihnutý krok
 // příští den znovu neobjevil. Zavře jak zdrojovou událost (source_event_id), tak všechny
