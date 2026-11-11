@@ -2646,7 +2646,9 @@
         } catch(e) { console.warn('pricelist fetch fail', e); }
         let sharedCfg = [];
         try { const scr = await fetch('/api/wh/pricelist-config-default'); if (scr.ok) { const sc = await scr.json(); sharedCfg = Array.isArray(sc && sc.config_options) ? sc.config_options : []; } } catch(e) { /* bez společné výbavy */ }
-        window._plAdd = { items: pricelistItems, shared: sharedCfg, currency: order.currency };
+        let svcItems = [];
+        try { const svr = await fetch('/api/wh/sales-services?active=true', { credentials: 'include' }); if (svr.ok) svcItems = await svr.json(); } catch(e) { /* bez služeb */ }
+        window._plAdd = { items: pricelistItems, shared: sharedCfg, currency: order.currency, services: Array.isArray(svcItems) ? svcItems : [] };
         if (products.length === 0) { try { const r2 = await fetch('/api/production/products?type=product'); products = await r2.json(); } catch(e) {} }
         if (companies.length === 0) await reloadCompanies();
         if (_availableSlots.length === 0) await loadAvailableSlots();
@@ -2808,7 +2810,12 @@
         const plMachines = pricelistItems.filter(function(pl) { return (pl.kind || 'machine') !== 'accessory'; });
         const plAccessories = pricelistItems.filter(function(pl) { return pl.kind === 'accessory'; });
         const plOpts = (plMachines.length ? '<optgroup label="Stroje">' + plMachines.map(plOptHtml).join('') + '</optgroup>' : '') +
-          (plAccessories.length ? '<optgroup label="Příslušenství">' + plAccessories.map(plOptHtml).join('') + '</optgroup>' : '');
+          (plAccessories.length ? '<optgroup label="Příslušenství (samostatná položka)">' + plAccessories.map(plOptHtml).join('') + '</optgroup>' : '') +
+          ((window._plAdd.services || []).length ? '<optgroup label="Služby (samostatná položka)">' + window._plAdd.services.map(function(sv) {
+            const p = order.currency === 'EUR' ? sv.price_eur : sv.price_czk;
+            const payTxt = sv.payer === 'customer' ? (p != null ? ' — ' + parseFloat(p).toLocaleString('cs-CZ') + ' ' + currencySym + (sv.unit && sv.unit !== 'paušál' ? '/' + sv.unit : '') : ' — bez ceny') : ' — ' + ({ us: 'platíme my', included: 'v ceně stroje', third: 'platí zákazník třetí straně' }[sv.payer] || '');
+            return '<option value="svc-' + sv.id + '" data-kind="service" data-name-cs="' + esc(sv.name) + '" data-name-en="" data-product-id="" data-price-czk="' + (sv.payer === 'customer' && sv.price_czk != null ? sv.price_czk : '0') + '" data-price-eur="' + (sv.payer === 'customer' && sv.price_eur != null ? sv.price_eur : '0') + '" data-truck-czk="" data-truck-eur="" data-unit="' + esc(sv.unit || 'paušál') + '">' + (sv.recommended ? '⭐ ' : '') + esc(sv.name) + payTxt + '</option>';
+          }).join('') + '</optgroup>' : '');
 
         // Sekce přidávání položek (jen pokud je editovatelné)
         let addItemSection = '';
@@ -2829,11 +2836,10 @@
                 // Vsechny nazev/produkt/mnozstvi/jednotka se plni automaticky — uzivatel vidi jen cenik + cenu.
                 '<input type="hidden" name="product_id" id="add-item-product-hidden" value="">' +
                 '<input type="hidden" name="name" id="add-item-name-hidden" value="">' +
-                '<input type="hidden" name="quantity" value="1">' +
-                '<input type="hidden" name="unit" value="ks">' +
+                '<input type="hidden" name="unit" id="add-item-unit-hidden" value="ks">' +
                 '<input type="hidden" name="spec" id="add-item-spec-hidden" value="">' +
                 '<div class="form-group" style="flex:3;min-width:260px;margin-bottom:0;">' +
-                  '<label style="color:#eab308;font-weight:600;">💰 Položka z ceníku — stroj / příslušenství (měna: ' + order.currency + ')</label>' +
+                  '<label style="color:#eab308;font-weight:600;">💰 Položka — stroj (s výbavou) / příslušenství / služba (měna: ' + order.currency + ')</label>' +
                   '<select id="add-item-pricelist" required onchange="fillFromPricelist(this, \'' + order.currency + '\', document.getElementById(\'add-item-truck\').checked)">' +
                     '<option value="">— Vyberte položku —</option>' + plOpts +
                   '</select>' +
@@ -2842,6 +2848,7 @@
                   '<input type="checkbox" id="add-item-truck" onchange="fillFromPricelist(document.getElementById(\'add-item-pricelist\'), \'' + order.currency + '\', this.checked)" style="width:16px;height:16px;cursor:pointer;">' +
                   '<span style="color:#0ea5e9;font-weight:600;">🚛 Kamion</span>' +
                 '</label>' +
+                '<div class="form-group" style="width:90px;margin-bottom:0;"><label title="Stroj je vždy 1 ks; příslušenství a služby lze zadat v libovolném množství">Množství</label><input type="number" name="quantity" id="add-item-qty" value="1" min="0.01" step="any" readonly></div>' +
                 '<div class="form-group" style="width:130px;margin-bottom:0;"><label>Cena/ks</label><input type="number" name="unit_price" value="0" step="0.01" title="Auto-doplneno z ceniku; lze prepsat"></div>' +
                 '<div id="add-item-config" style="flex-basis:100%;display:none;border-top:1px dashed rgba(234,179,8,0.35);padding-top:10px;"></div>' +
                 '<button type="submit" class="btn btn-primary btn-sm" style="margin-bottom:2px;">+ Přidat</button>' +
@@ -3549,8 +3556,18 @@
     // currency = 'CZK' | 'EUR'; useTruck = true pouzije kamionovou cenu.
     // ---- Povinná výbava u položky z ceníku (stroj i příslušenství) ----
     // Skupiny voleb: vlastní config_options položky; u stroje bez vlastní výbavy společná výbava; jinak povinný volný text.
+    // Výbava se řeší jen u STROJE. Příslušenství a služby jsou samostatné položky objednávky bez výbavy.
+    function addItemPl(plId) {
+      if (String(plId).indexOf('svc-') === 0) {
+        const sv = ((window._plAdd && window._plAdd.services) || []).find(function (x) { return 'svc-' + x.id === String(plId); });
+        return sv ? { id: plId, kind: 'service', sv: sv } : null;
+      }
+      return ((window._plAdd && window._plAdd.items) || []).find(function (x) { return String(x.id) === String(plId); });
+    }
+    function addItemIsMachine(pl) { return !!pl && pl.kind !== 'service' && (pl.kind || 'machine') !== 'accessory'; }
     function addItemGroups(pl) {
-      const own = pl && Array.isArray(pl.config_options) ? pl.config_options.filter(function (g) { return g && Array.isArray(g.options) && g.options.length; }) : [];
+      if (!addItemIsMachine(pl)) return [];
+      const own =pl && Array.isArray(pl.config_options) ? pl.config_options.filter(function (g) { return g && Array.isArray(g.options) && g.options.length; }) : [];
       if (own.length) return own;
       if (pl && (pl.kind || 'machine') !== 'accessory') return ((window._plAdd && window._plAdd.shared) || []).filter(function (g) { return g && Array.isArray(g.options) && g.options.length; });
       return [];
@@ -3564,7 +3581,8 @@
       const box = document.getElementById('add-item-config'); if (!box) return;
       if (!plId) { box.style.display = 'none'; box.innerHTML = ''; box.dataset.for = ''; return; }
       if (box.dataset.for === String(plId)) return; // jen přepnutí kamionu — výběr zůstane
-      const pl = ((window._plAdd && window._plAdd.items) || []).find(function (x) { return String(x.id) === String(plId); });
+      const pl = addItemPl(plId);
+      if (!addItemIsMachine(pl)) { box.style.display = 'none'; box.innerHTML = ''; box.dataset.for = String(plId); return; } // příslušenství / služba — bez výbavy
       const groups = addItemGroups(pl);
       const sym = ((window._plAdd && window._plAdd.currency) || 'CZK') === 'EUR' ? '€' : 'Kč';
       const inp = 'background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:13px;';
@@ -3593,7 +3611,9 @@
     function collectAddItemConfig(form) {
       const box = form.querySelector('#add-item-config'); const plId = box && box.dataset.for;
       if (!plId) return { spec: '', surcharge: 0, error: 'Vyberte položku z ceníku.' };
-      const pl = ((window._plAdd && window._plAdd.items) || []).find(function (x) { return String(x.id) === String(plId); });
+      const pl = addItemPl(plId);
+      if (pl && pl.kind === 'service') { const sv = pl.sv; return { spec: '🚚 Služba · ' + ({ customer: 'platí zákazník', us: 'platíme my', included: 'v ceně stroje', third: 'zákazník platí třetí straně' }[sv.payer] || ''), surcharge: 0 }; }
+      if (!addItemIsMachine(pl)) return { spec: '🧴 Příslušenství', surcharge: 0 };
       const groups = addItemGroups(pl); const parts = []; let sur = 0;
       if (!groups.length) {
         const free = (box.querySelector('[data-cfg-free]') || {}).value || '';
@@ -3625,6 +3645,10 @@
       const container = sel.closest('div').parentElement.parentElement;
       const form = container ? container.querySelector('form[onsubmit*="addOrderItem"]') : null;
       if (!form) return;
+      // Množství: stroj vždy 1 ks (1 kus = 1 řádek), příslušenství a služby libovolné; jednotka podle služby
+      const isMachine = addItemIsMachine(addItemPl(sel.value));
+      const qtyInp = form.querySelector('#add-item-qty'); if (qtyInp) { if (isMachine) qtyInp.value = '1'; qtyInp.readOnly = isMachine; }
+      const unitInp = form.querySelector('#add-item-unit-hidden'); if (unitInp) unitInp.value = opt.dataset.unit || 'ks';
       const nameCs = opt.dataset.nameCs || '';
       const nameEn = opt.dataset.nameEn || '';
       const productId = opt.dataset.productId || '';
@@ -3676,7 +3700,8 @@
       data.quantity = parseFloat(data.quantity);
       data.unit_price = parseFloat(data.unit_price || 0);
       if (!data.name && !data.product_id) { alert('Vyberte položku z ceníku.'); return; }
-      // Výbava je povinná (stroj i příslušenství) — ukládá se do specifikace položky, příplatky voleb se přičtou k ceně
+      if (!(data.quantity > 0)) { alert('Zadejte množství.'); return; }
+      // Výbava je povinná u stroje (příslušenství a služby jsou samostatné položky bez výbavy) — ukládá se do specifikace položky, příplatky voleb se přičtou k ceně
       const cfg = collectAddItemConfig(e.target);
       if (cfg.error) { alert(cfg.error); return; }
       data.spec = cfg.spec;
@@ -11429,7 +11454,7 @@
       order.forEach(function (cat) {
         var rows = byCat[cat];
         html += '<div style="display:flex;align-items:center;gap:10px;margin:16px 0 6px;padding:8px 14px;background:linear-gradient(135deg,rgba(59,130,246,0.16),rgba(59,130,246,0.04));border-left:4px solid #3b82f6;border-radius:8px;"><span style="font-size:15px;font-weight:800;">' + esc(cat) + '</span><span style="font-size:12px;color:var(--text2);">' + rows.length + ' pol.</span></div>';
-        html += '<div style="overflow-x:auto;margin-bottom:6px;"><table class="data-table"><thead><tr><th>Služba</th><th>Kdo platí</th><th style="text-align:right">Cena CZK</th><th style="text-align:right">Cena EUR</th><th>Jednotka</th><th>Stav</th><th>Akce</th></tr></thead><tbody>';
+        html += '<div style="overflow-x:auto;margin-bottom:6px;"><table class="data-table"><thead><tr><th>Služba</th><th>Kdo platí</th><th style="text-align:right">Cena CZK bez DPH</th><th style="text-align:right">Cena EUR bez DPH</th><th>Jednotka</th><th>Stav</th><th>Akce</th></tr></thead><tbody>';
         rows.forEach(function (it) {
           var col = SVC_PAYER_COLORS[it.payer] || '#9ca3af';
           html += '<tr onclick="openServiceModal(' + it.id + ')" style="cursor:pointer;">' +
@@ -11702,8 +11727,8 @@
       function tableFor(rows) {
         var h = '<div style="overflow-x:auto;margin:0 0 6px 0;"><table class="data-table"><thead><tr>' +
           '<th>Typ stroje</th><th title="Obrázek produktu — klikni pro nahrání">Foto</th><th>Název</th>' +
-          '<th style="text-align:right" title="Maloobchodní">Cena CZK</th>' +
-          '<th style="text-align:right" title="Maloobchodní">Cena EUR</th>' +
+          '<th style="text-align:right" title="Maloobchodní">Cena CZK bez DPH</th>' +
+          '<th style="text-align:right" title="Maloobchodní">Cena EUR bez DPH</th>' +
           '<th style="text-align:right" title="Kamionová / velkoobchodní">🚛 CZK</th>' +
           '<th style="text-align:right" title="Kamionová / velkoobchodní">🚛 EUR</th>' +
           '<th>Výrobek</th><th>Stav</th><th>Akce</th></tr></thead><tbody>';
@@ -11779,11 +11804,11 @@
                 '<div class="form-group full"><label>Název (česky) *</label><input type="text" name="name_cs" required value="' + esc(item.name_cs || '') + '" placeholder="Např. Prádlomat V3 S 8W18D"></div>' +
                 '<div class="form-group full"><label>Název (anglicky)</label><input type="text" name="name_en" value="' + esc(item.name_en || '') + '" placeholder="e.g. Laundromat V3 S 8W18D"></div>' +
                 '<div class="form-group full" style="grid-column:1/-1;margin-top:4px;"><label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">Maloobchodní cena (bez DPH)</label></div>' +
-                '<div class="form-group"><label>Cena v Kč</label><input type="number" step="0.01" min="0" name="price_czk" value="' + (item.price_czk != null ? item.price_czk : '') + '" placeholder="0.00"></div>' +
-                '<div class="form-group"><label>Cena v EUR</label><input type="number" step="0.01" min="0" name="price_eur" value="' + (item.price_eur != null ? item.price_eur : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group"><label>Cena v Kč (bez DPH)</label><input type="number" step="0.01" min="0" name="price_czk" value="' + (item.price_czk != null ? item.price_czk : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group"><label>Cena v EUR (bez DPH)</label><input type="number" step="0.01" min="0" name="price_eur" value="' + (item.price_eur != null ? item.price_eur : '') + '" placeholder="0.00"></div>' +
                 '<div class="form-group full" style="grid-column:1/-1;margin-top:4px;"><label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">🚛 Kamionová (velkoobchodní) cena (bez DPH)</label></div>' +
-                '<div class="form-group"><label>Cena v Kč</label><input type="number" step="0.01" min="0" name="truck_price_czk" value="' + (item.truck_price_czk != null ? item.truck_price_czk : '') + '" placeholder="0.00"></div>' +
-                '<div class="form-group"><label>Cena v EUR</label><input type="number" step="0.01" min="0" name="truck_price_eur" value="' + (item.truck_price_eur != null ? item.truck_price_eur : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group"><label>Cena v Kč (bez DPH)</label><input type="number" step="0.01" min="0" name="truck_price_czk" value="' + (item.truck_price_czk != null ? item.truck_price_czk : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group"><label>Cena v EUR (bez DPH)</label><input type="number" step="0.01" min="0" name="truck_price_eur" value="' + (item.truck_price_eur != null ? item.truck_price_eur : '') + '" placeholder="0.00"></div>' +
                 '<div class="form-group"><label>Kapacita ks/kamion</label><input type="number" step="1" min="1" name="truck_capacity" value="' + (item.truck_capacity != null ? item.truck_capacity : '') + '" placeholder="např. 3"></div>' +
                 '<div class="form-group"><div style="font-size:11px;color:var(--text2);padding-top:22px;">Při počtu ks ≥ kapacita se účtuje kamionová cena.</div></div>' +
                 '<div class="form-group full"><label>Výrobek (volitelné — propojí cenu s existujícím kusem ve výrobě)</label><select name="product_id" id="pl-product-select" onchange="updatePlProductWarning()"><option value="">— Bez napojení —</option>' + prodOpts + '</select>' +
@@ -11924,7 +11949,7 @@
         var rows = byCat[cat];
         html += '<div style="display:flex;align-items:center;gap:10px;margin:16px 0 6px;padding:8px 14px;background:linear-gradient(135deg,rgba(16,185,129,0.16),rgba(16,185,129,0.04));border-left:4px solid #10b981;border-radius:8px;">' +
           '<span style="font-size:15px;font-weight:800;">' + esc(cat) + '</span><span style="font-size:12px;color:var(--text2);">' + rows.length + ' pol.</span></div>';
-        html += '<div style="overflow-x:auto;margin-bottom:6px;"><table class="data-table"><thead><tr><th>Název</th><th style="text-align:right">Cena CZK</th><th style="text-align:right">Cena EUR</th><th>Stav</th><th>Akce</th></tr></thead><tbody>';
+        html += '<div style="overflow-x:auto;margin-bottom:6px;"><table class="data-table"><thead><tr><th>Název</th><th style="text-align:right">Cena CZK bez DPH</th><th style="text-align:right">Cena EUR bez DPH</th><th>Stav</th><th>Akce</th></tr></thead><tbody>';
         rows.forEach(function(it) {
           var statusCss = it.active ? 'background:rgba(16,185,129,0.12);color:#10b981' : 'background:rgba(156,163,175,0.12);color:#9ca3af';
           var statusLbl = it.active ? 'Aktivní' : 'Zrušeno';
@@ -11954,8 +11979,8 @@
                 '<div class="form-group full"><label>Kategorie</label><input type="text" name="category" list="acc-cat-list" value="' + esc(item.category || '') + '" placeholder="Např. Detergenty"><datalist id="acc-cat-list">' + cats.map(function(c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist></div>' +
                 '<div class="form-group full"><label>Název (česky) *</label><input type="text" name="name_cs" required value="' + esc(item.name_cs || '') + '" placeholder="Např. Prací prášek 20 kg"></div>' +
                 '<div class="form-group full"><label>Název (anglicky)</label><input type="text" name="name_en" value="' + esc(item.name_en || '') + '"></div>' +
-                '<div class="form-group"><label>Cena v Kč</label><input type="number" step="0.01" min="0" name="price_czk" value="' + (item.price_czk != null ? item.price_czk : '') + '" placeholder="0.00"></div>' +
-                '<div class="form-group"><label>Cena v EUR</label><input type="number" step="0.01" min="0" name="price_eur" value="' + (item.price_eur != null ? item.price_eur : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group"><label>Cena v Kč (bez DPH)</label><input type="number" step="0.01" min="0" name="price_czk" value="' + (item.price_czk != null ? item.price_czk : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group"><label>Cena v EUR (bez DPH)</label><input type="number" step="0.01" min="0" name="price_eur" value="' + (item.price_eur != null ? item.price_eur : '') + '" placeholder="0.00"></div>' +
                 '<div class="form-group full"><label>Poznámka</label><textarea name="note" rows="2" placeholder="Interní poznámka...">' + esc(item.note || '') + '</textarea></div>' +
                 '<div class="form-group full"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="active"' + (item.active === false ? '' : ' checked') + '> <span>Aktivní položka</span></label></div>' +
               '</div>' +
