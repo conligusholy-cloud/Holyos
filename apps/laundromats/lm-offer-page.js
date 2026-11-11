@@ -72,6 +72,12 @@ const REFS = {
 
 const money = (v, cur) => Math.round(Number(v)).toLocaleString('cs-CZ').replace(/\u00a0/g, ' ') + (cur === 'EUR' ? ' €' : ' Kč');
 
+const ECO2 = {
+  cs: { h: 'Ekonomika', oneH: 'Ekonomika jednoho prádlomatu', invT: 'Investice', price: 'Cena prádlomatu', conn: 'Přípojky (elektřina, voda, odpad)', connNA: 'dle lokality', warr: (n) => `Prodloužená záruka +${n} ${n === 1 ? 'rok' : 'roky'}`, invU: 'Investice / prádlomat', opT: 'Měsíční provoz (bez DPH)', sales: 'Tržby', energy: 'Energie — elektřina, voda, odpad (≈ 10 %)', service: 'Kompletní servisní správa vč. detergentů (20 %)', net: 'Čistý výsledek / měsíc', pilotH: (n) => `Ekonomika pilotu — ${n} prádlomatů`, warrNote: (y, m) => `Záruka ze zákona 1 rok. Lze prodloužit až na 5 let — ${y} bez DPH za každý rok navíc, max. 4 × ${y} = ${m}.` },
+  en: { h: 'Economics', oneH: 'Economics of one laundromat', invT: 'Investment', price: 'Laundromat price', conn: 'Connections (power, water, drainage)', connNA: 'per location', warr: (n) => `Extended warranty +${n} ${n === 1 ? 'year' : 'years'}`, invU: 'Investment / unit', opT: 'Monthly operation (excl. VAT)', sales: 'Revenue', energy: 'Utilities — power, water, waste (≈ 10 %)', service: 'Full service management incl. detergents (20 %)', net: 'Net result / month', pilotH: (n) => `Pilot economics — ${n} laundromats`, warrNote: (y, m) => `Statutory warranty 1 year. Extendable up to 5 years — ${y} excl. VAT per extra year, max. 4 × ${y} = ${m}.` },
+  pl: { h: 'Ekonomika', oneH: 'Ekonomika jednej pralni', invT: 'Inwestycja', price: 'Cena urządzenia', conn: 'Przyłącza (prąd, woda, kanalizacja)', connNA: 'wg lokalizacji', warr: (n) => `Przedłużona gwarancja +${n} ${n === 1 ? 'rok' : 'lata'}`, invU: 'Inwestycja / urządzenie', opT: 'Miesięczna eksploatacja (netto)', sales: 'Przychód', energy: 'Media — prąd, woda, ścieki (≈ 10 %)', service: 'Pełna obsługa serwisowa z detergentami (20 %)', net: 'Wynik netto / miesiąc', pilotH: (n) => `Ekonomika pilotażu — ${n} urządzeń`, warrNote: (y, m) => `Gwarancja ustawowa 1 rok. Można przedłużyć do 5 lat — ${y} netto za każdy dodatkowy rok, maks. 4 × ${y} = ${m}.` },
+};
+
 function chartSvg(invest, monthly, t) {
   // kumulovaný výsledek 0–60 měsíců: start na −investice, roste o měsíční výsledek
   const W = 760, H = 240, P = 36, N = 60;
@@ -151,9 +157,20 @@ function offerPage(o, token, opts) {
   const [h1a, h1b] = splitTitle(o.title || t.kick);
   const kick = (x) => `<div class="kicker">— ${esc(x)}</div>`;
   const kpi = (lbl, val, sub) => `<div class="k"><div class="kl">${esc(lbl)}</div><div class="kv">${val}</div>${sub ? `<div class="ks">${sub}</div>` : ''}</div>`;
-  const eco = units && price ? `<section class="sec" id="eko" data-s="ekonomika">${kick(X.eco)}<h2>${esc(t.ecoH)}</h2><p class="sub">${esc(t.ecoSub)}</p><div class="eco">
-    <div class="kpis">${kpi(t.units, String(units), o.model ? esc(t.model + ' ' + o.model) : '')}${kpi(t.inv, money(invest, o.currency), money(price, o.currency) + ' ' + esc(t.unit))}${mon ? kpi(t.mon, money(monAll, o.currency), money(mon, o.currency) + ' ' + esc(t.monU)) + kpi(t.pay, '≈ ' + Math.ceil(invest / monAll) + ' ' + esc(t.months), '') + kpi(t.y5, money(monAll * 60 - invest, o.currency), '') : ''}</div>
-    ${mon ? `<div class="chart"><div class="ph">${esc(t.chart)}</div>${chartSvg(invest, monAll, t)}</div>` : ''}<p class="fine">${esc(t.vat)}</p></div></section>` : '';
+  // Ekonomika ve dvou rovinách: 1 prádlomat (tržby − energie 10 % − servis 20 %) a celý pilot
+  const E = ECO2[L], cur = o.currency, EUR = cur === 'EUR';
+  const conn = Number(o.conn_price) || 0, wy = Math.min(4, Math.max(0, Math.round(Number(o.warranty_years) || 0)));
+  const wPrice = EUR ? 600 : 15000, wCost = wy * wPrice;
+  const uInv = price + conn + wCost, en = mon * 0.10, sv = mon * 0.20, net = mon - en - sv;
+  const pInv = units * uInv, pNet = units * net;
+  const row = (l, v, cls) => `<div class="er${cls ? ' ' + cls : ''}"><span>${l}</span><b>${v}</b></div>`;
+  const one = price ? `<div class="eco"><h3 class="eh">${esc(E.oneH)}</h3><div class="etwo">
+      <div class="ecol"><div class="ect">${esc(E.invT)}</div>${row(esc(E.price) + (o.model ? ' <i>' + esc(o.model) + '</i>' : ''), money(price, cur))}${row(esc(E.conn), conn ? money(conn, cur) : esc(E.connNA))}${wy ? row(esc(E.warr(wy)), money(wCost, cur)) : ''}${row(esc(E.invU), money(uInv, cur), 'tot')}</div>
+      ${mon ? `<div class="ecol"><div class="ect">${esc(E.opT)}</div>${row(esc(E.sales), money(mon, cur))}${row('− ' + esc(E.energy), '− ' + money(en, cur), 'neg')}${row('− ' + esc(E.service), '− ' + money(sv, cur), 'neg')}${row(esc(E.net), money(net, cur), 'tot')}${net > 0 ? row(esc(t.pay), '≈ ' + Math.ceil(uInv / net) + ' ' + esc(t.months)) : ''}</div>` : ''}</div>
+      <div class="ewar">🛡️ <span>${esc(E.warrNote(money(wPrice, cur), money(4 * wPrice, cur)))}</span></div></div>` : '';
+  const eco = units && price ? `<section class="sec" id="eko" data-s="ekonomika">${kick(X.eco)}<h2>${esc(E.h)}</h2><p class="sub">${esc(t.ecoSub)}</p>${one}
+    <div class="eco" style="margin-top:22px"><h3 class="eh">${esc(E.pilotH(units))}</h3><div class="kpis">${kpi(t.units, String(units), o.model ? esc(t.model + ' ' + o.model) : '')}${kpi(t.inv, money(pInv, cur), money(uInv, cur) + ' ' + esc(t.monU))}${mon ? kpi(t.mon, money(pNet, cur), money(net, cur) + ' ' + esc(t.monU)) + (pNet > 0 ? kpi(t.pay, '≈ ' + Math.ceil(pInv / pNet) + ' ' + esc(t.months), '') : '') + kpi(t.y5, money(pNet * 60 - pInv, cur), '') : ''}</div>
+    ${mon && pNet > 0 ? `<div class="chart"><div class="ph">${esc(t.chart)}</div>${chartSvg(pInv, pNet, t)}</div>` : ''}<p class="fine">${esc(t.vat)}</p></div></section>` : '';
   const body = `<style>
 .ox{--bg:#04060c;--line:rgba(120,160,255,.14);--line2:rgba(120,160,255,.28);--tx:#eef4ff;--tx2:#a9b8d3;--tx3:#6b7d9e;--az:#4fd1ff;--vi:#7c5cff;--teal:#2fe3c6;max-width:1180px;margin:0 auto;padding:0 22px 70px;color:var(--tx)}
 .ox h1,.ox h2,.ox h3{margin:0;letter-spacing:-.025em;line-height:1.08}
@@ -195,6 +212,7 @@ function offerPage(o, token, opts) {
 .ox .eco{margin-top:30px;border-radius:28px;padding:40px;background:linear-gradient(135deg,#0d1a33,#0a1222 60%,#120f2b);border:1px solid var(--line2);position:relative;overflow:hidden}
 .ox .eco:before{content:"";position:absolute;right:-120px;top:-120px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(124,92,255,.22),transparent 65%);pointer-events:none}
 .ox .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;position:relative}.ox .k{padding:16px 18px;border-radius:16px;background:rgba(4,6,12,.45);border:1px solid var(--line2)}.ox .kl{color:var(--tx2);font-size:13.5px}.ox .kv{font-size:30px;font-weight:850;letter-spacing:-.03em;margin:6px 0 2px}.ox .ks{color:var(--tx3);font-size:12.5px}
+.ox .eh{font-size:20px;margin:0 0 18px;position:relative}.ox .etwo{display:grid;grid-template-columns:1fr 1fr;gap:16px;position:relative}.ox .ecol{padding:18px 20px;border-radius:16px;background:rgba(4,6,12,.45);border:1px solid var(--line2)}.ox .ect{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--az);font-weight:700;margin-bottom:8px}.ox .er{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);color:var(--tx2);font-size:15px}.ox .er i{font-style:normal;color:var(--tx3);font-size:13px}.ox .er b{color:var(--tx);white-space:nowrap}.ox .er.neg b{color:#fca5a5}.ox .er.tot{border-bottom:0;padding-top:12px;font-weight:700;color:var(--tx)}.ox .er.tot b{font-size:20px;background:linear-gradient(90deg,var(--az),var(--vi));-webkit-background-clip:text;background-clip:text;color:transparent}.ox .ewar{margin-top:14px;display:flex;gap:10px;align-items:flex-start;padding:12px 16px;border-radius:14px;background:rgba(47,227,198,.07);border:1px solid rgba(47,227,198,.22);color:var(--tx2);font-size:14px;line-height:1.5;position:relative}@media (max-width:760px){.ox .etwo{grid-template-columns:1fr}}
 .ox .chart{margin-top:22px;position:relative}.ox .ph{font-weight:700;margin-bottom:8px;color:var(--tx2)}.ox .fine{color:var(--tx3);font-size:13px;margin:14px 0 0;position:relative}
 .ox .vids{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:30px;max-width:900px}.ox .vids figure{margin:0}.ox .vids video{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:18px;border:1px solid var(--line2);background:#0b1426;display:block}.ox .vids figcaption{margin-top:10px;color:var(--tx2);font-size:14px;font-weight:600}
 .ox .cta{margin-top:30px;border-radius:28px;padding:40px;background:linear-gradient(135deg,rgba(30,134,224,.18),rgba(124,92,255,.16));border:1px solid rgba(79,209,255,.4)}
