@@ -1938,11 +1938,16 @@ function verdictPill(score) {
 var HOVOR_ZA_MIN = 150000;       // nejdřív za dvě a půl minuty ve hře
 var HOVOR_ZA_MAX = 420000;       // nejpozději za sedm
 var HOVOR_ZVONI_MS = 8000;       // osm vteřin a zákazník to pokládá — nevyřízený hovor
-var HOVOR_ODMITNUTI = -6;        // co stojí nebraný hovor
+var HOVOR_ODMITNUTI = -2;        // co stojí nebraný hovor (projde přes váhu níž)
+// Hvězdičky se vydřou a ztratí hned. Dobrá odpověď posune pověst o půlku toho,
+// co je za ni napsané, špatná o trojnásobek — tak to chodí i ve skutečnosti:
+// spokojený zákazník mlčí, naštvaný to řekne všem.
+var POVEST_RUST = 0.5;
+var POVEST_PAD = 3;
 var POVEST_DOLU = 0.2;           // při nejhorší pověsti spadne návštěvnost o pětinu
 var POVEST_NAHORU = 0.1;         // při nejlepší stoupne o desetinu
-var SCENARU_PAMET = 12;          // kolik posledních rozhovorů se neopakuje
-var JMEN_PAMET = 30;             // tolik posledních jmen se neopakuje
+var SCENARU_PAMET = 18;          // kolik posledních rozhovorů se neopakuje
+var JMEN_PAMET = 60;             // tolik posledních jmen se neopakuje
 var HOVOR_ZENY = ['paní Nováková', 'paní Svobodová', 'paní Dvořáková', 'paní Černá',
   'paní Procházková', 'paní Kučerová', 'paní Veselá', 'paní Horáková', 'paní Němcová',
   'paní Marková', 'paní Pospíšilová', 'paní Pokorná', 'paní Hájková', 'paní Jelínková',
@@ -1953,7 +1958,17 @@ var HOVOR_ZENY = ['paní Nováková', 'paní Svobodová', 'paní Dvořáková', 
   'paní Mašková', 'paní Musilová', 'paní Šimková', 'paní Holubová', 'paní Kratochvílová',
   'paní Kadlecová', 'paní Machová', 'paní Lišková', 'paní Soukupová', 'paní Bláhová',
   'slečna Matoušková', 'slečna Burešová', 'slečna Kopecká', 'slečna Malá', 'slečna Dostálová',
-  'slečna Šťastná', 'slečna Tichá', 'slečna Vaněčková', 'slečna Hrubá', 'slečna Beránková'];
+  'slečna Šťastná', 'slečna Tichá', 'slečna Vaněčková', 'slečna Hrubá', 'slečna Beránková',
+  'paní Nguyenová', 'paní Horváthová', 'paní Baloghová', 'paní Kowalská', 'paní Šebestová',
+  'paní Strnadová', 'paní Vondráčková', 'paní Zídková', 'paní Melicharová', 'paní Pechová',
+  'paní Šulcová', 'paní Rybářová', 'paní Kohoutová', 'paní Čapková', 'paní Matějková',
+  'paní Vrbová', 'paní Janoušková', 'paní Dudková', 'paní Hrabalová', 'paní Pánková',
+  'paní Slavíková', 'paní Vítková', 'paní Brožová', 'paní Macháčková', 'paní Jirásková',
+  'paní Bednářová', 'paní Havlíčková', 'paní Trávníčková', 'paní Suchánková', 'paní Kasalová',
+  'slečna Kalousková', 'slečna Prokopová', 'slečna Hejduková', 'slečna Rysová', 'slečna Fenclová',
+  'slečna Linhartová', 'slečna Krejzová', 'slečna Michalcová', 'slečna Potůčková', 'slečna Boháčová',
+  'doktorka Králíčková', 'paní učitelka Zemanová', 'paní Nedvědová', 'paní Pilařová',
+  'paní Bezděková', 'paní Hofmanová', 'paní Rezková', 'paní Štědrá', 'paní Chalupová'];
 var HOVOR_MUZI = ['pan Novák', 'pan Svoboda', 'pan Dvořák', 'pan Černý', 'pan Procházka',
   'pan Kučera', 'pan Veselý', 'pan Horák', 'pan Němec', 'pan Marek', 'pan Pospíšil',
   'pan Pokorný', 'pan Hájek', 'pan Jelínek', 'pan Král', 'pan Růžička', 'pan Beneš',
@@ -1963,7 +1978,17 @@ var HOVOR_MUZI = ['pan Novák', 'pan Svoboda', 'pan Dvořák', 'pan Černý', 'p
   'pan Musil', 'pan Šimek', 'pan Holub', 'pan Kratochvíl', 'pan Kadlec', 'pan Mach',
   'pan Liška', 'pan Soukup', 'pan Bláha', 'pan Matoušek', 'pan Bureš', 'pan Kopecký',
   'pan Malý', 'pan Dostál', 'pan Šťastný', 'pan Tichý', 'pan Richter', 'pan Hruška',
-  'pan Beránek', 'pan Vávra'];
+  'pan Beránek', 'pan Vávra',
+  'pan Nguyen', 'pan Horváth', 'pan Balogh', 'pan Kowalski', 'pan Šebesta',
+  'pan Strnad', 'pan Vondráček', 'pan Zídek', 'pan Melichar', 'pan Pech',
+  'pan Šulc', 'pan Rybář', 'pan Kohout', 'pan Čapek', 'pan Matějka',
+  'pan Vrba', 'pan Janoušek', 'pan Dudek', 'pan Hrabal', 'pan Pánek',
+  'pan Slavík', 'pan Vítek', 'pan Brož', 'pan Macháček', 'pan Jirásek',
+  'pan Bednář', 'pan Havlíček', 'pan Trávníček', 'pan Suchánek', 'pan Kasal',
+  'pan Kalousek', 'pan Prokop', 'pan Hejduk', 'pan Rys', 'pan Fencl',
+  'pan Linhart', 'pan Krejza', 'pan Michalec', 'pan Potůček', 'pan Boháč',
+  'doktor Nedvěd', 'pan řidič Pilař', 'pan Bezděk', 'pan Hofman', 'pan Rezek',
+  'pan Štědrý', 'pan Chalupa', 'pan Křeček', 'pan Vlasák', 'pan Žáček'];
 var HOVOR_SCENARE = [
   { id: 'stovka', rod: '', kroky: [
     { t: 'Dobrý den, váš automat mi spolkl stovku a nic se nespustilo.', o: [
@@ -2400,6 +2425,210 @@ var HOVOR_SCENARE = [
       { t: 'Nedoporučuju, chodí tam strážníci a pokutují.', b: 1, r: 'Dobře, že to vím.' },
     ] },
   ] },
+  { id: 'svatba', rod: 'z', kroky: [
+    { t: 'Zítra se vdávám a na šatech mám flek od vína. Zvládne to váš automat?', o: [
+      { t: 'Svatební šaty bych do automatu nedávala. Zkuste čistírnu, tohle je na ruční práci.', b: 2, r: 'Děkuju za upřímnost.' },
+      { t: 'Jasně, hoďte to tam, program na jemné to dá.', b: -2, r: 'A když to zničím, co pak?' },
+      { t: 'To záleží na materiálu.', b: 0, r: 'Je to hedvábí.' },
+    ] },
+    { t: 'A kdybych to jen vymáchala, abych to měla aspoň svěží?', o: [
+      { t: 'Když to musí být dneska, dejte ruční program na dvacet stupňů bez odstřeďování. Ale ten flek to nevezme.', b: 2, r: 'Dobře, zkusím to opatrně.' },
+      { t: 'To je jedno, máchání je máchání.', b: -1, r: 'Tak to mi moc nepomohlo.' },
+      { t: 'Radši nic.', b: 0, r: 'Hm.' },
+    ] },
+    { t: 'A sušičku na to pustit můžu?', o: [
+      { t: 'V žádném případě. Hedvábí v sušičce se srazí a je po šatech.', b: 2, r: 'Tak to teda ne. Díky!' },
+      { t: 'Chvilku na nejnižší teplotu klidně.', b: -2, r: 'Vy mi ty šaty chcete zničit?' },
+      { t: 'To už je na vás.', b: -1, r: 'Ptám se, protože vy tomu máte rozumět.' },
+    ] },
+  ] },
+  { id: 'nocni', rod: 'm', kroky: [
+    { t: 'Dělám na nočních. Dostanu se k vám ve tři ráno?', o: [
+      { t: 'Dostanete, je to nonstop. Odemyká se kartou nebo přes aplikaci.', b: 2, r: 'To je přesně to, co potřebuju.' },
+      { t: 'V noci tam radši nechoďte.', b: -2, r: 'Tak proč to máte otevřené?' },
+      { t: 'Otevřeno je pořád, ale v noci tam nikdo není.', b: 0, r: 'To mi je jasné, je to samoobsluha.' },
+    ] },
+    { t: 'A je tam v noci vidět? Nerad bych tam šmátral po tmě.', o: [
+      { t: 'Světlo se rozsvítí na pohyb a svítí celý cyklus.', b: 2, r: 'Výborně.' },
+      { t: 'Vezměte si baterku.', b: -2, r: 'To myslíte vážně?' },
+      { t: 'Něco tam svítí.', b: -1, r: 'Tak to zní nejistě.' },
+    ] },
+    { t: 'A kdyby se to v noci zaseklo, komu volám?', o: [
+      { t: 'Mně. Tohle číslo bere člověk i ve tři ráno.', b: 2, r: 'Tak to je slovo do pranice. Díky.' },
+      { t: 'Napište nám mail, ráno to vyřídíme.', b: -1, r: 'A co mám do rána dělat s mokrým prádlem?' },
+      { t: 'V noci nikdo nebere, ale stroj si to pamatuje a ráno to doběhne.', b: -1, r: 'Hm, uvidím.' },
+    ] },
+  ] },
+  { id: 'ztrata', rod: 'z', kroky: [
+    { t: 'Zapomněla jsem si u vás prádlo v bubnu, byla jsem tam před hodinou.', o: [
+      { t: 'Podívám se do systému, který stroj to byl, a zamknu ho, dokud nedorazíte.', b: 2, r: 'To jste mě zachránil.' },
+      { t: 'To už tam asi nebude.', b: -2, r: 'Vy mě fakt umíte uklidnit.' },
+      { t: 'Zajeďte se tam podívat.', b: 0, r: 'To jsem chtěla udělat tak jako tak.' },
+    ] },
+    { t: 'A co když to někdo vyndal? Byly tam dětské věci.', o: [
+      { t: 'Vyndané prádlo dáváme do boxu vedle stroje, nikdo s tím neodchází.', b: 2, r: 'Tak to se mi ulevilo.' },
+      { t: 'Za věci v automatu neručíme, to je v podmínkách.', b: -2, r: 'Ptám se, co s tím uděláte, ne co nemusíte.' },
+      { t: 'Většinou se nic neztratí.', b: 0, r: 'Většinou.' },
+    ] },
+    { t: 'A co mi poradíte, abych to zas nezapomněla?', o: [
+      { t: 'Zapněte si v aplikaci upozornění na konec praní. Pípne vám to.', b: 2, r: 'To si nastavím hned.' },
+      { t: 'Prostě si to pamatujte.', b: -2, r: 'Děkuju za radu.' },
+      { t: 'Dejte si budík v telefonu.', b: 1, r: 'To není špatný nápad.' },
+    ] },
+  ] },
+  { id: 'mince', rod: 'm', kroky: [
+    { t: 'Stojím u automatu a nemám drobné. Bere to mince, nebo kartu?', o: [
+      { t: 'Kartou i telefonem, mince nepotřebujete vůbec.', b: 2, r: 'Super, tak to zkusím.' },
+      { t: 'Mince jsou jistota, zajeďte si vyměnit.', b: -2, r: 'Kam, ve čtvrt na deset večer?' },
+      { t: 'Obojí, jak chcete.', b: 1, r: 'Tak dobře.' },
+    ] },
+    { t: 'A nestrhne mi to víc, než kolik propeřu?', o: [
+      { t: 'Předautorizuje se vyšší částka a zbytek se vrátí do dvou dnů. Zaplatíte jen to, co propral.', b: 2, r: 'Aha, tak to je v pořádku.' },
+      { t: 'To se nám občas stane.', b: -2, r: 'Tak to radši nezkouším.' },
+      { t: 'Strhne přesně cenu programu.', b: 1, r: 'Dobře.' },
+    ] },
+    { t: 'A kdyby to platbu nevzalo?', o: [
+      { t: 'Zkuste to ještě jednou a pak mi zavolejte, pustím vám stroj na dálku.', b: 2, r: 'To je služba.' },
+      { t: 'To se stát nemůže.', b: -1, r: 'Všechno se může stát.' },
+      { t: 'Terminál občas vypadne, to je signálem.', b: -1, r: 'Takže mám smůlu?' },
+    ] },
+  ] },
+  { id: 'voda', rod: '', kroky: [
+    { t: 'Kolem vašeho automatu je louže. Teče to z něj?', o: [
+      { t: 'Díky, že voláte. Posílám tam technika a stroj zatím odstavím.', b: 2, r: 'Tak to je rychlovka, díky.' },
+      { t: 'To bude po někom jiném.', b: -2, r: 'A kdyby ne?' },
+      { t: 'Občas tam zůstane voda po vypouštění.', b: 0, r: 'Je toho dost.' },
+    ] },
+    { t: 'Můžu ten stroj zatím používat, nebo se mi to vylije?', o: [
+      { t: 'Nepoužívejte ho. Vedle je druhý, ten je v pořádku.', b: 2, r: 'Tak zkusím ten.' },
+      { t: 'Klidně perte, voda nikomu neublížila.', b: -2, r: 'A když se zkratuje?' },
+      { t: 'Já bych to risknul.', b: -2, r: 'Já teda ne.' },
+    ] },
+    { t: 'A dostanu něco za to, že jsem vám to nahlásil?', o: [
+      { t: 'Praní zdarma, pošlu vám kód do zprávy. Díky, bez vás bych se to dozvěděl až od technika.', b: 2, r: 'To mě potěšilo.' },
+      { t: 'To po nás nikdo nemůže chtít.', b: -2, r: 'Já nic nechtěl, jen se ptám.' },
+      { t: 'Nic takového nemáme, ale díky.', b: 0, r: 'Budiž.' },
+    ] },
+  ] },
+  { id: 'prasek', rod: 'z', kroky: [
+    { t: 'Jaký prášek tam dáváte? Mám citlivou pokožku a nesnesu silné parfémy.', o: [
+      { t: 'Jede tam neparfémovaná drogerie. Složení vám pošlu, ať si to můžete ověřit.', b: 2, r: 'To jste hodný, děkuju.' },
+      { t: 'Běžný prášek jako všude.', b: -1, r: 'To mi nic neříká.' },
+      { t: 'To fakt nevím, to řeší kolega.', b: -2, r: 'Tak mě s ním spojte.' },
+    ] },
+    { t: 'A můžu si přinést vlastní?', o: [
+      { t: 'Můžete, je tam přihrádka. Dávkujte polovinu, stroje berou míň než domácí pračka.', b: 2, r: 'Perfektní, tak to udělám.' },
+      { t: 'To nejde, systém dávkuje sám.', b: -1, r: 'Škoda.' },
+      { t: 'Vlastní prášky zakazujeme, ničí nám to stroje.', b: -2, r: 'Tak já zas ničím vaše stroje.' },
+    ] },
+    { t: 'A proplachuje se to mezi zákazníky, nebo peru v cizí pěně?', o: [
+      { t: 'Po každém cyklu jede proplach čistou vodou, a jednou týdně dezinfekce bubnu.', b: 2, r: 'To jsem chtěla slyšet.' },
+      { t: 'Voda je voda.', b: -2, r: 'To je dost nechutná odpověď.' },
+      { t: 'Buben se proplachuje, to je v pořádku.', b: 1, r: 'Dobře.' },
+    ] },
+  ] },
+  { id: 'kolo', rod: 'm', kroky: [
+    { t: 'Přijel jsem z vyjížďky, dres a bunda jsou od bláta. Dá se to u vás vyprat?', o: [
+      { t: 'Dá, jen nejdřív oklepejte hrubé bláto venku — jinak to jde do filtru.', b: 2, r: 'Tak to udělám.' },
+      { t: 'Zablácené věci do automatu nepatří.', b: -2, r: 'A kam teda patří?' },
+      { t: 'Hoďte to tam, to je jedno.', b: -1, r: 'Nechci vám zanést stroj.' },
+    ] },
+    { t: 'A membránovou bundu to nezničí? Stála pět tisíc.', o: [
+      { t: 'Dejte třicet stupňů, žádnou aviváž a nízké odstřeďování. Membrána to vydrží.', b: 2, r: 'Díky, to jsem potřeboval.' },
+      { t: 'Membrány se do automatu nedávají.', b: -1, r: 'Tak to si vyperu doma.' },
+      { t: 'To vám neřeknu, to je na výrobci.', b: 0, r: 'Hm.' },
+    ] },
+    { t: 'A batoh? Je po něm celé auto.', o: [
+      { t: 'Batoh vyndejte z rámu, zapněte všechny zipy a dejte na jemné. Sušičku ne, to by roztavilo zipy.', b: 2, r: 'Jasně, díky za tip.' },
+      { t: 'Batohy neperte, zničí se.', b: 0, r: 'Takže mám smůlu.' },
+      { t: 'To je mi jedno, zaplaceno máte.', b: -2, r: 'Tak to přeju hezký den.' },
+    ] },
+  ] },
+  { id: 'zdrazeni', rod: '', kroky: [
+    { t: 'Minule jsem platil míň. Vy jste zdražili?', o: [
+      { t: 'Zdražili, o deset korun za cyklus. Šla nahoru voda a elektřina, dýl už jsme to držet nemohli.', b: 2, r: 'Aspoň to říkáte na rovinu.' },
+      { t: 'Ceny jsou pořád stejné.', b: -2, r: 'Mám účtenku, na které to je jinak.' },
+      { t: 'To rozhoduje vedení.', b: -1, r: 'Vy jste vedení, ne?' },
+    ] },
+    { t: 'A to jste nemohli dát vědět dopředu?', o: [
+      { t: 'Máte pravdu, mělo to viset na dveřích týden předem. Příště to tak bude.', b: 2, r: 'Tak dobře.' },
+      { t: 'Cedule tam visela.', b: -1, r: 'Nevšiml jsem si.' },
+      { t: 'To nikdo nedělá.', b: -2, r: 'Slušní lidi to dělají.' },
+    ] },
+    { t: 'Nemáte něco pro ty, co k vám chodí pravidelně?', o: [
+      { t: 'Kredit na deset praní, tam je cena pořád ta stará. Můžu vám ho založit teď.', b: 2, r: 'Tak to beru.' },
+      { t: 'Nemáme a mít nebudeme.', b: -2, r: 'Příště zkusím konkurenci.' },
+      { t: 'Něco chystáme.', b: 0, r: 'Dejte vědět.' },
+    ] },
+  ] },
+  { id: 'deti', rod: 'z', kroky: [
+    { t: 'U vašeho automatu si hrají děti, lezou do bubnu. Víte o tom?', o: [
+      { t: 'Nevěděl, díky. Dám tam zámek dvířek mimo cyklus a zajedu se tam podívat.', b: 2, r: 'To je dobře.' },
+      { t: 'Za cizí děti neručíme.', b: -2, r: 'Jde o to, aby se nikomu nic nestalo.' },
+      { t: 'To mají hlídat rodiče.', b: -1, r: 'To jistě, ale stroj je váš.' },
+    ] },
+    { t: 'A jdou ta dvířka zevnitř otevřít?', o: [
+      { t: 'Jdou. Zámek drží jen při běhu a při výpadku proudu se sám rozepne.', b: 2, r: 'To jsem chtěla slyšet.' },
+      { t: 'To jsem nikdy nezkoušel.', b: -1, r: 'Tak to zkuste.' },
+      { t: 'Zevnitř ne, ale tam se nikdo nevejde.', b: -2, r: 'Osmiletý kluk se vejde.' },
+    ] },
+    { t: 'Nechcete tam dát cedulku, ať to vidí i rodiče?', o: [
+      { t: 'Dobrý nápad, objednám ji ještě dnes. Díky za postrčení.', b: 2, r: 'Není zač.' },
+      { t: 'Cedulky nikdo nečte.', b: -1, r: 'Některé se čtou.' },
+      { t: 'Máme tam dost cedulí.', b: -2, r: 'Tak nashledanou.' },
+    ] },
+  ] },
+  { id: 'klub', rod: 'm', kroky: [
+    { t: 'Vedu fotbalový klub, dvacet dresů každý týden. Dá se to u vás domluvit?', o: [
+      { t: 'Dá. Udělám vám klubový kredit a ukážu, jak to naskládat do dvou strojů.', b: 2, r: 'To by nám hodně pomohlo.' },
+      { t: 'Přijďte a plaťte jako každý.', b: -1, r: 'Ptám se, jestli to jde domluvit.' },
+      { t: 'Velké zakázky neděláme.', b: -2, r: 'Dvacet dresů není velká zakázka.' },
+    ] },
+    { t: 'A kdy máte nejmíň lidí? Nechci blokovat celou provozovnu.', o: [
+      { t: 'V úterý a ve středu dopoledne tam nikdo není. Vezměte to tehdy.', b: 2, r: 'Zapíšu si to.' },
+      { t: 'Pořád je to plné.', b: -1, r: 'To mi nepomohlo.' },
+      { t: 'To se nedá říct.', b: 0, r: 'Hm.' },
+    ] },
+    { t: 'A dostanu na to fakturu pro klub?', o: [
+      { t: 'Měsíční, se vším, co klub propere. Pošlu ji mailem.', b: 2, r: 'Perfektní, domluveno.' },
+      { t: 'Faktury neděláme.', b: -2, r: 'Tak to si klub neproplatí.' },
+      { t: 'To musíte řešit přes účetní.', b: -1, r: 'Volám vám, ne účetní.' },
+    ] },
+  ] },
+  { id: 'qr', rod: 'z', kroky: [
+    { t: 'Načetla jsem QR kód telefonem a nic se nestalo. Platba neprošla.', o: [
+      { t: 'Vidím to v systému — platba se zasekla na půl cesty a nic se nestrhlo. Pustím vám stroj ručně.', b: 2, r: 'To je rychlé, děkuju.' },
+      { t: 'To bude vaší bankou.', b: -2, r: 'Zkoušela jsem to dvakrát.' },
+      { t: 'Zkuste to ještě jednou.', b: -1, r: 'A když se to strhne dvakrát?' },
+    ] },
+    { t: 'A nestrhne se mi to nakonec dvakrát?', o: [
+      { t: 'Když to projde dvakrát, jednu platbu vám vrátím a ozvu se vám sama.', b: 2, r: 'Dobře, spoléhám na vás.' },
+      { t: 'To se nestává.', b: -1, r: 'Mně se právě stalo.' },
+      { t: 'To si pak musíte vyřídit s bankou.', b: -2, r: 'To je ale vaše platební brána.' },
+    ] },
+    { t: 'A nemáte to raději na kartu? Tomu rozumím líp.', o: [
+      { t: 'Terminál je přímo na stroji, přiložíte kartu a jede to. QR je jen pro ty, co nechtějí tahat peněženku.', b: 2, r: 'Tak příště kartou.' },
+      { t: 'QR je moderní, zvykejte si.', b: -2, r: 'Já si zvyknu na konkurenci.' },
+      { t: 'Obojí funguje stejně.', b: 0, r: 'To zjevně ne.' },
+    ] },
+  ] },
+  { id: 'cekani', rod: 'm', kroky: [
+    { t: 'Stojím u vás a všechny stroje běží. Jak dlouho mám čekat?', o: [
+      { t: 'Koukám do systému: ten vlevo končí za jedenáct minut, druhý za dvacet.', b: 2, r: 'Tak to počkám, díky.' },
+      { t: 'To vám neřeknu.', b: -2, r: 'Vždyť to musíte vidět.' },
+      { t: 'Chvilku to potrvá.', b: -1, r: 'Chvilku je kolik?' },
+    ] },
+    { t: 'A dá se to nějak zamluvit dopředu, ať nejezdím zbytečně?', o: [
+      { t: 'Rezervace neděláme, ale v aplikaci vidíte, co je volné, než vyrazíte.', b: 2, r: 'To mi stačí.' },
+      { t: 'Ne.', b: -1, r: 'Aha.' },
+      { t: 'Rezervujte si to u konkurence.', b: -2, r: 'To nebyla moc chytrá odpověď.' },
+    ] },
+    { t: 'A co když si někdo nechá prádlo ve stroji a nejde pro něj?', o: [
+      { t: 'Můžete ho vyndat do boxu vedle. Majiteli chodí upozornění, většinou dorazí do deseti minut.', b: 2, r: 'Rozumím, tak to zkusím.' },
+      { t: 'Do cizího prádla nesahejte.', b: -1, r: 'A co mám dělat?' },
+      { t: 'Tak si počkejte.', b: -2, r: 'Hezky jste mi poradil.' },
+    ] },
+  ] },
 ];
 function povest() { return Math.max(-100, Math.min(100, (S && S.povest) || 0)); }
 // Násobitel návštěvnosti podle pověsti. Nula je normál, záporná pověst bolí víc,
@@ -2426,6 +2655,11 @@ function povestSlovy() {
 }
 function zmenPovest(o) {
   S.povest = Math.max(-100, Math.min(100, povest() + o));
+}
+// Kolik pověsti doopravdy udělá jedna odpověď. Počítá se po odpovědích, ne až
+// ze součtu — jinak by se jedna hrubost schovala za dvě vlídné věty.
+function povestZaOdpoved(b) {
+  return (b > 0 ? b * POVEST_RUST : b * POVEST_PAD);
 }
 // Další hovor naplánujeme na náhodnou dobu strávenou ve hře.
 function naplanujHovor() {
@@ -2488,7 +2722,7 @@ function zacniHovor() {
     jmeno: hovorJmeno(sc.rod),
     scenar: sc.id, kroky: sc.kroky,
     poradi: sc.kroky.map(function (k) { return zamichej(k.o.length); }),
-    i: 0, body: 0, odpovedi: [], prepis: [], ceka: false,
+    i: 0, body: 0, vaha: 0, odpovedi: [], prepis: [], ceka: false,
     hvPred: hvezdy(), stav: 'zvoni', zvoniDo: Date.now() + HOVOR_ZVONI_MS
   };
   S.hovoryPosl = (S.hovoryPosl || []).concat([sc.id]).slice(-SCENARU_PAMET);
@@ -2505,7 +2739,7 @@ function hovorHlidej() {
 }
 function odmitniHovor(samo) {
   if (!HOVOR) return;
-  zmenPovest(HOVOR_ODMITNUTI);
+  zmenPovest(povestZaOdpoved(HOVOR_ODMITNUTI));
   S.hovoru = (S.hovoru || 0) + 1;
   HOVOR = null;
   naplanujHovor();
@@ -2531,6 +2765,7 @@ function odpovez(i) {
   var h = HOVOR, o = h.kroky[h.i].o[h.poradi[h.i][i]];
   if (!o) return;
   h.body += o.b;
+  h.vaha += povestZaOdpoved(o.b);
   h.odpovedi.push({ b: o.b, r: o.r });
   h.prepis.push({ k: 'ja', t: o.t });
   h.ceka = true;
@@ -2551,7 +2786,7 @@ function hovorDal() {
     HOVOR.prepis.push({ k: 'z', t: HOVOR.kroky[HOVOR.i].t });
   } else {
     HOVOR.stav = 'konec';
-    zmenPovest(HOVOR.body);
+    zmenPovest(HOVOR.vaha);
     S.hovoru = (S.hovoru || 0) + 1;
     save(); paint(); syncState(true);
   }
@@ -2611,7 +2846,8 @@ function paintHovor() {
       + '</div>';
   } else {
     var b = h.body;
-    var tr2 = b > 0 ? 'ok' : (b < 0 ? 'err' : 'muted');
+    var zm = Math.round((h.vaha || 0) * 10) / 10;   // co to doopravdy udělalo s pověstí
+    var tr2 = zm > 0 ? 'ok' : (zm < 0 ? 'err' : 'muted');
     var soud = b >= 6 ? 'Zákazník zavěsil nadšený a řekne to dál.'
       : b >= 2 ? 'Zákazník byl spokojený.'
       : b > -2 ? 'Zákazník zavěsil, ale nijak nadšený nebyl.'
@@ -2630,8 +2866,8 @@ function paintHovor() {
       + (dh ? ' <span class="' + tr2 + '">(' + (dh > 0 ? '+' : '−')
           + Math.abs(dh).toFixed(1).replace('.', ',') + ')</span>' : '') + '</b></div>'
       + '<div class="kv"><span>Pověst</span><b>' + povestSlovy()
-      + ' <span class="' + tr2 + '">(' + (b > 0 ? '+' : (b < 0 ? '−' : ''))
-      + Math.abs(b) + ')</span></b></div>'
+      + ' <span class="' + tr2 + '">(' + (zm > 0 ? '+' : (zm < 0 ? '−' : ''))
+      + String(Math.abs(zm)).replace('.', ',') + ')</span></b></div>'
       + '<div class="kv"><span>Návštěvnost</span><b class="' + (povest() >= 0 ? 'ok' : 'err') + '">'
       + (navs >= 0 ? '+' : '−') + Math.abs(navs).toFixed(1).replace('.', ',') + ' %</b></div>'
       + '<p class="fine">Pověst jde od −100 do +100. Každý hovor s ní pohne o pár bodů '
