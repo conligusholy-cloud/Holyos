@@ -44,7 +44,7 @@ async function findAccount(statement, fallbackId) {
 /**
  * @returns {Promise<{status:'imported'|'duplicate'|'no_account', statement_id?, inserted?, total?, matched?, warnings?, statement_number?}>}
  */
-async function importStatementBuffer({ buffer, filename, bankAccountId = null, source = 'email', userId = null, autoMatch = true, passwords = null }) {
+async function importStatementBuffer({ buffer, filename, bankAccountId = null, source = 'email', userId = null, autoMatch = true, passwords = null, force = false }) {
   const parsed = await parseAny(buffer, filename, passwords);
   const { statement, transactions, warnings, format } = parsed;
   const account = await findAccount(statement, bankAccountId);
@@ -52,6 +52,18 @@ async function importStatementBuffer({ buffer, filename, bankAccountId = null, s
 
   const existing = await prisma.bankStatement.findUnique({ where: { bank_account_id_statement_number: { bank_account_id: account.id, statement_number: String(statement.statement_number) } } }).catch(() => null);
   if (existing) return { status: 'duplicate', statement_id: existing.id, statement_number: statement.statement_number };
+
+  // Ochrana úplnosti: výpis, který přesně nesedí na zůstatky a počet transakcí, se NEIMPORTUJE (nechybí-li něco, nikdo to nepozná).
+  if (format === 'moneta_pdf' && parsed.reconciled === false && !force) {
+    return { status: 'unreconciled', statement_number: statement.statement_number, account_number: statement.account_number, read: transactions.length, expected: parsed.expected_count, diff: parsed.balance_diff, warnings };
+  }
+  // Návaznost: počáteční zůstatek musí odpovídat konečnému zůstatku předchozího výpisu (jinak chybí výpis / transakce)
+  try {
+    const prev = await prisma.bankStatement.findFirst({ where: { bank_account_id: account.id, period_to: { lt: statement.period_to || new Date() } }, orderBy: { period_to: 'desc' }, select: { statement_number: true, closing_balance: true } });
+    if (prev && statement.opening_balance != null && Math.abs(Number(prev.closing_balance) - Number(statement.opening_balance)) > 0.005) {
+      warnings.push(`Nenavazuje na předchozí výpis ${prev.statement_number}: ten končí na ${Number(prev.closing_balance)}, tento začíná na ${Number(statement.opening_balance)} — pravděpodobně chybí výpis.`);
+    }
+  } catch (e) { /* kontrola návaznosti je jen doplňková */ }
 
   // Originál výpisu uložit (pro audit / pozdější kontrolu)
   let filePath = null;

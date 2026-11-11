@@ -9173,15 +9173,15 @@ function visitId() {
 var evDone = {};
 
 // ─── Záznam první minuty ─────────────────────────────────────────────────────
-// Z úplně první návštěvy se nahraje prvních šedesát vteřin. Není to video —
+// Z úplně první návštěvy se nahrají první dvě minuty. Není to video —
 // ukládá se popis toho, co se na stránce dělo (co se vykreslilo, kam člověk
 // klepl, kam scroloval), takže je to malé a dá se to v administraci přehrát.
 // Vyplňované texty se nenahrávají, nick ani heslo se tedy nikam neuloží.
 // Posílá se po částech, ať se nic neztratí, když návštěvník odejde dřív.
 var ZAZNAM_KEY = 'lm_zaznam';     // značka, že první návštěva už se nahrála
-var ZAZNAM_DELKA = 60000;
+var ZAZNAM_DELKA = 120000;        // dvě minuty — aby šlo vidět celý tutoriál
 var ZAZNAM_CAST = 15000;
-var ZAZNAM_CASTI_MAX = 8;
+var ZAZNAM_CASTI_MAX = 12;        // 8 × 15 s + rezerva na poslední odeslání
 function zaznamStart() {
   try {
     if (localStorage.getItem(ZAZNAM_KEY)) return;   // není to první návštěva

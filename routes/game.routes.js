@@ -275,7 +275,7 @@ router.post('/ev', express.json({ limit: '2kb' }), async (req, res) => {
 // potkal a kde se zasekl. Vyplňované texty se nenahrávají, nick ani heslo
 // se tedy nikam neuloží.
 // Chodí to po částech, aby se nic neztratilo, když návštěvník odejde dřív.
-const ZAZNAM_CASTI = 8;              // víc než osm částí na návštěvu nebereme
+const ZAZNAM_CASTI = 12;             // víc než dvanáct částí na návštěvu nebereme (2 min po 15 s + rezerva)
 const ZAZNAM_LIMIT = '900kb';        // strop na jednu část
 router.post('/zaznam', express.json({ limit: ZAZNAM_LIMIT }), async (req, res) => {
   try {

@@ -57,6 +57,7 @@ async function runOnce({ markRead = true, all = false, passwords = null, trigger
           const r = await importStatementBuffer({ buffer: file.buffer, filename: a.name, source: 'email', passwords });
           if (r.status === 'imported') report.imported.push({ file: a.name, statement_id: r.statement_id, statement: r.statement_number, transactions: r.inserted, matched: r.matched ? r.matched.matched : null, warnings: r.warnings });
           else if (r.status === 'duplicate') report.duplicates.push({ file: a.name, statement: r.statement_number });
+          else if (r.status === 'unreconciled') { allOk = false; report.errors.push(`${a.name}: výpis ${r.statement_number} NEIMPORTOVÁN — nesedí na zůstatky (načteno ${r.read} z ${r.expected != null ? r.expected : '?'} transakcí, rozdíl ${r.diff}). Zkontroluj PDF / dej vědět vývojáři.`); }
           else { allOk = false; report.no_account.push({ file: a.name, account: (r.account_number || '?') + '/' + (r.bank_code || '?') }); }
         } catch (e) { allOk = false; report.errors.push((a.name || '?') + ': ' + e.message); }
       }

@@ -38,26 +38,30 @@ async function extractRows(buffer, password) {
   for (let p = 1; p <= doc.numPages; p++) {
     const pg = await doc.getPage(p);
     const tc = await pg.getTextContent();
-    const rows = {};
-    for (const it of tc.items) {
-      const s = String(it.str || '').trim(); if (!s) continue;
-      const y = Math.round(it.transform[5]);
-      // drobné odchylky Y (±2) sloučit do jednoho řádku
-      const key = Object.keys(rows).map(Number).find((k) => Math.abs(k - y) <= 2);
-      (rows[key != null ? key : y] = rows[key != null ? key : y] || []).push({ x: it.transform[4], s });
-    }
-    const ys = Object.keys(rows).map(Number).sort((a, b) => b - a);
-    pages.push(ys.map((y) => rows[y].sort((a, b) => a.x - b.x)));
+    pages.push(tc.items.map((it) => ({ x: it.transform[4], y: it.transform[5], w: it.width || 0, s: String(it.str || '').trim() })).filter((i) => i.s));
   }
-  return pages;
+  return pages; // surové položky po stránkách (řádky se skládají zvlášť, s různou tolerancí osy Y)
+}
+
+// Seskupí položky stránky do řádků podle osy Y (tolerance tol) a v řádku podle X
+function groupRows(pageItems, tol) {
+  const rows = {};
+  for (const it of pageItems) {
+    const y = Math.round(it.y);
+    const key = Object.keys(rows).map(Number).find((k) => Math.abs(k - y) <= tol);
+    (rows[key != null ? key : y] = rows[key != null ? key : y] || []).push({ x: it.x, w: it.w, s: it.s });
+  }
+  const ys = Object.keys(rows).map(Number).sort((a, b) => b - a);
+  return ys.map((y) => rows[y].sort((a, b) => a.x - b.x));
 }
 
 const cell = (row, x0, x1) => row.filter((c) => c.x >= x0 && c.x < x1).map((c) => c.s).join(' ').trim();
 const after = (row, label) => { const i = row.findIndex((c) => c.s.replace(/\s+/g, ' ').startsWith(label)); return i >= 0 && row[i + 1] ? row[i + 1].s : null; };
 
 async function parseMonetaPdf(buffer, opts = {}) {
-  const pages = await extractRows(buffer, opts.password);
+  const rawPages = await extractRows(buffer, opts.password);
   const warnings = [];
+  const pages = rawPages.map((p) => groupRows(p, 2));
   const all = [].concat(...pages);
   const findVal = (label) => { for (const r of all) { const v = after(r, label); if (v) return v; } return null; };
 
@@ -72,52 +76,120 @@ async function parseMonetaPdf(buffer, opts = {}) {
   const accM = accRaw ? /([\d-]+)\s*\/\s*(\d{4})/.exec(accRaw) : null;
   if (!stmtNo) throw new Error('Nepodařilo se najít číslo výpisu — není to PDF výpis MONETA?');
 
-  // Transakce: blok začíná řádkem s datem v 1. sloupci (x<100) a končí dalším blokem / součtem
-  const tx = [];
-  let cur = null;
-  const flush = () => { if (cur) tx.push(cur); cur = null; };
-  let inTable = false;
-  for (const pageRows of pages) {
-    for (const row of pageRows) {
-      const first = row[0];
-      const lineTxt = row.map((c) => c.s).join(' ');
-      if (/^Přehled transakcí/.test(lineTxt) || /Datum\s+Bankovní spojení/.test(lineTxt)) { inTable = true; continue; }
-      if (!inTable) continue;
-      if (/^Celkový počet transakcí/.test(lineTxt) || /^Konečný zůstatek/.test(lineTxt.trim())) { flush(); inTable = false; continue; }
-      if (/^(zpracování|Valuta)\b/.test(lineTxt) || /Počáteční zůstatek/.test(lineTxt)) continue;
-      if (first && first.x < 100 && RE_DATE.test(first.s)) {
-        flush();
-        const debit = cell(row, 420, 495); const credit = cell(row, 495, 9999);
-        const amtD = toNum(debit); const amtC = toNum(credit);
-        const c113 = cell(row, 100, 250);
-        cur = {
-          transaction_date: toDate(first.s), value_date: null,
-          direction: amtC != null && (amtD == null || amtD === 0) ? 'in' : 'out',
-          amount: Math.abs(amtC != null && (amtD == null || amtD === 0) ? amtC : (amtD || 0)),
-          currency, reference: cell(row, 250, 340) || null,
-          variable_symbol: cleanSym(cell(row, 340, 420)),
-          counterparty_account: RE_ACC.test(c113.replace(/\s+/g, '')) ? c113.replace(/\s+/g, '') : null,
-          _type: RE_ACC.test(c113.replace(/\s+/g, '')) ? null : c113,
-          _lines: [], _n: 1,
-        };
-        continue;
+  // Počet transakcí, který výpis sám uvádí („Celkový počet transakcí: N") — kontrola, že žádná nechybí
+  let expectedCount = null;
+  for (const r of all) { const m = /Celkový počet transakcí[:\s]*([\d\s]+)/.exec(r.map((c) => c.s).join(' ')); if (m) { const n = parseInt(m[1].replace(/\s+/g, ''), 10); if (Number.isFinite(n)) { expectedCount = n; break; } } }
+
+  const isMoney = (s) => /^-?\d+,\d{2}$/.test(String(s || '').replace(/[\s ]+/g, ''));
+
+  // Transakce: blok začíná řádkem s datem v 1. sloupci (x<100) a končí dalším blokem / součtem.
+  // mode 'x' = částka podle počátku sloupce (debet 420–495, kredit 495+); mode 'end' = podle PRAVÉHO okraje částky
+  // (částky jsou zarovnané doprava, takže dlouhé číslo začíná víc vlevo a sloupec podle počátku by netrefilo).
+  function parseBlocks(pagesRows, mode) {
+    const out = [];
+    let cur = null;
+    const flush = () => { if (cur) out.push(cur); cur = null; };
+    let inTable = false;
+    for (const pageRows of pagesRows) {
+      for (const row of pageRows) {
+        const first = row[0];
+        const lineTxt = row.map((c) => c.s).join(' ');
+        if (/^Přehled transakcí/.test(lineTxt) || /Datum\s+Bankovní spojení/.test(lineTxt)) { inTable = true; continue; }
+        if (!inTable) continue;
+        if (/^Celkový počet transakcí/.test(lineTxt) || /^Konečný zůstatek/.test(lineTxt.trim())) { flush(); inTable = false; continue; }
+        if (/^(zpracování|Valuta)\b/.test(lineTxt) || /Počáteční zůstatek/.test(lineTxt)) continue;
+        if (first && first.x < 100 && RE_DATE.test(first.s)) {
+          flush();
+          const debit = cell(row, 420, 495); const credit = cell(row, 495, 9999);
+          const amtD = toNum(debit); const amtC = toNum(credit);
+          const c113 = cell(row, 100, 250);
+          const money = row.filter((c) => c.x >= 330 && isMoney(c.s)).map((c) => ({ v: toNum(c.s), end: c.x + c.w }));
+          cur = {
+            transaction_date: toDate(first.s), value_date: null,
+            direction: amtC != null && (amtD == null || amtD === 0) ? 'in' : 'out',
+            amount: Math.abs(amtC != null && (amtD == null || amtD === 0) ? amtC : (amtD || 0)),
+            currency, reference: cell(row, 250, 340) || null,
+            variable_symbol: cleanSym(cell(row, 340, 420)),
+            counterparty_account: RE_ACC.test(c113.replace(/\s+/g, '')) ? c113.replace(/\s+/g, '') : null,
+            _type: RE_ACC.test(c113.replace(/\s+/g, '')) ? null : c113,
+            _lines: [], _n: 1, _money: money,
+          };
+          continue;
+        }
+        if (!cur) continue;
+        cur._n++;
+        const c113 = cell(row, 100, 250); const c255 = cell(row, 250, 340); const sym = cell(row, 340, 420);
+        if (cur._n === 2) {
+          if (c113) { if (TYPES.test(c113)) cur._type = cur._type || c113; else cur.counterparty_name = c113; }
+          if (RE_DATE.test(c255)) cur.value_date = toDate(c255);
+          cur.constant_symbol = cleanSym(sym);
+        } else if (cur._n === 3) {
+          if (c113) cur._lines.push(c113);
+          cur.specific_symbol = cleanSym(sym);
+        } else if (c113) {
+          cur._lines.push(c113);
+        }
       }
-      if (!cur) continue;
-      cur._n++;
-      const c113 = cell(row, 100, 250); const c255 = cell(row, 250, 340); const sym = cell(row, 340, 420);
-      if (cur._n === 2) {
-        if (c113) { if (TYPES.test(c113)) cur._type = cur._type || c113; else cur.counterparty_name = c113; }
-        if (RE_DATE.test(c255)) cur.value_date = toDate(c255);
-        cur.constant_symbol = cleanSym(sym);
-      } else if (cur._n === 3) {
-        if (c113) cur._lines.push(c113);
-        cur.specific_symbol = cleanSym(sym);
-      } else if (c113) {
-        cur._lines.push(c113);
+    }
+    flush();
+    if (mode === 'end') {
+      // směr podle pravého okraje částky: dva shluky (debet vlevo, kredit vpravo)
+      const ends = out.filter((t) => t._money.length).map((t) => t._money[0].end);
+      if (ends.length) {
+        let lo = Math.min(...ends), hi = Math.max(...ends);
+        if (hi - lo >= 15) {
+          let thr = (lo + hi) / 2;
+          for (let i = 0; i < 8; i++) {
+            const a = ends.filter((e) => e <= thr), b = ends.filter((e) => e > thr);
+            if (!a.length || !b.length) break;
+            thr = (a.reduce((s, e) => s + e, 0) / a.length + b.reduce((s, e) => s + e, 0) / b.length) / 2;
+          }
+          for (const t of out) { if (t._money.length) { t.amount = Math.abs(t._money[0].v); t.direction = t._money[0].end > thr ? 'in' : 'out'; } }
+        } else {
+          for (const t of out) { if (t._money.length) t.amount = Math.abs(t._money[0].v); } // jeden směr — směr zůstává podle počátku
+        }
+      }
+    }
+    return out;
+  }
+
+  const balanceDiff = (list) => {
+    if (opening == null || closing == null) return null;
+    const sIn = list.filter((t) => t.direction === 'in').reduce((s, t) => s + t.amount, 0);
+    const sOut = list.filter((t) => t.direction === 'out').reduce((s, t) => s + t.amount, 0);
+    return Math.round((opening + sIn - sOut - closing) * 100) / 100;
+  };
+  // Zkouší se víc postupů čtení (tolerance řádků × způsob určení částky); bere se první, který přesně sedí na zůstatky
+  // i na počet transakcí uvedený ve výpisu. Jinak se vezme ten s nejmenším rozdílem.
+  let tx = null, best = null; const tried = [];
+  outer: for (const tol of [2, 3, 1, 4]) {
+    const pr = tol === 2 ? pages : rawPages.map((p) => groupRows(p, tol));
+    for (const mode of ['x', 'end']) {
+      const cand = parseBlocks(pr, mode);
+      const d = balanceDiff(cand);
+      const countOk = expectedCount == null || cand.length === expectedCount;
+      tried.push({ tol, mode, n: cand.length, diff: d });
+      const score = (d == null ? 1e9 : Math.abs(d)) + (countOk ? 0 : 1e6);
+      if (!best || score < best.score) best = { cand, d, countOk, score };
+      if (d != null && Math.abs(d) < 0.005 && countOk) { tx = cand; break outer; }
+    }
+  }
+  let reconciled = !!tx;
+  if (!tx) {
+    tx = best.cand;
+    // Poslední pokus: jediná platba, jejíž přehození směru přesně srovná zůstatky (rozdíl = 2 × částka)
+    const d = balanceDiff(tx);
+    if (d != null && Math.abs(d) > 0.005) {
+      const hit = tx.filter((t) => t.amount > 0 && Math.abs(Math.abs(d) - 2 * t.amount) < 0.006 && ((d > 0 && t.direction === 'in') || (d < 0 && t.direction === 'out')));
+      if (hit.length === 1) {
+        hit[0].direction = hit[0].direction === 'in' ? 'out' : 'in';
+        warnings.push(`Opraven směr jedné platby (${hit[0].amount.toFixed(2)}) podle zůstatků výpisu.`);
+        const d2 = balanceDiff(tx);
+        reconciled = d2 != null && Math.abs(d2) < 0.005 && (expectedCount == null || tx.length === expectedCount);
       }
     }
   }
-  flush();
+  if (!reconciled) warnings.push(`NESEDÍ: načteno ${tx.length} z ${expectedCount != null ? expectedCount : '?'} transakcí, rozdíl proti zůstatkům ${balanceDiff(tx)} (zkoušeno ${tried.length} postupů čtení).`);
 
   const transactions = tx.map((t) => {
     const msg = []; let name = t.counterparty_name || null;
@@ -129,17 +201,14 @@ async function parseMonetaPdf(buffer, opts = {}) {
     if (t._type && /^PLATBA KARTOU/i.test(t._type) && name) msg.unshift('Platba kartou');
     else if (t._type) msg.unshift(t._type);
     const out = { ...t, counterparty_name: name, message: msg.filter(Boolean).join(' | ').slice(0, 1000) || null };
-    delete out._lines; delete out._n; delete out._type;
+    delete out._lines; delete out._n; delete out._type; delete out._money;
     if (!out.reference) out.reference = 'moneta-' + (stmtNo || '') + '-' + Math.random().toString(36).slice(2, 10);
     return out;
   });
 
-  // Kontrola součtů proti hlavičce
-  const sumIn = transactions.filter((t) => t.direction === 'in').reduce((s, t) => s + t.amount, 0);
-  const sumOut = transactions.filter((t) => t.direction === 'out').reduce((s, t) => s + t.amount, 0);
-  if (opening != null && closing != null && Math.abs(opening + sumIn - sumOut - closing) > 0.02) {
-    warnings.push(`Součet transakcí nesedí na zůstatky (počáteční ${opening} + ${sumIn.toFixed(2)} − ${sumOut.toFixed(2)} ≠ konečný ${closing}) — zkontroluj výpis.`);
-  }
+  if (opening == null || closing == null) { reconciled = false; warnings.push('Ve výpisu se nepodařilo najít počáteční nebo konečný zůstatek — nelze ověřit úplnost.'); }
+  // Transakce s nulovou částkou = nepřečtená částka → výpis se nepovažuje za ověřený
+  if (transactions.some((t) => !(t.amount > 0))) { reconciled = false; warnings.push('Některá transakce má nulovou částku (částka se nepřečetla).'); }
 
   return {
     statement: {
@@ -153,6 +222,9 @@ async function parseMonetaPdf(buffer, opts = {}) {
     },
     transactions,
     warnings,
+    reconciled,                       // true = součty i počet transakcí přesně sedí na hlavičku výpisu
+    expected_count: expectedCount,
+    balance_diff: balanceDiff(tx),
     format: 'moneta_pdf',
   };
 }
