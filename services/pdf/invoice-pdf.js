@@ -73,10 +73,17 @@ function renderTemplate(html, data) {
     }).join('');
   });
 
-  // {{#if KEY}}...{{/if}} — show jen pokud truthy
-  html = html.replace(/\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (_, key, inner) => {
-    return data[key] ? inner : '';
-  });
+  // {{#if KEY}}...{{else}}...{{/if}} — vnořené bloky se řeší od nejhlubšího (innermost), dokud nějaké zbývají.
+  // (Dřív se bral první {{/if}} → vnořené podmínky a {{else}} rozbily platební údaje na faktuře.)
+  const IF_INNER = /\{\{#if\s+(\w+)\}\}((?:(?!\{\{#if\s)[\s\S])*?)\{\{\/if\}\}/;
+  for (let guard = 0; guard < 500 && IF_INNER.test(html); guard++) {
+    html = html.replace(IF_INNER, (_, key, inner) => {
+      const ei = inner.indexOf('{{else}}');
+      const yes = ei >= 0 ? inner.slice(0, ei) : inner;
+      const no = ei >= 0 ? inner.slice(ei + 8) : '';
+      return data[key] ? yes : no;
+    });
+  }
 
   // Triple {{{ key }}} = raw HTML (bez escape — pro QR base64)
   html = html.replace(/\{\{\{(\w+)\}\}\}/g, (_, key) => {
