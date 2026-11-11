@@ -8,7 +8,7 @@ const T = {
   cs: {
     kick: 'Obchodní návrh', for: 'pro', valid: 'Platnost návrhu do',
     heroSub: (c) => `Samoobslužná prádelna přímo u vašich prodejen — provozovaná pod značkou ${c}, dodaná a spravovaná na klíč.`,
-    chips: ['24/7 bez obsluhy', 'Pod vaší značkou', 'Dodání a servis na klíč', 'Platba kartou i mobilem'],
+    chips: ['24/7 bez obsluhy', 'Pod vaší značkou', 'Dodání a servis na klíč', 'Ryze český výrobek'],
     ctaTop: 'Domluvit 20min schůzku', scroll: 'Podívat se, o co jde',
     whatH: 'O co jde', whatSub: 'Zákazník vypere a usuší během jednoho nákupu.',
     steps: [['🛒', 'Přijede na nákup', 'Prádlo vloží do prádlomatu u prodejny — trvá to minutu.'], ['🧺', 'Nakoupí', 'Praní 30–40 minut, sušení navazuje automaticky. Stav vidí v mobilu.'], ['✨', 'Odjede s čistým prádlem', 'Suché, voňavé prádlo vyzvedne cestou k autu.']],
@@ -27,7 +27,7 @@ const T = {
   en: {
     kick: 'Business proposal', for: 'for', valid: 'Valid until',
     heroSub: (c) => `A self-service laundry right at your stores — operated under the ${c} brand, delivered and managed turnkey.`,
-    chips: ['24/7, unstaffed', 'Under your brand', 'Turnkey delivery & service', 'Card & mobile payments'],
+    chips: ['24/7, unstaffed', 'Under your brand', 'Turnkey delivery & service', 'Made in Czechia'],
     ctaTop: 'Book a 20-minute meeting', scroll: 'See how it works',
     whatH: 'What it is', whatSub: 'Customers wash and dry their laundry during a single shopping trip.',
     steps: [['🛒', 'Arrive to shop', 'Load the laundry into the machine by the store — takes a minute.'], ['🧺', 'Do the shopping', 'Washing takes 30–40 minutes, drying follows automatically. Status on the phone.'], ['✨', 'Leave with clean laundry', 'Pick up dry, fresh laundry on the way to the car.']],
@@ -46,7 +46,7 @@ const T = {
   pl: {
     kick: 'Propozycja biznesowa', for: 'dla', valid: 'Ważna do',
     heroSub: (c) => `Pralnia samoobsługowa tuż przy Państwa sklepach — pod marką ${c}, dostarczona i obsługiwana pod klucz.`,
-    chips: ['24/7 bez obsługi', 'Pod Państwa marką', 'Dostawa i serwis pod klucz', 'Płatność kartą i telefonem'],
+    chips: ['24/7 bez obsługi', 'Pod Państwa marką', 'Dostawa i serwis pod klucz', 'Czeski produkt'],
     ctaTop: 'Umówić 20-minutowe spotkanie', scroll: 'Zobacz, jak to działa',
     whatH: 'Na czym to polega', whatSub: 'Klient pierze i suszy pranie podczas jednych zakupów.',
     steps: [['🛒', 'Przyjeżdża na zakupy', 'Wkłada pranie do urządzenia przy sklepie — to minuta.'], ['🧺', 'Robi zakupy', 'Pranie 30–40 minut, suszenie automatycznie. Status w telefonie.'], ['✨', 'Wraca z czystym praniem', 'Odbiera suche, pachnące pranie w drodze do auta.']],
@@ -90,9 +90,9 @@ function chartSvg(invest, monthly, t) {
 const CHK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></svg>';
 const PIN = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
 const EXTRA = {
-  cs: { eyebrow: 'Zkušenosti z více než 70 prádlomatů v České republice', statTxt: (n, c) => `prádlomatů v pilotním projektu pro ${c}.`, statAlt: 'Přes 70 prádlomatů, které sami provozujeme v České republice.', sites: 'Skutečné provozovny', what: 'O co jde', can: 'Co prádlomat umí', ben: 'Přínosy', eco: 'Ekonomika', pilot: 'Pilot', vid: 'Video', cta: 'Další krok' },
-  en: { eyebrow: 'Experience from more than 70 laundromats in the Czech Republic', statTxt: (n, c) => `laundromats in the pilot project for ${c}.`, statAlt: 'Over 70 laundromats we operate ourselves in the Czech Republic.', sites: 'Real sites', what: 'What it is', can: 'What it does', ben: 'Benefits', eco: 'Economics', pilot: 'Pilot', vid: 'Video', cta: 'Next step' },
-  pl: { eyebrow: 'Doświadczenie z ponad 70 pralni w Czechach', statTxt: (n, c) => `urządzeń w projekcie pilotażowym dla ${c}.`, statAlt: 'Ponad 70 pralni, które sami prowadzimy w Czechach.', sites: 'Prawdziwe punkty', what: 'Na czym to polega', can: 'Co potrafi', ben: 'Korzyści', eco: 'Ekonomika', pilot: 'Pilotaż', vid: 'Wideo', cta: 'Kolejny krok' },
+  cs: { proof: [['150+', 'prádlomatů dodaných po Evropě'], ['70+', 'prádlomatů sami provozujeme v ČR'], ['100 %', 'ryze český výrobek — vývoj i výroba v ČR']], eyebrow: 'Více než 150 prádlomatů dodaných po Evropě · ryze český výrobek', statTxt: (n, c) => `prádlomatů v pilotním projektu pro ${c}.`, statAlt: 'Více než 150 prádlomatů dodaných po Evropě.', sites: 'Skutečné provozovny', what: 'O co jde', can: 'Co prádlomat umí', ben: 'Přínosy', eco: 'Ekonomika', pilot: 'Pilot', vid: 'Video', cta: 'Další krok' },
+  en: { proof: [['150+', 'laundromats delivered across Europe'], ['70+', 'laundromats we operate ourselves in Czechia'], ['100 %', 'made in Czechia — designed and built here']], eyebrow: 'Over 150 laundromats delivered across Europe · made in Czechia', statTxt: (n, c) => `laundromats in the pilot project for ${c}.`, statAlt: 'Over 70 laundromats we operate ourselves in the Czech Republic.', sites: 'Real sites', what: 'What it is', can: 'What it does', ben: 'Benefits', eco: 'Economics', pilot: 'Pilot', vid: 'Video', cta: 'Next step' },
+  pl: { proof: [['150+', 'urządzeń dostarczonych w Europie'], ['70+', 'pralni prowadzimy sami w Czechach'], ['100 %', 'czeski produkt — projekt i produkcja w Czechach']], eyebrow: 'Ponad 150 urządzeń dostarczonych w Europie · czeski produkt', statTxt: (n, c) => `urządzeń w projekcie pilotażowym dla ${c}.`, statAlt: 'Ponad 70 pralni, które sami prowadzimy w Czechach.', sites: 'Prawdziwe punkty', what: 'Na czym to polega', can: 'Co potrafi', ben: 'Korzyści', eco: 'Ekonomika', pilot: 'Pilotaż', vid: 'Wideo', cta: 'Kolejny krok' },
 };
 // Nadpis: bílá část + gradientní část (rozdělí se před posledním „u / pro / pod / at / for / dla / przy")
 function splitTitle(title) {
@@ -122,19 +122,19 @@ function offerPage(o, token, opts) {
 .ox .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:52px;padding:0 26px;border-radius:14px;font-weight:700;font-size:16px;text-decoration:none;border:1px solid transparent;cursor:pointer;font-family:inherit;transition:transform .18s,box-shadow .18s,border-color .18s}
 .ox .btn-p{background:linear-gradient(90deg,#1e86e0,#3a6cf5 55%,#7c5cff);color:#fff;box-shadow:0 10px 30px -10px rgba(58,108,245,.8)}.ox .btn-p:hover{transform:translateY(-2px)}
 .ox .btn-g{background:rgba(255,255,255,.04);border-color:var(--line2);color:var(--tx)}.ox .btn-g:hover{border-color:var(--az)}
-.ox .hero{position:relative;display:grid;grid-template-columns:1.2fr .8fr;gap:40px;align-items:center;padding:40px 0 70px}
+.ox .hero{position:relative;display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center;padding:40px 0 70px}
 .ox .hero:before{content:"";position:absolute;inset:-20% -10% auto -10%;height:120%;background:radial-gradient(900px 520px at 78% 38%,rgba(58,108,245,.28),transparent 62%),radial-gradient(700px 420px at 12% 18%,rgba(79,209,255,.12),transparent 60%);pointer-events:none;z-index:-1}
 .ox .eyebrow{display:inline-flex;align-items:center;gap:9px;padding:7px 14px;border:1px solid rgba(47,227,198,.35);background:rgba(47,227,198,.07);border-radius:999px;color:#b6f5ea;font-size:13.5px;font-weight:600;text-transform:none;letter-spacing:0}.ox .eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--teal);box-shadow:0 0 10px var(--teal)}
-.ox .hero h1{font-size:clamp(36px,5vw,62px);font-weight:850;margin:22px 0 0;letter-spacing:-.035em}.ox .hero h1 span{display:block}
+.ox .hero h1{font-size:clamp(28px,3.2vw,42px);font-weight:750;margin:20px 0 0;letter-spacing:-.02em;line-height:1.15}.ox .hero h1 span{display:block}
 .ox .lead{margin:24px 0 0;font-size:clamp(17px,1.6vw,20px);line-height:1.6;color:var(--tx2);max-width:640px}
 .ox .ctas{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
 .ox .chk{list-style:none;padding:0;margin:30px 0 0;display:flex;flex-wrap:wrap;gap:10px 26px;color:var(--tx2);font-size:15px}.ox .chk li{display:flex;align-items:center;gap:9px}.ox .chk svg{color:var(--teal)}
 .ox .meta{color:var(--tx3);font-size:13.5px;margin-top:18px}
-.ox .visual{position:relative;justify-self:end;width:100%;max-width:440px}
+.ox .visual{position:relative;justify-self:end;width:100%;max-width:560px}
 .ox .visual .glow{position:absolute;inset:4%;border-radius:50%;background:radial-gradient(circle,rgba(79,209,255,.35),rgba(58,108,245,.18) 45%,transparent 70%);filter:blur(10px)}
-.ox .visual video{position:relative;display:block;width:62%;margin:0 auto;aspect-ratio:9/16;height:auto;object-fit:cover;border-radius:26px;border:1px solid var(--line2);background:#0b1220;box-shadow:0 30px 60px -20px rgba(0,0,0,.8),0 0 0 6px rgba(79,209,255,.06)}
-.ox .statcard{position:absolute;left:-6%;bottom:6%;max-width:280px;padding:18px 20px;border-radius:18px;background:rgba(10,16,30,.85);border:1px solid var(--line2);backdrop-filter:blur(12px);box-shadow:0 20px 50px -20px rgba(0,0,0,.8)}
-.ox .statcard b{display:block;font-size:42px;line-height:1;font-weight:850;letter-spacing:-.03em}.ox .statcard p{margin:8px 0 0;font-size:14px;color:var(--tx2);line-height:1.45}
+.ox .visual video{position:relative;display:block;width:78%;margin:0 auto;aspect-ratio:9/16;height:auto;object-fit:cover;border-radius:26px;border:1px solid var(--line2);background:#0b1220;box-shadow:0 30px 60px -20px rgba(0,0,0,.8),0 0 0 6px rgba(79,209,255,.06)}
+.ox .statcard{position:absolute;left:-8%;bottom:-4%;max-width:230px;padding:14px 16px;border-radius:18px;background:rgba(10,16,30,.85);border:1px solid var(--line2);backdrop-filter:blur(12px);box-shadow:0 20px 50px -20px rgba(0,0,0,.8)}
+.ox .statcard b{display:block;font-size:34px;line-height:1;font-weight:850;letter-spacing:-.03em}.ox .statcard p{margin:8px 0 0;font-size:14px;color:var(--tx2);line-height:1.45}
 .ox .sec{padding:70px 0 0;scroll-margin-top:70px}.ox .kicker{font-size:12.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--az);margin-bottom:14px}
 .ox h2{font-size:clamp(28px,3.4vw,42px);font-weight:820}.ox .sub{color:var(--tx2);margin:12px 0 0;font-size:17px;max-width:760px;line-height:1.55}
 .ox .grid{display:grid;gap:18px;margin-top:36px}.ox .g3{grid-template-columns:repeat(3,1fr)}
@@ -154,11 +154,12 @@ function offerPage(o, token, opts) {
 .ox .eco:before{content:"";position:absolute;right:-120px;top:-120px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(124,92,255,.22),transparent 65%);pointer-events:none}
 .ox .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;position:relative}.ox .k{padding:16px 18px;border-radius:16px;background:rgba(4,6,12,.45);border:1px solid var(--line2)}.ox .kl{color:var(--tx2);font-size:13.5px}.ox .kv{font-size:30px;font-weight:850;letter-spacing:-.03em;margin:6px 0 2px}.ox .ks{color:var(--tx3);font-size:12.5px}
 .ox .chart{margin-top:22px;position:relative}.ox .ph{font-weight:700;margin-bottom:8px;color:var(--tx2)}.ox .fine{color:var(--tx3);font-size:13px;margin:14px 0 0;position:relative}
-.ox .vids{display:grid;grid-template-columns:minmax(0,300px) minmax(0,300px);gap:16px;margin-top:30px}.ox .vids figure{margin:0}.ox .vids video{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:18px;border:1px solid var(--line2);background:#0b1426;display:block}.ox .vids figcaption{margin-top:10px;color:var(--tx2);font-size:14px;font-weight:600}
+.ox .vids{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:30px;max-width:900px}.ox .vids figure{margin:0}.ox .vids video{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:18px;border:1px solid var(--line2);background:#0b1426;display:block}.ox .vids figcaption{margin-top:10px;color:var(--tx2);font-size:14px;font-weight:600}
 .ox .cta{margin-top:30px;border-radius:28px;padding:40px;background:linear-gradient(135deg,rgba(30,134,224,.18),rgba(124,92,255,.16));border:1px solid rgba(79,209,255,.4)}
 .ox .cta label{display:block;font-size:14px;font-weight:600;margin:12px 0 6px}.ox .cta input,.ox .cta textarea{width:100%;box-sizing:border-box;min-height:50px;padding:12px 14px;border-radius:12px;border:1px solid var(--line2);background:rgba(4,6,12,.6);color:var(--tx);font:inherit}
 .ox .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.ox .contact{margin-top:22px;padding-top:16px;border-top:1px solid var(--line2);color:var(--tx2)}.ox .contact a{color:var(--az)}
-@media (max-width:900px){.ox .hero{grid-template-columns:1fr;gap:30px;padding-top:24px}.ox .visual{justify-self:center;max-width:400px}.ox .statcard{left:0}.ox .g3,.ox .models,.ox .sites{grid-template-columns:1fr}.ox .two{grid-template-columns:1fr}.ox .eco,.ox .cta{padding:24px}}
+.ox .proof{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:10px 0 0}.ox .proof div{padding:22px 24px;border-radius:20px;background:linear-gradient(160deg,rgba(20,32,58,.9),rgba(10,16,30,.9));border:1px solid var(--line2)}.ox .proof b{display:block;font-size:46px;font-weight:850;letter-spacing:-.03em;line-height:1}.ox .proof span{display:block;margin-top:8px;color:var(--tx2);font-size:15px;line-height:1.4}
+@media (max-width:900px){.ox .proof{grid-template-columns:1fr}.ox .hero{grid-template-columns:1fr;gap:30px;padding-top:24px}.ox .visual{justify-self:center;max-width:400px}.ox .statcard{left:0}.ox .g3,.ox .models,.ox .sites{grid-template-columns:1fr}.ox .two{grid-template-columns:1fr}.ox .eco,.ox .cta{padding:24px}}
 </style>
 <div class="ox">
   <section class="hero" data-s="uvod"><div>
@@ -172,6 +173,7 @@ function offerPage(o, token, opts) {
     <div class="visual"><div class="glow"></div><video src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" autoplay muted loop playsinline preload="metadata"></video>
       <div class="statcard">${units ? `<b>${units}</b><p>${esc(X.statTxt(units, o.company || ''))}</p>` : `<b>70+</b><p>${esc(X.statAlt)}</p>`}</div></div>
   </section>
+  <div class="proof" data-s="cisla">${X.proof.map((p) => `<div><b class="grad">${esc(p[0])}</b><span>${esc(p[1])}</span></div>`).join('')}</div>
 
   ${refs.length ? `<section class="sec" data-s="provozovny" style="padding-top:20px">${kick(X.sites)}<div class="sites">${refs.map((r) => `<figure class="site">${r[2] ? `<img src="${esc(r[2])}" alt="${esc(r[0])}" loading="lazy">` : ''}<figcaption>${PIN}${esc(r[0])}</figcaption>${r[1] ? `<small>${esc(r[1])}</small>` : ''}</figure>`).join('')}</div></section>` : ''}
 
