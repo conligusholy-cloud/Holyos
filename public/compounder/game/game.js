@@ -2970,7 +2970,7 @@ var DOTAZNIK_PO = false;
 // tenhle jeden bonus, a ten opravdu expiruje. Slibovat, že propadne i zbytek,
 // by byla lež, kterou hráč odhalí prvním obnovením stránky.
 var START_BONUS = 150000;
-var START_BONUS_MS = 30000;
+var START_BONUS_MS = 60000;
 var startBonusDo = 0;
 function startBonusPlati() { return startBonusDo > 0 && Date.now() < startBonusDo; }
 function startBonusOdpocet() {
