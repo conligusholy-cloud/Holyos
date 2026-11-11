@@ -1135,6 +1135,9 @@
             (inv.direction === 'ap' && !['paid', 'cancelled', 'written_off', 'archived', 'payment_queued'].includes(inv.status)
               ? ' <button class="btn btn-secondary btn-sm" onclick="sendPayRequest(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Poslat Tomášovi / Janovi do Velína žádost o zaplacení (QR platba)" style="margin-left:4px;">📲 QR</button>'
               : '') +
+            (inv.direction === 'ap' && window.currentUser && window.currentUser.canQrShow && !['paid', 'cancelled', 'written_off', 'archived', 'payment_queued'].includes(inv.status)
+              ? ' <button class="btn btn-primary btn-sm" onclick="showInvoiceQr(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\', ' + (inv.status === 'qr_pending') + ')" title="Zobrazit QR platbu — doklad se přepne na „platí se přes QR“" style="margin-left:4px;">▦ QR platba</button>'
+              : '') +
             (inv.status === 'qr_pending' && window.currentUser && (window.currentUser.role === 'admin' || window.currentUser.isSuperAdmin)
               ? ' <button class="btn btn-secondary btn-sm" onclick="qrCancel(' + inv.id + ')" title="Admin: zrušit stav „platí se přes QR" (nakonec se nezaplatilo)" style="margin-left:4px;">↩ QR</button>'
               : '') +
@@ -2183,6 +2186,27 @@
         q('.pr-e').style.color = '#22c55e'; q('.pr-e').textContent = '✓ Odesláno: ' + (r.data.sent || []).join(', ');
         setTimeout(() => ov.remove(), 1400);
       };
+    };
+    // ▦ QR platba přímo v HolyOS (jen Tomáš Holý): zobrazí QR a doklad přepne na „platí se přes QR"
+    window.showInvoiceQr = async function(id, num, already) {
+      if (!already && !confirm('Zobrazit QR platbu dokladu ' + num + '?\n\nDoklad se přepne do stavu „platí se přes QR" a přestane se nabízet k platbě; zaplaceno se potvrdí až nalezením ve výpisu.')) return;
+      const r = await api('POST', '/api/accounting/invoices/' + id + '/qr-show');
+      if (r.status !== 200) return alert('QR se nepodařilo zobrazit: ' + (r.data?.error || r.status));
+      const d = r.data;
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10050;display:flex;align-items:center;justify-content:center;';
+      const money = Number(d.amount).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + escapeHtml(d.currency || 'CZK');
+      ov.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;width:440px;max-width:94vw;padding:20px 22px;text-align:center;">'
+        + '<div style="display:flex;align-items:center;"><h3 style="margin:0;flex:1;text-align:left;">▦ QR platba · ' + escapeHtml(d.invoice_number || num) + '</h3><button class="btn btn-secondary btn-sm qs-x">✕</button></div>'
+        + '<div style="color:var(--text2);font-size:.9em;margin:6px 0 10px;text-align:left;">' + escapeHtml(d.supplier || '') + '</div>'
+        + '<img src="' + d.qr + '" alt="QR platba" style="width:300px;max-width:100%;background:#fff;border-radius:10px;padding:8px;">'
+        + '<div style="font-size:1.35em;font-weight:700;margin:10px 0 4px;">' + money + '</div>'
+        + '<div style="font-size:.9em;color:var(--text2);line-height:1.6;">Účet: <b style="color:var(--text);">' + escapeHtml(d.account || d.iban || '—') + '</b>' + (d.variable_symbol ? '<br>VS: <b style="color:var(--text);">' + escapeHtml(d.variable_symbol) + '</b>' : '') + '</div>'
+        + (d.self_note ? '<div style="margin-top:10px;text-align:left;font-size:.85em;color:var(--text2);">Poznámka pro mě: <span class="qs-n" style="color:var(--text);">' + escapeHtml(d.self_note) + '</span> <button class="btn btn-secondary btn-sm qs-cp" style="margin-left:6px;">Kopírovat</button></div>' : '')
+        + '<div style="margin-top:10px;font-size:.82em;color:#22d3ee;">Doklad je nyní ve stavu „platí se přes QR".</div></div>';
+      document.body.appendChild(ov);
+      ov.querySelector('.qs-x').onclick = () => { ov.remove(); loadInvoices(); };
+      const cp = ov.querySelector('.qs-cp'); if (cp) cp.onclick = () => { navigator.clipboard.writeText(d.self_note || ''); cp.textContent = '✓'; };
     };
     window.qrCancel = async function(id) {
       if (!confirm('Zrušit stav „platí se přes QR"?\n\nDoklad se vrátí do původního stavu a bude se zase nabízet k platbě. Použij jen když se podle QR nakonec nezaplatilo.')) return;

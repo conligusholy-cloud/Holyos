@@ -50,8 +50,15 @@ router.get('/:token', async (req, res) => {
 
 // Vygenerování QR kódu = doklad se označí „platí se přes QR" (qr_pending) a zmizí z nabídky k platbě
 router.post('/:token/generate', async (req, res) => {
+  const r = await generateByToken(req.params.token);
+  res.status(r.http || 200).json(r.body);
+});
+
+// Sdílená logika (veřejná stránka z e-mailu i tlačítko v HolyOS): vrací { http, body }
+async function generateByToken(token) {
+  const res = { status: (c) => ({ json: (b) => ({ http: c, body: b }) }), json: (b) => ({ http: 200, body: b }) };
   try {
-    const s = await loadState(req.params.token);
+    const s = await loadState(token);
     if (s.error) return res.status(s.http).json({ error: s.error });
     if (s.blocked) return res.status(409).json({ error: s.blocked });
     const { inv, remaining } = s;
@@ -69,7 +76,7 @@ router.post('/:token/generate', async (req, res) => {
         data: { status: 'qr_pending', tags },
       });
       if (r.count === 0) {
-        const again = await loadState(req.params.token);
+        const again = await loadState(token);
         return res.status(409).json({ error: (again.blocked) || 'Stav dokladu se mezitím změnil — načti stránku znovu.' });
       }
       logAudit({
@@ -81,10 +88,10 @@ router.post('/:token/generate', async (req, res) => {
 
     const QRCode = require('qrcode');
     const qr = await QRCode.toDataURL(spd.spd, { errorCorrectionLevel: 'M', margin: 2, width: 420 });
-    res.json({ qr, spd: spd.spd, iban: spd.iban, account: inv.partner_bank_account || null, amount: remaining, currency: inv.currency, variable_symbol: inv.variable_symbol, invoice_number: inv.invoice_number, supplier: inv.company && inv.company.name,
+    return res.json({ qr, spd: spd.spd, iban: spd.iban, account: inv.partner_bank_account || null, amount: remaining, currency: inv.currency, variable_symbol: inv.variable_symbol, invoice_number: inv.invoice_number, supplier: inv.company && inv.company.name,
       // „Poznámka pro mě" standard QR Platby (SPAYD) nezná — banka ji z QR nepřevezme, proto ji stránka nabídne ke zkopírování
       self_note: inv.payment_note || (inv.company && inv.company.name) || '' });
-  } catch (e) { console.error('[invoice-qr] generate:', e); res.status(500).json({ error: 'Chyba serveru.' }); }
-});
+  } catch (e) { console.error('[invoice-qr] generate:', e); return res.status(500).json({ error: 'Chyba serveru.' }); }
+}
 
-module.exports = { router };
+module.exports = { router, generateByToken };

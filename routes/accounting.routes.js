@@ -55,12 +55,30 @@ router.post('/bs2-billing/game/backfill', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Zobrazení QR platby přímo v HolyOS smí jen Tomáš Holý
+function isTomasHoly(user) {
+  const p = user && user.person; if (!p) return false;
+  return String(p.first_name || '').trim().toLowerCase() === 'tomáš' && String(p.last_name || '').trim().toLowerCase() === 'holý';
+}
+// POST /api/accounting/invoices/:id/qr-show — vygeneruje QR platbu přijaté faktury a přepne doklad do „platí se přes QR"
+router.post('/invoices/:id/qr-show', async (req, res, next) => {
+  try {
+    if (!isTomasHoly(req.user)) return res.status(403).json({ error: 'QR platbu zde smí zobrazit jen Tomáš Holý.' });
+    const id = parseInt(req.params.id, 10);
+    const { makeToken } = require('../services/accounting/invoice-qr');
+    const { generateByToken } = require('./invoice-qr-public.routes');
+    const r = await generateByToken(makeToken(id, 1));
+    res.status(r.http || 200).json(r.body);
+  } catch (err) { next(err); }
+});
+
 // Pro UI — info o aktuálním uživateli (potřeba pro skryté akce)
 router.get('/whoami', async (req, res) => {
   let canManual = false;
   try { canManual = await canManualMatch(req.user); } catch (e) { /* false */ }
   res.json({
     canManualMatch: canManual,
+    canQrShow: isTomasHoly(req.user),
     id: req.user.id,
     username: req.user.username,
     displayName: req.user.displayName,
