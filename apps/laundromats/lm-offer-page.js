@@ -165,7 +165,6 @@ function offerPage(o, token, opts) {
   <section class="hero" data-s="uvod"><div>
       <h1><span>${esc(h1a)}</span>${h1b ? `<span class="grad">${esc(h1b)}</span>` : ''}</h1>
       <p class="lead">${esc(o.perex || t.heroSub(o.company || ''))}</p>
-      <div class="ctas"><a class="btn btn-p" href="#zajem">${esc(t.ctaTop)} →</a><a class="btn btn-g" href="#o-co-jde">${esc(t.scroll)}</a></div>
       <ul class="chk">${t.chips.map((x) => `<li>${CHK}${esc(x)}</li>`).join('')}</ul>
       <div class="meta">${esc(t.kick)} ${esc(t.for)} <b>${c}</b>${valid ? ' · ' + esc(t.valid) + ' ' + esc(valid) : ''}</div>
     </div>
