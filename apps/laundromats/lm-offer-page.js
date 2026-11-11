@@ -20,7 +20,7 @@ const T = {
     refH: 'Funguje to už jinde', refSub: 'Prádlomaty provozujeme u čerpacích stanic a obchodních center v Česku i v zahraničí.',
     pilotH: 'Pilotní projekt', pilotSub: 'Jak bychom začali — konkrétní podmínky doladíme společně.',
     ecoH: 'Ekonomika pilotu', ecoSub: 'Orientační čísla — ekonomiku ověříme podle konkrétních lokalit.',
-    units: 'Počet prádlomatů', inv: 'Investice celkem', unit: 'cena za prádlomat', mon: 'Čistý výsledek / měsíc', monU: 'na prádlomat', pay: 'Návratnost', months: 'měsíců', y5: 'Výsledek za 5 let', chart: 'Kumulovaný výsledek pilotu (orientačně)', start: 'start', yr: 'rok', vat: 'Ceny bez DPH. Nejde o garantovaný výsledek — odvozeno z provozu existujících prádlomatů.', model: 'Model',
+    units: 'Počet prádlomatů', inv: 'Investice celkem', unit: 'cena za prádlomat', mon: 'Čistý výsledek / měsíc', monU: 'na prádlomat', pay: 'Návratnost', months: 'měsíců', y5: 'Výsledek za 10 let', chart: 'Kumulovaný výsledek pilotu (orientačně)', start: 'start', yr: 'rok', vat: 'Ceny bez DPH. Nejde o garantovaný výsledek — odvozeno z provozu existujících prádlomatů.', model: 'Model',
     vidH: 'Jak se prádlomat používá', vid1: 'Prádlomat v provozu', vid2: 'Krok za krokem',
     ctaH: 'Pojďme to probrat — 20 minut stačí', ctaSub: 'Ukážeme investiční i provozní model a navrhneme vhodné lokality pro pilot.', cta: 'Mám zájem — domluvit schůzku', name: 'Jméno a příjmení', phone: 'Telefon', email: 'E-mail', note: 'Poznámka (nepovinné)', send: 'Odeslat', thanks: 'Děkujeme! Ozveme se do jednoho pracovního dne a domluvíme termín.', done: 'Zájem jsme už zaznamenali — děkujeme.', err: 'Nepodařilo se odeslat. Zkuste to prosím znovu.', contact: 'Kontakt', write: 'Napsat e-mail',
   },
@@ -39,7 +39,7 @@ const T = {
     refH: 'Already working elsewhere', refSub: 'We operate laundromats at petrol stations and shopping centres in Czechia and abroad.',
     pilotH: 'Pilot project', pilotSub: 'How we would start — details to be agreed together.',
     ecoH: 'Pilot economics', ecoSub: 'Indicative figures — to be validated for the specific locations.',
-    units: 'Number of machines', inv: 'Total investment', unit: 'per machine', mon: 'Net result / month', monU: 'per machine', pay: 'Payback', months: 'months', y5: '5-year result', chart: 'Cumulative pilot result (indicative)', start: 'start', yr: 'year', vat: 'Prices excl. VAT. Not a guaranteed result — derived from existing operations.', model: 'Model',
+    units: 'Number of machines', inv: 'Total investment', unit: 'per machine', mon: 'Net result / month', monU: 'per machine', pay: 'Payback', months: 'months', y5: '10-year result', chart: 'Cumulative pilot result (indicative)', start: 'start', yr: 'year', vat: 'Prices excl. VAT. Not a guaranteed result — derived from existing operations.', model: 'Model',
     vidH: 'How it is used', vid1: 'Laundromat in operation', vid2: 'Step by step',
     ctaH: "Let's talk — 20 minutes is enough", ctaSub: 'We will present the investment and operating model and propose suitable pilot locations.', cta: "I'm interested — book a meeting", name: 'Full name', phone: 'Phone', email: 'E-mail', note: 'Note (optional)', send: 'Send', thanks: 'Thank you! We will get back to you within one business day.', done: 'Your interest has already been recorded — thank you.', err: 'Sending failed. Please try again.', contact: 'Contact', write: 'Write an e-mail',
   },
@@ -58,7 +58,7 @@ const T = {
     refH: 'To już działa gdzie indziej', refSub: 'Prowadzimy pralnie przy stacjach paliw i centrach handlowych w Czechach i za granicą.',
     pilotH: 'Projekt pilotażowy', pilotSub: 'Jak byśmy zaczęli — szczegóły ustalimy wspólnie.',
     ecoH: 'Ekonomika pilotażu', ecoSub: 'Liczby orientacyjne — do weryfikacji dla konkretnych lokalizacji.',
-    units: 'Liczba urządzeń', inv: 'Inwestycja łącznie', unit: 'za urządzenie', mon: 'Wynik netto / miesiąc', monU: 'na urządzenie', pay: 'Zwrot', months: 'miesięcy', y5: 'Wynik za 5 lat', chart: 'Skumulowany wynik pilotażu (orientacyjnie)', start: 'start', yr: 'rok', vat: 'Ceny netto. To nie jest gwarantowany wynik — na podstawie istniejących punktów.', model: 'Model',
+    units: 'Liczba urządzeń', inv: 'Inwestycja łącznie', unit: 'za urządzenie', mon: 'Wynik netto / miesiąc', monU: 'na urządzenie', pay: 'Zwrot', months: 'miesięcy', y5: 'Wynik za 10 lat', chart: 'Skumulowany wynik pilotażu (orientacyjnie)', start: 'start', yr: 'rok', vat: 'Ceny netto. To nie jest gwarantowany wynik — na podstawie istniejących punktów.', model: 'Model',
     vidH: 'Jak się z tego korzysta', vid1: 'Urządzenie w działaniu', vid2: 'Krok po kroku',
     ctaH: 'Porozmawiajmy — wystarczy 20 minut', ctaSub: 'Przedstawimy model inwestycyjny i operacyjny oraz zaproponujemy lokalizacje pilotażu.', cta: 'Jestem zainteresowany — umówić spotkanie', name: 'Imię i nazwisko', phone: 'Telefon', email: 'E-mail', note: 'Uwagi (opcjonalnie)', send: 'Wyślij', thanks: 'Dziękujemy! Odezwiemy się w ciągu jednego dnia roboczego.', done: 'Twoje zainteresowanie zostało już zapisane — dziękujemy.', err: 'Nie udało się wysłać. Spróbuj ponownie.', contact: 'Kontakt', write: 'Napisz e-mail',
   },
@@ -81,28 +81,50 @@ const ECO2 = {
 // Klientský přepočet po úpravě odhadu přípojky (žluté pole)
 function ecoScript(d) {
   return '<script>(function(){var D=' + JSON.stringify(d) + ',t=D.t;var esc=function(x){return String(x).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",\'"\':"&quot;"}[c];});};'
-    + 'var money=' + money.toString() + ';var chartSvg=' + chartSvg.toString() + ';'
+    + 'var money=' + money.toString() + ';var pilotSim=' + pilotSim.toString() + ';var chartSvg=' + chartSvg.toString() + ';'
     + 'var i=document.getElementById("eco-conn"),v=document.getElementById("eco-vis");if(!i||!v)return;function set(k,x){document.querySelectorAll("[data-k="+k+"]").forEach(function(e){e.textContent=x;});}'
     + 'function nv(){return Math.max(0,Number(String(v.value).replace(/\\s/g,"").replace(",","."))||0);}'
     + 'function calc(){var c=Number(String(i.value).replace(/[^0-9]/g,""))||0,u=D.price+c+D.wCost,pi=u*D.units,sa=nv()*D.rpv,net=sa*0.7,pn=net*D.units;'
     + 'set("uInv",money(u,D.cur));set("pInv",money(pi,D.cur));set("sales",money(sa,D.cur));set("en","− "+money(sa*0.1,D.cur));set("sv","− "+money(sa*0.2,D.cur));set("net",money(net,D.cur));set("pNet",money(pn,D.cur));'
-    + 'set("uPay","≈ "+(net>0?Math.ceil(u/net):"–")+" "+t.months);set("pPay","≈ "+(pn>0?Math.ceil(pi/pn):"–")+" "+t.months);set("y5",money(pn*60-pi,D.cur));var ch=document.getElementById("eco-chart");if(ch)ch.innerHTML=chartSvg(pi,pn,t);}'
+    + 'set("uPay","≈ "+(net>0?Math.ceil(u/net):"–")+" "+t.months);var sm=pilotSim(pi,pn,D.units,120);set("pPay","≈ "+(sm.payback?sm.payback:"–")+" "+t.months);set("y5",money(sm.total,D.cur));var ch=document.getElementById("eco-chart");if(ch)ch.innerHTML=chartSvg(pi,pn,t,D.units);}'
     + 'i.addEventListener("input",calc);v.addEventListener("input",calc);i.addEventListener("blur",function(){var c=Number(String(i.value).replace(/[^0-9]/g,""))||0;i.value=c.toLocaleString("cs-CZ");});})();<\/script>';
 }
 
-function chartSvg(invest, monthly, t) {
-  // kumulovaný výsledek 0–60 měsíců: start na −investice, roste o měsíční výsledek
-  const W = 760, H = 240, P = 36, N = 60;
-  const ys = Array.from({ length: N + 1 }, (_, m) => -invest + monthly * m);
+// Simulace pilotu na 10 let: půlka prádlomatů se postaví 1. měsíc, zbytek 2. měsíc (investice se platí postupně),
+// každý prádlomat po otevření nabíhá (skrytá náběhová křivka), na to sezónnost a lehké kolísání.
+// Dlouhodobý průměr = zadaný měsíční výsledek. Vrací kumulovaný výsledek po měsících + měsíc návratnosti.
+function pilotSim(invest, monthly, units, N) {
+  const n = Math.max(1, Math.round(units) || 1), first = Math.ceil(n / 2), unitInv = invest / n, unitNet = monthly / n;
+  const season = [1.07, 1.05, 1.02, 0.99, 0.96, 0.92, 0.89, 0.91, 0.99, 1.05, 1.09, 1.06];
+  const ramp = [0.4, 0.7, 0.9];
+  let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const cum = [0]; let c = 0, payback = null, min = 0;
+  for (let m = 1; m <= N; m++) {
+    const built = m === 1 ? first : (m === 2 ? n - first : 0);
+    c -= built * unitInv;
+    let net = 0;
+    for (const [b, cnt] of [[1, first], [2, n - first]]) { if (m >= b) net += cnt * unitNet * (ramp[m - b] != null ? ramp[m - b] : 1); }
+    c += net * season[(m - 1) % 12] * (1 + (rnd() - 0.5) * 0.08);
+    cum.push(c); if (c < min) min = c;
+    if (payback === null && m >= 2 && c >= 0) payback = m;
+  }
+  return { cum, payback, total: c };
+}
+
+function chartSvg(invest, monthly, t, units) {
+  // kumulovaný výsledek 0–120 měsíců (10 let) ze simulace náběhu, sezónnosti a kolísání
+  const W = 760, H = 240, P = 36, N = 120;
+  const sim = pilotSim(invest, monthly, units, N);
+  const ys = sim.cum;
   const lo = Math.min(...ys, 0), hi = Math.max(...ys, 0), span = hi - lo || 1;
   const x = (m) => P + (W - 2 * P) * m / N, y = (v) => H - P - (H - 2 * P) * (v - lo) / span;
   const pts = ys.map((v, m) => `${x(m).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-  const be = monthly > 0 ? invest / monthly : null;
-  const yrs = [0, 12, 24, 36, 48, 60].map((m) => `<line x1="${x(m)}" y1="${P / 2}" x2="${x(m)}" y2="${H - P}" stroke="rgba(255,255,255,.06)"/><text x="${x(m)}" y="${H - 10}" fill="#8ea2c2" font-size="12" text-anchor="middle">${m ? (m / 12) + '. ' + t.yr : t.start}</text>`).join('');
+  const be = sim.payback;
+  const yrs = [0, 12, 24, 36, 48, 60, 72, 84, 96, 108, 120].map((m) => `<line x1="${x(m)}" y1="${P / 2}" x2="${x(m)}" y2="${H - P}" stroke="rgba(255,255,255,.06)"/><text x="${x(m)}" y="${H - 10}" fill="#8ea2c2" font-size="11" text-anchor="middle">${m ? (m / 12) + '. ' + t.yr : t.start}</text>`).join('');
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(t.chart)}"><defs><linearGradient id="og" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#2dd4bf" stop-opacity=".35"/><stop offset="1" stop-color="#2dd4bf" stop-opacity="0"/></linearGradient></defs>
   ${yrs}<line x1="${P}" y1="${y(0)}" x2="${W - P}" y2="${y(0)}" stroke="rgba(255,255,255,.35)" stroke-dasharray="4 4"/>
   <polygon points="${x(0)},${y(0)} ${pts} ${x(N)},${y(0)}" fill="url(#og)"/><polyline points="${pts}" fill="none" stroke="#2dd4bf" stroke-width="3"/>
-  ${be && be <= N ? `<circle cx="${x(be)}" cy="${y(0)}" r="6" fill="#22c55e"/><text x="${x(be)}" y="${y(0) - 12}" fill="#22c55e" font-size="13" font-weight="700" text-anchor="middle">${t.pay} ≈ ${Math.ceil(be)} ${t.months}</text>` : ''}</svg>`;
+  ${be ? `<circle cx="${x(be)}" cy="${y(ys[be])}" r="6" fill="#22c55e"/><text x="${x(be)}" y="${y(ys[be]) - 12}" fill="#22c55e" font-size="13" font-weight="700" text-anchor="middle">${t.pay} ≈ ${be} ${t.months}</text>` : ''}</svg>`;
 }
 
 const CHK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></svg>';
@@ -178,14 +200,15 @@ function offerPage(o, token, opts) {
   const visits = Number(o.visits) || 7, sales = visits * RPV;
   const uInv = price + conn + wCost, en = sales * 0.10, sv = sales * 0.20, net = sales - en - sv;
   const pInv = units * uInv, pNet = units * net;
+  const pSim = pilotSim(pInv, pNet, units, 120);
   const row = (l, v, cls) => `<div class="er${cls ? ' ' + cls : ''}"><span>${l}</span><b>${v}</b></div>`;
   const one = price ? `<div class="eco"><div class="ehead"><div><h3 class="eh">${esc(E.oneH)}</h3><div class="emod"><b>${esc(E.modT)}</b> ${esc(E.modS)}</div></div><div class="eimg"><img src="${o.image_v ? '/nabidka/' + token + '/img?v=' + o.image_v : '/img/model/flex'}" alt="FLEX" loading="lazy" data-zoom><span>FLEX</span></div></div><div class="etwo">
       <div class="ecol"><div class="ect">${esc(E.invT)}</div>${row(esc(E.price) + (o.model ? ' <i>' + esc(o.model) + '</i>' : ''), money(price, cur))}<div class="er"><span>${esc(E.conn)} <em class="est">${esc(E.est)}</em></span><b><label class="edit"><input id="eco-conn" type="text" inputmode="numeric" value="${Math.round(conn).toLocaleString('cs-CZ')}" aria-label="${esc(E.conn)}">${EUR ? '€' : 'Kč'}</label></b></div>${wy ? row(esc(E.warr(wy)), money(wCost, cur)) : ''}${row(esc(E.invU), '<span data-k="uInv">' + money(uInv, cur) + '</span>', 'tot')}</div>
       <div class="ecol"><div class="ect">${esc(E.opT)}</div><div class="er"><span>${esc(E.visits)} <em class="est">${esc(E.est)}</em></span><b><label class="edit"><input id="eco-vis" type="text" inputmode="decimal" value="${String(visits).replace('.', ',')}" aria-label="${esc(E.visits)}" style="width:44px">${esc(E.perDay)}</label></b></div>${row(esc(E.sales), '<span data-k="sales">' + money(sales, cur) + '</span>')}${row('− ' + esc(E.energy), '<span data-k="en">− ' + money(en, cur) + '</span>', 'neg')}${row('− ' + esc(E.service), '<span data-k="sv">− ' + money(sv, cur) + '</span>', 'neg')}${row(esc(E.net), '<span data-k="net">' + money(net, cur) + '</span>', 'tot')}${row(esc(t.pay), '<span data-k="uPay">≈ ' + (net > 0 ? Math.ceil(uInv / net) : '–') + ' ' + esc(t.months) + '</span>')}</div></div>
       <div class="ewar">🛡️ <span>${esc(E.warrNote(money(wPrice, cur), money(4 * wPrice, cur)))}</span></div></div>` : '';
   const eco = units && price ? `<section class="sec" id="eko" data-s="ekonomika">${kick(X.eco)}<h2>${esc(E.h)}</h2><p class="sub">${esc(t.ecoSub)}</p>${one}
-    <div class="eco" style="margin-top:22px"><h3 class="eh">${esc(E.pilotH(units))}</h3><div class="kpis">${kpi(t.units, String(units), o.model ? esc(t.model + ' ' + o.model) : '')}${kpi(t.inv, '<span data-k="pInv">' + money(pInv, cur) + '</span>', '<span data-k="uInv">' + money(uInv, cur) + '</span> ' + esc(t.monU))}${kpi(t.mon, '<span data-k="pNet">' + money(pNet, cur) + '</span>', '<span data-k="net">' + money(net, cur) + '</span> ' + esc(t.monU)) + kpi(t.pay, '<span data-k="pPay">≈ ' + (pNet > 0 ? Math.ceil(pInv / pNet) : '–') + ' ' + esc(t.months) + '</span>', '') + kpi(t.y5, '<span data-k="y5">' + money(pNet * 60 - pInv, cur) + '</span>', '')}</div>
-    <div class="chart"><div class="ph">${esc(t.chart)}</div><div id="eco-chart">${chartSvg(pInv, pNet, t)}</div></div><p class="fine">${esc(t.vat)}</p></div></section>` + ecoScript({ price, wCost, rpv: RPV, units, cur, t: { chart: t.chart, yr: t.yr, start: t.start, pay: t.pay, months: t.months } }) : '';
+    <div class="eco" style="margin-top:22px"><h3 class="eh">${esc(E.pilotH(units))}</h3><div class="kpis">${kpi(t.units, String(units), o.model ? esc(t.model + ' ' + o.model) : '')}${kpi(t.inv, '<span data-k="pInv">' + money(pInv, cur) + '</span>', '<span data-k="uInv">' + money(uInv, cur) + '</span> ' + esc(t.monU))}${kpi(t.mon, '<span data-k="pNet">' + money(pNet, cur) + '</span>', '<span data-k="net">' + money(net, cur) + '</span> ' + esc(t.monU)) + kpi(t.pay, '<span data-k="pPay">≈ ' + (pSim.payback || '–') + ' ' + esc(t.months) + '</span>', '') + kpi(t.y5, '<span data-k="y5">' + money(pSim.total, cur) + '</span>', '')}</div>
+    <div class="chart"><div class="ph">${esc(t.chart)}</div><div id="eco-chart">${chartSvg(pInv, pNet, t, units)}</div></div><p class="fine">${esc(t.vat)}</p></div></section>` + ecoScript({ price, wCost, rpv: RPV, units, cur, t: { chart: t.chart, yr: t.yr, start: t.start, pay: t.pay, months: t.months } }) : '';
   const body = `<style>
 .ox{--bg:#04060c;--line:rgba(120,160,255,.14);--line2:rgba(120,160,255,.28);--tx:#eef4ff;--tx2:#a9b8d3;--tx3:#6b7d9e;--az:#4fd1ff;--vi:#7c5cff;--teal:#2fe3c6;max-width:1180px;margin:0 auto;padding:0 22px 70px;color:var(--tx)}
 .ox h1,.ox h2,.ox h3{margin:0;letter-spacing:-.025em;line-height:1.08}
