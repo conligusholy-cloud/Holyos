@@ -6051,8 +6051,22 @@ function sidloSheet() {
 
 // Hlavička se překresluje každou vteřinu, aby hotovost naskákala spolu
 // s čísly, která nad ní probléskní. Zbytek záložky stačí jednou za pět.
+// Pod jakou firmou hráč hraje. Bez účtu to řekne rovnou — a klepnutí vede tam,
+// kde si ho založí.
+function paintFirma() {
+  var el = $('t-firma');
+  if (!el) return;
+  if (ME) {
+    var firma = ME.company || (ME.nick + ' s.r.o.');
+    el.innerHTML = (ME.emblem ? znakSvg(ME.emblem, 20) + ' ' : '')
+      + '<b>' + esc(firma) + '</b><i>' + esc(ME.nick) + '</i>';
+  } else {
+    el.innerHTML = '<b class="muted">Hraješ bez účtu</b><i>Založit firmu ›</i>';
+  }
+}
 function paintHlavicka() {
   if (!S) return;
+  paintFirma();
   $('t-year').textContent = gameYear();
   $('t-cash').textContent = kcHdr(S.cash);
   var cz = cistyZisk();
@@ -8573,6 +8587,10 @@ $('open-areas').onclick = areasSheet;
 if ($('tut-skip')) $('tut-skip').onclick = tutSkip;
 // Hotovost v hlavičce je tlačítko — odtud se hráč dostane k penězům.
 if ($('t-penize')) $('t-penize').onclick = function () { penizeSheet(); };
+// Lišta s firmou: s účtem vede na profil, bez účtu rovnou na jeho založení.
+if ($('t-firma')) $('t-firma').onclick = function () {
+  if (ME) switchTab('me'); else showAcct('register');
+};
 $('burza-nova').onclick = novaNabidkaSheet;
 // Přepínače v záložce Síť: moje síť vs. žebříček a kategorie žebříčku.
 [].forEach.call(document.querySelectorAll('[data-net]'), function (b) {
