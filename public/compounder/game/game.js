@@ -999,7 +999,9 @@ function ramecSlozky() {
   return { historie: podleHistorie, zisk: podleZisku,
     cil: Math.round(Math.min(podleHistorie, podleZisku) / 10000) * 10000 };
 }
-function prehodnotRamec(rucne) {
+// rovnou = limit jde na cíl bez brzdy. Používá se, když hráč sám prodal nebo
+// přišel o prádlomat — tam není co změkčovat, změnu si způsobil vědomě.
+function prehodnotRamec(rucne, rovnou) {
   if (!maRamec()) return null;
   var sl = ramecSlozky();
   var cerp = ramecCerpano();
@@ -1009,7 +1011,7 @@ function prehodnotRamec(rucne) {
   var koef = stary > 0 && S.ramec.puvodniCil ? stary / S.ramec.puvodniCil : 1;
   var cil = Math.round(sl.cil * Math.max(0.5, Math.min(1.5, koef)) / 10000) * 10000;
   // Dolů jen pomalu a nikdy pod načerpané.
-  var dolniMez = Math.max(cerp, Math.round(stary * (1 - RAMEC_PAD_MAX)));
+  var dolniMez = rovnou ? cerp : Math.max(cerp, Math.round(stary * (1 - RAMEC_PAD_MAX)));
   var novy = cil >= stary ? cil : Math.max(dolniMez, cil);
   novy = Math.round(novy / 10000) * 10000;
   if (novy < cerp) novy = Math.ceil(cerp / 10000) * 10000;
@@ -5500,7 +5502,7 @@ function reconcileUnits() {
     S.stock[x.u.eco.model] = inStock(x.u.eco.model) + 1;
     osirelyUver(x.u.spotId);
   });
-  save(); paint();
+  save(); prehodnotRamec(false, true); paint();
   var x = lost[0];
   toast(lost.length === 1
     ? x.nick + ' přeplatil nájem v místě ' + x.u.name + '. Stroj máš zpátky na skladě.'
@@ -5565,7 +5567,7 @@ function hlidejStehovani() {
       + ' máš na skladě — najdi mu nové místo a udělej přípojky.'
       + (spl ? ' Splátky ' + kcFull(spl) + ' měsíčně běží dál.' : ''), 'err');
   });
-  save(); paint(); drawMap(); syncState(true);
+  save(); prehodnotRamec(false, true); paint(); drawMap(); syncState(true);
 }
 // Karta výpovědi v detailu prádlomatu.
 function vypovedMajiteleHtml(u) {
@@ -5881,7 +5883,7 @@ function vypovedMisto(u, sOdstupnym, rb) {
       S.stock[u.eco.model] = inStock(u.eco.model) + 1;
       osirelyUver(u.spotId);
       delete CLAIMS[u.spotId];
-      save(); paint(); drawMap(); closeSheet(); syncState(true);
+      save(); prehodnotRamec(false, true); paint(); drawMap(); closeSheet(); syncState(true);
       toast('Místo vypovězeno. ' + MODELS[u.eco.model].name + ' čeká na skladě.', 'ok');
   }).catch(function () { if (rb) rb.disabled = false; toast('Server neodpovídá.', 'err'); });
 }
@@ -6749,7 +6751,9 @@ function ramecRozborHtml() {
     + '<p class="fine">Platí ten menší z nich. ' + (drzi === 'zisk'
         ? 'Limit teď drží výdělek — zvedne ho vyšší zisk nebo nižší splátky.'
         : 'Limit teď drží historie — každý další doplacený prádlomat přidá ' + kcFull(RAMEC_ZA_MISTO) + '.')
-    + ' Banka ho sama srovná jednou za herní měsíc; dolů nikdy pod to, co máš načerpané.</p>';
+    + ' Banka ho sama srovná jednou za herní měsíc a hned, jakmile ti ubude nebo přibude '
+    + 'prádlomat — limit stojí na tom, kolik doplacených strojů máš v provozu. '
+    + 'Dolů jde po čtvrtinách a nikdy pod to, co máš načerpané.</p>';
 }
 function ramecSheet() {
   pohovorSheet(10, 'Pohovor o rámci', function (st) {
@@ -8540,6 +8544,9 @@ function vyzvedniNasledky(then) {
       }
       if (x.popis) zpravy.push(x.popis);
     });
+    // Když ubylo místo, banka se hned podívá na rámec — limit se počítá z toho,
+    // kolik doplacených prádlomatů má hráč v provozu.
+    if (d.some(function (x) { return x.kind === 'unit_remove' || x.kind === 'unit_add'; })) prehodnotRamec(false, true);
     save(); paint(); drawMap(); syncState(true);
     apiJson('/trade/deliveries/claim', { ids: d.map(function (x) { return x.id; }) }).catch(function () {});
     if (zpravy.length) toast(zpravy[0] + (zpravy.length > 1 ? ' (+' + (zpravy.length - 1) + ' dalších)' : ''), 'ok');
