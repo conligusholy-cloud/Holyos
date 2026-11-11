@@ -57,6 +57,7 @@ function buildHtml(order, our, opts) {
   var c = order.company || {};
   var owner = opts.owner || null;
   var slotDates = Array.isArray(opts.slotDates) ? opts.slotDates : [];
+  var extras = opts.extras || {}; // { equip: {itemId: 'výbava'}, payments: [...], invoices: [...] }
 
   // Rozpad na řádky (1 kus = 1 řádek).
   var rows = [], firstCode = null, rowIdx = 0, rowsHtml = '';
@@ -66,9 +67,10 @@ function buildHtml(order, our, opts) {
     if (!firstCode && code) firstCode = code;
     var nm = String(it.name || '').replace(/\n/g, ' — ').split(' — ')[0].replace(/\bL\d+H\d+(?:[WD]\d+)+\b/i, '').trim() || it.name;
     var up = Number(it.unit_price) || 0;
+    var equip = extras.equip && extras.equip[it.id] ? '<div style="font-size:10.5px;color:#5b6b8a;font-weight:400;margin-top:3px;line-height:1.35">Výbava: ' + esc(extras.equip[it.id]) + '</div>' : '';
     for (var q = 0; q < qty; q++) {
       rowsHtml += '<tr><td class="c">' + (rowIdx + 1) + '</td>'
-        + '<td class="d">' + esc(nm) + (code ? '<span class="code">' + esc(code) + '</span>' : '') + '</td>'
+        + '<td class="d">' + esc(nm) + (code ? '<span class="code">' + esc(code) + '</span>' : '') + equip + '</td>'
         + '<td class="r">1 ks</td>'
         + '<td>' + esc(term(slotDates[rowIdx])) + '</td>'
         + '<td class="r">' + money(up) + ' ' + cur + '<span class="vat">' + money(up * 1.21) + ' s DPH</span></td></tr>';
@@ -92,6 +94,32 @@ function buildHtml(order, our, opts) {
   } else {
     payHtml = '<div class="pay"><div class="pc"><div class="pk">Platba předem</div><div class="pv">' + money(grand) + ' ' + cur + '</div><div class="ps">vč. DPH</div></div></div>';
   }
+
+  // Rozložení plateb (splátkový kalendář objednávky) — má přednost před zjednodušeným výpisem výše
+  var planPays = Array.isArray(extras.payments) ? extras.payments : [];
+  if (planPays.length) {
+    var vatRate = cur === 'CZK' ? 0.21 : 0; // cizí měna = reverse charge
+    var MS = extras.milestones || {};
+    payHtml = '<table class="items" style="margin:0"><thead><tr><th class="r">#</th><th>Milník</th><th>Doklad</th><th class="r">%</th><th class="r">Bez DPH</th><th class="r">S DPH</th><th class="r">Splatnost</th></tr></thead><tbody>'
+      + planPays.map(function (p, i) {
+        var net = Number(p.amount) || 0;
+        return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(MS[p.milestone] || p.milestone) + '</td><td>' + (p.kind === 'final' ? 'Finální faktura' : 'Zálohová faktura') + '</td>'
+          + '<td class="r">' + (p.percent != null ? Number(p.percent) + ' %' : '—') + '</td><td class="r">' + money(net) + ' ' + cur + '</td><td class="r">' + money(net * (1 + vatRate)) + ' ' + cur + '</td>'
+          + '<td class="r">' + (p.due_days != null ? p.due_days + ' dní' : '—') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+  // Přílohy: skutečně vystavené doklady objednávky, jinak doklady, které z rozložení plateb vzniknou
+  var attItems = [];
+  (extras.invoices || []).forEach(function (inv) {
+    var kind = inv.invoice_role === 'deposit' ? 'Zálohová faktura' : (inv.invoice_role === 'final' ? 'Finální faktura' : 'Faktura');
+    attItems.push(kind + ' ' + esc(inv.invoice_number) + ' — ' + money(inv.total) + ' ' + esc(inv.currency || cur) + (inv.date_due ? ', splatnost ' + new Date(inv.date_due).toLocaleDateString('cs-CZ') : ''));
+  });
+  if (!attItems.length) {
+    planPays.forEach(function (p) { attItems.push((p.kind === 'final' ? 'Finální faktura' : 'Zálohová faktura') + (p.percent != null ? ' (' + Number(p.percent) + ' %)' : '') + ' — bude vystavena dle rozložení plateb'); });
+  }
+  var attHtml = attItems.length
+    ? '<div class="box"><h3>Přílohy</h3><ol style="margin:0;padding-left:20px;font-size:12px;line-height:1.7">' + attItems.map(function (a) { return '<li>' + a + '</li>'; }).join('') + '</ol></div>'
+    : '';
 
   var desc = codeDesc(firstCode);
   var machineCount = (order.items || []).reduce(function (s, it) { return s + (Number(it.quantity) || 0); }, 0);
@@ -129,7 +157,8 @@ function buildHtml(order, our, opts) {
     + '<div class="sum"><div class="row"><span>Základ bez DPH</span><strong>' + money(base) + ' ' + cur + '</strong></div>'
     + '<div class="row"><span>DPH 21 %</span><strong>' + money(vat) + ' ' + cur + '</strong></div>'
     + '<div class="row total"><span>Celkem s DPH</span><span>' + money(grand) + ' ' + cur + '</span></div></div>'
-    + '<div class="box"><h3>Platební podmínky</h3>' + payHtml + '</div>'
+    + '<div class="box"><h3>' + (planPays.length ? 'Rozložení plateb' : 'Platební podmínky') + '</h3>' + payHtml + '</div>'
+    + attHtml
     + '<div class="box fine"><h3>Podmínky objednávky</h3><ul>'
     + '<li>Stroj zůstává až do úplného zaplacení kupní ceny majetkem výrobce (výhrada vlastnictví).</li>'
     + '<li>Není-li stroj servisován prostřednictvím servisní smlouvy (13 % z obratu), je součástí softwarový poplatek <b>2 500 Kč / měsíc</b> (100 € / měsíc).</li>'
@@ -137,7 +166,7 @@ function buildHtml(order, our, opts) {
     + '</ul></div>'
     + '<div class="sigwrap">'
     + '<div class="sigcol"><h4>Za odběratele</h4>'
-    + (sig ? '<img src="' + sig + '">' : '<div class="box" style="margin-top:0">Bez podpisu</div>')
+    + (sig ? '<img src="' + sig + '">' : '<div class="box" style="margin-top:0">Autorizuje první platbou</div>')
     + '<div class="m">' + (order.signature_place ? 'Místo: <b>' + esc(order.signature_place) + '</b>' : '') + (order.signed_at ? ' · ' + new Date(order.signed_at).toLocaleString('cs-CZ') : '') + '</div></div>'
     + '<div class="sigcol"><h4>Za dodavatele (Best Series s.r.o.)</h4>'
     + (authSig ? '<img src="' + authSig + '">' : '<div class="box" style="margin-top:0">' + (authName ? esc(authName) : 'Autorizováno') + '</div>')

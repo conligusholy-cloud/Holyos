@@ -50,6 +50,29 @@ async function loadAuthorizer(order) {
   } catch (e) { return null; }
 }
 
+// Doplňky PDF objednávky: výbava položek, rozložení plateb a přílohy (vystavené faktury).
+async function loadOrderPdfExtras(orderId) {
+  const extras = { equip: {}, payments: [], milestones: {}, invoices: [] };
+  try {
+    const items = await prisma.orderItem.findMany({ where: { order_id: orderId }, select: { id: true, spec: true, configs: { include: { option: { include: { group: true } } } } } });
+    items.forEach((it) => {
+      const labels = (it.configs || []).map((c) => (c.option && c.option.group ? c.option.group.name + ': ' + c.option.name : (c.custom_value || ''))).filter(Boolean);
+      const txt = labels.length ? labels.join(' · ') : (it.spec || '');
+      if (txt) extras.equip[it.id] = txt;
+    });
+  } catch (e) { console.warn('[order-docs] výbava do PDF:', e && e.message); }
+  try {
+    const pp = require('./orders/payment-plan');
+    const plan = await pp.getPlan(orderId);
+    if (plan && Array.isArray(plan.payments)) extras.payments = plan.payments;
+    extras.milestones = pp.MILESTONE_LABEL || {};
+  } catch (e) { console.warn('[order-docs] rozložení plateb do PDF:', e && e.message); }
+  try {
+    extras.invoices = await prisma.invoice.findMany({ where: { order_id: orderId, status: { not: 'cancelled' } }, select: { invoice_number: true, invoice_role: true, total: true, currency: true, date_due: true }, orderBy: { id: 'asc' } });
+  } catch (e) { console.warn('[order-docs] přílohy do PDF:', e && e.message); }
+  return extras;
+}
+
 // Vygeneruje PDF objednávky podle šablony (Šablony dokumentů → Potvrzená objednávka) z aktuálních dat — NIC neukládá
 // (nepřepíše uložené potvrzené PDF). Slouží tlačítku „Objednávka" v detailu prodejní objednávky.
 async function buildOrderPdfBuffer(order, ourCompany) {
@@ -57,7 +80,8 @@ async function buildOrderPdfBuffer(order, ourCompany) {
   const owner = (await loadOwner(order)) || (order.sales_person ? { name: [order.sales_person.first_name, order.sales_person.last_name].filter(Boolean).join(' ').trim() } : null);
   const slotDates = await loadSlotDates(order.id);
   const authorizer = await loadAuthorizer(order);
-  return generateOrderPdf(order, ourCompany || {}, { owner, slotDates, authorizer });
+  const extras = await loadOrderPdfExtras(order.id);
+  return generateOrderPdf(order, ourCompany || {}, { owner, slotDates, authorizer, extras });
 }
 
 // Vygeneruje PDF potvrzené objednávky, uloží na data volume a vrátí { buffer, filePath }.
@@ -66,7 +90,8 @@ async function buildAndStoreOrderPdf(order, ourCompany) {
   const owner = await loadOwner(order);
   const slotDates = await loadSlotDates(order.id);
   const authorizer = await loadAuthorizer(order);
-  const buffer = await generateOrderPdf(order, ourCompany || {}, { owner, slotDates, authorizer });
+  const extras = await loadOrderPdfExtras(order.id);
+  const buffer = await generateOrderPdf(order, ourCompany || {}, { owner, slotDates, authorizer, extras });
   let filePath = null;
   try {
     fs.mkdirSync(ORDER_DOCS_DIR, { recursive: true });
