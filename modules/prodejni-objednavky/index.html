@@ -2606,9 +2606,13 @@
         // Aktivni polozky ceniku pro dropdown 'Z ceniku' pri pridavani polozky
         let pricelistItems = [];
         try {
-          const plRes = await fetch('/api/wh/pricelist?active=true&kind=machine');
+          // Stroje i příslušenství — u obojího se musí vyplnit výbava
+          const plRes = await fetch('/api/wh/pricelist?active=true');
           if (plRes.ok) { const pl = await plRes.json(); pricelistItems = Array.isArray(pl) ? pl : (Array.isArray(pl && pl.items) ? pl.items : []); }
         } catch(e) { console.warn('pricelist fetch fail', e); }
+        let sharedCfg = [];
+        try { const scr = await fetch('/api/wh/pricelist-config-default'); if (scr.ok) { const sc = await scr.json(); sharedCfg = Array.isArray(sc && sc.config_options) ? sc.config_options : []; } } catch(e) { /* bez společné výbavy */ }
+        window._plAdd = { items: pricelistItems, shared: sharedCfg, currency: order.currency };
         if (products.length === 0) { try { const r2 = await fetch('/api/production/products?type=product'); products = await r2.json(); } catch(e) {} }
         if (companies.length === 0) await reloadCompanies();
         if (_availableSlots.length === 0) await loadAvailableSlots();
@@ -2656,6 +2660,9 @@
               }).filter(Boolean);
               if (labels.length) configLine = '<div style="font-size:11px;color:var(--text2);margin-top:2px;">⚙️ ' + labels.join(' · ') + '</div>';
             }
+            // Výbava zadaná u položky z ceníku (uložená ve specifikaci) — a upozornění, když chybí úplně
+            if (!configLine && it.spec) configLine = '<div style="font-size:11px;color:var(--text2);margin-top:2px;">⚙️ ' + esc(it.spec) + '</div>';
+            if (!configLine) configLine = '<div style="font-size:11px;color:#ef4444;margin-top:2px;font-weight:600;">⚠ Chybí výbava — doplň (smaž položku a přidej znovu s výbavou)</div>';
 
             // Najdi přiřazený slot pro tuto položku
             const assignedSlot = getSlotForItem(it.id);
@@ -2742,7 +2749,7 @@
         const prodDetailOpts = products.map(p => '<option value="' + p.id + '">' + p.code + ' — ' + p.name + '</option>').join('');
 
         // Moznosti z ceniku — priklada data-* atributy pro auto-fill do form fields
-        const plOpts = pricelistItems.map(function(pl) {
+        const plOptHtml = function(pl) {
           const priceCzk = pl.price_czk != null ? parseFloat(pl.price_czk) : null;
           const priceEur = pl.price_eur != null ? parseFloat(pl.price_eur) : null;
           const truckCzk = pl.truck_price_czk != null ? parseFloat(pl.truck_price_czk) : null;
@@ -2763,7 +2770,11 @@
             ' data-truck-czk="' + (truckCzk != null ? truckCzk : '') + '"' +
             ' data-truck-eur="' + (truckEur != null ? truckEur : '') + '"' +
             '>' + esc(pl.name_cs) + pricePart + prodPart + '</option>';
-        }).join('');
+        };
+        const plMachines = pricelistItems.filter(function(pl) { return (pl.kind || 'machine') !== 'accessory'; });
+        const plAccessories = pricelistItems.filter(function(pl) { return pl.kind === 'accessory'; });
+        const plOpts = (plMachines.length ? '<optgroup label="Stroje">' + plMachines.map(plOptHtml).join('') + '</optgroup>' : '') +
+          (plAccessories.length ? '<optgroup label="Příslušenství">' + plAccessories.map(plOptHtml).join('') + '</optgroup>' : '');
 
         // Sekce přidávání položek (jen pokud je editovatelné)
         let addItemSection = '';
@@ -2786,8 +2797,9 @@
                 '<input type="hidden" name="name" id="add-item-name-hidden" value="">' +
                 '<input type="hidden" name="quantity" value="1">' +
                 '<input type="hidden" name="unit" value="ks">' +
+                '<input type="hidden" name="spec" id="add-item-spec-hidden" value="">' +
                 '<div class="form-group" style="flex:3;min-width:260px;margin-bottom:0;">' +
-                  '<label style="color:#eab308;font-weight:600;">💰 Položka z ceníku (měna: ' + order.currency + ')</label>' +
+                  '<label style="color:#eab308;font-weight:600;">💰 Položka z ceníku — stroj / příslušenství (měna: ' + order.currency + ')</label>' +
                   '<select id="add-item-pricelist" required onchange="fillFromPricelist(this, \'' + order.currency + '\', document.getElementById(\'add-item-truck\').checked)">' +
                     '<option value="">— Vyberte položku —</option>' + plOpts +
                   '</select>' +
@@ -2797,6 +2809,7 @@
                   '<span style="color:#0ea5e9;font-weight:600;">🚛 Kamion</span>' +
                 '</label>' +
                 '<div class="form-group" style="width:130px;margin-bottom:0;"><label>Cena/ks</label><input type="number" name="unit_price" value="0" step="0.01" title="Auto-doplneno z ceniku; lze prepsat"></div>' +
+                '<div id="add-item-config" style="flex-basis:100%;display:none;border-top:1px dashed rgba(234,179,8,0.35);padding-top:10px;"></div>' +
                 '<button type="submit" class="btn btn-primary btn-sm" style="margin-bottom:2px;">+ Přidat</button>' +
               '</form>' +
               '<div style="font-size:11px;color:var(--text2);margin-top:6px;">💡 Každá položka = 1 kus = 1 řádek. Pro další stejný kus použijte <strong>🔁 Duplikovat</strong> u existující položky.</div>' +
@@ -3499,8 +3512,78 @@
 
     // Doplni formu pro pridani polozky z vybrane polozky ceniku.
     // currency = 'CZK' | 'EUR'; useTruck = true pouzije kamionovou cenu.
+    // ---- Povinná výbava u položky z ceníku (stroj i příslušenství) ----
+    // Skupiny voleb: vlastní config_options položky; u stroje bez vlastní výbavy společná výbava; jinak povinný volný text.
+    function addItemGroups(pl) {
+      const own = pl && Array.isArray(pl.config_options) ? pl.config_options.filter(function (g) { return g && Array.isArray(g.options) && g.options.length; }) : [];
+      if (own.length) return own;
+      if (pl && (pl.kind || 'machine') !== 'accessory') return ((window._plAdd && window._plAdd.shared) || []).filter(function (g) { return g && Array.isArray(g.options) && g.options.length; });
+      return [];
+    }
+    function addItemOptPrice(o) {
+      const cur = (window._plAdd && window._plAdd.currency) || 'CZK';
+      const czk = parseFloat(o && o.price_czk) || 0, eur = parseFloat(o && o.price_eur) || 0;
+      return cur === 'EUR' ? (eur || (czk ? Math.round(czk / 25) : 0)) : (czk || (eur ? Math.round(eur * 25) : 0));
+    }
+    function renderAddItemConfig(plId) {
+      const box = document.getElementById('add-item-config'); if (!box) return;
+      if (!plId) { box.style.display = 'none'; box.innerHTML = ''; box.dataset.for = ''; return; }
+      if (box.dataset.for === String(plId)) return; // jen přepnutí kamionu — výběr zůstane
+      const pl = ((window._plAdd && window._plAdd.items) || []).find(function (x) { return String(x.id) === String(plId); });
+      const groups = addItemGroups(pl);
+      const sym = ((window._plAdd && window._plAdd.currency) || 'CZK') === 'EUR' ? '€' : 'Kč';
+      const inp = 'background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:13px;';
+      let h = '<div style="font-size:12px;font-weight:700;color:#eab308;margin-bottom:8px;">⚙️ Výbava ' + (pl && pl.kind === 'accessory' ? 'příslušenství' : 'stroje') + ' — povinné, ať je jasně definováno, co zákazník dostane</div>';
+      if (groups.length) {
+        h += '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;">';
+        groups.forEach(function (g, gi) {
+          const name = g.name || ('Skupina ' + (gi + 1)); const opts = g.options;
+          if (g.type === 'multi') {
+            h += '<div style="min-width:200px;"><div style="font-size:12px;color:var(--text2);margin-bottom:4px;">' + esc(name) + (g.required ? ' *' : '') + '</div>' +
+              opts.map(function (o, oi) { const p = addItemOptPrice(o); return '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" data-cfg-multi="' + gi + ':' + oi + '" data-g="' + gi + '"' + (g.required ? ' data-req="1"' : '') + '> ' + esc(o.name) + (p > 0 ? ' <span style="color:#eab308;">(+' + p.toLocaleString('cs-CZ') + ' ' + sym + ')</span>' : '') + '</label>'; }).join('') + '</div>';
+          } else {
+            h += '<div style="min-width:200px;"><div style="font-size:12px;color:var(--text2);margin-bottom:4px;">' + esc(name) + ' *</div>' +
+              '<select data-cfg-single="' + gi + '" required style="' + inp + 'min-width:200px;"><option value="">— vyberte —</option>' +
+              opts.map(function (o, oi) { const p = addItemOptPrice(o); return '<option value="' + oi + '">' + esc(o.name) + (p > 0 ? ' (+' + p.toLocaleString('cs-CZ') + ' ' + sym + ')' : '') + '</option>'; }).join('') + '</select></div>';
+          }
+        });
+        h += '</div>';
+      } else {
+        h += '<div style="font-size:12px;color:var(--text2);margin-bottom:4px;">' + (pl && pl.kind === 'accessory' ? 'Příslušenství' : 'Tento stroj') + ' nemá v ceníku definované volby výbavy — popiš výbavu / specifikaci ručně (povinné):</div>' +
+          '<input type="text" data-cfg-free required maxlength="400" placeholder="Např. pračka 18 kg, sušička 18 kg, platební terminál, barva RAL 5010…" style="' + inp + 'width:100%;">';
+      }
+      box.innerHTML = h; box.style.display = ''; box.dataset.for = String(plId);
+    }
+    // Sesbírá výbavu z formuláře: { spec: 'Skupina: volba · …', surcharge, error }
+    function collectAddItemConfig(form) {
+      const box = form.querySelector('#add-item-config'); const plId = box && box.dataset.for;
+      if (!plId) return { spec: '', surcharge: 0, error: 'Vyberte položku z ceníku.' };
+      const pl = ((window._plAdd && window._plAdd.items) || []).find(function (x) { return String(x.id) === String(plId); });
+      const groups = addItemGroups(pl); const parts = []; let sur = 0;
+      if (!groups.length) {
+        const free = (box.querySelector('[data-cfg-free]') || {}).value || '';
+        if (!free.trim()) return { spec: '', surcharge: 0, error: 'Doplňte výbavu / specifikaci položky.' };
+        return { spec: free.trim(), surcharge: 0 };
+      }
+      for (let gi = 0; gi < groups.length; gi++) {
+        const g = groups[gi]; const name = g.name || ('Skupina ' + (gi + 1));
+        if (g.type === 'multi') {
+          const picks = [];
+          box.querySelectorAll('[data-cfg-multi^="' + gi + ':"]').forEach(function (c) { if (c.checked) { const o = g.options[parseInt(c.dataset.cfgMulti.split(':')[1], 10)]; picks.push(o.name); sur += addItemOptPrice(o); } });
+          if (g.required && !picks.length) return { spec: '', surcharge: 0, error: 'Vyberte aspoň jednu volbu ve skupině „' + name + '".' };
+          if (picks.length) parts.push(name + ': ' + picks.join(', '));
+        } else {
+          const s = box.querySelector('[data-cfg-single="' + gi + '"]');
+          if (!s || s.value === '') return { spec: '', surcharge: 0, error: 'Vyplňte výbavu — skupina „' + name + '".' };
+          const o = g.options[parseInt(s.value, 10)]; parts.push(name + ': ' + o.name); sur += addItemOptPrice(o);
+        }
+      }
+      return { spec: parts.join(' · '), surcharge: sur };
+    }
+
     function fillFromPricelist(sel, currency, useTruck) {
-      if (!sel || !sel.value) return;
+      if (!sel || !sel.value) { renderAddItemConfig(null); return; }
+      renderAddItemConfig(sel.value);
       const opt = sel.options[sel.selectedIndex];
       if (!opt) return;
       // Najdi sourozenec form (Pridat polozku) ve stejnem containeru
@@ -3557,8 +3640,13 @@
       data.product_id = parseInt(data.product_id) || null;
       data.quantity = parseFloat(data.quantity);
       data.unit_price = parseFloat(data.unit_price || 0);
-      data.total_price = data.quantity * data.unit_price;
       if (!data.name && !data.product_id) { alert('Vyberte položku z ceníku.'); return; }
+      // Výbava je povinná (stroj i příslušenství) — ukládá se do specifikace položky, příplatky voleb se přičtou k ceně
+      const cfg = collectAddItemConfig(e.target);
+      if (cfg.error) { alert(cfg.error); return; }
+      data.spec = cfg.spec;
+      data.unit_price = (data.unit_price || 0) + cfg.surcharge;
+      data.total_price = data.quantity * data.unit_price;
       await fetch('/api/wh/orders/' + orderId + '/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
       await recalcOrder(orderId);
       openOrderDetail(orderId);
