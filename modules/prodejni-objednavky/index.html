@@ -3832,7 +3832,7 @@
         var del = DEL[inv.delivery_status] || DEL.not_sent;
         var delBadge = isDppp ? '<span class="badge" style="background:' + del.color + '22;color:' + del.color + ';">✉️ ' + esc(del.label) + '</span>' : '';
         var actions = '<button type="button" class="btn btn-sm" onclick="openInvoicePane(' + inv.id + ',\'' + esc(invLabel(inv) + ' ' + (inv.invoice_number || '')).replace(/\'/g, '') + '\')" title="Zobrazit fakturu vedle detailu">📄 Náhled</button>' +
-          ' <a class="btn btn-sm" href="/api/accounting/invoices/' + inv.id + '/pdf" target="_blank" rel="noopener" style="text-decoration:none;" title="Otevřít PDF v novém okně">↗ PDF</a>';
+          ' <a class="btn btn-sm" href="/api/accounting/invoices/' + inv.id + '/pdf?inline=1" target="_blank" rel="noopener" style="text-decoration:none;" title="Otevřít PDF v novém okně">↗ PDF</a>';
         if (isDppp && inv.status !== 'cancelled') {
           var sendLabel = (inv.delivery_status === 'sent') ? '↻ Znovu odeslat' : '✉️ Odeslat';
           actions += ' <button class="btn btn-sm" onclick="sendTaxReceipt(' + inv.id + ',' + order.id + ')">' + sendLabel + '</button>';
@@ -4321,8 +4321,8 @@
       openDocPane(url, '📄 Objednávka', 'náhled podle šablony', url + '&download=1');
     }
     function openInvoicePane(invoiceId, label) {
-      var url = '/api/accounting/invoices/' + invoiceId + '/pdf';
-      openDocPane(url, '🧾 ' + (label || 'Faktura'), 'náhled faktury', url);
+      var url = '/api/accounting/invoices/' + invoiceId + '/pdf?inline=1';
+      openDocPane(url, '🧾 ' + (label || 'Faktura'), 'náhled faktury', '/api/accounting/invoices/' + invoiceId + '/pdf');
     }
     function refreshOrderPane() {
       var pane = document.getElementById('order-pane'); var f = document.getElementById('op-frame'); if (!pane || !f) return;

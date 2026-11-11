@@ -3164,7 +3164,8 @@ router.get('/invoices/:id/pdf', async (req, res, next) => {
 
     const filename = `${invoice.invoice_number}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    // ?inline=1 → zobrazit v prohlížeči / náhledu (iframe), jinak stáhnout
+    res.setHeader('Content-Disposition', `${req.query.inline ? 'inline' : 'attachment'}; filename="${filename}"`);
     res.setHeader('Content-Length', pdfBuffer.length);
     res.send(pdfBuffer);
   } catch (err) { next(err); }
