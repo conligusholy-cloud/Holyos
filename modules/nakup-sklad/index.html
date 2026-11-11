@@ -1596,7 +1596,7 @@
           '<div class="po-box" id="po-delivery">' + poDeliveryBox() + '</div></div>' +
         '<table class="po-tbl"><thead><tr><th>#</th><th>Položka</th><th class="r">Množ.</th><th>Jedn.</th><th class="r">Cena/ks</th><th class="r">Celkem</th><th class="r">DPH %</th><th title="Start montáže — nejpozději tento den musí být díl ve výrobě">Ve výrobě do</th><th>Požadováno</th><th>Potvrzeno</th><th class="r">Doručeno</th><th>Stav</th><th class="po-noprint"></th></tr></thead><tbody id="po-rows">' +
           (o.items || []).map(poItemRow).join('') +
-          '<tr class="po-add po-noprint"><td class="po-n">＋</td><td><input class="po-in" id="po-new-name" list="po-mats" placeholder="Přidat položku – piš název (nabídne zboží ze skladu)" autocomplete="off"></td>' +
+          '<tr class="po-add po-noprint"><td class="po-n">＋</td><td><input class="po-in" id="po-new-name" list="po-mats" placeholder="Přidat položku – piš název (nabídne zboží ze skladu), nebo klikni na + Přidat a vyber prádlomat z prodejní objednávky" autocomplete="off"></td>' +
           '<td class="r"><input class="po-in r" id="po-new-qty" type="number" step="0.01" min="0.01" value="1"></td><td><input class="po-in" id="po-new-unit" value="ks"></td>' +
           '<td class="r"><input class="po-in r" id="po-new-price" type="number" step="0.01" min="0" value="0"></td><td></td>' +
           '<td></td><td></td><td><input class="po-in" id="po-new-date" type="date"></td><td></td><td></td><td colspan="2"><button class="po-add-btn" id="po-add-btn">+ Přidat</button></td></tr>' +
@@ -1705,8 +1705,62 @@
       PO.o.items = PO.o.items.filter((i) => i.id !== it.id); tr.remove(); poRecalc();
       document.querySelectorAll('#po-rows tr[data-id] .po-n').forEach((c, i) => { c.textContent = i + 1; });
     }
+    // Výběr prádlomatu z prodejních objednávek (doprava pro konkrétního zákazníka) — otevře se po kliku na „+ Přidat" s prázdným názvem
+    const SP = { orders: null };
+    async function poSalesPicker() {
+      if (document.getElementById('sp-root')) return;
+      const root = document.createElement('div'); root.id = 'sp-root';
+      root.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px';
+      root.innerHTML = '<div style="background:var(--surface,#1b2130);color:var(--text,#e5e7eb);border:1px solid var(--border,#2c3447);border-radius:14px;width:min(820px,100%);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
+        '<div style="padding:14px 18px;border-bottom:1px solid var(--border,#2c3447);display:flex;gap:12px;align-items:center"><b style="font-size:15px">Vybrat prádlomat z prodejních objednávek</b><span style="flex:1"></span><button class="po-btn" data-sp="close">✕ Zavřít</button></div>' +
+        '<div style="padding:12px 18px"><input class="po-in" id="sp-q" placeholder="Hledat podle zákazníka, čísla objednávky nebo prádlomatu…" autocomplete="off" style="width:100%"></div>' +
+        '<div id="sp-list" style="padding:0 18px 12px;overflow:auto;flex:1"><div style="padding:20px;color:#8a8f9c">Načítám prodejní objednávky…</div></div>' +
+        '<div style="padding:12px 18px;border-top:1px solid var(--border,#2c3447);display:flex;gap:12px;align-items:center"><span id="sp-count" style="color:#8a8f9c;font-size:12.5px">Nic nevybráno</span><span style="flex:1"></span><button class="po-add-btn" data-sp="add" style="padding:8px 16px;font-size:13px">+ Přidat vybrané do objednávky</button></div></div>';
+      document.body.appendChild(root);
+      const close = () => root.remove();
+      root.addEventListener('click', async (e) => {
+        if (e.target === root || e.target.dataset.sp === 'close') return close();
+        if (e.target.dataset.sp === 'add') return spAdd();
+        if (e.target.matches('input[data-spall]')) { root.querySelectorAll('input[data-spit="' + e.target.dataset.spall + '"]').forEach((c) => { c.checked = e.target.checked; }); spCount(); }
+      });
+      root.addEventListener('change', (e) => { if (e.target.matches('input[data-spit]')) spCount(); });
+      document.addEventListener('keydown', function esc(e) { if (!document.getElementById('sp-root')) { document.removeEventListener('keydown', esc); return; } if (e.key === 'Escape') { e.stopPropagation(); close(); document.removeEventListener('keydown', esc); } }, true);
+      const q = root.querySelector('#sp-q'); q.focus(); q.addEventListener('input', () => spRender(q.value));
+      try {
+        if (!SP.orders) { const r = await fetch('/api/wh/orders?type=sales'); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); SP.orders = (Array.isArray(j) ? j : []).filter((o) => !['cancelled', 'expired'].includes(o.status) && (o.items || []).length); }
+        spRender('');
+      } catch (err) { root.querySelector('#sp-list').innerHTML = '<div style="padding:20px;color:#ef4444">Načtení prodejních objednávek selhalo: ' + poTxt(err.message) + '</div>'; }
+    }
+    function spCount() { const n = document.querySelectorAll('#sp-root input[data-spit]:checked').length; const el = document.getElementById('sp-count'); if (el) el.textContent = n ? 'Vybráno: ' + n : 'Nic nevybráno'; }
+    function spRender(term) {
+      const t = (term || '').trim().toLowerCase(); const list = document.getElementById('sp-list'); if (!list) return;
+      const checked = new Set(Array.from(document.querySelectorAll('#sp-root input[data-spit]:checked')).map((c) => c.dataset.spit + ':' + c.value));
+      const orders = (SP.orders || []).filter((o) => !t || [o.order_number, o.company && o.company.name].concat((o.items || []).map((i) => i.name + ' ' + (i.serial_number || ''))).join(' ').toLowerCase().includes(t));
+      if (!orders.length) { list.innerHTML = '<div style="padding:20px;color:#8a8f9c">Žádná prodejní objednávka neodpovídá hledání.</div>'; return; }
+      list.innerHTML = orders.slice(0, 80).map((o) => {
+        const st = (ORDER_STATUSES[o.status] || { label: o.status, color: '#9ca3af' });
+        return '<div style="border:1px solid var(--border,#2c3447);border-radius:10px;margin:0 0 10px;overflow:hidden"><label style="display:flex;gap:10px;align-items:center;padding:8px 12px;background:rgba(99,102,241,.10);cursor:pointer"><input type="checkbox" data-spall="' + o.id + '"><b>' + poTxt(o.order_number) + '</b><span>' + poTxt((o.company && o.company.name) || '—') + '</span><span style="flex:1"></span><span style="color:' + st.color + ';font-size:12px">' + poTxt(st.label) + '</span></label>' +
+          (o.items || []).map((i) => '<label style="display:flex;gap:10px;align-items:center;padding:7px 12px;border-top:1px solid var(--border,#2c3447);cursor:pointer"><input type="checkbox" data-spit="' + o.id + '" value="' + i.id + '"' + (checked.has(o.id + ':' + i.id) ? ' checked' : '') + '><span style="flex:1">' + poTxt(i.name) + (i.serial_number ? ' <span style="color:#8a8f9c">· v.č. ' + poTxt(i.serial_number) + '</span>' : '') + '</span><span style="color:#8a8f9c;font-size:12.5px">' + (Number(i.quantity) || 0) + ' ' + poTxt(i.unit || 'ks') + '</span></label>').join('') + '</div>';
+      }).join('') + (orders.length > 80 ? '<div style="color:#8a8f9c;font-size:12px;padding:4px">Zobrazeno prvních 80 — upřesni hledání.</div>' : '');
+      spCount();
+    }
+    async function spAdd() {
+      const picks = Array.from(document.querySelectorAll('#sp-root input[data-spit]:checked'));
+      if (!picks.length) { alert('Nejdřív zaškrtni aspoň jeden prádlomat.'); return; }
+      const btn = document.querySelector('#sp-root [data-sp="add"]'); if (btn) { btn.disabled = true; btn.textContent = 'Přidávám…'; }
+      for (const c of picks) {
+        const so = (SP.orders || []).find((o) => String(o.id) === c.dataset.spit); const it = so && (so.items || []).find((i) => String(i.id) === c.value); if (!it) continue;
+        const cust = (so.company && so.company.name) || '';
+        const body = { name: 'Doprava: ' + it.name, quantity: Number(it.quantity) || 1, unit: it.unit || 'ks', unit_price: 0, production_ref: so.order_number,
+          spec: ['Zakázka ' + so.order_number, cust, it.serial_number ? 'v.č. ' + it.serial_number : ''].filter(Boolean).join(' · ') };
+        const r = await poReq('POST', '/api/wh/orders/' + PO.o.id + '/items', body); if (r === null) break;
+      }
+      const root = document.getElementById('sp-root'); if (root) root.remove();
+      const ov = document.querySelector('.po-overlay'); const top = ov ? ov.scrollTop : 0;
+      await openOrderDetail(PO.o.id); const ov2 = document.querySelector('.po-overlay'); if (ov2) ov2.scrollTop = top;
+    }
     async function poAddItem() {
-      const nm = document.getElementById('po-new-name'); const name = nm.value.trim(); if (!name) { nm.focus(); return; }
+      const nm = document.getElementById('po-new-name'); const name = nm.value.trim(); if (!name) { poSalesPicker(); return; }
       const body = { name, material_id: nm.dataset.mat || null, quantity: document.getElementById('po-new-qty').value, unit: document.getElementById('po-new-unit').value || 'ks', unit_price: document.getElementById('po-new-price').value, expected_delivery: document.getElementById('po-new-date').value || null };
       const r = await poReq('POST', '/api/wh/orders/' + PO.o.id + '/items', body); if (r === null) return;
       const ov = document.querySelector('.po-overlay'); const top = ov ? ov.scrollTop : 0;
