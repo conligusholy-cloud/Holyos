@@ -2947,6 +2947,9 @@
           // ─── Historie objednávky ───
           renderOrderTimeline(order) +
 
+          // ─── Slíbeno s místem ───
+          renderLocationPromise(order) +
+
           // ─── Rozložení plateb (splátkový kalendář) ───
           '<div id="order-payplan-wrap" style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;"><h3 style="font-size:14px;margin-bottom:8px;">💳 Rozložení plateb</h3><div id="order-payplan"><div style="color:var(--text2);font-size:12px;">Načítám…</div></div></div>' +
 
@@ -3047,6 +3050,36 @@
     // =====================================================================
     var PP = { orderId: null, plan: null, draft: null, dirty: false };
     var PP_MS = { at_order: 'Při objednání', before_production: 'Před výrobou', after_delivery: 'Po dodání' };
+
+    // ─── Slíbeno s místem (po platbě upozorní Michala Jandu) ───
+    function renderLocationPromise(order) {
+      var on = !!order.location_promised;
+      var dl = order.location_search_deadline ? String(order.location_search_deadline).slice(0, 10) : '';
+      var inp = 'padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;';
+      var st = order.location_notified_at ? '✅ Upozornění odesláno ' + new Date(order.location_notified_at).toLocaleString('cs-CZ') : (on ? '⏳ Odešle se automaticky po přijetí platby' : '');
+      return '<div id="order-locpromise" style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
+        '<h3 style="font-size:14px;margin-bottom:8px;">📍 Slíbeno s místem</h3>' +
+        '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="lp-on" ' + (on ? 'checked' : '') + ' onchange="document.getElementById(\'lp-fields\').style.display=this.checked?\'flex\':\'none\'"> Zákazníkovi bylo slíbeno místo</label>' +
+        '<div id="lp-fields" style="display:' + (on ? 'flex' : 'none') + ';gap:10px;flex-wrap:wrap;margin-top:8px;align-items:flex-end;">' +
+          '<div style="flex:2;min-width:200px;"><div style="font-size:11px;color:var(--text2);margin-bottom:3px;">Lokalita, kde hledat místo *</div><input id="lp-area" style="' + inp + 'width:100%;" maxlength="255" value="' + esc(order.location_search_area || '').replace(/"/g, '&quot;') + '" placeholder="např. Praha a okolí"></div>' +
+          '<div><div style="font-size:11px;color:var(--text2);margin-bottom:3px;">Termín, do kdy vyřešit *</div><input type="date" id="lp-deadline" style="' + inp + '" value="' + dl + '"></div>' +
+        '</div>' +
+        '<div style="margin-top:8px;display:flex;align-items:center;gap:10px;"><button type="button" class="btn btn-primary btn-sm" onclick="saveLocationPromise(' + order.id + ')">Uložit</button><span id="lp-status" style="font-size:12px;color:var(--text2);">' + st + '</span></div>' +
+        '<div style="font-size:11px;color:var(--text2);margin-top:6px;">Po přijetí platby odejde Michalu Jandovi e-mail + upozornění ve Velínu, aby okamžitě hledal místo do zadaného termínu.</div>' +
+      '</div>';
+    }
+    async function saveLocationPromise(orderId) {
+      var st = document.getElementById('lp-status');
+      var on = document.getElementById('lp-on').checked;
+      var body = { location_promised: on, location_search_area: document.getElementById('lp-area').value, location_search_deadline: document.getElementById('lp-deadline').value || null };
+      try {
+        var r = await fetch('/api/wh/orders/' + orderId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(body) });
+        var d = await r.json();
+        if (!r.ok) throw new Error(d.error || r.status);
+        st.style.color = '#22c55e';
+        st.textContent = on ? '✅ Uloženo — upozornění odejde po přijetí platby (nebo hned, pokud už je zaplaceno)' : '✅ Uloženo';
+      } catch (e) { st.style.color = '#ef4444'; st.textContent = 'Chyba: ' + e.message; }
+    }
 
     async function loadPayPlan(orderId) {
       PP.orderId = orderId;

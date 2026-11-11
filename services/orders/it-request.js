@@ -274,6 +274,7 @@ async function sendNayaxTest(email, body) {
 // Automaticky po PRVNÍ přijaté platbě k objednávce (objednávka je tím podepsaná/autorizovaná)
 async function autoSendOnFirstPayment(orderId) {
   try {
+    require('./site-search-notify').notifyIfDue(orderId).catch(() => {}); // „Slíbeno s místem" → upozornit Michala Jandu
     await scheduleNayaxMail(orderId); // Nayax e-mail se plánuje nezávisle na dotazníku (jednou na objednávku)
     const s = await getSettings();
     if (!s.auto_send || !orderId) return { skipped: 'vypnuto' };
@@ -333,4 +334,4 @@ async function sweepOverdue() {
   return { notified };
 }
 
-module.exports = { sendNayaxTest, sendDueNayaxMails, scheduleNayaxMail, getSettings, saveSettings, sendTest, autoSendOnFirstPayment, getTemplate, saveTemplate, getDueDays, sendToCustomer, getPublic, submitPublic, getForOrder, sweepOverdue, sanitizeItems, DEFAULT_TEMPLATE };
+module.exports = { mail, sendNayaxTest, sendDueNayaxMails, scheduleNayaxMail, getSettings, saveSettings, sendTest, autoSendOnFirstPayment, getTemplate, saveTemplate, getDueDays, sendToCustomer, getPublic, submitPublic, getForOrder, sweepOverdue, sanitizeItems, DEFAULT_TEMPLATE };

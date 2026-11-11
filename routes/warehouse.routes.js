@@ -1378,6 +1378,25 @@ router.put('/orders/:id', async (req, res, next) => {
       if (allowed.payment_account_id && !Object.keys(fields).length) return res.status(400).json({ error: 'Bankovní účet nenalezen' });
       await prisma.invoice.updateMany({ where: { order_id: orderId, direction: 'ar', status: { in: ['draft', 'issued', 'sent'] } }, data: Object.keys(fields).length ? fields : { partner_bank_account: null, partner_iban: null } });
     }
+    // Slíbeno s místem: při ANO je povinná lokalita i termín; změna zadání znovu povolí upozornění
+    if (req.body.location_promised !== undefined) {
+      const promised = !!req.body.location_promised;
+      allowed.location_promised = promised;
+      if (promised) {
+        const area = String(req.body.location_search_area || '').trim().slice(0, 255);
+        const dl = parseDate(req.body.location_search_deadline);
+        if (!area) return res.status(400).json({ error: 'Vyplň lokalitu, kde se má místo hledat' });
+        if (!dl) return res.status(400).json({ error: 'Vyplň termín, do kdy má být místo vyřešené' });
+        const prev = await prisma.order.findUnique({ where: { id: orderId }, select: { location_search_area: true, location_search_deadline: true, location_promised: true } });
+        const changed = !prev || !prev.location_promised || prev.location_search_area !== area || String(prev.location_search_deadline || '').slice(0, 10) !== String(dl).slice(0, 10);
+        allowed.location_search_area = area;
+        allowed.location_search_deadline = dl;
+        if (changed) allowed.location_notified_at = null;
+      } else {
+        allowed.location_search_area = null;
+        allowed.location_search_deadline = null;
+      }
+    }
     if (allowed.company_id) allowed.company_id = parseInt(allowed.company_id);
     if (allowed.sales_person_id !== undefined) allowed.sales_person_id = allowed.sales_person_id ? parseInt(allowed.sales_person_id) : null;
     if (allowed.financing_type !== undefined) allowed.financing_type = ['own', 'leasing'].includes(allowed.financing_type) ? allowed.financing_type : null;
@@ -1418,6 +1437,7 @@ router.put('/orders/:id', async (req, res, next) => {
       data: allowed,
       include: { items: true },
     });
+    if (req.body.location_promised !== undefined) require('../services/orders/site-search-notify').notifyIfDue(orderId).catch(() => {});
     res.json(order);
   } catch (err) {
     next(err);

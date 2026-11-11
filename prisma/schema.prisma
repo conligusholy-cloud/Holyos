@@ -739,6 +739,11 @@ model Order {
   deposit_percent    Int?
   deposit_paid       Boolean   @default(false)
   deposit_paid_at    DateTime?
+  // „Slíbeno s místem" — po platbě upozornit Michala Jandu, ať hledá místo (services/orders/site-search-notify.js)
+  location_promised        Boolean   @default(false)
+  location_search_area     String?   @db.VarChar(255)
+  location_search_deadline DateTime? @db.Date
+  location_notified_at     DateTime?
   final_paid         Boolean   @default(false)
   final_paid_at      DateTime?
   release_on_deposit Boolean   @default(true)
