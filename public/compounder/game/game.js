@@ -2771,8 +2771,18 @@ function startBonusOdpocet() {
   tik();
 }
 
-$('go-quiz').onclick = function () {
-  var bonus = startBonusPlati();
+// Kdo klepl na tlačítko včas, bonus má — i když se pak ještě chvíli pere
+// s obsazeným jménem. Odpočet ho za to trestat nebude.
+var BONUS_ZAMCEN = false;
+function introErr(t) {
+  var e = $('in-err');
+  if (!e) return toast(t, 'err');
+  e.textContent = t; e.classList.remove('hidden');
+}
+// Vlastní hra. Volá se, až když je jasné, pod jakým jménem hráč hraje —
+// nebo když se server neozval a hrát se musí i tak.
+function spustNovouHru() {
+  var bonus = BONUS_ZAMCEN;
   S = fresh('vyvazeny');
   if (bonus) S.cash += START_BONUS;
   save();
@@ -2783,6 +2793,43 @@ $('go-quiz').onclick = function () {
     toast('Stihl jsi to! Bonus za rychlý start +' + kcFull(START_BONUS) + '.', 'ok');
   }
   if (ME) syncState(true);
+}
+$('go-quiz').onclick = function () {
+  var b = $('go-quiz');
+  var nick = ($('in-nick') ? $('in-nick').value : '').trim();
+  var firma = ($('in-firma') ? $('in-firma').value : '').trim();
+  if (nick.length < 3) return introErr('Vymysli si jméno, aspoň tři znaky. Pod ním budeš hrát.');
+  if (nick.length > 24) return introErr('Jméno je moc dlouhé — nejvýš 24 znaků.');
+  if (/[\s@]/.test(nick)) return introErr('Ve jménu nesmí být mezery ani zavináč.');
+  if (firma.length === 1) return introErr('Název společnosti má aspoň dva znaky — nebo ho nech prázdný.');
+  if ($('in-err')) $('in-err').classList.add('hidden');
+  if (startBonusPlati()) BONUS_ZAMCEN = true;
+  b.disabled = true; b.textContent = 'Zakládám firmu…';
+  apiJson('/account/zacni', { nick: nick, company: firma, ref: trvalePid(),
+    odkud: prichoziRef(), zdroj: zjistiZdroj(), sid: visitId() }).then(function (r) {
+    b.disabled = false; b.textContent = 'Začít hrát';
+    if (!r.ok) {
+      // Obsazené jméno nebo překlep řešíme na místě — hra ještě nezačala.
+      if (r.status === 409 || r.status === 400 || r.status === 429) {
+        if (r.status === 409 && $('in-nick')) {
+          $('in-nick').value = nick + Math.floor(10 + Math.random() * 90);
+          $('in-nick').focus();
+        }
+        return introErr(r.j.error || 'Nepovedlo se.');
+      }
+      // Jiná chyba serveru hráče nesmí zastavit — hraje a účet doplní později.
+      return spustNovouHru();
+    }
+    ME = r.j.player;
+    srovnejRef();
+    POZVANI = null;
+    ev('game_register');
+    spustNovouHru();
+  }).catch(function () {
+    // Server mlčí. Hrát se dá i bez účtu, jméno si vyžádáme, až bude odpovídat.
+    b.disabled = false; b.textContent = 'Začít hrát';
+    spustNovouHru();
+  });
 };
 // Profil se mění za běhu — hráč už hraje, tak mu hotovost nikdy nebereme.
 function nastavProfil(id) {
@@ -2852,6 +2899,8 @@ function showRole(id) {
       $('role').classList.add('hidden');
       if (!ME) return showAcct('register');
       startGame(); syncState(true);
+      // Účet má jméno, ale ještě ne heslo — teď je ta chvíle, kdy má co ztratit.
+      if (!ME.ma_heslo) setTimeout(hesloSheet, 1200);
       return;
     }
     S = fresh(id); save();
@@ -3955,8 +4004,9 @@ function spotSheet(sp, areaId) {
       installSheet(sp, areaId, b.getAttribute('data-build'));
     };
   });
-  var go = $('go-shop');
-  if (go) go.onclick = function () { closeSheet(); switchTab('shop'); };
+  [].forEach.call($('sheet-body').querySelectorAll('[data-doobchodu]'), function (go) {
+    go.onclick = function () { closeSheet(); switchTab('shop'); };
+  });
 }
 // Karta modelu na konkrétním místě. Postavit jde jen to, co je skladem — jinak vede do obchodu.
 function modelCard(sp, e, pridej, bezTlacitka) {
@@ -3965,7 +4015,7 @@ function modelCard(sp, e, pridej, bezTlacitka) {
   if (bezTlacitka) btn = '';
   else if (n > 0) btn = '<button class="btn sm" style="width:100%;margin-top:10px" data-build="' + e.model + '">Postavit (' + n + '× skladem)</button>';
   else if (way > 0) btn = '<p class="fine warn" style="margin:10px 0 0">' + way + '× je na cestě — až dorazí, postavíš ho tady.</p>';
-  else btn = '<button class="btn sec sm" style="width:100%;margin-top:10px" id="go-shop">Není skladem — do obchodu</button>';
+  else btn = '<button class="btn sec sm" style="width:100%;margin-top:10px" data-doobchodu="' + e.model + '">Není skladem — do obchodu</button>';
   return '<div class="card"><div class="row"><h3>' + m.name + '</h3><b>' + kc(e.invest) + ' ' + CUR + '</b></div>'
     + '<p class="muted small" style="margin:2px 0 8px">' + esc(m.desc) + '</p>'
     + '<div class="kv"><span>Zákazníků / den</span><b>' + String(e.perday).replace('.', ',') + '</b></div>'
@@ -6072,20 +6122,75 @@ function tutKrok() {
   if (!mamStroj()) return 4;
   return 5;
 }
+// Co se v kroku dělá, proč to hráč dělá a na co si má dát pozor. Bez toho
+// druhého a třetího je z tutoriálu jen ukazování prstem.
 function tutText(k) {
-  if (k === 1) return { t: 'Vyber město', p: 'Kde bude mít firma sídlo? Pošli tam člověka, ať město projde a najde volná místa.', cil: '#open-areas' };
+  if (k === 1) return {
+    t: 'Vyber si město',
+    p: 'Napiš město a pošli tam člověka. Projde ho a najde místa, kde by prádlomat vydělával.',
+    proc: 'Bez míst nemáš kam stavět. A první město ti zůstane jako sídlo firmy — od něj se počítá doprava strojů.',
+    pozor: 'Cesta stojí ' + kcFull(SCOUT_COST) + '. Sídlo se později změnit nedá, tak ho dej tam, kde chceš stavět.',
+    cil: '#sidlo-mesto, #sidlo-go', nouze: '#open-areas'
+  };
   if (k === 2) {
     var proveril = Object.keys(S.revealed || {}).length > 0;
-    return proveril
-      ? { t: 'Domluv nájem', p: 'Vybral sis místo — teď se s majitelem dohodni na nájmu. Zadarmo, ale bez něj se stavět nedá.', cil: null }
-      : { t: 'Vytypuj lokalitu', p: 'Klepni na doměček na mapě a prověř místo — uvidíš nájem, obrat i zisk. Čím vyšší skóre, tím líp.', cil: null };
+    if (!proveril) return {
+      t: 'Prověř si místo',
+      p: 'Klepni na doměček na mapě a nech si ho prověřit. Uvidíš nájem, obrat i zisk.',
+      proc: 'Dokud místo neprověříš, vidíš jen skóre. Čísla rozhodnou, jestli se tam stroj vyplatí.',
+      pozor: 'Obhlídka stojí ' + kcFull(REVEAL_COST) + '. Čím vyšší skóre, tím víc lidí kolem chodí.',
+      cil: '#do-reveal', nouze: '#tab-map'
+    };
+    return {
+      t: 'Domluv nájem',
+      p: 'Vyber vázanost a výpovědní dobu a domluv se s majitelem pozemku.',
+      proc: 'Bez smlouvy se stavět nedá. Smlouva je zdarma — platí se až nájem, měsíc po měsíci.',
+      pozor: 'Delší vázanost je dražší, ale chrání tě: konkurence tě nepřeplatí a majitel tě tak snadno nevyžene.',
+      cil: '.najem-seg, #do-lease', nouze: '#tab-map'
+    };
   }
-  if (k === 3) return { t: 'Kup prádlomat', p: 'V obchodě vezmi MINI — na ten máš peníze a nemusíš si půjčovat.', cil: '#tab-shop' };
-  if (k === 4) return { t: 'Doruč ho hned', p: 'Dodací lhůta je jeden skutečný den. Máš ale kartu Expresní dovoz — použij ji a stroj je hned skladem.',
-    cil: document.querySelector('#v-shop .btn.rush') ? '#v-shop .btn.rush' : '#tab-shop' };
-  if (k === 5) return { t: 'Postav prádlomat', p: 'Vrať se na mapu, klepni na místo s domluveným nájmem a postav na něm stroj ze skladu.', cil: '#tab-map' };
+  if (k === 3) return {
+    t: 'Kup prádlomat',
+    p: 'V obchodě vezmi MINI. Zaplatíš ho z vlastního, půjčovat si zatím nemusíš.',
+    proc: 'MINI je nejlevnější stroj. Na první místo stačí a necháš si peníze na přípojky.',
+    pozor: 'Nech si rezervu — přípojky na místě stojí dalších 50 000 až 100 000.',
+    cil: '#v-shop [data-buy="mini"], [data-doobchodu="mini"]', nouze: '#tab-shop'
+  };
+  if (k === 4) return ownedOf('rush') ? {
+    t: 'Doruč ho hned',
+    p: 'Použij kartu Expresní dovoz a stroj je okamžitě skladem.',
+    proc: 'Běžné dodání jsou dva herní měsíce, tedy celý skutečný den. Tak dlouho čekat nemusíš.',
+    pozor: 'Kartu máš jednu do začátku. Další se dají získat později.',
+    cil: '#v-shop .btn.rush', nouze: '#tab-shop'
+  } : {
+    t: 'Stroj je na cestě',
+    p: 'Dopravce ho veze. Až dorazí, počká ve skladu, než mu najdeš místo.',
+    proc: 'Dodání trvá dva herní měsíce, tedy jeden skutečný den. Hra běží dál, i když ji zavřeš.',
+    pozor: 'Mezitím si můžeš prověřit další místa — ať máš z čeho vybírat.',
+    cil: '#tab-shop', nouze: '#tab-shop'
+  };
+  if (k === 5) return {
+    t: 'Postav prádlomat',
+    p: 'Klepni na místo s domluveným nájmem a dej Postavit. Stroj ze skladu se na něj nastěhuje.',
+    proc: 'Tím ti začne téct první příjem. Prádlomat vydělává nonstop, i když hru zavřeš.',
+    pozor: 'Při stavbě zaplatíš přípojky — vodu, odpad a elektřinu. Je to jednorázově, pak už jen nájem.',
+    cil: '[data-build], #do-build', nouze: '#tab-map'
+  };
   return null;
 }
+// Standa — provozní, co prádlomaty dělá roky. Provede hráče prvním strojem.
+var TUT_KDO = { jmeno: 'Standa', role: 'provozní, 40 prádlomatů' };
+var TUT_AVA = '<svg class="tut-ava" viewBox="0 0 48 48" aria-hidden="true">'
+  + '<circle cx="24" cy="24" r="24" fill="#16233a"/>'
+  + '<path d="M9 44a15 15 0 0 1 30 0Z" fill="#3a6cf5"/>'
+  + '<path d="M20 44V34h8v10Z" fill="#2a4fb8"/>'
+  + '<circle cx="24" cy="23" r="10" fill="#f0c9a4"/>'
+  + '<path d="M14 19a10 10 0 0 1 20 0Z" fill="#1f2d47"/>'
+  + '<path d="M12 19h24a1.6 1.6 0 0 1 0 3H12a1.6 1.6 0 0 1 0-3Z" fill="#273852"/>'
+  + '<circle cx="20.4" cy="23.4" r="1.5" fill="#1f2d47"/><circle cx="27.6" cy="23.4" r="1.5" fill="#1f2d47"/>'
+  + '<path d="M20 29.4h8" stroke="#1f2d47" stroke-width="1.8" stroke-linecap="round" fill="none"/>'
+  + '<path d="M19.6 26.6h8.8" stroke="#5b4636" stroke-width="2.4" stroke-linecap="round" fill="none"/>'
+  + '</svg>';
 var TUT_CIL = null;
 function tutPaint() {
   var bar = $('tut');
@@ -6094,6 +6199,7 @@ function tutPaint() {
   var k = tutKrok(), info = k ? tutText(k) : null;
   if (!info) {
     bar.classList.add('hidden');
+    tutZhasni();
     // První prádlomat stojí — tutoriál skončil sám.
     if (tutAktivni() && (S.units || []).length) {
       S.tut = 'done'; save();
@@ -6109,6 +6215,101 @@ function tutPaint() {
   $('tut-text').textContent = info.p;
   $('tut-fill').style.width = Math.round((k - 1) / TUT_KROKU * 100) + '%';
   if (info.cil) { var c = document.querySelector(info.cil); if (c) { c.classList.add('tut-on'); TUT_CIL = info.cil; } }
+  tutSvetlo(k, info);
+  tutHlidej();
+}
+
+// ─── Světlo na prvek a Standa, co vysvětluje ─────────────────────────────────
+// Hráč nemá luštit, kam klepnout. Okolí ztmavne, svítí jen to jedno tlačítko
+// a vedle něj stojí bublina: co udělat, proč to dělá a na co si dát pozor.
+// Ztmavení nic neblokuje — klikat jde všude, jen se to hůř přehlédne.
+var TUT_STAV = null;       // { k, cil, text } — co je zrovna nasvícené
+var TUT_SKRYTA = {};       // kroky, u kterých hráč bublinu zavřel
+var TUT_HLIDAC = null;
+// Krok může mít víc prvků (políčko i tlačítko pod ním) — nasvítíme je dohromady,
+// jinak by hráč měl psát do tmy.
+function tutRect(sel) {
+  if (!sel) return null;
+  var l = null, t = null, r2 = null, b = null;
+  // Otevřený panel překrývá celou hru. Nasvítit tlačítko pod ním by hráče jen
+  // poslalo klepat do tmy, tak se v tu chvíli díváme jen dovnitř panelu.
+  var sh = $('sheet'), panel = sh && !sh.classList.contains('hidden') ? sh : null;
+  [].forEach.call(document.querySelectorAll(sel), function (el) {
+    if (panel && !panel.contains(el)) return;
+    var r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    if (r.bottom < 0 || r.top > window.innerHeight) return;
+    l = l == null ? r.left : Math.min(l, r.left);
+    t = t == null ? r.top : Math.min(t, r.top);
+    r2 = r2 == null ? r.right : Math.max(r2, r.right);
+    b = b == null ? r.bottom : Math.max(b, r.bottom);
+  });
+  if (l == null) return null;
+  return { left: l, top: t, right: r2, bottom: b, width: r2 - l, height: b - t };
+}
+function tutPrvek(info) {
+  var r = tutRect(info.cil) || tutRect(info.nouze);
+  return r ? { r: r } : null;
+}
+function tutZhasni() {
+  var sv = $('tut-sv'), b = $('tut-bubl');
+  if (sv) sv.classList.add('hidden');
+  if (b) b.classList.add('hidden');
+  TUT_STAV = null;
+}
+// Panel se zavře, mapa popojede, stroj dorazí — světlo musí umět i naskočit
+// zpátky, ne jen zhasnout. Hlídač běží, dokud tutoriál běží.
+function tutHlidej() {
+  if (TUT_HLIDAC) return;
+  TUT_HLIDAC = setInterval(function () {
+    if (!tutAktivni()) { clearInterval(TUT_HLIDAC); TUT_HLIDAC = null; tutZhasni(); return; }
+    var k = tutKrok(), i = k ? tutText(k) : null;
+    if (!i) return tutZhasni();
+    tutSvetlo(k, i);
+  }, 350);
+}
+function tutSvetlo(k, info) {
+  var sv = $('tut-sv'), bub = $('tut-bubl');
+  if (!sv || !bub) return;
+  if (TUT_SKRYTA[k]) { tutZhasni(); return; }
+  var c = tutPrvek(info);
+  // Není co nasvítit — ať hráč aspoň vidí lištu nahoře.
+  if (!c) { tutZhasni(); if ($('tut') && tutAktivni()) $('tut').classList.remove('hidden'); return; }
+  // Bublinu překreslíme jen při změně kroku — jinak by blikala.
+  if (!TUT_STAV || TUT_STAV.k !== k || TUT_STAV.cil !== info.cil) {
+    bub.innerHTML = '<div class="tut-hl">' + TUT_AVA
+      + '<div class="tut-kdo"><b>' + esc(TUT_KDO.jmeno) + '</b><i>' + esc(TUT_KDO.role) + '</i></div>'
+      + '<span class="tut-poc">' + k + '/' + TUT_KROKU + '</span></div>'
+      + '<h4>' + esc(info.t) + '</h4>'
+      + '<p>' + esc(info.p) + '</p>'
+      + (info.proc ? '<p class="tut-proc">' + esc(info.proc) + '</p>' : '')
+      + (info.pozor ? '<p class="tut-pozor">Pozor: ' + esc(info.pozor) + '</p>' : '')
+      + '<div class="tut-akce"><button class="btn sm" id="tut-ok">Rozumím</button>'
+      + '<button class="tut-preskoc" id="tut-pres">Přeskočit</button></div>';
+    bub.querySelector('#tut-ok').onclick = function () { TUT_SKRYTA[k] = 1; tutZhasni(); };
+    bub.querySelector('#tut-pres').onclick = function () { tutZhasni(); tutSkip(); };
+    TUT_STAV = { k: k, cil: info.cil };
+  }
+  sv.classList.remove('hidden');
+  bub.classList.remove('hidden');
+  if ($('tut')) $('tut').classList.add('hidden');   // bublina říká totéž, a líp
+  tutUmisti(c.r);
+}
+function tutUmisti(r) {
+  var dira = $('tut-dira'), bub = $('tut-bubl');
+  if (!dira || !bub) return;
+  var o = 6;
+  dira.style.left = Math.max(0, r.left - o) + 'px';
+  dira.style.top = Math.max(0, r.top - o) + 'px';
+  dira.style.width = (r.width + o * 2) + 'px';
+  dira.style.height = (r.height + o * 2) + 'px';
+  var bh = bub.offsetHeight || 200, bw = bub.offsetWidth || 320;
+  // Bublina patří tam, kde nepřekryje to, na co má hráč klepnout.
+  var nad = r.top, pod = window.innerHeight - r.bottom;
+  var top = pod >= bh + 16 ? r.bottom + 12 : (nad >= bh + 16 ? r.top - bh - 12 : Math.max(8, (window.innerHeight - bh) / 2));
+  var left = Math.min(Math.max(10, r.left + r.width / 2 - bw / 2), Math.max(10, window.innerWidth - bw - 10));
+  bub.style.top = Math.round(top) + 'px';
+  bub.style.left = Math.round(left) + 'px';
 }
 function tutSkip() {
   if (!tutAktivni()) return;
@@ -6149,6 +6350,7 @@ function sidloSheet() {
 // Pod jakou firmou hráč hraje. Bez účtu to řekne rovnou — a klepnutí vede tam,
 // kde si ho založí.
 function paintFirma() {
+  paintHeslo();
   var el = $('t-firma');
   if (!el) return;
   if (ME) {
@@ -8996,6 +9198,58 @@ function syncState(force) {
       }
     })
     .catch(function () { syncBusy = false; /* offline — zkusí se příště */ });
+}
+
+// ─── Heslo k rozehranému účtu ────────────────────────────────────────────────
+// Hráč začal jen se jménem firmy. Dokud si nevymyslí heslo, drží ho ve hře
+// jediná cookie v tomhle prohlížeči — a to mu musíme říct narovinu, ne až
+// ve chvíli, kdy o síť přijde.
+function potrebujeHeslo() { return !!(ME && ME.ma_heslo === false); }
+function hesloSheet() {
+  if (!potrebujeHeslo()) return;
+  sheet('<h3>Zamkni si firmu heslem</h3>'
+    + '<p class="muted small">Hraješ jako <b>' + esc(ME.nick) + '</b>'
+    + (ME.company ? ' za ' + esc(ME.company) : '') + ' — tvoje síť je uložená u nás na serveru, '
+    + 'ale zatím tě k ní pustí jen tenhle prohlížeč. Vymysli si heslo a dostaneš se k ní '
+    + 'odkudkoli — z telefonu, z práce, po smazání historie.</p>'
+    + '<label class="fld"><span>Heslo</span>'
+    + '<input id="hs-pass" class="inp" type="password" maxlength="200" autocomplete="new-password" '
+    + 'placeholder="aspoň 6 znaků"></label>'
+    + '<p class="fine err hidden" id="hs-err"></p>'
+    + '<button class="btn big" id="hs-go" style="width:100%">Nastavit heslo</button>'
+    + '<button class="btn ghost" id="hs-pak" style="width:100%;margin-top:8px">Teď ne</button>'
+    + '<p class="fine">E-mail po tobě nikdo nechce. Ten bude potřeba, až si budeš něco kupovat.</p>');
+  var inp = $('hs-pass');
+  var posli = function () {
+    var pwd = inp ? inp.value : '';
+    var e = $('hs-err');
+    if (pwd.length < 6) { if (e) { e.textContent = 'Heslo musí mít aspoň 6 znaků.'; e.classList.remove('hidden'); } return; }
+    var b = $('hs-go'); b.disabled = true; b.textContent = 'Ukládám…';
+    apiJson('/account/heslo', { password: pwd }).then(function (r) {
+      b.disabled = false; b.textContent = 'Nastavit heslo';
+      if (!r.ok) { if (e) { e.textContent = r.j.error || 'Nepovedlo se.'; e.classList.remove('hidden'); } return; }
+      ME = r.j.player;
+      closeSheet(); paintHeslo();
+      toast('Hotovo. Teď se k síti dostaneš i jinde — jménem ' + ME.nick + ' a heslem.', 'ok');
+    }).catch(function () {
+      b.disabled = false; b.textContent = 'Nastavit heslo';
+      if (e) { e.textContent = 'Server neodpovídá. Zkus to za chvíli.'; e.classList.remove('hidden'); }
+    });
+  };
+  $('hs-go').onclick = posli;
+  if (inp) inp.onkeydown = function (ev2) { if (ev2.key === 'Enter') { ev2.preventDefault(); posli(); } };
+  $('hs-pak').onclick = function () { closeSheet(); paintHeslo(); };
+  setTimeout(function () { if (inp) inp.focus(); }, 80);
+}
+// Proužek nad hrou. Nezmizí, dokud heslo není — ale neplete se do hraní.
+function paintHeslo() {
+  var el = $('heslo-lista');
+  if (!el) return;
+  var ukaz = potrebujeHeslo() && S && (S.units || []).length > 0;
+  el.classList.toggle('hidden', !ukaz);
+  if (!ukaz) return;
+  el.innerHTML = '<span>Firma je zatím jen v tomhle prohlížeči.</span><b>Nastavit heslo</b>';
+  el.onclick = hesloSheet;
 }
 
 // ─── Registrace / přihlášení ────────────────────────────────────────────────

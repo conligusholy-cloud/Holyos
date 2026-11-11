@@ -173,6 +173,7 @@ async function pub(p) {
     email: p.email || null,
     first_name: p.first_name || null, last_name: p.last_name || null,
     has_details: !!(p.email && p.first_name && p.last_name),
+    ma_heslo: !!p.password_hash,
     cards: counts, state_at: p.state_at
   };
 }
@@ -460,6 +461,60 @@ async function zapisPozvani(player, odkud) {
   });
 }
 
+// ─── Začátek hry: jen nick a firma ───────────────────────────────────────────
+// POST /account/zacni { nick, company } → { ok, player }
+// Na úvodce po hráči nechceme heslo ani e-mail — jen pod jakým jménem hraje.
+// Účet tím vznikne doopravdy (nick je zabraný, síť se ukládá na server), ale
+// zatím ho drží jen cookie v prohlížeči. Heslo si doplní, až bude mít co
+// ztratit; do té doby se jinde přihlásit nedá a hra mu to říká.
+router.post('/account/zacni', async (req, res, next) => {
+  try {
+    if (rateLimited('zac:' + ipOf(req), 10, 3600e3)) return res.status(429).json({ error: 'Moc pokusů. Zkus to za chvíli.' });
+    const nick = s((req.body || {}).nick, 24);
+    if (!NICK_RE.test(nick)) return res.status(400).json({ error: 'Jméno musí mít 3–24 znaků (písmena, číslice, tečka, pomlčka, podtržítko).' });
+    const lower = nick.toLowerCase();
+    const taken = await prisma.gamePlayer.findUnique({ where: { nick_lower: lower }, select: { id: true } });
+    if (taken) return res.status(409).json({ error: 'Pod tímhle jménem už někdo hraje. Vymysli si jiné.' });
+    const p = await prisma.gamePlayer.create({
+      data: { nick, nick_lower: lower, company: firmaNebo(s((req.body || {}).company, 60), nick),
+        password_hash: null, last_login_at: new Date(),
+        zdroj: s((req.body || {}).zdroj, 80) || null,
+        sid: /^[a-z0-9-]{6,64}$/.test(String((req.body || {}).sid || ''))
+          ? String((req.body || {}).sid) : null }
+    });
+    try {
+      await prisma.gameCard.createMany({ data: CARD_KINDS.map((k) => ({ player_id: p.id, kind: k })) });
+    } catch (e) { console.warn('[game] uvítací karty:', e.message); }
+    let hrac = p;
+    try {
+      hrac = await narokujRef(hrac, (req.body || {}).ref);
+      hrac = await zapisPozvani(hrac, (req.body || {}).odkud);
+    } catch (e) { console.warn('[game] pozvánky na začátku:', e.message); }
+    setCookie(res, sign(hrac));
+    res.json({ ok: true, player: await pub(hrac) });
+    require('../services/game/notify').newPlayer(prisma, hrac);
+  } catch (e) {
+    if (e && e.code === 'P2002') return res.status(409).json({ error: 'Pod tímhle jménem už někdo hraje. Vymysli si jiné.' });
+    next(e);
+  }
+});
+
+// POST /account/heslo { password } — doplnění hesla k účtu, co vzniklo bez něj.
+// Kdo heslo už má, mění si ho jinde; tahle cesta slouží jen k prvnímu nastavení.
+router.post('/account/heslo', requirePlayer, async (req, res, next) => {
+  try {
+    if (req.player.password_hash) return res.status(409).json({ error: 'Heslo už máš nastavené.' });
+    const pwd = String((req.body || {}).password || '');
+    if (pwd.length < 6) return res.status(400).json({ error: 'Heslo musí mít aspoň 6 znaků.' });
+    if (pwd.length > 200) return res.status(400).json({ error: 'Heslo je příliš dlouhé.' });
+    const hrac = await prisma.gamePlayer.update({
+      where: { id: req.player.id },
+      data: { password_hash: await bcrypt.hash(pwd, 10) }
+    });
+    res.json({ ok: true, player: await pub(hrac) });
+  } catch (e) { next(e); }
+});
+
 // ─── Registrace ──────────────────────────────────────────────────────────────
 // POST /account/register { nick, password } → { ok, player }
 router.post('/account/register', async (req, res, next) => {
@@ -520,7 +575,10 @@ router.post('/account/login', async (req, res, next) => {
     const nick = s((req.body || {}).nick, 24);
     const pwd = String((req.body || {}).password || '');
     const p = await prisma.gamePlayer.findUnique({ where: { nick_lower: nick.toLowerCase() } });
-    const ok = p && !p.disabled && await bcrypt.compare(pwd, p.password_hash);
+    if (p && !p.disabled && !p.password_hash) {
+      return res.status(409).json({ error: 'Tenhle účet ještě nemá heslo. Otevři hru tam, kde jsi hrál naposledy, a heslo si nastav — jinak se k síti nedostaneš.' });
+    }
+    const ok = p && !p.disabled && p.password_hash && await bcrypt.compare(pwd, p.password_hash);
     if (!ok) return res.status(401).json({ error: 'Nick nebo heslo nesedí.' });
     let hrac = await prisma.gamePlayer.update({ where: { id: p.id }, data: { last_login_at: new Date() } });
     // Účty z doby před pozvánkami si při prvním přihlášení nárokují svoje sdílené id.
