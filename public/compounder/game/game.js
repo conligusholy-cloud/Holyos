@@ -5487,8 +5487,51 @@ function hlidejVypovedi() {
     toast(v.nick + ' přeplatil nájem na místě ' + u.name + '. Do konce výpovědní doby to můžeš dorovnat.', 'err');
   });
 }
+// Zábory na serveru jsou pravda o tom, co komu patří — a drží i tehdy, když
+// se stav hry mezi zařízeními rozejde. Když tedy server říká, že na místě
+// stojí můj prádlomat, ale v rozehrané hře chybí, vrátíme ho zpátky. Tohle
+// zachraňuje případ „koupil jsem na počítači a v telefonu to nevidím".
+function obnovChybejiciUnity() {
+  if (!S || !ME) return 0;
+  var mam = {};
+  (S.units || []).forEach(function (u) { mam[u.spotId] = 1; });
+  var pridano = 0;
+  Object.keys(CLAIMS || {}).forEach(function (sid) {
+    var c = CLAIMS[sid];
+    if (!c || !c.mine || !c.model || mam[sid]) return;
+    if (c.pozemek && !c.model) return;                 // holý pozemek není stroj
+    if (S.prodano && S.prodano[sid]) return;           // prodané se nevrací
+    // Když je město prozkoumané, vezmeme skutečné místo i s jeho skóre.
+    var sp = null;
+    Object.keys(S.areas || {}).forEach(function (aid) {
+      (S.areas[aid].spots || []).forEach(function (x) { if (x.id === zakladniSpotId(sid)) sp = x; });
+    });
+    var misto = sp || { id: sid, name: c.name || 'Prádlomat', kind: 'unknown', score: 60,
+      lat: c.lat, lon: c.lon };
+    var eco = economics({ id: sid, name: misto.name, kind: misto.kind, score: misto.score,
+      lat: misto.lat, lon: misto.lon }, c.model);
+    if (c.rent != null) {
+      eco.rent = c.rent;
+      eco.cost = eco.energy + eco.servis + eco.rent;
+      eco.profit = eco.revenue - eco.cost;
+    }
+    S.units.push({ spotId: sid, areaId: c.area_key || '', name: misto.name || c.name || 'Prádlomat',
+      kind: misto.kind || 'unknown', score: misto.score != null ? misto.score : 60,
+      lat: misto.lat != null ? misto.lat : c.lat, lon: misto.lon != null ? misto.lon : c.lon,
+      builtAt: Date.now(), eco: eco });
+    pridano++;
+  });
+  if (pridano) {
+    save(); paint(); drawMap(); syncState(true);
+    toast(pridano === 1
+      ? 'Vrátili jsme ti prádlomat, který v téhle hře chyběl — server o něm ví.'
+      : 'Vrátili jsme ti ' + pridano + ' prádlomaty, které v téhle hře chyběly.', 'ok');
+  }
+  return pridano;
+}
 // Místo, o které hráč přišel, zmizí ze sítě a stroj se mu vrátí na sklad.
 function reconcileUnits() {
+  obnovChybejiciUnity();
   if (!S || !S.units.length) return;
   var lost = [];
   S.units = S.units.filter(function (u) {
@@ -8731,15 +8774,45 @@ function apiJson(path, body, method) {
 }
 // Uložení na server. Neposíláme častěji než jednou za 15 s, ať to netluče zbytečně.
 var wiped = false;   // po smazání hry už nic na server neposíláme
+// Verze stavu na serveru, ze které tahle hra vychází. Posílá se s každým
+// uložením; když se mezitím uložilo z jiného zařízení, server to odmítne a
+// pošle novější stav. Bez toho by hra otevřená v telefonu přepsala prádlomaty
+// koupené mezitím na počítači.
+var STATE_REV = null;
+function prevezmiStav(srv, rev) {
+  if (!srv) return false;
+  var novy = dosypStav(srv);
+  if (!novy) return false;
+  S = novy;
+  if (rev != null) STATE_REV = rev;
+  save();
+  if (typeof refreshUnits === 'function') refreshUnits();
+  paint(); drawMap();
+  return true;
+}
 function syncState(force) {
   if (wiped || !ME || syncBusy || !S) return Promise.resolve();
+  // Hra na pozadí (druhá záložka, telefon v kapse) neukládá — jinak by svým
+  // starým stavem přepsala to, co hráč zrovna dělá jinde. Výjimka je poslední
+  // uložení při odchodu, to si vynutíme přes force.
+  if (!force && document.hidden) return Promise.resolve();
   if (!force && Date.now() - syncAt < 15000) return Promise.resolve();
   syncBusy = true; syncAt = Date.now();
   // aktivni říká serveru, jestli má hráč hru doopravdy před sebou — podle toho
   // se počítá čas strávený ve hře.
-  return apiJson('/account/state', { state: S, aktivni: !document.hidden }, 'PUT')
-    .catch(function () { /* offline — zkusí se příště */ })
-    .then(function () { syncBusy = false; });
+  return apiJson('/account/state', { state: S, aktivni: !document.hidden, rev: STATE_REV }, 'PUT')
+    .then(function (r) {
+      syncBusy = false;
+      if (r.ok) { if (r.j && r.j.rev != null) STATE_REV = r.j.rev; return; }
+      if (r.status === 409 && r.j) {
+        // Jinde je novější hra. Vezmeme ji — svoje poslední vteřiny raději
+        // obětujeme než cizí postup z druhého zařízení.
+        if (prevezmiStav(r.j.state, r.j.rev)) {
+          toast('Tuhle hru máš rozehranou i jinde — načetli jsme novější stav.', 'ok');
+        } else if (r.j.rev != null) { STATE_REV = r.j.rev; }
+      }
+    })
+    .catch(function () { syncBusy = false; /* offline — zkusí se příště */ });
 }
 
 // ─── Registrace / přihlášení ────────────────────────────────────────────────
@@ -8785,6 +8858,9 @@ function doAcct(login) {
     srovnejRef();
     POZVANI = null;
     if (!login) ev('game_register');
+    // Verzi stavu si bereme vždycky — podle ní se pozná, že hru mezitím uložilo
+    // jiné zařízení, a tohle ji nemá přepsat.
+    if (r.j.rev != null) STATE_REV = r.j.rev;
     if (login) {
       // Na serveru je uložená síť — ta má přednost před tím, co je v prohlížeči.
       if (r.j.state) { S = dosypStav(r.j.state) || S; save(); }
@@ -9247,6 +9323,7 @@ api('/account/me?ref=' + encodeURIComponent((S && S.pid) || trvalePid())).then(f
   if (r.ok && r.j.player) {
     ME = r.j.player;
     var srv = r.j.state;
+    if (r.j.rev != null) STATE_REV = r.j.rev;
     if (srv && (!S || (srv.lastTick || 0) >= (S.lastTick || 0))) { S = dosypStav(srv) || S; save(); }
     srovnejRef();   // až tady: stav ze serveru může mít staré pid
     if (S) return startGame();

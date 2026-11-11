@@ -7588,6 +7588,10 @@ model GamePlayer {
   // Celý stav hry (hotovost, síť, objednávky). Díky tomu hráč pokračuje i na jiném zařízení.
   state         Json?
   state_at      DateTime?
+  // Verze uloženého stavu. Zvedá se každým uložením; klient posílá verzi, ze
+  // které vychází, a když nesedí, server uložení odmítne — jinak by hra
+  // otevřená na druhém zařízení přepsala novější postup.
+  state_rev     Int       @default(0)
   token_version Int       @default(0)
   disabled      Boolean   @default(false)
   last_login_at DateTime?

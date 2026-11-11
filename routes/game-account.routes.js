@@ -527,7 +527,7 @@ router.post('/account/login', async (req, res, next) => {
     try { hrac = await narokujRef(hrac, (req.body || {}).ref); }
     catch (e) { console.warn('[game] pozvánky při přihlášení:', e.message); }
     setCookie(res, sign(hrac));
-    res.json({ ok: true, player: await pub(hrac), state: hrac.state || null });
+    res.json({ ok: true, player: await pub(hrac), state: hrac.state || null, rev: hrac.state_rev || 0 });
   } catch (e) { next(e); }
 });
 
@@ -544,7 +544,7 @@ router.get('/account/me', requirePlayer, async (req, res, next) => {
     let p = req.player;
     try { p = await narokujRef(p, req.query.ref); }
     catch (e) { console.warn('[game] narokovani ref v /me:', e.message); }
-    res.json({ ok: true, player: await pub(p), state: p.state || null });
+    res.json({ ok: true, player: await pub(p), state: p.state || null, rev: p.state_rev || 0 });
   } catch (e) { next(e); }
 });
 
@@ -675,12 +675,22 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
     const st = (req.body || {}).state;
     if (!st || typeof st !== 'object') return res.status(400).json({ error: 'Chybí stav.' });
     if (JSON.stringify(st).length > 400000) return res.status(413).json({ error: 'Stav hry je moc velký.' });
+    // Verze: klient posílá tu, ze které vychází. Když se mezitím uložilo odjinud
+    // (druhé zařízení), uložení odmítneme a pošleme zpátky novější stav — jinak
+    // by si hráč přepsal to, co před chvílí udělal jinde.
+    const rev = (req.body || {}).rev;
+    const akt = Number(req.player.state_rev || 0);
+    if (rev != null && Number(rev) !== akt) {
+      return res.status(409).json({ error: 'Hra se mezitím uložila z jiného zařízení.',
+        rev: akt, state: req.player.state || null });
+    }
     const ted = new Date();
-    await prisma.gamePlayer.update({
+    const p = await prisma.gamePlayer.update({
       where: { id: req.player.id },
-      data: Object.assign({ state: st, state_at: ted }, odehranyCas(req.player, ted, (req.body || {}).aktivni !== false)),
+      data: Object.assign({ state: st, state_at: ted, state_rev: akt + 1 },
+        odehranyCas(req.player, ted, (req.body || {}).aktivni !== false)),
     });
-    res.json({ ok: true });
+    res.json({ ok: true, rev: p.state_rev });
   } catch (e) { next(e); }
 });
 
