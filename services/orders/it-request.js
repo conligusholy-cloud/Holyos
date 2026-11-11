@@ -13,7 +13,16 @@ const { prisma } = require('../../config/database');
 const { getSetting, setSetting } = require('../settings');
 const { buildShareUrl } = require('../share-url');
 
-const TEMPLATE_KEY = 'it_requirements.template';
+// Odeslání přes stejného odesílatele jako potvrzení objednávky (Graph send-as z e-mailu naší firmy);
+// bez `from` by e-mail nešel nikam, když není nastavený SMTP.
+async function mail(opts) {
+  let our = null; try { our = await require('../settings').getOurCompany(); } catch (e) { /* */ }
+  const from = (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || undefined;
+  return require('../email').sendMail(Object.assign({ from, fromName: (our && our.name) || 'Best Series s.r.o.', brand: 'compounder' }, opts));
+}
+function mailErr(res) { return res && !res.sent ? (res.error || res.skipped || 'e-mail se neodeslal') : null; }
+
+const TEMPLATE_KEY ='it_requirements.template';
 const DUE_DAYS_KEY = 'it_requirements.due_days';
 const TYPES = ['yesno', 'text', 'textarea', 'choice'];
 
@@ -126,7 +135,7 @@ async function sendToCustomer(orderId, opts = {}) {
   const body = 'Dobrý den,\n\nk Vaší objednávce ' + order.order_number + ' potřebujeme zjistit několik technických informací o místě instalace (internet, elektřina, kontaktní osoba). '
     + 'Prosíme o vyplnění krátkého formuláře nejpozději do ' + dueTxt + ' (do ' + dueDays + ' dnů), ať můžeme instalaci včas připravit.\n\n'
     + 'Vyplnění zabere pár minut. Odpovědi jde zadat jedním odkazem bez přihlášení.\n\nDěkujeme.\n' + ourName;
-  const res = await sendMail({ audience: 'customer', to: email, subject: 'IT požadavky k objednávce ' + order.order_number + ' — prosíme o vyplnění do ' + dueTxt, body, link: url, linkLabel: 'Vyplnit IT požadavky', fromName: ourName });
+  const res = await mail({ audience: 'customer', to: email, subject: 'IT požadavky k objednávce ' + order.order_number + ' — prosíme o vyplnění do ' + dueTxt, body, link: url, linkLabel: 'Vyplnit IT požadavky', fromName: ourName });
   try { require('../order-events').logOrderEvent(orderId, { type: 'it_request_sent', label: 'IT požadavky odeslány zákazníkovi', detail: email + ' · vyplnit do ' + dueTxt + (res && res.sent ? '' : ' · e-mail se NEODESLAL' + (res && (res.error || res.skipped) ? ' (' + (res.error || res.skipped) + ')' : '')), actor: opts.actor || 'uživatel' }); } catch (e) { /* nekritické */ }
   return { request: req, url, sent: !!(res && res.sent), mail_error: res && !res.sent ? (res.error || res.skipped || 'e-mail se neodeslal') : null, due_at: due };
 }
@@ -183,7 +192,12 @@ async function sendResultMail(orderId, items, a, name, opts = {}) {
   const text = resultBody(orderNo, customer, items, a, name, new Date().toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' }));
   const subject = (opts.test ? '[TEST] ' : '') + 'IT požadavky vyplněny: ' + customer + ' (' + orderNo + ')';
   const link = buildShareUrl('/modules/prodejni-objednavky/index.html');
-  for (const t of to) await sendMail({ to: t, subject, body: text, link, linkLabel: 'Otevřít Prodejní objednávky' }).catch((e) => console.warn('[it-request] e-mail', t, e.message));
+  const errors = [];
+  for (const t of to) {
+    try { const r = await mail({ to: t, subject, body: text, link, linkLabel: 'Otevřít Prodejní objednávky' }); const er = mailErr(r); if (er) errors.push(t + ': ' + er); }
+    catch (e) { errors.push(t + ': ' + e.message); }
+  }
+  if (errors.length) { console.warn('[it-request] e-mail s výsledkem selhal:', errors.join(' | ')); if (opts.test) { const e = new Error('E-mail se neodeslal — ' + errors.join(' | ')); e.status = 502; throw e; } }
   return to;
 }
 
@@ -195,7 +209,8 @@ async function sendTest(email) {
   const s = await getSettings(); const items = await getTemplate();
   const due = new Date(Date.now() + s.due_days * 86400000).toLocaleDateString('cs-CZ', { timeZone: 'Europe/Prague' });
   const url = publicUrl(PREVIEW_TOKEN);
-  await sendMail({ to, subject: '[TEST] IT požadavky k objednávce SO-TEST — prosíme o vyplnění do ' + due, body: 'Dobrý den,\n\nk Vaší objednávce SO-TEST potřebujeme zjistit několik informací pro onboarding nového provozovatele prádlomatů. Prosíme o vyplnění krátkého formuláře nejpozději do ' + due + '.\n\nToto je TESTOVACÍ e-mail — formulář se v náhledu neukládá.', link: url, linkLabel: 'Vyplnit IT požadavky' });
+  const r1 = await mail({ to, subject: '[TEST] IT požadavky k objednávce SO-TEST — prosíme o vyplnění do ' + due, body: 'Dobrý den,\n\nk Vaší objednávce SO-TEST potřebujeme zjistit několik informací pro onboarding nového provozovatele prádlomatů. Prosíme o vyplnění krátkého formuláře nejpozději do ' + due + '.\n\nToto je TESTOVACÍ e-mail — formulář se v náhledu neukládá.', link: url, linkLabel: 'Vyplnit IT požadavky' });
+  if (mailErr(r1)) { const e = new Error('E-mail se neodeslal — ' + mailErr(r1)); e.status = 502; throw e; }
   const sample = {}; items.forEach((q) => { sample[q.id] = q.type === 'yesno' ? 'Ano' : q.type === 'choice' ? ((q.options || [])[0] || 'Ano') : 'Ukázková odpověď'; });
   await sendResultMail(0, items, sample, 'Jan Zákazník', { to, test: true, orderNo: 'SO-TEST', customer: 'Ukázková firma s.r.o.' });
   return { ok: true, url };
@@ -228,7 +243,7 @@ async function sendDueNayaxMails() {
       const evt = (label, detail) => require('../order-events').logOrderEvent(m.order_id, { type: 'nayax_mail', label, detail, actor: 'systém' });
       if (!email) { await evt('E-mail se zakládáním Nayax účtu nelze odeslat — chybí e-mail zákazníka'); continue; }
       const cust = (order.company && order.company.name) || '';
-      const res = await sendMail({ audience: 'customer', to: email, subject: fillNayax(s.nayax_subject, order.order_number, cust), body: fillNayax(s.nayax_body, order.order_number, cust) });
+      const res = await mail({ audience: 'customer', to: email, subject: fillNayax(s.nayax_subject, order.order_number, cust), body: fillNayax(s.nayax_body, order.order_number, cust) });
       await prisma.orderNayaxMail.update({ where: { id: m.id }, data: { to_email: email, error: res && res.sent ? null : String((res && (res.error || res.skipped)) || 'neodesláno') } });
       await evt(res && res.sent ? 'Odeslán e-mail se zakládáním Nayax účtu' : 'E-mail se zakládáním Nayax účtu se NEODESLAL', email + (res && res.sent ? '' : ' · ' + ((res && (res.error || res.skipped)) || '')));
       if (res && res.sent) sent++;
@@ -241,7 +256,7 @@ async function sendNayaxTest(email, body) {
   if (!/^\S+@\S+\.\S+$/.test(to)) { const e = new Error('Zadej platný e-mail'); e.status = 400; throw e; }
   const s = await getSettings(); const { sendMail } = require('../email');
   const subj = (body && body.nayax_subject) || s.nayax_subject; const txt = (body && body.nayax_body) || s.nayax_body;
-  const res = await sendMail({ to, subject: '[TEST] ' + fillNayax(subj, 'SO-TEST', 'Ukázková firma s.r.o.'), body: fillNayax(txt, 'SO-TEST', 'Ukázková firma s.r.o.') });
+  const res = await mail({ to, subject: '[TEST] ' + fillNayax(subj, 'SO-TEST', 'Ukázková firma s.r.o.'), body: fillNayax(txt, 'SO-TEST', 'Ukázková firma s.r.o.') });
   return { ok: true, sent: !!(res && res.sent), error: res && !res.sent ? (res.error || res.skipped) : null };
 }
 
@@ -299,7 +314,7 @@ async function sweepOverdue() {
     for (const p of people) {
       notifyPerson(prisma, p.id, { title, body, data: { type: 'it_request_overdue', order_id: r.order_id, link }, sound: 'default' }).catch((e) => console.warn('[it-request] push', p.id, e.message));
       if (p.user_id && createNotification) createNotification({ userId: p.user_id, type: 'system', title, body, link, meta: { order_id: r.order_id } }).catch((e) => console.warn('[it-request] zvonek', e.message));
-      if (p.email) sendMail({ to: p.email, subject: title, body, link: buildShareUrl(link), linkLabel: 'Otevřít Prodejní objednávky' }).catch((e) => console.warn('[it-request] e-mail', p.email, e.message));
+      if (p.email) mail({ to: p.email, subject: title, body, link: buildShareUrl(link), linkLabel: 'Otevřít Prodejní objednávky' }).catch((e) => console.warn('[it-request] e-mail', p.email, e.message));
     }
     try { require('../order-events').logOrderEvent(r.order_id, { type: 'it_request_overdue', label: 'IT požadavky nevyplněny včas — upozorněn ' + (people.map((p) => p.first_name + ' ' + p.last_name).join(', ') || 'nikdo (příjemce nenalezen)'), actor: 'systém' }); } catch (e) { /* nekritické */ }
     notified++;
