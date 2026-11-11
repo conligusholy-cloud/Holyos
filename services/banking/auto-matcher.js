@@ -89,9 +89,26 @@ function invoiceAccounts(inv) {
   return out;
 }
 
+/** Tokeny ze zprávy platby (velká písmena, bez mezer) — pro hledání čísel faktur uvedených ve zprávě / referenci. */
+function messageTokens(tx) {
+  const raw = [tx.message, tx.reference].filter(Boolean).join(' ').toUpperCase();
+  const set = new Set();
+  raw.split(/[^A-Z0-9\-\/]+/).forEach((t) => { if (t && t.length >= 6) { set.add(t); set.add(t.replace(/[-\/]/g, '')); } });
+  return set;
+}
+/** Je faktura uvedená ve zprávě platby (číslo dokladu, externí číslo dodavatele nebo VS, min. 6 znaků)? */
+function referencedInMessage(inv, tokens) {
+  if (!tokens.size) return false;
+  const cands = [inv.invoice_number, inv.external_number].filter(Boolean).map((s) => String(s).toUpperCase());
+  for (const c of cands) { if (c.length >= 6 && (tokens.has(c) || tokens.has(c.replace(/[-\/]/g, '')))) return true; }
+  const vs = normalizeVs(inv.variable_symbol);
+  return vs.length >= 6 && tokens.has(vs);
+}
+
 function scoreCandidates(tx, invoices) {
   const txAmount = Number(tx.amount);
   const txVs = normalizeVs(tx.variable_symbol);
+  const msgTokens = messageTokens(tx);
   const txCur = tx.currency || 'CZK';
   const invDir = tx.direction === 'in' ? 'ar' : 'ap';
   const list = [];
@@ -101,14 +118,15 @@ function scoreCandidates(tx, invoices) {
     if ((inv.currency || 'CZK') !== txCur) continue;
     const remaining = Math.round((Number(inv.total) - Number(inv.paid_amount || 0)) * 100) / 100;
     if (remaining <= 0.009) continue;
-    const vsOk = !!txVs && normalizeVs(inv.variable_symbol) === txVs;
+    const msgOk = referencedInMessage(inv, msgTokens);
+    const vsOk = (!!txVs && normalizeVs(inv.variable_symbol) === txVs) || msgOk; // číslo faktury ve zprávě platí jako VS
     const accs = invoiceAccounts(inv);
     const accKnown = accs.length > 0;
     const accOk = !!tx.counterparty_account && accs.some((a) => accountsEqual(a, tx.counterparty_account));
     if (!vsOk && !accOk) continue;
     const exact = Math.abs(remaining - txAmount) <= 0.01;
     const partial = txAmount < remaining - 0.01;
-    list.push({ ...inv, remaining, match: { vs: vsOk, account: accOk, account_known: accKnown, exact, partial } });
+    list.push({ ...inv, remaining, match: { vs: vsOk, msg: msgOk, account: accOk, account_known: accKnown, exact, partial } });
   }
   // nejlepší nahoře: VS+účet+částka > VS+částka > účet+částka > VS > účet
   const sc = (c) => (c.match.vs ? 4 : 0) + (c.match.account ? 2 : 0) + (c.match.exact ? 3 : 0);
@@ -128,6 +146,14 @@ async function findMatchCandidates(tx, prismaCtx, opts = {}) {
     return { decision: 'no_match', candidates: [], reason: txVs || tx.counterparty_account
       ? 'Žádná otevřená faktura se shodným VS ani účtem protistrany.'
       : 'Platba nemá VS ani účet protistrany — nelze automaticky spárovat.' };
+  }
+  // Jedna platba za víc faktur: ve zprávě je uvedeno víc faktur a jejich zbývající částky dohromady dávají částku platby → rozpustit
+  const msgRefs = list.filter((c) => c.match.msg);
+  if (msgRefs.length >= 2) {
+    const sum = Math.round(msgRefs.reduce((s, c) => s + c.remaining, 0) * 100) / 100;
+    if (Math.abs(sum - Number(tx.amount)) <= 0.01) {
+      return { decision: 'auto_match', multi: true, candidates: msgRefs, reason: `Zpráva uvádí ${msgRefs.length} faktur (${msgRefs.map((c) => c.invoice_number).join(', ')}) a součet sedí na částku platby.` };
+    }
   }
   const vsExact = list.filter((c) => c.match.vs && c.match.exact);
   if (vsExact.length === 1) return { decision: 'auto_match', candidates: vsExact, reason: `VS ${txVs} + částka sedí na ${vsExact[0].invoice_number}.` };
@@ -157,6 +183,11 @@ async function findMatchCandidates(tx, prismaCtx, opts = {}) {
 async function processTransaction(tx, prismaCtx, userContext, ctx, opts = {}) {
   const { ruleMatches, applyRule } = require('./matching-rules');
   const result = await findMatchCandidates(tx, prismaCtx, { invoices: ctx.invoices });
+  if (result.decision === 'auto_match' && result.multi) {
+    const r = await applyMatch(tx, result.candidates.map((c) => ({ invoice_id: c.id, amount: c.remaining })), prismaCtx, userContext, 'vs+amount');
+    (r.updated_invoices || []).forEach((u) => { const cached = ctx.invoices && ctx.invoices.find((i) => i.id === u.id); if (cached) { cached.paid_amount = u.paid_amount; cached.status = u.status; } });
+    return { status: 'matched', invoice: result.candidates.map((c) => c.invoice_number).join(', ') };
+  }
   if (result.decision === 'auto_match') {
     const inv = result.candidates[0];
     const r = await applyMatch(tx, [{ invoice_id: inv.id, amount: Number(tx.amount) }], prismaCtx, userContext, result.partial ? 'vs-partial' : (inv.match.vs ? 'vs+amount' : 'account+amount'));
