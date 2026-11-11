@@ -11,6 +11,12 @@
     /* Tabulka — .data-table není globálně definovaná v dashboard.css,
        každý modul má vlastní inline styl (konvence HolyOS) */
     .data-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    /* Široká tabulka dokladů: vlastní posuv (vodorovný jezdec viditelný dole, hlavička přilepená nahoře) */
+    .h-scroll { overflow: auto; max-height: calc(100vh - 110px); max-width: 100%; border-radius: 10px; scrollbar-width: auto; scrollbar-color: #4b5a7a #1b2236; }
+    .h-scroll::-webkit-scrollbar { height: 16px; width: 14px; }
+    .h-scroll::-webkit-scrollbar-track { background: #1b2236; border-radius: 8px; }
+    .h-scroll::-webkit-scrollbar-thumb { background: #4b5a7a; border-radius: 8px; border: 3px solid #1b2236; }
+    .h-scroll::-webkit-scrollbar-thumb:hover { background: #6a7ca3; }
     .data-table thead { position: sticky; top: 0; z-index: 1; }
     .data-table th {
       background: var(--surface2); padding: 10px 14px; text-align: left;
@@ -351,6 +357,8 @@
         </div>
       </div>
 
+      <!-- Posuvník vlevo/vpravo (i nahoru/dolů): hlavička zůstává vidět, vodorovný jezdec je vždy dole na obrazovce -->
+      <div id="invoices-scroll" class="h-scroll">
       <table class="data-table" id="invoices-table">
         <thead>
           <tr>
@@ -375,6 +383,7 @@
         </thead>
         <tbody><tr><td colspan="17" class="empty-hint">Načítání…</td></tr></tbody>
       </table>
+      </div><!-- /invoices-scroll -->
 
       </div><!-- /tab-invoices -->
 
