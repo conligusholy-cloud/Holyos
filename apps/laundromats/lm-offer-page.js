@@ -113,6 +113,8 @@ const GLOBE = (() => {
   <ellipse cx="${W / 2}" cy="${H / 2}" rx="${W / 2 - 2}" ry="${H / 2 - 2}" fill="url(#glg)" stroke="rgba(120,160,255,.25)"/>${dots}${arcs}
   <circle class="gl-pulse" cx="${cz[0]}" cy="${cz[1]}" r="6"/><circle class="gl-cz" cx="${cz[0]}" cy="${cz[1]}" r="5"/><text x="${cz[0] + 9}" y="${cz[1] - 7}" fill="#b6f5ea" font-size="10.5" font-weight="700">CZ</text></svg>`;
 })();
+// Jiskry za personalizovaným prádlomatem (pevné pozice, různé zpoždění)
+const SPARKS = '<div class="bsp">' + [[8, 18, 0], [86, 14, .6], [16, 62, 1.2], [92, 52, .3], [50, 4, 1.8], [30, 30, 2.4], [72, 70, .9], [4, 40, 2.1], [64, 24, 1.5], [96, 30, 2.7]].map(([x, y, d]) => `<i style="left:${x}%;top:${y}%;animation-delay:${d}s"></i>`).join('') + '</div>';
 function offerPage(o, token, opts) {
   const preview = !!(opts && opts.preview);
   const L = o.lang === 'en' ? 'en' : o.lang === 'pl' ? 'pl' : 'cs', t = T[L], X = EXTRA[L];
@@ -175,8 +177,15 @@ function offerPage(o, token, opts) {
 .ox .gl-arc{fill:none;stroke:#4fd1ff;stroke-width:1.6;stroke-linecap:round;stroke-dasharray:4 6;animation:glFlow 1.6s linear infinite;filter:drop-shadow(0 0 3px rgba(79,209,255,.7))}
 .ox .gl-dst{fill:#7aa8ff;animation:glPing 2.4s ease-in-out infinite}.ox .gl-cz{fill:#2fe3c6}.ox .gl-pulse{fill:none;stroke:#2fe3c6;stroke-width:2;transform-box:fill-box;transform-origin:center;animation:glPulse 2s ease-out infinite}
 @keyframes glFlow{to{stroke-dashoffset:-20}}@keyframes glPulse{0%{transform:scale(.4);opacity:1}100%{transform:scale(2.6);opacity:0}}@keyframes glPing{0%,100%{opacity:.35}50%{opacity:1}}
-.ox .bwrap{display:grid;grid-template-columns:1.15fr .85fr;gap:36px;align-items:center;margin-top:14px}.ox .bimg{position:relative;border-radius:24px;overflow:hidden;border:1px solid var(--line2);background:radial-gradient(circle at 50% 40%,rgba(79,209,255,.18),transparent 65%),#0b1426;box-shadow:0 30px 70px -30px rgba(58,108,245,.6)}
-.ox .bimg img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}.ox .bcap{position:absolute;left:14px;bottom:14px;padding:6px 12px;border-radius:999px;background:rgba(6,10,20,.78);border:1px solid var(--line2);font-size:13px;font-weight:700;color:var(--tx)}
+.ox .brand h2{font-size:clamp(24px,2.4vw,32px)}.ox .bwrap{display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center;margin-top:14px}.ox .bimg{position:relative;max-width:470px;width:100%;margin:0 auto;padding:30px 10px 54px;display:flex;flex-direction:column;align-items:center}
+.ox .bimg img{position:relative;z-index:2;display:block;width:88%;height:auto;max-height:340px;object-fit:contain;border-radius:14px;filter:drop-shadow(0 24px 40px rgba(0,0,0,.6));animation:bFloat 6s ease-in-out infinite}
+.ox .bglow{position:absolute;z-index:0;left:6%;right:6%;top:6%;bottom:16%;border-radius:50%;background:radial-gradient(circle,rgba(79,209,255,.55),rgba(124,92,255,.28) 45%,transparent 70%);filter:blur(28px);animation:bGlow 4s ease-in-out infinite}
+.ox .bshadow{width:60%;height:18px;margin-top:14px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.7),transparent);animation:bShadow 6s ease-in-out infinite}
+.ox .bsp{position:absolute;inset:0;z-index:1;pointer-events:none}.ox .bsp i{position:absolute;width:6px;height:6px;border-radius:50%;background:#fff;box-shadow:0 0 10px 3px rgba(79,209,255,.9),0 0 20px 6px rgba(124,92,255,.5);opacity:0;animation:bSpark 3.2s ease-in-out infinite}
+.ox .bcap{margin-top:10px;padding:6px 12px;border-radius:999px;background:rgba(6,10,20,.78);border:1px solid var(--line2);font-size:13px;font-weight:700;color:var(--tx);text-align:center}
+@keyframes bFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}@keyframes bShadow{0%,100%{transform:scaleX(1);opacity:.9}50%{transform:scaleX(.85);opacity:.55}}
+@keyframes bGlow{0%,100%{opacity:.75;transform:scale(1)}50%{opacity:1;transform:scale(1.06)}}@keyframes bSpark{0%{opacity:0;transform:scale(.3)}40%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.2) translateY(-18px)}}
+@media (prefers-reduced-motion:reduce){.ox .bimg img,.ox .bglow,.ox .bshadow,.ox .bsp i{animation:none}.ox .bsp i{opacity:.6}}
 .ox .bl{list-style:none;padding:0;margin:20px 0 0}.ox .bl li{display:flex;gap:10px;margin:10px 0;color:var(--tx2);font-size:16px;line-height:1.5}.ox .bl svg{flex:none;color:var(--teal);margin-top:4px}
 @media (max-width:900px){.ox .bwrap{grid-template-columns:1fr}}
 .ox .proof .pi{font-style:normal;font-size:30px;display:block;margin-bottom:10px}.ox .proof b{-webkit-text-fill-color:currentColor}
@@ -193,7 +202,7 @@ function offerPage(o, token, opts) {
     <div class="visual"><div class="glow"></div><video src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" autoplay muted loop playsinline preload="metadata"></video>
       <div class="statcard globe">${GLOBE}<div class="gt"><b>${CZF(20)} ${esc(X.statCard[0])}</b><p>🌍 ${esc(X.statCard[1])}</p></div></div></div>
   </section>
-  <section class="sec brand" data-s="znacka" style="padding-top:20px">${kick(X.brandK)}<div class="bwrap"><div class="bimg"><img src="${o.image_v ? '/nabidka/' + token + '/img?v=' + o.image_v : '/img/model/flex'}" alt="${esc(X.brandCap(o.company || ''))}"${o.image_v ? '' : ' style="object-fit:contain;padding:24px"'}><div class="bcap">${esc(o.image_v ? X.brandCap(o.company || '') : X.brandCap0)}</div></div>
+  <section class="sec brand" data-s="znacka" style="padding-top:20px">${kick(X.brandK)}<div class="bwrap"><div class="bimg"><div class="bglow"></div>${SPARKS}<img src="${o.image_v ? '/nabidka/' + token + '/img?v=' + o.image_v : '/img/model/flex'}" alt="${esc(X.brandCap(o.company || ''))}"><div class="bshadow"></div><div class="bcap">${esc(o.image_v ? X.brandCap(o.company || '') : X.brandCap0)}</div></div>
     <div><h2>${esc(X.brandH(o.company || ''))}</h2><p class="sub">${esc(X.brandSub(o.company || ''))}</p><ul class="bl">${X.brandPts.map((x) => `<li>${CHK}<span>${esc(x)}</span></li>`).join('')}</ul></div></div></section>
 
   ${refs.length ? `<section class="sec" data-s="provozovny" style="padding-top:20px">${kick(X.sites)}<div class="sites">${refs.map((r) => `<figure class="site">${r[2] ? `<img src="${esc(r[2])}" alt="${esc(r[0])}" loading="lazy">` : ''}<figcaption>${PIN}${esc(r[0])}</figcaption>${r[1] ? `<small>${esc(r[1])}</small>` : ''}</figure>`).join('')}</div></section>` : ''}
