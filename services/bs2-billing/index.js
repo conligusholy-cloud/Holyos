@@ -9,7 +9,7 @@ const { prisma } = require('../../config/database');
 const { generateInvoiceNumber } = require('../accountant/invoice-numbering');
 
 const KEY = 'bs2.billing';
-const CATS = ['products', 'online'];
+const CATS = ['products', 'online', 'game'];
 // Šablony dokladů = katalog modulu Šablony dokumentů (services/pdf/doc-previews CATALOG, skupina „Vydané doklady").
 // Faktury BS2 se renderují stejným generátorem (invoice-pdf + bs2-doc-style) jako náhledy v tom modulu,
 // takže zvolená šablona je přesně to, co je vidět v Šablonách dokumentů → Náhled.
@@ -36,7 +36,7 @@ async function getConfig() {
   const out = {};
   CATS.forEach((c) => {
     const x = (raw && raw[c]) || {};
-    out[c] = { template: normTemplate(x.template), CZK: toId(x.CZK), EUR: toId(x.EUR), auto_proforma: x.auto_proforma !== false, auto_final: x.auto_final !== false, auto_online: x.auto_online !== false, vat_rate: Number.isFinite(Number(x.vat_rate)) && x.vat_rate !== '' && x.vat_rate != null ? Number(x.vat_rate) : DEFAULT_VAT };
+    out[c] = { template: normTemplate(x.template), CZK: toId(x.CZK), EUR: toId(x.EUR), auto_proforma: x.auto_proforma !== false, auto_final: x.auto_final !== false, auto_online: c === 'game' ? x.auto_online === true : x.auto_online !== false, vat_rate: Number.isFinite(Number(x.vat_rate)) && x.vat_rate !== '' && x.vat_rate != null ? Number(x.vat_rate) : DEFAULT_VAT };
   });
   return out;
 }
@@ -111,6 +111,7 @@ async function sendInvoice(invoiceId, kind) {
     const pdf = await generateInvoicePdf(inv, await ourCompany());
     const cur = inv.currency || 'CZK';
     let subject, body;
+    const brandName = inv.source === 'game' ? 'Laundromat Tycoon' : 'Best Series 2.0';
     if (kind === 'proforma') {
       subject = 'Zálohová faktura ' + inv.invoice_number + ' — Best Series 2.0';
       body = 'Dobrý den,\n\nděkujeme za objednávku. V příloze zasíláme zálohovou fakturu ' + inv.invoice_number + '.\nČástka k úhradě: ' + fmt(inv.total, cur) + ', splatnost do ' + fmtD(inv.date_due) + ' (' + PROFORMA_DUE_DAYS + ' dny).\nPo přijetí platby Vám pošleme konečnou fakturu.\n\nS pozdravem\nBest Series s.r.o.';
@@ -118,7 +119,7 @@ async function sendInvoice(invoiceId, kind) {
       subject = 'Faktura ' + inv.invoice_number + ' — Best Series 2.0';
       body = 'Dobrý den,\n\nděkujeme za úhradu zálohy. V příloze zasíláme konečnou fakturu ' + inv.invoice_number + (inv.note ? ' (' + inv.note + ')' : '') + '.\nFaktura je uhrazena zálohou, k platbě nic nezbývá.\n\nS pozdravem\nBest Series s.r.o.';
     } else {
-      subject = 'Faktura ' + inv.invoice_number + ' — Best Series 2.0';
+      subject = 'Faktura ' + inv.invoice_number + ' — ' + brandName;
       body = 'Dobrý den,\n\nděkujeme za platbu. V příloze zasíláme fakturu ' + inv.invoice_number + ' na částku ' + fmt(inv.total, cur) + '. Faktura je již uhrazena.\n\nS pozdravem\nBest Series s.r.o.';
     }
     const r = await sendMail(Object.assign({}, await mailFrom(), { to, brand: 'bs2', subject, body, attachments: [{ filename: inv.invoice_number + '.pdf', content: pdf, contentType: 'application/pdf' }] }));
@@ -220,11 +221,13 @@ async function processPayment(paymentId) {
 }
 
 // ─── Kategorie ONLINE: po zaplacení přes Stripe rovnou faktura (ceny v BS2 jsou s DPH) ───
-async function issueOnline(p) {
-  const ref = 'BS2-L' + String(p.ref);
-  const ex = await prisma.invoice.findFirst({ where: { source: 'bs2_online', external_number: ref }, select: { id: true, invoice_number: true } });
+// Kategorie GAME (Laundromat Tycoon) používá stejný postup, jen vlastní nastavení, řadu GM a source = 'game'.
+async function issueOnline(p, o) {
+  o = o || { cat: 'online', source: 'bs2_online', refPrefix: 'BS2-L', series: 'bs2_online' };
+  const ref = o.refPrefix + String(p.ref);
+  const ex = await prisma.invoice.findFirst({ where: { source: o.source, external_number: ref }, select: { id: true, invoice_number: true } });
   if (ex) return { ok: true, existing: true, invoice_id: ex.id, invoice_number: ex.invoice_number };
-  const cfg = (await getConfig()).online;
+  const cfg = (await getConfig())[o.cat];
   const currency = parseCurrency(p.currency);
   const vatRate = p.vat_rate != null ? Number(p.vat_rate) : cfg.vat_rate;
   const b = buildItems(p.items, vatRate, p.gross !== false);
@@ -232,13 +235,13 @@ async function issueOnline(p) {
   const company = await resolveCompany(p.customer);
   const paidAt = p.paid_at ? new Date(p.paid_at) : new Date();
   const inv = await prisma.$transaction(async (tx) => {
-    const no = await generateInvoiceNumber('bs2_online', { prisma: tx });
+    const no = await generateInvoiceNumber(o.series, { prisma: tx });
     return tx.invoice.create({ data: {
       invoice_number: no, external_number: ref, type: 'issued', direction: 'ar', invoice_role: 'full', language: p.language === 'en' ? 'en' : 'cs',
       company_id: company.id, currency, subtotal: b.subtotal, vat_amount: b.vat, total: b.total, paid_amount: b.total, vat_regime: vatRate > 0 ? 'standard' : (p.vat_regime || 'outside_scope'),
       date_issued: paidAt, date_taxable: paidAt, date_due: paidAt, variable_symbol: no.replace(/\D/g, '').slice(0, 10), payment_method: 'card',
-      status: 'paid', source: 'bs2_online', sent_to: (p.customer && p.customer.email) || null, note: 'Zaplaceno online kartou přes Stripe' + (p.note ? ' — ' + p.note : '') + '. Objednávka č. ' + p.ref + '.',
-      ...(await bankFields('online', currency)),
+      status: 'paid', source: o.source, sent_to: (p.customer && p.customer.email) || null, note: 'Zaplaceno online kartou přes Stripe' + (p.note ? ' — ' + p.note : '') + '. Objednávka č. ' + p.ref + '.',
+      ...(await bankFields(o.cat, currency)),
       items: { create: b.rows },
     } });
   });
@@ -247,4 +250,23 @@ async function issueOnline(p) {
   return { ok: true, invoice_id: inv.id, invoice_number: inv.invoice_number, sent: !!s.ok, send_error: s.ok ? null : s.error };
 }
 
-module.exports = { CATS, TEMPLATES, getConfig, setConfig, bankFields, issueProforma, issueOnline, processPayment, sendInvoice };
+// ─── Kategorie GAME: zaplacený nákup karet v Laundromat Tycoon (GamePurchase) → faktura GM + e-mail ───
+async function issueGame(purchaseId, opts) {
+  opts = opts || {};
+  const pu = await prisma.gamePurchase.findUnique({ where: { id: purchaseId }, include: { player: true } });
+  if (!pu || pu.status !== 'paid') return { ok: false, skipped: true, reason: 'nákup není zaplacený' };
+  let name = pu.kind;
+  try { const it = await require('../../routes/game-account.routes')._item(pu.kind); if (it && it.name) name = it.name; } catch (e) { /* název = kód */ }
+  const pl = pu.player || {};
+  const person = [pl.first_name, pl.last_name].filter(Boolean).join(' ');
+  const customer = { name: person || pl.company || pl.nick || pu.email || 'Hráč', email: pu.email || pl.email || null };
+  const cur = String(pu.currency || 'czk').toUpperCase();
+  const qty = pu.qty || 1;
+  return issueOnline({
+    ref: pu.id, currency: cur, gross: true, paid_at: pu.paid_at, send: opts.send,
+    customer, note: 'Hráč ' + (pl.nick || pu.player_id),
+    items: [{ description: 'Laundromat Tycoon — ' + name, quantity: qty, unit: 'ks', unit_price: (pu.amount_cents / 100) / qty }],
+  }, { cat: 'game', source: 'game', refPrefix: 'GAME-', series: 'bs2_game' });
+}
+
+module.exports = { CATS, TEMPLATES, getConfig, setConfig, bankFields, issueProforma, issueOnline, issueGame, processPayment, sendInvoice };

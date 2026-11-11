@@ -41,6 +41,20 @@ router.put('/bs2-billing/config', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GAME: doplní doklady k už zaplaceným nákupům, které ještě fakturu nemají (nic se neodesílá, jen vystaví)
+router.post('/bs2-billing/game/backfill', async (req, res, next) => {
+  try {
+    const svc = require('../services/bs2-billing');
+    const paid = await prisma.gamePurchase.findMany({ where: { status: 'paid' }, orderBy: { id: 'asc' }, select: { id: true } });
+    let created = 0, existing = 0, failed = 0;
+    for (const p of paid) {
+      const r = await svc.issueGame(p.id, { send: false }).catch(() => ({ ok: false }));
+      if (r.ok && r.existing) existing++; else if (r.ok) created++; else failed++;
+    }
+    res.json({ total: paid.length, created, existing, failed });
+  } catch (err) { next(err); }
+});
+
 // Pro UI — info o aktuálním uživateli (potřeba pro skryté akce)
 router.get('/whoami', async (req, res) => {
   let canManual = false;

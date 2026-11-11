@@ -156,6 +156,8 @@ const webhook = [express.raw({ type: '*/*', limit: '1mb' }), async (req, res) =>
       })
     ]);
     console.log('[game] zaplaceno:', pu.qty + '× ' + pu.kind, '· hráč', pu.player_id);
+    // Doklad (řada GM) — vystaví se vždy, odešle se podle nastavení v Účetní doklady → GAME
+    require('../services/bs2-billing').issueGame(pu.id).then((r) => { if (r && !r.ok && !r.skipped) console.warn('[game] faktura:', r.error || r.reason); }).catch((e) => console.warn('[game] faktura selhala:', e.message));
     // Majitelům do Velína — až tady, po ověřeném podpisu, takže jen na skutečné platby.
     try {
       const hrac = await prisma.gamePlayer.findUnique({

@@ -38,6 +38,7 @@ const PREFIX_MAP = {
   bs2_proforma: 'ZB', // Best Series 2.0 — zálohová faktura k objednávce produktu
   bs2_final: 'FB', // Best Series 2.0 — finální faktura po zaplacení zálohy
   bs2_online: 'OB', // Best Series 2.0 — online produkty (faktura po platbě přes Stripe)
+  bs2_game: 'GM', // Laundromat Tycoon (GAME) — faktura po platbě přes Stripe
 };
 
 /**

@@ -299,6 +299,7 @@
         <button type="button" class="tab-btn" onclick="switchAccountingTab('servicebilling',null,event)">🔧 Fakturace servisních smluv</button>
         <button type="button" class="tab-btn" onclick="switchAccountingTab('softwarebilling',null,event)">💻 Softwarová podpora</button>
         <button type="button" class="tab-btn" onclick="switchAccountingTab('bs2',null,event)">🅱️ Best Series 2.0</button>
+        <button type="button" class="tab-btn" onclick="switchAccountingTab('game',null,event)">🎮 GAME</button>
       </div>
 
       <!-- TAB: FAKTURY -->
@@ -846,6 +847,29 @@
           </table>
         </div>
       </div><!-- /tab-bs2 -->
+
+      <div class="tab-pane" id="tab-game">
+        <div class="pb-card">
+          <h3>🎮 GAME — Laundromat Tycoon</h3>
+          <div style="font-size:13px; color:var(--text2); line-height:1.5; margin-bottom:12px;">Po zaplacení přes <b>Stripe</b> se hráči vystaví <b>faktura</b> (řada <b>GM</b>, již uhrazená) a odešle se na jeho e-mail. Vypnuto = faktura se jen vystaví a odešleš ji ručně tlačítkem „✉ Znovu".</div>
+          <div style="display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; margin-bottom:6px;">
+            <label style="font-size:12px;">Šablona dokladu <a href="#" onclick="bs2PreviewTemplate('game');return false;" style="font-size:11px;margin-left:6px;">🔍 náhled</a> · <a href="/modules/sablony-dokumentu/index.html" style="font-size:11px;">Šablony dokumentů</a><br><select id="bs2-game-template" style="min-width:260px;"></select></label>
+            <label style="font-size:12px;">Účet CZK<br><select id="bs2-game-CZK" style="min-width:260px;"></select></label>
+            <label style="font-size:12px;">Účet EUR<br><select id="bs2-game-EUR" style="min-width:260px;"></select></label>
+            <label style="font-size:12px;">DPH %<br><input type="number" id="bs2-game-vat" min="0" max="30" style="width:70px;"></label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:6px;padding-bottom:6px;"><input type="checkbox" id="bs2-game-auto"> Odesílat automaticky</label>
+            <button class="btn btn-primary btn-sm" onclick="saveBs2Config()">Uložit nastavení</button>
+            <button class="btn btn-secondary btn-sm" title="Vystaví doklady k už zaplaceným nákupům bez faktury (neodesílá je)" onclick="gameBackfill()">Doplnit chybějící doklady</button>
+            <span id="bs2-game-msg" style="font-size:12px;color:var(--text2);"></span>
+          </div>
+        </div>
+        <div class="pb-card" style="margin-top:12px;">
+          <table class="data-table" id="bs2-game-table" style="width:100%;">
+            <thead><tr><th>Číslo</th><th>Typ</th><th>Odběratel</th><th>Vystaveno</th><th>Splatnost</th><th>Částka</th><th>Stav</th><th>E-mail</th><th></th></tr></thead>
+            <tbody><tr><td colspan="9" class="empty-hint">Načítám…</td></tr></tbody>
+          </table>
+        </div>
+      </div><!-- /tab-game -->
 
     </div>
   </div>
@@ -3435,7 +3459,7 @@
       // Zvýrazni kliknuté tlačítko (u faktur jsou dvě – Vydané / Přijaté)
       if (ev && ev.currentTarget) ev.currentTarget.classList.add('active');
       else {
-        const btnIdxMap = { invoices: 0, payments: 2, bank: 3, reminders: 4, handovers: 5, servicebilling: 6, softwarebilling: 7, bs2: 8 };
+        const btnIdxMap = { invoices: 0, payments: 2, bank: 3, reminders: 4, handovers: 5, servicebilling: 6, softwarebilling: 7, bs2: 8, game: 9 };
         const b = document.querySelectorAll('.tab-btn')[btnIdxMap[name] ?? 0];
         if (b) b.classList.add('active');
       }
@@ -3450,7 +3474,7 @@
       if (name === 'handovers') loadHandovers();
       if (name === 'servicebilling') loadServiceBilling();
       if (name === 'softwarebilling') loadSoftwareBilling();
-      if (name === 'bs2') loadBs2Invoices();
+      if (name === 'bs2' || name === 'game') loadBs2Invoices();
     };
 
     // ─── Tab „Best Series 2.0" (dvě kategorie: produkty = záloha + finální, online = faktura po platbě; Invoice.source = bs2_products | bs2_online) ──
@@ -3467,22 +3491,22 @@
       const r = await api('GET', '/api/accounting/bs2-billing/config');
       if (r.status !== 200 || !r.data) return;
       window.__bs2cfg = r.data;
-      ['products', 'online'].forEach(cat => {
+      ['products', 'online', 'game'].forEach(cat => {
         const c = r.data.config[cat] || {};
         document.getElementById('bs2-' + cat + '-template').innerHTML = r.data.templates.map(t => bs2Opt(t.key, t.label, t.key === c.template)).join('');
         ['CZK', 'EUR'].forEach(cur => {
           document.getElementById('bs2-' + cat + '-' + cur).innerHTML = bs2Opt('', '— výchozí z nastavení fakturace —', !c[cur]) + r.data.accounts.filter(a => a.currency === cur).map(a => bs2Opt(a.id, (a.name || a.bank || '') + ' · ' + a.number, c[cur] === a.id)).join('');
         });
         document.getElementById('bs2-' + cat + '-vat').value = c.vat_rate != null ? c.vat_rate : 21;
-        document.getElementById('bs2-' + cat + '-auto').checked = cat === 'online' ? c.auto_online !== false : c.auto_proforma !== false;
+        document.getElementById('bs2-' + cat + '-auto').checked = cat === 'game' ? c.auto_online === true : (cat === 'online' ? c.auto_online !== false : c.auto_proforma !== false);
         const af = document.getElementById('bs2-' + cat + '-autofinal'); if (af) af.checked = c.auto_final !== false;
       });
     }
     window.saveBs2Config = async function() {
       const body = {};
-      ['products', 'online'].forEach(cat => { body[cat] = { template: document.getElementById('bs2-' + cat + '-template').value, CZK: document.getElementById('bs2-' + cat + '-CZK').value || null, EUR: document.getElementById('bs2-' + cat + '-EUR').value || null, vat_rate: document.getElementById('bs2-' + cat + '-vat').value, auto_proforma: cat === 'products' ? document.getElementById('bs2-' + cat + '-auto').checked : true, auto_final: cat === 'products' ? !!document.getElementById('bs2-' + cat + '-autofinal').checked : true, auto_online: cat === 'online' ? document.getElementById('bs2-' + cat + '-auto').checked : true }; });
+      ['products', 'online', 'game'].forEach(cat => { body[cat] = { template: document.getElementById('bs2-' + cat + '-template').value, CZK: document.getElementById('bs2-' + cat + '-CZK').value || null, EUR: document.getElementById('bs2-' + cat + '-EUR').value || null, vat_rate: document.getElementById('bs2-' + cat + '-vat').value, auto_proforma: cat === 'products' ? document.getElementById('bs2-' + cat + '-auto').checked : true, auto_final: cat === 'products' ? !!document.getElementById('bs2-' + cat + '-autofinal').checked : true, auto_online: (cat === 'online' || cat === 'game') ? document.getElementById('bs2-' + cat + '-auto').checked : true }; });
       const r = await api('PUT', '/api/accounting/bs2-billing/config', body);
-      ['products', 'online'].forEach(cat => { const m = document.getElementById('bs2-' + cat + '-msg'); m.textContent = r.status === 200 ? '✓ Uloženo' : ('Chyba: ' + ((r.data && r.data.error) || r.status)); setTimeout(() => { m.textContent = ''; }, 4000); });
+      ['products', 'online', 'game'].forEach(cat => { const m = document.getElementById('bs2-' + cat + '-msg'); m.textContent = r.status === 200 ? '✓ Uloženo' : ('Chyba: ' + ((r.data && r.data.error) || r.status)); setTimeout(() => { m.textContent = ''; }, 4000); });
     };
     const BS2_TYPE = { proforma_issued: 'Záloha', issued: 'Faktura', tax_receipt: 'DPPP' };
     window.resendBs2 = async function(id, no) {
@@ -3511,10 +3535,16 @@
       noun: 'faktur',
       emptyText: 'Zatím žádné faktury.',
     });
-    const bs2Tables = { products: bs2Table('#bs2-products-table'), online: bs2Table('#bs2-online-table') };
+    const bs2Tables = { products: bs2Table('#bs2-products-table'), online: bs2Table('#bs2-online-table'), game: bs2Table('#bs2-game-table') };
+    window.gameBackfill = async function() {
+      if (!confirm('Vystavit doklady ke všem zaplaceným nákupům ve hře, které ještě fakturu nemají? Nic se neodešle.')) return;
+      const r = await api('POST', '/api/accounting/bs2-billing/game/backfill', {});
+      alert(r.status === 200 ? ('Hotovo: nově vystaveno ' + r.data.created + ', už existovalo ' + r.data.existing + (r.data.failed ? ', selhalo ' + r.data.failed : '') + '.') : ('Chyba: ' + ((r.data && r.data.error) || r.status)));
+      loadBs2Invoices();
+    };
     window.loadBs2Invoices = async function() {
       await loadBs2Config();
-      for (const [cat, src] of [['products', 'bs2_products'], ['online', 'bs2_online']]) {
+      for (const [cat, src] of [['products', 'bs2_products'], ['online', 'bs2_online'], ['game', 'game']]) {
         const tb = document.querySelector('#bs2-' + cat + '-table tbody');
         const r = await api('GET', '/api/accounting/invoices?source=' + src + '&limit=1000');
         const list = (r.status === 200 && r.data && (r.data.invoices || r.data)) || null;
