@@ -98,6 +98,13 @@ const L = {
 
 module.exports = function mountOffers(app, ctx) {
   const { HOLYOS_URL, LM_SECRET, requireAdmin, rateLimited } = ctx;
+  // MINI / FLEX / MAX z produktů Best Series 2.0 (HolyOS) + texty z administrace Produkty
+  async function models() {
+    try {
+      const list = ctx.fetchProducts ? await ctx.fetchProducts() : []; const cfg = ctx.fetchProdConfig ? await ctx.fetchProdConfig() : {}; const items = (cfg && cfg.items) || {};
+      return ['mini', 'flex', 'max'].map((k) => { const re = new RegExp('\\b' + k + '\\b', 'i'); const c = list.filter((p) => re.test(p.model_variant || '') || re.test(p.name_cs || '')); const p = c.find((x) => /\bCZ\b/.test(x.name_cs || '')) || c[0]; const ic = (p && items[p.id]) || {}; return { kind: k, name: p ? (ic.title || p.name_cs) : '', desc: ic.desc || '' }; });
+    } catch (e) { return null; }
+  }
   const BASE = '/api/auth/lm/offers';
   const tok = () => jwt.sign({ aud: 'holyos-api', iss: 'laundromats' }, LM_SECRET, { expiresIn: '1m' });
   async function hos(method, p, body) {
@@ -143,7 +150,7 @@ module.exports = function mountOffers(app, ctx) {
     let o;
     try { o = (await hos('GET', '/public/' + req.params.token + (req.query.preview === '1' ? '?track=0' : ''))).offer; }
     catch (e) { return res.status(e.status === 404 ? 404 : 502).type('html').send(layout({ title: 'Nabídka', back: false, body: `<div class="card" style="max-width:560px;margin:40px auto"><h1 style="margin-top:0">${e.status === 404 ? 'Nabídka nenalezena' : 'Nabídka je dočasně nedostupná'}</h1><p class="muted">${e.status === 404 ? 'Odkaz už neplatí nebo je neúplný.' : 'Zkuste to prosím za chvíli.'}</p></div>` })); }
-    res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex, nofollow').type('html').send(require('./lm-offer-page').offerPage(o, req.params.token, { preview: req.query.preview === '1' }));
+    res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex, nofollow').type('html').send(require('./lm-offer-page').offerPage(o, req.params.token, { preview: req.query.preview === '1', models: await models() }));
   });
   app.post('/nabidka/:token([a-f0-9]{32})/zajem', js, async (req, res) => {
     if (rateLimited && rateLimited('offer:' + req.ip, 10, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho pokusů.' });

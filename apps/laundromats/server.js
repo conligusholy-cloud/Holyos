@@ -536,7 +536,7 @@ app.get('/img/product/:id(\\d+)', async (req, res) => {
 const SUP = require('./lm-support')(app, { HOLYOS_URL, LM_SECRET, requireAccount: ACC.requireAccount, requireAdmin, render: lmRender, trackServer });
 ACC.setSupportUnread(SUP.unread);
 // ── Nabídky korporátům (administrace → 🤝 Korporáty, veřejná nabídka /nabidka/<token>; data v HolyOS) ──
-require('./lm-offers')(app, { HOLYOS_URL, LM_SECRET, requireAdmin, rateLimited });
+require('./lm-offers')(app, { HOLYOS_URL, LM_SECRET, requireAdmin, rateLimited, fetchProducts, fetchProdConfig });
 // ── Aplikace lokalit (/cesta/hledat, /cesta/zhodnotit) ──
 ACC.mount(app);
 // Videohovor s kompetentní osobou (/videocall) — WebRTC + SSE, upozornění přes HolyOS (Velín)
