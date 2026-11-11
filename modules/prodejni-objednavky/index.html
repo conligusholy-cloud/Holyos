@@ -11528,7 +11528,15 @@
               '<h2>💻 IT požadavky — checklist pro zákazníka</h2>' +
               '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Zákazník dostane e-mailem odkaz na formulář. Odpovědi se uloží k objednávce a odejdou e-mailem příjemcům níže. Pokud zákazník nevyplní do termínu, přijde upozornění Radkovi Bečkovi e-mailem a do Velínu.</div>' +
               '<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;">' +
-                '<div style="font-weight:600;margin-bottom:8px;">⚙ Nastavení</div>' +
+                '<div style="font-weight:600;margin-bottom:8px;">💳 E-mail „Založení Nayax účtu" (platební terminál)</div>' +
+                '<label style="display:block;margin-bottom:6px;"><input type="checkbox" id="it-nx-on"' + (s.nayax_enabled ? ' checked' : '') + '> Poslat zákazníkovi automaticky <input type="number" id="it-nx-days" min="0" max="30" style="width:55px;" value="' + (s.nayax_delay_days != null ? s.nayax_delay_days : 2) + '"> dny po první platbě</label>' +
+                '<label style="display:block;margin-bottom:6px;">Předmět:<input id="it-nx-subj" style="width:100%;" value="' + esc(s.nayax_subject || '').replace(/"/g, '&quot;') + '"></label>' +
+                '<label style="display:block;margin-bottom:6px;">Text e-mailu (zástupné znaky: <code>{objednavka}</code>, <code>{zakaznik}</code>):<textarea id="it-nx-body" rows="10" style="width:100%;">' + esc(s.nayax_body || '') + '</textarea></label>' +
+                '<div style="display:flex;gap:6px;align-items:center;"><input id="it-nx-test" type="email" placeholder="Tvůj e-mail pro test" style="flex:1;"><button type="button" class="btn btn-secondary btn-sm" onclick="itSendNayaxTest()">✉ Odeslat testovací e-mail</button></div>' +
+                '<div style="margin-top:4px;color:var(--text2);">Test odešle aktuální text z okna (i neuložený) na tvůj e-mail. Uloží se tlačítkem Uložit dole.</div>' +
+              '</div>' +
+              '<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;">' +
+                '<div style="font-weight:600;margin-bottom:8px;">⚙ Nastavení dotazníku</div>' +
                 '<label style="display:block;margin-bottom:6px;"><input type="checkbox" id="it-s-auto"' + (s.auto_send ? ' checked' : '') + '> Odeslat zákazníkovi automaticky po přijetí první platby k objednávce</label>' +
                 '<label style="display:block;margin-bottom:6px;">Termín na vyplnění: <input type="number" id="it-s-days" min="1" max="30" style="width:60px;" value="' + (s.due_days || 3) + '"> dnů</label>' +
                 '<label style="display:block;margin-bottom:6px;"><input type="checkbox" id="it-s-radek"' + (s.include_radek ? ' checked' : '') + '> Výsledek poslat i Radkovi Bečkovi</label>' +
@@ -11592,9 +11600,23 @@
         auto_send: document.getElementById('it-s-auto').checked,
         due_days: document.getElementById('it-s-days').value,
         include_radek: document.getElementById('it-s-radek').checked,
-        result_emails: document.getElementById('it-s-mails').value
+        result_emails: document.getElementById('it-s-mails').value,
+        nayax_enabled: document.getElementById('it-nx-on').checked,
+        nayax_delay_days: document.getElementById('it-nx-days').value,
+        nayax_subject: document.getElementById('it-nx-subj').value,
+        nayax_body: document.getElementById('it-nx-body').value
       }) });
       if (!r.ok) throw new Error('Uložení nastavení selhalo (' + r.status + ')');
+    }
+    async function itSendNayaxTest() {
+      var email = (document.getElementById('it-nx-test').value || '').trim();
+      if (!email) { alert('Zadej svůj e-mail.'); return; }
+      try {
+        var r = await fetch('/api/it-requests/test-nayax', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email, nayax_subject: document.getElementById('it-nx-subj').value, nayax_body: document.getElementById('it-nx-body').value }) });
+        var d = await r.json();
+        if (!r.ok) throw new Error(d.error || ('Test selhal (' + r.status + ')'));
+        alert(d.sent ? 'Testovací e-mail odeslán na ' + email : 'E-mail se neodeslal: ' + (d.error || 'neznámý důvod'));
+      } catch (e) { alert('Chyba: ' + e.message); }
     }
     async function itSendTest() {
       var email = (document.getElementById('it-s-test').value || '').trim();

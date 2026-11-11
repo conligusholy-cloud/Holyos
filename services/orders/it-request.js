@@ -39,7 +39,9 @@ const DEFAULT_TEMPLATE = [
 
 // ── Nastavení (AppSetting) ───────────────────────────────────────────────────
 const SETTINGS_KEY = 'it_requirements.settings';
-const DEFAULT_SETTINGS = { due_days: 3, auto_send: true, result_emails: ['martin.polraich@bestseries.cz'], include_radek: true };
+const DEFAULT_NAYAX_SUBJECT = 'Založení Nayax účtu pro platební terminál — objednávka {objednavka}';
+const DEFAULT_NAYAX_BODY = 'Dobrý den,\n\nděkujeme za Vaši platbu k objednávce {objednavka}. Aby Váš prádlomat mohl přijímat platby kartou, potřebujeme, abyste si založili účet u poskytovatele platebního terminálu Nayax.\n\nPostup:\n1. Kontaktujte registrátora Nayax účtu (např. Jimark, Corevend) a požádejte o založení provozovatelského účtu.\n2. Po založení nám pošlete Operator ID a název Nayax účtu a název registrátora.\n3. Nayax účet nastavíme na Váš prádlomat před expedicí.\n\nPokud si nevíte rady, odpovězte na tento e-mail a pomůžeme Vám.\n\nDěkujeme,\nBest Series s.r.o.';
+const DEFAULT_SETTINGS = { due_days: 3, auto_send: true, result_emails: ['martin.polraich@bestseries.cz'], include_radek: true, nayax_enabled: true, nayax_delay_days: 2, nayax_subject: DEFAULT_NAYAX_SUBJECT, nayax_body: DEFAULT_NAYAX_BODY };
 function cleanEmails(v) {
   const arr = Array.isArray(v) ? v : String(v || '').split(/[\s,;]+/);
   return [...new Set(arr.map((s) => String(s).trim().toLowerCase()).filter((s) => /^\S+@\S+\.\S+$/.test(s)))].slice(0, 20);
@@ -51,10 +53,17 @@ async function getSettings() {
   s.auto_send = s.auto_send !== false;
   s.include_radek = s.include_radek !== false;
   s.result_emails = cleanEmails(s.result_emails);
+  s.nayax_enabled = s.nayax_enabled !== false;
+  s.nayax_delay_days = Math.min(30, Math.max(0, Number.isFinite(parseInt(s.nayax_delay_days, 10)) ? parseInt(s.nayax_delay_days, 10) : 2));
+  s.nayax_subject = String(s.nayax_subject || '').trim() || DEFAULT_NAYAX_SUBJECT;
+  s.nayax_body = String(s.nayax_body || '').trim() || DEFAULT_NAYAX_BODY;
   return s;
 }
 async function saveSettings(b) {
-  const s = { due_days: Math.min(30, Math.max(1, parseInt(b.due_days, 10) || 3)), auto_send: !!b.auto_send, include_radek: b.include_radek !== false, result_emails: cleanEmails(b.result_emails) };
+  const nd = parseInt(b.nayax_delay_days, 10);
+  const s = { due_days: Math.min(30, Math.max(1, parseInt(b.due_days, 10) || 3)), auto_send: !!b.auto_send, include_radek: b.include_radek !== false, result_emails: cleanEmails(b.result_emails),
+    nayax_enabled: !!b.nayax_enabled, nayax_delay_days: Math.min(30, Math.max(0, Number.isFinite(nd) ? nd : 2)),
+    nayax_subject: String(b.nayax_subject || '').trim().slice(0, 300) || DEFAULT_NAYAX_SUBJECT, nayax_body: String(b.nayax_body || '').trim().slice(0, 8000) || DEFAULT_NAYAX_BODY };
   await setSetting(SETTINGS_KEY, s, { type: 'json', scope: 'sales', description: 'IT požadavky — nastavení (termín, automatické odeslání, příjemci výsledků)' });
   return s;
 }
@@ -192,9 +201,54 @@ async function sendTest(email) {
   return { ok: true, url };
 }
 
+// ── E-mail „Založení Nayax účtu" — X dní (výchozí 2) po první platbě; text je editovatelný v nastavení ──
+function fillNayax(text, orderNo, customer) {
+  return String(text || '').replace(/\{objednavka\}/gi, orderNo || '').replace(/\{zakaznik\}/gi, customer || '');
+}
+async function scheduleNayaxMail(orderId) {
+  try {
+    const s = await getSettings();
+    if (!s.nayax_enabled || !orderId) return;
+    const exists = await prisma.orderNayaxMail.findUnique({ where: { order_id: orderId } });
+    if (exists) return;
+    await prisma.orderNayaxMail.create({ data: { order_id: orderId, send_at: new Date(Date.now() + s.nayax_delay_days * 86400000) } });
+    try { require('../order-events').logOrderEvent(orderId, { type: 'nayax_mail_scheduled', label: 'Naplánován e-mail se zakládáním Nayax účtu', detail: 'odeslání za ' + s.nayax_delay_days + ' dny', actor: 'systém (první platba)' }); } catch (e) { /* */ }
+  } catch (e) { console.warn('[it-request] plán Nayax e-mailu selhal:', e.message); }
+}
+async function sendDueNayaxMails() {
+  const due = await prisma.orderNayaxMail.findMany({ where: { sent_at: null, send_at: { lte: new Date() } }, take: 50 });
+  if (!due.length) return { sent: 0 };
+  const s = await getSettings(); const { sendMail } = require('../email'); let sent = 0;
+  for (const m of due) {
+    await prisma.orderNayaxMail.update({ where: { id: m.id }, data: { sent_at: new Date() } }); // nejdřív označ — neopakovat
+    try {
+      if (!s.nayax_enabled) continue;
+      const order = await prisma.order.findUnique({ where: { id: m.order_id }, include: { company: true } });
+      const email = order && (order.customer_email || (order.company && order.company.email));
+      const evt = (label, detail) => require('../order-events').logOrderEvent(m.order_id, { type: 'nayax_mail', label, detail, actor: 'systém' });
+      if (!email) { await evt('E-mail se zakládáním Nayax účtu nelze odeslat — chybí e-mail zákazníka'); continue; }
+      const cust = (order.company && order.company.name) || '';
+      const res = await sendMail({ audience: 'customer', to: email, subject: fillNayax(s.nayax_subject, order.order_number, cust), body: fillNayax(s.nayax_body, order.order_number, cust) });
+      await prisma.orderNayaxMail.update({ where: { id: m.id }, data: { to_email: email, error: res && res.sent ? null : String((res && (res.error || res.skipped)) || 'neodesláno') } });
+      await evt(res && res.sent ? 'Odeslán e-mail se zakládáním Nayax účtu' : 'E-mail se zakládáním Nayax účtu se NEODESLAL', email + (res && res.sent ? '' : ' · ' + ((res && (res.error || res.skipped)) || '')));
+      if (res && res.sent) sent++;
+    } catch (e) { console.warn('[it-request] Nayax e-mail:', e.message); }
+  }
+  return { sent };
+}
+async function sendNayaxTest(email, body) {
+  const to = String(email || '').trim();
+  if (!/^\S+@\S+\.\S+$/.test(to)) { const e = new Error('Zadej platný e-mail'); e.status = 400; throw e; }
+  const s = await getSettings(); const { sendMail } = require('../email');
+  const subj = (body && body.nayax_subject) || s.nayax_subject; const txt = (body && body.nayax_body) || s.nayax_body;
+  const res = await sendMail({ to, subject: '[TEST] ' + fillNayax(subj, 'SO-TEST', 'Ukázková firma s.r.o.'), body: fillNayax(txt, 'SO-TEST', 'Ukázková firma s.r.o.') });
+  return { ok: true, sent: !!(res && res.sent), error: res && !res.sent ? (res.error || res.skipped) : null };
+}
+
 // Automaticky po PRVNÍ přijaté platbě k objednávce (objednávka je tím podepsaná/autorizovaná)
 async function autoSendOnFirstPayment(orderId) {
   try {
+    await scheduleNayaxMail(orderId); // Nayax e-mail se plánuje nezávisle na dotazníku (jednou na objednávku)
     const s = await getSettings();
     if (!s.auto_send || !orderId) return { skipped: 'vypnuto' };
     const exists = await prisma.orderItRequest.findFirst({ where: { order_id: orderId } });
@@ -253,4 +307,4 @@ async function sweepOverdue() {
   return { notified };
 }
 
-module.exports = { getSettings, saveSettings, sendTest, autoSendOnFirstPayment, getTemplate, saveTemplate, getDueDays, sendToCustomer, getPublic, submitPublic, getForOrder, sweepOverdue, sanitizeItems, DEFAULT_TEMPLATE };
+module.exports = { sendNayaxTest, sendDueNayaxMails, scheduleNayaxMail, getSettings, saveSettings, sendTest, autoSendOnFirstPayment, getTemplate, saveTemplate, getDueDays, sendToCustomer, getPublic, submitPublic, getForOrder, sweepOverdue, sanitizeItems, DEFAULT_TEMPLATE };

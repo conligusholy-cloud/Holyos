@@ -8019,6 +8019,20 @@ model OrderItRequest {
 
 // Účetní položky (Nákup a sklad → Zboží → Účetní položky): samostatný ručně vedený seznam
 // položek, které neprochází skladem (služby, doprava, spotřeba…). Nepatří do Material.
+// Naplánovaný e-mail zákazníkovi se zakládáním Nayax účtu (X dní po první platbě)
+model OrderNayaxMail {
+  id         Int       @id @default(autoincrement())
+  order_id   Int       @unique
+  send_at    DateTime
+  sent_at    DateTime?
+  to_email   String?   @db.VarChar(255)
+  error      String?   @db.Text
+  created_at DateTime  @default(now())
+
+  @@index([sent_at, send_at])
+  @@map("order_nayax_mails")
+}
+
 // Doporučené služby k prodeji prádlomatů (doprava, instalace, školení…) — kdo platí a kolik stojí
 model SalesService {
   id          Int      @id @default(autoincrement())

@@ -14,8 +14,11 @@ async function runOnce() {
   if (_running) return;
   _running = true;
   try {
-    const r = await require('./orders/it-request').sweepOverdue();
+    const svc = require('./orders/it-request');
+    const r = await svc.sweepOverdue();
     if (r && r.notified) console.log('[it-request-worker] upozorněno na ' + r.notified + ' nevyplněných IT požadavků');
+    const n = await svc.sendDueNayaxMails();
+    if (n && n.sent) console.log('[it-request-worker] odesláno ' + n.sent + ' e-mailů se zakládáním Nayax účtu');
   } catch (err) { console.error('[it-request-worker] run selhal:', err && err.message); }
   finally { _running = false; }
 }

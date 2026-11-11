@@ -29,6 +29,10 @@ router.post('/test', async (req, res, next) => {
   try { res.json(await svc.sendTest((req.body || {}).email)); }
   catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
 });
+router.post('/test-nayax', async (req, res, next) => {
+  try { const b = req.body || {}; res.json(await svc.sendNayaxTest(b.email, b)); }
+  catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
+});
 router.get('/order/:orderId', async (req, res, next) => {
   try { res.json({ request: await svc.getForOrder(parseInt(req.params.orderId, 10)) }); } catch (err) { next(err); }
 });
