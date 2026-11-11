@@ -144,7 +144,9 @@ function buildHtml(order, our, opts) {
     + '<div class="st">Objednávku potvrzuji a autorizuji.</div>'
     + '<div class="m">' + (authName ? '<b>' + esc(authName) + '</b>' : '') + (order.authorizer_place ? ' · ' + esc(order.authorizer_place) : '') + (order.authorized_at ? ' · ' + new Date(order.authorized_at).toLocaleString('cs-CZ') : '') + '</div></div>'
     + '</div>';
-  return bs2.page({ title: 'Potvrzená objednávka', number: order.order_number, pill: 'Potvrzeno', demo: opts.demo }, body);
+  // Dokud objednávka není autorizovaná, je to „Objednávka" (ne „Potvrzená objednávka")
+  const confirmed = !!(order.authorized_at || order.confirmation_pdf_path || opts.demo);
+  return bs2.page({ title: confirmed ? 'Potvrzená objednávka' : 'Objednávka', number: order.order_number, pill: confirmed ? 'Potvrzeno' : 'Objednávka', demo: opts.demo }, body);
 }
 
 async function generateOrderPdf(order, our, opts) {

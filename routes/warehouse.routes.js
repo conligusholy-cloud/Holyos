@@ -1857,6 +1857,17 @@ router.get('/orders/:id/confirmation-pdf', async (req, res, next) => {
     if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
 
     const fs = require('fs');
+    const disp = (req.query.download === '1' ? 'attachment' : 'inline') + '; filename="Objednavka-' + order.order_number + '.pdf"';
+    // ?fresh=1 — vždy vygeneruj z aktuálních dat podle šablony (tlačítko „Objednávka" v detailu); uložené potvrzené PDF zůstane beze změny.
+    if (req.query.fresh === '1') {
+      let our = null;
+      try { our = await require('../services/settings').getOurCompany(); } catch (e) {}
+      const buf = await require('../services/order-docs').buildOrderPdfBuffer(order, our);
+      if (!buf || !buf.length) return res.status(500).json({ error: 'PDF se nepodařilo vygenerovat' });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', disp);
+      return res.end(buf);
+    }
     // Uložené PDF z data volume má přednost.
     if (order.confirmation_pdf_path && fs.existsSync(order.confirmation_pdf_path)) {
       res.setHeader('Content-Type', 'application/pdf');

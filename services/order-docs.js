@@ -50,6 +50,16 @@ async function loadAuthorizer(order) {
   } catch (e) { return null; }
 }
 
+// Vygeneruje PDF objednávky podle šablony (Šablony dokumentů → Potvrzená objednávka) z aktuálních dat — NIC neukládá
+// (nepřepíše uložené potvrzené PDF). Slouží tlačítku „Objednávka" v detailu prodejní objednávky.
+async function buildOrderPdfBuffer(order, ourCompany) {
+  const { generateOrderPdf } = require('./pdf/order-pdf');
+  const owner = (await loadOwner(order)) || (order.sales_person ? { name: [order.sales_person.first_name, order.sales_person.last_name].filter(Boolean).join(' ').trim() } : null);
+  const slotDates = await loadSlotDates(order.id);
+  const authorizer = await loadAuthorizer(order);
+  return generateOrderPdf(order, ourCompany || {}, { owner, slotDates, authorizer });
+}
+
 // Vygeneruje PDF potvrzené objednávky, uloží na data volume a vrátí { buffer, filePath }.
 async function buildAndStoreOrderPdf(order, ourCompany) {
   const { generateOrderPdf } = require('./pdf/order-pdf');
@@ -177,4 +187,4 @@ async function sendOrderConfirmationDocs(orderId) {
   } catch (e) { console.error('[order-docs] e-mail dokladů selhal:', e && e.message); }
 }
 
-module.exports = { sendOrderConfirmationDocs, ensureInvoiceForOrder, buildAndStoreOrderPdf };
+module.exports = { sendOrderConfirmationDocs, ensureInvoiceForOrder, buildAndStoreOrderPdf, buildOrderPdfBuffer };
