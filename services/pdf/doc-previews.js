@@ -135,6 +135,7 @@ function purchaseOrderHtml(order, ourCompany, opts) {
   ${pd.subject ? `<div class="box"><h3>Předmět objednávky</h3>${esc(pd.subject)}</div>` : ''}
   <table class="items"><thead><tr><th>#</th><th>Položka</th><th class="r">Množství</th><th class="r">Cena / MJ</th><th class="r">Celkem</th><th class="r">DPH</th><th>Termín dodání</th></tr></thead><tbody>${rows}</tbody></table>
   <div class="sum"><div class="row"><span>Celkem bez DPH</span><strong>${money(total, cur)}</strong></div>${anyVat ? `<div class="row"><span>DPH</span><strong>${money(vat, cur)}</strong></div><div class="row total"><span>Celkem s DPH</span><span>${money(total + vat, cur)}</span></div>` : ''}</div>
+  ${(pd.loading_place || pd.loading_date || pd.loading_note) ? `<div class="box"><h3>Místo nakládky</h3>${pd.loading_place ? esc(pd.loading_place) : ''}${pd.loading_date ? `<div>Datum nakládky: <strong>${d(pd.loading_date)}</strong></div>` : ''}${pd.loading_note ? `<div style="color:#6b7280">${esc(pd.loading_note)}</div>` : ''}</div>` : ''}
   ${place ? `<div class="box"><h3>Místo dodání</h3>${esc(place)}</div>` : ''}
   ${pdRows ? `<div class="box"><h3>Podmínky objednávky</h3><table style="width:100%;font-size:11.5px;border-collapse:collapse">${pdRows}</table></div>` : (o.payment_terms ? `<div class="box"><h3>Platební podmínky</h3>${esc(o.payment_terms)}</div>` : '')}
   ${o.note ? `<div class="box"><h3>Poznámka</h3>${esc(o.note)}</div>` : ''}
