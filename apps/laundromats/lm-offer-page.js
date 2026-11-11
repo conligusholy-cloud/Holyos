@@ -175,7 +175,7 @@ function offerPage(o, token, opts) {
   const wPrice = EUR ? 600 : 15000, wCost = wy * wPrice;
   // Tržby z návštěvnosti: 6 zákazníků / den = 2 073 € bez DPH měsíčně (CZK = × 25)
   const RPV = (EUR ? 2073 : 2073 * 25) / 6;
-  const visits = Number(o.visits) || (mon ? Math.round(mon / RPV * 10) / 10 : 6), sales = visits * RPV;
+  const visits = Number(o.visits) || 7, sales = visits * RPV;
   const uInv = price + conn + wCost, en = sales * 0.10, sv = sales * 0.20, net = sales - en - sv;
   const pInv = units * uInv, pNet = units * net;
   const row = (l, v, cls) => `<div class="er${cls ? ' ' + cls : ''}"><span>${l}</span><b>${v}</b></div>`;
