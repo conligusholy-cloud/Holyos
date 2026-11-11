@@ -1428,6 +1428,14 @@ module.exports._urokMesicne = urokMesicne;
 module.exports._zbydeMesicne = zbydeMesicne;
 module.exports._cisteJmeni = cisteJmeni;
 module.exports._kdoPrivedl = kdoPrivedl;
+// Id hráče z cookie, bez sahání do databáze. Používá hledání měst, aby se
+// limit počítal po hráčích a ne po IP — za jednou mobilní adresou sedí klidně
+// celé město a jeden hledající by ji vyčerpal všem ostatním.
+module.exports._pidZCookie = (req) => {
+  const t = (req.cookies || {})[COOKIE];
+  if (!t) return null;
+  try { return jwt.verify(t, JWT_SECRET, { audience: 'lm-game' }).pid || null; } catch (e) { return null; }
+};
 module.exports._dorovnejProvize = dorovnejProvize;
 module.exports._strojeHrace = strojeHrace;
 module.exports._privedeniHraci = privedeniHraci;

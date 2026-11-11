@@ -15,6 +15,7 @@
 const express = require('express');
 const router = express.Router();
 const finder = require('../services/spots/finder');
+const acct = require('./game-account.routes');
 const { prisma } = require('../config/database');
 const crypto = require('crypto');
 
@@ -207,7 +208,12 @@ router.get('/scout', async (req, res, next) => {
     }
     // Město už někdo prohledal dřív — vrátíme ho okamžitě, bez OpenStreetMap.
     const saved = await prisma.gameArea.findUnique({ where: { key } }).catch(() => null);
-    if (saved && Array.isArray(saved.spots) && saved.spots.length) {
+    // I město, kde se nic nenašlo, je prohledané. Vrátíme ho rovnou — jinak by
+    // každý další pokus znovu tahal OpenStreetMap a hráči ujídal limit.
+    // Po čtrnácti dnech to zkusíme znovu, mezitím mohlo něco přibýt.
+    const prazdneCerstve = saved && Array.isArray(saved.spots) && !saved.spots.length
+      && saved.updated_at && Date.now() - new Date(saved.updated_at).getTime() < 14 * 86400e3;
+    if (saved && Array.isArray(saved.spots) && (saved.spots.length || prazdneCerstve)) {
       const data = {
         area: { id: key, name: saved.name, country: saved.country || null, lat: saved.lat, lon: saved.lon },
         population: saved.population, spots: saved.spots,
@@ -221,9 +227,18 @@ router.get('/scout', async (req, res, next) => {
     if (job && job.state === 'done') { scoutJobs.delete(key); return res.status(503).json({ error: 'Zkus to prosím ještě jednou.' }); }
     if (job && job.state === 'error') { scoutJobs.delete(key); return res.status(503).json({ error: job.error }); }
     if (!job) {
-      // Nová úloha se počítá do limitu; doptávání na běžící úlohu ne, jinak by si hráč limit vyčerpal čekáním.
-      if (rateLimited('game:' + ipOf(req), 20, 10 * 60e3)) {
-        return res.status(429).json({ error: 'Moc rychle po sobě. Dej tomu chvilku.' });
+      // Nová úloha se počítá do limitu; doptávání na běžící úlohu ne, jinak by si
+      // hráč limit vyčerpal čekáním. Limit je na hráče — za jednou mobilní IP
+      // sedí klidně celé město a jeden hledající by ji ucpal všem ostatním.
+      // Nad tím běží ještě strop na adresu, ale takový, aby o něj normální
+      // hraní nezavadilo; chrání jen OpenStreetMap před jedním splašeným strojem.
+      const pid = acct._pidZCookie(req);
+      const muj = pid ? 'scout-h:' + pid : 'scout-a:' + ipOf(req);
+      if (rateLimited(muj, pid ? 60 : 15, 10 * 60e3)
+        || rateLimited('scout-ip:' + ipOf(req), 200, 10 * 60e3)) {
+        return res.status(429).json({
+          error: 'Nových měst jsi prohledal hodně za sebou. Dej tomu pár minut — '
+            + 'hotová města v seznamu se otevřou hned a zadarmo.' });
       }
       job = { at: Date.now(), state: 'running' };
       scoutJobs.set(key, job);
