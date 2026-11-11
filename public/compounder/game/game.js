@@ -8890,11 +8890,28 @@ function poradceSheet() {
   if (inp) inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); poradcePosli(inp.value); } };
   $('por-send').onclick = function () { poradcePosli($('por-q') ? $('por-q').value : ''); };
 }
+// Model odpovídá markdownem — **tučně** a odrážkami. V bublině to má vypadat
+// jako text, ne jako hvězdičky. Víc než tohle neumíme a ani nepotřebujeme.
+function poradceText(t) {
+  var radky = String(t == null ? '' : t).split(/\n/);
+  var out = '', seznam = false;
+  radky.forEach(function (r) {
+    r = r.replace(/\s+$/, '');
+    var li = /^\s*[-*\u2022]\s+/.test(r);
+    var txt = esc(r.replace(/^\s*[-*\u2022]\s+/, '').replace(/^#{1,6}\s*/, ''))
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+    if (li) { if (!seznam) { out += '<ul class="por-ul">'; seznam = true; } out += '<li>' + txt + '</li>'; return; }
+    if (seznam) { out += '</ul>'; seznam = false; }
+    if (txt) out += '<p>' + txt + '</p>';
+  });
+  if (seznam) out += '</ul>';
+  return out || esc(t || '');
+}
 function poradcePaint() {
   var tok = $('por-tok');
   if (!tok) return;
   var h = PORADCE_H.map(function (z) {
-    return '<div class="por-z ' + (z.role === 'ai' ? 'ai' : 'ja') + '">' + esc(z.text).replace(/\n/g, '<br>') + '</div>';
+    return '<div class="por-z ' + (z.role === 'ai' ? 'ai' : 'ja') + '">' + poradceText(z.text) + '</div>';
   }).join('');
   if (PORADCE_CEKA) h += '<div class="por-z ai cekam">Přemýšlím\u2026</div>';
   if (!h) h = '<div class="por-uvod">Nevíš, kde začít? Klikni na otázku níž.</div>';

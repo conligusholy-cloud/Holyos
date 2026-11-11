@@ -857,6 +857,12 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .por-z.ja{align-self:flex-end;background:var(--blue);color:#06121b;font-weight:600}
 .por-z.ai{align-self:flex-start;background:var(--card2,rgba(255,255,255,.06));border:1px solid var(--border)}
 .por-z.cekam{opacity:.6}
+.por-z p{margin:0 0 7px}
+.por-z p:last-child{margin-bottom:0}
+.por-z .por-ul{margin:0 0 7px;padding-left:17px}
+.por-z .por-ul:last-child{margin-bottom:0}
+.por-z .por-ul li{margin:0 0 4px}
+.por-z b{font-weight:700}
 .por-uvod{color:var(--text2);font-size:13px;padding:6px 2px}
 .por-chipy{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .por-chip{background:transparent;border:1px solid var(--border);color:var(--text2);
