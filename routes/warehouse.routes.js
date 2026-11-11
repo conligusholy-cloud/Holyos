@@ -1642,6 +1642,15 @@ router.put('/orders/:orderId/items/:itemId', async (req, res, next) => {
         allowed[f] = v != null && String(v).trim() !== '' ? String(v).trim() : null;
       }
     }
+    // Vygenerované výrobní číslo (z řady dané země) je zamčené — nejde ručně měnit ani mazat, ani přepnout zemi
+    if (req.body.serial_number !== undefined || req.body.destination_country !== undefined) {
+      const cur = await prisma.orderItem.findUnique({ where: { id: parseInt(req.params.itemId, 10) }, select: { serial_number: true, destination_country: true } });
+      if (cur && cur.serial_number && cur.destination_country) {
+        const sameSerial = req.body.serial_number === undefined || String(req.body.serial_number || '').trim() === cur.serial_number;
+        const sameCountry = req.body.destination_country === undefined || String(req.body.destination_country || '').trim().toUpperCase() === cur.destination_country;
+        if (!sameSerial || !sameCountry) return res.status(409).json({ error: 'Výrobní číslo ' + cur.serial_number + ' bylo vygenerováno z řady země ' + cur.destination_country + ' a nelze ho ručně měnit.', code: 'serial_locked' });
+      }
+    }
     // Země určení (kam jede prádlomat) — dvoupísmenný kód
     if (req.body.destination_country !== undefined) {
       const cc = String(req.body.destination_country || '').trim().toUpperCase();
