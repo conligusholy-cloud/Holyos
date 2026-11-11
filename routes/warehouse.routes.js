@@ -3073,4 +3073,64 @@ router.get('/delivery-notes/:id/pdf', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ============================================================
+// Účetní položky — samostatný ruční seznam (mimo sklad a Material)
+// ============================================================
+function accountingItemData(b) {
+  const s = (v, n) => (v === undefined || v === null || String(v).trim() === '' ? null : String(v).trim().slice(0, n));
+  const num = (v) => { const x = parseFloat(String(v).replace(',', '.')); return Number.isFinite(x) ? x : null; };
+  const data = {};
+  if (b.name !== undefined) data.name = String(b.name || '').trim().slice(0, 255);
+  if (b.code !== undefined) data.code = s(b.code, 50);
+  if (b.category !== undefined) data.category = s(b.category, 100);
+  if (b.unit !== undefined) data.unit = s(b.unit, 20) || 'ks';
+  if (b.unit_price !== undefined) data.unit_price = num(b.unit_price) || 0;
+  if (b.vat_rate !== undefined) data.vat_rate = b.vat_rate === '' || b.vat_rate === null ? null : num(b.vat_rate);
+  if (b.account_no !== undefined) data.account_no = s(b.account_no, 30);
+  if (b.supplier !== undefined) data.supplier = s(b.supplier, 255);
+  if (b.note !== undefined) data.note = s(b.note, 5000);
+  if (b.active !== undefined) data.active = !!b.active;
+  return data;
+}
+
+// GET /api/wh/accounting-items?search=&active=
+router.get('/accounting-items', async (req, res, next) => {
+  try {
+    const { search, active } = req.query;
+    const where = {};
+    if (active === 'true') where.active = true; else if (active === 'false') where.active = false;
+    if (search) where.OR = ['name', 'code', 'category', 'supplier', 'account_no'].map((f) => ({ [f]: { contains: String(search), mode: 'insensitive' } }));
+    res.json(await prisma.accountingItem.findMany({ where, orderBy: [{ name: 'asc' }], take: 2000 }));
+  } catch (err) { next(err); }
+});
+
+router.post('/accounting-items', async (req, res, next) => {
+  try {
+    const data = accountingItemData(req.body || {});
+    if (!data.name) return res.status(400).json({ error: 'Název účetní položky je povinný' });
+    res.status(201).json(await prisma.accountingItem.create({ data }));
+  } catch (err) { next(err); }
+});
+
+router.put('/accounting-items/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    const data = accountingItemData(req.body || {});
+    if (data.name !== undefined && !data.name) return res.status(400).json({ error: 'Název účetní položky je povinný' });
+    const exists = await prisma.accountingItem.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) return res.status(404).json({ error: 'Účetní položka nenalezena' });
+    res.json(await prisma.accountingItem.update({ where: { id }, data }));
+  } catch (err) { next(err); }
+});
+
+router.delete('/accounting-items/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    const exists = await prisma.accountingItem.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) return res.status(404).json({ error: 'Účetní položka nenalezena' });
+    await prisma.accountingItem.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

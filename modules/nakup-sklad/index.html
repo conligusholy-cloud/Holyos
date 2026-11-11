@@ -174,6 +174,21 @@
 
       <!-- TAB: Zboží -->
       <div class="tab-content" id="tab-materials">
+        <div class="sub-tabs" id="goods-subtabs">
+          <div class="sub-tab active" data-goods="stock" onclick="switchGoodsTab('stock')">📦 Zboží na skladě</div>
+          <div class="sub-tab" data-goods="accounting" onclick="switchGoodsTab('accounting')">🧾 Účetní položky</div>
+        </div>
+        <div id="goods-pane-accounting" style="display:none">
+          <div class="toolbar">
+            <input type="text" id="acc-search" placeholder="Hledat účetní položku (název, kód, kategorie, účet, dodavatel)…" oninput="loadAccItems()" style="width:380px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;"><input type="checkbox" id="acc-inactive" onchange="loadAccItems()"> Zobrazit i neaktivní</label>
+            <div style="flex:1"></div>
+            <button class="btn btn-primary" onclick="openAccItemModal()">+ Nová účetní položka</button>
+          </div>
+          <div style="font-size:12px;color:var(--text2);margin:-4px 0 10px">Samostatný ručně vedený seznam — položky, které neprochází skladem (služby, doprava, spotřeba…). Nabízejí se při psaní názvu položky v nákupní objednávce.</div>
+          <div id="acc-table"></div>
+        </div>
+        <div id="goods-pane-stock">
         <div class="toolbar">
           <input type="text" id="mat-search" placeholder="Hledat zboží (název, kód, klíč. slova)..." onkeyup="loadMaterials()" style="width:280px">
           <select id="mat-type-filter" onchange="loadMaterials()">
@@ -209,6 +224,7 @@
           <button class="btn btn-secondary btn-sm" onclick="clearMatSelection()">Zrušit výběr</button>
         </div>
         <div id="materials-table"></div>
+        </div>
       </div>
 
       <!-- TAB: Skladové zásoby -->
@@ -368,6 +384,70 @@
       if (tab === 'movements') { loadMovements(); populateMovementFilters(); }
       if (tab === 'inventories') { loadInventories(); initInvWhFilter(); }
       if (tab === 'forecast') loadForecast();
+    }
+
+    // ============================================================
+    // ZBOŽÍ: podzáložky „Zboží na skladě" / „Účetní položky"
+    // ============================================================
+    let ACC = { items: [] };
+    function switchGoodsTab(which) {
+      document.querySelectorAll('#goods-subtabs .sub-tab').forEach((t) => t.classList.toggle('active', t.dataset.goods === which));
+      document.getElementById('goods-pane-stock').style.display = which === 'stock' ? '' : 'none';
+      document.getElementById('goods-pane-accounting').style.display = which === 'accounting' ? '' : 'none';
+      if (which === 'accounting') loadAccItems();
+    }
+    async function loadAccItems() {
+      const q = (document.getElementById('acc-search') || {}).value || '';
+      const inactive = !!(document.getElementById('acc-inactive') || {}).checked;
+      try {
+        const r = await fetch('/api/wh/accounting-items?' + (q ? 'search=' + encodeURIComponent(q) : '') + (inactive ? '' : '&active=true'));
+        const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+        ACC.items = j; renderAccItems();
+      } catch (e) { document.getElementById('acc-table').innerHTML = '<div style="padding:20px;color:#ef4444">Načtení selhalo: ' + esc(e.message) + '</div>'; }
+    }
+    function renderAccItems() {
+      const el = document.getElementById('acc-table'); const list = ACC.items || [];
+      if (!list.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text2)">Zatím žádné účetní položky. Přidej první tlačítkem „+ Nová účetní položka".</div>'; return; }
+      const money = (v) => Number(v || 0).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Kč';
+      el.innerHTML = '<table class="data-table"><thead><tr><th>Kód</th><th>Název</th><th>Kategorie</th><th>Jedn.</th><th style="text-align:right">Cena</th><th style="text-align:right">DPH %</th><th>Účet</th><th>Dodavatel</th><th>Poznámka</th><th>Stav</th><th></th></tr></thead><tbody>' +
+        list.map((i) => '<tr onclick="openAccItemModal(' + i.id + ')"><td>' + esc(i.code || '') + '</td><td><b>' + esc(i.name) + '</b></td><td>' + esc(i.category || '') + '</td><td>' + esc(i.unit || '') + '</td><td style="text-align:right">' + money(i.unit_price) + '</td><td style="text-align:right">' + (i.vat_rate == null ? '—' : Number(i.vat_rate)) + '</td><td>' + esc(i.account_no || '') + '</td><td>' + esc(i.supplier || '') + '</td><td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(i.note || '').replace(/"/g, '&quot;') + '">' + esc(i.note || '') + '</td><td>' + (i.active ? '<span style="color:#16a34a">Aktivní</span>' : '<span style="color:#9ca3af">Neaktivní</span>') + '</td><td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();deleteAccItem(' + i.id + ')" title="Smazat">✕</button></td></tr>').join('') + '</tbody></table>';
+    }
+    function openAccItemModal(id) {
+      if (document.getElementById('acc-modal')) return;
+      const it = id ? (ACC.items || []).find((x) => x.id === id) : null; const v = it || { unit: 'ks', unit_price: 0, active: true };
+      const attr = (s) => esc(s == null ? '' : String(s)).replace(/"/g, '&quot;');
+      const fld = (label, key, extra) => '<label style="display:block;font-size:12px;color:var(--text2)">' + label + '<input class="po-in" id="acc-f-' + key + '" value="' + attr(v[key]) + '" ' + (extra || '') + ' style="width:100%;margin-top:3px"></label>';
+      const root = document.createElement('div'); root.id = 'acc-modal';
+      root.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px';
+      root.innerHTML = '<div style="background:var(--surface,#1b2130);color:var(--text,#e5e7eb);border:1px solid var(--border,#2c3447);border-radius:14px;width:min(640px,100%);max-height:90vh;overflow:auto;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
+        '<div style="display:flex;align-items:center;margin-bottom:12px"><b style="font-size:15px">' + (it ? 'Upravit účetní položku' : 'Nová účetní položka') + '</b><span style="flex:1"></span><button class="btn btn-secondary btn-sm" data-acc="close">✕</button></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 2fr;gap:10px 14px">' + fld('Kód', 'code') + fld('Název *', 'name') + fld('Kategorie', 'category') + fld('Jednotka', 'unit') + fld('Cena za jednotku (Kč)', 'unit_price', 'type="number" step="0.01" min="0"') + fld('DPH %', 'vat_rate', 'type="number" step="0.01" min="0" placeholder="21"') + fld('Účet / analytika', 'account_no') + fld('Dodavatel', 'supplier') + '</div>' +
+        '<label style="display:block;font-size:12px;color:var(--text2);margin-top:10px">Poznámka<textarea class="po-in" id="acc-f-note" rows="3" style="width:100%;margin-top:3px">' + esc(v.note || '') + '</textarea></label>' +
+        '<label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:10px"><input type="checkbox" id="acc-f-active"' + (v.active ? ' checked' : '') + '> Aktivní</label>' +
+        '<div style="display:flex;gap:10px;margin-top:16px"><span style="flex:1"></span><button class="btn btn-secondary" data-acc="close">Zrušit</button><button class="btn btn-primary" data-acc="save">Uložit</button></div></div>';
+      document.body.appendChild(root);
+      const close = () => { root.remove(); document.removeEventListener('keydown', onKey, true); };
+      const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+      document.addEventListener('keydown', onKey, true);
+      root.addEventListener('click', async (e) => {
+        if (e.target === root || e.target.dataset.acc === 'close') return close();
+        if (e.target.dataset.acc !== 'save') return;
+        const g = (k) => document.getElementById('acc-f-' + k).value;
+        const body = { code: g('code'), name: g('name'), category: g('category'), unit: g('unit'), unit_price: g('unit_price'), vat_rate: g('vat_rate'), account_no: g('account_no'), supplier: g('supplier'), note: g('note'), active: document.getElementById('acc-f-active').checked };
+        if (!body.name.trim()) { alert('Název je povinný.'); document.getElementById('acc-f-name').focus(); return; }
+        try {
+          const r = await fetch('/api/wh/accounting-items' + (it ? '/' + it.id : ''), { method: it ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+          close(); ACC.cache = null; loadAccItems();
+        } catch (err) { alert('Uložení selhalo: ' + err.message); }
+      });
+      setTimeout(() => { const n = document.getElementById('acc-f-name'); if (n) n.focus(); }, 30);
+    }
+    async function deleteAccItem(id) {
+      const it = (ACC.items || []).find((x) => x.id === id); if (!it) return;
+      if (!confirm('Smazat účetní položku „' + it.name + '"?')) return;
+      try { const r = await fetch('/api/wh/accounting-items/' + id, { method: 'DELETE' }); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); ACC.cache = null; loadAccItems(); }
+      catch (err) { alert('Smazání selhalo: ' + err.message); }
     }
 
     function switchOrderTab(type) {
@@ -1580,7 +1660,8 @@
     }
     function poRender() {
       const o = PO.o; const kind = o.type === 'cooperation' ? 'KOOPERAČNÍ OBJEDNÁVKA' : 'NÁKUPNÍ OBJEDNÁVKA';
-      const matList = materials.map((m) => '<option value="' + poAttr(m.name) + '">' + poTxt(m.code) + '</option>').join('');
+      const matList = materials.map((m) => '<option value="' + poAttr(m.name) + '">' + poTxt(m.code) + '</option>').join('') +
+        (ACC.cache || []).map((a) => '<option value="' + poAttr(a.name) + '">účetní položka' + (a.code ? ' · ' + poTxt(a.code) : '') + '</option>').join('');
       const compOpts = '<option value="">— vyber dodavatele —</option>' + companies.map((c) => '<option value="' + c.id + '"' + (o.company_id === c.id ? ' selected' : '') + '>' + poTxt(c.name) + '</option>').join('');
       const stOpts = Object.entries(ORDER_STATUSES).map(([k, v]) => '<option value="' + k + '"' + (o.status === k ? ' selected' : '') + '>' + v.label + '</option>').join('');
       const created = o.created_at ? new Date(o.created_at).toLocaleDateString('cs-CZ') : '—';
@@ -1610,7 +1691,13 @@
       sheet.addEventListener('change', poChange);
       sheet.addEventListener('click', poClick);
       const nm = document.getElementById('po-new-name');
-      nm.addEventListener('input', () => { const m = materials.find((x) => x.name === nm.value); if (m) { document.getElementById('po-new-unit').value = m.unit || 'ks'; document.getElementById('po-new-price').value = m.unit_price || 0; nm.dataset.mat = m.id; } else delete nm.dataset.mat; });
+      nm.addEventListener('input', () => {
+        const m = materials.find((x) => x.name === nm.value);
+        if (m) { document.getElementById('po-new-unit').value = m.unit || 'ks'; document.getElementById('po-new-price').value = m.unit_price || 0; nm.dataset.mat = m.id; return; }
+        delete nm.dataset.mat;
+        const a = (ACC.cache || []).find((x) => x.name === nm.value); // účetní položka: doplní jednotku a cenu, do skladu nevstupuje (bez material_id)
+        if (a) { document.getElementById('po-new-unit').value = a.unit || 'ks'; document.getElementById('po-new-price').value = Number(a.unit_price) || 0; }
+      });
       sheet.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.closest('.po-add')) { e.preventDefault(); poAddItem(); } if (e.key === 'Enter' && e.target.matches('.po-tbl input')) e.target.blur(); });
     }
     // Potvrzení nákupní objednávky dodavatelem (ceny + termíny) — stav + odeslání k potvrzení
@@ -1773,6 +1860,7 @@
         if (order.type === 'sales') return openOrderDetailLegacy(id); // prodejní objednávky mají vlastní složitější detail
         if (materials.length === 0) { try { materials = await (await fetch('/api/wh/materials')).json(); } catch (e) { /* bez našeptávače */ } }
         if (companies.length === 0) { try { companies = await (await fetch('/api/wh/companies')).json(); } catch (e) { /* bez firem */ } }
+        if (!ACC.cache) { try { const ar = await fetch('/api/wh/accounting-items?active=true'); const aj = await ar.json(); ACC.cache = ar.ok && Array.isArray(aj) ? aj : []; } catch (e) { ACC.cache = []; } }
         order.items = order.items || []; PO.o = order; poRender();
       } catch (e) { console.error(e); }
     }

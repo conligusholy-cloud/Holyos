@@ -7964,3 +7964,25 @@ model GameBlock {
   @@index([blocked_id])
   @@map("game_blocks")
 }
+
+// Účetní položky (Nákup a sklad → Zboží → Účetní položky): samostatný ručně vedený seznam
+// položek, které neprochází skladem (služby, doprava, spotřeba…). Nepatří do Material.
+model AccountingItem {
+  id         Int      @id @default(autoincrement())
+  code       String?  @db.VarChar(50)
+  name       String   @db.VarChar(255)
+  category   String?  @db.VarChar(100)
+  unit       String   @default("ks") @db.VarChar(20)
+  unit_price Decimal  @default(0) @db.Decimal(12, 2)
+  vat_rate   Decimal? @db.Decimal(5, 2)
+  account_no String?  @db.VarChar(30) // účet / analytika
+  supplier   String?  @db.VarChar(255)
+  note       String?  @db.Text
+  active     Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([name])
+  @@index([active])
+  @@map("accounting_items")
+}
