@@ -714,6 +714,13 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .hov-in h3{font-size:19px;margin-bottom:2px}
 .hov-popis{margin:0 0 6px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
 .hov-stav{margin:4px 0 0;font-size:13px;color:var(--text2)}
+/* Hotová města: co už někdo prošel, se otevře hned. */
+.mesta-chipy{display:flex;flex-wrap:wrap;gap:7px}
+.mesto-chip{display:inline-flex;align-items:baseline;gap:6px;padding:7px 11px;border-radius:999px;
+  background:rgba(120,160,255,.09);border:1px solid rgba(120,160,255,.28);color:var(--text);
+  font-size:13px;font-weight:700;cursor:pointer}
+.mesto-chip i{font-style:normal;font-size:10.5px;font-weight:600;color:var(--text3)}
+.mesto-chip:active{background:rgba(120,160,255,.18)}
 /* Tržiště: jedna nabídka = fotka stroje, cena a co to vydělá. */
 .trh-seznam{display:flex;flex-direction:column;gap:9px;margin-top:10px}
 .trh-p{display:flex;gap:11px;align-items:flex-start;background:var(--card);

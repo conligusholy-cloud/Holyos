@@ -171,6 +171,29 @@ async function runScout(query, key, job) {
   }
 }
 
+// ─── Hotová města ────────────────────────────────────────────────────────────
+// Co už někdo prohledal, je v databázi a otevře se okamžitě. První hledání
+// nového města ale tahá data z OpenStreetMap a trvá i minutu — nováčkovi to
+// vezme chuť dřív, než vůbec začne. Proto hře pošleme seznam hotových měst,
+// ze kterých se dá začít hned.
+let _mesta = { at: 0, data: null };
+router.get('/mesta', async (req, res) => {
+  try {
+    if (_mesta.data && Date.now() - _mesta.at < 120e3) return res.json(_mesta.data);
+    const rows = await prisma.gameArea.findMany({
+      orderBy: [{ hits: 'desc' }, { population: 'desc' }], take: 60,
+      select: { key: true, name: true, country: true, population: true, spots: true, hits: true },
+    });
+    const mesta = rows
+      .filter((a) => Array.isArray(a.spots) && a.spots.length)
+      .map((a) => ({ key: a.key, name: a.name, country: a.country || null,
+        mist: a.spots.length, lidi: a.population || null }));
+    const data = { ok: true, mesta };
+    _mesta = { at: Date.now(), data };
+    res.set('Cache-Control', 'public, max-age=120').json(data);
+  } catch (e) { res.json({ ok: true, mesta: [] }); }
+});
+
 router.get('/scout', async (req, res, next) => {
   try {
     const q = normQuery(req.query.q);

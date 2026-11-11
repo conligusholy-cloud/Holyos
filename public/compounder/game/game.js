@@ -3551,6 +3551,34 @@ function cizi(c) {
 // ─── Panel: průzkum města ────────────────────────────────────────────────────
 // Hráč napíše město a pošle tam člověka, aby ho prošel a našel vhodná místa.
 // Cesta stojí pokaždé stejně, ať jde o Prahu nebo o Trutnov.
+// Města, která už někdo prohledal — ta se otevřou okamžitě. Držíme je v paměti,
+// ať se při každém otevření panelu nechodí na server.
+var MESTA_HOTOVA = null;
+function loadMesta(then) {
+  if (MESTA_HOTOVA) { if (then) then(); return; }
+  api('/mesta').then(function (r) {
+    MESTA_HOTOVA = (r.ok && r.j.mesta) || [];
+    if (then) then();
+  }).catch(function () { MESTA_HOTOVA = []; if (then) then(); });
+}
+function mestaHtml(nadpis) {
+  var m = (MESTA_HOTOVA || []).filter(function (x) { return !S.areas[x.key]; }).slice(0, 18);
+  if (!m.length) return '';
+  return '<p class="muted small" style="margin:14px 0 6px"><b>' + esc(nadpis) + '</b></p>'
+    + '<div class="mesta-chipy">' + m.map(function (x) {
+        return '<button class="mesto-chip" data-mesto="' + esc(x.name) + '">' + esc(x.name)
+          + '<i>' + x.mist + ' míst</i></button>';
+      }).join('') + '</div>';
+}
+function bindMesta(spustit) {
+  [].forEach.call($('sheet-body').querySelectorAll('[data-mesto]'), function (b) {
+    b.onclick = function () {
+      var inp = $('q-area');
+      if (inp) inp.value = b.getAttribute('data-mesto');
+      if (spustit) spustit(b.getAttribute('data-mesto'));
+    };
+  });
+}
 function areasSheet() {
   var done = Object.keys(S.areas).map(function (id) {
     return '<div class="area-item"><div><div class="nm">' + esc(S.areas[id].name) + '</div>'
@@ -3570,11 +3598,22 @@ function areasSheet() {
     + '<button class="btn" id="do-scout"' + (S.cash < SCOUT_COST ? ' disabled' : '') + '>Hledat</button></div>'
     + '<p class="fine" id="city-note"></p>'
     + (S.cash < SCOUT_COST ? '<p class="fine err">Na cestu nemáš dost hotovosti.</p>' : '')
+    + '<div id="mesta-box">' + mestaHtml('Hotová města — člověk je prošel, otevřou se hned') + '</div>'
     + (done ? '<h3 style="margin-top:16px">Už prozkoumáno</h3>' + done : ''));
   var inp = $('q-area'), btn = $('do-scout');
+  // Hotová města doplníme, jakmile dorazí ze serveru — panel na ně nečeká.
+  if (!MESTA_HOTOVA) {
+    loadMesta(function () {
+      var box = $('mesta-box');
+      if (!box) return;
+      box.innerHTML = mestaHtml('Hotová města — člověk je prošel, otevřou se hned');
+      bindMesta(function (mesto) { scout(mesto, $('do-scout')); });
+    });
+  }
   // Na telefonu klávesnice ukousne půlku obrazovky — ať pole zůstane vidět.
   if (inp) inp.onfocus = function () { setTimeout(function () { inp.scrollIntoView({ block: 'center' }); }, 250); };
   var run = function () { scout((inp.value || '').trim(), btn); };
+  bindMesta(function (mesto) { scout(mesto, btn); });
   if (btn) btn.onclick = run;
   if (inp) inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); run(); } };
   [].forEach.call($('sheet-body').querySelectorAll('[data-go]'), function (b) {
@@ -3603,9 +3642,21 @@ function scout(city, btn) {
   if (note) note.textContent = 'Posílám tam člověka. Projít nové město může trvat i minutu.';
 
   // Postup píšeme i do poznámky pod polem — tlačítko bývá na mapě překryté.
+  var nabidnuto = false;
   var progress = function (s) {
     btn.textContent = 'Hledám… ' + s + ' s';
     if (note) note.textContent = 'Chodí po městě (' + s + ' s). Nech stránku otevřenou, může to trvat i minutu.';
+    // Po deseti vteřinách nabídneme města, kde už někdo byl — ta se otevřou
+    // hned. Nový hráč tak nemusí čekat na první hledání vůbec.
+    if (s >= 10 && !nabidnuto) {
+      nabidnuto = true;
+      loadMesta(function () {
+        var box = $('mesta-box');
+        if (!box || stop) return;
+        box.innerHTML = mestaHtml('Nechceš čekat? Tahle města jsou hotová a otevřou se hned');
+        bindMesta(function (mesto) { done(); btn.disabled = false; btn.textContent = 'Hledat'; scout(mesto, btn); });
+      });
+    }
   };
   // iOS uspí časovače, jakmile se přepne aplikace nebo zhasne displej. Po návratu
   // se proto hned zeptáme znovu, ať se hledání nezasekne na půl cesty.
