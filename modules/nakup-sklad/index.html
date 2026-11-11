@@ -1517,7 +1517,7 @@
     const PO_SECTIONS = [
       ['Místo nakládky', [['loading_place', 'Místo nakládky'], ['loading_date', 'Datum nakládky'], ['loading_note', 'Poznámka']]],
       ['Místo vykládky', [['unloading_place', 'Místo vykládky'], ['unloading_date', 'Datum vykládky'], ['unloading_note', 'Poznámka']]],
-      ['Doprava a převzetí', [['delivery_place', 'Místo dodání (areál, ulice, místo vykládky)'], ['receiver', 'Příjemce (jméno, tel., e-mail)'], ['receiving_hours', 'Doba příjmu'], ['transport_by', 'Dopravu zajišťuje a hradí'], ['unloading_by', 'Vykládku zajišťuje a hradí'], ['pre_notice', 'Ohlášení dodávky předem (lhůta, kontakt)'], ['packaging', 'Balení a značení'], ['incoterms', 'Dodací doložka (Incoterms 2020)'], ['returnable', 'Vratné obaly']]],
+      ['Doprava a balení', [['packaging', 'Balení a značení'], ['incoterms', 'Dodací doložka (Incoterms 2020)'], ['packaging_note', 'Poznámka']]],
       ['Platba a fakturace', [['pay_method', 'Způsob úhrady'], ['due_days', 'Splatnost (dnů od události)'], ['deposit', 'Záloha'], ['milestones', 'Doplatek / milníkové platby'], ['invoice_docs', 'Podklady pro fakturaci'], ['invoice_email', 'Faktury zasílat na'], ['partial_invoicing', 'Fakturace dílčích dodávek']]],
       ['Technické požadavky a dokumentace', [['quality', 'Specifikace a kvalita (materiál, tolerance, normy)'], ['substitutions', 'Náhrady nebo změny provedení'], ['docs_required', 'Doklady s dodávkou (DL, certifikáty, protokoly)'], ['acceptance', 'Přejímka a ověření funkčnosti'], ['warranty', 'Záruka a servis'], ['other_terms', 'Další sjednané podmínky']]],
       ['Přílohy a potvrzení', [['attachments', 'Přílohy (název, číslo, revize)'], ['precedence', 'Pořadí přednosti dokumentů'], ['confirm_by', 'Potvrzení zaslat do (datum)'], ['issued_by', 'Vystavil (jméno, funkce)'], ['approved_by', 'Schválil (jméno, funkce)'], ['discounts', 'Slevy a cenové úpravy'], ['price_regime', 'Cenový režim (pevná cena / změna ceny)'], ['extra_costs', 'Doprava / balení / další náklady bez DPH (částka)']]],
@@ -1541,7 +1541,7 @@
         const iso = /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : '';
         return '<label><span>' + f[1] + ' <small style="color:#8a8f9c">(kalendář nebo ruční zápis dd.mm.rrrr)</small></span><input class="po-in po-fld" type="date" data-pd="' + k + '" value="' + iso + '"></label>';
       }
-      if (k === 'loading_note' || k === 'unloading_note') {
+      if (k === 'loading_note' || k === 'unloading_note' || k === 'packaging_note') {
         return '<label style="grid-column:1/-1"><span>' + f[1] + ' <small style="color:#8a8f9c">(podrobnosti, které nejdou vybrat z adresáře)</small></span><input class="po-in po-fld" data-pd="' + k + '" placeholder="Např. kontaktní osoba, vjezd, rampa, otevírací doba…" value="' + poAttr(v) + '"></label>';
       }
       return '<label><span>' + f[1] + '</span><input class="po-in po-fld" data-pd="' + k + '" value="' + poAttr(v) + '"></label>';
