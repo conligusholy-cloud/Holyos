@@ -1250,6 +1250,7 @@ router.post('/orders/:id/payment', async (req, res, next) => {
     // Po zaplacení zálohy automaticky potvrď všechny rezervace slotů,
     // které patří této objednávce. Idempotentní: updateMany s reservation_status=reserved.
     let reservationsConfirmed = 0;
+    if (isPaid) require('../services/orders/it-request').autoSendOnFirstPayment(orderId).catch(() => {}); // IT dotazník po první platbě
     if (isPaid && (kind === 'deposit' || kind === 'full')) {
       const confirmRes = await prisma.slotAssignment.updateMany({
         where: { order_id: orderId, reservation_status: 'reserved' },
@@ -3140,6 +3141,62 @@ router.delete('/accounting-items/:id', async (req, res, next) => {
     const exists = await prisma.accountingItem.findUnique({ where: { id }, select: { id: true } });
     if (!exists) return res.status(404).json({ error: 'Účetní položka nenalezena' });
     await prisma.accountingItem.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// ============================================================
+// Služby k prodeji (doprava, instalace…) — kdo platí a kolik stojí
+// ============================================================
+const SERVICE_PAYERS = ['customer', 'us', 'included', 'third'];
+function salesServiceData(b) {
+  const s = (v, n) => (v === undefined || v === null || String(v).trim() === '' ? null : String(v).trim().slice(0, n));
+  const num = (v) => { if (v === '' || v === null || v === undefined) return null; const x = parseFloat(String(v).replace(/\s/g, '').replace(',', '.')); return Number.isFinite(x) ? x : null; };
+  const data = {};
+  if (b.name !== undefined) data.name = String(b.name || '').trim().slice(0, 255);
+  if (b.category !== undefined) data.category = s(b.category, 100);
+  if (b.description !== undefined) data.description = s(b.description, 5000);
+  if (b.payer !== undefined) data.payer = SERVICE_PAYERS.includes(b.payer) ? b.payer : 'customer';
+  if (b.price_czk !== undefined) data.price_czk = num(b.price_czk);
+  if (b.price_eur !== undefined) data.price_eur = num(b.price_eur);
+  if (b.unit !== undefined) data.unit = s(b.unit, 20) || 'paušál';
+  if (b.recommended !== undefined) data.recommended = !!b.recommended;
+  if (b.sort_order !== undefined) data.sort_order = parseInt(b.sort_order, 10) || 0;
+  if (b.note !== undefined) data.note = s(b.note, 5000);
+  if (b.active !== undefined) data.active = !!b.active;
+  return data;
+}
+router.get('/sales-services', async (req, res, next) => {
+  try {
+    const { search, active } = req.query; const where = {};
+    if (active === 'true') where.active = true; else if (active === 'false') where.active = false;
+    if (search) where.OR = ['name', 'category', 'description'].map((f) => ({ [f]: { contains: String(search), mode: 'insensitive' } }));
+    res.json(await prisma.salesService.findMany({ where, orderBy: [{ sort_order: 'asc' }, { name: 'asc' }], take: 1000 }));
+  } catch (err) { next(err); }
+});
+router.post('/sales-services', async (req, res, next) => {
+  try {
+    const data = salesServiceData(req.body || {});
+    if (!data.name) return res.status(400).json({ error: 'Název služby je povinný' });
+    res.status(201).json(await prisma.salesService.create({ data }));
+  } catch (err) { next(err); }
+});
+router.put('/sales-services/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const data = salesServiceData(req.body || {});
+    if (data.name !== undefined && !data.name) return res.status(400).json({ error: 'Název služby je povinný' });
+    const exists = await prisma.salesService.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) return res.status(404).json({ error: 'Služba nenalezena' });
+    res.json(await prisma.salesService.update({ where: { id }, data }));
+  } catch (err) { next(err); }
+});
+router.delete('/sales-services/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const exists = await prisma.salesService.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) return res.status(404).json({ error: 'Služba nenalezena' });
+    await prisma.salesService.delete({ where: { id } });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

@@ -310,6 +310,7 @@
     <div class="tab-bar">
       <button type="button" class="tab-btn active" data-tab="orders" onclick="switchTab('orders')">📋 Objednávky</button>
       <button type="button" class="tab-btn" data-tab="pricelist" onclick="switchTab('pricelist')">💰 Ceník</button>
+      <button type="button" class="tab-btn" data-tab="sluzby" onclick="switchTab('sluzby')">🚚 Služby</button>
       <button type="button" class="tab-btn" data-tab="cashflow" onclick="switchTab('cashflow')">💸 Cash flow</button>
       <button type="button" class="tab-btn" data-tab="tools" onclick="switchTab('tools')">🧰 Obchodní pomůcky</button>
       <button type="button" class="tab-btn" data-tab="compounder" onclick="switchTab('compounder')">🌐 Compounder</button>
@@ -767,6 +768,23 @@
           <button class="btn btn-primary" onclick="openPricelistModal()">+ Nová položka</button>
         </div>
         <div id="pricelist-table"></div>
+      </div>
+    </div>
+
+    <!-- TAB: Služby (doporučené služby: doprava, instalace…) -->
+    <div id="tab-sluzby" style="display:none;">
+      <div class="content">
+        <div class="toolbar">
+          <input type="text" id="svc-search" placeholder="Hledat službu..." onkeyup="loadSalesServices()">
+          <select id="svc-filter" onchange="loadSalesServices()">
+            <option value="">Všechny</option>
+            <option value="active" selected>Aktivní</option>
+            <option value="inactive">Zrušené</option>
+          </select>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" onclick="openServiceModal()">+ Nová služba</button>
+        </div>
+        <div id="svc-table"></div>
       </div>
     </div>
 
@@ -7370,13 +7388,14 @@
     window.prekladacCopy = prekladacCopy;
 
     function switchTab(name) {
-      ['orders', 'pricelist', 'accessories', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan', 'ai-asistent', 'prekladac', 'servis-smlouvy'].forEach(function(t) {
+      ['orders', 'pricelist', 'accessories', 'sluzby', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan', 'ai-asistent', 'prekladac', 'servis-smlouvy'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
         if (btn) btn.classList.toggle('active', t === name);
       });
       if (name === 'pricelist') loadPricelist();
+      if (name === 'sluzby') loadSalesServices();
       if (name === 'cashflow') loadCashflow();
       if (name === 'tools') initToolsTab();
       if (name === 'compounder') loadCompounderLeads();
@@ -11382,6 +11401,91 @@
         '</div>';
       plInitConfig(existing);
     }
+    // ── Služby: doporučené služby (doprava, instalace…) — kdo platí a kolik stojí ──
+    var SVC_PAYERS = { customer: 'Platí zákazník', us: 'Platíme my (Best Series)', included: 'V ceně stroje', third: 'Zákazník platí třetí straně' };
+    var SVC_PAYER_COLORS = { customer: '#3b82f6', us: '#f59e0b', included: '#10b981', third: '#8b5cf6' };
+    var SVC_DEFAULT_CATS = ['Doprava', 'Instalace', 'Uvedení do provozu', 'Školení', 'Servis', 'Ostatní'];
+    var _svcList = [];
+    async function loadSalesServices() {
+      var el = document.getElementById('svc-table'); if (!el) return;
+      var f = (document.getElementById('svc-filter') || {}).value || '';
+      var q = (document.getElementById('svc-search') || {}).value || '';
+      var url = '/api/wh/sales-services?' + (f === 'active' ? 'active=true&' : f === 'inactive' ? 'active=false&' : '') + (q ? 'search=' + encodeURIComponent(q) : '');
+      try {
+        var r = await fetch(url, { credentials: 'include' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        _svcList = await r.json(); renderSalesServices(_svcList);
+      } catch (e) { el.innerHTML = '<div style="color:#ef4444;padding:16px;">Nepodařilo se načíst služby: ' + esc(e.message) + '</div>'; }
+    }
+    function renderSalesServices(list) {
+      var el = document.getElementById('svc-table');
+      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🚚</div><h3>Zatím žádné služby</h3><p>Přidej doporučené služby (doprava, instalace, školení…) s cenou a určením, kdo je platí.</p></div>'; return; }
+      var byCat = {}, order = [];
+      list.forEach(function (it) { var c = it.category || 'Ostatní'; if (!byCat[c]) { byCat[c] = []; order.push(c); } byCat[c].push(it); });
+      order.sort(function (a, b) { var ia = SVC_DEFAULT_CATS.indexOf(a), ib = SVC_DEFAULT_CATS.indexOf(b); if (ia < 0) ia = 99; if (ib < 0) ib = 99; return ia - ib || a.localeCompare(b, 'cs'); });
+      var price = function (v, cur) { return v != null && v !== '' ? parseFloat(v).toLocaleString('cs-CZ') + ' ' + cur : '<span style="color:var(--text2)">—</span>'; };
+      var html = '';
+      order.forEach(function (cat) {
+        var rows = byCat[cat];
+        html += '<div style="display:flex;align-items:center;gap:10px;margin:16px 0 6px;padding:8px 14px;background:linear-gradient(135deg,rgba(59,130,246,0.16),rgba(59,130,246,0.04));border-left:4px solid #3b82f6;border-radius:8px;"><span style="font-size:15px;font-weight:800;">' + esc(cat) + '</span><span style="font-size:12px;color:var(--text2);">' + rows.length + ' pol.</span></div>';
+        html += '<div style="overflow-x:auto;margin-bottom:6px;"><table class="data-table"><thead><tr><th>Služba</th><th>Kdo platí</th><th style="text-align:right">Cena CZK</th><th style="text-align:right">Cena EUR</th><th>Jednotka</th><th>Stav</th><th>Akce</th></tr></thead><tbody>';
+        rows.forEach(function (it) {
+          var col = SVC_PAYER_COLORS[it.payer] || '#9ca3af';
+          html += '<tr onclick="openServiceModal(' + it.id + ')" style="cursor:pointer;">' +
+            '<td class="person-name">' + (it.recommended ? '⭐ ' : '') + esc(it.name) + (it.description ? '<div style="font-size:11px;color:var(--text2);font-weight:400;">' + esc(it.description) + '</div>' : '') + '</td>' +
+            '<td><span class="badge" style="background:' + col + '22;color:' + col + '">' + esc(SVC_PAYERS[it.payer] || it.payer) + '</span></td>' +
+            '<td style="text-align:right;font-weight:600;">' + (it.payer === 'included' ? '<span style="color:var(--text2)">v ceně</span>' : price(it.price_czk, 'Kč')) + '</td>' +
+            '<td style="text-align:right;font-weight:600;">' + (it.payer === 'included' ? '<span style="color:var(--text2)">v ceně</span>' : price(it.price_eur, '€')) + '</td>' +
+            '<td>' + esc(it.unit || '') + '</td>' +
+            '<td><span class="badge" style="' + (it.active ? 'background:rgba(16,185,129,0.12);color:#10b981' : 'background:rgba(156,163,175,0.12);color:#9ca3af') + '">' + (it.active ? 'Aktivní' : 'Zrušeno') + '</span></td>' +
+            '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteSalesService(' + it.id + ')">🗑️</button></td></tr>';
+        });
+        html += '</tbody></table></div>';
+      });
+      el.innerHTML = html;
+    }
+    function openServiceModal(id) {
+      var it = id ? (_svcList.find(function (x) { return x.id === id; }) || {}) : { payer: 'customer', unit: 'paušál', recommended: true, active: true };
+      var cats = SVC_DEFAULT_CATS.slice(); _svcList.forEach(function (x) { if (x.category && cats.indexOf(x.category) < 0) cats.push(x.category); });
+      var attr = function (v) { return esc(v == null ? '' : v).replace(/"/g, '&quot;'); };
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:600px;max-width:95vw;">' +
+          '<h2>' + (id ? '✏️ Upravit službu' : '➕ Nová služba') + '</h2>' +
+          '<form onsubmit="saveSalesService(event,' + (id || 'null') + ')"><div class="form-grid">' +
+            '<div class="form-group full"><label>Název služby *</label><input type="text" name="name" required value="' + attr(it.name) + '" placeholder="Např. Doprava a vykládka"></div>' +
+            '<div class="form-group"><label>Kategorie</label><input type="text" name="category" list="svc-cat-list" value="' + attr(it.category) + '"><datalist id="svc-cat-list">' + cats.map(function (c) { return '<option value="' + attr(c) + '">'; }).join('') + '</datalist></div>' +
+            '<div class="form-group"><label>Kdo platí</label><select name="payer">' + Object.keys(SVC_PAYERS).map(function (k) { return '<option value="' + k + '"' + (it.payer === k ? ' selected' : '') + '>' + SVC_PAYERS[k] + '</option>'; }).join('') + '</select></div>' +
+            '<div class="form-group"><label>Cena CZK (bez DPH)</label><input type="text" name="price_czk" value="' + attr(it.price_czk != null ? parseFloat(it.price_czk) : '') + '"></div>' +
+            '<div class="form-group"><label>Cena EUR (bez DPH)</label><input type="text" name="price_eur" value="' + attr(it.price_eur != null ? parseFloat(it.price_eur) : '') + '"></div>' +
+            '<div class="form-group"><label>Jednotka</label><input type="text" name="unit" list="svc-unit-list" value="' + attr(it.unit || 'paušál') + '"><datalist id="svc-unit-list"><option value="paušál"><option value="ks"><option value="km"><option value="hod"><option value="den"></datalist></div>' +
+            '<div class="form-group"><label>Pořadí</label><input type="number" name="sort_order" value="' + attr(it.sort_order || 0) + '"></div>' +
+            '<div class="form-group full"><label>Popis</label><textarea name="description" rows="2">' + esc(it.description || '') + '</textarea></div>' +
+            '<div class="form-group full"><label>Interní poznámka</label><textarea name="note" rows="2">' + esc(it.note || '') + '</textarea></div>' +
+            '<div class="form-group"><label><input type="checkbox" name="recommended"' + (it.recommended ? ' checked' : '') + '> ⭐ Doporučená služba</label></div>' +
+            '<div class="form-group"><label><input type="checkbox" name="active"' + (it.active !== false ? ' checked' : '') + '> Aktivní</label></div>' +
+          '</div><div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">Uložit</button></div></form>' +
+        '</div></div>';
+    }
+    async function saveSalesService(ev, id) {
+      ev.preventDefault();
+      var f = ev.target, g = function (n) { return f.elements[n].value; };
+      var body = { name: g('name'), category: g('category'), payer: g('payer'), price_czk: g('price_czk'), price_eur: g('price_eur'), unit: g('unit'), sort_order: g('sort_order'), description: g('description'), note: g('note'), recommended: f.elements.recommended.checked, active: f.elements.active.checked };
+      try {
+        var r = await fetch('/api/wh/sales-services' + (id ? '/' + id : ''), { method: id ? 'PUT' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        var d = await r.json();
+        if (!r.ok) throw new Error(d.error || ('Uložení selhalo (' + r.status + ')'));
+        closeModal(); loadSalesServices();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+    async function deleteSalesService(id) {
+      if (!confirm('Smazat službu? Tuto akci nelze vrátit.')) return;
+      try {
+        var r = await fetch('/api/wh/sales-services/' + id, { method: 'DELETE', credentials: 'include' });
+        if (!r.ok) throw new Error('Smazání selhalo (' + r.status + ')');
+        loadSalesServices();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
     // ── IT požadavky: editor šablony checklistu (Ceník) ──────────────────────────
     var _itTpl = [];
     var IT_TYPES = { yesno: 'Ano / Ne', text: 'Krátký text', textarea: 'Delší text', choice: 'Výběr z možností' };
@@ -11390,11 +11494,24 @@
         var r = await fetch('/api/it-requests/template', { credentials: 'include' });
         if (!r.ok) throw new Error('Načtení selhalo (' + r.status + ')');
         var d = await r.json(); _itTpl = d.items || [];
+        var s = await (await fetch('/api/it-requests/settings', { credentials: 'include' })).json();
         document.getElementById('modal-root').innerHTML =
           '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
             '<div class="modal" style="width:760px;max-width:95vw;max-height:90vh;overflow:auto;">' +
               '<h2>💻 IT požadavky — checklist pro zákazníka</h2>' +
-              '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Tyto otázky dostane zákazník e-mailem (odkaz na formulář) a má ' + (d.due_days || 3) + ' dny na vyplnění. Pokud nevyplní, přijde upozornění Radkovi Bečkovi e-mailem a do Velínu. Odeslání: v detailu objednávky tlačítko „💻 IT dotazník".</div>' +
+              '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Zákazník dostane e-mailem odkaz na formulář. Odpovědi se uloží k objednávce a odejdou e-mailem příjemcům níže. Pokud zákazník nevyplní do termínu, přijde upozornění Radkovi Bečkovi e-mailem a do Velínu.</div>' +
+              '<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;">' +
+                '<div style="font-weight:600;margin-bottom:8px;">⚙ Nastavení</div>' +
+                '<label style="display:block;margin-bottom:6px;"><input type="checkbox" id="it-s-auto"' + (s.auto_send ? ' checked' : '') + '> Odeslat zákazníkovi automaticky po přijetí první platby k objednávce</label>' +
+                '<label style="display:block;margin-bottom:6px;">Termín na vyplnění: <input type="number" id="it-s-days" min="1" max="30" style="width:60px;" value="' + (s.due_days || 3) + '"> dnů</label>' +
+                '<label style="display:block;margin-bottom:6px;"><input type="checkbox" id="it-s-radek"' + (s.include_radek ? ' checked' : '') + '> Výsledek poslat i Radkovi Bečkovi</label>' +
+                '<label style="display:block;margin-bottom:6px;">Další příjemci vyplněných odpovědí (e-maily oddělené čárkou):<input id="it-s-mails" style="width:100%;" value="' + esc((s.result_emails || []).join(', ')).replace(/"/g, '&quot;') + '"></label>' +
+                '<div style="display:flex;gap:6px;align-items:center;margin-top:8px;">' +
+                  '<input id="it-s-test" type="email" placeholder="Tvůj e-mail pro test" style="flex:1;">' +
+                  '<button type="button" class="btn btn-secondary btn-sm" onclick="itSendTest()">✉ Odeslat testovací e-mail</button>' +
+                '</div>' +
+                '<div style="margin-top:4px;color:var(--text2);">Test pošle ukázku e-mailu zákazníkovi (odkaz na náhled formuláře, nic se neukládá) i ukázku e-mailu s vyplněnými odpověďmi. Nastavení se uloží tlačítkem Uložit.</div>' +
+              '</div>' +
               '<div id="it-tpl-wrap"></div>' +
               '<button type="button" class="btn btn-secondary btn-sm" onclick="itTplAdd()">+ Přidat otázku</button>' +
               '<div class="modal-actions">' +
@@ -11443,9 +11560,33 @@
     function itTplAdd() { itTplSync(); _itTpl.push({ id: '', label: '', type: 'text', required: false }); itTplRender(); }
     function itTplDel(i) { itTplSync(); _itTpl.splice(i, 1); itTplRender(); }
     function itTplMove(i, d) { itTplSync(); var j = i + d; if (j < 0 || j >= _itTpl.length) return; var t = _itTpl[i]; _itTpl[i] = _itTpl[j]; _itTpl[j] = t; itTplRender(); }
+    async function itSaveSettings() {
+      var r = await fetch('/api/it-requests/settings', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        auto_send: document.getElementById('it-s-auto').checked,
+        due_days: document.getElementById('it-s-days').value,
+        include_radek: document.getElementById('it-s-radek').checked,
+        result_emails: document.getElementById('it-s-mails').value
+      }) });
+      if (!r.ok) throw new Error('Uložení nastavení selhalo (' + r.status + ')');
+    }
+    async function itSendTest() {
+      var email = (document.getElementById('it-s-test').value || '').trim();
+      if (!email) { alert('Zadej svůj e-mail.'); return; }
+      try {
+        itTplSync();
+        var sv = await fetch('/api/it-requests/template', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: _itTpl }) });
+        if (!sv.ok) throw new Error((await sv.json()).error || 'Uložení checklistu selhalo');
+        await itSaveSettings();
+        var r = await fetch('/api/it-requests/test', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email }) });
+        var d = await r.json();
+        if (!r.ok) throw new Error(d.error || ('Test selhal (' + r.status + ')'));
+        alert('Odesláno na ' + email + ' (2 e-maily: pro zákazníka a s vyplněnými odpověďmi).');
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
     async function itTplSave() {
       itTplSync();
       try {
+        await itSaveSettings();
         var r = await fetch('/api/it-requests/template', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: _itTpl }) });
         var d = await r.json();
         if (!r.ok) throw new Error(d.error || ('Uložení selhalo (' + r.status + ')'));
