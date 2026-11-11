@@ -124,6 +124,21 @@ const GLOBE = (() => {
 })();
 // Jiskry za personalizovaným prádlomatem (pevné pozice, různé zpoždění)
 const SPARKS = '<div class="bsp">' + [[8, 18, 0], [86, 14, .6], [16, 62, 1.2], [92, 52, .3], [50, 4, 1.8], [30, 30, 2.4], [72, 70, .9], [4, 40, 2.1], [64, 24, 1.5], [96, 30, 2.7]].map(([x, y, d]) => `<i style="left:${x}%;top:${y}%;animation-delay:${d}s"></i>`).join('') + '</div>';
+// Moderní ikony v brandu (gradient cyan → fialová) pro sekci Přínosy
+function benIco(i) {
+  const g = `<defs><linearGradient id="bg${i}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4fd1ff"/><stop offset="1" stop-color="#7c5cff"/></linearGradient></defs>`;
+  const a = `fill="none" stroke="url(#bg${i})" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`;
+  const P = [
+    // prodejna s rostoucím grafem
+    `<path ${a} d="M3 9.5 4.6 4h14.8L21 9.5"/><path ${a} d="M3 9.5c0 1.4 1.1 2.5 2.5 2.5S8 10.9 8 9.5c0 1.4 1.1 2.5 2.5 2.5h3c1.4 0 2.5-1.1 2.5-2.5 0 1.4 1.1 2.5 2.5 2.5S21 10.9 21 9.5"/><path ${a} d="M4.5 12v8h15v-8"/><path ${a} d="m8 17.5 2.5-2.5 2 1.5 3.5-3.5"/><path ${a} d="M14 13h2v2"/>`,
+    // zákazník + srdce
+    `<circle ${a} cx="9" cy="8" r="3.5"/><path ${a} d="M2.5 20c.6-3.6 3.3-6 6.5-6 1.6 0 3 .5 4.1 1.5"/><path ${a} d="M17.5 21s-4-2.4-4-5.1c0-1.2.9-2.1 2-2.1.8 0 1.5.4 2 1.1.5-.7 1.2-1.1 2-1.1 1.1 0 2 .9 2 2.1 0 2.7-4 5.1-4 5.1z"/>`,
+    // značka – odznak s jiskrou
+    `<path ${a} d="M12 2.8l2.2 1.6 2.7-.1.8 2.6 2.2 1.6-.9 2.5.9 2.5-2.2 1.6-.8 2.6-2.7-.1L12 19.2l-2.2-1.6-2.7.1-.8-2.6-2.2-1.6.9-2.5-.9-2.5 2.2-1.6.8-2.6 2.7.1z"/><path ${a} d="M12 7.5l1.1 2.4 2.4 1.1-2.4 1.1L12 14.5l-1.1-2.4L8.5 11l2.4-1.1z"/><path ${a} d="M8.5 19.5 7 22.5M15.5 19.5l1.5 3"/>`,
+  ];
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${g}${P[i] || P[2]}</svg>`;
+}
+
 function offerPage(o, token, opts) {
   const preview = !!(opts && opts.preview);
   const L = o.lang === 'en' ? 'en' : o.lang === 'pl' ? 'pl' : 'cs', t = T[L], X = EXTRA[L];
@@ -164,6 +179,9 @@ function offerPage(o, token, opts) {
 .ox .grid{display:grid;gap:18px;margin-top:36px}.ox .g3{grid-template-columns:repeat(3,1fr)}
 .ox .card{background:rgba(14,22,40,.62);border:1px solid var(--line);border-radius:20px;padding:26px;backdrop-filter:blur(6px)}
 .ox .ico{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;font-size:24px;background:linear-gradient(135deg,rgba(79,209,255,.16),rgba(124,92,255,.12));border:1px solid rgba(79,209,255,.22);margin-bottom:18px}
+.ox .ico{position:relative;width:56px;height:56px;border-radius:16px;box-shadow:0 0 0 1px rgba(79,209,255,.08) inset,0 8px 28px -10px rgba(79,209,255,.55);transition:transform .3s,box-shadow .3s}
+.ox .ico svg{width:28px;height:28px;filter:drop-shadow(0 0 6px rgba(79,209,255,.45))}
+.ox .path:hover .ico{transform:translateY(-3px);box-shadow:0 0 0 1px rgba(79,209,255,.25) inset,0 12px 34px -8px rgba(124,92,255,.7)}
 .ox .card h3{font-size:19px;font-weight:700}.ox .card p{color:var(--tx2);margin:10px 0 0;font-size:15.5px;line-height:1.55}
 .ox .step .n{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;font-weight:850;font-size:20px;background:var(--bg);border:1px solid var(--line2);color:var(--az);margin-bottom:18px}
 .ox .models{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:18px}.ox .models figure{margin:0;padding:18px;border-radius:20px;background:radial-gradient(circle at 50% 40%,rgba(79,209,255,.12),transparent 65%),rgba(14,22,40,.62);border:1px solid var(--line);text-align:center}.ox .models img{width:100%;height:200px;object-fit:contain;filter:drop-shadow(0 20px 30px rgba(0,0,0,.5))}.ox .models figcaption{font-weight:800;letter-spacing:.14em;color:var(--tx2);margin-top:8px}
@@ -240,7 +258,7 @@ function offerPage(o, token, opts) {
 
 
   <section class="sec" data-s="prinosy">${kick(X.ben)}<h2>${esc(t.benH)}</h2>
-    <div class="grid g3">${t.ben(o.company || '').map((b) => `<div class="path"><div class="ico">${b[0]}</div><h3>${esc(b[1])}</h3><ul>${b[2].map((x) => `<li>${CHK}<span>${esc(x)}</span></li>`).join('')}</ul></div>`).join('')}</div></section>
+    <div class="grid g3">${t.ben(o.company || '').map((b, i) => `<div class="path"><div class="ico">${benIco(i)}</div><h3>${esc(b[1])}</h3><ul>${b[2].map((x) => `<li>${CHK}<span>${esc(x)}</span></li>`).join('')}</ul></div>`).join('')}</div></section>
 
   ${pts.length ? `<section class="sec" data-s="pilot">${kick(X.pilot)}<h2>${esc(t.pilotH)}</h2><p class="sub">${esc(t.pilotSub)}</p><div class="tl">${pts.map((x) => `<div class="it"><span>${esc(x)}</span></div>`).join('')}</div></section>` : ''}
 
