@@ -7663,6 +7663,12 @@ model GamePlayer {
   // Id první návštěvy. Podle něj se k účtu najde záznam první minuty ve hře.
   sid           String?   @db.VarChar(64)
 
+  // Odkud účet vznikl: trvalé id prohlížeče, IP a prohlížeč při založení.
+  // Slouží jen k tomu, aby šlo poznat účty zakládané jedním člověkem na sebe.
+  dev_pid       String?   @db.VarChar(24)
+  reg_ip        String?   @db.VarChar(64)
+  reg_ua        String?   @db.Text
+
   cards     GameCard[]
   purchases GamePurchase[]
 
@@ -7673,6 +7679,8 @@ model GamePlayer {
   @@index([invited_by_id])
   @@index([invited_by_ref])
   @@index([sid])
+  @@index([dev_pid])
+  @@index([reg_ip])
   @@map("game_players")
 }
 

@@ -422,6 +422,154 @@ router.get('/provize/kontrola', api(async (req, res) => {
     radky });
 }));
 
+// ─── Spojené účty ────────────────────────────────────────────────────────────
+// GET /multi → skupiny účtů, které spolu nejspíš souvisí.
+//
+// Nic to neblokuje a hráč o tom neví. Jen to poskládá, co už víme: z jakého
+// prohlížeče účet vznikl (trvalé id, které si klient nese sám), z jaké IP a
+// z jaké sítě — a k tomu, kdo koho pozval a kolik na tom zvoucí vydělal.
+//
+// Čte se to opatrně: jedna IP neznamená podvod. Rodina u jedné wifi, kolej
+// nebo mobilní síť (operátoři sdílejí jednu IP mezi stovky lidí) vypadají
+// stejně. Důkaz je až spojení „stejné zařízení + jeden pozval druhého".
+const IP_SIT = (ip) => {
+  const x = String(ip || '');
+  if (!x) return null;
+  if (x.indexOf(':') >= 0) return x.split(':').slice(0, 4).join(':') + '::/64';
+  const o = x.split('.');
+  return o.length === 4 ? o.slice(0, 3).join('.') + '.0/24' : null;
+};
+router.get('/multi', api(async (req, res) => {
+  const [hraci, davky, mista] = await Promise.all([
+    prisma.gamePlayer.findMany({
+      select: { id: true, nick: true, company: true, created_at: true, last_login_at: true,
+        invited_by_id: true, invited_by_ref: true, ref_id: true, sid: true, state: true,
+        dev_pid: true, reg_ip: true, reg_ua: true, zdroj: true, disabled: true,
+        hra_s_celkem: true, provize_celkem: true, email: true },
+      orderBy: { id: 'asc' } }),
+    prisma.gameDelivery.findMany({ where: { kind: 'cash', popis: { startsWith: 'Provize' } },
+      select: { player_id: true, spot_id: true, amount: true } }),
+    prisma.gameSpotClaim.findMany({ select: { player_id: true, spot_id: true } }),
+  ]);
+  // Starší účty stopu u sebe nemají — dohledá se z první události té návštěvy.
+  const sidy = hraci.filter((h) => !h.reg_ip && h.sid).map((h) => h.sid);
+  const prvni = {};
+  if (sidy.length) {
+    const ev = await prisma.compounderEvent.findMany({
+      where: { sid: { in: sidy.slice(0, 2000) } },
+      select: { sid: true, ip: true, ua: true }, orderBy: { id: 'asc' }, take: 20000 });
+    ev.forEach((e) => { if (!prvni[e.sid] && e.ip) prvni[e.sid] = e; });
+  }
+  hraci.forEach((h) => {
+    const e = !h.reg_ip && h.sid ? prvni[h.sid] : null;
+    h._ip = h.reg_ip || (e && e.ip) || null;
+    h._ua = h.reg_ua || (e && e.ua) || null;
+  });
+
+  // Kdo koho pozval a kolik za něj zvoucí dostal.
+  const podleId = {}, podleRef = {};
+  hraci.forEach((h) => { podleId[h.id] = h; if (h.ref_id) podleRef[h.ref_id] = h; });
+  const majitelMista = {};
+  mista.forEach((m) => { majitelMista[m.spot_id] = m.player_id; });
+  const provize = {};   // "zvouci|pozvany" → { kusu, castka }
+  davky.forEach((d) => {
+    const klic = String(d.spot_id || '');
+    const m = /^nakup:(\d+):/.exec(klic);
+    const za = m ? Number(m[1]) : majitelMista[klic];
+    if (!za) return;
+    const k = d.player_id + '|' + za;
+    const z = provize[k] || (provize[k] = { kusu: 0, castka: 0 });
+    z.kusu++; z.castka += Number(d.amount) || 0;
+  });
+  const zvouciOd = (h) => podleId[h.invited_by_id] || podleRef[h.invited_by_ref] || null;
+
+  // Spojíme účty, které sdílí zařízení, IP nebo síť. Každé spojení si pamatuje,
+  // čím vzniklo — bez toho by se „stejná mobilní síť" četla jako důkaz.
+  const rodic = {};
+  const najdi = (x) => { while (rodic[x] !== x) { rodic[x] = rodic[rodic[x]]; x = rodic[x]; } return x; };
+  const spoj = (a, b) => { a = najdi(a); b = najdi(b); if (a !== b) rodic[b] = a; };
+  hraci.forEach((h) => { rodic[h.id] = h.id; });
+  const klice = { dev: {}, ip: {}, sit: {} };
+  hraci.forEach((h) => {
+    if (h.dev_pid) (klice.dev[h.dev_pid] = klice.dev[h.dev_pid] || []).push(h.id);
+    if (h._ip) (klice.ip[h._ip] = klice.ip[h._ip] || []).push(h.id);
+    const sit = IP_SIT(h._ip);
+    if (sit) (klice.sit[sit] = klice.sit[sit] || []).push(h.id);
+  });
+  ['dev', 'ip', 'sit'].forEach((druh) => {
+    Object.keys(klice[druh]).forEach((k) => {
+      const l = klice[druh][k];
+      for (let i = 1; i < l.length; i++) spoj(l[0], l[i]);
+    });
+  });
+  // Pozvánka sama o sobě skupinu nedělá — jinak by v jedné skupině skončila
+  // celá hra. Jen zpřísňuje hodnocení skupiny, která vznikla ze zařízení či IP.
+
+  const skupiny = {};
+  hraci.forEach((h) => {
+    const k = najdi(h.id);
+    (skupiny[k] = skupiny[k] || []).push(h);
+  });
+  const ven = [];
+  Object.keys(skupiny).forEach((k) => {
+    const cl = skupiny[k];
+    if (cl.length < 2) return;
+    const ids = {};
+    cl.forEach((h) => { ids[h.id] = 1; });
+    // Čím jsou spojení: stejný prohlížeč váží nejvíc, stejná síť nejmíň.
+    const devy = {}, ipy = {}, site = {};
+    cl.forEach((h) => {
+      if (h.dev_pid) devy[h.dev_pid] = (devy[h.dev_pid] || 0) + 1;
+      if (h._ip) ipy[h._ip] = (ipy[h._ip] || 0) + 1;
+      const s2 = IP_SIT(h._ip); if (s2) site[s2] = (site[s2] || 0) + 1;
+    });
+    const sdileneZarizeni = Object.keys(devy).some((x) => devy[x] > 1);
+    const sdilenaIp = Object.keys(ipy).some((x) => ipy[x] > 1);
+    let uvnitrProvize = 0, uvnitrKusu = 0, pozvanihVeSkupine = 0;
+    const clenove = cl.map((h) => {
+      const z = zvouciOd(h);
+      const vlastni = z && ids[z.id] ? 1 : 0;
+      if (vlastni) pozvanihVeSkupine++;
+      const pr = z ? (provize[z.id + '|' + h.id] || null) : null;
+      if (vlastni && pr) { uvnitrProvize += pr.castka; uvnitrKusu += pr.kusu; }
+      return {
+        id: h.id, nick: h.nick, firma: h.company || null, zalozeno: h.created_at,
+        naposledy: h.last_login_at, odehrano_s: h.hra_s_celkem || 0,
+        stroju: acct._strojeHrace(h.state).length,
+        pozval: z ? z.nick : null, pozval_ze_skupiny: !!vlastni,
+        provize_za_nej: pr ? pr.castka : 0, provizi_kusu: pr ? pr.kusu : 0,
+        zdroj: h.zdroj || null, ma_email: !!h.email, zablokovan: !!h.disabled,
+        zarizeni: h.dev_pid || null, ip: h._ip || null, sit: IP_SIT(h._ip),
+        prohlizec: (h._ua || '').slice(0, 120) || null,
+      };
+    });
+    clenove.sort((a, b) => new Date(a.zalozeno) - new Date(b.zalozeno));
+    const casy = clenove.map((c) => new Date(c.zalozeno).getTime());
+    const rozpeti = Math.max(0, Math.max.apply(null, casy) - Math.min.apply(null, casy));
+    // Hodnocení. Samotná sdílená síť je slabá stopa, teprve pozvánka uvnitř
+    // skupiny z toho dělá něco, co stojí za pohled.
+    let uroven = 'nizka', proc = [];
+    if (sdileneZarizeni) proc.push('stejný prohlížeč');
+    else if (sdilenaIp) proc.push('stejná IP');
+    else proc.push('stejná síť');
+    if (pozvanihVeSkupine) proc.push('pozvánka uvnitř skupiny');
+    if (uvnitrProvize) proc.push('provize uvnitř skupiny');
+    if (rozpeti && rozpeti < 2 * 3600e3) proc.push('účty vznikly do dvou hodin po sobě');
+    if (clenove.some((c) => c.odehrano_s < 300 && c.stroju > 0)) proc.push('stroj po pár minutách hry');
+    if (pozvanihVeSkupine && (sdileneZarizeni || sdilenaIp)) uroven = 'vysoka';
+    else if (pozvanihVeSkupine || sdileneZarizeni) uroven = 'stredni';
+    ven.push({ uroven, proc, clenu: clenove.length, pozvanych_uvnitr: pozvanihVeSkupine,
+      provize_uvnitr: uvnitrProvize, provizi_kusu: uvnitrKusu,
+      rozpeti_minut: Math.round(rozpeti / 60000),
+      zarizeni_sdilene: sdileneZarizeni, ip_sdilena: sdilenaIp, clenove });
+  });
+  const vaha = { vysoka: 3, stredni: 2, nizka: 1 };
+  ven.sort((a, b) => vaha[b.uroven] - vaha[a.uroven] || b.provize_uvnitr - a.provize_uvnitr || b.clenu - a.clenu);
+  res.json({ ok: true, skupin: ven.length,
+    bez_stopy: hraci.filter((h) => !h._ip && !h.dev_pid).length,
+    hracu: hraci.length, skupiny: ven });
+}));
+
 router.get('/stats', api(async (req, res) => {
   const dny = Math.min(180, Math.max(7, parseInt(req.query.dny, 10) || 30));
   const od = new Date(Date.now() - dny * 86400e3);

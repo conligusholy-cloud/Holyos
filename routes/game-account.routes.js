@@ -27,6 +27,18 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/;
 const NICK_RE = /^[\p{L}\p{N}_.-]{3,24}$/u;
 const FIRMA_RE = /^[\p{L}\p{N} .,&'"()+-]{2,60}$/u;
 const firmaNebo = (f, nick) => (f && FIRMA_RE.test(f) ? f : nick + ' s.r.o.');
+// Odkud účet vznikl. Id prohlížeče si klient nese sám (stejné, jaké posílá do
+// pozvánek), IP a prohlížeč bereme z požadavku. Nic z toho se hráči nikde
+// neukazuje — slouží jen k poznání účtů, které si jeden člověk zakládá sám.
+const PID_RE = /^[a-z0-9]{6,24}$/;
+function puvod(req) {
+  const pid = String((req.body || {}).ref || '').toLowerCase();
+  return {
+    dev_pid: PID_RE.test(pid) ? pid : null,
+    reg_ip: ipOf(req) || null,
+    reg_ua: String(req.headers['user-agent'] || '').slice(0, 500) || null,
+  };
+}
 // Znak je jen trojice čísel „tvar-paleta-symbol". Obrázek z nich složí prohlížeč.
 const ZNAK_RE = /^[0-9]{1,2}-[0-9]{1,2}-[0-9]{1,2}$/;
 const ipOf = (req) => String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.ip || '').trim();
@@ -480,7 +492,8 @@ router.post('/account/zacni', async (req, res, next) => {
         password_hash: null, last_login_at: new Date(),
         zdroj: s((req.body || {}).zdroj, 80) || null,
         sid: /^[a-z0-9-]{6,64}$/.test(String((req.body || {}).sid || ''))
-          ? String((req.body || {}).sid) : null }
+          ? String((req.body || {}).sid) : null,
+        ...puvod(req) }
     });
     try {
       await prisma.gameCard.createMany({ data: CARD_KINDS.map((k) => ({ player_id: p.id, kind: k })) });
@@ -535,7 +548,8 @@ router.post('/account/register', async (req, res, next) => {
         zdroj: s((req.body || {}).zdroj, 80) || null,
         // Id první návštěvy — podle něj se k účtu najde záznam první minuty.
         sid: /^[a-z0-9-]{6,64}$/.test(String((req.body || {}).sid || ''))
-          ? String((req.body || {}).sid) : null }
+          ? String((req.body || {}).sid) : null,
+        ...puvod(req) }
     });
     // Dárek do začátku: jedna od každé zrychlující karty. Dostane ho jen nový
     // účet — ne ten, kdo si hru resetuje, jinak by si karty takhle „vyráběl".

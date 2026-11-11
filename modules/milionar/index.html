@@ -38,6 +38,7 @@
     .st.pending { background:rgba(245,158,11,.18); color:#f59e0b; }
     .st.failed { background:rgba(239,68,68,.18); color:#f87171; }
     .note { color:var(--text2); font-size:12px; }
+    .mu-sk { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 14px; }
     /* Provoz: dvě tabulky vedle sebe, na užším okně pod sebou. */
     .pv-sloupce { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
     .ok { color:#22c55e; }
@@ -108,6 +109,7 @@
       <button class="module-tab" data-tab="orders">Objednávky</button>
       <button class="module-tab" data-tab="prices">Ceník</button>
       <button class="module-tab" data-tab="nahlasene">Nahlášené<span id="nahl-pocet"></span></button>
+      <button class="module-tab" data-tab="multi">Spojené účty<span id="multi-pocet"></span></button>
     </div>
 
     <div class="content">
@@ -184,6 +186,16 @@
         </div>
         <p class="note" style="margin:0 0 12px">Zprávy, na které si někdo stěžoval. Odesílatele zablokuješ v jeho detailu.</p>
         <div id="nahl-body"></div>
+      </div>
+
+      <div class="module-panel" id="panel-multi">
+        <p class="note" style="margin:16px 0 4px">Účty, které spolu nejspíš souvisí — podle prohlížeče, ze kterého vznikly,
+          podle IP a podle sítě. Nic se nikomu neblokuje a hráči o tom nevědí.</p>
+        <p class="note" style="margin:0 0 14px;color:var(--text2)">Jedna IP sama o sobě nic nedokazuje: rodina u jedné wifi,
+          kolej i mobilní operátoři sdílejí adresu mezi spoustu lidí. Vážně to začíná být, když je to <b>stejný prohlížeč</b>
+          a zároveň se účty ve skupině navzájem pozvaly a tečou mezi nimi provize.</p>
+        <div class="kpis" id="mu-kpis"></div>
+        <div id="mu-body"></div>
       </div>
 
       <div class="module-panel" id="panel-prices">
@@ -862,8 +874,57 @@
       };
     });
 
+    // ── Spojené účty ────────────────────────────────────────────────────────
+    var MU_UROVEN = { vysoka: ['Stojí za pohled', '#f87171'], stredni: ['Možná nic', '#fbbf24'], nizka: ['Nejspíš nic', '#94a3b8'] };
+    function muCas(s2) {
+      var m = Math.round((s2 || 0) / 60);
+      if (!m) return 'nehrál';
+      return m < 60 ? m + ' min' : Math.round(m / 6) / 10 + ' h';
+    }
+    function loadMulti() {
+      var box = document.getElementById('mu-body');
+      box.innerHTML = '<p class="note">Načítám…</p>';
+      get('/multi').then(function (j) {
+        var sk = j.skupiny || [];
+        var hlidat = sk.filter(function (g) { return g.uroven === 'vysoka'; });
+        var odzn = document.getElementById('multi-pocet');
+        if (odzn) odzn.textContent = hlidat.length ? ' ' + hlidat.length : '';
+        document.getElementById('mu-kpis').innerHTML =
+          kpi(sk.length, 'Skupin celkem')
+          + kpi(hlidat.length, 'Stojí za pohled')
+          + kpi(cz(sk.reduce(function (a, g) { return a + g.provize_uvnitr; }, 0)) + ' L$', 'Provize uvnitř skupin')
+          + kpi(j.bez_stopy + ' z ' + j.hracu, 'Účty bez stopy');
+        if (!sk.length) { box.innerHTML = '<p class="note">Zatím nic spojeného. Stopa se ukládá od teď — starší účty se dohledávají ze záznamu návštěv.</p>'; return; }
+        box.innerHTML = sk.map(function (g) {
+          var u = MU_UROVEN[g.uroven] || MU_UROVEN.nizka;
+          return '<div class="mu-sk" style="margin-bottom:14px;border-left:3px solid ' + u[1] + '">'
+            + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+            + '<b style="color:' + u[1] + '">' + u[0] + '</b>'
+            + '<span class="note">' + g.clenu + ' účty · ' + esc(g.proc.join(' · ')) + '</span>'
+            + (g.provize_uvnitr ? '<span class="note" style="margin-left:auto;color:#fbbf24">provize uvnitř: '
+                + cz(g.provize_uvnitr) + ' L$ za ' + g.provizi_kusu + ' strojů</span>' : '')
+            + '</div>'
+            + '<div class="tbl-wrap"><table class="data-table"><thead><tr>'
+            + '<th>Nick</th><th>Založeno</th><th>Odehráno</th><th>Strojů</th><th>Pozval</th>'
+            + '<th>Provize za něj</th><th>Zařízení</th><th>IP</th></tr></thead><tbody>'
+            + g.clenove.map(function (c) {
+              return '<tr><td><b>' + esc(c.nick) + '</b>' + (c.firma ? '<br><span class="note">' + esc(c.firma) + '</span>' : '')
+                + (c.zablokovan ? ' <span class="note" style="color:#f87171">zablokován</span>' : '') + '</td>'
+                + '<td>' + dt(c.zalozeno) + '<br><span class="note">' + stari(c.zalozeno) + '</span></td>'
+                + '<td' + (c.odehrano_s < 300 ? ' style="color:#fbbf24"' : '') + '>' + muCas(c.odehrano_s) + '</td>'
+                + '<td>' + c.stroju + '</td>'
+                + '<td>' + (c.pozval ? esc(c.pozval) + (c.pozval_ze_skupiny ? ' <span style="color:#f87171">↔</span>' : '') : '—') + '</td>'
+                + '<td>' + (c.provize_za_nej ? cz(c.provize_za_nej) + ' L$' : '—') + '</td>'
+                + '<td><span class="note">' + (c.zarizeni ? esc(c.zarizeni) : '—') + '</span></td>'
+                + '<td><span class="note">' + (c.ip ? esc(c.ip) : '—') + '</span></td></tr>';
+            }).join('')
+            + '</tbody></table></div></div>';
+        }).join('');
+      }).catch(function (e) { chyba('mu-body', e); });
+    }
+
     var LOADERY = { stats: loadStats, players: loadPlayers, orders: loadOrders,
-      prices: loadPrices, nahlasene: loadNahlasene };
+      prices: loadPrices, nahlasene: loadNahlasene, multi: loadMulti };
     var AKTIVNI = 'stats';
     [].forEach.call(document.querySelectorAll('.module-tab'), function (t) {
       t.onclick = function () {
