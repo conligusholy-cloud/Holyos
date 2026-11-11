@@ -310,6 +310,7 @@
     <div class="tab-bar">
       <button type="button" class="tab-btn active" data-tab="orders" onclick="switchTab('orders')">📋 Objednávky</button>
       <button type="button" class="tab-btn" data-tab="pricelist" onclick="switchTab('pricelist')">💰 Ceník</button>
+      <button type="button" class="tab-btn" data-tab="vyrobni-cisla" onclick="switchTab('vyrobni-cisla')">🔢 Výrobní čísla</button>
       <button type="button" class="tab-btn" data-tab="cashflow" onclick="switchTab('cashflow')">💸 Cash flow</button>
       <button type="button" class="tab-btn" data-tab="tools" onclick="switchTab('tools')">🧰 Obchodní pomůcky</button>
       <button type="button" class="tab-btn" data-tab="compounder" onclick="switchTab('compounder')">🌐 Compounder</button>
@@ -768,6 +769,18 @@
           <button class="btn btn-primary" onclick="openPricelistModal()">+ Nová položka</button>
         </div>
         <div id="pricelist-table"></div>
+      </div>
+    </div>
+
+    <!-- TAB: Výrobní čísla (číselné řady po zemích) -->
+    <div id="tab-vyrobni-cisla" style="display:none;">
+      <div class="content">
+        <div class="toolbar">
+          <div style="font-size:12px;color:var(--text2);">Číselné řady výrobních čísel strojů podle země zákazníka. Zadej formát a číslo, od kterého se pokračuje (navazuje na už vydaná čísla).</div>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" onclick="openSerialSeriesModal()">+ Nová řada</button>
+        </div>
+        <div id="serial-series-table"></div>
       </div>
     </div>
 
@@ -2732,7 +2745,7 @@
               const nameCell = '<span class="person-name">' + nameTop + '</span>' +
                 (nameBottom ? '<div style="font-size:11px;color:var(--text2);margin-top:2px;font-style:italic;">' + nameBottom + '</div>' : '');
               // Výrobní číslo kiosku — editovatelné inline, bez přenačtení modalu
-              const serialCellEditable = '<input type="text" value="' + esc(it.serial_number || '') + '" placeholder="—" maxlength="100" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;font-family:monospace;" onchange="updateOrderItemSerial(' + it.id + ',' + id + ',this.value,this)" title="Výrobní číslo kiosku (např. SN-2026-001)">';
+              const serialCellEditable = '<input type="text" value="' + esc(it.serial_number || '') + '" placeholder="—" maxlength="100" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;font-family:monospace;" onchange="updateOrderItemSerial(' + it.id + ',' + id + ',this.value,this)" title="Výrobní číslo kiosku (např. SN-2026-001)"><button type="button" class="btn btn-sm" style="margin-left:4px;" onclick="assignItemSerial(' + it.id + ',' + id + ',this)" title="Přidělit další číslo z číselné řady podle země zákazníka (záložka Výrobní čísla)">🔢</button>';
               itemsHtml += '<tr>';
               itemsHtml += '<td>' + nameCell + configLine + '</td>';
               itemsHtml += '<td>' + serialCellEditable + '</td>';
@@ -7437,7 +7450,7 @@
     window.prekladacCopy = prekladacCopy;
 
     function switchTab(name) {
-      ['orders', 'pricelist', 'accessories', 'sluzby', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan', 'ai-asistent', 'prekladac', 'servis-smlouvy'].forEach(function(t) {
+      ['orders', 'pricelist', 'accessories', 'sluzby', 'vyrobni-cisla', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan', 'ai-asistent', 'prekladac', 'servis-smlouvy'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
@@ -7445,6 +7458,7 @@
       });
       if (name === 'pricelist') loadPricelist();
       if (name === 'sluzby') loadSalesServices();
+      if (name === 'vyrobni-cisla') loadSerialSeries();
       if (name === 'accessories') loadAccessories();
       if (name === 'cashflow') loadCashflow();
       if (name === 'tools') initToolsTab();
@@ -11451,6 +11465,96 @@
         '</div>';
       plInitConfig(existing);
     }
+    // ── Výrobní čísla: číselné řady po zemích (formát + příští číslo) ──
+    var SER_COUNTRIES = { CZ: 'Česko', SK: 'Slovensko', PL: 'Polsko', DE: 'Německo', AT: 'Rakousko', GB: 'Velká Británie', HU: 'Maďarsko', FR: 'Francie', IT: 'Itálie', ES: 'Španělsko', NL: 'Nizozemsko', BE: 'Belgie', IE: 'Irsko', RO: 'Rumunsko' };
+    var _serList = [];
+    async function loadSerialSeries() {
+      var el = document.getElementById('serial-series-table'); if (!el) return;
+      try {
+        var r = await fetch('/api/wh/serial-series', { credentials: 'include' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        _serList = await r.json(); renderSerialSeries();
+      } catch (e) { el.innerHTML = '<div style="color:#ef4444;padding:16px;">Nepodařilo se načíst řady: ' + esc(e.message) + '</div>'; }
+    }
+    function renderSerialSeries() {
+      var el = document.getElementById('serial-series-table');
+      if (!_serList.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔢</div><h3>Zatím žádné číselné řady</h3><p>Přidej řadu pro zemi (např. CZ), zadej formát a číslo, od kterého se má pokračovat.</p></div>'; return; }
+      var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Země</th><th>Název</th><th>Formát</th><th style="text-align:right">Příští číslo</th><th>Další výrobní č.</th><th>Naposledy přiděleno</th><th>Stav</th><th>Akce</th></tr></thead><tbody>';
+      _serList.forEach(function (s) {
+        h += '<tr onclick="openSerialSeriesModal(' + s.id + ')" style="cursor:pointer;">' +
+          '<td class="person-name">' + esc(s.country) + ' <span style="color:var(--text2);font-weight:400;font-size:11px;">' + esc(SER_COUNTRIES[s.country] || '') + '</span></td>' +
+          '<td>' + esc(s.name || '—') + '</td>' +
+          '<td style="font-family:monospace;">' + esc(s.format) + '</td>' +
+          '<td style="text-align:right;font-weight:600;">' + s.next_number + '</td>' +
+          '<td><span style="font-family:monospace;font-weight:700;background:rgba(139,92,246,0.12);color:#8b5cf6;padding:3px 8px;border-radius:6px;">' + esc(s.preview) + '</span></td>' +
+          '<td style="color:var(--text2);font-size:12px;">' + (s.last_issued_at ? new Date(s.last_issued_at).toLocaleDateString('cs-CZ') : '—') + '</td>' +
+          '<td><span class="badge" style="' + (s.active ? 'background:rgba(16,185,129,0.12);color:#10b981' : 'background:rgba(156,163,175,0.12);color:#9ca3af') + '">' + (s.active ? 'Aktivní' : 'Neaktivní') + '</span></td>' +
+          '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteSerialSeries(' + s.id + ')">🗑️</button></td></tr>';
+      });
+      el.innerHTML = h + '</tbody></table></div>';
+    }
+    function serPreview() {
+      var f = document.getElementById('ser-format'), n = document.getElementById('ser-next'), c = document.getElementById('ser-country'), p = document.getElementById('ser-preview');
+      if (!f || !p) return;
+      var d = new Date(), num = parseInt(n.value, 10) || 0;
+      p.textContent = String(f.value || '').replace(/\{CC\}/gi, (c.value || '').toUpperCase()).replace(/\{YYYY\}/gi, d.getFullYear()).replace(/\{YY\}/gi, String(d.getFullYear()).slice(2)).replace(/\{N(?::(\d{1,2}))?\}/gi, function (_, w) { return String(num).padStart(parseInt(w, 10) || 0, '0'); });
+    }
+    function openSerialSeriesModal(id) {
+      var s = id ? (_serList.find(function (x) { return x.id === id; }) || {}) : { country: 'CZ', format: '{CC}-{N:4}', next_number: 1, active: true };
+      var attr = function (v) { return esc(v == null ? '' : v).replace(/"/g, '&quot;'); };
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:560px;max-width:95vw;">' +
+          '<h2>' + (id ? '✏️ Upravit číselnou řadu' : '➕ Nová číselná řada') + '</h2>' +
+          '<form onsubmit="saveSerialSeries(event,' + (id || 'null') + ')"><div class="form-grid">' +
+            '<div class="form-group"><label>Země (kód) *</label><input type="text" id="ser-country" name="country" list="ser-cc-list" maxlength="2" required value="' + attr(s.country) + '" oninput="serPreview()" style="text-transform:uppercase;"><datalist id="ser-cc-list">' + Object.keys(SER_COUNTRIES).map(function (k) { return '<option value="' + k + '">' + SER_COUNTRIES[k] + '</option>'; }).join('') + '</datalist></div>' +
+            '<div class="form-group"><label>Název (volitelný)</label><input type="text" name="name" value="' + attr(s.name) + '" placeholder="Např. Prádlomaty CZ"></div>' +
+            '<div class="form-group full"><label>Formát *</label><input type="text" id="ser-format" name="format" required value="' + attr(s.format) + '" oninput="serPreview()" style="font-family:monospace;"><div style="font-size:11px;color:var(--text2);margin-top:3px;">Zástupné znaky: <code>{CC}</code> země, <code>{YYYY}</code> rok, <code>{YY}</code> rok 2 číslice, <code>{N:4}</code> pořadové číslo s doplněním nul na 4 místa.</div></div>' +
+            '<div class="form-group"><label>Další číslo (od něj se pokračuje) *</label><input type="number" id="ser-next" name="next_number" min="0" required value="' + attr(s.next_number != null ? s.next_number : 1) + '" oninput="serPreview()"></div>' +
+            '<div class="form-group"><label>Další výrobní číslo bude</label><div id="ser-preview" style="font-family:monospace;font-weight:700;font-size:15px;color:#8b5cf6;padding:8px 0;">—</div></div>' +
+            '<div class="form-group full"><label>Poznámka</label><textarea name="note" rows="2">' + esc(s.note || '') + '</textarea></div>' +
+            '<div class="form-group"><label><input type="checkbox" name="active"' + (s.active !== false ? ' checked' : '') + '> Aktivní</label></div>' +
+          '</div><div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">Uložit</button></div></form>' +
+        '</div></div>';
+      serPreview();
+    }
+    async function saveSerialSeries(ev, id) {
+      ev.preventDefault();
+      var f = ev.target, g = function (n) { return f.elements[n].value; };
+      var body = { country: g('country'), name: g('name'), format: g('format'), next_number: g('next_number'), note: g('note'), active: f.elements.active.checked };
+      try {
+        var r = await fetch('/api/wh/serial-series' + (id ? '/' + id : ''), { method: id ? 'PUT' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        var d = await r.json();
+        if (!r.ok) throw new Error(d.error || ('Uložení selhalo (' + r.status + ')'));
+        closeModal(); loadSerialSeries();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+    async function deleteSerialSeries(id) {
+      if (!confirm('Smazat číselnou řadu? Už přidělená výrobní čísla zůstanou u položek.')) return;
+      try {
+        var r = await fetch('/api/wh/serial-series/' + id, { method: 'DELETE', credentials: 'include' });
+        if (!r.ok) throw new Error('Smazání selhalo (' + r.status + ')');
+        loadSerialSeries();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+    // Přidělí položce objednávky další výrobní číslo z řady podle země zákazníka
+    async function assignItemSerial(itemId, orderId, btn) {
+      var seriesId = null;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        var r = await fetch('/api/wh/orders/' + orderId + '/items/' + itemId + '/assign-serial', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(seriesId ? { series_id: seriesId } : {}) });
+        var d = await r.json().catch(function () { return {}; });
+        if (r.status === 409 && d.code === 'multiple') {
+          var pick = prompt('Pro zemi zákazníka je víc řad. Zadej číslo řady:\n' + d.options.map(function (o, i) { return (i + 1) + ') ' + (o.name || o.country) + ' — další: ' + o.preview; }).join('\n'));
+          var idx = parseInt(pick, 10) - 1; if (!(idx >= 0 && idx < d.options.length)) return;
+          seriesId = d.options[idx].id; continue;
+        }
+        if (!r.ok) { alert(d.error || ('Přidělení selhalo (' + r.status + ')')); return; }
+        var inp = btn && btn.parentNode ? btn.parentNode.querySelector('input') : null;
+        if (inp) { inp.value = d.serial_number; inp.style.borderColor = '#10b981'; }
+        loadOrders();
+        return;
+      }
+    }
+
     // ── Služby: doporučené služby (doprava, instalace…) — kdo platí a kolik stojí ──
     var SVC_PAYERS = { customer: 'Platí zákazník', us: 'Platíme my (Best Series)', included: 'V ceně stroje', third: 'Zákazník platí třetí straně' };
     var SVC_PAYER_COLORS = { customer: '#3b82f6', us: '#f59e0b', included: '#10b981', third: '#8b5cf6' };

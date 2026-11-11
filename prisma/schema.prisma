@@ -8020,6 +8020,23 @@ model OrderItRequest {
 
 // Účetní položky (Nákup a sklad → Zboží → Účetní položky): samostatný ručně vedený seznam
 // položek, které neprochází skladem (služby, doprava, spotřeba…). Nepatří do Material.
+// Číselné řady výrobních čísel strojů — po zemích (formát + startovní/příští číslo; navazuje na už vydaná čísla)
+model ProductionSerialSeries {
+  id             Int       @id @default(autoincrement())
+  country        String    @db.VarChar(2) // země zákazníka (Company.country): CZ, SK, GB…
+  name           String?   @db.VarChar(100)
+  format         String    @default("{CC}-{N:4}") @db.VarChar(100) // tokeny: {CC} země, {YYYY}, {YY}, {N:4} číslo s doplněním nul
+  next_number    Int       @default(1) // další číslo, které se přidělí
+  active         Boolean   @default(true)
+  note           String?   @db.Text
+  last_issued_at DateTime?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  @@index([country, active])
+  @@map("production_serial_series")
+}
+
 // Naplánovaný e-mail zákazníkovi se zakládáním Nayax účtu (X dní po první platbě)
 model OrderNayaxMail {
   id         Int       @id @default(autoincrement())

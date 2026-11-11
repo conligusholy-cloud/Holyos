@@ -3154,6 +3154,91 @@ router.delete('/accounting-items/:id', async (req, res, next) => {
 });
 
 // ============================================================
+// Číselné řady výrobních čísel strojů (po zemích)
+// ============================================================
+function formatSerial(fmt, country, n, when) {
+  const d = when || new Date();
+  return String(fmt || '{CC}-{N:4}')
+    .replace(/\{CC\}/gi, String(country || '').toUpperCase())
+    .replace(/\{YYYY\}/gi, String(d.getFullYear()))
+    .replace(/\{YY\}/gi, String(d.getFullYear()).slice(2))
+    .replace(/\{N(?::(\d{1,2}))?\}/gi, (_, w) => String(n).padStart(parseInt(w, 10) || 0, '0'));
+}
+function serialSeriesView(s) { return Object.assign({}, s, { preview: formatSerial(s.format, s.country, s.next_number) }); }
+function serialSeriesData(b) {
+  const data = {};
+  if (b.country !== undefined) data.country = String(b.country || '').trim().toUpperCase().slice(0, 2);
+  if (b.name !== undefined) data.name = String(b.name || '').trim().slice(0, 100) || null;
+  if (b.format !== undefined) data.format = String(b.format || '').trim().slice(0, 100) || '{CC}-{N:4}';
+  if (b.next_number !== undefined) { const n = parseInt(b.next_number, 10); data.next_number = Number.isFinite(n) && n >= 0 ? n : 1; }
+  if (b.note !== undefined) data.note = String(b.note || '').trim().slice(0, 2000) || null;
+  if (b.active !== undefined) data.active = !!b.active;
+  return data;
+}
+router.get('/serial-series', async (req, res, next) => {
+  try { res.json((await prisma.productionSerialSeries.findMany({ orderBy: [{ country: 'asc' }, { id: 'asc' }] })).map(serialSeriesView)); } catch (err) { next(err); }
+});
+router.post('/serial-series', async (req, res, next) => {
+  try {
+    const data = serialSeriesData(req.body || {});
+    if (!data.country || data.country.length !== 2) return res.status(400).json({ error: 'Zadej zemi (dvoupísmenný kód, např. CZ, SK, GB)' });
+    if (!/\{N(?::\d{1,2})?\}/i.test(data.format || '{CC}-{N:4}')) return res.status(400).json({ error: 'Formát musí obsahovat číslo — {N:4}' });
+    res.status(201).json(serialSeriesView(await prisma.productionSerialSeries.create({ data })));
+  } catch (err) { next(err); }
+});
+router.put('/serial-series/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const data = serialSeriesData(req.body || {});
+    if (data.country !== undefined && data.country.length !== 2) return res.status(400).json({ error: 'Zadej zemi (dvoupísmenný kód)' });
+    if (data.format !== undefined && !/\{N(?::\d{1,2})?\}/i.test(data.format)) return res.status(400).json({ error: 'Formát musí obsahovat číslo — {N:4}' });
+    const ex = await prisma.productionSerialSeries.findUnique({ where: { id }, select: { id: true } });
+    if (!ex) return res.status(404).json({ error: 'Řada nenalezena' });
+    res.json(serialSeriesView(await prisma.productionSerialSeries.update({ where: { id }, data })));
+  } catch (err) { next(err); }
+});
+router.delete('/serial-series/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const ex = await prisma.productionSerialSeries.findUnique({ where: { id }, select: { id: true } });
+    if (!ex) return res.status(404).json({ error: 'Řada nenalezena' });
+    await prisma.productionSerialSeries.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+// Přidělí položce objednávky další výrobní číslo z řady (podle země zákazníka, nebo zadané series_id). Atomicky, přeskočí už použitá čísla.
+router.post('/orders/:id/items/:itemId/assign-serial', async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id, 10), itemId = parseInt(req.params.itemId, 10);
+    const item = await prisma.orderItem.findFirst({ where: { id: itemId, order_id: orderId }, select: { id: true, serial_number: true } });
+    if (!item) return res.status(404).json({ error: 'Položka nenalezena' });
+    if (item.serial_number && !req.body.force) return res.status(409).json({ error: 'Položka už má výrobní číslo ' + item.serial_number, code: 'has_serial' });
+    let series;
+    if (req.body.series_id) {
+      series = await prisma.productionSerialSeries.findUnique({ where: { id: parseInt(req.body.series_id, 10) } });
+    } else {
+      const order = await prisma.order.findUnique({ where: { id: orderId }, select: { company: { select: { country: true } } } });
+      const cc = String((order && order.company && order.company.country) || 'CZ').toUpperCase();
+      const list = await prisma.productionSerialSeries.findMany({ where: { country: cc, active: true }, orderBy: { id: 'asc' } });
+      if (!list.length) return res.status(400).json({ error: 'Pro zemi ' + cc + ' není založená žádná číselná řada (záložka Výrobní čísla)', code: 'no_series' });
+      if (list.length > 1) return res.status(409).json({ error: 'Pro zemi ' + cc + ' je víc řad — vyber jednu', code: 'multiple', options: list.map(serialSeriesView) });
+      series = list[0];
+    }
+    if (!series || !series.active) return res.status(400).json({ error: 'Řada není aktivní nebo neexistuje' });
+    let serial = null;
+    for (let i = 0; i < 100 && !serial; i++) {
+      const upd = await prisma.productionSerialSeries.update({ where: { id: series.id }, data: { next_number: { increment: 1 }, last_issued_at: new Date() } });
+      const cand = formatSerial(series.format, series.country, upd.next_number - 1);
+      const used = await prisma.orderItem.findFirst({ where: { serial_number: cand }, select: { id: true } });
+      if (!used) serial = cand;
+    }
+    if (!serial) return res.status(500).json({ error: 'Nepodařilo se najít volné číslo — zkontroluj počáteční číslo řady' });
+    await prisma.orderItem.update({ where: { id: itemId }, data: { serial_number: serial } });
+    res.json({ ok: true, serial_number: serial, series_id: series.id });
+  } catch (err) { next(err); }
+});
+
+// ============================================================
 // Služby k prodeji (doprava, instalace…) — kdo platí a kolik stojí
 // ============================================================
 const SERVICE_PAYERS = ['customer', 'us', 'included', 'third'];
