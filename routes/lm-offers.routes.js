@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const settings = require('../services/settings');
 
 const router = express.Router();
-router.use(express.json({ limit: '200kb' }));
+router.use(express.json({ limit: '8mb' })); // obrázek personalizovaného prádlomatu jako base64
 router.use((req, res, next) => {
   const secret = process.env.LM_SSO_SECRET; const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
   if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
@@ -31,7 +31,7 @@ const LINK_LABEL = { cs: 'Zobrazit obchodní návrh', en: 'View the business pro
 // Veřejná podoba nabídky (bez interních poznámek a kontaktů na odesílatele navíc)
 function publicView(o) {
   return { token: o.token, company: o.company, contact_name: o.contact_name, lang: o.lang, currency: o.currency, title: o.title, intro: o.intro,
-    points: o.points, perex: o.perex, refs: o.refs, model: o.model, units: o.units, unit_price: o.unit_price, monthly_revenue: o.monthly_revenue, valid_until: o.valid_until,
+    points: o.points, perex: o.perex, refs: o.refs, image_v: o.image_v || null, model: o.model, units: o.units, unit_price: o.unit_price, monthly_revenue: o.monthly_revenue, valid_until: o.valid_until,
     sender_name: o.sender_name, sender_phone: o.sender_phone, reply_to: o.reply_to, interest: o.interest ? { at: o.interest.at } : null };
 }
 
@@ -163,6 +163,39 @@ router.post('/public/:token([a-f0-9]{32})/events', async (req, res, next) => {
     o.time_total = o.visits.reduce((a, x) => a + (x.secs || 0), 0);
     await save(list);
     res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// ── Obrázek personalizovaného prádlomatu (v barvách firmy) — samostatně v AppSetting lm_corp_offer_img.<id> ──
+const IMG_KEY = (id) => 'lm_corp_offer_img.' + id;
+router.post('/:id(\\d+)/image', async (req, res, next) => {
+  try {
+    const list = await load(); const o = list.find((x) => x.id === Number(req.params.id));
+    if (!o) return res.status(404).json({ error: 'Nabídka nenalezena' });
+    const b = req.body || {}; const mime = String(b.mime || '');
+    if (!/^image\/(jpeg|png|webp)$/.test(mime)) return res.status(400).json({ error: 'Obrázek musí být JPG, PNG nebo WEBP' });
+    const data = String(b.data || '').replace(/^data:[^,]*,/, '');
+    if (!data || data.length > 7.5 * 1024 * 1024) return res.status(400).json({ error: 'Obrázek je prázdný nebo větší než 5 MB' });
+    await settings.setSetting(IMG_KEY(o.id), { mime, data }, { type: 'json', description: 'Laundromats – obrázek nabídky #' + o.id, scope: 'laundromats' });
+    o.image_v = Date.now(); await save(list);
+    res.json({ ok: true, offer: o });
+  } catch (e) { next(e); }
+});
+router.delete('/:id(\\d+)/image', async (req, res, next) => {
+  try {
+    const list = await load(); const o = list.find((x) => x.id === Number(req.params.id));
+    if (!o) return res.status(404).json({ error: 'Nabídka nenalezena' });
+    await settings.setSetting(IMG_KEY(o.id), null, { type: 'json' }).catch(() => {});
+    o.image_v = null; await save(list); res.json({ ok: true, offer: o });
+  } catch (e) { next(e); }
+});
+router.get('/public/:token([a-f0-9]{32})/image', async (req, res, next) => {
+  try {
+    const list = await load(); const o = list.find((x) => x.token === req.params.token);
+    if (!o || !o.image_v) return res.status(404).end();
+    const v = await settings.getSetting(IMG_KEY(o.id), { type: 'json', defaultValue: null }).catch(() => null);
+    if (!v || !v.data) return res.status(404).end();
+    res.set('Content-Type', v.mime || 'image/jpeg').set('Cache-Control', 'public, max-age=86400').send(Buffer.from(v.data, 'base64'));
   } catch (e) { next(e); }
 });
 

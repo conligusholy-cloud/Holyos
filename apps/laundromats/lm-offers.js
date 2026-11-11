@@ -115,6 +115,16 @@ module.exports = function mountOffers(app, ctx) {
   app.post('/admin/api/offers', requireAdmin, js, J((req) => hos('POST', '/', req.body || {})));
   app.post('/admin/api/offers/:id(\\d+)/send', requireAdmin, J((req) => hos('POST', '/' + req.params.id + '/send')));
   app.post('/admin/api/offers/:id(\\d+)/delete', requireAdmin, J((req) => hos('DELETE', '/' + req.params.id)));
+  // Personalizovaný obrázek prádlomatu (v barvách firmy) — nahrání / odebrání / zobrazení
+  app.post('/admin/api/offers/:id(\\d+)/image', requireAdmin, J((req) => { const b = req.body || {}; return hos('POST', '/' + req.params.id + '/image', { mime: String(b.mime || ''), data: String(b.data || '') }); }));
+  app.post('/admin/api/offers/:id(\\d+)/image/delete', requireAdmin, J((req) => hos('DELETE', '/' + req.params.id + '/image')));
+  app.get('/nabidka/:token([a-f0-9]{32})/img', async (req, res) => {
+    try {
+      const r = await fetch(HOLYOS_URL + BASE + '/public/' + req.params.token + '/image', { headers: { Authorization: 'Bearer ' + tok() }, signal: AbortSignal.timeout(30000) });
+      if (!r.ok) return res.status(404).end();
+      res.set('Content-Type', r.headers.get('content-type') || 'image/jpeg').set('Cache-Control', 'public, max-age=86400').set('X-Content-Type-Options', 'nosniff').send(Buffer.from(await r.arrayBuffer()));
+    } catch (e) { res.status(502).end(); }
+  });
   app.post('/admin/api/offers/template', requireAdmin, js, J((req) => {
     const b = req.body || {}; const t = TPL[b.lang] || TPL.cs;
     const f = { company: String(b.company || '').trim() || '…', handover: String(b.handover || '').trim(), sender: String(b.sender || '').trim() };
@@ -232,11 +242,15 @@ function edit(o){cur=o||{lang:'cs',currency:'CZK',sender_name:'Tomáš Holý'};v
  +F('intro','Text e-mailu (posílá se e-mailem, na webové nabídce se neukazuje)',cur.intro,'w4','ta')+F('perex','Podnadpis webové nabídky (1–2 věty pod nadpisem)',cur.perex,'w4')+F('points','Pilotní projekt — kroky na webu (každý na nový řádek)',cur.points,'w4','ta')+F('refs','Reference na webu — řádek: Název | popis | obrázek (/media/provozovna-1.webp …)',cur.refs,'w4','ta')
  +F('model','Model prádlomatu (nepovinné)',cur.model)+F('units','Počet prádlomatů v pilotu',cur.units)+F('unit_price','Cena za prádlomat bez DPH',cur.unit_price)+F('monthly_revenue','Očekávaná tržba / prádlomat / měsíc',cur.monthly_revenue)
  +F('valid_until','Platnost do',cur.valid_until,'','date')+F('sender_name','Odesílatel (jméno)',cur.sender_name)+F('sender_phone','Telefon odesílatele',cur.sender_phone)+F('reply_to','E-mail pro odpovědi',cur.reply_to,'','email')
+ +'<div class="w4"><label>Personalizovaný obrázek prádlomatu v barvách firmy (zobrazí se v sekci „Prádlomat v barvách …“ hned pod úvodem)</label>'+(cur.id?'<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">'+(cur.image_v?'<img src="/nabidka/'+e(cur.token)+'/img?v='+cur.image_v+'" style="height:120px;border-radius:10px;border:1px solid var(--border2)">':'<span class="muted small">zatím bez obrázku — na webu se ukáže obecný prádlomat</span>')+'<input type="file" class="of-img" accept="image/jpeg,image/png,image/webp" style="width:auto">'+(cur.image_v?'<button class="btn sec sm of-imgdel" type="button" style="color:#f87171">Odebrat obrázek</button>':'')+'<span class="muted small of-imgmsg"></span></div>':'<span class="muted small">Obrázek půjde nahrát po prvním uložení nabídky.</span>')+'</div>'
  +F('note','Interní poznámka (korporát ji nevidí)',cur.note,'w4')
  +'</div><div style="margin-top:12px;display:flex;gap:8px"><button class="btn of-save" type="button">Uložit</button><button class="btn sec of-cancel" type="button">Zavřít</button><span class="muted small" style="align-self:center">Čísla jsou nepovinná — když nevyplníte, blok s čísly se na webu neukáže.</span></div>';
  w.querySelector('[name=lang]').value=cur.lang||'cs';w.querySelector('[name=currency]').value=cur.currency||'CZK';w.scrollIntoView({behavior:'smooth',block:'start'});}
 function form(){var w=P.querySelector('.of-edit'),d={};w.querySelectorAll('[name]').forEach(function(x){d[x.name]=x.value;});if(cur&&cur.id)d.id=cur.id;return d;}
+P.addEventListener('change',function(ev){var inp=ev.target.closest('.of-img');if(!inp||!inp.files||!inp.files[0]||!cur||!cur.id)return;var f=inp.files[0],m=P.querySelector('.of-imgmsg');
+ if(f.size>5*1024*1024){alert('Obrázek je větší než 5 MB.');inp.value='';return;}m.textContent='Nahrávám…';var rd=new FileReader();rd.onload=function(){req('/admin/api/offers/'+cur.id+'/image',{mime:f.type,data:String(rd.result)}).then(function(j){cur=j.offer;var i=(list||[]).findIndex(function(x){return x.id===cur.id;});if(i>=0)list[i]=cur;edit(cur);}).catch(function(er){m.textContent='';alert(er.message);});};rd.readAsDataURL(f);});
 P.addEventListener('click',function(ev){var t=ev.target;
+ if(t.closest('.of-imgdel')){if(!confirm('Odebrat personalizovaný obrázek?'))return;req('/admin/api/offers/'+cur.id+'/image/delete',{}).then(function(j){cur=j.offer;var i=(list||[]).findIndex(function(x){return x.id===cur.id;});if(i>=0)list[i]=cur;edit(cur);}).catch(function(er){alert(er.message);});return;}
  if(t.closest('.of-new')){edit(null);return;}
  if(t.closest('.of-cancel')){P.querySelector('.of-edit').style.display='none';cur=null;return;}
  if(t.closest('.of-tpl')){var d=form();if(!d.company){alert('Nejdřív vyplňte společnost.');return;}if((d.intro||d.points)&&!confirm('Přepsat předmět, nadpis, text a body podle šablony?'))return;

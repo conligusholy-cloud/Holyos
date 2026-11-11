@@ -58,7 +58,7 @@ app.use((req, res, next) => {
 app.disable('x-powered-by');
 const _jsonSmall = express.json({ limit: '20kb' }), _jsonAdmin = express.json({ limit: '300kb' }), _jsonFile = express.json({ limit: '15mb' });
 // nastavení produktů = delší texty; zprávy podpory = příloha jako base64 (max 10 MB)
-const _isSupSend = (p) => p === '/api/cesta/support/send' || /^\/admin\/api\/support\/threads\/\d+\/send$/.test(p);
+const _isSupSend = (p) => p === '/api/cesta/support/send' || /^\/admin\/api\/support\/threads\/\d+\/send$/.test(p) || /^\/admin\/api\/offers\/\d+\/image$/.test(p);
 app.use((req, res, next) => (_isSupSend(req.path) ? _jsonFile : (req.path.startsWith('/admin/api/products') || req.path.startsWith('/admin/api/offers')) ? _jsonAdmin : _jsonSmall)(req, res, next));
 app.use((req, res, next) => {
   res.set({
