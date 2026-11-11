@@ -2941,7 +2941,7 @@
             '<div style="flex:1;"></div>' +
             // Fáze 6 — Vystavit fakturu (jen pro objednávky, které mají položky a nejsou cancelled)
             ((order.items && order.items.length > 0 && order.status !== 'cancelled')
-              ? '<button class="btn btn-secondary" onclick="createInvoiceFromOrder(' + id + ')" title="Vystaví fakturu (AR) z této objednávky">💼 Vystavit fakturu</button>'
+              ? '<button class="btn btn-secondary" onclick="issueFinalInvoice(' + id + ')" title="Vystaví jen finální fakturu (zálohové faktury se vystavují tlačítky u jednotlivých splátek)">💼 Finální faktura</button>'
               : '') +
             '<button class="btn btn-secondary" onclick="makeDeliveryNote(' + id + ')" title="Vytvořit a otevřít dodací list (PDF)">📦 Dodací list</button>' +
             '<button class="btn btn-primary" onclick="saveAndCloseDetail(' + id + ')">✅ Uložit</button>' +
@@ -3045,6 +3045,7 @@
             '<td><input type="number" min="0" ' + di + ' value="' + (r.due_days != null ? r.due_days : 7) + '" onchange="ppSet(' + ri + ',\'due_days\',this.value)" title="Dní splatnosti od vystavení"></td>' +
             '<td style="min-width:210px;">' + st + '</td>' +
             '<td style="white-space:nowrap;text-align:right;">' +
+              (saved && !saved.invoice ? '<button type="button" class="btn btn-sm btn-primary" ' + (PP.dirty ? 'disabled title="Nejdřív ulož rozložení plateb"' : 'title="Vystaví ' + (saved.kind === 'final' ? 'finální' : 'zálohovou') + ' fakturu k této splátce (koncept v Účetních dokladech)"') + ' onclick="ppInvoice(' + saved.id + ')">🧾 ' + (saved.kind === 'final' ? 'Finální faktura' : 'Zálohová faktura') + '</button> ' : '') +
               (saved && saved.invoice ? '<a class="btn btn-sm" href="/api/accounting/invoices/' + saved.invoice.id + '/pdf" target="_blank" rel="noopener" title="Otevřít PDF faktury">📄</a> ' : '') +
               (!locked ? '<button type="button" class="btn btn-sm btn-danger" onclick="ppRemove(' + ri + ')" title="Odebrat splátku">🗑️</button>' : '<span title="Splátka má fakturu nebo je zaplacená — nelze měnit výši ani smazat" style="color:var(--text2);">🔒</span>') +
             '</td></tr>';
@@ -3057,7 +3058,7 @@
       var paid = PP.plan.paid_sum; var remaining = PP.plan.remaining;
       h += '<div style="display:flex;align-items:center;gap:12px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);font-size:12px;">' +
         '<span>Zaplaceno: <b style="color:#22c55e;">' + fm(paid) + '</b></span><span>Zbývá: <b style="color:#eab308;">' + fm(remaining) + '</b></span>' +
-        '<span style="color:var(--text2);">Faktury se vystavují ručně tlačítkem 🧾 (koncept v Účetních dokladech); při nastalém milníku přijde notifikace do Velína.</span>' +
+        '<span style="color:var(--text2);">Faktury se vystavují ručně tlačítkem 🧾 u splátky (koncept v Účetních dokladech); při nastalém milníku přijde notifikace do Velína.</span>' +
         '<span style="flex:1"></span>' +
         (PP.dirty ? '<button type="button" class="btn btn-sm" onclick="loadPayPlan(' + PP.orderId + ')">Zahodit změny</button><button type="button" class="btn btn-primary btn-sm" onclick="ppSave()">💾 Uložit rozložení plateb</button>' : '<span style="color:#22c55e;font-size:11px;">✓ uloženo</span>') +
       '</div>';
@@ -3164,16 +3165,40 @@
       loadOrders(); loadStats();
       openOrderDetail(PP.orderId); // obnoví rozložení plateb, účetní doklady i historii
     }
-    async function ppInvoice(pid) {
-      if (!confirm('Vystavit fakturu k této splátce? Vznikne koncept v Účetních dokladech (nic se neposílá).')) return;
+    // Faktura k jedné splátce (záloha nebo finální — podle druhu splátky). skipConfirm = potvrzení už proběhlo výš.
+    async function ppInvoice(pid, skipConfirm) {
+      var sp = PP.plan && PP.plan.payments.find(function (p) { return p.id === pid; });
+      if (!skipConfirm) {
+        var what = sp ? (sp.kind === 'final' ? 'finální' : 'zálohovou') + ' fakturu na ' + Number(sp.amount).toLocaleString('cs-CZ') + ' ' + PP.plan.currency + ' bez DPH' : 'fakturu k této splátce';
+        if (!confirm('Vystavit ' + what + '?\n\nVznikne koncept v Účetních dokladech (nic se neposílá).')) return false;
+      }
       try {
         var res = await fetch('/api/wh/orders/' + PP.orderId + '/payments/' + pid + '/invoice', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         var d = await res.json();
-        if (!res.ok) { alert('Nelze vystavit: ' + (d.error || res.status)); return; }
-        await loadPayPlan(PP.orderId);
-        if (typeof loadOrderHistory === 'function') loadOrderHistory(PP.orderId);
-        openOrderDetail(PP.orderId); // obnoví i Účetní doklady
-      } catch (e) { alert('Chyba: ' + e.message); }
+        if (!res.ok) { alert('Nelze vystavit: ' + (d.error || res.status)); return false; }
+        if (!skipConfirm) {
+          await loadPayPlan(PP.orderId);
+          if (typeof loadOrderHistory === 'function') loadOrderHistory(PP.orderId);
+          openOrderDetail(PP.orderId); // obnoví i Účetní doklady
+        }
+        return true;
+      } catch (e) { alert('Chyba: ' + e.message); return false; }
+    }
+    // Spodní tlačítko: vystaví JEN finální fakturu (zálohové se vystavují tlačítky u jednotlivých splátek)
+    async function issueFinalInvoice(orderId) {
+      if (!PP.plan || PP.orderId !== orderId) await loadPayPlan(orderId);
+      var pays = (PP.plan && PP.plan.payments) || [];
+      var finals = pays.filter(function (p) { return p.kind === 'final'; });
+      if (!finals.length) return createInvoiceFromOrder(orderId); // bez rozložení plateb: původní jedna faktura z objednávky
+      if (PP.dirty) { alert('Nejdřív ulož rozložení plateb.'); return; }
+      var todo = finals.filter(function (p) { return !p.invoice; });
+      if (!todo.length) { alert('Finální faktura už je vystavená: ' + finals.map(function (p) { return p.invoice.invoice_number; }).join(', ')); return; }
+      var total = todo.reduce(function (s, p) { return s + Number(p.amount || 0); }, 0);
+      if (!confirm('Vystavit finální fakturu' + (todo.length > 1 ? ' (' + todo.length + '×)' : '') + ' na ' + total.toLocaleString('cs-CZ') + ' ' + PP.plan.currency + ' bez DPH?\n\nVznikne koncept v Účetních dokladech (nic se neposílá).')) return;
+      for (var i = 0; i < todo.length; i++) { if (!(await ppInvoice(todo[i].id, true))) break; }
+      await loadPayPlan(orderId);
+      if (typeof loadOrderHistory === 'function') loadOrderHistory(orderId);
+      openOrderDetail(orderId);
     }
     async function ppPaid(pid, paid) {
       if (paid && !confirm('Označit splátku jako zaplacenou?')) return;
