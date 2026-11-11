@@ -1565,8 +1565,24 @@ router.post('/orders/:id/items', async (req, res, next) => {
         if (t) unit_price = t.price;
       }
     }
+    // Stroj s vybranou zemí určení: výrobní číslo se přidělí z řady té země (kontrola řady PŘED vytvořením položky)
+    const destCc = String(req.body.destination_country || '').trim().toUpperCase();
+    let autoSeries = null; let manualSerial = serial_number ? String(serial_number).trim() : '';
+    if (destCc.length === 2 && !manualSerial) {
+      const list = await prisma.productionSerialSeries.findMany({ where: { country: destCc, active: true }, orderBy: { id: 'asc' } });
+      if (!list.length) return res.status(400).json({ error: 'Pro zemi ' + destCc + ' není založená žádná číselná řada — založ ji v záložce Výrobní čísla', code: 'no_series' });
+      if (list.length > 1 && !req.body.series_id) return res.status(409).json({ error: 'Pro zemi ' + destCc + ' je víc řad — vyber jednu', code: 'multiple', options: list.map(serialSeriesView) });
+      autoSeries = list.find((x) => String(x.id) === String(req.body.series_id)) || list[0];
+    }
+    if (manualSerial) {
+      const dup = await serialInUse(manualSerial);
+      if (dup) return res.status(409).json({ error: 'Výrobní číslo ' + manualSerial + ' už je použité u objednávky ' + ((dup.order && dup.order.order_number) || ('#' + dup.order_id)), code: 'serial_duplicate' });
+    }
+    const autoSerial = autoSeries ? await allocateSerial(autoSeries) : null;
+    if (autoSeries && !autoSerial) return res.status(500).json({ error: 'Nepodařilo se najít volné výrobní číslo — zkontroluj počáteční číslo řady' });
     const item = await prisma.orderItem.create({
       data: {
+        destination_country: destCc.length === 2 ? destCc : null,
         order_id: parseInt(req.params.id),
         product_id: product_id ? parseInt(product_id) : null,
         material_id: material_id ? parseInt(material_id) : null,
@@ -1578,7 +1594,7 @@ router.post('/orders/:id/items', async (req, res, next) => {
         note: note || null,
         expected_delivery: parseDate(expected_delivery),
         needed_by: parseDate(needed_by),
-        serial_number: serial_number ? String(serial_number).trim() || null : null,
+        serial_number: manualSerial || autoSerial || null,
         spec: spec ? String(spec).trim() || null : null,
         vat_rate: vat_rate !== undefined && vat_rate !== null && vat_rate !== '' ? parseFloat(vat_rate) : null,
         production_ref: production_ref ? String(production_ref).trim().slice(0, 100) || null : null,
@@ -1625,6 +1641,16 @@ router.put('/orders/:orderId/items/:itemId', async (req, res, next) => {
         const v = req.body[f];
         allowed[f] = v != null && String(v).trim() !== '' ? String(v).trim() : null;
       }
+    }
+    // Země určení (kam jede prádlomat) — dvoupísmenný kód
+    if (req.body.destination_country !== undefined) {
+      const cc = String(req.body.destination_country || '').trim().toUpperCase();
+      allowed.destination_country = cc.length === 2 ? cc : null;
+    }
+    // Kontrola duplicit: dvě položky nesmí mít stejné výrobní číslo
+    if (allowed.serial_number) {
+      const dup = await serialInUse(allowed.serial_number, parseInt(req.params.itemId, 10));
+      if (dup) return res.status(409).json({ error: 'Výrobní číslo ' + allowed.serial_number + ' už je použité u objednávky ' + ((dup.order && dup.order.order_number) || ('#' + dup.order_id)), code: 'serial_duplicate' });
     }
     for (const f of intFields) if (req.body[f] !== undefined) allowed[f] = req.body[f] ? parseInt(req.body[f]) : null;
     for (const f of floatFields) if (req.body[f] !== undefined) allowed[f] = req.body[f] !== null && req.body[f] !== '' ? parseFloat(req.body[f]) : null;
@@ -1734,6 +1760,8 @@ router.post('/orders/:orderId/items/:itemId/duplicate', async (req, res, next) =
         unit_price: source.unit_price,
         total_price: source.unit_price, // 1 × unit_price
         note: source.note,
+        spec: source.spec, // výbava / popis zůstává i u kopie
+        destination_country: source.destination_country, // země určení; výrobní číslo se nekopíruje (musí být unikátní)
         expected_delivery: source.expected_delivery,
         configs: source.configs.length
           ? { create: source.configs.map(c => ({ option_id: c.option_id, custom_value: c.custom_value })) }
@@ -3164,6 +3192,22 @@ function formatSerial(fmt, country, n, when) {
     .replace(/\{YY\}/gi, String(d.getFullYear()).slice(2))
     .replace(/\{N(?::(\d{1,2}))?\}/gi, (_, w) => String(n).padStart(parseInt(w, 10) || 0, '0'));
 }
+// Je výrobní číslo už použité u jiné položky? (bez ohledu na velikost písmen a okrajové mezery)
+async function serialInUse(serial, exceptItemId) {
+  const s = String(serial || '').trim(); if (!s) return null;
+  const where = { serial_number: { equals: s, mode: 'insensitive' } };
+  if (exceptItemId) where.id = { not: exceptItemId };
+  return prisma.orderItem.findFirst({ where, select: { id: true, order_id: true, order: { select: { order_number: true } } } });
+}
+// Atomicky vydá další číslo z řady (increment v DB) a přeskočí čísla, která už někde existují
+async function allocateSerial(series) {
+  for (let i = 0; i < 200; i++) {
+    const upd = await prisma.productionSerialSeries.update({ where: { id: series.id }, data: { next_number: { increment: 1 }, last_issued_at: new Date() } });
+    const cand = formatSerial(series.format, series.country, upd.next_number - 1);
+    if (!(await serialInUse(cand))) return cand;
+  }
+  return null;
+}
 function serialSeriesView(s) { return Object.assign({}, s, { preview: formatSerial(s.format, s.country, s.next_number) }); }
 function serialSeriesData(b) {
   const data = {};
@@ -3217,24 +3261,20 @@ router.post('/orders/:id/items/:itemId/assign-serial', async (req, res, next) =>
     if (req.body.series_id) {
       series = await prisma.productionSerialSeries.findUnique({ where: { id: parseInt(req.body.series_id, 10) } });
     } else {
-      const order = await prisma.order.findUnique({ where: { id: orderId }, select: { company: { select: { country: true } } } });
-      const cc = String((order && order.company && order.company.country) || 'CZ').toUpperCase();
+      // Země určení (kam jede tento prádlomat) — z požadavku, jinak uložená u položky
+      const cur = await prisma.orderItem.findUnique({ where: { id: itemId }, select: { destination_country: true } });
+      const cc = String(req.body.country || (cur && cur.destination_country) || '').trim().toUpperCase();
+      if (cc.length !== 2) return res.status(400).json({ error: 'Nejdřív vyber zemi, do které prádlomat jede', code: 'no_country' });
       const list = await prisma.productionSerialSeries.findMany({ where: { country: cc, active: true }, orderBy: { id: 'asc' } });
       if (!list.length) return res.status(400).json({ error: 'Pro zemi ' + cc + ' není založená žádná číselná řada (záložka Výrobní čísla)', code: 'no_series' });
       if (list.length > 1) return res.status(409).json({ error: 'Pro zemi ' + cc + ' je víc řad — vyber jednu', code: 'multiple', options: list.map(serialSeriesView) });
       series = list[0];
     }
     if (!series || !series.active) return res.status(400).json({ error: 'Řada není aktivní nebo neexistuje' });
-    let serial = null;
-    for (let i = 0; i < 100 && !serial; i++) {
-      const upd = await prisma.productionSerialSeries.update({ where: { id: series.id }, data: { next_number: { increment: 1 }, last_issued_at: new Date() } });
-      const cand = formatSerial(series.format, series.country, upd.next_number - 1);
-      const used = await prisma.orderItem.findFirst({ where: { serial_number: cand }, select: { id: true } });
-      if (!used) serial = cand;
-    }
+    const serial = await allocateSerial(series);
     if (!serial) return res.status(500).json({ error: 'Nepodařilo se najít volné číslo — zkontroluj počáteční číslo řady' });
-    await prisma.orderItem.update({ where: { id: itemId }, data: { serial_number: serial } });
-    res.json({ ok: true, serial_number: serial, series_id: series.id });
+    await prisma.orderItem.update({ where: { id: itemId }, data: { serial_number: serial, destination_country: series.country } });
+    res.json({ ok: true, serial_number: serial, series_id: series.id, destination_country: series.country });
   } catch (err) { next(err); }
 });
 

@@ -825,6 +825,7 @@ model OrderEvent {
 }
 
 model OrderItem {
+  destination_country String?  @db.VarChar(2) // země, do které prádlomat jede (určuje číselnou řadu výrobního čísla)
   id                 Int       @id @default(autoincrement())
   order_id           Int
   material_id        Int?

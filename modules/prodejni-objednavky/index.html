@@ -2661,7 +2661,9 @@
         try { const scr = await fetch('/api/wh/pricelist-config-default'); if (scr.ok) { const sc = await scr.json(); sharedCfg = Array.isArray(sc && sc.config_options) ? sc.config_options : []; } } catch(e) { /* bez společné výbavy */ }
         let svcItems = [];
         try { const svr = await fetch('/api/wh/sales-services?active=true', { credentials: 'include' }); if (svr.ok) svcItems = await svr.json(); } catch(e) { /* bez služeb */ }
-        window._plAdd = { items: pricelistItems, shared: sharedCfg, currency: order.currency, services: Array.isArray(svcItems) ? svcItems : [] };
+        let serSeries = [];
+        try { const ssr = await fetch('/api/wh/serial-series', { credentials: 'include' }); if (ssr.ok) serSeries = (await ssr.json()).filter(function (s) { return s.active; }); } catch(e) { /* bez řad */ }
+        window._plAdd = { items: pricelistItems, shared: sharedCfg, currency: order.currency, services: Array.isArray(svcItems) ? svcItems : [], series: serSeries };
         if (products.length === 0) { try { const r2 = await fetch('/api/production/products?type=product'); products = await r2.json(); } catch(e) {} }
         if (companies.length === 0) await reloadCompanies();
         if (_availableSlots.length === 0) await loadAvailableSlots();
@@ -2745,7 +2747,14 @@
               const nameCell = '<span class="person-name">' + nameTop + '</span>' +
                 (nameBottom ? '<div style="font-size:11px;color:var(--text2);margin-top:2px;font-style:italic;">' + nameBottom + '</div>' : '');
               // Výrobní číslo kiosku — editovatelné inline, bez přenačtení modalu
-              const serialCellEditable = '<input type="text" value="' + esc(it.serial_number || '') + '" placeholder="—" maxlength="100" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;font-family:monospace;" onchange="updateOrderItemSerial(' + it.id + ',' + id + ',this.value,this)" title="Výrobní číslo kiosku (např. SN-2026-001)"><button type="button" class="btn btn-sm" style="margin-left:4px;" onclick="assignItemSerial(' + it.id + ',' + id + ',this)" title="Přidělit další číslo z číselné řady podle země zákazníka (záložka Výrobní čísla)">🔢</button>';
+              // Stroj: povinná země určení → z její řady se přidělí další výrobní číslo (příslušenství a služby nemají)
+              const isMachineRow = !(it.spec && /^(🧴|🚚)/.test(it.spec)) && !it.cost_kind;
+              const serSeries = (window._plAdd && window._plAdd.series) || [];
+              const serCountries = Array.from(new Set(serSeries.map(function (s) { return s.country; }).concat(it.destination_country ? [it.destination_country] : []))).sort();
+              const countrySel = isMachineRow
+                ? '<select onchange="setItemCountry(' + it.id + ',' + id + ',this)" title="Země, do které tento prádlomat jede — povinné; podle ní se přidělí výrobní číslo" style="width:140px;margin-bottom:4px;background:var(--bg);border:1px solid ' + (it.destination_country ? 'var(--border)' : '#ef4444') + ';border-radius:6px;padding:4px 6px;color:var(--text);font-size:12px;"><option value="">— země (povinné) —</option>' + serCountries.map(function (c) { return '<option value="' + c + '"' + (it.destination_country === c ? ' selected' : '') + '>' + c + ' · ' + esc((window.SER_COUNTRIES || {})[c] || '') + '</option>'; }).join('') + '</select>'
+                : '';
+              const serialCellEditable = '<div class="serial-cell">' + countrySel + '<div style="display:flex;align-items:center;"><input type="text" value="' + esc(it.serial_number || '') + '" placeholder="—" maxlength="100" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;font-family:monospace;" onchange="updateOrderItemSerial(' + it.id + ',' + id + ',this.value,this)" title="Výrobní číslo kiosku — musí být unikátní">' + (isMachineRow ? '<button type="button" class="btn btn-sm" style="margin-left:4px;" onclick="assignItemSerial(' + it.id + ',' + id + ',this)" title="Přidělit další číslo z číselné řady vybrané země">🔢</button>' : '') + '</div></div>';
               itemsHtml += '<tr>';
               itemsHtml += '<td>' + nameCell + configLine + '</td>';
               itemsHtml += '<td>' + serialCellEditable + '</td>';
@@ -3612,7 +3621,14 @@
       const groups = addItemGroups(pl);
       const sym = ((window._plAdd && window._plAdd.currency) || 'CZK') === 'EUR' ? '€' : 'Kč';
       const inp = 'background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:13px;';
-      let h = '<div style="font-size:12px;font-weight:700;color:#eab308;margin-bottom:8px;">⚙️ Výbava ' + (pl && pl.kind === 'accessory' ? 'příslušenství' : 'stroje') + ' — povinné, ať je jasně definováno, co zákazník dostane</div>';
+      // Země určení — povinná; podle ní se přidělí výrobní číslo z číselné řady
+      const serCs = Array.from(new Set(((window._plAdd && window._plAdd.series) || []).map(function (s) { return s.country; }))).sort();
+      let h = '<div style="margin-bottom:10px;"><div style="font-size:12px;font-weight:700;color:#eab308;margin-bottom:4px;">🌍 Země, do které prádlomat jede — povinné (podle ní se přidělí výrobní číslo)</div>' +
+        (serCs.length
+          ? '<select data-dest-country required style="' + inp + 'min-width:220px;"><option value="">— vyberte zemi —</option>' + serCs.map(function (c) { return '<option value="' + c + '">' + c + ' · ' + esc((window.SER_COUNTRIES || {})[c] || '') + '</option>'; }).join('') + '</select>'
+          : '<div style="font-size:12px;color:#ef4444;">⚠ Nejsou založené žádné číselné řady — nejdřív je přidej v záložce 🔢 Výrobní čísla.</div>') +
+        '</div>';
+      h += '<div style="font-size:12px;font-weight:700;color:#eab308;margin-bottom:8px;">⚙️ Výbava ' + (pl && pl.kind === 'accessory' ? 'příslušenství' : 'stroje') + ' — povinné, ať je jasně definováno, co zákazník dostane</div>';
       if (groups.length) {
         h += '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;">';
         groups.forEach(function (g, gi) {
@@ -3733,7 +3749,24 @@
       data.spec = cfg.spec;
       data.unit_price = (data.unit_price || 0) + cfg.surcharge;
       data.total_price = data.quantity * data.unit_price;
-      await fetch('/api/wh/orders/' + orderId + '/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      // Stroj: povinná země určení → server přidělí výrobní číslo z řady té země
+      const destSel = e.target.querySelector('[data-dest-country]');
+      if (destSel) {
+        if (!destSel.value) { alert('Vyberte zemi, do které prádlomat jede (povinné — podle ní se přidělí výrobní číslo).'); return; }
+        data.destination_country = destSel.value;
+      }
+      let res, resData;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        res = await fetch('/api/wh/orders/' + orderId + '/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        resData = await res.json().catch(function () { return {}; });
+        if (res.status === 409 && resData.code === 'multiple') {
+          const pick = prompt('Pro tuto zemi je víc řad. Zadej číslo řady:\n' + resData.options.map(function (o, i) { return (i + 1) + ') ' + (o.name || o.country) + ' — další: ' + o.preview; }).join('\n'));
+          const idx = parseInt(pick, 10) - 1; if (!(idx >= 0 && idx < resData.options.length)) return;
+          data.series_id = resData.options[idx].id; continue;
+        }
+        break;
+      }
+      if (!res.ok) { alert(resData.error || ('Položku se nepodařilo přidat (' + res.status + ')')); return; }
       await recalcOrder(orderId);
       openOrderDetail(orderId);
       loadOrders();
@@ -4029,8 +4062,13 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ serial_number: serial }),
         });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (!res.ok) {
+          const ed = await res.json().catch(function () { return {}; });
+          if (res.status === 409 && ed.code === 'serial_duplicate') { alert('⚠ ' + ed.error + '\nČíslo nebylo uloženo.'); if (inputEl) { inputEl.value = inputEl.defaultValue; inputEl.style.borderColor = '#ef4444'; } return; }
+          throw new Error(ed.error || ('HTTP ' + res.status));
+        }
         if (inputEl) {
+          inputEl.defaultValue = inputEl.value;
           const orig = inputEl.style.borderColor;
           inputEl.style.borderColor = '#10b981';
           setTimeout(function() { inputEl.style.borderColor = orig || ''; }, 600);
@@ -11466,7 +11504,7 @@
       plInitConfig(existing);
     }
     // ── Výrobní čísla: číselné řady po zemích (formát + příští číslo) ──
-    var SER_COUNTRIES = { CZ: 'Česko', SK: 'Slovensko', PL: 'Polsko', DE: 'Německo', AT: 'Rakousko', GB: 'Velká Británie', HU: 'Maďarsko', FR: 'Francie', IT: 'Itálie', ES: 'Španělsko', NL: 'Nizozemsko', BE: 'Belgie', IE: 'Irsko', RO: 'Rumunsko' };
+    window.SER_COUNTRIES = { CZ: 'Česko', SK: 'Slovensko', PL: 'Polsko', DE: 'Německo', AT: 'Rakousko', GB: 'Velká Británie', HU: 'Maďarsko', FR: 'Francie', IT: 'Itálie', ES: 'Španělsko', NL: 'Nizozemsko', BE: 'Belgie', IE: 'Irsko', RO: 'Rumunsko' };
     var _serList = [];
     async function loadSerialSeries() {
       var el = document.getElementById('serial-series-table'); if (!el) return;
@@ -11537,10 +11575,24 @@
       } catch (e) { alert('Chyba: ' + e.message); }
     }
     // Přidělí položce objednávky další výrobní číslo z řady podle země zákazníka
-    async function assignItemSerial(itemId, orderId, btn) {
+    // Zemi určení (kam prádlomat jede) uloží k položce a pokud ještě nemá výrobní číslo, přidělí další z řady této země
+    async function setItemCountry(itemId, orderId, sel) {
+      var cc = sel.value;
+      sel.style.borderColor = cc ? 'var(--border)' : '#ef4444';
+      var box = sel.closest('.serial-cell'); var inp = box ? box.querySelector('input') : null;
+      try {
+        var r = await fetch('/api/wh/orders/' + orderId + '/items/' + itemId, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ destination_country: cc || null }) });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+      } catch (e) { alert('Zemi se nepodařilo uložit: ' + e.message); return; }
+      if (cc && inp && !inp.value.trim()) await assignItemSerial(itemId, orderId, inp, cc);
+    }
+    async function assignItemSerial(itemId, orderId, btn, country) {
       var seriesId = null;
+      var cell = btn && btn.closest ? btn.closest('.serial-cell') : null;
+      if (!country && cell) { var cs = cell.querySelector('select'); country = cs ? cs.value : ''; }
+      if (!country) { alert('Nejdřív vyber zemi, do které tento prádlomat jede.'); return; }
       for (var attempt = 0; attempt < 2; attempt++) {
-        var r = await fetch('/api/wh/orders/' + orderId + '/items/' + itemId + '/assign-serial', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(seriesId ? { series_id: seriesId } : {}) });
+        var r = await fetch('/api/wh/orders/' + orderId + '/items/' + itemId + '/assign-serial', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(seriesId ? { series_id: seriesId, country: country } : { country: country }) });
         var d = await r.json().catch(function () { return {}; });
         if (r.status === 409 && d.code === 'multiple') {
           var pick = prompt('Pro zemi zákazníka je víc řad. Zadej číslo řady:\n' + d.options.map(function (o, i) { return (i + 1) + ') ' + (o.name || o.country) + ' — další: ' + o.preview; }).join('\n'));
@@ -11548,8 +11600,8 @@
           seriesId = d.options[idx].id; continue;
         }
         if (!r.ok) { alert(d.error || ('Přidělení selhalo (' + r.status + ')')); return; }
-        var inp = btn && btn.parentNode ? btn.parentNode.querySelector('input') : null;
-        if (inp) { inp.value = d.serial_number; inp.style.borderColor = '#10b981'; }
+        var inp = cell ? cell.querySelector('input') : (btn && btn.tagName === 'INPUT' ? btn : null);
+        if (inp) { inp.value = d.serial_number; inp.defaultValue = d.serial_number; inp.style.borderColor = '#10b981'; }
         loadOrders();
         return;
       }
