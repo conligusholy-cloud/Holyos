@@ -2813,6 +2813,7 @@
           (plAccessories.length ? '<optgroup label="Příslušenství (samostatná položka)">' + plAccessories.map(plOptHtml).join('') + '</optgroup>' : '') +
           ((window._plAdd.services || []).length ? '<optgroup label="Služby (samostatná položka)">' + window._plAdd.services.map(function(sv) {
             const p = order.currency === 'EUR' ? sv.price_eur : sv.price_czk;
+            const currencySym = order.currency === 'EUR' ? '€' : 'Kč';
             const payTxt = sv.payer === 'customer' ? (p != null ? ' — ' + parseFloat(p).toLocaleString('cs-CZ') + ' ' + currencySym + (sv.unit && sv.unit !== 'paušál' ? '/' + sv.unit : '') : ' — bez ceny') : ' — ' + ({ us: 'platíme my', included: 'v ceně stroje', third: 'platí zákazník třetí straně' }[sv.payer] || '');
             return '<option value="svc-' + sv.id + '" data-kind="service" data-name-cs="' + esc(sv.name) + '" data-name-en="" data-product-id="" data-price-czk="' + (sv.payer === 'customer' && sv.price_czk != null ? sv.price_czk : '0') + '" data-price-eur="' + (sv.payer === 'customer' && sv.price_eur != null ? sv.price_eur : '0') + '" data-truck-czk="" data-truck-eur="" data-unit="' + esc(sv.unit || 'paušál') + '">' + (sv.recommended ? '⭐ ' : '') + esc(sv.name) + payTxt + '</option>';
           }).join('') + '</optgroup>' : '');
