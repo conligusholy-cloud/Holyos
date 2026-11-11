@@ -260,9 +260,9 @@ function offerPage(o, token, opts) {
   <section class="sec" data-s="prinosy">${kick(X.ben)}<h2>${esc(t.benH)}</h2>
     <div class="grid g3">${t.ben(o.company || '').map((b, i) => `<div class="path"><div class="ico">${benIco(i)}</div><h3>${esc(b[1])}</h3><ul>${b[2].map((x) => `<li>${CHK}<span>${esc(x)}</span></li>`).join('')}</ul></div>`).join('')}</div></section>
 
-  ${pts.length ? `<section class="sec" data-s="pilot">${kick(X.pilot)}<h2>${esc(t.pilotH)}</h2><p class="sub">${esc(t.pilotSub)}</p><div class="tl">${pts.map((x) => `<div class="it"><span>${esc(x)}</span></div>`).join('')}</div></section>` : ''}
-
   ${eco}
+
+  ${pts.length ? `<section class="sec" data-s="pilot">${kick(X.pilot)}<h2>${esc(t.pilotH)}</h2><p class="sub">${esc(t.pilotSub)}</p><div class="tl">${pts.map((x) => `<div class="it"><span>${esc(x)}</span></div>`).join('')}</div></section>` : ''}
 
   <section class="sec" data-s="video">${kick(X.vid)}<h2>${esc(t.vidH)}</h2><div class="vids">
     <figure><video src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" controls playsinline preload="none"></video><figcaption>${esc(t.vid1)}</figcaption></figure>
