@@ -107,7 +107,8 @@
     s.onload = function() { renderSidebar('audit-log'); };
     document.head.appendChild(s);
   </script>
-    initDate();
+  <script>
+    window.addEventListener('load', function () { try { if (typeof initDate === 'function') initDate(); } catch (e) {} });
 
     const ENTITY_LABELS = { person: 'Osoba', department: 'Oddělení', role: 'Role', company: 'Společnost', material: 'Materiál', warehouse: 'Sklad', movement: 'Pohyb', attendance: 'Docházka', slot_assignment: 'Výrobní slot — rezervace' };
     const ACTION_LABELS = { create: 'Vytvořeno', update: 'Upraveno', delete: 'Smazáno', rollback: 'Rollback' };
