@@ -215,6 +215,14 @@ async function issueInvoiceForPayment(paymentId, opts = {}) {
   const scopeTxt = p.order_item ? (p.order_item.name + (p.order_item.serial_number ? ' (' + p.order_item.serial_number + ')' : '')) : ('objednávka ' + order.order_number);
   const pctTxt = p.percent != null ? Number(p.percent) + ' % ' : '';
   const mLabel = MILESTONE_LABEL[p.milestone] || p.milestone;
+  // Co je předmětem plnění (položky objednávky) — aby doklad nebyl „slepý". PDF faktury segment „Výbava: …" vykreslí
+  // v rámečku Konfigurace / výbava pod tabulkou (bez „ — " uvnitř, ten dělí segmenty popisu).
+  const scopeItems = p.order_item ? [p.order_item] : (order.items || []).filter((i) => !i.cost_kind);
+  const itemsTxt = scopeItems.map((i) => {
+    const qty = Number(i.quantity) || 1;
+    return String(i.name || '').replace(/\s+—\s+/g, ', ') + (i.serial_number ? ' v.č. ' + i.serial_number : '') + ' (' + qty + ' ' + (i.unit || 'ks') + ')';
+  }).join(' · ').slice(0, 500);
+  const vybava = itemsTxt ? ' — Výbava: ' + itemsTxt : '';
 
   let invoice;
   if (p.kind === 'deposit') {
@@ -226,13 +234,13 @@ async function issueInvoiceForPayment(paymentId, opts = {}) {
       date_issued: today, date_due: due, variable_symbol: (invNo.match(/(\d+)$/) || [])[1] || null,
       status: 'draft', invoice_role: 'deposit', source: 'from_order', created_by_user_id: opts.createdByUserId || null,
       note: 'Zálohová faktura ' + pctTxt + '(' + mLabel.toLowerCase() + ') — ' + scopeTxt,
-      items: { create: [{ line_order: 0, description: 'Záloha ' + pctTxt + '— ' + scopeTxt + ' · ' + mLabel.toLowerCase(), quantity: 1, unit: 'ks', unit_price: m.sub, vat_rate: rate, subtotal: m.sub, vat_amount: m.vat, total: m.tot, order_item_id: p.order_item_id || undefined }] },
+      items: { create: [{ line_order: 0, description: 'Záloha ' + pctTxt + '— ' + scopeTxt + ' (' + mLabel.toLowerCase() + ')' + vybava, quantity: 1, unit: 'ks', unit_price: m.sub, vat_rate: rate, subtotal: m.sub, vat_amount: m.vat, total: m.tot, order_item_id: p.order_item_id || undefined }] },
     } });
   } else {
     // Finální: celkové plnění rozsahu − zaplacené zálohy téhož rozsahu (dle plánu)
     const siblings = await db.orderPayment.findMany({ where: { order_id: order.id, order_item_id: p.order_item_id, kind: 'deposit', paid: true, id: { not: p.id } }, include: { invoice: { select: { invoice_number: true } } } });
     const plneni = money(base);
-    const items = [{ line_order: 1, description: 'Celkové plnění — ' + scopeTxt, quantity: 1, unit: 'ks', unit_price: plneni.sub, vat_rate: rate, subtotal: plneni.sub, vat_amount: plneni.vat, total: plneni.tot, order_item_id: p.order_item_id || undefined }];
+    const items = [{ line_order: 1, description: 'Celkové plnění — ' + scopeTxt + vybava, quantity: 1, unit: 'ks', unit_price: plneni.sub, vat_rate: rate, subtotal: plneni.sub, vat_amount: plneni.vat, total: plneni.tot, order_item_id: p.order_item_id || undefined }];
     let dSub = 0, dVat = 0, dTot = 0, li = 2;
     for (const s of siblings) {
       const m = money(amountOf(s, base));
