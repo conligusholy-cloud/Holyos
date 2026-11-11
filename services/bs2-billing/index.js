@@ -90,8 +90,9 @@ async function ourCompany() {
   let our = null; try { our = await require('../settings').getOurCompany(); } catch (e) { our = null; }
   return our || { name: 'Best Series s.r.o.' };
 }
-async function mailFrom() {
+async function mailFrom(source) {
   const our = await ourCompany();
+  if (source === 'game') return { from: process.env.GAME_BILLING_MAIL_FROM || process.env.BS2_BILLING_MAIL_FROM || process.env.SERVICE_BILLING_MAIL_FROM || our.email || undefined, fromName: process.env.GAME_BILLING_MAIL_FROM_NAME || 'Laundromat Tycoon' };
   return { from: process.env.BS2_BILLING_MAIL_FROM || process.env.SERVICE_BILLING_MAIL_FROM || our.email || undefined, fromName: process.env.BS2_BILLING_MAIL_FROM_NAME || 'Fakturace Best Series 2.0' };
 }
 const fmt = (n, cur) => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + cur;
@@ -122,7 +123,8 @@ async function sendInvoice(invoiceId, kind) {
       subject = 'Faktura ' + inv.invoice_number + ' — ' + brandName;
       body = 'Dobrý den,\n\nděkujeme za platbu. V příloze zasíláme fakturu ' + inv.invoice_number + ' na částku ' + fmt(inv.total, cur) + '. Faktura je již uhrazena.\n\nS pozdravem\nBest Series s.r.o.';
     }
-    const r = await sendMail(Object.assign({}, await mailFrom(), { to, brand: 'bs2', subject, body, attachments: [{ filename: inv.invoice_number + '.pdf', content: pdf, contentType: 'application/pdf' }] }));
+    if (inv.source === 'game') body = body.replace(/S pozdravem\nBest Series s\.r\.o\./, 'Hodně úspěchů ve hře!\nTým Laundromat Tycoon');
+    const r = await sendMail(Object.assign({}, await mailFrom(inv.source), { to, brand: inv.source === 'game' ? 'game' : 'bs2', subject, body, attachments: [{ filename: inv.invoice_number + '.pdf', content: pdf, contentType: 'application/pdf' }] }));
     if (!r || !r.sent) {
       const why = (r && (r.error || r.skipped)) || 'neodesláno';
       await prisma.invoice.update({ where: { id: invoiceId }, data: { delivery_status: 'failed', send_error: String(why).slice(0, 1000), sent_to: to } });
