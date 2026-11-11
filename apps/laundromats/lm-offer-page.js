@@ -90,9 +90,9 @@ function chartSvg(invest, monthly, t) {
 const CHK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></svg>';
 const PIN = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
 const EXTRA = {
-  cs: { proof: [['150+', 'prádlomatů dodaných po Evropě'], ['70+', 'prádlomatů sami provozujeme v ČR'], ['100 %', 'ryze český výrobek — vývoj i výroba v ČR']], eyebrow: 'Více než 150 prádlomatů dodaných po Evropě · ryze český výrobek', statTxt: (n, c) => `prádlomatů v pilotním projektu pro ${c}.`, statAlt: 'Více než 150 prádlomatů dodaných po Evropě.', sites: 'Skutečné provozovny', what: 'O co jde', can: 'Co prádlomat umí', ben: 'Přínosy', eco: 'Ekonomika', pilot: 'Pilot', vid: 'Video', cta: 'Další krok' },
-  en: { proof: [['150+', 'laundromats delivered across Europe'], ['70+', 'laundromats we operate ourselves in Czechia'], ['100 %', 'made in Czechia — designed and built here']], eyebrow: 'Over 150 laundromats delivered across Europe · made in Czechia', statTxt: (n, c) => `laundromats in the pilot project for ${c}.`, statAlt: 'Over 70 laundromats we operate ourselves in the Czech Republic.', sites: 'Real sites', what: 'What it is', can: 'What it does', ben: 'Benefits', eco: 'Economics', pilot: 'Pilot', vid: 'Video', cta: 'Next step' },
-  pl: { proof: [['150+', 'urządzeń dostarczonych w Europie'], ['70+', 'pralni prowadzimy sami w Czechach'], ['100 %', 'czeski produkt — projekt i produkcja w Czechach']], eyebrow: 'Ponad 150 urządzeń dostarczonych w Europie · czeski produkt', statTxt: (n, c) => `urządzeń w projekcie pilotażowym dla ${c}.`, statAlt: 'Ponad 70 pralni, które sami prowadzimy w Czechach.', sites: 'Prawdziwe punkty', what: 'Na czym to polega', can: 'Co potrafi', ben: 'Korzyści', eco: 'Ekonomika', pilot: 'Pilotaż', vid: 'Wideo', cta: 'Kolejny krok' },
+  cs: { statCard: 'prádlomatů dodaných po Evropě · ryze český výrobek', proof: [['150+', 'prádlomatů dodaných po Evropě'], ['70+', 'prádlomatů sami provozujeme v ČR'], ['100 %', 'ryze český výrobek — vývoj i výroba v ČR']], eyebrow: 'Více než 150 prádlomatů dodaných po Evropě · ryze český výrobek', statTxt: (n, c) => `prádlomatů v pilotním projektu pro ${c}.`, statAlt: 'Více než 150 prádlomatů dodaných po Evropě.', sites: 'Skutečné provozovny', what: 'O co jde', can: 'Co prádlomat umí', ben: 'Přínosy', eco: 'Ekonomika', pilot: 'Pilot', vid: 'Video', cta: 'Další krok' },
+  en: { statCard: 'laundromats delivered across Europe · made in Czechia', proof: [['150+', 'laundromats delivered across Europe'], ['70+', 'laundromats we operate ourselves in Czechia'], ['100 %', 'made in Czechia — designed and built here']], eyebrow: 'Over 150 laundromats delivered across Europe · made in Czechia', statTxt: (n, c) => `laundromats in the pilot project for ${c}.`, statAlt: 'Over 70 laundromats we operate ourselves in the Czech Republic.', sites: 'Real sites', what: 'What it is', can: 'What it does', ben: 'Benefits', eco: 'Economics', pilot: 'Pilot', vid: 'Video', cta: 'Next step' },
+  pl: { statCard: 'urządzeń dostarczonych w Europie · czeski produkt', proof: [['150+', 'urządzeń dostarczonych w Europie'], ['70+', 'pralni prowadzimy sami w Czechach'], ['100 %', 'czeski produkt — projekt i produkcja w Czechach']], eyebrow: 'Ponad 150 urządzeń dostarczonych w Europie · czeski produkt', statTxt: (n, c) => `urządzeń w projekcie pilotażowym dla ${c}.`, statAlt: 'Ponad 70 pralni, które sami prowadzimy w Czechach.', sites: 'Prawdziwe punkty', what: 'Na czym to polega', can: 'Co potrafi', ben: 'Korzyści', eco: 'Ekonomika', pilot: 'Pilotaż', vid: 'Wideo', cta: 'Kolejny krok' },
 };
 // Nadpis: bílá část + gradientní část (rozdělí se před posledním „u / pro / pod / at / for / dla / przy")
 function splitTitle(title) {
@@ -125,7 +125,7 @@ function offerPage(o, token, opts) {
 .ox .hero{position:relative;display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center;padding:40px 0 70px}
 .ox .hero:before{content:"";position:absolute;inset:-20% -10% auto -10%;height:120%;background:radial-gradient(900px 520px at 78% 38%,rgba(58,108,245,.28),transparent 62%),radial-gradient(700px 420px at 12% 18%,rgba(79,209,255,.12),transparent 60%);pointer-events:none;z-index:-1}
 .ox .eyebrow{display:inline-flex;align-items:center;gap:9px;padding:7px 14px;border:1px solid rgba(47,227,198,.35);background:rgba(47,227,198,.07);border-radius:999px;color:#b6f5ea;font-size:13.5px;font-weight:600;text-transform:none;letter-spacing:0}.ox .eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--teal);box-shadow:0 0 10px var(--teal)}
-.ox .hero h1{font-size:clamp(28px,3.2vw,42px);font-weight:750;margin:20px 0 0;letter-spacing:-.02em;line-height:1.15}.ox .hero h1 span{display:block}
+.ox .hero h1{font-size:clamp(28px,3.2vw,42px);font-weight:750;margin:0;letter-spacing:-.02em;line-height:1.15}.ox .hero h1 span{display:block}
 .ox .lead{margin:24px 0 0;font-size:clamp(17px,1.6vw,20px);line-height:1.6;color:var(--tx2);max-width:640px}
 .ox .ctas{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
 .ox .chk{list-style:none;padding:0;margin:30px 0 0;display:flex;flex-wrap:wrap;gap:10px 26px;color:var(--tx2);font-size:15px}.ox .chk li{display:flex;align-items:center;gap:9px}.ox .chk svg{color:var(--teal)}
@@ -163,7 +163,6 @@ function offerPage(o, token, opts) {
 </style>
 <div class="ox">
   <section class="hero" data-s="uvod"><div>
-      <span class="eyebrow"><i></i>${esc(X.eyebrow)}</span>
       <h1><span>${esc(h1a)}</span>${h1b ? `<span class="grad">${esc(h1b)}</span>` : ''}</h1>
       <p class="lead">${esc(o.perex || t.heroSub(o.company || ''))}</p>
       <div class="ctas"><a class="btn btn-p" href="#zajem">${esc(t.ctaTop)} →</a><a class="btn btn-g" href="#o-co-jde">${esc(t.scroll)}</a></div>
@@ -171,7 +170,7 @@ function offerPage(o, token, opts) {
       <div class="meta">${esc(t.kick)} ${esc(t.for)} <b>${c}</b>${valid ? ' · ' + esc(t.valid) + ' ' + esc(valid) : ''}</div>
     </div>
     <div class="visual"><div class="glow"></div><video src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" autoplay muted loop playsinline preload="metadata"></video>
-      <div class="statcard">${units ? `<b>${units}</b><p>${esc(X.statTxt(units, o.company || ''))}</p>` : `<b>70+</b><p>${esc(X.statAlt)}</p>`}</div></div>
+      <div class="statcard"><b class="grad">150+</b><p>${esc(X.statCard)}</p></div></div>
   </section>
   <div class="proof" data-s="cisla">${X.proof.map((p) => `<div><b class="grad">${esc(p[0])}</b><span>${esc(p[1])}</span></div>`).join('')}</div>
 
