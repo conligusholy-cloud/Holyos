@@ -122,35 +122,68 @@ async function extractHeader(filePath, options = {}) {
   const file = readFileForClaude(filePath);
 
   const startedAt = Date.now();
-  const response = await client.messages.create({
-    model,
-    max_tokens: 2000,
-    system: 'Vracíš pouze validní JSON objekt, bez markdown kódových bloků.',
-    messages: [{
-      role: 'user',
-      content: [
-        { type: file.type, source: { type: 'base64', media_type: file.media_type, data: file.data } },
-        { type: 'text', text: await withTextLayer(filePath, HEADER_PROMPT) },
-      ],
-    }],
-  });
+  const textLayerPrompt = await withTextLayer(filePath, HEADER_PROMPT);
 
-  const text = (response.content.find(c => c.type === 'text') || {}).text || '';
-  let parsed;
-  try {
-    parsed = JSON.parse(stripCodeFences(text));
-  } catch (err) {
-    throw new Error(`Claude vrátil nevalidní JSON v Pass 1: ${err.message}\n---\n${text.slice(0, 500)}`);
+  // Pokusy: 1) zadaný model s textovou vrstvou, 2) tentýž model bez textové vrstvy,
+  // 3) Opus bez textové vrstvy. Prázdná/uříznutá odpověď dřív shodila celý doklad.
+  const attempts = [
+    { m: model, prompt: textLayerPrompt },
+    { m: model, prompt: HEADER_PROMPT },
+    { m: MODEL_OPUS, prompt: HEADER_PROMPT },
+  ];
+  let parsed = null, response = null, usedModel = model, lastErr = null, lastText = '';
+  let inTok = 0, outTok = 0;
+  for (const a of attempts) {
+    try {
+      response = await client.messages.create({
+        model: a.m,
+        max_tokens: 4000,
+        system: 'Vracíš pouze validní JSON objekt, bez markdown kódových bloků.',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: file.type, source: { type: 'base64', media_type: file.media_type, data: file.data } },
+            { type: 'text', text: a.prompt },
+          ],
+        }],
+      });
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[ocr] Pass 1 (${a.m}) volání selhalo: ${err.message}`);
+      continue;
+    }
+    inTok += response.usage?.input_tokens || 0;
+    outTok += response.usage?.output_tokens || 0;
+    const text = (response.content.find(c => c.type === 'text') || {}).text || '';
+    lastText = text;
+    const cleaned = stripCodeFences(text);
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (err) {
+      // tolerantní záchrana: vezmi vše od první { po poslední }
+      const i = cleaned.indexOf('{'), j = cleaned.lastIndexOf('}');
+      if (i >= 0 && j > i) { try { parsed = JSON.parse(cleaned.slice(i, j + 1)); } catch (e2) { /* pokračuj */ } }
+      if (!parsed) {
+        lastErr = err;
+        console.warn(`[ocr] Pass 1 (${a.m}) nevalidní JSON: ${err.message}; stop_reason=${response.stop_reason}; délka=${text.length}`);
+        continue;
+      }
+    }
+    usedModel = a.m;
+    break;
+  }
+  if (!parsed) {
+    throw new Error(`Claude vrátil nevalidní JSON v Pass 1 (zkoušeno ${attempts.length}×; stop_reason=${response?.stop_reason || '—'}; odpověď ${lastText.length} znaků): ${lastErr ? lastErr.message : ''}\n---\n${lastText.slice(0, 500)}`);
   }
 
   return {
     pass: 1,
     pass_type: 'claude_vision_header',
-    model,
+    model: usedModel,
     data: parsed,
     confidence: Number(parsed.confidence || 0.5),
-    input_tokens: response.usage?.input_tokens || 0,
-    output_tokens: response.usage?.output_tokens || 0,
+    input_tokens: inTok,
+    output_tokens: outTok,
     duration_ms: Date.now() - startedAt,
   };
 }
