@@ -78,15 +78,21 @@ const ECO2 = {
   pl: { h: 'Ekonomika', oneH: 'Ekonomika jednej pralni', invT: 'Inwestycja (netto)', est: 'szacunek', visits: 'Frekwencja', perDay: 'klient./dzień', modT: 'Model oparty na typie FLEX', modS: '— pralka 8 kg, pralka 18 kg i suszarka 18 kg. Wszystkie liczby poniżej dotyczą tej konfiguracji.', price: 'Cena urządzenia', conn: 'Przyłącza (prąd, woda, kanalizacja)', connNA: 'wg lokalizacji', warr: (n) => `Gwarancja przedłużona do ${n + 1} ${n + 1 < 5 ? 'lat' : 'lat'} (+${n} × 1 rok)`, invU: 'Inwestycja / urządzenie', opT: 'Miesięczna eksploatacja (netto)', sales: 'Przychód', energy: 'Media — prąd, woda, ścieki (≈ 10 %)', service: 'Pełna obsługa serwisowa z detergentami (20 %)', net: 'Wynik netto / miesiąc', pilotH: (n) => `Ekonomika pilotażu — ${n} urządzeń`, warrNote: (y, m) => `Gwarancja ustawowa 1 rok. Można przedłużyć do 5 lat — ${y} netto za każdy dodatkowy rok, maks. 4 × ${y} = ${m}.` },
 };
 
+const POT = {
+  cs: { h: 'Celkový potenciál', sub: (c, n) => `Kdyby se pilot osvědčil: plán na 15 let pro ${n} prodejen ${c}, 1 prádlomat na prodejnu. Výstavba 20 prádlomatů měsíčně, tempo roste o 30 % ročně, dokud se nevyčerpá kapacita.`, mo: 'měsíc', pCap: 'Kapacita (prodejen)', pCapS: '1 prádlomat na prodejnu', pInv: 'Investice celkem', pMon: 'Čistý výsledek / měsíc', pMonS: 'při plné kapacitě', pFull: 'Plná kapacita dosažena', pPay: 'Návratnost celé investice', pTot: 'Výsledek za 15 let', cYear: 'Rok', cAdd: 'Nově postaveno', cTot: 'Prádlomatů celkem', cInv: 'Investice v roce', cNet: 'Čistý výsledek v roce', cCum: 'Kumulativně', fine: 'Orientační plán — počet prodejen vychází z veřejně dostupných informací; skutečný počet vhodných lokalit ověříme společně. Ceny bez DPH.' },
+  en: { h: 'Total potential', sub: (c, n) => `If the pilot proves itself: a 15-year plan for ${n} ${c} stores, 1 machine per store. 20 machines built per month, the pace grows 30 % a year until capacity is used up.`, mo: 'month', pCap: 'Capacity (stores)', pCapS: '1 machine per store', pInv: 'Total investment', pMon: 'Net result / month', pMonS: 'at full capacity', pFull: 'Full capacity reached', pPay: 'Payback of the whole investment', pTot: '15-year result', cYear: 'Year', cAdd: 'Newly built', cTot: 'Machines in total', cInv: 'Investment in year', cNet: 'Net result in year', cCum: 'Cumulative', fine: 'Indicative plan — the number of stores is based on publicly available information; the actual number of suitable sites will be verified together. Prices excl. VAT.' },
+  pl: { h: 'Łączny potencjał', sub: (c, n) => `Jeśli pilotaż się sprawdzi: plan na 15 lat dla ${n} sklepów ${c}, 1 urządzenie na sklep. Budowa 20 urządzeń miesięcznie, tempo rośnie o 30 % rocznie do wyczerpania pojemności.`, mo: 'miesiąc', pCap: 'Pojemność (sklepy)', pCapS: '1 urządzenie na sklep', pInv: 'Inwestycja łącznie', pMon: 'Wynik netto / miesiąc', pMonS: 'przy pełnej pojemności', pFull: 'Pełna pojemność osiągnięta', pPay: 'Zwrot całej inwestycji', pTot: 'Wynik za 15 lat', cYear: 'Rok', cAdd: 'Nowo zbudowane', cTot: 'Urządzeń łącznie', cInv: 'Inwestycja w roku', cNet: 'Wynik netto w roku', cCum: 'Narastająco', fine: 'Plan orientacyjny — liczba sklepów pochodzi z publicznie dostępnych informacji; faktyczną liczbę odpowiednich lokalizacji zweryfikujemy wspólnie. Ceny netto.' },
+};
+
 // Klientský přepočet po úpravě odhadu přípojky (žluté pole)
 function ecoScript(d) {
   return '<script>(function(){var D=' + JSON.stringify(d) + ',t=D.t;var esc=function(x){return String(x).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",\'"\':"&quot;"}[c];});};'
-    + 'var money=' + money.toString() + ';var pilotSim=' + pilotSim.toString() + ';var chartSvg=' + chartSvg.toString() + ';'
+    + 'var money=' + money.toString() + ';var pilotSim=' + pilotSim.toString() + ';var chartSvg=' + chartSvg.toString() + ';var potSim=' + potSim.toString() + ';var potHtml=' + potHtml.toString() + ';'
     + 'var i=document.getElementById("eco-conn"),v=document.getElementById("eco-vis");if(!i||!v)return;function set(k,x){document.querySelectorAll("[data-k="+k+"]").forEach(function(e){e.textContent=x;});}'
     + 'function nv(){return Math.max(0,Number(String(v.value).replace(/\\s/g,"").replace(",","."))||0);}'
     + 'function calc(){var c=Number(String(i.value).replace(/[^0-9]/g,""))||0,u=D.price+c+D.wCost,pi=u*D.units,sa=nv()*D.rpv,net=sa*0.7,pn=net*D.units;'
     + 'set("uInv",money(u,D.cur));set("pInv",money(pi,D.cur));set("sales",money(sa,D.cur));set("en","− "+money(sa*0.1,D.cur));set("sv","− "+money(sa*0.2,D.cur));set("net",money(net,D.cur));set("pNet",money(pn,D.cur));'
-    + 'set("uPay","≈ "+(net>0?Math.ceil(u/net):"–")+" "+t.months);var sm=pilotSim(pi,pn,D.units,120);set("pPay","≈ "+(sm.payback?sm.payback:"–")+" "+t.months);set("y5",money(sm.total,D.cur));var ch=document.getElementById("eco-chart");if(ch)ch.innerHTML=chartSvg(pi,pn,t,D.units);}'
+    + 'set("uPay","≈ "+(net>0?Math.ceil(u/net):"–")+" "+t.months);var sm=pilotSim(pi,pn,D.units,120);set("pPay","≈ "+(sm.payback?sm.payback:"–")+" "+t.months);set("y5",money(sm.total,D.cur));var ch=document.getElementById("eco-chart");if(ch)ch.innerHTML=chartSvg(pi,pn,t,D.units);var pe=document.getElementById("eco-pot");if(pe&&D.stores)pe.innerHTML=potHtml(potSim(u,net,D.stores,15),D.pt,money,D.cur);}'
     + 'i.addEventListener("input",calc);v.addEventListener("input",calc);i.addEventListener("blur",function(){var c=Number(String(i.value).replace(/[^0-9]/g,""))||0;i.value=c.toLocaleString("cs-CZ");});})();<\/script>';
 }
 
@@ -109,6 +115,35 @@ function pilotSim(invest, monthly, units, N) {
     if (payback === null && m >= 2 && c >= 0) payback = m;
   }
   return { cum, payback, total: c };
+}
+
+// Celkový potenciál: výstavba po 20 prádlomatech měsíčně, tempo roste o 30 % ročně, dokud se nevyčerpá kapacita (počet prodejen).
+// Každý nový prádlomat nabíhá (skrytá křivka), pak běží naplno. Vrací řádky po letech + klíčová čísla.
+function potSim(ui, un, cap, Y) {
+  const ramp = [0.4, 0.7, 0.9], N = Y * 12, built = [];
+  let left = cap, full = null;
+  for (let m = 0; m < N; m++) {
+    const b = Math.min(left, Math.round(20 * Math.pow(1.3, Math.floor(m / 12))));
+    built.push(b); left -= b; if (left === 0 && full === null) full = m + 1;
+  }
+  const rows = []; let cum = 0, payback = null, wasNeg = false, tot = 0, yNew = 0, yInv = 0, yNet = 0;
+  for (let m = 0; m < N; m++) {
+    let net = 0;
+    for (let j = 0; j <= m; j++) if (built[j]) net += built[j] * un * (ramp[m - j] != null ? ramp[m - j] : 1);
+    cum += net - built[m] * ui; tot += built[m]; yNew += built[m]; yInv += built[m] * ui; yNet += net;
+    if (cum < 0) wasNeg = true;
+    if (payback === null && wasNeg && cum >= 0) payback = m + 1;
+    if (m % 12 === 11) { rows.push({ year: (m + 1) / 12, added: yNew, total: tot, inv: yInv, net: yNet, cum: cum }); yNew = 0; yInv = 0; yNet = 0; }
+  }
+  return { rows, full, payback, total: cum, cap, invest: cap * ui, monthly: cap * un };
+}
+function potHtml(s, t, money, cur) {
+  const f = (m) => m ? (Math.floor((m - 1) / 12) + 1) + '. ' + t.yr + ', ' + (((m - 1) % 12) + 1) + '. ' + t.mo : '–';
+  const k = (l, v, sub) => '<div class="k"><div class="kl">' + l + '</div><div class="kv">' + v + '</div>' + (sub ? '<div class="ks">' + sub + '</div>' : '') + '</div>';
+  const nf = (n) => Math.round(n).toLocaleString('cs-CZ');
+  const body = s.rows.map((r) => '<tr' + (s.payback && r.year === Math.ceil(s.payback / 12) ? ' class="pb"' : '') + '><td>' + r.year + '. ' + t.yr + '</td><td>' + nf(r.added) + '</td><td>' + nf(r.total) + '</td><td>' + money(r.inv, cur) + '</td><td>' + money(r.net, cur) + '</td><td>' + money(r.cum, cur) + '</td></tr>').join('');
+  return '<div class="kpis">' + k(t.pCap, nf(s.cap), t.pCapS) + k(t.pInv, money(s.invest, cur), '') + k(t.pMon, money(s.monthly, cur), t.pMonS) + k(t.pFull, f(s.full), '') + k(t.pPay, f(s.payback), '') + k(t.pTot, money(s.total, cur), '') + '</div>'
+    + '<div class="ptw"><table class="pt"><thead><tr><th>' + t.cYear + '</th><th>' + t.cAdd + '</th><th>' + t.cTot + '</th><th>' + t.cInv + '</th><th>' + t.cNet + '</th><th>' + t.cCum + '</th></tr></thead><tbody>' + body + '</tbody></table></div>';
 }
 
 function chartSvg(invest, monthly, t, units) {
@@ -201,6 +236,9 @@ function offerPage(o, token, opts) {
   const uInv = price + conn + wCost, en = sales * 0.10, sv = sales * 0.20, net = sales - en - sv;
   const pInv = units * uInv, pNet = units * net;
   const pSim = pilotSim(pInv, pNet, units, 120);
+  const stores = Math.max(0, Math.round(Number(o.stores) || 0));
+  const PT = Object.assign({}, POT[L] || POT.cs, { yr: t.yr, mo: (POT[L] || POT.cs).mo });
+  // sub je funkce — do klienta se neposílá (JSON ji zahodí), klient ji nepotřebuje
   const row = (l, v, cls) => `<div class="er${cls ? ' ' + cls : ''}"><span>${l}</span><b>${v}</b></div>`;
   const one = price ? `<div class="eco"><div class="ehead"><div><h3 class="eh">${esc(E.oneH)}</h3><div class="emod"><b>${esc(E.modT)}</b> ${esc(E.modS)}</div></div><div class="eimg"><img src="${o.image_v ? '/nabidka/' + token + '/img?v=' + o.image_v : '/img/model/flex'}" alt="FLEX" loading="lazy" data-zoom><span>FLEX</span></div></div><div class="etwo">
       <div class="ecol"><div class="ect">${esc(E.invT)}</div>${row(esc(E.price) + (o.model ? ' <i>' + esc(o.model) + '</i>' : ''), money(price, cur))}<div class="er"><span>${esc(E.conn)} <em class="est">${esc(E.est)}</em></span><b><label class="edit"><input id="eco-conn" type="text" inputmode="numeric" value="${Math.round(conn).toLocaleString('cs-CZ')}" aria-label="${esc(E.conn)}">${EUR ? '€' : 'Kč'}</label></b></div>${wy ? row(esc(E.warr(wy)), money(wCost, cur)) : ''}${row(esc(E.invU), '<span data-k="uInv">' + money(uInv, cur) + '</span>', 'tot')}</div>
@@ -208,7 +246,7 @@ function offerPage(o, token, opts) {
       <div class="ewar">🛡️ <span>${esc(E.warrNote(money(wPrice, cur), money(4 * wPrice, cur)))}</span></div></div>` : '';
   const eco = units && price ? `<section class="sec" id="eko" data-s="ekonomika">${kick(X.eco)}<h2>${esc(E.h)}</h2><p class="sub">${esc(t.ecoSub)}</p>${one}
     <div class="eco" style="margin-top:22px"><h3 class="eh">${esc(E.pilotH(units))}</h3><div class="kpis">${kpi(t.units, String(units), o.model ? esc(t.model + ' ' + o.model) : '')}${kpi(t.inv, '<span data-k="pInv">' + money(pInv, cur) + '</span>', '<span data-k="uInv">' + money(uInv, cur) + '</span> ' + esc(t.monU))}${kpi(t.mon, '<span data-k="pNet">' + money(pNet, cur) + '</span>', '<span data-k="net">' + money(net, cur) + '</span> ' + esc(t.monU)) + kpi(t.pay, '<span data-k="pPay">≈ ' + (pSim.payback || '–') + ' ' + esc(t.months) + '</span>', '') + kpi(t.y5, '<span data-k="y5">' + money(pSim.total, cur) + '</span>', '')}</div>
-    <div class="chart"><div class="ph">${esc(t.chart)}</div><div id="eco-chart">${chartSvg(pInv, pNet, t, units)}</div></div><p class="fine">${esc(t.vat)}</p></div></section>` + ecoScript({ price, wCost, rpv: RPV, units, cur, t: { chart: t.chart, yr: t.yr, start: t.start, pay: t.pay, months: t.months } }) : '';
+    <div class="chart"><div class="ph">${esc(t.chart)}</div><div id="eco-chart">${chartSvg(pInv, pNet, t, units)}</div></div><p class="fine">${esc(t.vat)}</p></div>${stores > 0 ? `<div class="eco" style="margin-top:22px"><h3 class="eh">${esc(PT.h)}</h3><p class="sub" style="margin:0 0 14px">${esc(PT.sub(o.company || '', stores))}</p><div id="eco-pot">${potHtml(potSim(uInv, net, stores, 15), PT, money, cur)}</div><p class="fine">${esc(PT.fine)}</p></div>` : ''}</section>` + ecoScript({ price, wCost, rpv: RPV, units, cur, stores, pt: PT, t: { chart: t.chart, yr: t.yr, start: t.start, pay: t.pay, months: t.months } }) : '';
   const body = `<style>
 .ox{--bg:#04060c;--line:rgba(120,160,255,.14);--line2:rgba(120,160,255,.28);--tx:#eef4ff;--tx2:#a9b8d3;--tx3:#6b7d9e;--az:#4fd1ff;--vi:#7c5cff;--teal:#2fe3c6;max-width:1180px;margin:0 auto;padding:0 22px 70px;color:var(--tx)}
 .ox h1,.ox h2,.ox h3{margin:0;letter-spacing:-.025em;line-height:1.08}
@@ -252,6 +290,7 @@ function offerPage(o, token, opts) {
 .ox .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;position:relative}.ox .k{padding:16px 18px;border-radius:16px;background:rgba(4,6,12,.45);border:1px solid var(--line2)}.ox .kl{color:var(--tx2);font-size:13.5px}.ox .kv{font-size:30px;font-weight:850;letter-spacing:-.03em;margin:6px 0 2px}.ox .ks{color:var(--tx3);font-size:12.5px}
 .ox .eh{font-size:20px;margin:0 0 8px;position:relative}.ox .ehead{display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:20px;position:relative}.ox .emod{color:var(--tx2);font-size:14.5px;line-height:1.5;max-width:560px}.ox .emod b{color:#fde047}.ox .eimg{position:relative;flex:0 0 auto;width:230px;padding:10px;border-radius:18px;background:radial-gradient(circle at 50% 60%,rgba(79,209,255,.16),transparent 70%);border:1px solid var(--line2)}.ox .eimg img{display:block;width:100%;height:auto;filter:drop-shadow(0 12px 24px rgba(0,0,0,.5))}.ox [data-zoom]{cursor:zoom-in;transition:transform .25s}.ox .eimg:hover [data-zoom]{transform:scale(1.04)}.zoom{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:4vh 4vw;background:rgba(2,4,10,.88);backdrop-filter:blur(6px);cursor:zoom-out;animation:zin .2s ease}.zoom[hidden]{display:none}.zoom img{max-width:100%;max-height:92vh;border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.6);cursor:default}.zoom .zx{position:absolute;top:18px;right:22px;width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;font-size:18px;cursor:pointer}@keyframes zin{from{opacity:0}to{opacity:1}}
 .ox .eimg span{position:absolute;top:10px;right:10px;font-size:11px;font-weight:800;letter-spacing:.1em;padding:3px 8px;border-radius:7px;background:linear-gradient(90deg,var(--az),var(--vi));color:#04060c}@media (max-width:760px){.ox .ehead{flex-direction:column;align-items:flex-start}.ox .eimg{width:100%;max-width:300px}}.ox .etwo{display:grid;grid-template-columns:1fr 1fr;gap:16px;position:relative}.ox .ecol{padding:18px 20px;border-radius:16px;background:rgba(4,6,12,.45);border:1px solid var(--line2)}.ox .ect{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--az);font-weight:700;margin-bottom:8px}.ox .er{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);color:var(--tx2);font-size:15px}.ox .er i{font-style:normal;color:var(--tx3);font-size:13px}.ox .er b{color:var(--tx);white-space:nowrap}.ox .er.neg b{color:#fca5a5}.ox .est{font-style:normal;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#facc15;background:rgba(250,204,21,.12);border:1px solid rgba(250,204,21,.35);border-radius:6px;padding:1px 6px;margin-left:4px}.ox .edit{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:9px;background:rgba(250,204,21,.12);border:1px solid rgba(250,204,21,.55);color:#fde047;cursor:text}.ox .edit input{width:84px;background:transparent;border:0;outline:0;color:#fde047;font:inherit;font-weight:700;text-align:right;padding:0;margin:0;min-height:0}.ox .edit:focus-within{box-shadow:0 0 0 3px rgba(250,204,21,.25)}.ox .er.tot{border-bottom:0;padding-top:12px;font-weight:700;color:var(--tx)}.ox .er.tot b{font-size:20px;background:linear-gradient(90deg,var(--az),var(--vi));-webkit-background-clip:text;background-clip:text;color:transparent}.ox .ewar{margin-top:14px;display:flex;gap:10px;align-items:flex-start;padding:12px 16px;border-radius:14px;background:rgba(47,227,198,.07);border:1px solid rgba(47,227,198,.22);color:var(--tx2);font-size:14px;line-height:1.5;position:relative}@media (max-width:760px){.ox .etwo{grid-template-columns:1fr}}
+.ox .ptw{overflow-x:auto;margin-top:18px}.ox .pt{width:100%;border-collapse:collapse;font-size:14px}.ox .pt th,.ox .pt td{padding:9px 10px;text-align:right;border-bottom:1px solid rgba(255,255,255,.08);white-space:nowrap}.ox .pt th:first-child,.ox .pt td:first-child{text-align:left;font-weight:700}.ox .pt th{color:var(--tx2);font-weight:700;font-size:12.5px}.ox .pt tr.pb td{background:rgba(34,197,94,.10)}
 .ox .chart{margin-top:22px;position:relative}.ox .ph{font-weight:700;margin-bottom:8px;color:var(--tx2)}.ox .fine{color:var(--tx3);font-size:13px;margin:14px 0 0;position:relative}
 .ox .vids{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:30px;max-width:900px}.ox .vids figure{margin:0}.ox .vids video{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:18px;border:1px solid var(--line2);background:#0b1426;display:block}.ox .vids figcaption{margin-top:10px;color:var(--tx2);font-size:14px;font-weight:600}
 .ox .cta{margin-top:30px;border-radius:28px;padding:40px;background:linear-gradient(135deg,rgba(30,134,224,.18),rgba(124,92,255,.16));border:1px solid rgba(79,209,255,.4)}
