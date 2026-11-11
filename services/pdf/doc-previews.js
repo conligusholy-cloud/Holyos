@@ -129,7 +129,7 @@ function purchaseOrderHtml(order, ourCompany, opts) {
   const pdRows = Object.keys(PD_LABELS).filter((k) => pd[k] && !['issued_by', 'approved_by', 'confirm_by', 'delivery_place'].includes(k)).map((k) => `<tr><td style="width:34%;color:#6b7280">${PD_LABELS[k]}</td><td>${esc(pd[k])}</td></tr>`).join('');
   const place = pd.delivery_place || o.delivery_address;
   const rev = Number(o.revision) || 0;
-  return bs2.page({ title: 'Nákupní objednávka', number: o.order_number + (rev ? ' / rev. ' + String(rev).padStart(2, '0') : ''), pill: 'Objednávka dodavateli', demo: !order || (opts && opts.demo) }, `
+  return bs2.page({ title: 'Nákupní objednávka', number: o.order_number + (rev ? ' / rev. ' + String(rev).padStart(2, '0') : ''), pill: 'Objednávka dodavateli', noFooter: true, demo: !order || (opts && opts.demo) }, `
   <div class="parties">${party('Objednatel', our)}${party('Dodavatel', o.company || SUPPLIER)}</div>
   <div class="meta"><div><div class="l">Vystaveno</div><div class="v">${d(o.created_at)}</div></div><div><div class="l">Požadované dodání</div><div class="v">${d(o.expected_delivery)}</div></div><div><div class="l">Potvrzeno dodavatelem</div><div class="v">${o.confirmed_delivery ? d(o.confirmed_delivery) : 'čeká na potvrzení'}</div></div><div><div class="l">Vyřizuje</div><div class="v">${esc(pd.issued_by || o.issued_by || '—')}</div></div></div>
   ${pd.subject ? `<div class="box"><h3>Předmět objednávky</h3>${esc(pd.subject)}</div>` : ''}

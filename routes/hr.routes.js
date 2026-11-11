@@ -6,7 +6,7 @@ const express = require('express');
 const router = express.Router();
 const { prisma } = require('../config/database');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
-const { requireHrWrite, stripSensitive, canSeeSensitive, requireLeaveEdit, canEditLeave } = require('../middleware/hr-access');
+const { requireHrWrite, stripSensitive, canSeeSensitive, requireLeaveEdit, canEditLeave, requireCompanyLeaveEdit, canEditCompanyLeave } = require('../middleware/hr-access');
 const { logAudit: _logAuditHr } = require('../services/audit');
 const { logAudit, diffObjects, makeSnapshot } = require('../services/audit');
 const { z } = require('zod');
@@ -1299,11 +1299,18 @@ const leaveRequestSchema = z.object({
   type: z.string().trim().min(1, 'Vyberte typ volna').max(50, 'Typ volna je příliš dlouhý'),
   date_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Datum „Od" musí být ve tvaru RRRR-MM-DD'),
   date_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Datum „Do" musí být ve tvaru RRRR-MM-DD'),
+  // Čas je volitelný; prázdné pole = celodenní volno jako dosud. (Požadavek #141)
+  time_from: z.string().regex(/^\d{2}:\d{2}$/, 'Čas „Od" musí být ve tvaru HH:MM').nullish(),
+  time_to: z.string().regex(/^\d{2}:\d{2}$/, 'Čas „Do" musí být ve tvaru HH:MM').nullish(),
   note: z.string().trim().max(2000, 'Poznámka je příliš dlouhá').nullish(),
 }).refine((d) => d.date_to >= d.date_from, {
   message: 'Datum „Do" nemůže být dřív než „Od"',
   path: ['date_to'],
-});
+}).refine(
+  // Stejný den → čas „Do" musí být po čase „Od".
+  (d) => !(d.date_to === d.date_from && d.time_from && d.time_to) || d.time_to > d.time_from,
+  { message: 'Ve stejný den nemůže být čas „Do" dřív než „Od"', path: ['time_to'] },
+);
 
 // 'YYYY-MM-DD' → půlnoc v UTC. Pole je Prisma @db.Date, tak se uloží holý den
 // bez posunu o časovou zónu (na Windows i na Railway stejně).
@@ -1577,6 +1584,8 @@ router.post('/leave-requests', async (req, res, next) => {
         type: d.type,
         date_from: denNaDatum(d.date_from),
         date_to: denNaDatum(d.date_to),
+        time_from: d.time_from || null,
+        time_to: d.time_to || null,
         note: d.note || null,
         status: 'pending',
       },
@@ -1849,6 +1858,20 @@ router.get('/leave-balances', async (req, res, next) => {
       return { dny: dnuVRoce(cl.date_from, cl.date_to), vynechani: set };
     });
 
+    // Ručně přepsané dny celozávodní dovolené pro tenhle rok (požadavek #142).
+    // Kde záznam není, platí dál spočtená hodnota.
+    const rucni = new Map();
+    try {
+      const rows = await prisma.companyLeaveOverride.findMany({
+        where: { year: rok, person_id: { in: people.map((p) => p.id) } },
+        select: { person_id: true, days: true },
+      });
+      for (const r of rows) rucni.set(r.person_id, r.days);
+    } catch (e) {
+      // Chybějící tabulka (nenasazená migrace) nesmí shodit celý přehled.
+      console.warn('[hr] ruční celozávodní dovolená:', e.message);
+    }
+
     const balances = people.map(p => {
       const entitlement = p.leave_entitlement_days || 20;
       const carryover = p.leave_carryover || 0;
@@ -1861,6 +1884,10 @@ router.get('/leave-balances', async (req, res, next) => {
       for (const cl of vyjimky) {
         if (!cl.vynechani.has(p.id)) companyLeaveDays += cl.dny;
       }
+      // Ruční hodnota má přednost před spočtenou; spočtenou posíláme taky,
+      // ať se jde v UI vrátit zpátky k automatice. (Požadavek #142)
+      const prepsano = rucni.has(p.id);
+      const companyLeaveShown = prepsano ? rucni.get(p.id) : companyLeaveDays;
       return {
         person_id: p.id,
         first_name: p.first_name,
@@ -1872,12 +1899,80 @@ router.get('/leave-balances', async (req, res, next) => {
         total: entitlement + carryover,
         used: usedDays,
         entitlement_from: p.leave_entitlement_from,
-        company_leave_days: companyLeaveDays,
+        company_leave_days: companyLeaveShown,
+        company_leave_computed: companyLeaveDays,
+        company_leave_manual: prepsano,
         remaining: entitlement + carryover - usedDays,
       };
     });
 
     res.json(balances);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── CELOZÁVODNÍ DOVOLENÁ — RUČNÍ HODNOTA U ZAMĚSTNANCE (požadavek #142) ──
+// Sloupec „Celozávodní" v přehledu dovolených se normálně počítá z CompanyLeave.
+// Role s právem na modul „hr-celozavodni" ho smí u konkrétního člověka a roku
+// přepsat; prázdná hodnota přepis zruší a číslo se zase počítá automaticky.
+
+const companyLeaveOverrideSchema = z.object({
+  person_id: z.coerce.number({ error: 'Chybí zaměstnanec' }).int().positive('Chybí zaměstnanec'),
+  year: z.coerce.number({ error: 'Chybí rok' }).int().min(2000, 'Neplatný rok').max(2100, 'Neplatný rok'),
+  // Prázdné pole = zrušit ruční hodnotu. Bez preprocessu by z.coerce udělalo z null nulu.
+  days: z.preprocess(
+    (v) => (v === '' || v == null ? null : v),
+    z.coerce.number({ error: 'Počet dní musí být číslo' }).int('Počet dní musí být celé číslo')
+      .min(0, 'Počet dní nemůže být záporný').max(366, 'Počet dní je příliš velký').nullable(),
+  ),
+});
+
+// GET /api/hr/company-leave-days/can-edit — frontend podle toho povolí editaci buňky.
+router.get('/company-leave-days/can-edit', async (req, res, next) => {
+  try {
+    res.json({ can_edit: await canEditCompanyLeave(req.user) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/hr/company-leave-days { person_id, year, days }
+router.put('/company-leave-days', requireCompanyLeaveEdit, async (req, res, next) => {
+  try {
+    const parsed = companyLeaveOverrideSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: firstZodMessage(parsed.error, 'Neplatná data'), details: parsed.error.issues });
+    }
+    const { person_id, year, days } = parsed.data;
+
+    const osoba = await prisma.person.findUnique({
+      where: { id: person_id },
+      select: { id: true, first_name: true, last_name: true },
+    });
+    if (!osoba) return res.status(400).json({ error: 'Zaměstnanec neexistuje' });
+
+    if (days == null) {
+      await prisma.companyLeaveOverride.deleteMany({ where: { person_id, year } });
+      await logAudit({
+        action: 'delete', entity: 'company_leave_override', entity_id: person_id,
+        description: `Zrušena ruční celozávodní dovolená: ${jmenoOsoby(osoba)} (${year}) — počítá se zase automaticky`,
+        user: req.user,
+      });
+      return res.json({ ok: true, person_id, year, days: null, manual: false });
+    }
+
+    const zaznam = await prisma.companyLeaveOverride.upsert({
+      where: { person_id_year: { person_id, year } },
+      create: { person_id, year, days, updated_by: (req.user && req.user.id) || null },
+      update: { days, updated_by: (req.user && req.user.id) || null },
+    });
+    await logAudit({
+      action: 'update', entity: 'company_leave_override', entity_id: zaznam.id,
+      description: `Celozávodní dovolená ručně: ${jmenoOsoby(osoba)} (${year}) = ${days} dní`,
+      snapshot: makeSnapshot(zaznam), user: req.user,
+    });
+    res.json({ ok: true, person_id, year, days: zaznam.days, manual: true });
   } catch (err) {
     next(err);
   }

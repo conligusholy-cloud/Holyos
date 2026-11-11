@@ -310,7 +310,6 @@
     <div class="tab-bar">
       <button type="button" class="tab-btn active" data-tab="orders" onclick="switchTab('orders')">📋 Objednávky</button>
       <button type="button" class="tab-btn" data-tab="pricelist" onclick="switchTab('pricelist')">💰 Ceník</button>
-      <button type="button" class="tab-btn" data-tab="sluzby" onclick="switchTab('sluzby')">🚚 Služby</button>
       <button type="button" class="tab-btn" data-tab="cashflow" onclick="switchTab('cashflow')">💸 Cash flow</button>
       <button type="button" class="tab-btn" data-tab="tools" onclick="switchTab('tools')">🧰 Obchodní pomůcky</button>
       <button type="button" class="tab-btn" data-tab="compounder" onclick="switchTab('compounder')">🌐 Compounder</button>
@@ -763,6 +762,7 @@
           </select>
           <div style="flex:1"></div>
           <button class="btn" onclick="switchTab('accessories')" title="Ceník příslušenství (detergenty, náhradní díly, nářadí)" style="margin-right:8px;">🧴 Příslušenství</button>
+          <button class="btn" onclick="switchTab('sluzby')" title="Doporučené služby (doprava, instalace…) — kdo platí a kolik stojí" style="margin-right:8px;">🚚 Služby</button>
           <button class="btn" onclick="openItTemplateModal()" title="Checklist IT požadavků, který se posílá zákazníkovi e-mailem" style="margin-right:8px;">💻 IT požadavky</button>
           <button class="btn" onclick="openDefaultConfigModal()" title="Společná výbava pro všechny stroje" style="margin-right:8px;">⚙ Společná výbava</button>
           <button class="btn btn-primary" onclick="openPricelistModal()">+ Nová položka</button>
@@ -775,6 +775,7 @@
     <div id="tab-sluzby" style="display:none;">
       <div class="content">
         <div class="toolbar">
+          <button class="btn" onclick="switchTab('pricelist')" title="Zpět na ceník strojů" style="margin-right:8px;">← Ceník</button>
           <input type="text" id="svc-search" placeholder="Hledat službu..." onkeyup="loadSalesServices()">
           <select id="svc-filter" onchange="loadSalesServices()">
             <option value="">Všechny</option>

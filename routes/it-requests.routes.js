@@ -19,6 +19,16 @@ router.put('/template', async (req, res, next) => {
   try { res.json({ items: await svc.saveTemplate((req.body || {}).items) }); }
   catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
 });
+router.get('/settings', async (req, res, next) => {
+  try { res.json(await svc.getSettings()); } catch (err) { next(err); }
+});
+router.put('/settings', async (req, res, next) => {
+  try { res.json(await svc.saveSettings(req.body || {})); } catch (err) { next(err); }
+});
+router.post('/test', async (req, res, next) => {
+  try { res.json(await svc.sendTest((req.body || {}).email)); }
+  catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
+});
 router.get('/order/:orderId', async (req, res, next) => {
   try { res.json({ request: await svc.getForOrder(parseInt(req.params.orderId, 10)) }); } catch (err) { next(err); }
 });

@@ -824,6 +824,27 @@
       return 'Aktivní';
     };
     const HR_ATT_TYPE = { work: 'Práce', vacation: 'Dovolená', sick: 'Nemoc', holiday: 'Svátek', other: 'Jiné' };
+    // Názvy druhů volna z číselníku „Typy nepřítomnosti" — v tabulce žádostí
+    // se dřív ukazoval holý kód („neplavaol"). (Požadavek #141)
+    let HR_ABSENCE_NAMES = {};
+    async function nactiNazvyTypuVolna() {
+      try {
+        const r = await fetch('/api/hr/absence-types');
+        if (!r.ok) return HR_ABSENCE_NAMES;
+        const typy = await r.json();
+        const mapa = {};
+        (Array.isArray(typy) ? typy : []).forEach((t) => { if (t && t.code) mapa[t.code] = t.name || t.code; });
+        HR_ABSENCE_NAMES = mapa;
+      } catch (e) { /* zůstane poslední známá mapa */ }
+      return HR_ABSENCE_NAMES;
+    }
+    // Název druhu volna: číselník → vestavěné typy → holý kód jako poslední možnost.
+    const hrNazevVolna = (kod) => HR_ABSENCE_NAMES[kod] || HR_ATT_TYPE[kod] || kod || '';
+    // „11.11.2026" nebo „11.11.2026 09:00", když je čas vyplněný.
+    const hrDatumCas = (datum, cas) => {
+      const d = formatDate(datum);
+      return cas ? (d + ' ' + cas) : d;
+    };
     const HR_LEAVE_STATUS = { pending: 'Čekající', approved: 'Schváleno', rejected: 'Zamítnuto' };
     const hrPersonName = (pid) => { const pp = Array.isArray(people) ? people.find(x => x.id === pid) : null; return pp ? (pp.last_name + ' ' + pp.first_name) : '#' + pid; };
     const hrPeopleCols = (isArchive) => [
@@ -864,7 +885,7 @@
       ] },
       'hr-leave-dt': { noun: 'žádostí', emptyText: 'Žádné žádosti o volno.', columns: () => [
         { key: 'person', label: 'Zaměstnanec', type: 'text', ph: 'Zaměstnanec…', get: (r) => hrPersonName(r.person_id) },
-        { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (r) => r.type || '' },
+        { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (r) => hrNazevVolna(r.type) },
         { key: 'from', label: 'Od', type: 'date', ph: 'dd.mm.rrrr', get: (r) => cfDate(r.date_from) },
         { key: 'to', label: 'Do', type: 'date', ph: 'dd.mm.rrrr', get: (r) => cfDate(r.date_to) },
         { key: 'note', label: 'Poznámka', type: 'text', ph: 'Poznámka…', get: (r) => r.note || '' },
@@ -2208,6 +2229,7 @@
       try {
         const reqs = await leaveApi(url);
         await loadPeopleData();
+        await nactiNazvyTypuVolna();
         renderLeaveRequests(Array.isArray(reqs) ? reqs : []);
       } catch (e) {
         // Chyba se nesmí tvářit jako prázdný seznam — to byl původní symptom
@@ -2239,9 +2261,9 @@
         ` : '<span style="color:var(--text2);font-size:11px;">čeká na nadřízeného</span>');
         html += `<tr>
           <td class="person-name">${escHtml(personName)}</td>
-          <td>${escHtml(HR_ATT_TYPE[r.type] || r.type || '')}</td>
-          <td>${formatDate(r.date_from)}</td>
-          <td>${formatDate(r.date_to)}</td>
+          <td>${escHtml(hrNazevVolna(r.type))}</td>
+          <td>${escHtml(hrDatumCas(r.date_from, r.time_from))}</td>
+          <td>${escHtml(hrDatumCas(r.date_to, r.time_to))}</td>
           <td>${escHtml(r.note || '')}</td>
           <td><span class="leave-status ${escHtml(r.status)}">${escHtml(statusLabels[r.status] || r.status)}</span></td>
           <td>${actions}</td>
@@ -2282,12 +2304,18 @@
                 <select name="type" required>${typeOptions}</select>
               </div>
               <div class="form-group">
-                <label>Od *</label>
-                <input type="date" name="date_from" value="${today}" required>
+                <label>Od * <span style="font-weight:400;color:var(--text2);">(čas nepovinný)</span></label>
+                <div style="display:flex;gap:8px;">
+                  <input type="date" name="date_from" value="${today}" required style="flex:2;min-width:0;">
+                  <input type="time" name="time_from" style="flex:1;min-width:0;" aria-label="Čas od">
+                </div>
               </div>
               <div class="form-group">
-                <label>Do *</label>
-                <input type="date" name="date_to" value="${today}" required>
+                <label>Do * <span style="font-weight:400;color:var(--text2);">(čas nepovinný)</span></label>
+                <div style="display:flex;gap:8px;">
+                  <input type="date" name="date_to" value="${today}" required style="flex:2;min-width:0;">
+                  <input type="time" name="time_to" style="flex:1;min-width:0;" aria-label="Čas do">
+                </div>
               </div>
               <div class="form-group full">
                 <label>Poznámka</label>
@@ -2322,6 +2350,9 @@
       const data = {};
       for (const [k, v] of new FormData(e.target).entries()) data[k] = v || null;
       data.person_id = parseInt(data.person_id);
+      // Nevyplněný čas = celodenní volno; backend čeká null, ne prázdný řetězec.
+      if (!data.time_from) data.time_from = null;
+      if (!data.time_to) data.time_to = null;
       if (btn) { btn.disabled = true; btn.textContent = 'Odesílám…'; }
       try {
         await leaveApi('/api/hr/leave-requests', {
@@ -2979,6 +3010,7 @@
       { id: 'obchod',              name: 'Obchod',                 color: '#ec4899' },
       { id: 'lide-hr',             name: 'Lidé a HR',              color: '#6c5ce7' },
       { id: 'hr-dovolena',         name: 'Dovolená — nárok',       color: '#10b981' },
+      { id: 'hr-celozavodni',      name: 'Dovolená — celozávodní', color: '#0ea5e9' },
       { id: 'velin',               name: 'Velín (mobil)',          color: '#6366f1' },
       { id: 'metodicke-pokyny',    name: 'Metodické pokyny a směrnice', color: '#a78bfa' },
       { id: 'vytvoreni-arealu',    name: 'Vytvoření areálu',       color: '#8b5cf6' },
@@ -3152,10 +3184,83 @@
       }
     }
 
+    // Smí přihlášený přepsat dny celozávodní dovolené? (modul „hr-celozavodni",
+    // požadavek #142). Backend rozhoduje stejně — tohle jen zamkne buňku v UI.
+    let __canEditCelozavodni = null;
+    async function zjistiPravoNaCelozavodni() {
+      if (__canEditCelozavodni !== null) return __canEditCelozavodni;
+      try {
+        const r = await fetch('/api/hr/company-leave-days/can-edit');
+        __canEditCelozavodni = r.ok ? !!(await r.json()).can_edit : false;
+      } catch (e) { __canEditCelozavodni = false; }
+      return __canEditCelozavodni;
+    }
+
+    // Buňka sloupce „Celozávodní". Ručně zadaná hodnota je zvýrazněná a pozná se
+    // podle tužky; bez oprávnění je to obyčejné číslo.
+    function hrCelozavodniBunka(item) {
+      const dny = item.company_leave_days || 0;
+      const rucne = !!item.company_leave_manual;
+      const spocteno = item.company_leave_computed != null ? item.company_leave_computed : dny;
+      const znacka = rucne ? ' <span style="opacity:.7;">✏️</span>' : '';
+      if (!__canEditCelozavodni) {
+        const popis = rucne ? ('Ručně zadáno · automaticky by vyšlo ' + spocteno + ' dní') : 'Spočteno z celozávodní dovolené';
+        return '<td title="' + popis + '"' + (rucne ? ' style="font-weight:600;"' : '') + '>' + dny + znacka + '</td>';
+      }
+      const popis = (rucne ? ('Ručně zadáno · automaticky by vyšlo ' + spocteno + ' dní. ') : '')
+        + 'Klikni a zapiš počet dní — Enter nebo klik vedle uloží, Esc zruší, prázdné pole vrátí automatický výpočet.';
+      return '<td class="cz-edit" data-person="' + item.person_id + '" data-days="' + dny + '" title="' + popis + '"'
+        + ' style="cursor:pointer;' + (rucne ? 'font-weight:600;color:#0ea5e9;' : '') + '" onclick="hrCelozavodniEdit(this)">' + dny + znacka + '</td>';
+    }
+
+    // Inline editace: z buňky se udělá číselné pole. Uloží Enter i odchod z pole
+    // (klik vedle), Esc změnu zahodí. Hodnota se váže na zaměstnance a vybraný rok.
+    window.hrCelozavodniEdit = function (td) {
+      if (!td || td.querySelector('input')) return;
+      const personId = parseInt(td.getAttribute('data-person'), 10);
+      const puvodni = td.getAttribute('data-days') || '0';
+      const rok = parseInt((document.getElementById('lb-year') || {}).value, 10) || new Date().getFullYear();
+      if (!personId) return;
+      td.innerHTML = '<input type="number" min="0" max="366" step="1" value="' + puvodni
+        + '" style="width:74px;padding:4px 6px;background:var(--surface);border:1px solid var(--primary);border-radius:6px;color:var(--text);font-size:13px;">';
+      const inp = td.querySelector('input');
+      inp.focus();
+      inp.select();
+      let hotovo = false;
+      const konec = () => { hotovo = true; loadLeaveBalances(); };
+      const uloz = async () => {
+        if (hotovo) return;
+        hotovo = true;
+        const hodnota = String(inp.value).trim();
+        if (hodnota === puvodni) { loadLeaveBalances(); return; }
+        try {
+          const res = await fetch('/api/hr/company-leave-days', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ person_id: personId, year: rok, days: hodnota === '' ? null : hodnota }),
+          });
+          let telo = null;
+          try { telo = await res.json(); } catch (e) { telo = null; }
+          if (!res.ok) throw new Error((telo && telo.error) || ('Server vrátil chybu ' + res.status));
+        } catch (e) {
+          alert('Celozávodní dovolenou se nepodařilo uložit: ' + e.message);
+        }
+        loadLeaveBalances();
+      };
+      inp.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') { ev.preventDefault(); uloz(); }
+        else if (ev.key === 'Escape') { ev.preventDefault(); konec(); }
+      });
+      inp.addEventListener('blur', uloz);
+    };
+
     async function loadLeaveBalances() {
       initLeaveBalanceFilters();
       const year = document.getElementById('lb-year').value;
       try {
+        // Právo musí být známé dřív, než se tabulka vykreslí — podle něj se
+        // buňka „Celozávodní" vykreslí jako editovatelná, nebo jen jako číslo.
+        await zjistiPravoNaCelozavodni();
         const res = await fetch('/api/hr/leave-balances?year=' + year);
         const data = await res.json();
         renderLeaveBalances(data);
@@ -3193,7 +3298,7 @@
         html += '<td>' + item.carryover + '</td>';
         html += '<td style="font-weight:600;">' + total + '</td>';
         html += '<td>' + item.used + '</td>';
-        html += '<td>' + (item.company_leave_days || 0) + '</td>';
+        html += hrCelozavodniBunka(item);
         html += '<td><div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;"><div style="width:' + barPct + '%;height:100%;background:' + barColor + ';border-radius:4px;"></div></div><strong style="white-space:nowrap;">' + remaining + ' dní</strong></div></td>';
         html += '<td>' + statusBadge + '</td>';
         html += '</tr>';

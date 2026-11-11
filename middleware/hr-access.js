@@ -58,6 +58,33 @@ function requireLeaveEdit(req, res, next) {
   }).catch(next);
 }
 
+// ─── Právo přepsat dny celozávodní dovolené (požadavek #142) ─────────────────
+// Stejný vzor jako u nároku: vlastní modul v „Role a oprávnění", a když ho role
+// nemá nastavený, platí její úroveň na lide-hr (stávající role o nic nepřijdou).
+const COMPANY_LEAVE_MODULE = 'hr-celozavodni';
+
+async function canEditCompanyLeave(user) {
+  if (!user) return false;
+  if (user.isSuperAdmin || user.role === 'admin') return true;
+  try {
+    const person = await prisma.person.findFirst({
+      where: { user_id: user.id },
+      select: { role: { select: { permissions: { where: { module_id: COMPANY_LEAVE_MODULE }, select: { access_level: true } } } } },
+    });
+    const p = person && person.role && person.role.permissions && person.role.permissions[0];
+    if (p && p.access_level) return p.access_level === 'write';
+  } catch (e) { /* spadneme na úroveň lide-hr níž */ }
+  const l = await hrLevel(user);
+  return l === 'admin' || l === 'write';
+}
+
+function requireCompanyLeaveEdit(req, res, next) {
+  canEditCompanyLeave(req.user).then((ok) => {
+    if (ok) return next();
+    res.status(403).json({ error: 'Na úpravu celozávodní dovolené nemáte oprávnění.' });
+  }).catch(next);
+}
+
 // Citlivé údaje osoby (rodné číslo, OP, účet, mzda) — jen admin, HR s právem úpravy, nebo osoba sama
 const SENSITIVE_PERSON_FIELDS = ['birth_number', 'id_card_number', 'bank_account', 'hourly_rate', 'monthly_salary', 'birth_date'];
 function stripSensitive(person) {
@@ -75,4 +102,5 @@ async function canSeeSensitive(user, personId) {
 module.exports = {
   hrLevel, requireHrWrite, stripSensitive, canSeeSensitive, SENSITIVE_PERSON_FIELDS,
   canEditLeave, requireLeaveEdit, LEAVE_MODULE,
+  canEditCompanyLeave, requireCompanyLeaveEdit, COMPANY_LEAVE_MODULE,
 };

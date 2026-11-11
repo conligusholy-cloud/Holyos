@@ -286,6 +286,8 @@ async function setPaid(paymentId, paid, opts = {}) {
 
   let release = null;
   if (paid) {
+    // První přijatá platba = objednávka podepsaná → automaticky odeslat IT dotazník zákazníkovi (idempotentní)
+    require('./it-request').autoSendOnFirstPayment(p.order_id).catch(() => {});
     // Uvolnění do výroby: zaplacené všechny splátky „před výrobou" (nebo „při objednání", když před výrobou žádná není) — nad objednávkou,
     // u režimu položek stačí, že je zaplacená pro kteroukoli položku (výroba se dnes uvolňuje za celou objednávku).
     const all = await db.orderPayment.findMany({ where: { order_id: p.order_id } });

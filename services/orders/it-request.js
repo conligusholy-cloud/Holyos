@@ -17,16 +17,47 @@ const TEMPLATE_KEY = 'it_requirements.template';
 const DUE_DAYS_KEY = 'it_requirements.due_days';
 const TYPES = ['yesno', 'text', 'textarea', 'choice'];
 
+// Výchozí checklist = „Údaje pro onboarding nového provozovatele prádlomatů"
 const DEFAULT_TEMPLATE = [
-  { id: 'internet', label: 'Je v místě instalace dostupné internetové připojení?', type: 'yesno', required: true },
-  { id: 'conn_type', label: 'Typ připojení', type: 'choice', options: ['Kabel (LAN)', 'Wi-Fi', 'LTE / 5G router', 'Zatím žádné'], required: true },
-  { id: 'isp', label: 'Poskytovatel internetu a rychlost připojení', type: 'text', required: false },
-  { id: 'router_place', label: 'Umístění routeru / datové zásuvky a vzdálenost od stroje (v metrech)', type: 'text', required: true },
-  { id: 'power', label: 'Elektrická přípojka v místě instalace', type: 'choice', options: ['230 V', '400 V', 'Zatím nevyřízeno'], required: true },
-  { id: 'remote_ok', label: 'Povolíte vzdálený přístup a monitoring stroje (firewall / síťová pravidla)?', type: 'yesno', required: true },
-  { id: 'it_contact', label: 'Kontakt na osobu za IT / techniku (jméno, telefon, e-mail)', type: 'text', required: true },
-  { id: 'note', label: 'Poznámka', type: 'textarea', required: false },
+  { id: 'price_wash', label: 'Cena praní pro každou velikost stroje', type: 'textarea', required: true },
+  { id: 'price_softener', label: 'Cena za aviváž pro každou velikost stroje', type: 'textarea', required: true },
+  { id: 'price_clean', label: 'Cena za čištění pro každou velikost stroje', type: 'textarea', required: true },
+  { id: 'price_dry', label: 'Cena sušení za 15 minut', type: 'text', required: true },
+  { id: 'acceptors', label: 'Nastavení akceptorů — které mince a bankovky neakceptuje (centy, vysoké nominály)', type: 'textarea', required: true },
+  { id: 'own_logo', label: 'Vlastní logo? (zašlete nejlépe v křivkách e-mailem)', type: 'yesno', required: true },
+  { id: 'languages', label: 'Jazyky aplikace (max. 6) a telefonní číslo INFOLINKY', type: 'textarea', required: true },
+  { id: 'receipt_billing', label: 'Fakturační údaje na účtence', type: 'textarea', required: true },
+  { id: 'receipt_footer', label: 'Zpráva do patičky účtenky', type: 'text', required: false },
+  { id: 'receipt_mail', label: 'Vlastní e-mailový účet pro zasílání účtenek — jeho údaje (jinak použijeme náš)', type: 'text', required: false },
+  { id: 'nayax_operator', label: 'Operator ID a název Nayax účtu', type: 'text', required: true },
+  { id: 'nayax_registrar', label: 'Název registrátora Nayax účtu (Jimark, Corevend, …)', type: 'text', required: true },
+  { id: 'teamviewer_has', label: 'Vlastníte TeamViewer účet?', type: 'yesno', required: true },
+  { id: 'teamviewer_mail', label: 'E-mail TeamViewer účtu (pokud nemáte, vytvoříme na zadaný e-mail nový)', type: 'text', required: true },
+  { id: 'ewelink_has', label: 'Vlastníte eWeLink účet?', type: 'yesno', required: true },
+  { id: 'ewelink_mail', label: 'E-mail eWeLink účtu (pokud nemáte, vytvoříme na zadaný e-mail nový)', type: 'text', required: true },
 ];
+
+// ── Nastavení (AppSetting) ───────────────────────────────────────────────────
+const SETTINGS_KEY = 'it_requirements.settings';
+const DEFAULT_SETTINGS = { due_days: 3, auto_send: true, result_emails: ['martin.polraich@bestseries.cz'], include_radek: true };
+function cleanEmails(v) {
+  const arr = Array.isArray(v) ? v : String(v || '').split(/[\s,;]+/);
+  return [...new Set(arr.map((s) => String(s).trim().toLowerCase()).filter((s) => /^\S+@\S+\.\S+$/.test(s)))].slice(0, 20);
+}
+async function getSettings() {
+  const v = await getSetting(SETTINGS_KEY, { type: 'json', defaultValue: null }).catch(() => null);
+  const s = Object.assign({}, DEFAULT_SETTINGS, v || {});
+  s.due_days = Math.min(30, Math.max(1, parseInt(s.due_days, 10) || 3));
+  s.auto_send = s.auto_send !== false;
+  s.include_radek = s.include_radek !== false;
+  s.result_emails = cleanEmails(s.result_emails);
+  return s;
+}
+async function saveSettings(b) {
+  const s = { due_days: Math.min(30, Math.max(1, parseInt(b.due_days, 10) || 3)), auto_send: !!b.auto_send, include_radek: b.include_radek !== false, result_emails: cleanEmails(b.result_emails) };
+  await setSetting(SETTINGS_KEY, s, { type: 'json', scope: 'sales', description: 'IT požadavky — nastavení (termín, automatické odeslání, příjemci výsledků)' });
+  return s;
+}
 
 function sanitizeItems(arr) {
   const used = new Set(); const out = [];
@@ -58,10 +89,7 @@ async function saveTemplate(items) {
   await setSetting(TEMPLATE_KEY, clean, { type: 'json', scope: 'sales', description: 'IT požadavky — šablona checklistu pro zákazníka' });
   return clean;
 }
-async function getDueDays() {
-  const n = await getSetting(DUE_DAYS_KEY, { type: 'number', defaultValue: 3 }).catch(() => 3);
-  return Number.isFinite(Number(n)) && Number(n) > 0 ? Math.min(30, Math.round(Number(n))) : 3;
-}
+async function getDueDays() { return (await getSettings()).due_days; }
 
 function publicUrl(token) { return buildShareUrl('/it-pozadavky/' + token); }
 
@@ -95,14 +123,17 @@ async function sendToCustomer(orderId, opts = {}) {
 }
 
 // ── Veřejná část (zákazník) ──────────────────────────────────────────────────
+const PREVIEW_TOKEN = 'nahled';
 async function getPublic(token) {
+  if (token === PREVIEW_TOKEN) return { status: 'sent', preview: true, items: await getTemplate(), answers: {}, due_at: new Date(Date.now() + 3 * 86400000), order_number: 'TEST', customer: 'Náhled (nic se neukládá)' };
   const r = await prisma.orderItRequest.findUnique({ where: { token: String(token || '') } });
   if (!r) return null;
   const order = await prisma.order.findUnique({ where: { id: r.order_id }, select: { order_number: true, company: { select: { name: true } } } });
   return { status: r.status, items: r.items, answers: r.answers || {}, due_at: r.due_at, filled_at: r.filled_at, order_number: order && order.order_number, customer: order && order.company && order.company.name };
 }
 async function submitPublic(token, answers, name) {
-  const r = await prisma.orderItRequest.findUnique({ where: { token: String(token || '') } });
+  const preview = token === PREVIEW_TOKEN;
+  const r = preview ? { id: 0, order_id: 0, items: await getTemplate() } : await prisma.orderItRequest.findUnique({ where: { token: String(token || '') } });
   if (!r) { const e = new Error('Odkaz není platný'); e.status = 404; throw e; }
   const items = Array.isArray(r.items) ? r.items : [];
   const a = {}; const missing = [];
@@ -115,9 +146,67 @@ async function submitPublic(token, answers, name) {
     if (v) a[q.id] = v;
   });
   if (missing.length) { const e = new Error('Vyplňte prosím povinné otázky: ' + missing.slice(0, 3).join('; ') + (missing.length > 3 ? ' …' : '')); e.status = 400; throw e; }
+  if (preview) return { ok: true, preview: true };
+  if (r.status === 'filled') { const e = new Error('Dotazník už byl vyplněn'); e.status = 409; throw e; }
   await prisma.orderItRequest.update({ where: { id: r.id }, data: { answers: a, status: 'filled', filled_at: new Date(), filled_by: String(name || '').trim().slice(0, 255) || null } });
   try { require('../order-events').logOrderEvent(r.order_id, { type: 'it_request_filled', label: 'Zákazník vyplnil IT požadavky', detail: String(name || '').slice(0, 120), actor: 'zákazník' }); } catch (e) { /* nekritické */ }
+  sendResultMail(r.order_id, items, a, name).catch((e) => console.warn('[it-request] e-mail s výsledkem:', e.message));
   return { ok: true };
+}
+
+// ── E-mail s vyplněnými odpovědmi (Radek Bečka + nastavení příjemci) ─────────
+function resultBody(orderNo, customer, items, a, name, when) {
+  const rows = items.map((q) => q.label + '\n→ ' + (a[q.id] || '—')).join('\n\n');
+  return 'Zákazník ' + customer + ' vyplnil IT požadavky k objednávce ' + orderNo + (name ? ' (vyplnil: ' + name + ')' : '') + ' — ' + when + '.\nOdpovědi jsou uložené u objednávky (detail → 💻 IT dotazník).\n\n' + rows;
+}
+async function resultRecipients() {
+  const s = await getSettings();
+  const list = [...s.result_emails];
+  if (s.include_radek) { try { (await recipients()).forEach((p) => { if (p.email) list.push(String(p.email).toLowerCase()); }); } catch (e) { /* */ } }
+  return [...new Set(list)];
+}
+async function sendResultMail(orderId, items, a, name, opts = {}) {
+  const { sendMail } = require('../email');
+  const order = orderId ? await prisma.order.findUnique({ where: { id: orderId }, select: { order_number: true, company: { select: { name: true } } } }) : null;
+  const orderNo = opts.orderNo || (order && order.order_number) || ('#' + orderId);
+  const customer = opts.customer || (order && order.company && order.company.name) || 'zákazník';
+  const to = opts.to ? [opts.to] : await resultRecipients();
+  const text = resultBody(orderNo, customer, items, a, name, new Date().toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' }));
+  const subject = (opts.test ? '[TEST] ' : '') + 'IT požadavky vyplněny: ' + customer + ' (' + orderNo + ')';
+  const link = buildShareUrl('/modules/prodejni-objednavky/index.html');
+  for (const t of to) await sendMail({ to: t, subject, body: text, link, linkLabel: 'Otevřít Prodejní objednávky' }).catch((e) => console.warn('[it-request] e-mail', t, e.message));
+  return to;
+}
+
+// Test: pošle na zadaný e-mail ukázku e-mailu zákazníkovi i e-mailu s vyplněnými odpověďmi
+async function sendTest(email) {
+  const to = String(email || '').trim();
+  if (!/^\S+@\S+\.\S+$/.test(to)) { const e = new Error('Zadej platný e-mail'); e.status = 400; throw e; }
+  const { sendMail } = require('../email');
+  const s = await getSettings(); const items = await getTemplate();
+  const due = new Date(Date.now() + s.due_days * 86400000).toLocaleDateString('cs-CZ', { timeZone: 'Europe/Prague' });
+  const url = publicUrl(PREVIEW_TOKEN);
+  await sendMail({ to, subject: '[TEST] IT požadavky k objednávce SO-TEST — prosíme o vyplnění do ' + due, body: 'Dobrý den,\n\nk Vaší objednávce SO-TEST potřebujeme zjistit několik informací pro onboarding nového provozovatele prádlomatů. Prosíme o vyplnění krátkého formuláře nejpozději do ' + due + '.\n\nToto je TESTOVACÍ e-mail — formulář se v náhledu neukládá.', link: url, linkLabel: 'Vyplnit IT požadavky' });
+  const sample = {}; items.forEach((q) => { sample[q.id] = q.type === 'yesno' ? 'Ano' : q.type === 'choice' ? ((q.options || [])[0] || 'Ano') : 'Ukázková odpověď'; });
+  await sendResultMail(0, items, sample, 'Jan Zákazník', { to, test: true, orderNo: 'SO-TEST', customer: 'Ukázková firma s.r.o.' });
+  return { ok: true, url };
+}
+
+// Automaticky po PRVNÍ přijaté platbě k objednávce (objednávka je tím podepsaná/autorizovaná)
+async function autoSendOnFirstPayment(orderId) {
+  try {
+    const s = await getSettings();
+    if (!s.auto_send || !orderId) return { skipped: 'vypnuto' };
+    const exists = await prisma.orderItRequest.findFirst({ where: { order_id: orderId } });
+    if (exists) return { skipped: 'už odesláno' };
+    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { company: true } });
+    const email = order && (order.customer_email || (order.company && order.company.email));
+    if (!email) {
+      try { require('../order-events').logOrderEvent(orderId, { type: 'it_request_failed', label: 'IT požadavky nelze odeslat automaticky — chybí e-mail zákazníka', actor: 'systém' }); } catch (e) { /* */ }
+      return { skipped: 'bez e-mailu' };
+    }
+    return await sendToCustomer(orderId, { email, actor: 'systém (první platba)' });
+  } catch (e) { console.warn('[it-request] auto odeslání selhalo:', e.message); return { error: e.message }; }
 }
 
 // ── Interní stav pro detail objednávky ───────────────────────────────────────
@@ -164,4 +253,4 @@ async function sweepOverdue() {
   return { notified };
 }
 
-module.exports = { getTemplate, saveTemplate, getDueDays, sendToCustomer, getPublic, submitPublic, getForOrder, sweepOverdue, sanitizeItems, DEFAULT_TEMPLATE };
+module.exports = { getSettings, saveSettings, sendTest, autoSendOnFirstPayment, getTemplate, saveTemplate, getDueDays, sendToCustomer, getPublic, submitPublic, getForOrder, sweepOverdue, sanitizeItems, DEFAULT_TEMPLATE };

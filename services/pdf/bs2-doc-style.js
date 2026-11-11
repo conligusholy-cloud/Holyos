@@ -98,7 +98,7 @@ function header(o) {
 function page(opts, bodyHtml) {
   return '<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8"><title>' + esc(opts.docTitle || opts.title) + '</title><style>' + CSS + '</style></head><body>'
     + (opts.demo ? '<div class="demo">UKÁZKA — smyšlená data</div>' : '')
-    + header(opts) + bodyHtml + '<div class="footer">' + FOOTER_TEXT + '</div></body></html>';
+    + header(opts) + bodyHtml + (opts.noFooter ? '' : '<div class="footer">' + FOOTER_TEXT + '</div>') + '</body></html>';
 }
 
 // PDF přes Puppeteer: patička se kreslí jako skutečná patička stránky (footerTemplate v dolním okraji každé strany),
