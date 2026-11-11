@@ -787,7 +787,7 @@ router.get('/zaznamy', api(async (req, res) => {
   const take = Math.min(100, Math.max(5, parseInt(req.query.limit, 10) || 40));
   const prvni = await prisma.gameReplay.findMany({
     where: { poradi: 0 }, orderBy: { created_at: 'desc' }, take,
-    select: { sid: true, created_at: true, ua: true } });
+    select: { sid: true, created_at: true, ua: true, zdroj: true } });
   const sidy = prvni.map((r) => r.sid);
   const [casti, hraci] = await Promise.all([
     prisma.gameReplay.findMany({ where: { sid: { in: sidy } },
@@ -800,7 +800,7 @@ router.get('/zaznamy', api(async (req, res) => {
     const moje = casti.filter((c) => c.sid === r.sid);
     const h = H[r.sid] || null;
     return {
-      sid: r.sid, kdy: r.created_at,
+      sid: r.sid, kdy: r.created_at, zdroj: r.zdroj || (h ? h.zdroj : null),
       ms: Math.max.apply(null, moje.map((c) => c.ms || 0).concat([0])),
       bajtu: moje.reduce((a, c) => a + (c.bajtu || 0), 0),
       casti: moje.length,

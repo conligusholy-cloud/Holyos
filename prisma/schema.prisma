@@ -7691,6 +7691,8 @@ model GamePlayer {
 model GameReplay {
   id         Int      @id @default(autoincrement())
   sid        String   @db.VarChar(64)
+  // Odkud návštěvník přišel (utm z adresy). Nahrávají se jen lidé z reklamy.
+  zdroj      String?  @db.VarChar(80)
   poradi     Int      @default(0)
   udalosti   Json
   bajtu      Int      @default(0)

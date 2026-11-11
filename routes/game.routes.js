@@ -306,6 +306,7 @@ router.post('/zaznam', express.json({ limit: ZAZNAM_LIMIT }), async (req, res) =
       where: { sid_poradi: { sid, poradi } },
       update: { udalosti, bajtu, ms: Math.max(0, parseInt(b.ms, 10) || 0) },
       create: { sid, poradi, udalosti, bajtu, ms: Math.max(0, parseInt(b.ms, 10) || 0),
+        zdroj: String(b.zdroj || '').slice(0, 80) || null,
         ua: String(req.headers['user-agent'] || '').slice(0, 500) || null },
     });
     // Úklid: záznamy starší měsíce už nikdo neotevře, ať databáze nebobtná.

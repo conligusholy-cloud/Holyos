@@ -155,9 +155,10 @@
         <h3 style="font-size:14px;margin:22px 0 10px">Čas ve hře <span class="note" id="pv-cas-note"></span></h3>
         <div class="tbl-wrap"><table class="data-table" id="pv-casy"></table></div>
         <h3 style="font-size:14px;margin:26px 0 6px">První minuty</h3>
-        <p class="note" style="margin:0 0 10px">Záznam prvních dvou minut první návštěvy — i od lidí,
-          co si účet nakonec nezaložili. Není to video obrazovky: ukládá se, co se na stránce vykreslilo
-          a kam člověk klepl. Vyplňované texty se nenahrávají. Po třiceti dnech se záznam maže.</p>
+        <p class="note" style="margin:0 0 10px">Záznam prvních dvou minut u lidí, kteří přišli z reklamy —
+          i od těch, co si účet nakonec nezaložili. Nahrává se jen ten jeden příchod z inzerátu, ne návraty
+          a ne lidi, co dorazí sami. Není to video obrazovky: ukládá se, co se na stránce vykreslilo a kam
+          člověk klepl. Vyplňované texty se nenahrávají. Po třiceti dnech se záznam maže.</p>
         <div class="tbl-wrap"><table class="data-table" id="pv-zaznamy"></table></div>
       </div>
 
@@ -424,12 +425,12 @@
                       + esc(r.hrac.nick) + '</b><div class="note">účet založil po '
                       + doba(Math.max(0, r.hrac.zalozil_po_ms) / 1000) + '</div>'
                     : '<span class="note">bez účtu</span>') + '</td>'
-                + '<td class="note">' + esc((r.hrac && r.hrac.zdroj) || '—') + '</td>'
+                + '<td class="note">' + esc(r.zdroj || (r.hrac && r.hrac.zdroj) || '—') + '</td>'
                 + '<td class="num">' + doba((r.ms || 0) / 1000) + '</td>'
                 + '<td class="num note">' + (r.mobil ? 'mobil' : 'počítač') + '</td>'
                 + '<td><button class="btn sm" data-prehrat="' + esc(r.sid) + '">Přehrát</button></td></tr>';
-            }).join('') : '<tr><td colspan="6" class="note">Zatím žádný záznam. Nahrává se první návštěva, '
-              + 'takže se objeví, až přijde někdo nový.</td></tr>')
+            }).join('') : '<tr><td colspan="6" class="note">Zatím žádný záznam. Nahrává se příchod z reklamy, '
+              + 'takže se objeví, až někdo klikne na inzerát.</td></tr>')
           + '</tbody>';
         [].forEach.call(document.querySelectorAll('[data-prehrat]'), function (b) {
           b.onclick = function () { prehraj(b.getAttribute('data-prehrat')); };

@@ -9182,7 +9182,19 @@ var ZAZNAM_KEY = 'lm_zaznam';     // značka, že první návštěva už se nahr
 var ZAZNAM_DELKA = 120000;        // dvě minuty — aby šlo vidět celý tutoriál
 var ZAZNAM_CAST = 15000;
 var ZAZNAM_CASTI_MAX = 12;        // 8 × 15 s + rezerva na poslední odeslání
+// Nahrává se jen ten okamžik, kdy člověk doopravdy přišel z reklamy — tedy
+// příchod, který má v adrese utm nebo fbclid. Kdo se vrátí přímo nebo přijde
+// z vyhledávání, se nenahrává vůbec; u těch se stejně nemá co ladit, platíme
+// za ně. Poznává se to z adresy, ne z uloženého zdroje: ten si prohlížeč drží
+// i při dalších návštěvách a nahrávalo by se znovu a znovu.
+function zReklamy() {
+  try {
+    var q = new URLSearchParams(location.search);
+    return !!(q.get('utm_source') || q.get('zdroj') || q.get('fbclid') || q.get('gclid') || q.get('ttclid'));
+  } catch (e) { return false; }
+}
 function zaznamStart() {
+  if (!zReklamy()) return;
   try {
     if (localStorage.getItem(ZAZNAM_KEY)) return;   // není to první návštěva
     localStorage.setItem(ZAZNAM_KEY, '1');          // ani po obnovení stránky už podruhé
@@ -9200,7 +9212,8 @@ function zaznamJed() {
   function posli(posledni) {
     if (!buf.length || cast >= ZAZNAM_CASTI_MAX) return;
     var davka = buf; buf = [];
-    var telo = JSON.stringify({ sid: visitId(), poradi: cast, ms: Date.now() - start, udalosti: davka });
+    var telo = JSON.stringify({ sid: visitId(), poradi: cast, ms: Date.now() - start,
+      zdroj: zjistiZdroj(), udalosti: davka });
     cast++;
     try {
       fetch('/api/game/zaznam', { method: 'POST', headers: { 'Content-Type': 'application/json' },
