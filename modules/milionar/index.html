@@ -126,6 +126,19 @@
         <h3 style="font-size:14px;margin:22px 0 10px">Den po dni</h3>
         <div class="chart" id="st-chart"></div>
         <h3 style="font-size:14px;margin:26px 0 10px">Reklama: výdaje vs. tržby po dnech <span class="note">(výdaje z Facebook reklamy funnelu Tycoon, tržba ze hry bez DPH)</span></h3>
+        <div class="toolbar" id="rk-bar" style="flex-wrap:wrap">
+          <span class="note">Období:</span>
+          <button class="btn sm on" data-rk="mesic">Tento měsíc</button>
+          <button class="btn sm" data-rk="minuly">Minulý měsíc</button>
+          <button class="btn sm" data-rk="7">7 dní</button>
+          <button class="btn sm" data-rk="30">30 dní</button>
+          <button class="btn sm" data-rk="90">90 dní</button>
+          <span class="note" style="margin-left:10px">vlastní:</span>
+          <input type="date" id="rk-od" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:5px 8px">
+          <span class="note">–</span>
+          <input type="date" id="rk-do" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:5px 8px">
+          <button class="btn sm" id="rk-go">Zobrazit</button>
+        </div>
         <div class="kpis" id="rk-kpis"></div>
         <div class="tbl-wrap" style="margin-top:12px"><table class="data-table" id="rk-tbl"></table></div>
         <h3 style="font-size:14px;margin:26px 0 10px">Provoz právě teď <span class="note" id="pv-cas"></span></h3>
@@ -233,19 +246,57 @@
       if (panel && panel.classList.contains('active') && !document.hidden) loadProvoz();
     }, 30000);
     // Reklama po dnech: výdaj z Mety vs. tržba hry → zisk / ztráta
+    var RK = { mode: 'mesic' };
+    function rkRange() {
+      var iso = function (d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+      var now = new Date(), y = now.getFullYear(), m = now.getMonth();
+      if (RK.mode === 'mesic') return 'od=' + iso(new Date(y, m, 1)) + '&do=' + iso(now);
+      if (RK.mode === 'minuly') return 'od=' + iso(new Date(y, m - 1, 1)) + '&do=' + iso(new Date(y, m, 0));
+      if (RK.mode === 'vlastni') return 'od=' + RK.od + '&do=' + RK.do;
+      return 'dny=' + RK.mode;
+    }
+    document.getElementById('rk-bar').addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.id === 'rk-go') {
+        var o = document.getElementById('rk-od').value, d = document.getElementById('rk-do').value;
+        if (!o || !d) return alert('Vyber datum od i do.');
+        RK = { mode: 'vlastni', od: o, do: d };
+      } else if (b.dataset.rk) RK = { mode: b.dataset.rk };
+      else return;
+      document.querySelectorAll('#rk-bar [data-rk]').forEach(function (x) { x.classList.toggle('on', x === b); });
+      loadReklama();
+    });
+    // Reklama po dnech: výdaj z Mety vs. tržba hry → zisk / ztráta
     function loadReklama() {
       var tb = document.getElementById('rk-tbl'), kp = document.getElementById('rk-kpis');
       tb.innerHTML = '<tbody><tr><td class="note">Načítám…</td></tr></tbody>';
-      get('/stats/reklama?dny=' + DNY).then(function (j) {
+      get('/stats/reklama?' + rkRange()).then(function (j) {
         var kc = function (n) { return cz(Math.round(n)) + ' Kč'; };
         var zn = function (n) { return '<span style="color:' + (n >= 0 ? '#22c55e' : '#ef4444') + ';font-weight:700">' + (n > 0 ? '+' : '') + kc(n) + '</span>'; };
+        var dec = function (n) { return n == null ? '—' : String(n).replace('.', ','); };
         var s = j.souhrn || {};
-        kp.innerHTML = kpi(kc(s.vydaj || 0), 'Do reklamy za ' + j.dny + ' dní') + kpi(kc(s.trzba || 0), 'Zaplatili hráči (bez DPH)')
-          + kpi(zn(s.zisk || 0), (s.zisk || 0) >= 0 ? 'V plusu' : 'V minusu') + kpi(s.roas != null ? s.roas.toString().replace('.', ',') + '×' : '—', 'Návratnost reklamy (ROAS)');
-        var warn = j.chyba ? '<tr><td colspan="6" style="color:#f59e0b">⚠ ' + esc(j.chyba) + '</td></tr>' : '';
-        tb.innerHTML = '<thead><tr><th>Den</th><th class="num">Do reklamy</th><th class="num">Zaplatili hráči</th><th class="num">Nákupů</th><th class="num">Zisk / ztráta</th><th class="num">Kumulativně</th></tr></thead><tbody>' + warn
+        kp.innerHTML = kpi(kc(s.vydaj || 0), 'Do reklamy (' + j.dny + ' dní)') + kpi(kc(s.trzba || 0), 'Zaplatili hráči (bez DPH)')
+          + kpi(zn(s.zisk || 0), (s.zisk || 0) >= 0 ? 'Celkem v plusu' : 'Celkem v minusu')
+          + kpi('<span style="color:#22c55e">' + (s.dnu_plus || 0) + '</span> / <span style="color:#ef4444">' + (s.dnu_minus || 0) + '</span>', 'Dnů v plusu / v minusu')
+          + kpi(dec(s.roas) + (s.roas != null ? '×' : ''), 'Návratnost reklamy (ROAS)')
+          + kpi(s.cena_registrace != null ? dec(Math.round(s.cena_registrace)) + ' Kč' : '—', 'Cena za registraci')
+          + kpi(s.cena_nakupu != null ? dec(Math.round(s.cena_nakupu)) + ' Kč' : '—', 'Cena za nákup');
+        var warn = j.chyba ? '<tr><td colspan="9" style="color:#f59e0b">⚠ ' + esc(j.chyba) + '</td></tr>' : '';
+        var badge = function (n) {
+          var ok = n >= 0, nula = Math.abs(n) < 0.5;
+          var c = nula ? '#94a3b8' : (ok ? '#22c55e' : '#ef4444');
+          return '<span style="display:inline-block;min-width:110px;padding:3px 10px;border-radius:999px;font-weight:700;text-align:center;color:' + c + ';background:' + c + '22;border:1px solid ' + c + '55">' + (nula ? '0 Kč' : (ok ? '▲ +' : '▼ ') + kc(n)) + '</span>';
+        };
+        var th = function (t, num) { return '<th' + (num ? ' class="num" style="text-align:right"' : '') + '>' + t + '</th>'; };
+        tb.innerHTML = '<thead><tr>' + th('Den') + th('Do reklamy', 1) + th('Zaplatili hráči', 1) + th('Výsledek dne', 1) + th('Kumulativně', 1)
+          + th('Zobrazení', 1) + th('Kliky', 1) + th('Registrací', 1) + th('Nákupů', 1) + '</tr></thead><tbody>' + warn
+          + '<tr style="background:rgba(255,255,255,.04)"><td><b>Celkem</b></td><td class="num"><b>' + kc(s.vydaj || 0) + '</b></td><td class="num"><b>' + kc(s.trzba || 0) + '</b></td><td class="num">' + badge(s.zisk || 0) + '</td><td class="num"></td>'
+          + '<td class="num"></td><td class="num">' + cz(s.kliku || 0) + '</td><td class="num">' + cz(s.registraci || 0) + '</td><td class="num">' + cz(s.nakupu || 0) + '</td></tr>'
           + j.rady.slice().reverse().map(function (r) {
-              return '<tr><td>' + r.den + '</td><td class="num">' + kc(r.vydaj) + '</td><td class="num">' + kc(r.trzba) + '</td><td class="num">' + cz(r.nakupu) + '</td><td class="num">' + zn(r.zisk) + '</td><td class="num">' + zn(r.kumulativne) + '</td></tr>';
+              var tint = r.zisk > 0.5 ? 'rgba(34,197,94,.06)' : (r.zisk < -0.5 ? 'rgba(239,68,68,.07)' : 'transparent');
+              return '<tr style="background:' + tint + '"><td>' + r.den.split('-').reverse().join('. ').replace(/^(\d+)\. (\d+)\. /, '$1. $2. ') + '</td>'
+                + '<td class="num">' + kc(r.vydaj) + '</td><td class="num">' + kc(r.trzba) + '</td><td class="num">' + badge(r.zisk) + '</td><td class="num">' + zn(r.kumulativne) + '</td>'
+                + '<td class="num">' + cz(r.zobrazeni) + '</td><td class="num">' + cz(r.kliky) + '</td><td class="num">' + cz(r.registraci) + '</td><td class="num">' + cz(r.nakupu) + '</td></tr>';
             }).join('') + '</tbody>';
       }).catch(function (e) { tb.innerHTML = '<tbody><tr><td style="color:#ef4444">Chyba: ' + esc(e.message || e) + '</td></tr></tbody>'; });
     }

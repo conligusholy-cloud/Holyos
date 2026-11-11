@@ -497,13 +497,25 @@ router.get('/stats', api(async (req, res) => {
 // GET /stats/reklama?dny=30[&funnel=<id>] → po dnech: kolik šlo do reklamy (Meta, kampaně napojené na funnel
 // „Tycoon" v Centru reklamy) a kolik lidé ve hře zaplatili → zisk / ztráta. Tržba je bez DPH (21 %).
 router.get('/stats/reklama', api(async (req, res) => {
-  const dny = Math.min(180, Math.max(7, parseInt(req.query.dny, 10) || 30));
   const dk = (d) => new Date(d).toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
-  const dni = {};
-  for (let i = dny - 1; i >= 0; i--) { const k = dk(Date.now() - i * 86400e3); dni[k] = { den: k, vydaj: 0, trzba: 0, nakupu: 0 }; }
-  const od = new Date(Date.now() - dny * 86400e3);
-  const nakupy = await prisma.gamePurchase.findMany({ where: { status: 'paid', paid_at: { gte: od } }, select: { paid_at: true, amount_cents: true } });
+  const isD = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+  // Období: ?od=YYYY-MM-DD&do=YYYY-MM-DD (max 366 dní), jinak posledních ?dny dní
+  let odK, doK;
+  if (isD(req.query.od) && isD(req.query.do) && req.query.od <= req.query.do) { odK = req.query.od; doK = req.query.do; }
+  else { const n = Math.min(180, Math.max(1, parseInt(req.query.dny, 10) || 30)); doK = dk(Date.now()); odK = dk(Date.now() - (n - 1) * 86400e3); }
+  const dni = {}; const seznam = [];
+  for (let t = new Date(odK + 'T12:00:00Z'); ; t = new Date(t.getTime() + 86400e3)) {
+    const k = t.toISOString().slice(0, 10); if (k > doK || seznam.length >= 366) break;
+    dni[k] = { den: k, vydaj: 0, zobrazeni: 0, kliky: 0, registraci: 0, trzba: 0, nakupu: 0 }; seznam.push(k);
+  }
+  const dny = seznam.length;
+  const od = new Date(new Date(odK + 'T00:00:00Z').getTime() - 86400e3), dok = new Date(new Date(doK + 'T00:00:00Z').getTime() + 2 * 86400e3);
+  const [nakupy, hraci] = await Promise.all([
+    prisma.gamePurchase.findMany({ where: { status: 'paid', paid_at: { gte: od, lt: dok } }, select: { paid_at: true, amount_cents: true } }),
+    prisma.gamePlayer.findMany({ where: { created_at: { gte: od, lt: dok } }, select: { created_at: true } }),
+  ]);
   nakupy.forEach((n) => { const r = dni[dk(n.paid_at)]; if (r) { r.trzba += n.amount_cents / 100 / 1.21; r.nakupu++; } });
+  hraci.forEach((h) => { const r = dni[dk(h.created_at)]; if (r) r.registraci++; });
 
   const ads = require('./ads-center.routes');
   let funnel = null, kampane = [], chyba = null;
@@ -518,12 +530,12 @@ router.get('/stats/reklama', api(async (req, res) => {
       if (!c.token) chyba = 'Meta Ads není napojená (Centrum reklamy → Nastavení).';
       else if (!starts.length) chyba = 'Startovní bod funnelu nemá napojenou kampaň.';
       else {
-        const tr = JSON.stringify({ since: dk(od.getTime() + 86400e3), until: dk(Date.now()) });
+        const tr = JSON.stringify({ since: odK, until: doK });
         for (const nd of starts) {
           const id = String(nd.meta.campaign.id).replace(/[^0-9]/g, '');
           try {
             const j = await ads.metaGraph(id + '/insights', { fields: 'spend,impressions,inline_link_clicks', time_increment: 1, time_range: tr, limit: 500 }, c.token);
-            (j.data || []).forEach((r) => { const x = dni[r.date_start]; if (x) x.vydaj += Number(r.spend || 0); });
+            (j.data || []).forEach((r) => { const x = dni[r.date_start]; if (x) { x.vydaj += Number(r.spend || 0); x.zobrazeni += Number(r.impressions || 0); x.kliky += Number(r.inline_link_clicks || 0); } });
             kampane.push(nd.meta.campaign.name || id);
           } catch (e) { chyba = 'Meta: ' + e.message; }
         }
@@ -532,13 +544,17 @@ router.get('/stats/reklama', api(async (req, res) => {
   } catch (e) { chyba = 'Reklamu se nepodařilo načíst: ' + e.message; }
 
   let kum = 0;
+  const R2 = (n) => Math.round(n * 100) / 100;
   const rady = Object.values(dni).sort((a, b) => (a.den < b.den ? -1 : 1)).map((r) => {
     const zisk = r.trzba - r.vydaj; kum += zisk;
-    return { den: r.den, vydaj: Math.round(r.vydaj * 100) / 100, trzba: Math.round(r.trzba * 100) / 100, nakupu: r.nakupu, zisk: Math.round(zisk * 100) / 100, kumulativne: Math.round(kum * 100) / 100 };
+    return { den: r.den, vydaj: R2(r.vydaj), zobrazeni: r.zobrazeni, kliky: r.kliky, registraci: r.registraci, trzba: R2(r.trzba), nakupu: r.nakupu, zisk: R2(zisk), kumulativne: R2(kum) };
   });
-  const sum = rady.reduce((a, r) => ({ vydaj: a.vydaj + r.vydaj, trzba: a.trzba + r.trzba }), { vydaj: 0, trzba: 0 });
-  res.json({ ok: true, dny, funnel: funnel ? { id: funnel.id, name: funnel.name || funnel.title } : null, kampane, chyba, rady,
-    souhrn: { vydaj: Math.round(sum.vydaj), trzba: Math.round(sum.trzba), zisk: Math.round(sum.trzba - sum.vydaj), roas: sum.vydaj > 0 ? Math.round(sum.trzba / sum.vydaj * 100) / 100 : null } });
+  const sum = rady.reduce((a, r) => ({ vydaj: a.vydaj + r.vydaj, trzba: a.trzba + r.trzba, reg: a.reg + r.registraci, nak: a.nak + r.nakupu, kl: a.kl + r.kliky }), { vydaj: 0, trzba: 0, reg: 0, nak: 0, kl: 0 });
+  const plus = rady.filter((r) => r.zisk > 0).length, minus = rady.filter((r) => r.zisk < 0).length;
+  res.json({ ok: true, dny, od: odK, do: doK, funnel: funnel ? { id: funnel.id, name: funnel.name || funnel.title } : null, kampane, chyba, rady,
+    souhrn: { vydaj: Math.round(sum.vydaj), trzba: Math.round(sum.trzba), zisk: Math.round(sum.trzba - sum.vydaj), roas: sum.vydaj > 0 ? R2(sum.trzba / sum.vydaj) : null,
+      dnu_plus: plus, dnu_minus: minus, registraci: sum.reg, nakupu: sum.nak, kliku: sum.kl,
+      cena_registrace: sum.reg ? R2(sum.vydaj / sum.reg) : null, cena_nakupu: sum.nak ? R2(sum.vydaj / sum.nak) : null } });
 }));
 
 // GET /stats/provoz → kdo je na hře právě teď. Návštěvy se poznají podle stop,
