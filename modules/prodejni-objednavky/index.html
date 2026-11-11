@@ -3032,12 +3032,22 @@
         var r = await fetch('/api/wh/orders/' + orderId + '/payments');
         PP.plan = await r.json();
         if (!r.ok) throw new Error(PP.plan.error || r.status);
+        if (!PP.accounts) { try { var ar = await fetch('/api/banking/accounts?active=true', { credentials: 'include' }); PP.accounts = ar.ok ? await ar.json() : []; } catch (e) { PP.accounts = []; } }
         PP.draft = { scope: PP.plan.scope, payments: PP.plan.payments.map(function (p) { return { id: p.id, order_item_id: p.order_item_id, milestone: p.milestone, kind: p.kind, percent: p.percent, amount: p.amount_fixed, due_days: p.due_days, label: p.label }; }) };
         PP.dirty = false;
         renderPayPlan();
       } catch (e) { var el = document.getElementById('order-payplan'); if (el) el.innerHTML = '<div style="color:#ef4444;font-size:12px;">Rozložení plateb se nepodařilo načíst: ' + esc(e.message) + '</div>'; }
     }
 
+    async function ppSetAccount(val) {
+      try {
+        var r = await fetch('/api/wh/orders/' + PP.orderId, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payment_account_id: val ? parseInt(val, 10) : null }) });
+        var d = await r.json().catch(function () { return {}; });
+        if (!r.ok) throw new Error(d.error || ('Uložení selhalo (' + r.status + ')'));
+        PP.plan.payment_account_id = val ? parseInt(val, 10) : null;
+        renderPayPlan();
+      } catch (e) { alert('Chyba: ' + e.message); loadPayPlan(PP.orderId); }
+    }
     function ppBase(itemId) {
       if (!itemId) return PP.plan.total;
       var it = PP.plan.items.find(function (i) { return i.id === itemId; });
@@ -3064,6 +3074,7 @@
         '</div>' +
         '<span style="font-size:11px;color:var(--text2);">' + (d.scope === 'order' ? 'Jedna sada splátek z celé ceny objednávky (' + fm(PP.plan.total) + ').' : 'Každý stroj má vlastní splátky — pro různé termíny dodání.') + '</span>' +
         '<span style="flex:1"></span>' +
+        '<label style="font-size:11px;color:var(--text2);" title="Na tento účet má zákazník platit — propíše se na zálohové i finální faktury a QR kód">🏦 Účet pro platbu: <select onchange="ppSetAccount(this.value)" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;max-width:260px;"><option value="">— výchozí účet firmy —</option>' + (PP.accounts || []).filter(function (a) { return !a.currency || a.currency === cur || a.id === PP.plan.payment_account_id; }).map(function (a) { return '<option value="' + a.id + '"' + (PP.plan.payment_account_id === a.id ? ' selected' : '') + '>' + esc(a.name) + ' · ' + esc(a.account_number + '/' + a.bank_code) + ' (' + esc(a.currency || '') + ')</option>'; }).join('') + '</select></label>' +
         '<label style="font-size:11px;color:var(--text2);">Šablona: <select onchange="ppApplyTemplate(this.value, null);this.value=\'\'" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;"><option value="">— vybrat —</option>' + PP.plan.templates.map(function (t) { return '<option value="' + t.key + '">' + esc(t.label) + '</option>'; }).join('') + '</select></label>' +
       '</div>';
 

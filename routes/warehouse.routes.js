@@ -1370,6 +1370,14 @@ router.put('/orders/:id', async (req, res, next) => {
       }
       allowed.po_data = merged;
     }
+    // Náš účet pro platby zákazníka — propíše se i na dosud nezaplacené faktury objednávky (koncept / vystavená / odeslaná)
+    if (req.body.payment_account_id !== undefined) {
+      const pa = parseInt(req.body.payment_account_id, 10);
+      allowed.payment_account_id = pa > 0 ? pa : null;
+      const fields = await require('../services/orders/payment-plan').paymentAccountFields(prisma, allowed.payment_account_id);
+      if (allowed.payment_account_id && !Object.keys(fields).length) return res.status(400).json({ error: 'Bankovní účet nenalezen' });
+      await prisma.invoice.updateMany({ where: { order_id: orderId, direction: 'ar', status: { in: ['draft', 'issued', 'sent'] } }, data: Object.keys(fields).length ? fields : { partner_bank_account: null, partner_iban: null } });
+    }
     if (allowed.company_id) allowed.company_id = parseInt(allowed.company_id);
     if (allowed.sales_person_id !== undefined) allowed.sales_person_id = allowed.sales_person_id ? parseInt(allowed.sales_person_id) : null;
     if (allowed.financing_type !== undefined) allowed.financing_type = ['own', 'leasing'].includes(allowed.financing_type) ? allowed.financing_type : null;

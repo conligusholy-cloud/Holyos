@@ -658,6 +658,7 @@ model Company {
 }
 
 model Order {
+  payment_account_id Int? // náš bankovní účet (BankAccount), na který má zákazník platit — propíše se na faktury a QR
   id                Int       @id @default(autoincrement())
   order_number      String    @unique @db.VarChar(50)
   type              String    @db.VarChar(20) // purchase, sales, cooperation

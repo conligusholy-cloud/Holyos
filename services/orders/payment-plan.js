@@ -121,7 +121,7 @@ async function getPlan(orderId, db = defaultPrisma) {
   const total = r2(order.total_amount);
   const paidSum = r2(payments.filter((p) => p.paid).reduce((s, p) => s + p.amount, 0));
   return {
-    order_id: order.id, scope: order.payment_scope || 'order', currency: order.currency || 'CZK', total,
+    order_id: order.id, scope: order.payment_scope || 'order', currency: order.currency || 'CZK', total, payment_account_id: order.payment_account_id || null,
     customer_email: order.customer_email || (order.company && order.company.email) || null,
     items: order.items.map((i) => ({ id: i.id, name: i.name, serial_number: i.serial_number, base: baseOf(order, i), production_start: itemStart(i) })),
     payments, paid_sum: paidSum, remaining: r2(total - paidSum),
@@ -224,6 +224,7 @@ async function issueInvoiceForPayment(paymentId, opts = {}) {
   }).join(' · ').slice(0, 500);
   const vybava = itemsTxt ? ' — Výbava: ' + itemsTxt : '';
 
+  const acct = await paymentAccountFields(db, order.payment_account_id);
   let invoice;
   if (p.kind === 'deposit') {
     const m = money(net);
@@ -232,7 +233,7 @@ async function issueInvoiceForPayment(paymentId, opts = {}) {
       invoice_number: invNo, type: 'proforma_issued', direction: 'ar', company_id: order.company_id, order_id: order.id,
       currency: order.currency || 'CZK', subtotal: m.sub, vat_amount: m.vat, total: m.tot, vat_regime: vatRegime,
       date_issued: today, date_due: due, variable_symbol: (invNo.match(/(\d+)$/) || [])[1] || null,
-      status: 'draft', invoice_role: 'deposit', source: 'from_order', created_by_user_id: opts.createdByUserId || null,
+      status: 'draft', invoice_role: 'deposit', source: 'from_order', created_by_user_id: opts.createdByUserId || null, ...acct,
       note: 'Zálohová faktura ' + pctTxt + '(' + mLabel.toLowerCase() + ') — ' + scopeTxt,
       items: { create: [{ line_order: 0, description: 'Záloha ' + pctTxt + '— ' + scopeTxt + ' (' + mLabel.toLowerCase() + ')' + vybava, quantity: 1, unit: 'ks', unit_price: m.sub, vat_rate: rate, subtotal: m.sub, vat_amount: m.vat, total: m.tot, order_item_id: p.order_item_id || undefined }] },
     } });
@@ -252,7 +253,7 @@ async function issueInvoiceForPayment(paymentId, opts = {}) {
       invoice_number: invNo, type: 'issued', direction: 'ar', company_id: order.company_id, order_id: order.id,
       currency: order.currency || 'CZK', exchange_rate: 1, subtotal: r2(plneni.sub - dSub), vat_amount: r2(plneni.vat - dVat), total: r2(plneni.tot - dTot), vat_regime: vatRegime,
       date_issued: today, date_taxable: today, date_due: due, payment_method: 'bank_transfer', variable_symbol: invNo.replace(/\D/g, '').slice(-10),
-      status: 'draft', invoice_role: 'final', source: 'from_order', created_by_user_id: opts.createdByUserId || null,
+      status: 'draft', invoice_role: 'final', source: 'from_order', created_by_user_id: opts.createdByUserId || null, ...acct,
       note: 'Finální faktura (' + mLabel.toLowerCase() + ') — ' + scopeTxt + (dTot > 0 ? '. Započtené zálohy: ' + dTot.toLocaleString('cs-CZ') + ' ' + (order.currency || 'CZK') : ''),
       items: { create: items },
     } });
@@ -261,6 +262,17 @@ async function issueInvoiceForPayment(paymentId, opts = {}) {
   await db.orderPayment.update({ where: { id: p.id }, data: { invoice_id: invoice.id } });
   try { require('../order-events').logOrderEvent(order.id, { type: 'invoice_created', label: (p.kind === 'deposit' ? 'Vytvořena zálohová faktura' : 'Vytvořena finální faktura') + ' ke splátce', detail: invoice.invoice_number + ' · ' + Number(invoice.total).toLocaleString('cs-CZ') + ' ' + (order.currency || 'CZK') + ' · ' + mLabel + ' · ' + scopeTxt, actor: opts.actor || 'uživatel' }); } catch (e) { /* */ }
   return { created: true, invoice };
+}
+
+/** Pole faktury s naším účtem vybraným u objednávky (kam má zákazník platit; PDF + QR). Bez výběru → {} (výchozí účet firmy). */
+async function paymentAccountFields(db, accountId) {
+  if (!accountId) return {};
+  const a = await db.bankAccount.findUnique({ where: { id: accountId } }).catch(() => null);
+  if (!a) return {};
+  const num = a.account_number + '/' + a.bank_code;
+  let iban = a.iban ? String(a.iban).replace(/\s+/g, '') : '';
+  if (!iban) { try { iban = require('../pdf/invoice-pdf').czAccountToIban(num) || ''; } catch (e) { iban = ''; } }
+  return { partner_bank_account: num.slice(0, 50), partner_iban: iban ? iban.slice(0, 34) : null };
 }
 
 /** Ručně označí fakturu splátky jako odeslanou (čeká na platbu) / vrátí na vystavenou. */
@@ -317,4 +329,4 @@ const TEMPLATES = [
   { key: '100_after', label: '100 % po dodání', rows: [{ milestone: 'after_delivery', kind: 'final', percent: 100 }] },
 ];
 
-module.exports = { MILESTONES, MILESTONE_LABEL, TEMPLATES, getPlan, savePlan, issueInvoiceForPayment, setPaid, setSent, amountOf, baseOf };
+module.exports = { paymentAccountFields, MILESTONES, MILESTONE_LABEL, TEMPLATES, getPlan, savePlan, issueInvoiceForPayment, setPaid, setSent, amountOf, baseOf };
