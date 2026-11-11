@@ -89,6 +89,20 @@
 
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 9999; display: flex; align-items: center; justify-content: center; }
     .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: 600px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+    /* Náhled PDF objednávky vedle detailu (jako kontrola dokladu v Účetních dokladech) — modal se posune doleva */
+    #order-pane { position: fixed; top: 2vh; right: 1vw; width: calc(49vw - 12px); height: 96vh; box-sizing: border-box; z-index: 10000; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+    #order-pane .op-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    #order-pane .op-title { font-weight: 600; }
+    #order-pane .op-btns { display: flex; gap: 6px; align-items: center; }
+    #order-pane .op-btns a { text-decoration: none; }
+    #order-pane .op-frame { flex: 1; width: 100%; border: 0; background: #fff; }
+    body.order-pane-on .modal-overlay { justify-content: flex-start; align-items: flex-start; padding: 2vh 0 0 1vw; }
+    body.order-pane-on .modal { max-width: calc(50vw - 24px) !important; width: calc(50vw - 24px) !important; height: 96vh; max-height: 96vh; box-sizing: border-box; }
+    @media (max-width: 900px) {
+      #order-pane { top: auto; bottom: 1vh; left: 2vw; right: 2vw; width: auto; height: 49vh; }
+      body.order-pane-on .modal-overlay { align-items: flex-start; padding: 1vh 0 0; justify-content: center; }
+      body.order-pane-on .modal { width: 96vw !important; max-width: 96vw !important; height: 47vh; max-height: 47vh; }
+    }
     .modal h2 { margin: 0 0 20px; font-size: 18px; }
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .form-group { display: flex; flex-direction: column; gap: 4px; }
@@ -2952,7 +2966,7 @@
 
           '<div class="modal-actions" style="margin-top:20px;">' +
             '<div style="flex:1;"></div>' +
-            '<button class="btn btn-secondary" onclick="window.open(\'/api/wh/orders/' + id + '/confirmation-pdf?fresh=1&download=1\', \'_blank\')" title="Vygeneruje objednávku podle šablony (Šablony dokumentů → Potvrzená objednávka) z aktuálních dat a stáhne PDF">📄 Objednávka</button>' +
+            '<button class="btn btn-secondary" onclick="openOrderPane(' + id + ')" title="Zobrazí objednávku podle šablony (Šablony dokumentů) vedle detailu; odtud ji lze i stáhnout">📄 Objednávka</button>' +
             // Fáze 6 — Vystavit fakturu (jen pro objednávky, které mají položky a nejsou cancelled)
             ((order.items && order.items.length > 0 && order.status !== 'cancelled')
               ? '<button class="btn btn-secondary" onclick="issueFinalInvoice(' + id + ')" title="Vystaví jen finální fakturu (zálohové faktury se vystavují tlačítky u jednotlivých splátek)">💼 Finální faktura</button>'
@@ -4224,7 +4238,33 @@
       }
     }
 
-    function closeModal() { document.getElementById('modal-root').innerHTML = ''; _pendingItems = []; }
+    function closeModal() { closeOrderPane(); document.getElementById('modal-root').innerHTML = ''; _pendingItems = []; }
+
+    // Náhled PDF objednávky vedle detailu (iframe, vždy čerstvě z aktuálních dat podle šablony)
+    function openOrderPane(orderId) {
+      var pane = document.getElementById('order-pane');
+      if (!pane) { pane = document.createElement('div'); pane.id = 'order-pane'; document.body.appendChild(pane); }
+      pane.dataset.id = orderId;
+      var url = '/api/wh/orders/' + orderId + '/confirmation-pdf?fresh=1';
+      pane.innerHTML =
+        '<div class="op-head"><div class="op-title">📄 Objednávka <span style="color:var(--text2);font-weight:400;font-size:12px;">náhled podle šablony</span></div>' +
+          '<div class="op-btns">' +
+            '<button class="btn btn-secondary btn-sm" onclick="refreshOrderPane()" title="Načíst znovu (po změnách v objednávce nejdřív Ulož)">↻ Obnovit</button>' +
+            '<a class="btn btn-secondary btn-sm" href="' + url + '&download=1" title="Stáhnout PDF">⬇ Stáhnout</a>' +
+            '<a class="btn btn-secondary btn-sm" href="' + url + '" target="_blank" rel="noopener" title="Otevřít v novém okně">↗</a>' +
+            '<button class="btn btn-secondary btn-sm" onclick="closeOrderPane()" title="Zavřít náhled">✕</button>' +
+          '</div></div>' +
+        '<iframe class="op-frame" id="op-frame" src="' + url + '#view=FitH" title="Náhled objednávky"></iframe>';
+      document.body.classList.add('order-pane-on');
+    }
+    function refreshOrderPane() {
+      var pane = document.getElementById('order-pane'); var f = document.getElementById('op-frame'); if (!pane || !f) return;
+      f.src = '/api/wh/orders/' + pane.dataset.id + '/confirmation-pdf?fresh=1&t=' + Date.now() + '#view=FitH';
+    }
+    function closeOrderPane() {
+      var pane = document.getElementById('order-pane'); if (pane) pane.remove();
+      document.body.classList.remove('order-pane-on');
+    }
 
     // ============================================================
     // CENIK (sales pricelist)
