@@ -1438,3 +1438,6 @@ router.post('/channels/test-sms', express.json({ limit: '10kb' }), async (req, r
 
 module.exports = router;
 module.exports.PAGES = PAGES;
+module.exports.metaCfg = metaCfg;      // pro administraci hry (denní výdaje na reklamu)
+module.exports.metaGraph = graph;
+module.exports.loadFunnels = loadFunnels;

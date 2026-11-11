@@ -125,6 +125,9 @@
         <div class="tbl-wrap"><table class="data-table" id="st-retence"></table></div>
         <h3 style="font-size:14px;margin:22px 0 10px">Den po dni</h3>
         <div class="chart" id="st-chart"></div>
+        <h3 style="font-size:14px;margin:26px 0 10px">Reklama: výdaje vs. tržby po dnech <span class="note">(výdaje z Facebook reklamy funnelu Tycoon, tržba ze hry bez DPH)</span></h3>
+        <div class="kpis" id="rk-kpis"></div>
+        <div class="tbl-wrap" style="margin-top:12px"><table class="data-table" id="rk-tbl"></table></div>
         <h3 style="font-size:14px;margin:26px 0 10px">Provoz právě teď <span class="note" id="pv-cas"></span></h3>
         <div class="kpis" id="pv-kpis"></div>
         <div class="chart" id="pv-chart" style="margin-top:14px"></div>
@@ -229,8 +232,26 @@
       var panel = document.getElementById('panel-stats');
       if (panel && panel.classList.contains('active') && !document.hidden) loadProvoz();
     }, 30000);
+    // Reklama po dnech: výdaj z Mety vs. tržba hry → zisk / ztráta
+    function loadReklama() {
+      var tb = document.getElementById('rk-tbl'), kp = document.getElementById('rk-kpis');
+      tb.innerHTML = '<tbody><tr><td class="note">Načítám…</td></tr></tbody>';
+      get('/stats/reklama?dny=' + DNY).then(function (j) {
+        var kc = function (n) { return cz(Math.round(n)) + ' Kč'; };
+        var zn = function (n) { return '<span style="color:' + (n >= 0 ? '#22c55e' : '#ef4444') + ';font-weight:700">' + (n > 0 ? '+' : '') + kc(n) + '</span>'; };
+        var s = j.souhrn || {};
+        kp.innerHTML = kpi(kc(s.vydaj || 0), 'Do reklamy za ' + j.dny + ' dní') + kpi(kc(s.trzba || 0), 'Zaplatili hráči (bez DPH)')
+          + kpi(zn(s.zisk || 0), (s.zisk || 0) >= 0 ? 'V plusu' : 'V minusu') + kpi(s.roas != null ? s.roas.toString().replace('.', ',') + '×' : '—', 'Návratnost reklamy (ROAS)');
+        var warn = j.chyba ? '<tr><td colspan="6" style="color:#f59e0b">⚠ ' + esc(j.chyba) + '</td></tr>' : '';
+        tb.innerHTML = '<thead><tr><th>Den</th><th class="num">Do reklamy</th><th class="num">Zaplatili hráči</th><th class="num">Nákupů</th><th class="num">Zisk / ztráta</th><th class="num">Kumulativně</th></tr></thead><tbody>' + warn
+          + j.rady.slice().reverse().map(function (r) {
+              return '<tr><td>' + r.den + '</td><td class="num">' + kc(r.vydaj) + '</td><td class="num">' + kc(r.trzba) + '</td><td class="num">' + cz(r.nakupu) + '</td><td class="num">' + zn(r.zisk) + '</td><td class="num">' + zn(r.kumulativne) + '</td></tr>';
+            }).join('') + '</tbody>';
+      }).catch(function (e) { tb.innerHTML = '<tbody><tr><td style="color:#ef4444">Chyba: ' + esc(e.message || e) + '</td></tr></tbody>'; });
+    }
     function loadStats() {
       loadProvoz();
+      loadReklama();
       get('/stats?dny=' + DNY).then(function (j) {
         var s = j.souhrn;
         document.getElementById('st-kpis').innerHTML =
