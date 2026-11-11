@@ -123,11 +123,17 @@ module.exports = function mountOffers(app, ctx) {
   }));
 
   // ── Veřejná stránka nabídky ──
-  app.get('/nabidka/:token([a-f0-9]{32})', async (req, res) => {
+  // Odeslání pohybu na stránce (sekce, čas, scroll, kliky, videa) → HolyOS
+  app.post('/nabidka/:token([a-f0-9]{32})/ev', async (req, res) => {
+    if (rateLimited && rateLimited('offev:' + req.ip, 600, 3600e3)) return res.status(429).end();
+    try { await hos('POST', '/public/' + req.params.token + '/events', req.body || {}); res.status(204).end(); } catch (e) { res.status(e.status || 502).end(); }
+  });
+  // Každá nabídka má vlastní adresu: /nabidka/<firma>/<token> (i krátká /nabidka/<token>)
+  app.get(['/nabidka/:slug([a-z0-9-]{1,40})/:token([a-f0-9]{32})', '/nabidka/:token([a-f0-9]{32})'], async (req, res) => {
     let o;
     try { o = (await hos('GET', '/public/' + req.params.token + (req.query.preview === '1' ? '?track=0' : ''))).offer; }
     catch (e) { return res.status(e.status === 404 ? 404 : 502).type('html').send(layout({ title: 'Nabídka', back: false, body: `<div class="card" style="max-width:560px;margin:40px auto"><h1 style="margin-top:0">${e.status === 404 ? 'Nabídka nenalezena' : 'Nabídka je dočasně nedostupná'}</h1><p class="muted">${e.status === 404 ? 'Odkaz už neplatí nebo je neúplný.' : 'Zkuste to prosím za chvíli.'}</p></div>` })); }
-    res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex, nofollow').type('html').send(require('./lm-offer-page').offerPage(o, req.params.token));
+    res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex, nofollow').type('html').send(require('./lm-offer-page').offerPage(o, req.params.token, { preview: req.query.preview === '1' }));
   });
   app.post('/nabidka/:token([a-f0-9]{32})/zajem', js, async (req, res) => {
     if (rateLimited && rateLimited('offer:' + req.ip, 10, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho pokusů.' });
@@ -196,14 +202,24 @@ function req(u,b){return fetch(u,{method:b===undefined?'GET':'POST',headers:b===
 function e(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function dt(s){return s?new Date(s).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';}
 var ST={draft:'koncept',sent:'odesláno',viewed:'otevřeno',interested:'má zájem'};
-function link(o){return location.origin+'/nabidka/'+o.token;}
+function slug(c){return String(c||'nabidka').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40)||'nabidka';}
+function link(o){return location.origin+'/nabidka/'+slug(o.company)+'/'+o.token;}
 function renderList(){var w=P.querySelector('.of-list');if(!list){w.innerHTML='<div class="muted">Načítám…</div>';return;}
  if(!list.length){w.innerHTML='<div class="muted">Zatím žádná nabídka. Klikněte na „+ Nová nabídka“.</div>';return;}
  w.innerHTML='<table class="of-tbl"><thead><tr><th>Společnost</th><th>Kontakt</th><th>Jazyk</th><th>Stav</th><th>Odesláno</th><th>Otevřeno</th><th>Zájem</th><th></th></tr></thead><tbody>'+list.map(function(o){
   return '<tr><td><b>'+e(o.company)+'</b><div class="muted small">'+e(o.title||'')+'</div></td><td>'+e(o.contact_name||'')+'<div class="muted small">'+e(o.contact_email||'—')+'</div></td><td>'+e((o.lang||'cs').toUpperCase())+' · '+e(o.currency||'CZK')+'</td>'
-  +'<td><span class="of-st '+e(o.status)+'">'+e(ST[o.status]||o.status)+'</span></td><td class="small">'+dt(o.sent_at)+(o.sent_count>1?' ('+o.sent_count+'×)':'')+'</td><td class="small">'+(o.viewed_at?dt(o.viewed_at)+(o.views>1?'<div class="muted">'+o.views+'× otevřeno</div>':''):'—')+'</td>'
+  +'<td><span class="of-st '+e(o.status)+'">'+e(ST[o.status]||o.status)+'</span></td><td class="small">'+dt(o.sent_at)+(o.sent_count>1?' ('+o.sent_count+'×)':'')+'</td><td class="small">'+(o.viewed_at?dt(o.viewed_at)+(o.views>1?'<div class="muted">'+o.views+'× otevřeno</div>':'')+(o.time_total?'<div class="muted">⏱ '+mm(o.time_total)+'</div>':''):'—')+'</td>'
   +'<td class="small">'+(o.interest?'<b style="color:#22c55e">'+dt(o.interest.at)+'</b><div>'+e([o.interest.name,o.interest.phone,o.interest.email].filter(Boolean).join(' · '))+'</div>'+(o.interest.note?'<div class="muted">'+e(o.interest.note)+'</div>':''):'—')+'</td>'
-  +'<td class="a"><button class="btn sec sm" data-of-edit="'+o.id+'">Upravit</button> <a class="btn sec sm" target="_blank" href="/nabidka/'+e(o.token)+'?preview=1">Náhled</a> <button class="btn sec sm" data-of-copy="'+o.id+'" title="Zkopírovat odkaz na nabídku">🔗</button> <button class="btn sm" data-of-send="'+o.id+'">'+(o.sent_at?'Odeslat znovu':'Odeslat')+'</button> <button class="btn sec sm" data-of-del="'+o.id+'" title="Smazat" style="color:#f87171">🗑</button></td></tr>';}).join('')+'</tbody></table>';}
+  +'<td class="a"><button class="btn sec sm" data-of-edit="'+o.id+'">Upravit</button> <a class="btn sec sm" target="_blank" href="/nabidka/'+slug(o.company)+'/'+e(o.token)+'?preview=1">Náhled</a> <button class="btn sec sm" data-of-act="'+o.id+'">Aktivita'+((o.visits||[]).length?' ('+o.visits.length+')':'')+'</button> <button class="btn sec sm" data-of-copy="'+o.id+'" title="Zkopírovat odkaz na nabídku">🔗</button> <button class="btn sm" data-of-send="'+o.id+'">'+(o.sent_at?'Odeslat znovu':'Odeslat')+'</button> <button class="btn sec sm" data-of-del="'+o.id+'" title="Smazat" style="color:#f87171">🗑</button></td></tr>';}).join('')+'</tbody></table>';}
+var SEC={uvod:'Úvod',provozovny:'Provozovny','o-co-jde':'O co jde','co-umi':'Co umí',prinosy:'Přínosy',pilot:'Pilot',ekonomika:'Ekonomika',video:'Videa',zajem:'Další krok / zájem'};
+function mm(sec){sec=sec||0;return sec<60?sec+' s':Math.floor(sec/60)+' min '+(sec%60)+' s';}
+function activity(o){var w=P.querySelector('.of-act');if(!w){w=document.createElement('div');w.className='of-act card';P.querySelector('.of-list').before(w);}w.style.display='';
+ var vs=o.visits||[];w.innerHTML='<div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0">Aktivita na nabídce — '+e(o.company)+'</h3><span style="flex:1"></span><button class="btn sec sm of-actclose">Zavřít</button></div>'
+ +'<div class="muted small" style="margin:6px 0 10px">Adresa nabídky: <a href="'+e(link(o))+'" target="_blank">'+e(link(o))+'</a> · '+vs.length+' návštěv · celkem '+mm(o.time_total||0)+'</div>'
+ +(vs.length?'<table class="of-tbl"><thead><tr><th>Kdy</th><th>Zařízení</th><th>Čas na stránce</th><th>Dočteno</th><th>Viděné sekce</th><th>Videa</th><th>Kliknutí / formulář</th></tr></thead><tbody>'+vs.map(function(v){
+  return '<tr><td class="small">'+dt(v.at)+(v.last&&v.last!==v.at?'<div class="muted">do '+new Date(v.last).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})+'</div>':'')+'</td><td class="small">'+e(v.device||'')+'</td><td><b>'+mm(v.secs)+'</b></td><td>'+(v.scroll||0)+' %</td>'
+  +'<td class="small">'+(v.sections||[]).map(function(x){return e(SEC[x]||x);}).join(', ')+'</td><td class="small">'+e((v.videos||[]).join(', ')||'—')+'</td><td class="small">'+e((v.clicks||[]).slice(-8).join(' · ')||'—')+(v.form?'<div style="color:#22c55e">formulář '+e(v.form)+'</div>':'')+'</td></tr>';}).join('')+'</tbody></table>':'<div class="muted">Zatím nikdo stránku neotevřel (náhled z administrace se nepočítá).</div>');
+ w.scrollIntoView({behavior:'smooth',block:'start'});}
 function load(){list=null;renderList();req('/admin/api/offers').then(function(j){list=j.offers||[];renderList();}).catch(function(er){P.querySelector('.of-list').innerHTML='<div style="color:#f87171">'+e(er.message)+'</div>';});}
 function F(n,l,v,cls,t){return '<div class="'+(cls||'')+'"><label>'+l+'</label>'+(t==='ta'?'<textarea name="'+n+'" rows="'+(cls==='w4'?10:6)+'">'+e(v)+'</textarea>':'<input name="'+n+'" value="'+e(v)+'"'+(t?' type="'+t+'"':'')+'>')+'</div>';}
 function edit(o){cur=o||{lang:'cs',currency:'CZK',sender_name:'Tomáš Holý'};var w=P.querySelector('.of-edit');w.style.display='';
@@ -228,6 +244,8 @@ P.addEventListener('click',function(ev){var t=ev.target;
  if(t.closest('.of-save')){var b=t.closest('.of-save');b.disabled=true;req('/admin/api/offers',form()).then(function(j){cur=j.offer;b.disabled=false;P.querySelector('.of-edit').style.display='none';load();}).catch(function(er){b.disabled=false;alert(er.message);});return;}
  var id;
  if((id=t.getAttribute('data-of-edit'))){var o=(list||[]).find(function(x){return x.id==id;});if(o)edit(o);return;}
+ if((id=t.getAttribute('data-of-act'))){var oa=(list||[]).find(function(x){return x.id==id;});if(oa)activity(oa);return;}
+ if(t.closest('.of-actclose')){P.querySelector('.of-act').style.display='none';return;}
  if((id=t.getAttribute('data-of-copy'))){var o2=(list||[]).find(function(x){return x.id==id;});if(o2&&navigator.clipboard)navigator.clipboard.writeText(link(o2)).then(function(){t.textContent='✓';setTimeout(function(){t.textContent='🔗';},1500);});return;}
  if((id=t.getAttribute('data-of-send'))){var o3=(list||[]).find(function(x){return x.id==id;});if(!o3)return;if(!o3.contact_email){alert('Nabídka nemá e-mail příjemce.');return;}
   if(!confirm('Odeslat nabídku „'+(o3.subject||o3.title||o3.company)+'“\\nna '+o3.contact_email+'?\\n\\nE-mail obsahuje text a odkaz na webovou nabídku.'))return;t.disabled=true;

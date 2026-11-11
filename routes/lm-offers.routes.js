@@ -24,6 +24,8 @@ const load = async () => { const v = await settings.getSetting(KEY, { type: 'jso
 const save = (list) => settings.setSetting(KEY, list.slice(0, 1000), { type: 'json' });
 const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 const num = (v) => { const x = Number(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.')); return isFinite(x) && x > 0 ? Math.round(x * 100) / 100 : null; };
+// Čitelná část adresy podle firmy: /nabidka/<slug>/<token>
+const slugOf = (c) => String(c || 'nabidka').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'nabidka';
 const LINK_LABEL = { cs: 'Zobrazit obchodní návrh', en: 'View the business proposal', pl: 'Zobacz propozycję biznesową' };
 
 // Veřejná podoba nabídky (bez interních poznámek a kontaktů na odesílatele navíc)
@@ -90,7 +92,7 @@ router.post('/:id(\\d+)/send', async (req, res, next) => {
     if (!o.contact_email) return res.status(400).json({ error: 'Chybí e-mail příjemce' });
     if (!o.intro) return res.status(400).json({ error: 'Chybí text e-mailu' });
     const base = String(process.env.LM_URL || 'https://laundromats.eu').replace(/\/$/, '');
-    const link = base + '/nabidka/' + o.token;
+    const link = base + '/nabidka/' + slugOf(o.company) + '/' + o.token;
     let from = process.env.LM_OFFER_FROM || null;
     if (!from) { try { from = await require('./compounder.routes').funnelMailFrom('schuzka', o.lang === 'pl' ? 'pl' : undefined); } catch (e) { from = null; } }
     from = from || process.env.COMPOUNDER_MAIL_FROM || undefined;
@@ -133,6 +135,33 @@ router.post('/public/:token([a-f0-9]{32})/interest', async (req, res, next) => {
     o.status = 'interested';
     await save(list);
     notifyBoss('🤝 Zájem o nabídku: ' + o.company, [o.interest.name, o.interest.phone, o.interest.email].filter(Boolean).join(' · ') + (o.interest.note ? ' — ' + o.interest.note.slice(0, 160) : ''));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// POST /public/:token/events — pohyb na stránce nabídky {visit, events:[{k, v}], scroll, secs, ua}
+// k: section (viděná sekce), click (tlačítko/odkaz), video (přehrání), form (otevření/odeslání formuláře)
+router.post('/public/:token([a-f0-9]{32})/events', async (req, res, next) => {
+  try {
+    const list = await load(); const o = list.find((x) => x.token === req.params.token);
+    if (!o) return res.status(404).json({ error: 'Nabídka nenalezena' });
+    const b = req.body || {}; const vid = s(b.visit, 40); if (!/^[a-z0-9-]{6,40}$/.test(vid)) return res.status(400).json({ error: 'Chybí návštěva' });
+    o.visits = Array.isArray(o.visits) ? o.visits : [];
+    let v = o.visits.find((x) => x.id === vid);
+    const now = new Date().toISOString();
+    if (!v) { v = { id: vid, at: now, last: now, secs: 0, scroll: 0, sections: [], clicks: [], videos: [], form: null, ua: s(b.ua, 160), device: /mobi|android|iphone/i.test(String(b.ua || '')) ? 'mobil' : 'počítač' }; o.visits.unshift(v); o.visits = o.visits.slice(0, 100); }
+    v.last = now;
+    const secs = Number(b.secs); if (isFinite(secs) && secs >= 0) v.secs = Math.max(v.secs || 0, Math.min(Math.round(secs), 6 * 3600));
+    const sc = Number(b.scroll); if (isFinite(sc)) v.scroll = Math.max(v.scroll || 0, Math.min(100, Math.round(sc)));
+    (Array.isArray(b.events) ? b.events.slice(0, 50) : []).forEach((e) => {
+      const k = s(e && e.k, 20), val = s(e && e.v, 80); if (!val) return;
+      if (k === 'section' && !v.sections.includes(val)) v.sections.push(val);
+      else if (k === 'click') { v.clicks.push(val); v.clicks = v.clicks.slice(-40); }
+      else if (k === 'video' && !v.videos.includes(val)) v.videos.push(val);
+      else if (k === 'form') v.form = val;
+    });
+    o.time_total = o.visits.reduce((a, x) => a + (x.secs || 0), 0);
+    await save(list);
     res.json({ ok: true });
   } catch (e) { next(e); }
 });

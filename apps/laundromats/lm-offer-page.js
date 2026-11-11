@@ -100,7 +100,8 @@ function splitTitle(title) {
   return m ? [m[1], m[2]] : [String(title || ''), ''];
 }
 
-function offerPage(o, token) {
+function offerPage(o, token, opts) {
+  const preview = !!(opts && opts.preview);
   const L = o.lang === 'en' ? 'en' : o.lang === 'pl' ? 'pl' : 'cs', t = T[L], X = EXTRA[L];
   const c = esc(o.company || '');
   const pts = String(o.points || '').split('\n').map((x) => x.replace(/^[-•*\s]+/, '').trim()).filter(Boolean);
@@ -111,7 +112,7 @@ function offerPage(o, token) {
   const [h1a, h1b] = splitTitle(o.title || t.kick);
   const kick = (x) => `<div class="kicker">— ${esc(x)}</div>`;
   const kpi = (lbl, val, sub) => `<div class="k"><div class="kl">${esc(lbl)}</div><div class="kv">${val}</div>${sub ? `<div class="ks">${sub}</div>` : ''}</div>`;
-  const eco = units && price ? `<section class="sec" id="eko">${kick(X.eco)}<h2>${esc(t.ecoH)}</h2><p class="sub">${esc(t.ecoSub)}</p><div class="eco">
+  const eco = units && price ? `<section class="sec" id="eko" data-s="ekonomika">${kick(X.eco)}<h2>${esc(t.ecoH)}</h2><p class="sub">${esc(t.ecoSub)}</p><div class="eco">
     <div class="kpis">${kpi(t.units, String(units), o.model ? esc(t.model + ' ' + o.model) : '')}${kpi(t.inv, money(invest, o.currency), money(price, o.currency) + ' ' + esc(t.unit))}${mon ? kpi(t.mon, money(monAll, o.currency), money(mon, o.currency) + ' ' + esc(t.monU)) + kpi(t.pay, '≈ ' + Math.ceil(invest / monAll) + ' ' + esc(t.months), '') + kpi(t.y5, money(monAll * 60 - invest, o.currency), '') : ''}</div>
     ${mon ? `<div class="chart"><div class="ph">${esc(t.chart)}</div>${chartSvg(invest, monAll, t)}</div>` : ''}<p class="fine">${esc(t.vat)}</p></div></section>` : '';
   const body = `<style>
@@ -160,7 +161,7 @@ function offerPage(o, token) {
 @media (max-width:900px){.ox .hero{grid-template-columns:1fr;gap:30px;padding-top:24px}.ox .visual{justify-self:center;max-width:400px}.ox .statcard{left:0}.ox .g3,.ox .models,.ox .sites{grid-template-columns:1fr}.ox .two{grid-template-columns:1fr}.ox .eco,.ox .cta{padding:24px}}
 </style>
 <div class="ox">
-  <section class="hero"><div>
+  <section class="hero" data-s="uvod"><div>
       <span class="eyebrow"><i></i>${esc(X.eyebrow)}</span>
       <h1><span>${esc(h1a)}</span>${h1b ? `<span class="grad">${esc(h1b)}</span>` : ''}</h1>
       <p class="lead">${esc(o.perex || t.heroSub(o.company || ''))}</p>
@@ -172,27 +173,27 @@ function offerPage(o, token) {
       <div class="statcard">${units ? `<b>${units}</b><p>${esc(X.statTxt(units, o.company || ''))}</p>` : `<b>70+</b><p>${esc(X.statAlt)}</p>`}</div></div>
   </section>
 
-  ${refs.length ? `<section class="sec" style="padding-top:20px">${kick(X.sites)}<div class="sites">${refs.map((r) => `<figure class="site">${r[2] ? `<img src="${esc(r[2])}" alt="${esc(r[0])}" loading="lazy">` : ''}<figcaption>${PIN}${esc(r[0])}</figcaption>${r[1] ? `<small>${esc(r[1])}</small>` : ''}</figure>`).join('')}</div></section>` : ''}
+  ${refs.length ? `<section class="sec" data-s="provozovny" style="padding-top:20px">${kick(X.sites)}<div class="sites">${refs.map((r) => `<figure class="site">${r[2] ? `<img src="${esc(r[2])}" alt="${esc(r[0])}" loading="lazy">` : ''}<figcaption>${PIN}${esc(r[0])}</figcaption>${r[1] ? `<small>${esc(r[1])}</small>` : ''}</figure>`).join('')}</div></section>` : ''}
 
-  <section class="sec" id="o-co-jde">${kick(X.what)}<h2>${esc(t.whatH)}</h2><p class="sub">${esc(t.whatSub)}</p>
+  <section class="sec" id="o-co-jde" data-s="o-co-jde">${kick(X.what)}<h2>${esc(t.whatH)}</h2><p class="sub">${esc(t.whatSub)}</p>
     <div class="grid g3">${t.steps.map((s, i) => `<div class="card step"><div class="n">${i + 1}</div><h3>${esc(s[1])}</h3><p>${esc(s[2])}</p></div>`).join('')}</div></section>
 
-  <section class="sec">${kick(X.can)}<h2>${esc(t.canH)}</h2><p class="sub">${esc(t.canSub)}</p>
+  <section class="sec" data-s="co-umi">${kick(X.can)}<h2>${esc(t.canH)}</h2><p class="sub">${esc(t.canSub)}</p>
     <div class="grid g3">${t.can.map((s) => `<div class="card"><div class="ico">${s[0]}</div><h3>${esc(s[1])}</h3><p>${esc(s[2])}</p></div>`).join('')}</div>
     <div class="models">${['mini', 'flex', 'max'].map((m) => `<figure><img src="/img/model/${m}" alt="${m.toUpperCase()}" loading="lazy"><figcaption>${m.toUpperCase()}</figcaption></figure>`).join('')}</div></section>
 
-  <section class="sec">${kick(X.ben)}<h2>${esc(t.benH)}</h2>
+  <section class="sec" data-s="prinosy">${kick(X.ben)}<h2>${esc(t.benH)}</h2>
     <div class="grid g3">${t.ben(o.company || '').map((b) => `<div class="path"><div class="ico">${b[0]}</div><h3>${esc(b[1])}</h3><ul>${b[2].map((x) => `<li>${CHK}<span>${esc(x)}</span></li>`).join('')}</ul></div>`).join('')}</div></section>
 
-  ${pts.length ? `<section class="sec">${kick(X.pilot)}<h2>${esc(t.pilotH)}</h2><p class="sub">${esc(t.pilotSub)}</p><div class="tl">${pts.map((x) => `<div class="it"><span>${esc(x)}</span></div>`).join('')}</div></section>` : ''}
+  ${pts.length ? `<section class="sec" data-s="pilot">${kick(X.pilot)}<h2>${esc(t.pilotH)}</h2><p class="sub">${esc(t.pilotSub)}</p><div class="tl">${pts.map((x) => `<div class="it"><span>${esc(x)}</span></div>`).join('')}</div></section>` : ''}
 
   ${eco}
 
-  <section class="sec">${kick(X.vid)}<h2>${esc(t.vidH)}</h2><div class="vids">
+  <section class="sec" data-s="video">${kick(X.vid)}<h2>${esc(t.vidH)}</h2><div class="vids">
     <figure><video src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" controls playsinline preload="none"></video><figcaption>${esc(t.vid1)}</figcaption></figure>
     <figure><video src="/media/krok.mp4" poster="/media/krok-poster.jpg" controls playsinline preload="none"></video><figcaption>${esc(t.vid2)}</figcaption></figure></div></section>
 
-  <section class="sec" id="zajem">${kick(X.cta)}<div class="cta"><h2>${esc(t.ctaH)}</h2><p class="sub" style="margin-bottom:20px">${esc(t.ctaSub)}</p>
+  <section class="sec" id="zajem" data-s="zajem">${kick(X.cta)}<div class="cta"><h2>${esc(t.ctaH)}</h2><p class="sub" style="margin-bottom:20px">${esc(t.ctaSub)}</p>
     ${o.interest ? `<p style="margin:0;font-weight:700">✓ ${esc(t.done)}</p>` : `<button class="btn btn-p" type="button" id="of-open">${esc(t.cta)} →</button>
     <form id="of-form" style="display:none;margin-top:4px"><div class="two"><div><label>${esc(t.name)}</label><input name="name" required maxlength="120"></div><div><label>${esc(t.phone)}</label><input name="phone" maxlength="40"></div></div>
       <label>${esc(t.email)}</label><input name="email" type="email" maxlength="160"><label>${esc(t.note)}</label><textarea name="note" rows="3" maxlength="1500"></textarea>
@@ -203,7 +204,22 @@ function offerPage(o, token) {
 <script>(function(){var b=document.getElementById('of-open'),f=document.getElementById('of-form');if(!b)return;b.onclick=function(){f.style.display='';b.style.display='none';f.querySelector('input').focus();};
 f.onsubmit=function(e){e.preventDefault();var m=document.getElementById('of-msg'),d={};new FormData(f).forEach(function(v,k){d[k]=v;});f.querySelector('button').disabled=true;
 fetch('/nabidka/${token}/zajem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(function(r){if(!r.ok)throw 0;f.outerHTML='<p style="margin:0;font-weight:700">✓ ${esc(t.thanks).replace(/'/g, "\\'")}</p>';}).catch(function(){m.textContent='${esc(t.err).replace(/'/g, "\\'")}';f.querySelector('button').disabled=false;});};})();<\/script>`;
-  return layout({ title: (o.title || t.kick) + ' — ' + (o.company || ''), back: false, body }).replace('<html lang="cs">', '<html lang="' + L + '">');
+  // Sledování pohybu na stránce (každá nabídka má vlastní adresu → víme, kdo a jak dlouho ji čte). Náhled z administrace se nesleduje.
+  const TRACK = preview ? '' : `<script>(function(){var T='${token}',V=(Date.now().toString(36)+Math.random().toString(36).slice(2,8)),q=[],secs=0,sc=0,last=Date.now(),seen={};
+function tick(){var n=Date.now();if(!document.hidden)secs+=Math.min(n-last,30000)/1000;last=n;}
+function scr(){var h=document.documentElement,p=(h.scrollTop+innerHeight)/Math.max(1,h.scrollHeight)*100;if(p>sc)sc=p;}
+function send(fin){tick();var b=JSON.stringify({visit:V,secs:Math.round(secs),scroll:Math.round(sc),events:q.splice(0),ua:navigator.userAgent});
+try{fetch('/nabidka/'+T+'/ev',{method:'POST',headers:{'Content-Type':'application/json'},body:b,keepalive:true});}catch(e){}}
+addEventListener('scroll',scr,{passive:true});scr();
+if('IntersectionObserver' in window){var io=new IntersectionObserver(function(es){es.forEach(function(e){var k=e.target.getAttribute('data-s');if(e.isIntersecting&&!seen[k]){seen[k]=1;q.push({k:'section',v:k});}});},{threshold:.35});document.querySelectorAll('[data-s]').forEach(function(x){io.observe(x);});}
+document.addEventListener('click',function(e){var a=e.target.closest('a,button');if(a)q.push({k:'click',v:(a.textContent||a.getAttribute('href')||'').trim().slice(0,60)});});
+document.querySelectorAll('video[controls]').forEach(function(v){v.addEventListener('play',function(){q.push({k:'video',v:(v.closest('figure')&&v.closest('figure').textContent.trim())||v.getAttribute('src')});});});
+var f=document.getElementById('of-form');if(f){var o=document.getElementById('of-open');if(o)o.addEventListener('click',function(){q.push({k:'form',v:'otevřen'});});f.addEventListener('submit',function(){q.push({k:'form',v:'odeslán'});send();});}
+document.addEventListener('visibilitychange',function(){tick();if(document.hidden)send(1);});setInterval(function(){if(!document.hidden)send();},15000);setTimeout(send,3000);addEventListener('pagehide',function(){send(1);});})();<\/script>`;
+  let html = layout({ title: (o.title || t.kick) + ' — ' + (o.company || ''), back: false, body: body + TRACK }).replace('<html lang="cs">', '<html lang="' + L + '">');
+  // Nabídka je samostatná stránka: bez menu webu a bez čísla verze (zůstává logo a přepínač jazyka)
+  html = html.replace(/<nav class="lnav"[\s\S]*?<\/nav>/, '').replace(/<span class="lsp">[\s\S]*?<!--\/PRIV--><\/span>/, '<span class="lsp"></span>').replace(/(<a class="brand") href="[^"]*"/, '$1 href="#"');
+  return html;
 }
 
 module.exports = { offerPage, REFS, T };
