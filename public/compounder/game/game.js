@@ -937,10 +937,27 @@ function mesicniSplatka() {
 var RAMEC_ZA_MISTO = 1200000;     // o kolik limit povyroste s každým doplaceným místem
 var RAMEC_KRYTI = 1.0;            // pod tímhle pokrytím je místo pod vodou
 var RAMEC_LHUTA = YEAR_MS;        // jak dlouho smí být síť slabá, než rámec padne
-function doplacenychMist() { return (S.stats && S.stats.splacenoMist) || 0; }
+// Doplacené místo = stojící prádlomat, na kterém nevisí žádný nesplacený úvěr.
+// Počítá se z toho, co hráč má teď, ne z historie: započítá se i prádlomat
+// koupený za hotové (na tom taky nic nedluží) a místo financované dvěma úvěry
+// — na stroj a na přípojky — se počítá jednou, ne dvakrát. Když doplacené
+// místo prodá, ubude; rámec je živé číslo, ne medaile za minulost.
+function doplacenychMist() {
+  var dluzi = {};
+  (S.loans || []).forEach(function (l) { if (l.spotId && l.zbyva > 0) dluzi[l.spotId] = 1; });
+  var videno = {};
+  var n = 0;
+  (S.units || []).forEach(function (u) {
+    if (!u.spotId || dluzi[u.spotId] || videno[u.spotId]) return;
+    videno[u.spotId] = 1; n++;
+  });
+  return n;
+}
 function maRamec() { return !!(S.ramec && S.ramec.limit > 0 && !S.ramec.zavreny); }
 function ramecLze() { return !maSkraloup() && doplacenychMist() >= 2; }
 // Doplacený prádlomat — na tom stojí cesta k rámcovému úvěru.
+// Jen do statistik — kolik úvěrů na místa už hráč dotáhl do konce. Rámec se
+// podle toho neřídí, ten se dívá na dnešek (viz doplacenychMist).
 function zapisDoplacene(l) {
   if (l && l.spotId) S.stats.splacenoMist = (S.stats.splacenoMist || 0) + 1;
 }
