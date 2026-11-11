@@ -3250,6 +3250,19 @@ router.put('/serial-series/:id', async (req, res, next) => {
     res.json(serialSeriesView(await prisma.productionSerialSeries.update({ where: { id }, data })));
   } catch (err) { next(err); }
 });
+// Seznam vydaných čísel této řady (podle země určení) a objednávek, ke kterým patří
+router.get('/serial-series/:id/issued', async (req, res, next) => {
+  try {
+    const s = await prisma.productionSerialSeries.findUnique({ where: { id: parseInt(req.params.id, 10) } });
+    if (!s) return res.status(404).json({ error: 'Řada nenalezena' });
+    const items = await prisma.orderItem.findMany({
+      where: { destination_country: s.country, serial_number: { not: null } },
+      select: { id: true, name: true, serial_number: true, order_id: true, order: { select: { order_number: true, status: true, company: { select: { name: true } } } } },
+      orderBy: { id: 'desc' }, take: 1000,
+    });
+    res.json(items.map((i) => ({ item_id: i.id, serial_number: i.serial_number, item_name: String(i.name || '').split('\n')[0], order_id: i.order_id, order_number: i.order && i.order.order_number, status: i.order && i.order.status, customer: i.order && i.order.company && i.order.company.name })));
+  } catch (err) { next(err); }
+});
 router.delete('/serial-series/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
