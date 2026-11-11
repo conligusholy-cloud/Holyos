@@ -236,8 +236,7 @@ function offerPage(o, token, opts) {
   <section class="sec" id="o-co-jde" data-s="spoluprace">${kick(X.coopK)}<h2>${esc(X.coopH)}</h2><p class="sub">${esc(X.coopSub(o.company || ''))}</p>
     <div class="coop"><div class="path cside"><div class="ctag">${c}</div><h3>${esc(X.coopA)}</h3><ul>${X.coopAList(o.company || '').map((x) => `<li>${CHK}<span>${esc(x)}</span></li>`).join('')}</ul></div>
       <div class="carrow" aria-hidden="true">⇄</div>
-      <div class="path cside us"><div class="ctag">Laundromats.eu</div><h3>${esc(X.coopB)}</h3><ul>${X.coopBList.map((x) => `<li>${CHK}<span>${esc(x)}</span></li>`).join('')}</ul></div></div>
-    <div class="cflow">${X.coopFlow.map((f, i) => `<div class="cf"><span class="cn">${i + 1}</span><b>${esc(f[0])}</b><small>${esc(f[1] === 'A' ? (o.company || '') : 'Laundromats.eu')}</small></div>`).join('<span class="cfa">→</span>')}</div></section>
+      <div class="path cside us"><div class="ctag">Laundromats.eu</div><h3>${esc(X.coopB)}</h3><ul>${X.coopBList.map((x) => `<li>${CHK}<span>${esc(x)}</span></li>`).join('')}</ul></div></div></section>
 
 
   <section class="sec" data-s="prinosy">${kick(X.ben)}<h2>${esc(t.benH)}</h2>
