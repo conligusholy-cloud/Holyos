@@ -15,10 +15,23 @@ const { buildShareUrl } = require('../share-url');
 
 // Odeslání přes stejného odesílatele jako potvrzení objednávky (Graph send-as z e-mailu naší firmy);
 // bez `from` by e-mail nešel nikam, když není nastavený SMTP.
+// Odesílatel: info@bestseries.cz (env IT_MAIL_FROM), grafika Prádlomaty. Když schránka nemá oprávnění
+// odesílat (Graph), zkusí se záložní adresa (e-mail naší firmy / COMPOUNDER_MAIL_FROM / SMTP_FROM).
 async function mail(opts) {
+  const { sendMail } = require('../email');
   let our = null; try { our = await require('../settings').getOurCompany(); } catch (e) { /* */ }
-  const from = (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || undefined;
-  return require('../email').sendMail(Object.assign({ from, fromName: (our && our.name) || 'Best Series s.r.o.', brand: 'compounder' }, opts));
+  const primary = process.env.IT_MAIL_FROM || 'info@bestseries.cz';
+  const fallback = (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || undefined;
+  const base = Object.assign({ fromName: 'Best Series — Prádlomaty', brand: 'pradlomaty', lang: 'cs' }, opts);
+  const r = await sendMail(Object.assign({}, base, { from: primary }));
+  if (r && r.sent) return r;
+  if (fallback && fallback.toLowerCase() !== primary.toLowerCase()) {
+    console.warn('[it-request] odeslání z ' + primary + ' selhalo (' + (r && (r.error || r.skipped)) + '), zkouším ' + fallback);
+    const r2 = await sendMail(Object.assign({}, base, { from: fallback }));
+    if (r2 && r2.sent) return r2;
+    return Object.assign({}, r2, { error: 'z ' + primary + ': ' + ((r && (r.error || r.skipped)) || '?') + ' | ze ' + fallback + ': ' + ((r2 && (r2.error || r2.skipped)) || '?') });
+  }
+  return r;
 }
 function mailErr(res) { return res && !res.sent ? (res.error || res.skipped || 'e-mail se neodeslal') : null; }
 
@@ -135,7 +148,7 @@ async function sendToCustomer(orderId, opts = {}) {
   const body = 'Dobrý den,\n\nk Vaší objednávce ' + order.order_number + ' potřebujeme zjistit několik technických informací o místě instalace (internet, elektřina, kontaktní osoba). '
     + 'Prosíme o vyplnění krátkého formuláře nejpozději do ' + dueTxt + ' (do ' + dueDays + ' dnů), ať můžeme instalaci včas připravit.\n\n'
     + 'Vyplnění zabere pár minut. Odpovědi jde zadat jedním odkazem bez přihlášení.\n\nDěkujeme.\n' + ourName;
-  const res = await mail({ audience: 'customer', to: email, subject: 'IT požadavky k objednávce ' + order.order_number + ' — prosíme o vyplnění do ' + dueTxt, body, link: url, linkLabel: 'Vyplnit IT požadavky', fromName: ourName });
+  const res = await mail({ audience: 'customer', to: email, subject: 'IT požadavky k objednávce ' + order.order_number + ' — prosíme o vyplnění do ' + dueTxt, body, link: url, linkLabel: 'Vyplnit IT požadavky' });
   try { require('../order-events').logOrderEvent(orderId, { type: 'it_request_sent', label: 'IT požadavky odeslány zákazníkovi', detail: email + ' · vyplnit do ' + dueTxt + (res && res.sent ? '' : ' · e-mail se NEODESLAL' + (res && (res.error || res.skipped) ? ' (' + (res.error || res.skipped) + ')' : '')), actor: opts.actor || 'uživatel' }); } catch (e) { /* nekritické */ }
   return { request: req, url, sent: !!(res && res.sent), mail_error: res && !res.sent ? (res.error || res.skipped || 'e-mail se neodeslal') : null, due_at: due };
 }
@@ -243,7 +256,7 @@ async function sendDueNayaxMails() {
       const evt = (label, detail) => require('../order-events').logOrderEvent(m.order_id, { type: 'nayax_mail', label, detail, actor: 'systém' });
       if (!email) { await evt('E-mail se zakládáním Nayax účtu nelze odeslat — chybí e-mail zákazníka'); continue; }
       const cust = (order.company && order.company.name) || '';
-      const res = await mail({ audience: 'customer', to: email, subject: fillNayax(s.nayax_subject, order.order_number, cust), body: fillNayax(s.nayax_body, order.order_number, cust) });
+      const res = await mail({ audience: 'customer', to: email, subject: fillNayax(s.nayax_subject, order.order_number, cust), body: fillNayax(s.nayax_body, order.order_number, cust), link: 'https://pradlomaty.info', linkLabel: 'pradlomaty.info' });
       await prisma.orderNayaxMail.update({ where: { id: m.id }, data: { to_email: email, error: res && res.sent ? null : String((res && (res.error || res.skipped)) || 'neodesláno') } });
       await evt(res && res.sent ? 'Odeslán e-mail se zakládáním Nayax účtu' : 'E-mail se zakládáním Nayax účtu se NEODESLAL', email + (res && res.sent ? '' : ' · ' + ((res && (res.error || res.skipped)) || '')));
       if (res && res.sent) sent++;
@@ -256,7 +269,7 @@ async function sendNayaxTest(email, body) {
   if (!/^\S+@\S+\.\S+$/.test(to)) { const e = new Error('Zadej platný e-mail'); e.status = 400; throw e; }
   const s = await getSettings(); const { sendMail } = require('../email');
   const subj = (body && body.nayax_subject) || s.nayax_subject; const txt = (body && body.nayax_body) || s.nayax_body;
-  const res = await mail({ to, subject: '[TEST] ' + fillNayax(subj, 'SO-TEST', 'Ukázková firma s.r.o.'), body: fillNayax(txt, 'SO-TEST', 'Ukázková firma s.r.o.') });
+  const res = await mail({ to, subject: '[TEST] ' + fillNayax(subj, 'SO-TEST', 'Ukázková firma s.r.o.'), body: fillNayax(txt, 'SO-TEST', 'Ukázková firma s.r.o.'), link: 'https://pradlomaty.info', linkLabel: 'pradlomaty.info' });
   return { ok: true, sent: !!(res && res.sent), error: res && !res.sent ? (res.error || res.skipped) : null };
 }
 

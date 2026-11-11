@@ -344,4 +344,27 @@ router.get('/ref/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ─── AI poradce ──────────────────────────────────────────────────────────────
+// POST /poradce { otazka, stav, historie } → { ok, text }
+// Stav hry posílá klient — hra běží v prohlížeči a tohle je jediné místo, kde
+// jsou čísla úplná (i pro hráče bez účtu). Každé zavolání stojí peníze, proto
+// limit na IP: 20 dotazů za hodinu, 60 za den.
+router.post('/poradce', express.json({ limit: '24kb' }), async (req, res) => {
+  try {
+    const ip = ipOf(req);
+    if (rateLimited('poradce-h:' + ip, 20, 3600e3) || rateLimited('poradce-d:' + ip, 60, 24 * 3600e3)) {
+      return res.json({ ok: false, error: 'Na dnešek už toho bylo dost otázek. Zkus to za chvíli.' });
+    }
+    const b = req.body || {};
+    const otazka = String(b.otazka || '').trim();
+    if (!otazka) return res.json({ ok: false, error: 'Napiš, na co se chceš zeptat.' });
+    const { poradit } = require('../services/game/poradce');
+    const out = await poradit({ otazka, stav: b.stav, historie: b.historie });
+    res.json(out);
+  } catch (e) {
+    console.warn('[poradce]', e && e.message);
+    res.json({ ok: false, error: 'Poradce teď nemůže odpovědět.' });
+  }
+});
+
 module.exports = router;
