@@ -967,6 +967,61 @@ function ramecNavrh() {
   return Math.max(0, Math.round(Math.min(podleHistorie,
     stropPodleZisku(monthlyProfit() - splatkyMesicne(), podleHistorie)) / 10000) * 10000);
 }
+// ─── Přehodnocení rámce ──────────────────────────────────────────────────────
+// Rámec není jednou provždy. Banka ho jednou za herní měsíc srovná s tím, jak
+// si firma vede: doplacené prádlomaty ho zvedají, ztracený zisk nebo narostlé
+// splátky ho srážejí. Nikdy ale ne pod to, co už je načerpané — na vrácení
+// peněz, které hráč dostal, nikdo tlačit nebude. Stejně tak se dá o
+// přehodnocení říct kdykoli ručně.
+var RAMEC_KROK = 50000;           // menší pohyb než tenhle neřešíme
+var RAMEC_PAD_MAX = 0.25;         // naráz banka nesebere víc než čtvrtinu limitu
+// Z čeho se limit skládá: historie (doplacená místa) a co firma unese.
+function ramecSlozky() {
+  var podleHistorie = RAMEC_ZA_MISTO * Math.max(1, doplacenychMist() - 1);
+  var podleZisku = Math.max(0, Math.round(stropPodleZisku(monthlyProfit() - splatkyMesicne(), podleHistorie)));
+  return { historie: podleHistorie, zisk: podleZisku,
+    cil: Math.round(Math.min(podleHistorie, podleZisku) / 10000) * 10000 };
+}
+function prehodnotRamec(rucne) {
+  if (!maRamec()) return null;
+  var sl = ramecSlozky();
+  var cerp = ramecCerpano();
+  var stary = Math.round(S.ramec.limit || 0);
+  // Hodnocení z pohovoru si rámec nese dál — kdo u rizikoře uspěl, má výhodu
+  // i při přehodnocení.
+  var koef = stary > 0 && S.ramec.puvodniCil ? stary / S.ramec.puvodniCil : 1;
+  var cil = Math.round(sl.cil * Math.max(0.5, Math.min(1.5, koef)) / 10000) * 10000;
+  // Dolů jen pomalu a nikdy pod načerpané.
+  var dolniMez = Math.max(cerp, Math.round(stary * (1 - RAMEC_PAD_MAX)));
+  var novy = cil >= stary ? cil : Math.max(dolniMez, cil);
+  novy = Math.round(novy / 10000) * 10000;
+  if (novy < cerp) novy = Math.ceil(cerp / 10000) * 10000;
+  S.ramec.prehodnoceno = Date.now();
+  S.ramec.puvodniCil = S.ramec.puvodniCil || sl.cil || stary;
+  // Když si o přehodnocení řekne hráč sám, banka limit nesníží — to si nechá
+  // na pravidelnou revizi jednou za herní měsíc. Jinak by se nikdo neptal.
+  if (rucne && novy < stary) {
+    save();
+    toast('Na víc to teď není. ' + (sl.zisk < sl.historie
+      ? 'Limit drží výdělek sítě — zvedni zisk nebo sniž splátky.'
+      : 'Limit drží historie — doplať další prádlomat.'), 'err');
+    return { zmena: 0, limit: stary };
+  }
+  if (Math.abs(novy - stary) < RAMEC_KROK) {
+    if (rucne) toast('Banka limit přepočítala a nechala ho beze změny.', 'ok');
+    save();
+    return { zmena: 0, limit: stary };
+  }
+  S.ramec.limit = novy;
+  save();
+  if (novy > stary) {
+    toast('Banka ti zvedla rámec na ' + kcFull(novy) + ' (+' + kcFull(novy - stary) + ').', 'ok');
+  } else {
+    toast('Banka snížila rámec na ' + kcFull(novy) + '. Načerpané peníze ti nebere, '
+      + 'jen z rámce ubylo volné místo.', 'err');
+  }
+  return { zmena: novy - stary, limit: novy };
+}
 // Místa, která nevydělají ani na svou splátku.
 function slabaMista() {
   return S.units.filter(function (u) {
@@ -1728,6 +1783,7 @@ function tick() {
     else S.splatkyAt += mesicu * MONTH_MS;
     for (var i = 0; i < mesicu; i++) mesicniSplatka();
     hlidejKrach();
+    prehodnotRamec();          // banka se na limit podívá každý herní měsíc
   }
   deliverOrders();
   hlidejVypovedMajitele(dt);
@@ -6642,7 +6698,9 @@ function ramecHtml() {
             + ', pak ho zavře. Sprav to, nebo slabá místa prodej.</p>'
           : '<p class="fine">Čerpat můžeš bez dalšího pohovoru — jen krátké tři otázky. '
             + 'Podmínka je, že každý prádlomat vydělá aspoň na svou splátku.</p>')
+      + ramecRozborHtml()
       + (volny >= 1000 ? '<button class="btn sec big" id="do-cerpat">Čerpat z rámce</button>' : '')
+      + '<button class="btn sec" id="do-prehodnotit" style="width:100%;margin-top:8px">Požádat o navýšení</button>'
       + '</div>';
   }
   if (S.ramec && S.ramec.zavreny) {
@@ -6663,6 +6721,19 @@ function ramecHtml() {
         : '<p class="fine">Splať nejdřív dva prádlomaty do konce. Pak se přijď bavit o rámci.</p>')
     + '</div>';
 }
+// Z čeho limit vychází a co s ním pohne — bez toho hráč jen kouká na číslo.
+function ramecRozborHtml() {
+  var sl = ramecSlozky();
+  var drzi = sl.zisk < sl.historie ? 'zisk' : 'historie';
+  return '<div class="kv" style="margin-top:8px"><span>Za doplacená místa (' + doplacenychMist() + ')</span>'
+    + '<b class="' + (drzi === 'historie' ? 'warn' : '') + '">' + kcFull(sl.historie) + '</b></div>'
+    + '<div class="kv"><span>Co unese výdělek sítě</span>'
+    + '<b class="' + (drzi === 'zisk' ? 'warn' : '') + '">' + kcFull(sl.zisk) + '</b></div>'
+    + '<p class="fine">Platí ten menší z nich. ' + (drzi === 'zisk'
+        ? 'Limit teď drží výdělek — zvedne ho vyšší zisk nebo nižší splátky.'
+        : 'Limit teď drží historie — každý další doplacený prádlomat přidá ' + kcFull(RAMEC_ZA_MISTO) + '.')
+    + ' Banka ho sama srovná jednou za herní měsíc; dolů nikdy pod to, co máš načerpané.</p>';
+}
 function ramecSheet() {
   pohovorSheet(10, 'Pohovor o rámci', function (st) {
     if (!st.ok) { toast('Rizikoř to zamítl. Zkus to, až budeš mít věci srovnané.', 'err'); return; }
@@ -6676,7 +6747,8 @@ function ramecSheet() {
       + 'když to rok neplatí, banka rámec zavře.</p>'
       + '<button class="btn big" id="ram-ok">Beru</button>');
     $('ram-ok').onclick = function () {
-      S.ramec = { limit: limit, cerpano: 0, od: Date.now(), slabyOd: null, zavreny: null, bonus: st.sazba };
+      S.ramec = { limit: limit, cerpano: 0, od: Date.now(), slabyOd: null, zavreny: null,
+        bonus: st.sazba, puvodniCil: ramecNavrh() || limit, prehodnoceno: Date.now() };
       save(); paint(); closeSheet(); syncState(true);
       toast('Rámec ' + kcFull(limit) + ' je schválený.', 'ok');
     };
@@ -6899,6 +6971,13 @@ function paintBank() {
   if (r) r.onclick = function () { ramecSheet(); };
   var c = $('do-cerpat');
   if (c) c.onclick = function () { cerpatSheet(); };
+  var pr = $('do-prehodnotit');
+  if (pr) pr.onclick = function () {
+    pr.disabled = true;
+    prehodnotRamec(true);
+    paint();
+    syncState(true);
+  };
   [].forEach.call($('bank-body').querySelectorAll('[data-splatit]'), function (b) {
     b.onclick = function () { splatitUverSheet(b.getAttribute('data-splatit')); };
   });
