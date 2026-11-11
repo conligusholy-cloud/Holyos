@@ -94,6 +94,27 @@ async function listUnreadInFolder(userPrincipalName, folderId, opts = {}) {
 }
 
 /**
+ * Zprávy s přílohou ze složky přijaté za posledních `days` dní — PŘEČTENÉ I NEPŘEČTENÉ.
+ * (Zpráva se v Outlooku označí jako přečtená už při pouhém zobrazení v náhledu, takže se na příznak nelze spolehnout.)
+ */
+async function listRecentInFolder(userPrincipalName, folderId, opts = {}) {
+  const { days = 14, top = 50 } = opts;
+  const since = new Date(Date.now() - days * 86400e3).toISOString();
+  const url = new URL(`${GRAPH_BASE}/users/${encodeURIComponent(userPrincipalName)}/mailFolders/${encodeURIComponent(folderId)}/messages`);
+  url.searchParams.set('$filter', `hasAttachments eq true and receivedDateTime ge ${since}`);
+  url.searchParams.set('$top', String(top));
+  url.searchParams.set('$select', 'id,subject,from,receivedDateTime,hasAttachments,isRead');
+  url.searchParams.set('$expand', 'attachments($select=id,name,contentType,size,isInline)');
+  const r = await fetch(url, { headers: await authHeaders() });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new Error(`Graph list folder (poslední dny) selhal: ${r.status} — ${body.slice(0, 300)}`);
+  }
+  const data = await r.json();
+  return (data.value || []).sort((a, b) => String(a.receivedDateTime).localeCompare(String(b.receivedDateTime)));
+}
+
+/**
  * VŠECHNY zprávy s přílohou ve složce (přečtené i nepřečtené), od nejstarší. Stránkuje přes @odata.nextLink.
  * Pro jednorázové dotažení historie (např. všechny staré výpisy ve složce VYPISY).
  */
@@ -425,6 +446,7 @@ module.exports = {
   listUnreadMessages,
   findMailFolderId,
   listUnreadInFolder,
+  listRecentInFolder,
   listAllInFolder,
   downloadAttachment,
   markAsRead,

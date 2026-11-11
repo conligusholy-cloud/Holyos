@@ -15,6 +15,7 @@ const STATEMENT_FILE = /\.(pdf|gpc|abo|csv|sta|mt940|txt)$/i;
 
 let running = false;
 let lastRun = null;
+const handled = new Set(); // id zpráv, které už jsou úspěšně zpracované (nebo byly duplicitní) — jen do restartu
 let folderId = null;
 // Průběh právě běžícího (nebo posledního) importu — čte ho UI přes GET /statements/fetch-email/status
 let progress = { running: false, phase: 'idle', total: 0, done: 0, current: '', imported: 0, duplicates: 0, errors: 0, started_at: null, finished_at: null, report: null };
@@ -31,7 +32,16 @@ async function runOnce({ markRead = true, all = false, passwords = null, trigger
     if (!mb || !graph.isConfigured || !require('../ms-oauth2').isConfigured()) { report.errors.push('Schránka nebo Azure není nastavené'); return report; }
     if (!folderId) folderId = await graph.findMailFolderId(mb, FOLDER());
     if (!folderId) { report.errors.push(`Složka „${FOLDER()}" ve schránce ${mb} nenalezena`); return report; }
-    const msgs = all ? await graph.listAllInFolder(mb, folderId) : await graph.listUnreadInFolder(mb, folderId, { top: 25 });
+    let msgs;
+    if (all) msgs = await graph.listAllInFolder(mb, folderId);
+    else {
+      // Nepřečtené + všechno za posledních 14 dní (i přečtené — Outlook označí zprávu jako přečtenou už při zobrazení v náhledu,
+      // takže by se jinak výpis nikdy nenačetl). Už zpracované zprávy si pamatujeme, ať se PDF neparsují znovu při každém běhu.
+      const unread = await graph.listUnreadInFolder(mb, folderId, { top: 25 });
+      const recent = await graph.listRecentInFolder(mb, folderId, { days: 14, top: 50 });
+      const seen = new Set(); msgs = [];
+      for (const m of [...recent, ...unread]) { if (m && !seen.has(m.id) && !handled.has(m.id)) { seen.add(m.id); msgs.push(m); } }
+    }
     if (all) markRead = false;
     report.messages = msgs.length;
     progress.phase = 'importing'; progress.total = msgs.length;
@@ -51,7 +61,8 @@ async function runOnce({ markRead = true, all = false, passwords = null, trigger
         } catch (e) { allOk = false; report.errors.push((a.name || '?') + ': ' + e.message); }
       }
       progress.done++; progress.imported = report.imported.length; progress.duplicates = report.duplicates.length; progress.errors = report.errors.length + report.no_account.length;
-      if (allOk && markRead) { try { await graph.markAsRead(mb, m.id); } catch (e) { /* další běh to zkusí znovu */ } }
+      if (allOk) handled.add(m.id);
+      if (allOk && markRead && m.isRead !== true) { try { await graph.markAsRead(mb, m.id); } catch (e) { /* další běh to zkusí znovu */ } }
     }
     // Po importu znovu projít všechny nevyřešené platby (faktura mohla dorazit později než platba)
     if (report.imported.length) {
