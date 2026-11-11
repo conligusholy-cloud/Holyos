@@ -87,79 +87,117 @@ function chartSvg(invest, monthly, t) {
   ${be && be <= N ? `<circle cx="${x(be)}" cy="${y(0)}" r="6" fill="#22c55e"/><text x="${x(be)}" y="${y(0) - 12}" fill="#22c55e" font-size="13" font-weight="700" text-anchor="middle">${t.pay} ≈ ${Math.ceil(be)} ${t.months}</text>` : ''}</svg>`;
 }
 
+const CHK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></svg>';
+const PIN = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
+const EXTRA = {
+  cs: { eyebrow: 'Zkušenosti z více než 70 prádlomatů v České republice', statTxt: (n, c) => `prádlomatů v pilotním projektu pro ${c}.`, statAlt: 'Přes 70 prádlomatů, které sami provozujeme v České republice.', sites: 'Skutečné provozovny', what: 'O co jde', can: 'Co prádlomat umí', ben: 'Přínosy', eco: 'Ekonomika', pilot: 'Pilot', vid: 'Video', cta: 'Další krok' },
+  en: { eyebrow: 'Experience from more than 70 laundromats in the Czech Republic', statTxt: (n, c) => `laundromats in the pilot project for ${c}.`, statAlt: 'Over 70 laundromats we operate ourselves in the Czech Republic.', sites: 'Real sites', what: 'What it is', can: 'What it does', ben: 'Benefits', eco: 'Economics', pilot: 'Pilot', vid: 'Video', cta: 'Next step' },
+  pl: { eyebrow: 'Doświadczenie z ponad 70 pralni w Czechach', statTxt: (n, c) => `urządzeń w projekcie pilotażowym dla ${c}.`, statAlt: 'Ponad 70 pralni, które sami prowadzimy w Czechach.', sites: 'Prawdziwe punkty', what: 'Na czym to polega', can: 'Co potrafi', ben: 'Korzyści', eco: 'Ekonomika', pilot: 'Pilotaż', vid: 'Wideo', cta: 'Kolejny krok' },
+};
+// Nadpis: bílá část + gradientní část (rozdělí se před posledním „u / pro / pod / at / for / dla / przy")
+function splitTitle(title) {
+  const m = String(title || '').match(/^(.*\S)\s+((?:u|pro|pod|at|for|under|dla|przy|pod)\s+.+)$/i);
+  return m ? [m[1], m[2]] : [String(title || ''), ''];
+}
+
 function offerPage(o, token) {
-  const L = o.lang === 'en' ? 'en' : o.lang === 'pl' ? 'pl' : 'cs', t = T[L];
+  const L = o.lang === 'en' ? 'en' : o.lang === 'pl' ? 'pl' : 'cs', t = T[L], X = EXTRA[L];
   const c = esc(o.company || '');
   const pts = String(o.points || '').split('\n').map((x) => x.replace(/^[-•*\s]+/, '').trim()).filter(Boolean);
   const refs = String(o.refs || REFS[L]).split('\n').map((r) => r.split('|').map((x) => x.trim())).filter((r) => r[0]);
   const units = Number(o.units) || 0, price = Number(o.unit_price) || 0, mon = Number(o.monthly_revenue) || 0;
   const invest = units * price, monAll = units * mon;
   const valid = o.valid_until ? new Date(o.valid_until + 'T12:00:00').toLocaleDateString(L === 'en' ? 'en-GB' : L === 'pl' ? 'pl-PL' : 'cs-CZ') : '';
+  const [h1a, h1b] = splitTitle(o.title || t.kick);
+  const kick = (x) => `<div class="kicker">— ${esc(x)}</div>`;
   const kpi = (lbl, val, sub) => `<div class="k"><div class="kl">${esc(lbl)}</div><div class="kv">${val}</div>${sub ? `<div class="ks">${sub}</div>` : ''}</div>`;
-  const eco = units && price ? `<section class="sec" id="eko"><h2>${esc(t.ecoH)}</h2><p class="sub">${esc(t.ecoSub)}</p>
+  const eco = units && price ? `<section class="sec" id="eko">${kick(X.eco)}<h2>${esc(t.ecoH)}</h2><p class="sub">${esc(t.ecoSub)}</p><div class="eco">
     <div class="kpis">${kpi(t.units, String(units), o.model ? esc(t.model + ' ' + o.model) : '')}${kpi(t.inv, money(invest, o.currency), money(price, o.currency) + ' ' + esc(t.unit))}${mon ? kpi(t.mon, money(monAll, o.currency), money(mon, o.currency) + ' ' + esc(t.monU)) + kpi(t.pay, '≈ ' + Math.ceil(invest / monAll) + ' ' + esc(t.months), '') + kpi(t.y5, money(monAll * 60 - invest, o.currency), '') : ''}</div>
-    ${mon ? `<div class="panel"><div class="ph">${esc(t.chart)}</div>${chartSvg(invest, monAll, t)}</div>` : ''}<p class="fine">${esc(t.vat)}</p></section>` : '';
+    ${mon ? `<div class="chart"><div class="ph">${esc(t.chart)}</div>${chartSvg(invest, monAll, t)}</div>` : ''}<p class="fine">${esc(t.vat)}</p></div></section>` : '';
   const body = `<style>
-.ox{--a:#2dd4bf;--b:#60a5fa;max-width:1120px;margin:0 auto;padding:0 6px 60px}
-.ox .hero{position:relative;border-radius:26px;overflow:hidden;margin:18px 0 10px;min-height:440px;display:flex;align-items:flex-end;border:1px solid rgba(120,160,255,.25)}
-.ox .hero video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:brightness(.55)}
-.ox .hero:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(4,6,12,.1) 0%,rgba(4,6,12,.85) 85%)}
-.ox .hin{position:relative;z-index:1;padding:34px 34px 30px;max-width:780px}.ox .kick{color:var(--a);font-weight:800;letter-spacing:.1em;text-transform:uppercase;font-size:12px}
-.ox h1{font-size:44px;line-height:1.08;margin:8px 0 10px}.ox .lead{font-size:18px;line-height:1.5;color:#dbe6f7;margin:0 0 14px}
-.ox .chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}.ox .chip{padding:6px 12px;border-radius:99px;background:rgba(45,212,191,.12);border:1px solid rgba(45,212,191,.35);color:#c9fbf3;font-size:13px;font-weight:700}
-.ox .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.ox .btn{font-size:15px;padding:12px 18px;text-decoration:none;display:inline-block}.ox .ghost{background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff}
-.ox .meta{color:#9fb0c8;font-size:13px;margin-top:14px}
-.ox .sec{margin:54px 0 0}.ox h2{font-size:30px;margin:0 0 6px}.ox .sub{color:#9fb0c8;margin:0 0 20px;font-size:16px}
-.ox .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.ox .g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.ox .tile{background:rgba(13,20,36,.85);border:1px solid rgba(120,160,255,.18);border-radius:18px;padding:18px}.ox .tile .ic{font-size:30px}.ox .tile b{display:block;font-size:17px;margin:8px 0 4px}.ox .tile p{margin:0;color:#b6c4d8;line-height:1.5;font-size:14.5px}
-.ox .step{position:relative}.ox .step .n{position:absolute;top:14px;right:16px;color:rgba(255,255,255,.12);font-size:44px;font-weight:900}
-.ox .models{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px}.ox .models figure{margin:0;background:rgba(13,20,36,.85);border:1px solid rgba(120,160,255,.18);border-radius:18px;padding:12px;text-align:center}.ox .models img{width:100%;height:190px;object-fit:contain}.ox .models figcaption{font-weight:800;letter-spacing:.06em}
-.ox .ben{border-top:3px solid var(--a)}.ox .ben:nth-child(2){border-top-color:var(--b)}.ox .ben:nth-child(3){border-top-color:#fbbf24}.ox .ben ul{margin:10px 0 0;padding-left:18px;color:#c9d6ea;line-height:1.55}.ox .ben li{margin:4px 0}
-.ox .ref{padding:0;overflow:hidden}.ox .ref img{width:100%;height:220px;object-fit:cover;display:block}.ox .ref div{padding:14px 16px}
-.ox .tl{counter-reset:s;display:grid;gap:10px}.ox .tl .it{display:flex;gap:14px;align-items:flex-start;background:rgba(13,20,36,.85);border:1px solid rgba(120,160,255,.18);border-radius:14px;padding:14px 16px}
-.ox .tl .it:before{counter-increment:s;content:counter(s);flex:0 0 32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--a),var(--b));color:#04121a;font-weight:900;display:flex;align-items:center;justify-content:center}.ox .tl .it span{line-height:1.5;padding-top:5px}
-.ox .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}.ox .k{background:rgba(13,20,36,.85);border:1px solid rgba(45,212,191,.3);border-radius:16px;padding:14px 16px}.ox .kl{color:#9fb0c8;font-size:13px}.ox .kv{font-size:26px;font-weight:900;color:#5eead4;margin:4px 0 2px}.ox .ks{color:#8ea2c2;font-size:12.5px}
-.ox .panel{margin-top:14px;background:rgba(13,20,36,.85);border:1px solid rgba(120,160,255,.18);border-radius:18px;padding:16px}.ox .ph{font-weight:700;margin-bottom:6px}.ox .fine{color:#8ea2c2;font-size:12.5px;margin:10px 0 0}
-.ox .vids{display:grid;grid-template-columns:1fr 1fr;gap:14px}.ox .vids video{width:100%;aspect-ratio:9/16;max-height:620px;object-fit:cover;border-radius:18px;border:1px solid rgba(120,160,255,.2);background:#0b1426}.ox .vids figure{margin:0}.ox .vids figcaption{color:#9fb0c8;font-size:13px;margin-top:6px;text-align:center}
-.ox .cta{background:linear-gradient(135deg,rgba(45,212,191,.16),rgba(96,165,250,.12));border:1px solid rgba(45,212,191,.45);border-radius:22px;padding:28px}.ox .cta label{display:block;font-size:13px;margin:10px 0 4px;color:#9fb0c8}.ox .cta input,.ox .cta textarea{width:100%;box-sizing:border-box}
-@media(max-width:820px){.ox h1{font-size:30px}.ox .g3,.ox .models{grid-template-columns:1fr}.ox .g2,.ox .vids{grid-template-columns:1fr}.ox .hin{padding:22px}.ox .hero{min-height:380px}}
+.ox{--bg:#04060c;--line:rgba(120,160,255,.14);--line2:rgba(120,160,255,.28);--tx:#eef4ff;--tx2:#a9b8d3;--tx3:#6b7d9e;--az:#4fd1ff;--vi:#7c5cff;--teal:#2fe3c6;max-width:1180px;margin:0 auto;padding:0 22px 70px;color:var(--tx)}
+.ox h1,.ox h2,.ox h3{margin:0;letter-spacing:-.025em;line-height:1.08}
+.ox .grad{background:linear-gradient(90deg,var(--az),#7aa8ff 55%,var(--vi));-webkit-background-clip:text;background-clip:text;color:transparent}
+.ox .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:52px;padding:0 26px;border-radius:14px;font-weight:700;font-size:16px;text-decoration:none;border:1px solid transparent;cursor:pointer;font-family:inherit;transition:transform .18s,box-shadow .18s,border-color .18s}
+.ox .btn-p{background:linear-gradient(90deg,#1e86e0,#3a6cf5 55%,#7c5cff);color:#fff;box-shadow:0 10px 30px -10px rgba(58,108,245,.8)}.ox .btn-p:hover{transform:translateY(-2px)}
+.ox .btn-g{background:rgba(255,255,255,.04);border-color:var(--line2);color:var(--tx)}.ox .btn-g:hover{border-color:var(--az)}
+.ox .hero{position:relative;display:grid;grid-template-columns:1.2fr .8fr;gap:40px;align-items:center;padding:40px 0 70px}
+.ox .hero:before{content:"";position:absolute;inset:-20% -10% auto -10%;height:120%;background:radial-gradient(900px 520px at 78% 38%,rgba(58,108,245,.28),transparent 62%),radial-gradient(700px 420px at 12% 18%,rgba(79,209,255,.12),transparent 60%);pointer-events:none;z-index:-1}
+.ox .eyebrow{display:inline-flex;align-items:center;gap:9px;padding:7px 14px;border:1px solid rgba(47,227,198,.35);background:rgba(47,227,198,.07);border-radius:999px;color:#b6f5ea;font-size:13.5px;font-weight:600;text-transform:none;letter-spacing:0}.ox .eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--teal);box-shadow:0 0 10px var(--teal)}
+.ox .hero h1{font-size:clamp(36px,5vw,62px);font-weight:850;margin:22px 0 0;letter-spacing:-.035em}.ox .hero h1 span{display:block}
+.ox .lead{margin:24px 0 0;font-size:clamp(17px,1.6vw,20px);line-height:1.6;color:var(--tx2);max-width:640px}
+.ox .ctas{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
+.ox .chk{list-style:none;padding:0;margin:30px 0 0;display:flex;flex-wrap:wrap;gap:10px 26px;color:var(--tx2);font-size:15px}.ox .chk li{display:flex;align-items:center;gap:9px}.ox .chk svg{color:var(--teal)}
+.ox .meta{color:var(--tx3);font-size:13.5px;margin-top:18px}
+.ox .visual{position:relative;justify-self:end;width:100%;max-width:440px}
+.ox .visual .glow{position:absolute;inset:4%;border-radius:50%;background:radial-gradient(circle,rgba(79,209,255,.35),rgba(58,108,245,.18) 45%,transparent 70%);filter:blur(10px)}
+.ox .visual video{position:relative;display:block;width:62%;margin:0 auto;aspect-ratio:9/16;height:auto;object-fit:cover;border-radius:26px;border:1px solid var(--line2);background:#0b1220;box-shadow:0 30px 60px -20px rgba(0,0,0,.8),0 0 0 6px rgba(79,209,255,.06)}
+.ox .statcard{position:absolute;left:-6%;bottom:6%;max-width:280px;padding:18px 20px;border-radius:18px;background:rgba(10,16,30,.85);border:1px solid var(--line2);backdrop-filter:blur(12px);box-shadow:0 20px 50px -20px rgba(0,0,0,.8)}
+.ox .statcard b{display:block;font-size:42px;line-height:1;font-weight:850;letter-spacing:-.03em}.ox .statcard p{margin:8px 0 0;font-size:14px;color:var(--tx2);line-height:1.45}
+.ox .sec{padding:70px 0 0;scroll-margin-top:70px}.ox .kicker{font-size:12.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--az);margin-bottom:14px}
+.ox h2{font-size:clamp(28px,3.4vw,42px);font-weight:820}.ox .sub{color:var(--tx2);margin:12px 0 0;font-size:17px;max-width:760px;line-height:1.55}
+.ox .grid{display:grid;gap:18px;margin-top:36px}.ox .g3{grid-template-columns:repeat(3,1fr)}
+.ox .card{background:rgba(14,22,40,.62);border:1px solid var(--line);border-radius:20px;padding:26px;backdrop-filter:blur(6px)}
+.ox .ico{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;font-size:24px;background:linear-gradient(135deg,rgba(79,209,255,.16),rgba(124,92,255,.12));border:1px solid rgba(79,209,255,.22);margin-bottom:18px}
+.ox .card h3{font-size:19px;font-weight:700}.ox .card p{color:var(--tx2);margin:10px 0 0;font-size:15.5px;line-height:1.55}
+.ox .step .n{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;font-weight:850;font-size:20px;background:var(--bg);border:1px solid var(--line2);color:var(--az);margin-bottom:18px}
+.ox .models{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:18px}.ox .models figure{margin:0;padding:18px;border-radius:20px;background:radial-gradient(circle at 50% 40%,rgba(79,209,255,.12),transparent 65%),rgba(14,22,40,.62);border:1px solid var(--line);text-align:center}.ox .models img{width:100%;height:200px;object-fit:contain;filter:drop-shadow(0 20px 30px rgba(0,0,0,.5))}.ox .models figcaption{font-weight:800;letter-spacing:.14em;color:var(--tx2);margin-top:8px}
+.ox .path{display:flex;flex-direction:column;padding:30px;border-radius:24px;background:linear-gradient(160deg,rgba(20,32,58,.9),rgba(10,16,30,.9));border:1px solid var(--line2);position:relative;overflow:hidden}
+.ox .path:after{content:"";position:absolute;inset:auto -30% -55% auto;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(79,209,255,.14),transparent 65%);pointer-events:none}
+.ox .path ul{list-style:none;padding:0;margin:14px 0 0}.ox .path li{display:flex;gap:10px;color:var(--tx2);font-size:15.5px;line-height:1.5;margin:9px 0}.ox .path li svg{flex:none;color:var(--teal);margin-top:3px}
+.ox .sites{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:30px}.ox .site{margin:0}.ox .site img{width:100%;aspect-ratio:4/3;object-fit:cover;object-position:center 60%;border-radius:18px;border:1px solid var(--line)}
+.ox .site figcaption{display:flex;align-items:center;gap:7px;margin-top:10px;color:var(--tx2);font-size:14.5px;font-weight:600}.ox .site figcaption svg{color:var(--az);flex:none}.ox .site small{display:block;color:var(--tx3);font-weight:500;font-size:13.5px;margin:4px 0 0 23px;line-height:1.45}
+.ox .tl{display:grid;gap:12px;margin-top:30px;counter-reset:s}.ox .tl .it{display:flex;gap:16px;align-items:center;padding:16px 20px;border-radius:16px;background:rgba(14,22,40,.62);border:1px solid var(--line)}
+.ox .tl .it:before{counter-increment:s;content:counter(s);flex:0 0 42px;height:42px;border-radius:12px;display:grid;place-items:center;font-weight:850;background:var(--bg);border:1px solid var(--line2);color:var(--az)}.ox .tl .it span{color:var(--tx);font-size:16px;line-height:1.5}
+.ox .eco{margin-top:30px;border-radius:28px;padding:40px;background:linear-gradient(135deg,#0d1a33,#0a1222 60%,#120f2b);border:1px solid var(--line2);position:relative;overflow:hidden}
+.ox .eco:before{content:"";position:absolute;right:-120px;top:-120px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(124,92,255,.22),transparent 65%);pointer-events:none}
+.ox .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;position:relative}.ox .k{padding:16px 18px;border-radius:16px;background:rgba(4,6,12,.45);border:1px solid var(--line2)}.ox .kl{color:var(--tx2);font-size:13.5px}.ox .kv{font-size:30px;font-weight:850;letter-spacing:-.03em;margin:6px 0 2px}.ox .ks{color:var(--tx3);font-size:12.5px}
+.ox .chart{margin-top:22px;position:relative}.ox .ph{font-weight:700;margin-bottom:8px;color:var(--tx2)}.ox .fine{color:var(--tx3);font-size:13px;margin:14px 0 0;position:relative}
+.ox .vids{display:grid;grid-template-columns:minmax(0,300px) minmax(0,300px);gap:16px;margin-top:30px}.ox .vids figure{margin:0}.ox .vids video{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:18px;border:1px solid var(--line2);background:#0b1426;display:block}.ox .vids figcaption{margin-top:10px;color:var(--tx2);font-size:14px;font-weight:600}
+.ox .cta{margin-top:30px;border-radius:28px;padding:40px;background:linear-gradient(135deg,rgba(30,134,224,.18),rgba(124,92,255,.16));border:1px solid rgba(79,209,255,.4)}
+.ox .cta label{display:block;font-size:14px;font-weight:600;margin:12px 0 6px}.ox .cta input,.ox .cta textarea{width:100%;box-sizing:border-box;min-height:50px;padding:12px 14px;border-radius:12px;border:1px solid var(--line2);background:rgba(4,6,12,.6);color:var(--tx);font:inherit}
+.ox .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.ox .contact{margin-top:22px;padding-top:16px;border-top:1px solid var(--line2);color:var(--tx2)}.ox .contact a{color:var(--az)}
+@media (max-width:900px){.ox .hero{grid-template-columns:1fr;gap:30px;padding-top:24px}.ox .visual{justify-self:center;max-width:400px}.ox .statcard{left:0}.ox .g3,.ox .models,.ox .sites{grid-template-columns:1fr}.ox .two{grid-template-columns:1fr}.ox .eco,.ox .cta{padding:24px}}
 </style>
 <div class="ox">
-  <section class="hero"><video src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" autoplay muted loop playsinline preload="metadata"></video>
-    <div class="hin"><div class="kick">${esc(t.kick)} ${esc(t.for)} ${c}</div>
-      <h1>${esc(o.title || '')}</h1>
+  <section class="hero"><div>
+      <span class="eyebrow"><i></i>${esc(X.eyebrow)}</span>
+      <h1><span>${esc(h1a)}</span>${h1b ? `<span class="grad">${esc(h1b)}</span>` : ''}</h1>
       <p class="lead">${esc(o.perex || t.heroSub(o.company || ''))}</p>
-      <div class="chips">${t.chips.map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div>
-      <div class="row"><a class="btn" href="#zajem">${esc(t.ctaTop)}</a><a class="btn ghost" href="#o-co-jde">${esc(t.scroll)} ↓</a></div>
-      ${valid ? `<div class="meta">${esc(t.valid)} ${esc(valid)}</div>` : ''}</div></section>
+      <div class="ctas"><a class="btn btn-p" href="#zajem">${esc(t.ctaTop)} →</a><a class="btn btn-g" href="#o-co-jde">${esc(t.scroll)}</a></div>
+      <ul class="chk">${t.chips.map((x) => `<li>${CHK}${esc(x)}</li>`).join('')}</ul>
+      <div class="meta">${esc(t.kick)} ${esc(t.for)} <b>${c}</b>${valid ? ' · ' + esc(t.valid) + ' ' + esc(valid) : ''}</div>
+    </div>
+    <div class="visual"><div class="glow"></div><video src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" autoplay muted loop playsinline preload="metadata"></video>
+      <div class="statcard">${units ? `<b>${units}</b><p>${esc(X.statTxt(units, o.company || ''))}</p>` : `<b>70+</b><p>${esc(X.statAlt)}</p>`}</div></div>
+  </section>
 
-  <section class="sec" id="o-co-jde"><h2>${esc(t.whatH)}</h2><p class="sub">${esc(t.whatSub)}</p>
-    <div class="g3">${t.steps.map((s, i) => `<div class="tile step"><span class="n">${i + 1}</span><div class="ic">${s[0]}</div><b>${esc(s[1])}</b><p>${esc(s[2])}</p></div>`).join('')}</div></section>
+  ${refs.length ? `<section class="sec" style="padding-top:20px">${kick(X.sites)}<div class="sites">${refs.map((r) => `<figure class="site">${r[2] ? `<img src="${esc(r[2])}" alt="${esc(r[0])}" loading="lazy">` : ''}<figcaption>${PIN}${esc(r[0])}</figcaption>${r[1] ? `<small>${esc(r[1])}</small>` : ''}</figure>`).join('')}</div></section>` : ''}
 
-  <section class="sec"><h2>${esc(t.canH)}</h2><p class="sub">${esc(t.canSub)}</p>
-    <div class="g3">${t.can.map((s) => `<div class="tile"><div class="ic">${s[0]}</div><b>${esc(s[1])}</b><p>${esc(s[2])}</p></div>`).join('')}</div>
+  <section class="sec" id="o-co-jde">${kick(X.what)}<h2>${esc(t.whatH)}</h2><p class="sub">${esc(t.whatSub)}</p>
+    <div class="grid g3">${t.steps.map((s, i) => `<div class="card step"><div class="n">${i + 1}</div><h3>${esc(s[1])}</h3><p>${esc(s[2])}</p></div>`).join('')}</div></section>
+
+  <section class="sec">${kick(X.can)}<h2>${esc(t.canH)}</h2><p class="sub">${esc(t.canSub)}</p>
+    <div class="grid g3">${t.can.map((s) => `<div class="card"><div class="ico">${s[0]}</div><h3>${esc(s[1])}</h3><p>${esc(s[2])}</p></div>`).join('')}</div>
     <div class="models">${['mini', 'flex', 'max'].map((m) => `<figure><img src="/img/model/${m}" alt="${m.toUpperCase()}" loading="lazy"><figcaption>${m.toUpperCase()}</figcaption></figure>`).join('')}</div></section>
 
-  <section class="sec"><h2>${esc(t.benH)}</h2>
-    <div class="g3">${t.ben(o.company || '').map((b) => `<div class="tile ben"><div class="ic">${b[0]}</div><b>${esc(b[1])}</b><ul>${b[2].map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>`).join('')}</div></section>
+  <section class="sec">${kick(X.ben)}<h2>${esc(t.benH)}</h2>
+    <div class="grid g3">${t.ben(o.company || '').map((b) => `<div class="path"><div class="ico">${b[0]}</div><h3>${esc(b[1])}</h3><ul>${b[2].map((x) => `<li>${CHK}<span>${esc(x)}</span></li>`).join('')}</ul></div>`).join('')}</div></section>
 
-  ${refs.length ? `<section class="sec"><h2>${esc(t.refH)}</h2><p class="sub">${esc(t.refSub)}</p>
-    <div class="g3">${refs.map((r) => `<div class="tile ref">${r[2] ? `<img src="${esc(r[2])}" alt="${esc(r[0])}" loading="lazy">` : ''}<div><b>${esc(r[0])}</b><p>${esc(r[1] || '')}</p></div></div>`).join('')}</div></section>` : ''}
-
-  ${pts.length ? `<section class="sec"><h2>${esc(t.pilotH)}</h2><p class="sub">${esc(t.pilotSub)}</p><div class="tl">${pts.map((x) => `<div class="it"><span>${esc(x)}</span></div>`).join('')}</div></section>` : ''}
+  ${pts.length ? `<section class="sec">${kick(X.pilot)}<h2>${esc(t.pilotH)}</h2><p class="sub">${esc(t.pilotSub)}</p><div class="tl">${pts.map((x) => `<div class="it"><span>${esc(x)}</span></div>`).join('')}</div></section>` : ''}
 
   ${eco}
 
-  <section class="sec"><h2>${esc(t.vidH)}</h2><div class="vids">
+  <section class="sec">${kick(X.vid)}<h2>${esc(t.vidH)}</h2><div class="vids">
     <figure><video src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" controls playsinline preload="none"></video><figcaption>${esc(t.vid1)}</figcaption></figure>
     <figure><video src="/media/krok.mp4" poster="/media/krok-poster.jpg" controls playsinline preload="none"></video><figcaption>${esc(t.vid2)}</figcaption></figure></div></section>
 
-  <section class="sec" id="zajem"><div class="cta"><h2>${esc(t.ctaH)}</h2><p class="sub" style="margin-bottom:14px">${esc(t.ctaSub)}</p>
-    ${o.interest ? `<p style="margin:0;font-weight:700">✓ ${esc(t.done)}</p>` : `<button class="btn" type="button" id="of-open">${esc(t.cta)}</button>
-    <form id="of-form" style="display:none;margin-top:6px"><div class="g2"><div><label>${esc(t.name)}</label><input name="name" required maxlength="120"></div><div><label>${esc(t.phone)}</label><input name="phone" maxlength="40"></div></div>
+  <section class="sec" id="zajem">${kick(X.cta)}<div class="cta"><h2>${esc(t.ctaH)}</h2><p class="sub" style="margin-bottom:20px">${esc(t.ctaSub)}</p>
+    ${o.interest ? `<p style="margin:0;font-weight:700">✓ ${esc(t.done)}</p>` : `<button class="btn btn-p" type="button" id="of-open">${esc(t.cta)} →</button>
+    <form id="of-form" style="display:none;margin-top:4px"><div class="two"><div><label>${esc(t.name)}</label><input name="name" required maxlength="120"></div><div><label>${esc(t.phone)}</label><input name="phone" maxlength="40"></div></div>
       <label>${esc(t.email)}</label><input name="email" type="email" maxlength="160"><label>${esc(t.note)}</label><textarea name="note" rows="3" maxlength="1500"></textarea>
-      <div style="margin-top:12px"><button class="btn" type="submit">${esc(t.send)}</button> <span class="small" id="of-msg"></span></div></form>`}
-    ${o.sender_name || o.reply_to || o.sender_phone ? `<div style="margin-top:18px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12)"><span class="muted">${esc(t.contact)}:</span> <b>${esc(o.sender_name || 'Laundromats.eu')}</b>${o.sender_phone ? ` · <a href="tel:${esc(String(o.sender_phone).replace(/\s/g, ''))}">${esc(o.sender_phone)}</a>` : ''}${o.reply_to ? ` · <a href="mailto:${esc(o.reply_to)}">${esc(o.reply_to)}</a>` : ''}</div>` : ''}
+      <div style="margin-top:16px"><button class="btn btn-p" type="submit">${esc(t.send)}</button> <span class="small" id="of-msg"></span></div></form>`}
+    ${o.sender_name || o.reply_to || o.sender_phone ? `<div class="contact">${esc(t.contact)}: <b style="color:var(--tx)">${esc(o.sender_name || 'Laundromats.eu')}</b>${o.sender_phone ? ` · <a href="tel:${esc(String(o.sender_phone).replace(/\s/g, ''))}">${esc(o.sender_phone)}</a>` : ''}${o.reply_to ? ` · <a href="mailto:${esc(o.reply_to)}">${esc(o.reply_to)}</a>` : ''}</div>` : ''}
   </div></section>
 </div>
 <script>(function(){var b=document.getElementById('of-open'),f=document.getElementById('of-form');if(!b)return;b.onclick=function(){f.style.display='';b.style.display='none';f.querySelector('input').focus();};
