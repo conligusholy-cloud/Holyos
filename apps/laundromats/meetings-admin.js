@@ -657,9 +657,10 @@ root.addEventListener('click',function(e){var t=e.target.closest('[data-sup]');i
 supLoadQuiet();setInterval(supPoll,5000);
 // Přepínání záložek. Seznam se tahá ze serveru až při prvním otevření.
 function tab(name){
-  var isHot=name==='hot', isUsr=name==='usr', isStat=name==='stat', isProd=name==='prod', isSup=name==='sup';
+  var isHot=name==='hot', isUsr=name==='usr', isStat=name==='stat', isProd=name==='prod', isSup=name==='sup', isCorp=name==='corp';
   root.querySelectorAll('.mt-tabs button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-tab')===name);});
-  root.querySelector('.mt-meet').style.display=(isHot||isUsr||isStat||isProd||isSup)?'none':'';
+  root.querySelector('.mt-meet').style.display=(isHot||isUsr||isStat||isProd||isSup||isCorp)?'none':'';
+  var cp=root.querySelector('.mt-corp');if(cp){cp.style.display=isCorp?'':'none';if(isCorp&&window.__lmOffersLoad)window.__lmOffersLoad();}
   root.querySelector('.mt-sup').style.display=isSup?'':'none';
   if(isSup)supLoad();
   root.querySelector('.mt-prod').style.display=isProd?'':'none';
@@ -707,9 +708,9 @@ function meetingsPage({ admin, holyosUrl, error }) {
   const nm = String((admin && admin.name) || '').replace(/[<>&"]/g, '');
   return `<!DOCTYPE html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Schůzky · Laundromats</title><style>${LAYOUT_CSS}</style></head><body>
   <div class="top"><b>Laundromats<span>.eu</span></b><span class="muted">Administrace schůzek</span><span class="sp"></span><span class="who">${nm}</span>${holyosUrl ? `<a href="${holyosUrl}" class="small">← HolyOS</a>` : ''}<a href="/admin/logout" class="small">Odhlásit</a></div>
-  <div class="wrap"><style>${CSS}</style>
+  <div class="wrap"><style>${CSS}${require('./lm-offers').CSS}</style>
   <div id="mt">
-    <div class="mt-tabs"><button data-tab="meet" class="on">📅 Schůzky</button><button data-tab="hot">⭐ Jmenný seznam</button><button data-tab="usr">👤 Uživatelé</button><button data-tab="stat">📊 Statistiky</button><button data-tab="prod">📦 Produkty</button><button data-tab="sup">💬 Podpora</button></div>
+    <div class="mt-tabs"><button data-tab="meet" class="on">📅 Schůzky</button><button data-tab="hot">⭐ Jmenný seznam</button><button data-tab="usr">👤 Uživatelé</button><button data-tab="stat">📊 Statistiky</button><button data-tab="prod">📦 Produkty</button><button data-tab="sup">💬 Podpora</button><button data-tab="corp">🤝 Korporáty</button></div>
     <div class="mt-meet">
     <div class="mt-bar"><h2>📅 Kalendář schůzek</h2>
       <button class="btn sec sm mt-prev">←</button><span class="mt-range"></span><button class="btn sec sm mt-next">→</button>
@@ -740,6 +741,7 @@ function meetingsPage({ admin, holyosUrl, error }) {
       <p class="muted small" style="margin:-6px 0 14px">Co se ukáže na stránce <a href="/cesta/pradlomaty" target="_blank">Prádlomaty</a> v sekci „Prádlomaty, které si můžete pořídit“: které stroje, v jakém pořadí, s jakým názvem, popisem, cenou a obrázkem.</p>
       <div class="mt-prodwrap"></div>
     </div>
+    ${require('./lm-offers').PANEL}
     <div class="mt-stat" style="display:none">
       <div class="mt-bar"><h2>📊 Statistiky schůzek</h2><span style="flex:1"></span>
         <div class="mt-seg"><button data-sgrp="day" class="on">Dny</button><button data-sgrp="week">Týdny</button><button data-sgrp="month">Měsíce</button><button data-sgrp="year">Roky</button></div></div>
@@ -748,7 +750,7 @@ function meetingsPage({ admin, holyosUrl, error }) {
     </div>
   </div></div>
   <script src="/admin/column-filters.js"></script>
-  <script>window.LM_HOLYOS=${JSON.stringify(holyosUrl || '')};</script><script>${JS}</script></body></html>`;
+  <script>window.LM_HOLYOS=${JSON.stringify(holyosUrl || '')};</script><script>${JS}</script><script>${require('./lm-offers').JS}</script></body></html>`;
 }
 
 module.exports = { meetingsPage };

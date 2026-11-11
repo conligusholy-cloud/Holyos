@@ -1272,6 +1272,7 @@ router.use('/lm/accounts', require('./lm-accounts.routes'));
 // Videohovory z laundromats.eu/videocall (upozornění Jan + Tomáš, TURN servery)
 router.use('/lm/vc', require('./lm-videocall.routes'));
 router.use('/lm/support', require('./lm-support.routes'));
+router.use('/lm/offers', require('./lm-offers.routes')); // nabídky korporátům (obchodní návrhy) z administrace laundromats.eu
 router.use('/lm/i18n', require('./lm-i18n.routes')); // automatický překlad nových textů laundromats.eu (EN/PL) // Podpora Laundromats (chat) — servisní API pro laundromats.eu
 router.get('/lm/products', async (req, res, next) => {
   try {
