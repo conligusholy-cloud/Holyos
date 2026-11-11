@@ -118,7 +118,8 @@ module.exports = function mountOffers(app, ctx) {
   app.post('/admin/api/offers/template', requireAdmin, js, J((req) => {
     const b = req.body || {}; const t = TPL[b.lang] || TPL.cs;
     const f = { company: String(b.company || '').trim() || '…', handover: String(b.handover || '').trim(), sender: String(b.sender || '').trim() };
-    return { subject: t.subject(f), title: t.title(f), intro: t.intro(f), points: t.points(f) };
+    const P = require('./lm-offer-page'); const L = TPL[b.lang] ? b.lang : 'cs';
+    return { subject: t.subject(f), title: t.title(f), intro: t.intro(f), points: t.points(f), perex: P.T[L].heroSub(f.company), refs: P.REFS[L] };
   }));
 
   // ── Veřejná stránka nabídky ──
@@ -126,7 +127,7 @@ module.exports = function mountOffers(app, ctx) {
     let o;
     try { o = (await hos('GET', '/public/' + req.params.token + (req.query.preview === '1' ? '?track=0' : ''))).offer; }
     catch (e) { return res.status(e.status === 404 ? 404 : 502).type('html').send(layout({ title: 'Nabídka', back: false, body: `<div class="card" style="max-width:560px;margin:40px auto"><h1 style="margin-top:0">${e.status === 404 ? 'Nabídka nenalezena' : 'Nabídka je dočasně nedostupná'}</h1><p class="muted">${e.status === 404 ? 'Odkaz už neplatí nebo je neúplný.' : 'Zkuste to prosím za chvíli.'}</p></div>` })); }
-    res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex, nofollow').type('html').send(offerPage(o, req.params.token));
+    res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex, nofollow').type('html').send(require('./lm-offer-page').offerPage(o, req.params.token));
   });
   app.post('/nabidka/:token([a-f0-9]{32})/zajem', js, async (req, res) => {
     if (rateLimited && rateLimited('offer:' + req.ip, 10, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho pokusů.' });
@@ -212,7 +213,7 @@ function edit(o){cur=o||{lang:'cs',currency:'CZK',sender_name:'Tomáš Holý'};v
  +F('handover','Předat komu (do textu, např. panu Tomáši Vlkovi)',cur.handover||'','w2')
  +'<div class="w4" style="display:flex;gap:8px;align-items:center"><button class="btn sec sm of-tpl" type="button">✨ Vyplnit text podle šablony</button><span class="muted small">Doplní předmět, nadpis, text e-mailu a body návrhu podle jazyka a firmy — pak vše upravte.</span></div>'
  +F('subject','Předmět e-mailu',cur.subject,'w2')+F('title','Nadpis nabídky (web)',cur.title,'w2')
- +F('intro','Text e-mailu i úvod nabídky',cur.intro,'w4','ta')+F('points','Co navrhujeme — body (každý na nový řádek)',cur.points,'w4','ta')
+ +F('intro','Text e-mailu (posílá se e-mailem, na webové nabídce se neukazuje)',cur.intro,'w4','ta')+F('perex','Podnadpis webové nabídky (1–2 věty pod nadpisem)',cur.perex,'w4')+F('points','Pilotní projekt — kroky na webu (každý na nový řádek)',cur.points,'w4','ta')+F('refs','Reference na webu — řádek: Název | popis | obrázek (/media/provozovna-1.webp …)',cur.refs,'w4','ta')
  +F('model','Model prádlomatu (nepovinné)',cur.model)+F('units','Počet prádlomatů v pilotu',cur.units)+F('unit_price','Cena za prádlomat bez DPH',cur.unit_price)+F('monthly_revenue','Očekávaná tržba / prádlomat / měsíc',cur.monthly_revenue)
  +F('valid_until','Platnost do',cur.valid_until,'','date')+F('sender_name','Odesílatel (jméno)',cur.sender_name)+F('sender_phone','Telefon odesílatele',cur.sender_phone)+F('reply_to','E-mail pro odpovědi',cur.reply_to,'','email')
  +F('note','Interní poznámka (korporát ji nevidí)',cur.note,'w4')
@@ -223,7 +224,7 @@ P.addEventListener('click',function(ev){var t=ev.target;
  if(t.closest('.of-new')){edit(null);return;}
  if(t.closest('.of-cancel')){P.querySelector('.of-edit').style.display='none';cur=null;return;}
  if(t.closest('.of-tpl')){var d=form();if(!d.company){alert('Nejdřív vyplňte společnost.');return;}if((d.intro||d.points)&&!confirm('Přepsat předmět, nadpis, text a body podle šablony?'))return;
-  req('/admin/api/offers/template',{lang:d.lang,company:d.company,handover:d.handover,sender:d.sender_name}).then(function(j){var w=P.querySelector('.of-edit');['subject','title','intro','points'].forEach(function(k){w.querySelector('[name='+k+']').value=j[k];});}).catch(function(er){alert(er.message);});return;}
+  req('/admin/api/offers/template',{lang:d.lang,company:d.company,handover:d.handover,sender:d.sender_name}).then(function(j){var w=P.querySelector('.of-edit');['subject','title','intro','points','perex','refs'].forEach(function(k){var el=w.querySelector('[name='+k+']');if(el)el.value=j[k]||'';});}).catch(function(er){alert(er.message);});return;}
  if(t.closest('.of-save')){var b=t.closest('.of-save');b.disabled=true;req('/admin/api/offers',form()).then(function(j){cur=j.offer;b.disabled=false;P.querySelector('.of-edit').style.display='none';load();}).catch(function(er){b.disabled=false;alert(er.message);});return;}
  var id;
  if((id=t.getAttribute('data-of-edit'))){var o=(list||[]).find(function(x){return x.id==id;});if(o)edit(o);return;}
