@@ -143,8 +143,12 @@ async function logRun(report, opts, issues) {
 
 /** Žádný nový výpis déle než 3 pracovní dny (po víkendu se nepočítá). */
 async function checkStale() {
-  const accounts = await prisma.bankAccount.findMany({ where: { active: true }, select: { id: true, name: true } });
+  const accounts = await prisma.bankAccount.findMany({ where: { active: true }, select: { id: true, name: true, account_number: true } });
+  // Účty, u kterých se nehlídá „dlouho žádný výpis" (např. splátkový účet Moneta 3 — výpisy chodí jen občas).
+  // Čísla účtů oddělená čárkou; výchozí 233559796 (Moneta 3). Lze změnit proměnnou BANK_STALE_IGNORE_ACCOUNTS.
+  const ignore = String(process.env.BANK_STALE_IGNORE_ACCOUNTS != null ? process.env.BANK_STALE_IGNORE_ACCOUNTS : '233559796').split(',').map((s) => s.trim().replace(/^0+/, '')).filter(Boolean);
   for (const a of accounts) {
+    if (ignore.includes(String(a.account_number || '').replace(/^0+/, ''))) continue;
     const last = await prisma.bankStatement.findFirst({ where: { bank_account_id: a.id }, orderBy: { period_to: 'desc' }, select: { period_to: true, statement_number: true } });
     if (!last) continue;
     let d = new Date(last.period_to); d.setHours(0, 0, 0, 0);
