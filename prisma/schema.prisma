@@ -183,6 +183,7 @@ model Person {
   user         User?       @relation("UserPerson", fields: [user_id], references: [id])
 
   attendance                  Attendance[]
+  company_leave_overrides     CompanyLeaveOverride[]
   leave_requests              LeaveRequest[]         @relation("LeaveRequestPerson")
   approved_leaves             LeaveRequest[]         @relation("LeaveRequestApprover")
   overtime_requests           OvertimeRequest[]      @relation("OvertimeRequestPerson")
@@ -383,6 +384,11 @@ model LeaveRequest {
   date_from   DateTime @db.Date
   date_to     DateTime @db.Date
   note        String?  @db.Text
+  // Nepovinný čas volna "HH:MM" — půlden, návštěva lékaře apod. Prázdné = celý den.
+  // Dny samotné zůstávají v date_from/date_to (@db.Date), aby počítání nároku
+  // na dovolenou a plánování výroby fungovaly beze změny. (Požadavek #140)
+  time_from   String?  @db.VarChar(5)
+  time_to     String?  @db.VarChar(5)
   status      String   @default("pending") @db.VarChar(20)
   approved_by Int?
 
@@ -406,6 +412,27 @@ model CompanyLeave {
   created_at DateTime @default(now())
 
   @@map("company_leave")
+}
+
+// Ručně upravený počet dní celozávodní dovolené u konkrétního zaměstnance a roku.
+// Když záznam chybí, číslo se počítá z CompanyLeave jako dosud — override je tedy
+// jen výjimka pro případy, kdy člověk přes celozávodní pracoval apod.
+// Sloupec zůstává informativní, do zůstatku dovolené se nepromítá. (Požadavek #142)
+model CompanyLeaveOverride {
+  id         Int      @id @default(autoincrement())
+  person_id  Int
+  year       Int
+  days       Int
+  updated_by Int? // User.id toho, kdo hodnotu naposledy přepsal
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  person Person @relation(fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@unique([person_id, year])
+  @@index([year])
+  @@map("company_leave_overrides")
 }
 
 model Permission {
@@ -7963,6 +7990,31 @@ model GameBlock {
   @@unique([blocker_id, blocked_id])
   @@index([blocked_id])
   @@map("game_blocks")
+}
+
+// IT požadavky (Prodejní objednávky → Ceník → IT požadavky): checklist, který dostane zákazník e-mailem
+// a má ho do 3 dnů vyplnit (veřejný odkaz /it-pozadavky/<token>). Nevyplněný → upozornění Radkovi Bečkovi (e-mail + Velín).
+// items = snímek checklistu v době odeslání, answers = odpovědi zákazníka { <id otázky>: hodnota }.
+model OrderItRequest {
+  id                 Int       @id @default(autoincrement())
+  order_id           Int
+  token              String    @unique @db.VarChar(64)
+  status             String    @default("sent") @db.VarChar(20) // sent | filled
+  items              Json
+  answers            Json?
+  customer_email     String?   @db.VarChar(255)
+  filled_by          String?   @db.VarChar(255)
+  sent_at            DateTime  @default(now())
+  due_at             DateTime
+  filled_at          DateTime?
+  reminder_sent_at   DateTime? // kdy odešlo upozornění o nevyplnění
+  created_by_user_id Int?
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  @@index([order_id])
+  @@index([status, due_at])
+  @@map("order_it_requests")
 }
 
 // Účetní položky (Nákup a sklad → Zboží → Účetní položky): samostatný ručně vedený seznam

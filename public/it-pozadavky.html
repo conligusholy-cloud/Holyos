@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>IT požadavky k objednávce</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f6fa;color:#1e293b}
+  .wrap{max-width:680px;margin:0 auto;padding:20px 14px 60px}
+  .card{background:#fff;border-radius:12px;padding:22px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:14px}
+  h1{font-size:1.35rem;margin:0 0 6px}
+  .sub{color:#64748b;font-size:.92rem;margin-bottom:4px}
+  .due{display:inline-block;margin-top:8px;background:#fef3c7;color:#92400e;border-radius:6px;padding:4px 10px;font-size:.85rem;font-weight:600}
+  .q{margin-bottom:18px}
+  .q label.l{display:block;font-weight:600;margin-bottom:6px;font-size:.95rem}
+  .req{color:#dc2626}
+  .help{color:#64748b;font-size:.8rem;margin-top:3px}
+  input[type=text],textarea,select{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;background:#fff}
+  textarea{min-height:80px;resize:vertical}
+  .opts{display:flex;flex-wrap:wrap;gap:8px}
+  .opt{display:flex;align-items:center;gap:6px;border:1px solid #cbd5e1;border-radius:8px;padding:8px 14px;cursor:pointer;background:#fff}
+  .opt input{margin:0}
+  .opt.on{border-color:#2563eb;background:#eff6ff}
+  .invalid{border-color:#dc2626!important}
+  button{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:12px 26px;font:inherit;font-weight:600;cursor:pointer;width:100%}
+  button:disabled{opacity:.6}
+  .err{background:#fee2e2;color:#991b1b;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.9rem}
+  .ok{background:#dcfce7;color:#166534;border-radius:8px;padding:16px;font-weight:600;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="card">Načítám…</div></div>
+<script>
+(function () {
+  var token = location.pathname.split('/').filter(Boolean).pop();
+  var app = document.getElementById('app');
+  var data = null;
+
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function fmt(d) { try { return new Date(d).toLocaleDateString('cs-CZ'); } catch (e) { return ''; } }
+
+  function qHtml(q, val) {
+    var h = '<div class="q" data-id="' + esc(q.id) + '"><label class="l">' + esc(q.label) + (q.required ? ' <span class="req">*</span>' : '') + '</label>';
+    if (q.type === 'textarea') h += '<textarea name="' + esc(q.id) + '">' + esc(val) + '</textarea>';
+    else if (q.type === 'yesno' || q.type === 'choice') {
+      var opts = q.type === 'yesno' ? ['Ano', 'Ne'] : (q.options || []);
+      h += '<div class="opts">' + opts.map(function (o) {
+        return '<label class="opt' + (val === o ? ' on' : '') + '"><input type="radio" name="' + esc(q.id) + '" value="' + esc(o) + '"' + (val === o ? ' checked' : '') + '> ' + esc(o) + '</label>';
+      }).join('') + '</div>';
+    } else h += '<input type="text" name="' + esc(q.id) + '" value="' + esc(val) + '">';
+    if (q.help) h += '<div class="help">' + esc(q.help) + '</div>';
+    return h + '</div>';
+  }
+
+  function render() {
+    var d = data;
+    var head = '<div class="card"><h1>IT požadavky k objednávce ' + esc(d.order_number || '') + '</h1>' +
+      '<div class="sub">' + esc(d.customer || '') + '</div>';
+    if (d.status === 'filled') {
+      app.innerHTML = head + '</div><div class="card"><div class="ok">✓ Děkujeme, dotazník byl vyplněn' + (d.filled_at ? ' (' + fmt(d.filled_at) + ')' : '') + '.</div></div>';
+      return;
+    }
+    head += '<div class="sub">Prosíme o vyplnění krátkého formuláře k místu instalace.</div><span class="due">Vyplnit do ' + fmt(d.due_at) + '</span></div>';
+    var form = '<div class="card"><div id="err"></div>' +
+      d.items.map(function (q) { return qHtml(q, (d.answers || {})[q.id] || ''); }).join('') +
+      '<div class="q"><label class="l">Vaše jméno</label><input type="text" id="who" placeholder="Kdo formulář vyplňuje"></div>' +
+      '<button id="send">Odeslat</button></div>';
+    app.innerHTML = head + form;
+    app.querySelectorAll('.opt input').forEach(function (i) {
+      i.addEventListener('change', function () {
+        var grp = app.querySelectorAll('input[name="' + i.name + '"]');
+        grp.forEach(function (g) { g.parentNode.classList.toggle('on', g.checked); });
+      });
+    });
+    document.getElementById('send').addEventListener('click', submit);
+  }
+
+  function collect() {
+    var a = {};
+    data.items.forEach(function (q) {
+      var v = '';
+      if (q.type === 'yesno' || q.type === 'choice') {
+        var c = app.querySelector('input[name="' + q.id + '"]:checked'); v = c ? c.value : '';
+      } else {
+        var el = app.querySelector('[name="' + q.id + '"]'); v = el ? el.value.trim() : '';
+      }
+      a[q.id] = v;
+    });
+    return a;
+  }
+
+  function submit() {
+    var btn = document.getElementById('send'), err = document.getElementById('err');
+    var a = collect(), missing = [];
+    app.querySelectorAll('.q').forEach(function (n) { n.querySelectorAll('input[type=text],textarea').forEach(function (x) { x.classList.remove('invalid'); }); });
+    data.items.forEach(function (q) {
+      if (q.required && !a[q.id]) {
+        missing.push(q.label);
+        var el = app.querySelector('.q[data-id="' + q.id + '"] input[type=text],.q[data-id="' + q.id + '"] textarea');
+        if (el) el.classList.add('invalid');
+      }
+    });
+    if (missing.length) { err.innerHTML = '<div class="err">Vyplňte prosím povinné otázky (označené *).</div>'; window.scrollTo(0, 0); return; }
+    btn.disabled = true; btn.textContent = 'Odesílám…';
+    fetch('/api/public/it-requests/' + encodeURIComponent(token), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers: a, name: document.getElementById('who').value })
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (r) {
+        if (!r.ok) { err.innerHTML = '<div class="err">' + esc(r.j.error || 'Odeslání se nezdařilo') + '</div>'; btn.disabled = false; btn.textContent = 'Odeslat'; return; }
+        data.status = 'filled'; data.filled_at = new Date().toISOString(); render();
+      })
+      .catch(function () { err.innerHTML = '<div class="err">Chyba spojení, zkuste to prosím znovu.</div>'; btn.disabled = false; btn.textContent = 'Odeslat'; });
+  }
+
+  fetch('/api/public/it-requests/' + encodeURIComponent(token))
+    .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+    .then(function (d) { data = d; render(); })
+    .catch(function () { app.innerHTML = '<div class="card"><h1>Odkaz není platný</h1><div class="sub">Zkontrolujte prosím odkaz z e-mailu.</div></div>'; });
+})();
+</script>
+</body>
+</html>

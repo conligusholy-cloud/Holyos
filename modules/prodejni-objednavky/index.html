@@ -762,6 +762,7 @@
           </select>
           <div style="flex:1"></div>
           <button class="btn" onclick="switchTab('accessories')" title="Ceník příslušenství (detergenty, náhradní díly, nářadí)" style="margin-right:8px;">🧴 Příslušenství</button>
+          <button class="btn" onclick="openItTemplateModal()" title="Checklist IT požadavků, který se posílá zákazníkovi e-mailem" style="margin-right:8px;">💻 IT požadavky</button>
           <button class="btn" onclick="openDefaultConfigModal()" title="Společná výbava pro všechny stroje" style="margin-right:8px;">⚙ Společná výbava</button>
           <button class="btn btn-primary" onclick="openPricelistModal()">+ Nová položka</button>
         </div>
@@ -2966,6 +2967,7 @@
 
           '<div class="modal-actions" style="margin-top:20px;">' +
             '<div style="flex:1;"></div>' +
+            '<button class="btn btn-secondary" onclick="openItRequestModal(' + id + ')" title="Checklist technických požadavků pro zákazníka (vyplnit do 3 dnů)">💻 IT dotazník</button>' +
             '<button class="btn btn-secondary" onclick="openOrderPane(' + id + ')" title="Zobrazí objednávku podle šablony (Šablony dokumentů) vedle detailu; odtud ji lze i stáhnout">📄 Objednávka</button>' +
             // Fáze 6 — Vystavit fakturu (jen pro objednávky, které mají položky a nejsou cancelled)
             ((order.items && order.items.length > 0 && order.status !== 'cancelled')
@@ -11380,6 +11382,122 @@
         '</div>';
       plInitConfig(existing);
     }
+    // ── IT požadavky: editor šablony checklistu (Ceník) ──────────────────────────
+    var _itTpl = [];
+    var IT_TYPES = { yesno: 'Ano / Ne', text: 'Krátký text', textarea: 'Delší text', choice: 'Výběr z možností' };
+    async function openItTemplateModal() {
+      try {
+        var r = await fetch('/api/it-requests/template', { credentials: 'include' });
+        if (!r.ok) throw new Error('Načtení selhalo (' + r.status + ')');
+        var d = await r.json(); _itTpl = d.items || [];
+        document.getElementById('modal-root').innerHTML =
+          '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+            '<div class="modal" style="width:760px;max-width:95vw;max-height:90vh;overflow:auto;">' +
+              '<h2>💻 IT požadavky — checklist pro zákazníka</h2>' +
+              '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Tyto otázky dostane zákazník e-mailem (odkaz na formulář) a má ' + (d.due_days || 3) + ' dny na vyplnění. Pokud nevyplní, přijde upozornění Radkovi Bečkovi e-mailem a do Velínu. Odeslání: v detailu objednávky tlačítko „💻 IT dotazník".</div>' +
+              '<div id="it-tpl-wrap"></div>' +
+              '<button type="button" class="btn btn-secondary btn-sm" onclick="itTplAdd()">+ Přidat otázku</button>' +
+              '<div class="modal-actions">' +
+                '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+                '<button type="button" class="btn btn-primary" onclick="itTplSave()">Uložit</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        itTplRender();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+    function itTplCollect() {
+      var rows = document.querySelectorAll('#it-tpl-wrap .it-row'); var out = [];
+      rows.forEach(function (row, i) {
+        var prev = _itTpl[i] || {};
+        out.push({
+          id: prev.id || '',
+          label: row.querySelector('.it-label').value.trim(),
+          type: row.querySelector('.it-type').value,
+          required: row.querySelector('.it-req').checked,
+          options: row.querySelector('.it-opts').value
+        });
+      });
+      return out;
+    }
+    function itTplRender() {
+      var w = document.getElementById('it-tpl-wrap'); if (!w) return;
+      w.innerHTML = _itTpl.map(function (q, i) {
+        var opts = Array.isArray(q.options) ? q.options.join(', ') : (q.options || '');
+        return '<div class="it-row" style="border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px;">' +
+          '<div style="display:flex;gap:6px;align-items:center;">' +
+            '<input class="it-label" style="flex:1;" value="' + esc(q.label || '').replace(/"/g, '&quot;') + '" placeholder="Znění otázky">' +
+            '<button type="button" class="btn btn-secondary btn-sm" onclick="itTplMove(' + i + ',-1)" title="Nahoru">↑</button>' +
+            '<button type="button" class="btn btn-secondary btn-sm" onclick="itTplMove(' + i + ',1)" title="Dolů">↓</button>' +
+            '<button type="button" class="btn btn-secondary btn-sm" onclick="itTplDel(' + i + ')" title="Smazat">✕</button>' +
+          '</div>' +
+          '<div style="display:flex;gap:10px;align-items:center;margin-top:6px;font-size:12px;">' +
+            '<select class="it-type" onchange="itTplTypeChange(this)">' + Object.keys(IT_TYPES).map(function (k) { return '<option value="' + k + '"' + (q.type === k ? ' selected' : '') + '>' + IT_TYPES[k] + '</option>'; }).join('') + '</select>' +
+            '<label><input type="checkbox" class="it-req"' + (q.required ? ' checked' : '') + '> povinné</label>' +
+            '<input class="it-opts" style="flex:1;' + (q.type === 'choice' ? '' : 'display:none;') + '" value="' + esc(opts).replace(/"/g, '&quot;') + '" placeholder="Možnosti oddělené čárkou">' +
+          '</div></div>';
+      }).join('');
+    }
+    function itTplTypeChange(sel) { sel.closest('.it-row').querySelector('.it-opts').style.display = sel.value === 'choice' ? '' : 'none'; }
+    function itTplSync() { var c = itTplCollect(); _itTpl = c.map(function (x, i) { x.options = String(x.options || '').split(/[,;]/).map(function (s) { return s.trim(); }).filter(Boolean); return x; }); }
+    function itTplAdd() { itTplSync(); _itTpl.push({ id: '', label: '', type: 'text', required: false }); itTplRender(); }
+    function itTplDel(i) { itTplSync(); _itTpl.splice(i, 1); itTplRender(); }
+    function itTplMove(i, d) { itTplSync(); var j = i + d; if (j < 0 || j >= _itTpl.length) return; var t = _itTpl[i]; _itTpl[i] = _itTpl[j]; _itTpl[j] = t; itTplRender(); }
+    async function itTplSave() {
+      itTplSync();
+      try {
+        var r = await fetch('/api/it-requests/template', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: _itTpl }) });
+        var d = await r.json();
+        if (!r.ok) throw new Error(d.error || ('Uložení selhalo (' + r.status + ')'));
+        closeModal();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
+    // ── IT dotazník v detailu objednávky: stav, odeslání, odpovědi ───────────────
+    async function openItRequestModal(orderId) {
+      try {
+        var r = await fetch('/api/it-requests/order/' + orderId, { credentials: 'include' });
+        var d = await r.json(); var q = d.request;
+        var fmt = function (x) { return x ? new Date(x).toLocaleString('cs-CZ') : '—'; };
+        var body = '';
+        if (!q) body = '<div style="color:var(--text2);margin-bottom:12px;">Dotazník zatím nebyl odeslán zákazníkovi.</div>';
+        else {
+          var st = q.status === 'filled' ? '<span style="color:#16a34a;font-weight:600;">✓ Vyplněno ' + fmt(q.filled_at) + (q.filled_by ? ' (' + esc(q.filled_by) + ')' : '') + '</span>'
+            : (q.overdue ? '<span style="color:#dc2626;font-weight:600;">⚠ Nevyplněno po termínu' + (q.reminder_sent_at ? ' — Radek Bečka upozorněn ' + fmt(q.reminder_sent_at) : '') + '</span>' : '<span style="color:#d97706;font-weight:600;">⏳ Čeká na zákazníka</span>');
+          body = '<div style="margin-bottom:10px;">' + st + '</div>' +
+            '<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">Odesláno ' + fmt(q.sent_at) + ' na ' + esc(q.customer_email || '—') + ' · termín ' + fmt(q.due_at) + '</div>';
+          if (q.status === 'filled') {
+            body += '<table class="data-table"><tbody>' + (q.items || []).map(function (it) { return '<tr><td style="width:55%;">' + esc(it.label) + '</td><td><strong>' + esc((q.answers || {})[it.id] || '—') + '</strong></td></tr>'; }).join('') + '</tbody></table>';
+          }
+        }
+        var email = (q && q.customer_email) || '';
+        if (!email) { try { var o = await (await fetch('/api/wh/orders/' + orderId)).json(); email = o.customer_email || (o.company && o.company.email) || ''; } catch (e) {} }
+        document.getElementById('modal-root').innerHTML =
+          '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+            '<div class="modal" style="width:640px;max-width:95vw;max-height:90vh;overflow:auto;">' +
+              '<h2>💻 IT dotazník</h2>' + body +
+              (q && q.status === 'filled' ? '' :
+                '<div style="margin-top:12px;"><label style="font-size:12px;color:var(--text2);">E-mail zákazníka</label>' +
+                '<input id="it-send-email" type="email" style="width:100%;" value="' + esc(email).replace(/"/g, '&quot;') + '"></div>') +
+              '<div class="modal-actions">' +
+                '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
+                (q && q.status === 'filled' ? '' : '<button type="button" class="btn btn-primary" onclick="itSend(' + orderId + ')">' + (q ? 'Odeslat znovu' : 'Odeslat zákazníkovi') + '</button>') +
+              '</div>' +
+            '</div>' +
+          '</div>';
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+    async function itSend(orderId) {
+      var email = (document.getElementById('it-send-email') || {}).value || '';
+      try {
+        var r = await fetch('/api/it-requests/order/' + orderId + '/send', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email }) });
+        var d = await r.json();
+        if (!r.ok) throw new Error(d.error || ('Odeslání selhalo (' + r.status + ')'));
+        if (!d.sent) alert('Požadavek je vytvořen, ale e-mail se neodeslal: ' + (d.mail_error || 'neznámý důvod') + '\nOdkaz pro zákazníka:\n' + d.url);
+        openItRequestModal(orderId);
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
     async function saveDefaultConfig() {
       try {
         var r = await fetch('/api/wh/pricelist-config-default', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config_options: plCollectConfig() }) });

@@ -734,6 +734,12 @@ app.get('/platba-qr/:token', (req, res) => {
 });
 // Potvrzení nákupní objednávky dodavatelem (ceny + termíny) — bez přihlášení, jen token
 app.use('/api/public/po', purchaseInquiriesRoutes.poPublicRouter);
+// IT požadavky — checklist pro zákazníka (veřejný formulář přes token)
+const itRequestsRoutes = require('./routes/it-requests.routes');
+app.use('/api/public/it-requests', itRequestsRoutes.publicRouter);
+app.get('/it-pozadavky/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'it-pozadavky.html'));
+});
 app.get('/potvrzeni-objednavky/:token', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'po-confirm.html'));
 });
@@ -830,6 +836,7 @@ app.use('/api/hr', auditModuleAccess('hr', ['lide-hr', 'kiosky', 'velin', 'chat'
 app.use('/api/hr/applicants', applicantsRoutes); // musí být PŘED /api/hr (pevný podcesta)
 app.use('/api/hr', hrRoutes);
 app.use('/api/wh/purchase-pricelist', purchasePricelistRoutes); // Nákupní ceník — vlastní cesta (/api/wh/pricelist = prodejní ceník strojů ve warehouse.routes)
+app.use('/api/it-requests', itRequestsRoutes); // IT požadavky (interní: šablona, odeslání, stav)
 app.use('/api/wh/inquiries', purchaseInquiriesRoutes); // Poptávky u dodavatelů (před /api/wh, ať je nepohltí :id routy)
 app.use('/api/wh', warehouseRoutes);
 app.use('/api/wh', warehouseV2Routes); // Sklad 2.0 — moves, lookup, sync (mountnuté za legacy)
@@ -1471,6 +1478,11 @@ server.listen(PORT, async () => {
     slotReservationWorker.start();
   } catch (err) {
     console.error('[app] slot-reservation-worker nelze spustit:', err.message);
+  }
+  try {
+    require('./services/it-request-worker').start();
+  } catch (err) {
+    console.error('[app] it-request-worker nelze spustit:', err.message);
   }
   try {
     const metaLeadsSync = require('./services/ads/meta-leads-sync');
