@@ -5187,7 +5187,7 @@
           <td class="num">${fmtAmount(s.closing_balance)}</td>
           <td class="num">${s._count?.transactions ?? 0}</td>
           <td>${sourceLabel[s.source] || s.source}</td>
-          <td>${fmtDate(s.imported_at)}</td>
+          <td style="white-space:nowrap">${fmtDate(s.imported_at)}${s.imported_at ? ' <span style="color:var(--text-muted,#94a3b8)">' + new Date(s.imported_at).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Prague' }) + '</span>' : ''}</td>
           <td>
             <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); deleteStatement(${s.id}, '${(s.statement_number || '').replace(/'/g, '\\\'')}')">🗑️</button>
           </td>
