@@ -3103,7 +3103,7 @@
             '<td style="min-width:210px;">' + st + '</td>' +
             '<td style="white-space:nowrap;text-align:right;">' +
               (saved && !saved.invoice ? '<button type="button" class="btn btn-sm btn-primary" ' + (PP.dirty ? 'disabled title="Nejdřív ulož rozložení plateb"' : 'title="Vystaví ' + (saved.kind === 'final' ? 'finální' : 'zálohovou') + ' fakturu k této splátce (koncept v Účetních dokladech)"') + ' onclick="ppInvoice(' + saved.id + ')">🧾 ' + (saved.kind === 'final' ? 'Finální faktura' : 'Zálohová faktura') + '</button> ' : '') +
-              (saved && saved.invoice ? '<a class="btn btn-sm" href="/api/accounting/invoices/' + saved.invoice.id + '/pdf" target="_blank" rel="noopener" title="Otevřít PDF faktury">📄</a> ' : '') +
+              (saved && saved.invoice ? '<button type="button" class="btn btn-sm" onclick="openInvoicePane(' + saved.invoice.id + ',\'' + esc(saved.invoice.invoice_number || 'Faktura').replace(/\'/g, '') + '\')" title="Zobrazit fakturu vedle detailu">📄</button> ' : '') +
               (!locked ? '<button type="button" class="btn btn-sm btn-danger" onclick="ppRemove(' + ri + ')" title="Odebrat splátku">🗑️</button>' : '<span title="Splátka má fakturu nebo je zaplacená — nelze měnit výši ani smazat" style="color:var(--text2);">🔒</span>') +
             '</td></tr>';
         });
@@ -3820,7 +3820,8 @@
         var isDppp = inv.type === 'tax_receipt';
         var del = DEL[inv.delivery_status] || DEL.not_sent;
         var delBadge = isDppp ? '<span class="badge" style="background:' + del.color + '22;color:' + del.color + ';">✉️ ' + esc(del.label) + '</span>' : '';
-        var actions = '<a class="btn btn-sm" href="/api/accounting/invoices/' + inv.id + '/pdf" target="_blank" rel="noopener" style="text-decoration:none;">📄 PDF</a>';
+        var actions = '<button type="button" class="btn btn-sm" onclick="openInvoicePane(' + inv.id + ',\'' + esc(invLabel(inv) + ' ' + (inv.invoice_number || '')).replace(/\'/g, '') + '\')" title="Zobrazit fakturu vedle detailu">📄 Náhled</button>' +
+          ' <a class="btn btn-sm" href="/api/accounting/invoices/' + inv.id + '/pdf" target="_blank" rel="noopener" style="text-decoration:none;" title="Otevřít PDF v novém okně">↗ PDF</a>';
         if (isDppp && inv.status !== 'cancelled') {
           var sendLabel = (inv.delivery_status === 'sent') ? '↻ Znovu odeslat' : '✉️ Odeslat';
           actions += ' <button class="btn btn-sm" onclick="sendTaxReceipt(' + inv.id + ',' + order.id + ')">' + sendLabel + '</button>';
@@ -4288,25 +4289,34 @@
     function closeModal() { closeOrderPane(); document.getElementById('modal-root').innerHTML = ''; _pendingItems = []; }
 
     // Náhled PDF objednávky vedle detailu (iframe, vždy čerstvě z aktuálních dat podle šablony)
-    function openOrderPane(orderId) {
+    // Obecný boční náhled PDF vedle detailu (objednávka i faktura)
+    function openDocPane(url, title, sub, dlUrl) {
       var pane = document.getElementById('order-pane');
       if (!pane) { pane = document.createElement('div'); pane.id = 'order-pane'; document.body.appendChild(pane); }
-      pane.dataset.id = orderId;
-      var url = '/api/wh/orders/' + orderId + '/confirmation-pdf?fresh=1';
+      pane.dataset.url = url;
       pane.innerHTML =
-        '<div class="op-head"><div class="op-title">📄 Objednávka <span style="color:var(--text2);font-weight:400;font-size:12px;">náhled podle šablony</span></div>' +
+        '<div class="op-head"><div class="op-title">' + esc(title) + ' <span style="color:var(--text2);font-weight:400;font-size:12px;">' + esc(sub || '') + '</span></div>' +
           '<div class="op-btns">' +
-            '<button class="btn btn-secondary btn-sm" onclick="refreshOrderPane()" title="Načíst znovu (po změnách v objednávce nejdřív Ulož)">↻ Obnovit</button>' +
-            '<a class="btn btn-secondary btn-sm" href="' + url + '&download=1" title="Stáhnout PDF">⬇ Stáhnout</a>' +
+            '<button class="btn btn-secondary btn-sm" onclick="refreshOrderPane()" title="Načíst znovu">↻ Obnovit</button>' +
+            '<a class="btn btn-secondary btn-sm" href="' + dlUrl + '" download title="Stáhnout PDF">⬇ Stáhnout</a>' +
             '<a class="btn btn-secondary btn-sm" href="' + url + '" target="_blank" rel="noopener" title="Otevřít v novém okně">↗</a>' +
             '<button class="btn btn-secondary btn-sm" onclick="closeOrderPane()" title="Zavřít náhled">✕</button>' +
           '</div></div>' +
-        '<iframe class="op-frame" id="op-frame" src="' + url + '#view=FitH" title="Náhled objednávky"></iframe>';
+        '<iframe class="op-frame" id="op-frame" src="' + url + '#view=FitH" title="Náhled dokladu"></iframe>';
       document.body.classList.add('order-pane-on');
+    }
+    function openOrderPane(orderId) {
+      var url = '/api/wh/orders/' + orderId + '/confirmation-pdf?fresh=1';
+      openDocPane(url, '📄 Objednávka', 'náhled podle šablony', url + '&download=1');
+    }
+    function openInvoicePane(invoiceId, label) {
+      var url = '/api/accounting/invoices/' + invoiceId + '/pdf';
+      openDocPane(url, '🧾 ' + (label || 'Faktura'), 'náhled faktury', url);
     }
     function refreshOrderPane() {
       var pane = document.getElementById('order-pane'); var f = document.getElementById('op-frame'); if (!pane || !f) return;
-      f.src = '/api/wh/orders/' + pane.dataset.id + '/confirmation-pdf?fresh=1&t=' + Date.now() + '#view=FitH';
+      var u = pane.dataset.url || '';
+      f.src = u + (u.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now() + '#view=FitH';
     }
     function closeOrderPane() {
       var pane = document.getElementById('order-pane'); if (pane) pane.remove();
