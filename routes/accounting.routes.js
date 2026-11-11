@@ -2122,6 +2122,12 @@ router.post('/email/ingests/:id/reprocess', async (req, res, next) => {
       skipped_duplicates: result.skippedDuplicates,
       pipeline_count: result.results.length,
       newly_downloaded_links: newlyDownloaded,
+      // Diagnostika: proč se doklad nepodařilo přečíst (přesná chyba z OCR) + co se vlastně zpracovávalo
+      failure_reasons: result.results
+        .filter((r) => r.recommendation === 'unreadable' || r.ok === false)
+        .map((r) => String(r.reason || (r.errors && r.errors[0] && r.errors[0].message) || 'neznámá příčina').replace(/\s+/g, ' ').slice(0, 400)),
+      warnings: result.results.flatMap((r) => (r.warnings || []).map((w) => String(w.message || w).slice(0, 250))).slice(0, 6),
+      candidates: allCandidates.map((a) => ({ name: a.filename, type: a.content_type, size_kb: Math.round((a.size_bytes || 0) / 1024) })),
     });
   } catch (err) { next(err); }
 });

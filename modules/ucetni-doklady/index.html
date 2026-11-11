@@ -3373,6 +3373,12 @@
       }
       lines.push('• Přeskočeno duplikátů: ' + skipped.length);
       lines.push('• OCR průchodů: ' + (r.data?.pipeline_count || 0));
+      const cands = r.data?.candidates || [];
+      if (cands.length) lines.push('• Zpracované přílohy: ' + cands.map(c => c.name + ' (' + (c.type || '?') + ', ' + c.size_kb + ' kB)').join('; '));
+      const fr = r.data?.failure_reasons || [];
+      if (fr.length) lines.push('', '❌ Příčina nečitelnosti:', ...fr.map(x => '  – ' + x));
+      const wr = r.data?.warnings || [];
+      if (wr.length) lines.push('', '⚠ Upozornění:', ...wr.map(x => '  – ' + x));
       alert(lines.join('\n'));
       openIngestList();
       loadInvoices(); loadSummary();
