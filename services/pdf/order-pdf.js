@@ -118,7 +118,7 @@ function buildHtml(order, our, opts) {
     planPays.forEach(function (p) { attItems.push((p.kind === 'final' ? 'Finální faktura' : 'Zálohová faktura') + (p.percent != null ? ' (' + Number(p.percent) + ' %)' : '') + ' — bude vystavena dle rozložení plateb'); });
   }
   var attHtml = attItems.length
-    ? '<div class="box"><h3>Přílohy</h3><ol style="margin:0;padding-left:20px;font-size:12px;line-height:1.7">' + attItems.map(function (a) { return '<li>' + a + '</li>'; }).join('') + '</ol></div>'
+    ? '<div class="box" style="padding:8px 14px;margin-top:8px"><h3 style="margin-bottom:4px">Přílohy</h3><ol style="margin:0;padding-left:18px;font-size:10pt;line-height:1.4">' + attItems.map(function (a) { return '<li>' + a + '</li>'; }).join('') + '</ol></div>'
     : '';
 
   var desc = codeDesc(firstCode);
@@ -159,12 +159,12 @@ function buildHtml(order, our, opts) {
     + '<div class="row total"><span>Celkem s DPH</span><span>' + money(grand) + ' ' + cur + '</span></div></div>'
     + '<div class="box"><h3>' + (planPays.length ? 'Rozložení plateb' : 'Platební podmínky') + '</h3>' + payHtml + '</div>'
     + attHtml
-    + '<div class="box fine"><h3>Podmínky objednávky</h3><ul>'
+    + '<div class="box fine" style="padding:8px 14px;margin-top:8px"><h3 style="margin-bottom:4px">Podmínky objednávky</h3><ul style="font-size:9pt;line-height:1.3;margin:0;padding-left:16px">'
     + '<li>Stroj zůstává až do úplného zaplacení kupní ceny majetkem výrobce (výhrada vlastnictví).</li>'
     + '<li>Není-li stroj servisován prostřednictvím servisní smlouvy (13 % z obratu), je součástí softwarový poplatek <b>2 500 Kč / měsíc</b> (100 € / měsíc).</li>'
     + '<li>Uvedené výrobní termíny budou splněny za předpokladu, že platby proběhnou vždy před nebo v termín splatnosti jednotlivých dokladů.</li>'
     + '</ul></div>'
-    + '<div class="sigwrap">'
+    + '<div class="sigwrap" style="page-break-inside:avoid;break-inside:avoid">'
     + '<div class="sigcol"><h4>Za odběratele</h4>'
     + (sig ? '<img src="' + sig + '">' : '<div class="box" style="margin-top:0">Autorizuje první platbou</div>')
     + '<div class="m">' + (order.signature_place ? 'Místo: <b>' + esc(order.signature_place) + '</b>' : '') + (order.signed_at ? ' · ' + new Date(order.signed_at).toLocaleString('cs-CZ') : '') + '</div></div>'
