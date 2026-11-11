@@ -29,10 +29,16 @@ async function sweepExpiredReservations() {
   const now = new Date();
 
   // Najdi expirované rezervace (pro audit log + reload slotů ve frontendu)
-  const expired = await prisma.slotAssignment.findMany({
+  // POJISTKY proti zmizení slotu (opakovaně se stávalo):
+  //  1) RUČNÍ rezervace bez objednávky (order_id = null, „Rezervováno ručně — bez objednávky") se NIKDY automaticky nemaže —
+  //     drží, dokud ji člověk sám neuvolní / nepřiřadí objednávku.
+  //  2) Rezervace objednávky, u které je zaplacená záloha (nebo je objednávka potvrzená/dál ve zpracování), se nemaže.
+  //  3) Každé smazání se samo zapisuje do historie slotů (slot-audit extension na deleteMany) — jde obnovit z Historie.
+  const candidates = await prisma.slotAssignment.findMany({
     where: {
       reservation_status: 'reserved',
       reserved_until: { lt: now },
+      order_id: { not: null },
     },
     select: {
       id: true,
@@ -43,6 +49,24 @@ async function sweepExpiredReservations() {
       reserved_until: true,
     },
   });
+
+  // Zaplacené / potvrzené objednávky vyřadit
+  let protectedOrderIds = new Set();
+  if (candidates.length) {
+    try {
+      const orders = await prisma.order.findMany({
+        where: { id: { in: Array.from(new Set(candidates.map((c) => c.order_id))) } },
+        select: { id: true, status: true, deposit_paid: true },
+      });
+      const SAFE = new Set(['new', 'draft', 'awaiting_customer', 'signed', 'pending']);
+      orders.forEach((o) => { if (o.deposit_paid || (o.status && !SAFE.has(String(o.status)))) protectedOrderIds.add(o.id); });
+    } catch (e) {
+      // Nelze ověřit stav objednávky → radši nemazat nic
+      console.warn('[slot-reservation-worker] Ověření objednávek selhalo, nic nemažu:', e.message);
+      return { released: 0, freed_slot_ids: [], details: [] };
+    }
+  }
+  const expired = candidates.filter((c) => !protectedOrderIds.has(c.order_id));
 
   if (expired.length === 0) {
     return { released: 0, freed_slot_ids: [], details: [] };
