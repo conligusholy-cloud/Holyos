@@ -20,7 +20,10 @@ function passwordCandidates(extra) {
 async function parseAny(buffer, filename, extraPasswords) {
   if (isPdf(buffer)) {
     let lastErr = null;
-    for (const pw of passwordCandidates(extraPasswords)) {
+    const cands = passwordCandidates(extraPasswords);
+    // Diagnostika (hesla se nelogují, jen počet a délky) — ať je v logu vidět, jestli proměnná z Railway dorazila
+    if (!parseAny._logged) { parseAny._logged = true; setTimeout(() => { parseAny._logged = false; }, 60000); console.log('[bank-statement] hesla k PDF: z prostředí ' + String(process.env.BANK_STATEMENT_PASSWORD || '').split(/[;,]/).filter((s) => s.trim()).length + ', celkem zkoušeno ' + cands.length + ' (délky: ' + cands.map((p) => p.length).join(', ') + ')'); }
+    for (const pw of cands) {
       try { return await parseMonetaPdf(buffer, { password: pw }); }
       catch (e) { lastErr = e; if (!/heslo nesed|password/i.test(String(e && e.message))) throw e; }
     }
