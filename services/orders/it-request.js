@@ -224,8 +224,6 @@ async function sendTest(email) {
   const url = publicUrl(PREVIEW_TOKEN);
   const r1 = await mail({ to, subject: '[TEST] IT požadavky k objednávce SO-TEST — prosíme o vyplnění do ' + due, body: 'Dobrý den,\n\nk Vaší objednávce SO-TEST potřebujeme zjistit několik informací pro onboarding nového provozovatele prádlomatů. Prosíme o vyplnění krátkého formuláře nejpozději do ' + due + '.\n\nToto je TESTOVACÍ e-mail — formulář se v náhledu neukládá.', link: url, linkLabel: 'Vyplnit IT požadavky' });
   if (mailErr(r1)) { const e = new Error('E-mail se neodeslal — ' + mailErr(r1)); e.status = 502; throw e; }
-  const sample = {}; items.forEach((q) => { sample[q.id] = q.type === 'yesno' ? 'Ano' : q.type === 'choice' ? ((q.options || [])[0] || 'Ano') : 'Ukázková odpověď'; });
-  await sendResultMail(0, items, sample, 'Jan Zákazník', { to, test: true, orderNo: 'SO-TEST', customer: 'Ukázková firma s.r.o.' });
   return { ok: true, url };
 }
 

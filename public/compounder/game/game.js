@@ -3088,6 +3088,7 @@ function bindGlobus() {
     globusZavri();
     if (map && map.getZoom() <= GLOBUS_ZOOM) map.setView(map.getCenter(), GLOBUS_ZOOM + 1);
   };
+  if ($('map-poradce')) $('map-poradce').onclick = poradceSheet;
   if ($('map-globus')) $('map-globus').onclick = function () {
     if (G.on) {
       globusZavri();
@@ -8814,6 +8815,120 @@ function ev(name, znovu) {
       body: JSON.stringify({ event: name, sid: visitId(), zdroj: zjistiZdroj() }),
       keepalive: true }).catch(function () {});
   } catch (e) { /* sledování nikdy nesmí shodit hru */ }
+}
+
+// ─── AI poradce ──────────────────────────────────────────────────────────────
+// Rádce ke hře, co vidí, jak hráč hraje. Posílá se mu jen výtah z herního
+// stavu — čísla, nic osobního. Odpovídá server, model běží u nás.
+var PORADCE_H = [];          // historie rozhovoru v rámci jedné návštěvy
+var PORADCE_CEKA = false;
+
+// Výtah stavu pro poradce. Držet krátký: co řádek, to něco, co může poradit.
+function poradceStav() {
+  var mista = (S.units || []).map(function (u) {
+    return { name: u.name, model: (u.eco && u.eco.model) || '', score: u.score,
+      rent: (u.eco && u.eco.rent) || 0, zisk: (u.eco && u.eco.profit) || 0,
+      porucha: !!u.porucha, vypoved: typeof jeVeVypovedi === 'function' ? !!jeVeVypovedi(u) : false };
+  });
+  var sklad = 0; for (var k in (S.stock || {})) sklad += S.stock[k] || 0;
+  var zisk = monthlyProfit(), spl = splatkyMesicne();
+  var st = {
+    rok: Math.max(1, Math.ceil(((Date.now() - (S.startedAt || Date.now())) / MONTH_MS + 1) / 12)),
+    profil: (PROFILES[S.profile] || {}).name || S.profile,
+    cash: S.cash, dluh: S.loan, bank: S.bank,
+    zisk: zisk, splatky: spl, zbyde: zisk - spl,
+    pocet: mista.length, sklad: sklad, cesta: (S.orders || []).length,
+    mest: Object.keys(S.areas || {}).length,
+    poruchy: mista.filter(function (m) { return m.porucha; }).length,
+    vypovedi: mista.filter(function (m) { return m.vypoved; }).length,
+    povest: povest(), mista: mista,
+  };
+  if (maRamec()) st.ramec = { limit: S.ramec.limit, cerpano: ramecCerpano(), volny: ramecVolny() };
+  st.styl = poradceStyl(st);
+  return st;
+}
+// Jak hráč hraje, krátce a vlastními slovy. Poradce pak ladí rady podle toho.
+function poradceStyl(st) {
+  var v = [];
+  if (!st.pocet) v.push('zatím nic nepostavil');
+  else {
+    var sk = st.mista.reduce(function (a, m) { return a + (m.score || 0); }, 0) / st.pocet;
+    v.push('průměrné skóre míst ' + Math.round(sk));
+    var modely = {}; st.mista.forEach(function (m) { modely[m.model] = (modely[m.model] || 0) + 1; });
+    v.push('stroje: ' + Object.keys(modely).map(function (k) { return k + '×' + modely[k]; }).join(', '));
+  }
+  var majetek = assetsTotal();
+  if (majetek > 0) v.push('dluh je ' + Math.round((st.dluh / majetek) * 100) + ' % majetku');
+  if (st.splatky > 0) v.push('hotovost pokryje ' + (st.cash / st.splatky).toFixed(1).replace('.', ',') + ' splátky');
+  else if (!st.dluh) v.push('nemá žádný úvěr');
+  if (st.poruchy) v.push('nechává stát porouchané stroje');
+  return v.join(', ');
+}
+function poradceOtazky() {
+  if (!(S.units || []).length) {
+    return ['Jak mám začít?', 'Jak poznám dobré místo?', 'Mám si na první prádlomat půjčit?'];
+  }
+  var q = ['Co mám postavit dál?', 'Jak si stojím?'];
+  if (S.loan > 0) q.push('Nemám moc dluhů?');
+  if (maRamec()) q.push('Jak funguje rámcový úvěr?'); else q.push('Jak se dostanu k rámcovému úvěru?');
+  if ((S.units || []).some(function (u) { return !!u.porucha; })) q.push('Co mám dělat s poruchou?');
+  else q.push('Vyplatí se mi něco prodat na tržišti?');
+  return q.slice(0, 4);
+}
+function poradceSheet() {
+  PORADCE_CEKA = false;
+  sheet('<h3>\uD83D\uDCA1 Poradce</h3>'
+    + '<p class="muted small">Zeptej se na cokoli ke hře. Poradce vidí tvoje čísla — kolik máš, '
+    + 'co ti co vydělává a kde to drhne. Rozhovor nikam neukládáme.</p>'
+    + '<div id="por-tok" class="por-tok"></div>'
+    + '<div id="por-chipy" class="por-chipy"></div>'
+    + '<div class="por-vstup"><input class="inp" id="por-q" maxlength="300" '
+    + 'placeholder="Napiš otázku\u2026" autocomplete="off">'
+    + '<button class="btn sm" id="por-send">Zeptat se</button></div>');
+  poradcePaint();
+  var inp = $('por-q');
+  if (inp) inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); poradcePosli(inp.value); } };
+  $('por-send').onclick = function () { poradcePosli($('por-q') ? $('por-q').value : ''); };
+}
+function poradcePaint() {
+  var tok = $('por-tok');
+  if (!tok) return;
+  var h = PORADCE_H.map(function (z) {
+    return '<div class="por-z ' + (z.role === 'ai' ? 'ai' : 'ja') + '">' + esc(z.text).replace(/\n/g, '<br>') + '</div>';
+  }).join('');
+  if (PORADCE_CEKA) h += '<div class="por-z ai cekam">Přemýšlím\u2026</div>';
+  if (!h) h = '<div class="por-uvod">Nevíš, kde začít? Klikni na otázku níž.</div>';
+  tok.innerHTML = h;
+  tok.scrollTop = tok.scrollHeight;
+  var ch = $('por-chipy');
+  if (ch) {
+    ch.innerHTML = poradceOtazky().map(function (q) {
+      return '<button class="por-chip" data-por-q="' + esc(q) + '">' + esc(q) + '</button>';
+    }).join('');
+    ch.querySelectorAll('[data-por-q]').forEach(function (b) {
+      b.onclick = function () { poradcePosli(b.getAttribute('data-por-q')); };
+    });
+  }
+}
+function poradcePosli(q) {
+  q = String(q || '').trim();
+  if (!q || PORADCE_CEKA) return;
+  var inp = $('por-q'); if (inp) inp.value = '';
+  PORADCE_H.push({ role: 'ja', text: q });
+  PORADCE_CEKA = true; poradcePaint();
+  apiJson('/poradce', { otazka: q, stav: poradceStav(), historie: PORADCE_H.slice(0, -1).slice(-6) })
+    .then(function (r) {
+      PORADCE_CEKA = false;
+      var j = r.j || {};
+      if (j.ok && j.text) PORADCE_H.push({ role: 'ai', text: j.text });
+      else PORADCE_H.push({ role: 'ai', text: j.error || 'Poradce teď nemůže odpovědět. Zkus to za chvíli.' });
+      poradcePaint();
+    })
+    .catch(function () {
+      PORADCE_CEKA = false;
+      PORADCE_H.push({ role: 'ai', text: 'Server neodpovídá. Zkus to za chvíli.' });
+      poradcePaint();
+    });
 }
 
 function api(path, opts) {

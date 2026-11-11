@@ -6,28 +6,38 @@
 <meta name="robots" content="noindex">
 <title>IT požadavky k objednávce</title>
 <style>
+  /* Design BS 2.0 — tmavé navy pozadí, cyan → modrá → fialová */
+  :root{--bg:#050a14;--card:rgba(10,18,32,.72);--border:rgba(120,160,220,.16);--border2:rgba(120,160,220,.28);--text:#eaf1ff;--text2:#9db0cf;--text3:#6b7fa3;--accent:#4fd1ff;--accent2:#7c8cff;--ok:#2fe3a0;--err:#ff5d73;--warn:#f59e0b;--grad:linear-gradient(90deg,#4fd1ff,#3a6cf5 55%,#7c5cff)}
   *{box-sizing:border-box}
-  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f6fa;color:#1e293b}
-  .wrap{max-width:680px;margin:0 auto;padding:20px 14px 60px}
-  .card{background:#fff;border-radius:12px;padding:22px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:14px}
-  h1{font-size:1.35rem;margin:0 0 6px}
-  .sub{color:#64748b;font-size:.92rem;margin-bottom:4px}
-  .due{display:inline-block;margin-top:8px;background:#fef3c7;color:#92400e;border-radius:6px;padding:4px 10px;font-size:.85rem;font-weight:600}
-  .q{margin-bottom:18px}
-  .q label.l{display:block;font-weight:600;margin-bottom:6px;font-size:.95rem}
-  .req{color:#dc2626}
-  .help{color:#64748b;font-size:.8rem;margin-top:3px}
-  input[type=text],textarea,select{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;background:#fff}
-  textarea{min-height:80px;resize:vertical}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:radial-gradient(900px 500px at 15% -10%,rgba(79,209,255,.12),transparent),radial-gradient(800px 500px at 100% 0%,rgba(124,92,255,.14),transparent),var(--bg);color:var(--text);min-height:100vh}
+  .wrap{max-width:720px;margin:0 auto;padding:22px 16px 70px}
+  .top{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+  .logo{width:36px;height:36px;border-radius:10px;border:1px solid var(--border2);display:grid;place-items:center;font-weight:800;color:var(--accent);background:rgba(79,209,255,.06)}
+  .top b{font-size:17px}.top b span{color:var(--accent2);margin-left:4px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:14px;backdrop-filter:blur(8px)}
+  h1{font-size:1.4rem;margin:0 0 6px;font-weight:800}
+  h1 em{font-style:normal;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--text2);font-size:.92rem;margin-bottom:4px;line-height:1.5}
+  .due{display:inline-block;margin-top:10px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:#fbbf24;border-radius:999px;padding:5px 12px;font-size:.82rem;font-weight:700}
+  .q{margin-bottom:20px}
+  .q label.l{display:block;font-weight:600;margin-bottom:7px;font-size:.93rem;color:var(--text)}
+  .req{color:var(--err)}
+  .help{color:var(--text3);font-size:.8rem;margin-top:4px}
+  input[type=text],textarea,select{width:100%;padding:12px 13px;border:1px solid var(--border2);border-radius:10px;font:inherit;font-size:15px;background:rgba(5,10,20,.7);color:var(--text)}
+  input[type=text]:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,209,255,.12)}
+  textarea{min-height:84px;resize:vertical}
   .opts{display:flex;flex-wrap:wrap;gap:8px}
-  .opt{display:flex;align-items:center;gap:6px;border:1px solid #cbd5e1;border-radius:8px;padding:8px 14px;cursor:pointer;background:#fff}
-  .opt input{margin:0}
-  .opt.on{border-color:#2563eb;background:#eff6ff}
-  .invalid{border-color:#dc2626!important}
-  button{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:12px 26px;font:inherit;font-weight:600;cursor:pointer;width:100%}
+  .opt{display:flex;align-items:center;gap:8px;border:1px solid var(--border2);border-radius:10px;padding:10px 16px;cursor:pointer;background:rgba(5,10,20,.7);color:var(--text2);transition:.15s}
+  .opt:hover{border-color:var(--accent)}
+  .opt input{margin:0;accent-color:#4fd1ff}
+  .opt.on{border-color:var(--accent);background:rgba(79,209,255,.1);color:var(--text)}
+  .invalid{border-color:var(--err)!important}
+  button{background:var(--grad);color:#04101f;border:0;border-radius:12px;padding:14px 26px;font:inherit;font-weight:800;font-size:15px;cursor:pointer;width:100%;transition:.15s}
+  button:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.08)}
   button:disabled{opacity:.6}
-  .err{background:#fee2e2;color:#991b1b;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.9rem}
-  .ok{background:#dcfce7;color:#166534;border-radius:8px;padding:16px;font-weight:600;text-align:center}
+  .err{background:rgba(255,93,115,.12);border:1px solid rgba(255,93,115,.4);color:#ffb3bf;border-radius:10px;padding:11px 13px;margin-bottom:14px;font-size:.9rem}
+  .ok{background:rgba(47,227,160,.1);border:1px solid rgba(47,227,160,.4);color:var(--ok);border-radius:12px;padding:18px;font-weight:700;text-align:center}
+  .foot{color:var(--text3);font-size:11px;text-align:center;margin-top:22px}
 </style>
 </head>
 <body>
@@ -56,7 +66,8 @@
 
   function render() {
     var d = data;
-    var head = '<div class="card"><h1>IT požadavky k objednávce ' + esc(d.order_number || '') + '</h1>' +
+    var head = '<div class="top"><div class="logo">B</div><b>Best Series<span>2.0</span></b></div>' +
+      '<div class="card"><h1>IT požadavky k objednávce <em>' + esc(d.order_number || '') + '</em></h1>' +
       '<div class="sub">' + esc(d.customer || '') + '</div>';
     if (d.status === 'filled') {
       app.innerHTML = head + '</div><div class="card"><div class="ok">✓ Děkujeme, dotazník byl vyplněn' + (d.filled_at ? ' (' + fmt(d.filled_at) + ')' : '') + '.</div></div>';
@@ -67,7 +78,7 @@
       d.items.map(function (q) { return qHtml(q, (d.answers || {})[q.id] || ''); }).join('') +
       '<div class="q"><label class="l">Vaše jméno</label><input type="text" id="who" placeholder="Kdo formulář vyplňuje"></div>' +
       '<button id="send">Odeslat</button></div>';
-    app.innerHTML = head + form;
+    app.innerHTML = head + form + '<div class="foot">Best Series s.r.o.</div>';
     app.querySelectorAll('.opt input').forEach(function (i) {
       i.addEventListener('change', function () {
         var grp = app.querySelectorAll('input[name="' + i.name + '"]');

@@ -11523,9 +11523,10 @@
         var d = await r.json(); _itTpl = d.items || [];
         var s = await (await fetch('/api/it-requests/settings', { credentials: 'include' })).json();
         document.getElementById('modal-root').innerHTML =
-          '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
-            '<div class="modal" style="width:760px;max-width:95vw;max-height:90vh;overflow:auto;">' +
-              '<h2>💻 IT požadavky — checklist pro zákazníka</h2>' +
+          '<div class="modal-overlay" data-no-backdrop-close>' +
+            '<style>.it-modal input:not([type=checkbox]),.it-modal select,.it-modal textarea{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;box-sizing:border-box;font-family:inherit;}.it-modal textarea{resize:vertical;}.it-modal input[type=checkbox]{accent-color:#eab308;}.it-modal select{cursor:pointer;}.it-modal code{background:var(--bg);padding:1px 5px;border-radius:4px;}</style>' +
+            '<div class="modal it-modal" style="width:760px;max-width:95vw;max-height:90vh;overflow:auto;">' +
+              '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;"><h2 style="margin:0;">💻 IT požadavky — checklist pro zákazníka</h2><button type="button" class="btn btn-secondary btn-sm" onclick="closeModal()" title="Zavřít (neuložené změny se zahodí)" style="font-size:16px;line-height:1;">✕</button></div>' +
               '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Zákazník dostane e-mailem odkaz na formulář. Odpovědi se uloží k objednávce a odejdou e-mailem příjemcům níže. Pokud zákazník nevyplní do termínu, přijde upozornění Radkovi Bečkovi e-mailem a do Velínu.</div>' +
               '<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;">' +
                 '<div style="font-weight:600;margin-bottom:8px;">💳 E-mail „Založení Nayax účtu" (platební terminál)</div>' +
@@ -11545,12 +11546,11 @@
                   '<input id="it-s-test" type="email" placeholder="Tvůj e-mail pro test" style="flex:1;">' +
                   '<button type="button" class="btn btn-secondary btn-sm" onclick="itSendTest()">✉ Odeslat testovací e-mail</button>' +
                 '</div>' +
-                '<div style="margin-top:4px;color:var(--text2);">Test pošle ukázku e-mailu zákazníkovi (odkaz na náhled formuláře, nic se neukládá) i ukázku e-mailu s vyplněnými odpověďmi. Nastavení se uloží tlačítkem Uložit.</div>' +
+                '<div style="margin-top:4px;color:var(--text2);">Test pošle ukázku e-mailu zákazníkovi (odkaz na náhled formuláře, nic se neukládá). Vyplněné odpovědi se vždy uloží u objednávky (detail → 💻 IT dotazník) a e-mailem odejdou jen příjemcům výše. Nastavení se uloží tlačítkem Uložit.</div>' +
               '</div>' +
               '<div id="it-tpl-wrap"></div>' +
               '<button type="button" class="btn btn-secondary btn-sm" onclick="itTplAdd()">+ Přidat otázku</button>' +
               '<div class="modal-actions">' +
-                '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
                 '<button type="button" class="btn btn-primary" onclick="itTplSave()">Uložit</button>' +
               '</div>' +
             '</div>' +
@@ -11629,7 +11629,7 @@
         var r = await fetch('/api/it-requests/test', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email }) });
         var d = await r.json();
         if (!r.ok) throw new Error(d.error || ('Test selhal (' + r.status + ')'));
-        alert('Odesláno na ' + email + ' (2 e-maily: pro zákazníka a s vyplněnými odpověďmi).');
+        alert('Testovací e-mail pro zákazníka odeslán na ' + email + '.');
       } catch (e) { alert('Chyba: ' + e.message); }
     }
     async function itTplSave() {
@@ -11663,9 +11663,10 @@
         var email = (q && q.customer_email) || '';
         if (!email) { try { var o = await (await fetch('/api/wh/orders/' + orderId)).json(); email = o.customer_email || (o.company && o.company.email) || ''; } catch (e) {} }
         document.getElementById('modal-root').innerHTML =
-          '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
-            '<div class="modal" style="width:640px;max-width:95vw;max-height:90vh;overflow:auto;">' +
-              '<h2>💻 IT dotazník</h2>' + body +
+          '<div class="modal-overlay" data-no-backdrop-close>' +
+            '<style>.it-modal input:not([type=checkbox]),.it-modal select,.it-modal textarea{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;box-sizing:border-box;font-family:inherit;}</style>' +
+            '<div class="modal it-modal" style="width:640px;max-width:95vw;max-height:90vh;overflow:auto;">' +
+              '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;"><h2 style="margin:0;">💻 IT dotazník</h2><button type="button" class="btn btn-secondary btn-sm" onclick="closeModal()" title="Zavřít" style="font-size:16px;line-height:1;">✕</button></div>' + body +
               (q && q.status === 'filled' ? '' :
                 '<div style="margin-top:12px;"><label style="font-size:12px;color:var(--text2);">E-mail zákazníka</label>' +
                 '<input id="it-send-email" type="email" style="width:100%;" value="' + esc(email).replace(/"/g, '&quot;') + '"></div>') +

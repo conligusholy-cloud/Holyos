@@ -851,3 +851,16 @@ button.kv:active{background:rgba(124,92,255,.12)}
   backdrop-filter:blur(10px);font-size:17px;line-height:1;padding:0;
   box-shadow:0 8px 20px rgba(0,0,0,.45)}
 .map-globus.on{border-color:var(--blue);background:rgba(79,209,255,.18)}
+.map-poradce{font-size:17px}
+.por-tok{max-height:46vh;overflow:auto;display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.por-z{padding:9px 12px;border-radius:12px;font-size:14px;line-height:1.45;max-width:88%;white-space:normal}
+.por-z.ja{align-self:flex-end;background:var(--blue);color:#06121b;font-weight:600}
+.por-z.ai{align-self:flex-start;background:var(--card2,rgba(255,255,255,.06));border:1px solid var(--border)}
+.por-z.cekam{opacity:.6}
+.por-uvod{color:var(--text2);font-size:13px;padding:6px 2px}
+.por-chipy{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.por-chip{background:transparent;border:1px solid var(--border);color:var(--text2);
+  border-radius:999px;padding:6px 11px;font-size:12.5px;cursor:pointer}
+.por-chip:hover{border-color:var(--blue);color:var(--text)}
+.por-vstup{display:flex;gap:7px}
+.por-vstup .inp{flex:1;min-width:0}
