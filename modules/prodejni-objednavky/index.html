@@ -3074,7 +3074,7 @@
         '</div>' +
         '<span style="font-size:11px;color:var(--text2);">' + (d.scope === 'order' ? 'Jedna sada splátek z celé ceny objednávky (' + fm(PP.plan.total) + ').' : 'Každý stroj má vlastní splátky — pro různé termíny dodání.') + '</span>' +
         '<span style="flex:1"></span>' +
-        '<label style="font-size:11px;color:var(--text2);" title="Na tento účet má zákazník platit — propíše se na zálohové i finální faktury a QR kód">🏦 Účet pro platbu: <select onchange="ppSetAccount(this.value)" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;max-width:260px;"><option value="">— výchozí účet firmy —</option>' + (PP.accounts || []).filter(function (a) { return !a.currency || a.currency === cur || a.id === PP.plan.payment_account_id; }).map(function (a) { return '<option value="' + a.id + '"' + (PP.plan.payment_account_id === a.id ? ' selected' : '') + '>' + esc(a.name) + ' · ' + esc(a.account_number + '/' + a.bank_code) + ' (' + esc(a.currency || '') + ')</option>'; }).join('') + '</select></label>' +
+        '<label style="font-size:11px;color:var(--text2);" title="Na tento účet má zákazník platit — propíše se na zálohové i finální faktury a QR kód">🏦 Účet pro platbu <span style="color:#ef4444;font-weight:700;">*</span>: <select onchange="ppSetAccount(this.value)" style="background:var(--surface);border:1px solid ' + (PP.plan.payment_account_id ? 'var(--border)' : '#ef4444') + ';border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;max-width:260px;"><option value="">— vyber účet (povinné) —</option>' + (PP.accounts || []).filter(function (a) { return !a.currency || a.currency === cur || a.id === PP.plan.payment_account_id; }).map(function (a) { return '<option value="' + a.id + '"' + (PP.plan.payment_account_id === a.id ? ' selected' : '') + '>' + esc(a.name) + ' · ' + esc(a.account_number + '/' + a.bank_code) + ' (' + esc(a.currency || '') + ')</option>'; }).join('') + '</select></label>' +
         '<label style="font-size:11px;color:var(--text2);">Šablona: <select onchange="ppApplyTemplate(this.value, null);this.value=\'\'" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;"><option value="">— vybrat —</option>' + PP.plan.templates.map(function (t) { return '<option value="' + t.key + '">' + esc(t.label) + '</option>'; }).join('') + '</select></label>' +
       '</div>';
 
@@ -3236,6 +3236,7 @@
     // Faktura k jedné splátce (záloha nebo finální — podle druhu splátky). skipConfirm = potvrzení už proběhlo výš.
     async function ppInvoice(pid, skipConfirm) {
       var sp = PP.plan && PP.plan.payments.find(function (p) { return p.id === pid; });
+      if (PP.plan && !PP.plan.payment_account_id) { alert('Nejdřív vyber „Účet pro platbu" v Rozložení plateb (povinné) — bez něj nelze fakturu vystavit.'); return false; }
       if (!skipConfirm) {
         var what = sp ? (sp.kind === 'final' ? 'finální' : 'zálohovou') + ' fakturu na ' + Number(sp.amount).toLocaleString('cs-CZ') + ' ' + PP.plan.currency + ' bez DPH' : 'fakturu k této splátce';
         if (!confirm('Vystavit ' + what + '?\n\nVznikne koncept v Účetních dokladech (nic se neposílá).')) return false;

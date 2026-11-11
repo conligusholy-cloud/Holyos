@@ -224,7 +224,9 @@ async function issueInvoiceForPayment(paymentId, opts = {}) {
   }).join(' · ').slice(0, 500);
   const vybava = itemsTxt ? ' — Výbava: ' + itemsTxt : '';
 
+  // Účet pro platbu je povinný — bez něj by faktura neměla kam platit (vybírá se v Rozložení plateb)
   const acct = await paymentAccountFields(db, order.payment_account_id);
+  if (!order.payment_account_id || !acct.partner_bank_account) throw Object.assign(new Error('Nejdřív vyber „Účet pro platbu" v Rozložení plateb — bez něj nelze fakturu vystavit'), { status: 400, code: 'payment_account_required' });
   let invoice;
   if (p.kind === 'deposit') {
     const m = money(net);
