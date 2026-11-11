@@ -187,6 +187,25 @@ Pokyny:
 - Pokud řádek má množství 1 a jen celkovou cenu, použij quantity=1 a unit_price = tu cenu.
 - Vrať POUZE JSON.`;
 
+// Ořezaný výstup {"items":[{...},{...},{... → ponechá všechny celé položky
+function salvageItemsJson(t) {
+  let s = String(t || '');
+  for (let i = 0; i < 400; i++) {
+    const cut = s.lastIndexOf('}');
+    if (cut < 0) return null;
+    s = s.slice(0, cut + 1);
+    for (const tail of [']}', '}]}', ']', '']) {
+      try {
+        const o = JSON.parse(s + tail);
+        if (o && Array.isArray(o.items)) return o;
+        if (Array.isArray(o)) return { items: o };
+      } catch (e) { /* zkus další zakončení */ }
+    }
+    s = s.slice(0, -1);
+  }
+  return null;
+}
+
 async function extractItems(filePath, options = {}) {
   const { model = MODEL_SONNET } = options;
   const client = getClient();
@@ -195,7 +214,7 @@ async function extractItems(filePath, options = {}) {
   const startedAt = Date.now();
   const response = await client.messages.create({
     model,
-    max_tokens: 4000,
+    max_tokens: 16000, // dlouhé faktury (desítky řádků) se při 4000 tokenech ořízly uprostřed JSON → celé čtení padlo
     system: 'Vracíš pouze validní JSON objekt, bez markdown kódových bloků.',
     messages: [{
       role: 'user',
@@ -211,7 +230,10 @@ async function extractItems(filePath, options = {}) {
   try {
     parsed = JSON.parse(stripCodeFences(text));
   } catch (err) {
-    throw new Error(`Claude vrátil nevalidní JSON v Pass 2: ${err.message}\n---\n${text.slice(0, 500)}`);
+    // Záchrana ořezaného JSON: uřízni po poslední celé položce a doplň závorky
+    parsed = salvageItemsJson(stripCodeFences(text));
+    if (!parsed) throw new Error(`Claude vrátil nevalidní JSON v Pass 2: ${err.message}\n---\n${text.slice(0, 500)}`);
+    parsed.confidence = Math.min(Number(parsed.confidence || 0.5), 0.5);
   }
 
   return {

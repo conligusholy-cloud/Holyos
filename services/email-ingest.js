@@ -526,17 +526,21 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
     return { ingest, invoices: [], skippedDuplicates, results };
   }
 
+  // Skutečná příčina (např. „Claude Vision selhal: …“ / nevalidní JSON / nepodporovaný formát) — ať je vidět v detailu i v auditu
+  const failReason = lowConfidenceResults
+    .map((r) => r.reason || (r.errors && r.errors[0] && r.errors[0].message) || '')
+    .filter(Boolean).join(' | ').replace(/\s+/g, ' ').slice(0, 400);
   await prisma.emailIngest.update({
     where: { id: ingest.id },
     data: {
       status: 'unreadable',
       confidence: avgConfidence,
-      sender_notify_reason: `Nízká důvěra extrakce (${Math.round(avgConfidence * 100)} %)`,
+      sender_notify_reason: `Nízká důvěra extrakce (${Math.round(avgConfidence * 100)} %)` + (failReason ? ' — ' + failReason : ''),
     },
   });
   logAudit({
     action: 'update', entity: 'email_ingest', entity_id: ingest.id,
-    description: `❌ ${ingest.subject?.slice(0, 60) || ''} → nečitelné (${results.length} příloh, průměrná důvěra ${Math.round(avgConfidence * 100)}%)`,
+    description: `❌ ${ingest.subject?.slice(0, 60) || ''} → nečitelné (${results.length} příloh, průměrná důvěra ${Math.round(avgConfidence * 100)}%)` + (failReason ? ` — příčina: ${failReason.slice(0, 200)}` : ''),
     user: { username: 'system', display_name: 'Email ingest' },
   }).catch(() => {});
   if (notifyContext) {

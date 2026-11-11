@@ -148,23 +148,30 @@ async function runPipeline(filePath, ctx = {}) {
 
   // ─── Pass 1 + 2 — Claude Vision paralelně ──────────────────────────────
   let headerResult, itemsResult;
-  try {
-    [headerResult, itemsResult] = await Promise.all([
-      extractHeader(filePath),
-      extractItems(filePath),
-    ]);
-    passes.push(headerResult, itemsResult);
-  } catch (err) {
-    errors.push({ pass: 'vision', message: err.message });
+  // allSettled: selhání čtení POLOŽEK (dlouhá vícestránková faktura, ořezaný JSON…) nesmí shodit celý doklad —
+  // hlavička (částka, dodavatel, VS, splatnost) stačí a faktura půjde ke kontrole. Padá jen když selže hlavička.
+  const [hRes, iRes] = await Promise.allSettled([extractHeader(filePath), extractItems(filePath)]);
+  if (hRes.status === 'rejected') {
+    const msg = (hRes.reason && hRes.reason.message) || String(hRes.reason);
+    errors.push({ pass: 'vision', message: msg });
     await updateProgress(ctx, 0);
     return {
       ok: false,
       composite_confidence: 0,
       recommendation: 'unreadable',
-      reason: 'Claude Vision selhal: ' + err.message,
+      reason: 'Claude Vision selhal (hlavička): ' + msg,
       passes, errors, warnings,
     };
   }
+  headerResult = hRes.value;
+  if (iRes.status === 'fulfilled') {
+    itemsResult = iRes.value;
+  } else {
+    const msg = (iRes.reason && iRes.reason.message) || String(iRes.reason);
+    warnings.push({ pass: 'items', message: 'Položky se nepodařilo přečíst — doklad vytvořen jen z hlavičky, doplň položky ručně. ' + msg.slice(0, 300) });
+    itemsResult = { pass: 2, pass_type: 'claude_vision_lines', model: null, data: { items: [], confidence: 0.3 }, confidence: 0.3, input_tokens: 0, output_tokens: 0, duration_ms: 0 };
+  }
+  passes.push(headerResult, itemsResult);
   await updateProgress(ctx, 0.40, 'Hlavička a položky přečteny');
 
   const header = headerResult.data;
