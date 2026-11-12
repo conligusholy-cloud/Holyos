@@ -284,6 +284,18 @@ button.kv:active{background:rgba(124,92,255,.12)}
   font-size:15px;border:2px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,.6)}
 .pin.unknown{background:#2a3350;color:#8ea2c2;border-color:#4a5880}
 .pin.known{background:#1e86e0;color:#fff}
+/* Prověřené místo píše rovnou skóre; barva rámečku je verdikt. */
+.pin.skore{font-size:12.5px;font-weight:800;letter-spacing:-.3px}
+.pin.skore.dobre{border-color:#2fe3a0}
+.pin.skore.stredni{border-color:#ffd866}
+.pin.skore.slabe{border-color:#9fb0cc}
+.pin.pozemek.known{position:relative;overflow:visible}
+.pin-skore{position:absolute;right:-7px;bottom:-7px;min-width:19px;height:17px;line-height:15px;
+  border-radius:999px;font-size:10.5px;font-weight:800;font-style:normal;text-align:center;padding:0 3px;
+  border:1.5px solid #0b1220;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+.pin-skore.dobre{background:#2fe3a0;color:#04301f}
+.pin-skore.stredni{background:#ffd866;color:#3a2600}
+.pin-skore.slabe{background:#9fb0cc;color:#10182b}
 /* Pozemek na prodej — jiná nabídka než nájem, tak má i jinou barvu. */
 .pin.pozemek{background:#1d6b52;color:#9df0cc;border-color:#2fe3a0;font-weight:800}
 .pin.pozemek.known{background:#2fe3a0;color:#04301f}
