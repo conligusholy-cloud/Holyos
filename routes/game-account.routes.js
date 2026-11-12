@@ -1425,14 +1425,15 @@ function senVen(d) {
   return { id: d.id, nazev: d.nazev, popis: d.popis, zadani: d.zadani, cena: d.cena,
     rezie: d.rezie || 0, ikona: d.ikona, foto: d.foto, splneno: d.splneno_at,
     zaplaceno: d.zaplaceno, prodano: d.prodano_at, prodano_za: d.prodano_za,
-    zalozeno: d.created_at };
+    smazano: d.smazano_at, zalozeno: d.created_at };
 }
 
 // GET /sny → všechny sny hráče, nesplněné první
 router.get('/sny', requirePlayer, async (req, res, next) => {
   try {
     const sny = await prisma.gameDream.findMany({
-      where: { player_id: req.player.id }, orderBy: [{ splneno_at: 'asc' }, { created_at: 'desc' }] });
+      where: { player_id: req.player.id, prodano_at: null, smazano_at: null },
+      orderBy: [{ splneno_at: 'asc' }, { created_at: 'desc' }] });
     res.json({ ok: true, sny: sny.map(senVen) });
   } catch (e) { next(e); }
 });
@@ -1445,7 +1446,8 @@ router.post('/sny', requirePlayer, async (req, res, next) => {
     }
     const zadani = s((req.body || {}).zadani, 200);
     if (zadani.length < 2) return res.status(400).json({ error: 'Napiš, co by sis chtěl dopřát.' });
-    const kolik = await prisma.gameDream.count({ where: { player_id: req.player.id } });
+    const kolik = await prisma.gameDream.count({
+      where: { player_id: req.player.id, prodano_at: null, smazano_at: null } });
     if (kolik >= SNU_MAX) return res.status(409).json({ error: 'Na nástěnku se vejde ' + SNU_MAX + ' snů. Nějaký nejdřív ulov nebo smaž.' });
     const out = await require('../services/game/sen').vymysli(zadani);
     if (!out.ok) return res.status(503).json({ error: out.error });
@@ -1510,7 +1512,7 @@ router.post('/sny/:id/prodat', requirePlayer, async (req, res, next) => {
 router.get('/sny/zed', async (req, res, next) => {
   try {
     const radky = await prisma.gameDream.findMany({
-      where: { splneno_at: { not: null }, prodano_at: null },
+      where: { splneno_at: { not: null }, prodano_at: null, smazano_at: null },
       orderBy: { splneno_at: 'desc' }, take: 24,
       select: { id: true, nazev: true, cena: true, ikona: true, popis: true,
         splneno_at: true, prodano_at: true, player_id: true, foto: true } });
@@ -1540,14 +1542,47 @@ router.get('/sny/zed/:id/foto', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// DELETE /sny/:id
+// GET /sny/historie → co hráč někdy měl a už to nemá. Prodané i smazané
+// splněné sny, s datem a tím, co to stálo. Fotky se posílají zvlášť.
+router.get('/sny/historie', requirePlayer, async (req, res, next) => {
+  try {
+    const sny = await prisma.gameDream.findMany({
+      where: { player_id: req.player.id, splneno_at: { not: null },
+        OR: [{ prodano_at: { not: null } }, { smazano_at: { not: null } }] },
+      orderBy: { splneno_at: 'desc' }, take: 60,
+      select: { id: true, nazev: true, popis: true, cena: true, rezie: true, ikona: true,
+        splneno_at: true, prodano_at: true, prodano_za: true, smazano_at: true, foto: true } });
+    res.json({ ok: true, historie: sny.map((d) => ({
+      id: d.id, nazev: d.nazev, popis: d.popis, cena: d.cena, ikona: d.ikona,
+      splneno: d.splneno_at, prodano: d.prodano_at, prodano_za: d.prodano_za,
+      smazano: d.smazano_at, ma_foto: !!d.foto })) });
+  } catch (e) { next(e); }
+});
+
+// GET /sny/:id/foto → vlastní fotka ke snu, i k tomu v historii.
+router.get('/sny/:id/foto', requirePlayer, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const d = await prisma.gameDream.findFirst({ where: { id, player_id: req.player.id },
+      select: { foto: true } });
+    if (!d || !d.foto) return res.status(404).json({ error: 'Fotka tu není.' });
+    res.set('Cache-Control', 'private, max-age=3600').json({ ok: true, foto: d.foto });
+  } catch (e) { next(e); }
+});
+
+// DELETE /sny/:id — splněný sen se nemaže, schová se do historie i s fotkou.
+// Nesplněný byl jen poznámka na nástěnce, ten zmizí doopravdy.
 router.delete('/sny/:id', requirePlayer, async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
     const d = await prisma.gameDream.findFirst({ where: { id, player_id: req.player.id } });
     if (!d) return res.status(404).json({ error: 'Takový sen tu není.' });
+    if (d.splneno_at) {
+      await prisma.gameDream.update({ where: { id: d.id }, data: { smazano_at: new Date() } });
+      return res.json({ ok: true, historie: true });
+    }
     await prisma.gameDream.delete({ where: { id: d.id } });
-    res.json({ ok: true });
+    res.json({ ok: true, historie: false });
   } catch (e) { next(e); }
 });
 

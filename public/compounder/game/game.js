@@ -8012,6 +8012,59 @@ function oslavaSheet(x, dalsich) {
     }).catch(function () { /* zůstane ikona */ });
   }
 }
+// ─── Historie snů ────────────────────────────────────────────────────────────
+// Co si hráč někdy splnil a už to nemá — prodané i smazané sny. Z nástěnky
+// zmizí, ale tady zůstanou i s fotkou; je to jeho cesta, ne jen stav účtu.
+var HIST = null, HIST_OTEVRENO = false, HIST_NACITAM = false;
+function loadHist(pak) {
+  if (!ME || HIST_NACITAM) return;
+  HIST_NACITAM = true;
+  api('/sny/historie').then(function (r) {
+    HIST_NACITAM = false;
+    HIST = (r.ok && r.j.historie) ? r.j.historie : [];
+    if (pak) pak(); else if (!$('v-me').classList.contains('hidden')) paintMe();
+  }).catch(function () { HIST_NACITAM = false; HIST = HIST || []; });
+}
+// Fotky k historii se tahají po jedné, až když je hráč chce vidět.
+function histFotky() {
+  (HIST || []).forEach(function (d) {
+    if (!d.ma_foto || d.foto || d._cekam) return;
+    d._cekam = true;
+    api('/sny/' + d.id + '/foto').then(function (r) {
+      d._cekam = false;
+      if (!r.ok || !r.j.foto) return;
+      d.foto = r.j.foto;
+      var el = document.querySelector('[data-hist-foto="' + d.id + '"]');
+      if (el) el.innerHTML = '<img class="hist-foto" src="' + esc(d.foto) + '" alt="">';
+    }).catch(function () { d._cekam = false; });
+  });
+}
+function histHtml() {
+  if (!ME) return '';
+  if (HIST === null) { loadHist(); return ''; }
+  if (!HIST.length) return '';
+  var hlava = '<button class="hist-hlava" id="hist-prep">'
+    + '<b>Co už jsi měl</b><span>' + HIST.length + ' ' + mn(HIST.length, 'sen', 'sny', 'snů')
+    + ' · ' + (HIST_OTEVRENO ? 'skrýt' : 'ukázat') + '</span></button>';
+  if (!HIST_OTEVRENO) return '<div style="margin-top:16px">' + hlava + '</div>';
+  return '<div style="margin-top:16px">' + hlava
+    + '<p class="muted small" style="margin:8px 0">Splněné sny, co jsi prodal nebo smazal. '
+    + 'Z nástěnky zmizely, ale nezmizely úplně.</p>'
+    + '<div class="sny">' + HIST.map(function (d) {
+      var co = d.prodano
+        ? 'prodáno ' + new Date(d.prodano).toLocaleDateString('cs-CZ') + ' za ' + kcFull(d.prodano_za || 0)
+        : 'smazáno ' + new Date(d.smazano).toLocaleDateString('cs-CZ');
+      return '<div class="sen hist">'
+        + '<div class="sen-foto ikona" data-hist-foto="' + d.id + '">'
+        + (d.foto ? '<img class="hist-foto" src="' + esc(d.foto) + '" alt="">'
+                  : '<svg viewBox="0 0 64 64">' + SEN_IKONY[senZnacka(d)] + '</svg>') + '</div>'
+        + '<div class="sen-txt">'
+          + '<div class="sen-hl"><b>' + esc(d.nazev) + '</b><b>' + kcFull(d.cena) + '</b></div>'
+          + '<i>splněno ' + new Date(d.splneno).toLocaleDateString('cs-CZ') + '</i>'
+          + '<i>' + co + '</i>'
+        + '</div></div>';
+    }).join('') + '</div></div>';
+}
 function zedHtml() {
   if (ZED === null) { loadZed(); return ''; }
   if (!ZED.length) return '';
@@ -8210,6 +8263,7 @@ function snyKartaHtml() {
                 + 'co už jen leží, můžeš prodat.' : '') + '</p>'
           + '<div class="sny">' + splnene.map(senKarta).join('') + '</div>'
         : '')
+    + histHtml()
     + zedHtml()
     + (!SNY.length ? '<p class="fine" style="margin-top:10px">Zatím tu nic není. '
         + 'Zkus třeba „chata v Krkonoších" nebo „rok volna".</p>' : '')
@@ -8218,6 +8272,12 @@ function snyKartaHtml() {
 function bindSny() {
   var nb = $('sen-novy');
   if (nb) nb.onclick = senNovySheet;
+  var hp = $('hist-prep');
+  if (hp) hp.onclick = function () {
+    HIST_OTEVRENO = !HIST_OTEVRENO;
+    paintMe();
+    if (HIST_OTEVRENO) histFotky();
+  };
   [].forEach.call(document.querySelectorAll('[data-sen-koupit]'), function (b) {
     b.onclick = function () { senKoupitSheet(Number(b.getAttribute('data-sen-koupit'))); };
   });
@@ -8307,8 +8367,8 @@ function senProdatSheet(id) {
   sheet('<h3>Prodat ' + esc(d.nazev) + '?</h3>'
     + '<p class="muted small">Z druhé ruky nikdo nedá, co jsi zaplatil. Dostaneš '
     + Math.round(SEN_PRODEJ * 100) + ' % ceny a zbytek je ztráta — zato ti každý měsíc '
-    + 'přestane utíkat provoz. Z nástěnky i od ostatních hráčů sen zmizí; '
-    + 'v knize po něm zůstane zápis.</p>'
+    + 'přestane utíkat provoz. Z nástěnky i od ostatních hráčů sen zmizí, '
+    + 'ale zůstane ti i s fotkou v historii pod nástěnkou.</p>'
     + '<div class="kv"><span>Pořizovací cena</span><b>' + kcFull(d.cena) + '</b></div>'
     + '<div class="kv"><span>Dostaneš</span><b class="ok">' + kcFull(za) + '</b></div>'
     + '<div class="kv"><span>Ztráta</span><b class="err">' + kcFull(ztrata) + '</b></div>'
@@ -8322,8 +8382,9 @@ function senProdatSheet(id) {
       if (!r.ok) { b.disabled = false; b.textContent = 'Prodat'; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
       S.cash += r.j.za;
       zapis('sen', 'Prodaný sen — ' + d.nazev, r.j.za);
-      SNY = (SNY || []).map(function (x) { return x.id === d.id ? r.j.sen : x; });
+      SNY = (SNY || []).filter(function (x) { return x.id !== d.id; });
       snyPrepocti();
+      HIST = null;
       save(); paint(); syncState(true);
       closeSheet(); paintMe();
       toast('Prodáno za ' + kcFull(r.j.za) + '. Z nástěnky mizí, provoz taky.', 'ok');
@@ -8334,7 +8395,9 @@ function senSmazatSheet(id) {
   var d = senPodle(id);
   if (!d) return;
   sheet('<h3>Smazat sen?</h3>'
-    + '<p class="muted small">' + esc(d.nazev) + ' zmizí z nástěnky. Vrátit to nejde.</p>'
+    + '<p class="muted small">' + esc(d.nazev) + ' zmizí z nástěnky. '
+    + (d.splneno ? 'Protože sis ho splnil, zůstane ti i s fotkou v historii pod nástěnkou.'
+                 : 'Vrátit to nejde.') + '</p>'
     + '<button class="btn big" id="sen-del" style="width:100%">Smazat</button>'
     + '<button class="btn ghost" id="sen-nedel" style="width:100%;margin-top:8px">Nechat</button>');
   $('sen-nedel').onclick = closeSheet;
@@ -8342,6 +8405,7 @@ function senSmazatSheet(id) {
     api('/sny/' + d.id, { method: 'DELETE' }).then(function () {
       SNY = (SNY || []).filter(function (x) { return x.id !== d.id; });
       snyPrepocti();
+      if (d.splneno) HIST = null;        // splněný sen se přesunul do historie
       closeSheet(); paintMe();
     }).catch(function () { toast('Server neodpovídá.', 'err'); });
   };

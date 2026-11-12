@@ -7708,6 +7708,8 @@ model GameDream {
   // Prodej se ztrátou, když hráče provoz přeroste.
   prodano_at DateTime?
   prodano_za Int?
+  // Splněný sen se nemaže doopravdy — jen se schová do historie u profilu.
+  smazano_at DateTime?
   poradi     Int       @default(0)
   created_at DateTime  @default(now())
 
