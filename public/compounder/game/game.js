@@ -3187,6 +3187,22 @@ function odmitniHovor(samo) {
   } else {
     toast(samo ? 'Zákazník se nedočkal a položil to. Pověst klesla.'
                : 'Hovor jsi nevzal. Pověst klesla.', 'err');
+    // Zrovna ho to stálo hvězdičky — tady má nabídka smysl nejvíc.
+    if (linkaNabidnoutLze()) {
+      var c = (LINKA_CAT || [])[0];
+      S.linkaNabidka = Date.now(); save();
+      sheet('<h3>\u260E\uFE0F Ať to za tebe zvedne operátor</h3>'
+        + '<p class="muted small">Tenhle hovor ti vzal kus pověsti. Operátor infolinky zvedne '
+        + 'každý hovor, který nestihneš — a pověst zůstane, kde byla.</p>'
+        + '<div class="kv"><span>Nevyčerpané hovory</span><b>0</b></div>'
+        + '<button class="btn big" data-linka="' + esc(c.kind) + '">' + c.hovory + ' hovorů za '
+        + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button>'
+        + '<button class="btn sec" id="linka-ne" style="width:100%;margin-top:8px">Teď ne</button>'
+        + '<p class="fine">Větší balíčky vyjdou levněji — najdeš je v Kartách.</p>');
+      var bl = document.querySelector('#sheet-body [data-linka]');
+      if (bl) bl.onclick = function () { buyCash(bl.getAttribute('data-linka')); };
+      if ($('linka-ne')) $('linka-ne').onclick = closeSheet;
+    }
   }
 }
 function vezmiHovor() {
@@ -3317,6 +3333,7 @@ function paintHovor() {
       + (navs >= 0 ? '+' : '−') + Math.abs(navs).toFixed(1).replace('.', ',') + ' %</b></div>'
       + '<p class="fine">Pověst jde od −100 do +100. Každý hovor s ní pohne o pár bodů '
       + 'a podle ní se počítá hodnocení zákazníků i návštěvnost prádlomatů.</p>'
+      + (linkaNabidnoutLze() ? linkaNabidkaHtml() : '')
       + '<button class="btn big" id="hov-konec" style="width:100%;margin-top:10px">Zavěsit</button></div>';
   }
   el.innerHTML = html;
@@ -3324,6 +3341,9 @@ function paintHovor() {
   // Přepis dorůstá odspodu — vždy ukazujeme poslední repliku.
   var pr = $('hov-prepis');
   if (pr) pr.scrollTop = pr.scrollHeight;
+  [].forEach.call(el.querySelectorAll('[data-linka]'), function (b2) {
+    b2.onclick = function () { zavesHovor(); buyCash(b2.getAttribute('data-linka')); };
+  });
   if ($('hov-ano')) $('hov-ano').onclick = vezmiHovor;
   if ($('hov-ne')) $('hov-ne').onclick = function () { odmitniHovor(false); };
 
@@ -6468,6 +6488,31 @@ var NABIDKY = [
     duvod: 'Expanduješ na dluh a úrok ti ukrajuje ze zisku. Lepší bankéř sráží sazbu '
       + 'o dva body a zvedá rámec natrvalo.' }
 ];
+// Nabídka infolinky se ozývá tam, kde je k něčemu: po hovoru. Každý třetí,
+// a to jen tomu, kdo žádné kredity nemá — kdo si je koupil, má pokoj. Odstup
+// hlídáme i v čase, protože s velkou sítí zvoní telefon co půl minuty a
+// nabídka po každém třetím hovoru by jinak byla za chvíli otravná.
+var LINKA_PO_HOVORECH = 3;
+var LINKA_ODSTUP = 20 * 60e3;
+function linkaNabidnoutLze() {
+  if (!S || S.tut !== 'done' || !ME || !PAYMENTS_ON) return false;
+  if (!LINKA_CAT || !LINKA_CAT.length) return false;
+  if ((S.linka || 0) > 0) return false;
+  if (((S.hovoru || 0) % LINKA_PO_HOVORECH) !== 0) return false;
+  return Date.now() - (S.linkaNabidka || 0) >= LINKA_ODSTUP;
+}
+// Blok do panelu s koncem hovoru — nabídne nejmenší balíček a odkáže na zbytek.
+function linkaNabidkaHtml() {
+  var c = (LINKA_CAT || [])[0];
+  if (!c) return '';
+  S.linkaNabidka = Date.now(); save();
+  return '<div class="card agent" style="margin-top:12px"><h3>\u260E\uFE0F Ať to za tebe zvedne operátor</h3>'
+    + '<p class="muted small" style="margin:2px 0 8px">Takhle ti bude telefon zvonit u každé pobočky. '
+    + 'Hovor, který nestihneš, vezme operátor a pověst ti za něj neklesne.</p>'
+    + '<button class="btn big" data-linka="' + esc(c.kind) + '">' + c.hovory + ' hovorů za '
+    + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button>'
+    + '<p class="fine">Větší balíčky vyjdou levněji — jsou v Kartách.</p></div>';
+}
 function hlidejNabidky() {
   if (!S || S.tut !== 'done' || !ME || !PAYMENTS_ON || !CARDS_CAT) return;
   if (!$('sheet').classList.contains('hidden')) return;
