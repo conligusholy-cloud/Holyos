@@ -8155,10 +8155,7 @@ function senKarta(d) {
   var chybi = Math.max(0, d.cena - S.cash);
   var podil = Math.max(0, Math.min(1, S.cash / Math.max(1, d.cena)));
   var stav;
-  if (prodano) {
-    stav = '<i>Prodáno ' + new Date(d.prodano).toLocaleDateString('cs-CZ')
-      + ' za ' + kcFull(d.prodano_za || 0) + '</i>';
-  } else if (splneno) {
+  if (splneno) {
     stav = '<i class="ok">\u2714 Splněno ' + new Date(d.splneno).toLocaleDateString('cs-CZ') + '</i>'
       + (d.rezie ? '<i class="warn">provoz ' + kcFull(d.rezie) + ' / měsíc</i>' : '');
   } else {
@@ -8168,18 +8165,18 @@ function senKarta(d) {
           : 'máš na to — můžeš si ho pořídit') + '</i>'
       + (d.rezie ? '<i class="muted">provoz pak ' + kcFull(d.rezie) + ' / měsíc</i>' : '');
   }
-  return '<div class="sen' + (splneno && !prodano ? ' hotovo' : '') + (prodano ? ' pryc' : '') + '">'
+  return '<div class="sen' + (splneno ? ' hotovo' : '') + '">'
     + senObrazek(d)
     + '<div class="sen-txt">'
-      + '<div class="sen-hl"><b>' + esc(d.nazev) + '</b><b class="' + (splneno && !prodano ? 'ok' : '') + '">'
+      + '<div class="sen-hl"><b>' + esc(d.nazev) + '</b><b class="' + (splneno ? 'ok' : '') + '">'
       + kcFull(d.cena) + '</b></div>'
       + (d.popis ? '<i>' + esc(d.popis) + '</i>' : '')
       + stav
       + '<div class="sen-akce">'
-        + (splneno || prodano ? '' : '<button class="btn sm' + (chybi > 0 ? ' sec' : '') + '" data-sen-koupit="' + d.id + '"'
+        + (splneno ? '' : '<button class="btn sm' + (chybi > 0 ? ' sec' : '') + '" data-sen-koupit="' + d.id + '"'
             + (chybi > 0 ? ' disabled' : '') + '>Pořídit</button>')
-        + (splneno && !prodano ? '<button class="btn sm sec" data-sen-prodat="' + d.id + '">Prodat</button>' : '')
-        + (prodano ? '' : '<button class="btn sm sec" data-sen-foto="' + d.id + '">' + (d.foto ? 'Jiná fotka' : 'Vlastní fotka') + '</button>')
+        + (splneno ? '<button class="btn sm sec" data-sen-prodat="' + d.id + '">Prodat</button>' : '')
+        + '<button class="btn sm sec" data-sen-foto="' + d.id + '">' + (d.foto ? 'Jiná fotka' : 'Vlastní fotka') + '</button>'
         + '<button class="sen-smazat" data-sen-smazat="' + d.id + '" title="Smazat sen">\u00d7</button>'
       + '</div>'
     + '</div></div>';
@@ -8194,8 +8191,10 @@ function snyKartaHtml() {
     loadSny();
     return '<div class="card"><h3>Moje sny</h3><p class="muted small" style="margin:2px 0 0">Načítám…</p></div>';
   }
-  var nesplnene = SNY.filter(function (d) { return !d.splneno; });
-  var splnene = SNY.filter(function (d) { return !!d.splneno; });
+  // Prodaný sen z nástěnky zmizí — ani mezi nesplněnými, ani mezi splněnými.
+  // V knize po něm zůstane zápis, co stál a za kolik šel pryč.
+  var nesplnene = SNY.filter(function (d) { return !d.splneno && !d.prodano; });
+  var splnene = SNY.filter(function (d) { return !!d.splneno && !d.prodano; });
   var provoz = snyMesicne();
   return '<div class="card"><h3>Moje sny</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Napiš, co si chceš jednou dopřát. '
@@ -8308,7 +8307,8 @@ function senProdatSheet(id) {
   sheet('<h3>Prodat ' + esc(d.nazev) + '?</h3>'
     + '<p class="muted small">Z druhé ruky nikdo nedá, co jsi zaplatil. Dostaneš '
     + Math.round(SEN_PRODEJ * 100) + ' % ceny a zbytek je ztráta — zato ti každý měsíc '
-    + 'přestane utíkat provoz. Na nástěnce sen zůstane, jen jako prodaný.</p>'
+    + 'přestane utíkat provoz. Z nástěnky i od ostatních hráčů sen zmizí; '
+    + 'v knize po něm zůstane zápis.</p>'
     + '<div class="kv"><span>Pořizovací cena</span><b>' + kcFull(d.cena) + '</b></div>'
     + '<div class="kv"><span>Dostaneš</span><b class="ok">' + kcFull(za) + '</b></div>'
     + '<div class="kv"><span>Ztráta</span><b class="err">' + kcFull(ztrata) + '</b></div>'
@@ -8326,7 +8326,7 @@ function senProdatSheet(id) {
       snyPrepocti();
       save(); paint(); syncState(true);
       closeSheet(); paintMe();
-      toast('Prodáno za ' + kcFull(r.j.za) + '. Provoz ti přestal ujídat.', 'ok');
+      toast('Prodáno za ' + kcFull(r.j.za) + '. Z nástěnky mizí, provoz taky.', 'ok');
     }).catch(function () { b.disabled = false; b.textContent = 'Prodat'; toast('Server neodpovídá.', 'err'); });
   };
 }

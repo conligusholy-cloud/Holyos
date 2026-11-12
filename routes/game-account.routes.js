@@ -1510,7 +1510,7 @@ router.post('/sny/:id/prodat', requirePlayer, async (req, res, next) => {
 router.get('/sny/zed', async (req, res, next) => {
   try {
     const radky = await prisma.gameDream.findMany({
-      where: { splneno_at: { not: null } },
+      where: { splneno_at: { not: null }, prodano_at: null },
       orderBy: { splneno_at: 'desc' }, take: 24,
       select: { id: true, nazev: true, cena: true, ikona: true, popis: true,
         splneno_at: true, prodano_at: true, player_id: true, foto: true } });
