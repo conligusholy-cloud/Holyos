@@ -616,7 +616,9 @@ function vyjezdZblizka(u) {
   var oprava = ((u.porucha && u.porucha.zav) || 1) * HODINA_MS;
   return 2 * 0.5 * HODINA_MS + oprava;
 }
-function vyslatTechnika(u) {
+// `ticho` používá vedoucí servisu: když vyjede k třiceti strojům najednou,
+// nemá hráči probliknout třicet hlášek — dostane jednu souhrnnou.
+function vyslatTechnika(u, ticho) {
   if (!u || !jeVPoruse(u) || u.technik) return;
   var v = vyjezdOdhad(u);
   if (!v) { toast('Nemáš základnu, odkud technika poslat.', 'err'); return; }
@@ -628,7 +630,7 @@ function vyslatTechnika(u) {
   };
   save(); paint(); drawMap(); drawAuta(); syncState(true);
   nactiTrasu(u);
-  toast('Technik vyrazil ' + v.zpusob.nazev + ', na místě bude ' + etaText(v.jizda) + '.', 'ok');
+  if (!ticho) toast('Technik vyrazil ' + v.zpusob.nazev + ', na místě bude ' + etaText(v.jizda) + '.', 'ok');
 }
 // Výjezdy posouvá čas: jakmile je oprava hotová, stroj zase jede; až se auto
 // vrátí na základnu, zmizí z mapy.
@@ -1831,6 +1833,7 @@ function tick() {
   hlidejVypovedMajitele(dt);
   hlidejStehovani();
   hlidejServis();
+  dispecerKolo();
   zapisHistorii();
 }
 
@@ -10573,11 +10576,57 @@ function loadCards() {
   return api('/cards').then(function (r) {
     if (!r.ok) return;
     CARDS_CAT = r.j.catalog; CASH_CAT = r.j.cash || null; PAYMENTS_ON = !!r.j.payments;
+    SUBS_CAT = r.j.subs || null; PREDPLATNE = r.j.predplatne || [];
     RUSH_ZA = r.j.rush_zdarma_za; RUSH_MAX = r.j.rush_zdarma_max || 5;
     if (r.j.owned && ME) ME.cards = r.j.owned;
   }).catch(function () { });
 }
 function ownedOf(kind) { return (ME && ME.cards && ME.cards[kind]) || 0; }
+// ─── Předplatné: vedoucí servisních techniků ─────────────────────────────────
+// Jestli běží, rozhoduje server — klient si to nesmí odkývat sám. Dispečer
+// nechává hráči čtvrt hodiny: kdo u hry sedí, zareaguje stejně rychleji sám,
+// a předplatné tak šetří pozornost, ne že by kupovalo výhodu.
+var SUBS_CAT = null, PREDPLATNE = [];
+var DISPECER_PRODLEVA = 15 * 60e3;
+function predplatneNa(kind) {
+  var ted = Date.now();
+  return (PREDPLATNE || []).filter(function (x) {
+    return x.kind === kind && (!x.plati_do || new Date(x.plati_do).getTime() > ted);
+  })[0] || null;
+}
+function dispecerKapacita() {
+  var p = predplatneNa('dispecer');
+  if (!p) return 0;
+  var c = (SUBS_CAT || []).filter(function (x) { return x.kind === 'dispecer'; })[0];
+  return (p.qty || 1) * ((c && c.kapacita) || 35);
+}
+// Kolik techniků by síť potřebovala.
+function dispecerPotreba(pocet) {
+  var c = (SUBS_CAT || []).filter(function (x) { return x.kind === 'dispecer'; })[0];
+  var kap = (c && c.kapacita) || 35;
+  return Math.max(1, Math.ceil((pocet == null ? (S.units || []).length : pocet) / kap));
+}
+// Vedoucí obchází poruchy sám. Obslouží jen tolik poboček, kolik je zaplaceno —
+// bere je od nejstarší, aby to bylo pokaždé stejné a dalo se na to spolehnout.
+function dispecerKolo() {
+  var kap = dispecerKapacita();
+  if (!kap || !S || !S.units) return;
+  var ted = Date.now();
+  var hlidane = S.units.slice().sort(function (a, b) { return (a.builtAt || 0) - (b.builtAt || 0); }).slice(0, kap);
+  var poslal = 0;
+  hlidane.forEach(function (u) {
+    if (!jeVPoruse(u) || u.technik) return;
+    if (ted - ((u.porucha && u.porucha.od) || ted) < DISPECER_PRODLEVA) return;
+    vyslatTechnika(u, true);
+    poslal++;
+  });
+  if (poslal) {
+    // Držená hláška se sama zapíše i do seznamu upozornění, takže hráč to
+    // najde, i když byl zrovna pryč.
+    toast('Vedoucí servisu poslal ' + (poslal === 1 ? 'technika' : poslal + ' techniky')
+      + ' k ' + mn(poslal, 'porouchanému stroji', 'porouchaným strojům', 'porouchaným strojům') + '.', 'ok', true);
+  }
+}
 // Kdy přibude další Expresní dovoz zdarma. Počítá to server, klient jen ukazuje.
 var RUSH_ZA = null, RUSH_MAX = 5;
 function paintCards() {
@@ -10607,10 +10656,80 @@ function paintCards() {
           : '<span class="fine">Prodej se teprve spouští.</span>')
         + '</div></div>';
     }).join('');
+  box.innerHTML += predplatneHtml();
+  bindPredplatne();
   [].forEach.call(box.querySelectorAll('[data-use]'), function (b) { b.onclick = function () { useCard(b.getAttribute('data-use')); }; });
   [].forEach.call(box.querySelectorAll('[data-buy-card]'), function (b) { b.onclick = function () { buyCard(b.getAttribute('data-buy-card')); }; });
 }
 
+// Karta předplatného — jediná věc ve hře, která se strhává opakovaně, takže
+// se o tom musí psát narovinu: co to stojí, kdy se to strhne a jak to zrušit.
+function predplatneHtml() {
+  var c = (SUBS_CAT || []).filter(function (x) { return x.kind === 'dispecer'; })[0];
+  if (!c) return '';
+  var p = predplatneNa('dispecer');
+  var pocet = (S.units || []).length;
+  var treba = dispecerPotreba(pocet);
+  var kap = dispecerKapacita();
+  var do_ = p && p.plati_do ? new Date(p.plati_do) : null;
+  return '<div class="gcard sub">'
+    + '<div class="gcard-top"><span class="gcard-ico">\uD83D\uDD27</span>'
+    + '<div><h3>' + esc(c.name) + '</h3><p class="gcard-short">' + esc(c.short) + '</p></div>'
+    + (p ? '<b class="gcard-n ok">jede</b>' : '') + '</div>'
+    + '<p class="muted small">' + esc(c.desc) + '</p>'
+    + (p
+        ? '<div class="kv"><span>Techniků</span><b>' + p.qty + '\u00d7 (' + kap + ' poboček)</b></div>'
+          + '<div class="kv"><span>Platíš</span><b>' + (c.price_czk * p.qty).toLocaleString('cs-CZ')
+            + ' Kč týdně</b></div>'
+          + (do_ ? '<div class="kv"><span>' + (p.obnovi_se ? 'Další platba' : 'Doběhne')
+            + '</span><b' + (p.obnovi_se ? '' : ' class="warn"') + '>' + datumCas(do_) + '</b></div>' : '')
+          + (p.status === 'past_due' ? '<p class="fine err">Poslední platba neprošla. '
+              + 'Dokud se nestrhne, vedoucí nevyjíždí.</p>' : '')
+          + (pocet > kap ? '<p class="fine warn">Máš ' + pocet + ' poboček, zaplacených je ' + kap
+              + '. Na zbytek vedoucí nestačí — ty si hlídej sám, nebo přikup technika.</p>' : '')
+          + '<div class="gcard-act">'
+          + '<button class="btn sm ghost" data-sub-zrus="' + (p.obnovi_se ? '1' : '0') + '">'
+          + (p.obnovi_se ? 'Zrušit obnovování' : 'Nechat běžet dál') + '</button></div>'
+        : '<div class="kv"><span>Cena</span><b>' + c.price_czk.toLocaleString('cs-CZ')
+            + ' Kč za technika a týden</b></div>'
+          + '<div class="kv"><span>Jeden technik zvládne</span><b>' + c.kapacita + ' poboček</b></div>'
+          + '<div class="kv"><span>Na tvých ' + pocet + ' ' + mn(pocet, 'pobočku', 'pobočky', 'poboček')
+            + '</span><b>' + treba + '\u00d7 technik</b></div>'
+          + '<div class="kv souhrn"><span>Týdně zaplatíš</span><b>'
+            + (c.price_czk * treba).toLocaleString('cs-CZ') + ' Kč</b></div>'
+          + (PAYMENTS_ON
+              ? '<button class="btn big" data-sub-koupit="' + treba + '">Zapnout za '
+                + (c.price_czk * treba).toLocaleString('cs-CZ') + ' Kč týdně</button>'
+                + '<p class="fine">Strhává se každý týden, dokud to nezrušíš — zrušit jde kdykoli '
+                + 'tady v téhle kartě a zaplacený týden ti dojede.</p>'
+              : '<p class="fine">Prodej se teprve spouští.</p>'))
+    + '</div>';
+}
+function bindPredplatne() {
+  var k = document.querySelector('[data-sub-koupit]');
+  if (k) k.onclick = function () { zapniPredplatne('dispecer', k.getAttribute('data-sub-koupit')); };
+  var z = document.querySelector('[data-sub-zrus]');
+  if (z) z.onclick = function () {
+    var obnovit = z.getAttribute('data-sub-zrus') === '0';
+    z.disabled = true; z.textContent = 'Měním\u2026';
+    apiJson('/stripe/subscribe/zrusit', { kind: 'dispecer', obnovit: obnovit }).then(function (r) {
+      z.disabled = false;
+      if (!r.ok) return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err');
+      PREDPLATNE = r.j.predplatne || [];
+      paintCards();
+      toast(r.j.obnovi_se ? 'Předplatné poběží dál.' : 'Zrušeno. Zaplacený týden ještě dojede.', 'ok', true);
+    }).catch(function () { z.disabled = false; toast('Server neodpovídá.', 'err'); });
+  };
+}
+function zapniPredplatne(kind, qty) {
+  if (!ME) return toast('Nejdřív se přihlas.', 'err');
+  if (!ME.has_details) return detailsSheet(null, null, null, kind);
+  apiJson('/stripe/subscribe', { kind: kind, qty: qty }).then(function (r) {
+    if (r.ok && r.j.url) { location.href = r.j.url; return; }
+    if (r.status === 428) return detailsSheet(null, null, null, kind);
+    toast((r.j && r.j.error) || 'Nepovedlo se založit platbu.', 'err');
+  }).catch(function () { toast('Server neodpovídá.', 'err'); });
+}
 // Karta se spotřebuje NA SERVERU a teprve pak se projeví ve hře.
 // Zrychlí JEDNU vybranou zásilku, ne tu nejbližší — hráč si kliknul na konkrétní.
 function rushOrder(orderedAt, btn) {
@@ -10917,7 +11036,7 @@ function buyCard(kind, qty) {
   };
 }
 // Jméno a e-mail chceme až tady — do té chvíle je hra úplně anonymní.
-function detailsSheet(thenKind, thenCash, thenQty) {
+function detailsSheet(thenKind, thenCash, thenQty, thenSub) {
   sheet('<h3>Ještě dva údaje</h3>'
     + '<p class="muted small">K platbě potřebujeme vědět, komu kartu připsat a kam poslat doklad.</p>'
     + '<label class="fld"><span>Jméno</span><input id="d-first" class="inp" type="text" maxlength="60" value="' + esc((ME && ME.first_name) || '') + '"></label>'
@@ -10932,6 +11051,7 @@ function detailsSheet(thenKind, thenCash, thenQty) {
       ME = r.j.player; closeSheet();
       if (thenKind) buyCard(thenKind, thenQty);
       else if (thenCash) buyCash(thenCash);
+      else if (thenSub) zapniPredplatne(thenSub, dispecerPotreba());
     }).catch(function () { toast('Server neodpovídá.', 'err'); });
   };
 }
@@ -10939,6 +11059,26 @@ function detailsSheet(thenKind, thenCash, thenQty) {
 // Návrat z platby: ?platba=ok&s=cs_… — karta se připisuje na webhook, takže
 // chvíli počkáme, než se na serveru objeví.
 function checkPayment() {
+  var pm = /[?&]predplatne=([a-z]+)/.exec(location.search);
+  if (pm) {
+    var psid = (/[?&]s=([^&]+)/.exec(location.search) || [])[1];
+    history.replaceState(null, '', location.pathname);
+    if (pm[1] !== 'ok' || !psid) return toast('Předplatné nezapnuté, nic se nestrhlo.', 'err');
+    var pt = 0;
+    return (function cekej() {
+      api('/stripe/status?s=' + encodeURIComponent(psid)).then(function (r) {
+        if (r.ok && r.j.status === 'paid') {
+          PREDPLATNE = r.j.predplatne || PREDPLATNE;
+          ev('game_paid', true);
+          paintCards(); switchTab('cards');
+          return toast('Vedoucí servisu nastoupil. Od teď hlídá poruchy za tebe.', 'ok', true);
+        }
+        if (++pt < 10) return setTimeout(cekej, 1500);
+        loadCards().then(paintCards);
+        toast('Platba se ještě potvrzuje. Vedoucí naskočí během chvilky.', 'ok', true);
+      }).catch(function () { });
+    })();
+  }
   var m = /[?&]platba=([a-z]+)/.exec(location.search);
   if (!m) return;
   var sid = (/[?&]s=([^&]+)/.exec(location.search) || [])[1];
@@ -10985,7 +11125,12 @@ function startGame() {
   hlidejDenni();
   // Kdo hraje přes půlnoc, ať na odměnu nečeká do dalšího spuštění. Nabídka
   // karty jde až po odměně — otevřený panel ji stejně odloží na příště.
-  setInterval(function () { hlidejDenni(); hlidejNabidky(); }, 600000);
+  setInterval(function () {
+    hlidejDenni(); hlidejNabidky();
+    // Předplatné může skončit nebo ho hráč zruší na jiném zařízení — stav si
+    // proto pravidelně bereme ze serveru, nikdy si ho nedržíme natvrdo.
+    loadCards();
+  }, 600000);
   setTimeout(hlidejNabidky, 20000);
   var gained = S.cash - before;
   if (arrived) toast('Dorazilo ' + arrived + ' strojů — čekají na skladě v obchodě.', 'ok', true);

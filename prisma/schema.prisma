@@ -7671,6 +7671,7 @@ model GamePlayer {
 
   cards     GameCard[]
   purchases GamePurchase[]
+  subs      GameSubscription[]
 
   invited_by GamePlayer?  @relation("GamePozvani", fields: [invited_by_id], references: [id], onDelete: SetNull)
   invited    GamePlayer[] @relation("GamePozvani")
@@ -7779,6 +7780,30 @@ model GamePurchase {
 
   @@index([player_id])
   @@map("game_purchases")
+}
+
+// Předplatné, které se strhává samo — zatím jediné: vedoucí servisních
+// techniků. Pravda o tom, jestli běží, je ve Stripu; tahle tabulka je jeho
+// odraz, který se opravuje z webhooků. Hra se ptá jen jí.
+model GameSubscription {
+  id             Int       @id @default(autoincrement())
+  player_id      Int
+  kind           String    @db.VarChar(24)
+  qty            Int       @default(1)
+  status         String    @default("pending") @db.VarChar(16) // pending | active | past_due | canceled
+  stripe_sub     String?   @unique @db.VarChar(100)
+  stripe_session String?   @unique @db.VarChar(100)
+  stripe_cust    String?   @db.VarChar(100)
+  obnovi_se      Boolean   @default(true)
+  plati_do       DateTime?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  player GamePlayer @relation(fields: [player_id], references: [id], onDelete: Cascade)
+
+  @@index([player_id])
+  @@index([status])
+  @@map("game_subscriptions")
 }
 
 // Prozkoumané město pro hru. Jedno hledání na OpenStreetMap trvá i dvě minuty,

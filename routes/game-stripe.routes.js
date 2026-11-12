@@ -57,6 +57,15 @@ async function stripePost(path, body) {
   return j;
 }
 
+async function stripeGet(path) {
+  const r = await fetch('https://api.stripe.com/v1/' + path, {
+    headers: { Authorization: 'Bearer ' + key(), 'Stripe-Version': '2024-06-20' }
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('Stripe: ' + ((j.error && j.error.message) || r.status));
+  return j;
+}
+
 // ─── Založení platby ─────────────────────────────────────────────────────────
 // POST /stripe/checkout { kind, qty } → { url }
 router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePlayer, async (req, res, next) => {
@@ -67,6 +76,9 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
       return res.status(428).json({ error: 'Nejdřív doplň jméno a e-mail.', need_details: true });
     }
     const kind = String((req.body || {}).kind || '');
+    if (acct._subKinds.indexOf(kind) >= 0) {
+      return res.status(400).json({ error: 'Tohle se platí jako předplatné.' });
+    }
     const c = await itemOf(kind);   // cena z ceníku, ne z kódu
     if (!c) return res.status(400).json({ error: 'Tohle se teď neprodává.' });
     const qty = Math.max(1, Math.min(MAX_QTY, parseInt((req.body || {}).qty, 10) || 1));
@@ -109,13 +121,92 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
   } catch (e) { next(e); }
 });
 
+// ─── Předplatné ──────────────────────────────────────────────────────────────
+// POST /stripe/subscribe { kind, qty } → { url }
+// Opakovaná platba. Na rozdíl od karet tady nejde o jeden nákup: Stripe si
+// strhává sám dokola, dokud hráč nezruší. Pravda o tom, jestli běží, je ve
+// Stripu — naše tabulka je jen jeho odraz z webhooků.
+const MAX_TECHNIKU = 10;
+router.post('/stripe/subscribe', express.json({ limit: '8kb' }), acct._requirePlayer, async (req, res, next) => {
+  try {
+    if (!paymentsOn()) return res.status(503).json({ error: 'Platby zatím nejsou spuštěné.' });
+    const p = req.player;
+    if (!(p.email && p.first_name && p.last_name)) {
+      return res.status(428).json({ error: 'Nejdřív doplň jméno a e-mail.', need_details: true });
+    }
+    const kind = String((req.body || {}).kind || '');
+    if (acct._subKinds.indexOf(kind) < 0) return res.status(400).json({ error: 'Tohle se nepředplácí.' });
+    const c = await itemOf(kind);
+    if (!c) return res.status(400).json({ error: 'Tohle se teď neprodává.' });
+    const qty = Math.max(1, Math.min(MAX_TECHNIKU, parseInt((req.body || {}).qty, 10) || 1));
+
+    const bezi = (await acct._predplatneHrace(p)) || [];
+    if (bezi.some((x) => x.kind === kind)) {
+      return res.status(409).json({ error: 'Tohle předplatné ti už běží.' });
+    }
+
+    const row = await prisma.gameSubscription.create({
+      data: { player_id: p.id, kind, qty, status: 'pending' }
+    });
+    const session = await stripePost('checkout/sessions', {
+      mode: 'subscription',
+      locale: 'cs',
+      success_url: gameUrl() + '?predplatne=ok&s={CHECKOUT_SESSION_ID}',
+      cancel_url: gameUrl() + '?predplatne=zrus',
+      customer_email: p.email,
+      client_reference_id: String(row.id),
+      metadata: { sub_id: row.id, player_id: p.id, kind, qty },
+      subscription_data: { metadata: { sub_id: row.id, player_id: p.id, kind } },
+      line_items: [{
+        quantity: qty,
+        price_data: {
+          currency: 'czk', unit_amount: c.price,
+          recurring: { interval: c.interval || 'week' },
+          product_data: { name: 'Laundromat Tycoon — ' + c.name,
+            description: c.short || undefined }
+        }
+      }]
+    });
+    await prisma.gameSubscription.update({ where: { id: row.id }, data: { stripe_session: session.id } });
+    res.json({ ok: true, url: session.url });
+  } catch (e) { next(e); }
+});
+
+// POST /stripe/subscribe/zrusit { kind, obnovit } → zruší k datu konce období,
+// nebo zrušení vezme zpátky. Nic se nestrhává ani nevrací hned — hráč má
+// zaplacený týden dojetý.
+router.post('/stripe/subscribe/zrusit', express.json({ limit: '8kb' }), acct._requirePlayer, async (req, res, next) => {
+  try {
+    const kind = String((req.body || {}).kind || '');
+    const obnovit = (req.body || {}).obnovit === true;
+    const row = await prisma.gameSubscription.findFirst({
+      where: { player_id: req.player.id, kind, status: { in: ['active', 'past_due'] } },
+      orderBy: { id: 'desc' }
+    });
+    if (!row || !row.stripe_sub) return res.status(404).json({ error: 'Žádné běžící předplatné.' });
+    const sub = await stripePost('subscriptions/' + row.stripe_sub, { cancel_at_period_end: obnovit ? 'false' : 'true' });
+    await prisma.gameSubscription.update({ where: { id: row.id },
+      data: { obnovi_se: !sub.cancel_at_period_end,
+        plati_do: sub.current_period_end ? new Date(sub.current_period_end * 1000) : row.plati_do } });
+    res.json({ ok: true, obnovi_se: !sub.cancel_at_period_end,
+      predplatne: await acct._predplatneHrace(req.player) });
+  } catch (e) { next(e); }
+});
+
 // GET /stripe/status?s=cs_… → jak dopadla platba (klient se ptá po návratu)
 router.get('/stripe/status', acct._requirePlayer, async (req, res, next) => {
   try {
     const sid = String(req.query.s || '').slice(0, 100);
     if (!sid) return res.status(400).json({ error: 'Chybí platba.' });
     const pu = await prisma.gamePurchase.findUnique({ where: { stripe_session: sid } });
-    if (!pu || pu.player_id !== req.player.id) return res.status(404).json({ error: 'Platba nenalezena.' });
+    if (!pu) {
+      // Předplatné má vlastní tabulku — hráč se vrací stejnou cestou.
+      const su = await prisma.gameSubscription.findUnique({ where: { stripe_session: sid } });
+      if (!su || su.player_id !== req.player.id) return res.status(404).json({ error: 'Platba nenalezena.' });
+      return res.json({ ok: true, status: su.status === 'active' ? 'paid' : su.status, kind: su.kind,
+        qty: su.qty, predplatne: await acct._predplatneHrace(req.player) });
+    }
+    if (pu.player_id !== req.player.id) return res.status(404).json({ error: 'Platba nenalezena.' });
     res.json({ ok: true, status: pu.status, kind: pu.kind, qty: pu.qty, owned: (await acct._pub(req.player)).cards });
   } catch (e) { next(e); }
 });
@@ -133,6 +224,52 @@ function verify(raw, sigHeader, secret) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+// Stav předplatného ze Stripu přepíšeme do naší tabulky. Stripe je pravda,
+// my jen držíme odraz, kterého se ptá hra.
+const STAV = { active: 'active', trialing: 'active', past_due: 'past_due',
+  unpaid: 'past_due', canceled: 'canceled', incomplete: 'pending', incomplete_expired: 'canceled' };
+async function prepisPredplatne(sub) {
+  if (!sub || !sub.id) return;
+  let row = await prisma.gameSubscription.findUnique({ where: { stripe_sub: sub.id } });
+  if (!row) {
+    // Událost může přijít dřív, než se stihlo dopsat id z dokončené platby.
+    // Spárujeme ji podle značky, kterou jsme Stripu dali při zakládání.
+    const znacka = parseInt((sub.metadata || {}).sub_id, 10);
+    if (!znacka) return;
+    row = await prisma.gameSubscription.findUnique({ where: { id: znacka } });
+    if (!row) return;
+    await prisma.gameSubscription.update({ where: { id: row.id }, data: { stripe_sub: sub.id } });
+  }
+  const polozka = (sub.items && sub.items.data && sub.items.data[0]) || null;
+  await prisma.gameSubscription.update({
+    where: { id: row.id },
+    data: {
+      status: STAV[sub.status] || 'canceled',
+      qty: polozka && polozka.quantity ? polozka.quantity : row.qty,
+      obnovi_se: !sub.cancel_at_period_end,
+      plati_do: sub.current_period_end ? new Date(sub.current_period_end * 1000) : row.plati_do
+    }
+  });
+  console.log('[game] předplatné ' + row.kind + ' hráče ' + row.player_id + ': ' + sub.status);
+}
+async function zalozPredplatne(sess) {
+  const id = parseInt((sess.metadata || {}).sub_id, 10);
+  if (!id || !sess.subscription) return;
+  const row = await prisma.gameSubscription.findUnique({ where: { id } });
+  if (!row || row.stripe_sub) return;
+  // Platnost nastavíme i bez dalších událostí: kdyby ve Stripu nebyly zapnuté
+  // customer.subscription.*, předplatné prostě za týden samo dojde. Lepší než
+  // jet dál zadarmo.
+  await prisma.gameSubscription.update({
+    where: { id: row.id },
+    data: { stripe_sub: sess.subscription, stripe_cust: sess.customer || null,
+      status: 'active', plati_do: new Date(Date.now() + 8 * 86400000) }
+  });
+  console.log('[game] předplatné založeno:', row.kind, '· hráč', row.player_id, '·', row.qty + '× technik');
+  try { await stripeGet('subscriptions/' + sess.subscription).then(prepisPredplatne); }
+  catch (e) { console.warn('[game] načtení předplatného:', e.message); }
+}
+
 const webhook = [express.raw({ type: '*/*', limit: '1mb' }), async (req, res) => {
   // Bez tajemství podpis neověříme — pak by kdokoli mohl podvrhnout „zaplaceno".
   const secret = hookSecret();
@@ -146,7 +283,23 @@ const webhook = [express.raw({ type: '*/*', limit: '1mb' }), async (req, res) =>
   let ev; try { ev = JSON.parse(raw); } catch (e) { return res.status(400).send('bad json'); }
   // Stripe čeká 2xx rychle; všechno ostatní jen zalogujeme.
   res.json({ received: true });
+  // Předplatné má vlastní události. Bez nich bychom se o neuhrazené platbě
+  // ani o zrušení nikdy nedozvěděli — proto se musí v nastavení webhooku
+  // zapnout customer.subscription.* a invoice.*.
+  if (/^customer\.subscription\./.test(ev.type)) return prepisPredplatne(ev.data.object).catch(
+    (e) => console.error('[game] předplatné:', e.message));
+  if (ev.type === 'invoice.payment_succeeded' || ev.type === 'invoice.payment_failed') {
+    const id = ev.data.object && ev.data.object.subscription;
+    if (!id) return;
+    return stripeGet('subscriptions/' + id).then(prepisPredplatne).catch(
+      (e) => console.error('[game] předplatné z faktury:', e.message));
+  }
   if (ev.type !== 'checkout.session.completed' && ev.type !== 'checkout.session.async_payment_succeeded') return;
+  // Založení předplatného chodí jako obyčejné dokončení platby, jen v režimu
+  // subscription — a místo karet se zapisuje do vlastní tabulky.
+  if (ev.data.object && ev.data.object.mode === 'subscription') {
+    return zalozPredplatne(ev.data.object).catch((e) => console.error('[game] předplatné:', e.message));
+  }
 
   try {
     const sess = ev.data.object;

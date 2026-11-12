@@ -110,10 +110,25 @@ const CASH = {
   cash2000: { kind: 'cash2000', name: 'Obrněný vůz',    price: 200000, laundry: 4600000 },
 };
 const CASH_KINDS = Object.keys(CASH);
+
+// ─── Předplatné ──────────────────────────────────────────────────────────────
+// Co se strhává samo dokola. Cena je za JEDNOHO technika a týden; jeden
+// technik stihne obsloužit `kapacita` poboček. Víc poboček = víc techniků.
+const SUBS = {
+  dispecer: {
+    kind: 'dispecer', name: 'Vedoucí servisních techniků', icon: 'wrench', price: 3900,
+    interval: 'week', kapacita: 35,
+    short: 'Sám vysílá techniky k poruchám',
+    desc: 'Hlídá tvoje prádlomaty za tebe. Jakmile se některý porouchá, vedoucí k němu '
+      + 'do čtvrt hodiny pošle technika — i když zrovna nejsi ve hře. Jeden technik '
+      + 'zvládne 35 poboček, na větší síť jich je potřeba víc.'
+  }
+};
+const SUB_KINDS = Object.keys(SUBS);
 // Ručně přidaná hotovost z administrace. Není v nabídce, nedá se koupit —
 // vzniká jen tím, že ji někdo hráči přidá, a nese vlastní částku.
 const CASH_CUSTOM = 'cash_dar';
-const ALL = Object.assign({}, CARDS, CASH);
+const ALL = Object.assign({}, CARDS, CASH, SUBS);
 
 // ─── Ceník z databáze ────────────────────────────────────────────────────────
 // Hodnoty výš jsou jen výchozí. Co platí doopravdy, je v tabulce game_prices —
@@ -157,6 +172,28 @@ async function cashPublic() {
       bonus: zaklad ? Math.round((perCzk(c) / perCzk(zaklad) - 1) * 100) : 0 });
   }
   return out;
+}
+async function subsPublic() {
+  const out = [];
+  for (const k of SUB_KINDS) {
+    const c = await item(k); if (!c) continue;
+    out.push({ kind: c.kind, name: c.name, icon: c.icon, short: c.short, desc: c.desc,
+      price_czk: c.price / 100, interval: c.interval, kapacita: c.kapacita });
+  }
+  return out;
+}
+// Co hráči zrovna běží. Ptáme se databáze, kterou opravují webhooky ze Stripu —
+// a i tak nevěříme jen stavu: skončená platnost je skončená platnost.
+async function predplatneHrace(p) {
+  if (!p) return null;
+  const rows = await prisma.gameSubscription.findMany({
+    where: { player_id: p.id, status: { in: ['active', 'past_due'] } },
+    orderBy: { id: 'desc' }, take: 5
+  });
+  const ted = Date.now();
+  const zive = rows.filter((r) => !r.plati_do || new Date(r.plati_do).getTime() > ted);
+  return zive.map((r) => ({ kind: r.kind, qty: r.qty, status: r.status,
+    plati_do: r.plati_do, obnovi_se: r.obnovi_se }));
 }
 async function catalogPublic() {
   const out = [];
@@ -853,6 +890,7 @@ router.get('/cards', async (req, res, next) => {
     }
     res.json({
       ok: true, catalog: await catalogPublic(), cash: await cashPublic(),
+      subs: await subsPublic(), predplatne: await predplatneHrace(p),
       payments: require('./game-stripe.routes')._paymentsOn(),
       owned: p ? (await pub(p)).cards : null,
       rush_zdarma_za: p ? rushZdarmaZa(p) : null,
@@ -1617,6 +1655,8 @@ module.exports._pub = pub;
 module.exports._item = item;
 module.exports._cenaKusuVBalicku = cenaKusuVBalicku;
 module.exports._cardKinds = CARD_KINDS;
+module.exports._subKinds = SUB_KINDS;
+module.exports._predplatneHrace = predplatneHrace;
 module.exports._dropPrices = dropPrices;
 module.exports._defaults = ALL;
 module.exports._cashCustom = CASH_CUSTOM;

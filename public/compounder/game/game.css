@@ -341,6 +341,9 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .toast-x:hover{color:var(--text)}
 .toast.drz{border-color:rgba(124,92,255,.55)}
 /* Nabídka balíčku v panelu, kde hráč narazil. Odlišená, ale ne křiklavá. */
+/* Karta předplatného v Kartách — odlišená, ať je jasné, že se opakuje. */
+.gcard.sub{border-color:rgba(124,92,255,.5)}
+.gcard-n.ok{color:var(--ok,#2fe3a0)}
 /* Sedmidenní série denních odměn. */
 .dny{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
 .den{display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px;text-align:center;
