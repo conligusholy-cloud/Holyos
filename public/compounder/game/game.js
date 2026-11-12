@@ -13,14 +13,27 @@
 // Čísla jsou 1:1 z reálného modelu prádlomatu (apps/laundromats/ekonomika.js),
 // jen přepočtená do korun. Když se změní skutečný model, změň i tohle.
 var EUR = 24.35;
+// Kapacita = kolik lidí z místa stroj ještě pobere. Víc pracek a sušiček
+// zvládne víc lidí; co se nevejde, odejde k někomu jinému. Proto se na slabém
+// místě velký stroj nevyplatí (stejně obslouží to samé co malý, jen stál víc)
+// a na špičkovém místě malý stroj většinu lidí nechá odejít.
+// Čísla sedí na skóre místa: MINI naplní místo se skóre 50, FLEX 80, MAX 100.
 var MODELS = {
-  mini: { key: 'mini', name: 'MINI', machine: 35000, permit: 825, conn: 1926, spend: 16.52, cost: 647, perday: 5,
-    desc: 'Nejmenší a nejlevnější. Hodí se tam, kde nechodí davy.' },
-  flex: { key: 'flex', name: 'FLEX', machine: 52000, permit: 825, conn: 2889, spend: 11.33, cost: 767, perday: 8,
-    desc: 'Dvě pračky a sušička. Nejlepší poměr ceny a výkonu.' },
-  max: { key: 'max', name: 'MAX', machine: 67000, permit: 825, conn: 2889, spend: 11.33, cost: 900, perday: 10,
-    desc: 'Dvě pračky a dvě sušičky. Pro místa, kde je o praní rvačka.' }
+  mini: { key: 'mini', name: 'MINI', machine: 35000, permit: 825, conn: 1926, spend: 16.52, cost: 647,
+    kapacita: 7.1, idealni: 'do 55', desc: 'Nejmenší a nejlevnější. Hodí se tam, kde nechodí davy.' },
+  flex: { key: 'flex', name: 'FLEX', machine: 52000, permit: 825, conn: 2889, spend: 11.33, cost: 767,
+    kapacita: 14.3, idealni: '55 až 85', desc: 'Dvě pračky a sušička. Nejlepší poměr ceny a výkonu.' },
+  max: { key: 'max', name: 'MAX', machine: 67000, permit: 825, conn: 2889, spend: 11.33, cost: 900,
+    kapacita: 20, idealni: '85 a výš', desc: 'Dvě pračky a dvě sušičky. Pro místa, kde je o praní rvačka.' }
 };
+// Kolik lidí denně přijde na místo. Roste se skóre rychleji než lineárně —
+// špičkové místo má dvojnásobek lidí oproti průměrnému, ne o desetinu víc.
+var POPTAVKA_SPICKA = 20;        // lidí denně na místě se skóre 100
+var POPTAVKA_SKLON = 1.5;
+function poptavkaMista(score) {
+  var sc = Math.max(0, Math.min(100, Number(score) || 0));
+  return POPTAVKA_SPICKA * Math.pow(sc / 100, POPTAVKA_SKLON);
+}
 var MODEL_ORDER = ['mini', 'flex', 'max'];
 // Fotky strojů. Lokální soubory jsou jen záloha — po startu se přepíšou tím,
 // co je u dané verze nastavené v HolyOS (Compounder → fotky verzí). Když tam
@@ -66,8 +79,6 @@ var SCOUT_COST = 20000;          // cesta do města a hledání vhodných míst
 var CASH_RESERVE = 120000;       // tolik hotovosti banka nenechá utratit — musí zbýt na prověření místa a instalaci
 var OPERATING_MAX = 150000;      // provozní úvěr nad rámec úvěrového stropu, aby hra nikdy neskončila ve slepé uličce
 
-// Lepší místo = víc zákazníků. Skóre dává hledač míst ze skutečných dat.
-function placeFactor(score) { return Math.max(0.3, Math.min(1.7, 0.35 + (score / 100) * 1.25)); }
 var KIND_LABEL = { supermarket: 'Supermarket', hypermarket: 'Hypermarket', mall: 'Obchodní centrum',
   department_store: 'Obchodní dům', fuel: 'Benzínka', car_wash: 'Samoobslužná myčka' };
 
@@ -1237,7 +1248,10 @@ function economics(spot, modelKey, podil) {
   var m = MODELS[modelKey] || MODELS.flex;
   // Druhý a třetí prádlomat na stejném pozemku si zákazníky nepřivede — dělí se
   // o ty, co tam chodí tak jako tak. Proto bere menší podíl.
-  var perday = m.perday * placeFactor(spot.score) * traffic() * (podil == null ? 1 : podil);
+  // Kolik lidí místo nabídne a kolik z nich tenhle stroj pobere. Zbytek odejde.
+  var poptavka = poptavkaMista(spot.score) * (podil == null ? 1 : podil);
+  var obslouzi = Math.min(m.kapacita, poptavka);
+  var perday = obslouzi * traffic();
   var revenue = Math.round(perday * 30.5 * m.spend * EUR);
   var energy = Math.round(revenue * ENERGY_SHARE);
   var servis = Math.round(revenue * SERVIS_SHARE);
@@ -1252,7 +1266,9 @@ function economics(spot, modelKey, podil) {
   return { model: m.key, invest: inv, machine: machinePrice(m), install: conn, conn: conn,
     podil: podil == null ? 1 : podil,
     energy: energy, servis: servis, rent: rent, revenue: revenue, cost: cost, profit: profit,
-    perday: Math.round(perday * 10) / 10, payback: profit > 0 ? inv / (profit * 12) : null };
+    perday: Math.round(perday * 10) / 10,
+    poptavka: Math.round(poptavka * 10) / 10, kapacita: m.kapacita,
+    payback: profit > 0 ? inv / (profit * 12) : null };
 }
 
 // ─── Profily hráče ───────────────────────────────────────────────────────────
@@ -1461,8 +1477,11 @@ function refreshUnits() {
     var m = MODELS[u.eco.model]; if (!m) return;
     // Druhý a třetí stroj na jednom pozemku má menší podíl na zákaznících —
     // drží se u stroje, aby se přepočtem návštěvnosti neztratil.
-    var perday = m.perday * placeFactor(u.score) * traffic() * (u.eco.podil == null ? 1 : u.eco.podil);
+    var poptavka = poptavkaMista(u.score) * (u.eco.podil == null ? 1 : u.eco.podil);
+    var perday = Math.min(m.kapacita, poptavka) * traffic();
     var plne = Math.round(perday * 30.5 * m.spend * EUR);
+    u.eco.poptavka = Math.round(poptavka * 10) / 10;
+    u.eco.kapacita = m.kapacita;
     // Porouchaný stroj nevydělává (nebo jen půlku), ale servis a nájem běží dál.
     // Z výjezdů technika se platí právě ten servisní poplatek, takže ten
     // počítáme pořád z plného obratu. Energie jde dolů s tím, co opravdu běží.
@@ -4248,6 +4267,15 @@ function spotSheet(sp, areaId) {
     go.onclick = function () { closeSheet(); switchTab('shop'); };
   });
 }
+function cislo1(x) { return String(Math.round((Number(x) || 0) * 10) / 10).replace('.', ','); }
+// Jednou větou, jestli je stroj na tohle místo akorát, malý, nebo zbytečný.
+function kapacitaSlovy(e) {
+  var p = Number(e.poptavka) || 0, k = Number(e.kapacita) || 0;
+  if (!p) return 'Na tomhle místě skoro nikdo nechodí.';
+  if (k >= p * 1.25) return 'Na tohle místo je zbytečně velký — obslouží tu stejně jako menší stroj, jen stál víc.';
+  if (k <= p * 0.7) return 'Místo uveze víc, než tenhle stroj pobere. Zbytek lidí odejde jinam.';
+  return 'Na tohle místo sedí: pobere skoro všechny, co sem chodí.';
+}
 // Karta modelu na konkrétním místě. Postavit jde jen to, co je skladem — jinak vede do obchodu.
 function modelCard(sp, e, pridej, bezTlacitka) {
   var m = MODELS[e.model], n = inStock(e.model), way = onWay(e.model);
@@ -4258,7 +4286,12 @@ function modelCard(sp, e, pridej, bezTlacitka) {
   else btn = '<button class="btn sec sm" style="width:100%;margin-top:10px" data-doobchodu="' + e.model + '">Není skladem — do obchodu</button>';
   return '<div class="card"><div class="row"><h3>' + m.name + '</h3><b>' + kc(e.invest) + ' ' + CUR + '</b></div>'
     + '<p class="muted small" style="margin:2px 0 8px">' + esc(m.desc) + '</p>'
-    + '<div class="kv"><span>Zákazníků / den</span><b>' + String(e.perday).replace('.', ',') + '</b></div>'
+    + '<div class="kv"><span>Místo nabídne</span><b>' + cislo1(e.poptavka) + ' lidí / den</b></div>'
+    + '<div class="kv"><span>Tenhle stroj pobere</span><b class="' + (e.kapacita < e.poptavka ? 'warn' : 'ok') + '">'
+      + cislo1(Math.min(e.kapacita, e.poptavka)) + ' z toho</b></div>'
+    + '<p class="fine">' + kapacitaSlovy(e) + '</p>'
+    + '<div class="kv"><span>Skutečně ti jich přijde (návštěvnost ' + Math.round(traffic() * 100) + ' %)</span><b>'
+      + String(e.perday).replace('.', ',') + ' / den</b></div>'
     + '<div class="kv"><span>Obrat / měsíc</span><b>' + kcFull(e.revenue) + '</b></div>'
     + '<div class="kv"><span>Nájem / měsíc</span><b>' + kcFull(e.rent) + '</b></div>'
     + '<div class="kv"><span>Energie / měsíc (' + pct(ENERGY_SHARE) + ' obratu)</span><b>' + kcFull(e.energy) + '</b></div>'
@@ -4449,7 +4482,8 @@ function paintShop() {
       + '<div class="shop-img"><img src="' + esc(im.src) + '" alt="Prádlomat ' + m.name + '" loading="lazy"></div>'
       + '<div class="row" style="margin-top:12px"><h3>' + m.name + '</h3><b>' + kc(price) + ' ' + CUR + '</b></div>'
       + '<p class="muted small" style="margin:2px 0 8px">' + esc(m.desc) + '</p>'
-      + '<div class="kv"><span>Zákazníků / den na průměrném místě</span><b>' + m.perday + '</b></div>'
+      + '<div class="kv"><span>Pobere denně</span><b>' + cislo1(m.kapacita) + ' lidí</b></div>'
+      + '<div class="kv"><span>Hodí se na místa se skóre</span><b>' + m.idealni + '</b></div>'
       + '<div class="kv"><span>Servis a úklid</span><b>' + pct(SERVIS_SHARE) + ' obratu</b></div>'
       + '<div class="kv"><span>Energie</span><b>' + pct(ENERGY_SHARE) + ' obratu</b></div>'
       + '<div class="kv"><span>Přípojky na místě (navíc)</span><b>' + kcFull(Math.round(CONN_MIN * (k === 'max' ? CONN_MAX_MULT : 1))) + ' – ' + kcFull(Math.round(CONN_MAX * (k === 'max' ? CONN_MAX_MULT : 1))) + '</b></div>'
