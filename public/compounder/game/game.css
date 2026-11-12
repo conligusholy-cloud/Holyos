@@ -370,6 +370,9 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .toast.ok{border-color:rgba(47,227,160,.5);color:#a9f5d9}
 .map-zvon{position:relative;font-size:16px}
 .map-zvon.ma{border-color:var(--warn)}
+/* Krátké cuknutí, když do zvonku něco přibude. */
+.map-zvon.cuk{animation:zvonCuk .6s ease 2}
+@keyframes zvonCuk{0%,100%{transform:rotate(0)}20%{transform:rotate(-14deg)}60%{transform:rotate(11deg)}}
 .map-zvon b{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;border-radius:999px;
   background:var(--err);color:#fff;font-size:10.5px;line-height:16px;text-align:center;padding:0 3px}
 .upoz{display:flex;flex-direction:column;gap:7px;margin-top:10px;max-height:52vh;overflow:auto}

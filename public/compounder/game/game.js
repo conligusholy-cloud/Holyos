@@ -1937,12 +1937,15 @@ var toastT = null;
 // Všechno důležité se zároveň ukládá do zvonku, ať se k tomu dá vrátit.
 var TOASTU_MAX = 4;
 var TOAST_MS = 5200;
+// Hláška dole jen probliknutí — nic nezůstává viset. Co má přežít, jde do
+// zvonku: tam si to hráč přečte, až bude chtít. `drz` (a chyby) proto nemění
+// to, jak dlouho hláška svítí, ale jestli se zapíše mezi upozornění.
 function toast(msg, kind, drz) {
   var box = $('toasty');
   if (!box) return;
-  var drzet = drz === true || kind === 'err';
+  var doZvonku = drz === true || kind === 'err';
   var el = document.createElement('div');
-  el.className = 'toast' + (kind ? ' ' + kind : '') + (drzet ? ' drz' : '');
+  el.className = 'toast' + (kind ? ' ' + kind : '');
   var t = document.createElement('span');
   t.textContent = msg;
   var x = document.createElement('button');
@@ -1952,8 +1955,17 @@ function toast(msg, kind, drz) {
   el.appendChild(t); el.appendChild(x);
   box.appendChild(el);
   while (box.children.length > TOASTU_MAX) box.removeChild(box.firstChild);
-  if (!drzet) setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, TOAST_MS);
-  else zapisUpoz(msg, kind);
+  setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, TOAST_MS);
+  if (doZvonku) { zapisUpoz(msg, kind); zvonekCukni(); }
+}
+// Zvoneček na mapě krátce cukne, ať je poznat, že něco přibylo.
+function zvonekCukni() {
+  var el = $('map-zvon');
+  if (!el) return;
+  el.classList.remove('cuk');
+  void el.offsetWidth;
+  el.classList.add('cuk');
+  setTimeout(function () { el.classList.remove('cuk'); }, 1200);
 }
 // ─── Zvonek: co se stalo, když se hráč zrovna nedíval ────────────────────────
 var UPOZ_MAX = 60;
