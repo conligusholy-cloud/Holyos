@@ -1700,7 +1700,7 @@ function czIban(acc){var m=String(acc).replace(/\\s/g,'').match(/^(?:(\\d{1,6})-
   var bban=m[3]+(m[1]||'').padStart(6,'0')+m[2].padStart(10,'0');var ck=98-mod97(bban+'123500');return 'CZ'+String(ck).padStart(2,'0')+bban;}
 function iban(acc){var s=String(acc).replace(/\\s/g,'').toUpperCase();if(/^[A-Z]{2}\\d{2}[A-Z0-9]{11,30}$/.test(s))return s;return czIban(acc);}
 function esc(x){return String(x).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-document.querySelectorAll('.vqr').forEach(function(b){b.addEventListener('click',function(){
+document.addEventListener('click',function(ev){var b=ev.target&&ev.target.closest&&ev.target.closest('.vqr');if(!b)return;ev.preventDefault();(function(){
   var f=b.closest('form'),amt=Number(String((f&&f.querySelector('[name=paid_amount]')||{}).value||'').replace(/\\s/g,'').replace(',','.'));
   var cur=b.dataset.cur==='EUR'?'EUR':'CZK',ib=iban(b.dataset.acc),vs=b.dataset.vs,nm=asc(b.dataset.name),msg='BS2 vyber '+vs;
   box.innerHTML='';err.textContent='';
@@ -1713,7 +1713,7 @@ document.querySelectorAll('.vqr').forEach(function(b){b.addEventListener('click'
   new QRCode(box,{text:payload,width:240,height:240,correctLevel:QRCode.CorrectLevel.M});
   document.getElementById('vqr-t').textContent=cur==='CZK'?'QR Platba (CZK)':'SEPA QR (EUR)';
   info.innerHTML='<div>Příjemce: <b>'+esc(b.dataset.name)+'</b></div><div>Účet: <b>'+esc(b.dataset.acc)+'</b></div>'+(ib.replace(/\\s/g,'')!==String(b.dataset.acc).replace(/\\s/g,'').toUpperCase()?'<div>IBAN: <b>'+esc(ib.replace(/(.{4})/g,'$1 ').trim())+'</b></div>':'')+'<div>Částka: <b>'+esc(amt.toLocaleString('cs-CZ',{minimumFractionDigits:2}))+' '+(cur==='EUR'?'€':'Kč')+'</b></div>'+(vs?'<div>VS: <b>'+esc(vs)+'</b></div>':'')+'<div>Zpráva: '+esc(msg)+'</div><div class="muted" style="margin-top:6px">Po zaplacení klikni na ✓ Vyplaceno.</div>';
-  ov.style.display='flex';});});
+  ov.style.display='flex';})();});
 })();</script>`;
 
 // Admin → Výběry → Výplata (žádosti, aktuální měsíc) a Vyplaceno (historie)

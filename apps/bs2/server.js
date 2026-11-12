@@ -72,7 +72,15 @@ app.use((req, res, next) => {
 });
 // ---- CSRF: každý POST musí přijít z našeho webu (Origin/Referer = náš host). Formuláře navíc nesou token svázaný s relací. ----
 const CSRF_SECRET = (SESSION_SECRET || require('crypto').randomBytes(32).toString('hex')) + ':csrf'; // bez záložního předvídatelného klíče
-function csrfToken(req) { const a = req.cookies && (req.cookies.bs2_user || req.cookies.bs2_admin || ''); return require('crypto').createHmac('sha256', CSRF_SECRET).update(String(a)).digest('hex').slice(0, 32); }
+// Token je svázaný s identitou přihlášení (admin uid / uživatel sid), ne se surovou cookie — ta se při SSO / obnovení relace
+// přegeneruje a otevřené stránky by pak hlásily „Formulář vypršel". Pro /admin cesty se bere správcovská relace.
+function csrfToken(req) {
+  const dec = (n) => { try { return require('jsonwebtoken').decode((req.cookies || {})[n] || '') || null; } catch (e) { return null; } };
+  const ad = dec('bs2_admin'), us = dec('bs2_user');
+  const isAdm = String(req.path || '').startsWith('/admin');
+  const id = isAdm && ad ? 'a:' + (ad.uid || ad.pid || ad.username || '') : us ? 'u:' + (us.sid || '') : ad ? 'a:' + (ad.uid || ad.pid || ad.username || '') : '';
+  return require('crypto').createHmac('sha256', CSRF_SECRET).update(id).digest('hex').slice(0, 32);
+}
 app.use((req, res, next) => {
   if (req.method !== 'POST' || req.path === '/sso' || req.path.startsWith('/api/health')) return next();
   const host = req.get('host'); const src = req.get('origin') || req.get('referer') || '';
