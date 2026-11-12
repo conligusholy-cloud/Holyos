@@ -7683,6 +7683,9 @@ function paintBank() {
     + '<p class="fine" style="margin-top:6px">Rámec sám roste o ' + kcFull(BANK_PER_DAY)
     + ' za den a nemá strop. Kolik si půjčíš, ale rozhoduje zástava — majetek, kterým ručíš.</p>'
     + '</div>'
+    // Dobití patří hned pod přehled účtu — je to nejrychlejší cesta, jak
+    // zvednout rámec, a dole pod úvěry ho nikdo nenašel.
+    + cashPacksHtml()
     + '<div class="card"><h3>Úvěr</h3>'
     + '<div class="kv"><span>Dlužíš</span><b class="' + (S.loan > 0 ? 'warn' : '') + '">' + kcFull(S.loan) + '</b></div>'
     + '<div class="kv"><span>' + (S.loan > 0 ? 'Úrok z tvého dluhu' : 'Základní sazba') + '</span><b>'
@@ -7706,8 +7709,7 @@ function paintBank() {
     + (S.loan > 0 && S.cash < 1 ? '<p class="fine">Splácet začneš, až síť něco vydělá.</p>' : '')
     + '</div>'
     + ramecHtml()
-    + uveryHtml()
-    + cashPacksHtml();
+    + uveryHtml();
   bindCashPacks();
   var d = $('do-ask');
   if (d) d.onclick = function () { uverSheet(); };
