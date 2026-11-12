@@ -1687,6 +1687,7 @@ const VYB_QR = `<div id="vqr-ov" style="display:none;position:fixed;inset:0;z-in
 <div style="background:#0f172a;border:1px solid rgba(148,163,184,.3);border-radius:18px;padding:22px;max-width:380px;width:100%;text-align:center;color:#e2e8f0">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b id="vqr-t" style="font-size:16px">QR platba</b><button type="button" id="vqr-x" class="btn sec sm">✕</button></div>
 <div id="vqr-box" style="background:#fff;padding:14px;border-radius:12px;display:inline-block"></div>
+<div><button type="button" id="vqr-sw" class="btn sec sm" style="display:none;margin-top:10px"></button></div>
 <div id="vqr-info" class="small" style="margin-top:12px;text-align:left;line-height:1.7"></div>
 <div id="vqr-err" class="small" style="margin-top:10px;color:#fca5a5"></div></div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -1709,9 +1710,12 @@ document.addEventListener('click',function(ev){var b=ev.target&&ev.target.closes
   var a=amt.toFixed(2),payload;
   if(cur==='CZK') payload='SPD*1.0*ACC:'+ib+'*AM:'+a+'*CC:CZK'+(vs?'*X-VS:'+vs:'')+'*MSG:'+msg+(nm?'*RN:'+nm.slice(0,35):'');
   else payload=['BCD','002','1','SCT','',(nm||'Prijemce').slice(0,70),ib,'EUR'+a,'','',msg].join('\\n');
+  var epc=payload,spd='SPD*1.0*ACC:'+ib+'*AM:'+a+'*CC:'+cur+'*MSG:'+msg+(nm?'*RN:'+nm.slice(0,35):'');
+  if(cur==='EUR') payload=spd; // české bankovní aplikace čtou spíš formát SPD (platí i na zahraniční IBAN); SEPA/EPC je k přepnutí
   if(typeof QRCode==='undefined'){err.textContent='Knihovna QR se nenačetla — obnov stránku.';ov.style.display='flex';return;}
   new QRCode(box,{text:payload,width:240,height:240,correctLevel:QRCode.CorrectLevel.M});
-  document.getElementById('vqr-t').textContent=cur==='CZK'?'QR Platba (CZK)':'SEPA QR (EUR)';
+  document.getElementById('vqr-t').textContent=cur==='CZK'?'QR Platba (CZK)':'QR Platba (EUR)';
+  var sw=document.getElementById('vqr-sw'); if(sw){sw.style.display=cur==='EUR'?'':'none'; var mode='spd'; sw.textContent='Nejde to? Přepnout na SEPA (EPC) QR'; sw.onclick=function(){mode=mode==='spd'?'epc':'spd';box.innerHTML='';new QRCode(box,{text:mode==='spd'?spd:epc,width:240,height:240,correctLevel:QRCode.CorrectLevel.M});sw.textContent=mode==='spd'?'Nejde to? Přepnout na SEPA (EPC) QR':'Přepnout zpět na QR Platbu (SPD)';document.getElementById('vqr-t').textContent=mode==='spd'?'QR Platba (EUR)':'SEPA QR (EUR)';};}
   info.innerHTML='<div>Příjemce: <b>'+esc(b.dataset.name)+'</b></div><div>Účet: <b>'+esc(b.dataset.acc)+'</b></div>'+(ib.replace(/\\s/g,'')!==String(b.dataset.acc).replace(/\\s/g,'').toUpperCase()?'<div>IBAN: <b>'+esc(ib.replace(/(.{4})/g,'$1 ').trim())+'</b></div>':'')+'<div>Částka: <b>'+esc(amt.toLocaleString('cs-CZ',{minimumFractionDigits:2}))+' '+(cur==='EUR'?'€':'Kč')+'</b></div>'+(vs?'<div>VS: <b>'+esc(vs)+'</b></div>':'')+'<div>Zpráva: '+esc(msg)+'</div><div class="muted" style="margin:6px 0 10px">Po zaplacení klikni na ✓ Vyplaceno.</div><button type="button" id="vqr-paid" class="btn" style="width:100%;justify-content:center">✓ Vyplaceno — přesunout do vyplacených</button>';
   window.__vqrForm=f;
   var pb=document.getElementById('vqr-paid');if(pb)pb.onclick=function(){var fm=window.__vqrForm;if(!fm)return;pb.disabled=true;pb.textContent='Ukládám…';var pm=fm.querySelector('[name=pay_method]');if(pm)pm.value='QR kód';fm.submit();};
