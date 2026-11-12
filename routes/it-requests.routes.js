@@ -42,7 +42,7 @@ router.get('/order/:orderId', async (req, res, next) => {
 });
 router.post('/order/:orderId/send', async (req, res, next) => {
   try {
-    const r = await svc.sendToCustomer(parseInt(req.params.orderId, 10), { email: (req.body || {}).email, saveEmail: !!(req.body || {}).save_email, userId: req.user && req.user.id, actor: req.user && (req.user.username || req.user.email) });
+    const r = await svc.sendToCustomer(parseInt(req.params.orderId, 10), { email: (req.body || {}).email, saveEmail: !!(req.body || {}).save_email, manual: true, userId: req.user && req.user.id, actor: req.user && (req.user.username || req.user.email) });
     res.json({ ok: true, sent: r.sent, mail_error: r.mail_error, url: r.url, due_at: r.due_at });
   } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
 });

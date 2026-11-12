@@ -149,7 +149,7 @@ async function sendToCustomer(orderId, opts = {}) {
   const body = 'Dobrý den,\n\nk Vaší objednávce ' + order.order_number + ' potřebujeme zjistit několik technických informací o místě instalace (internet, elektřina, kontaktní osoba). '
     + 'Prosíme o vyplnění krátkého formuláře nejpozději do ' + dueTxt + ' (do ' + dueDays + ' dnů), ať můžeme instalaci včas připravit.\n\n'
     + 'Vyplnění zabere pár minut. Odpovědi jde zadat jedním odkazem bez přihlášení.\n\nDěkujeme.\n' + ourName;
-  const res = await mail({ audience: 'customer', to: email, subject: 'IT požadavky k objednávce ' + order.order_number + ' — prosíme o vyplnění do ' + dueTxt, body, link: url, linkLabel: 'Vyplnit IT požadavky' });
+  const res = await mail({ audience: 'customer', manual: !!opts.manual, to: email, subject: 'IT požadavky k objednávce ' + order.order_number + ' — prosíme o vyplnění do ' + dueTxt, body, link: url, linkLabel: 'Vyplnit IT požadavky' });
   try { require('../order-events').logOrderEvent(orderId, { type: 'it_request_sent', label: 'IT požadavky odeslány zákazníkovi', detail: email + ' · vyplnit do ' + dueTxt + (res && res.sent ? '' : ' · e-mail se NEODESLAL' + (res && (res.error || res.skipped) ? ' (' + (res.error || res.skipped) + ')' : '')), actor: opts.actor || 'uživatel' }); } catch (e) { /* nekritické */ }
   return { request: req, url, sent: !!(res && res.sent), mail_error: res && !res.sent ? (res.error || res.skipped || 'e-mail se neodeslal') : null, due_at: due };
 }
@@ -271,7 +271,7 @@ async function sendNayaxNow(orderId, opts = {}) {
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) { const e = new Error('Zadej platný e-mail zákazníka'); e.status = 400; throw e; }
   await rememberEmail(order, email, opts.saveEmail);
   const s = await getSettings(); const cust = (order.company && order.company.name) || '';
-  const res = await mail({ audience: 'customer', to: email, subject: fillNayax(s.nayax_subject, order.order_number, cust), body: fillNayax(s.nayax_body, order.order_number, cust), link: 'https://pradlomaty.info', linkLabel: 'pradlomaty.info' });
+  const res = await mail({ audience: 'customer', manual: true, to: email, subject: fillNayax(s.nayax_subject, order.order_number, cust), body: fillNayax(s.nayax_body, order.order_number, cust), link: 'https://pradlomaty.info', linkLabel: 'pradlomaty.info' });
   const ok = !!(res && res.sent), err = ok ? null : String((res && (res.error || res.skipped)) || 'neodesláno');
   await prisma.orderNayaxMail.upsert({ where: { order_id: orderId }, update: { sent_at: new Date(), to_email: email, error: err }, create: { order_id: orderId, send_at: new Date(), sent_at: new Date(), to_email: email, error: err } });
   try { require('../order-events').logOrderEvent(orderId, { type: 'nayax_mail', label: ok ? 'Ručně odeslán e-mail se zakládáním Nayax účtu' : 'Ruční e-mail se zakládáním Nayax účtu se NEODESLAL', detail: email + (ok ? '' : ' · ' + err), actor: opts.actor || 'uživatel' }); } catch (e) { /* */ }

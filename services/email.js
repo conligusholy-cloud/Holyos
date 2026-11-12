@@ -372,12 +372,13 @@ async function isCustomerMailPaused() {
   try { const { getSetting } = require('./settings'); return (await getSetting(CUSTOMER_MAIL_PAUSE_KEY, { type: 'boolean', defaultValue: false })) === true; } catch (e) { return false; }
 }
 
-async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, deliveryReceipt, audience, leadId, campaignId, unsubscribe, lang, onlySes }) {
+async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, deliveryReceipt, audience, leadId, campaignId, unsubscribe, lang, onlySes, manual }) {
   if (!to) return { sent: false, skipped: 'no-recipient' };
   // Prádlomaty mimo Česko → značka LAUNDROMATS (hlavička šablony i jméno odesílatele)
   let unsubLabel = 'Odhlásit odběr';
   if (brand === 'pradlomaty') { const ll = laundroLang({ lang, from, link, body, subject }); if (ll) { brand = 'laundromats:' + ll; unsubLabel = (LAUNDRO_TXT[ll] || LAUNDRO_TXT.en).unsub; if (!fromName || /PR[ÁA]DLOMATY/i.test(fromName)) fromName = '💧 LAUNDROMATS 💧'; } }
-  if (audience === 'customer' && await isCustomerMailPaused()) {
+  // manual: true = ruční odeslání tlačítkem uživatele (např. IT dotazník / Nayax v detailu objednávky) → pauza se neuplatní
+  if (audience === 'customer' && !manual && await isCustomerMailPaused()) {
     console.warn(`[Email] POZASTAVENO (customer_emails_paused) — neodesláno → ${to}: ${subject}`);
     return { sent: false, skipped: 'customer-emails-paused', error: 'E-maily zákazníkům jsou pozastaveny (přepínač v Prodejních objednávkách)' };
   }
