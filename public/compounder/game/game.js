@@ -6004,6 +6004,69 @@ function prevezmiMista() {
     toast('Výpovědní doba doběhla — ' + sp.name + ' je tvoje a stroj na něm stojí.', 'ok', true);
   });
 }
+// ─── Denní odměna ────────────────────────────────────────────────────────────
+// Sedmidenní série: každý další den přijde víc, sedmý den velký dárek a pak
+// série začíná znovu. Částka není pevná — je to podíl z měsíčního zisku, aby
+// dárek nebyl ve druhém roce k smíchu. Pod ním je pevné dno pro začátečníky,
+// kteří ještě nevydělávají nic. Vynechaný den sérii vrací na začátek.
+var DENNI_PODIL = [0.03, 0.04, 0.05, 0.06, 0.08, 0.10, 0.25];
+var DENNI_DNO = [5000, 10000, 15000, 20000, 30000, 40000, 100000];
+function dnesKlic(posunDnu) {
+  var d = new Date(Date.now() - (posunDnu || 0) * 86400000);
+  return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+}
+function denniOdmena(den) {
+  var i = Math.max(0, Math.min(DENNI_DNO.length - 1, (den || 1) - 1));
+  return Math.max(DENNI_DNO[i], Math.round(monthlyProfit() * DENNI_PODIL[i]));
+}
+// Který den série hráče dneska čeká.
+function denniDen() {
+  var d = (S && S.denni) || {};
+  if (d.den && d.kdy === dnesKlic(1) && d.den < DENNI_DNO.length) return d.den + 1;
+  return 1;
+}
+function denniCeka() {
+  if (!S || S.tut !== 'done') return false;
+  return ((S.denni || {}).kdy || '') !== dnesKlic(0);
+}
+function hlidejDenni() {
+  if (!denniCeka()) return;
+  // Rozdělanou práci nepřerušujeme — otevřený panel má přednost, dárek počká.
+  if (!$('sheet').classList.contains('hidden')) return;
+  denniSheet();
+}
+function denniSheet() {
+  // Když už si dneska vzal, ukazujeme ten den, co si vzal — ne ten zítřejší.
+  var vzato = !denniCeka();
+  var den = vzato && S.denni && S.denni.den ? S.denni.den : denniDen();
+  var castka = denniOdmena(den);
+  var dlazdice = '';
+  for (var i = 1; i <= DENNI_DNO.length; i++) {
+    dlazdice += '<div class="den' + (i < den || (vzato && i === den) ? ' hotovo' : (i === den ? ' ted' : '')) + '">'
+      + '<span>' + (i === DENNI_DNO.length ? '\uD83C\uDF81 ' : '') + i + '. den</span>'
+      + '<b>' + kc(denniOdmena(i)) + '</b></div>';
+  }
+  sheet('<h3>Denní odměna</h3>'
+    + '<p class="muted small">Za to, že se vracíš. Každý další den v řadě je štědřejší, sedmý den je dárek. '
+    + 'Když den vynecháš, série začíná znovu od prvního.</p>'
+    + '<div class="dny">' + dlazdice + '</div>'
+    + (vzato
+        ? '<p class="fine ok">Dneska sis vzal ' + kcFull(castka) + ' za ' + den + '. den. Další přijde zítra.</p>'
+        : '<div class="kv souhrn"><span>Dnes dostaneš</span><b class="ok">' + kcFull(castka) + '</b></div>'
+          + '<button class="btn big" id="den-vzit">Vzít ' + kcFull(castka) + '</button>')
+    + '<p class="fine">Odměna roste s firmou — je to podíl z toho, co síť měsíčně vydělá, '
+    + 'nejméně ale ' + kcFull(DENNI_DNO[Math.min(DENNI_DNO.length - 1, den - 1)]) + '.</p>');
+  var b = $('den-vzit');
+  if (b) b.onclick = function () {
+    if (!denniCeka()) return closeSheet();
+    var c = denniOdmena(denniDen());
+    S.denni = { den: denniDen(), kdy: dnesKlic(0) };
+    S.cash += c;
+    zapis('prijem', 'Denní odměna — ' + S.denni.den + '. den', c);
+    save(); paint(); syncState(true); closeSheet();
+    toast('Denní odměna ' + kcFull(c) + ' je na účtu.', 'ok', true);
+  };
+}
 // Nová výpověď na mém místě se nesmí přehlédnout — hráč na ni má omezený čas.
 // Značka, že už jsme o ní dali vědět, patří do uloženého stavu: ve hře v
 // paměti by se po každém obnovení stránky ztratila a hráč by dostal tu samou
@@ -10861,6 +10924,9 @@ function startGame() {
   var arrived = waiting - (S.orders || []).length;
   initMap();
   tutStart();
+  hlidejDenni();
+  // Kdo hraje přes půlnoc, ať na odměnu nečeká do dalšího spuštění.
+  setInterval(hlidejDenni, 600000);
   var gained = S.cash - before;
   if (arrived) toast('Dorazilo ' + arrived + ' strojů — čekají na skladě v obchodě.', 'ok', true);
   else if (gained > 1000) toast('Než ses vrátil, síť vydělala ' + kcFull(gained) + '.', 'ok', true);
