@@ -289,7 +289,9 @@ router.put('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.delete('/:id', async (req, res, next) => {
+// Pojistka: mazání slotu / rezervace musí být potvrzené opsáním „SMAZAT" (hlavička X-Confirm-Delete)
+const requireTypedConfirm = (req, res, next) => (String(req.get('X-Confirm-Delete') || '').toUpperCase() === 'SMAZAT' ? next() : res.status(400).json({ error: 'Smazání je potřeba potvrdit napsáním SMAZAT.' }));
+router.delete('/:id', requireTypedConfirm, async (req, res, next) => {
   try {
     const sid = parseInt(req.params.id);
     // Přiřazení se při smazání slotu smažou kaskádou v DB → zapiš je do historie předem
@@ -456,7 +458,7 @@ router.put('/assignments/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.delete('/assignments/:id', async (req, res, next) => {
+router.delete('/assignments/:id', requireTypedConfirm, async (req, res, next) => {
   try { await prisma.slotAssignment.delete({ where: { id: parseInt(req.params.id) } }); res.json({ ok: true }); }
   catch (err) { next(err); }
 });

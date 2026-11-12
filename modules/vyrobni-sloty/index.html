@@ -287,6 +287,7 @@
       .form-row { flex-direction: column; gap: 0; }
     }
   </style>
+  <script src="/js/typed-confirm.js?v=1"></script>
 </head>
 <body>
   <aside id="sidebar" class="sidebar"></aside>
@@ -1237,8 +1238,9 @@
     }
 
     async function deleteAssignment(aid, slotId) {
-      if (!confirm('Zrušit tuto blokaci / přiřazení ve slotu?')) return;
-      var r = await fetch('/api/slots/assignments/' + aid, { method: 'DELETE', credentials: 'include' });
+      var _a = null; try { _a = [].concat.apply([], (slots || []).map(function(s){ return s.assignments || []; })).find(function(x){ return x.id === aid; }); } catch (e) {}
+      if (!(await typedConfirm({ title: 'Smazat rezervaci ve slotu', text: (_a ? [_a.customer_name, czName(_a.product_name)].filter(Boolean).join(' – ') + (_a.order_id ? ' (napojená objednávka — stroj přijde o termín výroby)' : '') : 'Rezervace / přiřazení ve slotu') + '. Akce je nevratná.' }))) return;
+      var r = await fetch('/api/slots/assignments/' + aid, { method: 'DELETE', headers: TYPED_CONFIRM_HEADER, credentials: 'include' });
       if (!r.ok) { alert('Nepodařilo se zrušit.'); return; }
       refreshSlotDetail(slotId);
     }
@@ -1298,8 +1300,9 @@
     }
 
     async function deleteSlot(id) {
-      if (!confirm('Opravdu smazat tento slot?')) return;
-      await fetch('/api/slots/' + id, { method: 'DELETE', headers: headers, credentials: 'include' });
+      if (!(await typedConfirm({ title: 'Smazat celý slot', text: 'Smaže se slot i všechny rezervace v něm. Akce je nevratná.' }))) return;
+      var _r = await fetch('/api/slots/' + id, { method: 'DELETE', headers: Object.assign({}, headers, TYPED_CONFIRM_HEADER), credentials: 'include' });
+      if (!_r.ok) { alert('Slot se nepodařilo smazat.'); return; }
       closeModal();
       await loadAllSlots();
       render();

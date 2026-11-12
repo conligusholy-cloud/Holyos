@@ -294,6 +294,7 @@
   <script src="/js/countries.js"></script>
   <script src="modules/prodejni-objednavky/pradlomat-economy.js"></script>
   <script src="modules/prodejni-objednavky/pradlomat-balicek.js"></script>
+  <script src="/js/typed-confirm.js?v=1"></script>
 </head>
 <body>
   <div id="sidebar"></div>
@@ -2492,8 +2493,10 @@
     }
 
     async function removeSlotFromItem(assignmentId, slotId, orderId) {
+      if (!(await typedConfirm({ title: 'Zrušit termín výroby', text: 'Položka přijde o rezervovaný výrobní slot. Akce je nevratná.' }))) return;
       try {
-        await fetch('/api/slots/assignments/' + assignmentId, { method: 'DELETE', credentials: 'include' });
+        var _dr = await fetch('/api/slots/assignments/' + assignmentId, { method: 'DELETE', headers: TYPED_CONFIRM_HEADER, credentials: 'include' });
+        if (!_dr.ok) { alert('Termín se nepodařilo zrušit.'); return; }
         // Vrať slot na open
         await fetch('/api/slots/' + slotId, {
           method: 'PUT', credentials: 'include',
