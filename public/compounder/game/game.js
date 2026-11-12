@@ -3581,7 +3581,11 @@ function unitIcon(u) {
 }
 // Z dálky mají v mapě být jen prádlomaty, sídlo a pobočky. Volná místa je
 // v tomhle měřítku stejně nejde rozlišit — slepí se do hromádky otačníků.
-var MISTA_ZOOM = 14;
+var MISTA_ZOOM = 14;              // na tohle přiblížení hra skáče po průzkumu
+// Odkud jsou vidět volná místa a pozemky na prodej. Dřív to bylo až od úrovně
+// ulic, takže z pohledu na celé město koukal hráč na prázdnou mapu a nevěděl,
+// kde má co hledat. Shlukování si s množstvím špendlíků poradí samo.
+var MISTA_OD_ZOOMU = 11;
 // ─── Správa servisu ──────────────────────────────────────────────
 // Odznak vlevo nahoře nad mapou řekne jedním pohledem, jak síť jede. Po klepnutí
 // se otevře celý přehled — který stroj stojí, kde je technik a kdy bude hotovo.
@@ -3729,7 +3733,7 @@ function drawMap() {
   if (!layer) return;
   layer.clearLayers();
   var any = false, zname = {}, skryto = 0, skrytoCizi = 0, kusy = [];
-  var blizko = !map || map.getZoom() >= MISTA_ZOOM;
+  var blizko = !map || map.getZoom() >= MISTA_OD_ZOOMU;
   var moje = MAPA_MOJE;
   var naProdej = trhPodleMist();
   Object.keys(S.areas).forEach(function (aid) {
@@ -3818,7 +3822,7 @@ function drawMap() {
   // Že filtr „jen moje" schovává konkurenci, je vidět z přepínače nad mapou —
   // hlášku o tom hráč po pár minutách jen odklikává.
   } else if (skryto && Date.now() - (S.startedAt || 0) < MONTH_MS) {
-    h.textContent = 'Přibliž mapu na úroveň ulic, ať uvidíš volná místa — teď jich je schovaných '
+    h.textContent = 'Přibliž mapu, ať uvidíš volná místa — teď jich je schovaných '
       + skryto + '. Ze seznamu oblastí tě hra skočí rovnou k nim.';
     h.classList.remove('hidden');
   } else h.classList.add('hidden');
