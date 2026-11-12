@@ -2648,15 +2648,32 @@
     // Účet pro příchozí platbu: jen u vydaných dokladů; výchozí = jediný aktivní účet v měně faktury
     window.updateCreateBankRow = function() {
       const type = (document.getElementById('c-type') || {}).value || '';
+      const show = ['issued', 'proforma_issued', 'credit_note_issued'].includes(type) ? '' : 'none';
       const row = document.getElementById('c-bank-row');
-      if (row) row.style.display = ['issued', 'proforma_issued', 'credit_note_issued'].includes(type) ? '' : 'none';
+      if (row) row.style.display = show;
+      // Ruční číslo účtu patří ke stejné sekci — skrývá se s ní.
+      const manual = document.getElementById('c-bank-manual-row');
+      if (manual) manual.style.display = show;
     };
+    // Výběr účtu z agendy Banka předvyplní ruční pole, ať je vidět, co bude na faktuře.
+    window.onCreateBankAccountChange = function() {
+      window.cState.bankTouched = true;
+      syncCreateBankManual();
+    };
+    function syncCreateBankManual() {
+      const sel = document.getElementById('c-bank-account');
+      const manual = document.getElementById('c-bank-manual');
+      if (!sel || !manual) return;
+      const a = (window.cState.bankAccounts || []).find(x => String(x.id) === sel.value);
+      manual.value = a ? (a.account_number + '/' + a.bank_code) : '';
+    }
     window.autoPickBankAccount = function() {
       if (window.cState.bankTouched) return;
       const sel = document.getElementById('c-bank-account');
       if (!sel) return;
       const same = (window.cState.bankAccounts || []).filter(a => a.currency === window.cState.currency);
       sel.value = same.length === 1 ? String(same[0].id) : '';
+      syncCreateBankManual();
     };
 
     // Číslo dokladu (náhled; přidělí se definitivně až při založení)
@@ -2800,11 +2817,15 @@
                   '<option value="' + k + '"' + (k === 'bank_transfer' ? ' selected' : '') + '>' + v.icon + ' ' + v.full + '</option>'
                 ).join('') +
               '</select></div>' +
-              '<div class="modal-row" id="c-bank-row" style="grid-column: span 2;"><label>Účet pro příchozí platbu (z agendy Banka)</label>' +
-                '<select id="c-bank-account" onchange="window.cState.bankTouched=true">' +
+              '<div class="modal-row" id="c-bank-row"><label>Účet pro příchozí platbu (z agendy Banka)</label>' +
+                '<select id="c-bank-account" onchange="onCreateBankAccountChange()">' +
                   '<option value="">— žádný / neuvádět —</option>' +
                   (window.cState.bankAccounts || []).map(a => '<option value="' + a.id + '">' + escapeHtml(a.name) + ' — ' + escapeHtml(a.account_number + '/' + a.bank_code) + ' (' + escapeHtml(a.currency) + ')</option>').join('') +
                 '</select></div>' +
+              // Číslo účtu k ručnímu zapsání — když účet není v agendě Banka nebo se má
+              // na faktuře uvést jiný. Co je tady vepsané, to jde na fakturu.
+              '<div class="modal-row" id="c-bank-manual-row"><label>Číslo účtu (ručně)</label>' +
+                '<input type="text" id="c-bank-manual" maxlength="50" placeholder="např. 2901234567/2010 nebo IBAN"></div>' +
             '</div>' +
 
             // Položky — karty
@@ -2866,6 +2887,9 @@
         const numOf = a => a.account_number + '/' + a.bank_code;
         const hit = (window.cState.bankAccounts || []).find(a => (E.partner_bank_account && numOf(a) === E.partner_bank_account) || (E.partner_iban && a.iban && a.iban === E.partner_iban));
         if (hit) { set('c-bank-account', hit.id); window.cState.bankTouched = true; }
+        // Ruční pole ukáže číslo účtu tak, jak je uložené na faktuře (i když v agendě Banka není).
+        const manual = document.getElementById('c-bank-manual');
+        if (manual) manual.value = E.partner_bank_account || (hit ? numOf(hit) : '') || '';
       } else {
         autoPickBankAccount();
         loadCreateDocNumber();
@@ -2910,6 +2934,13 @@
           const row = document.getElementById('c-bank-row');
           if (!row || row.style.display === 'none') return {};
           const a = (window.cState.bankAccounts || []).find(x => String(x.id) === document.getElementById('c-bank-account').value);
+          const rucne = (document.getElementById('c-bank-manual')?.value || '').trim();
+          // Na faktuře je vždy to, co je v ručním poli. IBAN/BIC bereme z vybraného
+          // účtu jen tehdy, když ruční číslo opravdu patří k němu.
+          if (rucne) {
+            const sedi = !!a && (a.account_number + '/' + a.bank_code) === rucne;
+            return { partner_bank_account: rucne, partner_iban: sedi ? (a.iban || null) : null, partner_bic: sedi ? (a.bic || null) : null };
+          }
           return a ? { partner_bank_account: a.account_number + '/' + a.bank_code, partner_iban: a.iban || null, partner_bic: a.bic || null }
                    : { partner_bank_account: null, partner_iban: null, partner_bic: null };
         })(),
