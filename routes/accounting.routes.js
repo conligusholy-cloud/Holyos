@@ -1235,6 +1235,247 @@ router.get('/invoices/:id/source-pdf', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+
+// ────────────────────────────────────────────────────────────────────────────
+// NAHRÁNÍ ORIGINÁLU K DOKLADU (Požadavek #146)
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Doklad, který nepřišel e-mailem, dosud neměl jak získat originál — šlo ho jen
+// stáhnout, ne nahrát. Tenhle endpoint doplňuje ruční nahrání (PDF nebo foto)
+// a volitelně na něj pustí stejnou OCR pipeline jako u faktur z e-mailu.
+//
+// Vyčtení z dokladu NIKDY nepřepisuje, co už je vyplněné — doplní jen prázdná
+// pole. Ruční zápis má vždycky přednost před strojem.
+
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 MB — větší sken nemá smysl
+const UPLOAD_SUBDIR = 'invoices-manual';
+
+const sourceUploadSchema = z.object({
+  filename: z.string().trim().min(1, 'Chybí název souboru').max(255),
+  data: z.string().min(1, 'Chybí obsah souboru'), // base64 bez data: prefixu
+  mime: z.string().trim().max(120).nullish(),
+  run_ocr: z.boolean().default(false),
+  replace: z.boolean().default(false),
+});
+
+// Jen formáty, které umí přečíst OCR pipeline i náhled originálu.
+function uploadExt(filename, mime, buf) {
+  const m = String(mime || '').toLowerCase();
+  const n = String(filename || '').toLowerCase();
+  // Rozhoduje obsah, ne přípona — přejmenovaný .exe na .pdf tudy neprojde.
+  if (buf.length >= 5 && buf.slice(0, 5).toString('latin1') === '%PDF-') return '.pdf';
+  if (buf.length >= 8 && buf.slice(0, 8).toString('hex') === '89504e470d0a1a0a') return '.png';
+  if (buf.length >= 3 && buf.slice(0, 3).toString('hex') === 'ffd8ff') return '.jpg';
+  if (buf.length >= 12 && buf.slice(0, 4).toString('latin1') === 'RIFF' && buf.slice(8, 12).toString('latin1') === 'WEBP') return '.webp';
+  // Fallback podle hlášeného typu jen u formátů bez jasné signatury (nic takového zatím nepouštíme dál)
+  if (m === 'application/pdf' || n.endsWith('.pdf')) return null; // tvrdilo PDF, ale obsah to není
+  return null;
+}
+
+function uploadMime(ext) {
+  return ext === '.pdf' ? 'application/pdf'
+    : ext === '.png' ? 'image/png'
+    : ext === '.webp' ? 'image/webp'
+    : 'image/jpeg';
+}
+
+// Smaže předchozí originál, ale JEN když leží v našem úložišti (ochrana před
+// smazáním čehokoliv jiného, kdyby v poli byla cizí cesta).
+function smazStaryOriginal(filePath) {
+  try {
+    if (!filePath) return;
+    const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'data', 'storage');
+    const resolved = path.resolve(filePath);
+    if (!resolved.startsWith(path.resolve(STORAGE_DIR))) return;
+    if (fs.existsSync(resolved)) fs.unlinkSync(resolved);
+  } catch (e) { console.warn('[accounting] úklid starého originálu:', e.message); }
+}
+
+router.post('/invoices/:id/source-pdf', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID dokladu' });
+
+    const parsed = sourceUploadSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      const issue = parsed.error.issues && parsed.error.issues[0];
+      return res.status(400).json({ error: (issue && issue.message) || 'Neplatná data přílohy' });
+    }
+    const b = parsed.data;
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id },
+      select: { id: true, invoice_number: true, source_file_path: true, pdf_file_path: true, direction: true },
+    });
+    if (!invoice) return res.status(404).json({ error: 'Doklad nenalezen' });
+
+    // Vydaná faktura má vlastní vygenerované PDF — ruční originál by se s ním pral.
+    if (invoice.direction === 'ar') {
+      return res.status(400).json({ error: 'Vydaná faktura má vlastní PDF, které generuje HolyOS — nahrávat k ní originál nedává smysl.' });
+    }
+
+    // Starý originál přepíšeme jen na výslovné přání (frontend se nejdřív zeptá).
+    if (invoice.source_file_path && !b.replace) {
+      return res.status(409).json({ error: 'Doklad už má nahraný originál.', has_file: true });
+    }
+
+    let buf;
+    try {
+      buf = Buffer.from(String(b.data).replace(/^data:[^;]+;base64,/, ''), 'base64');
+    } catch (e) {
+      return res.status(400).json({ error: 'Soubor se nepodařilo přečíst' });
+    }
+    if (!buf.length) return res.status(400).json({ error: 'Soubor je prázdný' });
+    if (buf.length > MAX_UPLOAD_BYTES) {
+      return res.status(413).json({ error: `Soubor je příliš velký (${(buf.length / 1048576).toFixed(1)} MB). Limit je ${MAX_UPLOAD_BYTES / 1048576} MB.` });
+    }
+
+    const ext = uploadExt(b.filename, b.mime, buf);
+    if (!ext) {
+      return res.status(400).json({ error: 'Nepodporovaný soubor. Nahraj PDF nebo obrázek dokladu (PNG, JPG, WEBP).' });
+    }
+
+    // Uložení do úložiště: invoices-manual/<rok>/<měsíc>/<id>-<uuid><ext>
+    const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'data', 'storage');
+    const now = new Date();
+    const dir = path.join(STORAGE_DIR, UPLOAD_SUBDIR, String(now.getFullYear()), String(now.getMonth() + 1).padStart(2, '0'));
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, `${id}-${require('crypto').randomUUID()}${ext}`);
+    fs.writeFileSync(filePath, buf);
+
+    const stary = invoice.source_file_path;
+    await prisma.invoice.update({ where: { id }, data: { source_file_path: filePath } });
+    if (stary && stary !== filePath) smazStaryOriginal(stary);
+
+    logAudit({
+      action: 'update', entity: 'invoice', entity_id: id,
+      description: `Nahrán originál dokladu ${invoice.invoice_number}: ${b.filename} (${(buf.length / 1024).toFixed(0)} kB)`
+        + (stary ? ' — nahradil předchozí přílohu' : ''),
+      user: req.user,
+    }).catch(() => {});
+
+    // Vyčtení z dokladu — doplní jen to, co je prázdné.
+    let ocr = null;
+    if (b.run_ocr) ocr = await vyctiZOriginalu(id, filePath);
+
+    res.status(201).json({
+      ok: true,
+      filename: b.filename,
+      size: buf.length,
+      mime: uploadMime(ext),
+      replaced: !!stary,
+      ocr,
+    });
+  } catch (err) { next(err); }
+});
+
+// POST /api/accounting/invoices/:id/read-source — vyčtení z už nahraného originálu
+router.post('/invoices/:id/read-source', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID dokladu' });
+    const invoice = await prisma.invoice.findUnique({ where: { id }, select: { source_file_path: true } });
+    if (!invoice) return res.status(404).json({ error: 'Doklad nenalezen' });
+    if (!invoice.source_file_path || !fs.existsSync(invoice.source_file_path)) {
+      return res.status(400).json({ error: 'Doklad nemá nahraný originál, ze kterého se dá číst.' });
+    }
+    const ocr = await vyctiZOriginalu(id, invoice.source_file_path);
+    if (ocr && ocr.error) return res.status(422).json({ error: ocr.error });
+    res.json({ ok: true, ocr });
+  } catch (err) { next(err); }
+});
+
+/**
+ * Přečte originál dokladu a doplní PRÁZDNÁ pole faktury. Co už je vyplněné,
+ * zůstává — ruční zápis má přednost. Vrací přehled doplněných polí, ať
+ * uživatel vidí, co se změnilo, a nemusí to hledat.
+ */
+async function vyctiZOriginalu(invoiceId, filePath) {
+  let result;
+  try {
+    const { runPipeline } = require('../services/ocr/pipeline');
+    result = await runPipeline(filePath, { invoice_id: invoiceId });
+  } catch (e) {
+    console.warn('[accounting] vyčtení z originálu:', e.message);
+    return { error: 'Vyčtení z dokladu selhalo: ' + e.message };
+  }
+  if (!result || !result.ok) {
+    return { error: (result && result.reason) || 'Doklad se nepodařilo přečíst.' };
+  }
+
+  const inv = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+  if (!inv) return { error: 'Doklad mezitím zmizel.' };
+
+  const h = result.header || {};
+  const data = {};
+  const doplneno = [];
+  // Prázdné = null / prázdný řetězec / nula u částek. Datum vystavení a splatnosti
+  // mají při založení vždy nějakou hodnotu, takže se nepřepisují nikdy.
+  const text = (pole, popis, hodnota) => {
+    if (!hodnota) return;
+    if (inv[pole] !== null && inv[pole] !== undefined && String(inv[pole]).trim() !== '') return;
+    data[pole] = String(hodnota).slice(0, 100);
+    doplneno.push(popis + ': ' + data[pole]);
+  };
+  const castka = (pole, popis, hodnota) => {
+    const n = Number(hodnota);
+    if (!Number.isFinite(n) || n === 0) return;
+    if (Number(inv[pole] || 0) !== 0) return;
+    data[pole] = n.toFixed(2);
+    doplneno.push(popis + ': ' + n.toFixed(2));
+  };
+
+  text('external_number', 'Číslo dokladu', h.external_number);
+  text('variable_symbol', 'Variabilní symbol', h.variable_symbol);
+  text('constant_symbol', 'Konstantní symbol', h.constant_symbol);
+  text('specific_symbol', 'Specifický symbol', h.specific_symbol);
+  text('partner_bank_account', 'Bankovní účet', h.partner_bank_account);
+  text('partner_iban', 'IBAN', h.partner_iban);
+  text('partner_bic', 'BIC', h.partner_bic);
+  castka('subtotal', 'Základ bez DPH', h.subtotal);
+  castka('vat_amount', 'DPH', h.vat_amount);
+  castka('total', 'Celkem s DPH', h.total);
+
+  // DUZP se doplní, jen když chybí (na rozdíl od date_issued / date_due, které
+  // jsou povinné a vždycky vyplněné).
+  if (!inv.date_taxable && h.date_taxable) {
+    data.date_taxable = new Date(h.date_taxable);
+    doplneno.push('DUZP: ' + String(h.date_taxable).slice(0, 10));
+  }
+  // Dodavatel se mění jen u dokladu, kde zatím sedí zástupná „neznámá" firma.
+  if (result.matched_company_id && result.matched_company_id !== inv.company_id) {
+    try {
+      // Zástupná firma, kterou OCR dosazuje, když dodavatele nepozná
+      // (stejný název používá services/email-ingest.js).
+      const placeholder = await prisma.company.findFirst({
+        where: { name: 'Neznámý dodavatel (OCR fallback)' }, select: { id: true },
+      });
+      if (placeholder && inv.company_id === placeholder.id) {
+        const c = await prisma.company.findUnique({ where: { id: result.matched_company_id }, select: { name: true } });
+        data.company_id = result.matched_company_id;
+        doplneno.push('Dodavatel: ' + ((c && c.name) || ('#' + result.matched_company_id)));
+      }
+    } catch (e) { /* firmu raději necháme být */ }
+  }
+
+  data.ocr_confidence = result.composite_confidence;
+  data.ocr_passes_done = (inv.ocr_passes_done || 0) + (result.passes_count || 0);
+  if (result.recommendation !== 'ready') data.needs_human_review = true;
+
+  await prisma.invoice.update({ where: { id: invoiceId }, data }).catch((e) => {
+    console.warn('[accounting] zápis vyčtených polí:', e.message);
+  });
+
+  const polozky = Array.isArray(result.items) ? result.items.length : 0;
+  return {
+    confidence: result.composite_confidence,
+    recommendation: result.recommendation,
+    filled: doplneno,
+    items_found: polozky,
+    warnings: (result.warnings || []).map((w) => w.message).filter(Boolean).slice(0, 5),
+  };
+}
+
 // POST /api/accounting/invoices/:id/manual-match — ruční potvrzení „má objednávku" / „má příjemku" (dočasně místo 3-way match)
 // Body: { field: 'order'|'receipt', checked: bool }. Ukládá se jako tag manual_order / manual_receipt (bez migrace).
 // Když má faktura obojí a je už schválená (approved), posune se rovnou do ready_to_pay.
@@ -1591,6 +1832,60 @@ router.post('/invoices/:id/payment-note', async (req, res, next) => {
     const note = String(req.body?.note || '').replace(/\s+/g, ' ').trim().slice(0, 60) || null;
     const r = await prisma.invoice.update({ where: { id }, data: { payment_note: note }, select: { id: true, payment_note: true } });
     res.json(r);
+  } catch (err) { next(err); }
+});
+
+// ─── „ZA CO PLATÍM" PODLE DODAVATELE (požadavek #149) ─────────────────────
+// Pravidlo = pevný text u firmy (např. Tesco → „Potraviny"). Platí pro všechny
+// její PŘIJATÉ doklady: existující se doplní hned, nové při vzniku poznámky
+// (services/accounting/payment-note.js má pravidlo přednostně před AI).
+
+// GET /api/accounting/payment-note-rules — seznam pravidel i s názvy firem
+router.get('/payment-note-rules', async (req, res, next) => {
+  try {
+    const svc = require('../services/accounting/payment-note');
+    const rules = await svc.getRules();
+    const ids = Object.keys(rules).map((k) => parseInt(k, 10)).filter((n) => Number.isInteger(n) && n > 0);
+    const companies = ids.length
+      ? await prisma.company.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })
+      : [];
+    const byId = new Map(companies.map((c) => [c.id, c.name]));
+    res.json(ids.map((id) => ({ company_id: id, company_name: byId.get(id) || ('#' + id), note: rules[String(id)] })));
+  } catch (err) { next(err); }
+});
+
+const paymentNoteRuleSchema = z.object({
+  note: z.string().max(60).nullable().optional(),
+  overwrite: z.boolean().optional(),
+});
+
+// PUT /api/accounting/payment-note-rules/:companyId — nastavit/zrušit pravidlo
+// Tělo: { note: "Potraviny", overwrite?: false }. Prázdné note pravidlo smaže.
+router.put('/payment-note-rules/:companyId', async (req, res, next) => {
+  try {
+    const companyId = parseInt(req.params.companyId, 10);
+    if (!Number.isInteger(companyId) || companyId <= 0) return res.status(400).json({ error: 'Neplatné ID firmy.' });
+    const parsed = paymentNoteRuleSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: 'Text smí mít nejvýš 60 znaků.' });
+
+    const company = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true, name: true } });
+    if (!company) return res.status(404).json({ error: 'Firma nenalezena.' });
+
+    const svc = require('../services/accounting/payment-note');
+    const note = svc.normNote(parsed.data.note);
+    await svc.setRule(companyId, note, req.user && req.user.id);
+    const updated = note ? await svc.applyRuleToInvoices(companyId, note, { overwrite: !!parsed.data.overwrite }) : 0;
+
+    await logAudit({
+      action: 'update', entity: 'company', entity_id: companyId,
+      description: note
+        ? `„Za co platím" pro ${company.name}: ${note} (doplněno u ${updated} dokladů)`
+        : `Zrušeno pravidlo „za co platím" pro ${company.name}`,
+      changes: { payment_note_rule: { note, overwrite: !!parsed.data.overwrite, invoices_updated: updated } },
+      user: req.user,
+    }).catch(() => {});
+
+    res.json({ company_id: companyId, company_name: company.name, note, invoices_updated: updated });
   } catch (err) { next(err); }
 });
 

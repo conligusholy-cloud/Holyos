@@ -1510,6 +1510,129 @@
       }
     };
 
+
+    // ─── Nahrání originálu dokladu (Požadavek #146) ──────────────────────
+    // Doklad, který nepřišel e-mailem, šlo dosud jen stáhnout, ne nahrát.
+    // Po nahrání se nabídne vyčtení údajů stejnou OCR pipeline jako u faktur
+    // z e-mailu — doplní se JEN prázdná pole, ruční zápis má přednost.
+    const SOURCE_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp';
+    const SOURCE_MAX_MB = 20;
+
+    function vyberSoubor(accept) {
+      return new Promise((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = accept;
+        input.style.display = 'none';
+        input.onchange = () => { resolve(input.files && input.files[0] ? input.files[0] : null); input.remove(); };
+        document.body.appendChild(input);
+        input.click();
+      });
+    }
+
+    function souborNaBase64(file) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result || '').split(',')[1] || '');
+        r.onerror = () => reject(new Error('Soubor se nepodařilo přečíst.'));
+        r.readAsDataURL(file);
+      });
+    }
+
+    window.uploadSourceFile = async function(id) {
+      const file = await vyberSoubor(SOURCE_ACCEPT);
+      if (!file) return;
+      if (file.size > SOURCE_MAX_MB * 1048576) {
+        alert('Soubor je příliš velký (' + (file.size / 1048576).toFixed(1) + ' MB). Limit je ' + SOURCE_MAX_MB + ' MB.');
+        return;
+      }
+      const cist = confirm('Nahrát „' + file.name + '" k dokladu.\n\nMám z něj rovnou vyčíst údaje (číslo dokladu, částky, VS, účet)?\n\nOK = nahrát a vyčíst (chvíli to trvá)\nZrušit = jen nahrát soubor');
+
+      const hlaska = zobrazPrubeh(cist ? 'Nahrávám a čtu doklad…' : 'Nahrávám soubor…');
+      try {
+        let data;
+        try { data = await souborNaBase64(file); }
+        catch (e) { throw new Error(e.message); }
+
+        const telo = { filename: file.name, mime: file.type || null, data, run_ocr: !!cist, replace: false };
+        let r = await api('POST', '/api/accounting/invoices/' + id + '/source-pdf', telo);
+
+        // 409 = doklad už originál má; zeptej se a pošli znovu s replace.
+        if (r.status === 409) {
+          hlaska.remove();
+          if (!confirm('Doklad už má nahraný originál. Nahradit ho novým souborem?\n\nPůvodní soubor se smaže.')) return;
+          const h2 = zobrazPrubeh(cist ? 'Nahrávám a čtu doklad…' : 'Nahrávám soubor…');
+          telo.replace = true;
+          r = await api('POST', '/api/accounting/invoices/' + id + '/source-pdf', telo);
+          h2.remove();
+        } else {
+          hlaska.remove();
+        }
+
+        if (r.status !== 201) throw new Error((r.data && r.data.error) || ('Server vrátil chybu ' + r.status));
+        alert(shrnutiNahrani(r.data));
+      } catch (e) {
+        try { hlaska.remove(); } catch (_) {}
+        alert('Nahrání selhalo: ' + e.message);
+      }
+      // Detail i náhled originálu se musí překreslit, ať je nová příloha vidět.
+      await obnovDetailPoNahrani(id);
+    };
+
+    // Vyčtení z už nahraného originálu (bez nahrávání nového souboru).
+    window.readSourceFile = async function(id) {
+      if (!confirm('Vyčíst údaje z nahraného originálu?\n\nDoplní se jen prázdná pole — co už je vyplněné, zůstane.')) return;
+      const hlaska = zobrazPrubeh('Čtu doklad…');
+      try {
+        const r = await api('POST', '/api/accounting/invoices/' + id + '/read-source');
+        hlaska.remove();
+        if (r.status !== 200) throw new Error((r.data && r.data.error) || ('Server vrátil chybu ' + r.status));
+        alert(shrnutiNahrani(r.data));
+      } catch (e) {
+        try { hlaska.remove(); } catch (_) {}
+        alert('Vyčtení selhalo: ' + e.message);
+      }
+      await obnovDetailPoNahrani(id);
+    };
+
+    function shrnutiNahrani(d) {
+      const o = d && d.ocr;
+      if (!o) return 'Originál nahrán.';
+      if (o.error) return 'Originál nahrán, ale vyčtení se nepovedlo:\n' + o.error + '\n\nÚdaje doplň ručně.';
+      const radky = [];
+      radky.push('Originál nahrán a přečten (důvěra ' + Math.round((o.confidence || 0) * 100) + ' %).');
+      if (o.filled && o.filled.length) {
+        radky.push('');
+        radky.push('Doplněno do prázdných polí:');
+        o.filled.forEach(function(f) { radky.push('  • ' + f); });
+      } else {
+        radky.push('');
+        radky.push('Nic se nedoplnilo — všechna pole už byla vyplněná.');
+      }
+      if (o.items_found) { radky.push(''); radky.push('V dokladu nalezeno položek: ' + o.items_found + ' (položky se nepřepisují, zkontroluj je ručně).'); }
+      if (o.recommendation && o.recommendation !== 'ready') { radky.push(''); radky.push('⚠️ Doklad je označen ke kontrole — údaje si projdi.'); }
+      if (o.warnings && o.warnings.length) { radky.push(''); o.warnings.forEach(function(w) { radky.push('⚠️ ' + w); }); }
+      return radky.join('\n');
+    }
+
+    function zobrazPrubeh(text) {
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;';
+      el.innerHTML = '<div style="background:var(--surface,#111827);color:var(--text,#e5e7eb);padding:22px 28px;border-radius:12px;border:1px solid var(--border,#374151);font-size:14px;">'
+        + escapeHtml(text) + '<div style="color:var(--text2,#9ca3af);font-size:12px;margin-top:6px;">Nezavírej stránku.</div></div>';
+      document.body.appendChild(el);
+      return el;
+    }
+
+    async function obnovDetailPoNahrani(id) {
+      try { if (typeof loadInvoices === 'function') await loadInvoices(); } catch (e) {}
+      try { if (typeof openDetail === 'function') await openDetail(id); } catch (e) {}
+      try {
+        const pane = document.getElementById('review-pane');
+        if (pane && String(pane.dataset.id) === String(id) && typeof openReviewPane === 'function') openReviewPane(id);
+      } catch (e) {}
+    }
+
     // ─── Vizuální kontrola: originál dokladu vedle detailu ──────────────
     // Panel vpravo (mimo modal-root, aby přežil přepnutí detail → Upravit),
     // modal se přes body.review-on posune doleva.
@@ -1526,6 +1649,11 @@
           '<div class="rp-title">📄 Originál dokladu' + (inv ? ' <span class="dv-sub">' + escapeHtml(inv.invoice_number) + '</span>' : '') + '</div>' +
           '<div class="rp-btns">' +
             '<a class="btn btn-secondary btn-sm" href="' + url + '" target="_blank" title="Otevřít v novém okně">↗</a>' +
+            // Vyčtení z originálu — doplní jen prázdná pole. (Požadavek #146)
+            (inv && inv.direction === 'ap' && (inv.source_file_path || inv.pdf_file_path)
+              ? '<button class="btn btn-secondary btn-sm" onclick="readSourceFile(' + id + ')" title="Přečíst doklad a doplnit prázdná pole">🔍 Vyčíst</button>'
+                + '<button class="btn btn-secondary btn-sm" onclick="uploadSourceFile(' + id + ')" title="Nahradit originál jiným souborem">📎 Nahradit</button>'
+              : '') +
             (!inv || inv.status === 'draft' ? '<button class="btn btn-secondary btn-sm" onclick="editInvoice(' + id + ')">✏️ Upravit odchylky</button>' : '') +
             (checked
               ? '<button class="btn btn-secondary btn-sm" onclick="markInvoiceChecked(' + id + ', false)" title="Vrátit stav kontroly">↺ Zrušit kontrolu</button>'
@@ -1537,7 +1665,11 @@
           ? '<div class="rp-legend" id="rp-legend"></div>' +
             '<div class="rp-zoom"><button class="btn btn-secondary btn-sm" onclick="reviewZoom(-1)" title="Zmenšit">−</button><span id="rp-zoom-val">100 %</span><button class="btn btn-secondary btn-sm" onclick="reviewZoom(1)" title="Zvětšit">+</button></div>' +
             '<div class="rp-view" id="rp-view"><div class="empty-hint" style="padding:40px;">Načítám originál…</div></div>'
-          : '<div class="empty-hint" style="padding:40px;">Doklad nemá uložený originál (PDF / obrázek).</div>');
+          : '<div class="empty-hint" style="padding:40px;">Doklad nemá uložený originál (PDF / obrázek).'
+            + (inv && inv.direction === 'ap'
+              ? '<div style="margin-top:14px;"><button class="btn btn-primary" onclick="uploadSourceFile(' + id + ')">📎 Nahrát originál</button></div>'
+              : '')
+            + '</div>');
       document.body.classList.add('review-on');
       if (hasFile) { window._rpZoom = 1; renderReviewDoc(id, inv); }
     };
@@ -1822,12 +1954,33 @@
       if (r.status !== 200) return alert('Nepodařilo se: ' + (r.data?.error || r.status));
       openDetail(id);
     };
+    // ── Pravidlo „za co platím" pro celého dodavatele (požadavek #149) ──
+    // Místo vyplňování u každé faktury zvlášť se text nastaví jednou u firmy.
+    // Platí pak pro všechny její přijaté doklady — stávající s prázdným polem
+    // se doplní hned, nové při vzniku poznámky (QR platba / platební příkaz).
+    window.editPaymentNoteRule = async function(companyId, companyName, id) {
+      const cur = (window._detailInv && window._detailInv.id === id && window._detailInv.payment_note) || '';
+      const v = prompt('Za co platím u všech dokladů od „' + companyName + '" (1–3 slova, max 60 znaků).\n'
+        + 'Prázdné pole pravidlo zruší. Doklady, kde už text je, zůstanou beze změny.', cur);
+      if (v === null) return;
+      const r = await api('PUT', '/api/accounting/payment-note-rules/' + companyId, { note: v });
+      if (r.status !== 200) return alert('Nepodařilo se: ' + (r.data?.error || r.status));
+      alert(r.data.note
+        ? 'Pravidlo uloženo: „' + r.data.note + '". Doplněno u ' + r.data.invoices_updated + ' dokladů od ' + companyName + '.'
+        : 'Pravidlo pro ' + companyName + ' zrušeno.');
+      openDetail(id);
+    };
     function invPaymentNoteHtml(inv) {
       if (inv.direction !== 'ap') return '';
+      const comp = inv.company || {};
+      const ruleBtn = comp.id
+        ? '<button class="btn btn-secondary btn-sm" onclick="editPaymentNoteRule(' + comp.id + ', ' + JSON.stringify(comp.name || '').replace(/"/g, '&quot;') + ', ' + inv.id + ')" title="Nastavit text pro všechny doklady od tohoto dodavatele">🏢 Pro celou firmu</button>'
+        : '';
       return '<div class="dv-match" style="display:flex;align-items:center;gap:8px;">🏷 <b>Za co platím:</b> ' +
         (inv.payment_note ? '<span>' + escapeHtml(inv.payment_note) + '</span>' : '<span style="color:var(--text2)">zatím nevyplněno — vytvoří se samo při QR platbě nebo příkazu</span>') +
         '<span style="flex:1"></span><button class="btn btn-secondary btn-sm" onclick="editPaymentNote(' + inv.id + ')" title="Upravit ručně">✏️</button>' +
-        '<button class="btn btn-secondary btn-sm" onclick="editPaymentNote(' + inv.id + ',true)" title="Nechat AI shrnout z položek dokladu">🤖 Shrnout</button></div>';
+        '<button class="btn btn-secondary btn-sm" onclick="editPaymentNote(' + inv.id + ',true)" title="Nechat AI shrnout z položek dokladu">🤖 Shrnout</button>' +
+        ruleBtn + '</div>';
     }
     // ── Interní poznámka k dokladu ────────────────────────────────────────
     // Pole `internal_note` — vidíme ji jen my, na fakturu v PDF se NETISKNE
@@ -2106,6 +2259,10 @@
                   : '') +
               '</div>' +
               '<div class="dv-actions-r">' +
+                // Ruční originál dává smysl jen u přijatých dokladů — vydané si HolyOS generuje sám. (Požadavek #146)
+                (inv.direction === 'ap'
+                  ? '<button class="btn btn-secondary" onclick="uploadSourceFile(' + inv.id + ')" title="Nahrát PDF nebo foto dokladu">📎 ' + (inv.source_file_path ? 'Nahradit originál' : 'Nahrát originál') + '</button>'
+                  : '') +
                 (inv.status === 'draft' ? '<button class="btn btn-secondary" onclick="editInvoice(' + inv.id + ')">✏️ Upravit</button>' : '') +
                 (canSubmitForApproval && inv.status !== 'awaiting_approval' ? '<button class="btn btn-secondary" onclick="submitForApproval(' + inv.id + ')">Poslat ke schválení</button>' : '') +
                 (inv.status === 'awaiting_approval' ? '<button class="btn btn-primary" onclick="approveInvoice(' + inv.id + ')">✅ Schválit</button><button class="btn btn-danger" onclick="rejectInvoice(' + inv.id + ')">❌ Zamítnout</button>' : '') +
