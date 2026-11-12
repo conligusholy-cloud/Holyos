@@ -826,4 +826,95 @@ router.get('/zaznam', api(async (req, res) => {
     ms: Math.max.apply(null, casti.map((c) => c.ms || 0)), hrac, udalosti });
 }));
 
+// ─── AI analytik hry ─────────────────────────────────────────────────────────
+// Sesbírá, jak se hráči ve hře chovají (trychtýř, retence, postup, čas ve hře, platby, zdroje, reklama)
+// a nechá Claude navrhnout konkrétní změny, které povedou k víc platbám. Poslední rozbor se ukládá.
+const AI_KEY = 'game.ai_analyza';
+const medi = (a) => { if (!a.length) return null; const s = a.slice().sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const R1 = (n) => (n == null ? null : Math.round(n * 10) / 10);
+
+async function sesbirejDataHry(reklama) {
+  const dny = 30, od = new Date(Date.now() - dny * 86400e3);
+  const [udalosti, hraci, nakupy, ceny, zaznamu] = await Promise.all([
+    prisma.compounderEvent.findMany({ where: { created_at: { gte: od }, event: { startsWith: 'game_' } }, select: { event: true, sid: true }, take: 300000 }),
+    prisma.gamePlayer.findMany({ where: { disabled: false }, take: 4000, orderBy: { created_at: 'desc' },
+      select: { id: true, created_at: true, state_at: true, state: true, zdroj: true, hra_s_celkem: true, invited_by_id: true } }),
+    prisma.gamePurchase.findMany({ where: { status: 'paid' }, select: { player_id: true, kind: true, qty: true, amount_cents: true, paid_at: true } }),
+    prisma.gamePrice.findMany({ select: { kind: true, price: true, name: true, active: true } }),
+    prisma.gameReplay.count().catch(() => 0),
+  ]);
+  // Události: kolik unikátních návštěv a kolikrát
+  const ev = {};
+  udalosti.forEach((e) => { const o = ev[e.event] || (ev[e.event] = { sids: new Set(), celkem: 0 }); o.sids.add(e.sid); o.celkem++; });
+  const udalostiVystup = Object.keys(ev).map((k) => ({ udalost: k, unikatnich: ev[k].sids.size, celkem: ev[k].celkem })).sort((a, b) => b.unikatnich - a.unikatnich);
+
+  const plat = {}; nakupy.forEach((n) => { const o = plat[n.player_id] || (plat[n.player_id] = { n: 0, kc: 0, prvni: null }); o.n++; o.kc += n.amount_cents / 100; const t = new Date(n.paid_at).getTime(); if (!o.prvni || t < o.prvni) o.prvni = t; });
+  const bucket = (v, hr) => { for (const [lbl, max] of hr) if (v < max) return lbl; return hr[hr.length - 1][0]; };
+  const B = { pradlomatu: {}, cas_ve_hre: {}, dni_od_registrace_do_posledni_aktivity: {}, profil: {}, zdroj: {}, pozvany: {} };
+  const pridej = (skupina, klic, plati) => { const o = skupina[klic] || (skupina[klic] = { hracu: 0, platicich: 0 }); o.hracu++; if (plati) o.platicich++; };
+  const casy = [], dnuDoPlatby = [];
+  hraci.forEach((h) => {
+    const st = h.state || {}; const units = Array.isArray(st.units) ? st.units.length : 0; const plati = !!plat[h.id];
+    const minut = (h.hra_s_celkem || 0) / 60;
+    const dniAktivity = h.state_at ? (new Date(h.state_at).getTime() - new Date(h.created_at).getTime()) / 86400e3 : 0;
+    pridej(B.pradlomatu, bucket(units, [['0', 1], ['1', 2], ['2', 3], ['3-5', 6], ['6+', 1e9]]), plati);
+    pridej(B.cas_ve_hre, bucket(minut, [['<1 min', 1], ['1-5 min', 5], ['5-15 min', 15], ['15-30 min', 30], ['30+ min', 1e9]]), plati);
+    pridej(B.dni_od_registrace_do_posledni_aktivity, bucket(dniAktivity, [['<1 den', 1], ['1-3 dny', 3], ['3-7 dní', 7], ['7+ dní', 1e9]]), plati);
+    pridej(B.profil, String(st.profile || 'neuvedeno'), plati);
+    pridej(B.zdroj, String(h.zdroj || 'přímo/neznámý').slice(0, 40), plati);
+    pridej(B.pozvany, h.invited_by_id ? 'pozvaný hráčem' : 'nepozvaný', plati);
+    if (minut > 0) casy.push(minut);
+    if (plati && plat[h.id].prvni) dnuDoPlatby.push((plat[h.id].prvni - new Date(h.created_at).getTime()) / 86400e3);
+  });
+  const podleDruhu = {}; nakupy.forEach((n) => { const o = podleDruhu[n.kind] || (podleDruhu[n.kind] = { nakupu: 0, kc: 0 }); o.nakupu++; o.kc += n.amount_cents / 100; });
+  const platici = Object.keys(plat).length;
+  return {
+    obdobi_udalosti_dnu: dny,
+    hracu_celkem: hraci.length, platicich_hracu: platici,
+    konverze_na_platbu_pct: hraci.length ? R1(platici / hraci.length * 100) : 0,
+    udalosti_za_30_dni: udalostiVystup,
+    chovani_podle_skupin: B,
+    median_minut_ve_hre: R1(medi(casy)), median_dni_od_registrace_do_prvni_platby: R1(medi(dnuDoPlatby)),
+    nakupy_podle_druhu: podleDruhu,
+    cenik: ceny.map((c) => ({ druh: c.kind, nazev: c.name, cena_kc: c.price / 100, aktivni: c.active })),
+    nahranych_zaznamu_prvni_minuty: zaznamu,
+    reklama: reklama || null,
+  };
+}
+
+// GET /ai-analyza → poslední uložený rozbor
+router.get('/ai-analyza', api(async (req, res) => {
+  const { getSetting } = require('../services/settings');
+  const v = await getSetting(AI_KEY, { type: 'json', defaultValue: null }).catch(() => null);
+  res.json({ ok: true, rozbor: v });
+}));
+
+// POST /ai-analyza { reklama? } → nový rozbor (Claude), uloží se
+router.post('/ai-analyza', api(async (req, res) => {
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'AI není nakonfigurováno (chybí ANTHROPIC_API_KEY).' });
+  const rk = req.body && req.body.reklama && typeof req.body.reklama === 'object' ? req.body.reklama : null;
+  const reklama = rk ? ['vydaj', 'trzba', 'zisk', 'roas', 'dnu_plus', 'dnu_minus', 'registraci', 'nakupu', 'kliku', 'cena_registrace', 'cena_nakupu'].reduce((o, k) => { if (Number.isFinite(Number(rk[k]))) o[k] = Number(rk[k]); return o; }, {}) : null;
+  const data = await sesbirejDataHry(reklama && Object.keys(reklama).length ? reklama : null);
+  const Anthropic = require('@anthropic-ai/sdk');
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const model = process.env.GAME_AI_MODEL || 'claude-sonnet-4-6';
+  const sys = 'Jsi senior produktový analytik a growth designér free-to-play her. Analyzuješ hru „Laundromat Tycoon" (prohlížečová tycoon hra o stavbě sítě samoobslužných prádlomatů na pradlomaty.info/game; hráči si zakládají účet, prozkoumávají města, staví prádlomaty a platí přes Stripe za balíčky měny/karty/výhody). Cíl majitele: ZÍSKAT VÍC PLATEB (vyšší konverze na platbu a vyšší tržba na hráče při rozumné ceně reklamy). Dostaneš agregovaná data o chování hráčů (trychtýř událostí, chování podle skupin vč. konverze na platbu, čas ve hře, postup, zdroje návštěv, nákupy podle druhu, ceník, výsledky reklamy). Pracuj POUZE s dodanými čísly, nic si nevymýšlej; když je vzorek malý (jednotky plateb), řekni to a formuluj závěry jako hypotézy. Najdi: kde se hráči ztrácejí, v jakém okamžiku/postupu je pravděpodobné, že zaplatí (a co mají platící společné), co brání platbě (cena, načasování, nabídka, tření), co se dá změnit v herním designu, nabídce, ceníku, onboardingu, notifikacích/e-mailech a reklamě. Odpověz POUZE platným JSON bez markdownu: {"summary":"<3-5 vět o stavu>","zjisteni":[{"nadpis":"<krátce>","detail":"<1-3 věty s čísly>"}],"navrhy":[{"nazev":"<krátce>","co_zmenit":"<konkrétně co ve hře/nabídce udělat>","proc":"<na jakých číslech to stojí>","ocekavany_dopad":"<odhad dopadu na platby>","narocnost":"nízká|střední|vysoká","priorita":1}],"experimenty":["<A/B test nebo měření, které ověří hypotézu>"],"chybi_data":["<co by se mělo začít měřit, aby šlo příště analyzovat přesněji>"]}. 5–8 návrhů seřazených podle priority (1 = nejdřív). Piš česky, konkrétně, s čísly.';
+  const msg = await client.messages.create({ model, max_tokens: 3500, system: sys, messages: [{ role: 'user', content: 'Data hry (JSON):\n' + JSON.stringify(data) }] });
+  let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
+  text = text.replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
+  let j; try { j = JSON.parse(text); } catch (e) { j = { summary: text.slice(0, 2000), zjisteni: [], navrhy: [], experimenty: [], chybi_data: [] }; }
+  const S = (x, n) => String(x == null ? '' : x).slice(0, n);
+  const rozbor = {
+    vytvoreno: new Date().toISOString(), model,
+    prehled: { hracu: data.hracu_celkem, platicich: data.platicich_hracu, konverze_pct: data.konverze_na_platbu_pct },
+    summary: S(j.summary, 2000),
+    zjisteni: (Array.isArray(j.zjisteni) ? j.zjisteni : []).slice(0, 10).map((x) => ({ nadpis: S(x.nadpis, 120), detail: S(x.detail, 500) })),
+    navrhy: (Array.isArray(j.navrhy) ? j.navrhy : []).slice(0, 10).map((x) => ({ nazev: S(x.nazev, 120), co_zmenit: S(x.co_zmenit, 600), proc: S(x.proc, 500), ocekavany_dopad: S(x.ocekavany_dopad, 300), narocnost: S(x.narocnost, 20), priorita: Number(x.priorita) || 9 })).sort((a, b) => a.priorita - b.priorita),
+    experimenty: (Array.isArray(j.experimenty) ? j.experimenty : []).slice(0, 8).map((x) => S(x, 400)),
+    chybi_data: (Array.isArray(j.chybi_data) ? j.chybi_data : []).slice(0, 8).map((x) => S(x, 300)),
+  };
+  try { const { setSetting } = require('../services/settings'); await setSetting(AI_KEY, rozbor, { type: 'json', description: 'Laundromat Tycoon — poslední rozbor AI analytika', scope: 'game', userId: req.user && req.user.id }); } catch (e) { console.warn('[game-ai] uložení rozboru selhalo:', e.message); }
+  res.json({ ok: true, rozbor });
+}));
+
 module.exports = router;

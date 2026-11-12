@@ -99,6 +99,7 @@
       </div>
       <div class="toolbar" style="margin-left:auto">
         <a class="btn" href="https://pradlomaty.info/game" target="_blank" rel="noopener">Otevřít hru ↗</a>
+        <button class="btn" id="ai-btn" title="AI projde chování hráčů a navrhne změny, které povedou k víc platbám">🤖 AI analytik</button>
         <button class="btn" id="reload">↻ Obnovit</button>
       </div>
     </div>
@@ -250,6 +251,41 @@
     }
     function chyba(el, e) { document.getElementById(el).innerHTML = '<p class="note" style="color:#f87171">' + esc(e.message) + '</p>'; }
 
+    // ── AI analytik: chování hráčů → návrhy na víc plateb ────────────────────
+    function aiVykresli(r) {
+      var nar = { 'nízká': '#22c55e', 'střední': '#f59e0b', 'vysoká': '#ef4444' };
+      var h = '<button class="x" data-close>×</button><h2>🤖 AI analytik hry</h2>'
+        + '<div class="note" style="margin-bottom:10px">Rozbor z ' + dt(r.vytvoreno) + ' · hráčů ' + cz(r.prehled.hracu) + ', platících ' + cz(r.prehled.platicich) + ' (' + String(r.prehled.konverze_pct).replace('.', ',') + ' %)</div>'
+        + '<p style="line-height:1.55;margin:0 0 14px">' + esc(r.summary) + '</p>';
+      if ((r.zjisteni || []).length) h += '<h3 style="font-size:14px;margin:14px 0 6px">Co z dat vychází</h3>' + r.zjisteni.map(function (z) { return '<div style="margin:0 0 8px"><b>' + esc(z.nadpis) + '</b><div class="note" style="color:var(--text)">' + esc(z.detail) + '</div></div>'; }).join('');
+      if ((r.navrhy || []).length) h += '<h3 style="font-size:14px;margin:16px 0 6px">Návrhy změn (od nejdůležitějšího)</h3>' + r.navrhy.map(function (n, i) {
+        return '<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin:0 0 8px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>' + (i + 1) + '. ' + esc(n.nazev) + '</b><span class="note" style="color:' + (nar[n.narocnost] || '#94a3b8') + '">náročnost: ' + esc(n.narocnost || '—') + '</span></div>'
+          + '<div style="margin:6px 0 4px">' + esc(n.co_zmenit) + '</div><div class="note"><b>Proč:</b> ' + esc(n.proc) + '</div><div class="note"><b>Očekávaný dopad:</b> ' + esc(n.ocekavany_dopad) + '</div></div>'; }).join('');
+      if ((r.experimenty || []).length) h += '<h3 style="font-size:14px;margin:16px 0 6px">Co otestovat</h3><ul style="margin:0 0 8px 18px;padding:0">' + r.experimenty.map(function (x) { return '<li style="margin:3px 0">' + esc(x) + '</li>'; }).join('') + '</ul>';
+      if ((r.chybi_data || []).length) h += '<h3 style="font-size:14px;margin:16px 0 6px">Co začít měřit</h3><ul style="margin:0 0 8px 18px;padding:0">' + r.chybi_data.map(function (x) { return '<li style="margin:3px 0">' + esc(x) + '</li>'; }).join('') + '</ul>';
+      return h;
+    }
+    function aiOtevri() {
+      OV.classList.add('open');
+      DLG.innerHTML = '<p class="note">Načítám poslední rozbor…</p>';
+      get('/ai-analyza').then(function (j) {
+        var r = j.rozbor;
+        DLG.innerHTML = (r ? aiVykresli(r) : '<button class="x" data-close>×</button><h2>🤖 AI analytik hry</h2><p class="note">Zatím žádný rozbor. AI projde trychtýř, retenci, postup hráčů, platby, zdroje návštěv a výsledky reklamy a navrhne konkrétní změny.</p>')
+          + '<div style="margin-top:16px"><button class="btn" id="ai-run">' + (r ? '↻ Udělat nový rozbor' : '▶ Udělat rozbor') + '</button> <span class="note" id="ai-st"></span></div>';
+      }).catch(function (e) { DLG.innerHTML = '<button class="x" data-close>×</button><p class="note" style="color:#f87171">' + esc(e.message) + '</p>'; });
+    }
+    document.getElementById('ai-btn').addEventListener('click', aiOtevri);
+    document.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('#dlg [data-close]')) OV.classList.remove('open'); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && OV.classList.contains('open')) { try { zavriPrehravac(); } catch (x) { /* nic */ } OV.classList.remove('open'); } });
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('#ai-run'); if (!b) return;
+      b.disabled = true; var st = document.getElementById('ai-st'); st.textContent = 'Analyzuji… (trvá asi půl minuty)';
+      var rk = null; try { rk = window.__rkSouhrn || null; } catch (x) { /* bez reklamy */ }
+      post('/ai-analyza', { reklama: rk }).then(function (j) {
+        DLG.innerHTML = aiVykresli(j.rozbor) + '<div style="margin-top:16px"><button class="btn" id="ai-run">↻ Udělat nový rozbor</button> <span class="note" id="ai-st"></span></div>';
+      }).catch(function (er) { b.disabled = false; st.textContent = 'Chyba: ' + er.message; st.style.color = '#f87171'; });
+    });
+
     // ── Statistiky ──────────────────────────────────────────────────────────
     var DNY = 30;
     // Provoz se obnovuje sám, dokud je karta Statistiky otevřená — jinak by
@@ -288,6 +324,7 @@
         var zn = function (n) { return '<span style="color:' + (n >= 0 ? '#22c55e' : '#ef4444') + ';font-weight:700">' + (n > 0 ? '+' : '') + kc(n) + '</span>'; };
         var dec = function (n) { return n == null ? '—' : String(n).replace('.', ','); };
         var s = j.souhrn || {};
+        window.__rkSouhrn = s; // AI analytik dostane výsledky reklamy za zobrazené období
         kp.innerHTML = kpi(kc(s.vydaj || 0), 'Do reklamy (' + j.dny + ' dní)') + kpi(kc(s.trzba || 0), 'Zaplatili hráči (bez DPH)')
           + kpi(zn(s.zisk || 0), (s.zisk || 0) >= 0 ? 'Celkem v plusu' : 'Celkem v minusu')
           + kpi('<span style="color:#22c55e">' + (s.dnu_plus || 0) + '</span> / <span style="color:#ef4444">' + (s.dnu_minus || 0) + '</span>', 'Dnů v plusu / v minusu')
