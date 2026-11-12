@@ -8137,6 +8137,7 @@ function paintMe() {
       + (ME.emblem ? 'Změnit znak firmy' : 'Vygenerovat znak firmy') + '</button>'
       + '</div>'
     : '')
+    + snyKartaHtml()
     + '<div class="card"><h3>' + esc(p.name) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 8px">' + esc(p.desc) + '</p>'
     + '<div class="kv"><span>Herní rok</span><b>' + gameYear() + '</b></div>'
@@ -8145,7 +8146,6 @@ function paintMe() {
     + '<div class="kv"><span>Prověřených míst</span><b>' + Object.keys(S.revealed).length + '</b></div>'
     + '</div>'
     + majetekHtml()
-    + snyKartaHtml()
     + '<div class="card"><h3>Jak se hraje</h3>'
     + '<p class="muted small" style="margin:2px 0 0">Jeden skutečný den jsou ve hře dva měsíce, herní rok tedy trvá šest dní. Prádlomaty vydělávají, i když hru zavřeš — po návratu se ti všechno dopočítá. '
     + 'Místa na mapě jsou skutečná a jejich skóre počítá stejný nástroj, kterým Best Series hledá místa doopravdy. '
