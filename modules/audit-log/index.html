@@ -188,9 +188,11 @@
       }
 
       let html = '<div class="timeline">';
+      window._auditById = {};
       for (const e of entries) {
         const d = new Date(e.timestamp);
         const dateStr = d.toLocaleDateString('cs-CZ') + ' ' + d.toLocaleTimeString('cs-CZ', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+        window._auditById[e.id] = { dateStr, desc: e.description || '' };
 
         html += `<div class="timeline-entry">
           <div class="timeline-dot ${e.action}"></div>
@@ -222,14 +224,16 @@
         }
 
         html += `</div>
-          <button class="btn-rollback" onclick="confirmRollback(${e.id}, '${escAttr(dateStr)}', '${escAttr(e.description)}')">↩ Vrátit sem</button>
+          <button class="btn-rollback" onclick="confirmRollback(${e.id})">↩ Vrátit sem</button>
         </div>`;
       }
       html += '</div>';
       el.innerHTML = html;
     }
 
-    function confirmRollback(id, dateStr, desc) {
+    function confirmRollback(id) {
+      // Popis a datum se berou z paměti — dřív šly přes inline onclick a uvozovky / zalomení v popisu klik rozbily
+      const _m = (window._auditById || {})[id] || {}; const dateStr = escHtml(_m.dateStr || ''), desc = _m.desc || '';
       document.getElementById('modal-root').innerHTML = `
         <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
           <div class="modal">
