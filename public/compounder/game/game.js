@@ -7754,7 +7754,13 @@ var ZNAK_PAL = [
   ['#facc15', '#854d0e', '#3b2a05'],
   ['#ec4899', '#831843', '#ffffff'],
   ['#64748b', '#1e293b', '#ffffff'],
-  ['#84cc16', '#3f6212', '#ffffff']
+  ['#84cc16', '#3f6212', '#ffffff'],
+  ['#14b8a6', '#134e4a', '#ffffff'],
+  ['#6366f1', '#312e81', '#ffffff'],
+  ['#f43f5e', '#881337', '#ffffff'],
+  ['#0ea5e9', '#075985', '#ffffff'],
+  ['#d946ef', '#701a75', '#ffffff'],
+  ['#10b981', '#064e3b', '#ffffff']
 ];
 var ZNAK_TVAR = [
   '<path d="M50 3 L93 17 v33 c0 25-19 40-43 47 C26 90 7 75 7 50 V17z"/>',
@@ -7762,7 +7768,11 @@ var ZNAK_TVAR = [
   '<rect x="5" y="5" width="90" height="90" rx="24"/>',
   '<path d="M50 3 L89 26 v48 L50 97 11 74V26z"/>',
   '<path d="M50 3 L97 50 50 97 3 50z"/>',
-  '<path d="M31 5h38l26 26v38l-26 26H31L5 69V31z"/>'
+  '<path d="M31 5h38l26 26v38l-26 26H31L5 69V31z"/>',
+  '<path d="M50 6 L94 86 H6z"/>',
+  '<path d="M28 8h44l26 42-26 42H28L2 50z"/>',
+  '<path d="M50 4 L95 37 78 93H22L5 37z"/>',
+  '<rect x="16" y="16" width="68" height="68" rx="14" transform="rotate(45 50 50)"/>'
 ];
 var ZNAK_SYM = [
   '<rect x="27" y="24" width="46" height="54" rx="9" fill="%F%"/><circle cx="50" cy="56" r="15" fill="%D%"/><circle cx="50" cy="56" r="8" fill="%F%"/><rect x="33" y="31" width="10" height="7" rx="3.5" fill="%D%"/>',
@@ -7775,6 +7785,23 @@ var ZNAK_SYM = [
   '<path d="M18 56 q8-13 16 0 t16 0 t16 0 t16 0" fill="none" stroke="%F%" stroke-width="8" stroke-linecap="round"/><path d="M18 76 q8-13 16 0 t16 0 t16 0 t16 0" fill="none" stroke="%F%" stroke-width="8" stroke-linecap="round"/>',
   '<path d="M50 22 a9 9 0 0 1 9 9 c0 6-5 8-9 10 v4" fill="none" stroke="%F%" stroke-width="6" stroke-linecap="round"/><path d="M50 47 L21 70 h58z" fill="none" stroke="%F%" stroke-width="7" stroke-linejoin="round"/>',
   '<circle cx="50" cy="50" r="27" fill="%F%"/><circle cx="50" cy="50" r="9" fill="%D%"/><circle cx="50" cy="29" r="5" fill="%D%"/><circle cx="50" cy="71" r="5" fill="%D%"/><circle cx="29" cy="50" r="5" fill="%D%"/><circle cx="71" cy="50" r="5" fill="%D%"/>'
+,
+  '<path d="M36 22 L20 32 L26 45 L34 41 V79 H66 V41 L74 45 L80 32 L64 22 L57 28 Q50 33 43 28 Z" fill="%F%"/>',
+  '<path d="M22 44 h56 l-6 34 H28z" fill="%F%"/><path d="M34 44 a16 13 0 0 1 32 0" fill="none" stroke="%F%" stroke-width="6"/>',
+  '<ellipse cx="50" cy="32" rx="23" ry="8" fill="%F%"/><ellipse cx="50" cy="50" rx="23" ry="8" fill="%F%"/><ellipse cx="50" cy="68" rx="23" ry="8" fill="%F%"/>',
+  '<rect x="22" y="48" width="40" height="27" rx="9" fill="%F%"/><circle cx="69" cy="39" r="9" fill="%F%"/><circle cx="81" cy="56" r="5" fill="%F%"/>',
+  '<path d="M50 79 C24 63 20 46 28 37 c7-8 17-6 22 3 5-9 15-11 22-3 8 9 4 26-22 42z" fill="%F%"/>',
+  '<path d="M77 23 C46 25 28 42 28 64 q0 7 4 12 Q41 51 71 37 Q45 56 39 81 q31 4 39-25 4-15 -1-33z" fill="%F%"/>',
+  '<path d="M27 52 L43 69 75 33" fill="none" stroke="%F%" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>',
+  '<circle cx="36" cy="38" r="14" fill="none" stroke="%F%" stroke-width="7"/><path d="M46 48 L78 80" fill="none" stroke="%F%" stroke-width="8" stroke-linecap="round"/><path d="M60 62 l11-11" fill="none" stroke="%F%" stroke-width="7" stroke-linecap="round"/><path d="M69 71 l9-9" fill="none" stroke="%F%" stroke-width="7" stroke-linecap="round"/>',
+  '<path d="M50 14 c13 12 19 27 19 41 l-6 9H37l-6-9c0-14 6-29 19-41z" fill="%F%"/><circle cx="50" cy="40" r="7" fill="%D%"/><path d="M31 52 L19 74 l14-6z" fill="%F%"/><path d="M69 52 L81 74 67 68z" fill="%F%"/><path d="M43 70 h14 l-7 16z" fill="%F%"/>',
+  '<path d="M14 75 L38 35 53 59 63 44 86 75z" fill="%F%"/>',
+  '<rect x="28" y="48" width="44" height="32" rx="7" fill="%F%"/><path d="M38 48 v-8 a12 12 0 0 1 24 0 v8" fill="none" stroke="%F%" stroke-width="7"/><circle cx="50" cy="63" r="5" fill="%D%"/>',
+  '<path d="M32 25h36l14 19-32 33-32-33z" fill="%F%"/><path d="M18 44h64" fill="none" stroke="%D%" stroke-width="4"/><path d="M50 77 L41 44 50 25 59 44z" fill="none" stroke="%D%" stroke-width="4"/>',
+  '<path d="M24 74 h13V54H24zM43 74h13V38H43zM62 74h13V24H62z" fill="%F%"/>',
+  '<path d="M75 50a25 25 0 1 1-11-20" fill="none" stroke="%F%" stroke-width="9" stroke-linecap="round"/><path d="M68 15 l4 20-20 1z" fill="%F%"/>',
+  '<circle cx="50" cy="50" r="15" fill="%F%"/><path d="M50 13v11M50 76v11M13 50h11M76 50h11M24 24l8 8M68 68l8 8M76 24l-8 8M32 68l-8 8" fill="none" stroke="%F%" stroke-width="7" stroke-linecap="round"/>',
+  '<path d="M50 19 L83 46 v33H17V46z" fill="%F%"/><rect x="40" y="55" width="20" height="24" rx="3" fill="%D%"/>'
 ];
 // Z kódu složí hotové SVG. Když kód chybí nebo je rozbitý, vrátí prázdné kolečko.
 function znakSvg(kod, px) {
@@ -7787,7 +7814,7 @@ function znakSvg(kod, px) {
   var tvar = ZNAK_TVAR[c[0] % ZNAK_TVAR.length];
   var pal = ZNAK_PAL[c[1] % ZNAK_PAL.length];
   var sym = ZNAK_SYM[c[2] % ZNAK_SYM.length];
-  var gid = 'zg' + c.join('');
+  var gid = 'zg' + c.join('_');
   return '<svg class="znak" width="' + px + '" height="' + px + '" viewBox="0 0 100 100" aria-hidden="true">'
     + '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1">'
     + '<stop offset="0" stop-color="' + pal[0] + '"/><stop offset="1" stop-color="' + pal[1] + '"/></linearGradient></defs>'
@@ -7795,7 +7822,7 @@ function znakSvg(kod, px) {
     + sym.split('%F%').join(pal[2]).split('%D%').join(pal[1])
     + '</svg>';
 }
-// Výběr znaku — nabídne dvanáct náhodných a dá zamíchat další.
+// Výběr znaku — nabídne osmnáct náhodných a dá zamíchat další.
 function znakSheet() {
   var navrhy = [], vybrano = ME && ME.emblem ? ME.emblem : null;
   function zamichej() {
@@ -7809,7 +7836,7 @@ function znakSheet() {
     }
     var sy = michej(ZNAK_SYM.length), pa = michej(ZNAK_PAL.length);
     navrhy = [];
-    for (var i = 0; i < 12; i++) {
+    for (var i = 0; i < 18; i++) {
       navrhy.push(Math.floor(Math.random() * ZNAK_TVAR.length) + '-' + pa[i % pa.length] + '-' + sy[i % sy.length]);
     }
     if (vybrano && navrhy.indexOf(vybrano) < 0) navrhy[0] = vybrano;
