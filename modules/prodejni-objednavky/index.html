@@ -12319,9 +12319,12 @@
         var params = new URLSearchParams(window.location.search);
         var oid = parseInt(params.get('order'), 10);
         if (oid && !isNaN(oid)) {
+          // Odkaz se použije jen jednou — parametr z adresy hned odstraň, ať F5 objednávku znovu neotevírá
+          var _auth = params.get('authorize') === '1';
+          try { params.delete('order'); params.delete('authorize'); var qs = params.toString(); history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash); } catch (e) { /* */ }
           setTimeout(function () {
             openOrderDetail(oid);
-            if (params.get('authorize') === '1') {
+            if (_auth) {
               setTimeout(function () {
                 var btn = document.querySelector('[onclick^="authorizeOrder"]');
                 if (btn) { btn.scrollIntoView({ behavior: 'smooth', block: 'center' }); btn.style.boxShadow = '0 0 0 3px rgba(201,162,75,0.6)'; }
