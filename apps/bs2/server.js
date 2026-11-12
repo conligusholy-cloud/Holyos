@@ -2321,7 +2321,7 @@ async function vyberyPayoutRows(tab, m) {
   const month = /^\d{4}-\d{2}$/.test(m || '') ? m : (m === 'all' ? 'all' : (tab === 'vyplata' ? curM : 'all'));
   let rows;
   if (tab === 'vyplata') rows = (await q(`${VYBERY_PAY_SQL} WHERE w.status='requested' ${month === 'all' ? '' : `AND to_char(w.requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM') = '${month}'`} ORDER BY w.requested_at, w.id LIMIT 2000`)).rows;
-  else if (tab === 'zadosti') rows = (await q(`${VYBERY_PAY_SQL} ${month === 'all' ? '' : `WHERE to_char(w.requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM') = '${month}'`} ORDER BY w.requested_at DESC, w.id DESC LIMIT 5000`)).rows;
+  else if (tab === 'zadosti') rows = (await q(`${VYBERY_PAY_SQL} WHERE w.status='requested' ${month === 'all' ? '' : `AND to_char(w.requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM') = '${month}'`} ORDER BY w.requested_at DESC, w.id DESC LIMIT 5000`)).rows;
   else rows = (await q(`${VYBERY_PAY_SQL} WHERE w.status IN ('paid','rejected') ${month === 'all' ? '' : `AND to_char(coalesce(w.paid_at, w.decided_at) AT TIME ZONE 'Europe/Prague','YYYY-MM') = '${month}'`} ORDER BY coalesce(w.paid_at, w.decided_at) DESC, w.id DESC LIMIT 2000`)).rows;
   return { rows, month, curM };
 }
