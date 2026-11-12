@@ -11876,44 +11876,72 @@
     async function openItRequestModal(orderId) {
       try {
         var r = await fetch('/api/it-requests/order/' + orderId, { credentials: 'include' });
-        var d = await r.json(); var q = d.request;
+        var d = await r.json(); var q = d.request, nx = d.nayax;
         var fmt = function (x) { return x ? new Date(x).toLocaleString('cs-CZ') : '—'; };
-        var body = '';
-        if (!q) body = '<div style="color:var(--text2);margin-bottom:12px;">Dotazník zatím nebyl odeslán zákazníkovi.</div>';
+        var email = (q && q.customer_email) || d.email || '';
+        if (!email) { try { var o = await (await fetch('/api/wh/orders/' + orderId)).json(); email = o.customer_email || (o.company && o.company.email) || ''; } catch (e) {} }
+        var box = 'background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px;';
+        // 1) IT dotazník
+        var it = '';
+        if (!q) it = '<div style="color:var(--text2);">Dotazník zatím nebyl odeslán zákazníkovi.</div>';
         else {
           var st = q.status === 'filled' ? '<span style="color:#16a34a;font-weight:600;">✓ Vyplněno ' + fmt(q.filled_at) + (q.filled_by ? ' (' + esc(q.filled_by) + ')' : '') + '</span>'
             : (q.overdue ? '<span style="color:#dc2626;font-weight:600;">⚠ Nevyplněno po termínu' + (q.reminder_sent_at ? ' — Radek Bečka upozorněn ' + fmt(q.reminder_sent_at) : '') + '</span>' : '<span style="color:#d97706;font-weight:600;">⏳ Čeká na zákazníka</span>');
-          body = '<div style="margin-bottom:10px;">' + st + '</div>' +
-            '<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">Odesláno ' + fmt(q.sent_at) + ' na ' + esc(q.customer_email || '—') + ' · termín ' + fmt(q.due_at) + '</div>';
-          if (q.status === 'filled') {
-            body += '<table class="data-table"><tbody>' + (q.items || []).map(function (it) { return '<tr><td style="width:55%;">' + esc(it.label) + '</td><td><strong>' + esc((q.answers || {})[it.id] || '—') + '</strong></td></tr>'; }).join('') + '</tbody></table>';
-          }
+          it = '<div style="margin-bottom:6px;">' + st + '</div><div style="font-size:12px;color:var(--text2);">Odesláno ' + fmt(q.sent_at) + ' na ' + esc(q.customer_email || '—') + ' · termín ' + fmt(q.due_at) + '</div>';
+          if (q.status === 'filled') it += '<table class="data-table" style="margin-top:8px;"><tbody>' + (q.items || []).map(function (x) { return '<tr><td style="width:55%;">' + esc(x.label) + '</td><td><strong>' + esc((q.answers || {})[x.id] || '—') + '</strong></td></tr>'; }).join('') + '</tbody></table>';
         }
-        var email = (q && q.customer_email) || '';
-        if (!email) { try { var o = await (await fetch('/api/wh/orders/' + orderId)).json(); email = o.customer_email || (o.company && o.company.email) || ''; } catch (e) {} }
+        var itBtn = q && q.status === 'filled' ? '' : '<button type="button" class="btn btn-primary btn-sm" onclick="itSend(' + orderId + ')">📧 ' + (q ? 'Odeslat dotazník znovu' : 'Odeslat dotazník') + '</button>';
+        // 2) Nastavení platebního terminálu (Nayax)
+        var nxs;
+        if (!nx) nxs = '<span style="color:var(--text2);">Zatím neodesláno (automaticky se plánuje po první platbě).</span>';
+        else if (!nx.sent_at) nxs = '<span style="color:#d97706;font-weight:600;">⏳ Naplánováno na ' + fmt(nx.send_at) + '</span>';
+        else if (nx.error) nxs = '<span style="color:#dc2626;font-weight:600;">⚠ Neodesláno ' + fmt(nx.sent_at) + (nx.to_email ? ' (' + esc(nx.to_email) + ')' : '') + ' — ' + esc(nx.error) + '</span>';
+        else nxs = '<span style="color:#16a34a;font-weight:600;">✓ Odesláno ' + fmt(nx.sent_at) + ' na ' + esc(nx.to_email || '—') + '</span>';
+        var nxBtn = '<button type="button" class="btn btn-primary btn-sm" onclick="itNayaxSend(' + orderId + ')">📧 ' + (nx && nx.sent_at ? 'Odeslat znovu' : 'Odeslat teď') + '</button>';
         document.getElementById('modal-root').innerHTML =
           '<div class="modal-overlay" data-no-backdrop-close>' +
             '<style>.it-modal input:not([type=checkbox]),.it-modal select,.it-modal textarea{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;box-sizing:border-box;font-family:inherit;}</style>' +
-            '<div class="modal it-modal" style="width:640px;max-width:95vw;max-height:90vh;overflow:auto;">' +
-              '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;"><h2 style="margin:0;">💻 IT dotazník</h2><button type="button" class="btn btn-secondary btn-sm" onclick="closeModal()" title="Zavřít" style="font-size:16px;line-height:1;">✕</button></div>' + body +
-              (q && q.status === 'filled' ? '' :
-                '<div style="margin-top:12px;"><label style="font-size:12px;color:var(--text2);">E-mail zákazníka</label>' +
-                '<input id="it-send-email" type="email" style="width:100%;" value="' + esc(email).replace(/"/g, '&quot;') + '"></div>') +
-              '<div class="modal-actions">' +
-                '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
-                (q && q.status === 'filled' ? '' : '<button type="button" class="btn btn-primary" onclick="itSend(' + orderId + ')">' + (q ? 'Odeslat znovu' : 'Odeslat zákazníkovi') + '</button>') +
-              '</div>' +
+            '<div class="modal it-modal" style="width:680px;max-width:95vw;max-height:90vh;overflow:auto;">' +
+              '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><h2 style="margin:0;">💻 IT e-maily zákazníkovi</h2><button type="button" class="btn btn-secondary btn-sm" onclick="closeModal()" title="Zavřít" style="font-size:16px;line-height:1;">✕</button></div>' +
+              '<div style="margin-bottom:14px;"><label style="font-size:12px;color:var(--text2);">E-mail zákazníka (bere se ze společnosti / objednávky)</label>' +
+                '<input id="it-send-email" type="email" style="width:100%;' + (email ? '' : 'border-color:#dc2626;') + '" placeholder="e-mail kontaktu zákazníka" value="' + esc(email).replace(/"/g, '&quot;') + '">' +
+                (email ? '' : '<div style="font-size:12px;color:#f87171;margin-top:6px;font-weight:600;">⚠ E-mail zákazníka neznáme — doplň ho, jinak nejde nic odeslat.</div>') +
+                '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);margin-top:6px;"><input type="checkbox" id="it-save-email"' + (email ? '' : ' checked') + '> uložit e-mail i ke společnosti (pokud tam chybí)</label></div>' +
+              '<div style="' + box + '"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;"><b>📋 IT dotazník</b>' + itBtn + '</div>' + it + '</div>' +
+              '<div style="' + box + '"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;"><b>💳 Nastavení platebního terminálu (Nayax účet)</b>' + nxBtn + '</div>' + nxs + '</div>' +
+              '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
             '</div>' +
           '</div>';
       } catch (e) { alert('Chyba: ' + e.message); }
     }
+    function _itEmail() {
+      var email = ((document.getElementById('it-send-email') || {}).value || '').trim();
+      if (!/^\S+@\S+\.\S+$/.test(email)) {
+        email = (prompt('E-mail zákazníka neznáme. Zadej prosím e-mail kontaktu, kam se má e-mail poslat:', email) || '').trim();
+        if (!/^\S+@\S+\.\S+$/.test(email)) { if (email) alert('Neplatný e-mail.'); return null; }
+        var el = document.getElementById('it-send-email'); if (el) el.value = email;
+      }
+      return { email: email, save_email: !!(document.getElementById('it-save-email') || {}).checked };
+    }
     async function itSend(orderId) {
-      var email = (document.getElementById('it-send-email') || {}).value || '';
+      var b = _itEmail(); if (!b) return;
+      if (!confirm('Odeslat IT dotazník na ' + b.email + '?')) return;
       try {
-        var r = await fetch('/api/it-requests/order/' + orderId + '/send', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email }) });
+        var r = await fetch('/api/it-requests/order/' + orderId + '/send', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
         var d = await r.json();
         if (!r.ok) throw new Error(d.error || ('Odeslání selhalo (' + r.status + ')'));
         if (!d.sent) alert('Požadavek je vytvořen, ale e-mail se neodeslal: ' + (d.mail_error || 'neznámý důvod') + '\nOdkaz pro zákazníka:\n' + d.url);
+        openItRequestModal(orderId);
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+    async function itNayaxSend(orderId) {
+      var b = _itEmail(); if (!b) return;
+      if (!confirm('Odeslat e-mail s nastavením platebního terminálu (Nayax) na ' + b.email + '?')) return;
+      try {
+        var r = await fetch('/api/it-requests/order/' + orderId + '/nayax-send', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+        var d = await r.json();
+        if (!r.ok) throw new Error(d.error || ('Odeslání selhalo (' + r.status + ')'));
+        if (!d.sent) alert('E-mail se neodeslal: ' + (d.mail_error || 'neznámý důvod'));
         openItRequestModal(orderId);
       } catch (e) { alert('Chyba: ' + e.message); }
     }

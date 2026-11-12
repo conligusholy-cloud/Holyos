@@ -34,12 +34,24 @@ router.post('/test-nayax', async (req, res, next) => {
   catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
 });
 router.get('/order/:orderId', async (req, res, next) => {
-  try { res.json({ request: await svc.getForOrder(parseInt(req.params.orderId, 10)) }); } catch (err) { next(err); }
+  try {
+    const id = parseInt(req.params.orderId, 10);
+    let email = null; try { const o = await require('../config/database').prisma.order.findUnique({ where: { id }, select: { customer_email: true, company: { select: { email: true, name: true } } } }); email = (o && (o.customer_email || (o.company && o.company.email))) || null; } catch (e) { /* */ }
+    res.json({ request: await svc.getForOrder(id), nayax: await svc.getNayaxForOrder(id), email });
+  } catch (err) { next(err); }
 });
 router.post('/order/:orderId/send', async (req, res, next) => {
   try {
-    const r = await svc.sendToCustomer(parseInt(req.params.orderId, 10), { email: (req.body || {}).email, userId: req.user && req.user.id, actor: req.user && (req.user.username || req.user.email) });
+    const r = await svc.sendToCustomer(parseInt(req.params.orderId, 10), { email: (req.body || {}).email, saveEmail: !!(req.body || {}).save_email, userId: req.user && req.user.id, actor: req.user && (req.user.username || req.user.email) });
     res.json({ ok: true, sent: r.sent, mail_error: r.mail_error, url: r.url, due_at: r.due_at });
+  } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
+});
+
+// Ruční / opakované odeslání e-mailu „Založení Nayax účtu" (nastavení platebního terminálu)
+router.post('/order/:orderId/nayax-send', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    res.json(Object.assign({ ok: true }, await svc.sendNayaxNow(parseInt(req.params.orderId, 10), { email: b.email, saveEmail: !!b.save_email, actor: req.user && (req.user.username || req.user.email) })));
   } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
 });
 
