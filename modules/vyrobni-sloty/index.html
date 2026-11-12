@@ -948,6 +948,19 @@
             html += '<div style="font-size:11px;font-weight:700;margin-top:4px;color:#f472b6;">✍️ Rezervace celého slotu — čeká na napojení objednávky / plánování výroby</div>';
           } else if (a.order_id || a.order_item_id) {
             html += '<div style="font-size:11px;margin-top:4px;color:#93c5fd;">🔗 Evidujeme pod objednávkou ' + (a.order_id ? '<a href="/modules/prodejni-objednavky/index.html?order=' + a.order_id + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Otevřít objednávku" style="color:#60a5fa;font-weight:700;text-decoration:underline;">' + esc(a.order_number || ('#' + a.order_id)) + ' ↗</a>' : '') + (a.order_item_id ? ' · položka #' + a.order_item_id : '') + '</div>';
+            // Rychlý přehled objednávky: výbava stroje, příslušenství, služby
+            var ol = a.order_lines || [];
+            if (ol.length) {
+              var isAcc = function(l) { return /^🧴/.test(l.spec || ''); };
+              var isSvc = function(l) { return !!l.cost_kind || /servis|služb|doprav|montáž|instalac|školen/i.test(l.name || ''); };
+              var mach = ol.filter(function(l) { return !isAcc(l) && !isSvc(l); }), accs = ol.filter(isAcc), svcs = ol.filter(function(l) { return !isAcc(l) && isSvc(l); });
+              var row = function(l, withSpec) { return '<div style="font-size:11px;color:var(--text);margin:2px 0;">• ' + esc(l.name) + ' <span style="color:var(--text2);">× ' + l.quantity + ' ' + esc(l.unit || 'ks') + '</span>' + (withSpec && l.spec ? '<div style="color:var(--text2);margin-left:10px;white-space:pre-wrap;">' + esc(l.spec) + '</div>' : '') + '</div>'; };
+              html += '<div style="margin-top:8px;padding-top:6px;border-top:1px dashed var(--border);">';
+              if (mach.length) html += '<div style="font-size:11px;font-weight:700;color:#eab308;">⚙️ Stroj a výbava</div>' + mach.map(function(l) { return row(l, true); }).join('');
+              if (accs.length) html += '<div style="font-size:11px;font-weight:700;color:#34d399;margin-top:4px;">🧴 Příslušenství</div>' + accs.map(function(l) { return row(l, false); }).join('');
+              if (svcs.length) html += '<div style="font-size:11px;font-weight:700;color:#60a5fa;margin-top:4px;">🛠️ Služby</div>' + svcs.map(function(l) { return row(l, false); }).join('');
+              html += '</div>';
+            }
           }
           if (a.note) html += '<div style="font-size:11px;color:var(--text2);margin-top:4px;"><em>' + esc(a.note) + '</em></div>';
           // Akce k přiřazení
@@ -1495,6 +1508,9 @@
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
     function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+    // Zavření okna: Esc a klik mimo okno
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && document.getElementById('modal-root').firstChild) closeModal(); });
+    document.addEventListener('mousedown', function(e) { var r = document.getElementById('modal-root'); if (r && r.firstChild && !e.target.closest('.modal') && r.contains(e.target)) closeModal(); });
     function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
     // Dvojjazyčný název výrobku („Laundromat FLEX CZ Prádlomat FLEX CZ") → jen česká část
     function czName(name) {
@@ -1559,6 +1575,7 @@
     })();
   </script>
 
+  <script src="js/modal-autoclose.js"></script>
   <script src="js/ai-chat-panel.js"></script>
 </body>
 </html>

@@ -56,7 +56,12 @@ router.get('/', async (req, res, next) => {
     if (orderIds.length) {
       const orders = await prisma.order.findMany({ where: { id: { in: orderIds } }, select: { id: true, order_number: true, sales_person: { select: { id: true, first_name: true, last_name: true } } } });
       const byId = new Map(orders.map(o => [o.id, o]));
+      // Řádky objednávky (stroj + výbava ve spec, příslušenství, služby) pro rychlý přehled ve slotu
+      const lineRows = await prisma.orderItem.findMany({ where: { order_id: { in: orderIds } }, select: { id: true, order_id: true, name: true, quantity: true, unit: true, spec: true, cost_kind: true, product_id: true }, orderBy: { id: 'asc' } });
+      const linesBy = new Map();
+      for (const li of lineRows) { if (!linesBy.has(li.order_id)) linesBy.set(li.order_id, []); linesBy.get(li.order_id).push({ id: li.id, name: li.name, quantity: Number(li.quantity), unit: li.unit, spec: li.spec, cost_kind: li.cost_kind }); }
       for (const sl of slots) for (const a of sl.assignments) {
+        a.order_lines = a.order_id ? (linesBy.get(a.order_id) || []) : [];
         const o = a.order_id ? byId.get(a.order_id) : null;
         a.order_number = o ? o.order_number : null;
         a.sales_person_name = o && o.sales_person ? ((o.sales_person.first_name || '') + ' ' + (o.sales_person.last_name || '')).trim() : null;
