@@ -6067,6 +6067,58 @@ function denniSheet() {
     toast('Denní odměna ' + kcFull(c) + ' je na účtu.', 'ok', true);
   };
 }
+// ─── Nabídka karty v pravou chvíli ───────────────────────────────────────────
+// Karta se nabídne tehdy, kdy je k něčemu — ne náhodně. Pravidla jsou schválně
+// přísná: každou kartu nabídneme za celou hru jednou, nejvýš jednu nabídku za
+// den, nikdy přes rozdělanou práci, nikdy během tutoriálu a nikdy kartu, kterou
+// hráč zrovna má. Když ji nechce, zavře to a už se neozveme.
+var NABIDKY = [
+  { kind: 'rush',
+    kdy: function () { return ((S.orders || []).length > 0); },
+    duvod: 'Stroj máš na cestě a čeká se dva herní měsíce, tedy celý skutečný den. '
+      + 'Expresní dovoz ho hodí na sklad hned, takže místo může stát ještě dneska.' },
+  { kind: 'connect',
+    kdy: function () { return (S.units || []).length >= 1 && (S.units || []).length <= 2; },
+    duvod: 'První prádlomat stojí. Každé další místo chce vodu, odpad a elektřinu — '
+      + 'a přípojky bývají dražší než samotná doprava stroje.' },
+  { kind: 'traffic',
+    kdy: function () { var n = (S.units || []).length; return n >= 3 && n <= 6; },
+    duvod: 'Síť už máš. Kampaň se vyplatí právě teď — zvedne návštěvnost ve všech '
+      + 'prádlomatech najednou a platí natrvalo.' },
+  { kind: 'credit',
+    kdy: function () { return (S.units || []).length >= 6 && S.loan > 0; },
+    duvod: 'Expanduješ na dluh a úrok ti ukrajuje ze zisku. Lepší bankéř sráží sazbu '
+      + 'o dva body a zvedá rámec natrvalo.' }
+];
+function hlidejNabidky() {
+  if (!S || S.tut !== 'done' || !ME || !PAYMENTS_ON || !CARDS_CAT) return;
+  if (!$('sheet').classList.contains('hidden')) return;
+  var dnes = dnesKlic(0);
+  if (!S.nabidky) S.nabidky = {};
+  if (S.nabidky.den === dnes) return;                 // jedna za den stačí
+  for (var i = 0; i < NABIDKY.length; i++) {
+    var n = NABIDKY[i], c = (CARDS_CAT || []).filter(function (x) { return x.kind === n.kind; })[0];
+    if (!c || S.nabidky[n.kind] || ownedOf(n.kind) > 0) continue;
+    if (!n.kdy()) continue;
+    S.nabidky[n.kind] = dnes; S.nabidky.den = dnes; save();
+    return nabidkaSheet(n, c);
+  }
+}
+function nabidkaSheet(n, c) {
+  var art = CARD_ART[c.kind] || { emoji: '\u26A1' };
+  sheet('<h3>' + art.emoji + ' ' + esc(c.name) + '</h3>'
+    + '<p class="muted small">' + esc(n.duvod) + '</p>'
+    + '<div class="card agent" style="margin-top:12px"><p class="muted small" style="margin:0 0 8px">'
+    + esc(c.desc) + '</p>'
+    + '<div class="kv"><span>Cena</span><b>' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</b></div>'
+    + ((c.bundles || []).length ? '<p class="fine">Ve více kusech levněji — ' + c.bundles[c.bundles.length - 1].qty
+        + '\u00d7 se slevou ' + c.bundles[c.bundles.length - 1].sleva + ' %.</p>' : '')
+    + '<button class="btn big" id="nab-koupit">Koupit</button></div>'
+    + '<button class="btn sec" id="nab-ne" style="width:100%;margin-top:8px">Teď ne</button>'
+    + '<p class="fine">Tuhle nabídku už ti znovu vyskakovat nebudeme. Karty jsou kdykoli v záložce Karty.</p>');
+  $('nab-koupit').onclick = function () { buyCard(c.kind); };
+  $('nab-ne').onclick = closeSheet;
+}
 // Nová výpověď na mém místě se nesmí přehlédnout — hráč na ni má omezený čas.
 // Značka, že už jsme o ní dali vědět, patří do uloženého stavu: ve hře v
 // paměti by se po každém obnovení stránky ztratila a hráč by dostal tu samou
@@ -10925,8 +10977,10 @@ function startGame() {
   initMap();
   tutStart();
   hlidejDenni();
-  // Kdo hraje přes půlnoc, ať na odměnu nečeká do dalšího spuštění.
-  setInterval(hlidejDenni, 600000);
+  // Kdo hraje přes půlnoc, ať na odměnu nečeká do dalšího spuštění. Nabídka
+  // karty jde až po odměně — otevřený panel ji stejně odloží na příště.
+  setInterval(function () { hlidejDenni(); hlidejNabidky(); }, 600000);
+  setTimeout(hlidejNabidky, 20000);
   var gained = S.cash - before;
   if (arrived) toast('Dorazilo ' + arrived + ' strojů — čekají na skladě v obchodě.', 'ok', true);
   else if (gained > 1000) toast('Než ses vrátil, síť vydělala ' + kcFull(gained) + '.', 'ok', true);
