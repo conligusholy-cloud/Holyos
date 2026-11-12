@@ -1894,7 +1894,8 @@ function adminVyberyPayouts({ migCount = 0, okCount = 0, verified = [], booked =
   ${olderPending ? `<div class="small" style="margin-bottom:8px">Pozor: dalších <b>${olderPending}</b> nevyřízených žádostí je z dřívějších měsíců — <a href="/admin/vybery?tab=vyplata&m=all">zobrazit všechny nevyřízené</a>.</div>` : ''}
   <div class="card" style="overflow-x:auto;margin-top:10px"><table id="req-tbl"><thead><tr>${head}</tr></thead><tbody>${reqData.length ? '' : `<tr><td colspan="${cols}" class="muted">${tab === 'vyplata' || tab === 'zadosti' ? 'Žádné žádosti o výběr.' : 'Zatím nic vyplaceno.'}</td></tr>`}</tbody></table></div>
   ${reqData.length ? `<script src="/column-filters.js?v=1"><\/script>
-  <script>(function(){ var D=${reqJson}; var tb=document.querySelector('#req-tbl tbody'); if(!window.ColFilters){ tb.innerHTML=D.map(function(r){return r.html}).join(''); return; }
+  <form method="post" action="/admin/vybery/csrf-src" id="csrf-src" style="display:none"></form>
+  <script>(function(){ var D=${reqJson}; var tb=document.querySelector('#req-tbl tbody'); var cs=document.querySelector('#csrf-src [name=_csrf]'); var tok=cs?cs.value:''; var fx=function(h){return h.replace(/<form[^>]*>/g,function(m){return m+'<input type="hidden" name="_csrf" value="'+tok+'">';});}; D.forEach(function(r){r.html=fx(r.html);}); if(!window.ColFilters){ tb.innerHTML=D.map(function(r){return r.html}).join(''); return; }
     var T=function(k,l){return {key:k,label:l,type:'text',ph:l+'…',get:function(r){return r[k]}}}, E=function(k,l){return {key:k,label:l,type:'text',ph:'Vyber…',enum:true,get:function(r){return r[k]}}}, D2=function(k,l){return {key:k,label:l,type:'date',get:function(r){return r[k]}}};
     var Dt=D2;
     var TT=ColFilters.table({ table:'#req-tbl', noun:'žádostí', emptyText:'Nic nenalezeno.', renderRow:function(r){return r.html},
