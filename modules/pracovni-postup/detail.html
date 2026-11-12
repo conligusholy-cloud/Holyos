@@ -731,6 +731,8 @@
     .lane-main.has-variants{position:relative}
     .lane-main.has-variants .eq-box{position:static;width:max-content;max-width:calc(100% - 716px);min-width:320px;margin:-14px 0 22px 716px}
     .eq-table{width:auto}.eq-table td{white-space:nowrap}
+    /* Výbava v záložce Souhrn materiálů — box plave v proudu stránky, ne nad plátnem postupu */
+    .eq-box.eq-inline{position:static;width:auto;max-width:100%;margin:0 0 12px 0}
     .eq-head{display:flex;align-items:center;gap:10px;font-weight:700;font-size:13px;color:#fb923c;margin-bottom:4px}.eq-head .muted{font-weight:500;font-size:11px}
     .eq-table{border-collapse:collapse;font-size:12px}.eq-table td{padding:3px 6px 3px 0;vertical-align:top;border-top:1px solid var(--border)}.eq-table td.eq-g{font-weight:700;color:var(--text2);white-space:nowrap;width:1%;padding-right:12px}
     .eq-item{display:inline-block;border:1px solid rgba(251,146,60,.5);color:#fb923c;border-radius:999px;padding:1px 9px;margin:2px 2px 2px 0;cursor:pointer;user-select:none}.eq-item small{color:var(--text2);margin-left:3px}
@@ -1816,6 +1818,31 @@
       Object.values(eqSelected).forEach(id => { const e = productEquipment.find(x => x.id === id); if (!e) return; (e.variant_ids || []).forEach(vid => { const pv = provisionById(vid); if (!pv) return; const base = pv.variant_of_id || pv.id; out[base] = vid; }); });
       return out;
     }
+    // Výrobek s operacemi podle vyklikané výbavy — základní operace nahrazené
+    // zvolenými variantami. Bez výběru vrací základní sestavu. Používá Souhrn
+    // materiálů, aby odpovídal aktivní variantě z Pracovního postupu. (Požadavek #151)
+    function productForSelectedEquipment() {
+      const choice = eqRouteChoices(); // { id základní operace: id zvoleného provedení }
+      const ops = (product.operations || []).map(op => {
+        const pickedId = choice[op.id];
+        if (!pickedId || pickedId === op.id) return op;
+        const pv = provisionById(pickedId);
+        if (!pv) return op;
+        // Varianta nese vlastní materiály; pořadí v postupu bereme ze základu,
+        // ať souhrn i strom sedí s číslováním kroků.
+        return Object.assign({}, pv, { step_number: op.step_number });
+      });
+      return Object.assign({}, product, { operations: ops });
+    }
+    // Popis právě zvolené výbavy do hlavičky Souhrnu materiálů.
+    function selectedEquipmentLabel() {
+      const parts = [];
+      Object.keys(eqSelected).forEach(g => {
+        const e = productEquipment.find(x => x.id === eqSelected[g]);
+        if (e) parts.push(g + ': ' + e.name);
+      });
+      return parts;
+    }
     // Seznam provedení do výbavy: základ (pokud má varianty) + jeho varianty, seřazené po operacích
     function allVariantsList() {
       const out = [];
@@ -1828,7 +1855,7 @@
     }
     function variantLabelOf(v) { const base = v.variant_of_id ? findAnyOp(v.variant_of_id) : v; return (base ? base.step_number + '. ' + base.name + ': ' : '') + (v.variant_code ? v.variant_code + ' ' : '') + (v.variant_name || (v.variant_of_id ? '' : 'základ')) + (v.variant_of_id ? '' : ' (základ)'); }
     function provisionById(id) { return (product.variants || []).find(v => v.id === id) || (product.operations || []).find(o => o.id === id) || null; }
-    function renderEquipmentBox() {
+    function renderEquipmentBox(extraCls) {
       const groups = new Map();
       productEquipment.forEach(e => { if (!groups.has(e.group_name)) groups.set(e.group_name, []); groups.get(e.group_name).push(e); });
       let rows = '';
@@ -1840,7 +1867,7 @@
           return '<span class="eq-item' + (on ? ' on' : '') + '" onclick="eqPick(' + e.id + ')" title="' + esc(vs.map(variantLabelOf).join('\n') || 'bez variant') + (ovc ? '\nKonec: ' + esc(ovc.code + ' ' + ovc.name) : '') + '\n\nKliknutím vybereš — zeleně se vyznačí cesta postupu">' + esc(e.name) + ' <small>' + vs.map(v => v.variant_code || '').filter(Boolean).concat(ovc ? [ovc.code] : []).join(' ') + '</small></span>';
         }).join(' ') + '</td></tr>';
       });
-      return '<div class="eq-box">' +
+      return '<div class="eq-box' + (extraCls ? ' ' + extraCls : '') + '">' +
         '<div class="eq-head"><span>⚙ Výbava</span><span class="muted">' + (Object.keys(eqSelected).length ? '<b style="color:#22c55e;">zelená = cesta postupu pro zvolenou výbavu</b> · <a href="#" onclick="eqClear();return false;" style="color:var(--text2);">zrušit výběr</a>' : 'klikni na položky — zeleně se ukáže cesta postupu') + '</span><button class="btn" onclick="openEquipmentEditor()" title="Nastavit výbavu: skupina (Barva) → položky (Červená, Bílá) → dotčené varianty operací" style="margin-left:auto;padding:3px 8px;">⚙</button></div>' +
         (rows ? '<table class="eq-table">' + rows + '</table>' : '<div class="muted" style="font-size:12px;padding:4px 0 2px;">Zatím žádná výbava — klikni na ⚙ a vytvoř např. <b>Barva – Červená</b> a přiřaď k ní varianty operací.</div>') +
         '</div>';
@@ -3044,7 +3071,10 @@
 
     function renderMaterialSummary() {
       const content = document.getElementById('tab-content');
-      const ops = product.operations || [];
+      // Souhrn počítáme z výrobku podle výbavy vyklikané v Pracovním postupu —
+      // bez výběru je to základní sestava. (Požadavek #151)
+      const effProduct = productForSelectedEquipment();
+      const ops = effProduct.operations || [];
 
       // Toggle Souhrn / Strom
       const hasAnyMaterial = ops.some(o => (o.materials || []).length > 0);
@@ -3055,6 +3085,18 @@
       toolbar += '<button class="btn ' + flatBtn + '" onclick="setSummaryMode(\'flat\')" title="Plochý souhrn — sečtené množství napříč operacemi">📋 Souhrn (plochý)</button>';
       toolbar += '</div>';
 
+      // Hlavička: která výbava se zrovna počítá + možnost ji tady přepnout
+      // (box je stejný jako v Pracovním postupu, kliknutí překreslí souhrn).
+      const eqChosen = selectedEquipmentLabel();
+      let variantNote = '';
+      if (productEquipment.length) {
+        variantNote = eqChosen.length
+          ? '<div style="padding:8px 12px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.35);border-radius:8px;margin-bottom:12px;font-size:12px;">⚙ Souhrn pro výbavu <b style="color:#86efac;">' + esc(eqChosen.join(' · ')) + '</b> <span style="color:var(--text2);">(kód ' + esc(eqConfigCode()) + ')</span> · <a href="#" onclick="eqClear();return false;" style="color:var(--text2);">zpět na základní sestavu</a></div>'
+          : '<div style="padding:8px 12px;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.35);border-radius:8px;margin-bottom:12px;font-size:12px;">⚙ <b style="color:#fb923c;">Základní sestava</b> — žádná výbava není vybraná. Vyber ji níže nebo v záložce Pracovní postup a souhrn se přepočítá.</div>';
+        variantNote += renderEquipmentBox('eq-inline');
+      }
+      toolbar += variantNote;
+
       if (!hasAnyMaterial) {
         content.innerHTML = toolbar + '<div class="empty-ops"><div class="icon">&#128230;</div><p>Žádné materiály v operacích</p><p style="font-size:12px;">Přidejte materiály k operacím v záložce "Pracovní postup"</p></div>';
         return;
@@ -3062,7 +3104,7 @@
 
       // STROM POSTUPU
       if (_summaryMode === 'tree') {
-        content.innerHTML = toolbar + '<h3 style="margin:8px 0 8px;">Pracovní postup — rozpad přes polotovary</h3>' + wfRenderTree(product);
+        content.innerHTML = toolbar + '<h3 style="margin:8px 0 8px;">Pracovní postup — rozpad přes polotovary</h3>' + wfRenderTree(effProduct);
         return;
       }
 
@@ -3109,7 +3151,7 @@
           }
         }
       }
-      flattenWalk(product, 1, 0);
+      flattenWalk(effProduct, 1, 0);
 
       const matList = Object.values(matMap).sort((a, b) => {
         // 1) Polotovary bez postupu nahoru (chyba dat — Tomas to musi resit)
