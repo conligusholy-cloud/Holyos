@@ -380,11 +380,12 @@
           kpi(cz(j.den), 'Za 24 hodin');
         document.getElementById('pv-chart').innerHTML = grafHodin(j.hodiny);
         document.getElementById('pv-online').innerHTML =
-          '<thead><tr><th>Hráč</th><th>Firma</th><th class="num">Naposled</th></tr></thead><tbody>'
+          '<thead><tr><th>Hráč</th><th>Firma</th><th>Účet vytvořen</th><th class="num">Naposled</th></tr></thead><tbody>'
           + (j.online.length ? j.online.map(function (h) {
               return '<tr><td><b>' + esc(h.nick) + '</b></td><td>' + esc(h.firma || '') + '</td>'
+                + '<td class="note" style="white-space:nowrap">' + (h.zalozeno ? new Date(h.zalozeno).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—') + '</td>'
                 + '<td class="num">' + pred(h.pred) + '</td></tr>';
-            }).join('') : '<tr><td colspan="3" class="note">Nikdo není u hry.</td></tr>')
+            }).join('') : '<tr><td colspan="4" class="note">Nikdo není u hry.</td></tr>')
           + '</tbody>';
         document.getElementById('pv-last').innerHTML =
           '<thead><tr><th>Čas</th><th>Co se stalo</th><th>Návštěva</th></tr></thead><tbody>'

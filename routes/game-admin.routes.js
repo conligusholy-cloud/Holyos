@@ -717,7 +717,7 @@ router.get('/stats/provoz', api(async (req, res) => {
       select: { created_at: true, event: true, sid: true } }),
     prisma.gamePlayer.findMany({
       where: { state_at: { gte: new Date(ted - 60 * 60e3) }, disabled: false },
-      select: { id: true, nick: true, company: true, state_at: true } }),
+      select: { id: true, nick: true, company: true, state_at: true, created_at: true } }),
     prisma.compounderEvent.findMany({
       where: { event: { startsWith: 'game_' } },
       orderBy: { created_at: 'desc' }, take: 30,
@@ -758,7 +758,7 @@ router.get('/stats/provoz', api(async (req, res) => {
       .sort((a, b) => new Date(b.state_at).getTime() - new Date(a.state_at).getTime())
       .slice(0, 25)
       .map((h) => ({ id: h.id, nick: h.nick, firma: h.company,
-        pred: Math.max(0, Math.round((ted - new Date(h.state_at).getTime()) / 60000)) })),
+        pred: Math.max(0, Math.round((ted - new Date(h.state_at).getTime()) / 60000)), zalozeno: h.created_at })),
     hodiny,
     casy: casyVen.slice().sort((a, b) => (b.dnes - a.dnes) || (b.celkem - a.celkem)),
     cas_souhrn: {
