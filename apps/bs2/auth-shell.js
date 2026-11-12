@@ -99,7 +99,6 @@ function authShell({ title, card, members = null, esc, wide = false }) {
     <h1><span class="g">Vítej zpět</span><br>v Best Series 2.0</h1>
     <p class="lead">Jeden účet, všechny výhody. Přihlas se svým nickem nebo e-mailem.</p>
     <div class="chips"><span>Přístup z mobilu i počítače</span><span>Výhody pro členy</span></div>
-    ${members != null ? `<div class="stats"><div><b>${fmtN(members)}</b><small>aktivních uživatelů</small></div></div>` : ''}
   </section>
   <section class="side"><div class="card${wide ? ' wide' : ''}"><div class="in">${card}</div></div></section>
 </div>
