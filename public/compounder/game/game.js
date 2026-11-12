@@ -6246,11 +6246,13 @@ function poruchaHtml(u) {
 function unitSheet(u) {
   var years = (Date.now() - u.builtAt) / YEAR_MS;
   sheet('<h3>' + esc(u.name) + '</h3>'
-    + '<p class="muted small">' + esc(KIND_LABEL[u.kind] || 'Místo') + ' · ' + MODELS[u.eco.model].name
+    + '<p class="muted small">' + esc(KIND_LABEL[u.kind] || 'Místo')
+    + (mestoUnit(u) ? ' · ' + esc(mestoUnit(u)) : '') + ' · ' + MODELS[u.eco.model].name
     + ' · v provozu ' + years.toFixed(1).replace('.', ',') + ' roku'
     + (zemUnit(u) === 'moje' ? ' · <b class="ok">tvůj pozemek</b>'
         : zemUnit(u) === 'najem' ? ' · <b class="ok">pronajatý pozemek</b>' : '') + '</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(u.score) + '</div>'
+    + (u.lat != null ? '<button class="btn sec" id="do-mapa" style="width:100%;margin-bottom:12px">Ukázat na mapě</button>' : '')
     + vypovedHtml(u)
     + vypovedMajiteleHtml(u)
     + poruchaHtml(u)
@@ -6283,6 +6285,16 @@ function unitSheet(u) {
     + '<button class="btn sec" id="do-release" style="width:100%">Vypovědět místo</button>');
   var tb = $('do-technik');
   if (tb) tb.onclick = function () { vyslatTechnika(u); closeSheet(); switchTab('map'); };
+  var mb = $('do-mapa');
+  if (mb) mb.onclick = function () {
+    closeSheet(); switchTab('map');
+    // Mapa se po přepnutí záložky musí přeměřit, jinak skočí vedle.
+    setTimeout(function () {
+      if (!map) return;
+      map.invalidateSize();
+      map.setView([u.lat, u.lon], Math.max(16, map.getZoom()));
+    }, 60);
+  };
   var db = $('do-dorovnat');
   if (db) db.onclick = function () {
     var v = vyzvaNaMiste(u.spotId);
@@ -7001,6 +7013,12 @@ function vypovedStav(u) {
     text: 'majitel dal výpověď', akce: u.vypoved.navyseni ? 'Přisadit' : 'Řešit' };
   return null;
 }
+// Město, ve kterém stroj stojí. Oblast se jmenuje po městě, do kterého hráč
+// poslal průzkum. U úplně starých strojů může chybět — pak radši nepíšeme nic.
+function mestoUnit(u) {
+  var a = u && u.areaId && S.areas ? S.areas[u.areaId] : null;
+  return a && a.name ? a.name : '';
+}
 function strojRadek(u, i) {
   var popis = STROJE_POPIS[STROJE_KAT];
   var im = MODEL_IMG[u.eco && u.eco.model] || MODEL_IMG.flex;
@@ -7012,7 +7030,9 @@ function strojRadek(u, i) {
   // Pod názvem jedna řádka se vším podstatným — model, tržba, poruchy, spolehlivost.
   var vady = u.vady || 0;
   var zem = zemUnit(u);
-  var detail = (m ? m.name : '') + (zem === 'moje' ? ' · na tvém pozemku' : zem === 'najem' ? ' · na pronajatém pozemku' : '')
+  var mesto = mestoUnit(u);
+  var detail = (m ? m.name : '') + (mesto ? ' · ' + mesto : '')
+    + (zem === 'moje' ? ' · na tvém pozemku' : zem === 'najem' ? ' · na pronajatém pozemku' : '')
     + ' · tržba ' + kc(u.eco.revenue)
     + ' · ' + vady + ' ' + mn(vady, 'porucha', 'poruchy', 'poruch')
     + ' · bez závady ' + spl + ' %';
