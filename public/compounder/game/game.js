@@ -1957,6 +1957,11 @@ var UPOZ_MAX = 60;
 function zapisUpoz(text, kind) {
   if (!S) return;
   if (!Array.isArray(S.upoz)) S.upoz = [];
+  // Pojistka proti zdvojení: stejnou větu do deseti minut už nepřipisujeme.
+  var ted = Date.now(), txt = String(text || '').slice(0, 300);
+  for (var i = S.upoz.length - 1; i >= 0 && ted - (S.upoz[i].t || 0) < 10 * 60e3; i--) {
+    if (S.upoz[i].x === txt) return;
+  }
   S.upoz.push({ t: Date.now(), x: String(text || '').slice(0, 300), k: kind || '', p: 0 });
   if (S.upoz.length > UPOZ_MAX) S.upoz = S.upoz.slice(-UPOZ_MAX);
   save(); paintZvon();
@@ -5920,15 +5925,29 @@ function prevezmiMista() {
   });
 }
 // Nová výpověď na mém místě se nesmí přehlédnout — hráč na ni má omezený čas.
-var VYPOVEDI_ZNAME = {};
+// Značka, že už jsme o ní dali vědět, patří do uloženého stavu: ve hře v
+// paměti by se po každém obnovení stránky ztratila a hráč by dostal tu samou
+// zprávu pořád dokola. Klíčem je kdo a dokdy — na novou výzvu upozorníme zas.
 function hlidejVypovedi() {
+  if (!S) return;
+  if (!S.vypZnam) S.vypZnam = {};
+  var zmena = false;
   (S.units || []).forEach(function (u) {
     var v = vyzvaNaMiste(u.spotId);
-    if (!v) { delete VYPOVEDI_ZNAME[u.spotId]; return; }
-    if (VYPOVEDI_ZNAME[u.spotId]) return;
-    VYPOVEDI_ZNAME[u.spotId] = 1;
+    if (!v) return;
+    var klic = (v.nick || '') + '|' + (v.do || '');
+    if (S.vypZnam[u.spotId] === klic) return;
+    S.vypZnam[u.spotId] = klic; zmena = true;
     toast(v.nick + ' přeplatil nájem na místě ' + u.name + '. Do konce výpovědní doby to můžeš dorovnat.', 'err');
   });
+  // Úklid: značku držíme jen u míst, která pořád máme. Zmizelá výzva značku
+  // nemaže — jinak by stačilo, aby se zábory na chvíli nenačetly, a zpráva
+  // by naskočila znovu.
+  Object.keys(S.vypZnam).forEach(function (sid) {
+    var mam = (S.units || []).some(function (u) { return u.spotId === sid; });
+    if (!mam) { delete S.vypZnam[sid]; zmena = true; }
+  });
+  if (zmena) save();
 }
 // Zábory na serveru jsou pravda o tom, co komu patří — a drží i tehdy, když
 // se stav hry mezi zařízeními rozejde. Když tedy server říká, že na místě
