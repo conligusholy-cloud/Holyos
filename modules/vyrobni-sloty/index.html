@@ -929,8 +929,14 @@
         slot.assignments.forEach(function(a) {
           var serial = a.order_item && a.order_item.serial_number ? a.order_item.serial_number : '';
           html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;">';
+          // Rozklikávací zakázka: hlavička (výrobek + firma) je vidět vždy, detail se rozbalí klikem
+          var _st = a.reservation_status === 'reserved' ? '⏳' : (a.reservation_status ? '✅' : '');
+          html += '<div onclick="var b=this.nextElementSibling,o=b.style.display!==\'none\';b.style.display=o?\'none\':\'\';this.querySelector(\'.asg-chev\').textContent=o?\'▸\':\'▾\';" style="cursor:pointer;display:flex;align-items:center;gap:8px;user-select:none;" title="Klikni pro detail zakázky">';
+          html += '<span class="asg-chev" style="color:var(--text2);font-size:12px;width:10px;">▸</span><div style="flex:1;min-width:0;">';
           html += '<div style="font-weight:700;font-size:13px;color:#fb923c;" title="' + esc(a.product_name) + '">' + esc(czName(a.product_name)) + '</div>';
           if (a.customer_name) html += '<div style="font-size:12px;color:var(--text);">' + esc(a.customer_name) + '</div>';
+          html += '</div>' + (_st ? '<span style="font-size:14px;">' + _st + '</span>' : '') + '</div>';
+          html += '<div class="asg-body" style="display:none;padding-left:18px;margin-top:4px;">';
           if (a.sales_person_name) html += '<div style="font-size:12px;color:#c4b5fd;">👤 Obchodník: ' + esc(a.sales_person_name) + '</div>';
           if (serial) {
             html += '<div style="font-size:12px;margin-top:4px;"><span style="font-family:monospace;font-weight:700;background:rgba(251,191,36,0.15);color:#fbbf24;padding:3px 8px;border-radius:6px;">🔢 ' + esc(serial) + '</span></div>';
@@ -974,6 +980,7 @@
           }
           html += '</div>';
           html += '<div id="link-box-' + a.id + '"></div>';
+          html += '</div>'; // konec .asg-body
           html += '</div>';
         });
       }
