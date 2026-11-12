@@ -111,6 +111,19 @@ const CASH = {
 };
 const CASH_KINDS = Object.keys(CASH);
 
+// ─── Balíčky infolinky ───────────────────────────────────────────────────────
+// Kredit = jeden hovor, který vyřídí placený operátor místo hráče. Čím větší
+// balíček, tím nižší cena za hovor.
+const LINKA = {
+  linka50:  { kind: 'linka50',  name: '50 hovorů',  price: 9900,  hovory: 50 },
+  linka100: { kind: 'linka100', name: '100 hovorů', price: 17900, hovory: 100 },
+  linka200: { kind: 'linka200', name: '200 hovorů', price: 29900, hovory: 200 },
+  linka300: { kind: 'linka300', name: '300 hovorů', price: 39900, hovory: 300 },
+  linka400: { kind: 'linka400', name: '400 hovorů', price: 49900, hovory: 400 },
+  linka500: { kind: 'linka500', name: '500 hovorů', price: 59900, hovory: 500 }
+};
+const LINKA_KINDS = Object.keys(LINKA);
+
 // ─── Předplatné ──────────────────────────────────────────────────────────────
 // Co se strhává samo dokola. Cena je za JEDNOHO technika a týden; jeden
 // technik stihne obsloužit `kapacita` poboček. Víc poboček = víc techniků.
@@ -128,7 +141,7 @@ const SUB_KINDS = Object.keys(SUBS);
 // Ručně přidaná hotovost z administrace. Není v nabídce, nedá se koupit —
 // vzniká jen tím, že ji někdo hráči přidá, a nese vlastní částku.
 const CASH_CUSTOM = 'cash_dar';
-const ALL = Object.assign({}, CARDS, CASH, SUBS);
+const ALL = Object.assign({}, CARDS, CASH, SUBS, LINKA);
 
 // ─── Ceník z databáze ────────────────────────────────────────────────────────
 // Hodnoty výš jsou jen výchozí. Co platí doopravdy, je v tabulce game_prices —
@@ -170,6 +183,16 @@ async function cashPublic() {
     const c = await item(k); if (!c) continue;
     out.push({ kind: c.kind, name: c.name, price_czk: c.price / 100, laundry: c.laundry, per_czk: perCzk(c),
       bonus: zaklad ? Math.round((perCzk(c) / perCzk(zaklad) - 1) * 100) : 0 });
+  }
+  return out;
+}
+// Kolik korun za hovor — ať je vidět, že větší balíček vyjde líp.
+async function linkaPublic() {
+  const out = [];
+  for (const k of LINKA_KINDS) {
+    const c = await item(k); if (!c) continue;
+    out.push({ kind: c.kind, name: c.name, price_czk: c.price / 100, hovory: c.hovory,
+      za_hovor: Math.round(c.price / c.hovory) / 100 });
   }
   return out;
 }
@@ -890,6 +913,7 @@ router.get('/cards', async (req, res, next) => {
     }
     res.json({
       ok: true, catalog: await catalogPublic(), cash: await cashPublic(),
+      linka: await linkaPublic(),
       subs: await subsPublic(), predplatne: await predplatneHrace(p),
       payments: require('./game-stripe.routes')._paymentsOn(),
       owned: p ? (await pub(p)).cards : null,
@@ -932,6 +956,11 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
       const castka = (c && c.laundry) || CASH[kind].laundry;
       result = { effect: 'ramec', amount: castka,
         msg: 'Rámec v bance se zvedl o ' + castka.toLocaleString('cs-CZ') + ' L$.' };
+    } else if (LINKA[kind]) {
+      const c = await item(kind);
+      const kolik = (c && c.hovory) || LINKA[kind].hovory;
+      result = { effect: 'linka', hovory: kolik,
+        msg: 'Operátoři vyřídí ' + kolik + ' hovorů za tebe.' };
     } else {
       result = EFFECTS[kind]();
     }
@@ -1656,6 +1685,7 @@ module.exports._item = item;
 module.exports._cenaKusuVBalicku = cenaKusuVBalicku;
 module.exports._cardKinds = CARD_KINDS;
 module.exports._subKinds = SUB_KINDS;
+module.exports._linkaKinds = LINKA_KINDS;
 module.exports._predplatneHrace = predplatneHrace;
 module.exports._dropPrices = dropPrices;
 module.exports._defaults = ALL;

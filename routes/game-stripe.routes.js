@@ -89,7 +89,9 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
     // už v jejich odstupňování a podruhé ji nedostanou. Nespoléháme se na
     // seznam druhů: kdyby se nedotáhl, účtovali bychom jinou cenu, než jakou
     // hráč viděl.
-    const jeKarta = !c.laundry;
+    // Karta se pozná podle sebe: nenese laundry (balík peněz), hovory (balíček
+    // infolinky) ani interval (předplatné). Slevové balíčky platí jen na karty.
+    const jeKarta = !c.laundry && !c.hovory && !c.interval;
     const kus = jeKarta ? acct._cenaKusuVBalicku(c.price, qty) : c.price;
 
     const purchase = await prisma.gamePurchase.create({

@@ -1012,3 +1012,13 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .por-chip:hover{border-color:var(--blue);color:var(--text)}
 .por-vstup{display:flex;gap:7px}
 .por-vstup .inp{flex:1;min-width:0}
+
+/* Tvář volajícího a proužek nálady. */
+.hov-tvar{display:flex;justify-content:center;margin-bottom:10px}
+.tvar{display:block;border-radius:50%}
+.hov-hlava{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.hov-hlava>div{min-width:0;flex:1}
+.nal{display:flex;align-items:center;gap:8px;margin:4px 0 2px}
+.nal-pruh{flex:1;height:6px;border-radius:999px;background:rgba(255,255,255,.12);overflow:hidden}
+.nal-pruh b{display:block;height:100%;border-radius:999px;transition:width .35s ease,background .35s ease}
+.nal span{font-size:12px;font-weight:700}

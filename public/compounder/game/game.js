@@ -2072,7 +2072,21 @@ var HOVOR_ZENY = ['paní Nováková', 'paní Svobodová', 'paní Dvořáková', 
   'slečna Kalousková', 'slečna Prokopová', 'slečna Hejduková', 'slečna Rysová', 'slečna Fenclová',
   'slečna Linhartová', 'slečna Krejzová', 'slečna Michalcová', 'slečna Potůčková', 'slečna Boháčová',
   'doktorka Králíčková', 'paní učitelka Zemanová', 'paní Nedvědová', 'paní Pilařová',
-  'paní Bezděková', 'paní Hofmanová', 'paní Rezková', 'paní Štědrá', 'paní Chalupová'];
+  'paní Bezděková', 'paní Hofmanová', 'paní Rezková', 'paní Štědrá', 'paní Chalupová',
+  'paní Rychtaříková', 'paní Baštová', 'paní Hofmanová', 'paní Šimáčková',
+  'paní Trnková', 'paní Vopěnková', 'paní Kadlecová', 'paní Myšková',
+  'paní Bernardová', 'paní Kopalová', 'paní Zemanová', 'paní Stuchlíková',
+  'paní Vrbová', 'paní Hanzlíková', 'paní Michalíková', 'paní Dostálová',
+  'paní Lacinová', 'paní Kafková', 'paní Burdová', 'paní Nedvědová',
+  'paní Halámková', 'paní Šestáková', 'paní Pazderová', 'paní Kolmanová',
+  'paní Šubrtová', 'slečna Vacková', 'slečna Hrušková', 'slečna Doleželová',
+  'slečna Vaňková', 'slečna Čapková', 'slečna Bartošová', 'slečna Královcová',
+  'slečna Řezníčková', 'slečna Vlasáková', 'slečna Skalická', 'paní Hrabalová',
+  'paní Mlynářová', 'paní Konvalinková', 'paní Pechová', 'paní Bauerová',
+  'paní Sládková', 'paní Marešová', 'paní Tichá', 'paní Kratochvílová',
+  'paní Fialová', 'paní Vondráčková', 'paní Hubáčková', 'paní Zelinková',
+  'paní Janoušková', 'paní Peterková',
+];
 var HOVOR_MUZI = ['pan Novák', 'pan Svoboda', 'pan Dvořák', 'pan Černý', 'pan Procházka',
   'pan Kučera', 'pan Veselý', 'pan Horák', 'pan Němec', 'pan Marek', 'pan Pospíšil',
   'pan Pokorný', 'pan Hájek', 'pan Jelínek', 'pan Král', 'pan Růžička', 'pan Beneš',
@@ -2092,7 +2106,21 @@ var HOVOR_MUZI = ['pan Novák', 'pan Svoboda', 'pan Dvořák', 'pan Černý', 'p
   'pan Kalousek', 'pan Prokop', 'pan Hejduk', 'pan Rys', 'pan Fencl',
   'pan Linhart', 'pan Krejza', 'pan Michalec', 'pan Potůček', 'pan Boháč',
   'doktor Nedvěd', 'pan řidič Pilař', 'pan Bezděk', 'pan Hofman', 'pan Rezek',
-  'pan Štědrý', 'pan Chalupa', 'pan Křeček', 'pan Vlasák', 'pan Žáček'];
+  'pan Štědrý', 'pan Chalupa', 'pan Křeček', 'pan Vlasák', 'pan Žáček',
+  'pan Rychtařík', 'pan Bašta', 'pan Hofman', 'pan Šimáček',
+  'pan Trnka', 'pan Vopěnka', 'pan Kadlec', 'pan Myška',
+  'pan Bernard', 'pan Kopal', 'pan Zeman', 'pan Stuchlík',
+  'pan Vrba', 'pan Hanzlík', 'pan Michalík', 'pan Dostál',
+  'pan Lacina', 'pan Kafka', 'pan Burda', 'pan Nedvěd',
+  'pan Halámek', 'pan Šesták', 'pan Pazdera', 'pan Kolman',
+  'pan Šubrt', 'pan Vacek', 'pan Hruška', 'pan Doležel',
+  'pan Vaněk', 'pan Čapek', 'pan Bartoš', 'pan Královec',
+  'pan Řezníček', 'pan Vlasák', 'pan Skalický', 'pan Hrabal',
+  'pan Mlynář', 'pan Konvalinka', 'pan Pech', 'pan Bauer',
+  'pan Sládek', 'pan Mareš', 'pan Tichý', 'pan Kratochvíl',
+  'pan Fiala', 'pan Vondráček', 'pan Hubáček', 'pan Zelinka',
+  'pan Janoušek', 'pan Peterka',
+];
 var HOVOR_SCENARE = [
   { id: 'stovka', rod: '', kroky: [
     { t: 'Dobrý den, váš automat mi spolkl stovku a nic se nespustilo.', o: [
@@ -2733,7 +2761,294 @@ var HOVOR_SCENARE = [
       { t: 'Tak si počkejte.', b: -2, r: 'Hezky jste mi poradil.' },
     ] },
   ] },
+  // ── Druhá vlna scénářů. Lidi volají naštvaní; nálada se zvedá jen tím,
+  // jak s nimi mluvíš, ne tím, co jim slíbíš. ──────────────────────────────
+  { id: 'mokre2', rod: 'z', nalada: 18, kroky: [
+    { t: 'Dobrý den, vytáhla jsem prádlo ze sušičky a je pořád úplně mokré. Zaplatila jsem dvě sušení!', o: [
+      { t: 'To je naše chyba, obě sušení vám vracím. Zkuste prosím sušičku číslo dvě, tahle jde hned z provozu.', b: 2, r: 'No vida, konečně někdo rozumný.' },
+      { t: 'Asi jste ji přecpala, to je nejčastější důvod.', b: -2, r: 'Takže si za to můžu sama?' },
+      { t: 'Zkuste to pustit ještě jednou, třeba to dojede.', b: -1, r: 'Za třetí peníze? To snad ne.' },
+    ] },
+    { t: 'A co mám dělat teď? Mám tu tašku mokrého prádla a za hodinu jedu pryč.', o: [
+      { t: 'Pustím vám dvojku na dálku zdarma, naskočí za minutu. Za půl hodiny je prádlo suché.', b: 2, r: 'Děkuju, to mi zachrání den.' },
+      { t: 'Tak si ho vezměte domů, doma to doschne.', b: -2, r: 'Mokré prádlo v autě, výborně.' },
+      { t: 'Můžete počkat na technika, ten dorazí odpoledne.', b: -1, r: 'Odpoledne už budu pryč.' },
+    ] },
+    { t: 'A ty peníze za to první sušení?', o: [
+      { t: 'Posílám zpátky na účet, do dvou dnů tam budou. Potvrzení přijde SMSkou.', b: 2, r: 'Tak to beru, děkuju.' },
+      { t: 'To se bohužel nevrací, stroj se spustil.', b: -2, r: 'Spustil, ale neusušil!' },
+      { t: 'Napište si o to mailem, někdo se na to podívá.', b: -1, r: 'Další papírování.' },
+    ] },
+  ] },
+  { id: 'barva', rod: 'm', nalada: 10, kroky: [
+    { t: 'Někdo nechal v bubnu červené tričko a mně se obarvila celá bílá várka. Košile do práce, všechno!', o: [
+      { t: 'To je nepříjemné a omlouvám se. Spočítejte mi, co se zničilo, a já to proplatím.', b: 2, r: 'Dobře. Aspoň něco.' },
+      { t: 'Za obsah bubnu neručíme, to je na vás si ho zkontrolovat.', b: -2, r: 'Vy jste neuvěřitelný.' },
+      { t: 'To se stává, zkuste to vyprat s odbarvovačem.', b: -1, r: 'Odbarvovač na košile do práce?' },
+    ] },
+    { t: 'A jak zařídíte, aby se to nestalo zas?', o: [
+      { t: 'Na dveře dám cedulku a obsluha bude kontrolovat bubny při každém úklidu. Doteď to nedělala, to je na nás.', b: 2, r: 'To zní jako chlap, co to myslí vážně.' },
+      { t: 'Nijak, lidi jsou nepořádní.', b: -2, r: 'Tak to si příště vyperu jinde.' },
+      { t: 'Určitě na to upozorníme.', b: 0, r: 'Hm.' },
+    ] },
+    { t: 'Takže kolik mi dáte a kdy?', o: [
+      { t: 'Pošlete fotky a účtenku, do tří dnů posílám peníze. Když se nedomluvíme, řeknete si, co vám přijde fér.', b: 2, r: 'Fajn, fotky posílám.' },
+      { t: 'Maximálně vám vrátíme to praní.', b: -2, r: 'Tím mi košile nenahradíte.' },
+      { t: 'To záleží, uvidíme.', b: -1, r: 'Uvidíme. Jasně.' },
+    ] },
+  ] },
+  { id: 'prasek', rod: 'z', nalada: 30, kroky: [
+    { t: 'Dobrý den, ten automat na prášek je prázdný a já tu stojím s plnou taškou.', o: [
+      { t: 'Mrzí mě to. Dávkovač je ve stroji dvojka plný, pustím vám ho s prášky zdarma.', b: 2, r: 'To je milé, děkuju.' },
+      { t: 'Prášek si můžete nosit vlastní, nikdo vám nebrání.', b: -2, r: 'Tak proč tam ten automat máte?' },
+      { t: 'Doplňujeme ho jednou týdně, přijďte ve čtvrtek.', b: -1, r: 'Ve čtvrtek? To už budu mít doma plíseň.' },
+    ] },
+    { t: 'A nejbližší obchod je kde?', o: [
+      { t: 'Dvě minuty vedle je večerka, mají prášek za dvacet. Rozdíl vám vrátím v kreditu.', b: 2, r: 'Tak to zvládnu.' },
+      { t: 'To fakt nevím, nejsem navigace.', b: -2, r: 'Hezky jste mi pomohl.' },
+      { t: 'Někde v centru určitě něco bude.', b: -1, r: 'Někde. Super.' },
+    ] },
+    { t: 'A doplníte to, nebo si mám nosit prášek napořád?', o: [
+      { t: 'Doplním to dneska večer osobně a budu to hlídat týdně. Omlouvám se.', b: 2, r: 'Dobře, dám vám ještě šanci.' },
+      { t: 'Doplní se to, až se to doplní.', b: -2, r: 'Takže nikdy.' },
+      { t: 'Napíšu to kolegovi.', b: 0, r: 'No doufám.' },
+    ] },
+  ] },
+  { id: 'zamceno', rod: 'm', nalada: 12, kroky: [
+    { t: 'Stojím před vaší prádelnou, na dveřích máte nonstop a je zamčeno. Jel jsem sem dvacet minut.', o: [
+      { t: 'Zámek se zasekl, otevřu vám ho na dálku. Vydržte deset vteřin.', b: 2, r: 'Tak to je služba, děkuju.' },
+      { t: 'To není možné, nonstop je nonstop.', b: -2, r: 'Chcete fotku?' },
+      { t: 'Asi vám nejde karta, zkuste ji přiložit líp.', b: -1, r: 'Zkoušel jsem to pětkrát.' },
+    ] },
+    { t: 'Už jsem uvnitř. Ale příště radši pojedu jinam, když je to takhle.', o: [
+      { t: 'Chápu. Dám vám na příště praní zdarma, ať ta cesta nebyla zbytečná.', b: 2, r: 'Tak jo, to beru.' },
+      { t: 'Jak chcete, konkurence je kousek.', b: -2, r: 'Vy jste teda obchodník.' },
+      { t: 'Snad se to nebude opakovat.', b: 0, r: 'Snad.' },
+    ] },
+    { t: 'A co ten zámek, vyřešíte ho?', o: [
+      { t: 'Technik tam jede ráno a vymění ho. Do té doby to mám pod dohledem z dispečinku.', b: 2, r: 'Dobře, díky za upřímnost.' },
+      { t: 'Zámek je v pořádku, to byla výjimka.', b: -2, r: 'Výjimka, co mě stála večer.' },
+      { t: 'Nahlásím to dál.', b: 0, r: 'Hm.' },
+    ] },
+  ] },
+  { id: 'karta', rod: 'z', nalada: 26, kroky: [
+    { t: 'Terminál mi třikrát odmítl kartu a pak mi přišly tři zprávy z banky, že jsem platila. Co to je?', o: [
+      { t: 'To jsou předautorizace, peníze se vrátí do tří dnů samy. Praní vám pustím hned.', b: 2, r: 'Tak to se mi ulevilo.' },
+      { t: 'To máte problém s bankou, ne s námi.', b: -2, r: 'Tři platby u vás a problém mám já?' },
+      { t: 'Zkuste jinou kartu.', b: -1, r: 'Jinou nemám.' },
+    ] },
+    { t: 'A jak si mám být jistá, že mi to opravdu přijde zpátky?', o: [
+      { t: 'Posílám vám potvrzení o zrušení všech tří plateb na mail. Kdyby do tří dnů nepřišly, volejte mi přímo.', b: 2, r: 'Dobře, to mi stačí.' },
+      { t: 'Musíte nám věřit.', b: -2, r: 'Věřit. Po tomhle.' },
+      { t: 'Obvykle to chodí.', b: 0, r: 'Obvykle.' },
+    ] },
+    { t: 'A ten terminál spravíte?', o: [
+      { t: 'Vyměňujeme ho zítra. Dneska tam jede platba přes QR kód, ta funguje spolehlivě.', b: 2, r: 'Fajn, děkuju za jasnou odpověď.' },
+      { t: 'Terminál je v pořádku.', b: -2, r: 'Jasně, to já si vymýšlím.' },
+      { t: 'Podíváme se na to.', b: 0, r: 'Hm.' },
+    ] },
+  ] },
+  { id: 'proud', rod: 'm', nalada: 20, kroky: [
+    { t: 'Uprostřed praní vypadl proud a stroj je zablokovaný i s mým prádlem uvnitř.', o: [
+      { t: 'Po naběhnutí proudu program dojede od místa, kde skončil. Dveře odemknu na dálku, kdybyste to potřeboval dřív.', b: 2, r: 'Aha, tak to je dobré vědět.' },
+      { t: 'Za výpadky elektřiny neodpovídáme.', b: -2, r: 'To mě uklidnilo.' },
+      { t: 'Počkejte, ono to naskočí.', b: -1, r: 'Jak dlouho mám čekat?' },
+    ] },
+    { t: 'A to praní budu platit znovu?', o: [
+      { t: 'Ne. Cyklus pokračuje na původní platbu a kdyby ne, pustím vám nový zdarma.', b: 2, r: 'Férové.' },
+      { t: 'Samozřejmě, stroj se spustil.', b: -2, r: 'A dojel do půlky!' },
+      { t: 'To budeme řešit potom.', b: -1, r: 'Potom. Pořád potom.' },
+    ] },
+    { t: 'Nemáte tam záložní zdroj? V mrazáku vedle to taky vypadlo.', o: [
+      { t: 'Máme ho jen na zámky a osvětlení, abyste se vždycky dostal ven a k prádlu. Na stroje ne, to by byl jiný kalibr.', b: 2, r: 'Rozumím, to dává smysl.' },
+      { t: 'Takové věci neřešíme.', b: -2, r: 'Vy neřešíte nic.' },
+      { t: 'Něco tam asi je.', b: -1, r: 'Asi.' },
+    ] },
+  ] },
+  { id: 'penezenka', rod: 'z', nalada: 16, kroky: [
+    { t: 'Nechala jsem u vás v prádelně peněženku a za hodinu jsem se vrátila a byla pryč.', o: [
+      { t: 'To je mrzuté. Kamera tam je, projdu záznam hned teď a ozvu se vám do hodiny.', b: 2, r: 'Děkuju, aspoň něco.' },
+      { t: 'Za odložené věci neručíme, je to na cedulce.', b: -2, r: 'Já vím, co je na cedulce. Ptám se na pomoc.' },
+      { t: 'Zeptejte se ostatních zákazníků.', b: -1, r: 'Kterých, jsou pryč.' },
+    ] },
+    { t: 'A když ji na kameře uvidíte, co s tím uděláte?', o: [
+      { t: 'Záznam předám policii, to je jediná správná cesta. Vy si podejte oznámení a já jim ho pošlu rovnou.', b: 2, r: 'Dobře, udělám to.' },
+      { t: 'Nic, do toho se nebudeme plést.', b: -2, r: 'Takže nic.' },
+      { t: 'Uvidíme podle toho, co tam bude.', b: 0, r: 'Hm.' },
+    ] },
+    { t: 'Můžu ten záznam vidět?', o: [
+      { t: 'Sám vám ho ukázat nesmím, jsou tam i jiní lidé. Policii ho vydám okamžitě a vy u toho můžete být.', b: 2, r: 'To chápu, díky za rovnou řeč.' },
+      { t: 'Kamery stejně nefungují.', b: -2, r: 'Tak proč tam visí?' },
+      { t: 'To asi nepůjde.', b: -1, r: 'Proč ne?' },
+    ] },
+  ] },
+  { id: 'mastnota', rod: 'm', nalada: 14, kroky: [
+    { t: 'V bubnu byla mastnota po někom a mám zničené dvě mikiny. Prý tam někdo pral montérky.', o: [
+      { t: 'Omlouvám se. Mikiny proplatím a stroj stahuju na vyčištění ještě dneska.', b: 2, r: 'Dobře, tak to beru.' },
+      { t: 'Měl jste si buben zkontrolovat.', b: -2, r: 'Mám kontrolovat po vás?' },
+      { t: 'Zkuste to vyprat ještě jednou.', b: -1, r: 'Už dvakrát jsem to zkoušel.' },
+    ] },
+    { t: 'A proč někdo pere montérky v obyčejné pračce?', o: [
+      { t: 'Protože to zatím nikdo nehlídal. Dám do provozovny jeden stroj označený na pracovní prádlo a na ostatní to zakážu.', b: 2, r: 'To je rozumné řešení.' },
+      { t: 'Protože lidi jsou prasata.', b: -1, r: 'Hezky jste to řekl o svých zákaznících.' },
+      { t: 'To se nedá uhlídat.', b: -2, r: 'Tak to je váš byznys, ne?' },
+    ] },
+    { t: 'Jak dlouho bude ten stroj mimo?', o: [
+      { t: 'Do večera. Vyčistí ho profík, ne já s hadrem. Napíšu vám, až pojede.', b: 2, r: 'Fajn, díky.' },
+      { t: 'Nevím.', b: -2, r: 'Nic nevíte.' },
+      { t: 'Pár dní.', b: 0, r: 'Hm.' },
+    ] },
+  ] },
+  { id: 'voda', rod: 'z', nalada: 22, kroky: [
+    { t: 'U vás teče voda po podlaze, málem jsem upadla. S malým dítětem!', o: [
+      { t: 'Beru to vážně. Provozovnu hned zavírám, než to uklidí — děkuju, že jste zavolala.', b: 2, r: 'Aspoň někdo to bere vážně.' },
+      { t: 'Trochu vody po praní je normální.', b: -2, r: 'Normální je, aby si tam někdo rozbil hlavu?' },
+      { t: 'Dejte na to pozor a vyhněte se tomu.', b: -2, r: 'To mi radíte vážně?' },
+    ] },
+    { t: 'A odkud to teče?', o: [
+      { t: 'Nejspíš prasklá hadice u trojky. Technik tam bude do hodiny a do té doby je stroj odstavený.', b: 2, r: 'Dobře, díky.' },
+      { t: 'To se nedá poznat na dálku.', b: -1, r: 'Tak tam někoho pošlete.' },
+      { t: 'Asi to někdo rozlil.', b: -1, r: 'Deset litrů?' },
+    ] },
+    { t: 'Já tam mám rozdělané praní, co s ním?', o: [
+      { t: 'Dojede v pořádku, trojka s tím nesouvisí. Praní máte u mě příště zdarma za to zdržení.', b: 2, r: 'Děkuju, to je slušné.' },
+      { t: 'Přijďte si pro něj zítra.', b: -2, r: 'Zítra pracuju.' },
+      { t: 'To si musíte vyřešit sama.', b: -2, r: 'Děkuju za nic.' },
+    ] },
+  ] },
+  { id: 'drahe', rod: 'm', nalada: 34, kroky: [
+    { t: 'Zdražili jste o dvacku a vedle to mají levnější. Proč bych chodil k vám?', o: [
+      { t: 'Protože u nás vyperete i o půlnoci a stroj je vždycky čistý. Jestli ne, chci o tom vědět hned.', b: 2, r: 'To zní rozumně.' },
+      { t: 'Tak jděte vedle.', b: -2, r: 'Hezké jednání se zákazníkem.' },
+      { t: 'Zdražila energie, s tím nic nenaděláme.', b: 0, r: 'To slyším všude.' },
+    ] },
+    { t: 'A nějaká sleva pro stálé zákazníky?', o: [
+      { t: 'Každé desáté praní zdarma, stačí mi dát číslo, pod kterým vás povedu. Zapisuju vás teď.', b: 2, r: 'Tak to beru.' },
+      { t: 'Žádné slevy nemáme.', b: -1, r: 'Škoda.' },
+      { t: 'Zeptejte se na pobočce.', b: -1, r: 'Volám přece na infolinku.' },
+    ] },
+    { t: 'A nezdražíte zas za měsíc?', o: [
+      { t: 'Do konce roku ne, to vám říkám rovnou. Kdyby ano, napíšu to na dveře dva týdny dopředu.', b: 2, r: 'Férové, díky.' },
+      { t: 'To vám nikdo neslíbí.', b: 0, r: 'Hm.' },
+      { t: 'Klidně, trh je trh.', b: -2, r: 'Tak s vámi nepočítejte.' },
+    ] },
+  ] },
+  { id: 'faktura', rod: 'z', nalada: 38, kroky: [
+    { t: 'Potřebuju fakturu na firmu, pereme u vás prádlo z penzionu. Z automatu leze jen útržek.', o: [
+      { t: 'Fakturu vystavím. Pošlete mi IČO a za hodinu ji máte v mailu.', b: 2, r: 'Výborně, posílám.' },
+      { t: 'My faktury neděláme, jsme samoobsluha.', b: -2, r: 'Takže u vás firma prát nemůže?' },
+      { t: 'Zkuste napsat na mail, možná se někdo ozve.', b: -1, r: 'Možná?' },
+    ] },
+    { t: 'A šlo by to pravidelně měsíčně, ať neřeším každé praní?', o: [
+      { t: 'Ano. Založím vám firemní účet, praní se načítá a jednou měsíčně přijde souhrnná faktura.', b: 2, r: 'Tak to nám hodně pomůže.' },
+      { t: 'To je moc složité.', b: -2, r: 'Pro vás nebo pro mě?' },
+      { t: 'Teoreticky asi ano.', b: 0, r: 'Teoreticky.' },
+    ] },
+    { t: 'A dostaneme na ten objem nějakou cenu?', o: [
+      { t: 'Nad padesát praní měsíčně patnáct procent dolů. Napíšu to do smlouvy, ať to neplatí jen do příště.', b: 2, r: 'S tím jdu za majitelem.' },
+      { t: 'Ceny máme pro všechny stejné.', b: 0, r: 'Hm.' },
+      { t: 'To bych musel řešit s někým jiným.', b: -1, r: 'Tak ho sežeňte.' },
+    ] },
+  ] },
+  { id: 'svatky', rod: 'm', nalada: 42, kroky: [
+    { t: 'Máte otevřeno na Štědrý den? Na webu je to rozporuplné.', o: [
+      { t: 'Otevřeno je nonstop, i na Štědrý den. Web opravím ještě dneska, díky za upozornění.', b: 2, r: 'Děkuju, to je jasná odpověď.' },
+      { t: 'To nevím, zavolejte po svátcích.', b: -2, r: 'Po svátcích mi to je k ničemu.' },
+      { t: 'Asi ano.', b: -1, r: 'Asi mi nestačí.' },
+    ] },
+    { t: 'A bude tam někdo, kdyby se stroj zasekl?', o: [
+      { t: 'Na lince jsem já, i o svátcích. Stroj odemknu na dálku a technik je na telefonu.', b: 2, r: 'To je dobré vědět.' },
+      { t: 'O svátcích nikdo nejezdí.', b: -1, r: 'Takže riziko beru já.' },
+      { t: 'To se uvidí.', b: -2, r: 'Vy jste ale jistota.' },
+    ] },
+    { t: 'A ceny o svátcích nahoru nejdou?', o: [
+      { t: 'Ne, cena je stejná každý den v roce. Žádné svátkové přirážky u nás nejsou.', b: 2, r: 'Výborně.' },
+      { t: 'Zatím ne.', b: 0, r: 'Zatím.' },
+      { t: 'O svátcích je příplatek.', b: -2, r: 'Tak to vyperu doma.' },
+    ] },
+  ] },
+  { id: 'svetr', rod: 'z', nalada: 15, kroky: [
+    { t: 'Vaše sušička mi srazila svetr z merino vlny. Stál dva tisíce!', o: [
+      { t: 'Omlouvám se. Pošlete fotku a účtenku, řeším to jako škodu a proplatím ji.', b: 2, r: 'Tak to jsem nečekala, děkuju.' },
+      { t: 'Vlna se do sušičky nedává, to ví každý.', b: -2, r: 'Tak to tam napište, chytráku!' },
+      { t: 'To bude asi tím svetrem.', b: -1, r: 'Svetr byl v pořádku, než jsem ho dala k vám.' },
+    ] },
+    { t: 'A proč na tom programu není napsáno, že vlnu zničí?', o: [
+      { t: 'Protože to tam chybí, a to je chyba na naší straně. Dneska doplníme popisky ke každému programu.', b: 2, r: 'Děkuju, že to přiznáte.' },
+      { t: 'Protože to je samozřejmé.', b: -2, r: 'Mně to samozřejmé nebylo.' },
+      { t: 'Dáme to na seznam vylepšení.', b: 0, r: 'Na seznam. Jasně.' },
+    ] },
+    { t: 'Kdy ty peníze dostanu?', o: [
+      { t: 'Do tří pracovních dnů od fotky. Kdyby to vázlo, volejte mi přímo, mám to u sebe.', b: 2, r: 'Dobře, tak posílám fotku.' },
+      { t: 'To záleží na vedení.', b: -1, r: 'Vy jste vedení, ne?' },
+      { t: 'Nic vám vracet nebudeme.', b: -2, r: 'Tak se uvidíme u soudu.' },
+    ] },
+  ] },
 ];
+// ─── Tvář volajícího a jeho nálada ───────────────────────────────────────────
+// Obrázek se nekreslí nikde na serveru a nikde neleží — skládá se tady ze
+// jména, takže stejný zákazník vypadá vždycky stejně. Výraz ale není daný
+// jménem, ten se mění podle toho, jak s člověkem mluvíš: obočí, pusa i barva
+// kroužku kolem. Nálada jde od 0 (zuří) do 100 (spokojený).
+var TVAR_PLET = ['#f3c9a6', '#e8b48c', '#d79b6e', '#b87c52', '#8d5a3a', '#f7d9bd'];
+var TVAR_VLASY = ['#2b2118', '#4a3524', '#7a5230', '#a8763f', '#c9a227', '#8c8c94', '#1f1f23'];
+function tvarHash(txt) {
+  var h = 0, str = String(txt || '');
+  for (var i = 0; i < str.length; i++) { h = (h * 31 + str.charCodeAt(i)) % 100000; }
+  return h;
+}
+function naladaSlovy(n) {
+  if (n <= 15) return 'zuří';
+  if (n <= 32) return 'naštvaný';
+  if (n <= 48) return 'podrážděný';
+  if (n <= 62) return 'nejistý';
+  if (n <= 80) return 'uklidněný';
+  return 'spokojený';
+}
+function naladaBarva(n) {
+  if (n <= 32) return '#ff5d6c';
+  if (n <= 62) return '#f3b23c';
+  return '#2fe3a0';
+}
+// Ženská a mužská varianta se liší jen vlasy — zbytek je stejný obličej.
+function tvarSvg(jmeno, rod, nalada, px) {
+  px = px || 72;
+  var n = Math.max(0, Math.min(100, nalada == null ? 50 : nalada));
+  var h = tvarHash(jmeno);
+  var plet = TVAR_PLET[h % TVAR_PLET.length];
+  var vlasy = TVAR_VLASY[(h >> 3) % TVAR_VLASY.length];
+  var zena = rod === 'z' || (rod !== 'm' && (h % 2 === 0));
+  var ucho = (h >> 5) % 3;                       // malá obměna tvaru hlavy
+  var kruh = naladaBarva(n);
+  // Obočí: při vzteku vnitřní konec DOLŮ (to je ten zamračený véčkový tvar),
+  // při klidu mírně nahoru. Nahoru to přeháníme míň — vytřeštěné obočí by
+  // vypadalo vyděšeně, ne spokojeně.
+  var sk = (50 - n) / 50;
+  var sklon = Math.round(sk > 0 ? sk * 6 : sk * 3);
+  // Pusa: záporná hodnota je koutek dolů, kladná úsměv.
+  var usmev = Math.round((n - 50) / 50 * 13);
+  var vlasyTvar = zena
+    ? '<path d="M24 46 C24 24 76 24 76 46 L76 62 C76 52 70 44 50 44 C30 44 24 52 24 62z" fill="' + vlasy + '"/>'
+      + '<path d="M22 48 q-4 18 2 28 l6-4 q-4-12-2-24z" fill="' + vlasy + '"/>'
+      + '<path d="M78 48 q4 18-2 28 l-6-4 q4-12 2-24z" fill="' + vlasy + '"/>'
+    : '<path d="M26 46 C26 26 74 26 74 46 L74 50 C70 40 58 38 50 38 C40 38 30 41 26 50z" fill="' + vlasy + '"/>';
+  return '<svg class="tvar" width="' + px + '" height="' + px + '" viewBox="0 0 100 100" aria-hidden="true">'
+    + '<circle cx="50" cy="50" r="47" fill="#101a2d"/>'
+    + '<circle cx="50" cy="50" r="46" fill="none" stroke="' + kruh + '" stroke-width="3"/>'
+    + '<ellipse cx="50" cy="56" rx="' + (25 + ucho) + '" ry="28" fill="' + plet + '"/>'
+    + vlasyTvar
+    + '<circle cx="41" cy="56" r="3.2" fill="#23313f"/><circle cx="59" cy="56" r="3.2" fill="#23313f"/>'
+    + '<path d="M34 ' + (47 - sklon) + ' L45 ' + (47 + sklon) + '" stroke="#23313f" stroke-width="3" stroke-linecap="round"/>'
+    + '<path d="M66 ' + (47 - sklon) + ' L55 ' + (47 + sklon) + '" stroke="#23313f" stroke-width="3" stroke-linecap="round"/>'
+    + '<path d="M39 72 Q50 ' + (72 + usmev) + ' 61 72" fill="none" stroke="#23313f" stroke-width="3" stroke-linecap="round"/>'
+    + '</svg>';
+}
+// Pruh nálady pod jménem — ať je vidět i číslem, ne jen z výrazu.
+function naladaHtml(h) {
+  var n = Math.max(0, Math.min(100, h.nalada == null ? 50 : h.nalada));
+  return '<div class="nal"><i class="nal-pruh"><b style="width:' + n + '%;background:' + naladaBarva(n) + '"></b></i>'
+    + '<span style="color:' + naladaBarva(n) + '">' + naladaSlovy(n) + '</span></div>';
+}
 function povest() { return Math.max(-100, Math.min(100, (S && S.povest) || 0)); }
 // Násobitel návštěvnosti podle pověsti. Nula je normál, záporná pověst bolí víc,
 // než kladná pomůže — špatná pověst se roznese rychleji.
@@ -2822,8 +3137,12 @@ function hovorTik(dt) {
 }
 function zacniHovor() {
   var sc = vyberScenar();
+  // Lidi nevolají na infolinku, když jsou spokojení. Většina začíná
+  // podrážděná; scénář si může říct o vlastní výchozí náladu.
+  var n0 = sc.nalada == null ? 14 + Math.floor(Math.random() * 24) : sc.nalada;
   HOVOR = {
     jmeno: hovorJmeno(sc.rod),
+    rod: sc.rod, nalada: n0, nalada0: n0,
     scenar: sc.id, kroky: sc.kroky,
     poradi: sc.kroky.map(function (k) { return zamichej(k.o.length); }),
     i: 0, body: 0, vaha: 0, odpovedi: [], prepis: [], ceka: false,
@@ -2843,14 +3162,23 @@ function hovorHlidej() {
 }
 function odmitniHovor(samo) {
   if (!HOVOR) return;
-  zmenPovest(povestZaOdpoved(HOVOR_ODMITNUTI));
+  // Zaplacená linka: hovor, který hráč nevezme, vyřídí operátor a pověst
+  // nikam nejde. Kredit se strhne jen tehdy, když opravdu zaskakuje.
+  var operator = (S.linka || 0) > 0;
+  if (operator) S.linka = S.linka - 1;
+  else zmenPovest(povestZaOdpoved(HOVOR_ODMITNUTI));
   S.hovoru = (S.hovoru || 0) + 1;
   HOVOR = null;
   naplanujHovor();
   zavriHovor();
   save(); paint(); syncState(true);
-  toast(samo ? 'Zákazník se nedčekal a položil to. Pověst klesla.'
-             : 'Hovor jsi nevzal. Pověst klesla.', 'err');
+  if (operator) {
+    toast('Hovor vzal operátor infolinky za tebe. Zbývá ' + (S.linka || 0) + ' '
+      + mn(S.linka || 0, 'hovor', 'hovory', 'hovorů') + '.', 'ok', true);
+  } else {
+    toast(samo ? 'Zákazník se nedočkal a položil to. Pověst klesla.'
+               : 'Hovor jsi nevzal. Pověst klesla.', 'err');
+  }
 }
 function vezmiHovor() {
   if (!HOVOR) return;
@@ -2869,6 +3197,7 @@ function odpovez(i) {
   var h = HOVOR, o = h.kroky[h.i].o[h.poradi[h.i][i]];
   if (!o) return;
   h.body += o.b;
+  h.nalada = Math.max(0, Math.min(100, (h.nalada == null ? 50 : h.nalada) + o.b * 13));
   h.vaha += povestZaOdpoved(o.b);
   h.odpovedi.push({ b: o.b, r: o.r });
   h.prepis.push({ k: 'ja', t: o.t });
@@ -2928,9 +3257,10 @@ function paintHovor() {
   if (h.stav === 'zvoni') {
     var zbyva = Math.max(0, Math.ceil((h.zvoniDo - Date.now()) / 1000));
     html = '<div class="hov-in zvoni">'
-      + '<i class="hov-tel">📞</i>'
+      + '<div class="hov-tvar">' + tvarSvg(h.jmeno, h.rod, h.nalada, 108) + '</div>'
       + '<p class="hov-popis">Infolinka</p>'
       + '<h3>' + esc(h.jmeno) + '</h3>'
+      + naladaHtml(h)
       + '<p class="hov-stav">volá … položí to za <b id="hov-odpocet">' + zbyva + '</b> s</p>'
       + '<div class="hov-tlacitka">'
       + hovorBtn('hov-ne', 'hov-kolo ne', '✕')
@@ -2939,7 +3269,8 @@ function paintHovor() {
       + '<p class="fine">Kdo hovory nebere, přichází o návštěvnost.</p></div>';
   } else if (h.stav === 'hovor') {
     html = '<div class="hov-in hov-chat">'
-      + '<p class="hov-popis">' + esc(h.jmeno) + ' · infolinka</p>'
+      + '<div class="hov-hlava">' + tvarSvg(h.jmeno, h.rod, h.nalada, 54)
+      + '<div><p class="hov-popis">' + esc(h.jmeno) + ' · infolinka</p>' + naladaHtml(h) + '</div></div>'
       + hovorPrepis(h)
       + (h.ceka ? '' : '<div class="hov-vyber"><p class="hov-popis">Co odpovíte?</p>'
           + '<div class="hov-odp">'
@@ -2963,7 +3294,8 @@ function paintHovor() {
     var dh = Math.round((hvezdy() - h.hvPred) * 10) / 10;
     var navs = Math.round((povestKoef() - 1) * 1000) / 10;
     html = '<div class="hov-in hov-chat">'
-      + '<p class="hov-popis">Hovor skončil</p>'
+      + '<div class="hov-hlava">' + tvarSvg(h.jmeno, h.rod, h.nalada, 54)
+      + '<div><p class="hov-popis">Hovor skončil</p>' + naladaHtml(h) + '</div></div>'
       + hovorPrepis(h)
       + '<p class="hov-stav ' + tr2 + '">' + soud + '</p>'
       + '<div class="kv"><span>Hodnocení zákazníků</span><b>' + hvezdyText()
@@ -10589,6 +10921,7 @@ function loadCards() {
     if (!r.ok) return;
     CARDS_CAT = r.j.catalog; CASH_CAT = r.j.cash || null; PAYMENTS_ON = !!r.j.payments;
     SUBS_CAT = r.j.subs || null; PREDPLATNE = r.j.predplatne || [];
+    LINKA_CAT = r.j.linka || null;
     RUSH_ZA = r.j.rush_zdarma_za; RUSH_MAX = r.j.rush_zdarma_max || 5;
     if (r.j.owned && ME) ME.cards = r.j.owned;
   }).catch(function () { });
@@ -10598,7 +10931,7 @@ function ownedOf(kind) { return (ME && ME.cards && ME.cards[kind]) || 0; }
 // Jestli běží, rozhoduje server — klient si to nesmí odkývat sám. Dispečer
 // nechává hráči čtvrt hodiny: kdo u hry sedí, zareaguje stejně rychleji sám,
 // a předplatné tak šetří pozornost, ne že by kupovalo výhodu.
-var SUBS_CAT = null, PREDPLATNE = [];
+var SUBS_CAT = null, PREDPLATNE = [], LINKA_CAT = null;
 var DISPECER_PRODLEVA = 15 * 60e3;
 function predplatneNa(kind) {
   var ted = Date.now();
@@ -10668,12 +11001,36 @@ function paintCards() {
           : '<span class="fine">Prodej se teprve spouští.</span>')
         + '</div></div>';
     }).join('');
-  box.innerHTML += predplatneHtml();
+  box.innerHTML += predplatneHtml() + linkaPacksHtml();
   bindPredplatne();
+  [].forEach.call(box.querySelectorAll('[data-linka]'), function (el) {
+    el.onclick = function () { buyCash(el.getAttribute('data-linka')); };
+  });
   [].forEach.call(box.querySelectorAll('[data-use]'), function (b) { b.onclick = function () { useCard(b.getAttribute('data-use')); }; });
   [].forEach.call(box.querySelectorAll('[data-buy-card]'), function (b) { b.onclick = function () { buyCard(b.getAttribute('data-buy-card')); }; });
 }
 
+// Balíčky infolinky. Kredit je jeden hovor, který vyřídí operátor — hráč si
+// kupuje klid, ne výhodu: hovor vzatý osobně pořád vynese víc.
+function linkaPacksHtml() {
+  if (!LINKA_CAT || !LINKA_CAT.length) return '';
+  var zbyva = (S && S.linka) || 0;
+  return '<div class="card"><h3>\u260E\uFE0F Balíčky infolinky</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">Zajisti zákaznickou podporu pro svou síť. '
+    + 'Kredit je jeden hovor, který vezme operátor místo tebe — pověst pak neklesne, '
+    + 'i když zrovna nejsi ve hře. Hovor, který si vezmeš sám a zvládneš ho, pořád vynese víc.</p>'
+    + '<div class="kv"><span>Nevyčerpané hovory</span><b' + (zbyva ? ' class="ok"' : '') + '>' + zbyva + '</b></div>'
+    + (PAYMENTS_ON
+        ? LINKA_CAT.map(function (c) {
+            return '<div class="pack" data-linka="' + esc(c.kind) + '">'
+              + '<div class="pack-l"><b>' + c.hovory + ' hovorů</b>'
+              + '<span>' + String(c.za_hovor).replace('.', ',') + ' Kč za hovor</span></div>'
+              + '<button class="btn sm">' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button></div>';
+          }).join('')
+          + '<p class="fine">Platbu zpracovává Stripe. Hovory se připíšou hned po zaplacení.</p>'
+        : '<p class="fine">Prodej se teprve spouští.</p>')
+    + '</div>';
+}
 // Karta předplatného — jediná věc ve hře, která se strhává opakovaně, takže
 // se o tom musí psát narovinu: co to stojí, kdy se to strhne a jak to zrušit.
 function predplatneHtml() {
@@ -10953,17 +11310,24 @@ function bindCashPacks() {
   });
 }
 function buyCash(kind) {
-  var c = (CASH_CAT || []).filter(function (x) { return x.kind === kind; })[0];
+  var c = (CASH_CAT || []).concat(LINKA_CAT || []).filter(function (x) { return x.kind === kind; })[0];
   if (!c) return;
   if (!ME) return toast('Nejdřív se přihlas.', 'err');
   if (!ME.has_details) return detailsSheet(null, kind);
+  var hovory = !!c.hovory;
   sheet('<h3>' + esc(c.name) + '</h3>'
-    + '<div class="kv"><span>Rámec a zástava v bance</span><b class="ok">+' + kcFull(c.laundry) + '</b></div>'
+    + (hovory
+        ? '<div class="kv"><span>Hovory navíc</span><b class="ok">+' + c.hovory + '</b></div>'
+        : '<div class="kv"><span>Rámec a zástava v bance</span><b class="ok">+' + kcFull(c.laundry) + '</b></div>')
     + '<div class="kv"><span>Cena</span><b>' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</b></div>'
-    + '<div class="kv"><span>Za korunu</span><b>' + c.per_czk.toLocaleString('cs-CZ') + ' L$</b></div>'
+    + (hovory
+        ? '<div class="kv"><span>Za hovor</span><b>' + String(c.za_hovor).replace('.', ',') + ' Kč</b></div>'
+        : '<div class="kv"><span>Za korunu</span><b>' + c.per_czk.toLocaleString('cs-CZ') + ' L$</b></div>')
     + '<div class="kv"><span>Platí</span><b>' + esc(ME.first_name + ' ' + ME.last_name) + '</b></div>'
     + '<button class="btn big" id="do-pay">Zaplatit kartou</button>'
-    + '<p class="fine">Laundry jsou herní měna bez jakékoli hodnoty a nejde je směnit zpět.</p>');
+    + '<p class="fine">' + (hovory
+        ? 'Kredit se strhne jen tehdy, když hovor opravdu vezme operátor za tebe. Nevyčerpané hovory nikam nemizí.'
+        : 'Laundry jsou herní měna bez jakékoli hodnoty a nejde je směnit zpět.') + '</p>');
   $('do-pay').onclick = function () {
     $('do-pay').disabled = true;
     apiJson('/stripe/checkout', { kind: kind, qty: 1 }).then(function (r) {
@@ -10980,8 +11344,9 @@ function claimCash(then) {
   // Nejdřív ručně přidaná hotovost z administrace, pak koupené balíčky.
   var k = null;
   if ((ME.cards.cash_dar || 0) > 0) k = 'cash_dar';
-  else if (CASH_CAT) {
-    var dluzne = CASH_CAT.filter(function (c) { return (ME.cards[c.kind] || 0) > 0; });
+  else {
+    var fond = (CASH_CAT || []).concat(LINKA_CAT || []);
+    var dluzne = fond.filter(function (c) { return (ME.cards[c.kind] || 0) > 0; });
     if (dluzne.length) k = dluzne[0].kind;
   }
   if (!k) { if (then) then(); return; }
@@ -10997,6 +11362,13 @@ function claimCash(then) {
       toast(v.msg, 'ok');
       if (v.effect === 'ramec') agentNavrat();
       return claimCash(then);   // může jich čekat víc
+    }
+    if (v && v.effect === 'linka') {
+      S.linka = (S.linka || 0) + (v.hovory || 0);
+      ME.cards = r.j.owned;
+      save(); paint(); syncState(true);
+      toast(v.msg, 'ok', true);
+      return claimCash(then);
     }
     if (then) then();
   }).catch(function () { if (then) then(); });
@@ -11102,6 +11474,9 @@ function checkPayment() {
       if (r.ok && r.j.status === 'paid') {
         ev('game_paid', true);
         if (ME) ME.cards = r.j.owned;
+        if (/^linka/.test(r.j.kind || '')) {
+          return claimCash(function () { paintCards(); switchTab('cards'); });
+        }
         if (/^cash/.test(r.j.kind || '')) {
           // Když si hráč balík kupoval kvůli konkrétní stavbě, agent ho tam
           // vrátí sám — pak by přepnutí na banku jen zmátlo.
