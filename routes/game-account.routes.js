@@ -885,7 +885,9 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
 // Tři pohledy: kdo má nejvíc prádlomatů (to ví server jistě, z obsazených míst),
 // kdo nejvíc vydělává a kdo nejvíc pozval. Zisk a pozvánky čteme z uloženého
 // stavu, který píše prohlížeč hráče — ber je jako hlášené, ne ověřené.
-const ZEB_TOP = 25;
+// Žebříček ukazuje všechny hráče, ne jen špičku — kdo je sedmnáctý, chce to
+// vidět taky. Strop je jen pojistka, aby odpověď nerostla donekonečna.
+const ZEB_TOP = 500;
 // Zábor si drží jen nick; firmu dotahujeme až při čtení, aby se přejmenování
 // projevilo všude najednou a nemuselo se přepisovat do každé řádky.
 async function firmyMapa() {
