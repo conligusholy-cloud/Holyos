@@ -1343,16 +1343,19 @@ function jeReditel(osoba) {
 
 // Smí přihlášený uživatel rozhodnout o téhle žádosti?
 // Povolení má přímý nadřízený žadatele nebo ředitel. (Požadavek #136)
+// Ředitel navíc rozhoduje i o svém vlastním volnu — nad ním už nikdo není,
+// takže zásada „o vlastní žádosti nerozhoduji" u něj neplatí. (Požadavek #143)
 async function overSchvalovatele(user, zadost) {
   const osoba = await prihlasenaOsoba(user);
   if (!osoba) {
     return { ok: false, chyba: 'Váš účet nemá navázanou osobu v HR, nemůžete schvalovat žádosti.' };
   }
-  if (zadost.person_id === osoba.id) {
+  const reditel = jeReditel(osoba);
+  if (zadost.person_id === osoba.id && !reditel) {
     return { ok: false, chyba: 'Vlastní žádost o volno si schválit nemůžete — rozhodne nadřízený nebo ředitel.' };
   }
   const nadrizeny = zadost.person && zadost.person.supervisor_id === osoba.id;
-  if (nadrizeny || jeReditel(osoba)) return { ok: true, osoba };
+  if (nadrizeny || reditel) return { ok: true, osoba };
   return { ok: false, chyba: 'Žádost smí schválit nebo zamítnout jen přímý nadřízený žadatele nebo ředitel.' };
 }
 
@@ -1493,7 +1496,9 @@ router.get('/leave-requests', async (req, res, next) => {
     const osoba = await prihlasenaOsoba(req.user);
     const reditel = jeReditel(osoba);
     const smiRozhodnout = (r) => {
-      if (!osoba || r.status !== 'pending' || r.person_id === osoba.id) return false;
+      if (!osoba || r.status !== 'pending') return false;
+      // Vlastní žádost: tlačítka uvidí jedině ředitel. (Požadavek #143)
+      if (r.person_id === osoba.id) return reditel;
       return reditel || (r.person && r.person.supervisor_id === osoba.id);
     };
 

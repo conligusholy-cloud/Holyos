@@ -322,6 +322,104 @@ const colorSlug = (name) => String(name || '').normalize('NFD').replace(/[\u0300
 const MATERIAL_COPY_FIELDS = ['type', 'unit', 'sector', 'unit_price', 'min_stock', 'max_stock', 'min_stock_type', 'max_stock_type', 'supplier_id', 'lead_time_days', 'batch_size_min', 'batch_size_max', 'batch_size_default', 'processed_in_multiples', 'reorder_quantity', 'expedition_reserve_days', 'delivery_tolerance_pct', 'plan_orders', 'classification', 'family', 'material_group', 'norm', 'weight', 'dimension', 'category_id', 'non_stock', 'distinguish_batches'];
 
 // GET /api/wh/materials/:id/color-variants
+// GET /api/wh/materials/postup-vazby — kontrola vazby karta ↔ pracovní postup.
+// Vazbu drží Product.material_id. Když chybí, změna názvu/kódu na kartě se do
+// postupu nepropíše a oba údaje se rozejdou. Tahle routa ukáže:
+//   • rozejité  — vazba je, ale název nebo kód nesedí (propíše se při uložení karty)
+//   • nenavázané — postup bez material_id, u kterého se podle kódu nebo názvu
+//                  nabízí konkrétní karta
+// Nic nemění, jen hlásí. (Požadavek #145)
+router.get('/materials/postup-vazby', async (req, res, next) => {
+  try {
+    const produkty = await prisma.product.findMany({
+      select: { id: true, code: true, name: true, material_id: true },
+      orderBy: { code: 'asc' },
+    });
+    const karty = await prisma.material.findMany({
+      select: { id: true, code: true, name: true, status: true },
+    });
+
+    const kartaPodleId = new Map(karty.map((m) => [m.id, m]));
+    const norm = (v) => String(v == null ? '' : v).trim().toLowerCase();
+    const kartaPodleKodu = new Map(karty.map((m) => [norm(m.code), m]));
+    const kartyPodleNazvu = new Map();
+    for (const m of karty) {
+      const k = norm(m.name);
+      if (!kartyPodleNazvu.has(k)) kartyPodleNazvu.set(k, []);
+      kartyPodleNazvu.get(k).push(m);
+    }
+
+    const rozejite = [];
+    const nenavazane = [];
+    for (const p of produkty) {
+      if (p.material_id) {
+        const m = kartaPodleId.get(p.material_id);
+        if (!m) continue; // vazba na neexistující kartu — řeší se jinde
+        if (norm(m.name) !== norm(p.name) || norm(m.code) !== norm(p.code)) {
+          rozejite.push({
+            product_id: p.id, product_code: p.code, product_name: p.name,
+            material_id: m.id, material_code: m.code, material_name: m.name,
+            nesedi_nazev: norm(m.name) !== norm(p.name),
+            nesedi_kod: norm(m.code) !== norm(p.code),
+          });
+        }
+        continue;
+      }
+      // Bez vazby — zkusíme najít kartu podle kódu, jinak podle názvu.
+      const podleKodu = kartaPodleKodu.get(norm(p.code));
+      const podleNazvu = kartyPodleNazvu.get(norm(p.name)) || [];
+      const navrh = podleKodu || (podleNazvu.length === 1 ? podleNazvu[0] : null);
+      if (navrh) {
+        nenavazane.push({
+          product_id: p.id, product_code: p.code, product_name: p.name,
+          navrh_material_id: navrh.id, navrh_code: navrh.code, navrh_name: navrh.name,
+          shoda: podleKodu ? 'kód' : 'název',
+        });
+      }
+    }
+
+    res.json({
+      produktu_celkem: produkty.length,
+      bez_vazby: produkty.filter((p) => !p.material_id).length,
+      rozejite, nenavazane,
+    });
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/materials/postup-vazby/propojit — doplní Product.material_id
+// u vybraných dvojic. Tělo: { pary: [{ product_id, material_id }] }.
+// Název ani kód nemění — jen vytvoří vazbu, aby příští uložení karty fungovalo.
+router.post('/materials/postup-vazby/propojit', async (req, res, next) => {
+  try {
+    const { z } = require('zod');
+    const schema = z.object({
+      pary: z.array(z.object({
+        product_id: z.coerce.number().int().positive(),
+        material_id: z.coerce.number().int().positive(),
+      })).min(1, 'Nevybral jsi žádnou dvojici.'),
+    });
+    const parsed = schema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues.map((i) => i.message).join(' ') });
+    }
+    let propojeno = 0;
+    for (const par of parsed.data.pary) {
+      try {
+        await prisma.product.update({ where: { id: par.product_id }, data: { material_id: par.material_id } });
+        await logAudit({
+          action: 'update', entity: 'product', entity_id: par.product_id,
+          description: `Pracovní postup propojen se skladovou kartou #${par.material_id}`,
+          user: req.user,
+        });
+        propojeno++;
+      } catch (e) {
+        console.warn('[wh] propojení postupu #' + par.product_id + ' selhalo:', e.message);
+      }
+    }
+    res.json({ ok: true, propojeno, z_celkem: parsed.data.pary.length });
+  } catch (err) { next(err); }
+});
+
 router.get('/materials/:id/color-variants', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -544,9 +642,12 @@ router.put('/materials/:id', async (req, res, next) => {
     const reactivating = !!before && before.status !== 'active' && body.status === 'active';
     let linked = [];
     if (renamed || recoded) {
+      // Vazbu hledáme dvěma cestami: přes material_id (správný stav) a přes shodný
+      // kód. Spousta postupů z importu material_id vyplněné nemá a propagace se
+      // tím dřív tiše přeskočila — karta a postup pak zůstaly rozejité. (Požadavek #145)
       linked = await prisma.product.findMany({
-        where: { material_id: id },
-        select: { id: true, code: true, name: true, _count: { select: { operations: true } } },
+        where: { OR: [{ material_id: id }, { code: before.code }] },
+        select: { id: true, code: true, name: true, material_id: true, _count: { select: { operations: true } } },
       });
     }
     if ((renamed || recoded) && (linked.length || reactivating) && !confirmRename) {
@@ -571,6 +672,8 @@ router.put('/materials/:id', async (req, res, next) => {
       const data = {};
       if (renamed && p.name !== material.name) data.name = material.name;
       if (recoded && p.code === before.code) data.code = material.code;
+      // Postup dohledaný jen podle kódu vazbu doplníme, ať příště drží i po změně kódu.
+      if (!p.material_id) data.material_id = id;
       if (!Object.keys(data).length) continue;
       try {
         await prisma.product.update({ where: { id: p.id }, data });

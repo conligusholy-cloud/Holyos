@@ -2304,7 +2304,7 @@ app.get('/column-filters.js', (req, res) => {
   try { res.type('application/javascript').set('Cache-Control', 'public, max-age=3600').send(require('fs').readFileSync(require('path').join(__dirname, 'column-filters.js'), 'utf8')); }
   catch (e) { res.status(404).type('application/javascript').send('/* column-filters.js nenalezen */'); }
 });
-const VYBERY_PAY_SQL = `SELECT w.*, s.email, s.nick, s.first_name, s.last_name, to_char(w.requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM') AS req_month, to_char(w.paid_at AT TIME ZONE 'Europe/Prague','YYYY-MM') AS paid_month FROM withdrawal_requests w JOIN supporters s ON s.id = w.supporter_id`;
+const VYBERY_PAY_SQL = `SELECT w.*, s.mig_status, s.email, s.nick, s.first_name, s.last_name, to_char(w.requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM') AS req_month, to_char(w.paid_at AT TIME ZONE 'Europe/Prague','YYYY-MM') AS paid_month FROM withdrawal_requests w JOIN supporters s ON s.id = w.supporter_id`;
 async function vyberyPayoutRows(tab, m) {
   const curM = (await q(`SELECT to_char(now() AT TIME ZONE 'Europe/Prague','YYYY-MM') AS m`)).rows[0].m;
   const month = /^\d{4}-\d{2}$/.test(m || '') ? m : (m === 'all' ? 'all' : (tab === 'vyplata' ? curM : 'all'));
