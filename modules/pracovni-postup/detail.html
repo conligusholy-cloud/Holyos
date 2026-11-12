@@ -1874,7 +1874,8 @@
       const m = document.getElementById('equipment-modal'); if (!m) return;
       const inp = 'style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;"';
       const cols = eqOpCols();
-      const usedIn = (i, baseId, provId) => { const g = (eqDraft[i].group_name || '').trim().toLowerCase(); for (let j = 0; j < eqDraft.length; j++) { if (j === i || (eqDraft[j].group_name || '').trim().toLowerCase() !== g) continue; if (eqDraft[j].variant_ids.includes(provId)) return eqDraft[j]; } return null; };
+      // Dřív platilo „každé provedení jen u jedné položky ve skupině“ — pravidlo zrušeno, provedení se smí opakovat.
+      const usedIn = () => null; const _usedInOld = (i, baseId, provId) => { const g = (eqDraft[i].group_name || '').trim().toLowerCase(); for (let j = 0; j < eqDraft.length; j++) { if (j === i || (eqDraft[j].group_name || '').trim().toLowerCase() !== g) continue; if (eqDraft[j].variant_ids.includes(provId)) return eqDraft[j]; } return null; };
       let body = '';
       eqGroups().forEach(idxs => {
         const first = eqDraft[idxs[0]];
@@ -1892,7 +1893,7 @@
       });
       m.innerHTML = '<div class="modal-box" style="width:min(1500px,96vw);max-width:none;max-height:90vh;overflow:auto;">' +
         '<h3 style="margin-top:0;">⚙ Výbava výrobku</h3>' +
-        '<p class="muted" style="font-size:12.5px;margin:0 0 12px;">Řádek = položka výbavy (např. <b>Barva – Červená</b>), sloupce = operace, které mají varianty. V buňce vyber, jaké provedení operace položka znamená; „— netýká se" nech tam, kde položka operaci neovlivňuje. V jedné skupině může být každé provedení jen u jedné položky.</p>' +
+        '<p class="muted" style="font-size:12.5px;margin:0 0 12px;">Řádek = položka výbavy (např. <b>Barva – Červená</b>), sloupce = operace, které mají varianty. V buňce vyber, jaké provedení operace položka znamená; „— netýká se" nech tam, kde položka operaci neovlivňuje.</p>' +
         ((cols.length || productOutputVariants.length) ? body : '<p class="muted">Výrobek nemá žádné varianty operací ani konce — nejdřív je vytvoř tlačítkem ⎘ u operace nebo u Hotového výrobku.</p>') +
         '<div style="display:flex;gap:8px;margin-top:12px;"><button class="btn" onclick="eqAddGroup()">+ Skupina</button><span style="flex:1"></span><button class="btn" onclick="closeEquipmentEditor()">Zrušit</button><button class="btn btn-primary" onclick="saveEquipment()">Uložit</button></div>' +
         '</div>';
