@@ -3022,7 +3022,8 @@
 
           '<div class="modal-actions" style="margin-top:20px;">' +
             '<div style="flex:1;"></div>' +
-            '<button class="btn btn-secondary" onclick="openItRequestModal(' + id + ')" title="Checklist technických požadavků pro zákazníka (vyplnit do 3 dnů)">💻 IT dotazník</button>' +
+            '<button class="btn btn-secondary" onclick="openItRequestModal(' + id + ')" title="IT dotazník zákazníkovi — stav, ruční / opakované odeslání">💻 IT dotazník</button>' +
+            '<button class="btn btn-secondary" onclick="openItRequestModal(' + id + ')" title="E-mail se zakládáním Nayax účtu (nastavení platebního terminálu) — stav, ruční / opakované odeslání">💳 Nastavení terminálu</button>' +
             '<button class="btn btn-secondary" onclick="openOrderPane(' + id + ')" title="Zobrazí objednávku podle šablony (Šablony dokumentů) vedle detailu; odtud ji lze i stáhnout">📄 Objednávka</button>' +
             // Fáze 6 — Vystavit fakturu (jen pro objednávky, které mají položky a nejsou cancelled)
             ((order.items && order.items.length > 0 && order.status !== 'cancelled')
