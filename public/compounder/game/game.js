@@ -725,7 +725,7 @@ function connPrice(sp, modelKey) {
   var base = CONN_MIN + spotHash(sp.id, 'c') * (CONN_MAX - CONN_MIN);
   if (modelKey === 'max') base *= CONN_MAX_MULT;
   // Dokud plán není, ukazujeme hrubý odhad přípravy zelené louky.
-  if (jePozemek(sp) && !jeZasitovane(sp)) base *= POZEMEK_STAVBA;
+  if ((jePozemek(sp) || mamPozemek(sp.id)) && !jeZasitovane(sp)) base *= POZEMEK_STAVBA;
   // Voda, odpad i elektřina tu už jsou — platí se jen postavení a zapojení stroje.
   if (jeZasitovane(sp)) base *= INSTALACE_PODIL;
   // Vlastní četa to udělá za pětinu — ale jen na panenském místě a dokud má kapacitu.
@@ -1260,7 +1260,10 @@ function economics(spot, modelKey, podil) {
   // Co je domluvené, to se platí: vyjednaný nájem i nájem za cizí pozemek.
   // Na vlastní zemi se neplatí nic.
   var sml = (S.leases && S.leases[spot.id]) || null;
-  var rent = sml ? Math.round(sml.rent || 0) : (jePozemek(spot) ? 0 : rentOf(spot));
+  // Koupenou zem bereme jako vlastní navždy, i kdyby se podíl pozemků v
+  // nastavení hry změnil — jinak by hráč začal platit nájem sám sobě.
+  var rent = sml ? Math.round(sml.rent || 0)
+    : ((jePozemek(spot) || mamPozemek(spot.id)) ? 0 : rentOf(spot));
   var cost = energy + servis + rent;
   var profit = revenue - cost;
   var conn = connPrice(spot, m.key);
@@ -5363,7 +5366,7 @@ function areaKeys() { return Object.keys(S && S.areas ? S.areas : {}); }
 //
 // Které místo je pozemek, se počítá z jeho id, ne z nálezu — takže se pozemky
 // objeví i ve městech, která má hráč prozkoumaná odedávna.
-var POZEMKU_PODIL = 0.40;        // dvě pětiny míst jsou na prodej
+var POZEMKU_PODIL = 0.07;        // pozemek na prodej je rarita — zhruba každé čtrnácté místo
 var POZEMEK_M2_MIN = 180, POZEMEK_M2_MAX = 420;
 var POZEMEK_ZA_M2_MIN = 300, POZEMEK_ZA_M2_MAX = 1200;
 var POZEMEK_STAVBA = 2.2;        // příprava louky proti běžným přípojkám
