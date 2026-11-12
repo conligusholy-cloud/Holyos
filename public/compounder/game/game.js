@@ -1928,9 +1928,70 @@ function kcHdr(n) {
 var CUR = 'L$';
 function kcFull(n) { return (Math.round(Number(n) || 0)).toLocaleString('cs-CZ') + ' ' + CUR; }
 var toastT = null;
-function toast(msg, kind) {
-  var el = $('toast'); el.textContent = msg; el.className = 'toast' + (kind ? ' ' + kind : '');
-  clearTimeout(toastT); toastT = setTimeout(function () { el.classList.add('hidden'); }, 2600);
+// Hlášky se stohují nad sebou a každá má křížek. Co si hráč nezpůsobil sám —
+// výpověď z místa, porucha, doručená provize — nikam nemizí, dokud to nezavře;
+// potvrzení vlastního klepnutí po pár vteřinách zmizí samo.
+// Všechno důležité se zároveň ukládá do zvonku, ať se k tomu dá vrátit.
+var TOASTU_MAX = 4;
+var TOAST_MS = 5200;
+function toast(msg, kind, drz) {
+  var box = $('toasty');
+  if (!box) return;
+  var drzet = drz === true || kind === 'err';
+  var el = document.createElement('div');
+  el.className = 'toast' + (kind ? ' ' + kind : '') + (drzet ? ' drz' : '');
+  var t = document.createElement('span');
+  t.textContent = msg;
+  var x = document.createElement('button');
+  x.className = 'toast-x'; x.type = 'button'; x.setAttribute('aria-label', 'Zavřít');
+  x.textContent = '\u00d7';
+  x.onclick = function () { if (el.parentNode) el.parentNode.removeChild(el); };
+  el.appendChild(t); el.appendChild(x);
+  box.appendChild(el);
+  while (box.children.length > TOASTU_MAX) box.removeChild(box.firstChild);
+  if (!drzet) setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, TOAST_MS);
+  else zapisUpoz(msg, kind);
+}
+// ─── Zvonek: co se stalo, když se hráč zrovna nedíval ────────────────────────
+var UPOZ_MAX = 60;
+function zapisUpoz(text, kind) {
+  if (!S) return;
+  if (!Array.isArray(S.upoz)) S.upoz = [];
+  S.upoz.push({ t: Date.now(), x: String(text || '').slice(0, 300), k: kind || '', p: 0 });
+  if (S.upoz.length > UPOZ_MAX) S.upoz = S.upoz.slice(-UPOZ_MAX);
+  save(); paintZvon();
+}
+function upozNeprectenych() {
+  return ((S && S.upoz) || []).filter(function (u) { return !u.p; }).length;
+}
+function paintZvon() {
+  var el = $('map-zvon');
+  if (!el) return;
+  var n = upozNeprectenych(), celkem = ((S && S.upoz) || []).length;
+  el.classList.toggle('hidden', !celkem);
+  el.classList.toggle('ma', n > 0);
+  el.innerHTML = '\uD83D\uDD14' + (n ? '<b>' + (n > 9 ? '9+' : n) + '</b>' : '');
+  el.title = n ? n + ' nepřečtených upozornění' : 'Upozornění';
+}
+function upozorneniSheet() {
+  var l = ((S && S.upoz) || []).slice().reverse();
+  sheet('<h3>\uD83D\uDD14 Upozornění</h3>'
+    + '<p class="muted small">Co se ve hře stalo. Nepřečtené jsou zvýrazněné; '
+    + 'otevřením seznamu se označí jako přečtené.</p>'
+    + (l.length
+        ? '<div class="upoz">' + l.map(function (u) {
+            return '<div class="upoz-r' + (u.p ? '' : ' nove') + (u.k === 'err' ? ' err' : '') + '">'
+              + '<i>' + datumCas(u.t) + '</i><span>' + esc(u.x) + '</span></div>';
+          }).join('') + '</div>'
+          + '<button class="btn sec" id="upoz-smaz" style="width:100%;margin-top:12px">Vymazat seznam</button>'
+        : '<p class="fine">Zatím nic. Až se něco stane — výpověď z místa, porucha, '
+          + 'doručená provize — najdeš to tady.</p>'));
+  var b = $('upoz-smaz');
+  if (b) b.onclick = function () { S.upoz = []; save(); paintZvon(); closeSheet(); };
+  // Přečteno až po otevření, ať se zvonek nevynuluje jen tím, že něco přišlo.
+  var zmena = false;
+  ((S && S.upoz) || []).forEach(function (u) { if (!u.p) { u.p = 1; zmena = true; } });
+  if (zmena) { save(); paintZvon(); }
 }
 function sheet(html) { $('sheet-body').innerHTML = html; $('sheet').classList.remove('hidden'); }
 function closeSheet() { $('sheet').classList.add('hidden'); }
@@ -3396,6 +3457,8 @@ function bindGlobus() {
     globusZavri();
     if (map && map.getZoom() <= GLOBUS_ZOOM) map.setView(map.getCenter(), GLOBUS_ZOOM + 1);
   };
+  if ($('map-zvon')) $('map-zvon').onclick = upozorneniSheet;
+  paintZvon();
   if ($('map-poradce')) $('map-poradce').onclick = poradceSheet;
   if ($('map-globus')) $('map-globus').onclick = function () {
     if (G.on) {
@@ -5853,7 +5916,7 @@ function prevezmiMista() {
     S.units.push({ spotId: id, areaId: ceka.areaId, name: sp.name, kind: sp.kind, score: sp.score,
       lat: sp.lat, lon: sp.lon, builtAt: Date.now(), eco: eco });
     save(); paint(); drawMap(); syncState(true);
-    toast('Výpovědní doba doběhla — ' + sp.name + ' je tvoje a stroj na něm stojí.', 'ok');
+    toast('Výpovědní doba doběhla — ' + sp.name + ' je tvoje a stroj na něm stojí.', 'ok', true);
   });
 }
 // Nová výpověď na mém místě se nesmí přehlédnout — hráč na ni má omezený čas.
@@ -8012,7 +8075,7 @@ function loadZed(pak) {
         oslavaNaposled = Date.now();
         oslavaSheet(vitez, cerstve.length - 1);
       } else {
-        toast(vitez.firma + ' si splnil sen: ' + vitez.nazev + ' za ' + kcFull(vitez.cena), 'ok');
+        toast(vitez.firma + ' si splnil sen: ' + vitez.nazev + ' za ' + kcFull(vitez.cena), 'ok', true);
       }
     }
     if (pak) pak(); else if (!$('v-me').classList.contains('hidden')) paintMe();
@@ -9736,7 +9799,7 @@ function vyzvedniNasledky(then) {
     if (d.some(function (x) { return x.kind === 'unit_remove' || x.kind === 'unit_add'; })) prehodnotRamec(false, true);
     save(); paint(); drawMap(); syncState(true);
     apiJson('/trade/deliveries/claim', { ids: d.map(function (x) { return x.id; }) }).catch(function () {});
-    if (zpravy.length) toast(zpravy[0] + (zpravy.length > 1 ? ' (+' + (zpravy.length - 1) + ' dalších)' : ''), 'ok');
+    if (zpravy.length) toast(zpravy[0] + (zpravy.length > 1 ? ' (+' + (zpravy.length - 1) + ' dalších)' : ''), 'ok', true);
     if (then) then();
   }).catch(function () { if (then) then(); });
 }
@@ -10593,8 +10656,8 @@ function startGame() {
   initMap();
   tutStart();
   var gained = S.cash - before;
-  if (arrived) toast('Dorazilo ' + arrived + ' strojů — čekají na skladě v obchodě.', 'ok');
-  else if (gained > 1000) toast('Než ses vrátil, síť vydělala ' + kcFull(gained) + '.', 'ok');
+  if (arrived) toast('Dorazilo ' + arrived + ' strojů — čekají na skladě v obchodě.', 'ok', true);
+  else if (gained > 1000) toast('Než ses vrátil, síť vydělala ' + kcFull(gained) + '.', 'ok', true);
   pullRefs();
   loadCards().then(function () {
     claimCash();   // co je zaplacené a nevyzvednuté, připíšeme hned
