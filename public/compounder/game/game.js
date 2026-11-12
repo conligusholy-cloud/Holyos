@@ -6990,6 +6990,17 @@ var STROJE_POPIS = {
     jed: function (v) { return v >= 1e8 ? '—' : v.toFixed(1).replace('.', ',') + ' roku'; }, dolu: true,
     shrn: function (a, b) { return 'Nejrychleji se vrátí ' + a + ', nejpomaleji ' + b + '.'; } }
 };
+// Místo, o které hráč může přijít. Buď ho někdo přeplatil u majitele pozemku,
+// nebo mu vypověděl sám majitel — v obou případech se s tím ještě dá něco dělat.
+function vypovedStav(u) {
+  if (!u) return null;
+  var v = vyzvaNaMiste(u.spotId);
+  if (v) return { typ: 'preplaceno', do: v.do, kdo: v.nick, rent: v.rent,
+    text: v.nick + ' přeplatil nájem', akce: 'Dorovnat' };
+  if (u.vypoved && u.vypoved.do) return { typ: 'majitel', do: u.vypoved.do,
+    text: 'majitel dal výpověď', akce: u.vypoved.navyseni ? 'Přisadit' : 'Řešit' };
+  return null;
+}
 function strojRadek(u, i) {
   var popis = STROJE_POPIS[STROJE_KAT];
   var im = MODEL_IMG[u.eco && u.eco.model] || MODEL_IMG.flex;
@@ -7005,11 +7016,19 @@ function strojRadek(u, i) {
     + ' · tržba ' + kc(u.eco.revenue)
     + ' · ' + vady + ' ' + mn(vady, 'porucha', 'poruchy', 'poruch')
     + ' · bez závady ' + spl + ' %';
-  return '<div class="zeb-row stroj' + (vada ? ' vada' : '') + '" data-stroj-id="' + esc(u.spotId) + '">'
+  var vyp = vypovedStav(u);
+  return '<div class="zeb-row stroj' + (vada ? ' vada' : '') + (vyp ? ' vypoved' : '')
+      + '" data-stroj-id="' + esc(u.spotId) + '">'
     + '<i class="poradi' + (i < 3 ? ' medaile m' + (i + 1) : '') + '">' + (i + 1) + '</i>'
     + '<img class="stroj-foto" src="' + esc(im.src) + '" alt="">'
-    + '<span class="nick">' + esc(u.name) + (vada ? ' <em class="vada-znak">⚠️</em>' : '')
-    + '<i>' + esc(detail) + '</i></span>'
+    + '<span class="nick">' + esc(u.name)
+      + (vyp ? ' <em class="vyp-znak">\u25B2</em>' : '')
+      + (vada ? ' <em class="vada-znak">⚠️</em>' : '')
+    + '<i>' + esc(detail) + '</i>'
+    + (vyp ? '<i class="vyp-radka">\u25B2 ' + esc(vyp.text) + ' · zbývá '
+        + etaText(Math.max(0, vyp.do - Date.now())).replace('za ', '')
+        + ' <button class="vyp-btn" data-vyp-id="' + esc(u.spotId) + '">' + esc(vyp.akce) + '</button></i>' : '')
+    + '</span>'
     + '<b class="' + (STROJE_KAT === 'zisk' ? (zisk >= 0 ? 'ok' : 'err')
         : (STROJE_KAT === 'poruchy' && hod ? 'warn' : '')) + '">' + popis.jed(hod) + '</b></div>';
 }
@@ -7029,9 +7048,15 @@ function paintStroje() {
   }
   var vad = list.reduce(function (a, u) { return a + (u.vady || 0); }, 0);
   var nej = list[0], posl = list[list.length - 1];
+  var vypovedi = list.filter(function (u) { return !!vypovedStav(u); });
   box.innerHTML = '<h3 style="margin:14px 0 2px">' + popis.nadpis
     + ' <span class="muted small" style="font-weight:600">(' + popis.vic + ')</span></h3>'
     + '<p class="muted small" style="margin:0 0 10px">' + popis.pod + '</p>'
+    + (vypovedi.length
+        ? '<div class="vyp-lista">\u25B2 ' + vypovedi.length + ' '
+          + mn(vypovedi.length, 'místo je', 'místa jsou', 'míst je') + ' ve výpovědi. '
+          + 'Dokud lhůta běží, vydělávají dál — a dá se to ještě zvrátit.</div>'
+        : '')
     + '<div class="zeb">' + list.map(strojRadek).join('') + '</div>'
     + '<p class="fine" style="margin-top:12px">Dohromady ' + list.length + ' '
     + mn(list.length, 'stroj', 'stroje', 'strojů') + ' a ' + vad + ' '
@@ -7041,6 +7066,13 @@ function paintStroje() {
     + '</p>';
   [].forEach.call(box.querySelectorAll('[data-stroj-id]'), function (r) {
     r.onclick = function () { unitSheet(najdiJednotku(r.getAttribute('data-stroj-id'))); };
+  });
+  // Tlačítko u výpovědi otevře detail místa, kde se dá přihodit nebo dorovnat.
+  [].forEach.call(box.querySelectorAll('[data-vyp-id]'), function (b) {
+    b.onclick = function (ev2) {
+      ev2.stopPropagation();
+      unitSheet(najdiJednotku(b.getAttribute('data-vyp-id')));
+    };
   });
 }
 // ─── Žebříčky ────────────────────────────────────────────────────────────────
