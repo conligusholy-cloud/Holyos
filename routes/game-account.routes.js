@@ -1513,7 +1513,7 @@ router.get('/sny/zed', async (req, res, next) => {
       where: { splneno_at: { not: null } },
       orderBy: { splneno_at: 'desc' }, take: 24,
       select: { id: true, nazev: true, cena: true, ikona: true, popis: true,
-        splneno_at: true, prodano_at: true, player_id: true } });
+        splneno_at: true, prodano_at: true, player_id: true, foto: true } });
     const ids = Array.from(new Set(radky.map((r) => r.player_id)));
     const hraci = ids.length ? await prisma.gamePlayer.findMany({
       where: { id: { in: ids } }, select: { id: true, nick: true, company: true, emblem: true } }) : [];
@@ -1521,9 +1521,22 @@ router.get('/sny/zed', async (req, res, next) => {
     res.json({ ok: true, zed: radky.map((r) => {
       const h = H[r.player_id] || null;
       return { id: r.id, nazev: r.nazev, popis: r.popis, cena: r.cena, ikona: r.ikona,
-        kdy: r.splneno_at, prodano: !!r.prodano_at,
+        kdy: r.splneno_at, prodano: !!r.prodano_at, ma_foto: !!r.foto,
         nick: h ? h.nick : '—', firma: h ? (h.company || h.nick) : '—', znak: h ? h.emblem : null };
     }) });
+  } catch (e) { next(e); }
+});
+
+// GET /sny/zed/:id/foto → fotka ke splněnému snu, když ji hráč nahrál.
+// Posílá se zvlášť, ne v celém seznamu — fotky jsou velké a z dvaceti čtyř
+// řádků by byl megabajt. Hráč o tom ví: u nahrávání i u koupě to stojí.
+router.get('/sny/zed/:id/foto', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const d = await prisma.gameDream.findUnique({ where: { id },
+      select: { foto: true, splneno_at: true } });
+    if (!d || !d.splneno_at || !d.foto) return res.status(404).json({ error: 'Fotka tu není.' });
+    res.set('Cache-Control', 'public, max-age=3600').json({ ok: true, foto: d.foto });
   } catch (e) { next(e); }
 });
 

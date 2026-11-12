@@ -927,6 +927,20 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .zed-t b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .zed-t i{font-style:normal;font-size:11.5px;color:var(--text2)}
 .zed-c{font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--ok)}
+.oslava{position:fixed;inset:0;z-index:1300;background:rgba(5,10,20,.93);backdrop-filter:blur(6px);
+  display:flex;align-items:center;justify-content:center;padding:20px;animation:oslIn .25s ease}
+@keyframes oslIn{from{opacity:0}to{opacity:1}}
+.osl-in{width:100%;max-width:360px;text-align:center}
+.osl-nad{margin:0 0 12px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--text2)}
+.osl-obr{width:100%;aspect-ratio:3/2;border-radius:18px;border:1px solid var(--border);padding:22px;
+  background:linear-gradient(145deg,#16233a,#0f1a2c);display:flex;align-items:center;justify-content:center}
+.osl-obr svg{width:100%;height:100%}
+.osl-foto{width:100%;aspect-ratio:3/2;object-fit:cover;border-radius:18px;border:1px solid var(--border);display:block}
+.oslava h2{margin:14px 0 4px;font-size:23px}
+.osl-firma{margin:0;font-size:14px;color:var(--text2)}
+.osl-firma b{color:var(--ok)}
+.osl-dal{margin:10px 0 0;font-size:12.5px;color:var(--text2)}
+.osl-vyzva{margin:14px 0 16px;font-size:13.5px;line-height:1.5;color:var(--text2)}
 .por-uvod{color:var(--text2);font-size:13px;padding:6px 2px}
 .por-chipy{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .por-chip{background:transparent;border:1px solid var(--border);color:var(--text2);

@@ -7945,23 +7945,72 @@ function snyPrepocti() {
 // ─── Co si plní ostatní ──────────────────────────────────────────────────────
 // Veřejná zeď splněných snů. Není to žebříček, je to postrčení: když si někdo
 // koupí chatu, je vidět, že to jde.
-var ZED = null, ZED_VIDENO = null;
+var ZED = null;
+var OSLAVA_PAUZA = 5 * 60e3;      // mezi dvěma oslavami přes celou obrazovku
+var oslavaNaposled = 0;
 function loadZed(pak) {
   api('/sny/zed').then(function (r) {
     var nova = (r.ok && r.j.zed) ? r.j.zed : [];
-    // Co přibylo, co jsme se dívali naposled, zaslouží hlášku.
-    if (ZED_VIDENO != null && nova.length) {
-      var cerstve = nova.filter(function (x) { return new Date(x.kdy).getTime() > ZED_VIDENO && (!ME || x.nick !== ME.nick); });
-      if (cerstve.length) {
-        var c = cerstve[0];
-        toast(c.firma + ' si splnil sen: ' + c.nazev + ' za ' + kcFull(c.cena)
-          + (cerstve.length > 1 ? ' (a další ' + (cerstve.length - 1) + ')' : ''), 'ok');
+    ZED = nova;
+    if (!S) { if (pak) pak(); return; }
+    // Kam jsme se naposled dívali. Poprvé se podíváme pár hodin zpátky, ať
+    // hráči neuteče, co se stalo, než si verzi s oslavami stáhl.
+    if (S.zedVideno == null) S.zedVideno = Date.now() - 3 * 3600e3;
+    var cerstve = nova.filter(function (x) {
+      return new Date(x.kdy).getTime() > S.zedVideno && !x.prodano && (!ME || x.nick !== ME.nick);
+    });
+    if (nova.length) {
+      var nej = nova.reduce(function (a, x) {
+        return Math.max(a, new Date(x.kdy).getTime());
+      }, 0);
+      S.zedVideno = Math.max(S.zedVideno, nej);
+      save();
+    }
+    if (cerstve.length) {
+      // Když si během nepřítomnosti koupilo sen víc lidí, nebudeme hráče nutit
+      // odklikat deset oken — ukážeme ten nejdražší a zbytek zmíníme pod ním.
+      var vitez = cerstve.slice().sort(function (a, b) { return b.cena - a.cena; })[0];
+      if (Date.now() - oslavaNaposled > OSLAVA_PAUZA) {
+        oslavaNaposled = Date.now();
+        oslavaSheet(vitez, cerstve.length - 1);
+      } else {
+        toast(vitez.firma + ' si splnil sen: ' + vitez.nazev + ' za ' + kcFull(vitez.cena), 'ok');
       }
     }
-    ZED = nova;
-    ZED_VIDENO = nova.length ? new Date(nova[0].kdy).getTime() : (ZED_VIDENO || Date.now());
     if (pak) pak(); else if (!$('v-me').classList.contains('hidden')) paintMe();
   }).catch(function () { ZED = ZED || []; });
+}
+// ─── Oslava cizího splněného snu ─────────────────────────────────────────────
+// Přes celou obrazovku, s obrázkem. Není to otravné okno s chybou — je to
+// postrčení: někdo si to doopravdy vydělal, tak co ty?
+function oslavaSheet(x, dalsich) {
+  var el = $('oslava');
+  if (!el) return;
+  var obr = '<div class="osl-obr"><svg viewBox="0 0 64 64">' + SEN_IKONY[senZnacka(x)] + '</svg></div>';
+  el.innerHTML = '<div class="osl-in">'
+    + '<p class="osl-nad">Někdo si splnil sen</p>'
+    + '<div id="osl-obr">' + obr + '</div>'
+    + '<h2>' + esc(x.nazev) + '</h2>'
+    + '<p class="osl-firma">' + esc(x.firma) + ' za <b>' + kcFull(x.cena) + '</b></p>'
+    + (dalsich > 0 ? '<p class="osl-dal">A další ' + dalsich + ' ' + mn(dalsich, 'sen', 'sny', 'snů')
+        + ', co sis nestihl všimnout.</p>' : '')
+    + '<p class="osl-vyzva">Vydělal si to prádlomaty. Ty máš zatím na svůj sen '
+    + kcFull(S.cash) + '.</p>'
+    + '<button class="btn big" id="osl-zavri" style="width:100%">Jdu makat</button>'
+    + '<button class="btn ghost" id="osl-muj" style="width:100%;margin-top:8px">Chci taky svůj sen</button>'
+    + '</div>';
+  el.classList.remove('hidden');
+  var zavri = function () { el.classList.add('hidden'); el.innerHTML = ''; };
+  $('osl-zavri').onclick = zavri;
+  $('osl-muj').onclick = function () { zavri(); switchTab('me'); setTimeout(senNovySheet, 250); };
+  // Fotku dotáhneme zvlášť — v seznamu by se vozily megabajty.
+  if (x.ma_foto) {
+    api('/sny/zed/' + x.id + '/foto').then(function (r) {
+      var box = $('osl-obr');
+      if (!r.ok || !r.j.foto || !box || el.classList.contains('hidden')) return;
+      box.innerHTML = '<img class="osl-foto" src="' + esc(r.j.foto) + '" alt="">';
+    }).catch(function () { /* zůstane ikona */ });
+  }
 }
 function zedHtml() {
   if (ZED === null) { loadZed(); return ''; }
@@ -8151,7 +8200,8 @@ function snyKartaHtml() {
   return '<div class="card"><h3>Moje sny</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Napiš, co si chceš jednou dopřát. '
     + 'Spočítám, co to doopravdy stojí — a až na to vyděláš, koupíš si to za laundry. '
-    + 'Svoji fotku si k tomu můžeš nahrát. Vidíš to jen ty.</p>'
+    + 'Svoji fotku si k tomu můžeš nahrát. Dokud sen nemáš, vidíš ho jen ty; '
+    + 'jakmile si ho pořídíš, ukáže se ostatním hráčům — i s tou fotkou.</p>'
     + '<button class="btn" id="sen-novy" style="width:100%">Přidat sen</button>'
     + (nesplnene.length ? '<div class="sny">' + nesplnene.map(senKarta).join('') + '</div>' : '')
     + (splnene.length
@@ -8223,6 +8273,8 @@ function senKoupitSheet(id) {
     + '<p class="muted small">Z hotovosti ti ubude ' + kcFull(d.cena) + ' a sen se přesune mezi splněné. '
     + (d.rezie ? 'Počítej ale i s provozem — servis, pojištění a palivo běží každý měsíc dál, '
         + 'a co ti měsíčně zbyde, o to klesne.' : 'Provoz nestojí nic, jen ti ubude hotovost.') + '</p>'
+    + '<p class="fine">Splněný sen se ukáže ostatním hráčům — firma, co sis pořídil a za kolik'
+    + (d.foto ? ', i s tvojí fotkou' : '') + '.</p>'
     + '<div class="kv"><span>Hotovost teď</span><b>' + kcFull(S.cash) + '</b></div>'
     + '<div class="kv"><span>Po koupi</span><b>' + kcFull(S.cash - d.cena) + '</b></div>'
     + (d.rezie ? '<div class="kv"><span>Provoz</span><b class="warn">' + kcFull(d.rezie) + ' / měsíc</b></div>'
@@ -8241,7 +8293,7 @@ function senKoupitSheet(id) {
       snyPrepocti();
       save(); paint(); syncState(true);
       closeSheet(); paintMe();
-      ZED_VIDENO = Date.now();          // vlastní sen si sám sobě hlásit nemusíme
+      S.zedVideno = Date.now();         // vlastní sen si sám sobě hlásit nemusíme
       loadZed();
       toast('Splněno: ' + d.nazev + '. Uvidí to i ostatní hráči.', 'ok');
     }).catch(function () { b.disabled = false; b.textContent = 'Ano, pořídit'; toast('Server neodpovídá.', 'err'); });
@@ -10394,8 +10446,8 @@ function startGame() {
   loadChat();
   setInterval(function () { loadTrades(); loadTrh(drawMap); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }, 60000);
   // Splněné sny ostatních: jednou za dvě minuty, a jen když je hra vidět.
-  if (ME) loadZed();
-  setInterval(function () { if (!document.hidden && ME) loadZed(function () {}); }, 120000);
+  loadZed();
+  setInterval(function () { if (!document.hidden) loadZed(function () {}); }, 120000);
   // Zprávy od hráčů chodí živě: ptáme se každých dvacet vteřin, ale jen když má
   // hráč hru doopravdy před sebou.
   setInterval(function () { if (!document.hidden) loadChat(); }, 20000);
