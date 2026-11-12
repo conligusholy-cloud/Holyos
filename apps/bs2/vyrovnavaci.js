@@ -37,10 +37,31 @@ function normIban(v) {
 }
 // Variabilní symbol výplaty z id žádosti: 7 + id na 9 míst (10 číslic, unikátní)
 const vsFor = (id) => '7' + String(id).padStart(9, '0');
+// Náhodný variabilní symbol výplaty (10 číslic, začíná 7, druhá číslice 1–9 → nikdy se nepodobá starému pořadovému 7000000xxx)
+const crypto = require('crypto');
+const vsRandom = () => '7' + String(crypto.randomInt(100000000, 1000000000));
+// Uloží žádosti náhodný unikátní VS (při kolizi s unikátním indexem zkusí znovu)
+async function assignRandomVs(q, id) {
+  for (let i = 0; i < 20; i++) {
+    const vs = vsRandom();
+    try { await q('UPDATE withdrawal_requests SET vs=$2 WHERE id=$1', [id, vs]); return vs; }
+    catch (e) { if (!/duplicate|unique/i.test(String(e.message))) throw e; }
+  }
+  throw new Error('Nepodařilo se vygenerovat unikátní VS');
+}
 
 module.exports = function mountVyrovnavaci(app, ctx) {
   const { q, requireAdmin, wrap, V, log } = ctx;
   const esc = V.esc;
+  // Jednorázově (idempotentně): nevyřízeným žádostem se starým pořadovým VS (7000000xxx) přidělí náhodný VS.
+  // Vyplacené a zamítnuté se nemění (VS už mohl proběhnout v bance).
+  setTimeout(async () => {
+    try {
+      const old = (await q(`SELECT id FROM withdrawal_requests WHERE status='requested' AND vs ~ '^70000' ORDER BY id`)).rows;
+      for (const r of old) await assignRandomVs(q, r.id);
+      if (old.length) console.log('[bs2] Přegenerován VS u ' + old.length + ' nevyřízených žádostí o výběr');
+    } catch (e) { console.warn('[bs2] přegenerování VS selhalo:', e.message); }
+  }, 8000);
   const money = (v, cur) => Number(v || 0).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (cur === 'EUR' ? ' €' : ' Kč');
 
   // Zůstatek = jistina (součet pohybů) + zhodnocení: každý pohyb se úročí RATE_PA od okamžiku, kdy proběhl
@@ -187,3 +208,5 @@ module.exports.pctOf = pctOf;
 module.exports.normCzAccount = normCzAccount;
 module.exports.normIban = normIban;
 module.exports.vsFor = vsFor;
+module.exports.vsRandom = vsRandom;
+module.exports.assignRandomVs = assignRandomVs;
