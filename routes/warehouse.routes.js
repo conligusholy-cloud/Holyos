@@ -668,19 +668,42 @@ router.put('/materials/:id', async (req, res, next) => {
     if (changes) await logAudit({ action: 'update', entity: 'material', entity_id: material.id, description: `Upraven materiál: ${material.name}`, changes, snapshot: makeSnapshot(before), user: req.user });
 
     // Přenést název / kód do napojených pracovních postupů (sklad = zdroj pravdy)
+    const neprenesene = [];
     for (const p of linked) {
+      // Postup se stejným kódem, ale navázaný na JINOU kartu, nám nepatří — nesaháme na něj.
+      if (p.material_id && p.material_id !== id) continue;
       const data = {};
       if (renamed && p.name !== material.name) data.name = material.name;
-      if (recoded && p.code === before.code) data.code = material.code;
+      // Kód se přenese i tam, kde měl postup vlastní (85-M-4020 → 4600) —
+      // sklad je zdroj pravdy. Product.code je @unique, takže kolizi hlídáme.
+      if (recoded && p.code !== material.code) data.code = material.code;
       // Postup dohledaný jen podle kódu vazbu doplníme, ať příště drží i po změně kódu.
       if (!p.material_id) data.material_id = id;
       if (!Object.keys(data).length) continue;
+
+      if (data.code) {
+        const kolize = await prisma.product.findFirst({
+          where: { code: data.code, NOT: { id: p.id } },
+          select: { id: true, name: true },
+        });
+        if (kolize) {
+          // Kód už patří jinému postupu — název přeneseme, kód ne, a dáme vědět.
+          delete data.code;
+          neprenesene.push({ product_id: p.id, product_code: p.code, duvod: 'kód ' + material.code + ' už má postup „' + kolize.name + '"' });
+          if (!Object.keys(data).length) continue;
+        }
+      }
+
       try {
         await prisma.product.update({ where: { id: p.id }, data });
         await logAudit({ action: 'update', entity: 'product', entity_id: p.id, description: `Pracovní postup srovnán se skladovou kartou ${material.code}`, changes: Object.fromEntries(Object.keys(data).map((k) => [k, { from: p[k], to: data[k] }])), user: req.user });
-      } catch (e) { console.warn('[wh] propagace do postupu #' + p.id + ' selhala:', e.message); }
+      } catch (e) {
+        console.warn('[wh] propagace do postupu #' + p.id + ' selhala:', e.message);
+        neprenesene.push({ product_id: p.id, product_code: p.code, duvod: e.message });
+      }
     }
-    res.json(material);
+    // Když se něco nepřeneslo, ať to uživatel vidí — jinak zůstane rozpor skrytý.
+    res.json(neprenesene.length ? { ...material, postupy_neprenesene: neprenesene } : material);
   } catch (err) {
     next(err);
   }

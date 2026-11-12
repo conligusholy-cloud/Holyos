@@ -2641,7 +2641,14 @@
           if (j.old_code !== j.new_code) lines.push('Kód: ' + j.old_code + ' → ' + j.new_code);
           if (j.linked && j.linked.length) {
             lines.push('', 'Napojené pracovní postupy (změní se taky):');
-            j.linked.forEach(p => lines.push('  • ' + p.code + ' – ' + p.name + (p.operations ? ' (' + p.operations + ' operací)' : '')));
+            j.linked.forEach(p => {
+              // U každého postupu rovnou ukážeme, co se mu přepíše (Požadavek #145)
+              const zmeny = [];
+              if (j.old_name !== j.new_name && p.name !== j.new_name) zmeny.push('název → „' + j.new_name + '“');
+              if (j.old_code !== j.new_code && p.code !== j.new_code) zmeny.push('kód ' + p.code + ' → ' + j.new_code);
+              lines.push('  • ' + p.code + ' – ' + p.name + (p.operations ? ' (' + p.operations + ' operací)' : '')
+                + (zmeny.length ? '\n      ' + zmeny.join(', ') : ''));
+            });
           }
           lines.push('', 'Opravdu jde o STEJNÝ díl a jen opravuješ ' + (j.old_code !== j.new_code ? 'kód' : 'název') + '?', 'OK = uložit a přenést do postupu · Zrušit = nic neměnit');
           if (!confirm(lines.join('\n'))) return;
@@ -2654,6 +2661,16 @@
         alert('Uložení selhalo (' + res.status + '): ' + err);
         return;
       }
+      // Karta se uložila, ale část postupů se přepsat nedala (nejčastěji obsazený kód) —
+      // uživatel to musí vidět, jinak zůstane rozpor skrytý. (Požadavek #145)
+      try {
+        const ulozeno = await res.json();
+        if (ulozeno && ulozeno.postupy_neprenesene && ulozeno.postupy_neprenesene.length) {
+          alert('Karta uložena, ale u těchto pracovních postupů se změna nepřenesla:\n\n'
+            + ulozeno.postupy_neprenesene.map(x => '  • ' + x.product_code + ' – ' + x.duvod).join('\n')
+            + '\n\nOprav kód ručně v pracovním postupu.');
+        }
+      } catch (e) { /* odpověď bez těla neřešíme */ }
       closeModal(); loadMaterials(); loadStats();
     }
 
