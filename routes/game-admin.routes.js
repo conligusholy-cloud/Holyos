@@ -736,6 +736,7 @@ router.get('/stats/provoz', api(async (req, res) => {
     celkem: h.hra_s_celkem || 0,
     dni: Math.max(1, Math.round((ted - new Date(h.created_at).getTime()) / 86400e3)),
     naposled: h.hra_at,
+    zalozeno: h.created_at,
   }));
   const cas = (e) => new Date(e.created_at).getTime();
   const unikat = (ms) => new Set(udalosti.filter((e) => ted - cas(e) <= ms).map((e) => e.sid)).size;
