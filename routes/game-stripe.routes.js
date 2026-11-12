@@ -373,3 +373,6 @@ const webhook = [express.raw({ type: '*/*', limit: '1mb' }), async (req, res) =>
 module.exports = router;
 module.exports._webhook = webhook;
 module.exports._paymentsOn = paymentsOn;
+module.exports._zapisObdobi = zapisObdobi;
+module.exports._stripeGet = stripeGet;
+module.exports._prepisPredplatne = prepisPredplatne;

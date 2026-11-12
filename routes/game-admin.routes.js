@@ -304,6 +304,27 @@ router.get('/predplatne', api(async (req, res) => {
     })) });
 }));
 
+// POST /predplatne/:id/dorovnat — dotáhne zaplacená období přímo ze Stripu.
+// Na webhook se nečeká: tohle je záchrana pro případ, kdy událost nepřišla
+// (nebyla zapnutá, spadla, nebo je období starší než nasazení téhle verze).
+// Zapsat se nedá dvakrát — klíčem je číslo faktury.
+router.post('/predplatne/:id/dorovnat', api(async (req, res) => {
+  const stripe = require('./game-stripe.routes');
+  const row = await prisma.gameSubscription.findUnique({ where: { id: parseInt(req.params.id, 10) } });
+  if (!row || !row.stripe_sub) return res.status(404).json({ error: 'Předplatné nenalezeno.' });
+  const fa = await stripe._stripeGet('invoices?limit=12&subscription=' + encodeURIComponent(row.stripe_sub));
+  const zaplacene = (fa.data || []).filter((i) => i.status === 'paid' && i.amount_paid > 0);
+  const zapsane = [];
+  for (const i of zaplacene) {
+    const pu = await stripe._zapisObdobi(row, i.id, i.amount_paid, i.customer_email);
+    if (pu) zapsane.push({ id: pu.id, castka: pu.amount_cents / 100, faktura: i.id });
+  }
+  // Při té příležitosti srovnáme i stav předplatného podle Stripu.
+  try { await stripe._stripeGet('subscriptions/' + row.stripe_sub).then(stripe._prepisPredplatne); }
+  catch (e) { console.warn('[game] stav předplatného:', e.message); }
+  res.json({ ok: true, nalezeno: zaplacene.length, zapsano: zapsane.length, zapsane });
+}));
+
 // ─── Ceník ───────────────────────────────────────────────────────────────────
 router.get('/prices', api(async (req, res) => {
   const def = acct._defaults;
