@@ -66,14 +66,15 @@ module.exports = function mountVyrovnavaci(app, ctx) {
 
   // Zůstatek = jistina (součet pohybů) + zhodnocení: každý pohyb se úročí RATE_PA od okamžiku, kdy proběhl
   // (výběr = záporný pohyb, od svého data úročení té části zastaví). m.get(id)[cur] = celkem, m.get(id)['_' + cur] = rozpad.
-  const ACCR_SQL = `amount * GREATEST(0, EXTRACT(EPOCH FROM (now() - created_at))) / 86400.0 / 365.0 * ${RATE_PA} / 100.0`;
+  // Zhodnocení pohybu = částka × dny od value_date ÷ 365 × sazba pohybu (rate_pa, uložená při zápisu) — jednoduché, bez úroku z úroku
+  const ACCR_SQL = `amount * GREATEST(0, EXTRACT(EPOCH FROM (now() - COALESCE(value_date, created_at)))) / 86400.0 / 365.0 * COALESCE(rate_pa, ${RATE_PA}) / 100.0`;
   async function balances(ids) {
     const m = new Map(); if (!ids.length) return m;
     (await q(`SELECT supporter_id, currency, sum(amount) AS bal, sum(CASE WHEN kind <> 'interest' THEN ${ACCR_SQL} ELSE 0 END) AS accr FROM balance_entries WHERE supporter_id = ANY($1::int[]) GROUP BY supporter_id, currency`, [ids])).rows
       .forEach((x) => { const o = m.get(x.supporter_id) || {}; const pr = r2(x.bal), ac = r2(x.accr); o[x.currency] = r2(pr + ac); o['_' + x.currency] = { principal: pr, accrued: ac }; m.set(x.supporter_id, o); });
     return m;
   }
-  const accrOf = (e) => (e.kind === 'interest' ? 0 : Number(e.amount) * Math.max(0, (Date.now() - new Date(e.created_at).getTime()) / 864e5) / 365 * RATE_PA / 100);
+  const accrOf = (e) => (e.kind === 'interest' ? 0 : Number(e.amount) * Math.max(0, (Date.now() - new Date(e.value_date || e.created_at).getTime()) / 864e5) / 365 * Number(e.rate_pa != null ? e.rate_pa : RATE_PA) / 100);
 
   // Sekce do detailu uživatele (HTML)
   async function detailHtml(s) {
@@ -102,8 +103,8 @@ module.exports = function mountVyrovnavaci(app, ctx) {
         <div style="flex:1;min-width:180px"><label class="small">Poznámka</label><input name="note" placeholder="např. výplata převodem"></div>
         <button class="btn sec sm" type="submit" onclick="return confirm('Zapsat pohyb na vyrovnávací účet?')">Zapsat</button>
       </form>
-      <div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>Datum</th><th>Měsíc</th><th>Pohyb</th><th style="text-align:right">Částka</th><th style="text-align:right" title="Zhodnocení tohoto pohybu od jeho data do dneška">Zhodnocení k dnešku</th><th>Poznámka</th></tr></thead><tbody>
-      ${rows.map((e) => `<tr><td class="small muted">${new Date(e.created_at).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' })}</td><td class="small">${esc(e.period || '—')}</td><td>${esc(KIND[e.kind] || e.kind)}</td><td style="text-align:right;white-space:nowrap;color:${Number(e.amount) < 0 ? '#f87171' : '#22c55e'}"><b>${Number(e.amount) > 0 ? '+' : ''}${money(e.amount, e.currency)}</b></td><td style="text-align:right;white-space:nowrap" class="small">${e.kind === 'interest' ? '—' : (accrOf(e) >= 0 ? '+' : '') + money(r2(accrOf(e)), e.currency)}</td><td class="small">${esc(e.note || '')}${e.created_by ? `<div class="muted">${esc(e.created_by)}</div>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Zatím žádné pohyby.</td></tr>'}
+      <div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>Datum</th><th title="Od kdy se pohyb úročí a jakou sazbou p.a.">Úročí se od</th><th>Měsíc</th><th>Pohyb</th><th style="text-align:right">Částka</th><th style="text-align:right" title="Zhodnocení tohoto pohybu od jeho data do dneška">Zhodnocení k dnešku</th><th>Poznámka</th></tr></thead><tbody>
+      ${rows.map((e) => `<tr><td class="small muted">${new Date(e.created_at).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' })}</td><td class="small" style="white-space:nowrap">${e.kind === 'interest' ? '—' : new Date(e.value_date || e.created_at).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' }) + ' · ' + String(e.rate_pa != null ? Number(e.rate_pa) : RATE_PA).replace('.', ',') + ' % p.a.'}${e.request_id ? '<div class="muted">žádost #' + e.request_id + '</div>' : ''}</td><td class="small">${esc(e.period || '—')}</td><td>${esc(KIND[e.kind] || e.kind)}</td><td style="text-align:right;white-space:nowrap;color:${Number(e.amount) < 0 ? '#f87171' : '#22c55e'}"><b>${Number(e.amount) > 0 ? '+' : ''}${money(e.amount, e.currency)}</b></td><td style="text-align:right;white-space:nowrap" class="small">${e.kind === 'interest' ? '—' : (accrOf(e) >= 0 ? '+' : '') + money(r2(accrOf(e)), e.currency)}</td><td class="small">${esc(e.note || '')}${e.created_by ? `<div class="muted">${esc(e.created_by)}</div>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Zatím žádné pohyby.</td></tr>'}
       </tbody></table></div></div>`;
   }
 
@@ -128,7 +129,7 @@ module.exports = function mountVyrovnavaci(app, ctx) {
     const amt = Number(String(req.body.amount || '').replace(/\s/g, '').replace(',', '.'));
     if (!isFinite(amt) || amt <= 0) return res.redirect('/admin/supporters/' + id + '?msg=' + encodeURIComponent('Zadejte kladnou částku') + '#vyrovnavaci');
     const period = /^\d{4}-\d{2}$/.test(String(req.body.period || '').trim()) ? String(req.body.period).trim() : null;
-    await q('INSERT INTO balance_entries (supporter_id, period, kind, amount, currency, note, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+    await q('INSERT INTO balance_entries (supporter_id, period, kind, amount, currency, note, created_by, value_date, rate_pa) VALUES ($1,$2,$3,$4,$5,$6,$7,now(),' + RATE_PA + ')',
       [id, period, kind, kind === 'withdraw' ? -r2(amt) : r2(amt), s.cur === 'EUR' ? 'EUR' : 'CZK', String(req.body.note || '').trim().slice(0, 300) || null, (req.admin && req.admin.name) || 'správce']);
     await log(req.admin, 'balance_' + kind, { id, amount: r2(amt), period });
     res.redirect('/admin/supporters/' + id + '?msg=' + encodeURIComponent('Pohyb zapsán') + '#vyrovnavaci');
@@ -136,27 +137,27 @@ module.exports = function mountVyrovnavaci(app, ctx) {
 
   // Zaúčtování jednoho uživatele za měsíc (idempotentní — každý měsíc jen jednou):
   // připsání podílu pro vyrovnávací účet z K výplatě (zhodnocení běží průběžně od data připsání).
-  async function bookUser(u, period, avgVisits, who) {
+  async function bookUser(u, period, avgVisits, who, requestId) {
     const cur = u.std_currency === 'EUR' ? 'EUR' : 'CZK';
     const out = { interest: false, credit: false }; // zhodnocení se počítá průběžně od data pohybu, neúčtuje se měsíčně
     const p = V.provizeVyplaty(u, { period, avgVisits });
     const sp = split(p.total, pctOf(u));
     if (sp.bal != null && sp.bal > 0) {
-      const rc = await q(`INSERT INTO balance_entries (supporter_id, period, kind, amount, currency, note, created_by) VALUES ($1,$2,'credit',$3,$4,$5,$6) ON CONFLICT DO NOTHING RETURNING id`,
-        [u.id, period, sp.bal, cur, (100 - sp.pct) + ' % z K výplatě ' + money(p.total, cur) + ' (výplata ' + sp.pct + ' % = ' + money(sp.pay, cur) + ')', who]);
+      const rc = await q(`INSERT INTO balance_entries (supporter_id, period, kind, amount, currency, note, created_by, value_date, rate_pa, request_id) VALUES ($1,$2,'credit',$3,$4,$5,$6,now(),$7,$8) ON CONFLICT DO NOTHING RETURNING id`,
+        [u.id, period, sp.bal, cur, (100 - sp.pct) + ' % z K výplatě ' + money(p.total, cur) + ' (výplata ' + sp.pct + ' % = ' + money(sp.pay, cur) + ')', who, RATE_PA, requestId || null]);
       out.credit = !!rc.rowCount;
     }
     return out;
   }
   // Zaúčtování po odeslání žádosti o výběr (volá /vybery/request) — za měsíc, za který se vyplácí
-  async function bookOnRequest(id) {
+  async function bookOnRequest(id, requestId) {
     const per = (await q(`SELECT to_char((now() AT TIME ZONE 'Europe/Prague') - interval '1 month', 'YYYY-MM') AS p`)).rows[0].p;
     const pr = (await q('SELECT avg_visits FROM vybery_periods WHERE period=$1', [per])).rows[0];
     if (!pr || pr.avg_visits == null) return null;
     const u = (await q(`SELECT s.id, s.mig_position, s.payout_pct, partner_support->>'std_currency' AS std_currency, partner_support->>'std_total' AS std_total,
       partner_support->>'std_expanze_all' AS std_expanze_all, partner_support->>'exp_invested' AS exp_invested, partner_support->>'position' AS legacy_position, partner_support->>'ov_exrate' AS ov_exrate
       FROM supporters s WHERE s.id=$1`, [id])).rows[0];
-    return u ? bookUser(u, per, Number(pr.avg_visits), 'automaticky při žádosti o výběr') : null;
+    return u ? bookUser(u, per, Number(pr.avg_visits), 'automaticky při žádosti o výběr', requestId) : null;
   }
 
   // Zaúčtování měsíce (pro ty, kdo nepožádali o výběr): připsání podílu pro vyrovnávací účet

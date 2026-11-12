@@ -448,6 +448,12 @@ async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS balance_entries_sup_idx ON balance_entries (supporter_id, created_at);
     CREATE UNIQUE INDEX IF NOT EXISTS balance_entries_auto_uq ON balance_entries (supporter_id, period, kind) WHERE kind IN ('credit','interest');
+    -- Evidence úročení: od kdy se pohyb úročí (value_date), jakou sazbou p.a. (rate_pa) a ke které žádosti o výběr patří
+    ALTER TABLE balance_entries ADD COLUMN IF NOT EXISTS value_date TIMESTAMPTZ;
+    ALTER TABLE balance_entries ADD COLUMN IF NOT EXISTS rate_pa NUMERIC(6,3);
+    ALTER TABLE balance_entries ADD COLUMN IF NOT EXISTS request_id INT;
+    UPDATE balance_entries SET value_date = created_at WHERE value_date IS NULL;
+    UPDATE balance_entries SET rate_pa = 5.68 WHERE rate_pa IS NULL AND kind <> 'interest';
     CREATE TABLE IF NOT EXISTS mail_campaigns (
       id SERIAL PRIMARY KEY, name TEXT NOT NULL, subject TEXT NOT NULL, body TEXT NOT NULL,
       link TEXT, link_label TEXT, filter JSONB NOT NULL DEFAULT '{}'::jsonb,

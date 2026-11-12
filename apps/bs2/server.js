@@ -1720,7 +1720,7 @@ app.post('/vybery/request', wrap(requireUser), wrap(async (req, res) => {
   const ins = await q(`INSERT INTO withdrawal_requests (supporter_id, amount, currency, note, account) VALUES ($1,$2,$3,$4,$5) RETURNING id`, [req.user.id, amount, cur, String(req.body.note || '').trim().slice(0, 300) || null, account]);
   const vs = await VYRM.assignRandomVs(q, ins.rows[0].id);
   // Vyrovnávací účet: zbytek z K výplatě (+ zhodnocení zůstatku) se připíše automaticky při žádosti (za měsíc jen jednou)
-  try { await VYR.bookOnRequest(req.user.id); } catch (e) { console.warn('[bs2] vyrovnávací účet při žádosti:', e.message); }
+  try { await VYR.bookOnRequest(req.user.id, ins.rows[0].id); } catch (e) { console.warn('[bs2] vyrovnávací účet při žádosti:', e.message); }
   res.redirect('/vybery?msg=' + encodeURIComponent('Žádost o výběr byla odeslána. Variabilní symbol platby: ' + vs));
 }));
 app.get('/discount-credit', wrap(requireUser), wrap(async (req, res) => {
