@@ -1221,12 +1221,13 @@ router.get('/invoices/:id/source-pdf', async (req, res, next) => {
     // Path traversal protection — soubor musí být uvnitř STORAGE_DIR
     const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'data', 'storage');
     const resolved = path.resolve(filePath);
-    if (!resolved.startsWith(path.resolve(STORAGE_DIR))) {
+    if (!resolved.startsWith(path.resolve(STORAGE_DIR) + path.sep)) {
       return res.status(403).json({ error: 'Soubor mimo povolený adresář' });
     }
     const ext = path.extname(filePath).toLowerCase();
     const mime = ext === '.pdf' ? 'application/pdf'
       : ext === '.png' ? 'image/png'
+      : ext === '.webp' ? 'image/webp'
       : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
       : 'application/octet-stream';
     res.setHeader('Content-Type', mime);
@@ -1249,6 +1250,13 @@ router.get('/invoices/:id/source-pdf', async (req, res, next) => {
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 MB — větší sken nemá smysl
 const UPLOAD_SUBDIR = 'invoices-manual';
+
+// Ruční nahrání originálu a vyčtení z něj mění účetní doklad (a stojí AI kredit),
+// proto jen admin nebo super admin. Běžný uživatel originál vidí a stáhne, ale
+// nemění ho.
+function smiNahravatOriginal(user) {
+  return !!(user && (user.isSuperAdmin || user.role === 'admin'));
+}
 
 const sourceUploadSchema = z.object({
   filename: z.string().trim().min(1, 'Chybí název souboru').max(255),
@@ -1279,22 +1287,32 @@ function uploadMime(ext) {
     : 'image/jpeg';
 }
 
-// Smaže předchozí originál, ale JEN když leží v našem úložišti (ochrana před
-// smazáním čehokoliv jiného, kdyby v poli byla cizí cesta).
+// Smaže předchozí originál, ale JEN když ho nahrál tenhle endpoint (leží
+// v invoices-manual/). Doklad z e-mailu má ve `source_file_path` tutéž cestu
+// jako EmailAttachment.file_path — smazat ji by rozbilo přílohu e-mailu
+// i jeho opakované zpracování. Takový soubor proto necháváme ležet.
 function smazStaryOriginal(filePath) {
   try {
     if (!filePath) return;
     const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'data', 'storage');
+    const nasRoot = path.resolve(path.join(STORAGE_DIR, UPLOAD_SUBDIR)) + path.sep;
     const resolved = path.resolve(filePath);
-    if (!resolved.startsWith(path.resolve(STORAGE_DIR))) return;
+    if (!resolved.startsWith(nasRoot)) return;
     if (fs.existsSync(resolved)) fs.unlinkSync(resolved);
   } catch (e) { console.warn('[accounting] úklid starého originálu:', e.message); }
 }
+
+// Běží na dokladu právě vyčtení? OCR trvá desítky sekund a stojí kredit —
+// druhý souběžný běh by jen zdvojil zápisy i účet za API.
+const _ocrBezi = new Set();
 
 router.post('/invoices/:id/source-pdf', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID dokladu' });
+    if (!smiNahravatOriginal(req.user)) {
+      return res.status(403).json({ error: 'Nahrát originál k dokladu smí jen administrátor.' });
+    }
 
     const parsed = sourceUploadSchema.safeParse(req.body || {});
     if (!parsed.success) {
@@ -1356,7 +1374,7 @@ router.post('/invoices/:id/source-pdf', async (req, res, next) => {
 
     // Vyčtení z dokladu — doplní jen to, co je prázdné.
     let ocr = null;
-    if (b.run_ocr) ocr = await vyctiZOriginalu(id, filePath);
+    if (b.run_ocr) ocr = await vyctiZOriginalu(id, filePath, req.user);
 
     res.status(201).json({
       ok: true,
@@ -1374,12 +1392,17 @@ router.post('/invoices/:id/read-source', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID dokladu' });
-    const invoice = await prisma.invoice.findUnique({ where: { id }, select: { source_file_path: true } });
+    if (!smiNahravatOriginal(req.user)) {
+      return res.status(403).json({ error: 'Vyčíst údaje z dokladu smí jen administrátor.' });
+    }
+    const invoice = await prisma.invoice.findUnique({ where: { id }, select: { source_file_path: true, pdf_file_path: true } });
     if (!invoice) return res.status(404).json({ error: 'Doklad nenalezen' });
-    if (!invoice.source_file_path || !fs.existsSync(invoice.source_file_path)) {
+    // Stejný fallback jako u stahování originálu — ať tlačítko v UI nesvítí nadarmo.
+    const cesta = [invoice.source_file_path, invoice.pdf_file_path].find((f) => f && fs.existsSync(f));
+    if (!cesta) {
       return res.status(400).json({ error: 'Doklad nemá nahraný originál, ze kterého se dá číst.' });
     }
-    const ocr = await vyctiZOriginalu(id, invoice.source_file_path);
+    const ocr = await vyctiZOriginalu(id, cesta, req.user);
     if (ocr && ocr.error) return res.status(422).json({ error: ocr.error });
     res.json({ ok: true, ocr });
   } catch (err) { next(err); }
@@ -1390,7 +1413,22 @@ router.post('/invoices/:id/read-source', async (req, res, next) => {
  * zůstává — ruční zápis má přednost. Vrací přehled doplněných polí, ať
  * uživatel vidí, co se změnilo, a nemusí to hledat.
  */
-async function vyctiZOriginalu(invoiceId, filePath) {
+async function vyctiZOriginalu(invoiceId, filePath, user) {
+  // Zámek na doklad — bez něj druhé kliknutí rozjede druhou pipeline, zdvojí
+  // zápisy v ocr_extractions a zaplatíš Anthropic dvakrát.
+  if (_ocrBezi.has(invoiceId)) {
+    return { error: 'Na tomhle dokladu už vyčtení běží — počkej, až doběhne.' };
+  }
+
+  // Uzavřený doklad se nepřepisuje. Stejný seznam stavů jako u běžné editace.
+  const BLOKOVANE = ['paid', 'cancelled', 'written_off', 'archived'];
+  const pred = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+  if (!pred) return { error: 'Doklad mezitím zmizel.' };
+  if (BLOKOVANE.includes(pred.status)) {
+    return { error: `Doklad ve stavu ${pred.status} už nelze přepisovat — údaje doplň ručně.` };
+  }
+
+  _ocrBezi.add(invoiceId);
   let result;
   try {
     const { runPipeline } = require('../services/ocr/pipeline');
@@ -1398,55 +1436,73 @@ async function vyctiZOriginalu(invoiceId, filePath) {
   } catch (e) {
     console.warn('[accounting] vyčtení z originálu:', e.message);
     return { error: 'Vyčtení z dokladu selhalo: ' + e.message };
+  } finally {
+    _ocrBezi.delete(invoiceId);
   }
   if (!result || !result.ok) {
     return { error: (result && result.reason) || 'Doklad se nepodařilo přečíst.' };
   }
 
+  // Doklad načteme znovu — pipeline běžela dlouho, mezitím ho mohl někdo upravit.
   const inv = await prisma.invoice.findUnique({ where: { id: invoiceId } });
   if (!inv) return { error: 'Doklad mezitím zmizel.' };
+  if (BLOKOVANE.includes(inv.status)) {
+    return { error: `Doklad je mezitím ve stavu ${inv.status} — nic se nedoplnilo.` };
+  }
 
   const h = result.header || {};
   const data = {};
   const doplneno = [];
-  // Prázdné = null / prázdný řetězec / nula u částek. Datum vystavení a splatnosti
-  // mají při založení vždy nějakou hodnotu, takže se nepřepisují nikdy.
-  const text = (pole, popis, hodnota) => {
+  // Doplňujeme JEN prázdná pole — ruční zápis má vždycky přednost před strojem.
+  // `max` je délka sloupce v databázi; delší hodnota by zápis shodila a tiše
+  // zahodila i všechna ostatní doplněná pole.
+  const text = (pole, popis, hodnota, max, bezMezer) => {
     if (!hodnota) return;
     if (inv[pole] !== null && inv[pole] !== undefined && String(inv[pole]).trim() !== '') return;
-    data[pole] = String(hodnota).slice(0, 100);
-    doplneno.push(popis + ': ' + data[pole]);
-  };
-  const castka = (pole, popis, hodnota) => {
-    const n = Number(hodnota);
-    if (!Number.isFinite(n) || n === 0) return;
-    if (Number(inv[pole] || 0) !== 0) return;
-    data[pole] = n.toFixed(2);
-    doplneno.push(popis + ': ' + n.toFixed(2));
+    let v = String(hodnota).trim();
+    if (bezMezer) v = v.replace(/\s+/g, '');
+    v = v.slice(0, max);
+    if (!v) return;
+    data[pole] = v;
+    doplneno.push(popis + ': ' + v);
   };
 
-  text('external_number', 'Číslo dokladu', h.external_number);
-  text('variable_symbol', 'Variabilní symbol', h.variable_symbol);
-  text('constant_symbol', 'Konstantní symbol', h.constant_symbol);
-  text('specific_symbol', 'Specifický symbol', h.specific_symbol);
-  text('partner_bank_account', 'Bankovní účet', h.partner_bank_account);
-  text('partner_iban', 'IBAN', h.partner_iban);
-  text('partner_bic', 'BIC', h.partner_bic);
-  castka('subtotal', 'Základ bez DPH', h.subtotal);
-  castka('vat_amount', 'DPH', h.vat_amount);
-  castka('total', 'Celkem s DPH', h.total);
+  text('external_number', 'Číslo dokladu', h.external_number, 100);
+  text('variable_symbol', 'Variabilní symbol', h.variable_symbol, 20, true);
+  text('constant_symbol', 'Konstantní symbol', h.constant_symbol, 10, true);
+  text('specific_symbol', 'Specifický symbol', h.specific_symbol, 20, true);
+  text('partner_bank_account', 'Bankovní účet', h.partner_bank_account, 50, true);
+  text('partner_iban', 'IBAN', h.partner_iban, 34, true);
+  text('partner_bic', 'BIC', h.partner_bic, 11, true);
+
+  // Částky se doplňují jen u dokladu, který je ČÁSTKOU CELÝ prázdný. Nula totiž
+  // nemusí znamenat „nevyplněno": u reverse charge je nulová DPH správně a
+  // nulový dobropis je taky platný doklad.
+  if (Number(inv.total || 0) === 0 && Number(inv.subtotal || 0) === 0 && Number(inv.vat_amount || 0) === 0) {
+    const castka = (pole, popis, hodnota) => {
+      const n = Number(hodnota);
+      if (!Number.isFinite(n) || n === 0) return;
+      data[pole] = n.toFixed(2);
+      doplneno.push(popis + ': ' + n.toFixed(2));
+    };
+    castka('subtotal', 'Základ bez DPH', h.subtotal);
+    castka('vat_amount', 'DPH', h.vat_amount);
+    castka('total', 'Celkem s DPH', h.total);
+  }
 
   // DUZP se doplní, jen když chybí (na rozdíl od date_issued / date_due, které
   // jsou povinné a vždycky vyplněné).
   if (!inv.date_taxable && h.date_taxable) {
-    data.date_taxable = new Date(h.date_taxable);
-    doplneno.push('DUZP: ' + String(h.date_taxable).slice(0, 10));
+    const d = new Date(h.date_taxable);
+    if (!isNaN(d.getTime())) {
+      data.date_taxable = d;
+      doplneno.push('DUZP: ' + String(h.date_taxable).slice(0, 10));
+    }
   }
   // Dodavatel se mění jen u dokladu, kde zatím sedí zástupná „neznámá" firma.
   if (result.matched_company_id && result.matched_company_id !== inv.company_id) {
     try {
-      // Zástupná firma, kterou OCR dosazuje, když dodavatele nepozná
-      // (stejný název používá services/email-ingest.js).
+      // Stejný název používá services/email-ingest.js (getPlaceholderCompanyId).
       const placeholder = await prisma.company.findFirst({
         where: { name: 'Neznámý dodavatel (OCR fallback)' }, select: { id: true },
       });
@@ -1460,11 +1516,26 @@ async function vyctiZOriginalu(invoiceId, filePath) {
 
   data.ocr_confidence = result.composite_confidence;
   data.ocr_passes_done = (inv.ocr_passes_done || 0) + (result.passes_count || 0);
+  // Příznak „ke kontrole" jen zapínáme. Zhasnout ho smí člověk, ne stroj —
+  // jinak by vyčtení potichu smazalo varování od předchozího čtení.
   if (result.recommendation !== 'ready') data.needs_human_review = true;
 
-  await prisma.invoice.update({ where: { id: invoiceId }, data }).catch((e) => {
+  try {
+    await prisma.invoice.update({ where: { id: invoiceId }, data });
+  } catch (e) {
+    // Neúspěšný zápis se NESMÍ tvářit jako úspěch — uživatel by viděl seznam
+    // „doplněno" a v dokladu by nebylo nic.
     console.warn('[accounting] zápis vyčtených polí:', e.message);
-  });
+    return { error: 'Údaje se přečetly, ale uložit je do dokladu se nepovedlo: ' + e.message };
+  }
+
+  if (doplneno.length) {
+    logAudit({
+      action: 'update', entity: 'invoice', entity_id: invoiceId,
+      description: `Vyčteno z originálu dokladu ${inv.invoice_number}: ` + doplneno.join(', '),
+      snapshot: makeSnapshot(inv), user,
+    }).catch(() => {});
+  }
 
   const polozky = Array.isArray(result.items) ? result.items.length : 0;
   return {

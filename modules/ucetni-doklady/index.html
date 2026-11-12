@@ -1518,13 +1518,24 @@
     const SOURCE_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp';
     const SOURCE_MAX_MB = 20;
 
+    // Ruční nahrání originálu a vyčtení z něj mění účetní doklad — smí to jen
+    // administrátor. Server to hlídá taky (403), tohle jen schová tlačítka.
+    function smiNahravatOriginal() {
+      return !!(window.currentUser && (window.currentUser.role === 'admin' || window.currentUser.isSuperAdmin));
+    }
+
     function vyberSoubor(accept) {
       return new Promise((resolve) => {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = accept;
         input.style.display = 'none';
-        input.onchange = () => { resolve(input.files && input.files[0] ? input.files[0] : null); input.remove(); };
+        let hotovo = false;
+        const dej = (f) => { if (hotovo) return; hotovo = true; input.remove(); resolve(f); };
+        input.onchange = () => dej(input.files && input.files[0] ? input.files[0] : null);
+        // Zrušení systémového dialogu `onchange` nevyvolá — bez tohohle by
+        // promise nikdy neskončila a skrytý input zůstal v DOM.
+        input.oncancel = () => dej(null);
         document.body.appendChild(input);
         input.click();
       });
@@ -1540,6 +1551,7 @@
     }
 
     window.uploadSourceFile = async function(id) {
+      if (!smiNahravatOriginal()) { alert('Nahrát originál k dokladu smí jen administrátor.'); return; }
       const file = await vyberSoubor(SOURCE_ACCEPT);
       if (!file) return;
       if (file.size > SOURCE_MAX_MB * 1048576) {
@@ -1548,31 +1560,29 @@
       }
       const cist = confirm('Nahrát „' + file.name + '" k dokladu.\n\nMám z něj rovnou vyčíst údaje (číslo dokladu, částky, VS, účet)?\n\nOK = nahrát a vyčíst (chvíli to trvá)\nZrušit = jen nahrát soubor');
 
-      const hlaska = zobrazPrubeh(cist ? 'Nahrávám a čtu doklad…' : 'Nahrávám soubor…');
+      // Jeden handle na překryv — jinak by při chybě v druhém pokusu zůstal
+      // viset přes celou obrazovku a UI by šlo odblokovat jen reloadem.
+      let prekryv = zobrazPrubeh(cist ? 'Nahrávám a čtu doklad…' : 'Nahrávám soubor…');
+      const schovej = () => { try { if (prekryv) prekryv.remove(); } catch (_) {} prekryv = null; };
       try {
-        let data;
-        try { data = await souborNaBase64(file); }
-        catch (e) { throw new Error(e.message); }
-
+        const data = await souborNaBase64(file);
         const telo = { filename: file.name, mime: file.type || null, data, run_ocr: !!cist, replace: false };
         let r = await api('POST', '/api/accounting/invoices/' + id + '/source-pdf', telo);
 
         // 409 = doklad už originál má; zeptej se a pošli znovu s replace.
         if (r.status === 409) {
-          hlaska.remove();
+          schovej();
           if (!confirm('Doklad už má nahraný originál. Nahradit ho novým souborem?\n\nPůvodní soubor se smaže.')) return;
-          const h2 = zobrazPrubeh(cist ? 'Nahrávám a čtu doklad…' : 'Nahrávám soubor…');
+          prekryv = zobrazPrubeh(cist ? 'Nahrávám a čtu doklad…' : 'Nahrávám soubor…');
           telo.replace = true;
           r = await api('POST', '/api/accounting/invoices/' + id + '/source-pdf', telo);
-          h2.remove();
-        } else {
-          hlaska.remove();
         }
+        schovej();
 
         if (r.status !== 201) throw new Error((r.data && r.data.error) || ('Server vrátil chybu ' + r.status));
         alert(shrnutiNahrani(r.data));
       } catch (e) {
-        try { hlaska.remove(); } catch (_) {}
+        schovej();
         alert('Nahrání selhalo: ' + e.message);
       }
       // Detail i náhled originálu se musí překreslit, ať je nová příloha vidět.
@@ -1581,15 +1591,17 @@
 
     // Vyčtení z už nahraného originálu (bez nahrávání nového souboru).
     window.readSourceFile = async function(id) {
+      if (!smiNahravatOriginal()) { alert('Vyčíst údaje z dokladu smí jen administrátor.'); return; }
       if (!confirm('Vyčíst údaje z nahraného originálu?\n\nDoplní se jen prázdná pole — co už je vyplněné, zůstane.')) return;
-      const hlaska = zobrazPrubeh('Čtu doklad…');
+      let prekryv = zobrazPrubeh('Čtu doklad…');
+      const schovej = () => { try { if (prekryv) prekryv.remove(); } catch (_) {} prekryv = null; };
       try {
         const r = await api('POST', '/api/accounting/invoices/' + id + '/read-source');
-        hlaska.remove();
+        schovej();
         if (r.status !== 200) throw new Error((r.data && r.data.error) || ('Server vrátil chybu ' + r.status));
         alert(shrnutiNahrani(r.data));
       } catch (e) {
-        try { hlaska.remove(); } catch (_) {}
+        schovej();
         alert('Vyčtení selhalo: ' + e.message);
       }
       await obnovDetailPoNahrani(id);
@@ -1650,7 +1662,7 @@
           '<div class="rp-btns">' +
             '<a class="btn btn-secondary btn-sm" href="' + url + '" target="_blank" title="Otevřít v novém okně">↗</a>' +
             // Vyčtení z originálu — doplní jen prázdná pole. (Požadavek #146)
-            (inv && inv.direction === 'ap' && (inv.source_file_path || inv.pdf_file_path)
+            (inv && inv.direction === 'ap' && (inv.source_file_path || inv.pdf_file_path) && smiNahravatOriginal()
               ? '<button class="btn btn-secondary btn-sm" onclick="readSourceFile(' + id + ')" title="Přečíst doklad a doplnit prázdná pole">🔍 Vyčíst</button>'
                 + '<button class="btn btn-secondary btn-sm" onclick="uploadSourceFile(' + id + ')" title="Nahradit originál jiným souborem">📎 Nahradit</button>'
               : '') +
@@ -1666,7 +1678,7 @@
             '<div class="rp-zoom"><button class="btn btn-secondary btn-sm" onclick="reviewZoom(-1)" title="Zmenšit">−</button><span id="rp-zoom-val">100 %</span><button class="btn btn-secondary btn-sm" onclick="reviewZoom(1)" title="Zvětšit">+</button></div>' +
             '<div class="rp-view" id="rp-view"><div class="empty-hint" style="padding:40px;">Načítám originál…</div></div>'
           : '<div class="empty-hint" style="padding:40px;">Doklad nemá uložený originál (PDF / obrázek).'
-            + (inv && inv.direction === 'ap'
+            + (inv && inv.direction === 'ap' && smiNahravatOriginal()
               ? '<div style="margin-top:14px;"><button class="btn btn-primary" onclick="uploadSourceFile(' + id + ')">📎 Nahrát originál</button></div>'
               : '')
             + '</div>');
@@ -2260,7 +2272,7 @@
               '</div>' +
               '<div class="dv-actions-r">' +
                 // Ruční originál dává smysl jen u přijatých dokladů — vydané si HolyOS generuje sám. (Požadavek #146)
-                (inv.direction === 'ap'
+                (inv.direction === 'ap' && smiNahravatOriginal()
                   ? '<button class="btn btn-secondary" onclick="uploadSourceFile(' + inv.id + ')" title="Nahrát PDF nebo foto dokladu">📎 ' + (inv.source_file_path ? 'Nahradit originál' : 'Nahrát originál') + '</button>'
                   : '') +
                 (inv.status === 'draft' ? '<button class="btn btn-secondary" onclick="editInvoice(' + inv.id + ')">✏️ Upravit</button>' : '') +
