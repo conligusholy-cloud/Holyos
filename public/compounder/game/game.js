@@ -1544,7 +1544,8 @@ var KNIHA_DRUH = {
   provoz: { nazev: 'Provoz sítě', kat: 'provoz' },
   uver: { nazev: 'Z banky', kat: 'banka' },
   splatka: { nazev: 'Splátky', kat: 'banka' },
-  prijem: { nazev: 'Příjmy', kat: 'prijem' }
+  prijem: { nazev: 'Příjmy', kat: 'prijem' },
+  sen: { nazev: 'Splněné sny', kat: 'nakup' }
 };
 function knihaKat(d) { return (KNIHA_DRUH[d] || KNIHA_DRUH.prijem).kat; }
 // Zapíše jeden pohyb. Volá se až PO změně hotovosti, aby seděl zůstatek.
@@ -7909,6 +7910,216 @@ function bindMajetek() {
     };
   });
 }
+// ─── Nástěnka snů ────────────────────────────────────────────────────────────
+// Kvůli něčemu to vydělávání má být. Hráč si napíše, co by jednou chtěl mít,
+// model k tomu odhadne cenu a nakreslí obrázek — a až na to vydělá, koupí si
+// to za laundry. Nikomu jinému se to neukazuje.
+var SNY = null;            // null = ještě jsme je nenačetli
+var SNY_NACITAM = false;
+function loadSny(pak) {
+  if (!ME) { SNY = []; if (pak) pak(); return; }
+  if (SNY_NACITAM) return;
+  SNY_NACITAM = true;
+  api('/sny').then(function (r) {
+    SNY_NACITAM = false;
+    SNY = (r.ok && r.j.sny) ? r.j.sny : [];
+    if (pak) pak(); else if (!$('v-me').classList.contains('hidden')) paintMe();
+  }).catch(function () { SNY_NACITAM = false; SNY = SNY || []; });
+}
+function senObrazek(d) {
+  if (d.foto) return '<img class="sen-foto" src="' + esc(d.foto) + '" alt="">';
+  if (d.obrazek) {
+    // SVG od modelu jde do stránky jako obrázek, ne jako kus HTML — uvnitř
+    // <img> se nespustí ani to, co by tam náhodou propadlo filtrem.
+    var b64;
+    try { b64 = btoa(unescape(encodeURIComponent(d.obrazek))); } catch (e) { b64 = ''; }
+    if (b64) return '<img class="sen-foto" src="data:image/svg+xml;base64,' + b64 + '" alt="">';
+  }
+  return '<div class="sen-foto prazdna">\u2728</div>';
+}
+// Za jak dlouho na sen vydělá, když to půjde jako dosud.
+function senZaDlouho(chybi) {
+  var mesicne = monthlyProfit() - splatkyMesicne();
+  if (!(mesicne > 0)) return 'zatím na to síť nevydělává';
+  var m = chybi / mesicne;
+  if (m < 1) return 'ani ne herní měsíc';
+  if (m < 24) { var mm = Math.ceil(m); return 'asi ' + mm + ' ' + mn(mm, 'herní měsíc', 'herní měsíce', 'herních měsíců'); }
+  var r = Math.round(m / 12 * 10) / 10;
+  return 'asi ' + String(r).replace('.', ',') + ' herního roku';
+}
+function senKarta(d) {
+  var splneno = !!d.splneno;
+  var chybi = Math.max(0, d.cena - S.cash);
+  var podil = Math.max(0, Math.min(1, S.cash / Math.max(1, d.cena)));
+  return '<div class="sen' + (splneno ? ' hotovo' : '') + '">'
+    + senObrazek(d)
+    + '<div class="sen-txt">'
+      + '<div class="sen-hl"><b>' + esc(d.nazev) + '</b><b class="' + (splneno ? 'ok' : '') + '">'
+      + kcFull(d.cena) + '</b></div>'
+      + (d.popis ? '<i>' + esc(d.popis) + '</i>' : '')
+      + (splneno
+          ? '<i class="ok">\u2714 Splněno ' + new Date(d.splneno).toLocaleDateString('cs-CZ') + '</i>'
+          : '<div class="bar sen-bar"><i style="width:' + Math.round(podil * 100) + '%"></i></div>'
+            + '<i>' + (chybi > 0
+                ? 'chybí ' + kcFull(chybi) + ' · ' + senZaDlouho(chybi)
+                : 'máš na to — můžeš si ho pořídit') + '</i>')
+      + '<div class="sen-akce">'
+        + (splneno ? '' : '<button class="btn sm' + (chybi > 0 ? ' sec' : '') + '" data-sen-koupit="' + d.id + '"'
+            + (chybi > 0 ? ' disabled' : '') + '>Pořídit</button>')
+        + '<button class="btn sm sec" data-sen-foto="' + d.id + '">' + (d.foto ? 'Jiná fotka' : 'Vlastní fotka') + '</button>'
+        + '<button class="sen-smazat" data-sen-smazat="' + d.id + '" title="Smazat sen">\u00d7</button>'
+      + '</div>'
+    + '</div></div>';
+}
+function snyKartaHtml() {
+  if (!ME) {
+    return '<div class="card"><h3>Moje sny</h3>'
+      + '<p class="muted small" style="margin:2px 0 0">Nástěnka snů se ukládá k účtu, '
+      + 'aby ti zůstala i na jiném zařízení.</p></div>';
+  }
+  if (SNY === null) {
+    loadSny();
+    return '<div class="card"><h3>Moje sny</h3><p class="muted small" style="margin:2px 0 0">Načítám…</p></div>';
+  }
+  var nesplnene = SNY.filter(function (d) { return !d.splneno; });
+  var splnene = SNY.filter(function (d) { return !!d.splneno; });
+  return '<div class="card"><h3>Moje sny</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">Napiš, co si chceš jednou dopřát. '
+    + 'Spočítám, co to doopravdy stojí, a nakreslím to — a až na to vyděláš, koupíš si to za laundry. '
+    + 'Vidíš to jen ty.</p>'
+    + '<button class="btn" id="sen-novy" style="width:100%">Přidat sen</button>'
+    + (nesplnene.length ? '<div class="sny">' + nesplnene.map(senKarta).join('') + '</div>' : '')
+    + (splnene.length
+        ? '<h3 style="margin:18px 0 2px">Splněné sny</h3>'
+          + '<p class="muted small" style="margin:0 0 8px">Tohle sis vydělal.</p>'
+          + '<div class="sny">' + splnene.map(senKarta).join('') + '</div>'
+        : '')
+    + (!SNY.length ? '<p class="fine" style="margin-top:10px">Zatím tu nic není. '
+        + 'Zkus třeba „chata v Krkonoších" nebo „rok volna".</p>' : '')
+    + '</div>';
+}
+function bindSny() {
+  var nb = $('sen-novy');
+  if (nb) nb.onclick = senNovySheet;
+  [].forEach.call(document.querySelectorAll('[data-sen-koupit]'), function (b) {
+    b.onclick = function () { senKoupitSheet(Number(b.getAttribute('data-sen-koupit'))); };
+  });
+  [].forEach.call(document.querySelectorAll('[data-sen-foto]'), function (b) {
+    b.onclick = function () { senFoto(Number(b.getAttribute('data-sen-foto'))); };
+  });
+  [].forEach.call(document.querySelectorAll('[data-sen-smazat]'), function (b) {
+    b.onclick = function () { senSmazatSheet(Number(b.getAttribute('data-sen-smazat'))); };
+  });
+}
+function senPodle(id) {
+  return (SNY || []).filter(function (d) { return d.id === id; })[0] || null;
+}
+function senNovySheet() {
+  sheet('<h3>Nový sen</h3>'
+    + '<p class="muted small">Napiš vlastními slovy, co by sis jednou chtěl dopřát. '
+    + 'Odhadnu cenu podle skutečnosti a nakreslím k tomu obrázek — kreslím druh věci, '
+    + 'ne konkrétní značku, takže svoje přesné auto si pak můžeš nahradit fotkou.</p>'
+    + '<label class="fld"><span>Můj sen</span>'
+    + '<input id="sen-q" class="inp" type="text" maxlength="200" placeholder="třeba chata v Krkonoších"></label>'
+    + '<p class="fine err hidden" id="sen-err"></p>'
+    + '<button class="btn big" id="sen-go" style="width:100%">Spočítat a nakreslit</button>');
+  var inp = $('sen-q');
+  var posli = function () {
+    var q = inp ? inp.value.trim() : '';
+    var e = $('sen-err');
+    if (q.length < 2) { if (e) { e.textContent = 'Napiš, co by sis chtěl dopřát.'; e.classList.remove('hidden'); } return; }
+    var b = $('sen-go'); b.disabled = true; b.textContent = 'Počítám a kreslím…';
+    apiJson('/sny', { zadani: q }).then(function (r) {
+      b.disabled = false; b.textContent = 'Spočítat a nakreslit';
+      if (!r.ok) { if (e) { e.textContent = r.j.error || 'Nepovedlo se.'; e.classList.remove('hidden'); } return; }
+      SNY = [r.j.sen].concat(SNY || []);
+      closeSheet(); paintMe();
+      toast('Sen je na nástěnce: ' + r.j.sen.nazev + ' za ' + kcFull(r.j.sen.cena) + '.', 'ok');
+    }).catch(function () {
+      b.disabled = false; b.textContent = 'Spočítat a nakreslit';
+      if (e) { e.textContent = 'Server neodpovídá. Zkus to za chvíli.'; e.classList.remove('hidden'); }
+    });
+  };
+  $('sen-go').onclick = posli;
+  if (inp) inp.onkeydown = function (ev2) { if (ev2.key === 'Enter') { ev2.preventDefault(); posli(); } };
+  setTimeout(function () { if (inp) inp.focus(); }, 80);
+}
+function senKoupitSheet(id) {
+  var d = senPodle(id);
+  if (!d || d.splneno) return;
+  if (S.cash < d.cena) return toast('Na tohle ještě nemáš.', 'err');
+  sheet('<h3>Pořídit si ' + esc(d.nazev) + '?</h3>'
+    + '<p class="muted small">Z hotovosti ti ubude ' + kcFull(d.cena) + ' a sen se přesune mezi splněné. '
+    + 'Na provoz sítě to nemá vliv — jen na peníze, které bys jinak investoval.</p>'
+    + '<div class="kv"><span>Hotovost teď</span><b>' + kcFull(S.cash) + '</b></div>'
+    + '<div class="kv"><span>Po koupi</span><b>' + kcFull(S.cash - d.cena) + '</b></div>'
+    + '<button class="btn big" id="sen-ano" style="width:100%;margin-top:12px">Ano, pořídit</button>'
+    + '<button class="btn ghost" id="sen-ne" style="width:100%;margin-top:8px">Ještě ne</button>');
+  $('sen-ne').onclick = closeSheet;
+  $('sen-ano').onclick = function () {
+    var b = $('sen-ano'); b.disabled = true; b.textContent = 'Kupuji…';
+    apiJson('/sny/' + d.id + '/koupit', {}).then(function (r) {
+      if (!r.ok) { b.disabled = false; b.textContent = 'Ano, pořídit'; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
+      S.cash -= d.cena;
+      zapis('sen', 'Splněný sen — ' + d.nazev, -d.cena);
+      SNY = (SNY || []).map(function (x) { return x.id === d.id ? r.j.sen : x; });
+      save(); paint(); syncState(true);
+      closeSheet(); paintMe();
+      toast('Splněno: ' + d.nazev + '. Užij si to.', 'ok');
+    }).catch(function () { b.disabled = false; b.textContent = 'Ano, pořídit'; toast('Server neodpovídá.', 'err'); });
+  };
+}
+function senSmazatSheet(id) {
+  var d = senPodle(id);
+  if (!d) return;
+  sheet('<h3>Smazat sen?</h3>'
+    + '<p class="muted small">' + esc(d.nazev) + ' zmizí z nástěnky. Vrátit to nejde.</p>'
+    + '<button class="btn big" id="sen-del" style="width:100%">Smazat</button>'
+    + '<button class="btn ghost" id="sen-nedel" style="width:100%;margin-top:8px">Nechat</button>');
+  $('sen-nedel').onclick = closeSheet;
+  $('sen-del').onclick = function () {
+    api('/sny/' + d.id, { method: 'DELETE' }).then(function () {
+      SNY = (SNY || []).filter(function (x) { return x.id !== d.id; });
+      closeSheet(); paintMe();
+    }).catch(function () { toast('Server neodpovídá.', 'err'); });
+  };
+}
+// Vlastní fotka. Zmenšíme ji v prohlížeči — plná fotka z mobilu by byla
+// zbytečně velká a stejně se ukazuje v malém.
+function senFoto(id) {
+  var d = senPodle(id);
+  if (!d) return;
+  var inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = function () {
+    var f = inp.files && inp.files[0];
+    if (!f) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      var im = new Image();
+      im.onload = function () {
+        var max = 900, w = im.width, h = im.height;
+        if (w > max || h > max) { var k = max / Math.max(w, h); w = Math.round(w * k); h = Math.round(h * k); }
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(im, 0, 0, w, h);
+        var data = c.toDataURL('image/jpeg', 0.82);
+        if (data.length > 400000) data = c.toDataURL('image/jpeg', 0.6);
+        toast('Ukládám fotku…');
+        apiJson('/sny/' + d.id + '/foto', { foto: data }).then(function (r) {
+          if (!r.ok) return toast(r.j.error || 'Fotku se nepovedlo uložit.', 'err');
+          SNY = (SNY || []).map(function (x) { return x.id === d.id ? r.j.sen : x; });
+          paintMe();
+          toast('Fotka je na nástěnce.', 'ok');
+        }).catch(function () { toast('Server neodpovídá.', 'err'); });
+      };
+      im.src = fr.result;
+    };
+    fr.readAsDataURL(f);
+  };
+  inp.click();
+}
+
 function paintMe() {
   var p = PROFILES[S.profile];
   // Co má hráč rozepsané, přežije překreslení.
@@ -7934,6 +8145,7 @@ function paintMe() {
     + '<div class="kv"><span>Prověřených míst</span><b>' + Object.keys(S.revealed).length + '</b></div>'
     + '</div>'
     + majetekHtml()
+    + snyKartaHtml()
     + '<div class="card"><h3>Jak se hraje</h3>'
     + '<p class="muted small" style="margin:2px 0 0">Jeden skutečný den jsou ve hře dva měsíce, herní rok tedy trvá šest dní. Prádlomaty vydělávají, i když hru zavřeš — po návratu se ti všechno dopočítá. '
     + 'Místa na mapě jsou skutečná a jejich skóre počítá stejný nástroj, kterým Best Series hledá místa doopravdy. '
@@ -7974,6 +8186,7 @@ function paintMe() {
   if (kn) kn.onclick = function () { KNIHA_FILTR = 'vse'; knihaSheet(); };
   var zb = $('me-znak');
   if (zb) zb.onclick = function () { znakSheet(); };
+  bindSny();
   $('do-share').onclick = function () { shareGame($('do-share')); };
   $('do-reset').onclick = function () {
     sheet('<h3>Začít znovu?</h3>'

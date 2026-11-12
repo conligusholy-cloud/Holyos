@@ -1415,6 +1415,88 @@ router.post('/spots/release', requirePlayer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ─── Nástěnka snů ────────────────────────────────────────────────────────────
+// Co si hráč jednou chce dopřát. Model k tomu odhadne cenu a nakreslí obrázek,
+// hráč si sen koupí za vydělané laundry. Je to soukromé — vidí to jen on.
+const SNU_MAX = 24;
+const FOTO_MAX = 420000;          // fotka po zmenšení v prohlížeči, jako datová adresa
+
+function senVen(d) {
+  return { id: d.id, nazev: d.nazev, popis: d.popis, zadani: d.zadani, cena: d.cena,
+    obrazek: d.obrazek, foto: d.foto, splneno: d.splneno_at, zaplaceno: d.zaplaceno,
+    zalozeno: d.created_at };
+}
+
+// GET /sny → všechny sny hráče, nesplněné první
+router.get('/sny', requirePlayer, async (req, res, next) => {
+  try {
+    const sny = await prisma.gameDream.findMany({
+      where: { player_id: req.player.id }, orderBy: [{ splneno_at: 'asc' }, { created_at: 'desc' }] });
+    res.json({ ok: true, sny: sny.map(senVen) });
+  } catch (e) { next(e); }
+});
+
+// POST /sny { zadani } → model vymyslí název, cenu a obrázek a sen se uloží
+router.post('/sny', requirePlayer, async (req, res, next) => {
+  try {
+    if (rateLimited('sen:' + req.player.id, 12, 3600e3)) {
+      return res.status(429).json({ error: 'Na jednu hodinu už snů stačilo. Zkus to za chvíli.' });
+    }
+    const zadani = s((req.body || {}).zadani, 200);
+    if (zadani.length < 2) return res.status(400).json({ error: 'Napiš, co by sis chtěl dopřát.' });
+    const kolik = await prisma.gameDream.count({ where: { player_id: req.player.id } });
+    if (kolik >= SNU_MAX) return res.status(409).json({ error: 'Na nástěnku se vejde ' + SNU_MAX + ' snů. Nějaký nejdřív ulov nebo smaž.' });
+    const out = await require('../services/game/sen').vymysli(zadani);
+    if (!out.ok) return res.status(503).json({ error: out.error });
+    const d = await prisma.gameDream.create({
+      data: { player_id: req.player.id, zadani,
+        nazev: out.sen.nazev, popis: out.sen.popis, cena: out.sen.cena, obrazek: out.sen.obrazek },
+    });
+    res.json({ ok: true, sen: senVen(d) });
+  } catch (e) { next(e); }
+});
+
+// POST /sny/:id/koupit → sen je splněný. Peníze odepisuje hra u sebe, tady se
+// jen zapíše, co to stálo a kdy to bylo.
+router.post('/sny/:id/koupit', requirePlayer, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const d = await prisma.gameDream.findFirst({ where: { id, player_id: req.player.id } });
+    if (!d) return res.status(404).json({ error: 'Takový sen tu není.' });
+    if (d.splneno_at) return res.status(409).json({ error: 'Tenhle sen už máš splněný.' });
+    const up = await prisma.gameDream.update({ where: { id: d.id },
+      data: { splneno_at: new Date(), zaplaceno: d.cena } });
+    res.json({ ok: true, sen: senVen(up) });
+  } catch (e) { next(e); }
+});
+
+// POST /sny/:id/foto { foto } → vlastní fotka místo kreslené ilustrace
+router.post('/sny/:id/foto', requirePlayer, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const foto = String((req.body || {}).foto || '');
+    if (foto && !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(foto)) {
+      return res.status(400).json({ error: 'Tohle není obrázek.' });
+    }
+    if (foto.length > FOTO_MAX) return res.status(413).json({ error: 'Fotka je moc velká.' });
+    const d = await prisma.gameDream.findFirst({ where: { id, player_id: req.player.id } });
+    if (!d) return res.status(404).json({ error: 'Takový sen tu není.' });
+    const up = await prisma.gameDream.update({ where: { id: d.id }, data: { foto: foto || null } });
+    res.json({ ok: true, sen: senVen(up) });
+  } catch (e) { next(e); }
+});
+
+// DELETE /sny/:id
+router.delete('/sny/:id', requirePlayer, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const d = await prisma.gameDream.findFirst({ where: { id, player_id: req.player.id } });
+    if (!d) return res.status(404).json({ error: 'Takový sen tu není.' });
+    await prisma.gameDream.delete({ where: { id: d.id } });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;
 module.exports._cards = ALL;
 module.exports._currentPlayer = currentPlayer;

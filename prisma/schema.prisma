@@ -7684,6 +7684,29 @@ model GamePlayer {
   @@map("game_players")
 }
 
+// Nástěnka snů. Co si hráč jednou chce dopřát — AI k tomu odhadne cenu a
+// nakreslí obrázek, hráč si to pak koupí za vydělané laundry. Je to soukromé,
+// vidí to jen on, a slouží to jako cíl, kvůli kterému má smysl vydělávat.
+model GameDream {
+  id         Int       @id @default(autoincrement())
+  player_id  Int
+  nazev      String    @db.VarChar(80)
+  popis      String?   @db.VarChar(300)
+  // Co hráč napsal vlastními slovy — ať je vidět, z čeho AI vycházela.
+  zadani     String?   @db.VarChar(200)
+  cena       Int
+  // Kreslená ilustrace (SVG) od AI a případná vlastní fotka hráče.
+  obrazek    String?   @db.Text
+  foto       String?   @db.Text
+  splneno_at DateTime?
+  zaplaceno  Int?
+  poradi     Int       @default(0)
+  created_at DateTime  @default(now())
+
+  @@index([player_id])
+  @@map("game_dreams")
+}
+
 // Záznam první minuty návštěvy — co se na stránce dělo a kam návštěvník klikal.
 // Jedna řádka je jedna část záznamu (pár vteřin), aby se nic neztratilo, když
 // člověk odejde dřív. Vyplňované texty se nenahrávají. Sid je náhodné id
