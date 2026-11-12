@@ -2314,7 +2314,21 @@ app.get('/column-filters.js', (req, res) => {
   try { res.type('application/javascript').set('Cache-Control', 'public, max-age=3600').send(require('fs').readFileSync(require('path').join(__dirname, 'column-filters.js'), 'utf8')); }
   catch (e) { res.status(404).type('application/javascript').send('/* column-filters.js nenalezen */'); }
 });
-const VYBERY_PAY_SQL = `SELECT w.*, s.mig_status, s.email, s.nick, s.first_name, s.last_name, to_char(w.requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM') AS req_month, to_char(w.paid_at AT TIME ZONE 'Europe/Prague','YYYY-MM') AS paid_month FROM withdrawal_requests w JOIN supporters s ON s.id = w.supporter_id`;
+// BIC k IBAN (pro SEPA QR u zahraničních účtů) — openiban.com, s pamětí; při chybě vrací prázdno
+const BIC_CACHE = new Map();
+app.get('/admin/vybery/bic', requireAdmin, async (req, res) => {
+  const iban = String(req.query.iban || '').replace(/\s/g, '').toUpperCase();
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban)) return res.json({ bic: '' });
+  if (BIC_CACHE.has(iban)) return res.json({ bic: BIC_CACHE.get(iban) });
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
+    const r = await fetch('https://openiban.com/validate/' + iban + '?getBIC=true&validateBankCode=true', { signal: ctl.signal }); clearTimeout(t);
+    const j = await r.json(); const bic = String((j && j.bankData && j.bankData.bic) || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    if (bic) BIC_CACHE.set(iban, bic);
+    res.json({ bic });
+  } catch (e) { res.json({ bic: '' }); }
+});
+const VYBERY_PAY_SQL =`SELECT w.*, s.mig_status, s.email, s.nick, s.first_name, s.last_name, to_char(w.requested_at AT TIME ZONE 'Europe/Prague','YYYY-MM') AS req_month, to_char(w.paid_at AT TIME ZONE 'Europe/Prague','YYYY-MM') AS paid_month FROM withdrawal_requests w JOIN supporters s ON s.id = w.supporter_id`;
 async function vyberyPayoutRows(tab, m) {
   const curM = (await q(`SELECT to_char(now() AT TIME ZONE 'Europe/Prague','YYYY-MM') AS m`)).rows[0].m;
   const month = /^\d{4}-\d{2}$/.test(m || '') ? m : (m === 'all' ? 'all' : (tab === 'vyplata' ? curM : 'all'));

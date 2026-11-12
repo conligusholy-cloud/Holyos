@@ -1710,13 +1710,15 @@ document.addEventListener('click',function(ev){var b=ev.target&&ev.target.closes
   if(!(amt>0)){err.textContent='Zadej platnou částku.';ov.style.display='flex';return;}
   var a=amt.toFixed(2),payload;
   if(cur==='CZK') payload='SPD*1.0*ACC:'+ib+'*AM:'+a+'*CC:CZK'+(vs?'*X-VS:'+vs:'')+'*MSG:'+msg+(nm?'*RN:'+nm.slice(0,35):'');
-  else payload=['BCD','002','1','SCT','',(nm||'Prijemce').slice(0,70),ib,'EUR'+a,'','',msg].join('\\n');
-  var epc=payload,spd='SPD*1.0*ACC:'+ib+'*AM:'+a+'*CC:'+cur+'*MSG:'+msg+(nm?'*RN:'+nm.slice(0,35):'');
-  if(cur==='EUR') payload=spd; // české bankovní aplikace čtou spíš formát SPD (platí i na zahraniční IBAN); SEPA/EPC je k přepnutí
+  var foreign=cur==='EUR'&&!/^CZ/.test(ib);
+  var mkEpc=function(bic){return ['BCD','002','1','SCT',bic||'',(nm||'Prijemce').slice(0,70),ib,'EUR'+a,'','',msg].join('\\n');};
+  var epc=mkEpc(''),spd='SPD*1.0*ACC:'+ib+'*AM:'+a+'*CC:'+cur+'*MSG:'+msg+(nm?'*RN:'+nm.slice(0,35):'');
+  var mode=cur==='CZK'?'spd':(foreign?'epc':'spd'); // zahraniční IBAN: SEPA (EPC) QR s BIC; české IBAN: SPD
   if(typeof QRCode==='undefined'){err.textContent='Knihovna QR se nenačetla — obnov stránku.';ov.style.display='flex';return;}
-  new QRCode(box,{text:payload,width:240,height:240,correctLevel:QRCode.CorrectLevel.M});
-  document.getElementById('vqr-t').textContent=cur==='CZK'?'QR Platba (CZK)':'QR Platba (EUR)';
-  var sw=document.getElementById('vqr-sw'); if(sw){sw.style.display=cur==='EUR'?'':'none'; var mode='spd'; sw.textContent='Nejde to? Přepnout na SEPA (EPC) QR'; sw.onclick=function(){mode=mode==='spd'?'epc':'spd';box.innerHTML='';new QRCode(box,{text:mode==='spd'?spd:epc,width:240,height:240,correctLevel:QRCode.CorrectLevel.M});sw.textContent=mode==='spd'?'Nejde to? Přepnout na SEPA (EPC) QR':'Přepnout zpět na QR Platbu (SPD)';document.getElementById('vqr-t').textContent=mode==='spd'?'QR Platba (EUR)':'SEPA QR (EUR)';};}
+  var draw=function(){box.innerHTML='';new QRCode(box,{text:mode==='spd'?(cur==='CZK'?payload:spd):epc,width:240,height:240,correctLevel:QRCode.CorrectLevel.M});document.getElementById('vqr-t').textContent=cur==='CZK'?'QR Platba (CZK)':(mode==='spd'?'QR Platba (EUR)':'SEPA QR (EUR)');var sw=document.getElementById('vqr-sw');if(sw)sw.textContent=mode==='spd'?'Nejde to? Přepnout na SEPA (EPC) QR':'Nejde to? Přepnout na QR Platbu (SPD)';};
+  draw();
+  if(foreign){fetch('/admin/vybery/bic?iban='+encodeURIComponent(ib),{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(j){if(j&&j.bic){epc=mkEpc(j.bic);if(mode==='epc')draw();}}).catch(function(){});}
+  var sw=document.getElementById('vqr-sw'); if(sw){sw.style.display=cur==='EUR'?'':'none'; sw.onclick=function(){mode=mode==='spd'?'epc':'spd';draw();};}
   info.innerHTML='<div>Příjemce: <b>'+esc(b.dataset.name)+'</b></div><div>Účet: <b class="vqr-cp" data-cp="'+esc(String(b.dataset.acc).replace(/\\s/g,''))+'">'+esc(b.dataset.acc)+'</b></div>'+(ib.replace(/\\s/g,'')!==String(b.dataset.acc).replace(/\\s/g,'').toUpperCase()?'<div>IBAN: <b class="vqr-cp" data-cp="'+esc(ib.replace(/\\s/g,''))+'">'+esc(ib.replace(/(.{4})/g,'$1 ').trim())+'</b></div>':'')+'<div>Částka: <b class="vqr-cp" data-cp="'+a.replace('.',',')+'">'+esc(amt.toLocaleString('cs-CZ',{minimumFractionDigits:2}))+' '+(cur==='EUR'?'€':'Kč')+'</b></div>'+(vs?'<div>VS: <b class="vqr-cp" data-cp="'+esc(vs)+'">'+esc(vs)+'</b></div>':'')+'<div>Zpráva: <b class="vqr-cp" data-cp="'+esc(msg)+'">'+esc(msg)+'</b></div><div class="muted" style="margin:6px 0 10px">Kliknutím na údaj ho zkopíruješ (zahraniční IBAN bankovní aplikace často sama nevyplní — vlož ho do záložky Zahraniční).<br>Po zaplacení klikni na ✓ Vyplaceno.</div><button type="button" id="vqr-paid" class="btn" style="width:100%;justify-content:center">✓ Vyplaceno — přesunout do vyplacených</button>';
   window.__vqrForm=f;
   var pb=document.getElementById('vqr-paid');if(pb)pb.onclick=function(){var fm=window.__vqrForm;if(!fm)return;pb.disabled=true;pb.textContent='Ukládám…';var pm=fm.querySelector('[name=pay_method]');if(pm)pm.value='QR kód';fm.submit();};
