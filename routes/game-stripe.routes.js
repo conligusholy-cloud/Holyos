@@ -73,7 +73,12 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
     // Cena za kus padá s počtem, ale jen u karet — balíčky laundrů mají svoje
     // vlastní odstupňování a slevu podruhé nedostanou. Počítá to server,
     // klient si cenu určovat nesmí.
-    const kus = acct._cardKinds.indexOf(kind) >= 0 ? acct._cenaKusuVBalicku(c.price, qty) : c.price;
+    // Karta se pozná podle toho, že nenese laundry — u balíků peněz je sleva
+    // už v jejich odstupňování a podruhé ji nedostanou. Nespoléháme se na
+    // seznam druhů: kdyby se nedotáhl, účtovali bychom jinou cenu, než jakou
+    // hráč viděl.
+    const jeKarta = !c.laundry;
+    const kus = jeKarta ? acct._cenaKusuVBalicku(c.price, qty) : c.price;
 
     const purchase = await prisma.gamePurchase.create({
       data: { player_id: p.id, kind, qty, amount_cents: kus * qty, currency: 'czk', email: p.email }
