@@ -209,6 +209,9 @@ app.use((req, res, next) => {
       body = body.replace('<!--BS2-SWITCH-->', html);
     }
     if (typeof body === 'string' && body.includes('<form')) body = body.replace(/<form\b([^>]*method=["']?post["']?[^>]*)>/gi, (m) => m + '<input type="hidden" name="_csrf" value="' + csrfToken(req) + '">');
+    // Formuláře vykreslené až v prohlížeči (řádky tabulek z JSON + ColFilters) serverová injekce nezachytí —
+    // doplní se token při odeslání (zachycení v capture fázi, před vlastním submitem).
+    if (typeof body === 'string' && body.includes('</body>') && /^\s*<!doctype html/i.test(body)) body = ((k) => body.slice(0, k) + '<script>(function(){var T="' + csrfToken(req) + '";document.addEventListener("submit",function(e){var f=e.target;if(!f||String(f.getAttribute("method")||"").toLowerCase()!=="post")return;var i=f.querySelector("input[name=_csrf]");if(!i){i=document.createElement("input");i.type="hidden";i.name="_csrf";f.appendChild(i);}i.value=T;},true);})();<\/script>' + body.slice(k))(body.lastIndexOf('</body>'));
     return send(body);
   };
   next();
