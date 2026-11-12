@@ -2039,8 +2039,12 @@ function verdictPill(score) {
 // Zákazníci volá jen tomu, kdo je zrovna ve hře — odpočítává se čas strávený
 // v aplikaci, ne čas skutečný. Kdo hovory bere a umí poradit, má lepší pověst
 // a chodí mu víc lidí. Kdo je odmítá nebo odbyde, přijde až o pětinu návštěvnosti.
-var HOVOR_ZA_MIN = 150000;       // nejdřív za dvě a půl minuty ve hře
-var HOVOR_ZA_MAX = 420000;       // nejpozději za sedm
+var HOVOR_ZA_MIN = 150000;       // dvě a půl minuty — ale to je na JEDEN prádlomat
+var HOVOR_ZA_MAX = 420000;       // sedm minut, taky na jeden prádlomat
+// Čím větší síť, tím víc zákazníků a tím častěji zvoní: rozmezí se dělí
+// počtem postavených prádlomatů. Pod minimální odstup ale nejdeme — hovor
+// trvá skoro minutu a hra, ve které se jen zvedá telefon, by nebyla hra.
+var HOVOR_MIN_ODSTUP = 30000;
 var HOVOR_ZVONI_MS = 8000;       // osm vteřin a zákazník to pokládá — nevyřízený hovor
 var HOVOR_ODMITNUTI = -2;        // co stojí nebraný hovor (projde přes váhu níž)
 // Hvězdičky se vydřou a ztratí hned. Dobrá odpověď posune pověst o půlku toho,
@@ -3082,7 +3086,9 @@ function povestZaOdpoved(b) {
 }
 // Další hovor naplánujeme na náhodnou dobu strávenou ve hře.
 function naplanujHovor() {
-  S.hovorZa = HOVOR_ZA_MIN + Math.random() * (HOVOR_ZA_MAX - HOVOR_ZA_MIN);
+  var pobocek = Math.max(1, ((S && S.units) || []).length);
+  var zaklad = HOVOR_ZA_MIN + Math.random() * (HOVOR_ZA_MAX - HOVOR_ZA_MIN);
+  S.hovorZa = Math.max(HOVOR_MIN_ODSTUP, zaklad / pobocek);
 }
 var HOVOR = null;                // { jmeno, scenar, kroky, poradi, i, body, prepis, ceka, stav, zvoniDo }
 // Jeden hovor je jeden rozhovor na jedno téma — zákazník se dál ptá podle toho,
@@ -11079,7 +11085,8 @@ function linkaPacksHtml() {
   if (!LINKA_CAT || !LINKA_CAT.length) return '';
   var zbyva = (S && S.linka) || 0;
   return '<div class="card"><h3>\u260E\uFE0F Balíčky infolinky</h3>'
-    + '<p class="muted small" style="margin:2px 0 10px">Zajisti zákaznickou podporu pro svou síť. '
+    + '<p class="muted small" style="margin:2px 0 10px">S každým dalším prádlomatem volají lidi častěji — '
+    + 'u jedné pobočky jednou za pár minut, u velké sítě skoro pořád. '
     + 'Kredit je jeden hovor, který vezme operátor místo tebe — pověst pak neklesne, '
     + 'i když zrovna nejsi ve hře. Hovor, který si vezmeš sám a zvládneš ho, pořád vynese víc.</p>'
     + '<div class="kv"><span>Nevyčerpané hovory</span><b' + (zbyva ? ' class="ok"' : '') + '>' + zbyva + '</b></div>'
