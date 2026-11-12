@@ -3960,11 +3960,13 @@ function skoreIcon(cls, score) {
       + Math.round(score || 0) + '</div>' });
 }
 // Pozemek si nechává svůj domeček — že je na prodej, je důležitější než číslo.
-// Skóre se u prověřeného pozemku přilepí jako malá cedulka do rohu.
-function pozemekSkoreIcon(score) {
+// Pod ním visí cena (tu zná hráč z cedule na parcele i bez obhlídky) a
+// u prověřeného pozemku ještě skóre jako malá cedulka v rohu.
+function pozemekSkoreIcon(sp, seen) {
   return L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15],
-    html: '<div class="pin pozemek known"><span>\u2302</span>'
-      + '<i class="pin-skore ' + skoreTrida(score) + '">' + Math.round(score || 0) + '</i></div>' });
+    html: '<div class="pin pozemek' + (seen ? ' known' : '') + '"><span>\u2302</span>'
+      + (seen ? '<i class="pin-skore ' + skoreTrida(sp.score) + '">' + Math.round(sp.score || 0) + '</i>' : '')
+      + '<i class="pin-tag cena">' + esc(kc(pozemekCena(sp))) + '</i></div>' });
 }
 function pinIcon(cls, txt) {
   return L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15],
@@ -4201,7 +4203,7 @@ function drawMap() {
         : ciziPoz ? ciziPozemekIcon(ciziPoz)
         : rival ? rivalIcon(rival)
         : mujPoz ? pozemekIcon(sp)
-        : jePozemek(sp) ? (seen ? pozemekSkoreIcon(sp.score) : pinIcon('pozemek', '\u2302'))
+        : jePozemek(sp) ? pozemekSkoreIcon(sp, seen)
         : seen ? skoreIcon('known', sp.score)
         : pinIcon('unknown', '?');
       kusy.push({ lat: sp.lat, lon: sp.lon, moje: !!unit || mujPoz, kresli: function () {
