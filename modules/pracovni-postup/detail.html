@@ -783,6 +783,15 @@
     .mdiff{font-size:10px;font-weight:700;border-radius:4px;padding:1px 6px;white-space:nowrap}
     .mdiff.same{color:#22c55e;background:rgba(34,197,94,.12)} .mdiff.changed{color:#f59e0b;background:rgba(245,158,11,.12)} .mdiff.only{color:#60a5fa;background:rgba(96,165,250,.12)} .mdiff.missing{color:#ef4444;background:rgba(239,68,68,.12)}
     .mdiff-slot{flex:0 0 auto;min-width:70px;text-align:center}
+    /* Hlavička Souhrnu materiálů: nadpis vlevo, postup + konfigurace vpravo (Požadavek #152) */
+    .sum-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:8px 0 8px}
+    .sum-head h3{margin:0}
+    .sum-head-prod{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:12px}
+    .shp-label{color:var(--text2)}
+    .shp-name{font-weight:600}
+    .shp-code{font-family:ui-monospace,Consolas,monospace;color:var(--text2);background:var(--surface2);padding:1px 7px;border-radius:4px;border:1px solid var(--border)}
+    .shp-cfg{font-family:ui-monospace,Consolas,monospace;padding:1px 7px;border-radius:4px;border:1px solid rgba(34,197,94,.35);background:rgba(34,197,94,.12);color:#86efac}
+    .shp-cfg.base{border-color:rgba(251,146,60,.35);background:rgba(251,146,60,.12);color:#fb923c}
 </style>
 </head>
 <body>
@@ -1833,6 +1842,31 @@
         return Object.assign({}, pv, { step_number: op.step_number });
       });
       return Object.assign({}, product, { operations: ops });
+    }
+    // Hlavička Souhrnu materiálů — vedle nadpisu je vidět, KTERÝ postup a
+    // v JAKÉ konfiguraci se zrovna počítá. Bez toho nebylo u rozpadu poznat,
+    // jestli jde o základní sestavu, nebo o vyklikanou výbavu. (Požadavek #152)
+    function sumHeadHtml(nadpisHtml) {
+      const nazev = (product.name || '').trim();
+      const kod = (product.code || '').trim();
+      const maVybavu = Object.keys(eqSelected).length > 0;
+      let cfgHtml = '';
+      if (productEquipment.length) {
+        // Konfigurační kód = kód výrobku + kódy zvolených provedení + konec postupu.
+        const cfg = eqConfigCode();
+        cfgHtml = maVybavu
+          ? '<span class="shp-cfg" title="Konfigurace podle vybrané výbavy: ' + esc(selectedEquipmentLabel().join(' · ')) + '">' + esc(cfg) + '</span>'
+          : '<span class="shp-cfg base" title="Žádná výbava není vybraná — souhrn počítá základní sestavu">Základní sestava</span>';
+      }
+      return '<div class="sum-head">'
+        + '<h3>' + nadpisHtml + '</h3>'
+        + '<div class="sum-head-prod" title="Pracovní postup, ze kterého se souhrn počítá">'
+          + '<span class="shp-label">Postup:</span>'
+          + '<span class="shp-name">' + esc(nazev || '—') + '</span>'
+          + (kod ? '<span class="shp-code">' + esc(kod) + '</span>' : '')
+          + cfgHtml
+        + '</div>'
+      + '</div>';
     }
     // Popis právě zvolené výbavy do hlavičky Souhrnu materiálů.
     function selectedEquipmentLabel() {
@@ -3104,7 +3138,7 @@
 
       // STROM POSTUPU
       if (_summaryMode === 'tree') {
-        content.innerHTML = toolbar + '<h3 style="margin:8px 0 8px;">Pracovní postup — rozpad přes polotovary</h3>' + wfRenderTree(effProduct);
+        content.innerHTML = toolbar + sumHeadHtml('Pracovní postup — rozpad přes polotovary') + wfRenderTree(effProduct);
         return;
       }
 
@@ -3172,7 +3206,7 @@
       const missingNote = missingCount > 0
         ? '<div style="padding:10px 14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.35);border-radius:8px;margin-bottom:12px;font-size:12px;">⚠️ <b style="color:#ef4444;">' + missingCount + ' polotovarů</b> v souhrnu chybí pracovní postup, proto je nelze rozpadnout na nakupované díly. Zobrazují se jako jedna položka.</div>'
         : '';
-      let html = toolbar + '<h3 style="margin-bottom:8px;">Celková spotřeba materiálu na 1 výrobek <span style="font-size:12px;font-weight:400;color:var(--text2);">(rekurzivní rozpad včetně polotovarů)</span></h3>' + missingNote;
+      let html = toolbar + sumHeadHtml('Celková spotřeba materiálu na 1 výrobek <span style="font-size:12px;font-weight:400;color:var(--text2);">(rekurzivní rozpad včetně polotovarů)</span>') + missingNote;
       html += '<table id="mat-summary-table" style="width:100%;border-collapse:collapse;font-size:13px;">' +
         '<thead><tr style="border-bottom:2px solid var(--border);text-align:left;">' +
         '<th style="padding:8px;width:60px;" title="ID materiálu (Material.id) — shoduje se se sloupcem ID v Nákup a sklad → Zboží">ID</th>' +
