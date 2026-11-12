@@ -4307,7 +4307,7 @@ function bindMesta(spustit) {
     };
   });
 }
-function areasSheet() {
+function areasSheet(predvyplnit) {
   var done = Object.keys(S.areas).map(function (id) {
     return '<div class="area-item"><div><div class="nm">' + esc(S.areas[id].name) + '</div>'
       + '<div class="sub">nalezeno ' + S.areas[id].spots.length + ' míst</div></div>'
@@ -4322,9 +4322,11 @@ function areasSheet() {
     // kartou a špendlíkem se pak nad klávesnicí neukáže.
     + '<input id="q-area" name="hledat" type="search" class="inp" placeholder="Napiš sem" '
     + 'autocomplete="off" autocorrect="off" spellcheck="false" autocapitalize="words" '
-    + 'enterkeyhint="search" aria-label="Kam poslat člověka">'
+    + 'enterkeyhint="search" aria-label="Kam poslat člověka"'
+    + (predvyplnit ? ' value="' + esc(predvyplnit) + '"' : '') + '>'
     + '<button class="btn" id="do-scout"' + (S.cash < SCOUT_COST ? ' disabled' : '') + '>Hledat</button></div>'
-    + '<p class="fine" id="city-note"></p>'
+    + '<p class="fine" id="city-note">'
+    + (predvyplnit ? 'Z mapy: <b>' + esc(predvyplnit) + '</b> — stačí klepnout na Hledat.' : '') + '</p>'
     + (S.cash < SCOUT_COST ? '<p class="fine err">Na cestu nemáš dost hotovosti.</p>' : '')
     + '<div id="mesta-box">' + mestaHtml('Hotová města — člověk je prošel, otevřou se hned') + '</div>'
     + (done ? '<h3 style="margin-top:16px">Už prozkoumáno</h3>' + done : ''));
@@ -10448,6 +10450,67 @@ function vyzvedniNasledky(then) {
   }).catch(function () { if (then) then(); });
 }
 
+// ─── Podržení prstu na mapě ─────────────────────────────────────────────────
+// Hráč podrží prst nad městem a rovnou mu naskočí průzkum s vyplněným názvem.
+// Dlouhý stisk si hlídáme sami: `contextmenu` se na mobilech chová pokaždé
+// jinak a spoléhat se na něj nejde.
+function dlouhyStisk(el, cb) {
+  var t = null, x0 = 0, y0 = 0, pohyb = false;
+  function zrus() { if (t) { clearTimeout(t); t = null; } }
+  el.addEventListener('touchstart', function (e) {
+    if (!e.touches || e.touches.length !== 1) return zrus();
+    var p = e.touches[0], cil = e.target;
+    x0 = p.clientX; y0 = p.clientY; pohyb = false;
+    zrus();
+    t = setTimeout(function () { if (!pohyb) cb(x0, y0, cil); }, 550);
+  }, { passive: true });
+  el.addEventListener('touchmove', function (e) {
+    var p = e.touches && e.touches[0];
+    if (!p) return;
+    // Posun prstem je tah mapy, ne podržení — pár pixelů ale tolerujeme.
+    if (Math.abs(p.clientX - x0) > 12 || Math.abs(p.clientY - y0) > 12) { pohyb = true; zrus(); }
+  }, { passive: true });
+  ['touchend', 'touchcancel'].forEach(function (n) {
+    el.addEventListener(n, zrus, { passive: true });
+  });
+  // Na počítači je to pravé tlačítko.
+  el.addEventListener('contextmenu', function (e) {
+    e.preventDefault();
+    cb(e.clientX, e.clientY, e.target);
+  });
+}
+var MISTO_CEKA = false;
+function mapaPodrzeni(x, y, cil) {
+  if (!map || MISTO_CEKA || !S) return;
+  // Nad špendlíkem nebo tlačítkem se nic nespouští — tam má podržení svůj smysl.
+  if (cil && cil.closest && cil.closest('.leaflet-marker-icon, button, .map-vrstva, .map-hint')) return;
+  if (S.tut !== 'done') return;
+  if (!$('sheet').classList.contains('hidden')) return;
+  var box = $('map').getBoundingClientRect();
+  var bod = map.containerPointToLatLng([x - box.left, y - box.top]);
+  MISTO_CEKA = true;
+  toast('Koukám, co je to tam za město\u2026', 'ok');
+  api('/misto-podle?lat=' + bod.lat.toFixed(5) + '&lon=' + bod.lng.toFixed(5)).then(function (r) {
+    MISTO_CEKA = false;
+    if (r.ok && r.j.name) {
+      // Co už je prozkoumané, nemá cenu hledat znovu — rovnou tam skočíme.
+      var mam = null;
+      Object.keys(S.areas || {}).forEach(function (id) {
+        if (S.areas[id].name === r.j.name) mam = S.areas[id];
+      });
+      if (mam && mam.lat) {
+        map.setView([mam.lat, mam.lon], MISTA_ZOOM);
+        return toast(r.j.name + ' už máš prozkoumané.', 'ok');
+      }
+      return areasSheet(r.j.name);
+    }
+    areasSheet();
+    toast((r.j && r.j.error) || 'Tady žádné město nevidím, napiš ho ručně.', 'err');
+  }).catch(function () {
+    MISTO_CEKA = false; areasSheet(); toast('Server neodpovídá.', 'err');
+  });
+}
+
 // ─── Přepínání záložek ───────────────────────────────────────────────────────
 var TABS = ['map', 'shop', 'net', 'bank', 'cards', 'burza', 'me'];
 function switchTab(v) {
@@ -11508,6 +11571,7 @@ function startGame() {
   tick(); save(); dripCash = Math.round(S.cash); paint();
   var arrived = waiting - (S.orders || []).length;
   initMap();
+  if ($('map')) dlouhyStisk($('map'), mapaPodrzeni);
   tutStart();
   hlidejDenni();
   // Kdo hraje přes půlnoc, ať na odměnu nečeká do dalšího spuštění. Nabídka

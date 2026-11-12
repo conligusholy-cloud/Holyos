@@ -252,6 +252,45 @@ router.get('/scout', async (req, res, next) => {
 // Pár bodů v cestě hráče, ať je v administraci vidět, kde lidé odpadají.
 // Ukládáme do stejné tabulky jako zbytek webu (compounder_events), bez osobních
 // údajů — jen náhodné id návštěvy, krok a čas.
+// ─── Co je to tady za město ──────────────────────────────────────────────────
+// Hráč podrží prst na mapě a chce vědět, co tam je. Ptáme se OpenStreetMap
+// zpětným geokódováním. Odpověď držíme v paměti na den a klíčem jsou
+// souřadnice zaokrouhlené na dvě desetinná místa — to je zhruba kilometr,
+// takže sousední podržení prstu už se do OSM nechodí ptát vůbec.
+const mistoCache = new Map();
+const MISTO_TTL = 24 * 3600e3;
+function mistoUA() { return 'HolyOS-Laundromats/1.0 (+https://pradlomaty.info; tomas.holy@bestseries.cz)'; }
+router.get('/misto-podle', async (req, res, next) => {
+  try {
+    const lat = Number(req.query.lat), lon = Number(req.query.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+      return res.status(400).json({ error: 'Chybí souřadnice.' });
+    }
+    const key = lat.toFixed(2) + ',' + lon.toFixed(2);
+    const hit = mistoCache.get(key);
+    if (hit && Date.now() - hit.at < MISTO_TTL) return res.json({ ok: true, name: hit.name, zeme: hit.zeme });
+    if (rateLimited('misto:' + ipOf(req), 60, 10 * 60e3)) {
+      return res.status(429).json({ error: 'Moc rychle po sobě. Dej tomu chvilku.' });
+    }
+    const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&addressdetails=1'
+      + '&lat=' + encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lon);
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 9000);
+    let j = null;
+    try {
+      const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': mistoUA(), 'Accept': 'application/json' } });
+      if (r.ok) j = await r.json();
+    } catch (e) { /* nedostupné OSM řešíme níž */ } finally { clearTimeout(to); }
+    const a = (j && j.address) || {};
+    const name = a.city || a.town || a.village || a.municipality || a.county || a.state || null;
+    if (!name) return res.status(404).json({ error: 'Tady žádné město nevidím.' });
+    const zaznam = { at: Date.now(), name, zeme: a.country || null };
+    mistoCache.set(key, zaznam);
+    if (mistoCache.size > 2000) mistoCache.delete(mistoCache.keys().next().value);
+    res.json({ ok: true, name, zeme: zaznam.zeme });
+  } catch (e) { next(e); }
+});
+
 const EVENTY = ['game_open', 'game_quiz', 'game_register', 'game_scout', 'game_build', 'game_paid'];
 // Kroky, po kterých je jasné, že se návštěvník do hry opravdu pustil.
 const ZACAL_HRAT = ['game_scout', 'game_build'];
