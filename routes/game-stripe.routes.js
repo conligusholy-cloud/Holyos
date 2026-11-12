@@ -252,20 +252,55 @@ async function prepisPredplatne(sub) {
   });
   console.log('[game] předplatné ' + row.kind + ' hráče ' + row.player_id + ': ' + sub.status);
 }
+// Zaplacené období předplatného patří i mezi objednávky. Jinak by nebylo vidět
+// v tržbách a hlavně by se nevystavil doklad — ten se dělá z nákupu. Klíčem je
+// faktura ze Stripu, takže jedno období se nezapíše dvakrát, ani když stejná
+// událost přijde opakovaně.
+async function zapisObdobi(row, faktura, castka, email) {
+  if (!row || !faktura || !(castka > 0)) return null;
+  let pu;
+  try {
+    pu = await prisma.gamePurchase.create({
+      data: { player_id: row.player_id, kind: row.kind, qty: row.qty || 1,
+        amount_cents: Math.round(castka), currency: 'czk', status: 'paid',
+        paid_at: new Date(), stripe_session: faktura, email: email || null }
+    });
+  } catch (e) {
+    if (e.code === 'P2002') return null;      // tohle období už zapsané máme
+    throw e;
+  }
+  console.log('[game] předplatné zaplaceno:', row.kind, '· hráč', row.player_id,
+    '·', Math.round(castka) / 100 + ' Kč');
+  require('../services/bs2-billing').issueGame(pu.id)
+    .then((r) => { if (r && !r.ok && !r.skipped) console.warn('[game] faktura:', r.error || r.reason); })
+    .catch((e) => console.warn('[game] faktura selhala:', e.message));
+  try {
+    const hrac = await prisma.gamePlayer.findUnique({
+      where: { id: row.player_id }, select: { id: true, nick: true, company: true }
+    });
+    const polozka = await acct._item(row.kind);
+    require('../services/game/notify').purchasePaid(prisma, pu, hrac, polozka && polozka.name);
+  } catch (e) { console.warn('[game] notifikace o předplatném:', e.message); }
+  return pu;
+}
 async function zalozPredplatne(sess) {
   const id = parseInt((sess.metadata || {}).sub_id, 10);
   if (!id || !sess.subscription) return;
   const row = await prisma.gameSubscription.findUnique({ where: { id } });
-  if (!row || row.stripe_sub) return;
-  // Platnost nastavíme i bez dalších událostí: kdyby ve Stripu nebyly zapnuté
-  // customer.subscription.*, předplatné prostě za týden samo dojde. Lepší než
-  // jet dál zadarmo.
-  await prisma.gameSubscription.update({
-    where: { id: row.id },
-    data: { stripe_sub: sess.subscription, stripe_cust: sess.customer || null,
-      status: 'active', plati_do: new Date(Date.now() + 8 * 86400000) }
-  });
-  console.log('[game] předplatné založeno:', row.kind, '· hráč', row.player_id, '·', row.qty + '× technik');
+  if (!row) return;
+  if (!row.stripe_sub) {
+    // Platnost nastavíme i bez dalších událostí: kdyby ve Stripu nebyly zapnuté
+    // customer.subscription.*, předplatné prostě za týden samo dojde. Lepší než
+    // jet dál zadarmo.
+    await prisma.gameSubscription.update({
+      where: { id: row.id },
+      data: { stripe_sub: sess.subscription, stripe_cust: sess.customer || null,
+        status: 'active', plati_do: new Date(Date.now() + 8 * 86400000) }
+    });
+    console.log('[game] předplatné založeno:', row.kind, '· hráč', row.player_id, '·', row.qty + '× technik');
+  }
+  await zapisObdobi(row, sess.invoice || sess.id, sess.amount_total,
+    (sess.customer_details && sess.customer_details.email) || sess.customer_email);
   try { await stripeGet('subscriptions/' + sess.subscription).then(prepisPredplatne); }
   catch (e) { console.warn('[game] načtení předplatného:', e.message); }
 }
@@ -289,10 +324,14 @@ const webhook = [express.raw({ type: '*/*', limit: '1mb' }), async (req, res) =>
   if (/^customer\.subscription\./.test(ev.type)) return prepisPredplatne(ev.data.object).catch(
     (e) => console.error('[game] předplatné:', e.message));
   if (ev.type === 'invoice.payment_succeeded' || ev.type === 'invoice.payment_failed') {
-    const id = ev.data.object && ev.data.object.subscription;
-    if (!id) return;
-    return stripeGet('subscriptions/' + id).then(prepisPredplatne).catch(
-      (e) => console.error('[game] předplatné z faktury:', e.message));
+    const inv = ev.data.object || {};
+    if (!inv.subscription) return;
+    return stripeGet('subscriptions/' + inv.subscription).then(async (sub) => {
+      await prepisPredplatne(sub);
+      if (ev.type !== 'invoice.payment_succeeded') return;
+      const row = await prisma.gameSubscription.findUnique({ where: { stripe_sub: sub.id } });
+      await zapisObdobi(row, inv.id, inv.amount_paid, inv.customer_email);
+    }).catch((e) => console.error('[game] předplatné z faktury:', e.message));
   }
   if (ev.type !== 'checkout.session.completed' && ev.type !== 'checkout.session.async_payment_succeeded') return;
   // Založení předplatného chodí jako obyčejné dokončení platby, jen v režimu
