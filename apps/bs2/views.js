@@ -1682,6 +1682,40 @@ function vyberyTabs(active, pending = 0, mig = 0, ok = 0) {
   const t = [['seznam', 'Seznam', '/admin/vybery'], ['schvaleni', 'K ruční kontrole' + (mig ? ' (' + mig + ')' : ''), '/admin/vybery?tab=schvaleni'], ['vyplata', 'Prošlo kontrolou' + (ok ? ' (' + ok + ')' : ''), '/admin/vybery?tab=vyplata'], ['zadosti', 'Žádosti' + (pending ? ' (' + pending + ')' : ''), '/admin/vybery?tab=zadosti'], ['vyplaceno', 'Vyplaceno', '/admin/vybery?tab=vyplaceno']];
   return `<div class="row" style="gap:6px;margin:4px 0 14px;flex-wrap:wrap">${t.map(([k, l, h]) => `<a class="btn ${k === active ? '' : 'sec'}" href="${h}">${esc(l)}</a>`).join('')}</div>`;
 }
+// QR platba k žádosti o výběr: CZK → QR Platba (SPAYD, účet převeden na IBAN), EUR → EPC/SEPA QR. Generuje se v prohlížeči.
+const VYB_QR = `<div id="vqr-ov" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(2,6,14,.82);align-items:center;justify-content:center;padding:20px">
+<div style="background:#0f172a;border:1px solid rgba(148,163,184,.3);border-radius:18px;padding:22px;max-width:380px;width:100%;text-align:center;color:#e2e8f0">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b id="vqr-t" style="font-size:16px">QR platba</b><button type="button" id="vqr-x" class="btn sec sm">✕</button></div>
+<div id="vqr-box" style="background:#fff;padding:14px;border-radius:12px;display:inline-block"></div>
+<div id="vqr-info" class="small" style="margin-top:12px;text-align:left;line-height:1.7"></div>
+<div id="vqr-err" class="small" style="margin-top:10px;color:#fca5a5"></div></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>(function(){
+var ov=document.getElementById('vqr-ov'),box=document.getElementById('vqr-box'),info=document.getElementById('vqr-info'),err=document.getElementById('vqr-err');
+function close(){ov.style.display='none';}
+document.getElementById('vqr-x').onclick=close;ov.addEventListener('click',function(e){if(e.target===ov)close();});document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+function asc(x){return String(x||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[*\\r\\n]/g,' ').trim();}
+function mod97(s){var m=0;for(var i=0;i<s.length;i++)m=(m*10+Number(s[i]))%97;return m;}
+function czIban(acc){var m=String(acc).replace(/\\s/g,'').match(/^(?:(\\d{1,6})-)?(\\d{2,10})\\/(\\d{4})$/);if(!m)return null;
+  var bban=m[3]+(m[1]||'').padStart(6,'0')+m[2].padStart(10,'0');var ck=98-mod97(bban+'123500');return 'CZ'+String(ck).padStart(2,'0')+bban;}
+function iban(acc){var s=String(acc).replace(/\\s/g,'').toUpperCase();if(/^[A-Z]{2}\\d{2}[A-Z0-9]{11,30}$/.test(s))return s;return czIban(acc);}
+function esc(x){return String(x).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+document.querySelectorAll('.vqr').forEach(function(b){b.addEventListener('click',function(){
+  var f=b.closest('form'),amt=Number(String((f&&f.querySelector('[name=paid_amount]')||{}).value||'').replace(/\\s/g,'').replace(',','.'));
+  var cur=b.dataset.cur==='EUR'?'EUR':'CZK',ib=iban(b.dataset.acc),vs=b.dataset.vs,nm=asc(b.dataset.name),msg='BS2 vyber '+vs;
+  box.innerHTML='';err.textContent='';
+  if(!ib){err.textContent='Číslo účtu „'+b.dataset.acc+'“ nejde převést na IBAN — QR nelze vytvořit.';info.innerHTML='';ov.style.display='flex';return;}
+  if(!(amt>0)){err.textContent='Zadej platnou částku.';ov.style.display='flex';return;}
+  var a=amt.toFixed(2),payload;
+  if(cur==='CZK') payload='SPD*1.0*ACC:'+ib+'*AM:'+a+'*CC:CZK'+(vs?'*X-VS:'+vs:'')+'*MSG:'+msg+(nm?'*RN:'+nm.slice(0,35):'');
+  else payload=['BCD','002','1','SCT','',(nm||'Prijemce').slice(0,70),ib,'EUR'+a,'','',msg].join('\\n');
+  if(typeof QRCode==='undefined'){err.textContent='Knihovna QR se nenačetla — obnov stránku.';ov.style.display='flex';return;}
+  new QRCode(box,{text:payload,width:240,height:240,correctLevel:QRCode.CorrectLevel.M});
+  document.getElementById('vqr-t').textContent=cur==='CZK'?'QR Platba (CZK)':'SEPA QR (EUR)';
+  info.innerHTML='<div>Příjemce: <b>'+esc(b.dataset.name)+'</b></div><div>Účet: <b>'+esc(b.dataset.acc)+'</b></div>'+(ib.replace(/\\s/g,'')!==String(b.dataset.acc).replace(/\\s/g,'').toUpperCase()?'<div>IBAN: <b>'+esc(ib.replace(/(.{4})/g,'$1 ').trim())+'</b></div>':'')+'<div>Částka: <b>'+esc(amt.toLocaleString('cs-CZ',{minimumFractionDigits:2}))+' '+(cur==='EUR'?'€':'Kč')+'</b></div>'+(vs?'<div>VS: <b>'+esc(vs)+'</b></div>':'')+'<div>Zpráva: '+esc(msg)+'</div><div class="muted" style="margin-top:6px">Po zaplacení klikni na ✓ Vyplaceno.</div>';
+  ov.style.display='flex';});});
+})();</script>`;
+
 // Admin → Výběry → Výplata (žádosti, aktuální měsíc) a Vyplaceno (historie)
 // Provize k výplatě (měsíčně). Pravidla se doplňují postupně — dokud pravidlo není, vrací null (zobrazí se „—“).
 // r = uživatel (std_total, std_expanze_all, exp_invested, mig_position, std_currency…), ctx = { period: 'RRRR-MM', avgVisits }
@@ -1808,17 +1842,19 @@ function adminVyberyPayouts({ migCount = 0, okCount = 0, verified = [], booked =
     ? `<a class="btn sec sm" href="/admin/vybery?tab=vyplata">Aktuální měsíc (${esc(curM)})</a> <a class="btn sec sm" href="/admin/vybery?tab=vyplata&m=all">Všechny nevyřízené</a>`
     : `<form method="get" action="/admin/vybery" class="row" style="gap:6px;display:inline-flex"><input type="hidden" name="tab" value="${tab === 'zadosti' ? 'zadosti' : 'vyplaceno'}"><input name="m" value="${month === 'all' ? '' : esc(month)}" placeholder="RRRR-MM (prázdné = vše)" style="width:190px"><button class="btn sec sm" type="submit">Zobrazit</button></form>`;
   const ST = { requested: ['invited', 'čeká na výplatu'], paid: ['active', 'vyplaceno'], rejected: ['blocked', 'zamítnuto'] };
-  const body = rows.map(r => {
+  const kontrolaTxt = (r) => (r.mig_status === 'ok' ? 'prošel (shoda)' : r.mig_status === 'reviewed' ? 'prošel (ručně)' : r.mig_status === 'mismatch' ? 'neprošel (nesedí)' : 'nevyplnil kontrolu');
+  const bodyArr = rows.map(r => {
     if (tab === 'zadosti') { const paid = r.status === 'paid'; const st = ST[r.status] || ST.requested;
       return `<tr><td data-l="Uživatel" class="nm"><b>${nm(r)}</b><div class="small muted">${esc(r.email)}</div></td>
       <td data-l="Částka"><b style="white-space:nowrap">${money(paid && r.paid_amount != null ? r.paid_amount : r.amount, r.currency)}</b>${paid && r.paid_amount != null && Number(r.paid_amount) !== Number(r.amount) ? `<div class="small muted">žádáno ${money(r.amount, r.currency)}</div>` : ''}</td>
       <td data-l="VS" class="small">${r.vs ? `<b>${esc(r.vs)}</b>` : '—'}</td><td data-l="Účet" class="small" style="white-space:nowrap">${esc(r.account || '—')}</td>
       <td data-l="Stav"><span class="badge ${st[0]}">${st[1]}</span></td>
+      <td data-l="Kontrola" class="small" style="white-space:nowrap">${kontrolaTxt(r) === 'prošel (shoda)' || kontrolaTxt(r) === 'prošel (ručně)' ? '<span class="badge active">✓ ' + kontrolaTxt(r).replace('prošel ', '') + '</span>' : '<span class="badge blocked">' + esc(kontrolaTxt(r)) + '</span>'}</td>
       <td data-l="Podáno" class="small muted">${fmtDT(r.requested_at)}</td>
       <td data-l="Vyřízeno" class="small muted">${r.status === 'requested' ? '—' : fmtDT(r.paid_at || r.decided_at)}${r.pay_method ? `<div>${esc(r.pay_method)}</div>` : ''}${r.paid_by ? `<div>${esc(r.paid_by)}</div>` : ''}</td>
       <td data-l="Poznámka" class="small">${esc(r.note || '')}${r.pay_note || r.reject_reason ? `<div class="muted">${esc(r.pay_note || r.reject_reason)}</div>` : ''}</td>
       <td class="actions" style="white-space:nowrap">${r.status === 'requested' ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap">
-        <form method="post" action="/admin/vybery/request/${r.id}/pay" style="display:flex;gap:6px;align-items:center;margin:0;flex-wrap:nowrap"><input name="paid_amount" value="${esc(String(r.amount))}" style="width:80px;padding:6px 8px;height:32px" title="Skutečně vyplacená částka"><select name="pay_method" style="width:120px;padding:4px 8px;height:32px"><option value="QR kód">QR kód</option><option value="Příkaz v bance">Příkaz v bance</option><option value="Jinak">Jinak</option></select><input name="pay_note" placeholder="Poznámka" style="width:120px;padding:6px 8px;height:32px"><button class="btn sm" type="submit" style="white-space:nowrap" onclick="return confirm('Označit jako vyplaceno?')">✓ Vyplaceno</button></form>
+        <form method="post" action="/admin/vybery/request/${r.id}/pay" style="display:flex;gap:6px;align-items:center;margin:0;flex-wrap:nowrap"><input name="paid_amount" value="${esc(String(r.amount))}" style="width:80px;padding:6px 8px;height:32px" title="Skutečně vyplacená částka"><select name="pay_method" style="width:120px;padding:4px 8px;height:32px"><option value="QR kód">QR kód</option><option value="Příkaz v bance">Příkaz v bance</option><option value="Jinak">Jinak</option></select><input name="pay_note" placeholder="Poznámka" style="width:120px;padding:6px 8px;height:32px"><button class="btn sec sm vqr" type="button" style="white-space:nowrap" title="QR platba pro bankovní aplikaci" data-acc="${esc(r.account || '')}" data-cur="${esc(r.currency || 'CZK')}" data-vs="${esc(r.vs || '')}" data-name="${esc([r.first_name, r.last_name].filter(Boolean).join(' ') || r.nick || r.email || '')}">▦ QR</button><button class="btn sm" type="submit" style="white-space:nowrap" onclick="return confirm('Označit jako vyplaceno?')">✓ Vyplaceno</button></form>
         <form method="post" action="/admin/vybery/request/${r.id}/reject" style="margin:0"><input type="hidden" name="reason" value=""><button class="btn sec sm" type="submit" style="white-space:nowrap" onclick="var d=prompt('Důvod zamítnutí:');if(d===null)return false;this.form.reason.value=d;return true">✕ Zamítnout</button></form>
         <form method="post" action="/admin/vybery/request/${r.id}/delete" style="margin:0"><button class="btn sec sm" type="submit" style="white-space:nowrap;color:#f87171" title="Smazat žádost — uživatel může znovu požádat o výběr" onclick="return confirm('Opravdu smazat žádost${r.vs ? ' VS ' + esc(r.vs) : ''}?\\n\\nŽádost zmizí a uživatel bude moci znovu požádat o výběr. Připsání na vyrovnávací účet za daný měsíc se vrátí. Akci nelze vrátit.')">🗑 Smazat</button></form></div>` : ''}</td></tr>`; }
     if (tab === 'vyplata') return `<tr><td data-l="Uživatel" class="nm"><b>${nm(r)}</b><div class="small muted">${esc(r.email)}</div></td><td data-l="Částka"><b style="white-space:nowrap">${money(r.amount, r.currency)}</b>${r.vs ? `<div class="small">VS <b>${esc(r.vs)}</b></div>` : ''}${r.account ? `<div class="small muted" style="white-space:nowrap">${esc(r.account)}</div>` : ''}</td><td data-l="Podáno" class="small muted">${fmtDT(r.requested_at)}</td><td data-l="Poznámka" class="small">${esc(r.note || '—')}</td>
@@ -1826,9 +1862,16 @@ function adminVyberyPayouts({ migCount = 0, okCount = 0, verified = [], booked =
       <form method="post" action="/admin/vybery/request/${r.id}/reject" class="row" style="gap:6px;margin:6px 0 0"><input name="reason" placeholder="Důvod zamítnutí" style="width:200px"><button class="btn sec sm" type="submit" onclick="return confirm('Zamítnout žádost?')">Zamítnout</button></form></td></tr>`;
     const paid = r.status === 'paid';
     return `<tr><td data-l="Uživatel" class="nm"><b>${nm(r)}</b><div class="small muted">${esc(r.email)}</div></td><td data-l="Částka"><b style="white-space:nowrap">${money(paid && r.paid_amount != null ? r.paid_amount : r.amount, r.currency)}</b>${r.vs ? `<div class="small">VS <b>${esc(r.vs)}</b></div>` : ''}${r.account ? `<div class="small muted" style="white-space:nowrap">${esc(r.account)}</div>` : ''}${paid && r.paid_amount != null && Number(r.paid_amount) !== Number(r.amount) ? `<div class="small muted">žádáno ${money(r.amount, r.currency)}</div>` : ''}</td><td data-l="Stav"><span class="badge ${paid ? 'active' : 'blocked'}">${paid ? 'vyplaceno' : 'zamítnuto'}</span></td><td data-l="Vyřízeno" class="small muted">${fmtDT(r.paid_at || r.decided_at)}</td><td data-l="Způsob" class="small">${esc(r.pay_method || '—')}</td><td data-l="Poznámka" class="small">${esc(r.pay_note || r.reject_reason || r.note || '—')}${r.paid_by ? `<div class="muted">${esc(r.paid_by)}</div>` : ''}</td></tr>`;
-  }).join('');
-  const head = tab === 'zadosti' ? '<th>Uživatel</th><th>Částka</th><th>VS</th><th>Účet / IBAN</th><th>Stav</th><th>Podáno</th><th>Vyřízeno</th><th>Poznámka</th><th>Akce</th>' : tab === 'vyplata' ? '<th>Uživatel</th><th>Částka</th><th>Podáno</th><th>Poznámka</th><th>Akce</th>' : '<th>Uživatel</th><th>Částka</th><th>Stav</th><th>Vyřízeno</th><th>Způsob</th><th>Poznámka</th>';
-  const cols = tab === 'zadosti' ? 9 : tab === 'vyplata' ? 5 : 6;
+  });
+  const body = bodyArr.join('');
+  const reqData = tab === 'vyplata' ? [] : rows.map((r, i) => { const paid = r.status === 'paid'; const amt = Number(paid && r.paid_amount != null ? r.paid_amount : r.amount);
+    return { html: bodyArr[i], name: [r.last_name, r.first_name, r.nick, r.email].filter(Boolean).join(' '), amt: isFinite(amt) ? amt : null, cur: r.currency || 'CZK', vs: r.vs || '', acc: r.account || '', st: (ST[r.status] || ST.requested)[1], kon: kontrolaTxt(r), req: r.requested_at ? new Date(r.requested_at).getTime() : null, dec: r.status === 'requested' ? null : (r.paid_at || r.decided_at) ? new Date(r.paid_at || r.decided_at).getTime() : null, pm: r.pay_method || '', note: [r.note, r.pay_note, r.reject_reason].filter(Boolean).join(' ') }; });
+  const reqJson = JSON.stringify(reqData).replace(/</g, '\\u003c').replace(/[\u2028\u2029]/g, (c) => '\\u' + c.charCodeAt(0).toString(16));
+  const reqCols = tab === 'zadosti'
+    ? `{key:'name',label:'Uživatel',type:'text',ph:'Jméno / e-mail…',get:function(r){return r.name}}, {key:'amt',label:'Částka',type:'num',ph:'…',get:function(r){return r.amt}}, T('vs','VS'), T('acc','Účet / IBAN'), E('st','Stav'), E('kon','Kontrola'), D('req','Podáno'), D('dec','Vyřízeno'), T('note','Poznámka'), null`
+    : `{key:'name',label:'Uživatel',type:'text',ph:'Jméno / e-mail…',get:function(r){return r.name}}, {key:'amt',label:'Částka',type:'num',ph:'…',get:function(r){return r.amt}}, E('st','Stav'), D('dec','Vyřízeno'), E('pm','Způsob'), T('note','Poznámka')`;
+  const head = tab === 'zadosti' ? '<th>Uživatel</th><th>Částka</th><th>VS</th><th>Účet / IBAN</th><th>Stav</th><th>Kontrola</th><th>Podáno</th><th>Vyřízeno</th><th>Poznámka</th><th>Akce</th>' : tab === 'vyplata' ? '<th>Uživatel</th><th>Částka</th><th>Podáno</th><th>Poznámka</th><th>Akce</th>' : '<th>Uživatel</th><th>Částka</th><th>Stav</th><th>Vyřízeno</th><th>Způsob</th><th>Poznámka</th>';
+  const cols = tab === 'zadosti' ? 10 : tab === 'vyplata' ? 5 : 6;
   return adminLayout('Výběry', 'vyb', admin, `
   <style>main{max-width:none!important;padding-left:24px;padding-right:24px}main .card table{width:100%}main .card{max-width:none}</style>
   <h1 style="margin:0 0 6px">Výběry</h1>
@@ -1846,7 +1889,14 @@ function adminVyberyPayouts({ migCount = 0, okCount = 0, verified = [], booked =
     return `<div class="row" style="gap:10px;margin:0 0 10px;flex-wrap:wrap">${box('CZK', 'v Kč')}${box('EUR', 'v EUR')}</div>`; })() : ''}
   <span>${tab === 'zadosti' ? 'Všechny žádosti o výběr' : tab === 'vyplata' ? 'K výplatě' : 'Vyplaceno'} (${esc(mLabel)}): ${tab === 'zadosti' ? '' : sumTxt + ' · '}${rows.length} ${tab === 'vyplata' || tab === 'zadosti' ? 'žádostí' : 'položek'}</span>${monthNav}<a class="btn sec sm" href="/admin/vybery-vyplaty.xlsx?tab=${tab}&m=${encodeURIComponent(month)}">⬇ Do Excelu</a></div>
   ${olderPending ? `<div class="small" style="margin-bottom:8px">Pozor: dalších <b>${olderPending}</b> nevyřízených žádostí je z dřívějších měsíců — <a href="/admin/vybery?tab=vyplata&m=all">zobrazit všechny nevyřízené</a>.</div>` : ''}
-  <div class="card" style="overflow-x:auto;margin-top:10px"><table><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols}" class="muted">${tab === 'vyplata' || tab === 'zadosti' ? 'Žádné žádosti o výběr.' : 'Zatím nic vyplaceno.'}</td></tr>`}</tbody></table></div>
+  <div class="card" style="overflow-x:auto;margin-top:10px"><table id="req-tbl"><thead><tr>${head}</tr></thead><tbody>${reqData.length ? '' : `<tr><td colspan="${cols}" class="muted">${tab === 'vyplata' || tab === 'zadosti' ? 'Žádné žádosti o výběr.' : 'Zatím nic vyplaceno.'}</td></tr>`}</tbody></table></div>
+  ${reqData.length ? `<script src="/column-filters.js?v=1"><\/script>
+  <script>(function(){ var D=${reqJson}; var tb=document.querySelector('#req-tbl tbody'); if(!window.ColFilters){ tb.innerHTML=D.map(function(r){return r.html}).join(''); return; }
+    var T=function(k,l){return {key:k,label:l,type:'text',ph:l+'…',get:function(r){return r[k]}}}, E=function(k,l){return {key:k,label:l,type:'text',ph:'Vyber…',enum:true,get:function(r){return r[k]}}}, D2=function(k,l){return {key:k,label:l,type:'date',get:function(r){return r[k]}}};
+    var Dt=D2;
+    var TT=ColFilters.table({ table:'#req-tbl', noun:'žádostí', emptyText:'Nic nenalezeno.', renderRow:function(r){return r.html},
+      columns:[ ${reqCols.replace(/\bD\(/g, 'Dt(').replace(/\bT\(/g, 'T(')} ] });
+    TT.setRows(D); })();<\/script>` : ''}${tab === 'zadosti' ? VYB_QR : ''}
   </div>
   ${tab === 'vyplata' ? (() => { const cs = (r) => (r.std_mixed === 'true' ? 'SMÍŠENÉ' : r.std_currency === 'EUR' ? 'EUR' : 'CZK'); const cur = (r) => (r.std_currency === 'EUR' ? '€' : 'Kč');
     const num = (v, r) => (v != null && v !== '' && isFinite(Number(v)) ? Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' ' + cur(r) : '—');
