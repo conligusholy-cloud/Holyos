@@ -875,7 +875,7 @@
           kpi(cz(j.souhrn.zaplaceno_ks), 'Zaplacených objednávek') +
           kpi(cz(j.souhrn.zaplaceno_kc) + ' Kč', 'Tržba celkem');
         document.getElementById('or-tbl').innerHTML =
-          '<thead><tr><th>Kdy</th><th>Hráč</th><th>Registrace</th><th>Položka</th><th class="num">Ks</th><th class="num">Částka</th><th>Stav</th><th>Stripe</th></tr></thead><tbody>'
+          '<thead><tr><th>Kdy</th><th>Hráč</th><th>Registrace</th><th>Položka</th><th class="num">Ks</th><th class="num">Částka</th><th>Typ platby</th><th>Stav</th><th>Stripe</th></tr></thead><tbody>'
           + (j.orders.length ? j.orders.map(function (o) {
             return '<tr><td class="note">' + dt(o.created_at) + '</td>'
               + '<td>' + (o.nick ? '<b>' + esc(o.nick) + '</b>' : '<span class="note">—</span>')
@@ -883,10 +883,11 @@
               + '<td class="note" style="white-space:nowrap">' + (o.registrace ? dt(o.registrace) : '—') + '</td>'
               + '<td>' + esc(o.kind) + '</td><td class="num">' + o.qty + '</td>'
               + '<td class="num"><b>' + cz(o.castka) + ' Kč</b></td>'
+              + '<td style="white-space:nowrap">' + (o.opakovana ? '<span title="Platba období předplatného (Stripe faktura)" style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(124,92,255,.18);color:#a78bfa">🔁 opakovaná</span>' : '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(148,163,184,.15);color:#cbd5e1">jednorázová</span>') + '</td>'
               + '<td><span class="st ' + esc(o.status) + '">' + esc(o.status) + '</span>'
               + (o.paid_at ? '<div class="note">' + dt(o.paid_at) + '</div>' : '') + '</td>'
               + '<td class="note" style="font-family:monospace;font-size:11px">' + esc(o.session || '—') + '</td></tr>';
-          }).join('') : '<tr><td colspan="8" class="note" style="padding:20px">Zatím žádné objednávky.</td></tr>')
+          }).join('') : '<tr><td colspan="9" class="note" style="padding:20px">Zatím žádné objednávky.</td></tr>')
           + '</tbody>';
       }).catch(function (e) { chyba('or-kpis', e); });
     }

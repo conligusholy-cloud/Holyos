@@ -279,6 +279,8 @@ router.get('/orders', api(async (req, res) => {
       id: o.id, kind: o.kind, qty: o.qty, castka: o.amount_cents / 100, status: o.status,
       nick: o.player ? o.player.nick : null, registrace: o.player ? o.player.created_at : null, email: o.email || (o.player ? o.player.email : null),
       session: o.stripe_session, created_at: o.created_at, paid_at: o.paid_at,
+      // Období předplatného se zapisuje s ID faktury Stripe (in_…), jednorázový nákup s ID checkoutu (cs_…)
+      opakovana: /^in_/.test(o.stripe_session || ''),
     })) });
 }));
 
