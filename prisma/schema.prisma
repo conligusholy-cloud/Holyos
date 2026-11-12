@@ -7695,7 +7695,10 @@ model GameDream {
   // Co hráč napsal vlastními slovy — ať je vidět, z čeho AI vycházela.
   zadani     String?   @db.VarChar(200)
   cena       Int
-  // Kreslená ilustrace (SVG) od AI a případná vlastní fotka hráče.
+  // Značka ikony ze sady ve hře (auto, chata, hodinky…) a případná vlastní
+  // fotka hráče. Sloupec obrazek je pozůstatek po kreslení modelem — nové sny
+  // ho nepoužívají, kreslené pokusy byly k nepoznání.
+  ikona      String?   @db.VarChar(24)
   obrazek    String?   @db.Text
   foto       String?   @db.Text
   splneno_at DateTime?

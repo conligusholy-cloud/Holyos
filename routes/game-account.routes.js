@@ -1423,7 +1423,7 @@ const FOTO_MAX = 420000;          // fotka po zmenšení v prohlížeči, jako d
 
 function senVen(d) {
   return { id: d.id, nazev: d.nazev, popis: d.popis, zadani: d.zadani, cena: d.cena,
-    obrazek: d.obrazek, foto: d.foto, splneno: d.splneno_at, zaplaceno: d.zaplaceno,
+    ikona: d.ikona, foto: d.foto, splneno: d.splneno_at, zaplaceno: d.zaplaceno,
     zalozeno: d.created_at };
 }
 
@@ -1450,7 +1450,7 @@ router.post('/sny', requirePlayer, async (req, res, next) => {
     if (!out.ok) return res.status(503).json({ error: out.error });
     const d = await prisma.gameDream.create({
       data: { player_id: req.player.id, zadani,
-        nazev: out.sen.nazev, popis: out.sen.popis, cena: out.sen.cena, obrazek: out.sen.obrazek },
+        nazev: out.sen.nazev, popis: out.sen.popis, cena: out.sen.cena, ikona: out.sen.ikona },
     });
     res.json({ ok: true, sen: senVen(d) });
   } catch (e) { next(e); }

@@ -7926,16 +7926,120 @@ function loadSny(pak) {
     if (pak) pak(); else if (!$('v-me').classList.contains('hidden')) paintMe();
   }).catch(function () { SNY_NACITAM = false; SNY = SNY || []; });
 }
+// Sada ikon ke snům. Model jen vybere značku, kreslení si děláme sami —
+// jeho vlastní pokusy byly k nepoznání. Kdo chce svůj přesný kousek, nahraje
+// si fotku a ikona ustoupí.
+var SEN_IKONY = {
+  auto: '<path d="M12 40h40a4 4 0 0 1 4 4v5H8v-5a4 4 0 0 1 4-4Z" fill="#4fd1ff"/>'
+    + '<path d="M19 40l5-10h16l6 10Z" fill="#7c5cff"/>'
+    + '<circle cx="20" cy="49" r="5" fill="#dbe7f5"/><circle cx="44" cy="49" r="5" fill="#dbe7f5"/>',
+  motorka: '<circle cx="15" cy="43" r="11" fill="#0f1a2c" stroke="#4fd1ff" stroke-width="5"/>'
+    + '<circle cx="49" cy="43" r="11" fill="#0f1a2c" stroke="#4fd1ff" stroke-width="5"/>'
+    + '<path d="M15 43h12l7-11h10l5 11" fill="none" stroke="#7c5cff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>'
+    + '<path d="M20 26h14a3 3 0 0 1 0 6H24Z" fill="#7c5cff"/>'
+    + '<path d="M40 20h10M45 20l-3 9" fill="none" stroke="#dbe7f5" stroke-width="4" stroke-linecap="round"/>',
+  kolo: '<circle cx="16" cy="44" r="10" fill="none" stroke="#4fd1ff" stroke-width="3"/>'
+    + '<circle cx="48" cy="44" r="10" fill="none" stroke="#4fd1ff" stroke-width="3"/>'
+    + '<path d="M16 44l10-16h12l10 16M26 28h10M30 44l8-16" fill="none" stroke="#7c5cff" stroke-width="3" stroke-linecap="round"/>',
+  lod: '<path d="M8 44h48l-7 10H15Z" fill="#4fd1ff"/>'
+    + '<path d="M34 10l14 30H34Z" fill="#7c5cff"/><path d="M30 16 16 40h14Z" fill="#2fe3a0"/>'
+    + '<rect x="31" y="8" width="3" height="34" rx="1.5" fill="#dbe7f5"/>',
+  letadlo: '<path d="M32 6c2 0 3.5 2.5 3.5 7v9l20 11v5l-20-5v10l6 5v4l-9.5-2.5L22 52v-4l6-5V33L8 38v-5l20-11v-9c0-4.5 1.5-7 4-7Z" fill="#4fd1ff"/>',
+  dum: '<path d="M32 10 58 32h-7v22H13V32H6Z" fill="#4fd1ff"/>'
+    + '<rect x="27" y="38" width="11" height="16" rx="1.5" fill="#7c5cff"/>'
+    + '<rect x="17" y="36" width="7" height="7" rx="1" fill="#0f1a2c"/>'
+    + '<rect x="41" y="36" width="7" height="7" rx="1" fill="#0f1a2c"/>',
+  chata: '<path d="M4 46 20 22l12 18 8-11 14 17Z" fill="#2a3a55"/>'
+    + '<path d="M32 18 54 42H10Z" fill="#4fd1ff"/><rect x="16" y="42" width="32" height="12" fill="#7c5cff"/>'
+    + '<rect x="28" y="44" width="8" height="10" rx="1" fill="#0f1a2c"/>',
+  byt: '<rect x="14" y="8" width="36" height="48" rx="3" fill="#4fd1ff"/>'
+    + '<g fill="#0f1a2c"><rect x="20" y="14" width="8" height="8" rx="1"/><rect x="36" y="14" width="8" height="8" rx="1"/>'
+    + '<rect x="20" y="27" width="8" height="8" rx="1"/><rect x="36" y="27" width="8" height="8" rx="1"/>'
+    + '<rect x="20" y="40" width="8" height="8" rx="1"/></g>'
+    + '<rect x="36" y="42" width="9" height="14" rx="1" fill="#7c5cff"/>',
+  bazen: '<rect x="8" y="22" width="48" height="30" rx="6" fill="#4fd1ff"/>'
+    + '<path d="M12 34c4-4 8-4 12 0s8 4 12 0 8-4 12 0M12 44c4-4 8-4 12 0s8 4 12 0 8-4 12 0" fill="none" stroke="#0f1a2c" stroke-width="3" stroke-linecap="round"/>'
+    + '<path d="M44 10v10M52 10v10" stroke="#dbe7f5" stroke-width="3" stroke-linecap="round"/>',
+  strom: '<rect x="29" y="38" width="6" height="18" rx="2" fill="#7c5cff"/>'
+    + '<circle cx="32" cy="22" r="13" fill="#2fe3a0"/><circle cx="20" cy="31" r="9" fill="#2fe3a0"/>'
+    + '<circle cx="44" cy="31" r="9" fill="#2fe3a0"/>',
+  hodinky: '<rect x="25" y="4" width="14" height="14" rx="2" fill="#7c5cff"/>'
+    + '<rect x="25" y="46" width="14" height="14" rx="2" fill="#7c5cff"/>'
+    + '<circle cx="32" cy="32" r="16" fill="#4fd1ff"/><circle cx="32" cy="32" r="12" fill="#0f1a2c"/>'
+    + '<path d="M32 24v9l6 4" fill="none" stroke="#4fd1ff" stroke-width="3" stroke-linecap="round"/>',
+  diamant: '<path d="M20 10h24l10 14-22 30L10 24Z" fill="#4fd1ff"/>'
+    + '<path d="M20 10 32 24 44 10M10 24h44M32 24v30" fill="none" stroke="#0f1a2c" stroke-width="2.5"/>',
+  technika: '<rect x="12" y="14" width="40" height="26" rx="3" fill="#4fd1ff"/>'
+    + '<rect x="16" y="18" width="32" height="18" rx="1.5" fill="#0f1a2c"/>'
+    + '<path d="M6 44h52l-4 6H10Z" fill="#7c5cff"/>',
+  nabytek: '<path d="M10 30a6 6 0 0 1 12 0v6h20v-6a6 6 0 0 1 12 0v14H10Z" fill="#7c5cff"/>'
+    + '<rect x="14" y="36" width="36" height="12" rx="3" fill="#4fd1ff"/>'
+    + '<path d="M14 48v6M50 48v6" stroke="#dbe7f5" stroke-width="3" stroke-linecap="round"/>',
+  cinka: '<rect x="24" y="29" width="16" height="6" rx="3" fill="#dbe7f5"/>'
+    + '<rect x="12" y="22" width="10" height="20" rx="3" fill="#4fd1ff"/>'
+    + '<rect x="42" y="22" width="10" height="20" rx="3" fill="#4fd1ff"/>'
+    + '<rect x="6" y="26" width="6" height="12" rx="3" fill="#7c5cff"/>'
+    + '<rect x="52" y="26" width="6" height="12" rx="3" fill="#7c5cff"/>',
+  hory: '<circle cx="48" cy="18" r="7" fill="#ffd866"/>'
+    + '<path d="M4 50 24 18l12 19 8-11 16 24Z" fill="#4fd1ff"/>'
+    + '<path d="M24 18l6 9h-12ZM52 26l5 7h-10Z" fill="#dbe7f5"/>',
+  nota: '<path d="M26 44V14l22-5v30" fill="none" stroke="#4fd1ff" stroke-width="4" stroke-linejoin="round"/>'
+    + '<path d="M26 20l22-5" stroke="#4fd1ff" stroke-width="4"/>'
+    + '<ellipse cx="20" cy="45" rx="8" ry="6" fill="#7c5cff"/>'
+    + '<ellipse cx="42" cy="40" rx="8" ry="6" fill="#7c5cff"/>',
+  kniha: '<path d="M32 18c-6-5-14-6-22-5v32c8-1 16 0 22 5Z" fill="#4fd1ff"/>'
+    + '<path d="M32 18c6-5 14-6 22-5v32c-8-1-16 0-22 5Z" fill="#7c5cff"/>'
+    + '<path d="M32 18v32" stroke="#0f1a2c" stroke-width="3"/>',
+  tlapka: '<ellipse cx="32" cy="42" rx="14" ry="11" fill="#4fd1ff"/>'
+    + '<ellipse cx="16" cy="26" rx="6" ry="7" fill="#7c5cff"/><ellipse cx="26" cy="18" rx="6" ry="7" fill="#7c5cff"/>'
+    + '<ellipse cx="38" cy="18" rx="6" ry="7" fill="#7c5cff"/><ellipse cx="48" cy="26" rx="6" ry="7" fill="#7c5cff"/>',
+  jidlo: '<path d="M18 8v18a6 6 0 0 0 12 0V8M24 8v18M24 32v24" fill="none" stroke="#4fd1ff" stroke-width="4" stroke-linecap="round"/>'
+    + '<path d="M44 8c5 0 8 6 8 14s-3 10-8 10v24" fill="none" stroke="#7c5cff" stroke-width="4" stroke-linecap="round"/>',
+  slunce: '<circle cx="32" cy="26" r="12" fill="#ffd866"/>'
+    + '<path d="M32 4v6M32 42v6M10 26h6M48 26h6M16 10l4 4M48 10l-4 4M16 42l4-4M48 42l-4-4" stroke="#ffd866" stroke-width="3" stroke-linecap="round"/>'
+    + '<path d="M6 54c6-5 12-5 18 0s12 5 18 0 10-5 16 0" fill="none" stroke="#4fd1ff" stroke-width="4" stroke-linecap="round"/>',
+  penize: '<ellipse cx="32" cy="46" rx="20" ry="7" fill="#4fd1ff"/>'
+    + '<ellipse cx="32" cy="36" rx="20" ry="7" fill="#7c5cff"/>'
+    + '<ellipse cx="32" cy="26" rx="20" ry="7" fill="#ffd866"/>',
+  srdce: '<path d="M32 54S10 40 10 26a11 11 0 0 1 22-5 11 11 0 0 1 22 5c0 14-22 28-22 28Z" fill="#7c5cff"/>',
+  hvezda: '<path d="M32 8l7.5 15.5L56 26 44 37.5 47 54 32 46 17 54l3-16.5L8 26l16.5-2.5Z" fill="#ffd866"/>'
+};
+// Když ikona chybí (starší sen nebo model vrátil nesmysl), odhadneme ji ze slov.
+var SEN_SLOVA = [
+  ['auto', /auto|vůz|voz|sport|kabriolet|suv|pick|dodáv/i],
+  ['motorka', /motork|motocykl|harley|skútr|skutr/i],
+  ['kolo', /\bkolo\b|bike|cykl/i],
+  ['lod', /loď|lod|jachta|plachetn|kajak|paddle/i],
+  ['letadlo', /letad|letět|letet|pilot|dovolen|cestov|výlet|vylet|zájezd|zajezd/i],
+  ['chata', /chata|chalup|srub|roubenk/i],
+  ['byt', /byt\b|apartm/i],
+  ['dum', /dům|dum\b|vila|domek|bydlen|nemovitost/i],
+  ['bazen', /bazén|bazen|vířivk|virivk|sauna/i],
+  ['strom', /zahrad|sad\b|strom|les\b|pozemek/i],
+  ['hodinky', /hodink|náramk|naramk/i],
+  ['diamant', /prsten|šperk|sperk|diamant|zlat|náhrdel|nahrdel/i],
+  ['technika', /notebook|počítač|pocitac|mobil|telefon|kamera|foťák|fotak|technik|dron/i],
+  ['nabytek', /nábytek|nabytek|pohovk|sedačk|sedack|kuchyň|kuchyn|interiér|interier/i],
+  ['cinka', /posilov|fitness|činka|cinka|trénink|trenink|sport/i],
+  ['hory', /hory|lyž|lyz|snowboard|skial|vrchol|treking|turistik/i],
+  ['nota', /kytara|piano|klavír|klavir|hudb|koncert|bubn/i],
+  ['kniha', /knih|škola|skola|studi|kurz|vzdělá|vzdela|jazyk/i],
+  ['tlapka', /pes\b|psa|kočk|kock|zvíře|zvire|kůň|kun\b|koně|kone\b/i],
+  ['jidlo', /restaurac|večeř|vecer|jídl|jidl|kuchař|kuchar|víno|vino/i],
+  ['slunce', /volno|odpoč|odpoc|klid|čas\b|cas\b|důchod|duchod|pláž|plaz|moře|more\b/i],
+  ['penize', /úspor|uspor|rezerv|penez|peníz|investic|renta|milion/i],
+  ['srdce', /rodin|svatb|děti|deti|partner|láska|laska/i]
+];
+function senZnacka(d) {
+  if (d.ikona && SEN_IKONY[d.ikona]) return d.ikona;
+  var t = (d.nazev || '') + ' ' + (d.popis || '') + ' ' + (d.zadani || '');
+  for (var i = 0; i < SEN_SLOVA.length; i++) if (SEN_SLOVA[i][1].test(t)) return SEN_SLOVA[i][0];
+  return 'hvezda';
+}
 function senObrazek(d) {
   if (d.foto) return '<img class="sen-foto" src="' + esc(d.foto) + '" alt="">';
-  if (d.obrazek) {
-    // SVG od modelu jde do stránky jako obrázek, ne jako kus HTML — uvnitř
-    // <img> se nespustí ani to, co by tam náhodou propadlo filtrem.
-    var b64;
-    try { b64 = btoa(unescape(encodeURIComponent(d.obrazek))); } catch (e) { b64 = ''; }
-    if (b64) return '<img class="sen-foto" src="data:image/svg+xml;base64,' + b64 + '" alt="">';
-  }
-  return '<div class="sen-foto prazdna">\u2728</div>';
+  return '<div class="sen-foto ikona"><svg viewBox="0 0 64 64">'
+    + SEN_IKONY[senZnacka(d)] + '</svg></div>';
 }
 // Za jak dlouho na sen vydělá, když to půjde jako dosud.
 function senZaDlouho(chybi) {
@@ -7985,8 +8089,8 @@ function snyKartaHtml() {
   var splnene = SNY.filter(function (d) { return !!d.splneno; });
   return '<div class="card"><h3>Moje sny</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Napiš, co si chceš jednou dopřát. '
-    + 'Spočítám, co to doopravdy stojí, a nakreslím to — a až na to vyděláš, koupíš si to za laundry. '
-    + 'Vidíš to jen ty.</p>'
+    + 'Spočítám, co to doopravdy stojí — a až na to vyděláš, koupíš si to za laundry. '
+    + 'Svoji fotku si k tomu můžeš nahrát. Vidíš to jen ty.</p>'
     + '<button class="btn" id="sen-novy" style="width:100%">Přidat sen</button>'
     + (nesplnene.length ? '<div class="sny">' + nesplnene.map(senKarta).join('') + '</div>' : '')
     + (splnene.length
@@ -8017,26 +8121,26 @@ function senPodle(id) {
 function senNovySheet() {
   sheet('<h3>Nový sen</h3>'
     + '<p class="muted small">Napiš vlastními slovy, co by sis jednou chtěl dopřát. '
-    + 'Odhadnu cenu podle skutečnosti a nakreslím k tomu obrázek — kreslím druh věci, '
-    + 'ne konkrétní značku, takže svoje přesné auto si pak můžeš nahradit fotkou.</p>'
+    + 'Odhadnu, co to doopravdy stojí, a vyberu k tomu obrázek. Jestli chceš vidět '
+    + 'přesně svoje auto nebo svoji chatu, nahraj si pak k snu vlastní fotku.</p>'
     + '<label class="fld"><span>Můj sen</span>'
     + '<input id="sen-q" class="inp" type="text" maxlength="200" placeholder="třeba chata v Krkonoších"></label>'
     + '<p class="fine err hidden" id="sen-err"></p>'
-    + '<button class="btn big" id="sen-go" style="width:100%">Spočítat a nakreslit</button>');
+    + '<button class="btn big" id="sen-go" style="width:100%">Spočítat cenu</button>');
   var inp = $('sen-q');
   var posli = function () {
     var q = inp ? inp.value.trim() : '';
     var e = $('sen-err');
     if (q.length < 2) { if (e) { e.textContent = 'Napiš, co by sis chtěl dopřát.'; e.classList.remove('hidden'); } return; }
-    var b = $('sen-go'); b.disabled = true; b.textContent = 'Počítám a kreslím…';
+    var b = $('sen-go'); b.disabled = true; b.textContent = 'Počítám…';
     apiJson('/sny', { zadani: q }).then(function (r) {
-      b.disabled = false; b.textContent = 'Spočítat a nakreslit';
+      b.disabled = false; b.textContent = 'Spočítat cenu';
       if (!r.ok) { if (e) { e.textContent = r.j.error || 'Nepovedlo se.'; e.classList.remove('hidden'); } return; }
       SNY = [r.j.sen].concat(SNY || []);
       closeSheet(); paintMe();
       toast('Sen je na nástěnce: ' + r.j.sen.nazev + ' za ' + kcFull(r.j.sen.cena) + '.', 'ok');
     }).catch(function () {
-      b.disabled = false; b.textContent = 'Spočítat a nakreslit';
+      b.disabled = false; b.textContent = 'Spočítat cenu';
       if (e) { e.textContent = 'Server neodpovídá. Zkus to za chvíli.'; e.classList.remove('hidden'); }
     });
   };
