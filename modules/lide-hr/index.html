@@ -3138,7 +3138,7 @@
         const barColor = pctOfLimit >= 100 ? '#ef4444' : (pctOfLimit >= alertPct ? '#f59e0b' : '#10b981');
 
         html += '<tr>';
-        html += '<td class="person-name">' + item.person_name + '</td>';
+        html += '<td class="person-name">' + escHtml(item.person_name) + '</td>';
         html += '<td>' + workedH + '</td>';
         html += '<td>' + fundH + '</td>';
         html += '<td style="font-weight:600;color:' + (parseFloat(otH) > 0 ? '#f59e0b' : 'var(--text)') + '">' + otH + '</td>';

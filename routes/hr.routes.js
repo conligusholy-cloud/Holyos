@@ -10,6 +10,7 @@ const { requireHrWrite, stripSensitive, canSeeSensitive, requireLeaveEdit, canEd
 const { logAudit: _logAuditHr } = require('../services/audit');
 const { logAudit, diffObjects, makeSnapshot } = require('../services/audit');
 const { z } = require('zod');
+const { workingDaysInMonth, workingDaysInYear } = require('../services/cz-svatky');
 
 // ─── Časové zóny ────────────────────────────────────────────────────────
 // Node proces na Railway běží v UTC, ale docházka musí být v Europe/Prague.
@@ -2091,13 +2092,28 @@ router.post('/leave-settings/apply', requireLeaveEdit, async (req, res, next) =>
 
 // ─── PŘESČASY ─────────────────────────────────────────────────────────────
 
-// GET /api/hr/overtime-all
+// GET /api/hr/overtime-all?year=2026[&month=11]
+// Přehled přesčasů pro tabulku v modulu Lidé a HR → Docházka → Přesčasy.
+// POZOR na tvar odpovědi: tabulka čte person_name / total_worked_mins /
+// total_fund_mins / overtime_mins / overtime_year_total_mins. Dřív route
+// posílala first_name+overtime_hours, takže svítilo „undefined" a „NaN".
+// (Požadavek #144)
+//
+// Odpracováno se bere z časů UPRAVENÝCH vedoucím (adjusted_*), a když nejsou,
+// z čipových — stejně jako souhrn na záložce Docházka, ať se přehledy neliší.
+// Fond = pracovní dny období (Po–Pá mimo české státní svátky) × denní fond směny.
 router.get('/overtime-all', async (req, res, next) => {
   try {
-    const { year } = req.query;
-    const targetYear = year ? parseInt(year) : new Date().getFullYear();
-    const startDate = new Date(targetYear, 0, 1);
-    const endDate = new Date(targetYear, 11, 31);
+    const targetYear = parseInt(req.query.year, 10) || nowInPrague().year;
+    const monthRaw = req.query.month ? parseInt(req.query.month, 10) : null;
+    const month = monthRaw >= 1 && monthRaw <= 12 ? monthRaw : null;
+
+    // Období pro tabulku: buď zvolený měsíc, nebo celý rok.
+    // Prisma @db.Date → hranice jako UTC půlnoc, ne lokální čas procesu.
+    const periodStart = new Date(Date.UTC(targetYear, month ? month - 1 : 0, 1));
+    const periodEnd = new Date(Date.UTC(targetYear, month ? month : 12, 0));
+    const yearStart = new Date(Date.UTC(targetYear, 0, 1));
+    const yearEnd = new Date(Date.UTC(targetYear, 12, 0));
 
     const people = await prisma.person.findMany({
       where: { active: true, type: 'employee' },
@@ -2105,30 +2121,66 @@ router.get('/overtime-all', async (req, res, next) => {
         id: true, first_name: true, last_name: true,
         shift: { select: { hours_fund: true } },
         attendance: {
-          where: { date: { gte: startDate, lte: endDate } },
+          where: { date: { gte: yearStart, lte: yearEnd }, type: 'work' },
+          select: {
+            date: true, clock_in: true, clock_out: true, break_minutes: true,
+            adjusted_clock_in: true, adjusted_clock_out: true, adjusted_break: true,
+          },
         },
       },
+      orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }],
     });
 
-    const overtimeData = people.map(p => {
-      const dailyFund = p.shift ? parseFloat(p.shift.hours_fund) : 8;
-      let totalOvertime = 0;
+    // Pracovní dny v období — spočítat jednou, je to pro všechny stejné
+    const periodWorkingDays = month
+      ? workingDaysInMonth(targetYear, month)
+      : workingDaysInYear(targetYear);
+
+    const overtimeData = [];
+    for (const p of people) {
+      const dailyFundMins = Math.round((p.shift ? parseFloat(p.shift.hours_fund) : 8) * 60);
+
+      let periodWorked = 0;
+      let periodDays = 0;
+      const byMonth = new Map(); // měsíc (1-12) → odpracované minuty
       for (const a of p.attendance) {
-        if (a.clock_in && a.clock_out) {
-          const [inH, inM] = a.clock_in.split(':').map(Number);
-          const [outH, outM] = a.clock_out.split(':').map(Number);
-          const worked = (outH + outM / 60) - (inH + inM / 60) - (a.break_minutes / 60);
-          if (worked > dailyFund) totalOvertime += worked - dailyFund;
+        const mins = workedMinutesOf(a);
+        const d = a.date;
+        const mo = d.getUTCMonth() + 1;
+        byMonth.set(mo, (byMonth.get(mo) || 0) + mins);
+        if (d >= periodStart && d <= periodEnd) {
+          periodWorked += mins;
+          periodDays++;
         }
       }
-      return {
+
+      // Zaměstnance bez jediného záznamu v období nemá smysl v tabulce ukazovat —
+      // vyšel by mu celý fond jako mínus.
+      if (periodDays === 0) continue;
+
+      const periodFund = periodWorkingDays * dailyFundMins;
+
+      // Roční přesčas pro limit dle zákoníku práce = součet KLADNÝCH měsíčních
+      // přesčasů. Manko z jednoho měsíce nesmí umazat přesčas z jiného — zákon
+      // počítá odpracované přesčasové hodiny, ne saldo.
+      let yearOvertime = 0;
+      for (const [mo, worked] of byMonth) {
+        const fund = workingDaysInMonth(targetYear, mo) * dailyFundMins;
+        yearOvertime += Math.max(0, worked - fund);
+      }
+
+      overtimeData.push({
         person_id: p.id,
-        first_name: p.first_name,
-        last_name: p.last_name,
+        person_name: `${p.last_name || ''} ${p.first_name || ''}`.trim() || ('#' + p.id),
         year: targetYear,
-        overtime_hours: Math.round(totalOvertime * 100) / 100,
-      };
-    });
+        month: month,
+        days_worked: periodDays,
+        total_worked_mins: Math.round(periodWorked),
+        total_fund_mins: periodFund,
+        overtime_mins: Math.round(periodWorked - periodFund),
+        overtime_year_total_mins: Math.round(yearOvertime),
+      });
+    }
 
     res.json(overtimeData);
   } catch (err) {
@@ -2405,6 +2457,21 @@ router.post('/permissions/:roleId', requireAdmin, async (req, res, next) => {
     next(err);
   }
 });
+
+
+// Odpracované minuty jednoho dne docházky. Přednost mají časy upravené vedoucím
+// (adjusted_*), teprve když chybí, použijí se čipové. Stejné pravidlo jako
+// souhrn „Odprac. (uprav.)" na záložce Docházka. (Požadavek #144)
+function workedMinutesOf(a) {
+  const clockIn = a.adjusted_clock_in || a.clock_in;
+  const clockOut = a.adjusted_clock_out || a.clock_out;
+  if (!clockIn || !clockOut) return 0;
+  const [ih, im] = clockIn.split(':').map(Number);
+  const [oh, om] = clockOut.split(':').map(Number);
+  if ([ih, im, oh, om].some((n) => !Number.isFinite(n))) return 0;
+  const brk = a.adjusted_break != null ? a.adjusted_break : (a.break_minutes || 0);
+  return Math.max(0, (oh * 60 + om) - (ih * 60 + im) - brk);
+}
 
 // ─── HR STATISTIKY ─────────────────────────────────────────────────────────
 
