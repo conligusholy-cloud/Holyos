@@ -91,7 +91,7 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
     // hráč viděl.
     // Karta se pozná podle sebe: nenese laundry (balík peněz), hovory (balíček
     // infolinky) ani interval (předplatné). Slevové balíčky platí jen na karty.
-    const jeKarta = !c.laundry && !c.hovory && !c.interval;
+    const jeKarta = !c.laundry && !c.hovory && !c.interval && !c.bezBalicku;
     const kus = jeKarta ? acct._cenaKusuVBalicku(c.price, qty) : c.price;
 
     const purchase = await prisma.gamePurchase.create({

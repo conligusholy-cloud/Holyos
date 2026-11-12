@@ -62,7 +62,9 @@ const CARDS = {
     desc: 'Objednaný prádlomat přeskočí dvouměsíční dodací lhůtu a je na skladě okamžitě.'
   },
   traffic: {
-    kind: 'traffic', name: 'Reklamní kampaň', icon: 'megaphone', price: 9900,
+    // Kampaň se kupuje po jedné. Její účinek platí natrvalo, takže nabízet ji
+    // po deseti kusech se slevou nedává smysl ani hráči, ani nám.
+    kind: 'traffic', name: 'Reklamní kampaň', icon: 'megaphone', price: 9900, bezBalicku: true,
     short: '+15 % návštěvnosti natrvalo',
     desc: 'Letáky, polep, místní rádio. Do všech tvých prádlomatů začne chodit víc lidí — a zůstane to tak.'
   },
@@ -91,6 +93,7 @@ function cenaKusuVBalicku(price, qty) {
 }
 // Nabídka balíčků k jedné kartě, rovnou s úsporou — klient už nic nepočítá.
 function balickyProKartu(c) {
+  if (!c || c.bezBalicku) return [];
   return BALICKY.map((b) => {
     const kus = cenaKusuVBalicku(c.price, b.qty);
     const celkem = kus * b.qty, plna = c.price * b.qty;
