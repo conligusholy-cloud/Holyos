@@ -198,6 +198,10 @@ router.get('/invoices', async (req, res, next) => {
         { external_number: { contains: search, mode: 'insensitive' } },
         { variable_symbol: { contains: search, mode: 'insensitive' } },
         { company: { name: { contains: search, mode: 'insensitive' } } },
+        // „Za co platím" — ať se dá doklad najít i podle účelu platby, ne jen
+        // podle čísel a firmy. Sloupcový filtr hledá nad načtenými řádky,
+        // tohle projde celou databázi. (Požadavek #150)
+        { payment_note: { contains: search, mode: 'insensitive' } },
       ];
     }
 

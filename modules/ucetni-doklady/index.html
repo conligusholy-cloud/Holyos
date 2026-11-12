@@ -369,6 +369,7 @@
             <th>Typ</th>
             <th>Stav</th>
             <th>Firma</th>
+            <th>Za co platím</th>
             <th>Externí č.</th>
             <th>VS</th>
             <th class="num">Částka</th>
@@ -384,7 +385,7 @@
             <th></th>
           </tr>
         </thead>
-        <tbody><tr><td colspan="17" class="empty-hint">Načítání…</td></tr></tbody>
+        <tbody><tr><td colspan="18" class="empty-hint">Načítání…</td></tr></tbody>
       </table>
       </div><!-- /invoices-scroll -->
 
@@ -1082,7 +1083,7 @@
       const r = await api('GET', '/api/accounting/invoices' + (qs.toString() ? '?' + qs : ''));
       const tbody = document.querySelector('#invoices-table tbody');
       if (r.status !== 200) {
-        tbody.innerHTML = '<tr><td colspan="16" class="empty-hint">Chyba: ' + r.status + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="18" class="empty-hint">Chyba: ' + r.status + '</td></tr>';
         return;
       }
       INV_ALL = Array.isArray(r.data) ? r.data : [];
@@ -1124,6 +1125,9 @@
           '<td><span class="type-badge ' + inv.type + '">' + (TYPE_LABEL[inv.type] || inv.type) + '</span></td>' +
           '<td><span class="status-badge ' + inv.status + '">' + (STATUS_LABEL[inv.status] || inv.status) + '</span></td>' +
           '<td>' + escapeHtml(inv.company?.name || '—') + '</td>' +
+          (inv.payment_note
+            ? '<td title="' + escapeHtml(inv.payment_note) + '">🏷 ' + escapeHtml(inv.payment_note) + '</td>'
+            : '<td style="color:var(--text2);">—</td>') +
           '<td>' + escapeHtml(inv.external_number || '—') + '</td>' +
           '<td>' + escapeHtml(inv.variable_symbol || '—') + '</td>' +
           '<td class="amount-cell" style="white-space:nowrap;">' +
@@ -1186,6 +1190,9 @@
       { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (i) => (TYPE_LABEL[i.type] || i.type), pick: true },
       { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (i) => (STATUS_LABEL[i.status] || i.status), pick: true },
       { key: 'company', label: 'Firma', type: 'text', ph: 'Firma…', get: (i) => i.company?.name || '' },
+      // „Za co platím" = Invoice.payment_note (vyplní se ručně v detailu nebo ji doplní AI).
+      // Volné texty → bez výběru hodnot (pick), hledá se psaním. (Požadavek #150)
+      { key: 'paynote', label: 'Za co platím', type: 'text', ph: 'Za co platím…', get: (i) => i.payment_note || '' },
       { key: 'ext', label: 'Externí č.', type: 'text', ph: 'Externí č.…', get: (i) => i.external_number || '' },
       { key: 'vs', label: 'VS', type: 'text', ph: 'VS…', get: (i) => i.variable_symbol || '' },
       { key: 'total', label: 'Částka', type: 'num', ph: '', get: (i) => (i.total == null ? null : Number(i.total)) },
@@ -1304,7 +1311,7 @@
       }
       tbody.innerHTML = rows.length
         ? rows.slice(0, IV_LIMIT).map(invRowHtml).join('')
-        : '<tr><td colspan="16" class="empty-hint">' + (INV_ALL.length ? 'Filtrům nic neodpovídá.' : 'Žádné faktury odpovídající filtrům.') + '</td></tr>';
+        : '<tr><td colspan="18" class="empty-hint">' + (INV_ALL.length ? 'Filtrům nic neodpovídá.' : 'Žádné faktury odpovídající filtrům.') + '</td></tr>';
       const info = document.getElementById('iv-filter-info');
       if (info) info.innerHTML = (activeN ? 'Zobrazeno <b>' + rows.length + '</b> z ' + INV_ALL.length + ' dokladů' : 'Zobrazeno všech ' + INV_ALL.length + ' dokladů') +
         (rows.length > IV_LIMIT ? ' · prvních ' + IV_LIMIT + ' — upřesni filtr' : '') +
