@@ -2392,13 +2392,15 @@
       if (typeof showToast === 'function') showToast('↩ ' + num + ' → ' + (STATUS_LABEL[r.data.status] || r.data.status));
       loadInvoices(); if (typeof loadSummary === 'function') loadSummary();
     };
-    window.markInvoicePaid = function(id, num) {
+    // presetMethod — předvolí způsob platby v dialogu (např. při přepnutí úhrady na hotově)
+    // hint — doplňující věta nad formulářem, proč se dialog otevřel
+    window.markInvoicePaid = function(id, num, presetMethod, hint) {
       const today = new Date().toISOString().slice(0, 10);
       const ov = document.createElement('div');
       ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10050;display:flex;align-items:center;justify-content:center;';
       ov.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:420px;max-width:94vw;padding:20px 22px;">'
         + '<h3 style="margin:0 0 6px;">✓ Zaplaceno (ručně)</h3>'
-        + '<div style="color:var(--text2);font-size:.9em;margin-bottom:12px;">Doklad ' + escapeHtml(num) + ' se označí jako plně zaplacený. Vznikne evidovaná platba bez vazby na výpis.</div>'
+        + '<div style="color:var(--text2);font-size:.9em;margin-bottom:12px;">' + (hint ? escapeHtml(hint) + '<br>' : '') + 'Doklad ' + escapeHtml(num) + ' se označí jako plně zaplacený. Vznikne evidovaná platba bez vazby na výpis.</div>'
         + '<label style="display:block;font-size:.85em;color:var(--text2);margin-bottom:4px;">Datum platby</label>'
         + '<input type="date" class="mp-d form-control" style="width:100%;margin-bottom:10px;" value="' + today + '">'
         + '<label style="display:block;font-size:.85em;color:var(--text2);margin-bottom:4px;">Způsob</label>'
@@ -2409,6 +2411,7 @@
         + '<div class="mp-e" style="color:#ef4444;margin-top:8px;font-size:.88em;"></div></div>';
       document.body.appendChild(ov);
       const q = (c) => ov.querySelector(c);
+      if (presetMethod) q('.mp-m').value = presetMethod;
       q('.mp-c').onclick = () => ov.remove();
       q('.mp-s').onclick = async () => {
         q('.mp-s').disabled = true;
@@ -2417,6 +2420,8 @@
         });
         if (r.status !== 200) { q('.mp-e').textContent = r.data?.error || ('Chyba ' + r.status); q('.mp-s').disabled = false; return; }
         ov.remove(); loadInvoices(); loadSummary();
+        // Když je detail dokladu otevřený, překresli ho, ať je stav hned zelený
+        if (window._detailInv && window._detailInv.id === id) openDetail(id);
       };
     };
 
@@ -2458,7 +2463,13 @@
       };
     };
 
+    // Stavy, ve kterých už doklad nelze označit jako zaplacený
+    const CLOSED_STATUSES = ['paid', 'cancelled', 'written_off', 'archived'];
+
     // Změna způsobu úhrady přímo z detailu — PUT /invoices/:id
+    // Hotovost znamená, že doklad je vypořádaný, takže na ni rovnou navážeme
+    // označením jako zaplaceno — vznikne evidovaná platba, aby souhlasily
+    // součty uhrazeno/neuhrazeno, a doklad zmizí z neuhrazených. (Požadavek #148)
     window.updatePaymentMethod = async function(invoiceId, method) {
       const r = await api('PUT', '/api/accounting/invoices/' + invoiceId, { payment_method: method });
       if (r.status !== 200) {
@@ -2467,6 +2478,29 @@
       }
       // Aktualizuj řádek v tabulce, ať se způsob úhrady projeví bez celého reloadu
       loadInvoices();
+
+      if (method !== 'cash') return;
+
+      const inv = (window._detailInv && window._detailInv.id === invoiceId) ? window._detailInv : null;
+      if (inv && CLOSED_STATUSES.includes(inv.status)) return; // už uzavřený doklad neřešíme
+      if (inv && inv.status === 'payment_queued') {
+        alert('Způsob úhrady je uložený na hotově.\n\nStav ale nelze přepnout — doklad je v platebním příkazu. Nejdřív ho z dávky odeber, jinak hrozí dvojí platba.');
+        return;
+      }
+
+      const isAdmin = !!(window.currentUser && (window.currentUser.role === 'admin' || window.currentUser.isSuperAdmin));
+      if (!isAdmin) {
+        // Ruční úhradu smí potvrdit jen admin — ať uživatel ví, proč doklad zůstal červený
+        alert('Způsob úhrady je uložený na hotově.\n\nStav „K uhrazení" ale zůstává — označit doklad jako zaplacený smí jen administrátor.');
+        return;
+      }
+
+      window.markInvoicePaid(
+        invoiceId,
+        (inv && inv.invoice_number) || '#' + invoiceId,
+        'cash',
+        'Změnil(a) jsi způsob úhrady na hotově.',
+      );
     };
 
     window.hardDeleteInvoice = async function(id, invoiceNumber) {
