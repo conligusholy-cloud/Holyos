@@ -882,6 +882,25 @@ async function sesbirejDataHry(reklama) {
   };
 }
 
+// Odpověď AI → objekt. Když je JSON useknutý (dlouhá odpověď), zkusí ho opravit: zahodí nedokončený konec a doplní závorky.
+function parseAiJson(text) {
+  const a = text.indexOf('{'); if (a < 0) return { summary: text.slice(0, 2000) };
+  let t = text.slice(a);
+  try { return JSON.parse(t.slice(0, t.lastIndexOf('}') + 1)); } catch (e) { /* oprava níže */ }
+  for (let cut = t.length; cut > 10; ) {
+    const k = Math.max(t.lastIndexOf('},', cut - 1), t.lastIndexOf('",', cut - 1), t.lastIndexOf('}]', cut - 1));
+    if (k < 0) break; cut = k;
+    let cand = t.slice(0, k + 1); if (cand.endsWith(',')) cand = cand.slice(0, -1);
+    // dopočítej neuzavřené závorky (ignoruje obsah řetězců)
+    const st = []; let inS = false, esc = false;
+    for (const ch of cand) { if (inS) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inS = false; continue; } if (ch === '"') inS = true; else if (ch === '{' || ch === '[') st.push(ch); else if (ch === '}' || ch === ']') st.pop(); }
+    if (inS) continue;
+    const fixed = cand + st.reverse().map((c) => (c === '{' ? '}' : ']')).join('');
+    try { const o = JSON.parse(fixed); o._nekompletni = true; return o; } catch (e) { /* zkus kratší */ }
+  }
+  return { summary: 'AI vrátila neúplnou odpověď — spusť rozbor znovu.' };
+}
+
 // GET /ai-analyza → poslední uložený rozbor
 router.get('/ai-analyza', api(async (req, res) => {
   const { getSetting } = require('../services/settings');
@@ -898,18 +917,23 @@ router.post('/ai-analyza', api(async (req, res) => {
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const model = process.env.GAME_AI_MODEL || 'claude-sonnet-4-6';
-  const sys = 'Jsi senior produktový analytik a growth designér free-to-play her. Analyzuješ hru „Laundromat Tycoon" (prohlížečová tycoon hra o stavbě sítě samoobslužných prádlomatů na pradlomaty.info/game; hráči si zakládají účet, prozkoumávají města, staví prádlomaty a platí přes Stripe za balíčky měny/karty/výhody). Cíl majitele: ZÍSKAT VÍC PLATEB (vyšší konverze na platbu a vyšší tržba na hráče při rozumné ceně reklamy). Dostaneš agregovaná data o chování hráčů (trychtýř událostí, chování podle skupin vč. konverze na platbu, čas ve hře, postup, zdroje návštěv, nákupy podle druhu, ceník, výsledky reklamy). Pracuj POUZE s dodanými čísly, nic si nevymýšlej; když je vzorek malý (jednotky plateb), řekni to a formuluj závěry jako hypotézy. Najdi: kde se hráči ztrácejí, v jakém okamžiku/postupu je pravděpodobné, že zaplatí (a co mají platící společné), co brání platbě (cena, načasování, nabídka, tření), co se dá změnit v herním designu, nabídce, ceníku, onboardingu, notifikacích/e-mailech a reklamě. Odpověz POUZE platným JSON bez markdownu: {"summary":"<3-5 vět o stavu>","zjisteni":[{"nadpis":"<krátce>","detail":"<1-3 věty s čísly>"}],"navrhy":[{"nazev":"<krátce>","co_zmenit":"<konkrétně co ve hře/nabídce udělat>","proc":"<na jakých číslech to stojí>","ocekavany_dopad":"<odhad dopadu na platby>","narocnost":"nízká|střední|vysoká","priorita":1}],"experimenty":["<A/B test nebo měření, které ověří hypotézu>"],"chybi_data":["<co by se mělo začít měřit, aby šlo příště analyzovat přesněji>"]}. 5–8 návrhů seřazených podle priority (1 = nejdřív). Piš česky, konkrétně, s čísly.';
-  const msg = await client.messages.create({ model, max_tokens: 3500, system: sys, messages: [{ role: 'user', content: 'Data hry (JSON):\n' + JSON.stringify(data) }] });
+  const sys = 'Jsi senior produktový analytik a growth designér free-to-play her. Analyzuješ hru „Laundromat Tycoon" (prohlížečová tycoon hra o stavbě sítě samoobslužných prádlomatů na pradlomaty.info/game; hráči si zakládají účet, prozkoumávají města, staví prádlomaty a platí přes Stripe za balíčky měny/karty/výhody). Cíl majitele: ZÍSKAT VÍC PLATEB (vyšší konverze na platbu a vyšší tržba na hráče při rozumné ceně reklamy). Dostaneš agregovaná data o chování hráčů (trychtýř událostí, chování podle skupin vč. konverze na platbu, čas ve hře, postup, zdroje návštěv, nákupy podle druhu, ceník, výsledky reklamy). Pracuj POUZE s dodanými čísly, nic si nevymýšlej; když je vzorek malý (jednotky plateb), řekni to a formuluj závěry jako hypotézy. Najdi: kde se hráči ztrácejí, v jakém okamžiku/postupu je pravděpodobné, že zaplatí (a co mají platící společné), co brání platbě (cena, načasování, nabídka, tření), co se dá změnit v herním designu, nabídce, ceníku, onboardingu, notifikacích/e-mailech a reklamě. Odpověz POUZE platným JSON bez markdownu: {"summary":"<3-5 vět o stavu>","zjisteni":[{"nadpis":"<krátce>","detail":"<1-3 věty s čísly>"}],"navrhy":[{"nazev":"<krátce>","co_zmenit":"<konkrétně co ve hře/nabídce udělat>","proc":"<na jakých číslech to stojí>","ocekavany_dopad":"<odhad dopadu na platby>","narocnost":"nízká|střední|vysoká","priorita":1,"dopad":4,"snadnost":3,"oblast":"onboarding|nabídka|ceník|herní design|notifikace|reklama","kpi":"<jaká metrika se má zlepšit, např. konverze game_open→game_register>","cil":"<měřitelný cíl, např. z 8,5 % na 15 %>"}],"experimenty":["<A/B test nebo měření, které ověří hypotézu>"],"chybi_data":["<co by se mělo začít měřit, aby šlo příště analyzovat přesněji>"]}. 5–8 návrhů seřazených podle priority (1 = nejdřív); dopad a snadnost jsou celá čísla 1–5 (5 = největší dopad / nejsnazší). Každé zjištění musí mít aspoň jeden návrh, který ho řeší. Buď stručný: summary max 4 věty, detail max 2 věty, co_zmenit max 3 věty. Piš česky, konkrétně, s čísly.';
+  const msg = await client.messages.create({ model, max_tokens: 8000, system: sys, messages: [{ role: 'user', content: 'Data hry (JSON):\n' + JSON.stringify(data) }] });
   let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
   text = text.replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
-  let j; try { j = JSON.parse(text); } catch (e) { j = { summary: text.slice(0, 2000), zjisteni: [], navrhy: [], experimenty: [], chybi_data: [] }; }
+  const j = parseAiJson(text);
   const S = (x, n) => String(x == null ? '' : x).slice(0, n);
   const rozbor = {
     vytvoreno: new Date().toISOString(), model,
     prehled: { hracu: data.hracu_celkem, platicich: data.platicich_hracu, konverze_pct: data.konverze_na_platbu_pct },
     summary: S(j.summary, 2000),
     zjisteni: (Array.isArray(j.zjisteni) ? j.zjisteni : []).slice(0, 10).map((x) => ({ nadpis: S(x.nadpis, 120), detail: S(x.detail, 500) })),
-    navrhy: (Array.isArray(j.navrhy) ? j.navrhy : []).slice(0, 10).map((x) => ({ nazev: S(x.nazev, 120), co_zmenit: S(x.co_zmenit, 600), proc: S(x.proc, 500), ocekavany_dopad: S(x.ocekavany_dopad, 300), narocnost: S(x.narocnost, 20), priorita: Number(x.priorita) || 9 })).sort((a, b) => a.priorita - b.priorita),
+    navrhy: (Array.isArray(j.navrhy) ? j.navrhy : []).slice(0, 10).map((x) => ({ nazev: S(x.nazev, 120), co_zmenit: S(x.co_zmenit, 600), proc: S(x.proc, 500), ocekavany_dopad: S(x.ocekavany_dopad, 300), narocnost: S(x.narocnost, 20), priorita: Number(x.priorita) || 9,
+      dopad: Math.min(5, Math.max(1, Math.round(Number(x.dopad) || 3))), snadnost: Math.min(5, Math.max(1, Math.round(Number(x.snadnost) || 3))), oblast: S(x.oblast, 40), kpi: S(x.kpi, 200), cil: S(x.cil, 200) })).sort((a, b) => a.priorita - b.priorita),
+    nekompletni: !!j._nekompletni,
+    // Podklady pro grafy (stejná data, ze kterých AI vycházela)
+    data: { udalosti: data.udalosti_za_30_dni.slice(0, 20), skupiny: data.chovani_podle_skupin, nakupy: data.nakupy_podle_druhu,
+      median_minut: data.median_minut_ve_hre, median_dni_do_platby: data.median_dni_od_registrace_do_prvni_platby, reklama: data.reklama },
     experimenty: (Array.isArray(j.experimenty) ? j.experimenty : []).slice(0, 8).map((x) => S(x, 400)),
     chybi_data: (Array.isArray(j.chybi_data) ? j.chybi_data : []).slice(0, 8).map((x) => S(x, 300)),
   };

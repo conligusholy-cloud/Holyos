@@ -252,17 +252,78 @@
     function chyba(el, e) { document.getElementById(el).innerHTML = '<p class="note" style="color:#f87171">' + esc(e.message) + '</p>'; }
 
     // ── AI analytik: chování hráčů → návrhy na víc plateb ────────────────────
+    // Přehledně: KPI dlaždice · trychtýř (graf) · konverze podle skupin (grafy) · zjištění · návrhy (matice dopad × snadnost) · testy · měření
     function aiVykresli(r) {
+      try { document.getElementById('dlg').style.width = 'min(1120px,96vw)'; } catch (x) { /* */ }
       var nar = { 'nízká': '#22c55e', 'střední': '#f59e0b', 'vysoká': '#ef4444' };
+      var pct = function (a, b) { return b ? Math.round(a / b * 1000) / 10 : 0; };
+      var D = r.data || {}, P = r.prehled || {};
+      var card = 'background:var(--surface2,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:12px;padding:12px 14px;';
+      var h3 = function (t, sub) { return '<h3 style="font-size:15px;margin:20px 0 8px;display:flex;align-items:baseline;gap:8px">' + t + (sub ? '<span class="note" style="font-weight:400">' + sub + '</span>' : '') + '</h3>'; };
+      var bar = function (lbl, val, max, txt, color) { var w = max ? Math.max(2, Math.round(val / max * 100)) : 0;
+        return '<div style="display:grid;grid-template-columns:150px 1fr 120px;gap:8px;align-items:center;margin:4px 0;font-size:12.5px"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(lbl) + '</span>'
+          + '<div style="background:rgba(148,163,184,.12);border-radius:6px;height:14px;overflow:hidden"><div style="width:' + w + '%;height:100%;border-radius:6px;background:' + (color || 'linear-gradient(90deg,#4fd1ff,#7c5cff)') + '"></div></div><span class="note" style="text-align:right;white-space:nowrap">' + txt + '</span></div>'; };
       var h = '<button class="x" data-close>×</button><h2>🤖 AI analytik hry</h2>'
-        + '<div class="note" style="margin-bottom:10px">Rozbor z ' + dt(r.vytvoreno) + ' · hráčů ' + cz(r.prehled.hracu) + ', platících ' + cz(r.prehled.platicich) + ' (' + String(r.prehled.konverze_pct).replace('.', ',') + ' %)</div>'
-        + '<p style="line-height:1.55;margin:0 0 14px">' + esc(r.summary) + '</p>';
-      if ((r.zjisteni || []).length) h += '<h3 style="font-size:14px;margin:14px 0 6px">Co z dat vychází</h3>' + r.zjisteni.map(function (z) { return '<div style="margin:0 0 8px"><b>' + esc(z.nadpis) + '</b><div class="note" style="color:var(--text)">' + esc(z.detail) + '</div></div>'; }).join('');
-      if ((r.navrhy || []).length) h += '<h3 style="font-size:14px;margin:16px 0 6px">Návrhy změn (od nejdůležitějšího)</h3>' + r.navrhy.map(function (n, i) {
-        return '<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin:0 0 8px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>' + (i + 1) + '. ' + esc(n.nazev) + '</b><span class="note" style="color:' + (nar[n.narocnost] || '#94a3b8') + '">náročnost: ' + esc(n.narocnost || '—') + '</span></div>'
-          + '<div style="margin:6px 0 4px">' + esc(n.co_zmenit) + '</div><div class="note"><b>Proč:</b> ' + esc(n.proc) + '</div><div class="note"><b>Očekávaný dopad:</b> ' + esc(n.ocekavany_dopad) + '</div></div>'; }).join('');
-      if ((r.experimenty || []).length) h += '<h3 style="font-size:14px;margin:16px 0 6px">Co otestovat</h3><ul style="margin:0 0 8px 18px;padding:0">' + r.experimenty.map(function (x) { return '<li style="margin:3px 0">' + esc(x) + '</li>'; }).join('') + '</ul>';
-      if ((r.chybi_data || []).length) h += '<h3 style="font-size:14px;margin:16px 0 6px">Co začít měřit</h3><ul style="margin:0 0 8px 18px;padding:0">' + r.chybi_data.map(function (x) { return '<li style="margin:3px 0">' + esc(x) + '</li>'; }).join('') + '</ul>';
+        + '<div class="note" style="margin-bottom:12px">Rozbor z ' + dt(r.vytvoreno) + ' · data za 30 dní' + (r.nekompletni ? ' · <span style="color:#f59e0b">odpověď AI byla zkrácená — část návrhů může chybět</span>' : '') + '</div>';
+      // Starý / rozbitý rozbor (syrový JSON v souhrnu)
+      if (/^\s*\{/.test(r.summary || '')) return h + '<div style="' + card + 'border-color:#f59e0b"><b>Tento rozbor se nepodařilo zpracovat</b> (AI vrátila useknutou odpověď). Klikni na <b>↻ Udělat nový rozbor</b> — nová verze už odpověď ošetří a zobrazí grafy i návrhy.</div>';
+      // KPI dlaždice
+      var nak = D.nakupy || {}, trzba = Object.keys(nak).reduce(function (s, k) { return s + (nak[k].kc || 0); }, 0);
+      var kp = function (v, l, c) { return '<div style="' + card + 'flex:1;min-width:130px"><div style="font-size:22px;font-weight:800;' + (c ? 'color:' + c : '') + '">' + v + '</div><div class="note">' + l + '</div></div>'; };
+      h += '<div style="display:flex;gap:10px;flex-wrap:wrap">' + kp(cz(P.hracu), 'hráčů s účtem') + kp(cz(P.platicich), 'platících hráčů', '#22c55e') + kp(String(P.konverze_pct).replace('.', ',') + ' %', 'konverze na platbu', '#4fd1ff')
+        + (trzba ? kp(cz(Math.round(trzba)) + ' Kč', 'tržba celkem') : '') + (D.median_minut != null ? kp(String(D.median_minut).replace('.', ',') + ' min', 'medián času ve hře') : '')
+        + (D.reklama && D.reklama.roas != null ? kp(String(D.reklama.roas).replace('.', ','), 'ROAS reklamy', D.reklama.roas >= 1 ? '#22c55e' : '#ef4444') : '') + '</div>';
+      // Shrnutí
+      h += '<div style="' + card + 'margin-top:12px;line-height:1.55;border-left:3px solid #7c5cff">' + esc(r.summary) + '</div>';
+      // Trychtýř
+      var ev = {}; (D.udalosti || []).forEach(function (e) { ev[e.udalost] = e.unikatnich; });
+      var order = ['game_open', 'game_quiz', 'game_scout', 'game_register', 'game_build', 'game_paid'].filter(function (k) { return ev[k] != null; });
+      if (order.length >= 2) {
+        var top = ev[order[0]] || 1;
+        h += h3('Trychtýř hráčů', 'unikátní návštěvy za 30 dní · v závorce kolik % prošlo z předchozího kroku');
+        h += '<div style="' + card + '">' + order.map(function (k, i) { var v = ev[k], prev = i ? ev[order[i - 1]] : v, drop = i && prev ? pct(v, prev) : 100;
+          return bar(nazevUdalosti(k), v, top, cz(v) + (i ? ' (' + String(drop).replace('.', ',') + ' %)' : ''), i && drop < 30 ? 'linear-gradient(90deg,#ef4444,#f97316)' : null); }).join('')
+          + '<div class="note" style="margin-top:6px">Červeně = krok, kde odpadá víc než 70 % hráčů.</div></div>';
+      }
+      // Konverze podle skupin
+      var sk = D.skupiny || {}, grafy = [['cas_ve_hre', 'Podle času ve hře'], ['pradlomatu', 'Podle počtu prádlomatů'], ['dni_od_registrace_do_posledni_aktivity', 'Podle délky hraní'], ['zdroj', 'Podle zdroje']];
+      var gh = grafy.filter(function (g) { return sk[g[0]] && Object.keys(sk[g[0]]).length; }).map(function (g) {
+        var o = sk[g[0]], keys = Object.keys(o), max = Math.max.apply(null, keys.map(function (k) { return pct(o[k].platicich, o[k].hracu); }).concat([1]));
+        return '<div style="' + card + '"><b style="font-size:13px">' + g[1] + '</b><div class="note" style="margin-bottom:4px">konverze na platbu (platící / hráči)</div>'
+          + keys.map(function (k) { var c = pct(o[k].platicich, o[k].hracu); return bar(k, c, max, String(c).replace('.', ',') + ' % · ' + o[k].platicich + '/' + o[k].hracu, c ? 'linear-gradient(90deg,#22c55e,#4fd1ff)' : 'rgba(148,163,184,.35)'); }).join('') + '</div>';
+      });
+      if (gh.length) h += h3('Kdo platí', 'kde je konverze nejvyšší — tam vést hráče') + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:10px">' + gh.join('') + '</div>';
+      // Nákupy podle druhu
+      var nk = Object.keys(nak).sort(function (a, b) { return nak[b].kc - nak[a].kc; });
+      if (nk.length) { var mx = Math.max.apply(null, nk.map(function (k) { return nak[k].kc; }).concat([1]));
+        h += h3('Co si kupují', 'tržba podle položky') + '<div style="' + card + '">' + nk.map(function (k) { return bar(k, nak[k].kc, mx, cz(Math.round(nak[k].kc)) + ' Kč · ' + nak[k].nakupu + '×', 'linear-gradient(90deg,#f59e0b,#ef4444)'); }).join('') + '</div>'; }
+      // Zjištění
+      if ((r.zjisteni || []).length) h += h3('Co z dat vychází') + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px">'
+        + r.zjisteni.map(function (z, i) { return '<div style="' + card + 'border-left:3px solid #f59e0b"><div style="font-size:11px;color:#f59e0b;font-weight:700">ZJIŠTĚNÍ ' + (i + 1) + '</div><b>' + esc(z.nadpis) + '</b><div class="note" style="color:var(--text);margin-top:4px;line-height:1.5">' + esc(z.detail) + '</div></div>'; }).join('') + '</div>';
+      // Návrhy: matice dopad × snadnost + karty
+      var nv = r.navrhy || [];
+      if (nv.length) {
+        h += h3('Návrhy na zlepšení', 'od nejdůležitějšího · vpravo nahoře = velký dopad a snadné → udělat hned');
+        var W = 360, H = 220, pad = 30, sx = function (v) { return pad + (v - 1) / 4 * (W - 2 * pad); }, sy = function (v) { return H - pad - (v - 1) / 4 * (H - 2 * pad); };
+        var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:420px;display:block"><rect x="' + (W / 2) + '" y="' + 6 + '" width="' + (W / 2 - pad + 4) + '" height="' + (H / 2 - 6) + '" fill="rgba(34,197,94,.10)" rx="8"/>'
+          + '<text x="' + (W - pad) + '" y="20" fill="#22c55e" font-size="10" text-anchor="end" font-weight="700">UDĚLAT HNED</text>'
+          + '<line x1="' + pad + '" y1="' + (H - pad) + '" x2="' + (W - pad) + '" y2="' + (H - pad) + '" stroke="rgba(148,163,184,.4)"/><line x1="' + pad + '" y1="' + pad / 2 + '" x2="' + pad + '" y2="' + (H - pad) + '" stroke="rgba(148,163,184,.4)"/>'
+          + '<text x="' + (W / 2) + '" y="' + (H - 8) + '" fill="#94a3b8" font-size="10" text-anchor="middle">snadnost →</text><text x="10" y="' + (H / 2) + '" fill="#94a3b8" font-size="10" transform="rotate(-90 10 ' + (H / 2) + ')" text-anchor="middle">dopad →</text>'
+          + nv.map(function (n, i) { var x = sx(n.snadnost || 3) + ((i % 3) - 1) * 7, y = sy(n.dopad || 3) + ((i % 2) ? 6 : -6);
+            return '<g><circle cx="' + x + '" cy="' + y + '" r="11" fill="#7c5cff" stroke="#fff" stroke-width="1.5"><title>' + esc(n.nazev) + '</title></circle><text x="' + x + '" y="' + (y + 4) + '" fill="#fff" font-size="11" font-weight="800" text-anchor="middle">' + (i + 1) + '</text></g>'; }).join('') + '</svg>';
+        h += '<div style="display:grid;grid-template-columns:minmax(260px,420px) 1fr;gap:12px;align-items:start"><div style="' + card + '">' + svg + '</div><div>'
+          + nv.map(function (n, i) { return '<div style="' + card + 'margin:0 0 8px;border-left:3px solid #7c5cff">'
+            + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="background:#7c5cff;color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">' + (i + 1) + '</span><b>' + esc(n.nazev) + '</b>'
+            + (n.oblast ? '<span class="note" style="border:1px solid var(--border);border-radius:6px;padding:0 6px">' + esc(n.oblast) + '</span>' : '')
+            + '<span class="note">dopad ' + '●'.repeat(n.dopad || 0) + '<span style="opacity:.3">' + '●'.repeat(5 - (n.dopad || 0)) + '</span></span>'
+            + '<span class="note" style="color:' + (nar[n.narocnost] || '#94a3b8') + '">náročnost: ' + esc(n.narocnost || '—') + '</span></div>'
+            + '<div style="margin:8px 0 6px;line-height:1.5"><b style="color:#4fd1ff">Co udělat:</b> ' + esc(n.co_zmenit) + '</div>'
+            + '<div class="note" style="line-height:1.5"><b>Proč:</b> ' + esc(n.proc) + '</div>'
+            + '<div class="note" style="line-height:1.5"><b>Očekávaný dopad:</b> ' + esc(n.ocekavany_dopad) + '</div>'
+            + (n.kpi || n.cil ? '<div class="note" style="margin-top:4px;color:#22c55e">🎯 ' + esc(n.kpi || '') + (n.cil ? ' — cíl: ' + esc(n.cil) : '') + '</div>' : '') + '</div>'; }).join('') + '</div></div>';
+      } else h += h3('Návrhy na zlepšení') + '<div style="' + card + '" class="note">AI tentokrát nevrátila návrhy — udělej nový rozbor.</div>';
+      if ((r.experimenty || []).length) h += h3('Co otestovat', 'A/B testy, které ověří hypotézy') + '<div style="' + card + '"><ol style="margin:0 0 0 18px;padding:0">' + r.experimenty.map(function (x) { return '<li style="margin:4px 0;line-height:1.5">🧪 ' + esc(x) + '</li>'; }).join('') + '</ol></div>';
+      if ((r.chybi_data || []).length) h += h3('Co začít měřit', 'aby byl příští rozbor přesnější') + '<div style="' + card + '"><ul style="margin:0 0 0 18px;padding:0">' + r.chybi_data.map(function (x) { return '<li style="margin:4px 0;line-height:1.5">📏 ' + esc(x) + '</li>'; }).join('') + '</ul></div>';
       return h;
     }
     function aiOtevri() {
@@ -275,7 +336,7 @@
       }).catch(function (e) { DLG.innerHTML = '<button class="x" data-close>×</button><p class="note" style="color:#f87171">' + esc(e.message) + '</p>'; });
     }
     document.getElementById('ai-btn').addEventListener('click', aiOtevri);
-    document.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('#dlg [data-close]')) OV.classList.remove('open'); });
+    document.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('#dlg [data-close]')) { OV.classList.remove('open'); DLG.style.width = ''; } });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && OV.classList.contains('open')) { try { zavriPrehravac(); } catch (x) { /* nic */ } OV.classList.remove('open'); } });
     document.addEventListener('click', function (e) {
       var b = e.target.closest && e.target.closest('#ai-run'); if (!b) return;
