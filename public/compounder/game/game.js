@@ -8346,40 +8346,103 @@ function senSmazatSheet(id) {
     }).catch(function () { toast('Server neodpovídá.', 'err'); });
   };
 }
-// Vlastní fotka. Zmenšíme ji v prohlížeči — plná fotka z mobilu by byla
-// zbytečně velká a stejně se ukazuje v malém.
+// Vlastní fotka ke snu. Zmenšuje se v prohlížeči — plná fotka z mobilu má
+// klidně dvanáct megapixelů a tady se ukazuje v malém okénku.
+//
+// Na iPhonu to dřív tiše padalo: input mimo stránku Safari občas vůbec
+// neotevřelo, HEIC se nepodařilo načíst přes Image a když se cokoli nepovedlo,
+// hráč se nedozvěděl nic. Teď má input místo ve stránce, zkouší se moderní
+// dekodér i starý FileReader a každé selhání se řekne nahlas.
 function senFoto(id) {
   var d = senPodle(id);
   if (!d) return;
   var inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = 'image/*';
+  inp.type = 'file';
+  inp.accept = 'image/*';
+  inp.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0';
+  document.body.appendChild(inp);
+  var uklid = function () {
+    setTimeout(function () { if (inp.parentNode) inp.parentNode.removeChild(inp); }, 2000);
+  };
   inp.onchange = function () {
     var f = inp.files && inp.files[0];
+    uklid();
     if (!f) return;
-    var fr = new FileReader();
-    fr.onload = function () {
-      var im = new Image();
-      im.onload = function () {
-        var max = 900, w = im.width, h = im.height;
-        if (w > max || h > max) { var k = max / Math.max(w, h); w = Math.round(w * k); h = Math.round(h * k); }
-        var c = document.createElement('canvas');
-        c.width = w; c.height = h;
-        c.getContext('2d').drawImage(im, 0, 0, w, h);
-        var data = c.toDataURL('image/jpeg', 0.82);
-        if (data.length > 400000) data = c.toDataURL('image/jpeg', 0.6);
-        toast('Ukládám fotku…');
-        apiJson('/sny/' + d.id + '/foto', { foto: data }).then(function (r) {
-          if (!r.ok) return toast(r.j.error || 'Fotku se nepovedlo uložit.', 'err');
-          SNY = (SNY || []).map(function (x) { return x.id === d.id ? r.j.sen : x; });
-          paintMe();
-          toast('Fotka je na nástěnce.', 'ok');
-        }).catch(function () { toast('Server neodpovídá.', 'err'); });
-      };
-      im.src = fr.result;
-    };
-    fr.readAsDataURL(f);
+    if (f.size > 40 * 1024 * 1024) return toast('Tahle fotka je obrovská. Zkus menší.', 'err');
+    toast('Zpracovávám fotku\u2026');
+    senFotoZpracuj(d, f);
   };
-  inp.click();
+  // Safari na iPhonu picker neotevře, když input nevisí ve stránce.
+  setTimeout(function () { inp.click(); }, 0);
+}
+function senFotoChyba(duvod) {
+  if (duvod) console.warn('[sen-foto]', duvod);
+  toast('Fotku se nepovedlo načíst. Zkus jinou, nebo ji nejdřív ulož do galerie.', 'err');
+}
+// Z obrázku udělá datovou adresu, která se vejde do limitu. Když je pořád
+// velká, zkusí to menší a víc zkomprimované — radši menší fotka než žádná.
+function senFotoData(zdroj, w0, h0) {
+  var kroky = [[900, 0.82], [720, 0.75], [560, 0.65], [420, 0.55]];
+  for (var i = 0; i < kroky.length; i++) {
+    var max = kroky[i][0], q = kroky[i][1];
+    var w = w0, h = h0;
+    if (w > max || h > max) { var k = max / Math.max(w, h); w = Math.round(w * k); h = Math.round(h * k); }
+    var c = document.createElement('canvas');
+    c.width = Math.max(1, w); c.height = Math.max(1, h);
+    var ctx = c.getContext('2d');
+    if (!ctx) return null;
+    try { ctx.drawImage(zdroj, 0, 0, c.width, c.height); } catch (e) { return null; }
+    var data;
+    try { data = c.toDataURL('image/jpeg', q); } catch (e) { return null; }
+    if (!data || data.length < 200) return null;
+    if (data.length <= 380000) return data;
+  }
+  return null;
+}
+function senFotoPosli(d, data) {
+  apiJson('/sny/' + d.id + '/foto', { foto: data }).then(function (r) {
+    if (!r.ok) return toast((r.j && r.j.error) || 'Fotku se nepovedlo uložit.', 'err');
+    SNY = (SNY || []).map(function (x) { return x.id === d.id ? r.j.sen : x; });
+    paintMe();
+    toast('Fotka je na nástěnce.', 'ok');
+  }).catch(function () { toast('Server neodpovídá. Zkus to za chvíli.', 'err'); });
+}
+function senFotoZpracuj(d, f) {
+  var pres = function (zdroj, w, h, zavri) {
+    var data = senFotoData(zdroj, w, h);
+    if (zavri) { try { zavri(); } catch (e) { /* nevadí */ } }
+    if (!data) return senFotoChyba('kresba se nepovedla');
+    senFotoPosli(d, data);
+  };
+  // Moderní cesta: zvládne i HEIC z iPhonu a otočení podle EXIF.
+  if (window.createImageBitmap) {
+    var p;
+    try { p = createImageBitmap(f, { imageOrientation: 'from-image' }); }
+    catch (e) { p = null; }
+    if (p && p.then) {
+      p.then(function (bm) {
+        pres(bm, bm.width, bm.height, bm.close && bm.close.bind(bm));
+      }).catch(function () { senFotoStara(d, f); });
+      return;
+    }
+  }
+  senFotoStara(d, f);
+}
+// Záloha pro starší prohlížeče: načíst jako datovou adresu a nechat to na <img>.
+function senFotoStara(d, f) {
+  var fr = new FileReader();
+  fr.onerror = function () { senFotoChyba('soubor se nenačetl'); };
+  fr.onload = function () {
+    var im = new Image();
+    im.onerror = function () { senFotoChyba('formát obrázku prohlížeč neumí'); };
+    im.onload = function () {
+      var data = senFotoData(im, im.naturalWidth || im.width, im.naturalHeight || im.height);
+      if (!data) return senFotoChyba('kresba se nepovedla');
+      senFotoPosli(d, data);
+    };
+    im.src = fr.result;
+  };
+  try { fr.readAsDataURL(f); } catch (e) { senFotoChyba('soubor nejde přečíst'); }
 }
 
 function paintMe() {
