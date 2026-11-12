@@ -915,6 +915,18 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .sen-smazat{background:none;border:0;color:var(--text2);font-size:19px;line-height:1;cursor:pointer;
   padding:4px 7px;font-family:inherit}
 .sen-smazat:hover{color:var(--err)}
+.sen.pryc{opacity:.55}
+.sen.pryc .sen-foto{filter:grayscale(1)}
+.zed{display:flex;flex-direction:column;gap:7px}
+.zed-r{display:flex;align-items:center;gap:9px;padding:7px 9px;border:1px solid var(--border);
+  border-radius:11px;background:rgba(255,255,255,.03)}
+.zed-ik{width:34px;height:34px;flex:0 0 34px;border-radius:9px;padding:4px;
+  background:linear-gradient(145deg,#16233a,#0f1a2c);display:flex;align-items:center;justify-content:center}
+.zed-ik svg{width:100%;height:100%}
+.zed-t{flex:1;min-width:0}
+.zed-t b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.zed-t i{font-style:normal;font-size:11.5px;color:var(--text2)}
+.zed-c{font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--ok)}
 .por-uvod{color:var(--text2);font-size:13px;padding:6px 2px}
 .por-chipy{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .por-chip{background:transparent;border:1px solid var(--border);color:var(--text2);

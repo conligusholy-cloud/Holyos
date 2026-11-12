@@ -1487,7 +1487,10 @@ function monthlyProfit() { return S.units.reduce(function (a, u) { return a + u.
 // Jedno číslo, jedna definice: stejně se počítá v hlavičce i v panelu Síť.
 // Pozor: do tick() patří dál monthlyProfit(), tam se splátky stráhají zvlášť —
 // kdyby se počítalo s čistým ziskem, strhly by se dvakrát.
-function cistyZisk() { return monthlyProfit() - splatkyMesicne() - pobockyMesicne() - cetaMesicne(); }
+// Splněné sny nejsou jen trofej: letadlo chce hangár, pilota a servis.
+// Součet se drží ve stavu hry, aby se počítal i offline, než se nástěnka načte.
+function snyMesicne() { return Math.max(0, Math.round((S && S.snyRezie) || 0)); }
+function cistyZisk() { return monthlyProfit() - splatkyMesicne() - pobockyMesicne() - cetaMesicne() - snyMesicne(); }
 function yearlyProfit() { return monthlyProfit() * 12; }
 
 // ─── Vývoj v čase ───────────────────────────────────────────────────────
@@ -1786,7 +1789,7 @@ function tick() {
   // nepřítomnost zadarmo a porucha by začala až návratem.
   var ztrataPoruch = hlidejPoruchy(dt);
   // Pobočky i četa stojí každý měsíc bez ohledu na to, jestli se staví.
-  var earned = (yearlyProfit() - (pobockyMesicne() + cetaMesicne()) * 12) * years - ztrataPoruch;
+  var earned = (yearlyProfit() - (pobockyMesicne() + cetaMesicne() + snyMesicne()) * 12) * years - ztrataPoruch;
   // Do bubliny nad prádlomaty: zvlášť co přiteklo a co banka sebrala.
   drip.earn += Math.max(0, earned);
   S.cash += earned;
@@ -7916,6 +7919,7 @@ function bindMajetek() {
 // to za laundry. Nikomu jinému se to neukazuje.
 var SNY = null;            // null = ještě jsme je nenačetli
 var SNY_NACITAM = false;
+var SEN_PRODEJ = 0.6;      // kolik z ceny dá bazar — musí sedět se serverem
 function loadSny(pak) {
   if (!ME) { SNY = []; if (pak) pak(); return; }
   if (SNY_NACITAM) return;
@@ -7923,8 +7927,54 @@ function loadSny(pak) {
   api('/sny').then(function (r) {
     SNY_NACITAM = false;
     SNY = (r.ok && r.j.sny) ? r.j.sny : [];
+    snyPrepocti();
     if (pak) pak(); else if (!$('v-me').classList.contains('hidden')) paintMe();
   }).catch(function () { SNY_NACITAM = false; SNY = SNY || []; });
+}
+// Kolik stojí provoz splněných snů dohromady. Drží se ve stavu hry, aby s tím
+// uměl počítat i tick, který běží dřív, než se nástěnka stáhne ze serveru.
+function snyPrepocti() {
+  if (!S) return;
+  var soucet = (SNY || []).reduce(function (a, d) {
+    return a + ((d.splneno && !d.prodano) ? (d.rezie || 0) : 0);
+  }, 0);
+  if (Math.round(soucet) === Math.round(S.snyRezie || 0)) return;
+  S.snyRezie = Math.round(soucet);
+  save(); paint();
+}
+// ─── Co si plní ostatní ──────────────────────────────────────────────────────
+// Veřejná zeď splněných snů. Není to žebříček, je to postrčení: když si někdo
+// koupí chatu, je vidět, že to jde.
+var ZED = null, ZED_VIDENO = null;
+function loadZed(pak) {
+  api('/sny/zed').then(function (r) {
+    var nova = (r.ok && r.j.zed) ? r.j.zed : [];
+    // Co přibylo, co jsme se dívali naposled, zaslouží hlášku.
+    if (ZED_VIDENO != null && nova.length) {
+      var cerstve = nova.filter(function (x) { return new Date(x.kdy).getTime() > ZED_VIDENO && (!ME || x.nick !== ME.nick); });
+      if (cerstve.length) {
+        var c = cerstve[0];
+        toast(c.firma + ' si splnil sen: ' + c.nazev + ' za ' + kcFull(c.cena)
+          + (cerstve.length > 1 ? ' (a další ' + (cerstve.length - 1) + ')' : ''), 'ok');
+      }
+    }
+    ZED = nova;
+    ZED_VIDENO = nova.length ? new Date(nova[0].kdy).getTime() : (ZED_VIDENO || Date.now());
+    if (pak) pak(); else if (!$('v-me').classList.contains('hidden')) paintMe();
+  }).catch(function () { ZED = ZED || []; });
+}
+function zedHtml() {
+  if (ZED === null) { loadZed(); return ''; }
+  if (!ZED.length) return '';
+  return '<h3 style="margin:18px 0 2px">Co si plní ostatní</h3>'
+    + '<p class="muted small" style="margin:0 0 8px">Tohle si hráči doopravdy koupili za vydělané laundry.</p>'
+    + '<div class="zed">' + ZED.slice(0, 10).map(function (x) {
+      return '<div class="zed-r">'
+        + '<div class="zed-ik"><svg viewBox="0 0 64 64">' + SEN_IKONY[senZnacka(x)] + '</svg></div>'
+        + '<div class="zed-t"><b>' + esc(x.firma) + '</b><i>' + esc(x.nazev)
+        + (x.prodano ? ' · už prodal' : '') + '</i></div>'
+        + '<b class="zed-c">' + kcFull(x.cena) + '</b></div>';
+    }).join('') + '</div>';
 }
 // Sada ikon ke snům. Model jen vybere značku, kreslení si děláme sami —
 // jeho vlastní pokusy byly k nepoznání. Kdo chce svůj přesný kousek, nahraje
@@ -8052,25 +8102,35 @@ function senZaDlouho(chybi) {
   return 'asi ' + String(r).replace('.', ',') + ' herního roku';
 }
 function senKarta(d) {
-  var splneno = !!d.splneno;
+  var splneno = !!d.splneno, prodano = !!d.prodano;
   var chybi = Math.max(0, d.cena - S.cash);
   var podil = Math.max(0, Math.min(1, S.cash / Math.max(1, d.cena)));
-  return '<div class="sen' + (splneno ? ' hotovo' : '') + '">'
+  var stav;
+  if (prodano) {
+    stav = '<i>Prodáno ' + new Date(d.prodano).toLocaleDateString('cs-CZ')
+      + ' za ' + kcFull(d.prodano_za || 0) + '</i>';
+  } else if (splneno) {
+    stav = '<i class="ok">\u2714 Splněno ' + new Date(d.splneno).toLocaleDateString('cs-CZ') + '</i>'
+      + (d.rezie ? '<i class="warn">provoz ' + kcFull(d.rezie) + ' / měsíc</i>' : '');
+  } else {
+    stav = '<div class="bar sen-bar"><i style="width:' + Math.round(podil * 100) + '%"></i></div>'
+      + '<i>' + (chybi > 0
+          ? 'chybí ' + kcFull(chybi) + ' · ' + senZaDlouho(chybi)
+          : 'máš na to — můžeš si ho pořídit') + '</i>'
+      + (d.rezie ? '<i class="muted">provoz pak ' + kcFull(d.rezie) + ' / měsíc</i>' : '');
+  }
+  return '<div class="sen' + (splneno && !prodano ? ' hotovo' : '') + (prodano ? ' pryc' : '') + '">'
     + senObrazek(d)
     + '<div class="sen-txt">'
-      + '<div class="sen-hl"><b>' + esc(d.nazev) + '</b><b class="' + (splneno ? 'ok' : '') + '">'
+      + '<div class="sen-hl"><b>' + esc(d.nazev) + '</b><b class="' + (splneno && !prodano ? 'ok' : '') + '">'
       + kcFull(d.cena) + '</b></div>'
       + (d.popis ? '<i>' + esc(d.popis) + '</i>' : '')
-      + (splneno
-          ? '<i class="ok">\u2714 Splněno ' + new Date(d.splneno).toLocaleDateString('cs-CZ') + '</i>'
-          : '<div class="bar sen-bar"><i style="width:' + Math.round(podil * 100) + '%"></i></div>'
-            + '<i>' + (chybi > 0
-                ? 'chybí ' + kcFull(chybi) + ' · ' + senZaDlouho(chybi)
-                : 'máš na to — můžeš si ho pořídit') + '</i>')
+      + stav
       + '<div class="sen-akce">'
-        + (splneno ? '' : '<button class="btn sm' + (chybi > 0 ? ' sec' : '') + '" data-sen-koupit="' + d.id + '"'
+        + (splneno || prodano ? '' : '<button class="btn sm' + (chybi > 0 ? ' sec' : '') + '" data-sen-koupit="' + d.id + '"'
             + (chybi > 0 ? ' disabled' : '') + '>Pořídit</button>')
-        + '<button class="btn sm sec" data-sen-foto="' + d.id + '">' + (d.foto ? 'Jiná fotka' : 'Vlastní fotka') + '</button>'
+        + (splneno && !prodano ? '<button class="btn sm sec" data-sen-prodat="' + d.id + '">Prodat</button>' : '')
+        + (prodano ? '' : '<button class="btn sm sec" data-sen-foto="' + d.id + '">' + (d.foto ? 'Jiná fotka' : 'Vlastní fotka') + '</button>')
         + '<button class="sen-smazat" data-sen-smazat="' + d.id + '" title="Smazat sen">\u00d7</button>'
       + '</div>'
     + '</div></div>';
@@ -8087,6 +8147,7 @@ function snyKartaHtml() {
   }
   var nesplnene = SNY.filter(function (d) { return !d.splneno; });
   var splnene = SNY.filter(function (d) { return !!d.splneno; });
+  var provoz = snyMesicne();
   return '<div class="card"><h3>Moje sny</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Napiš, co si chceš jednou dopřát. '
     + 'Spočítám, co to doopravdy stojí — a až na to vyděláš, koupíš si to za laundry. '
@@ -8095,9 +8156,12 @@ function snyKartaHtml() {
     + (nesplnene.length ? '<div class="sny">' + nesplnene.map(senKarta).join('') + '</div>' : '')
     + (splnene.length
         ? '<h3 style="margin:18px 0 2px">Splněné sny</h3>'
-          + '<p class="muted small" style="margin:0 0 8px">Tohle sis vydělal.</p>'
+          + '<p class="muted small" style="margin:0 0 8px">Tohle sis vydělal.'
+            + (provoz ? ' Provoz tě stojí <b class="warn">' + kcFull(provoz) + ' měsíčně</b> — '
+                + 'co už jen leží, můžeš prodat.' : '') + '</p>'
           + '<div class="sny">' + splnene.map(senKarta).join('') + '</div>'
         : '')
+    + zedHtml()
     + (!SNY.length ? '<p class="fine" style="margin-top:10px">Zatím tu nic není. '
         + 'Zkus třeba „chata v Krkonoších" nebo „rok volna".</p>' : '')
     + '</div>';
@@ -8107,6 +8171,9 @@ function bindSny() {
   if (nb) nb.onclick = senNovySheet;
   [].forEach.call(document.querySelectorAll('[data-sen-koupit]'), function (b) {
     b.onclick = function () { senKoupitSheet(Number(b.getAttribute('data-sen-koupit'))); };
+  });
+  [].forEach.call(document.querySelectorAll('[data-sen-prodat]'), function (b) {
+    b.onclick = function () { senProdatSheet(Number(b.getAttribute('data-sen-prodat'))); };
   });
   [].forEach.call(document.querySelectorAll('[data-sen-foto]'), function (b) {
     b.onclick = function () { senFoto(Number(b.getAttribute('data-sen-foto'))); };
@@ -8154,9 +8221,13 @@ function senKoupitSheet(id) {
   if (S.cash < d.cena) return toast('Na tohle ještě nemáš.', 'err');
   sheet('<h3>Pořídit si ' + esc(d.nazev) + '?</h3>'
     + '<p class="muted small">Z hotovosti ti ubude ' + kcFull(d.cena) + ' a sen se přesune mezi splněné. '
-    + 'Na provoz sítě to nemá vliv — jen na peníze, které bys jinak investoval.</p>'
+    + (d.rezie ? 'Počítej ale i s provozem — servis, pojištění a palivo běží každý měsíc dál, '
+        + 'a co ti měsíčně zbyde, o to klesne.' : 'Provoz nestojí nic, jen ti ubude hotovost.') + '</p>'
     + '<div class="kv"><span>Hotovost teď</span><b>' + kcFull(S.cash) + '</b></div>'
     + '<div class="kv"><span>Po koupi</span><b>' + kcFull(S.cash - d.cena) + '</b></div>'
+    + (d.rezie ? '<div class="kv"><span>Provoz</span><b class="warn">' + kcFull(d.rezie) + ' / měsíc</b></div>'
+        + '<div class="kv"><span>Zbyde měsíčně pak</span><b class="' + (cistyZisk() - d.rezie >= 0 ? 'ok' : 'err') + '">'
+        + kcFull(cistyZisk() - d.rezie) + '</b></div>' : '')
     + '<button class="btn big" id="sen-ano" style="width:100%;margin-top:12px">Ano, pořídit</button>'
     + '<button class="btn ghost" id="sen-ne" style="width:100%;margin-top:8px">Ještě ne</button>');
   $('sen-ne').onclick = closeSheet;
@@ -8167,10 +8238,44 @@ function senKoupitSheet(id) {
       S.cash -= d.cena;
       zapis('sen', 'Splněný sen — ' + d.nazev, -d.cena);
       SNY = (SNY || []).map(function (x) { return x.id === d.id ? r.j.sen : x; });
+      snyPrepocti();
       save(); paint(); syncState(true);
       closeSheet(); paintMe();
-      toast('Splněno: ' + d.nazev + '. Užij si to.', 'ok');
+      ZED_VIDENO = Date.now();          // vlastní sen si sám sobě hlásit nemusíme
+      loadZed();
+      toast('Splněno: ' + d.nazev + '. Uvidí to i ostatní hráči.', 'ok');
     }).catch(function () { b.disabled = false; b.textContent = 'Ano, pořídit'; toast('Server neodpovídá.', 'err'); });
+  };
+}
+// Prodej splněného snu. Bazar dává míň, než to stálo — zato zmizí provoz.
+function senProdatSheet(id) {
+  var d = senPodle(id);
+  if (!d || !d.splneno || d.prodano) return;
+  var za = Math.round(d.cena * SEN_PRODEJ);
+  var ztrata = d.cena - za;
+  sheet('<h3>Prodat ' + esc(d.nazev) + '?</h3>'
+    + '<p class="muted small">Z druhé ruky nikdo nedá, co jsi zaplatil. Dostaneš '
+    + Math.round(SEN_PRODEJ * 100) + ' % ceny a zbytek je ztráta — zato ti každý měsíc '
+    + 'přestane utíkat provoz. Na nástěnce sen zůstane, jen jako prodaný.</p>'
+    + '<div class="kv"><span>Pořizovací cena</span><b>' + kcFull(d.cena) + '</b></div>'
+    + '<div class="kv"><span>Dostaneš</span><b class="ok">' + kcFull(za) + '</b></div>'
+    + '<div class="kv"><span>Ztráta</span><b class="err">' + kcFull(ztrata) + '</b></div>'
+    + (d.rezie ? '<div class="kv"><span>Ušetříš měsíčně</span><b class="ok">' + kcFull(d.rezie) + '</b></div>' : '')
+    + '<button class="btn big" id="sen-prodat-ano" style="width:100%;margin-top:12px">Prodat</button>'
+    + '<button class="btn ghost" id="sen-prodat-ne" style="width:100%;margin-top:8px">Nechat si ho</button>');
+  $('sen-prodat-ne').onclick = closeSheet;
+  $('sen-prodat-ano').onclick = function () {
+    var b = $('sen-prodat-ano'); b.disabled = true; b.textContent = 'Prodávám…';
+    apiJson('/sny/' + d.id + '/prodat', {}).then(function (r) {
+      if (!r.ok) { b.disabled = false; b.textContent = 'Prodat'; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
+      S.cash += r.j.za;
+      zapis('sen', 'Prodaný sen — ' + d.nazev, r.j.za);
+      SNY = (SNY || []).map(function (x) { return x.id === d.id ? r.j.sen : x; });
+      snyPrepocti();
+      save(); paint(); syncState(true);
+      closeSheet(); paintMe();
+      toast('Prodáno za ' + kcFull(r.j.za) + '. Provoz ti přestal ujídat.', 'ok');
+    }).catch(function () { b.disabled = false; b.textContent = 'Prodat'; toast('Server neodpovídá.', 'err'); });
   };
 }
 function senSmazatSheet(id) {
@@ -8184,6 +8289,7 @@ function senSmazatSheet(id) {
   $('sen-del').onclick = function () {
     api('/sny/' + d.id, { method: 'DELETE' }).then(function () {
       SNY = (SNY || []).filter(function (x) { return x.id !== d.id; });
+      snyPrepocti();
       closeSheet(); paintMe();
     }).catch(function () { toast('Server neodpovídá.', 'err'); });
   };
@@ -10287,6 +10393,9 @@ function startGame() {
   loadTrades();
   loadChat();
   setInterval(function () { loadTrades(); loadTrh(drawMap); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }, 60000);
+  // Splněné sny ostatních: jednou za dvě minuty, a jen když je hra vidět.
+  if (ME) loadZed();
+  setInterval(function () { if (!document.hidden && ME) loadZed(function () {}); }, 120000);
   // Zprávy od hráčů chodí živě: ptáme se každých dvacet vteřin, ale jen když má
   // hráč hru doopravdy před sebou.
   setInterval(function () { if (!document.hidden) loadChat(); }, 20000);

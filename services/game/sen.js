@@ -28,13 +28,17 @@ const SYSTEM = [
   'Hráč hry o budování sítě prádlomatů si zapisuje, co by si jednou chtěl dopřát.',
   'Z jeho věty udělej položku na nástěnku snů. Odpovídáš POUZE JSON objektem, bez markdownu.',
   '',
-  'Tvar: {"nazev":"…","popis":"…","cena":123456,"ikona":"auto"}',
+  'Tvar: {"nazev":"…","popis":"…","cena":123456,"rezie":1234,"ikona":"auto"}',
   '',
   '- nazev: dvě až čtyři slova česky, konkrétní („Sportovní auto", „Chata v horách").',
   '  Značku ani model do názvu nedávej.',
   '- popis: jedna věta česky, co to je a proč se na to vyplatí šetřit. Bez patosu.',
   '- cena: běžná pořizovací cena v Kč jako celé číslo, nová věc, české ceny, bez extrémů.',
   '  U nehmotných přání (klid, čas, rok volna) dej cenu toho, co by to doopravdy stálo.',
+  '- rezie: běžné MĚSÍČNÍ náklady na provoz té věci v Kč jako celé číslo — servis, pojištění,',
+  '  palivo, garáž či hangár, poplatky, u letadla i pilot. Co se neprovozuje (hodinky, šperk,',
+  '  obraz), má rezie 0. Drž se skutečnosti: auto za tři miliony stojí měsíčně řádově tisíce,',
+  '  soukromé letadlo řádově statisíce.',
   '- ikona: právě jedna značka z této sady, ta nejbližší: ' + IKONY.join(', ') + '.',
   '  Když nic nesedí, dej hvezda.',
 ].join('\n');
@@ -72,6 +76,7 @@ async function vymysli(zadani) {
       nazev: String(j.nazev || zadani).slice(0, 80),
       popis: String(j.popis || '').slice(0, 300) || null,
       cena, ikona,
+      rezie: Math.max(0, Math.min(cena, Math.round(Number(j.rezie) || 0))),
     } };
   } catch (e) {
     console.warn('[game-sen]', e && e.message);

@@ -7701,12 +7701,18 @@ model GameDream {
   ikona      String?   @db.VarChar(24)
   obrazek    String?   @db.Text
   foto       String?   @db.Text
+  // Měsíční provoz splněného snu — servis, pojištění, palivo, garáž, pilot.
+  rezie      Int       @default(0)
   splneno_at DateTime?
   zaplaceno  Int?
+  // Prodej se ztrátou, když hráče provoz přeroste.
+  prodano_at DateTime?
+  prodano_za Int?
   poradi     Int       @default(0)
   created_at DateTime  @default(now())
 
   @@index([player_id])
+  @@index([splneno_at])
   @@map("game_dreams")
 }
 
