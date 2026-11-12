@@ -1712,7 +1712,9 @@ document.addEventListener('click',function(ev){var b=ev.target&&ev.target.closes
   if(typeof QRCode==='undefined'){err.textContent='Knihovna QR se nenačetla — obnov stránku.';ov.style.display='flex';return;}
   new QRCode(box,{text:payload,width:240,height:240,correctLevel:QRCode.CorrectLevel.M});
   document.getElementById('vqr-t').textContent=cur==='CZK'?'QR Platba (CZK)':'SEPA QR (EUR)';
-  info.innerHTML='<div>Příjemce: <b>'+esc(b.dataset.name)+'</b></div><div>Účet: <b>'+esc(b.dataset.acc)+'</b></div>'+(ib.replace(/\\s/g,'')!==String(b.dataset.acc).replace(/\\s/g,'').toUpperCase()?'<div>IBAN: <b>'+esc(ib.replace(/(.{4})/g,'$1 ').trim())+'</b></div>':'')+'<div>Částka: <b>'+esc(amt.toLocaleString('cs-CZ',{minimumFractionDigits:2}))+' '+(cur==='EUR'?'€':'Kč')+'</b></div>'+(vs?'<div>VS: <b>'+esc(vs)+'</b></div>':'')+'<div>Zpráva: '+esc(msg)+'</div><div class="muted" style="margin-top:6px">Po zaplacení klikni na ✓ Vyplaceno.</div>';
+  info.innerHTML='<div>Příjemce: <b>'+esc(b.dataset.name)+'</b></div><div>Účet: <b>'+esc(b.dataset.acc)+'</b></div>'+(ib.replace(/\\s/g,'')!==String(b.dataset.acc).replace(/\\s/g,'').toUpperCase()?'<div>IBAN: <b>'+esc(ib.replace(/(.{4})/g,'$1 ').trim())+'</b></div>':'')+'<div>Částka: <b>'+esc(amt.toLocaleString('cs-CZ',{minimumFractionDigits:2}))+' '+(cur==='EUR'?'€':'Kč')+'</b></div>'+(vs?'<div>VS: <b>'+esc(vs)+'</b></div>':'')+'<div>Zpráva: '+esc(msg)+'</div><div class="muted" style="margin:6px 0 10px">Po zaplacení klikni na ✓ Vyplaceno.</div><button type="button" id="vqr-paid" class="btn" style="width:100%;justify-content:center">✓ Vyplaceno — přesunout do vyplacených</button>';
+  window.__vqrForm=f;
+  var pb=document.getElementById('vqr-paid');if(pb)pb.onclick=function(){var fm=window.__vqrForm;if(!fm)return;pb.disabled=true;pb.textContent='Ukládám…';var pm=fm.querySelector('[name=pay_method]');if(pm)pm.value='QR kód';fm.submit();};
   ov.style.display='flex';})();});
 })();</script>`;
 

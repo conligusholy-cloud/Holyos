@@ -947,7 +947,7 @@
           if (isManual) {
             html += '<div style="font-size:11px;font-weight:700;margin-top:4px;color:#f472b6;">✍️ Rezervace celého slotu — čeká na napojení objednávky / plánování výroby</div>';
           } else if (a.order_id || a.order_item_id) {
-            html += '<div style="font-size:11px;margin-top:4px;color:#93c5fd;">🔗 Napojeno na objednávku' + (a.order_id ? ' #' + a.order_id : '') + (a.order_item_id ? ' · položka #' + a.order_item_id : '') + '</div>';
+            html += '<div style="font-size:11px;margin-top:4px;color:#93c5fd;">🔗 Evidujeme pod objednávkou ' + (a.order_id ? '<a href="/modules/prodejni-objednavky/index.html?order=' + a.order_id + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Otevřít objednávku" style="color:#60a5fa;font-weight:700;text-decoration:underline;">' + esc(a.order_number || ('#' + a.order_id)) + ' ↗</a>' : '') + (a.order_item_id ? ' · položka #' + a.order_item_id : '') + '</div>';
           }
           if (a.note) html += '<div style="font-size:11px;color:var(--text2);margin-top:4px;"><em>' + esc(a.note) + '</em></div>';
           // Akce k přiřazení
