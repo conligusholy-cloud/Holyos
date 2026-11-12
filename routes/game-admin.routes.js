@@ -282,6 +282,28 @@ router.get('/orders', api(async (req, res) => {
     })) });
 }));
 
+// ─── Předplatná ──────────────────────────────────────────────────────────────
+// Co komu běží a dokud. Pravda je ve Stripu, tohle je její odraz z webhooků —
+// když se tu něco rozchází, chybí nejspíš zapnutá událost ve Stripu.
+router.get('/predplatne', api(async (req, res) => {
+  const take = Math.min(500, Math.max(10, parseInt(req.query.limit, 10) || 200));
+  const rows = await prisma.gameSubscription.findMany({
+    orderBy: { created_at: 'desc' }, take,
+    include: { player: { select: { nick: true, email: true } } },
+  });
+  const ted = Date.now();
+  const bezi = rows.filter((r) => ['active', 'past_due'].includes(r.status)
+    && (!r.plati_do || new Date(r.plati_do).getTime() > ted));
+  res.json({ ok: true,
+    souhrn: { bezi: bezi.length, techniku: bezi.reduce((a, r) => a + (r.qty || 1), 0) },
+    subs: rows.map((r) => ({
+      id: r.id, kind: r.kind, qty: r.qty, status: r.status, obnovi_se: r.obnovi_se,
+      plati_do: r.plati_do, nick: r.player ? r.player.nick : null,
+      email: r.player ? r.player.email : null,
+      stripe_sub: r.stripe_sub, created_at: r.created_at, updated_at: r.updated_at,
+    })) });
+}));
+
 // ─── Ceník ───────────────────────────────────────────────────────────────────
 router.get('/prices', api(async (req, res) => {
   const def = acct._defaults;
