@@ -4506,11 +4506,13 @@ function bindAgent() {
   };
 }
 // Peníze dorazily — otevřeme zpátky to, kvůli čemu si je hráč kupoval.
+var AGENT_VRACENO = false;
 function agentNavrat() {
   var z = S && S.agentZpet;
   if (!z) return;
   delete S.agentZpet; save();
   if (Date.now() - (z.kdy || 0) > 2 * 3600e3) return;
+  AGENT_VRACENO = true;
   var sp = null, a = S.areas && z.areaId ? S.areas[z.areaId] : null;
   if (a) (a.spots || []).forEach(function (x) { if (x.id === z.spotId) sp = x; });
   if (z.typ === 'stroj') { switchTab('shop'); return buySheet(z.model); }
@@ -10876,8 +10878,8 @@ function buyCard(kind, qty) {
   var c = (CARDS_CAT || []).filter(function (x) { return x.kind === kind; })[0];
   if (!c) return;
   if (!ME) return toast('Nejdřív se přihlas.', 'err');
-  if (!ME.has_details) return detailsSheet(kind);
   qty = Math.max(1, parseInt(qty, 10) || 1);
+  if (!ME.has_details) return detailsSheet(kind, null, qty);
   var bal = c.bundles || [];
   var vybrany = bal.filter(function (b) { return b.qty === qty; })[0];
   var cena = vybrany ? vybrany.price_czk : c.price_czk * qty;
@@ -10915,7 +10917,7 @@ function buyCard(kind, qty) {
   };
 }
 // Jméno a e-mail chceme až tady — do té chvíle je hra úplně anonymní.
-function detailsSheet(thenKind, thenCash) {
+function detailsSheet(thenKind, thenCash, thenQty) {
   sheet('<h3>Ještě dva údaje</h3>'
     + '<p class="muted small">K platbě potřebujeme vědět, komu kartu připsat a kam poslat doklad.</p>'
     + '<label class="fld"><span>Jméno</span><input id="d-first" class="inp" type="text" maxlength="60" value="' + esc((ME && ME.first_name) || '') + '"></label>'
@@ -10928,7 +10930,7 @@ function detailsSheet(thenKind, thenCash) {
     }).then(function (r) {
       if (!r.ok) return toast(r.j.error || 'Nepovedlo se uložit.', 'err');
       ME = r.j.player; closeSheet();
-      if (thenKind) buyCard(thenKind);
+      if (thenKind) buyCard(thenKind, thenQty);
       else if (thenCash) buyCash(thenCash);
     }).catch(function () { toast('Server neodpovídá.', 'err'); });
   };
@@ -10949,10 +10951,14 @@ function checkPayment() {
         ev('game_paid', true);
         if (ME) ME.cards = r.j.owned;
         if (/^cash/.test(r.j.kind || '')) {
-          return claimCash(function () { paintBank(); switchTab('bank'); });
+          // Když si hráč balík kupoval kvůli konkrétní stavbě, agent ho tam
+          // vrátí sám — pak by přepnutí na banku jen zmátlo.
+          return claimCash(function () { paintBank(); if (!AGENT_VRACENO) switchTab('bank'); });
         }
         paintCards(); switchTab('cards');
-        return toast('Zaplaceno — karta je tvoje.', 'ok');
+        var kusu = Math.max(1, parseInt(r.j.qty, 10) || 1);
+        return toast(kusu > 1 ? 'Zaplaceno — ' + kusu + ' karty jsou na účtu.' : 'Zaplaceno — karta je tvoje.',
+          'ok', true);
       }
       if (++tries < 10) return setTimeout(poll, 1500);
       toast('Platba se ještě potvrzuje. Karta se objeví během chvilky.', 'ok');
