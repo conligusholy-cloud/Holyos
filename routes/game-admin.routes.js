@@ -270,14 +270,14 @@ router.get('/orders', api(async (req, res) => {
   const rows = await prisma.gamePurchase.findMany({
     where: stav ? { status: stav } : {},
     orderBy: { created_at: 'desc' }, take,
-    include: { player: { select: { nick: true, email: true } } },
+    include: { player: { select: { nick: true, email: true, created_at: true } } },
   });
   const paid = await prisma.gamePurchase.aggregate({ where: { status: 'paid' }, _sum: { amount_cents: true }, _count: { _all: true } });
   res.json({ ok: true,
     souhrn: { zaplaceno_ks: paid._count._all, zaplaceno_kc: (paid._sum.amount_cents || 0) / 100 },
     orders: rows.map((o) => ({
       id: o.id, kind: o.kind, qty: o.qty, castka: o.amount_cents / 100, status: o.status,
-      nick: o.player ? o.player.nick : null, email: o.email || (o.player ? o.player.email : null),
+      nick: o.player ? o.player.nick : null, registrace: o.player ? o.player.created_at : null, email: o.email || (o.player ? o.player.email : null),
       session: o.stripe_session, created_at: o.created_at, paid_at: o.paid_at,
     })) });
 }));
