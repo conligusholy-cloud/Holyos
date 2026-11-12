@@ -79,6 +79,26 @@ const CARDS = {
 };
 const CARD_KINDS = Object.keys(CARDS);
 
+// ─── Balíčky karet ───────────────────────────────────────────────────────────
+// Víc kusů jedné karty najednou za nižší cenu za kus. Sleva je v procentech,
+// cena za kus se zaokrouhlí na celé koruny — ať v nabídce nesvítí haléře a
+// násobek sedí přesně na to, co se účtuje ve Stripu (ten násobí cenu za kus).
+const BALICKY = [{ qty: 3, sleva: 0.12 }, { qty: 5, sleva: 0.27 }, { qty: 10, sleva: 0.41 }];
+function cenaKusuVBalicku(price, qty) {
+  const b = BALICKY.filter((x) => x.qty === qty)[0];
+  if (!b || !(price > 0)) return price;
+  return Math.max(100, Math.round(price * (1 - b.sleva) / 100) * 100);
+}
+// Nabídka balíčků k jedné kartě, rovnou s úsporou — klient už nic nepočítá.
+function balickyProKartu(c) {
+  return BALICKY.map((b) => {
+    const kus = cenaKusuVBalicku(c.price, b.qty);
+    const celkem = kus * b.qty, plna = c.price * b.qty;
+    return { qty: b.qty, price_czk: celkem / 100, plna_czk: plna / 100,
+      sleva: Math.max(0, Math.round((1 - celkem / plna) * 100)) };
+  }).filter((b) => b.sleva > 0);
+}
+
 // ─── Balíčky herních peněz ───────────────────────────────────────────────────
 // Ceny v haléřích, laundry na ruku. Čím větší balík, tím víc za korunu —
 // u stovky je to 1 000 L$/Kč, u dvoutisícovky 2 300 L$/Kč.
@@ -142,7 +162,8 @@ async function catalogPublic() {
   const out = [];
   for (const k of CARD_KINDS) {
     const c = await item(k); if (!c) continue;
-    out.push({ kind: c.kind, name: c.name, icon: c.icon, short: c.short, desc: c.desc, price_czk: c.price / 100 });
+    out.push({ kind: c.kind, name: c.name, icon: c.icon, short: c.short, desc: c.desc,
+      price_czk: c.price / 100, bundles: balickyProKartu(c) });
   }
   return out;
 }
@@ -1594,6 +1615,8 @@ module.exports._currentPlayer = currentPlayer;
 module.exports._requirePlayer = requirePlayer;
 module.exports._pub = pub;
 module.exports._item = item;
+module.exports._cenaKusuVBalicku = cenaKusuVBalicku;
+module.exports._cardKinds = CARD_KINDS;
 module.exports._dropPrices = dropPrices;
 module.exports._defaults = ALL;
 module.exports._cashCustom = CASH_CUSTOM;

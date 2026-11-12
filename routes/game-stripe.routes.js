@@ -70,9 +70,13 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
     const c = await itemOf(kind);   // cena z ceníku, ne z kódu
     if (!c) return res.status(400).json({ error: 'Tohle se teď neprodává.' });
     const qty = Math.max(1, Math.min(MAX_QTY, parseInt((req.body || {}).qty, 10) || 1));
+    // Cena za kus padá s počtem, ale jen u karet — balíčky laundrů mají svoje
+    // vlastní odstupňování a slevu podruhé nedostanou. Počítá to server,
+    // klient si cenu určovat nesmí.
+    const kus = acct._cardKinds.indexOf(kind) >= 0 ? acct._cenaKusuVBalicku(c.price, qty) : c.price;
 
     const purchase = await prisma.gamePurchase.create({
-      data: { player_id: p.id, kind, qty, amount_cents: c.price * qty, currency: 'czk', email: p.email }
+      data: { player_id: p.id, kind, qty, amount_cents: kus * qty, currency: 'czk', email: p.email }
     });
 
     const session = await stripePost('checkout/sessions', {
@@ -88,8 +92,8 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
       line_items: [{
         quantity: qty,
         price_data: {
-          currency: 'czk', unit_amount: c.price,
-          product_data: { name: 'Laundromat Tycoon — ' + c.name,
+          currency: 'czk', unit_amount: kus,
+          product_data: { name: 'Laundromat Tycoon — ' + c.name + (qty > 1 ? ' (' + qty + '×)' : ''),
             description: c.short || (c.laundry ? c.laundry.toLocaleString('cs-CZ') + ' herních laundrů' : undefined) }
         }
       }]

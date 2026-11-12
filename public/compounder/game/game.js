@@ -10479,11 +10479,14 @@ function paintCards() {
         + '<p class="muted small">' + esc(c.desc) + '</p>'
         + (c.kind === 'rush' && RUSH_ZA != null
             ? '<p class="fine ok">Jedna ti přibude zdarma každé dva herní měsíce — další '
-              + etaText(RUSH_ZA) + (n >= RUSH_MAX ? '. Víc než ' + RUSH_MAX + ' si jich ale neuložíš.' : '.') + '</p>'
+              + etaText(RUSH_ZA) + (n >= RUSH_MAX ? '. Dokud máš ' + RUSH_MAX
+                  + ' nevyužitých, další zdarma nechodí — koupené se ale nikam neztratí.' : '.') + '</p>'
             : '')
         + '<div class="gcard-act">'
         + (n ? '<button class="btn sm" data-use="' + c.kind + '">Použít</button>' : '')
         + (PAYMENTS_ON ? '<button class="btn sm ghost" data-buy-card="' + c.kind + '">Koupit za ' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button>'
+          + ((c.bundles || []).length ? '<span class="fine bal-tip">nebo ' + c.bundles[c.bundles.length - 1].qty
+              + '\u00d7 se slevou ' + c.bundles[c.bundles.length - 1].sleva + ' %</span>' : '')
           : '<span class="fine">Prodej se teprve spouští.</span>')
         + '</div></div>';
     }).join('');
@@ -10752,21 +10755,43 @@ function claimCash(then) {
 }
 
 // ─── Nákup karty ─────────────────────────────────────────────────────────────
-function buyCard(kind) {
+// Kartu jde koupit po jednom kuse, nebo ve slevovém balíčku. Ceny počítá
+// server a posílá je v katalogu — klient je jen ukazuje.
+function buyCard(kind, qty) {
   var c = (CARDS_CAT || []).filter(function (x) { return x.kind === kind; })[0];
   if (!c) return;
   if (!ME) return toast('Nejdřív se přihlas.', 'err');
   if (!ME.has_details) return detailsSheet(kind);
+  qty = Math.max(1, parseInt(qty, 10) || 1);
+  var bal = c.bundles || [];
+  var vybrany = bal.filter(function (b) { return b.qty === qty; })[0];
+  var cena = vybrany ? vybrany.price_czk : c.price_czk * qty;
+  var dlazdice = [{ qty: 1, price_czk: c.price_czk, sleva: 0 }].concat(bal);
   sheet('<h3>' + esc(c.name) + '</h3>'
     + '<p class="muted small">' + esc(c.desc) + '</p>'
-    + '<div class="kv"><span>Cena</span><b>' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</b></div>'
+    + (bal.length ? '<p class="muted small" style="margin:12px 0 6px">Kolik kusů:</p>'
+        + '<div class="balicky">' + dlazdice.map(function (b) {
+            return '<button class="balik' + (b.qty === qty ? ' on' : '') + '" data-qty="' + b.qty + '">'
+              + '<b>' + b.qty + '\u00d7</b>'
+              + '<span>' + b.price_czk.toLocaleString('cs-CZ') + ' Kč</span>'
+              + (b.sleva > 0 ? '<i>' + (c.price_czk * b.qty).toLocaleString('cs-CZ') + ' Kč</i>'
+                  + '<em>\u2212' + b.sleva + ' %</em>' : '<i class="prazdno">za kus</i>')
+              + '</button>';
+          }).join('') + '</div>' : '')
+    + '<div class="kv"><span>Zaplatíš</span><b>' + cena.toLocaleString('cs-CZ') + ' Kč</b></div>'
+    + (qty > 1 ? '<div class="kv"><span>Dostaneš</span><b class="ok">' + qty + '\u00d7 ' + esc(c.name) + '</b></div>' : '')
     + '<div class="kv"><span>Platí</span><b>' + esc(ME.first_name + ' ' + ME.last_name) + '</b></div>'
     + '<div class="kv"><span>E-mail</span><b>' + esc(ME.email) + '</b></div>'
     + '<button class="btn big" id="do-pay">Zaplatit kartou</button>'
-    + '<p class="fine">Platbu zpracovává Stripe. Karta se ti připíše hned po zaplacení.</p>');
+    + '<p class="fine">Platbu zpracovává Stripe. '
+    + (qty > 1 ? 'Karty se ti připíšou' : 'Karta se ti připíše') + ' hned po zaplacení. '
+    + 'Nespotřebované zůstávají na účtu, nekazí se.</p>');
+  [].forEach.call(document.querySelectorAll('#sheet-body [data-qty]'), function (b) {
+    b.onclick = function () { buyCard(kind, b.getAttribute('data-qty')); };
+  });
   $('do-pay').onclick = function () {
     $('do-pay').disabled = true;
-    apiJson('/stripe/checkout', { kind: kind, qty: 1 }).then(function (r) {
+    apiJson('/stripe/checkout', { kind: kind, qty: qty }).then(function (r) {
       if (r.ok && r.j.url) { location.href = r.j.url; return; }
       $('do-pay').disabled = false;
       if (r.status === 428) return detailsSheet(kind);
