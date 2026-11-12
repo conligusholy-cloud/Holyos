@@ -4459,6 +4459,77 @@ function dohnat(chybi) {
     + mesicu + ' ' + mn(mesicu, 'herní měsíc', 'herní měsíce', 'herních měsíců')
     + ', tedy asi za ' + dni + ' ' + mn(dni, 'den', 'dny', 'dní') + '.';
 }
+// ─── Agent: balíček přesně tam, kde hráč narazil ─────────────────────────────
+// Pravidlo je přísné, aby to nebylo otravné: ozve se jedině tehdy, když hráč
+// na něco opravdu nemá A ZÁROVEŇ by to ten balíček spravil. Koupený balík jde
+// do rámce a skládá se jako zástava, takže pomůže jen tam, kde banku brzdí
+// rámec nebo zástava. Když ji brzdí splátka — výdělek by nový úvěr neunesl —
+// nepomohl by a my mlčíme. Žádné vyskakování jinde ve hře není.
+var AGENT_ZPET = null;
+function balikNaZed(amount, strop) {
+  if (!PAYMENTS_ON || !CASH_CAT || !CASH_CAT.length || !S) return null;
+  var puvB = S.bank, puvD = S.duvera || 0, nalez = null;
+  var podleVelikosti = CASH_CAT.slice().sort(function (a, b) { return a.laundry - b.laundry; });
+  for (var i = 0; i < podleVelikosti.length && !nalez; i++) {
+    S.bank = puvB + podleVelikosti[i].laundry;
+    S.duvera = puvD + podleVelikosti[i].laundry;
+    // Strop smí být i funkce — u prvního stroje se počítá ze zástavy, takže
+    // se musí přepočítat až s balíkem, jinak by vyšel pořád ten původní.
+    var f = canFinance(amount, null, typeof strop === 'function' ? strop() : strop);
+    if (f && f.ok) nalez = podleVelikosti[i];
+  }
+  S.bank = puvB; S.duvera = puvD;
+  return nalez;
+}
+// Vrátí kus HTML do panelu, kde hráč zrovna narazil. Prázdný řetězec znamená
+// „tady se neozýváme“ — volající s tím počítá.
+function agentHtml(amount, strop, zpet) {
+  var c = balikNaZed(amount, strop);
+  if (!c) return '';
+  AGENT_ZPET = zpet || null;
+  return '<div class="card agent"><h3>Rychlá cesta dál</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">Balík <b>' + esc(c.name) + '</b> zvedne volný rámec o '
+    + kcFull(c.laundry) + ' a zároveň se složí jako zástava — tohle ti pak banka proúvěruje.</p>'
+    + '<button class="btn big" data-agent="' + esc(c.kind) + '">Dobít ' + kcFull(c.laundry)
+    + ' za ' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button>'
+    + '<p class="fine">Nemusíš: rámec sám roste o ' + kcFull(BANK_PER_DAY)
+    + ' za den a celý ceník je v Bance. Laundry jsou herní měna bez hodnoty a nejdou směnit zpět.</p></div>';
+}
+function bindAgent() {
+  var b = document.querySelector('[data-agent]');
+  if (!b) return;
+  b.onclick = function () {
+    // Po zaplacení se hráč vrací přes Stripe, tedy po znovunačtení stránky —
+    // kam se měl vrátit, proto musí přežít v uloženém stavu.
+    if (AGENT_ZPET && S) { AGENT_ZPET.kdy = Date.now(); S.agentZpet = AGENT_ZPET; save(); }
+    buyCash(b.getAttribute('data-agent'));
+  };
+}
+// Peníze dorazily — otevřeme zpátky to, kvůli čemu si je hráč kupoval.
+function agentNavrat() {
+  var z = S && S.agentZpet;
+  if (!z) return;
+  delete S.agentZpet; save();
+  if (Date.now() - (z.kdy || 0) > 2 * 3600e3) return;
+  var sp = null, a = S.areas && z.areaId ? S.areas[z.areaId] : null;
+  if (a) (a.spots || []).forEach(function (x) { if (x.id === z.spotId) sp = x; });
+  if (z.typ === 'stroj') { switchTab('shop'); return buySheet(z.model); }
+  if (!sp) return;
+  switchTab('map');
+  if (z.typ === 'stavba') return installSheet(sp, z.areaId, z.model, false, z.pad);
+  if (z.typ === 'priprava') return pripravaSheet(sp, z.areaId);
+  if (z.typ === 'pozemek') return spotSheet(sp, z.areaId);
+}
+// Zeď, na kterou se nedá klepnout dál: řekneme proč, a jestli by to balíček
+// spravil, nabídneme ho. Když by nepomohl, zůstane jen hláška jako dřív.
+function zedSheet(nadpis, f, amount, strop, zpet) {
+  var h = agentHtml(amount, strop, zpet);
+  if (!h) return toast((f && f.duvod) || 'Na tohle zatím nemáš.', 'err');
+  sheet('<h3>' + esc(nadpis) + '</h3>'
+    + '<p class="fine err">' + esc((f && f.duvod) || '') + '</p>'
+    + '<p class="fine">' + esc(dohnat(f && f.chybi)) + '</p>' + h);
+  bindAgent();
+}
 function doFinance(f, vazba) {
   S.cash -= f.own; S.bank -= f.need; pricistDluh(f.need, prirazkaZa(f.need), vazba);
   zapis('nakup', (vazba && vazba.popis) || 'Nákup', -f.own, f.need);
@@ -4581,8 +4652,11 @@ function buySheet(modelKey, drz) {
     + financeRows(f)
     + '<button class="btn big" id="do-buy"' + (f.ok ? '' : ' disabled') + '>Objednat</button>'
     + (f.ok ? '' : '<p class="fine err">' + esc(f.duvod || '') + '</p>'
-        + '<p class="fine">' + esc(dohnat(f.chybi)) + ' Nebo splať část úvěru — tím se ti uvolní rámec.</p>'));
+        + '<p class="fine">' + esc(dohnat(f.chybi)) + ' Nebo splať část úvěru — tím se ti uvolní rámec.</p>'
+        + agentHtml(cena, function () { return zamerStrop(modelKey, cena); },
+            { typ: 'stroj', model: modelKey })));
   bindFinance(function () { buySheet(modelKey, true); });
+  bindAgent();
   var b = $('do-buy');
   if (b) b.onclick = function () {
     doFinance(f, { druh: 'stroj', popis: 'Prádlomat ' + m.name });
@@ -4636,8 +4710,10 @@ function pripravaSheet(sp, areaId, drz) {
     + (f.ok ? (f.dotkne_rezervy ? '<p class="fine warn">Sáhneš i do provozní rezervy — po zaplacení ti zbude '
           + kcFull(S.cash - f.own) + '.</p>' : '')
         : '<p class="fine err">' + esc(f.duvod || '') + '</p>'
-          + '<p class="fine">' + esc(dohnat(f.chybi)) + '</p>'));
+          + '<p class="fine">' + esc(dohnat(f.chybi)) + '</p>'
+          + agentHtml(cena, function () { return cena; }, { typ: 'priprava', areaId: areaId, spotId: sp.id })));
   bindFinance(function () { pripravaSheet(sp, areaId, true); });
+  bindAgent();
   var bp = $('do-priprava');
   if (bp) bp.onclick = function () {
     doFinance(f, { druh: 'misto', spotId: sp.id, popis: 'Příprava plochy — ' + sp.name });
@@ -4702,8 +4778,11 @@ function installSheet(sp, areaId, modelKey, drz, pad) {
     + (f.ok ? (f.dotkne_rezervy ? '<p class="fine warn">Sáhneš i do provozní rezervy — po stavbě ti zbude ' + kcFull(S.cash - f.own) + '.</p>' : '')
         : '<p class="fine err">' + esc(f.duvod || '') + '</p>'
           + '<p class="fine">' + esc(dohnat(f.chybi)) + '</p>'
-          + '<button class="btn sec" id="go-bank" style="width:100%;margin-top:8px">Zkusit úvěr v bance</button>'));
+          + '<button class="btn sec" id="go-bank" style="width:100%;margin-top:8px">Zkusit úvěr v bance</button>'
+          + agentHtml(celkem, function () { return stropPodleZisku(e.profit, celkem); },
+              { typ: 'stavba', areaId: areaId, spotId: sp.id, model: modelKey, pad: pad })));
   bindFinance(function () { installSheet(sp, areaId, modelKey, true, pad); });
+  bindAgent();
   var gb = $('go-bank');
   if (gb) gb.onclick = function () { closeSheet(); switchTab('bank'); uverSheet(); };
   var b = $('do-build');
@@ -4992,7 +5071,8 @@ function maPozemek(spotId) {
 function koupitPozemek(sp, areaId, btn) {
   var cena = pozemekCena(sp);
   var f = canFinance(cena, null, cena);
-  if (!f.ok) return toast(f.duvod || 'Na pozemek zatím nemáš.', 'err');
+  if (!f.ok) return zedSheet('Pozemek ' + sp.name, f, cena, function () { return cena; },
+    { typ: 'pozemek', areaId: areaId, spotId: sp.id });
   if (btn) { btn.disabled = true; btn.textContent = 'Kupuji…'; }
   apiJson('/spots/claim', { spot_id: sp.id, area_key: areaId, model: '', rent: 0,
     name: sp.name, lat: sp.lat, lon: sp.lon, pozemek: true }).then(function (r) {
@@ -10664,6 +10744,7 @@ function claimCash(then) {
       ME.cards = r.j.owned;
       save(); paint(); syncState(true);
       toast(v.msg, 'ok');
+      if (v.effect === 'ramec') agentNavrat();
       return claimCash(then);   // může jich čekat víc
     }
     if (then) then();

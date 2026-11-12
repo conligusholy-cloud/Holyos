@@ -340,6 +340,8 @@ button.kv:active{background:rgba(124,92,255,.12)}
   cursor:pointer;padding:0 2px;font-family:inherit}
 .toast-x:hover{color:var(--text)}
 .toast.drz{border-color:rgba(124,92,255,.55)}
+/* Nabídka balíčku v panelu, kde hráč narazil. Odlišená, ale ne křiklavá. */
+.card.agent{border-color:rgba(124,92,255,.5);background:linear-gradient(180deg,rgba(124,92,255,.10),rgba(124,92,255,.03))}
 .toast.err{border-color:rgba(255,93,108,.6);color:#ffb3bb}
 .toast.ok{border-color:rgba(47,227,160,.5);color:#a9f5d9}
 .map-zvon{position:relative;font-size:16px}
