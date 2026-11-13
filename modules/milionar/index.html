@@ -254,6 +254,7 @@
     // ── AI analytik: chování hráčů → návrhy na víc plateb ────────────────────
     // Přehledně: KPI dlaždice · trychtýř (graf) · konverze podle skupin (grafy) · zjištění · návrhy (matice dopad × snadnost) · testy · měření
     function aiVykresli(r) {
+      window.__aiRozbor = r;
       try { document.getElementById('dlg').style.width = 'min(1120px,96vw)'; } catch (x) { /* */ }
       var nar = { 'nízká': '#22c55e', 'střední': '#f59e0b', 'vysoká': '#ef4444' };
       var pct = function (a, b) { return b ? Math.round(a / b * 1000) / 10 : 0; };
@@ -320,12 +321,47 @@
             + '<div style="margin:8px 0 6px;line-height:1.5"><b style="color:#4fd1ff">Co udělat:</b> ' + esc(n.co_zmenit) + '</div>'
             + '<div class="note" style="line-height:1.5"><b>Proč:</b> ' + esc(n.proc) + '</div>'
             + '<div class="note" style="line-height:1.5"><b>Očekávaný dopad:</b> ' + esc(n.ocekavany_dopad) + '</div>'
-            + (n.kpi || n.cil ? '<div class="note" style="margin-top:4px;color:#22c55e">🎯 ' + esc(n.kpi || '') + (n.cil ? ' — cíl: ' + esc(n.cil) : '') + '</div>' : '') + '</div>'; }).join('') + '</div></div>';
+            + (n.kpi || n.cil ? '<div class="note" style="margin-top:4px;color:#22c55e">🎯 ' + esc(n.kpi || '') + (n.cil ? ' — cíl: ' + esc(n.cil) : '') + '</div>' : '')
+            + '<div style="margin-top:8px"><button type="button" class="btn ai-claude" data-i="' + i + '" title="Zkopíruje hotové zadání pro Clauda (implementace návrhu ve hře)">📋 Zadání pro Clauda</button></div></div>'; }).join('') + '</div></div>';
       } else h += h3('Návrhy na zlepšení') + '<div style="' + card + '" class="note">AI tentokrát nevrátila návrhy — udělej nový rozbor.</div>';
       if ((r.experimenty || []).length) h += h3('Co otestovat', 'A/B testy, které ověří hypotézy') + '<div style="' + card + '"><ol style="margin:0 0 0 18px;padding:0">' + r.experimenty.map(function (x) { return '<li style="margin:4px 0;line-height:1.5">🧪 ' + esc(x) + '</li>'; }).join('') + '</ol></div>';
       if ((r.chybi_data || []).length) h += h3('Co začít měřit', 'aby byl příští rozbor přesnější') + '<div style="' + card + '"><ul style="margin:0 0 0 18px;padding:0">' + r.chybi_data.map(function (x) { return '<li style="margin:4px 0;line-height:1.5">📏 ' + esc(x) + '</li>'; }).join('') + '</ul></div>';
       return h;
     }
+    // Zadání pro Clauda: z návrhu AI analytika udělá kompletní implementační úkol (kontext hry, cíl, měření, pravidla repa)
+    function aiZadani(n, r) {
+      var L = [];
+      L.push('# Úkol: ' + n.nazev);
+      L.push('');
+      L.push('## Kontext');
+      L.push('Hra „Laundromat Tycoon" (pradlomaty.info/game) v repu HolyOS. Frontend hry: public/compounder/game/ (index.html, game.js, game.css). Backend: routes/game.routes.js, game-account.routes.js, game-stripe.routes.js (platby Stripe), game-trade.routes.js; administrace a statistiky: routes/game-admin.routes.js + modules/milionar/index.html. Události chování se ukládají jako compounderEvent s názvem game_* (game_open, game_scout, game_register, game_build, game_paid…).');
+      if (r && r.prehled) L.push('Aktuální stav (30 dní): ' + r.prehled.hracu + ' hráčů s účtem, ' + r.prehled.platicich + ' platících, konverze na platbu ' + String(r.prehled.konverze_pct).replace('.', ',') + ' %.');
+      L.push('');
+      L.push('## Co udělat');
+      L.push(n.co_zmenit || '');
+      L.push('');
+      L.push('## Proč (data z AI analytika)');
+      L.push(n.proc || '');
+      if (n.ocekavany_dopad) { L.push(''); L.push('## Očekávaný dopad'); L.push(n.ocekavany_dopad); }
+      if (n.kpi || n.cil) { L.push(''); L.push('## Jak poznáme úspěch'); L.push('Metrika: ' + (n.kpi || '—') + (n.cil ? ' · cíl: ' + n.cil : '')); L.push('Pokud metriku dnes nejde změřit, přidej potřebnou game_* událost a doplň ji do statistik v administraci.'); }
+      L.push('');
+      L.push('## Postup a pravidla');
+      L.push('1. Nejdřív si projdi příslušné soubory hry a navrhni řešení v bodech (co a kde změníš); u větších zásahů se zeptej, než začneš.');
+      L.push('2. Implementuj tak, aby šla změna snadno vypnout (přepínač v ceníku/nastavení nebo konstanta), ať jde vyhodnotit jako experiment.');
+      L.push('3. Texty pro hráče česky (+ EN/PL, pokud hra překlady používá), komentáře v kódu česky, vanilla JS bez frameworků, Prisma (žádné raw SQL).');
+      L.push('4. Nic neposílej hráčům naostro (e-maily, push) bez mého potvrzení; platby jen přes stávající Stripe tok.');
+      L.push('5. Po změně ověř syntaxi (node --check) a napiš mi příkazy pro git commit + nasazení (railway up).');
+      L.push('');
+      L.push('Oblast: ' + (n.oblast || '—') + ' · náročnost: ' + (n.narocnost || '—') + ' · dopad ' + (n.dopad || '?') + '/5 · snadnost ' + (n.snadnost || '?') + '/5');
+      return L.join('\n');
+    }
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('.ai-claude'); if (!b) return;
+      var r = window.__aiRozbor || {}, n = (r.navrhy || [])[Number(b.getAttribute('data-i'))]; if (!n) return;
+      var txt = aiZadani(n, r), hotovo = function () { var t = b.textContent; b.textContent = '✓ Zkopírováno — vlož do Clauda'; b.style.color = '#22c55e'; setTimeout(function () { b.textContent = t; b.style.color = ''; }, 2500); };
+      var zaloha = function () { var ta = document.createElement('textarea'); ta.value = txt; ta.style.cssText = 'position:fixed;top:-1000px'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); hotovo(); } catch (x) { prompt('Zkopíruj zadání:', txt); } ta.remove(); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(hotovo, zaloha); else zaloha();
+    });
     function aiOtevri() {
       OV.classList.add('open');
       DLG.innerHTML = '<p class="note">Načítám poslední rozbor…</p>';
