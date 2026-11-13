@@ -1411,6 +1411,7 @@ function dosypStav(o) {
     if (typeof o.hovoru !== 'number') o.hovoru = 0;
     if (!Array.isArray(o.hovoryPosl)) o.hovoryPosl = [];
     if (!Array.isArray(o.hovorLog)) o.hovorLog = [];
+    if (!o.offPovest || typeof o.offPovest !== 'object') o.offPovest = { den: '', body: 0 };
     if (typeof o.linkaSam !== 'boolean') o.linkaSam = false;
     delete o.otazkyPosl;   // dřív se pamatovaly jednotlivé otázky, teď celé rozhovory
     // Rozehraná hra z doby před sídly: za sídlo bereme místo, kde hráč postavil
@@ -1825,6 +1826,7 @@ function tick() {
   S.stats.earned += Math.max(0, earned);
   S.bank = Math.min(bankCap(), S.bank + BANK_PER_DAY * (dt / 86400000));
   S.lastTick = now;
+  linkaOffline(dt);            // co se na infolince stalo, než se hráč vrátil
   // Úvěry se splácejí po celých herních měsících, ne plynule — splátka je
   // pevná a buď na ni hráč má, nebo ne.
   if (!S.splatkyAt) S.splatkyAt = now;
@@ -3168,6 +3170,66 @@ function operatorVyridi() {
   zapisHovor(jmeno, sc.kroky, 'operator', 0);
   naplanujHovor();
   save(); paint(); syncState(true);
+}
+// ─── Infolinka, když hráč není ve hře ────────────────────────────────────────
+// Lidi volají, i když má hráč hru zavřenou. Za nepřítomnosti počítáme hovory
+// třikrát pomaleji a nejvýš třicet za jeden návrat — jinak by velká síť
+// spolkla padesátihovorový balíček za jedno odpoledne. Co vezme operátor,
+// stojí kredit; co nikdo nevzal, srazí pověst nejvýš o šest bodů, ať se hráč
+// po víkendu nevrací k rozbité pověsti. Přepínač „beru si je sám" tady neplatí:
+// hovor, u kterého hráč není, může vzít jedině operátor.
+var OFF_PODIL = 3;            // offline chodí hovory třikrát pomaleji
+var OFF_MIN = 10 * 60e3;      // kratší pauzu neřešíme
+var OFF_MAX = 30;             // strop hovorů za jednu nepřítomnost
+var OFF_POVEST_MAX = 6;       // strop ztráty pověsti za jednu nepřítomnost
+var OFF_POVEST_DEN = 12;      // a za celý den, ať krátké odskoky nesčítají ztrátu donekonečna
+// Kolik pověsti ještě dnes smí nepřítomnost sebrat.
+function offPovestZbyva() {
+  var d = S.offPovest;
+  if (!d || d.den !== dnesKlic()) { d = { den: dnesKlic(), body: 0 }; S.offPovest = d; }
+  return Math.max(0, OFF_POVEST_DEN - d.body);
+}
+function linkaOffline(dt) {
+  if (!S || dt < OFF_MIN) return;
+  if (S.tut !== 'done' || !(S.units || []).length) return;
+  var pobocek = Math.max(1, (S.units || []).length);
+  var prumer = Math.max(HOVOR_MIN_ODSTUP,
+    ((HOVOR_ZA_MIN + HOVOR_ZA_MAX) / 2) / Math.pow(pobocek, HOVOR_SKLON));
+  var kolik = Math.min(OFF_MAX, Math.floor(dt / (prumer * OFF_PODIL)));
+  if (kolik <= 0) return;
+  var vzal = Math.min(kolik, Math.max(0, S.linka || 0));
+  var zmeskano = kolik - vzal;
+  if (vzal) S.linka = (S.linka || 0) - vzal;
+  S.hovoru = (S.hovoru || 0) + kolik;
+  var ztrata = 0;
+  if (zmeskano) {
+    ztrata = Math.min(OFF_POVEST_MAX, zmeskano, offPovestZbyva());
+    if (ztrata) { S.offPovest.body += ztrata; zmenPovest(-ztrata); }
+  }
+  if (vzal) {
+    zapisHovor('Operátor infolinky', [{ t: 'Vyřídil ' + vzal + ' '
+      + mn(vzal, 'hovor', 'hovory', 'hovorů') + ', když jsi byl pryč.' }], 'operator', 0);
+  }
+  if (zmeskano) {
+    zapisHovor('Nevzaté hovory', [{ t: zmeskano + ' '
+      + mn(zmeskano, 'hovor', 'hovory', 'hovorů') + ' nikdo nevzal, když jsi byl pryč.' }],
+      'nevzat', -ztrata);
+  }
+  // Řekneme to až po vykreslení, ať hlášku nepřebije načítání hry.
+  setTimeout(function () {
+    if (vzal && zmeskano) {
+      toast('Operátor za tebe vyřídil ' + vzal + ' ' + mn(vzal, 'hovor', 'hovory', 'hovorů')
+        + ', na ' + zmeskano + ' už kredit nebyl'
+        + (ztrata ? ' — pověst klesla o ' + ztrata + '.' : '.'), 'warn', true);
+    } else if (vzal) {
+      toast('Operátor za tebe vyřídil ' + vzal + ' ' + mn(vzal, 'hovor', 'hovory', 'hovorů')
+        + ', než ses vrátil. Zbývá ' + (S.linka || 0) + '.', 'ok', true);
+    } else {
+      toast(zmeskano + ' ' + mn(zmeskano, 'hovor', 'hovory', 'hovorů')
+        + ' nikdo nevzal, když jsi byl pryč.'
+        + (ztrata ? ' Pověst klesla o ' + ztrata + '.' : ''), ztrata ? 'err' : 'warn', true);
+    }
+  }, 1200);
 }
 function hovorTik(dt) {
   if (!S || document.hidden) return;
@@ -11345,8 +11407,9 @@ function linkaPacksHtml() {
   return '<div class="card"><h3>\u260E\uFE0F Balíčky infolinky</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">S každým dalším prádlomatem volají lidi častěji — '
     + 'u jedné pobočky jednou za pár minut, u velké sítě skoro pořád. '
-    + 'Kredit je jeden hovor, který vezme operátor místo tebe — pověst pak neklesne, '
-    + 'i když zrovna nejsi ve hře. Hovor, který si vezmeš sám a zvládneš ho, pořád vynese víc.</p>'
+    + 'Kredit je jeden hovor, který vezme operátor místo tebe. Volají i když hru zavřeš — '
+    + 'za nepřítomnosti pomaleji a nejvýš třicet hovorů, než se vrátíš; na co není kredit, '
+    + 'to srazí pověst. Hovor, který si vezmeš sám a zvládneš ho, pořád vynese víc.</p>'
     + '<div class="kv"><span>Nevyčerpané hovory</span><b' + (zbyva ? ' class="ok"' : '') + '>' + zbyva + '</b></div>'
     // Kdo má kredit, má mít klid: telefon nezvoní vůbec. Kdo chce vydělávat
     // víc a hovory si brát sám, přepne si to tady.
