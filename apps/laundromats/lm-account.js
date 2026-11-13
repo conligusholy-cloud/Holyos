@@ -56,7 +56,8 @@ module.exports = function createAccounts(ctx) {
     full: { label: 'Plný přístup', pages: ['podpora', 'compounder', 'pradlomaty', 'ekonomika', 'hledat', 'zhodnotit'] },
   };
   const roleOf = (a) => (a && ROLES[a.plan] ? a.plan : 'beginner'); // 'free' (původní výchozí) = Začátečník
-  const canSee = (req, page) => !!(req && ((req.account && ROLES[roleOf(req.account)].pages.includes(page)) || (!req.account && adminOf(req))));
+  // Marketplace lokalit nejde přes roli — správce ho zapíná jednotlivým uživatelům (account.marketplace z HolyOS)
+  const canSee = (req, page) => !!(req && ((req.account && (page === 'marketplace' ? req.account.marketplace === true : ROLES[roleOf(req.account)].pages.includes(page))) || (!req.account && adminOf(req))));
   function requirePage(page) {
     return (req, res, next) => {
       if (!req.account && !adminOf(req)) return requireAccount(req, res, next);
@@ -247,7 +248,7 @@ module.exports = function createAccounts(ctx) {
       ['', 'infolinka', 'Infolinka', 'Řízení infolinky: AI zpracování požadavku, delegování a řízení servisních požadavků.', true],
       ['', 'udrzba', 'Údržba', 'Řízení údržbového plánu, intervalů, odečtů a personální řízení údržby.', true],
       ['', 'pripojky', 'Přípojky', 'Odhad ceny přípojek a přesný postup při jejich zadání i realizaci.', true],
-      ['', 'marketplace', 'Marketplace lokalit', 'Připravená a předjednaná místa pro prádlomat — vyberte si lokalitu a jděte rovnou do realizace.', true],
+      ['/cesta/marketplace', 'marketplace', 'Marketplace lokalit', 'Připravená a předjednaná místa pro prádlomat — vyberte si lokalitu a jděte rovnou do realizace.'],
     ];
     app.get('/cesta/ucet', requireAccount, A(async (req, res) => {
       const supUnread = req.account && supportUnread ? await supportUnread(req.account.id) : 0;
@@ -267,6 +268,43 @@ module.exports = function createAccounts(ctx) {
           function cl(){ov.hidden=true;}ov.addEventListener('click',function(e){if(e.target===ov||e.target.closest('.acc-x'))cl();});document.addEventListener('keydown',function(e){if(e.key==='Escape')cl();});})();</script>
 `;
       send(req, res, 'Moje nástroje', body, 200, { back: false });
+    }));
+    // Marketplace lokalit — připravená a předjednaná místa (HolyOS „Předjednaná místa", stav zveřejněno/rezervováno).
+    // Vidí jen uživatel, kterému to správce zapnul (Administrace → Uživatelé → Marketplace). Poloha je přibližná.
+    app.get('/cesta/marketplace', requirePage('marketplace'), A(async (req, res) => {
+      let spots = [], chyba = '';
+      try { const r = await fetch(HOLYOS_URL + '/api/pradlomat-spots/public', { signal: AbortSignal.timeout(12000) }); spots = r.ok ? await r.json() : []; if (!r.ok) chyba = 'Nabídku se nepodařilo načíst.'; } catch (e) { chyba = 'Nabídku se teď nepodařilo načíst, zkuste to prosím za chvíli.'; }
+      if (!Array.isArray(spots)) spots = [];
+      const cz = (n) => Number(n).toLocaleString('cs-CZ', { maximumFractionDigits: 0 });
+      const kv = (l, v) => (v == null || v === '' ? '' : `<div class="mp-kv"><span>${l}</span><b>${v}</b></div>`);
+      const card = (s) => `<div class="card mp-card" data-q="${esc([s.name, s.city, s.region, s.country].filter(Boolean).join(' ').toLowerCase())}">
+          <div class="mp-img">${s.cover_image_url ? `<img src="${esc(s.cover_image_url)}" alt="" loading="lazy">` : `<div class="mp-noimg">${IC.marketplace}</div>`}${s.status === 'reserved' ? '<span class="mp-st res">Rezervováno</span>' : '<span class="mp-st">Volné</span>'}${s.score != null ? `<span class="mp-score" title="Skóre místa">${Math.round(s.score)}<small>/100</small></span>` : ''}</div>
+          <div class="mp-body"><h3>${esc(s.name)}</h3><p class="muted small" style="margin:0 0 8px">📍 ${esc([s.city, s.region].filter(Boolean).join(', ') || '—')} <span title="Přibližná poloha">(přibližně)</span></p>
+          ${s.highlight && s.highlight !== s.name ? `<p class="mp-hl">${esc(s.highlight)}</p>` : ''}${s.public_description ? `<p class="small" style="margin:0 0 10px;line-height:1.5">${esc(s.public_description)}</p>` : ''}
+          ${kv('Plocha', s.area_m2 != null ? cz(s.area_m2) + ' m²' : null)}${kv('Nájem / měsíc', s.rent_monthly != null ? cz(s.rent_monthly) + ' ' + esc(s.rent_currency || 'Kč') : null)}
+          ${kv('Parkování', s.has_parking ? 'ano' + (s.parking_distance_m != null ? ' · ' + cz(s.parking_distance_m) + ' m' : '') : (s.has_parking === false ? 'ne' : null))}
+          ${kv('Obyvatel ve spádu', s.population ? cz(s.population) : null)}${kv('Obchody v okolí', s.anchor_count != null ? cz(s.anchor_count) : null)}
+          ${kv('Konkurence v okolí', s.competition_count != null ? cz(s.competition_count) : null)}${kv('Nejbližší náš prádlomat', s.nearest_laundromat_km != null ? String(s.nearest_laundromat_km).replace('.', ',') + ' km' : null)}
+          ${s.availability_note ? `<p class="small muted" style="margin:8px 0 0">🗓 ${esc(s.availability_note)}</p>` : ''}
+          ${s.status === 'reserved' ? '<div class="btn sec" style="width:100%;justify-content:center;margin-top:12px;opacity:.6;cursor:default">Lokalita je rezervovaná</div>'
+            : `<a class="btn mp-want" href="/cesta/schuzka?lokalita=${encodeURIComponent(s.code || '')}" data-code="${esc(s.code || '')}" style="width:100%;justify-content:center;margin-top:12px">Mám zájem o tuto lokalitu</a>`}</div></div>`;
+      const body = CSS + `<style>.mp-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 4px}.mp-tools input{max-width:320px;margin:0}
+        .mp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-top:14px}.mp-card{margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column}
+        .mp-img{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,rgba(79,209,255,.12),rgba(124,92,255,.12))}.mp-img img{width:100%;height:100%;object-fit:cover;display:block}
+        .mp-noimg{height:100%;display:grid;place-items:center;opacity:.6}.mp-noimg svg{width:56px;height:56px}
+        .mp-st{position:absolute;top:10px;left:10px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:rgba(34,197,94,.9);color:#04130a}.mp-st.res{background:rgba(245,158,11,.92);color:#1a1200}
+        .mp-score{position:absolute;top:10px;right:10px;font-weight:800;padding:3px 9px;border-radius:10px;background:rgba(4,6,12,.75);border:1px solid rgba(79,209,255,.4)}.mp-score small{opacity:.6;font-weight:600}
+        .mp-body{padding:14px 16px 16px;display:flex;flex-direction:column;flex:1}.mp-body h3{margin:0 0 4px;font-size:17px}.mp-hl{margin:0 0 8px;color:#4fd1ff;font-weight:600;font-size:13.5px}
+        .mp-kv{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid rgba(120,160,255,.12);font-size:13.5px}.mp-kv span{color:var(--text2)}.mp-body .btn{margin-top:auto}</style>
+        <div class="hero" style="padding-bottom:6px"><span class="eyebrow"><i></i>Marketplace lokalit</span><h1>Připravená <span class="g">místa pro prádlomat</span></h1><p>Předjednané lokality, kde můžete rovnou začít s realizací. Poloha je z důvodu ochrany partnera přibližná — přesné místo probereme na schůzce.</p></div>
+        ${chyba ? msgHtml(chyba) : ''}
+        ${spots.length ? `<div class="mp-tools"><input type="search" id="mp-q" placeholder="Hledat město nebo oblast…" autocomplete="off"><span class="muted small" id="mp-n">${spots.length} ${spots.length === 1 ? 'lokalita' : spots.length < 5 ? 'lokality' : 'lokalit'}</span></div>
+          <div class="mp-grid" id="mp-grid">${spots.map(card).join('')}</div>`
+          : (chyba ? '' : '<div class="card" style="margin-top:14px"><p style="margin:0">Momentálně tu nejsou žádné volné lokality. Nové přidáváme průběžně — pokud hledáte konkrétní oblast, <a href="/cesta/schuzka">domluvte si online schůzku</a>.</p></div>')}
+        <script>(function(){var q=document.getElementById('mp-q');if(q)q.addEventListener('input',function(){var v=q.value.trim().toLowerCase(),n=0;document.querySelectorAll('.mp-card').forEach(function(c){var ok=!v||c.getAttribute('data-q').indexOf(v)!==-1;c.style.display=ok?'':'none';if(ok)n++;});document.getElementById('mp-n').textContent=n+' zobrazeno';});
+          document.querySelectorAll('.mp-want').forEach(function(a){a.addEventListener('click',function(){try{if(window.lmTrack)lmTrack('marketplace_interest',{code:a.getAttribute('data-code')});}catch(e){}});});
+          try{if(window.lmTrack)lmTrack('marketplace_view',{n:${spots.length}});}catch(e){}})();</script>`;
+      send(req, res, 'Marketplace lokalit', body);
     }));
     // Můj účet = údaje, změna hesla, odhlášení (z tlačítka 👤 v liště)
     app.get('/cesta/ucet/nastaveni', requireAccount, (req, res) => {

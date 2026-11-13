@@ -351,6 +351,7 @@ function usrRow(u){
     +'<td>'+dtm(u.last_login_at)+'</td><td style="text-align:right">'+(u.login_count||0)+'</td>'
     +'<td>'+lead+'</td>'
     +'<td><select class="usr-role" data-urole="'+u.id+'" style="background:#0b1220;color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:5px 8px;font:inherit;font-size:12.5px">'+USR_ROLES.map(function(r){return '<option value="'+r[0]+'"'+(roleKey(u.plan)===r[0]?' selected':'')+'>'+r[1]+'</option>';}).join('')+'</select></td>'
+    +'<td style="text-align:center"><input type="checkbox" data-ump="'+u.id+'"'+(u.marketplace?' checked':'')+' title="Vidí Marketplace lokalit (výchozí: nevidí)" style="width:18px;height:18px;cursor:pointer"></td>'
     +'<td><button class="btn sec sm" data-udis="'+u.id+'" data-on="'+(u.disabled?0:1)+'"'+(u.disabled?'':' style="color:#ff8f8f"')+'>'+(u.disabled?'Odblokovat':'Zablokovat')+'</button></td></tr>';
 }
 function usrRender(){
@@ -359,7 +360,7 @@ function usrRender(){
   var ver=usr.filter(function(u){return u.email_verified_at;}).length;
   root.querySelector('.mt-usrsum').textContent=usr.length?('Celkem '+usr.length+' · ověřených '+ver+' · zablokovaných '+usr.filter(function(u){return u.disabled;}).length):'';
   if(!usr.length){box.innerHTML='<div class="mt-empty">Zatím se nikdo nezaregistroval. Registrace je na laundromats.eu/cesta/registrace.</div>';return;}
-  box.innerHTML='<div class="mt-tw"><table class="usr-dt"><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Firma</th><th>Registrace</th><th>Ověření</th><th>Pozval</th><th>Poslední přihlášení</th><th>Přihlášení</th><th>V HolyOS</th><th>Role</th><th>Účet</th></tr></thead><tbody></tbody></table></div>';
+  box.innerHTML='<div class="mt-tw"><table class="usr-dt"><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Firma</th><th>Registrace</th><th>Ověření</th><th>Pozval</th><th>Poslední přihlášení</th><th>Přihlášení</th><th>V HolyOS</th><th>Role</th><th title="Vidí Marketplace lokalit">Marketplace</th><th>Účet</th></tr></thead><tbody></tbody></table></div>';
   if(!window.ColFilters){box.querySelector('tbody').innerHTML=usr.map(usrRow).join('');return;}
   usrT=dtable('.usr-dt',[
       {key:'name',label:'Jméno',get:function(u){return u.name||'';},ph:'Jméno…',enum:false},
@@ -373,6 +374,7 @@ function usrRender(){
       {key:'login_count',label:'Přihlášení',type:'num',get:function(u){return u.login_count||0;}},
       {key:'lead',label:'V HolyOS',get:function(u){return u.compounder_lead_id?String(u.compounder_lead_id):'';},enum:false},
       {key:'role',label:'Role',get:function(u){return roleLabel(u.plan);},ph:'Vyber…',enum:true},
+      {key:'mp',label:'Marketplace',get:function(u){return u.marketplace?'vidí':'nevidí';},ph:'Vyber…',enum:true},
       {key:'act',label:'Účet',get:function(u){return u.disabled?'zablokovaný':'aktivní';},enum:true}
     ],usrRow,'uživatelů','Žádný uživatel.');
   usrT.setRows(usr);
@@ -381,6 +383,9 @@ function usrRender(){
 root.addEventListener('click',function(e){var b=e.target.closest('[data-udis]');if(!b)return;e.stopPropagation();var id=+b.getAttribute('data-udis'),dis=b.getAttribute('data-on')==='1';
   if(dis&&!confirm('Zablokovat účet? Uživatel se odhlásí a nebude se moci přihlásit.'))return;b.disabled=true;
   api('/admin/api/users/'+id+'/disabled',{disabled:dis}).then(function(){(usr||[]).forEach(function(u){if(u.id===id)u.disabled=dis;});usrRender();}).catch(function(er){b.disabled=false;alert(er.message);});},true);
+// Marketplace lokalit — zaškrtnutí = uživatel ho uvidí (výchozí nevidí); projeví se do 5 minut
+document.addEventListener('change',function(e){var c=e.target.closest&&e.target.closest('[data-ump]');if(!c)return;var id=+c.getAttribute('data-ump'),on=c.checked;c.disabled=true;
+  api('/admin/api/users/'+id+'/marketplace',{on:on}).then(function(){(usr||[]).forEach(function(u){if(u.id===id)u.marketplace=on;});c.disabled=false;}).catch(function(er){c.disabled=false;c.checked=!on;alert(er.message);});});
 root.querySelector('.mt-usrreload').onclick=usrLoad;
 // ── Statistiky schůzek — kolik se jich na dané období domluvilo a kolik proběhlo ──
 // Schůzka patří do období podle TERMÍNU, ne podle data domluvení, aby byl obojí

@@ -20,6 +20,12 @@ const sha = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 const newToken = () => crypto.randomBytes(32).toString('hex');
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/;
 const pub = (a) => ({ id: a.id, lead_id: a.compounder_lead_id || null, email: a.email, name: a.name, phone: a.phone, company: a.company, plan: a.plan, v: a.token_version, verified: !!a.email_verified_at, created_at: a.created_at });
+// Marketplace lokalit: kdo ho vidí — seznam id účtů v AppSetting (výchozí = nikdo; zapíná správce u uživatele)
+const MP_KEY = 'lm_marketplace_ids';
+async function mpIds() {
+  try { const v = await require('../services/settings').getSetting(MP_KEY, { type: 'json', defaultValue: [] }); return Array.isArray(v) ? v.map(Number) : []; } catch (e) { return []; }
+}
+const pubMp = async (a) => Object.assign(pub(a), { marketplace: (await mpIds()).includes(Number(a.id)) });
 const pwErr = (p) => (String(p || '').length < 8 ? 'Heslo musí mít alespoň 8 znaků.' : String(p).length > 200 ? 'Heslo je příliš dlouhé.' : null);
 
 // Spáruje / založí kontakt v CRM (CompounderLead), ať obchod účet vidí
@@ -71,7 +77,7 @@ router.post('/register', async (req, res, next) => {
     const leadId = await linkLead(acc, b.sid);
     if (!exist) notifyOwners(acc, leadId);
     console.log('[lm-accounts] registrace #' + acc.id + (exist ? ' (znovu, neověřený)' : ''));
-    res.json({ ok: true, verify_token: token, account: pub(acc) });
+    res.json({ ok: true, verify_token: token, account: await pubMp(acc) });
   } catch (err) { next(err); }
 });
 // POST /verify {token} → ověří e-mail
@@ -81,7 +87,7 @@ router.post('/verify', async (req, res, next) => {
     const acc = await prisma.lmAccount.findFirst({ where: { verify_token_hash: sha(t) } });
     if (!acc || acc.disabled) return res.status(404).json({ error: 'Odkaz je neplatný nebo už byl použit.' });
     const upd = await prisma.lmAccount.update({ where: { id: acc.id }, data: { email_verified_at: acc.email_verified_at || new Date(), verify_token_hash: null, last_login_at: new Date(), login_count: { increment: 1 } } });
-    res.json({ ok: true, account: pub(upd) });
+    res.json({ ok: true, account: await pubMp(upd) });
   } catch (err) { next(err); }
 });
 // POST /login {email,password}
@@ -94,10 +100,10 @@ router.post('/login', async (req, res, next) => {
     if (!acc.email_verified_at) {
       const token = newToken();
       await prisma.lmAccount.update({ where: { id: acc.id }, data: { verify_token_hash: sha(token) } });
-      return res.status(403).json({ error: 'not_verified', verify_token: token, account: pub(acc) });
+      return res.status(403).json({ error: 'not_verified', verify_token: token, account: await pubMp(acc) });
     }
     const upd = await prisma.lmAccount.update({ where: { id: acc.id }, data: { last_login_at: new Date(), login_count: { increment: 1 } } });
-    res.json({ ok: true, account: pub(upd) });
+    res.json({ ok: true, account: await pubMp(upd) });
   } catch (err) { next(err); }
 });
 // POST /reset-request {email} → { ok, token? } (token jen pokud účet existuje — e-mail odešle Laundromats)
@@ -108,7 +114,7 @@ router.post('/reset-request', async (req, res, next) => {
     if (!acc || acc.disabled) return res.json({ ok: true });
     const token = newToken();
     await prisma.lmAccount.update({ where: { id: acc.id }, data: { reset_token_hash: sha(token), reset_expires_at: new Date(Date.now() + 3600e3) } });
-    res.json({ ok: true, token, account: pub(acc) });
+    res.json({ ok: true, token, account: await pubMp(acc) });
   } catch (err) { next(err); }
 });
 // POST /reset {token,password} → nové heslo (odhlásí ostatní zařízení)
@@ -119,7 +125,7 @@ router.post('/reset', async (req, res, next) => {
     const acc = t.length >= 20 ? await prisma.lmAccount.findFirst({ where: { reset_token_hash: sha(t) } }) : null;
     if (!acc || acc.disabled || !acc.reset_expires_at || acc.reset_expires_at < new Date()) return res.status(400).json({ error: 'Odkaz pro obnovu hesla je neplatný nebo vypršel.' });
     const upd = await prisma.lmAccount.update({ where: { id: acc.id }, data: { password_hash: await bcrypt.hash(String(b.password), 12), reset_token_hash: null, reset_expires_at: null, token_version: { increment: 1 }, email_verified_at: acc.email_verified_at || new Date(), last_login_at: new Date() } });
-    res.json({ ok: true, account: pub(upd) });
+    res.json({ ok: true, account: await pubMp(upd) });
   } catch (err) { next(err); }
 });
 // GET /:id/session?v= → platnost relace (účet existuje, není zablokovaný, verze tokenu sedí)
@@ -127,7 +133,7 @@ router.get('/:id(\\d+)/session', async (req, res, next) => {
   try {
     const acc = await prisma.lmAccount.findUnique({ where: { id: parseInt(req.params.id, 10) } });
     if (!acc || acc.disabled || !acc.email_verified_at || String(acc.token_version) !== String(req.query.v)) return res.status(401).json({ error: 'Relace neplatná' });
-    res.json({ ok: true, account: pub(acc) });
+    res.json({ ok: true, account: await pubMp(acc) });
   } catch (err) { next(err); }
 });
 // POST /:id/profile {name,phone,company}
@@ -136,7 +142,7 @@ router.post('/:id(\\d+)/profile', async (req, res, next) => {
     const b = req.body || {}; const name = s(b.name, 120), phone = s(b.phone, 40), company = s(b.company, 160);
     if (name.length < 2) return res.status(400).json({ error: 'Vyplňte jméno.' });
     const upd = await prisma.lmAccount.update({ where: { id: parseInt(req.params.id, 10) }, data: { name, phone: phone || null, company: company || null } });
-    res.json({ ok: true, account: pub(upd) });
+    res.json({ ok: true, account: await pubMp(upd) });
   } catch (err) { next(err); }
 });
 // POST /:id/password {old,password} → změna hesla (odhlásí ostatní zařízení)
@@ -146,7 +152,7 @@ router.post('/:id(\\d+)/password', async (req, res, next) => {
     const acc = await prisma.lmAccount.findUnique({ where: { id: parseInt(req.params.id, 10) } });
     if (!acc || !(await bcrypt.compare(String(b.old || ''), acc.password_hash))) return res.status(400).json({ error: 'Současné heslo nesouhlasí.' });
     const upd = await prisma.lmAccount.update({ where: { id: acc.id }, data: { password_hash: await bcrypt.hash(String(b.password), 12), token_version: { increment: 1 } } });
-    res.json({ ok: true, account: pub(upd) });
+    res.json({ ok: true, account: await pubMp(upd) });
   } catch (err) { next(err); }
 });
 
@@ -159,7 +165,8 @@ router.get('/list', async (req, res, next) => {
     const lids = [...new Set(rows.map((r) => r.compounder_lead_id).filter(Boolean))];
     const sent = lids.length ? await prisma.compounderEvent.findMany({ where: { event: 'economy_link_sent', OR: lids.map((id) => ({ props: { path: ['lead_id'], equals: id } })) }, orderBy: { created_at: 'asc' }, select: { props: true, created_at: true }, take: 5000 }).catch(() => []) : [];
     const inv = new Map(); sent.forEach((e) => { const p = e.props || {}; const k = Number(p.lead_id); if (!inv.has(k)) inv.set(k, { by: p.by || null, channel: p.channel || null, at: e.created_at, count: 0 }); inv.get(k).count++; inv.get(k).last_at = e.created_at; });
-    res.json({ ok: true, users: rows.map((r) => { const { password_hash, ...u } = r; return Object.assign(u, { pending_password: String(password_hash || '').startsWith('!setup:'), invited: r.compounder_lead_id ? (inv.get(r.compounder_lead_id) || null) : null }); }) });
+    const mp = await mpIds();
+    res.json({ ok: true, users: rows.map((r) => { const { password_hash, ...u } = r; return Object.assign(u, { marketplace: mp.includes(r.id), pending_password: String(password_hash || '').startsWith('!setup:'), invited: r.compounder_lead_id ? (inv.get(r.compounder_lead_id) || null) : null }); }) });
   } catch (err) { next(err); }
 });
 // POST /:id/disabled {disabled} — zablokovat / odblokovat účet (zablokovaný se odhlásí do 5 minut)
@@ -170,6 +177,15 @@ router.post('/:id(\\d+)/plan', async (req, res, next) => {
     if (!['beginner', 'economy', 'full'].includes(plan)) return res.status(400).json({ error: 'Neznámá role' });
     const upd = await prisma.lmAccount.update({ where: { id: parseInt(req.params.id, 10) }, data: { plan }, select: { id: true, plan: true } });
     res.json({ ok: true, plan: upd.plan });
+  } catch (err) { next(err); }
+});
+// POST /:id/marketplace {on} — zpřístupnit / skrýt Marketplace lokalit (projeví se do 5 minut)
+router.post('/:id(\\d+)/marketplace', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10), on = !!(req.body || {}).on;
+    const set = new Set(await mpIds()); if (on) set.add(id); else set.delete(id);
+    await require('../services/settings').setSetting(MP_KEY, [...set], { type: 'json', description: 'Laundromats — účty s přístupem do Marketplace lokalit' });
+    res.json({ ok: true, marketplace: on });
   } catch (err) { next(err); }
 });
 router.post('/:id(\\d+)/disabled', async (req, res, next) => {
@@ -273,7 +289,7 @@ router.post('/setup-complete', async (req, res, next) => {
         }
       } catch (e) { console.warn('[lm-accounts] doplnění kontaktu:', e.message); }
     }
-    res.json({ ok: true, account: pub(upd) });
+    res.json({ ok: true, account: await pubMp(upd) });
   } catch (err) { next(err); }
 });
 
