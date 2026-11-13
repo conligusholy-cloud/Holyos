@@ -500,7 +500,7 @@ async function loadMarketplaceTab(s) {
   const area = s.area_m2 != null ? Number(s.area_m2) : null, rent = s.rent_monthly != null ? Number(s.rent_monthly) : null;
   const f = (label, name, val, ph, type) => `<div class="form-row"><label>${esc(label)}</label><input type="${type || 'text'}" name="${name}" value="${val == null ? '' : esc(val)}" placeholder="${esc(ph || '')}"></div>`;
   box.innerHTML = `<div style="background:rgba(79,209,255,.07);border:1px solid rgba(79,209,255,.3);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.5">
-      Tyto údaje uvidí na <b>laundromats.eu → Marketplace lokalit</b> uživatelé, kterým ho zapneš. Vlastník, adresa ani přesná poloha se nezobrazují (město a poloha ~1 km).${m.updated_at ? ' <span class="muted">Naposledy uloženo ' + new Date(m.updated_at).toLocaleString('cs-CZ') + '.</span>' : ''}</div>
+      Tyto údaje uvidí na <b>laundromats.eu → Marketplace lokalit</b> uživatelé, kterým ho zapneš. Vlastník se nezobrazuje; adresa jen pokud ji vyplníš níže (jinak město a poloha ~1 km).${m.updated_at ? ' <span class="muted">Naposledy uloženo ' + new Date(m.updated_at).toLocaleString('cs-CZ') + '.</span>' : ''}</div>
     <div style="margin:0 0 12px"><button type="button" class="btn btn-secondary" onclick="mpAutofill()">✨ Doplnit z karet místa</button> <span class="muted" style="font-size:12px">doplní prázdná pole ze Základu, Financí, Prostoru, Vyhodnocení a fotek — pak zkontroluj a uprav</span></div>
     <div class="form-grid">
       <div class="form-row span2"><div class="checkbox-row"><label><input type="checkbox" name="mp_published" ${m.published ? 'checked' : ''}> <b>Zobrazit v Marketplace</b></label> &nbsp; <label><input type="checkbox" name="mp_reserved" ${m.reserved ? 'checked' : ''}> Rezervováno (vidět, ale nejde poptat)</label></div></div>
@@ -512,7 +512,7 @@ async function loadMarketplaceTab(s) {
       <div class="form-row"><label>Nájem je uveden</label><select name="mp_rent_vat"><option value="bez" ${(m.rent_vat || 'bez') === 'bez' ? 'selected' : ''}>bez DPH</option><option value="s" ${m.rent_vat === 's' ? 'selected' : ''}>s DPH</option><option value="neplatce" ${m.rent_vat === 'neplatce' ? 'selected' : ''}>vlastník není plátce DPH</option></select></div>
       ${f('Energie — jak jsou řešeny', 'mp_energy', m.energy, 'např. podružný elektroměr, platí se podle spotřeby; voda paušálem')}
       ${f('Cena přípojek', 'mp_connections_price', m.connections_price, 'např. přípojky hradí vlastník / 45 000 Kč bez DPH jednorázově')}
-      ${f('Odkaz na Google Mapy (nepovinné)', 'mp_maps_url', m.maps_url, 'https://maps.app.goo.gl/… — bez něj se ukáže přibližná poloha (~1 km)')}
+      ${f('Adresa místa (zobrazí se zákazníkům + odkaz na Google Mapy)', 'mp_address', m.address != null ? m.address : [s.address, s.city].filter(Boolean).join(', '), 'např. Sokolovská 113, Litomyšl — když necháš prázdné, ukáže se jen přibližná poloha')}
       ${f('Cena / podmínky', 'mp_price_note', m.price_note, 'např. nájem 12 000 Kč/měs., smlouva na 10 let')}
       ${f('Dostupnost', 'mp_availability', m.availability, 'např. ihned / od jara 2027')}
       ${f('Parkování', 'mp_parking', m.parking, 'např. ano, přímo u stání')}
@@ -546,7 +546,7 @@ function mpAutofill() {
   const okoli = [g('score') != null && g('score') !== '' ? 'Skóre místa ' + g('score') + '/100' : '', pros.length > 1 ? pros.slice(1, 3).join(', ') : ''].filter(Boolean).join(' · ');
   const nav = { mp_title: title, mp_highlight: pros[0] || (g('parking') ? 'Parkování přímo u místa' : ''), mp_description: popis,
     mp_area_m2: area != null && area !== '' ? area : '', mp_rent_monthly: rent != null && rent !== '' ? rent : '',
-    mp_price_note: cena, mp_availability: dostupnost, mp_parking: g('parking') === true ? 'Ano, přímo u místa' : (g('parking') === false ? 'Ne' : ''), mp_footfall: okoli };
+    mp_address: [g('address'), g('city')].filter(Boolean).join(', '), mp_price_note: cena, mp_availability: dostupnost, mp_parking: g('parking') === true ? 'Ano, přímo u místa' : (g('parking') === false ? 'Ne' : ''), mp_footfall: okoli };
   let n = 0;
   Object.keys(nav).forEach(k => { const el = document.querySelector('.modal [name=' + k + ']'); if (el && !String(el.value).trim() && nav[k] !== '' && nav[k] != null) { el.value = nav[k]; n++; el.style.borderColor = '#22c55e'; } });
   // Fotka: první fotka lokality, pokud ještě není vybraná
@@ -561,7 +561,7 @@ async function saveMarketplace(siteId) {
   const body = { published: v('mp_published'), reserved: v('mp_reserved'), title: v('mp_title'), highlight: v('mp_highlight'), description: v('mp_description'),
     area_m2: v('mp_area_m2'), rent_monthly: v('mp_rent_monthly'), price_note: v('mp_price_note'), availability: v('mp_availability'),
     parking: v('mp_parking'), footfall: v('mp_footfall'), image_url: v('mp_image_url'),
-    energy: v('mp_energy'), connections_price: v('mp_connections_price'), maps_url: v('mp_maps_url'), rent_vat: v('mp_rent_vat'),
+    energy: v('mp_energy'), connections_price: v('mp_connections_price'), address: v('mp_address'), rent_vat: v('mp_rent_vat'),
     photo_id: (document.querySelector('.modal [name=mp_photo_id]:checked') || {}).value || null,
     gallery: [...document.querySelectorAll('.modal [name=mp_gallery]:checked')].map(x => Number(x.value)) };
   try {
