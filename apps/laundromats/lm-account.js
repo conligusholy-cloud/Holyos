@@ -119,6 +119,8 @@ module.exports = function createAccounts(ctx) {
     hledat: SV('<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 1.1-.3 2.2-.7 3.2"/><circle cx="12" cy="10" r="2.3"/><circle cx="17.6" cy="17.6" r="2.6"/><path d="m19.5 19.5 2 2"/>'),
     zhodnotit: SV('<path d="M4.5 18a8.5 8.5 0 1 1 15 0"/><path d="m12 13.5 4-4.5"/><circle cx="12" cy="13.5" r="1.4"/><path d="M8 21h8"/>'),
     sis: SV('<rect x="2.5" y="4" width="19" height="13" rx="2.5"/><path d="M8.5 20.5h7M12 17v3.5"/><path d="M6 12.2h2.2l1.6-3.4 2 5.4 1.7-3.6 1.2 1.6H18"/>'),
+    // Marketplace: obchod (markýza) se špendlíkem lokality
+    marketplace: SV('<path d="M3.5 9.5 5 4.5h14l1.5 5"/><path d="M3.5 9.5c0 1.4 1.1 2.5 2.5 2.5S8.5 10.9 8.5 9.5c0 1.4 1.1 2.5 2.5 2.5h2c1.4 0 2.5-1.1 2.5-2.5 0 1.4 1.1 2.5 2.5 2.5s2.5-1.1 2.5-2.5"/><path d="M5 12v7.5h6"/><path d="M19 12v1.5"/><path d="M17 21.5s-3.5-3-3.5-5.6a3.5 3.5 0 0 1 7 0c0 2.6-3.5 5.6-3.5 5.6z"/><circle cx="17" cy="15.9" r="1.1"/>'),
     pripojky: SV('<path d="M2.5 19.5h19"/><path d="M5.5 19.5v2M18.5 19.5v2"/><path d="M12 19.5v-6.2"/><circle cx="12" cy="10.8" r="2.5"/><path d="M12 8.3V5.4M9.5 10.8H6.8M14.5 10.8h2.7M10.3 4.2h3.4"/>'),
     hugo: SV('<rect x="4" y="7.5" width="16" height="12" rx="3.5"/><path d="M12 7.5V4M10.3 2.8h3.4"/><circle cx="9" cy="13" r="1.2"/><circle cx="15" cy="13" r="1.2"/><path d="M9.5 16.6h5"/><path d="M1.8 11.5v4M22.2 11.5v4"/>'),
     infolinka: SV('<path d="M4.5 13.5v-1.8a7.5 7.5 0 0 1 15 0v1.8"/><rect x="2.5" y="12.8" width="4" height="6" rx="1.8"/><rect x="17.5" y="12.8" width="4" height="6" rx="1.8"/><path d="M19.5 18.8v.7a2.5 2.5 0 0 1-2.5 2.5h-3"/>'),
@@ -245,6 +247,7 @@ module.exports = function createAccounts(ctx) {
       ['', 'infolinka', 'Infolinka', 'Řízení infolinky: AI zpracování požadavku, delegování a řízení servisních požadavků.', true],
       ['', 'udrzba', 'Údržba', 'Řízení údržbového plánu, intervalů, odečtů a personální řízení údržby.', true],
       ['', 'pripojky', 'Přípojky', 'Odhad ceny přípojek a přesný postup při jejich zadání i realizaci.', true],
+      ['', 'marketplace', 'Marketplace lokalit', 'Připravená a předjednaná místa pro prádlomat — vyberte si lokalitu a jděte rovnou do realizace.', true],
     ];
     app.get('/cesta/ucet', requireAccount, A(async (req, res) => {
       const supUnread = req.account && supportUnread ? await supportUnread(req.account.id) : 0;
