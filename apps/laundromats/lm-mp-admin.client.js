@@ -8,7 +8,7 @@ function api(url,body){var o=body?{method:'POST',headers:{'Content-Type':'applic
 function kpi(l,v){return '<div class="card" style="flex:1;min-width:130px;padding:12px"><div class="muted small">'+l+'</div><div style="font-size:24px;font-weight:700">'+v+'</div></div>';}
 function render(){
   var k=D.kpi,h='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'+kpi('Nabízí se',k.published)+kpi('Rezervováno',k.reserved)+kpi('Skryto',k.hidden)+kpi('Uživatelů s přístupem',k.users_with_access)+kpi('Zobrazení (30 d)',k.views_30d)+kpi('Návštěvníků (30 d)',k.viewers_30d)+kpi('Zájem (30 d)',k.interests_30d)+'</div>';
-  var ST={new:'Nový',contacted:'Kontaktován',negotiating:'Jednáme',won:'Rezervováno / uzavřeno',lost:'Zrušeno'};
+  var ST={new:'Nový',contacted:'Kontaktován',negotiating:'Jednáme',won:'Prodáno (zmizí z nabídky)',lost:'Zrušeno (vrátí se do nabídky)'};
   h+='<div class="card" style="margin-bottom:14px;overflow:auto"><h3 style="margin:0 0 8px">Rezervace a závazné zájmy ('+(D.requests||[]).length+')</h3>';
   if(!(D.requests||[]).length)h+='<p class="muted small">Zatím žádný závazný zájem. Objeví se tu poté, co zákazník dvakrát potvrdí „Mám zájem“.</p>';
   else h+='<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left" class="muted"><th>Vznik</th><th>Lokalita</th><th>Zájemce</th><th>Stav</th><th>Poznámka</th></tr></thead><tbody>'+D.requests.map(function(r){

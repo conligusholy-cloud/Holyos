@@ -209,6 +209,12 @@ router.get('/marketplace', async (req, res, next) => {
 // Evidence rezervací / závazných zájmů o lokality (AppSetting lm_marketplace_requests, pole)
 const REQ_KEY = 'lm_marketplace_requests';
 const REQ_STATUSES = ['new', 'contacted', 'negotiating', 'won', 'lost'];
+// Přepne příznaky lokality v Marketplace (rezervováno / zveřejněno)
+async function setMpFlags(sid, flags) {
+  const all = await jsonSetting('site_marketplace'); const m = all[sid]; if (!m) return;
+  Object.assign(m, flags); m.updated_at = new Date().toISOString(); all[sid] = m;
+  await saveJson('site_marketplace', all, 'Lokality — data pro Marketplace lokalit na laundromats.eu');
+}
 // POST /marketplace-interest {account_id, code} — volá Laundromats po dvojitém potvrzení zákazníka
 router.post('/marketplace-interest', async (req, res, next) => {
   try {
@@ -221,10 +227,12 @@ router.post('/marketplace-interest', async (req, res, next) => {
     const list = await jsonSetting(REQ_KEY); const arr = Array.isArray(list) ? list : [];
     const open = arr.find((r) => r.account_id === accId && r.site_id === sid && r.status !== 'lost');
     if (open) return res.json({ ok: true, duplicate: true, id: open.id });
+    if (m.reserved) return res.status(409).json({ ok: false, error: 'Lokalita je právě rezervovaná jiným zájemcem.' });
     const now = new Date().toISOString();
     const rec = { id: 'r' + Date.now().toString(36) + crypto.randomBytes(2).toString('hex'), site_id: sid, code: 'L' + sid, place: m.title || ('Lokalita #' + sid), account_id: acc.id,
       name: acc.name || '', email: acc.email || '', phone: acc.phone || '', company: acc.company || '', status: 'new', note: '', created_at: now, updated_at: now };
     arr.unshift(rec);
+    await setMpFlags(sid, { reserved: true });
     await saveJson(REQ_KEY, arr, 'Laundromats — evidence rezervací / zájmů o lokality z Marketplace');
     require('../services/compounder/notify').notifyMarketplaceInterest(prisma, { name: acc.name || acc.email, contact: [acc.phone, acc.email, acc.company].filter(Boolean).join(' · '), place: rec.place, requestId: rec.id });
     res.json({ ok: true, id: rec.id });
@@ -239,6 +247,9 @@ router.post('/marketplace-requests/:id', async (req, res, next) => {
     if (b.note !== undefined) r.note = s(b.note, 2000);
     r.updated_at = new Date().toISOString();
     await saveJson(REQ_KEY, arr, 'Laundromats — evidence rezervací / zájmů o lokality z Marketplace');
+    if (b.status === 'won') await setMpFlags(r.site_id, { reserved: false, published: false }); // prodáno → zmizí z nabídky
+    else if (b.status === 'lost' && !arr.some((x) => x.site_id === r.site_id && x.id !== r.id && ['new', 'contacted', 'negotiating'].includes(x.status))) await setMpFlags(r.site_id, { reserved: false }); // vrátí se do nabídky
+    else if (['new', 'contacted', 'negotiating'].includes(b.status)) await setMpFlags(r.site_id, { reserved: true });
     res.json({ ok: true, request: r });
   } catch (err) { next(err); }
 });
