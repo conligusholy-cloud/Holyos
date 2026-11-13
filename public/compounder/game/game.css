@@ -1034,6 +1034,35 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .por-vstup{display:flex;gap:7px}
 .por-vstup .inp{flex:1;min-width:0}
 
+/* Hledač chodí po městě — místo odpočtu vteřin. Všechno je SVG a CSS. */
+.hledac{position:relative;height:96px;margin:8px 0 6px;border-radius:14px;overflow:hidden;
+  background:linear-gradient(180deg,#16233c 0%,#101a2d 62%,#0c1322 100%);border:1px solid var(--border)}
+.hledac-mesto{position:absolute;left:0;bottom:18px;height:60px;display:flex;align-items:flex-end;gap:9px;
+  animation:hledacMesto 7s linear infinite;will-change:transform}
+.hledac-mesto i{flex:0 0 auto;width:26px;border-radius:3px 3px 0 0;background:#1b2740;
+  background-image:repeating-linear-gradient(180deg,rgba(124,180,255,.16) 0 3px,transparent 3px 9px)}
+.hledac-mesto i:nth-child(2n){background-color:#20304d}
+.hledac-mesto i:nth-child(3n){background-color:#172238}
+.hledac-mesto i:nth-child(5n){background-color:#22334f}
+.hledac-ulice{position:absolute;left:0;right:0;bottom:12px;height:6px;background:#1a2338;
+  box-shadow:0 -1px 0 rgba(255,255,255,.04) inset}
+.hledac-clovek{position:absolute;left:50%;bottom:6px;width:42px;height:64px;margin-left:-21px;
+  animation:hledacSkok .46s ease-in-out infinite alternate}
+.hledac-clovek .noha,.hledac-clovek .ruka{transform-box:fill-box;transform-origin:50% 8%;
+  animation:hledacKrok .46s ease-in-out infinite alternate}
+.hledac-clovek .n2,.hledac-clovek .r1{animation-direction:alternate-reverse}
+.hledac-lupa{position:absolute;left:calc(50% + 15px);bottom:46px;font-style:normal;font-size:15px;
+  animation:hledacLupa 1.6s ease-in-out infinite}
+@keyframes hledacMesto{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes hledacKrok{from{transform:rotate(-20deg)}to{transform:rotate(20deg)}}
+@keyframes hledacSkok{from{transform:translateY(0)}to{transform:translateY(-2px)}}
+@keyframes hledacLupa{0%,100%{transform:translateY(0) rotate(-8deg);opacity:.85}
+  50%{transform:translateY(-4px) rotate(8deg);opacity:1}}
+.hledac-stav{display:block;line-height:1.5}
+.hledac-stav b{color:var(--text2);font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){
+  .hledac-mesto,.hledac-clovek,.hledac-clovek .noha,.hledac-clovek .ruka,.hledac-lupa{animation:none}
+}
 /* Kdo v zemi vede — pod rozpisem po modelích. */
 .zeme-kral{display:flex;align-items:center;gap:5px;margin-top:4px;font-style:normal;
   font-size:11.5px;color:var(--text2);line-height:1.3;min-width:0;width:100%;overflow:hidden}

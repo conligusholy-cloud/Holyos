@@ -4412,6 +4412,49 @@ function areasSheet(predvyplnit) {
 // Hledání běží na serveru na pozadí, protože data z OpenStreetMap chodí pomalu.
 // Doptáváme se, dokud není hotovo, a mezitím hráči ukazujeme, jak dlouho to trvá.
 var SCOUT_MAX_WAIT = 240000;   // první hledání nového města trvá na OpenStreetMap i pár minut
+// ─── Hledač chodí po městě ───────────────────────────────────────────────────
+// Místo odpočtu vteřin se kreslí, co se děje: panáček jde po ulici, město mu
+// běží za zády a pod tím se střídá, čím se zrovna zabývá. Je to čistě SVG
+// a CSS, nic se nestahuje a nic to nestojí.
+var HLEDAC_HLASKY = [
+  'Vystoupil na nádraží a rozhlíží se',
+  'Prochází hlavní třídu',
+  'Obhlíží benzínku u výpadovky',
+  'Počítá auta na parkovišti',
+  'Kouká, kde má konkurence prádelnu',
+  'Zastavil se u obchodního centra',
+  'Ptá se v myčce, kolik tam chodí lidí',
+  'Měří, kolik lidí projde za hodinu',
+  'Zapisuje si adresy a ceny nájmů',
+  'Obchází sídliště',
+  'Prohlíží si zavřenou provozovnu',
+  'Dopisuje poznámky do bloku'
+];
+function hledacHtml() {
+  // Osm domů dvakrát za sebou — díky tomu může pás jezdit dokola a napojení
+  // není vidět. Výšky a šířky dáváme natvrdo, ne přes nth-child.
+  var tvary = [[28, 60], [34, 38], [22, 54], [38, 30], [26, 46], [30, 58], [24, 34], [36, 44]];
+  var domy = '';
+  for (var i = 0; i < 16; i++) {
+    var t = tvary[i % tvary.length];
+    domy += '<i style="width:' + t[0] + 'px;height:' + t[1] + 'px"></i>';
+  }
+  return '<div class="hledac" aria-hidden="true">'
+    + '<div class="hledac-mesto">' + domy + '</div>'
+    + '<div class="hledac-ulice"></div>'
+    + '<svg class="hledac-clovek" viewBox="0 0 36 56">'
+    + '<ellipse cx="18" cy="52" rx="11" ry="2.6" fill="rgba(0,0,0,.45)"/>'
+    + '<rect class="noha n1" x="13" y="32" width="4.6" height="17" rx="2.3" fill="#5a7099"/>'
+    + '<rect class="noha n2" x="18.4" y="32" width="4.6" height="17" rx="2.3" fill="#44587d"/>'
+    + '<rect x="12" y="15" width="12" height="19" rx="4.5" fill="#7c5cff"/>'
+    + '<rect class="ruka r1" x="8.6" y="17" width="4.2" height="14" rx="2.1" fill="#6a4ddb"/>'
+    + '<rect class="ruka r2" x="23.2" y="17" width="4.2" height="14" rx="2.1" fill="#8f77ff"/>'
+    + '<circle cx="18" cy="8.5" r="7" fill="#f3c9a6"/>'
+    + '<path d="M11 6.5q7-7 14 0l-1.2 2.6q-5.8-4.2-11.6 0z" fill="#2b2118"/>'
+    + '</svg>'
+    + '<i class="hledac-lupa">\uD83D\uDD0D</i>'
+    + '</div>';
+}
 function scout(city, btn) {
   if (!city || city.length < 2) return toast('Napiš, do kterého města se má jet.', 'err');
   if (S.cash < SCOUT_COST) return toast('Na cestu nemáš dost hotovosti.', 'err');
@@ -4425,13 +4468,22 @@ function scout(city, btn) {
     toast(msg, 'err');
   };
   btn.disabled = true; btn.textContent = 'Hledám…';
-  if (note) note.textContent = 'Posílám tam člověka. Projít nové město může trvat i minutu.';
+  if (note) note.innerHTML = hledacHtml()
+    + '<span class="hledac-stav" id="hledac-stav">Posílám tam člověka\u2026 '
+    + '<br>Projít nové město může trvat i minutu.</span>';
 
   // Postup píšeme i do poznámky pod polem — tlačítko bývá na mapě překryté.
   var nabidnuto = false;
   var progress = function (s) {
-    btn.textContent = 'Hledám… ' + s + ' s';
-    if (note) note.textContent = 'Chodí po městě (' + s + ' s). Nech stránku otevřenou, může to trvat i minutu.';
+    btn.textContent = 'Hledám…';
+    var hl = $('hledac-stav');
+    if (hl) {
+      // Hláška se mění po čtyřech vteřinách, ať je vidět, že se něco děje.
+      hl.innerHTML = esc(HLEDAC_HLASKY[Math.floor(s / 4) % HLEDAC_HLASKY.length])
+        + '\u2026 <b>' + s + ' s</b><br>Nech stránku otevřenou, může to trvat i minutu.';
+    } else if (note) {
+      note.innerHTML = hledacHtml() + '<span class="hledac-stav" id="hledac-stav"></span>';
+    }
     // Po deseti vteřinách nabídneme města, kde už někdo byl — ta se otevřou
     // hned. Nový hráč tak nemusí čekat na první hledání vůbec.
     if (s >= 10 && !nabidnuto) {
