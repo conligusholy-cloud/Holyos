@@ -341,7 +341,7 @@ function usrInv(u){var i=u.invited;if(!i)return '<span class="muted small">sám 
   return '<span title="Odkaz na Ekonomiku poprvé '+esc(dtm(i.at).replace(/<[^>]+>/g,''))+(i.count>1?' · odesláno '+i.count+'×':'')+'"><b>'+esc(i.by||'?')+'</b><br><span class="muted small">'+esc(INV_CH[i.channel]||i.channel||'')+' · '+dtm(i.at)+(i.count>1?' · '+i.count+'×':'')+'</span></span>';}
 function usrRow(u){
   var lead=u.compounder_lead_id&&window.LM_HOLYOS?'<a href="'+window.LM_HOLYOS+'/modules/prodejni-objednavky/index.html?lead='+u.compounder_lead_id+'" target="_blank" rel="noopener" class="small">kontakt #'+u.compounder_lead_id+' ↗</a>':(u.compounder_lead_id?'<span class="small muted">#'+u.compounder_lead_id+'</span>':'<span class="muted">—</span>');
-  return '<tr'+(u.disabled?' style="opacity:.55"':'')+'><td><a href="#" class="nm" data-uact="'+u.id+'" title="Zobrazit pohyb na stránkách">'+esc(u.name)+'</a> <button class="btn sec sm" data-uact="'+u.id+'" title="Pohyb na stránkách">📈 Pohyb</button></td>'
+  return '<tr'+(u.disabled?' style="opacity:.55"':'')+'><td><a href="#" class="nm" data-uact="'+u.id+'" title="Zobrazit pohyb na stránkách">'+esc(u.name)+'</a> <button class="btn sec sm" data-uact="'+u.id+'" title="Pohyb na stránkách">📈 Pohyb</button> <button class="btn sm" data-udet="'+u.id+'" title="Detail kontaktu: údaje, poznámka, přístupy">👤 Detail</button></td>'
     +'<td>'+(u.email?'<a href="mailto:'+esc(u.email)+'">'+esc(u.email)+'</a>':'<span class="muted" title="Účet zatím nemá e-mail — zákazník ho doplní na aktivačním odkazu">bez e-mailu</span>')+'</td>'
     +'<td>'+(u.phone?'<a href="tel:'+esc(u.phone)+'">'+esc(u.phone)+'</a>':'<span class="muted">—</span>')+'</td>'
     +hcell(u.company)
@@ -383,6 +383,45 @@ function usrRender(){
 root.addEventListener('click',function(e){var b=e.target.closest('[data-udis]');if(!b)return;e.stopPropagation();var id=+b.getAttribute('data-udis'),dis=b.getAttribute('data-on')==='1';
   if(dis&&!confirm('Zablokovat účet? Uživatel se odhlásí a nebude se moci přihlásit.'))return;b.disabled=true;
   api('/admin/api/users/'+id+'/disabled',{disabled:dis}).then(function(){(usr||[]).forEach(function(u){if(u.id===id)u.disabled=dis;});usrRender();}).catch(function(er){b.disabled=false;alert(er.message);});},true);
+// ── Detail kontaktu: údaje, interní poznámka, přístupy k nástrojům (přebíjí roli), účet ──
+var UD_PAGES=[['podpora','Podpora Laundromats'],['compounder','Compounder'],['pradlomaty','Prádlomaty'],['ekonomika','Ekonomika'],['hledat','Najít místo'],['zhodnotit','Zhodnotit místo'],['marketplace','Marketplace lokalit']];
+var UD_ROLE={beginner:['podpora','compounder','pradlomaty'],economy:['podpora','compounder','pradlomaty','ekonomika'],full:['podpora','compounder','pradlomaty','ekonomika','hledat','zhodnotit']};
+function udDefault(u,p){return (UD_ROLE[roleKey(u.plan)]||[]).indexOf(p)!==-1;}
+function udEff(u,p){var o=u.access||{};return Object.prototype.hasOwnProperty.call(o,p)?o[p]===true:udDefault(u,p);}
+function udOpen(id){var u=(usr||[]).filter(function(x){return x.id===id;})[0];if(!u)return;
+  var ov=document.getElementById('ud-ov');if(!ov){ov=document.createElement('div');ov.id='ud-ov';ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(2,6,14,.78);display:flex;align-items:flex-start;justify-content:center;padding:4vh 16px;overflow:auto';(root||document.body).appendChild(ov);
+    ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});}
+  var inp='background:#0b1220;color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;font:inherit;font-size:13.5px;width:100%;box-sizing:border-box';
+  var lead=u.compounder_lead_id&&window.LM_HOLYOS?'<a href="'+window.LM_HOLYOS+'/modules/prodejni-objednavky/index.html?lead='+u.compounder_lead_id+'" target="_blank" rel="noopener">kontakt v HolyOS #'+u.compounder_lead_id+' ↗</a>':'<span class="muted">bez kontaktu v HolyOS</span>';
+  ov.innerHTML='<div class="card" style="max-width:720px;width:100%;margin:0;padding:22px;position:relative"><button type="button" data-udx style="position:absolute;top:12px;right:14px;background:none;border:0;color:var(--text2);font-size:22px;cursor:pointer">×</button>'
+    +'<h2 style="margin:0 0 2px">👤 '+esc(u.name||'')+'</h2><div class="muted small" style="margin-bottom:14px">'+(u.email?esc(u.email):'bez e-mailu')+' · registrace '+dtm(u.created_at)+' · poslední přihlášení '+dtm(u.last_login_at)+' ('+(u.login_count||0)+'×) · '+lead+'</div>'
+    +'<h3 style="margin:14px 0 8px;font-size:14px">Údaje</h3><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">'
+    +'<label class="small">Jméno<input id="ud-name" style="'+inp+'" maxlength="120" value="'+esc(u.name||'')+'"></label><label class="small">Telefon<input id="ud-phone" style="'+inp+'" maxlength="40" value="'+esc(u.phone||'')+'"></label><label class="small">Firma<input id="ud-company" style="'+inp+'" maxlength="160" value="'+esc(u.company||'')+'"></label></div>'
+    +'<h3 style="margin:16px 0 8px;font-size:14px">Interní poznámka <span class="muted small" style="font-weight:400">(uživatel ji nevidí)</span></h3><textarea id="ud-note" rows="4" maxlength="5000" style="'+inp+';resize:vertical" placeholder="Co o kontaktu víme, na čem jsme se domluvili, další krok…">'+esc(u.admin_note||'')+'</textarea>'
+    +'<div style="display:flex;gap:8px;align-items:center;margin-top:10px"><button class="btn sm" data-udsave="'+u.id+'">💾 Uložit údaje a poznámku</button><span class="small muted" id="ud-msg"></span></div>'
+    +'<h3 style="margin:18px 0 6px;font-size:14px">Co uživatel vidí</h3><div class="muted small" style="margin-bottom:8px">Role: <select data-urole="'+u.id+'" style="background:#0b1220;color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:4px 8px;font:inherit;font-size:12.5px">'+USR_ROLES.map(function(r){return '<option value="'+r[0]+'"'+(roleKey(u.plan)===r[0]?' selected':'')+'>'+r[1]+'</option>';}).join('')+'</select> — role určuje výchozí přístup; zaškrtnutím níže ho u tohoto uživatele změníš. Projeví se do 5 minut.</div>'
+    +'<div id="ud-acc">'+udAccHtml(u)+'</div>'
+    +'<h3 style="margin:18px 0 8px;font-size:14px">Účet</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sec sm" data-uact="'+u.id+'">📈 Pohyb na stránkách</button><button class="btn sec sm" data-udis="'+u.id+'" data-on="'+(u.disabled?0:1)+'"'+(u.disabled?'':' style="color:#ff8f8f"')+'>'+(u.disabled?'Odblokovat':'Zablokovat')+'</button></div></div>';
+}
+function udAccHtml(u){return UD_PAGES.map(function(p){var o=u.access||{},own=Object.prototype.hasOwnProperty.call(o,p[0]),on=udEff(u,p[0]),def=udDefault(u,p[0]);
+  return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(120,160,255,.12)"><label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer"><input type="checkbox" data-udacc="'+u.id+'" data-page="'+p[0]+'"'+(on?' checked':'')+' style="width:18px;height:18px"> <b style="font-size:13.5px">'+p[1]+'</b></label>'
+    +(own?'<span class="small" style="color:#f59e0b">nastaveno ručně</span> <button class="btn sec sm" data-udreset="'+u.id+'" data-page="'+p[0]+'" title="Vrátit na výchozí podle role">↺ podle role ('+(def?'vidí':'nevidí')+')</button>':'<span class="small muted">podle role</span>')+'</div>';}).join('');}
+function udRefresh(id){var u=(usr||[]).filter(function(x){return x.id===id;})[0],box=document.getElementById('ud-acc');if(u&&box)box.innerHTML=udAccHtml(u);}
+function udSetAcc(id,page,on){return api('/admin/api/users/'+id+'/access',{page:page,on:on}).then(function(j){(usr||[]).forEach(function(u){if(u.id===id){u.access=j.access||{};u.marketplace=(u.access.marketplace===true);}});udRefresh(id);if(typeof usrRender==='function')usrRender();});}
+document.addEventListener('click',function(e){var t=e.target;
+  var d=t.closest&&t.closest('[data-udet]');if(d){e.preventDefault();udOpen(+d.getAttribute('data-udet'));return;}
+  if(t.closest&&t.closest('[data-udx]')){var ov=document.getElementById('ud-ov');if(ov)ov.remove();return;}
+  var r=t.closest&&t.closest('[data-udreset]');if(r){udSetAcc(+r.getAttribute('data-udreset'),r.getAttribute('data-page'),null).catch(function(er){alert(er.message);});return;}
+  var sv=t.closest&&t.closest('[data-udsave]');if(sv){var id=+sv.getAttribute('data-udsave'),m=document.getElementById('ud-msg');sv.disabled=true;m.textContent='Ukládám…';
+    var b={name:document.getElementById('ud-name').value.trim(),phone:document.getElementById('ud-phone').value.trim(),company:document.getElementById('ud-company').value.trim()},note=document.getElementById('ud-note').value;
+    if(!b.name){sv.disabled=false;m.textContent='Jméno nesmí být prázdné.';return;}
+    Promise.all([api('/admin/api/users/'+id+'/profile',b),api('/admin/api/users/'+id+'/note',{note:note})]).then(function(){(usr||[]).forEach(function(u){if(u.id===id){u.name=b.name;u.phone=b.phone;u.company=b.company;u.admin_note=note;}});sv.disabled=false;m.textContent='✓ Uloženo';m.style.color='#4ade80';if(typeof usrRender==='function')usrRender();})
+      .catch(function(er){sv.disabled=false;m.textContent='Chyba: '+er.message;m.style.color='#ff8f8f';});}
+});
+document.addEventListener('change',function(e){var c=e.target.closest&&e.target.closest('[data-udacc]');if(!c)return;var id=+c.getAttribute('data-udacc');c.disabled=true;
+  udSetAcc(id,c.getAttribute('data-page'),c.checked).catch(function(er){c.checked=!c.checked;c.disabled=false;alert(er.message);});});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){var ov=document.getElementById('ud-ov');if(ov)ov.remove();}});
+document.addEventListener('change',function(e){var x=e.target.closest&&e.target.closest('#ud-ov [data-urole]');if(!x)return;var id=+x.getAttribute('data-urole');setTimeout(function(){udRefresh(id);},900);});
 // Marketplace lokalit — zaškrtnutí = uživatel ho uvidí (výchozí nevidí); projeví se do 5 minut
 document.addEventListener('change',function(e){var c=e.target.closest&&e.target.closest('[data-ump]');if(!c)return;var id=+c.getAttribute('data-ump'),on=c.checked;c.disabled=true;
   api('/admin/api/users/'+id+'/marketplace',{on:on}).then(function(){(usr||[]).forEach(function(u){if(u.id===id)u.marketplace=on;});c.disabled=false;}).catch(function(er){c.disabled=false;c.checked=!on;alert(er.message);});});

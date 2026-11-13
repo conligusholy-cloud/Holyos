@@ -20,12 +20,14 @@ const sha = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 const newToken = () => crypto.randomBytes(32).toString('hex');
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/;
 const pub = (a) => ({ id: a.id, lead_id: a.compounder_lead_id || null, email: a.email, name: a.name, phone: a.phone, company: a.company, plan: a.plan, v: a.token_version, verified: !!a.email_verified_at, created_at: a.created_at });
-// Marketplace lokalit: kdo ho vidí — seznam id účtů v AppSetting (výchozí = nikdo; zapíná správce u uživatele)
-const MP_KEY = 'lm_marketplace_ids';
-async function mpIds() {
-  try { const v = await require('../services/settings').getSetting(MP_KEY, { type: 'json', defaultValue: [] }); return Array.isArray(v) ? v.map(Number) : []; } catch (e) { return []; }
-}
-const pubMp = async (a) => Object.assign(pub(a), { marketplace: (await mpIds()).includes(Number(a.id)) });
+// Přístupy k nástrojům po jednotlivých účtech (přebíjí výchozí nastavení role) a interní poznámky správce.
+// AppSetting lm_account_access = { "<id účtu>": { "<stránka>": true|false } }, lm_account_notes = { "<id>": "text" }.
+// Marketplace lokalit nemá výchozí přístup v žádné roli — vidí ho jen ten, komu ho správce zapne.
+const ACCESS_KEY = 'lm_account_access', NOTES_KEY = 'lm_account_notes';
+const ACCESS_PAGES = ['podpora', 'compounder', 'pradlomaty', 'ekonomika', 'hledat', 'zhodnotit', 'marketplace'];
+async function jsonSetting(key) { try { const v = await require('../services/settings').getSetting(key, { type: 'json', defaultValue: {} }); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch (e) { return {}; } }
+const saveJson = (key, val, description) => require('../services/settings').setSetting(key, val, { type: 'json', description });
+const pubMp = async (a) => { const acc = (await jsonSetting(ACCESS_KEY))[a.id] || {}; return Object.assign(pub(a), { access: acc, marketplace: acc.marketplace === true }); };
 const pwErr = (p) => (String(p || '').length < 8 ? 'Heslo musí mít alespoň 8 znaků.' : String(p).length > 200 ? 'Heslo je příliš dlouhé.' : null);
 
 // Spáruje / založí kontakt v CRM (CompounderLead), ať obchod účet vidí
@@ -165,8 +167,8 @@ router.get('/list', async (req, res, next) => {
     const lids = [...new Set(rows.map((r) => r.compounder_lead_id).filter(Boolean))];
     const sent = lids.length ? await prisma.compounderEvent.findMany({ where: { event: 'economy_link_sent', OR: lids.map((id) => ({ props: { path: ['lead_id'], equals: id } })) }, orderBy: { created_at: 'asc' }, select: { props: true, created_at: true }, take: 5000 }).catch(() => []) : [];
     const inv = new Map(); sent.forEach((e) => { const p = e.props || {}; const k = Number(p.lead_id); if (!inv.has(k)) inv.set(k, { by: p.by || null, channel: p.channel || null, at: e.created_at, count: 0 }); inv.get(k).count++; inv.get(k).last_at = e.created_at; });
-    const mp = await mpIds();
-    res.json({ ok: true, users: rows.map((r) => { const { password_hash, ...u } = r; return Object.assign(u, { marketplace: mp.includes(r.id), pending_password: String(password_hash || '').startsWith('!setup:'), invited: r.compounder_lead_id ? (inv.get(r.compounder_lead_id) || null) : null }); }) });
+    const accAll = await jsonSetting(ACCESS_KEY), notes = await jsonSetting(NOTES_KEY);
+    res.json({ ok: true, users: rows.map((r) => { const { password_hash, ...u } = r; const ac = accAll[r.id] || {}; return Object.assign(u, { access: ac, marketplace: ac.marketplace === true, admin_note: notes[r.id] || '', pending_password: String(password_hash || '').startsWith('!setup:'), invited: r.compounder_lead_id ? (inv.get(r.compounder_lead_id) || null) : null }); }) });
   } catch (err) { next(err); }
 });
 // POST /:id/disabled {disabled} — zablokovat / odblokovat účet (zablokovaný se odhlásí do 5 minut)
@@ -179,13 +181,52 @@ router.post('/:id(\\d+)/plan', async (req, res, next) => {
     res.json({ ok: true, plan: upd.plan });
   } catch (err) { next(err); }
 });
-// POST /:id/marketplace {on} — zpřístupnit / skrýt Marketplace lokalit (projeví se do 5 minut)
-router.post('/:id(\\d+)/marketplace', async (req, res, next) => {
+// GET /marketplace — zveřejněné lokality pro Marketplace (zdroj: HolyOS Lokality → záložka Marketplace).
+// Jen veřejná pole; poloha zaokrouhlená (~1 km), bez adresy a vlastníka.
+router.get('/marketplace', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10), on = !!(req.body || {}).on;
-    const set = new Set(await mpIds()); if (on) set.add(id); else set.delete(id);
-    await require('../services/settings').setSetting(MP_KEY, [...set], { type: 'json', description: 'Laundromats — účty s přístupem do Marketplace lokalit' });
-    res.json({ ok: true, marketplace: on });
+    const all = await jsonSetting('site_marketplace');
+    const ids = Object.keys(all).filter((k) => all[k] && all[k].published).map(Number);
+    if (!ids.length) return res.json({ ok: true, items: [] });
+    const sites = await prisma.site.findMany({ where: { id: { in: ids } }, select: { id: true, city: true, country: true, latitude: true, longitude: true, area_m2: true, rent_monthly: true, rent_currency: true } });
+    const by = new Map(sites.map((x) => [x.id, x]));
+    const r2 = (v) => (v == null ? null : Math.round(Number(v) * 100) / 100);
+    const items = ids.filter((id) => by.has(id)).map((id) => { const m = all[id], x = by.get(id);
+      return { code: 'L' + id, name: m.title, highlight: m.highlight || null, description: m.description || null, city: x.city, country: x.country,
+        lat: r2(x.latitude), lon: r2(x.longitude), area_m2: m.area_m2 != null ? m.area_m2 : (x.area_m2 != null ? Number(x.area_m2) : null),
+        rent_monthly: m.rent_monthly != null ? m.rent_monthly : (x.rent_monthly != null ? Number(x.rent_monthly) : null), rent_currency: x.rent_currency || 'CZK',
+        price_note: m.price_note || null, availability: m.availability || null, parking: m.parking || null, footfall: m.footfall || null,
+        image_url: m.image_url || null, reserved: !!m.reserved, updated_at: m.updated_at || null };
+    }).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
+    res.json({ ok: true, items });
+  } catch (err) { next(err); }
+});
+// POST /:id/access {page, on|null} — přístup k nástroji (null = podle role). Projeví se do 5 minut.
+async function setAccess(id, page, on) {
+  const all = await jsonSetting(ACCESS_KEY); const cur = Object.assign({}, all[id] || {});
+  if (on === null) delete cur[page]; else cur[page] = !!on;
+  if (Object.keys(cur).length) all[id] = cur; else delete all[id];
+  await saveJson(ACCESS_KEY, all, 'Laundromats — přístupy k nástrojům po účtech (přebíjí roli)');
+  return cur;
+}
+router.post('/:id(\\d+)/access', async (req, res, next) => {
+  try {
+    const b = req.body || {}, page = String(b.page || '');
+    if (!ACCESS_PAGES.includes(page)) return res.status(400).json({ error: 'Neznámý nástroj' });
+    res.json({ ok: true, access: await setAccess(parseInt(req.params.id, 10), page, b.on === null || b.on === undefined ? null : !!b.on) });
+  } catch (err) { next(err); }
+});
+// POST /:id/marketplace {on} — zkratka pro sloupec v tabulce uživatelů
+router.post('/:id(\\d+)/marketplace', async (req, res, next) => {
+  try { const on = !!(req.body || {}).on; await setAccess(parseInt(req.params.id, 10), 'marketplace', on); res.json({ ok: true, marketplace: on }); } catch (err) { next(err); }
+});
+// POST /:id/note {note} — interní poznámka správce k účtu (uživatel ji nevidí)
+router.post('/:id(\\d+)/note', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10), note = s((req.body || {}).note, 5000);
+    const all = await jsonSetting(NOTES_KEY); if (note) all[id] = note; else delete all[id];
+    await saveJson(NOTES_KEY, all, 'Laundromats — interní poznámky správce k účtům');
+    res.json({ ok: true, note });
   } catch (err) { next(err); }
 });
 router.post('/:id(\\d+)/disabled', async (req, res, next) => {

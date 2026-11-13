@@ -387,6 +387,7 @@ function renderSiteModal() {
         <button class="site-tab" data-tab="docs" onclick="switchTab('docs')">Smlouvy (${(s.documents||[]).filter(d=>!isSurveyDoc(d)&&!isDataDoc(d)).length})</button>
         <button class="site-tab" data-tab="data" onclick="switchTab('data')">📁 DATA (${(s.documents||[]).filter(d=>isDataDoc(d)&&d.doc_type!=='data_root').length})</button>
         <button class="site-tab" data-tab="survey" onclick="switchTab('survey')">🏗️ Výstavba (${(s.documents||[]).filter(isSurveyDoc).length})</button>
+        <button class="site-tab" data-tab="market" onclick="switchTab('market')">🛒 Marketplace</button>
       `}
     </div>
 
@@ -402,6 +403,7 @@ function renderSiteModal() {
       <div class="site-tab-panel" id="tab-docs">${renderDocsTab(s)}</div>
       <div class="site-tab-panel" id="tab-survey">${renderSurveyDocsTab(s)}</div>
       <div class="site-tab-panel" id="tab-data">${renderDataTab(s)}</div>
+      <div class="site-tab-panel" id="tab-market"><p class="muted">Načítám…</p></div>
     `}
 
     <div class="modal-actions">
@@ -410,6 +412,49 @@ function renderSiteModal() {
       <button class="btn btn-primary" onclick="saveSite()">Uložit</button>
     </div>
   `);
+  if (!isNew) loadMarketplaceTab(s);
+}
+// ─── Záložka Marketplace — zdrojová data pro laundromats.eu/cesta/marketplace ───────────────
+// Ukládá se zvlášť (/api/sites/:id/marketplace) při „Uložit". Zákazník uvidí JEN to, co je tady —
+// ne jméno vlastníka, adresu ani přesné GPS (poloha na ~1 km).
+let mpLoaded = false;
+async function loadMarketplaceTab(s) {
+  mpLoaded = false;
+  const box = document.getElementById('tab-market'); if (!box || !s || !s.id) return;
+  let m = null;
+  try { const r = await fetch('/api/sites/' + s.id + '/marketplace', fetchOpts()); const j = await r.json(); m = j.marketplace; } catch (e) { box.innerHTML = '<p class="muted" style="color:#f87171">Marketplace data se nepodařilo načíst.</p>'; return; }
+  m = m || {};
+  const area = s.area_m2 != null ? Number(s.area_m2) : null, rent = s.rent_monthly != null ? Number(s.rent_monthly) : null;
+  const f = (label, name, val, ph, type) => `<div class="form-row"><label>${esc(label)}</label><input type="${type || 'text'}" name="${name}" value="${val == null ? '' : esc(val)}" placeholder="${esc(ph || '')}"></div>`;
+  box.innerHTML = `<div style="background:rgba(79,209,255,.07);border:1px solid rgba(79,209,255,.3);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.5">
+      Tyto údaje uvidí na <b>laundromats.eu → Marketplace lokalit</b> uživatelé, kterým ho zapneš. Vlastník, adresa ani přesná poloha se nezobrazují (město a poloha ~1 km).${m.updated_at ? ' <span class="muted">Naposledy uloženo ' + new Date(m.updated_at).toLocaleString('cs-CZ') + '.</span>' : ''}</div>
+    <div class="form-grid">
+      <div class="form-row span2"><div class="checkbox-row"><label><input type="checkbox" name="mp_published" ${m.published ? 'checked' : ''}> <b>Zobrazit v Marketplace</b></label> &nbsp; <label><input type="checkbox" name="mp_reserved" ${m.reserved ? 'checked' : ''}> Rezervováno (vidět, ale nejde poptat)</label></div></div>
+      ${f('Veřejný název *', 'mp_title', m.title, 'např. Retail park u Billy — ' + (s.city || 'město'))}
+      ${f('Lákadlo (1 věta)', 'mp_highlight', m.highlight, 'např. Parkoviště pro 120 aut, 6 000 aut denně')}
+      <div class="form-row span2"><label>Veřejný popis</label><textarea name="mp_description" placeholder="Co je v okolí, proč je místo dobré, co je připravené (přípojky, souhlas vlastníka…)">${esc(m.description || '')}</textarea></div>
+      ${f('Plocha (m²)', 'mp_area_m2', m.area_m2 != null ? m.area_m2 : '', area != null ? 'z lokality: ' + area : '', 'number')}
+      ${f('Nájem / měsíc', 'mp_rent_monthly', m.rent_monthly != null ? m.rent_monthly : '', rent != null ? 'z lokality: ' + rent : '', 'number')}
+      ${f('Cena / podmínky', 'mp_price_note', m.price_note, 'např. nájem 12 000 Kč/měs., smlouva na 10 let')}
+      ${f('Dostupnost', 'mp_availability', m.availability, 'např. ihned / od jara 2027')}
+      ${f('Parkování', 'mp_parking', m.parking, 'např. ano, přímo u stání')}
+      ${f('Okolí a návštěvnost', 'mp_footfall', m.footfall, 'např. supermarket, 15 000 obyvatel ve spádu')}
+      <div class="form-row span2"><label>Obrázek (URL, nepovinné)</label><input type="text" name="mp_image_url" value="${esc(m.image_url || '')}" placeholder="https://… (veřejně dostupná fotka nebo vizualizace)"></div>
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:8px">Prázdná plocha a nájem se doplní z údajů lokality. Ukládá se tlačítkem <b>Uložit</b> dole.</p>`;
+  mpLoaded = true;
+}
+async function saveMarketplace(siteId) {
+  if (!mpLoaded || !siteId) return null;
+  const v = (n) => { const el = document.querySelector('.modal [name=' + n + ']'); return el ? (el.type === 'checkbox' ? el.checked : el.value) : null; };
+  const body = { published: v('mp_published'), reserved: v('mp_reserved'), title: v('mp_title'), highlight: v('mp_highlight'), description: v('mp_description'),
+    area_m2: v('mp_area_m2'), rent_monthly: v('mp_rent_monthly'), price_note: v('mp_price_note'), availability: v('mp_availability'),
+    parking: v('mp_parking'), footfall: v('mp_footfall'), image_url: v('mp_image_url') };
+  try {
+    const r = await fetch('/api/sites/' + siteId + '/marketplace', fetchOpts({ method: 'PUT', body: JSON.stringify(body) }));
+    if (!r.ok) { const e = await r.json().catch(() => ({})); return 'Marketplace: ' + (e.error || ('chyba ' + r.status)); }
+  } catch (e) { return 'Marketplace: ' + e.message; }
+  return null;
 }
 function switchTab(name) {
   document.querySelectorAll('.site-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
@@ -808,7 +853,7 @@ function collectForm() {
   if (!root) return {};
   const out = {};
   root.querySelectorAll('input[name], select[name], textarea[name]').forEach(el => {
-    if (el.name.startsWith('contact_') || el.name.startsWith('comm_') || el.name.startsWith('doc_') || el.name.startsWith('sdoc_')) return;
+    if (el.name.startsWith('mp_') || el.name.startsWith('contact_') || el.name.startsWith('comm_') || el.name.startsWith('doc_') || el.name.startsWith('sdoc_')) return;
     if (el.type === 'checkbox') out[el.name] = el.checked;
     else if (el.value === '') out[el.name] = null;
     else if (el.type === 'number') out[el.name] = el.value === '' ? null : Number(el.value);
@@ -890,6 +935,8 @@ async function saveSite() {
     const siteId = (currentSite && currentSite.id) || (ulozena && ulozena.id);
 
     if (siteId) {
+      const chybaMp = await saveMarketplace(siteId);
+      if (chybaMp) { alert(chybaMp); switchTab('market'); return; }
       const chyba = await ulozRozepsane(siteId);
       // Lokalita je uložená; modal nezavíráme, ať uživatel o rozepsaná data nepřijde.
       if (chyba) { alert(chyba); return; }

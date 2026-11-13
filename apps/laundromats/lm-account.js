@@ -56,8 +56,10 @@ module.exports = function createAccounts(ctx) {
     full: { label: 'Plný přístup', pages: ['podpora', 'compounder', 'pradlomaty', 'ekonomika', 'hledat', 'zhodnotit'] },
   };
   const roleOf = (a) => (a && ROLES[a.plan] ? a.plan : 'beginner'); // 'free' (původní výchozí) = Začátečník
-  // Marketplace lokalit nejde přes roli — správce ho zapíná jednotlivým uživatelům (account.marketplace z HolyOS)
-  const canSee = (req, page) => !!(req && ((req.account && (page === 'marketplace' ? req.account.marketplace === true : ROLES[roleOf(req.account)].pages.includes(page))) || (!req.account && adminOf(req))));
+  // Přístup k nástroji: nastavení u konkrétního účtu (account.access z HolyOS, Administrace → Uživatelé → Detail)
+  // přebíjí roli. Marketplace lokalit v žádné roli není — vidí ho jen ten, komu ho správce zapne.
+  const accessOf = (a, page) => { const o = (a && a.access) || {}; if (Object.prototype.hasOwnProperty.call(o, page)) return o[page] === true; if (page === 'marketplace') return a.marketplace === true; return ROLES[roleOf(a)].pages.includes(page); };
+  const canSee = (req, page) => !!(req && ((req.account && accessOf(req.account, page)) || (!req.account && adminOf(req))));
   function requirePage(page) {
     return (req, res, next) => {
       if (!req.account && !adminOf(req)) return requireAccount(req, res, next);
@@ -269,24 +271,22 @@ module.exports = function createAccounts(ctx) {
 `;
       send(req, res, 'Moje nástroje', body, 200, { back: false });
     }));
-    // Marketplace lokalit — připravená a předjednaná místa (HolyOS „Předjednaná místa", stav zveřejněno/rezervováno).
+    // Marketplace lokalit — připravená místa. Zdroj: HolyOS Lokality → záložka Marketplace (zaškrtnuté „Zobrazit v Marketplace").
     // Vidí jen uživatel, kterému to správce zapnul (Administrace → Uživatelé → Marketplace). Poloha je přibližná.
     app.get('/cesta/marketplace', requirePage('marketplace'), A(async (req, res) => {
       let spots = [], chyba = '';
-      try { const r = await fetch(HOLYOS_URL + '/api/pradlomat-spots/public', { signal: AbortSignal.timeout(12000) }); spots = r.ok ? await r.json() : []; if (!r.ok) chyba = 'Nabídku se nepodařilo načíst.'; } catch (e) { chyba = 'Nabídku se teď nepodařilo načíst, zkuste to prosím za chvíli.'; }
+      try { const r = await hos('GET', '/marketplace'); if (r.status === 200 && r.j && Array.isArray(r.j.items)) spots = r.j.items; else chyba = 'Nabídku se nepodařilo načíst.'; } catch (e) { chyba = 'Nabídku se teď nepodařilo načíst, zkuste to prosím za chvíli.'; }
       if (!Array.isArray(spots)) spots = [];
       const cz = (n) => Number(n).toLocaleString('cs-CZ', { maximumFractionDigits: 0 });
       const kv = (l, v) => (v == null || v === '' ? '' : `<div class="mp-kv"><span>${l}</span><b>${v}</b></div>`);
-      const card = (s) => `<div class="card mp-card" data-q="${esc([s.name, s.city, s.region, s.country].filter(Boolean).join(' ').toLowerCase())}">
-          <div class="mp-img">${s.cover_image_url ? `<img src="${esc(s.cover_image_url)}" alt="" loading="lazy">` : `<div class="mp-noimg">${IC.marketplace}</div>`}${s.status === 'reserved' ? '<span class="mp-st res">Rezervováno</span>' : '<span class="mp-st">Volné</span>'}${s.score != null ? `<span class="mp-score" title="Skóre místa">${Math.round(s.score)}<small>/100</small></span>` : ''}</div>
-          <div class="mp-body"><h3>${esc(s.name)}</h3><p class="muted small" style="margin:0 0 8px">📍 ${esc([s.city, s.region].filter(Boolean).join(', ') || '—')} <span title="Přibližná poloha">(přibližně)</span></p>
-          ${s.highlight && s.highlight !== s.name ? `<p class="mp-hl">${esc(s.highlight)}</p>` : ''}${s.public_description ? `<p class="small" style="margin:0 0 10px;line-height:1.5">${esc(s.public_description)}</p>` : ''}
-          ${kv('Plocha', s.area_m2 != null ? cz(s.area_m2) + ' m²' : null)}${kv('Nájem / měsíc', s.rent_monthly != null ? cz(s.rent_monthly) + ' ' + esc(s.rent_currency || 'Kč') : null)}
-          ${kv('Parkování', s.has_parking ? 'ano' + (s.parking_distance_m != null ? ' · ' + cz(s.parking_distance_m) + ' m' : '') : (s.has_parking === false ? 'ne' : null))}
-          ${kv('Obyvatel ve spádu', s.population ? cz(s.population) : null)}${kv('Obchody v okolí', s.anchor_count != null ? cz(s.anchor_count) : null)}
-          ${kv('Konkurence v okolí', s.competition_count != null ? cz(s.competition_count) : null)}${kv('Nejbližší náš prádlomat', s.nearest_laundromat_km != null ? String(s.nearest_laundromat_km).replace('.', ',') + ' km' : null)}
-          ${s.availability_note ? `<p class="small muted" style="margin:8px 0 0">🗓 ${esc(s.availability_note)}</p>` : ''}
-          ${s.status === 'reserved' ? '<div class="btn sec" style="width:100%;justify-content:center;margin-top:12px;opacity:.6;cursor:default">Lokalita je rezervovaná</div>'
+      const card = (s) => `<div class="card mp-card" data-q="${esc([s.name, s.city, s.country].filter(Boolean).join(' ').toLowerCase())}">
+          <div class="mp-img">${s.image_url ? `<img src="${esc(s.image_url)}" alt="" loading="lazy">` : `<div class="mp-noimg">${IC.marketplace}</div>`}${s.reserved ? '<span class="mp-st res">Rezervováno</span>' : '<span class="mp-st">Volné</span>'}</div>
+          <div class="mp-body"><h3>${esc(s.name)}</h3><p class="muted small" style="margin:0 0 8px">📍 ${esc([s.city, s.country && s.country !== 'CZ' ? s.country : ''].filter(Boolean).join(', ') || '—')} <span title="Přesné místo probereme na schůzce">(přibližně)</span></p>
+          ${s.highlight ? `<p class="mp-hl">${esc(s.highlight)}</p>` : ''}${s.description ? `<p class="small" style="margin:0 0 10px;line-height:1.5;white-space:pre-line">${esc(s.description)}</p>` : ''}
+          ${kv('Plocha', s.area_m2 != null ? cz(s.area_m2) + ' m²' : null)}${kv('Nájem / měsíc', s.rent_monthly != null ? cz(s.rent_monthly) + ' ' + (s.rent_currency === 'EUR' ? '€' : 'Kč') : null)}
+          ${kv('Cena / podmínky', s.price_note ? esc(s.price_note) : null)}${kv('Parkování', s.parking ? esc(s.parking) : null)}${kv('Okolí a návštěvnost', s.footfall ? esc(s.footfall) : null)}
+          ${s.availability ? `<p class="small muted" style="margin:8px 0 0">🗓 ${esc(s.availability)}</p>` : ''}
+          ${s.reserved ? '<div class="btn sec" style="width:100%;justify-content:center;margin-top:12px;opacity:.6;cursor:default">Lokalita je rezervovaná</div>'
             : `<a class="btn mp-want" href="/cesta/schuzka?lokalita=${encodeURIComponent(s.code || '')}" data-code="${esc(s.code || '')}" style="width:100%;justify-content:center;margin-top:12px">Mám zájem o tuto lokalitu</a>`}</div></div>`;
       const body = CSS + `<style>.mp-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 4px}.mp-tools input{max-width:320px;margin:0}
         .mp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-top:14px}.mp-card{margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column}

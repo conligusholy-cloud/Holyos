@@ -318,6 +318,30 @@ const siteUpdateSchema = siteCreateSchema.partial().extend({
   sales_notes: z.string().optional().nullable(),
 });
 
+// ─── Marketplace lokalit (laundromats.eu/cesta/marketplace) — zdrojová data u lokality ───────────
+// AppSetting site_marketplace = { "<id lokality>": { published, title, highlight, description, price_note,
+// availability, area_m2, rent_monthly, parking, footfall, image_url, reserved, updated_at } }.
+// Na marketplace jde jen to, co je tady vyplněné — jméno vlastníka, adresa ani přesné GPS ne.
+const MP_SITE_KEY = 'site_marketplace';
+async function mpAll() { try { const v = await require('../services/settings').getSetting(MP_SITE_KEY, { type: 'json', defaultValue: {} }); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch (e) { return {}; } }
+router.get('/:id(\\d+)/marketplace', async (req, res, next) => {
+  try { res.json({ ok: true, marketplace: (await mpAll())[parseInt(req.params.id, 10)] || null }); } catch (err) { next(err); }
+});
+router.put('/:id(\\d+)/marketplace', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10), b = req.body || {};
+    const t = (v, n) => (v == null ? '' : String(v).trim().slice(0, n));
+    const num = (v) => { const x = Number(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.')); return v === '' || v == null || !isFinite(x) ? null : x; };
+    const zaznam = { published: !!b.published, reserved: !!b.reserved, title: t(b.title, 160), highlight: t(b.highlight, 200), description: t(b.description, 4000),
+      price_note: t(b.price_note, 300), availability: t(b.availability, 200), area_m2: num(b.area_m2), rent_monthly: num(b.rent_monthly),
+      parking: t(b.parking, 120), footfall: t(b.footfall, 300), image_url: /^https?:\/\//.test(t(b.image_url, 500)) ? t(b.image_url, 500) : '', updated_at: new Date().toISOString() };
+    if (zaznam.published && !zaznam.title) return res.status(400).json({ error: 'Pro zveřejnění v Marketplace vyplň veřejný název.' });
+    const all = await mpAll(); all[id] = zaznam;
+    await require('../services/settings').setSetting(MP_SITE_KEY, all, { type: 'json', description: 'Lokality — data pro Marketplace lokalit na laundromats.eu' });
+    res.json({ ok: true, marketplace: zaznam });
+  } catch (err) { next(err); }
+});
+
 router.put('/:id(\\d+)', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
