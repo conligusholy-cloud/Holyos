@@ -780,8 +780,12 @@ button.kv:active{background:rgba(124,92,255,.12)}
    Zavřít se dá jen tlačítkem, ať je jasné, že odmítnutí něco stojí. */
 .hovor{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;
   padding:20px;background:rgba(2,4,10,.82);backdrop-filter:blur(6px)}
+/* Okno hovoru musí jít posunout: s koncem hovoru a nabídkou pod ním se obsah
+   nevejde na jednu obrazovku a tlačítko Zavěsit končilo za okrajem. */
 .hov-in{width:100%;max-width:420px;background:var(--card2);border:1px solid var(--border2);
   border-radius:20px;padding:20px 18px;text-align:center;
+  max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);
+  overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
   box-shadow:0 24px 60px rgba(0,0,0,.7)}
 .hov-in h3{font-size:19px;margin-bottom:2px}
 .hov-popis{margin:0 0 6px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
@@ -834,7 +838,9 @@ button.kv:active{background:rgba(124,92,255,.12)}
    ať se okno nerozlije přes celou obrazovku, a roluje se vždy na poslední repliku. */
 .hov-chat{text-align:left}
 .hov-prepis{display:flex;flex-direction:column;gap:7px;max-height:42vh;overflow-y:auto;
-  margin:0 0 12px;padding-right:2px}
+  margin:0 0 12px;padding-right:2px;overscroll-behavior:contain}
+/* Po skončení hovoru je pod přepisem výsledek — tak mu ubereme výšku. */
+.hov-konec .hov-prepis{max-height:28vh}
 .hov-b{margin:0;max-width:86%;padding:9px 12px;border-radius:14px;font-size:14.5px;line-height:1.42}
 .hov-b.z{align-self:flex-start;background:var(--card);border:1px solid var(--border);
   border-bottom-left-radius:5px}

@@ -3318,7 +3318,7 @@ function paintHovor() {
     // ať je jasné, že jedna odpověď s tím pohne o kousek, ne o polovinu.
     var dh = Math.round((hvezdy() - h.hvPred) * 10) / 10;
     var navs = Math.round((povestKoef() - 1) * 1000) / 10;
-    html = '<div class="hov-in hov-chat">'
+    html = '<div class="hov-in hov-chat hov-konec">'
       + '<div class="hov-hlava">' + tvarSvg(h.jmeno, h.rod, h.nalada, 54)
       + '<div><p class="hov-popis">Hovor skončil</p>' + naladaHtml(h) + '</div></div>'
       + hovorPrepis(h)
