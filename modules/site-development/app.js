@@ -428,6 +428,7 @@ async function loadMarketplaceTab(s) {
   const f = (label, name, val, ph, type) => `<div class="form-row"><label>${esc(label)}</label><input type="${type || 'text'}" name="${name}" value="${val == null ? '' : esc(val)}" placeholder="${esc(ph || '')}"></div>`;
   box.innerHTML = `<div style="background:rgba(79,209,255,.07);border:1px solid rgba(79,209,255,.3);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.5">
       Tyto údaje uvidí na <b>laundromats.eu → Marketplace lokalit</b> uživatelé, kterým ho zapneš. Vlastník, adresa ani přesná poloha se nezobrazují (město a poloha ~1 km).${m.updated_at ? ' <span class="muted">Naposledy uloženo ' + new Date(m.updated_at).toLocaleString('cs-CZ') + '.</span>' : ''}</div>
+    <div style="margin:0 0 12px"><button type="button" class="btn btn-secondary" onclick="mpAutofill()">✨ Doplnit z karet místa</button> <span class="muted" style="font-size:12px">doplní prázdná pole ze Základu, Financí, Prostoru, Vyhodnocení a fotek — pak zkontroluj a uprav</span></div>
     <div class="form-grid">
       <div class="form-row span2"><div class="checkbox-row"><label><input type="checkbox" name="mp_published" ${m.published ? 'checked' : ''}> <b>Zobrazit v Marketplace</b></label> &nbsp; <label><input type="checkbox" name="mp_reserved" ${m.reserved ? 'checked' : ''}> Rezervováno (vidět, ale nejde poptat)</label></div></div>
       ${f('Veřejný název *', 'mp_title', m.title, 'např. Retail park u Billy — ' + (s.city || 'město'))}
@@ -439,17 +440,53 @@ async function loadMarketplaceTab(s) {
       ${f('Dostupnost', 'mp_availability', m.availability, 'např. ihned / od jara 2027')}
       ${f('Parkování', 'mp_parking', m.parking, 'např. ano, přímo u stání')}
       ${f('Okolí a návštěvnost', 'mp_footfall', m.footfall, 'např. supermarket, 15 000 obyvatel ve spádu')}
-      <div class="form-row span2"><label>Obrázek (URL, nepovinné)</label><input type="text" name="mp_image_url" value="${esc(m.image_url || '')}" placeholder="https://… (veřejně dostupná fotka nebo vizualizace)"></div>
+      <div class="form-row span2"><label>Fotka pro Marketplace</label>
+        ${(s.photos || []).length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">
+          <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="radio" name="mp_photo_id" value="" ${!m.photo_id ? 'checked' : ''}><span style="width:96px;height:64px;display:grid;place-items:center;border:1px dashed var(--border);border-radius:8px">bez fotky</span></label>
+          ${(s.photos || []).map(p => `<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer"><input type="radio" name="mp_photo_id" value="${p.id}" ${Number(m.photo_id) === p.id ? 'checked' : ''}><img src="${esc(p.url || '')}" alt="" style="width:96px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border)"></label>`).join('')}
+        </div>` : '<p class="muted" style="margin:0;font-size:12.5px">Lokalita zatím nemá fotky (záložka Fotky &amp; mapa). Můžeš zadat odkaz níže.</p>'}</div>
+      <div class="form-row span2"><label>Nebo obrázek z odkazu (URL, nepovinné)</label><input type="text" name="mp_image_url" value="${esc(m.image_url || '')}" placeholder="https://… (veřejně dostupná fotka nebo vizualizace)"></div>
     </div>
     <p class="muted" style="font-size:12px;margin-top:8px">Prázdná plocha a nájem se doplní z údajů lokality. Ukládá se tlačítkem <b>Uložit</b> dole.</p>`;
   mpLoaded = true;
 }
+// Doplní prázdná pole Marketplace z ostatních karet místa (bere i neuložené úpravy ve formuláři).
+// Interní údaje (vlastník, jeho kontakt, poznámky obchodu, adresa s číslem popisným) se NEPŘEBÍRAJÍ.
+function mpAutofill() {
+  const s = currentSite || {}, f = collectForm();
+  const g = (k) => (f[k] !== undefined ? f[k] : s[k]);
+  const cz = (n) => Number(n).toLocaleString('cs-CZ', { maximumFractionDigits: 0 });
+  const lines = (t) => String(t || '').split(/\n+/).map(x => x.replace(/^[-•*\s]+/, '').trim()).filter(Boolean);
+  const city = g('city') || '', addr = String(g('address') || ''), area = g('area_m2'), rent = g('rent_monthly');
+  // Název: obchodní místo z adresy (část před čárkou, když to není ulice s číslem), jinak typ + město — bez jména vlastníka
+  const misto = addr.includes(',') ? addr.split(',')[0].trim() : '';
+  const jeUlice = /\d/.test(misto) || /\b(ul\.|ulice|nám\.|náměstí|třída)\b/i.test(misto);
+  const title = (misto && !jeUlice ? misto + ' — ' : 'Připravené místo — ') + (city || 'lokalita');
+  const pros = lines(g('pros'));
+  const prip = [g('electricity_kw') ? 'elektřina ' + cz(g('electricity_kw')) + ' kW' : (g('electricity_kw') === 0 ? '' : ''), g('water_supply') ? 'voda' : '', g('sewage') ? 'odpad' : ''].filter(Boolean);
+  const popis = [g('description') || '', pros.length ? 'Proč je místo dobré:\n' + pros.map(x => '• ' + x).join('\n') : '', g('capacity_note') ? 'Dispozice: ' + g('capacity_note') : '', prip.length ? 'Přípojky na místě: ' + prip.join(', ') + '.' : ''].filter(Boolean).join('\n\n');
+  const stav = g('status'), dostupnost = stav === 'contract' ? 'Smlouva s vlastníkem uzavřena — připraveno k realizaci'
+    : (g('survey_done') ? 'Místní šetření proběhlo' + (g('preapproval_note') ? ', místo předschválené' : '') : (stav === 'negotiating' ? 'Ve vyjednávání s vlastníkem' : ''));
+  const cena = [rent != null && rent !== '' ? 'Nájem ' + cz(rent) + ' ' + (g('rent_currency') === 'EUR' ? '€' : 'Kč') + ' / měsíc' : '', g('site_type') === 'purchase' && g('purchase_price') ? 'Kupní cena ' + cz(g('purchase_price')) + ' Kč' : '', g('contract_terms') || ''].filter(Boolean).join(' · ');
+  const okoli = [g('score') != null && g('score') !== '' ? 'Skóre místa ' + g('score') + '/100' : '', pros.length > 1 ? pros.slice(1, 3).join(', ') : ''].filter(Boolean).join(' · ');
+  const nav = { mp_title: title, mp_highlight: pros[0] || (g('parking') ? 'Parkování přímo u místa' : ''), mp_description: popis,
+    mp_area_m2: area != null && area !== '' ? area : '', mp_rent_monthly: rent != null && rent !== '' ? rent : '',
+    mp_price_note: cena, mp_availability: dostupnost, mp_parking: g('parking') === true ? 'Ano, přímo u místa' : (g('parking') === false ? 'Ne' : ''), mp_footfall: okoli };
+  let n = 0;
+  Object.keys(nav).forEach(k => { const el = document.querySelector('.modal [name=' + k + ']'); if (el && !String(el.value).trim() && nav[k] !== '' && nav[k] != null) { el.value = nav[k]; n++; el.style.borderColor = '#22c55e'; } });
+  // Fotka: první fotka lokality, pokud ještě není vybraná
+  const radios = [...document.querySelectorAll('.modal [name=mp_photo_id]')], vybrana = radios.find(r => r.checked);
+  if ((!vybrana || !vybrana.value) && radios.length > 1) { radios[1].checked = true; n++; }
+  alert(n ? 'Doplněno ' + n + ' polí (zeleně). Zkontroluj je a ulož.' : 'Nebylo co doplnit — pole jsou vyplněná, nebo na kartách místa chybí údaje.');
+}
+window.mpAutofill = mpAutofill;
 async function saveMarketplace(siteId) {
   if (!mpLoaded || !siteId) return null;
   const v = (n) => { const el = document.querySelector('.modal [name=' + n + ']'); return el ? (el.type === 'checkbox' ? el.checked : el.value) : null; };
   const body = { published: v('mp_published'), reserved: v('mp_reserved'), title: v('mp_title'), highlight: v('mp_highlight'), description: v('mp_description'),
     area_m2: v('mp_area_m2'), rent_monthly: v('mp_rent_monthly'), price_note: v('mp_price_note'), availability: v('mp_availability'),
-    parking: v('mp_parking'), footfall: v('mp_footfall'), image_url: v('mp_image_url') };
+    parking: v('mp_parking'), footfall: v('mp_footfall'), image_url: v('mp_image_url'),
+    photo_id: (document.querySelector('.modal [name=mp_photo_id]:checked') || {}).value || null };
   try {
     const r = await fetch('/api/sites/' + siteId + '/marketplace', fetchOpts({ method: 'PUT', body: JSON.stringify(body) }));
     if (!r.ok) { const e = await r.json().catch(() => ({})); return 'Marketplace: ' + (e.error || ('chyba ' + r.status)); }

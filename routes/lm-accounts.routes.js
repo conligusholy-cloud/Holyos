@@ -196,9 +196,24 @@ router.get('/marketplace', async (req, res, next) => {
         lat: r2(x.latitude), lon: r2(x.longitude), area_m2: m.area_m2 != null ? m.area_m2 : (x.area_m2 != null ? Number(x.area_m2) : null),
         rent_monthly: m.rent_monthly != null ? m.rent_monthly : (x.rent_monthly != null ? Number(x.rent_monthly) : null), rent_currency: x.rent_currency || 'CZK',
         price_note: m.price_note || null, availability: m.availability || null, parking: m.parking || null, footfall: m.footfall || null,
-        image_url: m.image_url || null, reserved: !!m.reserved, updated_at: m.updated_at || null };
+        image_url: m.image_url || null, photo: !!m.photo_id, reserved: !!m.reserved, updated_at: m.updated_at || null };
     }).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
     res.json({ ok: true, items });
+  } catch (err) { next(err); }
+});
+// GET /marketplace/photo/:siteId — vybraná fotka lokality pro Marketplace (Laundromats ji proxuje přihlášeným)
+router.get('/marketplace/photo/:sid(\\d+)', async (req, res, next) => {
+  try {
+    const sid = parseInt(req.params.sid, 10), m = (await jsonSetting('site_marketplace'))[sid];
+    if (!m || !m.published || !m.photo_id) return res.status(404).end();
+    const ph = await prisma.sitePhoto.findUnique({ where: { id: Number(m.photo_id) } });
+    if (!ph || ph.site_id !== sid) return res.status(404).end();
+    const path = require('path'), fs = require('fs');
+    const dir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', 'data'), 'site-photos');
+    const file = path.join(dir, path.basename(String(ph.file_path || (ph.url || '').split('/').pop() || '')));
+    if (!file.startsWith(dir) || !fs.existsSync(file)) return res.status(404).end();
+    res.set('Cache-Control', 'private, max-age=3600'); if (ph.mime_type) res.type(ph.mime_type);
+    res.sendFile(file);
   } catch (err) { next(err); }
 });
 // POST /:id/access {page, on|null} — přístup k nástroji (null = podle role). Projeví se do 5 minut.

@@ -334,7 +334,7 @@ router.put('/:id(\\d+)/marketplace', async (req, res, next) => {
     const num = (v) => { const x = Number(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.')); return v === '' || v == null || !isFinite(x) ? null : x; };
     const zaznam = { published: !!b.published, reserved: !!b.reserved, title: t(b.title, 160), highlight: t(b.highlight, 200), description: t(b.description, 4000),
       price_note: t(b.price_note, 300), availability: t(b.availability, 200), area_m2: num(b.area_m2), rent_monthly: num(b.rent_monthly),
-      parking: t(b.parking, 120), footfall: t(b.footfall, 300), image_url: /^https?:\/\//.test(t(b.image_url, 500)) ? t(b.image_url, 500) : '', updated_at: new Date().toISOString() };
+      parking: t(b.parking, 120), footfall: t(b.footfall, 300), image_url: /^https?:\/\//.test(t(b.image_url, 500)) ? t(b.image_url, 500) : '', photo_id: Number(b.photo_id) > 0 ? Number(b.photo_id) : null, updated_at: new Date().toISOString() };
     if (zaznam.published && !zaznam.title) return res.status(400).json({ error: 'Pro zveřejnění v Marketplace vyplň veřejný název.' });
     const all = await mpAll(); all[id] = zaznam;
     await require('../services/settings').setSetting(MP_SITE_KEY, all, { type: 'json', description: 'Lokality — data pro Marketplace lokalit na laundromats.eu' });

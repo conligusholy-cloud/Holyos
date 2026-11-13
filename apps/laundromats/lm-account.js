@@ -271,6 +271,16 @@ module.exports = function createAccounts(ctx) {
 `;
       send(req, res, 'Moje nástroje', body, 200, { back: false });
     }));
+    // Fotka lokality pro Marketplace — z HolyOS přes servisní token (jen pro uživatele s přístupem)
+    app.get('/cesta/marketplace/foto/:code', requirePage('marketplace'), A(async (req, res) => {
+      const sid = (/^L(\d+)$/.exec(String(req.params.code || '')) || [])[1]; if (!sid || !LM_SECRET) return res.status(404).end();
+      const token = jwt.sign({ aud: 'holyos-api', iss: 'laundromats' }, LM_SECRET, { expiresIn: '1m' });
+      try {
+        const r = await fetch(HOLYOS_URL + '/api/auth/lm/accounts/marketplace/photo/' + sid, { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(15000) });
+        if (!r.ok) return res.status(404).end();
+        res.set('Content-Type', r.headers.get('content-type') || 'image/jpeg').set('Cache-Control', 'private, max-age=3600').send(Buffer.from(await r.arrayBuffer()));
+      } catch (e) { res.status(502).end(); }
+    }));
     // Marketplace lokalit — připravená místa. Zdroj: HolyOS Lokality → záložka Marketplace (zaškrtnuté „Zobrazit v Marketplace").
     // Vidí jen uživatel, kterému to správce zapnul (Administrace → Uživatelé → Marketplace). Poloha je přibližná.
     app.get('/cesta/marketplace', requirePage('marketplace'), A(async (req, res) => {
@@ -280,7 +290,7 @@ module.exports = function createAccounts(ctx) {
       const cz = (n) => Number(n).toLocaleString('cs-CZ', { maximumFractionDigits: 0 });
       const kv = (l, v) => (v == null || v === '' ? '' : `<div class="mp-kv"><span>${l}</span><b>${v}</b></div>`);
       const card = (s) => `<div class="card mp-card" data-q="${esc([s.name, s.city, s.country].filter(Boolean).join(' ').toLowerCase())}">
-          <div class="mp-img">${s.image_url ? `<img src="${esc(s.image_url)}" alt="" loading="lazy">` : `<div class="mp-noimg">${IC.marketplace}</div>`}${s.reserved ? '<span class="mp-st res">Rezervováno</span>' : '<span class="mp-st">Volné</span>'}</div>
+          <div class="mp-img">${s.image_url || s.photo ? `<img src="${esc(s.image_url || ('/cesta/marketplace/foto/' + encodeURIComponent(s.code || '')))}" alt="" loading="lazy">` : `<div class="mp-noimg">${IC.marketplace}</div>`}${s.reserved ? '<span class="mp-st res">Rezervováno</span>' : '<span class="mp-st">Volné</span>'}</div>
           <div class="mp-body"><h3>${esc(s.name)}</h3><p class="muted small" style="margin:0 0 8px">📍 ${esc([s.city, s.country && s.country !== 'CZ' ? s.country : ''].filter(Boolean).join(', ') || '—')} <span title="Přesné místo probereme na schůzce">(přibližně)</span></p>
           ${s.highlight ? `<p class="mp-hl">${esc(s.highlight)}</p>` : ''}${s.description ? `<p class="small" style="margin:0 0 10px;line-height:1.5;white-space:pre-line">${esc(s.description)}</p>` : ''}
           ${kv('Plocha', s.area_m2 != null ? cz(s.area_m2) + ' m²' : null)}${kv('Nájem / měsíc', s.rent_monthly != null ? cz(s.rent_monthly) + ' ' + (s.rent_currency === 'EUR' ? '€' : 'Kč') : null)}
