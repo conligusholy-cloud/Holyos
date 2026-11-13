@@ -847,6 +847,32 @@ function odehranyCas(p, ted, aktivni) {
   };
 }
 
+// ─── Pojistka na zaplacené balíčky ───────────────────────────────────────────
+// Balíček se na serveru označí za vyzvednutý, ale uloží se až se stavem, který
+// posílá klient — a ten se dá ztratit: druhé zařízení uloží novější stav,
+// klient ho převezme a svoje poslední vteřiny i s balíčkem zahodí. Proto si
+// server u každého uložení ohlídá, že složená zástava není nižší než součet
+// balíčků, které si hráč vyzvedl. Ztracený balíček se tím doplní sám.
+const _podlahy = new Map();          // player_id → { at, hodnota }
+function dropPodlaha(id) { _podlahy.delete(id); }
+async function zastavaPodlaha(playerId) {
+  const v = _podlahy.get(playerId);
+  if (v && Date.now() - v.at < 60e3) return v.hodnota;
+  let hodnota = 0;
+  try {
+    const karty = await prisma.gameCard.findMany({
+      where: { player_id: playerId, kind: { in: CASH_KINDS }, used_at: { not: null } },
+      select: { kind: true },
+    });
+    for (const k of karty) {
+      const c = await item(k.kind);
+      hodnota += (c && c.laundry) || (CASH[k.kind] && CASH[k.kind].laundry) || 0;
+    }
+  } catch (e) { console.warn('[game] podlaha zástavy:', e.message); return 0; }
+  _podlahy.set(playerId, { at: Date.now(), hodnota });
+  return hodnota;
+}
+
 // PUT /account/state { state } — klient posílá celý stav, server ho jen uloží.
 // Simulace běží v prohlížeči; server je úložiště, ne rozhodčí. Jediné, co se
 // podvrhnout nedá, jsou karty — ty žijí ve vlastní tabulce.
@@ -863,6 +889,14 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
     if (rev != null && Number(rev) !== akt) {
       return res.status(409).json({ error: 'Hra se mezitím uložila z jiného zařízení.',
         rev: akt, state: req.player.state || null });
+    }
+    // Zaplacený balíček nesmí zmizet: co je vyzvednuté, musí být i v zástavě.
+    const podlaha = await zastavaPodlaha(req.player.id);
+    const mel = Math.max(0, Number(st.duvera) || 0);
+    if (podlaha > mel) {
+      st.duvera = podlaha;
+      st.bank = Math.max(0, Number(st.bank) || 0) + (podlaha - mel);
+      console.warn('[game] hráč', req.player.id, 'přišel o zástavu', podlaha - mel, '— doplněno');
     }
     const ted = new Date();
     const p = await prisma.gamePlayer.update({
@@ -992,6 +1026,7 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
     } else {
       result = EFFECTS[kind]();
     }
+    dropPodlaha(req.player.id);
     res.json({ ok: true, card: kind, result, owned: (await pub(req.player)).cards });
   } catch (e) { next(e); }
 });
@@ -1743,6 +1778,7 @@ module.exports._subKinds = SUB_KINDS;
 module.exports._linkaKinds = LINKA_KINDS;
 module.exports._predplatneHrace = predplatneHrace;
 module.exports._dropPrices = dropPrices;
+module.exports._dropPodlaha = dropPodlaha;
 module.exports._nastaveni = nastaveni;
 module.exports._dropNastaveni = dropNastaveni;
 module.exports._rychlyOnboarding = rychlyOnboarding;
