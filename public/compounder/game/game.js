@@ -9922,7 +9922,9 @@ function paintTrhBadge() {
   // neměl kudy vystavit vlastní prádlomat.
   el.classList.remove('hidden');
   el.classList.toggle('prazdne', !kolik);
-  el.innerHTML = '<i>\uD83E\uDD1D</i><b>' + (kolik || 'Tržiště') + '</b>';
+  // Jen ikona — na popisek „Tržiště" není v jedné řadě nad mapou místo.
+  // Kolik je na prodej, řekne bublinka v rohu; prázdné tržiště je bez ní.
+  el.innerHTML = '<i>\uD83E\uDD1D</i>' + (kolik ? '<b>' + kolik + '</b>' : '');
   el.title = kolik
     ? 'Tržiště — ' + kolik + ' ' + mn(kolik, 'hotová provozovna', 'hotové provozovny', 'hotových provozoven') + ' na prodej'
     : 'Tržiště — zrovna nikdo nic nenabízí';
