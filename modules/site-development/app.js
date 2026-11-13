@@ -42,6 +42,7 @@ const ALL_COLUMNS = [
   { id:'permit',       label:'Stav. povolení', def:false },
   { id:'score',        label:'Skóre',     def:false },
   { id:'comms',        label:'Komunikace',def:false },
+  { id:'market',       label:'Marketplace', def:true },
   { id:'updated',      label:'Změna',     def:true },
 ];
 const COL_STORAGE = 'siteDev.cols';
@@ -189,6 +190,7 @@ const SITE_COL_DEF = {
   permit:   { type:'text', get: s => s.building_permit_note || '' },
   score:    { type:'num',  get: s => s.score == null ? null : Number(s.score) },
   comms:    { type:'num',  get: s => s._count ? s._count.communications : 0 },
+  market:   { type:'text', get: s => s.marketplace === 'nabízí se' ? 'Nabízí se' : s.marketplace === 'rezervováno' ? 'Rezervováno' : 'Ne' },
   updated:  { type:'date', get: s => s.updated_at || null },
 };
 
@@ -233,6 +235,7 @@ function renderTable() {
           return `<td><span class="score-bar"><div style="width:${s.score}%"></div></span>${s.score}</td>`;
         }
         case 'comms':   return `<td>${s._count ? s._count.communications : 0}</td>`;
+        case 'market':  return `<td>${s.marketplace === 'nabízí se' ? '<span class="badge badge-operational">🛒 Nabízí se</span>' : s.marketplace === 'rezervováno' ? '<span class="badge badge-negotiating">Rezervováno</span>' : '<span class="muted">Ne</span>'}</td>`;
         case 'updated': return `<td title="${esc(s.updated_at)}">${esc(fmtRel(s.updated_at))}</td>`;
         default: return '<td>—</td>';
       }

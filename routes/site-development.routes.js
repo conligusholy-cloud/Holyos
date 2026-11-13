@@ -128,6 +128,9 @@ router.get('/', async (req, res, next) => {
       buildStats(),
     ]);
 
+    // Marketplace: nabízí se místo na laundromats.eu (published) / rezervováno / ne
+    const mp = await mpAll();
+    items.forEach((it) => { const m = mp[it.id]; it.marketplace = m && m.published ? (m.reserved ? 'rezervováno' : 'nabízí se') : 'ne'; });
     res.json({ items, total, page, per_page: perPage, stats });
   } catch (err) {
     next(err);
