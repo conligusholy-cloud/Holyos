@@ -333,7 +333,15 @@ module.exports = function createAccounts(ctx) {
             function go(n){i=(n+list.length)%list.length;img.src=list[i];if(cnt)cnt.textContent=(i+1)+' / '+list.length;}
             box.addEventListener('click',function(e){if(e.target.closest('.prev')){go(i-1);return;}if(e.target.closest('.next')){go(i+1);return;}open(list,i);});});
           var q=document.getElementById('mp-q');if(q)q.addEventListener('input',function(){var v=q.value.trim().toLowerCase(),n=0;document.querySelectorAll('.mp-card').forEach(function(c){var ok=!v||c.getAttribute('data-q').indexOf(v)!==-1;c.style.display=ok?'':'none';if(ok)n++;});document.getElementById('mp-n').textContent=n+' zobrazeno';});
-          document.querySelectorAll('.mp-want').forEach(function(a){a.addEventListener('click',function(){try{if(window.lmTrack)lmTrack('marketplace_interest',{code:a.getAttribute('data-code')});}catch(e){}});});
+          document.querySelectorAll('.mp-want').forEach(function(a){a.addEventListener('click',function(ev){ev.preventDefault();var code=a.getAttribute('data-code');
+            if(!confirm('Máte o tuto lokalitu vážný zájem?'))return;
+            if(!confirm('Opravdu? Po potvrzení vám lokalitu zarezervujeme a ozveme se vám. Chcete zájem závazně odeslat?'))return;
+            try{if(window.lmTrack)lmTrack('marketplace_interest',{code:code});}catch(e){}
+            a.style.pointerEvents='none';a.textContent='Odesílám…';
+            fetch('/api/cesta/marketplace-zajem',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({code:code})})
+              .then(function(r){return r.json().catch(function(){return {};});})
+              .then(function(j){if(j&&j.ok){a.textContent='✓ Zájem odeslán — ozveme se vám';a.style.opacity='.8';}else{a.style.pointerEvents='';a.textContent='Mám zájem o tuto lokalitu';alert((j&&j.error)||'Odeslání se nepodařilo, zkuste to prosím znovu.');}})
+              .catch(function(){a.style.pointerEvents='';a.textContent='Mám zájem o tuto lokalitu';alert('Odeslání se nepodařilo, zkuste to prosím znovu.');});});});
           try{if(window.lmTrack)lmTrack('marketplace_view',{n:${spots.length}});}catch(e){}})();</script>`;
       send(req, res, 'Marketplace lokalit', body);
     }));

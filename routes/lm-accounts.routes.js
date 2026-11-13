@@ -206,6 +206,42 @@ router.get('/marketplace', async (req, res, next) => {
     res.json({ ok: true, items });
   } catch (err) { next(err); }
 });
+// Evidence rezervací / závazných zájmů o lokality (AppSetting lm_marketplace_requests, pole)
+const REQ_KEY = 'lm_marketplace_requests';
+const REQ_STATUSES = ['new', 'contacted', 'negotiating', 'won', 'lost'];
+// POST /marketplace-interest {account_id, code} — volá Laundromats po dvojitém potvrzení zákazníka
+router.post('/marketplace-interest', async (req, res, next) => {
+  try {
+    const b = req.body || {}, accId = parseInt(b.account_id, 10), sid = parseInt(String(b.code || '').replace(/^L/i, ''), 10);
+    if (!accId || !sid) return res.status(400).json({ ok: false, error: 'Chybí účet nebo lokalita.' });
+    const acc = await prisma.lmAccount.findUnique({ where: { id: accId }, select: { id: true, name: true, email: true, phone: true, company: true } });
+    if (!acc) return res.status(404).json({ ok: false, error: 'Účet nenalezen.' });
+    const m = (await jsonSetting('site_marketplace'))[sid];
+    if (!m || !m.published) return res.status(404).json({ ok: false, error: 'Lokalita už není v nabídce.' });
+    const list = await jsonSetting(REQ_KEY); const arr = Array.isArray(list) ? list : [];
+    const open = arr.find((r) => r.account_id === accId && r.site_id === sid && r.status !== 'lost');
+    if (open) return res.json({ ok: true, duplicate: true, id: open.id });
+    const now = new Date().toISOString();
+    const rec = { id: 'r' + Date.now().toString(36) + crypto.randomBytes(2).toString('hex'), site_id: sid, code: 'L' + sid, place: m.title || ('Lokalita #' + sid), account_id: acc.id,
+      name: acc.name || '', email: acc.email || '', phone: acc.phone || '', company: acc.company || '', status: 'new', note: '', created_at: now, updated_at: now };
+    arr.unshift(rec);
+    await saveJson(REQ_KEY, arr, 'Laundromats — evidence rezervací / zájmů o lokality z Marketplace');
+    require('../services/compounder/notify').notifyMarketplaceInterest(prisma, { name: acc.name || acc.email, contact: [acc.phone, acc.email, acc.company].filter(Boolean).join(' · '), place: rec.place, requestId: rec.id });
+    res.json({ ok: true, id: rec.id });
+  } catch (err) { next(err); }
+});
+// POST /marketplace-requests/:id {status?, note?}
+router.post('/marketplace-requests/:id', async (req, res, next) => {
+  try {
+    const b = req.body || {}; const arr = await jsonSetting(REQ_KEY); const r = Array.isArray(arr) && arr.find((x) => x.id === req.params.id);
+    if (!r) return res.status(404).json({ ok: false, error: 'Záznam nenalezen.' });
+    if (b.status !== undefined) { if (!REQ_STATUSES.includes(b.status)) return res.status(400).json({ ok: false, error: 'Neplatný stav.' }); r.status = b.status; }
+    if (b.note !== undefined) r.note = s(b.note, 2000);
+    r.updated_at = new Date().toISOString();
+    await saveJson(REQ_KEY, arr, 'Laundromats — evidence rezervací / zájmů o lokality z Marketplace');
+    res.json({ ok: true, request: r });
+  } catch (err) { next(err); }
+});
 // GET /marketplace-admin — přehled pro administraci: všechny lokality v Marketplace, zájem zákazníků, kdo má přístup.
 router.get('/marketplace-admin', async (req, res, next) => {
   try {
@@ -232,7 +268,8 @@ router.get('/marketplace-admin', async (req, res, next) => {
         rent_monthly: m.rent_monthly != null ? m.rent_monthly : (x && x.rent_monthly != null ? Number(x.rent_monthly) : null), rent_currency: (x && x.rent_currency) || 'CZK', rent_vat: m.rent_vat || 'bez',
         photos: x ? x._count.photos : 0, gallery: Array.isArray(m.gallery) ? m.gallery.length : null, has_cover: !!m.photo_id, address: !!m.address, interests: c.n, last_interest: c.last, updated_at: m.updated_at || null }; })
       .sort((a, b) => (b.published - a.published) || String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
-    res.json({ ok: true, listings, interests: interests.slice(0, 60), access: withAccess,
+    const reqsRaw = await jsonSetting(REQ_KEY); const requests = Array.isArray(reqsRaw) ? reqsRaw : [];
+    res.json({ ok: true, requests, listings, interests: interests.slice(0, 60), access: withAccess,
       kpi: { published: listings.filter((l) => l.published && !l.reserved).length, reserved: listings.filter((l) => l.published && l.reserved).length, hidden: listings.filter((l) => !l.published).length,
         users_with_access: withAccess.length, views_30d: views.length, viewers_30d: new Set(views.map((v) => v.sid)).size, interests_30d: interests.filter((i) => new Date(i.at).getTime() >= d30).length } });
   } catch (err) { next(err); }

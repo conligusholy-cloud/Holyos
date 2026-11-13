@@ -241,6 +241,15 @@ async function notifyPurchaseInquiry(prisma, { lead, count, locations, phone, ve
   } catch (e) { console.error('[compounder-notify] purchase', e.message); }
 }
 
+// Závazný zájem o lokalitu z Marketplace (zákazník potvrdil dvakrát) → Velín push + zvonek.
+async function notifyMarketplaceInterest(prisma, { name, contact, place, requestId }) {
+  try {
+    const title = '🛒 Zájem o lokalitu — ' + (place || 'Marketplace');
+    const body = (name || 'Zákazník') + ' potvrdil vážný zájem o lokalitu ' + (place || '') + '.' + (contact ? (' ' + contact) : '') + ' Ozvěte se mu.';
+    await dispatch(prisma, { title, body, data: { type: 'marketplace_interest', request_id: requestId || null } });
+  } catch (e) { console.error('[compounder-notify] marketplace', e.message); }
+}
+
 // Obecná zpráva do Velína (push + zvonek) nastaveným příjemcům (fallback Jan/Tomáš).
 // Používá denní hodnocení leadů (daily-digest-worker).
 async function notifyOwnersMessage(prisma, { title, body, data }) {
@@ -407,6 +416,7 @@ module.exports = {
   notifyContractAwaitingAuthorization,
   notifyContactRequest,
   notifyPurchaseInquiry,
+  notifyMarketplaceInterest,
   notifyOwnersMessage,
   notifyLeadReply,
   notifyFbLead,

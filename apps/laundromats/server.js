@@ -239,6 +239,17 @@ app.post('/api/cesta/pradlomat-zajem', async (req, res) => {
   }
 });
 
+// „Mám zájem" u lokality v Marketplace (po dvojím potvrzení) → HolyOS: evidence + notifikace do Velína.
+app.post('/api/cesta/marketplace-zajem', async (req, res) => {
+  const b = req.body || {};
+  if (!req.account || !req.account.id) return res.status(401).json({ ok: false, error: 'Pro odeslání se prosím přihlaste.' });
+  if (rateLimited('mpzajem:' + req.account.id, 10, 3600e3)) return res.status(429).json({ ok: false, error: 'Zájem už evidujeme, ozveme se vám.' });
+  try {
+    const j = await holyosSvc('POST', '/api/auth/lm/accounts/marketplace-interest', { account_id: req.account.id, code: String(b.code || '') });
+    if (!j || !j.ok) return res.status(502).json({ ok: false, error: (j && j.error) || 'Odeslání se nepodařilo' });
+    res.json({ ok: true });
+  } catch (e) { res.status(e.status && e.status < 500 ? e.status : 502).json({ ok: false, error: 'Odeslání se nepodařilo' }); }
+});
 app.get('/favicon.svg', (req, res) => res.set('Content-Type', 'image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(LOGO.replace(/^<span[^>]*>/, '').replace(/<\/span>$/, '').replace('width="34" height="34"', 'width="64" height="64"')));
 app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
 app.use('/media', express.static(path.join(__dirname, 'media'), { maxAge: '7d', fallthrough: false })); // fotky provozoven + videa (Range pro přehrávání)
@@ -450,6 +461,7 @@ app.get('/admin/api/users', requireAdmin, api(async () => ({ ok: true, users: (a
 app.post('/admin/api/users/:id(\\d+)/access', requireAdmin, api((req) => { const b = req.body || {}; return holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/access', { page: String(b.page || ''), on: b.on === null || b.on === undefined ? null : !!b.on }); }));
 app.post('/admin/api/users/:id(\\d+)/note', requireAdmin, api((req) => holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/note', { note: String((req.body || {}).note || '').slice(0, 5000) })));
 app.post('/admin/api/users/:id(\\d+)/profile', requireAdmin, api((req) => { const b = req.body || {}; return holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/profile', { name: b.name, phone: b.phone, company: b.company }); }));
+app.post('/admin/api/marketplace/request/:id', requireAdmin, api((req) => holyosSvc('POST', '/api/auth/lm/accounts/marketplace-requests/' + encodeURIComponent(req.params.id), { status: (req.body || {}).status, note: (req.body || {}).note })));
 app.get('/admin/api/marketplace', requireAdmin, api(async () => holyosSvc('GET', '/api/auth/lm/accounts/marketplace-admin')));
 app.post('/admin/api/marketplace/:sid(\\d+)', requireAdmin, api((req) => { const b = req.body || {}; const o = {}; if (b.published !== undefined) o.published = !!b.published; if (b.reserved !== undefined) o.reserved = !!b.reserved; return holyosSvc('POST', '/api/auth/lm/accounts/marketplace-admin/' + req.params.sid, o); }));
 app.post('/admin/api/users/:id(\\d+)/marketplace', requireAdmin, api((req) => holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/marketplace', { on: !!(req.body || {}).on })));

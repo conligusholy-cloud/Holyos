@@ -8,6 +8,16 @@ function api(url,body){var o=body?{method:'POST',headers:{'Content-Type':'applic
 function kpi(l,v){return '<div class="card" style="flex:1;min-width:130px;padding:12px"><div class="muted small">'+l+'</div><div style="font-size:24px;font-weight:700">'+v+'</div></div>';}
 function render(){
   var k=D.kpi,h='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'+kpi('Nabízí se',k.published)+kpi('Rezervováno',k.reserved)+kpi('Skryto',k.hidden)+kpi('Uživatelů s přístupem',k.users_with_access)+kpi('Zobrazení (30 d)',k.views_30d)+kpi('Návštěvníků (30 d)',k.viewers_30d)+kpi('Zájem (30 d)',k.interests_30d)+'</div>';
+  var ST={new:'Nový',contacted:'Kontaktován',negotiating:'Jednáme',won:'Rezervováno / uzavřeno',lost:'Zrušeno'};
+  h+='<div class="card" style="margin-bottom:14px;overflow:auto"><h3 style="margin:0 0 8px">Rezervace a závazné zájmy ('+(D.requests||[]).length+')</h3>';
+  if(!(D.requests||[]).length)h+='<p class="muted small">Zatím žádný závazný zájem. Objeví se tu poté, co zákazník dvakrát potvrdí „Mám zájem“.</p>';
+  else h+='<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left" class="muted"><th>Vznik</th><th>Lokalita</th><th>Zájemce</th><th>Stav</th><th>Poznámka</th></tr></thead><tbody>'+D.requests.map(function(r){
+    var opts=Object.keys(ST).map(function(k){return '<option value="'+k+'"'+(r.status===k?' selected':'')+'>'+ST[k]+'</option>';}).join('');
+    return '<tr style="border-top:1px solid var(--line,#333);vertical-align:top"><td style="padding:6px 8px;white-space:nowrap">'+dt(r.created_at)+'</td><td style="padding:6px 8px"><b>'+esc(r.place)+'</b><div class="muted small">'+esc(r.code)+'</div></td>'
+      +'<td style="padding:6px 8px"><b>'+esc(r.name||r.email)+'</b><div class="muted small">'+esc([r.phone,r.email,r.company].filter(Boolean).join(' · '))+'</div></td>'
+      +'<td style="padding:6px 8px"><select data-rst="'+esc(r.id)+'">'+opts+'</select></td>'
+      +'<td style="padding:6px 8px"><textarea data-rnote="'+esc(r.id)+'" rows="2" style="width:100%;min-width:180px" placeholder="Poznámka…">'+esc(r.note||'')+'</textarea></td></tr>';}).join('')+'</tbody></table>';
+  h+='</div>';
   h+='<div class="card" style="margin-bottom:14px;overflow:auto"><h3 style="margin:0 0 8px">Lokality</h3>';
   if(!D.listings.length)h+='<p class="muted small">Zatím žádná lokalita nemá vyplněná data pro Marketplace. Vyplňte je v HolyOS → Site Development → Marketplace.</p>';
   else{h+='<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left" class="muted"><th>Lokalita</th><th>Nájem</th><th>Fotky</th><th>Nabízí se</th><th>Rezervováno</th><th>Zájem</th><th>Poslední zájem</th></tr></thead><tbody>';
@@ -37,7 +47,10 @@ function render(){
 }
 function load(){var b=P.querySelector('.mp-body');if(!D)b.innerHTML='<p class="muted">Načítám…</p>';
   Promise.all([api('/admin/api/marketplace'),api('/admin/api/users').catch(function(){return {users:[]};})]).then(function(r){D=r[0];U=r[1].users||[];render();}).catch(function(e){b.innerHTML='<div class="card" style="color:#ff8f8f">'+esc(e.message)+'</div>';});}
-P.addEventListener('change',function(e){var t=e.target,id=t.getAttribute('data-mpp')||t.getAttribute('data-mpr');if(!id)return;
+P.addEventListener('change',function(e){var t=e.target;
+  if(t.hasAttribute('data-rst')){api('/admin/api/marketplace/request/'+encodeURIComponent(t.getAttribute('data-rst')),{status:t.value}).then(load).catch(function(er){alert(er.message);load();});return;}
+  if(t.hasAttribute('data-rnote')){api('/admin/api/marketplace/request/'+encodeURIComponent(t.getAttribute('data-rnote')),{note:t.value}).then(function(){t.style.outline='1px solid #3c9';setTimeout(function(){t.style.outline='';},900);}).catch(function(er){alert(er.message);});return;}
+  var id=t.getAttribute('data-mpp')||t.getAttribute('data-mpr');if(!id)return;
   var body={};if(t.hasAttribute('data-mpp'))body.published=t.checked;else body.reserved=t.checked;
   api('/admin/api/marketplace/'+id,body).then(load).catch(function(er){alert(er.message);load();});});
 P.addEventListener('click',function(e){var a=e.target.closest('[data-mpa]');
