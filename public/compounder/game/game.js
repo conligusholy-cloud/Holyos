@@ -3091,10 +3091,16 @@ function povestZaOdpoved(b) {
   return (b > 0 ? b * POVEST_RUST : b * POVEST_PAD);
 }
 // Další hovor naplánujeme na náhodnou dobu strávenou ve hře.
+// Frekvence neroste s počtem poboček přímo úměrně. Dřív ano a vycházelo
+// z toho, že desetina sítě znamená hovor co půl minuty — a to se nedá hrát.
+// Zákazníci si navíc postupně zvykají, že linka funguje, takže volá spíš
+// odmocnina z nich. Výsledek: jedna pobočka osm minut, deset poboček tři,
+// padesát necelé dvě.
+var HOVOR_SKLON = 0.42;
 function naplanujHovor() {
   var pobocek = Math.max(1, ((S && S.units) || []).length);
   var zaklad = HOVOR_ZA_MIN + Math.random() * (HOVOR_ZA_MAX - HOVOR_ZA_MIN);
-  S.hovorZa = Math.max(HOVOR_MIN_ODSTUP, zaklad / pobocek);
+  S.hovorZa = Math.max(HOVOR_MIN_ODSTUP, zaklad / Math.pow(pobocek, HOVOR_SKLON));
 }
 var HOVOR = null;                // { jmeno, scenar, kroky, poradi, i, body, prepis, ceka, stav, zvoniDo }
 // Jeden hovor je jeden rozhovor na jedno téma — zákazník se dál ptá podle toho,
