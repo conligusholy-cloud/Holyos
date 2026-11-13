@@ -420,6 +420,32 @@ function renderSiteModal() {
 // ─── Záložka Marketplace — zdrojová data pro laundromats.eu/cesta/marketplace ───────────────
 // Ukládá se zvlášť (/api/sites/:id/marketplace) při „Uložit". Zákazník uvidí JEN to, co je tady —
 // ne jméno vlastníka, adresu ani přesné GPS (poloha na ~1 km).
+function mpPhotosHtml(photos, selId) {
+  if (!photos.length) return '<p class="muted" style="margin:0;font-size:12.5px">Lokalita zatím nemá fotky — nahraj vizualizaci tlačítkem výše, nebo zadej odkaz níže.</p>';
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap">
+    <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="radio" name="mp_photo_id" value="" ${!selId ? 'checked' : ''}><span style="width:96px;height:64px;display:grid;place-items:center;border:1px dashed var(--border);border-radius:8px">bez fotky</span></label>
+    ${photos.map(p => `<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer"><input type="radio" name="mp_photo_id" value="${p.id}" ${Number(selId) === p.id ? 'checked' : ''}><img src="${esc(p.url || '')}" alt="" style="width:96px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border)"></label>`).join('')}
+  </div>`;
+}
+// Nahraje vizualizaci jako fotku lokality a rovnou ji vybere jako náhled (rozepsané údaje ve formuláři zůstanou).
+async function mpUploadImage(ev) {
+  const file = ev.target.files[0]; if (!file || !currentSite) return;
+  const st = document.getElementById('mp-up-st'); if (st) { st.textContent = 'Nahrávám…'; st.style.color = ''; }
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Soubor se nepodařilo přečíst')); i.src = URL.createObjectURL(file); });
+    const MAX = 1600, ratio = Math.min(1, MAX / Math.max(img.width, img.height));
+    const c = document.createElement('canvas'); c.width = Math.round(img.width * ratio); c.height = Math.round(img.height * ratio);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const r = await fetch('/api/sites/' + currentSite.id + '/photos', fetchOpts({ method: 'POST', body: JSON.stringify({ data_url: c.toDataURL('image/jpeg', 0.88), caption: 'Marketplace — vizualizace' }) }));
+    if (!r.ok) throw new Error('Nahrání selhalo (' + r.status + ')');
+    const p = await r.json();
+    currentSite.photos = (currentSite.photos || []).concat([p]);
+    document.getElementById('mp-photos').innerHTML = mpPhotosHtml(currentSite.photos, p.id);
+    if (st) { st.textContent = '✓ Nahráno a vybráno — nezapomeň dole kliknout na Uložit.'; st.style.color = '#4ade80'; }
+  } catch (e) { if (st) { st.textContent = 'Chyba: ' + e.message; st.style.color = '#f87171'; } }
+  ev.target.value = '';
+}
+window.mpUploadImage = mpUploadImage;
 let mpLoaded = false;
 async function loadMarketplaceTab(s) {
   mpLoaded = false;
@@ -443,11 +469,9 @@ async function loadMarketplaceTab(s) {
       ${f('Dostupnost', 'mp_availability', m.availability, 'např. ihned / od jara 2027')}
       ${f('Parkování', 'mp_parking', m.parking, 'např. ano, přímo u stání')}
       ${f('Okolí a návštěvnost', 'mp_footfall', m.footfall, 'např. supermarket, 15 000 obyvatel ve spádu')}
-      <div class="form-row span2"><label>Fotka pro Marketplace</label>
-        ${(s.photos || []).length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">
-          <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="radio" name="mp_photo_id" value="" ${!m.photo_id ? 'checked' : ''}><span style="width:96px;height:64px;display:grid;place-items:center;border:1px dashed var(--border);border-radius:8px">bez fotky</span></label>
-          ${(s.photos || []).map(p => `<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer"><input type="radio" name="mp_photo_id" value="${p.id}" ${Number(m.photo_id) === p.id ? 'checked' : ''}><img src="${esc(p.url || '')}" alt="" style="width:96px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border)"></label>`).join('')}
-        </div>` : '<p class="muted" style="margin:0;font-size:12.5px">Lokalita zatím nemá fotky (záložka Fotky &amp; mapa). Můžeš zadat odkaz níže.</p>'}</div>
+      <div class="form-row span2"><label>Náhledová fotka / vizualizace pro Marketplace</label>
+        <div style="margin:0 0 8px"><label class="btn btn-secondary" style="cursor:pointer;display:inline-block">📤 Nahrát vizualizaci<input type="file" accept="image/*" style="display:none" onchange="mpUploadImage(event)"></label> <span class="muted" id="mp-up-st" style="font-size:12px">nahraje se k fotkám lokality a hned se vybere jako náhled</span></div>
+        <div id="mp-photos">${mpPhotosHtml(s.photos || [], m.photo_id)}</div></div>
       <div class="form-row span2"><label>Nebo obrázek z odkazu (URL, nepovinné)</label><input type="text" name="mp_image_url" value="${esc(m.image_url || '')}" placeholder="https://… (veřejně dostupná fotka nebo vizualizace)"></div>
     </div>
     <p class="muted" style="font-size:12px;margin-top:8px">Prázdná plocha a nájem se doplní z údajů lokality. Ukládá se tlačítkem <b>Uložit</b> dole.</p>`;
