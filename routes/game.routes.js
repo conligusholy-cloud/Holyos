@@ -291,7 +291,32 @@ router.get('/misto-podle', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-const EVENTY = ['game_open', 'game_quiz', 'game_register', 'game_scout', 'game_build', 'game_paid'];
+// GET /api/game/intro → nastavení A/B testu úvodní obrazovky + skutečná čísla pro social proof
+// (hráči u hry za poslední hodinu, firmy s účtem). Krátká cache, ať úvod nezatěžuje databázi.
+let introCache = { at: 0, data: null };
+router.get('/intro', async (req, res) => {
+  try {
+    if (Date.now() - introCache.at > 60e3 || !introCache.data) {
+      let ab = 'off';
+      try { const v = await require('../services/settings').getSetting('game.ab_intro', { type: 'string', defaultValue: 'off' }); if (['off', '50', 'b'].includes(v)) ab = v; } catch (e) { /* výchozí */ }
+      const [online, firem] = await Promise.all([
+        prisma.gamePlayer.count({ where: { disabled: false, state_at: { gte: new Date(Date.now() - 60 * 60e3) } } }).catch(() => 0),
+        prisma.gamePlayer.count({ where: { disabled: false } }).catch(() => 0),
+      ]);
+      introCache = { at: Date.now(), data: { ab, online, firem } };
+    }
+    res.set('Cache-Control', 'no-store').json(Object.assign({ ok: true }, introCache.data));
+  } catch (e) { res.json({ ok: true, ab: 'off', online: 0, firem: 0 }); }
+});
+
+const EVENTY = ['game_open', 'game_quiz', 'game_quiz_done', 'game_register', 'game_scout',
+  'game_build', 'game_paid',
+  // Kroky tutoriálu — bez nich nevíme, kde mezi účtem a prvním prádlomatem
+  // hráči odpadají. Posílá je hra ve chvíli, kdy krok poprvé uvidí.
+  'game_tut1', 'game_tut2', 'game_tut3', 'game_tut4', 'game_tut5',
+  // Úvodní obrazovka: game_intro = nový návštěvník opravdu viděl úvod (správný jmenovatel konverze
+  // na registraci — game_open se počítá i vracejícím se hráčům); game_ab_a / game_ab_b = varianta A/B testu.
+  'game_intro', 'game_ab_a', 'game_ab_b'];
 // Kroky, po kterých je jasné, že se návštěvník do hry opravdu pustil.
 const ZACAL_HRAT = ['game_scout', 'game_build'];
 router.post('/ev', express.json({ limit: '2kb' }), async (req, res) => {

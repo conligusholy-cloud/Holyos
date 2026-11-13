@@ -327,6 +327,24 @@ router.post('/predplatne/:id/dorovnat', api(async (req, res) => {
   res.json({ ok: true, nalezeno: zaplacene.length, zapsano: zapsane.length, zapsane });
 }));
 
+// ─── Nastavení hry ───────────────────────────────────────────────────────────
+// Přepínače, které mění chování hry bez nasazování. Zatím jediný: zrychlený
+// onboarding (hotová města hned, první obhlídka zdarma, nájem na jedno
+// klepnutí, první stroj doručený okamžitě).
+router.get('/nastaveni', api(async (req, res) => {
+  res.json({ ok: true, nastaveni: await acct._nastaveni() });
+}));
+router.post('/nastaveni', api(async (req, res) => {
+  const klic = String((req.body || {}).klic || '').slice(0, 40);
+  const hodnota = String((req.body || {}).hodnota == null ? '' : (req.body || {}).hodnota).slice(0, 200);
+  if (!/^[a-z0-9_]+$/.test(klic)) return res.status(400).json({ error: 'Divný klíč.' });
+  await prisma.gameSetting.upsert({
+    where: { klic }, update: { hodnota }, create: { klic, hodnota },
+  });
+  acct._dropNastaveni();
+  res.json({ ok: true, nastaveni: await acct._nastaveni() });
+}));
+
 // ─── Ceník ───────────────────────────────────────────────────────────────────
 router.get('/prices', api(async (req, res) => {
   const def = acct._defaults;
@@ -678,7 +696,14 @@ router.get('/stats', api(async (req, res) => {
       { krok: 'Otevřeli hru', pocet: sidy.size },
       { krok: 'Dokončili dotazník', pocet: krok('game_quiz') },
       { krok: 'Založili účet', pocet: krok('game_register') },
+      // Mezi účtem a prvním prádlomatem je pět kroků tutoriálu. Teprve
+      // s nimi je vidět, na kterém hráči odpadají.
+      { krok: '1 · Vybrat město', pocet: krok('game_tut1') },
       { krok: 'Prozkoumali město', pocet: krok('game_scout') },
+      { krok: '2 · Prověřit místo a nájem', pocet: krok('game_tut2') },
+      { krok: '3 · Koupit prádlomat', pocet: krok('game_tut3') },
+      { krok: '4 · Čekání na dodání', pocet: krok('game_tut4') },
+      { krok: '5 · Postavit', pocet: krok('game_tut5') },
       { krok: 'Postavili prádlomat', pocet: krok('game_build') },
       { krok: 'Zaplatili', pocet: krok('game_paid') },
     ],
@@ -869,6 +894,42 @@ router.get('/zaznam', api(async (req, res) => {
     select: { id: true, nick: true, company: true } });
   res.json({ ok: true, sid, kdy: casti[0].created_at, casti: casti.length,
     ms: Math.max.apply(null, casti.map((c) => c.ms || 0)), hrac, udalosti });
+}));
+
+// ─── A/B test úvodní obrazovky ───────────────────────────────────────────────
+// Přepínač: off = jen původní úvod (A) · 50 = půl na půl · b = jen nový úvod (B).
+// Vyhodnocení: návštěvníci, kteří úvod viděli (game_intro) → registrace (game_register), podle varianty.
+router.get('/ab-intro', api(async (req, res) => {
+  const { getSetting } = require('../services/settings');
+  const rezim = await getSetting('game.ab_intro', { type: 'string', defaultValue: 'off' }).catch(() => 'off');
+  const dny = Math.min(180, Math.max(1, parseInt(req.query.dny, 10) || 30));
+  const od = new Date(Date.now() - dny * 86400e3);
+  const ev = await prisma.compounderEvent.findMany({
+    where: { created_at: { gte: od }, event: { in: ['game_intro', 'game_ab_a', 'game_ab_b', 'game_register', 'game_build', 'game_paid'] } },
+    select: { sid: true, event: true }, take: 400000 });
+  const S = {}; ev.forEach((e) => { (S[e.event] || (S[e.event] = new Set())).add(e.sid); });
+  const set = (k) => S[k] || new Set();
+  const intro = set('game_intro');
+  const varianta = (v) => {
+    const vs = set('game_ab_' + v); const vid = [...vs].filter((s) => intro.has(s));
+    const n = vid.length, reg = vid.filter((s) => set('game_register').has(s)).length;
+    const build = vid.filter((s) => set('game_build').has(s)).length, paid = vid.filter((s) => set('game_paid').has(s)).length;
+    return { navstev: n, registraci: reg, postavilo: build, zaplatilo: paid, konverze_pct: n ? Math.round(reg / n * 1000) / 10 : 0 };
+  };
+  const A = varianta('a'), B = varianta('b');
+  // Dvouvýběrový z-test podílů — orientačně, zda je rozdíl víc než náhoda
+  let z = null; const nA = A.navstev, nB = B.navstev;
+  if (nA >= 20 && nB >= 20) { const p = (A.registraci + B.registraci) / (nA + nB); const se = Math.sqrt(p * (1 - p) * (1 / nA + 1 / nB)); if (se > 0) z = Math.round(((B.registraci / nB) - (A.registraci / nA)) / se * 100) / 100; }
+  const celkem = { navstev: intro.size, registraci: [...intro].filter((s) => set('game_register').has(s)).length };
+  celkem.konverze_pct = celkem.navstev ? Math.round(celkem.registraci / celkem.navstev * 1000) / 10 : 0;
+  res.json({ ok: true, rezim, dny, celkem, A, B, z });
+}));
+router.put('/ab-intro', api(async (req, res) => {
+  const v = String((req.body || {}).rezim || '');
+  if (!['off', '50', 'b'].includes(v)) return res.status(400).json({ error: 'Neplatný režim' });
+  const { setSetting } = require('../services/settings');
+  await setSetting('game.ab_intro', v, { type: 'string', description: 'Laundromat Tycoon — A/B test úvodní obrazovky (off / 50 / b)', scope: 'game', userId: req.user && req.user.id });
+  res.json({ ok: true, rezim: v });
 }));
 
 // ─── AI analytik hry ─────────────────────────────────────────────────────────

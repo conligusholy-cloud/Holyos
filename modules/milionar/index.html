@@ -122,6 +122,8 @@
           <button class="btn sm" data-dny="90">90 dní</button>
         </div>
         <div class="kpis" id="st-kpis"></div>
+        <h3 style="font-size:14px;margin:18px 0 10px">A/B test úvodní obrazovky <span class="note">(nový návštěvník viděl úvod → založil účet)</span></h3>
+        <div id="st-ab" class="note">Načítám…</div>
         <h3 style="font-size:14px;margin:18px 0 10px">Kudy hráči procházejí</h3>
         <div class="fn" id="st-funnel"></div>
         <h3 style="font-size:14px;margin:22px 0 10px">Vrátili se? <span class="note">(podle posledního uložení hry)</span></h3>
@@ -202,6 +204,7 @@
 
       <div class="module-panel" id="panel-prices">
         <p class="note" style="margin:16px 0">Změna se projeví ve hře do minuty. Už rozdělané platby doběhnou za starou cenu.</p>
+        <div id="nast-box" style="margin:0 0 18px"></div>
         <div class="tbl-wrap"><table class="data-table" id="pr-tbl"></table></div>
       </div>
     </div>
@@ -447,8 +450,34 @@
             }).join('') + '</tbody>';
       }).catch(function (e) { tb.innerHTML = '<tbody><tr><td style="color:#ef4444">Chyba: ' + esc(e.message || e) + '</td></tr></tbody>'; });
     }
+    // A/B test úvodní obrazovky: přepínač režimu + vyhodnocení konverze úvod → registrace podle varianty
+    function loadAB() {
+      get('/ab-intro?dny=' + DNY).then(function (j) {
+        var k = function (x) { return String(x).replace('.', ','); };
+        var radek = function (lbl, v, pop) { return '<tr><td><b>' + lbl + '</b><div class="note">' + pop + '</div></td><td class="num">' + cz(v.navstev) + '</td><td class="num">' + cz(v.registraci) + '</td><td class="num"><b>' + k(v.konverze_pct) + ' %</b></td><td class="num">' + cz(v.postavilo) + '</td><td class="num">' + cz(v.zaplatilo) + '</td></tr>'; };
+        var verdikt = j.z == null ? 'Na vyhodnocení je zatím málo dat (potřeba aspoň 20 návštěv v každé variantě).'
+          : (Math.abs(j.z) >= 1.96 ? (j.z > 0 ? '✅ Varianta B je průkazně lepší (z = ' + k(j.z) + ').' : '⚠️ Varianta B je průkazně horší (z = ' + k(j.z) + ').') : 'Rozdíl zatím není průkazný (z = ' + k(j.z) + ', potřeba |z| ≥ 1,96) — nech test běžet.');
+        var rez = [['off', 'Vypnuto (jen A)'], ['50', 'A/B 50 : 50'], ['b', 'Jen nová (B)']];
+        document.getElementById('st-ab').innerHTML =
+          '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><span class="note">Režim:</span>'
+          + rez.map(function (r) { return '<button class="btn sm' + (j.rezim === r[0] ? ' on' : '') + '" data-abrez="' + r[0] + '">' + r[1] + '</button>'; }).join('')
+          + '<span class="note" style="margin-left:8px">Celkem úvod viděla ' + cz(j.celkem.navstev) + ' nových návštěv, účet založilo ' + cz(j.celkem.registraci) + ' (' + k(j.celkem.konverze_pct) + ' %).</span></div>'
+          + '<div class="tbl-wrap"><table class="data-table"><thead><tr><th>Varianta</th><th class="num">Viděli úvod</th><th class="num">Založili účet</th><th class="num">Konverze</th><th class="num">Postavili prádlomat</th><th class="num">Zaplatili</th></tr></thead><tbody>'
+          + radek('A — původní', j.A, 'logo, obrázek, body, bonus, pak formulář')
+          + radek('B — nová', j.B, '„Postav první prádlomat za 60 sekund", jméno a tlačítko nahoře, počet hráčů')
+          + '</tbody></table></div><p class="note" style="margin:8px 0 0">' + verdikt + ' Cíl: konverze úvod → účet z 8,5 % na 15 %.</p>';
+      }).catch(function (e) { chyba('st-ab', e); });
+    }
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-abrez]'); if (!b) return;
+      var v = b.getAttribute('data-abrez');
+      if (!confirm('Přepnout úvodní obrazovku hry na režim: ' + b.textContent + '?\n\nZměna se hráčům projeví do minuty.')) return;
+      fetch('/api/game-admin/ab-intro', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rezim: v }) })
+        .then(function (r) { return r.json(); }).then(function () { loadAB(); }).catch(function (er) { alert('Chyba: ' + er.message); });
+    });
     function loadStats() {
       loadProvoz();
+      loadAB();
       loadReklama();
       get('/stats?dny=' + DNY).then(function (j) {
         var s = j.souhrn;
@@ -485,7 +514,7 @@
     function kpi(v, l) { return '<div class="kpi"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
 
     // ── Provoz: kolik lidí je na hře teď ────────────────────────────────────
-    var UDALOST_NAZEV = { game_open: 'Otevřel hru', game_zije: 'Hraje', game_quiz: 'Dotazník',
+    var UDALOST_NAZEV = { game_intro: 'Viděl úvod (nový)', game_ab_a: 'Úvod — varianta A', game_ab_b: 'Úvod — varianta B', game_open: 'Otevřel hru', game_zije: 'Hraje', game_quiz: 'Dotazník',
       game_register: 'Založil účet', game_scout: 'Prozkoumal město', game_build: 'Postavil prádlomat',
       game_paid: 'Zaplatil' };
     function nazevUdalosti(e) { return UDALOST_NAZEV[e] || e.replace('game_', ''); }
@@ -928,8 +957,45 @@
       }).catch(function (e) { chyba('or-kpis', e); });
     }
 
+    // ── Nastavení hry ───────────────────────────────────────────────────────
+    // Přepínače chování hry. Mění se za běhu, bez nasazování — díky tomu jde
+    // změna vyhodnotit jako pokus a v případě potřeby hned vypnout.
+    var NASTAVENI_POPIS = {
+      onboarding_rychly: {
+        nazev: 'Zrychlený start pro nováčky',
+        popis: 'Hotová města hned bez psaní a čekání, první obhlídka místa zdarma, '
+          + 'první stroj doručený okamžitě. Platí jen do postavení prvního prádlomatu. '
+          + 'Vypnutím se hra vrátí k původní cestě a v trychtýři se dá porovnat, co to udělalo.'
+      }
+    };
+    function loadNastaveni() {
+      get('/nastaveni').then(function (j) {
+        var n = j.nastaveni || {};
+        document.getElementById('nast-box').innerHTML = Object.keys(NASTAVENI_POPIS).map(function (k) {
+          var zap = n[k] !== '0';
+          var d = NASTAVENI_POPIS[k];
+          return '<div class="card" style="padding:14px 16px;border-radius:12px;background:#111827;border:1px solid #243049">'
+            + '<div style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
+            + '<div><b>' + esc(d.nazev) + '</b><div class="note">' + esc(d.popis) + '</div></div>'
+            + '<button class="btn sm" data-nast="' + esc(k) + '" data-na="' + (zap ? '0' : '1') + '">'
+            + (zap ? 'Zapnuto — vypnout' : 'Vypnuto — zapnout') + '</button></div></div>';
+        }).join('');
+        [].forEach.call(document.querySelectorAll('[data-nast]'), function (b) {
+          b.onclick = function () {
+            b.disabled = true; b.textContent = 'Měním…';
+            post('/nastaveni', { klic: b.getAttribute('data-nast'), hodnota: b.getAttribute('data-na') })
+              .then(loadNastaveni)
+              .catch(function (e) { b.disabled = false; alert(e.message); });
+          };
+        });
+      }).catch(function (e) {
+        document.getElementById('nast-box').innerHTML = '<p class="note" style="color:#f87171">' + esc(e.message) + '</p>';
+      });
+    }
+
     // ── Ceník ───────────────────────────────────────────────────────────────
     function loadPrices() {
+      loadNastaveni();
       get('/prices').then(function (j) {
         document.getElementById('pr-tbl').innerHTML =
           '<thead><tr><th>Položka</th><th>Druh</th><th class="num">Cena (Kč)</th><th class="num">Laundrů</th>'

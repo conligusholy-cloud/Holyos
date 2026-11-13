@@ -4368,7 +4368,12 @@ function areasSheet(predvyplnit) {
       + '<div class="sub">nalezeno ' + S.areas[id].spots.length + ' míst</div></div>'
       + '<button class="btn sec sm" data-go="' + esc(id) + '">Na mapu</button></div>';
   }).join('');
+  var zacatek = zacatecnik() && !Object.keys(S.areas || {}).length;
   sheet('<h3>Prozkoumat město</h3>'
+    + (zacatek ? '<p class="muted small">Klepni na město a člověk do něj vyrazí hned — tahle '
+        + 'už prošel, takže místa uvidíš okamžitě. Jinak si napiš vlastní dole.</p>'
+        + '<div id="mesta-box-prvni">' + mestaHtml('') + '</div>'
+        + '<h3 style="margin-top:18px">Nebo vlastní město</h3>' : '')
     + '<p class="muted small">Napiš, kam poslat člověka. Projde město, obhlédne benzínky, obchodní centra a myčky a vrátí se se seznamem míst. '
     + 'Cesta stojí ' + kcFull(SCOUT_COST) + '. Co je na kterém místě, zjistíš až jeho prověřením.</p>'
     + '<div class="row" style="gap:8px;margin:12px 0 10px">'
@@ -4383,15 +4388,19 @@ function areasSheet(predvyplnit) {
     + '<p class="fine" id="city-note">'
     + (predvyplnit ? 'Z mapy: <b>' + esc(predvyplnit) + '</b> — stačí klepnout na Hledat.' : '') + '</p>'
     + (S.cash < SCOUT_COST ? '<p class="fine err">Na cestu nemáš dost hotovosti.</p>' : '')
-    + '<div id="mesta-box">' + mestaHtml('Hotová města — člověk je prošel, otevřou se hned') + '</div>'
+    // Nováčkovi ukazujeme hotová města hned a nahoře: psát město a čekat
+    // minutu na průzkum je ta nejhorší možná první minuta ve hře.
+    + (zacatek ? '' : '<div id="mesta-box">'
+        + mestaHtml('Hotová města — člověk je prošel, otevřou se hned') + '</div>')
     + (done ? '<h3 style="margin-top:16px">Už prozkoumáno</h3>' + done : ''));
   var inp = $('q-area'), btn = $('do-scout');
   // Hotová města doplníme, jakmile dorazí ze serveru — panel na ně nečeká.
   if (!MESTA_HOTOVA) {
     loadMesta(function () {
-      var box = $('mesta-box');
+      // Nováček má hotová města nahoře bez nadpisu, ostatní dole s vysvětlením.
+      var prvni = $('mesta-box-prvni'), box = prvni || $('mesta-box');
       if (!box) return;
-      box.innerHTML = mestaHtml('Hotová města — člověk je prošel, otevřou se hned');
+      box.innerHTML = mestaHtml(prvni ? '' : 'Hotová města — člověk je prošel, otevřou se hned');
       bindMesta(function (mesto) { scout(mesto, $('do-scout')); });
     });
   }
@@ -4598,13 +4607,15 @@ function spotSheet(sp, areaId) {
       + (poz0 ? '<div class="kv"><span>Výměra</span><b>' + pozemekM2(sp) + ' m²</b></div>'
           + '<div class="kv"><span>Cena pozemku</span><b>' + kcFull(pozemekCena(sp))
           + '</b> <span class="muted small">(' + kcFull(pozemekZaM2(sp)) + ' / m²)</span></div>' : '')
-      + '<div class="kv"><span>Cena obhlídky</span><b>' + kcFull(REVEAL_COST) + '</b></div>'
-      + '<button class="btn big" id="do-reveal"' + (S.cash < REVEAL_COST ? ' disabled' : '') + '>Prověřit místo</button>'
-      + (S.cash < REVEAL_COST ? '<p class="fine">Na obhlídku nemáš dost hotovosti.</p>' : ''));
+      + '<div class="kv"><span>Cena obhlídky</span><b' + (obhlidkaCena() ? '' : ' class="ok"') + '>'
+      + (obhlidkaCena() ? kcFull(obhlidkaCena()) : 'první zdarma') + '</b></div>'
+      + '<button class="btn big" id="do-reveal"' + (S.cash < obhlidkaCena() ? ' disabled' : '') + '>Prověřit místo</button>'
+      + (S.cash < obhlidkaCena() ? '<p class="fine">Na obhlídku nemáš dost hotovosti.</p>' : ''));
     var b = $('do-reveal');
     if (b) b.onclick = function () {
-      S.cash -= REVEAL_COST;
-      zapis('pruzkum', 'Prověření místa — ' + (sp.name || ''), -REVEAL_COST);
+      var cena = obhlidkaCena();
+      S.cash -= cena;
+      if (cena) zapis('pruzkum', 'Prověření místa — ' + (sp.name || ''), -cena);
       S.revealed[sp.id] = true; save(); paint(); drawMap(); syncState(true); spotSheet(sp, areaId);
     };
     return;
@@ -5118,7 +5129,11 @@ function buySheet(modelKey, drz) {
   var b = $('do-buy');
   if (b) b.onclick = function () {
     doFinance(f, { druh: 'stroj', popis: 'Prádlomat ' + m.name });
-    S.orders.push({ model: modelKey, orderedAt: Date.now(), arrivesAt: Date.now() + DELIVERY_MONTHS * MONTH_MS });
+    // První stroj dorazí hned. Čekat den na dodání je u člověka, který hru
+    // vidí poprvé, nejkratší cesta k tomu, že se už nevrátí.
+    var hned = zacatecnik() && !(S.orders || []).length && !mamStroj();
+    S.orders.push({ model: modelKey, orderedAt: Date.now(),
+      arrivesAt: hned ? Date.now() : Date.now() + DELIVERY_MONTHS * MONTH_MS });
     save(); paint(); closeSheet();
     // Nejdřív uložíme síť (je v ní nová objednávka) a pak řekneme serveru, že
     // se kupovalo — ten z ní spočte provizi tomu, kdo nás do hry přivedl.
@@ -5126,7 +5141,8 @@ function buySheet(modelKey, drz) {
     syncState(true).then(function () {
       if (ME) apiJson('/account/nakup', { model: modelKey }).catch(function () { /* zkusí se přiště */ });
     });
-    toast(m.name + ' objednán. Dorazí ' + etaText(DELIVERY_MONTHS * MONTH_MS) + '.', 'ok');
+    toast(hned ? m.name + ' je na skladě — dopravce ho přivezl rovnou.'
+      : m.name + ' objednán. Dorazí ' + etaText(DELIVERY_MONTHS * MONTH_MS) + '.', 'ok');
   };
 }
 
@@ -7260,6 +7276,9 @@ function tutPaint() {
     return;
   }
   bar.classList.remove('hidden');
+  // Kolik lidí který krok vůbec uvidí. Bez toho nevíme, kde se cesta
+  // k prvnímu prádlomatu láme — v administraci je to v trychtýři.
+  ev('game_tut' + k);
   $('tut-krok').textContent = 'Krok ' + k + ' z ' + TUT_KROKU;
   $('tut-titul').textContent = info.t;
   $('tut-text').textContent = info.p;
@@ -10816,6 +10835,51 @@ function ev(name, znovu) {
   } catch (e) { /* sledování nikdy nesmí shodit hru */ }
 }
 
+// ─── Úvodní obrazovka: A/B test ──────────────────────────────────────────────
+// A = původní úvod, B = nadpis „Postav první prádlomat za 60 sekund", jméno a tlačítko hned nahoře,
+// pod nimi skutečný počet hráčů (social proof) a zbytek úvodu níž. Režim přepíná administrace
+// (off / 50 / b). game_intro = návštěvník úvod opravdu viděl (správný jmenovatel konverze na registraci).
+var AB_KEY = 'lt_ab_intro';
+function introAB() {
+  var hotovo = false;
+  var dokonci = function (cfg) {
+    if (hotovo) return; hotovo = true;
+    cfg = cfg || {};
+    var rezim = cfg.ab === '50' || cfg.ab === 'b' ? cfg.ab : 'off', v = 'a';
+    if (rezim === 'b') v = 'b';
+    else if (rezim === '50') {
+      try { v = localStorage.getItem(AB_KEY); } catch (e) { v = null; }
+      if (v !== 'a' && v !== 'b') { v = Math.random() < 0.5 ? 'a' : 'b'; try { localStorage.setItem(AB_KEY, v); } catch (e) { /* bez úložiště */ } }
+    }
+    if (v === 'b') introVariantaB(cfg);
+    ev('game_intro');
+    if (rezim !== 'off') ev('game_ab_' + v);
+  };
+  api('/intro').then(function (r) { dokonci(r && r.ok ? r.j : null); }).catch(function () { dokonci(null); });
+  setTimeout(function () { dokonci(null); }, 2500);   // server mlčí → původní úvod, nečekáme
+}
+function introPlural(n, a, b, c) { return n === 1 ? a : (n >= 2 && n <= 4 ? b : c); }
+function introVariantaB(cfg) {
+  try {
+    var box = document.querySelector('#intro .intro-in'); if (!box || box.querySelector('.ib-hero')) return;
+    var online = Number(cfg.online) || 0, firem = Number(cfg.firem) || 0, proof = '';
+    if (online >= 5) proof = '<span class="ib-dot"></span>Právě hraje <b>' + online + '</b> ' + introPlural(online, 'hráč', 'hráči', 'hráčů') + (firem >= 20 ? ' · <b>' + firem + '</b> ' + introPlural(firem, 'firma', 'firmy', 'firem') + ' už staví' : '');
+    else if (firem >= 20) proof = '<b>' + firem + '</b> ' + introPlural(firem, 'firma už staví', 'firmy už staví', 'firem už staví') + ' svou síť';
+    var hero = document.createElement('div');
+    hero.className = 'ib-hero';
+    hero.innerHTML = '<h2 class="ib-h">Postav první prádlomat <span class="g">za 60 sekund</span></h2>'
+      + '<p class="ib-sub">Skutečná mapa, skutečná ekonomika. Hraješ hned — bez e-mailu a bez hesla.</p>'
+      + (proof ? '<div class="ib-proof">' + proof + '</div>' : '');
+    var brand = box.querySelector('.brand'), jmeno = box.querySelector('.intro-jmeno'), go = $('go-quiz'), login = $('go-login');
+    var zbytek = ['.hero-flex', '.lead', '.intro-pts', '#sb'].map(function (q) { return box.querySelector(q); }).filter(Boolean);
+    var kotva = brand ? brand.nextSibling : box.firstChild;
+    box.insertBefore(hero, kotva);
+    [jmeno, go, login].forEach(function (el) { if (el) box.insertBefore(el, kotva); });
+    zbytek.forEach(function (el) { box.insertBefore(el, kotva); });
+    $('intro').classList.add('ab-b');
+  } catch (e) { /* úvod musí fungovat i bez varianty B */ }
+}
+
 // ─── AI poradce ──────────────────────────────────────────────────────────────
 // Rádce ke hře, co vidí, jak hráč hraje. Posílá se mu jen výtah z herního
 // stavu — čísla, nic osobního. Odpovídá server, model běží u nás.
@@ -11123,6 +11187,7 @@ function loadCards() {
     CARDS_CAT = r.j.catalog; CASH_CAT = r.j.cash || null; PAYMENTS_ON = !!r.j.payments;
     SUBS_CAT = r.j.subs || null; PREDPLATNE = r.j.predplatne || [];
     LINKA_CAT = r.j.linka || null;
+    if (typeof r.j.onboarding_rychly === 'boolean') ONBOARDING_RYCHLY = r.j.onboarding_rychly;
     RUSH_ZA = r.j.rush_zdarma_za; RUSH_MAX = r.j.rush_zdarma_max || 5;
     if (r.j.owned && ME) ME.cards = r.j.owned;
   }).catch(function () { });
@@ -11133,6 +11198,20 @@ function ownedOf(kind) { return (ME && ME.cards && ME.cards[kind]) || 0; }
 // nechává hráči čtvrt hodiny: kdo u hry sedí, zareaguje stejně rychleji sám,
 // a předplatné tak šetří pozornost, ne že by kupovalo výhodu.
 var SUBS_CAT = null, PREDPLATNE = [], LINKA_CAT = null;
+// ─── Zrychlený start ────────────────────────────────────────────────────────
+// Cesta od založení firmy k prvnímu prádlomatu vedla přes osm úkonů, dva z nich
+// stály peníze a jeden se čekal. Tohle ji zkracuje na tři: město, místo, postav.
+// Vypíná se v administraci (Nastavení hry), takže jde porovnat, co to udělalo.
+var ONBOARDING_RYCHLY = true;
+// Platí jen do postavení prvního prádlomatu — pak už hra běží normálně.
+function zacatecnik() {
+  return ONBOARDING_RYCHLY && !!S && !(S.units || []).length;
+}
+function obhlidkaCena() {
+  // První obhlídka je zdarma. Nováček stejně neumí posoudit, jestli se mu
+  // vyplatí, a je to zbytečná překážka hned v prvním kroku.
+  return (zacatecnik() && !Object.keys(S.revealed || {}).length) ? 0 : REVEAL_COST;
+}
 var DISPECER_PRODLEVA = 15 * 60e3;
 function predplatneNa(kind) {
   var ted = Date.now();
@@ -11788,6 +11867,7 @@ api('/account/me?ref=' + encodeURIComponent((S && S.pid) || trvalePid())).then(f
     if (S) return startGame();
   }
   if (S) startGame();          // rozehraná hra bez účtu (z doby před účty)
-}).catch(function () { if (S) startGame(); });
+  else introAB();              // nový návštěvník opravdu vidí úvod
+}).catch(function () { if (S) startGame(); else introAB(); });
 
 })();

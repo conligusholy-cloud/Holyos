@@ -1086,3 +1086,15 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .nal-pruh{flex:1;height:6px;border-radius:999px;background:rgba(255,255,255,.12);overflow:hidden}
 .nal-pruh b{display:block;height:100%;border-radius:999px;transition:width .35s ease,background .35s ease}
 .nal span{font-size:12px;font-weight:700}
+
+/* ── Úvod, varianta B (A/B test): nadpis + jméno + tlačítko nahoře, social proof ── */
+#intro.ab-b .ib-hero{margin:14px 0 4px}
+#intro.ab-b .ib-h{font-size:clamp(24px,6.6vw,34px);line-height:1.1;font-weight:800;letter-spacing:-.02em;margin:0 0 8px}
+#intro.ab-b .ib-h .g{background:linear-gradient(90deg,#4fd1ff,#7c5cff);-webkit-background-clip:text;background-clip:text;color:transparent}
+#intro.ab-b .ib-sub{margin:0 0 10px;color:var(--text2);font-size:15px}
+#intro.ab-b .ib-proof{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.35);font-size:13px;color:var(--text)}
+#intro.ab-b .ib-proof b{color:#4ade80}
+#intro.ab-b .ib-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 0 rgba(34,197,94,.6);animation:ibPuls 1.8s infinite}
+@keyframes ibPuls{0%{box-shadow:0 0 0 0 rgba(34,197,94,.6)}70%{box-shadow:0 0 0 8px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+#intro.ab-b #go-quiz{margin-top:2px}
+#intro.ab-b .hero-flex{margin-top:18px}
