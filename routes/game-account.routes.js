@@ -283,7 +283,9 @@ async function pub(p) {
     select: { kind: true }
   });
   const counts = {};
-  CARD_KINDS.concat(CASH_KINDS).concat([CASH_CUSTOM]).forEach((k) => { counts[k] = 0; });
+  // Balíčky infolinky patří do seznamu taky — hra se jinak o zaplaceném
+  // balíčku nedozví a nikdy si ho nevyzvedne.
+  CARD_KINDS.concat(CASH_KINDS).concat(LINKA_KINDS).concat([CASH_CUSTOM]).forEach((k) => { counts[k] = 0; });
   cards.forEach((c) => { if (counts[c.kind] != null) counts[c.kind]++; });
   return {
     nick: p.nick, company: p.company || (p.nick + ' s.r.o.'), emblem: p.emblem || null,

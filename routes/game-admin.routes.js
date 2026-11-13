@@ -206,6 +206,10 @@ router.get('/players/:id', api(async (req, res) => {
     profil: st.profile || null,
     hotovost: typeof st.cash === 'number' ? Math.round(st.cash) : null,
     uver: typeof st.loan === 'number' ? Math.round(st.loan) : null,
+    // Rámec a zástava v bance — bez nich se u reklamace zaplaceného balíčku
+    // nedá poznat, jestli se hráči opravdu připsal.
+    ramec: typeof st.bank === 'number' ? Math.round(st.bank) : null,
+    zastava: typeof st.duvera === 'number' ? Math.round(st.duvera) : null,
     pradlomatu: Array.isArray(st.units) ? st.units.length : 0,
     prijem: acct._zbydeMesicne(st),
     pozvanek: st.refs || 0,
