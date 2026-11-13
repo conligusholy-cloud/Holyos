@@ -293,7 +293,7 @@ module.exports = function createAccounts(ctx) {
           <div class="mp-img">${s.image_url || s.photo ? `<img src="${esc(s.image_url || ('/cesta/marketplace/foto/' + encodeURIComponent(s.code || '')))}" alt="" loading="lazy">` : `<div class="mp-noimg">${IC.marketplace}</div>`}${s.reserved ? '<span class="mp-st res">Rezervováno</span>' : '<span class="mp-st">Volné</span>'}</div>
           <div class="mp-body"><h3>${esc(s.name)}</h3><p class="muted small" style="margin:0 0 8px">📍 ${esc([s.city, s.country && s.country !== 'CZ' ? s.country : ''].filter(Boolean).join(', ') || '—')} <span title="Přesné místo probereme na schůzce">(přibližně)</span></p>
           ${s.highlight ? `<p class="mp-hl">${esc(s.highlight)}</p>` : ''}${s.description ? `<p class="small" style="margin:0 0 10px;line-height:1.5;white-space:pre-line">${esc(s.description)}</p>` : ''}
-          ${kv('Plocha', s.area_m2 != null ? cz(s.area_m2) + ' m²' : null)}${kv('Nájem / měsíc', s.rent_monthly != null ? cz(s.rent_monthly) + ' ' + (s.rent_currency === 'EUR' ? '€' : 'Kč') : null)}
+          ${kv('Nájem / měsíc', s.rent_monthly != null ? cz(s.rent_monthly) + ' ' + (s.rent_currency === 'EUR' ? '€' : 'Kč') : null)}
           ${kv('Cena / podmínky', s.price_note ? esc(s.price_note) : null)}${kv('Parkování', s.parking ? esc(s.parking) : null)}${kv('Okolí a návštěvnost', s.footfall ? esc(s.footfall) : null)}
           ${s.availability ? `<p class="small muted" style="margin:8px 0 0">🗓 ${esc(s.availability)}</p>` : ''}
           ${s.reserved ? '<div class="btn sec" style="width:100%;justify-content:center;margin-top:12px;opacity:.6;cursor:default">Lokalita je rezervovaná</div>'
