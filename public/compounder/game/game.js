@@ -2050,7 +2050,7 @@ var HOVOR_ZA_MAX = 600000;
 // počtem postavených prádlomatů. Pod minimální odstup ale nejdeme — hovor
 // trvá skoro minutu a hra, ve které se jen zvedá telefon, by nebyla hra.
 // U velké sítě je právě tenhle odstup to, co o frekvenci rozhoduje.
-var HOVOR_MIN_ODSTUP = 60000;
+var HOVOR_MIN_ODSTUP = 300000;
 var HOVOR_ZVONI_MS = 8000;       // osm vteřin a zákazník to pokládá — nevyřízený hovor
 var HOVOR_ODMITNUTI = -2;        // co stojí nebraný hovor (projde přes váhu níž)
 // Hvězdičky se vydřou a ztratí hned. Dobrá odpověď posune pověst o půlku toho,
@@ -3091,12 +3091,11 @@ function povestZaOdpoved(b) {
   return (b > 0 ? b * POVEST_RUST : b * POVEST_PAD);
 }
 // Další hovor naplánujeme na náhodnou dobu strávenou ve hře.
-// Frekvence neroste s počtem poboček přímo úměrně. Dřív ano a vycházelo
-// z toho, že desetina sítě znamená hovor co půl minuty — a to se nedá hrát.
-// Zákazníci si navíc postupně zvykají, že linka funguje, takže volá spíš
-// odmocnina z nich. Výsledek: jedna pobočka osm minut, deset poboček tři,
-// padesát necelé dvě.
-var HOVOR_SKLON = 0.42;
+// Frekvence s počtem poboček roste, ale jen mírně, a nikdy nespadne pod pět
+// minut. Jinak by z hry o prádlomatech bylo call centrum: jeden hovor se
+// třemi otázkami trvá skoro minutu a při velké síti by se nedalo dělat nic
+// jiného. Jedna pobočka osm minut, padesát pobočkami pět a půl.
+var HOVOR_SKLON = 0.12;
 function naplanujHovor() {
   var pobocek = Math.max(1, ((S && S.units) || []).length);
   var zaklad = HOVOR_ZA_MIN + Math.random() * (HOVOR_ZA_MAX - HOVOR_ZA_MIN);
