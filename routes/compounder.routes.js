@@ -4471,6 +4471,7 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
       const ls = await prisma.compounderLead.findMany({ where: { id: { in: ids }, is_test: false }, orderBy: { created_at: 'desc' } });
       await enrichWarmth(ls); await _annotateBlacklist(ls); await annotateDiscount(ls); await annotateAiChat(ls);
       ls.forEach((l) => { const r = info[l.id]; l.owner_meeting_status = r.status; l.owner_meeting_at = r.slot && r.slot.starts_at ? new Date(r.slot.starts_at).toISOString() : null; });
+      await annotateMeeting(ls);
       ls.sort((a, b) => String(b.owner_meeting_at || '').localeCompare(String(a.owner_meeting_at || '')));
       return res.json(ls);
     }
@@ -4503,9 +4504,35 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
     await _annotateBlacklist(leads);
     await annotateDiscount(leads);
     await annotateAiChat(leads);
+    await annotateMeeting(leads);
     res.json(leads);
   } catch (err) { next(err); }
 });
+
+// Doplní kontaktům se stavem „Domluvena schůzka" (i online) meeting_at = kdy je schůzka:
+// nejbližší budoucí (nebo právě probíhající) termín z rezervací schůzek a z kalendáře obchodníka;
+// když budoucí není, poslední proběhlý. Nezrušené termíny.
+async function annotateMeeting(leads) {
+  try {
+    const sel = (leads || []).filter((l) => ['schuzka', 'schuzka_online'].includes(l.status) || l.owner_meeting_at);
+    if (!sel.length) return;
+    const ids = sel.map((l) => l.id);
+    const [rs, evs] = await Promise.all([
+      prisma.meetingReservation.findMany({ where: { compounder_lead_id: { in: ids }, NOT: { status: { in: ['canceled', 'cancelled'] } } }, select: { compounder_lead_id: true, slot: { select: { starts_at: true } } } }).catch(() => []),
+      prisma.salesEvent.findMany({ where: { compounder_lead_id: { in: ids }, event_type: 'meeting', NOT: { status: { in: ['cancelled', 'canceled'] } } }, select: { compounder_lead_id: true, start_at: true } }).catch(() => []),
+    ]);
+    const casy = {};
+    rs.forEach((r) => { if (r.slot && r.slot.starts_at) (casy[r.compounder_lead_id] || (casy[r.compounder_lead_id] = [])).push(new Date(r.slot.starts_at).getTime()); });
+    evs.forEach((e) => { if (e.start_at) (casy[e.compounder_lead_id] || (casy[e.compounder_lead_id] = [])).push(new Date(e.start_at).getTime()); });
+    const hranice = Date.now() - 2 * 3600e3; // do 2 h po začátku ji bereme jako „teď"
+    sel.forEach((l) => {
+      const t = (casy[l.id] || []).sort((a, b) => a - b); if (!t.length) return;
+      const pristi = t.find((x) => x >= hranice);
+      l.meeting_at = new Date(pristi != null ? pristi : t[t.length - 1]).toISOString();
+      l.meeting_past = pristi == null;
+    });
+  } catch (e) { /* datum schůzky je jen doplněk */ }
+}
 
 // Doplní leads o ai_last_chat_at (poslední zpráva zákazníka v chatu se specialistou).
 async function annotateAiChat(leads) {

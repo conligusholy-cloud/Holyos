@@ -1329,6 +1329,18 @@
   function setLeadStatus(val){ state.leadStatusFilter = val; render(); }
   window.setLeadStatus = setLeadStatus;
   function setCalledTodayOnly(v){ state.calledTodayOnly = !!v; render(); }
+  // Datum domluvené schůzky pod stavem (Domluvena schůzka / online, i schůzky s majitelem)
+  function obMeetBadge(l){
+    var at = l.meeting_at || l.owner_meeting_at; if (!at) return '';
+    if (['schuzka','schuzka_online'].indexOf(l.status||'')===-1 && !l.owner_meeting_at) return '';
+    var d = new Date(at); if (isNaN(d)) return '';
+    var dnes = new Date(); dnes.setHours(0,0,0,0); var den = new Date(d); den.setHours(0,0,0,0);
+    var rozdil = Math.round((den - dnes) / 864e5);
+    var kdy = rozdil===0 ? 'dnes' : rozdil===1 ? 'zítra' : d.toLocaleDateString('cs-CZ', { weekday:'short', day:'numeric', month:'numeric' });
+    var cas = d.toLocaleTimeString('cs-CZ', { hour:'2-digit', minute:'2-digit' });
+    var minula = d.getTime() < Date.now() - 2*3600e3;
+    return '<br><span style="font-weight:800;font-size:.95em;'+(minula?'opacity:.6;text-decoration:line-through':'')+'">📅 '+kdy+' '+cas+'</span>'+(minula?'<br><span style="font-weight:400;font-size:.8em">proběhla?</span>':'');
+  }
   function isUncalled(l){ return !l.last_called_at && !l.blacklisted && ['nezajem','nelze_pouzit','rejected','prodano','converted'].indexOf(l.status||'new')===-1; }
   function setUncalledOnly(v){ state.uncalledOnly = !!v; render(); }
   window.setUncalledOnly = setUncalledOnly;
@@ -1766,7 +1778,7 @@
       '<div class="card-main" onclick="toggle('+l.id+')">' +
         '<span class="dot" style="background:'+st.c+'"></span>' +
         '<div class="card-body"><div class="card-name">'+(l.is_hot?'⭐ ':'')+(l.only_polish?'<span title="Umí jen polsky">🇵🇱</span> ':'')+esc(l.name||l.email)+blBadge+(l.extra_offers?' <span title="Individuální nabídka lokalit">🎯</span>':'')+'</div>'+(state.allScope?'<div style="font-size:11.5px;color:#a78bfa;margin-top:1px">👤 '+esc(l.owner_name||'bez obchodníka')+'</div>':'')+invHtml+'<div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+obOverdueBadge(l)+calledBadge+chatBadge+chatEverHtml+obNextEventBadge(l.id)+'</div>' +
-        '<span class="badge" style="background:'+st.c+'22;color:'+st.c+';white-space:normal;text-align:center;line-height:1.2">'+st.l+((l.status==='dosledovani' && l.discount && l.discount.endsAt)?('<br><span style="font-weight:400;font-size:.85em;opacity:.85">do '+new Date(l.discount.endsAt).toLocaleDateString('cs-CZ')+'</span>'):'')+'</span>' +
+        '<span class="badge" style="background:'+st.c+'22;color:'+st.c+';white-space:normal;text-align:center;line-height:1.2">'+st.l+obMeetBadge(l)+((l.status==='dosledovani' && l.discount && l.discount.endsAt)?('<br><span style="font-weight:400;font-size:.85em;opacity:.85">do '+new Date(l.discount.endsAt).toLocaleDateString('cs-CZ')+'</span>'):'')+'</span>' +
         '<span class="gear" onclick="event.stopPropagation();openEdit('+l.id+')" title="Upravit údaje kontaktu">⚙️</span>' +
         '<span class="chev">▸</span>' +
       '</div>' +
