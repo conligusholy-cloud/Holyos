@@ -2042,12 +2042,15 @@ function verdictPill(score) {
 // Zákazníci volá jen tomu, kdo je zrovna ve hře — odpočítává se čas strávený
 // v aplikaci, ne čas skutečný. Kdo hovory bere a umí poradit, má lepší pověst
 // a chodí mu víc lidí. Kdo je odmítá nebo odbyde, přijde až o pětinu návštěvnosti.
-var HOVOR_ZA_MIN = 150000;       // dvě a půl minuty — ale to je na JEDEN prádlomat
-var HOVOR_ZA_MAX = 420000;       // sedm minut, taky na jeden prádlomat
+// Na jeden prádlomat vychází hovor zhruba jednou za osm minut; náhoda s tím
+// hýbe mezi šesti a deseti.
+var HOVOR_ZA_MIN = 360000;
+var HOVOR_ZA_MAX = 600000;
 // Čím větší síť, tím víc zákazníků a tím častěji zvoní: rozmezí se dělí
 // počtem postavených prádlomatů. Pod minimální odstup ale nejdeme — hovor
 // trvá skoro minutu a hra, ve které se jen zvedá telefon, by nebyla hra.
-var HOVOR_MIN_ODSTUP = 30000;
+// U velké sítě je právě tenhle odstup to, co o frekvenci rozhoduje.
+var HOVOR_MIN_ODSTUP = 60000;
 var HOVOR_ZVONI_MS = 8000;       // osm vteřin a zákazník to pokládá — nevyřízený hovor
 var HOVOR_ODMITNUTI = -2;        // co stojí nebraný hovor (projde přes váhu níž)
 // Hvězdičky se vydřou a ztratí hned. Dobrá odpověď posune pověst o půlku toho,
