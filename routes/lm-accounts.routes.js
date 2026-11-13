@@ -206,6 +206,49 @@ router.get('/marketplace', async (req, res, next) => {
     res.json({ ok: true, items });
   } catch (err) { next(err); }
 });
+// GET /marketplace-admin — přehled pro administraci: všechny lokality v Marketplace, zájem zákazníků, kdo má přístup.
+router.get('/marketplace-admin', async (req, res, next) => {
+  try {
+    const all = await jsonSetting('site_marketplace');
+    const ids = Object.keys(all).map(Number).filter((n) => n > 0);
+    const sites = ids.length ? await prisma.site.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, city: true, status: true, rent_monthly: true, rent_currency: true, _count: { select: { photos: true } } } }) : [];
+    const by = new Map(sites.map((x) => [x.id, x]));
+    const od = new Date(Date.now() - 180 * 86400e3);
+    const ev = await prisma.compounderEvent.findMany({ where: { event: { in: ['marketplace_view', 'marketplace_interest'] }, created_at: { gte: od } }, orderBy: { created_at: 'desc' }, take: 5000, select: { sid: true, event: true, props: true, created_at: true } }).catch(() => []);
+    // Kdo kliknul: napřed account_id / lead_id z události, jinak přes napojený prohlížeč (lead_linked)
+    const sids = [...new Set(ev.filter((e) => e.event === 'marketplace_interest').map((e) => e.sid).filter(Boolean))];
+    const linked = sids.length ? await prisma.compounderEvent.findMany({ where: { event: 'lead_linked', sid: { in: sids } }, select: { sid: true, props: true }, take: 3000 }).catch(() => []) : [];
+    const leadOfSid = new Map(); linked.forEach((l) => { const lid = l.props && l.props.lead_id != null ? Number(l.props.lead_id) : null; if (lid && !leadOfSid.has(l.sid)) leadOfSid.set(l.sid, lid); });
+    const accounts = await prisma.lmAccount.findMany({ select: { id: true, name: true, email: true, phone: true, company: true, compounder_lead_id: true, disabled: true } });
+    const accById = new Map(accounts.map((a) => [a.id, a])), accByLead = new Map(accounts.filter((a) => a.compounder_lead_id).map((a) => [a.compounder_lead_id, a]));
+    const who = (e) => { const p = e.props || {}; const a = (p.account_id != null && accById.get(Number(p.account_id))) || (p.lead_id != null && accByLead.get(Number(p.lead_id))) || (leadOfSid.has(e.sid) && accByLead.get(leadOfSid.get(e.sid))) || null; return a ? { id: a.id, name: a.name, email: a.email, phone: a.phone, company: a.company } : null; };
+    const interests = ev.filter((e) => e.event === 'marketplace_interest').map((e) => ({ at: e.created_at, code: String((e.props && e.props.code) || ''), who: who(e) }));
+    const cnt = {}; interests.forEach((i) => { const o = cnt[i.code] || (cnt[i.code] = { n: 0, last: null }); o.n++; if (!o.last) o.last = i.at; });
+    const d30 = Date.now() - 30 * 86400e3; const views = ev.filter((e) => e.event === 'marketplace_view' && new Date(e.created_at).getTime() >= d30);
+    const accAll = await jsonSetting('lm_account_access').catch(() => ({}));
+    const withAccess = accounts.filter((a) => (accAll[a.id] || {}).marketplace === true).map((a) => ({ id: a.id, name: a.name, email: a.email, company: a.company, disabled: a.disabled }));
+    const listings = ids.map((id) => { const m = all[id] || {}, x = by.get(id); const c = cnt['L' + id] || { n: 0, last: null };
+      return { id, code: 'L' + id, name: x ? x.name : ('Lokalita #' + id), city: x ? x.city : null, site_status: x ? x.status : null, title: m.title || '', published: !!m.published, reserved: !!m.reserved,
+        rent_monthly: m.rent_monthly != null ? m.rent_monthly : (x && x.rent_monthly != null ? Number(x.rent_monthly) : null), rent_currency: (x && x.rent_currency) || 'CZK', rent_vat: m.rent_vat || 'bez',
+        photos: x ? x._count.photos : 0, gallery: Array.isArray(m.gallery) ? m.gallery.length : null, has_cover: !!m.photo_id, address: !!m.address, interests: c.n, last_interest: c.last, updated_at: m.updated_at || null }; })
+      .sort((a, b) => (b.published - a.published) || String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
+    res.json({ ok: true, listings, interests: interests.slice(0, 60), access: withAccess,
+      kpi: { published: listings.filter((l) => l.published && !l.reserved).length, reserved: listings.filter((l) => l.published && l.reserved).length, hidden: listings.filter((l) => !l.published).length,
+        users_with_access: withAccess.length, views_30d: views.length, viewers_30d: new Set(views.map((v) => v.sid)).size, interests_30d: interests.filter((i) => new Date(i.at).getTime() >= d30).length } });
+  } catch (err) { next(err); }
+});
+// POST /marketplace-admin/:siteId {published?, reserved?} — rychlé přepnutí nabízení / rezervace z administrace
+router.post('/marketplace-admin/:sid(\\d+)', async (req, res, next) => {
+  try {
+    const sid = parseInt(req.params.sid, 10), b = req.body || {}; const all = await jsonSetting('site_marketplace'); const m = all[sid];
+    if (!m) return res.status(404).json({ error: 'Lokalita nemá vyplněná data pro Marketplace (HolyOS → Site Development → Marketplace).' });
+    if (b.published !== undefined) { if (b.published && !m.title) return res.status(400).json({ error: 'Pro zveřejnění chybí veřejný název (HolyOS → Marketplace).' }); m.published = !!b.published; }
+    if (b.reserved !== undefined) m.reserved = !!b.reserved;
+    m.updated_at = new Date().toISOString(); all[sid] = m;
+    await require('../services/settings').setSetting('site_marketplace', all, { type: 'json', description: 'Lokality — data pro Marketplace lokalit na laundromats.eu' });
+    res.json({ ok: true, published: !!m.published, reserved: !!m.reserved });
+  } catch (err) { next(err); }
+});
 // GET /marketplace/photo/:siteId — vybraná fotka lokality pro Marketplace (Laundromats ji proxuje přihlášeným)
 router.get('/marketplace/photo/:sid(\\d+)', async (req, res, next) => {
   try {

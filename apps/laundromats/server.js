@@ -450,6 +450,8 @@ app.get('/admin/api/users', requireAdmin, api(async () => ({ ok: true, users: (a
 app.post('/admin/api/users/:id(\\d+)/access', requireAdmin, api((req) => { const b = req.body || {}; return holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/access', { page: String(b.page || ''), on: b.on === null || b.on === undefined ? null : !!b.on }); }));
 app.post('/admin/api/users/:id(\\d+)/note', requireAdmin, api((req) => holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/note', { note: String((req.body || {}).note || '').slice(0, 5000) })));
 app.post('/admin/api/users/:id(\\d+)/profile', requireAdmin, api((req) => { const b = req.body || {}; return holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/profile', { name: b.name, phone: b.phone, company: b.company }); }));
+app.get('/admin/api/marketplace', requireAdmin, api(async () => holyosSvc('GET', '/api/auth/lm/accounts/marketplace-admin')));
+app.post('/admin/api/marketplace/:sid(\\d+)', requireAdmin, api((req) => { const b = req.body || {}; const o = {}; if (b.published !== undefined) o.published = !!b.published; if (b.reserved !== undefined) o.reserved = !!b.reserved; return holyosSvc('POST', '/api/auth/lm/accounts/marketplace-admin/' + req.params.sid, o); }));
 app.post('/admin/api/users/:id(\\d+)/marketplace', requireAdmin, api((req) => holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/marketplace', { on: !!(req.body || {}).on })));
 app.post('/admin/api/users/:id(\\d+)/disabled', requireAdmin, api((req) => holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/disabled', { disabled: !!(req.body || {}).disabled })));
 // Sloupcove filtry tabulek bereme primo z HolyOS (/js/column-filters.js), aby se admin
