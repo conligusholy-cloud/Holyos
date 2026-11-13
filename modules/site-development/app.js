@@ -422,11 +422,20 @@ function renderSiteModal() {
 // ne jméno vlastníka, adresu ani přesné GPS (poloha na ~1 km).
 function mpPhotosHtml(photos, selId) {
   if (!photos.length) return '<p class="muted" style="margin:0;font-size:12.5px">Lokalita zatím nemá fotky — nahraj vizualizaci tlačítkem výše, nebo zadej odkaz níže.</p>';
-  return `<div style="display:flex;gap:8px;flex-wrap:wrap">
-    <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="radio" name="mp_photo_id" value="" ${!selId ? 'checked' : ''}><span style="width:96px;height:64px;display:grid;place-items:center;border:1px dashed var(--border);border-radius:8px">bez fotky</span></label>
-    ${photos.map(p => `<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer"><input type="radio" name="mp_photo_id" value="${p.id}" ${Number(selId) === p.id ? 'checked' : ''}><img src="${esc(p.url || '')}" alt="" style="width:96px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border)"></label>`).join('')}
+  const sel = photos.find(p => Number(selId) === p.id);
+  const big = sel
+    ? `<div style="display:flex;gap:14px;align-items:flex-start;margin:0 0 12px;padding:10px;border:1px solid #14b8a6;border-radius:12px;background:rgba(20,184,166,.07)"><img src="${esc(sel.url || '')}" alt="" style="width:220px;height:146px;object-fit:cover;border-radius:10px"><div><div style="font-weight:700;color:#2dd4bf">⭐ Hlavní náhled v Marketplace</div><div class="muted" style="font-size:12.5px;margin-top:4px">Tahle fotka se ukáže jako první na kartě místa. Jinou vybereš kliknutím na miniaturu níže.</div></div></div>`
+    : '<div style="margin:0 0 12px;padding:10px 12px;border:1px dashed var(--border);border-radius:12px;font-size:12.5px" class="muted">Zatím není vybraná žádná náhledová fotka — vyber ji kliknutím na miniaturu níže.</div>';
+  return big + `<div style="display:flex;gap:8px;flex-wrap:wrap">
+    <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="radio" name="mp_photo_id" value="" ${!sel ? 'checked' : ''}><span style="width:96px;height:64px;display:grid;place-items:center;border:1px dashed var(--border);border-radius:8px">bez fotky</span></label>
+    ${photos.map(p => { const on = sel && sel.id === p.id; return `<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;position:relative"><input type="radio" name="mp_photo_id" value="${p.id}" ${on ? 'checked' : ''}><img src="${esc(p.url || '')}" alt="" style="width:96px;height:64px;object-fit:cover;border-radius:8px;border:${on ? '3px solid #14b8a6' : '1px solid var(--border)'};${on ? 'box-shadow:0 0 0 2px rgba(20,184,166,.3)' : ''}">${on ? '<span style="position:absolute;top:22px;left:4px;background:#14b8a6;color:#04201c;font-size:10px;font-weight:800;padding:1px 6px;border-radius:6px">⭐ NÁHLED</span>' : ''}</label>`; }).join('')}
   </div>`;
 }
+// Po výběru jiné miniatury překreslit zvýraznění hlavního náhledu
+document.addEventListener('change', function (e) {
+  const r = e.target.closest && e.target.closest('#mp-photos [name=mp_photo_id]'); if (!r || !currentSite) return;
+  document.getElementById('mp-photos').innerHTML = mpPhotosHtml(currentSite.photos || [], r.value ? Number(r.value) : null);
+});
 // Nahraje vizualizaci jako fotku lokality a rovnou ji vybere jako náhled (rozepsané údaje ve formuláři zůstanou).
 async function mpUploadImage(ev) {
   const file = ev.target.files[0]; if (!file || !currentSite) return;
