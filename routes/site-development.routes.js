@@ -761,6 +761,28 @@ router.post('/:id(\\d+)/photos', async (req, res, next) => {
   }
 });
 
+// Obrázek ze složky DATA/Vizualizace (dokument) → fotka lokality, aby šel použít jako náhled/galerie v Marketplace.
+// Soubor se zkopíruje; když už stejná fotka existuje (stejný popisek i velikost), vrátí se ta původní.
+router.post('/:id(\\d+)/photos/from-document', async (req, res, next) => {
+  try {
+    const siteId = parseInt(req.params.id, 10), did = parseInt((req.body || {}).document_id, 10);
+    const doc = await prisma.siteDocument.findUnique({ where: { id: did } });
+    if (!doc || doc.site_id !== siteId || !doc.file_path) return res.status(404).json({ error: 'Soubor nenalezen' });
+    const ext = String(doc.file_path.split('.').pop() || '').toLowerCase();
+    if (!/^(png|jpe?g|webp|gif)$/.test(ext)) return res.status(400).json({ error: 'Soubor není obrázek (png, jpg, webp, gif).' });
+    const caption = 'Vizualizace: ' + String(doc.title || '').slice(0, 450);
+    const dup = await prisma.sitePhoto.findFirst({ where: { site_id: siteId, caption, size_bytes: doc.size_bytes || null } });
+    if (dup) return res.json(dup);
+    const src = path.join(DATA_ROOT, doc.file_path);
+    if (!src.startsWith(DATA_ROOT) || !fs.existsSync(src)) return res.status(404).json({ error: 'Soubor na disku chybí' });
+    const filename = `site-${siteId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext === 'jpeg' ? 'jpg' : ext}`;
+    fs.copyFileSync(src, path.join(PHOTOS_DIR, filename));
+    const photo = await prisma.sitePhoto.create({ data: { site_id: siteId, file_path: `site-photos/${filename}`, url: `/api/sites/photos/${filename}`, caption,
+      mime_type: doc.mime_type || ('image/' + (ext === 'jpg' ? 'jpeg' : ext)), size_bytes: doc.size_bytes || fs.statSync(src).size, sort_order: 0 } });
+    res.status(201).json(photo);
+  } catch (err) { next(err); }
+});
+
 // Servírování fotky podle filename. Bez auth pro UI — soubor je veřejně
 // nedohádatelný (timestamp+random) a zabraňuje nutnosti Bearer tokenu v <img>.
 // Pokud bude potřeba, lze obalit do requireAuth nebo signed URL.

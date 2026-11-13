@@ -470,6 +470,26 @@ async function mpUploadImage(ev) {
 }
 window.mpUploadImage = mpUploadImage;
 let mpLoaded = false, mpGalleryInit = [];
+// Obrázky ze složky DATA → Vizualizace (a Výstavba → Vizualizace): nabídka k použití jako náhled / do galerie
+function mpDocsHtml(s) {
+  const imgs = (s.documents || []).filter(d => ['data_vizualizace', 'visualization'].includes(d.doc_type) && /\.(png|jpe?g|webp|gif)$/i.test(d.file_path || d.title || ''));
+  if (!imgs.length) return '<p class="muted" style="margin:0 0 8px;font-size:12.5px">Ve složce <b>DATA → Vizualizace</b> zatím nejsou žádné obrázky.</p>';
+  return '<div style="margin:0 0 4px;font-size:12.5px"><b>📁 Obrázky ze složky DATA → Vizualizace</b> <span class="muted">— vyber, co ukázat zákazníkům</span></div><div style="display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px">'
+    + imgs.map(d => `<div style="width:150px;border:1px solid var(--border);border-radius:10px;padding:6px;font-size:11.5px"><img src="/api/sites/documents/${d.id}/download" alt="" style="width:100%;height:90px;object-fit:cover;border-radius:6px"><div style="margin:4px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(d.title || '')}">${esc(d.title || '')}</div><button type="button" class="btn btn-sm btn-primary" style="width:100%;margin-bottom:4px" onclick="mpUseDoc(${d.id}, true)">⭐ Použít jako náhled</button><button type="button" class="btn btn-sm btn-secondary" style="width:100%" onclick="mpUseDoc(${d.id}, false)">＋ Do galerie</button></div>`).join('') + '</div>';
+}
+async function mpUseDoc(docId, asCover) {
+  if (!currentSite) return;
+  try {
+    const r = await fetch('/api/sites/' + currentSite.id + '/photos/from-document', fetchOpts({ method: 'POST', body: JSON.stringify({ document_id: docId }) }));
+    const p = await r.json(); if (!r.ok) throw new Error(p.error || ('chyba ' + r.status));
+    if (!(currentSite.photos || []).some(x => x.id === p.id)) currentSite.photos = (currentSite.photos || []).concat([p]);
+    const gal = [...document.querySelectorAll('#mp-photos [name=mp_gallery]:checked')].map(x => Number(x.value)); if (!gal.includes(p.id)) gal.push(p.id);
+    const curSel = (document.querySelector('#mp-photos [name=mp_photo_id]:checked') || {}).value;
+    document.getElementById('mp-photos').innerHTML = mpPhotosHtml(currentSite.photos, asCover ? p.id : (curSel ? Number(curSel) : null), gal);
+    const st = document.getElementById('mp-up-st'); if (st) { st.textContent = asCover ? '✓ Nastaveno jako náhled — nezapomeň dole kliknout na Uložit.' : '✓ Přidáno do galerie — nezapomeň dole kliknout na Uložit.'; st.style.color = '#4ade80'; }
+  } catch (e) { alert('Nepodařilo se použít obrázek: ' + e.message); }
+}
+window.mpUseDoc = mpUseDoc;
 async function loadMarketplaceTab(s) {
   mpLoaded = false;
   const box = document.getElementById('tab-market'); if (!box || !s || !s.id) return;
@@ -499,7 +519,7 @@ async function loadMarketplaceTab(s) {
       ${f('Okolí a návštěvnost', 'mp_footfall', m.footfall, 'např. supermarket, 15 000 obyvatel ve spádu')}
       <div class="form-row span2"><label>Náhledová fotka / vizualizace pro Marketplace</label>
         <div style="margin:0 0 8px"><label class="btn btn-secondary" style="cursor:pointer;display:inline-block">📤 Nahrát vizualizaci<input type="file" accept="image/*" style="display:none" onchange="mpUploadImage(event)"></label> <span class="muted" id="mp-up-st" style="font-size:12px">nahraje se k fotkám lokality a hned se vybere jako náhled</span></div>
-        <div class="muted" style="font-size:12px;margin:0 0 6px">Zaškrtni <b>v galerii</b> u fotek, které si zákazník může rozkliknout a prohlížet (hlavní náhled je v galerii vždy první). Nezaškrtnuté se zákazníkům nezobrazí.</div><div id="mp-photos">${mpPhotosHtml(s.photos || [], m.photo_id, mpGalleryInit)}</div></div>
+        <div id="mp-docs">${mpDocsHtml(s)}</div><div class="muted" style="font-size:12px;margin:0 0 6px">Zaškrtni <b>v galerii</b> u fotek, které si zákazník může rozkliknout a prohlížet (hlavní náhled je v galerii vždy první). Nezaškrtnuté se zákazníkům nezobrazí.</div><div id="mp-photos">${mpPhotosHtml(s.photos || [], m.photo_id, mpGalleryInit)}</div></div>
       <div class="form-row span2"><label>Nebo obrázek z odkazu (URL, nepovinné)</label><input type="text" name="mp_image_url" value="${esc(m.image_url || '')}" placeholder="https://… (veřejně dostupná fotka nebo vizualizace)"></div>
     </div>
     <p class="muted" style="font-size:12px;margin-top:8px">Prázdná plocha a nájem se doplní z údajů lokality. Ukládá se tlačítkem <b>Uložit</b> dole.</p>`;
