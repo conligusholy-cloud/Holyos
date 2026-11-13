@@ -184,16 +184,21 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .map-vrstva .map-hint{position:static;left:auto;right:auto;top:auto}
 /* Přepínač pohledu vpravo. */
 .map-prep{display:flex;gap:3px;padding:3px;border-radius:11px;pointer-events:auto;
+  flex:0 0 auto;margin-left:auto;
   background:rgba(4,6,12,.9);border:1px solid var(--border);backdrop-filter:blur(10px);
   box-shadow:0 8px 20px rgba(0,0,0,.45)}
 .map-prep button{background:none;border:0;color:var(--text2);font-size:12px;font-weight:700;
-  padding:5px 11px;border-radius:8px}
+  padding:5px 11px;border-radius:8px;white-space:nowrap}
 .map-prep button.on{background:rgba(124,92,255,.26);color:var(--text)}
 /* Odznak servisu vlevo nad mapou. Jedním pohledem řekne, jestli všechno jede. */
-.map-lista{pointer-events:none;display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+/* Odznaků nad mapou přibývá (servis, glóbus, nápověda, zvonek, tržiště) a na
+   úzkém displeji vytlačovaly přepínač pohledu za okraj. Lišta se proto zalamuje
+   a přepínač se v nejhorším případě přesune pod odznaky, ne mimo obrazovku. */
+.map-lista{pointer-events:none;display:flex;align-items:flex-start;justify-content:space-between;
+  gap:8px;flex-wrap:wrap}
 .map-lista>*{pointer-events:auto}
 /* Vlevo stojí odznak servisu a glóbus, vpravo přepínač pohledu. */
-.map-vlevo{display:flex;gap:6px;align-items:flex-start}
+.map-vlevo{display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;min-width:0}
 .map-servis{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:11px;
   background:rgba(4,6,12,.9);border:1px solid var(--border);backdrop-filter:blur(10px);
   color:var(--text2);font-size:12px;font-weight:800;box-shadow:0 8px 20px rgba(0,0,0,.45)}
