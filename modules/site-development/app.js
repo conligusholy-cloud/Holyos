@@ -515,6 +515,7 @@ async function loadMarketplaceTab(s) {
       ${f('Adresa místa (zobrazí se zákazníkům + odkaz na Google Mapy)', 'mp_address', m.address != null ? m.address : [s.address, s.city].filter(Boolean).join(', '), 'např. Sokolovská 113, Litomyšl — když necháš prázdné, ukáže se jen přibližná poloha')}
       ${f('Cena / podmínky', 'mp_price_note', m.price_note, 'např. nájem 12 000 Kč/měs., smlouva na 10 let')}
       ${f('Dostupnost', 'mp_availability', m.availability, 'např. ihned / od jara 2027')}
+      ${f('Obsadit do (termín)', 'mp_occupy_until', m.occupy_until, '', 'date')}
       ${f('Parkování', 'mp_parking', m.parking, 'např. ano, přímo u stání')}
       ${f('Okolí a návštěvnost', 'mp_footfall', m.footfall, 'např. supermarket, 15 000 obyvatel ve spádu')}
       <div class="form-row span2"><label>Náhledová fotka / vizualizace pro Marketplace</label>
@@ -560,7 +561,7 @@ async function saveMarketplace(siteId) {
   const v = (n) => { const el = document.querySelector('.modal [name=' + n + ']'); return el ? (el.type === 'checkbox' ? el.checked : el.value) : null; };
   const body = { published: v('mp_published'), reserved: v('mp_reserved'), title: v('mp_title'), highlight: v('mp_highlight'), description: v('mp_description'),
     area_m2: v('mp_area_m2'), rent_monthly: v('mp_rent_monthly'), price_note: v('mp_price_note'), availability: v('mp_availability'),
-    parking: v('mp_parking'), footfall: v('mp_footfall'), image_url: v('mp_image_url'),
+    parking: v('mp_parking'), footfall: v('mp_footfall'), occupy_until: v('mp_occupy_until'), image_url: v('mp_image_url'),
     energy: v('mp_energy'), connections_price: v('mp_connections_price'), address: v('mp_address'), rent_vat: v('mp_rent_vat'),
     photo_id: (document.querySelector('.modal [name=mp_photo_id]:checked') || {}).value || null,
     gallery: [...document.querySelectorAll('.modal [name=mp_gallery]:checked')].map(x => Number(x.value)) };
