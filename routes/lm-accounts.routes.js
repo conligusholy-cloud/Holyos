@@ -188,7 +188,7 @@ router.get('/marketplace', async (req, res, next) => {
     const all = await jsonSetting('site_marketplace');
     const ids = Object.keys(all).filter((k) => all[k] && all[k].published).map(Number);
     if (!ids.length) return res.json({ ok: true, items: [] });
-    const sites = await prisma.site.findMany({ where: { id: { in: ids } }, select: { id: true, city: true, country: true, latitude: true, longitude: true, area_m2: true, rent_monthly: true, rent_currency: true } });
+    const sites = await prisma.site.findMany({ where: { id: { in: ids } }, select: { id: true, address: true, zip: true, city: true, country: true, latitude: true, longitude: true, area_m2: true, rent_monthly: true, rent_currency: true } });
     const by = new Map(sites.map((x) => [x.id, x]));
     // Lokality, kde správce galerii ještě nenastavil (stará data), ukážou všechny fotky lokality
     const bezGalerie = ids.filter((id) => !Array.isArray(all[id].gallery));
@@ -199,7 +199,7 @@ router.get('/marketplace', async (req, res, next) => {
       return { code: 'L' + id, name: m.title, highlight: m.highlight || null, description: m.description || null, city: x.city, country: x.country,
         lat: r2(x.latitude), lon: r2(x.longitude), area_m2: m.area_m2 != null ? m.area_m2 : (x.area_m2 != null ? Number(x.area_m2) : null),
         rent_monthly: m.rent_monthly != null ? m.rent_monthly : (x.rent_monthly != null ? Number(x.rent_monthly) : null), rent_currency: x.rent_currency || 'CZK',
-        price_note: m.price_note || null, energy: m.energy || null, connections_price: m.connections_price || null, rent_vat: m.rent_vat || 'bez', address: m.address || null, availability: m.availability || null, parking: m.parking || null, footfall: m.footfall || null,
+        price_note: m.price_note || null, energy: m.energy || null, connections_price: m.connections_price || null, rent_vat: m.rent_vat || 'bez', address: m.address || [x.address, [x.zip, x.city].filter(Boolean).join(' ')].filter(Boolean).join(', ') || null, exact: (x.latitude != null && x.longitude != null) ? (Number(x.latitude) + ',' + Number(x.longitude)) : null, availability: m.availability || null, parking: m.parking || null, footfall: m.footfall || null,
         image_url: m.image_url || null, photo: !!m.photo_id,
         photos: [m.photo_id].concat(Array.isArray(m.gallery) ? m.gallery : (vsechnyFotky.get(id) || [])).map(Number).filter((v, i, a) => v > 0 && a.indexOf(v) === i), reserved: !!m.reserved, updated_at: m.updated_at || null };
     }).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
