@@ -420,7 +420,9 @@ function renderSiteModal() {
 // ─── Záložka Marketplace — zdrojová data pro laundromats.eu/cesta/marketplace ───────────────
 // Ukládá se zvlášť (/api/sites/:id/marketplace) při „Uložit". Zákazník uvidí JEN to, co je tady —
 // ne jméno vlastníka, adresu ani přesné GPS (poloha na ~1 km).
-function mpPhotosHtml(photos, selId) {
+function mpPhotosHtml(photos, selId, gal) {
+  if (gal === undefined) { const cur = [...document.querySelectorAll('#mp-photos [name=mp_gallery]:checked')].map(x => Number(x.value)); gal = cur.length || document.querySelector('#mp-photos [name=mp_gallery]') ? cur : (mpGalleryInit || []); }
+  gal = gal || [];
   if (!photos.length) return '<p class="muted" style="margin:0;font-size:12.5px">Lokalita zatím nemá fotky — nahraj vizualizaci tlačítkem výše, nebo zadej odkaz níže.</p>';
   const sel = photos.find(p => Number(selId) === p.id);
   const big = sel
@@ -428,7 +430,7 @@ function mpPhotosHtml(photos, selId) {
     : '<div style="margin:0 0 12px;padding:10px 12px;border:1px dashed var(--border);border-radius:12px;font-size:12.5px" class="muted">Zatím není vybraná žádná náhledová fotka — vyber ji kliknutím na miniaturu níže.</div>';
   return big + `<div style="display:flex;gap:8px;flex-wrap:wrap">
     <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-size:12px"><input type="radio" name="mp_photo_id" value="" ${!sel ? 'checked' : ''}><span style="width:96px;height:64px;display:grid;place-items:center;border:1px dashed var(--border);border-radius:8px">bez fotky</span></label>
-    ${photos.map(p => { const on = sel && sel.id === p.id; return `<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;position:relative"><input type="radio" name="mp_photo_id" value="${p.id}" ${on ? 'checked' : ''}><img src="${esc(p.url || '')}" alt="" style="width:96px;height:64px;object-fit:cover;border-radius:8px;border:${on ? '3px solid #14b8a6' : '1px solid var(--border)'};${on ? 'box-shadow:0 0 0 2px rgba(20,184,166,.3)' : ''}">${on ? '<span style="position:absolute;top:22px;left:4px;background:#14b8a6;color:#04201c;font-size:10px;font-weight:800;padding:1px 6px;border-radius:6px">⭐ NÁHLED</span>' : ''}</label>`; }).join('')}
+    ${photos.map(p => { const on = sel && sel.id === p.id; return `<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;position:relative"><input type="radio" name="mp_photo_id" value="${p.id}" ${on ? 'checked' : ''}><img src="${esc(p.url || '')}" alt="" style="width:96px;height:64px;object-fit:cover;border-radius:8px;border:${on ? '3px solid #14b8a6' : '1px solid var(--border)'};${on ? 'box-shadow:0 0 0 2px rgba(20,184,166,.3)' : ''}">${on ? '<span style="position:absolute;top:22px;left:4px;background:#14b8a6;color:#04201c;font-size:10px;font-weight:800;padding:1px 6px;border-radius:6px">⭐ NÁHLED</span>' : ''}<span style="font-size:11px;display:flex;gap:4px;align-items:center" onclick="event.stopPropagation()"><input type="checkbox" name="mp_gallery" value="${p.id}" ${gal.includes(p.id) || on ? 'checked' : ''} ${on ? 'disabled' : ''}> v galerii</span></label>`; }).join('')}
   </div>`;
 }
 // Po výběru jiné miniatury překreslit zvýraznění hlavního náhledu
@@ -455,13 +457,14 @@ async function mpUploadImage(ev) {
   ev.target.value = '';
 }
 window.mpUploadImage = mpUploadImage;
-let mpLoaded = false;
+let mpLoaded = false, mpGalleryInit = [];
 async function loadMarketplaceTab(s) {
   mpLoaded = false;
   const box = document.getElementById('tab-market'); if (!box || !s || !s.id) return;
   let m = null;
   try { const r = await fetch('/api/sites/' + s.id + '/marketplace', fetchOpts()); const j = await r.json(); m = j.marketplace; } catch (e) { box.innerHTML = '<p class="muted" style="color:#f87171">Marketplace data se nepodařilo načíst.</p>'; return; }
   m = m || {};
+  mpGalleryInit = (m.gallery || []).map(Number);
   const area = s.area_m2 != null ? Number(s.area_m2) : null, rent = s.rent_monthly != null ? Number(s.rent_monthly) : null;
   const f = (label, name, val, ph, type) => `<div class="form-row"><label>${esc(label)}</label><input type="${type || 'text'}" name="${name}" value="${val == null ? '' : esc(val)}" placeholder="${esc(ph || '')}"></div>`;
   box.innerHTML = `<div style="background:rgba(79,209,255,.07);border:1px solid rgba(79,209,255,.3);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.5">
@@ -480,7 +483,7 @@ async function loadMarketplaceTab(s) {
       ${f('Okolí a návštěvnost', 'mp_footfall', m.footfall, 'např. supermarket, 15 000 obyvatel ve spádu')}
       <div class="form-row span2"><label>Náhledová fotka / vizualizace pro Marketplace</label>
         <div style="margin:0 0 8px"><label class="btn btn-secondary" style="cursor:pointer;display:inline-block">📤 Nahrát vizualizaci<input type="file" accept="image/*" style="display:none" onchange="mpUploadImage(event)"></label> <span class="muted" id="mp-up-st" style="font-size:12px">nahraje se k fotkám lokality a hned se vybere jako náhled</span></div>
-        <div id="mp-photos">${mpPhotosHtml(s.photos || [], m.photo_id)}</div></div>
+        <div class="muted" style="font-size:12px;margin:0 0 6px">Zaškrtni <b>v galerii</b> u fotek, které si zákazník může rozkliknout a prohlížet (hlavní náhled je v galerii vždy první). Nezaškrtnuté se zákazníkům nezobrazí.</div><div id="mp-photos">${mpPhotosHtml(s.photos || [], m.photo_id, mpGalleryInit)}</div></div>
       <div class="form-row span2"><label>Nebo obrázek z odkazu (URL, nepovinné)</label><input type="text" name="mp_image_url" value="${esc(m.image_url || '')}" placeholder="https://… (veřejně dostupná fotka nebo vizualizace)"></div>
     </div>
     <p class="muted" style="font-size:12px;margin-top:8px">Prázdná plocha a nájem se doplní z údajů lokality. Ukládá se tlačítkem <b>Uložit</b> dole.</p>`;
@@ -522,7 +525,8 @@ async function saveMarketplace(siteId) {
   const body = { published: v('mp_published'), reserved: v('mp_reserved'), title: v('mp_title'), highlight: v('mp_highlight'), description: v('mp_description'),
     area_m2: v('mp_area_m2'), rent_monthly: v('mp_rent_monthly'), price_note: v('mp_price_note'), availability: v('mp_availability'),
     parking: v('mp_parking'), footfall: v('mp_footfall'), image_url: v('mp_image_url'),
-    photo_id: (document.querySelector('.modal [name=mp_photo_id]:checked') || {}).value || null };
+    photo_id: (document.querySelector('.modal [name=mp_photo_id]:checked') || {}).value || null,
+    gallery: [...document.querySelectorAll('.modal [name=mp_gallery]:checked')].map(x => Number(x.value)) };
   try {
     const r = await fetch('/api/sites/' + siteId + '/marketplace', fetchOpts({ method: 'PUT', body: JSON.stringify(body) }));
     if (!r.ok) { const e = await r.json().catch(() => ({})); return 'Marketplace: ' + (e.error || ('chyba ' + r.status)); }

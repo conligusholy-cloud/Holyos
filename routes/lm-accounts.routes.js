@@ -196,7 +196,8 @@ router.get('/marketplace', async (req, res, next) => {
         lat: r2(x.latitude), lon: r2(x.longitude), area_m2: m.area_m2 != null ? m.area_m2 : (x.area_m2 != null ? Number(x.area_m2) : null),
         rent_monthly: m.rent_monthly != null ? m.rent_monthly : (x.rent_monthly != null ? Number(x.rent_monthly) : null), rent_currency: x.rent_currency || 'CZK',
         price_note: m.price_note || null, availability: m.availability || null, parking: m.parking || null, footfall: m.footfall || null,
-        image_url: m.image_url || null, photo: !!m.photo_id, reserved: !!m.reserved, updated_at: m.updated_at || null };
+        image_url: m.image_url || null, photo: !!m.photo_id,
+        photos: [m.photo_id].concat(Array.isArray(m.gallery) ? m.gallery : []).map(Number).filter((v, i, a) => v > 0 && a.indexOf(v) === i), reserved: !!m.reserved, updated_at: m.updated_at || null };
     }).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
     res.json({ ok: true, items });
   } catch (err) { next(err); }
@@ -205,8 +206,11 @@ router.get('/marketplace', async (req, res, next) => {
 router.get('/marketplace/photo/:sid(\\d+)', async (req, res, next) => {
   try {
     const sid = parseInt(req.params.sid, 10), m = (await jsonSetting('site_marketplace'))[sid];
-    if (!m || !m.published || !m.photo_id) return res.status(404).end();
-    const ph = await prisma.sitePhoto.findUnique({ where: { id: Number(m.photo_id) } });
+    if (!m || !m.published) return res.status(404).end();
+    const povolene = [m.photo_id].concat(Array.isArray(m.gallery) ? m.gallery : []).map(Number).filter((v) => v > 0);
+    const pid = req.query.p ? Number(req.query.p) : Number(m.photo_id);
+    if (!pid || !povolene.includes(pid)) return res.status(404).end();
+    const ph = await prisma.sitePhoto.findUnique({ where: { id: pid } });
     if (!ph || ph.site_id !== sid) return res.status(404).end();
     const path = require('path'), fs = require('fs');
     const dir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', 'data'), 'site-photos');

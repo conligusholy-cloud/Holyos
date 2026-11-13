@@ -276,7 +276,7 @@ module.exports = function createAccounts(ctx) {
       const sid = (/^L(\d+)$/.exec(String(req.params.code || '')) || [])[1]; if (!sid || !LM_SECRET) return res.status(404).end();
       const token = jwt.sign({ aud: 'holyos-api', iss: 'laundromats' }, LM_SECRET, { expiresIn: '1m' });
       try {
-        const r = await fetch(HOLYOS_URL + '/api/auth/lm/accounts/marketplace/photo/' + sid, { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(15000) });
+        const r = await fetch(HOLYOS_URL + '/api/auth/lm/accounts/marketplace/photo/' + sid + (/^\d+$/.test(String(req.query.p || '')) ? '?p=' + req.query.p : ''), { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(15000) });
         if (!r.ok) return res.status(404).end();
         res.set('Content-Type', r.headers.get('content-type') || 'image/jpeg').set('Cache-Control', 'private, max-age=3600').send(Buffer.from(await r.arrayBuffer()));
       } catch (e) { res.status(502).end(); }
@@ -289,8 +289,10 @@ module.exports = function createAccounts(ctx) {
       if (!Array.isArray(spots)) spots = [];
       const cz = (n) => Number(n).toLocaleString('cs-CZ', { maximumFractionDigits: 0 });
       const kv = (l, v) => (v == null || v === '' ? '' : `<div class="mp-kv"><span>${l}</span><b>${v}</b></div>`);
+      // Všechny fotky lokality (hlavní náhled první), případně obrázek z odkazu
+      const imgs = (s) => (Array.isArray(s.photos) && s.photos.length ? s.photos.map((id, i) => '/cesta/marketplace/foto/' + encodeURIComponent(s.code || '') + '?p=' + id) : (s.image_url ? [s.image_url] : (s.photo ? ['/cesta/marketplace/foto/' + encodeURIComponent(s.code || '')] : [])));
       const card = (s) => `<div class="card mp-card" data-q="${esc([s.name, s.city, s.country].filter(Boolean).join(' ').toLowerCase())}">
-          <div class="mp-img">${s.image_url || s.photo ? `<img src="${esc(s.image_url || ('/cesta/marketplace/foto/' + encodeURIComponent(s.code || '')))}" alt="" loading="lazy">` : `<div class="mp-noimg">${IC.marketplace}</div>`}${s.reserved ? '<span class="mp-st res">Rezervováno</span>' : '<span class="mp-st">Volné</span>'}</div>
+          <div class="mp-img"${imgs(s).length ? ` data-imgs="${esc(JSON.stringify(imgs(s)))}" title="Klikněte pro zobrazení fotek"` : ''}>${imgs(s).length ? `<img src="${esc(imgs(s)[0])}" alt="" loading="lazy">${imgs(s).length > 1 ? `<span class="mp-cnt">1 / ${imgs(s).length}</span><button type="button" class="mp-nav prev" aria-label="Předchozí">‹</button><button type="button" class="mp-nav next" aria-label="Další">›</button>` : ''}` : `<div class="mp-noimg">${IC.marketplace}</div>`}${s.reserved ? '<span class="mp-st res">Rezervováno</span>' : '<span class="mp-st">Volné</span>'}</div>
           <div class="mp-body"><h3>${esc(s.name)}</h3><p class="muted small" style="margin:0 0 8px">📍 ${esc([s.city, s.country && s.country !== 'CZ' ? s.country : ''].filter(Boolean).join(', ') || '—')} <span title="Přesné místo probereme na schůzce">(přibližně)</span></p>
           ${s.highlight ? `<p class="mp-hl">${esc(s.highlight)}</p>` : ''}${s.description ? `<p class="small" style="margin:0 0 10px;line-height:1.5;white-space:pre-line">${esc(s.description)}</p>` : ''}
           ${kv('Nájem / měsíc', s.rent_monthly != null ? cz(s.rent_monthly) + ' ' + (s.rent_currency === 'EUR' ? '€' : 'Kč') : null)}
@@ -301,6 +303,10 @@ module.exports = function createAccounts(ctx) {
       const body = CSS + `<style>.mp-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 4px}.mp-tools input{max-width:320px;margin:0}
         .mp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-top:14px}.mp-card{margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column}
         .mp-img{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,rgba(79,209,255,.12),rgba(124,92,255,.12))}.mp-img img{width:100%;height:100%;object-fit:cover;display:block}
+        .mp-img[data-imgs]{cursor:zoom-in}.mp-cnt{position:absolute;bottom:10px;right:10px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(4,6,12,.75);color:#fff}
+        .mp-nav{position:absolute;top:50%;transform:translateY(-50%);width:32px;height:32px;border-radius:50%;border:0;background:rgba(4,6,12,.65);color:#fff;font-size:22px;line-height:1;cursor:pointer;display:grid;place-items:center;padding:0}.mp-nav.prev{left:8px}.mp-nav.next{right:8px}.mp-nav:hover{background:rgba(79,209,255,.85);color:#04121c}
+        #mp-lb{position:fixed;inset:0;z-index:99999;background:rgba(2,6,14,.92);display:none;align-items:center;justify-content:center}#mp-lb.open{display:flex}#mp-lb img{max-width:92vw;max-height:88vh;border-radius:10px;box-shadow:0 10px 50px rgba(0,0,0,.6)}
+        #mp-lb .mp-nav{width:46px;height:46px;font-size:30px}#mp-lb .lb-x{position:absolute;top:14px;right:18px;background:none;border:0;color:#fff;font-size:34px;cursor:pointer;line-height:1}#mp-lb .lb-c{position:absolute;bottom:16px;left:0;right:0;text-align:center;color:#cbd5e1;font-size:13px}
         .mp-noimg{height:100%;display:grid;place-items:center;opacity:.6}.mp-noimg svg{width:56px;height:56px}
         .mp-st{position:absolute;top:10px;left:10px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:rgba(34,197,94,.9);color:#04130a}.mp-st.res{background:rgba(245,158,11,.92);color:#1a1200}
         .mp-score{position:absolute;top:10px;right:10px;font-weight:800;padding:3px 9px;border-radius:10px;background:rgba(4,6,12,.75);border:1px solid rgba(79,209,255,.4)}.mp-score small{opacity:.6;font-weight:600}
@@ -311,7 +317,18 @@ module.exports = function createAccounts(ctx) {
         ${spots.length ? `<div class="mp-tools"><input type="search" id="mp-q" placeholder="Hledat město nebo oblast…" autocomplete="off"><span class="muted small" id="mp-n">${spots.length} ${spots.length === 1 ? 'lokalita' : spots.length < 5 ? 'lokality' : 'lokalit'}</span></div>
           <div class="mp-grid" id="mp-grid">${spots.map(card).join('')}</div>`
           : (chyba ? '' : '<div class="card" style="margin-top:14px"><p style="margin:0">Momentálně tu nejsou žádné volné lokality. Nové přidáváme průběžně — pokud hledáte konkrétní oblast, <a href="/cesta/schuzka">domluvte si online schůzku</a>.</p></div>')}
-        <script>(function(){var q=document.getElementById('mp-q');if(q)q.addEventListener('input',function(){var v=q.value.trim().toLowerCase(),n=0;document.querySelectorAll('.mp-card').forEach(function(c){var ok=!v||c.getAttribute('data-q').indexOf(v)!==-1;c.style.display=ok?'':'none';if(ok)n++;});document.getElementById('mp-n').textContent=n+' zobrazeno';});
+        <div id="mp-lb"><button type="button" class="lb-x" aria-label="Zavřít">×</button><button type="button" class="mp-nav prev" aria-label="Předchozí">‹</button><img alt=""><button type="button" class="mp-nav next" aria-label="Další">›</button><div class="lb-c"></div></div>
+        <script>(function(){
+          var lb=document.getElementById('mp-lb'),lbi=lb.querySelector('img'),lbc=lb.querySelector('.lb-c'),cur=[],ix=0;
+          function show(){lbi.src=cur[ix];lbc.textContent=cur.length>1?(ix+1)+' / '+cur.length:'';lb.querySelectorAll('.mp-nav').forEach(function(b){b.style.display=cur.length>1?'':'none';});}
+          function open(list,i){cur=list;ix=i;show();lb.classList.add('open');}
+          function step(d){ix=(ix+d+cur.length)%cur.length;show();}
+          lb.addEventListener('click',function(e){if(e.target.closest('.lb-x')||e.target===lb)lb.classList.remove('open');else if(e.target.closest('.prev'))step(-1);else if(e.target.closest('.next'))step(1);});
+          document.addEventListener('keydown',function(e){if(!lb.classList.contains('open'))return;if(e.key==='Escape')lb.classList.remove('open');else if(e.key==='ArrowLeft')step(-1);else if(e.key==='ArrowRight')step(1);});
+          document.querySelectorAll('.mp-img[data-imgs]').forEach(function(box){var list=[];try{list=JSON.parse(box.getAttribute('data-imgs'));}catch(e){}if(!list.length)return;var i=0,img=box.querySelector('img'),cnt=box.querySelector('.mp-cnt');
+            function go(n){i=(n+list.length)%list.length;img.src=list[i];if(cnt)cnt.textContent=(i+1)+' / '+list.length;}
+            box.addEventListener('click',function(e){if(e.target.closest('.prev')){go(i-1);return;}if(e.target.closest('.next')){go(i+1);return;}open(list,i);});});
+          var q=document.getElementById('mp-q');if(q)q.addEventListener('input',function(){var v=q.value.trim().toLowerCase(),n=0;document.querySelectorAll('.mp-card').forEach(function(c){var ok=!v||c.getAttribute('data-q').indexOf(v)!==-1;c.style.display=ok?'':'none';if(ok)n++;});document.getElementById('mp-n').textContent=n+' zobrazeno';});
           document.querySelectorAll('.mp-want').forEach(function(a){a.addEventListener('click',function(){try{if(window.lmTrack)lmTrack('marketplace_interest',{code:a.getAttribute('data-code')});}catch(e){}});});
           try{if(window.lmTrack)lmTrack('marketplace_view',{n:${spots.length}});}catch(e){}})();</script>`;
       send(req, res, 'Marketplace lokalit', body);
