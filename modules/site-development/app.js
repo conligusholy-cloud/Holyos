@@ -356,7 +356,7 @@ function openCompareModal() {
 window.openCompareModal = openCompareModal;
 
 // ─── Modal helpers ─────────────────────────────────────────────────────────
-function openModal(html) { document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this) closeModal()"><div class="modal">' + html + '</div></div>'; }
+function openModal(html) { document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this) closeModal()"><div class="modal"><div style="position:sticky;top:0;height:0;z-index:20;text-align:right;overflow:visible"><button type="button" onclick="closeModal()" title="Zavřít (Esc)" style="position:relative;top:-6px;right:-8px;width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--surface,#1e293b);color:var(--text,#e2e8f0);font-size:20px;line-height:1;cursor:pointer;padding:0">×</button></div>' + html + '</div></div>'; }
 function closeModal() { document.getElementById('modal-root').innerHTML = ''; currentSite = null; }
 // Esc zavře okno (kromě případu, kdy píšeš do pole s rozepsaným textem a okno je rozsáhlé — tam stačí druhé stisknutí)
 document.addEventListener('keydown', function (e) {
