@@ -511,7 +511,7 @@ async function loadMarketplaceTab(s) {
       ${f('Nájem / měsíc', 'mp_rent_monthly', m.rent_monthly != null ? m.rent_monthly : '', rent != null ? 'z lokality: ' + rent : '', 'number')}
       <div class="form-row"><label>Nájem je uveden</label><select name="mp_rent_vat"><option value="bez" ${(m.rent_vat || 'bez') === 'bez' ? 'selected' : ''}>bez DPH</option><option value="s" ${m.rent_vat === 's' ? 'selected' : ''}>s DPH</option><option value="neplatce" ${m.rent_vat === 'neplatce' ? 'selected' : ''}>vlastník není plátce DPH</option></select></div>
       ${f('Energie — jak jsou řešeny', 'mp_energy', m.energy, 'např. podružný elektroměr, platí se podle spotřeby; voda paušálem')}
-      ${f('Cena přípojek', 'mp_connections_price', m.connections_price, 'např. přípojky hradí vlastník / 45 000 Kč bez DPH jednorázově')}
+      ${f('Cena přípojek (Kč bez DPH)', 'mp_connections_price', m.connections_price, 'jen číslo v Kč bez DPH, např. 125000 — nebo text, např. přípojky hradí vlastník')}
       ${f('Adresa místa (zobrazí se zákazníkům + odkaz na Google Mapy)', 'mp_address', m.address != null ? m.address : [s.address, s.city].filter(Boolean).join(', '), 'např. Sokolovská 113, Litomyšl — když necháš prázdné, ukáže se jen přibližná poloha')}
       ${f('Cena / podmínky', 'mp_price_note', m.price_note, 'např. nájem 12 000 Kč/měs., smlouva na 10 let')}
       ${f('Dostupnost', 'mp_availability', m.availability, 'např. ihned / od jara 2027')}
