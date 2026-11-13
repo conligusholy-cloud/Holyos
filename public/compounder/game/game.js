@@ -1351,6 +1351,8 @@ function fresh(profileId) {
     hovoru: 0,        // kolik hovorů už má za sebou — bez nich se do žebříčku nepočítá
     hovorZa: null,    // za jak dlouho strávených ve hře zazvoní další hovor
     hovoryPosl: [],   // rozhovory, které už padly — ať se hned neopakují
+    hovorLog: [],     // evidence hovorů — kdo volal a jak to dopadlo
+    linkaSam: false,  // true = hovory si beru sám i s kreditem na lince
     stats: { earned: 0, interest: 0 },
     hist: []          // vývoj po herních měsících — tržby, zisk, dluh, počet prádlomatů
   };
@@ -1408,6 +1410,8 @@ function dosypStav(o) {
     if (typeof o.povest !== 'number') o.povest = 0;
     if (typeof o.hovoru !== 'number') o.hovoru = 0;
     if (!Array.isArray(o.hovoryPosl)) o.hovoryPosl = [];
+    if (!Array.isArray(o.hovorLog)) o.hovorLog = [];
+    if (typeof o.linkaSam !== 'boolean') o.linkaSam = false;
     delete o.otazkyPosl;   // dřív se pamatovaly jednotlivé otázky, teď celé rozhovory
     // Rozehraná hra z doby před sídly: za sídlo bereme místo, kde hráč postavil
     // první prádlomat. Bez toho by mu doprava vycházela zdarma a pobočku by
@@ -3142,6 +3146,29 @@ function hovorLze() {
     && !document.hidden && !pisePrave()
     && $('sheet').classList.contains('hidden');
 }
+// ─── Evidence hovorů ─────────────────────────────────────────────────────────
+// Posledních padesát hovorů: kdo volal, o co šlo a jak to dopadlo. Hráč, který
+// si platí operátora, jinak nemá jak zjistit, co za něj linka vyřídila.
+var HOVORU_PAMET = 50;
+function zapisHovor(jmeno, kroky, konec, zmena) {
+  var prvni = kroky && kroky[0] ? String(kroky[0].t || '') : '';
+  S.hovorLog = ((S.hovorLog) || []).concat([{
+    kdy: Date.now(), jmeno: jmeno || '', tema: prvni.slice(0, 90),
+    konec: konec, zmena: Math.round((zmena || 0) * 10) / 10
+  }]).slice(-HOVORU_PAMET);
+}
+// Zaplacený kredit znamená klid: hovor vyřídí operátor a telefon vůbec
+// nezazvoní. Kdo chce hovory brát sám (vynesou víc), přepne si to v kartě.
+function operatorVyridi() {
+  var sc = vyberScenar();
+  var jmeno = hovorJmeno(sc.rod);
+  S.hovoryPosl = (S.hovoryPosl || []).concat([sc.id]).slice(-SCENARU_PAMET);
+  S.linka = Math.max(0, (S.linka || 0) - 1);
+  S.hovoru = (S.hovoru || 0) + 1;
+  zapisHovor(jmeno, sc.kroky, 'operator', 0);
+  naplanujHovor();
+  save(); paint(); syncState(true);
+}
 function hovorTik(dt) {
   if (!S || document.hidden) return;
   if (HOVOR) { hovorHlidej(); return; }
@@ -3149,6 +3176,8 @@ function hovorTik(dt) {
   if (typeof S.hovorZa !== 'number') { naplanujHovor(); return; }
   S.hovorZa -= dt;
   if (S.hovorZa > 0) return;
+  // Dokud je kredit a hráč si hovory nebere sám, bere je operátor potichu.
+  if ((S.linka || 0) > 0 && !S.linkaSam) { operatorVyridi(); return; }
   if (!hovorLze()) return;              // později to zazvoní znovu
   zacniHovor();
 }
@@ -3185,6 +3214,8 @@ function odmitniHovor(samo) {
   if (operator) S.linka = S.linka - 1;
   else zmenPovest(povestZaOdpoved(HOVOR_ODMITNUTI));
   S.hovoru = (S.hovoru || 0) + 1;
+  zapisHovor(HOVOR.jmeno, HOVOR.kroky, operator ? 'operator' : 'nevzat',
+    operator ? 0 : povestZaOdpoved(HOVOR_ODMITNUTI));
   HOVOR = null;
   naplanujHovor();
   zavriHovor();
@@ -3254,6 +3285,7 @@ function hovorDal() {
     HOVOR.stav = 'konec';
     zmenPovest(HOVOR.vaha);
     S.hovoru = (S.hovoru || 0) + 1;
+    zapisHovor(HOVOR.jmeno, HOVOR.kroky, 'ja', HOVOR.vaha);
     save(); paint(); syncState(true);
   }
   paintHovor();
@@ -11296,6 +11328,11 @@ function paintCards() {
   [].forEach.call(box.querySelectorAll('[data-linka]'), function (el) {
     el.onclick = function () { buyCash(el.getAttribute('data-linka')); };
   });
+  if ($('linka-sam')) $('linka-sam').onclick = function () {
+    S.linkaSam = !S.linkaSam; save(); syncState(true); paintCards();
+    toast(S.linkaSam ? 'Hovory si bereš sám — telefon zase zvoní.'
+      : 'Hovory bere operátor. Telefon ti nezazvoní, dokud máš kredit.', 'ok');
+  };
   [].forEach.call(box.querySelectorAll('[data-use]'), function (b) { b.onclick = function () { useCard(b.getAttribute('data-use')); }; });
   [].forEach.call(box.querySelectorAll('[data-buy-card]'), function (b) { b.onclick = function () { buyCard(b.getAttribute('data-buy-card')); }; });
 }
@@ -11311,6 +11348,16 @@ function linkaPacksHtml() {
     + 'Kredit je jeden hovor, který vezme operátor místo tebe — pověst pak neklesne, '
     + 'i když zrovna nejsi ve hře. Hovor, který si vezmeš sám a zvládneš ho, pořád vynese víc.</p>'
     + '<div class="kv"><span>Nevyčerpané hovory</span><b' + (zbyva ? ' class="ok"' : '') + '>' + zbyva + '</b></div>'
+    // Kdo má kredit, má mít klid: telefon nezvoní vůbec. Kdo chce vydělávat
+    // víc a hovory si brát sám, přepne si to tady.
+    + (zbyva
+        ? '<div class="kv"><span>Hovory si beru sám</span>'
+          + '<button class="prep-sam' + (S.linkaSam ? ' on' : '') + '" id="linka-sam">'
+          + (S.linkaSam ? 'Zapnuto' : 'Vypnuto') + '</button></div>'
+          + '<p class="fine">' + (S.linkaSam
+              ? 'Telefon zvoní jako dřív. Kredit se strhne jen u hovoru, který nestihneš.'
+              : 'Hovory vyřizuje operátor a telefon ti vůbec nezazvoní. Najdeš je v evidenci níž.') + '</p>'
+        : '')
     + (PAYMENTS_ON
         ? LINKA_CAT.map(function (c) {
             return '<div class="pack" data-linka="' + esc(c.kind) + '">'
@@ -11320,7 +11367,41 @@ function linkaPacksHtml() {
           }).join('')
           + '<p class="fine">Platbu zpracovává Stripe. Hovory se připíšou hned po zaplacení.</p>'
         : '<p class="fine">Prodej se teprve spouští.</p>')
+    + hovorLogHtml()
     + '</div>';
+}
+// Evidence hovorů. Ukazujeme posledních dvacet z padesáti, co si hra pamatuje —
+// u každého, kdo volal, o co šlo a jestli ho vzal hráč, nebo operátor.
+function hovorLogHtml() {
+  var l = ((S && S.hovorLog) || []).slice().reverse().slice(0, 20);
+  if (!l.length) return '';
+  var kolik = ((S && S.hovorLog) || []).length;
+  var vzal = { ja: 'vzal jsem', operator: 'vzal operátor', nevzat: 'nevzatý' };
+  return '<h3 style="margin:18px 0 2px">Evidence hovorů</h3>'
+    + '<p class="muted small" style="margin:0 0 8px">'
+    + mn(l.length, 'Poslední hovor', 'Poslední ' + l.length + ' hovory', 'Posledních ' + l.length + ' hovorů')
+    + (kolik > l.length ? ' z ' + kolik + ' zapsaných' : '') + '.</p>'
+    + '<div class="hov-log">' + l.map(function (z) {
+        var tr = z.konec === 'ja' ? (z.zmena > 0 ? 'ok' : (z.zmena < 0 ? 'err' : 'muted'))
+          : (z.konec === 'operator' ? 'muted' : 'err');
+        return '<div class="hov-radek">'
+          + '<div class="hov-kdo"><b>' + esc(z.jmeno) + '</b><i>' + esc(z.tema) + '</i></div>'
+          + '<div class="hov-vysl"><span class="' + tr + '">' + (vzal[z.konec] || z.konec) + '</span>'
+          + '<em>' + casPred(z.kdy)
+          + (z.zmena ? ' · pověst ' + (z.zmena > 0 ? '+' : '\u2212')
+              + String(Math.abs(z.zmena)).replace('.', ',') : '') + '</em></div></div>';
+      }).join('') + '</div>';
+}
+// „před 4 min" se čte líp než čas, protože hovory padají po minutách.
+function casPred(kdy) {
+  var s = Math.max(0, Math.round((Date.now() - kdy) / 1000));
+  if (s < 90) return 'před chvílí';
+  var m = Math.round(s / 60);
+  if (m < 60) return 'před ' + m + ' min';
+  var h = Math.round(m / 60);
+  if (h < 24) return 'před ' + h + ' ' + mn(h, 'hodinou', 'hodinami', 'hodinami');
+  var d = Math.round(h / 24);
+  return 'před ' + d + ' ' + mn(d, 'dnem', 'dny', 'dny');
 }
 // Karta předplatného — jediná věc ve hře, která se strhává opakovaně, takže
 // se o tom musí psát narovinu: co to stojí, kdy se to strhne a jak to zrušit.

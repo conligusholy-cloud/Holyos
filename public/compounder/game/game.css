@@ -1127,3 +1127,18 @@ button.kv:active{background:rgba(124,92,255,.12)}
   .map-prep button b{display:none}
   .map-prep button i{display:inline}
 }
+
+/* ── Evidence hovorů a přepínač „beru si je sám" ────────────────────────────── */
+.prep-sam{background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text2);
+  font:inherit;font-size:12px;font-weight:800;padding:5px 12px;border-radius:9px;white-space:nowrap}
+.prep-sam.on{background:rgba(124,92,255,.26);border-color:rgba(124,92,255,.6);color:var(--text)}
+.hov-log{border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.hov-radek{display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:1px solid var(--border)}
+.hov-radek:first-child{border-top:0}
+.hov-kdo{flex:1;min-width:0}
+.hov-kdo b{display:block;font-size:13.5px}
+.hov-kdo i{display:block;font-style:normal;font-size:11.5px;color:var(--text2);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hov-vysl{flex:0 0 auto;text-align:right}
+.hov-vysl span{display:block;font-size:12px;font-weight:800}
+.hov-vysl em{font-style:normal;font-size:11px;color:var(--text3)}
