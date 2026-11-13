@@ -48,7 +48,12 @@ const ALL_COLUMNS = [
 const COL_STORAGE = 'siteDev.cols';
 function getActiveCols() {
   const stored = localStorage.getItem(COL_STORAGE);
-  if (stored) { try { return new Set(JSON.parse(stored)); } catch(e){} }
+  if (stored) { try {
+    const set = new Set(JSON.parse(stored));
+    // Nový sloupec Marketplace se uložené sadě jednorázově doplní (jinak by ho kdo má vlastní výběr sloupců neviděl)
+    if (!localStorage.getItem(COL_STORAGE + '.market')) { set.add('market'); localStorage.setItem(COL_STORAGE + '.market', '1'); localStorage.setItem(COL_STORAGE, JSON.stringify([...set])); }
+    return set;
+  } catch(e){} }
   return new Set(ALL_COLUMNS.filter(c => c.always || c.def).map(c => c.id));
 }
 let activeCols = getActiveCols();
@@ -190,7 +195,7 @@ const SITE_COL_DEF = {
   permit:   { type:'text', get: s => s.building_permit_note || '' },
   score:    { type:'num',  get: s => s.score == null ? null : Number(s.score) },
   comms:    { type:'num',  get: s => s._count ? s._count.communications : 0 },
-  market:   { type:'text', get: s => s.marketplace === 'nabízí se' ? 'Nabízí se' : s.marketplace === 'rezervováno' ? 'Rezervováno' : 'Ne' },
+  market:   { type:'text', get: s => s.marketplace === 'nabízí se' ? 'ANO' : s.marketplace === 'rezervováno' ? 'ANO · rezervováno' : 'NE' },
   updated:  { type:'date', get: s => s.updated_at || null },
 };
 
@@ -235,7 +240,7 @@ function renderTable() {
           return `<td><span class="score-bar"><div style="width:${s.score}%"></div></span>${s.score}</td>`;
         }
         case 'comms':   return `<td>${s._count ? s._count.communications : 0}</td>`;
-        case 'market':  return `<td>${s.marketplace === 'nabízí se' ? '<span class="badge badge-operational">🛒 Nabízí se</span>' : s.marketplace === 'rezervováno' ? '<span class="badge badge-negotiating">Rezervováno</span>' : '<span class="muted">Ne</span>'}</td>`;
+        case 'market':  return `<td>${s.marketplace === 'nabízí se' ? '<span class="badge badge-operational">🛒 ANO</span>' : s.marketplace === 'rezervováno' ? '<span class="badge badge-negotiating">ANO · rezervováno</span>' : '<span class="badge badge-lost">NE</span>'}</td>`;
         case 'updated': return `<td title="${esc(s.updated_at)}">${esc(fmtRel(s.updated_at))}</td>`;
         default: return '<td>—</td>';
       }
@@ -353,6 +358,13 @@ window.openCompareModal = openCompareModal;
 // ─── Modal helpers ─────────────────────────────────────────────────────────
 function openModal(html) { document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this) closeModal()"><div class="modal">' + html + '</div></div>'; }
 function closeModal() { document.getElementById('modal-root').innerHTML = ''; currentSite = null; }
+// Esc zavře okno (kromě případu, kdy píšeš do pole s rozepsaným textem a okno je rozsáhlé — tam stačí druhé stisknutí)
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Escape') return;
+  const root = document.getElementById('modal-root'); if (!root || !root.firstChild) return;
+  if (document.getElementById('photo-lightbox')) return; // lightbox fotek má vlastní zavírání
+  closeModal();
+});
 window.closeModal = closeModal;
 
 // ─── Detail / editace lokality ─────────────────────────────────────────────
@@ -477,6 +489,10 @@ async function loadMarketplaceTab(s) {
       <div class="form-row span2"><label>Veřejný popis</label><textarea name="mp_description" placeholder="Co je v okolí, proč je místo dobré, co je připravené (přípojky, souhlas vlastníka…)">${esc(m.description || '')}</textarea></div>
       ${f('Plocha (m²)', 'mp_area_m2', m.area_m2 != null ? m.area_m2 : '', area != null ? 'z lokality: ' + area : '', 'number')}
       ${f('Nájem / měsíc', 'mp_rent_monthly', m.rent_monthly != null ? m.rent_monthly : '', rent != null ? 'z lokality: ' + rent : '', 'number')}
+      <div class="form-row"><label>Nájem je uveden</label><select name="mp_rent_vat"><option value="bez" ${(m.rent_vat || 'bez') === 'bez' ? 'selected' : ''}>bez DPH</option><option value="s" ${m.rent_vat === 's' ? 'selected' : ''}>s DPH</option><option value="neplatce" ${m.rent_vat === 'neplatce' ? 'selected' : ''}>vlastník není plátce DPH</option></select></div>
+      ${f('Energie — jak jsou řešeny', 'mp_energy', m.energy, 'např. podružný elektroměr, platí se podle spotřeby; voda paušálem')}
+      ${f('Cena přípojek', 'mp_connections_price', m.connections_price, 'např. přípojky hradí vlastník / 45 000 Kč bez DPH jednorázově')}
+      ${f('Odkaz na Google Mapy (nepovinné)', 'mp_maps_url', m.maps_url, 'https://maps.app.goo.gl/… — bez něj se ukáže přibližná poloha (~1 km)')}
       ${f('Cena / podmínky', 'mp_price_note', m.price_note, 'např. nájem 12 000 Kč/měs., smlouva na 10 let')}
       ${f('Dostupnost', 'mp_availability', m.availability, 'např. ihned / od jara 2027')}
       ${f('Parkování', 'mp_parking', m.parking, 'např. ano, přímo u stání')}
@@ -525,6 +541,7 @@ async function saveMarketplace(siteId) {
   const body = { published: v('mp_published'), reserved: v('mp_reserved'), title: v('mp_title'), highlight: v('mp_highlight'), description: v('mp_description'),
     area_m2: v('mp_area_m2'), rent_monthly: v('mp_rent_monthly'), price_note: v('mp_price_note'), availability: v('mp_availability'),
     parking: v('mp_parking'), footfall: v('mp_footfall'), image_url: v('mp_image_url'),
+    energy: v('mp_energy'), connections_price: v('mp_connections_price'), maps_url: v('mp_maps_url'), rent_vat: v('mp_rent_vat'),
     photo_id: (document.querySelector('.modal [name=mp_photo_id]:checked') || {}).value || null,
     gallery: [...document.querySelectorAll('.modal [name=mp_gallery]:checked')].map(x => Number(x.value)) };
   try {
