@@ -146,6 +146,28 @@ const SUB_KINDS = Object.keys(SUBS);
 const CASH_CUSTOM = 'cash_dar';
 const ALL = Object.assign({}, CARDS, CASH, SUBS, LINKA);
 
+// ─── Nastavení hry ───────────────────────────────────────────────────────────
+// Přepínače, které jde cvaknout z administrace bez nasazování. Držíme je
+// půl minuty v paměti, ať se kvůli každému načtení hry nechodí do databáze.
+const NASTAVENI_VYCHOZI = { onboarding_rychly: '1' };
+let _nast = { at: 0, map: null };
+async function nastaveni() {
+  if (_nast.map && Date.now() - _nast.at < 30e3) return _nast.map;
+  const m = Object.assign({}, NASTAVENI_VYCHOZI);
+  try {
+    const rows = await prisma.gameSetting.findMany();
+    rows.forEach((r) => { m[r.klic] = r.hodnota; });
+  } catch (e) { console.warn('[game] nastavení:', e.message); }
+  _nast = { at: Date.now(), map: m };
+  return m;
+}
+function dropNastaveni() { _nast = { at: 0, map: null }; }
+// Zrychlený onboarding: hotová města hned, první obhlídka zdarma, nájem na
+// jedno klepnutí a první stroj doručený okamžitě.
+async function rychlyOnboarding() {
+  return (await nastaveni()).onboarding_rychly !== '0';
+}
+
 // ─── Ceník z databáze ────────────────────────────────────────────────────────
 // Hodnoty výš jsou jen výchozí. Co platí doopravdy, je v tabulce game_prices —
 // ceny se tak mění v administraci bez nasazování. Držíme je minutu v paměti,
@@ -917,6 +939,7 @@ router.get('/cards', async (req, res, next) => {
     res.json({
       ok: true, catalog: await catalogPublic(), cash: await cashPublic(),
       linka: await linkaPublic(),
+      onboarding_rychly: await rychlyOnboarding(),
       subs: await subsPublic(), predplatne: await predplatneHrace(p),
       payments: require('./game-stripe.routes')._paymentsOn(),
       owned: p ? (await pub(p)).cards : null,
@@ -1718,6 +1741,9 @@ module.exports._subKinds = SUB_KINDS;
 module.exports._linkaKinds = LINKA_KINDS;
 module.exports._predplatneHrace = predplatneHrace;
 module.exports._dropPrices = dropPrices;
+module.exports._nastaveni = nastaveni;
+module.exports._dropNastaveni = dropNastaveni;
+module.exports._rychlyOnboarding = rychlyOnboarding;
 module.exports._defaults = ALL;
 module.exports._cashCustom = CASH_CUSTOM;
 module.exports._urokMesicne = urokMesicne;

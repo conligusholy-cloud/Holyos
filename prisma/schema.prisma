@@ -7782,6 +7782,17 @@ model GamePurchase {
   @@map("game_purchases")
 }
 
+// Drobná nastavení hry, která se mají dát cvaknout z administrace bez
+// nasazování — zatím jen zrychlený onboarding. Klíč je název, hodnota text;
+// na pár přepínačů to stačí a nepotřebuje to migraci při každé novince.
+model GameSetting {
+  klic       String   @id @db.VarChar(40)
+  hodnota    String   @db.VarChar(200)
+  updated_at DateTime @updatedAt
+
+  @@map("game_settings")
+}
+
 // Předplatné, které se strhává samo — zatím jediné: vedoucí servisních
 // techniků. Pravda o tom, jestli běží, je ve Stripu; tahle tabulka je jeho
 // odraz, který se opravuje z webhooků. Hra se ptá jen jí.

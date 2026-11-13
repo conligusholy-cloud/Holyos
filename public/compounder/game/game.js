@@ -4738,6 +4738,10 @@ function spotSheet(sp, areaId) {
     // Podmínky se vybírají tady, při vyjednávání — pak už se smlouva nemění.
     if (S.najemVolba == null) S.najemVolba = { doba: 0, vypoved: 1 };
     var nv = S.najemVolba;
+    // Nováček řeší podmínky smlouvy dřív, než vůbec ví, co je prádlomat. Dokud
+    // nemá první nájem, vidí jen výchozí podmínky a jedno tlačítko; kdo chce,
+    // rozklikne si je. Pak už se smlouva sjednává normálně.
+    var jednoduse = zacatecnik() && !Object.keys(S.leases || {}).length;
     var vykresli = function () {
       var cena = najemSPodminkami(sp, nv.doba, nv.vypoved);
       var popis = '';
@@ -4746,20 +4750,20 @@ function spotSheet(sp, areaId) {
         + '<h3 style="margin-top:18px">Nájemní smlouva</h3>'
         + '<p class="muted small">Než sem něco postavíš, musíš se s majitelem pozemku dohodnout. '
         + 'Čím delší jistotu chceš, tím dražší nájem — ale tím hůř se ti někdo dostane na místo.</p>'
-        + '<p class="muted small" style="margin:10px 0 4px"><b>Na jak dlouho se vážeš</b></p>'
+        + (jednoduse ? '' : '<p class="muted small" style="margin:10px 0 4px"><b>Na jak dlouho se vážeš</b></p>'
         + '<div class="seg sub najem-seg">' + NAJEM_DOBY.map(function (d) {
             return '<button class="' + (d.m === nv.doba ? 'on' : '') + '" data-doba="' + d.m + '">'
               + (d.m ? (d.m / 12) + (d.m === 12 ? ' rok' : (d.m < 60 ? ' roky' : ' let')) : 'Neurčito') + '</button>';
           }).join('') + '</div>'
-        + '<p class="fine">' + esc(popis) + '</p>'
-        + '<p class="muted small" style="margin:12px 0 4px"><b>Výpovědní doba</b></p>'
+        + '<p class="fine">' + esc(popis) + '</p>')
+        + (jednoduse ? '' : '<p class="muted small" style="margin:12px 0 4px"><b>Výpovědní doba</b></p>'
         + '<div class="seg sub najem-seg">' + NAJEM_VYPOVEDI.map(function (m) {
             return '<button class="' + (m === nv.vypoved ? 'on' : '') + '" data-vyp="' + m + '">'
               + m + ' měs.</button>';
           }).join('') + '</div>'
         + '<p class="fine">Když tě někdo přeplatí, tolik herních měsíců ti místo ještě vydělává — '
         + 'a celou tu dobu můžeš jeho nabídku dorovnat a zůstat. Stejnou lhůtu musí dodržet '
-        + 'i majitel pozemku, když vypoví sám — tolik času pak máš na nové místo pro stroj.</p>'
+        + 'i majitel pozemku, když vypoví sám — tolik času pak máš na nové místo pro stroj.</p>')
         + '<div class="kv" style="margin-top:14px"><span>Nájem za těchhle podmínek</span><b class="'
         + (cena > rentOf(sp) ? 'warn' : 'ok') + '">' + kcFull(cena) + ' / měsíc</b></div>'
         + (cena > rentOf(sp)
@@ -4767,8 +4771,12 @@ function spotSheet(sp, areaId) {
               + ' (' + Math.round((najemKoef(nv.doba, nv.vypoved) - 1) * 100) + ' %)</b></div>'
             : '')
         + '<button class="btn big" id="do-lease" style="width:100%;margin-top:12px">Domluvit nájem</button>'
-        + '<p class="fine">Z doby určité se dá odejít i dřív, ale doplatíš odstupné — zbytek nájmu '
-        + 'do konce smlouvy, nejvýš za ' + ODSTUPNE_MAX + ' měsíce.</p>');
+        + (jednoduse
+            ? '<p class="fine"><a href="#" id="do-najem-vic">Chci si vybrat podmínky smlouvy</a></p>'
+            : '<p class="fine">Z doby určité se dá odejít i dřív, ale doplatíš odstupné — zbytek nájmu '
+              + 'do konce smlouvy, nejvýš za ' + ODSTUPNE_MAX + ' měsíce.</p>'));
+      var vic = $('do-najem-vic');
+      if (vic) vic.onclick = function (e) { e.preventDefault(); jednoduse = false; vykresli(); };
       [].forEach.call($('sheet-body').querySelectorAll('[data-doba]'), function (x) {
         x.onclick = function () { nv.doba = Number(x.getAttribute('data-doba')); save(); vykresli(); };
       });
