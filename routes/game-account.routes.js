@@ -1089,15 +1089,42 @@ async function zemeSPocty() {
   zabory.forEach((z) => {
     const cc = kod[z.area_key];
     if (!cc) return;
-    const r = out[cc] || (out[cc] = { kod: cc, mini: 0, flex: 0, max: 0, celkem: 0, hraci: new Set() });
+    const r = out[cc] || (out[cc] = { kod: cc, mini: 0, flex: 0, max: 0, celkem: 0,
+      hraci: new Set(), podle: {} });
     const m = String(z.model || 'mini').toLowerCase();
     if (m === 'flex' || m === 'max') r[m] += 1; else r.mini += 1;
     r.celkem += 1;
     r.hraci.add(z.player_id);
+    r.podle[z.player_id] = (r.podle[z.player_id] || 0) + 1;
   });
-  return Object.keys(out).map((k) => ({ kod: out[k].kod, mini: out[k].mini, flex: out[k].flex,
-    max: out[k].max, celkem: out[k].celkem, hracu: out[k].hraci.size }))
-    .sort((a, b) => b.celkem - a.celkem || a.kod.localeCompare(b.kod));
+  // Kdo má v zemi nejvíc prádlomatů. Při shodě vyhrává ten, kdo tam byl dřív —
+  // to poznáme podle nižšího id hráče.
+  const krale = {};
+  Object.keys(out).forEach((k) => {
+    const p = out[k].podle;
+    let nej = null;
+    Object.keys(p).forEach((id) => {
+      const pid = Number(id);
+      if (!nej || p[id] > nej.pocet || (p[id] === nej.pocet && pid < nej.id)) {
+        nej = { id: pid, pocet: p[id] };
+      }
+    });
+    if (nej) krale[k] = nej;
+  });
+  const ids = Object.keys(krale).map((k) => krale[k].id);
+  const hraci = ids.length
+    ? await prisma.gamePlayer.findMany({ where: { id: { in: ids } },
+        select: { id: true, nick: true, company: true, emblem: true } })
+    : [];
+  const kdo = {};
+  hraci.forEach((h) => { kdo[h.id] = h; });
+  return Object.keys(out).map((k) => {
+    const kral = krale[k] && kdo[krale[k].id] ? kdo[krale[k].id] : null;
+    return { kod: out[k].kod, mini: out[k].mini, flex: out[k].flex,
+      max: out[k].max, celkem: out[k].celkem, hracu: out[k].hraci.size,
+      kral: kral ? { nick: kral.nick, firma: kral.company || (kral.nick + ' s.r.o.'),
+        znak: kral.emblem || null, pocet: krale[k].pocet } : null };
+  }).sort((a, b) => b.celkem - a.celkem || a.kod.localeCompare(b.kod));
 }
 
 router.get('/leaderboard', async (req, res, next) => {

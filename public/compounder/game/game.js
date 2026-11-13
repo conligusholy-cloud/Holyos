@@ -7795,10 +7795,16 @@ function zemeRadek(z) {
   var mod = ['mini', 'flex', 'max'].map(function (k) {
     return '<i class="' + (z[k] ? 'je' : 'nic') + '">' + k.toUpperCase() + ' ' + (z[k] || 0) + '</i>';
   }).join('');
+  // Kdo v zemi vede: znak, firma a nick. Ať je vidět, s kým se tam měřit.
+  var k = z.kral;
   return '<div class="zeb-row zeme">'
     + '<i class="zeb-vlaj">' + (vlajka(z.kod) || esc(String(z.kod || '').toUpperCase())) + '</i>'
     + '<span class="nick">' + esc(zemeNazev(z.kod))
-    + '<i class="zeme-mod">' + mod + '<b>' + hracuSlovy(z.hracu) + '</b></i></span>'
+    + '<i class="zeme-mod">' + mod + '<b>' + hracuSlovy(z.hracu) + '</b></i>'
+    + (k ? '<i class="zeme-kral">' + (k.znak ? znakSvg(k.znak, 15) : '\uD83D\uDC51') + ' '
+        + '<b>' + esc(k.firma) + '</b> <span>' + esc(k.nick) + '</span>'
+        + ' \u00b7 ' + k.pocet + '\u00d7</i>' : '')
+    + '</span>'
     + '<b>' + z.celkem + '×</b></div>';
 }
 function paintZeb() {
