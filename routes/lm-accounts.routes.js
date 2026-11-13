@@ -190,6 +190,10 @@ router.get('/marketplace', async (req, res, next) => {
     if (!ids.length) return res.json({ ok: true, items: [] });
     const sites = await prisma.site.findMany({ where: { id: { in: ids } }, select: { id: true, city: true, country: true, latitude: true, longitude: true, area_m2: true, rent_monthly: true, rent_currency: true } });
     const by = new Map(sites.map((x) => [x.id, x]));
+    // Lokality, kde správce galerii ještě nenastavil (stará data), ukážou všechny fotky lokality
+    const bezGalerie = ids.filter((id) => !Array.isArray(all[id].gallery));
+    const vsechnyFotky = new Map();
+    if (bezGalerie.length) (await prisma.sitePhoto.findMany({ where: { site_id: { in: bezGalerie } }, orderBy: [{ sort_order: 'asc' }, { id: 'asc' }], select: { id: true, site_id: true } })).forEach((f) => { if (!vsechnyFotky.has(f.site_id)) vsechnyFotky.set(f.site_id, []); vsechnyFotky.get(f.site_id).push(f.id); });
     const r2 = (v) => (v == null ? null : Math.round(Number(v) * 100) / 100);
     const items = ids.filter((id) => by.has(id)).map((id) => { const m = all[id], x = by.get(id);
       return { code: 'L' + id, name: m.title, highlight: m.highlight || null, description: m.description || null, city: x.city, country: x.country,
@@ -197,7 +201,7 @@ router.get('/marketplace', async (req, res, next) => {
         rent_monthly: m.rent_monthly != null ? m.rent_monthly : (x.rent_monthly != null ? Number(x.rent_monthly) : null), rent_currency: x.rent_currency || 'CZK',
         price_note: m.price_note || null, availability: m.availability || null, parking: m.parking || null, footfall: m.footfall || null,
         image_url: m.image_url || null, photo: !!m.photo_id,
-        photos: [m.photo_id].concat(Array.isArray(m.gallery) ? m.gallery : []).map(Number).filter((v, i, a) => v > 0 && a.indexOf(v) === i), reserved: !!m.reserved, updated_at: m.updated_at || null };
+        photos: [m.photo_id].concat(Array.isArray(m.gallery) ? m.gallery : (vsechnyFotky.get(id) || [])).map(Number).filter((v, i, a) => v > 0 && a.indexOf(v) === i), reserved: !!m.reserved, updated_at: m.updated_at || null };
     }).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
     res.json({ ok: true, items });
   } catch (err) { next(err); }
@@ -207,7 +211,8 @@ router.get('/marketplace/photo/:sid(\\d+)', async (req, res, next) => {
   try {
     const sid = parseInt(req.params.sid, 10), m = (await jsonSetting('site_marketplace'))[sid];
     if (!m || !m.published) return res.status(404).end();
-    const povolene = [m.photo_id].concat(Array.isArray(m.gallery) ? m.gallery : []).map(Number).filter((v) => v > 0);
+    let galerie = m.gallery; if (!Array.isArray(galerie)) galerie = (await prisma.sitePhoto.findMany({ where: { site_id: sid }, select: { id: true } })).map((f) => f.id);
+    const povolene = [m.photo_id].concat(galerie).map(Number).filter((v) => v > 0);
     const pid = req.query.p ? Number(req.query.p) : Number(m.photo_id);
     if (!pid || !povolene.includes(pid)) return res.status(404).end();
     const ph = await prisma.sitePhoto.findUnique({ where: { id: pid } });

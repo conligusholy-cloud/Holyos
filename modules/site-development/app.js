@@ -464,7 +464,7 @@ async function loadMarketplaceTab(s) {
   let m = null;
   try { const r = await fetch('/api/sites/' + s.id + '/marketplace', fetchOpts()); const j = await r.json(); m = j.marketplace; } catch (e) { box.innerHTML = '<p class="muted" style="color:#f87171">Marketplace data se nepodařilo načíst.</p>'; return; }
   m = m || {};
-  mpGalleryInit = (m.gallery || []).map(Number);
+  mpGalleryInit = Array.isArray(m.gallery) ? m.gallery.map(Number) : (s.photos || []).map(p => p.id); // dosud nenastaveno = všechny fotky lokality
   const area = s.area_m2 != null ? Number(s.area_m2) : null, rent = s.rent_monthly != null ? Number(s.rent_monthly) : null;
   const f = (label, name, val, ph, type) => `<div class="form-row"><label>${esc(label)}</label><input type="${type || 'text'}" name="${name}" value="${val == null ? '' : esc(val)}" placeholder="${esc(ph || '')}"></div>`;
   box.innerHTML = `<div style="background:rgba(79,209,255,.07);border:1px solid rgba(79,209,255,.3);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.5">
