@@ -64,6 +64,20 @@ function loadMachinePhotos() {
 var MONTH_MS = 43200000;         // 1 herní měsíc = 12 skutečných hodin
 var YEAR_MS = 12 * MONTH_MS;     // 1 herní rok = 6 skutečných dní
 var DELIVERY_MONTHS = 2;         // dodání prádlomatu = 2 herní měsíce (přesně 1 skutečný den)
+// Výroba má svoje tempo. Do padesáti prádlomatů dorazí stroj za den, pak si
+// každých dalších padesát vyžádá den navíc — sto za dva dny, sto padesát za
+// tři. Nad dvě stě se to zastaví na pěti dnech, aby velký hráč nečekal týden.
+var DODANI_ZA = 50;              // po kolika postavených prádlomatech přibude den
+var DODANI_MAX_DNU = 5;          // strop, ať čekání nenaroste donekonečna
+function dodaniDnu() {
+  var n = ((S && S.units) || []).length;
+  return Math.max(1, Math.min(DODANI_MAX_DNU, Math.ceil(n / DODANI_ZA)));
+}
+function dodaniMs() { return dodaniDnu() * DELIVERY_MONTHS * MONTH_MS; }
+function dodaniSlovy() {
+  var d = dodaniDnu();
+  return d === 1 ? 'jeden skutečný den' : d + ' ' + mn(d, 'den', 'dny', 'dnů');
+}
 var BANK_BASE = 1000000;         // startovní rámec v bance
 var BANK_PER_DAY = 500000;       // co banka sama doplní za skutečný den
 var REVEAL_COST = 5000;          // obhlídka místa — jen se tam někdo zajede podívat
@@ -445,9 +459,80 @@ var ZAVADY = [
   { zav: 4, text: 'Rozbité ložisko bubnu' },
   { zav: 5, text: 'Vytopená technická místnost' }
 ];
+// ─── Katastrofy ──────────────────────────────────────────────────────────────
+// Na rozdíl od běžné závady tohle technik nespraví: hoří, teče nebo někdo
+// rozmlátil výlohu. Prádlomat stojí celý, oprava se platí a trvá dny. Stává se
+// to vzácně — v průměru jednou za osm herních let na stroj — ale bolí to, a
+// proto jde provozovny pojistit (pojistné běží měsíčně, oprava pak stojí pětinu).
+var KATASTROFA_ROCNE = 0.08;       // průměrně jednou za dvanáct herních let na stroj
+// Oprava je podíl z ceny stroje. Požár bolí nejvíc, rozbitá výloha je spíš
+// otrava — a i ta nejdražší škoda se dá splatit za pár herních měsíců provozu,
+// aby jedna smůla neposlala začínajícího hráče ke dnu.
+var KATASTROFY = [
+  { t: 'Požár', ico: '\uD83D\uDD25', p: 'Od přetížené zásuvky chytla sušička. Hasiči to uhasili, ale vevnitř je spálený strop a rozvody.', dnu: 5, podil: 0.22 },
+  { t: 'Vytopení', ico: '\uD83D\uDCA7', p: 'Praskl přívod vody a všechno se zalilo. Elektronika praček i terminál jsou na výměnu.', dnu: 4, podil: 0.16 },
+  { t: 'Vloupání', ico: '\uD83D\uDD13', p: 'V noci někdo vypáčil dveře, vybral mincovníky a rozmlátil dva automaty.', dnu: 3, podil: 0.1 },
+  { t: 'Vandalismus', ico: '\uD83E\uDDF1', p: 'Rozbitá výloha, posprejované stroje a utržené dveře od sušičky.', dnu: 2, podil: 0.05 },
+  { t: 'Vichřice', ico: '\uD83C\uDF2A\uFE0F', p: 'Vítr strhl střechu přístřešku a do provozovny zateklo.', dnu: 3, podil: 0.12 }
+];
+var POJISTNE_PODIL = 0.004;        // měsíční pojistné = 0,4 % ceny stroje
+var POJISTENI_SPOLUUCAST = 0.2;    // s pojištěním platí hráč pětinu opravy
+function jeVKatastrofe(u) { return !!(u && u.katastrofa); }
+function katastrofy() { return (S.units || []).filter(jeVKatastrofe); }
+// Měsíční pojistné za celou síť. Platí se jen když je pojištění zapnuté.
+function pojisteniMesicne() {
+  if (!S || !S.pojisteni) return 0;
+  return Math.round((S.units || []).reduce(function (a, u) {
+    return a + machinePrice(MODELS[(u.eco && u.eco.model) || 'mini']) * POJISTNE_PODIL;
+  }, 0));
+}
+function hlidejKatastrofy(dt) {
+  if (!(dt > 0)) return 0;
+  var sance = Math.min(0.2, dt / (YEAR_MS / KATASTROFA_ROCNE));
+  var ted = Date.now(), ztrata = 0;
+  (S.units || []).forEach(function (u) {
+    if (jeVKatastrofe(u) || Math.random() >= sance) return;
+    var k = KATASTROFY[Math.floor(Math.random() * KATASTROFY.length)];
+    var cena = Math.round(machinePrice(MODELS[(u.eco && u.eco.model) || 'mini']) * k.podil);
+    var pojisteno = !!S.pojisteni;
+    var platim = pojisteno ? Math.round(cena * POJISTENI_SPOLUUCAST) : cena;
+    u.katastrofa = { od: ted, t: k.t, ico: k.ico, p: k.p, dnu: k.dnu, cena: cena, platim: platim,
+      pojisteno: pojisteno, hotovo: null };
+    u.vady = (u.vady || 0) + 1;
+    ztrata += 0;
+    zapisUpoz(u.name + ': ' + k.t.toLowerCase() + '. Prádlomat stojí, dokud se neopraví.', 'err');
+    toast(u.name + ': ' + k.t + '! Prádlomat stojí. Oprava stojí ' + kcFull(platim)
+      + (pojisteno ? ' (zbytek platí pojišťovna).' : ' — pojištěný nebyl.'), 'err', true);
+  });
+  return ztrata;
+}
+// Hráč opravu zaplatí, od té chvíle se pracuje a za pár dní stroj zase jede.
+function zaplatOpravu(u) {
+  var k = u.katastrofa;
+  if (!k || k.hotovo) return;
+  if (S.cash < k.platim) return toast('Na opravu nemáš dost hotovosti.', 'err');
+  S.cash -= k.platim;
+  zapis('nakup', k.t + ' — oprava ' + (u.name || ''), -k.platim);
+  k.hotovo = Date.now() + k.dnu * (MONTH_MS / 30);   // herní den = 24 skutečných minut
+  save(); paint(); drawMap(); syncState(true);
+  toast('Oprava zaplacená. ' + (u.name || 'Prádlomat') + ' pojede za '
+    + etaText(k.hotovo - Date.now()).replace('za ', '') + '.', 'ok');
+}
+// Hotové opravy pustí stroj zpátky do provozu.
+function hlidejOpravy() {
+  var ted = Date.now(), zmena = false;
+  (S.units || []).forEach(function (u) {
+    var k = u.katastrofa;
+    if (!k || !k.hotovo || ted < k.hotovo) return;
+    delete u.katastrofa; zmena = true;
+    toast((u.name || 'Prádlomat') + ' je po opravě zase v provozu.', 'ok');
+  });
+  if (zmena) { save(); paint(); drawMap(); }
+}
 function jeVPoruse(u) { return !!(u && u.porucha); }
 // Kolik z plného provozu stroj zvládá, dokud není spravený.
 function chodStroje(u) {
+  if (jeVKatastrofe(u)) return 0;      // po požáru nebo vytopení nejede nic
   if (!jeVPoruse(u)) return 1;
   var k = PORUCHA_CHOD[u.eco && u.eco.model];
   return k == null ? 0 : k;
@@ -1353,6 +1438,7 @@ function fresh(profileId) {
     hovoryPosl: [],   // rozhovory, které už padly — ať se hned neopakují
     hovorLog: [],     // evidence hovorů — kdo volal a jak to dopadlo
     linkaSam: false,  // true = hovory si beru sám i s kreditem na lince
+    pojisteni: false, // pojištění provozoven proti požáru, vytopení a vloupání
     stats: { earned: 0, interest: 0 },
     hist: []          // vývoj po herních měsících — tržby, zisk, dluh, počet prádlomatů
   };
@@ -1414,6 +1500,7 @@ function dosypStav(o) {
     delete o.snyRezie;     // agenda snů zrušena — nikdo za ni dál neplatí
     if (!o.offPovest || typeof o.offPovest !== 'object') o.offPovest = { den: '', body: 0 };
     if (typeof o.linkaSam !== 'boolean') o.linkaSam = false;
+    if (typeof o.pojisteni !== 'boolean') o.pojisteni = false;
     delete o.otazkyPosl;   // dřív se pamatovaly jednotlivé otázky, teď celé rozhovory
     // Rozehraná hra z doby před sídly: za sídlo bereme místo, kde hráč postavil
     // první prádlomat. Bez toho by mu doprava vycházela zdarma a pobočku by
@@ -1517,7 +1604,7 @@ function monthlyProfit() { return S.units.reduce(function (a, u) { return a + u.
 // Jedno číslo, jedna definice: stejně se počítá v hlavičce i v panelu Síť.
 // Pozor: do tick() patří dál monthlyProfit(), tam se splátky stráhají zvlášť —
 // kdyby se počítalo s čistým ziskem, strhly by se dvakrát.
-function cistyZisk() { return monthlyProfit() - splatkyMesicne() - pobockyMesicne() - cetaMesicne(); }
+function cistyZisk() { return monthlyProfit() - splatkyMesicne() - pobockyMesicne() - cetaMesicne() - pojisteniMesicne(); }
 function yearlyProfit() { return monthlyProfit() * 12; }
 
 // ─── Vývoj v čase ───────────────────────────────────────────────────────
@@ -1815,8 +1902,10 @@ function tick() {
   // uprostřed doby, co byl hráč pryč, od té chvíle nevydělával. Jinak by byla
   // nepřítomnost zadarmo a porucha by začala až návratem.
   var ztrataPoruch = hlidejPoruchy(dt);
+  hlidejKatastrofy(dt);
+  hlidejOpravy();
   // Pobočky i četa stojí každý měsíc bez ohledu na to, jestli se staví.
-  var earned = (yearlyProfit() - (pobockyMesicne() + cetaMesicne()) * 12) * years - ztrataPoruch;
+  var earned = (yearlyProfit() - (pobockyMesicne() + cetaMesicne() + pojisteniMesicne()) * 12) * years - ztrataPoruch;
   // Do bubliny nad prádlomaty: zvlášť co přiteklo a co banka sebrala.
   drip.earn += Math.max(0, earned);
   S.cash += earned;
@@ -4119,7 +4208,7 @@ function zemUnit(u) {
 }
 function unitIcon(u) {
   var im = MODEL_IMG[u.eco && u.eco.model] || MODEL_IMG.flex;
-  var vada = jeVPoruse(u);
+  var vada = jeVPoruse(u) || jeVKatastrofe(u);
   // Domeček v rohu říká, že stroj stojí na pozemku — zeleně na vlastním,
   // fialově na pronajatém. Bez domečku je to běžný nájem místa.
   var zem = zemUnit(u);
@@ -4135,7 +4224,8 @@ function unitIcon(u) {
       + (vyp ? '<i class="pin-vyp">\u29D6</i>' : '')
       + (natrhu ? '<i class="pin-trh">\u20AC</i>' : '')
       + (zem ? '<i class="pin-zem">\u2302</i>' : '')
-      + '<i class="pin-tag">' + esc(vada ? u.porucha.text
+      + '<i class="pin-tag">' + esc(jeVKatastrofe(u) ? u.katastrofa.t
+          : vada ? u.porucha.text
           : (vyp ? 'Výpověď — ' + etaText(Math.max(0, u.vypoved.do - Date.now())).replace('za ', '')
           : natrhu ? 'Na prodej · ' + kcFull(natrhu.cena)
           : (MODELS[u.eco && u.eco.model] ? MODELS[u.eco.model].name : ''))) + '</i></div>' });
@@ -4177,7 +4267,13 @@ function paintServis() {
 function servisRadek(u) {
   var t = u.technik, ted = Date.now(), m = MODELS[u.eco && u.eco.model];
   var stav, tr, akce = '';
-  if (jeVPoruse(u) && !t) {
+  if (jeVKatastrofe(u)) {
+    var k = u.katastrofa;
+    tr = 'err';
+    stav = k.hotovo ? k.t + ' — opravuje se, hotovo ' + etaText(Math.max(0, k.hotovo - ted))
+      : k.t + ' — stojí, oprava za ' + kcFull(k.platim);
+    akce = k.hotovo ? '' : '<button class="btn sec maly" data-kat="' + esc(u.spotId) + '">Otevřít</button>';
+  } else if (jeVPoruse(u) && !t) {
     var v = vyjezdOdhad(u);
     tr = 'err';
     stav = u.porucha.text + (v ? ' — ' + Math.round(v.km) + ' km ' + v.zpusob.nazev
@@ -4239,6 +4335,13 @@ function servisSheet() {
       e.stopPropagation();
       vyslatTechnika(najdiJednotku(b.getAttribute('data-vada')));
       servisSheet();
+    };
+  });
+  // Katastrofu technik nespraví — otevřeme rovnou místo, kde se platí oprava.
+  [].forEach.call(document.querySelectorAll('#sheet-body [data-kat]'), function (b) {
+    b.onclick = function (e) {
+      e.stopPropagation();
+      unitSheet(najdiJednotku(b.getAttribute('data-kat')));
     };
   });
   [].forEach.call(document.querySelectorAll('#sheet-body [data-srv]'), function (r) {
@@ -5196,7 +5299,8 @@ function paintShop() {
       + '<div class="kv"><span>Servis a úklid</span><b>' + pct(SERVIS_SHARE) + ' obratu</b></div>'
       + '<div class="kv"><span>Energie</span><b>' + pct(ENERGY_SHARE) + ' obratu</b></div>'
       + '<div class="kv"><span>Přípojky na místě (navíc)</span><b>' + kcFull(Math.round(CONN_MIN * (k === 'max' ? CONN_MAX_MULT : 1))) + ' – ' + kcFull(Math.round(CONN_MAX * (k === 'max' ? CONN_MAX_MULT : 1))) + '</b></div>'
-      + '<div class="kv"><span>Dodání</span><b>' + DELIVERY_MONTHS + ' herní měsíce (1 den)</b></div>'
+      + '<div class="kv"><span>Dodání</span><b>' + dodaniSlovy()
+      + (dodaniDnu() > 1 ? ' <span class="warn">(vytížená výroba)</span>' : '') + '</b></div>'
       + '<button class="btn sm' + (f.ok ? '' : ' sec') + '" style="width:100%;margin-top:10px" data-buy="' + k + '">'
       + (f.ok ? 'Koupit ' + m.name : 'Chybí ti ' + kcFull(f.chybi)) + '</button>'
       + (f.ok ? '' : '<p class="fine">' + esc(dohnat(f.chybi)) + '</p>')
@@ -5211,7 +5315,10 @@ function buySheet(modelKey, drz) {
   var cena = machinePrice(MODELS[modelKey]);
   var m = MODELS[modelKey], f = canFinance(cena, FIN_OWN, zamerStrop(modelKey, cena));
   sheet('<h3>Koupit ' + m.name + '</h3>'
-    + '<p class="muted small">Stroj ti přivezou za ' + DELIVERY_MONTHS + ' herní měsíce, tedy za jeden skutečný den. Do té doby je na cestě, pak čeká na skladě, než mu najdeš místo.</p>'
+    + '<p class="muted small">Stroj ti přivezou za ' + dodaniSlovy() + '. Do té doby je na cestě, '
+    + 'pak čeká na skladě, než mu najdeš místo.'
+    + (dodaniDnu() > 1 ? ' Čím větší síť máš, tím je výroba vytíženější — každých '
+        + DODANI_ZA + ' prádlomatů znamená den čekání navíc, nejvýš ' + DODANI_MAX_DNU + '.' : '') + '</p>'
     + (jeZacatek() ? '<p class="fine ok">Na první stroj ti banka půjčí proti němu samému — '
         + 'ještě nemáš co vykázat, ale stroj si v případě problému odveze a prodá. '
         + 'U přípojek na místě už bude koukat na to, co vyděláš.</p>' : '')
@@ -5230,7 +5337,7 @@ function buySheet(modelKey, drz) {
     // vidí poprvé, nejkratší cesta k tomu, že se už nevrátí.
     var hned = zacatecnik() && !(S.orders || []).length && !mamStroj();
     S.orders.push({ model: modelKey, orderedAt: Date.now(),
-      arrivesAt: hned ? Date.now() : Date.now() + DELIVERY_MONTHS * MONTH_MS });
+      arrivesAt: hned ? Date.now() : Date.now() + dodaniMs() });
     save(); paint(); closeSheet();
     // Nejdřív uložíme síť (je v ní nová objednávka) a pak řekneme serveru, že
     // se kupovalo — ten z ní spočte provizi tomu, kdo nás do hry přivedl.
@@ -5239,7 +5346,7 @@ function buySheet(modelKey, drz) {
       if (ME) apiJson('/account/nakup', { model: modelKey }).catch(function () { /* zkusí se přiště */ });
     });
     toast(hned ? m.name + ' je na skladě — dopravce ho přivezl rovnou.'
-      : m.name + ' objednán. Dorazí ' + etaText(DELIVERY_MONTHS * MONTH_MS) + '.', 'ok');
+      : m.name + ' objednán. Dorazí ' + etaText(dodaniMs()) + '.', 'ok');
   };
 }
 
@@ -7017,6 +7124,36 @@ function mistoUverHtml(u) {
     + ' Zbývá splatit ' + kcFull(l.zbyva) + ', ještě ' + (l.zbyvaMesicu || 0) + ' měsíců.</p>';
 }
 // Co se o závadě píše v panelu místa — včetně toho, o kolik tržeb hráč přichází.
+// Karta katastrofy. Dokud se oprava nezaplatí, stroj stojí a nic nevydělává.
+function katastrofaHtml(u) {
+  var k = u && u.katastrofa;
+  if (!k) return '';
+  var ted = Date.now();
+  if (k.hotovo) {
+    return '<div class="card vada-karta"><div class="row"><h3>\uD83D\uDEA7 ' + esc(k.t) + ' — opravuje se</h3>'
+      + '<b class="warn">' + etaText(Math.max(0, k.hotovo - ted)) + '</b></div>'
+      + '<p class="muted small" style="margin:4px 0 0">Řemeslníci jsou na místě. Do konce opravy '
+      + 'prádlomat nevydělává, ale nájem a splátky běží dál.</p></div>';
+  }
+  return '<div class="card vada-karta"><div class="row"><h3>' + (k.ico || '\u26A0\uFE0F') + ' ' + esc(k.t) + '</h3>'
+    + '<b class="err">stojí</b></div>'
+    + '<p class="muted small" style="margin:4px 0 8px">' + esc(k.p)
+    + ' Prádlomat nevydělává vůbec nic a technik na tohle nestačí — musí se to opravit.</p>'
+    + '<div class="kv"><span>Oprava celkem</span><b>' + kcFull(k.cena) + '</b></div>'
+    + (k.pojisteno
+        ? '<div class="kv"><span>Platí pojišťovna</span><b class="ok">' + kcFull(k.cena - k.platim) + '</b></div>'
+        : '')
+    + '<div class="kv souhrn"><span>Zaplatíš</span><b class="' + (k.pojisteno ? 'ok' : 'err') + '">'
+    + kcFull(k.platim) + '</b></div>'
+    + '<div class="kv"><span>Oprava potrvá</span><b>' + k.dnu + ' '
+    + mn(k.dnu, 'herní den', 'herní dny', 'herních dnů') + '</b></div>'
+    + (k.pojisteno ? '' : '<p class="fine warn">Pojištěný nebyl — platíš celou opravu. '
+        + 'Pojištění zapneš v Síti.</p>')
+    + '<button class="btn big" id="do-oprava"' + (S.cash < k.platim ? ' disabled' : '')
+    + ' style="width:100%;margin-top:10px">Zaplatit opravu za ' + kcFull(k.platim) + '</button>'
+    + (S.cash < k.platim ? '<p class="fine err">Tolik hotovosti nemáš.</p>' : '')
+    + '</div>';
+}
 function poruchaHtml(u) {
   if (!jeVPoruse(u) && !u.technik) return '';
   var t = u.technik, ted = Date.now();
@@ -7059,6 +7196,7 @@ function unitSheet(u) {
     + (u.lat != null ? '<button class="btn sec" id="do-mapa" style="width:100%;margin-bottom:12px">Ukázat na mapě</button>' : '')
     + vypovedHtml(u)
     + vypovedMajiteleHtml(u)
+    + katastrofaHtml(u)
     + poruchaHtml(u)
     + '<h3 style="margin:16px 0 4px">Co to měsíčně dělá</h3>'
     + '<div class="kv"><span>Obrat</span><b>' + kcFull(u.eco.revenue) + '</b></div>'
@@ -7089,6 +7227,8 @@ function unitSheet(u) {
     + 'úvěru na něj běží dál.</p>'
     + '<button class="btn sec" id="do-release" style="width:100%">Vypovědět místo</button>');
   bindVymena(u);
+  var ob = $('do-oprava');
+  if (ob) ob.onclick = function () { ob.disabled = true; zaplatOpravu(u); closeSheet(); unitSheet(u); };
   var tb = $('do-technik');
   if (tb) tb.onclick = function () { vyslatTechnika(u); closeSheet(); switchTab('map'); };
   var mb = $('do-mapa');
@@ -7927,7 +8067,7 @@ function strojRadek(u, i) {
   var popis = STROJE_POPIS[STROJE_KAT];
   var im = MODEL_IMG[u.eco && u.eco.model] || MODEL_IMG.flex;
   var m = MODELS[u.eco && u.eco.model];
-  var vada = jeVPoruse(u);
+  var vada = jeVPoruse(u) || jeVKatastrofe(u);
   var spl = Math.round(spolehlivost(u) * 100);
   var hod = popis.hodnota(u);
   var zisk = zbydeZMista(u);
@@ -8120,7 +8260,8 @@ function paintZeb() {
 function povestHtml() {
   var p = povest();
   var zmena = Math.round((povestKoef() - 1) * 100);
-  return '<div class="card"><div class="row"><h3>Infolinka</h3>'
+  return pojisteniHtml()
+    + '<div class="card"><div class="row"><h3>Infolinka</h3>'
     + '<b class="' + (p > 0 ? 'ok' : (p < 0 ? 'err' : '')) + '">' + hvezdyText() + '</b></div>'
     + '<p class="muted small" style="margin:2px 0 0">Pověst u zákazníků je ' + povestSlovy() + '.</p>'
     + '<div class="povest-pas"><i style="left:' + ((p + 100) / 2) + '%"></i></div>'
@@ -8130,6 +8271,26 @@ function povestHtml() {
     + 'Kdo hovor vezme a umí poradit, má v prádlomatech víc lidí — až o desetinu. '
     + 'Kdo je odmítá nebo odbyde, přijde až o pětinu návštěvnosti. Zvoní to jen pět vteřin — '
     + 'co se nevezme, bere se jako nevyřízený hovor.</p></div>';
+}
+// Pojištění provozoven. Požár ani vytopení technik nespraví — oprava stojí
+// desetitisíce a stroj do té doby nevydělává. Pojistné běží měsíčně za každý
+// postavený prádlomat a sráží opravu na pětinu.
+function pojisteniHtml() {
+  var zap = !!(S && S.pojisteni);
+  var mes = (S.units || []).reduce(function (a, u) {
+    return a + machinePrice(MODELS[(u.eco && u.eco.model) || 'mini']) * POJISTNE_PODIL;
+  }, 0);
+  return '<div class="card"><div class="row"><h3>Pojištění provozoven</h3>'
+    + '<button class="prep-sam' + (zap ? ' on' : '') + '" id="do-pojisteni">'
+    + (zap ? 'Sjednané' : 'Nemáš') + '</button></div>'
+    + '<p class="muted small" style="margin:4px 0 0">Požár, vytopení nebo vloupání se stane vzácně, '
+    + 'ale prádlomat pak stojí několik dní a oprava jde do desetitisíců. S pojištěním zaplatíš '
+    + 'z opravy jen ' + Math.round(POJISTENI_SPOLUUCAST * 100) + ' %, zbytek jde za pojišťovnou.</p>'
+    + '<div class="kv"><span>Pojistné za celou síť</span><b' + (zap ? ' class="warn"' : '') + '>'
+    + kcFull(Math.round(mes)) + ' / měsíc</b></div>'
+    + '<p class="fine">' + (zap
+        ? 'Pojistné se strhává každý herní měsíc za každý postavený prádlomat.'
+        : 'Když ho sjednáš, platí se za každý postavený prádlomat — a škody už budou levnější.') + '</p></div>';
 }
 // Střed prozkoumaného města — odtud se dá zřídit pobočka.
 function stredOblasti(a) {
@@ -8254,7 +8415,7 @@ function paintNet() {
   // Dlaždice se čtou shora dolů jako výpis: co síť vydělá, co z toho odteče,
   // a co zbyde. Aby to sedělo, musí každé číslo vycházet ze stejného základu.
   var zbyde = cistyZisk();
-  var odtece = splatkyMesicne() + pobockyMesicne() + cetaMesicne();
+  var odtece = splatkyMesicne() + pobockyMesicne() + cetaMesicne() + pojisteniMesicne();
   $('net-sum').innerHTML = '<div><span>Prádlomaty</span><b>' + S.units.length + '</b></div>'
     // Dokud se nemá co odečítat, je zisk prádlomatů zároveň tím, co zbyde —
     // dvě stejná čísla vedle sebe by jen pletla.
@@ -8267,6 +8428,8 @@ function paintNet() {
         ? '<div><span>Provoz poboček</span><b class="warn">' + kc(-pobockyMesicne()) + '</b></div>' : '')
     + (cetaMesicne() > 0
         ? '<div><span>Vlastní četa</span><b class="warn">' + kc(-cetaMesicne()) + '</b></div>' : '')
+    + (pojisteniMesicne() > 0
+        ? '<div><span>Pojištění</span><b class="warn">' + kc(-pojisteniMesicne()) + '</b></div>' : '')
     + (odtece > 0
         ? '<div><span>Zbyde měsíčně</span><b class="' + (zbyde >= 0 ? 'ok' : 'err') + '">' + kc(zbyde) + '</b></div>' : '')
     + '<div><span>Investováno</span><b>' + kc(investedTotal()) + '</b></div>'
@@ -8310,6 +8473,14 @@ function paintNet() {
   bindZakladny();
 }
 function bindZakladny() {
+  var pj = $('do-pojisteni');
+  if (pj) pj.onclick = function () {
+    S.pojisteni = !S.pojisteni;
+    save(); paint(); syncState(true); paintNet();
+    toast(S.pojisteni
+      ? 'Provozovny jsou pojištěné. Pojistné ' + kcFull(pojisteniMesicne()) + ' měsíčně.'
+      : 'Pojištění zrušeno. Škody si teď platíš celé sám.', 'ok');
+  };
   var b = $('do-pobocka');
   if (b) b.onclick = function () { pobockaSheet(); };
   var c = $('do-ceta');
