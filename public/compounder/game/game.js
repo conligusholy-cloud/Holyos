@@ -7862,11 +7862,13 @@ function netZalozka(kam) {
   });
   $('net-moje').classList.toggle('hidden', kam !== 'moje');
   $('net-stroje').classList.toggle('hidden', kam !== 'stroje');
+  $('net-mista').classList.toggle('hidden', kam !== 'mista');
   $('net-vyvoj').classList.toggle('hidden', kam !== 'vyvoj');
   $('net-zebricek').classList.toggle('hidden', kam !== 'zebricek');
   if (kam === 'zebricek') { ZEB = null; paintZeb(); }
   else if (kam === 'vyvoj') paintVyvoj();
   else if (kam === 'stroje') paintStroje();
+  else if (kam === 'mista') paintMista();
   else paintNet();
 }
 // Souhrnný graf: tržby, zisk a to, co každý měsíc odteče, v jedné ose. Mezera
@@ -8095,6 +8097,89 @@ function strojRadek(u, i) {
     + '</span>'
     + '<b class="' + (STROJE_KAT === 'zisk' ? (zisk >= 0 ? 'ok' : 'err')
         : (STROJE_KAT === 'poruchy' && hod ? 'warn' : '')) + '">' + popis.jed(hod) + '</b></div>';
+}
+// ─── Agenda míst ─────────────────────────────────────────────────────────────
+// Všechna prověřená místa v jednom seznamu od nejlepšího po nejhorší. Hráč
+// s velkou sítí jinak nemá jak poznat, že na devadesátce dusí MINI a stovka
+// vedle je pořád volná. Řádek nic nemění — jen otevře to, co dává smysl:
+// vlastní místo detail prádlomatu (tam je výměna i výpověď), volné stavbu,
+// cizí přeplacení nájmu.
+var MISTA_FILTR = 'vse';
+var MISTA_STRANKA = 40;
+var MISTA_VIC = 0;
+// Všechna prověřená místa ze všech prozkoumaných měst, s tím, co na nich je.
+function vsechnaMista() {
+  var out = [];
+  Object.keys(S.areas || {}).forEach(function (aid) {
+    var a = S.areas[aid];
+    (a.spots || []).forEach(function (sp) {
+      if (!S.revealed || !S.revealed[sp.id]) return;      // neprověřené nemá smysl řadit
+      var u = (S.units || []).filter(function (x) { return x.spotId === sp.id; })[0] || null;
+      var c = !u && CLAIMS[sp.id] && !CLAIMS[sp.id].mine ? CLAIMS[sp.id] : null;
+      out.push({ sp: sp, areaId: aid, mesto: a.name || '', u: u, cizi: c,
+        stav: u ? 'moje' : (c ? 'cizi' : 'volna') });
+    });
+  });
+  return out.sort(function (x, y) { return (y.sp.score || 0) - (x.sp.score || 0); });
+}
+function mistoRadek(r) {
+  var sp = r.sp, u = r.u;
+  var m = u ? MODELS[u.eco && u.eco.model] : null;
+  var im = u ? (MODEL_IMG[u.eco && u.eco.model] || MODEL_IMG.flex) : null;
+  var e = u ? u.eco : economics(sp, 'flex', 1);
+  var zem = jePozemek(sp) || mamPozemek(sp.id);
+  var stav = u
+    ? '<b class="ok">' + esc(m ? m.name : '') + '</b> · zisk ' + kcFull(zbydeZMista(u))
+    : r.cizi
+      ? '<span class="err">' + esc(r.cizi.firma || r.cizi.nick || 'konkurence') + '</span> · '
+        + esc((MODELS[r.cizi.model] || {}).name || '') + ' · nájem ' + kcFull(r.cizi.rent || 0)
+      : '<span class="warn">volné</span> · nájem ' + (zem ? 'žádný — pozemek' : kcFull(rentOf(sp)))
+        + ' · FLEX by vydělal ' + kcFull(e.profit);
+  return '<div class="zeb-row misto" data-misto-id="' + esc(sp.id) + '">'
+    + (im ? '<img class="misto-ico" src="' + esc(im.src) + '" alt="">'
+        : '<i class="misto-ico prazdna">' + (r.cizi ? '\u26A0\uFE0F' : '\u25CB') + '</i>')
+    + '<span class="nick">' + esc(sp.name || 'Místo')
+    + '<i>' + [KIND_LABEL[sp.kind] || '', r.mesto || ''].filter(Boolean).map(esc).join(' · ') + '</i>'
+    + '<i>' + stav + '</i></span>'
+    + '<b class="' + skoreTrida(sp.score) + '">' + Math.round(sp.score) + '</b></div>';
+}
+function paintMista() {
+  var box = $('mista-body');
+  if (!box) return;
+  var vse = vsechnaMista();
+  var list = MISTA_FILTR === 'vse' ? vse : vse.filter(function (r) { return r.stav === MISTA_FILTR; });
+  var pocty = { moje: 0, volna: 0, cizi: 0 };
+  vse.forEach(function (r) { pocty[r.stav]++; });
+  if (!vse.length) {
+    box.innerHTML = '<div class="empty">Zatím nemáš prověřené ani jedno místo.<br>'
+      + 'Prozkoumej město a místa si prověř — pak je uvidíš tady seřazená.</div>';
+    return;
+  }
+  var kolik = MISTA_STRANKA + MISTA_VIC;
+  var videt = list.slice(0, kolik);
+  box.innerHTML = '<h3 style="margin:14px 0 2px">Místa, co znáš '
+    + '<span class="muted small" style="font-weight:600">(nejlepší nahoře)</span></h3>'
+    + '<p class="muted small" style="margin:0 0 10px">Prověřená místa ze všech tvých měst. '
+    + 'Vlastní otevřou detail prádlomatu, kde ho můžeš vyměnit nebo odvézt; volné rovnou stavbu, '
+    + 'cizí přeplacení nájmu. Tvých ' + pocty.moje + ', volných ' + pocty.volna
+    + ', obsazených konkurencí ' + pocty.cizi + '.</p>'
+    + (list.length ? videt.map(mistoRadek).join('')
+        : '<div class="empty">V téhle skupině nic nemáš.</div>')
+    + (list.length > videt.length
+        ? '<button class="btn sec" id="mista-vic" style="width:100%;margin-top:10px">Zobrazit dalších '
+          + Math.min(MISTA_STRANKA, list.length - videt.length) + '</button>' : '');
+  var vic = $('mista-vic');
+  if (vic) vic.onclick = function () { MISTA_VIC += MISTA_STRANKA; paintMista(); };
+  [].forEach.call(box.querySelectorAll('[data-misto-id]'), function (el) {
+    el.onclick = function () { otevriMisto(el.getAttribute('data-misto-id')); };
+  });
+}
+// Co se po klepnutí otevře, rozhoduje stav místa.
+function otevriMisto(id) {
+  var r = vsechnaMista().filter(function (x) { return x.sp.id === id; })[0];
+  if (!r) return;
+  if (r.u) return unitSheet(r.u);
+  spotSheet(r.sp, r.areaId);
 }
 function paintStroje() {
   var box = $('stroje-body');
@@ -10269,6 +10354,13 @@ $('burza-nova').onclick = novaNabidkaSheet;
 [].forEach.call(document.querySelectorAll('[data-mapa]'), function (b) {
   b.classList.toggle('on', (b.getAttribute('data-mapa') === 'moje') === MAPA_MOJE);
   b.onclick = function () { mapaPohled(b.getAttribute('data-mapa') === 'moje'); };
+});
+[].forEach.call(document.querySelectorAll('[data-misto]'), function (b) {
+  b.onclick = function () {
+    MISTA_FILTR = b.getAttribute('data-misto');
+    [].forEach.call(document.querySelectorAll('[data-misto]'), function (x) { x.classList.toggle('on', x === b); });
+    paintMista();
+  };
 });
 [].forEach.call(document.querySelectorAll('[data-stroj]'), function (b) {
   b.onclick = function () {

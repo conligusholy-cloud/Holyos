@@ -1068,3 +1068,15 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .vym-t b{font-size:14px}
 .vym-t i{display:block;font-style:normal;font-size:11.5px;color:var(--text2);line-height:1.35;margin-top:2px}
 .vym-r .btn{flex:0 0 auto}
+
+/* ── Agenda míst v Síti ─────────────────────────────────────────────────────── */
+.zeb-row.misto{cursor:pointer;align-items:flex-start}
+.zeb-row.misto .nick{white-space:normal}
+.zeb-row.misto .nick i{white-space:normal;line-height:1.35;margin-top:1px}
+.misto-ico{width:34px;height:34px;flex:0 0 34px;border-radius:10px;object-fit:cover}
+.misto-ico.prazdna{display:flex;align-items:center;justify-content:center;font-style:normal;
+  font-size:15px;color:var(--text3);border:1px dashed var(--border2,var(--border))}
+.zeb-row.misto b{flex:0 0 auto;font-variant-numeric:tabular-nums;font-size:15px;font-weight:800}
+.zeb-row.misto b.dobre{color:var(--ok)}
+.zeb-row.misto b.stredni{color:var(--warn)}
+.zeb-row.misto b.slabe{color:var(--err)}
