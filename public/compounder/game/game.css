@@ -1080,3 +1080,7 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .zeb-row.misto b.dobre{color:var(--ok)}
 .zeb-row.misto b.stredni{color:var(--warn)}
 .zeb-row.misto b.slabe{color:var(--err)}
+/* Křížek na zrušení pobočky přímo v řádku. */
+.pob-zrus{background:none;border:0;color:var(--text3);font-size:17px;line-height:1;cursor:pointer;
+  padding:0 2px 0 8px}
+.pob-zrus:hover{color:var(--err)}

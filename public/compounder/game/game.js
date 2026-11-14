@@ -116,7 +116,13 @@ var DOPRAVA_KM = 120;           // za kilometr
 var SILNICE = 1.3;              // silnice nejsou vzdušnou čarou
 var POBOCKA_CENA = 500000;
 var POBOCKA_MESICNE = 15000;    // sklad a člověk
-var POBOCKA_PAUZA = 3 * YEAR_MS;   // zřídit další jde jednou za tři herní roky
+// Pobočky si hráč zřizuje i ruší, kdy chce — jsou to provozní náklady, ne
+// trvalé rozhodnutí. Při zrušení se vybavení rozprodá se ztrátou, zpátky
+// přijde polovina. Sídlo je naopak adresa firmy: přestěhovat se dá, ale
+// stojí to a jen jednou za tři herní roky (osmnáct skutečných dní).
+var POBOCKA_VRATKA = 0.5;          // kolik se vrátí při zrušení pobočky
+var SIDLO_STEHOVANI = 300000;      // co stojí přestěhovat sídlo
+var SIDLO_PAUZA = 3 * YEAR_MS;     // a jak často to jde
 // Vzdálenost dvou bodů na mapě v kilometrech (po povrchu Země).
 function kmMezi(a, b) {
   if (!a || !b || a.lat == null || b.lat == null) return 0;
@@ -156,12 +162,15 @@ function dopravaNa(sp, modelKey) {
 }
 // Co pobočky stojí každý měsíc — dobře umístěná se zaplatí, špatná krade.
 function pobockyMesicne() { return (S.pobocky || []).length * POBOCKA_MESICNE; }
-// Kdy si hráč může zřídit další pobočku.
-function pobockaOd() {
-  var posledni = (S.pobocky || []).reduce(function (a, x) { return Math.max(a, x.od || 0); }, 0);
-  return Math.max(S.startedAt || 0, posledni) + POBOCKA_PAUZA;
+// Pobočku jde zřídit kdykoli — omezuje ji jen cena a to, že v místě ještě
+// žádnou základnu nemá.
+function pobockaLze() { return true; }
+// Kdy půjde přestěhovat sídlo. Počítá se od založení firmy nebo od posledního
+// stěhování, podle toho, co bylo později.
+function sidloOd() {
+  return Math.max(S.startedAt || 0, (S.sidlo && S.sidlo.od) || 0) + SIDLO_PAUZA;
 }
-function pobockaLze() { return Date.now() >= pobockaOd(); }
+function sidloLze() { return !!S.sidlo && Date.now() >= sidloOd(); }
 
 // ─── Pohovor s rizikořem ────────────────────────────────────────────────────
 // Deset otázek při otevření nebo navýšení rámce, tři při běžném čerpání.
@@ -1501,6 +1510,9 @@ function dosypStav(o) {
     if (!o.offPovest || typeof o.offPovest !== 'object') o.offPovest = { den: '', body: 0 };
     if (typeof o.linkaSam !== 'boolean') o.linkaSam = false;
     if (typeof o.pojisteni !== 'boolean') o.pojisteni = false;
+    // Sídlo z doby, kdy se nestěhovalo, nemá datum. Bereme založení firmy —
+    // kdo hraje dýl než tři herní roky, může se stěhovat hned.
+    if (o.sidlo && !o.sidlo.od) o.sidlo.od = o.startedAt || Date.now();
     delete o.otazkyPosl;   // dřív se pamatovaly jednotlivé otázky, teď celé rozhovory
     // Rozehraná hra z doby před sídly: za sídlo bereme místo, kde hráč postavil
     // první prádlomat. Bez toho by mu doprava vycházela zdarma a pobočku by
@@ -8404,13 +8416,19 @@ function zakladnyHtml() {
   if (!S.sidlo) return '<div class="card"><h3>Sídlo firmy</h3>'
     + '<p class="muted small" style="margin:2px 0 0">Vznikne tam, kde postavíš první prádlomat. '
     + 'Od sídla se pak počítá doprava všech dalších strojů.</p></div>';
-  var lze = pobockaLze();
   return '<div class="card"><h3>Sídlo a pobočky</h3>'
-    + '<p class="muted small" style="margin:2px 0 10px">Doprava stroje se počítá od nejbližší základny. '
-    + 'Pobočka stojí ' + kcFull(POBOCKA_CENA) + ' a ' + kcFull(POBOCKA_MESICNE) + ' měsíčně.</p>'
+    + '<p class="muted small" style="margin:2px 0 10px">Od nejbližší základny se počítá doprava stroje, '
+    + 'výjezd technika k poruše i jízdy vlastní čety. Pobočka stojí ' + kcFull(POBOCKA_CENA) + ' a '
+    + kcFull(POBOCKA_MESICNE) + ' měsíčně, zřídit i zrušit ji můžeš kdykoli.</p>'
     + '<div class="kv"><span>Sídlo</span><b>' + esc(S.sidlo.name || 'neznámé') + '</b></div>'
-    + (S.pobocky || []).map(function (b) {
-        return '<div class="kv"><span>Pobočka</span><b>' + esc(b.name || 'pobočka') + '</b></div>';
+    + (sidloLze()
+        ? '<button class="btn sec sm" id="do-sidlo" style="width:100%;margin:2px 0 8px">Přestěhovat sídlo za '
+          + kcFull(SIDLO_STEHOVANI) + '</button>'
+        : '<p class="fine">Sídlo půjde přestěhovat ' + etaText(sidloOd() - Date.now())
+          + ' (za ' + kcFull(SIDLO_STEHOVANI) + ').</p>')
+    + (S.pobocky || []).map(function (b, i) {
+        return '<div class="kv"><span>Pobočka</span><b>' + esc(b.name || 'pobočka')
+          + ' <button class="pob-zrus" data-pob-zrus="' + i + '" title="Zrušit pobočku">\u00d7</button></b></div>';
       }).join('')
     + (pobockyMesicne() > 0 ? '<div class="kv"><span>Provoz poboček</span><b class="warn">'
       + kcFull(pobockyMesicne()) + ' / měsíc</b></div>' : '')
@@ -8420,10 +8438,11 @@ function zakladnyHtml() {
           + '). Servis tam musí trajektem nebo letadlem — pobočka na té straně se zaplatí '
           + 'už na ušetřeném čase výjezdů.</p>'
         : '')
-    + (lze
-        ? '<button class="btn sec" id="do-pobocka" style="width:100%;margin-top:10px">Zřídit pobočku za ' + kcFull(POBOCKA_CENA) + '</button>'
-        : '<p class="fine">Další pobočku si můžeš zřídit ' + etaText(pobockaOd() - Date.now())
-          + '. Koupit ji od jiného hráče na Burze můžeš kdykoli.</p>')
+    + '<button class="btn sec" id="do-pobocka" style="width:100%;margin-top:10px">Zřídit pobočku za '
+    + kcFull(POBOCKA_CENA) + '</button>'
+    + ((S.pobocky || []).length
+        ? '<p class="fine">Zrušená pobočka vrátí ' + kcFull(Math.round(POBOCKA_CENA * POBOCKA_VRATKA))
+          + ' — vybavení a sklad se rozprodají se ztrátou.</p>' : '')
     + '</div>';
 }
 // Vlastní stavební četa — karta v Síti.
@@ -8487,8 +8506,8 @@ function pobockaSheet() {
   }).filter(Boolean);
   sheet('<h3>Zřídit pobočku</h3>'
     + '<p class="muted small">Stojí ' + kcFull(POBOCKA_CENA) + ' a ' + kcFull(POBOCKA_MESICNE)
-    + ' měsíčně. Vyplatí se tam, kde chceš stavět — doprava se pak počítá odsud. '
-    + 'Další půjde zřídit až za tři herní roky.</p>'
+    + ' měsíčně. Vyplatí se tam, kde chceš stavět — doprava, výjezdy techniků i jízdy čety '
+    + 'se pak počítají odsud. Zrušit ji můžeš kdykoli, vrátí se ti polovina ceny.</p>'
     + (S.cash < POBOCKA_CENA ? '<p class="fine err">Na pobočku teď nemáš — chybí ti ' + kcFull(POBOCKA_CENA - S.cash) + '.</p>' : '')
     + (mesta.length
       ? '<div class="zeb">' + mesta.map(function (m) {
@@ -8501,7 +8520,7 @@ function pobockaSheet() {
   [].forEach.call(document.querySelectorAll('[data-pob]'), function (b) {
     b.onclick = function () {
       var m = mesta.filter(function (x) { return x.id === b.getAttribute('data-pob'); })[0];
-      if (!m || S.cash < POBOCKA_CENA || !pobockaLze()) return;
+      if (!m || S.cash < POBOCKA_CENA) return;
       S.cash -= POBOCKA_CENA;
       zapis('nakup', 'Pobočka ' + m.name, -POBOCKA_CENA);
       S.pobocky.push({ name: m.name, lat: m.lat, lon: m.lon, od: Date.now() });
@@ -8571,7 +8590,69 @@ function paintNet() {
   });
   bindZakladny();
 }
+// Zrušení pobočky. Vrací se polovina ceny — zbytek je utopený ve vybavení.
+function zrusPobockuSheet(i) {
+  var b = (S.pobocky || [])[i];
+  if (!b) return;
+  var vratka = Math.round(POBOCKA_CENA * POBOCKA_VRATKA);
+  sheet('<h3>Zrušit pobočku ' + esc(b.name || '') + '</h3>'
+    + '<p class="muted small">Sklad se vyklidí a člověk odejde. Doprava strojů i výjezdy techniků '
+    + 'se pak budou počítat od další nejbližší základny — u míst v okolí to zdraží.</p>'
+    + '<div class="kv"><span>Vrátí se ti</span><b class="ok">' + kcFull(vratka) + '</b></div>'
+    + '<div class="kv"><span>Ušetříš měsíčně</span><b class="ok">' + kcFull(POBOCKA_MESICNE) + '</b></div>'
+    + '<button class="btn big" id="do-zrus-ano" style="width:100%;margin-top:12px">Zrušit pobočku</button>'
+    + '<button class="btn sec" id="do-zrus-ne" style="width:100%;margin-top:8px">Nechat být</button>');
+  if ($('do-zrus-ne')) $('do-zrus-ne').onclick = closeSheet;
+  if ($('do-zrus-ano')) $('do-zrus-ano').onclick = function () {
+    S.pobocky.splice(i, 1);
+    S.cash += vratka;
+    zapis('prijem', 'Zrušená pobočka ' + (b.name || ''), vratka);
+    save(); paint(); drawMap(); closeSheet(); syncState(true);
+    toast('Pobočka ' + (b.name || '') + ' zrušená, vrátilo se ' + kcFull(vratka) + '.', 'ok');
+  };
+}
+// Přestěhování sídla. Sídlo je adresa firmy, takže to stojí a jde jen jednou
+// za tři herní roky — jinak by si ho hráč vozil za každou vlnou stavby.
+function sidloSheet() {
+  var mesta = Object.keys(S.areas || {}).map(function (id) {
+    var a = S.areas[id], str = stredOblasti(a);
+    if (!str) return null;
+    var tady = S.sidlo && kmMezi(S.sidlo, str) < 8;
+    return { id: id, name: a.name || id, lat: str.lat, lon: str.lon, tady: tady };
+  }).filter(Boolean);
+  var malo = S.cash < SIDLO_STEHOVANI;
+  sheet('<h3>Přestěhovat sídlo</h3>'
+    + '<p class="muted small">Stěhování stojí ' + kcFull(SIDLO_STEHOVANI)
+    + ' a další půjde až za tři herní roky. Od sídla se počítá doprava strojů, výjezdy techniků '
+    + 'i jízdy čety — vyplatí se tam, kde máš těžiště sítě.</p>'
+    + (malo ? '<p class="fine err">Na stěhování teď nemáš — chybí ti '
+        + kcFull(SIDLO_STEHOVANI - S.cash) + '.</p>' : '')
+    + (mesta.length
+        ? '<div class="zeb">' + mesta.map(function (m) {
+            return '<div class="zeb-row"><span class="nick">' + esc(m.name)
+              + '<i>' + (m.tady ? 'tady sídlo máš' : 'prozkoumané město') + '</i></span>'
+              + (m.tady || malo ? '' : '<button class="btn sm" data-sidlo="' + esc(m.id) + '">Sem</button>')
+              + '</div>';
+          }).join('') + '</div>'
+        : '<div class="empty">Nemáš prozkoumané žádné město.</div>'));
+  [].forEach.call(document.querySelectorAll('[data-sidlo]'), function (b) {
+    b.onclick = function () {
+      var m = mesta.filter(function (x) { return x.id === b.getAttribute('data-sidlo'); })[0];
+      if (!m || S.cash < SIDLO_STEHOVANI || !sidloLze()) return;
+      S.cash -= SIDLO_STEHOVANI;
+      zapis('nakup', 'Stěhování sídla do ' + m.name, -SIDLO_STEHOVANI);
+      S.sidlo = { name: m.name, lat: m.lat, lon: m.lon, od: Date.now() };
+      save(); paint(); drawMap(); closeSheet(); syncState(true);
+      toast('Sídlo firmy je teď v ' + m.name + '.', 'ok');
+    };
+  });
+}
 function bindZakladny() {
+  var sd = $('do-sidlo');
+  if (sd) sd.onclick = sidloSheet;
+  [].forEach.call(document.querySelectorAll('[data-pob-zrus]'), function (b) {
+    b.onclick = function (e) { e.stopPropagation(); zrusPobockuSheet(Number(b.getAttribute('data-pob-zrus'))); };
+  });
   var pj = $('do-pojisteni');
   if (pj) pj.onclick = function () {
     S.pojisteni = !S.pojisteni;
