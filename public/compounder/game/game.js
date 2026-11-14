@@ -10489,6 +10489,7 @@ function loadCards() {
     SUBS_CAT = r.j.subs || null; PREDPLATNE = r.j.predplatne || [];
     LINKA_CAT = r.j.linka || null;
     if (typeof r.j.onboarding_rychly === 'boolean') ONBOARDING_RYCHLY = r.j.onboarding_rychly;
+    IG = r.j.instagram || null;
     RUSH_ZA = r.j.rush_zdarma_za; RUSH_MAX = r.j.rush_zdarma_max || 5;
     if (r.j.owned && ME) ME.cards = r.j.owned;
   }).catch(function () { });
@@ -10560,7 +10561,8 @@ function paintCards() {
   if (!CARDS_CAT) { box.innerHTML = '<p class="muted small">Načítám…</p>'; return loadCards().then(paintCards); }
   var total = CARDS_CAT.reduce(function (a, c) { return a + ownedOf(c.kind); }, 0);
   var vsechny = CARDS_CAT.length && CARDS_CAT.every(function (c) { return ownedOf(c.kind) >= 1; });
-  box.innerHTML = (total ? '' : '<p class="muted small">Zatím žádnou kartu nemáš.</p>')
+  box.innerHTML = instagramHtml()
+    + (total ? '' : '<p class="muted small">Zatím žádnou kartu nemáš.</p>')
     + (vsechny ? '<p class="muted small">Od každé karty máš jednu do začátku — jsou tvoje, použij je, kdy chceš.</p>' : '')
     + CARDS_CAT.map(function (c) {
       var n = ownedOf(c.kind), art = CARD_ART[c.kind] || { emoji: '⚡', tone: 'blue' };
@@ -10594,6 +10596,45 @@ function paintCards() {
   };
   [].forEach.call(box.querySelectorAll('[data-use]'), function (b) { b.onclick = function () { useCard(b.getAttribute('data-use')); }; });
   [].forEach.call(box.querySelectorAll('[data-buy-card]'), function (b) { b.onclick = function () { buyCard(b.getAttribute('data-buy-card')); }; });
+  bindInstagram();
+}
+
+// ─── Kartičky za sledování na Instagramu ─────────────────────────────────────
+// Že nás někdo opravdu sleduje, ověřit nejde — Instagram na to nemá rozhraní.
+// Stojí to tedy na důvěře a vydá se to jednou za účet: hráč si otevře profil
+// a pak si řekne o tři Expresní dovozy. Po vyzvednutí karta mizí.
+var IG = null;          // { odkaz, karet, vzato } ze serveru
+function instagramHtml() {
+  if (!ME || !IG || !IG.odkaz || IG.vzato) return '';
+  var otevrel = !!(S && S.igOtevren);
+  return '<div class="gcard ig">'
+    + '<div class="gcard-top"><span class="gcard-ico">\uD83D\uDCF8</span>'
+    + '<div><h3>Sleduj nás na Instagramu</h3>'
+    + '<p class="gcard-short">' + IG.karet + '\u00d7 Expresní dovoz zdarma</p></div></div>'
+    + '<p class="muted small">Dáváme tam, co se ve hře chystá, a co vyvedli ostatní hráči. '
+    + 'Za sledování ti přidáme ' + IG.karet + ' kartičky Expresní dovoz — stroj pak dorazí hned, '
+    + 'místo čekání dva herní měsíce. Jednou na účet.</p>'
+    + '<div class="gcard-act">'
+    + '<a class="btn sm" id="ig-open" href="' + esc(IG.odkaz) + '" target="_blank" rel="noopener">Otevřít Instagram</a>'
+    + (otevrel ? '<button class="btn sm ghost" id="ig-vzit">Sleduju — vzít ' + IG.karet + '\u00d7</button>' : '')
+    + '</div>'
+    + (otevrel ? '' : '<p class="fine">Až nás na Instagramu sledovat budeš, vrať se sem a kartičky si vyzvedni.</p>')
+    + '</div>';
+}
+function bindInstagram() {
+  var o = $('ig-open');
+  if (o) o.onclick = function () { S.igOtevren = true; save(); setTimeout(paintCards, 400); };
+  var v = $('ig-vzit');
+  if (v) v.onclick = function () {
+    v.disabled = true;
+    apiJson('/account/instagram', {}).then(function (r) {
+      if (!r.ok) { v.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
+      if (IG) IG.vzato = true;
+      if (ME) ME.cards = r.j.owned || ME.cards;
+      paint(); paintCards();
+      toast('Díky! Přidali jsme ti ' + r.j.karet + '\u00d7 Expresní dovoz.', 'ok', true);
+    }).catch(function () { v.disabled = false; toast('Server neodpovídá.', 'err'); });
+  };
 }
 
 // Balíčky infolinky. Kredit je jeden hovor, který vyřídí operátor — hráč si

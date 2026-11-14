@@ -7660,6 +7660,9 @@ model GamePlayer {
   hra_den       String?   @db.VarChar(10)
   hra_at        DateTime?
 
+  // Kdy si hráč vyzvedl kartičky za sledování na Instagramu. Jednou za účet.
+  instagram_at  DateTime?
+
   // Id první návštěvy. Podle něj se k účtu najde záznam první minuty ve hře.
   sid           String?   @db.VarChar(64)
 

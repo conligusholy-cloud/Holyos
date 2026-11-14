@@ -927,6 +927,29 @@ router.post('/account/tutorial-card', requirePlayer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ─── Sledování na Instagramu ─────────────────────────────────────────────────
+// Za sledování profilu dostane hráč tři Expresní dovozy. Že nás někdo opravdu
+// sleduje, se ověřit nedá — Instagram na to žádné rozhraní nemá — takže to
+// stojí na důvěře a vydá se to jednou za účet. Je to cena za reklamu, ne
+// prodej: karty jsou dárek (purchase_id zůstává prázdné).
+const IG_ODKAZ = 'https://www.instagram.com/laundromattycoon';
+const IG_KARET = 3;
+router.post('/account/instagram', requirePlayer, async (req, res, next) => {
+  try {
+    if (req.player.instagram_at) {
+      return res.status(409).json({ error: 'Kartičky za Instagram už sis vyzvedl.' });
+    }
+    await prisma.gamePlayer.update({
+      where: { id: req.player.id }, data: { instagram_at: new Date() },
+    });
+    await prisma.gameCard.createMany({
+      data: Array.from({ length: IG_KARET }, () => ({ player_id: req.player.id, kind: 'rush' })),
+    });
+    console.log('[game] instagram: hrac ' + req.player.id + ' dostal ' + IG_KARET + 'x rush');
+    res.json({ ok: true, karet: IG_KARET, owned: (await pub(req.player)).cards });
+  } catch (e) { next(e); }
+});
+
 // ─── Expresní dovoz zdarma ─────────────────────────────────────
 // Každé dva herní měsíce (jeden skutečný den) přibude jedna karta zdarma, ať
 // hráč nemusí čekat den na každý stroj. Nepoužité se hromadí jen do pěti —
@@ -976,6 +999,7 @@ router.get('/cards', async (req, res, next) => {
       ok: true, catalog: await catalogPublic(), cash: await cashPublic(),
       linka: await linkaPublic(),
       onboarding_rychly: await rychlyOnboarding(),
+      instagram: { odkaz: IG_ODKAZ, karet: IG_KARET, vzato: p ? !!p.instagram_at : false },
       subs: await subsPublic(), predplatne: await predplatneHrace(p),
       payments: require('./game-stripe.routes')._paymentsOn(),
       owned: p ? (await pub(p)).cards : null,
