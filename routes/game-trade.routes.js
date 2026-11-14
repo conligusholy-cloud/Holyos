@@ -19,7 +19,21 @@ router.use(express.json({ limit: '32kb' }));
 
 const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 const MODELY = ['mini', 'flex', 'max'];
-const PREDMETY = ['stroj', 'pradlomat', 'karta', 'pobocka'];
+const PREDMETY = ['stroj', 'pradlomat', 'karta', 'pobocka', 'pujcka', 'podil'];
+// Co si dva hráči můžou domluvit navíc k věcem: půjčku a podíl ve firmě.
+const MESIC_MS = 43200000;             // herní měsíc = 12 skutečných hodin
+const PUJCKA_MIN = 10000;
+const UROK_MAX = 0.6;                  // 60 % ročně je strop, výš už je to lichva
+const PUJCKA_MESICU_MAX = 60;
+const PODIL_MIN = 0.01, PODIL_MAX = 0.49;   // většinu firmy si majitel nechá
+const ODKUP_NASOBEK = 1.25;            // za kolik jde podíl koupit zpátky
+// Anuitní splátka za herní měsíc: stejná částka po celou dobu.
+function anuita(castka, urokRocni, mesicu) {
+  const r = (Number(urokRocni) || 0) / 12;
+  if (!(mesicu > 0)) return castka;
+  if (r <= 0) return Math.ceil(castka / mesicu);
+  return Math.ceil(castka * r / (1 - Math.pow(1 + r, -mesicu)));
+}
 const MAX_CENA = 2000000000;
 
 function hrac(req, res, next) {
@@ -81,7 +95,7 @@ router.get('/trade/players', hrac, api(async (req, res) => {
 // ─── Nabídky ─────────────────────────────────────────────────────────────────
 const verejny = (t, me) => ({
   id: t.id, smer: t.smer, predmet: t.predmet, model: t.model, spot_id: t.spot_id,
-  card_kind: t.card_kind, cena: t.cena, karty: t.karty || [], vzkaz: t.vzkaz,
+  card_kind: t.card_kind, cena: t.cena, karty: t.karty || [], vzkaz: t.vzkaz, data: t.data || null,
   stav: t.stav, parent_id: t.parent_id, created_at: t.created_at,
   od: { id: t.from_id, nick: t.from_nick }, komu: { id: t.to_id, nick: t.to_nick },
   moje: t.from_id === me,       // nabídku poslal přihlášený hráč
@@ -115,8 +129,16 @@ async function zkontroluj(nab, prodavajici) {
     // Pobočky žijí ve stavu hry, ne v tabulce — hledáme ji podle názvu.
     const pob = Array.isArray(st.pobocky) ? st.pobocky : [];
     if (!pob.some((x) => x && x.name === nab.pobocka)) return 'Prodávající takovou pobočku nemá.';
+  } else if (nab.predmet === 'pujcka' || nab.predmet === 'podil') {
+    return null;        // peníze a podíl se kontrolují zvlášť, nic se nepřevádí ze skladu
   } else return 'Tohle se obchodovat nedá.';
   return null;
+}
+// Kolik procent firmy už je prodáno jinde.
+async function prodanyPodil(firmaId) {
+  const rows = await prisma.gameEquity.findMany({ where: { firma_id: firmaId, stav: 'bezi' },
+    select: { podil: true } });
+  return rows.reduce((a, x) => a + (x.podil || 0), 0);
 }
 
 // POST /trade/offer { to_id, smer, predmet, model, spot_id, card_kind, cena, karty[], vzkaz }
@@ -137,6 +159,39 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
 
   const nab = { predmet, model: s(b.model, 10) || null, spot_id: s(b.spot_id, 120) || null,
     card_kind: s(b.card_kind, 24) || null, pobocka: s(b.pobocka, 80) || null };
+  // Podmínky půjčky a podílu. U půjčky je „prodávající" ten, kdo peníze dává,
+  // takže směr čteme stejně jako u věcí: koupim = chci je od něj.
+  let data = null;
+  if (predmet === 'pujcka') {
+    const urok = Math.max(0, Math.min(UROK_MAX, Number(b.urok) || 0));
+    const mesicu = Math.max(1, Math.min(PUJCKA_MESICU_MAX, Math.round(Number(b.mesicu) || 0)));
+    if (cena < PUJCKA_MIN) {
+      return res.status(400).json({ error: 'Nejmenší půjčka je ' + PUJCKA_MIN.toLocaleString('cs-CZ') + ' L$.' });
+    }
+    // Zástavou ručí vždycky dlužník — ten, kdo si půjčuje.
+    const dluznik = smer === 'koupim' ? req.player : druhy;
+    const zast = s(b.zastava, 120) || null;
+    let zastavaNazev = null;
+    if (zast) {
+      const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: zast } });
+      if (!c || c.player_id !== dluznik.id) {
+        return res.status(409).json({ error: 'Zástavou může být jen prádlomat toho, kdo si půjčuje.' });
+      }
+      zastavaNazev = c.name || zast;
+    }
+    data = { urok, mesicu, zastava: zast, zastava_nazev: zastavaNazev,
+      splatka: anuita(cena, urok, mesicu) };
+  } else if (predmet === 'podil') {
+    const podil = Math.max(PODIL_MIN, Math.min(PODIL_MAX, Number(b.podil) || 0));
+    // Podíl prodává majitel firmy — u „koupim" je to ten druhý, u „prodam" já.
+    const firma = smer === 'koupim' ? druhy : req.player;
+    const uz = await prodanyPodil(firma.id);
+    if (uz + podil > PODIL_MAX + 1e-9) {
+      return res.status(409).json({ error: 'Z firmy je prodáno už ' + Math.round(uz * 100)
+        + ' %. Víc než ' + Math.round(PODIL_MAX * 100) + ' % se prodat nedá.' });
+    }
+    data = { podil };
+  }
   // Kdo věc má: u „koupim" ji má ten druhý, u „prodam" ji mám já.
   const chyba = await zkontroluj(nab, smer === 'koupim' ? druhy : req.player);
   if (chyba) return res.status(409).json({ error: chyba });
@@ -152,7 +207,7 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
     smer, predmet, model: nab.model,
     // U pobočky nese její název sloupec spot_id — nový sloupec kvůli tomu nezakládáme.
     spot_id: predmet === 'pobocka' ? nab.pobocka : nab.spot_id, card_kind: nab.card_kind,
-    cena, karty, vzkaz: s(b.vzkaz, 200) || null,
+    cena, karty, data, vzkaz: s(b.vzkaz, 200) || null,
   } });
   res.json({ ok: true, trade: verejny(t, req.player.id) });
 }));
@@ -214,13 +269,36 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
   }
   // Má kupující na to? Čteme z jeho poslední uložené hry — není to neprůstřelné,
   // ale zachytí to poctivý omyl.
-  const hotovost = Math.round((stavu(kupujici).cash) || 0);
-  if (t.cena > hotovost) return res.status(409).json({ error: 'Kupující nemá dost hotovosti (' + hotovost.toLocaleString('cs-CZ') + ' L$).' });
+  // U půjčky dává peníze ten, od koho se „kupují" — tedy věřitel.
+  const platici = t.predmet === 'pujcka' ? prodavajici : kupujici;
+  const hotovost = Math.round((stavu(platici).cash) || 0);
+  if (t.cena > hotovost) {
+    return res.status(409).json({ error: (t.predmet === 'pujcka' ? 'Věřitel' : 'Kupující')
+      + ' nemá dost hotovosti (' + hotovost.toLocaleString('cs-CZ') + ' L$).' });
+  }
+  if (t.predmet === 'podil') {
+    const uz = await prodanyPodil(prodavajici.id);
+    const p = Number((t.data || {}).podil) || 0;
+    if (uz + p > PODIL_MAX + 1e-9) {
+      await prisma.gameTrade.update({ where: { id }, data: { stav: 'neplatne', resolved_at: new Date() } });
+      return res.status(409).json({ error: 'Z firmy je mezitím prodáno už ' + Math.round(uz * 100) + ' %.' });
+    }
+  }
+  if (t.predmet === 'pujcka' && (t.data || {}).zastava) {
+    const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: t.data.zastava } });
+    if (!c || c.player_id !== kupujici.id) {
+      await prisma.gameTrade.update({ where: { id }, data: { stav: 'neplatne', resolved_at: new Date() } });
+      return res.status(409).json({ error: 'Zastavený prádlomat už dlužníkovi nepatří.' });
+    }
+  }
 
   const karty = Array.isArray(t.karty) ? t.karty : [];
   const popisPredmetu = t.predmet === 'stroj' ? (t.model || '').toUpperCase()
     : t.predmet === 'pradlomat' ? 'prádlomat'
-    : t.predmet === 'pobocka' ? ('pobočku ' + (t.spot_id || '')) : 'karta';
+    : t.predmet === 'pobocka' ? ('pobočku ' + (t.spot_id || ''))
+    : t.predmet === 'pujcka' ? 'půjčku'
+    : t.predmet === 'podil' ? ('podíl ' + Math.round(((t.data || {}).podil || 0) * 100) + ' % ve firmě')
+    : 'karta';
 
   await prisma.$transaction(async (tx) => {
     // 1. karty přihozené k ceně → od kupujícího prodávajícímu
@@ -257,6 +335,40 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
           popis: 'Koupil jsi pobočku ' + (t.spot_id || '') },
       ] });
     }
+    // 3a. půjčka: peníze jdou od věřitele dlužníkovi a rozjede se splátkový kalendář
+    if (t.predmet === 'pujcka') {
+      const d = t.data || {};
+      const mesicu = Math.max(1, Math.round(Number(d.mesicu) || 1));
+      const urok = Math.max(0, Number(d.urok) || 0);
+      const splatka = Math.max(1, Math.round(Number(d.splatka) || anuita(t.cena, urok, mesicu)));
+      await tx.gameLoan.create({ data: {
+        trade_id: t.id,
+        lender_id: prodavajici.id, lender_nick: prodavajici.nick,
+        borrower_id: kupujici.id, borrower_nick: kupujici.nick,
+        castka: t.cena, urok, mesicu, splatka,
+        zastava_spot: d.zastava || null, zastava_nazev: d.zastava_nazev || null,
+        dalsi_at: new Date(Date.now() + MESIC_MS),
+      } });
+      await tx.gameDelivery.createMany({ data: [
+        { player_id: prodavajici.id, trade_id: t.id, kind: 'cash', amount: -t.cena,
+          popis: 'Půjčil jsi ' + kupujici.nick },
+        { player_id: kupujici.id, trade_id: t.id, kind: 'cash', amount: t.cena,
+          popis: 'Půjčka od ' + prodavajici.nick },
+      ] });
+      await tx.gameTrade.update({ where: { id }, data: { stav: 'prijato', resolved_at: new Date() } });
+      return;
+    }
+    // 3b. podíl: investor zaplatí majiteli a od příštího herního měsíce s ním
+    // nese zisk i ztrátu.
+    if (t.predmet === 'podil') {
+      const podil = Number((t.data || {}).podil) || 0;
+      await tx.gameEquity.create({ data: {
+        trade_id: t.id,
+        investor_id: kupujici.id, investor_nick: kupujici.nick,
+        firma_id: prodavajici.id, firma_nick: prodavajici.nick,
+        podil, cena: t.cena, dalsi_at: new Date(Date.now() + MESIC_MS),
+      } });
+    }
     // 3. peníze
     if (t.cena > 0) {
       await tx.gameDelivery.createMany({ data: [
@@ -270,6 +382,57 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
   console.log('[game] obchod #' + id + ': ' + prodavajici.nick + ' → ' + kupujici.nick
     + ' · ' + popisPredmetu + ' za ' + t.cena + ' L$' + (karty.length ? ' + ' + karty.length + ' karet' : ''));
   res.json({ ok: true });
+}));
+
+// ─── Půjčky a podíly: přehled a odkup ───────────────────────────────────────
+// GET /trade/finance → co komu dlužím, kdo dluží mně, kdo má podíl ve mně
+// a v kom mám podíl já.
+router.get('/trade/finance', hrac, api(async (req, res) => {
+  const ja = req.player.id;
+  const [pujcky, podily] = await Promise.all([
+    prisma.gameLoan.findMany({
+      where: { OR: [{ borrower_id: ja }, { lender_id: ja }], stav: { in: ['bezi', 'vymahano'] } },
+      orderBy: { dalsi_at: 'asc' }, take: 100,
+    }),
+    prisma.gameEquity.findMany({
+      where: { OR: [{ investor_id: ja }, { firma_id: ja }], stav: 'bezi' },
+      orderBy: { created_at: 'asc' }, take: 100,
+    }),
+  ]);
+  res.json({ ok: true,
+    pujcky: pujcky.map((p) => ({ id: p.id, moje: p.borrower_id === ja ? 'dluzim' : 'pujcil',
+      kdo: p.borrower_id === ja ? p.lender_nick : p.borrower_nick,
+      castka: p.castka, urok: p.urok, mesicu: p.mesicu, splatka: p.splatka,
+      splaceno: p.splaceno, zmeskano: p.zmeskano, stav: p.stav,
+      zastava: p.zastava_nazev || null, dalsi: p.dalsi_at })),
+    podily: podily.map((e) => ({ id: e.id, moje: e.investor_id === ja ? 'mam' : 'prodal',
+      kdo: e.investor_id === ja ? e.firma_nick : e.investor_nick,
+      podil: e.podil, cena: e.cena, vyplaceno: e.vyplaceno,
+      odkup: Math.round(e.cena * ODKUP_NASOBEK), dalsi: e.dalsi_at })),
+    odkup_nasobek: ODKUP_NASOBEK });
+}));
+
+// POST /trade/podil/:id/odkup → majitel firmy koupí podíl zpátky
+router.post('/trade/podil/:id/odkup', hrac, api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const e = await prisma.gameEquity.findUnique({ where: { id } });
+  if (!e || e.stav !== 'bezi') return res.status(404).json({ error: 'Takový podíl tu není.' });
+  if (e.firma_id !== req.player.id) return res.status(403).json({ error: 'Odkoupit podíl může jen majitel firmy.' });
+  const cena = Math.round(e.cena * ODKUP_NASOBEK);
+  const hotovost = Math.round(stavu(req.player).cash || 0);
+  if (cena > hotovost) {
+    return res.status(409).json({ error: 'Na odkup potřebuješ ' + cena.toLocaleString('cs-CZ') + ' L$.' });
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.gameDelivery.createMany({ data: [
+      { player_id: e.firma_id, kind: 'cash', amount: -cena,
+        popis: 'Odkup podílu od ' + e.investor_nick },
+      { player_id: e.investor_id, kind: 'cash', amount: cena,
+        popis: e.firma_nick + ' odkoupil tvůj podíl' },
+    ] });
+    await tx.gameEquity.update({ where: { id }, data: { stav: 'odkoupeno' } });
+  });
+  res.json({ ok: true, cena });
 }));
 
 // ─── Vyzvednutí následků ─────────────────────────────────────────────────────

@@ -7932,6 +7932,9 @@ model GameTrade {
   // Cena v laundrech a k tomu případně přihozené karty (pole druhů).
   cena          Int       @default(0)
   karty         Json?
+  // Podmínky u nabídek, které nejsou věc: půjčka (úrok, délka, zástava)
+  // a podíl ve firmě (procento).
+  data          Json?
   vzkaz         String?   @db.VarChar(200)
   // ceka | protinavrh | prijato | odmitnuto | zruseno | neplatne
   stav          String    @default("ceka") @db.VarChar(12)
@@ -7948,6 +7951,64 @@ model GameTrade {
 // Co si hráč musí po uzavřeném obchodu vyzvednout do své rozehrané hry.
 // Hotovost, stroje a postavené prádlomaty žijí v prohlížeči, takže server
 // jen zapíše, co se má stát, a klient to při nejbližším otevření provede.
+// ─── Půjčka mezi hráči ───────────────────────────────────────────────────────
+// Co si dva hráči domluví na burze: jistina, roční úrok, délka v herních
+// měsících a případná zástava (postavený prádlomat dlužníka). Splátky strhává
+// server každý herní měsíc; kdo třikrát nezaplatí, přijde o zástavu, a když
+// žádnou nemá, zbytek dluhu mu spadne do banky — odtud už vede cesta ke krachu.
+model GameLoan {
+  id           Int       @id @default(autoincrement())
+  trade_id     Int?
+  lender_id    Int
+  lender_nick  String    @db.VarChar(24)
+  borrower_id  Int
+  borrower_nick String   @db.VarChar(24)
+  castka       Int
+  urok         Float     @default(0)
+  mesicu       Int
+  splatka      Int
+  splaceno     Int       @default(0)
+  zmeskano     Int       @default(0)
+  zastava_spot String?   @db.VarChar(120)
+  zastava_nazev String?  @db.VarChar(160)
+  // bezi | splaceno | propadlo | vymahano
+  stav         String    @default("bezi") @db.VarChar(12)
+  dalsi_at     DateTime
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  @@index([stav, dalsi_at])
+  @@index([borrower_id])
+  @@index([lender_id])
+  @@map("game_loans")
+}
+
+// ─── Podíl ve firmě ──────────────────────────────────────────────────────────
+// Investor koupí procento firmy a od té chvíle s ní nese zisk i ztrátu: každý
+// herní měsíc mu chodí jeho díl toho, co firmě zbyde — a když je to minus,
+// stejným dílem doplácí. Majitel může podíl odkoupit zpátky.
+model GameEquity {
+  id            Int       @id @default(autoincrement())
+  trade_id      Int?
+  investor_id   Int
+  investor_nick String    @db.VarChar(24)
+  firma_id      Int
+  firma_nick    String    @db.VarChar(24)
+  podil         Float
+  cena          Int
+  vyplaceno     Int       @default(0)
+  // bezi | odkoupeno
+  stav          String    @default("bezi") @db.VarChar(12)
+  dalsi_at      DateTime
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  @@index([stav, dalsi_at])
+  @@index([firma_id])
+  @@index([investor_id])
+  @@map("game_equity")
+}
+
 model GameDelivery {
   id         Int       @id @default(autoincrement())
   player_id  Int

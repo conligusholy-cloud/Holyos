@@ -1426,6 +1426,12 @@ server.listen(PORT, async () => {
   runExpiredLotsSweep();
   setInterval(runExpiredLotsSweep, SWEEP_INTERVAL_MS);
   try {
+    // Splátky půjček mezi hráči a výplaty podílů ve firmách.
+    require('./services/game/finance').start();
+  } catch (err) {
+    console.error('[app] game-finance nelze spustit:', err.message);
+  }
+  try {
     const emailIngestWorker = require('./services/email-ingest-worker');
     emailIngestWorker.start();
   } catch (err) {
