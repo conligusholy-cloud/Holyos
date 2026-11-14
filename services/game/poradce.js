@@ -122,6 +122,8 @@ const PRAVIDLA = [
   '  poruch a návratnosti), Místa (všechna prověřená místa od nejlepšího skóre, s tím, co na nich',
   '  stojí — odtud se dá rovnou stavět, měnit stroj nebo přeplácet), Vývoj (grafy) a Žebříček',
   '  (hráči podle prádlomatů, zisku, jmění, hvězdiček, pozvánek a země).',
+  '- Záložka Já: název firmy a její znak jdou měnit kdykoli, jméno hráče jednou za nastavený',
+  '  počet dnů (výchozí 30). Změna jména se přepíše všude — na mapě, v žebříčku i u starých obchodů.',
   '',
   'CO VE HŘE NENÍ (dřív bylo, už ne):',
   '- Nástěnka snů a zprávy mezi hráči. Obojí bylo zrušeno, nenabízej je.',

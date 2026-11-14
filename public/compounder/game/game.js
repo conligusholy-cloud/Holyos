@@ -9362,6 +9362,61 @@ function bindMajetek() {
     };
   });
 }
+// ─── Změna jména hráče ───────────────────────────────────────────────────────
+// Jméno vidí ostatní na mapě i v žebříčku, takže mezi změnami je pauza —
+// jak dlouhá, řídí nastavení hry. Opravu velkých písmen pauza neblokuje.
+var NICK_PAUZA_MS = 30 * 86400000;
+var NICK_RE_HRA = /^[\p{L}\p{N}_.-]{3,24}$/u;   // stejné pravidlo jako na serveru
+function nickVolneZa() {
+  if (!ME || !ME.nick_at || !NICK_PAUZA_MS) return 0;
+  return Math.max(0, NICK_PAUZA_MS - (Date.now() - Number(new Date(ME.nick_at))));
+}
+function nickSheet() {
+  var zbyva = nickVolneZa();
+  var dnu = Math.ceil(zbyva / 86400000);
+  sheet('<h3>Jméno hráče</h3>'
+    + '<p class="muted small">Pod tímhle jménem tě vidí ostatní na mapě, v žebříčku i na burze. '
+    + 'Přepíše se všude — i u obchodů, které jsi už uzavřel.'
+    + (NICK_PAUZA_MS ? ' Měnit ho jde jednou za ' + Math.round(NICK_PAUZA_MS / 86400000) + ' dnů.' : '')
+    + '</p>'
+    + (zbyva ? '<p class="fine warn">Naposledy sis ho měnil nedávno — další změna půjde za ' + dnu + ' dnů. '
+        + 'Teď jde opravit jen velká a malá písmena.</p>' : '')
+    + '<label class="fld"><span>Jméno hráče</span>'
+    + '<input id="nick-novy" class="inp" type="text" maxlength="24" autocapitalize="off" '
+    + 'autocorrect="off" spellcheck="false" value="' + esc(ME ? ME.nick : '') + '"></label>'
+    + '<p class="fine" id="nick-stav">3–24 znaků: písmena, číslice, tečka, pomlčka, podtržítko.</p>'
+    + '<button class="btn big" id="nick-ok" style="width:100%;margin-top:6px">Uložit jméno</button>');
+  var hledam = null;
+  var stav = function (txt, tr) { var el = $('nick-stav'); el.textContent = txt; el.className = 'fine' + (tr ? ' ' + tr : ''); };
+  $('nick-novy').oninput = function () {
+    var v = $('nick-novy').value.trim();
+    if (hledam) { clearTimeout(hledam); hledam = null; }
+    if (v === (ME ? ME.nick : '')) return stav('Tohle jméno už máš.');
+    if (!NICK_RE_HRA.test(v)) return stav('3–24 znaků: písmena, číslice, tečka, pomlčka, podtržítko.', 'err');
+    if (ME && v.toLowerCase() === String(ME.nick).toLowerCase()) return stav('Jen jinak velká písmena — to jde kdykoli.', 'ok');
+    stav('Zjišťuji, jestli je volné…');
+    hledam = setTimeout(function () {
+      api('/account/nick-free?nick=' + encodeURIComponent(v)).then(function (r) {
+        if ($('nick-novy').value.trim() !== v) return;
+        stav(r.ok && r.j.free ? 'Jméno je volné.' : 'Tohle jméno už někdo má.', r.ok && r.j.free ? 'ok' : 'err');
+      }).catch(function () { stav('Volnost jména se nepovedlo ověřit.'); });
+    }, 400);
+  };
+  $('nick-ok').onclick = function () {
+    var v = $('nick-novy').value.trim(), b = $('nick-ok');
+    if (!NICK_RE_HRA.test(v)) return toast('Jméno musí mít 3–24 znaků.', 'err');
+    b.disabled = true; b.textContent = 'Ukládám…';
+    apiJson('/account/nick', { nick: v }).then(function (r) {
+      b.disabled = false; b.textContent = 'Uložit jméno';
+      if (!r.ok) return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err');
+      ME = r.j.player;
+      ZEB = null; TRADES = null; FINANCE = null;
+      closeSheet(); loadClaims(); paintMe(); drawMap();
+      toast('Od teď hraješ jako ' + ME.nick + '.', 'ok');
+    }).catch(function () { b.disabled = false; b.textContent = 'Uložit jméno'; toast('Server neodpovídá.', 'err'); });
+  };
+}
+
 function paintMe() {
   var p = PROFILES[S.profile];
   // Co má hráč rozepsané, přežije překreslení.
@@ -9377,6 +9432,7 @@ function paintMe() {
       + '<button class="btn sec" id="me-firma-ulozit" style="width:100%;margin-top:8px">Přejmenovat firmu</button>'
       + '<button class="btn sec" id="me-znak" style="width:100%;margin-top:8px">'
       + (ME.emblem ? 'Změnit znak firmy' : 'Vygenerovat znak firmy') + '</button>'
+      + '<button class="btn sec" id="me-nick" style="width:100%;margin-top:8px">Změnit jméno hráče</button>'
       + '</div>'
     : '')
     + '<div class="card"><h3>' + esc(p.name) + '</h3>'
@@ -9427,6 +9483,8 @@ function paintMe() {
   if (kn) kn.onclick = function () { KNIHA_FILTR = 'vse'; knihaSheet(); };
   var zb = $('me-znak');
   if (zb) zb.onclick = function () { znakSheet(); };
+  var nb = $('me-nick');
+  if (nb) nb.onclick = function () { nickSheet(); };
   $('do-share').onclick = function () { shareGame($('do-share')); };
   $('do-reset').onclick = function () {
     sheet('<h3>Začít znovu?</h3>'
@@ -11146,6 +11204,7 @@ function loadCards() {
     SUBS_CAT = r.j.subs || null; PREDPLATNE = r.j.predplatne || [];
     LINKA_CAT = r.j.linka || null;
     if (typeof r.j.onboarding_rychly === 'boolean') ONBOARDING_RYCHLY = r.j.onboarding_rychly;
+    if (typeof r.j.nick_pauza_ms === 'number') NICK_PAUZA_MS = r.j.nick_pauza_ms;
     IG = r.j.instagram || null;
     FB = r.j.facebook || null;
     RUSH_ZA = r.j.rush_zdarma_za; RUSH_MAX = r.j.rush_zdarma_max || 5;

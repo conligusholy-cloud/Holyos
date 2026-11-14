@@ -7615,6 +7615,8 @@ model GamePlayer {
   // Znak firmy — jen krátký kód „tvar-paleta-symbol", obrázek se kreslí v prohlížeči.
   emblem        String?   @db.VarChar(16)
   nick_lower    String    @unique @db.VarChar(24)
+  // Kdy naposledy změnil jméno hráče — mezi změnami je pauza z nastavení.
+  nick_at       DateTime?
   // Prázdné u účtu, který vznikl jen z nicku a firmy na úvodce. Dokud si
   // hráč heslo nedoplní, drží ho ve hře jen cookie a přihlásit se nemůže.
   password_hash String?   @db.VarChar(100)

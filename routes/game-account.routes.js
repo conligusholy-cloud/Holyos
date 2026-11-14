@@ -153,7 +153,7 @@ const ALL = Object.assign({}, CARDS, CASH, SUBS, LINKA);
 // ─── Nastavení hry ───────────────────────────────────────────────────────────
 // Přepínače, které jde cvaknout z administrace bez nasazování. Držíme je
 // půl minuty v paměti, ať se kvůli každému načtení hry nechodí do databáze.
-const NASTAVENI_VYCHOZI = { onboarding_rychly: '1' };
+const NASTAVENI_VYCHOZI = { onboarding_rychly: '1', nick_pauza_dnu: '30' };
 let _nast = { at: 0, map: null };
 async function nastaveni() {
   if (_nast.map && Date.now() - _nast.at < 30e3) return _nast.map;
@@ -170,6 +170,12 @@ function dropNastaveni() { _nast = { at: 0, map: null }; }
 // jedno klepnutí a první stroj doručený okamžitě.
 async function rychlyOnboarding() {
   return (await nastaveni()).onboarding_rychly !== '0';
+}
+// Jak dlouho musí hráč počkat, než si zase změní jméno. Jméno vidí ostatní
+// na mapě i v žebříčku, takže z něj nemá být převlek na každý den; 0 = bez pauzy.
+async function nickPauzaMs() {
+  const d = Number((await nastaveni()).nick_pauza_dnu);
+  return (isFinite(d) && d > 0 ? d : 0) * 86400000;
 }
 
 // ─── Ceník z databáze ────────────────────────────────────────────────────────
@@ -294,6 +300,7 @@ async function pub(p) {
   cards.forEach((c) => { if (counts[c.kind] != null) counts[c.kind]++; });
   return {
     nick: p.nick, company: p.company || (p.nick + ' s.r.o.'), emblem: p.emblem || null,
+    nick_at: p.nick_at || null,
     ref: p.ref_id || null,
     email: p.email || null,
     first_name: p.first_name || null, last_name: p.last_name || null,
@@ -828,6 +835,64 @@ router.post('/account/company', requirePlayer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// POST /account/nick { nick } — změna jména hráče
+// Jméno je po celé hře rozkopírované do desítek záznamů (kdo komu co prodal,
+// komu patří místo na mapě, kdo komu dluží). Mění se proto všude najednou,
+// jinak by po hráči zůstával starý podpis na mapě i v přehledech.
+router.post('/account/nick', requirePlayer, async (req, res, next) => {
+  try {
+    const nick = s((req.body || {}).nick, 24);
+    if (!NICK_RE.test(nick)) {
+      return res.status(400).json({ error: 'Jméno musí mít 3–24 znaků (písmena, číslice, tečka, pomlčka, podtržítko).' });
+    }
+    const stary = req.player.nick;
+    if (nick === stary) return res.json({ ok: true, player: await pub(req.player) });
+    const lower = nick.toLowerCase();
+    // Stejné jméno jinými velkými písmeny si hráč smí opravit kdykoli a zadarmo.
+    const jenVelikost = lower === String(stary).toLowerCase();
+    if (!jenVelikost) {
+      const pauza = await nickPauzaMs();
+      const od = req.player.nick_at ? new Date(req.player.nick_at).getTime() : 0;
+      if (pauza && od && Date.now() - od < pauza) {
+        const dnu = Math.ceil((pauza - (Date.now() - od)) / 86400000);
+        return res.status(409).json({ error: 'Jméno sis měnil nedávno. Další změna půjde za ' + dnu + ' dnů.' });
+      }
+      const taken = await prisma.gamePlayer.findUnique({ where: { nick_lower: lower }, select: { id: true } });
+      if (taken && taken.id !== req.player.id) {
+        return res.status(409).json({ error: 'Pod tímhle jménem už někdo hraje. Vymysli si jiné.' });
+      }
+    }
+    const id = req.player.id;
+    const p = await prisma.gamePlayer.update({ where: { id },
+      data: { nick, nick_lower: lower, nick_at: new Date() } });
+    // Přepis podpisů všude jinde. Kdyby některý krok selhal, hra tím nepadne —
+    // jen někde zůstane staré jméno, a to je menší zlo než půlka změny.
+    try {
+      await Promise.all([
+        prisma.gameSpotClaim.updateMany({ where: { player_id: id }, data: { nick } }),
+        prisma.gameSpotClaim.updateMany({ where: { vyzyvatel_id: id }, data: { vyzyvatel_nick: nick } }),
+        prisma.gameSpotClaim.updateMany({ where: { najemce_id: id }, data: { najemce_nick: nick } }),
+        prisma.gameTrade.updateMany({ where: { from_id: id }, data: { from_nick: nick } }),
+        prisma.gameTrade.updateMany({ where: { to_id: id }, data: { to_nick: nick } }),
+        prisma.gameLoan.updateMany({ where: { lender_id: id }, data: { lender_nick: nick } }),
+        prisma.gameLoan.updateMany({ where: { borrower_id: id }, data: { borrower_nick: nick } }),
+        prisma.gameEquity.updateMany({ where: { investor_id: id }, data: { investor_nick: nick } }),
+        prisma.gameEquity.updateMany({ where: { firma_id: id }, data: { firma_nick: nick } }),
+        prisma.gameMarket.updateMany({ where: { player_id: id }, data: { nick } }),
+        prisma.gameMarket.updateMany({ where: { koupil_id: id }, data: { koupil_nick: nick } }),
+        prisma.gameAuction.updateMany({ where: { player_id: id }, data: { nick } }),
+      ]);
+    } catch (e) { console.warn('[game] přepis jména ' + stary + ' → ' + nick + ':', e.message); }
+    dropZeb();
+    setCookie(res, sign(p));   // v podepsané cookii je nick, ať nesedí starý
+    console.log('[game] hráč #' + id + ' se přejmenoval: ' + stary + ' → ' + nick);
+    res.json({ ok: true, player: await pub(p) });
+  } catch (e) {
+    if (e && e.code === 'P2002') return res.status(409).json({ error: 'Pod tímhle jménem už někdo hraje. Vymysli si jiné.' });
+    next(e);
+  }
+});
+
 // ─── Stav hry ────────────────────────────────────────────────────────────────
 // Kolik času hráč ve hře opravdu strávil. Klient se ozývá zhruba co patnáct
 // vteřin, dokud má hru otevřenou — tak se dá sčítat mezera od minulého
@@ -1025,6 +1090,7 @@ router.get('/cards', async (req, res, next) => {
       ok: true, catalog: await catalogPublic(), cash: await cashPublic(),
       linka: await linkaPublic(),
       onboarding_rychly: await rychlyOnboarding(),
+      nick_pauza_ms: await nickPauzaMs(),
       instagram: { odkaz: IG_ODKAZ, karet: IG_KARET, vzato: p ? !!p.instagram_at : false },
       facebook: { odkaz: FB_ODKAZ, laundry: CASH[FB_KIND].laundry, vzato: p ? !!p.facebook_at : false },
       subs: await subsPublic(), predplatne: await predplatneHrace(p),
