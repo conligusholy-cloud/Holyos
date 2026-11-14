@@ -1627,6 +1627,23 @@ router.post('/spots/navyseni', requirePlayer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// POST /spots/model { spot_id, model } — výměna stroje na vlastním místě.
+// Zábor zůstává, mění se jen model: jinak by konkurence i žebříček zemí
+// koukali na stroj, který tam už nestojí. Peníze řeší hra u sebe.
+router.post('/spots/model', requirePlayer, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const spot = s(b.spot_id, 120), model = s(b.model, 10);
+    if (!spot || !model) return res.status(400).json({ error: 'Chybí místo nebo model.' });
+    const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
+    if (!c || c.player_id !== req.player.id) {
+      return res.status(404).json({ error: 'Tohle místo není tvoje.' });
+    }
+    const up = await prisma.gameSpotClaim.update({ where: { spot_id: spot }, data: { model } });
+    res.json({ ok: true, spot: claimPub(up, req.player.id, await firmyMapa()) });
+  } catch (e) { next(e); }
+});
+
 // POST /spots/release { spot_id, odstupne } — výpověď z místa, stroj si hráč odveze.
 // Z doby určité se dá odejít taky, ale majiteli pozemku se doplácí zbytek nájmu
 // (nejvýš ODSTUPNE_MAX nájmů) — klient částku strhne, server ji jen spočítá.

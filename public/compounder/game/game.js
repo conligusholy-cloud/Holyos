@@ -7074,6 +7074,7 @@ function unitSheet(u) {
     + '<div class="kv"><span>Vydělal celkem</span><b>' + kcFull(u.eco.ziskPlny * 12 * years) + '</b></div>'
     + (u.eco.ziskPlny > 0 ? '<div class="kv"><span>Návratnost</span><b>'
       + (u.eco.invest / (u.eco.ziskPlny * 12)).toFixed(1).replace('.', ',') + ' roku</b></div>' : '')
+    + vymenaHtml(u)
     + '<h3 style="margin:18px 0 4px">Prodat celou provozovnu</h3>'
     + (trhMoje(u.spotId)
         ? '<p class="muted small">Na tržišti za <b>' + kcFull(trhMoje(u.spotId).cena) + '</b>, nabídka končí '
@@ -7087,6 +7088,7 @@ function unitSheet(u) {
     + 'Přípojky ani domluvený nájem se nevracejí, místo se hned uvolní konkurenci a splátky '
     + 'úvěru na něj běží dál.</p>'
     + '<button class="btn sec" id="do-release" style="width:100%">Vypovědět místo</button>');
+  bindVymena(u);
   var tb = $('do-technik');
   if (tb) tb.onclick = function () { vyslatTechnika(u); closeSheet(); switchTab('map'); };
   var mb = $('do-mapa');
@@ -7188,6 +7190,101 @@ function vypovedMisto(u, sOdstupnym, rb) {
       save(); prehodnotRamec(false, true); paint(); drawMap(); closeSheet(); syncState(true);
       toast('Místo vypovězeno. ' + MODELS[u.eco.model].name + ' čeká na skladě.', 'ok');
   }).catch(function () { if (rb) rb.disabled = false; toast('Server neodpovídá.', 'err'); });
+}
+
+// ─── Výměna stroje za jiný model ─────────────────────────────────────────────
+// Místo zůstává i s nájmem a přípojkami, mění se jen stroj. Starý jde na sklad,
+// nový se bere ze skladu — stejné pravidlo jako u stavby. Platí se doprava
+// nového stroje a u silnějšího modelu rozdíl v přípojkách; co je jednou v zemi,
+// se nevrací, takže při výměně za slabší se nevrací nic.
+function mistoUnitu(u) {
+  return { id: u.spotId, name: u.name, kind: u.kind, score: u.score, lat: u.lat, lon: u.lon,
+    parking: u.parking, competition: u.competition, anchors: u.anchors };
+}
+function vymenaCena(u, novy) {
+  var sp = mistoUnitu(u);
+  var doprava = dopravaNa(sp, novy);
+  var doplatek = Math.max(0, connPrice(sp, novy) - connPrice(sp, u.eco.model));
+  return { doprava: doprava, doplatek: doplatek, celkem: doprava + doplatek };
+}
+function vymenaHtml(u) {
+  // Místo ve výpovědi se nevyměňuje — stroj se odtud stejně brzy stěhuje.
+  if (jeVeVypovedi(u)) return '';
+  var sp = mistoUnitu(u);
+  var jine = MODEL_ORDER.filter(function (k) { return k !== u.eco.model; });
+  var radky = jine.map(function (k) {
+    var skladem = inStock(k), m = MODELS[k];
+    var e = economics(sp, k, u.eco.podil);
+    var rozdil = e.profit - u.eco.profit;
+    var c = vymenaCena(u, k);
+    return '<div class="vym-r' + (skladem ? '' : ' nic') + '">'
+      + '<div class="vym-t"><b>' + esc(m.name) + '</b>'
+      + '<i>kapacita ' + String(m.kapacita).replace('.', ',') + ' lidí denně · zisk ' + kcFull(e.profit) + ' / měsíc '
+      + '<span class="' + (rozdil > 0 ? 'ok' : (rozdil < 0 ? 'err' : 'muted')) + '">('
+      + (rozdil > 0 ? '+' : (rozdil < 0 ? '\u2212' : '')) + kcFull(Math.abs(rozdil)) + ')</span></i>'
+      + '<i>' + (skladem ? skladem + '\u00d7 skladem · výměna za ' + kcFull(c.celkem)
+          : 'nemáš skladem — kup ho v Obchodě') + '</i></div>'
+      + (skladem ? '<button class="btn sm" data-vymena="' + k + '">Vyměnit</button>' : '')
+      + '</div>';
+  }).join('');
+  return '<h3 style="margin:18px 0 4px">Vyměnit stroj</h3>'
+    + '<p class="muted small">Nájem, přípojky i zábor místa zůstávají — mění se jen stroj. '
+    + 'Starý se vrátí na sklad a postavíš ho jinde. Platíš dopravu nového stroje a u silnějšího '
+    + 'modelu rozdíl v přípojkách; co je jednou v zemi, se nevrací.</p>'
+    + '<div class="vym">' + radky + '</div>';
+}
+function bindVymena(u) {
+  [].forEach.call(document.querySelectorAll('#sheet-body [data-vymena]'), function (b) {
+    b.onclick = function () { vymenaSheet(u, b.getAttribute('data-vymena')); };
+  });
+}
+function vymenaSheet(u, novy) {
+  var sp = mistoUnitu(u), m = MODELS[novy], stary = MODELS[u.eco.model];
+  var c = vymenaCena(u, novy);
+  var e = economics(sp, novy, u.eco.podil);
+  var rozdil = e.profit - u.eco.profit;
+  var malo = S.cash < c.celkem;
+  sheet('<h3>Vyměnit ' + esc(stary.name) + ' za ' + esc(m.name) + '</h3>'
+    + '<p class="muted small">' + esc(u.name) + (mestoUnit(u) ? ' \u00b7 ' + esc(mestoUnit(u)) : '') + '</p>'
+    + '<div class="kv"><span>Doprava stroje</span><b>' + kcFull(c.doprava) + '</b></div>'
+    + '<div class="kv"><span>Doplatek přípojek</span><b' + (c.doplatek ? ' class="warn"' : ' class="ok"') + '>'
+    + (c.doplatek ? kcFull(c.doplatek) : 'žádný') + '</b></div>'
+    + '<div class="kv souhrn"><span>Zaplatíš</span><b>' + kcFull(c.celkem) + '</b></div>'
+    + '<div class="kv"><span>Zisk místa teď</span><b>' + kcFull(u.eco.profit) + ' / měsíc</b></div>'
+    + '<div class="kv"><span>Po výměně</span><b class="' + (rozdil >= 0 ? 'ok' : 'err') + '">'
+    + kcFull(e.profit) + ' / měsíc</b></div>'
+    + (rozdil > 0 ? '<p class="fine ok">Výměna se vrátí '
+        + etaText(Math.max(1, Math.round(c.celkem / Math.max(1, rozdil) * MONTH_MS))) + '.</p>'
+      : rozdil < 0 ? '<p class="fine warn">Tohle místo tolik lidí neuživí — menší stroj tu vydělá míň. '
+        + 'Dává smysl jen tehdy, když ten velký potřebuješ jinde.</p>' : '')
+    + '<p class="fine">' + esc(stary.name) + ' se vrátí na sklad, ' + esc(m.name)
+    + ' se ze skladu postaví sem. Výměna je hotová hned.</p>'
+    + (malo ? '<p class="fine err">Na výměnu nemáš dost hotovosti.</p>' : '')
+    + '<button class="btn big" id="do-vymena"' + (malo ? ' disabled' : '') + ' style="width:100%;margin-top:10px">'
+    + 'Vyměnit za ' + kcFull(c.celkem) + '</button>'
+    + '<button class="btn sec" id="do-vymena-ne" style="width:100%;margin-top:8px">Nechat být</button>');
+  var ne = $('do-vymena-ne');
+  if (ne) ne.onclick = function () { closeSheet(); unitSheet(u); };
+  var ok = $('do-vymena');
+  if (ok) ok.onclick = function () { ok.disabled = true; vymenStroj(u, novy, ok); };
+}
+function vymenStroj(u, novy, btn) {
+  var stary = u.eco.model;
+  if (inStock(novy) < 1) { if (btn) btn.disabled = false; return toast('Tenhle model nemáš skladem.', 'err'); }
+  var c = vymenaCena(u, novy);
+  if (S.cash < c.celkem) { if (btn) btn.disabled = false; return toast('Na výměnu nemáš dost hotovosti.', 'err'); }
+  apiJson('/spots/model', { spot_id: u.spotId, model: novy }).then(function (r) {
+    if (!r.ok) { if (btn) btn.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
+    S.stock[novy] = inStock(novy) - 1;
+    S.stock[stary] = inStock(stary) + 1;
+    S.cash -= c.celkem;
+    zapis('nakup', 'Výměna stroje — ' + (u.name || '') + ' (' + MODELS[stary].name + ' \u2192 '
+      + MODELS[novy].name + ')', -c.celkem);
+    u.eco = economics(mistoUnitu(u), novy, u.eco.podil);
+    if (CLAIMS[u.spotId]) CLAIMS[u.spotId].model = novy;
+    save(); paint(); drawMap(); closeSheet(); syncState(true);
+    toast(MODELS[stary].name + ' je na skladě, na místě teď stojí ' + MODELS[novy].name + '.', 'ok');
+  }).catch(function () { if (btn) btn.disabled = false; toast('Server neodpovídá.', 'err'); });
 }
 
 // ─── Pozvánky ────────────────────────────────────────────────────────────────

@@ -1058,3 +1058,13 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .hov-vysl{flex:0 0 auto;text-align:right}
 .hov-vysl span{display:block;font-size:12px;font-weight:800}
 .hov-vysl em{font-style:normal;font-size:11px;color:var(--text3)}
+
+/* ── Výměna stroje na stojícím místě ────────────────────────────────────────── */
+.vym{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.vym-r{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;
+  border:1px solid var(--border);background:var(--card2,rgba(255,255,255,.04))}
+.vym-r.nic{opacity:.62}
+.vym-t{flex:1;min-width:0}
+.vym-t b{font-size:14px}
+.vym-t i{display:block;font-style:normal;font-size:11.5px;color:var(--text2);line-height:1.35;margin-top:2px}
+.vym-r .btn{flex:0 0 auto}
