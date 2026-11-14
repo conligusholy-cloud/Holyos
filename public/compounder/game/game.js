@@ -8117,9 +8117,14 @@ function vsechnaMista() {
     var a = S.areas[aid];
     (a.spots || []).forEach(function (sp) {
       if (!S.revealed || !S.revealed[sp.id]) return;      // neprověřené nemá smysl řadit
-      var u = (S.units || []).filter(function (x) { return x.spotId === sp.id; })[0] || null;
+      // Na vlastním pozemku může stát víc strojů pod id „místo#1"; bereme je taky,
+      // jinak by místo zůstalo v seznamu jako volné, i když na něm hráč staví.
+      var moje = (S.units || []).filter(function (x) {
+        return x.spotId === sp.id || String(x.spotId || '').indexOf(sp.id + '#') === 0;
+      });
+      var u = moje[0] || null;
       var c = !u && CLAIMS[sp.id] && !CLAIMS[sp.id].mine ? CLAIMS[sp.id] : null;
-      out.push({ sp: sp, areaId: aid, mesto: a.name || '', u: u, cizi: c,
+      out.push({ sp: sp, areaId: aid, mesto: a.name || '', u: u, kolik: moje.length, cizi: c,
         stav: u ? 'moje' : (c ? 'cizi' : 'volna') });
     });
   });
@@ -8132,7 +8137,13 @@ function mistoRadek(r) {
   var e = u ? u.eco : economics(sp, 'flex', 1);
   var zem = jePozemek(sp) || mamPozemek(sp.id);
   var stav = u
-    ? '<b class="ok">' + esc(m ? m.name : '') + '</b> · zisk ' + kcFull(zbydeZMista(u))
+    ? '<b class="ok">' + esc(m ? m.name : '') + '</b>'
+      + (r.kolik > 1 ? ' a další ' + (r.kolik - 1) : '')
+      + ' · zisk ' + kcFull(r.kolik > 1
+          ? (S.units || []).filter(function (x) {
+              return x.spotId === sp.id || String(x.spotId || '').indexOf(sp.id + '#') === 0;
+            }).reduce(function (a, x) { return a + zbydeZMista(x); }, 0)
+          : zbydeZMista(u))
     : r.cizi
       ? '<span class="err">' + esc(r.cizi.firma || r.cizi.nick || 'konkurence') + '</span> · '
         + esc((MODELS[r.cizi.model] || {}).name || '') + ' · nájem ' + kcFull(r.cizi.rent || 0)
