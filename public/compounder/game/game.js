@@ -4410,10 +4410,7 @@ function cizi(c) {
     + (zem ? 'Pošli tam člověka a pak uvidíš i okolní místa.'
           : 'Pošli tam člověka a pak se můžeš pokusit nájem přeplatit.') + '</p>'
     + '<button class="btn big" id="go-scout-here">Prozkoumat ' + (mesto ? esc(mesto) : 'tohle město') + ' za ' + kcFull(SCOUT_COST) + '</button>'
-    + (S.cash < SCOUT_COST ? '<p class="fine err">Na cestu nemáš dost hotovosti.</p>' : '')
-    + (c.id ? '<button class="btn ghost" id="cizi-napsat" style="width:100%;margin-top:8px">Napsat majiteli</button>' : ''));
-  var cn = $('cizi-napsat');
-  if (cn) cn.onclick = function () { chatSheet(c.id); };
+    + (S.cash < SCOUT_COST ? '<p class="fine err">Na cestu nemáš dost hotovosti.</p>' : ''));
   var b = $('go-scout-here');
   if (b) b.onclick = function () {
     if (S.cash < SCOUT_COST) return toast('Na cestu nemáš dost hotovosti.', 'err');
@@ -6909,11 +6906,8 @@ function rivalSheet(sp, areaId, c) {
       + '<div style="margin:8px 0 12px">' + verdictPill(sp.score) + '</div>'
       + '<div class="card"><div class="row"><h3>Vlastní pozemek</h3><b class="warn">nelze přeplatit</b></div>'
       + '<p class="muted small" style="margin:4px 0 0">Majitel tu nemá nájem — zem koupil. '
-      + 'Nabídnout majiteli pozemku víc nejde, protože žádný majitel pozemku není. '
-      + 'Jediná cesta je domluvit se s ním ve zprávách.</p></div>'
-      + (c.id ? '<button class="btn big" id="bid-napsat" style="width:100%">Napsat majiteli</button>' : ''));
-    var bn0 = $('bid-napsat');
-    if (bn0) bn0.onclick = function () { chatSheet(c.id); };
+      + 'Nabídnout víc nejde, protože není koho přeplatit, a koupenou zem nikdo přebrat nemůže. '
+      + 'Tohle místo je obsazené natrvalo — poohlédni se po jiném.</p></div>');
     return;
   }
   var free = MODEL_ORDER.filter(function (k) { return inStock(k) > 0; });
@@ -6939,10 +6933,7 @@ function rivalSheet(sp, areaId, c) {
       : '<p class="fine err">Nemáš na skladě žádný prádlomat. Abys tohle místo přebral, '
         + 'musíš mít volný stroj — konkurenta vystřídáš jedině tak, že na jeho místo hned postavíš svůj.</p>'
         + '<button class="btn big" id="go-shop-bid">Koupit prádlomat v obchodě</button>')
-    + (c.id ? '<button class="btn ghost" id="bid-napsat" style="width:100%;margin-top:8px">Napsat majiteli</button>'
-        + '<p class="fine">Místo jde i koupit po dobrém — dohodni se s ním ve zprávách.</p>' : ''));
-  var bn = $('bid-napsat');
-  if (bn) bn.onclick = function () { chatSheet(c.id); };
+    );
   var gs = $('go-shop-bid');
   if (gs) gs.onclick = function () { closeSheet(); switchTab('shop'); };
   var b = $('do-bid');
@@ -9021,106 +9012,12 @@ function loadTrades(then) {
   }).catch(function () { TRADES = TRADES || []; if (then) then(); });
 }
 
-// ─── Zprávy mezi hráči ─────────────────────────────────────────
-// Text od cizího hráče se do stránky nikdy nevkládá jako HTML — vždy přes esc().
-var CHAT = null;
-function loadChat(then) {
-  if (!ME) { CHAT = { threads: [], neprectenych: 0 }; if (then) then(); return; }
-  api('/chat/threads').then(function (r) {
-    CHAT = r.ok ? r.j : { threads: [], neprectenych: 0 };
-    chatOdznak();
-    hlidejZpravy();
-    if (then) then();
-  }).catch(function () { CHAT = CHAT || { threads: [], neprectenych: 0 }; if (then) then(); });
-}
-// ─── Zpráva od hráče doprostřed obrazovky ────────────────────────────────────
-// Když někdo napíše, zatímco hráč hraje, nestačí tečka na záložce — obchod se
-// domlouvá teď a odpověď za hodinu je k ničemu. Chová se to proto jako hovor
-// z infolinky: okno přes celou obrazovku, dokud ho hráč neodbaví. Nestohuje se
-// s hovorem a jednu zprávu neukáže dvakrát ani po obnovení stránky.
-var ZPRAVA_OKNO = null;
-function hlidejZpravy() {
-  if (!ME || !S || !CHAT || !CHAT.threads || !CHAT.threads.length) return;
-  if (HOVOR || ZPRAVA_OKNO) return;
-  // Poprvé si jen zapamatujeme, co už ve schránce leží. Jinak by hráči po
-  // otevření hry vyskočilo okno se zprávou, kterou si přečetl předevčírem.
-  if (S.zpravaVidena == null) {
-    S.zpravaVidena = CHAT.threads.reduce(function (a, t) {
-      return Math.max(a, (t.posledni && t.posledni.id) || 0); }, 0);
-    save();
-    return;
-  }
-  var nove = CHAT.threads.filter(function (t) {
-    return t.neprectenych > 0 && t.posledni && !t.posledni.moje
-      && t.posledni.id > (S.zpravaVidena || 0);
-  });
-  if (!nove.length) return;
-  S.zpravaVidena = nove.reduce(function (a, t) { return Math.max(a, t.posledni.id); }, S.zpravaVidena || 0);
-  save();
-  ukazZpravu(nove[0], nove.length - 1);
-}
-function ukazZpravu(t, dalsich) {
-  var el = $('zprava');
-  if (!el) return;
-  ZPRAVA_OKNO = t;
-  el.innerHTML = '<div class="zpr-in">'
-    + '<p class="hov-popis">Zpráva od hráče</p>'
-    + '<div class="zpr-kdo">' + (t.znak ? znakSvg(t.znak, 34) : '')
-      + '<div><b>' + esc(t.firma) + '</b><i>' + esc(t.nick) + '</i></div></div>'
-    + '<p class="zpr-text">' + esc(t.posledni.text) + '</p>'
-    + (dalsich > 0 ? '<p class="fine">A ještě ' + dalsich + ' '
-        + mn(dalsich, 'další zpráva', 'další zprávy', 'dalších zpráv') + ' od jiných.</p>' : '')
-    + '<div class="zpr-tl">'
-      + '<button class="btn sec" id="zpr-ne">Teď ne</button>'
-      + '<button class="btn" id="zpr-ano">Odpovědět</button>'
-    + '</div></div>';
-  el.classList.remove('hidden');
-  try { if (navigator.vibrate) navigator.vibrate([40, 60, 40]); } catch (e) { /* nevadí */ }
-  var zavri = function () { el.classList.add('hidden'); el.innerHTML = ''; ZPRAVA_OKNO = null; };
-  var ne = $('zpr-ne');
-  if (ne) ne.onclick = zavri;
-  var ano = $('zpr-ano');
-  if (ano) ano.onclick = function () { zavri(); chatSheet(t.id); };
-}
-// Tečka na záložce svítí, když čeká nabídka nebo nepřečtená zpráva.
+// Tečka na záložce svítí, když na hráče čeká nabídka obchodu.
 var CEKA_NABIDKA = false;
 function chatOdznak() {
   var dot = $('burza-dot');
   if (!dot) return;
-  var neprectene = CHAT && CHAT.neprectenych > 0;
-  dot.classList.toggle('hidden', !(CEKA_NABIDKA || neprectene));
-}
-function kdyKratce(x) {
-  var d = new Date(x), ted = new Date();
-  var dnes = d.toDateString() === ted.toDateString();
-  try {
-    return dnes ? d.toLocaleTimeString('cs-CZ', { hour: 'numeric', minute: '2-digit' })
-      : d.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' });
-  } catch (e) { return ''; }
-}
-function chatHtml() {
-  if (!ME) return '';
-  if (!CHAT) return '<div class="card"><h3>Zprávy</h3><p class="fine">Načítám…</p></div>';
-  var t = CHAT.threads || [];
-  return '<div class="card"><h3>Zprávy'
-    + (CHAT.neprectenych ? ' <i class="pocet">' + CHAT.neprectenych + '</i>' : '') + '</h3>'
-    + '<p class="muted small" style="margin:2px 0 10px">Napiš komukoli, s kým chceš domluvit obchod.</p>'
-    + (t.length ? t.map(function (x) {
-        return '<div class="area-item chat-r' + (x.neprectenych ? ' nove' : '') + '" data-chat="' + x.id + '">'
-          + '<div><div class="nm">' + (x.znak ? znakSvg(x.znak, 16) + ' ' : '') + esc(x.firma) + '</div>'
-          + '<div class="sub">' + (x.posledni.moje ? 'Ty: ' : '') + esc(x.posledni.text) + '</div></div>'
-          + '<div class="chat-p"><span class="muted small">' + kdyKratce(x.posledni.kdy) + '</span>'
-          + (x.neprectenych ? '<i class="pocet">' + x.neprectenych + '</i>' : '') + '</div></div>';
-      }).join('') : '<p class="fine">Zatím sis s nikým nepsal.</p>')
-    + '<button class="btn sec" id="chat-novy" style="width:100%;margin-top:10px">Napsat hráči</button>'
-    + '</div>';
-}
-function bindChat(box) {
-  [].forEach.call(box.querySelectorAll('[data-chat]'), function (b) {
-    b.onclick = function () { chatSheet(Number(b.getAttribute('data-chat'))); };
-  });
-  var n = $('chat-novy');
-  if (n) n.onclick = function () { chatVyberSheet(); };
+  dot.classList.toggle('hidden', !CEKA_NABIDKA);
 }
 // ─── Výběr hráče ─────────────────────────────────────────────────────────────
 // Používá se dvakrát: komu napsat a komu nabídnout obchod. Kdo je zrovna u hry,
@@ -9206,105 +9103,6 @@ function hraciVyberSheet(nadpis, popisTlacitka, pak) {
   }).catch(function () { toast('Server neodpovídá.', 'err'); });
 }
 // Komu napsat — seznam všech hráčů, stejný jako u nabídky.
-function chatVyberSheet() {
-  hraciVyberSheet('Komu napsat', 'Napsat', function (id) { chatSheet(id); });
-}
-// Jedna konverzace. Po otevření se všechno příchozí označí za přečtené.
-function chatSheet(id) {
-  sheet('<h3>Zprávy</h3><p class="muted small">Načítám…</p>');
-  api('/chat/with/' + id).then(function (r) {
-    if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
-    var h = r.j.hrac;
-    var blokuju = !!r.j.blokuju, blokujeMe = !!r.j.blokuje_me;
-    sheet('<h3>' + (h.znak ? znakSvg(h.znak, 20) + ' ' : '') + esc(h.firma) + '</h3>'
-      + '<p class="muted small">' + esc(h.nick) + '</p>'
-      + (blokuju ? '<p class="fine err">Tohohle hráče máš zablokovaného — nic ti od něj nepřijde a ani mu nenapíšeš.</p>' : '')
-      + (blokujeMe && !blokuju ? '<p class="fine err">Tenhle hráč si psát nepřeje.</p>' : '')
-      + '<div class="chat-okno" id="chat-okno">' + chatZpravyHtml(r.j.zpravy) + '</div>'
-      + (blokuju || blokujeMe ? ''
-          : '<label class="fld"><span>Napsat</span>'
-            + '<input id="chat-text" class="inp" type="text" maxlength="800" placeholder="Napiš zprávu…"></label>'
-            + '<button class="btn big" id="chat-send">Odeslat</button>')
-      + '<button class="btn ghost" id="chat-nabidka" style="width:100%;margin-top:8px">Nabídnout mu obchod</button>'
-      + '<button class="btn ghost" id="chat-blok" style="width:100%;margin-top:8px">'
-      + (blokuju ? 'Odblokovat' : 'Zablokovat hráče') + '</button>'
-      + (blokuju ? '' : '<p class="fine">Zablokovaný hráč ti už nenapíše. Nevhodnou zprávu nahlásíš praporkem u ní.</p>'));
-    var okno = $('chat-okno');
-    if (okno) { okno.scrollTop = okno.scrollHeight; bindNahlas(okno); }
-    var bl = $('chat-blok');
-    if (bl) bl.onclick = function () {
-      if (!blokuju && bl.getAttribute('data-jist') !== '1') {
-        bl.setAttribute('data-jist', '1');
-        bl.textContent = 'Opravdu zablokovat? Klepni znovu';
-        return;
-      }
-      bl.disabled = true;
-      apiJson('/chat/block', { id: id, zrusit: blokuju }).then(function (rr) {
-        if (!rr.ok) { bl.disabled = false; return toast(rr.j.error || 'Nepovedlo se.', 'err'); }
-        toast(blokuju ? 'Odblokováno.' : 'Zablokováno. Už ti nenapíše.', 'ok');
-        loadChat(function () { if (!$('v-burza').classList.contains('hidden')) paintBurza(); });
-        chatSheet(id);
-      }).catch(function () { bl.disabled = false; toast('Server neodpovídá.', 'err'); });
-    };
-    var inp = $('chat-text'), b = $('chat-send');
-    if (!inp || !b) { var nb0 = $('chat-nabidka'); if (nb0) nb0.onclick = function () { majetekSheet(id); }; return; }
-    var odesli = function () {
-      var t = (inp.value || '').trim();
-      if (!t) return;
-      b.disabled = true;
-      apiJson('/chat/send', { to_id: id, text: t }).then(function (rr) {
-        b.disabled = false;
-        if (!rr.ok) return toast(rr.j.error || 'Nepovedlo se odeslat.', 'err');
-        inp.value = '';
-        // Z prázdného okna nejdřív zmizí hláška, že si ještě nic nenapsali.
-        var pr = okno.querySelector('p.fine');
-        if (pr) okno.innerHTML = '';
-        okno.insertAdjacentHTML('beforeend', chatZpravyHtml([rr.j.zprava]));
-        bindNahlas(okno);
-        okno.scrollTop = okno.scrollHeight;
-        loadChat(function () { if (!$('v-burza').classList.contains('hidden')) paintBurza(); });
-      }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
-    };
-    b.onclick = odesli;
-    inp.onkeydown = function (e) { if (e.key === 'Enter') odesli(); };
-    var nb = $('chat-nabidka');
-    if (nb) nb.onclick = function () { majetekSheet(id); };
-    setTimeout(function () { inp.focus(); }, 60);
-    loadChat(function () { if (!$('v-burza').classList.contains('hidden')) paintBurza(); });
-  }).catch(function () { toast('Server neodpovídá.', 'err'); });
-}
-function chatZpravyHtml(zpravy) {
-  if (!zpravy.length) return '<p class="fine" style="margin:0">Ještě jste si nic nenapsali. Začni.</p>';
-  return zpravy.map(function (m) {
-    // Nahlásit jde jen to, co přišlo mně — u svojí zprávy praporek není.
-    var vlajka = m.moje ? ''
-      : (m.nahlasena
-          ? '<b class="chat-nahl" title="Už nahlášeno">\u2691 nahlášeno</b>'
-          : '<button class="chat-vlajka" data-nahlas="' + m.id + '" title="Nahlásit zprávu">\u2691</button>');
-    return '<div class="chat-b' + (m.moje ? ' ja' : '') + '">' + esc(m.text)
-      + '<i>' + kdyKratce(m.kdy) + vlajka + '</i></div>';
-  }).join('');
-}
-// Praporky se naviazují po každém překreslení okna.
-function bindNahlas(okno) {
-  [].forEach.call(okno.querySelectorAll('[data-nahlas]'), function (b) {
-    b.onclick = function () {
-      if (b.getAttribute('data-jist') !== '1') {
-        b.setAttribute('data-jist', '1');
-        b.textContent = 'opravdu?';
-        b.classList.add('ptam');
-        return;
-      }
-      b.disabled = true;
-      apiJson('/chat/report', { id: Number(b.getAttribute('data-nahlas')) }).then(function (r) {
-        if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
-        b.outerHTML = '<b class="chat-nahl">\u2691 nahlášeno</b>';
-        toast('Zpráva nahlášená. Podíváme se na to.', 'ok');
-      }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
-    };
-  });
-}
-
 function predmetPopis(t) {
   if (t.predmet === 'stroj') return 'stroj ' + ((MODELS[t.model] || {}).name || t.model);
   if (t.predmet === 'pradlomat') return 'prádlomat na místě';
@@ -9772,14 +9570,10 @@ function paintBurza() {
 
   if (AUKCE == null) loadAukce(paintBurza);
 
-  if (CHAT == null) loadChat(paintBurza);
-
-  box.innerHTML = chatHtml()
-    + aukceHtml()
+  box.innerHTML = aukceHtml()
     + sekce('Čeká na tvoji odpověď', naMe, 'Nikdo ti teď nic nenabízí.')
     + sekce('Čekáš na odpověď', odeslane, 'Nemáš rozjednanou žádnou nabídku.')
     + (hotove.length ? sekce('Uzavřené', hotove, '') : '');
-  bindChat(box);
   bindAukce();
 
   [].forEach.call(box.querySelectorAll('[data-tr]'), function (b) {
@@ -9983,8 +9777,7 @@ function cenaSheet(toId, kdo, x) {
         : '')
     + (x.predmet === 'pradlomat' && jaPlatim
         ? '<p class="fine">Co to místo vydělává a kolik tam platí nájem, ví jen majitel. '
-          + 'Zeptej se ho ve zprávách, než něco nabídneš.</p>'
-          + '<button class="btn ghost" id="na-napsat" style="width:100%;margin:4px 0 10px">Napsat majiteli</button>'
+          + 'Nabídku posuzuj podle toho, co o místě víš sám.</p>'
         : '')
     + (orient != null
         ? '<div class="kv souhrn"><span>Orientační cena</span><b>' + kcFull(orient) + '</b></div>'
@@ -10028,8 +9821,6 @@ function cenaSheet(toId, kdo, x) {
     vd.textContent = t.join(' ');
   };
   ci.oninput = verdikt; verdikt();
-  var nn = $('na-napsat');
-  if (nn) nn.onclick = function () { chatSheet(toId); };
   var vybrane = jaPlatim ? bindKartyVyber('na') : function () { return []; };
   $('na-ok').onclick = function () {
     var b = $('na-ok'); b.disabled = true;
@@ -11371,11 +11162,7 @@ function startGame() {
   loadTrh(drawMap);
   vyzvedniNasledky();
   loadTrades();
-  loadChat();
   setInterval(function () { loadTrades(); loadTrh(drawMap); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }, 60000);
-  // Zprávy od hráčů chodí živě: ptáme se každých dvacet vteřin, ale jen když má
-  // hráč hru doopravdy před sebou.
-  setInterval(function () { if (!document.hidden) loadChat(); }, 20000);
   checkPayment();
   setInterval(function () { tick(); save(); paint(); syncState(); }, 5000);
   // Vlastní, rychlejší tep jen pro naskakující čísla nad prádlomaty.
@@ -11383,7 +11170,7 @@ function startGame() {
   setInterval(pullRefs, 60000);
   document.addEventListener('visibilitychange', function () {
     // Po návratu do hry se hned podíváme, jestli nám konkurence nevyfoukla místo.
-    if (!document.hidden) { tick(); save(); paint(); loadClaims(); loadTrades(); loadChat(); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }
+    if (!document.hidden) { tick(); save(); paint(); loadClaims(); loadTrades(); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }
     else { syncState(true); }
   });
   window.addEventListener('pagehide', function () { syncState(true); });
