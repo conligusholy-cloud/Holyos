@@ -134,6 +134,35 @@ async function zkontroluj(nab, prodavajici) {
   } else return 'Tohle se obchodovat nedá.';
   return null;
 }
+// Kdo u téhle nabídky platí hotovost. U půjčky je to věřitel — ten, od koho
+// se peníze „kupují"; u všeho ostatního kupující.
+function platiciId(t) {
+  const kupujici = t.smer === 'koupim' ? t.from_id : t.to_id;
+  const prodavajici = t.smer === 'koupim' ? t.to_id : t.from_id;
+  return t.predmet === 'pujcka' ? prodavajici : kupujici;
+}
+// Co má hráč rozjednané a zaplatil by, kdyby to protistrana přijala.
+// Bez tohohle jde rozeslat deset nabídek po milionu s milionem v kase —
+// devět z nich pak nejde přijmout a hráč se diví proč.
+async function vazanaHotovost(playerId, kromeId) {
+  const rows = await prisma.gameTrade.findMany({
+    where: { stav: 'ceka', OR: [{ from_id: playerId }, { to_id: playerId }] },
+    select: { id: true, from_id: true, to_id: true, smer: true, predmet: true, cena: true },
+  });
+  return rows.reduce((a, t) => a
+    + (t.id !== kromeId && platiciId(t) === playerId ? (t.cena || 0) : 0), 0);
+}
+// Vejde se nová nabídka do toho, co hráči zbývá? Vrací chybovou větu, nebo null.
+async function hotovostStaci(hrac, cena, kromeId) {
+  const cash = Math.round((stavu(hrac).cash) || 0);
+  const vazano = await vazanaHotovost(hrac.id, kromeId);
+  const volne = cash - vazano;
+  if (cena <= volne) return null;
+  return 'Na tohle nemáš volnou hotovost. Máš ' + cash.toLocaleString('cs-CZ')
+    + ' L$, z toho ' + vazano.toLocaleString('cs-CZ') + ' L$ drží nabídky, co čekají na odpověď — '
+    + 'volných je ' + Math.max(0, volne).toLocaleString('cs-CZ') + ' L$.';
+}
+
 // Kolik procent firmy už je prodáno jinde.
 async function prodanyPodil(firmaId) {
   const rows = await prisma.gameEquity.findMany({ where: { firma_id: firmaId, stav: 'bezi' },
@@ -202,6 +231,13 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
     if (!m) return res.status(409).json({ error: 'Karta ' + k + ' chybí tomu, kdo má platit.' });
   }
 
+  // Platím-li já, musí na to být volná hotovost — jinak je nabídka od začátku mrtvá.
+  const platimJa = predmet === 'pujcka' ? smer === 'prodam' : smer === 'koupim';
+  if (platimJa && cena > 0) {
+    const chybi = await hotovostStaci(req.player, cena, null);
+    if (chybi) return res.status(409).json({ error: chybi });
+  }
+
   const t = await prisma.gameTrade.create({ data: {
     from_id: req.player.id, from_nick: req.player.nick, to_id, to_nick: druhy.nick,
     smer, predmet, model: nab.model,
@@ -222,14 +258,46 @@ router.post('/trade/:id/counter', hrac, api(async (req, res) => {
   const karty = Array.isArray((req.body || {}).karty) ? (req.body || {}).karty.map((x) => s(x, 24)).filter(Boolean).slice(0, 10) : [];
   if (!cena && !karty.length) return res.status(400).json({ error: 'Protinávrh potřebuje cenu nebo kartu.' });
 
+  // Směr se prohodí, takže se prohodí i to, kdo platí.
+  const novySmer = t.smer === 'koupim' ? 'prodam' : 'koupim';
+  // Podmínky půjčky a podílu jdou s předmětem — jinak by protinávrh udělal
+  // z dvacetiprocentní půjčky na rok bezúročnou na měsíc.
+  let data = t.data || null;
+  if (t.predmet === 'pujcka') {
+    const d = Object.assign({}, data || {});
+    if (cena < PUJCKA_MIN) {
+      return res.status(400).json({ error: 'Nejmenší půjčka je ' + PUJCKA_MIN.toLocaleString('cs-CZ') + ' L$.' });
+    }
+    // Zástavu dává dlužník — a po prohození směru se pozná stejně jako u nabídky.
+    const dluznikJaJa = novySmer === 'koupim';
+    const zast = s((req.body || {}).zastava, 120);
+    if (zast === '-') { d.zastava = null; d.zastava_nazev = null; }
+    else if (zast) {
+      if (!dluznikJaJa) return res.status(409).json({ error: 'Zástavu může dát jen ten, kdo si půjčuje.' });
+      const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: zast } });
+      if (!c || c.player_id !== req.player.id) {
+        return res.status(409).json({ error: 'Zástavou může být jen tvůj prádlomat.' });
+      }
+      d.zastava = zast; d.zastava_nazev = c.name || zast;
+    }
+    d.splatka = anuita(cena, Math.max(0, Number(d.urok) || 0), Math.max(1, Math.round(Number(d.mesicu) || 1)));
+    data = d;
+  }
+  // Platím-li po prohození já, musí na to být volná hotovost.
+  const platimJa = t.predmet === 'pujcka' ? novySmer === 'prodam' : novySmer === 'koupim';
+  if (platimJa && cena > 0) {
+    const chybi = await hotovostStaci(req.player, cena, t.id);
+    if (chybi) return res.status(409).json({ error: chybi });
+  }
+
   const novy = await prisma.$transaction(async (tx) => {
     await tx.gameTrade.update({ where: { id: t.id }, data: { stav: 'protinavrh', resolved_at: new Date() } });
     // Předmět i směr zůstávají, jen se prohodí, kdo komu píše.
     return tx.gameTrade.create({ data: {
       from_id: req.player.id, from_nick: req.player.nick, to_id: t.from_id, to_nick: t.from_nick,
-      smer: t.smer === 'koupim' ? 'prodam' : 'koupim',
+      smer: novySmer,
       predmet: t.predmet, model: t.model, spot_id: t.spot_id, card_kind: t.card_kind,
-      cena, karty, vzkaz: s((req.body || {}).vzkaz, 200) || null, parent_id: t.id,
+      cena, karty, data, vzkaz: s((req.body || {}).vzkaz, 200) || null, parent_id: t.id,
     } });
   });
   res.json({ ok: true, trade: verejny(novy, req.player.id) });

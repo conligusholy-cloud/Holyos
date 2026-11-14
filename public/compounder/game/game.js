@@ -9615,6 +9615,28 @@ function hraciVyberSheet(nadpis, popisTlacitka, pak) {
   }).catch(function () { toast('Server neodpovídá.', 'err'); });
 }
 // Komu napsat — seznam všech hráčů, stejný jako u nabídky.
+// ─── Kolik mám doopravdy volných peněz ───────────────────────────────────────
+// Rozjednaná nabídka, u které platím já, drží hotovost stejně jako objednávka.
+// Bez toho jde rozeslat deset nabídek po milionu s milionem v kase a devět
+// z nich pak nejde přijmout.
+function jaPlatimNabidku(t) {
+  var kupuji = (t.smer === 'koupim' && t.moje) || (t.smer === 'prodam' && !t.moje);
+  return t.predmet === 'pujcka' ? !kupuji : kupuji;   // u půjčky platí věřitel
+}
+function vazanaHotovost(krome) {
+  return (TRADES || []).reduce(function (a, t) {
+    return a + (t.stav === 'ceka' && t.id !== krome && jaPlatimNabidku(t) ? (t.cena || 0) : 0);
+  }, 0);
+}
+function volnaHotovost(krome) { return S.cash - vazanaHotovost(krome); }
+// Věta pod formulář: kolik mi zbývá a co to drží.
+function volneHtml(krome) {
+  var vaz = vazanaHotovost(krome);
+  if (!vaz) return '';
+  return '<p class="fine">Hotovost ' + kcFull(S.cash) + ', z toho ' + kcFull(vaz)
+    + ' drží rozjednané nabídky — volných je ' + kcFull(Math.max(0, S.cash - vaz)) + '.</p>';
+}
+
 function predmetPopis(t) {
   if (t.predmet === 'stroj') return 'stroj ' + ((MODELS[t.model] || {}).name || t.model);
   if (t.predmet === 'pradlomat') return 'prádlomat na místě';
@@ -10167,8 +10189,8 @@ function paintBurza() {
       var id = b.getAttribute('data-tr'), co = b.getAttribute('data-akce');
       var t = TRADES.filter(function (x) { return String(x.id) === id; })[0];
       if (co === 'counter') return protinavrhSheet(t);
-      // Platím-li já, ať to nepadne až na serveru.
-      var jaPlatim = (t.smer === 'koupim' && t.moje) || (t.smer === 'prodam' && !t.moje);
+      // Platím-li já, ať to nepadne až na serveru. U půjčky platí věřitel.
+      var jaPlatim = jaPlatimNabidku(t);
       if (co === 'accept' && jaPlatim && t.cena > S.cash) {
         return toast('Na tohle nemáš hotovost — chybí ' + kcFull(t.cena - S.cash) + '.', 'err');
       }
@@ -10212,6 +10234,7 @@ function radekObchodu(t) {
       : '')
     + '<div class="row"><span class="muted small">Cena</span><span class="cena">' + esc(cenaPopis(t)) + '</span></div>'
     + (t.vzkaz ? '<p class="muted small" style="margin-top:6px">„' + esc(t.vzkaz) + '"</p>' : '')
+    + nekrytoHtml(t)
     + (t.stav !== 'ceka' ? '<p style="margin-top:8px"><span class="stav ' + esc(t.stav) + '">' + esc(t.stav) + '</span></p>' : '')
     + (t.na_tahu
       ? '<div class="akce"><button class="btn sm" data-tr="' + t.id + '" data-akce="accept">Přijmout</button>'
@@ -10223,21 +10246,74 @@ function radekObchodu(t) {
     + '</div>';
 }
 
+// Nabídka, na kterou plátce nemá: dokud se to nespraví, přijmout nejde.
+function nekrytoHtml(t) {
+  if (t.stav !== 'ceka' || !jaPlatimNabidku(t)) return '';
+  var volne = volnaHotovost(t.id);
+  if ((t.cena || 0) <= volne) return '';
+  return '<p class="small err" style="margin-top:6px">Nemáš na to volnou hotovost — chybí '
+    + kcFull(t.cena - volne) + '. Dokud ji nedáš dohromady, obchod nejde uzavřít.</p>';
+}
+
 // ─── Protinávrh ──────────────────────────────────────────────────────────────
 function protinavrhSheet(t) {
   var vybrane = [];
+  var d = t.data || {};
+  // Protinávrh otáčí role: kdo kupoval, teď prodává. U půjčky se tím mění
+  // i to, kdo platí a kdo ručí.
+  var pujcka = t.predmet === 'pujcka';
+  var buduPlatit = pujcka ? t.smer === 'koupim' : t.smer === 'prodam';
+  var buduDluznik = pujcka && !buduPlatit;
+  var mojeMista = (S.units || []).map(function (u) {
+    return { id: u.spotId, name: u.name + ' · ' + (MODELS[u.eco.model] || {}).name };
+  });
   sheet('<h3>Protinávrh</h3>'
-    + '<p class="muted small">Předmět zůstává stejný (' + esc(predmetPopis(t)) + '), měníš jen cenu.</p>'
+    + '<p class="muted small">Předmět zůstává stejný (' + esc(predmetPopis(t)) + '), měníš '
+    + (pujcka ? 'částku' + (buduDluznik ? ' a zástavu' : '') + '. Úrok i délka zůstávají.' : 'jen cenu.') + '</p>'
     + '<div class="kv"><span>Původní nabídka</span><b>' + esc(cenaPopis(t)) + '</b></div>'
+    + (pujcka ? '<div class="kv"><span>Zástava</span><b>'
+        + (d.zastava_nazev ? esc(d.zastava_nazev) : 'bez zástavy') + '</b></div>' : '')
     + '<label class="fld"><span>Co nabízíš ty (L$)</span>'
     + '<input id="pn-cena" class="inp" type="number" min="0" step="1000" value="' + (t.cena || 0) + '"></label>'
+    + (pujcka ? '<p class="fine" id="pn-splatka"></p>' : '')
+    + (buduDluznik && mojeMista.length
+        ? '<label class="fld"><span>Ručím prádlomatem</span><select id="pn-zastava" class="inp">'
+          + '<option value="-">bez zástavy</option>'
+          + mojeMista.map(function (m) {
+              return '<option value="' + esc(m.id) + '"' + (m.id === d.zastava ? ' selected' : '') + '>'
+                + esc(m.name) + '</option>';
+            }).join('')
+          + '</select></label>'
+        : '')
     + kartyVyber('pn')
     + '<label class="fld"><span>Vzkaz (nepovinný)</span><input id="pn-vzkaz" class="inp" type="text" maxlength="200"></label>'
-    + '<button class="btn big" id="pn-ok">Poslat protinávrh</button>');
+    + '<p class="fine" id="pn-kryti"></p>'
+    + '<button class="btn big" id="pn-ok">Poslat protinávrh</button>'
+    + (buduPlatit ? volneHtml(t.id) : ''));
   vybrane = bindKartyVyber('pn');
+  var prepocti = function () {
+    var c = Math.max(0, Math.round(Number($('pn-cena').value) || 0));
+    if (pujcka && $('pn-splatka')) {
+      var sp = anuitaHra(c, (Number(d.urok) || 0) * 100, Math.max(1, Number(d.mesicu) || 1));
+      $('pn-splatka').textContent = 'Splátka by vyšla na ' + kcFull(sp) + ' za herní měsíc.';
+    }
+    var el = $('pn-kryti');
+    if (!buduPlatit) { el.textContent = ''; return; }
+    var volne = volnaHotovost(t.id);
+    if (c > volne) {
+      el.className = 'fine err';
+      el.textContent = 'Na tohle nemáš volnou hotovost — chybí ' + kcFull(c - volne) + '.';
+    } else { el.className = 'fine'; el.textContent = ''; }
+  };
+  $('pn-cena').oninput = prepocti; prepocti();
   $('pn-ok').onclick = function () {
-    var b = $('pn-ok'); b.disabled = true;
-    apiJson('/trade/' + t.id + '/counter', { cena: Number($('pn-cena').value) || 0, karty: vybrane(), vzkaz: $('pn-vzkaz').value })
+    var b = $('pn-ok');
+    if (buduPlatit && (Number($('pn-cena').value) || 0) > volnaHotovost(t.id)) {
+      return toast('Na tohle nemáš volnou hotovost — obchod by nešlo uzavřít.', 'err');
+    }
+    b.disabled = true;
+    apiJson('/trade/' + t.id + '/counter', { cena: Number($('pn-cena').value) || 0, karty: vybrane(),
+      zastava: $('pn-zastava') ? $('pn-zastava').value : null, vzkaz: $('pn-vzkaz').value })
       .then(function (r) {
         b.disabled = false;
         if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
@@ -10482,8 +10558,10 @@ function financeSheet(toId, kdo, co, a) {
     + '<label class="fld"><span>Vzkaz (nepovinný)</span>'
     + '<input id="fin-vzkaz" class="inp" type="text" maxlength="200"></label>'
     + '<div class="kv souhrn"><span id="fin-popis">Splátka</span><b id="fin-vysledek">—</b></div>'
+    + '<p class="fine" id="fin-kryti"></p>'
     + '<button class="btn big" id="fin-ok" style="width:100%;margin-top:10px">Poslat nabídku</button>'
-    + '<p class="fine">' + (jaDavam ? 'Peníze odejdou, až nabídku přijme.' : 'Peníze dorazí, až nabídku přijme.') + '</p>');
+    + '<p class="fine">' + (jaDavam ? 'Peníze odejdou, až nabídku přijme.' : 'Peníze dorazí, až nabídku přijme.') + '</p>'
+    + (jaDavam ? volneHtml(null) : ''));
   var prepocti = function () {
     var c = Math.max(0, Math.round(Number(($('fin-castka') || {}).value) || 0));
     if (pujcka) {
@@ -10500,6 +10578,19 @@ function financeSheet(toId, kdo, co, a) {
         : p + ' % z toho, co jeho firmě měsíčně zbyde';
     }
   };
+  var kryti = function () {
+    var el = $('fin-kryti');
+    if (!jaDavam) return;
+    var c = Math.max(0, Math.round(Number(($('fin-castka') || {}).value) || 0));
+    var volne = volnaHotovost(null);
+    if (c > volne) {
+      el.className = 'fine err';
+      el.textContent = 'Na tohle nemáš volnou hotovost — chybí ' + kcFull(c - volne)
+        + '. Dokud ji nemáš, nabídku nikdo nemůže přijmout.';
+    } else { el.className = 'fine'; el.textContent = ''; }
+  };
+  var puvodni = prepocti;
+  prepocti = function () { puvodni(); kryti(); };
   ['fin-castka', 'fin-urok', 'fin-mesicu', 'fin-podil'].forEach(function (id) {
     if ($(id)) $(id).oninput = prepocti;
   });
@@ -10508,7 +10599,10 @@ function financeSheet(toId, kdo, co, a) {
     var c = Math.max(0, Math.round(Number($('fin-castka').value) || 0));
     if (pujcka && c < PUJCKA_MIN_HRA) return toast('Nejmenší půjčka je ' + kcFull(PUJCKA_MIN_HRA) + '.', 'err');
     if (!c) return toast('Zadej částku.', 'err');
-    if (jaDavam && S.cash < c) return toast('Tolik hotovosti nemáš.', 'err');
+    if (jaDavam && c > volnaHotovost(null)) {
+      return toast('Volné hotovosti máš jen ' + kcFull(Math.max(0, volnaHotovost(null)))
+        + ' — zbytek drží rozjednané nabídky.', 'err');
+    }
     var telo = { to_id: toId, predmet: pujcka ? 'pujcka' : 'podil', cena: c,
       smer: (co === 'pujcim' || co === 'prodam-podil') ? 'prodam' : 'koupim',
       vzkaz: ($('fin-vzkaz').value || '').slice(0, 200) };
@@ -10558,7 +10652,8 @@ function cenaSheet(toId, kdo, x) {
     + (jaPlatim ? kartyVyber('na') : '')
     + '<label class="fld"><span>Vzkaz (nepovinný)</span><input id="na-vzkaz" class="inp" type="text" maxlength="200"></label>'
     + '<button class="btn big" id="na-ok">Odeslat nabídku</button>'
-    + '<p class="fine">Rozhodne protistrana — nabídku může přijmout i odmítnout.</p>');
+    + '<p class="fine">Rozhodne protistrana — nabídku může přijmout i odmítnout.</p>'
+    + (jaPlatim ? volneHtml(null) : ''));
   // Verdikt se přepíše při každém úderu do klávesnice.
   var ci = $('na-cena'), vd = $('na-verdikt');
   var verdikt = function () {
@@ -10583,14 +10678,25 @@ function cenaSheet(toId, kdo, x) {
         t.push('Úvěr to pokryje a ještě ti ' + kcFull(c - dluh) + ' zbyde.');
       }
     }
-    if (jaPlatim && c > S.cash) { t.push('Tolik hotovosti nemáš — máš ' + kcFull(S.cash) + '.'); tr = 'fine err'; }
+    if (jaPlatim) {
+      var volne = volnaHotovost(null);
+      if (c > volne) {
+        t.push(volne === S.cash ? 'Tolik hotovosti nemáš — máš ' + kcFull(S.cash) + '.'
+          : 'Volné hotovosti máš jen ' + kcFull(Math.max(0, volne)) + ' — zbytek drží rozjednané nabídky.');
+        tr = 'fine err';
+      }
+    }
     vd.className = tr;
     vd.textContent = t.join(' ');
   };
   ci.oninput = verdikt; verdikt();
   var vybrane = jaPlatim ? bindKartyVyber('na') : function () { return []; };
   $('na-ok').onclick = function () {
-    var b = $('na-ok'); b.disabled = true;
+    var b = $('na-ok');
+    if (jaPlatim && (Number(ci.value) || 0) > volnaHotovost(null)) {
+      return toast('Na tohle nemáš volnou hotovost — nabídku by nešlo přijmout.', 'err');
+    }
+    b.disabled = true;
     apiJson('/trade/offer', { to_id: toId, smer: x.smer, predmet: x.predmet, model: x.model || null,
       spot_id: x.spot_id || null, card_kind: x.card_kind || null, pobocka: x.pobocka || null,
       cena: Number($('na-cena').value) || 0, karty: vybrane(), vzkaz: $('na-vzkaz').value })
