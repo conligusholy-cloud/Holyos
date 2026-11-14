@@ -7787,6 +7787,9 @@ function paint() {
     if (!$('net-zebricek').classList.contains('hidden')) paintZeb();
     else if (!$('net-vyvoj').classList.contains('hidden')) paintVyvoj();
     else if (!$('net-stroje').classList.contains('hidden')) paintStroje();
+    // Agenda míst se musí překreslit taky — po výměně stroje nebo stavbě
+    // v ní jinak svítí starý model, dokud hráč hru neobnoví.
+    else if (!$('net-mista').classList.contains('hidden')) paintMista();
     else paintNet();
   }
   if (!$('v-bank').classList.contains('hidden')) paintBank();
