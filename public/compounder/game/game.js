@@ -9700,6 +9700,29 @@ function zaKolik(ms) {
   var zb = min - h * 60;
   return 'za ' + (h ? h + ' h' + (zb ? ' ' + zb + ' min' : '') : zb + ' min');
 }
+// Doplacení půjčky dřív, než doběhne. Platí se současná hodnota zbývajících
+// splátek — úrok tedy jen za dobu, kterou dlužník peníze opravdu měl.
+function splatitSheet(id, castka) {
+  var chybi = castka - S.cash;
+  sheet('<h3>Doplatit půjčku</h3>'
+    + '<p class="muted small">Zbytek dluhu splatíš naráz a půjčka končí. Úrok platíš jen za dobu, '
+    + 'co jsi peníze měl — zbývající splátky se už nepočítají. Zástava se tím uvolní.</p>'
+    + '<div class="kv"><span>Doplatek</span><b>' + kcFull(castka) + '</b></div>'
+    + '<div class="kv"><span>Hotovost</span><b class="' + (chybi > 0 ? 'err' : 'ok') + '">'
+    + kcFull(S.cash) + '</b></div>'
+    + (chybi > 0
+        ? '<p class="fine err">Chybí ti ' + kcFull(chybi) + '. Splátky zatím běží dál.</p>'
+        : '<button class="btn big" id="spl-ok" style="width:100%;margin-top:10px">Doplatit '
+          + kcFull(castka) + '</button>'));
+  if ($('spl-ok')) $('spl-ok').onclick = function () {
+    var b = $('spl-ok'); b.disabled = true;
+    apiJson('/trade/pujcka/' + id + '/splatit', {}).then(function (r) {
+      if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
+      closeSheet(); vyzvedniNasledky(); FINANCE = null; loadFinance(paintBurza);
+      toast('Půjčka je doplacená.', 'ok');
+    }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+  };
+}
 function financeHtml() {
   var f = FINANCE;
   if (!f || (!(f.pujcky || []).length && !(f.podily || []).length)) return '';
@@ -9722,6 +9745,10 @@ function financeHtml() {
               + (dluzim ? 'Po třetí se zbytek dluhu strhne a spadne ti do banky.'
                 : 'Po třetí se dluh vymáhá.') + '</p>'
             : '')
+      + (dluzim && p.doplatek > 0
+          ? '<div class="akce"><button class="btn sm sec" data-splatit="' + p.id + '" data-castka="'
+            + p.doplatek + '">Splatit teď za ' + kcFull(p.doplatek) + '</button></div>'
+          : '')
       + '</div>';
   });
   (f.podily || []).forEach(function (e) {
@@ -9739,6 +9766,9 @@ function financeHtml() {
   return h + '</div>';
 }
 function bindFinance() {
+  [].forEach.call($('burza-body').querySelectorAll('[data-splatit]'), function (b) {
+    b.onclick = function () { splatitSheet(b.getAttribute('data-splatit'), Number(b.getAttribute('data-castka'))); };
+  });
   [].forEach.call($('burza-body').querySelectorAll('[data-odkup]'), function (b) {
     b.onclick = function () {
       b.disabled = true;

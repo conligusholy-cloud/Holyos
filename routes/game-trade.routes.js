@@ -474,6 +474,17 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Kolik stojí doplatit půjčku hned. Je to současná hodnota zbývajících splátek:
+// dlužník vrátí jistinu, úrok platí jen za dobu, kterou peníze měl. Lichvu
+// za předčasné splacení hra nedělá — kdo má, může kdykoli skončit.
+function doplatek(p) {
+  const zbyva = Math.max(0, (p.mesicu || 0) - (p.splaceno || 0));
+  if (!zbyva) return 0;
+  const r = (Number(p.urok) || 0) / 12;
+  if (r <= 0) return Math.round(p.splatka * zbyva);
+  return Math.round(p.splatka * (1 - Math.pow(1 + r, -zbyva)) / r);
+}
+
 // ─── Půjčky a podíly: přehled a odkup ───────────────────────────────────────
 // GET /trade/finance → co komu dlužím, kdo dluží mně, kdo má podíl ve mně
 // a v kom mám podíl já.
@@ -493,13 +504,43 @@ router.get('/trade/finance', hrac, api(async (req, res) => {
     pujcky: pujcky.map((p) => ({ id: p.id, moje: p.borrower_id === ja ? 'dluzim' : 'pujcil',
       kdo: p.borrower_id === ja ? p.lender_nick : p.borrower_nick,
       castka: p.castka, urok: p.urok, mesicu: p.mesicu, splatka: p.splatka,
-      splaceno: p.splaceno, zmeskano: p.zmeskano, stav: p.stav,
+      splaceno: p.splaceno, zmeskano: p.zmeskano, stav: p.stav, doplatek: doplatek(p),
       zastava: p.zastava_nazev || null, dalsi: p.dalsi_at })),
     podily: podily.map((e) => ({ id: e.id, moje: e.investor_id === ja ? 'mam' : 'prodal',
       kdo: e.investor_id === ja ? e.firma_nick : e.investor_nick,
       podil: e.podil, cena: e.cena, vyplaceno: e.vyplaceno,
       odkup: Math.round(e.cena * ODKUP_NASOBEK), dalsi: e.dalsi_at })),
     odkup_nasobek: ODKUP_NASOBEK });
+}));
+
+// POST /trade/pujcka/:id/splatit → dlužník doplatí zbytek a je hotovo
+router.post('/trade/pujcka/:id/splatit', hrac, api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const p = await prisma.gameLoan.findUnique({ where: { id } });
+  if (!p || p.stav !== 'bezi') return res.status(404).json({ error: 'Taková půjčka tu neběží.' });
+  if (p.borrower_id !== req.player.id) return res.status(403).json({ error: 'Splatit ji může jen dlužník.' });
+  const castka = doplatek(p);
+  if (castka <= 0) {
+    await prisma.gameLoan.update({ where: { id }, data: { stav: 'splaceno' } });
+    return res.json({ ok: true, castka: 0 });
+  }
+  const hotovost = Math.round(stavu(req.player).cash || 0);
+  if (castka > hotovost) {
+    return res.status(409).json({ error: 'Na doplacení potřebuješ ' + castka.toLocaleString('cs-CZ')
+      + ' L$, máš ' + hotovost.toLocaleString('cs-CZ') + ' L$.' });
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.gameDelivery.createMany({ data: [
+      { player_id: p.borrower_id, kind: 'cash', amount: -castka,
+        popis: 'Doplatil jsi půjčku — ' + p.lender_nick },
+      { player_id: p.lender_id, kind: 'cash', amount: castka,
+        popis: p.borrower_nick + ' doplatil půjčku předčasně' },
+    ] });
+    await tx.gameLoan.update({ where: { id },
+      data: { stav: 'splaceno', splaceno: p.mesicu, zmeskano: 0 } });
+  });
+  console.log('[game] půjčka #' + id + ' doplacena předčasně: ' + castka + ' L$');
+  res.json({ ok: true, castka });
 }));
 
 // POST /trade/podil/:id/odkup → majitel firmy koupí podíl zpátky
