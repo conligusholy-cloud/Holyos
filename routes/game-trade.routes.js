@@ -52,6 +52,30 @@ const skladu = (st) => {
   return out;
 };
 
+// ─── Kolik firma stojí ───────────────────────────────────────────────────────
+// Bez čísla by byl podíl loterie: kupující nevidí cizí zisky a hádal by cenu
+// z ničeho. Firmu oceňujeme stejně jako jednotlivý prádlomat na burze —
+// čtyřnásobkem ročního zisku provozovny, shora i zdola drženým tím, co stavba
+// stála — a přičteme hotovost a odečteme dluh u banky. Je to orientace, ne
+// povinnost: za kolik si podíl přeprodají, je věc hráčů.
+const CENA_NASOBEK = 4;
+function cenaPradlomatu(zisk, invest) {
+  const podleZisku = Math.max(0, Math.round((zisk || 0) * 12 * CENA_NASOBEK));
+  if (!(invest > 0)) return podleZisku;
+  return Math.max(Math.round(invest * 0.5), Math.min(Math.round(invest * 1.2), podleZisku));
+}
+function oceneni(st) {
+  const units = Array.isArray(st.units) ? st.units : [];
+  const provozovny = units.reduce((a, u) => a
+    + cenaPradlomatu((u.eco && u.eco.profit) || 0, (u.eco && u.eco.invest) || 0), 0);
+  const hotovost = Math.max(0, Math.round(Number(st.cash) || 0));
+  const dluh = Math.max(0, Math.round(Number(st.loan) || 0));
+  const zbyde = Math.round(acct._zbydeMesicne(st) || 0);
+  return { provozovny: Math.round(provozovny), hotovost, dluh,
+    hodnota: Math.max(0, Math.round(provozovny + hotovost - dluh)),
+    zbyde_mesicne: zbyde, pradlomatu: units.length };
+}
+
 // ─── Co má kdo na prodej ─────────────────────────────────────────────────────
 // GET /trade/assets/:id → sklad, prádlomaty a karty daného hráče.
 // Na burze je tohle veřejné schválně: bez toho by se nedalo nabízet.
@@ -78,6 +102,9 @@ router.get('/trade/assets/:id', hrac, api(async (req, res) => {
       model: m.model, area_key: m.area_key })),
     pobocky: (Array.isArray(st.pobocky) ? st.pobocky : [])
       .filter((x) => x && x.name).map((x) => ({ name: x.name, lat: x.lat, lon: x.lon })),
+    // Souhrnné ocenění firmy jde ven schválně: kdo kupuje podíl, má vědět,
+    // do čeho jde. Čísla jednotlivých provozoven zůstávají majiteli.
+    oceneni: oceneni(st), prodany_podil: await prodanyPodil(id),
     karty: k });
 }));
 

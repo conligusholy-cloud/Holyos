@@ -10611,14 +10611,51 @@ function majetekSheet(id) {
 // Nabídka jako každá jiná: pošle se protistraně a ta ji přijme nebo odmítne.
 // Splátky i výplaty podílu pak řeší server každý herní měsíc sám.
 var UROK_MAX_HRA = 60, PODIL_MAX_HRA = 49, PUJCKA_MIN_HRA = 10000;
+// Kolik procent vlastní firmy už hráč prodal. Server to ví jistě, tohle je
+// jen pro formulář, než nabídku odešle.
+function podilProdano() {
+  return ((FINANCE && FINANCE.podily) || []).reduce(function (a, e) {
+    return a + (e.moje === 'prodal' ? (e.podil || 0) : 0);
+  }, 0);
+}
+// Našeptávač ceny podílu. Hráč si cenu určí sám — tohle je jen opora,
+// aby nestřílel od boku.
+function oceneniHtml(oc, co) {
+  if (!oc) return '<p class="fine">Hodnotu téhle firmy neznáme — cena je čistě na dohodě.</p>';
+  var cizi = co === 'koupim-podil';
+  return '<div class="kv" style="margin-top:10px"><span>'
+    + (cizi ? 'Jeho provozovny' : 'Tvoje provozovny') + ' (' + oc.pradlomatu + ')</span><b>'
+    + kcFull(oc.provozovny) + '</b></div>'
+    + '<div class="kv"><span>Hotovost</span><b>' + kcFull(oc.hotovost) + '</b></div>'
+    + '<div class="kv"><span>Dluh u banky</span><b class="' + (oc.dluh ? 'warn' : '') + '">−'
+    + kcFull(oc.dluh) + '</b></div>'
+    + '<div class="kv souhrn"><span>Orientační hodnota firmy</span><b>' + kcFull(oc.hodnota) + '</b></div>'
+    + '<p class="fine" id="fin-rada"></p>';
+}
 function anuitaHra(castka, urokProcent, mesicu) {
   var r = (Number(urokProcent) || 0) / 100 / 12;
   if (!(mesicu > 0)) return castka;
   if (r <= 0) return Math.ceil(castka / mesicu);
   return Math.ceil(castka * r / (1 - Math.pow(1 + r, -mesicu)));
 }
+// Kolik stojí moje firma. Stejný recept, jakým server oceňuje cizí: každá
+// provozovna za čtyřnásobek ročního zisku (držený tím, co stavba stála),
+// plus hotovost, minus dluh u banky.
+function hodnotaMojiFirmy() {
+  var provozovny = (S.units || []).reduce(function (a, u) {
+    return a + cenaPradlomatu(u.eco.profit, u.eco.invest);
+  }, 0);
+  return { provozovny: Math.round(provozovny), hotovost: Math.max(0, Math.round(S.cash)),
+    dluh: Math.max(0, Math.round(S.loan)), zbyde_mesicne: Math.round(cistyZisk()),
+    pradlomatu: (S.units || []).length,
+    hodnota: Math.max(0, Math.round(provozovny + Math.max(0, S.cash) - Math.max(0, S.loan))) };
+}
 function financeSheet(toId, kdo, co, a) {
   var pujcka = co === 'pujcim' || co === 'pujcim-si';
+  // Ocenění firmy, o jejíž podíl jde: u sebe spočítáme, u cizí přišlo ze serveru.
+  var oc = pujcka ? null
+    : (co === 'prodam-podil' ? hodnotaMojiFirmy() : ((a && a.oceneni) || null));
+  var prodano = co === 'koupim-podil' ? ((a && a.prodany_podil) || 0) : podilProdano();
   var jaDavam = co === 'pujcim' || co === 'koupim-podil';     // z mé hotovosti
   var nadpis = co === 'pujcim' ? 'Půjčit ' + esc(kdo.firma)
     : co === 'pujcim-si' ? 'Požádat o půjčku'
@@ -10657,7 +10694,8 @@ function financeSheet(toId, kdo, co, a) {
                 + 'dluh se mu strhne a spadne do banky — ale jestli nemá z čeho, nedostaneš nic.</p>')
         : '<label class="fld"><span>Podíl v %</span>'
           + '<input id="fin-podil" class="inp" type="number" inputmode="numeric" min="1" max="'
-          + PODIL_MAX_HRA + '" value="10"></label>')
+          + PODIL_MAX_HRA + '" value="10"></label>'
+          + oceneniHtml(oc, co))
     + '<label class="fld"><span>Vzkaz (nepovinný)</span>'
     + '<input id="fin-vzkaz" class="inp" type="text" maxlength="200"></label>'
     + '<div class="kv souhrn"><span id="fin-popis">Splátka</span><b id="fin-vysledek">—</b></div>'
@@ -10691,9 +10729,21 @@ function financeSheet(toId, kdo, co, a) {
     } else {
       var p = Math.max(1, Math.min(PODIL_MAX_HRA, Math.round(Number(($('fin-podil') || {}).value) || 0)));
       $('fin-popis').textContent = 'Co z firmy ukrojí';
-      $('fin-vysledek').textContent = co === 'prodam-podil'
-        ? p + ' % · teď ' + kcFull(Math.round(cistyZisk() * p / 100)) + ' / měs'
-        : p + ' % z toho, co jeho firmě měsíčně zbyde';
+      $('fin-vysledek').textContent = oc
+        ? p + ' % · ' + kcFull(Math.round(oc.zbyde_mesicne * p / 100)) + ' / měs'
+        : p + ' % z toho, co firmě měsíčně zbyde';
+      if (oc && $('fin-rada')) {
+        var doporucena = Math.round(oc.hodnota * p / 100);
+        var mesicne = Math.round(oc.zbyde_mesicne * p / 100);
+        var roky = mesicne > 0 && c > 0 ? (c / (mesicne * 12)) : null;
+        $('fin-rada').innerHTML = '<b>' + p + ' % firmy odpovídá ' + kcFull(doporucena) + '.</b> '
+          + (mesicne > 0
+              ? 'Při dnešním výdělku by z podílu chodilo ' + kcFull(mesicne) + ' měsíčně'
+                + (roky ? ' — za zadanou cenu návratnost ' + roky.toFixed(1).replace('.', ',') + ' roku.' : '.')
+              : 'Firma teď nevydělává, takže by podíl zatím nic nenesl — nebo by se i doplácelo.')
+          + ' Za kolik se nakonec dohodnete, je na vás.'
+          + (prodano > 0 ? ' Z firmy je už prodáno ' + Math.round(prodano * 100) + ' %.' : '');
+      }
     }
   };
   var kryti = function () {
@@ -10709,6 +10759,16 @@ function financeSheet(toId, kdo, co, a) {
   };
   var puvodni = prepocti;
   prepocti = function () { puvodni(); kryti(); };
+  // Částku napoprvé napovíme z ocenění a držíme ji s procentem, dokud do ní
+  // hráč sám nesáhne — pak je jeho.
+  var rucne = false;
+  if (oc && $('fin-castka')) $('fin-castka').value = Math.round(oc.hodnota * 0.1) || 1000000;
+  if ($('fin-castka')) $('fin-castka').addEventListener('input', function () { rucne = true; });
+  if (oc && $('fin-podil')) $('fin-podil').addEventListener('input', function () {
+    if (rucne) return;
+    var p = Math.max(1, Math.min(PODIL_MAX_HRA, Math.round(Number($('fin-podil').value) || 0)));
+    $('fin-castka').value = Math.round(oc.hodnota * p / 100);
+  });
   ['fin-castka', 'fin-urok', 'fin-mesicu', 'fin-podil'].forEach(function (id) {
     if ($(id)) $(id).oninput = prepocti;
   });
