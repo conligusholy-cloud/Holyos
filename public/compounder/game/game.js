@@ -7965,15 +7965,21 @@ function zemeRadek(z) {
   var mod = ['mini', 'flex', 'max'].map(function (k) {
     return '<i class="' + (z[k] ? 'je' : 'nic') + '">' + k.toUpperCase() + ' ' + (z[k] || 0) + '</i>';
   }).join('');
-  // Kdo v zemi vede: znak, firma a nick. Ať je vidět, s kým se tam měřit.
-  var k = z.kral;
+  // Kdo v zemi vede: první tři firmy se znakem, nickem a počtem prádlomatů.
+  // Ať je vidět nejen král, ale i s kým se dá o druhé místo poprat.
+  var top = z.top && z.top.length ? z.top : (z.kral ? [z.kral] : []);
+  var MEDAILE = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
   return '<div class="zeb-row zeme">'
     + '<i class="zeb-vlaj">' + (vlajka(z.kod) || esc(String(z.kod || '').toUpperCase())) + '</i>'
     + '<span class="nick">' + esc(zemeNazev(z.kod))
     + '<i class="zeme-mod">' + mod + '<b>' + hracuSlovy(z.hracu) + '</b></i>'
-    + (k ? '<i class="zeme-kral">' + (k.znak ? znakSvg(k.znak, 15) : '\uD83D\uDC51') + ' '
-        + '<b>' + esc(k.firma) + '</b> <span>' + esc(k.nick) + '</span>'
-        + ' \u00b7 ' + k.pocet + '\u00d7</i>' : '')
+    + top.map(function (k, i) {
+        return '<i class="zeme-kral">'
+          + '<em class="zeme-por">' + (MEDAILE[i] || (i + 1) + '.') + '</em>'
+          + (k.znak ? znakSvg(k.znak, 15) : '')
+          + '<b>' + esc(k.firma) + '</b> <span>' + esc(k.nick) + '</span>'
+          + ' \u00b7 ' + k.pocet + '\u00d7</i>';
+      }).join('')
     + '</span>'
     + '<b>' + z.celkem + '×</b></div>';
 }

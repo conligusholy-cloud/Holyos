@@ -1157,33 +1157,35 @@ async function zemeSPocty() {
     r.hraci.add(z.player_id);
     r.podle[z.player_id] = (r.podle[z.player_id] || 0) + 1;
   });
-  // Kdo má v zemi nejvíc prádlomatů. Při shodě vyhrává ten, kdo tam byl dřív —
-  // to poznáme podle nižšího id hráče.
-  const krale = {};
+  // Kdo má v zemi nejvíc prádlomatů — první tři. Při shodě je výš ten, kdo tam
+  // byl dřív; to poznáme podle nižšího id hráče.
+  const TOP = 3;
+  const spicka = {};
   Object.keys(out).forEach((k) => {
     const p = out[k].podle;
-    let nej = null;
-    Object.keys(p).forEach((id) => {
-      const pid = Number(id);
-      if (!nej || p[id] > nej.pocet || (p[id] === nej.pocet && pid < nej.id)) {
-        nej = { id: pid, pocet: p[id] };
-      }
-    });
-    if (nej) krale[k] = nej;
+    spicka[k] = Object.keys(p)
+      .map((id) => ({ id: Number(id), pocet: p[id] }))
+      .sort((a, b) => b.pocet - a.pocet || a.id - b.id)
+      .slice(0, TOP);
   });
-  const ids = Object.keys(krale).map((k) => krale[k].id);
+  const ids = [...new Set(Object.keys(spicka).flatMap((k) => spicka[k].map((x) => x.id)))];
   const hraci = ids.length
     ? await prisma.gamePlayer.findMany({ where: { id: { in: ids } },
         select: { id: true, nick: true, company: true, emblem: true } })
     : [];
   const kdo = {};
   hraci.forEach((h) => { kdo[h.id] = h; });
+  const ven = (x) => {
+    const h = kdo[x.id];
+    return h ? { nick: h.nick, firma: h.company || (h.nick + ' s.r.o.'),
+      znak: h.emblem || null, pocet: x.pocet } : null;
+  };
   return Object.keys(out).map((k) => {
-    const kral = krale[k] && kdo[krale[k].id] ? kdo[krale[k].id] : null;
+    const top = (spicka[k] || []).map(ven).filter(Boolean);
     return { kod: out[k].kod, mini: out[k].mini, flex: out[k].flex,
       max: out[k].max, celkem: out[k].celkem, hracu: out[k].hraci.size,
-      kral: kral ? { nick: kral.nick, firma: kral.company || (kral.nick + ' s.r.o.'),
-        znak: kral.emblem || null, pocet: krale[k].pocet } : null };
+      // kral zůstává kvůli starším verzím hry, co ještě nečtou top
+      kral: top[0] || null, top };
   }).sort((a, b) => b.celkem - a.celkem || a.kod.localeCompare(b.kod));
 }
 
