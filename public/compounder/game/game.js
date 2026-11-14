@@ -10339,42 +10339,95 @@ function majetekSheet(id) {
         popis: 'moje karta ' + c.name, pod: ownedOf(c.kind) + '× k dispozici' });
     });
 
+    // ── Rozcestník ─────────────────────────────────────────────────────────
+    // Všechno naráz byl na mobilu nekonečný seznam. Nejdřív tedy kategorie
+    // s počty, samotné položky až po rozkliknutí.
+    var KATEGORIE = [
+      { k: 'pradlomat', ico: '🧺', nazev: 'Prádlomaty', pod: 'hotové provozovny i s místem' },
+      { k: 'stroj', ico: '📦', nazev: 'Stroje', pod: 'co má kdo skladem' },
+      { k: 'pobocka', ico: '🏢', nazev: 'Pobočky', pod: 'základny pro dopravu a četu' },
+      { k: 'karta', ico: '⚡', nazev: 'Karty', pod: 'zrychlovače čekání' },
+      { k: 'pujcka', ico: '🏦', nazev: 'Půjčka', pod: 'peníze na úrok' },
+      { k: 'podil', ico: '📈', nazev: 'Podíl ve firmě', pod: 'procento ze zisku i ztráty' }
+    ];
+    var kolikJe = function (kat) {
+      var f = function (list) { return list.filter(function (x) { return x.predmet === kat; }).length; };
+      return { k: f(polozky), p: f(moje) };
+    };
+    var hlava = '<h3>' + esc(a.hrac.firma) + '</h3>'
+      + '<p class="muted small">' + esc(a.hrac.nick) + ' — vyber, o co ti jde.</p>';
+
+    var rozcestnik = function () {
+      sheet(hlava + '<div class="rozc">' + KATEGORIE.map(function (c) {
+        var n = c.k === 'pujcka' || c.k === 'podil' ? null : kolikJe(c.k);
+        var pocty = n == null ? c.pod
+          : !n.k && !n.p ? 'nemá ani jeden z vás'
+            : [n.k ? n.k + '× jeho' : '', n.p ? n.p + '× tvých' : ''].filter(Boolean).join(' · ');
+        return '<button type="button" class="rozc-b' + (n && !n.k && !n.p ? ' prazdna' : '')
+          + '" data-kat="' + c.k + '"><i>' + c.ico + '</i>'
+          + '<b>' + c.nazev + '</b><span>' + esc(pocty) + '</span></button>';
+      }).join('') + '</div>');
+      [].forEach.call($('sheet-body').querySelectorAll('[data-kat]'), function (b) {
+        b.onclick = function () { kategorie(b.getAttribute('data-kat')); };
+      });
+    };
+
     var radek = function (x, i, pref) {
       return '<div class="area-item"><div><div class="nm">' + x.popis + '</div>'
         + '<div class="sub">' + x.pod + '</div></div>'
         + '<button class="btn sec sm" data-p="' + pref + i + '">Nabídnout</button></div>';
     };
-    sheet('<h3>' + esc(a.hrac.firma) + '</h3>'
-      + '<p class="muted small">' + esc(a.hrac.nick) + ' — vyber, o co ti jde.</p>'
-      + (polozky.length ? '<h3 style="margin-top:14px">Koupit od něj</h3>' + polozky.map(function (x, i) { return radek(x, i, 'k'); }).join('')
-        : '<p class="muted small">Nemá nic, co by šlo koupit.</p>')
-      + (moje.length ? '<h3 style="margin-top:18px">Prodat mu</h3>' + moje.map(function (x, i) { return radek(x, i, 'p'); }).join('')
-        : '<p class="muted small" style="margin-top:14px">Ty zatím nemáš co nabídnout.</p>')
-      + '<h3 style="margin-top:18px">Peníze a podíl</h3>'
-      + '<p class="muted small" style="margin:0 0 8px">Půjčka se splácí každý herní měsíc. '
-      + 'Podílník nese zisk i ztrátu firmy — kolik procent má, tolik mu měsíčně chodí nebo doplácí.</p>'
-      + '<div class="area-item"><div><div class="nm">Půjčit mu peníze</div>'
-      + '<div class="sub">ty dáš hotovost, on splácí s úrokem</div></div>'
-      + '<button class="btn sec sm" data-fin="pujcim">Nastavit</button></div>'
-      + '<div class="area-item"><div><div class="nm">Požádat ho o půjčku</div>'
-      + '<div class="sub">on dá hotovost, ty splácíš</div></div>'
-      + '<button class="btn sec sm" data-fin="pujcim-si">Nastavit</button></div>'
-      + '<div class="area-item"><div><div class="nm">Koupit podíl v jeho firmě</div>'
-      + '<div class="sub">dostáváš procento z jeho zisku i ztráty</div></div>'
-      + '<button class="btn sec sm" data-fin="koupim-podil">Nastavit</button></div>'
-      + '<div class="area-item"><div><div class="nm">Nabídnout mu podíl ve své firmě</div>'
-      + '<div class="sub">dostaneš hotovost, on procento z tvého zisku</div></div>'
-      + '<button class="btn sec sm" data-fin="prodam-podil">Nastavit</button></div>');
-    [].forEach.call($('sheet-body').querySelectorAll('[data-fin]'), function (b) {
-      b.onclick = function () { financeSheet(id, a.hrac, b.getAttribute('data-fin'), a); };
-    });
-    [].forEach.call($('sheet-body').querySelectorAll('[data-p]'), function (b) {
-      b.onclick = function () {
-        var v = b.getAttribute('data-p');
-        var x = v.charAt(0) === 'k' ? polozky[Number(v.slice(1))] : moje[Number(v.slice(1))];
-        cenaSheet(id, a.hrac, x);
-      };
-    });
+    // Položky si drží původní pořadí, jen se vypisují po kategoriích —
+    // index v data-p tak pořád ukazuje do stejného pole.
+    var vypis = function (list, kat, pref) {
+      return list.map(function (x, i) { return x.predmet === kat ? radek(x, i, pref) : ''; }).join('');
+    };
+
+    var kategorie = function (kat) {
+      var c = KATEGORIE.filter(function (x) { return x.k === kat; })[0] || {};
+      var zpet = '<button type="button" class="btn sec sm zpet" id="rozc-zpet">‹ Zpět</button>';
+      var telo;
+      if (kat === 'pujcka') {
+        telo = '<p class="muted small">Splácí se anuitně každý herní měsíc. Kdo třikrát za sebou '
+          + 'nezaplatí, přijde o zástavu; bez zástavy mu dluh spadne do banky.</p>'
+          + '<div class="area-item"><div><div class="nm">Půjčit mu peníze</div>'
+          + '<div class="sub">ty dáš hotovost, on splácí s úrokem</div></div>'
+          + '<button class="btn sec sm" data-fin="pujcim">Nastavit</button></div>'
+          + '<div class="area-item"><div><div class="nm">Požádat ho o půjčku</div>'
+          + '<div class="sub">on dá hotovost, ty splácíš</div></div>'
+          + '<button class="btn sec sm" data-fin="pujcim-si">Nastavit</button></div>';
+      } else if (kat === 'podil') {
+        telo = '<p class="muted small">Podílník nese zisk i ztrátu firmy — kolik procent má, tolik mu '
+          + 'měsíčně chodí nebo doplácí. Majitel může podíl odkoupit zpátky za 125 % ceny.</p>'
+          + '<div class="area-item"><div><div class="nm">Koupit podíl v jeho firmě</div>'
+          + '<div class="sub">dostáváš procento z jeho zisku i ztráty</div></div>'
+          + '<button class="btn sec sm" data-fin="koupim-podil">Nastavit</button></div>'
+          + '<div class="area-item"><div><div class="nm">Nabídnout mu podíl ve své firmě</div>'
+          + '<div class="sub">dostaneš hotovost, on procento z tvého zisku</div></div>'
+          + '<button class="btn sec sm" data-fin="prodam-podil">Nastavit</button></div>';
+      } else {
+        var od = vypis(polozky, kat, 'k'), mu = vypis(moje, kat, 'p');
+        telo = '<h3 style="margin-top:14px">Koupit od něj</h3>'
+          + (od || '<p class="muted small">Nic takového nemá.</p>')
+          + '<h3 style="margin-top:18px">Prodat mu</h3>'
+          + (mu || '<p class="muted small">Ty zatím nemáš co nabídnout.</p>');
+      }
+      sheet('<div class="rozc-hlava">' + zpet + '<h3>' + (c.ico || '') + ' ' + esc(c.nazev || '') + '</h3></div>'
+        + '<p class="muted small" style="margin:0 0 4px">' + esc(a.hrac.nick) + '</p>' + telo);
+      $('rozc-zpet').onclick = rozcestnik;
+      [].forEach.call($('sheet-body').querySelectorAll('[data-fin]'), function (b) {
+        b.onclick = function () { financeSheet(id, a.hrac, b.getAttribute('data-fin'), a); };
+      });
+      [].forEach.call($('sheet-body').querySelectorAll('[data-p]'), function (b) {
+        b.onclick = function () {
+          var v = b.getAttribute('data-p');
+          var x = v.charAt(0) === 'k' ? polozky[Number(v.slice(1))] : moje[Number(v.slice(1))];
+          cenaSheet(id, a.hrac, x);
+        };
+      });
+    };
+
+    rozcestnik();
   }).catch(function () { toast('Server neodpovídá.', 'err'); });
 }
 

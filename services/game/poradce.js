@@ -102,6 +102,7 @@ const PRAVIDLA = [
   '- Tržiště: hotová provozovna i s místem, smlouvou a přípojkami. Vydělává hned, banka ji',
   '  financuje se spoluúčastí 20 %.',
   '- Burza: hráči si nabízejí stroje, celé provozovny i karty. Nabídka putuje tam a zpět.',
+  '  Po výběru hráče je rozcestník: Prádlomaty, Stroje, Pobočky, Karty, Půjčka, Podíl ve firmě.',
   '- Konkurzní rozprodej: majetek firem, které padly, za cenu klesající z 80 % na 40 %.',
   '- Cizí místo s nájmem jde přeplatit: nabídneš majiteli pozemku víc a musíš mít volný stroj.',
   '  Koupený pozemek přeplatit nejde — ten je obsazený natrvalo.',
