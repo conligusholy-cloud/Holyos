@@ -8,16 +8,19 @@
 // Peníze se mezi hráči posílají doručenkami (GameDelivery). Hra žije v
 // prohlížeči, takže jí jen řekneme, co si má připsat nebo odepsat.
 //
-// Když dlužník na splátku nemá, počítá se mu zmeškaná. Po třech přijde o
-// zástavu ve prospěch věřitele. Když žádnou nedal, spadne mu zbytek dluhu
-// do banky — a odtud už hru dovede ke krachu její vlastní mechanika.
+// Když dlužník na splátku nemá, počítá se mu zmeškaná. Zastavený prádlomat
+// propadá hned při první — zástava má mít zuby, jinak je to jen ozdoba.
+// Kdo žádnou nedal, má tři pokusy a pak mu zbytek dluhu spadne do banky —
+// odtud už hru dovede ke krachu její vlastní mechanika.
 
 'use strict';
 
 const { prisma } = require('../../config/database');
 
 const MESIC_MS = 43200000;          // herní měsíc = 12 skutečných hodin
-const ZMESKAT_MAX = 3;              // po kolika zmeškaných propadne zástava
+const ZMESKAT_BEZ_ZASTAVY = 3;      // kolik odpuštěných splátek má dlužník bez zástavy
+const ZMESKAT_SE_ZASTAVOU = 1;      // se zástavou propadá hned při první nezaplacené
+const zmeskatMax = (p) => (p.zastava_spot ? ZMESKAT_SE_ZASTAVOU : ZMESKAT_BEZ_ZASTAVY);
 const TIK_MS = 5 * 60000;           // jak často se kouká, co je splatné
 
 const stavu = (p) => (p && p.state) || {};
@@ -71,17 +74,18 @@ async function splatkyPujcek(ted) {
         });
         continue;
       }
-      // Nemá. Zmeškaná splátka — a po třetí se vymáhá.
+      // Nemá. Zmeškaná splátka — a po tolikáté se vymáhá.
       const zmeskano = p.zmeskano + 1;
-      if (zmeskano < ZMESKAT_MAX) {
+      const max = zmeskatMax(p);
+      if (zmeskano < max) {
         await prisma.gameLoan.update({ where: { id: p.id }, data: {
           zmeskano, dalsi_at: new Date(ted.getTime() + MESIC_MS),
         } });
         await prisma.gameDelivery.createMany({ data: [
           { player_id: p.borrower_id, kind: 'zprava',
-            popis: 'Nezaplatil jsi splátku ' + p.lender_nick + '. Zmeškané: ' + zmeskano + ' ze ' + ZMESKAT_MAX + '.' },
+            popis: 'Nezaplatil jsi splátku ' + p.lender_nick + '. Zmeškané: ' + zmeskano + ' ze ' + max + '.' },
           { player_id: p.lender_id, kind: 'zprava',
-            popis: p.borrower_nick + ' nezaplatil splátku (' + zmeskano + ' ze ' + ZMESKAT_MAX + ').' },
+            popis: p.borrower_nick + ' nezaplatil splátku (' + zmeskano + ' ze ' + max + ').' },
         ] });
         continue;
       }
@@ -94,10 +98,11 @@ async function splatkyPujcek(ted) {
             await tx.gameSpotClaim.update({ where: { spot_id: p.zastava_spot },
               data: { player_id: p.lender_id, nick: p.lender_nick } });
             await dorucit(tx, p.borrower_id, 'unit_remove', null,
-              'Propadla zástava — ' + (c.name || p.zastava_spot) + ' si vzal ' + p.lender_nick,
+              'Nezaplatil jsi splátku a propadla zástava — ' + (c.name || p.zastava_spot)
+              + ' si vzal ' + p.lender_nick,
               { spot_id: p.zastava_spot });
             await dorucit(tx, p.lender_id, 'unit_add', null,
-              'Propadlá zástava od ' + p.borrower_nick + ' — ' + (c.name || ''),
+              'Propadlá zástava od ' + p.borrower_nick + ' — ' + (c.name || '') + ' je tvůj',
               { spot_id: p.zastava_spot, model: c.model,
                 data: { name: c.name, lat: c.lat, lon: c.lon, rent: c.rent, area_key: c.area_key } });
             await tx.gameLoan.update({ where: { id: p.id }, data: { stav: 'propadlo', zmeskano } });

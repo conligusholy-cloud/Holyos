@@ -9713,9 +9713,15 @@ function financeHtml() {
       + ' · ' + (p.zastava ? 'zástava ' + esc(p.zastava) : 'bez zástavy') + '</p>'
       + '<div class="row"><span class="muted small">' + (dluzim ? 'Další splátka' : 'Další příjem') + '</span>'
       + '<span>' + kcFull(p.splatka) + ' ' + zaKolik(p.dalsi) + '</span></div>'
-      + (p.zmeskano ? '<p class="small err" style="margin-top:6px">Zmeškané splátky: ' + p.zmeskano + ' ze 3. '
-          + (dluzim ? 'Po třetí přijdeš o zástavu, a když žádná není, zbytek dluhu ti spadne do banky.'
-            : 'Po třetí se dluh vymáhá.') + '</p>' : '')
+      + (p.zastava
+          ? '<p class="fine ' + (dluzim ? 'err' : 'ok') + '">' + (dluzim
+              ? 'Stačí jedna nezaplacená splátka a zástava propadá — na splátku měj hotovost vždycky.'
+              : 'Jedna nezaplacená splátka a zástava je tvoje i s místem.') + '</p>'
+          : p.zmeskano
+            ? '<p class="small err" style="margin-top:6px">Zmeškané splátky: ' + p.zmeskano + ' ze 3. '
+              + (dluzim ? 'Po třetí se zbytek dluhu strhne a spadne ti do banky.'
+                : 'Po třetí se dluh vymáhá.') + '</p>'
+            : '')
       + '</div>';
   });
   (f.podily || []).forEach(function (e) {
@@ -10296,7 +10302,8 @@ function zastavaSheet(t) {
   }
   sheet('<h3>Čím ručíš</h3>'
     + '<p class="muted small">' + esc(t.od.nick) + ' u téhle půjčky chce zástavu. Vyber prádlomat — '
-    + 'když třikrát za sebou nezaplatíš splátku, připadne jemu i s místem.</p>'
+    + 'stačí jedna nezaplacená splátka a připadne jemu i s místem. Vybírej podle toho, '
+    + 'o co si můžeš dovolit přijít.</p>'
     + '<label class="fld"><span>Zástava</span><select id="za-spot" class="inp">'
     + mista.map(function (m) {
         return '<option value="' + esc(m.id) + '">' + esc(m.name) + ' — ' + esc(m.pod) + '</option>';
@@ -10526,8 +10533,9 @@ function majetekSheet(id) {
       var zpet = '<button type="button" class="btn sec sm zpet" id="rozc-zpet">‹ Zpět</button>';
       var telo;
       if (kat === 'pujcka') {
-        telo = '<p class="muted small">Splácí se anuitně každý herní měsíc. Kdo třikrát za sebou '
-          + 'nezaplatí, přijde o zástavu; bez zástavy mu dluh spadne do banky.</p>'
+        telo = '<p class="muted small">Splácí se anuitně každý herní měsíc. Se zástavou propadá '
+          + 'prádlomat hned při první nezaplacené splátce; bez zástavy má dlužník tři pokusy '
+          + 'a pak mu dluh spadne do banky.</p>'
           + '<div class="area-item"><div><div class="nm">Půjčit mu peníze</div>'
           + '<div class="sub">ty dáš hotovost, on splácí s úrokem</div></div>'
           + '<button class="btn sec sm" data-fin="pujcim">Nastavit</button></div>'
@@ -10592,8 +10600,9 @@ function financeSheet(toId, kdo, co, a) {
   });
   sheet('<h3>' + nadpis + '</h3>'
     + '<p class="muted small">' + (pujcka
-        ? 'Splácí se anuitně každý herní měsíc, tedy každých dvanáct hodin. Kdo třikrát za sebou '
-          + 'nezaplatí, přijde o zástavu; bez zástavy mu dluh spadne do banky.'
+        ? 'Splácí se anuitně každý herní měsíc, tedy každých dvanáct hodin. Se zástavou propadá '
+          + 'prádlomat hned při první nezaplacené splátce. Bez zástavy má dlužník tři pokusy '
+          + 'a pak mu dluh spadne do banky.'
         : 'Podílník dostává svoje procento z toho, co firmě měsíčně zbyde — a když firma prodělává, '
           + 'stejným dílem doplácí. Majitel může podíl kdykoli odkoupit zpátky za 125 % ceny.') + '</p>'
     + '<label class="fld"><span>' + (pujcka ? 'Kolik' : 'Za kolik') + '</span>'
@@ -10635,7 +10644,8 @@ function financeSheet(toId, kdo, co, a) {
       $('fin-zadam').classList.toggle('on', zadam);
       $('fin-zadam').textContent = zadam ? 'Vyžaduji' : 'Nechci';
       $('fin-zadam-pop').textContent = zadam
-        ? 'Dlužník vybere prádlomat, kterým ručí, až bude půjčku přijímat. Bez zástavy ji přijmout nepůjde.'
+        ? 'Dlužník vybere prádlomat, kterým ručí, až bude půjčku přijímat. Bez zástavy ji přijmout '
+          + 'nepůjde — a jakmile jednou nezaplatí splátku, prádlomat je tvůj i s místem.'
         : 'Půjčíš bez krytí. Když přestane splácet, dluh se mu strhne a spadne do banky — '
           + 'ale jestli nemá z čeho, nedostaneš nic.';
     };
