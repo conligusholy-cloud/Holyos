@@ -208,8 +208,11 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
       }
       zastavaNazev = c.name || zast;
     }
+    // Věřitel může zástavu podmínit, i když ještě neví, čím mu dlužník ručí —
+    // ten ji vybere, až bude nabídku přijímat.
+    const zadam = smer === 'prodam' && !zast && !!b.zadam_zastavu;
     data = { urok, mesicu, zastava: zast, zastava_nazev: zastavaNazev,
-      splatka: anuita(cena, urok, mesicu) };
+      zadam_zastavu: zadam, splatka: anuita(cena, urok, mesicu) };
   } else if (predmet === 'podil') {
     const podil = Math.max(PODIL_MIN, Math.min(PODIL_MAX, Number(b.podil) || 0));
     // Podíl prodává majitel firmy — u „koupim" je to ten druhý, u „prodam" já.
@@ -279,6 +282,7 @@ router.post('/trade/:id/counter', hrac, api(async (req, res) => {
         return res.status(409).json({ error: 'Zástavou může být jen tvůj prádlomat.' });
       }
       d.zastava = zast; d.zastava_nazev = c.name || zast;
+      d.zadam_zastavu = false;      // požadavek je splněný, zástava je na stole
     }
     d.splatka = anuita(cena, Math.max(0, Number(d.urok) || 0), Math.max(1, Math.round(Number(d.mesicu) || 1)));
     data = d;
@@ -352,12 +356,30 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
       return res.status(409).json({ error: 'Z firmy je mezitím prodáno už ' + Math.round(uz * 100) + ' %.' });
     }
   }
-  if (t.predmet === 'pujcka' && (t.data || {}).zastava) {
-    const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: t.data.zastava } });
+  let zastavaSpot = t.predmet === 'pujcka' ? ((t.data || {}).zastava || null) : null;
+  let zastavaNazev = t.predmet === 'pujcka' ? ((t.data || {}).zastava_nazev || null) : null;
+  if (zastavaSpot) {
+    const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: zastavaSpot } });
     if (!c || c.player_id !== kupujici.id) {
       await prisma.gameTrade.update({ where: { id }, data: { stav: 'neplatne', resolved_at: new Date() } });
       return res.status(409).json({ error: 'Zastavený prádlomat už dlužníkovi nepatří.' });
     }
+  } else if (t.predmet === 'pujcka' && (t.data || {}).zadam_zastavu) {
+    // Věřitel si zástavu vymínil, ale vybrat ji může jen dlužník — ten ví,
+    // který prádlomat je ochotný dát v sázku.
+    if (req.player.id !== kupujici.id) {
+      return res.status(409).json({ error: 'Dlužník ještě nevybral zástavu, kterou sis vymínil. '
+        + 'Pošli mu protinávrh, nebo počkej, až půjčku přijme se zástavou.' });
+    }
+    const z = s((req.body || {}).zastava, 120);
+    if (!z) {
+      return res.status(409).json({ error: 'Věřitel u téhle půjčky chce zástavu — vyber prádlomat, kterým ručíš.' });
+    }
+    const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: z } });
+    if (!c || c.player_id !== kupujici.id) {
+      return res.status(409).json({ error: 'Zástavou může být jen tvůj postavený prádlomat.' });
+    }
+    zastavaSpot = z; zastavaNazev = c.name || z;
   }
 
   const karty = Array.isArray(t.karty) ? t.karty : [];
@@ -414,7 +436,7 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
         lender_id: prodavajici.id, lender_nick: prodavajici.nick,
         borrower_id: kupujici.id, borrower_nick: kupujici.nick,
         castka: t.cena, urok, mesicu, splatka,
-        zastava_spot: d.zastava || null, zastava_nazev: d.zastava_nazev || null,
+        zastava_spot: zastavaSpot, zastava_nazev: zastavaNazev,
         dalsi_at: new Date(Date.now() + MESIC_MS),
       } });
       await tx.gameDelivery.createMany({ data: [

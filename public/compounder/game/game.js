@@ -10189,6 +10189,9 @@ function paintBurza() {
       var id = b.getAttribute('data-tr'), co = b.getAttribute('data-akce');
       var t = TRADES.filter(function (x) { return String(x.id) === id; })[0];
       if (co === 'counter') return protinavrhSheet(t);
+      // Věřitel si zástavu vymínil — ať dlužník ví, co dává v sázku, dřív než kývne.
+      if (co === 'accept' && t.predmet === 'pujcka'
+        && (t.data || {}).zadam_zastavu && !(t.data || {}).zastava) return zastavaSheet(t);
       // Platím-li já, ať to nepadne až na serveru. U půjčky platí věřitel.
       var jaPlatim = jaPlatimNabidku(t);
       if (co === 'accept' && jaPlatim && t.cena > S.cash) {
@@ -10218,10 +10221,12 @@ function radekObchodu(t) {
   // U půjčky platí ten, kdo peníze dává — tedy „prodávající".
   if (t.predmet === 'pujcka') jaKupuji = !jaKupuji;
   if (t.predmet === 'pujcka') {
-    veta = (t.smer === 'koupim') === !!t.moje
-      ? 'Žádáš ' + esc(protistrana) + ' o půjčku'
-      : t.moje ? 'Nabízíš půjčku ' + esc(protistrana)
-        : (t.smer === 'koupim' ? esc(protistrana) + ' tě žádá o půjčku' : esc(protistrana) + ' ti nabízí půjčku');
+    // „koupim" znamená, že si o půjčku žádá ten, kdo nabídku poslal.
+    veta = t.moje
+      ? (t.smer === 'koupim' ? 'Žádáš ' + esc(protistrana) + ' o půjčku'
+        : 'Nabízíš půjčku ' + esc(protistrana))
+      : (t.smer === 'koupim' ? esc(protistrana) + ' tě žádá o půjčku'
+        : esc(protistrana) + ' ti nabízí půjčku');
   }
   return '<div class="trade' + (t.na_tahu ? ' na-tahu' : '') + '">'
     + '<h4>' + esc(predmetPopis(t)) + '</h4>'
@@ -10229,8 +10234,10 @@ function radekObchodu(t) {
     + (t.predmet === 'pujcka'
       ? '<div class="row"><span class="muted small">Splátka za herní měsíc</span><span>'
         + kcFull((t.data || {}).splatka || 0) + '</span></div>'
-        + '<div class="row"><span class="muted small">Zástava</span><span>'
-        + ((t.data || {}).zastava_nazev ? esc(t.data.zastava_nazev) : 'bez zástavy') + '</span></div>'
+        + '<div class="row"><span class="muted small">Zástava</span><span' 
+        + ((t.data || {}).zadam_zastavu && !(t.data || {}).zastava_nazev ? ' class="warn"' : '') + '>'
+        + ((t.data || {}).zastava_nazev ? esc(t.data.zastava_nazev)
+            : (t.data || {}).zadam_zastavu ? 'věřitel ji vyžaduje' : 'bez zástavy') + '</span></div>'
       : '')
     + '<div class="row"><span class="muted small">Cena</span><span class="cena">' + esc(cenaPopis(t)) + '</span></div>'
     + (t.vzkaz ? '<p class="muted small" style="margin-top:6px">„' + esc(t.vzkaz) + '"</p>' : '')
@@ -10255,6 +10262,36 @@ function nekrytoHtml(t) {
     + kcFull(t.cena - volne) + '. Dokud ji nedáš dohromady, obchod nejde uzavřít.</p>';
 }
 
+// Výběr zástavy při přijetí půjčky, u které si ji věřitel vymínil.
+function zastavaSheet(t) {
+  var mista = (S.units || []).map(function (u) {
+    return { id: u.spotId, name: u.name, pod: (MODELS[u.eco.model] || {}).name
+      + ' · zisk ' + kcFull(u.eco.profit) + '/měs' };
+  });
+  if (!mista.length) {
+    return toast('Věřitel chce zástavu, ale ty nemáš postavený žádný prádlomat. '
+      + 'Pošli protinávrh a domluv se jinak.', 'err', true);
+  }
+  sheet('<h3>Čím ručíš</h3>'
+    + '<p class="muted small">' + esc(t.od.nick) + ' u téhle půjčky chce zástavu. Vyber prádlomat — '
+    + 'když třikrát za sebou nezaplatíš splátku, připadne jemu i s místem.</p>'
+    + '<label class="fld"><span>Zástava</span><select id="za-spot" class="inp">'
+    + mista.map(function (m) {
+        return '<option value="' + esc(m.id) + '">' + esc(m.name) + ' — ' + esc(m.pod) + '</option>';
+      }).join('') + '</select></label>'
+    + '<div class="kv"><span>Půjčka</span><b>' + kcFull(t.cena) + '</b></div>'
+    + '<div class="kv"><span>Splátka za herní měsíc</span><b>' + kcFull((t.data || {}).splatka || 0) + '</b></div>'
+    + '<button class="btn big" id="za-ok" style="width:100%;margin-top:10px">Přijmout se zástavou</button>');
+  $('za-ok').onclick = function () {
+    var b = $('za-ok'); b.disabled = true;
+    apiJson('/trade/' + t.id + '/accept', { zastava: $('za-spot').value }).then(function (r) {
+      if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
+      closeSheet(); vyzvedniNasledky(); FINANCE = null; loadTrades(paintBurza);
+      toast('Půjčka přijata. Splátky chodí každý herní měsíc.', 'ok');
+    }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+  };
+}
+
 // ─── Protinávrh ──────────────────────────────────────────────────────────────
 function protinavrhSheet(t) {
   var vybrane = [];
@@ -10271,8 +10308,11 @@ function protinavrhSheet(t) {
     + '<p class="muted small">Předmět zůstává stejný (' + esc(predmetPopis(t)) + '), měníš '
     + (pujcka ? 'částku' + (buduDluznik ? ' a zástavu' : '') + '. Úrok i délka zůstávají.' : 'jen cenu.') + '</p>'
     + '<div class="kv"><span>Původní nabídka</span><b>' + esc(cenaPopis(t)) + '</b></div>'
-    + (pujcka ? '<div class="kv"><span>Zástava</span><b>'
-        + (d.zastava_nazev ? esc(d.zastava_nazev) : 'bez zástavy') + '</b></div>' : '')
+    + (pujcka ? '<div class="kv"><span>Zástava</span><b' + (d.zadam_zastavu && !d.zastava_nazev ? ' class="warn"' : '') + '>'
+        + (d.zastava_nazev ? esc(d.zastava_nazev)
+            : d.zadam_zastavu ? 'věřitel ji vyžaduje' : 'bez zástavy') + '</b></div>'
+      + (d.zadam_zastavu && !d.zastava_nazev && buduDluznik
+          ? '<p class="fine warn">Bez vybrané zástavy tuhle půjčku přijmout nepůjde.</p>' : '') : '')
     + '<label class="fld"><span>Co nabízíš ty (L$)</span>'
     + '<input id="pn-cena" class="inp" type="number" min="0" step="1000" value="' + (t.cena || 0) + '"></label>'
     + (pujcka ? '<p class="fine" id="pn-splatka"></p>' : '')
@@ -10550,8 +10590,10 @@ function financeSheet(toId, kdo, co, a) {
                     + mojeMista.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>'; }).join('')
                     + '</select></label>'
                   : '<p class="fine">Nemáš postavený prádlomat, takže nabízíš půjčku bez zástavy.</p>')
-              : '<p class="fine">Zástavu může dát jen ten, kdo si půjčuje — nabídni mu ji ve vzkazu, '
-                + 'ať ti pošle protinávrh se zástavou.</p>')
+              : '<div class="row" style="margin:10px 0 2px"><span>Chci zástavu</span>'
+                + '<button type="button" class="prep-sam" id="fin-zadam">Nechci</button></div>'
+                + '<p class="fine" id="fin-zadam-pop">Půjčíš bez krytí. Když přestane splácet, '
+                + 'dluh se mu strhne a spadne do banky — ale jestli nemá z čeho, nedostaneš nic.</p>')
         : '<label class="fld"><span>Podíl v %</span>'
           + '<input id="fin-podil" class="inp" type="number" inputmode="numeric" min="1" max="'
           + PODIL_MAX_HRA + '" value="10"></label>')
@@ -10562,6 +10604,20 @@ function financeSheet(toId, kdo, co, a) {
     + '<button class="btn big" id="fin-ok" style="width:100%;margin-top:10px">Poslat nabídku</button>'
     + '<p class="fine">' + (jaDavam ? 'Peníze odejdou, až nabídku přijme.' : 'Peníze dorazí, až nabídku přijme.') + '</p>'
     + (jaDavam ? volneHtml(null) : ''));
+  // Věřitel si zástavu může vymínit, aniž by věděl, čím mu dlužník ručí —
+  // konkrétní prádlomat vybere dlužník, až bude půjčku přijímat.
+  var zadam = false;
+  if ($('fin-zadam')) {
+    $('fin-zadam').onclick = function () {
+      zadam = !zadam;
+      $('fin-zadam').classList.toggle('on', zadam);
+      $('fin-zadam').textContent = zadam ? 'Vyžaduji' : 'Nechci';
+      $('fin-zadam-pop').textContent = zadam
+        ? 'Dlužník vybere prádlomat, kterým ručí, až bude půjčku přijímat. Bez zástavy ji přijmout nepůjde.'
+        : 'Půjčíš bez krytí. Když přestane splácet, dluh se mu strhne a spadne do banky — '
+          + 'ale jestli nemá z čeho, nedostaneš nic.';
+    };
+  }
   var prepocti = function () {
     var c = Math.max(0, Math.round(Number(($('fin-castka') || {}).value) || 0));
     if (pujcka) {
@@ -10610,6 +10666,7 @@ function financeSheet(toId, kdo, co, a) {
       telo.urok = Math.max(0, Math.min(UROK_MAX_HRA, Number($('fin-urok').value) || 0)) / 100;
       telo.mesicu = Math.max(1, Math.min(60, Math.round(Number($('fin-mesicu').value) || 1)));
       if ($('fin-zastava') && $('fin-zastava').value) telo.zastava = $('fin-zastava').value;
+      if (co === 'pujcim') telo.zadam_zastavu = zadam;
     } else {
       telo.podil = Math.max(1, Math.min(PODIL_MAX_HRA, Math.round(Number($('fin-podil').value) || 0))) / 100;
     }
