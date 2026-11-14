@@ -518,24 +518,31 @@ function doplatek(p) {
 router.get('/trade/finance', hrac, api(async (req, res) => {
   const ja = req.player.id;
   const [pujcky, podily] = await Promise.all([
+    // Hotové půjčky a odkoupené podíly jdou ven taky — u uzavřené nabídky
+    // na burze pak jde napsat, jak to dopadlo. Přehled nahoře si běžící
+    // vyfiltruje sám.
     prisma.gameLoan.findMany({
-      where: { OR: [{ borrower_id: ja }, { lender_id: ja }], stav: { in: ['bezi', 'vymahano'] } },
+      where: { OR: [{ borrower_id: ja }, { lender_id: ja }] },
       orderBy: { dalsi_at: 'asc' }, take: 100,
     }),
     prisma.gameEquity.findMany({
-      where: { OR: [{ investor_id: ja }, { firma_id: ja }], stav: 'bezi' },
+      where: { OR: [{ investor_id: ja }, { firma_id: ja }] },
       orderBy: { created_at: 'asc' }, take: 100,
     }),
   ]);
   res.json({ ok: true,
-    pujcky: pujcky.map((p) => ({ id: p.id, moje: p.borrower_id === ja ? 'dluzim' : 'pujcil',
+    pujcky: pujcky.map((p) => ({ id: p.id, trade_id: p.trade_id,
+      moje: p.borrower_id === ja ? 'dluzim' : 'pujcil',
       kdo: p.borrower_id === ja ? p.lender_nick : p.borrower_nick,
       castka: p.castka, urok: p.urok, mesicu: p.mesicu, splatka: p.splatka,
       splaceno: p.splaceno, zmeskano: p.zmeskano, stav: p.stav, doplatek: doplatek(p),
+      // Kolik už přes splátky proteklo a kolik má ještě přijít, v penězích.
+      zaplaceno: p.splaceno * p.splatka, celkem: p.mesicu * p.splatka,
       zastava: p.zastava_nazev || null, dalsi: p.dalsi_at })),
-    podily: podily.map((e) => ({ id: e.id, moje: e.investor_id === ja ? 'mam' : 'prodal',
+    podily: podily.map((e) => ({ id: e.id, trade_id: e.trade_id,
+      moje: e.investor_id === ja ? 'mam' : 'prodal',
       kdo: e.investor_id === ja ? e.firma_nick : e.investor_nick,
-      podil: e.podil, cena: e.cena, vyplaceno: e.vyplaceno,
+      podil: e.podil, cena: e.cena, vyplaceno: e.vyplaceno, stav: e.stav,
       odkup: Math.round(e.cena * ODKUP_NASOBEK), dalsi: e.dalsi_at })),
     odkup_nasobek: ODKUP_NASOBEK });
 }));

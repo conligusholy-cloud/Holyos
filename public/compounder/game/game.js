@@ -9723,17 +9723,23 @@ function splatitSheet(id, castka) {
     }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
   };
 }
+// Co je uzavřené, v přehledu nepřekáží — zůstává u své nabídky v historii.
+var bezici = function (x) {
+  return x.stav !== 'splaceno' && x.stav !== 'propadlo' && x.stav !== 'odkoupeno';
+};
 function financeHtml() {
   var f = FINANCE;
-  if (!f || (!(f.pujcky || []).length && !(f.podily || []).length)) return '';
+  if (!f || (!(f.pujcky || []).filter(bezici).length && !(f.podily || []).filter(bezici).length)) return '';
   var h = '<div class="card"><h3>Půjčky a podíly</h3>';
-  (f.pujcky || []).forEach(function (p) {
+  (f.pujcky || []).filter(bezici).forEach(function (p) {
     var dluzim = p.moje === 'dluzim';
     h += '<div class="trade"><div class="row"><b>' + (dluzim ? 'Dlužíš ' : 'Půjčil jsi ') + esc(p.kdo) + '</b>'
       + '<b>' + kcFull(p.castka) + '</b></div>'
       + '<p class="muted small" style="margin:2px 0 6px">'
       + procenta(p.urok) + ' ročně · splaceno ' + p.splaceno + ' z ' + p.mesicu
       + ' · ' + (p.zastava ? 'zástava ' + esc(p.zastava) : 'bez zástavy') + '</p>'
+      + '<div class="row"><span class="muted small">' + (dluzim ? 'Zaplatil jsi' : 'Zaplatil ti')
+      + '</span><span>' + kcFull(p.zaplaceno) + ' z ' + kcFull(p.celkem) + '</span></div>'
       + '<div class="row"><span class="muted small">' + (dluzim ? 'Další splátka' : 'Další příjem') + '</span>'
       + '<span>' + kcFull(p.splatka) + ' ' + zaKolik(p.dalsi) + '</span></div>'
       + (p.zastava
@@ -9751,7 +9757,7 @@ function financeHtml() {
           : '')
       + '</div>';
   });
-  (f.podily || []).forEach(function (e) {
+  (f.podily || []).filter(bezici).forEach(function (e) {
     var mam = e.moje === 'mam';
     h += '<div class="trade"><div class="row"><b>' + Math.round(e.podil * 100) + ' % '
       + (mam ? 've firmě ' + esc(e.kdo) : 'tvé firmy drží ' + esc(e.kdo)) + '</b>'
@@ -10226,7 +10232,11 @@ function paintBurza() {
   var box = $('burza-body');
   if (!TRADES) { box.innerHTML = '<p class="muted small">Načítám…</p>'; return loadTrades(paintBurza); }
   var ceka = TRADES.filter(function (t) { return t.stav === 'ceka'; });
-  var hotove = TRADES.filter(function (t) { return t.stav !== 'ceka'; }).slice(0, 20);
+  // Nabídka, ze které vznikl protinávrh, není uzavřená — řeší se dál v tom
+  // novém. Mezi hotové patří až tehdy, když někdo řekne ano nebo ne.
+  var hotove = TRADES.filter(function (t) {
+    return t.stav !== 'ceka' && t.stav !== 'protinavrh';
+  }).slice(0, 20);
   var naMe = ceka.filter(function (t) { return t.na_tahu; });
   var odeslane = ceka.filter(function (t) { return !t.na_tahu; });
 
@@ -10301,6 +10311,7 @@ function radekObchodu(t) {
     + (t.vzkaz ? '<p class="muted small" style="margin-top:6px">„' + esc(t.vzkaz) + '"</p>' : '')
     + nekrytoHtml(t)
     + (t.stav !== 'ceka' ? '<p style="margin-top:8px"><span class="stav ' + esc(t.stav) + '">' + esc(t.stav) + '</span></p>' : '')
+    + jakToDopadloHtml(t)
     + (t.na_tahu
       ? '<div class="akce"><button class="btn sm" data-tr="' + t.id + '" data-akce="accept">Přijmout</button>'
         + '<button class="btn sm sec" data-tr="' + t.id + '" data-akce="counter">Protinávrh</button>'
@@ -10309,6 +10320,43 @@ function radekObchodu(t) {
         ? '<div class="akce"><button class="btn sm sec" data-tr="' + t.id + '" data-akce="decline">Zrušit nabídku</button></div>'
         : '')
     + '</div>';
+}
+
+// Jak uzavřený obchod pokračuje. U půjčky i podílu se platí dál měsíce potom,
+// co se ruka plácla — tady je vidět, kolik už proteklo a co ještě přijde.
+function jakToDopadloHtml(t) {
+  if (t.stav !== 'prijato' || !FINANCE) return '';
+  if (t.predmet === 'pujcka') {
+    var p = (FINANCE.pujcky || []).filter(function (x) { return x.trade_id === t.id; })[0];
+    if (!p) return '';
+    var dluzim = p.moje === 'dluzim';
+    var pct = p.celkem > 0 ? Math.min(100, Math.round(p.zaplaceno / p.celkem * 100)) : 0;
+    var konec = p.stav === 'splaceno' ? (dluzim ? 'Splaceno — máš čistý štít.' : 'Splacené, peníze máš zpátky.')
+      : p.stav === 'propadlo' ? (dluzim ? 'Nesplatil jsi to a propadla zástava.' : 'Nesplatil to — zástava je tvoje.')
+      : p.stav === 'vymahano' ? (dluzim ? 'Nesplatil jsi to, zbytek ti strhla banka.' : 'Nesplatil to, zbytek se vymohl.')
+      : null;
+    return '<div class="kv" style="margin-top:8px"><span class="muted small">'
+      + (dluzim ? 'Zaplatil jsi' : 'Zaplatil ti') + '</span><span>'
+      + kcFull(p.zaplaceno) + ' z ' + kcFull(p.celkem) + '</span></div>'
+      + '<div class="bar"><i style="width:' + pct + '%"></i></div>'
+      + (konec
+          ? '<p class="fine ' + (p.stav === 'splaceno' ? 'ok' : 'err') + '">' + konec + '</p>'
+          : '<p class="fine">Zbývá ' + (p.mesicu - p.splaceno) + ' '
+            + mn(p.mesicu - p.splaceno, 'splátka', 'splátky', 'splátek') + ' po ' + kcFull(p.splatka)
+            + ' · doplatit naráz by teď stálo ' + kcFull(p.doplatek) + '.</p>');
+  }
+  if (t.predmet === 'podil') {
+    var e = (FINANCE.podily || []).filter(function (x) { return x.trade_id === t.id; })[0];
+    if (!e) return '';
+    var mam = e.moje === 'mam';
+    return '<div class="kv" style="margin-top:8px"><span class="muted small">'
+      + (e.vyplaceno >= 0 ? (mam ? 'Vyplaceno tobě' : 'Vyplatil jsi') : (mam ? 'Doplatil jsi' : 'Doplatil ti'))
+      + '</span><span>' + kcFull(Math.abs(e.vyplaceno)) + '</span></div>'
+      + '<p class="fine' + (e.stav === 'odkoupeno' ? ' ok' : '') + '">'
+      + (e.stav === 'odkoupeno' ? 'Podíl je odkoupený zpátky, vyrovnáno.'
+        : 'Podíl běží dál — vyrovnává se každý herní měsíc.') + '</p>';
+  }
+  return '';
 }
 
 // Nabídka, na kterou plátce nemá: dokud se to nespraví, přijmout nejde.
