@@ -10490,6 +10490,7 @@ function loadCards() {
     LINKA_CAT = r.j.linka || null;
     if (typeof r.j.onboarding_rychly === 'boolean') ONBOARDING_RYCHLY = r.j.onboarding_rychly;
     IG = r.j.instagram || null;
+    FB = r.j.facebook || null;
     RUSH_ZA = r.j.rush_zdarma_za; RUSH_MAX = r.j.rush_zdarma_max || 5;
     if (r.j.owned && ME) ME.cards = r.j.owned;
   }).catch(function () { });
@@ -10603,38 +10604,71 @@ function paintCards() {
 // Že nás někdo opravdu sleduje, ověřit nejde — Instagram na to nemá rozhraní.
 // Stojí to tedy na důvěře a vydá se to jednou za účet: hráč si otevře profil
 // a pak si řekne o tři Expresní dovozy. Po vyzvednutí karta mizí.
-var IG = null;          // { odkaz, karet, vzato } ze serveru
-function instagramHtml() {
-  if (!ME || !IG || !IG.odkaz || IG.vzato) return '';
-  var otevrel = !!(S && S.igOtevren);
-  return '<div class="gcard ig">'
-    + '<div class="gcard-top"><span class="gcard-ico">\uD83D\uDCF8</span>'
-    + '<div><h3>Sleduj nás na Instagramu</h3>'
-    + '<p class="gcard-short">' + IG.karet + '\u00d7 Expresní dovoz zdarma</p></div></div>'
-    + '<p class="muted small">Dáváme tam, co se ve hře chystá, a co vyvedli ostatní hráči. '
-    + 'Za sledování ti přidáme ' + IG.karet + ' kartičky Expresní dovoz — stroj pak dorazí hned, '
-    + 'místo čekání dva herní měsíce. Jednou na účet.</p>'
+var IG = null, FB = null;    // { odkaz, …, vzato } ze serveru
+function socialHtml(s) {
+  var otevrel = !!(S && S[s.klicOtevren]);
+  return '<div class="gcard ' + s.trida + '">'
+    + '<div class="gcard-top"><span class="gcard-ico">' + s.ikona + '</span>'
+    + '<div><h3>' + s.nadpis + '</h3>'
+    + '<p class="gcard-short">' + s.odmena + '</p></div></div>'
+    + '<p class="muted small">' + s.popis + '</p>'
     + '<div class="gcard-act">'
-    + '<a class="btn sm" id="ig-open" href="' + esc(IG.odkaz) + '" target="_blank" rel="noopener">Otevřít Instagram</a>'
-    + (otevrel ? '<button class="btn sm ghost" id="ig-vzit">Sleduju — vzít ' + IG.karet + '\u00d7</button>' : '')
+    + '<a class="btn sm" id="' + s.id + '-open" href="' + esc(s.odkaz) + '" target="_blank" rel="noopener">'
+    + s.tlacitko + '</a>'
+    + (otevrel ? '<button class="btn sm ghost" id="' + s.id + '-vzit">Sleduju — vzít</button>' : '')
     + '</div>'
-    + (otevrel ? '' : '<p class="fine">Až nás na Instagramu sledovat budeš, vrať se sem a kartičky si vyzvedni.</p>')
+    + (otevrel ? '' : '<p class="fine">Až nás sledovat budeš, vrať se sem a odměnu si vyzvedni.</p>')
     + '</div>';
 }
+// Odměny za sledování. Že nás někdo opravdu sleduje, ověřit nejde — Instagram
+// ani Facebook na to nemají rozhraní — takže to stojí na důvěře a vydá se to
+// jednou za účet.
+function socialKarty() {
+  var out = [];
+  if (IG && IG.odkaz && !IG.vzato) out.push({
+    id: 'ig', trida: 'ig', ikona: '\uD83D\uDCF8', klicOtevren: 'igOtevren', odkaz: IG.odkaz,
+    nadpis: 'Sleduj nás na Instagramu', tlacitko: 'Otevřít Instagram',
+    odmena: IG.karet + '\u00d7 Expresní dovoz zdarma',
+    popis: 'Dáváme tam, co se ve hře chystá, a co vyvedli ostatní hráči. Za sledování ti '
+      + 'přidáme ' + IG.karet + ' kartičky Expresní dovoz — stroj pak dorazí hned, místo '
+      + 'čekání dva herní měsíce. Jednou na účet.',
+    cesta: '/account/instagram',
+    hotovo: function (r) { return 'Díky! Přidali jsme ti ' + r.karet + '\u00d7 Expresní dovoz.'; }
+  });
+  if (FB && FB.odkaz && !FB.vzato) out.push({
+    id: 'fb', trida: 'fb', ikona: '\uD83D\uDC4D', klicOtevren: 'fbOtevren', odkaz: FB.odkaz,
+    nadpis: 'Sleduj nás na Facebooku', tlacitko: 'Otevřít Facebook',
+    odmena: kcFull(FB.laundry) + ' do banky',
+    popis: 'Za sledování stránky ti zvedneme rámec v bance o ' + kcFull(FB.laundry)
+      + ' a stejnou částku složíme jako zástavu — banka proti ní půjčí, i když na to ještě '
+      + 'nevyděláváš. Do hotovosti to nejde, je to úvěrový rámec. Jednou na účet.',
+    cesta: '/account/facebook',
+    hotovo: function (r) { return 'Díky! Rámec v bance ti stoupl o ' + kcFull(r.laundry) + '.'; }
+  });
+  return out;
+}
+function instagramHtml() {
+  if (!ME) return '';
+  return socialKarty().map(socialHtml).join('');
+}
 function bindInstagram() {
-  var o = $('ig-open');
-  if (o) o.onclick = function () { S.igOtevren = true; save(); setTimeout(paintCards, 400); };
-  var v = $('ig-vzit');
-  if (v) v.onclick = function () {
-    v.disabled = true;
-    apiJson('/account/instagram', {}).then(function (r) {
-      if (!r.ok) { v.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
-      if (IG) IG.vzato = true;
-      if (ME) ME.cards = r.j.owned || ME.cards;
-      paint(); paintCards();
-      toast('Díky! Přidali jsme ti ' + r.j.karet + '\u00d7 Expresní dovoz.', 'ok', true);
-    }).catch(function () { v.disabled = false; toast('Server neodpovídá.', 'err'); });
-  };
+  socialKarty().forEach(function (s) {
+    var o = $(s.id + '-open');
+    if (o) o.onclick = function () { S[s.klicOtevren] = true; save(); setTimeout(paintCards, 400); };
+    var v = $(s.id + '-vzit');
+    if (v) v.onclick = function () {
+      v.disabled = true;
+      apiJson(s.cesta, {}).then(function (r) {
+        if (!r.ok) { v.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
+        if (s.id === 'ig' && IG) IG.vzato = true;
+        if (s.id === 'fb' && FB) FB.vzato = true;
+        if (ME) ME.cards = r.j.owned || ME.cards;
+        // Dárek do banky si hra vyzvedne jako každý jiný balíček.
+        claimCash(function () { paint(); paintCards(); });
+        toast(s.hotovo(r.j), 'ok', true);
+      }).catch(function () { v.disabled = false; toast('Server neodpovídá.', 'err'); });
+    };
+  });
 }
 
 // Balíčky infolinky. Kredit je jeden hovor, který vyřídí operátor — hráč si
@@ -11017,6 +11051,9 @@ function claimCash(then) {
   // Nejdřív ručně přidaná hotovost z administrace, pak koupené balíčky.
   var k = null;
   if ((ME.cards.cash_dar || 0) > 0) k = 'cash_dar';
+  // Dárek za Facebook není v nabídce, takže ho v katalogu nenajdeme — hlídáme
+  // ho zvlášť, jinak by hráči zůstal ležet nevyzvednutý.
+  else if ((ME.cards.cash_fb || 0) > 0) k = 'cash_fb';
   else {
     var fond = (CASH_CAT || []).concat(LINKA_CAT || []);
     var dluzne = fond.filter(function (c) { return (ME.cards[c.kind] || 0) > 0; });

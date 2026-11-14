@@ -111,6 +111,10 @@ const CASH = {
   cash500:  { kind: 'cash500',  name: 'Kufřík',         price: 50000,  laundry: 900000 },
   cash1000: { kind: 'cash1000', name: 'Trezor',         price: 100000, laundry: 2000000 },
   cash2000: { kind: 'cash2000', name: 'Obrněný vůz',    price: 200000, laundry: 4600000 },
+  // Dárek za sledování na Facebooku. V nabídce není a koupit se nedá — jen se
+  // vydá jednou za účet. Jede ale po stejné koleji jako koupené balíčky, takže
+  // ho chrání i pojistka, co hlídá, aby složená zástava nezmizela.
+  cash_fb:  { kind: 'cash_fb',  name: 'Dárek za Facebook', price: 0, laundry: 1000000, skryty: true },
 };
 const CASH_KINDS = Object.keys(CASH);
 
@@ -205,6 +209,7 @@ async function cashPublic() {
   const out = [];
   const zaklad = await item('cash100');
   for (const k of CASH_KINDS) {
+    if (CASH[k] && CASH[k].skryty) continue;      // dárky se neprodávají
     const c = await item(k); if (!c) continue;
     out.push({ kind: c.kind, name: c.name, price_czk: c.price / 100, laundry: c.laundry, per_czk: perCzk(c),
       bonus: zaklad ? Math.round((perCzk(c) / perCzk(zaklad) - 1) * 100) : 0 });
@@ -950,6 +955,27 @@ router.post('/account/instagram', requirePlayer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Za sledování stránky na Facebooku přibude do banky milion — rámec i zástava,
+// stejně jako u koupeného balíčku. Vydá se jednou za účet a stejně jako
+// u Instagramu to stojí na důvěře, ověřit to nejde.
+const FB_ODKAZ = 'https://www.facebook.com/share/1M6soaMidv/';
+const FB_KIND = 'cash_fb';
+router.post('/account/facebook', requirePlayer, async (req, res, next) => {
+  try {
+    if (req.player.facebook_at) {
+      return res.status(409).json({ error: 'Dárek za Facebook už sis vyzvedl.' });
+    }
+    await prisma.gamePlayer.update({
+      where: { id: req.player.id }, data: { facebook_at: new Date() },
+    });
+    await prisma.gameCard.create({ data: { player_id: req.player.id, kind: FB_KIND } });
+    const c = await item(FB_KIND);
+    console.log('[game] facebook: hrac ' + req.player.id + ' dostal ' + FB_KIND);
+    res.json({ ok: true, laundry: (c && c.laundry) || CASH[FB_KIND].laundry,
+      owned: (await pub(req.player)).cards });
+  } catch (e) { next(e); }
+});
+
 // ─── Expresní dovoz zdarma ─────────────────────────────────────
 // Každé dva herní měsíce (jeden skutečný den) přibude jedna karta zdarma, ať
 // hráč nemusí čekat den na každý stroj. Nepoužité se hromadí jen do pěti —
@@ -1000,6 +1026,7 @@ router.get('/cards', async (req, res, next) => {
       linka: await linkaPublic(),
       onboarding_rychly: await rychlyOnboarding(),
       instagram: { odkaz: IG_ODKAZ, karet: IG_KARET, vzato: p ? !!p.instagram_at : false },
+      facebook: { odkaz: FB_ODKAZ, laundry: CASH[FB_KIND].laundry, vzato: p ? !!p.facebook_at : false },
       subs: await subsPublic(), predplatne: await predplatneHrace(p),
       payments: require('./game-stripe.routes')._paymentsOn(),
       owned: p ? (await pub(p)).cards : null,

@@ -365,7 +365,8 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .gcard.sub{border-color:rgba(124,92,255,.5)}
 /* Kartička za sledování na Instagramu — odkaz vypadá jako tlačítko. */
 .gcard.ig{border-color:rgba(225,48,108,.55);background:linear-gradient(140deg,rgba(225,48,108,.1),rgba(124,92,255,.08))}
-.gcard.ig .btn{text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.gcard.fb{border-color:rgba(24,119,242,.55);background:linear-gradient(140deg,rgba(24,119,242,.12),rgba(79,209,255,.07))}
+.gcard.ig .btn,.gcard.fb .btn{text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
 .gcard-n.ok{color:var(--ok,#2fe3a0)}
 /* Sedmidenní série denních odměn. */
 .dny{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
