@@ -1042,6 +1042,20 @@ function mesicniSplatka() {
 // pohovoru — dokud mu síť plní podmínky. Musí si ho zasloužit: dva plně
 // doplacené prádlomaty.
 var RAMEC_ZA_MISTO = 1200000;     // o kolik limit povyroste s každým doplaceným místem
+// Objem, který si hráč smí z rámce vzít, odemykají balíčky. Bez nich platí
+// strop zdarma; nejvyšší balíček strop ruší úplně. Načerpané peníze strop
+// nikdy nebere — kdo je nad ním, splácí a teprve pod stropem čerpá dál.
+var RAMEC = null;                 // { zdarma, uroven, strop, balicky } ze serveru
+var RAMEC_ZDARMA = 5000000;
+function ramecStrop() {
+  if (!RAMEC) return RAMEC_ZDARMA;
+  return RAMEC.strop === null ? null : (RAMEC.strop || RAMEC_ZDARMA);
+}
+// Limit po zastropování. Null strop = beze změny.
+function podStropem(castka) {
+  var st = ramecStrop();
+  return st === null ? castka : Math.min(castka, st);
+}
 var RAMEC_KRYTI = 1.0;            // pod tímhle pokrytím je místo pod vodou
 var RAMEC_LHUTA = YEAR_MS;        // jak dlouho smí být síť slabá, než rámec padne
 // Doplacené místo = stojící prádlomat, na kterém nevisí žádný nesplacený úvěr.
@@ -1082,14 +1096,17 @@ function ramecCerpano() {
 // Kolik z rámce zbývá k čerpání — vždy ještě omezené tím, co firma unese.
 function ramecVolny() {
   if (!maRamec() || S.ramec.slabyOd) return 0;
-  var zbyva = Math.max(0, S.ramec.limit - ramecCerpano());
+  var cerp = ramecCerpano();
+  // Strop balíčku platí hned, ne až od příští revize limitu. Kdo je nad ním,
+  // o načerpané peníze nepřijde — jen čerpá znovu, až se dostane pod strop.
+  var zbyva = Math.max(0, podStropem(S.ramec.limit) - cerp);
   return Math.min(zbyva, stropPodleZisku(monthlyProfit() - splatkyMesicne(), zbyva));
 }
 // Základní limit podle historie a výdělku.
 function ramecNavrh() {
   var podleHistorie = RAMEC_ZA_MISTO * Math.max(1, doplacenychMist() - 1);
-  return Math.max(0, Math.round(Math.min(podleHistorie,
-    stropPodleZisku(monthlyProfit() - splatkyMesicne(), podleHistorie)) / 10000) * 10000);
+  return Math.max(0, Math.round(podStropem(Math.min(podleHistorie,
+    stropPodleZisku(monthlyProfit() - splatkyMesicne(), podleHistorie))) / 10000) * 10000);
 }
 // ─── Přehodnocení rámce ──────────────────────────────────────────────────────
 // Rámec není jednou provždy. Banka ho jednou za herní měsíc srovná s tím, jak
@@ -1103,8 +1120,8 @@ var RAMEC_PAD_MAX = 0.25;         // naráz banka nesebere víc než čtvrtinu l
 function ramecSlozky() {
   var podleHistorie = RAMEC_ZA_MISTO * Math.max(1, doplacenychMist() - 1);
   var podleZisku = Math.max(0, Math.round(stropPodleZisku(monthlyProfit() - splatkyMesicne(), podleHistorie)));
-  return { historie: podleHistorie, zisk: podleZisku,
-    cil: Math.round(Math.min(podleHistorie, podleZisku) / 10000) * 10000 };
+  return { historie: podleHistorie, zisk: podleZisku, strop: ramecStrop(),
+    cil: Math.round(podStropem(Math.min(podleHistorie, podleZisku)) / 10000) * 10000 };
 }
 // rovnou = limit jde na cíl bez brzdy. Používá se, když hráč sám prodal nebo
 // přišel o prádlomat — tam není co změkčovat, změnu si způsobil vědomě.
@@ -8714,14 +8731,19 @@ function ramecHtml() {
 // Z čeho limit vychází a co s ním pohne — bez toho hráč jen kouká na číslo.
 function ramecRozborHtml() {
   var sl = ramecSlozky();
-  var drzi = sl.zisk < sl.historie ? 'zisk' : 'historie';
+  var drziHru = sl.zisk < sl.historie ? 'zisk' : 'historie';
+  var drzi = sl.strop !== null && sl.strop < Math.min(sl.zisk, sl.historie) ? 'strop' : drziHru;
   return '<div class="kv" style="margin-top:8px"><span>Za doplacená místa (' + doplacenychMist() + ')</span>'
     + '<b class="' + (drzi === 'historie' ? 'warn' : '') + '">' + kcFull(sl.historie) + '</b></div>'
     + '<div class="kv"><span>Co unese výdělek sítě</span>'
     + '<b class="' + (drzi === 'zisk' ? 'warn' : '') + '">' + kcFull(sl.zisk) + '</b></div>'
-    + '<p class="fine">Platí ten menší z nich. ' + (drzi === 'zisk'
-        ? 'Limit teď drží výdělek — zvedne ho vyšší zisk nebo nižší splátky.'
-        : 'Limit teď drží historie — každý další doplacený prádlomat přidá ' + kcFull(RAMEC_ZA_MISTO) + '.')
+    + '<div class="kv"><span>Strop balíčku</span><b class="' + (drzi === 'strop' ? 'warn' : 'ok') + '">'
+    + (sl.strop === null ? 'bez stropu' : kcFull(sl.strop)) + '</b></div>'
+    + '<p class="fine">Platí ten nejmenší z nich. ' + (drzi === 'strop'
+        ? 'Limit teď drží strop tvého balíčku — vyšší balíček najdeš v Kartách.'
+        : drzi === 'zisk'
+          ? 'Limit teď drží výdělek — zvedne ho vyšší zisk nebo nižší splátky.'
+          : 'Limit teď drží historie — každý další doplacený prádlomat přidá ' + kcFull(RAMEC_ZA_MISTO) + '.')
     + ' Banka ho sama srovná jednou za herní měsíc a hned, jakmile ti ubude nebo přibude '
     + 'prádlomat — limit stojí na tom, kolik doplacených strojů máš v provozu. '
     + 'Dolů jde po čtvrtinách a nikdy pod to, co máš načerpané.</p>';
@@ -11421,6 +11443,7 @@ function loadCards() {
     LINKA_CAT = r.j.linka || null;
     if (typeof r.j.onboarding_rychly === 'boolean') ONBOARDING_RYCHLY = r.j.onboarding_rychly;
     if (typeof r.j.nick_pauza_ms === 'number') NICK_PAUZA_MS = r.j.nick_pauza_ms;
+    if (r.j.ramec) { RAMEC = r.j.ramec; RAMEC_ZDARMA = r.j.ramec.zdarma || RAMEC_ZDARMA; }
     IG = r.j.instagram || null;
     FB = r.j.facebook || null;
     RUSH_ZA = r.j.rush_zdarma_za; RUSH_MAX = r.j.rush_zdarma_max || 5;
@@ -11517,10 +11540,13 @@ function paintCards() {
           : '<span class="fine">Prodej se teprve spouští.</span>')
         + '</div></div>';
     }).join('');
-  box.innerHTML += predplatneHtml() + linkaPacksHtml();
+  box.innerHTML += ramecPacksHtml() + predplatneHtml() + linkaPacksHtml();
   bindPredplatne();
   [].forEach.call(box.querySelectorAll('[data-linka]'), function (el) {
     el.onclick = function () { buyCash(el.getAttribute('data-linka')); };
+  });
+  [].forEach.call(box.querySelectorAll('[data-ramec]'), function (el) {
+    el.onclick = function () { buyCash(el.getAttribute('data-ramec')); };
   });
   if ($('linka-sam')) $('linka-sam').onclick = function () {
     S.linkaSam = !S.linkaSam; save(); syncState(true); paintCards();
@@ -11605,6 +11631,46 @@ function bindInstagram() {
 
 // Balíčky infolinky. Kredit je jeden hovor, který vyřídí operátor — hráč si
 // kupuje klid, ne výhodu: hovor vzatý osobně pořád vynese víc.
+// ─── Balíčky rámcového úvěru ────────────────────────────────────────────────
+// Rámec je linka proti zástavě — kolik si z ní hráč smí vzít, odemyká balíček.
+// Kupuje se jednou a platí napořád; kdo má nižší stupeň, doplácí jen rozdíl.
+function ramecPacksHtml() {
+  if (!RAMEC || !(RAMEC.balicky || []).length) return '';
+  var muj = RAMEC.uroven || 0;
+  var mujStrop = ramecStrop();
+  var cena = function (b) {
+    var nizsi = (RAMEC.balicky || []).filter(function (x) { return x.uroven === muj; })[0];
+    return Math.max(0, b.price_czk - (nizsi ? nizsi.price_czk : 0));
+  };
+  return '<div class="card"><h3>\uD83C\uDFE6 Objem rámcového úvěru</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">Rámec je úvěrová linka proti zástavě — '
+    + 'ručíš za ni doplacenými prádlomaty. Kolik si z ní smíš naráz vzít, drží tenhle strop. '
+    + 'Herní pravidla platí dál: víc, než unese výdělek sítě a počet doplacených prádlomatů, '
+    + 'ti banka nepůjčí ani s nejvyšším balíčkem. Kupuje se jednou a platí napořád.</p>'
+    + '<div class="kv"><span>Tvůj strop</span><b class="' + (muj ? 'ok' : '') + '">'
+    + (mujStrop === null ? 'bez stropu' : kcFull(mujStrop)) + (muj ? '' : ' (zdarma)') + '</b></div>'
+    + (maRamec() && ramecCerpano() > (mujStrop === null ? Infinity : mujStrop)
+        ? '<p class="fine warn">Načerpáno máš ' + kcFull(ramecCerpano()) + ', tedy nad svůj strop. '
+          + 'O peníze nepřijdeš, ale dokud je nesplatíš pod strop, z rámce si už nevezmeš. '
+          + 'Vyšší balíček to otevře hned.</p>'
+        : '')
+    + (PAYMENTS_ON
+        ? (RAMEC.balicky || []).map(function (b) {
+            var mam = b.uroven <= muj;
+            var dop = cena(b);
+            return '<div class="pack' + (mam ? ' hotovo' : '') + '"'
+              + (mam ? '' : ' data-ramec="' + esc(b.kind) + '"') + '>'
+              + '<div class="pack-l"><b>' + (b.strop === null ? 'Bez stropu' : kcFull(b.strop)) + '</b>'
+              + '<span>' + (mam ? 'máš koupeno'
+                  : muj && dop < b.price_czk ? 'doplatek z tvého stupně' : 'jednorázově, napořád') + '</span></div>'
+              + '<button class="btn sm"' + (mam ? ' disabled' : '') + '>'
+              + (mam ? '\u2713' : dop.toLocaleString('cs-CZ') + ' Kč') + '</button></div>';
+          }).join('')
+          + '<p class="fine">Platbu zpracovává Stripe. Strop se zvedne hned po zaplacení. '
+          + 'Kdo má nižší stupeň, platí jen rozdíl — nic se nekupuje dvakrát.</p>'
+        : '<p class="fine">Prodej se teprve spouští.</p>')
+    + '</div>';
+}
 function linkaPacksHtml() {
   if (!LINKA_CAT || !LINKA_CAT.length) return '';
   var zbyva = (S && S.linka) || 0;
@@ -11949,24 +12015,41 @@ function bindCashPacks() {
   });
 }
 function buyCash(kind) {
-  var c = (CASH_CAT || []).concat(LINKA_CAT || []).filter(function (x) { return x.kind === kind; })[0];
+  var c = (CASH_CAT || []).concat(LINKA_CAT || []).concat((RAMEC && RAMEC.balicky) || [])
+    .filter(function (x) { return x.kind === kind; })[0];
   if (!c) return;
   if (!ME) return toast('Nejdřív se přihlas.', 'err');
   if (!ME.has_details) return detailsSheet(null, kind);
   var hovory = !!c.hovory;
+  var ramec = c.uroven != null;
+  // U rámce se platí jen rozdíl proti stupni, který hráč má.
+  var nizsi = ramec ? ((RAMEC.balicky || []).filter(function (x) { return x.uroven === (RAMEC.uroven || 0); })[0]) : null;
+  var platba = ramec ? Math.max(0, c.price_czk - (nizsi ? nizsi.price_czk : 0)) : c.price_czk;
   sheet('<h3>' + esc(c.name) + '</h3>'
-    + (hovory
-        ? '<div class="kv"><span>Hovory navíc</span><b class="ok">+' + c.hovory + '</b></div>'
-        : '<div class="kv"><span>Rámec a zástava v bance</span><b class="ok">+' + kcFull(c.laundry) + '</b></div>')
-    + '<div class="kv"><span>Cena</span><b>' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</b></div>'
-    + (hovory
-        ? '<div class="kv"><span>Za hovor</span><b>' + String(c.za_hovor).replace('.', ',') + ' Kč</b></div>'
-        : '<div class="kv"><span>Za korunu</span><b>' + c.per_czk.toLocaleString('cs-CZ') + ' L$</b></div>')
+    + (ramec
+        ? '<div class="kv"><span>Z rámce smíš čerpat</span><b class="ok">'
+          + (c.strop === null ? 'bez stropu' : kcFull(c.strop)) + '</b></div>'
+          + '<div class="kv"><span>Teď máš</span><b>'
+          + (ramecStrop() === null ? 'bez stropu' : kcFull(ramecStrop())) + '</b></div>'
+        : hovory
+          ? '<div class="kv"><span>Hovory navíc</span><b class="ok">+' + c.hovory + '</b></div>'
+          : '<div class="kv"><span>Rámec a zástava v bance</span><b class="ok">+' + kcFull(c.laundry) + '</b></div>')
+    + '<div class="kv"><span>Cena</span><b>' + platba.toLocaleString('cs-CZ') + ' Kč</b></div>'
+    + (ramec
+        ? (platba < c.price_czk
+            ? '<p class="fine ok">Plná cena je ' + c.price_czk.toLocaleString('cs-CZ')
+              + ' Kč — doplácíš jen rozdíl proti stupni, který máš.</p>' : '')
+        : hovory
+          ? '<div class="kv"><span>Za hovor</span><b>' + String(c.za_hovor).replace('.', ',') + ' Kč</b></div>'
+          : '<div class="kv"><span>Za korunu</span><b>' + c.per_czk.toLocaleString('cs-CZ') + ' L$</b></div>')
     + '<div class="kv"><span>Platí</span><b>' + esc(ME.first_name + ' ' + ME.last_name) + '</b></div>'
     + '<button class="btn big" id="do-pay">Zaplatit kartou</button>'
-    + '<p class="fine">' + (hovory
-        ? 'Kredit se strhne jen tehdy, když hovor opravdu vezme operátor za tebe. Nevyčerpané hovory nikam nemizí.'
-        : 'Laundry jsou herní měna bez jakékoli hodnoty a nejde je směnit zpět.') + '</p>');
+    + '<p class="fine">' + (ramec
+        ? 'Strop platí napořád a neruší herní pravidla: víc, než unese výdělek sítě a počet '
+          + 'doplacených prádlomatů, ti banka nepůjčí ani tak. Načerpané peníze strop nikdy nebere.'
+        : hovory
+          ? 'Kredit se strhne jen tehdy, když hovor opravdu vezme operátor za tebe. Nevyčerpané hovory nikam nemizí.'
+          : 'Laundry jsou herní měna bez jakékoli hodnoty a nejde je směnit zpět.') + '</p>');
   $('do-pay').onclick = function () {
     $('do-pay').disabled = true;
     apiJson('/stripe/checkout', { kind: kind, qty: 1 }).then(function (r) {
@@ -12118,6 +12201,15 @@ function checkPayment() {
         if (ME) ME.cards = r.j.owned;
         if (/^linka/.test(r.j.kind || '')) {
           return claimCash(function () { paintCards(); switchTab('cards'); });
+        }
+        if (/^ramec/.test(r.j.kind || '')) {
+          // Strop se nepoužívá jako karta — jen si znovu načteme ceník, kde
+          // server pošle novou úroveň, a ukážeme ji v bance.
+          return loadCards().then(function () {
+            paintCards(); paintBank(); switchTab('bank');
+            toast('Objem rámce se zvedl na '
+              + (ramecStrop() === null ? 'neomezený' : kcFull(ramecStrop())) + '.', 'ok', true);
+          });
         }
         if (/^cash/.test(r.j.kind || '')) {
           // Když si hráč balík kupoval kvůli konkrétní stavbě, agent ho tam

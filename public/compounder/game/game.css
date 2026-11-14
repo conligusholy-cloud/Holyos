@@ -508,6 +508,8 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .pack-l b{font-size:15px}
 .pack-l span{font-size:11px;color:var(--text2)}
 .pack .btn{flex:0 0 auto;min-width:86px}
+.pack.hotovo{opacity:.6}
+.pack.hotovo .btn{background:rgba(63,214,142,.18);border-color:rgba(63,214,142,.45);color:var(--ok)}
 
 /* Přírůstek a úbytek hotovosti v hlavičce — ať je vidět, že peníze tečou. */
 .t-item{position:relative}

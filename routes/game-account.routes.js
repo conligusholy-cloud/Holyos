@@ -118,6 +118,26 @@ const CASH = {
 };
 const CASH_KINDS = Object.keys(CASH);
 
+// ─── Balíčky rámcového úvěru ─────────────────────────────────────────────────
+// Rámec je úvěrová linka proti zástavě — a jak velký objem si z ní hráč může
+// vzít, odemykají tyhle balíčky. Nejsou spotřební: koupí se jednou a platí
+// napořád. Kdo má nižší stupeň a chce vyšší, doplácí jen rozdíl (viz checkout).
+// strop null = bez stropu, limit pak drží jen herní pravidla.
+const RAMEC_ZDARMA = 5000000;        // kolik unese rámec bez jediného balíčku
+const RAMEC = {
+  ramec10:  { kind: 'ramec10',  name: 'Rámec 10 M',       price: 50000,  strop: 10000000, uroven: 1, bezBalicku: true,
+    short: 'Z rámce smíš čerpat až 10 000 000 L$.' },
+  ramec20:  { kind: 'ramec20',  name: 'Rámec 20 M',       price: 100000, strop: 20000000, uroven: 2, bezBalicku: true,
+    short: 'Z rámce smíš čerpat až 20 000 000 L$.' },
+  ramec40:  { kind: 'ramec40',  name: 'Rámec 40 M',       price: 200000, strop: 40000000, uroven: 3, bezBalicku: true,
+    short: 'Z rámce smíš čerpat až 40 000 000 L$.' },
+  ramec70:  { kind: 'ramec70',  name: 'Rámec 70 M',       price: 300000, strop: 70000000, uroven: 4, bezBalicku: true,
+    short: 'Z rámce smíš čerpat až 70 000 000 L$.' },
+  ramecmax: { kind: 'ramecmax', name: 'Rámec bez stropu', price: 500000, strop: null,     uroven: 5, bezBalicku: true,
+    short: 'Rámec už nedrží strop — jen pravidla hry.' },
+};
+const RAMEC_KINDS = Object.keys(RAMEC);
+
 // ─── Balíčky infolinky ───────────────────────────────────────────────────────
 // Kredit = jeden hovor, který vyřídí placený operátor místo hráče. Čím větší
 // balíček, tím nižší cena za hovor.
@@ -148,7 +168,7 @@ const SUB_KINDS = Object.keys(SUBS);
 // Ručně přidaná hotovost z administrace. Není v nabídce, nedá se koupit —
 // vzniká jen tím, že ji někdo hráči přidá, a nese vlastní částku.
 const CASH_CUSTOM = 'cash_dar';
-const ALL = Object.assign({}, CARDS, CASH, SUBS, LINKA);
+const ALL = Object.assign({}, CARDS, CASH, SUBS, LINKA, RAMEC);
 
 // ─── Nastavení hry ───────────────────────────────────────────────────────────
 // Přepínače, které jde cvaknout z administrace bez nasazování. Držíme je
@@ -222,6 +242,32 @@ async function cashPublic() {
   }
   return out;
 }
+// Který stupeň rámce má hráč koupený. Karty se nespotřebovávají — jsou to
+// trvalá odemčení, takže se jen koukáme, co má.
+async function ramecUroven(playerId) {
+  try {
+    const karty = await prisma.gameCard.findMany({
+      where: { player_id: playerId, kind: { in: RAMEC_KINDS } }, select: { kind: true },
+    });
+    return karty.reduce((a, k) => Math.max(a, (RAMEC[k.kind] || {}).uroven || 0), 0);
+  } catch (e) { console.warn('[game] úroveň rámce:', e.message); return 0; }
+}
+function ramecPodleUrovne(uroven) {
+  if (!uroven) return RAMEC_ZDARMA;
+  const b = RAMEC_KINDS.map((k) => RAMEC[k]).filter((x) => x.uroven === uroven)[0];
+  return b ? b.strop : RAMEC_ZDARMA;        // null = bez stropu
+}
+async function ramecPublic(playerId) {
+  const balicky = [];
+  for (const k of RAMEC_KINDS) {
+    const c = await item(k); if (!c) continue;
+    balicky.push({ kind: c.kind, name: c.name, short: c.short,
+      price_czk: c.price / 100, strop: RAMEC[k].strop, uroven: RAMEC[k].uroven });
+  }
+  const uroven = playerId ? await ramecUroven(playerId) : 0;
+  return { zdarma: RAMEC_ZDARMA, uroven, strop: ramecPodleUrovne(uroven), balicky };
+}
+
 // Kolik korun za hovor — ať je vidět, že větší balíček vyjde líp.
 async function linkaPublic() {
   const out = [];
@@ -296,7 +342,8 @@ async function pub(p) {
   const counts = {};
   // Balíčky infolinky patří do seznamu taky — hra se jinak o zaplaceném
   // balíčku nedozví a nikdy si ho nevyzvedne.
-  CARD_KINDS.concat(CASH_KINDS).concat(LINKA_KINDS).concat([CASH_CUSTOM]).forEach((k) => { counts[k] = 0; });
+  CARD_KINDS.concat(CASH_KINDS).concat(LINKA_KINDS).concat(RAMEC_KINDS).concat([CASH_CUSTOM])
+    .forEach((k) => { counts[k] = 0; });
   cards.forEach((c) => { if (counts[c.kind] != null) counts[c.kind]++; });
   return {
     nick: p.nick, company: p.company || (p.nick + ' s.r.o.'), emblem: p.emblem || null,
@@ -1090,6 +1137,7 @@ router.get('/cards', async (req, res, next) => {
       ok: true, catalog: await catalogPublic(), cash: await cashPublic(),
       linka: await linkaPublic(),
       onboarding_rychly: await rychlyOnboarding(),
+      ramec: await ramecPublic(p ? p.id : null),
       nick_pauza_ms: await nickPauzaMs(),
       instagram: { odkaz: IG_ODKAZ, karet: IG_KARET, vzato: p ? !!p.instagram_at : false },
       facebook: { odkaz: FB_ODKAZ, laundry: CASH[FB_KIND].laundry, vzato: p ? !!p.facebook_at : false },
@@ -1114,6 +1162,8 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
   try {
     const kind = s((req.body || {}).kind, 24);
     if (!ALL[kind] && kind !== CASH_CUSTOM) return res.status(400).json({ error: 'Taková karta není.' });
+    // Balíček rámce není spotřební karta — je to trvalé odemčení, nespaluje se.
+    if (RAMEC[kind]) return res.status(409).json({ error: 'Balíček rámce se nepoužívá, platí trvale.' });
     const card = await prisma.gameCard.findFirst({
       where: { player_id: req.player.id, kind, used_at: null }, orderBy: { id: 'asc' }, select: { id: true, amount: true }
     });
@@ -1741,6 +1791,9 @@ module.exports._cenaKusuVBalicku = cenaKusuVBalicku;
 module.exports._cardKinds = CARD_KINDS;
 module.exports._subKinds = SUB_KINDS;
 module.exports._linkaKinds = LINKA_KINDS;
+module.exports._ramecKinds = RAMEC_KINDS;
+module.exports._ramecKatalog = RAMEC;
+module.exports._ramecUroven = ramecUroven;
 module.exports._predplatneHrace = predplatneHrace;
 module.exports._dropPrices = dropPrices;
 module.exports._dropPodlaha = dropPodlaha;

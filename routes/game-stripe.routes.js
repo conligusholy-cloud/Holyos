@@ -81,7 +81,27 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
     }
     const c = await itemOf(kind);   // cena z ceníku, ne z kódu
     if (!c) return res.status(400).json({ error: 'Tohle se teď neprodává.' });
-    const qty = Math.max(1, Math.min(MAX_QTY, parseInt((req.body || {}).qty, 10) || 1));
+    let qty = Math.max(1, Math.min(MAX_QTY, parseInt((req.body || {}).qty, 10) || 1));
+    // Balíček rámce je trvalé odemčení, ne zboží na kusy: kupuje se jeden
+    // a kdo má nižší stupeň, doplácí jen rozdíl. Počítá to server — hráč si
+    // cenu určovat nesmí.
+    let doplatek = null;
+    if ((acct._ramecKinds || []).indexOf(kind) >= 0) {
+      qty = 1;
+      const kat = acct._ramecKatalog || {};
+      const uroven = await acct._ramecUroven(p.id);
+      if (uroven >= (kat[kind] || {}).uroven) {
+        return res.status(409).json({ error: 'Tenhle stupeň rámce už máš — a vyšší se kupuje rovnou.' });
+      }
+      let zaplaceno = 0;
+      for (const k of acct._ramecKinds) {
+        if ((kat[k] || {}).uroven === uroven) {
+          const nizsi = await itemOf(k);
+          zaplaceno = (nizsi && nizsi.price) || 0;
+        }
+      }
+      doplatek = Math.max(100, c.price - zaplaceno);   // Stripe nebere nulu
+    }
     // Cena za kus padá s počtem, ale jen u karet — balíčky laundrů mají svoje
     // vlastní odstupňování a slevu podruhé nedostanou. Počítá to server,
     // klient si cenu určovat nesmí.
@@ -92,7 +112,7 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
     // Karta se pozná podle sebe: nenese laundry (balík peněz), hovory (balíček
     // infolinky) ani interval (předplatné). Slevové balíčky platí jen na karty.
     const jeKarta = !c.laundry && !c.hovory && !c.interval && !c.bezBalicku;
-    const kus = jeKarta ? acct._cenaKusuVBalicku(c.price, qty) : c.price;
+    const kus = doplatek != null ? doplatek : (jeKarta ? acct._cenaKusuVBalicku(c.price, qty) : c.price);
 
     const purchase = await prisma.gamePurchase.create({
       data: { player_id: p.id, kind, qty, amount_cents: kus * qty, currency: 'czk', email: p.email }
