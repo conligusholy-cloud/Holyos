@@ -11999,13 +11999,15 @@ function paintDrazbaHodiny() {
   var el = $('drz-hodiny'), cislo = $('drz-odpocet'), popis = $('drz-odpocet-p'), kruh = $('drz-kruh');
   if (!el || !cislo || !kruh) return;
   var ms = drazbaZbyva(), sek = Math.ceil(ms / 1000);
+  // Záporný posun drží konec oblouku na dvanáctce a ukrajuje ho od začátku,
+  // takže prázdné místo narůstá po směru hodinových ručiček.
   kruh.setAttribute('stroke-dashoffset',
-    String(DRAZBA_OBVOD * (1 - Math.max(0, Math.min(1, ms / DRAZBA_ZAKLAD_MS)))));
+    String(-DRAZBA_OBVOD * (1 - Math.max(0, Math.min(1, ms / DRAZBA_ZAKLAD_MS)))));
   if (!drazbaBezi()) {
     cislo.textContent = 'konec';
     if (popis) popis.textContent = 'dražba doběhla';
     el.className = 'drz-hodiny dobehlo';
-    kruh.setAttribute('stroke-dashoffset', String(DRAZBA_OBVOD));
+    kruh.setAttribute('stroke-dashoffset', String(-DRAZBA_OBVOD));
     return;
   }
   cislo.textContent = sek;
