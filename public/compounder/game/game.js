@@ -12049,6 +12049,7 @@ function hlidejDrazbu() {
         // jinak by se restartovaly hodiny a tlačítko by zmizelo zpod prstu.
         if (DRZ_STAVBA.id !== DRAZBA.id || DRZ_STAVBA.vedu !== !!DRAZBA.vedu
           || DRZ_STAVBA.moje !== !!DRAZBA.moje
+          || DRZ_STAVBA.pv !== (DRAZBA_PREDVOLBY || []).join(',')
           || (DRAZBA.moje && DRZ_STAVBA.pod !== (DRAZBA.suma > DRAZBA.vyvolavaci))) paintDrazba();
         else paintDrazbaZiva();
       }
@@ -12100,7 +12101,7 @@ function drazbaSheet() {
 }
 // Stavba posledního vykreslení okna — podle ní se pozná, jestli stačí přepsat
 // čísla, nebo se musí postavit celé okno znovu.
-var DRZ_STAVBA = { id: null, vedu: false, moje: false, pod: false };
+var DRZ_STAVBA = { id: null, vedu: false, moje: false, pod: false, pv: '' };
 // Strop na příhozy prodávajícího žádný není — dražbu smí držet naživu, jak
 // dlouho chce. Zůstává jako funkce kvůli jednomu místu v překreslování.
 function drzStrop() { return Infinity; }
@@ -12180,6 +12181,7 @@ function paintDrazba() {
   }
   var volne = Math.max(0, volnaHotovost(null) - (d.moje_prihozy || 0));
   var strop = drzStrop(d), limit = Math.min(volne, strop);
+  var minim = DRAZBA_MIN || 1000;
   box.innerHTML = '<h3>\u{1F528} Dražba — ' + esc(d.nazev) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">'
     + (d.moje ? 'Vyvolal jsi ji ty'
@@ -12221,14 +12223,17 @@ function paintDrazba() {
                       : 'Dokud jsou příhozy pod vyvolávací cenou, stojí tě příhoz přesně to, '
                         + 'co do něj dáš — vrátí se ti, ale o stejnou částku klesne doplatek '
                         + 'vítěze.')
+                  + ' Přihodit musíš aspoň ' + kcFull(minim) + ', tolik dal poslední.'
                   + ' Svou vlastní věc vyhrát nemůžeš.</p>'
-                : '<p class="fine">Volné hotovosti na příhozy máš <b id="drz-volne">' + kcFull(volne)
-                  + '</b>. Prohraný příhoz se nevrací.</p>'))
+                : '<p class="fine">Přihazuje se nahoru — aspoň <b>' + kcFull(minim)
+                  + '</b>, tolik dal poslední. Volné hotovosti máš <b id="drz-volne">'
+                  + kcFull(volne) + '</b>. Prohraný příhoz se nevrací.</p>'))
     + '<div class="drz-feed" id="drz-feed">' + drzFeedHtml() + '</div>'
     + '<button class="btn sec" id="drz-pryc" style="width:100%;margin-top:10px">Zavřít</button>';
   // pod = příhozy přerostly vyvolávací cenu. Prodávajícímu se tím mění text
   // pod tlačítky, takže se okno v tu chvíli musí postavit znovu.
-  DRZ_STAVBA = { id: d.id, vedu: !!d.vedu, moje: !!d.moje, pod: pod };
+  DRZ_STAVBA = { id: d.id, vedu: !!d.vedu, moje: !!d.moje, pod: pod,
+    pv: (DRAZBA_PREDVOLBY || []).join(',') };
   paintDrazbaHodiny();
   if ($('drz-pryc')) $('drz-pryc').onclick = closeSheet;
   [].forEach.call(box.querySelectorAll('[data-prihoz]'), function (b) {
@@ -12401,7 +12406,12 @@ function prihodDrazba(castka, b) {
     if (!r.ok) { hlidejDrazbu(); return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
     DRAZBA = r.j.drazba;
     DRAZBA.moje_prihozy = r.j.moje_prihozy;
+    // Příhozem se zvedlo minimum — tlačítka se musí přepsat na nový žebřík.
+    if (r.j.predvolby) DRAZBA_PREDVOLBY = r.j.predvolby;
+    if (r.j.min) DRAZBA_MIN = r.j.min;
     DRAZBA_PRIHOZY = [{ nick: (ME && ME.nick) || 'ty', castka: castka }].concat(DRAZBA_PRIHOZY || []).slice(0, 6);
+    // Bez hlášky: nové minimum je vidět rovnou na tlačítkách a v textu pod nimi,
+    // a toast by v poslední vteřině dražby přikryl zrovna ta tlačítka.
     paintDrazba();
   }).catch(function () { if (b) b.disabled = false; toast('Server neodpovídá.', 'err'); });
 }

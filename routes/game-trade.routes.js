@@ -1098,7 +1098,12 @@ router.get('/trade/drazba', hrac, api(async (req, res) => {
   v.moje_prihozy = mp;
   v.divaku = DRZ.divaku(d.id);
   v.prihazujicich = prihazujici.length;
-  res.json({ ok: true, drazba: v, prihozy: posledni, predvolby: DRZ.PREDVOLBY, min: DRZ.PRIHOZ_MIN });
+  // Minimum i předvolby se odvíjejí od posledního příhozu — přihodit se musí
+  // aspoň tolik, co dal on.
+  const minimum = DRZ.minPrihoz(posledni.length ? posledni[0].castka : 0);
+  v.minimum = minimum;
+  res.json({ ok: true, drazba: v, prihozy: posledni,
+    predvolby: DRZ.predvolby(minimum), min: minimum });
 }));
 
 // POST /trade/drazba { predmet, model, spot_id, card_kind, pobocka, podil, equity_id, vyvolavaci }
@@ -1193,6 +1198,16 @@ router.post('/trade/drazba/prihoz', hrac, api(async (req, res) => {
     await vyporadejDrazbu(d.id);
     return res.status(409).json({ error: 'Dražba už skončila.' });
   }
+  // Přihazuje se nahoru: aspoň tolik, kolik dal poslední. Dvě současná
+  // přihození si tím můžou vzájemně podrazit minimum — to ale stejně odchytí
+  // zámek na konci dražby o kus níž a jeden z nich dostane „někdo byl rychlejší".
+  const posl = await prisma.gameDrazbaPrihoz.findFirst({
+    where: { drazba_id: d.id }, orderBy: { id: 'desc' }, select: { castka: true } });
+  const minimum = DRZ.minPrihoz(posl ? posl.castka : 0);
+  if (castka < minimum) {
+    return res.status(400).json({ error: 'Přihodit musíš aspoň '
+      + minimum.toLocaleString('cs-CZ') + ' L$ — tolik dal poslední.' });
+  }
   const ja = req.player;
   const jsemProdavajici = d.prodavajici_id === ja.id;
   // Prodávající smí přihazovat na svou věc: sráží tím cenu a přidává čas,
@@ -1232,7 +1247,11 @@ router.post('/trade/drazba/prihoz', hrac, api(async (req, res) => {
   await prisma.gameDrazbaPrihoz.create({ data: { drazba_id: d.id, player_id: ja.id,
     nick: ja.nick, castka } });
   const cer = await prisma.gameDrazba.findUnique({ where: { id: d.id } });
-  res.json({ ok: true, drazba: DRZ.verejna(cer, ja.id), moje_prihozy: uz + castka });
+  const ven = DRZ.verejna(cer, ja.id);
+  // Po vlastním příhozu se minimum zvedlo na něj — klient si hned přepíše tlačítka.
+  ven.minimum = DRZ.minPrihoz(castka);
+  res.json({ ok: true, drazba: ven, moje_prihozy: uz + castka,
+    predvolby: DRZ.predvolby(castka), min: DRZ.minPrihoz(castka) });
 }));
 
 // Vypořádání: peníze a převod věci. Vrací null, protože po vypořádání už

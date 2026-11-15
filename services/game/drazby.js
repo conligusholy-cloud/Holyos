@@ -20,8 +20,24 @@ const PRIHOZ_MS = 3000;         // co přidá jeden příhoz
 const PRIHOZ_MIN = 1000;        // nejmenší příhoz
 const VYVOLAVACI_MIN = 10000;   // pod tím nemá dražba smysl
 const PREDMETY = ['stroj', 'pradlomat', 'pobocka', 'karta', 'podil', 'prevod'];
-// Rychlé předvolby pro tlačítka v okně dražby.
-const PREDVOLBY = [1000, 5000, 25000, 100000];
+// Rychlé předvolby pro tlačítka v okně dražby. Nejsou pevné: přihodit se musí
+// aspoň tolik, kolik přihodil poslední, takže se žebřík posouvá nahoru s ním.
+// První tlačítko je vždycky „stejně jako on", další jsou násobky.
+const PREDVOLBY = [1000, 5000, 25000, 100000];   // zůstává pro starší klienty
+const PREDVOLBY_POMER = [1, 2, 5, 10];
+// Kolik se musí přihodit nejmíň: tolik, co dal poslední, a nikdy pod PRIHOZ_MIN.
+function minPrihoz(posledni) {
+  return Math.max(PRIHOZ_MIN, Math.round(Number(posledni) || 0));
+}
+function predvolby(minimum) {
+  const m = minPrihoz(minimum), ven = [];
+  PREDVOLBY_POMER.forEach((k) => {
+    // Násobky zaokrouhlíme na tisíce, ať na tlačítkách nestojí divná čísla.
+    const v = k === 1 ? m : Math.max(m, Math.round(m * k / 1000) * 1000);
+    if (ven.indexOf(v) < 0) ven.push(v);
+  });
+  return ven;
+}
 
 // Cena, kterou zaplatí vítěz. Dole se odráží od nuly.
 function cenaZa(vyvolavaci, suma) {
@@ -115,4 +131,5 @@ function start() {
 module.exports = {
   DRAZBA_MS, PRIHOZ_MS, PRIHOZ_MIN, VYVOLAVACI_MIN, PREDMETY, PREDVOLBY,
   cenaZa, vynosProdavajiciho, verejna, bezici, start, divak, divaku,
+  PREDVOLBY_POMER, minPrihoz, predvolby,
 };
