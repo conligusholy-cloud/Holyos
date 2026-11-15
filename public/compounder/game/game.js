@@ -10002,7 +10002,9 @@ function paintMe() {
   $('me-body').innerHTML = (ME
     ? '<div class="card"><div class="znak-hlava">' + znakSvg(ME.emblem, 56)
       + '<div><h3 style="margin:0">' + esc(ME.company || ME.nick) + '</h3>'
-      + '<p class="muted small" style="margin:3px 0 0">Hraješ jako <b>' + esc(ME.nick) + '</b></p></div></div>'
+      + '<p class="muted small" style="margin:3px 0 0">Hraješ jako <b>' + esc(ME.nick) + '</b></p>'
+      + '<p class="muted small" style="margin:2px 0 0">' + esc(mojeHodnost().nazev) + '</p></div></div>'
+      + odznakyPruhHtml()
       + '<p class="muted small" style="margin:10px 0 8px">Pod jménem a znakem firmy tě vidí konkurence na mapě i v žebříčku.</p>'
       + '<label class="fld"><span>Název firmy</span>'
       + '<input id="me-firma" class="inp" type="text" maxlength="60" value="' + esc(ME.company || '') + '"></label>'
@@ -10291,6 +10293,21 @@ function odznakMedaile(o, velky) {
     : '';
   return '<span class="odz-m' + (o.mam ? ' mam' : '') + (velky ? ' vel' : '') + '" style="' + styl + '">'
     + '<span class="odz-m-in">' + (o.mam ? o.ikona : '\u{1F512}') + '</span></span>';
+}
+// Získané odznaky hned v hlavičce Já, aby se na ně nemuselo scrollovat.
+// Menší medaile, jen to, co hráč má — prázdná místa patří do sbírky níž.
+function odznakyPruhHtml() {
+  if (!ODZNAKY_HRA || !ODZNAKY_HRA.length) return '';
+  var mam = [];
+  ODZNAKY_HRA.forEach(function (o, i) { if (o.mam) mam.push({ o: o, i: i }); });
+  if (!mam.length) {
+    return '<p class="fine" style="margin:10px 0 0">Zatím žádný odznak — co se dá získat, '
+      + 'najdeš níž ve sbírce.</p>';
+  }
+  return '<div class="odz-pruh">' + mam.map(function (x) {
+    return '<button type="button" class="odz-b mal mam" data-odz="' + x.i + '" title="'
+      + esc(x.o.nazev) + '">' + odznakMedaile(x.o) + '</button>';
+  }).join('') + '<span class="odz-pruh-p">' + mam.length + ' z ' + ODZNAKY_HRA.length + '</span></div>';
 }
 function odznakyHtml() {
   if (!ME) return '';
