@@ -8369,7 +8369,8 @@ function paintZeb() {
     + '<p class="muted small" style="margin:0 0 10px">' + popis.pod + '</p>'
     + (list.length
       ? '<div class="zeb">' + list.map(function (x) {
-          return '<div class="zeb-row' + (x.ja ? ' ja' : '') + '">'
+          return '<div class="zeb-row' + (x.ja ? ' ja' : '') + '"'
+            + (x.id ? ' data-hrac="' + x.id + '"' : '') + '>'
             + '<i class="poradi' + (x.poradi <= 3 ? ' medaile m' + x.poradi : '') + '">' + x.poradi + '</i>'
             + (x.znak ? znakSvg(x.znak, 26) : '<i class="znak-mezera"></i>')
             + '<span class="nick">' + esc(x.firma || x.nick)
@@ -8382,6 +8383,49 @@ function paintZeb() {
       ? '<p class="muted small" style="margin-top:12px">Ty jsi ' + ja.poradi + '. z ' + ja.z + ' — ' + popis.jed(ja.hodnota) + '.</p>'
       : '')
     + (ZEB.hracu ? '<p class="fine">Hráčů se sítí: ' + ZEB.hracu + '</p>' : '');
+  [].forEach.call(box.querySelectorAll('[data-hrac]'), function (el) {
+    el.onclick = function () { strukturaSheet(Number(el.getAttribute('data-hrac'))); };
+  });
+}
+
+// ─── Vlastnická struktura firmy ──────────────────────────────────────────────
+// Kdo drží kus téhle firmy a kde má její majitel podíl jinde. Ceny a výplaty
+// tu nejsou — to je věc těch, co se domluvili. Tohle je obchodní rejstřík.
+function strukturaSheet(id) {
+  sheet('<h3>Vlastnická struktura</h3><p class="muted small">Načítám…</p>');
+  api('/trade/struktura/' + id).then(function (r) {
+    if (!r.ok) return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err');
+    var d = r.j;
+    var radek = function (x) {
+      return '<div class="area-item struk-r" data-struk="' + x.id + '">'
+        + '<div style="display:flex;align-items:center;gap:10px;min-width:0">'
+        + (x.znak ? znakSvg(x.znak, 26) : '<i class="znak-mezera"></i>')
+        + '<div style="min-width:0"><div class="nm">' + esc(x.firma) + '</div>'
+        + '<div class="sub">' + esc(x.nick) + '</div></div></div>'
+        + '<b>' + procentaPodilu(x.podil) + '</b></div>';
+    };
+    sheet('<h3>' + esc(d.hrac.firma) + '</h3>'
+      + '<p class="muted small">' + esc(d.hrac.nick) + ' — kdo vlastní kus téhle firmy a kde má podíl ona.</p>'
+      + '<div class="kv souhrn"><span>Majitel drží</span><b class="' + (d.prodano > 0 ? '' : 'ok') + '">'
+      + procentaPodilu(1 - d.prodano) + '</b></div>'
+      + '<h3 style="margin-top:16px">Podílníci</h3>'
+      + (d.podilnici.length
+          ? d.podilnici.map(function (x) { return radek(x); }).join('')
+          : '<p class="muted small">Firmu nedrží nikdo jiný — je celá majitelova.</p>')
+      + '<h3 style="margin-top:18px">Podíly v cizích firmách</h3>'
+      + (d.drzi.length
+          ? d.drzi.map(function (x) { return radek(x); }).join('')
+          : '<p class="muted small">V žádné cizí firmě podíl nemá.</p>')
+      + '<p class="fine" style="margin-top:12px">Klepnutím na firmu se podíváš na její strukturu.</p>');
+    [].forEach.call($('sheet-body').querySelectorAll('[data-struk]'), function (el) {
+      el.onclick = function () { strukturaSheet(Number(el.getAttribute('data-struk'))); };
+    });
+  }).catch(function () { toast('Server neodpovídá.', 'err'); });
+}
+// Procenta podílu tak, aby se neztratila desetina u malých podílů.
+function procentaPodilu(x) {
+  var v = Math.round((Number(x) || 0) * 1000) / 10;
+  return String(v).replace('.', ',') + ' %';
 }
 
 // Pověst z infolinky — ať je vidět i mimo hovor, co to s návštěvností dělá.

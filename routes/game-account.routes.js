@@ -1360,7 +1360,7 @@ router.get('/leaderboard', async (req, res, next) => {
   try {
     const p = await currentPlayer(req);
     const [z, zeme] = await Promise.all([zebricky(), zemeSPocty()]);
-    const orez = (l) => l.slice(0, ZEB_TOP).map((x, i) => ({ poradi: i + 1, nick: x.nick,
+    const orez = (l) => l.slice(0, ZEB_TOP).map((x, i) => ({ poradi: i + 1, id: x.id, nick: x.nick,
       firma: x.firma || (x.nick + ' s.r.o.'), znak: x.znak || null, zeme: x.zeme || [],
       hodnota: x.hodnota, ja: !!(p && x.id === p.id) }));
     res.json({ ok: true,

@@ -632,6 +632,43 @@ router.post('/trade/pujcka/:id/splatit', hrac, api(async (req, res) => {
   res.json({ ok: true, castka });
 }));
 
+// ─── Vlastnická struktura ────────────────────────────────────────────────────
+// GET /trade/struktura/:id → kdo vlastní kus téhle firmy a kde má její majitel
+// podíl jinde. Je to veřejné schválně: kdo do koho investoval, patří k obrazu
+// trhu stejně jako to, kde komu stojí prádlomat. Ceny a výplaty ven nejdou —
+// ty jsou věc těch dvou, co se domluvili.
+router.get('/trade/struktura/:id', hrac, api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const p = await prisma.gamePlayer.findUnique({ where: { id },
+    select: { id: true, nick: true, company: true, disabled: true } });
+  if (!p || p.disabled) return res.status(404).json({ error: 'Takový hráč tu není.' });
+  const [vMe, jinde] = await Promise.all([
+    prisma.gameEquity.findMany({ where: { firma_id: id, stav: 'bezi' },
+      orderBy: { podil: 'desc' }, take: 50 }),
+    prisma.gameEquity.findMany({ where: { investor_id: id, stav: 'bezi' },
+      orderBy: { podil: 'desc' }, take: 50 }),
+  ]);
+  const ids = Array.from(new Set(vMe.map((e) => e.investor_id).concat(jinde.map((e) => e.firma_id))));
+  const nazvy = new Map();
+  if (ids.length) {
+    const lide = await prisma.gamePlayer.findMany({ where: { id: { in: ids } },
+      select: { id: true, nick: true, company: true, emblem: true } });
+    lide.forEach((h) => nazvy.set(h.id, { nick: h.nick, firma: h.company || (h.nick + ' s.r.o.'),
+      znak: h.emblem || null }));
+  }
+  const kdo = (i) => nazvy.get(i) || { nick: '?', firma: 'neznámá firma', znak: null };
+  const prodano = vMe.reduce((a, e) => a + e.podil, 0);
+  res.json({ ok: true,
+    hrac: { id: p.id, nick: p.nick, firma: p.company || (p.nick + ' s.r.o.') },
+    prodano,
+    // Kdo drží kus téhle firmy.
+    podilnici: vMe.map((e) => ({ id: e.investor_id, podil: e.podil,
+      nick: kdo(e.investor_id).nick, firma: kdo(e.investor_id).firma, znak: kdo(e.investor_id).znak })),
+    // A kde má tenhle hráč podíl on sám.
+    drzi: jinde.map((e) => ({ id: e.firma_id, podil: e.podil,
+      nick: kdo(e.firma_id).nick, firma: kdo(e.firma_id).firma, znak: kdo(e.firma_id).znak })) });
+}));
+
 // ─── Vyzvednutí následků ─────────────────────────────────────────────────────
 // GET /trade/deliveries → co si mám připsat do rozehrané hry
 router.get('/trade/deliveries', hrac, api(async (req, res) => {

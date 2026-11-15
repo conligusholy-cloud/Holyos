@@ -565,6 +565,11 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .zeb-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--border)}
 .zeb-row:first-child{border-top:0}
 .zeb-row.ja{background:rgba(124,92,255,.14)}
+.zeb-row[data-hrac]{cursor:pointer}
+.struk-r{cursor:pointer}
+.struk-r:active{opacity:.7}
+.zeb-row[data-hrac]:active{background:rgba(124,92,255,.22)}
+.znak-mezera{display:block;width:26px;height:26px;flex:0 0 26px}
 .zeb-row .poradi{font-style:normal;width:26px;flex:0 0 26px;text-align:center;font-size:12px;
   color:var(--text3);font-variant-numeric:tabular-nums}
 .zeb-row .poradi.medaile{font-weight:800;color:#04301f;border-radius:50%;line-height:22px;height:22px}
