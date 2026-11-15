@@ -990,13 +990,25 @@ router.put('/ab-intro', api(async (req, res) => {
 // Sesbírá, jak se hráči ve hře chovají (trychtýř, retence, postup, čas ve hře, platby, zdroje, reklama)
 // a nechá Claude navrhnout konkrétní změny, které povedou k víc platbám. Poslední rozbor se ukládá.
 const AI_KEY = 'game.ai_analyza';
+// Soupis toho, co ve hře už hotové je. Bez něj AI navrhovala věci, které
+// dávno fungují (hraní bez registrace), nebo rovnou zhoršení (přidat e-mail
+// a heslo tam, kde se nikdy nechtěly). Když přibude funkce, dopiš ji sem.
+const CO_UZ_UMI = {
+  vstup_do_hry: 'Na úvodu je JEDINÉ povinné pole: jméno hráče (3–24 znaků). Název firmy je nepovinný. Žádný e-mail, žádné heslo, žádné potvrzování. Po kliknutí na „Začít hrát" se účet založí a hra běží do pár sekund. NENAVRHUJ e-mail, heslo, ověřovací odkaz ani „guest mode" — to všechno je buď hotové, nebo by to bylo zhoršení.',
+  ucet_a_prihlaseni: 'Nick + heslo slouží jen k přihlášení na dalším zařízení (obrazovka #acct) a na cestě nového hráče neleží. Jméno jde později změnit (jednou za 30 dnů, první změna hned).',
+  onboarding: 'Po založení účtu běží tutoriál o pěti krocích (game_tut1–game_tut5): vybrat město, prověřit místo a nájem, koupit prádlomat, počkat na dodání, postavit. Je i bonus za rychlý start (odpočet 60 s na úvodu).',
+  platby: 'Stripe: jednorázové balíčky (hotovost, karty, výhody) a předplatné. Ceník je v databázi (game_prices) a jde měnit v administraci.',
+  ab_testy: 'Hotový rámec na A/B testy úvodní obrazovky (nastavení game.ab_intro: off / 50 / b) i s vyhodnocením a z-testem v administraci.',
+  herni_systemy: 'Mapa skutečných míst, ekonomika prádlomatu, banka a úvěry, pojištění, infolinka s operátorem (placená), půjčky a podíly mezi hráči s burzou, zpětný odkup, převod podílu na třetího hráče, žebříček, pozvánky, světové události (povodně, festivaly, ceny energií), ekonomické krize a sezónnost.',
+  mereni: 'Události game_* se ukládají jako compounderEvent. Měří se od načtení stránky (game_nacita) přes spuštění hry (game_open), vracející se hráče (game_zpet), úvod (game_intro), účet, průzkum, stavbu až po platbu.',
+};
 const medi = (a) => { if (!a.length) return null; const s = a.slice().sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const R1 = (n) => (n == null ? null : Math.round(n * 10) / 10);
 
 async function sesbirejDataHry(reklama) {
   const dny = 30, od = new Date(Date.now() - dny * 86400e3);
   const [udalosti, hraci, nakupy, ceny, zaznamu] = await Promise.all([
-    prisma.compounderEvent.findMany({ where: { created_at: { gte: od }, event: { startsWith: 'game_' } }, select: { event: true, sid: true }, take: 300000 }),
+    prisma.compounderEvent.findMany({ where: { created_at: { gte: od }, event: { startsWith: 'game_' } }, select: { event: true, sid: true, created_at: true }, take: 300000 }),
     prisma.gamePlayer.findMany({ where: { disabled: false }, take: 4000, orderBy: { created_at: 'desc' },
       select: { id: true, created_at: true, state_at: true, state: true, zdroj: true, hra_s_celkem: true, invited_by_id: true } }),
     prisma.gamePurchase.findMany({ where: { status: 'paid' }, select: { player_id: true, kind: true, qty: true, amount_cents: true, paid_at: true } }),
@@ -1005,8 +1017,35 @@ async function sesbirejDataHry(reklama) {
   ]);
   // Události: kolik unikátních návštěv a kolikrát
   const ev = {};
-  udalosti.forEach((e) => { const o = ev[e.event] || (ev[e.event] = { sids: new Set(), celkem: 0 }); o.sids.add(e.sid); o.celkem++; });
-  const udalostiVystup = Object.keys(ev).map((k) => ({ udalost: k, unikatnich: ev[k].sids.size, celkem: ev[k].celkem })).sort((a, b) => b.unikatnich - a.unikatnich);
+  udalosti.forEach((e) => {
+    const o = ev[e.event] || (ev[e.event] = { sids: new Set(), celkem: 0, od: null });
+    o.sids.add(e.sid); o.celkem++;
+    const t = new Date(e.created_at).getTime();
+    if (!o.od || t < o.od) o.od = t;
+  });
+  const udalostiVystup = Object.keys(ev).map((k) => ({ udalost: k, unikatnich: ev[k].sids.size, celkem: ev[k].celkem,
+    // Nová událost má kratší historii než okno — bez tohohle se srovnávají jablka s hruškami.
+    merime_od: ev[k].od ? new Date(ev[k].od).toISOString().slice(0, 10) : null,
+    merime_dnu: ev[k].od ? Math.max(1, Math.round((Date.now() - ev[k].od) / 86400e3)) : null,
+  })).sort((a, b) => b.unikatnich - a.unikatnich);
+
+  // ── Trychtýř. Počítáme ho tady, ne v hlavě AI. ───────────────────────────
+  // Minulý rozbor vydělil game_intro / game_open a vyhlásil „62 % odpad před
+  // úvodem", jenže úvod z principu nevidí nikdo, kdo má rozehranou hru.
+  // Správný jmenovatel pro úvod jsou jen noví návštěvníci.
+  const u = (k) => (ev[k] ? ev[k].sids.size : 0);
+  const pct = (a, b) => (b ? Math.round(a / b * 1000) / 10 : null);
+  const novych = Math.max(0, u('game_open') - u('game_zpet'));
+  const trychtyr = [
+    { krok: 'načetli stránku', udalost: 'game_nacita', pocet: u('game_nacita'), z_predchoziho_pct: null, jmenovatel: null },
+    { krok: 'spustila se jim hra', udalost: 'game_open', pocet: u('game_open'), z_predchoziho_pct: pct(u('game_open'), u('game_nacita')), jmenovatel: 'game_nacita' },
+    { krok: 'z toho noví (bez rozehrané hry)', udalost: 'game_open − game_zpet', pocet: novych, z_predchoziho_pct: pct(novych, u('game_open')), jmenovatel: 'game_open' },
+    { krok: 'viděli úvod', udalost: 'game_intro', pocet: u('game_intro'), z_predchoziho_pct: pct(u('game_intro'), novych), jmenovatel: 'noví návštěvníci' },
+    { krok: 'založili účet', udalost: 'game_register', pocet: u('game_register'), z_predchoziho_pct: pct(u('game_register'), u('game_intro')), jmenovatel: 'game_intro' },
+    { krok: 'prozkoumali město', udalost: 'game_scout', pocet: u('game_scout'), z_predchoziho_pct: pct(u('game_scout'), u('game_register')), jmenovatel: 'game_register' },
+    { krok: 'postavili prádlomat', udalost: 'game_build', pocet: u('game_build'), z_predchoziho_pct: pct(u('game_build'), u('game_scout')), jmenovatel: 'game_scout' },
+    { krok: 'zaplatili', udalost: 'game_paid', pocet: u('game_paid'), z_predchoziho_pct: pct(u('game_paid'), u('game_build')), jmenovatel: 'game_build' },
+  ];
 
   const plat = {}; nakupy.forEach((n) => { const o = plat[n.player_id] || (plat[n.player_id] = { n: 0, kc: 0, prvni: null }); o.n++; o.kc += n.amount_cents / 100; const t = new Date(n.paid_at).getTime(); if (!o.prvni || t < o.prvni) o.prvni = t; });
   const bucket = (v, hr) => { for (const [lbl, max] of hr) if (v < max) return lbl; return hr[hr.length - 1][0]; };
@@ -1032,7 +1071,11 @@ async function sesbirejDataHry(reklama) {
     obdobi_udalosti_dnu: dny,
     hracu_celkem: hraci.length, platicich_hracu: platici,
     konverze_na_platbu_pct: hraci.length ? R1(platici / hraci.length * 100) : 0,
+    // Tohle je JEDINÝ platný trychtýř. Syrové počty níž slouží k doplňkovým
+    // pohledům, ne k dělení mezi sebou.
+    trychtyr: trychtyr,
     udalosti_za_30_dni: udalostiVystup,
+    co_uz_hra_umi: CO_UZ_UMI,
     chovani_podle_skupin: B,
     median_minut_ve_hre: R1(medi(casy)), median_dni_od_registrace_do_prvni_platby: R1(medi(dnuDoPlatby)),
     nakupy_podle_druhu: podleDruhu,
@@ -1126,7 +1169,26 @@ async function aiRozborNaPozadi(reklama, uzivatelId, zacalo) {
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const model = process.env.GAME_AI_MODEL || 'claude-sonnet-4-6';
-  const sys = 'Jsi senior produktový analytik a growth designér free-to-play her. Analyzuješ hru „Laundromat Tycoon" (prohlížečová tycoon hra o stavbě sítě samoobslužných prádlomatů na pradlomaty.info/game; hráči si zakládají účet, prozkoumávají města, staví prádlomaty a platí přes Stripe za balíčky měny/karty/výhody). Cíl majitele: ZÍSKAT VÍC PLATEB (vyšší konverze na platbu a vyšší tržba na hráče při rozumné ceně reklamy). Dostaneš agregovaná data o chování hráčů (trychtýř událostí, chování podle skupin vč. konverze na platbu, čas ve hře, postup, zdroje návštěv, nákupy podle druhu, ceník, výsledky reklamy). Pracuj POUZE s dodanými čísly, nic si nevymýšlej; když je vzorek malý (jednotky plateb), řekni to a formuluj závěry jako hypotézy. Najdi: kde se hráči ztrácejí, v jakém okamžiku/postupu je pravděpodobné, že zaplatí (a co mají platící společné), co brání platbě (cena, načasování, nabídka, tření), co se dá změnit v herním designu, nabídce, ceníku, onboardingu, notifikacích/e-mailech a reklamě. Odpověz POUZE platným JSON bez markdownu: {"summary":"<3-5 vět o stavu>","zjisteni":[{"nadpis":"<krátce>","detail":"<1-3 věty s čísly>"}],"navrhy":[{"nazev":"<krátce>","co_zmenit":"<konkrétně co ve hře/nabídce udělat>","proc":"<na jakých číslech to stojí>","ocekavany_dopad":"<odhad dopadu na platby>","narocnost":"nízká|střední|vysoká","priorita":1,"dopad":4,"snadnost":3,"oblast":"onboarding|nabídka|ceník|herní design|notifikace|reklama","kpi":"<jaká metrika se má zlepšit, např. konverze game_open→game_register>","cil":"<měřitelný cíl, např. z 8,5 % na 15 %>"}],"experimenty":["<A/B test nebo měření, které ověří hypotézu>"],"chybi_data":["<co by se mělo začít měřit, aby šlo příště analyzovat přesněji>"]}. 5–8 návrhů seřazených podle priority (1 = nejdřív); dopad a snadnost jsou celá čísla 1–5 (5 = největší dopad / nejsnazší). Každé zjištění musí mít aspoň jeden návrh, který ho řeší. Buď stručný: summary max 4 věty, detail max 2 věty, co_zmenit max 3 věty. Piš česky, konkrétně, s čísly.';
+  // Prompt je psaný proti konkrétním chybám, které analytik dělal: dělil si
+  // vlastní trychtýř ze syrových počtů, navrhoval funkce, které už existují,
+  // a z deseti plateb dělal sebejisté odhady dopadu.
+  const sys = [
+    'Jsi senior produktový analytik a growth designér free-to-play her. Analyzuješ hru „Laundromat Tycoon" (prohlížečová tycoon hra o stavbě sítě samoobslužných prádlomatů na pradlomaty.info/game). Cíl majitele: víc plateb — vyšší konverze na platbu a vyšší tržba na hráče při rozumné ceně reklamy.',
+    '',
+    'TVRDÁ PRAVIDLA, bez kterých je rozbor k ničemu:',
+    '1. TRYCHTÝŘ. Pole "trychtyr" je jediný platný trychtýř a jeho procenta už jsou spočítaná. NIKDY si nedělej vlastní poměry ze syrových počtů v "udalosti_za_30_dni" — ty události mají různé jmenovatele a různě dlouhou historii. Zvlášť NEDĚL game_intro děleno game_open: úvod z principu nevidí nikdo, kdo má rozehranou hru, takže ten rozdíl jsou hlavně vracející se hráči (game_zpet) a lepší retence ho ještě zvětší.',
+    '2. CO UŽ EXISTUJE. Před každým návrhem si projdi "co_uz_hra_umi". Co tam je popsané, NENAVRHUJ — ani jinými slovy. Když je tvůj nápad v rozporu s tím soupisem, zahoď ho.',
+    '3. MALÝ VZOREK. Když krok trychtýře stojí na méně než 30 přechodech, je to hypotéza, ne zjištění. Řekni to v textu, nepiš sebejisté odhady dopadu a místo úkolu navrhni měření nebo test. Deset platících neunese větu „přinese desítky plateb měsíčně".',
+    '4. KRÁTKÁ HISTORIE. U každé události je "merime_od" a "merime_dnu". Událost měřenou pár dní nesrovnávej s událostí měřenou celé okno a neoznačuj nízký počet za propad.',
+    '5. METRIKA SE JMENOVATELEM. V poli "kpi" vždycky napiš čitatele i jmenovatele („game_register ze všech, kdo viděli úvod"), ne jen název události.',
+    '6. RIZIKO. Každý návrh musí mít pole "rizika": co se tím může zhoršit a která metrika kvůli tomu klesne, i když je změna správná. Typicky: když usnadníš vstup, naroste jmenovatel a konverze na platbu v procentech spadne, i kdyby plateb bylo víc. Když riziko nevidíš, napiš to natvrdo.',
+    '7. Pracuj POUZE s dodanými čísly, nic si nedomýšlej. Když na něco data nemáš, patří to do "chybi_data", ne do návrhu.',
+    '',
+    'Najdi: kde se hráči doopravdy ztrácejí (podle "trychtyr"), co mají platící společné, co brání platbě (cena, načasování, nabídka, tření) a co s tím jde udělat v herním designu, nabídce, ceníku, onboardingu, notifikacích a reklamě.',
+    '',
+    'Odpověz POUZE platným JSON bez markdownu: {"summary":"<3-5 vět o stavu, včetně toho, jak velký je vzorek>","zjisteni":[{"nadpis":"<krátce>","detail":"<1-3 věty s čísly a se jmenovatelem>"}],"navrhy":[{"nazev":"<krátce>","co_zmenit":"<konkrétně co ve hře udělat>","proc":"<na jakých číslech to stojí>","rizika":"<co se tím může zhoršit a která metrika klesne>","ocekavany_dopad":"<odhad; u malého vzorku napiš, že je to hypotéza>","narocnost":"nízká|střední|vysoká","priorita":1,"dopad":4,"snadnost":3,"jistota":"nízká|střední|vysoká","oblast":"onboarding|nabídka|ceník|herní design|notifikace|reklama","kpi":"<metrika i se jmenovatelem>","cil":"<měřitelný cíl>"}],"experimenty":["<test, který hypotézu ověří>"],"chybi_data":["<co začít měřit>"]}.',
+    '5–8 návrhů podle priority (1 = nejdřív); dopad a snadnost jsou celá čísla 1–5. Každé zjištění musí mít aspoň jeden návrh, který ho řeší. Buď stručný: summary max 5 vět, detail max 2 věty, co_zmenit max 3 věty. Piš česky, konkrétně, s čísly.',
+  ].join('\n');
   const msg = await client.messages.create({ model, max_tokens: 8000, system: sys, messages: [{ role: 'user', content: 'Data hry (JSON):\n' + JSON.stringify(data) }] });
   let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
   text = text.replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
@@ -1137,11 +1199,11 @@ async function aiRozborNaPozadi(reklama, uzivatelId, zacalo) {
     prehled: { hracu: data.hracu_celkem, platicich: data.platicich_hracu, konverze_pct: data.konverze_na_platbu_pct },
     summary: S(j.summary, 2000),
     zjisteni: (Array.isArray(j.zjisteni) ? j.zjisteni : []).slice(0, 10).map((x) => ({ nadpis: S(x.nadpis, 120), detail: S(x.detail, 500) })),
-    navrhy: (Array.isArray(j.navrhy) ? j.navrhy : []).slice(0, 10).map((x) => ({ nazev: S(x.nazev, 120), co_zmenit: S(x.co_zmenit, 600), proc: S(x.proc, 500), ocekavany_dopad: S(x.ocekavany_dopad, 300), narocnost: S(x.narocnost, 20), priorita: Number(x.priorita) || 9,
+    navrhy: (Array.isArray(j.navrhy) ? j.navrhy : []).slice(0, 10).map((x) => ({ nazev: S(x.nazev, 120), co_zmenit: S(x.co_zmenit, 600), proc: S(x.proc, 500), rizika: S(x.rizika, 500), jistota: S(x.jistota, 20), ocekavany_dopad: S(x.ocekavany_dopad, 300), narocnost: S(x.narocnost, 20), priorita: Number(x.priorita) || 9,
       dopad: Math.min(5, Math.max(1, Math.round(Number(x.dopad) || 3))), snadnost: Math.min(5, Math.max(1, Math.round(Number(x.snadnost) || 3))), oblast: S(x.oblast, 40), kpi: S(x.kpi, 200), cil: S(x.cil, 200) })).sort((a, b) => a.priorita - b.priorita),
     nekompletni: !!j._nekompletni,
     // Podklady pro grafy (stejná data, ze kterých AI vycházela)
-    data: { udalosti: data.udalosti_za_30_dni.slice(0, 20), skupiny: data.chovani_podle_skupin, nakupy: data.nakupy_podle_druhu,
+    data: { trychtyr: data.trychtyr, udalosti: data.udalosti_za_30_dni.slice(0, 20), skupiny: data.chovani_podle_skupin, nakupy: data.nakupy_podle_druhu,
       median_minut: data.median_minut_ve_hre, median_dni_do_platby: data.median_dni_od_registrace_do_prvni_platby, reklama: data.reklama },
     experimenty: (Array.isArray(j.experimenty) ? j.experimenty : []).slice(0, 8).map((x) => S(x, 400)),
     chybi_data: (Array.isArray(j.chybi_data) ? j.chybi_data : []).slice(0, 8).map((x) => S(x, 300)),

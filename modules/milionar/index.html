@@ -263,6 +263,8 @@
       window.__aiRozbor = r;
       try { document.getElementById('dlg').style.width = 'min(1120px,96vw)'; } catch (x) { /* */ }
       var nar = { 'nízká': '#22c55e', 'střední': '#f59e0b', 'vysoká': '#ef4444' };
+      // U jistoty je to obráceně než u náročnosti: nízká jistota je varování.
+      var jis = { 'nízká': '#ef4444', 'střední': '#f59e0b', 'vysoká': '#22c55e' };
       var pct = function (a, b) { return b ? Math.round(a / b * 1000) / 10 : 0; };
       var D = r.data || {}, P = r.prehled || {};
       var card = 'background:var(--surface2,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:12px;padding:12px 14px;';
@@ -323,10 +325,13 @@
             + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="background:#7c5cff;color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">' + (i + 1) + '</span><b>' + esc(n.nazev) + '</b>'
             + (n.oblast ? '<span class="note" style="border:1px solid var(--border);border-radius:6px;padding:0 6px">' + esc(n.oblast) + '</span>' : '')
             + '<span class="note">dopad ' + '●'.repeat(n.dopad || 0) + '<span style="opacity:.3">' + '●'.repeat(5 - (n.dopad || 0)) + '</span></span>'
-            + '<span class="note" style="color:' + (nar[n.narocnost] || '#94a3b8') + '">náročnost: ' + esc(n.narocnost || '—') + '</span></div>'
+            + '<span class="note" style="color:' + (nar[n.narocnost] || '#94a3b8') + '">náročnost: ' + esc(n.narocnost || '—') + '</span>'
+            + (n.jistota ? '<span class="note" style="color:' + (jis[n.jistota] || '#94a3b8') + '">jistota: ' + esc(n.jistota) + '</span>' : '')
+            + '</div>'
             + '<div style="margin:8px 0 6px;line-height:1.5"><b style="color:#4fd1ff">Co udělat:</b> ' + esc(n.co_zmenit) + '</div>'
             + '<div class="note" style="line-height:1.5"><b>Proč:</b> ' + esc(n.proc) + '</div>'
             + '<div class="note" style="line-height:1.5"><b>Očekávaný dopad:</b> ' + esc(n.ocekavany_dopad) + '</div>'
+            + (n.rizika ? '<div class="note" style="line-height:1.5;color:#f59e0b"><b>Co se tím může zhoršit:</b> ' + esc(n.rizika) + '</div>' : '')
             + (n.kpi || n.cil ? '<div class="note" style="margin-top:4px;color:#22c55e">🎯 ' + esc(n.kpi || '') + (n.cil ? ' — cíl: ' + esc(n.cil) : '') + '</div>' : '')
             + '<div style="margin-top:8px"><button type="button" class="btn ai-claude" data-i="' + i + '" title="Zkopíruje hotové zadání pro Clauda (implementace návrhu ve hře)">📋 Zadání pro Clauda</button></div></div>'; }).join('') + '</div></div>';
       } else h += h3('Návrhy na zlepšení') + '<div style="' + card + '" class="note">AI tentokrát nevrátila návrhy — udělej nový rozbor.</div>';
@@ -348,15 +353,18 @@
       L.push('');
       L.push('## Proč (data z AI analytika)');
       L.push(n.proc || '');
-      if (n.ocekavany_dopad) { L.push(''); L.push('## Očekávaný dopad'); L.push(n.ocekavany_dopad); }
+      if (n.ocekavany_dopad) { L.push(''); L.push('## Očekávaný dopad'); L.push(n.ocekavany_dopad + (n.jistota ? ' (jistota: ' + n.jistota + ')' : '')); }
+      if (n.rizika) { L.push(''); L.push('## Co se tím může zhoršit'); L.push(n.rizika); }
       if (n.kpi || n.cil) { L.push(''); L.push('## Jak poznáme úspěch'); L.push('Metrika: ' + (n.kpi || '—') + (n.cil ? ' · cíl: ' + n.cil : '')); L.push('Pokud metriku dnes nejde změřit, přidej potřebnou game_* událost a doplň ji do statistik v administraci.'); }
       L.push('');
       L.push('## Postup a pravidla');
-      L.push('1. Nejdřív si projdi příslušné soubory hry a navrhni řešení v bodech (co a kde změníš); u větších zásahů se zeptej, než začneš.');
+      L.push('0. Tohle zadání psala AI z agregovaných čísel — nevidí do kódu. NEJDŘÍV ověř, že sedí: jestli ta funkce už ve hře dávno není, jestli metrika měří to, co si myslí, a jestli má správný jmenovatel. Když zadání stojí na špatně spočítaném čísle nebo na něčem hotovém, napiš mi to a neimplementuj to.');
+      L.push('1. Pak si projdi příslušné soubory hry a navrhni řešení v bodech (co a kde změníš); u větších zásahů se zeptej, než začneš.');
       L.push('2. Implementuj tak, aby šla změna snadno vypnout (přepínač v ceníku/nastavení nebo konstanta), ať jde vyhodnotit jako experiment.');
       L.push('3. Texty pro hráče česky (+ EN/PL, pokud hra překlady používá), komentáře v kódu česky, vanilla JS bez frameworků, Prisma (žádné raw SQL).');
       L.push('4. Nic neposílej hráčům naostro (e-maily, push) bez mého potvrzení; platby jen přes stávající Stripe tok.');
-      L.push('5. Po změně ověř syntaxi (node --check) a napiš mi příkazy pro git commit + nasazení (railway up).');
+      L.push('5. Po změně ověř syntaxi (node --check) a projdi to testem, ne odhadem.');
+      L.push('6. Nasazení je commit a `touch .push-prosim` — nikdy `railway up`.');
       L.push('');
       L.push('Oblast: ' + (n.oblast || '—') + ' · náročnost: ' + (n.narocnost || '—') + ' · dopad ' + (n.dopad || '?') + '/5 · snadnost ' + (n.snadnost || '?') + '/5');
       return L.join('\n');
