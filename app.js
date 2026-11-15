@@ -1066,13 +1066,26 @@ function serveGamePage(req, res) {
     const css = fs.statSync(path.join(dir, 'game.css')).mtimeMs;
     v = String(Math.round(Math.max(js, css)));
   } catch (e) { /* když se čas nepovede zjistit, stránku pošleme beze změny */ }
-  fs.readFile(path.join(dir, 'index.html'), 'utf8', (err, html) => {
+  fs.readFile(path.join(dir, 'index.html'), 'utf8', async (err, html) => {
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     if (err) return res.sendFile(path.join(dir, 'index.html'));
-    res.type('html').send(html
-      .replace('/game/game.css', '/game/game.css?v=' + v)
-      .replace('/game/game.js', '/game/game.js?v=' + v));
+    // Náhled sdíleného odkazu (Facebook, WhatsApp…): personalizovaná pozvánka od hráče z ?ref=
+    let og = '';
+    try { og = await require('./services/game/pozvanka').metaZnacky(req.query.ref, 'https://' + reqHostname(req)); } catch (e) { og = ''; }
+    let out = html.replace('/game/game.css', '/game/game.css?v=' + v).replace('/game/game.js', '/game/game.js?v=' + v);
+    if (og) out = out.replace(/<meta property="og:title"[^>]*>\s*/, '').replace('</head>', og + '\n</head>');
+    res.type('html').send(out);
   });
+}
+// Obrázek pozvánky 1200×630 pro náhled odkazu (/game/pozvanka.png?ref=…)
+async function serveGameInvite(req, res) {
+  try {
+    const png = await require('./services/game/pozvanka').obrazek(req.query.ref);
+    res.set('Cache-Control', 'public, max-age=21600').type('png').send(png);
+  } catch (e) {
+    console.warn('[game] pozvánka:', e.message);
+    res.redirect(302, '/game/flex.webp');
+  }
 }
 const serveVlastniKapital = serveCompounderPage('vlastni-kapital.html');
 const serveFinancovani = serveCompounderPage('financovani.html');
@@ -1109,6 +1122,7 @@ app.use((req, res, next) => {
   if (req.path === '/misto' || req.path === '/misto/') return serveMisto(req, res);
   // Laundromat Tycoon — hra o budování sítě prádlomatů (zatím jen na doménách prádlomatů).
   if (req.path === '/game' || req.path === '/game/') return serveGamePage(req, res);
+  if (req.path === '/game/pozvanka.png') return serveGameInvite(req, res);
   if (req.path === '/ai' || req.path === '/ai/') return serveAiSpecialist(req, res);
   // Zkrácený odkaz na AI specialistu: /s/<kód> → 302 na /ai?t=<token>.
   if (req.path.startsWith('/s/')) {

@@ -13668,6 +13668,8 @@ startBonusOdpocet();
 setInterval(function () {
   if (!document.hidden) ev('game_zije', true);
 }, 300000);
+// Tep přihlášeného hráče každou minutu — i když je záložka schovaná (jinak by se neukládal stav a vypadal by offline).
+setInterval(function () { if (ME && !wiped) apiJson('/account/ping', {}, 'POST').catch(function () {}); }, 60000);
 nastavTitulek();
 loadMachinePhotos();
 
