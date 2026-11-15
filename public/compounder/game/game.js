@@ -12092,6 +12092,12 @@ function paintDrazba() {
 // s čím jde obchodovat — včetně podílu v cizí firmě, který hráč jen drží.
 function drazbaVyvolatSheet() {
   if (drazbaBezi()) return drazbaSheet();
+  // Podíly v cizích firmách žijí v přehledu financí. Když se ještě nestáhl,
+  // vypadalo to, že hráč žádný nemá — vyžádáme si ho a okno postavíme potom.
+  if (FINANCE == null) {
+    sheet('<h3>\u{1F528} Vyvolat dražbu</h3><p class="muted small">Načítám, co máš…</p>');
+    return loadFinance(function () { drazbaVyvolatSheet(); });
+  }
   var polozky = [];
   (S.units || []).forEach(function (u) {
     polozky.push({ predmet: 'pradlomat', spot_id: u.spotId,
