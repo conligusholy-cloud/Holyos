@@ -123,11 +123,17 @@ router.get('/trade/players', hrac, api(async (req, res) => {
   const rows = await prisma.gamePlayer.findMany({
     where: { disabled: false, id: { not: req.player.id } },
     orderBy: { state_at: 'desc' }, take: 100,
-    select: { id: true, nick: true, company: true, state_at: true },
+    select: { id: true, nick: true, company: true, state_at: true, hodnost: true },
   });
+  // Hodnost posíláme s sebou: na burze je to jediná rychlá informace o tom,
+  // s kým se člověk chystá domluvit na penězích.
   res.json({ ok: true, players: rows.map((p) => ({ id: p.id, nick: p.nick,
-    firma: p.company || (p.nick + ' s.r.o.'), naposledy: p.state_at })) });
+    firma: p.company || (p.nick + ' s.r.o.'), naposledy: p.state_at,
+    hodnost: p.hodnost || null, hodnost_nazev: hodnostNazev(p.hodnost) })) });
 }));
+
+const { HODNOSTI, ODZNAK } = require('../services/game/hodnosti');
+const hodnostNazev = (id) => ((HODNOSTI.find((h) => h.id === id) || {}).nazev || null);
 
 // ─── Nabídky ─────────────────────────────────────────────────────────────────
 const verejny = (t, me) => ({
@@ -718,7 +724,7 @@ router.post('/trade/pujcka/:id/splatit', hrac, api(async (req, res) => {
 router.get('/trade/struktura/:id', hrac, api(async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const p = await prisma.gamePlayer.findUnique({ where: { id },
-    select: { id: true, nick: true, company: true, disabled: true } });
+    select: { id: true, nick: true, company: true, disabled: true, hodnost: true } });
   if (!p || p.disabled) return res.status(404).json({ error: 'Takový hráč tu není.' });
   const [vMe, jinde] = await Promise.all([
     prisma.gameEquity.findMany({ where: { firma_id: id, stav: 'bezi' },
@@ -749,8 +755,13 @@ router.get('/trade/struktura/:id', hrac, api(async (req, res) => {
     });
     return Array.from(m.values()).sort((a, b) => b.podil - a.podil);
   };
+  const odz = await prisma.gameOdmena.findMany({
+    where: { player_id: id, druh: 'odznak' }, select: { kod: true } }).catch(() => []);
   res.json({ ok: true,
-    hrac: { id: p.id, nick: p.nick, firma: p.company || (p.nick + ' s.r.o.') },
+    hrac: { id: p.id, nick: p.nick, firma: p.company || (p.nick + ' s.r.o.'),
+      hodnost: p.hodnost || null, hodnost_nazev: hodnostNazev(p.hodnost),
+      odznaky: odz.map((x) => ODZNAK[x.kod]).filter(Boolean)
+        .map((o) => ({ kod: o.kod, nazev: o.nazev, ikona: o.ikona, popis: o.popis })) },
     prodano,
     // Kdo drží kus téhle firmy.
     podilnici: sect(vMe, 'investor_id'),

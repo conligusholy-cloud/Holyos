@@ -2215,6 +2215,7 @@ function tick() {
   refreshUnits();              // zpátky na dnešní ekonomiku, ať čísla sedí s tím, co je teď
   hlidejKrizi();
   hlidejHodnost();
+  hlidejHvezdy();
   linkaOffline(dt);            // co se na infolince stalo, než se hráč vrátil
   // Úvěry se splácejí po celých herních měsících, ne plynule — splátka je
   // pevná a buď na ni hráč má, nebo ne.
@@ -3751,6 +3752,9 @@ function hovorDal() {
     HOVOR.stav = 'konec';
     zmenPovest(HOVOR.vaha);
     S.hovoru = (S.hovoru || 0) + 1;
+    // Zvlášť si počítáme hovory, které hráč vzal sám — odznak Spojovatel se
+    // nedá koupit infolinkou a bez vlastního počítadla by to nešlo odlišit.
+    S.hovoruJa = (S.hovoruJa || 0) + 1;
     zapisHovor(HOVOR.jmeno, HOVOR.kroky, 'ja', HOVOR.vaha);
     save(); paint(); syncState(true);
   }
@@ -5388,6 +5392,14 @@ function mojeHodnost() { return hodnostHra(S ? cisteJmeni() : 0); }
 // Smysl té karty je orientace — hráč má pořád vidět, co je příště.
 // Povýšení je jediná chvíle, kdy má smysl hráče vyrušit — jinak je hodnost
 // tichá informace v liště. Ukazuje se jednou na stupeň, i po návratu do hry.
+// Odznak Pět hvězd chce týden v kuse, ne jeden dobrý okamžik — proto si hra
+// pamatuje, odkdy hodnocení nepřetržitě drží nad čtyřmi a půl.
+var HVEZDY_META = 4.5;
+function hlidejHvezdy() {
+  if (!S) return;
+  if (hvezdy() >= HVEZDY_META) { if (!S.hvezdyOd) { S.hvezdyOd = Date.now(); save(); } }
+  else if (S.hvezdyOd) { S.hvezdyOd = 0; save(); }
+}
 function hlidejHodnost() {
   if (!S || !ME || S.tut !== 'done') return;
   var h = mojeHodnost();
@@ -5922,6 +5934,8 @@ function installSheet(sp, areaId, modelKey, drz, pad) {
       S.units.push({ spotId: spotId, areaId: areaId, name: nazev, kind: sp.kind, score: sp.score,
         lat: sp.lat + dlat, lon: sp.lon + dlon, builtAt: Date.now(), eco: e });
       ev('game_build');
+      // Kdo staví, když je ekonomika dole, má na to odznak.
+      if (krizeKoef() < 0.97) S.krizovka = true;
       save(); paint(); drawMap(); closeSheet(); syncState(true);
       toast('Prádlomat stojí. Vydělává ' + kcFull(e.profit) + ' měsíčně.', 'ok');
     }).catch(function () { b.disabled = false; b.textContent = 'Postavit'; toast('Server neodpovídá.', 'err'); });
@@ -8770,7 +8784,9 @@ function paintZeb() {
             + '<i class="poradi' + (x.poradi <= 3 ? ' medaile m' + x.poradi : '') + '">' + x.poradi + '</i>'
             + (x.znak ? znakSvg(x.znak, 26) : '<i class="znak-mezera"></i>')
             + '<span class="nick">' + esc(x.firma || x.nick)
-            + '<i>' + esc(x.nick) + '</i></span>'
+            // Pod firmou je hodnost místo nicku: v žebříčku je zajímavější,
+            // jak velký ten soupeř je, než jak si říká. Hodnost počítá server.
+            + '<i>' + esc(x.hodnost ? hodnostNazev(x.hodnost) || x.nick : x.nick) + '</i></span>'
             + vlajkyHtml(x.zeme)
             + '<b>' + popis.jed(x.hodnota) + '</b></div>';
         }).join('') + '</div>'
@@ -8805,8 +8821,18 @@ function strukturaSheet(id) {
         + '</div></div></div>'
         + '<b>' + procentaPodilu(x.podil) + '</b></div>';
     };
+    var odz = (d.hrac.odznaky || []);
     sheet('<h3>' + esc(d.hrac.firma) + '</h3>'
-      + '<p class="muted small">' + esc(d.hrac.nick) + ' — kdo vlastní kus téhle firmy a kde má podíl ona.</p>'
+      + '<p class="muted small">' + esc(d.hrac.nick)
+      + (d.hrac.hodnost_nazev ? ' · <b>' + esc(d.hrac.hodnost_nazev) + '</b>' : '')
+      + ' — kdo vlastní kus téhle firmy a kde má podíl ona.</p>'
+      // Odznaky jsou tady to nejcennější: než někomu půjčíš, chceš vědět,
+      // jestli to je člověk, co půjčky vrací.
+      + (odz.length
+          ? '<div class="odz-rada">' + odz.map(function (o) {
+              return '<span class="odz-chip" title="' + esc(o.popis) + '">' + o.ikona + ' '
+                + esc(o.nazev) + '</span>'; }).join('') + '</div>'
+          : '')
       + '<div class="kv souhrn"><span>Majitel drží</span><b class="' + (d.prodano > 0 ? '' : 'ok') + '">'
       + procentaPodilu(1 - d.prodano) + '</b></div>'
       + '<h3 style="margin-top:16px">Podílníci</h3>'
@@ -9994,6 +10020,7 @@ function paintMe() {
     + '<div class="kv"><span>Prověřených míst</span><b>' + Object.keys(S.revealed).length + '</b></div>'
     + '</div>'
     + hodnostHtml()
+    + odznakyHtml()
     + podilyHtml()
     + majetekHtml()
     + '<div class="card"><h3>Jak se hraje</h3>'
@@ -10031,6 +10058,7 @@ function paintMe() {
     }).catch(function () { fb.disabled = false; fb.textContent = 'Přejmenovat firmu'; toast('Server neodpovídá.', 'err'); });
   };
   if (FINANCE == null) loadFinance(paintMe);
+  if (ODZNAKY_HRA == null) loadOdznaky(paintMe);
   bindPodily();
   bindDist();
   bindMajetek();
@@ -10144,7 +10172,7 @@ function hraciVyberSheet(nadpis, popisTlacitka, pak) {
         + (k.length ? k.map(function (h) {
             var st = hracStav(h);
             return '<div class="area-item"><div><div class="nm">' + esc(h.firma) + '</div>'
-              + '<div class="sub">' + esc(h.nick) + ' · <i class="' + st.tr + '">'
+              + '<div class="sub">' + esc(h.hodnost_nazev || h.nick) + ' · <i class="' + st.tr + '">'
               + (st.kde === 'online' ? '● ' : '') + esc(st.text) + '</i></div></div>'
               + '<button class="btn sec sm" data-h="' + h.id + '">' + esc(popisTlacitka) + '</button></div>';
           }).join('')
@@ -10224,6 +10252,51 @@ function cenaPopis(t) {
 // ─── Co běží: půjčky a podíly ────────────────────────────────────────────────
 // Server to vypořádá sám každý herní měsíc, hráč tu jen vidí, na čem je.
 var FINANCE = null;
+// ─── Odznaky ─────────────────────────────────────────────────────────────────
+// Sbírku drží server, hra si ji jen vyzvedne. Nový odznak hlásíme jednou —
+// podle toho, co už hráč viděl, ne podle toho, co zrovna přišlo ze serveru.
+var ODZNAKY_HRA = null;
+function loadOdznaky(then) {
+  if (!ME) { ODZNAKY_HRA = []; if (then) then(); return; }
+  api('/account/odznaky').then(function (r) {
+    ODZNAKY_HRA = (r.ok && r.j.odznaky) || [];
+    hlidejNoveOdznaky();
+    if (then) then();
+  }).catch(function () { ODZNAKY_HRA = ODZNAKY_HRA || []; if (then) then(); });
+}
+function hlidejNoveOdznaky() {
+  if (!S || !ODZNAKY_HRA) return;
+  var videl = S.odznakyVidene || [];
+  var nove = ODZNAKY_HRA.filter(function (o) { return o.mam && videl.indexOf(o.kod) < 0; });
+  S.odznakyVidene = ODZNAKY_HRA.filter(function (o) { return o.mam; }).map(function (o) { return o.kod; });
+  save();
+  if (!nove.length) return;
+  var o = nove[0];
+  sheet('<h3>' + o.ikona + ' Odznak: ' + esc(o.nazev) + '</h3>'
+    + '<p class="muted small">' + esc(o.popis) + '</p>'
+    + (nove.length > 1 ? '<p class="fine">A k tomu ještě ' + (nove.length - 1) + ' další — najdeš je v Já.</p>' : '')
+    + '<p class="fine">Odměnu připisuje server, objeví se za chvilku v Kartách.</p>'
+    + '<button class="btn big" id="odz-ok" style="width:100%;margin-top:10px">Díky</button>');
+  if ($('odz-ok')) $('odz-ok').onclick = closeSheet;
+  toast('Máš odznak ' + o.nazev + '.', 'ok', true);
+}
+function odznakyHtml() {
+  if (!ME) return '';
+  if (ODZNAKY_HRA == null) return '<div class="card"><h3>Odznaky</h3><p class="muted small">Načítám…</p></div>';
+  if (!ODZNAKY_HRA.length) return '';
+  var mam = ODZNAKY_HRA.filter(function (o) { return o.mam; }).length;
+  return '<div class="card"><h3>Odznaky</h3>'
+    + '<p class="muted small" style="margin:2px 0 8px">Máš ' + mam + ' z ' + ODZNAKY_HRA.length
+    + '. Nejsou za velikost firmy, ale za to, jak hraješ — a vidí je i ostatní.</p>'
+    + ODZNAKY_HRA.map(function (o) {
+        return '<div class="odz' + (o.mam ? ' mam' : '') + '">'
+          + '<span class="odz-i">' + o.ikona + '</span>'
+          + '<span class="odz-t"><b>' + esc(o.nazev) + '</b>'
+          + '<i>' + esc(o.mam ? o.popis : o.jak) + '</i></span>'
+          + (o.mam ? '<span class="odz-v">\u2713</span>' : '') + '</div>';
+      }).join('')
+    + '</div>';
+}
 function loadFinance(then) {
   api('/trade/finance').then(function (r) { FINANCE = (r.ok && r.j) || { pujcky: [], podily: [] }; if (then) then(); })
     .catch(function () { FINANCE = { pujcky: [], podily: [] }; if (then) then(); });
@@ -10357,6 +10430,7 @@ function bindAukce() {
       apiJson('/trade/aukce/' + b.getAttribute('data-aukce') + '/koupit', {}).then(function (r) {
         if (!r.ok) { b.disabled = false; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
         toast('Koupeno za ' + kcFull(r.j.cena) + '.', 'ok');
+        S.mrchozrout = true; save();
         loadAukce(function () { vyzvedniNasledky(); paintBurza(); });
       }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
     };

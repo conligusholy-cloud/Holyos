@@ -819,6 +819,21 @@ router.post('/account/login', async (req, res, next) => {
 // POST /account/logout
 router.post('/account/logout', (req, res) => { res.clearCookie(COOKIE, { path: '/' }); res.json({ ok: true }); });
 
+// GET /account/odznaky → co mám a co mi chybí. Katalog posíláme s sebou, ať
+// hra nemusí držet vlastní kopii textů.
+router.get('/account/odznaky', requirePlayer, async (req, res, next) => {
+  try {
+    const mam = await prisma.gameOdmena.findMany({
+      where: { player_id: req.player.id, druh: 'odznak' },
+      select: { kod: true, created_at: true } });
+    const kdy = {};
+    mam.forEach((x) => { kdy[x.kod] = x.created_at; });
+    res.json({ ok: true, odznaky: ODZNAKY.map((o) => ({
+      kod: o.kod, nazev: o.nazev, ikona: o.ikona, popis: o.popis, jak: o.jak,
+      mam: !!kdy[o.kod], kdy: kdy[o.kod] || null })) });
+  } catch (e) { next(e); }
+});
+
 // GET /account/me → { player, state } nebo 401
 // Sdílené id se narokuůje i tady, ne jen při přihlášení. Kdo zůstává
 // přihlášený cookie a znovu se nepřihlásil, by ho jinak nedostal nikdy —
@@ -1125,6 +1140,7 @@ async function resHodnost(p, st) {
     await prisma.gamePlayer.update({ where: { id: p.id }, data: { hodnost: h.id } })
       .catch(() => {});
   }
+  await resOdznaky(p, st, cfg).catch((e) => console.warn('[game-odznak]', e && e.message));
   if (!cfg.odmeny) return;
   // Hodnost může i klesnout (prodal síť, zadlužil se) — odměnu mu nebereme,
   // ale ani znovu nevyplácíme: řádek v game_odmeny už tam je.
@@ -1139,6 +1155,57 @@ async function resHodnost(p, st) {
   // Když majitel zpětné vyplácení pustí dodatečně, doplatíme, co leží nevyplacené.
   if (cfg.zpetne) await doplatZpetne(p.id);
 }
+
+// ─── Odznaky ─────────────────────────────────────────────────────────────────
+// Část podmínek umí ověřit server z databáze (půjčky, podíly, země, pozvaní).
+// Zbytek — kolik hovorů vzal hráč sám, jestli stavěl v krizi — je ve stavu hry,
+// a ten je tak důvěryhodný jako celá hra: počítá se v prohlížeči. Odměnou je
+// proto karta, ne hotovost; za jednu kartu nemá smysl nic obcházet.
+const ODZNAK_PAUZA_MS = 5 * 60000;
+const odznakyKdy = new Map();
+const HVEZDY_TYDEN = 7 * 86400e3;
+const PUJCKA_MIN_MESICU = 6;
+
+async function splneneOdznaky(p, st) {
+  const ja = p.id;
+  const [pujcky, podily, zeme, pozvani] = await Promise.all([
+    prisma.gameLoan.count({ where: { lender_id: ja, stav: 'splaceno', splaceno: { gte: PUJCKA_MIN_MESICU } } }),
+    prisma.gameEquity.findMany({ where: { investor_id: ja }, select: { firma_id: true, vyplaceno: true } }),
+    zemeHracu().catch(() => ({})),
+    prisma.gamePlayer.findMany({ where: { invited_by_id: ja, disabled: false },
+      select: { state: true }, take: 50 }),
+  ]);
+  const firmy = new Set(podily.map((e) => e.firma_id));
+  const neslo = podily.some((e) => (e.vyplaceno || 0) !== 0);
+  const zemi = (zeme[ja] || []).length;
+  const postavili = pozvani.filter((h) => Array.isArray((h.state || {}).units) && h.state.units.length > 0).length;
+  const out = [];
+  if (pujcky > 0) out.push('banker');
+  if (firmy.size >= 3 && neslo) out.push('investor');
+  if (zemi >= 3) out.push('cestovatel');
+  if (st.hvezdyOd && Date.now() - Number(st.hvezdyOd) >= HVEZDY_TYDEN) out.push('hvezdy');
+  if ((st.hovoruJa || 0) >= 50) out.push('spojovatel');
+  if (st.krizovka) out.push('krizovka');
+  if (st.mrchozrout) out.push('mrchozrout');
+  if (postavili >= 3) out.push('naborar');
+  return out;
+}
+async function resOdznaky(p, st, cfg) {
+  const ted = Date.now();
+  if (ted - (odznakyKdy.get(p.id) || 0) < ODZNAK_PAUZA_MS) return;
+  odznakyKdy.set(p.id, ted);
+  const mam = await prisma.gameOdmena.findMany({ where: { player_id: p.id, druh: 'odznak' },
+    select: { kod: true } });
+  const uz = new Set(mam.map((x) => x.kod));
+  const splnene = await splneneOdznaky(p, st);
+  for (const kod of splnene) {
+    if (uz.has(kod)) continue;
+    const o = ODZNAK[kod];
+    if (!o) continue;
+    await vyplatOdmenu(p.id, 'odznak', kod, o.odmena, false, !!cfg.odmeny);
+  }
+}
+
 async function doplatZpetne(playerId) {
   const dluh = await prisma.gameOdmena.findMany({
     where: { player_id: playerId, vyplaceno: false }, take: 30 });
@@ -1518,7 +1585,8 @@ router.get('/leaderboard', async (req, res, next) => {
     const [z, zeme] = await Promise.all([zebricky(), zemeSPocty()]);
     const orez = (l) => l.slice(0, ZEB_TOP).map((x, i) => ({ poradi: i + 1, id: x.id, nick: x.nick,
       firma: x.firma || (x.nick + ' s.r.o.'), znak: x.znak || null, zeme: x.zeme || [],
-      hodnota: x.hodnota, ja: !!(p && x.id === p.id) }));
+      // Hodnost jde ven s každým řádkem — v žebříčku ji hra ukazuje místo nicku.
+      hodnota: x.hodnota, hodnost: x.hodnost || null, ja: !!(p && x.id === p.id) }));
     res.json({ ok: true,
       pradlomaty: orez(z.pradlomaty), zisk: orez(z.zisk), pozvanky: orez(z.pozvanky),
       jmeni: orez(z.jmeni), hvezdy: orez(z.hvezdy), zeme: zeme,
