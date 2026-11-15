@@ -1044,11 +1044,21 @@
         document.getElementById('nast-box').innerHTML = Object.keys(NASTAVENI_POPIS).map(function (k) {
           var zap = n[k] !== '0';
           var d = NASTAVENI_POPIS[k];
-          return '<div class="card" style="padding:14px 16px;border-radius:12px;background:#111827;border:1px solid #243049">'
-            + '<div style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
-            + '<div><b>' + esc(d.nazev) + '</b><div class="note">' + esc(d.popis) + '</div></div>'
-            + '<button class="btn sm" data-nast="' + esc(k) + '" data-na="' + (zap ? '0' : '1') + '">'
-            + (zap ? 'Zapnuto — vypnout' : 'Vypnuto — zapnout') + '</button></div></div>';
+          // Stav musí být vidět na první pohled a odděleně od toho, co udělá
+          // tlačítko — „Vypnuto — zapnout" šlo číst obojím směrem.
+          var odznak = zap
+            ? '<span style="font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;'
+              + 'background:rgba(34,197,94,.16);color:#4ade80;white-space:nowrap">● ZAPNUTO</span>'
+            : '<span style="font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;'
+              + 'background:rgba(148,163,184,.15);color:#94a3b8;white-space:nowrap">○ VYPNUTO</span>';
+          return '<div class="card" style="padding:14px 16px;border-radius:12px;background:#111827;'
+            + 'border:1px solid ' + (zap ? '#1f5137' : '#243049') + '">'
+            + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
+            + '<b>' + esc(d.nazev) + '</b>' + odznak + '</div>'
+            + '<div class="note" style="margin-bottom:10px">' + esc(d.popis) + '</div>'
+            + '<button class="btn sm" data-nast="' + esc(k) + '" data-na="' + (zap ? '0' : '1') + '"'
+            + ' style="width:100%' + (zap ? '' : ';background:#1d4ed8;border-color:#1d4ed8;color:#fff') + '">'
+            + (zap ? 'Vypnout' : 'Zapnout') + '</button></div>';
         }).join('');
         [].forEach.call(document.querySelectorAll('[data-nast]'), function (b) {
           b.onclick = function () {
