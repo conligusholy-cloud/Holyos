@@ -1312,10 +1312,29 @@ async function zebricky() {
   ]);
   // Firmy doplníme k nickům z míst — v žebříčku chceme vidět, kdo je kdo.
   const firmy = await firmyMapa();
-  const poMistech = mista.map((m) => ({ id: m.player_id, nick: m.nick,
-    firma: firmy[m.player_id] && firmy[m.player_id].firma, znak: firmy[m.player_id] && firmy[m.player_id].znak,
-    zeme: zemeMap[m.player_id] || [], hodnota: m._count._all }))
-    .sort((a, b) => b.hodnota - a.hodnota);
+  // Do žebříčku prádlomatů patří každý, kdo hru rozehrál — i ten, kdo zatím
+  // nic nepostavil. Jinak polovina hráčů v seznamu vůbec není a nedá se
+  // poznat, že tam jsou. Nula je taky výsledek.
+  const pocetMist = new Map();
+  mista.forEach((m) => pocetMist.set(m.player_id, m._count._all));
+  const poMistech = [];
+  const viden = new Set();
+  hraci.forEach((h) => {
+    if (!(h.state || {}).profile) return;        // kdo ani nezačal, do žebříčku nepatří
+    viden.add(h.id);
+    poMistech.push({ id: h.id, nick: h.nick, firma: h.company || (h.nick + ' s.r.o.'),
+      znak: h.emblem || null, zeme: zemeMap[h.id] || [], hodnota: pocetMist.get(h.id) || 0 });
+  });
+  // Kdyby někomu místa patřila, ale neměl uložený stav, ať nezmizí.
+  mista.forEach((m) => {
+    if (viden.has(m.player_id)) return;
+    poMistech.push({ id: m.player_id, nick: m.nick,
+      firma: firmy[m.player_id] && firmy[m.player_id].firma,
+      znak: firmy[m.player_id] && firmy[m.player_id].znak,
+      zeme: zemeMap[m.player_id] || [], hodnota: m._count._all });
+  });
+  poMistech.sort((a, b) => b.hodnota - a.hodnota);
+  const seSiti = poMistech.filter((x) => x.hodnota > 0).length;
 
   const zisk = [], pozvanky = [], jmeni = [], hvezdy = [];
   hraci.forEach((h) => {
@@ -1339,7 +1358,7 @@ async function zebricky() {
   jmeni.sort((a, b) => b.hodnota - a.hodnota);
   hvezdy.sort((a, b) => b.hodnota - a.hodnota);
 
-  _zeb = { at: Date.now(), data: { pradlomaty: poMistech, zisk, pozvanky, jmeni, hvezdy } };
+  _zeb = { at: Date.now(), data: { pradlomaty: poMistech, zisk, pozvanky, jmeni, hvezdy, seSiti } };
   return _zeb.data;
 }
 // Moje příčka — ať ji hráč vidí, i když do první pětadvacítky nedosáhne.
@@ -1414,7 +1433,7 @@ router.get('/leaderboard', async (req, res, next) => {
       ja: p ? { pradlomaty: moje(z.pradlomaty, p.id), zisk: moje(z.zisk, p.id),
         pozvanky: moje(z.pozvanky, p.id), jmeni: moje(z.jmeni, p.id),
         hvezdy: moje(z.hvezdy, p.id) } : null,
-      hracu: z.pradlomaty.length });
+      hracu: z.pradlomaty.length, se_siti: z.seSiti });
   } catch (e) { next(e); }
 });
 

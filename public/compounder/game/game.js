@@ -8293,7 +8293,8 @@ function paintStroje() {
 var ZEB = null, ZEB_KAT = 'pradlomaty';
 var ZEB_POPIS = {
   pradlomaty: { nadpis: 'Nejvíc prádlomatů', jed: function (v) { return v + '×'; },
-    pod: 'Počítají se postavené prádlomaty — to je jediné číslo, které hlídá server. Koupený pozemek bez stroje se nepočítá.' },
+    pod: 'Počítají se postavené prádlomaty — to je jediné číslo, které hlídá server. '
+      + 'Koupený pozemek bez stroje se nepočítá. Kdo hru rozehrál a zatím nic nepostavil, je tu s nulou.' },
   zisk: { nadpis: 'Nejvyšší měsíční zisk', jed: function (v) { return kcFull(v); },
     pod: 'Podle poslední uložené sítě hráče.' },
   hvezdy: { nadpis: 'Nejlepší hodnocení zákazníků',
@@ -8404,7 +8405,10 @@ function paintZeb() {
     + (ja && ja.poradi > list.length
       ? '<p class="muted small" style="margin-top:12px">Ty jsi ' + ja.poradi + '. z ' + ja.z + ' — ' + popis.jed(ja.hodnota) + '.</p>'
       : '')
-    + (ZEB.hracu ? '<p class="fine">Hráčů se sítí: ' + ZEB.hracu + '</p>' : '');
+    + (ZEB.hracu
+        ? '<p class="fine">Hráčů ve hře: ' + ZEB.hracu
+          + (ZEB.se_siti != null ? ' · s postaveným prádlomatem ' + ZEB.se_siti : '') + '</p>'
+        : '');
   [].forEach.call(box.querySelectorAll('[data-hrac]'), function (el) {
     el.onclick = function () { strukturaSheet(Number(el.getAttribute('data-hrac'))); };
   });
