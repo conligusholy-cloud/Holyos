@@ -1056,18 +1056,58 @@ function parseAiJson(text) {
   return { summary: 'AI vrátila neúplnou odpověď — spusť rozbor znovu.' };
 }
 
-// GET /ai-analyza → poslední uložený rozbor
+// Rozbor trvá i minuty — projít statisíce událostí a počkat na odpověď AI se
+// do jednoho požadavku z mobilu nevejde (prohlížeč spojení utne a napíše jen
+// „Load failed"). Běží tedy na pozadí a stránka se chodí ptát, jestli je hotovo.
+const AI_STAV = 'game.ai_analyza_stav';
+const AI_MAX_MS = 10 * 60000;        // po téhle době považujeme běh za spadlý
+async function aiStav() {
+  const { getSetting } = require('../services/settings');
+  const v = await getSetting(AI_STAV, { type: 'json', defaultValue: null }).catch(() => null);
+  if (!v) return { bezi: false };
+  // Spadl-li server uprostřed rozboru, zůstal by příznak viset navždy.
+  if (v.bezi && Date.now() - new Date(v.zacalo || 0).getTime() > AI_MAX_MS) {
+    return { bezi: false, chyba: 'Rozbor se nedokončil — zkus to znovu.' };
+  }
+  return v;
+}
+async function aiStavZapis(v) {
+  try {
+    const { setSetting } = require('../services/settings');
+    await setSetting(AI_STAV, v, { type: 'json', description: 'Laundromat Tycoon — stav běhu AI rozboru', scope: 'game' });
+  } catch (e) { console.warn('[game-ai] stav rozboru neuložen:', e.message); }
+}
+
+// GET /ai-analyza → poslední uložený rozbor a jestli zrovna běží nový
 router.get('/ai-analyza', api(async (req, res) => {
   const { getSetting } = require('../services/settings');
-  const v = await getSetting(AI_KEY, { type: 'json', defaultValue: null }).catch(() => null);
-  res.json({ ok: true, rozbor: v });
+  const [v, stav] = await Promise.all([
+    getSetting(AI_KEY, { type: 'json', defaultValue: null }).catch(() => null),
+    aiStav(),
+  ]);
+  res.json({ ok: true, rozbor: v, stav });
 }));
 
-// POST /ai-analyza { reklama? } → nový rozbor (Claude), uloží se
+// POST /ai-analyza { reklama? } → spustí nový rozbor na pozadí a hned odpoví.
+// Hotový výsledek si stránka vyzvedne přes GET.
 router.post('/ai-analyza', api(async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'AI není nakonfigurováno (chybí ANTHROPIC_API_KEY).' });
+  const bezi = await aiStav();
+  if (bezi.bezi) return res.json({ ok: true, stav: bezi, uz_bezi: true });
   const rk = req.body && req.body.reklama && typeof req.body.reklama === 'object' ? req.body.reklama : null;
   const reklama = rk ? ['vydaj', 'trzba', 'zisk', 'roas', 'dnu_plus', 'dnu_minus', 'registraci', 'nakupu', 'kliku', 'cena_registrace', 'cena_nakupu'].reduce((o, k) => { if (Number.isFinite(Number(rk[k]))) o[k] = Number(rk[k]); return o; }, {}) : null;
+  const zacalo = new Date().toISOString();
+  await aiStavZapis({ bezi: true, zacalo });
+  const uzivatel = req.user && req.user.id;
+  // Odpovíme hned; zbytek doběhne na pozadí.
+  res.json({ ok: true, stav: { bezi: true, zacalo } });
+  aiRozborNaPozadi(reklama, uzivatel, zacalo).catch(async (e) => {
+    console.error('[game-ai] rozbor selhal:', e && e.message);
+    await aiStavZapis({ bezi: false, zacalo, chyba: String((e && e.message) || e).slice(0, 300) });
+  });
+}));
+
+async function aiRozborNaPozadi(reklama, uzivatelId, zacalo) {
   const data = await sesbirejDataHry(reklama && Object.keys(reklama).length ? reklama : null);
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -1092,8 +1132,9 @@ router.post('/ai-analyza', api(async (req, res) => {
     experimenty: (Array.isArray(j.experimenty) ? j.experimenty : []).slice(0, 8).map((x) => S(x, 400)),
     chybi_data: (Array.isArray(j.chybi_data) ? j.chybi_data : []).slice(0, 8).map((x) => S(x, 300)),
   };
-  try { const { setSetting } = require('../services/settings'); await setSetting(AI_KEY, rozbor, { type: 'json', description: 'Laundromat Tycoon — poslední rozbor AI analytika', scope: 'game', userId: req.user && req.user.id }); } catch (e) { console.warn('[game-ai] uložení rozboru selhalo:', e.message); }
-  res.json({ ok: true, rozbor });
-}));
+  try { const { setSetting } = require('../services/settings'); await setSetting(AI_KEY, rozbor, { type: 'json', description: 'Laundromat Tycoon — poslední rozbor AI analytika', scope: 'game', userId: uzivatelId }); } catch (e) { console.warn('[game-ai] uložení rozboru selhalo:', e.message); }
+  await aiStavZapis({ bezi: false, zacalo, hotovo: rozbor.vytvoreno });
+  return rozbor;
+}
 
 module.exports = router;

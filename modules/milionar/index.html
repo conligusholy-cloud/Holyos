@@ -365,24 +365,59 @@
       var zaloha = function () { var ta = document.createElement('textarea'); ta.value = txt; ta.style.cssText = 'position:fixed;top:-1000px'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); hotovo(); } catch (x) { prompt('Zkopíruj zadání:', txt); } ta.remove(); };
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(hotovo, zaloha); else zaloha();
     });
+    function aiPata(r, bezi) {
+      return '<div style="margin-top:16px"><button class="btn" id="ai-run"' + (bezi ? ' disabled' : '') + '>'
+        + (r ? '↻ Udělat nový rozbor' : '▶ Udělat rozbor') + '</button> <span class="note" id="ai-st"></span></div>';
+    }
+    // Rozbor běží na pozadí — stránka se chodí ptát, jestli je hotový. Jde
+    // mezitím zavřít okno i celou stránku, rozbor doběhne a počká uložený.
+    var AI_T = null;
+    function aiHlidej(zacalo) {
+      if (AI_T) clearInterval(AI_T);
+      var start = Date.now();
+      var tik = function () {
+        get('/ai-analyza').then(function (j) {
+          var st = j.stav || {};
+          if (st.bezi) {
+            var s = Math.round((Date.now() - start) / 1000);
+            var el = document.getElementById('ai-st');
+            if (el) { el.style.color = ''; el.textContent = 'Analyzuji… běží ' + s + ' s (klidně to zavři, doběhne to samo)'; }
+            if (Date.now() - start > 12 * 60000) { clearInterval(AI_T); AI_T = null;
+              if (el) { el.textContent = 'Rozbor běží neobvykle dlouho — zkus okno otevřít znovu později.'; el.style.color = '#f59e0b'; } }
+            return;
+          }
+          clearInterval(AI_T); AI_T = null;
+          if (st.chyba) {
+            var e2 = document.getElementById('ai-st');
+            var b2 = document.getElementById('ai-run'); if (b2) b2.disabled = false;
+            if (e2) { e2.textContent = 'Chyba: ' + st.chyba; e2.style.color = '#f87171'; }
+            return;
+          }
+          DLG.innerHTML = aiVykresli(j.rozbor) + aiPata(j.rozbor, false);
+        }).catch(function () { /* výpadek sítě přejdeme, zkusíme za chvíli znova */ });
+      };
+      AI_T = setInterval(tik, 4000); tik();
+    }
     function aiOtevri() {
       OV.classList.add('open');
       DLG.innerHTML = '<p class="note">Načítám poslední rozbor…</p>';
       get('/ai-analyza').then(function (j) {
-        var r = j.rozbor;
+        var r = j.rozbor, bezi = !!(j.stav && j.stav.bezi);
         DLG.innerHTML = (r ? aiVykresli(r) : '<button class="x" data-close>×</button><h2>🤖 AI analytik hry</h2><p class="note">Zatím žádný rozbor. AI projde trychtýř, retenci, postup hráčů, platby, zdroje návštěv a výsledky reklamy a navrhne konkrétní změny.</p>')
-          + '<div style="margin-top:16px"><button class="btn" id="ai-run">' + (r ? '↻ Udělat nový rozbor' : '▶ Udělat rozbor') + '</button> <span class="note" id="ai-st"></span></div>';
+          + aiPata(r, bezi);
+        if (bezi) aiHlidej(j.stav.zacalo);
       }).catch(function (e) { DLG.innerHTML = '<button class="x" data-close>×</button><p class="note" style="color:#f87171">' + esc(e.message) + '</p>'; });
     }
     document.getElementById('ai-btn').addEventListener('click', aiOtevri);
-    document.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('#dlg [data-close]')) { OV.classList.remove('open'); DLG.style.width = ''; } });
+    document.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('#dlg [data-close]')) { OV.classList.remove('open'); DLG.style.width = ''; if (AI_T) { clearInterval(AI_T); AI_T = null; } } });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && OV.classList.contains('open')) { try { zavriPrehravac(); } catch (x) { /* nic */ } OV.classList.remove('open'); } });
     document.addEventListener('click', function (e) {
       var b = e.target.closest && e.target.closest('#ai-run'); if (!b) return;
-      b.disabled = true; var st = document.getElementById('ai-st'); st.textContent = 'Analyzuji… (trvá asi půl minuty)';
+      b.disabled = true; var st = document.getElementById('ai-st');
+      st.style.color = ''; st.textContent = 'Spouštím…';
       var rk = null; try { rk = window.__rkSouhrn || null; } catch (x) { /* bez reklamy */ }
       post('/ai-analyza', { reklama: rk }).then(function (j) {
-        DLG.innerHTML = aiVykresli(j.rozbor) + '<div style="margin-top:16px"><button class="btn" id="ai-run">↻ Udělat nový rozbor</button> <span class="note" id="ai-st"></span></div>';
+        aiHlidej((j.stav || {}).zacalo);
       }).catch(function (er) { b.disabled = false; st.textContent = 'Chyba: ' + er.message; st.style.color = '#f87171'; });
     });
 
