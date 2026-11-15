@@ -12120,20 +12120,55 @@ function drazbaVyvolatSheet() {
   polozky.push({ predmet: 'podil', podil: 10, popis: 'podíl ve vlastní firmě',
     pod: 'procento ze zisku i ze ztráty', navrh: Math.round(hodnotaMojiFirmy().hodnota * 0.1) || 1000000 });
 
-  sheet('<h3>\u{1F528} Vyvolat dražbu</h3>'
+  // Padesát prádlomatů v jednom seznamu se na mobilu neprojde. Napřed tedy
+  // kategorie s počty, samotné věci až po rozkliknutí — stejně jako u nabídky.
+  var KAT = [
+    { k: 'pradlomat', ico: '\u{1F9FA}', nazev: 'Prádlomaty', pod: 'hotové provozovny i s místem' },
+    { k: 'stroj', ico: '\u{1F4E6}', nazev: 'Stroje', pod: 'co máš skladem' },
+    { k: 'pobocka', ico: '\u{1F3E2}', nazev: 'Pobočky', pod: 'základny pro dopravu a četu' },
+    { k: 'karta', ico: '\u26A1', nazev: 'Karty', pod: 'zrychlovače čekání' },
+    { k: 'prevod', ico: '\u{1F4C8}', nazev: 'Podíly v cizích', pod: 'co držíš v cizích firmách' },
+    { k: 'podil', ico: '\u{1F3E6}', nazev: 'Podíl ve své firmě', pod: 'procento ze zisku i ztráty' }
+  ];
+  var hlava = '<h3>\u{1F528} Vyvolat dražbu</h3>'
     + '<p class="muted small">Dražba běží minutu a každý příhoz ji prodlouží o tři vteřiny. '
     + 'Příhozy cenu <b>snižují</b> — a všechny padnou tobě, i ty prohrané. Dohromady s doplatkem '
     + 'vítěze dostaneš vždycky aspoň vyvolávací cenu.</p>'
-    + '<p class="fine">Vyskočí všem, kdo jsou zrovna ve hře. Ve světě běží jedna dražba naráz.</p>'
-    + '<div style="margin-top:12px">' + polozky.map(function (x, i) {
-        return '<div class="area-item" data-drz-p="' + i + '">'
-          + '<div style="min-width:0"><div class="nm">' + x.popis + '</div>'
-          + '<div class="sub">' + x.pod + '</div></div>'
-          + '<b class="cena">' + kc(Math.max(10000, Math.round(x.navrh || 100000))) + '</b></div>';
-      }).join('') + '</div>');
-  [].forEach.call($('sheet-body').querySelectorAll('[data-drz-p]'), function (b) {
-    b.onclick = function () { drazbaCenaSheet(polozky[Number(b.getAttribute('data-drz-p'))]); };
-  });
+    + '<p class="fine">Vyskočí všem, kdo jsou zrovna ve hře. Ve světě běží jedna dražba naráz.</p>';
+  var vKategorii = function (k) {
+    return polozky.filter(function (x) { return x.predmet === k; });
+  };
+  var rozcestnik = function () {
+    sheet(hlava + '<div class="rozc">' + KAT.map(function (c) {
+      var n = c.k === 'podil' ? null : vKategorii(c.k).length;
+      var pod = n == null ? c.pod : (n ? n + '\u00d7 k dražbě' : 'nemáš žádné');
+      return '<button type="button" class="rozc-b' + (n === 0 ? ' prazdna' : '')
+        + '" data-drz-k="' + c.k + '"><i>' + c.ico + '</i>'
+        + '<b>' + c.nazev + '</b><span>' + esc(pod) + '</span></button>';
+    }).join('') + '</div>');
+    [].forEach.call($('sheet-body').querySelectorAll('[data-drz-k]'), function (b) {
+      b.onclick = function () { kategorie(b.getAttribute('data-drz-k')); };
+    });
+  };
+  var kategorie = function (k) {
+    var v = vKategorii(k), c = KAT.filter(function (x) { return x.k === k; })[0] || {};
+    if (k === 'podil') return drazbaCenaSheet(v[0]);
+    if (!v.length) return rozcestnik();
+    sheet('<h3>' + c.ico + ' ' + esc(c.nazev) + '</h3>'
+      + '<p class="muted small">Vyber, co dáš do dražby. Cenu nastavíš na dalším kroku.</p>'
+      + '<div style="margin-top:10px">' + v.map(function (x) {
+          return '<div class="area-item" data-drz-p="' + polozky.indexOf(x) + '">'
+            + '<div style="min-width:0"><div class="nm">' + x.popis + '</div>'
+            + '<div class="sub">' + x.pod + '</div></div>'
+            + '<b class="cena">' + kc(Math.max(10000, Math.round(x.navrh || 100000))) + '</b></div>';
+        }).join('') + '</div>'
+      + '<button class="btn sec" id="drz-zpet" style="width:100%;margin-top:12px">Zpátky na výběr</button>');
+    if ($('drz-zpet')) $('drz-zpet').onclick = rozcestnik;
+    [].forEach.call($('sheet-body').querySelectorAll('[data-drz-p]'), function (b) {
+      b.onclick = function () { drazbaCenaSheet(polozky[Number(b.getAttribute('data-drz-p'))]); };
+    });
+  };
+  rozcestnik();
 }
 function drazbaCenaSheet(x) {
   var jePodil = x.predmet === 'podil';
