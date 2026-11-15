@@ -19,7 +19,7 @@ router.use(express.json({ limit: '32kb' }));
 
 const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 const MODELY = ['mini', 'flex', 'max'];
-const PREDMETY = ['stroj', 'pradlomat', 'karta', 'pobocka', 'pujcka', 'podil', 'odkup'];
+const PREDMETY = ['stroj', 'pradlomat', 'karta', 'pobocka', 'pujcka', 'podil', 'odkup', 'prevod'];
 // Co si dva hráči můžou domluvit navíc k věcem: půjčku a podíl ve firmě.
 const MESIC_MS = 43200000;             // herní měsíc = 12 skutečných hodin
 const PUJCKA_MIN = 10000;
@@ -161,7 +161,8 @@ async function zkontroluj(nab, prodavajici) {
     // Pobočky žijí ve stavu hry, ne v tabulce — hledáme ji podle názvu.
     const pob = Array.isArray(st.pobocky) ? st.pobocky : [];
     if (!pob.some((x) => x && x.name === nab.pobocka)) return 'Prodávající takovou pobočku nemá.';
-  } else if (nab.predmet === 'pujcka' || nab.predmet === 'podil' || nab.predmet === 'odkup') {
+  } else if (nab.predmet === 'pujcka' || nab.predmet === 'podil'
+    || nab.predmet === 'odkup' || nab.predmet === 'prevod') {
     return null;        // peníze a podíl se kontrolují zvlášť, nic se nepřevádí ze skladu
   } else return 'Tohle se obchodovat nedá.';
   return null;
@@ -269,6 +270,22 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
       return res.status(409).json({ error: 'Tenhle podíl spolu nedržíte — odkup kupuje majitel firmy.' });
     }
     data = { equity_id: e.id, podil: e.podil, cena_puvodni: e.cena, vyplaceno: e.vyplaceno };
+  } else if (predmet === 'prevod') {
+    // Podíl v cizí firmě je majetek investora jako každý jiný — může ho prodat
+    // dál komukoli. Firma do toho nemluví; kdyby musela kývnout, byl by podíl
+    // neprodejný pokaždé, když má její majitel zrovna jiné starosti.
+    const e = await prisma.gameEquity.findUnique({ where: { id: parseInt(b.equity_id, 10) || 0 } });
+    if (!e || e.stav !== 'bezi') return res.status(409).json({ error: 'Takový podíl už neběží.' });
+    const kupujiciId = smer === 'koupim' ? req.player.id : to_id;
+    const prodavajiciId = smer === 'koupim' ? to_id : req.player.id;
+    if (e.investor_id !== prodavajiciId) {
+      return res.status(409).json({ error: 'Ten podíl prodávající nedrží.' });
+    }
+    if (e.firma_id === kupujiciId) {
+      return res.status(409).json({ error: 'Majitel firmy si podíl bere zpátky přes zpětný odkup.' });
+    }
+    data = { equity_id: e.id, podil: e.podil, cena_puvodni: e.cena, vyplaceno: e.vyplaceno,
+      firma_id: e.firma_id, firma_nick: e.firma_nick };
   }
   // Kdo věc má: u „koupim" ji má ten druhý, u „prodam" ji mám já.
   const chyba = await zkontroluj(nab, smer === 'koupim' ? druhy : req.player);
@@ -417,6 +434,16 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
       return res.status(409).json({ error: 'Ten podíl už mezi vámi neběží.' });
     }
   }
+  // Převod podílu na třetího: musí pořád běžet a pořád ho musí držet prodávající.
+  let prevodEq = null;
+  if (t.predmet === 'prevod') {
+    prevodEq = await prisma.gameEquity.findUnique({ where: { id: ((t.data || {}).equity_id) || 0 } });
+    if (!prevodEq || prevodEq.stav !== 'bezi' || prevodEq.investor_id !== prodavajici.id
+      || prevodEq.firma_id === kupujici.id) {
+      await prisma.gameTrade.update({ where: { id }, data: { stav: 'neplatne', resolved_at: new Date() } });
+      return res.status(409).json({ error: 'Ten podíl už takhle neběží.' });
+    }
+  }
   if (t.predmet === 'podil') {
     const uz = await prodanyPodil(prodavajici.id);
     const p = Number((t.data || {}).podil) || 0;
@@ -458,6 +485,8 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
     : t.predmet === 'pujcka' ? 'půjčku'
     : t.predmet === 'podil' ? ('podíl ' + Math.round(((t.data || {}).podil || 0) * 100) + ' % ve firmě')
     : t.predmet === 'odkup' ? ('zpětný odkup podílu ' + Math.round(((t.data || {}).podil || 0) * 100) + ' %')
+    : t.predmet === 'prevod' ? ('podíl ' + Math.round(((t.data || {}).podil || 0) * 100) + ' % ve firmě '
+      + ((t.data || {}).firma_nick || ''))
     : 'karta';
 
   await prisma.$transaction(async (tx) => {
@@ -527,6 +556,16 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
         investor_id: kupujici.id, investor_nick: kupujici.nick,
         firma_id: prodavajici.id, firma_nick: prodavajici.nick,
         podil, cena: t.cena, dalsi_at: new Date(Date.now() + MESIC_MS),
+      } });
+    }
+    // 3d. převod: podíl nezaniká, jen mění držitele. Pořizovací cena a vyplaceno
+    // se novému majiteli počítají od nuly — jinak by zdědil cizí výnos a jeho
+    // „kolik mi to vyneslo" by lhalo. Termín dalšího vyrovnání zůstává, takže
+    // nejbližší výplata jde celá tomu, kdo podíl drží v tu chvíli.
+    if (t.predmet === 'prevod' && prevodEq) {
+      await tx.gameEquity.update({ where: { id: prevodEq.id }, data: {
+        investor_id: kupujici.id, investor_nick: kupujici.nick,
+        cena: t.cena, vyplaceno: 0, trade_id: t.id,
       } });
     }
     // 3c. odkup: podíl se uzavírá, peníze pak projdou běžnou cestou níž

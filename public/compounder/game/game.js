@@ -9818,7 +9818,9 @@ function podilRadek(e, mam) {
         : '<p class="fine">Vyrovnává se každý herní měsíc, tedy po dvanácti hodinách. '
           + 'Odkoupit ho zpátky jde jen dohodou — pošleš nabídku a cenu si doladíte.</p>')
     + '<div class="akce"><button class="btn sm sec" data-odkup-ja="' + e.id + '">'
-      + (mam ? 'Nabídnout odkup majiteli' : 'Nabídnout odkup') + '</button></div>'
+      + (mam ? 'Nabídnout odkup majiteli' : 'Nabídnout odkup') + '</button>'
+      + (mam ? '<button class="btn sm sec" data-prevod="' + e.id + '">Prodat jinému</button>' : '')
+      + '</div>'
     + '</div>';
 }
 function podilyHtml() {
@@ -9852,6 +9854,17 @@ function bindPodily() {
       var id = Number(b.getAttribute('data-odkup-ja'));
       var e = ((FINANCE && FINANCE.podily) || []).filter(function (x) { return x.id === id; })[0];
       if (e) odkupSheet(e);
+    };
+  });
+  bindPrevod('me-body');
+}
+// Prodat podíl dál — stejné tlačítko v Já i na Burze.
+function bindPrevod(kde) {
+  [].forEach.call($(kde).querySelectorAll('[data-prevod]'), function (b) {
+    b.onclick = function () {
+      var id = Number(b.getAttribute('data-prevod'));
+      var e = ((FINANCE && FINANCE.podily) || []).filter(function (x) { return x.id === id; })[0];
+      if (e) prevodSheet(e);
     };
   });
 }
@@ -9996,6 +10009,8 @@ function hraciVyberSheet(nadpis, popisTlacitka, pak) {
   api('/trade/players').then(function (r) {
     if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
     var hraci = r.j.players || [];
+    var podleId = {};
+    hraci.forEach(function (h) { podleId[h.id] = h; });
     if (!hraci.length) {
       return sheet('<h3>Zatím není komu</h3><p class="muted small">Až přibude další hráč, objeví se tady.</p>');
     }
@@ -10050,7 +10065,7 @@ function hraciVyberSheet(nadpis, popisTlacitka, pak) {
         };
       }
       [].forEach.call($('sheet-body').querySelectorAll('[data-h]'), function (b) {
-        b.onclick = function () { pak(Number(b.getAttribute('data-h'))); };
+        b.onclick = function () { var i = Number(b.getAttribute('data-h')); pak(i, podleId[i]); };
       });
     };
     vykresli();
@@ -10091,6 +10106,8 @@ function predmetPopis(t) {
   }
   if (t.predmet === 'podil') return 'podíl ' + Math.round(((t.data || {}).podil || 0) * 100) + ' % ve firmě';
   if (t.predmet === 'odkup') return 'zpětný odkup podílu ' + Math.round(((t.data || {}).podil || 0) * 100) + ' %';
+  if (t.predmet === 'prevod') return 'podíl ' + Math.round(((t.data || {}).podil || 0) * 100) + ' % ve firmě '
+    + ((t.data || {}).firma_nick || '');
   var c = (CARDS_CAT || []).filter(function (x) { return x.kind === t.card_kind; })[0];
   return 'karta ' + (c ? c.name : t.card_kind);
 }
@@ -10189,7 +10206,9 @@ function financeHtml() {
       + (e.vyplaceno >= 0 ? 'Zatím vyplaceno ' : 'Zatím doplaceno ') + kcFull(Math.abs(e.vyplaceno))
       + ' · další vyrovnání ' + zaKolik(e.dalsi) + '</p>'
       + '<div class="akce"><button class="btn sm sec" data-odkup="' + e.id + '">'
-      + (mam ? 'Nabídnout odkup' : 'Odkoupit zpět') + '</button></div>'
+      + (mam ? 'Nabídnout odkup' : 'Odkoupit zpět') + '</button>'
+      + (mam ? '<button class="btn sm sec" data-prevod="' + e.id + '">Prodat jinému</button>' : '')
+      + '</div>'
       + '</div>';
   });
   return h + '</div>';
@@ -10205,6 +10224,7 @@ function bindFinance() {
       if (e) odkupSheet(e);
     };
   });
+  bindPrevod('burza-body');
 }
 
 // Konkurzní rozprodej — kdo zkrachoval, toho majetek je tu měsíc za klesající cenu.
@@ -10740,6 +10760,72 @@ function radekObchodu(t) {
         ? '<div class="akce"><button class="btn sm sec" data-tr="' + t.id + '" data-akce="decline">Zrušit nabídku</button></div>'
         : '')
     + '</div>';
+}
+
+// Prodat podíl dál, třetímu hráči. Podíl je majetek investora jako každý
+// jiný — firma do převodu nemluví, jen se jí změní jméno v rejstříku. Pro
+// kupujícího začíná výnos od nuly: pořizovací cena je ta, za kterou koupil on.
+function prevodSheet(e) {
+  hraciVyberSheet('Komu podíl prodáš', 'Vybrat', function (id, h) {
+    if (id === e.kdo_id) {
+      return toast('Majiteli firmy se podíl vrací přes odkup — to je tlačítko vedle.', 'err');
+    }
+    prevodCenaSheet(e, id, h);
+  });
+}
+function prevodCenaSheet(e, komuId, komu) {
+  var kdo = komu ? (komu.firma || komu.nick) : 'vybranému hráči';
+  sheet('<h3>Prodat podíl dál</h3>'
+    + '<p class="muted small">Držíš ' + Math.round(e.podil * 100) + ' % firmy '
+    + esc(e.kdo_firma || e.kdo) + '. Nabídni ho ' + esc(kdo)
+    + ' — platí on, a jen když nabídku přijme.</p>'
+    + '<div class="kv"><span>Podíl</span><b>' + Math.round(e.podil * 100) + ' %</b></div>'
+    + '<div class="kv"><span>Koupil jsi ho za</span><b>' + kcFull(e.cena) + '</b></div>'
+    + '<div class="kv"><span>Zatím ti vyneslo</span><b class="' + (e.vyplaceno > 0 ? 'ok' : '')
+    + '">' + kcFull(Math.abs(e.vyplaceno)) + '</b></div>'
+    + '<div class="kv"><span>Nese měsíčně</span><b class="' + (e.mesicne > 0 ? 'ok' : e.mesicne < 0 ? 'err' : '')
+    + '">' + (e.mesicne > 0 ? '+' : '') + kcFull(e.mesicne) + '</b></div>'
+    + '<label class="fld"><span>Cena (L$)</span>'
+    + '<input id="prev-cena" class="inp" type="number" min="0" step="10000" value="'
+    + (e.odkup || e.cena) + '"></label>'
+    + '<p class="fine" id="prev-rada"></p>'
+    + '<label class="fld"><span>Vzkaz (nepovinný)</span>'
+    + '<input id="prev-vzkaz" class="inp" type="text" maxlength="200"></label>'
+    + '<button class="btn big" id="prev-ok" style="width:100%;margin-top:6px">Poslat nabídku</button>'
+    + '<p class="fine">Nejbližší vyrovnání dostane celé ten, kdo podíl v tu chvíli drží. '
+    + 'Majitel firmy do převodu nemluví — dozví se ho až v rejstříku.</p>');
+  var rada = function () {
+    var c = Math.max(0, Math.round(Number($('prev-cena').value) || 0)), t = [];
+    if (e.cena > 0) {
+      var o = Math.round((c - e.cena) / e.cena * 100);
+      t.push(o === 0 ? 'Přesně za to, za co jsi ho koupil.'
+        : o > 0 ? 'O ' + o + ' % víc, než jsi za něj dal.'
+          : 'O ' + (-o) + ' % míň, než jsi za něj dal.');
+      var cely = e.vyplaceno + (c - e.cena);
+      t.push(cely >= 0 ? 'I s vyplaceným bys na něm byl ' + kcFull(cely) + ' v plusu.'
+        : 'I s vyplaceným bys na něm prodělal ' + kcFull(-cely) + '.');
+    }
+    if (e.mesicne > 0) {
+      t.push('Kupujícímu nese ' + kcFull(e.mesicne) + ' měsíčně — za tuhle cenu to má za '
+        + (c / (e.mesicne * 12)).toFixed(1).replace('.', ',') + ' roku zpátky.');
+    } else if (e.mesicne < 0) {
+      t.push('Pozor, firma je teď ve ztrátě a podíl na ní se doplácí — kupující to uvidí taky.');
+    }
+    $('prev-rada').textContent = t.join(' ');
+  };
+  $('prev-cena').oninput = rada; rada();
+  $('prev-ok').onclick = function () {
+    var c = Math.max(0, Math.round(Number($('prev-cena').value) || 0)), b = $('prev-ok');
+    if (!c) return toast('Zadej cenu.', 'err');
+    b.disabled = true;
+    apiJson('/trade/offer', { to_id: komuId, predmet: 'prevod', equity_id: e.id,
+      smer: 'prodam', cena: c, vzkaz: $('prev-vzkaz').value })
+      .then(function (r) {
+        if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
+        closeSheet(); TRADES = null; loadTrades(paintBurza);
+        toast('Nabídka odeslaná. Teď je to na druhé straně.', 'ok');
+      }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+  };
 }
 
 // Zpětný odkup podílu. Není to tlačítko, které by to udělalo samo —
