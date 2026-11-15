@@ -151,6 +151,8 @@ const LINKA = {
   linka1d: { kind: 'linka1d', name: 'Infolinka na den',   price: 4900, dnu: 1 },
   linka3d: { kind: 'linka3d', name: 'Infolinka na 3 dny', price: 7400, dnu: 3 },
   linka7d: { kind: 'linka7d', name: 'Infolinka na týden', price: 9900, dnu: 7 },
+  linka30d: { kind: 'linka30d', name: 'Infolinka na měsíc', price: 29000, dnu: 30 },
+  linka365d: { kind: 'linka365d', name: 'Infolinka na rok', price: 99900, dnu: 365 },
   // Doběh starých kreditových balíčků. Nenabízejí se, jen se dají vyzvednout.
   linka50:  { kind: 'linka50',  name: '50 hovorů',  price: 9900,  dnu: 7, stary: true },
   linka100: { kind: 'linka100', name: '100 hovorů', price: 17900, dnu: 7, stary: true },
@@ -182,6 +184,16 @@ const SUBS = {
     price: 9900, interval: 'week', interval_count: 1, linka: true,
     short: 'Obnovuje se každý týden',
     desc: 'Operátor bere všechny hovory za tebe. Platba se strhne jednou týdně, '
+      + 'dokud předplatné nezrušíš.' },
+  linka_sub30d: { kind: 'linka_sub30d', name: 'Infolinka každý měsíc', icon: 'phone',
+    price: 29000, interval: 'month', interval_count: 1, linka: true,
+    short: 'Obnovuje se každý měsíc',
+    desc: 'Operátor bere všechny hovory za tebe. Platba se strhne jednou měsíčně, '
+      + 'dokud předplatné nezrušíš.' },
+  linka_sub365d: { kind: 'linka_sub365d', name: 'Infolinka každý rok', icon: 'phone',
+    price: 99900, interval: 'year', interval_count: 1, linka: true,
+    short: 'Obnovuje se každý rok',
+    desc: 'Operátor bere všechny hovory za tebe. Platba se strhne jednou za rok, '
       + 'dokud předplatné nezrušíš.' },
   dispecer: {
     kind: 'dispecer', name: 'Vedoucí servisních techniků', icon: 'wrench', price: 3900,
@@ -1217,10 +1229,12 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
         msg: 'Rámec v bance se zvedl o ' + castka.toLocaleString('cs-CZ') + ' L$.' };
     } else if (LINKA[kind]) {
       const dnu = LINKA[kind].dnu || 1;
+      const doba = dnu === 1 ? 'den' : dnu === 7 ? 'týden' : dnu === 30 ? 'měsíc'
+        : dnu === 365 ? 'rok' : dnu + ' dny';
       result = { effect: 'linka', dnu,
         msg: LINKA[kind].stary
           ? 'Infolinka se platí na čas — tvůj balíček jsme převedli na týden.'
-          : 'Infolinka ti běží ' + (dnu === 1 ? 'den' : dnu === 7 ? 'týden' : dnu + ' dny') + '.' };
+          : 'Infolinka ti běží ' + doba + '.' };
     } else {
       result = EFFECTS[kind]();
     }

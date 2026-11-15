@@ -12059,7 +12059,13 @@ function ramecPacksHtml() {
 // je to volba u nákupu, ne nastavení firmy.
 var LINKA_AUTO = false;
 // Balíček na čas → odpovídající předplatné. Jiný kalendář, stejná linka.
-var LINKA_SUB = { linka1d: 'linka_sub1d', linka3d: 'linka_sub3d', linka7d: 'linka_sub7d' };
+var LINKA_SUB = { linka1d: 'linka_sub1d', linka3d: 'linka_sub3d', linka7d: 'linka_sub7d',
+  linka30d: 'linka_sub30d', linka365d: 'linka_sub365d' };
+// Jak dlouho balíček vydrží, lidsky.
+function dobaSlovy(dnu) {
+  return dnu === 1 ? 'den' : dnu === 7 ? 'týden' : dnu === 30 ? 'měsíc'
+    : dnu === 365 ? 'rok' : dnu + ' dny';
+}
 function linkaPacksHtml() {
   if (!LINKA_CAT || !LINKA_CAT.length) return '';
   var pred = linkaPredplatne();
@@ -12432,7 +12438,7 @@ function buyCash(kind) {
         : hovory
           ? '<div class="kv"><span>Infolinka poběží</span><b class="ok">'
             + (maLinku() ? etaText(linkaZbyva() + c.dnu * 86400000) + ' (včetně zbytku)'
-                : c.dnu === 1 ? 'den' : c.dnu === 7 ? 'týden' : c.dnu + ' dny') + '</b></div>'
+                : dobaSlovy(c.dnu)) + '</b></div>'
           : '<div class="kv"><span>Rámec a zástava v bance</span><b class="ok">+' + kcFull(c.laundry) + '</b></div>')
     + '<div class="kv"><span>Cena</span><b>' + platba.toLocaleString('cs-CZ') + ' Kč</b></div>'
     + (ramec
