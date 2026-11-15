@@ -1020,6 +1020,17 @@
         popis: 'Hotová města hned bez psaní a čekání, první obhlídka místa zdarma, '
           + 'první stroj doručený okamžitě. Platí jen do postavení prvního prádlomatu. '
           + 'Vypnutím se hra vrátí k původní cestě a v trychtýři se dá porovnat, co to udělalo.'
+      },
+      hodnosti_odmeny: {
+        nazev: 'Odměny za hodnosti a odznaky',
+        popis: 'Za každý nově dosažený stupeň dostane hráč hotovost nebo kartu, za odznak kartu. '
+          + 'Vypnutím se tituly ukazují dál, ale nic se nevyplácí.'
+      },
+      hodnosti_zpetne: {
+        nazev: 'Vyplatit hodnosti zpětně',
+        popis: 'POZOR, nevratné. Zapnutím dostanou stávající hráči odměny za všechny stupně, '
+          + 'které už mají — každý při nejbližším uložení hry. Rozdané peníze a karty zpátky '
+          + 'nevezmeš. Nech vypnuté, dokud si neověříš, že hodnosti sedí.'
       }
     };
     function loadNastaveni() {
@@ -1036,8 +1047,13 @@
         }).join('');
         [].forEach.call(document.querySelectorAll('[data-nast]'), function (b) {
           b.onclick = function () {
+            var k = b.getAttribute('data-nast'), na = b.getAttribute('data-na');
+            // Zpětné vyplacení je jediný přepínač, který rozdá peníze a nejde vzít zpět.
+            if (k === 'hodnosti_zpetne' && na === '1'
+              && !confirm('Opravdu vyplatit hodnosti zpětně?\n\nKaždý stávající hráč dostane odměny '
+                + 'za všechny stupně, které už má. Rozdané peníze a karty zpátky nevezmeš.')) return;
             b.disabled = true; b.textContent = 'Měním…';
-            post('/nastaveni', { klic: b.getAttribute('data-nast'), hodnota: b.getAttribute('data-na') })
+            post('/nastaveni', { klic: k, hodnota: na })
               .then(loadNastaveni)
               .catch(function (e) { b.disabled = false; alert(e.message); });
           };

@@ -15,6 +15,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../config/database');
+const { HODNOSTI, hodnost, ODZNAKY, ODZNAK } = require('../services/game/hodnosti');
 const JWT_SECRET = require('../config/secrets').jwtSecret();
 
 const router = express.Router();
@@ -213,7 +214,10 @@ const ALL = Object.assign({}, CARDS, CASH, SUBS, LINKA, RAMEC);
 // ─── Nastavení hry ───────────────────────────────────────────────────────────
 // Přepínače, které jde cvaknout z administrace bez nasazování. Držíme je
 // půl minuty v paměti, ať se kvůli každému načtení hry nechodí do databáze.
-const NASTAVENI_VYCHOZI = { onboarding_rychly: '1', nick_pauza_dnu: '30', udalosti_zap: '1' };
+const NASTAVENI_VYCHOZI = { onboarding_rychly: '1', nick_pauza_dnu: '30', udalosti_zap: '1',
+  // Odměny za hodnosti a odznaky běží. Zpětné vyplacení stávajícím hráčům je
+  // vypnuté schválně: rozdané peníze a karty už zpátky nevezmeš.
+  hodnosti_odmeny: '1', hodnosti_zpetne: '0' };
 let _nast = { at: 0, map: null };
 async function nastaveni() {
   if (_nast.map && Date.now() - _nast.at < 30e3) return _nast.map;
@@ -825,7 +829,10 @@ router.get('/account/me', requirePlayer, async (req, res, next) => {
     let p = req.player;
     try { p = await narokujRef(p, req.query.ref); }
     catch (e) { console.warn('[game] narokovani ref v /me:', e.message); }
-    res.json({ ok: true, player: await pub(p), state: p.state || null, rev: p.state_rev || 0 });
+    res.json({ ok: true, player: await pub(p), state: p.state || null, rev: p.state_rev || 0,
+      // Žebřík hodností posíláme ze serveru, aby hra v liště neukazovala jiný
+      // titul, než jaký u toho hráče vidí ostatní v žebříčku a na burze.
+      hodnosti: HODNOSTI });
   } catch (e) { next(e); }
 });
 
@@ -1064,8 +1071,84 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
         odehranyCas(req.player, ted, (req.body || {}).aktivni !== false)),
     });
     res.json({ ok: true, rev: p.state_rev });
+    // Hodnost dopočítáme až po odpovědi — hráč na vyplacení odměny nečeká a
+    // kdyby se tu cokoli pokazilo, uložení hry to shodit nesmí.
+    resHodnost(p, st).catch((e) => console.warn('[game-hodnost]', e && e.message));
   } catch (e) { next(e); }
 });
+
+// ─── Hodnost a odměny ────────────────────────────────────────────────────────
+// Počítá se ze stavu uloženého na serveru, ne z toho, co o sobě hra tvrdí.
+// Odměna se vyplácí jednou — hlídá to unikátní index v game_odmeny, ne tahle
+// funkce; dvě uložení hry ve stejnou vteřinu jsou běžná věc.
+async function nastaveniHodnosti() {
+  const n = await nastaveni().catch(() => ({}));
+  return {
+    odmeny: String(n.hodnosti_odmeny == null ? '1' : n.hodnosti_odmeny) !== '0',
+    zpetne: String(n.hodnosti_zpetne || '0') === '1',
+  };
+}
+// Jednu odměnu připsat: hotovost přes frontu následků, karta rovnou do balíčku.
+async function vyplatOdmenu(playerId, druh, kod, odmena, zpetne, platit) {
+  const cash = (odmena && odmena.cash) || 0;
+  const karta = (odmena && odmena.karta) || null;
+  try {
+    await prisma.gameOdmena.create({ data: { player_id: playerId, druh, kod,
+      cash, karta, zpetne: !!zpetne, vyplaceno: !!platit } });
+  } catch (e) {
+    return false;        // už tam je — unikátní index udělal svou práci
+  }
+  if (!platit) return false;
+  await pripisOdmenu(playerId, druh, kod, cash, karta);
+  return true;
+}
+async function pripisOdmenu(playerId, druh, kod, cash, karta) {
+  const nazev = druh === 'hodnost'
+    ? ((HODNOSTI.find((h) => h.id === kod) || {}).nazev || kod)
+    : ((ODZNAK[kod] || {}).nazev || kod);
+  const popis = (druh === 'hodnost' ? 'Hodnost ' : 'Odznak ') + nazev;
+  if (cash > 0) {
+    await prisma.gameDelivery.create({ data: { player_id: playerId, kind: 'cash',
+      amount: cash, popis } });
+  }
+  if (karta) await prisma.gameCard.create({ data: { player_id: playerId, kind: karta } });
+  console.log('[game-hodnost] ' + popis + ' → hráč ' + playerId
+    + (cash ? ' · ' + cash + ' L$' : '') + (karta ? ' · karta ' + karta : ''));
+}
+// Dopočítat hodnost po uložení hry a doplatit, co k ní patří.
+async function resHodnost(p, st) {
+  const cfg = await nastaveniHodnosti();
+  const h = hodnost(cisteJmeni(st));
+  const prvni = !p.hodnost;          // hráče vidíme s hodností poprvé
+  const stary = HODNOSTI.findIndex((x) => x.id === p.hodnost);
+  if (h.id !== p.hodnost) {
+    await prisma.gamePlayer.update({ where: { id: p.id }, data: { hodnost: h.id } })
+      .catch(() => {});
+  }
+  if (!cfg.odmeny) return;
+  // Hodnost může i klesnout (prodal síť, zadlužil se) — odměnu mu nebereme,
+  // ale ani znovu nevyplácíme: řádek v game_odmeny už tam je.
+  for (let i = 1; i <= h.stupen; i++) {
+    const st2 = HODNOSTI[i];
+    if (!st2.odmena) continue;
+    // Stupně, které měl hráč už při zavedení hodností, jsou „zpětné" a platí se
+    // jen tehdy, když to majitel pustí. Nové stupně se platí vždycky.
+    const jeZpetny = prvni || (stary >= 0 && i <= stary);
+    await vyplatOdmenu(p.id, 'hodnost', st2.id, st2.odmena, jeZpetny, jeZpetny ? cfg.zpetne : true);
+  }
+  // Když majitel zpětné vyplácení pustí dodatečně, doplatíme, co leží nevyplacené.
+  if (cfg.zpetne) await doplatZpetne(p.id);
+}
+async function doplatZpetne(playerId) {
+  const dluh = await prisma.gameOdmena.findMany({
+    where: { player_id: playerId, vyplaceno: false }, take: 30 });
+  for (const o of dluh) {
+    const r = await prisma.gameOdmena.updateMany({
+      where: { id: o.id, vyplaceno: false }, data: { vyplaceno: true } });
+    if (!r.count) continue;          // mezitím doplatil jiný požadavek
+    await pripisOdmenu(playerId, o.druh, o.kod, o.cash, o.karta);
+  }
+}
 
 // ─── Karty ───────────────────────────────────────────────────────────────────
 // POST /account/tutorial-card → kdo ještě nic nepostavil a nemá Expresní dovoz,
@@ -1315,6 +1398,7 @@ async function zebricky() {
   // Do žebříčku prádlomatů patří každý, kdo hru rozehrál — i ten, kdo zatím
   // nic nepostavil. Jinak polovina hráčů v seznamu vůbec není a nedá se
   // poznat, že tam jsou. Nula je taky výsledek.
+  const hodnostHrace = new Map();
   const pocetMist = new Map();
   mista.forEach((m) => pocetMist.set(m.player_id, m._count._all));
   const poMistech = [];
@@ -1322,8 +1406,12 @@ async function zebricky() {
   hraci.forEach((h) => {
     if (!(h.state || {}).profile) return;        // kdo ani nezačal, do žebříčku nepatří
     viden.add(h.id);
+    // Hodnost počítáme ze stavu uloženého na serveru — ne z toho, co o sobě
+    // tvrdí prohlížeč. V žebříčku a na burze to má být záruka, ne jmenovka.
+    hodnostHrace.set(h.id, hodnost(cisteJmeni(h.state || {})).id);
     poMistech.push({ id: h.id, nick: h.nick, firma: h.company || (h.nick + ' s.r.o.'),
-      znak: h.emblem || null, zeme: zemeMap[h.id] || [], hodnota: pocetMist.get(h.id) || 0 });
+      znak: h.emblem || null, zeme: zemeMap[h.id] || [], hodnota: pocetMist.get(h.id) || 0,
+      hodnost: hodnostHrace.get(h.id) });
   });
   // Kdyby někomu místa patřila, ale neměl uložený stav, ať nezmizí.
   mista.forEach((m) => {
@@ -1343,14 +1431,18 @@ async function zebricky() {
     const mesicne = zbydeMesicne(st);
     const fi = h.company || (h.nick + ' s.r.o.');
     const zm = zemeMap[h.id] || [];
-    if (mesicne > 0) zisk.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm, hodnota: Math.round(mesicne) });
-    if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm, hodnota: st.refs });
+    const hd = hodnostHrace.get(h.id) || hodnost(cisteJmeni(st)).id;
+    if (mesicne > 0) zisk.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm, hodnota: Math.round(mesicne), hodnost: hd });
+    if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm, hodnota: st.refs, hodnost: hd });
     // Do žebříčku jmění patří i ten, kdo je v minusu — právě to je vidět.
-    if (st.profile) jmeni.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm, hodnota: cisteJmeni(st) });
+    if (st.profile) {
+      const cj = cisteJmeni(st);
+      jmeni.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm, hodnota: cj, hodnost: hodnost(cj).id });
+    }
     // Kdo ještě žádný hovor neměl, nemá se podle čeho hodnotit — startuje se na třech.
     if (st.profile && (st.hovoru || 0) > 0) {
       hvezdy.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm,
-        hodnota: hvezdyZPovesti(st) });
+        hodnota: hvezdyZPovesti(st), hodnost: hd });
     }
   });
   zisk.sort((a, b) => b.hodnota - a.hodnota);

@@ -2214,6 +2214,7 @@ function tick() {
   KRIZE_PRUM = null; UDAL_OKNO = null;
   refreshUnits();              // zpátky na dnešní ekonomiku, ať čísla sedí s tím, co je teď
   hlidejKrizi();
+  hlidejHodnost();
   linkaOffline(dt);            // co se na infolince stalo, než se hráč vrátil
   // Úvěry se splácejí po celých herních měsících, ne plynule — splátka je
   // pevná a buď na ni hráč má, nebo ne.
@@ -5361,6 +5362,102 @@ function modelCard(sp, e, pridej, bezTlacitka) {
 // Používá se stejně na nákup stroje v obchodě i na instalaci na místě, aby se
 // hráč nikdy nezasekl bez hotovosti a bez možnosti si půjčit.
 function investedTotal() { return S.units.reduce(function (a, u) { return a + u.eco.invest; }, 0); }
+// ─── Hodnosti ────────────────────────────────────────────────────────────────
+// Žebřík si hra drží jen jako zálohu — platný seznam přijde ze serveru s
+// /account/me. Kdyby se obě kopie rozešly, hráč by v liště viděl jiný titul,
+// než jaký u něj vidí ostatní v žebříčku a na burze.
+var HODNOSTI_HRA = [
+  { id: 'pradlak', nazev: 'Pradlák', od: 0, odmena: null },
+  { id: 'zivnostnik', nazev: 'Živnostník', od: 3e6, odmena: { cash: 150000 } },
+  { id: 'provozovatel', nazev: 'Provozovatel', od: 10e6, odmena: { karta: 'credit' } },
+  { id: 'sitar', nazev: 'Majitel sítě', od: 30e6, odmena: { cash: 1e6 } },
+  { id: 'magnat', nazev: 'Magnát', od: 80e6, odmena: { karta: 'traffic' } },
+  { id: 'baron', nazev: 'Baron prádla', od: 200e6, odmena: { cash: 5e6 } },
+  { id: 'legenda', nazev: 'Legenda', od: 500e6, odmena: { karta: 'credit' } }
+];
+function hodnostHra(jmeni) {
+  var j = Number(jmeni) || 0, i = 0;
+  for (var k = 0; k < HODNOSTI_HRA.length; k++) if (j >= HODNOSTI_HRA[k].od) i = k;
+  var h = HODNOSTI_HRA[i], d = HODNOSTI_HRA[i + 1] || null;
+  return { stupen: i, id: h.id, nazev: h.nazev, od: h.od,
+    dalsi: d ? d.nazev : null, dalsi_od: d ? d.od : null,
+    doDalsi: d ? Math.max(0, d.od - j) : null };
+}
+function mojeHodnost() { return hodnostHra(S ? cisteJmeni() : 0); }
+// Celý žebřík v Já: kde stojím, kolik zbývá do další mety a co který stupeň dá.
+// Smysl té karty je orientace — hráč má pořád vidět, co je příště.
+// Povýšení je jediná chvíle, kdy má smysl hráče vyrušit — jinak je hodnost
+// tichá informace v liště. Ukazuje se jednou na stupeň, i po návratu do hry.
+function hlidejHodnost() {
+  if (!S || !ME || S.tut !== 'done') return;
+  var h = mojeHodnost();
+  if (!S.hodnostVidena) { S.hodnostVidena = h.id; S.hodnostMax = h.stupen; save(); return; }
+  if (S.hodnostVidena === h.id) return;
+  var byl = -1, je = h.stupen;
+  for (var i = 0; i < HODNOSTI_HRA.length; i++) if (HODNOSTI_HRA[i].id === S.hodnostVidena) byl = i;
+  S.hodnostVidena = h.id;
+  // Odměna se platí za stupeň jednou. Kdo spadne a vyšplhá se zpátky, povýšení
+  // uvidí znovu, ale slibovat mu podruhé peníze by byla lež.
+  var poprve = je > (S.hodnostMax == null ? -1 : S.hodnostMax);
+  if (poprve) S.hodnostMax = je;
+  save();
+  if (je <= byl) return;          // propad hodnosti neoslavujeme ani nehlásíme
+  var o = poprve ? (HODNOSTI_HRA[je] || {}).odmena : null;
+  sheet('<h3>\u{1F3C5} Povýšení: ' + esc(h.nazev) + '</h3>'
+    + '<p class="muted small">Tvoje čisté jmění přesáhlo ' + kcFull(h.od)
+    + '. Novou hodnost vidí i ostatní v žebříčku a na burze.</p>'
+    + (o ? '<div class="kv souhrn"><span>Odměna</span><b class="ok">' + esc(odmenaSlovy(o)) + '</b></div>'
+         + '<p class="fine">Hotovost i karty připíše server — objeví se během chvilky.</p>' : '')
+    + (h.dalsi ? '<div class="kv"><span>Další meta</span><b>' + esc(h.dalsi) + ' od '
+        + kcFull(h.dalsi_od) + '</b></div>' : '<p class="fine">Víc stupňů už není. Gratuluju.</p>')
+    + '<button class="btn big" id="hod-ok" style="width:100%;margin-top:10px">Díky</button>');
+  if ($('hod-ok')) $('hod-ok').onclick = closeSheet;
+  toast('Povýšil jsi na ' + h.nazev + '.', 'ok', true);
+}
+function hodnostHtml() {
+  if (!S) return '';
+  var h = mojeHodnost(), net = cisteJmeni();
+  var postup = 100;
+  if (h.dalsi_od != null) {
+    var od = h.od, do_ = h.dalsi_od;
+    postup = do_ > od ? Math.max(0, Math.min(100, Math.round((net - od) / (do_ - od) * 100))) : 0;
+  }
+  var radky = HODNOSTI_HRA.map(function (x, i) {
+    var mam = i <= h.stupen;
+    return '<div class="hod-r' + (mam ? ' mam' : '') + (i === h.stupen ? ' ted' : '') + '">'
+      + '<span class="hod-n">' + (mam ? '\u2713 ' : '') + esc(x.nazev) + '</span>'
+      + '<span class="hod-od">' + (x.od ? 'od ' + kc(x.od) : 'start') + '</span>'
+      + '<span class="hod-o">' + esc(odmenaSlovy(x.odmena)) + '</span></div>';
+  }).join('');
+  return '<div class="card"><h3>Hodnost</h3>'
+    + '<div class="kv souhrn"><span>' + esc(h.nazev) + '</span><b>' + kcFull(net) + '</b></div>'
+    + (h.dalsi
+        ? '<div class="bar"><i style="width:' + postup + '%"></i></div>'
+          + '<p class="fine">Do hodnosti <b>' + esc(h.dalsi) + '</b> ti zbývá ' + kcFull(h.doDalsi) + '.</p>'
+        : '<p class="fine">Jsi na nejvyšším stupni. Výš už to nejde.</p>')
+    + '<div class="hod-tab">' + radky + '</div>'
+    + '<p class="fine">Hodnost se počítá z čistého jmění — co máš, minus co dlužíš bance. '
+    + 'Vidí ji i ostatní v žebříčku a na burze.</p></div>';
+}
+function hodnostNazev(id) {
+  for (var i = 0; i < HODNOSTI_HRA.length; i++) if (HODNOSTI_HRA[i].id === id) return HODNOSTI_HRA[i].nazev;
+  return '';
+}
+// Co stupeň dává, jednou větou — do přehledu žebříku.
+function odmenaSlovy(o) {
+  if (!o) return '—';
+  if (o.cash) return kcFull(o.cash);
+  if (o.karta) {
+    // Katalog karet přijde ze serveru až po načtení; než dorazí, ať tam nesvítí
+    // technický název jako „credit".
+    var ceske = { rush: 'Expresní dovoz', traffic: 'Reklamní kampaň',
+      connect: 'Známý řemeslník', credit: 'Lepší bankéř' };
+    var c = (CARDS_CAT || []).filter(function (x) { return x.kind === o.karta; })[0];
+    return 'karta ' + (c ? c.name : (ceske[o.karta] || o.karta));
+  }
+  return '—';
+}
+
 // Čisté jmění: co hráč má, minus co dluží. Kromě postavených prádlomatů se počítají
 // i stroje na skladě a na cestě, pobočky a technika čety — to všechno už je zaplacené.
 // Musí sedět s cisteJmeni() v routes/game-account.routes.js, podle kterého se staví
@@ -8077,8 +8174,10 @@ function paintFirma() {
   }
   if (ME) {
     var firma = ME.company || (ME.nick + ' s.r.o.');
+    // Místo nicku ukazujeme hodnost: svoje jméno hráč zná, ale kde zrovna je
+    // na žebříku, se mění — a to je informace, kvůli které se na lištu dívá.
     el.innerHTML = (ME.emblem ? znakSvg(ME.emblem, 20) + ' ' : '')
-      + '<b>' + esc(firma) + '</b>' + stav + '<i>' + esc(ME.nick) + '</i>';
+      + '<b>' + esc(firma) + '</b>' + stav + '<i>' + esc(mojeHodnost().nazev) + '</i>';
   } else {
     el.innerHTML = '<b class="muted">Hraješ bez účtu</b>' + stav + '<i>Založit firmu ›</i>';
   }
@@ -9894,6 +9993,7 @@ function paintMe() {
     + '<div class="kv"><span>Prozkoumaných oblastí</span><b>' + Object.keys(S.areas).length + '</b></div>'
     + '<div class="kv"><span>Prověřených míst</span><b>' + Object.keys(S.revealed).length + '</b></div>'
     + '</div>'
+    + hodnostHtml()
     + podilyHtml()
     + majetekHtml()
     + '<div class="card"><h3>Jak se hraje</h3>'
@@ -13224,6 +13324,9 @@ S = load();
 api('/account/me?ref=' + encodeURIComponent((S && S.pid) || trvalePid())).then(function (r) {
   if (r.ok && r.j.player) {
     ME = r.j.player;
+    // Žebřík hodností má jediného vlastníka: server. Kopie v hře je jen záloha
+    // pro případ, že by starý server seznam ještě neposílal.
+    if (Array.isArray(r.j.hodnosti) && r.j.hodnosti.length) HODNOSTI_HRA = r.j.hodnosti;
     var srv = r.j.state;
     if (r.j.rev != null) STATE_REV = r.j.rev;
     if (srv && (!S || (srv.lastTick || 0) >= (S.lastTick || 0))) { S = dosypStav(srv) || S; save(); }

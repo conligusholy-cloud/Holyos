@@ -7617,6 +7617,9 @@ model GamePlayer {
   nick_lower    String    @unique @db.VarChar(24)
   // Kdy naposledy změnil jméno hráče — mezi změnami je pauza z nastavení.
   nick_at       DateTime?
+  // Nejvyšší dosažená hodnost (id ze services/game/hodnosti.js). Drží se tady,
+  // aby se odměny nemusely při každém uložení hry dohledávat v tabulce.
+  hodnost       String?   @db.VarChar(20)
   // Prázdné u účtu, který vznikl jen z nicku a firmy na úvodce. Dokud si
   // hráč heslo nedoplní, drží ho ve hře jen cookie a přihlásit se nemůže.
   password_hash String?   @db.VarChar(100)
@@ -7831,6 +7834,27 @@ model GameSubscription {
 // Vzniká na serveru jednou pro celý herní svět a zasahuje prádlomaty podle toho,
 // kde stojí — ne podle toho, čí jsou. Dopad si pak dopočítá hra v prohlížeči,
 // stejně jako počítá všechno ostatní.
+// Co komu hra už vyplatila za hodnost nebo odznak. Jeden řádek = jedna odměna,
+// unikátní index hlídá, že se tatáž nevyplatí dvakrát — to je u peněz podstatnější
+// než elegance. `zpetne` označuje odměnu za stupeň, který měl hráč už ve chvíli,
+// kdy se hodnosti zaváděly; vyplácí se, jen když to majitel pustí v administraci.
+model GameOdmena {
+  id          Int      @id @default(autoincrement())
+  player_id   Int
+  // hodnost | odznak
+  druh        String   @db.VarChar(10)
+  kod         String   @db.VarChar(24)
+  cash        Int      @default(0)
+  karta       String?  @db.VarChar(24)
+  zpetne      Boolean  @default(false)
+  vyplaceno   Boolean  @default(false)
+  created_at  DateTime @default(now())
+
+  @@unique([player_id, druh, kod])
+  @@index([player_id, vyplaceno])
+  @@map("game_odmeny")
+}
+
 model GameEvent {
   id         Int      @id @default(autoincrement())
   typ        String   @db.VarChar(32)     // klíč z katalogu

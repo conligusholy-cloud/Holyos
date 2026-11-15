@@ -469,6 +469,18 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .fld.chk{display:flex;align-items:flex-start;gap:9px;margin:10px 0 2px}
 .fld.chk input{flex:0 0 auto;width:20px;height:20px;margin:1px 0 0;accent-color:var(--akce,#7c5cff)}
 .fld.chk span{display:block;margin:0;font-size:13px;color:var(--text);line-height:1.35}
+/* Žebřík hodností v Já: co mám, kde stojím a co je příště. */
+.hod-tab{margin-top:10px;border-top:1px solid var(--border)}
+.hod-r{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);
+  font-size:12.5px;color:var(--text3)}
+.hod-r:last-child{border-bottom:0}
+.hod-r.mam{color:var(--text2)}
+.hod-r.ted{color:var(--text);font-weight:700}
+.hod-r.ted .hod-n{color:var(--akcent,#7c5cff)}
+.hod-n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hod-od{flex:0 0 auto;font-variant-numeric:tabular-nums;opacity:.8}
+.hod-o{flex:0 0 auto;width:40%;max-width:160px;text-align:right;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;opacity:.85}
 .btn.ghost{background:none;border:1px solid var(--border);color:var(--text2);box-shadow:none;margin-top:8px}
 .btn.ghost:hover{color:var(--text);border-color:var(--text)}
 .gcard{border:1px solid var(--border);border-radius:14px;padding:14px;margin:10px 0;background:var(--card);position:relative;overflow:hidden}
