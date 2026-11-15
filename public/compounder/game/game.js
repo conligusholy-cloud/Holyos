@@ -11992,9 +11992,25 @@ function rychleNaDrazbu(zap) {
   if (zap && !DRAZBA_T) DRAZBA_T = setInterval(hlidejDrazbu, 2000);
   if (!zap && DRAZBA_T) { clearInterval(DRAZBA_T); DRAZBA_T = null; }
 }
-function drazbaCas(ms) {
-  var sek = Math.ceil(ms / 1000);
-  return sek + ' s';
+// Kruh se vztahuje k základní minutě, takže každý příhoz je na něm vidět
+// jako kousek, který se vrátí zpátky.
+var DRAZBA_ZAKLAD_MS = 60000, DRAZBA_OBVOD = 326.7;
+function paintDrazbaHodiny() {
+  var el = $('drz-hodiny'), cislo = $('drz-odpocet'), popis = $('drz-odpocet-p'), kruh = $('drz-kruh');
+  if (!el || !cislo || !kruh) return;
+  var ms = drazbaZbyva(), sek = Math.ceil(ms / 1000);
+  kruh.setAttribute('stroke-dashoffset',
+    String(DRAZBA_OBVOD * (1 - Math.max(0, Math.min(1, ms / DRAZBA_ZAKLAD_MS)))));
+  if (!drazbaBezi()) {
+    cislo.textContent = 'konec';
+    if (popis) popis.textContent = 'dražba doběhla';
+    el.className = 'drz-hodiny dobehlo';
+    kruh.setAttribute('stroke-dashoffset', String(DRAZBA_OBVOD));
+    return;
+  }
+  cislo.textContent = sek;
+  if (popis) popis.textContent = sek === 1 ? 'vteřina' : (sek < 5 ? 'vteřiny' : 'vteřin');
+  el.className = 'drz-hodiny' + (ms <= 7000 ? ' dochazi' : ms <= 15000 ? ' spech' : '');
 }
 // Okno dražby. Překresluje se celé jen při změně dat; odpočet a cena tikají
 // zvlášť, aby se pod prstem nepřekreslovala tlačítka.
@@ -12005,10 +12021,9 @@ function drazbaSheet() {
   if (DRAZBA_TIK) clearInterval(DRAZBA_TIK);
   DRAZBA_TIK = setInterval(function () {
     if (!$('drz-okno')) { clearInterval(DRAZBA_TIK); DRAZBA_TIK = null; return; }
-    var o = $('drz-odpocet');
-    if (o && drazbaBezi()) o.textContent = drazbaCas(drazbaZbyva());
-    if (drazbaBezi() && drazbaZbyva() <= 0) paintDrazba();
-  }, 200);
+    paintDrazbaHodiny();
+    if (DRAZBA && DRAZBA.stav === 'bezi' && drazbaZbyva() <= 0) paintDrazba();
+  }, 150);
 }
 function paintDrazba() {
   var box = $('drz-okno');
@@ -12034,8 +12049,14 @@ function paintDrazba() {
   box.innerHTML = '<h3>\u{1F528} Dražba — ' + esc(d.nazev) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Vyvolal ' + esc(d.prodavajici_nick)
     + '. Každý příhoz sráží cenu a přidá tři vteřiny. Bere poslední přihazující.</p>'
-    + '<div class="drz-cena"><b id="drz-castka">' + kcFull(cena) + '</b>'
-    + '<span id="drz-odpocet" class="drz-cas">' + drazbaCas(drazbaZbyva()) + '</span></div>'
+    // Hodiny jsou hrdina okna — odpočet rozhoduje, cena je až druhá v pořadí.
+    + '<div class="drz-hodiny" id="drz-hodiny">'
+    + '<svg viewBox="0 0 120 120" aria-hidden="true">'
+    + '<circle class="drz-kruh-p" cx="60" cy="60" r="52"></circle>'
+    + '<circle class="drz-kruh" id="drz-kruh" cx="60" cy="60" r="52" '
+    + 'stroke-dasharray="326.7" stroke-dashoffset="0"></circle></svg>'
+    + '<div class="drz-cislo"><b id="drz-odpocet">0</b><span id="drz-odpocet-p">vteřin</span></div></div>'
+    + '<div class="drz-cena"><span>Cena teď</span><b id="drz-castka">' + kcFull(cena) + '</b></div>'
     + '<div class="kv"><span>Vyvolávací cena</span><b>' + kcFull(d.vyvolavaci) + '</b></div>'
     + '<div class="kv"><span>Příhozy (' + d.prihozu + ')</span><b>' + kcFull(d.suma) + '</b></div>'
     + (pod ? '<p class="fine warn">Příhozy přerostly vyvolávací cenu — od téhle chvíle cena zase roste '
@@ -12059,6 +12080,7 @@ function paintDrazba() {
         return '<span><i>' + esc(p.nick) + '</i> ' + kc(p.castka) + '</span>';
       }).join('') + '</div>'
     + '<button class="btn sec" id="drz-pryc" style="width:100%;margin-top:10px">Zavřít</button>';
+  paintDrazbaHodiny();
   if ($('drz-pryc')) $('drz-pryc').onclick = closeSheet;
   [].forEach.call(box.querySelectorAll('[data-prihoz]'), function (b) {
     b.onclick = function () { prihodDrazba(Number(b.getAttribute('data-prihoz')), b); };
