@@ -141,13 +141,23 @@ const RAMEC_KINDS = Object.keys(RAMEC);
 // ─── Balíčky infolinky ───────────────────────────────────────────────────────
 // Kredit = jeden hovor, který vyřídí placený operátor místo hráče. Čím větší
 // balíček, tím nižší cena za hovor.
+// Infolinka se platí na čas, ne na kusy: dokud balíček běží, bere operátor
+// všechny hovory a telefon hráči vůbec nezvoní. Staré balíčky po hovorech
+// zůstávají v seznamu kvůli tomu, co si lidi koupili a ještě nevyzvedli —
+// prodávat se už nedají (active: false v ceníku je schová úplně) a při
+// vyzvednutí dají týden, ať na tom nikdo netratí.
+const LINKA_DEN = 86400000;
 const LINKA = {
-  linka50:  { kind: 'linka50',  name: '50 hovorů',  price: 9900,  hovory: 50 },
-  linka100: { kind: 'linka100', name: '100 hovorů', price: 17900, hovory: 100 },
-  linka200: { kind: 'linka200', name: '200 hovorů', price: 29900, hovory: 200 },
-  linka300: { kind: 'linka300', name: '300 hovorů', price: 39900, hovory: 300 },
-  linka400: { kind: 'linka400', name: '400 hovorů', price: 49900, hovory: 400 },
-  linka500: { kind: 'linka500', name: '500 hovorů', price: 59900, hovory: 500 }
+  linka1d: { kind: 'linka1d', name: 'Infolinka na den',   price: 4900,  dnu: 1 },
+  linka3d: { kind: 'linka3d', name: 'Infolinka na 3 dny', price: 9900,  dnu: 3 },
+  linka7d: { kind: 'linka7d', name: 'Infolinka na týden', price: 14900, dnu: 7 },
+  // Doběh starých kreditových balíčků. Nenabízejí se, jen se dají vyzvednout.
+  linka50:  { kind: 'linka50',  name: '50 hovorů',  price: 9900,  dnu: 7, stary: true },
+  linka100: { kind: 'linka100', name: '100 hovorů', price: 17900, dnu: 7, stary: true },
+  linka200: { kind: 'linka200', name: '200 hovorů', price: 29900, dnu: 7, stary: true },
+  linka300: { kind: 'linka300', name: '300 hovorů', price: 39900, dnu: 7, stary: true },
+  linka400: { kind: 'linka400', name: '400 hovorů', price: 49900, dnu: 7, stary: true },
+  linka500: { kind: 'linka500', name: '500 hovorů', price: 59900, dnu: 7, stary: true }
 };
 const LINKA_KINDS = Object.keys(LINKA);
 
@@ -272,9 +282,10 @@ async function ramecPublic(playerId) {
 async function linkaPublic() {
   const out = [];
   for (const k of LINKA_KINDS) {
+    if (LINKA[k].stary) continue;          // doběh starých balíčků se neprodává
     const c = await item(k); if (!c) continue;
-    out.push({ kind: c.kind, name: c.name, price_czk: c.price / 100, hovory: c.hovory,
-      za_hovor: Math.round(c.price / c.hovory) / 100 });
+    out.push({ kind: c.kind, name: c.name, price_czk: c.price / 100, dnu: LINKA[k].dnu,
+      za_den: Math.round(c.price / LINKA[k].dnu) / 100 });
   }
   return out;
 }
@@ -1186,10 +1197,11 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
       result = { effect: 'ramec', amount: castka,
         msg: 'Rámec v bance se zvedl o ' + castka.toLocaleString('cs-CZ') + ' L$.' };
     } else if (LINKA[kind]) {
-      const c = await item(kind);
-      const kolik = (c && c.hovory) || LINKA[kind].hovory;
-      result = { effect: 'linka', hovory: kolik,
-        msg: 'Operátoři vyřídí ' + kolik + ' hovorů za tebe.' };
+      const dnu = LINKA[kind].dnu || 1;
+      result = { effect: 'linka', dnu,
+        msg: LINKA[kind].stary
+          ? 'Infolinka se platí na čas — tvůj balíček jsme převedli na týden.'
+          : 'Infolinka ti běží ' + (dnu === 1 ? 'den' : dnu === 7 ? 'týden' : dnu + ' dny') + '.' };
     } else {
       result = EFFECTS[kind]();
     }

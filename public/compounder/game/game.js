@@ -1463,7 +1463,7 @@ function fresh(profileId) {
     hovorZa: null,    // za jak dlouho strávených ve hře zazvoní další hovor
     hovoryPosl: [],   // rozhovory, které už padly — ať se hned neopakují
     hovorLog: [],     // evidence hovorů — kdo volal a jak to dopadlo
-    linkaSam: false,  // true = hovory si beru sám i s kreditem na lince
+    linkaDo: 0,       // dokud běží infolinka, bere operátor všechny hovory
     pojisteni: false, // pojištění provozoven proti požáru, vytopení a vloupání
     stats: { earned: 0, interest: 0 },
     hist: []          // vývoj po herních měsících — tržby, zisk, dluh, počet prádlomatů
@@ -1525,7 +1525,14 @@ function dosypStav(o) {
     if (!Array.isArray(o.hovorLog)) o.hovorLog = [];
     delete o.snyRezie;     // agenda snů zrušena — nikdo za ni dál neplatí
     if (!o.offPovest || typeof o.offPovest !== 'object') o.offPovest = { den: '', body: 0 };
-    if (typeof o.linkaSam !== 'boolean') o.linkaSam = false;
+    // Infolinka se platí na čas. Komu zbyly kredity ze starých balíčků,
+    // dostane za ně týden — jednou, při prvním otevření po změně.
+    if (typeof o.linkaDo !== 'number') o.linkaDo = 0;
+    if ((o.linka || 0) > 0 && !o.linkaPrevod) {
+      o.linkaDo = Math.max(o.linkaDo, Date.now() + LINKA_PREVOD_MS);
+      o.linka = 0; o.linkaPrevod = 1;
+    }
+    delete o.linkaSam;
     if (typeof o.pojisteni !== 'boolean') o.pojisteni = false;
     // Sídlo z doby, kdy se nestěhovalo, nemá datum. Bereme založení firmy —
     // kdo hraje dýl než tři herní roky, může se stěhovat hned.
@@ -3277,11 +3284,19 @@ function zapisHovor(jmeno, kroky, konec, zmena) {
 }
 // Zaplacený kredit znamená klid: hovor vyřídí operátor a telefon vůbec
 // nezazvoní. Kdo chce hovory brát sám (vynesou víc), přepne si to v kartě.
+// Dokud balíček běží, bere operátor všechny hovory a telefon nezvoní.
+var LINKA_PREVOD_MS = 7 * 86400000;     // co dostanou staré kredity při převodu
+function maLinku() { return !!(S && S.linkaDo && S.linkaDo > Date.now()); }
+function linkaZbyva() { return maLinku() ? S.linkaDo - Date.now() : 0; }
+function prodluzLinku(dnu) {
+  var od = Math.max(Date.now(), (S && S.linkaDo) || 0);
+  S.linkaDo = od + Math.max(0, Number(dnu) || 0) * 86400000;
+  return S.linkaDo;
+}
 function operatorVyridi() {
   var sc = vyberScenar();
   var jmeno = hovorJmeno(sc.rod);
   S.hovoryPosl = (S.hovoryPosl || []).concat([sc.id]).slice(-SCENARU_PAMET);
-  S.linka = Math.max(0, (S.linka || 0) - 1);
   S.hovoru = (S.hovoru || 0) + 1;
   zapisHovor(jmeno, sc.kroky, 'operator', 0);
   naplanujHovor();
@@ -3313,9 +3328,9 @@ function linkaOffline(dt) {
     ((HOVOR_ZA_MIN + HOVOR_ZA_MAX) / 2) / Math.pow(pobocek, HOVOR_SKLON));
   var kolik = Math.min(OFF_MAX, Math.floor(dt / (prumer * OFF_PODIL)));
   if (kolik <= 0) return;
-  var vzal = Math.min(kolik, Math.max(0, S.linka || 0));
+  // S běžícím balíčkem bere operátor všechno, i za nepřítomnosti.
+  var vzal = maLinku() ? kolik : 0;
   var zmeskano = kolik - vzal;
-  if (vzal) S.linka = (S.linka || 0) - vzal;
   S.hovoru = (S.hovoru || 0) + kolik;
   var ztrata = 0;
   if (zmeskano) {
@@ -3339,7 +3354,7 @@ function linkaOffline(dt) {
         + (ztrata ? ' — pověst klesla o ' + ztrata + '.' : '.'), 'warn', true);
     } else if (vzal) {
       toast('Operátor za tebe vyřídil ' + vzal + ' ' + mn(vzal, 'hovor', 'hovory', 'hovorů')
-        + ', než ses vrátil. Zbývá ' + (S.linka || 0) + '.', 'ok', true);
+        + ', než ses vrátil. Infolinka ti běží ' + etaText(linkaZbyva()) + '.', 'ok', true);
     } else {
       toast(zmeskano + ' ' + mn(zmeskano, 'hovor', 'hovory', 'hovorů')
         + ' nikdo nevzal, když jsi byl pryč.'
@@ -3355,7 +3370,7 @@ function hovorTik(dt) {
   S.hovorZa -= dt;
   if (S.hovorZa > 0) return;
   // Dokud je kredit a hráč si hovory nebere sám, bere je operátor potichu.
-  if ((S.linka || 0) > 0 && !S.linkaSam) { operatorVyridi(); return; }
+  if (maLinku()) { operatorVyridi(); return; }
   if (!hovorLze()) return;              // později to zazvoní znovu
   zacniHovor();
 }
@@ -3388,9 +3403,8 @@ function odmitniHovor(samo) {
   if (!HOVOR) return;
   // Zaplacená linka: hovor, který hráč nevezme, vyřídí operátor a pověst
   // nikam nejde. Kredit se strhne jen tehdy, když opravdu zaskakuje.
-  var operator = (S.linka || 0) > 0;
-  if (operator) S.linka = S.linka - 1;
-  else zmenPovest(povestZaOdpoved(HOVOR_ODMITNUTI));
+  var operator = maLinku();
+  if (!operator) zmenPovest(povestZaOdpoved(HOVOR_ODMITNUTI));
   S.hovoru = (S.hovoru || 0) + 1;
   zapisHovor(HOVOR.jmeno, HOVOR.kroky, operator ? 'operator' : 'nevzat',
     operator ? 0 : povestZaOdpoved(HOVOR_ODMITNUTI));
@@ -3399,8 +3413,7 @@ function odmitniHovor(samo) {
   zavriHovor();
   save(); paint(); syncState(true);
   if (operator) {
-    toast('Hovor vzal operátor infolinky za tebe. Zbývá ' + (S.linka || 0) + ' '
-      + mn(S.linka || 0, 'hovor', 'hovory', 'hovorů') + '.', 'ok', true);
+    toast('Hovor vzal operátor infolinky za tebe.', 'ok', true);
   } else {
     toast(samo ? 'Zákazník se nedočkal a položil to. Pověst klesla.'
                : 'Hovor jsi nevzal. Pověst klesla.', 'err');
@@ -3412,7 +3425,7 @@ function odmitniHovor(samo) {
         + '<p class="muted small">Tenhle hovor ti vzal kus pověsti. Operátor infolinky zvedne '
         + 'každý hovor, který nestihneš — a pověst zůstane, kde byla.</p>'
         + '<div class="kv"><span>Nevyčerpané hovory</span><b>0</b></div>'
-        + '<button class="btn big" data-linka="' + esc(c.kind) + '">' + c.hovory + ' hovorů za '
+        + '<button class="btn big" data-linka="' + esc(c.kind) + '">' + esc(c.name) + ' za '
         + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button>'
         + '<button class="btn sec" id="linka-ne" style="width:100%;margin-top:8px">Teď ne</button>'
         + '<p class="fine">Větší balíčky vyjdou levněji — najdeš je v Kartách.</p>');
@@ -6806,7 +6819,7 @@ var LINKA_ODSTUP = 20 * 60e3;
 function linkaNabidnoutLze() {
   if (!S || S.tut !== 'done' || !ME || !PAYMENTS_ON) return false;
   if (!LINKA_CAT || !LINKA_CAT.length) return false;
-  if ((S.linka || 0) > 0) return false;
+  if (maLinku()) return false;
   if (((S.hovoru || 0) % LINKA_PO_HOVORECH) !== 0) return false;
   return Date.now() - (S.linkaNabidka || 0) >= LINKA_ODSTUP;
 }
@@ -6818,7 +6831,7 @@ function linkaNabidkaHtml() {
   return '<div class="card agent" style="margin-top:12px"><h3>\u260E\uFE0F Ať to za tebe zvedne operátor</h3>'
     + '<p class="muted small" style="margin:2px 0 8px">Takhle ti bude telefon zvonit u každé pobočky. '
     + 'Hovor, který nestihneš, vezme operátor a pověst ti za něj neklesne.</p>'
-    + '<button class="btn big" data-linka="' + esc(c.kind) + '">' + c.hovory + ' hovorů za '
+    + '<button class="btn big" data-linka="' + esc(c.kind) + '">' + esc(c.name) + ' za '
     + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button>'
     + '<p class="fine">Větší balíčky vyjdou levněji — jsou v Kartách.</p></div>';
 }
@@ -8444,7 +8457,10 @@ function povestHtml() {
     + '<p class="fine" style="margin-top:8px">Zákazníci volí, jen když jsi ve hře. '
     + 'Kdo hovor vezme a umí poradit, má v prádlomatech víc lidí — až o desetinu. '
     + 'Kdo je odmítá nebo odbyde, přijde až o pětinu návštěvnosti. Zvoní to jen pět vteřin — '
-    + 'co se nevezme, bere se jako nevyřízený hovor.</p></div>';
+    + 'co se nevezme, bere se jako nevyřízený hovor. '
+    + (maLinku() ? 'Infolinku máš zaplacenou ještě ' + etaText(linkaZbyva())
+        + ', takže hovory bere operátor a telefon nezvoní.'
+        : 'Zaplacená infolinka je vezme za tebe, i když hru zavřeš.') + '</p></div>';
 }
 // Pojištění provozoven. Požár ani vytopení technik nespraví — oprava stojí
 // desetitisíce a stroj do té doby nevydělává. Pojistné běží měsíčně za každý
@@ -11889,11 +11905,7 @@ function paintCards() {
   [].forEach.call(box.querySelectorAll('[data-ramec]'), function (el) {
     el.onclick = function () { buyCash(el.getAttribute('data-ramec')); };
   });
-  if ($('linka-sam')) $('linka-sam').onclick = function () {
-    S.linkaSam = !S.linkaSam; save(); syncState(true); paintCards();
-    toast(S.linkaSam ? 'Hovory si bereš sám — telefon zase zvoní.'
-      : 'Hovory bere operátor. Telefon ti nezazvoní, dokud máš kredit.', 'ok');
-  };
+
   [].forEach.call(box.querySelectorAll('[data-use]'), function (b) { b.onclick = function () { useCard(b.getAttribute('data-use')); }; });
   [].forEach.call(box.querySelectorAll('[data-buy-card]'), function (b) { b.onclick = function () { buyCard(b.getAttribute('data-buy-card')); }; });
   bindInstagram();
@@ -12014,32 +12026,24 @@ function ramecPacksHtml() {
 }
 function linkaPacksHtml() {
   if (!LINKA_CAT || !LINKA_CAT.length) return '';
-  var zbyva = (S && S.linka) || 0;
-  return '<div class="card"><h3>\u260E\uFE0F Balíčky infolinky</h3>'
+  var bezi = maLinku();
+  return '<div class="card"><h3>\u260E\uFE0F Infolinka</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">S každým dalším prádlomatem volají lidi častěji — '
     + 'u jedné pobočky jednou za pár minut, u velké sítě skoro pořád. '
-    + 'Kredit je jeden hovor, který vezme operátor místo tebe. Volají i když hru zavřeš — '
-    + 'za nepřítomnosti pomaleji a nejvýš třicet hovorů, než se vrátíš; na co není kredit, '
-    + 'to srazí pověst. Hovor, který si vezmeš sám a zvládneš ho, pořád vynese víc.</p>'
-    + '<div class="kv"><span>Nevyčerpané hovory</span><b' + (zbyva ? ' class="ok"' : '') + '>' + zbyva + '</b></div>'
-    // Kdo má kredit, má mít klid: telefon nezvoní vůbec. Kdo chce vydělávat
-    // víc a hovory si brát sám, přepne si to tady.
-    + (zbyva
-        ? '<div class="kv"><span>Hovory si beru sám</span>'
-          + '<button class="prep-sam' + (S.linkaSam ? ' on' : '') + '" id="linka-sam">'
-          + (S.linkaSam ? 'Zapnuto' : 'Vypnuto') + '</button></div>'
-          + '<p class="fine">' + (S.linkaSam
-              ? 'Telefon zvoní jako dřív. Kredit se strhne jen u hovoru, který nestihneš.'
-              : 'Hovory vyřizuje operátor a telefon ti vůbec nezazvoní. Najdeš je v evidenci níž.') + '</p>'
-        : '')
+    + 'Dokud máš infolinku zaplacenou, bere operátor všechny hovory za tebe, telefon ti vůbec '
+    + 'nezazvoní a pověst neklesá — i když hru zavřeš. Co vyřídil, najdeš v evidenci níž.</p>'
+    + '<div class="kv"><span>Infolinka</span><b class="' + (bezi ? 'ok' : 'warn') + '">'
+    + (bezi ? 'běží ještě ' + etaText(linkaZbyva()) : 'neběží') + '</b></div>'
+    + (bezi ? '<p class="fine">Koupený balíček se přičte k tomu, co ti zbývá — nic nepropadne.</p>'
+        : '<p class="fine">Bez ní telefon zvoní a každý nevzatý hovor srazí pověst.</p>')
     + (PAYMENTS_ON
         ? LINKA_CAT.map(function (c) {
             return '<div class="pack" data-linka="' + esc(c.kind) + '">'
-              + '<div class="pack-l"><b>' + c.hovory + ' hovorů</b>'
-              + '<span>' + String(c.za_hovor).replace('.', ',') + ' Kč za hovor</span></div>'
+              + '<div class="pack-l"><b>' + esc(c.name) + '</b>'
+              + '<span>' + String(c.za_den).replace('.', ',') + ' Kč za den</span></div>'
               + '<button class="btn sm">' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button></div>';
           }).join('')
-          + '<p class="fine">Platbu zpracovává Stripe. Hovory se připíšou hned po zaplacení.</p>'
+          + '<p class="fine">Platbu zpracovává Stripe. Infolinka naskočí hned po zaplacení.</p>'
         : '<p class="fine">Prodej se teprve spouští.</p>')
     + hovorLogHtml()
     + '</div>';
@@ -12361,7 +12365,7 @@ function buyCash(kind) {
   if (!c) return;
   if (!ME) return toast('Nejdřív se přihlas.', 'err');
   if (!ME.has_details) return detailsSheet(null, kind);
-  var hovory = !!c.hovory;
+  var hovory = !!c.dnu;
   var ramec = c.uroven != null;
   // U rámce se platí jen rozdíl proti stupni, který hráč má.
   var nizsi = ramec ? ((RAMEC.balicky || []).filter(function (x) { return x.uroven === (RAMEC.uroven || 0); })[0]) : null;
@@ -12373,7 +12377,9 @@ function buyCash(kind) {
           + '<div class="kv"><span>Teď máš</span><b>'
           + (ramecStrop() === null ? 'bez stropu' : kcFull(ramecStrop())) + '</b></div>'
         : hovory
-          ? '<div class="kv"><span>Hovory navíc</span><b class="ok">+' + c.hovory + '</b></div>'
+          ? '<div class="kv"><span>Infolinka poběží</span><b class="ok">'
+            + (maLinku() ? etaText(linkaZbyva() + c.dnu * 86400000) + ' (včetně zbytku)'
+                : c.dnu === 1 ? 'den' : c.dnu === 7 ? 'týden' : c.dnu + ' dny') + '</b></div>'
           : '<div class="kv"><span>Rámec a zástava v bance</span><b class="ok">+' + kcFull(c.laundry) + '</b></div>')
     + '<div class="kv"><span>Cena</span><b>' + platba.toLocaleString('cs-CZ') + ' Kč</b></div>'
     + (ramec
@@ -12381,7 +12387,7 @@ function buyCash(kind) {
             ? '<p class="fine ok">Plná cena je ' + c.price_czk.toLocaleString('cs-CZ')
               + ' Kč — doplácíš jen rozdíl proti stupni, který máš.</p>' : '')
         : hovory
-          ? '<div class="kv"><span>Za hovor</span><b>' + String(c.za_hovor).replace('.', ',') + ' Kč</b></div>'
+          ? '<div class="kv"><span>Za den</span><b>' + String(c.za_den).replace('.', ',') + ' Kč</b></div>'
           : '<div class="kv"><span>Za korunu</span><b>' + c.per_czk.toLocaleString('cs-CZ') + ' L$</b></div>')
     + '<div class="kv"><span>Platí</span><b>' + esc(ME.first_name + ' ' + ME.last_name) + '</b></div>'
     + '<button class="btn big" id="do-pay">Zaplatit kartou</button>'
@@ -12389,7 +12395,8 @@ function buyCash(kind) {
         ? 'Strop platí napořád a neruší herní pravidla: víc, než unese výdělek sítě a počet '
           + 'doplacených prádlomatů, ti banka nepůjčí ani tak. Načerpané peníze strop nikdy nebere.'
         : hovory
-          ? 'Kredit se strhne jen tehdy, když hovor opravdu vezme operátor za tebe. Nevyčerpané hovory nikam nemizí.'
+          ? 'Čas běží od zaplacení a k tomu, co ti ještě zbývá, se přičte. '
+            + 'Po celou dobu bere operátor všechny hovory a telefon ti nezazvoní.'
           : 'Laundry jsou herní měna bez jakékoli hodnoty a nejde je směnit zpět.') + '</p>');
   $('do-pay').onclick = function () {
     $('do-pay').disabled = true;
@@ -12414,6 +12421,13 @@ function claimCash(then) {
     var fond = (CASH_CAT || []).concat(LINKA_CAT || []);
     var dluzne = fond.filter(function (c) { return (ME.cards[c.kind] || 0) > 0; });
     if (dluzne.length) k = dluzne[0].kind;
+    // Staré kreditové balíčky infolinky už v nabídce nejsou, ale kdo si nějaký
+    // koupil a nevyzvedl, o něj přijít nesmí — převede se na čas.
+    if (!k) {
+      Object.keys(ME.cards).forEach(function (kind) {
+        if (!k && /^linka/.test(kind) && ME.cards[kind] > 0) k = kind;
+      });
+    }
   }
   if (!k) { if (then) then(); return; }
   apiJson('/cards/use', { kind: k }).then(function (r) {
@@ -12430,7 +12444,7 @@ function claimCash(then) {
       return claimCash(then);   // může jich čekat víc
     }
     if (v && v.effect === 'linka') {
-      S.linka = (S.linka || 0) + (v.hovory || 0);
+      prodluzLinku(v.dnu || 0);
       ME.cards = r.j.owned;
       save(); paint(); syncState(true);
       toast(v.msg, 'ok', true);
