@@ -127,6 +127,14 @@ button{font:inherit;cursor:pointer}
   padding:6px 12px;padding-top:calc(env(safe-area-inset-top) + 6px)}
 .firma-lista b{font-size:12.5px;font-weight:700;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .firma-lista i{font-style:normal;font-size:11px;color:var(--text3);white-space:nowrap;margin-left:auto}
+/* Herní měsíc a stav ekonomiky uprostřed lišty — ať je sezóna vidět pořád. */
+.firma-lista u{text-decoration:none;font-size:11px;font-weight:700;white-space:nowrap;
+  color:var(--text2);margin-left:auto;padding:2px 8px;border-radius:8px;
+  background:rgba(255,255,255,.06)}
+.firma-lista u.ok{color:var(--ok);background:rgba(63,214,142,.14)}
+.firma-lista u.warn{color:var(--warn);background:rgba(255,183,77,.14)}
+.firma-lista u.err{color:var(--err);background:rgba(255,93,108,.16)}
+.firma-lista u + i{margin-left:10px}
 .firma-lista svg{flex:none}
 .top{position:relative;z-index:20;display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
   background:var(--border);border-bottom:1px solid var(--border)}

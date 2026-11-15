@@ -7934,12 +7934,21 @@ function paintFirma() {
   paintHeslo();
   var el = $('t-firma');
   if (!el) return;
+  // Uprostřed lišty je vidět, jaký je herní měsíc a jak na tom je ekonomika —
+  // sezóna a krize se násobí, takže se ukazuje výsledek obojího.
+  var e = S ? ekonomika() : null;
+  var stav = '';
+  if (e) {
+    var nad = Math.round((e.koef - 1) * 100);
+    stav = '<u class="' + (e.krize ? 'err' : nad > 1 ? 'ok' : nad < -1 ? 'warn' : '') + '">'
+      + MESICE[e.mesic] + ' ' + (nad > 0 ? '+' : '') + nad + ' %</u>';
+  }
   if (ME) {
     var firma = ME.company || (ME.nick + ' s.r.o.');
     el.innerHTML = (ME.emblem ? znakSvg(ME.emblem, 20) + ' ' : '')
-      + '<b>' + esc(firma) + '</b><i>' + esc(ME.nick) + '</i>';
+      + '<b>' + esc(firma) + '</b>' + stav + '<i>' + esc(ME.nick) + '</i>';
   } else {
-    el.innerHTML = '<b class="muted">Hraješ bez účtu</b><i>Založit firmu ›</i>';
+    el.innerHTML = '<b class="muted">Hraješ bez účtu</b>' + stav + '<i>Založit firmu ›</i>';
   }
 }
 function paintHlavicka() {
