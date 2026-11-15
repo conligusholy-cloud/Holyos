@@ -31,9 +31,9 @@ const prad = (n) => (n === 1 ? 'prádlomat' : n >= 2 && n <= 4 ? 'prádlomaty' :
 // OG / Twitter značky pro stránku hry
 async function metaZnacky(ref, origin) {
   const z = await zvouci(ref);
-  const title = z ? `${z.nick} tě zve do hry Laundromat Tycoon 🎮` : 'Laundromat Tycoon — postav největší síť prádlomatů';
+  const title = z ? 'Zvu tě do hry Laundromat Tycoon 🎮' : 'Laundromat Tycoon — postav největší síť prádlomatů';
   const desc = z
-    ? `${z.firma ? z.firma + ' už staví' : z.nick + ' staví'} síť prádlomatů${z.units ? ' (' + z.units + ' ' + prad(z.units) + ')' : ''} na skutečné mapě. Přidej se — dostaneš 1 550 000 L$ do začátku a hraješ hned, bez e-mailu a hesla.`
+    ? 'Stavím síť prádlomatů na skutečné mapě — přidej se. Dostaneš 1 550 000 L$ do začátku a hraješ hned, bez e-mailu a hesla.'
     : 'Skutečná mapa, skutečná ekonomika. Postav první prádlomat za 60 sekund a vybuduj síť po celé zemi. Hraješ hned, bez e-mailu a hesla.';
   const img = origin + '/game/pozvanka.png' + (z ? '?ref=' + encodeURIComponent(ref) : '');
   const url = origin + '/game' + (z ? '?ref=' + encodeURIComponent(ref) : '');
@@ -47,7 +47,7 @@ async function metaZnacky(ref, origin) {
     `<meta property="og:image:type" content="image/png">`,
     `<meta property="og:image:width" content="1200">`,
     `<meta property="og:image:height" content="630">`,
-    `<meta property="og:image:alt" content="${esc(z ? 'Pozvánka do hry od ' + z.nick : 'Laundromat Tycoon')}">`,
+    `<meta property="og:image:alt" content="${esc(z ? 'Pozvánka do hry Laundromat Tycoon' : 'Laundromat Tycoon')}">`,
     `<meta property="og:locale" content="cs_CZ">`,
     `<meta name="twitter:card" content="summary_large_image">`,
     `<meta name="twitter:title" content="${esc(title)}">`,
@@ -73,8 +73,8 @@ function flexDataUrl() {
 const cache = new Map(); // klíč → { at, png }
 
 function html(z) {
-  const hl = z ? `<div class="kdo"><span class="ava">${esc((z.nick || '?').slice(0, 1).toUpperCase())}</span><div><b>${esc(z.nick)}</b>${z.firma ? `<i>${esc(z.firma)}</i>` : ''}</div></div>
-      <h1>tě zve do hry</h1>` : `<h1 class="obec">Postav největší<br>síť prádlomatů</h1>`;
+  // Bez jména a firmy — pozvánka je od hráče, takže stačí „Zvu tě do hry".
+  const hl = z ? `<h1>Zvu tě<br>do hry</h1>` : `<h1 class="obec">Postav největší<br>síť prádlomatů</h1>`;
   return `<!doctype html><html><head><meta charset="utf-8"><style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{width:1200px;height:630px;overflow:hidden;font-family:'Liberation Sans',Arial,sans-serif;color:#eef4ff;
@@ -82,12 +82,12 @@ function html(z) {
   .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(120,160,255,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(120,160,255,.07) 1px,transparent 1px);background-size:48px 48px;mask-image:linear-gradient(180deg,transparent,#000 40%,#000)}
   .l{position:absolute;left:64px;top:56px;width:640px}
   .brand{display:flex;align-items:center;gap:14px;font-weight:800;font-size:26px;letter-spacing:-.01em;margin-bottom:34px}
-  .brand .m{width:52px;height:52px;border-radius:15px;background:#0b1220;border:2px solid #4fd1ff;display:grid;place-items:center;font-size:28px}
+  .brand .logo{width:68px;height:68px;flex:none}
   .brand .g{background:linear-gradient(90deg,#ffe9a8,#f0a92b);-webkit-background-clip:text;color:transparent}
   .kdo{display:flex;align-items:center;gap:16px;margin-bottom:6px}
   .ava{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:30px;background:linear-gradient(135deg,#4fd1ff,#7c5cff);color:#06101f}
   .kdo b{display:block;font-size:40px;line-height:1.05;letter-spacing:-.02em}.kdo i{display:block;font-style:normal;color:#a9b8d3;font-size:22px;margin-top:4px}
-  h1{font-size:64px;line-height:1.02;letter-spacing:-.035em;font-weight:800;background:linear-gradient(90deg,#4fd1ff,#9db8ff 50%,#a78bfa);-webkit-background-clip:text;color:transparent;margin:6px 0 22px}
+  h1{font-size:84px;line-height:1.02;letter-spacing:-.035em;font-weight:800;background:linear-gradient(90deg,#4fd1ff,#9db8ff 50%,#a78bfa);-webkit-background-clip:text;color:transparent;margin:6px 0 22px}
   h1.obec{font-size:70px}
   .pts{display:flex;flex-direction:column;gap:12px}
   .pt{display:flex;align-items:center;gap:12px;font-size:24px;color:#dbe6ff}.pt .ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:22px;background:rgba(79,209,255,.12);border:1px solid rgba(79,209,255,.35)}
@@ -99,7 +99,7 @@ function html(z) {
   .badge{position:absolute;right:60px;top:52px;padding:10px 18px;border-radius:999px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.5);color:#86efac;font-weight:800;font-size:20px}
   .url{position:absolute;right:64px;bottom:58px;color:#6b7d9e;font-size:20px;font-weight:700}
   </style></head><body><div class="grid"></div>
-  <div class="l"><div class="brand"><div class="m">🧺</div><span>Laundromat <span class="g">Tycoon</span></span></div>
+  <div class="l"><div class="brand"><svg class="logo" viewBox="0 0 64 64" aria-hidden="true">         <defs>           <linearGradient id="lg1" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">             <stop stop-color="#4fd1ff"/><stop offset=".55" stop-color="#3a6cf5"/><stop offset="1" stop-color="#7c5cff"/>           </linearGradient>           <linearGradient id="lg2" x1="20" y1="13" x2="46" y2="30" gradientUnits="userSpaceOnUse">             <stop stop-color="#ffe9a8"/><stop offset=".55" stop-color="#ffd866"/><stop offset="1" stop-color="#f0a92b"/>           </linearGradient>         </defs>         <rect x="2" y="2" width="60" height="60" rx="18" fill="#0b1220"/>         <rect x="2.9" y="2.9" width="58.2" height="58.2" rx="17.1" fill="none" stroke="url(#lg1)" stroke-width="1.6"/>         <path d="M18.6 26.4 21.7 17 26.2 22.6 32 13.2 37.8 22.6 42.3 17 45.4 26.4Z" fill="url(#lg2)"/>         <rect x="19.3" y="27.4" width="25.4" height="2.4" rx="1.2" fill="url(#lg2)"/>         <circle cx="32" cy="43.6" r="11.2" fill="none" stroke="url(#lg1)" stroke-width="3.2"/>         <circle cx="32" cy="43.6" r="5.6" fill="none" stroke="url(#lg1)" stroke-width="2" stroke-opacity=".6"/>         <circle cx="24.2" cy="37.6" r="1.6" fill="#4fd1ff"/>         <path d="M26.8 40.2a7.4 7.4 0 0 1 4.2-3.2" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1.6" stroke-linecap="round"/>       </svg><span>Laundromat <span class="g">Tycoon</span></span></div>
     ${hl}
     <div class="pts">
       <div class="pt"><span class="ic">🗺️</span>Skutečná mapa, skutečná ekonomika</div>
@@ -115,7 +115,7 @@ function html(z) {
 
 async function obrazek(ref) {
   const z = await zvouci(ref);
-  const key = z ? 'r:' + String(ref) + ':' + z.nick + ':' + z.firma : 'obecna';
+  const key = z ? 'pozvanka' : 'obecna';   // obrázek už není osobní — stačí dvě varianty
   const c = cache.get(key);
   if (c && Date.now() - c.at < 6 * 3600e3) return c.png;
   const b = await prohlizec();
