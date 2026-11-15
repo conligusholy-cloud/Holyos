@@ -9716,7 +9716,9 @@ function jaPlatimNabidku(t) {
 }
 function vazanaHotovost(krome) {
   return (TRADES || []).reduce(function (a, t) {
-    return a + (t.stav === 'ceka' && t.id !== krome && jaPlatimNabidku(t) ? (t.cena || 0) : 0);
+    // Jen vlastní nabídky — co posílá někdo mně, mě k ničemu nezavazuje.
+    return a + (t.moje && t.stav === 'ceka' && t.id !== krome && jaPlatimNabidku(t)
+      ? (t.cena || 0) : 0);
   }, 0);
 }
 function volnaHotovost(krome) { return S.cash - vazanaHotovost(krome); }
@@ -10490,9 +10492,12 @@ function jakToDopadloHtml(t) {
 // Nabídka, na kterou plátce nemá: dokud se to nespraví, přijmout nejde.
 function nekrytoHtml(t) {
   if (t.stav !== 'ceka' || !jaPlatimNabidku(t)) return '';
-  var volne = volnaHotovost(t.id);
+  // U vlastní nabídky počítáme i s tím, co drží ostatní vlastní nabídky.
+  // U cizí stačí hotovost: přijmout ji buď jde, nebo ne.
+  var volne = t.moje ? volnaHotovost(t.id) : S.cash;
   if ((t.cena || 0) <= volne) return '';
-  return '<p class="small err" style="margin-top:6px">Nemáš na to volnou hotovost — chybí '
+  return '<p class="small err" style="margin-top:6px">Nemáš na to '
+    + (t.moje ? 'volnou hotovost' : 'hotovost') + ' — chybí '
     + kcFull(t.cena - volne) + '. Dokud ji nedáš dohromady, obchod nejde uzavřít.</p>';
 }
 

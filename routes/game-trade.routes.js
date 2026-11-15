@@ -171,9 +171,12 @@ function platiciId(t) {
 // Co má hráč rozjednané a zaplatil by, kdyby to protistrana přijala.
 // Bez tohohle jde rozeslat deset nabídek po milionu s milionem v kase —
 // devět z nich pak nejde přijmout a hráč se diví proč.
+// Počítají se jen nabídky, které hráč sám poslal — ty jsou jeho slib. Co
+// přijde od ostatních, ho nezavazuje k ničemu (a kdyby se to počítalo, stačilo
+// by poslat komukoli velkou nabídku a zablokovat mu tím hotovost).
 async function vazanaHotovost(playerId, kromeId) {
   const rows = await prisma.gameTrade.findMany({
-    where: { stav: 'ceka', OR: [{ from_id: playerId }, { to_id: playerId }] },
+    where: { stav: 'ceka', from_id: playerId },
     select: { id: true, from_id: true, to_id: true, smer: true, predmet: true, cena: true },
   });
   return rows.reduce((a, t) => a
