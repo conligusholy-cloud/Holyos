@@ -957,11 +957,14 @@ const REKLAMA_RE = /(facebook|^fb\b|\bfb\b|instagram|^ig\b|\bmeta\b|google|gads|
 router.get('/odkud', api(async (req, res) => {
   const dny = Math.min(365, Math.max(1, parseInt(req.query.dny, 10) || 30));
   const od = new Date(Date.now() - dny * 86400e3);
-  const hraci = await prisma.gamePlayer.findMany({ where: { created_at: { gte: od }, disabled: false }, select: { id: true, zdroj: true, invited_by_id: true, invited_by_ref: true } });
+  const hraci = await prisma.gamePlayer.findMany({ where: { created_at: { gte: od }, disabled: false }, select: { id: true, zdroj: true, invited_by_id: true, invited_by_ref: true, created_at: true } });
   const ids = hraci.map((h) => h.id);
   const nak = ids.length ? await prisma.gamePurchase.findMany({ where: { status: 'paid', player_id: { in: ids } }, select: { player_id: true, amount_cents: true } }) : [];
   const plat = {}; nak.forEach((n) => { plat[n.player_id] = (plat[n.player_id] || 0) + n.amount_cents / 100; });
   const sk = {}, zdroje = {};
+  // Po dnech (pražský čas): kolik účtů z které skupiny ten den vzniklo
+  const denK = (d) => new Date(d).toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
+  const dnyMap = {}; for (let i = dny - 1; i >= 0; i--) { const k = denK(Date.now() - i * 86400e3); dnyMap[k] = { den: k, reklama: 0, doporuceni: 0, jiny: 0, nevime: 0, platicich: 0 }; }
   const pridej = (k, h) => { const o = sk[k] || (sk[k] = { hracu: 0, platicich: 0, trzba: 0 }); o.hracu++; if (plat[h.id]) { o.platicich++; o.trzba += plat[h.id]; } };
   hraci.forEach((h) => {
     const z = String(h.zdroj || '').trim();
@@ -971,11 +974,12 @@ router.get('/odkud', api(async (req, res) => {
     else if (z) k = 'jiny';
     else k = 'nevime';
     pridej(k, h);
+    const dd = dnyMap[denK(h.created_at)]; if (dd) { dd[k]++; if (plat[h.id]) dd.platicich++; }
     if (k === 'reklama' || k === 'jiny') { const key = z.split(' / ')[0].toLowerCase() || '?'; const o = zdroje[key] || (zdroje[key] = { zdroj: key, typ: k, hracu: 0, platicich: 0, trzba: 0 }); o.hracu++; if (plat[h.id]) { o.platicich++; o.trzba += plat[h.id]; } }
   });
   const out = ['reklama', 'doporuceni', 'jiny', 'nevime'].map((k) => Object.assign({ klic: k }, sk[k] || { hracu: 0, platicich: 0, trzba: 0 }));
   out.forEach((o) => { o.trzba = Math.round(o.trzba); });
-  res.json({ ok: true, dny, celkem: hraci.length, skupiny: out, zdroje: Object.values(zdroje).map((o) => Object.assign(o, { trzba: Math.round(o.trzba) })).sort((a, b) => b.hracu - a.hracu) });
+  res.json({ ok: true, dny, celkem: hraci.length, skupiny: out, po_dnech: Object.values(dnyMap), zdroje: Object.values(zdroje).map((o) => Object.assign(o, { trzba: Math.round(o.trzba) })).sort((a, b) => b.hracu - a.hracu) });
 }));
 
 // ─── A/B test úvodní obrazovky ───────────────────────────────────────────────

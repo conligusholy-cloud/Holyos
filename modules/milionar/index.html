@@ -537,9 +537,51 @@
         var kp = '<div class="kpis">' + j.skupiny.map(function (s) { var P = POP[s.klic]; return '<div class="kpi" style="border-left:3px solid ' + P[1] + '"><div class="v">' + cz(s.hracu) + ' <span class="note" style="font-size:13px">(' + k(pct(s.hracu)) + ' %)</span></div><div class="l">' + P[0] + '</div><div class="note" style="margin-top:4px">platících ' + s.platicich + (s.hracu ? ' (' + k(Math.round(s.platicich / s.hracu * 1000) / 10) + ' %)' : '') + ' · ' + cz(s.trzba) + ' Kč</div><div class="note" style="font-size:11px">' + P[2] + '</div></div>'; }).join('') + '</div>';
         var zt = (j.zdroje || []).length ? '<div class="tbl-wrap" style="margin-top:10px"><table class="data-table"><thead><tr><th>Zdroj (utm_source)</th><th>Typ</th><th class="num">Hráčů</th><th class="num">Platících</th><th class="num">Tržba</th></tr></thead><tbody>'
           + j.zdroje.map(function (z) { return '<tr><td><b>' + esc(z.zdroj) + '</b></td><td class="note">' + (z.typ === 'reklama' ? 'reklama' : 'jiný zdroj') + '</td><td class="num">' + cz(z.hracu) + '</td><td class="num">' + cz(z.platicich) + '</td><td class="num">' + cz(z.trzba) + ' Kč</td></tr>'; }).join('') + '</tbody></table></div>' : '';
-        document.getElementById('st-odkud').innerHTML = '<div class="note" style="margin-bottom:2px">Celkem ' + cz(c) + ' nových hráčů za ' + j.dny + ' dní.</div>' + bar + kp + zt;
+        document.getElementById('st-odkud').innerHTML = '<div class="note" style="margin-bottom:2px">Celkem ' + cz(c) + ' nových hráčů za ' + j.dny + ' dní.</div>' + bar + kp
+          + '<div style="display:flex;align-items:center;gap:6px;margin:16px 0 4px"><b style="font-size:13px">Vývoj v čase</b>'
+          + [['den', 'Po dnech', '30 dní'], ['tyden', 'Po týdnech', '26 týdnů'], ['mesic', 'Po měsících', '12 měsíců']].map(function (m) { return '<button class="btn sm' + (ODK_MODE === m[0] ? ' on' : '') + '" data-odkmode="' + m[0] + '" title="' + m[2] + '">' + m[1] + '</button>'; }).join('')
+          + '</div><div id="st-odkud-graf" class="note">Načítám…</div>' + zt;
+        loadOdkudGraf();
       }).catch(function (e) { chyba('st-odkud', e); });
     }
+    // Odkud hráči přišli — vývoj po dnech / týdnech / měsících (skládaný sloupcový graf + tabulka)
+    var ODK_MODE = 'den';
+    var ODK_POP = { reklama: ['📣 Reklama', '#f59e0b'], doporuceni: ['🤝 Doporučení', '#22c55e'], jiny: ['🔗 Jiný zdroj', '#4fd1ff'], nevime: ['❔ Neidentifikováno', '#94a3b8'] };
+    function loadOdkudGraf() {
+      var dnyG = ODK_MODE === 'mesic' ? 365 : ODK_MODE === 'tyden' ? 182 : 30;
+      get('/odkud?dny=' + dnyG).then(function (j) {
+        var KL = ['reklama', 'doporuceni', 'jiny', 'nevime'], skup = {}, poradi = [];
+        var klic = function (iso) {
+          if (ODK_MODE === 'mesic') return iso.slice(0, 7);
+          if (ODK_MODE === 'tyden') { var d = new Date(iso + 'T12:00:00'), w = (d.getDay() + 6) % 7; d.setDate(d.getDate() - w); return d.toISOString().slice(0, 10); }
+          return iso;
+        };
+        (j.po_dnech || []).forEach(function (d) { var k = klic(d.den); if (!skup[k]) { skup[k] = { k: k, reklama: 0, doporuceni: 0, jiny: 0, nevime: 0, platicich: 0 }; poradi.push(k); } KL.concat(['platicich']).forEach(function (x) { skup[k][x] += d[x] || 0; }); });
+        var PD = poradi.map(function (k) { return skup[k]; });
+        var MES = ['led', 'úno', 'bře', 'dub', 'kvě', 'čvn', 'čvc', 'srp', 'zář', 'říj', 'lis', 'pro'];
+        var popis = function (k) { var p = k.split('-'); if (ODK_MODE === 'mesic') return MES[+p[1] - 1] + ' ' + p[0]; var t = +p[2] + '. ' + +p[1] + '.'; return ODK_MODE === 'tyden' ? 'týden od ' + t : t; };
+        var kratce = function (k) { var p = k.split('-'); return ODK_MODE === 'mesic' ? MES[+p[1] - 1] : (+p[2] + '. ' + +p[1] + '.'); };
+        var mx = Math.max.apply(null, PD.map(function (d) { return d.reklama + d.doporuceni + d.jiny + d.nevime; }).concat([1]));
+        var html = '<div style="display:flex;align-items:flex-end;gap:' + (PD.length > 40 ? 2 : 4) + 'px;height:160px;padding:6px 0;border-bottom:1px solid var(--border)">'
+          + PD.map(function (d) { var sum = d.reklama + d.doporuceni + d.jiny + d.nevime;
+            return '<div title="' + popis(d.k) + ': ' + sum + ' hráčů — reklama ' + d.reklama + ', doporučení ' + d.doporuceni + ', jiný zdroj ' + d.jiny + ', neidentifikováno ' + d.nevime + ', platících ' + d.platicich + '" style="flex:1;min-width:5px;height:100%;display:flex;flex-direction:column-reverse;position:relative">'
+              + KL.map(function (k) { return d[k] ? '<div style="height:' + (d[k] / mx * 100) + '%;background:' + ODK_POP[k][1] + ';border-radius:2px;margin-top:1px"></div>' : ''; }).join('')
+              + (PD.length <= 14 && sum ? '<span style="position:absolute;left:0;right:0;bottom:' + (sum / mx * 100) + '%;text-align:center;font-size:11px;color:var(--text2);margin-bottom:2px">' + sum + '</span>' : '') + '</div>'; }).join('') + '</div>'
+          + (PD.length <= 14 ? '<div style="display:flex;gap:' + (PD.length > 40 ? 2 : 4) + 'px" class="note">' + PD.map(function (d) { return '<span style="flex:1;text-align:center;font-size:11px">' + kratce(d.k) + '</span>'; }).join('') + '</div>'
+            : '<div style="display:flex;justify-content:space-between" class="note"><span>' + popis(PD[0].k) + '</span><span>' + popis(PD[PD.length - 1].k) + '</span></div>')
+          + '<div style="display:flex;gap:14px;flex-wrap:wrap;margin:6px 0 4px" class="note">' + KL.map(function (k) { return '<span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + ODK_POP[k][1] + ';margin-right:5px"></i>' + ODK_POP[k][0] + '</span>'; }).join('') + '</div>'
+          + '<details style="margin-top:6px"' + (ODK_MODE !== 'den' ? ' open' : '') + '><summary class="note" style="cursor:pointer">Tabulka</summary><div class="tbl-wrap" style="margin-top:6px"><table class="data-table"><thead><tr><th>' + (ODK_MODE === 'mesic' ? 'Měsíc' : ODK_MODE === 'tyden' ? 'Týden' : 'Den') + '</th><th class="num">📣 Reklama</th><th class="num">🤝 Doporučení</th><th class="num">🔗 Jiný zdroj</th><th class="num">❔ Neidentif.</th><th class="num">Celkem</th><th class="num">Podíl doporučení</th><th class="num">Z nich platí</th></tr></thead><tbody>'
+          + PD.slice().reverse().map(function (d) { var sum = d.reklama + d.doporuceni + d.jiny + d.nevime; return '<tr' + (sum ? '' : ' style="opacity:.45"') + '><td>' + popis(d.k) + '</td><td class="num">' + d.reklama + '</td><td class="num">' + d.doporuceni + '</td><td class="num">' + d.jiny + '</td><td class="num">' + d.nevime + '</td><td class="num"><b>' + sum + '</b></td><td class="num">' + (sum ? String(Math.round(d.doporuceni / sum * 100)) + ' %' : '—') + '</td><td class="num">' + d.platicich + '</td></tr>'; }).join('')
+          + '</tbody></table></div></details>';
+        var el = document.getElementById('st-odkud-graf'); if (el) el.innerHTML = PD.length ? html : 'Žádná data.';
+      }).catch(function (e) { chyba('st-odkud-graf', e); });
+    }
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-odkmode]'); if (!b) return;
+      ODK_MODE = b.getAttribute('data-odkmode');
+      document.querySelectorAll('[data-odkmode]').forEach(function (x) { x.classList.toggle('on', x === b); });
+      loadOdkudGraf();
+    });
     function loadStats() {
       loadProvoz();
       loadOdkud();
