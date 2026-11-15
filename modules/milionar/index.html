@@ -488,44 +488,6 @@
             }).join('') + '</tbody>';
       }).catch(function (e) { tb.innerHTML = '<tbody><tr><td style="color:#ef4444">Chyba: ' + esc(e.message || e) + '</td></tr></tbody>'; });
     }
-    // Druhý pokus na stejném úvodu: bez povinného jména. Vyhodnocuje se stejně,
-    // jen přibyl sloupec, kolik lidí si vymyšlené jméno nakonec přepsalo.
-    function abJmeno(x, k) {
-      var A = x.A || { navstev: 0, registraci: 0, konverze_pct: 0, postavilo: 0, zaplatilo: 0, prejmenovalo: 0 };
-      var B = x.B || A;
-      var verd = x.z == null ? 'Na vyhodnocení je zatím málo dat (potřeba aspoň 20 návštěv v každé variantě).'
-        : (Math.abs(x.z) >= 1.96 ? (x.z > 0 ? '✅ Bez jména je průkazně lepší (z = ' + k(x.z) + ').'
-            : '⚠️ Bez jména je průkazně horší (z = ' + k(x.z) + ').')
-          : 'Rozdíl zatím není průkazný (z = ' + k(x.z) + ') — nech test běžet.');
-      var rez = [['off', 'Vypnuto'], ['50', 'Půl na půl'], ['on', 'Všem bez jména']];
-      var rad = function (lbl, v, pop) {
-        return '<tr><td><b>' + lbl + '</b><div class="note">' + pop + '</div></td>'
-          + '<td class="num">' + cz(v.navstev) + '</td><td class="num">' + cz(v.registraci) + '</td>'
-          + '<td class="num"><b>' + k(v.konverze_pct) + ' %</b></td><td class="num">' + cz(v.postavilo)
-          + '</td><td class="num">' + cz(v.zaplatilo) + '</td><td class="num">' + cz(v.prejmenovalo || 0) + '</td></tr>';
-      };
-      return '<h3 style="margin:22px 0 8px">Úvod bez povinného jména</h3>'
-        + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><span class="note">Režim:</span>'
-        + rez.map(function (r) { return '<button class="btn sm' + (x.rezim === r[0] ? ' on' : '')
-            + '" data-jmrez="' + r[0] + '">' + r[1] + '</button>'; }).join('') + '</div>'
-        + '<div class="tbl-wrap"><table class="data-table"><thead><tr><th>Varianta</th>'
-        + '<th class="num">Viděli úvod</th><th class="num">Založili účet</th><th class="num">Konverze</th>'
-        + '<th class="num">Postavili</th><th class="num">Zaplatili</th><th class="num">Přejmenovali se</th>'
-        + '</tr></thead><tbody>'
-        + rad('A — jméno se zadává', A, 'dnešní úvod, jméno je povinné pole')
-        + rad('B — jméno vymyslí hra', B, 'žádné pole, jméno si přepíše po prvním prádlomatu')
-        + '</tbody></table></div><p class="note" style="margin:8px 0 0">' + verd
-        + ' Pozor: víc účtů znamená i větší jmenovatel — konverzi na platbu posuzuj v počtech, ne v procentech.</p>';
-    }
-    document.addEventListener('click', function (e) {
-      var b = e.target.closest && e.target.closest('[data-jmrez]'); if (!b) return;
-      var v = b.getAttribute('data-jmrez');
-      if (!confirm('Přepnout úvod na režim: ' + b.textContent + '?\n\nZměna se hráčům projeví do minuty.')) return;
-      fetch('/api/game-admin/ab-jmeno', { method: 'PUT', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rezim: v }) })
-        .then(function (r) { return r.json(); }).then(function () { loadAB(); })
-        .catch(function (er) { alert('Chyba: ' + er.message); });
-    });
     // A/B test úvodní obrazovky: přepínač režimu + vyhodnocení konverze úvod → registrace podle varianty
     function loadAB() {
       get('/ab-intro?dny=' + DNY).then(function (j) {
@@ -541,8 +503,7 @@
           + '<div class="tbl-wrap"><table class="data-table"><thead><tr><th>Varianta</th><th class="num">Viděli úvod</th><th class="num">Založili účet</th><th class="num">Konverze</th><th class="num">Postavili prádlomat</th><th class="num">Zaplatili</th></tr></thead><tbody>'
           + radek('A — původní', j.A, 'logo, obrázek, body, bonus, pak formulář')
           + radek('B — nová', j.B, '„Postav první prádlomat za 60 sekund", jméno a tlačítko nahoře, počet hráčů')
-          + '</tbody></table></div><p class="note" style="margin:8px 0 0">' + verdikt + ' Cíl: konverze úvod → účet z 8,5 % na 15 %.</p>'
-          + abJmeno(j.jmeno || {}, k);
+          + '</tbody></table></div><p class="note" style="margin:8px 0 0">' + verdikt + ' Cíl: konverze úvod → účet z 8,5 % na 15 %.</p>';
       }).catch(function (e) { chyba('st-ab', e); });
     }
     document.addEventListener('click', function (e) {
@@ -599,8 +560,6 @@
 
     // ── Provoz: kolik lidí je na hře teď ────────────────────────────────────
     var UDALOST_NAZEV = { game_nacita: 'Načetl stránku', game_zpet: 'Vrátil se do rozehrané',
-      game_jm_a: 'Úvod — jméno se zadává', game_jm_b: 'Úvod — jméno vymyslí hra',
-      game_jmeno: 'Přepsal si vymyšlené jméno',
       game_intro: 'Viděl úvod (nový)', game_ab_a: 'Úvod — varianta A', game_ab_b: 'Úvod — varianta B', game_open: 'Otevřel hru', game_zije: 'Hraje', game_quiz: 'Dotazník',
       game_register: 'Založil účet', game_scout: 'Prozkoumal město', game_build: 'Postavil prádlomat',
       game_paid: 'Zaplatil' };
