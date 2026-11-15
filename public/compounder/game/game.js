@@ -11892,8 +11892,29 @@ function cenaSheet(toId, kdo, x) {
 function vyzvedniNasledky(then) {
   if (!ME) { if (then) then(); return; }
   api('/trade/deliveries').then(function (r) {
-    var d = (r.ok && r.j.deliveries) || [];
-    if (!d.length) { if (then) then(); return; }
+    var vse = (r.ok && r.j.deliveries) || [];
+    if (!vse.length) { if (then) then(); return; }
+    // Potvrzení „vyzvedl jsem si to" je jen fire-and-forget požadavek. Když
+    // nedojde (vypadne síť, hráč zavře hru), server pošle totéž znovu a hra by
+    // si to připsala podruhé — což se stalo u dražby: doplatek se strhl dvakrát.
+    // Proto si vedeme seznam už zapsaných doručenek a nespoléháme na server.
+    S.vyzvednute = S.vyzvednute || {};
+    var d = vse.filter(function (x) { return !S.vyzvednute[x.id]; });
+    // Označíme je dřív, než se začnou připisovat peníze, a hned uložíme.
+    d.forEach(function (x) { S.vyzvednute[x.id] = 1; });
+    var klice = Object.keys(S.vyzvednute);
+    if (klice.length > 400) {
+      klice.sort(function (a, b) { return Number(a) - Number(b); })
+        .slice(0, klice.length - 400)
+        .forEach(function (k) { delete S.vyzvednute[k]; });
+    }
+    save();
+    if (!d.length) {
+      // Všechno už máme zapsané, jen se to nepodařilo potvrdit — zkusíme znovu.
+      apiJson('/trade/deliveries/claim', { ids: vse.map(function (x) { return x.id; }) }).catch(function () {});
+      if (then) then();
+      return;
+    }
     var zpravy = [];
     d.forEach(function (x) {
       if (x.kind === 'cash') {
@@ -11947,7 +11968,7 @@ function vyzvedniNasledky(then) {
     // kolik doplacených prádlomatů má hráč v provozu.
     if (d.some(function (x) { return x.kind === 'unit_remove' || x.kind === 'unit_add'; })) prehodnotRamec(false, true);
     save(); paint(); drawMap(); syncState(true);
-    apiJson('/trade/deliveries/claim', { ids: d.map(function (x) { return x.id; }) }).catch(function () {});
+    apiJson('/trade/deliveries/claim', { ids: vse.map(function (x) { return x.id; }) }).catch(function () {});
     if (zpravy.length) toast(zpravy[0] + (zpravy.length > 1 ? ' (+' + (zpravy.length - 1) + ' dalších)' : ''), 'ok', true);
     if (then) then();
   }).catch(function () { if (then) then(); });
