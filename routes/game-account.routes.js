@@ -830,6 +830,7 @@ router.get('/account/odznaky', requirePlayer, async (req, res, next) => {
     mam.forEach((x) => { kdy[x.kod] = x.created_at; });
     res.json({ ok: true, odznaky: ODZNAKY.map((o) => ({
       kod: o.kod, nazev: o.nazev, ikona: o.ikona, popis: o.popis, jak: o.jak,
+      barva: o.barva || null, odmena: o.odmena || null,
       mam: !!kdy[o.kod], kdy: kdy[o.kod] || null })) });
   } catch (e) { next(e); }
 });

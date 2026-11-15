@@ -10060,6 +10060,7 @@ function paintMe() {
   if (FINANCE == null) loadFinance(paintMe);
   if (ODZNAKY_HRA == null) loadOdznaky(paintMe);
   bindPodily();
+  bindOdznaky();
   bindDist();
   bindMajetek();
   var kn = $('do-kniha');
@@ -10272,30 +10273,72 @@ function hlidejNoveOdznaky() {
   save();
   if (!nove.length) return;
   var o = nove[0];
-  sheet('<h3>' + o.ikona + ' Odznak: ' + esc(o.nazev) + '</h3>'
-    + '<p class="muted small">' + esc(o.popis) + '</p>'
+  sheet('<div class="odz-det">' + odznakMedaile(o, true)
+    + '<h3>Nový odznak</h3><span class="odz-stuha">' + esc(o.nazev) + '</span></div>'
+    + '<p class="muted small" style="text-align:center">' + esc(o.popis) + '</p>'
     + (nove.length > 1 ? '<p class="fine">A k tomu ještě ' + (nove.length - 1) + ' další — najdeš je v Já.</p>' : '')
     + '<p class="fine">Odměnu připisuje server, objeví se za chvilku v Kartách.</p>'
     + '<button class="btn big" id="odz-ok" style="width:100%;margin-top:10px">Díky</button>');
   if ($('odz-ok')) $('odz-ok').onclick = closeSheet;
   toast('Máš odznak ' + o.nazev + '.', 'ok', true);
 }
+// Jeden odznak jako medaile. Nesplněný je tmavá silueta se zámkem — má být
+// vidět, že tam něco chybí, ne že tam nic není.
+function odznakMedaile(o, velky) {
+  var b = o.barva || ['#94a3b8', '#475569'];
+  var styl = o.mam
+    ? 'background:linear-gradient(145deg,' + b[0] + ',' + b[1] + ')'
+    : '';
+  return '<span class="odz-m' + (o.mam ? ' mam' : '') + (velky ? ' vel' : '') + '" style="' + styl + '">'
+    + '<span class="odz-m-in">' + (o.mam ? o.ikona : '\u{1F512}') + '</span></span>';
+}
 function odznakyHtml() {
   if (!ME) return '';
   if (ODZNAKY_HRA == null) return '<div class="card"><h3>Odznaky</h3><p class="muted small">Načítám…</p></div>';
   if (!ODZNAKY_HRA.length) return '';
   var mam = ODZNAKY_HRA.filter(function (o) { return o.mam; }).length;
+  var cel = ODZNAKY_HRA.length;
   return '<div class="card"><h3>Odznaky</h3>'
-    + '<p class="muted small" style="margin:2px 0 8px">Máš ' + mam + ' z ' + ODZNAKY_HRA.length
-    + '. Nejsou za velikost firmy, ale za to, jak hraješ — a vidí je i ostatní.</p>'
-    + ODZNAKY_HRA.map(function (o) {
-        return '<div class="odz' + (o.mam ? ' mam' : '') + '">'
-          + '<span class="odz-i">' + o.ikona + '</span>'
-          + '<span class="odz-t"><b>' + esc(o.nazev) + '</b>'
-          + '<i>' + esc(o.mam ? o.popis : o.jak) + '</i></span>'
-          + (o.mam ? '<span class="odz-v">\u2713</span>' : '') + '</div>';
+    + '<div class="odz-hlava"><b>' + mam + '</b><span>z ' + cel + '</span></div>'
+    + '<div class="bar odz-bar"><i style="width:' + Math.round(mam / cel * 100) + '%"></i></div>'
+    + '<p class="muted small" style="margin:8px 0 12px">Nejsou za velikost firmy, ale za to, jak hraješ. '
+    + 'Vidí je i ostatní, když si otevřou tvou firmu.</p>'
+    + '<div class="odz-mriz">'
+    + ODZNAKY_HRA.map(function (o, i) {
+        return '<button type="button" class="odz-b' + (o.mam ? ' mam' : '') + '" data-odz="' + i + '">'
+          + odznakMedaile(o) + '<span class="odz-jm">' + esc(o.nazev) + '</span></button>';
       }).join('')
-    + '</div>';
+    + '</div></div>';
+}
+// Detail po klepnutí — tady je prostor říct, co to znamená a jak na to.
+function odznakSheet(o) {
+  sheet('<div class="odz-det">' + odznakMedaile(o, true)
+    + '<h3>' + esc(o.nazev) + '</h3>'
+    + (o.mam ? '<span class="odz-stuha">Získáno</span>'
+             : '<span class="odz-stuha zamek">Zatím nemáš</span>') + '</div>'
+    + '<p class="muted small" style="text-align:center">' + esc(o.popis) + '</p>'
+    + (o.mam
+        ? (o.kdy ? '<div class="kv"><span>Získáno</span><b>' + datumCZ(o.kdy) + '</b></div>' : '')
+        : '<div class="kv"><span>Jak na něj</span></div><p class="fine">' + esc(o.jak) + '</p>')
+    + (o.odmena && o.odmena.karta
+        ? '<div class="kv"><span>Odměna</span><b>' + esc(odmenaSlovy(o.odmena)) + '</b></div>' : '')
+    + '<button class="btn sec" id="odz-zpet" style="width:100%;margin-top:12px">Zpátky</button>');
+  if ($('odz-zpet')) $('odz-zpet').onclick = closeSheet;
+}
+function datumCZ(t) {
+  var d = new Date(t);
+  if (isNaN(d)) return '';
+  return d.getDate() + '. ' + (d.getMonth() + 1) + '. ' + d.getFullYear();
+}
+function bindOdznaky() {
+  var box = $('me-body');
+  if (!box) return;
+  [].forEach.call(box.querySelectorAll('[data-odz]'), function (b) {
+    b.onclick = function () {
+      var o = (ODZNAKY_HRA || [])[Number(b.getAttribute('data-odz'))];
+      if (o) odznakSheet(o);
+    };
+  });
 }
 function loadFinance(then) {
   api('/trade/finance').then(function (r) { FINANCE = (r.ok && r.j) || { pujcky: [], podily: [] }; if (then) then(); })

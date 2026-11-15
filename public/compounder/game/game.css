@@ -481,16 +481,41 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .hod-od{flex:0 0 auto;font-variant-numeric:tabular-nums;opacity:.8}
 .hod-o{flex:0 0 auto;width:40%;max-width:160px;text-align:right;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;opacity:.85}
-/* Odznaky: nesplněné jsou šedé a místo popisu ukazují, jak na ně. */
-.odz{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:1px solid var(--border)}
-.odz:first-of-type{border-top:0}
-.odz-i{flex:0 0 auto;width:26px;font-size:19px;line-height:1.2;filter:grayscale(1);opacity:.45}
-.odz.mam .odz-i{filter:none;opacity:1}
-.odz-t{flex:1;min-width:0}
-.odz-t b{display:block;font-size:13px;color:var(--text3)}
-.odz.mam .odz-t b{color:var(--text)}
-.odz-t i{display:block;font-style:normal;font-size:11.5px;color:var(--text3);line-height:1.4;margin-top:2px}
-.odz-v{flex:0 0 auto;color:var(--ok);font-weight:800}
+/* Odznaky jako medaile. Získaný má barevný prstenec a lesk, nezískaný je
+   tmavá silueta se zámkem — má být vidět, že tam něco chybí. */
+.odz-hlava{display:flex;align-items:baseline;gap:6px;margin:4px 0 6px}
+.odz-hlava b{font-size:26px;font-weight:800;line-height:1}
+.odz-hlava span{font-size:13px;color:var(--text3)}
+.odz-bar{margin:0 0 2px}
+.odz-mriz{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 6px;margin-top:4px}
+@media (min-width:520px){.odz-mriz{grid-template-columns:repeat(4,1fr)}}
+.odz-b{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:0;
+  padding:0;color:inherit;font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.odz-b:active{transform:scale(.95)}
+.odz-m{position:relative;display:flex;align-items:center;justify-content:center;
+  width:74px;height:74px;border-radius:50%;background:linear-gradient(145deg,#2a3344,#161c28);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.odz-m.mam{box-shadow:0 6px 18px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.35)}
+.odz-m-in{display:flex;align-items:center;justify-content:center;width:60px;height:60px;
+  border-radius:50%;background:radial-gradient(circle at 34% 28%,#20283a,#0b0f18);
+  font-size:27px;line-height:1}
+.odz-m:not(.mam) .odz-m-in{font-size:21px;opacity:.5}
+/* Lesk přes medaili — statický, žádné blikání. */
+.odz-m.mam::after{content:'';position:absolute;inset:0;border-radius:50%;pointer-events:none;
+  background:linear-gradient(145deg,rgba(255,255,255,.42),rgba(255,255,255,0) 46%)}
+.odz-m.vel{width:124px;height:124px;margin:2px auto 10px}
+.odz-m.vel .odz-m-in{width:100px;height:100px;font-size:46px}
+.odz-m.vel:not(.mam) .odz-m-in{font-size:36px}
+.odz-jm{font-size:11px;line-height:1.25;text-align:center;color:var(--text3);
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.odz-b.mam .odz-jm{color:var(--text);font-weight:700}
+/* Detail odznaku */
+.odz-det{text-align:center;margin-bottom:10px}
+.odz-det h3{margin:0 0 6px}
+.odz-stuha{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.04em;
+  text-transform:uppercase;padding:4px 14px;border-radius:999px;
+  background:rgba(63,214,142,.16);color:var(--ok)}
+.odz-stuha.zamek{background:rgba(148,163,184,.15);color:var(--text3)}
 /* Odznaky cizího hráče ve struktuře — řádek malých štítků. */
 .odz-rada{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}
 .odz-chip{font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;

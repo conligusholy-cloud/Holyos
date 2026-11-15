@@ -761,7 +761,8 @@ router.get('/trade/struktura/:id', hrac, api(async (req, res) => {
     hrac: { id: p.id, nick: p.nick, firma: p.company || (p.nick + ' s.r.o.'),
       hodnost: p.hodnost || null, hodnost_nazev: hodnostNazev(p.hodnost),
       odznaky: odz.map((x) => ODZNAK[x.kod]).filter(Boolean)
-        .map((o) => ({ kod: o.kod, nazev: o.nazev, ikona: o.ikona, popis: o.popis })) },
+        .map((o) => ({ kod: o.kod, nazev: o.nazev, ikona: o.ikona, popis: o.popis,
+          barva: o.barva || null })) },
     prodano,
     // Kdo drží kus téhle firmy.
     podilnici: sect(vMe, 'investor_id'),
