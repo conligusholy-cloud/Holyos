@@ -8401,7 +8401,9 @@ function strukturaSheet(id) {
         + '<div style="display:flex;align-items:center;gap:10px;min-width:0">'
         + (x.znak ? znakSvg(x.znak, 26) : '<i class="znak-mezera"></i>')
         + '<div style="min-width:0"><div class="nm">' + esc(x.firma) + '</div>'
-        + '<div class="sub">' + esc(x.nick) + '</div></div></div>'
+        + '<div class="sub">' + esc(x.nick)
+        + (x.smluv > 1 ? ' · ' + x.smluv + ' ' + mn(x.smluv, 'smlouva', 'smlouvy', 'smluv') : '')
+        + '</div></div></div>'
         + '<b>' + procentaPodilu(x.podil) + '</b></div>';
     };
     sheet('<h3>' + esc(d.hrac.firma) + '</h3>'

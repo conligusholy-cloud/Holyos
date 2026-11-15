@@ -663,15 +663,26 @@ router.get('/trade/struktura/:id', hrac, api(async (req, res) => {
   }
   const kdo = (i) => nazvy.get(i) || { nick: '?', firma: 'neznámá firma', znak: null };
   const prodano = vMe.reduce((a, e) => a + e.podil, 0);
+  // Jedna firma může podíl kupovat na víckrát. V rejstříku patří dohromady —
+  // dvakrát jedno procento je prostě dvě procenta, ne dva řádky.
+  const sect = (rows, klic) => {
+    const m = new Map();
+    rows.forEach((e) => {
+      const i = e[klic];
+      const x = m.get(i) || { id: i, podil: 0, smluv: 0,
+        nick: kdo(i).nick, firma: kdo(i).firma, znak: kdo(i).znak };
+      x.podil += e.podil; x.smluv++;
+      m.set(i, x);
+    });
+    return Array.from(m.values()).sort((a, b) => b.podil - a.podil);
+  };
   res.json({ ok: true,
     hrac: { id: p.id, nick: p.nick, firma: p.company || (p.nick + ' s.r.o.') },
     prodano,
     // Kdo drží kus téhle firmy.
-    podilnici: vMe.map((e) => ({ id: e.investor_id, podil: e.podil,
-      nick: kdo(e.investor_id).nick, firma: kdo(e.investor_id).firma, znak: kdo(e.investor_id).znak })),
+    podilnici: sect(vMe, 'investor_id'),
     // A kde má tenhle hráč podíl on sám.
-    drzi: jinde.map((e) => ({ id: e.firma_id, podil: e.podil,
-      nick: kdo(e.firma_id).nick, firma: kdo(e.firma_id).firma, znak: kdo(e.firma_id).znak })) });
+    drzi: sect(jinde, 'firma_id') });
 }));
 
 // ─── Vyzvednutí následků ─────────────────────────────────────────────────────
