@@ -566,6 +566,17 @@ router.get('/trade/finance', hrac, api(async (req, res) => {
     const f = await prisma.gamePlayer.findUnique({ where: { id: kdo }, select: { state: true } });
     firmy.set(kdo, Math.round(acct._zbydeMesicne(stavu(f)) || 0));
   }
+  // U podílu je srozumitelnější název firmy než přezdívka hráče — kupuje se
+  // kus firmy, ne kus člověka. Bereme aktuální název, ne ten z chvíle prodeje.
+  const nazvy = new Map();
+  const protistrany = podily.map((e) => (e.investor_id === ja ? e.firma_id : e.investor_id));
+  if (protistrany.length) {
+    const lide = await prisma.gamePlayer.findMany({
+      where: { id: { in: Array.from(new Set(protistrany)) } },
+      select: { id: true, nick: true, company: true },
+    });
+    lide.forEach((h) => { nazvy.set(h.id, h.company || (h.nick + ' s.r.o.')); });
+  }
   res.json({ ok: true,
     pujcky: pujcky.map((p) => ({ id: p.id, trade_id: p.trade_id,
       moje: p.borrower_id === ja ? 'dluzim' : 'pujcil',
@@ -579,6 +590,7 @@ router.get('/trade/finance', hrac, api(async (req, res) => {
       moje: e.investor_id === ja ? 'mam' : 'prodal',
       kdo: e.investor_id === ja ? e.firma_nick : e.investor_nick,
       kdo_id: e.investor_id === ja ? e.firma_id : e.investor_id,
+      kdo_firma: nazvy.get(e.investor_id === ja ? e.firma_id : e.investor_id) || null,
       podil: e.podil, cena: e.cena, vyplaceno: e.vyplaceno, stav: e.stav,
       // Co by z podílu přišlo při dnešním výdělku firmy. Záporné = firma
       // prodělává a podílník se na ztrátě podílí stejným dílem.

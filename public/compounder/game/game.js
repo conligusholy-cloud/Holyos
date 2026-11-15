@@ -9444,9 +9444,11 @@ function nickSheet() {
 // dává smysl: za kolik se koupil, kolik už vynesl a kolik nese teď.
 function podilRadek(e, mam) {
   var pct = Math.round(e.podil * 100);
+  // U podílu jde o firmu, ne o člověka — proto název firmy, když ho známe.
+  var kdo = e.kdo_firma || e.kdo;
   var navratnost = e.mesicne > 0 ? e.cena / (e.mesicne * 12) : null;
   var vraceno = e.cena > 0 ? Math.round(e.vyplaceno / e.cena * 100) : 0;
-  return '<div class="trade"><div class="row"><b>' + pct + ' % · ' + esc(e.kdo) + '</b>'
+  return '<div class="trade"><div class="row"><b>' + pct + ' % · ' + esc(kdo) + '</b>'
     + '<b class="' + (e.mesicne > 0 ? 'ok' : e.mesicne < 0 ? 'err' : '') + '">'
     + (e.mesicne > 0 ? '+' : '') + kcFull(e.mesicne) + ' / měs</b></div>'
     + '<div class="kv"><span>' + (mam ? 'Koupil jsi za' : 'Prodal jsi za') + '</span><b>'
@@ -9828,7 +9830,7 @@ function financeHtml() {
   (f.podily || []).filter(bezici).forEach(function (e) {
     var mam = e.moje === 'mam';
     h += '<div class="trade"><div class="row"><b>' + Math.round(e.podil * 100) + ' % '
-      + (mam ? 've firmě ' + esc(e.kdo) : 'tvé firmy drží ' + esc(e.kdo)) + '</b>'
+      + (mam ? 've firmě ' + esc(e.kdo_firma || e.kdo) : 'tvé firmy drží ' + esc(e.kdo)) + '</b>'
       + '<b>' + kcFull(e.cena) + '</b></div>'
       + '<p class="muted small" style="margin:2px 0 6px">'
       + (e.vyplaceno >= 0 ? 'Zatím vyplaceno ' : 'Zatím doplaceno ') + kcFull(Math.abs(e.vyplaceno))
@@ -10395,8 +10397,8 @@ function odkupSheet(e) {
     + '<p class="muted small">' + (majitel
         ? esc(e.kdo) + ' drží ' + Math.round(e.podil * 100) + ' % tvé firmy. Pošli mu nabídku na odkup — '
           + 'platí, až když ji přijme, a cenu si můžete doladit protinávrhem.'
-        : 'Držíš ' + Math.round(e.podil * 100) + ' % firmy ' + esc(e.kdo)
-          + '. Nabídni mu, ať si podíl koupí zpátky. Platí on, a jen když kývne.') + '</p>'
+        : 'Držíš ' + Math.round(e.podil * 100) + ' % firmy ' + esc(e.kdo_firma || e.kdo)
+          + ' — nabídni jejímu majiteli, ať si podíl koupí zpátky. Platí on, a jen když kývne.') + '</p>'
     + '<div class="kv"><span>Podíl</span><b>' + Math.round(e.podil * 100) + ' %</b></div>'
     + '<div class="kv"><span>' + (majitel ? 'Prodal jsi ho za' : 'Koupil jsi ho za') + '</span><b>'
     + kcFull(e.cena) + '</b></div>'
