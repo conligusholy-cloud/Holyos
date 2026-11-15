@@ -9439,6 +9439,73 @@ function nickSheet() {
   };
 }
 
+// ─── Podíly: kdo vlastní kus mě a kde mám kus já ─────────────────────────────
+// Podíl se vyrovnává každý herní měsíc, takže se vyplatí vidět, jestli to
+// dává smysl: za kolik se koupil, kolik už vynesl a kolik nese teď.
+function podilRadek(e, mam) {
+  var pct = Math.round(e.podil * 100);
+  var navratnost = e.mesicne > 0 ? e.cena / (e.mesicne * 12) : null;
+  var vraceno = e.cena > 0 ? Math.round(e.vyplaceno / e.cena * 100) : 0;
+  return '<div class="trade"><div class="row"><b>' + pct + ' % · ' + esc(e.kdo) + '</b>'
+    + '<b class="' + (e.mesicne > 0 ? 'ok' : e.mesicne < 0 ? 'err' : '') + '">'
+    + (e.mesicne > 0 ? '+' : '') + kcFull(e.mesicne) + ' / měs</b></div>'
+    + '<div class="kv"><span>' + (mam ? 'Koupil jsi za' : 'Prodal jsi za') + '</span><b>'
+    + kcFull(e.cena) + '</b></div>'
+    + '<div class="kv"><span>' + (e.vyplaceno >= 0
+        ? (mam ? 'Zatím vyneslo' : 'Zatím jsi vyplatil')
+        : (mam ? 'Zatím jsi doplatil' : 'Zatím ti doplatil')) + '</span><b class="'
+    + (e.vyplaceno > 0 ? (mam ? 'ok' : 'warn') : '') + '">' + kcFull(Math.abs(e.vyplaceno)) + '</b></div>'
+    + (mam
+        ? '<div class="bar"><i style="width:' + Math.min(100, Math.max(0, vraceno)) + '%"></i></div>'
+          + '<p class="fine">' + (e.vyplaceno >= e.cena
+              ? 'Vráceno celé a ' + kcFull(e.vyplaceno - e.cena) + ' nad to — od teď je to čistý výnos.'
+              : 'Vráceno ' + Math.max(0, vraceno) + ' % ceny'
+                + (navratnost ? ' · při dnešním výdělku zbývá ' + navratnost.toFixed(1).replace('.', ',')
+                    + ' roku do nuly.' : '. Firma teď nevydělává, tak se nic nevrací.')) + '</p>'
+        : '<p class="fine">Vyrovnává se každý herní měsíc, tedy po dvanácti hodinách. '
+          + 'Odkoupit zpátky můžeš kdykoli.</p>'
+          + '<div class="akce"><button class="btn sm sec" data-odkup-ja="' + e.id + '">Odkoupit zpět za '
+          + kcFull(e.odkup) + '</button></div>')
+    + '</div>';
+}
+function podilyHtml() {
+  if (!FINANCE) return '';
+  var moje = (FINANCE.podily || []).filter(function (e) { return e.moje === 'mam' && bezici(e); });
+  var ciziVeMne = (FINANCE.podily || []).filter(function (e) { return e.moje === 'prodal' && bezici(e); });
+  if (!moje.length && !ciziVeMne.length) return '';
+  var h = '<div class="card"><h3>Podíly</h3>';
+  if (ciziVeMne.length) {
+    var celkem = ciziVeMne.reduce(function (a, e) { return a + e.podil; }, 0);
+    var mesicne = ciziVeMne.reduce(function (a, e) { return a + e.mesicne; }, 0);
+    h += '<p class="muted small" style="margin:2px 0 8px">Z tvé firmy je prodáno '
+      + Math.round(celkem * 100) + ' %. Podílníkům z ní měsíčně odchází '
+      + kcFull(mesicne) + (mesicne < 0 ? ' — při ztrátě ti naopak doplácejí.' : '.') + '</p>'
+      + ciziVeMne.map(function (e) { return podilRadek(e, false); }).join('');
+  }
+  if (moje.length) {
+    var nese = moje.reduce(function (a, e) { return a + e.mesicne; }, 0);
+    var dal = moje.reduce(function (a, e) { return a + e.cena; }, 0);
+    var vzal = moje.reduce(function (a, e) { return a + e.vyplaceno; }, 0);
+    h += '<h3 style="margin-top:' + (ciziVeMne.length ? '18px' : '2px') + '">Tvoje podíly v cizích firmách</h3>'
+      + '<p class="muted small" style="margin:2px 0 8px">Dohromady jsi do nich dal ' + kcFull(dal)
+      + ', vrátilo se ' + kcFull(vzal) + ' a teď nesou ' + kcFull(nese) + ' měsíčně.</p>'
+      + moje.map(function (e) { return podilRadek(e, true); }).join('');
+  }
+  return h + '</div>';
+}
+function bindPodily() {
+  [].forEach.call($('me-body').querySelectorAll('[data-odkup-ja]'), function (b) {
+    b.onclick = function () {
+      b.disabled = true;
+      apiJson('/trade/podil/' + b.getAttribute('data-odkup-ja') + '/odkup', {}).then(function (r) {
+        if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
+        toast('Podíl je zase tvůj.', 'ok');
+        vyzvedniNasledky(); FINANCE = null; loadFinance(paintMe);
+      }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+    };
+  });
+}
+
 function paintMe() {
   var p = PROFILES[S.profile];
   // Co má hráč rozepsané, přežije překreslení.
@@ -9464,6 +9531,7 @@ function paintMe() {
     + '<div class="kv"><span>Prozkoumaných oblastí</span><b>' + Object.keys(S.areas).length + '</b></div>'
     + '<div class="kv"><span>Prověřených míst</span><b>' + Object.keys(S.revealed).length + '</b></div>'
     + '</div>'
+    + podilyHtml()
     + majetekHtml()
     + '<div class="card"><h3>Jak se hraje</h3>'
     + '<p class="muted small" style="margin:2px 0 0">Jeden skutečný den jsou ve hře dva měsíce, herní rok tedy trvá šest dní. Prádlomaty vydělávají, i když hru zavřeš — po návratu se ti všechno dopočítá. '
@@ -9499,6 +9567,8 @@ function paintMe() {
       toast('Firma se teď jmenuje ' + ME.company + '.', 'ok');
     }).catch(function () { fb.disabled = false; fb.textContent = 'Přejmenovat firmu'; toast('Server neodpovídá.', 'err'); });
   };
+  if (FINANCE == null) loadFinance(paintMe);
+  bindPodily();
   bindDist();
   bindMajetek();
   var kn = $('do-kniha');

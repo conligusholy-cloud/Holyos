@@ -530,6 +530,16 @@ router.get('/trade/finance', hrac, api(async (req, res) => {
       orderBy: { created_at: 'asc' }, take: 100,
     }),
   ]);
+  // Kolik z podílu teče teď: procento z toho, co dané firmě měsíčně zbyde.
+  // Čteme to z posledního uloženého stavu té firmy — stejné číslo, podle
+  // kterého se podíl o půlnoci herního měsíce doopravdy vyplácí.
+  const firmy = new Map();
+  for (const e of podily) {
+    const kdo = e.firma_id;
+    if (firmy.has(kdo)) continue;
+    const f = await prisma.gamePlayer.findUnique({ where: { id: kdo }, select: { state: true } });
+    firmy.set(kdo, Math.round(acct._zbydeMesicne(stavu(f)) || 0));
+  }
   res.json({ ok: true,
     pujcky: pujcky.map((p) => ({ id: p.id, trade_id: p.trade_id,
       moje: p.borrower_id === ja ? 'dluzim' : 'pujcil',
@@ -543,6 +553,9 @@ router.get('/trade/finance', hrac, api(async (req, res) => {
       moje: e.investor_id === ja ? 'mam' : 'prodal',
       kdo: e.investor_id === ja ? e.firma_nick : e.investor_nick,
       podil: e.podil, cena: e.cena, vyplaceno: e.vyplaceno, stav: e.stav,
+      // Co by z podílu přišlo při dnešním výdělku firmy. Záporné = firma
+      // prodělává a podílník se na ztrátě podílí stejným dílem.
+      mesicne: Math.round((firmy.get(e.firma_id) || 0) * e.podil),
       odkup: Math.round(e.cena * ODKUP_NASOBEK), dalsi: e.dalsi_at })),
     odkup_nasobek: ODKUP_NASOBEK });
 }));
