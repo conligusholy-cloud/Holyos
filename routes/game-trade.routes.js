@@ -333,6 +333,19 @@ router.post('/trade/:id/counter', hrac, api(async (req, res) => {
     d.splatka = anuita(cena, Math.max(0, Number(d.urok) || 0), Math.max(1, Math.round(Number(d.mesicu) || 1)));
     data = d;
   }
+  // U podílu se dá smlouvat i o procentech, nejen o ceně — „beru, ale za deset
+  // procent" je stejně legitimní protinávrh jako jiná cena.
+  if (t.predmet === 'podil' && b.podil != null) {
+    const podil = Math.max(PODIL_MIN, Math.min(PODIL_MAX, Number(b.podil) || 0));
+    // Prodává majitel firmy: u „koupim" je to protistrana, u „prodam" já.
+    const firmaId = novySmer === 'koupim' ? t.from_id : req.player.id;
+    const uz = await prodanyPodil(firmaId);
+    if (uz + podil > PODIL_MAX + 1e-9) {
+      return res.status(409).json({ error: 'Z firmy je prodáno už ' + Math.round(uz * 100)
+        + ' %. Víc než ' + Math.round(PODIL_MAX * 100) + ' % se prodat nedá.' });
+    }
+    data = Object.assign({}, data || {}, { podil });
+  }
   // Platím-li po prohození já, musí na to být volná hotovost.
   const platimJa = t.predmet === 'pujcka' ? novySmer === 'prodam' : novySmer === 'koupim';
   if (platimJa && cena > 0) {

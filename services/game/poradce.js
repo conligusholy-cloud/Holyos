@@ -163,6 +163,7 @@ const PRAVIDLA = [
   '  nabídky za víc, než má v kase. Co pošle někdo jemu, ho nezavazuje a hotovost mu to nedrží.',
   '  Když mu hotovost mezitím klesne, hra u nabídky napíše, kolik chybí.',
   '- Protinávrh u půjčky mění jen částku (a dlužník může přihodit zástavu), úrok a délka zůstávají.',
+  '  U podílu jde protinávrhem změnit i procenta — „beru, ale za deset procent" je legitimní odpověď.',
   '',
   'PŘEHLEDY',
   '- Síť má záložky: Moje síť (čísla), Stroje (žebříček vlastních strojů podle zisku, tržeb,',

@@ -10748,6 +10748,7 @@ function protinavrhSheet(t) {
   // Protinávrh otáčí role: kdo kupoval, teď prodává. U půjčky se tím mění
   // i to, kdo platí a kdo ručí.
   var pujcka = t.predmet === 'pujcka';
+  var podil = t.predmet === 'podil';
   var buduPlatit = pujcka ? t.smer === 'koupim' : t.smer === 'prodam';
   var buduDluznik = pujcka && !buduPlatit;
   var mojeMista = (S.units || []).map(function (u) {
@@ -10755,7 +10756,8 @@ function protinavrhSheet(t) {
   });
   sheet('<h3>Protinávrh</h3>'
     + '<p class="muted small">Předmět zůstává stejný (' + esc(predmetPopis(t)) + '), měníš '
-    + (pujcka ? 'částku' + (buduDluznik ? ' a zástavu' : '') + '. Úrok i délka zůstávají.' : 'jen cenu.') + '</p>'
+    + (pujcka ? 'částku' + (buduDluznik ? ' a zástavu' : '') + '. Úrok i délka zůstávají.'
+      : podil ? 'cenu i to, o kolik procent jde.' : 'jen cenu.') + '</p>'
     + '<div class="kv"><span>Původní nabídka</span><b>' + esc(cenaPopis(t)) + '</b></div>'
     + (pujcka ? '<div class="kv"><span>Zástava</span><b' + (d.zadam_zastavu && !d.zastava_nazev ? ' class="warn"' : '') + '>'
         + (d.zastava_nazev ? esc(d.zastava_nazev)
@@ -10764,6 +10766,12 @@ function protinavrhSheet(t) {
           ? '<p class="fine warn">Bez vybrané zástavy tuhle půjčku přijmout nepůjde.</p>' : '') : '')
     + '<label class="fld"><span>Co nabízíš ty (L$)</span>'
     + '<input id="pn-cena" class="inp" type="number" min="0" step="1000" value="' + (t.cena || 0) + '"></label>'
+    + (podil
+        ? '<label class="fld"><span>Podíl v %</span>'
+          + '<input id="pn-podil" class="inp" type="number" inputmode="numeric" min="1" max="'
+          + PODIL_MAX_HRA + '" value="' + Math.round((d.podil || 0) * 100) + '"></label>'
+          + '<p class="fine" id="pn-podil-pop"></p>'
+        : '')
     + (pujcka ? '<p class="fine" id="pn-splatka"></p>' : '')
     + (buduDluznik && mojeMista.length
         ? '<label class="fld"><span>Ručím prádlomatem</span><select id="pn-zastava" class="inp">'
@@ -10782,6 +10790,13 @@ function protinavrhSheet(t) {
   vybrane = bindKartyVyber('pn');
   var prepocti = function () {
     var c = Math.max(0, Math.round(Number($('pn-cena').value) || 0));
+    if (podil && $('pn-podil-pop')) {
+      var pp = Math.max(1, Math.min(PODIL_MAX_HRA, Math.round(Number($('pn-podil').value) || 0)));
+      var puv = Math.round((d.podil || 0) * 100);
+      $('pn-podil-pop').textContent = (pp === puv ? 'Procenta beze změny. '
+          : 'Původně šlo o ' + puv + ' %, ty chceš ' + pp + ' %. ')
+        + 'Za jedno procento to vychází na ' + kcFull(Math.round(c / pp)) + '.';
+    }
     if (pujcka && $('pn-splatka')) {
       var sp = anuitaHra(c, (Number(d.urok) || 0) * 100, Math.max(1, Number(d.mesicu) || 1));
       $('pn-splatka').textContent = 'Splátka by vyšla na ' + kcFull(sp) + ' za herní měsíc.';
@@ -10794,7 +10809,9 @@ function protinavrhSheet(t) {
       el.textContent = 'Na tohle nemáš volnou hotovost — chybí ' + kcFull(c - volne) + '.';
     } else { el.className = 'fine'; el.textContent = ''; }
   };
-  $('pn-cena').oninput = prepocti; prepocti();
+  $('pn-cena').oninput = prepocti;
+  if ($('pn-podil')) $('pn-podil').oninput = prepocti;
+  prepocti();
   $('pn-ok').onclick = function () {
     var b = $('pn-ok');
     if (buduPlatit && (Number($('pn-cena').value) || 0) > volnaHotovost(t.id)) {
@@ -10802,7 +10819,11 @@ function protinavrhSheet(t) {
     }
     b.disabled = true;
     apiJson('/trade/' + t.id + '/counter', { cena: Number($('pn-cena').value) || 0, karty: vybrane(),
-      zastava: $('pn-zastava') ? $('pn-zastava').value : null, vzkaz: $('pn-vzkaz').value })
+      zastava: $('pn-zastava') ? $('pn-zastava').value : null,
+      podil: $('pn-podil')
+        ? Math.max(1, Math.min(PODIL_MAX_HRA, Math.round(Number($('pn-podil').value) || 0))) / 100
+        : null,
+      vzkaz: $('pn-vzkaz').value })
       .then(function (r) {
         b.disabled = false;
         if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
