@@ -38,6 +38,13 @@
     .st.pending { background:rgba(245,158,11,.18); color:#f59e0b; }
     .st.failed { background:rgba(239,68,68,.18); color:#f87171; }
     .note { color:var(--text2); font-size:12px; }
+    /* Dražby: karta na jednu dražbu a štítky pro stav a role. */
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:14px; }
+    .chip { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px;
+      background:var(--surface2); color:var(--text2); white-space:nowrap; }
+    .chip.ok { background:rgba(16,185,129,.16); color:#10b981; }
+    .chip.warn { background:rgba(245,158,11,.16); color:#f59e0b; }
+    .chip.err { background:rgba(239,68,68,.16); color:#ef4444; }
     .mu-sk { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 14px; }
     /* Provoz: dvě tabulky vedle sebe, na užším okně pod sebou. */
     .pv-sloupce { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
@@ -112,6 +119,7 @@
       <button class="module-tab" data-tab="players">Hráči</button>
       <button class="module-tab" data-tab="orders">Objednávky</button>
       <button class="module-tab" data-tab="prices">Ceník</button>
+      <button class="module-tab" data-tab="drazby">Dražby</button>
       <button class="module-tab" data-tab="nastaveni">Nastavení</button>
       <button class="module-tab" data-tab="nahlasene">Nahlášené<span id="nahl-pocet"></span></button>
       <button class="module-tab" data-tab="multi">Spojené účty<span id="multi-pocet"></span></button>
@@ -213,6 +221,14 @@
         <div class="tbl-wrap"><table class="data-table" id="pr-tbl"></table></div>
       </div>
 
+      <div class="module-panel" id="panel-drazby">
+        <p class="note" style="margin:16px 0">Posledních dvacet dražeb i s rozpadem na hráče.
+          Peníze se při vypořádání rozdávají jako doručenky bez vazby na dražbu, takže se tu
+          počítají znovu ze stejných vstupů — vyvolávací cena, součet příhozů, kdo vedl.
+          Kontrolní součet u každé dražby musí být nula; když není, rozešlo se vypořádání
+          s tímhle výpisem a je to chyba.</p>
+        <div id="drz-box"></div>
+      </div>
       <div class="module-panel" id="panel-nastaveni">
         <p class="note" style="margin:16px 0">Přepínače chování hry. Mění se za běhu, bez nasazování — hráčům se projeví do minuty.</p>
         <div id="nast-box" style="margin:0 0 18px"></div>
@@ -1269,8 +1285,69 @@
       }).catch(function (e) { chyba('mu-body', e); });
     }
 
+    // ─── Dražby ──────────────────────────────────────────────────────────────
+    function drzStav(d) {
+      if (d.stav === 'bezi') return '<span class="chip warn">běží</span>';
+      if (d.stav === 'neplatna') return '<span class="chip err">neplatná — nic se nepřevedlo</span>';
+      return d.vitez ? '<span class="chip ok">prodáno</span>'
+        : '<span class="chip">nikdo nepřihodil</span>';
+    }
+    function drzJedna(d) {
+      var k = d.kontrola;
+      var pod = k.penize_sedi && k.sedi_suma
+        ? '<span class="chip ok">součty sedí</span>'
+        : '<span class="chip err">NESEDÍ: příhozy ' + cz(k.soucet_prihozu) + ' vs. '
+          + cz(k.suma_v_drazbe) + ', netto ' + cz(k.netto_celkem) + '</span>';
+      var radky = d.hraci.map(function (h) {
+        var role = [];
+        if (h.prodavajici) role.push('<span class="chip">vyvolal</span>');
+        if (h.vitez) role.push('<span class="chip ok">vyhrál</span>');
+        return '<tr><td>' + esc(h.nick || ('#' + h.id)) + ' ' + role.join(' ') + '</td>'
+          + '<td style="text-align:right">' + (h.prihozu || '—') + '</td>'
+          + '<td style="text-align:right">' + (h.prihozy ? cz(h.prihozy) : '—') + '</td>'
+          + '<td style="text-align:right">' + (h.zaplatil ? cz(h.zaplatil) : '—') + '</td>'
+          + '<td style="text-align:right">' + (h.prijal ? cz(h.prijal) : '—') + '</td>'
+          + '<td style="text-align:right;font-weight:700;color:'
+          + (h.netto > 0 ? 'var(--ok,#10b981)' : h.netto < 0 ? 'var(--err,#ef4444)' : 'inherit')
+          + '">' + (h.netto > 0 ? '+' : '') + cz(h.netto) + '</td></tr>';
+      }).join('');
+      // Pořadí příhozů: z něj je vidět, kdo kdy vedl a jak dlouho se to táhlo.
+      var feed = d.prihozy.length
+        ? '<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px">'
+          + d.prihozy.map(function (p) {
+              return '<span class="chip">' + esc(p.nick) + ' ' + cz(p.castka) + '</span>';
+            }).join('') + '</div>'
+        : '';
+      return '<div class="card" style="margin:0 0 14px;padding:14px">'
+        + '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">'
+        + '<b>#' + d.id + ' · ' + esc(d.nazev) + '</b>'
+        + '<span>' + drzStav(d) + ' ' + pod + '</span></div>'
+        + '<p class="note" style="margin:6px 0 10px">Vyvolal ' + esc(d.prodavajici.nick)
+        + ' · ' + dt(d.created_at) + ' · vyvolávací ' + cz(d.vyvolavaci)
+        + ' · příhozů ' + d.prihozu + ' za ' + cz(d.suma)
+        + ' · doplatek vítěze ' + cz(d.cena)
+        + (d.vitez ? ' · bere ' + esc(d.vitez.nick) : ' · bez vítěze')
+        + '<br>Prodávající dostal ' + cz(d.vynos_hruby) + ' hrubého, čistého '
+        + cz(d.vynos_cisty) + ' (po svých vlastních příhozech).</p>'
+        + '<div class="tbl-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Hráč</th><th style="text-align:right">Příhozů</th>'
+        + '<th style="text-align:right">Přihodil</th><th style="text-align:right">Zaplatil</th>'
+        + '<th style="text-align:right">Dostal</th><th style="text-align:right">Čistě</th>'
+        + '</tr></thead><tbody>' + radky + '</tbody></table></div>'
+        + feed + '</div>';
+    }
+    function loadDrazby() {
+      var box = document.getElementById('drz-box');
+      box.innerHTML = '<p class="note">Načítám…</p>';
+      get('/drazby').then(function (j) {
+        box.innerHTML = j.drazby.length ? j.drazby.map(drzJedna).join('')
+          : '<p class="note">Zatím se nedražilo.</p>';
+      }).catch(function (e) { box.innerHTML = '<p class="note">Chyba: ' + esc(e.message) + '</p>'; });
+    }
+
     var LOADERY = { stats: loadStats, players: loadPlayers, orders: loadOrders,
-      prices: loadPrices, nastaveni: loadNastaveni, nahlasene: loadNahlasene, multi: loadMulti };
+      prices: loadPrices, nastaveni: loadNastaveni, nahlasene: loadNahlasene, multi: loadMulti,
+      drazby: loadDrazby };
     var AKTIVNI = 'stats';
     [].forEach.call(document.querySelectorAll('.module-tab'), function (t) {
       t.onclick = function () {

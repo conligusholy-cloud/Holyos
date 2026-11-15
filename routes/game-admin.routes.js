@@ -1246,3 +1246,76 @@ async function aiRozborNaPozadi(reklama, uzivatelId, zacalo) {
 }
 
 module.exports = router;
+
+// ─── Dražby ──────────────────────────────────────────────────────────────────
+// Audit dražeb: u každé celý rozpad na hráče, aby se dal výpis přepočítat
+// ručně. Peníze se při vypořádání rozdávají jako doručenky bez vazby na
+// dražbu, takže se tu počítají znovu ze stejných vstupů (vyvolávací cena,
+// součet příhozů, kdo vedl). Kdyby se vzorec rozešel s vyporadejDrazbu(),
+// kontrolní součet to ukáže.
+const DRZ_A = require('../services/game/drazby');
+router.get('/drazby', api(async (req, res) => {
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+  const drazby = await prisma.gameDrazba.findMany({ orderBy: { id: 'desc' }, take: limit });
+  if (!drazby.length) return res.json({ ok: true, drazby: [] });
+  const prihozy = await prisma.gameDrazbaPrihoz.findMany({
+    where: { drazba_id: { in: drazby.map((d) => d.id) } }, orderBy: { id: 'asc' },
+    select: { id: true, drazba_id: true, player_id: true, nick: true, castka: true, created_at: true } });
+
+  const ven = drazby.map((d) => {
+    const moje = prihozy.filter((p) => p.drazba_id === d.id);
+    // Cena vítěze: u hotové dražby to, co se opravdu zapsalo; u běžící
+    // a u zneplatněné dopočítaná z aktuálního součtu.
+    const cena = d.cena != null ? d.cena : DRZ_A.cenaZa(d.vyvolavaci, d.suma);
+    const soucetPrihozu = moje.reduce((a, p) => a + p.castka, 0);
+    const platil = d.stav === 'hotovo';     // jen hotová dražba hýbala penězi
+
+    const hraci = new Map();
+    const dej = (id, nick) => {
+      if (!hraci.has(id)) hraci.set(id, { id, nick, prihozu: 0, prihozy: 0, prijal: 0, zaplatil: 0 });
+      const h = hraci.get(id);
+      if (nick) h.nick = nick;
+      return h;
+    };
+    moje.forEach((p) => { const h = dej(p.player_id, p.nick); h.prihozu += 1; h.prihozy += p.castka; });
+    // Prodávající patří do výpisu, i když sám nepřihodil.
+    dej(d.prodavajici_id, d.prodavajici_nick);
+    if (d.vitez_id) dej(d.vitez_id, d.vitez_nick);
+
+    hraci.forEach((h) => {
+      // 1. příhozy platí každý, kdo přihodil — i ten, kdo prohrál
+      if (platil) h.zaplatil += h.prihozy;
+      // 2. prodávajícímu padají všechny příhozy a od vítěze doplatek
+      if (platil && h.id === d.prodavajici_id) h.prijal += d.suma + (d.vitez_id ? cena : 0);
+      // 3. vítěz doplácí
+      if (platil && d.vitez_id && h.id === d.vitez_id) h.zaplatil += cena;
+      h.netto = h.prijal - h.zaplatil;
+      h.prodavajici = h.id === d.prodavajici_id;
+      h.vitez = !!d.vitez_id && h.id === d.vitez_id;
+    });
+    const radky = [...hraci.values()].sort((a, b) => b.prihozy - a.prihozy);
+
+    return {
+      id: d.id, nazev: d.nazev, predmet: d.predmet, stav: d.stav,
+      vyvolavaci: d.vyvolavaci, suma: d.suma, prihozu: d.prihozu, cena,
+      created_at: d.created_at, konec: d.konec, updated_at: d.updated_at,
+      prodavajici: { id: d.prodavajici_id, nick: d.prodavajici_nick },
+      vitez: d.vitez_id ? { id: d.vitez_id, nick: d.vitez_nick } : null,
+      // Výnos prodávajícího hrubý (co mu přišlo) i čistý (po jeho vlastních příhozech).
+      vynos_hruby: platil ? d.suma + (d.vitez_id ? cena : 0) : 0,
+      vynos_cisty: platil ? (radky.find((h) => h.prodavajici) || { netto: 0 }).netto : 0,
+      hraci: radky,
+      prihozy: moje.map((p) => ({ id: p.id, nick: p.nick, player_id: p.player_id,
+        castka: p.castka, kdy: p.created_at })),
+      // Kontrola: co se rozdalo, se musí rovnat tomu, co se strhlo.
+      kontrola: {
+        soucet_prihozu: soucetPrihozu,
+        suma_v_drazbe: d.suma,
+        sedi_suma: soucetPrihozu === d.suma,
+        netto_celkem: radky.reduce((a, h) => a + h.netto, 0),
+        penize_sedi: radky.reduce((a, h) => a + h.netto, 0) === 0,
+      },
+    };
+  });
+  res.json({ ok: true, drazby: ven });
+}));
