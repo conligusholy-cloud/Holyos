@@ -10237,7 +10237,7 @@ function predmetPopis(t) {
   }
   if (t.predmet === 'podil') return 'podíl ' + Math.round(((t.data || {}).podil || 0) * 100) + ' % ve firmě';
   if (t.predmet === 'odkup') return 'zpětný odkup podílu ' + Math.round(((t.data || {}).podil || 0) * 100) + ' %';
-  if (t.predmet === 'prevod') return 'podíl ' + Math.round(((t.data || {}).podil || 0) * 100) + ' % ve firmě '
+  if (t.predmet === 'prevod') return 'podíl ' + pctHra((t.data || {}).podil) + ' % ve firmě '
     + ((t.data || {}).firma_nick || '');
   var c = (CARDS_CAT || []).filter(function (x) { return x.kind === t.card_kind; })[0];
   return 'karta ' + (c ? c.name : t.card_kind);
@@ -11023,16 +11023,24 @@ function prevodSheet(e) {
 }
 function prevodCenaSheet(e, komuId, komu) {
   var kdo = komu ? (komu.firma || komu.nick) : 'vybranému hráči';
+  // Pustit jde i kus podílu — po procentech, stejně jako v dražbě.
+  var maxPct = Math.round(e.podil * 1000) / 10;
+  var krok = maxPct < 1 ? 0.1 : 1;
   sheet('<h3>Prodat podíl dál</h3>'
-    + '<p class="muted small">Držíš ' + Math.round(e.podil * 100) + ' % firmy '
+    + '<p class="muted small">Držíš ' + pctHra(e.podil) + ' % firmy '
     + esc(e.kdo_firma || e.kdo) + '. Nabídni ho ' + esc(kdo)
-    + ' — platí on, a jen když nabídku přijme.</p>'
-    + '<div class="kv"><span>Podíl</span><b>' + Math.round(e.podil * 100) + ' %</b></div>'
-    + '<div class="kv"><span>Koupil jsi ho za</span><b>' + kcFull(e.cena) + '</b></div>'
-    + '<div class="kv"><span>Zatím ti vyneslo</span><b class="' + (e.vyplaceno > 0 ? 'ok' : '')
-    + '">' + kcFull(Math.abs(e.vyplaceno)) + '</b></div>'
-    + '<div class="kv"><span>Nese měsíčně</span><b class="' + (e.mesicne > 0 ? 'ok' : e.mesicne < 0 ? 'err' : '')
-    + '">' + (e.mesicne > 0 ? '+' : '') + kcFull(e.mesicne) + '</b></div>'
+    + ' — platí on, a jen když nabídku přijme. Pustit můžeš i jen část.</p>'
+    + '<label class="fld"><span>Kolik procent pustíš</span>'
+    + '<input id="prev-podil" class="inp" type="number" min="' + Math.min(1, maxPct)
+    + '" max="' + maxPct + '" step="' + krok + '" value="' + maxPct + '"></label>'
+    + '<div class="kv"><span>Podíl</span><b id="prev-pct">' + pctHra(e.podil) + ' %</b></div>'
+    + '<div class="kv"><span>Koupil jsi ho za</span><b id="prev-pordil">'
+    + kcFull(e.cena) + '</b></div>'
+    + '<div class="kv"><span>Zatím ti vyneslo</span><b id="prev-vyndil" class="'
+    + (e.vyplaceno > 0 ? 'ok' : '') + '">' + kcFull(Math.abs(e.vyplaceno)) + '</b></div>'
+    + '<div class="kv"><span>Nese měsíčně</span><b id="prev-mesdil" class="'
+    + (e.mesicne > 0 ? 'ok' : e.mesicne < 0 ? 'err' : '') + '">'
+    + (e.mesicne > 0 ? '+' : '') + kcFull(e.mesicne) + '</b></div>'
     + '<label class="fld"><span>Cena (L$)</span>'
     + '<input id="prev-cena" class="inp" type="number" min="0" step="10000" value="'
     + (e.odkup || e.cena) + '"></label>'
@@ -11042,31 +11050,54 @@ function prevodCenaSheet(e, komuId, komu) {
     + '<button class="btn big" id="prev-ok" style="width:100%;margin-top:6px">Poslat nabídku</button>'
     + '<p class="fine">Nejbližší vyrovnání dostane celé ten, kdo podíl v tu chvíli drží. '
     + 'Majitel firmy do převodu nemluví — dozví se ho až v rejstříku.</p>');
+  // Jaká část podílu se zrovna nabízí (0–1) a kolik z čísel na ni připadá.
+  var castPodilu = function () {
+    var p = Number($('prev-podil').value) || maxPct;
+    return Math.max(0.0001, Math.min(1, (Math.round(p * 10) / 1000) / e.podil));
+  };
   var rada = function () {
     var c = Math.max(0, Math.round(Number($('prev-cena').value) || 0)), t = [];
-    if (e.cena > 0) {
-      var o = Math.round((c - e.cena) / e.cena * 100);
+    var k = castPodilu();
+    var porCena = Math.round(e.cena * k), porVypl = Math.round(e.vyplaceno * k);
+    var porMes = Math.round(e.mesicne * k);
+    if (porCena > 0) {
+      var o = Math.round((c - porCena) / porCena * 100);
       t.push(o === 0 ? 'Přesně za to, za co jsi ho koupil.'
         : o > 0 ? 'O ' + o + ' % víc, než jsi za něj dal.'
           : 'O ' + (-o) + ' % míň, než jsi za něj dal.');
-      var cely = e.vyplaceno + (c - e.cena);
+      var cely = porVypl + (c - porCena);
       t.push(cely >= 0 ? 'I s vyplaceným bys na něm byl ' + kcFull(cely) + ' v plusu.'
         : 'I s vyplaceným bys na něm prodělal ' + kcFull(-cely) + '.');
     }
-    if (e.mesicne > 0) {
-      t.push('Kupujícímu nese ' + kcFull(e.mesicne) + ' měsíčně — za tuhle cenu to má za '
-        + (c / (e.mesicne * 12)).toFixed(1).replace('.', ',') + ' roku zpátky.');
-    } else if (e.mesicne < 0) {
+    if (porMes > 0) {
+      t.push('Kupujícímu nese ' + kcFull(porMes) + ' měsíčně — za tuhle cenu to má za '
+        + (c / (porMes * 12)).toFixed(1).replace('.', ',') + ' roku zpátky.');
+    } else if (porMes < 0) {
       t.push('Pozor, firma je teď ve ztrátě a podíl na ní se doplácí — kupující to uvidí taky.');
     }
+    if (k < 0.9999) t.push('Zbytek ti zůstává.');
     $('prev-rada').textContent = t.join(' ');
   };
+  // Ubereš procenta, uberou se i čísla pod nimi i navržená cena.
+  var dlePodilu = function () {
+    var k = castPodilu();
+    $('prev-pct').textContent = pctHra(e.podil * k) + ' %';
+    $('prev-pordil').textContent = kcFull(Math.round(e.cena * k));
+    $('prev-vyndil').textContent = kcFull(Math.abs(Math.round(e.vyplaceno * k)));
+    var m = Math.round(e.mesicne * k);
+    $('prev-mesdil').textContent = (m > 0 ? '+' : '') + kcFull(m);
+    $('prev-cena').value = Math.max(0, Math.round((e.odkup || e.cena) * k));
+    rada();
+  };
+  $('prev-podil').oninput = dlePodilu;
   $('prev-cena').oninput = rada; rada();
   $('prev-ok').onclick = function () {
     var c = Math.max(0, Math.round(Number($('prev-cena').value) || 0)), b = $('prev-ok');
     if (!c) return toast('Zadej cenu.', 'err');
     b.disabled = true;
+    var pp = Number($('prev-podil').value) || maxPct;
     apiJson('/trade/offer', { to_id: komuId, predmet: 'prevod', equity_id: e.id,
+      podil: Math.max(0.001, Math.min(e.podil, Math.round(pp * 10) / 1000)),
       smer: 'prodam', cena: c, vzkaz: $('prev-vzkaz').value })
       .then(function (r) {
         if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }

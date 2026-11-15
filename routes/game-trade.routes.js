@@ -312,8 +312,20 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
     if (e.firma_id === kupujiciId) {
       return res.status(409).json({ error: 'Majitel firmy si podíl bere zpátky přes zpětný odkup.' });
     }
-    data = { equity_id: e.id, podil: e.podil, cena_puvodni: e.cena, vyplaceno: e.vyplaceno,
-      firma_id: e.firma_id, firma_nick: e.firma_nick };
+    // Nabídnout jde i kus drženého podílu — po procentech, stejně jako v dražbě.
+    // Když klient nic nepošle, nabízí se celý.
+    let podilP = b.podil == null ? e.podil : Math.round(Number(b.podil) * 1000) / 1000;
+    if (!(podilP > 0)) return res.status(400).json({ error: 'Kolik procent podílu nabízíš?' });
+    if (podilP > e.podil + 1e-9) {
+      return res.status(409).json({ error: 'Prodávající drží jen ' + pct(e.podil) + ' %.' });
+    }
+    // Zbytek pod desetinou procenta nemá cenu držet — vezme se to celé.
+    if (e.podil - podilP < 0.001) podilP = e.podil;
+    // Pořizovací cena a vyplacené se v nabídce krátí na nabízený kus, ať druhá
+    // strana nevidí čísla za celý balík.
+    const dilP = (v) => Math.round((Number(v) || 0) * (podilP / e.podil));
+    data = { equity_id: e.id, podil: podilP, cena_puvodni: dilP(e.cena),
+      vyplaceno: dilP(e.vyplaceno), firma_id: e.firma_id, firma_nick: e.firma_nick };
   }
   // Kdo věc má: u „koupim" ji má ten druhý, u „prodam" ji mám já.
   const chyba = await zkontroluj(nab, smer === 'koupim' ? druhy : req.player);
@@ -516,7 +528,7 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
     : t.predmet === 'pujcka' ? 'půjčku'
     : t.predmet === 'podil' ? ('podíl ' + Math.round(((t.data || {}).podil || 0) * 100) + ' % ve firmě')
     : t.predmet === 'odkup' ? ('zpětný odkup podílu ' + Math.round(((t.data || {}).podil || 0) * 100) + ' %')
-    : t.predmet === 'prevod' ? ('podíl ' + Math.round(((t.data || {}).podil || 0) * 100) + ' % ve firmě '
+    : t.predmet === 'prevod' ? ('podíl ' + pct((t.data || {}).podil) + ' % ve firmě '
       + ((t.data || {}).firma_nick || ''))
     : 'karta';
 
@@ -594,10 +606,29 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
     // „kolik mi to vyneslo" by lhalo. Termín dalšího vyrovnání zůstává, takže
     // nejbližší výplata jde celá tomu, kdo podíl drží v tu chvíli.
     if (t.predmet === 'prevod' && prevodEq) {
-      await tx.gameEquity.update({ where: { id: prevodEq.id }, data: {
-        investor_id: kupujici.id, investor_nick: kupujici.nick,
-        cena: t.cena, vyplaceno: 0, trade_id: t.id,
-      } });
+      // Nabídnout šel i kus podílu. Kolik se opravdu převádí, se ověřuje až
+      // tady — mezitím mohl prodávající část pustit jinudy.
+      let podil = Number((t.data || {}).podil);
+      if (!(podil > 0) || podil > prevodEq.podil + 1e-9) podil = prevodEq.podil;
+      const zbytek = prevodEq.podil - podil;
+      // Co zůstává prodávajícímu: pořizovací cena i vyplacené dividendy se
+      // krátí ve stejném poměru, jinak by zbytek v knize vypadal dráž, než je.
+      const dil = (v) => Math.round((Number(v) || 0) * (zbytek / prevodEq.podil));
+      if (zbytek < 1e-9) {
+        await tx.gameEquity.update({ where: { id: prevodEq.id }, data: {
+          investor_id: kupujici.id, investor_nick: kupujici.nick,
+          cena: t.cena, vyplaceno: 0, trade_id: t.id,
+        } });
+      } else {
+        await tx.gameEquity.update({ where: { id: prevodEq.id },
+          data: { podil: zbytek, cena: dil(prevodEq.cena), vyplaceno: dil(prevodEq.vyplaceno) } });
+        await tx.gameEquity.create({ data: {
+          trade_id: t.id,
+          investor_id: kupujici.id, investor_nick: kupujici.nick,
+          firma_id: prevodEq.firma_id, firma_nick: prevodEq.firma_nick,
+          podil, cena: t.cena, dalsi_at: prevodEq.dalsi_at,
+        } });
+      }
     }
     // 3c. odkup: podíl se uzavírá, peníze pak projdou běžnou cestou níž
     if (t.predmet === 'odkup' && odkupEq) {
