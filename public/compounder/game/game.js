@@ -10613,7 +10613,14 @@ function trhSeznamSheet() {
     + ((S.units || []).length
         ? '<button class="btn" id="trh-nabidnout-2" style="width:100%;margin-top:14px">'
           + (moje.length ? 'Nabídnout další prádlomat' : 'Nabídnout vlastní prádlomat') + '</button>'
-        : ''));
+        : '')
+    + (drazbaBezi()
+        ? '<button class="btn" id="trh-drazba-bezi" style="width:100%;margin-top:8px">'
+          + '\u{1F528} Zrovna se draží — přidej se</button>'
+        : '<button class="btn sec" id="trh-drazba" style="width:100%;margin-top:8px">'
+          + '\u{1F528} Vyvolat dražbu</button>'));
+  if ($('trh-drazba')) $('trh-drazba').onclick = drazbaVyvolatSheet;
+  if ($('trh-drazba-bezi')) $('trh-drazba-bezi').onclick = drazbaSheet;
   [].forEach.call($('sheet-body').querySelectorAll('[data-trh-n]'), function (b) {
     b.onclick = function () {
       var n = (TRH || []).filter(function (x) { return String(x.id) === b.getAttribute('data-trh-n'); })[0];
@@ -11944,6 +11951,217 @@ function vyzvedniNasledky(then) {
     if (zpravy.length) toast(zpravy[0] + (zpravy.length > 1 ? ' (+' + (zpravy.length - 1) + ' dalších)' : ''), 'ok', true);
     if (then) then();
   }).catch(function () { if (then) then(); });
+}
+
+// ─── Dražby na tržišti ──────────────────────────────────────────────────────
+// Obrácená aukce: příhozy cenu snižují. Minuta odpočtu, každý příhoz přidá tři
+// vteřiny a vyhrává ten, kdo přihodil naposledy. Okno vyskočí všem, kdo jsou
+// zrovna ve hře — proto se na stav ptáme i mimo tržiště.
+var DRAZBA = null;          // poslední známý stav ze serveru
+var DRAZBA_T = null;        // rychlé dotazování po dobu dražby
+var DRAZBA_TIK = null;      // překreslování odpočtu
+var DRAZBA_VIDENA = 0;      // kterou dražbu už hráč viděl — ať okno nevyskakuje dokola
+var DRAZBA_PREDVOLBY = [1000, 5000, 25000, 100000];
+var DRAZBA_MIN = 1000;
+
+function drazbaZbyva() {
+  if (!DRAZBA || !DRAZBA.konec) return 0;
+  return Math.max(0, new Date(DRAZBA.konec).getTime() - Date.now());
+}
+function drazbaBezi() { return !!(DRAZBA && DRAZBA.stav === 'bezi' && drazbaZbyva() > 0); }
+function hlidejDrazbu() {
+  if (!ME || !S || S.tut !== 'done') return;
+  api('/trade/drazba').then(function (r) {
+    if (!r.ok) return;
+    DRAZBA = r.j.drazba || null;
+    DRAZBA_PRIHOZY = r.j.prihozy || [];
+    if (r.j.predvolby) DRAZBA_PREDVOLBY = r.j.predvolby;
+    if (r.j.min) DRAZBA_MIN = r.j.min;
+    if (drazbaBezi()) {
+      rychleNaDrazbu(true);
+      // Vlastní dražbu hráči nevnucujeme, tu spustil sám.
+      if (DRAZBA.id !== DRAZBA_VIDENA && !DRAZBA.moje) { DRAZBA_VIDENA = DRAZBA.id; drazbaSheet(); }
+    } else {
+      rychleNaDrazbu(false);
+      if (DRAZBA && DRAZBA.stav === 'hotovo' && $('drz-okno')) paintDrazba();
+    }
+  }).catch(function () { /* dražba hru shodit nesmí */ });
+}
+var DRAZBA_PRIHOZY = [];
+function rychleNaDrazbu(zap) {
+  if (zap && !DRAZBA_T) DRAZBA_T = setInterval(hlidejDrazbu, 2000);
+  if (!zap && DRAZBA_T) { clearInterval(DRAZBA_T); DRAZBA_T = null; }
+}
+function drazbaCas(ms) {
+  var sek = Math.ceil(ms / 1000);
+  return sek + ' s';
+}
+// Okno dražby. Překresluje se celé jen při změně dat; odpočet a cena tikají
+// zvlášť, aby se pod prstem nepřekreslovala tlačítka.
+function drazbaSheet() {
+  if (!DRAZBA) return;
+  sheet('<div id="drz-okno"></div>');
+  paintDrazba();
+  if (DRAZBA_TIK) clearInterval(DRAZBA_TIK);
+  DRAZBA_TIK = setInterval(function () {
+    if (!$('drz-okno')) { clearInterval(DRAZBA_TIK); DRAZBA_TIK = null; return; }
+    var o = $('drz-odpocet');
+    if (o && drazbaBezi()) o.textContent = drazbaCas(drazbaZbyva());
+    if (drazbaBezi() && drazbaZbyva() <= 0) paintDrazba();
+  }, 200);
+}
+function paintDrazba() {
+  var box = $('drz-okno');
+  if (!box || !DRAZBA) return;
+  var d = DRAZBA, bezi = drazbaBezi();
+  var cena = Math.abs(d.vyvolavaci - d.suma);
+  var pod = d.suma > d.vyvolavaci;
+  if (!bezi) {
+    box.innerHTML = '<h3>Dražba skončila</h3>'
+      + '<p class="muted small">' + esc(d.nazev) + '</p>'
+      + (d.vitez_nick
+          ? '<div class="kv souhrn"><span>' + esc(d.vitez_nick) + '</span><b class="ok">'
+            + kcFull(d.cena != null ? d.cena : cena) + '</b></div>'
+            + '<p class="fine">' + (d.vitez_id === (ME && ME.id)
+                ? 'Vyhrál jsi. Věc i doplatek se připíšou během chvilky.'
+                : 'Vyhrál poslední přihazující.') + '</p>'
+          : '<p class="fine">Nikdo nepřihodil, věc zůstává prodávajícímu.</p>')
+      + '<button class="btn big" id="drz-ok" style="width:100%;margin-top:10px">Zavřít</button>';
+    if ($('drz-ok')) $('drz-ok').onclick = closeSheet;
+    return;
+  }
+  var volne = Math.max(0, volnaHotovost(null) - (d.moje_prihozy || 0));
+  box.innerHTML = '<h3>\u{1F528} Dražba — ' + esc(d.nazev) + '</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">Vyvolal ' + esc(d.prodavajici_nick)
+    + '. Každý příhoz sráží cenu a přidá tři vteřiny. Bere poslední přihazující.</p>'
+    + '<div class="drz-cena"><b id="drz-castka">' + kcFull(cena) + '</b>'
+    + '<span id="drz-odpocet" class="drz-cas">' + drazbaCas(drazbaZbyva()) + '</span></div>'
+    + '<div class="kv"><span>Vyvolávací cena</span><b>' + kcFull(d.vyvolavaci) + '</b></div>'
+    + '<div class="kv"><span>Příhozy (' + d.prihozu + ')</span><b>' + kcFull(d.suma) + '</b></div>'
+    + (pod ? '<p class="fine warn">Příhozy přerostly vyvolávací cenu — od téhle chvíle cena zase roste '
+        + 'a vydělává na tom prodávající.</p>' : '')
+    + '<div class="kv"><span>Vede</span><b class="' + (d.vedu ? 'ok' : '') + '">'
+    + esc(d.vedouci_nick || 'zatím nikdo') + '</b></div>'
+    + (d.moje_prihozy > 0 ? '<div class="kv"><span>Už jsi přihodil</span><b class="warn">'
+        + kcFull(d.moje_prihozy) + '</b></div>' : '')
+    + (d.moje
+        ? '<p class="fine">Tohle je tvoje věc — dostaneš příhozy i doplatek, dohromady vždycky '
+          + 'aspoň vyvolávací cenu.</p>'
+        : d.vedu
+          ? '<p class="fine ok">Vedeš. Dál přihazovat nemůžeš — počkej, jestli tě někdo přebije.</p>'
+          : '<div class="drz-tl">' + DRAZBA_PREDVOLBY.map(function (c) {
+              return '<button class="btn sm' + (c > volne ? ' sec' : '') + '" data-prihoz="' + c + '"'
+                + (c > volne ? ' disabled' : '') + '>+' + kc(c) + '</button>';
+            }).join('') + '</div>'
+            + '<p class="fine">Volné hotovosti na příhozy máš ' + kcFull(volne)
+            + '. Prohraný příhoz se nevrací.</p>')
+    + '<div class="drz-feed">' + (DRAZBA_PRIHOZY || []).map(function (p) {
+        return '<span><i>' + esc(p.nick) + '</i> ' + kc(p.castka) + '</span>';
+      }).join('') + '</div>'
+    + '<button class="btn sec" id="drz-pryc" style="width:100%;margin-top:10px">Zavřít</button>';
+  if ($('drz-pryc')) $('drz-pryc').onclick = closeSheet;
+  [].forEach.call(box.querySelectorAll('[data-prihoz]'), function (b) {
+    b.onclick = function () { prihodDrazba(Number(b.getAttribute('data-prihoz')), b); };
+  });
+}
+// Vyvolání dražby: co mám a za kolik to chci vyvolat. Draží se všechno,
+// s čím jde obchodovat — včetně podílu v cizí firmě, který hráč jen drží.
+function drazbaVyvolatSheet() {
+  if (drazbaBezi()) return drazbaSheet();
+  var polozky = [];
+  (S.units || []).forEach(function (u) {
+    polozky.push({ predmet: 'pradlomat', spot_id: u.spotId,
+      popis: esc(u.name), pod: (MODELS[u.eco.model] || {}).name + ' · zisk ' + kcFull(u.eco.profit) + '/měs',
+      navrh: cenaPradlomatu(u.eco.profit, u.eco.invest) });
+  });
+  MODEL_ORDER.forEach(function (k) {
+    if (inStock(k) > 0) polozky.push({ predmet: 'stroj', model: k,
+      popis: 'stroj ' + MODELS[k].name, pod: inStock(k) + '× skladem',
+      navrh: machinePrice(MODELS[k]) });
+  });
+  (S.pobocky || []).forEach(function (bq) {
+    polozky.push({ predmet: 'pobocka', pobocka: bq.name, popis: 'pobočka ' + esc(bq.name),
+      pod: 'základna pro dopravu a četu', navrh: POBOCKA_CENA });
+  });
+  (CARDS_CAT || []).forEach(function (c) {
+    if (ownedOf(c.kind) > 0) polozky.push({ predmet: 'karta', card_kind: c.kind,
+      popis: 'karta ' + c.name, pod: ownedOf(c.kind) + '× k dispozici', navrh: 100000 });
+  });
+  ((FINANCE && FINANCE.podily) || []).forEach(function (e) {
+    if (e.moje !== 'mam' || !bezici(e)) return;
+    polozky.push({ predmet: 'prevod', equity_id: e.id,
+      popis: Math.round(e.podil * 100) + ' % ve firmě ' + esc(e.kdo_firma || e.kdo),
+      pod: 'podíl, který držíš · nese ' + kcFull(e.mesicne) + '/měs', navrh: e.odkup || e.cena });
+  });
+  polozky.push({ predmet: 'podil', podil: 10, popis: 'podíl ve vlastní firmě',
+    pod: 'procento ze zisku i ze ztráty', navrh: Math.round(hodnotaMojiFirmy().hodnota * 0.1) || 1000000 });
+
+  sheet('<h3>\u{1F528} Vyvolat dražbu</h3>'
+    + '<p class="muted small">Dražba běží minutu a každý příhoz ji prodlouží o tři vteřiny. '
+    + 'Příhozy cenu <b>snižují</b> — a všechny padnou tobě, i ty prohrané. Dohromady s doplatkem '
+    + 'vítěze dostaneš vždycky aspoň vyvolávací cenu.</p>'
+    + '<p class="fine">Vyskočí všem, kdo jsou zrovna ve hře. Ve světě běží jedna dražba naráz.</p>'
+    + '<div style="margin-top:12px">' + polozky.map(function (x, i) {
+        return '<div class="area-item" data-drz-p="' + i + '">'
+          + '<div style="min-width:0"><div class="nm">' + x.popis + '</div>'
+          + '<div class="sub">' + x.pod + '</div></div>'
+          + '<b class="cena">' + kc(Math.max(10000, Math.round(x.navrh || 100000))) + '</b></div>';
+      }).join('') + '</div>');
+  [].forEach.call($('sheet-body').querySelectorAll('[data-drz-p]'), function (b) {
+    b.onclick = function () { drazbaCenaSheet(polozky[Number(b.getAttribute('data-drz-p'))]); };
+  });
+}
+function drazbaCenaSheet(x) {
+  var jePodil = x.predmet === 'podil';
+  sheet('<h3>Vyvolávací cena</h3>'
+    + '<p class="muted small">' + x.popis + '</p>'
+    + (jePodil
+        ? '<label class="fld"><span>Kolik procent firmy</span>'
+          + '<input id="drz-podil" class="inp" type="number" min="1" max="100" value="10"></label>'
+        : '')
+    + '<label class="fld"><span>Vyvolávací cena (L$)</span>'
+    + '<input id="drz-cena-in" class="inp" type="number" min="10000" step="10000" value="'
+    + Math.max(10000, Math.round(x.navrh || 100000)) + '"></label>'
+    + '<p class="fine" id="drz-rada"></p>'
+    + '<button class="btn big" id="drz-start" style="width:100%;margin-top:6px">Spustit dražbu</button>'
+    + '<p class="fine">Jakmile dražbu spustíš, nejde ji zastavit. Věc se převede tomu, '
+    + 'kdo přihodí naposledy — a když nepřihodí nikdo, zůstane ti.</p>');
+  var rada = function () {
+    var c = Math.max(0, Math.round(Number($('drz-cena-in').value) || 0));
+    $('drz-rada').textContent = 'Při příhozech za ' + kcFull(Math.round(c / 2))
+      + ' zaplatí vítěz ' + kcFull(Math.round(c / 2)) + ' a ty dostaneš ' + kcFull(c)
+      + '. Když příhozy přerostou vyvolávací cenu, dostaneš víc.';
+  };
+  $('drz-cena-in').oninput = rada; rada();
+  $('drz-start').onclick = function () {
+    var b = $('drz-start');
+    var telo = { predmet: x.predmet, model: x.model, spot_id: x.spot_id, pobocka: x.pobocka,
+      card_kind: x.card_kind, equity_id: x.equity_id,
+      vyvolavaci: Math.max(0, Math.round(Number($('drz-cena-in').value) || 0)) };
+    if (jePodil) {
+      telo.podil = Math.max(1, Math.min(100, Math.round(Number($('drz-podil').value) || 10))) / 100;
+    }
+    b.disabled = true; b.textContent = 'Spouštím…';
+    apiJson('/trade/drazba', telo).then(function (r) {
+      b.disabled = false; b.textContent = 'Spustit dražbu';
+      if (!r.ok) return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err');
+      DRAZBA = r.j.drazba; DRAZBA_PRIHOZY = []; DRAZBA_VIDENA = DRAZBA.id;
+      rychleNaDrazbu(true);
+      drazbaSheet();
+    }).catch(function () { b.disabled = false; b.textContent = 'Spustit dražbu'; toast('Server neodpovídá.', 'err'); });
+  };
+}
+function prihodDrazba(castka, b) {
+  if (!drazbaBezi()) return toast('Dražba už skončila.', 'err');
+  if (b) b.disabled = true;
+  apiJson('/trade/drazba/prihoz', { castka: castka }).then(function (r) {
+    if (b) b.disabled = false;
+    if (!r.ok) { hlidejDrazbu(); return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
+    DRAZBA = r.j.drazba;
+    DRAZBA.moje_prihozy = r.j.moje_prihozy;
+    DRAZBA_PRIHOZY = [{ nick: (ME && ME.nick) || 'ty', castka: castka }].concat(DRAZBA_PRIHOZY || []).slice(0, 6);
+    paintDrazba();
+  }).catch(function () { if (b) b.disabled = false; toast('Server neodpovídá.', 'err'); });
 }
 
 // ─── Podržení prstu na mapě ─────────────────────────────────────────────────
@@ -13428,6 +13646,10 @@ function startGame() {
   // Vlastní, rychlejší tep jen pro naskakující čísla nad prádlomaty.
   setInterval(function () { tick(); dripTick(); }, 1000);
   setInterval(pullRefs, 60000);
+  // Dražba je událost — běží minutu a musí doletět i k tomu, kdo zrovna kouká
+  // do mapy. Mimo dražbu se ptáme líně, během ní často.
+  setInterval(hlidejDrazbu, 15000);
+  hlidejDrazbu();
   document.addEventListener('visibilitychange', function () {
     // Po návratu do hry se hned podíváme, jestli nám konkurence nevyfoukla místo.
     if (!document.hidden) { tick(); save(); paint(); loadClaims(); loadTrades(); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }

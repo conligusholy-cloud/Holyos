@@ -997,3 +997,257 @@ router.post('/trade/trh/:id/koupit', hrac, api(async (req, res) => {
 }));
 
 module.exports = router;
+
+// ─── Dražby na tržišti ───────────────────────────────────────────────────────
+// Obrácená aukce: příhozy cenu snižují, ne zvyšují. Pravidla a výpočty jsou
+// v services/game/drazby.js, tady je jen obsluha a peníze.
+//
+// Převod vydražené věci je schválně napsaný zvlášť a ne vytažený z přijetí
+// nabídky výš: ta cesta je funkční a bez testů, a rozebírat ji kvůli dražbám
+// by znamenalo sáhnout do peněz, které chodí. Když se tady něco změní, musí
+// se to změnit i v /trade/:id/accept.
+const DRZ = require('../services/game/drazby');
+
+// Kolik hráč v téhle dražbě už přihodil — nemůže slíbit víc, než má.
+async function mojePrihozy(drazbaId, playerId) {
+  const r = await prisma.gameDrazbaPrihoz.aggregate({
+    where: { drazba_id: drazbaId, player_id: playerId }, _sum: { castka: true } });
+  return (r._sum && r._sum.castka) || 0;
+}
+
+// GET /trade/drazba → co se zrovna draží (a chvíli po konci i výsledek)
+router.get('/trade/drazba', hrac, api(async (req, res) => {
+  let d = await DRZ.bezici();
+  if (d && new Date(d.konec).getTime() <= Date.now()) d = await vyporadejDrazbu(d.id);
+  if (!d) {
+    // Posledních pár vteřin po konci ukážeme výsledek, ať hráč vidí, jak dopadl.
+    d = await prisma.gameDrazba.findFirst({
+      where: { stav: 'hotovo', updated_at: { gte: new Date(Date.now() - 25000) } },
+      orderBy: { id: 'desc' } });
+  }
+  if (!d) return res.json({ ok: true, drazba: null, predvolby: DRZ.PREDVOLBY, min: DRZ.PRIHOZ_MIN });
+  const v = DRZ.verejna(d, req.player.id);
+  v.moje_prihozy = await mojePrihozy(d.id, req.player.id);
+  const posledni = await prisma.gameDrazbaPrihoz.findMany({
+    where: { drazba_id: d.id }, orderBy: { id: 'desc' }, take: 6,
+    select: { nick: true, castka: true } });
+  res.json({ ok: true, drazba: v, prihozy: posledni, predvolby: DRZ.PREDVOLBY, min: DRZ.PRIHOZ_MIN });
+}));
+
+// POST /trade/drazba { predmet, model, spot_id, card_kind, pobocka, podil, equity_id, vyvolavaci }
+router.post('/trade/drazba', hrac, api(async (req, res) => {
+  const b = req.body || {};
+  const predmet = s(b.predmet, 12);
+  if (!DRZ.PREDMETY.includes(predmet)) return res.status(400).json({ error: 'Tohle vydražit nejde.' });
+  const vyvolavaci = Math.min(MAX_CENA, Math.max(0, Math.round(Number(b.vyvolavaci) || 0)));
+  if (vyvolavaci < DRZ.VYVOLAVACI_MIN) {
+    return res.status(400).json({ error: 'Nejnižší vyvolávací cena je '
+      + DRZ.VYVOLAVACI_MIN.toLocaleString('cs-CZ') + ' L$.' });
+  }
+  // Jedna dražba ve světě naráz. Jinak by z události byly tři vyskakující okna.
+  const uz = await DRZ.bezici();
+  if (uz && new Date(uz.konec).getTime() > Date.now()) {
+    return res.status(409).json({ error: 'Zrovna běží jiná dražba. Zkus to, až doběhne.' });
+  }
+  if (uz) await vyporadejDrazbu(uz.id);
+
+  const ja = req.player;
+  const st = stavu(ja);
+  let nazev = '', data = null, model = null, spotId = null, cardKind = null;
+  if (predmet === 'stroj') {
+    model = s(b.model, 10);
+    if (!MODELY.includes(model)) return res.status(400).json({ error: 'Takový model neznám.' });
+    if (skladu(st)[model] < 1) return res.status(409).json({ error: 'Ten stroj nemáš skladem.' });
+    nazev = 'stroj ' + model.toUpperCase();
+  } else if (predmet === 'pradlomat') {
+    spotId = s(b.spot_id, 120);
+    const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spotId } });
+    if (!c || c.player_id !== ja.id || !c.model) return res.status(409).json({ error: 'Ten prádlomat ti nepatří.' });
+    nazev = 'prádlomat ' + (c.name || spotId);
+  } else if (predmet === 'pobocka') {
+    spotId = s(b.pobocka, 120);
+    const pob = Array.isArray(st.pobocky) ? st.pobocky : [];
+    if (!pob.some((x) => x && x.name === spotId)) return res.status(409).json({ error: 'Takovou pobočku nemáš.' });
+    nazev = 'pobočka ' + spotId;
+  } else if (predmet === 'karta') {
+    cardKind = s(b.card_kind, 24);
+    const k = await prisma.gameCard.count({ where: { player_id: ja.id, kind: cardKind, used_at: null } });
+    if (!k) return res.status(409).json({ error: 'Tu kartu nemáš.' });
+    nazev = 'karta ' + cardKind;
+  } else if (predmet === 'podil') {
+    const podil = Math.max(PODIL_MIN, Math.min(PODIL_MAX, Number(b.podil) || 0));
+    const prodano = await prodanyPodil(ja.id);
+    if (prodano + podil > PODIL_MAX + 1e-9) {
+      return res.status(409).json({ error: 'Z firmy je prodáno už ' + Math.round(prodano * 100)
+        + ' %. Celá firma je sto procent.' });
+    }
+    data = { podil };
+    nazev = 'podíl ' + Math.round(podil * 100) + ' % ve firmě ' + (ja.company || ja.nick);
+  } else if (predmet === 'prevod') {
+    const e = await prisma.gameEquity.findUnique({ where: { id: parseInt(b.equity_id, 10) || 0 } });
+    if (!e || e.stav !== 'bezi' || e.investor_id !== ja.id) {
+      return res.status(409).json({ error: 'Takový podíl nedržíš.' });
+    }
+    data = { equity_id: e.id, podil: e.podil, firma_id: e.firma_id, firma_nick: e.firma_nick };
+    nazev = 'podíl ' + Math.round(e.podil * 100) + ' % ve firmě ' + e.firma_nick;
+  }
+
+  const d = await prisma.gameDrazba.create({ data: {
+    prodavajici_id: ja.id, prodavajici_nick: ja.nick,
+    predmet, model, spot_id: spotId, card_kind: cardKind, data,
+    nazev: nazev.slice(0, 160), vyvolavaci,
+    konec: new Date(Date.now() + DRZ.DRAZBA_MS),
+  } });
+  console.log('[game-drazba] #' + d.id + ' ' + ja.nick + ' vyvolává ' + nazev + ' za ' + vyvolavaci);
+  res.json({ ok: true, drazba: DRZ.verejna(d, ja.id) });
+}));
+
+// POST /trade/drazba/prihoz { castka }
+router.post('/trade/drazba/prihoz', hrac, api(async (req, res) => {
+  const castka = Math.max(0, Math.round(Number((req.body || {}).castka) || 0));
+  if (castka < DRZ.PRIHOZ_MIN) {
+    return res.status(400).json({ error: 'Nejmenší příhoz je '
+      + DRZ.PRIHOZ_MIN.toLocaleString('cs-CZ') + ' L$.' });
+  }
+  const d = await DRZ.bezici();
+  if (!d) return res.status(409).json({ error: 'Žádná dražba neběží.' });
+  if (new Date(d.konec).getTime() <= Date.now()) {
+    await vyporadejDrazbu(d.id);
+    return res.status(409).json({ error: 'Dražba už skončila.' });
+  }
+  const ja = req.player;
+  if (d.prodavajici_id === ja.id) return res.status(409).json({ error: 'Vlastní věc si nepřihodíš.' });
+  // Vedoucí sám proti sobě nepřihazuje — jen by pálil peníze a natahoval čas.
+  if (d.vedouci_id === ja.id) return res.status(409).json({ error: 'Vedeš. Počkej, až někdo přihodí.' });
+  // Na příhozy musí mít. Počítá se z poslední uložené hry, co už v téhle dražbě
+  // slíbil a co má rozjednané na burze — stejně jako u nabídek.
+  const mam = Math.round(stavu(ja).cash || 0);
+  const uz = await mojePrihozy(d.id, ja.id);
+  const vazane = await vazanaHotovost(ja.id, null);
+  if (mam - uz - vazane < castka) {
+    return res.status(409).json({ error: 'Na tenhle příhoz nemáš volnou hotovost — zbývá ti '
+      + Math.max(0, mam - uz - vazane).toLocaleString('cs-CZ') + ' L$.' });
+  }
+  // Prodloužení i součet v jedné aktualizaci: dva příhozy ve stejnou chvíli si
+  // tak nepřepíšou čas konce.
+  const novyKonec = new Date(new Date(d.konec).getTime() + DRZ.PRIHOZ_MS);
+  const r = await prisma.gameDrazba.updateMany({
+    where: { id: d.id, stav: 'bezi', konec: d.konec },
+    data: { suma: { increment: castka }, prihozu: { increment: 1 },
+      vedouci_id: ja.id, vedouci_nick: ja.nick, konec: novyKonec },
+  });
+  if (!r.count) return res.status(409).json({ error: 'Někdo byl rychlejší. Zkus to znovu.' });
+  await prisma.gameDrazbaPrihoz.create({ data: { drazba_id: d.id, player_id: ja.id,
+    nick: ja.nick, castka } });
+  const cer = await prisma.gameDrazba.findUnique({ where: { id: d.id } });
+  res.json({ ok: true, drazba: DRZ.verejna(cer, ja.id), moje_prihozy: uz + castka });
+}));
+
+// Vypořádání: peníze a převod věci. Vrací null, protože po vypořádání už
+// žádná dražba neběží.
+async function vyporadejDrazbu(id) {
+  const d = await prisma.gameDrazba.findUnique({ where: { id } });
+  if (!d || d.stav !== 'bezi') return null;
+  // Zamknout dražbu dřív, než se začnou hýbat peníze — jinak by ji dvě
+  // současná dotázání vypořádala dvakrát.
+  const zamek = await prisma.gameDrazba.updateMany({
+    where: { id, stav: 'bezi' }, data: { stav: 'hotovo' } });
+  if (!zamek.count) return null;
+
+  const cena = DRZ.cenaZa(d.vyvolavaci, d.suma);
+  const prihozy = await prisma.gameDrazbaPrihoz.groupBy({
+    by: ['player_id', 'nick'], where: { drazba_id: id }, _sum: { castka: true } });
+  const vitez = d.vedouci_id
+    ? await prisma.gamePlayer.findUnique({ where: { id: d.vedouci_id } })
+    : null;
+  const prodavajici = await prisma.gamePlayer.findUnique({ where: { id: d.prodavajici_id } });
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // 1. příhozy: každému přihazujícímu se strhne, co v dražbě utratil
+      for (const p of prihozy) {
+        const c = (p._sum && p._sum.castka) || 0;
+        if (c <= 0) continue;
+        await tx.gameDelivery.create({ data: { player_id: p.player_id, kind: 'cash', amount: -c,
+          popis: 'Příhozy v dražbě: ' + d.nazev } });
+      }
+      // 2. prodávající dostane příhozy i doplatek
+      if (d.suma + (vitez ? cena : 0) > 0) {
+        await tx.gameDelivery.create({ data: { player_id: d.prodavajici_id, kind: 'cash',
+          amount: d.suma + (vitez ? cena : 0),
+          popis: vitez ? ('Vydražil jsi ' + d.nazev) : ('Dražba bez vítěze: ' + d.nazev) } });
+      }
+      // 3. vítěz doplatí a dostane věc. Bez příhozu se nic nepřevádí a
+      //    prodávajícímu věc zůstává.
+      if (vitez) {
+        if (cena > 0) {
+          await tx.gameDelivery.create({ data: { player_id: vitez.id, kind: 'cash', amount: -cena,
+            popis: 'Doplatek za vydražené: ' + d.nazev } });
+        }
+        await prevedVydrazene(tx, d, prodavajici, vitez);
+      }
+      await tx.gameDrazba.update({ where: { id }, data: {
+        vitez_id: vitez ? vitez.id : null, vitez_nick: vitez ? vitez.nick : null,
+        cena: vitez ? cena : null } });
+    });
+  } catch (e) {
+    console.error('[game-drazba] vypořádání #' + id + ' selhalo:', e && e.message);
+    await prisma.gameDrazba.update({ where: { id }, data: { stav: 'neplatna' } }).catch(() => {});
+    return null;
+  }
+  console.log('[game-drazba] #' + id + ' hotovo · ' + d.nazev
+    + (vitez ? (' → ' + vitez.nick + ' za ' + cena + ' L$ (příhozy ' + d.suma + ')') : ' → nikdo nepřihodil'));
+  return null;
+}
+
+// Převod vydražené věci. Dvojče k tomu, co dělá /trade/:id/accept — když se
+// změní jedno, musí se i druhé.
+async function prevedVydrazene(tx, d, prodavajici, vitez) {
+  const popis = d.nazev;
+  if (d.predmet === 'karta') {
+    const c = await tx.gameCard.findFirst({ where: { player_id: prodavajici.id,
+      kind: d.card_kind, used_at: null }, orderBy: { id: 'asc' } });
+    if (!c) throw new Error('Karta se mezitím ztratila.');
+    await tx.gameCard.update({ where: { id: c.id }, data: { player_id: vitez.id } });
+  } else if (d.predmet === 'stroj') {
+    await tx.gameDelivery.createMany({ data: [
+      { player_id: prodavajici.id, kind: 'stock', model: d.model, amount: -1, popis: 'Vydražil se tvůj ' + popis },
+      { player_id: vitez.id, kind: 'stock', model: d.model, amount: 1, popis: 'Vydražil jsi ' + popis },
+    ] });
+  } else if (d.predmet === 'pradlomat') {
+    const c = await tx.gameSpotClaim.update({ where: { spot_id: d.spot_id },
+      data: { player_id: vitez.id, nick: vitez.nick } });
+    await tx.gameDelivery.createMany({ data: [
+      { player_id: prodavajici.id, kind: 'unit_remove', spot_id: d.spot_id, popis: 'Vydražil se tvůj ' + popis },
+      { player_id: vitez.id, kind: 'unit_add', spot_id: d.spot_id, model: c.model,
+        data: { name: c.name, lat: c.lat, lon: c.lon, rent: c.rent, area_key: c.area_key },
+        popis: 'Vydražil jsi ' + popis },
+    ] });
+  } else if (d.predmet === 'pobocka') {
+    await tx.gameDelivery.createMany({ data: [
+      { player_id: prodavajici.id, kind: 'pobocka_remove', spot_id: d.spot_id, popis: 'Vydražila se tvá ' + popis },
+      { player_id: vitez.id, kind: 'pobocka_add', spot_id: d.spot_id, popis: 'Vydražil jsi ' + popis },
+    ] });
+  } else if (d.predmet === 'podil') {
+    const podil = Number((d.data || {}).podil) || 0;
+    await tx.gameEquity.create({ data: {
+      investor_id: vitez.id, investor_nick: vitez.nick,
+      firma_id: prodavajici.id, firma_nick: prodavajici.nick,
+      podil, cena: DRZ.cenaZa(d.vyvolavaci, d.suma), dalsi_at: new Date(Date.now() + MESIC_MS),
+    } });
+  } else if (d.predmet === 'prevod') {
+    const eq = await tx.gameEquity.findUnique({ where: { id: (d.data || {}).equity_id || 0 } });
+    if (!eq || eq.stav !== 'bezi' || eq.investor_id !== prodavajici.id) {
+      throw new Error('Podíl už takhle neběží.');
+    }
+    if (eq.firma_id === vitez.id) {
+      // Vydražil si vlastní podíl zpátky — to je odkup, podíl se uzavírá.
+      await tx.gameEquity.update({ where: { id: eq.id }, data: { stav: 'odkoupeno' } });
+    } else {
+      await tx.gameEquity.update({ where: { id: eq.id }, data: {
+        investor_id: vitez.id, investor_nick: vitez.nick,
+        cena: DRZ.cenaZa(d.vyvolavaci, d.suma), vyplaceno: 0 } });
+    }
+  }
+}
+module.exports._vyporadejDrazbu = vyporadejDrazbu;

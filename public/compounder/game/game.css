@@ -521,6 +521,17 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .odz-pruh .odz-b.mal .odz-m{width:44px;height:44px}
 .odz-pruh .odz-b.mal .odz-m-in{width:35px;height:35px;font-size:16px}
 .odz-pruh-p{font-size:11px;color:var(--text3);margin-left:auto}
+/* Dražba: cena a odpočet velké, ať je napětí vidět přes celou obrazovku. */
+.drz-cena{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:6px 0 12px}
+.drz-cena b{font-size:30px;font-weight:800;line-height:1;letter-spacing:-.02em}
+.drz-cas{flex:0 0 auto;font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;
+  color:var(--err);background:rgba(255,93,108,.14);padding:4px 12px;border-radius:999px}
+.drz-tl{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0 4px}
+.drz-tl .btn{padding:12px 4px;font-weight:800}
+.drz-feed{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.drz-feed span{font-size:11px;padding:3px 9px;border-radius:999px;
+  background:rgba(255,255,255,.06);color:var(--text2);white-space:nowrap}
+.drz-feed i{font-style:normal;color:var(--text3)}
 /* Odznaky cizího hráče ve struktuře — řádek malých štítků. */
 .odz-rada{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}
 .odz-chip{font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;

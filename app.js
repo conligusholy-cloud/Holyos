@@ -1430,6 +1430,8 @@ server.listen(PORT, async () => {
     require('./services/game/finance').start();
     // Povodně, festivaly a zdražení energií — jeden svět pro všechny hráče.
     require('./services/game/udalosti').start();
+    // Doběhlou dražbu musí někdo vypořádat, i když se zrovna nikdo nedívá.
+    require('./services/game/drazby').start();
   } catch (err) {
     console.error('[app] game-finance nelze spustit:', err.message);
   }

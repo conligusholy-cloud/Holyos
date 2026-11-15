@@ -7855,6 +7855,52 @@ model GameOdmena {
   @@map("game_odmeny")
 }
 
+// Dražba na tržišti. Běží minutu, každý příhoz ji prodlouží o tři vteřiny a
+// zároveň snižuje cenu, kterou nakonec zaplatí poslední přihazující. Když
+// součet příhozů přeroste vyvolávací cenu, cena zase roste — od té chvíle
+// prodávající dostává víc, než si řekl.
+model GameDrazba {
+  id             Int       @id @default(autoincrement())
+  prodavajici_id Int
+  prodavajici_nick String  @db.VarChar(24)
+  // stroj | pradlomat | pobocka | karta | podil | prevod
+  predmet        String    @db.VarChar(12)
+  model          String?   @db.VarChar(10)
+  spot_id        String?   @db.VarChar(120)
+  card_kind      String?   @db.VarChar(24)
+  data           Json?
+  nazev          String    @db.VarChar(160)
+  vyvolavaci     Int
+  suma           Int       @default(0)
+  prihozu        Int       @default(0)
+  vedouci_id     Int?
+  vedouci_nick   String?   @db.VarChar(24)
+  konec          DateTime
+  // bezi | hotovo | zrusena | neplatna
+  stav           String    @default("bezi") @db.VarChar(12)
+  vitez_id       Int?
+  vitez_nick     String?   @db.VarChar(24)
+  cena           Int?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  @@index([stav, konec])
+  @@map("game_drazby")
+}
+
+model GameDrazbaPrihoz {
+  id         Int      @id @default(autoincrement())
+  drazba_id  Int
+  player_id  Int
+  nick       String   @db.VarChar(24)
+  castka     Int
+  created_at DateTime @default(now())
+
+  @@index([drazba_id])
+  @@index([drazba_id, player_id])
+  @@map("game_drazba_prihozy")
+}
+
 model GameEvent {
   id         Int      @id @default(autoincrement())
   typ        String   @db.VarChar(32)     // klíč z katalogu
