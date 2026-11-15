@@ -10849,12 +10849,15 @@ function oceneniHtml(oc, co) {
   if (!oc) return '<p class="fine">Hodnotu téhle firmy neznáme — cena je čistě na dohodě.</p>';
   var cizi = co === 'koupim-podil';
   return '<div class="kv" style="margin-top:10px"><span>'
-    + (cizi ? 'Jeho provozovny' : 'Tvoje provozovny') + ' (' + oc.pradlomatu + ')</span><b>'
-    + kcFull(oc.provozovny) + '</b></div>'
+    + (cizi ? 'Jeho majetek' : 'Tvůj majetek') + ' (' + oc.pradlomatu + ' '
+    + mn(oc.pradlomatu, 'prádlomat', 'prádlomaty', 'prádlomatů') + ', stroje, pozemky)</span><b>'
+    + kcFull(oc.majetek) + '</b></div>'
     + '<div class="kv"><span>Hotovost</span><b>' + kcFull(oc.hotovost) + '</b></div>'
     + '<div class="kv"><span>Dluh u banky</span><b class="' + (oc.dluh ? 'warn' : '') + '">−'
     + kcFull(oc.dluh) + '</b></div>'
-    + '<div class="kv souhrn"><span>Orientační hodnota firmy</span><b>' + kcFull(oc.hodnota) + '</b></div>'
+    + '<div class="kv souhrn"><span>Čisté jmění firmy</span><b class="' + (oc.jmeni >= 0 ? '' : 'err')
+    + '">' + kcFull(oc.jmeni) + '</b></div>'
+    + '<div class="kv"><span>Podle zisku (4× roční)</span><b>' + kcFull(oc.podle_zisku) + '</b></div>'
     + '<p class="fine" id="fin-rada"></p>';
 }
 function anuitaHra(castka, urokProcent, mesicu) {
@@ -10867,13 +10870,14 @@ function anuitaHra(castka, urokProcent, mesicu) {
 // provozovna za čtyřnásobek ročního zisku (držený tím, co stavba stála),
 // plus hotovost, minus dluh u banky.
 function hodnotaMojiFirmy() {
-  var provozovny = (S.units || []).reduce(function (a, u) {
-    return a + cenaPradlomatu(u.eco.profit, u.eco.invest);
-  }, 0);
-  return { provozovny: Math.round(provozovny), hotovost: Math.max(0, Math.round(S.cash)),
-    dluh: Math.max(0, Math.round(S.loan)), zbyde_mesicne: Math.round(cistyZisk()),
-    pradlomatu: (S.units || []).length,
-    hodnota: Math.max(0, Math.round(provozovny + Math.max(0, S.cash) - Math.max(0, S.loan))) };
+  var hotovost = Math.max(0, Math.round(S.cash));
+  var dluh = Math.max(0, Math.round(S.loan));
+  var jmeni = Math.round(cisteJmeni());
+  var zbyde = Math.round(cistyZisk());
+  return { majetek: jmeni - hotovost + dluh, hotovost: hotovost, dluh: dluh, jmeni: jmeni,
+    podle_zisku: Math.max(0, Math.round(zbyde * 12 * CENA_NASOBEK)),
+    zbyde_mesicne: zbyde, pradlomatu: (S.units || []).length,
+    hodnota: Math.max(0, jmeni) };
 }
 function financeSheet(toId, kdo, co, a) {
   var pujcka = co === 'pujcim' || co === 'pujcim-si';
@@ -10959,10 +10963,18 @@ function financeSheet(toId, kdo, co, a) {
         ? p + ' % · ' + kcFull(Math.round(oc.zbyde_mesicne * p / 100)) + ' / měs'
         : p + ' % z toho, co firmě měsíčně zbyde';
       if (oc && $('fin-rada')) {
-        var doporucena = Math.round(oc.hodnota * p / 100);
+        var podleJmeni = Math.round(oc.jmeni * p / 100);
+        var podleZisku = Math.round(oc.podle_zisku * p / 100);
         var mesicne = Math.round(oc.zbyde_mesicne * p / 100);
         var roky = mesicne > 0 && c > 0 ? (c / (mesicne * 12)) : null;
-        $('fin-rada').innerHTML = '<b>' + p + ' % firmy odpovídá ' + kcFull(doporucena) + '.</b> '
+        $('fin-rada').innerHTML = (oc.jmeni > 0
+            ? '<b>' + p + ' % jmění je ' + kcFull(podleJmeni)
+              + (podleZisku > podleJmeni
+                  ? ', podle zisku ' + kcFull(podleZisku) + ' — firma vydělává víc, než na kolik vypadá.'
+                  : '.') + '</b> '
+            : '<b>Firma má zápornou hodnotu — dluh u banky přesahuje její majetek.</b> '
+              + (podleZisku > 0 ? 'Podle zisku by ' + p + ' % mělo cenu ' + kcFull(podleZisku)
+                  + ', ale kupuješ i ten dluh. ' : ''))
           + (mesicne > 0
               ? 'Při dnešním výdělku by z podílu chodilo ' + kcFull(mesicne) + ' měsíčně'
                 + (roky ? ' — za zadanou cenu návratnost ' + roky.toFixed(1).replace('.', ',') + ' roku.' : '.')
@@ -10988,12 +11000,13 @@ function financeSheet(toId, kdo, co, a) {
   // Částku napoprvé napovíme z ocenění a držíme ji s procentem, dokud do ní
   // hráč sám nesáhne — pak je jeho.
   var rucne = false;
-  if (oc && $('fin-castka')) $('fin-castka').value = Math.round(oc.hodnota * 0.1) || 1000000;
+  var zaklad = function () { return oc ? (oc.hodnota > 0 ? oc.hodnota : oc.podle_zisku) : 0; };
+  if (oc && $('fin-castka')) $('fin-castka').value = Math.round(zaklad() * 0.1) || 1000000;
   if ($('fin-castka')) $('fin-castka').addEventListener('input', function () { rucne = true; });
   if (oc && $('fin-podil')) $('fin-podil').addEventListener('input', function () {
     if (rucne) return;
     var p = Math.max(1, Math.min(PODIL_MAX_HRA, Math.round(Number($('fin-podil').value) || 0)));
-    $('fin-castka').value = Math.round(oc.hodnota * p / 100);
+    $('fin-castka').value = Math.round(zaklad() * p / 100);
   });
   ['fin-castka', 'fin-urok', 'fin-mesicu', 'fin-podil'].forEach(function (id) {
     if ($(id)) $(id).oninput = prepocti;

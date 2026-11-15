@@ -66,14 +66,19 @@ function cenaPradlomatu(zisk, invest) {
 }
 function oceneni(st) {
   const units = Array.isArray(st.units) ? st.units : [];
-  const provozovny = units.reduce((a, u) => a
-    + cenaPradlomatu((u.eco && u.eco.profit) || 0, (u.eco && u.eco.invest) || 0), 0);
   const hotovost = Math.max(0, Math.round(Number(st.cash) || 0));
   const dluh = Math.max(0, Math.round(Number(st.loan) || 0));
+  // Čisté jmění počítá tatáž funkce jako v kartě „Můj majetek" a v žebříčku,
+  // takže ocenění sedí s tím, co hráč vidí o sobě: provozovny, stroje skladem
+  // i na cestě, pozemky, pobočky a četa, plus hotovost, minus dluh.
+  const jmeni = Math.round(acct._cisteJmeni(st) || 0);
+  const majetek = jmeni - hotovost + dluh;
   const zbyde = Math.round(acct._zbydeMesicne(st) || 0);
-  return { provozovny: Math.round(provozovny), hotovost, dluh,
-    hodnota: Math.max(0, Math.round(provozovny + hotovost - dluh)),
-    zbyde_mesicne: zbyde, pradlomatu: units.length };
+  // Druhý pohled: co firma vydělává. Tržní cena provozovny je čtyřnásobek
+  // jejího ročního zisku, u celé firmy to funguje stejně.
+  const podleZisku = Math.max(0, Math.round(zbyde * 12 * CENA_NASOBEK));
+  return { majetek, hotovost, dluh, jmeni, podle_zisku: podleZisku,
+    hodnota: Math.max(0, jmeni), zbyde_mesicne: zbyde, pradlomatu: units.length };
 }
 
 // ─── Co má kdo na prodej ─────────────────────────────────────────────────────
