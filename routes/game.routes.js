@@ -337,16 +337,19 @@ let introCache = { at: 0, data: null };
 router.get('/intro', async (req, res) => {
   try {
     if (Date.now() - introCache.at > 60e3 || !introCache.data) {
-      let ab = 'off';
+      let ab = 'off', jmeno = 'off';
       try { const v = await require('../services/settings').getSetting('game.ab_intro', { type: 'string', defaultValue: 'off' }); if (['off', '50', 'b'].includes(v)) ab = v; } catch (e) { /* výchozí */ }
+      // Druhý, nezávislý pokus: úvod bez povinného jména. off = jméno se zadává,
+      // on = hra ho vymyslí a hráč si ho přepíše později, 50 = půl na půl.
+      try { const v = await require('../services/settings').getSetting('game.ab_jmeno', { type: 'string', defaultValue: 'off' }); if (['off', '50', 'on'].includes(v)) jmeno = v; } catch (e) { /* výchozí */ }
       const [online, firem] = await Promise.all([
         prisma.gamePlayer.count({ where: { disabled: false, state_at: { gte: new Date(Date.now() - 60 * 60e3) } } }).catch(() => 0),
         prisma.gamePlayer.count({ where: { disabled: false } }).catch(() => 0),
       ]);
-      introCache = { at: Date.now(), data: { ab, online, firem } };
+      introCache = { at: Date.now(), data: { ab, jmeno, online, firem } };
     }
     res.set('Cache-Control', 'no-store').json(Object.assign({ ok: true }, introCache.data));
-  } catch (e) { res.json({ ok: true, ab: 'off', online: 0, firem: 0 }); }
+  } catch (e) { res.json({ ok: true, ab: 'off', jmeno: 'off', online: 0, firem: 0 }); }
 });
 
 const EVENTY = ['game_open', 'game_quiz', 'game_quiz_done', 'game_register', 'game_scout',
@@ -361,7 +364,10 @@ const EVENTY = ['game_open', 'game_quiz', 'game_quiz_done', 'game_register', 'ga
   // z čeho se pozná, kolik lidí odejde během načítání. game_zpet = vracející se
   // hráč s rozehranou hrou; ten úvod nevidí a bez něj by v trychtýři vypadal
   // jako ztráta.
-  'game_nacita', 'game_zpet'];
+  'game_nacita', 'game_zpet',
+  // Úvod bez povinného jména: game_jm_a / game_jm_b = varianta pokusu,
+  // game_jmeno = hráč si vymyšlené jméno nakonec přepsal na vlastní.
+  'game_jm_a', 'game_jm_b', 'game_jmeno'];
 // Kroky, po kterých je jasné, že se návštěvník do hry opravdu pustil.
 const ZACAL_HRAT = ['game_scout', 'game_build'];
 router.post('/ev', express.json({ limit: '2kb' }), async (req, res) => {

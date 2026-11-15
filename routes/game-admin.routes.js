@@ -956,27 +956,47 @@ router.get('/zaznam', api(async (req, res) => {
 router.get('/ab-intro', api(async (req, res) => {
   const { getSetting } = require('../services/settings');
   const rezim = await getSetting('game.ab_intro', { type: 'string', defaultValue: 'off' }).catch(() => 'off');
+  const rezimJmeno = await getSetting('game.ab_jmeno', { type: 'string', defaultValue: 'off' }).catch(() => 'off');
   const dny = Math.min(180, Math.max(1, parseInt(req.query.dny, 10) || 30));
   const od = new Date(Date.now() - dny * 86400e3);
   const ev = await prisma.compounderEvent.findMany({
-    where: { created_at: { gte: od }, event: { in: ['game_intro', 'game_ab_a', 'game_ab_b', 'game_register', 'game_build', 'game_paid'] } },
+    where: { created_at: { gte: od }, event: { in: ['game_intro', 'game_ab_a', 'game_ab_b',
+      'game_jm_a', 'game_jm_b', 'game_jmeno', 'game_register', 'game_build', 'game_paid'] } },
     select: { sid: true, event: true }, take: 400000 });
   const S = {}; ev.forEach((e) => { (S[e.event] || (S[e.event] = new Set())).add(e.sid); });
   const set = (k) => S[k] || new Set();
   const intro = set('game_intro');
-  const varianta = (v) => {
-    const vs = set('game_ab_' + v); const vid = [...vs].filter((s) => intro.has(s));
+  // Stejná matematika pro oba pokusy — liší se jen tím, jaká událost značí variantu.
+  const varianta = (prefix, v) => {
+    const vs = set(prefix + v); const vid = [...vs].filter((s) => intro.has(s));
     const n = vid.length, reg = vid.filter((s) => set('game_register').has(s)).length;
     const build = vid.filter((s) => set('game_build').has(s)).length, paid = vid.filter((s) => set('game_paid').has(s)).length;
-    return { navstev: n, registraci: reg, postavilo: build, zaplatilo: paid, konverze_pct: n ? Math.round(reg / n * 1000) / 10 : 0 };
+    const jmeno = vid.filter((s) => set('game_jmeno').has(s)).length;
+    return { navstev: n, registraci: reg, postavilo: build, zaplatilo: paid, prejmenovalo: jmeno,
+      konverze_pct: n ? Math.round(reg / n * 1000) / 10 : 0 };
   };
-  const A = varianta('a'), B = varianta('b');
+  const zTest = (A, B) => {
+    const nA = A.navstev, nB = B.navstev;
+    if (nA < 20 || nB < 20) return null;
+    const p = (A.registraci + B.registraci) / (nA + nB);
+    const se = Math.sqrt(p * (1 - p) * (1 / nA + 1 / nB));
+    return se > 0 ? Math.round(((B.registraci / nB) - (A.registraci / nA)) / se * 100) / 100 : null;
+  };
+  const A = varianta('game_ab_', 'a'), B = varianta('game_ab_', 'b');
+  const JA = varianta('game_jm_', 'a'), JB = varianta('game_jm_', 'b');
   // Dvouvýběrový z-test podílů — orientačně, zda je rozdíl víc než náhoda
-  let z = null; const nA = A.navstev, nB = B.navstev;
-  if (nA >= 20 && nB >= 20) { const p = (A.registraci + B.registraci) / (nA + nB); const se = Math.sqrt(p * (1 - p) * (1 / nA + 1 / nB)); if (se > 0) z = Math.round(((B.registraci / nB) - (A.registraci / nA)) / se * 100) / 100; }
+  const z = zTest(A, B), zJmeno = zTest(JA, JB);
   const celkem = { navstev: intro.size, registraci: [...intro].filter((s) => set('game_register').has(s)).length };
   celkem.konverze_pct = celkem.navstev ? Math.round(celkem.registraci / celkem.navstev * 1000) / 10 : 0;
-  res.json({ ok: true, rezim, dny, celkem, A, B, z });
+  res.json({ ok: true, rezim, dny, celkem, A, B, z,
+    jmeno: { rezim: rezimJmeno, A: JA, B: JB, z: zJmeno } });
+}));
+router.put('/ab-jmeno', api(async (req, res) => {
+  const v = String((req.body || {}).rezim || '');
+  if (!['off', '50', 'on'].includes(v)) return res.status(400).json({ error: 'Neplatný režim' });
+  const { setSetting } = require('../services/settings');
+  await setSetting('game.ab_jmeno', v, { type: 'string', description: 'Laundromat Tycoon — úvod bez povinného jména (off / 50 / on)', scope: 'game', userId: req.user && req.user.id });
+  res.json({ ok: true, rezim: v });
 }));
 router.put('/ab-intro', api(async (req, res) => {
   const v = String((req.body || {}).rezim || '');

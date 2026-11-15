@@ -3987,9 +3987,13 @@ function introErr(t) {
 }
 // Vlastní hra. Volá se, až když je jasné, pod jakým jménem hráč hraje —
 // nebo když se server neozval a hrát se musí i tak.
+var JMENO_VYMYSLENE = false, POKUSU_O_JMENO = 0;
 function spustNovouHru() {
   var bonus = BONUS_ZAMCEN;
   S = fresh('vyvazeny');
+  // Komu hra jméno vymyslela, tomu ho jednou nabídneme přepsat — ale až bude
+  // mít co ukázat, ne hned na úvodu. Tím se tření jen přesune.
+  if (JMENO_VYMYSLENE) S.jmenoNabidnout = true;
   if (bonus) S.cash += START_BONUS;
   save();
   startGame();
@@ -4004,6 +4008,10 @@ $('go-quiz').onclick = function () {
   var b = $('go-quiz');
   var nick = ($('in-nick') ? $('in-nick').value : '').trim();
   var firma = ($('in-firma') ? $('in-firma').value : '').trim();
+  // Ve variantě bez pole si jméno vymyslíme sami. Obsazené pak doladí server
+  // (vrátí 409 a hra k němu přilepí číslo) — stejnou cestou jako u zadaného.
+  if (!nick && BEZ_JMENA) { nick = vymysliJmeno(); JMENO_VYMYSLENE = true;
+    if ($('in-nick')) $('in-nick').value = nick; }
   if (nick.length < 3) return introErr('Vymysli si jméno, aspoň tři znaky. Pod ním budeš hrát.');
   if (nick.length > 24) return introErr('Jméno je moc dlouhé — nejvýš 24 znaků.');
   if (/[\s@]/.test(nick)) return introErr('Ve jménu nesmí být mezery ani zavináč.');
@@ -4017,6 +4025,13 @@ $('go-quiz').onclick = function () {
     if (!r.ok) {
       // Obsazené jméno nebo překlep řešíme na místě — hra ještě nezačala.
       if (r.status === 409 || r.status === 400 || r.status === 429) {
+        // Ve variantě bez pole nemá hráč co opravovat — políčko je schované.
+        // Vymyslíme jiné jméno a zkusíme to znovu, ať o tom vůbec neví.
+        if (r.status === 409 && BEZ_JMENA && JMENO_VYMYSLENE && POKUSU_O_JMENO < 3) {
+          POKUSU_O_JMENO++;
+          if ($('in-nick')) $('in-nick').value = vymysliJmeno();
+          return b.click();
+        }
         if (r.status === 409 && $('in-nick')) {
           $('in-nick').value = nick + Math.floor(10 + Math.random() * 90);
           $('in-nick').focus();
@@ -5825,6 +5840,8 @@ function installSheet(sp, areaId, modelKey, drz, pad) {
       S.units.push({ spotId: spotId, areaId: areaId, name: nazev, kind: sp.kind, score: sp.score,
         lat: sp.lat + dlat, lon: sp.lon + dlon, builtAt: Date.now(), eco: e });
       ev('game_build');
+      // Teď už má hráč co ukazovat — tady má smysl se zeptat na jméno.
+      if (S.jmenoNabidnout) { S.jmenoNabidnout = false; setTimeout(nabidniJmeno, 2200); }
       save(); paint(); drawMap(); closeSheet(); syncState(true);
       toast('Prádlomat stojí. Vydělává ' + kcFull(e.profit) + ' měsíčně.', 'ok');
     }).catch(function () { b.disabled = false; b.textContent = 'Postavit'; toast('Server neodpovídá.', 'err'); });
@@ -9744,6 +9761,39 @@ function nickVolneZa() {
   if (!ME || !ME.nick_at || !NICK_PAUZA_MS) return 0;
   return Math.max(0, NICK_PAUZA_MS - (Date.now() - Number(new Date(ME.nick_at))));
 }
+// Jednorázová nabídka po prvním postaveném prádlomatu: hra ti jméno vymyslela,
+// tady si ho můžeš přepsat. Odmítnout jde jedním klepnutím a víc se neozve.
+function nabidniJmeno() {
+  if (!ME) return;
+  sheet('<h3>Pod jakým jménem chceš hrát?</h3>'
+    + '<p class="muted small">Zatím ti říkáme <b>' + esc(ME.nick) + '</b> — to jsme si vymysleli, '
+    + 'abys mohl hrát hned. Teď si to přepiš, pod tímhle jménem tě uvidí konkurence '
+    + 'na mapě i v žebříčku. Je to zdarma.</p>'
+    + '<label class="fld"><span>Tvoje obchodní jméno</span>'
+    + '<input id="nj-nick" class="inp" type="text" maxlength="24" value="' + esc(ME.nick) + '" '
+    + 'autocapitalize="off" spellcheck="false"></label>'
+    + '<p class="fine err hidden" id="nj-err"></p>'
+    + '<button class="btn big" id="nj-ok" style="width:100%;margin-top:6px">Takhle mi říkejte</button>'
+    + '<button class="btn sec" id="nj-ne" style="width:100%;margin-top:8px">Nechat, jak je</button>');
+  $('nj-ne').onclick = closeSheet;
+  $('nj-ok').onclick = function () {
+    var n = $('nj-nick').value.trim(), e = $('nj-err');
+    if (n === ME.nick) return closeSheet();
+    if (!NICK_RE_HRA.test(n)) { e.textContent = 'Tři až dvacet čtyři znaků, bez mezer a zavináče.';
+      return e.classList.remove('hidden'); }
+    $('nj-ok').disabled = true;
+    apiJson('/account/nick', { nick: n }).then(function (r) {
+      $('nj-ok').disabled = false;
+      if (!r.ok) { e.textContent = (r.j && r.j.error) || 'Nepovedlo se.'; return e.classList.remove('hidden'); }
+      ME = r.j.player || ME;
+      ev('game_jmeno');
+      closeSheet(); paint();
+      toast('Hotovo, od teď jsi ' + ME.nick + '.', 'ok');
+    }).catch(function () { $('nj-ok').disabled = false; e.textContent = 'Server neodpovídá.';
+      e.classList.remove('hidden'); });
+  };
+  save();
+}
 function nickSheet() {
   var zbyva = nickVolneZa();
   var dnu = Math.ceil(zbyva / 86400000);
@@ -11952,6 +12002,29 @@ function ev(name, znovu) {
 // pod nimi skutečný počet hráčů (social proof) a zbytek úvodu níž. Režim přepíná administrace
 // (off / 50 / b). game_intro = návštěvník úvod opravdu viděl (správný jmenovatel konverze na registraci).
 var AB_KEY = 'lt_ab_intro';
+var AB_JM_KEY = 'lt_ab_jmeno';
+// Úvod bez povinného jména: hra si ho vymyslí a hráč si ho přepíše, až bude chtít.
+// Vymýšlet si jméno dřív, než člověk hru vůbec viděl, je poslední tření na úvodu.
+var BEZ_JMENA = false;
+var JMENA_ZAKLAD = ['Pradlar', 'Bublinka', 'Mydlinka', 'Pracka', 'Susak', 'Otacka',
+  'Cistic', 'Pena', 'Valec', 'Sloupek', 'Kotel', 'Pralka'];
+function vymysliJmeno() {
+  return JMENA_ZAKLAD[Math.floor(Math.random() * JMENA_ZAKLAD.length)]
+    + Math.floor(100 + Math.random() * 9900);
+}
+function introBezJmena() {
+  try {
+    var box = document.querySelector('#intro .intro-jmeno');
+    if (!box) return;
+    box.classList.add('hidden');
+    var b = $('go-quiz'); if (!b) return;
+    if (document.getElementById('bez-jm')) return;
+    var p = document.createElement('p');
+    p.className = 'fine'; p.id = 'bez-jm';
+    p.textContent = 'Jméno ti vymyslíme a přepíšeš si ho kdykoli zadarmo. Žádný e-mail ani heslo.';
+    b.parentNode.insertBefore(p, b);
+  } catch (e) { /* úvod musí jet i tak */ }
+}
 function introAB() {
   // Úvod je od téhle chvíle na obrazovce a nic ho už nepřebije. Hlásíme to
   // hned, ne až po odpovědi serveru — dvě kolečka na server (/account/me
@@ -11970,6 +12043,16 @@ function introAB() {
     }
     if (v === 'b') introVariantaB(cfg);
     if (rezim !== 'off') ev('game_ab_' + v);
+    // Druhý, nezávislý pokus: úvod bez povinného jména.
+    var rj = cfg.jmeno === '50' || cfg.jmeno === 'on' ? cfg.jmeno : 'off', vj = 'a';
+    if (rj === 'on') vj = 'b';
+    else if (rj === '50') {
+      try { vj = localStorage.getItem(AB_JM_KEY); } catch (e) { vj = null; }
+      if (vj !== 'a' && vj !== 'b') { vj = Math.random() < 0.5 ? 'a' : 'b'; try { localStorage.setItem(AB_JM_KEY, vj); } catch (e) { /* bez úložiště */ } }
+    }
+    BEZ_JMENA = vj === 'b';
+    if (BEZ_JMENA) introBezJmena();
+    if (rj !== 'off') ev('game_jm_' + vj);
   };
   api('/intro').then(function (r) { dokonci(r && r.ok ? r.j : null); }).catch(function () { dokonci(null); });
   setTimeout(function () { dokonci(null); }, 2500);   // server mlčí → původní úvod, nečekáme
