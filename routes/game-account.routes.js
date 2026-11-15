@@ -148,9 +148,9 @@ const RAMEC_KINDS = Object.keys(RAMEC);
 // vyzvednutí dají týden, ať na tom nikdo netratí.
 const LINKA_DEN = 86400000;
 const LINKA = {
-  linka1d: { kind: 'linka1d', name: 'Infolinka na den',   price: 4900,  dnu: 1 },
-  linka3d: { kind: 'linka3d', name: 'Infolinka na 3 dny', price: 9900,  dnu: 3 },
-  linka7d: { kind: 'linka7d', name: 'Infolinka na týden', price: 14900, dnu: 7 },
+  linka1d: { kind: 'linka1d', name: 'Infolinka na den',   price: 4900, dnu: 1 },
+  linka3d: { kind: 'linka3d', name: 'Infolinka na 3 dny', price: 7400, dnu: 3 },
+  linka7d: { kind: 'linka7d', name: 'Infolinka na týden', price: 9900, dnu: 7 },
   // Doběh starých kreditových balíčků. Nenabízejí se, jen se dají vyzvednout.
   linka50:  { kind: 'linka50',  name: '50 hovorů',  price: 9900,  dnu: 7, stary: true },
   linka100: { kind: 'linka100', name: '100 hovorů', price: 17900, dnu: 7, stary: true },
@@ -164,7 +164,25 @@ const LINKA_KINDS = Object.keys(LINKA);
 // ─── Předplatné ──────────────────────────────────────────────────────────────
 // Co se strhává samo dokola. Cena je za JEDNOHO technika a týden; jeden
 // technik stihne obsloužit `kapacita` poboček. Víc poboček = víc techniků.
+// Infolinka na předplatné: totéž co balíček, jen se sama obnovuje. Dokud
+// předplatné běží, je linka zapnutá — nic se nepřipisuje na čas, platí stav
+// předplatného. Zrušit jde kdykoli a zaplacené období dojede.
 const SUBS = {
+  linka_sub1d: { kind: 'linka_sub1d', name: 'Infolinka každý den', icon: 'phone',
+    price: 4900, interval: 'day', interval_count: 1, linka: true,
+    short: 'Obnovuje se každý den',
+    desc: 'Operátor bere všechny hovory za tebe. Platba se strhne každý den, '
+      + 'dokud předplatné nezrušíš.' },
+  linka_sub3d: { kind: 'linka_sub3d', name: 'Infolinka každé 3 dny', icon: 'phone',
+    price: 7400, interval: 'day', interval_count: 3, linka: true,
+    short: 'Obnovuje se každé tři dny',
+    desc: 'Operátor bere všechny hovory za tebe. Platba se strhne jednou za tři dny, '
+      + 'dokud předplatné nezrušíš.' },
+  linka_sub7d: { kind: 'linka_sub7d', name: 'Infolinka každý týden', icon: 'phone',
+    price: 9900, interval: 'week', interval_count: 1, linka: true,
+    short: 'Obnovuje se každý týden',
+    desc: 'Operátor bere všechny hovory za tebe. Platba se strhne jednou týdně, '
+      + 'dokud předplatné nezrušíš.' },
   dispecer: {
     kind: 'dispecer', name: 'Vedoucí servisních techniků', icon: 'wrench', price: 3900,
     interval: 'week', kapacita: 35,
@@ -294,7 +312,8 @@ async function subsPublic() {
   for (const k of SUB_KINDS) {
     const c = await item(k); if (!c) continue;
     out.push({ kind: c.kind, name: c.name, icon: c.icon, short: c.short, desc: c.desc,
-      price_czk: c.price / 100, interval: c.interval, kapacita: c.kapacita });
+      price_czk: c.price / 100, interval: c.interval, interval_count: c.interval_count || 1,
+      linka: !!c.linka, kapacita: c.kapacita });
   }
   return out;
 }

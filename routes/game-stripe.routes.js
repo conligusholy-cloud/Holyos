@@ -166,6 +166,10 @@ router.post('/stripe/subscribe', express.json({ limit: '8kb' }), acct._requirePl
     if (bezi.some((x) => x.kind === kind)) {
       return res.status(409).json({ error: 'Tohle předplatné ti už běží.' });
     }
+    // Infolinka je jedna: dvě předplatná vedle sebe by jen braly peníze dvakrát.
+    if (/^linka_sub/.test(kind) && bezi.some((x) => /^linka_sub/.test(x.kind))) {
+      return res.status(409).json({ error: 'Infolinku už máš předplacenou. Nejdřív zruš tu stávající.' });
+    }
 
     const row = await prisma.gameSubscription.create({
       data: { player_id: p.id, kind, qty, status: 'pending' }
@@ -183,7 +187,8 @@ router.post('/stripe/subscribe', express.json({ limit: '8kb' }), acct._requirePl
         quantity: qty,
         price_data: {
           currency: 'czk', unit_amount: c.price,
-          recurring: { interval: c.interval || 'week' },
+          recurring: { interval: c.interval || 'week',
+            interval_count: String(Math.max(1, parseInt(c.interval_count, 10) || 1)) },
           product_data: { name: 'Laundromat Tycoon — ' + c.name,
             description: c.short || undefined }
         }

@@ -3286,7 +3286,16 @@ function zapisHovor(jmeno, kroky, konec, zmena) {
 // nezazvoní. Kdo chce hovory brát sám (vynesou víc), přepne si to v kartě.
 // Dokud balíček běží, bere operátor všechny hovory a telefon nezvoní.
 var LINKA_PREVOD_MS = 7 * 86400000;     // co dostanou staré kredity při převodu
-function maLinku() { return !!(S && S.linkaDo && S.linkaDo > Date.now()); }
+function linkaPredplatne() {
+  var ted = Date.now();
+  return (PREDPLATNE || []).filter(function (x) {
+    return /^linka_sub/.test(x.kind) && (!x.plati_do || new Date(x.plati_do).getTime() > ted);
+  })[0] || null;
+}
+function maLinku() {
+  if (linkaPredplatne()) return true;     // běžící předplatné drží linku zapnutou
+  return !!(S && S.linkaDo && S.linkaDo > Date.now());
+}
 function linkaZbyva() { return maLinku() ? S.linkaDo - Date.now() : 0; }
 function prodluzLinku(dnu) {
   var od = Math.max(Date.now(), (S && S.linkaDo) || 0);
@@ -11900,8 +11909,29 @@ function paintCards() {
   box.innerHTML += ramecPacksHtml() + predplatneHtml() + linkaPacksHtml();
   bindPredplatne();
   [].forEach.call(box.querySelectorAll('[data-linka]'), function (el) {
-    el.onclick = function () { buyCash(el.getAttribute('data-linka')); };
+    el.onclick = function () {
+      var kind = el.getAttribute('data-linka');
+      if (LINKA_AUTO && LINKA_SUB[kind]) return zapniPredplatne(LINKA_SUB[kind], 1);
+      buyCash(kind);
+    };
   });
+  if ($('linka-auto')) $('linka-auto').onclick = function () {
+    LINKA_AUTO = !LINKA_AUTO; paintCards();
+  };
+  var lz = box.querySelector('[data-linka-zrus]');
+  if (lz) lz.onclick = function () {
+    var obnovit = lz.getAttribute('data-linka-zrus') === '0';
+    lz.disabled = true; lz.textContent = 'Měním\u2026';
+    apiJson('/stripe/subscribe/zrusit', { kind: lz.getAttribute('data-kind'), obnovit: obnovit })
+      .then(function (r) {
+        lz.disabled = false;
+        if (!r.ok) return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err');
+        PREDPLATNE = r.j.predplatne || [];
+        paintCards();
+        toast(r.j.obnovi_se ? 'Infolinka poběží dál.'
+          : 'Zrušeno. Zaplacené období ještě dojede.', 'ok', true);
+      }).catch(function () { lz.disabled = false; toast('Server neodpovídá.', 'err'); });
+  };
   [].forEach.call(box.querySelectorAll('[data-ramec]'), function (el) {
     el.onclick = function () { buyCash(el.getAttribute('data-ramec')); };
   });
@@ -12024,8 +12054,15 @@ function ramecPacksHtml() {
         : '<p class="fine">Prodej se teprve spouští.</p>')
     + '</div>';
 }
+// Přepínač „obnovovat automaticky": když je zapnutý, nekupuje se balíček na
+// čas, ale předplatné, které se samo platí dál. Drží se jen do zavření hry —
+// je to volba u nákupu, ne nastavení firmy.
+var LINKA_AUTO = false;
+// Balíček na čas → odpovídající předplatné. Jiný kalendář, stejná linka.
+var LINKA_SUB = { linka1d: 'linka_sub1d', linka3d: 'linka_sub3d', linka7d: 'linka_sub7d' };
 function linkaPacksHtml() {
   if (!LINKA_CAT || !LINKA_CAT.length) return '';
+  var pred = linkaPredplatne();
   var bezi = maLinku();
   return '<div class="card"><h3>\u260E\uFE0F Infolinka</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">S každým dalším prádlomatem volají lidi častěji — '
@@ -12033,18 +12070,34 @@ function linkaPacksHtml() {
     + 'Dokud máš infolinku zaplacenou, bere operátor všechny hovory za tebe, telefon ti vůbec '
     + 'nezazvoní a pověst neklesá — i když hru zavřeš. Co vyřídil, najdeš v evidenci níž.</p>'
     + '<div class="kv"><span>Infolinka</span><b class="' + (bezi ? 'ok' : 'warn') + '">'
-    + (bezi ? 'běží ještě ' + etaText(linkaZbyva()) : 'neběží') + '</b></div>'
-    + (bezi ? '<p class="fine">Koupený balíček se přičte k tomu, co ti zbývá — nic nepropadne.</p>'
-        : '<p class="fine">Bez ní telefon zvoní a každý nevzatý hovor srazí pověst.</p>')
-    + (PAYMENTS_ON
-        ? LINKA_CAT.map(function (c) {
-            return '<div class="pack" data-linka="' + esc(c.kind) + '">'
-              + '<div class="pack-l"><b>' + esc(c.name) + '</b>'
-              + '<span>' + String(c.za_den).replace('.', ',') + ' Kč za den</span></div>'
-              + '<button class="btn sm">' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button></div>';
-          }).join('')
+    + (pred ? 'běží na předplatné' : bezi ? 'běží ještě ' + etaText(linkaZbyva()) : 'neběží') + '</b></div>'
+    + (pred
+        ? '<div class="kv"><span>' + (pred.obnovi_se ? 'Další platba' : 'Doběhne') + '</span><b'
+          + (pred.obnovi_se ? '' : ' class="warn"') + '>'
+          + (pred.plati_do ? datumCas(new Date(pred.plati_do)) : 'brzy') + '</b></div>'
+          + (pred.status === 'past_due'
+              ? '<p class="fine err">Poslední platba neprošla. Dokud se nestrhne, operátor nebere.</p>' : '')
+          + '<div class="gcard-act"><button class="btn sm ghost" data-linka-zrus="'
+          + (pred.obnovi_se ? '1' : '0') + '" data-kind="' + esc(pred.kind) + '">'
+          + (pred.obnovi_se ? 'Zrušit obnovování' : 'Nechat běžet dál') + '</button></div>'
+        : bezi ? '<p class="fine">Koupený balíček se přičte k tomu, co ti zbývá — nic nepropadne.</p>'
+          : '<p class="fine">Bez ní telefon zvoní a každý nevzatý hovor srazí pověst.</p>')
+    + (PAYMENTS_ON && !pred
+        ? '<div class="kv" style="margin-top:10px"><span>Obnovovat automaticky</span>'
+          + '<button class="prep-sam' + (LINKA_AUTO ? ' on' : '') + '" id="linka-auto">'
+          + (LINKA_AUTO ? 'Zapnuto' : 'Vypnuto') + '</button></div>'
+          + '<p class="fine">' + (LINKA_AUTO
+              ? 'Koupíš si to jako předplatné: po vypršení se samo zaplatí znovu, dokud ho nezrušíš.'
+              : 'Jednorázový nákup — až čas doběhne, infolinka se vypne.') + '</p>'
+          + LINKA_CAT.map(function (c) {
+              return '<div class="pack" data-linka="' + esc(c.kind) + '">'
+                + '<div class="pack-l"><b>' + esc(c.name) + '</b>'
+                + '<span>' + String(c.za_den).replace('.', ',') + ' Kč za den'
+                + (LINKA_AUTO ? ' · obnovuje se' : '') + '</span></div>'
+                + '<button class="btn sm">' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button></div>';
+            }).join('')
           + '<p class="fine">Platbu zpracovává Stripe. Infolinka naskočí hned po zaplacení.</p>'
-        : '<p class="fine">Prodej se teprve spouští.</p>')
+        : PAYMENTS_ON ? '' : '<p class="fine">Prodej se teprve spouští.</p>')
     + hovorLogHtml()
     + '</div>';
 }
@@ -12535,7 +12588,9 @@ function checkPayment() {
           PREDPLATNE = r.j.predplatne || PREDPLATNE;
           ev('game_paid', true);
           paintCards(); switchTab('cards');
-          return toast('Vedoucí servisu nastoupil. Od teď hlídá poruchy za tebe.', 'ok', true);
+          return toast(/^linka_sub/.test(r.j.kind || '')
+            ? 'Infolinka běží a sama se obnovuje. Telefon ti nezazvoní.'
+            : 'Vedoucí servisu nastoupil. Od teď hlídá poruchy za tebe.', 'ok', true);
         }
         if (++pt < 10) return setTimeout(cekej, 1500);
         loadCards().then(paintCards);
