@@ -1368,6 +1368,21 @@ var KRIZE_DNO_MAX = 0.4;           // nejhorší propad
 var KONJ_VLNA = 0.05;              // jak moc ekonomika dýchá i mimo krizi
 var KRIZE_PRUM = null;             // dočasné přepsání při dopočtu nepřítomnosti
 
+// ─── Sezóna ──────────────────────────────────────────────────────────────────
+// Prát se nepřestane nikdy, ale ne každý měsíc stejně. Po Vánocích jsou lidi
+// bez peněz a doma, v létě se perou ručníky a plavky a na podzim se chystá
+// na svátky. Rozdíl mezi nejslabším a nejsilnějším měsícem je kolem 30 %,
+// tedy zhruba ±15 % kolem průměru. Měsíce běží všem stejně — jsou odvozené
+// z času, ne od toho, kdy kdo začal hrát.
+var MESICE = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen',
+  'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
+var SEZONA = [0.86, 0.88, 0.94, 0.99, 1.02, 1.08, 1.13, 1.12, 1.07, 0.96, 1.03, 1.08];
+// Normalizace: přes celý rok musí sezóna vyjít na jedničku, jinak by sama
+// o sobě hru zlevnila nebo zdražila.
+var SEZONA_PRUMER = SEZONA.reduce(function (a, b) { return a + b; }, 0) / SEZONA.length;
+function hernoMesic(t) { return ((Math.floor(t / MONTH_MS) % 12) + 12) % 12; }
+function sezonaV(t) { return SEZONA[hernoMesic(t)] / SEZONA_PRUMER; }
+
 // Deterministický šum: ze stejného čísla vyleze vždycky stejné „náhodné" číslo,
 // takže se krize nemusí nikde ukládat ani posílat — spočítá si ji každý sám.
 function krizeSum(blok, sul) {
@@ -1399,14 +1414,18 @@ function ekonomikaV(t) {
   }
   // I v dobrých časech to trochu dýchá — nikdy to není rovná čára.
   var dech = 1 + KONJ_VLNA * Math.sin(t / (0.37 * YEAR_MS));
-  if (!nejhorsi) return { koef: dech, krize: false, hloubka: 0 };
+  var sez = sezonaV(t), mes = hernoMesic(t);
+  if (!nejhorsi) {
+    return { koef: dech * sez, krize: false, hloubka: 0, sezona: sez, mesic: mes };
+  }
   // Propad nenastoupí ze dne na den: nabíhá, drží se u dna a zase povoluje.
   // Uvnitř krize to kolísá, takže se nedá odhadnout, kdy je nejhůř.
   var u = (t - nejhorsi.od) / nejhorsi.delka;
   var tvar = Math.pow(Math.sin(Math.PI * Math.min(1, Math.max(0, u))), 0.6);
   var vlna = 1 + 0.22 * Math.sin(t / (0.11 * YEAR_MS) + nejhorsi.od);
   var pokles = Math.max(0, Math.min(0.45, nejhorsi.dno * tvar * vlna));
-  return { koef: Math.max(0.3, dech - pokles), krize: pokles > 0.03, hloubka: pokles };
+  return { koef: Math.max(0.3, dech - pokles) * sez, krize: pokles > 0.03, hloubka: pokles,
+    sezona: sez, mesic: mes };
 }
 // Průměr za delší úsek — podle toho se dopočítá nepřítomnost, aby se krize
 // nedala přečkat tím, že hráč hru prostě zavře.
@@ -1436,17 +1455,25 @@ function ekonomikaHtml() {
   var e = ekonomika();
   var pct = Math.round(e.hloubka * 100);
   var nad = Math.round((e.koef - 1) * 100);
+  var sez = Math.round((e.sezona - 1) * 100);
   return '<div class="card"><div class="row"><h3>Ekonomika</h3>'
     + '<b class="' + (e.krize ? 'err' : nad >= 0 ? 'ok' : 'warn') + '">'
     + (e.krize ? 'krize' : nad > 1 ? 'konjunktura' : 'klid') + '</b></div>'
-    + '<div class="kv"><span>Návštěvnost oproti normálu</span><b class="'
+    + '<div class="kv"><span>Herní měsíc</span><b>' + MESICE[e.mesic] + '</b></div>'
+    + '<div class="kv"><span>Sezóna</span><b class="' + (sez >= 0 ? 'ok' : 'warn') + '">'
+    + (sez > 0 ? '+' : '') + sez + ' %</b></div>'
+    + (e.krize ? '<div class="kv"><span>Krize</span><b class="err">−'
+        + Math.round(e.hloubka * 100) + ' %</b></div>' : '')
+    + '<div class="kv souhrn"><span>Návštěvnost oproti normálu</span><b class="'
     + (e.koef >= 1 ? 'ok' : 'err') + '">' + (nad > 0 ? '+' : '') + nad + ' %</b></div>'
     + '<p class="fine">' + (e.krize
         ? 'Zákazníků ubylo o ' + pct + ' %. Dno ani konec dopředu nikdo nezná a v průběhu '
           + 'to kolísá — nájmy, splátky a mzdy ale běží dál. Kdo má rezervu, přečká to; '
           + 'kdo je na hraně, musí šetřit.'
         : 'Trh je v pořádku. Krize přicházejí nepravidelně a bez varování, takže se vyplatí '
-          + 'držet rezervu — běží to stejně všem hráčům.') + '</p></div>';
+          + 'držet rezervu — běží to stejně všem hráčům.')
+    + ' V lednu a únoru se pere nejmíň, od června do září nejvíc a před Vánoci to ještě '
+    + 'jednou vyskočí. Herní měsíc trvá dvanáct hodin.</p></div>';
 }
 function krizeKoef() { return KRIZE_PRUM != null ? KRIZE_PRUM : ekonomika().koef; }
 
