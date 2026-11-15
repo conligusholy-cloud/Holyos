@@ -25,7 +25,12 @@ const MESIC_MS = 43200000;             // herní měsíc = 12 skutečných hodin
 const PUJCKA_MIN = 10000;
 const UROK_MAX = 0.6;                  // 60 % ročně je strop, výš už je to lichva
 const PUJCKA_MESICU_MAX = 60;
-const PODIL_MIN = 0.01, PODIL_MAX = 0.49;   // většinu firmy si majitel nechá
+// Prodat jde i většina firmy — majitel si o tom rozhoduje sám. Strop je jen
+// na sto procentech: víc než celou firmu prodat nelze.
+const PODIL_MIN = 0.01, PODIL_MAX = 1;
+// Nad tímhle podílem drží kupující většinu a hra na to musí prodávajícího
+// upozornit dřív, než klikne.
+const PODIL_VETSINA = 0.5;
 const ODKUP_NASOBEK = 1.25;            // orientační cena zpětného odkupu, dohoda ji přebíjí
 // Anuitní splátka za herní měsíc: stejná částka po celou dobu.
 function anuita(castka, urokRocni, mesicu) {
@@ -206,6 +211,14 @@ async function prodanyPodil(firmaId) {
   return rows.reduce((a, x) => a + (x.podil || 0), 0);
 }
 
+// Kolik z téhle firmy drží jeden konkrétní investor. Rozhoduje to o většině:
+// padesát procent rozdrobených mezi pět lidí nikomu kontrolu nedává.
+async function podilInvestora(firmaId, investorId) {
+  const rows = await prisma.gameEquity.findMany({
+    where: { firma_id: firmaId, investor_id: investorId, stav: 'bezi' }, select: { podil: true } });
+  return rows.reduce((a, x) => a + (x.podil || 0), 0);
+}
+
 // POST /trade/offer { to_id, smer, predmet, model, spot_id, card_kind, cena, karty[], vzkaz }
 router.post('/trade/offer', hrac, api(async (req, res) => {
   const b = req.body || {};
@@ -256,9 +269,14 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
     const uz = await prodanyPodil(firma.id);
     if (uz + podil > PODIL_MAX + 1e-9) {
       return res.status(409).json({ error: 'Z firmy je prodáno už ' + Math.round(uz * 100)
-        + ' %. Víc než ' + Math.round(PODIL_MAX * 100) + ' % se prodat nedá.' });
+        + ' %. Celá firma je sto procent — víc prodat nejde.' });
     }
-    data = { podil };
+    // Kolik bude kupující držet, až to projde — a jestli tím získá většinu.
+    // Posíláme to v nabídce, aby obě strany viděly totéž a prodávající se
+    // nedozvěděl až po kliknutí, že se právě zbavil kontroly nad firmou.
+    const kupujici = smer === 'koupim' ? req.player : druhy;
+    const po = (await podilInvestora(firma.id, kupujici.id)) + podil;
+    data = { podil, po_prodeji: po, vetsina: po > PODIL_VETSINA + 1e-9 };
   } else if (predmet === 'odkup') {
     // Zpětný odkup je obchod jako každý jiný: souhlasit musí obě strany a cenu
     // si řeknou samy. Kupuje vždycky majitel firmy, prodává podílník.
@@ -359,9 +377,12 @@ router.post('/trade/:id/counter', hrac, api(async (req, res) => {
     const uz = await prodanyPodil(firmaId);
     if (uz + podil > PODIL_MAX + 1e-9) {
       return res.status(409).json({ error: 'Z firmy je prodáno už ' + Math.round(uz * 100)
-        + ' %. Víc než ' + Math.round(PODIL_MAX * 100) + ' % se prodat nedá.' });
+        + ' %. Celá firma je sto procent — víc prodat nejde.' });
     }
-    data = Object.assign({}, data || {}, { podil });
+    const kupujiciId = novySmer === 'koupim' ? req.player.id : t.from_id;
+    const po = (await podilInvestora(firmaId, kupujiciId)) + podil;
+    data = Object.assign({}, data || {}, { podil, po_prodeji: po,
+      vetsina: po > PODIL_VETSINA + 1e-9 });
   }
   // Platím-li po prohození já, musí na to být volná hotovost.
   const platimJa = t.predmet === 'pujcka' ? novySmer === 'prodam' : novySmer === 'koupim';

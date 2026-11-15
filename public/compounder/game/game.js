@@ -10705,13 +10705,20 @@ function paintBurza() {
       if (co === 'accept' && jaPlatim && t.cena > S.cash) {
         return toast('Na tohle nemáš hotovost — chybí ' + kcFull(t.cena - S.cash) + '.', 'err');
       }
-      b.disabled = true;
-      apiJson('/trade/' + id + '/' + co, {}).then(function (r) {
-        if (!r.ok) { b.disabled = false; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
-        toast(co === 'accept' ? 'Obchod uzavřen.' : 'Nabídka zamítnuta.', 'ok');
-        if (co === 'accept') { vyzvedniNasledky(); FINANCE = null; }
-        loadTrades(paintBurza);
-      }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+      var proved = function () {
+        b.disabled = true;
+        apiJson('/trade/' + id + '/' + co, {}).then(function (r) {
+          if (!r.ok) { b.disabled = false; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
+          toast(co === 'accept' ? 'Obchod uzavřen.' : 'Nabídka zamítnuta.', 'ok');
+          if (co === 'accept') { vyzvedniNasledky(); FINANCE = null; }
+          loadTrades(paintBurza);
+        }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+      };
+      // Prodávám většinu vlastní firmy — tohle si nikdo nesmí odkliknout omylem.
+      if (co === 'accept' && t.predmet === 'podil' && (t.data || {}).vetsina && !jaPlatim) {
+        return vetsinaSheet(t, proved);
+      }
+      proved();
     };
   });
 }
@@ -10825,6 +10832,36 @@ function prevodCenaSheet(e, komuId, komu) {
         closeSheet(); TRADES = null; loadTrades(paintBurza);
         toast('Nabídka odeslaná. Teď je to na druhé straně.', 'ok');
       }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+  };
+}
+
+// Poslední brzda před prodejem většiny vlastní firmy. Hra prodej nezakazuje —
+// je to majitelovo rozhodnutí — ale nenechá ho projít jedním kliknutím.
+function vetsinaSheet(t, pak) {
+  var d = t.data || {};
+  var pct = Math.round((d.podil || 0) * 100);
+  var po = Math.round((d.po_prodeji || d.podil || 0) * 100);
+  var kdo = t.moje ? t.komu.nick : t.od.nick;
+  sheet('<h3>\u26A0\uFE0F Prodáváš většinu firmy</h3>'
+    + '<p class="muted small">' + esc(kdo) + ' po tomhle obchodu bude držet <b>' + po
+    + ' %</b> tvé firmy' + (po > pct ? ' (teď má ' + (po - pct) + ' %, kupuje dalších ' + pct + ' %)' : '')
+    + '. Víc než polovinu.</p>'
+    + '<div class="kv"><span>Prodáváš</span><b>' + pct + ' %</b></div>'
+    + '<div class="kv"><span>Za</span><b>' + kcFull(t.cena) + '</b></div>'
+    + '<div class="kv"><span>Zůstane ti</span><b>' + Math.max(0, 100 - Math.round(podilProdano() * 100) - pct)
+    + ' %</b></div>'
+    + '<p class="fine err">Zpátky ji dostaneš jen tak, že ti ji druhá strana bude ochotná prodat. '
+    + 'Vynutit to nejde a cenu si řekne on.</p>'
+    + '<p class="fine">Z firmy mu pak každý herní měsíc odchází jeho procento z toho, co ti zbyde — '
+    + 'a stejným dílem s tebou nese i ztrátu.</p>'
+    + '<label class="fld chk"><input type="checkbox" id="vet-chk"> '
+    + '<span>Rozumím tomu a většinu prodávám.</span></label>'
+    + '<button class="btn big" id="vet-ok" style="width:100%;margin-top:6px">Přijmout nabídku</button>'
+    + '<button class="btn sec" id="vet-ne" style="width:100%;margin-top:8px">Zatím ne</button>');
+  $('vet-ne').onclick = closeSheet;
+  $('vet-ok').onclick = function () {
+    if (!$('vet-chk').checked) return toast('Nejdřív to odklikni.', 'err');
+    closeSheet(); pak();
   };
 }
 
@@ -11249,7 +11286,9 @@ function majetekSheet(id) {
 // ─── Půjčka a podíl mezi hráči ───────────────────────────────────────────────
 // Nabídka jako každá jiná: pošle se protistraně a ta ji přijme nebo odmítne.
 // Splátky i výplaty podílu pak řeší server každý herní měsíc sám.
-var UROK_MAX_HRA = 60, PODIL_MAX_HRA = 49, PUJCKA_MIN_HRA = 10000;
+// Prodat jde i většina firmy. Hra do toho majiteli nemluví, jen ho nenechá
+// kliknout naslepo — nad padesáti procenty musí potvrdit, že ví, co dělá.
+var UROK_MAX_HRA = 60, PODIL_MAX_HRA = 100, PODIL_VETSINA_HRA = 50, PUJCKA_MIN_HRA = 10000;
 // Kolik procent vlastní firmy už hráč prodal. Server to ví jistě, tohle je
 // jen pro formulář, než nabídku odešle.
 function podilProdano() {
@@ -11273,6 +11312,15 @@ function oceneniHtml(oc, co) {
     + '">' + kcFull(oc.jmeni) + '</b></div>'
     + '<div class="kv"><span>Podle zisku (4× roční)</span><b>' + kcFull(oc.podle_zisku) + '</b></div>'
     + '<p class="fine" id="fin-rada"></p>';
+}
+// Kolik téhle firmy drží jeden konkrétní hráč. Většinu dělá jeden držitel,
+// ne součet všech podílníků — padesát procent rozdrobených mezi pět lidí
+// nikomu kontrolu nedává.
+function podilJednoho(toId, co) {
+  var klic = co === 'koupim-podil' ? 'mam' : 'prodal';
+  return ((FINANCE && FINANCE.podily) || []).filter(function (e) {
+    return e.moje === klic && e.kdo_id === toId && bezici(e);
+  }).reduce(function (a, e) { return a + (e.podil || 0); }, 0);
 }
 function anuitaHra(castka, urokProcent, mesicu) {
   var r = (Number(urokProcent) || 0) / 100 / 12;
@@ -11346,11 +11394,11 @@ function financeSheet(toId, kdo, co, a) {
           + (zbyvaPodilu < PODIL_MAX_HRA
               ? '<p class="fine' + (zbyvaPodilu < 1 ? ' err' : '') + '">'
                 + (zbyvaPodilu < 1
-                    ? 'Z firmy je prodáno ' + Math.round(prodano * 100) + ' % a víc než '
-                      + PODIL_MAX_HRA + ' % prodat nejde — další podíl už koupit nelze.'
-                    : 'Prodáno je ' + Math.round(prodano * 100) + ' %, nejvýš se dá vzít ještě '
+                    ? 'Tahle firma je rozprodaná celá — dalších sto procent neexistuje.'
+                    : 'Prodáno je ' + Math.round(prodano * 100) + ' %, zbývá tedy '
                       + zbyvaPodilu + ' %.') + '</p>'
               : '')
+          + '<p class="fine" id="fin-vetsina"></p>'
           + oceneniHtml(oc, co))
     + '<label class="fld"><span>Vzkaz (nepovinný)</span>'
     + '<input id="fin-vzkaz" class="inp" type="text" maxlength="200"></label>'
@@ -11422,8 +11470,41 @@ function financeSheet(toId, kdo, co, a) {
         + '. Dokud ji nemáš, nabídku nikdo nemůže přijmout.';
     } else { el.className = 'fine'; el.textContent = ''; }
   };
+  // Většina firmy. Hláška je živá, ať ji hráč vidí dřív, než klikne — a u
+  // prodeje vlastní firmy si ji musí odkliknout, aby nešla přehlédnout.
+  var drziUz = co === 'koupim-podil' || co === 'prodam-podil' ? podilJednoho(toId, co) : 0;
+  var poProdeji = function () {
+    var i = $('fin-podil');
+    if (!i) return 0;
+    return Math.round(drziUz * 100) + Math.max(0, Math.round(Number(i.value) || 0));
+  };
+  var vetsinaVar = function () {
+    var el = $('fin-vetsina');
+    if (!el) return;
+    var po = poProdeji();
+    if (po <= PODIL_VETSINA_HRA) {
+      el.className = 'fine'; el.textContent = '';
+      var s1 = $('fin-souhlas'); if (s1) s1.parentNode.removeChild(s1);
+      return;
+    }
+    var kdoBude = co === 'koupim-podil' ? 'Budeš' : esc(kdo.firma || kdo.nick) + ' bude';
+    el.className = 'fine err';
+    el.innerHTML = '<b>Většinový podíl.</b> ' + kdoBude + ' držet ' + po + ' % firmy'
+      + (drziUz > 0 ? ' (už má ' + Math.round(drziUz * 100) + ' %)' : '') + '. '
+      + (co === 'prodam-podil'
+          ? 'Prodáváš tím většinu vlastní firmy. Zpátky ji dostaneš jen tak, že ti ji druhá strana '
+            + 'bude ochotná prodat — vynutit to nejde.'
+          : 'Získáváš tím většinu v cizí firmě. Rozhodnout musí její majitel.');
+    if (co === 'prodam-podil' && !$('fin-souhlas')) {
+      var w = document.createElement('label');
+      w.className = 'fld chk'; w.id = 'fin-souhlas';
+      w.innerHTML = '<input type="checkbox" id="fin-souhlas-in"> '
+        + '<span>Rozumím, prodávám většinu své firmy.</span>';
+      el.parentNode.insertBefore(w, el.nextSibling);
+    }
+  };
   var puvodni = prepocti;
-  prepocti = function () { puvodni(); kryti(); };
+  prepocti = function () { puvodni(); kryti(); vetsinaVar(); };
   // Částku napoprvé napovíme z ocenění a držíme ji s procentem, dokud do ní
   // hráč sám nesáhne — pak je jeho.
   var rucne = false;
@@ -11458,10 +11539,14 @@ function financeSheet(toId, kdo, co, a) {
       if (co === 'pujcim') telo.zadam_zastavu = zadam;
     } else {
       var pp = Math.max(1, Math.round(Number($('fin-podil').value) || 0));
+      if (co === 'prodam-podil' && poProdeji() > PODIL_VETSINA_HRA
+        && !(($('fin-souhlas-in') || {}).checked)) {
+        return toast('Prodáváš většinu firmy — odklikni, že to víš.', 'err');
+      }
       if (pp > zbyvaPodilu) {
         return toast(zbyvaPodilu < 1
-          ? 'Z téhle firmy už další podíl koupit nejde — prodáno je ' + Math.round(prodano * 100) + ' %.'
-          : 'Z firmy zbývá nejvýš ' + zbyvaPodilu + ' %. Víc než ' + PODIL_MAX_HRA + ' % prodat nejde.', 'err');
+          ? 'Tahle firma je rozprodaná celá — víc než sto procent neexistuje.'
+          : 'Z firmy zbývá ' + zbyvaPodilu + ' %. Celá firma je sto procent.', 'err');
       }
       telo.podil = pp / 100;
     }

@@ -465,6 +465,10 @@ button.kv:active{background:rgba(124,92,255,.12)}
 /* ─── Účet a karty ────────────────────────────────────────────────────────── */
 .fld{display:block;margin:12px 0 4px;text-align:left}
 .fld span{display:block;font-size:12px;color:var(--text2);margin-bottom:4px}
+/* Zaškrtnutí vedle textu — u potvrzení, která nemají projít omylem. */
+.fld.chk{display:flex;align-items:flex-start;gap:9px;margin:10px 0 2px}
+.fld.chk input{flex:0 0 auto;width:20px;height:20px;margin:1px 0 0;accent-color:var(--akce,#7c5cff)}
+.fld.chk span{display:block;margin:0;font-size:13px;color:var(--text);line-height:1.35}
 .btn.ghost{background:none;border:1px solid var(--border);color:var(--text2);box-shadow:none;margin-top:8px}
 .btn.ghost:hover{color:var(--text);border-color:var(--text)}
 .gcard{border:1px solid var(--border);border-radius:14px;padding:14px;margin:10px 0;background:var(--card);position:relative;overflow:hidden}
