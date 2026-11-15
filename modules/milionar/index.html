@@ -112,6 +112,7 @@
       <button class="module-tab" data-tab="players">Hráči</button>
       <button class="module-tab" data-tab="orders">Objednávky</button>
       <button class="module-tab" data-tab="prices">Ceník</button>
+      <button class="module-tab" data-tab="nastaveni">Nastavení</button>
       <button class="module-tab" data-tab="nahlasene">Nahlášené<span id="nahl-pocet"></span></button>
       <button class="module-tab" data-tab="multi">Spojené účty<span id="multi-pocet"></span></button>
     </div>
@@ -207,8 +208,12 @@
 
       <div class="module-panel" id="panel-prices">
         <p class="note" style="margin:16px 0">Změna se projeví ve hře do minuty. Už rozdělané platby doběhnou za starou cenu.</p>
-        <div id="nast-box" style="margin:0 0 18px"></div>
         <div class="tbl-wrap"><table class="data-table" id="pr-tbl"></table></div>
+      </div>
+
+      <div class="module-panel" id="panel-nastaveni">
+        <p class="note" style="margin:16px 0">Přepínače chování hry. Mění se za běhu, bez nasazování — hráčům se projeví do minuty.</p>
+        <div id="nast-box" style="margin:0 0 18px"></div>
       </div>
     </div>
   </div>
@@ -1065,7 +1070,6 @@
 
     // ── Ceník ───────────────────────────────────────────────────────────────
     function loadPrices() {
-      loadNastaveni();
       get('/prices').then(function (j) {
         document.getElementById('pr-tbl').innerHTML =
           '<thead><tr><th>Položka</th><th>Druh</th><th class="num">Cena (Kč)</th><th class="num">Laundrů</th>'
@@ -1199,7 +1203,7 @@
     }
 
     var LOADERY = { stats: loadStats, players: loadPlayers, orders: loadOrders,
-      prices: loadPrices, nahlasene: loadNahlasene, multi: loadMulti };
+      prices: loadPrices, nastaveni: loadNastaveni, nahlasene: loadNahlasene, multi: loadMulti };
     var AKTIVNI = 'stats';
     [].forEach.call(document.querySelectorAll('.module-tab'), function (t) {
       t.onclick = function () {
