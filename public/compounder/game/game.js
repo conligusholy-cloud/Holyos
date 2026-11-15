@@ -471,9 +471,11 @@ var ZAVADY = [
 // ─── Katastrofy ──────────────────────────────────────────────────────────────
 // Na rozdíl od běžné závady tohle technik nespraví: hoří, teče nebo někdo
 // rozmlátil výlohu. Prádlomat stojí celý, oprava se platí a trvá dny. Stává se
-// to vzácně — v průměru jednou za osm herních let na stroj — ale bolí to, a
-// proto jde provozovny pojistit (pojistné běží měsíčně, oprava pak stojí pětinu).
-var KATASTROFA_ROCNE = 0.08;       // průměrně jednou za dvanáct herních let na stroj
+// to nečekaně — v průměru jednou za pět a půl herního roku na stroj — ale bolí
+// to, a proto jde provozovny pojistit (pojistné běží měsíčně, oprava pak stojí
+// pětinu). U velké sítě to znamená několik škod do měsíce: čím víc strojů, tím
+// častěji se něco semele, a pojištění se začne vyplácet samo.
+var KATASTROFA_ROCNE = 0.18;       // průměrně jednou za 5,5 herního roku na stroj
 // Oprava je podíl z ceny stroje. Požár bolí nejvíc, rozbitá výloha je spíš
 // otrava — a i ta nejdražší škoda se dá splatit za pár herních měsíců provozu,
 // aby jedna smůla neposlala začínajícího hráče ke dnu.
@@ -1351,10 +1353,107 @@ function rentOf(sp) {
 function trafficMax() { return TRAFFIC_MAX + (S && S.boost ? S.boost : 0); }
 // Pověst z infolinky násobí výsledek až na konci — ať platí celý rozsah
 // i tomu, kdo už má návštěvnost na stropu.
+// ─── Ekonomika: konjunktura a krize ──────────────────────────────────────────
+// Trh se vlní. Klidné roky střídají krize, kdy lidem dojdou peníze a do
+// prádlomatů chodí míň zákazníků. Není to náhoda v prohlížeči — je to funkce
+// času, takže všichni hráči jsou na tom ve stejnou chvíli stejně a dá se o tom
+// bavit. Jak dlouho krize potrvá, ale nikdo dopředu neví: délka i hloubka se
+// losují z času a během krize to navíc kolísá.
+var KRIZE_BLOK = 1;                // jak často se losuje, jestli krize začne (herní roky)
+var KRIZE_SANCE = 0.28;            // s jakou pravděpodobností v bloku začne
+var KRIZE_DELKA_MIN = 0.5;         // nejkratší krize v herních letech (3 skutečné dny)
+var KRIZE_DELKA_MAX = 2;           // nejdelší krize (12 skutečných dnů)
+var KRIZE_DNO_MIN = 0.15;          // nejmírnější propad návštěvnosti
+var KRIZE_DNO_MAX = 0.4;           // nejhorší propad
+var KONJ_VLNA = 0.05;              // jak moc ekonomika dýchá i mimo krizi
+var KRIZE_PRUM = null;             // dočasné přepsání při dopočtu nepřítomnosti
+
+// Deterministický šum: ze stejného čísla vyleze vždycky stejné „náhodné" číslo,
+// takže se krize nemusí nikde ukládat ani posílat — spočítá si ji každý sám.
+function krizeSum(blok, sul) {
+  var x = Math.imul(blok ^ (sul * 0x9e3779b9), 2654435761);
+  x ^= x >>> 15; x = Math.imul(x, 2246822519);
+  x ^= x >>> 13; x = Math.imul(x, 3266489917);
+  x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+}
+// Krize, která se losovala v daném bloku. Null = v tom bloku žádná nezačala.
+function krizeBloku(i) {
+  if (krizeSum(i, 1) >= KRIZE_SANCE) return null;
+  var blokMs = KRIZE_BLOK * YEAR_MS;
+  var od = i * blokMs + krizeSum(i, 2) * blokMs;
+  var delka = (KRIZE_DELKA_MIN + krizeSum(i, 3) * (KRIZE_DELKA_MAX - KRIZE_DELKA_MIN)) * YEAR_MS;
+  var dno = KRIZE_DNO_MIN + krizeSum(i, 4) * (KRIZE_DNO_MAX - KRIZE_DNO_MIN);
+  return { od: od, do: od + delka, delka: delka, dno: dno };
+}
+// Jak hluboko je ekonomika v daný okamžik. 1 = normál, 0,6 = o 40 % míň lidí.
+function ekonomikaV(t) {
+  var blokMs = KRIZE_BLOK * YEAR_MS;
+  var i = Math.floor(t / blokMs);
+  var nejhorsi = null;
+  // Krize může přesahovat do dalších bloků, proto se díváme i dozadu.
+  for (var k = i - 3; k <= i; k++) {
+    var kr = krizeBloku(k);
+    if (!kr || t < kr.od || t >= kr.do) continue;
+    if (!nejhorsi || kr.dno > nejhorsi.dno) nejhorsi = kr;
+  }
+  // I v dobrých časech to trochu dýchá — nikdy to není rovná čára.
+  var dech = 1 + KONJ_VLNA * Math.sin(t / (0.37 * YEAR_MS));
+  if (!nejhorsi) return { koef: dech, krize: false, hloubka: 0 };
+  // Propad nenastoupí ze dne na den: nabíhá, drží se u dna a zase povoluje.
+  // Uvnitř krize to kolísá, takže se nedá odhadnout, kdy je nejhůř.
+  var u = (t - nejhorsi.od) / nejhorsi.delka;
+  var tvar = Math.pow(Math.sin(Math.PI * Math.min(1, Math.max(0, u))), 0.6);
+  var vlna = 1 + 0.22 * Math.sin(t / (0.11 * YEAR_MS) + nejhorsi.od);
+  var pokles = Math.max(0, Math.min(0.45, nejhorsi.dno * tvar * vlna));
+  return { koef: Math.max(0.3, dech - pokles), krize: pokles > 0.03, hloubka: pokles };
+}
+// Průměr za delší úsek — podle toho se dopočítá nepřítomnost, aby se krize
+// nedala přečkat tím, že hráč hru prostě zavře.
+function krizePrumer(od, doKdy) {
+  if (!(doKdy > od)) return ekonomikaV(doKdy).koef;
+  var vzorku = Math.max(2, Math.min(64, Math.ceil((doKdy - od) / (YEAR_MS / 24))));
+  var sum = 0;
+  for (var j = 0; j < vzorku; j++) sum += ekonomikaV(od + (doKdy - od) * (j + 0.5) / vzorku).koef;
+  return sum / vzorku;
+}
+function ekonomika() { return ekonomikaV(Date.now()); }
+// Když se ekonomika zlomí, ať to hráč nezjistí až z toho, že mu klesly tržby.
+function hlidejKrizi() {
+  var e = ekonomika();
+  var bylo = !!(S && S.vKrizi);
+  if (e.krize === bylo) return;
+  S.vKrizi = e.krize;
+  if (e.krize) {
+    toast('Přišla ekonomická krize. Lidem docházejí peníze a do prádlomatů chodí míň zákazníků — '
+      + 'o ' + Math.round(e.hloubka * 100) + ' %. Jak dlouho to potrvá, neví nikdo.', 'err', true);
+  } else {
+    toast('Krize je zažehnaná, zákazníci se vracejí.', 'ok', true);
+  }
+}
+// Jak si ekonomika stojí — bez prozrazení, kdy to skončí.
+function ekonomikaHtml() {
+  var e = ekonomika();
+  var pct = Math.round(e.hloubka * 100);
+  var nad = Math.round((e.koef - 1) * 100);
+  return '<div class="card"><div class="row"><h3>Ekonomika</h3>'
+    + '<b class="' + (e.krize ? 'err' : nad >= 0 ? 'ok' : 'warn') + '">'
+    + (e.krize ? 'krize' : nad > 1 ? 'konjunktura' : 'klid') + '</b></div>'
+    + '<div class="kv"><span>Návštěvnost oproti normálu</span><b class="'
+    + (e.koef >= 1 ? 'ok' : 'err') + '">' + (nad > 0 ? '+' : '') + nad + ' %</b></div>'
+    + '<p class="fine">' + (e.krize
+        ? 'Zákazníků ubylo o ' + pct + ' %. Dno ani konec dopředu nikdo nezná a v průběhu '
+          + 'to kolísá — nájmy, splátky a mzdy ale běží dál. Kdo má rezervu, přečká to; '
+          + 'kdo je na hraně, musí šetřit.'
+        : 'Trh je v pořádku. Krize přicházejí nepravidelně a bez varování, takže se vyplatí '
+          + 'držet rezervu — běží to stejně všem hráčům.') + '</p></div>';
+}
+function krizeKoef() { return KRIZE_PRUM != null ? KRIZE_PRUM : ekonomika().koef; }
+
 function traffic() {
   var t = Math.min(trafficMax(),
     TRAFFIC_BASE + (S && S.refs ? S.refs : 0) * TRAFFIC_PER_REF + (S && S.boost ? S.boost : 0));
-  return t * povestKoef();
+  return t * povestKoef() * krizeKoef();
 }
 // Servis, praní a úklid se platí z obratu - cim vic lidi pere, tim vic prace.
 function economics(spot, modelKey, podil) {
@@ -1465,6 +1564,7 @@ function fresh(profileId) {
     hovorLog: [],     // evidence hovorů — kdo volal a jak to dopadlo
     linkaDo: 0,       // dokud běží infolinka, bere operátor všechny hovory
     pojisteni: false, // pojištění provozoven proti požáru, vytopení a vloupání
+    vKrizi: false,    // byla ekonomika v krizi, když se hra naposled počítala
     stats: { earned: 0, interest: 0 },
     hist: []          // vývoj po herních měsících — tržby, zisk, dluh, počet prádlomatů
   };
@@ -1928,11 +2028,14 @@ function dopocitejHistorii(o) {
   return h;
 }
 function tick() {
-  refreshUnits();
   var now = Date.now();
   var dt = now - S.lastTick;
-  if (dt < 0) { S.lastTick = now; return; }      // hráč si přetočil hodiny v telefonu
+  if (dt < 0) { S.lastTick = now; refreshUnits(); return; }  // přetočené hodiny v telefonu
   if (dt > 30 * YEAR_MS) dt = 30 * YEAR_MS;      // po měsíci nepřítomnosti dál nenabíhá
+  // Za dobu, co byl hráč pryč, se počítá s průměrnou ekonomikou toho období —
+  // jinak by stačilo krizi přesedět se zavřenou hrou.
+  KRIZE_PRUM = dt > 60000 ? krizePrumer(now - dt, now) : null;
+  refreshUnits();
   var years = dt / YEAR_MS;
   // Poruchy se řeší dřív, než se spočítá výnos: stroj, který praskl někdy
   // uprostřed doby, co byl hráč pryč, od té chvíle nevydělával. Jinak by byla
@@ -1949,6 +2052,9 @@ function tick() {
   S.stats.earned += Math.max(0, earned);
   S.bank = Math.min(bankCap(), S.bank + BANK_PER_DAY * (dt / 86400000));
   S.lastTick = now;
+  KRIZE_PRUM = null;
+  refreshUnits();              // zpátky na dnešní ekonomiku, ať čísla sedí s tím, co je teď
+  hlidejKrizi();
   linkaOffline(dt);            // co se na infolince stalo, než se hráč vrátil
   // Úvěry se splácejí po celých herních měsících, ne plynule — splátka je
   // pevná a buď na ni hráč má, nebo ne.
@@ -8460,7 +8566,8 @@ function procentaPodilu(x) {
 function povestHtml() {
   var p = povest();
   var zmena = Math.round((povestKoef() - 1) * 100);
-  return pojisteniHtml()
+  return ekonomikaHtml()
+    + pojisteniHtml()
     + '<div class="card"><div class="row"><h3>Infolinka</h3>'
     + '<b class="' + (p > 0 ? 'ok' : (p < 0 ? 'err' : '')) + '">' + hvezdyText() + '</b></div>'
     + '<p class="muted small" style="margin:2px 0 0">Pověst u zákazníků je ' + povestSlovy() + '.</p>'
