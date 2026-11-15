@@ -10124,6 +10124,10 @@ function chatOdznak() {
 var ONLINE_MS = 10 * 60000;       // kdo si uložil hru za posledních deset minut
 var DNES_MS = 24 * 3600000;
 function hracStav(h) {
+  // Přednost má tep z otevřené hry — ten chodí pořád. Poslední uložení je jen
+  // záloha pro případ, že server tepy ještě neposílá.
+  if (h.online === 'tady') return { kde: 'online', text: 'u hry teď', tr: 'ok' };
+  if (h.online === 'pozadi') return { kde: 'online', text: 'hru má otevřenou', tr: 'ok' };
   var t = h.naposledy ? new Date(h.naposledy).getTime() : 0;
   if (!t) return { kde: 'nikdy', text: 'ještě nehrál', tr: '' };
   var pred = Date.now() - t;
@@ -13904,8 +13908,8 @@ function startGame() {
   hlidejDrazbu();
   document.addEventListener('visibilitychange', function () {
     // Po návratu do hry se hned podíváme, jestli nám konkurence nevyfoukla místo.
-    if (!document.hidden) { tick(); save(); paint(); loadClaims(); loadTrades(); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }
-    else { syncState(true); }
+    if (!document.hidden) { tep(); tick(); save(); paint(); loadClaims(); loadTrades(); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }
+    else { tep(); syncState(true); }
   });
   window.addEventListener('pagehide', function () { syncState(true); });
 }
@@ -13920,8 +13924,14 @@ startBonusOdpocet();
 setInterval(function () {
   if (!document.hidden) ev('game_zije', true);
 }, 300000);
-// Tep přihlášeného hráče každou minutu — i když je záložka schovaná (jinak by se neukládal stav a vypadal by offline).
-setInterval(function () { if (ME && !wiped) apiJson('/account/ping', {}, 'POST').catch(function () {}); }, 60000);
+// Tep přihlášeného hráče každou půlminutu — i ze schované záložky, jinak by
+// hráč, který zrovna sleduje dražbu, vypadal na burze jako dávno pryč.
+// vidim rozlišuje, jestli má hru na očích, nebo ji jen drží otevřenou.
+function tep() {
+  if (!ME || wiped) return;
+  apiJson('/account/ping', { vidim: !document.hidden }, 'POST').catch(function () {});
+}
+setInterval(tep, 30000);
 nastavTitulek();
 loadMachinePhotos();
 
@@ -13937,6 +13947,7 @@ api('/account/me?ref=' + encodeURIComponent((S && S.pid) || trvalePid())).then(f
     // Žebřík hodností má jediného vlastníka: server. Kopie v hře je jen záloha
     // pro případ, že by starý server seznam ještě neposílal.
     if (Array.isArray(r.j.hodnosti) && r.j.hodnosti.length) HODNOSTI_HRA = r.j.hodnosti;
+    tep();   // ať je hráč na burze vidět hned, ne až za půl minuty
     var srv = r.j.state;
     if (r.j.rev != null) STATE_REV = r.j.rev;
     if (srv && (!S || (srv.lastTick || 0) >= (S.lastTick || 0))) { S = dosypStav(srv) || S; save(); }

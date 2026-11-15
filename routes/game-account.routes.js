@@ -1059,7 +1059,12 @@ async function zastavaPodlaha(playerId) {
 // Simulace běží v prohlížeči; server je úložiště, ne rozhodčí. Jediné, co se
 // podvrhnout nedá, jsou karty — ty žijí ve vlastní tabulce.
 // POST /account/ping — tep otevřené hry (i ze skryté záložky), jen pro přehled „kdo je online“
-router.post('/account/ping', requirePlayer, (req, res) => { require('../services/game/presence').ping(req.player.id); res.json({ ok: true }); });
+router.post('/account/ping', requirePlayer, (req, res) => {
+  // vidim říká, jestli má hráč hru na očích, nebo ji jen drží ve schované
+  // záložce. Na burze se podle toho pozná, kdo odpoví hned.
+  require('../services/game/presence').ping(req.player.id, (req.body || {}).vidim !== false);
+  res.json({ ok: true });
+});
 router.put('/account/state', requirePlayer, async (req, res, next) => {
   try {
     const st = (req.body || {}).state;

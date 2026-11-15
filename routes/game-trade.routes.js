@@ -118,18 +118,41 @@ router.get('/trade/assets/:id', hrac, api(async (req, res) => {
     karty: k });
 }));
 
+// Kdo je u hry: bere se z tepů otevřené hry, ne z posledního uložení.
+// Uložení stavu se na pozadí zastaví a jinak se děje jen po akcích, takže
+// hráč, který zrovna sleduje dražbu, podle něj vypadal jako dávno pryč.
+const PRESENCE = require('../services/game/presence');
+const ONLINE_MS = 150000;   // tep chodí po třiceti vteřinách, pár se jich smí ztratit
+
 // GET /trade/players → s kým jde obchodovat
 router.get('/trade/players', hrac, api(async (req, res) => {
-  const rows = await prisma.gamePlayer.findMany({
-    where: { disabled: false, id: { not: req.player.id } },
-    orderBy: { state_at: 'desc' }, take: 100,
-    select: { id: true, nick: true, company: true, state_at: true, hodnost: true },
-  });
+  const vyber = { id: true, nick: true, company: true, state_at: true, hodnost: true };
+  const tepy = new Map();
+  PRESENCE.recent(ONLINE_MS).forEach((x) => { if (x.id !== req.player.id) tepy.set(x.id, x); });
+  const idOnline = [...tepy.keys()];
+  const [cerstvi, zivi] = await Promise.all([
+    prisma.gamePlayer.findMany({
+      where: { disabled: false, id: { not: req.player.id } },
+      orderBy: { state_at: 'desc' }, take: 100, select: vyber }),
+    // Kdo je u hry, musí v seznamu být, i kdyby se mu stav neuložil týden.
+    idOnline.length
+      ? prisma.gamePlayer.findMany({ where: { disabled: false, id: { in: idOnline } }, select: vyber })
+      : [],
+  ]);
+  const vsichni = [];
+  const viden = new Set();
+  zivi.concat(cerstvi).forEach((p) => { if (!viden.has(p.id)) { viden.add(p.id); vsichni.push(p); } });
+  const ted = Date.now();
   // Hodnost posíláme s sebou: na burze je to jediná rychlá informace o tom,
   // s kým se člověk chystá domluvit na penězích.
-  res.json({ ok: true, players: rows.map((p) => ({ id: p.id, nick: p.nick,
-    firma: p.company || (p.nick + ' s.r.o.'), naposledy: p.state_at,
-    hodnost: p.hodnost || null, hodnost_nazev: hodnostNazev(p.hodnost) })) });
+  res.json({ ok: true, players: vsichni.map((p) => {
+    const t = tepy.get(p.id);
+    return { id: p.id, nick: p.nick,
+      firma: p.company || (p.nick + ' s.r.o.'), naposledy: p.state_at,
+      // tady = má hru na očích, pozadi = drží ji ve schované záložce
+      online: !t ? null : (ted - t.v <= ONLINE_MS ? 'tady' : 'pozadi'),
+      hodnost: p.hodnost || null, hodnost_nazev: hodnostNazev(p.hodnost) };
+  }) });
 }));
 
 const { HODNOSTI, ODZNAK } = require('../services/game/hodnosti');
