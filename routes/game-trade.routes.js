@@ -1058,7 +1058,7 @@ router.post('/trade/drazba', hrac, api(async (req, res) => {
     model = s(b.model, 10);
     if (!MODELY.includes(model)) return res.status(400).json({ error: 'Takový model neznám.' });
     if (skladu(st)[model] < 1) return res.status(409).json({ error: 'Ten stroj nemáš skladem.' });
-    nazev = 'stroj ' + model.toUpperCase();
+    nazev = 'prádlomat ' + model.toUpperCase() + ' (stroj ze skladu)';
   } else if (predmet === 'pradlomat') {
     spotId = s(b.spot_id, 120);
     const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spotId } });
@@ -1073,7 +1073,9 @@ router.post('/trade/drazba', hrac, api(async (req, res) => {
     cardKind = s(b.card_kind, 24);
     const k = await prisma.gameCard.count({ where: { player_id: ja.id, kind: cardKind, used_at: null } });
     if (!k) return res.status(409).json({ error: 'Tu kartu nemáš.' });
-    nazev = 'karta ' + cardKind;
+    // V dražbě musí být poznat, o co se hraje — „karta connect" nikomu nic neřekne.
+    const kat = (acct._cards || {})[cardKind];
+    nazev = 'karta ' + ((kat && kat.name) || cardKind);
   } else if (predmet === 'podil') {
     const podil = Math.max(PODIL_MIN, Math.min(PODIL_MAX, Number(b.podil) || 0));
     const prodano = await prodanyPodil(ja.id);
