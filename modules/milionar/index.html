@@ -126,6 +126,8 @@
           <button class="btn sm" data-dny="90">90 dní</button>
         </div>
         <div class="kpis" id="st-kpis"></div>
+        <h3 style="font-size:14px;margin:18px 0 10px">Odkud hráči přišli <span class="note">(účty založené v období)</span></h3>
+        <div id="st-odkud" class="note">Načítám…</div>
         <h3 style="font-size:14px;margin:18px 0 10px">A/B test úvodní obrazovky <span class="note">(nový návštěvník viděl úvod → založil účet)</span></h3>
         <div id="st-ab" class="note">Načítám…</div>
         <h3 style="font-size:14px;margin:18px 0 10px">Kudy hráči procházejí</h3>
@@ -526,8 +528,21 @@
       fetch('/api/game-admin/ab-intro', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rezim: v }) })
         .then(function (r) { return r.json(); }).then(function () { loadAB(); }).catch(function (er) { alert('Chyba: ' + er.message); });
     });
+    // Odkud hráči přišli: reklama / doporučení hráče / jiný označený zdroj / neidentifikováno
+    function loadOdkud() {
+      get('/odkud?dny=' + DNY).then(function (j) {
+        var POP = { reklama: ['📣 Reklama', '#f59e0b', 'Facebook, Instagram, Google, TikTok… (utm_source / fbclid)'], doporuceni: ['🤝 Doporučení hráče', '#22c55e', 'přišli přes pozvánku od jiného hráče'], jiny: ['🔗 Jiný označený zdroj', '#4fd1ff', 'označený odkaz, který není reklama (web, e-mail…)'], nevime: ['❔ Neidentifikováno', '#94a3b8', 'bez zdroje i pozvánky — přímý vstup, sdílený odkaz bez kódu…'] };
+        var c = j.celkem || 0, pct = function (n) { return c ? Math.round(n / c * 1000) / 10 : 0; }, k = function (x) { return String(x).replace('.', ','); };
+        var bar = '<div style="display:flex;height:16px;border-radius:8px;overflow:hidden;margin:4px 0 12px;background:rgba(148,163,184,.12)">' + j.skupiny.map(function (s) { return s.hracu ? '<div title="' + POP[s.klic][0] + ': ' + s.hracu + '" style="width:' + pct(s.hracu) + '%;background:' + POP[s.klic][1] + '"></div>' : ''; }).join('') + '</div>';
+        var kp = '<div class="kpis">' + j.skupiny.map(function (s) { var P = POP[s.klic]; return '<div class="kpi" style="border-left:3px solid ' + P[1] + '"><div class="v">' + cz(s.hracu) + ' <span class="note" style="font-size:13px">(' + k(pct(s.hracu)) + ' %)</span></div><div class="l">' + P[0] + '</div><div class="note" style="margin-top:4px">platících ' + s.platicich + (s.hracu ? ' (' + k(Math.round(s.platicich / s.hracu * 1000) / 10) + ' %)' : '') + ' · ' + cz(s.trzba) + ' Kč</div><div class="note" style="font-size:11px">' + P[2] + '</div></div>'; }).join('') + '</div>';
+        var zt = (j.zdroje || []).length ? '<div class="tbl-wrap" style="margin-top:10px"><table class="data-table"><thead><tr><th>Zdroj (utm_source)</th><th>Typ</th><th class="num">Hráčů</th><th class="num">Platících</th><th class="num">Tržba</th></tr></thead><tbody>'
+          + j.zdroje.map(function (z) { return '<tr><td><b>' + esc(z.zdroj) + '</b></td><td class="note">' + (z.typ === 'reklama' ? 'reklama' : 'jiný zdroj') + '</td><td class="num">' + cz(z.hracu) + '</td><td class="num">' + cz(z.platicich) + '</td><td class="num">' + cz(z.trzba) + ' Kč</td></tr>'; }).join('') + '</tbody></table></div>' : '';
+        document.getElementById('st-odkud').innerHTML = '<div class="note" style="margin-bottom:2px">Celkem ' + cz(c) + ' nových hráčů za ' + j.dny + ' dní.</div>' + bar + kp + zt;
+      }).catch(function (e) { chyba('st-odkud', e); });
+    }
     function loadStats() {
       loadProvoz();
+      loadOdkud();
       loadAB();
       loadReklama();
       get('/stats?dny=' + DNY).then(function (j) {
