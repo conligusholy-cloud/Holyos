@@ -109,7 +109,6 @@ function html(z) {
   <div class="cta">▶ Přijmout pozvánku</div>
   <div class="badge">🎁 Hra zdarma</div>
   <div class="r"><div class="glow"></div>${flexDataUrl() ? `<img src="${flexDataUrl()}" alt="">` : ''}</div>
-  <div class="url">pradlomaty.info/game</div>
   </body></html>`;
 }
 
