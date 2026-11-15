@@ -302,6 +302,19 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .btn.zpet{padding:6px 12px;flex:0 0 auto}
 @media (max-width:359px){.rozc{grid-template-columns:1fr}.rozc-b{min-height:0;flex-direction:row;align-items:center;gap:10px}
   .rozc-b i{margin:0}.rozc-b b{flex:0 0 auto}}
+/* Laundromat News — co se děje ve světě. */
+.udal{border:1px solid var(--border);border-left:3px solid var(--err);border-radius:12px;
+  padding:10px 12px;margin-top:8px;background:rgba(255,93,108,.05)}
+.udal.dobra{border-left-color:var(--ok);background:rgba(63,214,142,.05)}
+.udal.moje{box-shadow:0 0 0 1px rgba(124,92,255,.35)}
+.udal.konec{opacity:.55;border-left-color:var(--border2);background:transparent}
+.udal-h{display:flex;align-items:center;gap:10px}
+.udal-h i{font-style:normal;font-size:20px;line-height:1;flex:0 0 auto}
+.udal-h b{display:block;font-size:14px}
+.udal-h span{display:block;font-size:11.5px;color:var(--text3)}
+.udal-h em{margin-left:auto;font-style:normal;font-size:12px;font-weight:800;
+  color:var(--text);background:rgba(124,92,255,.26);padding:2px 8px;border-radius:8px}
+.udal p{margin:6px 0 0}
 .area-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--border)}
 .area-item:first-of-type{border-top:0}
 .area-item .nm{font-weight:700}

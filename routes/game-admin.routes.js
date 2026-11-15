@@ -349,6 +349,51 @@ router.post('/nastaveni', api(async (req, res) => {
   res.json({ ok: true, nastaveni: await acct._nastaveni() });
 }));
 
+// ─── Světové události ────────────────────────────────────────────────────────
+// Přehled, ruční vyhlášení a předčasné ukončení. Generátor běží sám, tohle je
+// pro případy, kdy chceme něco vyhlásit schválně — nebo rychle zarazit.
+router.get('/udalosti', api(async (req, res) => {
+  const ted = new Date();
+  const [bezi, hotove] = await Promise.all([
+    prisma.gameEvent.findMany({ where: { do: { gt: ted } }, orderBy: { od: 'asc' } }),
+    prisma.gameEvent.findMany({ where: { do: { lte: ted } }, orderBy: { do: 'desc' }, take: 50 }),
+  ]);
+  res.json({ ok: true, bezi, hotove, katalog: require('../services/game/udalosti').KATALOG });
+}));
+router.post('/udalosti', api(async (req, res) => {
+  const b = req.body || {};
+  const sablona = require('../services/game/udalosti').KATALOG
+    .filter((x) => x.typ === String(b.typ || ''))[0];
+  if (!sablona) return res.status(400).json({ error: 'Takový typ události neznám.' });
+  const uroven = ['svet', 'zeme', 'mesto'].indexOf(String(b.uroven)) >= 0 ? String(b.uroven) : 'zeme';
+  if (uroven === 'mesto' && !b.area_key) return res.status(400).json({ error: 'Chybí město.' });
+  if (uroven === 'zeme' && !b.zeme) return res.status(400).json({ error: 'Chybí země.' });
+  const hodin = Math.max(1, Math.min(720, Number(b.hodin) || 24));
+  const od = new Date();
+  const e = await prisma.gameEvent.create({ data: {
+    typ: sablona.typ, nazev: String(b.nazev || sablona.nazev).slice(0, 120),
+    popis: String(b.popis || sablona.popis).slice(0, 1000), ikona: sablona.ikona,
+    dobra: !!sablona.dobra, uroven, zavaznost: sablona.zavaznost,
+    dopad: b.dopad && typeof b.dopad === 'object' ? b.dopad : sablona.dopad,
+    zeme: uroven === 'svet' ? null : String(b.zeme || '').toLowerCase().slice(0, 2) || null,
+    area_key: uroven === 'mesto' ? String(b.area_key).slice(0, 80) : null,
+    od, do: new Date(od.getTime() + hodin * 3600000), rucni: true,
+    autor: (req.user && (req.user.email || req.user.name)) || null,
+  } });
+  try { require('./game.routes')._dropUdalosti(); } catch (err) { /* jen cache */ }
+  console.log('[game-udalosti] ručně vyhlášeno: ' + e.nazev + ' · ' + uroven);
+  res.json({ ok: true, udalost: e });
+}));
+// Ukončit hned — do se posune na teď, takže se to chová jako doběhlá událost.
+router.post('/udalosti/:id/konec', api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const e = await prisma.gameEvent.findUnique({ where: { id } });
+  if (!e) return res.status(404).json({ error: 'Taková událost tu není.' });
+  const u = await prisma.gameEvent.update({ where: { id }, data: { do: new Date() } });
+  try { require('./game.routes')._dropUdalosti(); } catch (err) { /* jen cache */ }
+  res.json({ ok: true, udalost: u });
+}));
+
 // ─── Ceník ───────────────────────────────────────────────────────────────────
 router.get('/prices', api(async (req, res) => {
   const def = acct._defaults;

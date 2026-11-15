@@ -172,6 +172,46 @@ async function runScout(query, key, job) {
   }
 }
 
+// ─── Světové události ────────────────────────────────────────────────────────
+// Co se právě děje ve světě a co nedávno skončilo. Je to veřejné: události
+// nejsou ničí, platí pro každého, kdo tam má prádlomat. Hra si z toho sama
+// vybere, co se týká jejích míst.
+let _udal = { at: 0, data: null };
+router.get('/udalosti', async (req, res) => {
+  try {
+    if (_udal.data && Date.now() - _udal.at < 20e3) return res.json(_udal.data);
+    const ted = new Date();
+    const [bezi, konec, oblasti] = await Promise.all([
+      prisma.gameEvent.findMany({ where: { do: { gt: ted } }, orderBy: { od: 'asc' }, take: 60 }),
+      prisma.gameEvent.findMany({ where: { do: { lte: ted } }, orderBy: { do: 'desc' }, take: 20 }),
+      prisma.gameArea.findMany({ where: { country: { not: null } },
+        select: { key: true, name: true, country: true }, take: 1000 }),
+    ]);
+    // Ke každé události rovnou seznam měst, kterých se týká — hra pak jen
+    // porovná klíč svého místa a nemusí vůbec řešit, kde která země je.
+    const vMeste = {};
+    oblasti.forEach((o) => { vMeste[o.key] = { name: o.name, country: o.country }; });
+    const prevod = (e) => ({
+      id: e.id, typ: e.typ, nazev: e.nazev, popis: e.popis, ikona: e.ikona, dobra: e.dobra,
+      uroven: e.uroven, zeme: e.zeme, zavaznost: e.zavaznost, dopad: e.dopad,
+      od: e.od, do: e.do, rucni: e.rucni,
+      // Kde přesně to platí. null = celý svět.
+      mesta: e.uroven === 'svet' ? null
+        : e.uroven === 'mesto' ? [e.area_key]
+          : oblasti.filter((o) => o.country === e.zeme).map((o) => o.key),
+      kde: e.uroven === 'svet' ? 'celý svět'
+        : e.uroven === 'mesto' ? ((vMeste[e.area_key] || {}).name || e.area_key)
+          : String(e.zeme || '').toUpperCase(),
+    });
+    const data = { ok: true, ted: ted, bezi: bezi.map(prevod), konec: konec.map(prevod) };
+    _udal = { at: Date.now(), data };
+    res.json(data);
+  } catch (e) {
+    res.json({ ok: true, bezi: [], konec: [] });   // hra kvůli událostem padat nesmí
+  }
+});
+function dropUdalosti() { _udal = { at: 0, data: null }; }
+
 // ─── Hotová města ────────────────────────────────────────────────────────────
 // Co už někdo prohledal, je v databázi a otevře se okamžitě. První hledání
 // nového města ale tahá data z OpenStreetMap a trvá i minutu — nováčkovi to
@@ -448,3 +488,4 @@ router.post('/poradce', express.json({ limit: '24kb' }), async (req, res) => {
 });
 
 module.exports = router;
+module.exports._dropUdalosti = dropUdalosti;

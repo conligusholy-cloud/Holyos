@@ -7827,6 +7827,34 @@ model GameSubscription {
 // Prozkoumané město pro hru. Jedno hledání na OpenStreetMap trvá i dvě minuty,
 // proto si výsledek necháváme natrvalo — a hlavně společný pro všechny hráče.
 // Klíč je jméno bez diakritiky a malými písmeny, ať „Kneznou" a „Kněžnou" splynou.
+// Světová událost: povodeň v Česku, festival v Brně, zdražení energií v Evropě.
+// Vzniká na serveru jednou pro celý herní svět a zasahuje prádlomaty podle toho,
+// kde stojí — ne podle toho, čí jsou. Dopad si pak dopočítá hra v prohlížeči,
+// stejně jako počítá všechno ostatní.
+model GameEvent {
+  id         Int      @id @default(autoincrement())
+  typ        String   @db.VarChar(32)     // klíč z katalogu
+  nazev      String   @db.VarChar(120)
+  popis      String   @db.Text
+  ikona      String   @db.VarChar(8)
+  dobra      Boolean  @default(false)     // pozitivní událost
+  uroven     String   @db.VarChar(8)      // svet | zeme | mesto
+  zeme       String?  @db.VarChar(2)      // kód země u úrovně zeme a mesto
+  area_key   String?  @db.VarChar(80)     // konkrétní město u úrovně mesto
+  zavaznost  Int      @default(1)         // 1 drobnost, 3 pohroma
+  // Co to dělá: { navstevnost: -0.3, naklady: 0.15 }
+  dopad      Json
+  od         DateTime
+  do         DateTime
+  rucni      Boolean  @default(false)     // založil administrátor
+  autor      String?  @db.VarChar(80)
+  created_at DateTime @default(now())
+
+  @@index([od])
+  @@index([do])
+  @@map("game_events")
+}
+
 model GameArea {
   id         Int      @id @default(autoincrement())
   key        String   @unique @db.VarChar(80)

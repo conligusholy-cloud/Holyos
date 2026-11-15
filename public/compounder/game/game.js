@@ -1437,6 +1437,131 @@ function krizePrumer(od, doKdy) {
   return sum / vzorku;
 }
 function ekonomika() { return ekonomikaV(Date.now()); }
+
+// ─── Světové události ────────────────────────────────────────────────────────
+// Povodeň v Česku, festival v Brně, zdražení energií. Vyhlašuje je server
+// jednou pro celý svět a platí tam, kde platí — ne tomu, komu patří. Hra si
+// z nich vybere ty, které se týkají jejích míst, a dopad si spočítá sama.
+var UDALOSTI = null;               // { bezi: [...], konec: [...] } ze serveru
+var UDAL_OKNO = null;              // { od, do } při dopočtu nepřítomnosti
+var UDAL_OCHRANA = 5;              // do kolika prádlomatů se negativní události vyhýbají
+var UDAL_DNO = 0.45;               // pod tohle návštěvnost kvůli událostem neklesne
+var UDAL_STROP = 1.8;              // a nad tohle nevyskočí
+function loadUdalosti(then) {
+  return api('/udalosti').then(function (r) {
+    UDALOSTI = (r.ok && r.j) || { bezi: [], konec: [] };
+    if (then) then();
+  }).catch(function () { UDALOSTI = UDALOSTI || { bezi: [], konec: [] }; if (then) then(); });
+}
+// Týká se událost tohohle místa?
+function udalostPlatiNa(e, areaId) {
+  if (!e.mesta) return true;                     // celý svět
+  return e.mesta.indexOf(areaId) >= 0;
+}
+// Nováčka pohromy míjejí — ať se má čas postavit na nohy.
+function udalostProMe(e) {
+  if (e.dobra) return true;
+  return (S.units || []).length >= UDAL_OCHRANA;
+}
+// Kolik mých prádlomatů událost zasáhla.
+function udalostKolikMych(e) {
+  if (!udalostProMe(e)) return 0;
+  return (S.units || []).filter(function (u) { return udalostPlatiNa(e, u.areaId); }).length;
+}
+// Nová událost u mých provozoven se ohlásí. Dvakrát se neohlásí.
+function hlidejUdalosti() {
+  if (!S || !UDALOSTI) return;
+  S.udalostiVim = S.udalostiVim || [];
+  var nove = (UDALOSTI.bezi || []).filter(function (e) {
+    return S.udalostiVim.indexOf(e.id) < 0 && udalostKolikMych(e) > 0;
+  });
+  (UDALOSTI.bezi || []).forEach(function (e) {
+    if (S.udalostiVim.indexOf(e.id) < 0) S.udalostiVim.push(e.id);
+  });
+  S.udalostiVim = S.udalostiVim.slice(-200);
+  if (!nove.length) return;
+  var e = nove[0];
+  var kolik = udalostKolikMych(e);
+  toast(e.ikona + ' ' + e.nazev + ' — ' + e.kde + '. Zasahuje ' + kolik + ' '
+    + mn(kolik, 'tvůj prádlomat', 'tvoje prádlomaty', 'tvých prádlomatů')
+    + (nove.length > 1 ? ' (a další ' + (nove.length - 1) + ' událost)' : '') + '.',
+    e.dobra ? 'ok' : 'err', true);
+  save();
+}
+// Laundromat News: co se děje ve světě a co z toho se mě týká.
+function udalostiHtml() {
+  if (!UDALOSTI) return '';
+  var bezi = (UDALOSTI.bezi || []).slice().sort(function (a, b) {
+    return udalostKolikMych(b) - udalostKolikMych(a) || b.zavaznost - a.zavaznost;
+  });
+  var radek = function (e, skoncila) {
+    var kolik = udalostKolikMych(e);
+    var d = e.dopad || {};
+    var ucinky = [];
+    if (d.navstevnost) ucinky.push((d.navstevnost > 0 ? '+' : '')
+      + Math.round(d.navstevnost * 100) + ' % návštěvnost');
+    if (d.naklady) ucinky.push((d.naklady > 0 ? '+' : '')
+      + Math.round(d.naklady * 100) + ' % provozní náklady');
+    return '<div class="udal' + (e.dobra ? ' dobra' : '') + (kolik ? ' moje' : '')
+      + (skoncila ? ' konec' : '') + '">'
+      + '<div class="udal-h"><i>' + e.ikona + '</i>'
+      + '<div><b>' + esc(e.nazev) + '</b><span>' + esc(e.kde)
+      + (skoncila ? ' · skončilo' : ' · ještě ' + etaText(Number(new Date(e.do)) - Date.now()))
+      + '</span></div>'
+      + (kolik ? '<em>' + kolik + '\u00d7</em>' : '') + '</div>'
+      + '<p class="muted small">' + esc(e.popis) + '</p>'
+      + (ucinky.length ? '<p class="fine ' + (e.dobra ? 'ok' : 'warn') + '">'
+          + ucinky.join(' · ') + (kolik ? '' : ' — tebe se to netýká') + '</p>' : '')
+      + '</div>';
+  };
+  var mych = bezi.filter(function (e) { return udalostKolikMych(e) > 0; }).length;
+  return '<div class="card"><div class="row"><h3>Co se děje ve světě</h3>'
+    + (mych ? '<b class="warn">' + mych + '\u00d7 u tebe</b>' : '') + '</div>'
+    + '<p class="muted small" style="margin:2px 0 10px">Události platí podle toho, kde prádlomat '
+    + 'stojí, ne komu patří — kdo má síť rozesetou po víc zemích, rozloží riziko. '
+    + ((S.units || []).length < UDAL_OCHRANA
+        ? 'Dokud nemáš ' + UDAL_OCHRANA + ' prádlomatů, pohromy se ti vyhýbají.'
+        : '') + '</p>'
+    + (bezi.length ? bezi.map(function (e) { return radek(e, false); }).join('')
+      : '<p class="muted small">Teď je ve světě klid.</p>')
+    + ((UDALOSTI.konec || []).length
+        ? '<h3 style="margin-top:16px">Nedávno skončilo</h3>'
+          + UDALOSTI.konec.slice(0, 5).map(function (e) { return radek(e, true); }).join('')
+        : '')
+    + '</div>';
+}
+function udalostiMista(areaId) {
+  return ((UDALOSTI && UDALOSTI.bezi) || []).filter(function (e) {
+    return udalostProMe(e) && udalostPlatiNa(e, areaId);
+  });
+}
+// Jak dlouho byla událost v daném okně aktivní, v poměru k délce okna.
+function udalostPodil(e, od, doKdy) {
+  var a = Math.max(od, Number(new Date(e.od)));
+  var b = Math.min(doKdy, Number(new Date(e.do)));
+  if (!(b > a)) return 0;
+  return (b - a) / (doKdy - od);
+}
+// Koeficienty pro jedno místo: návštěvnost a náklady. Při dopočtu nepřítomnosti
+// se váží dobou, po kterou událost v tom období opravdu běžela.
+function udalostKoef(areaId) {
+  var navst = 1, nakl = 1;
+  var vse = ((UDALOSTI && UDALOSTI.bezi) || []).concat((UDALOSTI && UDALOSTI.konec) || []);
+  for (var i = 0; i < vse.length; i++) {
+    var e = vse[i];
+    if (!udalostProMe(e) || !udalostPlatiNa(e, areaId)) continue;
+    var vaha = 1;
+    if (UDAL_OKNO) {
+      vaha = udalostPodil(e, UDAL_OKNO.od, UDAL_OKNO.do);
+      if (!vaha) continue;
+    } else if (Number(new Date(e.do)) <= Date.now()) continue;   // doběhlé teď neplatí
+    var d = e.dopad || {};
+    navst *= 1 + (Number(d.navstevnost) || 0) * vaha;
+    nakl *= 1 + (Number(d.naklady) || 0) * vaha;
+  }
+  return { navstevnost: Math.max(UDAL_DNO, Math.min(UDAL_STROP, navst)),
+    naklady: Math.max(0.5, Math.min(2, nakl)) };
+}
 // Když se ekonomika zlomí, ať to hráč nezjistí až z toho, že mu klesly tržby.
 function hlidejKrizi() {
   var e = ekonomika();
@@ -1592,6 +1717,7 @@ function fresh(profileId) {
     linkaDo: 0,       // dokud běží infolinka, bere operátor všechny hovory
     pojisteni: false, // pojištění provozoven proti požáru, vytopení a vloupání
     vKrizi: false,    // byla ekonomika v krizi, když se hra naposled počítala
+    udalostiVim: [],  // ohlášené světové události — ať se nehlásí dvakrát
     stats: { earned: 0, interest: 0 },
     hist: []          // vývoj po herních měsících — tržby, zisk, dluh, počet prádlomatů
   };
@@ -1739,7 +1865,11 @@ function refreshUnits() {
     // Druhý a třetí stroj na jednom pozemku má menší podíl na zákaznících —
     // drží se u stroje, aby se přepočtem návštěvnosti neztratil.
     var poptavka = poptavkaMista(u.score) * (u.eco.podil == null ? 1 : u.eco.podil);
-    var perday = Math.min(m.kapacita, poptavka) * traffic();
+    // Co se zrovna děje tam, kde stroj stojí: povodeň, festival, zdražení energií.
+    var ud = udalostKoef(u.areaId);
+    u.eco.udalost = Math.round(ud.navstevnost * 1000) / 1000;
+    u.eco.udalostNaklady = Math.round(ud.naklady * 1000) / 1000;
+    var perday = Math.min(m.kapacita, poptavka) * traffic() * ud.navstevnost;
     var plne = Math.round(perday * 30.5 * m.spend * EUR);
     u.eco.poptavka = Math.round(poptavka * 10) / 10;
     u.eco.kapacita = m.kapacita;
@@ -1751,8 +1881,9 @@ function refreshUnits() {
     u.eco.chod = chod;
     u.eco.perday = Math.round(perday * chod * 10) / 10;
     u.eco.revenue = revenue;
-    u.eco.energy = Math.round(revenue * ENERGY_SHARE);
-    u.eco.servis = Math.round(plne * SERVIS_SHARE);
+    // Zdražení energií i levnější proud jdou do provozních nákladů.
+    u.eco.energy = Math.round(revenue * ENERGY_SHARE * ud.naklady);
+    u.eco.servis = Math.round(plne * SERVIS_SHARE * ud.naklady);
     u.eco.cost = u.eco.energy + u.eco.servis + u.eco.rent;
     u.eco.profit = revenue - u.eco.cost;
     // Zisk, kdyby stroj jel naplno. Podle něj počítáme návratnost a co už místo
@@ -2062,6 +2193,7 @@ function tick() {
   // Za dobu, co byl hráč pryč, se počítá s průměrnou ekonomikou toho období —
   // jinak by stačilo krizi přesedět se zavřenou hrou.
   KRIZE_PRUM = dt > 60000 ? krizePrumer(now - dt, now) : null;
+  UDAL_OKNO = dt > 60000 ? { od: now - dt, do: now } : null;
   refreshUnits();
   var years = dt / YEAR_MS;
   // Poruchy se řeší dřív, než se spočítá výnos: stroj, který praskl někdy
@@ -2079,7 +2211,7 @@ function tick() {
   S.stats.earned += Math.max(0, earned);
   S.bank = Math.min(bankCap(), S.bank + BANK_PER_DAY * (dt / 86400000));
   S.lastTick = now;
-  KRIZE_PRUM = null;
+  KRIZE_PRUM = null; UDAL_OKNO = null;
   refreshUnits();              // zpátky na dnešní ekonomiku, ať čísla sedí s tím, co je teď
   hlidejKrizi();
   linkaOffline(dt);            // co se na infolince stalo, než se hráč vrátil
@@ -8603,6 +8735,7 @@ function povestHtml() {
   var p = povest();
   var zmena = Math.round((povestKoef() - 1) * 100);
   return ekonomikaHtml()
+    + udalostiHtml()
     + pojisteniHtml()
     + '<div class="card"><div class="row"><h3>Infolinka</h3>'
     + '<b class="' + (p > 0 ? 'ok' : (p < 0 ? 'err' : '')) + '">' + hvezdyText() + '</b></div>'
@@ -12849,6 +12982,12 @@ function startGame() {
   });
   loadClaims();
   setInterval(loadClaims, 45000);
+  // Co se děje ve světě. Načte se hned a pak každé dvě minuty — události
+  // běží v hodinách, častěji to nemá smysl.
+  loadUdalosti(function () { hlidejUdalosti(); refreshUnits(); paint(); });
+  setInterval(function () {
+    loadUdalosti(function () { hlidejUdalosti(); refreshUnits(); paint(); });
+  }, 120000);
   // Tržiště chceme mít i na mapě, ne až po otevření Burzy.
   paintTrhBadge();
   loadTrh(drawMap);

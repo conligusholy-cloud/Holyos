@@ -1428,6 +1428,8 @@ server.listen(PORT, async () => {
   try {
     // Splátky půjček mezi hráči a výplaty podílů ve firmách.
     require('./services/game/finance').start();
+    // Povodně, festivaly a zdražení energií — jeden svět pro všechny hráče.
+    require('./services/game/udalosti').start();
   } catch (err) {
     console.error('[app] game-finance nelze spustit:', err.message);
   }

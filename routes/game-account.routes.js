@@ -213,7 +213,7 @@ const ALL = Object.assign({}, CARDS, CASH, SUBS, LINKA, RAMEC);
 // ─── Nastavení hry ───────────────────────────────────────────────────────────
 // Přepínače, které jde cvaknout z administrace bez nasazování. Držíme je
 // půl minuty v paměti, ať se kvůli každému načtení hry nechodí do databáze.
-const NASTAVENI_VYCHOZI = { onboarding_rychly: '1', nick_pauza_dnu: '30' };
+const NASTAVENI_VYCHOZI = { onboarding_rychly: '1', nick_pauza_dnu: '30', udalosti_zap: '1' };
 let _nast = { at: 0, map: null };
 async function nastaveni() {
   if (_nast.map && Date.now() - _nast.at < 30e3) return _nast.map;
