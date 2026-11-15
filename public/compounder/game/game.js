@@ -9463,9 +9463,9 @@ function podilRadek(e, mam) {
                 + (navratnost ? ' · při dnešním výdělku zbývá ' + navratnost.toFixed(1).replace('.', ',')
                     + ' roku do nuly.' : '. Firma teď nevydělává, tak se nic nevrací.')) + '</p>'
         : '<p class="fine">Vyrovnává se každý herní měsíc, tedy po dvanácti hodinách. '
-          + 'Odkoupit zpátky můžeš kdykoli.</p>'
-          + '<div class="akce"><button class="btn sm sec" data-odkup-ja="' + e.id + '">Odkoupit zpět za '
-          + kcFull(e.odkup) + '</button></div>')
+          + 'Odkoupit ho zpátky jde jen dohodou — pošleš nabídku a cenu si doladíte.</p>')
+    + '<div class="akce"><button class="btn sm sec" data-odkup-ja="' + e.id + '">'
+      + (mam ? 'Nabídnout odkup majiteli' : 'Nabídnout odkup') + '</button></div>'
     + '</div>';
 }
 function podilyHtml() {
@@ -9496,12 +9496,9 @@ function podilyHtml() {
 function bindPodily() {
   [].forEach.call($('me-body').querySelectorAll('[data-odkup-ja]'), function (b) {
     b.onclick = function () {
-      b.disabled = true;
-      apiJson('/trade/podil/' + b.getAttribute('data-odkup-ja') + '/odkup', {}).then(function (r) {
-        if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
-        toast('Podíl je zase tvůj.', 'ok');
-        vyzvedniNasledky(); FINANCE = null; loadFinance(paintMe);
-      }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+      var id = Number(b.getAttribute('data-odkup-ja'));
+      var e = ((FINANCE && FINANCE.podily) || []).filter(function (x) { return x.id === id; })[0];
+      if (e) odkupSheet(e);
     };
   });
 }
@@ -9738,6 +9735,7 @@ function predmetPopis(t) {
       + (d.mesicu || 0) + ' herních měsíců';
   }
   if (t.predmet === 'podil') return 'podíl ' + Math.round(((t.data || {}).podil || 0) * 100) + ' % ve firmě';
+  if (t.predmet === 'odkup') return 'zpětný odkup podílu ' + Math.round(((t.data || {}).podil || 0) * 100) + ' %';
   var c = (CARDS_CAT || []).filter(function (x) { return x.kind === t.card_kind; })[0];
   return 'karta ' + (c ? c.name : t.card_kind);
 }
@@ -9835,8 +9833,8 @@ function financeHtml() {
       + '<p class="muted small" style="margin:2px 0 6px">'
       + (e.vyplaceno >= 0 ? 'Zatím vyplaceno ' : 'Zatím doplaceno ') + kcFull(Math.abs(e.vyplaceno))
       + ' · další vyrovnání ' + zaKolik(e.dalsi) + '</p>'
-      + (mam ? '' : '<div class="akce"><button class="btn sm sec" data-odkup="' + e.id + '">Odkoupit zpět za '
-          + kcFull(e.odkup) + '</button></div>')
+      + '<div class="akce"><button class="btn sm sec" data-odkup="' + e.id + '">'
+      + (mam ? 'Nabídnout odkup' : 'Odkoupit zpět') + '</button></div>'
       + '</div>';
   });
   return h + '</div>';
@@ -9847,12 +9845,9 @@ function bindFinance() {
   });
   [].forEach.call($('burza-body').querySelectorAll('[data-odkup]'), function (b) {
     b.onclick = function () {
-      b.disabled = true;
-      apiJson('/trade/podil/' + b.getAttribute('data-odkup') + '/odkup', {}).then(function (r) {
-        if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
-        toast('Podíl je zase tvůj.', 'ok');
-        vyzvedniNasledky(); FINANCE = null; loadFinance(paintBurza);
-      }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+      var id = Number(b.getAttribute('data-odkup'));
+      var e = ((FINANCE && FINANCE.podily) || []).filter(function (x) { return x.id === id; })[0];
+      if (e) odkupSheet(e);
     };
   });
 }
@@ -10392,6 +10387,67 @@ function radekObchodu(t) {
     + '</div>';
 }
 
+// Zpětný odkup podílu. Není to tlačítko, které by to udělalo samo —
+// je to nabídka jako každá jiná: souhlasit musí obě strany a cenu si řeknou.
+function odkupSheet(e) {
+  var majitel = e.moje === 'prodal';       // odkupuje majitel firmy
+  sheet('<h3>' + (majitel ? 'Odkoupit podíl zpátky' : 'Nabídnout podíl k odkupu') + '</h3>'
+    + '<p class="muted small">' + (majitel
+        ? esc(e.kdo) + ' drží ' + Math.round(e.podil * 100) + ' % tvé firmy. Pošli mu nabídku na odkup — '
+          + 'platí, až když ji přijme, a cenu si můžete doladit protinávrhem.'
+        : 'Držíš ' + Math.round(e.podil * 100) + ' % firmy ' + esc(e.kdo)
+          + '. Nabídni mu, ať si podíl koupí zpátky. Platí on, a jen když kývne.') + '</p>'
+    + '<div class="kv"><span>Podíl</span><b>' + Math.round(e.podil * 100) + ' %</b></div>'
+    + '<div class="kv"><span>' + (majitel ? 'Prodal jsi ho za' : 'Koupil jsi ho za') + '</span><b>'
+    + kcFull(e.cena) + '</b></div>'
+    + '<div class="kv"><span>' + (e.vyplaceno >= 0 ? 'Zatím vyplaceno' : 'Zatím doplaceno') + '</span><b>'
+    + kcFull(Math.abs(e.vyplaceno)) + '</b></div>'
+    + '<div class="kv"><span>Nese měsíčně</span><b class="' + (e.mesicne > 0 ? 'ok' : e.mesicne < 0 ? 'err' : '')
+    + '">' + (e.mesicne > 0 ? '+' : '') + kcFull(e.mesicne) + '</b></div>'
+    + '<label class="fld"><span>Cena odkupu (L$)</span>'
+    + '<input id="odk-cena" class="inp" type="number" min="0" step="10000" value="' + (e.odkup || e.cena) + '"></label>'
+    + '<p class="fine" id="odk-rada"></p>'
+    + '<label class="fld"><span>Vzkaz (nepovinný)</span><input id="odk-vzkaz" class="inp" type="text" maxlength="200"></label>'
+    + '<button class="btn big" id="odk-ok" style="width:100%;margin-top:6px">Poslat nabídku</button>'
+    + '<p class="fine">Rozhodne druhá strana — nabídku může přijmout, odmítnout i poslat protinávrh.</p>'
+    + (majitel ? volneHtml(null) : ''));
+  var rada = function () {
+    var c = Math.max(0, Math.round(Number($('odk-cena').value) || 0));
+    var t = [];
+    if (e.cena > 0) {
+      var o = Math.round((c - e.cena) / e.cena * 100);
+      t.push(o === 0 ? 'Přesně za to, za co se prodával.'
+        : o > 0 ? 'O ' + o + ' % víc, než za kolik se prodával.'
+          : 'O ' + (-o) + ' % míň, než za kolik se prodával.');
+    }
+    if (e.mesicne > 0) {
+      t.push('Podílníkovi nese ' + kcFull(e.mesicne) + ' měsíčně, za nabízenou cenu to má za '
+        + (c / (e.mesicne * 12)).toFixed(1).replace('.', ',') + ' roku zpátky.');
+    }
+    var el = $('odk-rada');
+    el.className = majitel && c > volnaHotovost(null) ? 'fine err' : 'fine';
+    el.textContent = (majitel && c > volnaHotovost(null)
+      ? 'Na tohle nemáš volnou hotovost — chybí ' + kcFull(c - volnaHotovost(null)) + '. '
+      : '') + t.join(' ');
+  };
+  $('odk-cena').oninput = rada; rada();
+  $('odk-ok').onclick = function () {
+    var c = Math.max(0, Math.round(Number($('odk-cena').value) || 0)), b = $('odk-ok');
+    if (!c) return toast('Zadej cenu.', 'err');
+    if (majitel && c > volnaHotovost(null)) {
+      return toast('Na tohle nemáš volnou hotovost — nabídku by nešlo přijmout.', 'err');
+    }
+    b.disabled = true;
+    apiJson('/trade/offer', { to_id: e.kdo_id, predmet: 'odkup', equity_id: e.id,
+      smer: majitel ? 'koupim' : 'prodam', cena: c, vzkaz: $('odk-vzkaz').value })
+      .then(function (r) {
+        if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
+        closeSheet(); TRADES = null; loadTrades(paintBurza);
+        toast('Nabídka na odkup odeslaná. Teď je to na druhé straně.', 'ok');
+      }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+  };
+}
+
 // Jak uzavřený obchod pokračuje. U půjčky i podílu se platí dál měsíce potom,
 // co se ruka plácla — tady je vidět, kolik už proteklo a co ještě přijde.
 function jakToDopadloHtml(t) {
@@ -10692,7 +10748,7 @@ function majetekSheet(id) {
           + '<button class="btn sec sm" data-fin="pujcim-si">Nastavit</button></div>';
       } else if (kat === 'podil') {
         telo = '<p class="muted small">Podílník nese zisk i ztrátu firmy — kolik procent má, tolik mu '
-          + 'měsíčně chodí nebo doplácí. Majitel může podíl odkoupit zpátky za 125 % ceny.</p>'
+          + 'měsíčně chodí nebo doplácí. Odkoupit ho zpátky jde jen dohodou obou stran.</p>'
           + '<div class="area-item"><div><div class="nm">Koupit podíl v jeho firmě</div>'
           + '<div class="sub">dostáváš procento z jeho zisku i ztráty</div></div>'
           + '<button class="btn sec sm" data-fin="koupim-podil">Nastavit</button></div>'
@@ -10789,7 +10845,8 @@ function financeSheet(toId, kdo, co, a) {
           + 'prádlomat hned při první nezaplacené splátce. Bez zástavy má dlužník tři pokusy '
           + 'a pak mu dluh spadne do banky.'
         : 'Podílník dostává svoje procento z toho, co firmě měsíčně zbyde — a když firma prodělává, '
-          + 'stejným dílem doplácí. Majitel může podíl kdykoli odkoupit zpátky za 125 % ceny.') + '</p>'
+          + 'stejným dílem doplácí. Odkoupit ho zpátky jde kdykoli, ale jen když druhá strana kývne '
+          + 'na cenu, na které se domluvíte.') + '</p>'
     + '<label class="fld"><span>' + (pujcka ? 'Kolik' : 'Za kolik') + '</span>'
     + '<input id="fin-castka" class="inp" type="number" inputmode="numeric" min="0" value="'
     + (pujcka ? 500000 : 1000000) + '"></label>'
