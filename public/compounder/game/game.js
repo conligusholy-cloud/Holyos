@@ -12143,9 +12143,10 @@ function drazbaVyvolatSheet() {
   });
   ((FINANCE && FINANCE.podily) || []).forEach(function (e) {
     if (e.moje !== 'mam' || !bezici(e)) return;
-    polozky.push({ predmet: 'prevod', equity_id: e.id,
-      popis: Math.round(e.podil * 100) + ' % ve firmě ' + esc(e.kdo_firma || e.kdo),
-      pod: 'podíl, který držíš · nese ' + kcFull(e.mesicne) + '/měs', navrh: e.odkup || e.cena });
+    polozky.push({ predmet: 'prevod', equity_id: e.id, podil_max: e.podil,
+      popis: pctHra(e.podil) + ' % ve firmě ' + esc(e.kdo_firma || e.kdo),
+      pod: 'podíl, který držíš · nese ' + kcFull(e.mesicne) + '/měs · jde dražit i po kouskách',
+      navrh: e.odkup || e.cena });
   });
   polozky.push({ predmet: 'podil', podil: 10, popis: 'podíl ve vlastní firmě',
     pod: 'procento ze zisku i ze ztráty', navrh: Math.round(hodnotaMojiFirmy().hodnota * 0.1) || 1000000 });
@@ -12157,7 +12158,7 @@ function drazbaVyvolatSheet() {
     { k: 'stroj', ico: '\u{1F4E6}', nazev: 'Stroje', pod: 'co máš skladem' },
     { k: 'pobocka', ico: '\u{1F3E2}', nazev: 'Pobočky', pod: 'základny pro dopravu a četu' },
     { k: 'karta', ico: '\u26A1', nazev: 'Karty', pod: 'zrychlovače čekání' },
-    { k: 'prevod', ico: '\u{1F4C8}', nazev: 'Podíly v cizích', pod: 'co držíš v cizích firmách' },
+    { k: 'prevod', ico: '\u{1F4C8}', nazev: 'Podíly v cizích', pod: 'co držíš v cizích firmách — i po procentech' },
     { k: 'podil', ico: '\u{1F3E6}', nazev: 'Podíl ve své firmě', pod: 'procento ze zisku i ztráty' }
   ];
   var hlava = '<h3>\u{1F528} Vyvolat dražbu</h3>'
@@ -12200,13 +12201,27 @@ function drazbaVyvolatSheet() {
   };
   rozcestnik();
 }
+// Procenta ve hře: 0,05 → „5", 0,025 → „2,5". Musí sedět s pct() na serveru.
+function pctHra(x) { return String(Math.round((Number(x) || 0) * 1000) / 10).replace('.', ','); }
 function drazbaCenaSheet(x) {
   var jePodil = x.predmet === 'podil';
+  // Držený podíl v cizí firmě jde rozdražit po kouskách — nabídneme stejné
+  // políčko jako u vlastní firmy, jen se stropem na tom, co hráč opravdu drží.
+  var jePrevod = x.predmet === 'prevod' && Number(x.podil_max) > 0;
+  var maxPct = jePrevod ? Math.round(Number(x.podil_max) * 1000) / 10 : 100;
+  // Základ, ke kterému se váže navržená cena: u vlastní firmy deset procent,
+  // u drženého podílu celý balík. Od něj se cena přepočítává.
+  var zakladPct = jePodil ? 10 : maxPct;
+  var vychozi = jePodil ? 10 : maxPct;
+  var krok = jePrevod && maxPct < 1 ? 0.1 : 1;
   sheet('<h3>Vyvolávací cena</h3>'
     + '<p class="muted small">' + x.popis + '</p>'
-    + (jePodil
-        ? '<label class="fld"><span>Kolik procent firmy</span>'
-          + '<input id="drz-podil" class="inp" type="number" min="1" max="100" value="10"></label>'
+    + (jePodil || jePrevod
+        ? '<label class="fld"><span>Kolik procent' + (jePrevod ? ' z podílu pustíš' : ' firmy') + '</span>'
+          + '<input id="drz-podil" class="inp" type="number" min="' + Math.min(1, maxPct)
+          + '" max="' + maxPct + '" step="' + krok + '" value="' + vychozi + '"></label>'
+          + (jePrevod ? '<p class="fine">Držíš ' + pctHra(x.podil_max)
+              + ' %. Co nevydražíš, zůstane ti.</p>' : '')
         : '')
     + '<label class="fld"><span>Vyvolávací cena (L$)</span>'
     + '<input id="drz-cena-in" class="inp" type="number" min="10000" step="10000" value="'
@@ -12221,6 +12236,17 @@ function drazbaCenaSheet(x) {
       + ' zaplatí vítěz ' + kcFull(Math.round(c / 2)) + ' a ty dostaneš ' + kcFull(c)
       + '. Když příhozy přerostou vyvolávací cenu, dostaneš víc.';
   };
+  // Když hráč ubere procenta, musí jít dolů i cena — jinak by za procento
+  // chtěl tolik, co za celý balík, a nikdo by nepřihodil.
+  var dlePodilu = function () {
+    if (!$('drz-podil') || !(zakladPct > 0)) return;
+    var p = Number($('drz-podil').value) || 0;
+    if (!(p > 0)) return;
+    $('drz-cena-in').value = Math.max(10000,
+      Math.round((Number(x.navrh) || 100000) * p / zakladPct));
+    rada();
+  };
+  if ($('drz-podil')) $('drz-podil').oninput = dlePodilu;
   $('drz-cena-in').oninput = rada; rada();
   $('drz-start').onclick = function () {
     var b = $('drz-start');
@@ -12229,6 +12255,10 @@ function drazbaCenaSheet(x) {
       vyvolavaci: Math.max(0, Math.round(Number($('drz-cena-in').value) || 0)) };
     if (jePodil) {
       telo.podil = Math.max(1, Math.min(100, Math.round(Number($('drz-podil').value) || 10))) / 100;
+    } else if (jePrevod) {
+      var pp = Number($('drz-podil').value) || maxPct;
+      telo.podil = Math.max(0.001, Math.min(Number(x.podil_max),
+        Math.round(pp * 10) / 1000));
     }
     b.disabled = true; b.textContent = 'Spouštím…';
     apiJson('/trade/drazba', telo).then(function (r) {

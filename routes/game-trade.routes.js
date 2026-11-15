@@ -217,6 +217,10 @@ async function prodanyPodil(firmaId) {
   return rows.reduce((a, x) => a + (x.podil || 0), 0);
 }
 
+// Procenta do názvů a hlášek: 0,05 → „5", 0,025 → „2,5". Celá čísla zůstávají
+// celá, desetinná mají čárku — ať to v dražbě vypadá česky.
+const pct = (x) => String(Math.round((Number(x) || 0) * 1000) / 10).replace('.', ',');
+
 // Kolik z téhle firmy drží jeden konkrétní investor. Rozhoduje to o většině:
 // padesát procent rozdrobených mezi pět lidí nikomu kontrolu nedává.
 async function podilInvestora(firmaId, investorId) {
@@ -1084,14 +1088,23 @@ router.post('/trade/drazba', hrac, api(async (req, res) => {
         + ' %. Celá firma je sto procent.' });
     }
     data = { podil };
-    nazev = 'podíl ' + Math.round(podil * 100) + ' % ve firmě ' + (ja.company || ja.nick);
+    nazev = 'podíl ' + pct(podil) + ' % ve firmě ' + (ja.company || ja.nick);
   } else if (predmet === 'prevod') {
     const e = await prisma.gameEquity.findUnique({ where: { id: parseInt(b.equity_id, 10) || 0 } });
     if (!e || e.stav !== 'bezi' || e.investor_id !== ja.id) {
       return res.status(409).json({ error: 'Takový podíl nedržíš.' });
     }
-    data = { equity_id: e.id, podil: e.podil, firma_id: e.firma_id, firma_nick: e.firma_nick };
-    nazev = 'podíl ' + Math.round(e.podil * 100) + ' % ve firmě ' + e.firma_nick;
+    // Držený podíl jde rozdražit po kouscích — kdo má pět procent, může
+    // pustit jedno. Když klient nic nepošle, jde do dražby celý.
+    let podil = b.podil == null ? e.podil : Math.round(Number(b.podil) * 1000) / 1000;
+    if (!(podil > 0)) return res.status(400).json({ error: 'Kolik procent chceš vydražit?' });
+    if (podil > e.podil + 1e-9) {
+      return res.status(409).json({ error: 'Držíš jen ' + pct(e.podil) + ' %.' });
+    }
+    // Zbytek pod desetinou procenta nemá cenu držet — vezme se to celé.
+    if (e.podil - podil < 0.001) podil = e.podil;
+    data = { equity_id: e.id, podil, firma_id: e.firma_id, firma_nick: e.firma_nick };
+    nazev = 'podíl ' + pct(podil) + ' % ve firmě ' + e.firma_nick;
   }
 
   const d = await prisma.gameDrazba.create({ data: {
@@ -1242,13 +1255,37 @@ async function prevedVydrazene(tx, d, prodavajici, vitez) {
     if (!eq || eq.stav !== 'bezi' || eq.investor_id !== prodavajici.id) {
       throw new Error('Podíl už takhle neběží.');
     }
+    // Do dražby mohl jít jen kus. Kolik, se ověřuje až tady — mezitím mohl
+    // prodávající část podílu prodat jinudy a slíbit víc, než drží.
+    let podil = Number((d.data || {}).podil);
+    if (!(podil > 0) || podil > eq.podil + 1e-9) podil = eq.podil;
+    const zbytek = eq.podil - podil;
+    const cely = zbytek < 1e-9;
+    const cena = DRZ.cenaZa(d.vyvolavaci, d.suma);
+    // Co zůstává prodávajícímu: pořizovací cena i vyplacené dividendy se
+    // krátí ve stejném poměru, jinak by zbytek v knize vypadal dráž, než je.
+    const dil = (v) => Math.round((Number(v) || 0) * (zbytek / eq.podil));
     if (eq.firma_id === vitez.id) {
-      // Vydražil si vlastní podíl zpátky — to je odkup, podíl se uzavírá.
-      await tx.gameEquity.update({ where: { id: eq.id }, data: { stav: 'odkoupeno' } });
-    } else {
+      // Vydražil si vlastní podíl zpátky — to je odkup.
+      if (cely) await tx.gameEquity.update({ where: { id: eq.id }, data: { stav: 'odkoupeno' } });
+      else {
+        await tx.gameEquity.update({ where: { id: eq.id },
+          data: { podil: zbytek, cena: dil(eq.cena), vyplaceno: dil(eq.vyplaceno) } });
+      }
+    } else if (cely) {
       await tx.gameEquity.update({ where: { id: eq.id }, data: {
+        investor_id: vitez.id, investor_nick: vitez.nick, cena, vyplaceno: 0 } });
+    } else {
+      // Prodaný kus se odštípne do vlastního záznamu. Součty obou stran dělá
+      // podilInvestora() přes řádky, takže na většinu to sedí dál.
+      await tx.gameEquity.update({ where: { id: eq.id },
+        data: { podil: zbytek, cena: dil(eq.cena), vyplaceno: dil(eq.vyplaceno) } });
+      await tx.gameEquity.create({ data: {
         investor_id: vitez.id, investor_nick: vitez.nick,
-        cena: DRZ.cenaZa(d.vyvolavaci, d.suma), vyplaceno: 0 } });
+        firma_id: eq.firma_id, firma_nick: eq.firma_nick,
+        // Výplatní termín si bere z původního záznamu: vítěz nemá dostat
+        // dividendu navíc, ani o rozjetý měsíc přijít.
+        podil, cena, dalsi_at: eq.dalsi_at } });
     }
   }
 }
