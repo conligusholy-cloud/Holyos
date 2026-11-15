@@ -1140,9 +1140,27 @@ router.post('/trade/drazba/prihoz', hrac, api(async (req, res) => {
     return res.status(409).json({ error: 'Dražba už skončila.' });
   }
   const ja = req.player;
-  if (d.prodavajici_id === ja.id) return res.status(409).json({ error: 'Vlastní věc si nepřihodíš.' });
-  // Vedoucí sám proti sobě nepřihazuje — jen by pálil peníze a natahoval čas.
-  if (d.vedouci_id === ja.id) return res.status(409).json({ error: 'Vedeš. Počkej, až někdo přihodí.' });
+  const jsemProdavajici = d.prodavajici_id === ja.id;
+  // Prodávající smí přihazovat na svou věc: sráží tím cenu a přidává čas,
+  // takže může dražbu natahovat a nalákat další. Platí to ale ze svého —
+  // příhozy mu sice spadnou zpátky, ale vítězův doplatek o ně klesne, takže
+  // ho to vyjde přesně na to, co do toho vloží.
+  if (jsemProdavajici) {
+    // Nad vyvolávací cenou už by si jen přihrával: každá koruna navíc by
+    // zvedla doplatek vítěze o dvě. Tam se prodávajícímu přihazovat zakazuje.
+    const zbyva = d.vyvolavaci - d.suma;
+    if (zbyva <= 0) {
+      return res.status(409).json({ error: 'Příhozy přerostly tvoji vyvolávací cenu — '
+        + 'tady už přihazovat nemůžeš, cena teď roste ve tvůj prospěch.' });
+    }
+    if (castka > zbyva) {
+      return res.status(409).json({ error: 'Na svou věc můžeš přihodit nejvýš '
+        + zbyva.toLocaleString('cs-CZ') + ' L$ — níž než na nulu cena nejde.' });
+    }
+  } else if (d.vedouci_id === ja.id) {
+    // Vedoucí sám proti sobě nepřihazuje — jen by pálil peníze a natahoval čas.
+    return res.status(409).json({ error: 'Vedeš. Počkej, až někdo přihodí.' });
+  }
   // Na příhozy musí mít. Počítá se z poslední uložené hry, co už v téhle dražbě
   // slíbil a co má rozjednané na burze — stejně jako u nabídek.
   const mam = Math.round(stavu(ja).cash || 0);
@@ -1157,8 +1175,11 @@ router.post('/trade/drazba/prihoz', hrac, api(async (req, res) => {
   const novyKonec = new Date(new Date(d.konec).getTime() + DRZ.PRIHOZ_MS);
   const r = await prisma.gameDrazba.updateMany({
     where: { id: d.id, stav: 'bezi', konec: d.konec },
-    data: { suma: { increment: castka }, prihozu: { increment: 1 },
-      vedouci_id: ja.id, vedouci_nick: ja.nick, konec: novyKonec },
+    data: Object.assign({ suma: { increment: castka }, prihozu: { increment: 1 },
+      konec: novyKonec },
+      // Prodávající se svým příhozem nikdy nestává vedoucím — vlastní věc
+      // vyhrát nemůže. Vede dál poslední skutečný zájemce.
+      jsemProdavajici ? {} : { vedouci_id: ja.id, vedouci_nick: ja.nick }),
   });
   if (!r.count) return res.status(409).json({ error: 'Někdo byl rychlejší. Zkus to znovu.' });
   await prisma.gameDrazbaPrihoz.create({ data: { drazba_id: d.id, player_id: ja.id,

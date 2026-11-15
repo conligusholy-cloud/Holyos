@@ -36,6 +36,9 @@ function vynosProdavajiciho(vyvolavaci, suma) {
 // hodiny v prohlížeči se rozcházejí a odpočet si hra dopočítá sama.
 function verejna(d, jaId) {
   if (!d) return null;
+  // Kdo dražbu vyvolal, se do jejího konce neví. Jinak je hned jasné, komu
+  // příhozy padají, a s kým se nevyplatí hrát. Prodávající sám to ví pořád.
+  const tajno = d.stav === 'bezi' && !(jaId != null && d.prodavajici_id === jaId);
   return {
     id: d.id,
     predmet: d.predmet, model: d.model, spot_id: d.spot_id, card_kind: d.card_kind,
@@ -43,7 +46,9 @@ function verejna(d, jaId) {
     vyvolavaci: d.vyvolavaci, suma: d.suma, prihozu: d.prihozu,
     cena: cenaZa(d.vyvolavaci, d.suma),
     vedouci_id: d.vedouci_id || null, vedouci_nick: d.vedouci_nick || null,
-    prodavajici_id: d.prodavajici_id, prodavajici_nick: d.prodavajici_nick,
+    prodavajici_id: tajno ? null : d.prodavajici_id,
+    prodavajici_nick: tajno ? null : d.prodavajici_nick,
+    tajny_prodavajici: tajno,
     konec: d.konec, stav: d.stav,
     vitez_id: d.vitez_id || null, vitez_nick: d.vitez_nick || null,
     moje: jaId != null && d.prodavajici_id === jaId,

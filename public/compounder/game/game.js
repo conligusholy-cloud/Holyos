@@ -12013,7 +12013,8 @@ function hlidejDrazbu() {
         // (jiná dražba, nebo hráč začal/přestal vést a mizí mu tlačítka) —
         // jinak by se restartovaly hodiny a tlačítko by zmizelo zpod prstu.
         if (DRZ_STAVBA.id !== DRAZBA.id || DRZ_STAVBA.vedu !== !!DRAZBA.vedu
-          || DRZ_STAVBA.moje !== !!DRAZBA.moje) paintDrazba();
+          || DRZ_STAVBA.moje !== !!DRAZBA.moje
+          || DRZ_STAVBA.smim !== (drzStrop(DRAZBA) > 0)) paintDrazba();
         else paintDrazbaZiva();
       }
     } else {
@@ -12064,7 +12065,12 @@ function drazbaSheet() {
 }
 // Stavba posledního vykreslení okna — podle ní se pozná, jestli stačí přepsat
 // čísla, nebo se musí postavit celé okno znovu.
-var DRZ_STAVBA = { id: null, vedu: false, moje: false };
+var DRZ_STAVBA = { id: null, vedu: false, moje: false, smim: false };
+// Kolik smí prodávající ještě přihodit na svou vlastní věc. Pod vyvolávací
+// cenu to jde, nad ni ne — tam už by si jen přihrával peníze od vítěze.
+function drzStrop(d) {
+  return d && d.moje ? Math.max(0, d.vyvolavaci - d.suma) : Infinity;
+}
 // Krátké bliknutí, když se změní jméno vedoucího. Bez toho se v běžící dražbě
 // přehodí jméno tak potichu, že si toho nikdo nevšimne.
 function drzBlik(el) {
@@ -12109,11 +12115,13 @@ function paintDrazbaZiva() {
   }
   if ($('drz-feed')) $('drz-feed').innerHTML = drzFeedHtml();
   var volne = Math.max(0, volnaHotovost(null) - (d.moje_prihozy || 0));
+  var limit = Math.min(volne, drzStrop(d));
   if ($('drz-volne')) $('drz-volne').textContent = kcFull(volne);
+  if ($('drz-strop')) $('drz-strop').textContent = kcFull(drzStrop(d));
   [].forEach.call(box.querySelectorAll('[data-prihoz]'), function (b) {
     var c = Number(b.getAttribute('data-prihoz'));
-    b.disabled = c > volne;
-    b.className = 'btn sm' + (c > volne ? ' sec' : '');
+    b.disabled = c > limit;
+    b.className = 'btn sm' + (c > limit ? ' sec' : '');
   });
 }
 function paintDrazba() {
@@ -12124,7 +12132,8 @@ function paintDrazba() {
   var pod = d.suma > d.vyvolavaci;
   if (!bezi) {
     box.innerHTML = '<h3>Dražba skončila</h3>'
-      + '<p class="muted small">' + esc(d.nazev) + '</p>'
+      + '<p class="muted small">' + esc(d.nazev)
+      + (d.prodavajici_nick ? ' · vyvolal ' + esc(d.prodavajici_nick) : '') + '</p>'
       + (d.vitez_nick
           ? '<div class="kv souhrn"><span>' + esc(d.vitez_nick) + '</span><b class="ok">'
             + kcFull(d.cena != null ? d.cena : cena) + '</b></div>'
@@ -12137,8 +12146,12 @@ function paintDrazba() {
     return;
   }
   var volne = Math.max(0, volnaHotovost(null) - (d.moje_prihozy || 0));
+  var strop = drzStrop(d), limit = Math.min(volne, strop);
   box.innerHTML = '<h3>\u{1F528} Dražba — ' + esc(d.nazev) + '</h3>'
-    + '<p class="muted small" style="margin:2px 0 10px">Vyvolal ' + esc(d.prodavajici_nick)
+    + '<p class="muted small" style="margin:2px 0 10px">'
+    + (d.moje ? 'Vyvolal jsi ji ty'
+        : d.tajny_prodavajici ? 'Kdo ji vyvolal, se ukáže až na konci'
+          : 'Vyvolal ' + esc(d.prodavajici_nick))
     + '. Každý příhoz sráží cenu a přidá tři vteřiny. Bere poslední přihazující.</p>'
     // Hodiny jsou hrdina okna — odpočet rozhoduje, cena je až druhá v pořadí.
     + '<div class="drz-hodiny" id="drz-hodiny">'
@@ -12160,20 +12173,26 @@ function paintDrazba() {
     + '<div class="kv" id="drz-moje-r"' + (d.moje_prihozy > 0 ? '' : ' style="display:none"')
     + '><span>Už jsi přihodil</span><b class="warn" id="drz-moje">'
     + kcFull(d.moje_prihozy || 0) + '</b></div>'
-    + (d.moje
-        ? '<p class="fine">Tohle je tvoje věc — dostaneš příhozy i doplatek, dohromady vždycky '
-          + 'aspoň vyvolávací cenu.</p>'
-        : d.vedu
-          ? '<p class="fine ok">Vedeš. Dál přihazovat nemůžeš — počkej, jestli tě někdo přebije.</p>'
+    + (d.vedu
+        ? '<p class="fine ok">Vedeš. Dál přihazovat nemůžeš — počkej, jestli tě někdo přebije.</p>'
+        : (d.moje && strop <= 0)
+          ? '<p class="fine">Tohle je tvoje věc. Příhozy přerostly tvoji vyvolávací cenu, takže '
+            + 'tady už přihazovat nemůžeš — od téhle chvíle cena roste ve tvůj prospěch.</p>'
           : '<div class="drz-tl">' + DRAZBA_PREDVOLBY.map(function (c) {
-              return '<button class="btn sm' + (c > volne ? ' sec' : '') + '" data-prihoz="' + c + '"'
-                + (c > volne ? ' disabled' : '') + '>+' + kc(c) + '</button>';
+              return '<button class="btn sm' + (c > limit ? ' sec' : '') + '" data-prihoz="' + c + '"'
+                + (c > limit ? ' disabled' : '') + '>+' + kc(c) + '</button>';
             }).join('') + '</div>'
-            + '<p class="fine">Volné hotovosti na příhozy máš <b id="drz-volne">' + kcFull(volne)
-            + '</b>. Prohraný příhoz se nevrací.</p>')
+            + (d.moje
+                ? '<p class="fine">Tohle je tvoje věc — a přihodit můžeš taky. Srazíš tím cenu '
+                  + 'a přidáš tři vteřiny, takže dražbu natáhneš a nalákáš další. Příhoz se ti '
+                  + 'vrátí v tom, co nakonec dostaneš, ale o stejnou částku klesne doplatek '
+                  + 'vítěze — stojí tě tedy přesně to, co do toho vložíš. Nejvýš '
+                  + '<b id="drz-strop">' + kcFull(strop) + '</b> a svou vlastní věc vyhrát nemůžeš.</p>'
+                : '<p class="fine">Volné hotovosti na příhozy máš <b id="drz-volne">' + kcFull(volne)
+                  + '</b>. Prohraný příhoz se nevrací.</p>'))
     + '<div class="drz-feed" id="drz-feed">' + drzFeedHtml() + '</div>'
     + '<button class="btn sec" id="drz-pryc" style="width:100%;margin-top:10px">Zavřít</button>';
-  DRZ_STAVBA = { id: d.id, vedu: !!d.vedu, moje: !!d.moje };
+  DRZ_STAVBA = { id: d.id, vedu: !!d.vedu, moje: !!d.moje, smim: strop > 0 };
   paintDrazbaHodiny();
   if ($('drz-pryc')) $('drz-pryc').onclick = closeSheet;
   [].forEach.call(box.querySelectorAll('[data-prihoz]'), function (b) {
