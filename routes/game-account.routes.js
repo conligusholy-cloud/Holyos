@@ -459,6 +459,11 @@ function cisteJmeni(st) {
 // Musí dávat to samé číslo jako cistyZisk() v public/compounder/game/game.js,
 // jinak by administrace ukazovala něco jiného než hráč vidí v hlavičce.
 const POBOCKA_MESICNE = 15000, CETA_MZDY = 80000, SHANEC_MZDA = 50000;
+// Musí sedět s cistyZisk() v public/compounder/game/game.js — je to stejné
+// číslo, jaké hráči svítí v hlavičce. Pojistné se dlouho odečítalo jen
+// v prohlížeči, takže žebříček ukazoval o pojistku vyšší zisk, než hráč sám
+// viděl, a čísla si odporovala.
+const POJISTNE_PODIL = 0.004;     // měsíční pojistné = 0,4 % ceny stroje
 function zbydeMesicne(st) {
   if (!st) return 0;
   const units = Array.isArray(st.units) ? st.units : [];
@@ -466,7 +471,11 @@ function zbydeMesicne(st) {
   const pobocky = (Array.isArray(st.pobocky) ? st.pobocky.length : 0) * POBOCKA_MESICNE;
   const ceta = (st.ceta && st.ceta.od)
     ? CETA_MZDY + (st.ceta.shanec ? SHANEC_MZDA : 0) + (Number(st.ceta.phm) || 0) : 0;
-  return Math.round(provozni - splatkyMesicne(st) - pobocky - ceta);
+  const pojisteni = st.pojisteni
+    ? units.reduce((a, u) => a + (CENY_STROJU[(u.eco && u.eco.model)] || CENY_STROJU.mini)
+      * POJISTNE_PODIL, 0)
+    : 0;
+  return Math.round(provozni - splatkyMesicne(st) - pobocky - ceta - pojisteni);
 }
 
 // ─── Distributor ────────────────────────────────────────────────────────────

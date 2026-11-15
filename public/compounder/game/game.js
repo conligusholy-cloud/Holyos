@@ -12825,8 +12825,9 @@ function api(path, opts) {
   return fetch('/api/game' + path, Object.assign({ credentials: 'same-origin' }, opts || {}))
     .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); });
 }
-function apiJson(path, body, method) {
-  return api(path, { method: method || 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+function apiJson(path, body, method, extra) {
+  return api(path, Object.assign({ method: method || 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }, extra || {}));
 }
 // Uložení na server. Neposíláme častěji než jednou za 15 s, ať to netluče zbytečně.
 var wiped = false;   // po smazání hry už nic na server neposíláme
@@ -12850,22 +12851,44 @@ function prevezmiStav(srv, rev) {
 // Jedou s nejbližším uložením hry, aby se potvrzení a zápis staly naráz —
 // bez toho projde jedno bez druhého a peníze se připíšou dvakrát.
 var NEPOTVRZENE = [];
+// Zaseknutý požadavek nesmí ukládání zastavit navždy. Na mobilu se fetch při
+// přepnutí sítě (5G ↔ Wi-Fi) umí nevrátit vůbec — a protože se další uložení
+// pouští jen když zrovna žádné neběží, hra by sice běžela dál, ale na server
+// by se nic neuložilo. Hráč by viděl svoje čísla, všichni ostatní jeho hodinu
+// starý stav, a o postup by přišel při příštím načtení.
+var SYNC_ZASEK_MS = 30000;     // po téhle době se zaseknuté uložení zahodí
+var SYNC_TIMEOUT_MS = 20000;   // a tolik se na odpověď vůbec čeká
+var syncBusyAt = 0, syncOk = 0, syncVarovano = 0;
 function syncState(force) {
-  if (wiped || !ME || syncBusy || !S) return Promise.resolve();
+  if (wiped || !ME || !S) return Promise.resolve();
+  if (syncBusy) {
+    if (Date.now() - syncBusyAt < SYNC_ZASEK_MS) return Promise.resolve();
+    syncBusy = false;   // předchozí uložení se nevrátilo, zkusíme znovu
+  }
   // Hra na pozadí (druhá záložka, telefon v kapse) neukládá — jinak by svým
   // starým stavem přepsala to, co hráč zrovna dělá jinde. Výjimka je poslední
   // uložení při odchodu, to si vynutíme přes force.
   if (!force && document.hidden) return Promise.resolve();
   if (!force && Date.now() - syncAt < 15000) return Promise.resolve();
-  syncBusy = true; syncAt = Date.now();
+  syncBusy = true; syncAt = Date.now(); syncBusyAt = syncAt;
+  // Vlastní strážce na úrovni požadavku: když server mlčí, spojení přerušíme
+  // a pustíme ho příště znovu.
+  var prerus = null;
+  try {
+    var ac = new AbortController();
+    prerus = setTimeout(function () { try { ac.abort(); } catch (e) { /* nevadí */ } }, SYNC_TIMEOUT_MS);
+    var signal = ac.signal;
+  } catch (e) { /* starý prohlížeč bez AbortController — jede se bez toho */ }
   // aktivni říká serveru, jestli má hráč hru doopravdy před sebou — podle toho
   // se počítá čas strávený ve hře.
   var potvrzuju = NEPOTVRZENE.slice(0, 50);
   return apiJson('/account/state', { state: S, aktivni: !document.hidden, rev: STATE_REV,
-    vyzvednuto: potvrzuju }, 'PUT')
+    vyzvednuto: potvrzuju }, 'PUT', signal ? { signal: signal } : null)
     .then(function (r) {
       syncBusy = false;
+      if (prerus) clearTimeout(prerus);
       if (r.ok) {
+        syncOk = Date.now(); syncVarovano = 0;
         // Server stav uložil a ve stejném zápisu potvrdil doručenky.
         NEPOTVRZENE = NEPOTVRZENE.filter(function (id) { return potvrzuju.indexOf(id) < 0; });
         if (r.j && r.j.rev != null) STATE_REV = r.j.rev;
@@ -12882,7 +12905,24 @@ function syncState(force) {
         } else if (r.j.rev != null) { STATE_REV = r.j.rev; }
       }
     })
-    .catch(function () { syncBusy = false; /* offline — zkusí se příště */ });
+    .catch(function () {
+      syncBusy = false;
+      if (prerus) clearTimeout(prerus);
+      /* offline nebo přerušeno — zkusí se příště */
+    });
+}
+// Když se hra dlouho neuloží, musí to hráč vědět. Jinak hraje dál do stavu,
+// o který při příštím načtení přijde, a v žebříčku svítí stará čísla.
+var SYNC_TICHO_MS = 180000;
+function hlidejUkladani() {
+  if (wiped || !ME || !S || document.hidden) return;
+  if (!syncOk) { syncOk = Date.now(); return; }
+  var ticho = Date.now() - syncOk;
+  if (ticho < SYNC_TICHO_MS) return;
+  if (Date.now() - syncVarovano < 300000) return;
+  syncVarovano = Date.now();
+  toast('Hra se ' + Math.round(ticho / 60000) + ' minuty neuložila na server — '
+    + 'zkontroluj připojení. Zkoušíme to dál.', 'err');
 }
 
 // ─── Heslo k rozehranému účtu ────────────────────────────────────────────────
@@ -13898,7 +13938,7 @@ function startGame() {
   loadTrades();
   setInterval(function () { loadTrades(); loadTrh(drawMap); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }, 60000);
   checkPayment();
-  setInterval(function () { tick(); save(); paint(); syncState(); }, 5000);
+  setInterval(function () { tick(); save(); paint(); syncState(); hlidejUkladani(); }, 5000);
   // Vlastní, rychlejší tep jen pro naskakující čísla nad prádlomaty.
   setInterval(function () { tick(); dripTick(); }, 1000);
   setInterval(pullRefs, 60000);
