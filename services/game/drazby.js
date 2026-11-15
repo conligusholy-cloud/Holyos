@@ -55,6 +55,36 @@ async function bezici() {
   return prisma.gameDrazba.findFirst({ where: { stav: 'bezi' }, orderBy: { id: 'desc' } });
 }
 
+// ─── Kdo se zrovna dívá ──────────────────────────────────────────────────────
+// Při běžící dražbě se každý otevřený klient ptá serveru po dvou vteřinách.
+// Víc k tomu netřeba: kdo se ozval za posledních šest vteřin, ten u dražby je.
+// Drží se to jen v paměti — po restartu se do šesti vteřin zaplní znovu.
+const DIVAK_MS = 6000;
+const divaci = new Map();          // drazba_id -> Map(player_id -> ms)
+function divak(drazbaId, playerId) {
+  if (!drazbaId || !playerId) return;
+  let m = divaci.get(drazbaId);
+  if (!m) divaci.set(drazbaId, m = new Map());
+  m.set(Number(playerId), Date.now());
+  // Doběhlé dražby ať v paměti neleží navěky.
+  if (divaci.size > 20) {
+    const ted = Date.now();
+    for (const [id, mm] of divaci) {
+      let ziva = false;
+      for (const t of mm.values()) if (ted - t < 60000) { ziva = true; break; }
+      if (!ziva) divaci.delete(id);
+    }
+  }
+}
+function divaku(drazbaId) {
+  const m = divaci.get(drazbaId);
+  if (!m) return 0;
+  const lim = Date.now() - DIVAK_MS;
+  let n = 0;
+  for (const [id, t] of m) { if (t >= lim) n++; else m.delete(id); }
+  return n;
+}
+
 // Doběhlou dražbu vypořádá i to, že se na ni někdo zeptá — tohle je pojistka
 // pro případ, že se zrovna nikdo nedívá. Jinak by vítěz čekal na svou věc,
 // dokud někdo neotevře tržiště.
@@ -79,5 +109,5 @@ function start() {
 
 module.exports = {
   DRAZBA_MS, PRIHOZ_MS, PRIHOZ_MIN, VYVOLAVACI_MIN, PREDMETY, PREDVOLBY,
-  cenaZa, vynosProdavajiciho, verejna, bezici, start,
+  cenaZa, vynosProdavajiciho, verejna, bezici, start, divak, divaku,
 };

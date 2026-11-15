@@ -11995,7 +11995,10 @@ function drazbaZbyva() {
 function drazbaBezi() { return !!(DRAZBA && DRAZBA.stav === 'bezi' && drazbaZbyva() > 0); }
 function hlidejDrazbu() {
   if (!ME || !S || S.tut !== 'done') return;
-  api('/trade/drazba').then(function (r) {
+  // vidim=1 říká serveru, že hráč má okno dražby opravdu před sebou. Schovaná
+  // záložka se ptá dál, aby o dražbě věděla, ale mezi diváky nepatří.
+  var divam = !document.hidden && !!$('drz-okno');
+  api('/trade/drazba' + (divam ? '?vidim=1' : '')).then(function (r) {
     if (!r.ok) return;
     DRAZBA = r.j.drazba || null;
     DRAZBA_PRIHOZY = r.j.prihozy || [];
@@ -12005,6 +12008,14 @@ function hlidejDrazbu() {
       rychleNaDrazbu(true);
       // Vlastní dražbu hráči nevnucujeme, tu spustil sám.
       if (DRAZBA.id !== DRAZBA_VIDENA && !DRAZBA.moje) { DRAZBA_VIDENA = DRAZBA.id; drazbaSheet(); }
+      else if ($('drz-okno')) {
+        // Okno je otevřené. Celé se překresluje jen když se mění jeho stavba
+        // (jiná dražba, nebo hráč začal/přestal vést a mizí mu tlačítka) —
+        // jinak by se restartovaly hodiny a tlačítko by zmizelo zpod prstu.
+        if (DRZ_STAVBA.id !== DRAZBA.id || DRZ_STAVBA.vedu !== !!DRAZBA.vedu
+          || DRZ_STAVBA.moje !== !!DRAZBA.moje) paintDrazba();
+        else paintDrazbaZiva();
+      }
     } else {
       rychleNaDrazbu(false);
       if (DRAZBA && DRAZBA.stav === 'hotovo' && $('drz-okno')) paintDrazba();
@@ -12051,6 +12062,60 @@ function drazbaSheet() {
     if (DRAZBA && DRAZBA.stav === 'bezi' && drazbaZbyva() <= 0) paintDrazba();
   }, 150);
 }
+// Stavba posledního vykreslení okna — podle ní se pozná, jestli stačí přepsat
+// čísla, nebo se musí postavit celé okno znovu.
+var DRZ_STAVBA = { id: null, vedu: false, moje: false };
+// Krátké bliknutí, když se změní jméno vedoucího. Bez toho se v běžící dražbě
+// přehodí jméno tak potichu, že si toho nikdo nevšimne.
+function drzBlik(el) {
+  if (!el) return;
+  el.classList.remove('drz-blik');
+  void el.offsetWidth;
+  el.classList.add('drz-blik');
+}
+function drzLideHtml(d) {
+  // Sám sebe hráč vidí vždycky — server o něm ví z posledního dotazu.
+  var oci = Math.max(1, d.divaku || 1), pri = d.prihazujicich || 0;
+  return '<span><b>' + oci + '</b> ' + mn(oci, 'hráč', 'hráči', 'hráčů') + ' u dražby</span>'
+    + '<span>' + (pri
+        ? '<b>' + pri + '</b> ' + mn(pri, 'přihazuje', 'přihazují', 'přihazuje')
+        : 'zatím nikdo nepřihodil') + '</span>';
+}
+function drzFeedHtml() {
+  return (DRAZBA_PRIHOZY || []).map(function (p) {
+    return '<span><i>' + esc(p.nick) + '</i> ' + kc(p.castka) + '</span>';
+  }).join('');
+}
+// Dražba se mění pod rukama. Tohle sahá jen na čísla, ne na stavbu okna.
+function paintDrazbaZiva() {
+  var d = DRAZBA, box = $('drz-okno');
+  if (!d || !box || !drazbaBezi()) return;
+  if ($('drz-castka')) $('drz-castka').textContent = kcFull(Math.abs(d.vyvolavaci - d.suma));
+  if ($('drz-prihozu-l')) $('drz-prihozu-l').textContent = 'Příhozy (' + d.prihozu + ')';
+  if ($('drz-suma')) $('drz-suma').textContent = kcFull(d.suma);
+  if ($('drz-pod')) $('drz-pod').style.display = d.suma > d.vyvolavaci ? '' : 'none';
+  var v = $('drz-vede');
+  if (v) {
+    var jmeno = d.vedouci_nick || 'zatím nikdo', zmena = v.textContent !== jmeno;
+    if (zmena) v.textContent = jmeno;
+    // Třída se přepisuje celá, takže bliknutí musí přijít až po ní.
+    v.className = d.vedu ? 'ok' : '';
+    if (zmena) drzBlik(v);
+  }
+  if ($('drz-lide')) $('drz-lide').innerHTML = drzLideHtml(d);
+  if ($('drz-moje-r')) {
+    $('drz-moje-r').style.display = d.moje_prihozy > 0 ? '' : 'none';
+    if ($('drz-moje')) $('drz-moje').textContent = kcFull(d.moje_prihozy || 0);
+  }
+  if ($('drz-feed')) $('drz-feed').innerHTML = drzFeedHtml();
+  var volne = Math.max(0, volnaHotovost(null) - (d.moje_prihozy || 0));
+  if ($('drz-volne')) $('drz-volne').textContent = kcFull(volne);
+  [].forEach.call(box.querySelectorAll('[data-prihoz]'), function (b) {
+    var c = Number(b.getAttribute('data-prihoz'));
+    b.disabled = c > volne;
+    b.className = 'btn sm' + (c > volne ? ' sec' : '');
+  });
+}
 function paintDrazba() {
   var box = $('drz-okno');
   if (!box || !DRAZBA) return;
@@ -12082,15 +12147,19 @@ function paintDrazba() {
     + '<circle class="drz-kruh" id="drz-kruh" cx="60" cy="60" r="52" '
     + 'stroke-dasharray="326.7" stroke-dashoffset="0"></circle></svg>'
     + '<div class="drz-cislo"><b id="drz-odpocet">0</b><span id="drz-odpocet-p">vteřin</span></div></div>'
+    + '<div class="drz-lide" id="drz-lide">' + drzLideHtml(d) + '</div>'
     + '<div class="drz-cena"><span>Cena teď</span><b id="drz-castka">' + kcFull(cena) + '</b></div>'
     + '<div class="kv"><span>Vyvolávací cena</span><b>' + kcFull(d.vyvolavaci) + '</b></div>'
-    + '<div class="kv"><span>Příhozy (' + d.prihozu + ')</span><b>' + kcFull(d.suma) + '</b></div>'
-    + (pod ? '<p class="fine warn">Příhozy přerostly vyvolávací cenu — od téhle chvíle cena zase roste '
-        + 'a vydělává na tom prodávající.</p>' : '')
-    + '<div class="kv"><span>Vede</span><b class="' + (d.vedu ? 'ok' : '') + '">'
+    + '<div class="kv"><span id="drz-prihozu-l">Příhozy (' + d.prihozu + ')</span>'
+    + '<b id="drz-suma">' + kcFull(d.suma) + '</b></div>'
+    + '<p class="fine warn" id="drz-pod"' + (pod ? '' : ' style="display:none"')
+    + '>Příhozy přerostly vyvolávací cenu — od téhle chvíle cena zase roste '
+    + 'a vydělává na tom prodávající.</p>'
+    + '<div class="kv"><span>Vede</span><b id="drz-vede" class="' + (d.vedu ? 'ok' : '') + '">'
     + esc(d.vedouci_nick || 'zatím nikdo') + '</b></div>'
-    + (d.moje_prihozy > 0 ? '<div class="kv"><span>Už jsi přihodil</span><b class="warn">'
-        + kcFull(d.moje_prihozy) + '</b></div>' : '')
+    + '<div class="kv" id="drz-moje-r"' + (d.moje_prihozy > 0 ? '' : ' style="display:none"')
+    + '><span>Už jsi přihodil</span><b class="warn" id="drz-moje">'
+    + kcFull(d.moje_prihozy || 0) + '</b></div>'
     + (d.moje
         ? '<p class="fine">Tohle je tvoje věc — dostaneš příhozy i doplatek, dohromady vždycky '
           + 'aspoň vyvolávací cenu.</p>'
@@ -12100,12 +12169,11 @@ function paintDrazba() {
               return '<button class="btn sm' + (c > volne ? ' sec' : '') + '" data-prihoz="' + c + '"'
                 + (c > volne ? ' disabled' : '') + '>+' + kc(c) + '</button>';
             }).join('') + '</div>'
-            + '<p class="fine">Volné hotovosti na příhozy máš ' + kcFull(volne)
-            + '. Prohraný příhoz se nevrací.</p>')
-    + '<div class="drz-feed">' + (DRAZBA_PRIHOZY || []).map(function (p) {
-        return '<span><i>' + esc(p.nick) + '</i> ' + kc(p.castka) + '</span>';
-      }).join('') + '</div>'
+            + '<p class="fine">Volné hotovosti na příhozy máš <b id="drz-volne">' + kcFull(volne)
+            + '</b>. Prohraný příhoz se nevrací.</p>')
+    + '<div class="drz-feed" id="drz-feed">' + drzFeedHtml() + '</div>'
     + '<button class="btn sec" id="drz-pryc" style="width:100%;margin-top:10px">Zavřít</button>';
+  DRZ_STAVBA = { id: d.id, vedu: !!d.vedu, moje: !!d.moje };
   paintDrazbaHodiny();
   if ($('drz-pryc')) $('drz-pryc').onclick = closeSheet;
   [].forEach.call(box.querySelectorAll('[data-prihoz]'), function (b) {

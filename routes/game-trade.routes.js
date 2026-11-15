@@ -1030,11 +1030,20 @@ router.get('/trade/drazba', hrac, api(async (req, res) => {
       orderBy: { id: 'desc' } });
   }
   if (!d) return res.json({ ok: true, drazba: null, predvolby: DRZ.PREDVOLBY, min: DRZ.PRIHOZ_MIN });
+  // Kdo má okno dražby opravdu před sebou, přidá ?vidim=1. Schovaná záložka
+  // se ptá dál (aby o dražbě věděla), ale do počtu diváků nepatří.
+  if (d.stav === 'bezi' && String((req.query || {}).vidim) === '1') DRZ.divak(d.id, req.player.id);
   const v = DRZ.verejna(d, req.player.id);
-  v.moje_prihozy = await mojePrihozy(d.id, req.player.id);
-  const posledni = await prisma.gameDrazbaPrihoz.findMany({
-    where: { drazba_id: d.id }, orderBy: { id: 'desc' }, take: 6,
-    select: { nick: true, castka: true } });
+  const [mp, posledni, prihazujici] = await Promise.all([
+    mojePrihozy(d.id, req.player.id),
+    prisma.gameDrazbaPrihoz.findMany({ where: { drazba_id: d.id }, orderBy: { id: 'desc' }, take: 6,
+      select: { nick: true, castka: true } }),
+    prisma.gameDrazbaPrihoz.findMany({ where: { drazba_id: d.id },
+      select: { player_id: true }, distinct: ['player_id'] }),
+  ]);
+  v.moje_prihozy = mp;
+  v.divaku = DRZ.divaku(d.id);
+  v.prihazujicich = prihazujici.length;
   res.json({ ok: true, drazba: v, prihozy: posledni, predvolby: DRZ.PREDVOLBY, min: DRZ.PRIHOZ_MIN });
 }));
 

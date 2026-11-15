@@ -549,6 +549,14 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .drz-cena b{font-size:23px;font-weight:800;line-height:1;letter-spacing:-.02em;white-space:nowrap}
 .drz-tl{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0 4px}
 .drz-tl .btn{padding:12px 4px;font-weight:800}
+/* Kdo je u dražby: pruh pod hodinami, který se hýbe sám. */
+.drz-lide{display:flex;justify-content:space-between;gap:10px;margin:2px 0 10px;
+  font-size:12px;color:var(--text3);letter-spacing:.2px}
+.drz-lide b{color:var(--text);font-weight:800}
+.drz-lide span:last-child{text-align:right}
+/* Změna vedoucího se musí dát zahlédnout, jinak proklouzne. */
+@keyframes drzBlik{0%{background:rgba(16,185,129,.35)}100%{background:transparent}}
+.drz-blik{animation:drzBlik .9s ease-out;border-radius:6px;padding:0 4px;margin:0 -4px}
 .drz-feed{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .drz-feed span{font-size:11px;padding:3px 9px;border-radius:999px;
   background:rgba(255,255,255,.06);color:var(--text2);white-space:nowrap}
