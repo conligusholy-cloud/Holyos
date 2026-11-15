@@ -16,6 +16,39 @@
 </head>
 <body>
 
+<!-- Měření příchodu. Je to tady schválně nahoře a inline: game.js má po drátě
+     přes dvě stě kilobajtů a než se stáhne a spustí, může být návštěvník dávno
+     pryč — takový člověk pak v číslech nebyl vůbec vidět. Tohle odejde hned,
+     jak se dopíše tahle značka, a je jediné, z čeho se pozná, kolik lidí se
+     načítání vůbec nedočkalo. Vypne se přepnutím MERIT na false. -->
+<script>
+(function () {
+  var MERIT = true;
+  if (!MERIT) return;
+  try {
+    // Stejné klíče jako ve hře, ať je to jeden a týž návštěvník.
+    var vid = null, zdroj = '';
+    try {
+      vid = localStorage.getItem('lm_vid');
+      if (!vid) { vid = (Date.now().toString(36) + Math.random().toString(36).slice(2, 10)).toLowerCase();
+        localStorage.setItem('lm_vid', vid); }
+      // Zdroj z reklamy musíme zachytit tady — kdo odejde při načítání, ke
+      // game.js se nedostane a kampaň by pak neměla komu přičíst návštěvu.
+      var q = new URLSearchParams(location.search);
+      var z = q.get('utm_source') || q.get('ref') || '';
+      if (z && !localStorage.getItem('lm_zdroj')) {
+        localStorage.setItem('lm_zdroj', [z, q.get('utm_medium') || '', q.get('utm_campaign') || '']
+          .filter(Boolean).join(' / ').slice(0, 80));
+      }
+      zdroj = localStorage.getItem('lm_zdroj') || '';
+    } catch (e) { vid = 'anon' + Math.random().toString(36).slice(2, 10); }
+    fetch('/api/game/ev', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'game_nacita', sid: vid, zdroj: zdroj }), keepalive: true })
+      .catch(function () {});
+  } catch (e) { /* měření nikdy nesmí shodit stránku */ }
+})();
+</script>
+
 <!-- ÚVOD + vytvoření postavy -->
 <div id="intro" class="screen">
   <div class="intro-in">

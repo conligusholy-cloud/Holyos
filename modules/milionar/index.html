@@ -48,6 +48,9 @@
     .fn-bar { flex:1; height:22px; background:var(--surface2); border-radius:6px; overflow:hidden; }
     .fn-bar i { display:block; height:100%; background:linear-gradient(90deg,#7c5cff,#4fd1ff); }
     .fn-row b { width:120px; text-align:right; font-variant-numeric:tabular-nums; font-size:13px; }
+    /* Vedlejší řádek: vysvětluje rozdíl mezi kroky, sám krokem není. */
+    .fn-row.vedl .nm { padding-left:14px; opacity:.75; font-size:12px; }
+    .fn-row.vedl b { opacity:.75; }
     .chart { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px; }
     .price-in { width:92px; padding:5px 8px; border-radius:7px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:13px; text-align:right; }
     .price-in.wide { width:120px; }
@@ -521,10 +524,17 @@
           kpi(cz(s.obsazenych_mist), 'Obsazených míst') +
           kpi(cz(s.trzba_obdobi) + ' Kč', 'Tržba za ' + j.dny + ' dní') +
           kpi(cz(s.nakupu_obdobi), 'Nákupů za ' + j.dny + ' dní');
-        var max = Math.max.apply(null, j.trychtyr.map(function (x) { return x.pocet; }).concat([1]));
-        var prvni = j.trychtyr[0].pocet || 0;
+        // Vedlejší řádky (vracející se hráči) nejsou krok trychtýře — jen
+        // vysvětlují, kam se poděl rozdíl, a tak se nepočítají do procent.
+        var kroky = j.trychtyr.filter(function (x) { return !x.vedlejsi; });
+        var max = Math.max.apply(null, kroky.map(function (x) { return x.pocet; }).concat([1]));
+        var prvni = (kroky[0] || {}).pocet || 0;
         document.getElementById('st-funnel').innerHTML = j.trychtyr.map(function (x) {
           var pct = prvni ? Math.round(x.pocet / prvni * 100) : 0;
+          if (x.vedlejsi) {
+            return '<div class="fn-row vedl"><span class="nm">\u21B3 ' + esc(x.krok) + '</span>'
+              + '<span class="fn-bar"></span><b class="note">' + cz(x.pocet) + '</b></div>';
+          }
           return '<div class="fn-row"><span class="nm">' + esc(x.krok) + '</span>'
             + '<span class="fn-bar"><i style="width:' + Math.round(x.pocet / max * 100) + '%"></i></span>'
             + '<b>' + cz(x.pocet) + (prvni ? ' <span class="note">(' + pct + ' %)</span>' : '') + '</b></div>';
@@ -549,7 +559,8 @@
     function kpi(v, l) { return '<div class="kpi"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
 
     // ── Provoz: kolik lidí je na hře teď ────────────────────────────────────
-    var UDALOST_NAZEV = { game_intro: 'Viděl úvod (nový)', game_ab_a: 'Úvod — varianta A', game_ab_b: 'Úvod — varianta B', game_open: 'Otevřel hru', game_zije: 'Hraje', game_quiz: 'Dotazník',
+    var UDALOST_NAZEV = { game_nacita: 'Načetl stránku', game_zpet: 'Vrátil se do rozehrané',
+      game_intro: 'Viděl úvod (nový)', game_ab_a: 'Úvod — varianta A', game_ab_b: 'Úvod — varianta B', game_open: 'Otevřel hru', game_zije: 'Hraje', game_quiz: 'Dotazník',
       game_register: 'Založil účet', game_scout: 'Prozkoumal město', game_build: 'Postavil prádlomat',
       game_paid: 'Zaplatil' };
     function nazevUdalosti(e) { return UDALOST_NAZEV[e] || e.replace('game_', ''); }

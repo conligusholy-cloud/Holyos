@@ -11953,6 +11953,11 @@ function ev(name, znovu) {
 // (off / 50 / b). game_intro = návštěvník úvod opravdu viděl (správný jmenovatel konverze na registraci).
 var AB_KEY = 'lt_ab_intro';
 function introAB() {
+  // Úvod je od téhle chvíle na obrazovce a nic ho už nepřebije. Hlásíme to
+  // hned, ne až po odpovědi serveru — dvě kolečka na server (/account/me
+  // a /intro, k tomu 2,5s pojistka) trvají na mobilu dost na to, aby se
+  // návštěvník stihl otočit a v číslech pak chyběl, i když úvod viděl.
+  ev('game_intro');
   var hotovo = false;
   var dokonci = function (cfg) {
     if (hotovo) return; hotovo = true;
@@ -11964,7 +11969,6 @@ function introAB() {
       if (v !== 'a' && v !== 'b') { v = Math.random() < 0.5 ? 'a' : 'b'; try { localStorage.setItem(AB_KEY, v); } catch (e) { /* bez úložiště */ } }
     }
     if (v === 'b') introVariantaB(cfg);
-    ev('game_intro');
     if (rezim !== 'off') ev('game_ab_' + v);
   };
   api('/intro').then(function (r) { dokonci(r && r.ok ? r.j : null); }).catch(function () { dokonci(null); });
@@ -13224,10 +13228,12 @@ api('/account/me?ref=' + encodeURIComponent((S && S.pid) || trvalePid())).then(f
     if (r.j.rev != null) STATE_REV = r.j.rev;
     if (srv && (!S || (srv.lastTick || 0) >= (S.lastTick || 0))) { S = dosypStav(srv) || S; save(); }
     srovnejRef();   // až tady: stav ze serveru může mít staré pid
-    if (S) return startGame();
+    if (S) { ev('game_zpet'); return startGame(); }
   }
-  if (S) startGame();          // rozehraná hra bez účtu (z doby před účty)
-  else introAB();              // nový návštěvník opravdu vidí úvod
-}).catch(function () { if (S) startGame(); else introAB(); });
+  // Vracející se hráč úvod nikdy neuvidí — bez tohohle vypadal v trychtýři
+  // jako někdo, kdo odešel před úvodem, a kazil tak celý jmenovatel.
+  if (S) { ev('game_zpet'); startGame(); }   // rozehraná hra bez účtu (z doby před účty)
+  else introAB();                            // nový návštěvník opravdu vidí úvod
+}).catch(function () { if (S) { ev('game_zpet'); startGame(); } else introAB(); });
 
 })();

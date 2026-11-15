@@ -356,7 +356,12 @@ const EVENTY = ['game_open', 'game_quiz', 'game_quiz_done', 'game_register', 'ga
   'game_tut1', 'game_tut2', 'game_tut3', 'game_tut4', 'game_tut5',
   // Úvodní obrazovka: game_intro = nový návštěvník opravdu viděl úvod (správný jmenovatel konverze
   // na registraci — game_open se počítá i vracejícím se hráčům); game_ab_a / game_ab_b = varianta A/B testu.
-  'game_intro', 'game_ab_a', 'game_ab_b'];
+  'game_intro', 'game_ab_a', 'game_ab_b',
+  // game_nacita posílá přímo index.html, ještě než se stáhne game.js — jediné,
+  // z čeho se pozná, kolik lidí odejde během načítání. game_zpet = vracející se
+  // hráč s rozehranou hrou; ten úvod nevidí a bez něj by v trychtýři vypadal
+  // jako ztráta.
+  'game_nacita', 'game_zpet'];
 // Kroky, po kterých je jasné, že se návštěvník do hry opravdu pustil.
 const ZACAL_HRAT = ['game_scout', 'game_build'];
 router.post('/ev', express.json({ limit: '2kb' }), async (req, res) => {

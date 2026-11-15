@@ -742,7 +742,12 @@ router.get('/stats', api(async (req, res) => {
   res.json({ ok: true, dny, retence,
     souhrn: { hracu_celkem: celkem, obsazenych_mist: mista, trzba_obdobi: Math.round(trzbaCelkem), nakupu_obdobi: nakupy.length },
     trychtyr: [
-      { krok: 'Otevřeli hru', pocet: sidy.size },
+      // Trychtýř začíná načtením stránky, ne spuštěním hry: mezi tím se stahuje
+      // game.js a kdo to nedočká, nebyl dřív vidět nikde.
+      { krok: 'Načetli stránku', pocet: krok('game_nacita') },
+      { krok: 'Spustila se hra', pocet: sidy.size },
+      { krok: 'Vrátili se do rozehrané', pocet: krok('game_zpet'), vedlejsi: true },
+      { krok: 'Viděli úvod (jen noví)', pocet: krok('game_intro') },
       { krok: 'Dokončili dotazník', pocet: krok('game_quiz') },
       { krok: 'Založili účet', pocet: krok('game_register') },
       // Mezi účtem a prvním prádlomatem je pět kroků tutoriálu. Teprve
@@ -1033,6 +1038,15 @@ async function sesbirejDataHry(reklama) {
     nakupy_podle_druhu: podleDruhu,
     cenik: ceny.map((c) => ({ druh: c.kind, nazev: c.name, cena_kc: c.price / 100, aktivni: c.active })),
     nahranych_zaznamu_prvni_minuty: zaznamu,
+    // Bez tohohle si AI spočítá nesmysl: brala game_open→game_intro jako krok
+    // trychtýře, i když úvod z principu nevidí nikdo, kdo má rozehranou hru.
+    vyznam_udalosti: {
+      game_nacita: 'Načetla se stránka hry. Posílá index.html ještě před stažením game.js — je to skutečný začátek trychtýře a jediné číslo, které zahrnuje i ty, co odešli během načítání.',
+      game_open: 'Spustil se game.js. Posílá se KAŽDÉMU, i vracejícímu se hráči s rozehranou hrou.',
+      game_zpet: 'Vracející se hráč s rozehranou hrou. Takový úvod nikdy neuvidí, takže game_open − game_zpet je správný jmenovatel pro game_intro.',
+      game_intro: 'Nový návštěvník uvidel úvodní obrazovku. NEPOČÍTEJ game_open→game_intro jako ztrátu, rozdíl tvoří hlavně vracející se hráči (game_zpet). Lepší retence tenhle poměr naopak snižuje.',
+      game_zije: 'Tichá stopa každých 5 minut u otevřené hry — slouží k počtu hráčů právě teď, ne jako krok trychtýře.',
+    },
     reklama: reklama || null,
   };
 }
