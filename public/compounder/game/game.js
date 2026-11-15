@@ -8683,7 +8683,9 @@ var ZEB_POPIS = {
     pod: 'Počítají se postavené prádlomaty — to je jediné číslo, které hlídá server. '
       + 'Koupený pozemek bez stroje se nepočítá. Kdo hru rozehrál a zatím nic nepostavil, je tu s nulou.' },
   zisk: { nadpis: 'Nejvyšší měsíční zisk', jed: function (v) { return kcFull(v); },
-    pod: 'Podle poslední uložené sítě hráče.' },
+    pod: 'Co hráči měsíčně zbyde po splátkách, pobočkách, četě a pojistném — '
+      + 'stejné číslo, jaké mu svítí v hlavičce. Je to sazba, ne hromada, '
+      + 'takže nestárne: platí, dokud hráč něco nepostaví nebo neprodá.' },
   hvezdy: { nadpis: 'Nejlepší hodnocení zákazníků',
     jed: function (v) { return hvezdyText(v); },
     pod: 'Jedna až pět hvězdiček podle toho, jak si hráč vede na infolince. '
@@ -8695,7 +8697,12 @@ var ZEB_POPIS = {
       + 'rozepsané po modelích.' },
   jmeni: { nadpis: 'Největší čisté jmění', jed: function (v) { return kcFull(v); },
     pod: 'Co hráč má, minus co dluží: prádlomaty, stroje skladem, pobočky a technika '
-      + 'v pořizovací ceně, plus hotovost, minus úvěr. V minusu se může být.' }
+      + 'v pořizovací ceně, plus hotovost, minus úvěr. V minusu se může být. '
+      + 'Hotovost se dopočítává k teď i hráčům, kteří zrovna nehrají — jejich '
+      + 'sítě vydělávají dál, tak ať tabulka nestojí na čísle z minulého '
+      + 'přihlášení. U nich je to odhad podle jejich měsíčního zisku, protože '
+      + 'poruchy a krize se jim přihodí až při návratu. Meta u jména zůstává ta, '
+      + 'kterou hra opravdu udělila — tu dostane hráč, až se vrátí.' }
 };
 function loadZeb() {
   // Při výpadku nastavíme prázdný žebříček — jinak by panel zůstal viset

@@ -1473,6 +1473,34 @@ function hvezdyZPovesti(st) {
   const p = Math.max(-100, Math.min(100, Number(st && st.povest) || 0));
   return Math.round((3 + p / 50) * 10) / 10;
 }
+// ─── Dopočet času, který hráč prohrál mimo hru ───────────────────────────────
+// Hra počítá v prohlížeči, server drží jen poslední uložený snímek. Hráč, co
+// zrovna nehraje, měl proto v žebříčku jmění hotovost k poslednímu přihlášení
+// — a po návratu skokem přeskočil půlku tabulky, protože mu tick() dopočítal
+// celou dobu naráz. Tady se ta mezera dopočítá dopředu: hotovost naroste
+// sazbou „co mu měsíčně zbyde" za čas, který od uložení uběhl. Je to stejná
+// sazba, s jakou počítá tick() — earned = (roční zisk − režie) × roky.
+//
+// Odhad to zůstává, ne výpis z účtu: nezná poruchy, katastrofy, krize ani
+// sezónnost, které hráči naskočí až při návratu, takže se od skutečnosti liší
+// o jednotky procent. Přesné to z principu být nemůže — pravidla, podle
+// kterých se čas dopočítává, zná jen prohlížeč. Pro pořadí v žebříčku to ale
+// stačí a je to nesrovnatelně blíž pravdě než zmrzlé číslo.
+const DOPOCET_MAX_MS = 14 * 86400e3;   // dál je odhad moc divoký, radši se zastaví
+function dopoctiStav(st, naposledy) {
+  if (!st || !naposledy) return { st, odhad: false, od: 0, pridano: 0 };
+  const od = Math.max(0, Date.now() - new Date(naposledy).getTime());
+  // Kdo hraje teď, má stav čerstvý — není co dopočítávat.
+  if (od < 60000) return { st, odhad: false, od, pridano: 0 };
+  const mesicne = zbydeMesicne(st);
+  if (!mesicne) return { st, odhad: false, od, pridano: 0 };
+  const pridej = Math.round(mesicne * (Math.min(od, DOPOCET_MAX_MS) / MESIC_MS));
+  if (!pridej) return { st, odhad: false, od, pridano: 0 };
+  // Mělká kopie: měníme jedno číslo a uložený stav zašpinit nechceme.
+  return { st: Object.assign({}, st, { cash: (Number(st.cash) || 0) + pridej }),
+    odhad: true, od, pridano: pridej };
+}
+
 let _zeb = { at: 0, data: null };
 function dropZeb() { _zeb = { at: 0, data: null }; }
 async function zebricky() {
@@ -1485,7 +1513,7 @@ async function zebricky() {
     prisma.gamePlayer.findMany({
       where: { disabled: false, state: { not: null } },
       orderBy: { state_at: 'desc' }, take: 500,
-      select: { id: true, nick: true, company: true, emblem: true, state: true },
+      select: { id: true, nick: true, company: true, emblem: true, state: true, state_at: true },
     }),
     // Kdyby sloupec se zemí ještě nebyl v databázi, žebříček kvůli vlaječkám
     // spadnout nesmí — prostě se nevykreslí.
@@ -1534,8 +1562,14 @@ async function zebricky() {
     if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm, hodnota: st.refs, hodnost: hd });
     // Do žebříčku jmění patří i ten, kdo je v minusu — právě to je vidět.
     if (st.profile) {
-      const cj = cisteJmeni(st);
-      jmeni.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm, hodnota: cj, hodnost: hodnost(cj).id });
+      // Jmění se dopočítá k teď, aby neaktivní hráč nevisel na starém čísle.
+      const dop = dopoctiStav(st, h.state_at);
+      const cj = cisteJmeni(dop.st);
+      // Hodnost zůstává z uloženého stavu: je to meta, kterou hra hráči
+      // opravdu udělila. Z dopočítaného jmění by mu žebříček maloval metu,
+      // kterou ještě nedostal.
+      jmeni.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm,
+        hodnota: cj, hodnost: hd, odhad: dop.odhad, naposledy: h.state_at });
     }
     // Kdo ještě žádný hovor neměl, nemá se podle čeho hodnotit — startuje se na třech.
     if (st.profile && (st.hovoru || 0) > 0) {
