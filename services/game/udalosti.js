@@ -21,6 +21,7 @@ const DEN = 86400000;
 const TIK_MS = 10 * 60000;          // jak často se kouká, co začít a co ukončit
 const NAJEDNOU_MAX = 6;             // kolik událostí smí běžet ve světě naráz
 const SANCE_ZA_TIK = 0.2;           // s jakou pravděpodobností při tiku něco vznikne
+const TICHO_MAX = 2 * 3600000;      // po takovém tichu vyhlásí další tik událost jistě
 
 // ─── Katalog ─────────────────────────────────────────────────────────────────
 // navstevnost a naklady jsou poměrné změny: −0.3 = o třicet procent míň lidí,
@@ -155,7 +156,14 @@ async function tik() {
     if (aktivnich >= NAJEDNOU_MAX) return;
     // Čím prázdnější svět, tím spíš se něco semele — ať tam pořád něco žije.
     const sance = SANCE_ZA_TIK * (1 + (NAJEDNOU_MAX - aktivnich) / NAJEDNOU_MAX);
-    if (Math.random() >= sance) return;
+    // Pojistka proti mrtvému světu: když se nikde nic neděje a ani se dlouho
+    // nedělo, vyhlásíme něco natvrdlo. Jinak by hráč mohl trefit prázdno.
+    let nutne = false;
+    if (!aktivnich) {
+      const posledni = await prisma.gameEvent.findFirst({ orderBy: { do: 'desc' }, select: { do: true } });
+      nutne = !posledni || ted.getTime() - new Date(posledni.do).getTime() > TICHO_MAX;
+    }
+    if (!nutne && Math.random() >= sance) return;
     await zalozUdalost();
   } catch (e) {
     console.warn('[game-udalosti] tik:', e && e.message);
