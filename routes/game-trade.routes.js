@@ -1177,17 +1177,10 @@ router.post('/trade/drazba/prihoz', hrac, api(async (req, res) => {
   // příhozy mu sice spadnou zpátky, ale vítězův doplatek o ně klesne, takže
   // ho to vyjde přesně na to, co do toho vloží.
   if (jsemProdavajici) {
-    // Nad vyvolávací cenou už by si jen přihrával: každá koruna navíc by
-    // zvedla doplatek vítěze o dvě. Tam se prodávajícímu přihazovat zakazuje.
-    const zbyva = d.vyvolavaci - d.suma;
-    if (zbyva <= 0) {
-      return res.status(409).json({ error: 'Příhozy přerostly tvoji vyvolávací cenu — '
-        + 'tady už přihazovat nemůžeš, cena teď roste ve tvůj prospěch.' });
-    }
-    if (castka > zbyva) {
-      return res.status(409).json({ error: 'Na svou věc můžeš přihodit nejvýš '
-        + zbyva.toLocaleString('cs-CZ') + ' L$ — níž než na nulu cena nejde.' });
-    }
+    // Žádný strop: prodávající smí přihazovat pořád, i nad vyvolávací cenou,
+    // aby dražbu udržel naživu jak dlouho chce. Platí to ze svého jako každý
+    // jiný. Nad vyvolávací cenou tím ale zvedá doplatek vedoucímu, který se
+    // bránit nemůže — tak je ta hra postavená a je to vědomé rozhodnutí.
   } else if (d.vedouci_id === ja.id) {
     // Vedoucí sám proti sobě nepřihazuje — jen by pálil peníze a natahoval čas.
     return res.status(409).json({ error: 'Vedeš. Počkej, až někdo přihodí.' });

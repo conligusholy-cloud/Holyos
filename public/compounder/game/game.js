@@ -12045,7 +12045,7 @@ function hlidejDrazbu() {
         // jinak by se restartovaly hodiny a tlačítko by zmizelo zpod prstu.
         if (DRZ_STAVBA.id !== DRAZBA.id || DRZ_STAVBA.vedu !== !!DRAZBA.vedu
           || DRZ_STAVBA.moje !== !!DRAZBA.moje
-          || DRZ_STAVBA.smim !== (drzStrop(DRAZBA) > 0)) paintDrazba();
+          || (DRAZBA.moje && DRZ_STAVBA.pod !== (DRAZBA.suma > DRAZBA.vyvolavaci))) paintDrazba();
         else paintDrazbaZiva();
       }
     } else {
@@ -12096,12 +12096,10 @@ function drazbaSheet() {
 }
 // Stavba posledního vykreslení okna — podle ní se pozná, jestli stačí přepsat
 // čísla, nebo se musí postavit celé okno znovu.
-var DRZ_STAVBA = { id: null, vedu: false, moje: false, smim: false };
-// Kolik smí prodávající ještě přihodit na svou vlastní věc. Pod vyvolávací
-// cenu to jde, nad ni ne — tam už by si jen přihrával peníze od vítěze.
-function drzStrop(d) {
-  return d && d.moje ? Math.max(0, d.vyvolavaci - d.suma) : Infinity;
-}
+var DRZ_STAVBA = { id: null, vedu: false, moje: false, pod: false };
+// Strop na příhozy prodávajícího žádný není — dražbu smí držet naživu, jak
+// dlouho chce. Zůstává jako funkce kvůli jednomu místu v překreslování.
+function drzStrop() { return Infinity; }
 // Krátké bliknutí, když se změní jméno vedoucího. Bez toho se v běžící dražbě
 // přehodí jméno tak potichu, že si toho nikdo nevšimne.
 function drzBlik(el) {
@@ -12206,24 +12204,27 @@ function paintDrazba() {
     + kcFull(d.moje_prihozy || 0) + '</b></div>'
     + (d.vedu
         ? '<p class="fine ok">Vedeš. Dál přihazovat nemůžeš — počkej, jestli tě někdo přebije.</p>'
-        : (d.moje && strop <= 0)
-          ? '<p class="fine">Tohle je tvoje věc. Příhozy přerostly tvoji vyvolávací cenu, takže '
-            + 'tady už přihazovat nemůžeš — od téhle chvíle cena roste ve tvůj prospěch.</p>'
-          : '<div class="drz-tl">' + DRAZBA_PREDVOLBY.map(function (c) {
+        : '<div class="drz-tl">' + DRAZBA_PREDVOLBY.map(function (c) {
               return '<button class="btn sm' + (c > limit ? ' sec' : '') + '" data-prihoz="' + c + '"'
                 + (c > limit ? ' disabled' : '') + '>+' + kc(c) + '</button>';
             }).join('') + '</div>'
             + (d.moje
-                ? '<p class="fine">Tohle je tvoje věc — a přihodit můžeš taky. Srazíš tím cenu '
-                  + 'a přidáš tři vteřiny, takže dražbu natáhneš a nalákáš další. Příhoz se ti '
-                  + 'vrátí v tom, co nakonec dostaneš, ale o stejnou částku klesne doplatek '
-                  + 'vítěze — stojí tě tedy přesně to, co do toho vložíš. Nejvýš '
-                  + '<b id="drz-strop">' + kcFull(strop) + '</b> a svou vlastní věc vyhrát nemůžeš.</p>'
+                ? '<p class="fine">Tohle je tvoje věc — a přihodit můžeš taky, pořád a bez '
+                  + 'stropu. Každý příhoz přidá tři vteřiny, takže dražbu udržíš naživu, jak '
+                  + 'dlouho chceš. ' + (pod
+                      ? 'Nad vyvolávací cenou ti příhoz vydělá — zvedne doplatek vedoucímu '
+                        + 'o dvojnásobek toho, co vložíš.'
+                      : 'Dokud jsou příhozy pod vyvolávací cenou, stojí tě příhoz přesně to, '
+                        + 'co do něj dáš — vrátí se ti, ale o stejnou částku klesne doplatek '
+                        + 'vítěze.')
+                  + ' Svou vlastní věc vyhrát nemůžeš.</p>'
                 : '<p class="fine">Volné hotovosti na příhozy máš <b id="drz-volne">' + kcFull(volne)
                   + '</b>. Prohraný příhoz se nevrací.</p>'))
     + '<div class="drz-feed" id="drz-feed">' + drzFeedHtml() + '</div>'
     + '<button class="btn sec" id="drz-pryc" style="width:100%;margin-top:10px">Zavřít</button>';
-  DRZ_STAVBA = { id: d.id, vedu: !!d.vedu, moje: !!d.moje, smim: strop > 0 };
+  // pod = příhozy přerostly vyvolávací cenu. Prodávajícímu se tím mění text
+  // pod tlačítky, takže se okno v tu chvíli musí postavit znovu.
+  DRZ_STAVBA = { id: d.id, vedu: !!d.vedu, moje: !!d.moje, pod: pod };
   paintDrazbaHodiny();
   if ($('drz-pryc')) $('drz-pryc').onclick = closeSheet;
   [].forEach.call(box.querySelectorAll('[data-prihoz]'), function (b) {
