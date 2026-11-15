@@ -11910,8 +11910,10 @@ function vyzvedniNasledky(then) {
     }
     save();
     if (!d.length) {
-      // Všechno už máme zapsané, jen se to nepodařilo potvrdit — zkusíme znovu.
-      apiJson('/trade/deliveries/claim', { ids: vse.map(function (x) { return x.id; }) }).catch(function () {});
+      // Všechno už máme zapsané, jen se to nestihlo potvrdit — přibalíme to
+      // k nejbližšímu uložení hry.
+      vse.forEach(function (x) { if (NEPOTVRZENE.indexOf(x.id) < 0) NEPOTVRZENE.push(x.id); });
+      syncState(true);
       if (then) then();
       return;
     }
@@ -11967,8 +11969,9 @@ function vyzvedniNasledky(then) {
     // Když ubylo místo, banka se hned podívá na rámec — limit se počítá z toho,
     // kolik doplacených prádlomatů má hráč v provozu.
     if (d.some(function (x) { return x.kind === 'unit_remove' || x.kind === 'unit_add'; })) prehodnotRamec(false, true);
+    // Nejdřív do fronty k potvrzení, teprve pak uložení — ať jede obojí naráz.
+    vse.forEach(function (x) { if (NEPOTVRZENE.indexOf(x.id) < 0) NEPOTVRZENE.push(x.id); });
     save(); paint(); drawMap(); syncState(true);
-    apiJson('/trade/deliveries/claim', { ids: vse.map(function (x) { return x.id; }) }).catch(function () {});
     if (zpravy.length) toast(zpravy[0] + (zpravy.length > 1 ? ' (+' + (zpravy.length - 1) + ' dalších)' : ''), 'ok', true);
     if (then) then();
   }).catch(function () { if (then) then(); });
@@ -12690,6 +12693,10 @@ function prevezmiStav(srv, rev) {
   paint(); drawMap();
   return true;
 }
+// Doručenky, které jsme si zapsali do stavu, ale server o tom ještě neví.
+// Jedou s nejbližším uložením hry, aby se potvrzení a zápis staly naráz —
+// bez toho projde jedno bez druhého a peníze se připíšou dvakrát.
+var NEPOTVRZENE = [];
 function syncState(force) {
   if (wiped || !ME || syncBusy || !S) return Promise.resolve();
   // Hra na pozadí (druhá záložka, telefon v kapse) neukládá — jinak by svým
@@ -12700,14 +12707,24 @@ function syncState(force) {
   syncBusy = true; syncAt = Date.now();
   // aktivni říká serveru, jestli má hráč hru doopravdy před sebou — podle toho
   // se počítá čas strávený ve hře.
-  return apiJson('/account/state', { state: S, aktivni: !document.hidden, rev: STATE_REV }, 'PUT')
+  var potvrzuju = NEPOTVRZENE.slice(0, 50);
+  return apiJson('/account/state', { state: S, aktivni: !document.hidden, rev: STATE_REV,
+    vyzvednuto: potvrzuju }, 'PUT')
     .then(function (r) {
       syncBusy = false;
-      if (r.ok) { if (r.j && r.j.rev != null) STATE_REV = r.j.rev; return; }
+      if (r.ok) {
+        // Server stav uložil a ve stejném zápisu potvrdil doručenky.
+        NEPOTVRZENE = NEPOTVRZENE.filter(function (id) { return potvrzuju.indexOf(id) < 0; });
+        if (r.j && r.j.rev != null) STATE_REV = r.j.rev;
+        return;
+      }
       if (r.status === 409 && r.j) {
         // Jinde je novější hra. Vezmeme ji — svoje poslední vteřiny raději
         // obětujeme než cizí postup z druhého zařízení.
         if (prevezmiStav(r.j.state, r.j.rev)) {
+          // Náš zápis propadl i s doručenkami — ty zůstanou na serveru
+          // nepotvrzené a přijdou znovu k tomu stavu, který vyhrál.
+          NEPOTVRZENE = [];
           toast('Tuhle hru máš rozehranou i jinde — načetli jsme novější stav.', 'ok');
         } else if (r.j.rev != null) { STATE_REV = r.j.rev; }
       }

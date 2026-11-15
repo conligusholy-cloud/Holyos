@@ -1083,11 +1083,25 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
       console.warn('[game] hráč', req.player.id, 'přišel o zástavu', podlaha - mel, '— doplněno');
     }
     const ted = new Date();
-    const p = await prisma.gamePlayer.update({
-      where: { id: req.player.id },
-      data: Object.assign({ state: st, state_at: ted, state_rev: akt + 1 },
-        odehranyCas(req.player, ted, (req.body || {}).aktivni !== false)),
-    });
+    // Doručenky, které si hra do tohohle stavu zapsala, potvrdíme ve STEJNÉ
+    // transakci. Dřív se potvrzovaly zvlášť, a když to potvrzení nedošlo,
+    // server poslal totéž znovu a hra si peníze připsala podruhé. Takhle
+    // projde buď obojí, nebo nic: stav bez potvrzení neexistuje.
+    const vyzvednuto = Array.isArray((req.body || {}).vyzvednuto)
+      ? (req.body || {}).vyzvednuto.map((x) => parseInt(x, 10)).filter(Number.isFinite).slice(0, 100)
+      : [];
+    const [p] = await prisma.$transaction([
+      prisma.gamePlayer.update({
+        where: { id: req.player.id },
+        data: Object.assign({ state: st, state_at: ted, state_rev: akt + 1 },
+          odehranyCas(req.player, ted, (req.body || {}).aktivni !== false)),
+      }),
+    ].concat(vyzvednuto.length ? [
+      prisma.gameDelivery.updateMany({
+        where: { id: { in: vyzvednuto }, player_id: req.player.id, claimed_at: null },
+        data: { claimed_at: ted },
+      }),
+    ] : []));
     res.json({ ok: true, rev: p.state_rev });
     // Hodnost dopočítáme až po odpovědi — hráč na vyplacení odměny nečeká a
     // kdyby se tu cokoli pokazilo, uložení hry to shodit nesmí.
