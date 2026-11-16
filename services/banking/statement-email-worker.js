@@ -12,6 +12,27 @@ const MAILBOX = () => process.env.BANK_STATEMENT_MAILBOX || 'invoice@bestseries.
 const FOLDER = () => process.env.BANK_STATEMENT_MAIL_FOLDER || 'VYPISY';
 const INTERVAL_MIN = Math.max(5, parseInt(process.env.BANK_STATEMENT_POLL_MINUTES || '30', 10) || 30);
 const STATEMENT_FILE = /\.(pdf|gpc|abo|csv|sta|mt940|txt)$/i;
+// E-mail podepsaný S/MIME (UniCredit BusinessNet): Graph vrátí místo příloh jediný soubor smime.p7m,
+// ve kterém je celá původní zpráva (MIME). Přílohy výpisu z něj vytáhneme přes mailparser.
+const SMIME = (a) => /smime\.p7m$/i.test(a.name || '') || /multipart\/signed|pkcs7-mime/i.test(a.contentType || '');
+async function filesFromSmime(buffer) {
+  const { simpleParser } = require('mailparser');
+  let raw = buffer;
+  // Neprůhledný podpis (application/pkcs7-mime, DER): původní zpráva je uvnitř jako text — najdi začátek MIME hlaviček
+  if (raw[0] === 0x30) {
+    const txt = raw.toString('latin1'), i = txt.search(/(Content-Type|MIME-Version):/i);
+    if (i < 0) return [];
+    raw = Buffer.from(txt.slice(i), 'latin1');
+  }
+  const mail = await simpleParser(raw);
+  const out = [];
+  for (const a of mail.attachments || []) {
+    if (a.filename && STATEMENT_FILE.test(a.filename)) out.push({ name: a.filename, buffer: a.content });
+    // Vnořená podepsaná zpráva (podpis v podpisu)
+    else if (/rfc822|pkcs7-mime|multipart\/signed/i.test(a.contentType || '') && a.content) { try { out.push(...(await filesFromSmime(a.content))); } catch (e) { /* ignoruj */ } }
+  }
+  return out;
+}
 
 let running = false;
 let lastRun = null;
@@ -47,12 +68,23 @@ async function runOnce({ markRead = true, all = false, passwords = null, trigger
     progress.phase = 'importing'; progress.total = msgs.length;
     for (const m of msgs) {
       progress.current = (m.receivedDateTime ? String(m.receivedDateTime).slice(0, 10) + ' — ' : '') + (m.subject || 'e-mail');
-      const atts = (m.attachments || []).filter((a) => !a.isInline && STATEMENT_FILE.test(a.name || ''));
+      const atts = (m.attachments || []).filter((a) => !a.isInline && (STATEMENT_FILE.test(a.name || '') || SMIME(a)));
       if (!atts.length) { progress.done++; continue; }
       let allOk = true;
+      // Rozbal S/MIME obálky na skutečné přílohy výpisu
+      const soubory = [];
       for (const a of atts) {
+        if (!SMIME(a)) { soubory.push({ a }); continue; }
         try {
-          const file = await graph.downloadAttachment(mb, m.id, a.id);
+          const f = await graph.downloadAttachment(mb, m.id, a.id);
+          const inner = f && f.buffer ? await filesFromSmime(f.buffer) : [];
+          if (!inner.length) { allOk = false; report.errors.push((m.subject || 'e-mail') + ': podepsaná zpráva (S/MIME) bez přílohy výpisu'); }
+          inner.forEach((x) => soubory.push({ a: { name: x.name }, file: { buffer: x.buffer } }));
+        } catch (e) { allOk = false; report.errors.push((m.subject || 'e-mail') + ': S/MIME se nepodařilo rozbalit — ' + e.message); }
+      }
+      for (const { a, file: predem } of soubory) {
+        try {
+          const file = predem || await graph.downloadAttachment(mb, m.id, a.id);
           if (!file || !file.buffer) { allOk = false; report.errors.push(a.name + ': nelze stáhnout'); continue; }
           const r = await importStatementBuffer({ buffer: file.buffer, filename: a.name, source: 'email', passwords });
           if (r.status === 'imported') report.imported.push({ file: a.name, statement_id: r.statement_id, statement: r.statement_number, transactions: r.inserted, matched: r.matched ? r.matched.matched : null, warnings: r.warnings });
