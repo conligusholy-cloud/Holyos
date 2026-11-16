@@ -79,6 +79,12 @@ router.get('/players', api(async (req, res) => {
       privedl_me: p.invited_by_id ? (ZVOU[p.invited_by_id] || ('hráč #' + p.invited_by_id)) : null,
       // Odkud přišel, když ho nikdo nepozval — z reklamy, z odkazu, sám.
       zdroj: p.zdroj || null,
+      // Odkud se připojuje — z IP, nikde se na to neptáme. U mobilních sítí
+      // a VPN to ukazuje bránu operátora, ne skutečné město.
+      geo_mesto: p.geo_city || null,
+      geo_kraj: p.geo_region || null,
+      geo_zeme: p.geo_country || null,
+      geo_cc: p.geo_cc || null,
       mist: (S[p.id] && S[p.id]._count._all) || 0,
       karet: (C[p.id] && C[p.id]._count._all) || 0,
       nakupu: (P[p.id] && P[p.id]._count._all) || 0,

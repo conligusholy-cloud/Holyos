@@ -7679,6 +7679,16 @@ model GamePlayer {
   reg_ip        String?   @db.VarChar(64)
   reg_ua        String?   @db.Text
 
+  // Odkud se hráč připojuje — město a země odvozené z IP, jako to dělá
+  // analytika. Nikde se na to neptáme. geo_ip drží IP, ze které se to naposledy
+  // zjišťovalo, aby se stejná adresa nedohledávala pořád dokola.
+  geo_city      String?   @db.VarChar(80)
+  geo_region    String?   @db.VarChar(80)
+  geo_country   String?   @db.VarChar(80)
+  geo_cc        String?   @db.VarChar(4)
+  geo_ip        String?   @db.VarChar(64)
+  geo_at        DateTime?
+
   cards     GameCard[]
   purchases GamePurchase[]
   subs      GameSubscription[]

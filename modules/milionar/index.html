@@ -184,6 +184,11 @@
           <input id="pl-q" class="price-in wide" style="text-align:left;width:260px" placeholder="Hledat nick, e-mail, příjmení">
           <button class="btn sm" id="pl-find">Hledat</button>
         </div>
+        <p class="note" style="margin:0 0 12px">„Odkud hraje" je odvozené z IP, nikde se na to
+          hráče neptáme — stejně jako to dělá běžná analytika. Zjišťuje se při načtení hry
+          a znovu až po dvou týdnech nebo při změně IP. Přesnost podle toho: na mobilních
+          sítích to často ukáže město, kde sedí brána operátora, a přes VPN úplně jinou zemi.
+          Na orientaci, kde se hra chytá, to stačí; na nic jiného se to používat nemá.</p>
         <div class="tbl-wrap"><table class="data-table" id="pl-tbl"></table></div>
       </div>
 
@@ -879,7 +884,8 @@
       var q = document.getElementById('pl-q').value.trim();
       get('/players?limit=300' + (q ? '&q=' + encodeURIComponent(q) : '')).then(function (j) {
         document.getElementById('pl-tbl').innerHTML =
-          '<thead><tr><th>Nick</th><th>Jméno a e-mail</th><th class="num">Prádlomatů</th><th class="num">Míst</th>'
+          '<thead><tr><th>Nick</th><th>Jméno a e-mail</th><th>Odkud hraje</th>'
+          + '<th class="num">Prádlomatů</th><th class="num">Míst</th>'
           + '<th class="num">Měst</th><th class="num">Zbyde / měsíc</th>'
           + '<th class="num">Hotovost</th><th class="num">Úvěr</th><th class="num">Otevření</th>'
           + '<th class="num">Přivedl</th>'
@@ -891,6 +897,11 @@
               + (p.zdroj ? '<div class="note">z: ' + esc(p.zdroj) + '</div>' : '') + '</td>'
               + '<td>' + (p.jmeno ? esc(p.jmeno) : '<span class="note">—</span>')
               + (p.email ? '<div class="note">' + esc(p.email) + '</div>' : '') + '</td>'
+              + '<td>' + (p.geo_mesto || p.geo_zeme
+                  ? esc(p.geo_mesto || p.geo_zeme)
+                    + '<div class="note">' + esc([p.geo_kraj, p.geo_zeme].filter(function (x) {
+                        return x && x !== p.geo_mesto; }).join(' · ')) + '</div>'
+                  : '<span class="note">—</span>') + '</td>'
               + '<td class="num">' + cz(p.pradlomatu) + '</td><td class="num">' + cz(p.mist) + '</td>'
               + '<td class="num">' + cz(p.mest) + '</td>'
               + '<td class="num"><b class="' + (p.prijem > 0 ? 'ok' : '') + '">' + cz(p.prijem) + ' L$</b></td>'
@@ -906,7 +917,7 @@
               + '<td class="note">' + dt(naposled(p)) + '</td>'
               + '<td><button class="btn sm" data-off="' + p.id + '" data-v="' + (p.disabled ? '0' : '1') + '">'
               + (p.disabled ? 'Odblokovat' : 'Zablokovat') + '</button></td></tr>';
-          }).join('') : '<tr><td colspan="15" class="note" style="padding:20px">Zatím tu nikdo není.</td></tr>')
+          }).join('') : '<tr><td colspan="16" class="note" style="padding:20px">Zatím tu nikdo není.</td></tr>')
           + '</tbody>';
         [].forEach.call(document.querySelectorAll('[data-detail]'), function (b) {
           b.onclick = function () { detail(b.getAttribute('data-detail')); };

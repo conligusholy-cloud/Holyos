@@ -854,6 +854,9 @@ router.get('/account/me', requirePlayer, async (req, res, next) => {
     let p = req.player;
     try { p = await narokujRef(p, req.query.ref); }
     catch (e) { console.warn('[game] narokovani ref v /me:', e.message); }
+    // Odkud se hráč připojuje — doplní se na pozadí, odpověď na to nečeká.
+    // Jednou za načtení hry stačí; služba se stejně ptá jen při změně IP.
+    require('../services/game/geo').obnov(p, ipOf(req));
     res.json({ ok: true, player: await pub(p), state: p.state || null, rev: p.state_rev || 0,
       // Žebřík hodností posíláme ze serveru, aby hra v liště neukazovala jiný
       // titul, než jaký u toho hráče vidí ostatní v žebříčku a na burze.
