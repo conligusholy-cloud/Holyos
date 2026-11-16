@@ -12898,6 +12898,11 @@ var SYNC_TIMEOUT_MS = 45000;   // a tolik se na odpověď vůbec čeká
 var syncBusyAt = 0, syncOk = 0, syncVarovano = 0;
 // Proč se neukládá. Bez toho hráč i my vidíme jen „neuložilo se" a hádáme.
 var SYNC_CHYBA = null;
+// Počitadla, ze kterých se pozná, kde se to zaseklo: kolik pokusů se vůbec
+// rozjelo, kolik jich doběhlo (ať už dobře, nebo chybou) a jaký byl poslední
+// stavový kód. Když je pokusů hodně a odpovědí nula, neodpovídá server; když
+// je nula i pokusů, hra uložení vůbec nepustila a chyba je na naší straně.
+var SYNC_POKUSU = 0, SYNC_ODPOVEDI = 0, SYNC_STATUS = null;
 function syncState(force) {
   if (wiped || !ME || !S) return Promise.resolve();
   if (syncBusy) {
@@ -12909,7 +12914,7 @@ function syncState(force) {
   // uložení při odchodu, to si vynutíme přes force.
   if (!force && document.hidden) return Promise.resolve();
   if (!force && Date.now() - syncAt < 15000) return Promise.resolve();
-  syncBusy = true; syncAt = Date.now(); syncBusyAt = syncAt;
+  syncBusy = true; syncAt = Date.now(); syncBusyAt = syncAt; SYNC_POKUSU++;
   // Vlastní strážce na úrovni požadavku: když server mlčí, spojení přerušíme
   // a pustíme ho příště znovu.
   var prerus = null;
@@ -12925,6 +12930,7 @@ function syncState(force) {
     vyzvednuto: potvrzuju }, 'PUT', signal ? { signal: signal } : null)
     .then(function (r) {
       syncBusy = false;
+      SYNC_ODPOVEDI++; SYNC_STATUS = r.status;
       if (prerus) clearTimeout(prerus);
       if (r.ok) {
         syncOk = Date.now(); syncVarovano = 0; SYNC_CHYBA = null;
@@ -12959,6 +12965,7 @@ function syncState(force) {
     })
     .catch(function (err) {
       syncBusy = false;
+      SYNC_ODPOVEDI++;
       if (prerus) clearTimeout(prerus);
       SYNC_CHYBA = (err && err.name === 'AbortError')
         ? 'server neodpověděl do ' + Math.round(SYNC_TIMEOUT_MS / 1000) + ' s'
@@ -12973,11 +12980,21 @@ function hlidejUkladani() {
   if (wiped || !ME || !S || document.hidden) return;
   if (!syncOk) { syncOk = Date.now(); return; }
   var ticho = Date.now() - syncOk;
+  // Po minutě ticha zkusíme uložit natvrdo. Vynucené uložení obejde brzdu
+  // patnácti vteřin i pravidlo „na pozadí se neukládá", takže ani jedno
+  // z nich nemůže být příčinou dlouhého ticha.
+  if (ticho > 60000) syncState(true);
   if (ticho < SYNC_TICHO_MS) return;
   if (Date.now() - syncVarovano < 300000) return;
   syncVarovano = Date.now();
+  // Do hlášky patří i počitadla — bez nich se nedá poznat, jestli hra uložení
+  // vůbec pustila, nebo jestli server mlčí.
   toast('Hra se ' + Math.round(ticho / 60000) + ' minuty neuložila na server'
-    + (SYNC_CHYBA ? ': ' + SYNC_CHYBA : ' — zkontroluj připojení') + '. Zkoušíme to dál.', 'err');
+    + (SYNC_CHYBA ? ': ' + SYNC_CHYBA : '')
+    + ' · pokusů ' + SYNC_POKUSU + ', odpovědí ' + SYNC_ODPOVEDI
+    + (SYNC_STATUS ? ', naposledy ' + SYNC_STATUS : '')
+    + (syncBusy ? ', právě běží' : '')
+    + '. Zkoušíme to dál.', 'err');
 }
 
 // ─── Heslo k rozehranému účtu ────────────────────────────────────────────────
