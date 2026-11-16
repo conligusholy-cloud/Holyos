@@ -154,6 +154,19 @@ function main() {
   const bezpecny = (c) => {
     if (c[0] === "'") return true;
     if (/\b(if|return|var|let|const|for|while|function|new|delete|typeof)\b/.test(c)) return false;
+    // Celý člen v závorce je uzavřený výraz — klidně i s podmínkou.
+    // '... stojí ' + (kolik === 1 ? 'jeden' : 'dva') + ' kusy' se takhle
+    // dá složit do jedné věty a podmínka se jen dosadí. Bez toho by se
+    // kvůli jediné podmínce nesloučilo nic a věta zůstala v úlomcích.
+    if (c[0] === '(' && c[c.length - 1] === ')' && !/[;{}]|=>/.test(c)
+        && !/(^|[^=!<>])=([^=]|$)/.test(c)) {
+      let h = 0, celek = true;
+      for (let i = 0; i < c.length; i++) {
+        if (c[i] === '(') h++;
+        else if (c[i] === ')') { h--; if (h === 0 && i < c.length - 1) { celek = false; break; } }
+      }
+      if (celek && h === 0) return true;
+    }
     if (/=>|[?:]/.test(c)) return false;
     if (/(^|[^=!<>])=([^=]|$)/.test(c)) return false;
     if (/[;{}]/.test(c)) return false;
