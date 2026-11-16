@@ -325,6 +325,7 @@ router.get('/', async (req, res, next) => {
     const where = {};
     if (['refund', 'receipt'].includes(req.query.kind)) where.kind = req.query.kind;
     if (req.query.status) where.status = String(req.query.status);
+    if (req.query.kind !== 'refund') await backfillReceiptInvoices();
     const rows = await prisma.washComplaint.findMany({ where, orderBy: { created_at: 'desc' }, take: 2000 });
     const counts = await prisma.washComplaint.groupBy({ by: ['kind', 'status'], _count: { _all: true } }).catch(() => []);
     res.json({ rows, counts: counts.map((c) => ({ kind: c.kind, status: c.status, n: c._count._all })) });
@@ -355,6 +356,7 @@ router.get('/:id(\\d+)', async (req, res, next) => {
   try {
     const row = await prisma.washComplaint.findUnique({ where: { id: parseInt(req.params.id, 10) } });
     if (!row) return res.status(404).json({ error: 'Žádost nenalezena' });
+    if (row.kind === 'receipt' && row.receipt_number) await ensureReceiptInvoice(row, row.receipt_number, req.user).catch(() => {});
     const cn = row.kind === 'refund' ? await findCreditNote(row).catch(() => null) : null;
     res.json(cn ? Object.assign({}, row, { credit_note: { id: cn.id, invoice_number: cn.invoice_number, status: cn.status, total: cn.total, delivery_status: cn.delivery_status } }) : row);
   } catch (err) { next(err); }
@@ -448,8 +450,7 @@ async function ensureCreditNote(row, user) {
   const st = await getSettings(), vat = Number(st.vat_rate) || 0, total = Number(row.amount);
   const base = Math.round(total / (1 + vat / 100) * 100) / 100, vatAmount = Math.round((total - base) * 100) / 100;
   // Zákazník jako firma v adresáři (podle e-mailu), ať se dobropis i platba vážou na stejný záznam
-  let company = await prisma.company.findFirst({ where: { email: { equals: row.email, mode: 'insensitive' }, type: { in: ['customer', 'both'] } } });
-  if (!company) company = await prisma.company.create({ data: { name: row.customer_name.slice(0, 255), type: 'customer', email: row.email, phone: String(row.phone || '').slice(0, 20), bank_account: row.account ? String(row.account).slice(0, 50) : null, notes: 'Zákazník prádlomatu — vrácení platby ' + row.number } });
+  const company = await ensureCustomerCompany(row);
   const { generateInvoiceNumber } = require('../services/accountant/invoice-numbering');
   const tx = new Date(row.tx_at), popis = 'Vrácení platby — ' + row.service + ', ' + row.place_label + ', transakce ' + tx.toLocaleDateString('cs-CZ', { timeZone: 'Europe/Prague' });
   const due = new Date(); due.setDate(due.getDate() + 3);
@@ -468,6 +469,34 @@ async function ensureCreditNote(row, user) {
   });
   return inv;
 }
+// Zákazník prádlomatu jako firma v adresáři (podle e-mailu)
+async function ensureCustomerCompany(row) {
+  let company = await prisma.company.findFirst({ where: { email: { equals: row.email, mode: 'insensitive' }, type: { in: ['customer', 'both'] } } });
+  if (!company) company = await prisma.company.create({ data: { name: row.customer_name.slice(0, 255), type: 'customer', email: row.email, phone: String(row.phone || '').slice(0, 20), bank_account: row.account ? String(row.account).slice(0, 50) : null, notes: 'Zákazník prádlomatu — žádost ' + row.number } });
+  return company;
+}
+// Vystavený doklad k platbě v prádlomatu (zjednodušený daňový doklad) se zapíše i do Účetních dokladů → Vydané (už zaplaceno)
+async function ensureReceiptInvoice(row, number, user) {
+  const ex = await prisma.invoice.findFirst({ where: { source: 'wash_receipt', external_number: row.number } });
+  if (ex) return ex;
+  const d = await receiptData(row), company = await ensureCustomerCompany(row), tx = new Date(row.tx_at);
+  const pm = /mince|bankov/i.test(row.pay_method) ? 'cash' : 'card';
+  return prisma.invoice.create({ data: {
+    invoice_number: number, external_number: row.number, type: 'issued', direction: 'ar', source: 'wash_receipt', company_id: company.id, currency: 'CZK',
+    subtotal: d.base.toFixed(2), vat_amount: d.vatAmount.toFixed(2), total: d.total.toFixed(2), paid_amount: d.total.toFixed(2),
+    vat_regime: d.vat ? 'standard' : 'non_vat_payer', date_issued: new Date(), date_taxable: tx, date_due: tx, payment_method: pm, status: 'paid',
+    note: 'Zjednodušený daňový doklad k platbě v prádlomatu (' + row.place_label + ') — žádost ' + row.number, created_by_user_id: (user && user.id) || null,
+    items: { create: [{ line_order: 1, description: (row.service + ' — ' + row.place_label).slice(0, 500), quantity: 1, unit: 'ks', unit_price: d.base.toFixed(4), vat_rate: d.vat, subtotal: d.base.toFixed(2), vat_amount: d.vatAmount.toFixed(2), total: d.total.toFixed(2) }] },
+  } });
+}
+// Doplní do Účetních dokladů doklady, které už byly odeslané dřív, než se začaly zapisovat (jednou po startu + při otevření seznamu)
+async function backfillReceiptInvoices() {
+  try {
+    const rows = await prisma.washComplaint.findMany({ where: { kind: 'receipt', receipt_number: { not: null } } });
+    for (const r of rows) await ensureReceiptInvoice(r, r.receipt_number, null).catch((e) => console.warn('[wash] doklad ' + r.receipt_number + ' do Účetních dokladů:', e.message));
+  } catch (e) { console.warn('[wash] backfill dokladů:', e.message); }
+}
+setTimeout(backfillReceiptInvoices, 45000);
 async function markCreditNotePaid(inv) {
   if (inv.status === 'paid') return inv;
   return prisma.invoice.update({ where: { id: inv.id }, data: { status: 'paid', paid_amount: inv.total } });
@@ -574,6 +603,7 @@ router.post('/:id(\\d+)/send-receipt', async (req, res, next) => {
       body: 'Dobrý den,\n\nv příloze posíláme doklad k vaší platbě ze dne ' + new Date(row.tx_at).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' }) + ' (' + row.place_label + ', ' + kc(row.amount) + ').\n\nDěkujeme, že využíváte naše prádlomaty.',
       attachments: [{ filename: number + '.pdf', content: Buffer.from(pdf), contentType: 'application/pdf' }] });
     if (!r || !r.sent) return res.status(502).json({ error: 'E-mail se nepodařilo odeslat: ' + ((r && (r.error || r.skipped)) || 'neznámá chyba') });
+    await ensureReceiptInvoice(row, number, req.user).catch((e) => console.warn('[wash] doklad do Účetních dokladů:', e.message));
     const upd = await prisma.washComplaint.update({ where: { id }, data: { receipt_number: number, receipt_sent_at: new Date(), status: 'done', resolved_at: new Date(), resolved_by: whoOf(req),
       history: hist(row, 'Doklad ' + number + ' odeslán na ' + row.email, whoOf(req)) } });
     res.json(upd);
