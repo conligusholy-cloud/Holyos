@@ -15,7 +15,10 @@
     "db:studio": "npx prisma studio",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/patch-fleet-frontend.js",
-    "i18n:sync": "node scripts/compounder-i18n-sync.js"
+    "i18n:sync": "node scripts/compounder-i18n-sync.js",
+    "texty:kontrola": "node nastroje/texty-kontrola.js",
+    "texty:prelozit": "node nastroje/texty-prelozit.js",
+    "texty:vytahni": "node nastroje/texty-vytahni.js"
   },
   "engines": {
     "node": ">=22.0.0"
