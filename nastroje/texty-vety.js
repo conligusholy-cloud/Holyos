@@ -96,7 +96,19 @@ function retezy(txt) {
       if (zas.length > 1) zas.pop();
       i++; continue;
     }
+    // Klíčové slovo řetěz ukončí — 'return ' + text by jinak byl první člen
+    // a celá věta by propadla.
+    if (/[A-Za-z]/.test(z) && !/[\w$.]/.test(txt[i - 1] || '')) {
+      const slovo = /^(return|throw|case|else|do)\b/.exec(txt.slice(i));
+      if (slovo) { uzavri(i); i += slovo[0].length; continue; }
+    }
+    // Přiřazení řetěz ukončí. Bez toho by prvním členem bylo '= text' a
+    // celá věta by kvůli tomu propadla. Platí i pro +=.
+    if (z === '+' && txt[i + 1] === '=') { uzavri(i); i += 2; continue; }
     if (z === '+') { dejClen(i); i++; continue; }
+    if (z === '=' && txt[i + 1] !== '=' && !'=!<>+-*/%&|^'.includes(txt[i - 1])) {
+      uzavri(i); i++; continue;
+    }
     if (z === '?' || z === ':' || z === ',' || z === ';') { uzavri(i); i++; continue; }
     if (z !== ' ' && z !== '\t' && z !== '\n') zacni(i);
     i++;
@@ -151,27 +163,29 @@ function main() {
   // Jeden špatný člen nesmí zabít celý řetěz. Dlouhá věta často končí
   // přílepkem s podmínkou — + (lze ? neco() : '') — a kvůli němu by se
   // nesloučilo nic. Bereme proto nejdelší souvislé úseky bezpečných členů.
+  // Člen je bezpečný, když je to uzavřený výraz: závorky sedí a není v něm
+  // nic, co by přetékalo ven. Podmínku ani složené závorky uvnitř zakazovat
+  // nemusíme — skener řetěz dělí na čárce, otazníku i dvojtečce své úrovně,
+  // takže co zbyde uvnitř členu, je vždycky zanořené v závorce.
   const bezpecny = (c) => {
     if (c[0] === "'") return true;
-    if (/\b(if|return|var|let|const|for|while|function|new|delete|typeof)\b/.test(c)) return false;
-    // Celý člen v závorce je uzavřený výraz — klidně i s podmínkou.
-    // '... stojí ' + (kolik === 1 ? 'jeden' : 'dva') + ' kusy' se takhle
-    // dá složit do jedné věty a podmínka se jen dosadí. Bez toho by se
-    // kvůli jediné podmínce nesloučilo nic a věta zůstala v úlomcích.
-    if (c[0] === '(' && c[c.length - 1] === ')' && !/[;{}]|=>/.test(c)
-        && !/(^|[^=!<>])=([^=]|$)/.test(c)) {
-      let h = 0, celek = true;
-      for (let i = 0; i < c.length; i++) {
-        if (c[i] === '(') h++;
-        else if (c[i] === ')') { h--; if (h === 0 && i < c.length - 1) { celek = false; break; } }
+    if (/\b(if|else|return|var|let|const|for|while|function|new|delete|typeof|throw)\b/.test(c)) return false;
+    if (/=>|;/.test(c)) return false;
+    let h = 0;
+    for (let i = 0; i < c.length; i++) {
+      const z = c[i];
+      if (z === "'" || z === '"' || z === '`') {
+        const q = z; i++;
+        while (i < c.length && (c[i] !== q || c[i - 1] === '\\')) i++;
+        continue;
       }
-      if (celek && h === 0) return true;
+      if (z === '(' || z === '[' || z === '{') h++;
+      else if (z === ')' || z === ']' || z === '}') { h--; if (h < 0) return false; }
+      // Přiřazení na nejvyšší úrovni by znamenalo, že člen není jen hodnota.
+      else if (h === 0 && z === '=' && c[i - 1] !== '=' && c[i - 1] !== '!'
+               && c[i - 1] !== '<' && c[i - 1] !== '>' && c[i + 1] !== '=') return false;
     }
-    if (/=>|[?:]/.test(c)) return false;
-    if (/(^|[^=!<>])=([^=]|$)/.test(c)) return false;
-    if (/[;{}]/.test(c)) return false;
-    return /^[A-Za-z_$][\w$.]*(\s*\([^;{}]*\))?(\s*\[[^\];{}]*\])?$/.test(c)
-      || /^[A-Za-z_$][\w$.]*\s*\([\s\S]*\)$/.test(c);
+    return h === 0;
   };
   const useky = [];
   nalezy.forEach((n) => {
