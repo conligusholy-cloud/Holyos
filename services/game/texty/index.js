@@ -45,8 +45,26 @@ function katalogPro(jazyk) {
   return Object.assign({}, KATALOGY[jadro.ZDROJ] || {}, KATALOGY[j] || {});
 }
 
+// ─── Scénáře infolinky ───────────────────────────────────────────────────────
+// Padesát rozhovorů, přes tisíc replik. Jako klíče v katalogu by se v tom
+// nedalo psát, tak mají vlastní soubor na jazyk. Když pro jazyk nejsou,
+// vrátí se české — rozhovor česky je lepší než infolinka, co nezvoní.
+const SCENARE = {};
+function scenare(jazyk) {
+  const j = jadro.JAZYKY.indexOf(jazyk) >= 0 ? jazyk : jadro.ZDROJ;
+  if (SCENARE[j]) return SCENARE[j];
+  try {
+    SCENARE[j] = JSON.parse(fs.readFileSync(path.join(__dirname, 'linka.' + j + '.json'), 'utf8'));
+  } catch (e) {
+    if (j !== jadro.ZDROJ) return scenare(jadro.ZDROJ);
+    console.warn('[game-texty] scénáře infolinky se nenačetly:', e && e.message);
+    SCENARE[j] = [];
+  }
+  return SCENARE[j];
+}
+
 module.exports = {
-  t, tHraci, jazykHrace, katalogPro, nacti,
+  t, tHraci, jazykHrace, katalogPro, nacti, scenare,
   JAZYKY: jadro.JAZYKY, ZDROJ: jadro.ZDROJ,
   cislo: jadro.cislo, penize: jadro.penize, datum: jadro.datum,
   _katalogy: KATALOGY,

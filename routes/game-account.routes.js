@@ -1088,6 +1088,16 @@ router.get('/texty/:jazyk', (req, res) => {
     texty: TEXTY.katalogPro(j) });
 });
 
+// GET /texty/linka/:jazyk → scénáře infolinky. Je to souvislá próza, ne
+// popisky, tak má vlastní soubor místo tisíce klíčů v katalogu. Když pro
+// daný jazyk ještě nejsou, pošlou se české — rozhovor česky je pořád lepší
+// než infolinka, která nezvoní.
+router.get('/texty/linka/:jazyk', (req, res) => {
+  const j = String(req.params.jazyk || '').slice(0, 5);
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json({ ok: true, scenare: TEXTY.scenare(j) });
+});
+
 // POST /account/jazyk { jazyk } → přepnutí jazyka u účtu
 router.post('/account/jazyk', requirePlayer, async (req, res, next) => {
   try {
