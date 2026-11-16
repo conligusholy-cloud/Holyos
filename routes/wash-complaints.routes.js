@@ -627,5 +627,13 @@ router.post('/:id(\\d+)/email', async (req, res, next) => {
 module.exports = router;
 module.exports.publicRouter = publicRouter;
 module.exports.processPaymentForRefunds = processPaymentForRefunds;
+// PDF dokladu z Účetních dokladů: vlastní vzhled zjednodušeného dokladu / dobropisu (jinak generický PDF faktury)
+module.exports.pdfForInvoice = async function (inv) {
+  if (!inv || !['wash_receipt', 'wash_refund'].includes(inv.source)) return null;
+  const row = await prisma.washComplaint.findUnique({ where: { number: inv.external_number } });
+  if (!row) return null;
+  const buf = inv.source === 'wash_receipt' ? await pdfFromHtml(receiptHtml(row, await receiptData(row), inv.invoice_number)) : await creditNotePdf(row, inv);
+  return Buffer.from(buf);
+};
 module.exports.sendCreditNoteEmail = sendCreditNoteEmail;
 module.exports._test = { normPhone, normAccount, checkToken, formToken, powChallenge, powCheck, imgChallenge, imgCheck, passFor };

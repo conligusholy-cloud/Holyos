@@ -3558,7 +3558,9 @@ router.get('/invoices/:id/pdf', async (req, res, next) => {
 
     let pdfBuffer;
     try {
-      pdfBuffer = await generateInvoicePdf(invoice, ourCompany);
+      // Doklady z Reklamací praní (doklad k platbě / dobropis) mají vlastní vzhled
+      if (invoice.source === 'wash_receipt' || invoice.source === 'wash_refund') pdfBuffer = await require('./wash-complaints.routes').pdfForInvoice(invoice).catch(() => null);
+      if (!pdfBuffer) pdfBuffer = await generateInvoicePdf(invoice, ourCompany);
     } catch (e) {
       console.error('[invoice-pdf] Generation failed:', e);
       return res.status(500).json({ error: 'PDF generování selhalo: ' + e.message });

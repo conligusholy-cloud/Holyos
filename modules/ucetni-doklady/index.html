@@ -2269,6 +2269,9 @@
 
             (inv.order_id ? '<div id="order-history-panel" style="margin-top:18px;"><div style="color:#6b7280;font-size:12px;">Načítám historii objednávky…</div></div>' : '') +
 
+            // Doklady z Reklamací praní: rovnou zobrazit PDF v detailu
+            ((inv.source === 'wash_receipt' || inv.source === 'wash_refund') ? '<div id="wash-pdf-preview" style="margin-top:18px;"><div style="color:#6b7280;font-size:12px;">Načítám doklad…</div></div>' : '') +
+
             // Akce: vlevo méně časté / nebezpečné, vpravo hlavní
             '<div class="dv-actions">' +
               '<div class="dv-actions-l">' +
@@ -2296,7 +2299,20 @@
         '</div>'
       );
       if (inv.order_id) loadOrderHistoryPanel(inv.order_id);
+      if (inv.source === 'wash_receipt' || inv.source === 'wash_refund') loadWashPdfPreview(inv.id);
     };
+
+    // Vloží PDF dokladu přímo do detailu (fetch s autorizací → blob → iframe)
+    async function loadWashPdfPreview(id) {
+      const el = document.getElementById('wash-pdf-preview'); if (!el) return;
+      try {
+        const headers = {}; if (token) headers['Authorization'] = 'Bearer ' + token;
+        const resp = await fetch('/api/accounting/invoices/' + id + '/pdf?inline=1', { credentials: 'include', headers });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const url = URL.createObjectURL(await resp.blob());
+        el.innerHTML = '<iframe src="' + url + '" style="width:100%;height:720px;border:1px solid var(--border);border-radius:10px;background:#fff"></iframe>';
+      } catch (e) { el.innerHTML = '<div style="color:#f87171;font-size:12.5px">Doklad se nepodařilo zobrazit: ' + escapeHtml(e.message) + '</div>'; }
+    }
 
     // Historie objednávky + související doklady (data z /api/wh/orders/:id/history).
     async function loadOrderHistoryPanel(orderId) {
