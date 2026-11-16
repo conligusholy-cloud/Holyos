@@ -62,9 +62,11 @@ async function splatkyPujcek(ted) {
       if (hotovost >= p.splatka) {
         await prisma.$transaction(async (tx) => {
           await dorucit(tx, p.borrower_id, 'cash', -p.splatka,
-            'Splátka půjčky — ' + p.lender_nick);
+            'Splátka půjčky — ' + p.lender_nick,
+            { text_kod: 'dor.splatka_pujcky', text_data: { p1: p.lender_nick } });
           await dorucit(tx, p.lender_id, 'cash', p.splatka,
-            'Splátka od ' + p.borrower_nick);
+            'Splátka od ' + p.borrower_nick,
+            { text_kod: 'dor.splatka_od', text_data: { p1: p.borrower_nick } });
           const hotovo = p.splaceno + 1 >= p.mesicu;
           await tx.gameLoan.update({ where: { id: p.id }, data: {
             splaceno: p.splaceno + 1, zmeskano: 0,
@@ -100,10 +102,13 @@ async function splatkyPujcek(ted) {
             await dorucit(tx, p.borrower_id, 'unit_remove', null,
               'Nezaplatil jsi splátku a propadla zástava — ' + (c.name || p.zastava_spot)
               + ' si vzal ' + p.lender_nick,
-              { spot_id: p.zastava_spot });
+              { spot_id: p.zastava_spot, text_kod: 'dor.propadla_zastava_tobe',
+                text_data: { p1: (c.name || p.zastava_spot), p2: p.lender_nick } });
             await dorucit(tx, p.lender_id, 'unit_add', null,
               'Propadlá zástava od ' + p.borrower_nick + ' — ' + (c.name || '') + ' je tvůj',
-              { spot_id: p.zastava_spot, model: c.model,
+              { text_kod: 'dor.propadla_zastava_tvoje',
+                text_data: { p1: p.borrower_nick, p2: (c.name || '') },
+                spot_id: p.zastava_spot, model: c.model,
                 data: { name: c.name, lat: c.lat, lon: c.lon, rent: c.rent, area_key: c.area_key } });
             await tx.gameLoan.update({ where: { id: p.id }, data: { stav: 'propadlo', zmeskano } });
           });
@@ -114,9 +119,11 @@ async function splatkyPujcek(ted) {
       // Zástava není (nebo už dlužníkovi nepatří) — zbytek dluhu jde do banky.
       await prisma.$transaction(async (tx) => {
         await dorucit(tx, p.borrower_id, 'cash', -zbyva,
-          'Vymáhaná půjčka — ' + p.lender_nick);
+          'Vymáhaná půjčka — ' + p.lender_nick,
+          { text_kod: 'dor.vymahana_pujcka', text_data: { p1: p.lender_nick } });
         await dorucit(tx, p.lender_id, 'cash', zbyva,
-          'Doplacená půjčka od ' + p.borrower_nick);
+          'Doplacená půjčka od ' + p.borrower_nick,
+          { text_kod: 'dor.doplacena_pujcka', text_data: { p1: p.borrower_nick } });
         await tx.gameLoan.update({ where: { id: p.id }, data: { stav: 'vymahano', zmeskano } });
       });
       console.log('[game-finance] půjčka #' + p.id + ' vymáhána po ' + zmeskano + ' zmeškaných');
@@ -149,12 +156,16 @@ async function vyplatyPodilu(ted) {
       const pct = Math.round(e.podil * 100) + ' %';
       await prisma.$transaction(async (tx) => {
         if (castka > 0) {
-          await dorucit(tx, e.investor_id, 'cash', castka, 'Podíl ' + pct + ' ve firmě ' + e.firma_nick);
-          await dorucit(tx, e.firma_id, 'cash', -castka, 'Výplata podílu — ' + e.investor_nick);
+          await dorucit(tx, e.investor_id, 'cash', castka, 'Podíl ' + pct + ' ve firmě ' + e.firma_nick,
+            { text_kod: 'dor.podil_ve_firme', text_data: { p1: pct, p2: e.firma_nick } });
+          await dorucit(tx, e.firma_id, 'cash', -castka, 'Výplata podílu — ' + e.investor_nick,
+            { text_kod: 'dor.vyplata_podilu', text_data: { p1: e.investor_nick } });
         } else {
           // Firma prodělává: investor nese svůj díl ztráty.
-          await dorucit(tx, e.investor_id, 'cash', castka, 'Podíl na ztrátě firmy ' + e.firma_nick);
-          await dorucit(tx, e.firma_id, 'cash', -castka, 'Doplatek od podílníka ' + e.investor_nick);
+          await dorucit(tx, e.investor_id, 'cash', castka, 'Podíl na ztrátě firmy ' + e.firma_nick,
+            { text_kod: 'dor.podil_na_ztrate', text_data: { p1: e.firma_nick } });
+          await dorucit(tx, e.firma_id, 'cash', -castka, 'Doplatek od podílníka ' + e.investor_nick,
+            { text_kod: 'dor.doplatek_od_podilnika', text_data: { p1: e.investor_nick } });
         }
         await tx.gameEquity.update({ where: { id: e.id },
           data: { vyplaceno: e.vyplaceno + castka, dalsi_at: dalsi } });

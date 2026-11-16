@@ -155,7 +155,10 @@ function main() {
 
   // Jen literály v jednoduchých uvozovkách — tak je celý game.js psaný.
   const novyText = fn.text.replace(/'((?:[^'\\\n]|\\.)*)'/g, (cele, obsah) => {
-    if (!jeText(obsah, true)) return cele;
+    // Předfiltr tu být nesmí: '<div class="kv"><span>Cena</span>' vypadá jako
+    // kus kódu, ale je v něm text pro hráče. O každém kousku rozhoduje casti()
+    // zvlášť podle toho, jestli stojí mezi značkami.
+    if (!/[A-Za-zÀ-ž]{2}/.test(obsah)) return cele;
     // Text, ve kterém je kus kódu, nechávám na ruční přepis.
     if (/\\'|\$\{|\\n/.test(obsah)) { preskoceno.push(obsah); return cele; }
     const ch = casti(obsah);

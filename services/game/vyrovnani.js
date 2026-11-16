@@ -40,6 +40,7 @@ async function vyrovnejStartovniHotovost() {
         player_id: h.id, kind: 'cash', amount: rozdil, spot_id: KLIC,
         popis: 'Vyrovnání ' + rozdil.toLocaleString('cs-CZ') + ' L$ — noví hráči teď začínají '
           + 's vyšší hotovostí, tak ti doplácíme rozdíl.',
+        text_kod: 'dor.vyrovnani_startovni', text_data: { penize: rozdil },
       },
     });
     poslano++; celkem += rozdil;

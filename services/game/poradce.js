@@ -236,7 +236,21 @@ function prehled(st) {
   return r.join('\n');
 }
 
-async function poradit({ otazka, stav, historie }) {
+// Jazyk odpovědi říká hra — poradce sedí na veřejné cestě, kde se hráč
+// nepřihlašuje, takže si ho ze serveru nezjistí. Pravidla zůstávají česky;
+// mění se jen jazyk, kterým má odpovídat. Kdyby to bylo jinak, anglicky
+// hrající hráč by dostal odpověď česky.
+const JAZYKY = { cs: 'česky', en: 'anglicky (English)' };
+function pravidlaPro(jazyk) {
+  const j = JAZYKY[jazyk] ? jazyk : 'cs';
+  if (j === 'cs') return PRAVIDLA;
+  return PRAVIDLA + '\n\nJAZYK ODPOVĚDI: odpovídej ' + JAZYKY[j] + ', i když se hráč ptá česky.'
+    + ' Herní pojmy překládej podle zvyklostí hry: prádlomat = laundromat, místo = spot,'
+    + ' pobočka = depot, četa = crew, rámec = credit line, zástava = collateral,'
+    + ' splátka = instalment, dražba = auction, podíl = stake. Měna L$ zůstává L$.';
+}
+
+async function poradit({ otazka, stav, historie, jazyk }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return { ok: false, error: 'Poradce teď není k dispozici.' };
   const client = new Anthropic({ apiKey });
@@ -249,7 +263,7 @@ async function poradit({ otazka, stav, historie }) {
     'PŘEHLED MOJÍ HRY:\n' + prehled(stav) + '\n\nOTÁZKA: ' + String(otazka || '').slice(0, 600) });
   try {
     const resp = await messagesCreate(client, {
-      model: MODEL, max_tokens: MAX_TOKENS, system: PRAVIDLA, messages: zpravy,
+      model: MODEL, max_tokens: MAX_TOKENS, system: pravidlaPro(jazyk), messages: zpravy,
     }, { label: 'game-poradce' });
     const text = ((resp && resp.content) || [])
       .filter((c) => c && c.type === 'text').map((c) => c.text).join('\n').trim();

@@ -46,6 +46,22 @@ function jeText(v) {
   return false;
 }
 
+// Text pro hráče nesedí jen samostatně — bývá uvnitř HTML, mezi značkami.
+// Bez tohohle dělení by '<span>Cena</span>' prošlo jako kus kódu.
+function casti(obsah) {
+  if (obsah.indexOf('<') < 0 && obsah.indexOf('>') < 0) return [{ s: obsah, mezi: false }];
+  const out = [];
+  const prvni = obsah.indexOf('<'), posledni = obsah.lastIndexOf('>');
+  let pos = 0;
+  if (prvni > 0) { out.push({ s: obsah.slice(0, prvni), mezi: true }); pos = prvni; }
+  const stred = posledni >= pos ? obsah.slice(pos, posledni + 1) : '';
+  const re = />([^<>]+)</g;
+  let m;
+  while ((m = re.exec(stred)) !== null) out.push({ s: m[1], mezi: true });
+  if (posledni >= pos && posledni + 1 < obsah.length) out.push({ s: obsah.slice(posledni + 1), mezi: true });
+  return out;
+}
+
 function main() {
   const cs = nacti('cs.json', {});
   const en = nacti('en.json', {});
@@ -61,18 +77,45 @@ function main() {
   // 'Koupit za', 'Za den' a 'Hotovost' jsou česky a diakritiku nemají. Bere
   // se proto i text bez ní, když vypadá jako věta a ne jako kus kódu.
   // Komentáře se přeskakují, ty jsou pro nás, ne pro hráče.
-  const radky = fs.readFileSync(HRA, 'utf8').split('\n');
+  // Kouká se i na server: doručenky, události a vyrovnání čte hráč stejně
+  // jako okna ve hře. Správa hry sem nepatří, tu vidí jen majitel, a
+  // game.routes.js je veřejná cesta bez přihlášeného hráče.
+  const HLIDANE = [
+    ['game.js', HRA],
+    ['finance.js', path.join(KOREN, 'services', 'game', 'finance.js')],
+    ['udalosti.js', path.join(KOREN, 'services', 'game', 'udalosti.js')],
+    ['vyrovnani.js', path.join(KOREN, 'services', 'game', 'vyrovnani.js')],
+    ['game-account.routes.js', path.join(KOREN, 'routes', 'game-account.routes.js')],
+    ['game-trade.routes.js', path.join(KOREN, 'routes', 'game-trade.routes.js')],
+  ];
   const zapomenute = [];
-  radky.forEach((l, i) => {
-    const bezKomentare = l.replace(/\/\/.*$/, '');
-    const re = /'((?:[^'\\\n]|\\.)*)'/g;
-    let m;
-    while ((m = re.exec(bezKomentare)) !== null) {
-      // Porovnání — e.key === 'Enter' — je hodnota, ne text pro hráče.
-      const pred = bezKomentare.slice(0, m.index);
-      if (/[=!]==?\s*$/.test(pred)) continue;
-      if (m[1] && jeText(m[1])) zapomenute.push({ radek: i + 1, text: m[1].slice(0, 60) });
-    }
+  HLIDANE.forEach(([jmeno, cesta]) => {
+    let obsah = '';
+    try { obsah = fs.readFileSync(cesta, 'utf8'); } catch (e) { return; }
+    const radkyS = obsah.split('\n');
+    // Posun každého řádku v celém souboru — potřeba na okolí kolem nálezu.
+    const zacatky = []; let poz = 0;
+    radkyS.forEach((l) => { zacatky.push(poz); poz += l.length + 1; });
+    radkyS.forEach((l, i) => {
+      const bezKomentare = l.replace(/\/\/.*$/, '');
+      // Výpis do konzole je pro nás, ne pro hráče.
+      if (/\bconsole\.(log|warn|error|info)\s*\(/.test(bezKomentare)) return;
+      const re = /'((?:[^'\\\n]|\\.)*)'/g;
+      let m;
+      while ((m = re.exec(bezKomentare)) !== null) {
+        // Porovnání — e.key === 'Enter' — je hodnota, ne text pro hráče.
+        const pred = bezKomentare.slice(0, m.index);
+        if (/[=!]==?\s*$/.test(pred)) continue;
+        // Doručenka, která má text_kod, si český popis nechává schválně:
+        // je to záloha zapsaná do databáze pro případ, že by klíč zmizel.
+        // Hráč ji normálně nevidí, překládá se podle klíče.
+        const kolem = obsah.slice(Math.max(0, zacatky[i] - 500), zacatky[i] + l.length + 500);
+        if (kolem.indexOf('text_kod') >= 0) continue;
+        if (!m[1]) continue;
+        const nalez = casti(m[1]).map((c) => c.s.trim()).filter((c) => jeText(c))[0];
+        if (nalez) zapomenute.push({ kde: jmeno, radek: i + 1, text: nalez.slice(0, 60) });
+      }
+    });
   });
 
   // Klíč použitý v kódu, který v katalogu není. Takový se hráči ukáže jako
@@ -120,7 +163,7 @@ function main() {
   if (process.argv.includes('--vypis')) {
     chybi.slice(0, 40).forEach((k) => console.log('  chybí      ' + k));
     zastarale.forEach((k) => console.log('  zastaralé  ' + k));
-    zapomenute.slice(0, 40).forEach((z) => console.log('  v kódu  ř.' + z.radek + '  ' + z.text));
+    zapomenute.slice(0, 200).forEach((z) => console.log('  v kódu  ' + z.kde + ' ř.' + z.radek + '  ' + z.text));
   }
 
   // Nasazení se kvůli překladům nezastavuje — tak to bylo rozhodnuto.

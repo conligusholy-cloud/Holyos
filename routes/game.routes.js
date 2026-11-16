@@ -484,7 +484,7 @@ router.post('/poradce', express.json({ limit: '24kb' }), async (req, res) => {
     const otazka = String(b.otazka || '').trim();
     if (!otazka) return res.json({ ok: false, error: 'Napiš, na co se chceš zeptat.' });
     const { poradit } = require('../services/game/poradce');
-    const out = await poradit({ otazka, stav: b.stav, historie: b.historie });
+    const out = await poradit({ otazka, stav: b.stav, historie: b.historie, jazyk: b.jazyk });
     res.json(out);
   } catch (e) {
     console.warn('[poradce]', e && e.message);

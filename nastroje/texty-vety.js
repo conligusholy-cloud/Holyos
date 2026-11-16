@@ -75,7 +75,7 @@ function retezy(txt) {
   const uzavri = (i) => {
     const u = vrch();
     dejClen(i);
-    if (u.cleny.length > 1 && u.cleny.some((c) => c.s[0] === "'" && jeText(c.s.slice(1, -1))) && u.od >= 0) {
+    if (u.cleny.length > 1 && u.cleny.some((c) => c.s[0] === "'" && maText(c.s.slice(1, -1))) && u.od >= 0) {
       out.push({ od: u.od, do: i, cleny: u.cleny.slice() });
     }
     u.cleny = []; u.od = -1; u.odClenu = -1;
@@ -153,6 +153,26 @@ function dekoduj(s) {
     .replace(/\\u([0-9a-fA-F]{4})/g, (m, h) => String.fromCharCode(parseInt(h, 16)));
 }
 
+// Text pro hráče bývá uvnitř HTML — '>Prozkoumat ' na konci tlačítka. Bez
+// tohohle dělení by celý literál propadl jako kus kódu a věta by se
+// nesloučila.
+function casti(o) {
+  if (o.indexOf('<') < 0 && o.indexOf('>') < 0) return [o];
+  const out = [];
+  const prvni = o.indexOf('<'), posledni = o.lastIndexOf('>');
+  let pos = 0;
+  if (prvni > 0) { out.push(o.slice(0, prvni)); pos = prvni; }
+  const stred = posledni >= pos ? o.slice(pos, posledni + 1) : '';
+  const re = />([^<>]+)</g;
+  let m;
+  while ((m = re.exec(stred)) !== null) out.push(m[1]);
+  if (posledni >= pos && posledni + 1 < o.length) out.push(o.slice(posledni + 1));
+  return out;
+}
+function maText(literal) {
+  return casti(literal).some((c) => jeText(c));
+}
+
 function klicZ(text, predpona, obsazene) {
   let z = text.replace(/\{p\d+\}/g, ' ').normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -211,7 +231,7 @@ function main() {
   nalezy.forEach((n) => {
     let bezi = [];
     const uloz = () => {
-      if (bezi.length > 1 && bezi.some((c) => c.s[0] === "'" && jeText(c.s.slice(1, -1)))) useky.push(bezi.slice());
+      if (bezi.length > 1 && bezi.some((c) => c.s[0] === "'" && maText(c.s.slice(1, -1)))) useky.push(bezi.slice());
       bezi = [];
     };
     n.cleny.forEach((c) => { if (bezpecny(c.s)) bezi.push(c); else { uloz(); vynechane.push(c.s.slice(0, 60)); } });
@@ -223,7 +243,7 @@ function main() {
       if (c.s[0] === "'") { sablona += c.s.slice(1, -1); return; }
       i++; udaje.push('p' + i + ': ' + c.s); sablona += '{p' + i + '}';
     });
-    if (!jeText(sablona) || sablona.indexOf("\\'") >= 0) return;
+    if (!maText(sablona) || sablona.indexOf("\\'") >= 0) return;
     let k = Object.keys(nove).find((x) => nove[x] === sablona);
     if (!k) { k = klicZ(dekoduj(sablona), predpona, obsazene); nove[k] = dekoduj(sablona); }
     const nahrada = 'tx(\'' + k + '\'' + (udaje.length ? ', { ' + udaje.join(', ') + ' }' : '') + ')';
