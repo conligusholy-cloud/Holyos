@@ -1,0 +1,45 @@
+#!/bin/sh
+# =============================================================================
+# Před commitem: dopřeložit, co přibylo
+# =============================================================================
+# Tohle je to, co drží českou a anglickou verzi pohromadě. Při každém commitu
+# se podívá, jestli v katalogu nepřibyl text bez překladu nebo jestli se
+# některý český text nezměnil pod hotovým překladem. Když ano a je po ruce
+# klíč k API, nechá to dopřeložit a přidá do stejného commitu.
+#
+# Commit nikdy nezastaví kvůli překladu — chybějící angličtina hráče nezabije,
+# hra spadne zpátky do češtiny. Zastaví ho jediná věc: klíč použitý v kódu,
+# ke kterému žádný text není. To by hráč viděl jako holý klíč v okně.
+
+if [ -z "$(git diff --cached --name-only | grep -E 'public/compounder/game/game\.js|services/game/texty/|routes/game-')" ]; then
+  exit 0
+fi
+
+node nastroje/texty-kontrola.js
+STAV=$?
+
+if [ "$STAV" -eq 2 ]; then
+  echo ""
+  echo "STOP: v kódu je klíč, ke kterému v katalogu není žádný text."
+  echo "Hráč by na tom místě viděl holý klíč. Doplň ho a zkus to znovu."
+  exit 1
+fi
+
+if [ "$STAV" -eq 1 ]; then
+  if [ -n "$ANTHROPIC_API_KEY" ]; then
+    echo ""
+    echo "Dopřekládám, co přibylo..."
+    if node nastroje/texty-prelozit.js; then
+      git add services/game/texty/en.json services/game/texty/en.meta.json
+      echo "Překlad přidán do commitu."
+    else
+      echo "Překlad se nepovedl — commit jde dál, hra zůstane česky."
+    fi
+  else
+    echo ""
+    echo "Něco je bez překladu, ale v prostředí není ANTHROPIC_API_KEY."
+    echo "Commit jde dál. Až budeš mít klíč, spusť: npm run texty:prelozit"
+  fi
+fi
+
+exit 0
