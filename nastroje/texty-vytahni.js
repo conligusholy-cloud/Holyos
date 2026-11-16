@@ -25,6 +25,14 @@ const CS = path.join(__dirname, '..', 'services', 'game', 'texty', 'cs.json');
 const CZ = /[ěščřžýáíéúůňťďóĚŠČŘŽÝÁÍÉÚŮŇŤĎÓ]/;
 
 // Klíč z textu: bez diakritiky, slova spojená podtržítkem, rozumně krátký.
+// Znak zapsaný ve zdroji jako \u00d7 patří do katalogu jako samotný znak.
+// Jinak by hráč v okně viděl ten zápis, ne křížek.
+function dekoduj(s) {
+  return String(s)
+    .replace(/\\u\{([0-9a-fA-F]+)\}/g, (m, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/\\u([0-9a-fA-F]{4})/g, (m, h) => String.fromCharCode(parseInt(h, 16)));
+}
+
 function klicZ(text, predpona, obsazene) {
   let z = text.normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -143,8 +151,8 @@ function main() {
       if (!cisty) { kusy.push("'" + c.s + "'"); return; }
       const pred = c.s.slice(0, c.s.indexOf(cisty));
       const po = c.s.slice(c.s.indexOf(cisty) + cisty.length);
-      const k = klicZ(cisty, predpona, obsazene);
-      nove[k] = cisty;
+      const k = klicZ(dekoduj(cisty), predpona, obsazene);
+      nove[k] = dekoduj(cisty);
       if (pred) kusy.push("'" + pred + "'");
       kusy.push('esc(tx(\'' + k + '\'))');
       if (po) kusy.push("'" + po + "'");

@@ -114,6 +114,13 @@ function retezy(txt) {
   return cisto;
 }
 
+// Znak zapsaný ve zdroji jako \u00d7 patří do katalogu jako samotný znak.
+function dekoduj(s) {
+  return String(s)
+    .replace(/\\u\{([0-9a-fA-F]+)\}/g, (m, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/\\u([0-9a-fA-F]{4})/g, (m, h) => String.fromCharCode(parseInt(h, 16)));
+}
+
 function klicZ(text, predpona, obsazene) {
   let z = text.replace(/\{p\d+\}/g, ' ').normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -171,7 +178,7 @@ function main() {
     });
     if (!CZ.test(sablona) || sablona.indexOf("\\'") >= 0) return;
     let k = Object.keys(nove).find((x) => nove[x] === sablona);
-    if (!k) { k = klicZ(sablona, predpona, obsazene); nove[k] = sablona; }
+    if (!k) { k = klicZ(dekoduj(sablona), predpona, obsazene); nove[k] = dekoduj(sablona); }
     const nahrada = 'tx(\'' + k + '\'' + (udaje.length ? ', { ' + udaje.join(', ') + ' }' : '') + ')';
     text = text.slice(0, u[0].od) + nahrada + text.slice(u[u.length - 1].do);
   });
