@@ -63,6 +63,16 @@ async function prelozDavku(davka, slovnik) {
 }
 
 async function main() {
+  // Bez klíče nemá smysl zkoušet ani první dávku. Dřív to selhalo u každé
+  // zvlášť a vypsalo sto stejných řádků, ve kterých ta podstatná věta zapadla.
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error('Chybí ANTHROPIC_API_KEY v prostředí — nemám se čím přihlásit k API.');
+    console.error('');
+    console.error('Na tohle okno:   $env:ANTHROPIC_API_KEY = "sk-ant-..."');
+    console.error('Natrvalo:        setx ANTHROPIC_API_KEY "sk-ant-..."  a otevři NOVÉ okno');
+    console.error('Ověření:         echo $env:ANTHROPIC_API_KEY');
+    process.exit(1);
+  }
   const velikost = Number((process.argv.find((a) => a.startsWith('--davka=')) || '').split('=')[1]) || 40;
   const nanecisto = process.argv.includes('--nanecisto');
   const cs = nacti('cs.json', {});
