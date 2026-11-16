@@ -90,6 +90,13 @@ function main() {
   const zdroj = fs.readFileSync(HRA, 'utf8');
   const fn = telo(zdroj, jmeno);
   if (!fn) { console.error('funkci ' + jmeno + ' jsem v game.js nenašel.'); process.exit(1); }
+  // Překladač se jmenuje tx schválně: 't' je v game.js na devětadvaceti
+  // místech lokální proměnná a volání by se tiše stínilo. Kdyby se někde
+  // objevilo i lokální tx, radši se zastavím, než abych to rozbil.
+  if (/(?:var|let|const)\s+tx\b|,\s*tx\s*=/.test(fn.text)) {
+    console.error('ve funkci ' + jmeno + ' je lokální proměnná tx — přepiš ji ručně.');
+    process.exit(2);
+  }
 
   const cs = JSON.parse(fs.readFileSync(CS, 'utf8'));
   const obsazene = new Set(Object.keys(cs));
@@ -126,7 +133,7 @@ function main() {
       const k = klicZ(cisty, predpona, obsazene);
       nove[k] = cisty;
       if (pred) kusy.push("'" + pred + "'");
-      kusy.push('esc(t(\'' + k + '\'))');
+      kusy.push('esc(tx(\'' + k + '\'))');
       if (po) kusy.push("'" + po + "'");
     });
     return kusy.join(' + ');
