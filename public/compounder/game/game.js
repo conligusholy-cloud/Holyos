@@ -9925,6 +9925,19 @@ function nickSheet() {
 // ─── Podíly: kdo vlastní kus mě a kde mám kus já ─────────────────────────────
 // Podíl se vyrovnává každý herní měsíc, takže se vyplatí vidět, jestli to
 // dává smysl: za kolik se koupil, kolik už vynesl a kolik nese teď.
+// Kdy z podílu příjde další výplata. Bez toho hráč u čerstvě koupeného podílu
+// vidí „Zatím vyneslo 0" a nemá jak poznat, jestli je to rozbité, nebo jen
+// ještě nebyl termín. Vyplácí se jednou za herní měsíc, tedy po dvanácti
+// skutečných hodinách; server je obchází po pěti minutách, takže „teď"
+// znamená do pěti minut.
+function vyplataZa(e) {
+  if (!e || !e.dalsi) return 'po herním měsíci';
+  var ms = new Date(e.dalsi).getTime() - Date.now();
+  if (!(ms > 0)) return 'teď';
+  var h = Math.floor(ms / 3600000), m = Math.round((ms % 3600000) / 60000);
+  if (h >= 1) return 'za ' + h + ' h ' + (m ? m + ' min' : '');
+  return 'za ' + Math.max(1, m) + ' min';
+}
 function podilRadek(e, mam) {
   var pct = Math.round(e.podil * 100);
   // U podílu jde o firmu, ne o člověka — proto název firmy, když ho známe.
@@ -9940,6 +9953,8 @@ function podilRadek(e, mam) {
         ? (mam ? 'Zatím vyneslo' : 'Zatím jsi vyplatil')
         : (mam ? 'Zatím jsi doplatil' : 'Zatím ti doplatil')) + '</span><b class="'
     + (e.vyplaceno > 0 ? (mam ? 'ok' : 'warn') : '') + '">' + kcFull(Math.abs(e.vyplaceno)) + '</b></div>'
+    + '<div class="kv"><span>Nejbližší výplata</span><b class="'
+    + (vyplataZa(e) === 'teď' ? 'ok' : '') + '">' + vyplataZa(e) + '</b></div>'
     + (mam
         ? '<div class="bar"><i style="width:' + Math.min(100, Math.max(0, vraceno)) + '%"></i></div>'
           + '<p class="fine">' + (e.vyplaceno >= e.cena
@@ -9975,7 +9990,9 @@ function podilyHtml() {
     var vzal = moje.reduce(function (a, e) { return a + e.vyplaceno; }, 0);
     h += '<h3 style="margin-top:' + (ciziVeMne.length ? '18px' : '2px') + '">Tvoje podíly v cizích firmách</h3>'
       + '<p class="muted small" style="margin:2px 0 8px">Dohromady jsi do nich dal ' + kcFull(dal)
-      + ', vrátilo se ' + kcFull(vzal) + ' a teď nesou ' + kcFull(nese) + ' měsíčně.</p>'
+      + ', vrátilo se ' + kcFull(vzal) + ' a teď nesou ' + kcFull(nese) + ' měsíčně. '
+      + 'Vyplácí se jednou za herní měsíc, tedy po dvanácti hodinách — čerstvě koupený '
+      + 'podíl proto chvíli stojí na nule.</p>'
       + moje.map(function (e) { return podilRadek(e, true); }).join('');
   }
   return h + '</div>';
