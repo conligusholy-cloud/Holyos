@@ -8345,3 +8345,42 @@ model AccountingItem {
   @@index([active])
   @@map("accounting_items")
 }
+
+// Reklamace praní — žádosti zákazníků z pradlomaty.info/podpora (Servis → Reklamace praní).
+// kind: refund = žádost o vrácení platby, receipt = žádost o zaslání dokladu.
+// status: new → approved → done (vyplaceno / doklad odeslán), nebo rejected.
+model WashComplaint {
+  id              Int       @id @default(autoincrement())
+  number          String    @unique @db.VarChar(20)
+  kind            String    @db.VarChar(10)
+  status          String    @default("new") @db.VarChar(16)
+  tx_at           DateTime
+  place_code      String?   @db.VarChar(40)
+  place_label     String    @db.VarChar(200)
+  place_address   String?   @db.VarChar(300)
+  customer_name   String    @db.VarChar(160)
+  phone           String    @db.VarChar(40)
+  email           String    @db.VarChar(160)
+  amount          Decimal   @db.Decimal(10, 2)
+  pay_method      String    @db.VarChar(40)
+  service         String    @db.VarChar(80)
+  account         String?   @db.VarChar(60)
+  reason          String?   @db.Text
+  internal_note   String?   @db.Text
+  reject_reason   String?   @db.Text
+  receipt_number  String?   @db.VarChar(30)
+  receipt_sent_at DateTime?
+  paid_at         DateTime?
+  resolved_by     String?   @db.VarChar(120)
+  resolved_at     DateTime?
+  history         Json?
+  ip              String?   @db.VarChar(64)
+  user_agent      String?   @db.VarChar(300)
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  @@index([kind, status])
+  @@index([created_at])
+  @@index([email])
+  @@map("wash_complaints")
+}

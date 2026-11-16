@@ -737,6 +737,8 @@ app.use('/api/public/po', purchaseInquiriesRoutes.poPublicRouter);
 // IT požadavky — checklist pro zákazníka (veřejný formulář přes token)
 const itRequestsRoutes = require('./routes/it-requests.routes');
 app.use('/api/public/it-requests', itRequestsRoutes.publicRouter);
+const washComplaintsRoutes = require('./routes/wash-complaints.routes');
+app.use('/api/public/wash', washComplaintsRoutes.publicRouter); // Reklamace praní — veřejný formulář pradlomaty.info/podpora
 app.get('/it-pozadavky/:token', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'it-pozadavky.html'));
 });
@@ -836,7 +838,8 @@ app.use('/api/hr', auditModuleAccess('hr', ['lide-hr', 'kiosky', 'velin', 'chat'
 app.use('/api/hr/applicants', applicantsRoutes); // musí být PŘED /api/hr (pevný podcesta)
 app.use('/api/hr', hrRoutes);
 app.use('/api/wh/purchase-pricelist', purchasePricelistRoutes); // Nákupní ceník — vlastní cesta (/api/wh/pricelist = prodejní ceník strojů ve warehouse.routes)
-app.use('/api/it-requests', itRequestsRoutes); // IT požadavky (interní: šablona, odeslání, stav)
+app.use('/api/it-requests', itRequestsRoutes);
+app.use('/api/wash-complaints', washComplaintsRoutes); // Reklamace praní (Servis) — interní // IT požadavky (interní: šablona, odeslání, stav)
 app.use('/api/wh/inquiries', purchaseInquiriesRoutes); // Poptávky u dodavatelů (před /api/wh, ať je nepohltí :id routy)
 app.use('/api/wh', warehouseRoutes);
 app.use('/api/wh', warehouseV2Routes); // Sklad 2.0 — moves, lookup, sync (mountnuté za legacy)
@@ -1120,6 +1123,8 @@ app.use((req, res, next) => {
   if (req.path === '/portal' || req.path === '/portal/') return serveCompounderPortal(req, res);
   if (req.path === '/location' || req.path === '/location/') return serveLocationOverview(req, res);
   if (req.path === '/misto' || req.path === '/misto/') return serveMisto(req, res);
+  // Reklamace praní — žádost o vrácení platby / o doklad (jen domény prádlomatů)
+  if ((req.path === '/podpora' || req.path === '/podpora/') && PRADLOMATY_HOSTS.has(reqHostname(req))) { res.set('Cache-Control', 'no-cache, no-store, must-revalidate'); return res.sendFile(path.join(COMPOUNDER_DIR, 'podpora.html')); }
   // Laundromat Tycoon — hra o budování sítě prádlomatů (zatím jen na doménách prádlomatů).
   if (req.path === '/game' || req.path === '/game/') return serveGamePage(req, res);
   if (req.path === '/game/pozvanka.png') return serveGameInvite(req, res);

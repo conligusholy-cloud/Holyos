@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Podpora prádlomatů — vrácení platby a doklady</title>
+<meta name="description" content="Žádost o vrácení platby nebo o zaslání dokladu za praní v samoobslužném prádlomatu.">
+<style>
+  :root{--bg:#eef0f7;--card:#fff;--text:#1f2433;--muted:#6b7385;--line:#dfe3ec;--brand:#0e7c4a;--brand2:#12a160;--err:#c0352b;--focus:#3b82f6}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:15px;line-height:1.45}
+  .wrap{max-width:760px;margin:0 auto;padding:28px 16px 48px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px;box-shadow:0 6px 24px rgba(20,30,60,.06);margin-bottom:16px}
+  h1{font-size:30px;font-weight:600;text-align:center;margin:0 0 6px}
+  h2{font-size:20px;margin:0 0 2px}
+  .sub{color:var(--muted);margin:0 0 4px}
+  hr{border:0;border-top:1px solid var(--line);margin:18px 0}
+  .choices{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:8px;padding:11px 20px;font:inherit;font-weight:600;cursor:pointer;background:var(--brand);color:#fff;text-decoration:none}
+  .btn:hover{background:var(--brand2)}.btn:disabled{opacity:.6;cursor:wait}
+  .btn.sec{background:#e9ecf3;color:var(--text)}.btn.sec:hover{background:#dde2ec}
+  .btn.big{min-width:270px;font-size:16px}
+  .linka{text-align:center}.linka h3{font-weight:500;letter-spacing:.02em;margin:0 0 6px;font-size:19px}.linka a{color:var(--text);text-decoration:none;font-size:17px}
+  .sec-h{font-weight:600;padding:0 0 10px;margin:0 0 14px;border-bottom:1px solid var(--line)}
+  .row{display:grid;grid-template-columns:1fr 160px;gap:12px}
+  .fld{margin:0 0 14px}
+  .fld label{display:block;font-size:13px;color:var(--muted);margin:0 0 5px}
+  .fld label b{color:var(--err)}
+  input,select,textarea{width:100%;font:inherit;color:var(--text);background:#fff;border:1px solid #cdd3df;border-radius:8px;padding:10px 12px}
+  input:focus,select:focus,textarea:focus{outline:2px solid rgba(59,130,246,.25);border-color:var(--focus)}
+  textarea{min-height:110px;resize:vertical}
+  .hint{font-size:12.5px;color:var(--muted);margin-top:4px}
+  .hp{position:absolute;left:-5000px;width:1px;height:1px;overflow:hidden}
+  .err{background:#fdecea;color:var(--err);border:1px solid #f3c2bd;border-radius:8px;padding:10px 12px;margin:0 0 14px}
+  .ok{text-align:center}.ok .big{font-size:44px}.ok .num{display:inline-block;font-weight:700;font-size:20px;background:#e8f6ee;color:var(--brand);padding:6px 14px;border-radius:8px;margin:8px 0}
+  .actions{display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap;align-items:center}
+  .gdpr{font-size:12.5px;color:var(--muted)}
+  .hidden{display:none}
+  @media(max-width:560px){.row{grid-template-columns:1fr 120px}h1{font-size:25px}.btn.big{min-width:0;width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Rozcestník -->
+  <div class="card" id="v-start">
+    <h1>Vytvořit nový požadavek</h1>
+    <hr>
+    <div class="choices">
+      <button class="btn big" data-go="refund">Žádost o vrácení platby</button>
+      <button class="btn big" data-go="receipt">Žádost o zaslání dokladu</button>
+    </div>
+    <hr>
+    <div class="linka"><h3>NONSTOP PRÁDLOMAT LINKA</h3><a href="tel:+420792319961">+420 792 319 961</a><div class="sub">(CZ, SK, EN)</div></div>
+  </div>
+
+  <!-- Formulář -->
+  <form id="v-form" class="hidden" novalidate autocomplete="on">
+    <div style="margin:0 0 14px"><h2 id="f-title"></h2><p class="sub" id="f-sub"></p></div>
+    <div id="f-err" class="err hidden" role="alert"></div>
+
+    <div class="card">
+      <div class="sec-h">Základní údaje</div>
+      <div class="row">
+        <div class="fld"><label for="date">Datum transakce <b>*</b></label><input type="date" id="date" name="date" required></div>
+        <div class="fld"><label for="time">Čas</label><input type="time" id="time" name="time" value="00:00"></div>
+      </div>
+      <div class="fld"><label for="place">Místo (prádlomat) <b>*</b></label>
+        <input id="place-q" placeholder="Začněte psát město nebo obchod…" autocomplete="off" style="margin-bottom:6px">
+        <select id="place" name="place_code" required size="1"><option value="">— vyberte místo —</option></select>
+        <div class="hint" id="place-hint"></div></div>
+    </div>
+
+    <div class="card">
+      <div class="sec-h">Informace o zákazníkovi</div>
+      <div class="fld"><label for="name">Jméno a příjmení / Firma <b>*</b></label><input id="name" name="name" maxlength="160" autocomplete="name" required></div>
+      <div class="fld"><label for="phone">Telefonní číslo <b>*</b></label><input id="phone" name="phone" type="tel" maxlength="40" autocomplete="tel" placeholder="+420 …" required></div>
+      <div class="fld"><label for="email">E-mail <b>*</b></label><input id="email" name="email" type="email" maxlength="160" autocomplete="email" required></div>
+    </div>
+
+    <div class="card">
+      <div class="sec-h" id="svc-h">Informace o službě</div>
+      <div class="fld"><label for="amount">Částka v Kč <b>*</b></label><input id="amount" name="amount" inputmode="decimal" maxlength="12" required><div class="hint" id="amount-hint"></div></div>
+      <div class="fld"><label for="pay">Původní způsob platby <b>*</b></label><select id="pay" name="pay_method" required><option value="">— vyberte —</option></select></div>
+      <div class="fld"><label for="service">Zakoupená služba <b>*</b></label><select id="service" name="service" required><option value="">— vyberte —</option></select></div>
+      <div id="refund-only">
+        <div class="fld"><label for="account">Číslo účtu pro vrácení peněz <b>*</b></label><input id="account" name="account" maxlength="60" placeholder="123456789/0100 nebo IBAN"><div class="hint">Na tento účet vám peníze vrátíme.</div></div>
+        <div class="fld"><label for="reason">Důvod pro vrácení platby <b>*</b></label><textarea id="reason" name="reason" maxlength="2000" placeholder="Co se stalo — např. pračka se nespustila, platba proběhla dvakrát…"></textarea></div>
+      </div>
+      <!-- Pole pro roboty (lidé ho nevidí) -->
+      <div class="hp" aria-hidden="true"><label>Web<input name="web" tabindex="-1" autocomplete="off"></label></div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn sec" id="f-back">← Zpět</button>
+      <span class="gdpr">Údaje použijeme jen k vyřízení vaší žádosti.</span>
+      <button type="submit" class="btn" id="f-send">Odeslat žádost</button>
+    </div>
+  </form>
+
+  <!-- Hotovo -->
+  <div class="card ok hidden" id="v-ok">
+    <div class="big">✅</div>
+    <h2>Žádost jsme přijali</h2>
+    <div class="num" id="ok-num"></div>
+    <p class="sub">Potvrzení jsme vám poslali e-mailem. Ozveme se co nejdříve.</p>
+    <hr>
+    <button class="btn sec" id="ok-new">Vytvořit další žádost</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var CFG = null, KIND = null, PLACES = [];
+  var TXT = {
+    refund: ['Žádost o vrácení platby', 'Vyplňte a odešlete formulář níže.'],
+    receipt: ['Žádost o vydání dokladu', 'Vyplňte a odešlete formulář níže — pro každou službu či transakci musí být vytvořena samostatná žádost.']
+  };
+  function show(id) { ['v-start', 'v-form', 'v-ok'].forEach(function (x) { $(x).classList.toggle('hidden', x !== id); }); window.scrollTo(0, 0); }
+  function opts(sel, list) { list.forEach(function (v) { var o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); }); }
+  function fillPlaces(q) {
+    var sel = $('place'), cur = sel.value; q = (q || '').trim().toLowerCase();
+    while (sel.options.length > 1) sel.remove(1);
+    var n = 0;
+    PLACES.forEach(function (p) {
+      var txt = p.label + (p.address ? ' — ' + p.address : '');
+      if (q && txt.toLowerCase().indexOf(q) === -1) return;
+      var o = document.createElement('option'); o.value = p.code; o.textContent = txt; sel.appendChild(o); n++;
+    });
+    if (cur) sel.value = cur;
+    $('place-hint').textContent = q ? ('Nalezeno ' + n + ' míst.') : '';
+    if (q && n === 1) sel.selectedIndex = 1;
+  }
+  function load() {
+    return fetch('/api/public/wash/form', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+      CFG = j; PLACES = j.places || [];
+      if (!$('pay').options[1]) opts($('pay'), j.pay_methods || []);
+      if (!$('service').options[1]) opts($('service'), j.services || []);
+      fillPlaces($('place-q').value);
+      if (!PLACES.length) $('place-hint').textContent = 'Seznam míst se nepodařilo načíst — zkuste stránku obnovit, nebo nám zavolejte.';
+    });
+  }
+  function start(kind) {
+    KIND = kind;
+    $('f-title').textContent = TXT[kind][0]; $('f-sub').textContent = TXT[kind][1];
+    $('refund-only').classList.toggle('hidden', kind !== 'refund');
+    $('svc-h').textContent = kind === 'receipt' ? 'Informace o službě (pro každou službu či transakci musí být vytvořena separátní žádost)' : 'Informace o službě';
+    $('amount-hint').textContent = kind === 'receipt' ? 'Maximální částka ' + ((CFG && CFG.receipt_max) || 350) + ' Kč' : '';
+    $('f-err').classList.add('hidden');
+    var d = $('date'); if (!d.value) { var t = new Date(); d.value = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'); }
+    d.max = d.value && new Date().toISOString().slice(0, 10);
+    show('v-form');
+    if (!CFG) load();
+    try { history.replaceState(null, '', '#' + kind); } catch (e) {}
+  }
+  document.querySelectorAll('[data-go]').forEach(function (b) { b.onclick = function () { start(b.getAttribute('data-go')); }; });
+  $('f-back').onclick = function () { show('v-start'); try { history.replaceState(null, '', location.pathname); } catch (e) {} };
+  $('ok-new').onclick = function () { $('v-form').reset(); show('v-start'); load(); };
+  $('place-q').addEventListener('input', function () { fillPlaces(this.value); });
+
+  function fail(msg) { var e = $('f-err'); e.textContent = msg; e.classList.remove('hidden'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  $('v-form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var f = $('v-form'), v = function (n) { var el = f.elements[n]; return el ? String(el.value || '').trim() : ''; };
+    var data = { kind: KIND, token: CFG && CFG.token, web: v('web'), date: v('date'), time: v('time') || '00:00', place_code: v('place_code'),
+      name: v('name'), phone: v('phone'), email: v('email'), amount: v('amount'), pay_method: v('pay_method'), service: v('service') };
+    if (KIND === 'refund') { data.account = v('account'); data.reason = v('reason'); }
+    // Rychlá kontrola v prohlížeči (server kontroluje vše znovu)
+    if (!data.date) return fail('Vyplňte datum transakce.');
+    if (!data.place_code) return fail('Vyberte místo (prádlomat).');
+    if (data.name.length < 3) return fail('Vyplňte jméno a příjmení / firmu.');
+    if (data.phone.replace(/\D/g, '').length < 9) return fail('Vyplňte telefonní číslo.');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(data.email)) return fail('Vyplňte platný e-mail.');
+    var a = Number(String(data.amount).replace(/\s/g, '').replace(',', '.'));
+    if (!(a > 0)) return fail('Vyplňte částku v Kč.');
+    if (KIND === 'receipt' && CFG && a > CFG.receipt_max) return fail('Maximální částka na jednu žádost o doklad je ' + CFG.receipt_max + ' Kč.');
+    if (!data.pay_method) return fail('Vyberte původní způsob platby.');
+    if (!data.service) return fail('Vyberte zakoupenou službu.');
+    if (KIND === 'refund' && !data.account) return fail('Vyplňte číslo účtu pro vrácení peněz.');
+    if (KIND === 'refund' && data.reason.length < 5) return fail('Popište důvod pro vrácení platby.');
+    var b = $('f-send'); b.disabled = true; b.textContent = 'Odesílám…';
+    fetch('/api/public/wash/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (r) {
+        b.disabled = false; b.textContent = 'Odeslat žádost';
+        if (!r.ok) { if (/vypršel/.test(r.j.error || '')) load(); return fail(r.j.error || 'Žádost se nepodařilo odeslat.'); }
+        $('ok-num').textContent = 'Číslo žádosti: ' + r.j.number; show('v-ok'); load();
+      })
+      .catch(function () { b.disabled = false; b.textContent = 'Odeslat žádost'; fail('Nepodařilo se spojit se serverem. Zkontrolujte připojení a zkuste to znovu.'); });
+  });
+
+  load().catch(function () {});
+  if (location.hash === '#refund' || location.hash === '#receipt') start(location.hash.slice(1));
+})();
+</script>
+</body>
+</html>

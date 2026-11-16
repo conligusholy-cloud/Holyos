@@ -789,7 +789,7 @@ function meetingsPage({ admin, holyosUrl, error }) {
       <div class="mt-prodwrap"></div>
     </div>
     ${require('./lm-offers').PANEL}
-    <div class="mt-mp" style="display:none"><div class="mt-bar"><h2>🛒 Marketplace</h2><span style="flex:1"></span><button class="btn sec sm mp-reload">↻ Obnovit</button></div><div class="mp-body"></div></div>
+    <div class="mt-mp" style="display:none"><div class="mt-bar"><h2>🛒 Marketplace</h2><span style="flex:1"></span><a class="btn sec sm" href="/cesta/marketplace" target="_blank" rel="noopener" style="margin-right:8px">🛒 Otevřít Marketplace ↗</a><button class="btn sec sm mp-reload">↻ Obnovit</button></div><div class="mp-body"></div></div>
     <div class="mt-stat" style="display:none">
       <div class="mt-bar"><h2>📊 Statistiky schůzek</h2><span style="flex:1"></span>
         <div class="mt-seg"><button data-sgrp="day" class="on">Dny</button><button data-sgrp="week">Týdny</button><button data-sgrp="month">Měsíce</button><button data-sgrp="year">Roky</button></div></div>

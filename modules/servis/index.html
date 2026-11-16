@@ -215,6 +215,7 @@
       <button class="section-tab" data-section="objednavky">📦 Objednávky</button>
       <button class="section-tab" data-section="sklad">🏬 Servisní sklad</button>
       <button class="section-tab" data-section="udrzba">🔩 Údržba</button>
+      <button class="section-tab" data-section="reklamace">🧺 Reklamace praní</button>
     </nav>
 
     <!-- ═══ SEKCE: HUGO (znalostní báze + AI pro partnery) ═══ -->
@@ -778,6 +779,11 @@
       </div>
     </section>
 
+    <!-- ═══ SEKCE: REKLAMACE PRANÍ (žádosti z pradlomaty.info/podpora) — logika v modules/servis/reklamace.js ═══ -->
+    <section class="section-panel" id="section-reklamace">
+      <div class="content" style="padding:16px 24px"><div id="rp-root"></div></div>
+    </section>
+
     <!-- ═══ SEKCE: SERVISNÍ SKLAD (připravujeme) ═══ -->
     <section class="section-panel" id="section-sklad">
       <div class="content">
@@ -803,7 +809,7 @@
       // v dokumentu), takže při obnově po refreshi ještě nemusí existovat. Proto je
       // voláme s krátkým opakováním, dokud nejsou připravené.
       function ensureFor(sec) {
-        var map = { infolinka: 'infoInit', pozadavky: 'srEnsure', stroje: 'smEnsure', odecty: 'odEnsure', kontrola: 'kmEnsure', udrzba: 'udEnsure' };
+        var map = { infolinka: 'infoInit', pozadavky: 'srEnsure', stroje: 'smEnsure', odecty: 'odEnsure', kontrola: 'kmEnsure', udrzba: 'udEnsure', reklamace: 'rpEnsure' };
         var fn = map[sec]; if (!fn) return;
         var tries = 0;
         (function attempt() {
@@ -2921,5 +2927,6 @@
   })();
   </script>
   <script src="modules/servis/app.js?v=2026-05-17-7"></script>
+  <script src="modules/servis/reklamace.js?v=2026-11-16-1"></script>
 </body>
 </html>
