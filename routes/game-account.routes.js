@@ -66,27 +66,15 @@ function rateLimited(key, max, windowMs) {
 // Ceny v haléřích. Co karta dělá, rozhoduje server — klient si efekt nevymýšlí.
 const CARDS = {
   rush: {
-    kind: 'rush', name: 'Expresní dovoz', icon: 'truck', price: 4900,
-    short: 'Stroj dorazí hned',
-    desc: 'Objednaný prádlomat přeskočí dvouměsíční dodací lhůtu a je na skladě okamžitě.'
-  },
+    kind: 'rush', icon: 'truck', price: 4900 },
   traffic: {
     // Kampaň se kupuje po jedné. Její účinek platí natrvalo, takže nabízet ji
     // po deseti kusech se slevou nedává smysl ani hráči, ani nám.
-    kind: 'traffic', name: 'Reklamní kampaň', icon: 'megaphone', price: 9900, bezBalicku: true,
-    short: '+15 % návštěvnosti natrvalo',
-    desc: 'Letáky, polep, místní rádio. Do všech tvých prádlomatů začne chodit víc lidí — a zůstane to tak.'
-  },
+    kind: 'traffic', icon: 'megaphone', price: 9900, bezBalicku: true },
   connect: {
-    kind: 'connect', name: 'Známý řemeslník', icon: 'wrench', price: 7900,
-    short: 'Přípojky o 40 % levněji',
-    desc: 'Udělá ti vodu, odpad i elektřinu za přátelskou cenu. Platí na jednu stavbu.'
-  },
+    kind: 'connect', icon: 'wrench', price: 7900 },
   credit: {
-    kind: 'credit', name: 'Lepší bankéř', icon: 'bank', price: 12900,
-    short: 'Úrok −2 % a vyšší strop',
-    desc: 'Přepíše ti úvěrové podmínky: sazba klesne o dva procentní body a banka ti natrvalo zvedne rámec.'
-  }
+    kind: 'credit', icon: 'bank', price: 12900 }
 };
 const CARD_KINDS = Object.keys(CARDS);
 
@@ -115,15 +103,15 @@ function balickyProKartu(c) {
 // Ceny v haléřích, laundry na ruku. Čím větší balík, tím víc za korunu —
 // u stovky je to 1 000 L$/Kč, u dvoutisícovky 2 300 L$/Kč.
 const CASH = {
-  cash100:  { kind: 'cash100',  name: 'Hrst laundrů',   price: 10000,  laundry: 100000 },
-  cash200:  { kind: 'cash200',  name: 'Balík laundrů',  price: 20000,  laundry: 300000 },
-  cash500:  { kind: 'cash500',  name: 'Kufřík',         price: 50000,  laundry: 900000 },
-  cash1000: { kind: 'cash1000', name: 'Trezor',         price: 100000, laundry: 2000000 },
-  cash2000: { kind: 'cash2000', name: 'Obrněný vůz',    price: 200000, laundry: 4600000 },
+  cash100:  { kind: 'cash100',  price: 10000,  laundry: 100000 },
+  cash200:  { kind: 'cash200',  price: 20000,  laundry: 300000 },
+  cash500:  { kind: 'cash500',  price: 50000,  laundry: 900000 },
+  cash1000: { kind: 'cash1000', price: 100000, laundry: 2000000 },
+  cash2000: { kind: 'cash2000', price: 200000, laundry: 4600000 },
   // Dárek za sledování na Facebooku. V nabídce není a koupit se nedá — jen se
   // vydá jednou za účet. Jede ale po stejné koleji jako koupené balíčky, takže
   // ho chrání i pojistka, co hlídá, aby složená zástava nezmizela.
-  cash_fb:  { kind: 'cash_fb',  name: 'Dárek za Facebook', price: 0, laundry: 1000000, skryty: true },
+  cash_fb:  { kind: 'cash_fb',  price: 0, laundry: 1000000, skryty: true },
 };
 const CASH_KINDS = Object.keys(CASH);
 
@@ -134,16 +122,11 @@ const CASH_KINDS = Object.keys(CASH);
 // strop null = bez stropu, limit pak drží jen herní pravidla.
 const RAMEC_ZDARMA = 5000000;        // kolik unese rámec bez jediného balíčku
 const RAMEC = {
-  ramec10:  { kind: 'ramec10',  name: 'Rámec 10 M',       price: 50000,  strop: 10000000, uroven: 1, bezBalicku: true,
-    short: 'Z rámce smíš čerpat až 10 000 000 L$.' },
-  ramec20:  { kind: 'ramec20',  name: 'Rámec 20 M',       price: 100000, strop: 20000000, uroven: 2, bezBalicku: true,
-    short: 'Z rámce smíš čerpat až 20 000 000 L$.' },
-  ramec40:  { kind: 'ramec40',  name: 'Rámec 40 M',       price: 200000, strop: 40000000, uroven: 3, bezBalicku: true,
-    short: 'Z rámce smíš čerpat až 40 000 000 L$.' },
-  ramec70:  { kind: 'ramec70',  name: 'Rámec 70 M',       price: 300000, strop: 70000000, uroven: 4, bezBalicku: true,
-    short: 'Z rámce smíš čerpat až 70 000 000 L$.' },
-  ramecmax: { kind: 'ramecmax', name: 'Rámec bez stropu', price: 500000, strop: null,     uroven: 5, bezBalicku: true,
-    short: 'Rámec už nedrží strop — jen pravidla hry.' },
+  ramec10:  { kind: 'ramec10',  price: 50000,  strop: 10000000, uroven: 1, bezBalicku: true },
+  ramec20:  { kind: 'ramec20',  price: 100000, strop: 20000000, uroven: 2, bezBalicku: true },
+  ramec40:  { kind: 'ramec40',  price: 200000, strop: 40000000, uroven: 3, bezBalicku: true },
+  ramec70:  { kind: 'ramec70',  price: 300000, strop: 70000000, uroven: 4, bezBalicku: true },
+  ramecmax: { kind: 'ramecmax', price: 500000, strop: null,     uroven: 5, bezBalicku: true },
 };
 const RAMEC_KINDS = Object.keys(RAMEC);
 
@@ -157,18 +140,18 @@ const RAMEC_KINDS = Object.keys(RAMEC);
 // vyzvednutí dají týden, ať na tom nikdo netratí.
 const LINKA_DEN = 86400000;
 const LINKA = {
-  linka1d: { kind: 'linka1d', name: 'Infolinka na den',   price: 4900, dnu: 1 },
-  linka3d: { kind: 'linka3d', name: 'Infolinka na 3 dny', price: 7400, dnu: 3 },
-  linka7d: { kind: 'linka7d', name: 'Infolinka na týden', price: 9900, dnu: 7 },
-  linka30d: { kind: 'linka30d', name: 'Infolinka na měsíc', price: 29000, dnu: 30 },
-  linka365d: { kind: 'linka365d', name: 'Infolinka na rok', price: 99900, dnu: 365 },
+  linka1d: { kind: 'linka1d', price: 4900, dnu: 1 },
+  linka3d: { kind: 'linka3d', price: 7400, dnu: 3 },
+  linka7d: { kind: 'linka7d', price: 9900, dnu: 7 },
+  linka30d: { kind: 'linka30d', price: 29000, dnu: 30 },
+  linka365d: { kind: 'linka365d', price: 99900, dnu: 365 },
   // Doběh starých kreditových balíčků. Nenabízejí se, jen se dají vyzvednout.
-  linka50:  { kind: 'linka50',  name: '50 hovorů',  price: 9900,  dnu: 7, stary: true },
-  linka100: { kind: 'linka100', name: '100 hovorů', price: 17900, dnu: 7, stary: true },
-  linka200: { kind: 'linka200', name: '200 hovorů', price: 29900, dnu: 7, stary: true },
-  linka300: { kind: 'linka300', name: '300 hovorů', price: 39900, dnu: 7, stary: true },
-  linka400: { kind: 'linka400', name: '400 hovorů', price: 49900, dnu: 7, stary: true },
-  linka500: { kind: 'linka500', name: '500 hovorů', price: 59900, dnu: 7, stary: true }
+  linka50:  { kind: 'linka50',  price: 9900,  dnu: 7, stary: true },
+  linka100: { kind: 'linka100', price: 17900, dnu: 7, stary: true },
+  linka200: { kind: 'linka200', price: 29900, dnu: 7, stary: true },
+  linka300: { kind: 'linka300', price: 39900, dnu: 7, stary: true },
+  linka400: { kind: 'linka400', price: 49900, dnu: 7, stary: true },
+  linka500: { kind: 'linka500', price: 59900, dnu: 7, stary: true }
 };
 const LINKA_KINDS = Object.keys(LINKA);
 
@@ -179,41 +162,36 @@ const LINKA_KINDS = Object.keys(LINKA);
 // předplatné běží, je linka zapnutá — nic se nepřipisuje na čas, platí stav
 // předplatného. Zrušit jde kdykoli a zaplacené období dojede.
 const SUBS = {
-  linka_sub1d: { kind: 'linka_sub1d', name: 'Infolinka každý den', icon: 'phone',
-    price: 4900, interval: 'day', interval_count: 1, linka: true,
-    short: 'Obnovuje se každý den',
-    desc: 'Operátor bere všechny hovory za tebe. Platba se strhne každý den, '
-      + 'dokud předplatné nezrušíš.' },
-  linka_sub3d: { kind: 'linka_sub3d', name: 'Infolinka každé 3 dny', icon: 'phone',
-    price: 7400, interval: 'day', interval_count: 3, linka: true,
-    short: 'Obnovuje se každé tři dny',
-    desc: 'Operátor bere všechny hovory za tebe. Platba se strhne jednou za tři dny, '
-      + 'dokud předplatné nezrušíš.' },
-  linka_sub7d: { kind: 'linka_sub7d', name: 'Infolinka každý týden', icon: 'phone',
-    price: 9900, interval: 'week', interval_count: 1, linka: true,
-    short: 'Obnovuje se každý týden',
-    desc: 'Operátor bere všechny hovory za tebe. Platba se strhne jednou týdně, '
-      + 'dokud předplatné nezrušíš.' },
-  linka_sub30d: { kind: 'linka_sub30d', name: 'Infolinka každý měsíc', icon: 'phone',
-    price: 29000, interval: 'month', interval_count: 1, linka: true,
-    short: 'Obnovuje se každý měsíc',
-    desc: 'Operátor bere všechny hovory za tebe. Platba se strhne jednou měsíčně, '
-      + 'dokud předplatné nezrušíš.' },
-  linka_sub365d: { kind: 'linka_sub365d', name: 'Infolinka každý rok', icon: 'phone',
-    price: 99900, interval: 'year', interval_count: 1, linka: true,
-    short: 'Obnovuje se každý rok',
-    desc: 'Operátor bere všechny hovory za tebe. Platba se strhne jednou za rok, '
-      + 'dokud předplatné nezrušíš.' },
+  linka_sub1d: { kind: 'linka_sub1d', icon: 'phone',
+    price: 4900, interval: 'day', interval_count: 1, linka: true },
+  linka_sub3d: { kind: 'linka_sub3d', icon: 'phone',
+    price: 7400, interval: 'day', interval_count: 3, linka: true },
+  linka_sub7d: { kind: 'linka_sub7d', icon: 'phone',
+    price: 9900, interval: 'week', interval_count: 1, linka: true },
+  linka_sub30d: { kind: 'linka_sub30d', icon: 'phone',
+    price: 29000, interval: 'month', interval_count: 1, linka: true },
+  linka_sub365d: { kind: 'linka_sub365d', icon: 'phone',
+    price: 99900, interval: 'year', interval_count: 1, linka: true },
   dispecer: {
-    kind: 'dispecer', name: 'Vedoucí servisních techniků', icon: 'wrench', price: 3900,
-    interval: 'week', kapacita: 35,
-    short: 'Sám vysílá techniky k poruchám',
-    desc: 'Hlídá tvoje prádlomaty za tebe. Jakmile se některý porouchá, vedoucí k němu '
-      + 'do čtvrt hodiny pošle technika — i když zrovna nejsi ve hře. Jeden technik '
-      + 'zvládne 35 poboček, na větší síť jich je potřeba víc.'
-  }
+    kind: 'dispecer', icon: 'wrench', price: 3900,
+    interval: 'week', kapacita: 35 }
 };
 const SUB_KINDS = Object.keys(SUBS);
+
+// Text položek bydlí v katalogu — tady zůstávají jen čísla a chování. České
+// znění se doplní při startu: potřebuje ho Stripe (název produktu na účtence)
+// a správa hry. Hráč vidí text složený v prohlížeči podle kódu položky, takže
+// každý ve svém jazyce.
+[CARDS, CASH, RAMEC, LINKA, SUBS].forEach((tab) => {
+  Object.keys(tab).forEach((k) => {
+    const x = tab[k];
+    ['name', 'short', 'desc'].forEach((pole) => {
+      const klic = 'obchod.' + x.kind + '.' + pole;
+      const v = TEXTY.t(klic, null, 'cs');
+      if (v !== klic) x[pole] = v;
+    });
+  });
+});
 // Ručně přidaná hotovost z administrace. Není v nabídce, nedá se koupit —
 // vzniká jen tím, že ji někdo hráči přidá, a nese vlastní částku.
 const CASH_CUSTOM = 'cash_dar';
@@ -592,7 +570,8 @@ async function dorovnejProvize(zvouci) {
       const castka = Math.round((CENY_STROJU[model] || CENY_STROJU.mini) * DIST_PROVIZE);
       await prisma.gameDelivery.create({
         data: { player_id: zvouci.id, kind: 'cash', amount: castka, spot_id: klic,
-          popis: 'Provize ' + castka.toLocaleString('cs-CZ') + ' L$ — ' + h.nick
+          text_kod: 'dor.provize', text_data: { penize: castka, p1: h.nick },
+        popis: 'Provize ' + castka.toLocaleString('cs-CZ') + ' L$ — ' + h.nick
             + ' koupil ' + String(model).toUpperCase() },
       });
       klice.add(klic);
@@ -992,7 +971,7 @@ router.post('/account/nick', requirePlayer, async (req, res, next) => {
       const od = req.player.nick_at ? new Date(req.player.nick_at).getTime() : 0;
       if (pauza && od && Date.now() - od < pauza) {
         const dnu = Math.ceil((pauza - (Date.now() - od)) / 86400000);
-        return res.status(409).json({ error: stx(req)('server.jmeno_sis_menil_nedavno_dalsi_zmena') + dnu + ' dnů.' });
+        return res.status(409).json({ error: stx(req)('server.jmeno_menil_nedavno_dnu', { p1: dnu }) });
       }
       const taken = await prisma.gamePlayer.findUnique({ where: { nick_lower: lower }, select: { id: true } });
       if (taken && taken.id !== req.player.id) {
@@ -1141,8 +1120,8 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
     if (velikost > STAV_MAX) {
       console.warn('[game] hráč #' + req.player.id + ' má stav ' + Math.round(velikost / 1024)
         + ' kB, strop ' + Math.round(STAV_MAX / 1024) + ' kB — neuloženo');
-      return res.status(413).json({ error: stx(req)('server.stav_hry_je_moc_velky') + Math.round(velikost / 1024)
-        + ' kB, vejde se ' + Math.round(STAV_MAX / 1024) + ' kB.' });
+      return res.status(413).json({ error: stx(req)('server.stav_moc_velky_kb',
+        { p1: Math.round(velikost / 1024), p2: Math.round(STAV_MAX / 1024) }) });
     }
     // Verze: klient posílá tu, ze které vychází. Když se mezitím uložilo odjinud
     // (druhé zařízení), uložení odmítneme a pošleme zpátky novější stav — jinak
@@ -1443,10 +1422,10 @@ router.get('/cards', async (req, res, next) => {
 // POST /cards/use { kind, on } → spotřebuje jeden kus a vrátí, co má klient udělat.
 // Efekt popisuje server, aby šlo číslo kdykoli změnit bez nasazení nové hry.
 const EFFECTS = {
-  rush: () => ({ effect: 'rush', msg: 'Stroj dorazil okamžitě.' }),
-  traffic: () => ({ effect: 'traffic', add: 0.15, msg: 'Kampaň běží — chodí ti o 15 % víc lidí.' }),
-  connect: () => ({ effect: 'connect', discount: 0.4, msg: 'Přípojky na dalším místě budou o 40 % levnější.' }),
-  credit: () => ({ effect: 'credit', rate_drop: 0.02, room_add: 1000000, msg: 'Banka ti snížila úrok a zvedla rámec.' })
+  rush: (t) => ({ effect: 'rush', msg: t('karta.rush_hotovo') }),
+  traffic: (t) => ({ effect: 'traffic', add: 0.15, msg: t('karta.traffic_hotovo') }),
+  connect: (t) => ({ effect: 'connect', discount: 0.4, msg: t('karta.connect_hotovo') }),
+  credit: (t) => ({ effect: 'credit', rate_drop: 0.02, room_add: 1000000, msg: t('karta.credit_hotovo') })
 };
 router.post('/cards/use', requirePlayer, async (req, res, next) => {
   try {
@@ -1467,24 +1446,26 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
     let result;
     if (kind === CASH_CUSTOM) {
       const castka = Math.max(0, card.amount || 0);
-      result = { effect: 'cash', amount: castka, msg: 'Na účet ti přistálo ' + castka.toLocaleString('cs-CZ') + ' L$.' };
+      result = { effect: 'cash', amount: castka, msg: stx(req)('karta.na_ucet_pristalo', { penize: castka }) };
     } else if (CASH[kind]) {
       // Zakoupené balíčky dobíjejí rámec v bance, ne hotovost — proto se to
       // jmenuje „Dobít banku". Hráč si pak peníze půjčí, jak potřebuje.
       const c = await item(kind);
       const castka = (c && c.laundry) || CASH[kind].laundry;
       result = { effect: 'ramec', amount: castka,
-        msg: 'Rámec v bance se zvedl o ' + castka.toLocaleString('cs-CZ') + ' L$.' };
+        msg: stx(req)('karta.ramec_se_zvedl', { penize: castka }) };
     } else if (LINKA[kind]) {
       const dnu = LINKA[kind].dnu || 1;
-      const doba = dnu === 1 ? 'den' : dnu === 7 ? 'týden' : dnu === 30 ? 'měsíc'
-        : dnu === 365 ? 'rok' : dnu + ' dny';
+      const t = stx(req);
+      const doba = dnu === 1 ? t('obecne.den') : dnu === 7 ? t('obecne.tyden')
+        : dnu === 30 ? t('obecne.mesic') : dnu === 365 ? t('obecne.rok')
+          : t('obecne.dnu', { n: dnu });
       result = { effect: 'linka', dnu,
         msg: LINKA[kind].stary
-          ? 'Infolinka se platí na čas — tvůj balíček jsme převedli na týden.'
-          : 'Infolinka ti běží ' + doba + '.' };
+          ? t('karta.linka_prevedena_na_tyden')
+          : t('karta.linka_bezi', { p1: doba }) };
     } else {
-      result = EFFECTS[kind]();
+      result = EFFECTS[kind](stx(req));
     }
     dropPodlaha(req.player.id);
     res.json({ ok: true, card: kind, result, owned: (await pub(req.player)).cards });
@@ -1871,7 +1852,8 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
     const taken = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
     if (taken) {
       return res.status(409).json({
-        error: taken.player_id === req.player.id ? 'Tady už stojíš.' : 'Tohle místo mezitím obsadil ' + taken.nick + '.',
+        error: taken.player_id === req.player.id ? stx(req)('server.tady_uz_stojis')
+        : stx(req)('server.misto_obsadil', { p1: taken.nick }),
         occupied: claimPub(taken, req.player.id, await firmyMapa()),
       });
     }
@@ -2064,6 +2046,7 @@ async function dorovnejNajmy(majitel) {
     await prisma.gameDelivery.create({
       data: { player_id: majitel.id, kind: 'cash', amount: castka,
         spot_id: 'najem:' + c.spot_id + ':' + Math.round(od / MESIC_MS),
+        text_kod: 'dor.najem', text_data: { penize: castka, p1: (c.name || 'pozemek'), p2: c.najemce_nick },
         popis: 'Nájem ' + castka.toLocaleString('cs-CZ') + ' L$ — ' + (c.name || 'pozemek')
           + ' (' + c.najemce_nick + ')' },
     });

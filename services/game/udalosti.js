@@ -16,6 +16,7 @@
 
 const { prisma } = require('../../config/database');
 const acct = require('../../routes/game-account.routes');
+const TEXTY = require('./texty');
 
 const DEN = 86400000;
 const TIK_MS = 10 * 60000;          // jak často se kouká, co začít a co ukončit
@@ -28,52 +29,37 @@ const TICHO_MAX = 2 * 3600000;      // po takovém tichu vyhlásí další tik u
 // +0.2 = o pětinu dražší provoz. Délka je ve skutečných hodinách.
 const KATALOG = [
   // ── co bolí ───────────────────────────────────────────────────────────────
-  { typ: 'povoden', nazev: 'Povodně', ikona: '🌊', vaha: 8, zavaznost: 3, urovne: ['mesto', 'zeme'],
-    hodin: [12, 72], dopad: { navstevnost: -0.35, naklady: 0.12 },
-    popis: 'Rozvodněná řeka zaplavila ulice. Lidé řeší čerpadla, ne prádlo, a do provozoven se špatně dostává.' },
-  { typ: 'vypadek', nazev: 'Výpadek elektřiny', ikona: '🔌', vaha: 10, zavaznost: 2, urovne: ['mesto'],
-    hodin: [6, 30], dopad: { navstevnost: -0.5 },
-    popis: 'Porucha na vedení. Část města je bez proudu a pračky stojí.' },
-  { typ: 'energie', nazev: 'Zdražení energií', ikona: '⚡', vaha: 10, zavaznost: 2, urovne: ['zeme', 'svet'],
-    hodin: [48, 168], dopad: { naklady: 0.22 },
-    popis: 'Ceny elektřiny vyskočily. Praní je dražší a na účtech je to znát hned.' },
-  { typ: 'vichrice', nazev: 'Vichřice', ikona: '🌪️', vaha: 7, zavaznost: 2, urovne: ['zeme'],
-    hodin: [8, 36], dopad: { navstevnost: -0.18, naklady: 0.08 },
-    popis: 'Silný vítr strhává střechy a lidé zůstávají doma.' },
-  { typ: 'doprava', nazev: 'Dopravní omezení', ikona: '🚧', vaha: 8, zavaznost: 1, urovne: ['mesto'],
-    hodin: [24, 96], dopad: { navstevnost: -0.22 },
-    popis: 'Uzavřená hlavní třída a objížďky. Zákazníci to k prádlomatu mají složitější.' },
-  { typ: 'detergent', nazev: 'Nedostatek detergentů', ikona: '🧴', vaha: 6, zavaznost: 2, urovne: ['svet', 'zeme'],
-    hodin: [48, 144], dopad: { naklady: 0.18 },
-    popis: 'Výpadek u dodavatele. Prací prostředky se shánějí hůř a jsou dražší.' },
-  { typ: 'mrazy', nazev: 'Mrazy', ikona: '❄️', vaha: 6, zavaznost: 2, urovne: ['zeme'],
-    hodin: [24, 96], dopad: { navstevnost: -0.15, naklady: 0.15 },
-    popis: 'Silné mrazy. Topí se naplno a lidem se ven nechce.' },
-  { typ: 'sucho', nazev: 'Sucho a omezení vody', ikona: '🏜️', vaha: 5, zavaznost: 3, urovne: ['zeme'],
-    hodin: [48, 168], dopad: { navstevnost: -0.25, naklady: 0.12 },
-    popis: 'Vyhlášené omezení odběru vody. Pere se míň a dráž.' },
-  { typ: 'recese', nazev: 'Recese', ikona: '📉', vaha: 4, zavaznost: 3, urovne: ['zeme'],
-    hodin: [72, 240], dopad: { navstevnost: -0.28 },
-    popis: 'Lidé utahují opasky. Prádlo se nechává doma na ruční praní.' },
+  { typ: 'povoden', ikona: '🌊', vaha: 8, zavaznost: 3, urovne: ['mesto', 'zeme'],
+    hodin: [12, 72], dopad: { navstevnost: -0.35, naklady: 0.12 } },
+  { typ: 'vypadek', ikona: '🔌', vaha: 10, zavaznost: 2, urovne: ['mesto'],
+    hodin: [6, 30], dopad: { navstevnost: -0.5 } },
+  { typ: 'energie', ikona: '⚡', vaha: 10, zavaznost: 2, urovne: ['zeme', 'svet'],
+    hodin: [48, 168], dopad: { naklady: 0.22 } },
+  { typ: 'vichrice', ikona: '🌪️', vaha: 7, zavaznost: 2, urovne: ['zeme'],
+    hodin: [8, 36], dopad: { navstevnost: -0.18, naklady: 0.08 } },
+  { typ: 'doprava', ikona: '🚧', vaha: 8, zavaznost: 1, urovne: ['mesto'],
+    hodin: [24, 96], dopad: { navstevnost: -0.22 } },
+  { typ: 'detergent', ikona: '🧴', vaha: 6, zavaznost: 2, urovne: ['svet', 'zeme'],
+    hodin: [48, 144], dopad: { naklady: 0.18 } },
+  { typ: 'mrazy', ikona: '❄️', vaha: 6, zavaznost: 2, urovne: ['zeme'],
+    hodin: [24, 96], dopad: { navstevnost: -0.15, naklady: 0.15 } },
+  { typ: 'sucho', ikona: '🏜️', vaha: 5, zavaznost: 3, urovne: ['zeme'],
+    hodin: [48, 168], dopad: { navstevnost: -0.25, naklady: 0.12 } },
+  { typ: 'recese', ikona: '📉', vaha: 4, zavaznost: 3, urovne: ['zeme'],
+    hodin: [72, 240], dopad: { navstevnost: -0.28 } },
   // ── co pomáhá ─────────────────────────────────────────────────────────────
-  { typ: 'festival', nazev: 'Festival', ikona: '🎪', vaha: 10, dobra: true, zavaznost: 2, urovne: ['mesto'],
-    hodin: [12, 60], dopad: { navstevnost: 0.45 },
-    popis: 'Do města se sjeli návštěvníci. Ubytování praská ve švech a prádla je plno.' },
-  { typ: 'turiste', nazev: 'Turistická sezóna', ikona: '🧳', vaha: 9, dobra: true, zavaznost: 2, urovne: ['zeme'],
-    hodin: [72, 240], dopad: { navstevnost: 0.22 },
-    popis: 'Nájezd turistů. Penziony perou víc a hosté hledají samoobslužné prádelny.' },
-  { typ: 'hotel', nazev: 'Nový hotel', ikona: '🏨', vaha: 7, dobra: true, zavaznost: 1, urovne: ['mesto'],
-    hodin: [48, 168], dopad: { navstevnost: 0.28 },
-    popis: 'Ve městě otevřel velký hotel a shání, kde prát.' },
-  { typ: 'sport', nazev: 'Sportovní akce', ikona: '🏟️', vaha: 8, dobra: true, zavaznost: 2, urovne: ['mesto'],
-    hodin: [12, 48], dopad: { navstevnost: 0.4 },
-    popis: 'Velký zápas a s ním plné hotely, dresy a ručníky.' },
-  { typ: 'levneenergie', nazev: 'Zlevnění energií', ikona: '💡', vaha: 7, dobra: true, zavaznost: 1, urovne: ['zeme', 'svet'],
-    hodin: [48, 168], dopad: { naklady: -0.18 },
-    popis: 'Ceny elektřiny spadly. Provoz je na chvíli levnější.' },
-  { typ: 'rust', nazev: 'Hospodářský růst', ikona: '📈', vaha: 5, dobra: true, zavaznost: 2, urovne: ['zeme'],
-    hodin: [72, 240], dopad: { navstevnost: 0.2 },
-    popis: 'Lidem se vede líp a za pohodlí si rádi připlatí.' },
+  { typ: 'festival', ikona: '🎪', vaha: 10, dobra: true, zavaznost: 2, urovne: ['mesto'],
+    hodin: [12, 60], dopad: { navstevnost: 0.45 } },
+  { typ: 'turiste', ikona: '🧳', vaha: 9, dobra: true, zavaznost: 2, urovne: ['zeme'],
+    hodin: [72, 240], dopad: { navstevnost: 0.22 } },
+  { typ: 'hotel', ikona: '🏨', vaha: 7, dobra: true, zavaznost: 1, urovne: ['mesto'],
+    hodin: [48, 168], dopad: { navstevnost: 0.28 } },
+  { typ: 'sport', ikona: '🏟️', vaha: 8, dobra: true, zavaznost: 2, urovne: ['mesto'],
+    hodin: [12, 48], dopad: { navstevnost: 0.4 } },
+  { typ: 'levneenergie', ikona: '💡', vaha: 7, dobra: true, zavaznost: 1, urovne: ['zeme', 'svet'],
+    hodin: [48, 168], dopad: { naklady: -0.18 } },
+  { typ: 'rust', ikona: '📈', vaha: 5, dobra: true, zavaznost: 2, urovne: ['zeme'],
+    hodin: [72, 240], dopad: { navstevnost: 0.2 } },
 ];
 
 // Kde co hrozí víc. Čeho tu není, má váhu jedna.
@@ -127,8 +113,14 @@ async function zalozUdalost() {
   const uroven = vyber(sablona.urovne);
   const hodin = nahodne(sablona.hodin[0], sablona.hodin[1]);
   const od = new Date();
+  // Do databáze se zapisuje české znění jako záloha — pro správu hry a pro
+  // starší řádky. Hráč vidí text složený v prohlížeči podle typu, takže
+  // každý ve svém jazyce.
   const data = {
-    typ: sablona.typ, nazev: sablona.nazev, popis: sablona.popis, ikona: sablona.ikona,
+    typ: sablona.typ,
+    nazev: TEXTY.t('udalost.' + sablona.typ + '.nazev', null, 'cs'),
+    popis: TEXTY.t('udalost.' + sablona.typ + '.popis', null, 'cs'),
+    ikona: sablona.ikona,
     dobra: !!sablona.dobra, uroven, zavaznost: sablona.zavaznost, dopad: sablona.dopad,
     zeme: uroven === 'svet' ? null : kde.country,
     area_key: uroven === 'mesto' ? kde.key : null,

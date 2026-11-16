@@ -106,11 +106,27 @@ function main() {
         // Porovnání — e.key === 'Enter' — je hodnota, ne text pro hráče.
         const pred = bezKomentare.slice(0, m.index);
         if (/[=!]==?\s*$/.test(pred)) continue;
+        // Dotaz do databáze ani technický klíč nejsou text pro hráče:
+        // popis: { startsWith: 'Provize' } je filtr, timeZone je časové pásmo.
+        if (/\b(startsWith|contains|endsWith|equals|timeZone|locale|label|id)\s*:\s*$/.test(pred)) continue;
         // Doručenka, která má text_kod, si český popis nechává schválně:
         // je to záloha zapsaná do databáze pro případ, že by klíč zmizel.
         // Hráč ji normálně nevidí, překládá se podle klíče.
         const kolem = obsah.slice(Math.max(0, zacatky[i] - 500), zacatky[i] + l.length + 500);
-        if (kolem.indexOf('text_kod') >= 0) continue;
+        if (kolem.indexOf('text_kod') >= 0 || kolem.indexOf('nazev_kod') >= 0 || kolem.indexOf('nazevKod') >= 0) continue;
+        // Víceřádkový výpis do konzole — pokračovací řádek sám o sobě
+        // console nemá, pozná se podle začátku příkazu nad ním.
+        const predRadky = radkyS.slice(Math.max(0, i - 3), i).join('\n');
+        const otevrene = (predRadky.match(/console\.(log|warn|error|info)\s*\(/g) || []).length;
+        if (otevrene) {
+          // Počítáme závorky od posledního console — dokud se nezavřou, jsme
+          // pořád uvnitř výpisu, i o několik řádků níž.
+          const od = predRadky.lastIndexOf('console.');
+          const zbytek = predRadky.slice(od);
+          let h = 0;
+          for (const z of zbytek) { if (z === '(') h++; else if (z === ')') h--; }
+          if (h > 0) continue;
+        }
         if (!m[1]) continue;
         const nalez = casti(m[1]).map((c) => c.s.trim()).filter((c) => jeText(c))[0];
         if (nalez) zapomenute.push({ kde: jmeno, radek: i + 1, text: nalez.slice(0, 60) });

@@ -192,25 +192,25 @@ router.get('/trade/list', hrac, api(async (req, res) => {
 }));
 
 // Ověří, že nabídka dává smysl a že prodávající danou věc opravdu má.
-async function zkontroluj(nab, prodavajici) {
+async function zkontroluj(nab, prodavajici, t) {
   const st = stavu(prodavajici);
   if (nab.predmet === 'stroj') {
-    if (!MODELY.includes(nab.model)) return 'Takový model neznám.';
-    if (skladu(st)[nab.model] < 1) return 'Prodávající nemá ten stroj skladem.';
+    if (!MODELY.includes(nab.model)) return t('server.takovy_model_neznam');
+    if (skladu(st)[nab.model] < 1) return t('server.prodavajici_nema_stroj');
   } else if (nab.predmet === 'pradlomat') {
     const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: nab.spot_id || '' } });
-    if (!c || c.player_id !== prodavajici.id) return 'Ten prádlomat už prodávajícímu nepatří.';
+    if (!c || c.player_id !== prodavajici.id) return t('server.pradlomat_uz_nepatri');
   } else if (nab.predmet === 'karta') {
     const k = await prisma.gameCard.count({ where: { player_id: prodavajici.id, kind: nab.card_kind || '', used_at: null } });
-    if (!k) return 'Prodávající tu kartu nemá.';
+    if (!k) return t('server.prodavajici_nema_kartu');
   } else if (nab.predmet === 'pobocka') {
     // Pobočky žijí ve stavu hry, ne v tabulce — hledáme ji podle názvu.
     const pob = Array.isArray(st.pobocky) ? st.pobocky : [];
-    if (!pob.some((x) => x && x.name === nab.pobocka)) return 'Prodávající takovou pobočku nemá.';
+    if (!pob.some((x) => x && x.name === nab.pobocka)) return t('server.prodavajici_nema_pobocku');
   } else if (nab.predmet === 'pujcka' || nab.predmet === 'podil'
     || nab.predmet === 'odkup' || nab.predmet === 'prevod') {
     return null;        // peníze a podíl se kontrolují zvlášť, nic se nepřevádí ze skladu
-  } else return 'Tohle se obchodovat nedá.';
+  } else return t('server.tohle_se_obchodovat_neda');
   return null;
 }
 // Kdo u téhle nabídky platí hotovost. U půjčky je to věřitel — ten, od koho
@@ -235,14 +235,13 @@ async function vazanaHotovost(playerId, kromeId) {
     + (t.id !== kromeId && platiciId(t) === playerId ? (t.cena || 0) : 0), 0);
 }
 // Vejde se nová nabídka do toho, co hráči zbývá? Vrací chybovou větu, nebo null.
-async function hotovostStaci(hrac, cena, kromeId) {
+async function hotovostStaci(hrac, cena, kromeId, t) {
   const cash = Math.round((stavu(hrac).cash) || 0);
   const vazano = await vazanaHotovost(hrac.id, kromeId);
   const volne = cash - vazano;
   if (cena <= volne) return null;
-  return 'Na tohle nemáš volnou hotovost. Máš ' + cash.toLocaleString('cs-CZ')
-    + ' L$, z toho ' + vazano.toLocaleString('cs-CZ') + ' L$ drží nabídky, co čekají na odpověď — '
-    + 'volných je ' + Math.max(0, volne).toLocaleString('cs-CZ') + ' L$.';
+  return t('server.nemas_volnou_hotovost',
+    { mas: cash, vazano: vazano, volne: Math.max(0, volne) });
 }
 
 // Kolik procent firmy už je prodáno jinde.
@@ -313,8 +312,7 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
     const firma = smer === 'koupim' ? druhy : req.player;
     const uz = await prodanyPodil(firma.id);
     if (uz + podil > PODIL_MAX + 1e-9) {
-      return res.status(409).json({ error: stx(req)('server.z_firmy_je_prodano_uz') + Math.round(uz * 100)
-        + ' %. Celá firma je sto procent — víc prodat nejde.' });
+      return res.status(409).json({ error: stx(req)('server.z_firmy_je_prodano_uz_pct', { p1: Math.round(uz * 100) }) });
     }
     // Kolik bude kupující držet, až to projde — a jestli tím získá většinu.
     // Posíláme to v nabídce, aby obě strany viděly totéž a prodávající se
@@ -363,19 +361,19 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
       vyplaceno: dilP(e.vyplaceno), firma_id: e.firma_id, firma_nick: e.firma_nick };
   }
   // Kdo věc má: u „koupim" ji má ten druhý, u „prodam" ji mám já.
-  const chyba = await zkontroluj(nab, smer === 'koupim' ? druhy : req.player);
+  const chyba = await zkontroluj(nab, smer === 'koupim' ? druhy : req.player, stx(req));
   if (chyba) return res.status(409).json({ error: chyba });
   // Karty přihozené k ceně platí vždycky ten, kdo kupuje.
   const platici = smer === 'koupim' ? req.player : druhy;
   for (const k of karty) {
     const m = await prisma.gameCard.count({ where: { player_id: platici.id, kind: k, used_at: null } });
-    if (!m) return res.status(409).json({ error: 'Karta ' + k + ' chybí tomu, kdo má platit.' });
+    if (!m) return res.status(409).json({ error: stx(req)('server.karta_chybi_platicimu', { p1: k }) });
   }
 
   // Platím-li já, musí na to být volná hotovost — jinak je nabídka od začátku mrtvá.
   const platimJa = predmet === 'pujcka' ? smer === 'prodam' : smer === 'koupim';
   if (platimJa && cena > 0) {
-    const chybi = await hotovostStaci(req.player, cena, null);
+    const chybi = await hotovostStaci(req.player, cena, null, stx(req));
     if (chybi) return res.status(409).json({ error: chybi });
   }
 
@@ -433,8 +431,7 @@ router.post('/trade/:id/counter', hrac, api(async (req, res) => {
     const firmaId = novySmer === 'koupim' ? t.from_id : req.player.id;
     const uz = await prodanyPodil(firmaId);
     if (uz + podil > PODIL_MAX + 1e-9) {
-      return res.status(409).json({ error: stx(req)('server.z_firmy_je_prodano_uz_2') + Math.round(uz * 100)
-        + ' %. Celá firma je sto procent — víc prodat nejde.' });
+      return res.status(409).json({ error: stx(req)('server.z_firmy_je_prodano_uz_pct', { p1: Math.round(uz * 100) }) });
     }
     const kupujiciId = novySmer === 'koupim' ? req.player.id : t.from_id;
     const po = (await podilInvestora(firmaId, kupujiciId)) + podil;
@@ -444,7 +441,7 @@ router.post('/trade/:id/counter', hrac, api(async (req, res) => {
   // Platím-li po prohození já, musí na to být volná hotovost.
   const platimJa = t.predmet === 'pujcka' ? novySmer === 'prodam' : novySmer === 'koupim';
   if (platimJa && cena > 0) {
-    const chybi = await hotovostStaci(req.player, cena, t.id);
+    const chybi = await hotovostStaci(req.player, cena, t.id, stx(req));
     if (chybi) return res.status(409).json({ error: chybi });
   }
 
@@ -488,7 +485,7 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
   const kupujici = t.smer === 'koupim' ? odesilatel : req.player;
   const prodavajici = t.smer === 'koupim' ? req.player : odesilatel;
 
-  const chyba = await zkontroluj(t, prodavajici);
+  const chyba = await zkontroluj(t, prodavajici, stx(req));
   if (chyba) {
     await prisma.gameTrade.update({ where: { id }, data: { stav: 'neplatne', resolved_at: new Date() } });
     return res.status(409).json({ error: chyba });
@@ -499,8 +496,9 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
   const platici = t.predmet === 'pujcka' ? prodavajici : kupujici;
   const hotovost = Math.round((stavu(platici).cash) || 0);
   if (t.cena > hotovost) {
-    return res.status(409).json({ error: (t.predmet === 'pujcka' ? 'Věřitel' : 'Kupující')
-      + ' nemá dost hotovosti (' + hotovost.toLocaleString('cs-CZ') + ' L$).' });
+    return res.status(409).json({ error: stx(req)(t.predmet === 'pujcka'
+      ? 'server.veritel_nema_dost_hotovosti' : 'server.kupujici_nema_dost_hotovosti',
+      { penize: hotovost }) });
   }
   // Odkup: podíl musí pořád běžet a držet ho spolu ti dva, co se domlouvají.
   let odkupEq = null;
@@ -542,8 +540,7 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
     // Věřitel si zástavu vymínil, ale vybrat ji může jen dlužník — ten ví,
     // který prádlomat je ochotný dát v sázku.
     if (req.player.id !== kupujici.id) {
-      return res.status(409).json({ error: stx(req)('server.dluznik_jeste_nevybral_zastavu_kterou_sis')
-        + 'Pošli mu protinávrh, nebo počkej, až půjčku přijme se zástavou.' });
+      return res.status(409).json({ error: stx(req)('server.dluznik_nevybral_zastavu_cela') });
     }
     const z = s((req.body || {}).zastava, 120);
     if (!z) {
@@ -557,31 +554,33 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
   }
 
   const karty = Array.isArray(t.karty) ? t.karty : [];
+  const tx = stx(req);
   const popisPredmetu = t.predmet === 'stroj' ? (t.model || '').toUpperCase()
-    : t.predmet === 'pradlomat' ? 'prádlomat'
-    : t.predmet === 'pobocka' ? ('pobočku ' + (t.spot_id || ''))
-    : t.predmet === 'pujcka' ? 'půjčku'
-    : t.predmet === 'podil' ? ('podíl ' + Math.round(((t.data || {}).podil || 0) * 100) + ' % ve firmě')
-    : t.predmet === 'odkup' ? ('zpětný odkup podílu ' + Math.round(((t.data || {}).podil || 0) * 100) + ' %')
-    : t.predmet === 'prevod' ? ('podíl ' + pct((t.data || {}).podil) + ' % ve firmě '
-      + ((t.data || {}).firma_nick || ''))
-    : 'karta';
+    : t.predmet === 'pradlomat' ? tx('predmet.pradlomat')
+    : t.predmet === 'pobocka' ? tx('predmet.pobocku', { p1: (t.spot_id || '') })
+    : t.predmet === 'pujcka' ? tx('predmet.pujcku')
+    : t.predmet === 'podil' ? tx('predmet.podil_pct', { p1: Math.round(((t.data || {}).podil || 0) * 100) })
+    : t.predmet === 'odkup' ? tx('predmet.odkup_pct', { p1: Math.round(((t.data || {}).podil || 0) * 100) })
+    : t.predmet === 'prevod' ? tx('predmet.podil_pct_firma',
+      { p1: pct((t.data || {}).podil), p2: ((t.data || {}).firma_nick || '') })
+    : tx('predmet.karta');
 
   await prisma.$transaction(async (tx) => {
     // 1. karty přihozené k ceně → od kupujícího prodávajícímu
     for (const k of karty) {
       const c = await tx.gameCard.findFirst({ where: { player_id: kupujici.id, kind: k, used_at: null }, orderBy: { id: 'asc' } });
-      if (!c) throw new Error('Karta ' + k + ' se mezitím ztratila.');
+      if (!c) throw new Error(stx(req)('server.karta_se_ztratila', { p1: k }));
       await tx.gameCard.update({ where: { id: c.id }, data: { player_id: prodavajici.id } });
     }
     // 2. samotný předmět
     if (t.predmet === 'karta') {
       const c = await tx.gameCard.findFirst({ where: { player_id: prodavajici.id, kind: t.card_kind, used_at: null }, orderBy: { id: 'asc' } });
-      if (!c) throw new Error('Karta se mezitím ztratila.');
+      if (!c) throw new Error(stx(req)('server.karta_se_ztratila_2'));
       await tx.gameCard.update({ where: { id: c.id }, data: { player_id: kupujici.id } });
     } else if (t.predmet === 'stroj') {
       await tx.gameDelivery.createMany({ data: [
-        { player_id: prodavajici.id, trade_id: t.id, kind: 'stock', model: t.model, amount: -1, popis: 'Prodal jsi ' + popisPredmetu },
+        { player_id: prodavajici.id, trade_id: t.id, kind: 'stock', model: t.model, amount: -1, popis: 'Prodal jsi ' + popisPredmetu,
+      text_kod: 'dor.prodal_jsi', text_data: { p1: popisPredmetu } },
         { player_id: kupujici.id, trade_id: t.id, kind: 'stock', model: t.model, amount: 1, popis: 'Koupil jsi ' + popisPredmetu },
       ] });
     } else if (t.predmet === 'pradlomat') {
@@ -811,7 +810,7 @@ router.get('/trade/struktura/:id', hrac, api(async (req, res) => {
     lide.forEach((h) => nazvy.set(h.id, { nick: h.nick, firma: h.company || (h.nick + ' s.r.o.'),
       znak: h.emblem || null }));
   }
-  const kdo = (i) => nazvy.get(i) || { nick: '?', firma: 'neznámá firma', znak: null };
+  const kdo = (i) => nazvy.get(i) || { nick: '?', firma: stx(req)('server.neznama_firma'), znak: null };
   const prodano = vMe.reduce((a, e) => a + e.podil, 0);
   // Jedna firma může podíl kupovat na víckrát. V rejstříku patří dohromady —
   // dvakrát jedno procento je prostě dvě procenta, ne dva řádky.
@@ -936,11 +935,13 @@ router.post('/trade/aukce/:id/koupit', hrac, api(async (req, res) => {
       where: { id: a.id, koupil_id: null },
       data: { koupil_id: req.player.id, koupil_za: cena, koupeno_at: new Date() },
     });
-    if (!zabrano.count) throw Object.assign(new Error('Tohle už někdo koupil.'), { stav: 409 });
+    if (!zabrano.count) throw Object.assign(new Error(stx(req)('server.tohle_uz_nekdo_koupil')), { stav: 409 });
 
     const dorucenky = [
-      { player_id: req.player.id, kind: 'cash', amount: -cena, popis: 'Koupil jsi z konkurzu: ' + a.popis },
-      { player_id: a.player_id, kind: 'cash', amount: cena, popis: 'Z konkurzu se prodalo: ' + a.popis },
+      { player_id: req.player.id, kind: 'cash', amount: -cena, popis: 'Koupil jsi z konkurzu: ' + a.popis,
+        text_kod: 'dor.koupil_z_konkurzu', text_data: { p1: a.popis } },
+      { player_id: a.player_id, kind: 'cash', amount: cena, popis: 'Z konkurzu se prodalo: ' + a.popis,
+        text_kod: 'dor.prodalo_z_konkurzu', text_data: { p1: a.popis } },
     ];
     if (a.predmet === 'stroj') {
       dorucenky.push({ player_id: req.player.id, kind: 'stock', model: a.model, amount: 1, popis: 'Z konkurzu: ' + a.popis });
@@ -1005,7 +1006,7 @@ router.post('/trade/trh', hrac, api(async (req, res) => {
   if (bezi) return res.status(409).json({ error: stx(req)('server.tohle_misto_uz_na_trzisti_je') });
   const kolik = await prisma.gameMarket.count({
     where: { player_id: req.player.id, koupil_id: null, zruseno_at: null, do: { gt: new Date() } } });
-  if (kolik >= TRH_MAX_NABIDEK) return res.status(429).json({ error: stx(req)('server.vic_nez') + TRH_MAX_NABIDEK + ' nabídek naráz mít nemůžeš.' });
+  if (kolik >= TRH_MAX_NABIDEK) return res.status(429).json({ error: stx(req)('server.vic_nabidek_naraz', { p1: TRH_MAX_NABIDEK }) });
 
   const m = await prisma.gameMarket.create({ data: {
     player_id: req.player.id, nick: req.player.nick, firma: req.player.company,
@@ -1051,7 +1052,7 @@ router.post('/trade/trh/:id/koupit', hrac, api(async (req, res) => {
       where: { id: m.id, koupil_id: null, zruseno_at: null },
       data: { koupil_id: req.player.id, koupil_nick: req.player.nick, koupeno_at: new Date() },
     });
-    if (!zabrano.count) throw Object.assign(new Error('Tohle už někdo koupil.'), { stav: 409 });
+    if (!zabrano.count) throw Object.assign(new Error(stx(req)('server.tohle_uz_nekdo_koupil')), { stav: 409 });
     await tx.gameSpotClaim.update({ where: { spot_id: m.spot_id },
       data: { player_id: req.player.id, nick: req.player.nick } });
     const popis = 'prádlomat ' + (m.name || m.spot_id) + ' z tržiště';
@@ -1142,22 +1143,28 @@ router.post('/trade/drazba', hrac, api(async (req, res) => {
 
   const ja = req.player;
   const st = stavu(ja);
-  let nazev = '', data = null, model = null, spotId = null, cardKind = null;
+  // Vedle českého názvu se posílá i kód a proměnná část — název dražby vidí
+  // všichni hráči naráz a každý ve svém jazyce. Jde to do sloupce data, který
+  // je JSON a klient ho dostává celý, takže kvůli tomu nemusí nic přibýt.
+  let nazev = '', data = null, model = null, spotId = null, cardKind = null, nazevKod = null;
   if (predmet === 'stroj') {
     model = s(b.model, 10);
     if (!MODELY.includes(model)) return res.status(400).json({ error: stx(req)('server.takovy_model_neznam') });
     if (skladu(st)[model] < 1) return res.status(409).json({ error: stx(req)('server.ten_stroj_nemas_skladem') });
     nazev = 'prádlomat ' + model.toUpperCase() + ' (stroj ze skladu)';
+    nazevKod = { kod: 'drazba.nazev_stroj', cast: model.toUpperCase() };
   } else if (predmet === 'pradlomat') {
     spotId = s(b.spot_id, 120);
     const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spotId } });
     if (!c || c.player_id !== ja.id || !c.model) return res.status(409).json({ error: stx(req)('server.ten_pradlomat_ti_nepatri') });
     nazev = 'prádlomat ' + (c.name || spotId);
+    nazevKod = { kod: 'drazba.nazev_pradlomat', cast: (c.name || spotId) };
   } else if (predmet === 'pobocka') {
     spotId = s(b.pobocka, 120);
     const pob = Array.isArray(st.pobocky) ? st.pobocky : [];
     if (!pob.some((x) => x && x.name === spotId)) return res.status(409).json({ error: stx(req)('server.takovou_pobocku_nemas') });
     nazev = 'pobočka ' + spotId;
+    nazevKod = { kod: 'drazba.nazev_pobocka', cast: spotId };
   } else if (predmet === 'karta') {
     cardKind = s(b.card_kind, 24);
     const k = await prisma.gameCard.count({ where: { player_id: ja.id, kind: cardKind, used_at: null } });
@@ -1169,11 +1176,11 @@ router.post('/trade/drazba', hrac, api(async (req, res) => {
     const podil = Math.max(PODIL_MIN, Math.min(PODIL_MAX, Number(b.podil) || 0));
     const prodano = await prodanyPodil(ja.id);
     if (prodano + podil > PODIL_MAX + 1e-9) {
-      return res.status(409).json({ error: stx(req)('server.z_firmy_je_prodano_uz_3') + Math.round(prodano * 100)
-        + ' %. Celá firma je sto procent.' });
+      return res.status(409).json({ error: stx(req)('server.z_firmy_prodano_sto', { p1: Math.round(prodano * 100) }) });
     }
     data = { podil };
     nazev = 'podíl ' + pct(podil) + ' % ve firmě ' + (ja.company || ja.nick);
+    nazevKod = { kod: 'drazba.nazev_podil', cast: (ja.company || ja.nick), pct: pct(podil) };
   } else if (predmet === 'prevod') {
     const e = await prisma.gameEquity.findUnique({ where: { id: parseInt(b.equity_id, 10) || 0 } });
     if (!e || e.stav !== 'bezi' || e.investor_id !== ja.id) {
@@ -1190,11 +1197,13 @@ router.post('/trade/drazba', hrac, api(async (req, res) => {
     if (e.podil - podil < 0.001) podil = e.podil;
     data = { equity_id: e.id, podil, firma_id: e.firma_id, firma_nick: e.firma_nick };
     nazev = 'podíl ' + pct(podil) + ' % ve firmě ' + e.firma_nick;
+    nazevKod = { kod: 'drazba.nazev_podil', cast: e.firma_nick, pct: pct(podil) };
   }
 
   const d = await prisma.gameDrazba.create({ data: {
     prodavajici_id: ja.id, prodavajici_nick: ja.nick,
-    predmet, model, spot_id: spotId, card_kind: cardKind, data,
+    predmet, model, spot_id: spotId, card_kind: cardKind,
+    data: nazevKod ? Object.assign({}, data || {}, { nazev_kod: nazevKod }) : data,
     nazev: nazev.slice(0, 160), vyvolavaci,
     konec: new Date(Date.now() + DRZ.DRAZBA_MS),
   } });
@@ -1222,8 +1231,7 @@ router.post('/trade/drazba/prihoz', hrac, api(async (req, res) => {
     where: { drazba_id: d.id }, orderBy: { id: 'desc' }, select: { castka: true } });
   const minimum = DRZ.minPrihoz(posl ? posl.castka : 0);
   if (castka < minimum) {
-    return res.status(400).json({ error: stx(req)('server.prihodit_musis_aspon')
-      + minimum.toLocaleString('cs-CZ') + ' L$ — tolik dal poslední.' });
+    return res.status(400).json({ error: stx(req)('server.prihodit_aspon_posledni', { penize: minimum }) });
   }
   const ja = req.player;
   const jsemProdavajici = d.prodavajici_id === ja.id;
@@ -1335,7 +1343,7 @@ async function prevedVydrazene(tx, d, prodavajici, vitez) {
   if (d.predmet === 'karta') {
     const c = await tx.gameCard.findFirst({ where: { player_id: prodavajici.id,
       kind: d.card_kind, used_at: null }, orderBy: { id: 'asc' } });
-    if (!c) throw new Error('Karta se mezitím ztratila.');
+    if (!c) throw new Error(stx(req)('server.karta_se_ztratila_2'));
     await tx.gameCard.update({ where: { id: c.id }, data: { player_id: vitez.id } });
   } else if (d.predmet === 'stroj') {
     await tx.gameDelivery.createMany({ data: [
@@ -1366,7 +1374,7 @@ async function prevedVydrazene(tx, d, prodavajici, vitez) {
   } else if (d.predmet === 'prevod') {
     const eq = await tx.gameEquity.findUnique({ where: { id: (d.data || {}).equity_id || 0 } });
     if (!eq || eq.stav !== 'bezi' || eq.investor_id !== prodavajici.id) {
-      throw new Error('Podíl už takhle neběží.');
+      throw new Error(stx(req)('server.podil_uz_takhle_nebezi'));
     }
     // Do dražby mohl jít jen kus. Kolik, se ověřuje až tady — mezitím mohl
     // prodávající část podílu prodat jinudy a slíbit víc, než drží.

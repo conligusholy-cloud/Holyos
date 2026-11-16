@@ -10695,6 +10695,15 @@ function drzFeedHtml() {
   }).join('');
 }
 // Dražba se mění pod rukama. Tohle sahá jen na čísla, ne na stavbu okna.
+// Název dražby vidí všichni hráči naráz, takže ho server posílá i jako kód
+// s proměnnou částí (ve sloupci data). Složí si ho každý prohlížeč ve svém
+// jazyce; u starších dražeb, které kód nemají, zůstane české znění ze serveru.
+function drzNazev(d) {
+  var k = d && d.data && d.data.nazev_kod;
+  if (!k || !k.kod) return (d && d.nazev) || '';
+  var v = tx(k.kod, { p1: k.cast, p2: k.pct });
+  return v === k.kod ? (d.nazev || '') : v;
+}
 function paintDrazbaZiva() {
   var d = DRAZBA, box = $('drz-okno');
   if (!d || !box || !drazbaBezi()) return;
@@ -10734,7 +10743,7 @@ function paintDrazba() {
   var pod = d.suma > d.vyvolavaci;
   if (!bezi) {
     box.innerHTML = '<h3>' + esc(tx('drazba.drazba_skoncila')) + '</h3>'
-      + '<p class="muted small">' + esc(d.nazev)
+      + '<p class="muted small">' + esc(drzNazev(d))
       + (d.prodavajici_nick ? tx('veta.vyvolal_2', { p1: esc(d.prodavajici_nick) }) : '') + '</p>'
       + (d.vitez_nick
           ? '<div class="kv souhrn"><span>' + esc(d.vitez_nick) + '</span><b class="ok">'
@@ -10750,7 +10759,7 @@ function paintDrazba() {
   var volne = Math.max(0, volnaHotovost(null) - (d.moje_prihozy || 0));
   var strop = drzStrop(d), limit = Math.min(volne, strop);
   var minim = DRAZBA_MIN || 1000;
-  box.innerHTML = tx('veta.h3_drazba', { p1: tx('veta.h3_p_class_muted_small_style_10', { p1: esc(d.nazev), p2: (d.moje ? esc(tx('hra.vyvolal_jsi_ji_ty'))
+  box.innerHTML = tx('veta.h3_drazba', { p1: tx('veta.h3_p_class_muted_small_style_10', { p1: esc(drzNazev(d)), p2: (d.moje ? esc(tx('hra.vyvolal_jsi_ji_ty'))
         : d.tajny_prodavajici ? esc(tx('drazba.kdo_ji_vyvolal_se_ukaze'))
           : tx('veta.vyvolal', { p1: esc(d.prodavajici_nick) })) }) })
     // Hodiny jsou hrdina okna — odpočet rozhoduje, cena je až druhá v pořadí.
