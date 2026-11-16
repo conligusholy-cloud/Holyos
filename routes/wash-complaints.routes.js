@@ -104,6 +104,52 @@ function powCheck(p) {
   powUsed.set(salt, exp); if (powUsed.size > 20000) { const now = Date.now(); for (const [k, v] of powUsed) if (v < now) powUsed.delete(k); }
   return null;
 }
+// ─── Obrázková výzva (po „Jsem člověk") — vyber všechny obrázky dané věci ────────
+// Obrázky kreslí server (SVG, náhodné barvy/natočení/velikost), správnou odpověď nikam neposílá —
+// v podpisu je jen HMAC(salt + správné pozice). Výzva platí jednou, 10 minut, max 3 pokusy z IP za minutu.
+const IMG_ICONS = {
+  pracka: { nazev: 'pračkou', d: (c) => `<rect x="12" y="8" width="40" height="48" rx="5" fill="${c}"/><rect x="12" y="8" width="40" height="10" rx="5" fill="#00000022"/><circle cx="20" cy="13" r="2" fill="#fff"/><circle cx="27" cy="13" r="2" fill="#fff"/><circle cx="32" cy="36" r="13" fill="#e8f4ff" stroke="#00000044" stroke-width="3"/><path d="M22 38q5-5 10 0t10 0" stroke="#3b82f6" stroke-width="3" fill="none"/>` },
+  triko: { nazev: 'tričkem', d: (c) => `<path d="M22 10l-12 8 6 10 6-3v29h20V25l6 3 6-10-12-8q-4 6-10 6t-10-6z" fill="${c}"/>` },
+  auto: { nazev: 'autem', d: (c) => `<path d="M8 38l5-12q2-4 6-4h22q4 0 6 4l5 12v8H8z" fill="${c}"/><rect x="18" y="26" width="10" height="8" rx="1" fill="#dbeafe"/><rect x="31" y="26" width="10" height="8" rx="1" fill="#dbeafe"/><circle cx="19" cy="47" r="5" fill="#222"/><circle cx="45" cy="47" r="5" fill="#222"/>` },
+  strom: { nazev: 'stromem', d: (c) => `<rect x="29" y="38" width="6" height="18" fill="#7c4a1e"/><circle cx="32" cy="26" r="16" fill="${c}"/><circle cx="22" cy="32" r="9" fill="${c}"/><circle cx="42" cy="32" r="9" fill="${c}"/>` },
+  ryba: { nazev: 'rybou', d: (c) => `<path d="M10 32q14-16 32 0-18 16-32 0z" fill="${c}"/><path d="M42 32l12-10v20z" fill="${c}"/><circle cx="19" cy="29" r="2.5" fill="#111"/>` },
+  hvezda: { nazev: 'hvězdou', d: (c) => `<path d="M32 8l7 15 16 2-12 11 3 16-14-8-14 8 3-16-12-11 16-2z" fill="${c}"/>` },
+  dum: { nazev: 'domem', d: (c) => `<path d="M10 30L32 12l22 18" fill="none" stroke="${c}" stroke-width="5" stroke-linejoin="round"/><rect x="16" y="30" width="32" height="24" fill="${c}"/><rect x="28" y="40" width="8" height="14" fill="#fff"/>` },
+  hrnek: { nazev: 'hrnkem', d: (c) => `<rect x="14" y="18" width="28" height="32" rx="4" fill="${c}"/><path d="M42 24h6q6 0 6 8t-6 8h-6" fill="none" stroke="${c}" stroke-width="5"/>` },
+  ponozka: { nazev: 'ponožkou', d: (c) => `<path d="M24 8h16v28l8 8q4 6-2 10t-12-2L20 40q-2-2-2-6V8z" fill="${c}"/><rect x="22" y="8" width="20" height="6" fill="#00000022"/>` },
+};
+const IMG_COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#64748b', '#84cc16', '#0ea5e9'];
+const imgUsed = new Map();
+function imgChallenge() {
+  const keys = Object.keys(IMG_ICONS), rnd = (n) => crypto.randomInt(n);
+  const target = ['pracka', 'triko', 'ponozka', 'auto', 'strom', 'ryba'][rnd(6)];
+  const pocet = 2 + rnd(3); // 2–4 správné
+  const others = keys.filter((k) => k !== target);
+  const cells = Array.from({ length: 9 }, (_, i) => (i < pocet ? target : others[rnd(others.length)]));
+  for (let i = cells.length - 1; i > 0; i--) { const j = rnd(i + 1); [cells[i], cells[j]] = [cells[j], cells[i]]; }
+  const tiles = cells.map((k) => {
+    const c = IMG_COLORS[rnd(IMG_COLORS.length)], bg = ['#eef6ff', '#f3f0ff', '#effaf3', '#fff7ed', '#f8fafc'][rnd(5)];
+    const rot = rnd(50) - 25, sc = (80 + rnd(30)) / 100, dx = rnd(10) - 5, dy = rnd(10) - 5;
+    const noise = Array.from({ length: 5 }, () => `<circle cx="${rnd(64)}" cy="${rnd(64)}" r="${1 + rnd(4)}" fill="${IMG_COLORS[rnd(IMG_COLORS.length)]}" opacity=".35"/>`).join('');
+    return `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="${bg}"/>${noise}<g transform="translate(${32 + dx} ${32 + dy}) rotate(${rot}) scale(${sc}) translate(-32 -32)">${IMG_ICONS[k].d(c)}</g></svg>`;
+  });
+  const correct = cells.map((k, i) => (k === target ? i : -1)).filter((i) => i >= 0).join(',');
+  const salt = crypto.randomBytes(12).toString('hex'), exp = Date.now() + 10 * 60e3;
+  const sig = crypto.createHmac('sha256', SECRET).update('img:' + salt + ':' + exp + ':' + correct).digest('hex').slice(0, 32);
+  return { salt, exp, sig, otazka: 'Vyberte všechny obrázky s ' + IMG_ICONS[target].nazev, tiles };
+}
+function imgCheck(p) {
+  if (!p || typeof p !== 'object') return 'Vyřešte prosím obrázkovou úlohu.';
+  const salt = String(p.salt || ''), exp = Number(p.exp), sig = String(p.sig || '');
+  if (!/^[a-f0-9]{24}$/.test(salt) || !(exp > Date.now())) return 'Úloha vypršela — zkuste novou.';
+  if (imgUsed.has(salt)) return 'Úloha už byla použita — zkuste novou.';
+  imgUsed.set(salt, exp); if (imgUsed.size > 20000) { const now = Date.now(); for (const [k, v] of imgUsed) if (v < now) imgUsed.delete(k); }
+  const pick = [...new Set((Array.isArray(p.pick) ? p.pick : []).map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n < 9))].sort((a, b) => a - b).join(',');
+  const ok = crypto.createHmac('sha256', SECRET).update('img:' + salt + ':' + exp + ':' + pick).digest('hex').slice(0, 32);
+  return sig.length === ok.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(ok)) ? null : 'Výběr nesouhlasí — zkuste novou úlohu.';
+}
+// Propustka po obou krocích (ověření + obrázky), svázaná s konkrétním řešením „Jsem člověk"
+const passFor = (powSalt) => crypto.createHmac('sha256', SECRET).update('pass:' + powSalt).digest('hex').slice(0, 32);
 const hits = new Map();
 function limited(key, max, ms) {
   const now = Date.now(), arr = (hits.get(key) || []).filter((x) => now - x < ms);
@@ -169,6 +215,20 @@ publicRouter.get('/challenge', (req, res) => {
   if (limited('pow:' + ipOf(req), 60, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho pokusů, zkuste to prosím později.' });
   res.set('Cache-Control', 'no-store').json(Object.assign({ ok: true }, powChallenge()));
 });
+// GET /api/public/wash/image-challenge → obrázková úloha
+publicRouter.get('/image-challenge', (req, res) => {
+  if (limited('img:' + ipOf(req), 40, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho pokusů, zkuste to prosím později.' });
+  res.set('Cache-Control', 'no-store').json(Object.assign({ ok: true }, imgChallenge()));
+});
+// POST /api/public/wash/image-verify { img:{salt,exp,sig,pick}, pow:{…} } → propustka pro odeslání žádosti
+publicRouter.post('/image-verify', (req, res) => {
+  const b = req.body || {}, ip = ipOf(req);
+  if (limited('imgv:' + ip, 3, 60e3) || limited('imgvh:' + ip, 30, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho pokusů — počkejte prosím chvíli.' });
+  const e = imgCheck(b.img); if (e) return res.status(400).json({ error: e });
+  const p = b.pow || {}, salt = String(p.salt || '');
+  if (!/^[a-f0-9]{24}$/.test(salt)) return res.status(400).json({ error: 'Nejdřív potvrďte „Jsem člověk".' });
+  res.json({ ok: true, pass: passFor(salt) });
+});
 // GET /api/public/wash/form → místa, číselníky a token formuláře
 publicRouter.get('/form', async (req, res) => {
   try {
@@ -184,6 +244,7 @@ publicRouter.post('/request', async (req, res) => {
     if (s(b.web, 100)) return res.json({ ok: true, number: '—' });
     const tokErr = checkToken(b.token); if (tokErr) return res.status(400).json({ error: tokErr });
     const powErr = powCheck(b.pow); if (powErr) return res.status(400).json({ error: powErr, pow: true });
+    if (!b.pow || String(b.pass || '') !== passFor(String(b.pow.salt || ''))) return res.status(400).json({ error: 'Vyřešte prosím obrázkovou úlohu.', pow: true });
     if (limited('ip:' + ip, 6, 3600e3) || limited('ipd:' + ip, 15, 86400e3)) return res.status(429).json({ error: 'Z tohoto připojení bylo odesláno příliš mnoho žádostí. Zkuste to prosím později, nebo nám zavolejte.' });
 
     const kind = b.kind === 'refund' ? 'refund' : b.kind === 'receipt' ? 'receipt' : null;
@@ -402,4 +463,4 @@ router.post('/:id(\\d+)/email', async (req, res, next) => {
 
 module.exports = router;
 module.exports.publicRouter = publicRouter;
-module.exports._test = { normPhone, normAccount, checkToken, formToken, powChallenge, powCheck };
+module.exports._test = { normPhone, normAccount, checkToken, formToken, powChallenge, powCheck, imgChallenge, imgCheck, passFor };

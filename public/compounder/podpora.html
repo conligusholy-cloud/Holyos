@@ -45,6 +45,18 @@
   .hchk.ok{border-color:var(--brand);background:var(--brand)}.hchk.ok::after{content:"✓";color:#fff;font-weight:900;font-size:17px}
   .hlogo{margin-left:auto;text-align:center;font-size:20px;line-height:1}.hlogo i{display:block;font-style:normal;font-size:9px;color:var(--muted);margin-top:2px}
   @keyframes hsp{to{transform:rotate(360deg)}}
+  .cap-ov{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50}
+  .cap{background:#fff;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:380px;max-width:100%;overflow:hidden}
+  .cap-h{background:#0e7c7b;color:#fff;font-weight:700;padding:16px 16px 22px;font-size:16px;line-height:1.3}
+  .cap-h small{display:block;font-weight:400;opacity:.85;font-size:12.5px;margin-top:4px}
+  .cap-g{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:10px;background:#eceff4}
+  .cap-t{position:relative;border:0;padding:0;cursor:pointer;border-radius:4px;overflow:hidden;background:#fff;aspect-ratio:1}
+  .cap-t svg{width:100%;height:100%;display:block;transition:transform .12s}
+  .cap-t.on svg{transform:scale(.82)}
+  .cap-t.on::after{content:"✓";position:absolute;top:4px;left:4px;width:22px;height:22px;border-radius:50%;background:#0e7c7b;color:#fff;font-weight:900;font-size:14px;display:grid;place-items:center}
+  .cap-f{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid #e5e7eb}
+  .cap-f .msg{flex:1;font-size:12.5px;color:var(--err)}
+  .cap-re{background:none;border:0;font-size:20px;cursor:pointer;color:#475569}
   @media(max-width:560px){.row{grid-template-columns:1fr 120px}h1{font-size:25px}.btn.big{min-width:0;width:100%}}
 </style>
 </head>
@@ -143,6 +155,7 @@
     });
   }
   function human() {
+    if (POW && !PASS && !POW_BUSY) { capOpen(); return; }
     if (POW_BUSY || POW) return;
     if (!window.crypto || !crypto.subtle) { $('h-hint').textContent = 'Váš prohlížeč ověření nepodporuje — zavolejte nám prosím na linku níže.'; return; }
     POW_BUSY = true; $('h-chk').className = 'hchk spin'; $('h-txt').textContent = 'Ověřuji…'; $('h-hint').textContent = '';
@@ -150,10 +163,43 @@
       if (!ch.salt) throw new Error(ch.error || 'Ověření se nepodařilo spustit');
       return solve(ch).then(function (nonce) { POW = { salt: ch.salt, exp: ch.exp, sig: ch.sig, nonce: String(nonce) }; });
     }).then(function () {
-      POW_BUSY = false; $('h-chk').className = 'hchk ok'; $('h-txt').textContent = 'Jsem člověk'; $('h-box').disabled = true; $('h-go').disabled = false;
+      POW_BUSY = false; $('h-chk').className = 'hchk'; $('h-txt').textContent = 'Jsem člověk'; capOpen();
     }).catch(function (e) { POW_BUSY = false; $('h-chk').className = 'hchk'; $('h-txt').textContent = 'Jsem člověk'; $('h-hint').textContent = (e && e.message) || 'Ověření se nepovedlo, zkuste to znovu.'; });
   }
-  function resetHuman() { POW = null; $('h-chk').className = 'hchk'; $('h-box').disabled = false; $('h-go').disabled = true; $('human').classList.remove('hidden'); $('choices').classList.add('hidden'); }
+  // Obrázková úloha po výpočtu „Jsem člověk" (jako u klasických captch)
+  var IMG = null, PASS = null;
+  function capOpen() {
+    var ov = document.createElement('div'); ov.className = 'cap-ov'; ov.id = 'cap-ov';
+    ov.innerHTML = '<div class="cap" role="dialog" aria-label="Ověření"><div class="cap-h" id="cap-q">Načítám úlohu…</div><div class="cap-g" id="cap-g"></div>'
+      + '<div class="cap-f"><button type="button" class="cap-re" id="cap-re" title="Jiná úloha">↻</button><span class="msg" id="cap-m"></span><button type="button" class="btn" id="cap-ok">Ověřit</button></div></div>';
+    document.body.appendChild(ov);
+    $('cap-re').onclick = capLoad; $('cap-ok').onclick = capVerify;
+    capLoad();
+  }
+  function capLoad() {
+    $('cap-m').textContent = ''; $('cap-g').innerHTML = '';
+    fetch('/api/public/wash/image-challenge', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j.tiles) throw new Error(j.error || 'Úlohu se nepodařilo načíst');
+      IMG = j; $('cap-q').innerHTML = j.otazka.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '<small>Klikněte na všechny odpovídající obrázky, pak na Ověřit. Pokud tam žádné nejsou, zkuste ↻.</small>';
+      $('cap-g').innerHTML = j.tiles.map(function (t, i) { return '<button type="button" class="cap-t" data-i="' + i + '">' + t + '</button>'; }).join('');
+      [].forEach.call($('cap-g').children, function (b) { b.onclick = function () { b.classList.toggle('on'); }; });
+    }).catch(function (e) { $('cap-m').textContent = e.message; });
+  }
+  function capVerify() {
+    if (!IMG) return;
+    var pick = [].filter.call($('cap-g').children, function (b) { return b.classList.contains('on'); }).map(function (b) { return Number(b.getAttribute('data-i')); });
+    if (!pick.length) { $('cap-m').textContent = 'Vyberte alespoň jeden obrázek.'; return; }
+    var btn = $('cap-ok'); btn.disabled = true;
+    fetch('/api/public/wash/image-verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ img: { salt: IMG.salt, exp: IMG.exp, sig: IMG.sig, pick: pick }, pow: POW }) })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (r) {
+        btn.disabled = false;
+        if (!r.ok) { $('cap-m').textContent = r.j.error || 'Nesouhlasí, zkuste znovu.'; capLoad(); return; }
+        PASS = r.j.pass; var o = $('cap-ov'); if (o) o.remove();
+        $('h-chk').className = 'hchk ok'; $('h-txt').textContent = 'Jsem člověk'; $('h-box').disabled = true; $('h-go').disabled = false;
+      }).catch(function () { btn.disabled = false; $('cap-m').textContent = 'Spojení selhalo, zkuste znovu.'; });
+  }
+  function resetHuman() { PASS = null; POW = null; $('h-chk').className = 'hchk'; $('h-box').disabled = false; $('h-go').disabled = true; $('human').classList.remove('hidden'); $('choices').classList.add('hidden'); }
   var TXT = {
     refund: ['Žádost o vrácení platby', 'Vyplňte a odešlete formulář níže.'],
     receipt: ['Žádost o vydání dokladu', 'Vyplňte a odešlete formulář níže — pro každou službu či transakci musí být vytvořena samostatná žádost.']
@@ -196,7 +242,7 @@
     try { history.replaceState(null, '', '#' + kind); } catch (e) {}
   }
   $('h-box').onclick = human;
-  $('h-go').onclick = function () { if (!POW) return; $('human').classList.add('hidden'); $('choices').classList.remove('hidden'); };
+  $('h-go').onclick = function () { if (!POW || !PASS) return; $('human').classList.add('hidden'); $('choices').classList.remove('hidden'); };
   document.querySelectorAll('[data-go]').forEach(function (b) { b.onclick = function () { start(b.getAttribute('data-go')); }; });
   $('f-back').onclick = function () { show('v-start'); if (!POW) resetHuman(); try { history.replaceState(null, '', location.pathname); } catch (e) {} };
   $('ok-new').onclick = function () { $('v-form').reset(); show('v-start'); resetHuman(); load(); };
@@ -206,8 +252,8 @@
   $('v-form').addEventListener('submit', function (ev) {
     ev.preventDefault();
     var f = $('v-form'), v = function (n) { var el = f.elements[n]; return el ? String(el.value || '').trim() : ''; };
-    if (!POW) { show('v-start'); resetHuman(); return; }
-    var data = { kind: KIND, token: CFG && CFG.token, pow: POW, web: v('web'), date: v('date'), time: v('time') || '00:00', place_code: v('place_code'),
+    if (!POW || !PASS) { show('v-start'); resetHuman(); return; }
+    var data = { kind: KIND, token: CFG && CFG.token, pow: POW, pass: PASS, web: v('web'), date: v('date'), time: v('time') || '00:00', place_code: v('place_code'),
       name: v('name'), phone: v('phone'), email: v('email'), amount: v('amount'), pay_method: v('pay_method'), service: v('service') };
     if (KIND === 'refund') { data.account = v('account'); data.reason = v('reason'); }
     // Rychlá kontrola v prohlížeči (server kontroluje vše znovu)
@@ -233,7 +279,7 @@
           if (r.j.pow) { POW = null; fail(r.j.error + ' Klikněte na „Zpět" a ověřte se znovu.'); return; }
           return fail(r.j.error || 'Žádost se nepodařilo odeslat.');
         }
-        POW = null; // ověření platí jen na jednu žádost
+        POW = null; PASS = null; // ověření platí jen na jednu žádost
         $('ok-num').textContent = 'Číslo žádosti: ' + r.j.number; show('v-ok'); load();
       })
       .catch(function () { b.disabled = false; b.textContent = 'Odeslat žádost'; fail('Nepodařilo se spojit se serverem. Zkontrolujte připojení a zkuste to znovu.'); });
@@ -241,7 +287,7 @@
 
   load().catch(function () {});
   // Přímý odkaz #refund / #receipt: nejdřív ověření, pak rovnou formulář
-  if (location.hash === '#refund' || location.hash === '#receipt') { var want = location.hash.slice(1); $('h-go').onclick = function () { if (POW) { $('human').classList.add('hidden'); $('choices').classList.remove('hidden'); start(want); } }; }
+  if (location.hash === '#refund' || location.hash === '#receipt') { var want = location.hash.slice(1); $('h-go').onclick = function () { if (POW && PASS) { $('human').classList.add('hidden'); $('choices').classList.remove('hidden'); start(want); } }; }
 })();
 </script>
 </body>
