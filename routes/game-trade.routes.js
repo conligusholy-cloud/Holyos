@@ -143,6 +143,7 @@ router.get('/trade/players', hrac, api(async (req, res) => {
   const viden = new Set();
   zivi.concat(cerstvi).forEach((p) => { if (!viden.has(p.id)) { viden.add(p.id); vsichni.push(p); } });
   const ted = Date.now();
+  const jaz = TEXTY.jazykHrace(req.player);
   // Hodnost posíláme s sebou: na burze je to jediná rychlá informace o tom,
   // s kým se člověk chystá domluvit na penězích.
   res.json({ ok: true, players: vsichni.map((p) => {
@@ -151,12 +152,16 @@ router.get('/trade/players', hrac, api(async (req, res) => {
       firma: p.company || (p.nick + ' s.r.o.'), naposledy: p.state_at,
       // tady = má hru na očích, pozadi = drží ji ve schované záložce
       online: !t ? null : (ted - t.v <= ONLINE_MS ? 'tady' : 'pozadi'),
-      hodnost: p.hodnost || null, hodnost_nazev: hodnostNazev(p.hodnost) };
+      hodnost: p.hodnost || null, hodnost_nazev: hodnostNazev(p.hodnost, jaz) };
   }) });
 }));
 
-const { HODNOSTI, ODZNAK } = require('../services/game/hodnosti');
-const hodnostNazev = (id) => ((HODNOSTI.find((h) => h.id === id) || {}).nazev || null);
+const { HODNOSTI, ODZNAK, nazevHodnosti, odznakPro } = require('../services/game/hodnosti');
+const TEXTY = require('../services/game/texty');
+const { textDorucenky } = require('../services/game/doruceni');
+// Název hodnosti se skládá pro toho, KOMU se posílá — na burze se potkají
+// dva hráči a každý může mít nastavený jiný jazyk.
+const hodnostNazev = (id, jazyk) => (id ? nazevHodnosti(id, jazyk) : null);
 
 // ─── Nabídky ─────────────────────────────────────────────────────────────────
 const verejny = (t, me) => ({
@@ -784,6 +789,7 @@ router.get('/trade/struktura/:id', hrac, api(async (req, res) => {
   const p = await prisma.gamePlayer.findUnique({ where: { id },
     select: { id: true, nick: true, company: true, disabled: true, hodnost: true } });
   if (!p || p.disabled) return res.status(404).json({ error: 'Takový hráč tu není.' });
+  const jazyk = TEXTY.jazykHrace(req.player);
   const [vMe, jinde] = await Promise.all([
     prisma.gameEquity.findMany({ where: { firma_id: id, stav: 'bezi' },
       orderBy: { podil: 'desc' }, take: 50 }),
@@ -817,8 +823,8 @@ router.get('/trade/struktura/:id', hrac, api(async (req, res) => {
     where: { player_id: id, druh: 'odznak' }, select: { kod: true } }).catch(() => []);
   res.json({ ok: true,
     hrac: { id: p.id, nick: p.nick, firma: p.company || (p.nick + ' s.r.o.'),
-      hodnost: p.hodnost || null, hodnost_nazev: hodnostNazev(p.hodnost),
-      odznaky: odz.map((x) => ODZNAK[x.kod]).filter(Boolean)
+      hodnost: p.hodnost || null, hodnost_nazev: hodnostNazev(p.hodnost, jazyk),
+      odznaky: odz.map((x) => odznakPro(x.kod, jazyk)).filter(Boolean)
         .map((o) => ({ kod: o.kod, nazev: o.nazev, ikona: o.ikona, popis: o.popis,
           barva: o.barva || null })) },
     prodano,
@@ -836,8 +842,12 @@ router.get('/trade/deliveries', hrac, api(async (req, res) => {
   });
   // created_at posíláme kvůli účetní knize: doručenka mohla čekat i půl dne,
   // než si ji hráč vyzvedl, a v knize má být vidět, kdy ta provize vznikla.
+  const jazyk = TEXTY.jazykHrace(req.player);
   res.json({ ok: true, deliveries: rows.map((d) => ({ id: d.id, kind: d.kind, model: d.model,
-    amount: d.amount, spot_id: d.spot_id, data: d.data || null, popis: d.popis,
+    amount: d.amount, spot_id: d.spot_id, data: d.data || null,
+    // Věta se skládá až tady, v jazyce toho, kdo ji čte. Starší řádky mají
+    // jen hotový český popis — ty se nechávají být.
+    popis: textDorucenky(d, jazyk),
     vzniklo: d.created_at })) });
 }));
 

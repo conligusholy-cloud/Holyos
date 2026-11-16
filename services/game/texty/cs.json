@@ -1,14 +1,70 @@
 {
-  "jazyk.nadpis": "Jazyk hry",
-  "jazyk.popis": "Hra se přepne celá — hlášky ze serveru ti pak chodí taky v tomhle jazyce.",
+  "hodnost.baron": "Baron prádla",
+  "hodnost.legenda": "Legenda",
+  "hodnost.magnat": "Magnát",
+  "hodnost.pradlak": "Pradlák",
+  "hodnost.provozovatel": "Provozovatel",
+  "hodnost.sitar": "Majitel sítě",
+  "hodnost.zivnostnik": "Živnostník",
   "jazyk.cs": "Čeština",
   "jazyk.en": "Angličtina",
+  "jazyk.nadpis": "Jazyk hry",
+  "jazyk.popis": "Hra se přepne celá — hlášky ze serveru ti pak chodí taky v tomhle jazyce.",
   "jazyk.ulozeno": "Jazyk nastaven.",
-
-  "obecne.dnu": { "one": "{cislo:n} den", "few": "{cislo:n} dny", "other": "{cislo:n} dní" },
-  "obecne.hodin": { "one": "{cislo:n} hodina", "few": "{cislo:n} hodiny", "other": "{cislo:n} hodin" },
-  "obecne.minut": { "one": "{cislo:n} minuta", "few": "{cislo:n} minuty", "other": "{cislo:n} minut" },
-  "obecne.mesicu": { "one": "{cislo:n} herní měsíc", "few": "{cislo:n} herní měsíce", "other": "{cislo:n} herních měsíců" },
-  "obecne.pradlomatu": { "one": "{cislo:n} prádlomat", "few": "{cislo:n} prádlomaty", "other": "{cislo:n} prádlomatů" },
-  "obecne.hracu": { "one": "{cislo:n} hráč", "few": "{cislo:n} hráči", "other": "{cislo:n} hráčů" }
+  "obecne.dnu": {
+    "few": "{cislo:n} dny",
+    "one": "{cislo:n} den",
+    "other": "{cislo:n} dní"
+  },
+  "obecne.hodin": {
+    "few": "{cislo:n} hodiny",
+    "one": "{cislo:n} hodina",
+    "other": "{cislo:n} hodin"
+  },
+  "obecne.hracu": {
+    "few": "{cislo:n} hráči",
+    "one": "{cislo:n} hráč",
+    "other": "{cislo:n} hráčů"
+  },
+  "obecne.mesicu": {
+    "few": "{cislo:n} herní měsíce",
+    "one": "{cislo:n} herní měsíc",
+    "other": "{cislo:n} herních měsíců"
+  },
+  "obecne.minut": {
+    "few": "{cislo:n} minuty",
+    "one": "{cislo:n} minuta",
+    "other": "{cislo:n} minut"
+  },
+  "obecne.pradlomatu": {
+    "few": "{cislo:n} prádlomaty",
+    "one": "{cislo:n} prádlomat",
+    "other": "{cislo:n} prádlomatů"
+  },
+  "odmena.hodnost": "Hodnost {nazev}",
+  "odmena.odznak": "Odznak {nazev}",
+  "odznak.banker.jak": "Půjč někomu na burze a nech půjčku doběhnout — musí běžet aspoň šest herních měsíců.",
+  "odznak.banker.nazev": "Bankéř",
+  "odznak.banker.popis": "Půjčil jinému hráči a dostal celou půjčku zpátky.",
+  "odznak.cestovatel.jak": "Rozjeď síť i za hranicemi — stačí jeden prádlomat ve třech různých zemích.",
+  "odznak.cestovatel.nazev": "Cestovatel",
+  "odznak.cestovatel.popis": "Má postavený prádlomat ve třech zemích.",
+  "odznak.hvezdy.jak": "Ber hovory a odpovídej slušně. Hlídá se sedm dní bez přerušení.",
+  "odznak.hvezdy.nazev": "Pět hvězd",
+  "odznak.hvezdy.popis": "Udržel hodnocení 4,5 ★ celý týden v kuse.",
+  "odznak.investor.jak": "Kup si podíl ve třech různých firmách a počkej si na vyrovnání.",
+  "odznak.investor.nazev": "Investor",
+  "odznak.investor.popis": "Drží podíl ve třech různých firmách a aspoň jeden mu už něco vynesl.",
+  "odznak.krizovka.jak": "Až přijde krize, nestavěj stop — postav.",
+  "odznak.krizovka.nazev": "Krizovka",
+  "odznak.krizovka.popis": "Postavil prádlomat v době, kdy běžela ekonomická krize.",
+  "odznak.mrchozrout.jak": "Sleduj konkurzní rozprodej — majetek po zkrachovalých jde za klesající cenu.",
+  "odznak.mrchozrout.nazev": "Mrchožrout",
+  "odznak.mrchozrout.popis": "Koupil prádlomat z konkurzu.",
+  "odznak.naborar.jak": "Rozešli svůj odkaz. Počítají se jen ti, co se do hry doopravdy pustili.",
+  "odznak.naborar.nazev": "Náborář",
+  "odznak.naborar.popis": "Pozval tři hráče, kteří opravdu postavili prádlomat.",
+  "odznak.spojovatel.jak": "Zvedej telefon osobně. Hovory vyřízené placenou infolinkou se nepočítají.",
+  "odznak.spojovatel.nazev": "Spojovatel",
+  "odznak.spojovatel.popis": "Vzal padesát hovorů sám. Operátor se nepočítá."
 }

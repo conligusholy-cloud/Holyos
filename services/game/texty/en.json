@@ -1,14 +1,64 @@
 {
-  "jazyk.nadpis": "Game language",
-  "jazyk.popis": "The whole game switches — messages from the server will come in this language too.",
+  "hodnost.baron": "Laundry Baron",
+  "hodnost.legenda": "Legend",
+  "hodnost.magnat": "Magnate",
+  "hodnost.pradlak": "Launderer",
+  "hodnost.provozovatel": "Operator",
+  "hodnost.sitar": "Chain Owner",
+  "hodnost.zivnostnik": "Sole Trader",
   "jazyk.cs": "Czech",
   "jazyk.en": "English",
+  "jazyk.nadpis": "Game language",
+  "jazyk.popis": "The whole game switches — messages from the server will come in this language too.",
   "jazyk.ulozeno": "Language set.",
-
-  "obecne.dnu": { "one": "{cislo:n} day", "other": "{cislo:n} days" },
-  "obecne.hodin": { "one": "{cislo:n} hour", "other": "{cislo:n} hours" },
-  "obecne.minut": { "one": "{cislo:n} minute", "other": "{cislo:n} minutes" },
-  "obecne.mesicu": { "one": "{cislo:n} game month", "other": "{cislo:n} game months" },
-  "obecne.pradlomatu": { "one": "{cislo:n} laundromat", "other": "{cislo:n} laundromats" },
-  "obecne.hracu": { "one": "{cislo:n} player", "other": "{cislo:n} players" }
+  "obecne.dnu": {
+    "one": "{cislo:n} day",
+    "other": "{cislo:n} days"
+  },
+  "obecne.hodin": {
+    "one": "{cislo:n} hour",
+    "other": "{cislo:n} hours"
+  },
+  "obecne.hracu": {
+    "one": "{cislo:n} player",
+    "other": "{cislo:n} players"
+  },
+  "obecne.mesicu": {
+    "one": "{cislo:n} game month",
+    "other": "{cislo:n} game months"
+  },
+  "obecne.minut": {
+    "one": "{cislo:n} minute",
+    "other": "{cislo:n} minutes"
+  },
+  "obecne.pradlomatu": {
+    "one": "{cislo:n} laundromat",
+    "other": "{cislo:n} laundromats"
+  },
+  "odmena.hodnost": "Rank: {nazev}",
+  "odmena.odznak": "Badge: {nazev}",
+  "odznak.banker.jak": "Lend someone money on the exchange and let the loan run its course — it has to run for at least six game months.",
+  "odznak.banker.nazev": "Banker",
+  "odznak.banker.popis": "Lent to another player and got the whole loan back.",
+  "odznak.cestovatel.jak": "Take the chain across borders — one laundromat in three different countries is enough.",
+  "odznak.cestovatel.nazev": "Globetrotter",
+  "odznak.cestovatel.popis": "Has a laundromat built in three countries.",
+  "odznak.hvezdy.jak": "Take calls and answer politely. Seven days without a break.",
+  "odznak.hvezdy.nazev": "Five Stars",
+  "odznak.hvezdy.popis": "Kept a 4.5 ★ rating for a whole week straight.",
+  "odznak.investor.jak": "Buy a stake in three different companies and wait for a payout.",
+  "odznak.investor.nazev": "Investor",
+  "odznak.investor.popis": "Holds a stake in three different companies and at least one has already paid out.",
+  "odznak.krizovka.jak": "When a crisis comes, don't stop building — build.",
+  "odznak.krizovka.nazev": "Crisis Builder",
+  "odznak.krizovka.popis": "Built a laundromat while an economic crisis was running.",
+  "odznak.mrchozrout.jak": "Watch the bankruptcy sale — assets of collapsed companies go at a falling price.",
+  "odznak.mrchozrout.nazev": "Scavenger",
+  "odznak.mrchozrout.popis": "Bought a laundromat out of bankruptcy.",
+  "odznak.naborar.jak": "Share your link. Only those who really got started count.",
+  "odznak.naborar.nazev": "Recruiter",
+  "odznak.naborar.popis": "Invited three players who actually built a laundromat.",
+  "odznak.spojovatel.jak": "Pick up the phone yourself. Calls handled by the paid hotline don't count.",
+  "odznak.spojovatel.nazev": "Switchboard",
+  "odznak.spojovatel.popis": "Took fifty calls personally. The operator doesn't count."
 }

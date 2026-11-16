@@ -15,7 +15,8 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../config/database');
-const { HODNOSTI, hodnost, ODZNAKY, ODZNAK } = require('../services/game/hodnosti');
+const { HODNOSTI, hodnost, ODZNAKY, ODZNAK,
+  hodnostiPro, odznakyPro, nazevOdmeny } = require('../services/game/hodnosti');
 const TEXTY = require('../services/game/texty');
 const JWT_SECRET = require('../config/secrets').jwtSecret();
 
@@ -843,7 +844,7 @@ router.get('/account/odznaky', requirePlayer, async (req, res, next) => {
       select: { kod: true, created_at: true } });
     const kdy = {};
     mam.forEach((x) => { kdy[x.kod] = x.created_at; });
-    res.json({ ok: true, odznaky: ODZNAKY.map((o) => ({
+    res.json({ ok: true, odznaky: odznakyPro(TEXTY.jazykHrace(req.player)).map((o) => ({
       kod: o.kod, nazev: o.nazev, ikona: o.ikona, popis: o.popis, jak: o.jak,
       barva: o.barva || null, odmena: o.odmena || null,
       mam: !!kdy[o.kod], kdy: kdy[o.kod] || null })) });
@@ -866,7 +867,7 @@ router.get('/account/me', requirePlayer, async (req, res, next) => {
     res.json({ ok: true, player: await pub(p), state: p.state || null, rev: p.state_rev || 0,
       // Žebřík hodností posíláme ze serveru, aby hra v liště neukazovala jiný
       // titul, než jaký u toho hráče vidí ostatní v žebříčku a na burze.
-      hodnosti: HODNOSTI });
+      hodnosti: hodnostiPro(TEXTY.jazykHrace(p)) });
   } catch (e) { next(e); }
 });
 
@@ -1197,13 +1198,15 @@ async function vyplatOdmenu(playerId, druh, kod, odmena, zpetne, platit) {
   return true;
 }
 async function pripisOdmenu(playerId, druh, kod, cash, karta) {
-  const nazev = druh === 'hodnost'
-    ? ((HODNOSTI.find((h) => h.id === kod) || {}).nazev || kod)
-    : ((ODZNAK[kod] || {}).nazev || kod);
-  const popis = (druh === 'hodnost' ? 'Hodnost ' : 'Odznak ') + nazev;
+  // Text se neukládá jako hotová věta, ale jako kód a údaje — složí se až
+  // u toho, kdo doručenku čte, v jeho jazyce. popis se plní taky, aby starší
+  // verze hry a administrace pořád něco viděly.
+  const textKod = druh === 'hodnost' ? 'odmena.hodnost' : 'odmena.odznak';
+  const textData = { kod };
+  const popis = TEXTY.t(textKod, { nazev: nazevOdmeny(druh, kod, TEXTY.ZDROJ) }, TEXTY.ZDROJ);
   if (cash > 0) {
     await prisma.gameDelivery.create({ data: { player_id: playerId, kind: 'cash',
-      amount: cash, popis } });
+      amount: cash, popis, text_kod: textKod, text_data: textData } });
   }
   if (karta) await prisma.gameCard.create({ data: { player_id: playerId, kind: karta } });
   console.log('[game-hodnost] ' + popis + ' → hráč ' + playerId

@@ -8140,6 +8140,11 @@ model GameDelivery {
   amount     Int?
   spot_id    String?   @db.VarChar(120)
   data       Json?
+  // Text doručenky jako kód a údaje, ne hotová věta. Čte ji i hráč, který má
+  // nastavený jiný jazyk než ten, kdo ji vyvolal — složí se až u čtenáře.
+  // popis zůstává pro řádky z doby, kdy se ukládala rovnou česká věta.
+  text_kod   String?   @db.VarChar(60)
+  text_data  Json?
   popis      String?   @db.VarChar(200)
   claimed_at DateTime?
   created_at DateTime  @default(now())
