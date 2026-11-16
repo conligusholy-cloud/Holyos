@@ -538,7 +538,7 @@ function zaplatOpravu(u) {
   if (!k || k.hotovo) return;
   if (S.cash < k.platim) return toast(esc(tx('hra.na_opravu_nemas_dost_hotovosti')), 'err');
   S.cash -= k.platim;
-  zapis('nakup', k.t + ' — oprava ' + (u.name || ''), -k.platim);
+  zapis('nakup', tx('veta.oprava', { p1: k.t, p2: (u.name || '') }), -k.platim);
   k.hotovo = Date.now() + k.dnu * (MONTH_MS / 30);   // herní den = 24 skutečných minut
   save(); paint(); drawMap(); syncState(true);
   toast(esc(tx('hra.oprava_zaplacena')) + ' ' + (u.name || esc(tx('hra.pradlomat_6'))) + ' pojede za '
@@ -1488,9 +1488,7 @@ function hlidejUdalosti() {
   if (!nove.length) return;
   var e = nove[0];
   var kolik = udalostKolikMych(e);
-  toast(e.ikona + ' ' + e.nazev + ' — ' + e.kde + '. Zasahuje ' + kolik + ' '
-    + mn(kolik, esc(tx('hra.tvuj_pradlomat')), esc(tx('hra.tvoje_pradlomaty')), esc(tx('hra.tvych_pradlomatu')))
-    + (nove.length > 1 ? tx('veta.a_dalsi_udalost', { p1: (nove.length - 1) }) : '') + '.',
+  toast(tx('veta.zasahuje', { p1: e.ikona, p2: e.nazev, p3: e.kde, p4: kolik, p5: mn(kolik, esc(tx('hra.tvuj_pradlomat')), esc(tx('hra.tvoje_pradlomaty')), esc(tx('hra.tvych_pradlomatu'))), p6: (nove.length > 1 ? tx('veta.a_dalsi_udalost', { p1: (nove.length - 1) }) : '') }),
     e.dobra ? 'ok' : 'err', true);
   save();
 }
@@ -2022,14 +2020,14 @@ function knihaMesic(t) {
   return Math.max(0, Math.floor(((t || 0) - (S.startedAt || 0)) / MONTH_MS));
 }
 function mesicNazev(m) {
-  return 'Rok ' + tx('veta.mesic', { p1: (Math.floor(m / 12) + 1), p2: (m % 12 + 1) });
+  return tx('veta.rok', { p1: tx('veta.mesic', { p1: (Math.floor(m / 12) + 1), p2: (m % 12 + 1) }) });
 }
 function knihaRadek(r) {
   var kl = r.c > 0 ? 'ok' : 'err';
   return '<div class="kn-radek"><i class="kn-tecka ' + knihaKat(r.d) + '"></i>'
     + '<span><b>' + esc(r.p) + '</b><i>' + datumCas(r.t)
     + (r.u ? tx('veta.z_toho_uver', { p1: kcFull(r.u) }): '')
-    + (r.v ? ' · vzniklo ' + datumCas(r.v) : '')
+    + (r.v ? tx('veta.vzniklo', { p1: datumCas(r.v) }) : '')
     + (r.r ? ' ' + esc(tx('hra.dopocitano')) : (r.z != null ? tx('veta.zustatek', { p1: kcFull(r.z) }): '')) + '</i></span>'
     + '<b class="' + kl + '">' + (r.c > 0 ? '+' : '−') + kcFull(Math.abs(r.c)) + '</b></div>';
 }
@@ -3222,7 +3220,7 @@ function showRole(id) {
     if (popisek) popisek.textContent = esc(tx('hra.startovni_hotovost'));
     $('role-cash').textContent = kcFull(p.cash);
   }
-  $('role-ltv').textContent = Math.round(p.ltv * 100) + ' % z ceny';
+  $('role-ltv').textContent = tx('veta.z_ceny', { p1: Math.round(p.ltv * 100) });
   $('role-rate').textContent = tx('veta.rocne', { p1: (p.rate * 100).toFixed(1).replace('.', desZnak()) });
   // Kdo je přihlášený (třeba po „začít znovu"), už účet zakládat nemusí.
   var hint = $('role-acct');
@@ -3670,7 +3668,7 @@ function unitIcon(u) {
       + (zem ? '<i class="pin-zem">\u2302</i>' : '')
       + '<i class="pin-tag">' + esc(jeVKatastrofe(u) ? u.katastrofa.t
           : vada ? u.porucha.text
-          : (vyp ? tx('veta.vypoved', { p1: etaText(Math.max(0, u.vypoved.do - Date.now())).replace('za ', '') }): natrhu ? 'Na prodej · ' + kcFull(natrhu.cena)
+          : (vyp ? tx('veta.vypoved', { p1: etaText(Math.max(0, u.vypoved.do - Date.now())).replace('za ', '') }): natrhu ? tx('veta.na_prodej', { p1: kcFull(natrhu.cena) })
           : (MODELS[u.eco && u.eco.model] ? MODELS[u.eco.model].name : ''))) + '</i></div>' });
 }
 // Z dálky mají v mapě být jen prádlomaty, sídlo a pobočky. Volná místa je
@@ -3713,14 +3711,13 @@ function servisRadek(u) {
   if (jeVKatastrofe(u)) {
     var k = u.katastrofa;
     tr = 'err';
-    stav = k.hotovo ? k.t + ' — opravuje se, hotovo ' + etaText(Math.max(0, k.hotovo - ted))
+    stav = k.hotovo ? tx('veta.opravuje_se_hotovo', { p1: k.t, p2: etaText(Math.max(0, k.hotovo - ted)) })
       : tx('veta.stoji_oprava_za', { p1: k.t, p2: kcFull(k.platim) });
     akce = k.hotovo ? '' : '<button class="btn sec maly" data-kat="' + esc(u.spotId) + '">' + esc(tx('hra.otevrit')) + '</button>';
   } else if (jeVPoruse(u) && !t) {
     var v = vyjezdOdhad(u);
     tr = 'err';
-    stav = u.porucha.text + (v ? ' — ' + Math.round(v.km) + ' km ' + v.zpusob.nazev
-      + ', oprava na ' + u.porucha.zav + ' h' : '');
+    stav = u.porucha.text + (v ? tx('veta.km_oprava_na_h', { p1: Math.round(v.km), p2: v.zpusob.nazev, p3: u.porucha.zav }) : '');
     akce = v ? '<button class="btn sec maly" data-vada="' + esc(u.spotId) + '">Vyslat</button>' : '';
   } else if (t && ted < t.prijezd) {
     tr = 'warn'; stav = u.porucha.text + ' — ' + (ZNAK_CESTY[t.zpusob] || ZNAK_CESTY.auto)
@@ -3732,7 +3729,7 @@ function servisRadek(u) {
   } else if (jeVeVypovedi(u)) {
     tr = 'warn'; stav = tx('veta.vypoved_z_mista_odvoz_na_sklad', { p1: etaText(Math.max(0, u.vypoved.do - Date.now())) });
   } else {
-    tr = 'ok'; stav = 'Jede — ' + kcFull(u.eco.profit) + ' ' + esc(tx('hra.mesic_2'));
+    tr = 'ok'; stav = tx('veta.jede', { p1: kcFull(u.eco.profit), p2: esc(tx('hra.mesic_2')) });
   }
   return '<div class="srv-radek" data-srv="' + esc(u.spotId) + '">'
     + '<i class="srv-tecka ' + tr + '"></i>'
@@ -4125,7 +4122,7 @@ function scout(city, btn) {
   var poll = function () {
     if (stop) return;
     fetch('/api/game/scout?q=' + encodeURIComponent(city), { cache: 'no-store' })
-      .then(function (r) { return r.json().then(function (j) { if (!r.ok && r.status !== 202) throw new Error(j.error || ('Chyba ' + r.status)); return j; }); })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok && r.status !== 202) throw new Error(j.error || (tx('veta.chyba', { p1: r.status }))); return j; }); })
       .then(function (j) {
         if (stop) return;
         netErr = 0;
@@ -4764,7 +4761,7 @@ function paintShop() {
       + '<div class="kv"><span>' + esc(tx('mapa.dodani')) + '</span><b>' + dodaniSlovy()
       + (dodaniDnu() > 1 ? ' <span class="warn">' + esc(tx('mapa.vytizena_vyroba')) + '</span>' : '') + '</b></div>'
       + '<button class="btn sm' + (f.ok ? '' : ' sec') + '" style="width:100%;margin-top:10px" data-buy="' + k + '">'
-      + (f.ok ? 'Koupit ' + m.name : tx('hra.chybi_ti', { p1: kcFull(f.chybi) })) + '</button>'
+      + (f.ok ? tx('veta.koupit', { p1: m.name }) : tx('hra.chybi_ti', { p1: kcFull(f.chybi) })) + '</button>'
       + (f.ok ? '' : '<p class="fine">' + esc(dohnat(f.chybi)) + '</p>')
       + '</div>';
   }).join('');
@@ -5187,7 +5184,7 @@ function maPozemek(spotId) {
 function koupitPozemek(sp, areaId, btn) {
   var cena = pozemekCena(sp);
   var f = canFinance(cena, null, cena);
-  if (!f.ok) return zedSheet('Pozemek ' + sp.name, f, cena, function () { return cena; },
+  if (!f.ok) return zedSheet(tx('veta.pozemek_2', { p1: sp.name }), f, cena, function () { return cena; },
     { typ: 'pozemek', areaId: areaId, spotId: sp.id });
   if (btn) { btn.disabled = true; btn.textContent = esc(tx('hra.kupuji')); }
   apiJson('/spots/claim', { spot_id: sp.id, area_key: areaId, model: '', rent: 0,
@@ -5199,7 +5196,7 @@ function koupitPozemek(sp, areaId, btn) {
       return toast(r.j.error || esc(tx('hra.misto_je_obsazene')), 'err');
     }
     CLAIMS[sp.id] = r.j.spot;
-    doFinance(f, { druh: 'pozemek', spotId: sp.id, popis: 'Pozemek — ' + sp.name });
+    doFinance(f, { druh: 'pozemek', spotId: sp.id, popis: tx('veta.pozemek', { p1: sp.name }) });
     pozemky().push({ spotId: sp.id, areaId: areaId, name: sp.name, lat: sp.lat, lon: sp.lon,
       m2: pozemekM2(sp), cena: cena, od: Date.now() });
     save(); paint(); drawMap(); closeSheet(); syncState(true);
@@ -6556,7 +6553,7 @@ function unitSheet(u) {
   sheet('<h3>' + esc(u.name) + '</h3>'
     + '<p class="muted small">' + esc(KIND_LABEL[u.kind] || esc(tx('mapa.misto')))
     + (mestoUnit(u) ? ' · ' + esc(mestoUnit(u)) : '') + ' · ' + MODELS[u.eco.model].name
-    + ' · v provozu ' + years.toFixed(1).replace('.', desZnak()) + ' roku'
+    + tx('hra.v_provozu_roku', { p1: years.toFixed(1).replace('.', desZnak()) })
     + (zemUnit(u) === 'moje' ? ' · <b class="ok">' + esc(tx('mapa.tvuj_pozemek')) + '</b>'
         : zemUnit(u) === 'najem' ? ' · <b class="ok">' + esc(tx('mapa.pronajaty_pozemek')) + '</b>' : '') + '</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(u.score) + '</div>'
@@ -6950,7 +6947,7 @@ function tutPaint() {
   // Kolik lidí který krok vůbec uvidí. Bez toho nevíme, kde se cesta
   // k prvnímu prádlomatu láme — v administraci je to v trychtýři.
   ev('game_tut' + k);
-  $('tut-krok').textContent = 'Krok ' + k + ' z ' + TUT_KROKU;
+  $('tut-krok').textContent = tx('veta.krok_z', { p1: k, p2: TUT_KROKU });
   $('tut-titul').textContent = info.t;
   $('tut-text').textContent = info.p;
   $('tut-fill').style.width = Math.round((k - 1) / TUT_KROKU * 100) + '%';
@@ -7470,11 +7467,11 @@ function mistoRadek(r) {
   var stav = u
     ? '<b class="ok">' + esc(m ? m.name : '') + '</b>'
       + (r.kolik > 1 ? tx('veta.a_dalsi', { p1: (r.kolik - 1) }) : '')
-      + ' · zisk ' + kcFull(r.kolik > 1
+      + tx('hra.zisk_dvojtecka', { p1: kcFull(r.kolik > 1
           ? (S.units || []).filter(function (x) {
               return x.spotId === sp.id || String(x.spotId || '').indexOf(sp.id + '#') === 0;
             }).reduce(function (a, x) { return a + zbydeZMista(x); }, 0)
-          : zbydeZMista(u))
+          : zbydeZMista(u)) })
     : r.cizi
       ? '<span class="err">' + esc(r.cizi.firma || r.cizi.nick || 'konkurence') + '</span> · '
         + esc((MODELS[r.cizi.model] || {}).name || '') + tx('veta.najem', { p1: kcFull(r.cizi.rent || 0) })
@@ -8129,7 +8126,7 @@ function splatitUverSheet(id) {
     var dal = splatitUver(id, Number(i.value) || 0);
     if (!dal) return toast(esc(tx('hra.zadej_castku_kterou_mas')), 'err');
     save(); paint(); paintBank(); closeSheet(); syncState(true);
-    toast('Splaceno ' + kcFull(dal) + '.', 'ok');
+    toast(tx('veta.splaceno_2', { p1: kcFull(dal) }), 'ok');
   };
 }
 // Panel: vyjednání delší splatnosti u běžícího úvěru.
@@ -8298,7 +8295,7 @@ function penizeSheet() {
     var pay = Math.min(S.cash, S.loan);
     S.cash -= pay; splatitDluh(pay); S.bank = Math.min(bankCap(), S.bank + pay);
     zapis('splatka', esc(tx('hra.doplaceni_uveru')), -pay);
-    save(); paint(); syncState(true); closeSheet(); toast('Splaceno ' + kcFull(pay) + '.', 'ok');
+    save(); paint(); syncState(true); closeSheet(); toast(tx('veta.splaceno', { p1: kcFull(pay) }), 'ok');
   };
   var ba = $('pen-balicek');
   if (ba) ba.onclick = function () { closeSheet(); switchTab('bank'); };
@@ -8455,7 +8452,7 @@ function datumCas(x) {
   } catch (e) { return ''; }
 }
 function provizeSheet() {
-  sheet('<h3>' + 'Provize' + '</h3><p class="muted small">' + esc(tx('hra.nacitam_6')) + '</p>');
+  sheet('<h3>' + esc(tx('hra.provize_2')) + '</h3><p class="muted small">' + esc(tx('hra.nacitam_6')) + '</p>');
   api('/account/provize').then(function (r) {
     var list = (r.ok && r.j.provize) || [];
     var celkem = list.reduce(function (a, x) { return a + (x.castka || 0); }, 0);
@@ -8474,7 +8471,7 @@ function provizeSheet() {
           : tx('hra.div_class_empty_br_prived_nekoho', { p1: esc(tx('hra.zatim_zadna_provize')) }))
       + (list.length >= 200 ? '<p class="fine">' + esc(tx('hra.ukazuje_se_poslednich_200')) + '</p>' : ''));
   }).catch(function () {
-    sheet('<h3>' + 'Provize' + '</h3><p class="muted small">' + esc(tx('hra.rozpis_se_nepodarilo_nacist_zkus')) + '</p>');
+    sheet('<h3>' + esc(tx('hra.provize_2')) + '</h3><p class="muted small">' + esc(tx('hra.rozpis_se_nepodarilo_nacist_zkus')) + '</p>');
   });
 }
 function loadDist(then) {
@@ -8491,7 +8488,7 @@ function loadDist(then) {
 }
 function distHtml() {
   if (!ME) return '';
-  if (!DIST) return '<div class="card"><h3>' + 'Distributor' + '</h3><p class="fine">' + esc(tx('hra.nacitam')) + '</p></div>';
+  if (!DIST) return '<div class="card"><h3>' + esc(tx('hra.distributor_2')) + '</h3><p class="fine">' + esc(tx('hra.nacitam')) + '</p></div>';
   var aktivni = DIST.aktivni, rezie = DIST.rezie;
   return '<div class="card"><h3>' + tx('veta.h3_p_class_muted_small_style', { p1: esc(tx('hra.distributor_pradlomatu')), p2: Math.round(DIST.provize * 100), p3: esc(tx('hra.plati_to_i_na_jeho')) }) + (aktivni ? 'ok' : 'warn') + '">'
     + (aktivni ? tx('dist.aktivni_konci', { p1: etaText(new Date(DIST.do).getTime() - Date.now()) }) : esc(tx('hra.neaktivni'))) + '</b></div>'
@@ -8555,7 +8552,7 @@ function pozvaniHtml() {
         return '<div class="zeb-row">' + (h.znak ? znakSvg(h.znak, 24) : '<i class="znak-mezera"></i>')
           + '<span class="nick">' + esc(h.firma)
           + '<i>' + esc(h.nick) + ' · ' + stroju + ' '
-          + mn(stroju, 'stroj', 'stroje', esc(tx('hra.stroju'))) + ' · provize z ' + provizi + '</i></span>'
+          + mn(stroju, 'stroj', 'stroje', esc(tx('hra.stroju'))) + tx('hra.provize_z', { p1: provizi }) + '</i></span>'
           + '<b class="' + (h.provize ? 'ok' : (chybi ? 'warn' : 'muted')) + '">'
           + (h.provize ? kc(h.provize) : datumKratce(h.kdy)) + '</b></div>';
       }).join('') + '</div>'
@@ -8583,7 +8580,7 @@ function majetekHtml() {
   var majetek = assetsTotal() + zazemi;
   var polozky = [
     { n: esc(tx('hra.postavene_pradlomaty')), m: S.units.length + '×', v: investedTotal() },
-    { n: esc(tx('hra.stroje_skladem_a_na_ceste')), m: skladem + '× skladem' + (cesta ? ', ' + cesta + esc(tx('hra.na_ceste')) : ''), v: stockValue() },
+    { n: esc(tx('hra.stroje_skladem_a_na_ceste')), m: tx('veta.skladem', { p1: skladem, p2: (cesta ? ', ' + cesta + esc(tx('hra.na_ceste')) : '') }), v: stockValue() },
     { n: esc(tx('hra.pozemky_a_zaplacene_plochy')), m: zem.length + '×', v: pozemkyHodnota() },
     { n: esc(tx('hra.pobocky_a_servisni_ceta')), m: (S.pobocky || []).length + tx('veta.pobocka_5', { p1: (maCetu() ? esc(tx('hra.ceta_v_souhrnu')) : '') }), v: zazemi }
   ];
@@ -8814,7 +8811,7 @@ function paintMe() {
     + '<div class="card"><h3>Jak se hraje</h3>'
     + '<p class="muted small" style="margin:2px 0 0">' + esc(tx('hra.jeden_skutecny_den_jsou_ve')) + ' '
     + esc(tx('hra.mista_na_mape_jsou_skutecna')) + ' '
-    + esc(tx('hra.plati_se_v')) + ' ' + '<b>' + 'laundrech (L$)' + '</b>' + ' ' + esc(tx('hra.herni_mene_ktera_nema_zadnou')) + '</p></div>'
+    + esc(tx('hra.plati_se_v')) + ' ' + '<b>' + esc(tx('hra.laundrech')) + '</b>' + ' ' + esc(tx('hra.herni_mene_ktera_nema_zadnou')) + '</p></div>'
     + '<div class="card"><h3>' + esc(tx('hra.pozvi_lidi_a_pribydou_ti')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">' + esc(tx('hra.kazdy_kdo_otevre_tvuj_odkaz')) + ' '
     + esc(tx('hra.pocita_se_otevreni_odkazu_nekym')) + '</p>'
@@ -9087,7 +9084,7 @@ function odznakyPruhHtml() {
 }
 function odznakyHtml() {
   if (!ME) return '';
-  if (ODZNAKY_HRA == null) return '<div class="card"><h3>' + 'Odznaky' + '</h3><p class="muted small">' + esc(tx('hra.nacitam_7')) + '</p></div>';
+  if (ODZNAKY_HRA == null) return '<div class="card"><h3>' + esc(tx('hra.odznaky_2')) + '</h3><p class="muted small">' + esc(tx('hra.nacitam_7')) + '</p></div>';
   if (!ODZNAKY_HRA.length) return '';
   var mam = ODZNAKY_HRA.filter(function (o) { return o.mam; }).length;
   var cel = ODZNAKY_HRA.length;
@@ -9188,7 +9185,7 @@ function financeHtml() {
               ? esc(tx('hra.staci_jedna_nezaplacena_splatka_a'))
               : esc(tx('hra.jedna_nezaplacena_splatka_a_zastava'))) + '</p>'
           : p.zmeskano
-            ? '<p class="small err" style="margin-top:6px">' + esc(tx('hra.zmeskane_splatky')) + ' ' + p.zmeskano + ' ze 3. '
+            ? '<p class="small err" style="margin-top:6px">' + esc(tx('hra.zmeskane_splatky')) + ' ' + tx('hra.ze_tri', { p1: p.zmeskano })
               + (dluzim ? esc(tx('hra.po_treti_se_zbytek_dluhu'))
                 : esc(tx('hra.po_treti_se_dluh_vymaha'))) + '</p>'
             : '')
@@ -9249,7 +9246,7 @@ function bindAukce() {
       b.disabled = true; b.textContent = esc(tx('hra.kupuju'));
       apiJson('/trade/aukce/' + b.getAttribute('data-aukce') + '/koupit', {}).then(function (r) {
         if (!r.ok) { b.disabled = false; return toast(r.j.error || esc(tx('hra.nepovedlo_se_21')), 'err'); }
-        toast('Koupeno za ' + kcFull(r.j.cena) + '.', 'ok');
+        toast(tx('veta.koupeno_za', { p1: kcFull(r.j.cena) }), 'ok');
         S.mrchozrout = true; save();
         loadAukce(function () { vyzvedniNasledky(); paintBurza(); });
       }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida_36')), 'err'); });
@@ -9471,7 +9468,7 @@ function trhKoupitSheet(n) {
     g.disabled = true; g.textContent = esc(tx('hra.kupuju_2'));
     apiJson('/trade/trh/' + n.id + '/koupit', {}).then(function (r) {
       if (!r.ok) {
-        g.disabled = false; g.textContent = 'Koupit za ' + kcFull(n.cena);
+        g.disabled = false; g.textContent = tx('veta.koupit_za', { p1: kcFull(n.cena) });
         return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_23')), 'err');
       }
       // Celou cenu strhne doručenka ze serveru. Z našeho tu přibude jen to, co
@@ -9489,7 +9486,7 @@ function trhKoupitSheet(n) {
       toast(tx('veta.koupeno_je_tvuj_a_hned_vydelava', { p1: (n.name || esc(tx('mapa.pradlomat'))) }), 'ok');
       loadTrh(function () { vyzvedniNasledky(function () { loadClaims(); paintBurza(); }); });
     }).catch(function () {
-      g.disabled = false; g.textContent = 'Koupit za ' + kcFull(n.cena);
+      g.disabled = false; g.textContent = tx('veta.koupit_za', { p1: kcFull(n.cena) });
       toast(esc(tx('mapa.server_neodpovida_3')), 'err');
     });
   };
@@ -9935,8 +9932,7 @@ function nekrytoHtml(t) {
 // Výběr zástavy při přijetí půjčky, u které si ji věřitel vymínil.
 function zastavaSheet(t) {
   var mista = (S.units || []).map(function (u) {
-    return { id: u.spotId, name: u.name, pod: (MODELS[u.eco.model] || {}).name
-      + ' · zisk ' + kcFull(u.eco.profit) + esc(tx('hra.mes_3')) };
+    return { id: u.spotId, name: u.name, pod: tx('veta.zisk_2', { p1: (MODELS[u.eco.model] || {}).name, p2: kcFull(u.eco.profit), p3: esc(tx('hra.mes_3')) }) };
   });
   if (!mista.length) {
     return toast(esc(tx('hra.veritel_chce_zastavu_ale_ty')) + ' '
@@ -10367,7 +10363,7 @@ function financeSheet(toId, kdo, co, a) {
         $('fin-rada').innerHTML = (oc.jmeni > 0
             ? tx('veta.b_jmeni_je', { p1: p, p2: kcFull(podleJmeni) })
               + (podleZisku > podleJmeni
-                  ? ', podle zisku ' + kcFull(podleZisku) + ' ' + esc(tx('hra.firma_vydelava_vic_nez_na'))
+                  ? tx('veta.podle_zisku', { p1: kcFull(podleZisku), p2: esc(tx('hra.firma_vydelava_vic_nez_na')) })
                   : '.') + '</b> '
             : '<b>' + esc(tx('hra.firma_ma_zapornou_hodnotu_dluh')) + '</b> '
               + (podleZisku > 0 ? tx('veta.podle_zisku_by_melo_cenu_ale', { p1: p, p2: kcFull(podleZisku) }): ''))
@@ -10804,7 +10800,7 @@ function paintDrazba() {
   if (!bezi) {
     box.innerHTML = '<h3>' + esc(tx('drazba.drazba_skoncila')) + '</h3>'
       + '<p class="muted small">' + esc(d.nazev)
-      + (d.prodavajici_nick ? ' · vyvolal ' + esc(d.prodavajici_nick) : '') + '</p>'
+      + (d.prodavajici_nick ? tx('veta.vyvolal_2', { p1: esc(d.prodavajici_nick) }) : '') + '</p>'
       + (d.vitez_nick
           ? '<div class="kv souhrn"><span>' + esc(d.vitez_nick) + '</span><b class="ok">'
             + kcFull(d.cena != null ? d.cena : cena) + '</b></div>'
@@ -10821,7 +10817,7 @@ function paintDrazba() {
   var minim = DRAZBA_MIN || 1000;
   box.innerHTML = tx('veta.h3_drazba', { p1: tx('veta.h3_p_class_muted_small_style_10', { p1: esc(d.nazev), p2: (d.moje ? esc(tx('hra.vyvolal_jsi_ji_ty'))
         : d.tajny_prodavajici ? esc(tx('drazba.kdo_ji_vyvolal_se_ukaze'))
-          : 'Vyvolal ' + esc(d.prodavajici_nick)) }) })
+          : tx('veta.vyvolal', { p1: esc(d.prodavajici_nick) })) }) })
     // Hodiny jsou hrdina okna — odpočet rozhoduje, cena je až druhá v pořadí.
     + tx('veta.div_class_drz_hodiny_id_drz', { p1: esc(tx('drazba.vterin')), p2: drzLideHtml(d), p3: esc(tx('drazba.cena_ted')), p4: kcFull(cena), p5: esc(tx('drazba.vyvolavaci_cena')), p6: kcFull(d.vyvolavaci), p7: d.prihozu, p8: kcFull(d.suma) }) + (pod ? '' : ' style="display:none"')
     + tx('veta.prihozy_prerostly_vyvolavaci_cenu_od_tehle') + (d.vedu ? 'ok' : '') + '">'
@@ -10866,7 +10862,7 @@ function drazbaVyvolatSheet() {
   var polozky = [];
   (S.units || []).forEach(function (u) {
     polozky.push({ predmet: 'pradlomat', spot_id: u.spotId,
-      popis: esc(u.name), pod: (MODELS[u.eco.model] || {}).name + ' · zisk ' + kcFull(u.eco.profit) + esc(tx('drazba.mes')),
+      popis: esc(u.name), pod: tx('veta.zisk', { p1: (MODELS[u.eco.model] || {}).name, p2: kcFull(u.eco.profit), p3: esc(tx('drazba.mes')) }),
       navrh: cenaPradlomatu(u.eco.profit, u.eco.invest) });
   });
   MODEL_ORDER.forEach(function (k) {
@@ -11341,7 +11337,7 @@ function poradceStyl(st) {
     v.push('stroje: ' + Object.keys(modely).map(function (k) { return k + '×' + modely[k]; }).join(', '));
   }
   var majetek = assetsTotal();
-  if (majetek > 0) v.push('dluh je ' + Math.round((st.dluh / majetek) * 100) + ' % majetku');
+  if (majetek > 0) v.push(tx('veta.dluh_je_majetku', { p1: Math.round((st.dluh / majetek) * 100) }));
   if (st.splatky > 0) v.push(tx('veta.hotovost_pokryje_splatky', { p1: (st.cash / st.splatky).toFixed(1).replace('.', desZnak()) }));
   else if (!st.dluh) v.push(esc(tx('hra.nema_zadny_uver')));
   if (st.poruchy) v.push(esc(tx('hra.nechava_stat_porouchane_stroje')));
@@ -11675,7 +11671,7 @@ function paintHeslo() {
   var ukaz = potrebujeHeslo() && S && (S.units || []).length > 0;
   el.classList.toggle('hidden', !ukaz);
   if (!ukaz) return;
-  el.innerHTML = '<span>' + esc(tx('hra.firma_je_zatim_jen_v')) + '</span><b>' + 'Nastavit heslo' + '</b>';
+  el.innerHTML = '<span>' + esc(tx('hra.firma_je_zatim_jen_v')) + '</span><b>' + esc(tx('hra.nastavit_heslo_3')) + '</b>';
   el.onclick = hesloSheet;
 }
 
@@ -12250,7 +12246,7 @@ function uverSheet(chci, iSplatnosti) {
         + kcFull(duveraVolna()) + '</b></div>'
         + '<p class="fine">' + esc(tx('hra.tolik_ti_banka_pujci_i')) + '</p>' : '')
     + '<div class="kv"><span>' + esc(tx('hra.dnes_dluzis')) + '</span><b' + (S.loan > 0 ? ' class="warn"' : '') + '>' + kcFull(S.loan)
-    + (S.loan > 0 ? ' · ' + Math.round(n.ted * 100) + ' % majetku' : '') + tx('veta.b_div_label_class_fld_span', { p1: kcFull(n.max), p2: n.max, p3: n.castka }) + SPLATNOSTI.slice(SPL_ZAKLAD).map(function (x, j) {
+    + (S.loan > 0 ? tx('veta.majetku', { p1: Math.round(n.ted * 100) }) : '') + tx('veta.b_div_label_class_fld_span', { p1: kcFull(n.max), p2: n.max, p3: n.castka }) + SPLATNOSTI.slice(SPL_ZAKLAD).map(function (x, j) {
         var i = SPL_ZAKLAD + j, lze = i <= maxS;
         return '<button class="splat-b' + (i === n.iSplatnosti ? ' on' : '') + (lze ? '' : ' zamceno')
           + '" data-splat="' + i + '"' + (lze ? '' : ' disabled') + '>'
@@ -12380,7 +12376,7 @@ function claimCash(then) {
       // Hotovost přidaná z administrace jde do kapsy, koupený balíček do rámce.
       // Koupený balík je zároveň zástava: banka proti němu půjčí i bez výdělku.
       if (v.effect === 'ramec') { S.bank += v.amount; S.duvera = (S.duvera || 0) + v.amount; }
-      else { S.cash += v.amount; zapis('prijem', 'Karta — ' + (v.name || 'hotovost'), v.amount); }
+      else { S.cash += v.amount; zapis('prijem', tx('veta.karta', { p1: (v.name || 'hotovost') }), v.amount); }
       ME.cards = r.j.owned;
       save(); paint(); syncState(true);
       toast(v.msg, 'ok');

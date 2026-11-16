@@ -68,6 +68,9 @@ function main() {
     const re = /'((?:[^'\\\n]|\\.)*)'/g;
     let m;
     while ((m = re.exec(bezKomentare)) !== null) {
+      // Porovnání — e.key === 'Enter' — je hodnota, ne text pro hráče.
+      const pred = bezKomentare.slice(0, m.index);
+      if (/[=!]==?\s*$/.test(pred)) continue;
       if (m[1] && jeText(m[1])) zapomenute.push({ radek: i + 1, text: m[1].slice(0, 60) });
     }
   });

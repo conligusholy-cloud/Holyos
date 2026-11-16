@@ -22,6 +22,26 @@ const HRA = path.join(__dirname, '..', 'public', 'compounder', 'game', 'game.js'
 const CS = path.join(__dirname, '..', 'services', 'game', 'texty', 'cs.json');
 const CZ = /[ěščřžýáíéúůňťďóĚŠČŘŽÝÁÍÉÚŮŇŤĎÓ]/;
 
+// Podle háčků a čárek se text pro hráče nepozná — 'Rok ', 'Krok ' a
+// 'Splaceno ' jsou česky a diakritiku nemají. Stejné pravidlo jako
+// ve vytahovacím nástroji.
+const TECHNICKE = /[=<>{}#;|\\]|\/\/|\bhttp|^[a-z0-9_]+(\.[a-z0-9_]+)+$|^[.#][a-zA-Z]/;
+function jeText(v) {
+  // Značky {p1} ze šablony nejsou kód — bez jejich odstranění by každá
+  // složená věta propadla na složených závorkách.
+  const c = String(v).replace(/\{[^}]*\}/g, '').trim();
+  if (!/[A-Za-zÀ-ž]{2}/.test(c)) return false;
+  if (CZ.test(c)) return true;
+  if (TECHNICKE.test(c)) return false;
+  if (!/\s/.test(c)) {
+    if (/^[A-Z0-9_-]+$/.test(c)) return false;
+    if (/[a-z][A-Z]/.test(c) || /-[A-Z]/.test(c)) return false;
+  }
+  if (/^[A-ZÀ-Ž]/.test(c)) return true;
+  if (/\s/.test(c) && !/^[a-z0-9_-]+( [a-z0-9_-]+)*$/.test(c)) return true;
+  return false;
+}
+
 function telo(zdroj, jmeno) {
   const radky = zdroj.split('\n');
   const od = radky.findIndex((l) => l.startsWith('function ' + jmeno + '('));
@@ -55,7 +75,7 @@ function retezy(txt) {
   const uzavri = (i) => {
     const u = vrch();
     dejClen(i);
-    if (u.cleny.length > 1 && u.cleny.some((c) => c.s[0] === "'" && CZ.test(c.s)) && u.od >= 0) {
+    if (u.cleny.length > 1 && u.cleny.some((c) => c.s[0] === "'" && jeText(c.s.slice(1, -1))) && u.od >= 0) {
       out.push({ od: u.od, do: i, cleny: u.cleny.slice() });
     }
     u.cleny = []; u.od = -1; u.odClenu = -1;
@@ -191,7 +211,7 @@ function main() {
   nalezy.forEach((n) => {
     let bezi = [];
     const uloz = () => {
-      if (bezi.length > 1 && bezi.some((c) => c.s[0] === "'" && CZ.test(c.s))) useky.push(bezi.slice());
+      if (bezi.length > 1 && bezi.some((c) => c.s[0] === "'" && jeText(c.s.slice(1, -1)))) useky.push(bezi.slice());
       bezi = [];
     };
     n.cleny.forEach((c) => { if (bezpecny(c.s)) bezi.push(c); else { uloz(); vynechane.push(c.s.slice(0, 60)); } });
@@ -203,7 +223,7 @@ function main() {
       if (c.s[0] === "'") { sablona += c.s.slice(1, -1); return; }
       i++; udaje.push('p' + i + ': ' + c.s); sablona += '{p' + i + '}';
     });
-    if (!CZ.test(sablona) || sablona.indexOf("\\'") >= 0) return;
+    if (!jeText(sablona) || sablona.indexOf("\\'") >= 0) return;
     let k = Object.keys(nove).find((x) => nove[x] === sablona);
     if (!k) { k = klicZ(dekoduj(sablona), predpona, obsazene); nove[k] = dekoduj(sablona); }
     const nahrada = 'tx(\'' + k + '\'' + (udaje.length ? ', { ' + udaje.join(', ') + ' }' : '') + ')';
