@@ -65,7 +65,10 @@ function main() {
     try { txt = fs.readFileSync(f, 'utf8'); } catch (e) { return; }
     // Komentáře ven — ukázky klíčů ve vysvětlivkách nejsou volání.
     txt = txt.split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n');
-    const re = /(?:^|[^\w$.])(?:tx|stx\(req\)|TEXTY\.t)\(\s*'([a-z][\w.]+)'/g;
+    // Klíč skládaný za běhu — tx('model.' + k + '.popis') — není chybějící
+    // klíč, jen ho tady nedohlédneme. Poznáme ho podle toho, že za uvozovkou
+    // pokračuje výraz, ne čárka nebo konec volání.
+    const re = /(?:^|[^\w$.])(?:tx|stx\(req\)|TEXTY\.t)\(\s*'([a-z][\w.]+)'\s*[,)]/g;
     let m;
     while ((m = re.exec(txt)) !== null) if (cs[m[1]] == null) chybejiciKlice.add(m[1]);
   });
