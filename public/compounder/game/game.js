@@ -8765,13 +8765,25 @@ function zemeRadek(z) {
     + '</span>'
     + '<b>' + z.celkem + '×</b></div>';
 }
+// Ke kterému okamžiku žebříček platí. Server ho počítá po třicetivteřinových
+// oknech přibitých na hodiny, takže všichni, kdo se zeptají ve stejném okně,
+// vidí tatáž čísla. Bez téhle věty vypadaly dva telefony vedle sebe jako chyba.
+function zebKdy() {
+  if (!ZEB || !ZEB.aktualizovano) return '';
+  var d = new Date(ZEB.aktualizovano);
+  if (isNaN(d.getTime())) return '';
+  var dv = function (n) { return (n < 10 ? '0' : '') + n; };
+  return ' Platí k ' + dv(d.getHours()) + ':' + dv(d.getMinutes()) + ':' + dv(d.getSeconds())
+    + ' — přepočítává se po půlminutě, takže kdo se zeptá ve stejném okně, '
+    + 'vidí stejná čísla.';
+}
 function paintZeb() {
   var box = $('zeb-body');
   if (!ZEB) { box.innerHTML = '<p class="muted small">Načítám…</p>'; return loadZeb().then(paintZeb); }
   var list = ZEB[ZEB_KAT] || [], popis = ZEB_POPIS[ZEB_KAT];
   if (ZEB_KAT === 'zeme') {
     box.innerHTML = '<h3 style="margin:14px 0 2px">' + popis.nadpis + '</h3>'
-      + '<p class="muted small" style="margin:0 0 10px">' + popis.pod + '</p>'
+      + '<p class="muted small" style="margin:0 0 10px">' + popis.pod + zebKdy() + '</p>'
       + (list.length
         ? '<div class="zeb">' + list.map(zemeRadek).join('') + '</div>'
         : '<div class="empty">' + (ZEB.chyba
@@ -8783,7 +8795,7 @@ function paintZeb() {
   }
   var ja = ZEB.ja ? ZEB.ja[ZEB_KAT] : null;
   box.innerHTML = '<h3 style="margin:14px 0 2px">' + popis.nadpis + '</h3>'
-    + '<p class="muted small" style="margin:0 0 10px">' + popis.pod + '</p>'
+    + '<p class="muted small" style="margin:0 0 10px">' + popis.pod + zebKdy() + '</p>'
     + (list.length
       ? '<div class="zeb">' + list.map(function (x) {
           return '<div class="zeb-row' + (x.ja ? ' ja' : '') + '"'

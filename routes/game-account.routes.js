@@ -1526,10 +1526,17 @@ function dopoctiStav(st, naposledy) {
     odhad: true, od, pridano: pridej };
 }
 
-let _zeb = { at: 0, data: null };
-function dropZeb() { _zeb = { at: 0, data: null }; }
+// Žebříček se drží v paměti po oknech přibitých na hodiny, ne na „třicet
+// vteřin od posledního dotazu". Dřív si každý hráč načetl svůj vlastní snímek
+// podle toho, kdy se zrovna zeptal, a dva telefony vedle sebe pak ukazovaly
+// jiná čísla. Teď připadne každý dotaz do stejného okna a všichni v něm
+// dostanou tentýž žebříček — a překlopí se jim naráz.
+const ZEB_OKNO = 30000;
+let _zeb = { okno: -1, data: null };
+function dropZeb() { _zeb = { okno: -1, data: null }; }
 async function zebricky() {
-  if (Date.now() - _zeb.at < 30e3 && _zeb.data) return _zeb.data;
+  const okno = Math.floor(Date.now() / ZEB_OKNO);
+  if (_zeb.okno === okno && _zeb.data) return _zeb.data;
   const [mista, hraci, zemeMap] = await Promise.all([
     // Počítají se postavené prádlomaty, ne zabraná místa — prázdný pozemek
     // do žebříčku nepatří.
@@ -1607,7 +1614,10 @@ async function zebricky() {
   jmeni.sort((a, b) => b.hodnota - a.hodnota);
   hvezdy.sort((a, b) => b.hodnota - a.hodnota);
 
-  _zeb = { at: Date.now(), data: { pradlomaty: poMistech, zisk, pozvanky, jmeni, hvezdy, seSiti } };
+  _zeb = { okno, data: { pradlomaty: poMistech, zisk, pozvanky, jmeni, hvezdy, seSiti,
+    // Ke kterému okamžiku žebříček platí. Posílá se do hry, ať je rozdíl mezi
+    // dvěma telefony vysvětlený, a ne záhadný.
+    aktualizovano: new Date(okno * ZEB_OKNO).toISOString() } };
   return _zeb.data;
 }
 // Moje příčka — ať ji hráč vidí, i když do první pětadvacítky nedosáhne.
@@ -1680,6 +1690,7 @@ router.get('/leaderboard', async (req, res, next) => {
     res.json({ ok: true,
       pradlomaty: orez(z.pradlomaty), zisk: orez(z.zisk), pozvanky: orez(z.pozvanky),
       jmeni: orez(z.jmeni), hvezdy: orez(z.hvezdy), zeme: zeme,
+      aktualizovano: z.aktualizovano || null,
       ja: p ? { pradlomaty: moje(z.pradlomaty, p.id), zisk: moje(z.zisk, p.id),
         pozvanky: moje(z.pozvanky, p.id), jmeni: moje(z.jmeni, p.id),
         hvezdy: moje(z.hvezdy, p.id) } : null,
