@@ -2816,5 +2816,8 @@
   "uver.zastava_by_dovolila_vic_splatka": "<p class=\"fine\">Zástava by dovolila víc, ale banka chce, aby ti na splátku zbývalo aspoň ",
   "uver.rocne_b_div": "{p1} % ročně</b></div>",
   "podil.firma_nevydelava": ". Firma teď nevydělává, tak se nic nevrací.",
-  "trh.do_te_doby_vydelava": "{p1}. Do té doby ti prádlomat normálně vydělává.</p>"
+  "trh.do_te_doby_vydelava": "{p1}. Do té doby ti prádlomat normálně vydělává.</p>",
+  "obecne.tisic": "{p1} tis.",
+  "obecne.milion": "{p1} M",
+  "obecne.miliarda": "{p1} mld."
 }
