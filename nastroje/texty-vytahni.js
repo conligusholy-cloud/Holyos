@@ -67,16 +67,29 @@ function casti(obsah) {
     return CZ.test(obsah) ? [{ text: true, s: obsah }] : [{ text: false, s: obsah }];
   }
   const out = [];
+  // Text pro hráče nesedí jen mezi dvěma značkami. Řetězec často končí
+  // uprostřed věty — '<b>Hodnocení: ' — nebo jí naopak začíná —
+  // 'To s hodnocením zamávalo.</p>'. Bereme proto i úsek před první
+  // značkou a za poslední.
+  const prvni = obsah.indexOf('<');
+  const posledni = obsah.lastIndexOf('>');
+  let pos = 0;
+  if (prvni > 0) { out.push({ text: CZ.test(obsah.slice(0, prvni)), s: obsah.slice(0, prvni) }); pos = prvni; }
+  const stred = posledni >= pos ? obsah.slice(pos, posledni + 1) : '';
   const re = />([^<>]+)</g;
-  let pos = 0, m;
-  while ((m = re.exec(obsah)) !== null) {
+  let p2 = 0, m;
+  while ((m = re.exec(stred)) !== null) {
     const zacatek = m.index + 1;
-    if (zacatek > pos) out.push({ text: false, s: obsah.slice(pos, zacatek) });
+    if (zacatek > p2) out.push({ text: false, s: stred.slice(p2, zacatek) });
     out.push({ text: CZ.test(m[1]), s: m[1] });
-    pos = zacatek + m[1].length;
-    re.lastIndex = pos;
+    p2 = zacatek + m[1].length;
+    re.lastIndex = p2;
   }
-  if (pos < obsah.length) out.push({ text: false, s: obsah.slice(pos) });
+  if (p2 < stred.length) out.push({ text: false, s: stred.slice(p2) });
+  if (posledni >= pos && posledni + 1 < obsah.length) {
+    const konec = obsah.slice(posledni + 1);
+    out.push({ text: CZ.test(konec), s: konec });
+  }
   return out;
 }
 

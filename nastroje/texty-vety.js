@@ -46,15 +46,16 @@ function retezy(txt) {
   const dejClen = (i) => {
     const u = vrch();
     if (u.odClenu >= 0) {
-      const c = txt.slice(u.odClenu, i).trim();
-      if (c) u.cleny.push(c);
+      const syrovy = txt.slice(u.odClenu, i);
+      const c = syrovy.trim();
+      if (c) u.cleny.push({ s: c, od: u.odClenu + syrovy.indexOf(c), do: u.odClenu + syrovy.indexOf(c) + c.length });
     }
     u.odClenu = -1;
   };
   const uzavri = (i) => {
     const u = vrch();
     dejClen(i);
-    if (u.cleny.length > 1 && u.cleny.some((c) => c[0] === "'" && CZ.test(c)) && u.od >= 0) {
+    if (u.cleny.length > 1 && u.cleny.some((c) => c.s[0] === "'" && CZ.test(c.s)) && u.od >= 0) {
       out.push({ od: u.od, do: i, cleny: u.cleny.slice() });
     }
     u.cleny = []; u.od = -1; u.odClenu = -1;
@@ -76,6 +77,15 @@ function retezy(txt) {
     }
     // Složené závorky se počítají taky. Bez nich řetěz přeroste přes konec
     // objektu — [{ t: 'Vyřídil ' + n + ' hovorů.' }] — a vznikne nesmysl.
+    // Komentář řetěz ukončí. Vysvětlivka mezi dvěma kusy věty je legální
+    // JavaScript, ale do šablony nepatří — a kdyby se vzala jako člen,
+    // rozbije zbytek řádku.
+    if (z === '/' && (txt[i + 1] === '/' || txt[i + 1] === '*')) {
+      uzavri(i);
+      if (txt[i + 1] === '/') { while (i < txt.length && txt[i] !== '\n') i++; }
+      else { i += 2; while (i < txt.length && !(txt[i] === '*' && txt[i + 1] === '/')) i++; i += 2; }
+      continue;
+    }
     if (z === '(' || z === '[' || z === '{') {
       zacni(i);
       zas.push({ cleny: [], odClenu: -1, od: -1 });
@@ -131,33 +141,39 @@ function main() {
   let text = fn.text;
 
   // Od konce, ať se posuny nerozbijí.
-  nalezy.slice().sort((a, b) => b.od - a.od).forEach((n) => {
-    const cleny = n.cleny;
-    // Do šablony smí jít jen to, co je opravdu hodnota: jméno, přístup přes
-    // tečku nebo volání. Jakmile se v členu objeví příkaz nebo přiřazení,
-    // řetěz přerostl přes konec výrazu a sloučením by vznikl nesmysl —
-    // takové místo se nechá být a nahlásí.
-    const bezpecny = (c) => {
-      if (c[0] === "'") return true;
-      if (/\b(if|return|var|let|const|for|while|function|new|delete|typeof)\b/.test(c)) return false;
-      if (/=>|[?:]/.test(c)) return false;
-      if (/(^|[^=!<>])=([^=]|$)/.test(c)) return false;     // přiřazení
-      if (/[;{}]/.test(c)) return false;
-      return /^[A-Za-z_$][\w$.]*(\s*\([^;{}]*\))?(\s*\[[^\];{}]*\])?$/.test(c)
-        || /^[A-Za-z_$][\w$.]*\s*\([\s\S]*\)$/.test(c);
+  // Jeden špatný člen nesmí zabít celý řetěz. Dlouhá věta často končí
+  // přílepkem s podmínkou — + (lze ? neco() : '') — a kvůli němu by se
+  // nesloučilo nic. Bereme proto nejdelší souvislé úseky bezpečných členů.
+  const bezpecny = (c) => {
+    if (c[0] === "'") return true;
+    if (/\b(if|return|var|let|const|for|while|function|new|delete|typeof)\b/.test(c)) return false;
+    if (/=>|[?:]/.test(c)) return false;
+    if (/(^|[^=!<>])=([^=]|$)/.test(c)) return false;
+    if (/[;{}]/.test(c)) return false;
+    return /^[A-Za-z_$][\w$.]*(\s*\([^;{}]*\))?(\s*\[[^\];{}]*\])?$/.test(c)
+      || /^[A-Za-z_$][\w$.]*\s*\([\s\S]*\)$/.test(c);
+  };
+  const useky = [];
+  nalezy.forEach((n) => {
+    let bezi = [];
+    const uloz = () => {
+      if (bezi.length > 1 && bezi.some((c) => c.s[0] === "'" && CZ.test(c.s))) useky.push(bezi.slice());
+      bezi = [];
     };
-    if (!cleny.every(bezpecny)) { vynechane.push(cleny.join(' + ').slice(0, 70)); return; }
+    n.cleny.forEach((c) => { if (bezpecny(c.s)) bezi.push(c); else { uloz(); vynechane.push(c.s.slice(0, 60)); } });
+    uloz();
+  });
+  useky.sort((a, b) => b[0].od - a[0].od).forEach((u) => {
     let sablona = '', udaje = [], i = 0;
-    cleny.forEach((c) => {
-      if (c[0] === "'") { sablona += c.slice(1, -1); return; }
-      i++; udaje.push('p' + i + ': ' + c); sablona += '{p' + i + '}';
+    u.forEach((c) => {
+      if (c.s[0] === "'") { sablona += c.s.slice(1, -1); return; }
+      i++; udaje.push('p' + i + ': ' + c.s); sablona += '{p' + i + '}';
     });
-    if (!CZ.test(sablona)) return;
-    if (sablona.indexOf("\\'") >= 0) { vynechane.push(sablona.slice(0, 70)); return; }
-    const k = klicZ(sablona, predpona, obsazene);
-    nove[k] = sablona;
+    if (!CZ.test(sablona) || sablona.indexOf("\\'") >= 0) return;
+    let k = Object.keys(nove).find((x) => nove[x] === sablona);
+    if (!k) { k = klicZ(sablona, predpona, obsazene); nove[k] = sablona; }
     const nahrada = 'tx(\'' + k + '\'' + (udaje.length ? ', { ' + udaje.join(', ') + ' }' : '') + ')';
-    text = text.slice(0, n.od) + nahrada + text.slice(n.do);
+    text = text.slice(0, u[0].od) + nahrada + text.slice(u[u.length - 1].do);
   });
 
   console.log('funkce ' + jmeno + ' · sloučených vět: ' + Object.keys(nove).length

@@ -1130,6 +1130,17 @@ app.use((req, res, next) => {
   // Jádro překladů si hra tahá ze stejného souboru, jaký používá server —
   // dvě kopie by se do měsíce rozešly a hráč by viděl jinou větu, než jaká
   // mu přijde ze serveru.
+  // Český katalog jde do stránky jako obyčejný skript, ne přes fetch.
+  // Důvod je zásadní: ve sloučených šablonách je i HTML včetně id prvků,
+  // takže kdyby katalog nebyl po ruce hned, nevykreslil by se jen text —
+  // zmizela by celá stavba okna a hra by si sáhla na neexistující prvek.
+  // Takhle je čeština ve hře vždycky a angličtina ji jen přebije.
+  if (req.path === '/game/texty-cs.js') {
+    res.set('Content-Type', 'application/javascript; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=120');
+    const T = require('./services/game/texty');
+    return res.send('window.__TEXTY_CS = ' + JSON.stringify(T.katalogPro('cs')) + ';');
+  }
   if (req.path === '/game/texty.js') {
     res.set('Content-Type', 'application/javascript; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=300');
