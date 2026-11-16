@@ -12905,8 +12905,8 @@ var NEPOTVRZENE = [];
 // Pozor na pořadí: strážce musí počkat déle, než trvá vlastní timeout, jinak
 // by zahazoval uložení, která ještě mají šanci dojít. Velký stav na pomalém
 // mobilu umí letět i půl minuty, takže je tu čas vrchovatě.
-var SYNC_ZASEK_MS = 60000;     // po téhle době se zaseknuté uložení zahodí
-var SYNC_TIMEOUT_MS = 45000;   // a tolik se na odpověď vůbec čeká
+var SYNC_ZASEK_MS = 30000;     // po téhle době se zaseknuté uložení zahodí
+var SYNC_TIMEOUT_MS = 25000;   // a tolik se na odpověď vůbec čeká
 var syncBusyAt = 0, syncOk = 0, syncVarovano = 0;
 // Proč se neukládá. Bez toho hráč i my vidíme jen „neuložilo se" a hádáme.
 var SYNC_CHYBA = null;
@@ -12915,6 +12915,7 @@ var SYNC_CHYBA = null;
 // stavový kód. Když je pokusů hodně a odpovědí nula, neodpovídá server; když
 // je nula i pokusů, hra uložení vůbec nepustila a chyba je na naší straně.
 var SYNC_POKUSU = 0, SYNC_ODPOVEDI = 0, SYNC_STATUS = null;
+var SYNC_SITE_PO_SOBE = 0, SYNC_KONFLIKTU_PO_SOBE = 0;   // krátký výpadek ani jednorázový konflikt se nehlásí
 // Chyby ukládání a hry se hráči neukazují — jdou tiše na server do adminu hry
 // (záložka Chyby). Stejná chyba se z jednoho zařízení hlásí nejvýš jednou za 10 minut;
 // co se nepovede odeslat (výpadek sítě), čeká ve frontě a odejde s dalším hlášením.
@@ -12977,7 +12978,7 @@ function syncState(force) {
       SYNC_ODPOVEDI++; SYNC_STATUS = r.status;
       if (prerus) clearTimeout(prerus);
       if (r.ok) {
-        syncOk = Date.now(); syncVarovano = 0; SYNC_CHYBA = null; odesliChyby();
+        syncOk = Date.now(); syncVarovano = 0; SYNC_CHYBA = null; SYNC_SITE_PO_SOBE = 0; SYNC_KONFLIKTU_PO_SOBE = 0; odesliChyby();
         // Server stav uložil a ve stejném zápisu potvrdil doručenky.
         NEPOTVRZENE = NEPOTVRZENE.filter(function (id) { return potvrzuju.indexOf(id) < 0; });
         if (r.j && r.j.rev != null) STATE_REV = r.j.rev;
@@ -12990,7 +12991,8 @@ function syncState(force) {
         // takhle točí dokola, hraje hráč na dvou místech a jeho postup padá
         // pod stůl — hlídač neukládání to pak řekne i s důvodem.
         SYNC_CHYBA = 'hru máš rozehranou i jinde, stav se bere odtamtud';
-        hlasChybu('ulozeni-konflikt', SYNC_CHYBA, { status: 409 });
+        // Jednorázový konflikt je normální (druhé zařízení); hlásí se až když se opakuje.
+        if (++SYNC_KONFLIKTU_PO_SOBE >= 3) hlasChybu('ulozeni-konflikt', SYNC_CHYBA, { status: 409, po_sobe: SYNC_KONFLIKTU_PO_SOBE });
         if (prevezmiStav(r.j.state, r.j.rev)) {
           // Náš zápis propadl i s doručenkami — ty zůstanou na serveru
           // nepotvrzené a přijdou znovu k tomu stavu, který vyhrál.
@@ -13016,7 +13018,8 @@ function syncState(force) {
       SYNC_CHYBA = (err && err.name === 'AbortError')
         ? 'server neodpověděl do ' + Math.round(SYNC_TIMEOUT_MS / 1000) + ' s'
         : 'spojení se serverem se nepovedlo';
-      hlasChybu((err && err.name === 'AbortError') ? 'ulozeni-timeout' : 'ulozeni-sit', SYNC_CHYBA, { zprava: err && err.message });
+      // Krátký výpadek sítě (5G ↔ Wi-Fi, tunel) se hlásí až při třetím selhání za sebou.
+      if (++SYNC_SITE_PO_SOBE >= 3) hlasChybu((err && err.name === 'AbortError') ? 'ulozeni-timeout' : 'ulozeni-sit', SYNC_CHYBA, { zprava: err && err.message, po_sobe: SYNC_SITE_PO_SOBE });
       console.warn('[hra] uložení selhalo:', SYNC_CHYBA, err && err.message);
     });
 }
@@ -14064,7 +14067,7 @@ function startGame() {
   hlidejDrazbu();
   document.addEventListener('visibilitychange', function () {
     // Po návratu do hry se hned podíváme, jestli nám konkurence nevyfoukla místo.
-    if (!document.hidden) { tep(); tick(); save(); paint(); loadClaims(); loadTrades(); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }
+    if (!document.hidden) { syncOk = Date.now(); syncState(true); tep(); tick(); save(); paint(); loadClaims(); loadTrades(); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }
     else { tep(); syncState(true); }
   });
   window.addEventListener('pagehide', function () { syncState(true); });
