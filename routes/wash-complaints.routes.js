@@ -27,6 +27,8 @@ publicRouter.use(express.json({ limit: '20kb' }));
 const NOTIFY_KEY = 'wash.velin_notify_person_ids';
 const SETTINGS_KEY = 'wash.settings';
 const RECEIPT_MAX = 350;
+// Odesílatel zákaznických e-mailů: Graph send-as z firemní schránky (bez toho by se použil SMTP fallback, který tu nemá platné přihlášení)
+const MAIL_FROM = process.env.WASH_MAIL_FROM || process.env.COMPOUNDER_MAIL_FROM || undefined;
 const PAY_METHODS = ['Platební karta', 'Mobil (Apple Pay / Google Pay)', 'Mince', 'Bankovky', 'Aplikace', 'Jiný'];
 const SERVICES = ['Praní 8 kg', 'Praní 18 kg', 'Praní 18 kg + aviváž', 'Sušení', 'Praní + sušení', 'Jiná'];
 const KIND_LABEL = { refund: 'Vrácení platby', receipt: 'Zaslání dokladu' };
@@ -293,7 +295,7 @@ publicRouter.post('/request', async (req, res) => {
     // Potvrzení zákazníkovi (s číslem žádosti)
     try {
       const { sendMail } = require('../services/email');
-      sendMail({ audience: 'customer', manual: true, to: email, brand: 'pradlomaty', lang: 'cs',
+      sendMail({ audience: 'customer', manual: true, to: email, brand: 'pradlomaty', lang: 'cs', from: MAIL_FROM, fromName: '💧 PRÁDLOMATY 💧',
         subject: 'Přijali jsme vaši žádost ' + row.number + ' — ' + KIND_LABEL[kind].toLowerCase(),
         body: 'Dobrý den,\n\nděkujeme, vaši žádost (' + KIND_LABEL[kind].toLowerCase() + ') jsme přijali pod číslem ' + row.number + '.\n\nMísto: ' + place.label + '\nDatum transakce: ' + txAt.toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' }) + '\nČástka: ' + kc(amount) + '\n\nOzveme se vám co nejdříve. Na tuto zprávu můžete odpovědět.\n\nNonstop prádlomat linka: +420 792 319 961',
       }).catch(() => {});
@@ -487,7 +489,7 @@ async function sendCreditNoteEmail(row) {
   if (inv.delivery_status === 'sent') return { ok: true, already: true };
   const pdf = await creditNotePdf(row, inv);
   const { sendMail } = require('../services/email');
-  const r = await sendMail({ audience: 'customer', manual: true, to: row.email, brand: 'pradlomaty', lang: 'cs',
+  const r = await sendMail({ audience: 'customer', manual: true, to: row.email, brand: 'pradlomaty', lang: 'cs', from: MAIL_FROM, fromName: '💧 PRÁDLOMATY 💧',
     subject: 'Vrátili jsme vám platbu — dobropis ' + inv.invoice_number,
     body: 'Dobrý den,\n\nvaši platbu ' + kc(inv.total) + ' (' + row.place_label + ', ' + new Date(row.tx_at).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' }) + ') jsme vám vrátili na účet ' + (row.account || '') + '. Podle banky může připsání trvat jeden pracovní den.\n\nV příloze zasíláme dobropis ' + inv.invoice_number + ' k vaší žádosti ' + row.number + '.\n\nDěkujeme za trpělivost.\nNonstop prádlomat linka: +420 792 319 961',
     attachments: [{ filename: inv.invoice_number + '.pdf', content: Buffer.from(pdf), contentType: 'application/pdf' }] });
@@ -558,7 +560,7 @@ router.post('/:id(\\d+)/send-receipt', async (req, res, next) => {
     const number = await receiptNumber(row);
     const pdf = await pdfFromHtml(receiptHtml(row, await receiptData(row), number));
     const { sendMail } = require('../services/email');
-    const r = await sendMail({ audience: 'customer', manual: true, to: row.email, brand: 'pradlomaty', lang: 'cs',
+    const r = await sendMail({ audience: 'customer', manual: true, to: row.email, brand: 'pradlomaty', lang: 'cs', from: MAIL_FROM, fromName: '💧 PRÁDLOMATY 💧',
       subject: 'Doklad k vaší platbě v prádlomatu — ' + number,
       body: 'Dobrý den,\n\nv příloze posíláme doklad k vaší platbě ze dne ' + new Date(row.tx_at).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' }) + ' (' + row.place_label + ', ' + kc(row.amount) + ').\n\nDěkujeme, že využíváte naše prádlomaty.',
       attachments: [{ filename: number + '.pdf', content: Buffer.from(pdf), contentType: 'application/pdf' }] });
@@ -576,7 +578,7 @@ router.post('/:id(\\d+)/email', async (req, res, next) => {
     if (!row) return res.status(404).json({ error: 'Žádost nenalezena' });
     if (text.length < 5) return res.status(400).json({ error: 'Napište text zprávy.' });
     const { sendMail } = require('../services/email');
-    const r = await sendMail({ audience: 'customer', manual: true, to: row.email, brand: 'pradlomaty', lang: 'cs', subject: 'Vaše žádost ' + row.number, body: text });
+    const r = await sendMail({ audience: 'customer', manual: true, to: row.email, brand: 'pradlomaty', lang: 'cs', from: MAIL_FROM, fromName: '💧 PRÁDLOMATY 💧', subject: 'Vaše žádost ' + row.number, body: text });
     if (!r || !r.sent) return res.status(502).json({ error: 'E-mail se nepodařilo odeslat: ' + ((r && (r.error || r.skipped)) || 'neznámá chyba') });
     const upd = await prisma.washComplaint.update({ where: { id }, data: { history: hist(row, 'E-mail zákazníkovi: ' + text.slice(0, 300), whoOf(req)) } });
     res.json(upd);
