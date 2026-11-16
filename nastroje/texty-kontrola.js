@@ -82,6 +82,19 @@ function main() {
     + ' · zastaralých: ' + zastarale.length);
   console.log('českých textů přímo v kódu: ' + zapomenute.length);
 
+  // Scénáře infolinky jdou vedle katalogu — próza, ne klíče.
+  let linkaChybi = 0, linkaCelkem = 0;
+  try {
+    const lcs = JSON.parse(fs.readFileSync(path.join(KOREN, 'services', 'game', 'texty', 'linka.cs.json'), 'utf8'));
+    let len = [], lmeta = {};
+    try { len = JSON.parse(fs.readFileSync(path.join(KOREN, 'services', 'game', 'texty', 'linka.en.json'), 'utf8')); } catch (e) { /* ještě není */ }
+    try { lmeta = JSON.parse(fs.readFileSync(path.join(KOREN, 'services', 'game', 'texty', 'linka.en.meta.json'), 'utf8')); } catch (e) { /* ještě není */ }
+    const mam = new Set(len.map((x) => x.id));
+    linkaCelkem = lcs.length;
+    linkaChybi = lcs.filter((x) => !mam.has(x.id) || lmeta[x.id] !== otisk(x)).length;
+    console.log('scénářů infolinky: ' + linkaCelkem + ' · k překladu: ' + linkaChybi);
+  } catch (e) { /* linka nemusí být */ }
+
   if (process.argv.includes('--vypis')) {
     chybi.slice(0, 40).forEach((k) => console.log('  chybí      ' + k));
     zastarale.forEach((k) => console.log('  zastaralé  ' + k));
@@ -94,6 +107,6 @@ function main() {
   // Chybějící klíč je horší než chybějící překlad: hráč uvidí holý klíč.
   // Proto vlastní kód, ať jde odlišit od „je co dopřekládat".
   if (chybejiciKlice.size) process.exit(2);
-  process.exit(chybi.length || zastarale.length ? 1 : 0);
+  process.exit(chybi.length || zastarale.length || linkaChybi ? 1 : 0);
 }
 main();

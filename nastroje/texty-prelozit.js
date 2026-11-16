@@ -74,8 +74,12 @@ async function main() {
   const kdopotrebuje = Object.keys(cs).filter((k) =>
     en[k] == null || (meta[k] && meta[k] !== otisk(cs[k])));
   console.log('k překladu: ' + kdopotrebuje.length + ' z ' + Object.keys(cs).length);
-  if (!kdopotrebuje.length) return;
-  if (nanecisto) { console.log(kdopotrebuje.slice(0, 20).join('\n')); return; }
+  if (nanecisto) {
+    console.log(kdopotrebuje.slice(0, 20).join('\n'));
+    await linka(slovnik);
+    return;
+  }
+  if (!kdopotrebuje.length) { await linka(slovnik); return; }
 
   let hotovo = 0;
   for (let i = 0; i < kdopotrebuje.length; i += velikost) {
@@ -98,5 +102,47 @@ async function main() {
     }
   }
   console.log('přeloženo: ' + hotovo);
+  await linka(slovnik);
 }
+
+// -----------------------------------------------------------------------------
+// Scénáře infolinky
+// -----------------------------------------------------------------------------
+// Souvislá próza, ne klíče — překládá se po celých scénářích, aby odpovědi
+// seděly na otázky. Otisk je u celého scénáře; když se jeden upraví, přeloží
+// se znovu jen on.
+async function linka(slovnik) {
+  const cs = nacti('linka.cs.json', null);
+  if (!cs) return;
+  const en = nacti('linka.en.json', []);
+  const meta = nacti('linka.en.meta.json', {});
+  const hotove = {};
+  en.forEach((s) => { hotove[s.id] = s; });
+
+  const chybi = cs.filter((s) => !hotove[s.id] || meta[s.id] !== otisk(s));
+  console.log('scénářů linky k překladu: ' + chybi.length + ' z ' + cs.length);
+  if (!chybi.length) return;
+  if (process.argv.includes('--nanecisto')) { console.log(chybi.map((s) => s.id).join(', ')); return; }
+
+  for (const scenar of chybi) {
+    try {
+      // Překládají se jen věty. id, bod a rod musí zůstat, jak jsou —
+      // podle nich hra scénář řídí.
+      const vysledek = await prelozDavku({ scenar: JSON.stringify(scenar) }, slovnik
+        + '\n\nTohle je scénář hovoru na infolince. Vrať ho jako JSON se stejnou'
+        + ' stavbou a stejnými klíči. Přelož jen hodnoty t a r. Klíče id, b a rod'
+        + ' nech beze změny — podle nich hra hovor řídí. Vrať {"scenar": "<JSON jako text>"}.');
+      const prelozeny = JSON.parse(vysledek.scenar);
+      if (prelozeny.id !== scenar.id) throw new Error('scénář se vrátil s jiným id');
+      hotove[scenar.id] = prelozeny;
+      meta[scenar.id] = otisk(scenar);
+      zapis('linka.en.json', cs.map((s) => hotove[s.id]).filter(Boolean));
+      zapis('linka.en.meta.json', meta);
+      console.log('  ' + scenar.id);
+    } catch (e) {
+      console.error('  scénář ' + scenar.id + ' selhal: ' + e.message);
+    }
+  }
+}
+
 main().catch((e) => { console.error(e.message); process.exit(1); });
