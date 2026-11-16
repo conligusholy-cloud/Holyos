@@ -24,13 +24,21 @@ v okně.
 
 ## Klíč k API
 
-Bere se z prostředí, nikdy ze souboru v repozitáři. Ve Windows:
+Nejjednodušší je dát ho do `.env` v kořeni projektu:
 
 ```
-setx ANTHROPIC_API_KEY sk-ant-...
+ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Pak nové okno terminálu. Ověření: `npm run texty:kontrola`.
+Soubor je v `.gitignore`, takže nikam neodejde, a nemusíš klíč psát do
+příkazové řádky — tam ho umí vypsat chybová hláška, když se v něm uklepneš.
+
+Jen pro jedno okno jde použít i proměnnou prostředí (**s uvozovkami**, jinak
+si PowerShell myslí, že mu dáváš příkaz k provedení):
+
+```powershell
+$env:ANTHROPIC_API_KEY = "sk-ant-..."
+```
 
 ## Ručně, bez commitu
 

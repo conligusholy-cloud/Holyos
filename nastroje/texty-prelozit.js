@@ -13,6 +13,12 @@
 // POUŽITÍ:  node nastroje/texty-prelozit.js [--davka 40] [--nanecisto]
 'use strict';
 
+// Klíč bereme z .env, když tam je — je gitignorovaný a stejně ho tam projekt
+// má. Lepit ho do příkazové řádky je zbytečná příležitost, jak ho vypsat do
+// chybové hlášky. Proměnná v prostředí má přednost, ať jde přebít jedním
+// spuštěním.
+try { require('dotenv').config(); } catch (e) { /* bez dotenv to jede z prostředí */ }
+
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -68,9 +74,12 @@ async function main() {
   if (!process.env.ANTHROPIC_API_KEY) {
     console.error('Chybí ANTHROPIC_API_KEY v prostředí — nemám se čím přihlásit k API.');
     console.error('');
-    console.error('Na tohle okno:   $env:ANTHROPIC_API_KEY = "sk-ant-..."');
-    console.error('Natrvalo:        setx ANTHROPIC_API_KEY "sk-ant-..."  a otevři NOVÉ okno');
-    console.error('Ověření:         echo $env:ANTHROPIC_API_KEY');
+    console.error('Nejjednodušší: dej ho do .env v kořeni projektu jako řádek');
+    console.error('  ANTHROPIC_API_KEY=sk-ant-...');
+    console.error('Soubor je v .gitignore, takže nikam neodejde, a nemusíš klíč');
+    console.error('psát do příkazové řádky, kde ho umí vyplivnout chybová hláška.');
+    console.error('');
+    console.error('Jen pro tohle okno:  $env:ANTHROPIC_API_KEY = "sk-ant-..."  (s uvozovkami)');
     process.exit(1);
   }
   const velikost = Number((process.argv.find((a) => a.startsWith('--davka=')) || '').split('=')[1]) || 40;
