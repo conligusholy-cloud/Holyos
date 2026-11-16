@@ -18,6 +18,12 @@ const { prisma } = require('../config/database');
 const { HODNOSTI, hodnost, ODZNAKY, ODZNAK,
   hodnostiPro, odznakyPro, nazevOdmeny } = require('../services/game/hodnosti');
 const TEXTY = require('../services/game/texty');
+// Zkratka do obsluhy: stx(req)('server.neco') vrátí hlášku v jazyce hráče.
+// Skládá se pro toho, KOMU se posílá — ne pro toho, kdo akci vyvolal.
+function stx(req) {
+  const j = TEXTY.jazykHrace(req && req.player);
+  return (klic, udaje) => TEXTY.t(klic, udaje, j);
+}
 const JWT_SECRET = require('../config/secrets').jwtSecret();
 
 const router = express.Router();
@@ -376,7 +382,7 @@ async function currentPlayer(req) {
 }
 function requirePlayer(req, res, next) {
   currentPlayer(req).then((p) => {
-    if (!p) return res.status(401).json({ error: 'Nejsi přihlášený.' });
+    if (!p) return res.status(401).json({ error: stx(req)('server.nejsi_prihlaseny') });
     req.player = p; next();
   }).catch(next);
 }
@@ -710,12 +716,12 @@ async function zapisPozvani(player, odkud) {
 // ztratit; do té doby se jinde přihlásit nedá a hra mu to říká.
 router.post('/account/zacni', async (req, res, next) => {
   try {
-    if (rateLimited('zac:' + ipOf(req), 10, 3600e3)) return res.status(429).json({ error: 'Moc pokusů. Zkus to za chvíli.' });
+    if (rateLimited('zac:' + ipOf(req), 10, 3600e3)) return res.status(429).json({ error: stx(req)('server.moc_pokusu_zkus_to_za_chvili') });
     const nick = s((req.body || {}).nick, 24);
-    if (!NICK_RE.test(nick)) return res.status(400).json({ error: 'Jméno musí mít 3–24 znaků (písmena, číslice, tečka, pomlčka, podtržítko).' });
+    if (!NICK_RE.test(nick)) return res.status(400).json({ error: stx(req)('server.jmeno_musi_mit_3_24_znaku') });
     const lower = nick.toLowerCase();
     const taken = await prisma.gamePlayer.findUnique({ where: { nick_lower: lower }, select: { id: true } });
-    if (taken) return res.status(409).json({ error: 'Pod tímhle jménem už někdo hraje. Vymysli si jiné.' });
+    if (taken) return res.status(409).json({ error: stx(req)('server.pod_timhle_jmenem_uz_nekdo_hraje') });
     const p = await prisma.gamePlayer.create({
       data: { nick, nick_lower: lower, company: firmaNebo(s((req.body || {}).company, 60), nick),
         password_hash: null, last_login_at: new Date(),
@@ -736,7 +742,7 @@ router.post('/account/zacni', async (req, res, next) => {
     res.json({ ok: true, player: await pub(hrac) });
     require('../services/game/notify').newPlayer(prisma, hrac);
   } catch (e) {
-    if (e && e.code === 'P2002') return res.status(409).json({ error: 'Pod tímhle jménem už někdo hraje. Vymysli si jiné.' });
+    if (e && e.code === 'P2002') return res.status(409).json({ error: stx(req)('server.pod_timhle_jmenem_uz_nekdo_hraje_2') });
     next(e);
   }
 });
@@ -745,10 +751,10 @@ router.post('/account/zacni', async (req, res, next) => {
 // Kdo heslo už má, mění si ho jinde; tahle cesta slouží jen k prvnímu nastavení.
 router.post('/account/heslo', requirePlayer, async (req, res, next) => {
   try {
-    if (req.player.password_hash) return res.status(409).json({ error: 'Heslo už máš nastavené.' });
+    if (req.player.password_hash) return res.status(409).json({ error: stx(req)('server.heslo_uz_mas_nastavene') });
     const pwd = String((req.body || {}).password || '');
-    if (pwd.length < 6) return res.status(400).json({ error: 'Heslo musí mít aspoň 6 znaků.' });
-    if (pwd.length > 200) return res.status(400).json({ error: 'Heslo je příliš dlouhé.' });
+    if (pwd.length < 6) return res.status(400).json({ error: stx(req)('server.heslo_musi_mit_aspon_6_znaku') });
+    if (pwd.length > 200) return res.status(400).json({ error: stx(req)('server.heslo_je_prilis_dlouhe') });
     const hrac = await prisma.gamePlayer.update({
       where: { id: req.player.id },
       data: { password_hash: await bcrypt.hash(pwd, 10) }
@@ -761,15 +767,15 @@ router.post('/account/heslo', requirePlayer, async (req, res, next) => {
 // POST /account/register { nick, password } → { ok, player }
 router.post('/account/register', async (req, res, next) => {
   try {
-    if (rateLimited('reg:' + ipOf(req), 10, 3600e3)) return res.status(429).json({ error: 'Moc pokusů. Zkus to za chvíli.' });
+    if (rateLimited('reg:' + ipOf(req), 10, 3600e3)) return res.status(429).json({ error: stx(req)('server.moc_pokusu_zkus_to_za_chvili_2') });
     const nick = s((req.body || {}).nick, 24);
     const pwd = String((req.body || {}).password || '');
-    if (!NICK_RE.test(nick)) return res.status(400).json({ error: 'Nick musí mít 3–24 znaků (písmena, číslice, tečka, pomlčka, podtržítko).' });
-    if (pwd.length < 6) return res.status(400).json({ error: 'Heslo musí mít aspoň 6 znaků.' });
-    if (pwd.length > 200) return res.status(400).json({ error: 'Heslo je příliš dlouhé.' });
+    if (!NICK_RE.test(nick)) return res.status(400).json({ error: stx(req)('server.nick_musi_mit_3_24_znaku') });
+    if (pwd.length < 6) return res.status(400).json({ error: stx(req)('server.heslo_musi_mit_aspon_6_znaku_2') });
+    if (pwd.length > 200) return res.status(400).json({ error: stx(req)('server.heslo_je_prilis_dlouhe_2') });
     const lower = nick.toLowerCase();
     const taken = await prisma.gamePlayer.findUnique({ where: { nick_lower: lower }, select: { id: true } });
-    if (taken) return res.status(409).json({ error: 'Tenhle nick už někdo má. Vymysli jiný.' });
+    if (taken) return res.status(409).json({ error: stx(req)('server.tenhle_nick_uz_nekdo_ma_vymysli') });
     const p = await prisma.gamePlayer.create({
       data: { nick, nick_lower: lower, company: firmaNebo(s((req.body || {}).company, 60), nick),
         password_hash: await bcrypt.hash(pwd, 10), last_login_at: new Date(),
@@ -796,7 +802,7 @@ router.post('/account/register', async (req, res, next) => {
     // Majitelé to mají vědět hned — do Velína i na zvonek. Nečekáme na to.
     require('../services/game/notify').newPlayer(prisma, hrac);
   } catch (e) {
-    if (e && e.code === 'P2002') return res.status(409).json({ error: 'Tenhle nick už někdo má. Vymysli jiný.' });
+    if (e && e.code === 'P2002') return res.status(409).json({ error: stx(req)('server.tenhle_nick_uz_nekdo_ma_vymysli_2') });
     next(e);
   }
 });
@@ -814,15 +820,15 @@ router.get('/account/nick-free', async (req, res, next) => {
 // POST /account/login { nick, password }
 router.post('/account/login', async (req, res, next) => {
   try {
-    if (rateLimited('log:' + ipOf(req), 20, 900e3)) return res.status(429).json({ error: 'Moc pokusů. Zkus to za chvíli.' });
+    if (rateLimited('log:' + ipOf(req), 20, 900e3)) return res.status(429).json({ error: stx(req)('server.moc_pokusu_zkus_to_za_chvili_3') });
     const nick = s((req.body || {}).nick, 24);
     const pwd = String((req.body || {}).password || '');
     const p = await prisma.gamePlayer.findUnique({ where: { nick_lower: nick.toLowerCase() } });
     if (p && !p.disabled && !p.password_hash) {
-      return res.status(409).json({ error: 'Tenhle účet ještě nemá heslo. Otevři hru tam, kde jsi hrál naposledy, a heslo si nastav — jinak se k síti nedostaneš.' });
+      return res.status(409).json({ error: stx(req)('server.tenhle_ucet_jeste_nema_heslo_otevri') });
     }
     const ok = p && !p.disabled && p.password_hash && await bcrypt.compare(pwd, p.password_hash);
-    if (!ok) return res.status(401).json({ error: 'Nick nebo heslo nesedí.' });
+    if (!ok) return res.status(401).json({ error: stx(req)('server.nick_nebo_heslo_nesedi') });
     let hrac = await prisma.gamePlayer.update({ where: { id: p.id }, data: { last_login_at: new Date() } });
     // Účty z doby před pozvánkami si při prvním přihlášení nárokují svoje sdílené id.
     try { hrac = await narokujRef(hrac, (req.body || {}).ref); }
@@ -878,8 +884,8 @@ router.post('/account/details', requirePlayer, async (req, res, next) => {
     const email = s(b.email, 160).toLowerCase();
     const first = s(b.first_name, 60);
     const last = s(b.last_name, 60);
-    if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Zadej platný e-mail.' });
-    if (first.length < 2 || last.length < 2) return res.status(400).json({ error: 'Vyplň jméno i příjmení.' });
+    if (!EMAIL_RE.test(email)) return res.status(400).json({ error: stx(req)('server.zadej_platny_e_mail') });
+    if (first.length < 2 || last.length < 2) return res.status(400).json({ error: stx(req)('server.vypln_jmeno_i_prijmeni') });
     const p = await prisma.gamePlayer.update({
       where: { id: req.player.id }, data: { email, first_name: first, last_name: last }
     });
@@ -948,7 +954,7 @@ router.get('/account/invited', requirePlayer, async (req, res, next) => {
 router.post('/account/emblem', requirePlayer, async (req, res, next) => {
   try {
     const e = s((req.body || {}).emblem, 16);
-    if (e && !ZNAK_RE.test(e)) return res.status(400).json({ error: 'Neplatný znak.' });
+    if (e && !ZNAK_RE.test(e)) return res.status(400).json({ error: stx(req)('server.neplatny_znak') });
     const p = await prisma.gamePlayer.update({ where: { id: req.player.id }, data: { emblem: e || null } });
     dropZeb();
     res.json({ ok: true, player: await pub(p) });
@@ -959,7 +965,7 @@ router.post('/account/emblem', requirePlayer, async (req, res, next) => {
 router.post('/account/company', requirePlayer, async (req, res, next) => {
   try {
     const f = s((req.body || {}).company, 60);
-    if (!FIRMA_RE.test(f)) return res.status(400).json({ error: 'Název firmy má 2–60 znaků, bez divokých symbolů.' });
+    if (!FIRMA_RE.test(f)) return res.status(400).json({ error: stx(req)('server.nazev_firmy_ma_2_60_znaku') });
     const p = await prisma.gamePlayer.update({ where: { id: req.player.id }, data: { company: f } });
     dropZeb();   // žebříček drží 30 s v paměti, po přejmenování ho zahodíme
     res.json({ ok: true, player: await pub(p) });
@@ -974,7 +980,7 @@ router.post('/account/nick', requirePlayer, async (req, res, next) => {
   try {
     const nick = s((req.body || {}).nick, 24);
     if (!NICK_RE.test(nick)) {
-      return res.status(400).json({ error: 'Jméno musí mít 3–24 znaků (písmena, číslice, tečka, pomlčka, podtržítko).' });
+      return res.status(400).json({ error: stx(req)('server.jmeno_musi_mit_3_24_znaku_2') });
     }
     const stary = req.player.nick;
     if (nick === stary) return res.json({ ok: true, player: await pub(req.player) });
@@ -986,11 +992,11 @@ router.post('/account/nick', requirePlayer, async (req, res, next) => {
       const od = req.player.nick_at ? new Date(req.player.nick_at).getTime() : 0;
       if (pauza && od && Date.now() - od < pauza) {
         const dnu = Math.ceil((pauza - (Date.now() - od)) / 86400000);
-        return res.status(409).json({ error: 'Jméno sis měnil nedávno. Další změna půjde za ' + dnu + ' dnů.' });
+        return res.status(409).json({ error: stx(req)('server.jmeno_sis_menil_nedavno_dalsi_zmena') + dnu + ' dnů.' });
       }
       const taken = await prisma.gamePlayer.findUnique({ where: { nick_lower: lower }, select: { id: true } });
       if (taken && taken.id !== req.player.id) {
-        return res.status(409).json({ error: 'Pod tímhle jménem už někdo hraje. Vymysli si jiné.' });
+        return res.status(409).json({ error: stx(req)('server.pod_timhle_jmenem_uz_nekdo_hraje_3') });
       }
     }
     const id = req.player.id;
@@ -1019,7 +1025,7 @@ router.post('/account/nick', requirePlayer, async (req, res, next) => {
     console.log('[game] hráč #' + id + ' se přejmenoval: ' + stary + ' → ' + nick);
     res.json({ ok: true, player: await pub(p) });
   } catch (e) {
-    if (e && e.code === 'P2002') return res.status(409).json({ error: 'Pod tímhle jménem už někdo hraje. Vymysli si jiné.' });
+    if (e && e.code === 'P2002') return res.status(409).json({ error: stx(req)('server.pod_timhle_jmenem_uz_nekdo_hraje_4') });
     next(e);
   }
 });
@@ -1102,7 +1108,7 @@ router.get('/texty/linka/:jazyk', (req, res) => {
 router.post('/account/jazyk', requirePlayer, async (req, res, next) => {
   try {
     const j = String((req.body || {}).jazyk || '').slice(0, 5);
-    if (TEXTY.JAZYKY.indexOf(j) < 0) return res.status(400).json({ error: 'Takový jazyk neznám.' });
+    if (TEXTY.JAZYKY.indexOf(j) < 0) return res.status(400).json({ error: stx(req)('server.takovy_jazyk_neznam') });
     const p = await prisma.gamePlayer.update({ where: { id: req.player.id }, data: { jazyk: j } });
     console.log('[game] hráč #' + p.id + ' přepnul jazyk na ' + j);
     res.json({ ok: true, jazyk: j, hlaska: TEXTY.t('jazyk.ulozeno', {}, j) });
@@ -1126,7 +1132,7 @@ router.post('/account/chyba', requirePlayer, async (req, res) => {
 router.put('/account/state', requirePlayer, async (req, res, next) => {
   try {
     const st = (req.body || {}).state;
-    if (!st || typeof st !== 'object') return res.status(400).json({ error: 'Chybí stav.' });
+    if (!st || typeof st !== 'object') return res.status(400).json({ error: stx(req)('server.chybi_stav') });
     // Strop je pojistka proti nesmyslu, ne proti velké síti. Do hlášky i do logu
     // patří skutečná velikost — jinak hráč ani my nevíme, o kolik to přeteklo,
     // a ukládání se zastaví potichu. Přesně to dva dny drželo žebříčky na
@@ -1135,7 +1141,7 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
     if (velikost > STAV_MAX) {
       console.warn('[game] hráč #' + req.player.id + ' má stav ' + Math.round(velikost / 1024)
         + ' kB, strop ' + Math.round(STAV_MAX / 1024) + ' kB — neuloženo');
-      return res.status(413).json({ error: 'Stav hry je moc velký — ' + Math.round(velikost / 1024)
+      return res.status(413).json({ error: stx(req)('server.stav_hry_je_moc_velky') + Math.round(velikost / 1024)
         + ' kB, vejde se ' + Math.round(STAV_MAX / 1024) + ' kB.' });
     }
     // Verze: klient posílá tu, ze které vychází. Když se mezitím uložilo odjinud
@@ -1144,7 +1150,7 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
     const rev = (req.body || {}).rev;
     const akt = Number(req.player.state_rev || 0);
     if (rev != null && Number(rev) !== akt) {
-      return res.status(409).json({ error: 'Hra se mezitím uložila z jiného zařízení.',
+      return res.status(409).json({ error: stx(req)('server.hra_se_mezitim_ulozila_z_jineho'),
         rev: akt, state: req.player.state || null });
     }
     // Zaplacený balíček nesmí zmizet: co je vyzvednuté, musí být i v zástavě.
@@ -1338,7 +1344,7 @@ const IG_KARET = 3;
 router.post('/account/instagram', requirePlayer, async (req, res, next) => {
   try {
     if (req.player.instagram_at) {
-      return res.status(409).json({ error: 'Kartičky za Instagram už sis vyzvedl.' });
+      return res.status(409).json({ error: stx(req)('server.karticky_za_instagram_uz_sis_vyzvedl') });
     }
     await prisma.gamePlayer.update({
       where: { id: req.player.id }, data: { instagram_at: new Date() },
@@ -1359,7 +1365,7 @@ const FB_KIND = 'cash_fb';
 router.post('/account/facebook', requirePlayer, async (req, res, next) => {
   try {
     if (req.player.facebook_at) {
-      return res.status(409).json({ error: 'Dárek za Facebook už sis vyzvedl.' });
+      return res.status(409).json({ error: stx(req)('server.darek_za_facebook_uz_sis_vyzvedl') });
     }
     await prisma.gamePlayer.update({
       where: { id: req.player.id }, data: { facebook_at: new Date() },
@@ -1445,19 +1451,19 @@ const EFFECTS = {
 router.post('/cards/use', requirePlayer, async (req, res, next) => {
   try {
     const kind = s((req.body || {}).kind, 24);
-    if (!ALL[kind] && kind !== CASH_CUSTOM) return res.status(400).json({ error: 'Taková karta není.' });
+    if (!ALL[kind] && kind !== CASH_CUSTOM) return res.status(400).json({ error: stx(req)('server.takova_karta_neni') });
     // Balíček rámce není spotřební karta — je to trvalé odemčení, nespaluje se.
-    if (RAMEC[kind]) return res.status(409).json({ error: 'Balíček rámce se nepoužívá, platí trvale.' });
+    if (RAMEC[kind]) return res.status(409).json({ error: stx(req)('server.balicek_ramce_se_nepouziva_plati_trvale') });
     const card = await prisma.gameCard.findFirst({
       where: { player_id: req.player.id, kind, used_at: null }, orderBy: { id: 'asc' }, select: { id: true, amount: true }
     });
-    if (!card) return res.status(409).json({ error: 'Tuhle kartu nemáš.' });
+    if (!card) return res.status(409).json({ error: stx(req)('server.tuhle_kartu_nemas') });
     // updateMany s podmínkou used_at: null — dvojklik ani dvě záložky kartu nespotřebují dvakrát
     const done = await prisma.gameCard.updateMany({
       where: { id: card.id, used_at: null },
       data: { used_at: new Date(), used_on: s((req.body || {}).on, 80) || null }
     });
-    if (!done.count) return res.status(409).json({ error: 'Karta už byla použitá.' });
+    if (!done.count) return res.status(409).json({ error: stx(req)('server.karta_uz_byla_pouzita') });
     let result;
     if (kind === CASH_CUSTOM) {
       const castka = Math.max(0, card.amount || 0);
@@ -1861,7 +1867,7 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
     const spot = s(b.spot_id, 120), area = s(b.area_key, 80), model = s(b.model, 10);
     const rent = Math.max(0, Math.round(Number(b.rent) || 0));
     // Pozemek se dá koupit i bez stroje — leží a čeká, až na něj hráč něco postaví.
-    if (!spot || !area || (!model && !b.pozemek)) return res.status(400).json({ error: 'Chybí místo.' });
+    if (!spot || !area || (!model && !b.pozemek)) return res.status(400).json({ error: stx(req)('server.chybi_misto') });
     const taken = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
     if (taken) {
       return res.status(409).json({
@@ -1887,7 +1893,7 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
     // Provize se už neplatí za stavbu, ale za nákup stroje — viz /account/nakup.
     res.json({ ok: true, spot: claimPub(c, req.player.id, await firmyMapa()) });
   } catch (e) {
-    if (e && e.code === 'P2002') return res.status(409).json({ error: 'Tohle místo právě někdo obsadil.' });
+    if (e && e.code === 'P2002') return res.status(409).json({ error: stx(req)('server.tohle_misto_prave_nekdo_obsadil') });
     next(e);
   }
 });
@@ -1901,13 +1907,13 @@ router.post('/spots/bid', requirePlayer, async (req, res, next) => {
     const model = s(b.model, 10);
     await dobehleVypovedi();
     const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
-    if (!cur) return res.status(404).json({ error: 'Tohle místo je volné — stav rovnou.' });
-    if (cur.player_id === req.player.id) return res.status(409).json({ error: 'Tady stojíš ty sám.' });
+    if (!cur) return res.status(404).json({ error: stx(req)('server.tohle_misto_je_volne_stav_rovnou') });
+    if (cur.player_id === req.player.id) return res.status(409).json({ error: stx(req)('server.tady_stojis_ty_sam') });
     // Vlastní pozemek se nepřeplácí — není komu nabízet nájem. Tohle hráči
     // řekneme na rovinu, ať zbytečně neplatí za cestu; je to veřejná informace.
     if (cur.pozemek) {
       return res.status(409).json({ ok: false, won: false, nelze: true,
-        error: 'Tohle místo stojí na vlastním pozemku. Přeplatit ho nejde.' });
+        error: stx(req)('server.tohle_misto_stoji_na_vlastnim_pozemku') });
     }
     const need = Math.ceil(cur.rent * TAKEOVER_MIN);
     const ted = Date.now();
@@ -1918,7 +1924,7 @@ router.post('/spots/bid', requirePlayer, async (req, res, next) => {
     const nadNabidkou = cur.vypoved_do ? offer >= Math.ceil((cur.vyzyvatel_rent || 0) * TAKEOVER_MIN) : true;
     if (offer < need || kryty || !nadNabidkou) {
       // Kolik bylo potřeba, neprozradíme — jinak by stačilo zkoušet po tisícovkách.
-      return res.status(409).json({ ok: false, won: false, fee: BID_FEE, error: 'Majitel pozemku tvoji nabídku odmítl. Nájemce platí víc.' });
+      return res.status(409).json({ ok: false, won: false, fee: BID_FEE, error: stx(req)('server.majitel_pozemku_tvoji_nabidku_odmitl_najemce') });
     }
     // Nájemce má výpovědní dobu: místo mu vydělává dál a může nabídku dorovnat.
     const doKdy = new Date(ted + Math.max(1, cur.vypoved_mesicu || 1) * MESIC_MS);
@@ -1940,11 +1946,11 @@ router.post('/spots/stavba', requirePlayer, async (req, res, next) => {
   try {
     const b = req.body || {};
     const spot = s(b.spot_id, 120), model = s(b.model, 10);
-    if (!spot || !model) return res.status(400).json({ error: 'Chybí stroj.' });
+    if (!spot || !model) return res.status(400).json({ error: stx(req)('server.chybi_stroj') });
     const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
-    if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: 'Tohle místo ti nepatří.' });
-    if (cur.model) return res.status(409).json({ error: 'Tady už něco stojí.' });
-    if (cur.najemce_id) return res.status(409).json({ error: 'Pozemek máš pronajatý — nejdřív ukonči nájem.' });
+    if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: stx(req)('server.tohle_misto_ti_nepatri_2') });
+    if (cur.model) return res.status(409).json({ error: stx(req)('server.tady_uz_neco_stoji') });
+    if (cur.najemce_id) return res.status(409).json({ error: stx(req)('server.pozemek_mas_pronajaty_nejdriv_ukonci_najem') });
     const upd = await prisma.gameSpotClaim.update({ where: { spot_id: spot }, data: { model } });
     res.json({ ok: true, spot: claimPub(upd, req.player.id, await firmyMapa()) });
   } catch (e) { next(e); }
@@ -1956,10 +1962,10 @@ router.post('/spots/dorovnat', requirePlayer, async (req, res, next) => {
   try {
     const spot = s((req.body || {}).spot_id, 120);
     const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
-    if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: 'Tohle místo ti nepatří.' });
-    if (!cur.vypoved_do) return res.status(409).json({ error: 'Žádná výpověď tu neběží.' });
+    if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: stx(req)('server.tohle_misto_ti_nepatri_3') });
+    if (!cur.vypoved_do) return res.status(409).json({ error: stx(req)('server.zadna_vypoved_tu_nebezi') });
     if (new Date(cur.vypoved_do).getTime() <= Date.now()) {
-      return res.status(409).json({ error: 'Výpovědní doba už uběhla.' });
+      return res.status(409).json({ error: stx(req)('server.vypovedni_doba_uz_ubehla') });
     }
     const novy = Math.max(cur.rent, cur.vyzyvatel_rent || cur.rent);
     const upd = await prisma.gameSpotClaim.update({
@@ -1986,10 +1992,10 @@ router.post('/spots/pronajem', requirePlayer, async (req, res, next) => {
     const spot = s(b.spot_id, 120);
     const cena = Math.max(0, Math.min(NAJEM_MAX, Math.round(Number(b.cena) || 0)));
     const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
-    if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: 'Tenhle pozemek ti nepatří.' });
-    if (!cur.pozemek) return res.status(409).json({ error: 'Pronajmout jde jen vlastní pozemek.' });
-    if (cur.najemce_id) return res.status(409).json({ error: 'Pozemek už je pronajatý.' });
-    if (cur.model) return res.status(409).json({ error: 'Nejdřív odvez vlastní prádlomat.' });
+    if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: stx(req)('server.tenhle_pozemek_ti_nepatri') });
+    if (!cur.pozemek) return res.status(409).json({ error: stx(req)('server.pronajmout_jde_jen_vlastni_pozemek') });
+    if (cur.najemce_id) return res.status(409).json({ error: stx(req)('server.pozemek_uz_je_pronajaty') });
+    if (cur.model) return res.status(409).json({ error: stx(req)('server.nejdriv_odvez_vlastni_pradlomat') });
     const upd = await prisma.gameSpotClaim.update({
       where: { spot_id: spot },
       data: { pronajem_cena: cena > 0 ? cena : null, pronajem_sit: cena > 0 ? !!b.sit : false },
@@ -2004,10 +2010,10 @@ router.post('/spots/najmout', requirePlayer, async (req, res, next) => {
     const b = req.body || {};
     const spot = s(b.spot_id, 120);
     const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
-    if (!cur || !cur.pozemek) return res.status(404).json({ error: 'Takový pozemek neexistuje.' });
-    if (cur.player_id === req.player.id) return res.status(409).json({ error: 'Tohle je tvůj vlastní pozemek.' });
-    if (!cur.pronajem_cena) return res.status(409).json({ error: 'Majitel pozemek nenabízí.' });
-    if (cur.najemce_id) return res.status(409).json({ error: 'Pozemek si mezitím pronajal někdo jiný.' });
+    if (!cur || !cur.pozemek) return res.status(404).json({ error: stx(req)('server.takovy_pozemek_neexistuje') });
+    if (cur.player_id === req.player.id) return res.status(409).json({ error: stx(req)('server.tohle_je_tvuj_vlastni_pozemek') });
+    if (!cur.pronajem_cena) return res.status(409).json({ error: stx(req)('server.majitel_pozemek_nenabizi') });
+    if (cur.najemce_id) return res.status(409).json({ error: stx(req)('server.pozemek_si_mezitim_pronajal_nekdo_jiny') });
     const ted = new Date();
     const upd = await prisma.gameSpotClaim.update({
       where: { spot_id: spot },
@@ -2025,9 +2031,9 @@ router.post('/spots/najem-konec', requirePlayer, async (req, res, next) => {
     const b = req.body || {};
     const spot = s(b.spot_id, 120);
     const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
-    if (!cur) return res.status(404).json({ error: 'Takový pozemek neexistuje.' });
+    if (!cur) return res.status(404).json({ error: stx(req)('server.takovy_pozemek_neexistuje_2') });
     const muj = cur.player_id === req.player.id, najemce = cur.najemce_id === req.player.id;
-    if (!muj && !najemce) return res.status(409).json({ error: 'S tímhle pozemkem nemáš co do činění.' });
+    if (!muj && !najemce) return res.status(409).json({ error: stx(req)('server.s_timhle_pozemkem_nemas_co_do') });
     // Co nájemci doběhlo do konce, majitel ještě dostane.
     await dorovnejNajmy({ id: cur.player_id, nick: cur.nick });
     const upd = await prisma.gameSpotClaim.update({
@@ -2092,11 +2098,11 @@ router.post('/spots/navyseni', requirePlayer, async (req, res, next) => {
     const spot = s(b.spot_id, 120);
     const rent = Math.round(Number(b.rent) || 0);
     const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
-    if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: 'Tohle místo ti nepatří.' });
-    if (cur.pozemek) return res.status(409).json({ error: 'Na vlastním pozemku se nájem neplatí.' });
-    if (!(rent > cur.rent)) return res.status(400).json({ error: 'Nová částka musí být vyšší než dosavadní nájem.' });
+    if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: stx(req)('server.tohle_misto_ti_nepatri_4') });
+    if (cur.pozemek) return res.status(409).json({ error: stx(req)('server.na_vlastnim_pozemku_se_najem_neplati') });
+    if (!(rent > cur.rent)) return res.status(400).json({ error: stx(req)('server.nova_castka_musi_byt_vyssi_nez') });
     if (rent > cur.rent * NAVYSENI_MAX || rent > 5000000) {
-      return res.status(400).json({ error: 'Tolik si majitel neřekl.' });
+      return res.status(400).json({ error: stx(req)('server.tolik_si_majitel_nerekl') });
     }
     const upd = await prisma.gameSpotClaim.update({ where: { spot_id: spot }, data: { rent } });
     console.log('[game] nájemce přisadil po výpovědi:', spot, req.player.nick, rent + ' L$');
@@ -2111,10 +2117,10 @@ router.post('/spots/model', requirePlayer, async (req, res, next) => {
   try {
     const b = req.body || {};
     const spot = s(b.spot_id, 120), model = s(b.model, 10);
-    if (!spot || !model) return res.status(400).json({ error: 'Chybí místo nebo model.' });
+    if (!spot || !model) return res.status(400).json({ error: stx(req)('server.chybi_misto_nebo_model') });
     const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
     if (!c || c.player_id !== req.player.id) {
-      return res.status(404).json({ error: 'Tohle místo není tvoje.' });
+      return res.status(404).json({ error: stx(req)('server.tohle_misto_neni_tvoje') });
     }
     const up = await prisma.gameSpotClaim.update({ where: { spot_id: spot }, data: { model } });
     res.json({ ok: true, spot: claimPub(up, req.player.id, await firmyMapa()) });
@@ -2129,13 +2135,13 @@ router.post('/spots/release', requirePlayer, async (req, res, next) => {
     const b = req.body || {};
     const spot = s(b.spot_id, 120);
     const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
-    if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: 'Tohle místo ti nepatří.' });
+    if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: stx(req)('server.tohle_misto_ti_nepatri_5') });
     const zbyva = cur.vazano_do
       ? Math.ceil(Math.max(0, new Date(cur.vazano_do).getTime() - Date.now()) / MESIC_MS) : 0;
     const odstupne = Math.round(cur.rent * Math.min(zbyva, ODSTUPNE_MAX));
     if (odstupne > 0 && !b.odstupne) {
       return res.status(409).json({ ok: false, odstupne, zbyva,
-        error: 'Smlouva je na dobu určitou. Odejít jde, ale doplatíš odstupné.' });
+        error: stx(req)('server.smlouva_je_na_dobu_urcitou_odejit') });
     }
     await prisma.gameSpotClaim.deleteMany({ where: { spot_id: spot, player_id: req.player.id } });
     res.json({ ok: true, odstupne });
