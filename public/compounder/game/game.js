@@ -12890,9 +12890,14 @@ var NEPOTVRZENE = [];
 // pouští jen když zrovna žádné neběží, hra by sice běžela dál, ale na server
 // by se nic neuložilo. Hráč by viděl svoje čísla, všichni ostatní jeho hodinu
 // starý stav, a o postup by přišel při příštím načtení.
-var SYNC_ZASEK_MS = 30000;     // po téhle době se zaseknuté uložení zahodí
-var SYNC_TIMEOUT_MS = 20000;   // a tolik se na odpověď vůbec čeká
+// Pozor na pořadí: strážce musí počkat déle, než trvá vlastní timeout, jinak
+// by zahazoval uložení, která ještě mají šanci dojít. Velký stav na pomalém
+// mobilu umí letět i půl minuty, takže je tu čas vrchovatě.
+var SYNC_ZASEK_MS = 60000;     // po téhle době se zaseknuté uložení zahodí
+var SYNC_TIMEOUT_MS = 45000;   // a tolik se na odpověď vůbec čeká
 var syncBusyAt = 0, syncOk = 0, syncVarovano = 0;
+// Proč se neukládá. Bez toho hráč i my vidíme jen „neuložilo se" a hádáme.
+var SYNC_CHYBA = null;
 function syncState(force) {
   if (wiped || !ME || !S) return Promise.resolve();
   if (syncBusy) {
@@ -12922,7 +12927,7 @@ function syncState(force) {
       syncBusy = false;
       if (prerus) clearTimeout(prerus);
       if (r.ok) {
-        syncOk = Date.now(); syncVarovano = 0;
+        syncOk = Date.now(); syncVarovano = 0; SYNC_CHYBA = null;
         // Server stav uložil a ve stejném zápisu potvrdil doručenky.
         NEPOTVRZENE = NEPOTVRZENE.filter(function (id) { return potvrzuju.indexOf(id) < 0; });
         if (r.j && r.j.rev != null) STATE_REV = r.j.rev;
@@ -12931,18 +12936,34 @@ function syncState(force) {
       if (r.status === 409 && r.j) {
         // Jinde je novější hra. Vezmeme ji — svoje poslední vteřiny raději
         // obětujeme než cizí postup z druhého zařízení.
+        // Konflikt není ztráta spojení, ale uložení taky neproběhlo. Když se
+        // takhle točí dokola, hraje hráč na dvou místech a jeho postup padá
+        // pod stůl — hlídač neukládání to pak řekne i s důvodem.
+        SYNC_CHYBA = 'hru máš rozehranou i jinde, stav se bere odtamtud';
         if (prevezmiStav(r.j.state, r.j.rev)) {
           // Náš zápis propadl i s doručenkami — ty zůstanou na serveru
           // nepotvrzené a přijdou znovu k tomu stavu, který vyhrál.
           NEPOTVRZENE = [];
           toast('Tuhle hru máš rozehranou i jinde — načetli jsme novější stav.', 'ok');
         } else if (r.j.rev != null) { STATE_REV = r.j.rev; }
+        return;
       }
+      // Cokoli jiného než 409 se dosud mlčky zahodilo. Server přitom posílá
+      // důvod — je potřeba ho vidět, jinak se dlouhé neukládání nedá vysvětlit.
+      SYNC_CHYBA = (r.j && r.j.error) ? r.j.error : ('server odpověděl ' + r.status);
+      if (r.status === 413) {
+        SYNC_CHYBA = 'stav hry je na server moc velký ('
+          + Math.round(JSON.stringify(S).length / 1024) + ' kB)';
+      }
+      console.warn('[hra] uložení selhalo:', r.status, SYNC_CHYBA);
     })
-    .catch(function () {
+    .catch(function (err) {
       syncBusy = false;
       if (prerus) clearTimeout(prerus);
-      /* offline nebo přerušeno — zkusí se příště */
+      SYNC_CHYBA = (err && err.name === 'AbortError')
+        ? 'server neodpověděl do ' + Math.round(SYNC_TIMEOUT_MS / 1000) + ' s'
+        : 'spojení se serverem se nepovedlo';
+      console.warn('[hra] uložení selhalo:', SYNC_CHYBA, err && err.message);
     });
 }
 // Když se hra dlouho neuloží, musí to hráč vědět. Jinak hraje dál do stavu,
@@ -12955,8 +12976,8 @@ function hlidejUkladani() {
   if (ticho < SYNC_TICHO_MS) return;
   if (Date.now() - syncVarovano < 300000) return;
   syncVarovano = Date.now();
-  toast('Hra se ' + Math.round(ticho / 60000) + ' minuty neuložila na server — '
-    + 'zkontroluj připojení. Zkoušíme to dál.', 'err');
+  toast('Hra se ' + Math.round(ticho / 60000) + ' minuty neuložila na server'
+    + (SYNC_CHYBA ? ': ' + SYNC_CHYBA : ' — zkontroluj připojení') + '. Zkoušíme to dál.', 'err');
 }
 
 // ─── Heslo k rozehranému účtu ────────────────────────────────────────────────
