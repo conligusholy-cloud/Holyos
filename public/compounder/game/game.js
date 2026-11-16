@@ -9189,38 +9189,38 @@ function bindZakladny() {
 function ramecHtml() {
   if (maRamec()) {
     var volny = ramecVolny();
-    return '<div class="card"><h3>Rámcový úvěr</h3>'
-      + '<div class="kv"><span>Schválený limit</span><b>' + kcFull(S.ramec.limit) + '</b></div>'
-      + '<div class="kv"><span>Vyčerpáno</span><b>' + kcFull(ramecCerpano()) + '</b></div>'
-      + '<div class="kv"><span>K čerpání</span><b class="' + (volny > 0 ? 'ok' : 'warn') + '">' + kcFull(volny) + '</b></div>'
+    return '<div class="card"><h3>' + esc(t('banka.ramcovy_uver')) + '</h3>'
+      + '<div class="kv"><span>' + esc(t('banka.schvaleny_limit')) + '</span><b>' + kcFull(S.ramec.limit) + '</b></div>'
+      + '<div class="kv"><span>' + esc(t('banka.vycerpano')) + '</span><b>' + kcFull(ramecCerpano()) + '</b></div>'
+      + '<div class="kv"><span>' + esc(t('banka.k_cerpani')) + '</span><b class="' + (volny > 0 ? 'ok' : 'warn') + '">' + kcFull(volny) + '</b></div>'
       + (S.ramec.slabyOd
           ? '<p class="fine err">Čerpání je zastavené — ' + slabaMista().length + ' '
-            + mn(slabaMista().length, 'místo nevydělá', 'místa nevydělají', 'míst nevydělá')
+            + mn(slabaMista().length, esc(t('banka.misto_nevydela')), esc(t('banka.mista_nevydelaji')), esc(t('banka.mist_nevydela')))
             + ' na svou splátku. Banka dá rámci ' + etaText(S.ramec.slabyOd + RAMEC_LHUTA - Date.now())
             + ', pak ho zavře. Sprav to, nebo slabá místa prodej.</p>'
           : '<p class="fine">Čerpat můžeš bez dalšího pohovoru — jen krátké tři otázky. '
             + 'Podmínka je, že každý prádlomat vydělá aspoň na svou splátku.</p>')
       + ramecRozborHtml()
-      + (volny >= 1000 ? '<button class="btn sec big" id="do-cerpat">Čerpat z rámce</button>' : '')
-      + '<button class="btn sec" id="do-prehodnotit" style="width:100%;margin-top:8px">Požádat o navýšení</button>'
+      + (volny >= 1000 ? '<button class="btn sec big" id="do-cerpat">' + esc(t('banka.cerpat_z_ramce')) + '</button>' : '')
+      + '<button class="btn sec" id="do-prehodnotit" style="width:100%;margin-top:8px">' + esc(t('banka.pozadat_o_navyseni')) + '</button>'
       + '</div>';
   }
   if (S.ramec && S.ramec.zavreny) {
-    return '<div class="card"><h3>Rámcový úvěr</h3>'
+    return '<div class="card"><h3>' + esc(t('banka.ramcovy_uver_2')) + '</h3>'
       + '<p class="muted small" style="margin:2px 0 0">Banka ti rámec zavřela, protože síť rok nevydělávala na splátky. '
       + 'Co je načerpané, splácíš dál. Nový rámec si můžeš zasloužit znovu — stejnou cestou.</p></div>';
   }
   var doplaceno = doplacenychMist();
-  return '<div class="card"><h3>Rámcový úvěr</h3>'
+  return '<div class="card"><h3>' + esc(t('banka.ramcovy_uver_3')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Schválený objem, ze kterého čerpáš na další prádlomaty '
     + 'bez nového pohovoru. Banka ho otevře tomu, kdo už dokázal úvěr splatit.</p>'
-    + '<div class="kv"><span>Plně doplacených prádlomatů</span><b class="' + (doplaceno >= 2 ? 'ok' : '') + '">'
+    + '<div class="kv"><span>' + esc(t('banka.plne_doplacenych_pradlomatu')) + '</span><b class="' + (doplaceno >= 2 ? 'ok' : '') + '">'
     + doplaceno + ' ze 2</b></div>'
-    + (maSkraloup() ? '<p class="fine err">Po konkurzu ti banka herní rok nepůjčí.</p>' : '')
+    + (maSkraloup() ? '<p class="fine err">' + esc(t('banka.po_konkurzu_ti_banka_herni')) + '</p>' : '')
     + (ramecLze()
-        ? '<p class="fine">Máš na něj nárok. Čeká tě pohovor s rizikořem — deset otázek.</p>'
-          + '<button class="btn sec big" id="do-ramec">Požádat o rámec</button>'
-        : '<p class="fine">Splať nejdřív dva prádlomaty do konce. Pak se přijď bavit o rámci.</p>')
+        ? '<p class="fine">' + esc(t('banka.mas_na_nej_narok_ceka')) + '</p>'
+          + '<button class="btn sec big" id="do-ramec">' + esc(t('banka.pozadat_o_ramec')) + '</button>'
+        : '<p class="fine">' + esc(t('banka.splat_nejdriv_dva_pradlomaty_do')) + '</p>')
     + '</div>';
 }
 // Z čeho limit vychází a co s ním pohne — bez toho hráč jen kouká na číslo.
@@ -9297,30 +9297,30 @@ function cerpatSheet(chci) {
 function uveryHtml() {
   var l = (S.loans || []).slice().sort(function (a, b) { return b.zbyva - a.zbyva; });
   if (!l.length) return '';
-  return '<div class="card"><h3>Tvoje úvěry</h3>'
+  return '<div class="card"><h3>' + esc(t('banka.tvoje_uvery')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Každý má svoji sazbu a pevnou splátku. '
     + 'Kterýkoli můžeš kdykoli předčasně splatit bez sankce — nebo si u něj vyjednat jinou délku splácení: delší srazí splátku, kratší ušetří na úrocích.</p>'
     + l.map(function (u) {
         var urok = Math.round(u.zbyva * u.sazba / 12);
         var splatka = Math.min(u.splatka, u.zbyva + urok);
         return '<div class="uver' + (u.zmeskano ? ' dluzi' : '') + '">'
-          + '<div class="uver-hl"><b>' + esc(u.popis || 'Úvěr') + '</b>'
+          + '<div class="uver-hl"><b>' + esc(u.popis || esc(t('banka.uver_2'))) + '</b>'
           + '<span>' + (u.sazba * 100).toFixed(1).replace('.', ',') + ' %</span></div>'
-          + '<div class="kv"><span>Zbývá splatit</span><b>' + kcFull(u.zbyva) + '</b></div>'
-          + '<div class="kv"><span>Splátka / měsíc</span><b class="warn">' + kcFull(splatka)
+          + '<div class="kv"><span>' + esc(t('banka.zbyva_splatit')) + '</span><b>' + kcFull(u.zbyva) + '</b></div>'
+          + '<div class="kv"><span>' + esc(t('banka.splatka_mesic_2')) + '</span><b class="warn">' + kcFull(splatka)
           + ' <span class="muted">(úrok ' + kcFull(urok) + ')</span></b></div>'
-          + '<div class="kv"><span>Zbývá měsíců</span><b>' + (u.zbyvaMesicu || 0) + ' z ' + (u.mesicu || 60) + '</b></div>'
+          + '<div class="kv"><span>' + esc(t('banka.zbyva_mesicu')) + '</span><b>' + (u.zbyvaMesicu || 0) + ' z ' + (u.mesicu || 60) + '</b></div>'
           + ((u.prepsano || u.prodlouzeno) ? '<p class="fine">Délku splácení už jsi jednou vyjednával'
               + ((u.prepsano || u.prodlouzeno) > 1 ? ' (' + (u.prepsano || u.prodlouzeno) + '×)' : '') + '.</p>' : '')
           + (u.zmeskano ? '<p class="fine err">Nezaplacená splátka: ' + u.zmeskano + ' ze ' + KRACH_SPLATEK
               + '. Když přišla splátka, neměl jsi na ni hotovost — co jsi nezaplatil, přičetlo se k dluhu. '
               + (u.zmeskano >= KRACH_SPLATEK - 1
-                  ? 'Ještě jedna a banka pošle firmu do konkurzu. '
-                  : 'Při třetí jde firma do konkurzu. ')
+                  ? esc(t('banka.jeste_jedna_a_banka_posle')) + ' '
+                  : esc(t('banka.pri_treti_jde_firma_do')) + ' ')
               + 'Jakmile jednu splátku zaplatíš celou, počítadlo se vynuluje.</p>' : '')
           + '<div class="uver-akce">'
           + '<button class="btn sec sm" data-splatit="' + esc(u.id) + '"' + (S.cash < 1 ? ' disabled' : '') + '>Splatit tenhle</button>'
-          + '<button class="btn sec sm" data-prodlouzit="' + esc(u.id) + '">Změnit splatnost</button>'
+          + '<button class="btn sec sm" data-prodlouzit="' + esc(u.id) + '">' + esc(t('banka.zmenit_splatnost')) + '</button>'
           + '</div>'
           + '</div>';
       }).join('')
@@ -13817,11 +13817,11 @@ function uverSheet(chci, iSplatnosti) {
 var CASH_CAT = null;
 function cashPacksHtml() {
   if (!PAYMENTS_ON) {
-    return '<div class="card"><h3>Dobít banku</h3><p class="muted small" style="margin:2px 0 0">'
+    return '<div class="card"><h3>' + esc(t('banka.dobit_banku')) + '</h3><p class="muted small" style="margin:2px 0 0">'
       + 'Balíčky herních peněz se teprve spouštějí. Zatím se banka doplňuje jen sama.</p></div>';
   }
-  if (!CASH_CAT) return '<div class="card"><h3>Dobít banku</h3><p class="muted small" style="margin:2px 0 0">Načítám…</p></div>';
-  return '<div class="card"><h3>Dobít banku</h3>'
+  if (!CASH_CAT) return '<div class="card"><h3>' + esc(t('banka.dobit_banku_2')) + '</h3><p class="muted small" style="margin:2px 0 0">' + esc(t('banka.nacitam')) + '</p></div>';
+  return '<div class="card"><h3>' + esc(t('banka.dobit_banku_3')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Zvedne ti volný rámec v bance a složí se jako zástava — '
     + 'banka proti ní půjčí, i když na to ještě nevyděláváš. Čím větší balík, tím víc laundrů za korunu.</p>'
     + CASH_CAT.map(function (c) {
@@ -13830,7 +13830,7 @@ function cashPacksHtml() {
         + '<span>' + esc(c.name) + (c.bonus > 0 ? ' · o ' + c.bonus + ' % výhodnější' : '') + '</span></div>'
         + '<button class="btn sm">' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button></div>';
     }).join('')
-    + '<p class="fine">Platbu zpracovává Stripe. Peníze se připíšou hned po zaplacení.</p></div>';
+    + '<p class="fine">' + esc(t('banka.platbu_zpracovava_stripe_penize_se')) + '</p></div>';
 }
 function bindCashPacks() {
   [].forEach.call(document.querySelectorAll('#bank-body [data-pack]'), function (el) {
