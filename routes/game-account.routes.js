@@ -19,7 +19,7 @@ const { HODNOSTI, hodnost, ODZNAKY, ODZNAK } = require('../services/game/hodnost
 const JWT_SECRET = require('../config/secrets').jwtSecret();
 
 const router = express.Router();
-router.use(express.json({ limit: '512kb' })); // stav hry bývá pár desítek kB
+router.use(express.json({ limit: '4mb' })); // stav hry roste s počtem prádlomatů (136 ≈ 470 kB)
 
 const COOKIE = 'lm_game';
 const TOKEN_DAYS = 180;
@@ -486,6 +486,10 @@ const DIST_REZIE = 40000;         // dávka režie za herní měsíc
 const DIST_NA_HRACU = 5;          // za každých pět přivedených jedna dávka
 const DIST_PROVIZE = 0.10;        // podíl z ceny prádlomatu
 const MESIC_MS = 43200000;        // herní měsíc = 12 skutečných hodin
+// Kam až smí vyrůst uložený stav. Musí zůstat pod limitem parseru těla
+// požadavku (4 MB o pár řádků výš), jinak by uložení spadlo dřív, než se
+// k téhle kontrole dostane, a hráč by místo srozumitelné hlášky dostal mlčení.
+const STAV_MAX = 3000000;
 // Ceny strojů musí sedět s MODELS v public/compounder/game/game.js.
 const CENY_STROJU = { mini: Math.round(35000 * 24.35 * 1.25), flex: Math.round(52000 * 24.35 * 1.25),
   max: Math.round(67000 * 24.35 * 1.25) };
@@ -1081,7 +1085,17 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
   try {
     const st = (req.body || {}).state;
     if (!st || typeof st !== 'object') return res.status(400).json({ error: 'Chybí stav.' });
-    if (JSON.stringify(st).length > 400000) return res.status(413).json({ error: 'Stav hry je moc velký.' });
+    // Strop je pojistka proti nesmyslu, ne proti velké síti. Do hlášky i do logu
+    // patří skutečná velikost — jinak hráč ani my nevíme, o kolik to přeteklo,
+    // a ukládání se zastaví potichu. Přesně to dva dny drželo žebříčky na
+    // starých číslech: stav přerostl 400 kB a každé uložení padalo na 413.
+    const velikost = JSON.stringify(st).length;
+    if (velikost > STAV_MAX) {
+      console.warn('[game] hráč #' + req.player.id + ' má stav ' + Math.round(velikost / 1024)
+        + ' kB, strop ' + Math.round(STAV_MAX / 1024) + ' kB — neuloženo');
+      return res.status(413).json({ error: 'Stav hry je moc velký — ' + Math.round(velikost / 1024)
+        + ' kB, vejde se ' + Math.round(STAV_MAX / 1024) + ' kB.' });
+    }
     // Verze: klient posílá tu, ze které vychází. Když se mezitím uložilo odjinud
     // (druhé zařízení), uložení odmítneme a pošleme zpátky novější stav — jinak
     // by si hráč přepsal to, co před chvílí udělal jinde.

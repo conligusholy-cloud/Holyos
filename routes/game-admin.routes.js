@@ -74,6 +74,9 @@ router.get('/players', api(async (req, res) => {
       uver: typeof st.loan === 'number' ? Math.round(st.loan) : null,
       pradlomatu: units.length,
       mest: st.areas ? Object.keys(st.areas).length : 0,
+      // Jak velký má uložený stav. Roste hlavně se seznamem prozkoumaných
+      // míst a je to to, co dřív naráželo na strop a tiše blokovalo ukládání.
+      stav_kb: p.state ? Math.round(JSON.stringify(p.state).length / 1024) : 0,
       pozvanek: st.refs || 0,
       privedl: PRIV[p.id] || 0,
       privedl_me: p.invited_by_id ? (ZVOU[p.invited_by_id] || ('hráč #' + p.invited_by_id)) : null,
