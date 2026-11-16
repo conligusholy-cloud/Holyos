@@ -283,6 +283,36 @@ module.exports = function createAccounts(ctx) {
     }));
     // Marketplace lokalit — připravená místa. Zdroj: HolyOS Lokality → záložka Marketplace (zaškrtnuté „Zobrazit v Marketplace").
     // Vidí jen uživatel, kterému to správce zapnul (Administrace → Uživatelé → Marketplace). Poloha je přibližná.
+    // ── Veřejná (omezená) ukázka Marketplace — bez přihlášení: jen město a ROZMAZANÁ náhledovka ──
+    // Fotka se rozmaže na serveru (HolyOS), v obrázku tedy nejde nic zpětně zjistit. Žádná adresa, popis ani ceny.
+    app.get('/marketplace/foto/:ref([a-f0-9]{14})', A(async (req, res) => {
+      if (!LM_SECRET) return res.status(404).end();
+      const token = jwt.sign({ aud: 'holyos-api', iss: 'laundromats' }, LM_SECRET, { expiresIn: '1m' });
+      try {
+        const r = await fetch(HOLYOS_URL + '/api/auth/lm/accounts/marketplace-public/photo/' + req.params.ref, { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(30000) });
+        if (!r.ok) return res.status(404).end();
+        res.set('Content-Type', 'image/jpeg').set('Cache-Control', 'public, max-age=3600').send(Buffer.from(await r.arrayBuffer()));
+      } catch (e) { res.status(502).end(); }
+    }));
+    app.get('/marketplace', A(async (req, res) => {
+      let items = [], chyba = '';
+      try { const r = await hos('GET', '/marketplace-public'); if (r.status === 200 && r.j && Array.isArray(r.j.items)) items = r.j.items; else chyba = 'Nabídku se nepodařilo načíst.'; } catch (e) { chyba = 'Nabídku se teď nepodařilo načíst, zkuste to prosím za chvíli.'; }
+      const mine = canSee(req, 'marketplace');
+      const cta = mine ? '<a class="btn" href="/cesta/marketplace" style="width:100%;justify-content:center">Zobrazit detail</a>'
+        : '<a class="btn" href="/cesta/prihlaseni?next=' + encodeURIComponent('/cesta/marketplace') + '" style="width:100%;justify-content:center">Přihlásit se pro detail</a>';
+      const card = (s) => `<div class="card pm-card"><div class="pm-img"><img src="/marketplace/foto/${esc(s.ref)}" alt="" loading="lazy" draggable="false"><span class="pm-lock">🔒</span><span class="pm-st${s.reserved ? ' res' : ''}">${s.reserved ? 'Rezervováno' : 'Volné'}</span></div>
+        <div class="pm-body"><h3>Připravené místo — ${esc(s.city || 'lokalita')}</h3><p class="muted small" style="margin:0 0 12px">Přesná poloha, fotky, popis a podmínky uvidí přihlášení partneři.</p>${cta}</div></div>`;
+      const body = `<style>.pm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:18px}.pm-card{margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column}
+        .pm-img{position:relative;height:190px;overflow:hidden;background:linear-gradient(135deg,rgba(79,209,255,.12),rgba(124,92,255,.12))}.pm-img img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;user-select:none}
+        .pm-lock{position:absolute;inset:0;display:grid;place-items:center;font-size:38px;background:rgba(4,6,12,.25)}.pm-st{position:absolute;top:10px;left:10px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:rgba(34,197,94,.9);color:#04130a}.pm-st.res{background:rgba(245,158,11,.92);color:#1a1200}
+        .pm-body{padding:14px 16px 16px;display:flex;flex-direction:column;flex:1}.pm-body h3{margin:0 0 6px;font-size:17px}</style>
+        <div class="hero" style="padding-bottom:6px"><span class="eyebrow"><i></i>Marketplace lokalit</span><h1>Připravená <span class="g">místa pro prádlomat</span></h1><p>Předjednané lokality, kde můžete rovnou začít s realizací. Přesné adresy, fotky a podmínky ukazujeme jen přihlášeným partnerům.</p></div>
+        ${chyba ? '<div class="card"><p style="margin:0">' + esc(chyba) + '</p></div>' : ''}
+        ${items.length ? '<div class="pm-grid">' + items.map(card).join('') + '</div>' : (chyba ? '' : '<div class="card" style="margin-top:18px"><p style="margin:0">Momentálně tu nejsou žádné lokality k zobrazení. Nové přidáváme průběžně — <a href="/cesta/schuzka">domluvte si online schůzku</a> a rádi vám nabídneme místa na míru.</p></div>')}
+        <p class="muted small" style="margin-top:18px">Nemáte přístup? <a href="/cesta/schuzka">Domluvte si schůzku</a> a otevřeme vám ho.</p>
+        <script>document.addEventListener('contextmenu',function(e){if(e.target.closest('.pm-img'))e.preventDefault();});</script>`;
+      send(req, res, 'Marketplace lokalit', body);
+    }));
     app.get('/cesta/marketplace', requirePage('marketplace'), A(async (req, res) => {
       let spots = [], chyba = '';
       try { const r = await hos('GET', '/marketplace'); if (r.status === 200 && r.j && Array.isArray(r.j.items)) spots = r.j.items; else chyba = 'Nabídku se nepodařilo načíst.'; } catch (e) { chyba = 'Nabídku se teď nepodařilo načíst, zkuste to prosím za chvíli.'; }

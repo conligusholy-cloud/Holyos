@@ -276,7 +276,7 @@ router.get('/marketplace-admin', async (req, res, next) => {
     const accAll = await jsonSetting('lm_account_access').catch(() => ({}));
     const withAccess = accounts.filter((a) => (accAll[a.id] || {}).marketplace === true).map((a) => ({ id: a.id, name: a.name, email: a.email, company: a.company, disabled: a.disabled }));
     const listings = ids.map((id) => { const m = all[id] || {}, x = by.get(id); const c = cnt['L' + id] || { n: 0, last: null };
-      return { id, code: 'L' + id, name: x ? x.name : ('Lokalita #' + id), city: x ? x.city : null, site_status: x ? x.status : null, title: m.title || '', published: !!m.published, reserved: !!m.reserved,
+      return { id, code: 'L' + id, name: x ? x.name : ('Lokalita #' + id), city: x ? x.city : null, site_status: x ? x.status : null, title: m.title || '', published: !!m.published, reserved: !!m.reserved, public_teaser: !!m.public_teaser,
         rent_monthly: m.rent_monthly != null ? m.rent_monthly : (x && x.rent_monthly != null ? Number(x.rent_monthly) : null), rent_currency: (x && x.rent_currency) || 'CZK', rent_vat: m.rent_vat || 'bez',
         detail: { highlight: m.highlight || '', description: m.description || '', price_note: m.price_note || '', availability: m.availability || '', area_m2: m.area_m2 != null ? m.area_m2 : null,
           energy: m.energy || '', connections_price: m.connections_price || '', parking: m.parking || '', occupy_until: m.occupy_until || '',
@@ -297,9 +297,44 @@ router.post('/marketplace-admin/:sid(\\d+)', async (req, res, next) => {
     if (!m) return res.status(404).json({ error: 'Lokalita nemá vyplněná data pro Marketplace (HolyOS → Site Development → Marketplace).' });
     if (b.published !== undefined) { if (b.published && !m.title) return res.status(400).json({ error: 'Pro zveřejnění chybí veřejný název (HolyOS → Marketplace).' }); m.published = !!b.published; }
     if (b.reserved !== undefined) m.reserved = !!b.reserved;
+    if (b.public_teaser !== undefined) m.public_teaser = !!b.public_teaser;
     m.updated_at = new Date().toISOString(); all[sid] = m;
     await require('../services/settings').setSetting('site_marketplace', all, { type: 'json', description: 'Lokality — data pro Marketplace lokalit na laundromats.eu' });
     res.json({ ok: true, published: !!m.published, reserved: !!m.reserved });
+  } catch (err) { next(err); }
+});
+// ─── Veřejná (omezená) ukázka Marketplace: bez přihlášení, jen město + rozmazaná náhledovka ──────────
+// Zobrazí se jen lokality se zapnutým „Veřejně" (public_teaser). Žádná adresa, popis, ceny ani název (ten může
+// obsahovat jméno partnera); odkaz na fotku nese neprůhledné ref (HMAC), ne číslo lokality.
+const PUB_SECRET = process.env.LM_SSO_SECRET || process.env.JWT_SECRET || 'lm-pub';
+const pubRef = (sid) => crypto.createHmac('sha256', PUB_SECRET).update('mp-pub:' + sid).digest('hex').slice(0, 14);
+async function pubListings() {
+  const all = await jsonSetting('site_marketplace');
+  const ids = Object.keys(all).map(Number).filter((n) => n > 0 && all[n] && all[n].published && all[n].public_teaser);
+  if (!ids.length) return [];
+  const sites = await prisma.site.findMany({ where: { id: { in: ids } }, select: { id: true, city: true, country: true } });
+  const by = new Map(sites.map((x) => [x.id, x]));
+  return ids.filter((id) => by.has(id)).map((id) => ({ sid: id, m: all[id], site: by.get(id) }));
+}
+router.get('/marketplace-public', async (req, res, next) => {
+  try {
+    const list = await pubListings();
+    res.json({ ok: true, items: list.map((l) => ({ ref: pubRef(l.sid), city: l.site.city || '', country: l.site.country || 'CZ', reserved: !!l.m.reserved, occupy_until: l.m.occupy_until || null })) });
+  } catch (err) { next(err); }
+});
+router.get('/marketplace-public/photo/:ref([a-f0-9]{14})', async (req, res, next) => {
+  try {
+    const l = (await pubListings()).find((x) => pubRef(x.sid) === req.params.ref);
+    if (!l) return res.status(404).end();
+    let photo = l.m.photo_id ? await prisma.sitePhoto.findUnique({ where: { id: Number(l.m.photo_id) } }) : null;
+    if (!photo || photo.site_id !== l.sid) photo = await prisma.sitePhoto.findFirst({ where: { site_id: l.sid }, orderBy: [{ sort_order: 'asc' }, { id: 'asc' }] });
+    if (!photo) return res.status(404).end();
+    const path = require('path'), fs = require('fs');
+    const dir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', 'data'), 'site-photos');
+    const file = path.join(dir, path.basename(String(photo.file_path || (photo.url || '').split('/').pop() || '')));
+    if (!file.startsWith(dir) || !fs.existsSync(file)) return res.status(404).end();
+    const buf = await require('../services/lm/blur-photo').blurPhoto(l.sid + '-' + photo.id, file, photo.mime_type);
+    res.set('Content-Type', 'image/jpeg').set('Cache-Control', 'public, max-age=3600').send(buf);
   } catch (err) { next(err); }
 });
 // GET /marketplace/photo/:siteId — vybraná fotka lokality pro Marketplace (Laundromats ji proxuje přihlášeným)
