@@ -325,7 +325,7 @@ router.get('/', async (req, res, next) => {
     const where = {};
     if (['refund', 'receipt'].includes(req.query.kind)) where.kind = req.query.kind;
     if (req.query.status) where.status = String(req.query.status);
-    if (req.query.kind !== 'refund') await backfillReceiptInvoices();
+    await backfillReceiptInvoices();
     const rows = await prisma.washComplaint.findMany({ where, orderBy: { created_at: 'desc' }, take: 2000 });
     const counts = await prisma.washComplaint.groupBy({ by: ['kind', 'status'], _count: { _all: true } }).catch(() => []);
     res.json({ rows, counts: counts.map((c) => ({ kind: c.kind, status: c.status, n: c._count._all })) });
@@ -491,6 +491,16 @@ async function ensureReceiptInvoice(row, number, user) {
 }
 // Doplní do Účetních dokladů doklady, které už byly odeslané dřív, než se začaly zapisovat (jednou po startu + při otevření seznamu)
 async function backfillReceiptInvoices() {
+  try {
+    // Schválené žádosti o vrácení (ze starší verze) bez dobropisu → dobropis se vystaví a žádost čeká na platbu
+    const apr = await prisma.washComplaint.findMany({ where: { kind: 'refund', status: 'approved' } });
+    for (const r of apr) {
+      try {
+        const cn = await ensureCreditNote(r, null);
+        await prisma.washComplaint.update({ where: { id: r.id }, data: { status: 'awaiting_payment', history: hist(r, 'schváleno, vystaven dobropis ' + cn.invoice_number + ' — čeká na platbu', 'HolyOS') } });
+      } catch (e) { console.warn('[wash] dobropis k ' + r.number + ':', e.message); }
+    }
+  } catch (e) { console.warn('[wash] backfill dobropisů:', e.message); }
   try {
     const rows = await prisma.washComplaint.findMany({ where: { kind: 'receipt', receipt_number: { not: null } } });
     for (const r of rows) await ensureReceiptInvoice(r, r.receipt_number, null).catch((e) => console.warn('[wash] doklad ' + r.receipt_number + ' do Účetních dokladů:', e.message));
