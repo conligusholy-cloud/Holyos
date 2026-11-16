@@ -6,7 +6,9 @@ const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
-const { LANGS, NAMES, T } = require('./i18n');
+const { LANGS, NAMES, T, QSEC } = require('./i18n');
+const QS_FIELDS = QSEC.en.flatMap((sec) => sec.f.filter(Array.isArray));
+const QS_KEYS = QS_FIELDS.map((f) => f[0]); const QS_LABELS = QS_FIELDS.map((f) => f[2]);
 
 const PORT = process.env.PORT || 8080;
 const HOLYOS_URL = String(process.env.HOLYOS_URL || 'https://app.holyos.cz').replace(/\/$/, '');
@@ -303,16 +305,11 @@ function questionnairePage(lang, token, err) {
   const t = T[lang]; const base = lang === 'en' ? '' : '/' + lang;
   const radios = (name, opts) => `<div class="opts">${opts.map((o) => `<label><input type="radio" name="${name}" value="${esc(o)}"> ${esc(o)}</label>`).join('')}</div>`;
   const checks = (name, opts) => `<div class="opts">${opts.map((o) => `<label><input type="checkbox" name="${name}" value="${esc(o)}"> ${esc(o)}</label>`).join('')}</div>`;
-  const body = `<div class="page"><div class="wrap"><span class="tag w">${esc(t.nav_apply)}</span><h2>${esc(t.q_h)}</h2><p class="sub">${esc(t.q_p)}</p>
+  const fld = (f) => f.group ? `<h3 class="qg">${esc(f.group)}</h3>` : `<label>${esc(f[2])}${f[3] ? ` <span class="qh">· ${esc(f[3])}</span>` : ''}</label>` + (f[1] === 'area' ? `<textarea name="f_${f[0]}" maxlength="2000"></textarea>` : `<input name="f_${f[0]}" maxlength="300"${f[1] === 'num' ? ' inputmode="decimal"' : ''}>`);
+  const qfields = QSEC[lang].map((sec) => `<h3 class="qs">${esc(sec.h)}</h3>${sec.intro ? `<div class="qi">${sec.intro.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : ''}${sec.f.map(fld).join('')}`).join('');
+  const body = `<style>.qs{font-size:26px;margin:46px 0 4px;padding-top:26px;border-top:1px solid var(--line)}.qs:first-of-type{margin-top:0;border:0;padding:0}.qg{font-size:17px;color:var(--cy);margin:26px 0 0}.qh{color:var(--mut);text-transform:none;letter-spacing:0;font-weight:300}.qi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin:10px 0 6px;color:#d8e1ee;font-size:15px;line-height:1.7}</style><div class="page"><div class="wrap"><span class="tag w">${esc(t.nav_apply)}</span><h2>${esc(t.q_h)}</h2><p class="sub">${esc(t.q_p)}</p>
 <form class="box" method="post" action="${base}/questionnaire/${esc(token)}">${err ? `<div class="err">${esc(err)}</div>` : ''}
-<label style="margin-top:0">${esc(t.q_territory)}</label><input name="territory" maxlength="200">
-<label>${esc(t.q_exp)}</label>${radios('experience', t.q_exp_o)}
-<label>${esc(t.q_team)}</label>${radios('team', t.q_team_o)}
-<label>${esc(t.q_invest)}</label>${radios('investment', t.q_invest_o)}
-<label>${esc(t.q_scope)}</label>${checks('scope', t.q_scope_o)}
-<label>${esc(t.q_when)}</label>${radios('start', t.q_when_o)}
-<label>${esc(t.q_heard)}</label>${radios('heard', t.q_heard_o)}
-<label>${esc(t.q_msg)}</label><textarea name="message" maxlength="3000"></textarea>
+${qfields}
 <div style="margin-top:28px;display:flex;gap:14px;flex-wrap:wrap;align-items:center"><button class="btn o" type="submit"><span>${esc(t.q_submit)}${CHEV}</span></button><a class="btn line" href="${base}/thanks"><span>${esc(t.q_skip)}</span></a></div></form></div></div>`;
   return page({ lang, title: t.q_h + ' — Laundry Unlimited', body, canonicalPath: '/questionnaire', noindex: true });
 }
@@ -379,10 +376,10 @@ app.post('/questionnaire/:token', form, async (req, res) => {
     const row = await byToken(req.params.token);
     if (!row) return res.status(404).send(simplePage(lang, T[lang].err_h, T[lang].err_p, '/questionnaire'));
     const s = (x, n) => String(x == null ? '' : x).slice(0, n);
-    const scope = [].concat(b.scope || []).map((x) => s(x, 120)).slice(0, 12);
-    const answers = { territory: s(b.territory, 200), experience: s(b.experience, 120), team: s(b.team, 80), investment: s(b.investment, 80), scope, start: s(b.start, 80), heard: s(b.heard, 80), message: s(b.message, 3000) };
+    const answers = {};
+    for (const sec of QSEC.en) for (const f of sec.f) if (Array.isArray(f)) { const v = s(b['f_' + f[0]], f[1] === 'area' ? 2000 : 300).trim(); if (v) answers[f[0]] = v; }
     await q("UPDATE inquiries SET answers=$2::jsonb, answered_at=now(), updated_at=now() WHERE id=$1", [row.id, JSON.stringify(answers)]);
-    notifyHolyos('🧺 Dotazník vyplněn', (answers.territory || '—') + (answers.investment ? ' · ' + answers.investment : ''), '/');
+    notifyHolyos('🧺 Dotazník vyplněn', (answers.territory || '—') + (answers.capital ? ' · kapitál ' + answers.capital : ''), '/');
     res.redirect(303, (lang === 'en' ? '' : '/' + lang) + '/thanks');
   } catch (e) { console.error('[lu] questionnaire:', e.message); res.status(500).send(questionnairePage(lang, req.params.token, T[lang].f_err_server)); }
 });
@@ -418,7 +415,7 @@ app.get('/admin', requireAdmin, async (req, res) => {
   const rows = (await q('SELECT * FROM inquiries' + (where.length ? ' WHERE ' + where.join(' AND ') : '') + ' ORDER BY created_at DESC LIMIT 500', params)).rows;
   const counts = {}; (await q('SELECT status, count(*)::int AS n FROM inquiries GROUP BY status')).rows.forEach((r) => { counts[r.status] = r.n; });
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  const ans = (a) => a ? [['Území', a.territory], ['Zkušenosti', a.experience], ['Tým', a.team], ['Investice', a.investment], ['Rozsah', (a.scope || []).join(', ')], ['Start', a.start], ['Odkud', a.heard], ['Zpráva', a.message]].filter((x) => x[1]).map((x) => `<div><span class="k">${esc(x[0])}</span> ${esc(x[1])}</div>`).join('') : '<div class="mut">Dotazník zatím nevyplněn.</div>';
+  const ans = (a) => a ? QSEC.en.map((sec) => { const rows = sec.f.filter((f) => Array.isArray(f) && a[f[0]]).map((f) => `<div><span class="k">${esc(f[2])}</span> ${esc(a[f[0]])}</div>`).join(''); return rows ? `<div class="k" style="margin-top:8px"><b>${esc(sec.h)}</b></div>${rows}` : ''; }).join('') || '<div class="mut">Dotazník je prázdný.</div>' : '<div class="mut">Dotazník zatím nevyplněn.</div>';
   const tr = rows.map((r) => `<details class="r"><summary><span class="dot" style="background:${stColor[r.status] || '#64748b'}"></span><b>${esc(r.name)}</b>
 <span class="mut">${esc(r.country || '')}${r.company ? ' · ' + esc(r.company) : ''}</span><span class="sp"></span><span class="chip" style="border-color:${stColor[r.status] || '#64748b'}">${esc(stLabel(r.status))}</span>${r.answers ? '<span class="chip ok">dotazník</span>' : ''}<span class="mut">${esc(r.lang.toUpperCase())} · ${fmtDt(r.created_at)}</span></summary>
 <div class="det"><div class="g"><div><div class="k">E-mail</div><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></div><div><div class="k">Telefon</div>${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '—'}</div></div>
@@ -453,8 +450,8 @@ app.post('/admin/api/inquiry/:id(\\d+)/delete', requireAdmin, express.json({ lim
 app.get('/admin/export.csv', requireAdmin, async (req, res) => {
   const rows = (await q('SELECT * FROM inquiries ORDER BY created_at DESC')).rows;
   const c = (x) => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"';
-  const head = ['Datum', 'Jazyk', 'Jméno', 'E-mail', 'Telefon', 'Firma', 'Země', 'Stav', 'Poznámka', 'Území', 'Zkušenosti', 'Tým', 'Investice', 'Rozsah', 'Start', 'Odkud', 'Zpráva'];
-  const lines = rows.map((r) => { const a = r.answers || {}; return [fmtDt(r.created_at), r.lang, r.name, r.email, r.phone, r.company, r.country, stLabel(r.status), r.note, a.territory, a.experience, a.team, a.investment, (a.scope || []).join('; '), a.start, a.heard, a.message].map(c).join(';'); });
+  const head = ['Datum', 'Jazyk', 'Jméno', 'E-mail', 'Telefon', 'Firma', 'Země', 'Stav', 'Poznámka', ...QS_LABELS];
+  const lines = rows.map((r) => { const a = r.answers || {}; return [fmtDt(r.created_at), r.lang, r.name, r.email, r.phone, r.company, r.country, stLabel(r.status), r.note, ...QS_KEYS.map((k) => a[k])].map(c).join(';'); });
   res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="poptavky-laundry-unlimited-' + new Date().toISOString().slice(0, 10) + '.csv"' }).send('﻿' + head.map(c).join(';') + '\n' + lines.join('\n'));
 });
 

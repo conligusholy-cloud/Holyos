@@ -234,4 +234,74 @@ Object.assign(T.cs, {
 });
 for (const l of ['pl', 'de']) T[l] = Object.assign({}, T.en, T[l], { hero_h: T.en.hero_h, hero_sub: T.en.hero_sub, hero_p: T.en.hero_p });
 
-module.exports = { LANGS, NAMES, T };
+// ── Dotazník (podle tabulky intro questionnaire.xlsx) ──
+// Pole: [klíč, typ (text|num|area), popisek, nápověda]; skupina {group} = podnadpis pro následující pole.
+const QSEC = {
+  en: [
+    { h: 'General info', f: [
+      ['owners', 'area', 'Who are the ultimate owners / shareholders?'],
+      ['established', 'text', 'When was the company established?'],
+      ['other_business', 'area', 'What other businesses do you control?'],
+      ['core_business', 'area', 'What is your core business today?'],
+      ['franchise_exp', 'area', 'Have you been a franchisee or franchisor before?'],
+      ['rev2024', 'num', '2024 company revenue', 'numbers, EUR'], ['rev2025', 'num', '2025 company revenue', 'numbers, EUR'],
+      ['ebt2024', 'num', '2024 company EBT', 'numbers, EUR'], ['ebt2025', 'num', '2025 company EBT', 'numbers, EUR']] },
+    { h: 'Experience', f: [
+      ['employees', 'num', 'How many employees do you manage?', 'number'],
+      ['locations', 'num', 'How many locations / business units do you operate?', 'number'],
+      ['best_locations', 'area', 'Please share your best locations with reasons why']] },
+    { h: 'Territory / Location', f: [
+      ['territory', 'text', 'Territory COUNTRY — which market / markets are you interested in?', 'Which territory you are interested in'],
+      ['regions', 'text', 'Which regions / cities within your country would you prioritize?', 'Where are you based now; where do you plan to install your first 5 laundromats'],
+      ['assessment', 'area', 'How do you assess the opportunity in your country?'],
+      ['competitors', 'area', 'Who are the main competitors?']] },
+    { h: 'Investment / finance', intro: ['While answering the questions, please consider the following:', 'a) The price of 1 laundromat ranges between EUR 50k (mini) and EUR 100k (max).', 'b) Installation costs may vary depending on various factors (EUR 5k – 20k).', 'c) Identifying and negotiating a location may take 1–3 months.'], f: [
+      ['capital', 'num', 'How much of your own capital would you plan to allocate?', 'EUR'],
+      ['funding', 'num', 'How much of the funding would come from equity and how much from debt?', 'e.g. 60 % equity / 40 % debt'],
+      ['invest35', 'num', 'How much are you prepared to invest over the first 3–5 years?', 'EUR'],
+      ['return', 'num', 'What return expectations do you have?', 'e.g. payback in years / % p.a.'],
+      { group: 'What would be your goal for year 1?' },
+      ['y1_laundromats', 'num', 'Number of laundromats', 'number'], ['y1_partners', 'num', 'Number of partners', 'number'],
+      { group: 'What would be your goal for year 3?' },
+      ['y3_laundromats', 'num', 'Number of laundromats', 'number'], ['y3_partners', 'num', 'Number of partners', 'number'],
+      { group: 'Critical question' },
+      ['breakeven_plan', 'area', 'If the business does not break even within 18 months, what is your funding plan?']] },
+    { h: 'Anything else', f: [['message', 'area', 'Anything else you would like us to know?']] }
+  ],
+  cs: [
+    { h: 'Obecné informace', f: [
+      ['owners', 'area', 'Kdo jsou koneční vlastníci / společníci?'],
+      ['established', 'text', 'Kdy byla firma založena?'],
+      ['other_business', 'area', 'Jaké další podnikání ovládáte?'],
+      ['core_business', 'area', 'Jaký je dnes váš hlavní předmět podnikání?'],
+      ['franchise_exp', 'area', 'Byli jste už někdy franšízantem nebo franšízorem?'],
+      ['rev2024', 'num', 'Obrat firmy 2024', 'číslo, EUR'], ['rev2025', 'num', 'Obrat firmy 2025', 'číslo, EUR'],
+      ['ebt2024', 'num', 'EBT firmy 2024', 'číslo, EUR'], ['ebt2025', 'num', 'EBT firmy 2025', 'číslo, EUR']] },
+    { h: 'Zkušenosti', f: [
+      ['employees', 'num', 'Kolik zaměstnanců řídíte?', 'číslo'],
+      ['locations', 'num', 'Kolik poboček / provozních jednotek provozujete?', 'číslo'],
+      ['best_locations', 'area', 'Popište své nejlepší lokality a proč jsou nejlepší']] },
+    { h: 'Území / lokalita', f: [
+      ['territory', 'text', 'Území (ZEMĚ) — o který trh / trhy máte zájem?', 'O jaké území máte zájem'],
+      ['regions', 'text', 'Které regiony / města ve své zemi byste upřednostnili?', 'Kde dnes sídlíte; kde plánujete nainstalovat prvních 5 prádlomatů'],
+      ['assessment', 'area', 'Jak hodnotíte příležitost ve své zemi?'],
+      ['competitors', 'area', 'Kdo jsou hlavní konkurenti?']] },
+    { h: 'Investice / financování', intro: ['Při odpovědích prosím zohledněte:', 'a) Cena 1 prádlomatu se pohybuje mezi 50 tis. EUR (mini) a 100 tis. EUR (max).', 'b) Náklady na instalaci se liší podle okolností (5–20 tis. EUR).', 'c) Nalezení a vyjednání místa může trvat 1–3 měsíce.'], f: [
+      ['capital', 'num', 'Kolik vlastního kapitálu byste plánovali vložit?', 'EUR'],
+      ['funding', 'num', 'Kolik financování by pocházelo z vlastního kapitálu a kolik z dluhu?', 'např. 60 % kapitál / 40 % dluh'],
+      ['invest35', 'num', 'Kolik jste připraveni investovat v prvních 3–5 letech?', 'EUR'],
+      ['return', 'num', 'Jaká jsou vaše očekávání návratnosti?', 'např. návratnost v letech / % ročně'],
+      { group: 'Jaký by byl váš cíl pro 1. rok?' },
+      ['y1_laundromats', 'num', 'Počet prádlomatů', 'číslo'], ['y1_partners', 'num', 'Počet partnerů', 'číslo'],
+      { group: 'Jaký by byl váš cíl pro 3. rok?' },
+      ['y3_laundromats', 'num', 'Počet prádlomatů', 'číslo'], ['y3_partners', 'num', 'Počet partnerů', 'číslo'],
+      { group: 'Klíčová otázka' },
+      ['breakeven_plan', 'area', 'Pokud se byznys nedostane do 18 měsíců do zisku, jaký je váš plán financování?']] },
+    { h: 'Něco dalšího', f: [['message', 'area', 'Cokoli dalšího, co bychom měli vědět?']] }
+  ]
+};
+QSEC.pl = QSEC.en; QSEC.de = QSEC.en;
+Object.assign(T.en, { q_p: 'Thank you, we have your contact. Your answers help us understand your business and territory so that the first conversation is meaningful and we do not call you back with empty hands. It takes about 10 minutes; everything except the contact is optional, but the more you share, the better.' });
+Object.assign(T.cs, { q_p: 'Děkujeme, kontakt máme. Vaše odpovědi nám pomohou pochopit váš byznys a území, aby první rozhovor dával smysl. Zabere to zhruba 10 minut; vše je nepovinné, ale čím více napíšete, tím lépe.' });
+
+module.exports = { LANGS, NAMES, T, QSEC };
