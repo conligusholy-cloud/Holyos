@@ -245,6 +245,7 @@
 
   <div class="ov" id="ov"><div class="dlg" id="dlg"></div></div>
 
+  <script src="/js/column-filters.js?v=8"></script>
   <script src="js/sidebar.js?v=2026-11-05-1"></script>
   <script>
   (function () {
@@ -896,57 +897,77 @@
       }
       if (!zeme && !p.geo_tip) return '<span class="note">—</span>';
       var proc = p.geo_presnost === 'mobil' ? 'mobilní síť — město neurčíme'
-        : 'služby se na městě neshodly';
+        : p.geo_presnost === 'sam' ? 'odpověděla jen jedna služba, nebylo co porovnat'
+          : 'služby se na městě NESHODLY';
+      // Varianty vypíšeme každou na svůj řádek i se jménem služby — ať je vidět,
+      // mezi čím se rozhoduje a která databáze je vedle.
+      var var2 = String(p.geo_tip || '').split(' | ').filter(Boolean).map(function (x) {
+        return '<div class="note">· ' + esc(x) + '</div>';
+      }).join('');
       return (zeme || '<span class="note">neznámá země</span>')
-        + '<div class="note">' + proc
-        + (p.geo_tip ? ' · tipuje ' + esc(p.geo_tip) : '') + '</div>' + isp;
+        + '<div class="note">' + proc + '</div>' + var2 + isp;
+    }
+    // Tabulka hráčů: standardní filtry + řazení po sloupcích (js/column-filters.js)
+    var PL_TBL = null;
+    function plRow(p) {
+      return '<tr' + (p.disabled ? ' style="opacity:.45"' : '') + '><td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + p.id + '">' + esc(p.nick) + '</b>'
+        + (p.profil ? '<div class="note">' + esc(p.profil) + '</div>' : '')
+        + (p.zdroj ? '<div class="note">z: ' + esc(p.zdroj) + '</div>' : '') + '</td>'
+        + '<td>' + (p.jmeno ? esc(p.jmeno) : '<span class="note">—</span>')
+        + (p.email ? '<div class="note">' + esc(p.email) + '</div>' : '') + '</td>'
+        + '<td>' + odkud(p) + '</td>'
+        + '<td class="num">' + cz(p.pradlomatu) + '</td><td class="num">' + cz(p.mist) + '</td>'
+        + '<td class="num">' + cz(p.mest) + '</td>'
+        + '<td class="num"><b class="' + (p.prijem > 0 ? 'ok' : '') + '">' + cz(p.prijem) + ' L$</b></td>'
+        + '<td class="num">' + (p.hotovost == null ? '—' : cz(p.hotovost)) + '</td>'
+        + '<td class="num">' + (p.uver == null ? '—' : cz(p.uver)) + '</td>'
+        + '<td class="num">' + cz(p.pozvanek) + '</td>'
+        + '<td class="num"><b class="' + (p.privedl > 0 ? 'ok' : '') + '">' + cz(p.privedl || 0) + '</b>'
+        + (p.privedl_me ? '<div class="note">od ' + esc(p.privedl_me) + '</div>' : '') + '</td>'
+        + '<td class="num">' + cz(p.nakupu) + '</td>'
+        + '<td class="num"><b>' + cz(p.utraceno) + ' Kč</b></td>'
+        + '<td class="note">' + dt(p.created_at)
+        + (p.created_at ? '<div class="note">' + stari(p.created_at) + '</div>' : '') + '</td>'
+        + '<td class="note">' + dt(naposled(p)) + '</td>'
+        + '<td><button class="btn sm" data-off="' + p.id + '" data-v="' + (p.disabled ? '0' : '1') + '">'
+        + (p.disabled ? 'Odblokovat' : 'Zablokovat') + '</button></td></tr>';
+    }
+    function plCols() {
+      var n = function (k, l, f) { return { key: k, label: l, type: 'num', get: f }; };
+      return [
+        { key: 'nick', label: 'Nick', type: 'text', ph: 'Nick…', get: function (p) { return p.nick || ''; } },
+        { key: 'jmeno', label: 'Jméno a e-mail', type: 'text', ph: 'Jméno / e-mail…', get: function (p) { return (p.jmeno || '') + ' ' + (p.email || ''); } },
+        { key: 'odkud', label: 'Odkud hraje', type: 'text', ph: 'Země / město…', get: function (p) { return [p.geo_mesto, p.geo_kraj, p.geo_zeme, p.geo_isp].filter(Boolean).join(' '); } },
+        n('pradl', 'Prádlomatů', function (p) { return Number(p.pradlomatu) || 0; }), n('mist', 'Míst', function (p) { return Number(p.mist) || 0; }),
+        n('mest', 'Měst', function (p) { return Number(p.mest) || 0; }), n('prijem', 'Zbyde / měsíc', function (p) { return Number(p.prijem) || 0; }),
+        n('hot', 'Hotovost', function (p) { return p.hotovost == null ? null : Number(p.hotovost); }), n('uver', 'Úvěr', function (p) { return p.uver == null ? null : Number(p.uver); }),
+        n('otev', 'Otevření', function (p) { return Number(p.pozvanek) || 0; }), n('priv', 'Přivedl', function (p) { return Number(p.privedl) || 0; }),
+        n('nak', 'Nákupů', function (p) { return Number(p.nakupu) || 0; }), n('utr', 'Utraceno', function (p) { return Number(p.utraceno) || 0; }),
+        { key: 'zal', label: 'Založeno', type: 'date', ph: 'dd.mm.rrrr', get: function (p) { return p.created_at; } },
+        { key: 'nap', label: 'Naposledy', type: 'date', ph: 'dd.mm.rrrr', get: function (p) { return naposled(p); } },
+        null
+      ];
     }
     function loadPlayers() {
       var q = document.getElementById('pl-q').value.trim();
       get('/players?limit=300' + (q ? '&q=' + encodeURIComponent(q) : '')).then(function (j) {
-        document.getElementById('pl-tbl').innerHTML =
-          '<thead><tr><th>Nick</th><th>Jméno a e-mail</th><th>Odkud hraje</th>'
-          + '<th class="num">Prádlomatů</th><th class="num">Míst</th>'
-          + '<th class="num">Měst</th><th class="num">Zbyde / měsíc</th>'
-          + '<th class="num">Hotovost</th><th class="num">Úvěr</th><th class="num">Otevření</th>'
-          + '<th class="num">Přivedl</th>'
-          + '<th class="num">Nákupů</th><th class="num">Utraceno</th><th>Založeno</th><th>Naposledy</th>'
-          + '<th></th></tr></thead><tbody>'
-          + (j.players.length ? j.players.map(function (p) {
-            return '<tr' + (p.disabled ? ' style="opacity:.45"' : '') + '><td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + p.id + '">' + esc(p.nick) + '</b>'
-              + (p.profil ? '<div class="note">' + esc(p.profil) + '</div>' : '')
-              + (p.zdroj ? '<div class="note">z: ' + esc(p.zdroj) + '</div>' : '') + '</td>'
-              + '<td>' + (p.jmeno ? esc(p.jmeno) : '<span class="note">—</span>')
-              + (p.email ? '<div class="note">' + esc(p.email) + '</div>' : '') + '</td>'
-              + '<td>' + odkud(p) + '</td>'
-              + '<td class="num">' + cz(p.pradlomatu) + '</td><td class="num">' + cz(p.mist) + '</td>'
-              + '<td class="num">' + cz(p.mest) + '</td>'
-              + '<td class="num"><b class="' + (p.prijem > 0 ? 'ok' : '') + '">' + cz(p.prijem) + ' L$</b></td>'
-              + '<td class="num">' + (p.hotovost == null ? '—' : cz(p.hotovost)) + '</td>'
-              + '<td class="num">' + (p.uver == null ? '—' : cz(p.uver)) + '</td>'
-              + '<td class="num">' + cz(p.pozvanek) + '</td>'
-              + '<td class="num"><b class="' + (p.privedl > 0 ? 'ok' : '') + '">' + cz(p.privedl || 0) + '</b>'
-              + (p.privedl_me ? '<div class="note">od ' + esc(p.privedl_me) + '</div>' : '') + '</td>'
-              + '<td class="num">' + cz(p.nakupu) + '</td>'
-              + '<td class="num"><b>' + cz(p.utraceno) + ' Kč</b></td>'
-              + '<td class="note">' + dt(p.created_at)
-              + (p.created_at ? '<div class="note">' + stari(p.created_at) + '</div>' : '') + '</td>'
-              + '<td class="note">' + dt(naposled(p)) + '</td>'
-              + '<td><button class="btn sm" data-off="' + p.id + '" data-v="' + (p.disabled ? '0' : '1') + '">'
-              + (p.disabled ? 'Odblokovat' : 'Zablokovat') + '</button></td></tr>';
-          }).join('') : '<tr><td colspan="16" class="note" style="padding:20px">Zatím tu nikdo není.</td></tr>')
-          + '</tbody>';
-        [].forEach.call(document.querySelectorAll('[data-detail]'), function (b) {
-          b.onclick = function () { detail(b.getAttribute('data-detail')); };
-        });
-        [].forEach.call(document.querySelectorAll('[data-off]'), function (b) {
-          b.onclick = function () {
+        var tbl = document.getElementById('pl-tbl');
+        if (!PL_TBL) {
+          tbl.innerHTML = '<thead><tr><th>Nick</th><th>Jméno a e-mail</th><th>Odkud hraje</th>'
+            + '<th class="num">Prádlomatů</th><th class="num">Míst</th><th class="num">Měst</th><th class="num">Zbyde / měsíc</th>'
+            + '<th class="num">Hotovost</th><th class="num">Úvěr</th><th class="num">Otevření</th><th class="num">Přivedl</th>'
+            + '<th class="num">Nákupů</th><th class="num">Utraceno</th><th>Založeno</th><th>Naposledy</th><th></th></tr></thead><tbody></tbody>';
+          PL_TBL = ColFilters.table({ table: '#pl-tbl', columns: plCols(), renderRow: plRow, noun: 'hráčů', emptyText: 'Zatím tu nikdo není.', limit: 1000 });
+          tbl.addEventListener('click', function (e) {
+            var d = e.target.closest('[data-detail]'); if (d) { detail(d.getAttribute('data-detail')); return; }
+            var b = e.target.closest('[data-off]'); if (!b) return;
             b.disabled = true;
             post('/players/' + b.getAttribute('data-off') + '/disabled', { disabled: b.getAttribute('data-v') === '1' })
-              .then(loadPlayers).catch(function (e) { b.disabled = false; alert(e.message); });
-          };
-        });
-      }).catch(function (e) { document.getElementById('pl-tbl').innerHTML = '<tbody><tr><td class="note" style="color:#f87171;padding:20px">' + esc(e.message) + '</td></tr></tbody>'; });
+              .then(loadPlayers).catch(function (er) { b.disabled = false; alert(er.message); });
+          });
+        }
+        PL_TBL.setRows(j.players || []);
+      }).catch(function (e) { PL_TBL = null; document.getElementById('pl-tbl').innerHTML = '<tbody><tr><td class="note" style="color:#f87171;padding:20px">' + esc(e.message) + '</td></tr></tbody>'; });
     }
 
     // ── Detail hráče ────────────────────────────────────────────────────────

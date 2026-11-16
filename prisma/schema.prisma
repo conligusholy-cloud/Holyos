@@ -7691,7 +7691,7 @@ model GamePlayer {
   // kde databáze ukazují bránu operátora. geo_tip drží město, které vyšlo,
   // i když mu nevěříme — jako vodítko, ne jako údaj.
   geo_isp       String?   @db.VarChar(120)
-  geo_tip       String?   @db.VarChar(80)
+  geo_tip       String?   @db.VarChar(200)
   geo_presnost  String?   @db.VarChar(10)
   geo_ip        String?   @db.VarChar(64)
   geo_at        DateTime?

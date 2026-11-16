@@ -80,18 +80,23 @@ async function dohledej(ip) {
     const z = a || b;
     const shoda = !!(a && b && a.city && b.city && klic(a.city) === klic(b.city));
     const mobil = !!((a && a.mobil) || (b && b.mobil));
+    // Co si která služba myslí. Když se neshodnou, chceme vidět obě varianty
+    // i s tím, od koho jsou — z toho se dá poznat, která databáze je mimo.
+    const varianty = [];
+    if (a && a.city) varianty.push('ipwho.is: ' + a.city);
+    if (b && b.city) varianty.push('ip-api: ' + b.city);
     data = {
       // Město ukážeme jen tehdy, když se obě služby shodly a nejde o mobilní
-      // nebo skrytou síť. Jinak si ho necháme jen jako tip.
+      // nebo skrytou síť. Jinak si necháme jen varianty.
       city: shoda && !mobil ? z.city : null,
-      tip: z.city || null,
+      tip: varianty.join(' | ').slice(0, 200) || null,
       region: shoda && !mobil ? (z.region || null) : null,
       country: z.country || null,
       cc: z.cc || null,
       isp: z.isp || null,
-      // mesto = shodly se, zeme = víme jen zemi, mobil = mobilní nebo skrytá síť
-      presnost: mobil ? 'mobil' : (shoda ? 'mesto' : 'zeme'),
-      zdroju: (a ? 1 : 0) + (b ? 1 : 0),
+      // mesto = shodly se, zeme = neshodly, mobil = mobilní nebo skrytá síť,
+      // sam = odpověděla jen jedna služba, takže není co s čím porovnat
+      presnost: mobil ? 'mobil' : (shoda ? 'mesto' : (a && b ? 'zeme' : 'sam')),
     };
   }
   if (cache.size > CACHE_MAX) cache.clear();
