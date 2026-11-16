@@ -76,7 +76,7 @@ function dodaniDnu() {
 function dodaniMs() { return dodaniDnu() * DELIVERY_MONTHS * MONTH_MS; }
 function dodaniSlovy() {
   var d = dodaniDnu();
-  return d === 1 ? 'jeden skutečný den' : d + ' ' + mn(d, 'den', 'dny', 'dnů');
+  return d === 1 ? esc(tx('hra.jeden_skutecny_den')) : d + ' ' + mn(d, 'den', 'dny', esc(tx('hra.dnu')));
 }
 var BANK_BASE = 1000000;         // startovní rámec v bance
 var BANK_PER_DAY = 500000;       // co banka sama doplní za skutečný den
@@ -93,8 +93,8 @@ var SCOUT_COST = 20000;          // cesta do města a hledání vhodných míst
 var CASH_RESERVE = 120000;       // tolik hotovosti banka nenechá utratit — musí zbýt na prověření místa a instalaci
 var OPERATING_MAX = 150000;      // provozní úvěr nad rámec úvěrového stropu, aby hra nikdy neskončila ve slepé uličce
 
-var KIND_LABEL = { supermarket: 'Supermarket', hypermarket: 'Hypermarket', mall: 'Obchodní centrum',
-  department_store: 'Obchodní dům', fuel: 'Benzínka', car_wash: 'Samoobslužná myčka' };
+var KIND_LABEL = { supermarket: 'Supermarket', hypermarket: 'Hypermarket', mall: esc(tx('hra.obchodni_centrum')),
+  department_store: esc(tx('hra.obchodni_dum')), fuel: esc(tx('hra.benzinka')), car_wash: esc(tx('hra.samoobsluzna_mycka')) };
 
 // Ceník prádlomatů je o 25 % nad modelovou cenou.
 var PRICE_MULT = 1.25;
@@ -222,14 +222,14 @@ var OTAZKY = [
 function pohovorStupen(body, otazek) {
   var max = otazek * 2;
   var podil = max > 0 ? body / max : 0;
-  if (podil >= 0.7) return { nazev: 'výborné', limit: 1.2, sazba: -0.003, ok: true,
-    slovo: 'Takhle připravené klienty máme rádi. Dáme vám lepší sazbu i vyšší limit.' };
-  if (podil >= 0.4) return { nazev: 'dobré', limit: 1, sazba: 0, ok: true,
-    slovo: 'Nic mimořádného, ale drží to pohromadě. Podmínky standardní.' };
-  if (podil >= 0.15) return { nazev: 'slabé', limit: 0.8, sazba: 0.003, ok: true,
-    slovo: 'Mám z toho rozpaky. Půjčíme míň a dráž.' };
-  return { nazev: 'nedostatečné', limit: 0, sazba: 0, ok: false,
-    slovo: 'Takhle ne. Vraťte se, až budete mít věci srovnané.' };
+  if (podil >= 0.7) return { nazev: esc(tx('hra.vyborne_2')), limit: 1.2, sazba: -0.003, ok: true,
+    slovo: esc(tx('hra.takhle_pripravene_klienty_mame_radi')) };
+  if (podil >= 0.4) return { nazev: esc(tx('hra.dobre')), limit: 1, sazba: 0, ok: true,
+    slovo: esc(tx('hra.nic_mimoradneho_ale_drzi_to')) };
+  if (podil >= 0.15) return { nazev: esc(tx('hra.slabe_2')), limit: 0.8, sazba: 0.003, ok: true,
+    slovo: esc(tx('hra.mam_z_toho_rozpaky_pujcime')) };
+  return { nazev: esc(tx('hra.nedostatecne')), limit: 0, sazba: 0, ok: false,
+    slovo: esc(tx('hra.takhle_ne_vratte_se_az')) };
 }
 // Vlastní pohovor. `kolik` otázek, `hotovo` dostane výsledek.
 function pohovorSheet(kolik, nadpis, hotovo) {
@@ -244,9 +244,9 @@ function pohovorSheet(kolik, nadpis, hotovo) {
       var st = pohovorStupen(body, poradi.length);
       sheet('<h3>' + esc(nadpis) + '</h3>'
         + '<div class="nalada"><b>Hodnocení: ' + st.nazev + '</b><span>' + esc(st.slovo) + '</span></div>'
-        + (prichyceno ? '<p class="fine err">Rizikoř si ' + prichyceno + '× ověřil, co jste říkal, a nesedělo to. '
+        + (prichyceno ? '<p class="fine err">Rizikoř si ' + prichyceno + esc(tx('hra.overil_co_jste_rikal_a')) + ' '
           + 'To s hodnocením zamávalo víc, než kdybyste odpověděl na rovinu.</p>' : '')
-        + '<button class="btn big" id="poh-ok">Pokračovat</button>');
+        + '<button class="btn big" id="poh-ok">' + esc(tx('hra.pokracovat')) + '</button>');
       $('poh-ok').onclick = function () { closeSheet(); hotovo(st); };
       return;
     }
@@ -288,8 +288,8 @@ function hlidejKrach() {
   S.krachVarovano = z;
   if (z >= KRACH_SPLATEK) { krachSheet(); return; }
   toast(z === 1
-    ? 'Nezaplatil jsi splátku. Prodej něco na Burze, nebo splať, než to banka zvedne.'
-    : 'Druhá neuhrazená splátka. Ještě jedna a banka pošle firmu do konkurzu.', 'err');
+    ? esc(tx('hra.nezaplatil_jsi_splatku_prodej_neco'))
+    : esc(tx('hra.druha_neuhrazena_splatka_jeste_jedna')), 'err');
 }
 // Rozprodej majetku. Prádlomaty i stroje jdou z ruky za zlomek hodnoty,
 // výtěžek nejdřív bance a co zbude, patří hráči. Místa se uvolní — a protože
@@ -301,7 +301,7 @@ function provedKonkurz() {
   var polozky = [];
   S.units.forEach(function (u) {
     polozky.push({ predmet: 'pradlomat', model: u.eco.model, spot_id: u.spotId,
-      popis: u.name || 'prádlomat', hodnota: Math.round(u.eco.invest || machinePrice(MODELS[u.eco.model])) });
+      popis: u.name || esc(tx('hra.pradlomat_7')), hodnota: Math.round(u.eco.invest || machinePrice(MODELS[u.eco.model])) });
     apiJson('/spots/release', { spot_id: u.spotId });   // místo se uvolní konkurenci
   });
   MODEL_ORDER.forEach(function (k) {
@@ -310,7 +310,7 @@ function provedKonkurz() {
     }
   });
   (S.orders || []).forEach(function (o) {
-    polozky.push({ predmet: 'stroj', model: o.model, popis: 'stroj ' + MODELS[o.model].name + ' (na cestě)',
+    polozky.push({ predmet: 'stroj', model: o.model, popis: 'stroj ' + MODELS[o.model].name + ' ' + esc(tx('hra.na_ceste_2')),
       hodnota: machinePrice(MODELS[o.model]) });
   });
   (S.pobocky || []).forEach(function (b) {
@@ -389,9 +389,9 @@ function maSkraloup() { return (S.skraloupDo || 0) > Date.now(); }
 // expanduje. Pod dvě místa měsíčně prodělává.
 var CETA_TECHNIKA = [
   { id: 'bagr', nazev: 'Minibagr', cena: 800000 },
-  { id: 'dodavka', nazev: 'Dodávka', cena: 600000 },
-  { id: 'vrtacka', nazev: 'Jádrová vrtačka', cena: 80000 },
-  { id: 'deska', nazev: 'Vibrační deska', cena: 50000 }
+  { id: 'dodavka', nazev: esc(tx('hra.dodavka')), cena: 600000 },
+  { id: 'vrtacka', nazev: esc(tx('hra.jadrova_vrtacka')), cena: 80000 },
+  { id: 'deska', nazev: esc(tx('hra.vibracni_deska')), cena: 50000 }
 ];
 var CETA_CENA = CETA_TECHNIKA.reduce(function (a, x) { return a + x.cena; }, 0);  // 1 530 000
 var CETA_MZDY = 80000;            // dva lidi po 40 tisících
@@ -513,7 +513,7 @@ function hlidejKatastrofy(dt) {
     ztrata += 0;
     zapisUpoz(u.name + ': ' + k.t.toLowerCase() + '. Prádlomat stojí, dokud se neopraví.', 'err');
     toast(u.name + ': ' + k.t + '! Prádlomat stojí. Oprava stojí ' + kcFull(platim)
-      + (pojisteno ? ' (zbytek platí pojišťovna).' : ' — pojištěný nebyl.'), 'err', true);
+      + (pojisteno ? ' ' + esc(tx('hra.zbytek_plati_pojistovna')) : ' ' + esc(tx('hra.pojisteny_nebyl'))), 'err', true);
   });
   return ztrata;
 }
@@ -521,12 +521,12 @@ function hlidejKatastrofy(dt) {
 function zaplatOpravu(u) {
   var k = u.katastrofa;
   if (!k || k.hotovo) return;
-  if (S.cash < k.platim) return toast('Na opravu nemáš dost hotovosti.', 'err');
+  if (S.cash < k.platim) return toast(esc(tx('hra.na_opravu_nemas_dost_hotovosti')), 'err');
   S.cash -= k.platim;
   zapis('nakup', k.t + ' — oprava ' + (u.name || ''), -k.platim);
   k.hotovo = Date.now() + k.dnu * (MONTH_MS / 30);   // herní den = 24 skutečných minut
   save(); paint(); drawMap(); syncState(true);
-  toast('Oprava zaplacená. ' + (u.name || 'Prádlomat') + ' pojede za '
+  toast(esc(tx('hra.oprava_zaplacena')) + ' ' + (u.name || esc(tx('hra.pradlomat_6'))) + ' pojede za '
     + etaText(k.hotovo - Date.now()).replace('za ', '') + '.', 'ok');
 }
 // Hotové opravy pustí stroj zpátky do provozu.
@@ -536,7 +536,7 @@ function hlidejOpravy() {
     var k = u.katastrofa;
     if (!k || !k.hotovo || ted < k.hotovo) return;
     delete u.katastrofa; zmena = true;
-    toast((u.name || 'Prádlomat') + ' je po opravě zase v provozu.', 'ok');
+    toast((u.name || esc(tx('hra.pradlomat_8'))) + ' je po opravě zase v provozu.', 'ok');
   });
   if (zmena) { save(); paint(); drawMap(); }
 }
@@ -554,14 +554,14 @@ function poruchy() { return (S.units || []).filter(jeVPoruse); }
 function dobaProstoje(ms) {
   if (ms >= MONTH_MS) {
     var m = Math.max(1, Math.round(ms / MONTH_MS));
-    return m + ' ' + mn(m, 'herní měsíc', 'herní měsíce', 'herních měsíců');
+    return m + ' ' + mn(m, esc(tx('hra.herni_mesic_2')), esc(tx('hra.herni_mesice')), esc(tx('hra.hernich_mesicu')));
   }
   if (ms >= MONTH_MS / 30) {
     var d = Math.max(1, Math.round(ms / (MONTH_MS / 30)));
-    return d + ' ' + mn(d, 'herní den', 'herní dny', 'herních dnů');
+    return d + ' ' + mn(d, esc(tx('hra.herni_den_2')), esc(tx('hra.herni_dny_2')), esc(tx('hra.hernich_dnu_2')));
   }
   var h = Math.max(1, Math.round(ms / HODINA_MS));
-  return h + ' ' + mn(h, 'herní hodinu', 'herní hodiny', 'herních hodin');
+  return h + ' ' + mn(h, esc(tx('hra.herni_hodinu')), esc(tx('hra.herni_hodiny')), esc(tx('hra.hernich_hodin')));
 }
 // Závada přibývá průběžně, ne v pevných intervalech — šance se počítá z toho,
 // kolik času uběhlo. Po dlouhé pauze strop hlídá, ať se nerozbije všechno naráz.
@@ -664,7 +664,7 @@ function cestaHodin(km, zp) {
 }
 // Jeden prádlomat je, dva jsou — ať věta nedrhne.
 function zaMoremSlovy(n) {
-  return n === 1 ? 'Jeden prádlomat máš' : (n >= 2 && n <= 4 ? n + ' prádlomaty máš' : n + ' prádlomatů máš');
+  return n === 1 ? esc(tx('hra.jeden_pradlomat_mas')) : (n >= 2 && n <= 4 ? n + ' prádlomaty máš' : n + ' prádlomatů máš');
 }
 // Prádlomaty, ke kterým se technik nedostane autem — od každé základny jen
 // přes vodu. Právě u nich se vyplatí pobočka za mořem.
@@ -680,7 +680,7 @@ function zaMorem() {
 function zaMoremRada(u, v) {
   if (!v || !v.zpusob || v.zpusob.kod === 'auto') return '';
   return '<p class="fine warn" style="margin:8px 0 0">Tenhle prádlomat je za mořem — technik tam '
-    + (v.zpusob.kod === 'letadlo' ? 'musí letět' : 'jede trajektem')
+    + (v.zpusob.kod === 'letadlo' ? esc(tx('hra.musi_letet')) : 'jede trajektem')
     + '. S pobočkou v jeho okolí by výjezd trval '
     + etaText(vyjezdZblizka(u)).replace('za ', '') + ' místo '
     + etaText(v.celkem).replace('za ', '') + '.</p>';
@@ -717,10 +717,10 @@ function vyjezdZblizka(u) {
 function vyslatTechnika(u, ticho) {
   if (!u || !jeVPoruse(u) || u.technik) return;
   var v = vyjezdOdhad(u);
-  if (!v) { toast('Nemáš základnu, odkud technika poslat.', 'err'); return; }
+  if (!v) { toast(esc(tx('hra.nemas_zakladnu_odkud_technika_poslat_2')), 'err'); return; }
   var ted = Date.now();
   u.technik = {
-    z: { lat: v.zakladna.lat, lon: v.zakladna.lon, name: v.zakladna.name || 'sídlo' },
+    z: { lat: v.zakladna.lat, lon: v.zakladna.lon, name: v.zakladna.name || esc(tx('hra.sidlo_2')) },
     km: Math.round(v.km), zpusob: v.zpusob.kod, start: ted, prijezd: ted + v.jizda,
     hotovo: ted + v.jizda + v.oprava, navrat: ted + 2 * v.jizda + v.oprava
   };
@@ -881,7 +881,7 @@ function pricistDluh(castka, prirazka, vazba, mesicu) {
     id: 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1000),
     druh: (vazba && vazba.druh) || 'provoz',
     spotId: (vazba && vazba.spotId) || null,
-    popis: (vazba && vazba.popis) || 'Provozní úvěr',
+    popis: (vazba && vazba.popis) || esc(tx('hra.provozni_uver')),
     puvodni: castka, zbyva: castka, sazba: sazba,
     mesicu: mesicu || UVER_MESICU, zbyvaMesicu: mesicu || UVER_MESICU,
     splatka: anuita(castka, sazba, mesicu || UVER_MESICU),
@@ -919,7 +919,7 @@ function splatitUver(id, castka) {
   var dam = Math.min(Math.max(0, Math.round(castka || 0)), Math.round(l.zbyva), Math.floor(S.cash));
   if (!(dam > 0)) return 0;
   S.cash -= dam;
-  zapis('splatka', 'Mimořádná splátka — ' + (l.popis || 'úvěr'), -dam);
+  zapis('splatka', 'Mimořádná splátka — ' + (l.popis || esc(tx('hra.uver_5'))), -dam);
   l.zbyva = Math.max(0, l.zbyva - dam);
   S.bank = Math.min(bankCap(), S.bank + dam);   // splácením se uvolňuje rámec
   if (l.zbyva < 1) {
@@ -978,7 +978,7 @@ function zmenitSplatnost(id, i) {
   var n = zmenaNavrh(l, i);
   if (S.cash < n.poplatek) return null;
   S.cash -= n.poplatek;
-  zapis('poplatek', 'Změna splatnosti — ' + (l.popis || 'úvěr'), -n.poplatek);
+  zapis('poplatek', 'Změna splatnosti — ' + (l.popis || esc(tx('hra.uver_4'))), -n.poplatek);
   l.sazba = n.sazba;
   l.mesicu = n.mesicu;
   l.zbyvaMesicu = n.mesicu;
@@ -998,12 +998,12 @@ function dalsiSplatkaHtml() {
   var kolik = splatkyMesicne();
   if (!(kolik > 0)) return '';
   var ma = S.cash >= kolik;
-  return '<div class="kv"><span>Další splátka</span><b class="' + (ma ? 'ok' : 'err') + '">'
+  return '<div class="kv"><span>' + esc(tx('hra.dalsi_splatka_2')) + '</span><b class="' + (ma ? 'ok' : 'err') + '">'
     + etaText(dalsiSplatkaZa()) + '</b></div>'
     + '<p class="fine' + (ma ? '' : ' err') + '">' + (ma
         ? 'Do té doby musí být na účtu ' + kcFull(kolik) + '. Máš ' + kcFull(S.cash) + ', takže klid.'
         : 'Do té doby musí být na účtu ' + kcFull(kolik) + ', a máš jen ' + kcFull(S.cash)
-          + '. Chybí ' + kcFull(kolik - S.cash) + ' — co nezaplatíš, přičte se k dluhu a počítá se jako nezaplacená splátka.')
+          + '. Chybí ' + kcFull(kolik - S.cash) + ' ' + esc(tx('hra.co_nezaplatis_pricte_se_k')))
     + '</p>';
 }
 
@@ -1147,13 +1147,13 @@ function prehodnotRamec(rucne, rovnou) {
   // na pravidelnou revizi jednou za herní měsíc. Jinak by se nikdo neptal.
   if (rucne && novy < stary) {
     save();
-    toast('Na víc to teď není. ' + (sl.zisk < sl.historie
-      ? 'Limit drží výdělek sítě — zvedni zisk nebo sniž splátky.'
-      : 'Limit drží historie — doplať další prádlomat.'), 'err');
+    toast(esc(tx('hra.na_vic_to_ted_neni')) + ' ' + (sl.zisk < sl.historie
+      ? esc(tx('hra.limit_drzi_vydelek_site_zvedni'))
+      : esc(tx('hra.limit_drzi_historie_doplat_dalsi'))), 'err');
     return { zmena: 0, limit: stary };
   }
   if (Math.abs(novy - stary) < RAMEC_KROK) {
-    if (rucne) toast('Banka limit přepočítala a nechala ho beze změny.', 'ok');
+    if (rucne) toast(esc(tx('hra.banka_limit_prepocitala_a_nechala')), 'ok');
     save();
     return { zmena: 0, limit: stary };
   }
@@ -1181,18 +1181,18 @@ function hlidejRamec() {
   if (!maRamec()) return;
   var slabych = slabaMista().length;
   if (!slabych) {
-    if (S.ramec.slabyOd) { S.ramec.slabyOd = null; toast('Síť je zase v pořádku, rámec máš otevřený.', 'ok'); }
+    if (S.ramec.slabyOd) { S.ramec.slabyOd = null; toast(esc(tx('hra.sit_je_zase_v_poradku')), 'ok'); }
     return;
   }
   if (!S.ramec.slabyOd) {
     S.ramec.slabyOd = Date.now();
-    toast(slabych + ' ' + mn(slabych, 'místo nevydělá', 'místa nevydělají', 'míst nevydělá')
+    toast(slabych + ' ' + mn(slabych, esc(tx('hra.misto_nevydela')), esc(tx('hra.mista_nevydelaji')), esc(tx('hra.mist_nevydela')))
       + ' na svou splátku. Dokud to trvá, z rámce čerpat nemůžeš.', 'err');
     return;
   }
   if (Date.now() - S.ramec.slabyOd > RAMEC_LHUTA) {
     S.ramec.zavreny = Date.now();
-    toast('Banka ti zavřela rámec — síť rok nesplňovala podmínky. Co je načerpané, splácíš dál.', 'err');
+    toast(esc(tx('hra.banka_ti_zavrela_ramec_sit')), 'err');
   }
 }
 
@@ -1201,13 +1201,13 @@ function hlidejRamec() {
 // daná hráčem a herním měsícem, takže se nedá překlikat obnovením stránky —
 // a nikdy neobejde tvrdá pravidla, hýbe jen cenou a ochotou.
 var NALADY = [
-  { id: 'vstricny', nazev: 'Vstřícný den', slovo: 'Dneska mám dobrý den, tak se domluvíme.',
+  { id: 'vstricny', nazev: esc(tx('hra.vstricny_den')), slovo: esc(tx('hra.dneska_mam_dobry_den_tak')),
     sazba: -0.0015, castka: 1.05, splatnost: 1 },
-  { id: 'bezny', nazev: 'Běžný den', slovo: 'Jedeme podle pravidel, nic víc, nic míň.',
+  { id: 'bezny', nazev: esc(tx('hra.bezny_den')), slovo: esc(tx('hra.jedeme_podle_pravidel_nic_vic')),
     sazba: 0, castka: 1, splatnost: 0 },
-  { id: 'prisny', nazev: 'Přísný den', slovo: 'Dneska jsem opatrný, tak se nedivte.',
+  { id: 'prisny', nazev: esc(tx('hra.prisny_den')), slovo: esc(tx('hra.dneska_jsem_opatrny_tak_se')),
     sazba: 0.0015, castka: 0.95, splatnost: 0 },
-  { id: 'audit', nazev: 'Po auditu', slovo: 'Máme po kontrole. Držím se předpisů do písmene.',
+  { id: 'audit', nazev: 'Po auditu', slovo: esc(tx('hra.mame_po_kontrole_drzim_se')),
     sazba: 0.0015, castka: 0.95, splatnost: -1 }
 ];
 function naladaDnes() {
@@ -1237,10 +1237,10 @@ function maxSplatnost() {
 // Proč delší splatnost nedostane — vždycky i s tím, za co by to bylo ano.
 function splatnostDuvod(i) {
   var splacenych = (S.stats && S.stats.splaceno) || 0;
-  if (naladaDnes().id === 'audit') return 'Dneska je rizikoř po auditu a drží se základní splatnosti. Zkus to zítra.';
-  if (splacenych === 0) return 'Nemáš za sebou jediný splacený úvěr, takže banka nemá podle čeho soudit. Splať první úvěr a vrať se.';
-  if (splacenych === 1 && i >= SPL_ZAKLAD + 2) return 'S jedním splaceným úvěrem ti banka dá nejvýš sedm let. Na deset se vrať, až budeš mít dva.';
-  return 'Na tuhle splatnost zatím nedosáhneš.';
+  if (naladaDnes().id === 'audit') return esc(tx('hra.dneska_je_rizikor_po_auditu'));
+  if (splacenych === 0) return esc(tx('hra.nemas_za_sebou_jediny_splaceny'));
+  if (splacenych === 1 && i >= SPL_ZAKLAD + 2) return esc(tx('hra.s_jednim_splacenym_uverem_ti'));
+  return esc(tx('hra.na_tuhle_splatnost_zatim_nedosahnes'));
 }
 
 // Banka nepůjčí podle toho, co máš, ale podle toho, co to uživí. Kolik musí
@@ -1337,7 +1337,7 @@ function osirelyUver(spotId) {
   (S.loans || []).forEach(function (l) {
     if (l.spotId !== spotId) return;
     l.spotId = null;
-    if (String(l.popis || '').indexOf('místo zrušeno') < 0) l.popis = (l.popis || 'Úvěr') + ' (místo zrušeno)';
+    if (String(l.popis || '').indexOf(esc(tx('hra.misto_zruseno'))) < 0) l.popis = (l.popis || esc(tx('hra.uver_3'))) + ' ' + esc(tx('hra.misto_zruseno_2'));
   });
   return splatka;
 }
@@ -1374,8 +1374,8 @@ var KRIZE_PRUM = null;             // dočasné přepsání při dopočtu nepř�
 // na svátky. Rozdíl mezi nejslabším a nejsilnějším měsícem je kolem 30 %,
 // tedy zhruba ±15 % kolem průměru. Měsíce běží všem stejně — jsou odvozené
 // z času, ne od toho, kdy kdo začal hrát.
-var MESICE = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen',
-  'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
+var MESICE = ['leden', esc(tx('hra.unor')), esc(tx('hra.brezen')), 'duben', esc(tx('hra.kveten')), esc(tx('hra.cerven')),
+  esc(tx('hra.cervenec')), 'srpen', esc(tx('hra.zari')), esc(tx('hra.rijen')), 'listopad', 'prosinec'];
 var SEZONA = [0.86, 0.88, 0.94, 0.99, 1.02, 1.08, 1.13, 1.12, 1.07, 0.96, 1.03, 1.08];
 // Normalizace: přes celý rok musí sezóna vyjít na jedničku, jinak by sama
 // o sobě hru zlevnila nebo zdražila.
@@ -1483,7 +1483,7 @@ function hlidejUdalosti() {
   var e = nove[0];
   var kolik = udalostKolikMych(e);
   toast(e.ikona + ' ' + e.nazev + ' — ' + e.kde + '. Zasahuje ' + kolik + ' '
-    + mn(kolik, 'tvůj prádlomat', 'tvoje prádlomaty', 'tvých prádlomatů')
+    + mn(kolik, esc(tx('hra.tvuj_pradlomat')), esc(tx('hra.tvoje_pradlomaty')), esc(tx('hra.tvych_pradlomatu')))
     + (nove.length > 1 ? ' (a další ' + (nove.length - 1) + ' událost)' : '') + '.',
     e.dobra ? 'ok' : 'err', true);
   save();
@@ -1506,16 +1506,16 @@ function udalostiHtml() {
       + (skoncila ? ' konec' : '') + '">'
       + '<div class="udal-h"><i>' + e.ikona + '</i>'
       + '<div><b>' + esc(e.nazev) + '</b><span>' + esc(e.kde)
-      + (skoncila ? ' · skončilo' : ' · ještě ' + etaText(Number(new Date(e.do)) - Date.now()))
+      + (skoncila ? ' ' + esc(tx('hra.skoncilo')) : ' · ještě ' + etaText(Number(new Date(e.do)) - Date.now()))
       + '</span></div>'
       + (kolik ? '<em>' + kolik + '\u00d7</em>' : '') + '</div>'
       + '<p class="muted small">' + esc(e.popis) + '</p>'
       + (ucinky.length ? '<p class="fine ' + (e.dobra ? 'ok' : 'warn') + '">'
-          + ucinky.join(' · ') + (kolik ? '' : ' — tebe se to netýká') + '</p>' : '')
+          + ucinky.join(' · ') + (kolik ? '' : ' ' + esc(tx('hra.tebe_se_to_netyka'))) + '</p>' : '')
       + '</div>';
   };
   var mych = bezi.filter(function (e) { return udalostKolikMych(e) > 0; }).length;
-  return '<div class="card"><div class="row"><h3>Co se děje ve světě</h3>'
+  return '<div class="card"><div class="row"><h3>' + esc(tx('hra.co_se_deje_ve_svete')) + '</h3>'
     + (mych ? '<b class="warn">' + mych + '\u00d7 u tebe</b>' : '') + '</div>'
     + '<p class="muted small" style="margin:2px 0 10px">Události platí podle toho, kde prádlomat '
     + 'stojí, ne komu patří — kdo má síť rozesetou po víc zemích, rozloží riziko. '
@@ -1523,9 +1523,9 @@ function udalostiHtml() {
         ? 'Dokud nemáš ' + UDAL_OCHRANA + ' prádlomatů, pohromy se ti vyhýbají.'
         : '') + '</p>'
     + (bezi.length ? bezi.map(function (e) { return radek(e, false); }).join('')
-      : '<p class="muted small">Teď je ve světě klid.</p>')
+      : '<p class="muted small">' + esc(tx('hra.ted_je_ve_svete_klid')) + '</p>')
     + ((UDALOSTI.konec || []).length
-        ? '<h3 style="margin-top:16px">Nedávno skončilo</h3>'
+        ? '<h3 style="margin-top:16px">' + esc(tx('hra.nedavno_skoncilo')) + '</h3>'
           + UDALOSTI.konec.slice(0, 5).map(function (e) { return radek(e, true); }).join('')
         : '')
     + '</div>';
@@ -1572,7 +1572,7 @@ function hlidejKrizi() {
     toast('Přišla ekonomická krize. Lidem docházejí peníze a do prádlomatů chodí míň zákazníků — '
       + 'o ' + Math.round(e.hloubka * 100) + ' %. Jak dlouho to potrvá, neví nikdo.', 'err', true);
   } else {
-    toast('Krize je zažehnaná, zákazníci se vracejí.', 'ok', true);
+    toast(esc(tx('hra.krize_je_zazehnana_zakaznici_se')), 'ok', true);
   }
 }
 // Jak si ekonomika stojí — bez prozrazení, kdy to skončí.
@@ -1584,12 +1584,12 @@ function ekonomikaHtml() {
   return '<div class="card"><div class="row"><h3>Ekonomika</h3>'
     + '<b class="' + (e.krize ? 'err' : nad >= 0 ? 'ok' : 'warn') + '">'
     + (e.krize ? 'krize' : nad > 1 ? 'konjunktura' : 'klid') + '</b></div>'
-    + '<div class="kv"><span>Herní měsíc</span><b>' + MESICE[e.mesic] + '</b></div>'
-    + '<div class="kv"><span>Sezóna</span><b class="' + (sez >= 0 ? 'ok' : 'warn') + '">'
+    + '<div class="kv"><span>' + esc(tx('hra.herni_mesic')) + '</span><b>' + MESICE[e.mesic] + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.sezona')) + '</span><b class="' + (sez >= 0 ? 'ok' : 'warn') + '">'
     + (sez > 0 ? '+' : '') + sez + ' %</b></div>'
     + (e.krize ? '<div class="kv"><span>Krize</span><b class="err">−'
         + Math.round(e.hloubka * 100) + ' %</b></div>' : '')
-    + '<div class="kv souhrn"><span>Návštěvnost oproti normálu</span><b class="'
+    + '<div class="kv souhrn"><span>' + esc(tx('hra.navstevnost_oproti_normalu')) + '</span><b class="'
     + (e.koef >= 1 ? 'ok' : 'err') + '">' + (nad > 0 ? '+' : '') + nad + ' %</b></div>'
     + '<p class="fine">' + (e.krize
         ? 'Zákazníků ubylo o ' + pct + ' %. Dno ani konec dopředu nikdo nezná a v průběhu '
@@ -1640,26 +1640,26 @@ function economics(spot, modelKey, podil) {
 
 // ─── Profily hráče ───────────────────────────────────────────────────────────
 var PROFILES = {
-  opatrny: { id: 'opatrny', name: 'Opatrný stavitel', cash: 1500000, ltv: 0.70, rate: 0.096,
-    desc: 'Nerad dlužíš. Banka ti proto půjčí míň, zato nejlevněji — a začínáš s nejtlustší peněženkou.' },
-  vyvazeny: { id: 'vyvazeny', name: 'Vyvážený podnikatel', cash: 1400000, ltv: 0.85, rate: 0.114,
-    desc: 'Riziko bereš jako nástroj, ne jako adrenalin. Rozumný úvěr, rozumný úrok.' },
-  dravy: { id: 'dravy', name: 'Dravý expanzista', cash: 1300000, ltv: 1.00, rate: 0.132,
-    desc: 'Chceš růst rychle a na dluh. Banka ti zaplatí i celý prádlomat, ale nechá si za to zaplatit. Na první prádlomat máš i tak dost — začíná se bez dluhu.' }
+  opatrny: { id: 'opatrny', name: esc(tx('hra.opatrny_stavitel')), cash: 1500000, ltv: 0.70, rate: 0.096,
+    desc: esc(tx('hra.nerad_dluzis_banka_ti_proto')) },
+  vyvazeny: { id: 'vyvazeny', name: esc(tx('hra.vyvazeny_podnikatel')), cash: 1400000, ltv: 0.85, rate: 0.114,
+    desc: esc(tx('hra.riziko_beres_jako_nastroj_ne')) },
+  dravy: { id: 'dravy', name: esc(tx('hra.dravy_expanzista')), cash: 1300000, ltv: 1.00, rate: 0.132,
+    desc: esc(tx('hra.chces_rust_rychle_a_na')) }
 };
 var QUIZ = [
-  { q: 'Máš 1 000 000 L$ a jeden prádlomat stojí 1 356 636 L$. Co uděláš?',
-    a: [['Počkám, až našetřím celou částku.', 'opatrny'],
-        ['Vezmu si menší úvěr a doplatím ze svého.', 'vyvazeny'],
-        ['Vezmu maximální úvěr a hned stavím další.', 'dravy']] },
-  { q: 'Našel jsi místo se skóre 61 ze 100. Postavíš tam?',
-    a: [['Ne. Hledám dál, dokud nenajdu špičku.', 'opatrny'],
-        ['Postavím, ale menší variantu MINI.', 'vyvazeny'],
-        ['Postavím hned to velké. Čas jsou peníze.', 'dravy']] },
-  { q: 'Síť vydělává. Co s penězi?',
-    a: [['Splatím úvěr do posledního haléře.', 'opatrny'],
-        ['Půlku na splátky, půlku na další prádlomat.', 'vyvazeny'],
-        ['Všechno zpátky do expanze.', 'dravy']] }
+  { q: esc(tx('hra.mas_1_000_000_l')),
+    a: [[esc(tx('hra.pockam_az_nasetrim_celou_castku')), 'opatrny'],
+        [esc(tx('hra.vezmu_si_mensi_uver_a')), 'vyvazeny'],
+        [esc(tx('hra.vezmu_maximalni_uver_a_hned')), 'dravy']] },
+  { q: esc(tx('hra.nasel_jsi_misto_se_skore')),
+    a: [[esc(tx('hra.ne_hledam_dal_dokud_nenajdu')), 'opatrny'],
+        [esc(tx('hra.postavim_ale_mensi_variantu_mini')), 'vyvazeny'],
+        [esc(tx('hra.postavim_hned_to_velke_cas')), 'dravy']] },
+  { q: esc(tx('hra.sit_vydelava_co_s_penezi')),
+    a: [[esc(tx('hra.splatim_uver_do_posledniho_halere')), 'opatrny'],
+        [esc(tx('hra.pulku_na_splatky_pulku_na')), 'vyvazeny'],
+        [esc(tx('hra.vsechno_zpatky_do_expanze')), 'dravy']] }
 ];
 
 // ─── Stav hry ────────────────────────────────────────────────────────────────
@@ -1763,7 +1763,7 @@ function dosypStav(o) {
       if (o.loan > 0) {
         var sz = Math.max(0.02, (PROFILES[o.profile] ? PROFILES[o.profile].rate : 0.114)
           - (o.rateDrop || 0) + (o.loanPrem || 0));
-        o.loans.push({ id: 'u-stary', druh: 'stary', spotId: null, popis: 'Dřívější dluh',
+        o.loans.push({ id: 'u-stary', druh: 'stary', spotId: null, popis: esc(tx('hra.drivejsi_dluh')),
           puvodni: Math.round(o.loan), zbyva: Math.round(o.loan), sazba: sz,
           mesicu: 60, zbyvaMesicu: 60,
           splatka: Math.ceil(o.loan * (sz / 12) / (1 - Math.pow(1 + sz / 12, -60))),
@@ -1801,7 +1801,7 @@ function dosypStav(o) {
         var sp2 = (ob && ob.spots) || [];
         var la = 0, lo = 0, n = 0;
         sp2.forEach(function (x) { if (x.lat != null) { la += x.lat; lo += x.lon; n++; } });
-        o.sidlo = { name: (ob && ob.name) || prvni.name || 'sídlo',
+        o.sidlo = { name: (ob && ob.name) || prvni.name || esc(tx('hra.sidlo_3')),
           lat: n ? la / n : prvni.lat, lon: n ? lo / n : prvni.lon, od: prvni.builtAt || Date.now() };
       } else o.sidlo = null;
     }
@@ -1843,7 +1843,7 @@ function inStock(modelKey) { return (S.stock && S.stock[modelKey]) || 0; }
 function onWay(modelKey) { return (S.orders || []).filter(function (o) { return o.model === modelKey; }).length; }
 // Zbývající čas dodání lidsky: „za 7 h 20 min"
 function etaText(ms) {
-  if (ms <= 0) return 'právě teď';
+  if (ms <= 0) return esc(tx('hra.prave_ted'));
   var mins = Math.max(1, Math.round(ms / 60000));   // zaokrouhlíme až minuty, jinak vyjde „23 h 60 min"
   var h = Math.floor(mins / 60), m = mins % 60;
   if (h >= 1) return 'za ' + h + ' h' + (m ? ' ' + m + ' min' : '');
@@ -1949,14 +1949,14 @@ function zapisHistorii() {
 // zapíšou jedním řádkem — jinak by v knize byly tisíce drobných přírůstků.
 var KNIHA_MAX = 600;              // starší řádky se zahazují, ať stav hry nenabobtná
 var KNIHA_DRUH = {
-  nakup: { nazev: 'Nákupy a stavba', kat: 'nakup' },
-  pruzkum: { nazev: 'Průzkum', kat: 'provoz' },
+  nakup: { nazev: esc(tx('hra.nakupy_a_stavba')), kat: 'nakup' },
+  pruzkum: { nazev: esc(tx('hra.pruzkum')), kat: 'provoz' },
   poplatek: { nazev: 'Poplatky', kat: 'provoz' },
-  provoz: { nazev: 'Provoz sítě', kat: 'provoz' },
+  provoz: { nazev: esc(tx('hra.provoz_site')), kat: 'provoz' },
   uver: { nazev: 'Z banky', kat: 'banka' },
-  splatka: { nazev: 'Splátky', kat: 'banka' },
-  prijem: { nazev: 'Příjmy', kat: 'prijem' },
-  sen: { nazev: 'Splněné sny', kat: 'nakup' }
+  splatka: { nazev: esc(tx('hra.splatky_3')), kat: 'banka' },
+  prijem: { nazev: esc(tx('hra.prijmy_2')), kat: 'prijem' },
+  sen: { nazev: esc(tx('hra.splnene_sny')), kat: 'nakup' }
 };
 function knihaKat(d) { return (KNIHA_DRUH[d] || KNIHA_DRUH.prijem).kat; }
 // Zapíše jeden pohyb. Volá se až PO změně hotovosti, aby seděl zůstatek.
@@ -1989,25 +1989,25 @@ function knihaUzavri() {
   var b = S.knihaMes;
   if (!b) return;
   S.knihaMes = null;
-  if (Math.round(b.provoz)) zapis('provoz', 'Provoz sítě za měsíc', b.provoz);
-  if (Math.round(b.splatky)) zapis('splatka', 'Splátky úvěrů za měsíc', b.splatky);
+  if (Math.round(b.provoz)) zapis('provoz', esc(tx('hra.provoz_site_za_mesic')), b.provoz);
+  if (Math.round(b.splatky)) zapis('splatka', esc(tx('hra.splatky_uveru_za_mesic')), b.splatky);
 }
 // Kdo hrál dřív, než se kniha začala vést, dostane začátek dopočítaný z toho,
 // co ve hře stojí. U těchhle řádků neznáme zůstatek ani rozdělení na hotovost
 // a úvěr, proto jsou označené jako dopočítané.
 function dopocitejKnihu(o) {
   var k = [], p = PROFILES[o.profile];
-  if (p) k.push({ t: o.startedAt, d: 'prijem', p: 'Startovní kapitál', c: Math.round(p.cash), r: 1 });
+  if (p) k.push({ t: o.startedAt, d: 'prijem', p: esc(tx('hra.startovni_kapital')), c: Math.round(p.cash), r: 1 });
   (o.units || []).forEach(function (u) {
     var m = MODELS[u.eco && u.eco.model];
     k.push({ t: u.builtAt || o.startedAt, d: 'nakup', r: 1,
-      p: 'Prádlomat ' + (u.name || 'místo') + (m ? ' (' + m.name + ')' : ''),
+      p: 'Prádlomat ' + (u.name || esc(tx('hra.misto_6'))) + (m ? ' (' + m.name + ')' : ''),
       c: -Math.round((u.eco && u.eco.invest) || 0) });
   });
   (o.pobocky || []).forEach(function (b) {
     k.push({ t: b.od || o.startedAt, d: 'nakup', p: 'Pobočka ' + (b.name || ''), c: -POBOCKA_CENA, r: 1 });
   });
-  if (o.ceta) k.push({ t: o.ceta.od || o.startedAt, d: 'nakup', p: 'Stavební technika', c: -CETA_CENA, r: 1 });
+  if (o.ceta) k.push({ t: o.ceta.od || o.startedAt, d: 'nakup', p: esc(tx('hra.stavebni_technika_2')), c: -CETA_CENA, r: 1 });
   k.sort(function (a, b) { return a.t - b.t; });
   return k;
 }
@@ -2031,13 +2031,13 @@ function knihaRadek(r) {
     + '<span><b>' + esc(r.p) + '</b><i>' + datumCas(r.t)
     + (r.u ? ' · z toho úvěr ' + kcFull(r.u) : '')
     + (r.v ? ' · vzniklo ' + datumCas(r.v) : '')
-    + (r.r ? ' · dopočítáno' : (r.z != null ? ' · zůstatek ' + kcFull(r.z) : '')) + '</i></span>'
+    + (r.r ? ' ' + esc(tx('hra.dopocitano')) : (r.z != null ? ' · zůstatek ' + kcFull(r.z) : '')) + '</i></span>'
     + '<b class="' + kl + '">' + (r.c > 0 ? '+' : '−') + kcFull(Math.abs(r.c)) + '</b></div>';
 }
 var KNIHA_FILTR = 'vse';
 var KNIHA_FILTRY = [
-  { k: 'vse', n: 'Vše' }, { k: 'nakup', n: 'Nákupy' }, { k: 'provoz', n: 'Provoz' },
-  { k: 'banka', n: 'Banka' }, { k: 'prijem', n: 'Příjmy' }
+  { k: 'vse', n: esc(tx('hra.vse')) }, { k: 'nakup', n: esc(tx('hra.nakupy')) }, { k: 'provoz', n: 'Provoz' },
+  { k: 'banka', n: 'Banka' }, { k: 'prijem', n: esc(tx('hra.prijmy_3')) }
 ];
 function knihaSheet() {
   knihaZaloz();
@@ -2054,10 +2054,10 @@ function knihaSheet() {
   // Rozepsaný měsíc ukážeme zvlášť, aby bylo vidět, co se zrovna sbírá.
   var b = S.knihaMes, bezi = '';
   if (b && (Math.round(b.provoz) || Math.round(b.splatky))) {
-    bezi = '<div class="kn-bezi"><b>Rozepsaný měsíc</b>'
+    bezi = '<div class="kn-bezi"><b>' + esc(tx('hra.rozepsany_mesic')) + '</b>'
       + '<span>Provoz <i class="' + (b.provoz >= 0 ? 'ok' : 'err') + '">'
       + (b.provoz >= 0 ? '+' : '−') + kcFull(Math.abs(Math.round(b.provoz))) + '</i></span>'
-      + (Math.round(b.splatky) ? '<span>Splátky <i class="err">−'
+      + (Math.round(b.splatky) ? '<span>' + esc(tx('hra.splatky_2')) + ' ' + '<i class="err">−'
           + kcFull(Math.abs(Math.round(b.splatky))) + '</i></span>' : '') + '</div>';
   }
   var mesic = -1, html = '';
@@ -2073,12 +2073,12 @@ function knihaSheet() {
     }
     html += knihaRadek(r);
   });
-  sheet('<h3>Účetní kniha</h3>'
+  sheet('<h3>' + esc(tx('hra.ucetni_kniha')) + '</h3>'
     + '<p class="muted small">Každý pohyb peněz od začátku hry. Provoz sítě a splátky '
     + 'bance se sčítají za herní měsíc, všechno ostatní má svůj řádek.</p>'
     + '<div class="sum-grid" style="margin:12px 0">'
-    + '<div><span>Příjmy</span><b class="ok">' + kc(prijmy) + ' ' + CUR + '</b></div>'
-    + '<div><span>Výdaje</span><b class="err">' + kc(vydaje) + ' ' + CUR + '</b></div>'
+    + '<div><span>' + esc(tx('hra.prijmy')) + '</span><b class="ok">' + kc(prijmy) + ' ' + CUR + '</b></div>'
+    + '<div><span>' + esc(tx('hra.vydaje')) + '</span><b class="err">' + kc(vydaje) + ' ' + CUR + '</b></div>'
     + '<div><span>Hotovost</span><b>' + kc(S.cash) + ' ' + CUR + '</b></div>'
     + '</div>'
     + bezi
@@ -2087,7 +2087,7 @@ function knihaSheet() {
           + f.n + '</button>';
       }).join('') + '</div>'
     + (html ? '<div class="kn">' + html + '</div>'
-            : '<div class="empty">V tomhle období nic není.</div>')
+            : '<div class="empty">' + esc(tx('hra.v_tomhle_obdobi_nic_neni')) + '</div>')
     + (S.knihaOd
         ? '<p class="fine" style="margin-top:12px">Řádky označené „dopočítáno" jsou z doby, '
           + 'kdy se kniha ještě nevedla — poskládali jsme je z toho, co ti ve hře stojí, '
@@ -2137,11 +2137,11 @@ function knihaHtml() {
   var prijmy = 0, vydaje = 0;
   vse.forEach(function (r) { if (r.c > 0) prijmy += r.c; else vydaje -= r.c; });
   return '<button class="card kv-karta" id="do-kniha">'
-    + '<div class="row"><h3>Účetní kniha</h3><b class="muted">' + vse.length + ' zápisů ›</b></div>'
+    + '<div class="row"><h3>' + esc(tx('hra.ucetni_kniha_2')) + '</h3><b class="muted">' + vse.length + ' zápisů ›</b></div>'
     + '<p class="muted small" style="margin:2px 0 8px">Co jsi kdy koupil, co ti přiteklo a co '
     + 'sebrala banka — od prvního dne.</p>'
-    + '<div class="kv"><span>Příjmy celkem</span><b class="ok">' + kcFull(prijmy) + '</b></div>'
-    + '<div class="kv"><span>Výdaje celkem</span><b class="err">' + kcFull(vydaje) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.prijmy_celkem')) + '</span><b class="ok">' + kcFull(prijmy) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.vydaje_celkem')) + '</span><b class="err">' + kcFull(vydaje) + '</b></div>'
     + '</button>';
 }
 // Kolik z úvěru zbývalo po tolika měsících splácení.
@@ -2348,7 +2348,7 @@ function toast(msg, kind, drz) {
   var t = document.createElement('span');
   t.textContent = msg;
   var x = document.createElement('button');
-  x.className = 'toast-x'; x.type = 'button'; x.setAttribute('aria-label', 'Zavřít');
+  x.className = 'toast-x'; x.type = 'button'; x.setAttribute('aria-label', esc(tx('hra.zavrit')));
   x.textContent = '\u00d7';
   x.onclick = function () { if (el.parentNode) el.parentNode.removeChild(el); };
   el.appendChild(t); el.appendChild(x);
@@ -2390,11 +2390,11 @@ function paintZvon() {
   el.classList.toggle('hidden', !celkem);
   el.classList.toggle('ma', n > 0);
   el.innerHTML = '\uD83D\uDD14' + (n ? '<b>' + (n > 9 ? '9+' : n) + '</b>' : '');
-  el.title = n ? n + ' nepřečtených upozornění' : 'Upozornění';
+  el.title = n ? n + ' nepřečtených upozornění' : esc(tx('hra.upozorneni'));
 }
 function upozorneniSheet() {
   var l = ((S && S.upoz) || []).slice().reverse();
-  sheet('<h3>\uD83D\uDD14 Upozornění</h3>'
+  sheet('<h3>' + esc(tx('hra.ud83d_udd14_upozorneni')) + '</h3>'
     + '<p class="muted small">Co se ve hře stalo. Nepřečtené jsou zvýrazněné; '
     + 'otevřením seznamu se označí jako přečtené.</p>'
     + (l.length
@@ -2430,7 +2430,7 @@ $('sheet-x').onclick = closeSheet;
 
 function verdictPill(score) {
   var c = score >= 70 ? 'good' : score >= 55 ? 'mid' : 'bad';
-  var t = score >= 70 ? 'výborné' : score >= 55 ? 'použitelné' : 'slabé';
+  var t = score >= 70 ? esc(tx('hra.vyborne')) : score >= 55 ? esc(tx('hra.pouzitelne')) : esc(tx('hra.slabe'));
   return '<span class="pill ' + c + '">' + score + '/100 · ' + t + '</span>';
 }
 
@@ -2458,74 +2458,74 @@ var POVEST_DOLU = 0.2;           // při nejhorší pověsti spadne návštěvno
 var POVEST_NAHORU = 0.1;         // při nejlepší stoupne o desetinu
 var SCENARU_PAMET = 18;          // kolik posledních rozhovorů se neopakuje
 var JMEN_PAMET = 60;             // tolik posledních jmen se neopakuje
-var HOVOR_ZENY = ['paní Nováková', 'paní Svobodová', 'paní Dvořáková', 'paní Černá',
-  'paní Procházková', 'paní Kučerová', 'paní Veselá', 'paní Horáková', 'paní Němcová',
-  'paní Marková', 'paní Pospíšilová', 'paní Pokorná', 'paní Hájková', 'paní Jelínková',
-  'paní Králová', 'paní Růžičková', 'paní Benešová', 'paní Fialová', 'paní Sedláčková',
-  'paní Doležalová', 'paní Zemanová', 'paní Kolářová', 'paní Navrátilová', 'paní Čermáková',
-  'paní Vaňková', 'paní Urbanová', 'paní Blažková', 'paní Křížová', 'paní Kovářová',
-  'paní Bartošová', 'paní Vlčková', 'paní Štěpánková', 'paní Poláková', 'paní Konečná',
-  'paní Mašková', 'paní Musilová', 'paní Šimková', 'paní Holubová', 'paní Kratochvílová',
-  'paní Kadlecová', 'paní Machová', 'paní Lišková', 'paní Soukupová', 'paní Bláhová',
-  'slečna Matoušková', 'slečna Burešová', 'slečna Kopecká', 'slečna Malá', 'slečna Dostálová',
-  'slečna Šťastná', 'slečna Tichá', 'slečna Vaněčková', 'slečna Hrubá', 'slečna Beránková',
-  'paní Nguyenová', 'paní Horváthová', 'paní Baloghová', 'paní Kowalská', 'paní Šebestová',
-  'paní Strnadová', 'paní Vondráčková', 'paní Zídková', 'paní Melicharová', 'paní Pechová',
-  'paní Šulcová', 'paní Rybářová', 'paní Kohoutová', 'paní Čapková', 'paní Matějková',
-  'paní Vrbová', 'paní Janoušková', 'paní Dudková', 'paní Hrabalová', 'paní Pánková',
-  'paní Slavíková', 'paní Vítková', 'paní Brožová', 'paní Macháčková', 'paní Jirásková',
-  'paní Bednářová', 'paní Havlíčková', 'paní Trávníčková', 'paní Suchánková', 'paní Kasalová',
-  'slečna Kalousková', 'slečna Prokopová', 'slečna Hejduková', 'slečna Rysová', 'slečna Fenclová',
-  'slečna Linhartová', 'slečna Krejzová', 'slečna Michalcová', 'slečna Potůčková', 'slečna Boháčová',
-  'doktorka Králíčková', 'paní učitelka Zemanová', 'paní Nedvědová', 'paní Pilařová',
-  'paní Bezděková', 'paní Hofmanová', 'paní Rezková', 'paní Štědrá', 'paní Chalupová',
-  'paní Rychtaříková', 'paní Baštová', 'paní Hofmanová', 'paní Šimáčková',
-  'paní Trnková', 'paní Vopěnková', 'paní Kadlecová', 'paní Myšková',
-  'paní Bernardová', 'paní Kopalová', 'paní Zemanová', 'paní Stuchlíková',
-  'paní Vrbová', 'paní Hanzlíková', 'paní Michalíková', 'paní Dostálová',
-  'paní Lacinová', 'paní Kafková', 'paní Burdová', 'paní Nedvědová',
-  'paní Halámková', 'paní Šestáková', 'paní Pazderová', 'paní Kolmanová',
-  'paní Šubrtová', 'slečna Vacková', 'slečna Hrušková', 'slečna Doleželová',
-  'slečna Vaňková', 'slečna Čapková', 'slečna Bartošová', 'slečna Královcová',
-  'slečna Řezníčková', 'slečna Vlasáková', 'slečna Skalická', 'paní Hrabalová',
-  'paní Mlynářová', 'paní Konvalinková', 'paní Pechová', 'paní Bauerová',
-  'paní Sládková', 'paní Marešová', 'paní Tichá', 'paní Kratochvílová',
-  'paní Fialová', 'paní Vondráčková', 'paní Hubáčková', 'paní Zelinková',
-  'paní Janoušková', 'paní Peterková',
+var HOVOR_ZENY = [esc(tx('hra.pani_novakova')), esc(tx('hra.pani_svobodova')), esc(tx('hra.pani_dvorakova')), esc(tx('hra.pani_cerna')),
+  esc(tx('hra.pani_prochazkova')), esc(tx('hra.pani_kucerova')), esc(tx('hra.pani_vesela')), esc(tx('hra.pani_horakova')), esc(tx('hra.pani_nemcova')),
+  esc(tx('hra.pani_markova')), esc(tx('hra.pani_pospisilova')), esc(tx('hra.pani_pokorna')), esc(tx('hra.pani_hajkova')), esc(tx('hra.pani_jelinkova')),
+  esc(tx('hra.pani_kralova')), esc(tx('hra.pani_ruzickova')), esc(tx('hra.pani_benesova')), esc(tx('hra.pani_fialova')), esc(tx('hra.pani_sedlackova')),
+  esc(tx('hra.pani_dolezalova')), esc(tx('hra.pani_zemanova')), esc(tx('hra.pani_kolarova')), esc(tx('hra.pani_navratilova')), esc(tx('hra.pani_cermakova')),
+  esc(tx('hra.pani_vankova')), esc(tx('hra.pani_urbanova')), esc(tx('hra.pani_blazkova')), esc(tx('hra.pani_krizova')), esc(tx('hra.pani_kovarova')),
+  esc(tx('hra.pani_bartosova')), esc(tx('hra.pani_vlckova')), esc(tx('hra.pani_stepankova')), esc(tx('hra.pani_polakova')), esc(tx('hra.pani_konecna')),
+  esc(tx('hra.pani_maskova')), esc(tx('hra.pani_musilova')), esc(tx('hra.pani_simkova')), esc(tx('hra.pani_holubova')), esc(tx('hra.pani_kratochvilova')),
+  esc(tx('hra.pani_kadlecova')), esc(tx('hra.pani_machova')), esc(tx('hra.pani_liskova')), esc(tx('hra.pani_soukupova')), esc(tx('hra.pani_blahova')),
+  esc(tx('hra.slecna_matouskova')), esc(tx('hra.slecna_buresova')), esc(tx('hra.slecna_kopecka')), esc(tx('hra.slecna_mala')), esc(tx('hra.slecna_dostalova')),
+  esc(tx('hra.slecna_stastna')), esc(tx('hra.slecna_ticha')), esc(tx('hra.slecna_vaneckova')), esc(tx('hra.slecna_hruba')), esc(tx('hra.slecna_berankova')),
+  esc(tx('hra.pani_nguyenova')), esc(tx('hra.pani_horvathova')), esc(tx('hra.pani_baloghova')), esc(tx('hra.pani_kowalska')), esc(tx('hra.pani_sebestova')),
+  esc(tx('hra.pani_strnadova')), esc(tx('hra.pani_vondrackova')), esc(tx('hra.pani_zidkova')), esc(tx('hra.pani_melicharova')), esc(tx('hra.pani_pechova')),
+  esc(tx('hra.pani_sulcova')), esc(tx('hra.pani_rybarova')), esc(tx('hra.pani_kohoutova')), esc(tx('hra.pani_capkova')), esc(tx('hra.pani_matejkova')),
+  esc(tx('hra.pani_vrbova')), esc(tx('hra.pani_janouskova')), esc(tx('hra.pani_dudkova')), esc(tx('hra.pani_hrabalova')), esc(tx('hra.pani_pankova')),
+  esc(tx('hra.pani_slavikova')), esc(tx('hra.pani_vitkova')), esc(tx('hra.pani_brozova')), esc(tx('hra.pani_machackova')), esc(tx('hra.pani_jiraskova')),
+  esc(tx('hra.pani_bednarova')), esc(tx('hra.pani_havlickova')), esc(tx('hra.pani_travnickova')), esc(tx('hra.pani_suchankova')), esc(tx('hra.pani_kasalova')),
+  esc(tx('hra.slecna_kalouskova')), esc(tx('hra.slecna_prokopova')), esc(tx('hra.slecna_hejdukova')), esc(tx('hra.slecna_rysova')), esc(tx('hra.slecna_fenclova')),
+  esc(tx('hra.slecna_linhartova')), esc(tx('hra.slecna_krejzova')), esc(tx('hra.slecna_michalcova')), esc(tx('hra.slecna_potuckova')), esc(tx('hra.slecna_bohacova')),
+  esc(tx('hra.doktorka_kralickova')), esc(tx('hra.pani_ucitelka_zemanova')), esc(tx('hra.pani_nedvedova')), esc(tx('hra.pani_pilarova')),
+  esc(tx('hra.pani_bezdekova')), esc(tx('hra.pani_hofmanova')), esc(tx('hra.pani_rezkova')), esc(tx('hra.pani_stedra')), esc(tx('hra.pani_chalupova')),
+  esc(tx('hra.pani_rychtarikova')), esc(tx('hra.pani_bastova')), esc(tx('hra.pani_hofmanova_2')), esc(tx('hra.pani_simackova')),
+  esc(tx('hra.pani_trnkova')), esc(tx('hra.pani_vopenkova')), esc(tx('hra.pani_kadlecova_2')), esc(tx('hra.pani_myskova')),
+  esc(tx('hra.pani_bernardova')), esc(tx('hra.pani_kopalova')), esc(tx('hra.pani_zemanova_2')), esc(tx('hra.pani_stuchlikova')),
+  esc(tx('hra.pani_vrbova_2')), esc(tx('hra.pani_hanzlikova')), esc(tx('hra.pani_michalikova')), esc(tx('hra.pani_dostalova')),
+  esc(tx('hra.pani_lacinova')), esc(tx('hra.pani_kafkova')), esc(tx('hra.pani_burdova')), esc(tx('hra.pani_nedvedova_2')),
+  esc(tx('hra.pani_halamkova')), esc(tx('hra.pani_sestakova')), esc(tx('hra.pani_pazderova')), esc(tx('hra.pani_kolmanova')),
+  esc(tx('hra.pani_subrtova')), esc(tx('hra.slecna_vackova')), esc(tx('hra.slecna_hruskova')), esc(tx('hra.slecna_dolezelova')),
+  esc(tx('hra.slecna_vankova')), esc(tx('hra.slecna_capkova')), esc(tx('hra.slecna_bartosova')), esc(tx('hra.slecna_kralovcova')),
+  esc(tx('hra.slecna_reznickova')), esc(tx('hra.slecna_vlasakova')), esc(tx('hra.slecna_skalicka')), esc(tx('hra.pani_hrabalova_2')),
+  esc(tx('hra.pani_mlynarova')), esc(tx('hra.pani_konvalinkova')), esc(tx('hra.pani_pechova_2')), esc(tx('hra.pani_bauerova')),
+  esc(tx('hra.pani_sladkova')), esc(tx('hra.pani_maresova')), esc(tx('hra.pani_ticha')), esc(tx('hra.pani_kratochvilova_2')),
+  esc(tx('hra.pani_fialova_2')), esc(tx('hra.pani_vondrackova_2')), esc(tx('hra.pani_hubackova')), esc(tx('hra.pani_zelinkova')),
+  esc(tx('hra.pani_janouskova_2')), esc(tx('hra.pani_peterkova')),
 ];
-var HOVOR_MUZI = ['pan Novák', 'pan Svoboda', 'pan Dvořák', 'pan Černý', 'pan Procházka',
-  'pan Kučera', 'pan Veselý', 'pan Horák', 'pan Němec', 'pan Marek', 'pan Pospíšil',
-  'pan Pokorný', 'pan Hájek', 'pan Jelínek', 'pan Král', 'pan Růžička', 'pan Beneš',
-  'pan Fiala', 'pan Sedláček', 'pan Doležal', 'pan Zeman', 'pan Kolář', 'pan Navrátil',
-  'pan Čermák', 'pan Vaněk', 'pan Urban', 'pan Blažek', 'pan Kříž', 'pan Kovář',
-  'pan Bartoš', 'pan Vlček', 'pan Štěpánek', 'pan Polák', 'pan Konečný', 'pan Mašek',
-  'pan Musil', 'pan Šimek', 'pan Holub', 'pan Kratochvíl', 'pan Kadlec', 'pan Mach',
-  'pan Liška', 'pan Soukup', 'pan Bláha', 'pan Matoušek', 'pan Bureš', 'pan Kopecký',
-  'pan Malý', 'pan Dostál', 'pan Šťastný', 'pan Tichý', 'pan Richter', 'pan Hruška',
-  'pan Beránek', 'pan Vávra',
-  'pan Nguyen', 'pan Horváth', 'pan Balogh', 'pan Kowalski', 'pan Šebesta',
-  'pan Strnad', 'pan Vondráček', 'pan Zídek', 'pan Melichar', 'pan Pech',
-  'pan Šulc', 'pan Rybář', 'pan Kohout', 'pan Čapek', 'pan Matějka',
-  'pan Vrba', 'pan Janoušek', 'pan Dudek', 'pan Hrabal', 'pan Pánek',
-  'pan Slavík', 'pan Vítek', 'pan Brož', 'pan Macháček', 'pan Jirásek',
-  'pan Bednář', 'pan Havlíček', 'pan Trávníček', 'pan Suchánek', 'pan Kasal',
+var HOVOR_MUZI = [esc(tx('hra.pan_novak')), 'pan Svoboda', esc(tx('hra.pan_dvorak')), esc(tx('hra.pan_cerny')), esc(tx('hra.pan_prochazka')),
+  esc(tx('hra.pan_kucera')), esc(tx('hra.pan_vesely')), esc(tx('hra.pan_horak')), esc(tx('hra.pan_nemec')), 'pan Marek', esc(tx('hra.pan_pospisil')),
+  esc(tx('hra.pan_pokorny')), esc(tx('hra.pan_hajek')), esc(tx('hra.pan_jelinek')), esc(tx('hra.pan_kral')), esc(tx('hra.pan_ruzicka')), esc(tx('hra.pan_benes')),
+  'pan Fiala', esc(tx('hra.pan_sedlacek')), esc(tx('hra.pan_dolezal')), 'pan Zeman', esc(tx('hra.pan_kolar')), esc(tx('hra.pan_navratil')),
+  esc(tx('hra.pan_cermak')), esc(tx('hra.pan_vanek')), 'pan Urban', esc(tx('hra.pan_blazek')), esc(tx('hra.pan_kriz')), esc(tx('hra.pan_kovar')),
+  esc(tx('hra.pan_bartos')), esc(tx('hra.pan_vlcek')), esc(tx('hra.pan_stepanek')), esc(tx('hra.pan_polak')), esc(tx('hra.pan_konecny')), esc(tx('hra.pan_masek')),
+  'pan Musil', esc(tx('hra.pan_simek')), 'pan Holub', esc(tx('hra.pan_kratochvil')), 'pan Kadlec', 'pan Mach',
+  esc(tx('hra.pan_liska')), 'pan Soukup', esc(tx('hra.pan_blaha')), esc(tx('hra.pan_matousek')), esc(tx('hra.pan_bures')), esc(tx('hra.pan_kopecky')),
+  esc(tx('hra.pan_maly')), esc(tx('hra.pan_dostal')), esc(tx('hra.pan_stastny')), esc(tx('hra.pan_tichy')), 'pan Richter', esc(tx('hra.pan_hruska')),
+  esc(tx('hra.pan_beranek')), esc(tx('hra.pan_vavra')),
+  'pan Nguyen', esc(tx('hra.pan_horvath')), 'pan Balogh', 'pan Kowalski', esc(tx('hra.pan_sebesta')),
+  'pan Strnad', esc(tx('hra.pan_vondracek')), esc(tx('hra.pan_zidek')), 'pan Melichar', 'pan Pech',
+  esc(tx('hra.pan_sulc')), esc(tx('hra.pan_rybar')), 'pan Kohout', esc(tx('hra.pan_capek')), esc(tx('hra.pan_matejka')),
+  'pan Vrba', esc(tx('hra.pan_janousek')), 'pan Dudek', 'pan Hrabal', esc(tx('hra.pan_panek')),
+  esc(tx('hra.pan_slavik')), esc(tx('hra.pan_vitek')), esc(tx('hra.pan_broz')), esc(tx('hra.pan_machacek')), esc(tx('hra.pan_jirasek')),
+  esc(tx('hra.pan_bednar')), esc(tx('hra.pan_havlicek')), esc(tx('hra.pan_travnicek')), esc(tx('hra.pan_suchanek')), 'pan Kasal',
   'pan Kalousek', 'pan Prokop', 'pan Hejduk', 'pan Rys', 'pan Fencl',
-  'pan Linhart', 'pan Krejza', 'pan Michalec', 'pan Potůček', 'pan Boháč',
-  'doktor Nedvěd', 'pan řidič Pilař', 'pan Bezděk', 'pan Hofman', 'pan Rezek',
-  'pan Štědrý', 'pan Chalupa', 'pan Křeček', 'pan Vlasák', 'pan Žáček',
-  'pan Rychtařík', 'pan Bašta', 'pan Hofman', 'pan Šimáček',
-  'pan Trnka', 'pan Vopěnka', 'pan Kadlec', 'pan Myška',
-  'pan Bernard', 'pan Kopal', 'pan Zeman', 'pan Stuchlík',
-  'pan Vrba', 'pan Hanzlík', 'pan Michalík', 'pan Dostál',
-  'pan Lacina', 'pan Kafka', 'pan Burda', 'pan Nedvěd',
-  'pan Halámek', 'pan Šesták', 'pan Pazdera', 'pan Kolman',
-  'pan Šubrt', 'pan Vacek', 'pan Hruška', 'pan Doležel',
-  'pan Vaněk', 'pan Čapek', 'pan Bartoš', 'pan Královec',
-  'pan Řezníček', 'pan Vlasák', 'pan Skalický', 'pan Hrabal',
-  'pan Mlynář', 'pan Konvalinka', 'pan Pech', 'pan Bauer',
-  'pan Sládek', 'pan Mareš', 'pan Tichý', 'pan Kratochvíl',
-  'pan Fiala', 'pan Vondráček', 'pan Hubáček', 'pan Zelinka',
-  'pan Janoušek', 'pan Peterka',
+  'pan Linhart', 'pan Krejza', 'pan Michalec', esc(tx('hra.pan_potucek')), esc(tx('hra.pan_bohac')),
+  esc(tx('hra.doktor_nedved')), esc(tx('hra.pan_ridic_pilar')), esc(tx('hra.pan_bezdek')), 'pan Hofman', 'pan Rezek',
+  esc(tx('hra.pan_stedry')), 'pan Chalupa', esc(tx('hra.pan_krecek')), esc(tx('hra.pan_vlasak')), esc(tx('hra.pan_zacek')),
+  esc(tx('hra.pan_rychtarik')), esc(tx('hra.pan_basta')), 'pan Hofman', esc(tx('hra.pan_simacek')),
+  'pan Trnka', esc(tx('hra.pan_vopenka')), 'pan Kadlec', esc(tx('hra.pan_myska')),
+  'pan Bernard', 'pan Kopal', 'pan Zeman', esc(tx('hra.pan_stuchlik')),
+  'pan Vrba', esc(tx('hra.pan_hanzlik')), esc(tx('hra.pan_michalik')), esc(tx('hra.pan_dostal_2')),
+  'pan Lacina', 'pan Kafka', 'pan Burda', esc(tx('hra.pan_nedved')),
+  esc(tx('hra.pan_halamek')), esc(tx('hra.pan_sestak')), 'pan Pazdera', 'pan Kolman',
+  esc(tx('hra.pan_subrt')), 'pan Vacek', esc(tx('hra.pan_hruska_2')), esc(tx('hra.pan_dolezel')),
+  esc(tx('hra.pan_vanek_2')), esc(tx('hra.pan_capek_2')), esc(tx('hra.pan_bartos_2')), esc(tx('hra.pan_kralovec')),
+  esc(tx('hra.pan_reznicek')), esc(tx('hra.pan_vlasak_2')), esc(tx('hra.pan_skalicky')), 'pan Hrabal',
+  esc(tx('hra.pan_mlynar')), 'pan Konvalinka', 'pan Pech', 'pan Bauer',
+  esc(tx('hra.pan_sladek')), esc(tx('hra.pan_mares')), esc(tx('hra.pan_tichy_2')), esc(tx('hra.pan_kratochvil_2')),
+  'pan Fiala', esc(tx('hra.pan_vondracek_2')), esc(tx('hra.pan_hubacek')), 'pan Zelinka',
+  esc(tx('hra.pan_janousek_2')), 'pan Peterka',
 ];
 // Scénáře infolinky nejsou v kódu, ale v services/game/texty/linka.<jazyk>.json
 // a stahují se podle jazyka hráče. Je to souvislá próza — padesát rozhovorů,
@@ -2552,12 +2552,12 @@ function tvarHash(txt) {
   return h;
 }
 function naladaSlovy(n) {
-  if (n <= 15) return 'zuří';
-  if (n <= 32) return 'naštvaný';
-  if (n <= 48) return 'podrážděný';
-  if (n <= 62) return 'nejistý';
-  if (n <= 80) return 'uklidněný';
-  return 'spokojený';
+  if (n <= 15) return esc(tx('hra.zuri'));
+  if (n <= 32) return esc(tx('hra.nastvany'));
+  if (n <= 48) return esc(tx('hra.podrazdeny'));
+  if (n <= 62) return esc(tx('hra.nejisty'));
+  if (n <= 80) return esc(tx('hra.uklidneny'));
+  return esc(tx('hra.spokojeny'));
 }
 function naladaBarva(n) {
   if (n <= 32) return '#ff5d6c';
@@ -2620,11 +2620,11 @@ function hvezdyText(h) {
 }
 function povestSlovy() {
   var p = povest();
-  if (p >= 60) return 'výborná';
-  if (p >= 20) return 'dobrá';
-  if (p > -20) return 'průměrná';
-  if (p > -60) return 'špatná';
-  return 'mizerná';
+  if (p >= 60) return esc(tx('hra.vyborna'));
+  if (p >= 20) return esc(tx('hra.dobra'));
+  if (p > -20) return esc(tx('hra.prumerna'));
+  if (p > -60) return esc(tx('hra.spatna'));
+  return esc(tx('hra.mizerna'));
 }
 function zmenPovest(o) {
   S.povest = Math.max(-100, Math.min(100, povest() + o));
@@ -2767,25 +2767,25 @@ function linkaOffline(dt) {
     if (ztrata) { S.offPovest.body += ztrata; zmenPovest(-ztrata); }
   }
   if (vzal) {
-    zapisHovor('Operátor infolinky', [{ t: 'Vyřídil ' + vzal + ' '
-      + mn(vzal, 'hovor', 'hovory', 'hovorů') + ', když jsi byl pryč.' }], 'operator', 0);
+    zapisHovor(esc(tx('hra.operator_infolinky')), [{ t: 'Vyřídil ' + vzal + ' '
+      + mn(vzal, 'hovor', 'hovory', esc(tx('hra.hovoru'))) + ', když jsi byl pryč.' }], 'operator', 0);
   }
   if (zmeskano) {
-    zapisHovor('Nevzaté hovory', [{ t: zmeskano + ' '
-      + mn(zmeskano, 'hovor', 'hovory', 'hovorů') + ' nikdo nevzal, když jsi byl pryč.' }],
+    zapisHovor(esc(tx('hra.nevzate_hovory')), [{ t: zmeskano + ' '
+      + mn(zmeskano, 'hovor', 'hovory', esc(tx('hra.hovoru_2'))) + ' nikdo nevzal, když jsi byl pryč.' }],
       'nevzat', -ztrata);
   }
   // Řekneme to až po vykreslení, ať hlášku nepřebije načítání hry.
   setTimeout(function () {
     if (vzal && zmeskano) {
-      toast('Operátor za tebe vyřídil ' + vzal + ' ' + mn(vzal, 'hovor', 'hovory', 'hovorů')
+      toast('Operátor za tebe vyřídil ' + vzal + ' ' + mn(vzal, 'hovor', 'hovory', esc(tx('hra.hovoru_3')))
         + ', na ' + zmeskano + ' už kredit nebyl'
         + (ztrata ? ' — pověst klesla o ' + ztrata + '.' : '.'), 'warn', true);
     } else if (vzal) {
-      toast('Operátor za tebe vyřídil ' + vzal + ' ' + mn(vzal, 'hovor', 'hovory', 'hovorů')
+      toast('Operátor za tebe vyřídil ' + vzal + ' ' + mn(vzal, 'hovor', 'hovory', esc(tx('hra.hovoru_4')))
         + ', než ses vrátil. Infolinka ti běží ' + etaText(linkaZbyva()) + '.', 'ok', true);
     } else {
-      toast(zmeskano + ' ' + mn(zmeskano, 'hovor', 'hovory', 'hovorů')
+      toast(zmeskano + ' ' + mn(zmeskano, 'hovor', 'hovory', esc(tx('hra.hovoru_5')))
         + ' nikdo nevzal, když jsi byl pryč.'
         + (ztrata ? ' Pověst klesla o ' + ztrata + '.' : ''), ztrata ? 'err' : 'warn', true);
     }
@@ -2843,22 +2843,22 @@ function odmitniHovor(samo) {
   zavriHovor();
   save(); paint(); syncState(true);
   if (operator) {
-    toast('Hovor vzal operátor infolinky za tebe.', 'ok', true);
+    toast(esc(tx('hra.hovor_vzal_operator_infolinky_za')), 'ok', true);
   } else {
-    toast(samo ? 'Zákazník se nedočkal a položil to. Pověst klesla.'
-               : 'Hovor jsi nevzal. Pověst klesla.', 'err');
+    toast(samo ? esc(tx('hra.zakaznik_se_nedockal_a_polozil'))
+               : esc(tx('hra.hovor_jsi_nevzal_povest_klesla')), 'err');
     // Zrovna ho to stálo hvězdičky — tady má nabídka smysl nejvíc.
     if (linkaNabidnoutLze()) {
       var c = (LINKA_CAT || [])[0];
       S.linkaNabidka = Date.now(); save();
-      sheet('<h3>\u260E\uFE0F Ať to za tebe zvedne operátor</h3>'
+      sheet('<h3>' + esc(tx('hra.u260e_ufe0f_at_to_za')) + '</h3>'
         + '<p class="muted small">Tenhle hovor ti vzal kus pověsti. Operátor infolinky zvedne '
         + 'každý hovor, který nestihneš — a pověst zůstane, kde byla.</p>'
-        + '<div class="kv"><span>Nevyčerpané hovory</span><b>0</b></div>'
+        + '<div class="kv"><span>' + esc(tx('hra.nevycerpane_hovory')) + '</span><b>' + '0' + '</b></div>'
         + '<button class="btn big" data-linka="' + esc(c.kind) + '">' + esc(c.name) + ' za '
         + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button>'
-        + '<button class="btn sec" id="linka-ne" style="width:100%;margin-top:8px">Teď ne</button>'
-        + '<p class="fine">Větší balíčky vyjdou levněji — najdeš je v Kartách.</p>');
+        + '<button class="btn sec" id="linka-ne" style="width:100%;margin-top:8px">' + esc(tx('hra.ted_ne_2')) + '</button>'
+        + '<p class="fine">' + esc(tx('hra.vetsi_balicky_vyjdou_levneji_najdes')) + '</p>');
       var bl = document.querySelector('#sheet-body [data-linka]');
       if (bl) bl.onclick = function () { buyCash(bl.getAttribute('data-linka')); };
       if ($('linka-ne')) $('linka-ne').onclick = closeSheet;
@@ -2950,18 +2950,18 @@ function paintHovor() {
       + '<p class="hov-popis">Infolinka</p>'
       + '<h3>' + esc(h.jmeno) + '</h3>'
       + naladaHtml(h)
-      + '<p class="hov-stav">volá … položí to za <b id="hov-odpocet">' + zbyva + '</b> s</p>'
+      + '<p class="hov-stav">' + esc(tx('hra.vola_polozi_to_za')) + ' ' + '<b id="hov-odpocet">' + zbyva + '</b> s</p>'
       + '<div class="hov-tlacitka">'
       + hovorBtn('hov-ne', 'hov-kolo ne', '✕')
       + hovorBtn('hov-ano', 'hov-kolo ano', '✓')
       + '</div>'
-      + '<p class="fine">Kdo hovory nebere, přichází o návštěvnost.</p></div>';
+      + '<p class="fine">' + esc(tx('hra.kdo_hovory_nebere_prichazi_o')) + '</p></div>';
   } else if (h.stav === 'hovor') {
     html = '<div class="hov-in hov-chat">'
       + '<div class="hov-hlava">' + tvarSvg(h.jmeno, h.rod, h.nalada, 54)
       + '<div><p class="hov-popis">' + esc(h.jmeno) + ' · infolinka</p>' + naladaHtml(h) + '</div></div>'
       + hovorPrepis(h)
-      + (h.ceka ? '' : '<div class="hov-vyber"><p class="hov-popis">Co odpovíte?</p>'
+      + (h.ceka ? '' : '<div class="hov-vyber"><p class="hov-popis">' + esc(tx('hra.co_odpovite')) + '</p>'
           + '<div class="hov-odp">'
           + h.poradi[h.i].map(function (ix, i) {
               return '<button data-odp="' + i + '">' + esc(h.kroky[h.i].o[ix].t) + '</button>';
@@ -2972,11 +2972,11 @@ function paintHovor() {
     var b = h.body;
     var zm = Math.round((h.vaha || 0) * 10) / 10;   // co to doopravdy udělalo s pověstí
     var tr2 = zm > 0 ? 'ok' : (zm < 0 ? 'err' : 'muted');
-    var soud = b >= 6 ? 'Zákazník zavěsil nadšený a řekne to dál.'
-      : b >= 2 ? 'Zákazník byl spokojený.'
-      : b > -2 ? 'Zákazník zavěsil, ale nijak nadšený nebyl.'
-      : b > -6 ? 'Zákazník odchází nespokojený.'
-      : 'Zákazník prásknul telefonem. Tohle se roznese.';
+    var soud = b >= 6 ? esc(tx('hra.zakaznik_zavesil_nadseny_a_rekne'))
+      : b >= 2 ? esc(tx('hra.zakaznik_byl_spokojeny'))
+      : b > -2 ? esc(tx('hra.zakaznik_zavesil_ale_nijak_nadseny'))
+      : b > -6 ? esc(tx('hra.zakaznik_odchazi_nespokojeny'))
+      : esc(tx('hra.zakaznik_prasknul_telefonem_tohle_se'));
     // Co hovor udělal, ukážeme v tom, čemu hráč rozumí: v hvězdičkách a
     // v návštěvnosti. Body pověsti se objeví jen jednou a rovnou se stupnicí,
     // ať je jasné, že jedna odpověď s tím pohne o kousek, ne o polovinu.
@@ -2984,21 +2984,21 @@ function paintHovor() {
     var navs = Math.round((povestKoef() - 1) * 1000) / 10;
     html = '<div class="hov-in hov-chat hov-konec">'
       + '<div class="hov-hlava">' + tvarSvg(h.jmeno, h.rod, h.nalada, 54)
-      + '<div><p class="hov-popis">Hovor skončil</p>' + naladaHtml(h) + '</div></div>'
+      + '<div><p class="hov-popis">' + esc(tx('hra.hovor_skoncil')) + '</p>' + naladaHtml(h) + '</div></div>'
       + hovorPrepis(h)
       + '<p class="hov-stav ' + tr2 + '">' + soud + '</p>'
-      + '<div class="kv"><span>Hodnocení zákazníků</span><b>' + hvezdyText()
+      + '<div class="kv"><span>' + esc(tx('hra.hodnoceni_zakazniku')) + '</span><b>' + hvezdyText()
       + (dh ? ' <span class="' + tr2 + '">(' + (dh > 0 ? '+' : '−')
           + Math.abs(dh).toFixed(1).replace('.', ',') + ')</span>' : '') + '</b></div>'
-      + '<div class="kv"><span>Pověst</span><b>' + povestSlovy()
+      + '<div class="kv"><span>' + esc(tx('hra.povest')) + '</span><b>' + povestSlovy()
       + ' <span class="' + tr2 + '">(' + (zm > 0 ? '+' : (zm < 0 ? '−' : ''))
       + String(Math.abs(zm)).replace('.', ',') + ')</span></b></div>'
-      + '<div class="kv"><span>Návštěvnost</span><b class="' + (povest() >= 0 ? 'ok' : 'err') + '">'
+      + '<div class="kv"><span>' + esc(tx('hra.navstevnost_2')) + '</span><b class="' + (povest() >= 0 ? 'ok' : 'err') + '">'
       + (navs >= 0 ? '+' : '−') + Math.abs(navs).toFixed(1).replace('.', ',') + ' %</b></div>'
       + '<p class="fine">Pověst jde od −100 do +100. Každý hovor s ní pohne o pár bodů '
       + 'a podle ní se počítá hodnocení zákazníků i návštěvnost prádlomatů.</p>'
       + (linkaNabidnoutLze() ? linkaNabidkaHtml() : '')
-      + '<button class="btn big" id="hov-konec" style="width:100%;margin-top:10px">Zavěsit</button></div>';
+      + '<button class="btn big" id="hov-konec" style="width:100%;margin-top:10px">' + esc(tx('hra.zavesit')) + '</button></div>';
   }
   el.innerHTML = html;
   el.classList.remove('hidden');
@@ -3021,9 +3021,9 @@ function paintHovor() {
 // odpovědi se překreslí, takže hráč vidí, do koho se svými volbami proměňuje.
 var SKIN = '#e8b58e', SKIN2 = '#d19a73';
 var AVA = [
-  { accent: '#4fd1ff', suit: '#24466b', hair: '#3a4256', name: 'opatrný' },
-  { accent: '#7c5cff', suit: '#39306b', hair: '#2f3242', name: 'vyvážený' },
-  { accent: '#ff8a3d', suit: '#5a2f1c', hair: '#241f22', name: 'dravý' }
+  { accent: '#4fd1ff', suit: '#24466b', hair: '#3a4256', name: esc(tx('hra.opatrny')) },
+  { accent: '#7c5cff', suit: '#39306b', hair: '#2f3242', name: esc(tx('hra.vyvazeny')) },
+  { accent: '#ff8a3d', suit: '#5a2f1c', hair: '#241f22', name: esc(tx('hra.dravy')) }
 ];
 function avatarSvg(lvl) {
   lvl = Math.max(0, Math.min(2, lvl | 0));
@@ -3119,18 +3119,18 @@ function startBonusOdpocet() {
     // Posledních deset vteřin odpočet tepe — je to jediná věc, co opravdu mizí.
     cas.classList.toggle('pulz', zbyva > 0 && zbyva <= 10000);
     if (pod && zbyva > 0) pod.textContent = 'Je tvůj, když začneš do ' + s + ' '
-      + mn(s, 'vteřiny', 'vteřin', 'vteřin');
+      + mn(s, esc(tx('hra.vteriny')), esc(tx('hra.vterin')), esc(tx('hra.vterin_2')));
     if (zbyva > 0) return;
     clearInterval(t);
-    cas.textContent = 'vypršel';
+    cas.textContent = esc(tx('hra.vyprsel'));
     cas.classList.remove('pulz');
     cas.classList.add('pryc');
     pruh.classList.add('pryc');
     if (box) box.classList.add('pryc');
-    if (hl) hl.textContent = 'Bonus za rychlý start propadl';
-    if (pod) pod.textContent = 'Všechno ostatní dostaneš pořád.';
+    if (hl) hl.textContent = esc(tx('hra.bonus_za_rychly_start_propadl'));
+    if (pod) pod.textContent = esc(tx('hra.vsechno_ostatni_dostanes_porad'));
     if (suma) suma.textContent = zakladni.toLocaleString('cs-CZ');
-    if (hrat) hrat.textContent = hratText || 'Hrát — bez registrace';
+    if (hrat) hrat.textContent = hratText || esc(tx('hra.hrat_bez_registrace'));
   };
   var t = setInterval(tik, 250);
   tik();
@@ -3153,7 +3153,7 @@ function spustNovouHru() {
   save();
   startGame();
   if (bonus) {
-    zapis('bonus', 'Bonus za rychlý start', START_BONUS);
+    zapis('bonus', esc(tx('hra.bonus_za_rychly_start')), START_BONUS);
     save(); paint();
     toast('Stihl jsi to! Bonus za rychlý start +' + kcFull(START_BONUS) + '.', 'ok');
   }
@@ -3163,16 +3163,16 @@ $('go-quiz').onclick = function () {
   var b = $('go-quiz');
   var nick = ($('in-nick') ? $('in-nick').value : '').trim();
   var firma = ($('in-firma') ? $('in-firma').value : '').trim();
-  if (nick.length < 3) return introErr('Vymysli si jméno, aspoň tři znaky. Pod ním budeš hrát.');
-  if (nick.length > 24) return introErr('Jméno je moc dlouhé — nejvýš 24 znaků.');
-  if (/[\s@]/.test(nick)) return introErr('Ve jménu nesmí být mezery ani zavináč.');
-  if (firma.length === 1) return introErr('Název společnosti má aspoň dva znaky — nebo ho nech prázdný.');
+  if (nick.length < 3) return introErr(esc(tx('hra.vymysli_si_jmeno_aspon_tri')));
+  if (nick.length > 24) return introErr(esc(tx('hra.jmeno_je_moc_dlouhe_nejvys')));
+  if (/[\s@]/.test(nick)) return introErr(esc(tx('hra.ve_jmenu_nesmi_byt_mezery')));
+  if (firma.length === 1) return introErr(esc(tx('hra.nazev_spolecnosti_ma_aspon_dva')));
   if ($('in-err')) $('in-err').classList.add('hidden');
   if (startBonusPlati()) BONUS_ZAMCEN = true;
-  b.disabled = true; b.textContent = 'Zakládám firmu…';
+  b.disabled = true; b.textContent = esc(tx('hra.zakladam_firmu'));
   apiJson('/account/zacni', { nick: nick, company: firma, ref: trvalePid(),
     odkud: prichoziRef(), zdroj: zjistiZdroj(), sid: visitId() }).then(function (r) {
-    b.disabled = false; b.textContent = 'Začít hrát';
+    b.disabled = false; b.textContent = esc(tx('hra.zacit_hrat'));
     if (!r.ok) {
       // Obsazené jméno nebo překlep řešíme na místě — hra ještě nezačala.
       if (r.status === 409 || r.status === 400 || r.status === 429) {
@@ -3192,7 +3192,7 @@ $('go-quiz').onclick = function () {
     spustNovouHru();
   }).catch(function () {
     // Server mlčí. Hrát se dá i bez účtu, jméno si vyžádáme, až bude odpovídat.
-    b.disabled = false; b.textContent = 'Začít hrát';
+    b.disabled = false; b.textContent = esc(tx('hra.zacit_hrat_2'));
     spustNovouHru();
   });
 };
@@ -3246,10 +3246,10 @@ function showRole(id) {
   var popisek = $('role-cash').parentNode.firstChild;
   if (DOTAZNIK_PO) {
     var stary0 = PROFILES[S && S.profile] || PROFILES.vyvazeny;
-    if (popisek) popisek.textContent = 'Hotovost navíc';
+    if (popisek) popisek.textContent = esc(tx('hra.hotovost_navic'));
     $('role-cash').textContent = kcFull(Math.max(0, p.cash - stary0.cash));
   } else {
-    if (popisek) popisek.textContent = 'Startovní hotovost';
+    if (popisek) popisek.textContent = esc(tx('hra.startovni_hotovost'));
     $('role-cash').textContent = kcFull(p.cash);
   }
   $('role-ltv').textContent = Math.round(p.ltv * 100) + ' % z ceny';
@@ -3534,7 +3534,7 @@ function initMap() {
   // — jen místo mapy ukážeme hlášku a všechno ostatní se ovládá ze seznamu oblastí.
   if (typeof L === 'undefined') {
     var h = $('map-hint');
-    h.textContent = 'Mapu se nepodařilo načíst. Zkontroluj připojení a načti hru znovu — hrát jde i bez ní přes tlačítko dole.';
+    h.textContent = esc(tx('hra.mapu_se_nepodarilo_nacist_zkontroluj'));
     h.classList.remove('hidden');
     return;
   }
@@ -3564,7 +3564,7 @@ function addAttribution() {
     onAdd: function () {
       var el = L.DomUtil.create('div', 'attr-mini');
       el.innerHTML = '<button type="button" aria-label="Zdroj mapových podkladů">i</button>'
-        + '<span>Mapové podklady &copy; Esri · Leaflet</span>';
+        + '<span>' + esc(tx('hra.mapove_podklady_copy_esri_leaflet')) + '</span>';
       L.DomEvent.disableClickPropagation(el);
       el.querySelector('button').onclick = function () { el.classList.toggle('open'); };
       return el;
@@ -3606,18 +3606,18 @@ function domIcon(velke, nazev) {
   return L.divIcon({ className: '', iconSize: [r, r], iconAnchor: [r / 2, r / 2],
     html: '<div class="pin dum' + (velke ? '' : ' mala') + '">'
       + '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.5 11h2.2v9h5.1v-5.6h4.4V20h5.1v-9h2.2z"/></svg>'
-      + '<i class="pin-tag">' + esc(nazev || (velke ? 'Sídlo' : 'Pobočka')) + '</i></div>' });
+      + '<i class="pin-tag">' + esc(nazev || (velke ? esc(tx('hra.sidlo_4')) : esc(tx('hra.pobocka_4')))) + '</i></div>' });
 }
 // Co se dá se základnou dělat — zatím jen přehled, pobočku jde prodat na Burze.
 function zakladnaSheet(z, jeSidlo) {
-  sheet('<h3>' + esc(z.name || (jeSidlo ? 'Sídlo firmy' : 'Pobočka')) + '</h3>'
+  sheet('<h3>' + esc(z.name || (jeSidlo ? esc(tx('hra.sidlo_firmy_2')) : esc(tx('hra.pobocka_3')))) + '</h3>'
     + '<p class="muted small">' + (jeSidlo
-        ? 'Odsud vyjíždí doprava strojů i stavební četa. Sídlo se nemění.'
-        : 'Provozovna — doprava se počítá od ní, když je blíž než sídlo.') + '</p>'
+        ? esc(tx('hra.odsud_vyjizdi_doprava_stroju_i'))
+        : esc(tx('hra.provozovna_doprava_se_pocita_od'))) + '</p>'
     + (jeSidlo ? '' : '<div class="kv"><span>Provoz</span><b class="warn">' + kcFull(POBOCKA_MESICNE) + ' / měsíc</b></div>')
-    + '<div class="kv"><span>Prádlomatů do 30 km</span><b>'
+    + '<div class="kv"><span>' + esc(tx('hra.pradlomatu_do_30_km')) + '</span><b>'
     + S.units.filter(function (u) { return u.lat != null && kmMezi(z, u) <= 30; }).length + '</b></div>'
-    + (jeSidlo ? '' : '<p class="fine">Prodat ji můžeš na Burze jako cokoli jiného.</p>'));
+    + (jeSidlo ? '' : '<p class="fine">' + esc(tx('hra.prodat_ji_muzes_na_burze')) + '</p>'));
 }
 // Koupený pozemek. Na mapě musí být na první pohled poznat, že zem je moje —
 // a jestli je plocha připravená, nebo je to pořád louka.
@@ -3735,7 +3735,7 @@ function paintServis() {
       ? '<i>⚠️</i><b>' + st.stoji.length + '</b>'
       : (tr === 'jede' ? '<i>🔧</i><b>' + (st.resi.length + st.vraci.length) + '</b>'
                        : '<i>🔧</i><b>' + st.jede + '/' + st.vse.length + '</b>');
-  el.title = 'Správa servisu';
+  el.title = esc(tx('hra.sprava_servisu_2'));
   el.onclick = servisSheet;
 }
 // Jedna řádka přehledu. Pořadí: co stojí bez technika, co se právě řeší, co jede.
@@ -3747,7 +3747,7 @@ function servisRadek(u) {
     tr = 'err';
     stav = k.hotovo ? k.t + ' — opravuje se, hotovo ' + etaText(Math.max(0, k.hotovo - ted))
       : k.t + ' — stojí, oprava za ' + kcFull(k.platim);
-    akce = k.hotovo ? '' : '<button class="btn sec maly" data-kat="' + esc(u.spotId) + '">Otevřít</button>';
+    akce = k.hotovo ? '' : '<button class="btn sec maly" data-kat="' + esc(u.spotId) + '">' + esc(tx('hra.otevrit')) + '</button>';
   } else if (jeVPoruse(u) && !t) {
     var v = vyjezdOdhad(u);
     tr = 'err';
@@ -3760,12 +3760,12 @@ function servisRadek(u) {
   } else if (t && jeVPoruse(u)) {
     tr = 'warn'; stav = u.porucha.text + ' — technik na místě, hotovo ' + etaText(t.hotovo - ted);
   } else if (t) {
-    tr = 'ok'; stav = 'Spraveno, technik jede zpátky';
+    tr = 'ok'; stav = esc(tx('hra.spraveno_technik_jede_zpatky'));
   } else if (jeVeVypovedi(u)) {
     tr = 'warn'; stav = 'Výpověď z místa — odvoz na sklad '
       + etaText(Math.max(0, u.vypoved.do - Date.now()));
   } else {
-    tr = 'ok'; stav = 'Jede — ' + kcFull(u.eco.profit) + ' / měsíc';
+    tr = 'ok'; stav = 'Jede — ' + kcFull(u.eco.profit) + ' ' + esc(tx('hra.mesic_2'));
   }
   return '<div class="srv-radek" data-srv="' + esc(u.spotId) + '">'
     + '<i class="srv-tecka ' + tr + '"></i>'
@@ -3776,14 +3776,14 @@ function servisSheet() {
   var st = servisStav();
   var poradi = st.stoji.concat(st.resi, st.vraci,
     st.vse.filter(function (u) { return !jeVPoruse(u) && !u.technik; }));
-  sheet('<h3>Správa servisu</h3>'
+  sheet('<h3>' + esc(tx('hra.sprava_servisu')) + '</h3>'
     + '<p class="muted small">Výjezdy máš zaplacené v servisním poplatku, takže technika '
     + 'můžeš poslat kam chceš a kolik jich chceš naráz. Dokud stroj stojí, nájem, '
     + 'servis i splátka běží dál — čekáním se nic neušetří.</p>'
     + '<div class="sum-grid" style="margin:12px 0">'
     + '<div><span>Jede</span><b class="ok">' + st.jede + ' z ' + st.vse.length + '</b></div>'
-    + '<div><span>Stojí</span><b class="' + (st.stoji.length ? 'err' : '') + '">' + st.stoji.length + '</b></div>'
-    + '<div><span>Techniků na cestě</span><b class="' + (st.resi.length + st.vraci.length ? 'warn' : '') + '">'
+    + '<div><span>' + esc(tx('hra.stoji_3')) + '</span><b class="' + (st.stoji.length ? 'err' : '') + '">' + st.stoji.length + '</b></div>'
+    + '<div><span>' + esc(tx('hra.techniku_na_ceste')) + '</span><b class="' + (st.resi.length + st.vraci.length ? 'warn' : '') + '">'
     + (st.resi.length + st.vraci.length) + '</b></div>'
     + '</div>'
     + (st.stoji.length > 1
@@ -3792,7 +3792,7 @@ function servisSheet() {
         : '')
     + (poradi.length
         ? '<div class="srv">' + poradi.map(servisRadek).join('') + '</div>'
-        : '<div class="empty">Zatím nemáš žádný prádlomat.</div>')
+        : '<div class="empty">' + esc(tx('hra.zatim_nemas_zadny_pradlomat')) + '</div>')
     + (zaMorem().length
         ? '<p class="fine warn" style="margin-top:12px">' + zaMoremSlovy(zaMorem().length)
           + ' za mořem — technik tam jede trajektem nebo letí. Pobočka v jejich okolí '
@@ -3955,7 +3955,7 @@ function drawMap() {
   // Nápověda pod mapou říká buď „začni průzkumem“, nebo „přibliž, místa jsou schovaná“.
   var h = $('map-hint');
   if (!any) {
-    h.textContent = 'Napiš město a pošli tam člověka, ať ho projde. Místa jsou schovaná — dokud město neprozkoumáš, nic na mapě neuvidíš.';
+    h.textContent = esc(tx('hra.napis_mesto_a_posli_tam_2'));
     h.classList.remove('hidden');
   // Nápověda o schovaných místech patří k prvnímu rozkoukání. Po herním měsíci
   // už hráč ví, jak se mapa chová, a lišta přes půl obrazovky by jen překážela.
@@ -4131,8 +4131,8 @@ function hledacHtml() {
     + '</div>';
 }
 function scout(city, btn) {
-  if (!city || city.length < 2) return toast('Napiš, do kterého města se má jet.', 'err');
-  if (S.cash < SCOUT_COST) return toast('Na cestu nemáš dost hotovosti.', 'err');
+  if (!city || city.length < 2) return toast(esc(tx('hra.napis_do_ktereho_mesta_se')), 'err');
+  if (S.cash < SCOUT_COST) return toast(esc(tx('hra.na_cestu_nemas_dost_hotovosti_2')), 'err');
   var started = Date.now(), stop = false, timer = null, netErr = 0;
   var note = $('city-note');
   var done = function () { stop = true; clearTimeout(timer); document.removeEventListener('visibilitychange', wake); };
@@ -4142,15 +4142,15 @@ function scout(city, btn) {
     if (note) note.textContent = '';
     toast(msg, 'err');
   };
-  btn.disabled = true; btn.textContent = 'Hledám…';
+  btn.disabled = true; btn.textContent = esc(tx('hra.hledam'));
   if (note) note.innerHTML = hledacHtml()
     + '<span class="hledac-stav" id="hledac-stav">Posílám tam člověka\u2026 '
-    + '<br>Projít nové město může trvat i minutu.</span>';
+    + '<br>' + esc(tx('hra.projit_nove_mesto_muze_trvat')) + '</span>';
 
   // Postup píšeme i do poznámky pod polem — tlačítko bývá na mapě překryté.
   var nabidnuto = false;
   var progress = function (s) {
-    btn.textContent = 'Hledám…';
+    btn.textContent = esc(tx('hra.hledam_2'));
     var hl = $('hledac-stav');
     if (hl) {
       // Hláška se mění po čtyřech vteřinách, ať je vidět, že se něco děje.
@@ -4166,7 +4166,7 @@ function scout(city, btn) {
       loadMesta(function () {
         var box = $('mesta-box');
         if (!box || stop) return;
-        box.innerHTML = mestaHtml('Nechceš čekat? Tahle města jsou hotová a otevřou se hned');
+        box.innerHTML = mestaHtml(esc(tx('hra.nechces_cekat_tahle_mesta_jsou')));
         bindMesta(function (mesto) { done(); btn.disabled = false; btn.textContent = 'Hledat'; scout(mesto, btn); });
       });
     }
@@ -4186,7 +4186,7 @@ function scout(city, btn) {
         if (j && j.pending) {
           var s = Math.round((Date.now() - started) / 1000);
           if (Date.now() - started > SCOUT_MAX_WAIT) {
-            return fail('Zabralo to moc času, ale hledání běží dál na serveru. Zkus za minutu to samé město znovu — naskočí hned.');
+            return fail(esc(tx('hra.zabralo_to_moc_casu_ale')));
           }
           progress(s);
           timer = setTimeout(poll, 2500);
@@ -4195,7 +4195,7 @@ function scout(city, btn) {
         done();
         btn.disabled = false; btn.textContent = 'Hledat';
         if (note) note.textContent = '';
-        if (!j.spots || !j.spots.length) return toast('Tam se nic vhodného nenašlo. Peníze ti zůstávají.', 'err');
+        if (!j.spots || !j.spots.length) return toast(esc(tx('hra.tam_se_nic_vhodneho_nenaslo')), 'err');
         var id = j.area.id;
         var known = S.areas[id] ? S.areas[id].spots.length : 0;
         // Už prozkoumané město neúčtujeme znovu — jen hráče hodíme na mapu.
@@ -4222,7 +4222,7 @@ function scout(city, btn) {
         if (stop) return;
         // Krátký výpadek sítě (tunel, přepnutí Wi-Fi) hledání nezabíjí — zkusíme to znovu.
         if (++netErr <= 5 && Date.now() - started < SCOUT_MAX_WAIT) { timer = setTimeout(poll, 3000); return; }
-        fail(e.message || 'Spojení se serverem vázne.');
+        fail(e.message || esc(tx('hra.spojeni_se_serverem_vazne')));
       });
   };
   poll();
@@ -4242,7 +4242,7 @@ function prvniMisto(areaId) {
   setTimeout(function () {
     if (map && nej.lat != null) map.setView([nej.lat, nej.lon], 16);
     spotSheet(nej, areaId);
-    toast('Nejlepší místo ve městě jsme ti obhlédli zdarma.', 'ok');
+    toast(esc(tx('hra.nejlepsi_misto_ve_meste_jsme')), 'ok');
   }, 400);
 }
 
@@ -4485,10 +4485,10 @@ function cislo1(x) { return String(Math.round((Number(x) || 0) * 10) / 10).repla
 // Jednou větou, jestli je stroj na tohle místo akorát, malý, nebo zbytečný.
 function kapacitaSlovy(e) {
   var p = Number(e.poptavka) || 0, k = Number(e.kapacita) || 0;
-  if (!p) return 'Na tomhle místě skoro nikdo nechodí.';
-  if (k >= p * 1.25) return 'Na tohle místo je zbytečně velký — obslouží tu stejně jako menší stroj, jen stál víc.';
-  if (k <= p * 0.7) return 'Místo uveze víc, než tenhle stroj pobere. Zbytek lidí odejde jinam.';
-  return 'Na tohle místo sedí: pobere skoro všechny, co sem chodí.';
+  if (!p) return esc(tx('hra.na_tomhle_miste_skoro_nikdo'));
+  if (k >= p * 1.25) return esc(tx('hra.na_tohle_misto_je_zbytecne'));
+  if (k <= p * 0.7) return esc(tx('hra.misto_uveze_vic_nez_tenhle'));
+  return esc(tx('hra.na_tohle_misto_sedi_pobere'));
 }
 // Karta modelu na konkrétním místě. Postavit jde jen to, co je skladem — jinak vede do obchodu.
 function modelCard(sp, e, pridej, bezTlacitka) {
@@ -4497,22 +4497,22 @@ function modelCard(sp, e, pridej, bezTlacitka) {
   if (bezTlacitka) btn = '';
   else if (n > 0) btn = '<button class="btn sm" style="width:100%;margin-top:10px" data-build="' + e.model + '">Postavit (' + n + '× skladem)</button>';
   else if (way > 0) btn = '<p class="fine warn" style="margin:10px 0 0">' + way + '× je na cestě — až dorazí, postavíš ho tady.</p>';
-  else btn = '<button class="btn sec sm" style="width:100%;margin-top:10px" data-doobchodu="' + e.model + '">Není skladem — do obchodu</button>';
+  else btn = '<button class="btn sec sm" style="width:100%;margin-top:10px" data-doobchodu="' + e.model + '">' + esc(tx('hra.neni_skladem_do_obchodu')) + '</button>';
   return '<div class="card"><div class="row"><h3>' + m.name + '</h3><b>' + kc(e.invest) + ' ' + CUR + '</b></div>'
     + '<p class="muted small" style="margin:2px 0 8px">' + esc(m.desc) + '</p>'
-    + '<div class="kv"><span>Místo nabídne</span><b>' + cislo1(e.poptavka) + ' lidí / den</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.misto_nabidne')) + '</span><b>' + cislo1(e.poptavka) + ' lidí / den</b></div>'
     + '<div class="kv"><span>Tenhle stroj pobere</span><b class="' + (e.kapacita < e.poptavka ? 'warn' : 'ok') + '">'
       + cislo1(Math.min(e.kapacita, e.poptavka)) + ' z toho</b></div>'
     + '<p class="fine">' + kapacitaSlovy(e) + '</p>'
     + '<div class="kv"><span>Skutečně ti jich přijde (návštěvnost ' + Math.round(traffic() * 100) + ' %)</span><b>'
       + String(e.perday).replace('.', ',') + ' / den</b></div>'
-    + '<div class="kv"><span>Obrat / měsíc</span><b>' + kcFull(e.revenue) + '</b></div>'
-    + '<div class="kv"><span>Nájem / měsíc</span><b>' + kcFull(e.rent) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.obrat_mesic_2')) + '</span><b>' + kcFull(e.revenue) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.najem_mesic_2')) + '</span><b>' + kcFull(e.rent) + '</b></div>'
     + '<div class="kv"><span>Energie / měsíc (' + pct(ENERGY_SHARE) + ' obratu)</span><b>' + kcFull(e.energy) + '</b></div>'
     + '<div class="kv"><span>Servis a úklid / měsíc (' + pct(SERVIS_SHARE) + ' obratu)</span><b>' + kcFull(e.servis) + '</b></div>'
-    + '<div class="kv"><span>Zisk / měsíc</span><b class="' + (e.profit > 0 ? 'ok' : 'err') + '">' + kcFull(e.profit) + '</b></div>'
-    + '<div class="kv"><span>Přípojky (jednorázově)</span><b>' + kcFull(e.conn) + '</b></div>'
-    + '<div class="kv"><span>Návratnost</span><b>' + (e.payback ? e.payback.toFixed(1).replace('.', ',') + ' roku' : 'nikdy') + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.zisk_mesic_4')) + '</span><b class="' + (e.profit > 0 ? 'ok' : 'err') + '">' + kcFull(e.profit) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.pripojky_jednorazove')) + '</span><b>' + kcFull(e.conn) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.navratnost')) + '</span><b>' + (e.payback ? e.payback.toFixed(1).replace('.', ',') + ' roku' : 'nikdy') + '</b></div>'
     + btn + (pridej || '') + '</div>';
 }
 
@@ -4525,12 +4525,12 @@ function investedTotal() { return S.units.reduce(function (a, u) { return a + u.
 // /account/me. Kdyby se obě kopie rozešly, hráč by v liště viděl jiný titul,
 // než jaký u něj vidí ostatní v žebříčku a na burze.
 var HODNOSTI_HRA = [
-  { id: 'pradlak', nazev: 'Pradlák', od: 0, odmena: null },
-  { id: 'zivnostnik', nazev: 'Živnostník', od: 3e6, odmena: { cash: 150000 } },
+  { id: 'pradlak', nazev: esc(tx('hra.pradlak')), od: 0, odmena: null },
+  { id: 'zivnostnik', nazev: esc(tx('hra.zivnostnik')), od: 3e6, odmena: { cash: 150000 } },
   { id: 'provozovatel', nazev: 'Provozovatel', od: 10e6, odmena: { karta: 'credit' } },
-  { id: 'sitar', nazev: 'Majitel sítě', od: 30e6, odmena: { cash: 1e6 } },
-  { id: 'magnat', nazev: 'Magnát', od: 80e6, odmena: { karta: 'traffic' } },
-  { id: 'baron', nazev: 'Baron prádla', od: 200e6, odmena: { cash: 5e6 } },
+  { id: 'sitar', nazev: esc(tx('hra.majitel_site')), od: 30e6, odmena: { cash: 1e6 } },
+  { id: 'magnat', nazev: esc(tx('hra.magnat')), od: 80e6, odmena: { karta: 'traffic' } },
+  { id: 'baron', nazev: esc(tx('hra.baron_pradla')), od: 200e6, odmena: { cash: 5e6 } },
   { id: 'legenda', nazev: 'Legenda', od: 500e6, odmena: { karta: 'credit' } }
 ];
 function hodnostHra(jmeni) {
@@ -4572,11 +4572,11 @@ function hlidejHodnost() {
   sheet('<h3>\u{1F3C5} Povýšení: ' + esc(h.nazev) + '</h3>'
     + '<p class="muted small">Tvoje čisté jmění přesáhlo ' + kcFull(h.od)
     + '. Novou hodnost vidí i ostatní v žebříčku a na burze.</p>'
-    + (o ? '<div class="kv souhrn"><span>Odměna</span><b class="ok">' + esc(odmenaSlovy(o)) + '</b></div>'
-         + '<p class="fine">Hotovost i karty připíše server — objeví se během chvilky.</p>' : '')
-    + (h.dalsi ? '<div class="kv"><span>Další meta</span><b>' + esc(h.dalsi) + ' od '
-        + kcFull(h.dalsi_od) + '</b></div>' : '<p class="fine">Víc stupňů už není. Gratuluju.</p>')
-    + '<button class="btn big" id="hod-ok" style="width:100%;margin-top:10px">Díky</button>');
+    + (o ? '<div class="kv souhrn"><span>' + esc(tx('hra.odmena')) + '</span><b class="ok">' + esc(odmenaSlovy(o)) + '</b></div>'
+         + '<p class="fine">' + esc(tx('hra.hotovost_i_karty_pripise_server')) + '</p>' : '')
+    + (h.dalsi ? '<div class="kv"><span>' + esc(tx('hra.dalsi_meta')) + '</span><b>' + esc(h.dalsi) + ' od '
+        + kcFull(h.dalsi_od) + '</b></div>' : '<p class="fine">' + esc(tx('hra.vic_stupnu_uz_neni_gratuluju')) + '</p>')
+    + '<button class="btn big" id="hod-ok" style="width:100%;margin-top:10px">' + esc(tx('hra.diky')) + '</button>');
   if ($('hod-ok')) $('hod-ok').onclick = closeSheet;
   toast('Povýšil jsi na ' + h.nazev + '.', 'ok', true);
 }
@@ -4600,7 +4600,7 @@ function hodnostHtml() {
     + (h.dalsi
         ? '<div class="bar"><i style="width:' + postup + '%"></i></div>'
           + '<p class="fine">Do hodnosti <b>' + esc(h.dalsi) + '</b> ti zbývá ' + kcFull(h.doDalsi) + '.</p>'
-        : '<p class="fine">Jsi na nejvyšším stupni. Výš už to nejde.</p>')
+        : '<p class="fine">' + esc(tx('hra.jsi_na_nejvyssim_stupni_vys')) + '</p>')
     + '<div class="hod-tab">' + radky + '</div>'
     + '<p class="fine">Hodnost se počítá z čistého jmění — co máš, minus co dlužíš bance. '
     + 'Vidí ji i ostatní v žebříčku a na burze.</p></div>';
@@ -4616,8 +4616,8 @@ function odmenaSlovy(o) {
   if (o.karta) {
     // Katalog karet přijde ze serveru až po načtení; než dorazí, ať tam nesvítí
     // technický název jako „credit".
-    var ceske = { rush: 'Expresní dovoz', traffic: 'Reklamní kampaň',
-      connect: 'Známý řemeslník', credit: 'Lepší bankéř' };
+    var ceske = { rush: esc(tx('hra.expresni_dovoz')), traffic: esc(tx('hra.reklamni_kampan')),
+      connect: esc(tx('hra.znamy_remeslnik')), credit: esc(tx('hra.lepsi_banker')) };
     var c = (CARDS_CAT || []).filter(function (x) { return x.kind === o.karta; })[0];
     return 'karta ' + (c ? c.name : (ceske[o.karta] || o.karta));
   }
@@ -4680,9 +4680,9 @@ function canFinance(amount, chci, strop) {
         + (dscr <= ltvRoom && dscr <= S.bank
             ? ' — zástava by dovolila ' + kcFull(Math.min(ltvRoom, S.bank)) + ', ale tolik by neuneslo splátku. '
               + 'Banka chce vidět, že výdělek pokryje splátku aspoň ' + KRYTI_MIN.toFixed(2).replace('.', ',') + '×.'
-              + (jeZacatek() ? ' Začni menším strojem, nebo místem, které víc vydělá.' : '')
+              + (jeZacatek() ? ' ' + esc(tx('hra.zacni_mensim_strojem_nebo_mistem')) : '')
           : S.bank < ltvRoom
-            ? ' — víc jí teď ve volném rámci nezbývá, ten roste každý den.'
+            ? ' ' + esc(tx('hra.vic_ji_ted_ve_volnem'))
             : ' — na víc nemáš zástavu, úvěrový strop je ' + kcFull(ltvRoom) + '.');
     } else duvod = 'Chybí ti ' + kcFull(chybi) + '.';
   }
@@ -4698,12 +4698,12 @@ function mn(n, a, b, c) { return n === 1 ? a : (n >= 2 && n <= 4) ? b : c; }
 function dohnat(chybi) {
   if (!(chybi > 0)) return '';
   var zisk = cistyZisk();
-  if (!(zisk > 0)) return 'Zatím ti nic nepřitéká — postav první prádlomat, nebo si půjč v bance.';
+  if (!(zisk > 0)) return esc(tx('hra.zatim_ti_nic_nepriteka_postav'));
   var mesicu = Math.ceil(chybi / zisk);
   var dni = Math.max(1, Math.round(mesicu / 2));
   return 'Při zisku ' + kcFull(zisk) + ' za měsíc na to budeš mít za '
-    + mesicu + ' ' + mn(mesicu, 'herní měsíc', 'herní měsíce', 'herních měsíců')
-    + ', tedy asi za ' + dni + ' ' + mn(dni, 'den', 'dny', 'dní') + '.';
+    + mesicu + ' ' + mn(mesicu, esc(tx('hra.herni_mesic_3')), esc(tx('hra.herni_mesice_2')), esc(tx('hra.hernich_mesicu_2')))
+    + ', tedy asi za ' + dni + ' ' + mn(dni, 'den', 'dny', esc(tx('hra.dni'))) + '.';
 }
 // ─── Agent: balíček přesně tam, kde hráč narazil ─────────────────────────────
 // Pravidlo je přísné, aby to nebylo otravné: ozve se jedině tehdy, když hráč
@@ -4733,8 +4733,8 @@ function agentHtml(amount, strop, zpet) {
   var c = balikNaZed(amount, strop);
   if (!c) return '';
   AGENT_ZPET = zpet || null;
-  return '<div class="card agent"><h3>Rychlá cesta dál</h3>'
-    + '<p class="muted small" style="margin:2px 0 10px">Balík <b>' + esc(c.name) + '</b> zvedne volný rámec o '
+  return '<div class="card agent"><h3>' + esc(tx('hra.rychla_cesta_dal')) + '</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">' + esc(tx('hra.balik')) + ' ' + '<b>' + esc(c.name) + '</b> zvedne volný rámec o '
     + kcFull(c.laundry) + ' a zároveň se složí jako zástava — tohle ti pak banka proúvěruje.</p>'
     + '<button class="btn big" data-agent="' + esc(c.kind) + '">Dobít ' + kcFull(c.laundry)
     + ' za ' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button>'
@@ -4772,7 +4772,7 @@ function agentNavrat() {
 // spravil, nabídneme ho. Když by nepomohl, zůstane jen hláška jako dřív.
 function zedSheet(nadpis, f, amount, strop, zpet) {
   var h = agentHtml(amount, strop, zpet);
-  if (!h) return toast((f && f.duvod) || 'Na tohle zatím nemáš.', 'err');
+  if (!h) return toast((f && f.duvod) || esc(tx('hra.na_tohle_zatim_nemas')), 'err');
   sheet('<h3>' + esc(nadpis) + '</h3>'
     + '<p class="fine err">' + esc((f && f.duvod) || '') + '</p>'
     + '<p class="fine">' + esc(dohnat(f && f.chybi)) + '</p>' + h);
@@ -4780,7 +4780,7 @@ function zedSheet(nadpis, f, amount, strop, zpet) {
 }
 function doFinance(f, vazba) {
   S.cash -= f.own; S.bank -= f.need; pricistDluh(f.need, prirazkaZa(f.need), vazba);
-  zapis('nakup', (vazba && vazba.popis) || 'Nákup', -f.own, f.need);
+  zapis('nakup', (vazba && vazba.popis) || esc(tx('hra.nakup')), -f.own, f.need);
 }
 // Stroj se kupuje dřív, než ví, kde bude stát. Až se postaví, úvěr na něj
 // přivážeme k tomu místu — jinak by nešlo říct, že je ten prádlomat doplacený.
@@ -4790,7 +4790,7 @@ function pripojUverKeStroji(spotId, nazev) {
   if (!l) return;
   l.spotId = spotId;
   l.druh = 'misto';
-  l.popis = 'Prádlomat — ' + (nazev || 'místo');
+  l.popis = 'Prádlomat — ' + (nazev || esc(tx('hra.misto_7')));
 }
 // Kolik banka ukousne každý měsíc na úrocích z celého dluhu.
 function urokMesicne() {
@@ -4832,18 +4832,18 @@ function financeRows(f) {
     + (lze
       ? '<label class="fld"><span>Kolik dáš ze svého (akontace)' + pctNote(f.own, f.amount) + '</span>'
         + '<input id="fin-own" class="inp" type="number" step="1000" min="' + f.minOwn + '" max="' + f.maxOwn + '" value="' + Math.round(f.own) + '"></label>'
-        + '<p class="fine">' + (f.minOwn > 0 ? 'Nejmíň ' + kcFull(f.minOwn) + ' musíš dát ze svého, ' : 'Můžeš dát od nuly ')
+        + '<p class="fine">' + (f.minOwn > 0 ? 'Nejmíň ' + kcFull(f.minOwn) + ' musíš dát ze svého, ' : esc(tx('hra.muzes_dat_od_nuly')) + ' ')
         + 'nejvíc ' + kcFull(f.maxOwn) + '. Zbytek doplatí banka.</p>'
-      : '<div class="kv"><span>Z vlastní hotovosti (akontace)</span><b>' + kcFull(f.own) + pctNote(f.own, f.amount) + '</b></div>')
-    + '<div class="kv"><span>Doplatí banka (úvěr)</span><b class="' + (f.need > 0 ? 'warn' : '') + '">' + kcFull(f.need) + pctNote(f.need, f.amount) + '</b></div>'
-    + (f.need > 0 ? '<div class="kv"><span>Úvěrový strop profilu</span><b>' + kcFull(f.ltvRoom) + '</b></div>'
+      : '<div class="kv"><span>' + esc(tx('hra.z_vlastni_hotovosti_akontace')) + '</span><b>' + kcFull(f.own) + pctNote(f.own, f.amount) + '</b></div>')
+    + '<div class="kv"><span>' + esc(tx('hra.doplati_banka_uver')) + '</span><b class="' + (f.need > 0 ? 'warn' : '') + '">' + kcFull(f.need) + pctNote(f.need, f.amount) + '</b></div>'
+    + (f.need > 0 ? '<div class="kv"><span>' + esc(tx('hra.uverovy_strop_profilu')) + '</span><b>' + kcFull(f.ltvRoom) + '</b></div>'
       + (f.dscr != null && f.dscr < Math.min(f.ltvRoom, S.bank)
-          ? '<div class="kv"><span>Strop podle výdělku</span><b class="warn">' + kcFull(f.dscr) + '</b></div>'
+          ? '<div class="kv"><span>' + esc(tx('hra.strop_podle_vydelku')) + '</span><b class="warn">' + kcFull(f.dscr) + '</b></div>'
             + '<p class="fine">Zástava by dovolila víc, ale banka chce, aby výdělek pokryl splátku aspoň '
             + KRYTI_MIN.toFixed(2).replace('.', ',') + '×. Víc ti na tohle teď nepůjčí.</p>'
           : '')
-      + '<div class="kv"><span>Volný rámec v bance</span><b>' + kcFull(S.bank) + '</b></div>'
-      + '<div class="kv"><span>Úrok z této půjčky</span><b>'
+      + '<div class="kv"><span>' + esc(tx('hra.volny_ramec_v_bance')) + '</span><b>' + kcFull(S.bank) + '</b></div>'
+      + '<div class="kv"><span>' + esc(tx('hra.urok_z_teto_pujcky')) + '</span><b>'
       + ((rateOf() + prirazkaZa(f.need)) * 100).toFixed(1).replace('.', ',') + ' % ročně'
       + (prirazkaZa(f.need) ? ' <span class="warn">(+' + (prirazkaZa(f.need) * 100).toFixed(1).replace('.', ',') + ' za riziko)</span>' : '')
       + '</b></div>' : '');
@@ -4943,27 +4943,27 @@ function pripravaSheet(sp, areaId, drz) {
   var cena = Math.max(0, Math.round(plan.cena || 0) - jiz);
   if (!cena) {
     save();
-    toast('Plochu máš zaplacenou, nic se nedoplácí.', 'ok');
+    toast(esc(tx('hra.plochu_mas_zaplacenou_nic_se')), 'ok');
     return spotSheet(sp, areaId);
   }
   // Banka to posuzuje jako zhodnocení pozemku, ne jako výdělek místa — stroj tu
   // zatím žádný není, takže se nedá půjčovat proti jeho zisku.
   var f = canFinance(cena, FIN_OWN, cena);
-  sheet('<h3>Připravit plochu</h3>'
-    + '<p class="muted small">' + esc(sp.name) + ' — cesta, parkování, dlažba a přípojky podle tvého návrhu. '
+  sheet('<h3>' + esc(tx('hra.pripravit_plochu_2')) + '</h3>'
+    + '<p class="muted small">' + esc(sp.name) + ' ' + esc(tx('hra.cesta_parkovani_dlazba_a_pripojky')) + ' '
     + 'Stroje mít nemusíš: plocha počká, až je vyrobíš nebo koupíš.</p>'
-    + '<div class="kv"><span>Stání na prádlomaty</span><b>' + pady.length + '\u00d7 ('
+    + '<div class="kv"><span>' + esc(tx('hra.stani_na_pradlomaty_2')) + '</span><b>' + pady.length + '\u00d7 ('
     + esc(pady.map(function (x) { return (MODELS[x.model] || {}).name || ''; }).join(', ')) + ')</b></div>'
     + (jiz
-        ? '<div class="kv"><span>Příprava podle návrhu</span><b>' + kcFull(plan.cena) + '</b></div>'
-          + '<div class="kv"><span>Zaplaceno dřív</span><b class="ok">\u2212' + kcFull(jiz) + '</b></div>'
+        ? '<div class="kv"><span>' + esc(tx('hra.priprava_podle_navrhu')) + '</span><b>' + kcFull(plan.cena) + '</b></div>'
+          + '<div class="kv"><span>' + esc(tx('hra.zaplaceno_driv_2')) + '</span><b class="ok">\u2212' + kcFull(jiz) + '</b></div>'
           + '<div class="kv souhrn"><span>Doplatek</span><b>' + kcFull(cena) + '</b></div>'
-        : '<div class="kv souhrn"><span>Příprava celkem</span><b>' + kcFull(cena) + '</b></div>')
+        : '<div class="kv souhrn"><span>' + esc(tx('hra.priprava_celkem_2')) + '</span><b>' + kcFull(cena) + '</b></div>')
     + financeRows(f)
     + '<p class="fine">Hotová plocha zůstane u pozemku — počítá se do majetku a banka ji bere jako zástavu. '
     + 'Při stavbě pak platíš jen dopravu stroje.</p>'
     + '<button class="btn big" id="do-priprava"' + (f.ok ? '' : ' disabled')
-    + ' style="width:100%;margin-top:10px">Nechat udělat</button>'
+    + ' style="width:100%;margin-top:10px">' + esc(tx('hra.nechat_udelat')) + '</button>'
     + (f.ok ? (f.dotkne_rezervy ? '<p class="fine warn">Sáhneš i do provozní rezervy — po zaplacení ti zbude '
           + kcFull(S.cash - f.own) + '.</p>' : '')
         : '<p class="fine err">' + esc(f.duvod || '') + '</p>'
@@ -4977,7 +4977,7 @@ function pripravaSheet(sp, areaId, drz) {
     plan.zaplaceno = Math.round(plan.cena || 0);
     pozemky().forEach(function (z) { if (z.spotId === sp.id) z.priprava = plan.zaplaceno; });
     save(); paint(); drawMap(); syncState(true);
-    toast('Plocha je připravená na ' + pady.length + ' ' + mn(pady.length, 'prádlomat', 'prádlomaty', 'prádlomatů')
+    toast('Plocha je připravená na ' + pady.length + ' ' + mn(pady.length, esc(tx('hra.pradlomat')), esc(tx('hra.pradlomaty_4')), esc(tx('hra.pradlomatu')))
       + '. Až stroj dorazí, zaplatíš jen dopravu.', 'ok');
     spotSheet(sp, areaId);
   };
@@ -5146,7 +5146,7 @@ function bindPronajem(sp, areaId, claim) {
   [].forEach.call($('sheet-body').querySelectorAll('[data-pron-sit]'), function (b) {
     b.onclick = function () {
       sit = b.getAttribute('data-pron-sit') === '1';
-      if (sit && !maPlochu) return toast('Nejdřív připrav a zaplať plochu.', 'err');
+      if (sit && !maPlochu) return toast(esc(tx('hra.nejdriv_priprav_a_zaplat_plochu')), 'err');
       var i = $('pron-cena');
       if (i) i.value = navrhNajmu(sp, sit);
       [].forEach.call($('sheet-body').querySelectorAll('[data-pron-sit]'), function (x) {
@@ -5157,7 +5157,7 @@ function bindPronajem(sp, areaId, claim) {
   var pb = $('do-pronajem');
   if (pb) pb.onclick = function () {
     var cena = Math.max(0, Math.round(Number(($('pron-cena') || {}).value) || 0));
-    if (cena < 100) return toast('Dej nájmu nějakou rozumnou cenu.', 'err');
+    if (cena < 100) return toast(esc(tx('hra.dej_najmu_nejakou_rozumnou_cenu')), 'err');
     pb.disabled = true; pb.textContent = 'Zapisuji…';
     apiJson('/spots/pronajem', { spot_id: sp.id, cena: cena, sit: sit }).then(function (r) {
       pb.disabled = false;
@@ -5165,16 +5165,16 @@ function bindPronajem(sp, areaId, claim) {
       CLAIMS[sp.id] = r.j.spot;
       drawMap(); toast('Pozemek je v nabídce za ' + kcFull(cena) + ' měsíčně.', 'ok');
       spotSheet(sp, areaId);
-    }).catch(function () { pb.disabled = false; toast('Server neodpovídá.', 'err'); });
+    }).catch(function () { pb.disabled = false; toast(esc(tx('hra.server_neodpovida_19')), 'err'); });
   };
   var sb = $('do-pronajem-stop');
   if (sb) sb.onclick = function () {
     apiJson('/spots/pronajem', { spot_id: sp.id, cena: 0 }).then(function (r) {
       if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
       CLAIMS[sp.id] = r.j.spot;
-      drawMap(); toast('Nabídka stažená.', 'ok');
+      drawMap(); toast(esc(tx('hra.nabidka_stazena_3')), 'ok');
       spotSheet(sp, areaId);
-    }).catch(function () { toast('Server neodpovídá.', 'err'); });
+    }).catch(function () { toast(esc(tx('hra.server_neodpovida_20')), 'err'); });
   };
   var kb = $('do-najem-konec');
   if (kb) kb.onclick = function () {
@@ -5184,9 +5184,9 @@ function bindPronajem(sp, areaId, claim) {
       if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
       CLAIMS[sp.id] = r.j.spot;
       nactiNajmy(function () { vyzvedniNasledky(); });
-      drawMap(); toast('Pronájem skončil.', 'ok');
+      drawMap(); toast(esc(tx('hra.pronajem_skoncil')), 'ok');
       spotSheet(sp, areaId);
-    }).catch(function () { kb.disabled = false; toast('Server neodpovídá.', 'err'); });
+    }).catch(function () { kb.disabled = false; toast(esc(tx('hra.server_neodpovida_21')), 'err'); });
   };
 }
 // Cizí pozemek. Koupit se nedá — zem se dál neprodává. Když ji ale majitel
@@ -5194,29 +5194,29 @@ function bindPronajem(sp, areaId, claim) {
 function cizipozemekSheet(sp, areaId, c) {
   var n = c.pronajem;
   sheet('<h3>' + esc(sp.name) + '</h3>'
-    + '<p class="muted small">' + esc(KIND_LABEL[sp.kind] || 'Místo') + ' · '
-    + esc(S.areas[areaId] ? S.areas[areaId].name : '') + ' · <b class="warn">cizí pozemek</b></p>'
+    + '<p class="muted small">' + esc(KIND_LABEL[sp.kind] || esc(tx('hra.misto_3'))) + ' · '
+    + esc(S.areas[areaId] ? S.areas[areaId].name : '') + ' · <b class="warn">' + esc(tx('hra.cizi_pozemek')) + '</b></p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(sp.score) + '</div>'
     + '<div class="card"><div class="row"><h3>' + (c.znak ? znakSvg(c.znak, 20) + ' ' : '') + esc(c.firma) + '</h3>'
     + '<b class="muted small">' + esc(c.nick) + '</b></div>'
     + '<p class="muted small" style="margin:4px 0 0">' + (n
-        ? 'Zem patří téhle firmě a nabízí ji k pronájmu. Koupit ji nejde — pozemky se dál neprodávají.'
-        : c.najemce ? 'Zem patří téhle firmě a už je pronajatá někomu jinému.'
-        : 'Zem patří téhle firmě a zatím ji nikomu nenabízí.') + '</p></div>'
+        ? esc(tx('hra.zem_patri_tehle_firme_a'))
+        : c.najemce ? esc(tx('hra.zem_patri_tehle_firme_a_2'))
+        : esc(tx('hra.zem_patri_tehle_firme_a_3'))) + '</p></div>'
     + (n
-        ? '<h3 style="margin-top:18px">Nabídka pronájmu</h3>'
-          + '<div class="kv"><span>Nájem</span><b class="warn">' + kcFull(n.cena) + ' / měsíc</b></div>'
+        ? '<h3 style="margin-top:18px">' + esc(tx('hra.nabidka_pronajmu')) + '</h3>'
+          + '<div class="kv"><span>' + esc(tx('hra.najem')) + '</span><b class="warn">' + kcFull(n.cena) + ' / měsíc</b></div>'
           + '<div class="kv"><span>Plocha</span><b class="' + (n.sit ? 'ok' : '') + '">'
-          + (n.sit ? 'připravená — přípojky hotové' : 'holá parcela') + '</b></div>'
+          + (n.sit ? esc(tx('hra.pripravena_pripojky_hotove')) : esc(tx('hra.hola_parcela_2'))) + '</b></div>'
           + '<p class="fine">' + (n.sit
-              ? 'Cestu, parkování i přípojky zaplatil majitel. Ty platíš jen dopravu stroje a nájem.'
-              : 'Cestu, parkování i přípojky si vybuduješ a zaplatíš ty — nájem je za to nižší.') + '</p>'
+              ? esc(tx('hra.cestu_parkovani_i_pripojky_zaplatil'))
+              : esc(tx('hra.cestu_parkovani_i_pripojky_si'))) + '</p>'
           + '<button class="btn big" id="do-najmout" style="width:100%;margin-top:10px">Pronajmout si</button>'
-          + '<p class="fine">Zem zůstává majiteli, prádlomat je tvůj. Přeplatit tě tu nikdo nemůže.</p>'
+          + '<p class="fine">' + esc(tx('hra.zem_zustava_majiteli_pradlomat_je')) + '</p>'
         : ''));
   var nb = $('do-najmout');
   if (nb) nb.onclick = function () {
-    nb.disabled = true; nb.textContent = 'Domlouvám…';
+    nb.disabled = true; nb.textContent = esc(tx('hra.domlouvam'));
     apiJson('/spots/najmout', { spot_id: sp.id }).then(function (r) {
       nb.disabled = false; nb.textContent = 'Pronajmout si';
       if (!r.ok) {
@@ -5227,9 +5227,9 @@ function cizipozemekSheet(sp, areaId, c) {
       CLAIMS[sp.id] = r.j.spot;
       S.leases[sp.id] = { rent: n.cena, at: Date.now(), pronajem: 1, sit: !!n.sit, majitel: c.firma };
       save(); paint(); drawMap(); syncState(true);
-      toast('Pozemek máš pronajatý. Teď na něj postav prádlomat.', 'ok');
+      toast(esc(tx('hra.pozemek_mas_pronajaty_ted_na')), 'ok');
       spotSheet(sp, areaId);
-    }).catch(function () { nb.disabled = false; nb.textContent = 'Pronajmout si'; toast('Server neodpovídá.', 'err'); });
+    }).catch(function () { nb.disabled = false; nb.textContent = 'Pronajmout si'; toast(esc(tx('hra.server_neodpovida_13')), 'err'); });
   };
 }
 // Nájmy si server spočítá sám, jen ho musíme šťouchnout — pak přijdou jako
@@ -5339,17 +5339,17 @@ function koupitPozemek(sp, areaId, btn) {
     if (!r.ok) {
       if (r.j.occupied) CLAIMS[sp.id] = r.j.occupied;
       drawMap(); closeSheet();
-      return toast(r.j.error || 'Místo je obsazené.', 'err');
+      return toast(r.j.error || esc(tx('hra.misto_je_obsazene')), 'err');
     }
     CLAIMS[sp.id] = r.j.spot;
     doFinance(f, { druh: 'pozemek', spotId: sp.id, popis: 'Pozemek — ' + sp.name });
     pozemky().push({ spotId: sp.id, areaId: areaId, name: sp.name, lat: sp.lat, lon: sp.lon,
       m2: pozemekM2(sp), cena: cena, od: Date.now() });
     save(); paint(); drawMap(); closeSheet(); syncState(true);
-    toast('Pozemek je tvůj. Postavit na něm můžeš, až budeš chtít.', 'ok');
+    toast(esc(tx('hra.pozemek_je_tvuj_postavit_na')), 'ok');
   }).catch(function () {
     if (btn) { btn.disabled = false; btn.textContent = 'Koupit pozemek bez stroje'; }
-    toast('Server neodpovídá.', 'err');
+    toast(esc(tx('hra.server_neodpovida_32')), 'err');
   });
 }
 function pozemekKarta(sp) {
@@ -5358,10 +5358,10 @@ function pozemekKarta(sp) {
     + '<p class="muted small">Tohle místo se nepronajímá, prodává se. Když ho koupíš, neplatíš '
     + 'žádný nájem a nikdo tě odtud nevyhodí — zem je tvoje. Je to ale holá parcela: '
     + 'příjezdovou cestu, parkování, přípojky i dlažbu pod stroj zaplatíš ty.</p>'
-    + '<div class="kv"><span>Výměra</span><b>' + m2 + ' m²</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.vymera_2')) + '</span><b>' + m2 + ' m²</b></div>'
     + '<div class="kv"><span>Cena za m²</span><b>' + kcFull(zaM2) + '</b></div>'
     + '<div class="kv souhrn"><span>Pozemek celkem</span><b>' + kcFull(m2 * zaM2) + '</b></div>'
-    + '<div class="kv"><span>Nájem</span><b class="ok">žádný</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.najem_4')) + '</span><b class="ok">' + esc(tx('hra.zadny_2')) + '</b></div>'
     + '<p class="fine">Příprava louky je zhruba ' + POZEMEK_STAVBA.toFixed(1).replace('.', ',')
     + '× dražší než napojení na hotovém místě. Zaplatí se to tím, že za tohle místo '
     + 'nikdy nikomu nic neplatíš a nikdo ti ho nevezme.</p>';
@@ -5393,14 +5393,14 @@ var PLAN_CESTA_SIRKY = [3, 5];
 // dohromady to, co dřív stál jeden společný výkop.
 var PLAN_MEDIA = [
   { k: 'voda', n: 'Voda', b: '#4ab8ff', m: 2200 },
-  { k: 'elektrina', n: 'Elektřina', b: '#ffd34a', m: 2400 },
+  { k: 'elektrina', n: esc(tx('hra.elektrina')), b: '#ffd34a', m: 2400 },
   { k: 'odpad', n: 'Kanalizace', b: '#b39bff', m: 2000 }
 ];
 var PLAN_PRAZDNO = 0, PLAN_DLAZBA = 1, PLAN_CESTA = 2, PLAN_STANI_B = 3, PLAN_STROJ = 9;
 var PLAN_NARADI = [
-  { k: 'cesta', n: 'Cesta', b: PLAN_CESTA, p: 'Asfalt, po kterém se k prádlomatu dojede. Musí navazovat na ulici.' },
-  { k: 'dlazba', n: 'Dlažba', b: PLAN_DLAZBA, p: 'Zámková dlažba okolo stroje, aby se nechodilo v blátě.' },
-  { k: 'guma', n: 'Guma', b: PLAN_PRAZDNO, p: 'Smaže, co jsi nakreslil. Tráva nic nestojí.' }
+  { k: 'cesta', n: 'Cesta', b: PLAN_CESTA, p: esc(tx('hra.asfalt_po_kterem_se_k')) },
+  { k: 'dlazba', n: esc(tx('hra.dlazba')), b: PLAN_DLAZBA, p: esc(tx('hra.zamkova_dlazba_okolo_stroje_aby')) },
+  { k: 'guma', n: 'Guma', b: PLAN_PRAZDNO, p: esc(tx('hra.smaze_co_jsi_nakreslil_trava')) }
 ];
 // Rozměry parcely v metrech. Držíme ji obdélníkovou, mírně do šířky k ulici.
 function planRozmer(m2) {
@@ -5651,15 +5651,15 @@ function planPocty(p) {
 function planCena(p) {
   var c = planPocty(p), v = planVykopy(p);
   var polozky = [
-    { n: 'Asfaltová cesta', m: c.cesta + ' m²', v: c.cesta * PLAN_CESTA_M2 },
-    { n: 'Parkovací stání', m: c.stanixKs + '×', v: c.stanixKs * PLAN_STANI },
-    { n: 'Zámková dlažba', m: (c.dlazba + c.podStrojem) + ' m²', v: (c.dlazba + c.podStrojem) * PLAN_DLAZBA_M2 }
+    { n: esc(tx('hra.asfaltova_cesta')), m: c.cesta + ' m²', v: c.cesta * PLAN_CESTA_M2 },
+    { n: esc(tx('hra.parkovaci_stani')), m: c.stanixKs + '×', v: c.stanixKs * PLAN_STANI },
+    { n: esc(tx('hra.zamkova_dlazba')), m: (c.dlazba + c.podStrojem) + ' m²', v: (c.dlazba + c.podStrojem) * PLAN_DLAZBA_M2 }
   ];
   PLAN_MEDIA.forEach(function (md) {
     polozky.push({ n: md.n, m: (v[md.k].ok ? v[md.k].delka + ' m' : '—'),
       v: (v[md.k].ok ? v[md.k].delka : 0) * md.m });
   });
-  polozky.push({ n: 'Připojovací poplatky', m: '', v: PLAN_POPLATKY });
+  polozky.push({ n: esc(tx('hra.pripojovaci_poplatky')), m: '', v: PLAN_POPLATKY });
   var celkem = polozky.reduce(function (a, x) { return a + x.v; }, 0);
   var delka = PLAN_MEDIA.reduce(function (a, md) { return a + (v[md.k].ok ? v[md.k].delka : 0); }, 0);
   return { polozky: polozky, celkem: Math.round(celkem), delka: delka, vykopy: v };
@@ -5667,14 +5667,14 @@ function planCena(p) {
 // Co ještě chybí, aby se dalo stavět. Hráč má vědět proč, ne jen že to nejde.
 function planChyby(p) {
   var ch = [], c = planPocty(p), n = c.stroju;
-  if (!n) ch.push('Umísti aspoň jeden prádlomat — klepni na Stroj a pak na plochu.');
+  if (!n) ch.push(esc(tx('hra.umisti_aspon_jeden_pradlomat_klepni')));
   var potreba = PLAN_STANI_MIN * Math.max(1, n);
   if (c.stanixKs < potreba) {
     ch.push('Chybí parkování: máš ' + c.stanixKs + ' z ' + potreba + ' stání (na každý prádlomat dvě, '
       + 'jedno stání je ' + cisloM(PLAN_STANI_ROZMER[0]) + ' × ' + cisloM(PLAN_STANI_ROZMER[1]) + ' m).');
   }
   var videl = planCestaOdUlice(p);
-  if (n && !planDojezd(p)) ch.push('Ke každému prádlomatu se musí dát dojet — veď cestu od ulice až k němu.');
+  if (n && !planDojezd(p)) ch.push(esc(tx('hra.ke_kazdemu_pradlomatu_se_musi')));
   var zajezd = planStani(p).filter(function (st) { return !planSousediCesta(videl, st); }).length;
   if (zajezd) ch.push('K ' + zajezd + ' stání se nedá zajet — každé musí přiléhat k cestě.');
   if (n) {
@@ -6157,7 +6157,7 @@ function dobaNazev(m) {
   return Math.round(m / 12) + ' let';
 }
 function vypovedNazev(m) {
-  return m + ' ' + mn(m, 'měsíc', 'měsíce', 'měsíců');
+  return m + ' ' + mn(m, esc(tx('hra.mesic_3')), esc(tx('hra.mesice_2')), esc(tx('hra.mesicu_2')));
 }
 // Běžící výpověď na mém místě — vrací data, ze kterých se staví varování.
 function vyzvaNaMiste(spotId) {
@@ -6173,34 +6173,34 @@ function vypovedHtml(u) {
   var v = vyzvaNaMiste(u.spotId);
   if (!v) return '';
   var rozdil = Math.max(0, v.rent - (u.eco.rent || 0));
-  return '<div class="card vada-karta"><div class="row"><h3>⚠️ Výpověď z místa</h3>'
-    + '<b class="err">' + etaText(v.do - Date.now()).replace('za ', 'zbývá ') + '</b></div>'
+  return '<div class="card vada-karta"><div class="row"><h3>' + esc(tx('hra.vypoved_z_mista')) + '</h3>'
+    + '<b class="err">' + etaText(v.do - Date.now()).replace('za ', esc(tx('hra.zbyva_2')) + ' ') + '</b></div>'
     + '<p class="muted small" style="margin:4px 0 8px">' + esc(v.nick) + ' nabídl majiteli pozemku '
     + 'vyšší nájem. Do konce výpovědní doby tu vyděláváš dál — a když nabídku dorovnáš, '
     + 'místo ti zůstane.</p>'
-    + '<div class="kv"><span>Platíš teď</span><b>' + kcFull(u.eco.rent) + ' / měsíc</b></div>'
-    + '<div class="kv"><span>Nabídka konkurenta</span><b class="warn">' + kcFull(v.rent) + ' / měsíc</b></div>'
-    + '<div class="kv"><span>Zdraží tě to o</span><b class="err">' + kcFull(rozdil) + ' / měsíc</b></div>'
-    + '<button class="btn big" id="do-dorovnat" style="width:100%;margin-top:10px">Dorovnat a zůstat</button>'
+    + '<div class="kv"><span>' + esc(tx('hra.platis_ted_2')) + '</span><b>' + kcFull(u.eco.rent) + ' / měsíc</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.nabidka_konkurenta')) + '</span><b class="warn">' + kcFull(v.rent) + ' / měsíc</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.zdrazi_te_to_o_2')) + '</span><b class="err">' + kcFull(rozdil) + ' / měsíc</b></div>'
+    + '<button class="btn big" id="do-dorovnat" style="width:100%;margin-top:10px">' + esc(tx('hra.dorovnat_a_zustat')) + '</button>'
     + '</div>';
 }
 // Jak je místo nasmlouvané — vidí jen nájemce.
 function smlouvaHtml(u) {
   var c = CLAIMS[u.spotId];
   if (c && c.mine && c.pozemek) {
-    return '<h3 style="margin:16px 0 4px">Vlastní pozemek</h3>'
-      + '<div class="kv"><span>Nájem</span><b class="ok">neplatíš žádný</b></div>'
-      + '<div class="kv"><span>Může tě odsud někdo dostat?</span><b class="ok">ne</b></div>'
+    return '<h3 style="margin:16px 0 4px">' + esc(tx('hra.vlastni_pozemek')) + '</h3>'
+      + '<div class="kv"><span>' + esc(tx('hra.najem_3')) + '</span><b class="ok">' + esc(tx('hra.neplatis_zadny')) + '</b></div>'
+      + '<div class="kv"><span>' + esc(tx('hra.muze_te_odsud_nekdo_dostat')) + '</span><b class="ok">' + 'ne' + '</b></div>'
       + '<p class="fine">Zem je tvoje, takže tohle místo nejde přeplatit ani vypovědět. '
       + 'Prodat se dá jedině se strojem.</p>';
   }
   if (!c || !c.mine || !c.vypoved_mesicu) return '';
   var vaz = c.vazano_do ? new Date(c.vazano_do).getTime() : 0;
   var kryty = vaz > Date.now();
-  return '<h3 style="margin:16px 0 4px">Nájemní smlouva</h3>'
-    + '<div class="kv"><span>Vázanost</span><b class="' + (kryty ? 'ok' : '') + '">'
-    + (kryty ? 'do ' + datumCas(vaz).split(' ')[0] + ' (nikdo tě nepřeplatí)' : 'na dobu neurčitou') + '</b></div>'
-    + '<div class="kv"><span>Výpovědní doba</span><b>' + vypovedNazev(c.vypoved_mesicu) + '</b></div>'
+  return '<h3 style="margin:16px 0 4px">' + esc(tx('hra.najemni_smlouva_2')) + '</h3>'
+    + '<div class="kv"><span>' + esc(tx('hra.vazanost')) + '</span><b class="' + (kryty ? 'ok' : '') + '">'
+    + (kryty ? 'do ' + datumCas(vaz).split(' ')[0] + ' ' + esc(tx('hra.nikdo_te_nepreplati')) : esc(tx('hra.na_dobu_neurcitou_2'))) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.vypovedni_doba_2')) + '</span><b>' + vypovedNazev(c.vypoved_mesicu) + '</b></div>'
     + '<p class="fine">Konkurence tvoje podmínky nevidí. Dokud vázanost běží, přihazovat na tvoje '
     + 'místo nemá smysl — majitel pozemku je nabídku nucen odmítnout a vypovědět nesmí ani sám. '
     + 'Na dobu neurčitou vypovědět může: stroj se pak po výpovědní době stěhuje na sklad.</p>';
@@ -6305,13 +6305,13 @@ function denniSheet() {
       + '<span>' + (i === DENNI_DNO.length ? '\uD83C\uDF81 ' : '') + i + '. den</span>'
       + '<b>' + kc(denniOdmena(i)) + '</b></div>';
   }
-  sheet('<h3>Denní odměna</h3>'
+  sheet('<h3>' + esc(tx('hra.denni_odmena')) + '</h3>'
     + '<p class="muted small">Za to, že se vracíš. Každý další den v řadě je štědřejší, sedmý den je dárek. '
     + 'Když den vynecháš, série začíná znovu od prvního.</p>'
     + '<div class="dny">' + dlazdice + '</div>'
     + (vzato
         ? '<p class="fine ok">Dneska sis vzal ' + kcFull(castka) + ' za ' + den + '. den. Další přijde zítra.</p>'
-        : '<div class="kv souhrn"><span>Dnes dostaneš</span><b class="ok">' + kcFull(castka) + '</b></div>'
+        : '<div class="kv souhrn"><span>' + esc(tx('hra.dnes_dostanes')) + '</span><b class="ok">' + kcFull(castka) + '</b></div>'
           + '<button class="btn big" id="den-vzit">Vzít ' + kcFull(castka) + '</button>')
     + '<p class="fine">Odměna roste s firmou — je to podíl z toho, co síť měsíčně vydělá, '
     + 'nejméně ale ' + kcFull(DENNI_DNO[Math.min(DENNI_DNO.length - 1, den - 1)]) + '.</p>');
@@ -6334,8 +6334,8 @@ function denniSheet() {
 var NABIDKY = [
   { kind: 'rush',
     kdy: function () { return ((S.orders || []).length > 0); },
-    duvod: 'Stroj máš na cestě a čeká se dva herní měsíce, tedy celý skutečný den. '
-      + 'Expresní dovoz ho hodí na sklad hned, takže místo může stát ještě dneska.' },
+    duvod: esc(tx('hra.stroj_mas_na_ceste_a')) + ' '
+      + esc(tx('hra.expresni_dovoz_ho_hodi_na')) },
   { kind: 'connect',
     kdy: function () { return (S.units || []).length >= 1 && (S.units || []).length <= 2; },
     duvod: 'První prádlomat stojí. Každé další místo chce vodu, odpad a elektřinu — '
@@ -6367,12 +6367,12 @@ function linkaNabidkaHtml() {
   var c = (LINKA_CAT || [])[0];
   if (!c) return '';
   S.linkaNabidka = Date.now(); save();
-  return '<div class="card agent" style="margin-top:12px"><h3>\u260E\uFE0F Ať to za tebe zvedne operátor</h3>'
+  return '<div class="card agent" style="margin-top:12px"><h3>' + esc(tx('hra.u260e_ufe0f_at_to_za_2')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 8px">Takhle ti bude telefon zvonit u každé pobočky. '
     + 'Hovor, který nestihneš, vezme operátor a pověst ti za něj neklesne.</p>'
     + '<button class="btn big" data-linka="' + esc(c.kind) + '">' + esc(c.name) + ' za '
     + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button>'
-    + '<p class="fine">Větší balíčky vyjdou levněji — jsou v Kartách.</p></div>';
+    + '<p class="fine">' + esc(tx('hra.vetsi_balicky_vyjdou_levneji_jsou')) + '</p></div>';
 }
 function hlidejNabidky() {
   if (!S || S.tut !== 'done' || !ME || !PAYMENTS_ON || !CARDS_CAT) return;
@@ -6398,8 +6398,8 @@ function nabidkaSheet(n, c) {
     + ((c.bundles || []).length ? '<p class="fine">Ve více kusech levněji — ' + c.bundles[c.bundles.length - 1].qty
         + '\u00d7 se slevou ' + c.bundles[c.bundles.length - 1].sleva + ' %.</p>' : '')
     + '<button class="btn big" id="nab-koupit">Koupit</button></div>'
-    + '<button class="btn sec" id="nab-ne" style="width:100%;margin-top:8px">Teď ne</button>'
-    + '<p class="fine">Tuhle nabídku už ti znovu vyskakovat nebudeme. Karty jsou kdykoli v záložce Karty.</p>');
+    + '<button class="btn sec" id="nab-ne" style="width:100%;margin-top:8px">' + esc(tx('hra.ted_ne_3')) + '</button>'
+    + '<p class="fine">' + esc(tx('hra.tuhle_nabidku_uz_ti_znovu')) + '</p>');
   $('nab-koupit').onclick = function () { buyCard(c.kind); };
   $('nab-ne').onclick = closeSheet;
 }
@@ -6447,7 +6447,7 @@ function obnovChybejiciUnity() {
     Object.keys(S.areas || {}).forEach(function (aid) {
       (S.areas[aid].spots || []).forEach(function (x) { if (x.id === zakladniSpotId(sid)) sp = x; });
     });
-    var misto = sp || { id: sid, name: c.name || 'Prádlomat', kind: 'unknown', score: 60,
+    var misto = sp || { id: sid, name: c.name || esc(tx('hra.pradlomat_4')), kind: 'unknown', score: 60,
       lat: c.lat, lon: c.lon };
     var eco = economics({ id: sid, name: misto.name, kind: misto.kind, score: misto.score,
       lat: misto.lat, lon: misto.lon }, c.model);
@@ -6456,7 +6456,7 @@ function obnovChybejiciUnity() {
       eco.cost = eco.energy + eco.servis + eco.rent;
       eco.profit = eco.revenue - eco.cost;
     }
-    S.units.push({ spotId: sid, areaId: c.area_key || '', name: misto.name || c.name || 'Prádlomat',
+    S.units.push({ spotId: sid, areaId: c.area_key || '', name: misto.name || c.name || esc(tx('hra.pradlomat_5')),
       kind: misto.kind || 'unknown', score: misto.score != null ? misto.score : 60,
       lat: misto.lat != null ? misto.lat : c.lat, lon: misto.lon != null ? misto.lon : c.lon,
       builtAt: Date.now(), eco: eco });
@@ -6465,7 +6465,7 @@ function obnovChybejiciUnity() {
   if (pridano) {
     save(); paint(); drawMap(); syncState(true);
     toast(pridano === 1
-      ? 'Vrátili jsme ti prádlomat, který v téhle hře chyběl — server o něm ví.'
+      ? esc(tx('hra.vratili_jsme_ti_pradlomat_ktery'))
       : 'Vrátili jsme ti ' + pridano + ' prádlomaty, které v téhle hře chyběly.', 'ok');
   }
   return pridano;
@@ -6501,12 +6501,12 @@ function reconcileUnits() {
 // vyjednaná výpovědní doba rozhoduje, kolik času na stěhování zbude.
 var VYPOVED_ROCNE = 0.08;          // průměrně jednou za ~12 herních let na stroj
 var VYPOVED_DUVODY = [
-  { t: 'Majitel pozemek prodal', p: 'Nový vlastník s prádlomatem nepočítá.', jednat: false },
-  { t: 'Majitel si plochu bere pro sebe', p: 'Chystá tam vlastní stavbu.', jednat: false },
-  { t: 'Benzínka ruší podnájmy', p: 'Vedení sítě zrušilo pronájmy ploch plošně.', jednat: false },
-  { t: 'Obchod mění provozovatele', p: 'Nový nájemce objektu chce plochu pro sebe.', jednat: true },
-  { t: 'Majitel má lepší nabídku', p: 'Za plochu mu někdo nabídl víc, než platíš ty.', jednat: true },
-  { t: 'Stížnosti sousedů', p: 'Majiteli vadí noční provoz. Dá se to ukecat, ale ne zadarmo.', jednat: true }
+  { t: 'Majitel pozemek prodal', p: esc(tx('hra.novy_vlastnik_s_pradlomatem_nepocita')), jednat: false },
+  { t: 'Majitel si plochu bere pro sebe', p: esc(tx('hra.chysta_tam_vlastni_stavbu')), jednat: false },
+  { t: esc(tx('hra.benzinka_rusi_podnajmy')), p: esc(tx('hra.vedeni_site_zrusilo_pronajmy_ploch')), jednat: false },
+  { t: esc(tx('hra.obchod_meni_provozovatele')), p: esc(tx('hra.novy_najemce_objektu_chce_plochu')), jednat: true },
+  { t: esc(tx('hra.majitel_ma_lepsi_nabidku')), p: esc(tx('hra.za_plochu_mu_nekdo_nabidl')), jednat: true },
+  { t: esc(tx('hra.stiznosti_sousedu')), p: esc(tx('hra.majiteli_vadi_nocni_provoz_da')), jednat: true }
 ];
 var VYPOVED_PRIHOZENI = [0.25, 0.35, 0.5];   // o kolik si majitel řekne víc, když se dá jednat
 function jeVeVypovedi(u) { return !!(u && u.vypoved); }
@@ -6547,7 +6547,7 @@ function hlidejStehovani() {
     var spl = osirelyUver(u.spotId);
     delete CLAIMS[u.spotId];
     if (ME) apiJson('/spots/release', { spot_id: u.spotId, odstupne: true }).catch(function () {});
-    toast('Nájem v místě ' + u.name + ' skončil. ' + ((MODELS[u.eco.model] || {}).name || 'Prádlomat')
+    toast('Nájem v místě ' + u.name + ' skončil. ' + ((MODELS[u.eco.model] || {}).name || esc(tx('hra.pradlomat_3')))
       + ' máš na skladě — najdi mu nové místo a udělej přípojky.'
       + (spl ? ' Splátky ' + kcFull(spl) + ' měsíčně běží dál.' : ''), 'err');
   });
@@ -6558,24 +6558,24 @@ function vypovedMajiteleHtml(u) {
   var v = u && u.vypoved;
   if (!v) return '';
   var novy = Math.round((u.eco.rent || 0) * (1 + (v.navyseni || 0)));
-  var h = '<div class="card vada-karta"><div class="row"><h3>⚠️ Výpověď od majitele</h3>'
-    + '<b class="err">' + etaText(Math.max(0, v.do - Date.now())).replace('za ', 'zbývá ') + '</b></div>'
+  var h = '<div class="card vada-karta"><div class="row"><h3>' + esc(tx('hra.vypoved_od_majitele')) + '</h3>'
+    + '<b class="err">' + etaText(Math.max(0, v.do - Date.now())).replace('za ', esc(tx('hra.zbyva')) + ' ') + '</b></div>'
     + '<p class="muted small" style="margin:4px 0 8px"><b>' + esc(v.t) + '.</b> ' + esc(v.p)
     + ' Výpovědní doba je ' + vypovedNazev(v.mesicu) + '; do jejího konce prádlomat vydělává dál. '
     + 'Pak se musí odvézt — skončí na skladě a nové místo bude chtít i nové přípojky.</p>';
   var spl = splatkyMista(u.spotId);
   if (spl > 0) {
-    h += '<div class="kv"><span>Splátky úvěru na tohle místo</span><b class="err">'
+    h += '<div class="kv"><span>' + esc(tx('hra.splatky_uveru_na_tohle_misto')) + '</span><b class="err">'
       + kcFull(spl) + ' / měsíc</b></div>'
       + '<p class="fine err" style="margin:4px 0 8px">Ty běží dál. Na skladě stroj nevydělává nic, '
       + 'ale bance se platí stejně — proto se vyplatí mít nové místo nachystané dřív, než lhůta doběhne.</p>';
   }
   if (v.navyseni > 0) {
-    h += '<div class="kv"><span>Platíš teď</span><b>' + kcFull(u.eco.rent || 0) + ' / měsíc</b></div>'
+    h += '<div class="kv"><span>' + esc(tx('hra.platis_ted')) + '</span><b>' + kcFull(u.eco.rent || 0) + ' / měsíc</b></div>'
       + '<div class="kv"><span>Majitel chce</span><b class="warn">' + kcFull(novy) + ' / měsíc</b></div>'
-      + '<div class="kv"><span>Zdraží tě to o</span><b class="err">'
+      + '<div class="kv"><span>' + esc(tx('hra.zdrazi_te_to_o')) + '</span><b class="err">'
       + kcFull(Math.max(0, novy - (u.eco.rent || 0))) + ' / měsíc</b></div>'
-      + '<button class="btn big" id="do-navyseni" style="width:100%;margin-top:10px">Přisadit a zůstat</button>';
+      + '<button class="btn big" id="do-navyseni" style="width:100%;margin-top:10px">' + esc(tx('hra.prisadit_a_zustat')) + '</button>';
   } else {
     h += '<p class="fine err">Tahle výpověď se vyjednat nedá. Hledej nové místo včas — '
       + 'stroj na skladě nevydělává.</p>';
@@ -6684,8 +6684,8 @@ function mistoUverHtml(u) {
   var l = uverMista(u);
   if (!l) {
     return (S.loan > 0
-      ? '<p class="fine">Tenhle prádlomat je doplacený — celý provozní zisk je tvůj. Dluh máš jinde.</p>'
-      : '<p class="fine">Nemáš dluh, takže provozní zisk je zároveň čistý výdělek.</p>');
+      ? '<p class="fine">' + esc(tx('hra.tenhle_pradlomat_je_doplaceny_cely')) + '</p>'
+      : '<p class="fine">' + esc(tx('hra.nemas_dluh_takze_provozni_zisk')) + '</p>');
   }
   var urok = Math.round(l.zbyva * l.sazba / 12);
   var splatka = Math.min(l.splatka, l.zbyva + urok);
@@ -6693,15 +6693,15 @@ function mistoUverHtml(u) {
   var kryti = splatka > 0 ? u.eco.profit / splatka : 9;
   return '<div class="kv"><span>− Splátka úvěru (úrok ' + kcFull(urok) + ')</span><b class="warn">'
     + kcFull(splatka) + '</b></div>'
-    + '<div class="kv souhrn"><span>Čistý výdělek</span><b class="' + (cisty >= 0 ? 'ok' : 'err') + '">'
+    + '<div class="kv souhrn"><span>' + esc(tx('hra.cisty_vydelek')) + '</span><b class="' + (cisty >= 0 ? 'ok' : 'err') + '">'
     + kcFull(cisty) + '</b></div>'
-    + '<div class="kv"><span>Pokrytí splátky</span><b class="' + (kryti >= 1.25 ? 'ok' : kryti >= 1 ? 'warn' : 'err') + '">'
+    + '<div class="kv"><span>' + esc(tx('hra.pokryti_splatky')) + '</span><b class="' + (kryti >= 1.25 ? 'ok' : kryti >= 1 ? 'warn' : 'err') + '">'
     + kryti.toFixed(2).replace('.', ',') + '×</b></div>'
     + '<p class="fine">' + (kryti >= 1.25
-        ? 'Místo si na svou splátku vydělá s rezervou — banka takové financuje ráda.'
+        ? esc(tx('hra.misto_si_na_svou_splatku'))
         : kryti >= 1
-          ? 'Na splátku to vyjde jen tak tak. Banka chce vidět aspoň 1,25×.'
-          : 'Tohle místo na svou splátku nevydělá a doplácíš na něj z ostatních.')
+          ? esc(tx('hra.na_splatku_to_vyjde_jen'))
+          : esc(tx('hra.tohle_misto_na_svou_splatku')))
     + ' Zbývá splatit ' + kcFull(l.zbyva) + ', ještě ' + (l.zbyvaMesicu || 0) + ' měsíců.</p>';
 }
 // Co se o závadě píše v panelu místa — včetně toho, o kolik tržeb hráč přichází.
@@ -6717,22 +6717,22 @@ function katastrofaHtml(u) {
       + 'prádlomat nevydělává, ale nájem a splátky běží dál.</p></div>';
   }
   return '<div class="card vada-karta"><div class="row"><h3>' + (k.ico || '\u26A0\uFE0F') + ' ' + esc(k.t) + '</h3>'
-    + '<b class="err">stojí</b></div>'
+    + '<b class="err">' + esc(tx('hra.stoji_2')) + '</b></div>'
     + '<p class="muted small" style="margin:4px 0 8px">' + esc(k.p)
     + ' Prádlomat nevydělává vůbec nic a technik na tohle nestačí — musí se to opravit.</p>'
     + '<div class="kv"><span>Oprava celkem</span><b>' + kcFull(k.cena) + '</b></div>'
     + (k.pojisteno
-        ? '<div class="kv"><span>Platí pojišťovna</span><b class="ok">' + kcFull(k.cena - k.platim) + '</b></div>'
+        ? '<div class="kv"><span>' + esc(tx('hra.plati_pojistovna')) + '</span><b class="ok">' + kcFull(k.cena - k.platim) + '</b></div>'
         : '')
-    + '<div class="kv souhrn"><span>Zaplatíš</span><b class="' + (k.pojisteno ? 'ok' : 'err') + '">'
+    + '<div class="kv souhrn"><span>' + esc(tx('hra.zaplatis_3')) + '</span><b class="' + (k.pojisteno ? 'ok' : 'err') + '">'
     + kcFull(k.platim) + '</b></div>'
-    + '<div class="kv"><span>Oprava potrvá</span><b>' + k.dnu + ' '
-    + mn(k.dnu, 'herní den', 'herní dny', 'herních dnů') + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.oprava_potrva')) + '</span><b>' + k.dnu + ' '
+    + mn(k.dnu, esc(tx('hra.herni_den')), esc(tx('hra.herni_dny')), esc(tx('hra.hernich_dnu'))) + '</b></div>'
     + (k.pojisteno ? '' : '<p class="fine warn">Pojištěný nebyl — platíš celou opravu. '
         + 'Pojištění zapneš v Síti.</p>')
     + '<button class="btn big" id="do-oprava"' + (S.cash < k.platim ? ' disabled' : '')
     + ' style="width:100%;margin-top:10px">Zaplatit opravu za ' + kcFull(k.platim) + '</button>'
-    + (S.cash < k.platim ? '<p class="fine err">Tolik hotovosti nemáš.</p>' : '')
+    + (S.cash < k.platim ? '<p class="fine err">' + esc(tx('hra.tolik_hotovosti_nemas')) + '</p>' : '')
     + '</div>';
 }
 function poruchaHtml(u) {
@@ -6742,28 +6742,28 @@ function poruchaHtml(u) {
     var chod = chodStroje(u);
     var v = t ? null : vyjezdOdhad(u);
     return '<div class="card vada-karta"><div class="row"><h3>⚠️ ' + esc(u.porucha.text) + '</h3>'
-      + '<b class="err">' + (chod ? 'půl provozu' : 'stojí') + '</b></div>'
+      + '<b class="err">' + (chod ? esc(tx('hra.pul_provozu')) : esc(tx('hra.stoji_4'))) + '</b></div>'
       + '<p class="muted small" style="margin:4px 0 8px">'
-      + (chod ? 'Část strojů jede dál, ale tržba je na polovině. '
-              : 'Prádlomat nevydělává vůbec nic. ')
+      + (chod ? esc(tx('hra.cast_stroju_jede_dal_ale')) + ' '
+              : esc(tx('hra.pradlomat_nevydelava_vubec_nic')) + ' ')
       + 'Nájem, servis i splátka běží dál — výjezd technika už máš v servisním poplatku zaplacený.</p>'
       + (t
           ? '<div class="kv"><span>Technik</span><b>' + esc(ted < t.prijezd
               ? 'na cestě, přijede ' + etaText(t.prijezd - ted)
               : 'na místě, hotovo ' + etaText(t.hotovo - ted)) + '</b></div>'
           : (v
-              ? '<div class="kv"><span>Odkud pojede</span><b>' + esc(v.zakladna.name || 'základna') + '</b></div>'
-                + '<div class="kv"><span>Vzdálenost</span><b>' + Math.round(v.km) + ' km '
+              ? '<div class="kv"><span>Odkud pojede</span><b>' + esc(v.zakladna.name || esc(tx('hra.zakladna'))) + '</b></div>'
+                + '<div class="kv"><span>' + esc(tx('hra.vzdalenost')) + '</span><b>' + Math.round(v.km) + ' km '
                   + v.zpusob.znak + ' ' + v.zpusob.nazev + '</b></div>'
                 + '<div class="kv"><span>Cesta a oprava</span><b>' + etaText(v.celkem).replace('za ', '') + '</b></div>'
                 + zaMoremRada(u, v)
                 + '<button class="btn big" id="do-technik" style="width:100%;margin-top:10px">Vyslat technika</button>'
-              : '<p class="fine err">Nemáš základnu, odkud technika poslat.</p>'))
+              : '<p class="fine err">' + esc(tx('hra.nemas_zakladnu_odkud_technika_poslat')) + '</p>'))
       + '</div>';
   }
   return '<div class="card vada-karta"><div class="row"><h3>🔧 Spraveno</h3>'
     + '<b class="ok">zase jede</b></div>'
-    + '<p class="muted small" style="margin:4px 0 0">Technik jede zpátky na základnu.</p></div>';
+    + '<p class="muted small" style="margin:4px 0 0">' + esc(tx('hra.technik_jede_zpatky_na_zakladnu')) + '</p></div>';
 }
 function unitSheet(u) {
   var years = (Date.now() - u.builtAt) / YEAR_MS;
@@ -6880,18 +6880,18 @@ function unitSheet(u) {
 function vypovedMisto(u, sOdstupnym, rb) {
   apiJson('/spots/release', { spot_id: u.spotId, odstupne: !!sOdstupnym }).then(function (r) {
       if (!r.ok && r.j && r.j.odstupne > 0 && !sOdstupnym) {
-        if (rb) { rb.disabled = false; rb.textContent = 'Vypovědět místo'; rb.classList.remove('warn'); }
+        if (rb) { rb.disabled = false; rb.textContent = esc(tx('hra.vypovedet_misto')); rb.classList.remove('warn'); }
         if (S.cash < r.j.odstupne) {
           return toast('Odstupné je ' + kcFull(r.j.odstupne) + ' a tolik hotovosti nemáš.', 'err');
         }
-        sheet('<h3>Odstupné</h3>'
+        sheet('<h3>' + esc(tx('hra.odstupne')) + '</h3>'
           + '<p class="muted small">Smlouva je na dobu určitou, do konce zbývá ' + r.j.zbyva + ' '
-          + mn(r.j.zbyva, 'měsíc', 'měsíce', 'měsíců') + '. Majitel pozemku tě pustí, ale chce '
+          + mn(r.j.zbyva, esc(tx('hra.mesic')), esc(tx('hra.mesice')), esc(tx('hra.mesicu'))) + '. Majitel pozemku tě pustí, ale chce '
           + 'doplatit nájem — nejvýš za ' + ODSTUPNE_MAX + ' měsíce.</p>'
-          + '<div class="kv"><span>Odstupné</span><b class="err">' + kcFull(r.j.odstupne) + '</b></div>'
+          + '<div class="kv"><span>' + esc(tx('hra.odstupne_2')) + '</span><b class="err">' + kcFull(r.j.odstupne) + '</b></div>'
           + '<div class="kv"><span>Zbude ti</span><b>' + kcFull(S.cash - r.j.odstupne) + '</b></div>'
-          + '<button class="btn big" id="do-odstupne" style="width:100%;margin-top:12px">Zaplatit a odejít</button>'
-          + '<button class="btn sec" id="do-zustat" style="width:100%;margin-top:8px">Nechat být</button>');
+          + '<button class="btn big" id="do-odstupne" style="width:100%;margin-top:12px">' + esc(tx('hra.zaplatit_a_odejit')) + '</button>'
+          + '<button class="btn sec" id="do-zustat" style="width:100%;margin-top:8px">' + esc(tx('hra.nechat_byt_2')) + '</button>');
         var o = $('do-odstupne');
         if (o) o.onclick = function () {
           o.disabled = true;
@@ -6909,8 +6909,8 @@ function vypovedMisto(u, sOdstupnym, rb) {
       osirelyUver(u.spotId);
       delete CLAIMS[u.spotId];
       save(); prehodnotRamec(false, true); paint(); drawMap(); closeSheet(); syncState(true);
-      toast('Místo vypovězeno. ' + MODELS[u.eco.model].name + ' čeká na skladě.', 'ok');
-  }).catch(function () { if (rb) rb.disabled = false; toast('Server neodpovídá.', 'err'); });
+      toast(esc(tx('hra.misto_vypovezeno')) + ' ' + MODELS[u.eco.model].name + ' čeká na skladě.', 'ok');
+  }).catch(function () { if (rb) rb.disabled = false; toast(esc(tx('hra.server_neodpovida_11')), 'err'); });
 }
 
 // ─── Výměna stroje za jiný model ─────────────────────────────────────────────
@@ -6944,11 +6944,11 @@ function vymenaHtml(u) {
       + '<span class="' + (rozdil > 0 ? 'ok' : (rozdil < 0 ? 'err' : 'muted')) + '">('
       + (rozdil > 0 ? '+' : (rozdil < 0 ? '\u2212' : '')) + kcFull(Math.abs(rozdil)) + ')</span></i>'
       + '<i>' + (skladem ? skladem + '\u00d7 skladem · výměna za ' + kcFull(c.celkem)
-          : 'nemáš skladem — kup ho v Obchodě') + '</i></div>'
-      + (skladem ? '<button class="btn sm" data-vymena="' + k + '">Vyměnit</button>' : '')
+          : esc(tx('hra.nemas_skladem_kup_ho_v'))) + '</i></div>'
+      + (skladem ? '<button class="btn sm" data-vymena="' + k + '">' + esc(tx('hra.vymenit')) + '</button>' : '')
       + '</div>';
   }).join('');
-  return '<h3 style="margin:18px 0 4px">Vyměnit stroj</h3>'
+  return '<h3 style="margin:18px 0 4px">' + esc(tx('hra.vymenit_stroj')) + '</h3>'
     + '<p class="muted small">Nájem, přípojky i zábor místa zůstávají — mění se jen stroj. '
     + 'Starý se vrátí na sklad a postavíš ho jinde. Platíš dopravu nového stroje a u silnějšího '
     + 'modelu rozdíl v přípojkách; co je jednou v zemi, se nevrací.</p>'
@@ -6968,11 +6968,11 @@ function vymenaSheet(u, novy) {
   sheet('<h3>Vyměnit ' + esc(stary.name) + ' za ' + esc(m.name) + '</h3>'
     + '<p class="muted small">' + esc(u.name) + (mestoUnit(u) ? ' \u00b7 ' + esc(mestoUnit(u)) : '') + '</p>'
     + '<div class="kv"><span>Doprava stroje</span><b>' + kcFull(c.doprava) + '</b></div>'
-    + '<div class="kv"><span>Doplatek přípojek</span><b' + (c.doplatek ? ' class="warn"' : ' class="ok"') + '>'
-    + (c.doplatek ? kcFull(c.doplatek) : 'žádný') + '</b></div>'
-    + '<div class="kv souhrn"><span>Zaplatíš</span><b>' + kcFull(c.celkem) + '</b></div>'
-    + '<div class="kv"><span>Zisk místa teď</span><b>' + kcFull(u.eco.profit) + ' / měsíc</b></div>'
-    + '<div class="kv"><span>Po výměně</span><b class="' + (rozdil >= 0 ? 'ok' : 'err') + '">'
+    + '<div class="kv"><span>' + esc(tx('hra.doplatek_pripojek')) + '</span><b' + (c.doplatek ? ' class="warn"' : ' class="ok"') + '>'
+    + (c.doplatek ? kcFull(c.doplatek) : esc(tx('hra.zadny'))) + '</b></div>'
+    + '<div class="kv souhrn"><span>' + esc(tx('hra.zaplatis')) + '</span><b>' + kcFull(c.celkem) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.zisk_mista_ted')) + '</span><b>' + kcFull(u.eco.profit) + ' / měsíc</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.po_vymene')) + '</span><b class="' + (rozdil >= 0 ? 'ok' : 'err') + '">'
     + kcFull(e.profit) + ' / měsíc</b></div>'
     + (rozdil > 0 ? '<p class="fine ok">Výměna se vrátí '
         + etaText(Math.max(1, Math.round(c.celkem / Math.max(1, rozdil) * MONTH_MS))) + '.</p>'
@@ -6980,10 +6980,10 @@ function vymenaSheet(u, novy) {
         + 'Dává smysl jen tehdy, když ten velký potřebuješ jinde.</p>' : '')
     + '<p class="fine">' + esc(stary.name) + ' se vrátí na sklad, ' + esc(m.name)
     + ' se ze skladu postaví sem. Výměna je hotová hned.</p>'
-    + (malo ? '<p class="fine err">Na výměnu nemáš dost hotovosti.</p>' : '')
+    + (malo ? '<p class="fine err">' + esc(tx('hra.na_vymenu_nemas_dost_hotovosti')) + '</p>' : '')
     + '<button class="btn big" id="do-vymena"' + (malo ? ' disabled' : '') + ' style="width:100%;margin-top:10px">'
     + 'Vyměnit za ' + kcFull(c.celkem) + '</button>'
-    + '<button class="btn sec" id="do-vymena-ne" style="width:100%;margin-top:8px">Nechat být</button>');
+    + '<button class="btn sec" id="do-vymena-ne" style="width:100%;margin-top:8px">' + esc(tx('hra.nechat_byt_3')) + '</button>');
   var ne = $('do-vymena-ne');
   if (ne) ne.onclick = function () { closeSheet(); unitSheet(u); };
   var ok = $('do-vymena');
@@ -6991,9 +6991,9 @@ function vymenaSheet(u, novy) {
 }
 function vymenStroj(u, novy, btn) {
   var stary = u.eco.model;
-  if (inStock(novy) < 1) { if (btn) btn.disabled = false; return toast('Tenhle model nemáš skladem.', 'err'); }
+  if (inStock(novy) < 1) { if (btn) btn.disabled = false; return toast(esc(tx('hra.tenhle_model_nemas_skladem')), 'err'); }
   var c = vymenaCena(u, novy);
-  if (S.cash < c.celkem) { if (btn) btn.disabled = false; return toast('Na výměnu nemáš dost hotovosti.', 'err'); }
+  if (S.cash < c.celkem) { if (btn) btn.disabled = false; return toast(esc(tx('hra.na_vymenu_nemas_dost_hotovosti_2')), 'err'); }
   apiJson('/spots/model', { spot_id: u.spotId, model: novy }).then(function (r) {
     if (!r.ok) { if (btn) btn.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
     S.stock[novy] = inStock(novy) - 1;
@@ -7005,7 +7005,7 @@ function vymenStroj(u, novy, btn) {
     if (CLAIMS[u.spotId]) CLAIMS[u.spotId].model = novy;
     save(); paint(); drawMap(); closeSheet(); syncState(true);
     toast(MODELS[stary].name + ' je na skladě, na místě teď stojí ' + MODELS[novy].name + '.', 'ok');
-  }).catch(function () { if (btn) btn.disabled = false; toast('Server neodpovídá.', 'err'); });
+  }).catch(function () { if (btn) btn.disabled = false; toast(esc(tx('hra.server_neodpovida_26')), 'err'); });
 }
 
 // ─── Pozvánky ────────────────────────────────────────────────────────────────
@@ -7052,14 +7052,14 @@ function countIncomingRef() {
 }
 function shareGame(btn) {
   var url = shareUrl();
-  var txt = 'Stavím síť prádlomatů v Laundromat Tycoonu. Zkus to taky — a mně tím přibydou zákazníci.';
+  var txt = esc(tx('hra.stavim_sit_pradlomatu_v_laundromat'));
   if (navigator.share) {
     navigator.share({ title: 'Laundromat Tycoon', text: txt, url: url }).catch(function () {});
     return;
   }
-  var done = function () { btn.textContent = 'Odkaz zkopírován'; setTimeout(function () { btn.textContent = 'Zkopírovat odkaz'; }, 2000); };
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done).catch(function () { prompt('Zkopíruj odkaz:', url); });
-  else prompt('Zkopíruj odkaz:', url);
+  var done = function () { btn.textContent = esc(tx('hra.odkaz_zkopirovan')); setTimeout(function () { btn.textContent = esc(tx('hra.zkopirovat_odkaz_2')); }, 2000); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done).catch(function () { prompt(esc(tx('hra.zkopiruj_odkaz')), url); });
+  else prompt(esc(tx('hra.zkopiruj_odkaz_2')), url);
 }
 
 // ─── Obrazovky hry ───────────────────────────────────────────────────────────
@@ -7178,7 +7178,7 @@ function tutPaint() {
     // První prádlomat stojí — tutoriál skončil sám.
     if (tutAktivni() && (S.units || []).length) {
       S.tut = 'done'; save();
-      toast('První prádlomat stojí. Teď už to znáš — další si postavíš sám.', 'ok');
+      toast(esc(tx('hra.prvni_pradlomat_stoji_ted_uz')), 'ok');
       // Teď má smysl se ptát, jaký je podnikatel — a nabídnout účet.
       if (!S.profilVybran) setTimeout(otevriDotaznik, 1400);
     }
@@ -7262,8 +7262,8 @@ function tutSvetlo(k, info) {
       + '<p>' + esc(info.p) + '</p>'
       + (info.proc ? '<p class="tut-proc">' + esc(info.proc) + '</p>' : '')
       + (info.pozor ? '<p class="tut-pozor">Pozor: ' + esc(info.pozor) + '</p>' : '')
-      + '<div class="tut-akce"><button class="btn sm" id="tut-ok">Rozumím</button>'
-      + '<button class="tut-preskoc" id="tut-pres">Přeskočit</button></div>';
+      + '<div class="tut-akce"><button class="btn sm" id="tut-ok">' + esc(tx('hra.rozumim_3')) + '</button>'
+      + '<button class="tut-preskoc" id="tut-pres">' + esc(tx('hra.preskocit')) + '</button></div>';
     bub.querySelector('#tut-ok').onclick = function () { TUT_SKRYTA[k] = 1; tutZhasni(); };
     bub.querySelector('#tut-pres').onclick = function () { tutZhasni(); tutSkip(); };
     TUT_STAV = { k: k, cil: info.cil };
@@ -7292,7 +7292,7 @@ function tutUmisti(r) {
 function tutSkip() {
   if (!tutAktivni()) return;
   S.tut = 'done'; save(); tutPaint(); syncState(true);
-  toast('Tutoriál vypnutý. Našeptávat už ti nebudu.', 'ok');
+  toast(esc(tx('hra.tutorial_vypnuty_naseptavat_uz_ti')), 'ok');
 }
 // První krok otevřeme sami — bez sídla není co dělat.
 function tutStart() {
@@ -7309,13 +7309,13 @@ function tutStart() {
   sidloSheet();
 }
 function sidloSheet() {
-  sheet('<h3>Kde bude mít firma sídlo?</h3>'
+  sheet('<h3>' + esc(tx('hra.kde_bude_mit_firma_sidlo')) + '</h3>'
     + '<p class="muted small">Napiš město. Pošleme tam člověka, projde ho a najde místa, kde by prádlomat vydělával. '
     + 'První prozkoumané město se stane sídlem tvojí firmy — ve městě, ne na adrese prádlomatu — a od něj se pak počítá doprava strojů.</p>'
-    + '<label class="fld"><span>Město</span>'
+    + '<label class="fld"><span>' + esc(tx('hra.mesto')) + '</span>'
     + '<input id="sidlo-mesto" class="inp" type="text" maxlength="60" placeholder="např. Pardubice"></label>'
     + '<p class="fine" id="city-note"></p>'
-    + '<button class="btn big" id="sidlo-go">Poslat tam člověka</button>'
+    + '<button class="btn big" id="sidlo-go">' + esc(tx('hra.poslat_tam_cloveka')) + '</button>'
     + '<p class="fine">Cesta stojí ' + kcFull(SCOUT_COST) + '. Měst můžeš později projít kolik chceš, ale sídlo zůstane tam, kde začneš.</p>');
   var i = $('sidlo-mesto'), b = $('sidlo-go');
   b.onclick = function () { scout((i.value || '').trim(), b); };
@@ -7347,7 +7347,7 @@ function paintFirma() {
     el.innerHTML = (ME.emblem ? znakSvg(ME.emblem, 20) + ' ' : '')
       + '<b>' + esc(firma) + '</b>' + stav + '<i>' + esc(mojeHodnost().nazev) + '</i>';
   } else {
-    el.innerHTML = '<b class="muted">Hraješ bez účtu</b>' + stav + '<i>Založit firmu ›</i>';
+    el.innerHTML = '<b class="muted">' + esc(tx('hra.hrajes_bez_uctu')) + '</b>' + stav + '<i>' + esc(tx('hra.zalozit_firmu')) + '</i>';
   }
 }
 function paintHlavicka() {
@@ -7442,7 +7442,7 @@ function grafSvg(body, barva, schody, mezniky) {
 function grafKarta(o) {
   var dolu = o.dobreNahoru === false;
   var lepsi = dolu ? o.zmena < 0 : o.zmena > 0;
-  var zm = !o.zmena ? 'beze změny od začátku'
+  var zm = !o.zmena ? esc(tx('hra.beze_zmeny_od_zacatku'))
     : (o.zmena > 0 ? '▲ +' : '▼ −') + o.jed(Math.abs(o.zmena)) + ' od začátku';
   return '<div class="card graf-karta">'
     + '<div class="row"><h3>' + o.nadpis + '</h3><b>' + o.jed(o.ted) + '</b></div>'
@@ -7651,7 +7651,7 @@ function vypovedStav(u) {
   if (v) return { typ: 'preplaceno', do: v.do, kdo: v.nick, rent: v.rent,
     text: v.nick + ' přeplatil nájem', akce: 'Dorovnat' };
   if (u.vypoved && u.vypoved.do) return { typ: 'majitel', do: u.vypoved.do,
-    text: 'majitel dal výpověď', akce: u.vypoved.navyseni ? 'Přisadit' : 'Řešit' };
+    text: esc(tx('hra.majitel_dal_vypoved')), akce: u.vypoved.navyseni ? esc(tx('hra.prisadit')) : esc(tx('hra.resit')) };
   return null;
 }
 // Město, ve kterém stroj stojí. Oblast se jmenuje po městě, do kterého hráč
@@ -7673,7 +7673,7 @@ function strojRadek(u, i) {
   var zem = zemUnit(u);
   var mesto = mestoUnit(u);
   var detail = (m ? m.name : '') + (mesto ? ' · ' + mesto : '')
-    + (zem === 'moje' ? ' · na tvém pozemku' : zem === 'najem' ? ' · na pronajatém pozemku' : '')
+    + (zem === 'moje' ? ' ' + esc(tx('hra.na_tvem_pozemku')) : zem === 'najem' ? ' ' + esc(tx('hra.na_pronajatem_pozemku')) : '')
     + ' · tržba ' + kc(u.eco.revenue)
     + ' · ' + vady + ' ' + mn(vady, 'porucha', 'poruchy', 'poruch')
     + ' · bez závady ' + spl + ' %';
@@ -7739,12 +7739,12 @@ function mistoRadek(r) {
     : r.cizi
       ? '<span class="err">' + esc(r.cizi.firma || r.cizi.nick || 'konkurence') + '</span> · '
         + esc((MODELS[r.cizi.model] || {}).name || '') + ' · nájem ' + kcFull(r.cizi.rent || 0)
-      : '<span class="warn">volné</span> · nájem ' + (zem ? 'žádný — pozemek' : kcFull(rentOf(sp)))
+      : '<span class="warn">' + esc(tx('hra.volne_2')) + '</span> · nájem ' + (zem ? esc(tx('hra.zadny_pozemek')) : kcFull(rentOf(sp)))
         + ' · FLEX by vydělal ' + kcFull(e.profit);
   return '<div class="zeb-row misto" data-misto-id="' + esc(sp.id) + '">'
     + (im ? '<img class="misto-ico" src="' + esc(im.src) + '" alt="">'
         : '<i class="misto-ico prazdna">' + (r.cizi ? '\u26A0\uFE0F' : '\u25CB') + '</i>')
-    + '<span class="nick">' + esc(sp.name || 'Místo')
+    + '<span class="nick">' + esc(sp.name || esc(tx('hra.misto_4')))
     + '<i>' + [KIND_LABEL[sp.kind] || '', r.mesto || ''].filter(Boolean).map(esc).join(' · ') + '</i>'
     + '<i>' + stav + '</i></span>'
     + '<b class="' + skoreTrida(sp.score) + '">' + Math.round(sp.score) + '</b></div>';
@@ -7757,20 +7757,20 @@ function paintMista() {
   var pocty = { moje: 0, volna: 0, cizi: 0 };
   vse.forEach(function (r) { pocty[r.stav]++; });
   if (!vse.length) {
-    box.innerHTML = '<div class="empty">Zatím nemáš prověřené ani jedno místo.<br>'
+    box.innerHTML = '<div class="empty">' + esc(tx('hra.zatim_nemas_proverene_ani_jedno')) + '<br>'
       + 'Prozkoumej město a místa si prověř — pak je uvidíš tady seřazená.</div>';
     return;
   }
   var kolik = MISTA_STRANKA + MISTA_VIC;
   var videt = list.slice(0, kolik);
   box.innerHTML = '<h3 style="margin:14px 0 2px">Místa, co znáš '
-    + '<span class="muted small" style="font-weight:600">(nejlepší nahoře)</span></h3>'
+    + '<span class="muted small" style="font-weight:600">' + esc(tx('hra.nejlepsi_nahore')) + '</span></h3>'
     + '<p class="muted small" style="margin:0 0 10px">Prověřená místa ze všech tvých měst. '
     + 'Vlastní otevřou detail prádlomatu, kde ho můžeš vyměnit nebo odvézt; volné rovnou stavbu, '
     + 'cizí přeplacení nájmu. Tvých ' + pocty.moje + ', volných ' + pocty.volna
     + ', obsazených konkurencí ' + pocty.cizi + '.</p>'
     + (list.length ? videt.map(mistoRadek).join('')
-        : '<div class="empty">V téhle skupině nic nemáš.</div>')
+        : '<div class="empty">' + esc(tx('hra.v_tehle_skupine_nic_nemas')) + '</div>')
     + (list.length > videt.length
         ? '<button class="btn sec" id="mista-vic" style="width:100%;margin-top:10px">Zobrazit dalších '
           + Math.min(MISTA_STRANKA, list.length - videt.length) + '</button>' : '');
@@ -7870,11 +7870,11 @@ function loadZeb() {
 // ─── Vlaječky zemí ─────────────────────────────────────────────────
 // Vlajka je dvojice znaků „regional indicator“ — telefon z nich slöží obrázek
 // vlajky sám. Kde na to písmo není (Windows), ukáže aspoň kód země, což stačí.
-var ZEME_NAZEV = { cz: 'Česko', sk: 'Slovensko', pl: 'Polsko', de: 'Německo', at: 'Rakousko',
-  hu: 'Maďarsko', si: 'Slovinsko', hr: 'Chorvatsko', it: 'Itálie', es: 'Španělsko',
-  fr: 'Francie', nl: 'Nizozemsko', be: 'Belgie', ch: 'Švýcarsko', gb: 'Velká Británie',
-  ie: 'Irsko', dk: 'Dánsko', se: 'Švédsko', no: 'Norsko', fi: 'Finsko', pt: 'Portugalsko',
-  ro: 'Rumunsko', bg: 'Bulharsko', gr: 'Řecko', ua: 'Ukrajina', us: 'Spojené státy',
+var ZEME_NAZEV = { cz: esc(tx('hra.cesko')), sk: 'Slovensko', pl: 'Polsko', de: esc(tx('hra.nemecko')), at: 'Rakousko',
+  hu: esc(tx('hra.madarsko')), si: 'Slovinsko', hr: 'Chorvatsko', it: esc(tx('hra.italie')), es: esc(tx('hra.spanelsko')),
+  fr: 'Francie', nl: 'Nizozemsko', be: 'Belgie', ch: esc(tx('hra.svycarsko')), gb: esc(tx('hra.velka_britanie')),
+  ie: 'Irsko', dk: esc(tx('hra.dansko')), se: esc(tx('hra.svedsko')), no: 'Norsko', fi: 'Finsko', pt: 'Portugalsko',
+  ro: 'Rumunsko', bg: 'Bulharsko', gr: esc(tx('hra.recko')), ua: 'Ukrajina', us: esc(tx('hra.spojene_staty')),
   ca: 'Kanada' };
 function vlajka(kod) {
   var k = String(kod || '').toUpperCase();
@@ -7894,7 +7894,7 @@ function vlajkyHtml(zeme) {
 }
 // Čeština má tři tvary — jeden hráč, dva hráči, pět hráčů.
 function hracuSlovy(n) {
-  return n + (n === 1 ? ' hráč' : (n >= 2 && n <= 4 ? ' hráči' : ' hráčů'));
+  return n + (n === 1 ? ' ' + esc(tx('hra.hrac_4')) : (n >= 2 && n <= 4 ? ' ' + esc(tx('hra.hraci_4')) : ' ' + esc(tx('hra.hracu_4'))));
 }
 // Země místo hráčů: vlaječka, název, rozpis po modelích a celkový počet.
 function zemeRadek(z) {
@@ -7933,7 +7933,7 @@ function zebKdy() {
 }
 function paintZeb() {
   var box = $('zeb-body');
-  if (!ZEB) { box.innerHTML = '<p class="muted small">Načítám…</p>'; return loadZeb().then(paintZeb); }
+  if (!ZEB) { box.innerHTML = '<p class="muted small">' + esc(tx('hra.nacitam_4')) + '</p>'; return loadZeb().then(paintZeb); }
   var list = ZEB[ZEB_KAT] || [], popis = ZEB_POPIS[ZEB_KAT];
   if (ZEB_KAT === 'zeme') {
     box.innerHTML = '<h3 style="margin:14px 0 2px">' + popis.nadpis + '</h3>'
@@ -7941,10 +7941,10 @@ function paintZeb() {
       + (list.length
         ? '<div class="zeb">' + list.map(zemeRadek).join('') + '</div>'
         : '<div class="empty">' + (ZEB.chyba
-            ? 'Žebříček se nepodařilo načíst. Zkus to za chvíli.'
-            : 'Zatím nikde nic nestojí.') + '</div>')
+            ? esc(tx('hra.zebricek_se_nepodarilo_nacist_zkus'))
+            : esc(tx('hra.zatim_nikde_nic_nestoji'))) + '</div>')
       + (list.length ? '<p class="fine">Celkem ' + list.reduce(function (a, z) { return a + z.celkem; }, 0)
-          + ' prádlomatů v ' + list.length + (list.length === 1 ? ' zemi.' : (list.length <= 4 ? ' zemích.' : ' zemích.')) + '</p>' : '');
+          + ' prádlomatů v ' + list.length + (list.length === 1 ? ' zemi.' : (list.length <= 4 ? ' ' + esc(tx('hra.zemich')) : ' ' + esc(tx('hra.zemich_2')))) + '</p>' : '');
     return;
   }
   var ja = ZEB.ja ? ZEB.ja[ZEB_KAT] : null;
@@ -7963,7 +7963,7 @@ function paintZeb() {
             + vlajkyHtml(x.zeme)
             + '<b>' + popis.jed(x.hodnota) + '</b></div>';
         }).join('') + '</div>'
-      : '<div class="empty">' + (ZEB.chyba ? 'Žebříček se nepodařilo načíst. Zkus to za chvíli.' : 'Tady zatím nikdo není. Buď první.') + '</div>')
+      : '<div class="empty">' + (ZEB.chyba ? esc(tx('hra.zebricek_se_nepodarilo_nacist_zkus_2')) : esc(tx('hra.tady_zatim_nikdo_neni_bud'))) + '</div>')
     + (ja && ja.poradi > list.length
       ? '<p class="muted small" style="margin-top:12px">Ty jsi ' + ja.poradi + '. z ' + ja.z + ' — ' + popis.jed(ja.hodnota) + '.</p>'
       : '')
@@ -7980,7 +7980,7 @@ function paintZeb() {
 // Kdo drží kus téhle firmy a kde má její majitel podíl jinde. Ceny a výplaty
 // tu nejsou — to je věc těch, co se domluvili. Tohle je obchodní rejstřík.
 function strukturaSheet(id) {
-  sheet('<h3>Vlastnická struktura</h3><p class="muted small">Načítám…</p>');
+  sheet('<h3>' + esc(tx('hra.vlastnicka_struktura')) + '</h3><p class="muted small">' + esc(tx('hra.nacitam_5')) + '</p>');
   api('/trade/struktura/' + id).then(function (r) {
     if (!r.ok) return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err');
     var d = r.j;
@@ -8006,21 +8006,21 @@ function strukturaSheet(id) {
               return '<span class="odz-chip" title="' + esc(o.popis) + '">' + o.ikona + ' '
                 + esc(o.nazev) + '</span>'; }).join('') + '</div>'
           : '')
-      + '<div class="kv souhrn"><span>Majitel drží</span><b class="' + (d.prodano > 0 ? '' : 'ok') + '">'
+      + '<div class="kv souhrn"><span>' + esc(tx('hra.majitel_drzi')) + '</span><b class="' + (d.prodano > 0 ? '' : 'ok') + '">'
       + procentaPodilu(1 - d.prodano) + '</b></div>'
-      + '<h3 style="margin-top:16px">Podílníci</h3>'
+      + '<h3 style="margin-top:16px">' + esc(tx('hra.podilnici')) + '</h3>'
       + (d.podilnici.length
           ? d.podilnici.map(function (x) { return radek(x); }).join('')
-          : '<p class="muted small">Firmu nedrží nikdo jiný — je celá majitelova.</p>')
-      + '<h3 style="margin-top:18px">Podíly v cizích firmách</h3>'
+          : '<p class="muted small">' + esc(tx('hra.firmu_nedrzi_nikdo_jiny_je')) + '</p>')
+      + '<h3 style="margin-top:18px">' + esc(tx('hra.podily_v_cizich_firmach')) + '</h3>'
       + (d.drzi.length
           ? d.drzi.map(function (x) { return radek(x); }).join('')
-          : '<p class="muted small">V žádné cizí firmě podíl nemá.</p>')
-      + '<p class="fine" style="margin-top:12px">Klepnutím na firmu se podíváš na její strukturu.</p>');
+          : '<p class="muted small">' + esc(tx('hra.v_zadne_cizi_firme_podil')) + '</p>')
+      + '<p class="fine" style="margin-top:12px">' + esc(tx('hra.klepnutim_na_firmu_se_podivas')) + '</p>');
     [].forEach.call($('sheet-body').querySelectorAll('[data-struk]'), function (el) {
       el.onclick = function () { strukturaSheet(Number(el.getAttribute('data-struk'))); };
     });
-  }).catch(function () { toast('Server neodpovídá.', 'err'); });
+  }).catch(function () { toast(esc(tx('hra.server_neodpovida_18')), 'err'); });
 }
 // Procenta podílu tak, aby se neztratila desetina u malých podílů.
 function procentaPodilu(x) {
@@ -8039,15 +8039,15 @@ function povestHtml() {
     + '<b class="' + (p > 0 ? 'ok' : (p < 0 ? 'err' : '')) + '">' + hvezdyText() + '</b></div>'
     + '<p class="muted small" style="margin:2px 0 0">Pověst u zákazníků je ' + povestSlovy() + '.</p>'
     + '<div class="povest-pas"><i style="left:' + ((p + 100) / 2) + '%"></i></div>'
-    + '<div class="kv"><span>Návštěvnost z pověsti</span><b class="'
+    + '<div class="kv"><span>' + esc(tx('hra.navstevnost_z_povesti')) + '</span><b class="'
     + (zmena > 0 ? 'ok' : (zmena < 0 ? 'err' : '')) + '">' + (zmena > 0 ? '+' : '') + zmena + ' %</b></div>'
     + '<p class="fine" style="margin-top:8px">Zákazníci volí, jen když jsi ve hře. '
-    + 'Kdo hovor vezme a umí poradit, má v prádlomatech víc lidí — až o desetinu. '
+    + esc(tx('hra.kdo_hovor_vezme_a_umi')) + ' '
     + 'Kdo je odmítá nebo odbyde, přijde až o pětinu návštěvnosti. Zvoní to jen pět vteřin — '
     + 'co se nevezme, bere se jako nevyřízený hovor. '
     + (maLinku() ? 'Infolinku máš zaplacenou ještě ' + etaText(linkaZbyva())
         + ', takže hovory bere operátor a telefon nezvoní.'
-        : 'Zaplacená infolinka je vezme za tebe, i když hru zavřeš.') + '</p></div>';
+        : esc(tx('hra.zaplacena_infolinka_je_vezme_za'))) + '</p></div>';
 }
 // Pojištění provozoven. Požár ani vytopení technik nespraví — oprava stojí
 // desetitisíce a stroj do té doby nevydělává. Pojistné běží měsíčně za každý
@@ -8057,17 +8057,17 @@ function pojisteniHtml() {
   var mes = (S.units || []).reduce(function (a, u) {
     return a + machinePrice(MODELS[(u.eco && u.eco.model) || 'mini']) * POJISTNE_PODIL;
   }, 0);
-  return '<div class="card"><div class="row"><h3>Pojištění provozoven</h3>'
+  return '<div class="card"><div class="row"><h3>' + esc(tx('hra.pojisteni_provozoven')) + '</h3>'
     + '<button class="prep-sam' + (zap ? ' on' : '') + '" id="do-pojisteni">'
-    + (zap ? 'Sjednané' : 'Nemáš') + '</button></div>'
+    + (zap ? esc(tx('hra.sjednane')) : esc(tx('hra.nemas'))) + '</button></div>'
     + '<p class="muted small" style="margin:4px 0 0">Požár, vytopení nebo vloupání se stane vzácně, '
     + 'ale prádlomat pak stojí několik dní a oprava jde do desetitisíců. S pojištěním zaplatíš '
     + 'z opravy jen ' + Math.round(POJISTENI_SPOLUUCAST * 100) + ' %, zbytek jde za pojišťovnou.</p>'
-    + '<div class="kv"><span>Pojistné za celou síť</span><b' + (zap ? ' class="warn"' : '') + '>'
+    + '<div class="kv"><span>' + esc(tx('hra.pojistne_za_celou_sit')) + '</span><b' + (zap ? ' class="warn"' : '') + '>'
     + kcFull(Math.round(mes)) + ' / měsíc</b></div>'
     + '<p class="fine">' + (zap
-        ? 'Pojistné se strhává každý herní měsíc za každý postavený prádlomat.'
-        : 'Když ho sjednáš, platí se za každý postavený prádlomat — a škody už budou levnější.') + '</p></div>';
+        ? esc(tx('hra.pojistne_se_strhava_kazdy_herni'))
+        : esc(tx('hra.kdyz_ho_sjednas_plati_se'))) + '</p></div>';
 }
 // Střed prozkoumaného města — odtud se dá zřídit pobočka.
 function stredOblasti(a) {
@@ -8139,27 +8139,27 @@ function cetaHtml() {
 }
 function cetaSheet() {
   var f = canFinance(CETA_CENA, FIN_OWN);
-  sheet('<h3>Pořídit stavební četu</h3>'
+  sheet('<h3>' + esc(tx('hra.poridit_stavebni_cetu')) + '</h3>'
     + '<p class="muted small">Technika patří k sídlu a lidi jedou odtud. Banka techniku financuje, '
     + 'ale posuzuje ji podle cash flow celé firmy — nestojí za ní místo, které vydělává.</p>'
     + CETA_TECHNIKA.map(function (t) {
         return '<div class="kv"><span>' + esc(t.nazev) + '</span><b>' + kcFull(t.cena) + '</b></div>';
       }).join('')
     + financeRows(f)
-    + '<div class="kv souhrn"><span>Mzdy dvou lidí</span><b class="warn">' + kcFull(CETA_MZDY) + ' / měsíc</b></div>'
+    + '<div class="kv souhrn"><span>' + esc(tx('hra.mzdy_dvou_lidi_2')) + '</span><b class="warn">' + kcFull(CETA_MZDY) + ' / měsíc</b></div>'
     + '<p class="fine">Při čtyřech místech měsíčně ušetříš kolem 240 tisíc a četa stojí kolem 120 — '
     + 'při jednom místě naopak prodělává. Je to sázka na vlastní tempo.</p>'
-    + '<button class="btn big" id="do-ceta-ano"' + (f.ok ? '' : ' disabled') + '>Pořídit</button>'
+    + '<button class="btn big" id="do-ceta-ano"' + (f.ok ? '' : ' disabled') + '>' + esc(tx('hra.poridit')) + '</button>'
     + (f.ok ? '' : '<p class="fine err">' + esc(f.duvod || '') + '</p>'));
   bindFinance(function () { cetaSheet(); });
   var b = $('do-ceta-ano');
   if (b) b.onclick = function () {
     var g = canFinance(CETA_CENA, FIN_OWN);
     if (!g.ok) return;
-    doFinance(g, { druh: 'technika', popis: 'Stavební technika' });
+    doFinance(g, { druh: 'technika', popis: esc(tx('hra.stavebni_technika')) });
     S.ceta = { od: Date.now(), shanec: false, mesic: Math.floor(Date.now() / MONTH_MS), hotovo: 0, phm: 0 };
     save(); paint(); closeSheet(); syncState(true);
-    toast('Četa je tvoje. Přípojky teď stavíš za pětinu.', 'ok');
+    toast(esc(tx('hra.ceta_je_tvoje_pripojky_ted')), 'ok');
   };
 }
 // Výběr města pro pobočku — jen z toho, co hráč prozkoumal.
@@ -8170,7 +8170,7 @@ function pobockaSheet() {
     var uz = zakladny().some(function (b) { return kmMezi(b, str) < 8; });
     return { id: id, name: a.name || id, lat: str.lat, lon: str.lon, uz: uz };
   }).filter(Boolean);
-  sheet('<h3>Zřídit pobočku</h3>'
+  sheet('<h3>' + esc(tx('hra.zridit_pobocku')) + '</h3>'
     + '<p class="muted small">Stojí ' + kcFull(POBOCKA_CENA) + ' a ' + kcFull(POBOCKA_MESICNE)
     + ' měsíčně. Vyplatí se tam, kde chceš stavět — doprava, výjezdy techniků i jízdy čety '
     + 'se pak počítají odsud. Zrušit ji můžeš kdykoli, vrátí se ti polovina ceny.</p>'
@@ -8178,11 +8178,11 @@ function pobockaSheet() {
     + (mesta.length
       ? '<div class="zeb">' + mesta.map(function (m) {
           return '<div class="zeb-row"><span class="nick">' + esc(m.name)
-            + '<i>' + (m.uz ? 'tady už základnu máš' : 'prozkoumané město') + '</i></span>'
-            + (m.uz || S.cash < POBOCKA_CENA ? '' : '<button class="btn sm" data-pob="' + esc(m.id) + '">Zřídit</button>')
+            + '<i>' + (m.uz ? esc(tx('hra.tady_uz_zakladnu_mas')) : esc(tx('hra.prozkoumane_mesto'))) + '</i></span>'
+            + (m.uz || S.cash < POBOCKA_CENA ? '' : '<button class="btn sm" data-pob="' + esc(m.id) + '">' + esc(tx('hra.zridit')) + '</button>')
             + '</div>';
         }).join('') + '</div>'
-      : '<div class="empty">Nemáš prozkoumané žádné město.</div>'));
+      : '<div class="empty">' + esc(tx('hra.nemas_prozkoumane_zadne_mesto')) + '</div>'));
   [].forEach.call(document.querySelectorAll('[data-pob]'), function (b) {
     b.onclick = function () {
       var m = mesta.filter(function (x) { return x.id === b.getAttribute('data-pob'); })[0];
@@ -8264,10 +8264,10 @@ function zrusPobockuSheet(i) {
   sheet('<h3>Zrušit pobočku ' + esc(b.name || '') + '</h3>'
     + '<p class="muted small">Sklad se vyklidí a člověk odejde. Doprava strojů i výjezdy techniků '
     + 'se pak budou počítat od další nejbližší základny — u míst v okolí to zdraží.</p>'
-    + '<div class="kv"><span>Vrátí se ti</span><b class="ok">' + kcFull(vratka) + '</b></div>'
-    + '<div class="kv"><span>Ušetříš měsíčně</span><b class="ok">' + kcFull(POBOCKA_MESICNE) + '</b></div>'
-    + '<button class="btn big" id="do-zrus-ano" style="width:100%;margin-top:12px">Zrušit pobočku</button>'
-    + '<button class="btn sec" id="do-zrus-ne" style="width:100%;margin-top:8px">Nechat být</button>');
+    + '<div class="kv"><span>' + esc(tx('hra.vrati_se_ti')) + '</span><b class="ok">' + kcFull(vratka) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.usetris_mesicne')) + '</span><b class="ok">' + kcFull(POBOCKA_MESICNE) + '</b></div>'
+    + '<button class="btn big" id="do-zrus-ano" style="width:100%;margin-top:12px">' + esc(tx('hra.zrusit_pobocku')) + '</button>'
+    + '<button class="btn sec" id="do-zrus-ne" style="width:100%;margin-top:8px">' + esc(tx('hra.nechat_byt_4')) + '</button>');
   if ($('do-zrus-ne')) $('do-zrus-ne').onclick = closeSheet;
   if ($('do-zrus-ano')) $('do-zrus-ano').onclick = function () {
     S.pobocky.splice(i, 1);
@@ -8325,7 +8325,7 @@ function bindZakladny() {
     save(); paint(); syncState(true); paintNet();
     toast(S.pojisteni
       ? 'Provozovny jsou pojištěné. Pojistné ' + kcFull(pojisteniMesicne()) + ' měsíčně.'
-      : 'Pojištění zrušeno. Škody si teď platíš celé sám.', 'ok');
+      : esc(tx('hra.pojisteni_zruseno_skody_si_ted')), 'ok');
   };
   var b = $('do-pobocka');
   if (b) b.onclick = function () { pobockaSheet(); };
@@ -8335,7 +8335,7 @@ function bindZakladny() {
   if (sh) sh.onclick = function () {
     S.ceta.shanec = !S.ceta.shanec;
     save(); paint(); syncState(true);
-    toast(S.ceta.shanec ? 'Sháněč nastoupil — místa bude hledat sám.' : 'Sháněč skončil.', 'ok');
+    toast(S.ceta.shanec ? esc(tx('hra.shanec_nastoupil_mista_bude_hledat')) : esc(tx('hra.shanec_skoncil')), 'ok');
   };
 }
 // Přehled jednotlivých úvěrů — co je na co, za kolik a kolik ještě zbývá.
@@ -8384,14 +8384,14 @@ function ramecRozborHtml() {
   var drzi = sl.strop !== null && sl.strop < Math.min(sl.zisk, sl.historie) ? 'strop' : drziHru;
   return '<div class="kv" style="margin-top:8px"><span>Za doplacená místa (' + doplacenychMist() + ')</span>'
     + '<b class="' + (drzi === 'historie' ? 'warn' : '') + '">' + kcFull(sl.historie) + '</b></div>'
-    + '<div class="kv"><span>Co unese výdělek sítě</span>'
+    + '<div class="kv"><span>' + esc(tx('hra.co_unese_vydelek_site')) + '</span>'
     + '<b class="' + (drzi === 'zisk' ? 'warn' : '') + '">' + kcFull(sl.zisk) + '</b></div>'
-    + '<div class="kv"><span>Strop balíčku</span><b class="' + (drzi === 'strop' ? 'warn' : 'ok') + '">'
+    + '<div class="kv"><span>' + esc(tx('hra.strop_balicku')) + '</span><b class="' + (drzi === 'strop' ? 'warn' : 'ok') + '">'
     + (sl.strop === null ? 'bez stropu' : kcFull(sl.strop)) + '</b></div>'
     + '<p class="fine">Platí ten nejmenší z nich. ' + (drzi === 'strop'
-        ? 'Limit teď drží strop tvého balíčku — vyšší balíček najdeš v Kartách.'
+        ? esc(tx('hra.limit_ted_drzi_strop_tveho'))
         : drzi === 'zisk'
-          ? 'Limit teď drží výdělek — zvedne ho vyšší zisk nebo nižší splátky.'
+          ? esc(tx('hra.limit_ted_drzi_vydelek_zvedne'))
           : 'Limit teď drží historie — každý další doplacený prádlomat přidá ' + kcFull(RAMEC_ZA_MISTO) + '.')
     + ' Banka ho sama srovná jednou za herní měsíc a hned, jakmile ti ubude nebo přibude '
     + 'prádlomat — limit stojí na tom, kolik doplacených strojů máš v provozu. '
@@ -8667,41 +8667,41 @@ function paintBank() {
 function penizeSheet() {
   var room = Math.max(0, zastavaStrop() - S.loan);
   var muze = uverNabidka(null).max >= 1000;
-  sheet('<h3>Peníze</h3>'
+  sheet('<h3>' + esc(tx('hra.penize')) + '</h3>'
     + '<div class="kv"><span>Hotovost</span><b>' + kcFull(S.cash) + '</b></div>'
-    + '<div class="kv"><span>Dlužíš bance</span><b class="' + (S.loan > 0 ? 'warn' : '') + '">' + kcFull(S.loan) + '</b></div>'
-    + '<div class="kv"><span>Ještě si můžeš půjčit</span><b>' + kcFull(Math.min(room, S.bank)) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.dluzis_bance')) + '</span><b class="' + (S.loan > 0 ? 'warn' : '') + '">' + kcFull(S.loan) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.jeste_si_muzes_pujcit')) + '</span><b>' + kcFull(Math.min(room, S.bank)) + '</b></div>'
     + dalsiSplatkaHtml()
     + '<p class="muted small" style="margin:10px 0 0">Hotovost roste sama tím, co vydělají prádlomaty. '
     + 'Když potřebuješ víc hned, půjč si v bance — podmínky uvidíš dopředu'
     + (PAYMENTS_ON ? ', nebo si dobij balíček laundry.' : '.') + '</p>'
     + (muze
-        ? '<button class="btn big" id="pen-uver" style="margin-top:12px">Požádat banku o úvěr</button>'
+        ? '<button class="btn big" id="pen-uver" style="margin-top:12px">' + esc(tx('hra.pozadat_banku_o_uver')) + '</button>'
         : '<p class="fine" style="margin-top:12px">' + uverDuvod() + '</p>')
     + (S.loan > 0 && S.cash >= 1
         ? '<button class="btn sec" id="pen-splatit" style="width:100%;margin-top:8px">Splatit ' + kcFull(Math.min(S.cash, S.loan)) + '</button>' : '')
-    + (PAYMENTS_ON ? '<button class="btn sec" id="pen-balicek" style="width:100%;margin-top:8px">Dobít balíček laundry</button>' : '')
-    + '<button class="btn sec" id="pen-ceka" style="width:100%;margin-top:8px">Zkontrolovat, co na mě čeká</button>'
-    + '<p class="fine">Čekat může hotovost přidaná ručně nebo zaplacený balíček, který se ještě nestihl připsat.</p>');
+    + (PAYMENTS_ON ? '<button class="btn sec" id="pen-balicek" style="width:100%;margin-top:8px">' + esc(tx('hra.dobit_balicek_laundry')) + '</button>' : '')
+    + '<button class="btn sec" id="pen-ceka" style="width:100%;margin-top:8px">' + esc(tx('hra.zkontrolovat_co_na_me_ceka')) + '</button>'
+    + '<p class="fine">' + esc(tx('hra.cekat_muze_hotovost_pridana_rucne')) + '</p>');
   var u = $('pen-uver');
   if (u) u.onclick = function () { uverSheet(); };
   var sp = $('pen-splatit');
   if (sp) sp.onclick = function () {
     var pay = Math.min(S.cash, S.loan);
     S.cash -= pay; splatitDluh(pay); S.bank = Math.min(bankCap(), S.bank + pay);
-    zapis('splatka', 'Doplacení úvěrů', -pay);
+    zapis('splatka', esc(tx('hra.doplaceni_uveru')), -pay);
     save(); paint(); syncState(true); closeSheet(); toast('Splaceno ' + kcFull(pay) + '.', 'ok');
   };
   var ba = $('pen-balicek');
   if (ba) ba.onclick = function () { closeSheet(); switchTab('bank'); };
   var ck = $('pen-ceka');
   if (ck) ck.onclick = function () {
-    ck.disabled = true; ck.textContent = 'Koukám\u2026';
+    ck.disabled = true; ck.textContent = esc(tx('hra.koukam_u2026'));
     var pred = S.cash;
     loadCards().then(function () {
       claimCash(function () {
         closeSheet();
-        if (S.cash <= pred) toast('Nic na tebe nečeká.');
+        if (S.cash <= pred) toast(esc(tx('hra.nic_na_tebe_neceka')));
       });
     });
   };
@@ -8847,7 +8847,7 @@ function datumCas(x) {
   } catch (e) { return ''; }
 }
 function provizeSheet() {
-  sheet('<h3>Provize</h3><p class="muted small">Načítám…</p>');
+  sheet('<h3>' + 'Provize' + '</h3><p class="muted small">' + esc(tx('hra.nacitam_6')) + '</p>');
   api('/account/provize').then(function (r) {
     var list = (r.ok && r.j.provize) || [];
     var celkem = list.reduce(function (a, x) { return a + (x.castka || 0); }, 0);
@@ -8857,19 +8857,19 @@ function provizeSheet() {
       + (list.length
           ? '<div class="sum-grid" style="margin:12px 0">'
             + '<div><span>Dohromady</span><b class="ok">' + kcFull(celkem) + '</b></div>'
-            + '<div><span>Provizí</span><b>' + list.length + '×</b></div></div>'
+            + '<div><span>' + esc(tx('hra.provizi')) + '</span><b>' + list.length + '×</b></div></div>'
             + '<div class="srv">' + list.map(function (x) {
                 return '<div class="srv-radek">'
                   + '<i class="srv-tecka ' + (x.vyzvednuto ? 'ok' : 'warn') + '"></i>'
                   + '<span><b>' + esc(x.zac || 'provize') + '</b>'
-                  + '<i>' + esc(datumCas(x.kdy)) + (x.vyzvednuto ? '' : ' · čeká na vyzvednutí') + '</i></span>'
+                  + '<i>' + esc(datumCas(x.kdy)) + (x.vyzvednuto ? '' : ' ' + esc(tx('hra.ceka_na_vyzvednuti'))) + '</i></span>'
                   + '<b class="ok">' + kcFull(x.castka) + '</b></div>';
               }).join('') + '</div>'
-          : '<div class="empty">Zatím žádná provize.<br>Přiveď někoho do hry a dostaneš '
+          : '<div class="empty">' + esc(tx('hra.zatim_zadna_provize')) + '<br>Přiveď někoho do hry a dostaneš '
             + 'desetinu z každého stroje, který si koupí.</div>')
-      + (list.length >= 200 ? '<p class="fine">Ukazuje se posledních 200.</p>' : ''));
+      + (list.length >= 200 ? '<p class="fine">' + esc(tx('hra.ukazuje_se_poslednich_200')) + '</p>' : ''));
   }).catch(function () {
-    sheet('<h3>Provize</h3><p class="muted small">Rozpis se nepodařilo načíst. Zkus to za chvíli.</p>');
+    sheet('<h3>' + 'Provize' + '</h3><p class="muted small">' + esc(tx('hra.rozpis_se_nepodarilo_nacist_zkus')) + '</p>');
   });
 }
 function loadDist(then) {
@@ -8886,20 +8886,20 @@ function loadDist(then) {
 }
 function distHtml() {
   if (!ME) return '';
-  if (!DIST) return '<div class="card"><h3>Distributor</h3><p class="fine">Načítám…</p></div>';
+  if (!DIST) return '<div class="card"><h3>' + 'Distributor' + '</h3><p class="fine">' + esc(tx('hra.nacitam')) + '</p></div>';
   var aktivni = DIST.aktivni, rezie = DIST.rezie;
-  return '<div class="card"><h3>Distributor prádlomatů</h3>'
+  return '<div class="card"><h3>' + esc(tx('hra.distributor_pradlomatu')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Platíš měsíční režii a bereš '
     + Math.round(DIST.provize * 100) + ' % z ceny každého prádlomatu, který si koupí hráč, '
     + 'kterého jsi do hry přivedl. Vyplácí se hned při nákupu — nečeká se na dovoz ani stavbu. '
     + 'Platí to i na jeho druhý, třetí a každý další.</p>'
     + '<div class="kv"><span>Stav</span><b class="' + (aktivni ? 'ok' : 'warn') + '">'
-    + (aktivni ? 'aktivní, končí ' + etaText(new Date(DIST.do).getTime() - Date.now()) : 'neaktivní') + '</b></div>'
-    + '<div class="kv"><span>Přivedených hráčů</span><b>' + DIST.privedeno + '</b></div>'
-    + '<div class="kv"><span>Režie na měsíc</span><b class="' + (rezie > 0 ? 'warn' : 'ok') + '">'
+    + (aktivni ? 'aktivní, končí ' + etaText(new Date(DIST.do).getTime() - Date.now()) : esc(tx('hra.neaktivni'))) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.privedenych_hracu')) + '</span><b>' + DIST.privedeno + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.rezie_na_mesic')) + '</span><b class="' + (rezie > 0 ? 'warn' : 'ok') + '">'
     + (rezie > 0 ? kcFull(rezie) : 'zdarma') + '</b></div>'
     + (DIST.provize_celkem > 0
-        ? '<button class="kv kv-klik" id="do-provize"><span>Vyděláno na provizích</span>'
+        ? '<button class="kv kv-klik" id="do-provize"><span>' + esc(tx('hra.vydelano_na_provizich')) + '</span>'
           + '<b class="ok">' + kcFull(DIST.provize_celkem) + ' ›</b></button>' : '')
     + '<p class="fine">' + (rezie > 0
         ? 'Režie roste o ' + kcFull(40000) + ' s každými pěti přivedenými hráči — čím větší síť, tím dražší provoz.'
@@ -8921,17 +8921,17 @@ function bindDist() {
   if (!b) return;
   b.onclick = function () {
     if (!DIST || S.cash < DIST.rezie) return;
-    b.disabled = true; b.textContent = 'Platím…';
+    b.disabled = true; b.textContent = esc(tx('hra.platim'));
     var rezie = DIST.rezie;
     apiJson('/account/distributor', {}).then(function (r) {
       if (!r.ok) { b.disabled = false; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
       S.cash -= rezie;
-      zapis('poplatek', 'Distributorský program — měsíční režie', -rezie);
+      zapis('poplatek', esc(tx('hra.distributorsky_program_mesicni_rezie')), -rezie);
       save(); syncState(true);
       loadDist(function () { paintMe(); });
-      toast(rezie > 0 ? 'Distribuce zaplacená na další herní měsíc.'
-        : 'Distribuce zapnutá na další herní měsíc — zdarma.', 'ok');
-    }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+      toast(rezie > 0 ? esc(tx('hra.distribuce_zaplacena_na_dalsi_herni'))
+        : esc(tx('hra.distribuce_zapnuta_na_dalsi_herni')), 'ok');
+    }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida_27')), 'err'); });
   };
 }
 
@@ -8944,13 +8944,13 @@ function loadPozvani() {
     .catch(function () { POZVANI = []; });
 }
 function pozvaniHtml() {
-  if (!ME) return '<p class="fine">Přihlášeným hráčům se tady vypíše, koho konkrétně přivedli.</p>';
-  if (POZVANI == null) return '<p class="fine">Načítám…</p>';
+  if (!ME) return '<p class="fine">' + esc(tx('hra.prihlasenym_hracum_se_tady_vypise')) + '</p>';
+  if (POZVANI == null) return '<p class="fine">' + esc(tx('hra.nacitam_3')) + '</p>';
   if (!POZVANI.length) return '<p class="fine">Přes tvůj odkaz se zatím nikdo nezaregistroval. '
     + 'Otevření odkazu ti zvedá návštěvnost hned, ale do sítě se počítá až založený účet.</p>';
   return '<p class="fine" style="margin-bottom:8px">Ve tvé síti '
     + mn(POZVANI.length, 'je', 'jsou', 'je') + ' ' + POZVANI.length + ' '
-    + mn(POZVANI.length, 'hráč', 'hráči', 'hráčů') + ':</p>'
+    + mn(POZVANI.length, esc(tx('hra.hrac')), esc(tx('hra.hraci')), esc(tx('hra.hracu'))) + ':</p>'
     + '<div class="zeb">' + POZVANI.map(function (h) {
         // U každého je vidět, kolik má strojů a za kolik z nich už provize přišla.
         // Když se čísla rozcházejí, je hned jasné, u koho to vázne.
@@ -8959,7 +8959,7 @@ function pozvaniHtml() {
         return '<div class="zeb-row">' + (h.znak ? znakSvg(h.znak, 24) : '<i class="znak-mezera"></i>')
           + '<span class="nick">' + esc(h.firma)
           + '<i>' + esc(h.nick) + ' · ' + stroju + ' '
-          + mn(stroju, 'stroj', 'stroje', 'strojů') + ' · provize z ' + provizi + '</i></span>'
+          + mn(stroju, 'stroj', 'stroje', esc(tx('hra.stroju'))) + ' · provize z ' + provizi + '</i></span>'
           + '<b class="' + (h.provize ? 'ok' : (chybi ? 'warn' : 'muted')) + '">'
           + (h.provize ? kc(h.provize) : datumKratce(h.kdy)) + '</b></div>';
       }).join('') + '</div>'
@@ -9031,7 +9031,7 @@ function bindMajetek() {
   [].forEach.call(document.querySelectorAll('[data-zem]'), function (r) {
     r.onclick = function () {
       var n = spotPodle(r.getAttribute('data-zem'));
-      if (!n) return toast('Tenhle pozemek je v městě, které zrovna není načtené.', 'err');
+      if (!n) return toast(esc(tx('hra.tenhle_pozemek_je_v_meste')), 'err');
       switchTab('map');
       if (map) map.setView([n.sp.lat, n.sp.lon], Math.max(16, map.getZoom()));
       spotSheet(n.sp, n.areaId);
@@ -9102,9 +9102,9 @@ function nickSheet() {
 // skutečných hodinách; server je obchází po pěti minutách, takže „teď"
 // znamená do pěti minut.
 function vyplataZa(e) {
-  if (!e || !e.dalsi) return 'po herním měsíci';
+  if (!e || !e.dalsi) return esc(tx('hra.po_hernim_mesici'));
   var ms = new Date(e.dalsi).getTime() - Date.now();
-  if (!(ms > 0)) return 'teď';
+  if (!(ms > 0)) return esc(tx('hra.ted_2'));
   var h = Math.floor(ms / 3600000), m = Math.round((ms % 3600000) / 60000);
   if (h >= 1) return 'za ' + h + ' h ' + (m ? m + ' min' : '');
   return 'za ' + Math.max(1, m) + ' min';
@@ -9146,20 +9146,20 @@ function podilyHtml() {
   var moje = (FINANCE.podily || []).filter(function (e) { return e.moje === 'mam' && bezici(e); });
   var ciziVeMne = (FINANCE.podily || []).filter(function (e) { return e.moje === 'prodal' && bezici(e); });
   if (!moje.length && !ciziVeMne.length) return '';
-  var h = '<div class="card"><h3>Podíly</h3>';
+  var h = '<div class="card"><h3>' + esc(tx('hra.podily')) + '</h3>';
   if (ciziVeMne.length) {
     var celkem = ciziVeMne.reduce(function (a, e) { return a + e.podil; }, 0);
     var mesicne = ciziVeMne.reduce(function (a, e) { return a + e.mesicne; }, 0);
     h += '<p class="muted small" style="margin:2px 0 8px">Z tvé firmy je prodáno '
       + Math.round(celkem * 100) + ' %. Podílníkům z ní měsíčně odchází '
-      + kcFull(mesicne) + (mesicne < 0 ? ' — při ztrátě ti naopak doplácejí.' : '.') + '</p>'
+      + kcFull(mesicne) + (mesicne < 0 ? ' ' + esc(tx('hra.pri_ztrate_ti_naopak_doplaceji')) : '.') + '</p>'
       + ciziVeMne.map(function (e) { return podilRadek(e, false); }).join('');
   }
   if (moje.length) {
     var nese = moje.reduce(function (a, e) { return a + e.mesicne; }, 0);
     var dal = moje.reduce(function (a, e) { return a + e.cena; }, 0);
     var vzal = moje.reduce(function (a, e) { return a + e.vyplaceno; }, 0);
-    h += '<h3 style="margin-top:' + (ciziVeMne.length ? '18px' : '2px') + '">Tvoje podíly v cizích firmách</h3>'
+    h += '<h3 style="margin-top:' + (ciziVeMne.length ? '18px' : '2px') + '">' + esc(tx('hra.tvoje_podily_v_cizich_firmach')) + '</h3>'
       + '<p class="muted small" style="margin:2px 0 8px">Dohromady jsi do nich dal ' + kcFull(dal)
       + ', vrátilo se ' + kcFull(vzal) + ' a teď nesou ' + kcFull(nese) + ' měsíčně. '
       + 'Vyplácí se jednou za herní měsíc, tedy po dvanácti hodinách — čerstvě koupený '
@@ -9333,12 +9333,12 @@ var DNES_MS = 24 * 3600000;
 function hracStav(h) {
   // Přednost má tep z otevřené hry — ten chodí pořád. Poslední uložení je jen
   // záloha pro případ, že server tepy ještě neposílá.
-  if (h.online === 'tady') return { kde: 'online', text: 'u hry teď', tr: 'ok' };
-  if (h.online === 'pozadi') return { kde: 'online', text: 'hru má otevřenou', tr: 'ok' };
+  if (h.online === 'tady') return { kde: 'online', text: esc(tx('hra.u_hry_ted')), tr: 'ok' };
+  if (h.online === 'pozadi') return { kde: 'online', text: esc(tx('hra.hru_ma_otevrenou')), tr: 'ok' };
   var t = h.naposledy ? new Date(h.naposledy).getTime() : 0;
-  if (!t) return { kde: 'nikdy', text: 'ještě nehrál', tr: '' };
+  if (!t) return { kde: 'nikdy', text: esc(tx('hra.jeste_nehral')), tr: '' };
   var pred = Date.now() - t;
-  if (pred <= ONLINE_MS) return { kde: 'online', text: 'u hry teď', tr: 'ok' };
+  if (pred <= ONLINE_MS) return { kde: 'online', text: esc(tx('hra.u_hry_ted_2')), tr: 'ok' };
   if (pred <= DNES_MS) {
     var min = Math.round(pred / 60000);
     return { kde: 'dnes', text: min < 60 ? 'před ' + min + ' min' : 'před ' + Math.round(min / 60) + ' h', tr: 'warn' };
@@ -9347,14 +9347,14 @@ function hracStav(h) {
   return { kde: 'dav', text: 'před ' + dnu + ' ' + mn(dnu, 'dnem', 'dny', 'dny'), tr: '' };
 }
 function hraciVyberSheet(nadpis, popisTlacitka, pak) {
-  sheet('<h3>' + esc(nadpis) + '</h3><p class="muted small">Načítám hráče…</p>');
+  sheet('<h3>' + esc(nadpis) + '</h3><p class="muted small">' + esc(tx('hra.nacitam_hrace')) + '</p>');
   api('/trade/players').then(function (r) {
     if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
     var hraci = r.j.players || [];
     var podleId = {};
     hraci.forEach(function (h) { podleId[h.id] = h; });
     if (!hraci.length) {
-      return sheet('<h3>Zatím není komu</h3><p class="muted small">Až přibude další hráč, objeví se tady.</p>');
+      return sheet('<h3>' + esc(tx('hra.zatim_neni_komu')) + '</h3><p class="muted small">' + esc(tx('hra.az_pribude_dalsi_hrac_objevi')) + '</p>');
     }
     var online = hraci.filter(function (h) { return hracStav(h).kde === 'online'; }).length;
     var dnes = hraci.filter(function (h) { return hracStav(h).kde !== 'nikdy' && hracStav(h).kde !== 'dav'; }).length;
@@ -9391,8 +9391,8 @@ function hraciVyberSheet(nadpis, popisTlacitka, pak) {
               + '<button class="btn sec sm" data-h="' + h.id + '">' + esc(popisTlacitka) + '</button></div>';
           }).join('')
           : '<p class="muted small" style="margin-top:14px">'
-            + (filtr === 'online' ? 'Zrovna nikdo u hry není. Zkus Dnes nebo Všichni — zprávu si přečte, až se vrátí.'
-               : 'Nikdo takový tu není.') + '</p>'));
+            + (filtr === 'online' ? esc(tx('hra.zrovna_nikdo_u_hry_neni'))
+               : esc(tx('hra.nikdo_takovy_tu_neni'))) + '</p>'));
       [].forEach.call($('sheet-body').querySelectorAll('[data-f]'), function (b) {
         b.onclick = function () { filtr = b.getAttribute('data-f'); vykresli(); };
       });
@@ -9411,7 +9411,7 @@ function hraciVyberSheet(nadpis, popisTlacitka, pak) {
       });
     };
     vykresli();
-  }).catch(function () { toast('Server neodpovídá.', 'err'); });
+  }).catch(function () { toast(esc(tx('hra.server_neodpovida_24')), 'err'); });
 }
 // Komu napsat — seznam všech hráčů, stejný jako u nabídky.
 // ─── Kolik mám doopravdy volných peněz ───────────────────────────────────────
@@ -9440,7 +9440,7 @@ function volneHtml(krome) {
 
 function predmetPopis(t) {
   if (t.predmet === 'stroj') return 'stroj ' + ((MODELS[t.model] || {}).name || t.model);
-  if (t.predmet === 'pradlomat') return 'prádlomat na místě';
+  if (t.predmet === 'pradlomat') return esc(tx('hra.pradlomat_na_miste'));
   if (t.predmet === 'pujcka') {
     var d = t.data || {};
     return 'půjčka ' + kcFull(t.cena) + ' · ' + procenta(d.urok) + ' ročně na '
@@ -9487,11 +9487,11 @@ function hlidejNoveOdznaky() {
   if (!nove.length) return;
   var o = nove[0];
   sheet('<div class="odz-det">' + odznakMedaile(o, true)
-    + '<h3>Nový odznak</h3><span class="odz-stuha">' + esc(o.nazev) + '</span></div>'
+    + '<h3>' + esc(tx('hra.novy_odznak')) + '</h3><span class="odz-stuha">' + esc(o.nazev) + '</span></div>'
     + '<p class="muted small" style="text-align:center">' + esc(o.popis) + '</p>'
     + (nove.length > 1 ? '<p class="fine">A k tomu ještě ' + (nove.length - 1) + ' další — najdeš je v Já.</p>' : '')
-    + '<p class="fine">Odměnu připisuje server, objeví se za chvilku v Kartách.</p>'
-    + '<button class="btn big" id="odz-ok" style="width:100%;margin-top:10px">Díky</button>');
+    + '<p class="fine">' + esc(tx('hra.odmenu_pripisuje_server_objevi_se')) + '</p>'
+    + '<button class="btn big" id="odz-ok" style="width:100%;margin-top:10px">' + esc(tx('hra.diky_2')) + '</button>');
   if ($('odz-ok')) $('odz-ok').onclick = closeSheet;
   toast('Máš odznak ' + o.nazev + '.', 'ok', true);
 }
@@ -9522,7 +9522,7 @@ function odznakyPruhHtml() {
 }
 function odznakyHtml() {
   if (!ME) return '';
-  if (ODZNAKY_HRA == null) return '<div class="card"><h3>Odznaky</h3><p class="muted small">Načítám…</p></div>';
+  if (ODZNAKY_HRA == null) return '<div class="card"><h3>' + 'Odznaky' + '</h3><p class="muted small">' + esc(tx('hra.nacitam_7')) + '</p></div>';
   if (!ODZNAKY_HRA.length) return '';
   var mam = ODZNAKY_HRA.filter(function (o) { return o.mam; }).length;
   var cel = ODZNAKY_HRA.length;
@@ -9542,15 +9542,15 @@ function odznakyHtml() {
 function odznakSheet(o) {
   sheet('<div class="odz-det">' + odznakMedaile(o, true)
     + '<h3>' + esc(o.nazev) + '</h3>'
-    + (o.mam ? '<span class="odz-stuha">Získáno</span>'
-             : '<span class="odz-stuha zamek">Zatím nemáš</span>') + '</div>'
+    + (o.mam ? '<span class="odz-stuha">' + esc(tx('hra.ziskano')) + '</span>'
+             : '<span class="odz-stuha zamek">' + esc(tx('hra.zatim_nemas')) + '</span>') + '</div>'
     + '<p class="muted small" style="text-align:center">' + esc(o.popis) + '</p>'
     + (o.mam
-        ? (o.kdy ? '<div class="kv"><span>Získáno</span><b>' + datumCZ(o.kdy) + '</b></div>' : '')
-        : '<div class="kv"><span>Jak na něj</span></div><p class="fine">' + esc(o.jak) + '</p>')
+        ? (o.kdy ? '<div class="kv"><span>' + esc(tx('hra.ziskano_2')) + '</span><b>' + datumCZ(o.kdy) + '</b></div>' : '')
+        : '<div class="kv"><span>' + esc(tx('hra.jak_na_nej')) + '</span></div><p class="fine">' + esc(o.jak) + '</p>')
     + (o.odmena && o.odmena.karta
-        ? '<div class="kv"><span>Odměna</span><b>' + esc(odmenaSlovy(o.odmena)) + '</b></div>' : '')
-    + '<button class="btn sec" id="odz-zpet" style="width:100%;margin-top:12px">Zpátky</button>');
+        ? '<div class="kv"><span>' + esc(tx('hra.odmena_2')) + '</span><b>' + esc(odmenaSlovy(o.odmena)) + '</b></div>' : '')
+    + '<button class="btn sec" id="odz-zpet" style="width:100%;margin-top:12px">' + esc(tx('hra.zpatky_2')) + '</button>');
   if ($('odz-zpet')) $('odz-zpet').onclick = closeSheet;
 }
 function datumCZ(t) {
@@ -9579,7 +9579,7 @@ function procenta(x) {
 }
 function zaKolik(ms) {
   var d = Number(ms ? new Date(ms) : 0) - Date.now();
-  if (!(d > 0)) return 'každou chvíli';
+  if (!(d > 0)) return esc(tx('hra.kazdou_chvili'));
   var min = Math.max(1, Math.round(d / 60000)), h = Math.floor(min / 60);
   var zb = min - h * 60;
   return 'za ' + (h ? h + ' h' + (zb ? ' ' + zb + ' min' : '') : zb + ' min');
@@ -9588,7 +9588,7 @@ function zaKolik(ms) {
 // splátek — úrok tedy jen za dobu, kterou dlužník peníze opravdu měl.
 function splatitSheet(id, castka) {
   var chybi = castka - S.cash;
-  sheet('<h3>Doplatit půjčku</h3>'
+  sheet('<h3>' + esc(tx('hra.doplatit_pujcku')) + '</h3>'
     + '<p class="muted small">Zbytek dluhu splatíš naráz a půjčka končí. Úrok platíš jen za dobu, '
     + 'co jsi peníze měl — zbývající splátky se už nepočítají. Zástava se tím uvolní.</p>'
     + '<div class="kv"><span>Doplatek</span><b>' + kcFull(castka) + '</b></div>'
@@ -9603,8 +9603,8 @@ function splatitSheet(id, castka) {
     apiJson('/trade/pujcka/' + id + '/splatit', {}).then(function (r) {
       if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
       closeSheet(); vyzvedniNasledky(); FINANCE = null; loadFinance(paintBurza);
-      toast('Půjčka je doplacená.', 'ok');
-    }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+      toast(esc(tx('hra.pujcka_je_doplacena')), 'ok');
+    }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida_22')), 'err'); });
   };
 }
 // Co je uzavřené, v přehledu nepřekáží — zůstává u své nabídky v historii.
@@ -9679,7 +9679,7 @@ function loadAukce(then) {
 }
 function aukceHtml() {
   if (!AUKCE || !AUKCE.length) return '';
-  return '<div class="card"><h3>Konkurzní rozprodej</h3>'
+  return '<div class="card"><h3>' + esc(tx('hra.konkurzni_rozprodej')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Majetek firem, které padly. Cena klesá z 80 % na 40 % '
     + 'hodnoty — kdo si počká, koupí levněji, ale riskuje, že to mezitím vezme někdo jiný.</p>'
     + AUKCE.map(function (a) {
@@ -9687,7 +9687,7 @@ function aukceHtml() {
           + '<b class="ok">' + kcFull(a.cena) + '</b></div>'
           + '<p class="muted small" style="margin:2px 0 6px">po ' + esc(a.nick) + ' · hodnota ' + kcFull(a.hodnota)
           + ' · končí ' + etaText(new Date(a.konci).getTime() - Date.now()) + '</p>'
-          + (a.moje ? '<p class="fine">Tohle je tvůj majetek z konkurzu.</p>'
+          + (a.moje ? '<p class="fine">' + esc(tx('hra.tohle_je_tvuj_majetek_z')) + '</p>'
             : S.cash < a.cena ? '<p class="fine err">Chybí ti ' + kcFull(a.cena - S.cash) + '.</p>'
             : '<button class="btn sm" data-aukce="' + a.id + '">Koupit za ' + kcFull(a.cena) + '</button>')
           + '</div>';
@@ -9703,7 +9703,7 @@ function bindAukce() {
         toast('Koupeno za ' + kcFull(r.j.cena) + '.', 'ok');
         S.mrchozrout = true; save();
         loadAukce(function () { vyzvedniNasledky(); paintBurza(); });
-      }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+      }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida_36')), 'err'); });
     };
   });
 }
@@ -9771,8 +9771,8 @@ function paintTrhBadge() {
   // Kolik je na prodej, řekne bublinka v rohu; prázdné tržiště je bez ní.
   el.innerHTML = '<i>\uD83E\uDD1D</i>' + (kolik ? '<b>' + kolik + '</b>' : '');
   el.title = kolik
-    ? 'Tržiště — ' + kolik + ' ' + mn(kolik, 'hotová provozovna', 'hotové provozovny', 'hotových provozoven') + ' na prodej'
-    : 'Tržiště — zrovna nikdo nic nenabízí';
+    ? 'Tržiště — ' + kolik + ' ' + mn(kolik, esc(tx('hra.hotova_provozovna')), esc(tx('hra.hotove_provozovny')), esc(tx('hra.hotovych_provozoven'))) + ' na prodej'
+    : esc(tx('hra.trziste_zrovna_nikdo_nic_nenabizi'));
   el.onclick = trhSeznamSheet;
 }
 // Celé tržiště v panelu — otevře se z mapy, ať se nemusí chodit na Burzu.
@@ -9783,7 +9783,7 @@ function trhKonci(ms) {
   ms = Math.max(0, ms);
   if (ms >= 48 * 3600e3) {
     var d = Math.round(ms / 86400e3);
-    return 'za ' + d + ' ' + mn(d, 'den', 'dny', 'dní');
+    return 'za ' + d + ' ' + mn(d, 'den', 'dny', esc(tx('hra.dni_2')));
   }
   return etaText(ms);
 }
@@ -9794,7 +9794,7 @@ function trhPolozka(n, moje) {
   return '<div class="trh-p">'
     + '<img class="trh-foto" src="' + esc(im.src) + '" alt="' + esc(m.name) + '">'
     + '<div class="trh-txt">'
-      + '<div class="trh-hl"><b>' + esc(n.name || 'Místo') + '</b>'
+      + '<div class="trh-hl"><b>' + esc(n.name || esc(tx('hra.misto_5'))) + '</b>'
       + '<b class="' + (moje ? 'warn' : 'ok') + '">' + kcFull(n.cena) + '</b></div>'
       + '<i>' + esc(m.name) + (moje ? '' : ' · ' + esc(n.firma || n.nick)) + '</i>'
       + '<i>' + (moje ? 'vydělává ti ' + kcFull(n.zisk)
@@ -9809,21 +9809,21 @@ function trhSeznamSheet() {
   var vse = TRH || [];
   var cizi = vse.filter(function (n) { return !n.moje; });
   var moje = vse.filter(function (n) { return n.moje; });
-  sheet('<h3>Tržiště</h3>'
+  sheet('<h3>' + esc(tx('hra.trziste')) + '</h3>'
     + '<p class="muted small">Hotové provozovny: stroj, nájemní smlouva, přípojky i rozvržení plochy. '
     + 'Vydělává hned — nečekáš na výrobu ani nehledáš místo. Banka to financuje jako obchodní '
     + 'příležitost, ale chce spoluúčast ' + Math.round(TRH_SPOLUUCAST * 100) + ' %.</p>'
     + (cizi.length
         ? '<div class="trh-seznam">' + cizi.map(function (n) { return trhPolozka(n, false); }).join('') + '</div>'
-        : '<p class="muted small" style="margin-top:12px">Zrovna tu nikdo nic nenabízí.</p>')
+        : '<p class="muted small" style="margin-top:12px">' + esc(tx('hra.zrovna_tu_nikdo_nic_nenabizi')) + '</p>')
     + (moje.length
-        ? '<h3 style="margin:18px 0 6px">Tvoje nabídky</h3>'
-          + '<p class="muted small" style="margin:0 0 8px">Dokud se neprodají, vydělávají dál tobě.</p>'
+        ? '<h3 style="margin:18px 0 6px">' + esc(tx('hra.tvoje_nabidky')) + '</h3>'
+          + '<p class="muted small" style="margin:0 0 8px">' + esc(tx('hra.dokud_se_neprodaji_vydelavaji_dal')) + '</p>'
           + '<div class="trh-seznam">' + moje.map(function (n) { return trhPolozka(n, true); }).join('') + '</div>'
         : '')
     + ((S.units || []).length
         ? '<button class="btn" id="trh-nabidnout-2" style="width:100%;margin-top:14px">'
-          + (moje.length ? 'Nabídnout další prádlomat' : 'Nabídnout vlastní prádlomat') + '</button>'
+          + (moje.length ? esc(tx('hra.nabidnout_dalsi_pradlomat')) : esc(tx('hra.nabidnout_vlastni_pradlomat'))) + '</button>'
         : '')
     + (drazbaBezi()
         ? '<button class="btn" id="trh-drazba-bezi" style="width:100%;margin-top:8px">'
@@ -9842,12 +9842,12 @@ function trhSeznamSheet() {
     b.onclick = function () {
       b.disabled = true; b.textContent = 'Stahuju…';
       apiJson('/trade/trh/' + b.getAttribute('data-trh-stop') + '/stahnout', {}).then(function (r) {
-        if (!r.ok) { b.disabled = false; b.textContent = 'Stáhnout z nabídky';
+        if (!r.ok) { b.disabled = false; b.textContent = esc(tx('hra.stahnout_z_nabidky_2'));
           return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
-        toast('Nabídka stažena.', 'ok');
+        toast(esc(tx('hra.nabidka_stazena_2')), 'ok');
         loadTrh(function () { drawMap(); trhSeznamSheet(); });
-      }).catch(function () { b.disabled = false; b.textContent = 'Stáhnout z nabídky';
-        toast('Server neodpovídá.', 'err'); });
+      }).catch(function () { b.disabled = false; b.textContent = esc(tx('hra.stahnout_z_nabidky_3'));
+        toast(esc(tx('hra.server_neodpovida_14')), 'err'); });
     };
   });
   var nb = $('trh-nabidnout-2');
@@ -9857,8 +9857,8 @@ function trhSeznamSheet() {
 // Výběr, který prádlomat chci vystavit — ať se to nemusí hledat po mapě.
 function trhVyberSheet() {
   var u = (S.units || []).slice();
-  if (!u.length) return toast('Nemáš co nabídnout — zatím nic nestojí.', 'err');
-  sheet('<h3>Který prádlomat nabídnout</h3>'
+  if (!u.length) return toast(esc(tx('hra.nemas_co_nabidnout_zatim_nic')), 'err');
+  sheet('<h3>' + esc(tx('hra.ktery_pradlomat_nabidnout')) + '</h3>'
     + '<p class="muted small">Prodáváš celou provozovnu: stroj, nájemní smlouvu, přípojky i rozvržení '
     + 'plochy. Dokud se neprodá, vydělává dál tobě.</p>'
     + '<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">'
@@ -9994,7 +9994,7 @@ function rozvahaMista(u) {
 function dobaProvozu(mesicu) {
   if (mesicu < 12) {
     var m = Math.max(1, Math.round(mesicu));
-    return m + ' ' + mn(m, 'herní měsíc', 'herní měsíce', 'herních měsíců');
+    return m + ' ' + mn(m, esc(tx('hra.herni_mesic_4')), esc(tx('hra.herni_mesice_3')), esc(tx('hra.hernich_mesicu_3')));
   }
   var roky = mesicu / 12;
   var cele = Math.round(roky);
@@ -10003,36 +10003,36 @@ function dobaProvozu(mesicu) {
 }
 function rozvahaHtml(r) {
   return '<div class="card">'
-    + '<div class="row"><h3>Co tě to stálo</h3><b>' + kcFull(r.vlozeno) + '</b></div>'
+    + '<div class="row"><h3>' + esc(tx('hra.co_te_to_stalo')) + '</h3><b>' + kcFull(r.vlozeno) + '</b></div>'
     + '<div class="kv"><span>Stroj</span><b>' + kcFull(r.stroj) + '</b></div>'
-    + '<div class="kv"><span>Přípojky a instalace</span><b>' + kcFull(r.pripojky) + '</b></div>'
-    + (r.obhlidka ? '<div class="kv"><span>Obhlídka místa</span><b>' + kcFull(r.obhlidka) + '</b></div>' : '')
-    + (r.pozemek ? '<div class="kv"><span>Pozemek a příprava plochy</span><b>' + kcFull(r.pozemek) + '</b></div>' : '')
+    + '<div class="kv"><span>' + esc(tx('hra.pripojky_a_instalace')) + '</span><b>' + kcFull(r.pripojky) + '</b></div>'
+    + (r.obhlidka ? '<div class="kv"><span>' + esc(tx('hra.obhlidka_mista')) + '</span><b>' + kcFull(r.obhlidka) + '</b></div>' : '')
+    + (r.pozemek ? '<div class="kv"><span>' + esc(tx('hra.pozemek_a_priprava_plochy')) + '</span><b>' + kcFull(r.pozemek) + '</b></div>' : '')
     + '</div>'
     + '<div class="card">'
-    + '<div class="row"><h3>Co to zatím vydělalo</h3><b class="' + (r.vydelal >= 0 ? 'ok' : 'err') + '">'
+    + '<div class="row"><h3>' + esc(tx('hra.co_to_zatim_vydelalo')) + '</h3><b class="' + (r.vydelal >= 0 ? 'ok' : 'err') + '">'
       + kcFull(r.vydelal) + '</b></div>'
     + '<p class="muted small" style="margin:2px 0 8px">Za ' + dobaProvozu(r.mesicu) + ' provozu'
       + (r.vady ? ' · ' + r.vady + ' ' + mn(r.vady, 'porucha', 'poruchy', 'poruch') : '') + '</p>'
     + '<div class="kv"><span>Obrat</span><b>' + kcFull(r.obrat) + '</b></div>'
-    + '<div class="kv"><span>− Nájem</span><b class="warn">' + kcFull(r.najem) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.najem_2')) + '</span><b class="warn">' + kcFull(r.najem) + '</b></div>'
     + '<div class="kv"><span>− Energie</span><b class="warn">' + kcFull(r.energie) + '</b></div>'
-    + '<div class="kv"><span>− Servis a úklid</span><b class="warn">' + kcFull(r.servis) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.servis_a_uklid')) + '</span><b class="warn">' + kcFull(r.servis) + '</b></div>'
     + '<p class="fine">Odhad z měsíčních čísel a doby provozu — hra každému stroji zvlášť pokladnu nevede. '
     + 'Doba, kdy stál porouchaný, je už odečtená.</p>'
     + '</div>'
     + '<div class="card">'
     + '<div class="row"><h3>Kde je nula</h3><b class="' + (r.nula > 0 ? 'warn' : 'ok') + '">'
-      + (r.nula > 0 ? kcFull(r.nula) : 'už je zaplacený') + '</b></div>'
+      + (r.nula > 0 ? kcFull(r.nula) : esc(tx('hra.uz_je_zaplaceny'))) + '</b></div>'
     + '<p class="muted small" style="margin:2px 0 0">'
     + (r.nula > 0
         ? 'Tolik z vložených peněz se ti provozem ještě nevrátilo. Prodej dráž a jsi v plusu, '
           + 'prodej levněji a tohle místo tě celkem stálo víc, než dalo.'
-        : 'Provoz už vložené peníze vrátil celé. Cokoli utržíš, je čistý zisk z téhle provozovny.')
+        : esc(tx('hra.provoz_uz_vlozene_penize_vratil')))
     + '</p>'
-    + (r.dluh ? '<div class="kv" style="margin-top:8px"><span>Zbývá splatit úvěr na místě</span>'
+    + (r.dluh ? '<div class="kv" style="margin-top:8px"><span>' + esc(tx('hra.zbyva_splatit_uver_na_miste')) + '</span>'
         + '<b class="err">' + kcFull(r.dluh) + '</b></div>'
-        + '<p class="fine">Úvěr prodejem nezmizí — zůstává tobě. Počítej s ním v ceně.</p>' : '')
+        + '<p class="fine">' + esc(tx('hra.uver_prodejem_nezmizi_zustava_tobe')) + '</p>' : '')
     + '</div>';
 }
 
@@ -10197,14 +10197,14 @@ function radekObchodu(t) {
   }
   return '<div class="trade' + (t.na_tahu ? ' na-tahu' : '') + '">'
     + '<h4>' + esc(predmetPopis(t)) + '</h4>'
-    + '<p class="kdo">' + veta + ' · ' + (jaKupuji ? 'platíš ty' : 'platí on') + '</p>'
+    + '<p class="kdo">' + veta + ' · ' + (jaKupuji ? esc(tx('hra.platis_ty')) : esc(tx('hra.plati_on'))) + '</p>'
     + (t.predmet === 'pujcka'
-      ? '<div class="row"><span class="muted small">Splátka za herní měsíc</span><span>'
+      ? '<div class="row"><span class="muted small">' + esc(tx('hra.splatka_za_herni_mesic_2')) + '</span><span>'
         + kcFull((t.data || {}).splatka || 0) + '</span></div>'
-        + '<div class="row"><span class="muted small">Zástava</span><span' 
+        + '<div class="row"><span class="muted small">' + esc(tx('hra.zastava_2')) + '</span><span' 
         + ((t.data || {}).zadam_zastavu && !(t.data || {}).zastava_nazev ? ' class="warn"' : '') + '>'
         + ((t.data || {}).zastava_nazev ? esc(t.data.zastava_nazev)
-            : (t.data || {}).zadam_zastavu ? 'věřitel ji vyžaduje' : 'bez zástavy') + '</span></div>'
+            : (t.data || {}).zadam_zastavu ? esc(tx('hra.veritel_ji_vyzaduje_2')) : esc(tx('hra.bez_zastavy_5'))) + '</span></div>'
       : '')
     + '<div class="row"><span class="muted small">Cena</span><span class="cena">' + esc(cenaPopis(t)) + '</span></div>'
     + (t.vzkaz ? '<p class="muted small" style="margin-top:6px">„' + esc(t.vzkaz) + '"</p>' : '')
@@ -10212,11 +10212,11 @@ function radekObchodu(t) {
     + (t.stav !== 'ceka' ? '<p style="margin-top:8px"><span class="stav ' + esc(t.stav) + '">' + esc(t.stav) + '</span></p>' : '')
     + jakToDopadloHtml(t)
     + (t.na_tahu
-      ? '<div class="akce"><button class="btn sm" data-tr="' + t.id + '" data-akce="accept">Přijmout</button>'
-        + '<button class="btn sm sec" data-tr="' + t.id + '" data-akce="counter">Protinávrh</button>'
-        + '<button class="btn sm sec" data-tr="' + t.id + '" data-akce="decline">Odmítnout</button></div>'
+      ? '<div class="akce"><button class="btn sm" data-tr="' + t.id + '" data-akce="accept">' + esc(tx('hra.prijmout')) + '</button>'
+        + '<button class="btn sm sec" data-tr="' + t.id + '" data-akce="counter">' + esc(tx('hra.protinavrh_2')) + '</button>'
+        + '<button class="btn sm sec" data-tr="' + t.id + '" data-akce="decline">' + esc(tx('hra.odmitnout')) + '</button></div>'
       : t.stav === 'ceka' && t.moje
-        ? '<div class="akce"><button class="btn sm sec" data-tr="' + t.id + '" data-akce="decline">Zrušit nabídku</button></div>'
+        ? '<div class="akce"><button class="btn sm sec" data-tr="' + t.id + '" data-akce="decline">' + esc(tx('hra.zrusit_nabidku')) + '</button></div>'
         : '')
     + '</div>';
 }
@@ -10225,9 +10225,9 @@ function radekObchodu(t) {
 // jiný — firma do převodu nemluví, jen se jí změní jméno v rejstříku. Pro
 // kupujícího začíná výnos od nuly: pořizovací cena je ta, za kterou koupil on.
 function prevodSheet(e) {
-  hraciVyberSheet('Komu podíl prodáš', 'Vybrat', function (id, h) {
+  hraciVyberSheet(esc(tx('hra.komu_podil_prodas')), 'Vybrat', function (id, h) {
     if (id === e.kdo_id) {
-      return toast('Majiteli firmy se podíl vrací přes odkup — to je tlačítko vedle.', 'err');
+      return toast(esc(tx('hra.majiteli_firmy_se_podil_vraci')), 'err');
     }
     prevodCenaSheet(e, id, h);
   });
@@ -10325,25 +10325,25 @@ function vetsinaSheet(t, pak) {
   var pct = Math.round((d.podil || 0) * 100);
   var po = Math.round((d.po_prodeji || d.podil || 0) * 100);
   var kdo = t.moje ? t.komu.nick : t.od.nick;
-  sheet('<h3>\u26A0\uFE0F Prodáváš většinu firmy</h3>'
+  sheet('<h3>' + esc(tx('hra.u26a0_ufe0f_prodavas_vetsinu_firmy')) + '</h3>'
     + '<p class="muted small">' + esc(kdo) + ' po tomhle obchodu bude držet <b>' + po
     + ' %</b> tvé firmy' + (po > pct ? ' (teď má ' + (po - pct) + ' %, kupuje dalších ' + pct + ' %)' : '')
     + '. Víc než polovinu.</p>'
-    + '<div class="kv"><span>Prodáváš</span><b>' + pct + ' %</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.prodavas')) + '</span><b>' + pct + ' %</b></div>'
     + '<div class="kv"><span>Za</span><b>' + kcFull(t.cena) + '</b></div>'
-    + '<div class="kv"><span>Zůstane ti</span><b>' + Math.max(0, 100 - Math.round(podilProdano() * 100) - pct)
+    + '<div class="kv"><span>' + esc(tx('hra.zustane_ti')) + '</span><b>' + Math.max(0, 100 - Math.round(podilProdano() * 100) - pct)
     + ' %</b></div>'
     + '<p class="fine err">Zpátky ji dostaneš jen tak, že ti ji druhá strana bude ochotná prodat. '
     + 'Vynutit to nejde a cenu si řekne on.</p>'
     + '<p class="fine">Z firmy mu pak každý herní měsíc odchází jeho procento z toho, co ti zbyde — '
     + 'a stejným dílem s tebou nese i ztrátu.</p>'
     + '<label class="fld chk"><input type="checkbox" id="vet-chk"> '
-    + '<span>Rozumím tomu a většinu prodávám.</span></label>'
-    + '<button class="btn big" id="vet-ok" style="width:100%;margin-top:6px">Přijmout nabídku</button>'
-    + '<button class="btn sec" id="vet-ne" style="width:100%;margin-top:8px">Zatím ne</button>');
+    + '<span>' + esc(tx('hra.rozumim_tomu_a_vetsinu_prodavam')) + '</span></label>'
+    + '<button class="btn big" id="vet-ok" style="width:100%;margin-top:6px">' + esc(tx('hra.prijmout_nabidku')) + '</button>'
+    + '<button class="btn sec" id="vet-ne" style="width:100%;margin-top:8px">' + esc(tx('hra.zatim_ne')) + '</button>');
   $('vet-ne').onclick = closeSheet;
   $('vet-ok').onclick = function () {
-    if (!$('vet-chk').checked) return toast('Nejdřív to odklikni.', 'err');
+    if (!$('vet-chk').checked) return toast(esc(tx('hra.nejdriv_to_odklikni')), 'err');
     closeSheet(); pak();
   };
 }
@@ -10418,8 +10418,8 @@ function jakToDopadloHtml(t) {
     if (!p) return '';
     var dluzim = p.moje === 'dluzim';
     var pct = p.celkem > 0 ? Math.min(100, Math.round(p.zaplaceno / p.celkem * 100)) : 0;
-    var konec = p.stav === 'splaceno' ? (dluzim ? 'Splaceno — máš čistý štít.' : 'Splacené, peníze máš zpátky.')
-      : p.stav === 'propadlo' ? (dluzim ? 'Nesplatil jsi to a propadla zástava.' : 'Nesplatil to — zástava je tvoje.')
+    var konec = p.stav === 'splaceno' ? (dluzim ? esc(tx('hra.splaceno_mas_cisty_stit')) : esc(tx('hra.splacene_penize_mas_zpatky')))
+      : p.stav === 'propadlo' ? (dluzim ? esc(tx('hra.nesplatil_jsi_to_a_propadla')) : esc(tx('hra.nesplatil_to_zastava_je_tvoje')))
       : p.stav === 'vymahano' ? (dluzim ? 'Nesplatil jsi to, zbytek ti strhla banka.' : 'Nesplatil to, zbytek se vymohl.')
       : null;
     return '<div class="kv" style="margin-top:8px"><span class="muted small">'
@@ -10429,7 +10429,7 @@ function jakToDopadloHtml(t) {
       + (konec
           ? '<p class="fine ' + (p.stav === 'splaceno' ? 'ok' : 'err') + '">' + konec + '</p>'
           : '<p class="fine">Zbývá ' + (p.mesicu - p.splaceno) + ' '
-            + mn(p.mesicu - p.splaceno, 'splátka', 'splátky', 'splátek') + ' po ' + kcFull(p.splatka)
+            + mn(p.mesicu - p.splaceno, esc(tx('hra.splatka_4')), esc(tx('hra.splatky')), esc(tx('hra.splatek'))) + ' po ' + kcFull(p.splatka)
             + ' · doplatit naráz by teď stálo ' + kcFull(p.doplatek) + '.</p>');
   }
   if (t.predmet === 'podil') {
@@ -10437,11 +10437,11 @@ function jakToDopadloHtml(t) {
     if (!e) return '';
     var mam = e.moje === 'mam';
     return '<div class="kv" style="margin-top:8px"><span class="muted small">'
-      + (e.vyplaceno >= 0 ? (mam ? 'Vyplaceno tobě' : 'Vyplatil jsi') : (mam ? 'Doplatil jsi' : 'Doplatil ti'))
+      + (e.vyplaceno >= 0 ? (mam ? esc(tx('hra.vyplaceno_tobe')) : 'Vyplatil jsi') : (mam ? 'Doplatil jsi' : 'Doplatil ti'))
       + '</span><span>' + kcFull(Math.abs(e.vyplaceno)) + '</span></div>'
       + '<p class="fine' + (e.stav === 'odkoupeno' ? ' ok' : '') + '">'
-      + (e.stav === 'odkoupeno' ? 'Podíl je odkoupený zpátky, vyrovnáno.'
-        : 'Podíl běží dál — vyrovnává se každý herní měsíc.') + '</p>';
+      + (e.stav === 'odkoupeno' ? esc(tx('hra.podil_je_odkoupeny_zpatky_vyrovnano'))
+        : esc(tx('hra.podil_bezi_dal_vyrovnava_se'))) + '</p>';
   }
   return '';
 }
@@ -10462,30 +10462,30 @@ function nekrytoHtml(t) {
 function zastavaSheet(t) {
   var mista = (S.units || []).map(function (u) {
     return { id: u.spotId, name: u.name, pod: (MODELS[u.eco.model] || {}).name
-      + ' · zisk ' + kcFull(u.eco.profit) + '/měs' };
+      + ' · zisk ' + kcFull(u.eco.profit) + esc(tx('hra.mes_3')) };
   });
   if (!mista.length) {
-    return toast('Věřitel chce zástavu, ale ty nemáš postavený žádný prádlomat. '
-      + 'Pošli protinávrh a domluv se jinak.', 'err', true);
+    return toast(esc(tx('hra.veritel_chce_zastavu_ale_ty')) + ' '
+      + esc(tx('hra.posli_protinavrh_a_domluv_se')), 'err', true);
   }
-  sheet('<h3>Čím ručíš</h3>'
+  sheet('<h3>' + esc(tx('hra.cim_rucis')) + '</h3>'
     + '<p class="muted small">' + esc(t.od.nick) + ' u téhle půjčky chce zástavu. Vyber prádlomat — '
     + 'stačí jedna nezaplacená splátka a připadne jemu i s místem. Vybírej podle toho, '
     + 'o co si můžeš dovolit přijít.</p>'
-    + '<label class="fld"><span>Zástava</span><select id="za-spot" class="inp">'
+    + '<label class="fld"><span>' + esc(tx('hra.zastava_3')) + '</span><select id="za-spot" class="inp">'
     + mista.map(function (m) {
         return '<option value="' + esc(m.id) + '">' + esc(m.name) + ' — ' + esc(m.pod) + '</option>';
       }).join('') + '</select></label>'
-    + '<div class="kv"><span>Půjčka</span><b>' + kcFull(t.cena) + '</b></div>'
-    + '<div class="kv"><span>Splátka za herní měsíc</span><b>' + kcFull((t.data || {}).splatka || 0) + '</b></div>'
-    + '<button class="btn big" id="za-ok" style="width:100%;margin-top:10px">Přijmout se zástavou</button>');
+    + '<div class="kv"><span>' + esc(tx('hra.pujcka')) + '</span><b>' + kcFull(t.cena) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.splatka_za_herni_mesic_3')) + '</span><b>' + kcFull((t.data || {}).splatka || 0) + '</b></div>'
+    + '<button class="btn big" id="za-ok" style="width:100%;margin-top:10px">' + esc(tx('hra.prijmout_se_zastavou')) + '</button>');
   $('za-ok').onclick = function () {
     var b = $('za-ok'); b.disabled = true;
     apiJson('/trade/' + t.id + '/accept', { zastava: $('za-spot').value }).then(function (r) {
       if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
       closeSheet(); vyzvedniNasledky(); FINANCE = null; loadTrades(paintBurza);
-      toast('Půjčka přijata. Splátky chodí každý herní měsíc.', 'ok');
-    }).catch(function () { b.disabled = false; toast('Server neodpovídá.', 'err'); });
+      toast(esc(tx('hra.pujcka_prijata_splatky_chodi_kazdy')), 'ok');
+    }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida_16')), 'err'); });
   };
 }
 
@@ -10583,7 +10583,7 @@ function protinavrhSheet(t) {
 function kartyVyber(pref) {
   var moje = (CARDS_CAT || []).filter(function (c) { return ownedOf(c.kind) > 0; });
   if (!moje.length) return '';
-  return '<p class="muted small" style="margin:10px 0 2px">Přihodit karty</p><div class="vyber" id="' + pref + '-karty">'
+  return '<p class="muted small" style="margin:10px 0 2px">' + esc(tx('hra.prihodit_karty')) + '</p><div class="vyber" id="' + pref + '-karty">'
     + moje.map(function (c) { return '<button type="button" data-k="' + c.kind + '">' + esc(c.name) + ' (' + ownedOf(c.kind) + ')</button>'; }).join('')
     + '</div>';
 }
@@ -10622,7 +10622,7 @@ function rokyNavratnosti(cena, zisk) {
 }
 
 function novaNabidkaSheet() {
-  hraciVyberSheet('Komu chceš nabídnout', 'Vybrat', function (id) { majetekSheet(id); });
+  hraciVyberSheet(esc(tx('hra.komu_chces_nabidnout')), 'Vybrat', function (id) { majetekSheet(id); });
 }
 
 function majetekSheet(id) {
@@ -10782,18 +10782,18 @@ function podilProdano() {
 // Našeptávač ceny podílu. Hráč si cenu určí sám — tohle je jen opora,
 // aby nestřílel od boku.
 function oceneniHtml(oc, co) {
-  if (!oc) return '<p class="fine">Hodnotu téhle firmy neznáme — cena je čistě na dohodě.</p>';
+  if (!oc) return '<p class="fine">' + esc(tx('hra.hodnotu_tehle_firmy_nezname_cena')) + '</p>';
   var cizi = co === 'koupim-podil';
   return '<div class="kv" style="margin-top:10px"><span>'
-    + (cizi ? 'Jeho majetek' : 'Tvůj majetek') + ' (' + oc.pradlomatu + ' '
-    + mn(oc.pradlomatu, 'prádlomat', 'prádlomaty', 'prádlomatů') + ', stroje, pozemky)</span><b>'
+    + (cizi ? 'Jeho majetek' : esc(tx('hra.tvuj_majetek'))) + ' (' + oc.pradlomatu + ' '
+    + mn(oc.pradlomatu, esc(tx('hra.pradlomat_2')), esc(tx('hra.pradlomaty_5')), esc(tx('hra.pradlomatu_2'))) + ', stroje, pozemky)</span><b>'
     + kcFull(oc.majetek) + '</b></div>'
     + '<div class="kv"><span>Hotovost</span><b>' + kcFull(oc.hotovost) + '</b></div>'
     + '<div class="kv"><span>Dluh u banky</span><b class="' + (oc.dluh ? 'warn' : '') + '">−'
     + kcFull(oc.dluh) + '</b></div>'
-    + '<div class="kv souhrn"><span>Čisté jmění firmy</span><b class="' + (oc.jmeni >= 0 ? '' : 'err')
+    + '<div class="kv souhrn"><span>' + esc(tx('hra.ciste_jmeni_firmy')) + '</span><b class="' + (oc.jmeni >= 0 ? '' : 'err')
     + '">' + kcFull(oc.jmeni) + '</b></div>'
-    + '<div class="kv"><span>Podle zisku (4× roční)</span><b>' + kcFull(oc.podle_zisku) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.podle_zisku_4_rocni')) + '</span><b>' + kcFull(oc.podle_zisku) + '</b></div>'
     + '<p class="fine" id="fin-rada"></p>';
 }
 // Kolik téhle firmy drží jeden konkrétní hráč. Většinu dělá jeden držitel,
@@ -11163,7 +11163,7 @@ function vyzvedniNasledky(then) {
     d.forEach(function (x) {
       if (x.kind === 'cash') {
         S.cash += x.amount || 0;
-        zapis('prijem', x.popis || 'Připsáno na účet', x.amount || 0, 0, x.vzniklo);
+        zapis('prijem', x.popis || esc(tx('hra.pripsano_na_ucet')), x.amount || 0, 0, x.vzniklo);
         // Kdyby mezitím peníze utratil, schodek pokryje banka — ať hra neskončí
         // v záporné hotovosti, ze které není cesta ven.
         if (S.cash < 0) { pricistDluh(-S.cash, prirazkaZa(-S.cash)); S.bank = Math.max(0, S.bank + S.cash); S.cash = 0; }
@@ -11190,7 +11190,7 @@ function vyzvedniNasledky(then) {
       } else if (x.kind === 'unit_add') {
         var dd = x.data || {};
         if (!S.units.some(function (u) { return u.spotId === x.spot_id; })) {
-          var sp = { id: x.spot_id, name: dd.name || 'Koupený prádlomat', kind: dd.kind || 'unknown',
+          var sp = { id: x.spot_id, name: dd.name || esc(tx('hra.koupeny_pradlomat')), kind: dd.kind || 'unknown',
             score: dd.score != null ? dd.score : 60, lat: dd.lat, lon: dd.lon };
           var eco = economics(sp, x.model || 'mini');
           eco.rent = dd.rent || eco.rent;
@@ -11284,13 +11284,13 @@ function paintDrazbaHodiny() {
     String(-DRAZBA_OBVOD * (1 - Math.max(0, Math.min(1, ms / DRAZBA_ZAKLAD_MS)))));
   if (!drazbaBezi()) {
     cislo.textContent = 'konec';
-    if (popis) popis.textContent = 'dražba doběhla';
+    if (popis) popis.textContent = esc(tx('hra.drazba_dobehla'));
     el.className = 'drz-hodiny dobehlo';
     kruh.setAttribute('stroke-dashoffset', String(-DRAZBA_OBVOD));
     return;
   }
   cislo.textContent = sek;
-  if (popis) popis.textContent = sek === 1 ? 'vteřina' : (sek < 5 ? 'vteřiny' : 'vteřin');
+  if (popis) popis.textContent = sek === 1 ? esc(tx('hra.vterina')) : (sek < 5 ? esc(tx('hra.vteriny_2')) : esc(tx('hra.vterin_3')));
   el.className = 'drz-hodiny' + (ms <= 7000 ? ' dochazi' : ms <= 15000 ? ' spech' : '');
 }
 // Okno dražby. Překresluje se celé jen při změně dat; odpočet a cena tikají
@@ -11323,10 +11323,10 @@ function drzBlik(el) {
 function drzLideHtml(d) {
   // Sám sebe hráč vidí vždycky — server o něm ví z posledního dotazu.
   var oci = Math.max(1, d.divaku || 1), pri = d.prihazujicich || 0;
-  return '<span><b>' + oci + '</b> ' + mn(oci, 'hráč', 'hráči', 'hráčů') + ' u dražby</span>'
+  return '<span><b>' + oci + '</b> ' + mn(oci, esc(tx('hra.hrac_3')), esc(tx('hra.hraci_3')), esc(tx('hra.hracu_3'))) + ' u dražby</span>'
     + '<span>' + (pri
-        ? '<b>' + pri + '</b> ' + mn(pri, 'přihazuje', 'přihazují', 'přihazuje')
-        : 'zatím nikdo nepřihodil') + '</span>';
+        ? '<b>' + pri + '</b> ' + mn(pri, esc(tx('hra.prihazuje')), esc(tx('hra.prihazuji')), esc(tx('hra.prihazuje_2')))
+        : esc(tx('hra.zatim_nikdo_neprihodil'))) + '</span>';
 }
 function drzFeedHtml() {
   return (DRAZBA_PRIHOZY || []).map(function (p) {
@@ -11343,7 +11343,7 @@ function paintDrazbaZiva() {
   if ($('drz-pod')) $('drz-pod').style.display = d.suma > d.vyvolavaci ? '' : 'none';
   var v = $('drz-vede');
   if (v) {
-    var jmeno = d.vedouci_nick || 'zatím nikdo', zmena = v.textContent !== jmeno;
+    var jmeno = d.vedouci_nick || esc(tx('hra.zatim_nikdo')), zmena = v.textContent !== jmeno;
     if (zmena) v.textContent = jmeno;
     // Třída se přepisuje celá, takže bliknutí musí přijít až po ní.
     v.className = d.vedu ? 'ok' : '';
@@ -11606,7 +11606,7 @@ function drazbaCenaSheet(x) {
   };
 }
 function prihodDrazba(castka, b) {
-  if (!drazbaBezi()) return toast('Dražba už skončila.', 'err');
+  if (!drazbaBezi()) return toast(esc(tx('hra.drazba_uz_skoncila')), 'err');
   if (b) b.disabled = true;
   apiJson('/trade/drazba/prihoz', { castka: castka }).then(function (r) {
     if (b) b.disabled = false;
@@ -11620,7 +11620,7 @@ function prihodDrazba(castka, b) {
     // Bez hlášky: nové minimum je vidět rovnou na tlačítkách a v textu pod nimi,
     // a toast by v poslední vteřině dražby přikryl zrovna ta tlačítka.
     paintDrazba();
-  }).catch(function () { if (b) b.disabled = false; toast('Server neodpovídá.', 'err'); });
+  }).catch(function () { if (b) b.disabled = false; toast(esc(tx('hra.server_neodpovida_33')), 'err'); });
 }
 
 // ─── Podržení prstu na mapě ─────────────────────────────────────────────────
@@ -11662,7 +11662,7 @@ function mapaPodrzeni(x, y, cil) {
   var box = $('map').getBoundingClientRect();
   var bod = map.containerPointToLatLng([x - box.left, y - box.top]);
   MISTO_CEKA = true;
-  toast('Koukám, co je to tam za město\u2026', 'ok');
+  toast(esc(tx('hra.koukam_co_je_to_tam')), 'ok');
   api('/misto-podle?lat=' + bod.lat.toFixed(5) + '&lon=' + bod.lng.toFixed(5)).then(function (r) {
     MISTO_CEKA = false;
     if (r.ok && r.j.name) {
@@ -11678,9 +11678,9 @@ function mapaPodrzeni(x, y, cil) {
       return areasSheet(r.j.name);
     }
     areasSheet();
-    toast((r.j && r.j.error) || 'Tady žádné město nevidím, napiš ho ručně.', 'err');
+    toast((r.j && r.j.error) || esc(tx('hra.tady_zadne_mesto_nevidim_napis')), 'err');
   }).catch(function () {
-    MISTO_CEKA = false; areasSheet(); toast('Server neodpovídá.', 'err');
+    MISTO_CEKA = false; areasSheet(); toast(esc(tx('hra.server_neodpovida_29')), 'err');
   });
 }
 
@@ -11890,12 +11890,12 @@ function introVariantaB(cfg) {
   try {
     var box = document.querySelector('#intro .intro-in'); if (!box || box.querySelector('.ib-hero')) return;
     var online = Number(cfg.online) || 0, firem = Number(cfg.firem) || 0, proof = '';
-    if (online >= 5) proof = '<span class="ib-dot"></span>Právě hraje <b>' + online + '</b> ' + introPlural(online, 'hráč', 'hráči', 'hráčů') + (firem >= 20 ? ' · <b>' + firem + '</b> ' + introPlural(firem, 'firma', 'firmy', 'firem') + ' už staví' : '');
-    else if (firem >= 20) proof = '<b>' + firem + '</b> ' + introPlural(firem, 'firma už staví', 'firmy už staví', 'firem už staví') + ' svou síť';
+    if (online >= 5) proof = '<span class="ib-dot"></span>' + esc(tx('hra.prave_hraje')) + ' ' + '<b>' + online + '</b> ' + introPlural(online, esc(tx('hra.hrac_2')), esc(tx('hra.hraci_2')), esc(tx('hra.hracu_2'))) + (firem >= 20 ? ' · <b>' + firem + '</b> ' + introPlural(firem, 'firma', 'firmy', 'firem') + ' už staví' : '');
+    else if (firem >= 20) proof = '<b>' + firem + '</b> ' + introPlural(firem, esc(tx('hra.firma_uz_stavi')), esc(tx('hra.firmy_uz_stavi')), esc(tx('hra.firem_uz_stavi'))) + ' svou síť';
     var hero = document.createElement('div');
     hero.className = 'ib-hero';
-    hero.innerHTML = '<h2 class="ib-h">Postav první prádlomat <span class="g">za 60 sekund</span></h2>'
-      + '<p class="ib-sub">Skutečná mapa, skutečná ekonomika. Hraješ hned — bez e-mailu a bez hesla.</p>'
+    hero.innerHTML = '<h2 class="ib-h">' + esc(tx('hra.postav_prvni_pradlomat')) + ' ' + '<span class="g">' + 'za 60 sekund' + '</span></h2>'
+      + '<p class="ib-sub">' + esc(tx('hra.skutecna_mapa_skutecna_ekonomika_hrajes')) + '</p>'
       + (proof ? '<div class="ib-proof">' + proof + '</div>' : '');
     var brand = box.querySelector('.brand'), jmeno = box.querySelector('.intro-jmeno'), go = $('go-quiz'), login = $('go-login');
     var zbytek = ['.hero-flex', '.lead', '.intro-pts', '#sb'].map(function (q) { return box.querySelector(q); }).filter(Boolean);
@@ -11940,7 +11940,7 @@ function poradceStav() {
 // Jak hráč hraje, krátce a vlastními slovy. Poradce pak ladí rady podle toho.
 function poradceStyl(st) {
   var v = [];
-  if (!st.pocet) v.push('zatím nic nepostavil');
+  if (!st.pocet) v.push(esc(tx('hra.zatim_nic_nepostavil')));
   else {
     var sk = st.mista.reduce(function (a, m) { return a + (m.score || 0); }, 0) / st.pocet;
     v.push('průměrné skóre míst ' + Math.round(sk));
@@ -11950,19 +11950,19 @@ function poradceStyl(st) {
   var majetek = assetsTotal();
   if (majetek > 0) v.push('dluh je ' + Math.round((st.dluh / majetek) * 100) + ' % majetku');
   if (st.splatky > 0) v.push('hotovost pokryje ' + (st.cash / st.splatky).toFixed(1).replace('.', ',') + ' splátky');
-  else if (!st.dluh) v.push('nemá žádný úvěr');
-  if (st.poruchy) v.push('nechává stát porouchané stroje');
+  else if (!st.dluh) v.push(esc(tx('hra.nema_zadny_uver')));
+  if (st.poruchy) v.push(esc(tx('hra.nechava_stat_porouchane_stroje')));
   return v.join(', ');
 }
 function poradceOtazky() {
   if (!(S.units || []).length) {
-    return ['Jak mám začít?', 'Jak poznám dobré místo?', 'Mám si na první prádlomat půjčit?'];
+    return [esc(tx('hra.jak_mam_zacit')), esc(tx('hra.jak_poznam_dobre_misto')), esc(tx('hra.mam_si_na_prvni_pradlomat'))];
   }
-  var q = ['Co mám postavit dál?', 'Jak si stojím?'];
-  if (S.loan > 0) q.push('Nemám moc dluhů?');
-  if (maRamec()) q.push('Jak funguje rámcový úvěr?'); else q.push('Jak se dostanu k rámcovému úvěru?');
-  if ((S.units || []).some(function (u) { return !!u.porucha; })) q.push('Co mám dělat s poruchou?');
-  else q.push('Vyplatí se mi něco prodat na tržišti?');
+  var q = [esc(tx('hra.co_mam_postavit_dal')), esc(tx('hra.jak_si_stojim'))];
+  if (S.loan > 0) q.push(esc(tx('hra.nemam_moc_dluhu')));
+  if (maRamec()) q.push(esc(tx('hra.jak_funguje_ramcovy_uver'))); else q.push(esc(tx('hra.jak_se_dostanu_k_ramcovemu')));
+  if ((S.units || []).some(function (u) { return !!u.porucha; })) q.push(esc(tx('hra.co_mam_delat_s_poruchou')));
+  else q.push(esc(tx('hra.vyplati_se_mi_neco_prodat')));
   return q.slice(0, 4);
 }
 function poradceSheet() {
@@ -12003,8 +12003,8 @@ function poradcePaint() {
   var h = PORADCE_H.map(function (z) {
     return '<div class="por-z ' + (z.role === 'ai' ? 'ai' : 'ja') + '">' + poradceText(z.text) + '</div>';
   }).join('');
-  if (PORADCE_CEKA) h += '<div class="por-z ai cekam">Přemýšlím\u2026</div>';
-  if (!h) h = '<div class="por-uvod">Nevíš, kde začít? Klikni na otázku níž.</div>';
+  if (PORADCE_CEKA) h += '<div class="por-z ai cekam">' + esc(tx('hra.premyslim_u2026')) + '</div>';
+  if (!h) h = '<div class="por-uvod">' + esc(tx('hra.nevis_kde_zacit_klikni_na')) + '</div>';
   tok.innerHTML = h;
   tok.scrollTop = tok.scrollHeight;
   var ch = $('por-chipy');
@@ -12028,12 +12028,12 @@ function poradcePosli(q) {
       PORADCE_CEKA = false;
       var j = r.j || {};
       if (j.ok && j.text) PORADCE_H.push({ role: 'ai', text: j.text });
-      else PORADCE_H.push({ role: 'ai', text: j.error || 'Poradce teď nemůže odpovědět. Zkus to za chvíli.' });
+      else PORADCE_H.push({ role: 'ai', text: j.error || esc(tx('hra.poradce_ted_nemuze_odpovedet_zkus')) });
       poradcePaint();
     })
     .catch(function () {
       PORADCE_CEKA = false;
-      PORADCE_H.push({ role: 'ai', text: 'Server neodpovídá. Zkus to za chvíli.' });
+      PORADCE_H.push({ role: 'ai', text: esc(tx('hra.server_neodpovida_zkus_to_za_3')) });
       poradcePaint();
     });
 }
@@ -12079,7 +12079,7 @@ function prepniJazyk(j, pak) {
       toast((r.j && r.j.hlaska) || 'Hotovo.', 'ok');
       if (pak) pak();
     });
-  }).catch(function () { toast('Server neodpovídá.', 'err'); });
+  }).catch(function () { toast(esc(tx('hra.server_neodpovida_34')), 'err'); });
 }
 
 function apiJson(path, body, method, extra) {
@@ -12157,7 +12157,7 @@ window.addEventListener('error', function (e) {
   if (CHYBY_JS++ < 10) hlasChybu('js', (e && e.message) || 'chyba skriptu', { zdroj: String((e && e.filename) || '').split('/').pop(), radek: e && e.lineno, sloupec: e && e.colno });
 });
 window.addEventListener('unhandledrejection', function (e) {
-  if (CHYBY_JS++ < 10) hlasChybu('js-promise', String((e && e.reason && (e.reason.message || e.reason)) || 'odmítnutý slib'), {});
+  if (CHYBY_JS++ < 10) hlasChybu('js-promise', String((e && e.reason && (e.reason.message || e.reason)) || esc(tx('hra.odmitnuty_slib'))), {});
 });
 function syncState(force) {
   if (wiped || !ME || !S) return Promise.resolve();
@@ -12201,14 +12201,14 @@ function syncState(force) {
         // Konflikt není ztráta spojení, ale uložení taky neproběhlo. Když se
         // takhle točí dokola, hraje hráč na dvou místech a jeho postup padá
         // pod stůl — hlídač neukládání to pak řekne i s důvodem.
-        SYNC_CHYBA = 'hru máš rozehranou i jinde, stav se bere odtamtud';
+        SYNC_CHYBA = esc(tx('hra.hru_mas_rozehranou_i_jinde'));
         // Jednorázový konflikt je normální (druhé zařízení); hlásí se až když se opakuje.
         if (++SYNC_KONFLIKTU_PO_SOBE >= 3) hlasChybu('ulozeni-konflikt', SYNC_CHYBA, { status: 409, po_sobe: SYNC_KONFLIKTU_PO_SOBE });
         if (prevezmiStav(r.j.state, r.j.rev)) {
           // Náš zápis propadl i s doručenkami — ty zůstanou na serveru
           // nepotvrzené a přijdou znovu k tomu stavu, který vyhrál.
           NEPOTVRZENE = [];
-          toast('Tuhle hru máš rozehranou i jinde — načetli jsme novější stav.', 'ok');
+          toast(esc(tx('hra.tuhle_hru_mas_rozehranou_i')), 'ok');
         } else if (r.j.rev != null) { STATE_REV = r.j.rev; }
         return;
       }
@@ -12220,7 +12220,7 @@ function syncState(force) {
           + Math.round(JSON.stringify(S).length / 1024) + ' kB)';
       }
       hlasChybu('ulozeni', SYNC_CHYBA, { status: r.status });
-      console.warn('[hra] uložení selhalo:', r.status, SYNC_CHYBA);
+      console.warn(esc(tx('hra.hra_ulozeni_selhalo')), r.status, SYNC_CHYBA);
     })
     .catch(function (err) {
       syncBusy = false;
@@ -12228,10 +12228,10 @@ function syncState(force) {
       if (prerus) clearTimeout(prerus);
       SYNC_CHYBA = (err && err.name === 'AbortError')
         ? 'server neodpověděl do ' + Math.round(SYNC_TIMEOUT_MS / 1000) + ' s'
-        : 'spojení se serverem se nepovedlo';
+        : esc(tx('hra.spojeni_se_serverem_se_nepovedlo'));
       // Krátký výpadek sítě (5G ↔ Wi-Fi, tunel) se hlásí až při třetím selhání za sebou.
       if (++SYNC_SITE_PO_SOBE >= 3) hlasChybu((err && err.name === 'AbortError') ? 'ulozeni-timeout' : 'ulozeni-sit', SYNC_CHYBA, { zprava: err && err.message, po_sobe: SYNC_SITE_PO_SOBE });
-      console.warn('[hra] uložení selhalo:', SYNC_CHYBA, err && err.message);
+      console.warn(esc(tx('hra.hra_ulozeni_selhalo_2')), SYNC_CHYBA, err && err.message);
     });
 }
 // Když se hra dlouho neuloží, musí to hráč vědět. Jinak hraje dál do stavu,
@@ -12263,7 +12263,7 @@ function potrebujeHeslo() { return !!(ME && ME.ma_heslo === false); }
 function hesloSheet() {
   if (!potrebujeHeslo()) return;
   sheet('<h3>Zamkni si firmu heslem</h3>'
-    + '<p class="muted small">Hraješ jako <b>' + esc(ME.nick) + '</b>'
+    + '<p class="muted small">' + esc(tx('hra.hrajes_jako_2')) + ' ' + '<b>' + esc(ME.nick) + '</b>'
     + (ME.company ? ' za ' + esc(ME.company) : '') + ' — tvoje síť je uložená u nás na serveru, '
     + 'ale zatím tě k ní pustí jen tenhle prohlížeč. Vymysli si heslo a dostaneš se k ní '
     + 'odkudkoli — z telefonu, z práce, po smazání historie.</p>'
@@ -12272,14 +12272,14 @@ function hesloSheet() {
     + 'placeholder="aspoň 6 znaků"></label>'
     + '<p class="fine err hidden" id="hs-err"></p>'
     + '<button class="btn big" id="hs-go" style="width:100%">Nastavit heslo</button>'
-    + '<button class="btn ghost" id="hs-pak" style="width:100%;margin-top:8px">Teď ne</button>'
-    + '<p class="fine">E-mail po tobě nikdo nechce. Ten bude potřeba, až si budeš něco kupovat.</p>');
+    + '<button class="btn ghost" id="hs-pak" style="width:100%;margin-top:8px">' + esc(tx('hra.ted_ne')) + '</button>'
+    + '<p class="fine">' + esc(tx('hra.e_mail_po_tobe_nikdo')) + '</p>');
   var inp = $('hs-pass');
   var posli = function () {
     var pwd = inp ? inp.value : '';
     var e = $('hs-err');
-    if (pwd.length < 6) { if (e) { e.textContent = 'Heslo musí mít aspoň 6 znaků.'; e.classList.remove('hidden'); } return; }
-    var b = $('hs-go'); b.disabled = true; b.textContent = 'Ukládám…';
+    if (pwd.length < 6) { if (e) { e.textContent = esc(tx('hra.heslo_musi_mit_aspon_6')); e.classList.remove('hidden'); } return; }
+    var b = $('hs-go'); b.disabled = true; b.textContent = esc(tx('hra.ukladam_4'));
     apiJson('/account/heslo', { password: pwd }).then(function (r) {
       b.disabled = false; b.textContent = 'Nastavit heslo';
       if (!r.ok) { if (e) { e.textContent = r.j.error || 'Nepovedlo se.'; e.classList.remove('hidden'); } return; }
@@ -12288,7 +12288,7 @@ function hesloSheet() {
       toast('Hotovo. Teď se k síti dostaneš i jinde — jménem ' + ME.nick + ' a heslem.', 'ok');
     }).catch(function () {
       b.disabled = false; b.textContent = 'Nastavit heslo';
-      if (e) { e.textContent = 'Server neodpovídá. Zkus to za chvíli.'; e.classList.remove('hidden'); }
+      if (e) { e.textContent = esc(tx('hra.server_neodpovida_zkus_to_za')); e.classList.remove('hidden'); }
     });
   };
   $('hs-go').onclick = posli;
@@ -12303,7 +12303,7 @@ function paintHeslo() {
   var ukaz = potrebujeHeslo() && S && (S.units || []).length > 0;
   el.classList.toggle('hidden', !ukaz);
   if (!ukaz) return;
-  el.innerHTML = '<span>Firma je zatím jen v tomhle prohlížeči.</span><b>Nastavit heslo</b>';
+  el.innerHTML = '<span>' + esc(tx('hra.firma_je_zatim_jen_v')) + '</span><b>' + 'Nastavit heslo' + '</b>';
   el.onclick = hesloSheet;
 }
 
@@ -12312,9 +12312,9 @@ function showAcct(mode) {
   ['intro', 'quiz', 'role'].forEach(function (id) { $(id).classList.add('hidden'); });
   $('acct').classList.remove('hidden');
   var login = mode === 'login';
-  $('acct').querySelector('h2').textContent = login ? 'Přihlas se ke své síti' : 'Vyber si herní nick';
-  $('ac-go').textContent = login ? 'Přihlásit a pokračovat' : 'Založit a hrát';
-  $('ac-have').textContent = login ? 'Chci začít znovu s novým účtem' : 'Už účet mám — přihlásit se';
+  $('acct').querySelector('h2').textContent = login ? esc(tx('hra.prihlas_se_ke_sve_siti')) : esc(tx('hra.vyber_si_herni_nick'));
+  $('ac-go').textContent = login ? esc(tx('hra.prihlasit_a_pokracovat')) : esc(tx('hra.zalozit_a_hrat'));
+  $('ac-have').textContent = login ? esc(tx('hra.chci_zacit_znovu_s_novym')) : esc(tx('hra.uz_ucet_mam_prihlasit_se'));
   $('ac-nick-hint').classList.toggle('hidden', login);
   $('ac-firma-f').classList.toggle('hidden', login);
   $('ac-firma-hint').classList.toggle('hidden', login);
@@ -12323,7 +12323,7 @@ function showAcct(mode) {
   $('ac-have').onclick = function () { showAcct(login ? 'register' : 'login'); };
   var zp = $('ac-zpet');
   // Kdo už hraje, se účtem nesmí být zdržený — hra běží i bez něj.
-  if (zp) zp.textContent = (S && S.units && S.units.length) ? 'Teď ne — hrát dál' : 'Zpět';
+  if (zp) zp.textContent = (S && S.units && S.units.length) ? esc(tx('hra.ted_ne_hrat_dal')) : esc(tx('hra.zpet'));
   if (zp) zp.onclick = function () {
     $('acct').classList.add('hidden');
     if (S && S.units && S.units.length) return startGame();
@@ -12336,11 +12336,11 @@ function showAcct(mode) {
 function acctErr(t) { var e = $('ac-err'); e.textContent = t; e.classList.remove('hidden'); }
 function doAcct(login) {
   var nick = $('ac-nick').value.trim(), pass = $('ac-pass').value;
-  if (nick.length < 3) return acctErr('Nick musí mít aspoň 3 znaky.');
-  if (pass.length < 6) return acctErr('Heslo musí mít aspoň 6 znaků.');
+  if (nick.length < 3) return acctErr(esc(tx('hra.nick_musi_mit_aspon_3')));
+  if (pass.length < 6) return acctErr(esc(tx('hra.heslo_musi_mit_aspon_6_2')));
   $('ac-go').disabled = true;
   var firma = $('ac-firma').value.trim();
-  if (!login && firma.length && firma.length < 2) return acctErr('Název firmy má aspoň 2 znaky.');
+  if (!login && firma.length && firma.length < 2) return acctErr(esc(tx('hra.nazev_firmy_ma_aspon_2_2')));
   apiJson('/account/' + (login ? 'login' : 'register'),
     { nick: nick, password: pass, company: firma, ref: trvalePid(), odkud: prichoziRef(),
       zdroj: zjistiZdroj(), sid: visitId() }).then(function (r) {
@@ -12360,14 +12360,14 @@ function doAcct(login) {
         // Účet existuje, ale rozehraná hra k němu není — pošleme ho vybrat profil.
         $('acct').classList.add('hidden');
         $('intro').classList.remove('hidden');
-        return toast('Přihlášeno. Teď si ještě vyber, jaký jsi podnikatel.', 'ok');
+        return toast(esc(tx('hra.prihlaseno_ted_si_jeste_vyber')), 'ok');
       }
     }
     $('acct').classList.add('hidden');
     srovnejRef();   // znovu: po přihlášení mohl přijít stav se starým pid
     startGame();
     syncState(true);
-  }).catch(function () { $('ac-go').disabled = false; acctErr('Server neodpovídá. Zkus to za chvíli.'); });
+  }).catch(function () { $('ac-go').disabled = false; acctErr(esc(tx('hra.server_neodpovida_zkus_to_za_2'))); });
 }
 
 // ─── Karty ───────────────────────────────────────────────────────────────────
@@ -12447,19 +12447,19 @@ function dispecerKolo() {
     // Držená hláška se sama zapíše i do seznamu upozornění, takže hráč to
     // najde, i když byl zrovna pryč.
     toast('Vedoucí servisu poslal ' + (poslal === 1 ? 'technika' : poslal + ' techniky')
-      + ' k ' + mn(poslal, 'porouchanému stroji', 'porouchaným strojům', 'porouchaným strojům') + '.', 'ok', true);
+      + ' k ' + mn(poslal, esc(tx('hra.porouchanemu_stroji')), esc(tx('hra.porouchanym_strojum')), esc(tx('hra.porouchanym_strojum_2'))) + '.', 'ok', true);
   }
 }
 // Kdy přibude další Expresní dovoz zdarma. Počítá to server, klient jen ukazuje.
 var RUSH_ZA = null, RUSH_MAX = 5;
 function paintCards() {
   var box = $('cards-body');
-  if (!CARDS_CAT) { box.innerHTML = '<p class="muted small">Načítám…</p>'; return loadCards().then(paintCards); }
+  if (!CARDS_CAT) { box.innerHTML = '<p class="muted small">' + esc(tx('hra.nacitam_2')) + '</p>'; return loadCards().then(paintCards); }
   var total = CARDS_CAT.reduce(function (a, c) { return a + ownedOf(c.kind); }, 0);
   var vsechny = CARDS_CAT.length && CARDS_CAT.every(function (c) { return ownedOf(c.kind) >= 1; });
   box.innerHTML = instagramHtml()
-    + (total ? '' : '<p class="muted small">Zatím žádnou kartu nemáš.</p>')
-    + (vsechny ? '<p class="muted small">Od každé karty máš jednu do začátku — jsou tvoje, použij je, kdy chceš.</p>' : '')
+    + (total ? '' : '<p class="muted small">' + esc(tx('hra.zatim_zadnou_kartu_nemas')) + '</p>')
+    + (vsechny ? '<p class="muted small">' + esc(tx('hra.od_kazde_karty_mas_jednu')) + '</p>' : '')
     + CARDS_CAT.map(function (c) {
       var n = ownedOf(c.kind), art = CARD_ART[c.kind] || { emoji: '⚡', tone: 'blue' };
       return '<div class="gcard ' + art.tone + '">'
@@ -12473,11 +12473,11 @@ function paintCards() {
                   + ' nevyužitých, další zdarma nechodí — koupené se ale nikam neztratí.' : '.') + '</p>'
             : '')
         + '<div class="gcard-act">'
-        + (n ? '<button class="btn sm" data-use="' + c.kind + '">Použít</button>' : '')
+        + (n ? '<button class="btn sm" data-use="' + c.kind + '">' + esc(tx('hra.pouzit')) + '</button>' : '')
         + (PAYMENTS_ON ? '<button class="btn sm ghost" data-buy-card="' + c.kind + '">Koupit za ' + c.price_czk.toLocaleString('cs-CZ') + ' Kč</button>'
           + ((c.bundles || []).length ? '<span class="fine bal-tip">nebo ' + c.bundles[c.bundles.length - 1].qty
               + '\u00d7 se slevou ' + c.bundles[c.bundles.length - 1].sleva + ' %</span>' : '')
-          : '<span class="fine">Prodej se teprve spouští.</span>')
+          : '<span class="fine">' + esc(tx('hra.prodej_se_teprve_spousti_4')) + '</span>')
         + '</div></div>';
     }).join('');
   box.innerHTML += ramecPacksHtml() + predplatneHtml() + linkaPacksHtml();
@@ -12495,16 +12495,16 @@ function paintCards() {
   var lz = box.querySelector('[data-linka-zrus]');
   if (lz) lz.onclick = function () {
     var obnovit = lz.getAttribute('data-linka-zrus') === '0';
-    lz.disabled = true; lz.textContent = 'Měním\u2026';
+    lz.disabled = true; lz.textContent = esc(tx('hra.menim_u2026'));
     apiJson('/stripe/subscribe/zrusit', { kind: lz.getAttribute('data-kind'), obnovit: obnovit })
       .then(function (r) {
         lz.disabled = false;
         if (!r.ok) return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err');
         PREDPLATNE = r.j.predplatne || [];
         paintCards();
-        toast(r.j.obnovi_se ? 'Infolinka poběží dál.'
-          : 'Zrušeno. Zaplacené období ještě dojede.', 'ok', true);
-      }).catch(function () { lz.disabled = false; toast('Server neodpovídá.', 'err'); });
+        toast(r.j.obnovi_se ? esc(tx('hra.infolinka_pobezi_dal'))
+          : esc(tx('hra.zruseno_zaplacene_obdobi_jeste_dojede')), 'ok', true);
+      }).catch(function () { lz.disabled = false; toast(esc(tx('hra.server_neodpovida_17')), 'err'); });
   };
   [].forEach.call(box.querySelectorAll('[data-ramec]'), function (el) {
     el.onclick = function () { buyCash(el.getAttribute('data-ramec')); };
@@ -12530,9 +12530,9 @@ function socialHtml(s) {
     + '<div class="gcard-act">'
     + '<a class="btn sm" id="' + s.id + '-open" href="' + esc(s.odkaz) + '" target="_blank" rel="noopener">'
     + s.tlacitko + '</a>'
-    + (otevrel ? '<button class="btn sm ghost" id="' + s.id + '-vzit">Sleduju — vzít</button>' : '')
+    + (otevrel ? '<button class="btn sm ghost" id="' + s.id + '-vzit">' + esc(tx('hra.sleduju_vzit')) + '</button>' : '')
     + '</div>'
-    + (otevrel ? '' : '<p class="fine">Až nás sledovat budeš, vrať se sem a odměnu si vyzvedni.</p>')
+    + (otevrel ? '' : '<p class="fine">' + esc(tx('hra.az_nas_sledovat_budes_vrat')) + '</p>')
     + '</div>';
 }
 // Odměny za sledování. Že nás někdo opravdu sleduje, ověřit nejde — Instagram
@@ -12542,17 +12542,17 @@ function socialKarty() {
   var out = [];
   if (IG && IG.odkaz && !IG.vzato) out.push({
     id: 'ig', trida: 'ig', ikona: '\uD83D\uDCF8', klicOtevren: 'igOtevren', odkaz: IG.odkaz,
-    nadpis: 'Sleduj nás na Instagramu', tlacitko: 'Otevřít Instagram',
-    odmena: IG.karet + '\u00d7 Expresní dovoz zdarma',
+    nadpis: esc(tx('hra.sleduj_nas_na_instagramu')), tlacitko: esc(tx('hra.otevrit_instagram')),
+    odmena: IG.karet + esc(tx('hra.u00d7_expresni_dovoz_zdarma')),
     popis: 'Dáváme tam, co se ve hře chystá, a co vyvedli ostatní hráči. Za sledování ti '
       + 'přidáme ' + IG.karet + ' kartičky Expresní dovoz — stroj pak dorazí hned, místo '
       + 'čekání dva herní měsíce. Jednou na účet.',
     cesta: '/account/instagram',
-    hotovo: function (r) { return 'Díky! Přidali jsme ti ' + r.karet + '\u00d7 Expresní dovoz.'; }
+    hotovo: function (r) { return 'Díky! Přidali jsme ti ' + r.karet + esc(tx('hra.u00d7_expresni_dovoz')); }
   });
   if (FB && FB.odkaz && !FB.vzato) out.push({
     id: 'fb', trida: 'fb', ikona: '\uD83D\uDC4D', klicOtevren: 'fbOtevren', odkaz: FB.odkaz,
-    nadpis: 'Sleduj nás na Facebooku', tlacitko: 'Otevřít Facebook',
+    nadpis: esc(tx('hra.sleduj_nas_na_facebooku')), tlacitko: esc(tx('hra.otevrit_facebook')),
     odmena: kcFull(FB.laundry) + ' do banky',
     popis: 'Za sledování stránky ti zvedneme rámec v bance o ' + kcFull(FB.laundry)
       + ' a stejnou částku složíme jako zástavu — banka proti ní půjčí, i když na to ještě '
@@ -12581,7 +12581,7 @@ function bindInstagram() {
         // Dárek do banky si hra vyzvedne jako každý jiný balíček.
         claimCash(function () { paint(); paintCards(); });
         toast(s.hotovo(r.j), 'ok', true);
-      }).catch(function () { v.disabled = false; toast('Server neodpovídá.', 'err'); });
+      }).catch(function () { v.disabled = false; toast(esc(tx('hra.server_neodpovida_35')), 'err'); });
     };
   });
 }
@@ -12599,16 +12599,16 @@ function ramecPacksHtml() {
     var nizsi = (RAMEC.balicky || []).filter(function (x) { return x.uroven === muj; })[0];
     return Math.max(0, b.price_czk - (nizsi ? nizsi.price_czk : 0));
   };
-  return '<div class="card"><h3>\uD83C\uDFE6 Objem rámcového úvěru</h3>'
+  return '<div class="card"><h3>' + esc(tx('hra.ud83c_udfe6_objem_ramcoveho_uveru')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Rámec je úvěrová linka proti zástavě — '
     + 'ručíš za ni doplacenými prádlomaty. Kolik si z ní smíš naráz vzít, drží tenhle strop. '
     + 'Herní pravidla platí dál: víc, než unese výdělek sítě a počet doplacených prádlomatů, '
     + 'ti banka nepůjčí ani s nejvyšším balíčkem. Kupuje se jednou a platí napořád.</p>'
-    + '<div class="kv"><span>Tvůj strop</span><b class="' + (muj ? 'ok' : '') + '">'
+    + '<div class="kv"><span>' + esc(tx('hra.tvuj_strop')) + '</span><b class="' + (muj ? 'ok' : '') + '">'
     + (mujStrop === null ? 'bez stropu' : kcFull(mujStrop)) + (muj ? '' : ' (zdarma)') + '</b></div>'
     + (maRamec() && ramecCerpano() > (mujStrop === null ? Infinity : mujStrop)
         ? '<p class="fine warn">Načerpáno máš ' + kcFull(ramecCerpano()) + ', tedy nad svůj strop. '
-          + 'O peníze nepřijdeš, ale dokud je nesplatíš pod strop, z rámce si už nevezmeš. '
+          + esc(tx('hra.o_penize_neprijdes_ale_dokud')) + ' '
           + 'Vyšší balíček to otevře hned.</p>'
         : '')
     + (PAYMENTS_ON
@@ -12618,14 +12618,14 @@ function ramecPacksHtml() {
             return '<div class="pack' + (mam ? ' hotovo' : '') + '"'
               + (mam ? '' : ' data-ramec="' + esc(b.kind) + '"') + '>'
               + '<div class="pack-l"><b>' + (b.strop === null ? 'Bez stropu' : kcFull(b.strop)) + '</b>'
-              + '<span>' + (mam ? 'máš koupeno'
-                  : muj && dop < b.price_czk ? 'doplatek z tvého stupně' : 'jednorázově, napořád') + '</span></div>'
+              + '<span>' + (mam ? esc(tx('hra.mas_koupeno'))
+                  : muj && dop < b.price_czk ? esc(tx('hra.doplatek_z_tveho_stupne')) : esc(tx('hra.jednorazove_naporad'))) + '</span></div>'
               + '<button class="btn sm"' + (mam ? ' disabled' : '') + '>'
-              + (mam ? '\u2713' : dop.toLocaleString('cs-CZ') + ' Kč') + '</button></div>';
+              + (mam ? '\u2713' : dop.toLocaleString('cs-CZ') + ' ' + esc(tx('hra.kc'))) + '</button></div>';
           }).join('')
           + '<p class="fine">Platbu zpracovává Stripe. Strop se zvedne hned po zaplacení. '
           + 'Kdo má nižší stupeň, platí jen rozdíl — nic se nekupuje dvakrát.</p>'
-        : '<p class="fine">Prodej se teprve spouští.</p>')
+        : '<p class="fine">' + esc(tx('hra.prodej_se_teprve_spousti_3')) + '</p>')
     + '</div>';
 }
 // Přepínač „obnovovat automaticky": když je zapnutý, nekupuje se balíček na
@@ -12637,7 +12637,7 @@ var LINKA_SUB = { linka1d: 'linka_sub1d', linka3d: 'linka_sub3d', linka7d: 'link
   linka30d: 'linka_sub30d', linka365d: 'linka_sub365d' };
 // Jak dlouho balíček vydrží, lidsky.
 function dobaSlovy(dnu) {
-  return dnu === 1 ? 'den' : dnu === 7 ? 'týden' : dnu === 30 ? 'měsíc'
+  return dnu === 1 ? 'den' : dnu === 7 ? esc(tx('hra.tyden')) : dnu === 30 ? esc(tx('hra.mesic_4'))
     : dnu === 365 ? 'rok' : dnu + ' dny';
 }
 function linkaPacksHtml() {
@@ -12687,10 +12687,10 @@ function hovorLogHtml() {
   var l = ((S && S.hovorLog) || []).slice().reverse().slice(0, 20);
   if (!l.length) return '';
   var kolik = ((S && S.hovorLog) || []).length;
-  var vzal = { ja: 'vzal jsem', operator: 'vzal operátor', nevzat: 'nevzatý' };
-  return '<h3 style="margin:18px 0 2px">Evidence hovorů</h3>'
+  var vzal = { ja: 'vzal jsem', operator: esc(tx('hra.vzal_operator')), nevzat: esc(tx('hra.nevzaty')) };
+  return '<h3 style="margin:18px 0 2px">' + esc(tx('hra.evidence_hovoru')) + '</h3>'
     + '<p class="muted small" style="margin:0 0 8px">'
-    + mn(l.length, 'Poslední hovor', 'Poslední ' + l.length + ' hovory', 'Posledních ' + l.length + ' hovorů')
+    + mn(l.length, esc(tx('hra.posledni_hovor')), 'Poslední ' + l.length + ' hovory', 'Posledních ' + l.length + ' hovorů')
     + (kolik > l.length ? ' z ' + kolik + ' zapsaných' : '') + '.</p>'
     + '<div class="hov-log">' + l.map(function (z) {
         var tr = z.konec === 'ja' ? (z.zmena > 0 ? 'ok' : (z.zmena < 0 ? 'err' : 'muted'))
@@ -12706,7 +12706,7 @@ function hovorLogHtml() {
 // „před 4 min" se čte líp než čas, protože hovory padají po minutách.
 function casPred(kdy) {
   var s = Math.max(0, Math.round((Date.now() - kdy) / 1000));
-  if (s < 90) return 'před chvílí';
+  if (s < 90) return esc(tx('hra.pred_chvili'));
   var m = Math.round(s / 60);
   if (m < 60) return 'před ' + m + ' min';
   var h = Math.round(m / 60);
@@ -12763,51 +12763,51 @@ function bindPredplatne() {
   var z = document.querySelector('[data-sub-zrus]');
   if (z) z.onclick = function () {
     var obnovit = z.getAttribute('data-sub-zrus') === '0';
-    z.disabled = true; z.textContent = 'Měním\u2026';
+    z.disabled = true; z.textContent = esc(tx('hra.menim_u2026_2'));
     apiJson('/stripe/subscribe/zrusit', { kind: 'dispecer', obnovit: obnovit }).then(function (r) {
       z.disabled = false;
       if (!r.ok) return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err');
       PREDPLATNE = r.j.predplatne || [];
       paintCards();
-      toast(r.j.obnovi_se ? 'Předplatné poběží dál.' : 'Zrušeno. Zaplacený týden ještě dojede.', 'ok', true);
-    }).catch(function () { z.disabled = false; toast('Server neodpovídá.', 'err'); });
+      toast(r.j.obnovi_se ? esc(tx('hra.predplatne_pobezi_dal')) : esc(tx('hra.zruseno_zaplaceny_tyden_jeste_dojede')), 'ok', true);
+    }).catch(function () { z.disabled = false; toast(esc(tx('hra.server_neodpovida_30')), 'err'); });
   };
 }
 function zapniPredplatne(kind, qty) {
-  if (!ME) return toast('Nejdřív se přihlas.', 'err');
+  if (!ME) return toast(esc(tx('hra.nejdriv_se_prihlas_3')), 'err');
   if (!ME.has_details) return detailsSheet(null, null, null, kind);
   apiJson('/stripe/subscribe', { kind: kind, qty: qty }).then(function (r) {
     if (r.ok && r.j.url) { location.href = r.j.url; return; }
     if (r.status === 428) return detailsSheet(null, null, null, kind);
-    toast((r.j && r.j.error) || 'Nepovedlo se založit platbu.', 'err');
-  }).catch(function () { toast('Server neodpovídá.', 'err'); });
+    toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_zalozit_platbu')), 'err');
+  }).catch(function () { toast(esc(tx('hra.server_neodpovida_31')), 'err'); });
 }
 // Karta se spotřebuje NA SERVERU a teprve pak se projeví ve hře.
 // Zrychlí JEDNU vybranou zásilku, ne tu nejbližší — hráč si kliknul na konkrétní.
 function rushOrder(orderedAt, btn) {
   var o = (S.orders || []).filter(function (x) { return x.orderedAt === orderedAt; })[0];
-  if (!o) return toast('Tahle zásilka už dorazila.', 'err');
-  if (!ownedOf('rush')) return toast('Nemáš kartu Expresní dovoz.', 'err');
-  if (btn) { btn.disabled = true; btn.textContent = 'Volám dopravci…'; }
+  if (!o) return toast(esc(tx('hra.tahle_zasilka_uz_dorazila')), 'err');
+  if (!ownedOf('rush')) return toast(esc(tx('hra.nemas_kartu_expresni_dovoz')), 'err');
+  if (btn) { btn.disabled = true; btn.textContent = esc(tx('hra.volam_dopravci')); }
   apiJson('/cards/use', { kind: 'rush', on: o.model }).then(function (r) {
-    if (!r.ok) { if (btn) { btn.disabled = false; btn.textContent = '⚡ Doručit hned'; } return toast(r.j.error || 'Nepovedlo se.', 'err'); }
+    if (!r.ok) { if (btn) { btn.disabled = false; btn.textContent = esc(tx('hra.dorucit_hned')); } return toast(r.j.error || 'Nepovedlo se.', 'err'); }
     if (ME) ME.cards = r.j.owned;
     o.arrivesAt = Date.now() - 1;
     deliverOrders();
     save(); syncState(true); paint(); paintShop();
     toast(MODELS[o.model].name + ' je skladem — můžeš stavět.', 'ok');
-  }).catch(function () { if (btn) { btn.disabled = false; btn.textContent = '⚡ Doručit hned'; } toast('Server neodpovídá.', 'err'); });
+  }).catch(function () { if (btn) { btn.disabled = false; btn.textContent = esc(tx('hra.dorucit_hned_2')); } toast(esc(tx('hra.server_neodpovida_23')), 'err'); });
 }
 function useCard(kind) {
-  if (kind === 'rush' && !(S.orders || []).length) return toast('Nemáš nic na cestě — nejdřív si kup stroj v obchodě.', 'err');
-  if (kind === 'connect' && S.connDiscount) return toast('Slevu na přípojky už máš připravenou.', 'err');
+  if (kind === 'rush' && !(S.orders || []).length) return toast(esc(tx('hra.nemas_nic_na_ceste_nejdriv')), 'err');
+  if (kind === 'connect' && S.connDiscount) return toast(esc(tx('hra.slevu_na_pripojky_uz_mas')), 'err');
   apiJson('/cards/use', { kind: kind }).then(function (r) {
-    if (!r.ok) return toast(r.j.error || 'Kartu se nepovedlo použít.', 'err');
+    if (!r.ok) return toast(r.j.error || esc(tx('hra.kartu_se_nepovedlo_pouzit')), 'err');
     if (ME) ME.cards = r.j.owned;
     applyCard(r.j.result);
     save(); syncState(true); paint(); paintCards();
     toast(r.j.result.msg, 'ok');
-  }).catch(function () { toast('Server neodpovídá.', 'err'); });
+  }).catch(function () { toast(esc(tx('hra.server_neodpovida_28')), 'err'); });
 }
 function applyCard(e) {
   if (!e) return;
@@ -12873,7 +12873,7 @@ function uverDuvod() {
   var p = PROFILES[S.profile];
   var majetek = assetsTotal();
   var strop = Math.max(0, zastavaStrop() - S.loan);
-  if (majetek <= 0 && strop < 1000) return 'Banka půjčuje proti majetku a ty zatím žádný nemáš. Kup první prádlomat — nebo slož zástavu přes Dobít banku — a rámec se otevře.';
+  if (majetek <= 0 && strop < 1000) return esc(tx('hra.banka_pujcuje_proti_majetku_a'));
   if (strop < 1000) {
     return 'Banka ti půjčí nejvýš ' + Math.round(p.ltv * 100) + ' % hodnoty majetku, což je '
       + kcFull(Math.round(p.ltv * majetek)) + ' — a tolik už dlužíš. Splať část úvěru, nebo přikup prádlomat; '
@@ -12883,7 +12883,7 @@ function uverDuvod() {
   if (stropPodleZisku(zbyva, 0) < 1000) {
     return 'Banka se dívá na to, co ti po splátkách zbývá — a to je '
       + kcFull(Math.max(0, zbyva)) + ' měsíčně. Na další splátku to nestačí. '
-      + 'Postav další prádlomat, nebo splať část úvěru a vrať se.';
+      + esc(tx('hra.postav_dalsi_pradlomat_nebo_splat'));
   }
   return 'Volný rámec v bance je vyčerpaný. Sám dorůstá o ' + kcFull(BANK_PER_DAY)
     + ' za den — nebo ho doplníš tím, že splatíš část úvěru.';
@@ -12996,7 +12996,7 @@ function buyCash(kind) {
   var c = (CASH_CAT || []).concat(LINKA_CAT || []).concat((RAMEC && RAMEC.balicky) || [])
     .filter(function (x) { return x.kind === kind; })[0];
   if (!c) return;
-  if (!ME) return toast('Nejdřív se přihlas.', 'err');
+  if (!ME) return toast(esc(tx('hra.nejdriv_se_prihlas')), 'err');
   if (!ME.has_details) return detailsSheet(null, kind);
   var hovory = !!c.dnu;
   var ramec = c.uroven != null;
@@ -13005,15 +13005,15 @@ function buyCash(kind) {
   var platba = ramec ? Math.max(0, c.price_czk - (nizsi ? nizsi.price_czk : 0)) : c.price_czk;
   sheet('<h3>' + esc(c.name) + '</h3>'
     + (ramec
-        ? '<div class="kv"><span>Z rámce smíš čerpat</span><b class="ok">'
+        ? '<div class="kv"><span>' + esc(tx('hra.z_ramce_smis_cerpat')) + '</span><b class="ok">'
           + (c.strop === null ? 'bez stropu' : kcFull(c.strop)) + '</b></div>'
-          + '<div class="kv"><span>Teď máš</span><b>'
+          + '<div class="kv"><span>' + esc(tx('hra.ted_mas')) + '</span><b>'
           + (ramecStrop() === null ? 'bez stropu' : kcFull(ramecStrop())) + '</b></div>'
         : hovory
-          ? '<div class="kv"><span>Infolinka poběží</span><b class="ok">'
-            + (maLinku() ? etaText(linkaZbyva() + c.dnu * 86400000) + ' (včetně zbytku)'
+          ? '<div class="kv"><span>' + esc(tx('hra.infolinka_pobezi')) + '</span><b class="ok">'
+            + (maLinku() ? etaText(linkaZbyva() + c.dnu * 86400000) + ' ' + esc(tx('hra.vcetne_zbytku'))
                 : dobaSlovy(c.dnu)) + '</b></div>'
-          : '<div class="kv"><span>Rámec a zástava v bance</span><b class="ok">+' + kcFull(c.laundry) + '</b></div>')
+          : '<div class="kv"><span>' + esc(tx('hra.ramec_a_zastava_v_bance')) + '</span><b class="ok">+' + kcFull(c.laundry) + '</b></div>')
     + '<div class="kv"><span>Cena</span><b>' + platba.toLocaleString('cs-CZ') + ' Kč</b></div>'
     + (ramec
         ? (platba < c.price_czk
@@ -13022,23 +13022,23 @@ function buyCash(kind) {
         : hovory
           ? '<div class="kv"><span>Za den</span><b>' + String(c.za_den).replace('.', ',') + ' Kč</b></div>'
           : '<div class="kv"><span>Za korunu</span><b>' + c.per_czk.toLocaleString('cs-CZ') + ' L$</b></div>')
-    + '<div class="kv"><span>Platí</span><b>' + esc(ME.first_name + ' ' + ME.last_name) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.plati')) + '</span><b>' + esc(ME.first_name + ' ' + ME.last_name) + '</b></div>'
     + '<button class="btn big" id="do-pay">Zaplatit kartou</button>'
     + '<p class="fine">' + (ramec
         ? 'Strop platí napořád a neruší herní pravidla: víc, než unese výdělek sítě a počet '
           + 'doplacených prádlomatů, ti banka nepůjčí ani tak. Načerpané peníze strop nikdy nebere.'
         : hovory
-          ? 'Čas běží od zaplacení a k tomu, co ti ještě zbývá, se přičte. '
-            + 'Po celou dobu bere operátor všechny hovory a telefon ti nezazvoní.'
-          : 'Laundry jsou herní měna bez jakékoli hodnoty a nejde je směnit zpět.') + '</p>');
+          ? esc(tx('hra.cas_bezi_od_zaplaceni_a')) + ' '
+            + esc(tx('hra.po_celou_dobu_bere_operator'))
+          : esc(tx('hra.laundry_jsou_herni_mena_bez'))) + '</p>');
   $('do-pay').onclick = function () {
     $('do-pay').disabled = true;
     apiJson('/stripe/checkout', { kind: kind, qty: 1 }).then(function (r) {
       if (r.ok && r.j.url) { location.href = r.j.url; return; }
       $('do-pay').disabled = false;
       if (r.status === 428) return detailsSheet(null, kind);
-      toast(r.j.error || 'Platbu se nepodařilo založit.', 'err');
-    }).catch(function () { $('do-pay').disabled = false; toast('Server neodpovídá.', 'err'); });
+      toast(r.j.error || esc(tx('hra.platbu_se_nepodarilo_zalozit')), 'err');
+    }).catch(function () { $('do-pay').disabled = false; toast(esc(tx('hra.server_neodpovida_12')), 'err'); });
   };
 }
 // Zaplacené balíčky si vyzvedneme sami, hráč na nic klikat nemusí.
@@ -13093,7 +13093,7 @@ function claimCash(then) {
 function buyCard(kind, qty) {
   var c = (CARDS_CAT || []).filter(function (x) { return x.kind === kind; })[0];
   if (!c) return;
-  if (!ME) return toast('Nejdřív se přihlas.', 'err');
+  if (!ME) return toast(esc(tx('hra.nejdriv_se_prihlas_2')), 'err');
   qty = Math.max(1, parseInt(qty, 10) || 1);
   if (!ME.has_details) return detailsSheet(kind, null, qty);
   var bal = c.bundles || [];
@@ -13102,7 +13102,7 @@ function buyCard(kind, qty) {
   var dlazdice = [{ qty: 1, price_czk: c.price_czk, sleva: 0 }].concat(bal);
   sheet('<h3>' + esc(c.name) + '</h3>'
     + '<p class="muted small">' + esc(c.desc) + '</p>'
-    + (bal.length ? '<p class="muted small" style="margin:12px 0 6px">Kolik kusů:</p>'
+    + (bal.length ? '<p class="muted small" style="margin:12px 0 6px">' + esc(tx('hra.kolik_kusu')) + '</p>'
         + '<div class="balicky">' + dlazdice.map(function (b) {
             return '<button class="balik' + (b.qty === qty ? ' on' : '') + '" data-qty="' + b.qty + '">'
               + '<b>' + b.qty + '\u00d7</b>'
@@ -13111,13 +13111,13 @@ function buyCard(kind, qty) {
                   + '<em>\u2212' + b.sleva + ' %</em>' : '<i class="prazdno">za kus</i>')
               + '</button>';
           }).join('') + '</div>' : '')
-    + '<div class="kv"><span>Zaplatíš</span><b>' + cena.toLocaleString('cs-CZ') + ' Kč</b></div>'
-    + (qty > 1 ? '<div class="kv"><span>Dostaneš</span><b class="ok">' + qty + '\u00d7 ' + esc(c.name) + '</b></div>' : '')
-    + '<div class="kv"><span>Platí</span><b>' + esc(ME.first_name + ' ' + ME.last_name) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.zaplatis_2')) + '</span><b>' + cena.toLocaleString('cs-CZ') + ' Kč</b></div>'
+    + (qty > 1 ? '<div class="kv"><span>' + esc(tx('hra.dostanes')) + '</span><b class="ok">' + qty + '\u00d7 ' + esc(c.name) + '</b></div>' : '')
+    + '<div class="kv"><span>' + esc(tx('hra.plati_2')) + '</span><b>' + esc(ME.first_name + ' ' + ME.last_name) + '</b></div>'
     + '<div class="kv"><span>E-mail</span><b>' + esc(ME.email) + '</b></div>'
     + '<button class="btn big" id="do-pay">Zaplatit kartou</button>'
     + '<p class="fine">Platbu zpracovává Stripe. '
-    + (qty > 1 ? 'Karty se ti připíšou' : 'Karta se ti připíše') + ' hned po zaplacení. '
+    + (qty > 1 ? esc(tx('hra.karty_se_ti_pripisou')) : esc(tx('hra.karta_se_ti_pripise'))) + ' hned po zaplacení. '
     + 'Nespotřebované zůstávají na účtu, nekazí se.</p>');
   [].forEach.call(document.querySelectorAll('#sheet-body [data-qty]'), function (b) {
     b.onclick = function () { buyCard(kind, b.getAttribute('data-qty')); };
@@ -13128,28 +13128,28 @@ function buyCard(kind, qty) {
       if (r.ok && r.j.url) { location.href = r.j.url; return; }
       $('do-pay').disabled = false;
       if (r.status === 428) return detailsSheet(kind);
-      toast(r.j.error || 'Platbu se nepodařilo založit.', 'err');
-    }).catch(function () { $('do-pay').disabled = false; toast('Server neodpovídá.', 'err'); });
+      toast(r.j.error || esc(tx('hra.platbu_se_nepodarilo_zalozit_2')), 'err');
+    }).catch(function () { $('do-pay').disabled = false; toast(esc(tx('hra.server_neodpovida_15')), 'err'); });
   };
 }
 // Jméno a e-mail chceme až tady — do té chvíle je hra úplně anonymní.
 function detailsSheet(thenKind, thenCash, thenQty, thenSub) {
-  sheet('<h3>Ještě dva údaje</h3>'
-    + '<p class="muted small">K platbě potřebujeme vědět, komu kartu připsat a kam poslat doklad.</p>'
-    + '<label class="fld"><span>Jméno</span><input id="d-first" class="inp" type="text" maxlength="60" value="' + esc((ME && ME.first_name) || '') + '"></label>'
-    + '<label class="fld"><span>Příjmení</span><input id="d-last" class="inp" type="text" maxlength="60" value="' + esc((ME && ME.last_name) || '') + '"></label>'
+  sheet('<h3>' + esc(tx('hra.jeste_dva_udaje')) + '</h3>'
+    + '<p class="muted small">' + esc(tx('hra.k_platbe_potrebujeme_vedet_komu')) + '</p>'
+    + '<label class="fld"><span>' + esc(tx('hra.jmeno')) + '</span><input id="d-first" class="inp" type="text" maxlength="60" value="' + esc((ME && ME.first_name) || '') + '"></label>'
+    + '<label class="fld"><span>' + esc(tx('hra.prijmeni')) + '</span><input id="d-last" class="inp" type="text" maxlength="60" value="' + esc((ME && ME.last_name) || '') + '"></label>'
     + '<label class="fld"><span>E-mail</span><input id="d-mail" class="inp" type="email" maxlength="160" value="' + esc((ME && ME.email) || '') + '"></label>'
-    + '<button class="btn big" id="d-save">Uložit a pokračovat</button>');
+    + '<button class="btn big" id="d-save">' + esc(tx('hra.ulozit_a_pokracovat')) + '</button>');
   $('d-save').onclick = function () {
     apiJson('/account/details', {
       first_name: $('d-first').value, last_name: $('d-last').value, email: $('d-mail').value
     }).then(function (r) {
-      if (!r.ok) return toast(r.j.error || 'Nepovedlo se uložit.', 'err');
+      if (!r.ok) return toast(r.j.error || esc(tx('hra.nepovedlo_se_ulozit')), 'err');
       ME = r.j.player; closeSheet();
       if (thenKind) buyCard(thenKind, thenQty);
       else if (thenCash) buyCash(thenCash);
       else if (thenSub) zapniPredplatne(thenSub, dispecerPotreba());
-    }).catch(function () { toast('Server neodpovídá.', 'err'); });
+    }).catch(function () { toast(esc(tx('hra.server_neodpovida_25')), 'err'); });
   };
 }
 
@@ -13160,7 +13160,7 @@ function checkPayment() {
   if (pm) {
     var psid = (/[?&]s=([^&]+)/.exec(location.search) || [])[1];
     history.replaceState(null, '', location.pathname);
-    if (pm[1] !== 'ok' || !psid) return toast('Předplatné nezapnuté, nic se nestrhlo.', 'err');
+    if (pm[1] !== 'ok' || !psid) return toast(esc(tx('hra.predplatne_nezapnute_nic_se_nestrhlo')), 'err');
     var pt = 0;
     return (function cekej() {
       api('/stripe/status?s=' + encodeURIComponent(psid)).then(function (r) {
@@ -13169,12 +13169,12 @@ function checkPayment() {
           ev('game_paid', true);
           paintCards(); switchTab('cards');
           return toast(/^linka_sub/.test(r.j.kind || '')
-            ? 'Infolinka běží a sama se obnovuje. Telefon ti nezazvoní.'
-            : 'Vedoucí servisu nastoupil. Od teď hlídá poruchy za tebe.', 'ok', true);
+            ? esc(tx('hra.infolinka_bezi_a_sama_se'))
+            : esc(tx('hra.vedouci_servisu_nastoupil_od_ted')), 'ok', true);
         }
         if (++pt < 10) return setTimeout(cekej, 1500);
         loadCards().then(paintCards);
-        toast('Platba se ještě potvrzuje. Vedoucí naskočí během chvilky.', 'ok', true);
+        toast(esc(tx('hra.platba_se_jeste_potvrzuje_vedouci')), 'ok', true);
       }).catch(function () { });
     })();
   }
@@ -13182,7 +13182,7 @@ function checkPayment() {
   if (!m) return;
   var sid = (/[?&]s=([^&]+)/.exec(location.search) || [])[1];
   history.replaceState(null, '', location.pathname);
-  if (m[1] !== 'ok' || !sid) return toast('Platba zrušená, nic se nestrhlo.', 'err');
+  if (m[1] !== 'ok' || !sid) return toast(esc(tx('hra.platba_zrusena_nic_se_nestrhlo')), 'err');
   var tries = 0;
   (function poll() {
     api('/stripe/status?s=' + encodeURIComponent(sid)).then(function (r) {
@@ -13198,7 +13198,7 @@ function checkPayment() {
           return loadCards().then(function () {
             paintCards(); paintBank(); switchTab('bank');
             toast('Objem rámce se zvedl na '
-              + (ramecStrop() === null ? 'neomezený' : kcFull(ramecStrop())) + '.', 'ok', true);
+              + (ramecStrop() === null ? esc(tx('hra.neomezeny')) : kcFull(ramecStrop())) + '.', 'ok', true);
           });
         }
         if (/^cash/.test(r.j.kind || '')) {
@@ -13212,7 +13212,7 @@ function checkPayment() {
           'ok', true);
       }
       if (++tries < 10) return setTimeout(poll, 1500);
-      toast('Platba se ještě potvrzuje. Karta se objeví během chvilky.', 'ok');
+      toast(esc(tx('hra.platba_se_jeste_potvrzuje_karta')), 'ok');
     }).catch(function () { });
   })();
 }
