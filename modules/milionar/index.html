@@ -917,7 +917,11 @@
         + (p.email ? '<div class="note">' + esc(p.email) + '</div>' : '') + '</td>'
         + '<td>' + odkud(p) + '</td>'
         + '<td class="num">' + cz(p.pradlomatu) + '</td><td class="num">' + cz(p.mist) + '</td>'
-        + '<td class="num">' + cz(p.mest) + '</td>'
+        + '<td class="num">' + cz(p.mest)
+        // Velikost uloženého stavu. Roste hlavně seznamem prozkoumaných míst
+        // a právě ta dva dny přerůstala strop, takže ukládání tiše padalo.
+        + (p.stav_kb ? '<div class="note"' + (p.stav_kb > 2000 ? ' style="color:#f87171"' : '')
+            + '>' + cz(p.stav_kb) + ' kB</div>' : '') + '</td>'
         + '<td class="num"><b class="' + (p.prijem > 0 ? 'ok' : '') + '">' + cz(p.prijem) + ' L$</b></td>'
         + '<td class="num">' + (p.hotovost == null ? '—' : cz(p.hotovost)) + '</td>'
         + '<td class="num">' + (p.uver == null ? '—' : cz(p.uver)) + '</td>'
