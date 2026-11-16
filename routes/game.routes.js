@@ -124,6 +124,21 @@ function normQuery(q) {
 function cacheKey(q) {
   return q.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
+// Předpona id míst ve městě. Vyhodit z klíče všechno kromě a-z0-9 stačí na
+// Hradec Králové i Wrocław, ale ne na Москву nebo Львів — z těch nezbude nic
+// a všechna taková města by sdílela JEDNU předponu. Tím by sdílela i id svých
+// míst, takže prádlomat postavený v Moskvě by se ukazoval i ve Lvově. Přesně
+// to se stalo.
+//
+// Když po převodu nezbude ani jeden znak, vezmeme otisk původního klíče.
+// Městům s latinkou se id nemění — ta musí zůstat, jak jsou, jinak by se
+// odtrhly od už postavených prádlomatů.
+function predponaMista(key) {
+  const s = String(key).replace(/[^a-z0-9]+/g, '-');
+  if (/[a-z0-9]/.test(s)) return s;
+  return 'm' + crypto.createHash('sha1').update(String(key)).digest('hex').slice(0, 8);
+}
+
 const scoutJobs = new Map();
 const JOB_TTL = 5 * 60e3;
 function cleanJobs() {
@@ -140,7 +155,7 @@ async function runScout(query, key, job) {
       max_candidates: 40,
     });
     if (r && r.error) { job.state = 'error'; job.error = r.error; return; }
-    const spots = (r.candidates || []).map((c, i) => toSpot(c, i, key.replace(/[^a-z0-9]+/g, '-')));
+    const spots = (r.candidates || []).map((c, i) => toSpot(c, i, predponaMista(key)));
     // Dvoupismenný kód země — ve hře z něj jsou vlaječky u hráčů v žebříčku.
     const zeme = r.area && r.area.country_code
       ? String(r.area.country_code).toLowerCase().slice(0, 2) : null;
