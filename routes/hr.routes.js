@@ -988,7 +988,35 @@ router.get('/roles', async (req, res, next) => {
 });
 
 // POST /api/hr/roles
-router.post('/roles', requireAdmin, async (req, res, next) => {
+// Úpravu rolí a oprávnění smí správce (admin) a navíc lidé vybraní správcem
+// (AppSetting hr.role_editor_person_ids = [person_id…]) — bez nutnosti dávat jim roli admin.
+const ROLE_EDITORS_KEY = 'hr.role_editor_person_ids';
+async function roleEditorIds() {
+  try { const v = await require('../services/settings').getSetting(ROLE_EDITORS_KEY, { type: 'json', defaultValue: [] }); return Array.isArray(v) ? v.map(Number).filter(Boolean) : []; } catch (e) { return []; }
+}
+async function requireRoleEditor(req, res, next) {
+  if (req.user && (req.user.role === 'admin' || req.user.isSuperAdmin)) return next();
+  const pid = req.user && req.user.person && req.user.person.id;
+  if (pid && (await roleEditorIds()).includes(Number(pid))) return next();
+  return res.status(403).json({ error: 'Nemáte oprávnění upravovat role a oprávnění. Požádejte správce HolyOS.' });
+}
+// GET /api/hr/role-editors → { can_edit, person_ids } ; PUT (jen správce) { person_ids: [...] }
+router.get('/role-editors', async (req, res, next) => {
+  try {
+    const ids = await roleEditorIds(), pid = req.user && req.user.person && req.user.person.id;
+    const isAdmin = !!(req.user && (req.user.role === 'admin' || req.user.isSuperAdmin));
+    res.json({ is_admin: isAdmin, can_edit: isAdmin || (!!pid && ids.includes(Number(pid))), person_ids: ids });
+  } catch (err) { next(err); }
+});
+router.put('/role-editors', requireAdmin, async (req, res, next) => {
+  try {
+    const ids = [...new Set(((req.body || {}).person_ids || []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+    await require('../services/settings').setSetting(ROLE_EDITORS_KEY, ids, { type: 'json', description: 'HR — kdo (kromě správců) smí upravovat role a oprávnění', userId: req.user && req.user.id });
+    res.json({ ok: true, person_ids: ids });
+  } catch (err) { next(err); }
+});
+
+router.post('/roles', requireRoleEditor, async (req, res, next) => {
   try {
     const data = sanitizeRoleData(req.body);
     const role = await prisma.role.create({ data });
@@ -1004,7 +1032,7 @@ router.post('/roles', requireAdmin, async (req, res, next) => {
 });
 
 // PUT /api/hr/roles/:id
-router.put('/roles/:id', requireAdmin, async (req, res, next) => {
+router.put('/roles/:id', requireRoleEditor, async (req, res, next) => {
   try {
     const before = await prisma.role.findUnique({ where: { id: parseInt(req.params.id) } });
     const data = sanitizeRoleData(req.body);
@@ -1027,7 +1055,7 @@ router.put('/roles/:id', requireAdmin, async (req, res, next) => {
 });
 
 // DELETE /api/hr/roles/:id
-router.delete('/roles/:id', requireAdmin, async (req, res, next) => {
+router.delete('/roles/:id', requireRoleEditor, async (req, res, next) => {
   try {
     const before = await prisma.role.findUnique({ where: { id: parseInt(req.params.id) } });
     await prisma.role.delete({ where: { id: parseInt(req.params.id) } });
@@ -2411,7 +2439,7 @@ router.get('/permissions', async (req, res, next) => {
 // Přijme buď array `{ permissions: [{ module_id, access_level }, ...] }`,
 // nebo mapu `{ module_id: access_level, ... }` (frontend lide-hr ji posílá takhle).
 // Záznamy s 'none' nebo prázdnou hodnotou se neukládají — chybí = nemá přístup.
-router.post('/permissions/:roleId', requireAdmin, async (req, res, next) => {
+router.post('/permissions/:roleId', requireRoleEditor, async (req, res, next) => {
   try {
     const roleId = parseInt(req.params.roleId);
     if (Number.isNaN(roleId)) {

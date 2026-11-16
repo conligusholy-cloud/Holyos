@@ -580,6 +580,7 @@
       <div class="tab-content" id="tab-roles">
         <div class="toolbar">
           <button class="btn btn-primary" onclick="openRoleModal()">+ Nová role</button>
+          <span id="role-editors-box" style="margin-left:auto;font-size:12.5px;color:var(--text2)"></span>
         </div>
         <div id="roles-table"></div>
 
@@ -2864,7 +2865,41 @@
     async function loadRoles() {
       await loadRolesData();
       renderRoles();
+      loadRoleEditors();
     }
+    // Kdo (kromě správců) smí upravovat role a oprávnění — nastavuje jen správce
+    let roleEditors = { is_admin: false, can_edit: true, person_ids: [] };
+    async function loadRoleEditors() {
+      const box = document.getElementById('role-editors-box'); if (!box) return;
+      try { const r = await fetch('/api/hr/role-editors'); if (r.ok) roleEditors = await r.json(); } catch (e) {}
+      if (!roleEditors.is_admin) { box.innerHTML = roleEditors.can_edit ? '' : '🔒 Role a oprávnění může upravovat jen správce nebo pověřená osoba.'; return; }
+      if (!people || !people.length) { try { const r = await fetch('/api/hr/people'); if (r.ok) people = await r.json(); } catch (e) {} }
+      const jm = (id) => { const p = (people || []).find(x => x.id === id); return p ? ((p.first_name || '') + ' ' + (p.last_name || '')).trim() : ('#' + id); };
+      box.innerHTML = '🔑 Upravovat role smí kromě správců: <b>' + (roleEditors.person_ids.length ? roleEditors.person_ids.map(jm).map(escRE).join(', ') : 'nikdo') + '</b> <button class="btn btn-secondary btn-sm" onclick="editRoleEditors()">Upravit</button>';
+    }
+    function escRE(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+    function editRoleEditors() {
+      const list = (people || []).filter(p => p.active !== false).sort((a, b) => ((a.last_name || '') + (a.first_name || '')).localeCompare((b.last_name || '') + (b.first_name || ''), 'cs'));
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px';
+      ov.innerHTML = '<div style="background:var(--surface,#1e1b2e);border:1px solid var(--border);border-radius:14px;padding:20px;width:min(460px,96vw);max-height:84vh;display:flex;flex-direction:column">'
+        + '<h3 style="margin:0 0 6px">Kdo smí upravovat role a oprávnění</h3><p style="font-size:12.5px;color:var(--text2);margin:0 0 10px">Správci (admin) mohou vždy. Vybraní lidé nedostanou roli admin — jen úpravu rolí a oprávnění v Lidé a HR.</p>'
+        + '<input id="re-q" placeholder="Hledat jméno…" style="margin-bottom:8px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)">'
+        + '<div id="re-list" style="overflow:auto;flex:1;border:1px solid var(--border);border-radius:8px;padding:4px 8px">'
+        + list.map(p => '<label data-n="' + escRE(((p.first_name || '') + ' ' + (p.last_name || '')).toLowerCase()) + '" style="display:flex;gap:8px;align-items:center;padding:5px 0;cursor:pointer"><input type="checkbox" value="' + p.id + '"' + (roleEditors.person_ids.includes(p.id) ? ' checked' : '') + '> ' + escRE(((p.first_name || '') + ' ' + (p.last_name || '')).trim()) + '</label>').join('')
+        + '</div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn btn-secondary" data-x>Zrušit</button><button class="btn btn-primary" data-ok>Uložit</button></div></div>';
+      document.body.appendChild(ov);
+      ov.querySelector('#re-q').addEventListener('input', function () { const v = this.value.trim().toLowerCase(); ov.querySelectorAll('#re-list label').forEach(l => { l.style.display = !v || l.dataset.n.includes(v) ? '' : 'none'; }); });
+      ov.querySelector('[data-x]').onclick = () => ov.remove();
+      ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+      ov.querySelector('[data-ok]').onclick = async () => {
+        const ids = [...ov.querySelectorAll('#re-list input:checked')].map(i => Number(i.value));
+        const r = await fetch('/api/hr/role-editors', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person_ids: ids }) });
+        if (!r.ok) { const e = await r.json().catch(() => ({})); alert('Nepodařilo se uložit: ' + (e.error || r.status)); return; }
+        ov.remove(); loadRoleEditors();
+      };
+    }
+    window.editRoleEditors = editRoleEditors;
 
     function renderRoles() {
       const el = document.getElementById('roles-table');
@@ -2969,7 +3004,9 @@
 
       const url = id ? '/api/hr/roles/' + id : '/api/hr/roles';
       const res = await fetch(url, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-      const savedRole = await res.json();
+      const savedRole = await res.json().catch(() => ({}));
+      // Dřív se chyba (např. 403 — role smí upravovat jen správce) tiše spolkla a okno se zavřelo, jako by se uložilo.
+      if (!res.ok) { alert('Roli se nepodařilo uložit: ' + (savedRole.error || ('chyba ' + res.status)) + (res.status === 403 ? '\n\nNemáte oprávnění upravovat role. Požádejte správce HolyOS, ať vás přidá mezi lidi, kteří smí upravovat role.' : '')); return; }
       const roleId = id || savedRole.id;
 
       // Save permissions for this role — backend čeká { permissions: [{ module_id, access_level }] }
@@ -2983,13 +3020,14 @@
         }
       }
       try {
-        await fetch('/api/hr/permissions/' + roleId, {
+        const pr = await fetch('/api/hr/permissions/' + roleId, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ permissions: permsList })
         });
+        if (!pr.ok) { const pe = await pr.json().catch(() => ({})); alert('Oprávnění se neuložila: ' + (pe.error || ('chyba ' + pr.status)) + (pr.status === 403 ? '\n\nNemáte oprávnění upravovat role a oprávnění.' : '')); return; }
         allPermissions[String(roleId)] = permsMap;
-      } catch (e) { console.error('Permissions save error:', e); }
+      } catch (e) { console.error('Permissions save error:', e); alert('Oprávnění se neuložila: ' + e.message); return; }
 
       closeModal();
       loadRoles();
