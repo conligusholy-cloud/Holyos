@@ -9440,38 +9440,43 @@ function paintBank() {
   var p = PROFILES[S.profile];
   // Do majetku patří i stroje skladem a na cestě — banka je bere jako zástavu stejně jako postavené.
   var room = Math.max(0, zastavaStrop() - S.loan);
+  // Procenta se v češtině píšou s desetinnou čárkou, v angličtině s tečkou —
+  // formát čísla si proto nechá udělat katalog, ne ruční replace.
+  var sazba = function (x) {
+    return (x * 100).toFixed(1).replace('.', JAZYK === 'en' ? '.' : ',');
+  };
   $('bank-body').innerHTML = '<div class="card">'
-    + '<div class="row"><span class="muted small">Hotovost</span><b>' + kcFull(S.cash) + '</b></div>'
-    + '<div class="row"><span class="muted small">Volný rámec v bance</span><b>' + kcFull(S.bank) + '</b></div>'
-    + ((S.duvera || 0) > 0 ? '<div class="row"><span class="muted small">Složená zástava</span><b>' + kcFull(S.duvera)
-        + (duveraVolna() < S.duvera ? ' <span class="muted">(volná ' + kcFull(duveraVolna()) + ')</span>' : '') + '</b></div>' : '')
-    + '<p class="fine" style="margin-top:6px">Rámec sám roste o ' + kcFull(BANK_PER_DAY)
-    + ' za den a nemá strop. Kolik si půjčíš, ale rozhoduje zástava — majetek, kterým ručíš.</p>'
+    + '<div class="row"><span class="muted small">' + esc(t('banka.hotovost')) + '</span><b>' + tPenize(S.cash) + '</b></div>'
+    + '<div class="row"><span class="muted small">' + esc(t('banka.volny_ramec')) + '</span><b>' + tPenize(S.bank) + '</b></div>'
+    + ((S.duvera || 0) > 0 ? '<div class="row"><span class="muted small">' + esc(t('banka.zastava')) + '</span><b>' + tPenize(S.duvera)
+        + (duveraVolna() < S.duvera ? ' <span class="muted">(' + esc(t('banka.zastava_volna', { kolik: duveraVolna() })) + ')</span>' : '') + '</b></div>' : '')
+    + '<p class="fine" style="margin-top:6px">' + esc(t('banka.ramec_roste', { denne: BANK_PER_DAY })) + '</p>'
     + '</div>'
     // Dobití patří hned pod přehled účtu — je to nejrychlejší cesta, jak
     // zvednout rámec, a dole pod úvěry ho nikdo nenašel.
     + cashPacksHtml()
-    + '<div class="card"><h3>Úvěr</h3>'
-    + '<div class="kv"><span>Dlužíš</span><b class="' + (S.loan > 0 ? 'warn' : '') + '">' + kcFull(S.loan) + '</b></div>'
-    + '<div class="kv"><span>' + (S.loan > 0 ? 'Úrok z tvého dluhu' : 'Základní sazba') + '</span><b>'
-    + ((S.loan > 0 ? urokSazba() : rateOf()) * 100).toFixed(1).replace('.', ',') + ' % ročně'
+    + '<div class="card"><h3>' + esc(t('banka.uver')) + '</h3>'
+    + '<div class="kv"><span>' + esc(t('banka.dluzis')) + '</span><b class="' + (S.loan > 0 ? 'warn' : '') + '">' + tPenize(S.loan) + '</b></div>'
+    + '<div class="kv"><span>' + esc(t(S.loan > 0 ? 'banka.urok_z_dluhu' : 'banka.zakladni_sazba')) + '</span><b>'
+    + esc(t('banka.rocne', { sazba: sazba(S.loan > 0 ? urokSazba() : rateOf()) }))
     + (S.loan > 0 && S.loanPrem > 0.0005
-        ? ' <span class="warn">(+' + (S.loanPrem * 100).toFixed(1).replace('.', ',') + ' za riziko)</span>' : '')
+        ? ' <span class="warn">' + esc(t('banka.za_riziko', { sazba: sazba(S.loanPrem) })) + '</span>' : '')
     + '</b></div>'
-    + '<div class="kv"><span>Splátka / měsíc</span><b class="' + (splatkyMesicne() > 0 ? 'warn' : '') + '">'
-    + kcFull(splatkyMesicne()) + (urokMesicne() > 0 ? ' <span class="muted">(z toho úrok ' + kcFull(urokMesicne()) + ')</span>' : '') + '</b></div>'
+    + '<div class="kv"><span>' + esc(t('banka.splatka_mesic')) + '</span><b class="' + (splatkyMesicne() > 0 ? 'warn' : '') + '">'
+    + tPenize(splatkyMesicne()) + (urokMesicne() > 0 ? ' <span class="muted">' + esc(t('banka.z_toho_urok', { urok: urokMesicne() })) + '</span>' : '') + '</b></div>'
     + dalsiSplatkaHtml()
-    + '<div class="kv"><span>Zaplaceno na úrocích</span><b>' + kcFull(S.stats.interest) + '</b></div>'
-    + ((S.stats.splaceno || 0) > 0 ? '<div class="kv"><span>Splacených úvěrů</span><b class="ok">'
+    + '<div class="kv"><span>' + esc(t('banka.na_urocich')) + '</span><b>' + tPenize(S.stats.interest) + '</b></div>'
+    + ((S.stats.splaceno || 0) > 0 ? '<div class="kv"><span>' + esc(t('banka.splacenych')) + '</span><b class="ok">'
       + S.stats.splaceno + '</b></div>' : '')
-    + '<div class="kv"><span>Ještě si můžeš půjčit</span><b>' + kcFull(Math.min(room, S.bank)) + '</b></div>'
+    + '<div class="kv"><span>' + esc(t('banka.jeste_pujcit')) + '</span><b>' + tPenize(Math.min(room, S.bank)) + '</b></div>'
     + (uverNabidka(null).max >= 1000
-        ? '<button class="btn sec big" id="do-ask">Požádat o úvěr</button>'
-          + '<p class="fine">Banka se podívá, co máš, a řekne si podmínky. Než kývneš, uvidíš všechno dopředu.</p>'
+        ? '<button class="btn sec big" id="do-ask">' + esc(t('banka.pozadat')) + '</button>'
+          + '<p class="fine">' + esc(t('banka.pozadat_fine')) + '</p>'
         : '<p class="fine">' + uverDuvod() + '</p>')
-    + (S.loan > 0 && S.cash >= 1 ? '<button class="btn big" id="do-repay">Splatit mimořádně ' + kcFull(Math.min(S.cash, S.loan)) + '</button>'
-        + '<p class="fine">Mimořádná splátka jde nejdřív na nejdražší úvěr. Běžné splátky se strhávají samy každý herní měsíc.</p>' : '')
-    + (S.loan > 0 && S.cash < 1 ? '<p class="fine">Splácet začneš, až síť něco vydělá.</p>' : '')
+    + (S.loan > 0 && S.cash >= 1 ? '<button class="btn big" id="do-repay">'
+        + esc(t('banka.splatit_mimo', { kolik: Math.min(S.cash, S.loan) })) + '</button>'
+        + '<p class="fine">' + esc(t('banka.splatit_fine')) + '</p>' : '')
+    + (S.loan > 0 && S.cash < 1 ? '<p class="fine">' + esc(t('banka.splacet_pozdeji')) + '</p>' : '')
     + '</div>'
     + ramecHtml()
     + uveryHtml();
@@ -9499,8 +9504,8 @@ function paintBank() {
   if (b) b.onclick = function () {
     var pay = Math.min(S.cash, S.loan);
     S.cash -= pay; splatitDluh(pay); S.bank = Math.min(bankCap(), S.bank + pay);
-    zapis('splatka', 'Doplacení úvěrů', -pay);
-    save(); paint(); syncState(true); toast('Splaceno ' + kcFull(pay) + '.', 'ok');
+    zapis('splatka', t('banka.doplaceni'), -pay);
+    save(); paint(); syncState(true); toast(t('banka.splaceno', { kolik: pay }), 'ok');
   };
 }
 // Klepnutí na hotovost v hlavičce. Když peníze dojdou, hráč nemá hledat,
