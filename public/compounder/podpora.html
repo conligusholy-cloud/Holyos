@@ -37,6 +37,14 @@
   .actions{display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap;align-items:center}
   .gdpr{font-size:12.5px;color:var(--muted)}
   .hidden{display:none}
+  .human{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .hbox{display:flex;align-items:center;gap:12px;width:300px;max-width:100%;padding:12px 14px;border:1px solid #d4d8e2;border-radius:6px;background:#fafbfc;font:inherit;font-size:15px;color:var(--text);cursor:pointer;text-align:left}
+  .hbox:disabled{cursor:default}
+  .hchk{width:26px;height:26px;border:2px solid #8a93a6;border-radius:4px;background:#fff;flex:none;display:grid;place-items:center}
+  .hchk.spin{border-color:#cfd5e1;border-top-color:var(--brand);border-radius:50%;animation:hsp .8s linear infinite}
+  .hchk.ok{border-color:var(--brand);background:var(--brand)}.hchk.ok::after{content:"✓";color:#fff;font-weight:900;font-size:17px}
+  .hlogo{margin-left:auto;text-align:center;font-size:20px;line-height:1}.hlogo i{display:block;font-style:normal;font-size:9px;color:var(--muted);margin-top:2px}
+  @keyframes hsp{to{transform:rotate(360deg)}}
   @media(max-width:560px){.row{grid-template-columns:1fr 120px}h1{font-size:25px}.btn.big{min-width:0;width:100%}}
 </style>
 </head>
@@ -47,7 +55,14 @@
   <div class="card" id="v-start">
     <h1>Vytvořit nový požadavek</h1>
     <hr>
-    <div class="choices">
+    <!-- Ověření „Jsem člověk" (vlastní, bez cizí služby — prohlížeč chvíli počítá) -->
+    <div id="human" class="human">
+      <div class="sub" style="text-align:center;margin-bottom:8px">Ověřte, že jste člověk:</div>
+      <button type="button" class="hbox" id="h-box" aria-pressed="false"><span class="hchk" id="h-chk"></span><span id="h-txt">Jsem člověk</span><span class="hlogo">🛡️<i>Ochrana<br>Prádlomaty</i></span></button>
+      <div class="hint" id="h-hint" style="text-align:center;min-height:18px"></div>
+      <div style="text-align:center"><button type="button" class="btn" id="h-go" disabled>Ověřit</button></div>
+    </div>
+    <div class="choices hidden" id="choices">
       <button class="btn big" data-go="refund">Žádost o vrácení platby</button>
       <button class="btn big" data-go="receipt">Žádost o zaslání dokladu</button>
     </div>
@@ -113,7 +128,32 @@
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var CFG = null, KIND = null, PLACES = [];
+  var CFG = null, KIND = null, PLACES = [], POW = null, POW_BUSY = false;
+  // Ověření „Jsem člověk": najít číslo, se kterým SHA-256(salt + číslo) začíná nulami (proof-of-work)
+  function hex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+  function solve(ch) {
+    var pre = new Array(ch.zeros + 1).join('0'), enc = new TextEncoder(), n = 0;
+    return new Promise(function (resolve, reject) {
+      function batch() {
+        var ps = [];
+        for (var i = 0; i < 400; i++) { (function (k) { ps.push(crypto.subtle.digest('SHA-256', enc.encode(ch.salt + k)).then(function (h) { return hex(h).indexOf(pre) === 0 ? k : -1; })); })(n++); }
+        Promise.all(ps).then(function (r) { var hit = r.filter(function (x) { return x >= 0; })[0]; if (hit !== undefined) resolve(hit); else if (n > 5e6) reject(new Error('Ověření trvá příliš dlouho')); else setTimeout(batch, 0); }, reject);
+      }
+      batch();
+    });
+  }
+  function human() {
+    if (POW_BUSY || POW) return;
+    if (!window.crypto || !crypto.subtle) { $('h-hint').textContent = 'Váš prohlížeč ověření nepodporuje — zavolejte nám prosím na linku níže.'; return; }
+    POW_BUSY = true; $('h-chk').className = 'hchk spin'; $('h-txt').textContent = 'Ověřuji…'; $('h-hint').textContent = '';
+    fetch('/api/public/wash/challenge', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (ch) {
+      if (!ch.salt) throw new Error(ch.error || 'Ověření se nepodařilo spustit');
+      return solve(ch).then(function (nonce) { POW = { salt: ch.salt, exp: ch.exp, sig: ch.sig, nonce: String(nonce) }; });
+    }).then(function () {
+      POW_BUSY = false; $('h-chk').className = 'hchk ok'; $('h-txt').textContent = 'Jsem člověk'; $('h-box').disabled = true; $('h-go').disabled = false;
+    }).catch(function (e) { POW_BUSY = false; $('h-chk').className = 'hchk'; $('h-txt').textContent = 'Jsem člověk'; $('h-hint').textContent = (e && e.message) || 'Ověření se nepovedlo, zkuste to znovu.'; });
+  }
+  function resetHuman() { POW = null; $('h-chk').className = 'hchk'; $('h-box').disabled = false; $('h-go').disabled = true; $('human').classList.remove('hidden'); $('choices').classList.add('hidden'); }
   var TXT = {
     refund: ['Žádost o vrácení platby', 'Vyplňte a odešlete formulář níže.'],
     receipt: ['Žádost o vydání dokladu', 'Vyplňte a odešlete formulář níže — pro každou službu či transakci musí být vytvořena samostatná žádost.']
@@ -155,16 +195,19 @@
     if (!CFG) load();
     try { history.replaceState(null, '', '#' + kind); } catch (e) {}
   }
+  $('h-box').onclick = human;
+  $('h-go').onclick = function () { if (!POW) return; $('human').classList.add('hidden'); $('choices').classList.remove('hidden'); };
   document.querySelectorAll('[data-go]').forEach(function (b) { b.onclick = function () { start(b.getAttribute('data-go')); }; });
-  $('f-back').onclick = function () { show('v-start'); try { history.replaceState(null, '', location.pathname); } catch (e) {} };
-  $('ok-new').onclick = function () { $('v-form').reset(); show('v-start'); load(); };
+  $('f-back').onclick = function () { show('v-start'); if (!POW) resetHuman(); try { history.replaceState(null, '', location.pathname); } catch (e) {} };
+  $('ok-new').onclick = function () { $('v-form').reset(); show('v-start'); resetHuman(); load(); };
   $('place-q').addEventListener('input', function () { fillPlaces(this.value); });
 
   function fail(msg) { var e = $('f-err'); e.textContent = msg; e.classList.remove('hidden'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   $('v-form').addEventListener('submit', function (ev) {
     ev.preventDefault();
     var f = $('v-form'), v = function (n) { var el = f.elements[n]; return el ? String(el.value || '').trim() : ''; };
-    var data = { kind: KIND, token: CFG && CFG.token, web: v('web'), date: v('date'), time: v('time') || '00:00', place_code: v('place_code'),
+    if (!POW) { show('v-start'); resetHuman(); return; }
+    var data = { kind: KIND, token: CFG && CFG.token, pow: POW, web: v('web'), date: v('date'), time: v('time') || '00:00', place_code: v('place_code'),
       name: v('name'), phone: v('phone'), email: v('email'), amount: v('amount'), pay_method: v('pay_method'), service: v('service') };
     if (KIND === 'refund') { data.account = v('account'); data.reason = v('reason'); }
     // Rychlá kontrola v prohlížeči (server kontroluje vše znovu)
@@ -185,14 +228,20 @@
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (r) {
         b.disabled = false; b.textContent = 'Odeslat žádost';
-        if (!r.ok) { if (/vypršel/.test(r.j.error || '')) load(); return fail(r.j.error || 'Žádost se nepodařilo odeslat.'); }
+        if (!r.ok) {
+          if (/vypršel/.test(r.j.error || '')) load();
+          if (r.j.pow) { POW = null; fail(r.j.error + ' Klikněte na „Zpět" a ověřte se znovu.'); return; }
+          return fail(r.j.error || 'Žádost se nepodařilo odeslat.');
+        }
+        POW = null; // ověření platí jen na jednu žádost
         $('ok-num').textContent = 'Číslo žádosti: ' + r.j.number; show('v-ok'); load();
       })
       .catch(function () { b.disabled = false; b.textContent = 'Odeslat žádost'; fail('Nepodařilo se spojit se serverem. Zkontrolujte připojení a zkuste to znovu.'); });
   });
 
   load().catch(function () {});
-  if (location.hash === '#refund' || location.hash === '#receipt') start(location.hash.slice(1));
+  // Přímý odkaz #refund / #receipt: nejdřív ověření, pak rovnou formulář
+  if (location.hash === '#refund' || location.hash === '#receipt') { var want = location.hash.slice(1); $('h-go').onclick = function () { if (POW) { $('human').classList.add('hidden'); $('choices').classList.remove('hidden'); start(want); } }; }
 })();
 </script>
 </body>

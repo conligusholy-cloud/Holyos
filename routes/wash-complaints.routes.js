@@ -83,6 +83,27 @@ function checkToken(tok) {
   if (age > 2 * 3600e3) return 'Formulář vypršel — načtěte stránku znovu.';
   return null;
 }
+// Ověření „Jsem člověk" bez cizí služby: proof-of-work. Server vydá podepsanou výzvu (salt), prohlížeč
+// najde číslo, se kterým SHA-256(salt + číslo) začíná N nulami (pár sekund práce), server to ověří.
+// Pro člověka je to jedno kliknutí, pro hromadné roboty drahé. Každé řešení platí jen jednou a 30 minut.
+const POW_ZEROS = 4; // hex nuly na začátku (~65 tisíc pokusů)
+const powUsed = new Map();
+function powChallenge() {
+  const salt = crypto.randomBytes(12).toString('hex'), exp = Date.now() + 30 * 60e3;
+  const sig = crypto.createHmac('sha256', SECRET).update('pow:' + salt + ':' + exp).digest('hex').slice(0, 32);
+  return { salt, exp, sig, zeros: POW_ZEROS };
+}
+function powCheck(p) {
+  if (!p || typeof p !== 'object') return 'Potvrďte prosím, že jste člověk.';
+  const salt = String(p.salt || ''), exp = Number(p.exp), sig = String(p.sig || ''), nonce = String(p.nonce || '');
+  if (!/^[a-f0-9]{24}$/.test(salt) || !/^\d{1,12}$/.test(nonce) || !(exp > Date.now())) return 'Ověření vypršelo — potvrďte prosím znovu, že jste člověk.';
+  const ok = crypto.createHmac('sha256', SECRET).update('pow:' + salt + ':' + exp).digest('hex').slice(0, 32);
+  if (sig.length !== ok.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(ok))) return 'Ověření není platné — načtěte stránku znovu.';
+  if (!crypto.createHash('sha256').update(salt + nonce).digest('hex').startsWith('0'.repeat(POW_ZEROS))) return 'Ověření se nepovedlo — zkuste to prosím znovu.';
+  if (powUsed.has(salt)) return 'Ověření už bylo použito — potvrďte prosím znovu, že jste člověk.';
+  powUsed.set(salt, exp); if (powUsed.size > 20000) { const now = Date.now(); for (const [k, v] of powUsed) if (v < now) powUsed.delete(k); }
+  return null;
+}
 const hits = new Map();
 function limited(key, max, ms) {
   const now = Date.now(), arr = (hits.get(key) || []).filter((x) => now - x < ms);
@@ -143,6 +164,11 @@ async function notifyNew(row) {
 }
 
 // ═══ VEŘEJNÉ ═════════════════════════════════════════════════════════════════
+// GET /api/public/wash/challenge → výzva pro ověření „Jsem člověk"
+publicRouter.get('/challenge', (req, res) => {
+  if (limited('pow:' + ipOf(req), 60, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho pokusů, zkuste to prosím později.' });
+  res.set('Cache-Control', 'no-store').json(Object.assign({ ok: true }, powChallenge()));
+});
 // GET /api/public/wash/form → místa, číselníky a token formuláře
 publicRouter.get('/form', async (req, res) => {
   try {
@@ -157,6 +183,7 @@ publicRouter.post('/request', async (req, res) => {
     // Honeypot: skryté pole „web" vyplní jen robot — tváříme se, že je vše v pořádku
     if (s(b.web, 100)) return res.json({ ok: true, number: '—' });
     const tokErr = checkToken(b.token); if (tokErr) return res.status(400).json({ error: tokErr });
+    const powErr = powCheck(b.pow); if (powErr) return res.status(400).json({ error: powErr, pow: true });
     if (limited('ip:' + ip, 6, 3600e3) || limited('ipd:' + ip, 15, 86400e3)) return res.status(429).json({ error: 'Z tohoto připojení bylo odesláno příliš mnoho žádostí. Zkuste to prosím později, nebo nám zavolejte.' });
 
     const kind = b.kind === 'refund' ? 'refund' : b.kind === 'receipt' ? 'receipt' : null;
@@ -375,4 +402,4 @@ router.post('/:id(\\d+)/email', async (req, res, next) => {
 
 module.exports = router;
 module.exports.publicRouter = publicRouter;
-module.exports._test = { normPhone, normAccount, checkToken, formToken };
+module.exports._test = { normPhone, normAccount, checkToken, formToken, powChallenge, powCheck };
