@@ -1,0 +1,93 @@
+// =============================================================================
+// Laundromat Tycoon — jádro překladů
+// =============================================================================
+// Jeden soubor pro server i prohlížeč. Schválně: kdyby to byly dvě kopie,
+// rozejdou se do měsíce a hráč uvidí jinou větu, než jaká mu přijde ze serveru.
+// Server si ho načte přes require, hra ho dostane jako /game/texty.js.
+//
+// Klíč vypadá jako 'drazba.vyvolal', text jako 'Vyvolal {nick}.'. Chybí-li
+// klíč v cílovém jazyce, spadne se na češtinu; chybí-li i tam, vrátí se
+// samotný klíč. Nikdy se nevrátí prázdno — prázdné místo ve hře je horší
+// než česká věta v anglické hře.
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.T18N = factory();
+}(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  var ZDROJ = 'cs';                 // v téhle řeči se texty píšou
+  var JAZYKY = ['cs', 'en'];
+
+  // ─── Množné číslo ─────────────────────────────────────────────────────────
+  // Čeština má tři tvary (1 / 2–4 / 5 a víc), angličtina dva. Tvary se v
+  // katalogu píšou jako { one, few, other }; angličtina 'few' prostě nemá.
+  function tvar(jazyk, n) {
+    var a = Math.abs(n);
+    if (jazyk === 'cs') {
+      if (a === 1) return 'one';
+      if (a >= 2 && a <= 4) return 'few';
+      return 'other';
+    }
+    return a === 1 ? 'one' : 'other';
+  }
+
+  // ─── Čísla, peníze, čas ───────────────────────────────────────────────────
+  // Čeština píše 1 234 567, angličtina 1,234,567. Měna zůstává L$ v obou —
+  // je to herní měna, ne koruna.
+  function cislo(n, jazyk) {
+    var x = Math.round(Number(n) || 0);
+    try { return x.toLocaleString(jazyk === 'en' ? 'en-GB' : 'cs-CZ'); }
+    catch (e) { return String(x); }
+  }
+  function penize(n, jazyk) { return cislo(n, jazyk) + ' L$'; }
+  function datum(d, jazyk) {
+    var t = (d instanceof Date) ? d : new Date(d);
+    if (isNaN(t.getTime())) return '';
+    try {
+      return t.toLocaleString(jazyk === 'en' ? 'en-GB' : 'cs-CZ',
+        { day: 'numeric', month: 'numeric', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return t.toISOString().slice(0, 16).replace('T', ' '); }
+  }
+
+  // ─── Dosazování údajů ─────────────────────────────────────────────────────
+  // {nick} vloží hodnotu tak, jak přišla. {penize:cena} a {cislo:kolik} ji
+  // naformátují podle jazyka. Chybějící údaj nechá značku být — ať je na první
+  // pohled vidět, že se zapomnělo něco předat, místo tichého „undefined".
+  var ZNACKA = /\{(?:([a-z]+):)?([a-zA-Z0-9_]+)\}/g;
+  function dosad(text, udaje, jazyk) {
+    if (!udaje) udaje = {};
+    return String(text).replace(ZNACKA, function (cele, format, klic) {
+      if (!(klic in udaje)) return cele;
+      var v = udaje[klic];
+      if (format === 'penize') return penize(v, jazyk);
+      if (format === 'cislo') return cislo(v, jazyk);
+      if (format === 'datum') return datum(v, jazyk);
+      return String(v == null ? '' : v);
+    });
+  }
+
+  // ─── Vlastní překladač ────────────────────────────────────────────────────
+  function Preklady(katalogy) {
+    this.k = katalogy || {};
+  }
+  Preklady.prototype.nastav = function (jazyk, katalog) { this.k[jazyk] = katalog || {}; };
+  Preklady.prototype.ma = function (jazyk, klic) {
+    return !!(this.k[jazyk] && this.k[jazyk][klic] != null);
+  };
+  // Vrátí hotovou větu. jazyk → zdrojový jazyk → klíč.
+  Preklady.prototype.t = function (klic, udaje, jazyk) {
+    var j = JAZYKY.indexOf(jazyk) >= 0 ? jazyk : ZDROJ;
+    var zaznam = (this.k[j] && this.k[j][klic]);
+    if (zaznam == null && j !== ZDROJ) { zaznam = this.k[ZDROJ] && this.k[ZDROJ][klic]; j = ZDROJ; }
+    if (zaznam == null) return klic;
+    // Tvary množného čísla: vybere se podle {n} v údajích.
+    if (typeof zaznam === 'object') {
+      var n = udaje && udaje.n != null ? Number(udaje.n) : 0;
+      zaznam = zaznam[tvar(j, n)] || zaznam.other || zaznam.one || '';
+    }
+    return dosad(zaznam, udaje, j);
+  };
+
+  return { ZDROJ: ZDROJ, JAZYKY: JAZYKY, Preklady: Preklady,
+    tvar: tvar, cislo: cislo, penize: penize, datum: datum, dosad: dosad };
+}));

@@ -1,0 +1,14 @@
+{
+  "jazyk.nadpis": "Game language",
+  "jazyk.popis": "The whole game switches — messages from the server will come in this language too.",
+  "jazyk.cs": "Czech",
+  "jazyk.en": "English",
+  "jazyk.ulozeno": "Language set.",
+
+  "obecne.dnu": { "one": "{cislo:n} day", "other": "{cislo:n} days" },
+  "obecne.hodin": { "one": "{cislo:n} hour", "other": "{cislo:n} hours" },
+  "obecne.minut": { "one": "{cislo:n} minute", "other": "{cislo:n} minutes" },
+  "obecne.mesicu": { "one": "{cislo:n} game month", "other": "{cislo:n} game months" },
+  "obecne.pradlomatu": { "one": "{cislo:n} laundromat", "other": "{cislo:n} laundromats" },
+  "obecne.hracu": { "one": "{cislo:n} player", "other": "{cislo:n} players" }
+}

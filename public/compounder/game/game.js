@@ -10048,6 +10048,14 @@ function paintMe() {
       + '<button class="btn sec" id="me-znak" style="width:100%;margin-top:8px">'
       + (ME.emblem ? 'Změnit znak firmy' : 'Vygenerovat znak firmy') + '</button>'
       + '<button class="btn sec" id="me-nick" style="width:100%;margin-top:8px">Změnit jméno hráče</button>'
+      // Jazyk sedí u účtu, takže přepnutí platí i na druhém zařízení.
+      + '<p class="muted small" style="margin:14px 0 6px"><b>' + esc(t('jazyk.nadpis')) + '</b><br>'
+      + esc(t('jazyk.popis')) + '</p>'
+      + '<div class="drz-tl">'
+      + '<button class="btn sm' + (JAZYK === 'cs' ? '' : ' sec') + '" data-jazyk="cs">'
+      + esc(t('jazyk.cs')) + '</button>'
+      + '<button class="btn sm' + (JAZYK === 'en' ? '' : ' sec') + '" data-jazyk="en">'
+      + esc(t('jazyk.en')) + '</button></div>'
       + '</div>'
     : '')
     + '<div class="card"><h3>' + esc(p.name) + '</h3>'
@@ -10107,6 +10115,10 @@ function paintMe() {
   if (zb) zb.onclick = function () { znakSheet(); };
   var nb = $('me-nick');
   if (nb) nb.onclick = function () { nickSheet(); };
+  // Přepínač jazyka. Po přepnutí se panel překreslí, ať je hned vidět, co to udělalo.
+  [].forEach.call($('me-body').querySelectorAll('[data-jazyk]'), function (b) {
+    b.onclick = function () { prepniJazyk(b.getAttribute('data-jazyk'), paintMe); };
+  });
   $('do-share').onclick = function () { shareGame($('do-share')); };
   $('do-reset').onclick = function () {
     sheet('<h3>Začít znovu?</h3>'
@@ -12871,6 +12883,45 @@ function api(path, opts) {
   return fetch('/api/game' + path, Object.assign({ credentials: 'same-origin' }, opts || {}))
     .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); });
 }
+// ─── Překlady ────────────────────────────────────────────────────────────────
+// Jazyk drží účet, ne prohlížeč — hráč hraje na telefonu i na počítači a chce
+// to mít stejně. Katalog se tahá ze serveru; než dorazí, jede hra na češtině
+// zadrátované v kódu, takže se při výpadku nestane vůbec nic.
+// t('drazba.vyvolal', { nick: 'Lord-P' }) vrátí hotovou větu.
+var JAZYK = 'cs';
+var PREKLADY = (window.T18N ? new window.T18N.Preklady({}) : null);
+function t(klic, udaje) {
+  if (!PREKLADY) return klic;
+  return PREKLADY.t(klic, udaje, JAZYK);
+}
+// Peníze a čísla se v angličtině píšou jinak (1,234,567 místo 1 234 567).
+function tCislo(n) { return window.T18N ? window.T18N.cislo(n, JAZYK) : String(Math.round(n || 0)); }
+function tPenize(n) { return window.T18N ? window.T18N.penize(n, JAZYK) : (Math.round(n || 0) + ' L$'); }
+// Množné číslo přes katalog — nahrazuje mn(), které umí jen česká pravidla.
+function tPocet(klic, n) { return t(klic, { n: n }); }
+function nactiTexty(jazyk, pak) {
+  var j = jazyk || 'cs';
+  if (!PREKLADY) { JAZYK = 'cs'; if (pak) pak(); return; }
+  api('/texty/' + encodeURIComponent(j)).then(function (r) {
+    if (r.ok && r.j && r.j.texty) {
+      PREKLADY.nastav(r.j.jazyk || j, r.j.texty);
+      JAZYK = r.j.jazyk || j;
+    }
+    if (pak) pak();
+  }).catch(function () { if (pak) pak(); });
+}
+function prepniJazyk(j, pak) {
+  apiJson('/account/jazyk', { jazyk: j }).then(function (r) {
+    if (!r.ok) return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err');
+    if (ME) ME.jazyk = j;
+    nactiTexty(j, function () {
+      if (S) { paint(); drawMap(); }
+      toast((r.j && r.j.hlaska) || 'Hotovo.', 'ok');
+      if (pak) pak();
+    });
+  }).catch(function () { toast('Server neodpovídá.', 'err'); });
+}
+
 function apiJson(path, body, method, extra) {
   return api(path, Object.assign({ method: method || 'POST',
     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }, extra || {}));
@@ -14106,6 +14157,11 @@ api('/account/me?ref=' + encodeURIComponent((S && S.pid) || trvalePid())).then(f
     // Žebřík hodností má jediného vlastníka: server. Kopie v hře je jen záloha
     // pro případ, že by starý server seznam ještě neposílal.
     if (Array.isArray(r.j.hodnosti) && r.j.hodnosti.length) HODNOSTI_HRA = r.j.hodnosti;
+    // Katalog textů v jazyce účtu. Dokud nedorazí, jede hra na češtině
+    // zadrátované v kódu — výpadek katalogu tedy hru nikdy nerozbije.
+    // Překreslit smíme až když je stav načtený — /account/me se vrací dřív,
+    // než hra stihne postavit S, a paint() by si na prázdnu podtrhl nohy.
+    nactiTexty(ME.jazyk || 'cs', function () { if (S) paint(); });
     tep();   // ať je hráč na burze vidět hned, ne až za půl minuty
     var srv = r.j.state;
     if (r.j.rev != null) STATE_REV = r.j.rev;

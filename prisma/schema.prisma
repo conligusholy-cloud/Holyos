@@ -7617,6 +7617,10 @@ model GamePlayer {
   nick_lower    String    @unique @db.VarChar(24)
   // Kdy naposledy změnil jméno hráče — mezi změnami je pauza z nastavení.
   nick_at       DateTime?
+  // Jazyk hry. Drží se u účtu, ne u prohlížeče — hráč hraje na telefonu
+  // i na počítači a chce to mít stejně. Server podle toho skládá hlášky
+  // každému příjemci zvlášť. Prázdné = čeština.
+  jazyk         String?   @db.VarChar(5)
   // Nejvyšší dosažená hodnost (id ze services/game/hodnosti.js). Drží se tady,
   // aby se odměny nemusely při každém uložení hry dohledávat v tabulce.
   hodnost       String?   @db.VarChar(20)

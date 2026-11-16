@@ -1127,6 +1127,14 @@ app.use((req, res, next) => {
   if ((req.path === '/podpora' || req.path === '/podpora/') && PRADLOMATY_HOSTS.has(reqHostname(req))) { res.set('Cache-Control', 'no-cache, no-store, must-revalidate'); return res.sendFile(path.join(COMPOUNDER_DIR, 'podpora.html')); }
   // Laundromat Tycoon — hra o budování sítě prádlomatů (zatím jen na doménách prádlomatů).
   if (req.path === '/game' || req.path === '/game/') return serveGamePage(req, res);
+  // Jádro překladů si hra tahá ze stejného souboru, jaký používá server —
+  // dvě kopie by se do měsíce rozešly a hráč by viděl jinou větu, než jaká
+  // mu přijde ze serveru.
+  if (req.path === '/game/texty.js') {
+    res.set('Content-Type', 'application/javascript; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=300');
+    return res.sendFile(path.join(__dirname, 'services', 'game', 'texty', 'jadro.js'));
+  }
   if (req.path === '/game/pozvanka.png') return serveGameInvite(req, res);
   if (req.path === '/ai' || req.path === '/ai/') return serveAiSpecialist(req, res);
   // Zkrácený odkaz na AI specialistu: /s/<kód> → 302 na /ai?t=<token>.

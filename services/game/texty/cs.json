@@ -1,0 +1,14 @@
+{
+  "jazyk.nadpis": "Jazyk hry",
+  "jazyk.popis": "Hra se přepne celá — hlášky ze serveru ti pak chodí taky v tomhle jazyce.",
+  "jazyk.cs": "Čeština",
+  "jazyk.en": "Angličtina",
+  "jazyk.ulozeno": "Jazyk nastaven.",
+
+  "obecne.dnu": { "one": "{cislo:n} den", "few": "{cislo:n} dny", "other": "{cislo:n} dní" },
+  "obecne.hodin": { "one": "{cislo:n} hodina", "few": "{cislo:n} hodiny", "other": "{cislo:n} hodin" },
+  "obecne.minut": { "one": "{cislo:n} minuta", "few": "{cislo:n} minuty", "other": "{cislo:n} minut" },
+  "obecne.mesicu": { "one": "{cislo:n} herní měsíc", "few": "{cislo:n} herní měsíce", "other": "{cislo:n} herních měsíců" },
+  "obecne.pradlomatu": { "one": "{cislo:n} prádlomat", "few": "{cislo:n} prádlomaty", "other": "{cislo:n} prádlomatů" },
+  "obecne.hracu": { "one": "{cislo:n} hráč", "few": "{cislo:n} hráči", "other": "{cislo:n} hráčů" }
+}

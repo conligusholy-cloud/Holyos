@@ -16,6 +16,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../config/database');
 const { HODNOSTI, hodnost, ODZNAKY, ODZNAK } = require('../services/game/hodnosti');
+const TEXTY = require('../services/game/texty');
 const JWT_SECRET = require('../config/secrets').jwtSecret();
 
 const router = express.Router();
@@ -394,6 +395,7 @@ async function pub(p) {
   return {
     nick: p.nick, company: p.company || (p.nick + ' s.r.o.'), emblem: p.emblem || null,
     nick_at: p.nick_at || null,
+    jazyk: TEXTY.jazykHrace(p),
     ref: p.ref_id || null,
     email: p.email || null,
     first_name: p.first_name || null, last_name: p.last_name || null,
@@ -1075,6 +1077,27 @@ async function zastavaPodlaha(playerId) {
 // Simulace běží v prohlížeči; server je úložiště, ne rozhodčí. Jediné, co se
 // podvrhnout nedá, jsou karty — ty žijí ve vlastní tabulce.
 // POST /account/ping — tep otevřené hry (i ze skryté záložky), jen pro přehled „kdo je online“
+// ─── Jazyk hry ───────────────────────────────────────────────────────────────
+// GET /texty/:jazyk → celý katalog pro prohlížeč. Angličtina přichází
+// podložená češtinou, takže hře nikdy nechybí klíč a nemusí řešit pády sama.
+router.get('/texty/:jazyk', (req, res) => {
+  const j = String(req.params.jazyk || '').slice(0, 5);
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json({ ok: true, jazyk: TEXTY.JAZYKY.indexOf(j) >= 0 ? j : TEXTY.ZDROJ,
+    texty: TEXTY.katalogPro(j) });
+});
+
+// POST /account/jazyk { jazyk } → přepnutí jazyka u účtu
+router.post('/account/jazyk', requirePlayer, async (req, res, next) => {
+  try {
+    const j = String((req.body || {}).jazyk || '').slice(0, 5);
+    if (TEXTY.JAZYKY.indexOf(j) < 0) return res.status(400).json({ error: 'Takový jazyk neznám.' });
+    const p = await prisma.gamePlayer.update({ where: { id: req.player.id }, data: { jazyk: j } });
+    console.log('[game] hráč #' + p.id + ' přepnul jazyk na ' + j);
+    res.json({ ok: true, jazyk: j, hlaska: TEXTY.t('jazyk.ulozeno', {}, j) });
+  } catch (e) { next(e); }
+});
+
 router.post('/account/ping', requirePlayer, (req, res) => {
   // vidim říká, jestli má hráč hru na očích, nebo ji jen drží ve schované
   // záložce. Na burze se podle toho pozná, kdo odpoví hned.
