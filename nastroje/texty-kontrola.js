@@ -53,6 +53,26 @@ function main() {
     }
   });
 
+  // Klíč použitý v kódu, který v katalogu není. Takový se hráči ukáže jako
+  // holý 'server.neprihlasen' — přesně to se stalo, když jsem jeden klíč
+  // napsal ručně a zapomněl ho do katalogu doplnit. Prošlo to až na produkci.
+  const soubory = [HRA,
+    path.join(KOREN, 'routes', 'game-trade.routes.js'),
+    path.join(KOREN, 'routes', 'game-account.routes.js')];
+  const chybejiciKlice = new Set();
+  soubory.forEach((f) => {
+    let txt = '';
+    try { txt = fs.readFileSync(f, 'utf8'); } catch (e) { return; }
+    // Komentáře ven — ukázky klíčů ve vysvětlivkách nejsou volání.
+    txt = txt.split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n');
+    const re = /(?:^|[^\w$.])(?:tx|stx\(req\)|TEXTY\.t)\(\s*'([a-z][\w.]+)'/g;
+    let m;
+    while ((m = re.exec(txt)) !== null) if (cs[m[1]] == null) chybejiciKlice.add(m[1]);
+  });
+
+  console.log('klíčů použitých v kódu a chybějících v katalogu: ' + chybejiciKlice.size);
+  if (chybejiciKlice.size) [...chybejiciKlice].slice(0, 20).forEach((k) => console.log('  BEZ TEXTU  ' + k));
+
   console.log('klíčů v češtině: ' + Object.keys(cs).length
     + ' · přeloženo: ' + (Object.keys(cs).length - chybi.length)
     + ' · chybí: ' + chybi.length
@@ -68,6 +88,9 @@ function main() {
   // Nasazení se kvůli překladům nezastavuje — tak to bylo rozhodnuto.
   // Návratový kód jen říká, jestli je co dopřekládat, aby se na to dal
   // pověsit automatický překlad.
+  // Chybějící klíč je horší než chybějící překlad: hráč uvidí holý klíč.
+  // Proto vlastní kód, ať jde odlišit od „je co dopřekládat".
+  if (chybejiciKlice.size) process.exit(2);
   process.exit(chybi.length || zastarale.length ? 1 : 0);
 }
 main();

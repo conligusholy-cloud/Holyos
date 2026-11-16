@@ -2227,5 +2227,6 @@
   "server.chybi_misto_nebo_model": "Chybí místo nebo model.",
   "server.tohle_misto_neni_tvoje": "Tohle místo není tvoje.",
   "server.tohle_misto_ti_nepatri_5": "Tohle místo ti nepatří.",
-  "server.smlouva_je_na_dobu_urcitou_odejit": "Smlouva je na dobu určitou. Odejít jde, ale doplatíš odstupné."
+  "server.smlouva_je_na_dobu_urcitou_odejit": "Smlouva je na dobu určitou. Odejít jde, ale doplatíš odstupné.",
+  "server.neprihlasen": "Nejsi přihlášený."
 }
