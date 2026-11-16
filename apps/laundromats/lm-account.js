@@ -299,7 +299,7 @@ module.exports = function createAccounts(ctx) {
       try { const r = await hos('GET', '/marketplace-public'); if (r.status === 200 && r.j && Array.isArray(r.j.items)) items = r.j.items; else chyba = 'Nabídku se nepodařilo načíst.'; } catch (e) { chyba = 'Nabídku se teď nepodařilo načíst, zkuste to prosím za chvíli.'; }
       const mine = canSee(req, 'marketplace');
       const cta = mine ? '<a class="btn" href="/cesta/marketplace" style="width:100%;justify-content:center">Zobrazit detail</a>'
-        : '<a class="btn" href="/cesta/prihlaseni?next=' + encodeURIComponent('/cesta/marketplace') + '" style="width:100%;justify-content:center">Přihlásit se pro detail</a>';
+        : (req.account ? '<div class="muted small" style="text-align:center">Máte omezený přístup — pro plný detail nás kontaktujte.</div>' : '<a class="btn" href="/cesta/prihlaseni?next=' + encodeURIComponent('/cesta/marketplace') + '" style="width:100%;justify-content:center">Přihlásit se pro detail</a>');
       const card = (s) => `<div class="card pm-card"><div class="pm-img"><img src="/marketplace/foto/${esc(s.ref)}" alt="" loading="lazy" draggable="false"><span class="pm-lock">🔒</span><span class="pm-st${s.reserved ? ' res' : ''}">${s.reserved ? 'Rezervováno' : 'Volné'}</span></div>
         <div class="pm-body"><h3>Připravené místo — ${esc(s.city || 'lokalita')}</h3><p class="muted small" style="margin:0 0 12px">Přesná poloha, fotky, popis a podmínky uvidí přihlášení partneři.</p>${cta}</div></div>`;
       const body = `<style>.pm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:18px}.pm-card{margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column}
@@ -313,6 +313,8 @@ module.exports = function createAccounts(ctx) {
         <script>document.addEventListener('contextmenu',function(e){if(e.target.closest('.pm-img'))e.preventDefault();});</script>`;
       send(req, res, 'Marketplace lokalit', body);
     }));
+    // Uživatel jen s omezeným přístupem (veřejná verze) se z menu dostane na rozmazanou ukázku, ne na plný Marketplace
+    app.get('/cesta/marketplace', (req, res, next) => { if (req.account && !canSee(req, 'marketplace') && canSee(req, 'marketplace_public')) return res.redirect(302, '/marketplace'); next(); });
     app.get('/cesta/marketplace', requirePage('marketplace'), A(async (req, res) => {
       let spots = [], chyba = '';
       try { const r = await hos('GET', '/marketplace'); if (r.status === 200 && r.j && Array.isArray(r.j.items)) spots = r.j.items; else chyba = 'Nabídku se nepodařilo načíst.'; } catch (e) { chyba = 'Nabídku se teď nepodařilo načíst, zkuste to prosím za chvíli.'; }

@@ -384,7 +384,7 @@ root.addEventListener('click',function(e){var b=e.target.closest('[data-udis]');
   if(dis&&!confirm('Zablokovat účet? Uživatel se odhlásí a nebude se moci přihlásit.'))return;b.disabled=true;
   api('/admin/api/users/'+id+'/disabled',{disabled:dis}).then(function(){(usr||[]).forEach(function(u){if(u.id===id)u.disabled=dis;});usrRender();}).catch(function(er){b.disabled=false;alert(er.message);});},true);
 // ── Detail kontaktu: údaje, interní poznámka, přístupy k nástrojům (přebíjí roli), účet ──
-var UD_PAGES=[['podpora','Podpora Laundromats'],['compounder','Compounder'],['pradlomaty','Prádlomaty'],['ekonomika','Ekonomika'],['hledat','Najít místo'],['zhodnotit','Zhodnotit místo'],['marketplace','Marketplace lokalit']];
+var UD_PAGES=[['podpora','Podpora Laundromats'],['compounder','Compounder'],['pradlomaty','Prádlomaty'],['ekonomika','Ekonomika'],['hledat','Najít místo'],['zhodnotit','Zhodnotit místo'],['marketplace','Marketplace lokalit — standardní (plná verze)'],['marketplace_public','Marketplace lokalit — veřejná (omezená: město + rozmazaná fotka)']];
 var UD_ROLE={beginner:['podpora','compounder','pradlomaty'],economy:['podpora','compounder','pradlomaty','ekonomika'],full:['podpora','compounder','pradlomaty','ekonomika','hledat','zhodnotit']};
 function udDefault(u,p){return (UD_ROLE[roleKey(u.plan)]||[]).indexOf(p)!==-1;}
 function udEff(u,p){var o=u.access||{};return Object.prototype.hasOwnProperty.call(o,p)?o[p]===true:udDefault(u,p);}

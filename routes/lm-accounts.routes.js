@@ -24,7 +24,7 @@ const pub = (a) => ({ id: a.id, lead_id: a.compounder_lead_id || null, email: a.
 // AppSetting lm_account_access = { "<id účtu>": { "<stránka>": true|false } }, lm_account_notes = { "<id>": "text" }.
 // Marketplace lokalit nemá výchozí přístup v žádné roli — vidí ho jen ten, komu ho správce zapne.
 const ACCESS_KEY = 'lm_account_access', NOTES_KEY = 'lm_account_notes';
-const ACCESS_PAGES = ['podpora', 'compounder', 'pradlomaty', 'ekonomika', 'hledat', 'zhodnotit', 'marketplace'];
+const ACCESS_PAGES = ['podpora', 'compounder', 'pradlomaty', 'ekonomika', 'hledat', 'zhodnotit', 'marketplace', 'marketplace_public'];
 async function jsonSetting(key) { try { const v = await require('../services/settings').getSetting(key, { type: 'json', defaultValue: {} }); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch (e) { return {}; } }
 const saveJson = (key, val, description) => require('../services/settings').setSetting(key, val, { type: 'json', description });
 const pubMp = async (a) => { const acc = (await jsonSetting(ACCESS_KEY))[a.id] || {}; return Object.assign(pub(a), { access: acc, marketplace: acc.marketplace === true }); };
