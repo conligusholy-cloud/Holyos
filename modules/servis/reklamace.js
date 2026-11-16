@@ -117,8 +117,8 @@
         + '</div><div>'
         + '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">Interní poznámka (zákazník nevidí)</div><textarea id="rp-note" rows="4" style="' + inp + ';width:100%;resize:vertical">' + esc(r.internal_note || '') + '</textarea>'
         + '<div style="display:flex;gap:6px;margin:6px 0 14px"><button class="btn btn-secondary btn-sm" data-rpa="note">💾 Uložit poznámku</button></div>'
-        + '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">Zpráva zákazníkovi (e-mail na ' + esc(r.email) + ')</div><textarea id="rp-msg" rows="3" style="' + inp + ';width:100%;resize:vertical" placeholder="Např. Platbu jsme vám vrátili na účet…"></textarea>'
-        + '<div style="display:flex;gap:6px;margin:6px 0 14px"><button class="btn btn-secondary btn-sm" data-rpa="mail">✉️ Odeslat e-mail</button></div>'
+        + (r.kind === 'receipt' ? '' : '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">Zpráva zákazníkovi (e-mail na ' + esc(r.email) + ')</div><textarea id="rp-msg" rows="3" style="' + inp + ';width:100%;resize:vertical" placeholder="Např. Platbu jsme vám vrátili na účet…"></textarea>'
+        + '<div style="display:flex;gap:6px;margin:6px 0 14px"><button class="btn btn-secondary btn-sm" data-rpa="mail">✉️ Odeslat e-mail</button></div>')
         + '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">Historie</div><div style="max-height:200px;overflow:auto">' + (hist || '<span style="color:var(--text2);font-size:12.5px">—</span>') + '</div>'
         + '</div></div>'
         + '<div class="modal-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">' + act + '<span style="flex:1"></span><button class="btn btn-secondary" data-rpx>Zavřít</button></div></div>';
