@@ -8,6 +8,7 @@ const path = require('path');
 const { prisma } = require('../../config/database');
 const { parseStatement } = require('./parsers');
 const { parseMonetaPdf, isPdf } = require('./parsers/moneta-pdf-parser');
+const { parseUnicreditPdf } = require('./parsers/unicredit-pdf-parser');
 
 const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', '..', 'data', 'storage');
 
@@ -19,6 +20,8 @@ function passwordCandidates(extra) {
 }
 async function parseAny(buffer, filename, extraPasswords) {
   if (isPdf(buffer)) {
+    // UniCredit (BusinessNet) posílá nezaheslované PDF — pozná se podle obsahu; jinak MONETA (zaheslované)
+    try { return await parseUnicreditPdf(buffer); } catch (e) { if (e.code !== 'NOT_UNICREDIT' && !/password|heslo/i.test(String(e && e.message))) throw e; }
     let lastErr = null;
     const cands = passwordCandidates(extraPasswords);
     // Diagnostika (hesla se nelogují, jen počet a délky) — ať je v logu vidět, jestli proměnná z Railway dorazila
@@ -36,8 +39,16 @@ async function findAccount(statement, fallbackId) {
   if (fallbackId) return prisma.bankAccount.findUnique({ where: { id: fallbackId } });
   const num = statement.account_number ? String(statement.account_number).replace(/^0+/, '') : null;
   const all = await prisma.bankAccount.findMany({ where: { active: true } });
+  // Maskované číslo účtu (UniCredit: „18XXXXX000") — X = libovolná číslice; musí sedět banka i měna a shoda musí být jediná
+  let byMask = null;
+  if (statement.account_mask) {
+    const re = new RegExp('^' + String(statement.account_mask).replace(/^0+/, '').replace(/X/gi, '\\d') + '$');
+    const hits = all.filter((a) => re.test(String(a.account_number || '').replace(/^0+/, '')) && (!statement.bank_code || a.bank_code === statement.bank_code) && (!statement.currency || !a.currency || a.currency === statement.currency));
+    if (hits.length === 1) byMask = hits[0];
+  }
   return all.find((a) => num && String(a.account_number).replace(/^0+/, '') === num && (!statement.bank_code || a.bank_code === statement.bank_code))
     || all.find((a) => statement.iban && a.iban && a.iban.replace(/\s+/g, '') === statement.iban)
+    || byMask
     || null;
 }
 
@@ -48,13 +59,13 @@ async function importStatementBuffer({ buffer, filename, bankAccountId = null, s
   const parsed = await parseAny(buffer, filename, passwords);
   const { statement, transactions, warnings, format } = parsed;
   const account = await findAccount(statement, bankAccountId);
-  if (!account) return { status: 'no_account', statement_number: statement.statement_number, account_number: statement.account_number, bank_code: statement.bank_code };
+  if (!account) return { status: 'no_account', statement_number: statement.statement_number, account_number: statement.account_number || statement.account_mask, bank_code: statement.bank_code };
 
   const existing = await prisma.bankStatement.findUnique({ where: { bank_account_id_statement_number: { bank_account_id: account.id, statement_number: String(statement.statement_number) } } }).catch(() => null);
   if (existing) return { status: 'duplicate', statement_id: existing.id, statement_number: statement.statement_number };
 
   // Ochrana úplnosti: výpis, který přesně nesedí na zůstatky a počet transakcí, se NEIMPORTUJE (nechybí-li něco, nikdo to nepozná).
-  if (format === 'moneta_pdf' && parsed.reconciled === false && !force) {
+  if ((format === 'moneta_pdf' || format === 'unicredit_pdf') && parsed.reconciled === false && !force) {
     return { status: 'unreconciled', statement_number: statement.statement_number, account_number: statement.account_number, read: transactions.length, expected: parsed.expected_count, diff: parsed.balance_diff, warnings };
   }
   // Návaznost: počáteční zůstatek musí odpovídat konečnému zůstatku předchozího výpisu (jinak chybí výpis / transakce)
@@ -83,7 +94,7 @@ async function importStatementBuffer({ buffer, filename, bankAccountId = null, s
         period_to: statement.period_to || new Date(),
         opening_balance: statement.opening_balance || 0,
         closing_balance: statement.closing_balance || 0,
-        source: (format === 'moneta_pdf' ? 'pdf_' : format + '_') + source,
+        source: (format === 'moneta_pdf' || format === 'unicredit_pdf' ? 'pdf_' : format + '_') + source,
         file_path: filePath,
         imported_by_id: userId,
       },
