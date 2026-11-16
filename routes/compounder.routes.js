@@ -4479,7 +4479,10 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
     let leads;
     if (q && q.length >= 2) {
       // Chytré hledání: BEZ DIAKRITIKY, napříč jméno/e-mail/telefon/firma; ignoruje ostatní filtry.
-      const all = await prisma.compounderLead.findMany({ where: allScope ? { is_test: false } : { owner_person_id: meId, is_test: false }, orderBy: { created_at: 'desc' }, take: allScope ? 20000 : 5000 });
+      // Hledá i v kontaktech, kterým jsem domluvil online schůzku s majitelem (kontakt už patří majiteli)
+      let omIds = [];
+      if (!allScope) { try { omIds = (await prisma.meetingReservation.findMany({ where: { booked_by_person_id: meId, compounder_lead_id: { not: null } }, select: { compounder_lead_id: true } })).map((r) => r.compounder_lead_id); } catch (e) { omIds = []; } }
+      const all = await prisma.compounderLead.findMany({ where: allScope ? { is_test: false } : { is_test: false, OR: [{ owner_person_id: meId }, ...(omIds.length ? [{ id: { in: omIds } }] : [])] }, orderBy: { created_at: 'desc' }, take: allScope ? 20000 : 5000 });
       const norm = (s) => (s == null ? '' : String(s)).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
       const nq = norm(q); const qd = q.replace(/\D/g, '');
       leads = all.filter((l) => {
