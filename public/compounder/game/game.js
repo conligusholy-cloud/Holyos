@@ -5111,19 +5111,19 @@ function spotSheet(sp, areaId) {
   // 1. krok — obhlídka. Levná, jen se tam někdo zajede podívat.
   if (!S.revealed[sp.id]) {
     var poz0 = jePozemek(sp);
-    sheet('<h3>' + (poz0 ? 'Pozemek na prodej' : 'Neprověřené místo') + '</h3>'
+    sheet('<h3>' + (poz0 ? 'Pozemek na prodej' : esc(tx('hra.neproverene_misto'))) + '</h3>'
       + '<p class="muted small">' + (poz0
           ? 'Na parcele je cedule, takže výměru i cenu znáš. Co tu ale chodí lidí a jestli se '
             + 'sem prádlomat vyplatí, zjistíš až obhlídkou.'
-          : 'Víš jen, že tu něco je. Obhlídka ti ukáže, kolik tu chodí lidí, jaká je konkurence a jestli se tu prádlomat vyplatí.') + '</p>'
-      + '<div class="kv"><span>Typ místa</span><b>' + esc(KIND_LABEL[sp.kind] || 'Neznámý') + '</b></div>'
-      + (poz0 ? '<div class="kv"><span>Výměra</span><b>' + pozemekM2(sp) + ' m²</b></div>'
+          : esc(tx('hra.vis_jen_ze_tu_neco'))) + '</p>'
+      + '<div class="kv"><span>' + esc(tx('hra.typ_mista')) + '</span><b>' + esc(KIND_LABEL[sp.kind] || esc(tx('hra.neznamy'))) + '</b></div>'
+      + (poz0 ? '<div class="kv"><span>' + esc(tx('hra.vymera')) + '</span><b>' + pozemekM2(sp) + ' m²</b></div>'
           + '<div class="kv"><span>Cena pozemku</span><b>' + kcFull(pozemekCena(sp))
           + '</b> <span class="muted small">(' + kcFull(pozemekZaM2(sp)) + ' / m²)</span></div>' : '')
-      + '<div class="kv"><span>Cena obhlídky</span><b' + (obhlidkaCena() ? '' : ' class="ok"') + '>'
-      + (obhlidkaCena() ? kcFull(obhlidkaCena()) : 'první zdarma') + '</b></div>'
-      + '<button class="btn big" id="do-reveal"' + (S.cash < obhlidkaCena() ? ' disabled' : '') + '>Prověřit místo</button>'
-      + (S.cash < obhlidkaCena() ? '<p class="fine">Na obhlídku nemáš dost hotovosti.</p>' : ''));
+      + '<div class="kv"><span>' + esc(tx('hra.cena_obhlidky')) + '</span><b' + (obhlidkaCena() ? '' : ' class="ok"') + '>'
+      + (obhlidkaCena() ? kcFull(obhlidkaCena()) : esc(tx('hra.prvni_zdarma'))) + '</b></div>'
+      + '<button class="btn big" id="do-reveal"' + (S.cash < obhlidkaCena() ? ' disabled' : '') + '>' + esc(tx('hra.proverit_misto')) + '</button>'
+      + (S.cash < obhlidkaCena() ? '<p class="fine">' + esc(tx('hra.na_obhlidku_nemas_dost_hotovosti')) + '</p>' : ''));
     var b = $('do-reveal');
     if (b) b.onclick = function () {
       var cena = obhlidkaCena();
@@ -5144,13 +5144,13 @@ function spotSheet(sp, areaId) {
     save();
   }
   var head = '<h3>' + esc(sp.name) + '</h3>'
-    + '<p class="muted small">' + esc(KIND_LABEL[sp.kind] || 'Místo') + ' · ' + esc(S.areas[areaId] ? S.areas[areaId].name : '')
+    + '<p class="muted small">' + esc(KIND_LABEL[sp.kind] || esc(tx('hra.misto'))) + ' · ' + esc(S.areas[areaId] ? S.areas[areaId].name : '')
     // Co hráč koupil, se mu už nenabízí — v hlavičce stojí, že zem je jeho.
-    + (mamPozemek(sp.id) ? ' · <b class="ok">tvůj pozemek</b>'
-        : najemniMoje ? ' · <b class="ok">pronajatý pozemek</b>'
+    + (mamPozemek(sp.id) ? ' · <b class="ok">' + esc(tx('hra.tvuj_pozemek')) + '</b>'
+        : najemniMoje ? ' · <b class="ok">' + esc(tx('hra.pronajaty_pozemek')) + '</b>'
         : jePozemek(sp) ? ' · <b class="ok">pozemek na prodej</b>' : '') + '</p>'
     + '<div style="margin:8px 0 12px">' + verdictPill(sp.score) + '</div>'
-    + '<div class="kv"><span>Parkovacích ploch v okolí</span><b>' + (mnum(sp.parking) != null ? mnum(sp.parking) + (sp.parking_m != null ? ' (' + sp.parking_m + ' m)' : '') : '—') + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.parkovacich_ploch_v_okoli')) + '</span><b>' + (mnum(sp.parking) != null ? mnum(sp.parking) + (sp.parking_m != null ? ' (' + sp.parking_m + ' m)' : '') : '—') + '</b></div>'
     + '<div class="kv"><span>Konkurence do 1,5 km</span><b>' + (mnum(sp.competition) != null ? mnum(sp.competition) : '—') + '</b></div>'
     + '<div class="kv"><span>Tahouni provozu</span><b>' + (mnum(sp.anchors) != null ? mnum(sp.anchors) : '—') + '</b></div>';
 
@@ -5164,7 +5164,7 @@ function spotSheet(sp, areaId) {
       + (fz.ok
           ? '<p class="fine">Kupuješ samotnou zem. Cestu, parkování a přípojky si pak necháš udělat, '
             + 'až budeš chtít — a prádlomat sem přivezeš, až ho budeš mít. Nájem už nikdy neplatíš.</p>'
-          : '<p class="fine err">' + esc(fz.duvod || 'Na pozemek zatím nemáš.') + '</p>'));
+          : '<p class="fine err">' + esc(fz.duvod || esc(tx('hra.na_pozemek_zatim_nemas'))) + '</p>'));
     var kz = $('do-koupit-zem');
     if (kz) kz.onclick = function () { koupitPozemek(sp, areaId, kz); };
     return;
@@ -5179,16 +5179,16 @@ function spotSheet(sp, areaId) {
     var pady0 = pl0 && pl0.hotovo && pl0.zaplaceno ? planStroje(pl0) : [];
     var stoji0 = strojuNaPozemku(sp.id);
     sheet(head
-      + '<div class="card"><div class="row"><h3>Tvůj pozemek</h3><b class="ok">' + (zem0.m2 || pozemekM2(sp)) + ' m²</b></div>'
+      + '<div class="card"><div class="row"><h3>' + esc(tx('hra.tvuj_pozemek_2')) + '</h3><b class="ok">' + (zem0.m2 || pozemekM2(sp)) + ' m²</b></div>'
       + '<p class="muted small" style="margin:4px 0 0">Zem máš koupenou za ' + kcFull(zem0.cena || pozemekCena(sp))
       + '. Nájem neplatíš a nikdo tě odtud nevyhodí.</p>'
       + (pady0.length
-          ? '<div class="kv" style="margin-top:10px"><span>Zaplacená příprava plochy</span><b class="ok">'
+          ? '<div class="kv" style="margin-top:10px"><span>' + esc(tx('hra.zaplacena_priprava_plochy')) + '</span><b class="ok">'
             + kcFull(pl0.zaplaceno) + '</b></div>'
-            + '<div class="kv"><span>Stání na prádlomaty</span><b>' + stoji0 + ' z ' + pady0.length + ' obsazeno</b></div>'
+            + '<div class="kv"><span>' + esc(tx('hra.stani_na_pradlomaty')) + '</span><b>' + stoji0 + ' z ' + pady0.length + ' obsazeno</b></div>'
           : '')
       + (najemce0 ? '' : '<button class="btn big" id="do-priprava-start" style="width:100%;margin-top:12px">'
-          + (pady0.length ? 'Rozšířit nebo předělat plochu' : 'Připravit plochu') + '</button>')
+          + (pady0.length ? esc(tx('hra.rozsirit_nebo_predelat_plochu')) : esc(tx('hra.pripravit_plochu'))) + '</button>')
       + (pady0.length || najemce0 ? ''
           : '<p class="fine">Cestu, parkování, dlažbu a přípojky si necháš udělat a zaplatíš hned — stroj '
             + 'skladem mít nemusíš. V návrhu si zvolíš, jestli děláš místo pro jeden velký kiosek, '
@@ -5196,17 +5196,17 @@ function spotSheet(sp, areaId) {
       + '</div>'
       + pronajemKarta(sp, claim, pady0.length > 0, stoji0)
       + (najemce0 ? '' : pady0.length
-          ? '<h3 style="margin-top:18px">Stání na ploše</h3>'
+          ? '<h3 style="margin-top:18px">' + esc(tx('hra.stani_na_plose')) + '</h3>'
             + pady0.map(function (pd, i) {
                 var obsaz = padObsazen(sp, i), mm = MODELS[pd.model] || MODELS.mini;
                 var skl = inStock(pd.model), cest = onWay(pd.model);
                 return '<div class="card"><div class="row"><h3>' + (i + 1) + '. stání · ' + esc(mm.name) + '</h3>'
-                  + '<b class="' + (obsaz ? 'ok' : '') + '">' + (obsaz ? 'stojí' : 'volné') + '</b></div>'
+                  + '<b class="' + (obsaz ? 'ok' : '') + '">' + (obsaz ? esc(tx('hra.stoji')) : esc(tx('hra.volne'))) + '</b></div>'
                   + (obsaz
-                      ? '<p class="muted small" style="margin:4px 0 8px">Prádlomat je v provozu.</p>'
-                        + '<button class="btn sec sm" style="width:100%" data-pad-detail="' + i + '">Otevřít detail</button>'
+                      ? '<p class="muted small" style="margin:4px 0 8px">' + esc(tx('hra.pradlomat_je_v_provozu')) + '</p>'
+                        + '<button class="btn sec sm" style="width:100%" data-pad-detail="' + i + '">' + esc(tx('hra.otevrit_detail')) + '</button>'
                       : skl > 0
-                        ? '<p class="muted small" style="margin:4px 0 8px">Plocha je zaplacená — platí se už jen doprava stroje.</p>'
+                        ? '<p class="muted small" style="margin:4px 0 8px">' + esc(tx('hra.plocha_je_zaplacena_plati_se')) + '</p>'
                           + '<button class="btn sm" style="width:100%" data-pad="' + i + '">Postavit '
                           + esc(mm.name) + ' (' + skl + '× skladem)</button>'
                         : cest > 0
@@ -5260,16 +5260,16 @@ function spotSheet(sp, areaId) {
       var popis = '';
       NAJEM_DOBY.forEach(function (d) { if (d.m === nv.doba) popis = d.p; });
       sheet(head
-        + '<h3 style="margin-top:18px">Nájemní smlouva</h3>'
+        + '<h3 style="margin-top:18px">' + esc(tx('hra.najemni_smlouva')) + '</h3>'
         + '<p class="muted small">Než sem něco postavíš, musíš se s majitelem pozemku dohodnout. '
         + 'Čím delší jistotu chceš, tím dražší nájem — ale tím hůř se ti někdo dostane na místo.</p>'
-        + (jednoduse ? '' : '<p class="muted small" style="margin:10px 0 4px"><b>Na jak dlouho se vážeš</b></p>'
+        + (jednoduse ? '' : '<p class="muted small" style="margin:10px 0 4px"><b>' + esc(tx('hra.na_jak_dlouho_se_vazes')) + '</b></p>'
         + '<div class="seg sub najem-seg">' + NAJEM_DOBY.map(function (d) {
             return '<button class="' + (d.m === nv.doba ? 'on' : '') + '" data-doba="' + d.m + '">'
-              + (d.m ? (d.m / 12) + (d.m === 12 ? ' rok' : (d.m < 60 ? ' roky' : ' let')) : 'Neurčito') + '</button>';
+              + (d.m ? (d.m / 12) + (d.m === 12 ? ' rok' : (d.m < 60 ? ' roky' : ' let')) : esc(tx('hra.neurcito'))) + '</button>';
           }).join('') + '</div>'
         + '<p class="fine">' + esc(popis) + '</p>')
-        + (jednoduse ? '' : '<p class="muted small" style="margin:12px 0 4px"><b>Výpovědní doba</b></p>'
+        + (jednoduse ? '' : '<p class="muted small" style="margin:12px 0 4px"><b>' + esc(tx('hra.vypovedni_doba')) + '</b></p>'
         + '<div class="seg sub najem-seg">' + NAJEM_VYPOVEDI.map(function (m) {
             return '<button class="' + (m === nv.vypoved ? 'on' : '') + '" data-vyp="' + m + '">'
               + m + ' měs.</button>';
@@ -5277,15 +5277,15 @@ function spotSheet(sp, areaId) {
         + '<p class="fine">Když tě někdo přeplatí, tolik herních měsíců ti místo ještě vydělává — '
         + 'a celou tu dobu můžeš jeho nabídku dorovnat a zůstat. Stejnou lhůtu musí dodržet '
         + 'i majitel pozemku, když vypoví sám — tolik času pak máš na nové místo pro stroj.</p>')
-        + '<div class="kv" style="margin-top:14px"><span>Nájem za těchhle podmínek</span><b class="'
+        + '<div class="kv" style="margin-top:14px"><span>' + esc(tx('hra.najem_za_techhle_podminek')) + '</span><b class="'
         + (cena > rentOf(sp) ? 'warn' : 'ok') + '">' + kcFull(cena) + ' / měsíc</b></div>'
         + (cena > rentOf(sp)
-            ? '<div class="kv"><span>Příplatek za jistotu</span><b>+' + kcFull(cena - rentOf(sp))
+            ? '<div class="kv"><span>' + esc(tx('hra.priplatek_za_jistotu')) + '</span><b>+' + kcFull(cena - rentOf(sp))
               + ' (' + Math.round((najemKoef(nv.doba, nv.vypoved) - 1) * 100) + ' %)</b></div>'
             : '')
-        + '<button class="btn big" id="do-lease" style="width:100%;margin-top:12px">Domluvit nájem</button>'
+        + '<button class="btn big" id="do-lease" style="width:100%;margin-top:12px">' + esc(tx('hra.domluvit_najem')) + '</button>'
         + (jednoduse
-            ? '<p class="fine"><a href="#" id="do-najem-vic">Chci si vybrat podmínky smlouvy</a></p>'
+            ? '<p class="fine"><a href="#" id="do-najem-vic">' + esc(tx('hra.chci_si_vybrat_podminky_smlouvy')) + '</a></p>'
             : '<p class="fine">Z doby určité se dá odejít i dřív, ale doplatíš odstupné — zbytek nájmu '
               + 'do konce smlouvy, nejvýš za ' + ODSTUPNE_MAX + ' měsíce.</p>'));
       var vic = $('do-najem-vic');
@@ -5311,9 +5311,9 @@ function spotSheet(sp, areaId) {
 
   // 3. krok — vybrat stroj a zaplatit přípojky.
   sheet(head
-    + '<div class="kv"><span>Domluvený nájem</span><b class="ok">' + kcFull(lease.rent) + ' / měsíc</b></div>'
-    + '<div class="kv"><span>' + (jeZasitovane(sp) ? 'Instalace na tomhle místě' : 'Přípojky na tomhle místě') + '</span><b'
-    + (jeZasitovane(sp) ? ' class="ok"' : '') + '>' + kcFull(connPrice(sp, 'flex')) + '</b> <span class="muted small">(u MAXu o 20 % víc)</span></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.domluveny_najem')) + '</span><b class="ok">' + kcFull(lease.rent) + ' / měsíc</b></div>'
+    + '<div class="kv"><span>' + (jeZasitovane(sp) ? esc(tx('hra.instalace_na_tomhle_miste')) : esc(tx('hra.pripojky_na_tomhle_miste'))) + '</span><b'
+    + (jeZasitovane(sp) ? ' class="ok"' : '') + '>' + kcFull(connPrice(sp, 'flex')) + '</b>' + ' ' + '<span class="muted small">' + esc(tx('hra.u_maxu_o_20_vic')) + '</span></div>'
     + (jeZasitovane(sp) ? '<p class="fine ok">Zasíťované místo — voda, odpad i elektřina už tu jsou. '
       + 'Platíš jen ' + Math.round(INSTALACE_PODIL * 100) + ' % toho, co stály přípojky.</p>' : '')
     + '<h3 style="margin-top:18px">Co tu postavit</h3>'
@@ -6776,13 +6776,13 @@ function planEditor(sp, areaId, hotovo) {
   function polozStroj(x, y) {
     var st = planStroje(p), byl = padNa(x, y);
     if (byl >= 0) {
-      if (padObsazen(sp, byl)) return toast('Na tomhle stání už prádlomat stojí.', 'err');
+      if (padObsazen(sp, byl)) return toast(esc(tx('hra.na_tomhle_stani_uz_pradlomat')), 'err');
       st.splice(byl, 1); save(); return vykresli();
     }
     var r = planRozmerStroje(PLAN_MODEL);
     var sx = Math.max(0, Math.min(p.w - planCely(r[0]), x));
     var sy = Math.max(0, Math.min(p.h - planCely(r[1]), y));
-    if (!volno(sx, sy, r[0], r[1])) return toast('Tady už něco je.', 'err');
+    if (!volno(sx, sy, r[0], r[1])) return toast(esc(tx('hra.tady_uz_neco_je')), 'err');
     st.push({ x: sx, y: sy, w: r[0], h: r[1], model: PLAN_MODEL });
     // Pod strojem je dlažba sama o sobě — co tam hráč nakreslil dřív, se nepočítá dvakrát.
     vycisti(st[st.length - 1]);
@@ -6806,7 +6806,7 @@ function planEditor(sp, areaId, hotovo) {
     if (!volno(sx, sy, w, h)) {
       w = r2[1]; h = r2[0];
       sx = Math.max(0, Math.min(p.w - planCely(w), x)); sy = Math.max(0, Math.min(p.h - planCely(h), y));
-      if (!volno(sx, sy, w, h)) return toast('Stání se sem nevejde.', 'err');
+      if (!volno(sx, sy, w, h)) return toast(esc(tx('hra.stani_se_sem_nevejde')), 'err');
     }
     st.push({ x: sx, y: sy, w: w, h: h });
     vycisti(st[st.length - 1]);
@@ -6837,12 +6837,12 @@ function planEditor(sp, areaId, hotovo) {
     var naradi = PLAN_NARADI.filter(function (t) { return t.k === PLAN_NASTROJ; })[0];
     var st = planStroje(p), stoji = strojuNaPozemku(sp.id);
     var popis = PLAN_NASTROJ === 'stroj'
-        ? 'Klepni na plochu a stání pro stroj se tam položí. Klepnutím na hotové ho zase sundáš.'
+        ? esc(tx('hra.klepni_na_plochu_a_stani'))
       : PLAN_NASTROJ === 'stani'
         ? 'Parkovací stání je ' + cisloM(planRozmerStani()[0]) + ' × ' + cisloM(planRozmerStani()[1])
           + ' m. Musí přiléhat k cestě; klepnutím na hotové ho sundáš.'
       : (naradi || {}).p || '';
-    sheet('<h3>Příprava plochy</h3>'
+    sheet('<h3>' + esc(tx('hra.priprava_plochy')) + '</h3>'
       + '<p class="muted small">' + esc(sp.name) + ' · ' + p.w + ' × ' + p.h + ' m. '
       + 'Rozmísti na parcelu tolik prádlomatů, kolik jich sem chceš — jeden velký kiosek, '
       + 'nebo dvě tři menší stání vedle sebe.</p>'
@@ -6856,7 +6856,7 @@ function planEditor(sp, areaId, hotovo) {
       + '<button class="' + (PLAN_NASTROJ === 'stroj' ? 'on' : '') + '" data-plan-t="stroj">'
       + '<i class="sw sw-stroj"></i>Stroj</button>'
       + '<button class="' + (PLAN_NASTROJ === 'stani' ? 'on' : '') + '" data-plan-t="stani">'
-      + '<i class="sw sw-stani"></i>Stání</button>'
+      + '<i class="sw sw-stani"></i>' + esc(tx('hra.stani')) + '</button>'
       + PLAN_NARADI.map(function (t) {
           return '<button class="' + (t.k === PLAN_NASTROJ ? 'on' : '') + '" data-plan-t="' + t.k + '">'
             + '<i class="sw sw-' + t.k + '"></i>' + t.n + '</button>';
@@ -6871,46 +6871,46 @@ function planEditor(sp, areaId, hotovo) {
           : '')
       + (PLAN_NASTROJ === 'stroj' || PLAN_NASTROJ === 'stani'
           ? '<button class="btn sec sm" id="plan-otocit" style="width:100%;margin-top:6px">↻ Otočit o 90° '
-            + '(teď ' + (PLAN_OTOCENO ? 'nadél' : 'čelem k cestě') + ')</button>'
+            + '(teď ' + (PLAN_OTOCENO ? esc(tx('hra.nadel')) : esc(tx('hra.celem_k_ceste'))) + ')</button>'
           : '')
       + (PLAN_NASTROJ === 'cesta'
           ? '<div class="seg sub plan-seg" style="margin-top:6px">'
             + PLAN_CESTA_SIRKY.map(function (s2) {
                 return '<button class="' + (s2 === PLAN_SIRKA ? 'on' : '') + '" data-plan-s="' + s2 + '">'
-                  + s2 + ' m ' + (s2 > 3 ? 'obousměrná' : 'jednosměrka') + '</button>';
+                  + s2 + ' m ' + (s2 > 3 ? esc(tx('hra.obousmerna')) : esc(tx('hra.jednosmerka'))) + '</button>';
               }).join('') + '</div>'
           : '')
       + '<p class="fine">' + esc(popis) + '</p>'
-      + '<h3 style="margin:14px 0 4px">Na ploše stojí</h3>'
+      + '<h3 style="margin:14px 0 4px">' + esc(tx('hra.na_plose_stoji')) + '</h3>'
       + (st.length
           ? st.map(function (x, i) {
               return '<div class="kv"><span>' + (i + 1) + '. stání · ' + esc((MODELS[x.model] || {}).name || '')
                 + '</span><b class="' + (padObsazen(sp, i) ? 'ok' : '') + '">'
-                + (padObsazen(sp, i) ? 'prádlomat stojí' : cisloM(x.w) + ' × ' + cisloM(x.h) + ' m') + '</b></div>';
+                + (padObsazen(sp, i) ? esc(tx('hra.pradlomat_stoji')) : cisloM(x.w) + ' × ' + cisloM(x.h) + ' m') + '</b></div>';
             }).join('')
-          : '<p class="fine">Zatím žádné. Klepni na Stroj a pak na parcelu.</p>')
-      + '<div class="kv"><span>Parkovacích stání</span><b class="'
+          : '<p class="fine">' + esc(tx('hra.zatim_zadne_klepni_na_stroj')) + '</p>')
+      + '<div class="kv"><span>' + esc(tx('hra.parkovacich_stani')) + '</span><b class="'
       + (c.stanixKs >= PLAN_STANI_MIN * Math.max(1, c.stroju) ? 'ok' : 'warn') + '">' + c.stanixKs + '×</b></div>'
-      + '<h3 style="margin:14px 0 4px">Co to bude stát</h3>'
+      + '<h3 style="margin:14px 0 4px">' + esc(tx('hra.co_to_bude_stat')) + '</h3>'
       + cen.polozky.map(function (x) {
           return '<div class="kv"><span>' + esc(x.n) + (x.m ? ' <i class="muted small">' + esc(x.m) + '</i>' : '')
             + '</span><b>' + kcFull(x.v) + '</b></div>';
         }).join('')
-      + '<div class="kv souhrn"><span>Příprava celkem</span><b class="' + (cen.celkem ? 'warn' : '') + '">'
+      + '<div class="kv souhrn"><span>' + esc(tx('hra.priprava_celkem')) + '</span><b class="' + (cen.celkem ? 'warn' : '') + '">'
       + kcFull(cen.celkem) + '</b></div>'
       + (p.zaplaceno
-          ? '<div class="kv"><span>Zaplaceno dřív</span><b class="ok">−' + kcFull(p.zaplaceno) + '</b></div>'
+          ? '<div class="kv"><span>' + esc(tx('hra.zaplaceno_driv')) + '</span><b class="ok">−' + kcFull(p.zaplaceno) + '</b></div>'
           : '')
       + (chyby.length
-          ? '<div class="card vada-karta" style="margin-top:12px"><h3>⚠️ Ještě to nejde</h3>'
+          ? '<div class="card vada-karta" style="margin-top:12px"><h3>' + esc(tx('hra.jeste_to_nejde')) + '</h3>'
             + chyby.map(function (x) { return '<p class="muted small" style="margin:6px 0 0">' + esc(x) + '</p>'; }).join('')
             + '</div>'
           : '<p class="fine ok" style="margin-top:10px">Plocha je hotová: dojede se sem, zaparkuje se tu a '
             + 'všechna tři média mají kudy vést — dohromady ' + cen.delka + ' m výkopů.</p>')
-      + '<button class="btn sec" id="plan-auto" style="width:100%;margin-top:12px">Navrhnout za mě</button>'
+      + '<button class="btn sec" id="plan-auto" style="width:100%;margin-top:12px">' + esc(tx('hra.navrhnout_za_me')) + '</button>'
       + '<button class="btn big" id="plan-hotovo"' + (chyby.length ? ' disabled' : '')
-      + ' style="width:100%;margin-top:8px">Hotovo — spočítat přípravu</button>'
-      + (stoji ? '' : '<button class="btn sec" id="plan-smazat" style="width:100%;margin-top:8px">Začít návrh znovu</button>'));
+      + ' style="width:100%;margin-top:8px">' + esc(tx('hra.hotovo_spocitat_pripravu')) + '</button>'
+      + (stoji ? '' : '<button class="btn sec" id="plan-smazat" style="width:100%;margin-top:8px">' + esc(tx('hra.zacit_navrh_znovu')) + '</button>'));
     var pl = $('sheet-body').querySelector('.plan-plocha');
     if (pl) {
       var kresli = function (ev) {
@@ -6952,7 +6952,7 @@ function planEditor(sp, areaId, hotovo) {
       planAutoNavrh(p);
       PLAN_NASTROJ = 'cesta';
       save(); vykresli();
-      toast('Hotový návrh. Doladit ho můžeš po svém.', 'ok');
+      toast(esc(tx('hra.hotovy_navrh_doladit_ho_muzes')), 'ok');
     };
     var sm = $('plan-smazat');
     if (sm) sm.onclick = function () {
@@ -6980,10 +6980,10 @@ function planEditor(sp, areaId, hotovo) {
 // Za jistotu se platí vyšším nájmem. Konkurent podmínky nevidí, stejně jako
 // nevidí nájem — přihazuje naslepo a nikdy neví, jak dobře je soused krytý.
 var NAJEM_DOBY = [
-  { m: 0, n: 'Na dobu neurčitou', p: 'Nejlevnější. Kdokoli tě může kdykoli přeplatit.' },
-  { m: 12, n: '1 rok', p: 'Rok klidu. Pak se smlouva mění na dobu neurčitou.' },
-  { m: 36, n: '3 roky', p: 'Tři roky tě nikdo nevystrnadí.' },
-  { m: 60, n: '5 let', p: 'Nejdražší jistota. Pět herních let nedotknutelný.' }
+  { m: 0, n: esc(tx('hra.na_dobu_neurcitou')), p: esc(tx('hra.nejlevnejsi_kdokoli_te_muze_kdykoli')) },
+  { m: 12, n: '1 rok', p: esc(tx('hra.rok_klidu_pak_se_smlouva')) },
+  { m: 36, n: '3 roky', p: esc(tx('hra.tri_roky_te_nikdo_nevystrnadi')) },
+  { m: 60, n: '5 let', p: esc(tx('hra.nejdrazsi_jistota_pet_hernich_let')) }
 ];
 var NAJEM_VYPOVEDI = [1, 3, 6, 12];
 var NAJEM_ZA_ROK = 0.05;        // +5 % nájmu za každý rok vázanosti
@@ -8409,7 +8409,7 @@ function paintVyvoj() {
   if (!el) return;
   var h = (S.hist || []).slice();
   if (h.length < 2) {
-    el.innerHTML = '<div class="empty">Na graf je ještě brzo.<br>'
+    el.innerHTML = '<div class="empty">' + esc(tx('hra.na_graf_je_jeste_brzo')) + '<br>'
       + 'Bod přibývá každý herní měsíc, to je dvakrát za den.</div>';
     return;
   }
@@ -8428,16 +8428,16 @@ function paintVyvoj() {
   var odtok = h.map(function (x) { return Math.round((Number(x.s) || 0) + (Number(x.o) || 0)); });
   var zbyde = posl.z - odtok[odtok.length - 1];
   var souhrn = '<div class="card graf-karta">'
-    + '<div class="row"><h3>Všechno dohromady</h3><b class="' + (zbyde >= 0 ? 'ok' : 'err') + '">'
+    + '<div class="row"><h3>' + esc(tx('hra.vsechno_dohromady')) + '</h3><b class="' + (zbyde >= 0 ? 'ok' : 'err') + '">'
     + kcFull(zbyde) + '</b></div>'
-    + '<p class="graf-zmena muted">' + (zbyde >= 0 ? 'tolik ti teď měsíčně zbyde'
-        : 'tolik ti teď každý měsíc chybí') + '</p>'
+    + '<p class="graf-zmena muted">' + (zbyde >= 0 ? esc(tx('hra.tolik_ti_ted_mesicne_zbyde'))
+        : esc(tx('hra.tolik_ti_ted_kazdy_mesic'))) + '</p>'
     + grafSouhrn({ trzby: vzit('t'), zisk: vzit('z'), odtok: odtok, pocty: vzit('p'), mezniky: mez })
     + '<div class="legenda">'
-    + legendaRadek('#4fd1ff', 'Tržby', kcFull(posl.t))
+    + legendaRadek('#4fd1ff', esc(tx('hra.trzby')), kcFull(posl.t))
     + legendaRadek('#2fe3a0', 'Zisk', kcFull(posl.z))
-    + legendaRadek('#ffd866', 'Splátky a provoz', kcFull(odtok[odtok.length - 1]))
-    + legendaRadek('#7c5cff', 'Prádlomaty', kus(posl.p), true)
+    + legendaRadek('#ffd866', esc(tx('hra.splatky_a_provoz')), kcFull(odtok[odtok.length - 1]))
+    + legendaRadek('#7c5cff', esc(tx('hra.pradlomaty')), kus(posl.p), true)
     + '</div>'
     + '<p class="fine" style="margin:8px 0 0">Vybarvená mezera mezi zelenou a žlutou je to, co ti '
     + 'měsíčně zbyde — zeleně, když zbývá, červeně, když chybí. Čím víc se rozevírá, '
@@ -8445,18 +8445,18 @@ function paintVyvoj() {
     + 'i s pobočkami a četou. Čárkovaná fialová je počet prádlomatů — ta má vlastní '
     + 'měřítko, s penězi se neporovnává.</p></div>';
   el.innerHTML = souhrn
-    + grafKarta({ nadpis: 'Tržby prádlomatů', body: vzit('t'), barva: '#4fd1ff', jed: kcFull,
+    + grafKarta({ nadpis: esc(tx('hra.trzby_pradlomatu')), body: vzit('t'), barva: '#4fd1ff', jed: kcFull,
         ted: posl.t, zmena: posl.t - prvni.t,
-        pod: 'Co prádlomaty za měsíc vyberou, než se z toho cokoli zaplatí.', mezniky: mez })
-    + grafKarta({ nadpis: 'Zisk před splátkou', body: vzit('z'), barva: '#2fe3a0', jed: kcFull,
+        pod: esc(tx('hra.co_pradlomaty_za_mesic_vyberou')), mezniky: mez })
+    + grafKarta({ nadpis: esc(tx('hra.zisk_pred_splatkou')), body: vzit('z'), barva: '#2fe3a0', jed: kcFull,
         ted: posl.z, zmena: posl.z - prvni.z,
-        pod: 'Tržby minus energie, servis a nájmy. Splátky bance v tom ještě nejsou.', mezniky: mez })
-    + grafKarta({ nadpis: 'Závazky bance', body: vzit('d'), barva: '#ff5d6c', jed: kcFull,
+        pod: esc(tx('hra.trzby_minus_energie_servis_a')), mezniky: mez })
+    + grafKarta({ nadpis: esc(tx('hra.zavazky_bance')), body: vzit('d'), barva: '#ff5d6c', jed: kcFull,
         ted: posl.d, zmena: posl.d - prvni.d, dobreNahoru: false,
         pod: 'Kolik ještě zbývá splatit bance. Na splátky teď jde ' + kcFull(posl.s) + ' měsíčně.', mezniky: mez })
-    + grafKarta({ nadpis: 'Prádlomaty', body: vzit('p'), barva: '#7c5cff', jed: kus, schody: true,
+    + grafKarta({ nadpis: esc(tx('hra.pradlomaty_2')), body: vzit('p'), barva: '#7c5cff', jed: kus, schody: true,
         ted: posl.p, zmena: posl.p - prvni.p,
-        pod: 'Kolik jich v síti stálo.', mezniky: mez })
+        pod: esc(tx('hra.kolik_jich_v_siti_stalo')), mezniky: mez })
     + '<p class="fine" style="margin:4px 2px 0">Jeden bod je jeden herní měsíc, tedy 12 hodin. '
     + 'Graf začíná v herním roce ' + (Math.floor(prvni.m / 12) + 1) + '.'
     + (h.some(function (x) { return x.r; })
@@ -8470,21 +8470,21 @@ function paintVyvoj() {
 // každá řádka ukáže všechno podstatné najednou, ať se nemusí přebírat záložkami.
 var STROJE_KAT = 'zisk';
 var STROJE_POPIS = {
-  zisk: { nadpis: 'Co který stroj vydělá', vic: 'nejvíc nahoře',
-    pod: 'Zisk místa po zaplacení jeho vlastní splátky — to, co ti z něj opravdu zbyde.',
+  zisk: { nadpis: esc(tx('hra.co_ktery_stroj_vydela')), vic: esc(tx('hra.nejvic_nahore')),
+    pod: esc(tx('hra.zisk_mista_po_zaplaceni_jeho')),
     hodnota: function (u) { return zbydeZMista(u); }, jed: kcFull, dolu: false,
     shrn: function (a, b) { return 'Nejvíc vydělá ' + a + ', nejméně ' + b + '.'; } },
-  trzby: { nadpis: 'Největší tržby', vic: 'nejvíc nahoře',
-    pod: 'Co stroj za měsíc vybere, než se z toho zaplatí energie, servis a nájem.',
+  trzby: { nadpis: esc(tx('hra.nejvetsi_trzby')), vic: esc(tx('hra.nejvic_nahore_2')),
+    pod: esc(tx('hra.co_stroj_za_mesic_vybere')),
     hodnota: function (u) { return u.eco.revenue; }, jed: kcFull, dolu: false,
     shrn: function (a, b) { return 'Největší tržbu má ' + a + ', nejmenší ' + b + '.'; } },
-  poruchy: { nadpis: 'Nejvíc poruch', vic: 'nejhorší nahoře',
-    pod: 'Kolikrát se stroj od postavení porouchal. Vedle je, kolik času od té doby šlapal bez závady.',
+  poruchy: { nadpis: esc(tx('hra.nejvic_poruch')), vic: esc(tx('hra.nejhorsi_nahore')),
+    pod: esc(tx('hra.kolikrat_se_stroj_od_postaveni')),
     hodnota: function (u) { return u.vady || 0; },
     jed: function (n) { return n + '×'; }, dolu: false,
     shrn: function (a, b) { return 'Nejvíc poruch má ' + a + ', nejméně ' + b + '.'; } },
-  navratnost: { nadpis: 'Nejrychlejší návratnost', vic: 'nejkratší nahoře',
-    pod: 'Za jak dlouho se investice do místa vrátí při plném provozu. Kratší je lepší.',
+  navratnost: { nadpis: esc(tx('hra.nejrychlejsi_navratnost')), vic: esc(tx('hra.nejkratsi_nahore')),
+    pod: esc(tx('hra.za_jak_dlouho_se_investice')),
     hodnota: function (u) { return u.eco.payback == null ? 1e9 : u.eco.payback; },
     jed: function (v) { return v >= 1e8 ? '—' : v.toFixed(1).replace('.', ',') + ' roku'; }, dolu: true,
     shrn: function (a, b) { return 'Nejrychleji se vrátí ' + a + ', nejpomaleji ' + b + '.'; } }
@@ -9244,13 +9244,13 @@ function ramecRozborHtml() {
     + 'Dolů jde po čtvrtinách a nikdy pod to, co máš načerpané.</p>';
 }
 function ramecSheet() {
-  pohovorSheet(10, 'Pohovor o rámci', function (st) {
-    if (!st.ok) { toast('Rizikoř to zamítl. Zkus to, až budeš mít věci srovnané.', 'err'); return; }
+  pohovorSheet(10, esc(tx('hra.pohovor_o_ramci')), function (st) {
+    if (!st.ok) { toast(esc(tx('hra.rizikor_to_zamitl_zkus_to')), 'err'); return; }
     var limit = Math.round(ramecNavrh() * st.limit / 10000) * 10000;
-    if (limit < 10000) { toast('Na rámec zatím nevyděláváš dost. Vrať se, až síť povyroste.', 'err'); return; }
-    sheet('<h3>Rámec schválen</h3>'
+    if (limit < 10000) { toast(esc(tx('hra.na_ramec_zatim_nevydelavas_dost')), 'err'); return; }
+    sheet('<h3>' + esc(tx('hra.ramec_schvalen')) + '</h3>'
       + '<div class="kv"><span>Limit</span><b class="ok">' + kcFull(limit) + '</b></div>'
-      + '<div class="kv"><span>Hodnocení pohovoru</span><b>' + esc(st.nazev) + '</b></div>'
+      + '<div class="kv"><span>' + esc(tx('hra.hodnoceni_pohovoru')) + '</span><b>' + esc(st.nazev) + '</b></div>'
       + '<p class="muted small" style="margin-top:10px">Čerpat můžeš po částech, vždycky jen do výše, '
       + 'kterou unese výdělek. Podmínka je, že každý prádlomat vydělá aspoň na svou splátku — '
       + 'když to rok neplatí, banka rámec zavře.</p>'
@@ -9265,30 +9265,30 @@ function ramecSheet() {
 }
 function cerpatSheet(chci) {
   var volny = ramecVolny();
-  if (volny < 1000) { closeSheet(); return toast('Z rámce teď čerpat nemůžeš.', 'err'); }
+  if (volny < 1000) { closeSheet(); return toast(esc(tx('hra.z_ramce_ted_cerpat_nemuzes')), 'err'); }
   var castka = Math.max(1000, Math.min(volny, Math.round((chci == null ? volny : chci) / 1000) * 1000));
   var prirazka = prirazkaZa(castka) + (S.ramec.bonus || 0);
   var sazba = Math.max(0.02, rateOf() + prirazka);
   var splatka = anuita(castka, sazba, UVER_MESICU);
-  sheet('<h3>Čerpání z rámce</h3>'
+  sheet('<h3>' + esc(tx('hra.cerpani_z_ramce')) + '</h3>'
     + '<div class="kv"><span>K dispozici</span><b>' + kcFull(volny) + '</b></div>'
-    + '<label class="fld"><span>Kolik si vezmeš</span>'
+    + '<label class="fld"><span>' + esc(tx('hra.kolik_si_vezmes')) + '</span>'
     + '<input id="cer-amt" class="inp" type="number" min="1000" step="1000" max="' + volny + '" value="' + castka + '"></label>'
-    + '<div class="kv"><span>Úrok</span><b>' + (sazba * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>'
-    + '<div class="kv souhrn"><span>Splátka</span><b class="warn">' + kcFull(splatka) + ' / měsíc po 5 let</b></div>'
-    + '<button class="btn big" id="cer-ano">Čerpat</button>'
-    + '<button class="btn sec" id="cer-ne" style="width:100%;margin-top:8px">Zpátky</button>');
+    + '<div class="kv"><span>' + esc(tx('hra.urok_3')) + '</span><b>' + (sazba * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>'
+    + '<div class="kv souhrn"><span>' + esc(tx('hra.splatka_3')) + '</span><b class="warn">' + kcFull(splatka) + ' / měsíc po 5 let</b></div>'
+    + '<button class="btn big" id="cer-ano">' + esc(tx('hra.cerpat')) + '</button>'
+    + '<button class="btn sec" id="cer-ne" style="width:100%;margin-top:8px">' + esc(tx('hra.zpatky')) + '</button>');
   var inp = $('cer-amt');
   if (inp) inp.onchange = function () { cerpatSheet(Number(inp.value) || 0); };
   $('cer-ne').onclick = closeSheet;
   $('cer-ano').onclick = function () {
     var c = Math.max(1000, Math.min(ramecVolny(), Math.round((Number(inp.value) || 0) / 1000) * 1000));
     // Krátký pohovor — tři otázky, ať to po desáté neotravuje.
-    pohovorSheet(3, 'Krátká kontrola', function (st) {
-      if (!st.ok) { toast('Rizikoř čerpání zastavil. Zkus to, až se věci srovnají.', 'err'); return; }
+    pohovorSheet(3, esc(tx('hra.kratka_kontrola')), function (st) {
+      if (!st.ok) { toast(esc(tx('hra.rizikor_cerpani_zastavil_zkus_to')), 'err'); return; }
       S.cash += c;
-      zapis('uver', 'Čerpání z rámce', c);
-      pricistDluh(c, prirazkaZa(c) + (S.ramec.bonus || 0), { druh: 'ramec', popis: 'Čerpání z rámce' });
+      zapis('uver', esc(tx('hra.cerpani_z_ramce_2')), c);
+      pricistDluh(c, prirazkaZa(c) + (S.ramec.bonus || 0), { druh: 'ramec', popis: esc(tx('hra.cerpani_z_ramce_3')) });
       save(); paint(); syncState(true);
       toast('Načerpáno ' + kcFull(c) + '.', 'ok');
     });
@@ -9331,14 +9331,14 @@ function splatitUverSheet(id) {
   var l = (S.loans || []).filter(function (x) { return x.id === id; })[0];
   if (!l) return;
   var max = Math.min(Math.floor(S.cash), Math.round(l.zbyva));
-  if (max < 1) return toast('Na mimořádnou splátku teď nemáš hotovost.', 'err');
-  sheet('<h3>Splatit — ' + esc(l.popis || 'Úvěr') + '</h3>'
+  if (max < 1) return toast(esc(tx('hra.na_mimoradnou_splatku_ted_nemas')), 'err');
+  sheet('<h3>Splatit — ' + esc(l.popis || esc(tx('hra.uver_2'))) + '</h3>'
     + '<p class="muted small">Splátka zůstane stejně vysoká a úvěr skončí dřív — tak ušetříš nejvíc na úrocích. '
     + 'Bez sankce, kdykoli.</p>'
-    + '<div class="kv"><span>Zbývá splatit</span><b>' + kcFull(l.zbyva) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.zbyva_splatit')) + '</span><b>' + kcFull(l.zbyva) + '</b></div>'
     + '<div class="kv"><span>Úrok ' + (l.sazba * 100).toFixed(1).replace('.', ',') + ' % — měsíčně</span><b class="warn">'
     + kcFull(Math.round(l.zbyva * l.sazba / 12)) + '</b></div>'
-    + '<div class="kv"><span>Máš v hotovosti</span><b>' + kcFull(S.cash) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.mas_v_hotovosti')) + '</span><b>' + kcFull(S.cash) + '</b></div>'
     + '<label class="fld"><span>Kolik splatit (nejvíš ' + kcFull(max) + ')</span>'
     + '<input id="sp-amt" class="inp" type="number" min="1" step="1000" max="' + max + '" value="' + max + '"></label>'
     + '<p class="fine" id="sp-note"></p>'
@@ -9354,7 +9354,7 @@ function splatitUverSheet(id) {
   i.oninput = prepis; prepis();
   $('sp-go').onclick = function () {
     var dal = splatitUver(id, Number(i.value) || 0);
-    if (!dal) return toast('Zadej částku, kterou máš.', 'err');
+    if (!dal) return toast(esc(tx('hra.zadej_castku_kterou_mas')), 'err');
     save(); paint(); paintBank(); closeSheet(); syncState(true);
     toast('Splaceno ' + kcFull(dal) + '.', 'ok');
   };
@@ -9367,10 +9367,10 @@ function prodlouzitSheet(id, vybrany) {
   var nalada = naladaDnes();
   var ted = splatnostIdx(l);
   if (!lze.length) {
-    sheet('<h3>Změnit délku splácení</h3>'
+    sheet('<h3>' + esc(tx('hra.zmenit_delku_splaceni')) + '</h3>'
       + '<div class="nalada ' + nalada.id + '"><b>' + nalada.nazev + '</b><span>' + esc(nalada.slovo) + '</span></div>'
-      + '<p class="muted small">Tenhle úvěr už není kam přepsat.</p>'
-      + '<button class="btn sec big" id="pr-zavrit">Rozumím</button>');
+      + '<p class="muted small">' + esc(tx('hra.tenhle_uver_uz_neni_kam')) + '</p>'
+      + '<button class="btn sec big" id="pr-zavrit">' + esc(tx('hra.rozumim')) + '</button>');
     var zx = $('pr-zavrit');
     if (zx) zx.onclick = closeSheet;
     return;
@@ -9386,16 +9386,16 @@ function prodlouzitSheet(id, vybrany) {
   var splatkaTed = Math.min(l.splatka, l.zbyva);
   var zbydePak = Math.round(cistyZisk() - n.rozdilSplatky);
   var strop = maxSplatnost();
-  sheet('<h3>Změnit délku splácení</h3>'
-    + '<p class="muted small">' + esc(l.popis || 'Úvěr') + ' — zbývá ' + kcFull(l.zbyva)
+  sheet('<h3>' + esc(tx('hra.zmenit_delku_splaceni_2')) + '</h3>'
+    + '<p class="muted small">' + esc(l.popis || esc(tx('hra.uver'))) + ' — zbývá ' + kcFull(l.zbyva)
     + ', teď na ' + SPLATNOSTI[ted].nazev + '</p>'
     + '<div class="nalada ' + nalada.id + '"><b>' + nalada.nazev + '</b><span>' + esc(nalada.slovo) + '</span></div>'
-    + '<label class="fld"><span>Na jak dlouho — krátká stojí míň, dlouhá uleví měsíčně</span></label>'
+    + '<label class="fld"><span>' + esc(tx('hra.na_jak_dlouho_kratka_stoji')) + '</span></label>'
     + '<div class="splat">'
     + SPLATNOSTI.map(function (x, k) {
-        if (k === ted) return '<button class="splat-b ted" disabled><b>' + x.nazev + '</b><span>teď</span></button>';
+        if (k === ted) return '<button class="splat-b ted" disabled><b>' + x.nazev + '</b><span>' + esc(tx('hra.ted')) + '</span></button>';
         var moznost = lze.indexOf(k) >= 0;
-        if (!moznost) return '<button class="splat-b zamceno" disabled><b>' + x.nazev + '</b><span>zamčeno</span></button>';
+        if (!moznost) return '<button class="splat-b zamceno" disabled><b>' + x.nazev + '</b><span>' + esc(tx('hra.zamceno_2')) + '</span></button>';
         var m = zmenaNavrh(l, k);
         return '<button class="splat-b' + (k === i ? ' on' : '') + '" data-pr-sp="' + k + '">'
           + '<b>' + x.nazev + '</b><span>' + kcFull(m.splatka) + ' / měs</span></button>';
@@ -9403,14 +9403,14 @@ function prodlouzitSheet(id, vybrany) {
     + '</div>'
     + (strop < SPLATNOSTI.length - 1 ? '<p class="fine">Zkrátit můžeš vždycky. Na delší splatnost zatím nedosáhneš: '
         + esc(splatnostDuvod(strop + 1)) + '</p>' : '')
-    + '<div class="kv"><span>Splátka teď</span><b>' + kcFull(splatkaTed) + ' / měsíc</b></div>'
-    + '<div class="kv"><span>Splátka po přepsání</span><b class="' + (n.rozdilSplatky <= 0 ? 'ok' : 'warn') + '">'
+    + '<div class="kv"><span>' + esc(tx('hra.splatka_ted')) + '</span><b>' + kcFull(splatkaTed) + ' / měsíc</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.splatka_po_prepsani')) + '</span><b class="' + (n.rozdilSplatky <= 0 ? 'ok' : 'warn') + '">'
     + kcFull(n.splatka) + ' / měsíc</b></div>'
-    + '<div class="kv souhrn"><span>' + (n.rozdilSplatky <= 0 ? 'Ušetříš každý měsíc' : 'Zaplatíš každý měsíc navíc') + '</span>'
+    + '<div class="kv souhrn"><span>' + (n.rozdilSplatky <= 0 ? esc(tx('hra.usetris_kazdy_mesic')) : esc(tx('hra.zaplatis_kazdy_mesic_navic'))) + '</span>'
     + '<b class="' + (n.rozdilSplatky <= 0 ? 'ok' : 'warn') + '">' + kcFull(Math.abs(n.rozdilSplatky)) + '</b></div>'
-    + '<div class="kv"><span>Úrok</span><b>' + (l.sazba * 100).toFixed(1).replace('.', ',') + ' % → '
+    + '<div class="kv"><span>' + esc(tx('hra.urok_2')) + '</span><b>' + (l.sazba * 100).toFixed(1).replace('.', ',') + ' % → '
     + (n.sazba * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>'
-    + '<div class="kv"><span>' + (n.rozdilUroku <= 0 ? 'Na úrocích ušetříš celkem' : 'Na úrocích zaplatíš navíc') + '</span>'
+    + '<div class="kv"><span>' + (n.rozdilUroku <= 0 ? esc(tx('hra.na_urocich_usetris_celkem')) : esc(tx('hra.na_urocich_zaplatis_navic'))) + '</span>'
     + '<b class="' + (n.rozdilUroku <= 0 ? 'ok' : 'warn') + '">' + kcFull(Math.abs(n.rozdilUroku)) + '</b></div>'
     + '<div class="kv"><span>Poplatek za přepsání (' + (PRODLOUZENI_POPLATEK * 100).toFixed(1).replace('.', ',') + ' %)</span><b class="warn">'
     + kcFull(n.poplatek) + '</b></div>'
@@ -9422,7 +9422,7 @@ function prodlouzitSheet(id, vybrany) {
     + ' Po přepsání ti měsíčně zbyde ' + kcFull(zbydePak) + '.</p>'
     + '<button class="btn big" id="pr-go"' + (S.cash < n.poplatek ? ' disabled' : '') + '>Přepsat na ' + SPLATNOSTI[i].nazev + '</button>'
     + (S.cash < n.poplatek ? '<p class="fine err">Na poplatek ' + kcFull(n.poplatek) + ' teď nemáš hotovost.</p>' : '')
-    + '<button class="btn ghost" id="pr-zavrit">Nechám to tak</button>');
+    + '<button class="btn ghost" id="pr-zavrit">' + esc(tx('hra.necham_to_tak')) + '</button>');
   var z = $('pr-zavrit');
   if (z) z.onclick = closeSheet;
   [].forEach.call($('sheet-body').querySelectorAll('[data-pr-sp]'), function (b) {
@@ -9431,7 +9431,7 @@ function prodlouzitSheet(id, vybrany) {
   var g = $('pr-go');
   if (g) g.onclick = function () {
     var r = zmenitSplatnost(id, i);
-    if (!r) return toast('Na poplatek nemáš hotovost.', 'err');
+    if (!r) return toast(esc(tx('hra.na_poplatek_nemas_hotovost')), 'err');
     save(); paint(); paintBank(); closeSheet(); syncState(true);
     toast('Přepsáno na ' + r.nazev + ' — splátka ' + kcFull(r.splatka) + ' měsíčně.', 'ok');
   };
@@ -9660,8 +9660,8 @@ function znakSheet() {
       + '<div class="znak-grid">' + navrhy.map(function (k) {
           return '<button class="znak-opt' + (k === vybrano ? ' on' : '') + '" data-k="' + esc(k) + '">' + znakSvg(k, 54) + '</button>';
         }).join('') + '</div>'
-      + '<button class="btn sec" id="znak-mix" style="width:100%;margin-top:12px">Zamíchat jiné</button>'
-      + '<button class="btn big" id="znak-ulozit" style="margin-top:8px"' + (vybrano ? '' : ' disabled') + '>Použít tenhle znak</button>');
+      + '<button class="btn sec" id="znak-mix" style="width:100%;margin-top:12px">' + esc(tx('hra.zamichat_jine')) + '</button>'
+      + '<button class="btn big" id="znak-ulozit" style="margin-top:8px"' + (vybrano ? '' : ' disabled') + '>' + esc(tx('hra.pouzit_tenhle_znak')) + '</button>');
     Array.prototype.forEach.call(document.querySelectorAll('.znak-opt'), function (b) {
       b.onclick = function () { vybrano = b.getAttribute('data-k'); kresli(); };
     });
@@ -9669,12 +9669,12 @@ function znakSheet() {
     $('znak-ulozit').onclick = function () {
       var b = $('znak-ulozit');
       if (!vybrano) return;
-      b.disabled = true; b.textContent = 'Ukládám…';
+      b.disabled = true; b.textContent = esc(tx('hra.ukladam_2'));
       apiJson('/account/emblem', { emblem: vybrano }).then(function (r) {
-        if (!r.ok) { b.disabled = false; b.textContent = 'Použít tenhle znak'; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
+        if (!r.ok) { b.disabled = false; b.textContent = esc(tx('hra.pouzit_tenhle_znak_2')); return toast(r.j.error || 'Nepovedlo se.', 'err'); }
         ME = r.j.player; ZEB = null; closeSheet(); loadClaims(); paintMe();
-        toast('Znak firmy je nastavený.', 'ok');
-      }).catch(function () { b.disabled = false; b.textContent = 'Použít tenhle znak'; toast('Server neodpovídá.', 'err'); });
+        toast(esc(tx('hra.znak_firmy_je_nastaveny')), 'ok');
+      }).catch(function () { b.disabled = false; b.textContent = esc(tx('hra.pouzit_tenhle_znak_3')); toast(esc(tx('hra.server_neodpovida_4')), 'err'); });
     };
   }
   kresli();
@@ -9896,46 +9896,46 @@ function nickVolneZa() {
 function nickSheet() {
   var zbyva = nickVolneZa();
   var dnu = Math.ceil(zbyva / 86400000);
-  sheet('<h3>Jméno hráče</h3>'
+  sheet('<h3>' + esc(tx('hra.jmeno_hrace')) + '</h3>'
     + '<p class="muted small">Pod tímhle jménem tě vidí ostatní na mapě, v žebříčku i na burze. '
-    + 'Přepíše se všude — i u obchodů, které jsi už uzavřel.'
+    + esc(tx('hra.prepise_se_vsude_i_u'))
     + (NICK_PAUZA_MS ? ' Měnit ho jde jednou za ' + Math.round(NICK_PAUZA_MS / 86400000) + ' dnů.' : '')
     + '</p>'
     + (zbyva ? '<p class="fine warn">Naposledy sis ho měnil nedávno — další změna půjde za ' + dnu + ' dnů. '
         + 'Teď jde opravit jen velká a malá písmena.</p>' : '')
-    + '<label class="fld"><span>Jméno hráče</span>'
+    + '<label class="fld"><span>' + esc(tx('hra.jmeno_hrace_2')) + '</span>'
     + '<input id="nick-novy" class="inp" type="text" maxlength="24" autocapitalize="off" '
     + 'autocorrect="off" spellcheck="false" value="' + esc(ME ? ME.nick : '') + '"></label>'
-    + '<p class="fine" id="nick-stav">3–24 znaků: písmena, číslice, tečka, pomlčka, podtržítko.</p>'
-    + '<button class="btn big" id="nick-ok" style="width:100%;margin-top:6px">Uložit jméno</button>');
+    + '<p class="fine" id="nick-stav">' + esc(tx('hra.3_24_znaku_pismena_cislice')) + '</p>'
+    + '<button class="btn big" id="nick-ok" style="width:100%;margin-top:6px">' + esc(tx('hra.ulozit_jmeno')) + '</button>');
   var hledam = null;
   var stav = function (txt, tr) { var el = $('nick-stav'); el.textContent = txt; el.className = 'fine' + (tr ? ' ' + tr : ''); };
   $('nick-novy').oninput = function () {
     var v = $('nick-novy').value.trim();
     if (hledam) { clearTimeout(hledam); hledam = null; }
-    if (v === (ME ? ME.nick : '')) return stav('Tohle jméno už máš.');
-    if (!NICK_RE_HRA.test(v)) return stav('3–24 znaků: písmena, číslice, tečka, pomlčka, podtržítko.', 'err');
-    if (ME && v.toLowerCase() === String(ME.nick).toLowerCase()) return stav('Jen jinak velká písmena — to jde kdykoli.', 'ok');
-    stav('Zjišťuji, jestli je volné…');
+    if (v === (ME ? ME.nick : '')) return stav(esc(tx('hra.tohle_jmeno_uz_mas')));
+    if (!NICK_RE_HRA.test(v)) return stav(esc(tx('hra.3_24_znaku_pismena_cislice_2')), 'err');
+    if (ME && v.toLowerCase() === String(ME.nick).toLowerCase()) return stav(esc(tx('hra.jen_jinak_velka_pismena_to')), 'ok');
+    stav(esc(tx('hra.zjistuji_jestli_je_volne')));
     hledam = setTimeout(function () {
       api('/account/nick-free?nick=' + encodeURIComponent(v)).then(function (r) {
         if ($('nick-novy').value.trim() !== v) return;
-        stav(r.ok && r.j.free ? 'Jméno je volné.' : 'Tohle jméno už někdo má.', r.ok && r.j.free ? 'ok' : 'err');
-      }).catch(function () { stav('Volnost jména se nepovedlo ověřit.'); });
+        stav(r.ok && r.j.free ? esc(tx('hra.jmeno_je_volne')) : esc(tx('hra.tohle_jmeno_uz_nekdo_ma')), r.ok && r.j.free ? 'ok' : 'err');
+      }).catch(function () { stav(esc(tx('hra.volnost_jmena_se_nepovedlo_overit'))); });
     }, 400);
   };
   $('nick-ok').onclick = function () {
     var v = $('nick-novy').value.trim(), b = $('nick-ok');
-    if (!NICK_RE_HRA.test(v)) return toast('Jméno musí mít 3–24 znaků.', 'err');
-    b.disabled = true; b.textContent = 'Ukládám…';
+    if (!NICK_RE_HRA.test(v)) return toast(esc(tx('hra.jmeno_musi_mit_3_24')), 'err');
+    b.disabled = true; b.textContent = esc(tx('hra.ukladam_3'));
     apiJson('/account/nick', { nick: v }).then(function (r) {
-      b.disabled = false; b.textContent = 'Uložit jméno';
+      b.disabled = false; b.textContent = esc(tx('hra.ulozit_jmeno_2'));
       if (!r.ok) return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err');
       ME = r.j.player;
       ZEB = null; TRADES = null; FINANCE = null;
       closeSheet(); loadClaims(); paintMe(); drawMap();
       toast('Od teď hraješ jako ' + ME.nick + '.', 'ok');
-    }).catch(function () { b.disabled = false; b.textContent = 'Uložit jméno'; toast('Server neodpovídá.', 'err'); });
+    }).catch(function () { b.disabled = false; b.textContent = esc(tx('hra.ulozit_jmeno_3')); toast(esc(tx('hra.server_neodpovida_5')), 'err'); });
   };
 }
 
@@ -10043,16 +10043,16 @@ function paintMe() {
   $('me-body').innerHTML = (ME
     ? '<div class="card"><div class="znak-hlava">' + znakSvg(ME.emblem, 56)
       + '<div><h3 style="margin:0">' + esc(ME.company || ME.nick) + '</h3>'
-      + '<p class="muted small" style="margin:3px 0 0">Hraješ jako <b>' + esc(ME.nick) + '</b></p>'
+      + '<p class="muted small" style="margin:3px 0 0">' + esc(tx('hra.hrajes_jako')) + ' ' + '<b>' + esc(ME.nick) + '</b></p>'
       + '<p class="muted small" style="margin:2px 0 0">' + esc(mojeHodnost().nazev) + '</p></div></div>'
       + odznakyPruhHtml()
-      + '<p class="muted small" style="margin:10px 0 8px">Pod jménem a znakem firmy tě vidí konkurence na mapě i v žebříčku.</p>'
-      + '<label class="fld"><span>Název firmy</span>'
+      + '<p class="muted small" style="margin:10px 0 8px">' + esc(tx('hra.pod_jmenem_a_znakem_firmy')) + '</p>'
+      + '<label class="fld"><span>' + esc(tx('hra.nazev_firmy')) + '</span>'
       + '<input id="me-firma" class="inp" type="text" maxlength="60" value="' + esc(ME.company || '') + '"></label>'
-      + '<button class="btn sec" id="me-firma-ulozit" style="width:100%;margin-top:8px">Přejmenovat firmu</button>'
+      + '<button class="btn sec" id="me-firma-ulozit" style="width:100%;margin-top:8px">' + esc(tx('hra.prejmenovat_firmu')) + '</button>'
       + '<button class="btn sec" id="me-znak" style="width:100%;margin-top:8px">'
-      + (ME.emblem ? 'Změnit znak firmy' : 'Vygenerovat znak firmy') + '</button>'
-      + '<button class="btn sec" id="me-nick" style="width:100%;margin-top:8px">Změnit jméno hráče</button>'
+      + (ME.emblem ? esc(tx('hra.zmenit_znak_firmy')) : 'Vygenerovat znak firmy') + '</button>'
+      + '<button class="btn sec" id="me-nick" style="width:100%;margin-top:8px">' + esc(tx('hra.zmenit_jmeno_hrace')) + '</button>'
       // Jazyk sedí u účtu, takže přepnutí platí i na druhém zařízení.
       + '<p class="muted small" style="margin:14px 0 6px"><b>' + esc(tx('jazyk.nadpis')) + '</b><br>'
       + esc(tx('jazyk.popis')) + '</p>'
@@ -10065,10 +10065,10 @@ function paintMe() {
     : '')
     + '<div class="card"><h3>' + esc(p.name) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 8px">' + esc(p.desc) + '</p>'
-    + '<div class="kv"><span>Herní rok</span><b>' + gameYear() + '</b></div>'
-    + '<div class="kv"><span>Čisté jmění</span><b class="' + (net >= 0 ? 'ok' : 'err') + '">' + kcFull(net) + '</b></div>'
-    + '<div class="kv"><span>Prozkoumaných oblastí</span><b>' + Object.keys(S.areas).length + '</b></div>'
-    + '<div class="kv"><span>Prověřených míst</span><b>' + Object.keys(S.revealed).length + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.herni_rok')) + '</span><b>' + gameYear() + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.ciste_jmeni')) + '</span><b class="' + (net >= 0 ? 'ok' : 'err') + '">' + kcFull(net) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.prozkoumanych_oblasti')) + '</span><b>' + Object.keys(S.areas).length + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.proverenych_mist')) + '</span><b>' + Object.keys(S.revealed).length + '</b></div>'
     + '</div>'
     + hodnostHtml()
     + odznakyHtml()
@@ -10076,37 +10076,37 @@ function paintMe() {
     + majetekHtml()
     + '<div class="card"><h3>Jak se hraje</h3>'
     + '<p class="muted small" style="margin:2px 0 0">Jeden skutečný den jsou ve hře dva měsíce, herní rok tedy trvá šest dní. Prádlomaty vydělávají, i když hru zavřeš — po návratu se ti všechno dopočítá. '
-    + 'Místa na mapě jsou skutečná a jejich skóre počítá stejný nástroj, kterým Best Series hledá místa doopravdy. '
-    + 'Platí se v <b>laundrech (L$)</b> — herní měně, která nemá žádnou skutečnou hodnotu.</p></div>'
-    + '<div class="card"><h3>Pozvi lidi a přibydou ti zákazníci</h3>'
+    + esc(tx('hra.mista_na_mape_jsou_skutecna')) + ' '
+    + 'Platí se v <b>' + 'laundrech (L$)' + '</b>' + ' ' + esc(tx('hra.herni_mene_ktera_nema_zadnou')) + '</p></div>'
+    + '<div class="card"><h3>' + esc(tx('hra.pozvi_lidi_a_pribydou_ti')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Každý, kdo otevře tvůj odkaz, ti zvedne návštěvnost všech prádlomatů. '
     + 'Počítá se otevření odkazu někým jiným, ne samotné sdílení.</p>'
-    + '<div class="kv"><span>Otevřeli tvůj odkaz</span><b class="ok">' + (S.refs || 0) + '×</b></div>'
-    + '<div class="kv"><span>Návštěvnost</span><b>' + Math.round(traffic() * 100) + ' % '
+    + '<div class="kv"><span>' + esc(tx('hra.otevreli_tvuj_odkaz')) + '</span><b class="ok">' + (S.refs || 0) + '×</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.navstevnost')) + '</span><b>' + Math.round(traffic() * 100) + ' % '
     + (traffic() >= trafficMax() ? '(na maximu)' : '(z ' + Math.round(trafficMax() * 100) + ' %)') + '</b></div>'
     + '<div class="bar"><i style="width:' + Math.round(traffic() / trafficMax() * 100) + '%"></i></div>'
-    + '<button class="btn big" id="do-share" style="margin-top:12px">' + (navigator.share ? 'Poslat odkaz' : 'Zkopírovat odkaz') + '</button>'
+    + '<button class="btn big" id="do-share" style="margin-top:12px">' + (navigator.share ? 'Poslat odkaz' : esc(tx('hra.zkopirovat_odkaz'))) + '</button>'
     + '</div>'
-    + '<div class="card"><h3>Tvoje síť hráčů</h3>'
+    + '<div class="card"><h3>' + esc(tx('hra.tvoje_sit_hracu')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">Kdo si přes tvůj odkaz založil účet. '
     + 'Tohle zůstává zapsané natrvalo.</p>'
     + pozvaniHtml() + '</div>'
     + knihaHtml()
     + distHtml()
-    + '<button class="btn sec big" id="do-reset">Začít znovu od nuly</button>';
+    + '<button class="btn sec big" id="do-reset">' + esc(tx('hra.zacit_znovu_od_nuly')) + '</button>';
   if (drzFirma != null && $('me-firma')) $('me-firma').value = drzFirma;
   var fb = $('me-firma-ulozit');
   if (fb) fb.onclick = function () {
     var f = $('me-firma').value.trim();
-    if (f.length < 2) return toast('Název firmy má aspoň 2 znaky.', 'err');
-    fb.disabled = true; fb.textContent = 'Ukládám…';
+    if (f.length < 2) return toast(esc(tx('hra.nazev_firmy_ma_aspon_2')), 'err');
+    fb.disabled = true; fb.textContent = esc(tx('hra.ukladam'));
     apiJson('/account/company', { company: f }).then(function (r) {
-      fb.disabled = false; fb.textContent = 'Přejmenovat firmu';
+      fb.disabled = false; fb.textContent = esc(tx('hra.prejmenovat_firmu_2'));
       if (!r.ok) return toast(r.j.error || 'Nepovedlo se.', 'err');
       ME = r.j.player;
       ZEB = null; loadClaims(); paintMe();
       toast('Firma se teď jmenuje ' + ME.company + '.', 'ok');
-    }).catch(function () { fb.disabled = false; fb.textContent = 'Přejmenovat firmu'; toast('Server neodpovídá.', 'err'); });
+    }).catch(function () { fb.disabled = false; fb.textContent = esc(tx('hra.prejmenovat_firmu_3')); toast(esc(tx('hra.server_neodpovida_2')), 'err'); });
   };
   if (FINANCE == null) loadFinance(paintMe);
   if (ODZNAKY_HRA == null) loadOdznaky(paintMe);
@@ -10126,22 +10126,22 @@ function paintMe() {
   });
   $('do-share').onclick = function () { shareGame($('do-share')); };
   $('do-reset').onclick = function () {
-    sheet('<h3>Začít znovu?</h3>'
+    sheet('<h3>' + esc(tx('hra.zacit_znovu')) + '</h3>'
       + '<p class="muted small">Přijdeš o celou síť, o peníze i o zabraná místa — ta se hned uvolní konkurenci. '
       + 'Tohle se nedá vrátit. Účet i zaplacené karty ti zůstávají.</p>'
-      + '<button class="btn big" id="yes-reset" style="background:linear-gradient(90deg,#b4263a,#ff5d6c)">Ano, smazat a začít znovu</button>'
-      + '<button class="btn sec big" id="no-reset">Nechat být</button>');
+      + '<button class="btn big" id="yes-reset" style="background:linear-gradient(90deg,#b4263a,#ff5d6c)">' + esc(tx('hra.ano_smazat_a_zacit_znovu')) + '</button>'
+      + '<button class="btn sec big" id="no-reset">' + esc(tx('hra.nechat_byt')) + '</button>');
     $('no-reset').onclick = closeSheet;
     $('yes-reset').onclick = function () {
-      var y = $('yes-reset'); y.disabled = true; y.textContent = 'Mažu…';
+      var y = $('yes-reset'); y.disabled = true; y.textContent = esc(tx('hra.mazu'));
       // Smazat jen prohlížeč nestačí — stav i zabraná místa drží server a po
       // obnovení stránky by se hra vrátila přesně tam, kde byla.
       apiJson('/account/reset', {}).then(function (r) {
-        if (!r.ok) { y.disabled = false; y.textContent = 'Ano, smazat a začít znovu'; return toast(r.j.error || 'Nepovedlo se.', 'err'); }
+        if (!r.ok) { y.disabled = false; y.textContent = esc(tx('hra.ano_smazat_a_zacit_znovu_2')); return toast(r.j.error || 'Nepovedlo se.', 'err'); }
         wiped = true;
         try { localStorage.removeItem(KEY); } catch (e) {}
         location.replace(location.pathname);
-      }).catch(function () { y.disabled = false; y.textContent = 'Ano, smazat a začít znovu'; toast('Server neodpovídá.', 'err'); });
+      }).catch(function () { y.disabled = false; y.textContent = esc(tx('hra.ano_smazat_a_zacit_znovu_3')); toast(esc(tx('hra.server_neodpovida_3')), 'err'); });
     };
   };
 }
@@ -11681,9 +11681,9 @@ function financeSheet(toId, kdo, co, a) {
   var zbyvaPodilu = Math.max(0, PODIL_MAX_HRA - Math.round(prodano * 100));
   var jaDavam = co === 'pujcim' || co === 'koupim-podil';     // z mé hotovosti
   var nadpis = co === 'pujcim' ? 'Půjčit ' + esc(kdo.firma)
-    : co === 'pujcim-si' ? 'Požádat o půjčku'
+    : co === 'pujcim-si' ? esc(tx('hra.pozadat_o_pujcku'))
     : co === 'koupim-podil' ? 'Koupit podíl v ' + esc(kdo.firma)
-    : 'Nabídnout podíl ve své firmě';
+    : esc(tx('hra.nabidnout_podil_ve_sve_firme'));
   // Zástavu dává vždycky dlužník. Když si půjčuju já, vybírám ze svých míst.
   var mojeMista = (S.units || []).map(function (u) {
     return { id: u.spotId, name: u.name + ' · ' + (MODELS[u.eco.model] || {}).name };
@@ -11700,41 +11700,41 @@ function financeSheet(toId, kdo, co, a) {
     + '<input id="fin-castka" class="inp" type="number" inputmode="numeric" min="0" value="'
     + (pujcka ? 500000 : 1000000) + '"></label>'
     + (pujcka
-        ? '<label class="fld"><span>Roční úrok v %</span>'
+        ? '<label class="fld"><span>' + esc(tx('hra.rocni_urok_v')) + '</span>'
           + '<input id="fin-urok" class="inp" type="number" inputmode="decimal" min="0" max="'
           + UROK_MAX_HRA + '" step="0.5" value="10"></label>'
-          + '<label class="fld"><span>Na kolik herních měsíců</span>'
+          + '<label class="fld"><span>' + esc(tx('hra.na_kolik_hernich_mesicu')) + '</span>'
           + '<input id="fin-mesicu" class="inp" type="number" inputmode="numeric" min="1" max="60" value="12"></label>'
           + (co === 'pujcim-si'
               ? (mojeMista.length
-                  ? '<label class="fld"><span>Zástava (nepovinná)</span><select id="fin-zastava" class="inp">'
-                    + '<option value="">bez zástavy</option>'
+                  ? '<label class="fld"><span>' + esc(tx('hra.zastava_nepovinna')) + '</span><select id="fin-zastava" class="inp">'
+                    + '<option value="">' + esc(tx('hra.bez_zastavy')) + '</option>'
                     + mojeMista.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>'; }).join('')
                     + '</select></label>'
-                  : '<p class="fine">Nemáš postavený prádlomat, takže nabízíš půjčku bez zástavy.</p>')
-              : '<div class="row" style="margin:10px 0 2px"><span>Chci zástavu</span>'
+                  : '<p class="fine">' + esc(tx('hra.nemas_postaveny_pradlomat_takze_nabizis')) + '</p>')
+              : '<div class="row" style="margin:10px 0 2px"><span>' + esc(tx('hra.chci_zastavu')) + '</span>'
                 + '<button type="button" class="prep-sam" id="fin-zadam">Nechci</button></div>'
                 + '<p class="fine" id="fin-zadam-pop">Půjčíš bez krytí. Když přestane splácet, '
                 + 'dluh se mu strhne a spadne do banky — ale jestli nemá z čeho, nedostaneš nic.</p>')
-        : '<label class="fld"><span>Podíl v %</span>'
+        : '<label class="fld"><span>' + esc(tx('hra.podil_v')) + '</span>'
           + '<input id="fin-podil" class="inp" type="number" inputmode="numeric" min="1" max="'
           + zbyvaPodilu + '" value="' + Math.min(10, zbyvaPodilu) + '"'
           + (zbyvaPodilu < 1 ? ' disabled' : '') + '></label>'
           + (zbyvaPodilu < PODIL_MAX_HRA
               ? '<p class="fine' + (zbyvaPodilu < 1 ? ' err' : '') + '">'
                 + (zbyvaPodilu < 1
-                    ? 'Tahle firma je rozprodaná celá — dalších sto procent neexistuje.'
+                    ? esc(tx('hra.tahle_firma_je_rozprodana_cela'))
                     : 'Prodáno je ' + Math.round(prodano * 100) + ' %, zbývá tedy '
                       + zbyvaPodilu + ' %.') + '</p>'
               : '')
           + '<p class="fine" id="fin-vetsina"></p>'
           + oceneniHtml(oc, co))
-    + '<label class="fld"><span>Vzkaz (nepovinný)</span>'
+    + '<label class="fld"><span>' + esc(tx('hra.vzkaz_nepovinny')) + '</span>'
     + '<input id="fin-vzkaz" class="inp" type="text" maxlength="200"></label>'
-    + '<div class="kv souhrn"><span id="fin-popis">Splátka</span><b id="fin-vysledek">—</b></div>'
+    + '<div class="kv souhrn"><span id="fin-popis">' + esc(tx('hra.splatka')) + '</span><b id="fin-vysledek">' + '—' + '</b></div>'
     + '<p class="fine" id="fin-kryti"></p>'
-    + '<button class="btn big" id="fin-ok" style="width:100%;margin-top:10px">Poslat nabídku</button>'
-    + '<p class="fine">' + (jaDavam ? 'Peníze odejdou, až nabídku přijme.' : 'Peníze dorazí, až nabídku přijme.') + '</p>'
+    + '<button class="btn big" id="fin-ok" style="width:100%;margin-top:10px">' + esc(tx('hra.poslat_nabidku')) + '</button>'
+    + '<p class="fine">' + (jaDavam ? esc(tx('hra.penize_odejdou_az_nabidku_prijme')) : esc(tx('hra.penize_dorazi_az_nabidku_prijme'))) + '</p>'
     + (jaDavam ? volneHtml(null) : ''));
   // Věřitel si zástavu může vymínit, aniž by věděl, čím mu dlužník ručí —
   // konkrétní prádlomat vybere dlužník, až bude půjčku přijímat.
@@ -11743,7 +11743,7 @@ function financeSheet(toId, kdo, co, a) {
     $('fin-zadam').onclick = function () {
       zadam = !zadam;
       $('fin-zadam').classList.toggle('on', zadam);
-      $('fin-zadam').textContent = zadam ? 'Vyžaduji' : 'Nechci';
+      $('fin-zadam').textContent = zadam ? esc(tx('hra.vyzaduji')) : 'Nechci';
       $('fin-zadam-pop').textContent = zadam
         ? 'Dlužník vybere prádlomat, kterým ručí, až bude půjčku přijímat. Bez zástavy ji přijmout '
           + 'nepůjde — a jakmile jednou nezaplatí splátku, prádlomat je tvůj i s místem.'
@@ -11757,14 +11757,14 @@ function financeSheet(toId, kdo, co, a) {
       var u = Math.max(0, Math.min(UROK_MAX_HRA, Number(($('fin-urok') || {}).value) || 0));
       var m = Math.max(1, Math.min(60, Math.round(Number(($('fin-mesicu') || {}).value) || 1)));
       var sp = anuitaHra(c, u, m);
-      $('fin-popis').textContent = 'Splátka za herní měsíc';
+      $('fin-popis').textContent = esc(tx('hra.splatka_za_herni_mesic'));
       $('fin-vysledek').textContent = kcFull(sp) + '  (celkem ' + kcFull(sp * m) + ')';
     } else {
       var p = Math.max(1, Math.min(zbyvaPodilu || PODIL_MAX_HRA,
       Math.round(Number(($('fin-podil') || {}).value) || 0)));
-      $('fin-popis').textContent = 'Co z firmy ukrojí';
+      $('fin-popis').textContent = esc(tx('hra.co_z_firmy_ukroji'));
       $('fin-vysledek').textContent = oc
-        ? p + ' % · ' + kcFull(Math.round(oc.zbyde_mesicne * p / 100)) + ' / měs'
+        ? p + ' % · ' + kcFull(Math.round(oc.zbyde_mesicne * p / 100)) + ' ' + esc(tx('hra.mes'))
         : p + ' % z toho, co firmě měsíčně zbyde';
       if (oc && $('fin-rada')) {
         var podleJmeni = Math.round(oc.jmeni * p / 100);
@@ -11774,16 +11774,16 @@ function financeSheet(toId, kdo, co, a) {
         $('fin-rada').innerHTML = (oc.jmeni > 0
             ? '<b>' + p + ' % jmění je ' + kcFull(podleJmeni)
               + (podleZisku > podleJmeni
-                  ? ', podle zisku ' + kcFull(podleZisku) + ' — firma vydělává víc, než na kolik vypadá.'
+                  ? ', podle zisku ' + kcFull(podleZisku) + ' ' + esc(tx('hra.firma_vydelava_vic_nez_na'))
                   : '.') + '</b> '
-            : '<b>Firma má zápornou hodnotu — dluh u banky přesahuje její majetek.</b> '
+            : '<b>' + esc(tx('hra.firma_ma_zapornou_hodnotu_dluh')) + '</b> '
               + (podleZisku > 0 ? 'Podle zisku by ' + p + ' % mělo cenu ' + kcFull(podleZisku)
                   + ', ale kupuješ i ten dluh. ' : ''))
           + (mesicne > 0
               ? 'Při dnešním výdělku by z podílu chodilo ' + kcFull(mesicne) + ' měsíčně'
                 + (roky ? ' — za zadanou cenu návratnost ' + roky.toFixed(1).replace('.', ',') + ' roku.' : '.')
-              : 'Firma teď nevydělává, takže by podíl zatím nic nenesl — nebo by se i doplácelo.')
-          + ' Za kolik se nakonec dohodnete, je na vás.'
+              : esc(tx('hra.firma_ted_nevydelava_takze_by')))
+          + ' ' + esc(tx('hra.za_kolik_se_nakonec_dohodnete'))
           + (prodano > 0 ? ' Z firmy je už prodáno ' + Math.round(prodano * 100) + ' %.' : '');
       }
     }
@@ -11816,19 +11816,19 @@ function financeSheet(toId, kdo, co, a) {
       var s1 = $('fin-souhlas'); if (s1) s1.parentNode.removeChild(s1);
       return;
     }
-    var kdoBude = co === 'koupim-podil' ? 'Budeš' : esc(kdo.firma || kdo.nick) + ' bude';
+    var kdoBude = co === 'koupim-podil' ? esc(tx('hra.budes')) : esc(kdo.firma || kdo.nick) + ' bude';
     el.className = 'fine err';
-    el.innerHTML = '<b>Většinový podíl.</b> ' + kdoBude + ' držet ' + po + ' % firmy'
+    el.innerHTML = '<b>' + esc(tx('hra.vetsinovy_podil')) + '</b> ' + kdoBude + ' držet ' + po + ' % firmy'
       + (drziUz > 0 ? ' (už má ' + Math.round(drziUz * 100) + ' %)' : '') + '. '
       + (co === 'prodam-podil'
           ? 'Prodáváš tím většinu vlastní firmy. Zpátky ji dostaneš jen tak, že ti ji druhá strana '
             + 'bude ochotná prodat — vynutit to nejde.'
-          : 'Získáváš tím většinu v cizí firmě. Rozhodnout musí její majitel.');
+          : esc(tx('hra.ziskavas_tim_vetsinu_v_cizi')));
     if (co === 'prodam-podil' && !$('fin-souhlas')) {
       var w = document.createElement('label');
       w.className = 'fld chk'; w.id = 'fin-souhlas';
       w.innerHTML = '<input type="checkbox" id="fin-souhlas-in"> '
-        + '<span>Rozumím, prodávám většinu své firmy.</span>';
+        + '<span>' + esc(tx('hra.rozumim_prodavam_vetsinu_sve_firmy')) + '</span>';
       el.parentNode.insertBefore(w, el.nextSibling);
     }
   };
@@ -11853,10 +11853,10 @@ function financeSheet(toId, kdo, co, a) {
   $('fin-ok').onclick = function () {
     var c = Math.max(0, Math.round(Number($('fin-castka').value) || 0));
     if (pujcka && c < PUJCKA_MIN_HRA) return toast('Nejmenší půjčka je ' + kcFull(PUJCKA_MIN_HRA) + '.', 'err');
-    if (!c) return toast('Zadej částku.', 'err');
+    if (!c) return toast(esc(tx('hra.zadej_castku')), 'err');
     if (jaDavam && c > volnaHotovost(null)) {
       return toast('Volné hotovosti máš jen ' + kcFull(Math.max(0, volnaHotovost(null)))
-        + ' — zbytek drží rozjednané nabídky.', 'err');
+        + ' ' + esc(tx('hra.zbytek_drzi_rozjednane_nabidky')), 'err');
     }
     var telo = { to_id: toId, predmet: pujcka ? 'pujcka' : 'podil', cena: c,
       smer: (co === 'pujcim' || co === 'prodam-podil') ? 'prodam' : 'koupim',
@@ -11870,11 +11870,11 @@ function financeSheet(toId, kdo, co, a) {
       var pp = Math.max(1, Math.round(Number($('fin-podil').value) || 0));
       if (co === 'prodam-podil' && poProdeji() > PODIL_VETSINA_HRA
         && !(($('fin-souhlas-in') || {}).checked)) {
-        return toast('Prodáváš většinu firmy — odklikni, že to víš.', 'err');
+        return toast(esc(tx('hra.prodavas_vetsinu_firmy_odklikni_ze')), 'err');
       }
       if (pp > zbyvaPodilu) {
         return toast(zbyvaPodilu < 1
-          ? 'Tahle firma je rozprodaná celá — víc než sto procent neexistuje.'
+          ? esc(tx('hra.tahle_firma_je_rozprodana_cela_2'))
           : 'Z firmy zbývá ' + zbyvaPodilu + ' %. Celá firma je sto procent.', 'err');
       }
       telo.podil = pp / 100;
@@ -11883,8 +11883,8 @@ function financeSheet(toId, kdo, co, a) {
     apiJson('/trade/offer', telo).then(function (r) {
       if (!r.ok) { $('fin-ok').disabled = false; return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err'); }
       closeSheet(); loadTrades(paintBurza);
-      toast('Nabídka odeslaná. Teď je to na druhé straně.', 'ok');
-    }).catch(function () { $('fin-ok').disabled = false; toast('Server neodpovídá.', 'err'); });
+      toast(esc(tx('hra.nabidka_odeslana_ted_je_to')), 'ok');
+    }).catch(function () { $('fin-ok').disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
   };
 }
 function cenaSheet(toId, kdo, x) {
@@ -13735,7 +13735,7 @@ function uverDuvod() {
 }
 function uverSheet(chci, iSplatnosti) {
   var n = uverNabidka(chci, iSplatnosti);
-  if (n.max < 1000) { closeSheet(); return toast('Banka ti teď nepůjčí ani korunu.', 'err'); }
+  if (n.max < 1000) { closeSheet(); return toast(esc(tx('hra.banka_ti_ted_nepujci_ani')), 'err'); }
   // Hodnotíme PŮJČKU, ne hráče: přirážka se řídí tím, jak bude zadlužený až
   // si tuhle částku vezme. Dřív tu stálo „jsi zadlužený" i tomu, kdo neměl ani korunu dluhu.
   var po = Math.round(n.zadluzenost * 100);
@@ -13752,18 +13752,18 @@ function uverSheet(chci, iSplatnosti) {
       ? 'Do ' + kcFull(n.levnejsi) + ' by byla přirážka jen 0,8 bodu.'
     : '';
   var maxS = maxSplatnost();
-  sheet('<h3>Nabídka banky</h3>'
+  sheet('<h3>' + esc(tx('hra.nabidka_banky')) + '</h3>'
     + '<div class="nalada ' + n.nalada.id + '"><b>' + n.nalada.nazev + '</b>'
     + '<span>' + esc(n.nalada.slovo) + '</span></div>'
     + '<p class="muted small">' + hodnoceni + (rada ? ' ' + rada : '')
     + ' Podmínky platí, dokud je nepřijmeš — nic se neděje samo.</p>'
-    + (n.brzdiVydelek ? '<div class="kv"><span>Strop podle výdělku firmy</span><b class="warn">' + kcFull(n.dscr) + '</b></div>'
+    + (n.brzdiVydelek ? '<div class="kv"><span>' + esc(tx('hra.strop_podle_vydelku_firmy')) + '</span><b class="warn">' + kcFull(n.dscr) + '</b></div>'
         + '<p class="fine">Zástava by dovolila víc, ale banka chce, aby ti na splátku zbývalo aspoň '
         + KRYTI_MIN.toFixed(2).replace('.', ',') + '× tolik, co splátka dělá.</p>' : '')
-    + (duveraVolna() > 0 ? '<div class="kv"><span>Z toho proti zástavě</span><b class="ok">'
+    + (duveraVolna() > 0 ? '<div class="kv"><span>' + esc(tx('hra.z_toho_proti_zastave')) + '</span><b class="ok">'
         + kcFull(duveraVolna()) + '</b></div>'
-        + '<p class="fine">Tolik ti banka půjčí i bez výdělku — složená zástava úvěr kryje.</p>' : '')
-    + '<div class="kv"><span>Dnes dlužíš</span><b' + (S.loan > 0 ? ' class="warn"' : '') + '>' + kcFull(S.loan)
+        + '<p class="fine">' + esc(tx('hra.tolik_ti_banka_pujci_i')) + '</p>' : '')
+    + '<div class="kv"><span>' + esc(tx('hra.dnes_dluzis')) + '</span><b' + (S.loan > 0 ? ' class="warn"' : '') + '>' + kcFull(S.loan)
     + (S.loan > 0 ? ' · ' + Math.round(n.ted * 100) + ' % majetku' : '') + '</b></div>'
     + '<label class="fld"><span>Kolik si chceš půjčit (nejvýš ' + kcFull(n.max) + ')</span>'
     + '<input id="uv-amt" class="inp" type="number" min="1000" step="1000" max="' + n.max + '" value="' + n.castka + '"></label>'
@@ -13772,24 +13772,24 @@ function uverSheet(chci, iSplatnosti) {
         var i = SPL_ZAKLAD + j, lze = i <= maxS;
         return '<button class="splat-b' + (i === n.iSplatnosti ? ' on' : '') + (lze ? '' : ' zamceno')
           + '" data-splat="' + i + '"' + (lze ? '' : ' disabled') + '>'
-          + '<b>' + x.nazev + '</b><span>' + (lze ? kcFull(anuita(n.castka, Math.max(0.02, rateOf() + prirazkaZa(n.castka) + x.prirazka + n.nalada.sazba), x.mesicu)) + ' / měs' : 'zamčeno') + '</span></button>';
+          + '<b>' + x.nazev + '</b><span>' + (lze ? kcFull(anuita(n.castka, Math.max(0.02, rateOf() + prirazkaZa(n.castka) + x.prirazka + n.nalada.sazba), x.mesicu)) + ' ' + esc(tx('hra.mes_2')) : esc(tx('hra.zamceno'))) + '</span></button>';
       }).join('') + '</div>'
     + (maxS < SPLATNOSTI.length - 1 ? '<p class="fine">' + esc(splatnostDuvod(maxS + 1)) + '</p>' : '')
-    + '<div class="kv"><span>Úrok</span><b>' + (n.sazba * 100).toFixed(1).replace('.', ',') + ' % ročně'
+    + '<div class="kv"><span>' + esc(tx('hra.urok')) + '</span><b>' + (n.sazba * 100).toFixed(1).replace('.', ',') + ' % ročně'
     + (n.prirazka > 0.0005 ? ' <span class="warn">(+' + (n.prirazka * 100).toFixed(1).replace('.', ',') + ' za riziko a splatnost)</span>' : '') + '</b></div>'
-    + '<div class="kv"><span>Poplatek za sjednání (1 %)</span><b class="warn">' + kcFull(n.poplatek) + '</b></div>'
-    + '<div class="kv"><span>Dostaneš na ruku</span><b class="ok">' + kcFull(n.naruku) + '</b></div>'
-    + '<div class="kv souhrn"><span>Splátka</span><b class="warn">' + kcFull(n.splatkaMes) + ' / měsíc po ' + n.splatnost.nazev + '</b></div>'
-    + '<div class="kv"><span>Celkem na úrocích zaplatíš</span><b>' + kcFull(n.celkemUrok) + '</b></div>'
-    + '<div class="kv"><span>Dluh po načerpání</span><b>' + kcFull(S.loan + n.castka) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.poplatek_za_sjednani_1')) + '</span><b class="warn">' + kcFull(n.poplatek) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.dostanes_na_ruku')) + '</span><b class="ok">' + kcFull(n.naruku) + '</b></div>'
+    + '<div class="kv souhrn"><span>' + esc(tx('hra.splatka_2')) + '</span><b class="warn">' + kcFull(n.splatkaMes) + ' / měsíc po ' + n.splatnost.nazev + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.celkem_na_urocich_zaplatis')) + '</span><b>' + kcFull(n.celkemUrok) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.dluh_po_nacerpani')) + '</span><b>' + kcFull(S.loan + n.castka) + '</b></div>'
     + (S.loan > 0 && Math.abs(n.poSjednani - n.sazba) > 0.0005
-        ? '<div class="kv"><span>Sazba z celého dluhu</span><b>'
+        ? '<div class="kv"><span>' + esc(tx('hra.sazba_z_celeho_dluhu')) + '</span><b>'
           + (n.poSjednani * 100).toFixed(1).replace('.', ',') + ' % ročně</b></div>'
-          + '<p class="fine">Starý dluh má svoji sazbu, nová půjčka svoji — banka je zprůměruje podle částek.</p>'
+          + '<p class="fine">' + esc(tx('hra.stary_dluh_ma_svoji_sazbu')) + '</p>'
         : '')
     + '<button class="btn big" id="uv-ano">Beru to</button>'
-    + '<button class="btn sec" id="uv-ne" style="width:100%;margin-top:8px">Díky, nechám si to projít hlavou</button>'
-    + '<p class="fine">Splátka se strhne každý herní měsíc sama. Doplatit zbytek můžeš kdykoli a bez sankcí.</p>');
+    + '<button class="btn sec" id="uv-ne" style="width:100%;margin-top:8px">' + esc(tx('hra.diky_necham_si_to_projit')) + '</button>'
+    + '<p class="fine">' + esc(tx('hra.splatka_se_strhne_kazdy_herni')) + '</p>');
   // Při změně částky přepočítáme celou nabídku — sazba se může hnout.
   var inp = $('uv-amt');
   if (inp) inp.onchange = function () { uverSheet(Number(inp.value) || 0, n.iSplatnosti); };
@@ -13799,7 +13799,7 @@ function uverSheet(chci, iSplatnosti) {
   $('uv-ne').onclick = closeSheet;
   $('uv-ano').onclick = function () {
     var m = uverNabidka(Number(inp.value) || 0, n.iSplatnosti);
-    if (m.castka < 1000) return toast('Takhle malou částku banka neřeší.', 'err');
+    if (m.castka < 1000) return toast(esc(tx('hra.takhle_malou_castku_banka_neresi')), 'err');
     S.bank -= m.castka;
     pricistDluh(m.castka, m.prirazka, { druh: 'provoz', popis: 'Úvěr z banky na ' + m.splatnost.nazev }, m.splatnost.mesicu);
     S.cash += m.naruku;
