@@ -1661,6 +1661,24 @@
       let pane = document.getElementById('review-pane');
       if (!pane) { pane = document.createElement('div'); pane.id = 'review-pane'; document.body.appendChild(pane); }
       pane.dataset.id = id;
+      // Doklady z Reklamací praní: vedle detailu se ukáže vystavený doklad / dobropis (PDF)
+      if (inv && (inv.source === 'wash_receipt' || inv.source === 'wash_refund')) {
+        const pdfUrl = '/api/accounting/invoices/' + id + '/pdf?inline=1';
+        pane.innerHTML = '<div class="rp-head"><div class="rp-title">📄 ' + (inv.source === 'wash_refund' ? 'Dobropis' : 'Doklad') + ' <span class="dv-sub">' + escapeHtml(inv.invoice_number) + '</span></div>'
+          + '<div class="rp-btns"><a class="btn btn-secondary btn-sm" href="' + pdfUrl + '" target="_blank" title="Otevřít v novém okně">↗</a><button class="btn btn-secondary btn-sm" onclick="closeReviewPane()" title="Zavřít náhled">✕</button></div></div>'
+          + '<div class="rp-view" id="rp-view" style="padding:0"><div class="empty-hint" style="padding:40px;">Načítám doklad…</div></div>';
+        document.body.classList.add('review-on');
+        (async () => {
+          try {
+            const headers = {}; if (token) headers['Authorization'] = 'Bearer ' + token;
+            const resp = await fetch(pdfUrl, { credentials: 'include', headers });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const burl = URL.createObjectURL(await resp.blob());
+            const v = document.getElementById('rp-view'); if (v) v.innerHTML = '<iframe class="rp-frame" style="width:100%;height:100%;border:0;background:#fff" src="' + burl + '#toolbar=1&navpanes=0&view=FitH"></iframe>';
+          } catch (e) { const v = document.getElementById('rp-view'); if (v) v.innerHTML = '<div class="empty-hint" style="padding:40px;color:#f87171">Doklad se nepodařilo zobrazit: ' + escapeHtml(e.message) + '</div>'; }
+        })();
+        return;
+      }
       const url = '/api/accounting/invoices/' + id + '/source-pdf';
       const checked = inv && Array.isArray(inv.tags) && inv.tags.includes('ocr_checked');
       pane.innerHTML =
@@ -2075,7 +2093,7 @@
       {
         const paneOpen = document.getElementById('review-pane');
         // Originál dokladu se u přijatých dokladů otevírá vedle detailu vždy a automaticky (bez ohledu na stav i na to, zda už byl zkontrolován)
-        const needsCheck = inv.direction === 'ap' && (inv.source_file_path || inv.pdf_file_path);
+        const needsCheck = (inv.direction === 'ap' && (inv.source_file_path || inv.pdf_file_path)) || inv.source === 'wash_receipt' || inv.source === 'wash_refund';
         if (needsCheck || (paneOpen && Number(paneOpen.dataset.id) === inv.id)) setTimeout(() => openReviewPane(inv.id), 0);
         else if (paneOpen) closeReviewPane();
       }
@@ -2270,8 +2288,6 @@
             (inv.order_id ? '<div id="order-history-panel" style="margin-top:18px;"><div style="color:#6b7280;font-size:12px;">Načítám historii objednávky…</div></div>' : '') +
 
             // Doklady z Reklamací praní: rovnou zobrazit PDF v detailu
-            ((inv.source === 'wash_receipt' || inv.source === 'wash_refund') ? '<div id="wash-pdf-preview" style="margin-top:18px;"><div style="color:#6b7280;font-size:12px;">Načítám doklad…</div></div>' : '') +
-
             // Akce: vlevo méně časté / nebezpečné, vpravo hlavní
             '<div class="dv-actions">' +
               '<div class="dv-actions-l">' +
@@ -2299,20 +2315,7 @@
         '</div>'
       );
       if (inv.order_id) loadOrderHistoryPanel(inv.order_id);
-      if (inv.source === 'wash_receipt' || inv.source === 'wash_refund') loadWashPdfPreview(inv.id);
     };
-
-    // Vloží PDF dokladu přímo do detailu (fetch s autorizací → blob → iframe)
-    async function loadWashPdfPreview(id) {
-      const el = document.getElementById('wash-pdf-preview'); if (!el) return;
-      try {
-        const headers = {}; if (token) headers['Authorization'] = 'Bearer ' + token;
-        const resp = await fetch('/api/accounting/invoices/' + id + '/pdf?inline=1', { credentials: 'include', headers });
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        const url = URL.createObjectURL(await resp.blob());
-        el.innerHTML = '<iframe src="' + url + '" style="width:100%;height:720px;border:1px solid var(--border);border-radius:10px;background:#fff"></iframe>';
-      } catch (e) { el.innerHTML = '<div style="color:#f87171;font-size:12.5px">Doklad se nepodařilo zobrazit: ' + escapeHtml(e.message) + '</div>'; }
-    }
 
     // Historie objednávky + související doklady (data z /api/wh/orders/:id/history).
     async function loadOrderHistoryPanel(orderId) {
