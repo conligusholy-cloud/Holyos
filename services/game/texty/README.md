@@ -15,6 +15,15 @@
 Scénáře infolinky jsou zvlášť v `linka.cs.json` — je to souvislá próza
 a jako klíče by se v tom nedalo psát.
 
+## Kde se katalog bere v prohlížeči
+
+Čeština jde do stránky jako obyčejný skript `/game/texty-cs.js`, načtený
+**před** `game.js`. Není to zbytečnost: ve sloučených šablonách je i kus
+stavby okna včetně `id` prvků, takže kdyby katalog nebyl po ruce hned,
+nezmizel by jen text — zmizelo by celé okno a hra by si sáhla na prvek,
+co není. Cizí jazyk se pak dotáhne přes `/api/game/texty/<jazyk>` a češtinu
+jen přebije. Čeština se proto nikdy netahá po drátě.
+
 ## Co pustit před nasazením
 
 ```
@@ -23,7 +32,16 @@ npm run texty:prelozit     # dopřeloží chybějící a zastaralé (potřebuje 
 ```
 
 Kontrola nikdy nasazení nezastaví — vrací jen kód 1, když je co dopřekládat,
-aby se na ni dal pověsit automatický překlad.
+aby se na ni dal pověsit automatický překlad. Kód 2 je jiná věc: v kódu je
+klíč, ke kterému žádný text není, a hráč by ho viděl v okně holý.
+
+Ručně to pouštět nemusíš. Zapni si háček a děje se to samo při commitu:
+
+```
+git config core.hooksPath nastroje/hooks
+```
+
+Podrobnosti v `nastroje/hooks/README.md`.
 
 ## Jak se pozná, že překlad zestaral
 
@@ -38,12 +56,16 @@ npm run texty:vytahni -- <funkce> <predpona>            # nanečisto
 npm run texty:vytahni -- <funkce> <predpona> --zapsat
 ```
 
-Nástroj se **nedotkne vět rozsekaných vloženým číslem** („. Máš",
-„, takže klid.") — ty se v angličtině skládají jinak a musí se přepsat ručně
-na šablonu se značkami. Nahlásí je a nechá být.
+Nástroj má dva průchody. První vytáhne samostatné texty, druhý
+(`texty-vety.js`) slepí větu rozsekanou vloženým číslem do jedné šablony se
+značkami — jinak by se v angličtině nedala poskládat, protože slovosled je
+jiný. Co vzít nejde, nahlásí a nechá být.
 
-Po každé dávce porovnej české vykreslení před a po. Dokud sedí čeština,
-přepis nic nerozbil.
+Celý `game.js` je tímhle hotový: kontrola hlásí 0 českých textů v kódu.
+
+Po každé dávce porovnej české vykreslení před a po — a porovnávej
+**innerHTML, ne jen text**. Rozbité `id` na textu vidět není a otisk by
+hlásil shodu, i když hra nefunguje. Jednou se to přesně takhle stalo.
 
 ## Slovník pojmů
 
