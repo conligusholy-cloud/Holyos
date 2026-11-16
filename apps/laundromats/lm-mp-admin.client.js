@@ -21,7 +21,7 @@ function render(){
   h+='<div class="card" style="margin-bottom:14px;overflow:auto"><h3 style="margin:0 0 8px">Lokality v nabídce</h3><label class="small muted" style="display:block;margin:-4px 0 8px"><input type="checkbox" data-mphid="1"'+(showHid?' checked':'')+'> Zobrazit i skryté ('+k.hidden+')</label>';
   var LS=D.listings.filter(function(l){return showHid||l.published;});
   if(!LS.length)h+='<p class="muted small">Žádná lokalita se zatím nenabízí. Zapněte „Nabízí se“ v HolyOS → Site Development → Marketplace.</p>';
-  else{h+='<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left" class="muted"><th>Lokalita</th><th>Nájem</th><th>Fotky</th><th>Nabízí se</th><th>Rezervováno</th><th>Zájem</th><th>Poslední zájem</th></tr></thead><tbody>';
+  else{h+='<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left" class="muted"><th>Lokalita</th><th>Nájem</th><th>Fotky</th><th>Nabízí se</th><th>Rezervováno</th><th>Zájem</th><th>Poslední zájem</th><th></th></tr></thead><tbody>';
     LS.forEach(function(l){
       var rent=l.rent_monthly!=null?(Number(l.rent_monthly).toLocaleString('cs-CZ')+' '+esc(l.rent_currency)+' '+(l.rent_vat==='s'?'s DPH':'bez DPH')):'–';
       var warn=[];if(!l.title)warn.push('chybí název');if(!l.has_cover)warn.push('bez titulní fotky');if(!l.address)warn.push('bez adresy');
@@ -29,7 +29,7 @@ function render(){
         +'<td style="padding:6px 8px">'+rent+'</td><td style="padding:6px 8px">'+(l.gallery!=null?l.gallery:l.photos)+'</td>'
         +'<td style="padding:6px 8px"><label><input type="checkbox" data-mpp="'+l.id+'"'+(l.published?' checked':'')+'> ano</label></td>'
         +'<td style="padding:6px 8px"><label><input type="checkbox" data-mpr="'+l.id+'"'+(l.reserved?' checked':'')+'> ano</label></td>'
-        +'<td style="padding:6px 8px">'+l.interests+'</td><td style="padding:6px 8px">'+dt(l.last_interest)+'</td></tr>';});
+        +'<td style="padding:6px 8px">'+l.interests+'</td><td style="padding:6px 8px">'+dt(l.last_interest)+'</td><td style="padding:6px 8px;text-align:right"><button class="btn sec sm" data-mpd="'+l.id+'">Detail</button></td></tr>';});
     h+='</tbody></table>';}
   h+='<p class="muted small" style="margin:8px 0 0">Obsah (popis, fotky, ceny) se upravuje v HolyOS → Site Development → záložka Marketplace.'+(window.LM_HOLYOS?' <a href="'+esc(window.LM_HOLYOS)+'/modules/site-development/index.html" target="_blank">Otevřít</a>':'')+'</p></div>';
   h+='<div class="card" style="margin-bottom:14px"><h3 style="margin:0 0 8px">Uživatelé s přístupem</h3>';
@@ -48,6 +48,39 @@ function render(){
 }
 function load(){var b=P.querySelector('.mp-body');if(!D)b.innerHTML='<p class="muted">Načítám…</p>';
   Promise.all([api('/admin/api/marketplace'),api('/admin/api/users').catch(function(){return {users:[]};})]).then(function(r){D=r[0];U=r[1].users||[];render();}).catch(function(e){b.innerHTML='<div class="card" style="color:#ff8f8f">'+esc(e.message)+'</div>';});}
+function row(l,v){return '<div style="display:flex;gap:12px;padding:7px 0;border-bottom:1px solid var(--line,#2a3350)"><span class="muted" style="width:150px;flex:none">'+l+'</span><span style="flex:1">'+(v==null||v===''?'<span class="muted">neuvedeno</span>':v)+'</span></div>';}
+function closeDet(){var o=document.getElementById('mp-det');if(o)o.remove();document.removeEventListener('keydown',escDet);}
+function escDet(e){if(e.key==='Escape')closeDet();}
+function openDet(id){
+  var l=(D.listings||[]).filter(function(x){return x.id===id;})[0];if(!l)return;var d=l.detail||{};
+  var maps=d.address?'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(d.address):'';
+  var rent=l.rent_monthly!=null?(Number(l.rent_monthly).toLocaleString('cs-CZ')+' '+esc(l.rent_currency)+' '+(l.rent_vat==='s'?'s DPH':'bez DPH')):null;
+  var cp=d.connections_price,cpTxt=cp?(/^[\d\s.,]+$/.test(String(cp))?Number(String(cp).replace(/\s/g,'').replace(',','.')).toLocaleString('cs-CZ')+' Kč bez DPH':esc(cp)):null;
+  var ph=(d.photos||[]).map(function(pid,i){var u='/admin/api/marketplace/photo/'+l.id+'?p='+pid;return '<a href="'+u+'" target="_blank" rel="noopener" style="position:relative;display:block;width:150px;height:100px;border-radius:8px;overflow:hidden;border:1px solid '+(i===0?'#14b8a6':'var(--line,#2a3350)')+'"><img src="'+u+'" alt="" style="width:100%;height:100%;object-fit:cover">'+(i===0?'<span style="position:absolute;left:4px;top:4px;background:#14b8a6;color:#04130a;font-size:10px;font-weight:800;padding:1px 6px;border-radius:999px">NÁHLED</span>':'')+'</a>';}).join('');
+  var ints=(D.interests||[]).filter(function(i){return i.code===l.code;});
+  var reqs=(D.requests||[]).filter(function(r){return r.code===l.code;});
+  var ST={new:'Nový',contacted:'Kontaktován',negotiating:'Jednáme',won:'Prodáno',lost:'Zrušeno'};
+  var h='<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><h2 style="margin:0;font-size:19px;flex:1">'+esc(l.title||l.name)+'</h2>'
+    +'<span style="padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;background:'+(l.reserved?'#f59e0b33;color:#f59e0b':(l.published?'#22c55e33;color:#22c55e':'#64748b33;color:#94a3b8'))+'">'+(l.reserved?'Rezervováno':(l.published?'Nabízí se':'Skryto'))+'</span>'
+    +'<button class="btn sec sm" data-mpdx>✕</button></div>'
+    +'<div class="muted small" style="margin-bottom:10px">'+esc(l.name)+(l.city?' · '+esc(l.city):'')+' · '+esc(l.code)+(l.updated_at?' · uloženo '+dt(l.updated_at):'')+'</div>'
+    +(ph?'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+ph+'</div>':'')
+    +row('Lákadlo',esc(d.highlight))+row('Popis','<span style="white-space:pre-line">'+esc(d.description)+'</span>')
+    +row('Adresa',d.address?esc(d.address)+' · <a href="'+maps+'" target="_blank" rel="noopener">Google Mapy ↗</a>':null)
+    +row('Plocha',d.area_m2!=null?esc(d.area_m2)+' m²':null)+row('Nájem / měsíc',rent)+row('Energie',esc(d.energy))+row('Cena přípojek',cpTxt)
+    +row('Obsadit do',d.occupy_until?new Date(d.occupy_until+'T12:00:00').toLocaleDateString('cs-CZ'):null)
+    +row('Parkování',esc(d.parking))+row('Dostupnost',esc(d.availability))+row('Cena / podmínky',esc(d.price_note))
+    +'<h3 style="margin:14px 0 6px;font-size:14px">Zájem ('+ints.length+')</h3>'
+    +(ints.length?ints.slice(0,15).map(function(i){return '<div class="small" style="padding:3px 0">'+dt(i.at)+' · '+(i.who?'<b>'+esc(i.who.name||i.who.email)+'</b> <span class="muted">'+esc([i.who.email,i.who.phone,i.who.company].filter(Boolean).join(' · '))+'</span>':'<span class="muted">neznámý návštěvník</span>')+'</div>';}).join(''):'<div class="muted small">Zatím nikdo.</div>')
+    +'<h3 style="margin:14px 0 6px;font-size:14px">Rezervace / závazné zájmy ('+reqs.length+')</h3>'
+    +(reqs.length?reqs.map(function(r){return '<div class="small" style="padding:3px 0">'+dt(r.created_at)+' · <b>'+esc(r.name||r.email)+'</b> <span class="muted">'+esc([r.phone,r.email,r.company].filter(Boolean).join(' · '))+'</span> · '+esc(ST[r.status]||r.status)+(r.note?' · '+esc(r.note):'')+'</div>';}).join(''):'<div class="muted small">Žádná.</div>')
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">'+(window.LM_HOLYOS?'<a class="btn sec sm" href="'+esc(window.LM_HOLYOS)+'/modules/site-development/index.html" target="_blank" rel="noopener">Upravit v HolyOS ↗</a>':'')+'<button class="btn sm" data-mpdx>Zavřít</button></div>';
+  closeDet();
+  var ov=document.createElement('div');ov.id='mp-det';ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:30px 12px';
+  ov.innerHTML='<div class="card" style="width:760px;max-width:100%;margin:0">'+h+'</div>';
+  ov.addEventListener('click',function(e){if(e.target===ov||e.target.closest('[data-mpdx]'))closeDet();});
+  document.body.appendChild(ov);document.addEventListener('keydown',escDet);
+}
 P.addEventListener('change',function(e){var t=e.target;
   if(t.hasAttribute('data-mphid')){showHid=t.checked;render();return;}
   if(t.hasAttribute('data-rst')){api('/admin/api/marketplace/request/'+encodeURIComponent(t.getAttribute('data-rst')),{status:t.value}).then(load).catch(function(er){alert(er.message);load();});return;}
@@ -55,7 +88,8 @@ P.addEventListener('change',function(e){var t=e.target;
   var id=t.getAttribute('data-mpp')||t.getAttribute('data-mpr');if(!id)return;
   var body={};if(t.hasAttribute('data-mpp'))body.published=t.checked;else body.reserved=t.checked;
   api('/admin/api/marketplace/'+id,body).then(load).catch(function(er){alert(er.message);load();});});
-P.addEventListener('click',function(e){var a=e.target.closest('[data-mpa]');
+P.addEventListener('click',function(e){var dd=e.target.closest('[data-mpd]');if(dd){openDet(+dd.getAttribute('data-mpd'));return;}
+  var a=e.target.closest('[data-mpa]');
   if(a){api('/admin/api/users/'+a.getAttribute('data-mpa')+'/marketplace',{on:false}).then(load).catch(function(er){alert(er.message);});return;}
   if(e.target.closest('[data-mpadd]')){var v=P.querySelector('.mp-add').value;if(!v)return;api('/admin/api/users/'+v+'/marketplace',{on:true}).then(load).catch(function(er){alert(er.message);});return;}
   if(e.target.closest('.mp-reload'))load();});

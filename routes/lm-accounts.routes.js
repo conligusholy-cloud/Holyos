@@ -258,7 +258,8 @@ router.get('/marketplace-admin', async (req, res, next) => {
   try {
     const all = await jsonSetting('site_marketplace');
     const ids = Object.keys(all).map(Number).filter((n) => n > 0);
-    const sites = ids.length ? await prisma.site.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, city: true, status: true, rent_monthly: true, rent_currency: true, _count: { select: { photos: true } } } }) : [];
+    const sites = ids.length ? await prisma.site.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, city: true, address: true, zip: true, status: true, rent_monthly: true, rent_currency: true, _count: { select: { photos: true } } } }) : [];
+    const allPh = ids.length ? await prisma.sitePhoto.findMany({ where: { site_id: { in: ids } }, orderBy: [{ sort_order: 'asc' }, { id: 'asc' }], select: { id: true, site_id: true } }) : [];
     const by = new Map(sites.map((x) => [x.id, x]));
     const od = new Date(Date.now() - 180 * 86400e3);
     const ev = await prisma.compounderEvent.findMany({ where: { event: { in: ['marketplace_view', 'marketplace_interest'] }, created_at: { gte: od } }, orderBy: { created_at: 'desc' }, take: 5000, select: { sid: true, event: true, props: true, created_at: true } }).catch(() => []);
@@ -277,6 +278,10 @@ router.get('/marketplace-admin', async (req, res, next) => {
     const listings = ids.map((id) => { const m = all[id] || {}, x = by.get(id); const c = cnt['L' + id] || { n: 0, last: null };
       return { id, code: 'L' + id, name: x ? x.name : ('Lokalita #' + id), city: x ? x.city : null, site_status: x ? x.status : null, title: m.title || '', published: !!m.published, reserved: !!m.reserved,
         rent_monthly: m.rent_monthly != null ? m.rent_monthly : (x && x.rent_monthly != null ? Number(x.rent_monthly) : null), rent_currency: (x && x.rent_currency) || 'CZK', rent_vat: m.rent_vat || 'bez',
+        detail: { highlight: m.highlight || '', description: m.description || '', price_note: m.price_note || '', availability: m.availability || '', area_m2: m.area_m2 != null ? m.area_m2 : null,
+          energy: m.energy || '', connections_price: m.connections_price || '', parking: m.parking || '', occupy_until: m.occupy_until || '',
+          address: m.address || [x && x.address, [x && x.zip, x && x.city].filter(Boolean).join(' ')].filter(Boolean).join(', '),
+          photos: [m.photo_id].concat(Array.isArray(m.gallery) ? m.gallery : allPh.filter((f) => f.site_id === id).map((f) => f.id)).map(Number).filter((v, i, a) => v > 0 && a.indexOf(v) === i) },
         photos: x ? x._count.photos : 0, gallery: Array.isArray(m.gallery) ? m.gallery.length : null, has_cover: !!m.photo_id, address: !!m.address, interests: c.n, last_interest: c.last, updated_at: m.updated_at || null }; })
       .sort((a, b) => (b.published - a.published) || String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
     const reqsRaw = await jsonSetting(REQ_KEY); const requests = Array.isArray(reqsRaw) ? reqsRaw : [];

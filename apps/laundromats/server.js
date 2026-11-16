@@ -462,6 +462,14 @@ app.post('/admin/api/users/:id(\\d+)/access', requireAdmin, api((req) => { const
 app.post('/admin/api/users/:id(\\d+)/note', requireAdmin, api((req) => holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/note', { note: String((req.body || {}).note || '').slice(0, 5000) })));
 app.post('/admin/api/users/:id(\\d+)/profile', requireAdmin, api((req) => { const b = req.body || {}; return holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/profile', { name: b.name, phone: b.phone, company: b.company }); }));
 app.post('/admin/api/marketplace/request/:id', requireAdmin, api((req) => holyosSvc('POST', '/api/auth/lm/accounts/marketplace-requests/' + encodeURIComponent(req.params.id), { status: (req.body || {}).status, note: (req.body || {}).note })));
+app.get('/admin/api/marketplace/photo/:sid(\\d+)', requireAdmin, async (req, res) => {
+  try {
+    const token = jwt.sign({ aud: 'holyos-api', iss: 'laundromats' }, LM_SECRET, { expiresIn: '1m' });
+    const r = await fetch(HOLYOS_URL + '/api/auth/lm/accounts/marketplace/photo/' + req.params.sid + (/^\d+$/.test(String(req.query.p || '')) ? '?p=' + req.query.p : ''), { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(15000) });
+    if (!r.ok) return res.status(404).end();
+    res.set('Content-Type', r.headers.get('content-type') || 'image/jpeg').set('Cache-Control', 'private, max-age=600').send(Buffer.from(await r.arrayBuffer()));
+  } catch (e) { res.status(502).end(); }
+});
 app.get('/admin/api/marketplace', requireAdmin, api(async () => holyosSvc('GET', '/api/auth/lm/accounts/marketplace-admin')));
 app.post('/admin/api/marketplace/:sid(\\d+)', requireAdmin, api((req) => { const b = req.body || {}; const o = {}; if (b.published !== undefined) o.published = !!b.published; if (b.reserved !== undefined) o.reserved = !!b.reserved; return holyosSvc('POST', '/api/auth/lm/accounts/marketplace-admin/' + req.params.sid, o); }));
 app.post('/admin/api/users/:id(\\d+)/marketplace', requireAdmin, api((req) => holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/marketplace', { on: !!(req.body || {}).on })));
