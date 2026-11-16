@@ -2819,5 +2819,7 @@
   "trh.do_te_doby_vydelava": "{p1}. Do té doby ti prádlomat normálně vydělává.</p>",
   "obecne.tisic": "{p1} tis.",
   "obecne.milion": "{p1} M",
-  "obecne.miliarda": "{p1} mld."
+  "obecne.miliarda": "{p1} mld.",
+  "hra.nepovedlo_se_4": "Nepovedlo se.",
+  "hra.hotovo_3": "Hotovo."
 }

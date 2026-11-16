@@ -9,6 +9,35 @@
 'use strict';
 (function () {
 
+// ─── Texty a jazyk ───────────────────────────────────────────────────────────
+// Tohle musí být úplně první věc v souboru. Datové tabulky níž — měsíce,
+// názvy zemí, jména volajících, otázky pohovoru, hodnosti — se počítají při
+// načtení, a kdyby překladač ještě nestál, dostaly by místo textů holé klíče
+// a hráč by je tak i viděl.
+//
+// Oba katalogy jsou ve stránce dřív než hra, jako obyčejné skripty. Čeština
+// je vždycky (ve sloučených šablonách je i stavba oken včetně id prvků, takže
+// chybějící katalog nezničí jen text, ale celé okno), jazyk hráče k ní přibude
+// podle jeho účtu. Proto se jazyk přepíná znovunačtením stránky — překreslit
+// to nestačí, tabulky nahoře se už podruhé nepočítají.
+var HRAC_TEXTY = window.__TEXTY_HRAC || { jazyk: 'cs' };
+var JAZYK = HRAC_TEXTY.jazyk || 'cs';
+var PREKLADY = (window.T18N
+  ? new window.T18N.Preklady(
+      HRAC_TEXTY.texty
+        ? (function (m) { m.cs = window.__TEXTY_CS || {}; m[JAZYK] = HRAC_TEXTY.texty; return m; })({})
+        : { cs: window.__TEXTY_CS || {} })
+  : null);
+function tx(klic, udaje) {
+  if (!PREKLADY) return klic;
+  return PREKLADY.t(klic, udaje, JAZYK);
+}
+// Peníze a čísla se v angličtině píšou jinak (1,234,567 místo 1 234 567).
+function tCislo(n) { return window.T18N ? window.T18N.cislo(n, JAZYK) : String(Math.round(n || 0)); }
+function tPenize(n) { return window.T18N ? window.T18N.penize(n, JAZYK) : (Math.round(n || 0) + ' L$'); }
+// Množné číslo přes katalog — nahrazuje mn(), které umí jen česká pravidla.
+function tPocet(klic, n) { return tx(klic, { n: n }); }
+
 // ─── Ekonomika ───────────────────────────────────────────────────────────────
 // Čísla jsou 1:1 z reálného modelu prádlomatu (apps/laundromats/ekonomika.js),
 // jen přepočtená do korun. Když se změní skutečný model, změň i tohle.
@@ -11404,28 +11433,14 @@ function api(path, opts) {
 // to mít stejně. Katalog se tahá ze serveru; než dorazí, jede hra na češtině
 // zadrátované v kódu, takže se při výpadku nestane vůbec nic.
 // tx('drazba.vyvolal', { nick: 'Lord-P' }) vrátí hotovou větu.
-var JAZYK = 'cs';
-// Čeština je ve stránce rovnou, jako obyčejný skript před hrou. Ve sloučených
-// šablonách je i HTML včetně id prvků — kdyby katalog chyběl, nezmizel by jen
-// text, ale celá stavba okna, a hra by si sáhla na prvek, co není.
-var PREKLADY = (window.T18N
-  ? new window.T18N.Preklady({ cs: window.__TEXTY_CS || {} })
-  : null);
-function tx(klic, udaje) {
-  if (!PREKLADY) return klic;
-  return PREKLADY.t(klic, udaje, JAZYK);
-}
-// Peníze a čísla se v angličtině píšou jinak (1,234,567 místo 1 234 567).
-function tCislo(n) { return window.T18N ? window.T18N.cislo(n, JAZYK) : String(Math.round(n || 0)); }
-function tPenize(n) { return window.T18N ? window.T18N.penize(n, JAZYK) : (Math.round(n || 0) + ' L$'); }
-// Množné číslo přes katalog — nahrazuje mn(), které umí jen česká pravidla.
-function tPocet(klic, n) { return tx(klic, { n: n }); }
+// Katalog se po drátě netahá vůbec — oba jazyky jsou ve stránce dřív než hra.
+// Zůstává jen kvůli volajícím, kteří čekají, že si texty vyžádají.
 function nactiTexty(jazyk, pak) {
+  if (pak) pak();
+}
+function nactiTextyPoDrate(jazyk, pak) {
   var j = jazyk || 'cs';
   if (!PREKLADY) { JAZYK = 'cs'; if (pak) pak(); return; }
-  // Češtinu si netaháme — je ve stránce od začátku. Stahovat ji znovu by
-  // znamenalo přepsat hotový katalog tím, co zrovna přijde po drátě; kdyby
-  // odpověď byla neúplná, zmizely by s texty i kusy stavby oken.
   if (j === 'cs') { JAZYK = 'cs'; if (pak) pak(); return; }
   api('/texty/' + encodeURIComponent(j)).then(function (r) {
     if (r.ok && r.j && r.j.texty) {
@@ -11435,16 +11450,18 @@ function nactiTexty(jazyk, pak) {
     if (pak) pak();
   }).catch(function () { if (pak) pak(); });
 }
+// Jazyk se přepíná znovunačtením stránky. Datové tabulky v tomhle souboru
+// se počítají jen jednou, při načtení — překreslení by je nechalo české.
+// Rozehraná hra se napřed uloží, ať se o nic nepřijde.
 function prepniJazyk(j, pak) {
   apiJson('/account/jazyk', { jazyk: j }).then(function (r) {
-    if (!r.ok) return toast((r.j && r.j.error) || 'Nepovedlo se.', 'err');
+    if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_4')), 'err');
     if (ME) ME.jazyk = j;
-    nactiScenare(j);
-    nactiTexty(j, function () {
-      if (S) { paint(); drawMap(); }
-      toast((r.j && r.j.hlaska) || 'Hotovo.', 'ok');
-      if (pak) pak();
-    });
+    toast((r.j && r.j.hlaska) || esc(tx('hra.hotovo_3')), 'ok');
+    var dal = function () { location.reload(); };
+    if (S) { try { save(); } catch (e) { /* uložit se nemuselo povést */ } syncState(true).then(dal, dal); }
+    else dal();
+    if (pak) pak();
   }).catch(function () { toast(esc(tx('hra.server_neodpovida_34')), 'err'); });
 }
 

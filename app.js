@@ -1141,6 +1141,31 @@ app.use((req, res, next) => {
     const T = require('./services/game/texty');
     return res.send('window.__TEXTY_CS = ' + JSON.stringify(T.katalogPro('cs')) + ';');
   }
+  // Katalog hráčova jazyka jde do stránky taky, a to je to podstatné:
+  // v game.js jsou datové tabulky, které se počítají při načtení — jména
+  // volajících, názvy zemí, měsíce, otázky pohovoru. Kdyby angličtina
+  // dorazila až po drátě, tyhle tabulky by zůstaly navždycky české.
+  // Proto je jazyk ve stránce dřív než hra a přepnutí jazyka stránku
+  // načte znovu.
+  if (req.path === '/game/texty-hrac.js') {
+    res.set('Content-Type', 'application/javascript; charset=utf-8');
+    // Podle hráče, takže se to nesmí ukládat do sdílené mezipaměti.
+    res.set('Cache-Control', 'private, no-store');
+    const T = require('./services/game/texty');
+    const ucty = require('./routes/game-account.routes');
+    const posli = (jazyk) => {
+      const telo = jazyk === 'cs'
+        ? { jazyk: jazyk }
+        : { jazyk: jazyk, texty: T.katalogPro(jazyk) };
+      res.send('window.__TEXTY_HRAC = ' + JSON.stringify(telo) + ';');
+    };
+    let pid = null;
+    try { pid = ucty._pidZCookie(req); } catch (e) { /* bez cookie */ }
+    if (!pid) return posli('cs');
+    return prisma.gamePlayer.findUnique({ where: { id: pid } })
+      .then((p) => posli(T.jazykHrace(p)))
+      .catch(() => posli('cs'));
+  }
   if (req.path === '/game/texty.js') {
     res.set('Content-Type', 'application/javascript; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=300');
