@@ -344,7 +344,8 @@ router.get('/:id(\\d+)', async (req, res, next) => {
   try {
     const row = await prisma.washComplaint.findUnique({ where: { id: parseInt(req.params.id, 10) } });
     if (!row) return res.status(404).json({ error: 'Žádost nenalezena' });
-    res.json(row);
+    const cn = row.kind === 'refund' ? await findCreditNote(row).catch(() => null) : null;
+    res.json(cn ? Object.assign({}, row, { credit_note: { id: cn.id, invoice_number: cn.invoice_number, status: cn.status, total: cn.total, delivery_status: cn.delivery_status } }) : row);
   } catch (err) { next(err); }
 });
 // PATCH /:id — úprava údajů / interní poznámka / stav (approved, rejected, done, new)
@@ -358,17 +359,39 @@ router.patch('/:id(\\d+)', async (req, res, next) => {
     if (b.amount !== undefined) { const a = Math.round(Number(String(b.amount).replace(',', '.')) * 100) / 100; if (a > 0) { data.amount = a; zmeny.push('částka ' + kc(a)); } }
     if (b.account !== undefined && row.kind === 'refund') { const acc = normAccount(b.account); if (!acc) return res.status(400).json({ error: 'Číslo účtu není platné.' }); data.account = acc; zmeny.push('účet ' + acc); }
     if (b.email !== undefined) { const em = s(b.email, 160).toLowerCase(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(em)) return res.status(400).json({ error: 'E-mail není platný.' }); data.email = em; zmeny.push('e-mail ' + em); }
+    let afterPaid = false;
     if (b.status !== undefined) {
       const st = String(b.status);
-      if (!['new', 'approved', 'rejected', 'done'].includes(st)) return res.status(400).json({ error: 'Neplatný stav' });
-      data.status = st;
-      if (st === 'rejected') { data.reject_reason = s(b.reject_reason, 1000) || null; }
-      if (st === 'done' && row.kind === 'refund') data.paid_at = new Date();
-      if (['rejected', 'done'].includes(st)) { data.resolved_at = new Date(); data.resolved_by = whoOf(req); }
-      zmeny.push({ new: 'vráceno mezi nové', approved: 'schváleno', rejected: 'zamítnuto' + (data.reject_reason ? ' (' + data.reject_reason + ')' : ''), done: row.kind === 'refund' ? 'vyplaceno' : 'vyřízeno' }[st]);
+      if (!['new', 'approved', 'awaiting_payment', 'rejected', 'done'].includes(st)) return res.status(400).json({ error: 'Neplatný stav' });
+      const isRefund = row.kind === 'refund';
+      const inv = isRefund ? await findCreditNote(row) : null;
+      if (st === 'approved' || st === 'awaiting_payment') {
+        if (isRefund) {
+          const cn = await ensureCreditNote({ ...row, ...data }, req.user);
+          data.status = 'awaiting_payment';
+          zmeny.push('schváleno, vystaven dobropis ' + cn.invoice_number + ' — čeká na platbu');
+        } else { data.status = 'approved'; zmeny.push('schváleno'); }
+      } else if (st === 'done' && isRefund) {
+        if (!inv) return res.status(400).json({ error: 'Nejdřív žádost schvalte — tím se vystaví dobropis, který se proplácí.' });
+        await markCreditNotePaid(inv);
+        data.status = 'done'; data.paid_at = new Date(); data.resolved_at = new Date(); data.resolved_by = whoOf(req);
+        zmeny.push('zaplaceno (dobropis ' + inv.invoice_number + ')'); afterPaid = true;
+      } else if (st === 'rejected' || st === 'new') {
+        if (inv) {
+          if (inv.status === 'paid') return res.status(400).json({ error: 'Dobropis ' + inv.invoice_number + ' je už zaplacený — žádost nejde zrušit.' });
+          await prisma.invoice.update({ where: { id: inv.id }, data: { status: 'cancelled' } });
+          zmeny.push('dobropis ' + inv.invoice_number + ' stornován');
+        }
+        data.status = st;
+        if (st === 'rejected') { data.reject_reason = s(b.reject_reason, 1000) || null; data.resolved_at = new Date(); data.resolved_by = whoOf(req); }
+        zmeny.push(st === 'rejected' ? 'zrušeno' + (data.reject_reason ? ' (' + data.reject_reason + ')' : '') : 'vráceno mezi nové');
+      } else { // done u dokladu
+        data.status = 'done'; data.resolved_at = new Date(); data.resolved_by = whoOf(req); zmeny.push('vyřízeno');
+      }
     }
     if (zmeny.length) data.history = hist(row, zmeny.join(', '), whoOf(req));
     const upd = await prisma.washComplaint.update({ where: { id }, data });
+    if (afterPaid) sendCreditNoteEmail(upd).catch((e) => console.warn('[wash] e-mail dobropisu:', e.message));
     res.json(upd);
   } catch (err) { next(err); }
 });
@@ -400,6 +423,94 @@ function receiptHtml(row, d, number) {
     + '<div class="note"><strong>Celkem uhrazeno: ' + kc(d.total) + '</strong> · uhrazeno ' + esc(row.pay_method.toLowerCase()) + ' v prádlomatu. Doklad vystaven na žádost zákazníka ' + esc(row.number) + '.' + (d.note ? '<br>' + esc(d.note) : '') + '</div>';
   return bs2.page({ title: 'Zjednodušený daňový doklad', number, pill: 'Prádlomat' }, body);
 }
+// ─── Dobropis k vrácení platby ───────────────────────────────────────────────
+// Schválená žádost o vrácení platby vystaví dobropis (Invoice type credit_note_issued, source wash_refund).
+// Dobropis je závazek vůči zákazníkovi → vede se ve směru "ap" (kladná částka), takže se objeví v Účetních
+// dokladech → K platbě, jde do platebního příkazu a bankovní auto-matcher ho spáruje (VS = číslo žádosti, účet,
+// částka). Po zaplacení (z banky i ručně) se žádost sama překlopí do „Zaplaceno" a zákazník dostane dobropis e-mailem.
+const vsOf = (number) => String(number || '').replace(/\D/g, '').slice(0, 10);
+async function findCreditNote(row) {
+  return prisma.invoice.findFirst({ where: { source: 'wash_refund', external_number: row.number, status: { not: 'cancelled' } }, include: { items: true, company: true }, orderBy: { id: 'desc' } });
+}
+async function ensureCreditNote(row, user) {
+  const ex = await findCreditNote(row); if (ex) return ex;
+  const st = await getSettings(), vat = Number(st.vat_rate) || 0, total = Number(row.amount);
+  const base = Math.round(total / (1 + vat / 100) * 100) / 100, vatAmount = Math.round((total - base) * 100) / 100;
+  // Zákazník jako firma v adresáři (podle e-mailu), ať se dobropis i platba vážou na stejný záznam
+  let company = await prisma.company.findFirst({ where: { email: { equals: row.email, mode: 'insensitive' }, type: { in: ['customer', 'both'] } } });
+  if (!company) company = await prisma.company.create({ data: { name: row.customer_name.slice(0, 255), type: 'customer', email: row.email, phone: String(row.phone || '').slice(0, 20), bank_account: row.account ? String(row.account).slice(0, 50) : null, notes: 'Zákazník prádlomatu — vrácení platby ' + row.number } });
+  const { generateInvoiceNumber } = require('../services/accountant/invoice-numbering');
+  const tx = new Date(row.tx_at), popis = 'Vrácení platby — ' + row.service + ', ' + row.place_label + ', transakce ' + tx.toLocaleDateString('cs-CZ', { timeZone: 'Europe/Prague' });
+  const due = new Date(); due.setDate(due.getDate() + 3);
+  const inv = await prisma.$transaction(async (t) => {
+    const number = await generateInvoiceNumber('credit_note_issued', { prisma: t });
+    return t.invoice.create({ data: {
+      invoice_number: number, external_number: row.number, type: 'credit_note_issued', direction: 'ap', invoice_role: 'refund', source: 'wash_refund',
+      company_id: company.id, currency: 'CZK', subtotal: base.toFixed(2), vat_amount: vatAmount.toFixed(2), total: total.toFixed(2),
+      vat_regime: vat ? 'standard' : 'non_vat_payer', date_issued: new Date(), date_taxable: tx, date_due: due,
+      payment_method: 'bank_transfer', variable_symbol: vsOf(row.number), partner_bank_account: row.account || null,
+      status: 'ready_to_pay', payment_note: 'Vrácení platby ' + row.number,
+      note: 'Dobropis k žádosti o vrácení platby ' + row.number + (row.reason ? ' — ' + String(row.reason).slice(0, 300) : ''),
+      created_by_user_id: (user && user.id) || null,
+      items: { create: [{ line_order: 1, description: popis.slice(0, 500), quantity: 1, unit: 'ks', unit_price: base.toFixed(4), vat_rate: vat, subtotal: base.toFixed(2), vat_amount: vatAmount.toFixed(2), total: total.toFixed(2) }] },
+    }, include: { items: true, company: true } });
+  });
+  return inv;
+}
+async function markCreditNotePaid(inv) {
+  if (inv.status === 'paid') return inv;
+  return prisma.invoice.update({ where: { id: inv.id }, data: { status: 'paid', paid_amount: inv.total } });
+}
+function creditNoteHtml(row, inv, d) {
+  const bs2 = require('../services/pdf/bs2-doc-style');
+  const our = d.our || {}, adresa = [our.address, [our.zip, our.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  const tx = new Date(row.tx_at), neg = (n) => kc(-Math.abs(Number(n)));
+  const body = '<div class="parties"><div class="party"><span class="h">Vystavil</span><div class="name">' + esc(our.name || 'Best Series s.r.o.') + '</div>'
+    + (adresa ? '<div class="row">' + esc(adresa) + '</div>' : '')
+    + ((our.ico || our.dic) ? '<div class="row">' + (our.ico ? 'IČO: ' + esc(our.ico) : '') + (our.dic ? ' · DIČ: ' + esc(our.dic) : '') + '</div>' : '') + '</div>'
+    + '<div class="party"><span class="h">Zákazník</span><div class="name">' + esc(row.customer_name) + '</div><div class="row">' + esc(row.email) + '</div></div></div>'
+    + '<div class="meta"><div><div class="l">Datum vystavení</div><div class="v">' + new Date(inv.date_issued).toLocaleDateString('cs-CZ') + '</div></div>'
+    + '<div><div class="l">Původní transakce</div><div class="v">' + tx.toLocaleString('cs-CZ', { timeZone: 'Europe/Prague', day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + '</div></div>'
+    + '<div><div class="l">Vrácení na účet</div><div class="v">' + esc(row.account || '—') + '</div></div>'
+    + '<div><div class="l">Variabilní symbol</div><div class="v">' + esc(inv.variable_symbol || '') + '</div></div></div>'
+    + '<table class="items"><thead><tr><th class="r">#</th><th>Položka</th><th class="r">Základ</th><th class="r">DPH ' + d.vat + ' %</th><th class="r">Celkem</th></tr></thead><tbody>'
+    + '<tr><td class="c">1</td><td class="d">Vrácení platby — ' + esc(row.service) + '<span class="code">' + esc(row.place_label) + (row.place_address ? ', ' + esc(row.place_address) : '') + ' · k žádosti ' + esc(row.number) + '</span></td>'
+    + '<td class="r">' + neg(inv.subtotal) + '</td><td class="r">' + neg(inv.vat_amount) + '</td><td class="r"><b>' + neg(inv.total) + '</b></td></tr></tbody></table>'
+    + '<div class="note"><strong>Vráceno zákazníkovi: ' + kc(inv.total) + '</strong> bankovním převodem na účet ' + esc(row.account || '') + '. Dobropis vystaven k žádosti o vrácení platby ' + esc(row.number) + '.' + (d.note ? '<br>' + esc(d.note) : '') + '</div>';
+  return bs2.page({ title: 'Dobropis', number: inv.invoice_number, pill: 'Vrácení platby' }, body);
+}
+async function creditNotePdf(row, inv) { return pdfFromHtml(creditNoteHtml(row, inv, await receiptData(row))); }
+// E-mail zákazníkovi s dobropisem (po zaplacení). Bezpečné volat opakovaně — pošle se jen jednou.
+async function sendCreditNoteEmail(row) {
+  const inv = await prisma.invoice.findFirst({ where: { source: 'wash_refund', external_number: row.number, status: { not: 'cancelled' } }, orderBy: { id: 'desc' } });
+  if (!inv) return { ok: false, reason: 'no_credit_note' };
+  if (inv.delivery_status === 'sent') return { ok: true, already: true };
+  const pdf = await creditNotePdf(row, inv);
+  const { sendMail } = require('../services/email');
+  const r = await sendMail({ audience: 'customer', manual: true, to: row.email, brand: 'pradlomaty', lang: 'cs',
+    subject: 'Vrátili jsme vám platbu — dobropis ' + inv.invoice_number,
+    body: 'Dobrý den,\n\nvaši platbu ' + kc(inv.total) + ' (' + row.place_label + ', ' + new Date(row.tx_at).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' }) + ') jsme vám vrátili na účet ' + (row.account || '') + '. Podle banky může připsání trvat jeden pracovní den.\n\nV příloze zasíláme dobropis ' + inv.invoice_number + ' k vaší žádosti ' + row.number + '.\n\nDěkujeme za trpělivost.\nNonstop prádlomat linka: +420 792 319 961',
+    attachments: [{ filename: inv.invoice_number + '.pdf', content: Buffer.from(pdf), contentType: 'application/pdf' }] });
+  if (!r || !r.sent) { await prisma.invoice.update({ where: { id: inv.id }, data: { delivery_status: 'failed', send_error: String((r && (r.error || r.skipped)) || 'unknown').slice(0, 500), sent_to: row.email } }); return { ok: false, reason: 'send_failed' }; }
+  await prisma.invoice.update({ where: { id: inv.id }, data: { delivery_status: 'sent', sent_at: new Date(), sent_to: row.email, send_error: null } });
+  const cur = await prisma.washComplaint.findUnique({ where: { id: row.id } });
+  await prisma.washComplaint.update({ where: { id: row.id }, data: { receipt_number: inv.invoice_number, receipt_sent_at: new Date(), history: hist(cur, 'Dobropis ' + inv.invoice_number + ' odeslán na ' + row.email, 'HolyOS') } });
+  return { ok: true };
+}
+// Voláno po spárování bankovní platby: zaplacený dobropis → žádost „Zaplaceno" + e-mail zákazníkovi
+async function processPaymentForRefunds(paymentId) {
+  try {
+    const allocs = await prisma.paymentAllocation.findMany({ where: { payment_id: paymentId }, include: { invoice: { select: { id: true, status: true, source: true, external_number: true } } } });
+    for (const a of allocs) {
+      const inv = a.invoice; if (!inv || inv.source !== 'wash_refund' || inv.status !== 'paid') continue;
+      const row = await prisma.washComplaint.findUnique({ where: { number: inv.external_number } });
+      if (!row || row.status === 'done') continue;
+      const upd = await prisma.washComplaint.update({ where: { id: row.id }, data: { status: 'done', paid_at: new Date(), resolved_at: new Date(), resolved_by: 'banka (automaticky)', history: hist(row, 'zaplaceno — platba spárována s dobropisem (automaticky z banky)', 'HolyOS') } });
+      sendCreditNoteEmail(upd).catch((e) => console.warn('[wash] e-mail dobropisu:', e.message));
+    }
+  } catch (e) { console.warn('[wash] processPaymentForRefunds:', e.message); }
+}
+
 let _browser = null;
 async function pdfFromHtml(html) {
   if (!_browser || !_browser.isConnected()) _browser = await require('puppeteer').launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox', '--font-render-hinting=none'] });
@@ -463,4 +574,6 @@ router.post('/:id(\\d+)/email', async (req, res, next) => {
 
 module.exports = router;
 module.exports.publicRouter = publicRouter;
+module.exports.processPaymentForRefunds = processPaymentForRefunds;
+module.exports.sendCreditNoteEmail = sendCreditNoteEmail;
 module.exports._test = { normPhone, normAccount, checkToken, formToken, powChallenge, powCheck, imgChallenge, imgCheck, passFor };

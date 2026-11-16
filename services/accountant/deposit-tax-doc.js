@@ -201,6 +201,8 @@ async function processPaymentForDepositTaxDocs(paymentId, opts = {}) {
   try {
     // Best Series 2.0: finální faktura k zaplacené záloze + e-mail (nezávisle na DEPOSIT_TAX_AUTO_SEND)
     require('../bs2-billing').processPayment(paymentId).catch((e) => console.warn('[bs2-billing] processPayment:', e.message));
+    // Reklamace praní: zaplacený dobropis → žádost „Zaplaceno" + e-mail s dobropisem zákazníkovi
+    require('../../routes/wash-complaints.routes').processPaymentForRefunds(paymentId).catch((e) => console.warn('[wash-refund] processPayment:', e.message));
     const created = await createDepositTaxDocsForPayment(paymentId, opts);
     const autoSend = process.env.DEPOSIT_TAX_AUTO_SEND === '1';
     if (autoSend) {

@@ -5,8 +5,9 @@
   'use strict';
   var API = '/api/wash-complaints';
   var KIND = 'refund', ROWS = [], TBL = null, loaded = false;
-  var ST = { new: ['Nová', '#f59e0b'], approved: ['Schváleno', '#3b82f6'], done: ['Vyřízeno', '#22c55e'], rejected: ['Zamítnuto', '#ef4444'] };
-  var stLabel = function (r) { if (r.status === 'done') return r.kind === 'refund' ? 'Vyplaceno' : 'Doklad odeslán'; return (ST[r.status] || [r.status])[0]; };
+  var ST = { new: ['Nová', '#f59e0b'], approved: ['Schváleno', '#3b82f6'], awaiting_payment: ['Čeká na platbu', '#a855f7'], done: ['Vyřízeno', '#22c55e'], rejected: ['Zrušeno', '#ef4444'] };
+  var OPEN = ['new', 'approved', 'awaiting_payment'];
+  var stLabel = function (r) { if (r.status === 'done') return r.kind === 'refund' ? 'Zaplaceno' : 'Doklad odeslán'; return (ST[r.status] || [r.status])[0]; };
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   var kc = function (n) { return Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Kč'; };
   var dt = function (d) { return d ? new Date(d).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'; };
@@ -68,10 +69,10 @@
     var rows = ROWS.filter(function (r) { return r.kind === KIND; });
     var sum = function (f) { return rows.filter(f).reduce(function (s, r) { return s + Number(r.amount); }, 0); };
     var tile = function (l, v, sub, c) { return '<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid ' + c + ';border-radius:10px;padding:8px 14px;min-width:170px"><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px">' + l + '</div><div style="font-size:19px;font-weight:800">' + v + '</div><div style="font-size:11.5px;color:var(--text2)">' + sub + '</div></div>'; };
-    var open = rows.filter(function (r) { return r.status === 'new' || r.status === 'approved'; });
-    $('rp-sum').innerHTML = tile('K vyřízení', open.length, kc(sum(function (r) { return r.status === 'new' || r.status === 'approved'; })), '#f59e0b')
-      + tile(KIND === 'refund' ? 'Vyplaceno' : 'Dokladů odesláno', rows.filter(function (r) { return r.status === 'done'; }).length, kc(sum(function (r) { return r.status === 'done'; })), '#22c55e')
-      + tile('Zamítnuto', rows.filter(function (r) { return r.status === 'rejected'; }).length, kc(sum(function (r) { return r.status === 'rejected'; })), '#ef4444')
+    var open = rows.filter(function (r) { return OPEN.indexOf(r.status) !== -1; });
+    $('rp-sum').innerHTML = tile('K vyřízení', open.length, kc(sum(function (r) { return OPEN.indexOf(r.status) !== -1; })), '#f59e0b')
+      + tile(KIND === 'refund' ? 'Zaplaceno' : 'Dokladů odesláno', rows.filter(function (r) { return r.status === 'done'; }).length, kc(sum(function (r) { return r.status === 'done'; })), '#22c55e')
+      + tile('Zrušeno', rows.filter(function (r) { return r.status === 'rejected'; }).length, kc(sum(function (r) { return r.status === 'rejected'; })), '#ef4444')
       + tile('Celkem žádostí', rows.length, kc(sum(function () { return true; })), '#64748b');
     var cols = COLS();
     box.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto;padding:8px 0 0">'
@@ -97,10 +98,10 @@
       var inp = 'background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font:inherit;font-size:13px';
       var hist = (Array.isArray(r.history) ? r.history.slice().reverse() : []).map(function (h) { return '<div style="font-size:12.5px;padding:4px 0;border-bottom:1px dashed var(--border)"><span style="color:var(--text2)">' + esc(dt(h.at)) + (h.who ? ' · ' + esc(h.who) : '') + '</span><br>' + esc(h.text) + '</div>'; }).join('');
       var act = '';
-      if (r.status === 'new') act += '<button class="btn btn-primary" data-rpa="approved">✓ Schválit</button>';
-      if (r.kind === 'refund' && (r.status === 'new' || r.status === 'approved')) act += '<button class="btn" style="background:#22c55e;color:#04130a" data-rpa="done">💸 Vyplaceno</button>';
+      if (r.status === 'new') act += '<button class="btn btn-primary" data-rpa="approved">' + (r.kind === 'refund' ? '✓ Schválit a vystavit dobropis' : '✓ Schválit') + '</button>';
+      if (r.kind === 'refund' && (r.status === 'approved' || r.status === 'awaiting_payment')) act += '<button class="btn" style="background:#22c55e;color:#04130a" data-rpa="done" title="Normálně se přepne samo po spárování platby v bance">💸 Označit jako zaplaceno</button>';
       if (r.kind === 'receipt' && r.status !== 'rejected') act += '<a class="btn btn-secondary" href="' + API + '/' + r.id + '/receipt.pdf" target="_blank" rel="noopener">👁 Náhled dokladu</a><button class="btn" style="background:#22c55e;color:#04130a" data-rpa="send">🧾 ' + (r.receipt_sent_at ? 'Poslat doklad znovu' : 'Vystavit a poslat doklad') + '</button>';
-      if (r.status === 'new' || r.status === 'approved') act += '<button class="btn btn-secondary" style="color:#f87171" data-rpa="rejected">✕ Zamítnout</button>';
+      if (OPEN.indexOf(r.status) !== -1) act += '<button class="btn btn-secondary" style="color:#f87171" data-rpa="rejected">✕ Zrušit žádost</button>';
       if (r.status === 'rejected' || r.status === 'done') act += '<button class="btn btn-secondary" data-rpa="new">↺ Vrátit mezi nové</button>';
       ov.innerHTML = '<div class="modal" style="width:820px">'
         + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><h2 style="margin:0;font-size:19px">' + (r.kind === 'refund' ? '💸 Vrácení platby' : '🧾 Zaslání dokladu') + ' ' + esc(r.number) + '</h2>' + badge(r) + '<span style="flex:1"></span><button class="btn btn-secondary btn-sm" data-rpx>✕</button></div>'
@@ -110,7 +111,8 @@
         + kv('Částka', '<b>' + kc(r.amount) + '</b>') + kv('Způsob platby', esc(r.pay_method)) + kv('Služba', esc(r.service))
         + (r.kind === 'refund' ? kv('Účet pro vrácení', '<b style="font-family:Consolas,monospace">' + esc(r.account || '—') + '</b>') + kv('Důvod', '<span style="white-space:pre-line">' + esc(r.reason || '—') + '</span>') : '')
         + (r.receipt_number ? kv('Doklad', esc(r.receipt_number) + ' · odeslán ' + esc(dt(r.receipt_sent_at))) : '')
-        + (r.paid_at ? kv('Vyplaceno', esc(dt(r.paid_at))) : '') + (r.reject_reason ? kv('Důvod zamítnutí', esc(r.reject_reason)) : '')
+        + (r.credit_note ? kv('Dobropis', '<b>' + esc(r.credit_note.invoice_number) + '</b> · ' + ({ ready_to_pay: 'k proplacení (Účetní doklady → K platbě)', payment_queued: 'v platebním příkazu', paid: 'zaplacen', cancelled: 'stornován', partially_paid: 'částečně zaplacen' }[r.credit_note.status] || esc(r.credit_note.status)) + (r.credit_note.delivery_status === 'sent' ? ' · odeslán zákazníkovi' : '')) : '')
+        + (r.paid_at ? kv('Zaplaceno', esc(dt(r.paid_at))) : '') + (r.reject_reason ? kv('Důvod zrušení', esc(r.reject_reason)) : '')
         + '</div><div>'
         + '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">Interní poznámka (zákazník nevidí)</div><textarea id="rp-note" rows="4" style="' + inp + ';width:100%;resize:vertical">' + esc(r.internal_note || '') + '</textarea>'
         + '<div style="display:flex;gap:6px;margin:6px 0 14px"><button class="btn btn-secondary btn-sm" data-rpa="note">💾 Uložit poznámku</button></div>'
@@ -127,8 +129,8 @@
           if (a === 'note') p = api('/' + r.id, { method: 'PATCH', body: JSON.stringify({ internal_note: $('rp-note').value }) });
           else if (a === 'mail') { var t = $('rp-msg').value.trim(); if (t.length < 5) return alert('Napište text zprávy.'); if (!confirm('Odeslat e-mail zákazníkovi na ' + r.email + '?')) return; p = api('/' + r.id + '/email', { method: 'POST', body: JSON.stringify({ text: t }) }); }
           else if (a === 'send') { if (!confirm('Vystavit doklad a poslat ho e-mailem na ' + r.email + '?')) return; b.disabled = true; b.textContent = 'Odesílám…'; p = api('/' + r.id + '/send-receipt', { method: 'POST' }); }
-          else if (a === 'rejected') { var why = prompt('Důvod zamítnutí (uloží se k žádosti):', ''); if (why === null) return; p = api('/' + r.id, { method: 'PATCH', body: JSON.stringify({ status: 'rejected', reject_reason: why }) }); }
-          else if (a === 'done') { if (!confirm('Označit jako vyplaceno (' + kc(r.amount) + ' na účet ' + (r.account || '?') + ')?')) return; p = api('/' + r.id, { method: 'PATCH', body: JSON.stringify({ status: 'done' }) }); }
+          else if (a === 'rejected') { var why = prompt('Důvod zrušení (uloží se k žádosti):', ''); if (why === null) return; p = api('/' + r.id, { method: 'PATCH', body: JSON.stringify({ status: 'rejected', reject_reason: why }) }); }
+          else if (a === 'done') { if (!confirm('Označit dobropis jako zaplacený (' + kc(r.amount) + ' na účet ' + (r.account || '?') + ') a poslat zákazníkovi dobropis e-mailem?')) return; p = api('/' + r.id, { method: 'PATCH', body: JSON.stringify({ status: 'done' }) }); }
           else p = api('/' + r.id, { method: 'PATCH', body: JSON.stringify({ status: a }) });
           p.then(function () { load(); openDetail(r.id); }).catch(function (e) { b.disabled = false; alert('Chyba: ' + e.message); openDetail(r.id); });
         };
