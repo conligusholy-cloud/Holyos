@@ -262,8 +262,8 @@
         '<button type="button" class="cf-op" data-cfk="' + escH(key) + '" title="' + escH(def[0] + (OP_TITLES[c.op] ? ' — ' + OP_TITLES[c.op] : '') + ' (klikni pro změnu)') + '">' + def[1] + '</button>' +
         (def[2] === 3
           ? '<input class="cf-in cf-ro" readonly data-cfk="' + escH(key) + '" data-vi="1" value="' + escH((c.vals || []).join(', ')) + '" placeholder="' + escH(ph) + '" title="' + escH((c.vals || []).join(', ') || 'Klikni a vyber hodnoty') + '">'
-          : '<input class="cf-in" data-cfk="' + escH(key) + '" data-vi="1" value="' + escH(def[2] ? c.v : '') + '" placeholder="' + escH(ph) + '"' + (def[2] === 0 ? ' disabled' : '') + '>') +
-        (def[2] === 2 ? '<input class="cf-in cf-in2" data-cfk="' + escH(key) + '" data-vi="2" value="' + escH(c.v2 || '') + '" placeholder="do">' : '') +
+          : '<input class="cf-in" autocomplete="off" name="cf-' + escH(key) + '-' + Math.random().toString(36).slice(2, 7) + '" data-cfk="' + escH(key) + '" data-vi="1" value="' + escH(def[2] ? c.v : '') + '" placeholder="' + escH(ph) + '"' + (def[2] === 0 ? ' disabled' : '') + '>') +
+        (def[2] === 2 ? '<input class="cf-in cf-in2" autocomplete="off" data-cfk="' + escH(key) + '" data-vi="2" value="' + escH(c.v2 || '') + '" placeholder="do">' : '') +
         (extra > 0 ? '<button type="button" class="cf-more" data-cfk="' + escH(key) + '" title="Další podmínky (' + extra + ')">+' + extra + '</button>' : '') +
         (on || extra > 0 ? '<button type="button" class="cf-x" data-cfk="' + escH(key) + '" title="Zrušit filtr sloupce">✕</button>' : '') +
         '</div>';

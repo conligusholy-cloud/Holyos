@@ -165,4 +165,73 @@ const T = {
   }
 };
 
+// ── Přepracování úvodní stránky podle komentářů (EN je zdroj; PL/DE zatím přebírají EN, korektury překladů se dodělají) ──
+Object.assign(T.en, {
+  title: 'Franchise & master franchise operators wanted — Laundry Unlimited',
+  desc: 'We are searching for franchise and master franchise operators across Europe and more. Get territory exclusivity for selling and distributing laundromats.',
+  nav_about: 'About us', nav_machines: 'Laundromats', nav_model: 'Franchise model',
+  hero_kicker: 'Franchise & master franchise opportunity',
+  hero_h: 'We are searching for franchise & master franchise operators across Europe and more!',
+  hero_sub: 'Get territory exclusivity for selling and distributing laundromats.',
+  hero_p: 'Start a clean and fresh-smelling business by becoming a master franchise partner.',
+  about_h: 'Who we are',
+  about_p: 'We are not selling a theory. We build, sell and operate laundromats ourselves — the franchise model is built on a business that already works.',
+  about_facts: [['2', 'brothers, Tomáš and Jan, behind the company'], ['70', 'laundromats operating across Czechia, the UK and Ireland'], ['+2', 'new markets starting still in 2026'], ['100%', 'own production facility and in-house development']],
+  about_prod: 'Own production facility', about_prod_p: 'Machines are developed and assembled in our own production — clean, controlled and serviced by the people who build them.',
+  perf_h: 'Performance', perf: [],
+  mach_lbl: 'What is Laundry Unlimited', mach_h: 'Three laundromats, from MINI to MAX',
+  mach_p: 'Top of their class, developed in cooperation with the manufacturer. One platform, three sizes — pick the one that fits the location.',
+  machines: [['MINI', 'For small locations', 'Compact laundromat for housing estates, petrol stations and small spaces. Low entry investment, fast payback.'], ['MIDI', 'The all-rounder', 'Balanced capacity for a typical high-street or neighbourhood location.'], ['MAX', 'Maximum capacity', 'The largest capacity and strongest spin for busy locations and commercial laundry.']],
+  feat_h: 'Everything built in',
+  feat: ['Top in its class, developed with the manufacturer', 'Large washing capacity and strong spin', 'Water heating that works even at -30 °C', 'Payment gate: cash-less and cash', 'Online — remote monitoring and management', 'AI support', 'Speaks any local language', 'All features included as standard'],
+  ben_h: 'What it means for you',
+  ben: ['Drier laundry', 'Longer machine life', 'Higher capacity', 'Lower running cost than a stone laundromat', 'No staff needed on site', 'Open 24/7'],
+  mach_cmp: 'Compared with a traditional (brick-and-mortar) laundry: no staff, no fixed opening hours, remote control and a fraction of the operating costs.',
+  inst_h: 'Real installations', inst_p: 'Laundromats operating today across the market.',
+  model_h: 'Franchise model',
+  model_p: 'Three roles, one system. We provide the proven system, you build the region, franchisees run the laundromats.',
+  fr_cols: [
+    ['We — Laundry Unlimited', 'Franchisor functions', ['Proven business system', 'Technology and machines', 'Support platform', 'Territory exclusivity', 'Marketplace access', 'Flexible scope of support']],
+    ['You — master franchise', 'Regional operator functions', ['Set up the organization, buy laundromat(s), arrange location and installation', 'Start operating while the first franchisee(s) are being found', 'Sell franchise contract(s): laundromat + location based on delivered potential and economics', 'Develop your own retail locations', 'Marketplace access']],
+    ['You / they — franchisee', 'Local operator functions', ['Laundromat operations', 'Marketplace access']]
+  ],
+  rev_h: 'Master franchise revenue streams',
+  rev: ['Sales of laundromat locations based on economics', 'Own laundromat retail network operations', 'Franchise fees (contracted area)', 'Service', 'After-sale revenue (detergents…)'],
+  market_h: 'Marketplace', market_p: 'Connects buyers from all around the world with prepared and already operating locations. A buyer can be an individual, a company or a chain.',
+});
+Object.assign(T.cs, {
+  title: 'Hledáme franšízanty a master franšízanty — Laundry Unlimited',
+  desc: 'Hledáme franšízové a master franšízové operátory po celé Evropě i mimo ni. Získej územní exkluzivitu pro prodej a distribuci prádlomatů.',
+  nav_about: 'O nás', nav_machines: 'Prádlomaty', nav_model: 'Franšízový model',
+  hero_kicker: 'Příležitost pro franšízanty a master franšízanty',
+  hero_h: 'Hledáme franšízové a master franšízové operátory po celé Evropě i mimo ni!',
+  hero_sub: 'Získej územní exkluzivitu pro prodej a distribuci prádlomatů.',
+  hero_p: 'Začni čisté a voňavé podnikání jako master franšízový partner.',
+  about_h: 'Kdo jsme',
+  about_p: 'Neprodáváme teorii. Prádlomaty sami stavíme, prodáváme i provozujeme — franšízový model stojí na byznysu, který už funguje.',
+  about_facts: [['2', 'bratři, Tomáš a Jan, stojí za firmou'], ['70', 'prádlomatů v provozu v Česku, Británii a Irsku'], ['+2', 'nové trhy ještě v roce 2026'], ['100%', 'vlastní výrobní závod a vývoj']],
+  about_prod: 'Vlastní výroba', about_prod_p: 'Stroje vyvíjíme a sestavujeme ve vlastním výrobním závodě — čistě, pod kontrolou a se servisem od lidí, kteří je vyrábějí.',
+  perf_h: 'Výkon', perf: [],
+  mach_lbl: 'Co je Laundry Unlimited', mach_h: 'Tři prádlomaty od MINI po MAX',
+  mach_p: 'Špička ve své třídě, vyvíjená ve spolupráci s výrobcem. Jedna platforma, tři velikosti — vyber tu, která sedí na místo.',
+  machines: [['MINI', 'Pro malá místa', 'Kompaktní prádlomat na sídliště, k čerpací stanici i do malých prostor. Nízká vstupní investice, rychlá návratnost.'], ['MIDI', 'Univerzál', 'Vyvážená kapacita pro typické místo v ulici nebo ve čtvrti.'], ['MAX', 'Maximální kapacita', 'Největší kapacita a nejsilnější odstředění pro vytížená místa i komerční praní.']],
+  feat_h: 'Všechno v základu',
+  feat: ['Špička ve své třídě, vyvíjeno s výrobcem', 'Velká prací kapacita a silné odstředění', 'Ohřev vody funguje i při -30 °C', 'Platební brána: bezhotovostně i hotově', 'Online — vzdálený dohled a správa', 'AI podpora', 'Mluví v jakémkoli místním jazyce', 'Všechny funkce jako standard'],
+  ben_h: 'Co to znamená pro vás',
+  ben: ['Sušší prádlo', 'Delší životnost stroje', 'Vyšší kapacita', 'Nižší provozní náklady než kamenná prádelna', 'Bez obsluhy na místě', 'Otevřeno 24/7'],
+  mach_cmp: 'Oproti klasické (kamenné) prádelně: bez personálu, bez pevné otevírací doby, ovládání na dálku a zlomek provozních nákladů.',
+  inst_h: 'Skutečné instalace', inst_p: 'Prádlomaty v provozu napříč trhem.',
+  model_h: 'Franšízový model',
+  model_p: 'Tři role, jeden systém. My dodáme prověřený systém, ty vybuduješ region, franšízanti provozují prádlomaty.',
+  fr_cols: [
+    ['My — Laundry Unlimited', 'Funkce franšízora', ['Prověřený obchodní systém', 'Technologie a stroje', 'Podpůrná platforma', 'Územní exkluzivita', 'Přístup na Marketplace', 'Flexibilní rozsah podpory']],
+    ['Ty — master franšíza', 'Funkce regionálního operátora', ['Založení organizace, nákup prádlomatu(ů), zajištění místa a instalace', 'Zahájení provozu, než se najdou první franšízanti', 'Prodej franšízových smluv: prádlomat + místo podle potenciálu a dodané ekonomiky', 'Rozvoj vlastních provozoven', 'Přístup na Marketplace']],
+    ['Ty / oni — franšízant', 'Funkce místního operátora', ['Provoz prádlomatu', 'Přístup na Marketplace']]
+  ],
+  rev_h: 'Příjmy master franšízanta',
+  rev: ['Prodej míst s prádlomaty podle ekonomiky', 'Provoz vlastní sítě prádlomatů', 'Franšízové poplatky (smluvní oblast)', 'Servis', 'Příjmy po prodeji (prací prostředky…)'],
+  market_h: 'Marketplace', market_p: 'Propojuje kupující z celého světa s připravenými i již fungujícími místy. Kupujícím může být jednotlivec, firma i řetězec.',
+});
+for (const l of ['pl', 'de']) T[l] = Object.assign({}, T.en, T[l], { hero_h: T.en.hero_h, hero_sub: T.en.hero_sub, hero_p: T.en.hero_p });
+
 module.exports = { LANGS, NAMES, T };

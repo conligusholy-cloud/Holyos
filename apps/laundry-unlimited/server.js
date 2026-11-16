@@ -213,7 +213,7 @@ ${noindex ? '<meta name="robots" content="noindex">' : alts}<meta name="theme-co
 <script>document.documentElement.className+=' js'</script><style>${SITE_CSS}</style></head><body>
 <div class="aur"><i></i><i></i><i></i></div><div class="prog" id="prog"></div>
 <div class="bar"><div class="wrap"><a href="${base || '/'}" style="display:block">${logoHtml(50)}</a>
-<nav><a class="hide" href="${base}/#model">${esc(t.nav_model)}</a><a class="hide" href="${base}/#offer">${esc(t.nav_offer)}</a><a class="hide" href="${base}/#who">${esc(t.nav_who)}</a>
+<nav><a class="hide" href="${base}/#about">${esc(t.nav_about)}</a><a class="hide" href="${base}/#machines">${esc(t.nav_machines)}</a><a class="hide" href="${base}/#model">${esc(t.nav_model)}</a><a class="hide" href="${base}/#offer">${esc(t.nav_offer)}</a><a class="hide" href="${base}/#who">${esc(t.nav_who)}</a>
 <div class="lang">${sw}</div><a class="btn" href="${base}/apply"><span>${esc(t.nav_apply)}${CHEV}</span></a></nav></div></div>
 ${body}
 <footer><div class="wrap"><b>Laundry Unlimited</b> — ${esc(t.foot.replace(/^Laundry Unlimited\s*·\s*/, ''))}</div></footer>
@@ -254,18 +254,24 @@ function landing(lang) {
   const item = (o, i) => `<div class="it"><span class="n">${nn(i)}</span><div><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div></div>`;
   const body = `
 <div class="hero"><div class="drum"><i class="ring"></i><i class="ring r2"></i><i class="ring r3"></i><i class="core"></i></div>${bub}
-<div class="wrap hw"><span class="lbl">${esc(t.hero_kicker)}</span><h1>${esc(t.hero_h)}</h1><p class="lead">${esc(t.hero_p)}</p>
+<div class="wrap hw"><span class="lbl">${esc(t.hero_kicker)}</span><h1>${esc(t.hero_h)}</h1><p class="lead"><b>${esc(t.hero_sub)}</b><br>${esc(t.hero_p)}</p>
 <div class="cta"><a class="btn" href="${base}/apply"><span>${esc(t.hero_cta)}${CHEV}</span></a><a class="btn line" href="#model"><span>${esc(t.hero_cta2)}</span></a></div>
 <div class="facts">${stats}</div></div></div>
 <div class="tick"><div>${tk}${tk}</div></div>
-<section><div class="wrap"><div class="sec-h rv"><div><span class="lbl">Laundry Unlimited</span><h2>${esc(t.brands_h)}</h2></div><p>${esc(t.brands_p)}</p></div>
+<section id="about"><div class="wrap"><div class="sec-h rv"><div><span class="lbl">${esc(t.nav_about)}</span><h2>${esc(t.about_h)}</h2></div><p>${esc(t.about_p)}</p></div>
+<div class="facts" style="margin-top:0">${t.about_facts.map((f, i) => `<div class="gl tilt rv" style="--i:${i % 3}"><h3 style="font-size:44px;margin:0 0 8px">${esc(f[0])}</h3>${esc(f[1])}</div>`).join('')}</div>
+<div class="gl rv" style="padding:34px 38px;margin-top:16px"><h3>${esc(t.about_prod)}</h3><p>${esc(t.about_prod_p)}</p></div>
+${t.perf && t.perf.length ? `<div class="gl rv" style="padding:34px 38px;margin-top:16px"><h3>${esc(t.perf_h)}</h3><ul class="ck">${li(t.perf)}</ul></div>` : ''}</div></section>
+<section id="machines"><div class="wrap"><div class="sec-h rv"><div><span class="lbl">${esc(t.mach_lbl)}</span><h2>${esc(t.mach_h)}</h2></div><p>${esc(t.mach_p)}</p></div>
+<div class="facts" style="margin-top:0">${t.machines.map((m, i) => `<div class="gl tilt rv" style="--i:${i}"><h3 style="font-size:38px;margin:0 0 4px">${esc(m[0])}</h3><small>${esc(m[1])}</small><p>${esc(m[2])}</p></div>`).join('')}</div>
+<div class="duo" style="margin-top:16px"><div class="gl pan rv"><h3 class="col">${esc(t.feat_h)}</h3><ul class="ck">${li(t.feat)}</ul></div>
+<div class="gl pan rv" style="--i:1"><h3 class="col">${esc(t.ben_h)}</h3><ul class="ck">${li(t.ben)}</ul><p>${esc(t.mach_cmp)}</p></div></div>
+<div class="sec-h rv" style="margin-top:70px"><div><h2 style="font-size:clamp(26px,3vw,40px)">${esc(t.inst_h)}</h2></div><p>${esc(t.inst_p)}</p></div>
 <div class="brands rv"><figure class="tilt"><img src="/img/ireland.webp" alt="" loading="lazy" width="1200" height="900"></figure><figure class="tilt"><img src="/img/blue.webp" alt="" loading="lazy" width="900" height="1200"></figure><figure class="tilt"><img src="/img/orlen.webp" alt="" loading="lazy" width="1200" height="900"></figure></div></div></section>
 <section id="model"><div class="wrap"><div class="sec-h rv"><div><span class="lbl">${esc(t.nav_model)}</span><h2>${esc(t.model_h)}</h2></div><p>${esc(t.model_p)}</p></div>
-<div class="mgrid"><div class="flow">
-<div class="gl node rv"><small>01</small><h3>${esc(t.top_h)}</h3><p>${esc(t.top_p)}</p></div><div class="wire"></div>
-<div class="gl node rv" style="--i:1"><small>02</small><h3>${esc(t.mid_h)}</h3><p>${esc(t.mid_p)}</p></div><div class="wire"></div>
-<div class="gl node hot rv" style="--i:2"><small>03</small><h3>${esc(t.market_h)}</h3><p>${esc(t.market_p)}</p></div></div>
-<div class="gl big rv" style="--i:1"><h3>${esc(t.b_h.replace(/^B\s+/, ''))}</h3><small>${esc(t.b_p)}</small><ul class="ck">${li(t.b_li)}</ul></div></div></div></section>
+<div class="facts" style="margin-top:0">${t.fr_cols.map((c, i) => `<div class="gl rv${i === 1 ? ' node hot' : ''}" style="--i:${i};padding:34px 30px"><small>0${i + 1}</small><h3>${esc(c[0])}</h3><p>${esc(c[1])}</p><ul class="ck">${li(c[2].map((x, k) => (k + 1) + ') ' + x))}</ul></div>`).join('')}</div>
+<div class="duo" style="margin-top:16px"><div class="gl node hot rv"><small>${esc(t.market_h)}</small><h3>${esc(t.market_h)}</h3><p>${esc(t.market_p)}</p></div>
+<div class="gl pan rv" style="--i:1"><h3 class="col">${esc(t.rev_h)}</h3><ul class="ck">${li(t.rev)}</ul></div></div></div></section>
 <section id="offer"><div class="wrap"><div class="sec-h rv"><div><span class="lbl">${esc(t.nav_offer)}</span><h2>${esc(t.offer_h)}</h2></div></div>
 <div class="bento">${t.offer.map((o, i) => `<div class="gl b b${i} rv" style="--i:${i % 3}"><span class="num">${nn(i)}</span><h3>${esc(o[0])}</h3><p>${esc(o[1])}</p></div>`).join('')}</div></div></section>
 <section id="who"><div class="wrap"><div class="sec-h rv"><div><span class="lbl">${esc(t.nav_who)}</span><h2>${esc(t.who_h)}</h2></div></div>
