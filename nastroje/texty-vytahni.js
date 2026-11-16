@@ -24,6 +24,35 @@ const HRA = path.join(__dirname, '..', 'public', 'compounder', 'game', 'game.js'
 const CS = path.join(__dirname, '..', 'services', 'game', 'texty', 'cs.json');
 const CZ = /[ěščřžýáíéúůňťďóĚŠČŘŽÝÁÍÉÚŮŇŤĎÓ]/;
 
+// Podle háčků a čárek se text pro hráče nepozná — 'Koupit za', 'Za den'
+// a 'Hotovost' jsou česky a diakritiku nemají. Rozhoduje proto, kde text
+// stojí a jak vypadá.
+//
+// Text mezi značkami je vždycky vidět, stačí aby v něm bylo slovo.
+// Samostatný řetězec je naopak obvykle technický — třída, selektor, adresa,
+// klíč — a ten se nesmí vzít. Pustíme ho jen tehdy, když vypadá jako věta:
+// začíná velkým písmenem nebo má mezeru a žádné znaky ze světa kódu.
+const TECHNICKE = /[=<>{}#;|\\]|\/\/|\bhttp|^[a-z0-9_]+(\.[a-z0-9_]+)+$|^[.#][a-zA-Z]/;
+function jeText(s, meziZnackami) {
+  const c = String(s).trim();
+  if (!/[A-Za-zÀ-ž]{2}/.test(c)) return false;
+  if (CZ.test(c)) return true;
+  if (TECHNICKE.test(c)) return false;
+  // Jedno slovo, co vypadá jako z kódu: AbortError, Content-Type, POST.
+  // Text pro hráče se takhle nepíše.
+  if (!/\s/.test(c)) {
+    if (/^[A-Z0-9_-]+$/.test(c)) return false;
+    if (/[a-z][A-Z]/.test(c)) return false;
+    if (/-[A-Z]/.test(c)) return false;
+  }
+  if (meziZnackami) return true;
+  // Samostatný řetězec: buď začíná velkým písmenem, nebo je to kus věty
+  // s mezerou. Jedno malé slovo je skoro vždycky název třídy nebo klíč.
+  if (/^[A-ZÀ-Ž]/.test(c)) return true;
+  if (/\s/.test(c) && !/^[a-z0-9_-]+( [a-z0-9_-]+)*$/.test(c)) return true;
+  return false;
+}
+
 // Klíč z textu: bez diakritiky, slova spojená podtržítkem, rozumně krátký.
 // Znak zapsaný ve zdroji jako \u00d7 patří do katalogu jako samotný znak.
 // Jinak by hráč v okně viděl ten zápis, ne křížek.
@@ -72,7 +101,7 @@ function uUlomek(cisty, pred, po) {
 // Text pro hráče = úsek mezi > a < (nebo celý literál, když HTML neobsahuje).
 function casti(obsah) {
   if (obsah.indexOf('<') < 0 && obsah.indexOf('>') < 0) {
-    return CZ.test(obsah) ? [{ text: true, s: obsah }] : [{ text: false, s: obsah }];
+    return jeText(obsah, false) ? [{ text: true, s: obsah }] : [{ text: false, s: obsah }];
   }
   const out = [];
   // Text pro hráče nesedí jen mezi dvěma značkami. Řetězec často končí
@@ -82,21 +111,21 @@ function casti(obsah) {
   const prvni = obsah.indexOf('<');
   const posledni = obsah.lastIndexOf('>');
   let pos = 0;
-  if (prvni > 0) { out.push({ text: CZ.test(obsah.slice(0, prvni)), s: obsah.slice(0, prvni) }); pos = prvni; }
+  if (prvni > 0) { out.push({ text: jeText(obsah.slice(0, prvni), true), s: obsah.slice(0, prvni) }); pos = prvni; }
   const stred = posledni >= pos ? obsah.slice(pos, posledni + 1) : '';
   const re = />([^<>]+)</g;
   let p2 = 0, m;
   while ((m = re.exec(stred)) !== null) {
     const zacatek = m.index + 1;
     if (zacatek > p2) out.push({ text: false, s: stred.slice(p2, zacatek) });
-    out.push({ text: CZ.test(m[1]), s: m[1] });
+    out.push({ text: jeText(m[1], true), s: m[1] });
     p2 = zacatek + m[1].length;
     re.lastIndex = p2;
   }
   if (p2 < stred.length) out.push({ text: false, s: stred.slice(p2) });
   if (posledni >= pos && posledni + 1 < obsah.length) {
     const konec = obsah.slice(posledni + 1);
-    out.push({ text: CZ.test(konec), s: konec });
+    out.push({ text: jeText(konec, true), s: konec });
   }
   return out;
 }
@@ -126,7 +155,7 @@ function main() {
 
   // Jen literály v jednoduchých uvozovkách — tak je celý game.js psaný.
   const novyText = fn.text.replace(/'((?:[^'\\\n]|\\.)*)'/g, (cele, obsah) => {
-    if (!CZ.test(obsah)) return cele;
+    if (!jeText(obsah, true)) return cele;
     // Text, ve kterém je kus kódu, nechávám na ruční přepis.
     if (/\\'|\$\{|\\n/.test(obsah)) { preskoceno.push(obsah); return cele; }
     const ch = casti(obsah);
@@ -135,6 +164,11 @@ function main() {
     // pozná, jestli text uprostřed věty pokračuje někde jinde.
     const kde = fn.text.indexOf(cele);
     const okoliPred = fn.text.slice(Math.max(0, kde - 40), kde);
+    // Porovnání — e.key === 'Enter' — není text pro hráče, je to hodnota.
+    if (/[=!]==?\s*$/.test(okoliPred)) { preskoceno.push(obsah); return cele; }
+    // Ukázka ve vysvětlivce taky ne.
+    const radek = okoliPred.slice(okoliPred.lastIndexOf('\n') + 1);
+    if (radek.indexOf('//') >= 0) return cele;
     const okoliPo = fn.text.slice(kde + cele.length, kde + cele.length + 40);
     const lepiPred = /\+\s*$/.test(okoliPred);
     const lepiPo = /^\s*\+/.test(okoliPo);

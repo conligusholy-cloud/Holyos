@@ -29,6 +29,23 @@ function nacti(jmeno, vychozi) {
 const otisk = (x) => crypto.createHash('sha1')
   .update(typeof x === 'string' ? x : JSON.stringify(x)).digest('hex').slice(0, 12);
 
+// Stejné pravidlo jako ve vytahovacím nástroji: mezi značkami je text vždycky
+// vidět, samostatný řetězec se pustí jen tehdy, když vypadá jako věta.
+const TECHNICKE = /[=<>{}#;|\\]|\/\/|\bhttp|^[a-z0-9_]+(\.[a-z0-9_]+)+$|^[.#][a-zA-Z]/;
+function jeText(v) {
+  const c = String(v).trim();
+  if (!/[A-Za-zÀ-ž]{2}/.test(c)) return false;
+  if (CZ.test(c)) return true;
+  if (TECHNICKE.test(c)) return false;
+  if (!/\s/.test(c)) {
+    if (/^[A-Z0-9_-]+$/.test(c)) return false;
+    if (/[a-z][A-Z]/.test(c) || /-[A-Z]/.test(c)) return false;
+  }
+  if (/^[A-ZÀ-Ž]/.test(c)) return true;
+  if (/\s/.test(c) && !/^[a-z0-9_-]+( [a-z0-9_-]+)*$/.test(c)) return true;
+  return false;
+}
+
 function main() {
   const cs = nacti('cs.json', {});
   const en = nacti('en.json', {});
@@ -40,8 +57,10 @@ function main() {
     if (meta[k] && meta[k] !== otisk(cs[k])) zastarale.push(k);
   });
 
-  // Zapomenuté texty v kódu. Počítají se jen celé řetězce s českým písmenem;
-  // komentáře se přeskakují, ty jsou pro nás, ne pro hráče.
+  // Zapomenuté texty v kódu. Podle háčků a čárek se text pro hráče nepozná —
+  // 'Koupit za', 'Za den' a 'Hotovost' jsou česky a diakritiku nemají. Bere
+  // se proto i text bez ní, když vypadá jako věta a ne jako kus kódu.
+  // Komentáře se přeskakují, ty jsou pro nás, ne pro hráče.
   const radky = fs.readFileSync(HRA, 'utf8').split('\n');
   const zapomenute = [];
   radky.forEach((l, i) => {
@@ -49,7 +68,7 @@ function main() {
     const re = /'((?:[^'\\\n]|\\.)*)'/g;
     let m;
     while ((m = re.exec(bezKomentare)) !== null) {
-      if (m[1] && CZ.test(m[1])) zapomenute.push({ radek: i + 1, text: m[1].slice(0, 60) });
+      if (m[1] && jeText(m[1])) zapomenute.push({ radek: i + 1, text: m[1].slice(0, 60) });
     }
   });
 
