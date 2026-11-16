@@ -83,9 +83,9 @@ async function splatkyPujcek(ted) {
         } });
         await prisma.gameDelivery.createMany({ data: [
           { player_id: p.borrower_id, kind: 'zprava',
-            popis: 'Nezaplatil jsi splátku ' + p.lender_nick + '. Zmeškané: ' + zmeskano + ' ze ' + max + '.' },
+            popis: 'Nezaplatil jsi splátku ' + p.lender_nick + '. Zmeškané: ' + zmeskano + ' ze ' + max + '.' , text_kod: 'dor.nezaplatil_jsi_splatku_zmeskane_ze', text_data: { p1: p.lender_nick, p2: zmeskano, p3: max }},
           { player_id: p.lender_id, kind: 'zprava',
-            popis: p.borrower_nick + ' nezaplatil splátku (' + zmeskano + ' ze ' + max + ').' },
+            popis: p.borrower_nick + ' nezaplatil splátku (' + zmeskano + ' ze ' + max + ').' , text_kod: 'dor.nezaplatil_splatku_ze', text_data: { p1: p.borrower_nick, p2: zmeskano, p3: max }},
         ] });
         continue;
       }

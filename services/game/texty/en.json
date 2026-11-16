@@ -84,5 +84,7 @@
   "odznak.spojovatel.jak": "Pick up the phone yourself. Calls handled by the paid hotline don't count.",
   "odznak.spojovatel.nazev": "Switchboard",
   "odznak.spojovatel.popis": "Took fifty calls personally. The operator doesn't count.",
-  "server.neprihlasen": "You are not signed in."
+  "server.neprihlasen": "You are not signed in.",
+  "dor.vydrazil_jsi": "You won {p1} at auction",
+  "dor.prihozy_v_drazbe": "Bids in auction: {p1}"
 }

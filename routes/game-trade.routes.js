@@ -588,18 +588,18 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
       const c = await tx.gameSpotClaim.update({ where: { spot_id: t.spot_id },
         data: { player_id: kupujici.id, nick: kupujici.nick } });
       await tx.gameDelivery.createMany({ data: [
-        { player_id: prodavajici.id, trade_id: t.id, kind: 'unit_remove', spot_id: t.spot_id, popis: 'Prodal jsi prádlomat ' + (c.name || '') },
+        { player_id: prodavajici.id, trade_id: t.id, kind: 'unit_remove', spot_id: t.spot_id, popis: 'Prodal jsi prádlomat ' + (c.name || '') , text_kod: 'dor.prodal_jsi_pradlomat', text_data: { p1: (c.name || '') }},
         { player_id: kupujici.id, trade_id: t.id, kind: 'unit_add', spot_id: t.spot_id, model: c.model,
           data: { name: c.name, lat: c.lat, lon: c.lon, rent: c.rent, area_key: c.area_key },
-          popis: 'Koupil jsi prádlomat ' + (c.name || '') },
+          popis: 'Koupil jsi prádlomat ' + (c.name || '') , text_kod: 'dor.koupil_jsi_pradlomat', text_data: { p1: (c.name || '') }},
       ] });
     } else if (t.predmet === 'pobocka') {
       // Pobočka se přesouvá přes doručenky — stav hry si ji přepíše sám.
       await tx.gameDelivery.createMany({ data: [
         { player_id: prodavajici.id, trade_id: t.id, kind: 'pobocka_remove', spot_id: t.spot_id,
-          popis: 'Prodal jsi pobočku ' + (t.spot_id || '') },
+          popis: 'Prodal jsi pobočku ' + (t.spot_id || '') , text_kod: 'dor.prodal_jsi_pobocku', text_data: { p1: (t.spot_id || '') }},
         { player_id: kupujici.id, trade_id: t.id, kind: 'pobocka_add', spot_id: t.spot_id,
-          popis: 'Koupil jsi pobočku ' + (t.spot_id || '') },
+          popis: 'Koupil jsi pobočku ' + (t.spot_id || '') , text_kod: 'dor.koupil_jsi_pobocku', text_data: { p1: (t.spot_id || '') }},
       ] });
     }
     // 3a. půjčka: peníze jdou od věřitele dlužníkovi a rozjede se splátkový kalendář
@@ -618,9 +618,9 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
       } });
       await tx.gameDelivery.createMany({ data: [
         { player_id: prodavajici.id, trade_id: t.id, kind: 'cash', amount: -t.cena,
-          popis: 'Půjčil jsi ' + kupujici.nick },
+          popis: 'Půjčil jsi ' + kupujici.nick , text_kod: 'dor.pujcil_jsi', text_data: { p1: kupujici.nick }},
         { player_id: kupujici.id, trade_id: t.id, kind: 'cash', amount: t.cena,
-          popis: 'Půjčka od ' + prodavajici.nick },
+          popis: 'Půjčka od ' + prodavajici.nick , text_kod: 'dor.pujcka_od', text_data: { p1: prodavajici.nick }},
       ] });
       await tx.gameTrade.update({ where: { id }, data: { stav: 'prijato', resolved_at: new Date() } });
       return;
@@ -673,7 +673,7 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
     if (t.cena > 0) {
       await tx.gameDelivery.createMany({ data: [
         { player_id: kupujici.id, trade_id: t.id, kind: 'cash', amount: -t.cena, popis: 'Zaplatil jsi za ' + popisPredmetu },
-        { player_id: prodavajici.id, trade_id: t.id, kind: 'cash', amount: t.cena, popis: 'Utržil jsi za ' + popisPredmetu },
+        { player_id: prodavajici.id, trade_id: t.id, kind: 'cash', amount: t.cena, popis: 'Utržil jsi za ' + popisPredmetu , text_kod: 'dor.utrzil_jsi_za', text_data: { p1: popisPredmetu }},
       ] });
     }
     await tx.gameTrade.update({ where: { id }, data: { stav: 'prijato', resolved_at: new Date() } });
@@ -775,9 +775,9 @@ router.post('/trade/pujcka/:id/splatit', hrac, api(async (req, res) => {
   await prisma.$transaction(async (tx) => {
     await tx.gameDelivery.createMany({ data: [
       { player_id: p.borrower_id, kind: 'cash', amount: -castka,
-        popis: 'Doplatil jsi půjčku — ' + p.lender_nick },
+        popis: 'Doplatil jsi půjčku — ' + p.lender_nick , text_kod: 'dor.doplatil_jsi_pujcku', text_data: { p1: p.lender_nick }},
       { player_id: p.lender_id, kind: 'cash', amount: castka,
-        popis: p.borrower_nick + ' doplatil půjčku předčasně' },
+        popis: p.borrower_nick + ' doplatil půjčku předčasně' , text_kod: 'dor.doplatil_pujcku_predcasne', text_data: { p1: p.borrower_nick }},
     ] });
     await tx.gameLoan.update({ where: { id },
       data: { stav: 'splaceno', splaceno: p.mesicu, zmeskano: 0 } });
@@ -950,7 +950,7 @@ router.post('/trade/aukce/:id/koupit', hrac, api(async (req, res) => {
       // Místo po zkrachovalém je volné — kupující ho musí zabrat jako každé jiné,
       // ale stroj dostane na sklad.
       dorucenky.push({ player_id: req.player.id, kind: 'stock', model: a.model || 'mini', amount: 1,
-        popis: 'Z konkurzu stroj z místa ' + a.popis });
+        popis: 'Z konkurzu stroj z místa ' + a.popis , text_kod: 'dor.z_konkurzu_stroj_z_mista', text_data: { p1: a.popis }});
     }
     await tx.gameDelivery.createMany({ data: dorucenky });
   });
@@ -1057,13 +1057,13 @@ router.post('/trade/trh/:id/koupit', hrac, api(async (req, res) => {
     const popis = 'prádlomat ' + (m.name || m.spot_id) + ' z tržiště';
     await tx.gameDelivery.createMany({ data: [
       { player_id: m.player_id, kind: 'unit_remove', spot_id: m.spot_id,
-        popis: 'Prodal jsi ' + popis + ' hráči ' + req.player.nick },
+        popis: 'Prodal jsi ' + popis + ' hráči ' + req.player.nick , text_kod: 'dor.prodal_jsi_hraci', text_data: { p1: popis, p2: req.player.nick }},
       { player_id: req.player.id, kind: 'unit_add', spot_id: m.spot_id, model: m.model,
         data: { name: m.name, lat: m.lat, lon: m.lon, rent: m.rent, area_key: m.area_key,
           kind: m.kind, score: m.score, invest: m.cena, plan: m.plan || null },
         popis: 'Koupil jsi ' + popis },
       { player_id: req.player.id, kind: 'cash', amount: -m.cena, popis: 'Zaplatil jsi za ' + popis },
-      { player_id: m.player_id, kind: 'cash', amount: m.cena, popis: 'Utržil jsi za ' + popis },
+      { player_id: m.player_id, kind: 'cash', amount: m.cena, popis: 'Utržil jsi za ' + popis , text_kod: 'dor.utrzil_jsi_za', text_data: { p1: popis }},
     ] });
   });
 
@@ -1297,7 +1297,7 @@ async function vyporadejDrazbu(id) {
         const c = (p._sum && p._sum.castka) || 0;
         if (c <= 0) continue;
         await tx.gameDelivery.create({ data: { player_id: p.player_id, kind: 'cash', amount: -c,
-          popis: 'Příhozy v dražbě: ' + d.nazev } });
+          popis: 'Příhozy v dražbě: ' + d.nazev , text_kod: 'dor.prihozy_v_drazbe', text_data: { p1: d.nazev }} });
       }
       // 2. prodávající dostane příhozy i doplatek
       if (d.suma + (vitez ? cena : 0) > 0) {
@@ -1310,7 +1310,7 @@ async function vyporadejDrazbu(id) {
       if (vitez) {
         if (cena > 0) {
           await tx.gameDelivery.create({ data: { player_id: vitez.id, kind: 'cash', amount: -cena,
-            popis: 'Doplatek za vydražené: ' + d.nazev } });
+            popis: 'Doplatek za vydražené: ' + d.nazev , text_kod: 'dor.doplatek_za_vydrazene', text_data: { p1: d.nazev }} });
         }
         await prevedVydrazene(tx, d, prodavajici, vitez);
       }
@@ -1339,22 +1339,22 @@ async function prevedVydrazene(tx, d, prodavajici, vitez) {
     await tx.gameCard.update({ where: { id: c.id }, data: { player_id: vitez.id } });
   } else if (d.predmet === 'stroj') {
     await tx.gameDelivery.createMany({ data: [
-      { player_id: prodavajici.id, kind: 'stock', model: d.model, amount: -1, popis: 'Vydražil se tvůj ' + popis },
-      { player_id: vitez.id, kind: 'stock', model: d.model, amount: 1, popis: 'Vydražil jsi ' + popis },
+      { player_id: prodavajici.id, kind: 'stock', model: d.model, amount: -1, popis: 'Vydražil se tvůj ' + popis , text_kod: 'dor.vydrazil_se_tvuj', text_data: { p1: popis }},
+      { player_id: vitez.id, kind: 'stock', model: d.model, amount: 1, popis: 'Vydražil jsi ' + popis , text_kod: 'dor.vydrazil_jsi', text_data: { p1: popis }},
     ] });
   } else if (d.predmet === 'pradlomat') {
     const c = await tx.gameSpotClaim.update({ where: { spot_id: d.spot_id },
       data: { player_id: vitez.id, nick: vitez.nick } });
     await tx.gameDelivery.createMany({ data: [
-      { player_id: prodavajici.id, kind: 'unit_remove', spot_id: d.spot_id, popis: 'Vydražil se tvůj ' + popis },
+      { player_id: prodavajici.id, kind: 'unit_remove', spot_id: d.spot_id, popis: 'Vydražil se tvůj ' + popis , text_kod: 'dor.vydrazil_se_tvuj', text_data: { p1: popis }},
       { player_id: vitez.id, kind: 'unit_add', spot_id: d.spot_id, model: c.model,
         data: { name: c.name, lat: c.lat, lon: c.lon, rent: c.rent, area_key: c.area_key },
-        popis: 'Vydražil jsi ' + popis },
+        popis: 'Vydražil jsi ' + popis , text_kod: 'dor.vydrazil_jsi', text_data: { p1: popis }},
     ] });
   } else if (d.predmet === 'pobocka') {
     await tx.gameDelivery.createMany({ data: [
-      { player_id: prodavajici.id, kind: 'pobocka_remove', spot_id: d.spot_id, popis: 'Vydražila se tvá ' + popis },
-      { player_id: vitez.id, kind: 'pobocka_add', spot_id: d.spot_id, popis: 'Vydražil jsi ' + popis },
+      { player_id: prodavajici.id, kind: 'pobocka_remove', spot_id: d.spot_id, popis: 'Vydražila se tvá ' + popis , text_kod: 'dor.vydrazila_se_tva', text_data: { p1: popis }},
+      { player_id: vitez.id, kind: 'pobocka_add', spot_id: d.spot_id, popis: 'Vydražil jsi ' + popis , text_kod: 'dor.vydrazil_jsi', text_data: { p1: popis }},
     ] });
   } else if (d.predmet === 'podil') {
     const podil = Number((d.data || {}).podil) || 0;
