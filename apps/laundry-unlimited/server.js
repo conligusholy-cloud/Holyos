@@ -295,18 +295,28 @@ function applyPage(lang, err, v) {
 <div><label>${esc(t.f_phone)}</label><input name="phone" maxlength="40" value="${esc(v.phone)}" autocomplete="tel"></div></div>
 <div class="row2"><div><label>${esc(t.f_company)}</label><input name="company" maxlength="160" value="${esc(v.company)}" autocomplete="organization"></div>
 <div><label>${esc(t.f_country)}</label><input name="country" maxlength="80" value="${esc(v.country)}" autocomplete="country-name"></div></div>
-<label class="chk"><input type="checkbox" name="consent" value="1" required> <span>${esc(t.f_consent)}</span></label>
+${QSTYLE}<div class="qwrap">${qFields(lang)}</div>
+<label class="chk" style="margin-top:34px"><input type="checkbox" name="consent" value="1" required> <span>${esc(t.f_consent)}</span></label>
 <input type="hidden" name="utm" id="utm" value=""><div style="margin-top:26px"><button class="btn o" type="submit"><span>${esc(t.f_submit)}${CHEV}</span></button></div></form></div></div>
 <script>try{var u={},p=new URLSearchParams(location.search);['utm_source','utm_medium','utm_campaign','gclid','fbclid'].forEach(function(k){if(p.get(k))u[k]=p.get(k)});if(document.referrer)u.ref=document.referrer.slice(0,200);document.getElementById('utm').value=JSON.stringify(u)}catch(e){}</script>`;
   return page({ lang, title: t.form_h + ' — Laundry Unlimited', body, canonicalPath: '/apply' });
 }
 
+const QSTYLE = `<style>.qs{font-size:26px;margin:46px 0 4px;padding-top:26px;border-top:1px solid var(--line)}.qs:first-of-type{margin-top:0;border:0;padding:0}.qg{font-size:17px;color:var(--cy);margin:26px 0 0}.qh{color:var(--mut);text-transform:none;letter-spacing:0;font-weight:300}.qi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin:10px 0 6px;color:#d8e1ee;font-size:15px;line-height:1.7}</style>`;
+function qFields(lang) {
+  const fld = (f) => f.group ? `<h3 class="qg">${esc(f.group)}</h3>` : `<label>${esc(f[2])}${f[3] ? ` <span class="qh">· ${esc(f[3])}</span>` : ''}</label>` + (f[1] === 'area' ? `<textarea name="f_${f[0]}" maxlength="2000"></textarea>` : `<input name="f_${f[0]}" maxlength="300"${f[1] === 'num' ? ' inputmode="decimal"' : ''}>`);
+  return QSEC[lang].map((sec) => `<h3 class="qs">${esc(sec.h)}</h3>${sec.intro ? `<div class="qi">${sec.intro.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : ''}${sec.f.map(fld).join('')}`).join('');
+}
+function qAnswers(b) {
+  const s = (x, n) => String(x == null ? '' : x).slice(0, n); const answers = {};
+  for (const sec of QSEC.en) for (const f of sec.f) if (Array.isArray(f)) { const v = s(b['f_' + f[0]], f[1] === 'area' ? 2000 : 300).trim(); if (v) answers[f[0]] = v; }
+  return answers;
+}
 function questionnairePage(lang, token, err) {
   const t = T[lang]; const base = lang === 'en' ? '' : '/' + lang;
   const radios = (name, opts) => `<div class="opts">${opts.map((o) => `<label><input type="radio" name="${name}" value="${esc(o)}"> ${esc(o)}</label>`).join('')}</div>`;
   const checks = (name, opts) => `<div class="opts">${opts.map((o) => `<label><input type="checkbox" name="${name}" value="${esc(o)}"> ${esc(o)}</label>`).join('')}</div>`;
-  const fld = (f) => f.group ? `<h3 class="qg">${esc(f.group)}</h3>` : `<label>${esc(f[2])}${f[3] ? ` <span class="qh">· ${esc(f[3])}</span>` : ''}</label>` + (f[1] === 'area' ? `<textarea name="f_${f[0]}" maxlength="2000"></textarea>` : `<input name="f_${f[0]}" maxlength="300"${f[1] === 'num' ? ' inputmode="decimal"' : ''}>`);
-  const qfields = QSEC[lang].map((sec) => `<h3 class="qs">${esc(sec.h)}</h3>${sec.intro ? `<div class="qi">${sec.intro.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : ''}${sec.f.map(fld).join('')}`).join('');
+  const qfields = qFields(lang);
   const body = `<style>.qs{font-size:26px;margin:46px 0 4px;padding-top:26px;border-top:1px solid var(--line)}.qs:first-of-type{margin-top:0;border:0;padding:0}.qg{font-size:17px;color:var(--cy);margin:26px 0 0}.qh{color:var(--mut);text-transform:none;letter-spacing:0;font-weight:300}.qi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin:10px 0 6px;color:#d8e1ee;font-size:15px;line-height:1.7}</style><div class="page"><div class="wrap"><span class="tag w">${esc(t.nav_apply)}</span><h2>${esc(t.q_h)}</h2><p class="sub">${esc(t.q_p)}</p>
 <form class="box" method="post" action="${base}/questionnaire/${esc(token)}">${err ? `<div class="err">${esc(err)}</div>` : ''}
 ${qfields}
@@ -358,10 +368,11 @@ app.post('/apply', form, async (req, res) => {
   if (!v.name || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email) || !b.consent) return res.status(400).send(applyPage(lang, t.f_err, v));
   try {
     const token = crypto.randomBytes(18).toString('base64url');
+    const ans = qAnswers(b); const hasAns = Object.keys(ans).length > 0;
     let utm = null; try { const u = JSON.parse(String(b.utm || '{}')); if (u && typeof u === 'object') utm = JSON.stringify(u).slice(0, 1000); } catch (e) { /* bez UTM */ }
-    await q('INSERT INTO inquiries (token, lang, name, email, phone, company, country, ip, user_agent, utm) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)', [token, lang, v.name, v.email, v.phone || null, v.company || null, v.country || null, req.ip, String(req.headers['user-agent'] || '').slice(0, 300), utm]);
+    await q('INSERT INTO inquiries (token, lang, name, email, phone, company, country, ip, user_agent, utm, answers, answered_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12)', [token, lang, v.name, v.email, v.phone || null, v.company || null, v.country || null, req.ip, String(req.headers['user-agent'] || '').slice(0, 300), utm, hasAns ? JSON.stringify(ans) : null, hasAns ? new Date() : null]);
     notifyHolyos('🧺 Nová poptávka (územní exkluzivita)', v.name + (v.country ? ' · ' + v.country : '') + ' · ' + v.email, '/');
-    res.redirect(303, (lang === 'en' ? '' : '/' + lang) + '/questionnaire/' + token);
+    res.redirect(303, (lang === 'en' ? '' : '/' + lang) + (hasAns ? '/thanks' : '/questionnaire/' + token));
   } catch (e) { console.error('[lu] apply:', e.message); res.status(500).send(applyPage(lang, t.f_err_server, v)); }
 });
 async function byToken(token) { if (!/^[\w-]{10,40}$/.test(String(token))) return null; return (await q('SELECT id, lang, answers FROM inquiries WHERE token=$1', [token])).rows[0] || null; }

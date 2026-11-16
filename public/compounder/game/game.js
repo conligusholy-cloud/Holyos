@@ -12903,6 +12903,38 @@ var SYNC_CHYBA = null;
 // stavový kód. Když je pokusů hodně a odpovědí nula, neodpovídá server; když
 // je nula i pokusů, hra uložení vůbec nepustila a chyba je na naší straně.
 var SYNC_POKUSU = 0, SYNC_ODPOVEDI = 0, SYNC_STATUS = null;
+// Chyby ukládání a hry se hráči neukazují — jdou tiše na server do adminu hry
+// (záložka Chyby). Stejná chyba se z jednoho zařízení hlásí nejvýš jednou za 10 minut;
+// co se nepovede odeslat (výpadek sítě), čeká ve frontě a odejde s dalším hlášením.
+var CHYBY_FRONTA = [], CHYBY_POSLANO = {}, CHYBY_ODESILANI = false, CHYBY_JS = 0;
+function hlasChybu(typ, text, detail) {
+  try {
+    var klic = typ + '|' + String(text || '').slice(0, 80), ted = Date.now();
+    if (CHYBY_POSLANO[klic] && ted - CHYBY_POSLANO[klic] < 600000) return;
+    CHYBY_POSLANO[klic] = ted;
+    var d = Object.assign({ online: navigator.onLine !== false, skryto: !!document.hidden,
+      ua: String(navigator.userAgent || '').slice(0, 160), cesta: location.pathname,
+      kb: S ? Math.round(JSON.stringify(S).length / 1024) : null }, detail || {});
+    CHYBY_FRONTA.push({ typ: typ, text: String(text || '').slice(0, 300), detail: d, kdy: new Date().toISOString() });
+    if (CHYBY_FRONTA.length > 20) CHYBY_FRONTA.shift();
+    odesliChyby();
+  } catch (e) { /* hlášení chyb nesmí rozbít hru */ }
+}
+function odesliChyby() {
+  if (CHYBY_ODESILANI || !CHYBY_FRONTA.length || !ME) return;
+  CHYBY_ODESILANI = true;
+  var davka = CHYBY_FRONTA.slice(0, 10);
+  apiJson('/account/chyba', { chyby: davka }).then(function (r) {
+    CHYBY_ODESILANI = false;
+    if (r && r.ok) { CHYBY_FRONTA.splice(0, davka.length); if (CHYBY_FRONTA.length) odesliChyby(); }
+  }).catch(function () { CHYBY_ODESILANI = false; });
+}
+window.addEventListener('error', function (e) {
+  if (CHYBY_JS++ < 10) hlasChybu('js', (e && e.message) || 'chyba skriptu', { zdroj: String((e && e.filename) || '').split('/').pop(), radek: e && e.lineno, sloupec: e && e.colno });
+});
+window.addEventListener('unhandledrejection', function (e) {
+  if (CHYBY_JS++ < 10) hlasChybu('js-promise', String((e && e.reason && (e.reason.message || e.reason)) || 'odmítnutý slib'), {});
+});
 function syncState(force) {
   if (wiped || !ME || !S) return Promise.resolve();
   if (syncBusy) {
@@ -12933,7 +12965,7 @@ function syncState(force) {
       SYNC_ODPOVEDI++; SYNC_STATUS = r.status;
       if (prerus) clearTimeout(prerus);
       if (r.ok) {
-        syncOk = Date.now(); syncVarovano = 0; SYNC_CHYBA = null;
+        syncOk = Date.now(); syncVarovano = 0; SYNC_CHYBA = null; odesliChyby();
         // Server stav uložil a ve stejném zápisu potvrdil doručenky.
         NEPOTVRZENE = NEPOTVRZENE.filter(function (id) { return potvrzuju.indexOf(id) < 0; });
         if (r.j && r.j.rev != null) STATE_REV = r.j.rev;
@@ -12946,6 +12978,7 @@ function syncState(force) {
         // takhle točí dokola, hraje hráč na dvou místech a jeho postup padá
         // pod stůl — hlídač neukládání to pak řekne i s důvodem.
         SYNC_CHYBA = 'hru máš rozehranou i jinde, stav se bere odtamtud';
+        hlasChybu('ulozeni-konflikt', SYNC_CHYBA, { status: 409 });
         if (prevezmiStav(r.j.state, r.j.rev)) {
           // Náš zápis propadl i s doručenkami — ty zůstanou na serveru
           // nepotvrzené a přijdou znovu k tomu stavu, který vyhrál.
@@ -12961,6 +12994,7 @@ function syncState(force) {
         SYNC_CHYBA = 'stav hry je na server moc velký ('
           + Math.round(JSON.stringify(S).length / 1024) + ' kB)';
       }
+      hlasChybu('ulozeni', SYNC_CHYBA, { status: r.status });
       console.warn('[hra] uložení selhalo:', r.status, SYNC_CHYBA);
     })
     .catch(function (err) {
@@ -12970,6 +13004,7 @@ function syncState(force) {
       SYNC_CHYBA = (err && err.name === 'AbortError')
         ? 'server neodpověděl do ' + Math.round(SYNC_TIMEOUT_MS / 1000) + ' s'
         : 'spojení se serverem se nepovedlo';
+      hlasChybu((err && err.name === 'AbortError') ? 'ulozeni-timeout' : 'ulozeni-sit', SYNC_CHYBA, { zprava: err && err.message });
       console.warn('[hra] uložení selhalo:', SYNC_CHYBA, err && err.message);
     });
 }
@@ -12989,12 +13024,9 @@ function hlidejUkladani() {
   syncVarovano = Date.now();
   // Do hlášky patří i počitadla — bez nich se nedá poznat, jestli hra uložení
   // vůbec pustila, nebo jestli server mlčí.
-  toast('Hra se ' + Math.round(ticho / 60000) + ' minuty neuložila na server'
-    + (SYNC_CHYBA ? ': ' + SYNC_CHYBA : '')
-    + ' · pokusů ' + SYNC_POKUSU + ', odpovědí ' + SYNC_ODPOVEDI
-    + (SYNC_STATUS ? ', naposledy ' + SYNC_STATUS : '')
-    + (syncBusy ? ', právě běží' : '')
-    + '. Zkoušíme to dál.', 'err');
+  // Hráči se nic neukazuje; do adminu jde i s počitadly, podle kterých se pozná příčina.
+  hlasChybu('ulozeni-ticho', 'Hra se ' + Math.round(ticho / 60000) + ' min neuložila na server' + (SYNC_CHYBA ? ': ' + SYNC_CHYBA : ''),
+    { pokusu: SYNC_POKUSU, odpovedi: SYNC_ODPOVEDI, status: SYNC_STATUS || null, bezi: !!syncBusy, ticho_s: Math.round(ticho / 1000) });
 }
 
 // ─── Heslo k rozehranému účtu ────────────────────────────────────────────────

@@ -122,6 +122,7 @@
       <button class="module-tab" data-tab="drazby">Dražby</button>
       <button class="module-tab" data-tab="nastaveni">Nastavení</button>
       <button class="module-tab" data-tab="nahlasene">Nahlášené<span id="nahl-pocet"></span></button>
+      <button class="module-tab" data-tab="chyby">Chyby<span id="chyby-pocet"></span></button>
       <button class="module-tab" data-tab="multi">Spojené účty<span id="multi-pocet"></span></button>
     </div>
 
@@ -211,6 +212,17 @@
         </div>
         <p class="note" style="margin:0 0 12px">Zprávy, na které si někdo stěžoval. Odesílatele zablokuješ v jeho detailu.</p>
         <div id="nahl-body"></div>
+      </div>
+
+      <div class="module-panel" id="panel-chyby">
+        <div class="toolbar">
+          <button class="btn sm on" data-chyby="">Nevyřízené</button>
+          <button class="btn sm" data-chyby="1">Všechny</button>
+          <button class="btn sm" id="chyby-smazat">Smazat vyřízené</button>
+        </div>
+        <p class="note" style="margin:0 0 12px">Chyby z her hráčů (neuložení hry, výpadky spojení, chyby skriptu). Hráč o nich neví. Stejná chyba u stejného hráče se sčítá.</p>
+        <div id="chyby-sum"></div>
+        <div id="chyby-body"></div>
       </div>
 
       <div class="module-panel" id="panel-multi">
@@ -1398,8 +1410,62 @@
       }).catch(function (e) { box.innerHTML = '<p class="note">Chyba: ' + esc(e.message) + '</p>'; });
     }
 
+    // ── Chyby z klientů ────────────────────────────────────────
+    var CHYBY_VSE = '';
+    var CHYBY_TYPY = { ulozeni: 'Uložení selhalo', 'ulozeni-ticho': 'Dlouho neuloženo', 'ulozeni-sit': 'Výpadek spojení',
+      'ulozeni-timeout': 'Server neodpověděl', 'ulozeni-konflikt': 'Konflikt zařízení', js: 'Chyba skriptu', 'js-promise': 'Chyba skriptu (slib)' };
+    function loadChyby() {
+      var box = document.getElementById('chyby-body');
+      box.innerHTML = '<p class="note">Načítám…</p>';
+      get('/chyby' + (CHYBY_VSE ? '?vse=1' : '')).then(function (j) {
+        var odzn = document.getElementById('chyby-pocet');
+        if (odzn) odzn.textContent = j.nevyrizenych ? ' ' + j.nevyrizenych : '';
+        document.getElementById('chyby-sum').innerHTML = Object.keys(j.typy || {}).map(function (k) {
+          return '<span class="chip" style="margin:0 6px 10px 0;display:inline-block">' + esc(CHYBY_TYPY[k] || k) + ': <b>' + j.typy[k] + '×</b></span>';
+        }).join('');
+        var z = j.chyby || [];
+        if (!z.length) { box.innerHTML = '<p class="note">Žádné chyby.</p>'; return; }
+        box.innerHTML = '<div class="tbl-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Typ</th><th>Chyba</th><th>Hráč</th><th>Počet</th><th>Naposledy</th><th>Podrobnosti</th><th></th>'
+          + '</tr></thead><tbody>'
+          + z.map(function (c) {
+              var d = c.detail || {};
+              var det = [d.status ? 'HTTP ' + d.status : '', d.kb != null ? d.kb + ' kB' : '', d.pokusu != null ? 'pokusů ' + d.pokusu : '',
+                d.odpovedi != null ? 'odpovědí ' + d.odpovedi : '', d.online === false ? 'offline' : '', d.skryto ? 'na pozadí' : '',
+                d.zdroj ? d.zdroj + ':' + (d.radek || '') : ''].filter(Boolean).join(' · ');
+              return '<tr' + (c.vyrizeno ? ' style="opacity:.55"' : '') + '>'
+                + '<td>' + esc(CHYBY_TYPY[c.typ] || c.typ) + '</td>'
+                + '<td style="max-width:360px">' + esc(c.text) + '</td>'
+                + '<td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + c.player_id + '">' + esc(c.firma || c.nick || ('#' + c.player_id)) + '</b></td>'
+                + '<td>' + c.pocet + '×</td>'
+                + '<td class="note">' + dt(c.naposledy) + '<div>poprvé ' + dt(c.poprve) + '</div></td>'
+                + '<td class="note" style="max-width:300px">' + esc(det) + '<div title="' + esc(d.ua || '') + '">' + esc(String(d.ua || '').slice(0, 60)) + '</div></td>'
+                + '<td style="white-space:nowrap"><button class="btn sm" data-chvyr="' + esc(c.id) + '" data-zpet="' + (c.vyrizeno ? '1' : '') + '">' + (c.vyrizeno ? 'Vrátit' : 'Vyřízeno') + '</button></td></tr>';
+            }).join('')
+          + '</tbody></table></div>';
+        [].forEach.call(box.querySelectorAll('[data-detail]'), function (b) { b.onclick = function () { detail(b.getAttribute('data-detail')); }; });
+        [].forEach.call(box.querySelectorAll('[data-chvyr]'), function (b) {
+          b.onclick = function () {
+            b.disabled = true;
+            post('/chyby/' + b.getAttribute('data-chvyr') + '/vyrizeno', { zpet: b.getAttribute('data-zpet') === '1' })
+              .then(loadChyby).catch(function (e) { b.disabled = false; alert(e.message); });
+          };
+        });
+      }).catch(function (e) { chyba('chyby-body', e); });
+    }
+    [].forEach.call(document.querySelectorAll('[data-chyby]'), function (b) {
+      b.onclick = function () {
+        CHYBY_VSE = b.getAttribute('data-chyby');
+        [].forEach.call(document.querySelectorAll('[data-chyby]'), function (x) { x.classList.toggle('on', x === b); });
+        loadChyby();
+      };
+    });
+    document.getElementById('chyby-smazat').onclick = function () {
+      if (confirm('Trvale smazat všechny vyřízené chyby?')) post('/chyby/smazat-vyrizene', {}).then(loadChyby).catch(function (e) { alert(e.message); });
+    };
+
     var LOADERY = { stats: loadStats, players: loadPlayers, orders: loadOrders,
-      prices: loadPrices, nastaveni: loadNastaveni, nahlasene: loadNahlasene, multi: loadMulti,
+      prices: loadPrices, nastaveni: loadNastaveni, nahlasene: loadNahlasene, chyby: loadChyby, multi: loadMulti,
       drazby: loadDrazby };
     var AKTIVNI = 'stats';
     [].forEach.call(document.querySelectorAll('.module-tab'), function (t) {

@@ -1081,6 +1081,14 @@ router.post('/account/ping', requirePlayer, (req, res) => {
   require('../services/game/presence').ping(req.player.id, (req.body || {}).vidim !== false);
   res.json({ ok: true });
 });
+// POST /account/chyba { chyby: [{typ,text,detail,kdy}] } — tiché hlášení chyb z klienta (jen pro admin hry)
+router.post('/account/chyba', requirePlayer, async (req, res) => {
+  try {
+    const chyby = Array.isArray((req.body || {}).chyby) ? req.body.chyby : [];
+    if (chyby.length) await require('../services/game/chyby').zapis(req.player, chyby);
+    res.json({ ok: true });
+  } catch (e) { res.json({ ok: false }); }
+});
 router.put('/account/state', requirePlayer, async (req, res, next) => {
   try {
     const st = (req.body || {}).state;

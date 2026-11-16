@@ -168,6 +168,23 @@ router.post('/nahlasene/:id/vyrizeno', api(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ─── Chyby z klientů (ukládání hry, chyby skriptu) ───────────────────────────
+router.get('/chyby', api(async (req, res) => {
+  const vse = String(req.query.vse || '') === '1';
+  const list = await require('../services/game/chyby').nacti();
+  const typy = {};
+  list.filter((x) => !x.vyrizeno).forEach((x) => { typy[x.typ] = (typy[x.typ] || 0) + x.pocet; });
+  res.json({ ok: true, chyby: vse ? list : list.filter((x) => !x.vyrizeno), nevyrizenych: list.filter((x) => !x.vyrizeno).length, typy });
+}));
+router.post('/chyby/:id/vyrizeno', api(async (req, res) => {
+  await require('../services/game/chyby').vyrizeno(String(req.params.id), !(req.body || {}).zpet);
+  res.json({ ok: true });
+}));
+router.post('/chyby/smazat-vyrizene', api(async (req, res) => {
+  await require('../services/game/chyby').smazVyrizene();
+  res.json({ ok: true });
+}));
+
 // GET /players → pro výběr zvoucího stačí nick a firma (lehký seznam)
 router.get('/players-vyber', api(async (req, res) => {
   const rows = await prisma.gamePlayer.findMany({
