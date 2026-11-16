@@ -185,10 +185,12 @@
           <button class="btn sm" id="pl-find">Hledat</button>
         </div>
         <p class="note" style="margin:0 0 12px">„Odkud hraje" je odvozené z IP, nikde se na to
-          hráče neptáme — stejně jako to dělá běžná analytika. Zjišťuje se při načtení hry
-          a znovu až po dvou týdnech nebo při změně IP. Přesnost podle toho: na mobilních
-          sítích to často ukáže město, kde sedí brána operátora, a přes VPN úplně jinou zemi.
-          Na orientaci, kde se hra chytá, to stačí; na nic jiného se to používat nemá.</p>
+          hráče neptáme — stejně jako to dělá běžná analytika. Ptáme se dvou nezávislých
+          služeb a <b>město ukážeme jen tehdy, když se obě shodnou</b>. Když ne, nebo když
+          jde o mobilní či skrytou síť, je tam jen země, poskytovatel a šedý tip — mobilní
+          operátoři pouštějí provoz přes pár bran a databáze pak celému rozsahu přiřadí
+          město té brány, klidně dvě stě kilometrů vedle. Zjišťuje se při načtení hry a
+          znovu až po dvou týdnech nebo při změně IP.</p>
         <div class="tbl-wrap"><table class="data-table" id="pl-tbl"></table></div>
       </div>
 
@@ -880,6 +882,25 @@
     }
 
     // ── Hráči ───────────────────────────────────────────────────────────────
+    // Odkud hráč hraje. Město se ukáže jen tehdy, když se na něm shodly dvě
+    // nezávislé služby. U mobilních sítí ukazují databáze bránu operátora —
+    // tam se píše poskytovatel a město jen jako šedý tip, ať to nikdo nečte
+    // jako fakt.
+    function odkud(p) {
+      var zeme = p.geo_zeme ? esc(p.geo_zeme) : null;
+      var isp = p.geo_isp ? '<div class="note">' + esc(p.geo_isp) + '</div>' : '';
+      if (p.geo_presnost === 'mesto' && p.geo_mesto) {
+        return '<b>' + esc(p.geo_mesto) + '</b>'
+          + '<div class="note">' + esc([p.geo_kraj, p.geo_zeme].filter(function (x) {
+              return x && x !== p.geo_mesto; }).join(' · ')) + '</div>' + isp;
+      }
+      if (!zeme && !p.geo_tip) return '<span class="note">—</span>';
+      var proc = p.geo_presnost === 'mobil' ? 'mobilní síť — město neurčíme'
+        : 'služby se na městě neshodly';
+      return (zeme || '<span class="note">neznámá země</span>')
+        + '<div class="note">' + proc
+        + (p.geo_tip ? ' · tipuje ' + esc(p.geo_tip) : '') + '</div>' + isp;
+    }
     function loadPlayers() {
       var q = document.getElementById('pl-q').value.trim();
       get('/players?limit=300' + (q ? '&q=' + encodeURIComponent(q) : '')).then(function (j) {
@@ -897,11 +918,7 @@
               + (p.zdroj ? '<div class="note">z: ' + esc(p.zdroj) + '</div>' : '') + '</td>'
               + '<td>' + (p.jmeno ? esc(p.jmeno) : '<span class="note">—</span>')
               + (p.email ? '<div class="note">' + esc(p.email) + '</div>' : '') + '</td>'
-              + '<td>' + (p.geo_mesto || p.geo_zeme
-                  ? esc(p.geo_mesto || p.geo_zeme)
-                    + '<div class="note">' + esc([p.geo_kraj, p.geo_zeme].filter(function (x) {
-                        return x && x !== p.geo_mesto; }).join(' · ')) + '</div>'
-                  : '<span class="note">—</span>') + '</td>'
+              + '<td>' + odkud(p) + '</td>'
               + '<td class="num">' + cz(p.pradlomatu) + '</td><td class="num">' + cz(p.mist) + '</td>'
               + '<td class="num">' + cz(p.mest) + '</td>'
               + '<td class="num"><b class="' + (p.prijem > 0 ? 'ok' : '') + '">' + cz(p.prijem) + ' L$</b></td>'

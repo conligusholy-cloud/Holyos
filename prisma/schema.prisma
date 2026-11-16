@@ -7686,6 +7686,13 @@ model GamePlayer {
   geo_region    String?   @db.VarChar(80)
   geo_country   String?   @db.VarChar(80)
   geo_cc        String?   @db.VarChar(4)
+  // Poskytovatel připojení a to, nakolik se dá městu věřit: mesto = shodly se
+  // dvě nezávislé služby, zeme = neshodly, mobil = mobilní nebo skrytá síť,
+  // kde databáze ukazují bránu operátora. geo_tip drží město, které vyšlo,
+  // i když mu nevěříme — jako vodítko, ne jako údaj.
+  geo_isp       String?   @db.VarChar(120)
+  geo_tip       String?   @db.VarChar(80)
+  geo_presnost  String?   @db.VarChar(10)
   geo_ip        String?   @db.VarChar(64)
   geo_at        DateTime?
 
