@@ -537,6 +537,17 @@ router.get('/:id(\\d+)/receipt.pdf', async (req, res, next) => {
     res.set('Content-Type', 'application/pdf').set('Content-Disposition', 'inline; filename="' + (row.receipt_number || 'nahled-' + row.number) + '.pdf"').send(Buffer.from(pdf));
   } catch (err) { next(err); }
 });
+// GET /:id/credit-note.pdf — dobropis k vrácení platby (náhled / stažení)
+router.get('/:id(\\d+)/credit-note.pdf', async (req, res, next) => {
+  try {
+    const row = await prisma.washComplaint.findUnique({ where: { id: parseInt(req.params.id, 10) } });
+    if (!row || row.kind !== 'refund') return res.status(404).json({ error: 'Žádost nenalezena' });
+    const inv = await findCreditNote(row);
+    if (!inv) return res.status(404).json({ error: 'Dobropis zatím není vystavený — žádost nejdřív schvalte.' });
+    const pdf = await creditNotePdf(row, inv);
+    res.set('Content-Type', 'application/pdf').set('Content-Disposition', 'inline; filename="' + inv.invoice_number + '.pdf"').send(Buffer.from(pdf));
+  } catch (err) { next(err); }
+});
 // POST /:id/send-receipt — přidělí číslo, vygeneruje PDF a pošle zákazníkovi (lze i znovu)
 router.post('/:id(\\d+)/send-receipt', async (req, res, next) => {
   try {
