@@ -445,10 +445,38 @@ function mpPhotosHtml(photos, selId, gal) {
     ${photos.map(p => { const on = sel && sel.id === p.id; return `<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;position:relative"><input type="radio" name="mp_photo_id" value="${p.id}" ${on ? 'checked' : ''}><img src="${esc(p.url || '')}" alt="" style="width:96px;height:64px;object-fit:cover;border-radius:8px;border:${on ? '3px solid #14b8a6' : '1px solid var(--border)'};${on ? 'box-shadow:0 0 0 2px rgba(20,184,166,.3)' : ''}">${on ? '<span style="position:absolute;top:22px;left:4px;background:#14b8a6;color:#04201c;font-size:10px;font-weight:800;padding:1px 6px;border-radius:6px">⭐ NÁHLED</span>' : ''}<span style="font-size:11px;display:flex;gap:4px;align-items:center" onclick="event.stopPropagation()"><input type="checkbox" name="mp_gallery" value="${p.id}" ${gal.includes(p.id) || on ? 'checked' : ''} ${on ? 'disabled' : ''}> v galerii</span></label>`; }).join('')}
   </div>`;
 }
+// Výřez náhledu: ohnisko (kiosek) a režim celé fotky
+function mpCropRender() {
+  const box = document.getElementById('mp-crop'); if (!box || !currentSite) return;
+  const q = (n) => document.querySelector('.modal [name=' + n + ']');
+  const rid = (document.querySelector('#mp-photos [name=mp_photo_id]:checked') || {}).value;
+  const ph = (currentSite.photos || []).find(p => String(p.id) === String(rid));
+  if (!ph) { box.innerHTML = '<div class="muted" style="padding:14px;font-size:12px">Nejdřív vyber náhledovou fotku.</div>'; return; }
+  const fx = Number((q('mp_fx') || {}).value), fy = Number((q('mp_fy') || {}).value), fit = q('mp_fit') && q('mp_fit').checked;
+  const u = esc(ph.url || '');
+  box.innerHTML = fit
+    ? '<img src="' + u + '" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:blur(18px) brightness(.6);transform:scale(1.15)"><img src="' + u + '" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain">'
+    : '<img src="' + u + '" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:' + fx + '% ' + fy + '%"><span style="position:absolute;left:' + fx + '%;top:' + fy + '%;width:16px;height:16px;margin:-8px 0 0 -8px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 2px rgba(0,0,0,.5);pointer-events:none"></span>';
+}
+function mpCropClick(e) {
+  const q = (n) => document.querySelector('.modal [name=' + n + ']'); if (q('mp_fit') && q('mp_fit').checked) return;
+  const box = document.getElementById('mp-crop'), r = box.getBoundingClientRect();
+  const img = box.querySelector('img'); if (!img || !img.naturalWidth) return;
+  // Kliknutí se přepočítá na polohu ve fotce (fotka je zobrazená přes cover s aktuálním ohniskem)
+  const bw = r.width, bh = r.height, sc = Math.max(bw / img.naturalWidth, bh / img.naturalHeight), iw = img.naturalWidth * sc, ih = img.naturalHeight * sc;
+  const fx0 = Number(q('mp_fx').value) / 100, fy0 = Number(q('mp_fy').value) / 100;
+  const offX = (bw - iw) * fx0, offY = (bh - ih) * fy0;
+  const px = (e.clientX - r.left - offX) / iw, py = (e.clientY - r.top - offY) / ih; // poloha kliknutí ve fotce 0..1
+  // chceme, aby bod (px,py) skončil uprostřed rámečku: offset = bw/2 - px*iw = (bw-iw)*f  →  f = (bw/2 - px*iw)/(bw-iw)
+  const f = (c, p, bs, is) => (is - bs) < 1 ? 50 : Math.max(0, Math.min(100, (bs / 2 - p * is) / (bs - is) * 100));
+  q('mp_fx').value = Math.round(f(0, px, bw, iw)); q('mp_fy').value = Math.round(f(0, py, bh, ih));
+  mpCropRender();
+}
 // Po výběru jiné miniatury překreslit zvýraznění hlavního náhledu
 document.addEventListener('change', function (e) {
   const r = e.target.closest && e.target.closest('#mp-photos [name=mp_photo_id]'); if (!r || !currentSite) return;
   document.getElementById('mp-photos').innerHTML = mpPhotosHtml(currentSite.photos || [], r.value ? Number(r.value) : null);
+  mpCropRender();
 });
 // Nahraje vizualizaci jako fotku lokality a rovnou ji vybere jako náhled (rozepsané údaje ve formuláři zůstanou).
 async function mpUploadImage(ev) {
@@ -520,11 +548,17 @@ async function loadMarketplaceTab(s) {
       ${f('Okolí a návštěvnost', 'mp_footfall', m.footfall, 'např. supermarket, 15 000 obyvatel ve spádu')}
       <div class="form-row span2"><label>Náhledová fotka / vizualizace pro Marketplace</label>
         <div style="margin:0 0 8px"><label class="btn btn-secondary" style="cursor:pointer;display:inline-block">📤 Nahrát vizualizaci<input type="file" accept="image/*" style="display:none" onchange="mpUploadImage(event)"></label> <span class="muted" id="mp-up-st" style="font-size:12px">nahraje se k fotkám lokality a hned se vybere jako náhled</span></div>
-        <div id="mp-docs">${mpDocsHtml(s)}</div><div class="muted" style="font-size:12px;margin:0 0 6px">Zaškrtni <b>v galerii</b> u fotek, které si zákazník může rozkliknout a prohlížet (hlavní náhled je v galerii vždy první). Nezaškrtnuté se zákazníkům nezobrazí.</div><div id="mp-photos">${mpPhotosHtml(s.photos || [], m.photo_id, mpGalleryInit)}</div></div>
+        <div id="mp-docs">${mpDocsHtml(s)}</div><div class="muted" style="font-size:12px;margin:0 0 6px">Zaškrtni <b>v galerii</b> u fotek, které si zákazník může rozkliknout a prohlížet (hlavní náhled je v galerii vždy první). Nezaškrtnuté se zákazníkům nezobrazí.</div><div id="mp-photos">${mpPhotosHtml(s.photos || [], m.photo_id, mpGalleryInit)}</div>
+        <div style="margin-top:12px"><div style="font-weight:700;margin-bottom:4px">Výřez náhledu na kartě</div>
+          <div class="muted" style="font-size:12px;margin-bottom:6px">Klikni do náhledu na kiosek — bude na kartě uprostřed. Nebo zapni zobrazení celé fotky bez ořezu.</div>
+          <input type="hidden" name="mp_fx" value="${m.photo_fx != null ? m.photo_fx : 50}"><input type="hidden" name="mp_fy" value="${m.photo_fy != null ? m.photo_fy : 50}">
+          <div id="mp-crop" onclick="mpCropClick(event)" style="position:relative;width:100%;max-width:343px;aspect-ratio:343/210;overflow:hidden;border-radius:10px;border:1px solid var(--border);cursor:crosshair;background:#0b1220"></div>
+          <label style="display:block;margin-top:6px;font-size:13px"><input type="checkbox" name="mp_fit" ${m.photo_fit === 'contain' ? 'checked' : ''} onchange="mpCropRender()"> Zobrazit celou fotku (bez ořezu)</label></div></div>
       <div class="form-row span2"><label>Nebo obrázek z odkazu (URL, nepovinné)</label><input type="text" name="mp_image_url" value="${esc(m.image_url || '')}" placeholder="https://… (veřejně dostupná fotka nebo vizualizace)"></div>
     </div>
     <p class="muted" style="font-size:12px;margin-top:8px">Prázdná plocha a nájem se doplní z údajů lokality. Ukládá se tlačítkem <b>Uložit</b> dole.</p>`;
   mpLoaded = true;
+  setTimeout(mpCropRender, 0);
 }
 // Doplní prázdná pole Marketplace z ostatních karet místa (bere i neuložené úpravy ve formuláři).
 // Interní údaje (vlastník, jeho kontakt, poznámky obchodu, adresa s číslem popisným) se NEPŘEBÍRAJÍ.
@@ -561,7 +595,7 @@ async function saveMarketplace(siteId) {
   const v = (n) => { const el = document.querySelector('.modal [name=' + n + ']'); return el ? (el.type === 'checkbox' ? el.checked : el.value) : null; };
   const body = { published: v('mp_published'), reserved: v('mp_reserved'), title: v('mp_title'), highlight: v('mp_highlight'), description: v('mp_description'),
     area_m2: v('mp_area_m2'), rent_monthly: v('mp_rent_monthly'), price_note: v('mp_price_note'), availability: v('mp_availability'),
-    parking: v('mp_parking'), footfall: v('mp_footfall'), occupy_until: v('mp_occupy_until'), image_url: v('mp_image_url'),
+    parking: v('mp_parking'), photo_fx: v('mp_fx'), photo_fy: v('mp_fy'), photo_fit: v('mp_fit') ? 'contain' : 'cover', footfall: v('mp_footfall'), occupy_until: v('mp_occupy_until'), image_url: v('mp_image_url'),
     energy: v('mp_energy'), connections_price: v('mp_connections_price'), address: v('mp_address'), rent_vat: v('mp_rent_vat'),
     photo_id: (document.querySelector('.modal [name=mp_photo_id]:checked') || {}).value || null,
     gallery: [...document.querySelectorAll('.modal [name=mp_gallery]:checked')].map(x => Number(x.value)) };
