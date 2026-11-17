@@ -159,6 +159,14 @@ router.get('/jmeni-srovnani', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(tisk(await srovnani(), kolik));
 }));
 
+// GET /evidence-rozdily → kde se evidence míst a stav hry rozcházejí.
+// Dokud se to nevysvětlí, nejde na evidenci postavit jmění: jedněm by
+// přibylo, druhým ubylo.
+router.get('/evidence-rozdily', api(async (req, res) => {
+  const { evidence, tiskEvidence } = require('../services/game/srovnani');
+  res.type('text/plain; charset=utf-8').send(tiskEvidence(await evidence()));
+}));
+
 // GET /strop-prehled → kolik uložení přeteklo mez přírůstku hotovosti.
 // Tohle je ladicí pohled, ne obvinění: mez je zatím schválně velkorysá a
 // zajímá nás hlavně, kolik planých poplachů dělá, než se z ní stane strop.

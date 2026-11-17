@@ -148,4 +148,98 @@ function tisk(d, kolik) {
   return out.join('\n');
 }
 
-module.exports = { srovnani, tisk, CENY_STROJU, stupen };
+// ─── Rozdíly mezi evidencí míst a stavem hry ─────────────────────────────────
+// Srovnání jmění ukázalo, že obojí nesedí, a to v obou směrech: někdo má
+// v evidenci víc míst než ve hře, jiný naopak. Dokud se nevysvětlí proč,
+// nejde na evidenci postavit jmění — jedněm by přibylo, druhým ubylo.
+//
+// Tohle to rozepíše po hráčích i po konkrétních místech, aby bylo vidět,
+// jestli za tím je pronájem jinému hráči, koupený pozemek bez stroje,
+// běžící výpověď, nebo něco, co se prostě rozešlo.
+async function evidence() {
+  const hraci = await prisma.gamePlayer.findMany({
+    where: { disabled: false },
+    select: { id: true, nick: true, state: true },
+  });
+  const claims = await prisma.gameSpotClaim.findMany({
+    select: { spot_id: true, player_id: true, model: true, pozemek: true,
+      najemce_id: true, vypoved_do: true, name: true },
+  });
+  const podleHrace = new Map();
+  claims.forEach((c) => {
+    const a = podleHrace.get(c.player_id) || [];
+    a.push(c);
+    podleHrace.set(c.player_id, a);
+  });
+
+  const out = [];
+  hraci.forEach((h) => {
+    const st = h.state || null;
+    if (!st) return;
+    const units = Array.isArray(st.units) ? st.units : [];
+    const mych = podleHrace.get(h.id) || [];
+    const idUnitu = new Set(units.map((u) => u && u.spotId).filter(Boolean));
+    const idClaimu = new Set(mych.map((c) => c.spot_id));
+
+    // Claim bez stroje ve hře. Může to být poctivé: koupený pozemek bez
+    // stavby, nebo místo pronajaté jinému hráči.
+    const navic = mych.filter((c) => !idUnitu.has(c.spot_id));
+    // Stroj ve hře bez claimu. Tohle poctivé být nemůže: hra tvrdí, že tam
+    // prádlomat stojí, a server o tom místě neví.
+    const chybi = units.filter((u) => u && u.spotId && !idClaimu.has(u.spotId));
+
+    if (!navic.length && !chybi.length) return;
+    out.push({
+      id: h.id, nick: h.nick,
+      unitu: units.length, claimu: mych.length,
+      navic: navic.map((c) => ({
+        spot: c.spot_id, nazev: c.name, model: c.model || null,
+        pozemek: !!c.pozemek, pronajato: !!c.najemce_id,
+        vypoved: c.vypoved_do ? new Date(c.vypoved_do).toISOString().slice(0, 10) : null,
+      })),
+      chybi: chybi.map((u) => ({ spot: u.spotId, nazev: u.name || null, model: u.model || null })),
+    });
+  });
+  out.sort((a, b) => (b.navic.length + b.chybi.length) - (a.navic.length + a.chybi.length));
+  return out;
+}
+
+function tiskEvidence(rows) {
+  const out = [];
+  const sChybejicim = rows.filter((r) => r.chybi.length);
+  out.push('Hráčů, kde evidence a hra nesedí: ' + rows.length);
+  out.push('Z toho takových, kde hra tvrdí prádlomat a server o místě neví: '
+    + sChybejicim.length);
+  out.push('');
+  // Proč je claim navíc — rozpad podle pravděpodobné příčiny.
+  const duvody = { pozemek: 0, pronajato: 0, vypoved: 0, nevysvetleno: 0 };
+  rows.forEach((r) => r.navic.forEach((c) => {
+    if (c.pronajato) duvody.pronajato++;
+    else if (c.pozemek && !c.model) duvody.pozemek++;
+    else if (c.vypoved) duvody.vypoved++;
+    else duvody.nevysvetleno++;
+  }));
+  out.push('Místa v evidenci bez stroje ve hře, podle příčiny:');
+  out.push('  pronajaté jinému hráči:      ' + duvody.pronajato);
+  out.push('  koupený pozemek bez stavby:  ' + duvody.pozemek);
+  out.push('  běžící výpověď:              ' + duvody.vypoved);
+  out.push('  nevysvětlené:                ' + duvody.nevysvetleno + '  \u2190 tohle je ten problém');
+  out.push('');
+  rows.slice(0, 30).forEach((r) => {
+    out.push(r.nick + '  (hra ' + r.unitu + ' prádlomatů, evidence ' + r.claimu + ' míst)');
+    r.navic.forEach((c) => {
+      const proc = c.pronajato ? 'pronajato jinému' : (c.pozemek && !c.model) ? 'pozemek bez stavby'
+        : c.vypoved ? ('výpověď do ' + c.vypoved) : 'NEVYSVĚTLENO';
+      out.push('    v evidenci navíc: ' + String(c.spot).padEnd(24).slice(0, 24)
+        + ' ' + String(c.model || '\u2014').padEnd(6) + ' ' + proc);
+    });
+    r.chybi.forEach((u) => {
+      out.push('    hra tvrdí prádlomat, server místo nezná: '
+        + String(u.spot).padEnd(24).slice(0, 24) + ' ' + (u.model || '\u2014'));
+    });
+  });
+  if (rows.length > 30) out.push('\u2026 a dalších ' + (rows.length - 30));
+  return out.join('\n');
+}
+
+module.exports = { srovnani, tisk, evidence, tiskEvidence, CENY_STROJU, stupen };
