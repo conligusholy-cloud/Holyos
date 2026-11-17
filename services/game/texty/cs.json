@@ -3359,5 +3359,12 @@
   "hra.chce_koupit_od_tebe": "chce koupit od tebe",
   "hra.doba_1_rok": "1 rok",
   "hra.doba_3_roky": "3 roky",
-  "hra.doba_5_let": "5 let"
+  "hra.doba_5_let": "5 let",
+  "hra.vyslat_tlacitko": "Vyslat",
+  "hra.za_h": "za {p1} h",
+  "hra.za_h_min": "za {p1} h {p2} min",
+  "hra.za_min": "za {p1} min",
+  "hra.zpusob_letecky": "letecky",
+  "hra.zpusob_autem": "autem",
+  "hra.zpusob_trajektem": "trajektem"
 }

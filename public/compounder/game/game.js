@@ -698,16 +698,16 @@ function pevnina(b) {
 }
 // Čím technik pojede a co ho to stojí navíc. Stejná pevnina znamená auto.
 function zpusobCesty(a, b, km) {
-  var letadlo = { kod: 'letadlo', nazev: 'letecky', znak: '✈',
+  var letadlo = { kod: 'letadlo', nazev: tx('hra.zpusob_letecky'), znak: '✈',
     kmh: LETADLO_KMH, rezie: LETADLO_REZIE, silnice: false };
   if (pevnina(a) === pevnina(b)) {
     // Po vlastní ose jen do rozumné dálky. Přes půl kontinentu se letí a auto
     // si technik půjčí na místě — jinak by jediný výjezd trval týden.
     if (km > LETADLO_OD_KM) return letadlo;
-    return { kod: 'auto', nazev: 'autem', znak: '🚐', kmh: TECHNIK_KMH, rezie: 0, silnice: true };
+    return { kod: 'auto', nazev: tx('hra.zpusob_autem'), znak: '🚐', kmh: TECHNIK_KMH, rezie: 0, silnice: true };
   }
   if (km <= TRAJEKT_MAX_KM) {
-    return { kod: 'trajekt', nazev: 'trajektem', znak: '⛴', kmh: TECHNIK_KMH, rezie: TRAJEKT_REZIE, silnice: true };
+    return { kod: 'trajekt', nazev: tx('hra.zpusob_trajektem'), znak: '⛴', kmh: TECHNIK_KMH, rezie: TRAJEKT_REZIE, silnice: true };
   }
   return letadlo;
 }
@@ -1905,8 +1905,8 @@ function etaText(ms) {
   if (ms <= 0) return esc(tx('hra.prave_ted'));
   var mins = Math.max(1, Math.round(ms / 60000));   // zaokrouhlíme až minuty, jinak vyjde „23 h 60 min"
   var h = Math.floor(mins / 60), m = mins % 60;
-  if (h >= 1) return 'za ' + h + ' h' + (m ? ' ' + m + ' min' : '');
-  return 'za ' + m + ' min';
+  if (h >= 1) return m ? tx('hra.za_h_min', { p1: h, p2: m }) : tx('hra.za_h', { p1: h });
+  return tx('hra.za_min', { p1: m });
 }
 
 // ─── Běh času ────────────────────────────────────────────────────────────────
@@ -3819,19 +3819,19 @@ function servisRadek(u) {
   if (jeVKatastrofe(u)) {
     var k = u.katastrofa;
     tr = 'err';
-    stav = k.hotovo ? tx('veta.opravuje_se_hotovo', { p1: k.t, p2: etaText(Math.max(0, k.hotovo - ted)) })
-      : tx('veta.stoji_oprava_za', { p1: k.t, p2: kcFull(k.platim) });
+    stav = k.hotovo ? tx('veta.opravuje_se_hotovo', { p1: hovorText(k.t), p2: etaText(Math.max(0, k.hotovo - ted)) })
+      : tx('veta.stoji_oprava_za', { p1: hovorText(k.t), p2: kcFull(k.platim) });
     akce = k.hotovo ? '' : '<button class="btn sec maly" data-kat="' + esc(u.spotId) + '">' + esc(tx('hra.otevrit')) + '</button>';
   } else if (jeVPoruse(u) && !t) {
     var v = vyjezdOdhad(u);
     tr = 'err';
-    stav = u.porucha.text + (v ? tx('veta.km_oprava_na_h', { p1: Math.round(v.km), p2: v.zpusob.nazev, p3: u.porucha.zav }) : '');
-    akce = v ? '<button class="btn sec maly" data-vada="' + esc(u.spotId) + '">Vyslat</button>' : '';
+    stav = hovorText(u.porucha.text) + (v ? tx('veta.km_oprava_na_h', { p1: Math.round(v.km), p2: v.zpusob.nazev, p3: u.porucha.zav }) : '');
+    akce = v ? '<button class="btn sec maly" data-vada="' + esc(u.spotId) + '">' + esc(tx('hra.vyslat_tlacitko')) + '</button>' : '';
   } else if (t && ted < t.prijezd) {
-    tr = 'warn'; stav = u.porucha.text + ' — ' + (ZNAK_CESTY[t.zpusob] || ZNAK_CESTY.auto)
+    tr = 'warn'; stav = hovorText(u.porucha.text) + ' — ' + (ZNAK_CESTY[t.zpusob] || ZNAK_CESTY.auto)
       + tx('veta.technik_prijede', { p1: etaText(t.prijezd - ted) });
   } else if (t && jeVPoruse(u)) {
-    tr = 'warn'; stav = u.porucha.text + tx('veta.technik_na_miste_hotovo', { p1: etaText(t.hotovo - ted) });
+    tr = 'warn'; stav = hovorText(u.porucha.text) + tx('veta.technik_na_miste_hotovo', { p1: etaText(t.hotovo - ted) });
   } else if (t) {
     tr = 'ok'; stav = esc(tx('hra.spraveno_technik_jede_zpatky'));
   } else if (jeVeVypovedi(u)) {
@@ -3841,7 +3841,7 @@ function servisRadek(u) {
   }
   return '<div class="srv-radek" data-srv="' + esc(u.spotId) + '">'
     + '<i class="srv-tecka ' + tr + '"></i>'
-    + '<span><b>' + esc(u.name) + '</b> <i>' + esc((m ? m.name : '') + ' · ' + stav) + '</i></span>'
+    + '<span><b>' + esc(jmenoStroje(u.name)) + '</b> <i>' + esc((m ? m.name : '') + ' · ' + stav) + '</i></span>'
     + akce + '</div>';
 }
 function servisSheet() {
@@ -6614,7 +6614,7 @@ function poruchaHtml(u) {
 }
 function unitSheet(u) {
   var years = (Date.now() - u.builtAt) / YEAR_MS;
-  sheet('<h3>' + esc(u.name) + '</h3>'
+  sheet('<h3>' + esc(jmenoStroje(u.name)) + '</h3>'
     + '<p class="muted small">' + esc(KIND_LABEL[u.kind] || esc(tx('mapa.misto')))
     + (mestoUnit(u) ? ' · ' + esc(mestoUnit(u)) : '') + ' · ' + MODELS[u.eco.model].name
     + tx('hra.v_provozu_roku', { p1: years.toFixed(1).replace('.', desZnak()) })
@@ -6793,7 +6793,7 @@ function vymenaSheet(u, novy) {
   var e = economics(sp, novy, u.eco.podil);
   var rozdil = e.profit - u.eco.profit;
   var malo = S.cash < c.celkem;
-  sheet(tx('veta.h3_vymenit_za_h3_p_class', { p1: esc(stary.name), p2: esc(m.name), p3: esc(u.name) }) + (mestoUnit(u) ? ' \u00b7 ' + esc(mestoUnit(u)) : '') + '</p>'
+  sheet(tx('veta.h3_vymenit_za_h3_p_class', { p1: esc(stary.name), p2: esc(m.name), p3: esc(jmenoStroje(u.name)) }) + (mestoUnit(u) ? ' \u00b7 ' + esc(mestoUnit(u)) : '') + '</p>'
     + '<div class="kv"><span>' + esc(tx('hra.doprava_stroje_2')) + '</span><b>' + kcFull(c.doprava) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('hra.doplatek_pripojek')) + '</span><b' + (c.doplatek ? ' class="warn"' : ' class="ok"') + '>'
     + (c.doplatek ? kcFull(c.doplatek) : esc(tx('hra.zadny'))) + '</b></div>'
@@ -7484,7 +7484,7 @@ function strojRadek(u, i) {
       + '" data-stroj-id="' + esc(u.spotId) + '">'
     + '<i class="poradi' + (i < 3 ? ' medaile m' + (i + 1) : '') + '">' + (i + 1) + '</i>'
     + '<img class="stroj-foto" src="' + esc(im.src) + '" alt="">'
-    + '<span class="nick">' + esc(u.name)
+    + '<span class="nick">' + esc(jmenoStroje(u.name))
       + (vyp ? ' <em class="vyp-znak">\u25B2</em>' : '')
       + (vada ? ' <em class="vada-znak">⚠️</em>' : '')
     + '<i>' + esc(detail) + '</i>'
@@ -7973,7 +7973,7 @@ function paintNet() {
   }
   $('net-list').innerHTML = povestHtml() + zakladnyHtml() + cetaHtml() + S.units.slice().sort(function (a, b) { return b.eco.profit - a.eco.profit; }).map(function (u) {
     return '<div class="card" data-unit="' + esc(u.spotId) + '">'
-      + '<div class="row"><h3>' + esc(u.name) + '</h3>' + verdictPill(u.score) + '</div>'
+      + '<div class="row"><h3>' + esc(jmenoStroje(u.name)) + '</h3>' + verdictPill(u.score) + '</div>'
       + '<p class="muted small" style="margin:2px 0 6px">' + esc(KIND_LABEL[u.kind] || esc(tx('hra.misto_2'))) + ' · ' + MODELS[u.eco.model].name + '</p>'
       + (function () {
         var l = uverMista(u);
@@ -9614,7 +9614,7 @@ function rozvahaHtml(r) {
 function trhProdejSheet(u) {
   var bezi = trhMoje(u.spotId);
   if (bezi) {
-    sheet(tx('veta.h3_h3_p_class_muted_small_9', { p1: esc(tx('hra.na_trzisti')), p2: esc(u.name), p3: kcFull(bezi.cena) }) + etaText(new Date(bezi.konci).getTime() - Date.now()) + '. '
+    sheet(tx('veta.h3_h3_p_class_muted_small_9', { p1: esc(tx('hra.na_trzisti')), p2: esc(jmenoStroje(u.name)), p3: kcFull(bezi.cena) }) + etaText(new Date(bezi.konci).getTime() - Date.now()) + '. '
       + esc(tx('hra.do_te_doby_pradlomat_normalne')) + '</p>'
       + '<button class="btn sec" id="trh-stop" style="width:100%;margin-top:12px">' + esc(tx('hra.stahnout_z_nabidky')) + '</button>');
     var st = $('trh-stop');
@@ -9632,7 +9632,7 @@ function trhProdejSheet(u) {
   var cena = trhNavrhCeny(u);
   var r = rozvahaMista(u);
   var vykresli = function () {
-    sheet(tx('veta.h3_h3_p_class_muted_small_8', { p1: esc(tx('hra.nabidnout_na_trzisti')), p2: esc(u.name), p3: rozvahaHtml(r), p4: esc(tx('hra.vydela_mesicne')), p5: kcFull(u.eco.profit), p6: kcFull(Math.round(u.eco.profit * 12)) })
+    sheet(tx('veta.h3_h3_p_class_muted_small_8', { p1: esc(tx('hra.nabidnout_na_trzisti')), p2: esc(jmenoStroje(u.name)), p3: rozvahaHtml(r), p4: esc(tx('hra.vydela_mesicne')), p5: kcFull(u.eco.profit), p6: kcFull(Math.round(u.eco.profit * 12)) })
         + (splatkyMista(u.spotId) ? '<div class="kv"><span>' + esc(tx('hra.splatky_na_miste')) + '</span><b class="warn">'
             + kcFull(splatkyMista(u.spotId)) + ' ' + esc(tx('hra.mesic_18')) + '</b></div>' : '')
       + tx('veta.div_p_class_muted_small_style', { p1: cena, p2: kcFull(trhNavrhCeny(u)), p3: esc(tx('hra.co_jsi_do_mista_dal')), p4: esc(tx('hra.cena_je_na_tobe_kupujici')) })
@@ -10167,7 +10167,7 @@ function majetekSheet(id) {
       moje.push({ smer: 'prodam', predmet: 'pradlomat', spot_id: u.spotId, model: u.eco.model,
         zisk: u.eco.profit, invest: u.eco.invest, obrat: u.eco.revenue, skore: u.score, rent: u.eco.rent,
         dluh: dluh, splatka: l ? Math.round(l.splatka) : 0,
-        popis: tx('veta.muj', { p1: esc(u.name) }), pod: MODELS[u.eco.model].name
+        popis: tx('veta.muj', { p1: esc(jmenoStroje(u.name)) }), pod: MODELS[u.eco.model].name
           + tx('veta.100_zisk_mes_br_i_class', { p1: Math.round(u.score), p2: kcFull(u.eco.profit), p3: kcFull(cenaPradlomatu(u.eco.profit, u.eco.invest)) })
           + (dluh > 0 ? tx('hra.i_class_cena_dluh_visi_na', { p1: kcFull(dluh) }) : '') });
     });
@@ -10904,7 +10904,7 @@ function drazbaVyvolatSheet() {
   var polozky = [];
   (S.units || []).forEach(function (u) {
     polozky.push({ predmet: 'pradlomat', spot_id: u.spotId,
-      popis: esc(u.name), pod: tx('veta.zisk', { p1: (MODELS[u.eco.model] || {}).name, p2: kcFull(u.eco.profit), p3: esc(tx('drazba.mes')) }),
+      popis: esc(jmenoStroje(u.name)), pod: tx('veta.zisk', { p1: (MODELS[u.eco.model] || {}).name, p2: kcFull(u.eco.profit), p3: esc(tx('drazba.mes')) }),
       navrh: cenaPradlomatu(u.eco.profit, u.eco.invest) });
   });
   MODEL_ORDER.forEach(function (k) {
@@ -12103,6 +12103,14 @@ function linkaPacksHtml() {
 // Záznam hovoru drží jméno a téma tak, jak se zapsaly. Starší záznamy mají místo
 // jména holý klíč katalogu (překlad tehdy chyběl), jiné český text. Při zobrazení
 // obojí převedeme na jazyk hráče: klíč přímo, český text zpětným dohledáním klíče.
+// Názvy míst se stavbou druhého a dalšího stroje dostanou příponu „— 2. stání“,
+// která se zapíše do názvu hotová. Při zobrazení ji složíme znovu v jazyce hráče.
+function jmenoStroje(n) {
+  n = String(n == null ? '' : n);
+  if (JAZYK === 'cs') return n;
+  return n.replace(/ \u2014 (\d+)\. st\u00e1n\u00ed$/, function (m, c) { return tx('veta.stani', { p1: +c }); })
+    .replace(/ \u00b7 (\d+)\. st\u00e1n\u00ed$/, function (m, c) { return tx('veta.stani_3', { p1: +c }); });
+}
 var HOVOR_OBRAT = null;
 function hovorText(t) {
   t = String(t == null ? '' : t);
