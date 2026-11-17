@@ -2440,13 +2440,51 @@ function paintZvon() {
   el.innerHTML = '\uD83D\uDD14' + (n ? '<b>' + (n > 9 ? '9+' : n) + '</b>' : '');
   el.title = n ? tx('veta.neprectenych_upozorneni', { p1: n }): esc(tx('hra.upozorneni'));
 }
+// Upozornění se do hry zapisují jako hotová věta v jazyce, který zrovna platil.
+// Starší záznamy jsou proto česky, i když hráč hraje anglicky. Při zobrazení
+// větu dohledáme podle české předlohy v katalogu (s čísly na místě {p1}…) a
+// složíme znovu v jazyce hráče. Co se nenajde, zůstane tak, jak bylo.
+var ZPETNE_SABLONY = null;
+function zpetneTx(text) {
+  text = String(text == null ? '' : text);
+  if (JAZYK === 'cs' || !text) return text;
+  if (!ZPETNE_SABLONY) {
+    ZPETNE_SABLONY = [];
+    var cz = window.__TEXTY_CS || {};
+    Object.keys(cz).forEach(function (k) {
+      var v = cz[k];
+      if (typeof v !== 'string' || v.indexOf('<') >= 0 || v.length < 8) return;
+      var jmena = [];
+      var re = '^' + v.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{(?:[a-z]+:)?(p\d+)\}/g, function (m, n) { jmena.push(n); return '(.+?)'; }) + '$';
+      if (!jmena.length) return;
+      try { ZPETNE_SABLONY.push({ k: k, re: new RegExp(re), j: jmena, d: v.replace(/\{[^}]+\}/g, '').length }); } catch (e) { /* neplatná šablona se přeskočí */ }
+    });
+    ZPETNE_SABLONY.sort(function (a, b) { return b.d - a.d; });
+  }
+  for (var i = 0; i < ZPETNE_SABLONY.length; i++) {
+    var sb = ZPETNE_SABLONY[i], m = sb.re.exec(text);
+    if (!m) continue;
+    var udaje = {};
+    sb.j.forEach(function (n, x) {
+      var h = m[x + 1];
+      var pen = /^(-?[\d\s ]+(?:,\d+)?)\s*L\$$/.exec(h);
+      var cis = /^-?[\d\s ]+$/.exec(h);
+      if (pen) udaje[n] = tPenize(Number(pen[1].replace(/[\s ]/g, '').replace(',', '.')));
+      else if (cis) udaje[n] = tCislo(Number(h.replace(/[\s ]/g, '')));
+      else udaje[n] = hovorText(h);
+    });
+    var out = tx(sb.k, udaje);
+    return out && out !== sb.k ? out : text;
+  }
+  return text;
+}
 function upozorneniSheet() {
   var l = ((S && S.upoz) || []).slice().reverse();
   sheet(tx('veta.h3_h3_p_class_muted_small_22', { p1: esc(tx('hra.ud83d_udd14_upozorneni')) })
     + (l.length
         ? '<div class="upoz">' + l.map(function (u) {
             return '<div class="upoz-r' + (u.p ? '' : ' nove') + (u.k === 'err' ? ' err' : '') + '">'
-              + '<i>' + datumCas(u.t) + '</i><span>' + esc(u.x) + '</span></div>';
+              + '<i>' + datumCas(u.t) + '</i><span>' + esc(zpetneTx(u.x)) + '</span></div>';
           }).join('') + '</div>'
           + '<button class="btn sec" id="upoz-smaz" style="width:100%;margin-top:12px">' + esc(tx('hra.vymazat_seznam')) + '</button>'
         : tx('hra.p_class_fine_zatim_nic_az')));

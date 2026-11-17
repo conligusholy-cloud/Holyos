@@ -3423,5 +3423,11 @@
   "hra.zpusob_trajektem": "by ferry",
   "obchod.herni_laundry_popis": "{p1} in-game Laundrs",
   "dor.podil_firma_nehraje": "{p1} quit the game, your {p2}% stake in their company closes. The uncovered portion of {penize:penize} is written off.",
-  "dor.podilnici_vyplaceni": "You were away too long, so stakeholders in your company cashed out and their stakes ended. There were {p1} of them and it cost {penize:penize} in cash."
+  "dor.podilnici_vyplaceni": "You were away too long, so stakeholders in your company cashed out and their stakes ended. There were {p1} of them and it cost {penize:penize} in cash.",
+  "hra.stav_ceka": "pending",
+  "hra.stav_protinavrh": "counteroffer",
+  "hra.stav_prijato": "accepted",
+  "hra.stav_odmitnuto": "declined",
+  "hra.stav_zruseno": "cancelled",
+  "hra.stav_neplatne": "no longer valid"
 }

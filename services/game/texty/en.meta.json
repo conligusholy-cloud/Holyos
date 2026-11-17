@@ -3342,5 +3342,11 @@
   "hra.zpusob_trajektem": "861581ce6215",
   "obchod.herni_laundry_popis": "9bbb8c0df8f1",
   "dor.podil_firma_nehraje": "b7b8bfc2ef21",
-  "dor.podilnici_vyplaceni": "947d08604cf1"
+  "dor.podilnici_vyplaceni": "947d08604cf1",
+  "hra.stav_ceka": "e12c0ea10f16",
+  "hra.stav_protinavrh": "4628110d6dc9",
+  "hra.stav_prijato": "dd2f8d2858cb",
+  "hra.stav_odmitnuto": "468cf19abb79",
+  "hra.stav_zruseno": "12bb89c80923",
+  "hra.stav_neplatne": "e9a63ff9d6ec"
 }
