@@ -3278,5 +3278,11 @@
   "dor.provize": "e2ec504295ee",
   "dor.najem": "fdcbc62c8925",
   "hra.nechces_cekat_tahle_mesta_jsou": "97b261637000",
-  "hra.staci_klepnout_na_hledat": "75646f0fb4a0"
+  "hra.staci_klepnout_na_hledat": "75646f0fb4a0",
+  "dor.konec_splatka_pujcky": "96ce3cfbd5f4",
+  "dor.konec_pujcka_odepsana": "a89a9f9e2377",
+  "dor.konec_odkup_podilu": "0dc3b0fa4c64",
+  "dor.konec_podil_zanikl": "83e3965df1de",
+  "dor.konec_veritel_skoncil": "f831e4f6cdbf",
+  "dor.konec_podilnik_skoncil": "5e7503a122fa"
 }

@@ -387,12 +387,16 @@ function krachSheet() {
   };
   $('krach-znovu').onclick = function () {
     var y = $('krach-znovu'); y.disabled = true; y.textContent = esc(tx('hra.mazu_2'));
+    // Napřed uložit: server z tohohle stavu vyrovnává půjčky a podíly, takže
+    // potřebuje hotovost, kterou hráč opravdu má.
+    syncState(true).catch(function () {}).then(function () {
     apiJson('/account/reset', {}).then(function (r) {
       if (!r.ok) { y.disabled = false; y.textContent = esc(tx('hra.zacit_znovu_s_cistym_stitem_2')); return toast(r.j.error || esc(tx('hra.nepovedlo_se')), 'err'); }
       wiped = true;
       try { localStorage.removeItem(KEY); } catch (e) { /* nevadí */ }
       location.replace(location.pathname);
     }).catch(function () { y.disabled = false; y.textContent = esc(tx('hra.zacit_znovu_s_cistym_stitem_3')); toast(esc(tx('hra.server_neodpovida_10')), 'err'); });
+    });
   };
 }
 // Po krachu banka rok nepůjčí.
@@ -8865,6 +8869,7 @@ function paintMe() {
         try { localStorage.removeItem(KEY); } catch (e) {}
         location.replace(location.pathname);
       }).catch(function () { y.disabled = false; y.textContent = esc(tx('hra.ano_smazat_a_zacit_znovu_3')); toast(esc(tx('hra.server_neodpovida_3')), 'err'); });
+      });
     };
   };
 }

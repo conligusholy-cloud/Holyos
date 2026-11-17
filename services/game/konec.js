@@ -109,8 +109,18 @@ async function ukonciHru(playerId) {
   const suma = nevraceno.reduce((a, x) => a + x.dluh, 0);
   const kDeleni = suma > 0 ? Math.min(hotovost, suma) : 0;
   hotovost -= kDeleni;
-  nevraceno.forEach(({ e, dluh }) => {
-    const dam = suma > 0 ? Math.round(kDeleni * (dluh / suma)) : 0;
+  let rozdano = 0;
+  nevraceno.forEach(({ e, dluh }, i, pole) => {
+    // Zaokrouhlení poměrné části umí přes součet přestřelit — a vyplatit
+    // o korunu víc, než hráč měl, znamená vyrobit peníze z ničeho. Poslední
+    // proto dostane přesně to, co zbylo, a nikdo víc, než kolik mu chybí.
+    const posledni = i === pole.length - 1;
+    // suma == 0 znamená, že nikdo nemá co dostat — bez téhle pojistky by
+    // z dělení nulou vypadlo NaN a sečetlo se to do nesmyslu.
+    const navrh = suma <= 0 ? 0
+      : (posledni ? (kDeleni - rozdano) : Math.round(kDeleni * (dluh / suma)));
+    const dam = Math.max(0, Math.min(navrh, dluh, kDeleni - rozdano));
+    rozdano += dam;
     if (dam > 0) {
       dorucenky.push({ player_id: e.investor_id, kind: 'cash', amount: dam,
         text_kod: 'dor.konec_odkup_podilu', text_data: { p1: hrac.nick, penize: dam },

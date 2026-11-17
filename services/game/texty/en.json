@@ -3359,5 +3359,11 @@
   "dor.provize": "Commission {penize:penize} — {p1}",
   "dor.najem": "Rent {penize:penize} — {p1} ({p2})",
   "hra.nechces_cekat_tahle_mesta_jsou": "Don't want to wait? These cities are ready and will open immediately",
-  "hra.staci_klepnout_na_hledat": "— just click Search."
+  "hra.staci_klepnout_na_hledat": "— just click Search.",
+  "dor.konec_splatka_pujcky": "{p1} quit the game — {penize:penize} from their cash went to repay your loan.",
+  "dor.konec_pujcka_odepsana": "{p1} quit the game without cash to cover the loan. {penize:penize} written off.",
+  "dor.konec_odkup_podilu": "{p1} quit the game — {penize:penize} from their cash went to buy back your stake.",
+  "dor.konec_podil_zanikl": "{p1} quit the game, your {p2}% stake in their company is gone. Uncovered balance of {penize:penize} written off.",
+  "dor.konec_veritel_skoncil": "{p1} quit the game. Your debt to them is written off — no more instalments.",
+  "dor.konec_podilnik_skoncil": "{p1} quit the game, their {p2}% stake in your company is gone. No more payouts to them."
 }
