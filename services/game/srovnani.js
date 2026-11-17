@@ -261,6 +261,13 @@ async function sklad() {
     where: { postaveno_at: null, zruseno_at: null },
     select: { player_id: true, model: true, dorazi_at: true },
   });
+  // Bez tohohle nejde rozeznat „ještě nikdo nekoupil" od „zapisování
+  // nefunguje". Obojí vypadá v tabulce stejně: samé nuly.
+  const [zapsano, posledni] = await Promise.all([
+    prisma.gameOrder.count(),
+    prisma.gameOrder.findFirst({ orderBy: { id: 'desc' },
+      select: { created_at: true, model: true, player_id: true } }),
+  ]);
   const ted = Date.now();
   const podleHrace = new Map();
   rows.forEach((r) => {
@@ -283,6 +290,8 @@ async function sklad() {
       sedi: hraSkladem === a.skladem && hraNaceste === a.naceste });
   });
   out.sort((x, y) => (x.sedi === y.sedi ? 0 : x.sedi ? 1 : -1));
+  out.zapsano = zapsano;
+  out.posledni = posledni;
   return out;
 }
 
@@ -304,6 +313,16 @@ function tiskSklad(rows) {
   out.push('');
   out.push('Hráči, kteří kupovali dřív, než se nákup začal zapisovat, budou mít');
   out.push('serverový sklad prázdný. Zajímavé jsou až ty, co koupili potom.');
+  out.push('');
+  out.push('Objednávek zapsaných na serveru celkem: ' + (rows.zapsano || 0));
+  if (rows.posledni) {
+    out.push('Poslední zápis: ' + new Date(rows.posledni.created_at).toISOString().slice(0, 19).replace('T', ' ')
+      + '  (' + rows.posledni.model + ', hráč #' + rows.posledni.player_id + ')');
+  } else {
+    out.push('Zatím ani jeden. Buď od nasazení nikdo nekoupil stroj, nebo se');
+    out.push('zápis nedaří — pozná se tak, že jeden stroj koupíš a číslo výš');
+    out.push('se zvedne na jedničku.');
+  }
   return out.join('\n');
 }
 
