@@ -3326,5 +3326,11 @@
   "hra.sit": "Síť",
   "hra.burza": "Burza",
   "hra.ja": "Já",
-  "hra.mapa_napoveda": "Napiš město a pošli tam člověka, ať ho projde. Místa jsou schovaná — dokud město neprozkoumáš, nic na mapě neuvidíš."
+  "hra.mapa_napoveda": "Napiš město a pošli tam člověka, ať ho projde. Místa jsou schovaná — dokud město neprozkoumáš, nic na mapě neuvidíš.",
+  "linka.operator_bere_hovory": "Operátor bere hovory",
+  "linka.pauza_bezi": "Linka stojí a zbývající čas se nespotřebovává. Telefon zvoní tobě — a hodnocení roste jen z hovorů, které vyřídíš sám.",
+  "linka.pauza_nabidka": "Můžeš ji kdykoli vypnout a brát hovory sám. Zbývající čas se zmrazí a po zapnutí běží dál — nic nepropadne.",
+  "linka.zapnuta": "Operátor zase bere hovory za tebe.",
+  "linka.vypnuta": "Linka stojí. Telefon teď zvoní tobě a zbývající čas se nespotřebovává.",
+  "linka.stoji_zbyva": "Linku máš pozastavenou, zbývá na ní {p1}. Hovory bereš sám, a jen z nich roste hodnocení."
 }

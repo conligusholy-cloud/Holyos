@@ -1757,6 +1757,8 @@ function fresh(profileId) {
     hovoryPosl: [],   // rozhovory, které už padly — ať se hned neopakují
     hovorLog: [],     // evidence hovorů — kdo volal a jak to dopadlo
     linkaDo: 0,       // dokud běží infolinka, bere operátor všechny hovory
+    linkaStop: 0,     // pozastavená linka: hovory bere hráč, čas se nespotřebovává
+    linkaZbytek: 0,   // zmrazený zbytek času, dokud linka stojí
     pojisteni: false, // pojištění provozoven proti požáru, vytopení a vloupání
     vKrizi: false,    // byla ekonomika v krizi, když se hra naposled počítala
     udalostiVim: [],  // ohlášené světové události — ať se nehlásí dvakrát
@@ -1823,6 +1825,8 @@ function dosypStav(o) {
     // Infolinka se platí na čas. Komu zbyly kredity ze starých balíčků,
     // dostane za ně týden — jednou, při prvním otevření po změně.
     if (typeof o.linkaDo !== 'number') o.linkaDo = 0;
+    if (typeof o.linkaZbytek !== 'number') o.linkaZbytek = 0;
+    if (typeof o.linkaStop !== 'number') o.linkaStop = 0;
     if ((o.linka || 0) > 0 && !o.linkaPrevod) {
       o.linkaDo = Math.max(o.linkaDo, Date.now() + LINKA_PREVOD_MS);
       o.linka = 0; o.linkaPrevod = 1;
@@ -2739,14 +2743,45 @@ function linkaPredplatne() {
     return /^linka_sub/.test(x.kind) && (!x.plati_do || new Date(x.plati_do).getTime() > ted);
   })[0] || null;
 }
+// Linku jde pozastavit. Dokud za hráče bere hovory operátor, nemá jak si
+// zvednout hodnocení — to roste jen z hovorů, které vyřídí sám. Zbývající čas
+// se přitom nesmí spotřebovávat, takže se zmrazí a po zapnutí běží dál.
+function linkaStoji() { return !!(S && S.linkaStop); }
 function maLinku() {
+  if (linkaStoji()) return false;
   if (linkaPredplatne()) return true;     // běžící předplatné drží linku zapnutou
   return !!(S && S.linkaDo && S.linkaDo > Date.now());
 }
-function linkaZbyva() { return maLinku() ? S.linkaDo - Date.now() : 0; }
+// Kolik času na lince zbývá. Když stojí, je to zmrazený zbytek — proto se
+// nedá počítat z maLinku(), ta je v tu chvíli false.
+function linkaZbyva() {
+  if (linkaStoji()) return Math.max(0, (S && S.linkaZbytek) || 0);
+  return (S && S.linkaDo && S.linkaDo > Date.now()) ? S.linkaDo - Date.now() : 0;
+}
+function pozastavLinku() {
+  if (!S || linkaStoji()) return;
+  S.linkaZbytek = Math.max(0, (S.linkaDo || 0) - Date.now());
+  S.linkaStop = 1;
+  S.linkaDo = 0;
+  save(); paint(); syncState(true);
+}
+function spustLinku() {
+  if (!S || !linkaStoji()) return;
+  S.linkaDo = Date.now() + Math.max(0, S.linkaZbytek || 0);
+  S.linkaStop = 0;
+  S.linkaZbytek = 0;
+  save(); paint(); syncState(true);
+}
 function prodluzLinku(dnu) {
+  var pridat = Math.max(0, Number(dnu) || 0) * 86400000;
+  // Koupeno za chodu pauzy: přičítá se ke zmrazenému zbytku, ne k datu —
+  // jinak by nakoupený čas začal utíkat, i když linka stojí.
+  if (linkaStoji()) {
+    S.linkaZbytek = Math.max(0, S.linkaZbytek || 0) + pridat;
+    return S.linkaZbytek;
+  }
   var od = Math.max(Date.now(), (S && S.linkaDo) || 0);
-  S.linkaDo = od + Math.max(0, Number(dnu) || 0) * 86400000;
+  S.linkaDo = od + pridat;
   return S.linkaDo;
 }
 function operatorVyridi() {
@@ -7767,8 +7802,10 @@ function povestHtml() {
     + '<b class="' + (p > 0 ? 'ok' : (p < 0 ? 'err' : '')) + tx('veta.b_div_p_class_muted_small', { p1: hvezdyText(), p2: povestSlovy() }) + ((p + 100) / 2) + '%"></i></div>'
     + '<div class="kv"><span>' + esc(tx('hra.navstevnost_z_povesti')) + '</span><b class="'
     + (zmena > 0 ? 'ok' : (zmena < 0 ? 'err' : '')) + '">' + (zmena > 0 ? '+' : '') + tx('veta.b_div_p_class_fine_style', { p1: zmena, p2: esc(tx('hra.zakaznici_voli_jen_kdyz_jsi')), p3: esc(tx('hra.kdo_hovor_vezme_a_umi')) })
-    + (maLinku() ? tx('hra.infolinku_mas_zaplacenou_jeste_takze_hovory', { p1: etaText(linkaZbyva()) })
-        : esc(tx('hra.zaplacena_infolinka_je_vezme_za'))) + '</p></div>';
+    // Pozastavená linka je třetí stav: zaplacená, ale hovory bere hráč.
+    + (linkaStoji() ? tx('linka.stoji_zbyva', { p1: etaText(linkaZbyva()) })
+        : maLinku() ? tx('hra.infolinku_mas_zaplacenou_jeste_takze_hovory', { p1: etaText(linkaZbyva()) })
+          : esc(tx('hra.zaplacena_infolinka_je_vezme_za'))) + '</p></div>';
 }
 // Pojištění provozoven. Požár ani vytopení technik nespraví — oprava stojí
 // desetitisíce a stroj do té doby nevydělává. Pojistné běží měsíčně za každý
@@ -11851,6 +11888,16 @@ function paintCards() {
   if ($('linka-auto')) $('linka-auto').onclick = function () {
     LINKA_AUTO = !LINKA_AUTO; paintCards();
   };
+  if ($('linka-stop')) $('linka-stop').onclick = function () {
+    if (linkaStoji()) {
+      spustLinku();
+      toast(esc(tx('linka.zapnuta')), 'ok');
+    } else {
+      pozastavLinku();
+      toast(esc(tx('linka.vypnuta')), 'ok');
+    }
+    paintCards();
+  };
   var lz = box.querySelector('[data-linka-zrus]');
   if (lz) lz.onclick = function () {
     var obnovit = lz.getAttribute('data-linka-zrus') === '0';
@@ -12006,6 +12053,17 @@ function linkaPacksHtml() {
           + (pred.obnovi_se ? esc(tx('hra.zrusit_obnovovani_2')) : esc(tx('hra.nechat_bezet_dal_2'))) + '</button></div>'
         : bezi ? '<p class="fine">' + esc(tx('hra.koupeny_balicek_se_pricte_k')) + '</p>'
           : '<p class="fine">' + esc(tx('hra.bez_ni_telefon_zvoni_a')) + '</p>')
+    // Přepínač linky. Hodnocení roste jen z hovorů, které hráč vyřídí sám,
+    // takže kdo má linku zaplacenou dopředu, nemá jak si ho zvednout. Pauza
+    // zbývající čas zmrazí — nic se jí neutratí.
+    + ((bezi || linkaStoji() || pred)
+        ? '<div class="kv" style="margin-top:10px"><span>' + esc(tx('linka.operator_bere_hovory')) + '</span>'
+          + '<button class="prep-sam' + (linkaStoji() ? '' : ' on') + '" id="linka-stop">'
+          + (linkaStoji() ? esc(tx('hra.vypnuto')) : esc(tx('hra.zapnuto'))) + '</button></div>'
+          + '<p class="fine">' + (linkaStoji()
+              ? esc(tx('linka.pauza_bezi'))
+              : esc(tx('linka.pauza_nabidka'))) + '</p>'
+        : '')
     + (PAYMENTS_ON && !pred
         ? '<div class="kv" style="margin-top:10px"><span>' + esc(tx('hra.obnovovat_automaticky')) + '</span>'
           + '<button class="prep-sam' + (LINKA_AUTO ? ' on' : '') + '" id="linka-auto">'
