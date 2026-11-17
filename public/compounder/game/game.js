@@ -6046,9 +6046,9 @@ function planEditor(sp, areaId, hotovo) {
 // nevidí nájem — přihazuje naslepo a nikdy neví, jak dobře je soused krytý.
 var NAJEM_DOBY = [
   { m: 0, n: esc(tx('hra.na_dobu_neurcitou')), p: esc(tx('hra.nejlevnejsi_kdokoli_te_muze_kdykoli')) },
-  { m: 12, n: '1 rok', p: esc(tx('hra.rok_klidu_pak_se_smlouva')) },
-  { m: 36, n: '3 roky', p: esc(tx('hra.tri_roky_te_nikdo_nevystrnadi')) },
-  { m: 60, n: '5 let', p: esc(tx('hra.nejdrazsi_jistota_pet_hernich_let')) }
+  { m: 12, n: esc(tx('hra.doba_1_rok')), p: esc(tx('hra.rok_klidu_pak_se_smlouva')) },
+  { m: 36, n: esc(tx('hra.doba_3_roky')), p: esc(tx('hra.tri_roky_te_nikdo_nevystrnadi')) },
+  { m: 60, n: esc(tx('hra.doba_5_let')), p: esc(tx('hra.nejdrazsi_jistota_pet_hernich_let')) }
 ];
 var NAJEM_VYPOVEDI = [1, 3, 6, 12];
 var NAJEM_ZA_ROK = 0.05;        // +5 % nájmu za každý rok vázanosti
@@ -9737,7 +9737,7 @@ function radekObchodu(t) {
   var protistrana = t.moje ? t.komu.nick : t.od.nick;
   var veta = t.moje
     ? (t.smer === 'koupim' ? tx('veta.chces_koupit_od', { p1: esc(protistrana) }): tx('veta.nabizis', { p1: esc(protistrana) }))
-    : (t.smer === 'koupim' ? esc(protistrana) + ' chce koupit od tebe' : tx('veta.ti_nabizi', { p1: esc(protistrana) }));
+    : (t.smer === 'koupim' ? esc(protistrana) + ' ' + esc(tx('hra.chce_koupit_od_tebe')) : tx('veta.ti_nabizi', { p1: esc(protistrana) }));
   // U půjčky platí ten, kdo peníze dává — tedy „prodávající".
   if (t.predmet === 'pujcka') jaKupuji = !jaKupuji;
   if (t.predmet === 'pujcka') {
@@ -12019,7 +12019,7 @@ function ramecPacksHtml() {
     return Math.max(0, b.price_czk - (nizsi ? nizsi.price_czk : 0));
   };
   return '<div class="card"><h3>' + tx('veta.h3_p_class_muted_small_style_2', { p1: esc(tx('hra.ud83c_udfe6_objem_ramcoveho_uveru')), p2: esc(tx('hra.tvuj_strop')) }) + (muj ? 'ok' : '') + '">'
-    + (mujStrop === null ? 'bez stropu' : kcFull(mujStrop)) + (muj ? '' : ' (zdarma)') + '</b></div>'
+    + (mujStrop === null ? esc(tx('hra.bez_stropu')) : kcFull(mujStrop)) + (muj ? '' : ' ' + esc(tx('hra.zdarma_zavorka'))) + '</b></div>'
     + (maRamec() && ramecCerpano() > (mujStrop === null ? Infinity : mujStrop)
         ? tx('hra.p_class_fine_warn_nacerpano_mas', { p1: kcFull(ramecCerpano()), p2: esc(tx('hra.o_penize_neprijdes_ale_dokud')), p3: esc(tx('hra.vyssi_balicek_to_otevre_hned')) })
         : '')

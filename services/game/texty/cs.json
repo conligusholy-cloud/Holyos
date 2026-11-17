@@ -3354,5 +3354,10 @@
   "obecne.mena_vychozi": "Kč",
   "hra.vzal_jsem": "vzal jsem",
   "hra.pred_hodin": "před {p1} h",
-  "hra.pred_dnu": "před {p1} d"
+  "hra.pred_dnu": "před {p1} d",
+  "hra.zdarma_zavorka": "(zdarma)",
+  "hra.chce_koupit_od_tebe": "chce koupit od tebe",
+  "hra.doba_1_rok": "1 rok",
+  "hra.doba_3_roky": "3 roky",
+  "hra.doba_5_let": "5 let"
 }
