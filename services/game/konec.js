@@ -26,6 +26,27 @@ const cele = (x) => Math.max(0, Math.round(Number(x) || 0));
 
 // Zpráva protiúčtu. Jde přes doručenky, takže ji hráč najde ve zvonku i když
 // zrovna nehraje.
+// Rozdělí, co je k dispozici, mezi nároky — poměrně a tak, aby se nikdy
+// nerozdalo víc, než na co je. Zaokrouhlení poměrné části umí přes součet
+// přestřelit, a vyplatit o korunu víc, než firma má, znamená vyrobit peníze
+// z ničeho. Poslední proto dostane přesně to, co zbylo, a nikdo víc, než
+// kolik mu chybí.
+//
+// Je to schválně jedna funkce pro obě cesty (ukončení hry i úklid mrtvých
+// podílů). Dva stejné výpočty vedle sebe se dřív nebo později rozejdou.
+function rozdel(kDeleni, naroky) {
+  const suma = naroky.reduce((a, b) => a + b, 0);
+  let rozdano = 0;
+  return naroky.map((dluh, i) => {
+    const posledni = i === naroky.length - 1;
+    const navrh = suma <= 0 ? 0
+      : (posledni ? (kDeleni - rozdano) : Math.round(kDeleni * (dluh / suma)));
+    const dam = Math.max(0, Math.min(navrh, dluh, kDeleni - rozdano));
+    rozdano += dam;
+    return dam;
+  });
+}
+
 function zprava(player_id, kod, data) {
   return {
     player_id, kind: 'zprava', text_kod: kod, text_data: data || null,
@@ -109,18 +130,9 @@ async function ukonciHru(playerId) {
   const suma = nevraceno.reduce((a, x) => a + x.dluh, 0);
   const kDeleni = suma > 0 ? Math.min(hotovost, suma) : 0;
   hotovost -= kDeleni;
-  let rozdano = 0;
-  nevraceno.forEach(({ e, dluh }, i, pole) => {
-    // Zaokrouhlení poměrné části umí přes součet přestřelit — a vyplatit
-    // o korunu víc, než hráč měl, znamená vyrobit peníze z ničeho. Poslední
-    // proto dostane přesně to, co zbylo, a nikdo víc, než kolik mu chybí.
-    const posledni = i === pole.length - 1;
-    // suma == 0 znamená, že nikdo nemá co dostat — bez téhle pojistky by
-    // z dělení nulou vypadlo NaN a sečetlo se to do nesmyslu.
-    const navrh = suma <= 0 ? 0
-      : (posledni ? (kDeleni - rozdano) : Math.round(kDeleni * (dluh / suma)));
-    const dam = Math.max(0, Math.min(navrh, dluh, kDeleni - rozdano));
-    rozdano += dam;
+  const dily = rozdel(kDeleni, nevraceno.map((x) => x.dluh));
+  nevraceno.forEach(({ e, dluh }, i) => {
+    const dam = dily[i];
     if (dam > 0) {
       dorucenky.push({ player_id: e.investor_id, kind: 'cash', amount: dam,
         text_kod: 'dor.konec_odkup_podilu', text_data: { p1: hrac.nick, penize: dam },
@@ -194,4 +206,101 @@ async function ukonciHru(playerId) {
   return Object.assign({}, prehled, souhrn);
 }
 
-module.exports = { ukonciHru };
+// -----------------------------------------------------------------------------
+// Podíly ve firmách, které už nikdo nehraje
+// -----------------------------------------------------------------------------
+// Když hráč odejde nebo si dá novou hru, jeho firma zůstane prázdná a podíl
+// v ní běží dál — výplata se počítá z jejího stavu, ten je nula, takže se
+// investorovi donekonečna vyplácí nic a termín další výplaty se jen posouvá.
+// V seznamu to pak vypadá jako majetek, který se co nevidět vyplatí, a nikdy
+// nevyplatí.
+//
+// Tohle takové podíly uzavře. Z toho, co firmě zbylo, se investorům poměrně
+// vrátí, co do podílu dali a ještě nedostali; zbytek se odepíše. Pravidla jsou
+// stejná jako při ukončení hry, jen se spouštějí sama.
+const NEAKTIVNI_DNU_VYCHOZI = 30;
+
+async function neaktivniDnu() {
+  try {
+    const r = await prisma.gameSetting.findUnique({ where: { klic: 'podil_neaktivni_dnu' } });
+    const n = Number(r && r.hodnota);
+    if (isFinite(n) && n > 0) return n;
+  } catch (e) { /* bez nastavení jede výchozí */ }
+  return NEAKTIVNI_DNU_VYCHOZI;
+}
+
+// Vyrovná podíly v jedné firmě a uzavře je. Vrací, co se komu poslalo.
+async function vyrovnejPodilyFirmy(firma, duvod) {
+  const podily = await prisma.gameEquity.findMany({
+    where: { firma_id: firma.id, stav: 'bezi' } });
+  if (!podily.length) return null;
+
+  const st = stavu(firma);
+  let hotovost = cele(st.cash);
+  const dorucenky = [];
+  const nevraceno = podily.map((e) => ({ e, dluh: Math.max(0, cele(e.cena) - cele(e.vyplaceno)) }));
+  const suma = nevraceno.reduce((a, x) => a + x.dluh, 0);
+  const kDeleni = suma > 0 ? Math.min(hotovost, suma) : 0;
+  const dily = rozdel(kDeleni, nevraceno.map((x) => x.dluh));
+  const rozdano = dily.reduce((a, b) => a + b, 0);
+  nevraceno.forEach(({ e, dluh }, i) => {
+    const dam = dily[i];
+    if (dam > 0) {
+      dorucenky.push({ player_id: e.investor_id, kind: 'cash', amount: dam,
+        text_kod: 'dor.konec_odkup_podilu', text_data: { p1: firma.nick, penize: dam },
+        popis: TEXTY.t('dor.konec_odkup_podilu', { p1: firma.nick, penize: dam }, 'cs') });
+    }
+    dorucenky.push(zprava(e.investor_id, 'dor.podil_firma_nehraje',
+      { p1: firma.nick, p2: Math.round(e.podil * 100), penize: dluh - dam }));
+  });
+  // Majiteli taky — vrátí se po měsíci a jinak by nechápal, kam se poděly
+  // peníze a proč mu ve firmě zmizeli podílníci.
+  dorucenky.push(zprava(firma.id, 'dor.podilnici_vyplaceni',
+    { p1: podily.length, penize: rozdano }));
+
+  await prisma.$transaction(async (tx) => {
+    for (const { e } of nevraceno) {
+      await tx.gameEquity.update({ where: { id: e.id }, data: { stav: 'odkoupeno' } });
+    }
+    if (dorucenky.length) await tx.gameDelivery.createMany({ data: dorucenky });
+    // Hotovost firmy se tím zmenšila. Když stav vůbec není, není co upravovat.
+    if (st && typeof st === 'object' && rozdano > 0) {
+      await tx.gamePlayer.update({ where: { id: firma.id },
+        data: { state: Object.assign({}, st, { cash: Math.max(0, cele(st.cash) - rozdano) }),
+          state_rev: { increment: 1 } } });
+    }
+  }, { timeout: 60000 });
+
+  console.log('[game] podíly ve firmě ' + firma.nick + ' uzavřeny (' + duvod + '): '
+    + podily.length + ', vráceno ' + rozdano);
+  return { podilu: podily.length, vraceno: rozdano };
+}
+
+// Projde podíly a uzavře ty, jejichž firma už nehraje. Pouští se z tepu financí.
+async function uklidMrtvePodily() {
+  const bezici = await prisma.gameEquity.findMany({
+    where: { stav: 'bezi' }, select: { firma_id: true }, take: 2000 });
+  if (!bezici.length) return 0;
+  const firmy = [...new Set(bezici.map((x) => x.firma_id))];
+  const dnu = await neaktivniDnu();
+  const mez = new Date(Date.now() - dnu * 86400000);
+  let hotovo = 0;
+  for (const id of firmy) {
+    try {
+      const p = await prisma.gamePlayer.findUnique({ where: { id } });
+      if (!p) continue;                       // firma zmizela úplně, řeší výplaty
+      // Bez stavu hráč buď začal znovu, nebo hru nikdy nerozehrál. Čekat na
+      // lhůtu nemá smysl — vyplácet se stejně nemá z čeho.
+      const bezStavu = !p.state;
+      const davno = !p.state_at || new Date(p.state_at) < mez;
+      if (!bezStavu && !davno) continue;
+      const v = await vyrovnejPodilyFirmy(p, bezStavu ? 'začal znovu' : 'nehraje ' + dnu + ' dnů');
+      if (v) hotovo += v.podilu;
+    } catch (e) {
+      console.warn('[game] úklid podílů firmy #' + id + ':', e && e.message);
+    }
+  }
+  return hotovo;
+}
+
+module.exports = { ukonciHru, uklidMrtvePodily, vyrovnejPodilyFirmy };

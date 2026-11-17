@@ -184,6 +184,9 @@ async function tik() {
     const ted = new Date();
     await splatkyPujcek(ted);
     await vyplatyPodilu(ted);
+    // Podíl ve firmě, kterou už nikdo nehraje, by se jinak vyplácel donekonečna
+    // a vyplácel nulu. Uzavře se a investorovi se vrátí, co z firmy zbylo.
+    await require('./konec').uklidMrtvePodily();
   } catch (e) {
     console.warn('[game-finance] tik:', e && e.message);
   } finally { bezi = false; }

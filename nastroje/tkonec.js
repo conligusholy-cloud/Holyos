@@ -4,6 +4,21 @@
 'use strict';
 const cele = (x) => Math.max(0, Math.round(Number(x) || 0));
 
+// Rozdělení je vytažené z konec.js doslova — obě cesty (ukončení hry i úklid
+// podílů v mrtvé firmě) používají jednu funkci, takže ji stačí zkoušet jednou.
+function rozdel(kDeleni, naroky) {
+  const suma = naroky.reduce((a, b) => a + b, 0);
+  let rozdano = 0;
+  return naroky.map((dluh, i) => {
+    const posledni = i === naroky.length - 1;
+    const navrh = suma <= 0 ? 0
+      : (posledni ? (kDeleni - rozdano) : Math.round(kDeleni * (dluh / suma)));
+    const dam = Math.max(0, Math.min(navrh, dluh, kDeleni - rozdano));
+    rozdano += dam;
+    return dam;
+  });
+}
+
 // Stejný výpočet jako v konec.js, jen nad daty v paměti.
 function vyrovnej(hotovost, pujcky, podily) {
   let zbyva = cele(hotovost);
@@ -19,17 +34,12 @@ function vyrovnej(hotovost, pujcky, podily) {
   const suma = nevraceno.reduce((a, b) => a + b, 0);
   const kDeleni = suma > 0 ? Math.min(zbyva, suma) : 0;
   zbyva -= kDeleni;
-  let rozdano = 0;
-  nevraceno.forEach((d, i, pole) => {
-    const posledni = i === pole.length - 1;
-    const navrh = suma <= 0 ? 0
-      : (posledni ? (kDeleni - rozdano) : Math.round(kDeleni * (d / suma)));
-    const dam = Math.max(0, Math.min(navrh, d, kDeleni - rozdano));
-    rozdano += dam;
-    out.investorum += dam;
-    out.odepsanoPodily += d - dam;
+  const dily = rozdel(kDeleni, nevraceno);
+  nevraceno.forEach((d, i) => {
+    out.investorum += dily[i];
+    out.odepsanoPodily += d - dily[i];
   });
-  zbyva += kDeleni - rozdano;        // co se kvůli zaokrouhlení nerozdalo
+  zbyva += kDeleni - dily.reduce((a, b) => a + b, 0);
   out.zbylo = zbyva;
   return out;
 }
