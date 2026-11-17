@@ -2663,7 +2663,7 @@
   "hra.kupuje_dalsich": " %, kupuje dalších {p1} %)",
   "hra.dokud_mas_nevyuzitych_dalsi_zdarma_nechodi": ". Dokud máš {p1} nevyužitých, další zdarma nechodí — koupené se ale nikam neztratí.",
   "hra.p_class_fine_warn_nacerpano_mas": "<p class=\"fine warn\">Načerpáno máš {p1}, tedy nad svůj strop. {p2} {p3}</p>",
-  "hra.div_class_pack_l_b_b": "{p1}\"><div class=\"pack-l\"><b>{p2}</b><span>{p3} Kč za den",
+  "hra.div_class_pack_l_b_b": "{p1}\"><div class=\"pack-l\"><b>{p2}</b><span>{p3} za den",
   "hra.bezi_jeste": "běží ještě {p1}",
   "hra.chybi_ti": "Chybí ti {p1}",
   "hra.u00d7_skladem_vymena_za": "{p1}× skladem · výměna za {p2}",
@@ -3348,5 +3348,8 @@
   "hra.zal_jak_si_vedu": "Jak si vedu od začátku →",
   "hra.zal_obchod_popis": "Prádlomat si kup i bez místa — počká ti na skladě. Dodání trvá dva herní měsíce, to je jeden skutečný den.",
   "hra.zal_karty_popis": "Zrychlující karty ti pomůžou přeskočit čekání. Kupují se za skutečné peníze a zůstávají navázané na tvůj účet, ne na tenhle telefon.",
-  "hra.zal_burza_popis": "Stroje, celé prádlomaty i karty si mezi sebou můžete prodávat. Nabídka jde tam a zpět, dokud ji někdo nepřijme. Půjčit se tu dají i peníze na úrok a prodat podíl ve vlastní firmě."
+  "hra.zal_burza_popis": "Stroje, celé prádlomaty i karty si mezi sebou můžete prodávat. Nabídka jde tam a zpět, dokud ji někdo nepřijme. Půjčit se tu dají i peníze na úrok a prodat podíl ve vlastní firmě.",
+  "hra.za_technika_a_tyden": "za technika a týden",
+  "hra.doplacis_jen_rozdil_proti": "— doplácíš jen rozdíl proti stupni, který máš.",
+  "obecne.mena_vychozi": "Kč"
 }

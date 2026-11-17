@@ -2922,7 +2922,7 @@ function odmitniHovor(samo) {
     if (linkaNabidnoutLze()) {
       var c = (LINKA_CAT || [])[0];
       S.linkaNabidka = Date.now(); save();
-      sheet(tx('veta.h3_h3_p_class_muted_small_3', { p1: esc(tx('hra.u260e_ufe0f_at_to_za')), p2: esc(tx('hra.nevycerpane_hovory')), p3: esc(c.kind), p4: esc(polNazev(c)), p5: c.price_czk.toLocaleString('cs-CZ'), p6: esc(tx('hra.ted_ne_2')), p7: esc(tx('hra.vetsi_balicky_vyjdou_levneji_najdes')) }));
+      sheet(tx('veta.h3_h3_p_class_muted_small_3', { p1: esc(tx('hra.u260e_ufe0f_at_to_za')), p2: esc(tx('hra.nevycerpane_hovory')), p3: esc(c.kind), p4: esc(polNazev(c)), p5: cenaReal(c.price_czk), p6: esc(tx('hra.ted_ne_2')), p7: esc(tx('hra.vetsi_balicky_vyjdou_levneji_najdes')) }));
       var bl = document.querySelector('#sheet-body [data-linka]');
       if (bl) bl.onclick = function () { buyCash(bl.getAttribute('data-linka')); };
       if ($('linka-ne')) $('linka-ne').onclick = closeSheet;
@@ -4728,7 +4728,7 @@ function agentHtml(amount, strop, zpet) {
   var c = balikNaZed(amount, strop);
   if (!c) return '';
   AGENT_ZPET = zpet || null;
-  return '<div class="card agent"><h3>' + tx('veta.h3_p_class_muted_small_style_7', { p1: esc(tx('hra.rychla_cesta_dal')), p2: esc(tx('hra.balik')), p3: esc(polNazev(c)), p4: kcFull(c.laundry), p5: esc(c.kind), p6: kcFull(c.laundry), p7: c.price_czk.toLocaleString('cs-CZ'), p8: esc(tx('hra.kc_9')), p9: kcFull(BANK_PER_DAY) });
+  return '<div class="card agent"><h3>' + tx('veta.h3_p_class_muted_small_style_7', { p1: esc(tx('hra.rychla_cesta_dal')), p2: esc(tx('hra.balik')), p3: esc(polNazev(c)), p4: kcFull(c.laundry), p5: esc(c.kind), p6: kcFull(c.laundry), p7: cenaReal(c.price_czk), p8: '', p9: kcFull(BANK_PER_DAY) });
 }
 function bindAgent() {
   var b = document.querySelector('[data-agent]');
@@ -6262,7 +6262,7 @@ function linkaNabidkaHtml() {
     + '<p class="muted small" style="margin:2px 0 8px">' + esc(tx('hra.takhle_ti_bude_telefon_zvonit')) + ' '
     + esc(tx('hra.hovor_ktery_nestihnes_vezme_operator')) + '</p>'
     + '<button class="btn big" data-linka="' + esc(c.kind) + '">' + esc(polNazev(c)) + ' za '
-    + c.price_czk.toLocaleString('cs-CZ') + ' ' + esc(tx('hra.kc_11')) + '</button>'
+    + cenaReal(c.price_czk) + '</button>'
     + '<p class="fine">' + esc(tx('hra.vetsi_balicky_vyjdou_levneji_jsou')) + '</p></div>';
 }
 function hlidejNabidky() {
@@ -6285,7 +6285,7 @@ function nabidkaSheet(n, c) {
     + '<p class="muted small">' + esc(n.duvod) + '</p>'
     + '<div class="card agent" style="margin-top:12px"><p class="muted small" style="margin:0 0 8px">'
     + esc(polPopis(c)) + '</p>'
-    + '<div class="kv"><span>' + esc(tx('hra.cena_2')) + '</span><b>' + c.price_czk.toLocaleString('cs-CZ') + ' ' + esc(tx('hra.kc_13')) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.cena_2')) + '</span><b>' + cenaReal(c.price_czk) + '</b></div>'
     + ((c.bundles || []).length ? tx('veta.p_class_fine_ve_vice_kusech', { p1: c.bundles[c.bundles.length - 1].qty, p2: c.bundles[c.bundles.length - 1].sleva }) : '')
     + '<button class="btn big" id="nab-koupit">' + esc(tx('hra.koupit')) + '</button></div>'
     + '<button class="btn sec" id="nab-ne" style="width:100%;margin-top:8px">' + esc(tx('hra.ted_ne_3')) + '</button>'
@@ -11789,6 +11789,10 @@ function loadCards() {
   return api('/cards').then(function (r) {
     if (!r.ok) return;
     CARDS_CAT = r.j.catalog; CASH_CAT = r.j.cash || null; PAYMENTS_ON = !!r.j.payments;
+    // Měna skutečných plateb. Rozhoduje server podle jazyka hráče a stejnou
+    // hodnotou pak účtuje Stripe, takže si ji klient nedopočítává.
+    if (r.j.mena) { MENA = r.j.mena; MENA_ZNAK = r.j.mena_znak || MENA_ZNAK; }
+    if (typeof r.j.mena_des === 'number') MENA_DES = r.j.mena_des;
     SUBS_CAT = r.j.subs || null; PREDPLATNE = r.j.predplatne || [];
     LINKA_CAT = r.j.linka || null;
     if (typeof r.j.onboarding_rychly === 'boolean') ONBOARDING_RYCHLY = r.j.onboarding_rychly;
@@ -11884,7 +11888,7 @@ function paintCards() {
             : '')
         + '<div class="gcard-act">'
         + (n ? '<button class="btn sm" data-use="' + c.kind + '">' + esc(tx('hra.pouzit')) + '</button>' : '')
-        + (PAYMENTS_ON ? tx('veta.button_class_btn_sm_ghost_data', { p1: c.kind, p2: c.price_czk.toLocaleString('cs-CZ'), p3: esc(tx('hra.kc_8')), p4: ((c.bundles || []).length ? '<span class="fine bal-tip">nebo ' + c.bundles[c.bundles.length - 1].qty
+        + (PAYMENTS_ON ? tx('veta.button_class_btn_sm_ghost_data', { p1: c.kind, p2: cenaReal(c.price_czk), p3: '', p4: ((c.bundles || []).length ? '<span class="fine bal-tip">nebo ' + c.bundles[c.bundles.length - 1].qty
               + '\u00d7 se slevou ' + c.bundles[c.bundles.length - 1].sleva + ' %</span>' : '') })
           : '<span class="fine">' + esc(tx('hra.prodej_se_teprve_spousti_4')) + '</span>')
         + '</div></div>';
@@ -12029,7 +12033,7 @@ function ramecPacksHtml() {
               + '<span>' + (mam ? esc(tx('hra.mas_koupeno'))
                   : muj && dop < b.price_czk ? esc(tx('hra.doplatek_z_tveho_stupne')) : esc(tx('hra.jednorazove_naporad'))) + '</span></div>'
               + '<button class="btn sm"' + (mam ? ' disabled' : '') + '>'
-              + (mam ? '\u2713' : dop.toLocaleString('cs-CZ') + ' ' + esc(tx('hra.kc'))) + '</button></div>';
+              + (mam ? '\u2713' : cenaReal(dop)) + '</button></div>';
           }).join('')
           + '<p class="fine">' + esc(tx('hra.platbu_zpracovava_stripe_strop_se')) + ' '
           + esc(tx('hra.kdo_ma_nizsi_stupen_plati')) + '</p>'
@@ -12085,9 +12089,9 @@ function linkaPacksHtml() {
               ? esc(tx('hra.koupis_si_to_jako_predplatne'))
               : esc(tx('hra.jednorazovy_nakup_az_cas_dobehne'))) + '</p>'
           + LINKA_CAT.map(function (c) {
-              return '<div class="pack" data-linka="' + tx('hra.div_class_pack_l_b_b', { p1: esc(c.kind), p2: esc(polNazev(c)), p3: String(c.za_den).replace('.', desZnak()) })
+              return '<div class="pack" data-linka="' + tx('hra.div_class_pack_l_b_b', { p1: esc(c.kind), p2: esc(polNazev(c)), p3: cenaDen(c.za_den) })
                 + (LINKA_AUTO ? ' ' + esc(tx('hra.obnovuje_se')) : '') + '</span></div>'
-                + '<button class="btn sm">' + c.price_czk.toLocaleString('cs-CZ') + ' ' + esc(tx('hra.kc_10')) + '</button></div>';
+                + '<button class="btn sm">' + cenaReal(c.price_czk) + '</button></div>';
             }).join('')
           + '<p class="fine">' + esc(tx('hra.platbu_zpracovava_stripe_infolinka_naskoci')) + '</p>'
         : PAYMENTS_ON ? '' : '<p class="fine">' + esc(tx('hra.prodej_se_teprve_spousti_2')) + '</p>')
@@ -12142,8 +12146,7 @@ function predplatneHtml() {
     + (p ? '<b class="gcard-n ok">' + esc(tx('hra.jede')) + '</b>' : '') + '</div>'
     + '<p class="muted small">' + esc(polPopis(c)) + '</p>'
     + (p
-        ? tx('veta.div_class_kv_span_span_b_2', { p1: esc(tx('hra.techniku')), p2: p.qty, p3: kap, p4: esc(tx('hra.platis')) }) + (c.price_czk * p.qty).toLocaleString('cs-CZ')
-            + ' ' + esc(tx('hra.kc_tydne')) + '</b></div>'
+        ? tx('veta.div_class_kv_span_span_b_2', { p1: esc(tx('hra.techniku')), p2: p.qty, p3: kap, p4: esc(tx('hra.platis')) }) + cenaReal((c.price_czk * p.qty)) + '</b></div>'
           + (do_ ? '<div class="kv"><span>' + (p.obnovi_se ? esc(tx('hra.dalsi_platba')) : esc(tx('hra.dobehne')))
             + '</span><b' + (p.obnovi_se ? '' : ' class="warn"') + '>' + datumCas(do_) + '</b></div>' : '')
           + (p.status === 'past_due' ? '<p class="fine err">' + esc(tx('hra.posledni_platba_neprosla')) + ' '
@@ -12166,10 +12169,10 @@ function predplatneHtml() {
           + (PAYMENTS_ON && treba > p.qty
               ? tx('hra.na_vsechny_pobocky_potrebujes', { p1: treba, p2: (c.price_czk * treba) })
               : '')
-        : tx('veta.div_class_kv_span_cena_span', { p1: c.price_czk.toLocaleString('cs-CZ'), p2: esc(tx('hra.kc_za_technika_a_tyden')), p3: esc(tx('hra.jeden_technik_zvladne')), p4: c.kapacita, p5: pocet, p6: mn(pocet, esc(tx('hra.pobocku')), esc(tx('hra.pobocky')), esc(tx('hra.pobocek'))), p7: treba, p8: esc(tx('hra.tydne_zaplatis')) })
-            + (c.price_czk * treba).toLocaleString('cs-CZ') + ' ' + esc(tx('hra.kc_7')) + '</b></div>'
+        : tx('veta.div_class_kv_span_cena_span', { p1: cenaReal(c.price_czk), p2: esc(tx('hra.za_technika_a_tyden')), p3: esc(tx('hra.jeden_technik_zvladne')), p4: c.kapacita, p5: pocet, p6: mn(pocet, esc(tx('hra.pobocku')), esc(tx('hra.pobocky')), esc(tx('hra.pobocek'))), p7: treba, p8: esc(tx('hra.tydne_zaplatis')) })
+            + cenaReal((c.price_czk * treba)) + '</b></div>'
           + (PAYMENTS_ON
-              ? tx('veta.button_class_btn_big_data_sub', { p1: treba, p2: (c.price_czk * treba).toLocaleString('cs-CZ'), p3: tx('hra.button_p_class_fine_strhava_se', { p1: esc(tx('hra.kc_tydne_2')) }) })
+              ? tx('veta.button_class_btn_big_data_sub', { p1: treba, p2: cenaReal(c.price_czk * treba), p3: tx('hra.button_p_class_fine_strhava_se', { p1: esc(tx('hra.kc_tydne_2')) }) })
               : '<p class="fine">' + esc(tx('hra.prodej_se_teprve_spousti')) + '</p>'))
     + '</div>';
 }
@@ -12387,6 +12390,31 @@ function obchodText(x, pole) {
 function polNazev(x) { return obchodText(x, 'name'); }
 function polKratce(x) { return obchodText(x, 'short'); }
 function polPopis(x) { return obchodText(x, 'desc'); }
+// Skutečné peníze (ne herní L$). Měnu i počet desetinných míst říká server
+// podle jazyka hráče, protože stejnou hodnotou pak účtuje Stripe. Kdyby si to
+// klient počítal sám, dřív nebo později by ukázal jinou cenu, než jaká se
+// strhne.
+// Výchozí hodnoty platí jen do načtení ceníku, pak je přebije server.
+var MENA = 'czk', MENA_ZNAK = tx('obecne.mena_vychozi'), MENA_DES = 0;
+// Cena za den vychází z dělení, takže potřebuje desetinné místo i v korunách.
+function cenaDen(x) {
+  var n = Number(x) || 0;
+  var txt;
+  try {
+    txt = n.toLocaleString(JAZYK === 'en' ? 'en-GB' : 'cs-CZ',
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  } catch (e) { txt = n.toFixed(2); }
+  return txt + ' ' + MENA_ZNAK;
+}
+function cenaReal(x) {
+  var n = Number(x) || 0;
+  var txt;
+  try {
+    txt = n.toLocaleString(JAZYK === 'en' ? 'en-GB' : 'cs-CZ',
+      { minimumFractionDigits: MENA_DES, maximumFractionDigits: MENA_DES });
+  } catch (e) { txt = String(MENA_DES ? n.toFixed(MENA_DES) : Math.round(n)); }
+  return txt + ' ' + MENA_ZNAK;
+}
 function cashPacksHtml() {
   if (!PAYMENTS_ON) {
     return '<div class="card"><h3>' + esc(tx('banka.dobit_banku')) + '</h3><p class="muted small" style="margin:2px 0 0">'
@@ -12398,7 +12426,7 @@ function cashPacksHtml() {
       return '<div class="pack" data-pack="' + c.kind + '">'
         + '<div class="pack-l"><b>' + kcFull(c.laundry) + '</b>'
         + '<span>' + esc(polNazev(c)) + (c.bonus > 0 ? tx('hra.o_vyhodnejsi', { p1: c.bonus }) : '') + '</span></div>'
-        + '<button class="btn sm">' + c.price_czk.toLocaleString('cs-CZ') + ' ' + esc(tx('hra.kc_12')) + '</button></div>';
+        + '<button class="btn sm">' + cenaReal(c.price_czk) + '</button></div>';
     }).join('')
     + '<p class="fine">' + esc(tx('banka.platbu_zpracovava_stripe_penize_se')) + '</p></div>';
 }
@@ -12429,12 +12457,12 @@ function buyCash(kind) {
             + (maLinku() ? etaText(linkaZbyva() + c.dnu * 86400000) + ' ' + esc(tx('hra.vcetne_zbytku'))
                 : dobaSlovy(c.dnu)) + '</b></div>'
           : '<div class="kv"><span>' + esc(tx('hra.ramec_a_zastava_v_bance')) + '</span><b class="ok">+' + kcFull(c.laundry) + '</b></div>')
-    + '<div class="kv"><span>' + esc(tx('hra.cena_5')) + '</span><b>' + platba.toLocaleString('cs-CZ') + ' ' + esc(tx('hra.kc_2')) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.cena_5')) + '</span><b>' + cenaReal(platba) + '</b></div>'
     + (ramec
         ? (platba < c.price_czk
-            ? tx('veta.p_class_fine_ok_plna_cena', { p1: c.price_czk.toLocaleString('cs-CZ'), p2: esc(tx('hra.kc_doplacis_jen_rozdil_proti')) }) : '')
+            ? tx('veta.p_class_fine_ok_plna_cena', { p1: cenaReal(c.price_czk), p2: esc(tx('hra.doplacis_jen_rozdil_proti')) }) : '')
         : hovory
-          ? '<div class="kv"><span>' + esc(tx('hra.za_den')) + '</span><b>' + String(c.za_den).replace('.', desZnak()) + ' ' + esc(tx('hra.kc_3')) + '</b></div>'
+          ? '<div class="kv"><span>' + esc(tx('hra.za_den')) + '</span><b>' + cenaDen(c.za_den) + '</b></div>'
           : '<div class="kv"><span>' + esc(tx('hra.za_korunu')) + '</span><b>' + tCislo(c.per_czk) + ' L$</b></div>')
     + '<div class="kv"><span>' + esc(tx('hra.plati')) + '</span><b>' + esc(ME.first_name + ' ' + ME.last_name) + '</b></div>'
     + '<button class="btn big" id="do-pay">' + esc(tx('hra.zaplatit_kartou')) + '</button>'
@@ -12519,12 +12547,12 @@ function buyCard(kind, qty) {
         + '<div class="balicky">' + dlazdice.map(function (b) {
             return '<button class="balik' + (b.qty === qty ? ' on' : '') + '" data-qty="' + b.qty + '">'
               + '<b>' + b.qty + '\u00d7</b>'
-              + '<span>' + b.price_czk.toLocaleString('cs-CZ') + ' ' + esc(tx('hra.kc_4')) + '</span>'
-              + (b.sleva > 0 ? '<i>' + (c.price_czk * b.qty).toLocaleString('cs-CZ') + ' ' + esc(tx('hra.kc_5')) + '</i>'
+              + '<span>' + cenaReal(b.price_czk) + '</span>'
+              + (b.sleva > 0 ? '<i>' + cenaReal((c.price_czk * b.qty)) + '</i>'
                   + '<em>\u2212' + b.sleva + ' %</em>' : '<i class="prazdno">' + esc(tx('hra.za_kus')) + '</i>')
               + '</button>';
           }).join('') + '</div>' : '')
-    + '<div class="kv"><span>' + esc(tx('hra.zaplatis_2')) + '</span><b>' + cena.toLocaleString('cs-CZ') + ' ' + esc(tx('hra.kc_6')) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.zaplatis_2')) + '</span><b>' + cenaReal(cena) + '</b></div>'
     + (qty > 1 ? '<div class="kv"><span>' + esc(tx('hra.dostanes')) + '</span><b class="ok">' + qty + '\u00d7 ' + esc(c.name) + '</b></div>' : '')
     + '<div class="kv"><span>' + esc(tx('hra.plati_2')) + '</span><b>' + esc(ME.first_name + ' ' + ME.last_name) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('hra.e_mail')) + '</span><b>' + esc(ME.email) + '</b></div>'

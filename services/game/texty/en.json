@@ -2732,7 +2732,7 @@
   "hra.kupuje_dalsich": " %, buying another {p1} %)",
   "hra.dokud_mas_nevyuzitych_dalsi_zdarma_nechodi": ". While you have {p1} unused, no more free ones arrive — but purchased ones don't disappear.",
   "hra.p_class_fine_warn_nacerpano_mas": "<p class=\"fine warn\">You've drawn {p1}, above your limit. {p2} {p3}</p>",
-  "hra.div_class_pack_l_b_b": "{p1}\"><div class=\"pack-l\"><b>{p2}</b><span>{p3} CZK per day",
+  "hra.div_class_pack_l_b_b": "{p1}\"><div class=\"pack-l\"><b>{p2}</b><span>{p3} per day",
   "hra.bezi_jeste": "{p1} remaining",
   "hra.chybi_ti": "You need {p1}",
   "hra.p_class_fine_ok_vymena_se": "<p class=\"fine ok\">Exchange returns {p1}.</p>",

@@ -18,6 +18,7 @@ const { prisma } = require('../config/database');
 const { HODNOSTI, hodnost, ODZNAKY, ODZNAK,
   hodnostiPro, odznakyPro, nazevOdmeny } = require('../services/game/hodnosti');
 const TEXTY = require('../services/game/texty');
+const MENY = require('../services/game/meny');
 // Zkratka do obsluhy: stx(req)('server.neco') vrátí hlášku v jazyce hráče.
 // Skládá se pro toho, KOMU se posílá — ne pro toho, kdo akci vyvolal.
 function stx(req) {
@@ -89,12 +90,12 @@ function cenaKusuVBalicku(price, qty) {
   return Math.max(100, Math.round(price * (1 - b.sleva) / 100) * 100);
 }
 // Nabídka balíčků k jedné kartě, rovnou s úsporou — klient už nic nepočítá.
-function balickyProKartu(c) {
+function balickyProKartu(c, prev) {
   if (!c || c.bezBalicku) return [];
   return BALICKY.map((b) => {
     const kus = cenaKusuVBalicku(c.price, b.qty);
     const celkem = kus * b.qty, plna = c.price * b.qty;
-    return { qty: b.qty, price_czk: celkem / 100, plna_czk: plna / 100,
+    return { qty: b.qty, price_czk: prev.zobraz(celkem), plna_czk: prev.zobraz(plna),
       sleva: Math.max(0, Math.round((1 - celkem / plna) * 100)) };
   }).filter((b) => b.sleva > 0);
 }
@@ -261,13 +262,14 @@ async function activeKinds(list) {
 }
 // Kolik laundrů za korunu — ať hráč vidí, že se větší balík vyplatí.
 const perCzk = (c) => Math.round(c.laundry / (c.price / 100));
-async function cashPublic() {
+async function cashPublic(prev) {
   const out = [];
   const zaklad = await item('cash100');
   for (const k of CASH_KINDS) {
     if (CASH[k] && CASH[k].skryty) continue;      // dárky se neprodávají
     const c = await item(k); if (!c) continue;
-    out.push({ kind: c.kind, name: c.name, price_czk: c.price / 100, laundry: c.laundry, per_czk: perCzk(c),
+    out.push({ kind: c.kind, name: c.name, price_czk: prev.zobraz(c.price), laundry: c.laundry,
+      per_czk: Math.round(c.laundry / prev.zobraz(c.price)),
       bonus: zaklad ? Math.round((perCzk(c) / perCzk(zaklad) - 1) * 100) : 0 });
   }
   return out;
@@ -287,34 +289,34 @@ function ramecPodleUrovne(uroven) {
   const b = RAMEC_KINDS.map((k) => RAMEC[k]).filter((x) => x.uroven === uroven)[0];
   return b ? b.strop : RAMEC_ZDARMA;        // null = bez stropu
 }
-async function ramecPublic(playerId) {
+async function ramecPublic(playerId, prev) {
   const balicky = [];
   for (const k of RAMEC_KINDS) {
     const c = await item(k); if (!c) continue;
     balicky.push({ kind: c.kind, name: c.name, short: c.short,
-      price_czk: c.price / 100, strop: RAMEC[k].strop, uroven: RAMEC[k].uroven });
+      price_czk: prev.zobraz(c.price), strop: RAMEC[k].strop, uroven: RAMEC[k].uroven });
   }
   const uroven = playerId ? await ramecUroven(playerId) : 0;
   return { zdarma: RAMEC_ZDARMA, uroven, strop: ramecPodleUrovne(uroven), balicky };
 }
 
 // Kolik korun za hovor — ať je vidět, že větší balíček vyjde líp.
-async function linkaPublic() {
+async function linkaPublic(prev) {
   const out = [];
   for (const k of LINKA_KINDS) {
     if (LINKA[k].stary) continue;          // doběh starých balíčků se neprodává
     const c = await item(k); if (!c) continue;
-    out.push({ kind: c.kind, name: c.name, price_czk: c.price / 100, dnu: LINKA[k].dnu,
-      za_den: Math.round(c.price / LINKA[k].dnu) / 100 });
+    out.push({ kind: c.kind, name: c.name, price_czk: prev.zobraz(c.price), dnu: LINKA[k].dnu,
+      za_den: Math.round(prev.zobraz(c.price) / LINKA[k].dnu * 100) / 100 });
   }
   return out;
 }
-async function subsPublic() {
+async function subsPublic(prev) {
   const out = [];
   for (const k of SUB_KINDS) {
     const c = await item(k); if (!c) continue;
     out.push({ kind: c.kind, name: c.name, icon: c.icon, short: c.short, desc: c.desc,
-      price_czk: c.price / 100, interval: c.interval, interval_count: c.interval_count || 1,
+      price_czk: prev.zobraz(c.price), interval: c.interval, interval_count: c.interval_count || 1,
       linka: !!c.linka, kapacita: c.kapacita });
   }
   return out;
@@ -332,12 +334,12 @@ async function predplatneHrace(p) {
   return zive.map((r) => ({ kind: r.kind, qty: r.qty, status: r.status,
     plati_do: r.plati_do, obnovi_se: r.obnovi_se }));
 }
-async function catalogPublic() {
+async function catalogPublic(prev) {
   const out = [];
   for (const k of CARD_KINDS) {
     const c = await item(k); if (!c) continue;
     out.push({ kind: c.kind, name: c.name, icon: c.icon, short: c.short, desc: c.desc,
-      price_czk: c.price / 100, bundles: balickyProKartu(c) });
+      price_czk: prev.zobraz(c.price), bundles: balickyProKartu(c, prev) });
   }
   return out;
 }
@@ -1405,15 +1407,19 @@ router.get('/cards', async (req, res, next) => {
       try { p = await dosypExpresniDovoz(p) || p; }
       catch (e) { console.warn('[game] expresni dovoz zdarma:', e.message); }
     }
+    // Měna se řídí jazykem hráče. Ceny v ceníku jsou v haléřích, převádí se
+    // až tady — a stejnou funkcí, jakou pak Stripe počítá, co strhne.
+    const prev = await MENY.prevodnik(TEXTY.jazykHrace(p));
     res.json({
-      ok: true, catalog: await catalogPublic(), cash: await cashPublic(),
-      linka: await linkaPublic(),
+      ok: true, mena: prev.mena, mena_znak: prev.znak, mena_des: prev.des,
+      catalog: await catalogPublic(prev), cash: await cashPublic(prev),
+      linka: await linkaPublic(prev),
       onboarding_rychly: await rychlyOnboarding(),
-      ramec: await ramecPublic(p ? p.id : null),
+      ramec: await ramecPublic(p ? p.id : null, prev),
       nick_pauza_ms: await nickPauzaMs(),
       instagram: { odkaz: IG_ODKAZ, karet: IG_KARET, vzato: p ? !!p.instagram_at : false },
       facebook: { odkaz: FB_ODKAZ, laundry: CASH[FB_KIND].laundry, vzato: p ? !!p.facebook_at : false },
-      subs: await subsPublic(), predplatne: await predplatneHrace(p),
+      subs: await subsPublic(prev), predplatne: await predplatneHrace(p),
       payments: require('./game-stripe.routes')._paymentsOn(),
       owned: p ? (await pub(p)).cards : null,
       rush_zdarma_za: p ? rushZdarmaZa(p) : null,

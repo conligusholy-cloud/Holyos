@@ -28,6 +28,8 @@ Tenhle soubor čte i automatický překlad ve fázi 3 — co je tady, to platí.
 | zástava | collateral | |
 | splátka | instalment | |
 | infolinka | hotline | |
+| Kč | CZK | **skutečné peníze, ne herní měna** — nikdy nepřekládat na L$ |
+| L$ | L$ | herní měna, zůstává vždycky L$ |
 | hovor | call | |
 | hvězdičky | stars | hodnocení zákazníků |
 | pověst | reputation | |

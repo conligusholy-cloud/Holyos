@@ -14,6 +14,8 @@ const express = require('express');
 const crypto = require('crypto');
 const { prisma } = require('../config/database');
 const acct = require('./game-account.routes');
+const TEXTY = require('../services/game/texty');
+const MENY = require('../services/game/meny');
 
 const router = express.Router();
 const itemOf = acct._item;
@@ -112,15 +114,19 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
     // Karta se pozná podle sebe: nenese laundry (balík peněz), hovory (balíček
     // infolinky) ani interval (předplatné). Slevové balíčky platí jen na karty.
     const jeKarta = !c.laundry && !c.hovory && !c.dnu && !c.interval && !c.bezBalicku;
-    const kus = doplatek != null ? doplatek : (jeKarta ? acct._cenaKusuVBalicku(c.price, qty) : c.price);
+    const kusKc = doplatek != null ? doplatek : (jeKarta ? acct._cenaKusuVBalicku(c.price, qty) : c.price);
+    // Měna podle jazyka hráče. Stejný výpočet jako v ceníku — kdyby se
+    // počítaly zvlášť, rozešla by se zobrazená cena s tou účtovanou.
+    const prev = await MENY.prevodnik(TEXTY.jazykHrace(p));
+    const kus = prev.halere(kusKc);
 
     const purchase = await prisma.gamePurchase.create({
-      data: { player_id: p.id, kind, qty, amount_cents: kus * qty, currency: 'czk', email: p.email }
+      data: { player_id: p.id, kind, qty, amount_cents: kus * qty, currency: prev.mena, email: p.email }
     });
 
     const session = await stripePost('checkout/sessions', {
       mode: 'payment',
-      locale: 'cs',
+      locale: prev.mena === 'czk' ? 'cs' : 'en',
       invoice_creation: { enabled: 'true' },
       success_url: gameUrl() + '?platba=ok&s={CHECKOUT_SESSION_ID}',
       cancel_url: gameUrl() + '?platba=zrus',
@@ -131,7 +137,7 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
       line_items: [{
         quantity: qty,
         price_data: {
-          currency: 'czk', unit_amount: kus,
+          currency: prev.mena, unit_amount: kus,
           product_data: { name: 'Laundromat Tycoon — ' + c.name + (qty > 1 ? ' (' + qty + '×)' : ''),
             description: c.short || (c.laundry ? c.laundry.toLocaleString('cs-CZ') + ' herních laundrů' : undefined) }
         }
@@ -161,6 +167,7 @@ router.post('/stripe/subscribe', express.json({ limit: '8kb' }), acct._requirePl
     const c = await itemOf(kind);
     if (!c) return res.status(400).json({ error: 'Tohle se teď neprodává.' });
     const qty = Math.max(1, Math.min(MAX_TECHNIKU, parseInt((req.body || {}).qty, 10) || 1));
+    const prev = await MENY.prevodnik(TEXTY.jazykHrace(p));
 
     const bezi = (await acct._predplatneHrace(p)) || [];
     if (bezi.some((x) => x.kind === kind)) {
@@ -176,7 +183,7 @@ router.post('/stripe/subscribe', express.json({ limit: '8kb' }), acct._requirePl
     });
     const session = await stripePost('checkout/sessions', {
       mode: 'subscription',
-      locale: 'cs',
+      locale: prev.mena === 'czk' ? 'cs' : 'en',
       success_url: gameUrl() + '?predplatne=ok&s={CHECKOUT_SESSION_ID}',
       cancel_url: gameUrl() + '?predplatne=zrus',
       customer_email: p.email,
@@ -186,7 +193,7 @@ router.post('/stripe/subscribe', express.json({ limit: '8kb' }), acct._requirePl
       line_items: [{
         quantity: qty,
         price_data: {
-          currency: 'czk', unit_amount: c.price,
+          currency: prev.mena, unit_amount: prev.halere(c.price),
           recurring: { interval: c.interval || 'week',
             interval_count: String(Math.max(1, parseInt(c.interval_count, 10) || 1)) },
           product_data: { name: 'Laundromat Tycoon — ' + c.name,
@@ -321,13 +328,15 @@ async function prepisPredplatne(sub) {
 // v tržbách a hlavně by se nevystavil doklad — ten se dělá z nákupu. Klíčem je
 // faktura ze Stripu, takže jedno období se nezapíše dvakrát, ani když stejná
 // událost přijde opakovaně.
-async function zapisObdobi(row, faktura, castka, email) {
+async function zapisObdobi(row, faktura, castka, email, mena) {
   if (!row || !faktura || !(castka > 0)) return null;
   let pu;
   try {
     pu = await prisma.gamePurchase.create({
       data: { player_id: row.player_id, kind: row.kind, qty: row.qty || 1,
-        amount_cents: Math.round(castka), currency: 'czk', status: 'paid',
+        // Měna musí být ta, kterou Stripe opravdu strhl — podle ní se pak
+        // vystavuje doklad a vybírá bankovní účet.
+        amount_cents: Math.round(castka), currency: String(mena || 'czk').toLowerCase(), status: 'paid',
         paid_at: new Date(), stripe_session: faktura, email: email || null }
     });
   } catch (e) {
@@ -335,7 +344,7 @@ async function zapisObdobi(row, faktura, castka, email) {
     throw e;
   }
   console.log('[game] předplatné zaplaceno:', row.kind, '· hráč', row.player_id,
-    '·', Math.round(castka) / 100 + ' Kč');
+    '·', Math.round(castka) / 100 + ' ' + String(mena || 'czk').toUpperCase());
   require('../services/bs2-billing').issueGame(pu.id)
     .then((r) => { if (r && !r.ok && !r.skipped) console.warn('[game] faktura:', r.error || r.reason); })
     .catch((e) => console.warn('[game] faktura selhala:', e.message));
@@ -365,7 +374,8 @@ async function zalozPredplatne(sess) {
     console.log('[game] předplatné založeno:', row.kind, '· hráč', row.player_id, '·', row.qty + '× technik');
   }
   await zapisObdobi(row, sess.invoice || sess.id, sess.amount_total,
-    (sess.customer_details && sess.customer_details.email) || sess.customer_email);
+    (sess.customer_details && sess.customer_details.email) || sess.customer_email,
+    sess.currency);
   try { await stripeGet('subscriptions/' + sess.subscription).then(prepisPredplatne); }
   catch (e) { console.warn('[game] načtení předplatného:', e.message); }
 }
@@ -395,7 +405,7 @@ const webhook = [express.raw({ type: '*/*', limit: '1mb' }), async (req, res) =>
       await prepisPredplatne(sub);
       if (ev.type !== 'invoice.payment_succeeded') return;
       const row = await prisma.gameSubscription.findUnique({ where: { stripe_sub: sub.id } });
-      await zapisObdobi(row, inv.id, inv.amount_paid, inv.customer_email);
+      await zapisObdobi(row, inv.id, inv.amount_paid, inv.customer_email, inv.currency);
     }).catch((e) => console.error('[game] předplatné z faktury:', e.message));
   }
   if (ev.type !== 'checkout.session.completed' && ev.type !== 'checkout.session.async_payment_succeeded') return;

@@ -68,65 +68,84 @@
   {
     "id": "svetr",
     "rod": "z",
-    "nalada": 15,
     "kroky": [
       {
-        "t": "Your dryer shrunk my merino wool sweater. It cost two thousand!",
+        "t": "I washed a wool sweater at your place and now it's child-size.",
         "o": [
           {
-            "t": "I apologize. Send me a photo and receipt, I'll handle it as damage claim and reimburse you.",
+            "t": "I'm sorry to hear that. What program did you use?",
             "b": 2,
-            "r": "I wasn't expecting that, thank you."
+            "r": "Good, you're asking the right questions."
           },
           {
-            "t": "Everyone knows you don't put wool in the dryer.",
+            "t": "Wool doesn't belong in a machine, that's your mistake.",
             "b": -2,
-            "r": "Then write it there, smartass!"
+            "r": "Well, that really helped."
           },
           {
-            "t": "That's probably the sweater's fault.",
-            "b": -1,
-            "r": "The sweater was fine before I brought it to you."
+            "t": "We're not liable for shrinkage, it's written on the machine and in the terms on our website, check there.",
+            "b": -2,
+            "r": "I'm calling about the sweater, not about terms."
           }
         ]
       },
       {
-        "t": "And why doesn't it say on that program that it'll ruin wool?",
+        "t": "I used sixty, it was preset.",
         "o": [
           {
-            "t": "Because it's missing, and that's our mistake. We'll add labels to every program today.",
+            "t": "That's too much for wool. I'll put a better label on that machine so it doesn't happen to someone else.",
             "b": 2,
-            "r": "Thanks for admitting it."
+            "r": "At least something."
           },
           {
-            "t": "Because it's obvious.",
+            "t": "Well, there you go, that's clear then.",
+            "b": -1,
+            "r": "That really cheered me up."
+          },
+          {
+            "t": "Sixty is standard, it can't harm anyone.",
             "b": -2,
-            "r": "It wasn't obvious to me."
+            "r": "Then why is my sweater a rag?"
+          }
+        ]
+      },
+      {
+        "t": "And who's going to pay for the sweater?",
+        "o": [
+          {
+            "t": "Send me a photo and receipt, we'll work it out.",
+            "b": 2,
+            "r": "Okay, I'll send it."
           },
           {
-            "t": "We'll put it on the improvement list.",
+            "t": "Nobody, you washed it yourself and the machine says what goes in it.",
+            "b": -2,
+            "r": "I'm done with you."
+          },
+          {
+            "t": "I can give you a free wash, can't do more than that.",
+            "b": 1,
+            "r": "Well, better than nothing."
+          }
+        ]
+      },
+      {
+        "t": "Okay. And how should I wash it next time?",
+        "o": [
+          {
+            "t": "Thirty and never in the dryer.",
+            "b": 2,
+            "r": "Noted. Thanks."
+          },
+          {
+            "t": "Try something, that's what self-service is for.",
+            "b": -2,
+            "r": "Are you serious?"
+          },
+          {
+            "t": "I'd hand-wash wool at home, in a machine it's always a risk, even on the lowest program and slow spin.",
             "b": 0,
-            "r": "On the list. Right."
-          }
-        ]
-      },
-      {
-        "t": "When will I get the money?",
-        "o": [
-          {
-            "t": "Within three business days from the photo. If there's a delay, call me directly, I'm handling it personally.",
-            "b": 2,
-            "r": "Okay, sending the photo now."
-          },
-          {
-            "t": "That depends on management.",
-            "b": -1,
-            "r": "You are management, aren't you?"
-          },
-          {
-            "t": "We're not refunding you anything.",
-            "b": -2,
-            "r": "See you in court then."
+            "r": "Then I won't bring wool to your place."
           }
         ]
       }
@@ -134,66 +153,65 @@
   },
   {
     "id": "drahe",
-    "rod": "m",
-    "nalada": 34,
+    "rod": "",
     "kroky": [
       {
-        "t": "You raised the price by twenty and next door it's cheaper. Why should I come to you?",
+        "t": "You're too expensive. Around the corner they wash cheaper.",
         "o": [
           {
-            "t": "Because here you can wash even at midnight and the machine is always clean. If not, I want to know right away.",
+            "t": "How much do you pay there?",
             "b": 2,
-            "r": "That sounds reasonable."
+            "r": "You're asking the right question."
           },
           {
-            "t": "Go next door then.",
+            "t": "Then go around the corner, nobody's keeping you here.",
             "b": -2,
-            "r": "Nice customer service."
+            "r": "Don't worry, I will."
           },
           {
-            "t": "Energy got more expensive, can't do anything about that.",
-            "b": 0,
-            "r": "I hear that everywhere."
+            "t": "Our prices reflect the fact that we have new machines, open 24/7, and next-day service.",
+            "b": 1,
+            "r": "Sounds like a flyer."
           }
         ]
       },
       {
-        "t": "Any discount for regular customers?",
+        "t": "Hundred thirty for a washer. Two hundred at yours.",
         "o": [
           {
-            "t": "Every tenth wash free, just give me the number I'll keep you under. I'm registering you now.",
+            "t": "With us you wash eighteen kilos at once, there probably six.",
             "b": 2,
-            "r": "I'll take that."
+            "r": "Hm, didn't think of that."
           },
           {
-            "t": "We don't have any discounts.",
+            "t": "Can't compare that—everyone has different machines, different water, different costs, so don't worry about price per cycle.",
             "b": -1,
-            "r": "Too bad."
+            "r": "Why not?"
           },
           {
-            "t": "Ask at the depot.",
-            "b": -1,
-            "r": "I'm calling the hotline."
+            "t": "Then go there.",
+            "b": -2,
+            "r": "Will do."
           }
         ]
       },
       {
-        "t": "And you won't raise prices again next month?",
+        "t": "Hm. Give me a discount or I'll write a review?",
         "o": [
           {
-            "t": "Not until end of year, I'll tell you straight. If we do, I'll post it on the door two weeks ahead.",
+            "t": "Write your review. I'll give you one wash free so you can try it.",
             "b": 2,
-            "r": "Fair enough, thanks."
+            "r": "Alright, I'll try it."
           },
           {
-            "t": "Nobody can promise you that.",
-            "b": 0,
-            "r": "Hm."
+            "t": "I'll give you fifty percent forever.",
+            "b": -1,
+            "r": "Deal! I'll tell everyone."
           },
           {
-            "t": "Sure we might, market is market.",
+            "t": "Go ahead and write.",
             "b": -2,
-            "r": "Then don't count on me."
+            "r": "Count on it."
           }
         ]
       }
@@ -683,66 +701,65 @@
   },
   {
     "id": "karta",
-    "rod": "z",
-    "nalada": 26,
+    "rod": "m",
     "kroky": [
       {
-        "t": "The terminal rejected my card three times and then I got three messages from the bank that I paid. What's going on?",
+        "t": "Hello, I paid by card and it charged me twice.",
         "o": [
           {
-            "t": "Those are pre-authorizations, the money will return within three days automatically. I'll start your wash right now.",
+            "t": "I'll cancel one payment right away.",
             "b": 2,
-            "r": "That's a relief."
+            "r": "Thanks, that's quick."
           },
           {
-            "t": "That's a problem with your bank, not with us.",
+            "t": "That's the bank, not us.",
             "b": -2,
-            "r": "Three payments at your place and the problem is mine?"
+            "r": "But I paid you."
           },
           {
-            "t": "Try another card.",
+            "t": "I'll look into it, but the terminal sometimes sends two pre-authorizations and one releases itself, so maybe just wait.",
+            "b": 0,
+            "r": "And what if it doesn't release?"
+          }
+        ]
+      },
+      {
+        "t": "How do I know that on the statement?",
+        "o": [
+          {
+            "t": "I don't know.",
+            "b": -2,
+            "r": "So where do I check that?"
+          },
+          {
+            "t": "You'll get a refund for the same amount, usually within three days. If not, call and I'll sort it out.",
+            "b": 2,
+            "r": "Alright, thanks."
+          },
+          {
+            "t": "It'll say reversal.",
+            "b": 1,
+            "r": "I'll check then."
+          }
+        ]
+      },
+      {
+        "t": "Can I do laundry in the meantime?",
+        "o": [
+          {
+            "t": "Sure, I'll start the machine remotely.",
+            "b": 2,
+            "r": "Great."
+          },
+          {
+            "t": "Once that payment's sorted, I can't start the machine until then.",
+            "b": -2,
+            "r": "So I'm supposed to walk home with the basket?"
+          },
+          {
+            "t": "Try paying with coins, but you probably don't have change on you.",
             "b": -1,
-            "r": "I don't have another one."
-          }
-        ]
-      },
-      {
-        "t": "And how can I be sure it will actually come back?",
-        "o": [
-          {
-            "t": "I'm sending you confirmation of cancellation of all three payments by email. If they don't arrive within three days, call me directly.",
-            "b": 2,
-            "r": "Okay, that's enough for me."
-          },
-          {
-            "t": "You have to trust us.",
-            "b": -2,
-            "r": "Trust. After this."
-          },
-          {
-            "t": "It usually works.",
-            "b": 0,
-            "r": "Usually."
-          }
-        ]
-      },
-      {
-        "t": "And will you fix that terminal?",
-        "o": [
-          {
-            "t": "We're replacing it tomorrow. Today there's QR code payment available, that works reliably.",
-            "b": 2,
-            "r": "Fine, thanks for the clear answer."
-          },
-          {
-            "t": "The terminal is fine.",
-            "b": -2,
-            "r": "Right, I'm making it up."
-          },
-          {
-            "t": "We'll look into it.",
-            "b": 0,
-            "r": "Hm."
+            "r": "I don't."
           }
         ]
       }
@@ -948,66 +965,65 @@
   },
   {
     "id": "barva",
-    "rod": "m",
-    "nalada": 10,
+    "rod": "z",
     "kroky": [
       {
-        "t": "Someone left a red T-shirt in the drum and my whole white load got dyed. Work shirts, everything!",
+        "t": "I washed after someone and it stained my white shirt.",
         "o": [
           {
-            "t": "That's unfortunate and I apologize. Add up what got ruined and I'll cover it.",
+            "t": "That's unfortunate. Which machine was it and when?",
             "b": 2,
-            "r": "Okay. At least something."
+            "r": "This morning, the middle one."
           },
           {
-            "t": "We're not responsible for the drum contents, you need to check it yourself.",
+            "t": "Someone else ran that, we can't do anything about it.",
             "b": -2,
-            "r": "You're unbelievable."
+            "r": "So nothing."
           },
           {
-            "t": "It happens, try washing it with color remover.",
+            "t": "The machine rinses the drum after each wash, so dye can't remain in it — it probably got stained by something of yours.",
             "b": -1,
-            "r": "Color remover on work shirts?"
+            "r": "Are you calling me a liar?"
           }
         ]
       },
       {
-        "t": "And how will you make sure it doesn't happen again?",
+        "t": "This morning, the middle one.",
         "o": [
           {
-            "t": "I'll put up a sign on the door and staff will check drums during every cleaning. They haven't been doing that, that's on us.",
-            "b": 2,
-            "r": "That sounds like someone who means it."
-          },
-          {
-            "t": "No way, people are messy.",
-            "b": -2,
-            "r": "Then I'll wash somewhere else next time."
-          },
-          {
-            "t": "We'll definitely point it out.",
+            "t": "Okay, I'll make a note of that.",
             "b": 0,
-            "r": "Hm."
+            "r": "And then?"
+          },
+          {
+            "t": "I'll run an empty cycle on it and check. I'll give you a free wash for that shirt.",
+            "b": 2,
+            "r": "That's decent."
+          },
+          {
+            "t": "Can't prove that now.",
+            "b": -2,
+            "r": "Goodbye then."
           }
         ]
       },
       {
-        "t": "So how much will you give me and when?",
+        "t": "Can the shirt still be saved?",
         "o": [
           {
-            "t": "Send photos and receipt, I'll send money within three days. If we can't agree, you tell me what seems fair to you.",
+            "t": "Try washing it again right away, before the dye sets.",
             "b": 2,
-            "r": "Fine, sending photos."
+            "r": "I'll do that."
           },
           {
-            "t": "We'll refund the wash at most.",
-            "b": -2,
-            "r": "That won't replace my shirts."
-          },
-          {
-            "t": "Depends, we'll see.",
+            "t": "Don't know, I'm not a chemist.",
             "b": -1,
-            "r": "We'll see. Right."
+            "r": "Could've just said what you'd do."
+          },
+          {
+            "t": "Probably not, can't help you there, this is more for a dry cleaner.",
+            "b": -1,
+            "r": "Thanks for the optimism."
           }
         ]
       }
@@ -1147,66 +1163,65 @@
   },
   {
     "id": "faktura",
-    "rod": "z",
-    "nalada": 38,
+    "rod": "m",
     "kroky": [
       {
-        "t": "I need an invoice for my company, we wash laundry from our guesthouse at your place. The machine only prints a receipt.",
+        "t": "I need a receipt for business expenses.",
         "o": [
           {
-            "t": "I'll issue an invoice. Send me your tax ID and you'll have it in your email within an hour.",
+            "t": "I'll email you an invoice. What's your business ID?",
             "b": 2,
-            "r": "Perfect, sending it now."
+            "r": "I'll give it to you now."
           },
           {
-            "t": "We don't do invoices, we're self-service.",
+            "t": "We don't do receipts for self-service.",
             "b": -2,
-            "r": "So a business can't wash here?"
+            "r": "Then I'll take my business elsewhere."
           },
           {
-            "t": "Try writing to our email, maybe someone will respond.",
+            "t": "The terminal prints a payment slip, but that probably won't work for your accounting, so I don't know what to tell you.",
             "b": -1,
-            "r": "Maybe?"
+            "r": "That's why I'm calling."
           }
         ]
       },
       {
-        "t": "Could we do it monthly regularly, so I don't have to deal with each wash?",
+        "t": "We're a sole proprietorship, we pay with a company card.",
         "o": [
           {
-            "t": "Yes. I'll set up a business account for you, washes accumulate and once a month you get a summary invoice.",
-            "b": 2,
-            "r": "That will help us a lot."
-          },
-          {
-            "t": "That's too complicated.",
-            "b": -2,
-            "r": "For you or for me?"
-          },
-          {
-            "t": "Theoretically yes.",
+            "t": "That's easy then.",
             "b": 0,
-            "r": "Theoretically."
+            "r": "So what do I do?"
+          },
+          {
+            "t": "Perfect. I can track those payments in the system and send you a monthly invoice.",
+            "b": 2,
+            "r": "That would work for us."
+          },
+          {
+            "t": "Better not use company cards here.",
+            "b": -2,
+            "r": "Why not?"
           }
         ]
       },
       {
-        "t": "Will we get a discount for that volume?",
+        "t": "Can you set that up permanently?",
         "o": [
           {
-            "t": "Over fifty washes per month, fifteen percent off. I'll put it in the contract so it doesn't just apply until next time.",
+            "t": "Yes. I'll set it up today.",
             "b": 2,
-            "r": "I'll take that to the owner."
+            "r": "Thanks."
           },
           {
-            "t": "Our prices are the same for everyone.",
-            "b": 0,
-            "r": "Hm."
-          },
-          {
-            "t": "I'd have to discuss that with someone else.",
+            "t": "We'll see. I won't promise anything right now.",
             "b": -1,
-            "r": "Then get them."
+            "r": "That's not an answer."
+          },
+          {
+            "t": "You'd need to talk to accounting, but she's off today and tomorrow.",
+            "b": -1,
+            "r": "Can't you handle it?"
           }
         ]
       }
@@ -1478,66 +1493,65 @@
   },
   {
     "id": "proud",
-    "rod": "m",
-    "nalada": 20,
+    "rod": "",
     "kroky": [
       {
-        "t": "The power went out during the wash and the machine is locked with my laundry inside.",
+        "t": "Power went out in the middle of washing and the machine is stuck with my laundry inside.",
         "o": [
           {
-            "t": "When the power comes back, the program will continue from where it stopped. I'll unlock the door remotely if you need it sooner.",
+            "t": "I'll unlock the door remotely. Give me a minute.",
             "b": 2,
-            "r": "Oh, good to know."
+            "r": "Thanks!"
           },
           {
-            "t": "We're not responsible for power outages.",
+            "t": "That's a power company outage, nothing I can do about it.",
             "b": -2,
-            "r": "That's reassuring."
+            "r": "What about my laundry?"
           },
           {
-            "t": "Wait, it'll come back on.",
-            "b": -1,
-            "r": "How long am I supposed to wait?"
+            "t": "Wait for it to come back on — the machine remembers where it stopped and will finish on its own, though it might take a while.",
+            "b": 1,
+            "r": "I'll wait then."
           }
         ]
       },
       {
-        "t": "And I have to pay for the wash again?",
+        "t": "Will it finish or do I start over?",
         "o": [
           {
-            "t": "No. The cycle continues on the original payment, and if it doesn't, I'll start a new one for free.",
+            "t": "It'll finish.",
+            "b": 1,
+            "r": "Okay."
+          },
+          {
+            "t": "It'll pick up where it stopped. And if it doesn't, I'll run the full cycle again for free.",
             "b": 2,
             "r": "Fair enough."
           },
           {
-            "t": "Of course, the machine started up.",
+            "t": "Can't tell you.",
             "b": -2,
-            "r": "And it was halfway done!"
-          },
-          {
-            "t": "We'll deal with that later.",
-            "b": -1,
-            "r": "Later. Always later."
+            "r": "You're the hotline, aren't you?"
           }
         ]
       },
       {
-        "t": "Don't you have a backup power source? The freezer next door went out too.",
+        "t": "Does this happen often?",
         "o": [
           {
-            "t": "We only have it for locks and lights, so you can always get out and to your laundry. Not for the machines—that'd be a different scale.",
+            "t": "No. Second time all year.",
             "b": 2,
-            "r": "I see, that makes sense."
+            "r": "I can live with that."
           },
           {
-            "t": "We don't deal with such things.",
-            "b": -2,
-            "r": "You don't deal with anything."
-          },
-          {
-            "t": "There's probably something there.",
+            "t": "Happens sometimes, it's how that area is.",
             "b": -1,
-            "r": "Probably."
+            "r": "Doesn't sound great."
+          },
+          {
+            "t": "Power's a real problem for us, we dealt with it like five times last year.",
+            "b": -2,
+            "r": "I won't be washing there then."
           }
         ]
       }
@@ -1941,66 +1955,65 @@
   },
   {
     "id": "voda",
-    "rod": "z",
-    "nalada": 22,
+    "rod": "",
     "kroky": [
       {
-        "t": "There's water all over your floor, I almost fell. With a small child!",
+        "t": "There's a puddle around your machine. Is it leaking?",
         "o": [
           {
-            "t": "I take this seriously. Closing the place right now until it's cleaned up — thanks for calling.",
+            "t": "Thanks for calling. I'm sending a technician and taking the machine offline.",
             "b": 2,
-            "r": "At least someone takes it seriously."
+            "r": "That was quick, thanks."
           },
           {
-            "t": "A bit of water after washing is normal.",
+            "t": "That's probably from someone else.",
             "b": -2,
-            "r": "Is someone cracking their head open normal?"
+            "r": "What if it's not?"
           },
           {
-            "t": "Watch out for it and avoid it.",
-            "b": -2,
-            "r": "Are you seriously advising me that?"
+            "t": "Sometimes water stays there after draining.",
+            "b": 0,
+            "r": "There's quite a lot of it."
           }
         ]
       },
       {
-        "t": "And where's it leaking from?",
+        "t": "Can I use that machine, or will it spill on me?",
         "o": [
           {
-            "t": "Probably a burst hose on number three. Technician will be there within an hour and the machine is shut down until then.",
+            "t": "Don't use it. There's another one next to it, that one's fine.",
             "b": 2,
-            "r": "Alright, thanks."
+            "r": "I'll try that one."
           },
           {
-            "t": "Can't tell remotely.",
-            "b": -1,
-            "r": "Then send someone over."
+            "t": "Go ahead and wash, water never hurt anyone.",
+            "b": -2,
+            "r": "What if it short-circuits?"
           },
           {
-            "t": "Someone probably spilled it.",
-            "b": -1,
-            "r": "Ten liters?"
+            "t": "I'd risk it.",
+            "b": -2,
+            "r": "Well, I wouldn't."
           }
         ]
       },
       {
-        "t": "I have laundry in progress there, what about it?",
+        "t": "Do I get anything for reporting this?",
         "o": [
           {
-            "t": "It'll finish fine, number three has nothing to do with it. Your next wash is on me for the inconvenience.",
+            "t": "Free wash, I'll send you a code in a message. Thanks, I wouldn't have known until the technician told me.",
             "b": 2,
-            "r": "Thanks, that's decent of you."
+            "r": "That's nice."
           },
           {
-            "t": "Come pick it up tomorrow.",
+            "t": "Nobody can expect that from us.",
             "b": -2,
-            "r": "I'm working tomorrow."
+            "r": "I wasn't asking for anything, just wondering."
           },
           {
-            "t": "You'll have to figure that out yourself.",
-            "b": -2,
-            "r": "Thanks for nothing."
+            "t": "We don't have anything like that, but thanks.",
+            "b": 0,
+            "r": "Fair enough."
           }
         ]
       }
@@ -2009,65 +2022,64 @@
   {
     "id": "prasek",
     "rod": "z",
-    "nalada": 30,
     "kroky": [
       {
-        "t": "Hello, the detergent dispenser is empty and I'm standing here with a full bag of laundry.",
+        "t": "What detergent do you use? I have sensitive skin and can't stand strong perfumes.",
         "o": [
           {
-            "t": "I'm sorry. The dispenser in machine number two is full, I'll let you use it with detergent for free.",
+            "t": "We use fragrance-free products. I'll send you the ingredients so you can check.",
             "b": 2,
-            "r": "That's nice, thanks."
+            "r": "That's kind of you, thanks."
           },
           {
-            "t": "You can bring your own detergent, nobody's stopping you.",
-            "b": -2,
-            "r": "Then why do you have that dispenser there?"
-          },
-          {
-            "t": "We refill it once a week, come back on Thursday.",
+            "t": "Regular detergent like everywhere else.",
             "b": -1,
-            "r": "Thursday? I'll have mold at home by then."
+            "r": "That doesn't tell me anything."
+          },
+          {
+            "t": "I really don't know, a colleague handles that.",
+            "b": -2,
+            "r": "Then connect me with them."
           }
         ]
       },
       {
-        "t": "And where's the nearest store?",
+        "t": "Can I bring my own?",
         "o": [
           {
-            "t": "There's a convenience store two minutes away, they have detergent for twenty. I'll refund you the difference in credit.",
+            "t": "You can, there's a compartment. Use half the amount, the machines need less than home washers.",
             "b": 2,
-            "r": "I can manage that."
+            "r": "Perfect, I'll do that."
           },
           {
-            "t": "No idea, I'm not a GPS.",
-            "b": -2,
-            "r": "Real helpful, thanks."
-          },
-          {
-            "t": "There's bound to be something downtown.",
+            "t": "That's not possible, the system dispenses automatically.",
             "b": -1,
-            "r": "Somewhere. Great."
+            "r": "Too bad."
+          },
+          {
+            "t": "We prohibit personal detergents, they damage our machines.",
+            "b": -2,
+            "r": "So I'm damaging your machines now."
           }
         ]
       },
       {
-        "t": "And will you refill it, or should I bring my own detergent forever?",
+        "t": "Do you rinse between customers, or am I washing in someone else's suds?",
         "o": [
           {
-            "t": "I'll refill it personally tonight and check it weekly. My apologies.",
+            "t": "After each cycle there's a rinse with clean water, and once a week the drum gets disinfected.",
             "b": 2,
-            "r": "Alright, I'll give you another chance."
+            "r": "That's what I wanted to hear."
           },
           {
-            "t": "It'll get refilled when it gets refilled.",
+            "t": "Water is water.",
             "b": -2,
-            "r": "So never."
+            "r": "That's a pretty disgusting answer."
           },
           {
-            "t": "I'll write it down for my colleague.",
-            "b": 0,
-            "r": "Well, I hope so."
+            "t": "The drum gets rinsed, it's fine.",
+            "b": 1,
+            "r": "Okay."
           }
         ]
       }
@@ -2538,66 +2550,65 @@
   },
   {
     "id": "barva",
-    "rod": "m",
-    "nalada": 10,
+    "rod": "z",
     "kroky": [
       {
-        "t": "Someone left a red T-shirt in the drum and my whole white load got dyed. Work shirts, everything!",
+        "t": "I washed after someone and it stained my white shirt.",
         "o": [
           {
-            "t": "That's unfortunate and I apologize. Add up what got ruined and I'll cover it.",
+            "t": "That's unfortunate. Which machine was it and when?",
             "b": 2,
-            "r": "Okay. At least something."
+            "r": "This morning, the middle one."
           },
           {
-            "t": "We're not responsible for the drum contents, you need to check it yourself.",
+            "t": "Someone else ran that, we can't do anything about it.",
             "b": -2,
-            "r": "You're unbelievable."
+            "r": "So nothing."
           },
           {
-            "t": "It happens, try washing it with color remover.",
+            "t": "The machine rinses the drum after each wash, so dye can't remain in it — it probably got stained by something of yours.",
             "b": -1,
-            "r": "Color remover on work shirts?"
+            "r": "Are you calling me a liar?"
           }
         ]
       },
       {
-        "t": "And how will you make sure it doesn't happen again?",
+        "t": "This morning, the middle one.",
         "o": [
           {
-            "t": "I'll put up a sign on the door and staff will check drums during every cleaning. They haven't been doing that, that's on us.",
-            "b": 2,
-            "r": "That sounds like someone who means it."
-          },
-          {
-            "t": "No way, people are messy.",
-            "b": -2,
-            "r": "Then I'll wash somewhere else next time."
-          },
-          {
-            "t": "We'll definitely point it out.",
+            "t": "Okay, I'll make a note of that.",
             "b": 0,
-            "r": "Hm."
+            "r": "And then?"
+          },
+          {
+            "t": "I'll run an empty cycle on it and check. I'll give you a free wash for that shirt.",
+            "b": 2,
+            "r": "That's decent."
+          },
+          {
+            "t": "Can't prove that now.",
+            "b": -2,
+            "r": "Goodbye then."
           }
         ]
       },
       {
-        "t": "So how much will you give me and when?",
+        "t": "Can the shirt still be saved?",
         "o": [
           {
-            "t": "Send photos and receipt, I'll send money within three days. If we can't agree, you tell me what seems fair to you.",
+            "t": "Try washing it again right away, before the dye sets.",
             "b": 2,
-            "r": "Fine, sending photos."
+            "r": "I'll do that."
           },
           {
-            "t": "We'll refund the wash at most.",
-            "b": -2,
-            "r": "That won't replace my shirts."
-          },
-          {
-            "t": "Depends, we'll see.",
+            "t": "Don't know, I'm not a chemist.",
             "b": -1,
-            "r": "We'll see. Right."
+            "r": "Could've just said what you'd do."
+          },
+          {
+            "t": "Probably not, can't help you there, this is more for a dry cleaner.",
+            "b": -1,
+            "r": "Thanks for the optimism."
           }
         ]
       }
@@ -2606,65 +2617,64 @@
   {
     "id": "prasek",
     "rod": "z",
-    "nalada": 30,
     "kroky": [
       {
-        "t": "Hello, the detergent dispenser is empty and I'm standing here with a full bag of laundry.",
+        "t": "What detergent do you use? I have sensitive skin and can't stand strong perfumes.",
         "o": [
           {
-            "t": "I'm sorry. The dispenser in machine number two is full, I'll let you use it with detergent for free.",
+            "t": "We use fragrance-free products. I'll send you the ingredients so you can check.",
             "b": 2,
-            "r": "That's nice, thanks."
+            "r": "That's kind of you, thanks."
           },
           {
-            "t": "You can bring your own detergent, nobody's stopping you.",
-            "b": -2,
-            "r": "Then why do you have that dispenser there?"
-          },
-          {
-            "t": "We refill it once a week, come back on Thursday.",
+            "t": "Regular detergent like everywhere else.",
             "b": -1,
-            "r": "Thursday? I'll have mold at home by then."
+            "r": "That doesn't tell me anything."
+          },
+          {
+            "t": "I really don't know, a colleague handles that.",
+            "b": -2,
+            "r": "Then connect me with them."
           }
         ]
       },
       {
-        "t": "And where's the nearest store?",
+        "t": "Can I bring my own?",
         "o": [
           {
-            "t": "There's a convenience store two minutes away, they have detergent for twenty. I'll refund you the difference in credit.",
+            "t": "You can, there's a compartment. Use half the amount, the machines need less than home washers.",
             "b": 2,
-            "r": "I can manage that."
+            "r": "Perfect, I'll do that."
           },
           {
-            "t": "No idea, I'm not a GPS.",
-            "b": -2,
-            "r": "Real helpful, thanks."
-          },
-          {
-            "t": "There's bound to be something downtown.",
+            "t": "That's not possible, the system dispenses automatically.",
             "b": -1,
-            "r": "Somewhere. Great."
+            "r": "Too bad."
+          },
+          {
+            "t": "We prohibit personal detergents, they damage our machines.",
+            "b": -2,
+            "r": "So I'm damaging your machines now."
           }
         ]
       },
       {
-        "t": "And will you refill it, or should I bring my own detergent forever?",
+        "t": "Do you rinse between customers, or am I washing in someone else's suds?",
         "o": [
           {
-            "t": "I'll refill it personally tonight and check it weekly. My apologies.",
+            "t": "After each cycle there's a rinse with clean water, and once a week the drum gets disinfected.",
             "b": 2,
-            "r": "Alright, I'll give you another chance."
+            "r": "That's what I wanted to hear."
           },
           {
-            "t": "It'll get refilled when it gets refilled.",
+            "t": "Water is water.",
             "b": -2,
-            "r": "So never."
+            "r": "That's a pretty disgusting answer."
           },
           {
-            "t": "I'll write it down for my colleague.",
-            "b": 0,
-            "r": "Well, I hope so."
+            "t": "The drum gets rinsed, it's fine.",
+            "b": 1,
+            "r": "Okay."
           }
         ]
       }
@@ -2739,66 +2749,65 @@
   },
   {
     "id": "karta",
-    "rod": "z",
-    "nalada": 26,
+    "rod": "m",
     "kroky": [
       {
-        "t": "The terminal rejected my card three times and then I got three messages from the bank that I paid. What's going on?",
+        "t": "Hello, I paid by card and it charged me twice.",
         "o": [
           {
-            "t": "Those are pre-authorizations, the money will return within three days automatically. I'll start your wash right now.",
+            "t": "I'll cancel one payment right away.",
             "b": 2,
-            "r": "That's a relief."
+            "r": "Thanks, that's quick."
           },
           {
-            "t": "That's a problem with your bank, not with us.",
+            "t": "That's the bank, not us.",
             "b": -2,
-            "r": "Three payments at your place and the problem is mine?"
+            "r": "But I paid you."
           },
           {
-            "t": "Try another card.",
+            "t": "I'll look into it, but the terminal sometimes sends two pre-authorizations and one releases itself, so maybe just wait.",
+            "b": 0,
+            "r": "And what if it doesn't release?"
+          }
+        ]
+      },
+      {
+        "t": "How do I know that on the statement?",
+        "o": [
+          {
+            "t": "I don't know.",
+            "b": -2,
+            "r": "So where do I check that?"
+          },
+          {
+            "t": "You'll get a refund for the same amount, usually within three days. If not, call and I'll sort it out.",
+            "b": 2,
+            "r": "Alright, thanks."
+          },
+          {
+            "t": "It'll say reversal.",
+            "b": 1,
+            "r": "I'll check then."
+          }
+        ]
+      },
+      {
+        "t": "Can I do laundry in the meantime?",
+        "o": [
+          {
+            "t": "Sure, I'll start the machine remotely.",
+            "b": 2,
+            "r": "Great."
+          },
+          {
+            "t": "Once that payment's sorted, I can't start the machine until then.",
+            "b": -2,
+            "r": "So I'm supposed to walk home with the basket?"
+          },
+          {
+            "t": "Try paying with coins, but you probably don't have change on you.",
             "b": -1,
-            "r": "I don't have another one."
-          }
-        ]
-      },
-      {
-        "t": "And how can I be sure it will actually come back?",
-        "o": [
-          {
-            "t": "I'm sending you confirmation of cancellation of all three payments by email. If they don't arrive within three days, call me directly.",
-            "b": 2,
-            "r": "Okay, that's enough for me."
-          },
-          {
-            "t": "You have to trust us.",
-            "b": -2,
-            "r": "Trust. After this."
-          },
-          {
-            "t": "It usually works.",
-            "b": 0,
-            "r": "Usually."
-          }
-        ]
-      },
-      {
-        "t": "And will you fix that terminal?",
-        "o": [
-          {
-            "t": "We're replacing it tomorrow. Today there's QR code payment available, that works reliably.",
-            "b": 2,
-            "r": "Fine, thanks for the clear answer."
-          },
-          {
-            "t": "The terminal is fine.",
-            "b": -2,
-            "r": "Right, I'm making it up."
-          },
-          {
-            "t": "We'll look into it.",
-            "b": 0,
-            "r": "Hm."
+            "r": "I don't."
           }
         ]
       }
@@ -2806,66 +2815,65 @@
   },
   {
     "id": "proud",
-    "rod": "m",
-    "nalada": 20,
+    "rod": "",
     "kroky": [
       {
-        "t": "The power went out during the wash and the machine is locked with my laundry inside.",
+        "t": "Power went out in the middle of washing and the machine is stuck with my laundry inside.",
         "o": [
           {
-            "t": "When the power comes back, the program will continue from where it stopped. I'll unlock the door remotely if you need it sooner.",
+            "t": "I'll unlock the door remotely. Give me a minute.",
             "b": 2,
-            "r": "Oh, good to know."
+            "r": "Thanks!"
           },
           {
-            "t": "We're not responsible for power outages.",
+            "t": "That's a power company outage, nothing I can do about it.",
             "b": -2,
-            "r": "That's reassuring."
+            "r": "What about my laundry?"
           },
           {
-            "t": "Wait, it'll come back on.",
-            "b": -1,
-            "r": "How long am I supposed to wait?"
+            "t": "Wait for it to come back on — the machine remembers where it stopped and will finish on its own, though it might take a while.",
+            "b": 1,
+            "r": "I'll wait then."
           }
         ]
       },
       {
-        "t": "And I have to pay for the wash again?",
+        "t": "Will it finish or do I start over?",
         "o": [
           {
-            "t": "No. The cycle continues on the original payment, and if it doesn't, I'll start a new one for free.",
+            "t": "It'll finish.",
+            "b": 1,
+            "r": "Okay."
+          },
+          {
+            "t": "It'll pick up where it stopped. And if it doesn't, I'll run the full cycle again for free.",
             "b": 2,
             "r": "Fair enough."
           },
           {
-            "t": "Of course, the machine started up.",
+            "t": "Can't tell you.",
             "b": -2,
-            "r": "And it was halfway done!"
-          },
-          {
-            "t": "We'll deal with that later.",
-            "b": -1,
-            "r": "Later. Always later."
+            "r": "You're the hotline, aren't you?"
           }
         ]
       },
       {
-        "t": "Don't you have a backup power source? The freezer next door went out too.",
+        "t": "Does this happen often?",
         "o": [
           {
-            "t": "We only have it for locks and lights, so you can always get out and to your laundry. Not for the machines—that'd be a different scale.",
+            "t": "No. Second time all year.",
             "b": 2,
-            "r": "I see, that makes sense."
+            "r": "I can live with that."
           },
           {
-            "t": "We don't deal with such things.",
-            "b": -2,
-            "r": "You don't deal with anything."
-          },
-          {
-            "t": "There's probably something there.",
+            "t": "Happens sometimes, it's how that area is.",
             "b": -1,
-            "r": "Probably."
+            "r": "Doesn't sound great."
+          },
+          {
+            "t": "Power's a real problem for us, we dealt with it like five times last year.",
+            "b": -2,
+            "r": "I won't be washing there then."
           }
         ]
       }
@@ -3007,66 +3015,65 @@
   },
   {
     "id": "voda",
-    "rod": "z",
-    "nalada": 22,
+    "rod": "",
     "kroky": [
       {
-        "t": "There's water all over your floor, I almost fell. With a small child!",
+        "t": "There's a puddle around your machine. Is it leaking?",
         "o": [
           {
-            "t": "I take this seriously. Closing the place right now until it's cleaned up — thanks for calling.",
+            "t": "Thanks for calling. I'm sending a technician and taking the machine offline.",
             "b": 2,
-            "r": "At least someone takes it seriously."
+            "r": "That was quick, thanks."
           },
           {
-            "t": "A bit of water after washing is normal.",
+            "t": "That's probably from someone else.",
             "b": -2,
-            "r": "Is someone cracking their head open normal?"
+            "r": "What if it's not?"
           },
           {
-            "t": "Watch out for it and avoid it.",
-            "b": -2,
-            "r": "Are you seriously advising me that?"
+            "t": "Sometimes water stays there after draining.",
+            "b": 0,
+            "r": "There's quite a lot of it."
           }
         ]
       },
       {
-        "t": "And where's it leaking from?",
+        "t": "Can I use that machine, or will it spill on me?",
         "o": [
           {
-            "t": "Probably a burst hose on number three. Technician will be there within an hour and the machine is shut down until then.",
+            "t": "Don't use it. There's another one next to it, that one's fine.",
             "b": 2,
-            "r": "Alright, thanks."
+            "r": "I'll try that one."
           },
           {
-            "t": "Can't tell remotely.",
-            "b": -1,
-            "r": "Then send someone over."
+            "t": "Go ahead and wash, water never hurt anyone.",
+            "b": -2,
+            "r": "What if it short-circuits?"
           },
           {
-            "t": "Someone probably spilled it.",
-            "b": -1,
-            "r": "Ten liters?"
+            "t": "I'd risk it.",
+            "b": -2,
+            "r": "Well, I wouldn't."
           }
         ]
       },
       {
-        "t": "I have laundry in progress there, what about it?",
+        "t": "Do I get anything for reporting this?",
         "o": [
           {
-            "t": "It'll finish fine, number three has nothing to do with it. Your next wash is on me for the inconvenience.",
+            "t": "Free wash, I'll send you a code in a message. Thanks, I wouldn't have known until the technician told me.",
             "b": 2,
-            "r": "Thanks, that's decent of you."
+            "r": "That's nice."
           },
           {
-            "t": "Come pick it up tomorrow.",
+            "t": "Nobody can expect that from us.",
             "b": -2,
-            "r": "I'm working tomorrow."
+            "r": "I wasn't asking for anything, just wondering."
           },
           {
-            "t": "You'll have to figure that out yourself.",
-            "b": -2,
-            "r": "Thanks for nothing."
+            "t": "We don't have anything like that, but thanks.",
+            "b": 0,
+            "r": "Fair enough."
           }
         ]
       }
@@ -3074,66 +3081,65 @@
   },
   {
     "id": "drahe",
-    "rod": "m",
-    "nalada": 34,
+    "rod": "",
     "kroky": [
       {
-        "t": "You raised the price by twenty and next door it's cheaper. Why should I come to you?",
+        "t": "You're too expensive. Around the corner they wash cheaper.",
         "o": [
           {
-            "t": "Because here you can wash even at midnight and the machine is always clean. If not, I want to know right away.",
+            "t": "How much do you pay there?",
             "b": 2,
-            "r": "That sounds reasonable."
+            "r": "You're asking the right question."
           },
           {
-            "t": "Go next door then.",
+            "t": "Then go around the corner, nobody's keeping you here.",
             "b": -2,
-            "r": "Nice customer service."
+            "r": "Don't worry, I will."
           },
           {
-            "t": "Energy got more expensive, can't do anything about that.",
-            "b": 0,
-            "r": "I hear that everywhere."
+            "t": "Our prices reflect the fact that we have new machines, open 24/7, and next-day service.",
+            "b": 1,
+            "r": "Sounds like a flyer."
           }
         ]
       },
       {
-        "t": "Any discount for regular customers?",
+        "t": "Hundred thirty for a washer. Two hundred at yours.",
         "o": [
           {
-            "t": "Every tenth wash free, just give me the number I'll keep you under. I'm registering you now.",
+            "t": "With us you wash eighteen kilos at once, there probably six.",
             "b": 2,
-            "r": "I'll take that."
+            "r": "Hm, didn't think of that."
           },
           {
-            "t": "We don't have any discounts.",
+            "t": "Can't compare that—everyone has different machines, different water, different costs, so don't worry about price per cycle.",
             "b": -1,
-            "r": "Too bad."
+            "r": "Why not?"
           },
           {
-            "t": "Ask at the depot.",
-            "b": -1,
-            "r": "I'm calling the hotline."
+            "t": "Then go there.",
+            "b": -2,
+            "r": "Will do."
           }
         ]
       },
       {
-        "t": "And you won't raise prices again next month?",
+        "t": "Hm. Give me a discount or I'll write a review?",
         "o": [
           {
-            "t": "Not until end of year, I'll tell you straight. If we do, I'll post it on the door two weeks ahead.",
+            "t": "Write your review. I'll give you one wash free so you can try it.",
             "b": 2,
-            "r": "Fair enough, thanks."
+            "r": "Alright, I'll try it."
           },
           {
-            "t": "Nobody can promise you that.",
-            "b": 0,
-            "r": "Hm."
+            "t": "I'll give you fifty percent forever.",
+            "b": -1,
+            "r": "Deal! I'll tell everyone."
           },
           {
-            "t": "Sure we might, market is market.",
+            "t": "Go ahead and write.",
             "b": -2,
-            "r": "Then don't count on me."
+            "r": "Count on it."
           }
         ]
       }
@@ -3141,66 +3147,65 @@
   },
   {
     "id": "faktura",
-    "rod": "z",
-    "nalada": 38,
+    "rod": "m",
     "kroky": [
       {
-        "t": "I need an invoice for my company, we wash laundry from our guesthouse at your place. The machine only prints a receipt.",
+        "t": "I need a receipt for business expenses.",
         "o": [
           {
-            "t": "I'll issue an invoice. Send me your tax ID and you'll have it in your email within an hour.",
+            "t": "I'll email you an invoice. What's your business ID?",
             "b": 2,
-            "r": "Perfect, sending it now."
+            "r": "I'll give it to you now."
           },
           {
-            "t": "We don't do invoices, we're self-service.",
+            "t": "We don't do receipts for self-service.",
             "b": -2,
-            "r": "So a business can't wash here?"
+            "r": "Then I'll take my business elsewhere."
           },
           {
-            "t": "Try writing to our email, maybe someone will respond.",
+            "t": "The terminal prints a payment slip, but that probably won't work for your accounting, so I don't know what to tell you.",
             "b": -1,
-            "r": "Maybe?"
+            "r": "That's why I'm calling."
           }
         ]
       },
       {
-        "t": "Could we do it monthly regularly, so I don't have to deal with each wash?",
+        "t": "We're a sole proprietorship, we pay with a company card.",
         "o": [
           {
-            "t": "Yes. I'll set up a business account for you, washes accumulate and once a month you get a summary invoice.",
-            "b": 2,
-            "r": "That will help us a lot."
-          },
-          {
-            "t": "That's too complicated.",
-            "b": -2,
-            "r": "For you or for me?"
-          },
-          {
-            "t": "Theoretically yes.",
+            "t": "That's easy then.",
             "b": 0,
-            "r": "Theoretically."
+            "r": "So what do I do?"
+          },
+          {
+            "t": "Perfect. I can track those payments in the system and send you a monthly invoice.",
+            "b": 2,
+            "r": "That would work for us."
+          },
+          {
+            "t": "Better not use company cards here.",
+            "b": -2,
+            "r": "Why not?"
           }
         ]
       },
       {
-        "t": "Will we get a discount for that volume?",
+        "t": "Can you set that up permanently?",
         "o": [
           {
-            "t": "Over fifty washes per month, fifteen percent off. I'll put it in the contract so it doesn't just apply until next time.",
+            "t": "Yes. I'll set it up today.",
             "b": 2,
-            "r": "I'll take that to the owner."
+            "r": "Thanks."
           },
           {
-            "t": "Our prices are the same for everyone.",
-            "b": 0,
-            "r": "Hm."
-          },
-          {
-            "t": "I'd have to discuss that with someone else.",
+            "t": "We'll see. I won't promise anything right now.",
             "b": -1,
-            "r": "Then get them."
+            "r": "That's not an answer."
+          },
+          {
+            "t": "You'd need to talk to accounting, but she's off today and tomorrow.",
+            "b": -1,
+            "r": "Can't you handle it?"
           }
         ]
       }
@@ -3276,65 +3281,84 @@
   {
     "id": "svetr",
     "rod": "z",
-    "nalada": 15,
     "kroky": [
       {
-        "t": "Your dryer shrunk my merino wool sweater. It cost two thousand!",
+        "t": "I washed a wool sweater at your place and now it's child-size.",
         "o": [
           {
-            "t": "I apologize. Send me a photo and receipt, I'll handle it as damage claim and reimburse you.",
+            "t": "I'm sorry to hear that. What program did you use?",
             "b": 2,
-            "r": "I wasn't expecting that, thank you."
+            "r": "Good, you're asking the right questions."
           },
           {
-            "t": "Everyone knows you don't put wool in the dryer.",
+            "t": "Wool doesn't belong in a machine, that's your mistake.",
             "b": -2,
-            "r": "Then write it there, smartass!"
+            "r": "Well, that really helped."
           },
           {
-            "t": "That's probably the sweater's fault.",
-            "b": -1,
-            "r": "The sweater was fine before I brought it to you."
+            "t": "We're not liable for shrinkage, it's written on the machine and in the terms on our website, check there.",
+            "b": -2,
+            "r": "I'm calling about the sweater, not about terms."
           }
         ]
       },
       {
-        "t": "And why doesn't it say on that program that it'll ruin wool?",
+        "t": "I used sixty, it was preset.",
         "o": [
           {
-            "t": "Because it's missing, and that's our mistake. We'll add labels to every program today.",
+            "t": "That's too much for wool. I'll put a better label on that machine so it doesn't happen to someone else.",
             "b": 2,
-            "r": "Thanks for admitting it."
+            "r": "At least something."
           },
           {
-            "t": "Because it's obvious.",
+            "t": "Well, there you go, that's clear then.",
+            "b": -1,
+            "r": "That really cheered me up."
+          },
+          {
+            "t": "Sixty is standard, it can't harm anyone.",
             "b": -2,
-            "r": "It wasn't obvious to me."
+            "r": "Then why is my sweater a rag?"
+          }
+        ]
+      },
+      {
+        "t": "And who's going to pay for the sweater?",
+        "o": [
+          {
+            "t": "Send me a photo and receipt, we'll work it out.",
+            "b": 2,
+            "r": "Okay, I'll send it."
           },
           {
-            "t": "We'll put it on the improvement list.",
+            "t": "Nobody, you washed it yourself and the machine says what goes in it.",
+            "b": -2,
+            "r": "I'm done with you."
+          },
+          {
+            "t": "I can give you a free wash, can't do more than that.",
+            "b": 1,
+            "r": "Well, better than nothing."
+          }
+        ]
+      },
+      {
+        "t": "Okay. And how should I wash it next time?",
+        "o": [
+          {
+            "t": "Thirty and never in the dryer.",
+            "b": 2,
+            "r": "Noted. Thanks."
+          },
+          {
+            "t": "Try something, that's what self-service is for.",
+            "b": -2,
+            "r": "Are you serious?"
+          },
+          {
+            "t": "I'd hand-wash wool at home, in a machine it's always a risk, even on the lowest program and slow spin.",
             "b": 0,
-            "r": "On the list. Right."
-          }
-        ]
-      },
-      {
-        "t": "When will I get the money?",
-        "o": [
-          {
-            "t": "Within three business days from the photo. If there's a delay, call me directly, I'm handling it personally.",
-            "b": 2,
-            "r": "Okay, sending the photo now."
-          },
-          {
-            "t": "That depends on management.",
-            "b": -1,
-            "r": "You are management, aren't you?"
-          },
-          {
-            "t": "We're not refunding you anything.",
-            "b": -2,
-            "r": "See you in court then."
+            "r": "Then I won't bring wool to your place."
           }
         ]
       }
