@@ -19,7 +19,18 @@ router.use(express.json({ limit: '32kb' }));
 
 const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 const MODELY = ['mini', 'flex', 'max'];
-const PREDMETY = ['stroj', 'pradlomat', 'karta', 'pobocka', 'pujcka', 'podil', 'odkup', 'prevod'];
+const JMENI = require('../services/game/jmeni');
+const PODILY = require('../services/game/podily');
+const PREDMETY = ['stroj', 'pradlomat', 'karta', 'pobocka', 'pujcka', 'podil', 'odkup', 'prevod', 'vstup'];
+// Kapitálový vstup: investor dá firmě peníze a dostane za ně NOVĚ VYDANÝ
+// podíl. Od prodeje podílu se to liší v tom, kdo se tím ředí — u prodeje
+// jen majitel, tady všichni, protože se celý koláč krájí znovu. Podrobně
+// i s příkladem v services/game/podily.js.
+//
+// Proč to v záchraně firmy potřebujeme: kdo už prodal většinu, nemá co dál
+// prodávat, a půjčku mu nikdo nedá, protože nemá čím ručit. Vstup je jediná
+// cesta, jak do takové firmy dostat peníze.
+const VSTUP_MIN = 0.01, VSTUP_MAX = 0.5;
 // Co si dva hráči můžou domluvit navíc k věcem: půjčku a podíl ve firmě.
 const MESIC_MS = 43200000;             // herní měsíc = 12 skutečných hodin
 const PUJCKA_MIN = 10000;
@@ -208,7 +219,7 @@ async function zkontroluj(nab, prodavajici, t) {
     const pob = Array.isArray(st.pobocky) ? st.pobocky : [];
     if (!pob.some((x) => x && x.name === nab.pobocka)) return t('server.prodavajici_nema_pobocku');
   } else if (nab.predmet === 'pujcka' || nab.predmet === 'podil'
-    || nab.predmet === 'odkup' || nab.predmet === 'prevod') {
+    || nab.predmet === 'odkup' || nab.predmet === 'prevod' || nab.predmet === 'vstup') {
     return null;        // peníze a podíl se kontrolují zvlášť, nic se nepřevádí ze skladu
   } else return t('server.tohle_se_obchodovat_neda');
   return null;
@@ -340,6 +351,31 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
     const kupujici = smer === 'koupim' ? req.player : druhy;
     const po = (await podilInvestora(firma.id, kupujici.id)) + podil;
     data = { podil, po_prodeji: po, vetsina: po > PODIL_VETSINA + 1e-9 };
+  } else if (predmet === 'vstup') {
+    // Peníze jdou do firmy, investor za ně dostane nově vydaný podíl a
+    // všichni dosavadní se o stejný poměr zředí.
+    const podil = Math.max(VSTUP_MIN, Math.min(VSTUP_MAX, Number(b.podil) || 0));
+    // Firmou je ten, kdo peníze dostává: u „koupim" kupuje podíl odesílatel,
+    // firmou je tedy ten druhý.
+    const firma = smer === 'koupim' ? druhy : req.player;
+    const investor = smer === 'koupim' ? req.player : druhy;
+    if (firma.id === investor.id) {
+      return res.status(400).json({ error: stx(req)('server.do_vlastni_firmy_vstoupit_nejde') });
+    }
+    // Čím firma je, počítá server z vlastních dat — ne z toho, co o sobě
+    // tvrdí prohlížeč. Z toho plyne, jaký podíl by za ty peníze slušel;
+    // je to vodítko do nabídky, ne povinnost. Kolik si plácnou, je na nich.
+    const hodnotaPred = Math.max(0, await JMENI.proHrace(firma.id, stavu(firma)));
+    const uz = await prodanyPodil(firma.id);
+    const investoru = await prisma.gameEquity.count({ where: { firma_id: firma.id, stav: 'bezi' } });
+    data = { podil,
+      hodnota_pred: Math.round(hodnotaPred),
+      hodnota_po: Math.round(hodnotaPred + cena),
+      podil_dle_ceny: Math.round(PODILY.podilDleCeny(hodnotaPred, cena) * 1000) / 1000,
+      prodano_pred: Math.round(uz * 1000) / 1000,
+      redi_se: investoru,
+      po_prodeji: podil,
+      vetsina: podil > PODIL_VETSINA + 1e-9 };
   } else if (predmet === 'odkup') {
     // Zpětný odkup je obchod jako každý jiný: souhlasit musí obě strany a cenu
     // si řeknou samy. Kupuje vždycky majitel firmy, prodává podílník.
@@ -595,6 +631,7 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
     : t.predmet === 'pobocka' ? tx('predmet.pobocku', { p1: (t.spot_id || '') })
     : t.predmet === 'pujcka' ? tx('predmet.pujcku')
     : t.predmet === 'podil' ? tx('predmet.podil_pct', { p1: Math.round(((t.data || {}).podil || 0) * 100) })
+    : t.predmet === 'vstup' ? tx('predmet.vstup_pct', { p1: Math.round(((t.data || {}).podil || 0) * 100) })
     : t.predmet === 'odkup' ? tx('predmet.odkup_pct', { p1: Math.round(((t.data || {}).podil || 0) * 100) })
     : t.predmet === 'prevod' ? tx('predmet.podil_pct_firma',
       { p1: pct((t.data || {}).podil), p2: ((t.data || {}).firma_nick || '') })
@@ -670,6 +707,38 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
         firma_id: prodavajici.id, firma_nick: prodavajici.nick,
         podil, cena: t.cena, dalsi_at: new Date(Date.now() + MESIC_MS),
       } });
+    }
+    // 3b2. kapitálový vstup: peníze jdou majiteli firmy a investor za ně
+    // dostane nově vydaný podíl. Dosavadní podíly se musí PŘEPOČÍTAT, ne jen
+    // doplnit o nový — jinak by součet přerostl sto procent, nebo by se
+    // někomu potichu ubralo. Krátí se podíl, ne pořizovací cena a vyplacené
+    // dividendy: ty jsou historie a ředěním se nemění.
+    if (t.predmet === 'vstup') {
+      const f = Math.max(VSTUP_MIN, Math.min(VSTUP_MAX, Number((t.data || {}).podil) || 0));
+      const stavajici = await tx.gameEquity.findMany({
+        where: { firma_id: prodavajici.id, stav: 'bezi' },
+        select: { id: true, podil: true, investor_id: true },
+      });
+      for (const e of PODILY.redeni(stavajici, f)) {
+        await tx.gameEquity.update({ where: { id: e.id }, data: { podil: e.podil } });
+      }
+      await tx.gameEquity.create({ data: {
+        trade_id: t.id,
+        investor_id: kupujici.id, investor_nick: kupujici.nick,
+        firma_id: prodavajici.id, firma_nick: prodavajici.nick,
+        podil: f, cena: t.cena, dalsi_at: new Date(Date.now() + MESIC_MS),
+      } });
+      // Dosavadním podílníkům to musí někdo říct. Zředili se a nikdo se jich
+      // neptal — doručenka bez peněz je jediné místo, kde se to dozvědí.
+      const komu = PODILY.redeni(stavajici, f).filter((e) => e.investor_id !== kupujici.id);
+      if (komu.length) {
+        await tx.gameDelivery.createMany({ data: komu.map((e) => ({
+          player_id: e.investor_id, trade_id: t.id, kind: 'cash', amount: 0,
+          popis: 'Do firmy ' + prodavajici.nick + ' vstoupil nový investor, tvůj podíl se zředil',
+          text_kod: 'dor.redeni_podilu',
+          text_data: { p1: prodavajici.nick, p2: Math.round(f * 100) },
+        })) });
+      }
     }
     // 3d. převod: podíl nezaniká, jen mění držitele. Pořizovací cena a vyplaceno
     // se novému majiteli počítají od nuly — jinak by zdědil cizí výnos a jeho

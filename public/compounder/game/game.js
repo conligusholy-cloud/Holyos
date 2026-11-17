@@ -9593,10 +9593,11 @@ function mojeKrizeHtml() {
 // Nástěnka ostatních. Nejhorší nahoře — tam je nejmíň času a nejvíc prostoru
 // říct si o podmínky.
 function krizeHtml() {
-  var f = (KRIZE && KRIZE.firmy) || [];
-  if (!f.length) return '';
+  if (!KRIZE) return '';
+  var f = (KRIZE.firmy) || [];
   return '<div class="card"><h3>\uD83D\uDD25 ' + esc(tx('krize.nadpis_seznamu')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">' + esc(tx('veta.krize_k_cemu_to_je')) + '</p>'
+    + (f.length ? '' : '<p class="muted small">' + esc(tx('krize.zatim_nikdo')) + '</p>')
     + f.slice(0, 12).map(function (x) {
         return '<div class="trade"><div class="row"><b>' + esc(x.firma) + '</b>'
           + '<span class="pill ' + (x.stupen === 'propadne' ? 'bad' : 'mid') + '">'

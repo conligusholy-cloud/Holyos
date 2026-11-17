@@ -64,6 +64,16 @@ if git diff --cached --name-only | grep -qE 'nastroje/texty-prelozit'; then
   fi
 fi
 
+# Ředění podílů. Podíl rozhoduje o tom, komu kolik teče ze zisku — chyba tady
+# není chyba v zobrazení, ale krádež na splátky. Commit zastaví.
+if git diff --cached --name-only | grep -qE 'services/game/podily'; then
+  if ! node nastroje/tpodily.js; then
+    echo ""
+    echo "STOP: ředění podílů nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Firmy v nouzi. Rozhoduje to o tom, čí jméno se objeví ostatním na nástěnce.
 if git diff --cached --name-only | grep -qE 'services/game/krize'; then
   if ! node nastroje/tkrize.js; then

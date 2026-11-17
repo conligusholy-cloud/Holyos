@@ -3452,5 +3452,9 @@
   "veta.krize_propadne_rada": "Tahle je poslední. Když nezaplatíš, zástava přejde věřiteli a zpátky ji nedostaneš.",
   "veta.krize_jsi_videt": "Ostatní hráči tě teď vidí mezi firmami v nouzi. Někdo ti může nabídnout půjčku — podmínky si určí sám.",
   "veta.krize_k_cemu_to_je": "Těmhle firmám chybí peníze na splátku. Kdo přijde s penězi, může si říct o podmínky — úrok i zástavu.",
-  "veta.krize_ruceni": "{p1} volných prádlomatů, {p2} % firmy ještě neprodáno"
+  "veta.krize_ruceni": "{p1} volných prádlomatů, {p2} % firmy ještě neprodáno",
+  "predmet.vstup_pct": "kapitálový vstup za {p1} % firmy",
+  "server.do_vlastni_firmy_vstoupit_nejde": "Do vlastní firmy vstoupit nejde.",
+  "dor.redeni_podilu": "Do firmy {p1} vstoupil nový investor za {p2} % — tvůj podíl se o stejný díl zředil.",
+  "krize.zatim_nikdo": "Zrovna nikomu nehoří. Jakmile někdo nebude mít na splátku, objeví se tady."
 }
