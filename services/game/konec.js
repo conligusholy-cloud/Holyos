@@ -303,4 +303,81 @@ async function uklidMrtvePodily() {
   return hotovo;
 }
 
-module.exports = { ukonciHru, uklidMrtvePodily, vyrovnejPodilyFirmy };
+// =============================================================================
+// Smazání účtu
+// =============================================================================
+// Právo na výmaz. Napřed konkurz — co hráč dluží jiným hráčům a co u něj drží,
+// se musí vypořádat stejně jako při čistém štítu, jinak by odchodem jednoho
+// přišli o svoje ostatní. Teprve pak se z účtu smažou osobní údaje.
+//
+// Dvě věci se nemažou a je to tak schválně:
+//  • Doklady o zaplacených nákupech. Fakturu musí firma ze zákona držet roky;
+//    co z ní jde pryč, je e-mail, zbytek je účetnictví, ne osobní profil.
+//  • Řádek hráče jako takový. Zůstane prázdná schránka se zamčeným přístupem —
+//    aby cizí obchody a půjčky nezůstaly ukazovat do prázdna. Jméno, firma,
+//    e-mail, heslo ani stav hry v ní nezbydou.
+//
+// Běžící předplatné se zruší k datu konce období: zaplacené dojede, dál se už
+// nic nestrhne. Nevracíme peníze — na to je potřeba člověk, ne tlačítko.
+async function smazUcet(playerId) {
+  const id = Number(playerId);
+  if (!Number.isFinite(id)) throw new Error('smazUcet: chybí hráč');
+  const hrac = await prisma.gamePlayer.findUnique({ where: { id } });
+  if (!hrac) return { ok: false, duvod: 'neexistuje' };
+
+  // 1. Konkurz: vyrovnat se se světem, dokud ještě víme, co hráč má.
+  const vyrovnani = await ukonciHru(id);
+
+  // 2. Předplatné zrušit u Stripu, ať se po smazaném účtu dál nestrhává.
+  const predplatne = await prisma.gameSubscription.findMany({
+    where: { player_id: id, status: { in: ['active', 'past_due'] }, stripe_sub: { not: null } },
+  });
+  let zruseno = 0;
+  for (const row of predplatne) {
+    try {
+      const { _stripePost } = require('../../routes/game-stripe.routes');
+      await _stripePost('subscriptions/' + row.stripe_sub, { cancel_at_period_end: 'true' });
+      await prisma.gameSubscription.update({ where: { id: row.id }, data: { obnovi_se: false } });
+      zruseno++;
+    } catch (e) {
+      // Stripe neodpověděl. Mazání kvůli tomu nezastavíme — hráč má právo
+      // odejít — ale musí to být vidět v logu, ať se to dá dorovnat ručně.
+      console.error('[game-smazani] předplatné ' + row.stripe_sub + ' se nepodařilo zrušit:', e && e.message);
+    }
+  }
+
+  // 3. Jméno, pod kterým hráč vystupoval, zmizí i z cizích záznamů. Nick je
+  //    pseudonym, který si zvolil sám, a může ho prozradit — v obchodech,
+  //    půjčkách a podílech ostatních ho proto přepíšeme na neutrální.
+  const anonym = 'smazaný hráč';
+  const klic = 'smazany-' + id;
+  await prisma.$transaction([
+    prisma.gameTrade.updateMany({ where: { from_id: id }, data: { from_nick: anonym } }),
+    prisma.gameTrade.updateMany({ where: { to_id: id }, data: { to_nick: anonym } }),
+    prisma.gameLoan.updateMany({ where: { lender_id: id }, data: { lender_nick: anonym } }),
+    prisma.gameLoan.updateMany({ where: { borrower_id: id }, data: { borrower_nick: anonym } }),
+    prisma.gameEquity.updateMany({ where: { investor_id: id }, data: { investor_nick: anonym } }),
+    prisma.gameEquity.updateMany({ where: { firma_id: id }, data: { firma_nick: anonym } }),
+    // E-mail u dokladů je osobní údaj; částky a data jsou účetnictví a zůstávají.
+    prisma.gamePurchase.updateMany({ where: { player_id: id }, data: { email: null } }),
+    // Co patřilo jen jemu, mizí celé.
+    prisma.gameDelivery.deleteMany({ where: { player_id: id } }),
+    prisma.gameOdmena.deleteMany({ where: { player_id: id } }),
+    prisma.gameCard.deleteMany({ where: { player_id: id } }),
+    // 4. Samotná schránka: prázdná, zamčená, bez osobních údajů.
+    prisma.gamePlayer.update({
+      where: { id },
+      data: {
+        nick: anonym, nick_lower: klic, company: null, emblem: null,
+        email: null, first_name: null, last_name: null, password_hash: null,
+        state: null, state_at: null, state_rev: { increment: 1 },
+        zdroj: null, ref_id: null, hodnost: null, jazyk: null,
+        disabled: true, token_version: { increment: 1 },
+      },
+    }),
+  ]);
+  console.log('[game-smazani] účet #' + id + ' smazán · předplatných zrušeno: ' + zruseno);
+  return { ok: true, vyrovnani, predplatne_zruseno: zruseno };
+}
+
+module.exports = { ukonciHru, uklidMrtvePodily, vyrovnejPodilyFirmy, smazUcet };

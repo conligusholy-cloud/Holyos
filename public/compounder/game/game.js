@@ -420,19 +420,9 @@ function krachSheet() {
       + tx('veta.p_class_muted_small_style_margin', { p1: v.mel, p2: mn(v.mel, esc(tx('hra.misto_se_uvolnilo')), esc(tx('hra.mista_se_uvolnila')), esc(tx('hra.mist_se_uvolnilo'))), p3: esc(tx('hra.banka_ti_herni_rok_nepujci')), p4: esc(tx('hra.rozumim_2')) }));
     $('krach-ok').onclick = closeSheet;
   };
-  $('krach-znovu').onclick = function () {
-    var y = $('krach-znovu'); y.disabled = true; y.textContent = esc(tx('hra.mazu_2'));
-    // Napřed uložit: server z tohohle stavu vyrovnává půjčky a podíly, takže
-    // potřebuje hotovost, kterou hráč opravdu má.
-    syncState(true).catch(function () {}).then(function () {
-    apiJson('/account/reset', {}).then(function (r) {
-      if (!r.ok) { y.disabled = false; y.textContent = esc(tx('hra.zacit_znovu_s_cistym_stitem_2')); return toast(r.j.error || esc(tx('hra.nepovedlo_se')), 'err'); }
-      wiped = true;
-      try { localStorage.removeItem(KEY); } catch (e) { /* nevadí */ }
-      location.replace(location.pathname);
-    }).catch(function () { y.disabled = false; y.textContent = esc(tx('hra.zacit_znovu_s_cistym_stitem_3')); toast(esc(tx('hra.server_neodpovida_10')), 'err'); });
-    });
-  };
+  // I po krachu se slovo opisuje. Je to pořád nevratné smazání sítě a hráč,
+  // kterému se zrovna zhroutila firma, kliká rychleji než přemýšlí.
+  $('krach-znovu').onclick = zacniZnovuSheet;
 }
 // Po krachu banka rok nepůjčí.
 function maSkraloup() { return (S.skraloupDo || 0) > Date.now(); }
@@ -2506,6 +2496,38 @@ function upozorneniSheet() {
 }
 function sheet(html) { $('sheet-body').innerHTML = html; $('sheet').classList.remove('hidden'); }
 function closeSheet() { $('sheet').classList.add('hidden'); }
+// Krok, který nejde vzít zpátky, se nesmí stát ukliknutím. Hráč musí slovo
+// opsat a tlačítko zůstane zamčené, dokud nesedí. Diakritika ani velikost
+// písmen se neřeší — kdo napíše „zacit znova", myslel to stejně vážně.
+// Tohle okno je zdvořilost, ne zámek: slovo si server ověřuje znovu sám.
+function bezOzdob(x) {
+  return String(x == null ? '' : x).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase().replace(/\s+/g, ' ').replace(/^ | $/g, '');
+}
+function potvrdSlovem(o) {
+  sheet('<h3>' + esc(o.nadpis) + '</h3>'
+    + '<p class="muted small">' + o.popis + '</p>'
+    + '<p class="fine warn" style="margin:10px 0 4px">'
+    + tx('veta.pro_potvrzeni_opis_slovo', { p1: '<b>' + esc(o.slovo) + '</b>' }) + '</p>'
+    + '<input id="pot-vstup" class="inp" type="text" autocomplete="off" autocapitalize="characters"'
+    + ' autocorrect="off" spellcheck="false" style="width:100%">'
+    + '<button class="btn big" id="pot-ok" style="width:100%;margin-top:10px" disabled>'
+    + esc(o.tlacitko) + '</button>'
+    + '<button class="btn sec" id="pot-ne" style="width:100%;margin-top:8px">'
+    + esc(tx('hra.nechat_byt')) + '</button>');
+  var vstup = $('pot-vstup'), ok = $('pot-ok');
+  var sedi = function () { return bezOzdob(vstup.value) === bezOzdob(o.slovo); };
+  vstup.oninput = function () { ok.disabled = !sedi(); };
+  vstup.onkeydown = function (e) { if (e.key === 'Enter' && sedi()) ok.click(); };
+  $('pot-ne').onclick = closeSheet;
+  ok.onclick = function () {
+    if (!sedi()) return;
+    ok.disabled = true;
+    ok.textContent = esc(o.pracuji || tx('hra.mazu'));
+    o.pak(vstup.value, function () { ok.disabled = false; ok.textContent = esc(o.tlacitko); });
+  };
+  setTimeout(function () { try { vstup.focus(); } catch (e) { /* na mobilu to nevadí */ } }, 60);
+}
 // Když na telefonu vyjede klávesnice, okno se zmenší. Panel na to musí reagovat,
 // jinak mu pole s tlačítkem schová pod sebe.
 if (window.visualViewport) {
@@ -9014,7 +9036,8 @@ function paintMe() {
     + distHtml()
     + '<div class="card"><h3>' + esc(tx('hra.tvoje_udaje')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">' + esc(tx('hra.co_o_tobe_hra_vede')) + '</p>'
-    + '<button class="btn sec" id="do-udaje" style="width:100%">' + esc(tx('hra.stahnout_moje_udaje')) + '</button></div>'
+    + '<button class="btn sec" id="do-udaje" style="width:100%">' + esc(tx('hra.stahnout_moje_udaje')) + '</button>'
+    + '<button class="btn sec" id="do-smazat" style="width:100%;margin-top:8px">' + esc(tx('hra.smazat_ucet')) + '</button></div>'
     + '<button class="btn sec big" id="do-reset">' + esc(tx('hra.zacit_znovu_od_nuly')) + '</button>';
   if (drzFirma != null && $('me-firma')) $('me-firma').value = drzFirma;
   var fb = $('me-firma-ulozit');
@@ -9052,25 +9075,49 @@ function paintMe() {
   if ($('do-udaje')) $('do-udaje').onclick = function () {
     window.location.href = '/api/game/account/udaje';
   };
-  $('do-reset').onclick = function () {
-    sheet(tx('veta.h3_h3_p_class_muted_small_4', { p1: esc(tx('hra.zacit_znovu')), p2: esc(tx('hra.ano_smazat_a_zacit_znovu')), p3: esc(tx('hra.nechat_byt')) }));
-    $('no-reset').onclick = closeSheet;
-    $('yes-reset').onclick = function () {
-      var y = $('yes-reset'); y.disabled = true; y.textContent = esc(tx('hra.mazu'));
-      // Smazat jen prohlížeč nestačí — stav i zabraná místa drží server a po
-      // obnovení stránky by se hra vrátila přesně tam, kde byla.
+  $('do-reset').onclick = zacniZnovuSheet;
+  if ($('do-smazat')) $('do-smazat').onclick = smazUcetSheet;
+}
+// Čistý štít. Smazat jen prohlížeč nestačí — stav i zabraná místa drží server
+// a po obnovení stránky by se hra vrátila přesně tam, kde byla.
+function zacniZnovuSheet() {
+  potvrdSlovem({
+    nadpis: tx('hra.zacit_znovu'),
+    popis: esc(tx('hra.prijdes_o_celou_sit_o')),
+    slovo: tx('server.potvrzeni_zacit_znovu'),
+    tlacitko: tx('hra.ano_smazat_a_zacit_znovu'),
+    pak: function (slovo, zpet) {
       // Napřed stav uložíme: server z něj vyrovnává půjčky a podíly, takže
       // musí mít tu hotovost, kterou hráč opravdu má, ne tu z minulé minuty.
       syncState(true).catch(function () {}).then(function () {
-      apiJson('/account/reset', {}).then(function (r) {
-        if (!r.ok) { y.disabled = false; y.textContent = esc(tx('hra.ano_smazat_a_zacit_znovu_2')); return toast(r.j.error || esc(tx('hra.nepovedlo_se_18')), 'err'); }
-        wiped = true;
-        try { localStorage.removeItem(KEY); } catch (e) {}
-        location.replace(location.pathname);
-      }).catch(function () { y.disabled = false; y.textContent = esc(tx('hra.ano_smazat_a_zacit_znovu_3')); toast(esc(tx('hra.server_neodpovida_3')), 'err'); });
+        apiJson('/account/reset', { potvrzeni: slovo }).then(function (r) {
+          if (!r.ok) { zpet(); return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_18')), 'err'); }
+          wiped = true;
+          try { localStorage.removeItem(KEY); } catch (e) { /* nevadí */ }
+          location.replace(location.pathname);
+        }).catch(function () { zpet(); toast(esc(tx('hra.server_neodpovida_3')), 'err'); });
       });
-    };
-  };
+    },
+  });
+}
+// Smazání účtu. Nevratné a jiné než čistý štít: tohle je odchod ze hry.
+function smazUcetSheet() {
+  potvrdSlovem({
+    nadpis: tx('hra.smazat_ucet'),
+    popis: esc(tx('hra.ucet_zmizi_i_s_udaji')),
+    slovo: tx('server.potvrzeni_smazat'),
+    tlacitko: tx('hra.ano_smazat_ucet'),
+    pak: function (slovo, zpet) {
+      syncState(true).catch(function () {}).then(function () {
+        apiJson('/account/smazat', { potvrzeni: slovo }).then(function (r) {
+          if (!r.ok) { zpet(); return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_18')), 'err'); }
+          wiped = true;
+          try { localStorage.removeItem(KEY); } catch (e) { /* nevadí */ }
+          location.replace(location.pathname);
+        }).catch(function () { zpet(); toast(esc(tx('hra.server_neodpovida_3')), 'err'); });
+      });
+    },
+  });
 }
 
 

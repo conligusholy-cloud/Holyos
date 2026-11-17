@@ -874,6 +874,24 @@ router.post('/account/details', requirePlayer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ─── Potvrzení slovem ──────────────────────────────────────────────────────
+// Dva kroky už nejdou vzít zpátky: čistý štít a smazání účtu. Ani jeden se
+// nesmí spustit ukliknutím, takže hráč musí slovo opsat. Hlídá to SERVER, ne
+// jen okno v prohlížeči — kdyby to bylo jen v okně, stačilo by poslat
+// požadavek rovnou a potvrzení by nebylo k ničemu.
+// Diakritika ani velikost písmen se neřeší: kdo napíše „zacit znova", myslel
+// to stejně vážně jako ten, kdo trefil háčky.
+const bezOzdob = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase().replace(/\s+/g, ' ').trim();
+function potvrzeniSedi(zadano, klic, jazyk) {
+  const a = bezOzdob(zadano);
+  if (!a) return false;
+  // Bereme slovo v řeči hráče i v češtině — kdo si mezitím přepnul jazyk,
+  // ať nezůstane zamčený venku.
+  return [TEXTY.t(klic, null, jazyk), TEXTY.t(klic, null, TEXTY.ZDROJ)]
+    .some((x) => bezOzdob(x) === a);
+}
+
 // POST /account/reset — hráč začíná od nuly. Účet i zaplacené karty mu zůstávají
 // (ty si koupil za skutečné peníze), ale síť, uložený stav a zabraná místa mizí.
 // Bez téhle routy by se stav po obnovení stránky vrátil ze serveru.
@@ -883,8 +901,31 @@ router.post('/account/details', requirePlayer, async (req, res, next) => {
 // se maže. Podrobnosti v services/game/konec.js.
 router.post('/account/reset', requirePlayer, async (req, res, next) => {
   try {
+    const jaz = TEXTY.jazykHrace(req.player);
+    if (!potvrzeniSedi((req.body || {}).potvrzeni, 'server.potvrzeni_zacit_znovu', jaz)) {
+      return res.status(400).json({ error: stx(req)('server.napis_pro_potvrzeni',
+        { p1: TEXTY.t('server.potvrzeni_zacit_znovu', null, jaz) }) });
+    }
     const v = await require('../services/game/konec').ukonciHru(req.player.id);
     res.json({ ok: true, vyrovnani: v });
+  } catch (e) { next(e); }
+});
+
+// POST /account/smazat — právo na výmaz. Nevratné: napřed konkurz, pak z účtu
+// zmizí osobní údaje. Podrobnosti i to, co se schválně nemaže, v konec.js.
+router.post('/account/smazat', requirePlayer, async (req, res, next) => {
+  try {
+    const jaz = TEXTY.jazykHrace(req.player);
+    if (!potvrzeniSedi((req.body || {}).potvrzeni, 'server.potvrzeni_smazat', jaz)) {
+      return res.status(400).json({ error: stx(req)('server.napis_pro_potvrzeni',
+        { p1: TEXTY.t('server.potvrzeni_smazat', null, jaz) }) });
+    }
+    const v = await require('../services/game/konec').smazUcet(req.player.id);
+    if (!v.ok) return res.status(409).json({ error: stx(req)('server.ucet_uz_neexistuje') });
+    // Přihlášení padá s token_version, cookie smažeme hned, ať se nikdo
+    // nevrací do prázdné schránky.
+    res.clearCookie(COOKIE, { path: '/' });
+    res.json({ ok: true, vyrovnani: v.vyrovnani, predplatne_zruseno: v.predplatne_zruseno });
   } catch (e) { next(e); }
 });
 

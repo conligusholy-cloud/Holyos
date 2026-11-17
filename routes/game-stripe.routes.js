@@ -485,4 +485,5 @@ module.exports._zaberAPripis = zaberAPripis;
 module.exports._paymentsOn = paymentsOn;
 module.exports._zapisObdobi = zapisObdobi;
 module.exports._stripeGet = stripeGet;
+module.exports._stripePost = stripePost;
 module.exports._prepisPredplatne = prepisPredplatne;

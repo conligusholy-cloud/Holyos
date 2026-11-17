@@ -3394,5 +3394,14 @@
   "hra.tvoje_udaje": "Tvoje údaje",
   "hra.co_o_tobe_hra_vede": "Všechno, co o tobě hra vede — účet, stav hry, nákupy, obchody. Stáhne se jako soubor. Hesla ven nejdou, držíme jen jejich otisk.",
   "hra.stahnout_moje_udaje": "Stáhnout moje údaje",
-  "server.vsechno_co_o_tobe_hra_vede": "Všechno, co o tobě hra vede. Hesla ven nejdou — držíme jen jejich otisk."
+  "server.vsechno_co_o_tobe_hra_vede": "Všechno, co o tobě hra vede. Hesla ven nejdou — držíme jen jejich otisk.",
+  "server.potvrzeni_zacit_znovu": "ZAČÍT ZNOVA",
+  "server.potvrzeni_smazat": "SMAZAT",
+  "server.napis_pro_potvrzeni": "Pro potvrzení napiš {p1}.",
+  "server.ucet_uz_neexistuje": "Tenhle účet už neexistuje.",
+  "veta.pro_potvrzeni_opis_slovo": "Pro potvrzení opiš slovo {p1}. Na háčky ani velká písmena se nehledí.",
+  "hra.prijdes_o_celou_sit_o": "Přijdeš o celou síť, o peníze i o zabraná místa — ta se hned uvolní konkurenci. Co dlužíš jiným hráčům a co u tebe drží, se nejdřív vyrovná jako při konkurzu. Tohle se nedá vrátit. Účet i zaplacené karty ti zůstávají.",
+  "hra.smazat_ucet": "Smazat účet",
+  "hra.ano_smazat_ucet": "Ano, smazat účet",
+  "hra.ucet_zmizi_i_s_udaji": "Účet zmizí i s tvými údaji — jméno, e-mail, heslo i stav hry. Nejdřív proběhne konkurz, aby ostatní hráči nepřišli o to, co u tebe mají. Běžící předplatné se zruší ke konci zaplaceného období; peníze se nevracejí. Doklady o nákupech musíme ze zákona držet dál, ale bez tvého e-mailu. Tohle se nedá vrátit a do hry už se nevrátíš."
 }
