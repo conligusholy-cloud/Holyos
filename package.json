@@ -21,7 +21,9 @@
     "texty:vytahni": "node nastroje/texty-vytahni.js",
     "texty:prohlidka": "node nastroje/texty-prohlidka.js",
     "meny:kontrola": "node nastroje/tmenypl.js",
-    "platby:kontrola": "node nastroje/twebhook.js"
+    "platby:kontrola": "node nastroje/twebhook.js",
+    "texty:prelozit:pl": "node nastroje/texty-prelozit.js --jazyk=pl",
+    "texty:prohlidka:pl": "node nastroje/texty-prohlidka.js pl"
   },
   "engines": {
     "node": ">=22.0.0"
