@@ -413,6 +413,7 @@ router.post('/trade/:id/counter', hrac, api(async (req, res) => {
   if (!t) return res.status(404).json({ error: stx(req)('server.nabidka_nenalezena') });
   if (t.to_id !== req.player.id) return res.status(403).json({ error: stx(req)('server.tahle_nabidka_neni_pro_tebe') });
   if (t.stav !== 'ceka') return res.status(409).json({ error: stx(req)('server.tahle_nabidka_uz_neni_ve_hre') });
+  const b = req.body || {};   // větev pro podíl níž na něj spoléhá — bez toho spadne na „b is not defined"
   const cena = Math.max(0, Math.min(MAX_CENA, Math.round(Number((req.body || {}).cena) || 0)));
   const karty = Array.isArray((req.body || {}).karty) ? (req.body || {}).karty.map((x) => s(x, 24)).filter(Boolean).slice(0, 10) : [];
   if (!cena && !karty.length) return res.status(400).json({ error: stx(req)('server.protinavrh_potrebuje_cenu_nebo_kartu') });
@@ -1388,7 +1389,9 @@ async function prevedVydrazene(tx, d, prodavajici, vitez) {
   if (d.predmet === 'karta') {
     const c = await tx.gameCard.findFirst({ where: { player_id: prodavajici.id,
       kind: d.card_kind, used_at: null }, orderBy: { id: 'asc' } });
-    if (!c) throw new Error(stx(req)('server.karta_se_ztratila_2'));
+    // Dražbu vyhodnocuje úloha na pozadí, ne požadavek hráče — hláška se proto
+    // skládá v jazyce prodávajícího, ne přes stx(req), který tu nemá odkud vzít req.
+    if (!c) throw new Error(TEXTY.tHraci(prodavajici, 'server.karta_se_ztratila_2'));
     await tx.gameCard.update({ where: { id: c.id }, data: { player_id: vitez.id } });
   } else if (d.predmet === 'stroj') {
     await tx.gameDelivery.createMany({ data: [
@@ -1419,7 +1422,7 @@ async function prevedVydrazene(tx, d, prodavajici, vitez) {
   } else if (d.predmet === 'prevod') {
     const eq = await tx.gameEquity.findUnique({ where: { id: (d.data || {}).equity_id || 0 } });
     if (!eq || eq.stav !== 'bezi' || eq.investor_id !== prodavajici.id) {
-      throw new Error(stx(req)('server.podil_uz_takhle_nebezi'));
+      throw new Error(TEXTY.tHraci(prodavajici, 'server.podil_uz_takhle_nebezi'));
     }
     // Do dražby mohl jít jen kus. Kolik, se ověřuje až tady — mezitím mohl
     // prodávající část podílu prodat jinudy a slíbit víc, než drží.
