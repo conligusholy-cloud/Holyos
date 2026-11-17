@@ -57,6 +57,10 @@ PRAVIDLA
 - Kč je skutečná měna, ne herní. Nepřepisuj ji na L$.
 - U textů s tvary množného čísla vrať objekt s klíči {TVARY}.
   Čeština má one/few/other.
+- ALE: tvary vracej JEN tam, kde je objekt i v předloze. Když je předloha
+  obyčejný text, vrať obyčejný text — i kdyby to bylo samotné slovo jako
+  „den" nebo „vteřiny". Hra ho dosazuje do věty sama a objekt by v ní
+  skončil jako [object Object].
 - Drž se slovníku pojmů níž. Je závazný.
 
 SLOVNÍK POJMŮ
@@ -253,6 +257,17 @@ async function main() {
       const vysledek = await poDavkach(davka, slovnik, jazyk);
       klice.forEach((k) => {
         if (vysledek[k] == null) return;
+        // Tvar musí sedět s předlohou. Když je česky obyčejný text a zpátky
+        // přijde objekt s tvary, hra ho dosadí do věty jako [object Object].
+        // Takový překlad raději zahodíme — při dalším běhu se zkusí znovu
+        // a zadání na to teď upozorňuje.
+        const cekaText = typeof cs[k] === 'string';
+        const jeText = typeof vysledek[k] === 'string';
+        if (cekaText !== jeText) {
+          console.error('    ' + k + ': ' + (jeText ? 'čekal jsem tvary, přišel text'
+            : 'čekal jsem text, přišly tvary') + ' — zahozeno, zkusí se znovu');
+          return;
+        }
         en[k] = vysledek[k];
         meta[k] = otisk(cs[k]);
         hotovo++;

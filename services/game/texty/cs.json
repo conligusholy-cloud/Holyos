@@ -2560,7 +2560,7 @@
   "veta.h3_h3_p_class_muted_small_22": "<h3>{p1}</h3><p class=\"muted small\">Co se ve hře stalo. Nepřečtené jsou zvýrazněné; otevřením seznamu se označí jako přečtené.</p>",
   "veta.mesic_konci_i_button_class_btn": " / měsíc · končí {p1}</i><button class=\"btn ",
   "veta.trzba_bez_zavady": " · tržba {p1} · {p2} {p3} · bez závady {p4} %",
-  "veta.h3_p_class_muted_small_style_9": "{p1}</h3><p class=\"muted small\" style=\"margin:2px 0 10px\">Zvedne ti volný rámec v bance a složí se jako zástava — banka proti ní půjčí, i když na to ještě nevyděláváš. Čím větší balík, tím víc laundrů za korunu.</p>",
+  "veta.h3_p_class_muted_small_style_9": "{p1}</h3><p class=\"muted small\" style=\"margin:2px 0 10px\">Zvedne ti volný rámec v bance a složí se jako zástava — banka proti ní půjčí, i když na to ještě nevyděláváš. Čím větší balík, tím víc laundrů za stejné peníze.</p>",
   "veta.s_pobockou_v_jeho_okoli_by": ". S pobočkou v jeho okolí by výjezd trval {p1} místo {p2}.</p>",
   "veta.div_class_shop_img_img_src": "<div class=\"shop-img\"><img src=\"{p1}\" alt=\"Prádlomat {p2}\" loading=\"lazy\"></div><div class=\"row\" style=\"margin-top:12px\"><h3>{p3}</h3><b>{p4} {p5}</b></div><p class=\"muted small\" style=\"margin:2px 0 8px\">{p6}</p><div class=\"kv\"><span>{p7}</span><b>{p8} lidí</b></div><div class=\"kv\"><span>{p9}</span><b>{p10}</b></div><div class=\"kv\"><span>{p11}</span><b>{p12} obratu</b></div><div class=\"kv\"><span>Energie</span><b>{p13} obratu</b></div><div class=\"kv\"><span>{p14}</span><b>",
   "veta.na_ceste_2": " na cestě · {p1}",
@@ -3212,7 +3212,6 @@
   "hra.jede": "jede",
   "hra.cena_5": "Cena",
   "hra.za_den": "Za den",
-  "hra.za_korunu": "Za korunu",
   "hra.zaplatit_kartou": "Zaplatit kartou",
   "hra.za_kus": "za kus",
   "hra.e_mail": "E-mail",
@@ -3388,5 +3387,6 @@
   "hra.ano_smazat_ucet": "Ano, smazat účet",
   "hra.ucet_zmizi_i_s_udaji": "Účet zmizí i s tvými údaji — jméno, e-mail, heslo i stav hry. Nejdřív proběhne konkurz, aby ostatní hráči nepřišli o to, co u tebe mají. Běžící předplatné se zruší ke konci zaplaceného období; peníze se nevracejí. Doklady o nákupech musíme ze zákona držet dál, ale bez tvého e-mailu. Tohle se nedá vrátit a do hry už se nevrátíš.",
   "jazyk.pl": "Polština",
-  "jazyk.de": "Němčina"
+  "jazyk.de": "Němčina",
+  "veta.za_jednotku_meny": "Za {p1}"
 }

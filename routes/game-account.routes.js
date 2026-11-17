@@ -269,6 +269,11 @@ async function cashPublic(prev) {
     if (CASH[k] && CASH[k].skryty) continue;      // dárky se neprodávají
     const c = await item(k); if (!c) continue;
     out.push({ kind: c.kind, name: c.name, price_czk: prev.zobraz(c.price), laundry: c.laundry,
+      // Kolik L$ dostane hráč za jednotku SVOJÍ měny — dělí se cenou už
+      // přepočtenou, takže je to euro, dolar nebo zlotý, ne koruna.
+      // per_czk zůstává kvůli hrám otevřeným přes nasazení; staré jméno
+      // lhalo a dalo se podle něj snadno splést.
+      za_jednotku: Math.round(c.laundry / prev.zobraz(c.price)),
       per_czk: Math.round(c.laundry / prev.zobraz(c.price)),
       bonus: zaklad ? Math.round((perCzk(c) / perCzk(zaklad) - 1) * 100) : 0 });
   }

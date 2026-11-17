@@ -12772,7 +12772,13 @@ function buyCash(kind) {
             ? tx('veta.p_class_fine_ok_plna_cena', { p1: cenaReal(c.price_czk), p2: esc(tx('hra.doplacis_jen_rozdil_proti')) }) : '')
         : hovory
           ? '<div class="kv"><span>' + esc(tx('hra.za_den')) + '</span><b>' + cenaDen(c.za_den) + '</b></div>'
-          : '<div class="kv"><span>' + esc(tx('hra.za_korunu')) + '</span><b>' + tCislo(c.per_czk) + ' L$</b></div>')
+          // „Za korunu" platilo, dokud se platilo jen v korunách. Číslo je
+          // přitom správně za jednotku měny hráče — lhal jen popisek, takže
+          // Polák viděl „Za złotówkę" u čísla počítaného z eura. Značku teď
+          // dává server stejně jako u cen.
+          : '<div class="kv"><span>' + tx('veta.za_jednotku_meny', { p1: sMenou('1') })
+            + '</span><b>' + tCislo(c.za_jednotku != null ? c.za_jednotku : c.per_czk)
+            + ' L$</b></div>')
     + '<div class="kv"><span>' + esc(tx('hra.plati')) + '</span><b>' + esc(ME.first_name + ' ' + ME.last_name) + '</b></div>'
     + '<button class="btn big" id="do-pay">' + esc(tx('hra.zaplatit_kartou')) + '</button>'
     + '<p class="fine">' + (ramec
