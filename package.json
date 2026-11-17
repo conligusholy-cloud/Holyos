@@ -28,7 +28,9 @@
     "texty:prelozit:de": "node nastroje/texty-prelozit.js --jazyk=de",
     "texty:prohlidka:de": "node nastroje/texty-prohlidka.js de",
     "texty:prelozit:es": "node nastroje/texty-prelozit.js --jazyk=es",
-    "texty:prohlidka:es": "node nastroje/texty-prohlidka.js es"
+    "texty:prohlidka:es": "node nastroje/texty-prohlidka.js es",
+    "texty:prelozit:fr": "node nastroje/texty-prelozit.js --jazyk=fr",
+    "texty:prohlidka:fr": "node nastroje/texty-prohlidka.js fr"
   },
   "engines": {
     "node": ">=22.0.0"

@@ -12707,7 +12707,7 @@ var MENA_DES = typeof HRAC_TEXTY.mena_des === 'number' ? HRAC_TEXTY.mena_des : 0
 var MENA_PRED = !!HRAC_TEXTY.mena_pred;
 // Kde která řeč píše tisíce a desetinnou čárku. Neznámý jazyk bere češtinu —
 // pořád lepší než rozhozená čísla.
-var LOCALE_JAZYKA = { cs: 'cs-CZ', en: 'en-GB', pl: 'pl-PL', sk: 'sk-SK', de: 'de-DE', es: 'es-ES' };
+var LOCALE_JAZYKA = { cs: 'cs-CZ', en: 'en-GB', pl: 'pl-PL', sk: 'sk-SK', de: 'de-DE', es: 'es-ES', fr: 'fr-FR' };
 function localeHrace() { return LOCALE_JAZYKA[JAZYK] || 'cs-CZ'; }
 // Značka patří k číslu tak, jak se to v té měně píše: 5 Kč, 5 zł, ale $5.
 // Říká to server spolu s měnou — klient si to nesmí odvozovat sám, jinak se

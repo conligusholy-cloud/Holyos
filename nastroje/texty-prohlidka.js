@@ -137,12 +137,43 @@ function obracenaInterpunkce(c, e, jazyk) {
   return 'chybí ' + chybi.join(' a ') + ' na začátku';
 }
 
+// ─── Mezera před dvojitou interpunkcí (francouzština) ───────────────
+// Francouzština píše před ? ! : ; úzkou nezlomitelnou mezeru: „Prêt ?",
+// ne „Prêt?". Strojový překlad to trefí tak obden a Francouzovi to praští
+// do oka stejně jako nám „ahoj,jak se máš". Hlídá se jen prostý text bez
+// HTML a bez značek — v URL a v časech (12:30) dvojtečka mezeru nechce.
+const UZKA = '\u202f';      // úzká nezlomitelná mezera
+const NEZLOM = '\u00a0';    // obyčejná nezlomitelná
+function mezeraPredInterpunkci(c, e, jazyk) {
+  if (jazyk !== 'fr') return null;
+  if (typeof c !== 'string' || typeof e !== 'string') return null;
+  if (/[<>{]/.test(c)) return null;
+  const spatne = [];
+  // Před znaménkem musí být nezlomitelná mezera. Obyčejná je taky chyba,
+  // ale tu neřešíme — rozdělí řádek, nerozbije větu.
+  ['?', '!', ';'].forEach((z) => {
+    const i = e.indexOf(z);
+    if (i <= 0) return;
+    const pred = e[i - 1];
+    if (pred !== UZKA && pred !== NEZLOM && pred !== ' ') spatne.push(z);
+  });
+  // Dvojtečka jen tam, kde za ní není číslo (12:30) ani lomítko (http://).
+  const d = e.indexOf(':');
+  if (d > 0 && !/[\d/]/.test(e[d + 1] || '') && !/[\d]/.test(e[d - 1] || '')) {
+    const pred = e[d - 1];
+    if (pred !== UZKA && pred !== NEZLOM && pred !== ' ') spatne.push(':');
+  }
+  if (!spatne.length) return null;
+  return 'chybí mezera před ' + spatne.join(' ');
+}
+
 // ─── Tvary množného čísla ────────────────────────────────────────────────────
 // Co která řeč potřebuje. Musí sedět s tvar() v jadro.js — kdyby se rozešly,
 // hra by pro část čísel sáhla po tvaru, který v katalogu není, a věta by
 // spadla na jiný pád nebo na prázdno.
 const TVARY = { cs: ['one', 'few', 'other'], en: ['one', 'other'],
-  pl: ['one', 'few', 'many'], de: ['one', 'other'], es: ['one', 'other'] };
+  pl: ['one', 'few', 'many'], de: ['one', 'other'], es: ['one', 'other'],
+  fr: ['one', 'other'] };
 function tvaryChybi(hodnota, jazyk) {
   if (typeof hodnota !== 'object' || !hodnota) return ['není objekt s tvary'];
   const chce = TVARY[jazyk] || ['one', 'other'];
@@ -237,6 +268,8 @@ function main() {
     if (d) pridej(mekke, k, 'dlouhý popisek', d);
     const oi = obracenaInterpunkce(c, e, jazyk);
     if (oi) pridej(mekke, k, 'obrácená interpunkce', oi + ': ' + e.slice(0, 50));
+    const mi = mezeraPredInterpunkci(c, e, jazyk);
+    if (mi) pridej(mekke, k, 'francouzská mezera', mi + ': ' + e.slice(0, 50));
 
     // Zbytky češtiny. Jména volajících jsou česká schválně — operátor zvedá
     // telefon v Česku a paní Vondráčková se jmenuje pořád stejně.

@@ -24,7 +24,7 @@ const MENY = {
 // u kterého víme, že ho zvolil vědomě. Jazyk, který tu není, platí v eurech —
 // to je horší než správná měna, ale pořád lepší než koruny, které nikdo mimo
 // Česko nezná.
-const MENA_JAZYKA = { cs: 'czk', en: 'eur', pl: 'pln', de: 'eur', es: 'eur' };
+const MENA_JAZYKA = { cs: 'czk', en: 'eur', pl: 'pln', de: 'eur', es: 'eur', fr: 'eur' };
 const MENA_VYCHOZI = 'eur';
 // Co Stripe umí účtovat. Co by v mapování přibylo navíc, musí se nejdřív
 // doplnit sem i do MENY.

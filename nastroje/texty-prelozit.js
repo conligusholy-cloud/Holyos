@@ -43,6 +43,9 @@ const JAZYKY = {
       + ' (22 few, ale 12 many); zbytek = many. Tvar "other" polština nepotřebuje' },
   de: { nazev: 'němčiny', tvary: 'one a other (němčina nemá few ani many)' },
   es: { nazev: 'španělštiny', tvary: 'one a other (španělština nemá few ani many)' },
+  fr: { nazev: 'francouzštiny',
+    tvary: 'one a other. Pozor: francouzština bere jako jednotné číslo i nulu,'
+      + ' takže tvar one platí pro 0 i 1 (0 machine, ne 0 machines)' },
 };
 
 const ZADANI = `Překládáš texty počítačové hry Laundromat Tycoon z češtiny do {JAZYK}.
