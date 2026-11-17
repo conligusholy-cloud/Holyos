@@ -764,9 +764,9 @@ function vyjezdZblizka(u) {
 // `ticho` používá vedoucí servisu: když vyjede k třiceti strojům najednou,
 // nemá hráči probliknout třicet hlášek — dostane jednu souhrnnou.
 function vyslatTechnika(u, ticho) {
-  if (!u || !jeVPoruse(u) || u.technik) return;
+  if (!u || !jeVPoruse(u) || u.technik) return false;
   var v = vyjezdOdhad(u);
-  if (!v) { toast(esc(tx('hra.nemas_zakladnu_odkud_technika_poslat_2')), 'err'); return; }
+  if (!v) { toast(esc(tx('hra.nemas_zakladnu_odkud_technika_poslat_2')), 'err'); return false; }
   var ted = Date.now();
   u.technik = {
     z: { lat: v.zakladna.lat, lon: v.zakladna.lon, name: v.zakladna.name || esc(tx('hra.sidlo_2')) },
@@ -776,6 +776,7 @@ function vyslatTechnika(u, ticho) {
   save(); paint(); drawMap(); drawAuta(); syncState(true);
   nactiTrasu(u);
   if (!ticho) toast(tx('veta.technik_vyrazil_na_miste_bude', { p1: v.zpusob.nazev, p2: etaText(v.jizda) }), 'ok');
+  return true;
 }
 // Výjezdy posouvá čas: jakmile je oprava hotová, stroj zase jede; až se auto
 // vrátí na základnu, zmizí z mapy.
@@ -2277,6 +2278,7 @@ function tick() {
   hlidejVypovedMajitele(dt);
   hlidejStehovani();
   hlidejServis();
+  hlidejDispecer();
   dispecerKolo();
   zapisHistorii();
 }
@@ -3870,7 +3872,12 @@ function servisRadek(u) {
   } else if (jeVPoruse(u) && !t) {
     var v = vyjezdOdhad(u);
     tr = 'err';
-    stav = hovorText(u.porucha.text) + (v ? tx('veta.km_oprava_na_h', { p1: Math.round(v.km), p2: v.zpusob.nazev, p3: u.porucha.zav }) : '');
+    // Když to řeší vedoucí, ať je to vidět — jinak to vypadá, že se neděje nic.
+    var vyr = dispecerVyrazi(u);
+    stav = hovorText(u.porucha.text)
+      + (vyr != null
+          ? tx('veta.vedouci_chysta_plan_servisu', { p1: etaText(vyr - ted) })
+          : (v ? tx('veta.km_oprava_na_h', { p1: Math.round(v.km), p2: v.zpusob.nazev, p3: u.porucha.zav }) : ''));
     akce = v ? '<button class="btn sec maly" data-vada="' + esc(u.spotId) + '">' + esc(tx('hra.vyslat_tlacitko')) + '</button>' : '';
   } else if (t && ted < t.prijezd) {
     tr = 'warn'; stav = hovorText(u.porucha.text) + ' — ' + (ZNAK_CESTY[t.zpusob] || ZNAK_CESTY.auto)
@@ -3898,6 +3905,11 @@ function servisSheet() {
     + '<div><span>' + esc(tx('hra.techniku_na_ceste')) + '</span><b class="' + (st.resi.length + st.vraci.length ? 'warn' : '') + '">'
     + (st.resi.length + st.vraci.length) + '</b></div>'
     + '</div>'
+    + (dispecerKapacita() && st.vse.length > dispecerKapacita()
+        ? '<p class="fine warn" style="margin:8px 0 0">'
+          + tx('veta.vedouci_nestiha_hlidat', { p1: dispecerKapacita(), p2: st.vse.length,
+              p3: dispecerPotreba(st.vse.length) }) + '</p>'
+        : '')
     + (st.stoji.length > 1
         ? tx('hra.button_class_btn_big_id_do', { p1: st.stoji.length })
         : '')
@@ -11976,7 +11988,7 @@ function obhlidkaCena() {
   // vyplatí, a je to zbytečná překážka hned v prvním kroku.
   return (zacatecnik() && !Object.keys(S.revealed || {}).length) ? 0 : REVEAL_COST;
 }
-var DISPECER_PRODLEVA = 15 * 60e3;
+var DISPECER_PRODLEVA = 60e3;      // než vedoucí sestaví plán výjezdu
 function predplatneNa(kind) {
   var ted = Date.now();
   return (PREDPLATNE || []).filter(function (x) {
@@ -11998,19 +12010,55 @@ function dispecerPotreba(pocet) {
   var kap = (c && c.kapacita) || 35;
   return Math.max(1, Math.ceil((pocet == null ? (S.units || []).length : pocet) / kap));
 }
-// Vedoucí obchází poruchy sám. Obslouží jen tolik poboček, kolik je zaplaceno —
+// Které pobočky vedoucí vůbec hlídá. Obslouží jen tolik, kolik je zaplaceno —
 // bere je od nejstarší, aby to bylo pokaždé stejné a dalo se na to spolehnout.
-function dispecerKolo() {
+var DISP_CACHE = null;
+function dispecerHlidane() {
   var kap = dispecerKapacita();
-  if (!kap || !S || !S.units) return;
+  if (!kap || !S || !S.units) return [];
+  // Panel se ptá za každý řádek zvlášť; bez tohohle by se u velké sítě
+  // seznam přetřídil stokrát za jedno vykreslení.
   var ted = Date.now();
-  var hlidane = S.units.slice().sort(function (a, b) { return (a.builtAt || 0) - (b.builtAt || 0); }).slice(0, kap);
+  if (DISP_CACHE && DISP_CACHE.do > ted && DISP_CACHE.kap === kap
+    && DISP_CACHE.n === S.units.length) return DISP_CACHE.v;
+  var v = S.units.slice().sort(function (a, b) { return (a.builtAt || 0) - (b.builtAt || 0); }).slice(0, kap);
+  DISP_CACHE = { do: ted + 1000, kap: kap, n: S.units.length, v: v };
+  return v;
+}
+// Hlídá vedoucí tenhle konkrétní prádlomat? Podle toho se v servisu ukazuje,
+// jestli tam někdo vyrazí sám, nebo si hráč musí poslat technika ručně.
+function dispecerHlida(u) {
+  if (!u) return false;
+  return dispecerHlidane().indexOf(u) >= 0;
+}
+// Kdy u téhle poruchy vyrazí technik sám. null = vedoucí ji neřeší.
+function dispecerVyrazi(u) {
+  if (!u || !jeVPoruse(u) || u.technik || !dispecerHlida(u)) return null;
+  return ((u.porucha && u.porucha.od) || Date.now()) + DISPECER_PRODLEVA;
+}
+// Když síť přeroste zaplacenou kapacitu, zbytek vedoucí nehlídá vůbec —
+// tam stroj stojí, dokud si toho hráč nevšimne sám. Hlásíme to jednou za
+// každou výši kapacity, ať to nemele pořád dokola.
+function hlidejDispecer() {
+  if (!S) return;
+  var kap = dispecerKapacita();
+  var pocet = (S.units || []).length;
+  if (!kap || pocet <= kap) { S.dispecerMalo = 0; return; }
+  if (S.dispecerMalo === kap) return;
+  S.dispecerMalo = kap;
+  toast(tx('veta.vedouci_nestiha_hlidat', { p1: kap, p2: pocet, p3: dispecerPotreba(pocet) }), 'err');
+}
+// Vedoucí obchází poruchy sám.
+function dispecerKolo() {
+  if (!dispecerKapacita() || !S || !S.units) return;
+  var ted = Date.now();
   var poslal = 0;
-  hlidane.forEach(function (u) {
+  dispecerHlidane().forEach(function (u) {
     if (!jeVPoruse(u) || u.technik) return;
     if (ted - ((u.porucha && u.porucha.od) || ted) < DISPECER_PRODLEVA) return;
-    vyslatTechnika(u, true);
-    poslal++;
+    // Počítáme jen ty, kdo opravdu vyjeli — bez základny se technik nepošle
+    // a hláška „vedoucí poslal technika" by lhala.
+    if (vyslatTechnika(u, true)) poslal++;
   });
   if (poslal) {
     // Držená hláška se sama zapíše i do seznamu upozornění, takže hráč to
