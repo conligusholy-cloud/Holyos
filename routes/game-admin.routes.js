@@ -246,6 +246,105 @@ router.get('/strop-prehled', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(out.join('\n'));
 }));
 
+// GET /diagnostika-dat → prázdné řádky v seznamu hráčů: přišli o uložený stav,
+// nebo ho nikdy neměli? Rozhoduje `state_rev` — zvedá se při KAŽDÉM uložení hry:
+//   • stav prázdný a state_rev = 0 → hráč nikdy nic neuložil (registrace bez hraní)
+//   • stav prázdný a state_rev > 0 → stav měl a přišel o něj; to umí jen „Začít
+//     znovu" (/account/reset) a „Smazat účet" (/account/smazat), obojí si pouští
+//     hráč sám s opsaným potvrzením
+// Jen čte. Odpověď je text, ať se dá otevřít rovnou v prohlížeči.
+router.get('/diagnostika-dat', api(async (req, res) => {
+  const hraci = await prisma.gamePlayer.findMany({
+    select: { id: true, nick: true, zdroj: true, disabled: true,
+      state_at: true, state_rev: true, created_at: true, last_login_at: true },
+    orderBy: { created_at: 'desc' },
+  });
+  // `state` je velký JSON (až stovky kB na hráče) — ptáme se jen, jestli vůbec je.
+  const maStav = new Map();
+  (await prisma.$queryRaw`select id, (state is not null) as ma from game_players`)
+    .forEach((r) => maStav.set(Number(r.id), !!r.ma));
+
+  const sStavem = [], nikdyNehrali = [], prisliOStav = [], smazani = [];
+  for (const h of hraci) {
+    if (h.nick === 'smazaný hráč') { smazani.push(h); continue; }
+    if (maStav.get(h.id)) { sStavem.push(h); continue; }
+    if ((h.state_rev || 0) > 0) prisliOStav.push(h); else nikdyNehrali.push(h);
+  }
+
+  const kc = (n) => Math.round(Number(n) || 0).toLocaleString('cs-CZ');
+  const dt = (d) => (d ? new Date(d).toISOString().slice(0, 16).replace('T', ' ') : '—');
+  const out = [];
+  out.push('HRÁČI CELKEM: ' + hraci.length);
+  out.push('');
+  out.push('  s uloženou rozehranou hrou : ' + sStavem.length);
+  out.push('  nikdy nic neuložili        : ' + nikdyNehrali.length + '   (registrace bez hraní — nic nezmizelo)');
+  out.push('  stav MĚLI a přišli o něj   : ' + prisliOStav.length);
+  out.push('  smazané účty               : ' + smazani.length + '   (hráč si účet smazal sám)');
+  out.push('');
+
+  if (prisliOStav.length) {
+    out.push('── Přišli o uložený stav ──');
+    out.push('id     nick                 uložení  registrace        poslední přihlášení  zdroj');
+    prisliOStav.forEach((h) => out.push(String(h.id).padEnd(7)
+      + String(h.nick || '').slice(0, 20).padEnd(21)
+      + String(h.state_rev).padStart(7) + '  '
+      + dt(h.created_at).padEnd(18) + dt(h.last_login_at).padEnd(21) + (h.zdroj || '—')));
+    out.push('');
+  }
+
+  if (smazani.length) {
+    const ids = smazani.map((h) => h.id);
+    const [nakupy, obchody, pujckyL, pujckyB] = await Promise.all([
+      prisma.gamePurchase.groupBy({ by: ['player_id'], where: { player_id: { in: ids }, status: 'paid' }, _count: { _all: true }, _sum: { amount_cents: true } }),
+      prisma.gameTrade.groupBy({ by: ['from_id'], where: { from_id: { in: ids } }, _count: { _all: true } }),
+      prisma.gameLoan.groupBy({ by: ['lender_id'], where: { lender_id: { in: ids } }, _count: { _all: true } }),
+      prisma.gameLoan.groupBy({ by: ['borrower_id'], where: { borrower_id: { in: ids } }, _count: { _all: true } }),
+    ]);
+    const mapa = (arr, klic) => { const m = {}; arr.forEach((x) => { m[x[klic]] = x; }); return m; };
+    const N = mapa(nakupy, 'player_id'), O = mapa(obchody, 'from_id');
+    const PL = mapa(pujckyL, 'lender_id'), PB = mapa(pujckyB, 'borrower_id');
+    out.push('── Smazané účty: co po nich zbylo ──');
+    out.push('(jméno ani e-mail v DB nejsou, to je smysl výmazu; původní nick najdeš');
+    out.push(' v logu Railway na řádku „[game] konec hry <nick>" — píše se před anonymizací)');
+    out.push('');
+    out.push('id     registrace        poslední přihlášení  uložení     zaplatil  obchodů  půjček');
+    smazani.forEach((h) => {
+      const n = N[h.id];
+      out.push(String(h.id).padEnd(7) + dt(h.created_at).padEnd(18) + dt(h.last_login_at).padEnd(21)
+        + String(h.state_rev).padStart(7)
+        + (n ? (kc((n._sum.amount_cents || 0) / 100) + ' Kč') : '—').padStart(13)
+        + String((O[h.id] && O[h.id]._count._all) || 0).padStart(9)
+        + String(((PL[h.id] && PL[h.id]._count._all) || 0) + ((PB[h.id] && PB[h.id]._count._all) || 0)).padStart(8));
+    });
+    out.push('');
+    out.push('„uložení" = kolikrát se hra uložila, než hráč účet smazal.');
+    out.push('0–1 → účet vznikl a hned zmizel · vyšší číslo → opravdu hrál.');
+    out.push('');
+  }
+
+  // Zaplatili a nemají rozehranou hru — jediné, co opravdu pálí.
+  const platici = await prisma.gamePurchase.groupBy({
+    by: ['player_id'], where: { status: 'paid' }, _count: { _all: true }, _sum: { amount_cents: true },
+  });
+  const problem = platici.filter((x) => !maStav.get(x.player_id));
+  out.push('── Zaplatili, ale nemají rozehranou hru: ' + problem.length + ' ──');
+  problem.forEach((x) => {
+    const h = hraci.find((y) => y.id === x.player_id);
+    out.push('#' + x.player_id + ' ' + (h ? h.nick : '?') + ' · nákupů ' + x._count._all
+      + ' · ' + kc((x._sum.amount_cents || 0) / 100) + ' Kč · uložení ' + (h ? h.state_rev : '?'));
+  });
+  out.push('');
+
+  const posledni = sStavem.map((h) => h.state_at).filter(Boolean).sort((a, b) => new Date(b) - new Date(a));
+  const den1 = Date.now() - 86400000;
+  out.push('── Poslední uložení hry ──');
+  out.push('nejnovější: ' + dt(posledni[0]));
+  out.push('nejstarší : ' + dt(posledni[posledni.length - 1]));
+  out.push('za posledních 24 h se uložilo ' + posledni.filter((d) => new Date(d).getTime() > den1).length + ' hráčům');
+
+  res.type('text/plain; charset=utf-8').send(out.join('\n'));
+}));
+
 // GET /players/:id/otisky → jak hráči rostla hotovost a jmění v čase.
 // Jediná historie, kterou o rozehrané hře máme: uložený stav si drží
 // jen poslední podobu.
