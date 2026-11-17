@@ -730,6 +730,24 @@ function doplatek(p) {
 // ─── Půjčky a podíly: přehled a odkup ───────────────────────────────────────
 // GET /trade/finance → co komu dlužím, kdo dluží mně, kdo má podíl ve mně
 // a v kom mám podíl já.
+
+// GET /trade/krize → kdo nemá na splátku.
+// Nikdo se o nic nehlásí a o nic nežádá: kdo nemá na splátku, ten je vidět.
+// Tak to chodí i doopravdy a je to lepší hra než tlačítko „požádat o pomoc",
+// které nikdo nestiskne. Vlastní stav posíláme zvlášť — varování vidí jen
+// dlužník sám, na nástěnce je až krize.
+router.get('/trade/krize', hrac, api(async (req, res) => {
+  const KRIZE = require('../services/game/krize');
+  const moje = await prisma.gameLoan.findMany({
+    where: { borrower_id: req.player.id, stav: 'bezi' },
+  });
+  const [seznam, ja] = await Promise.all([
+    KRIZE.seznam(),
+    Promise.resolve(KRIZE.stav(moje, stavu(req.player))),
+  ]);
+  res.json({ ok: true, ja, firmy: seznam.filter((f) => f.id !== req.player.id) });
+}));
+
 router.get('/trade/finance', hrac, api(async (req, res) => {
   const ja = req.player.id;
   const [pujcky, podily] = await Promise.all([
