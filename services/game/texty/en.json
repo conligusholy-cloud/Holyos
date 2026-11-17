@@ -3365,5 +3365,20 @@
   "dor.konec_odkup_podilu": "{p1} quit the game — {penize:penize} from their cash went to buy back your stake.",
   "dor.konec_podil_zanikl": "{p1} quit the game, your {p2}% stake in their company is gone. Uncovered balance of {penize:penize} written off.",
   "dor.konec_veritel_skoncil": "{p1} quit the game. Your debt to them is written off — no more instalments.",
-  "dor.konec_podilnik_skoncil": "{p1} quit the game, their {p2}% stake in your company is gone. No more payouts to them."
+  "dor.konec_podilnik_skoncil": "{p1} quit the game, their {p2}% stake in your company is gone. No more payouts to them.",
+  "hra.rok": "Year",
+  "hra.zbyde_mes": "Left / mo",
+  "hra.vsechno": "Everything",
+  "hra.jen_moje": "Mine only",
+  "hra.moje": "Mine",
+  "hra.mapa": "Map",
+  "hra.obchod": "Shop",
+  "hra.sit": "Network",
+  "hra.burza": "Market",
+  "hra.ja": "Me",
+  "hra.mapa_napoveda": "Type a city and send someone there to scout it. Locations are hidden — until you explore a city, you won't see anything on the map.",
+  "hra.prikoupit_technika": "Hire a technician",
+  "hra.ubrat_technika": "Remove a technician",
+  "hra.techniku_ted_mas": "You now have {p1} technicians.",
+  "hra.na_vsechny_pobocky_potrebujes": "<p class=\"fine\">For all depots you'd need {p1} technicians — that would cost L${p2} per week. The difference will be settled in the next payment, so hiring mid-week means paying only half.</p>"
 }

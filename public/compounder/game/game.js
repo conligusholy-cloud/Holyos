@@ -32,6 +32,28 @@ function tx(klic, udaje) {
   if (!PREKLADY) return klic;
   return PREKLADY.t(klic, udaje, JAZYK);
 }
+// Pevný (statický) text hlavičky, mapy a spodní lišty je v index.html česky.
+// V jiném jazyce ho tady přepíšeme z katalogu; česky se nesahá na nic.
+function prelozStatickyText() {
+  if (JAZYK === 'cs') return;
+  var dej = function (sel, klic) {
+    var el = document.querySelector(sel);
+    if (el) el.textContent = tx(klic);
+  };
+  dej('.top .t-item:nth-child(1) > span', 'hra.rok');
+  dej('#t-penize > span', 'hra.hotovost');
+  dej('.top .t-item:nth-child(3) > span', 'hra.zbyde_mes');
+  dej('.top .t-item:nth-child(4) > span', 'hra.pradlomaty');
+  dej('[data-mapa="vse"] b', 'hra.vsechno'); dej('[data-mapa="vse"] i', 'hra.vse');
+  dej('[data-mapa="moje"] b', 'hra.jen_moje'); dej('[data-mapa="moje"] i', 'hra.moje');
+  var od = document.getElementById('open-areas'); if (od) od.textContent = '\uD83D\uDD0E ' + tx('hra.prozkoumat_mesto');
+  dej('#map-hint', 'hra.mapa_napoveda');
+  [['map', 'hra.mapa'], ['shop', 'hra.obchod'], ['net', 'hra.sit'], ['bank', 'hra.banka'], ['cards', 'hra.karty'], ['burza', 'hra.burza'], ['me', 'hra.ja']].forEach(function (p) {
+    var b = document.querySelector('nav.tabs button[data-v="' + p[0] + '"]'); if (!b) return;
+    for (var n = b.lastChild; n; n = n.previousSibling) { if (n.nodeType === 3 && n.textContent.trim()) { n.textContent = tx(p[1]); break; } }
+  });
+}
+prelozStatickyText();
 // Peníze a čísla se v angličtině píšou jinak (1,234,567 místo 1 234 567).
 function tCislo(n) { return window.T18N ? window.T18N.cislo(n, JAZYK) : String(Math.round(n || 0)); }
 function tPenize(n) { return window.T18N ? window.T18N.penize(n, JAZYK) : (Math.round(n || 0) + ' L$'); }

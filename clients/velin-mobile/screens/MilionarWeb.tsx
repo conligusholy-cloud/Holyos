@@ -12,6 +12,10 @@ import { WebView } from 'react-native-webview';
 
 const BS = { bg: '#04060c', text: '#eaf2ff', text2: '#8ea2c2', accent2: '#4fd1ff' };
 const HRA = 'https://pradlomaty.info/game';
+// Lišta nad hrou: česky jen v českém/slovenském telefonu, jinak anglicky (hra sama se přepíná podle účtu).
+const CS = (() => { try { return /^(cs|sk)/i.test(Intl.DateTimeFormat().resolvedOptions().locale); } catch { return true; } })();
+const TXT = CS ? { obnovit: '↻ Obnovit', hint: 'Hra běží dál, i když ji zavřeš' }
+  : { obnovit: '↻ Refresh', hint: 'The game keeps running even when you close it' };
 
 export default function MilionarWeb() {
   const ref = useRef<WebView>(null);
@@ -27,9 +31,9 @@ export default function MilionarWeb() {
           <Text style={s.btnTxt}>←</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => ref.current?.reload()} style={s.btn}>
-          <Text style={s.btnTxt}>↻ Obnovit</Text>
+          <Text style={s.btnTxt}>{TXT.obnovit}</Text>
         </TouchableOpacity>
-        <Text style={s.hint}>Hra běží dál, i když ji zavřeš</Text>
+        <Text style={s.hint}>{TXT.hint}</Text>
       </View>
       <WebView
         ref={ref}

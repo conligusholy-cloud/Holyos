@@ -3284,5 +3284,20 @@
   "dor.konec_odkup_podilu": "0dc3b0fa4c64",
   "dor.konec_podil_zanikl": "83e3965df1de",
   "dor.konec_veritel_skoncil": "f831e4f6cdbf",
-  "dor.konec_podilnik_skoncil": "5e7503a122fa"
+  "dor.konec_podilnik_skoncil": "5e7503a122fa",
+  "hra.rok": "6a68ad66c926",
+  "hra.zbyde_mes": "de896185d249",
+  "hra.vsechno": "bed9e018d867",
+  "hra.jen_moje": "eb7b4f345c73",
+  "hra.moje": "a80902682c4b",
+  "hra.mapa": "b74e0f23cd9c",
+  "hra.obchod": "c32ee096d976",
+  "hra.sit": "72166206aaaa",
+  "hra.burza": "43a8e8e4ce32",
+  "hra.ja": "b78283d3ea18",
+  "hra.mapa_napoveda": "a100d53d5a8d",
+  "hra.prikoupit_technika": "deb385355a4b",
+  "hra.ubrat_technika": "f6868716b25f",
+  "hra.techniku_ted_mas": "47ac109d0ee7",
+  "hra.na_vsechny_pobocky_potrebujes": "bb0b7ac2f93d"
 }

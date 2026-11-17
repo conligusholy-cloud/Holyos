@@ -3316,4 +3316,15 @@
   "hra.ubrat_technika": "Ubrat technika",
   "hra.techniku_ted_mas": "Techniků teď máš {p1}.",
   "hra.na_vsechny_pobocky_potrebujes": "<p class=\"fine\">Na všechny pobočky bys potřeboval {p1} techniky — vyšlo by to na {cislo:p2} Kč týdně. Rozdíl se dorovná v nejbližší platbě, takže v půlce týdne doplatíš jen půlku.</p>",
- 
+  "hra.rok": "Rok",
+  "hra.zbyde_mes": "Zbyde / měs",
+  "hra.vsechno": "Všechno",
+  "hra.jen_moje": "Jen moje",
+  "hra.moje": "Moje",
+  "hra.mapa": "Mapa",
+  "hra.obchod": "Obchod",
+  "hra.sit": "Síť",
+  "hra.burza": "Burza",
+  "hra.ja": "Já",
+  "hra.mapa_napoveda": "Napiš město a pošli tam člověka, ať ho projde. Místa jsou schovaná — dokud město neprozkoumáš, nic na mapě neuvidíš."
+}
