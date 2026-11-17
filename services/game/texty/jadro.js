@@ -16,13 +16,14 @@
   'use strict';
 
   var ZDROJ = 'cs';                 // v téhle řeči se texty píšou
-  var JAZYKY = ['cs', 'en', 'pl'];
+  var JAZYKY = ['cs', 'en', 'pl', 'de'];
 
   // ─── Množné číslo ─────────────────────────────────────────────────────────
-  // Každá řeč jinak. Čeština tři tvary (1 / 2–4 / 5 a víc), angličtina dva,
-  // polština čtyři — a ten čtvrtý je ten nejčastější, takže se na něj nedá
-  // zapomenout: 5 prádlomatów, ale 22 prádlomaty. Tvary se v katalogu píšou
-  // jako { one, few, many, other }; co která řeč nemá, prostě chybí.
+  // Každá řeč jinak. Čeština tři tvary (1 / 2–4 / 5 a víc), angličtina
+  // a němčina dva, polština čtyři — a ten čtvrtý je ten nejčastější, takže
+  // se na něj nedá zapomenout: 5 prádlomatów, ale 22 prádlomaty. Tvary se
+  // v katalogu píšou jako { one, few, many, other }; co která řeč nemá,
+  // prostě chybí.
   function tvar(jazyk, n) {
     var a = Math.abs(n);
     if (jazyk === 'cs') {
@@ -43,7 +44,7 @@
   // ─── Čísla, peníze, čas ───────────────────────────────────────────────────
   // Čeština píše 1 234 567, angličtina 1,234,567, polština zase po svém.
   // Měna zůstává L$ ve všech — je to herní měna, ne koruna ani zlotý.
-  var LOCALE = { cs: 'cs-CZ', en: 'en-GB', pl: 'pl-PL' };
+  var LOCALE = { cs: 'cs-CZ', en: 'en-GB', pl: 'pl-PL', de: 'de-DE' };
   function locale(jazyk) { return LOCALE[jazyk] || LOCALE[ZDROJ]; }
   function cislo(n, jazyk) {
     var x = Math.round(Number(n) || 0);

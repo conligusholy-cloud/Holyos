@@ -86,12 +86,37 @@ function menaSedi(c, e, klic) {
     }
     return false;
   };
-  const maMenu = (t) => samostatne(t, 'zł') || samostatne(t, 'PLN');
-  if (!/zł|PLN|\$|€/.test(c) && maMenu(e)) {
-    return 'překlad si dosadil zlotý natvrdo — měnu určuje server, ne text';
+  // Platí to pro každou měnu, ne jen pro zlotý: Němec platí v eurech, ale
+  // text o tom nesmí rozhodovat — zítra se mapování změní a zůstane lež.
+  const ZNACKY = ['zł', 'PLN', '€', 'EUR', 'CZK', 'USD', 'Kč'];
+  const najdi = (t) => ZNACKY.filter((z) => samostatne(t, z));
+  // Dolar hledáme zvlášť: $ se píše rovnou k číslu ($5), takže okolí
+  // samostatného slova na něj nesedí. A L$ není měna, ale herní peníze.
+  const maDolar = (t) => /(^|[^L\w])\$\s*\d/.test(t);
+  const vPredloze = najdi(c).length > 0 || maDolar(c);
+  const vPrekladu = najdi(e);
+  if (!vPredloze && (vPrekladu.length || maDolar(e))) {
+    return 'překlad si dosadil měnu natvrdo (' + (vPrekladu[0] || '$')
+      + ') — značku určuje server podle toho, kde hráč platí';
   }
   if (!/L\$/.test(c) && /L\$/.test(e)) return 'L$ v překladu přibylo, i když v předloze nebylo';
   return null;
+}
+
+// ─── Délka ──────────────────────────────────────────────────────────
+// Němčina skládá slova a bývá o půlku delší než čeština. Na tlačítku se to
+// pozná až v telefonu, kdy už je pozdě. Hlídáme jen krátké texty bez HTML —
+// tedy popisky tlačítek a hlaviček, kde na pár znacích záleží. Je to měkký
+// nález: dlouhé slovo není chyba, jen místo, kam se má člověk podívat.
+const KRATKY = 28;          // delší předloha je věta, ne popisek
+const NEJVYS = 1.7;         // kolikrát smí překlad narůst
+const SNESE = 20;           // do téhle délky se vejde všechno
+function delkaSedi(c, e) {
+  if (typeof c !== 'string' || typeof e !== 'string') return null;
+  if (c.length > KRATKY || /[<>{]/.test(c)) return null;
+  if (e.length <= SNESE || e.length <= c.length * NEJVYS) return null;
+  return 'popisek je ' + Math.round((e.length / Math.max(1, c.length)) * 10) / 10
+    + '× delší než česky (' + c.length + ' → ' + e.length + ' znaků)';
 }
 
 // ─── Tvary množného čísla ────────────────────────────────────────────────────
@@ -99,7 +124,7 @@ function menaSedi(c, e, klic) {
 // hra by pro část čísel sáhla po tvaru, který v katalogu není, a věta by
 // spadla na jiný pád nebo na prázdno.
 const TVARY = { cs: ['one', 'few', 'other'], en: ['one', 'other'],
-  pl: ['one', 'few', 'many'] };
+  pl: ['one', 'few', 'many'], de: ['one', 'other'] };
 function tvaryChybi(hodnota, jazyk) {
   if (typeof hodnota !== 'object' || !hodnota) return ['není objekt s tvary'];
   const chce = TVARY[jazyk] || ['one', 'other'];
@@ -189,6 +214,9 @@ function main() {
     // Měna
     const m = menaSedi(c, e, k);
     if (m) pridej(tvrde, k, 'měna', m);
+    // Délka krátkých popisků — měkký nález, do layoutu se musí podívat člověk.
+    const d = delkaSedi(c, e);
+    if (d) pridej(mekke, k, 'dlouhý popisek', d);
 
     // Zbytky češtiny. Jména volajících jsou česká schválně — operátor zvedá
     // telefon v Česku a paní Vondráčková se jmenuje pořád stejně.

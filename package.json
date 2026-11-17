@@ -24,7 +24,9 @@
     "platby:kontrola": "node nastroje/twebhook.js",
     "texty:prelozit:pl": "node nastroje/texty-prelozit.js --jazyk=pl",
     "texty:prohlidka:pl": "node nastroje/texty-prohlidka.js pl",
-    "texty:prelozit:kontrola": "node nastroje/tprelozit.js"
+    "texty:prelozit:kontrola": "node nastroje/tprelozit.js",
+    "texty:prelozit:de": "node nastroje/texty-prelozit.js --jazyk=de",
+    "texty:prohlidka:de": "node nastroje/texty-prohlidka.js de"
   },
   "engines": {
     "node": ">=22.0.0"
