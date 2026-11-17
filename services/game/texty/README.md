@@ -43,6 +43,48 @@ git config core.hooksPath nastroje/hooks
 
 Podrobnosti v `nastroje/hooks/README.md`.
 
+## Druhý jazyk: co pustit a v jakém pořadí
+
+```
+npm run texty:kontrola      # co chybí
+npm run texty:prelozit      # dopřeloží
+npm run texty:prohlidka     # co je přeložené ŠPATNĚ
+```
+
+Kontrola a prohlídka dělají každá něco jiného a obě jsou potřeba. Kontrola
+hlídá, co ještě není přeložené — to hráče nebolí, hra spadne zpátky do
+češtiny. Prohlídka hlídá to horší: že přeložené JE, ale rozbité. To projde
+kolem všeho a pozná se až na hráčích.
+
+Každá kontrola v prohlídce vznikla z chyby, která se opravdu stala:
+
+| co hlídá | co se stalo |
+|---|---|
+| značky | Chybějící `{p1}` znamená, že z věty zmizí číslo. Hráč si přečte „Chybí ti ." a neví, kolik. |
+| stavba | Ve sloučených šablonách je i HTML včetně `id`. Když překlad `id` ztratí, nezmizí text — rozsype se celé okno a hra si sáhne na prvek, co není. |
+| měna | Kč jsou skutečné peníze, L$ herní. Z Kč se staly L$ na sedmnácti místech a v obchodě svítilo „49 L$" za něco za 49 Kč. |
+| tvary | Angličtina má one/other, čeština one/few/other. Chybějící tvar znamená, že se u nějakého počtu nevypíše nic. |
+| scénáře | Scénáře se překládaly podle `id`, a dva se stejným `id` si přepsaly překlad navzájem — jeden dostal text toho druhého i s jinými body. |
+| zbytky | Text, co zůstal česky, nebo věta namíchaná z obou jazyků. |
+
+`aria-label`, `title` a `alt` se do stavby nepočítají: čte je odečítač
+obrazovky, je to text pro hráče a překládat se má.
+
+Tvrdé nálezy **zastaví commit** (háček v `nastroje/hooks`). Chybějící překlad
+ne — rozdělanou větu musí jít uložit.
+
+## Co udělat navíc pro třetí jazyk
+
+- Doplnit tvary množného čísla do `TVARY` v `nastroje/texty-prohlidka.js`.
+  Čeština má one/few/other, angličtina one/other; ruština nebo polština mají
+  svoje a bez doplnění by prohlídka chybějící tvar nenašla.
+- `mn()` v `game.js` umí **jenom česká pravidla** (1 / 2–4 / 5+). Pro
+  angličtinu to náhodou vychází, protože 2–4 i 5+ padnou na stejný tvar.
+  U jazyka s jinými pravidly se ta volání musí přepsat na `tPocet()`, který
+  bere tvary z katalogu.
+- Přidat jazyk do `JAZYKY` v `texty/jadro.js` a do měn v
+  `services/game/meny.js`, pokud se v něm platí jinou měnou.
+
 ## Jak se pozná, že překlad zestaral
 
 U každého anglického textu je v `en.meta.json` otisk české předlohy. Když se

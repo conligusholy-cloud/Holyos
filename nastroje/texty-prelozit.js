@@ -135,15 +135,18 @@ async function linka(slovnik) {
   if (!cs) return;
   const en = nacti('linka.en.json', []);
   const meta = nacti('linka.en.meta.json', {});
-  const hotove = {};
-  en.forEach((s) => { hotove[s.id] = s; });
+  // Podle pořadí, ne podle id. Dva scénáře se stejným id si jinak přepíšou
+  // překlad navzájem a jeden z nich dostane text toho druhého — což se taky
+  // stalo. Id jsou sice teď jedinečná, ale pořadí je jistota.
+  const hotove = cs.map((_, i) => en[i] || null);
 
-  const chybi = cs.filter((s) => !hotove[s.id] || meta[s.id] !== otisk(s));
+  const chybi = cs.map((s, i) => ({ s, i }))
+    .filter(({ s, i }) => !hotove[i] || hotove[i].id !== s.id || meta[s.id] !== otisk(s));
   console.log('scénářů linky k překladu: ' + chybi.length + ' z ' + cs.length);
   if (!chybi.length) return;
-  if (process.argv.includes('--nanecisto')) { console.log(chybi.map((s) => s.id).join(', ')); return; }
+  if (process.argv.includes('--nanecisto')) { console.log(chybi.map(({ s }) => s.id).join(', ')); return; }
 
-  for (const scenar of chybi) {
+  for (const { s: scenar, i: poradi } of chybi) {
     try {
       // Překládají se jen věty. id, bod a rod musí zůstat, jak jsou —
       // podle nich hra scénář řídí.
@@ -153,9 +156,11 @@ async function linka(slovnik) {
         + ' nech beze změny — podle nich hra hovor řídí. Vrať {"scenar": "<JSON jako text>"}.');
       const prelozeny = JSON.parse(vysledek.scenar);
       if (prelozeny.id !== scenar.id) throw new Error('scénář se vrátil s jiným id');
-      hotove[scenar.id] = prelozeny;
+      hotove[poradi] = prelozeny;
       meta[scenar.id] = otisk(scenar);
-      zapis('linka.en.json', cs.map((s) => hotove[s.id]).filter(Boolean));
+      // Zapisuje se celé pole v pořadí předlohy. Zatím nepřeložené scénáře
+      // drží svoje místo, ať se ostatní neposunou na cizí pozici.
+      zapis('linka.en.json', hotove.map((x, i) => x || en[i] || null).filter(Boolean));
       zapis('linka.en.meta.json', meta);
       console.log('  ' + scenar.id);
     } catch (e) {

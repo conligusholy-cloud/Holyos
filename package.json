@@ -18,7 +18,8 @@
     "i18n:sync": "node scripts/compounder-i18n-sync.js",
     "texty:kontrola": "node nastroje/texty-kontrola.js",
     "texty:prelozit": "node nastroje/texty-prelozit.js",
-    "texty:vytahni": "node nastroje/texty-vytahni.js"
+    "texty:vytahni": "node nastroje/texty-vytahni.js",
+    "texty:prohlidka": "node nastroje/texty-prohlidka.js"
   },
   "engines": {
     "node": ">=22.0.0"

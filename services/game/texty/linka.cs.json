@@ -1,3355 +1,3355 @@
 [
- {
-  "id": "stovka",
-  "rod": "",
-  "kroky": [
-   {
-    "t": "Dobrý den, váš automat mi spolkl stovku a nic se nespustilo.",
-    "o": [
-     {
-      "t": "Mrzí mě to. Pošlu vám ji zpátky na účet.",
-      "b": 2,
-      "r": "Dobře, to je fér."
-     },
-     {
-      "t": "Bez dokladu nic nevracíme, to je u samoobsluhy běžné.",
-      "b": -2,
-      "r": "Takže mě okradete a je to?"
-     },
-     {
-      "t": "To se občas stane, zkuste to znovu a snad to projde — mincovníky někdy naberou vlhkost a zasekne se jim mechanika.",
-      "b": -1,
-      "r": "Takže mám hodit další stovku?"
-     }
-    ]
-   },
-   {
-    "t": "A jak dlouho to trvá, než mi ty peníze přijdou?",
-    "o": [
-     {
-      "t": "Do dvou dnů. Kdyby ne, ozvěte se mi přímo.",
-      "b": 2,
-      "r": "Beru."
-     },
-     {
-      "t": "Těžko říct, to má na starosti účetní.",
-      "b": -1,
-      "r": "No super."
-     },
-     {
-      "t": "Obvykle to bývá rychlé.",
-      "b": 0,
-      "r": "Hm."
-     }
-    ]
-   },
-   {
-    "t": "A co teď? Potřebuju to vyprat dneska.",
-    "o": [
-     {
-      "t": "Pustím vám stroj na dálku, za minutu naskočí.",
-      "b": 2,
-      "r": "Vy jste zlato, děkuju!"
-     },
-     {
-      "t": "Tak přijďte zítra.",
-      "b": -2,
-      "r": "Zítra mi to je k ničemu."
-     },
-     {
-      "t": "Zkuste ten vedlejší, tam jde platit i kartou, ale jestli je volný, to vám odsud neřeknu.",
-      "b": 1,
-      "r": "Tak to zkusím."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "svetr",
-  "rod": "z",
-  "kroky": [
-   {
-    "t": "Prala jsem u vás vlněný svetr a je z něj dětská velikost.",
-    "o": [
-     {
-      "t": "To je mi líto. Co jste na něj dala za program?",
-      "b": 2,
-      "r": "Hned se ptáte věcně, to je dobré."
-     },
-     {
-      "t": "Vlna do automatu nepatří, to je vaše chyba.",
-      "b": -2,
-      "r": "Tak to mi teda pomohlo."
-     },
-     {
-      "t": "Za sražení neručíme, máte to napsané na stroji i v podmínkách na webu, podívejte se tam.",
-      "b": -2,
-      "r": "Volám kvůli svetru, ne kvůli podmínkám."
-     }
-    ]
-   },
-   {
-    "t": "Dala jsem šedesát, bylo to předvolené.",
-    "o": [
-     {
-      "t": "Tak to je na vlnu moc. Dám k tomu stroji lepší popisek, ať to nepotká dalšího.",
-      "b": 2,
-      "r": "Aspoň něco."
-     },
-     {
-      "t": "No vidíte, tak to je jasné.",
-      "b": -1,
-      "r": "To mě teda potěšilo."
-     },
-     {
-      "t": "Šedesát je standard, to nemůže nikomu uškodit.",
-      "b": -2,
-      "r": "Tak proč mám ze svetru hadr?"
-     }
-    ]
-   },
-   {
-    "t": "A kdo mi ten svetr zaplatí?",
-    "o": [
-     {
-      "t": "Pošlete mi fotku a účtenku, domluvíme se.",
-      "b": 2,
-      "r": "Dobře, pošlu."
-     },
-     {
-      "t": "Nikdo, prala jste si sama a na stroji je napsané, co do něj patří.",
-      "b": -2,
-      "r": "Končím s váma."
-     },
-     {
-      "t": "Můžu vám dát praní zdarma, víc bohužel ne.",
-      "b": 1,
-      "r": "No, lepší než nic."
-     }
-    ]
-   },
-   {
-    "t": "Dobře. A jak to mám prát příště?",
-    "o": [
-     {
-      "t": "Třicet a nikdy do sušičky.",
-      "b": 2,
-      "r": "Zapsáno. Děkuju."
-     },
-     {
-      "t": "Nějak to zkuste, od toho je to samoobsluha.",
-      "b": -2,
-      "r": "To myslíte vážně?"
-     },
-     {
-      "t": "Vlnu bych radši doma v ruce, v automatu je to vždycky risk, i když dáte nejnižší program a pomalé otáčky.",
-      "b": 0,
-      "r": "Tak to k vám s vlnou nepůjdu."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "drahe",
-  "rod": "",
-  "kroky": [
-   {
-    "t": "Jste moc drazí. Za rohem perou levněji.",
-    "o": [
-     {
-      "t": "Kolik tam platíte?",
-      "b": 2,
-      "r": "Ptáte se správně."
-     },
-     {
-      "t": "Tak jděte za roh, nikdo vás tu nedrží.",
-      "b": -2,
-      "r": "Nebojte, půjdu."
-     },
-     {
-      "t": "Naše ceny vycházejí z toho, že máme nové stroje, otevřeno nonstop a technika do druhého dne.",
-      "b": 1,
-      "r": "To zní jako z letáku."
-     }
-    ]
-   },
-   {
-    "t": "Sto třicet za pračku. U vás dvě stě.",
-    "o": [
-     {
-      "t": "U nás vyperete osmnáct kilo naráz, tam nejspíš šest.",
-      "b": 2,
-      "r": "Hm, to mě nenapadlo."
-     },
-     {
-      "t": "To nejde porovnávat, každý má jiné stroje, jinou vodu i jiné náklady, takže cenu za cyklus fakt neřešte.",
-      "b": -1,
-      "r": "Proč ne?"
-     },
-     {
-      "t": "Tak si tam jděte.",
-      "b": -2,
-      "r": "Však jo."
-     }
-    ]
-   },
-   {
-    "t": "Hm. A dáte mi slevu, nebo vám napíšu recenzi?",
-    "o": [
-     {
-      "t": "Recenzi si napište. Jedno praní vám dám zdarma, ať to zkusíte.",
-      "b": 2,
-      "r": "Tak dobře, zkusím to."
-     },
-     {
-      "t": "Dám vám padesát procent napořád.",
-      "b": -1,
-      "r": "Beru! A řeknu to všem."
-     },
-     {
-      "t": "Tak si pište.",
-      "b": -2,
-      "r": "Spolehněte se."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "dvirka",
-  "rod": "z",
-  "kroky": [
-   {
-    "t": "Nejdou mi otevřít dvířka a mám uvnitř všechno prádlo.",
-    "o": [
-     {
-      "t": "Dotáčí se a odpouští vodu. Dvě minuty a povolí.",
-      "b": 2,
-      "r": "Aha, tak počkám."
-     },
-     {
-      "t": "Zatáhněte za ně pořádně.",
-      "b": -2,
-      "r": "Já vám je ulomím!"
-     },
-     {
-      "t": "Zámek je bezpečnostní a nejde s ním nic dělat, technik přijede nejdřív zítra, do té doby to tam asi zůstane.",
-      "b": -1,
-      "r": "Zítra?!"
-     }
-    ]
-   },
-   {
-    "t": "Už to povolilo. Ale prádlo je úplně mokré.",
-    "o": [
-     {
-      "t": "Neproběhlo odstřeďování. Sušičku máte u mě zdarma, kód pošlu SMSkou.",
-      "b": 2,
-      "r": "To je slušné, děkuju."
-     },
-     {
-      "t": "Tak to dejte do sušičky, je vedle.",
-      "b": 0,
-      "r": "Za další peníze?"
-     },
-     {
-      "t": "To se stává, odstřeďování občas vynechá a nic se tím nezkazí, prádlo doschne doma na balkoně.",
-      "b": -2,
-      "r": "To mi nestačí."
-     }
-    ]
-   },
-   {
-    "t": "A proč to vůbec spadlo?",
-    "o": [
-     {
-      "t": "Mrknu do stroje. Jestli je to závada, pošlu tam dnes technika.",
-      "b": 2,
-      "r": "Dobře, díky."
-     },
-     {
-      "t": "Nejspíš jste ji přecpala.",
-      "b": -1,
-      "r": "Zase si to můžu za všechno sama."
-     },
-     {
-      "t": "Netuším.",
-      "b": -2,
-      "r": "Tak to je mi platné."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "novy",
-  "rod": "",
-  "kroky": [
-   {
-    "t": "Dobrý den, jdu kolem a nevím, jak to funguje. Je to prádelna?",
-    "o": [
-     {
-      "t": "Samoobsluha. Naházíte prádlo, zaplatíte a za 35 minut máte hotovo.",
-      "b": 2,
-      "r": "Aha, tak to zkusím."
-     },
-     {
-      "t": "Je to přece jasné z názvu, kdyby to byla prádelna, stál by tam někdo za pultem a bral vám to prádlo.",
-      "b": -2,
-      "r": "Tohle je zbytečné."
-     },
-     {
-      "t": "Samoobsluha.",
-      "b": 0,
-      "r": "No... dobře."
-     }
-    ]
-   },
-   {
-    "t": "A prášek si mám přinést?",
-    "o": [
-     {
-      "t": "Nemusíte, dávkovač je ve stroji.",
-      "b": 2,
-      "r": "Výborně."
-     },
-     {
-      "t": "To je na vás, každý si to dělá po svém.",
-      "b": 0,
-      "r": "Tak co mi radíte?"
-     },
-     {
-      "t": "Jasně, bez vlastního prášku to nemá cenu, náš dávkovač stejně dávkuje málo a prádlo pak není pořádně vyprané.",
-      "b": -2,
-      "r": "Tak to je skvělá reklama."
-     }
-    ]
-   },
-   {
-    "t": "Kolik ho mám dát?",
-    "o": [
-     {
-      "t": "Odměřený díl. Víc prášku líp nevypere.",
-      "b": 2,
-      "r": "Dobrá rada."
-     },
-     {
-      "t": "Co myslíte, že je potřeba. Já u toho stroje nestojím.",
-      "b": -1,
-      "r": "Proto se ptám vás."
-     },
-     {
-      "t": "Přečtěte si to na obalu, je tam tabulka podle tvrdosti vody a míry zašpinění.",
-      "b": -1,
-      "r": "Stojím u stroje, ne doma."
-     }
-    ]
-   },
-   {
-    "t": "A kde zaplatím?",
-    "o": [
-     {
-      "t": "Kartou na terminálu u dvířek, nebo mincemi.",
-      "b": 2,
-      "r": "Super, jdu na to."
-     },
-     {
-      "t": "Někde tam to je.",
-      "b": -2,
-      "r": "To mi teda pomohlo."
-     },
-     {
-      "t": "Platí se až po doprání.",
-      "b": -2,
-      "r": "Tak to mi stroj nenaskočil."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "pes",
-  "rod": "",
-  "kroky": [
-   {
-    "t": "Můžu u vás vyprat deku po psovi? Nechci si zanést vlastní pračku.",
-    "o": [
-     {
-      "t": "Klidně. Přesně na to to je.",
-      "b": 2,
-      "r": "Super."
-     },
-     {
-      "t": "Zvířecí věci u nás neperem.",
-      "b": -1,
-      "r": "Tak to jdu jinam."
-     },
-     {
-      "t": "To je mi jedno, perte si co chcete.",
-      "b": -2,
-      "r": "Pěkný přístup."
-     }
-    ]
-   },
-   {
-    "t": "A nebude to vadit tomu, kdo bude prát po mně?",
-    "o": [
-     {
-      "t": "Nebude, stroj mezi cykly vypláchne buben sám.",
-      "b": 2,
-      "r": "To je dobře vymyšlené."
-     },
-     {
-      "t": "To nevím, nikdo si zatím nestěžoval, ale asi by jim to vadit mohlo, kdyby to věděli.",
-      "b": -1,
-      "r": "Vy nevíte, jak funguje váš stroj?"
-     },
-     {
-      "t": "Těm je to jedno.",
-      "b": -2,
-      "r": "Mně by to jedno nebylo."
-     }
-    ]
-   },
-   {
-    "t": "A dám ji potom do sušičky?",
-    "o": [
-     {
-      "t": "Klidně, chlupy padají do filtru.",
-      "b": 2,
-      "r": "Děkuju za radu."
-     },
-     {
-      "t": "Sušičku radši ne.",
-      "b": 0,
-      "r": "Aha, tak jo."
-     },
-     {
-      "t": "Dělejte si, co chcete.",
-      "b": -2,
-      "r": "To jsem si mohl ušetřit telefon."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "smrad",
-  "rod": "",
-  "kroky": [
-   {
-    "t": "Prádlo mi po praní smrdí. To není normální.",
-    "o": [
-     {
-      "t": "To opravdu není. Který stroj to byl?",
-      "b": 2,
-      "r": "Dobře, že se ptáte."
-     },
-     {
-      "t": "Smrdělo asi už předtím, stroj za to nemůže.",
-      "b": -2,
-      "r": "To je neuvěřitelné."
-     },
-     {
-      "t": "Zkuste přidat víc aviváže, to to obvykle přebije a prádlo pak voní i několik dní.",
-      "b": -2,
-      "r": "Já nechci přebít smrad, chci ho nemít."
-     }
-    ]
-   },
-   {
-    "t": "Ten krajní, u silnice.",
-    "o": [
-     {
-      "t": "Díky. Nechám mu vyčistit buben a praní máte u mě zdarma.",
-      "b": 2,
-      "r": "To je slušné."
-     },
-     {
-      "t": "Podíváme se na to někdy, až tam technik pojede kvůli něčemu jinému.",
-      "b": -1,
-      "r": "Někdy?"
-     },
-     {
-      "t": "Na ten si nikdo nestěžoval.",
-      "b": -2,
-      "r": "Tak já jsem první."
-     }
-    ]
-   },
-   {
-    "t": "A jak poznám, že je to spravené?",
-    "o": [
-     {
-      "t": "Dám vám vědět, až to technik udělá.",
-      "b": 2,
-      "r": "Budu čekat, děkuju."
-     },
-     {
-      "t": "Prostě to zkusíte.",
-      "b": -1,
-      "r": "Za svoje peníze."
-     },
-     {
-      "t": "To poznáte.",
-      "b": -2,
-      "r": "Díky za nic."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "penzion",
-  "rod": "",
-  "kroky": [
-   {
-    "t": "Mám penzion a potřebuju prát povlečení. Zvládnete to?",
-    "o": [
-     {
-      "t": "Zvládneme. Kolik toho týdně je?",
-      "b": 2,
-      "r": "Hned k věci, to se mi líbí."
-     },
-     {
-      "t": "Přijďte jako každý jiný, rezervace neděláme a pořadí se tu nedrží.",
-      "b": 0,
-      "r": "Tak to asi ne."
-     },
-     {
-      "t": "To nás nezajímá, jedeme na samoobsluhu a ne na firmy.",
-      "b": -2,
-      "r": "Škoda pro vás."
-     }
-    ]
-   },
-   {
-    "t": "Asi sto kilo týdně.",
-    "o": [
-     {
-      "t": "To je pět praní. Domluvím vám pevnou cenu a stroje podržím.",
-      "b": 2,
-      "r": "To zní výborně."
-     },
-     {
-      "t": "Tak to vám bude chvíli trvat, pět praní po pětatřiceti minutách jsou skoro tři hodiny, počítejte s tím.",
-      "b": -1,
-      "r": "To mi moc nepomohlo."
-     },
-     {
-      "t": "Tolik toho nepereme.",
-      "b": -2,
-      "r": "Na co tam ty stroje máte?"
-     }
-    ]
-   },
-   {
-    "t": "A co když bude obsazeno?",
-    "o": [
-     {
-      "t": "Dám vám číslo, zavoláte a já vám stroj uvolním.",
-      "b": 2,
-      "r": "Beru, ozvu se."
-     },
-     {
-      "t": "Tak počkáte.",
-      "b": -2,
-      "r": "S prádlem z penzionu?"
-     },
-     {
-      "t": "To se nestává.",
-      "b": -1,
-      "r": "To mi nestačí."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "soused",
-  "rod": "",
-  "kroky": [
-   {
-    "t": "Váš prádlomat stojí pod mými okny a v noci hučí.",
-    "o": [
-     {
-      "t": "To mě mrzí. V kolik vás to budí nejvíc?",
-      "b": 2,
-      "r": "Aspoň někdo poslouchá."
-     },
-     {
-      "t": "Máme na to povolení od města i hlukovou studii, takže z naší strany je všechno v pořádku.",
-      "b": -1,
-      "r": "To mě netěší."
-     },
-     {
-      "t": "To je váš problém, měl jste se dívat, co se vám staví pod okny.",
-      "b": -2,
-      "r": "Uvidíme, čí to bude problém."
-     }
-    ]
-   },
-   {
-    "t": "Kolem jedenácté, kdy jdou lidi z práce.",
-    "o": [
-     {
-      "t": "Dám tam noční režim s nižšími otáčkami. Vyzkoušíme to týden.",
-      "b": 2,
-      "r": "To by pomohlo."
-     },
-     {
-      "t": "S tím nic nenadělám, stroje běží jak běží a vypínat je na noc kvůli jednomu člověku nebudu.",
-      "b": -2,
-      "r": "Tak to budu řešit jinde."
-     },
-     {
-      "t": "Lidi musí taky prát.",
-      "b": -1,
-      "r": "A já musím spát."
-     }
-    ]
-   },
-   {
-    "t": "A když to nepomůže?",
-    "o": [
-     {
-      "t": "Přijdu se podívat a změříme to.",
-      "b": 2,
-      "r": "Tak to beru."
-     },
-     {
-      "t": "Tak si stěžujte.",
-      "b": -2,
-      "r": "Spolehněte se."
-     },
-     {
-      "t": "Pomůže.",
-      "b": -1,
-      "r": "To uvidíme."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "tenisky",
-  "rod": "",
-  "kroky": [
-   {
-    "t": "Můžu u vás vyprat tenisky?",
-    "o": [
-     {
-      "t": "Můžete. Do sáčku a na třicet.",
-      "b": 2,
-      "r": "Super, díky."
-     },
-     {
-      "t": "Boty ne.",
-      "b": -1,
-      "r": "Aha, škoda."
-     },
-     {
-      "t": "Zkuste to, uvidíte, já vám to nezakazuju ani nedoporučuju.",
-      "b": -2,
-      "r": "To mi teda pomohlo."
-     }
-    ]
-   },
-   {
-    "t": "A do sušičky?",
-    "o": [
-     {
-      "t": "Ty ne, rozlepily by se. Nechte je doschnout doma.",
-      "b": 2,
-      "r": "Dobře, že to vím."
-     },
-     {
-      "t": "Klidně.",
-      "b": -2,
-      "r": "Tak to mi je zničíte."
-     },
-     {
-      "t": "Jak chcete.",
-      "b": -1,
-      "r": "Ptám se, co je lepší."
-     }
-    ]
-   },
-   {
-    "t": "A nezničí mi to buben?",
-    "o": [
-     {
-      "t": "Ne, proto ten sáček.",
-      "b": 2,
-      "r": "Jasně. Děkuju."
-     },
-     {
-      "t": "Může, podrážky jsou tvrdé a buben je plech.",
-      "b": -1,
-      "r": "Tak to tam nedám."
-     },
-     {
-      "t": "To nevím, nikdy jsem to nezkoušel, ale podrážky jsou tvrdé, takže bych se asi nedivil, kdyby jo.",
-      "b": -1,
-      "r": "Tak to mě teda uklidnilo."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "karta",
-  "rod": "m",
-  "kroky": [
-   {
-    "t": "Dobrý den, zaplatil jsem kartou a strhlo se to dvakrát.",
-    "o": [
-     {
-      "t": "Jednu platbu vám hned zruším.",
-      "b": 2,
-      "r": "Děkuju, to je rychlovka."
-     },
-     {
-      "t": "To dělá banka, ne my.",
-      "b": -2,
-      "r": "Peníze mám ale u vás."
-     },
-     {
-      "t": "Podívám se na to, ale terminál občas pošle dvě předautorizace a jedna se sama uvolní, takže možná stačí počkat.",
-      "b": 0,
-      "r": "A co když se neuvolní?"
-     }
-    ]
-   },
-   {
-    "t": "A jak to poznám na výpisu?",
-    "o": [
-     {
-      "t": "To já nevím.",
-      "b": -2,
-      "r": "Tak kde si to mám ověřit?"
-     },
-     {
-      "t": "Přijde vám vratka ve stejné částce, obvykle do tří dnů. Kdyby ne, zavolejte a dořeším to.",
-      "b": 2,
-      "r": "Dobře, díky."
-     },
-     {
-      "t": "Bude tam napsáno storno.",
-      "b": 1,
-      "r": "Tak se podívám."
-     }
-    ]
-   },
-   {
-    "t": "A můžu zatím prát?",
-    "o": [
-     {
-      "t": "Jasně, pustím vám stroj na dálku.",
-      "b": 2,
-      "r": "Super."
-     },
-     {
-      "t": "Až se ta platba vyřeší, do té doby vám stroj nepustím.",
-      "b": -2,
-      "r": "To mám chodit s košem domů?"
-     },
-     {
-      "t": "Zkuste platit mincemi, ale drobné u sebe asi nemáte, že.",
-      "b": -1,
-      "r": "Nemám."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "mraz",
-  "rod": "m",
-  "kroky": [
-   {
-    "t": "Teď v zimě to vůbec jede? Je mínus deset.",
-    "o": [
-     {
-      "t": "Jede. Stroj je vyhřívaný a voda nezamrzne.",
-      "b": 2,
-      "r": "To jsem nevěděl."
-     },
-     {
-      "t": "To zkuste.",
-      "b": -2,
-      "r": "Ptám se vás."
-     },
-     {
-      "t": "Když je takhle zima, radši to nechte na jindy, mohlo by to zamrznout a pak z toho máme opravu.",
-      "b": -2,
-      "r": "Tak na co to tam je."
-     }
-    ]
-   },
-   {
-    "t": "A neztuhne mi prádlo, než ho donesu k autu?",
-    "o": [
-     {
-      "t": "Neztuhne.",
-      "b": 0,
-      "r": "To mi jako má stačit?"
-     },
-     {
-      "t": "Nechte ho projet sušičkou, vyjde teplé a cestou domů nezmrzne.",
-      "b": 2,
-      "r": "Dobrý nápad."
-     },
-     {
-      "t": "Vezměte si rukavice.",
-      "b": -1,
-      "r": "Děkuju za radu století."
-     }
-    ]
-   },
-   {
-    "t": "A kdyby to přece jen zamrzlo?",
-    "o": [
-     {
-      "t": "Zavolejte, pošlu technika hned.",
-      "b": 2,
-      "r": "Beru."
-     },
-     {
-      "t": "To se nám zatím nestalo, takže s tím ani nepočítám.",
-      "b": -1,
-      "r": "Ale stát se to může."
-     },
-     {
-      "t": "Tak to máte smůlu, mráz je vyšší moc.",
-      "b": -2,
-      "r": "Pěkné."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "otviracka",
-  "rod": "m",
-  "kroky": [
-   {
-    "t": "Do kolika máte otevřeno?",
-    "o": [
-     {
-      "t": "Nonstop. Stroj stojí venku a jede pořád.",
-      "b": 2,
-      "r": "To je super."
-     },
-     {
-      "t": "Do osmi večer.",
-      "b": -2,
-      "r": "Tak to nikdy nestihnu."
-     },
-     {
-      "t": "Otevřeno vlastně nemáme, protože to není prádelna, ale stroj, a ten se nezavírá.",
-      "b": 1,
-      "r": "Aha, rozumím."
-     }
-    ]
-   },
-   {
-    "t": "A v noci je to tam bezpečné?",
-    "o": [
-     {
-      "t": "Klidně.",
-      "b": -1,
-      "r": "To mě moc neuklidnilo."
-     },
-     {
-      "t": "Je tam světlo a kamera na automat. Ale v noci je tam člověk sám, to vám nebudu zastírat.",
-      "b": 2,
-      "r": "Oceňuju, že to řeknete na rovinu."
-     },
-     {
-      "t": "To vám nezaručím.",
-      "b": 0,
-      "r": "Hm."
-     }
-    ]
-   },
-   {
-    "t": "A o svátcích?",
-    "o": [
-     {
-      "t": "Taky. Nic nezavíráme.",
-      "b": 2,
-      "r": "Výborně."
-     },
-     {
-      "t": "Svátky řešíme individuálně.",
-      "b": -1,
-      "r": "Co to znamená?"
-     },
-     {
-      "t": "Nevím, podívejte se na web.",
-      "b": -2,
-      "r": "Volám, abych se nemusel dívat."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "peri",
-  "rod": "z",
-  "kroky": [
-   {
-    "t": "Vejde se mi do toho peřina? Mám dvoulůžkovou.",
-    "o": [
-     {
-      "t": "Do velkého stroje ano, bere osm kilo suchého prádla.",
-      "b": 2,
-      "r": "Tak to vezmu."
-     },
-     {
-      "t": "Nevejde.",
-      "b": -2,
-      "r": "A to víte odkud?"
-     },
-     {
-      "t": "Zkuste to tam nacpat, ono se to většinou nějak vejde, a když ne, tak to zase vytáhnete.",
-      "b": -2,
-      "r": "Nacpat peřinu do pračky, to je tedy rada."
-     }
-    ]
-   },
-   {
-    "t": "A vyschne mi v sušičce?",
-    "o": [
-     {
-      "t": "Dejte ji na delší program a přihoďte dva suché ručníky, naberou vlhkost a peří se neslepí.",
-      "b": 2,
-      "r": "To zkusím, díky."
-     },
-     {
-      "t": "Vyschne.",
-      "b": 0,
-      "r": "Určitě?"
-     },
-     {
-      "t": "Peřiny radši nesušíme.",
-      "b": -1,
-      "r": "A co s ní mám podle vás dělat?"
-     }
-    ]
-   },
-   {
-    "t": "Nezničím tím to peří?",
-    "o": [
-     {
-      "t": "Ne, když nedáte vysokou teplotu.",
-      "b": 2,
-      "r": "Dobře, děkuju."
-     },
-     {
-      "t": "To se stát může.",
-      "b": -1,
-      "r": "Tak mi poraďte, jak ne."
-     },
-     {
-      "t": "Peří je peří, to vydrží všechno.",
-      "b": -2,
-      "r": "To si zrovna nemyslím."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "barva",
-  "rod": "z",
-  "kroky": [
-   {
-    "t": "Prala jsem po někom a obarvilo mi to bílé triko.",
-    "o": [
-     {
-      "t": "To je nepříjemné. Který stroj to byl a kdy?",
-      "b": 2,
-      "r": "Dneska ráno, ten prostřední."
-     },
-     {
-      "t": "To si pustil někdo jiný, s tím nic nenaděláme.",
-      "b": -2,
-      "r": "Takže nic."
-     },
-     {
-      "t": "Stroj po každém praní vypláchne buben, takže v něm barva zbýt nemůže — spíš se to obarvilo od něčeho vašeho.",
-      "b": -1,
-      "r": "Vy mi tvrdíte, že lžu?"
-     }
-    ]
-   },
-   {
-    "t": "Dneska ráno, ten prostřední.",
-    "o": [
-     {
-      "t": "Dobře, poznamenám si to.",
-      "b": 0,
-      "r": "A dál?"
-     },
-     {
-      "t": "Pustím na něj prázdný cyklus a prověřím to. Za to triko vám dám praní zdarma.",
-      "b": 2,
-      "r": "To je slušné."
-     },
-     {
-      "t": "To už se nedá dokázat.",
-      "b": -2,
-      "r": "Tak nashledanou."
-     }
-    ]
-   },
-   {
-    "t": "A dá se to triko ještě zachránit?",
-    "o": [
-     {
-      "t": "Zkuste ho vyprat hned znovu, dokud barva nezaschla.",
-      "b": 2,
-      "r": "Jdu to udělat."
-     },
-     {
-      "t": "To nevím, nejsem chemik.",
-      "b": -1,
-      "r": "Stačilo říct, co byste udělal vy."
-     },
-     {
-      "t": "Asi ne, s tím už vám nepomůžu, tohle je spíš na čistírnu.",
-      "b": -1,
-      "r": "Děkuju za optimismus."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "susicka",
-  "rod": "z",
-  "kroky": [
-   {
-    "t": "Sušička mi nedosušila, prádlo je po celém cyklu vlhké.",
-    "o": [
-     {
-      "t": "To nemá být. Byl ten buben plný?",
-      "b": 2,
-      "r": "No, nacpala jsem ho dost."
-     },
-     {
-      "t": "Dala jste tam moc věcí.",
-      "b": -1,
-      "r": "To říkáte, aniž byste věděl kolik."
-     },
-     {
-      "t": "Sušení záleží na spoustě věcí — na tom, co sušíte, jak to bylo odstředěné a jak je venku chladno.",
-      "b": 0,
-      "r": "Takže?"
-     }
-    ]
-   },
-   {
-    "t": "No, nacpala jsem ho dost.",
-    "o": [
-     {
-      "t": "No vidíte.",
-      "b": -2,
-      "r": "Nemusíte mě poučovat."
-     },
-     {
-      "t": "Tak to bude tím — sušička potřebuje, aby se prádlo volně otáčelo. Dejte půlku a uvidíte rozdíl.",
-      "b": 2,
-      "r": "Dobře, zkusím to."
-     },
-     {
-      "t": "I tak to mělo usušit.",
-      "b": 0,
-      "r": "Tak co teda?"
-     }
-    ]
-   },
-   {
-    "t": "A zaplatím si to sušení znovu?",
-    "o": [
-     {
-      "t": "Ne, tohle jedno vám pustím zdarma.",
-      "b": 2,
-      "r": "Děkuju."
-     },
-     {
-      "t": "Zaplatíte, stroj běžel.",
-      "b": -1,
-      "r": "Ale nedosušil."
-     },
-     {
-      "t": "To už neřeším, stroj běžel a tím to pro mě končí.",
-      "b": -2,
-      "r": "Skvělý přístup."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "miminko",
-  "rod": "z",
-  "kroky": [
-   {
-    "t": "Můžu u vás prát věci po miminku?",
-    "o": [
-     {
-      "t": "Můžete. Dejte šedesát, to je na dětské prádlo tak akorát.",
-      "b": 2,
-      "r": "Dobře."
-     },
-     {
-      "t": "Jasně.",
-      "b": 0,
-      "r": "A na kolik stupňů?"
-     },
-     {
-      "t": "Klidně, ale upřímně bych dětské věci do veřejné pračky nedával, nikdy nevíte, co tam kdo pral před vámi.",
-      "b": -2,
-      "r": "Tak proč to provozujete?"
-     }
-    ]
-   },
-   {
-    "t": "A zbyde tam prášek po tom, kdo pral přede mnou?",
-    "o": [
-     {
-      "t": "Nezbyde.",
-      "b": 1,
-      "r": "Tak dobře."
-     },
-     {
-      "t": "Ne, stroj mezi praními vypláchne buben čistou vodou a prášek si dávkuje sám, takže se nic nenahromadí.",
-      "b": 2,
-      "r": "To mě uklidnilo."
-     },
-     {
-      "t": "Něco tam vždycky zbyde.",
-      "b": -2,
-      "r": "Tak to teda ne."
-     }
-    ]
-   },
-   {
-    "t": "A aviváž tam mám dávat?",
-    "o": [
-     {
-      "t": "U dětských věcí ji radši vynechte.",
-      "b": 2,
-      "r": "Děkuju za radu."
-     },
-     {
-      "t": "Dejte si, co chcete, do toho vám mluvit nebudu.",
-      "b": -1,
-      "r": "Ptala jsem se na doporučení."
-     },
-     {
-      "t": "To je jedno, aviváž ještě nikdy nikomu nic nezkazila.",
-      "b": -1,
-      "r": "U dětské kůže bych si tím nebyla tak jistá."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "faktura",
-  "rod": "m",
-  "kroky": [
-   {
-    "t": "Potřeboval bych na praní doklad pro firmu.",
-    "o": [
-     {
-      "t": "Pošlu vám fakturu na mail. Jaké máte IČO?",
-      "b": 2,
-      "r": "Hned vám ho nadiktuju."
-     },
-     {
-      "t": "Doklady u samoobsluhy neděláme.",
-      "b": -2,
-      "r": "Tak to si prádlo odvezu jinam."
-     },
-     {
-      "t": "Terminál tiskne útržek z platby, ale ten vám do účetnictví asi nestačí, takže nevím, co s tím.",
-      "b": -1,
-      "r": "Proto právě volám."
-     }
-    ]
-   },
-   {
-    "t": "Jsme eseróčko, platíme firemní kartou.",
-    "o": [
-     {
-      "t": "Tak to je jednoduché.",
-      "b": 0,
-      "r": "A co mám tedy udělat?"
-     },
-     {
-      "t": "Výborně, ty platby umím v systému dohledat a poslat vám souhrnnou fakturu jednou měsíčně.",
-      "b": 2,
-      "r": "To by nám sedlo."
-     },
-     {
-      "t": "Firemní karty tu radši nepoužívejte.",
-      "b": -2,
-      "r": "Proč ne?"
-     }
-    ]
-   },
-   {
-    "t": "A dá se to nastavit natrvalo?",
-    "o": [
-     {
-      "t": "Dá. Nastavím vám to ještě dneska.",
-      "b": 2,
-      "r": "Děkuju."
-     },
-     {
-      "t": "Uvidíme, teď vám nic slibovat nebudu.",
-      "b": -1,
-      "r": "To není odpověď."
-     },
-     {
-      "t": "To byste musel na účetní, ta tu ale dneska není a zítra má volno.",
-      "b": -1,
-      "r": "Vy to nevyřídíte?"
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "kamery",
-  "rod": "m",
-  "kroky": [
-   {
-    "t": "Někdo mi z automatu vzal prádlo. Máte tam kamery?",
-    "o": [
-     {
-      "t": "Kamera tam je. Řekněte mi čas a podívám se na záznam.",
-      "b": 2,
-      "r": "Bylo to kolem páté odpoledne."
-     },
-     {
-      "t": "Máme, hned vám ten záznam pošlu.",
-      "b": -2,
-      "r": "To byste asi jen tak posílat neměl, ne?"
-     },
-     {
-      "t": "Kamery tam jsou, ale záznam vám dát nemůžu, ten se předává policii.",
-      "b": 1,
-      "r": "Aspoň něco."
-     }
-    ]
-   },
-   {
-    "t": "Bylo to kolem páté odpoledne.",
-    "o": [
-     {
-      "t": "Podívám se.",
-      "b": 1,
-      "r": "Dobře."
-     },
-     {
-      "t": "Projdu to, a když tam někdo bude, předám to policii. Vám dám potvrzení, že se to stalo.",
-      "b": 2,
-      "r": "To mi pomůže."
-     },
-     {
-      "t": "V pět tam chodí spousta lidí, to nedohledám.",
-      "b": -2,
-      "r": "Ani jste se nepodíval."
-     }
-    ]
-   },
-   {
-    "t": "A nahradíte mi to?",
-    "o": [
-     {
-      "t": "To bohužel ne, ale příští praní jde za mnou.",
-      "b": 2,
-      "r": "Fér."
-     },
-     {
-      "t": "Za věci ve stroji neručíme, je to tam napsané.",
-      "b": -1,
-      "r": "Technicky máte pravdu, lidsky ne."
-     },
-     {
-      "t": "To jste si měl hlídat.",
-      "b": -2,
-      "r": "Děkuju za pochopení."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "prepln",
-  "rod": "m",
-  "kroky": [
-   {
-    "t": "Vypral jsem si a prádlo je pořád špinavé.",
-    "o": [
-     {
-      "t": "Podívám se na ten stroj. Kolik jste toho dal dovnitř? Buben má být tak do tří čtvrtin.",
-      "b": 2,
-      "r": "No, byl plný až nahoru."
-     },
-     {
-      "t": "Dal jste tam moc.",
-      "b": -1,
-      "r": "To přece nemůžete vědět."
-     },
-     {
-      "t": "Tak si perte doma.",
-      "b": -2,
-      "r": "Pěkné."
-     }
-    ]
-   },
-   {
-    "t": "No, byl plný až nahoru.",
-    "o": [
-     {
-      "t": "To je ono.",
-      "b": 0,
-      "r": "A co teď?"
-     },
-     {
-      "t": "Pak se prádlo nemá jak hýbat a nevypere se. Příště nechte nahoře dlaň místa.",
-      "b": 2,
-      "r": "Aha, to dává smysl."
-     },
-     {
-      "t": "No vidíte, takže to není vada stroje, ale chyba obsluhy, tedy vaše.",
-      "b": -2,
-      "r": "Nemusíte mi to podávat takhle."
-     }
-    ]
-   },
-   {
-    "t": "Dobře, a vyperu to znovu za svoje?",
-    "o": [
-     {
-      "t": "Tentokrát to jde za mnou.",
-      "b": 2,
-      "r": "To je slušné, děkuju."
-     },
-     {
-      "t": "Ano, stroj běžel správně.",
-      "b": -1,
-      "r": "Chápu, ale mrzí mě to."
-     },
-     {
-      "t": "Zkuste to znovu a uvidíme, jak to dopadne.",
-      "b": -1,
-      "r": "Co uvidíme?"
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "monterky",
-  "rod": "m",
-  "kroky": [
-   {
-    "t": "Můžu u vás vyprat montérky od oleje?",
-    "o": [
-     {
-      "t": "Vyprat ano. Ale do sušičky je pak nedávejte.",
-      "b": 2,
-      "r": "Proč ne?"
-     },
-     {
-      "t": "Klidně, všechno.",
-      "b": -2,
-      "r": "I do sušičky?"
-     },
-     {
-      "t": "Můžete, u nás si každý pere, co chce — montérky, hadry, klidně i koberce, stroj to zvládne.",
-      "b": -1,
-      "r": "To mě zrovna neuklidnilo."
-     }
-    ]
-   },
-   {
-    "t": "Proč ne?",
-    "o": [
-     {
-      "t": "Je to tak doporučené.",
-      "b": 0,
-      "r": "Ale proč?"
-     },
-     {
-      "t": "Zbytky oleje se v horkém bubnu můžou vznítit. Nechte je doschnout na vzduchu, je to bezpečnější.",
-      "b": 2,
-      "r": "To jsem netušil, díky."
-     },
-     {
-      "t": "Protože by to smrdělo.",
-      "b": -1,
-      "r": "To mi nepřijde jako důvod."
-     }
-    ]
-   },
-   {
-    "t": "A nezanesu tím stroj ostatním?",
-    "o": [
-     {
-      "t": "Ne, stroj po vás buben vypláchne.",
-      "b": 2,
-      "r": "Dobře, díky."
-     },
-     {
-      "t": "Trochu jo, ale to nikdo nepozná.",
-      "b": -2,
-      "r": "To se mi vůbec nelíbí."
-     },
-     {
-      "t": "Těžko říct, to vám takhle po telefonu nepovím.",
-      "b": -1,
-      "r": "Vy to nevíte?"
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "koberec",
-  "rod": "m",
-  "kroky": [
-   {
-    "t": "Vejde se do vaší pračky předložka z koupelny?",
-    "o": [
-     {
-      "t": "Látková ano. Gumová ne, ta se v bubnu drolí.",
-      "b": 2,
-      "r": "Ta moje je látková."
-     },
-     {
-      "t": "Nevejde.",
-      "b": -1,
-      "r": "Ani malá?"
-     },
-     {
-      "t": "To záleží na tom, jak je velká, jak je těžká, kolik nasákne a co má na spodní straně.",
-      "b": 0,
-      "r": "Je to obyčejná předložka."
-     }
-    ]
-   },
-   {
-    "t": "Ta moje je látková, metr na půl metru.",
-    "o": [
-     {
-      "t": "Tak to jde.",
-      "b": 1,
-      "r": "Fajn."
-     },
-     {
-      "t": "V pohodě. Dejte ji samotnou, nasákne hodně vody a s dalším prádlem by stroj nestíhal.",
-      "b": 2,
-      "r": "Dobře, vezmu ji zvlášť."
-     },
-     {
-      "t": "Zkuste to a uvidíte.",
-      "b": -1,
-      "r": "Radši bych to věděl předem."
-     }
-    ]
-   },
-   {
-    "t": "A usuším ji u vás?",
-    "o": [
-     {
-      "t": "Ano, na nižší teplotu a déle.",
-      "b": 2,
-      "r": "Jasné, děkuju."
-     },
-     {
-      "t": "Sušička je na prádlo, ne na koberce.",
-      "b": -1,
-      "r": "Vždyť jste říkal, že se to vyprat dá."
-     },
-     {
-      "t": "To už je na vás.",
-      "b": -2,
-      "r": "Ptám se vás, vy to tam provozujete."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "proud",
-  "rod": "",
-  "kroky": [
-   {
-    "t": "Uprostřed praní vypadl proud a stroj stojí s mým prádlem uvnitř.",
-    "o": [
-     {
-      "t": "Odemknu vám dvířka na dálku. Vydržte minutu.",
-      "b": 2,
-      "r": "Děkuju!"
-     },
-     {
-      "t": "To je výpadek u distributora, s tím nic nenadělám.",
-      "b": -2,
-      "r": "A moje prádlo?"
-     },
-     {
-      "t": "Počkejte, až se to rozjede — stroj si pamatuje, kde skončil, a dopere to sám, i když to může chvíli trvat.",
-      "b": 1,
-      "r": "Tak počkám."
-     }
-    ]
-   },
-   {
-    "t": "A dopere se to, nebo začínám znovu?",
-    "o": [
-     {
-      "t": "Dopere.",
-      "b": 1,
-      "r": "Tak jo."
-     },
-     {
-      "t": "Naváže tam, kde skončil. A kdyby ne, pustím vám celý cyklus znovu a zdarma.",
-      "b": 2,
-      "r": "To je fér."
-     },
-     {
-      "t": "To vám neřeknu.",
-      "b": -2,
-      "r": "Vy jste ta infolinka, ne?"
-     }
-    ]
-   },
-   {
-    "t": "A stává se to často?",
-    "o": [
-     {
-      "t": "Ne. Za celý rok podruhé.",
-      "b": 2,
-      "r": "Tak to beru."
-     },
-     {
-      "t": "Občas se to stane, na té lokalitě je to dané.",
-      "b": -1,
-      "r": "To nezní dobře."
-     },
-     {
-      "t": "Elektřina je u nás vůbec problém, loni jsme to řešili snad pětkrát.",
-      "b": -2,
-      "r": "Tak to tam radši prát nebudu."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "sleva",
-  "rod": "",
-  "kroky": [
-   {
-    "t": "Chodím k vám třikrát týdně. Nemáte něco pro stálé zákazníky?",
-    "o": [
-     {
-      "t": "Můžu vám založit předplacený kredit se slevou. Chcete?",
-      "b": 2,
-      "r": "To zní dobře."
-     },
-     {
-      "t": "Nemáme.",
-      "b": -1,
-      "r": "Škoda."
-     },
-     {
-      "t": "Slevy nedáváme, cena je pro všechny stejná, a kdybychom slevili jednomu, chtěli by to hned všichni.",
-      "b": -1,
-      "r": "Nemusíte mi vysvětlovat ekonomiku."
-     }
-    ]
-   },
-   {
-    "t": "A kolik by ta sleva byla?",
-    "o": [
-     {
-      "t": "Pár procent.",
-      "b": 0,
-      "r": "Kolik přesně?"
-     },
-     {
-      "t": "Při dobití na deset praní desetina dolů. Kredit nepropadá, zůstane vám, dokud ho nevyberete.",
-      "b": 2,
-      "r": "Tak to beru."
-     },
-     {
-      "t": "To ještě vymyslíme.",
-      "b": -1,
-      "r": "Radši bych slyšel číslo."
-     }
-    ]
-   },
-   {
-    "t": "A platí to i na sušičku?",
-    "o": [
-     {
-      "t": "Platí, na obojí.",
-      "b": 2,
-      "r": "Výborně."
-     },
-     {
-      "t": "Zatím jen na praní, sušičku jsme do toho nedali.",
-      "b": 0,
-      "r": "Aha, tak dobře."
-     },
-     {
-      "t": "To nevím, musel bych se podívat, jak to máme nastavené v systému.",
-      "b": -1,
-      "r": "Tak mi zavolejte, až to budete vědět."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "parkovani",
-  "rod": "m",
-  "kroky": [
-   {
-    "t": "Dá se u vašeho automatu zaparkovat? Vozím prádlo autem.",
-    "o": [
-     {
-      "t": "Jsou tam dvě místa přímo u stroje, většinou bývá volno.",
-      "b": 2,
-      "r": "Tak to je dobré."
-     },
-     {
-      "t": "Nevím.",
-      "b": -2,
-      "r": "To je přece vaše místo."
-     },
-     {
-      "t": "Parkování neřešíme, to je věc města a my k tomu nemáme co říct.",
-      "b": -1,
-      "r": "Ptám se prakticky, ne úředně."
-     }
-    ]
-   },
-   {
-    "t": "A v sobotu, když je vedle trh?",
-    "o": [
-     {
-      "t": "To bude horší.",
-      "b": 0,
-      "r": "Tak kdy teda?"
-     },
-     {
-      "t": "V sobotu dopoledne je plno. Kdybyste přijel po poledni, máte to tam volné.",
-      "b": 2,
-      "r": "Díky, zařídím se podle toho."
-     },
-     {
-      "t": "Tak přijeďte jindy.",
-      "b": -1,
-      "r": "Děkuju za radu."
-     }
-    ]
-   },
-   {
-    "t": "A zastavit aspoň na chvíli u dvířek?",
-    "o": [
-     {
-      "t": "To jde, na vyložení to tam stačí.",
-      "b": 2,
-      "r": "Super."
-     },
-     {
-      "t": "Stát tam nesmíte, je tam zákaz, to snad víte.",
-      "b": -1,
-      "r": "Ani na minutu?"
-     },
-     {
-      "t": "Nedoporučuju, chodí tam strážníci a pokutují.",
-      "b": 1,
-      "r": "Dobře, že to vím."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "svatba",
-  "rod": "z",
-  "kroky": [
-   {
-    "t": "Zítra se vdávám a na šatech mám flek od vína. Zvládne to váš automat?",
-    "o": [
-     {
-      "t": "Svatební šaty bych do automatu nedávala. Zkuste čistírnu, tohle je na ruční práci.",
-      "b": 2,
-      "r": "Děkuju za upřímnost."
-     },
-     {
-      "t": "Jasně, hoďte to tam, program na jemné to dá.",
-      "b": -2,
-      "r": "A když to zničím, co pak?"
-     },
-     {
-      "t": "To záleží na materiálu.",
-      "b": 0,
-      "r": "Je to hedvábí."
-     }
-    ]
-   },
-   {
-    "t": "A kdybych to jen vymáchala, abych to měla aspoň svěží?",
-    "o": [
-     {
-      "t": "Když to musí být dneska, dejte ruční program na dvacet stupňů bez odstřeďování. Ale ten flek to nevezme.",
-      "b": 2,
-      "r": "Dobře, zkusím to opatrně."
-     },
-     {
-      "t": "To je jedno, máchání je máchání.",
-      "b": -1,
-      "r": "Tak to mi moc nepomohlo."
-     },
-     {
-      "t": "Radši nic.",
-      "b": 0,
-      "r": "Hm."
-     }
-    ]
-   },
-   {
-    "t": "A sušičku na to pustit můžu?",
-    "o": [
-     {
-      "t": "V žádném případě. Hedvábí v sušičce se srazí a je po šatech.",
-      "b": 2,
-      "r": "Tak to teda ne. Díky!"
-     },
-     {
-      "t": "Chvilku na nejnižší teplotu klidně.",
-      "b": -2,
-      "r": "Vy mi ty šaty chcete zničit?"
-     },
-     {
-      "t": "To už je na vás.",
-      "b": -1,
-      "r": "Ptám se, protože vy tomu máte rozumět."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "nocni",
-  "rod": "m",
-  "kroky": [
-   {
-    "t": "Dělám na nočních. Dostanu se k vám ve tři ráno?",
-    "o": [
-     {
-      "t": "Dostanete, je to nonstop. Odemyká se kartou nebo přes aplikaci.",
-      "b": 2,
-      "r": "To je přesně to, co potřebuju."
-     },
-     {
-      "t": "V noci tam radši nechoďte.",
-      "b": -2,
-      "r": "Tak proč to máte otevřené?"
-     },
-     {
-      "t": "Otevřeno je pořád, ale v noci tam nikdo není.",
-      "b": 0,
-      "r": "To mi je jasné, je to samoobsluha."
-     }
-    ]
-   },
-   {
-    "t": "A je tam v noci vidět? Nerad bych tam šmátral po tmě.",
-    "o": [
-     {
-      "t": "Světlo se rozsvítí na pohyb a svítí celý cyklus.",
-      "b": 2,
-      "r": "Výborně."
-     },
-     {
-      "t": "Vezměte si baterku.",
-      "b": -2,
-      "r": "To myslíte vážně?"
-     },
-     {
-      "t": "Něco tam svítí.",
-      "b": -1,
-      "r": "Tak to zní nejistě."
-     }
-    ]
-   },
-   {
-    "t": "A kdyby se to v noci zaseklo, komu volám?",
-    "o": [
-     {
-      "t": "Mně. Tohle číslo bere člověk i ve tři ráno.",
-      "b": 2,
-      "r": "Tak to je slovo do pranice. Díky."
-     },
-     {
-      "t": "Napište nám mail, ráno to vyřídíme.",
-      "b": -1,
-      "r": "A co mám do rána dělat s mokrým prádlem?"
-     },
-     {
-      "t": "V noci nikdo nebere, ale stroj si to pamatuje a ráno to doběhne.",
-      "b": -1,
-      "r": "Hm, uvidím."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "ztrata",
-  "rod": "z",
-  "kroky": [
-   {
-    "t": "Zapomněla jsem si u vás prádlo v bubnu, byla jsem tam před hodinou.",
-    "o": [
-     {
-      "t": "Podívám se do systému, který stroj to byl, a zamknu ho, dokud nedorazíte.",
-      "b": 2,
-      "r": "To jste mě zachránil."
-     },
-     {
-      "t": "To už tam asi nebude.",
-      "b": -2,
-      "r": "Vy mě fakt umíte uklidnit."
-     },
-     {
-      "t": "Zajeďte se tam podívat.",
-      "b": 0,
-      "r": "To jsem chtěla udělat tak jako tak."
-     }
-    ]
-   },
-   {
-    "t": "A co když to někdo vyndal? Byly tam dětské věci.",
-    "o": [
-     {
-      "t": "Vyndané prádlo dáváme do boxu vedle stroje, nikdo s tím neodchází.",
-      "b": 2,
-      "r": "Tak to se mi ulevilo."
-     },
-     {
-      "t": "Za věci v automatu neručíme, to je v podmínkách.",
-      "b": -2,
-      "r": "Ptám se, co s tím uděláte, ne co nemusíte."
-     },
-     {
-      "t": "Většinou se nic neztratí.",
-      "b": 0,
-      "r": "Většinou."
-     }
-    ]
-   },
-   {
-    "t": "A co mi poradíte, abych to zas nezapomněla?",
-    "o": [
-     {
-      "t": "Zapněte si v aplikaci upozornění na konec praní. Pípne vám to.",
-      "b": 2,
-      "r": "To si nastavím hned."
-     },
-     {
-      "t": "Prostě si to pamatujte.",
-      "b": -2,
-      "r": "Děkuju za radu."
-     },
-     {
-      "t": "Dejte si budík v telefonu.",
-      "b": 1,
-      "r": "To není špatný nápad."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "mince",
-  "rod": "m",
-  "kroky": [
-   {
-    "t": "Stojím u automatu a nemám drobné. Bere to mince, nebo kartu?",
-    "o": [
-     {
-      "t": "Kartou i telefonem, mince nepotřebujete vůbec.",
-      "b": 2,
-      "r": "Super, tak to zkusím."
-     },
-     {
-      "t": "Mince jsou jistota, zajeďte si vyměnit.",
-      "b": -2,
-      "r": "Kam, ve čtvrt na deset večer?"
-     },
-     {
-      "t": "Obojí, jak chcete.",
-      "b": 1,
-      "r": "Tak dobře."
-     }
-    ]
-   },
-   {
-    "t": "A nestrhne mi to víc, než kolik propeřu?",
-    "o": [
-     {
-      "t": "Předautorizuje se vyšší částka a zbytek se vrátí do dvou dnů. Zaplatíte jen to, co propral.",
-      "b": 2,
-      "r": "Aha, tak to je v pořádku."
-     },
-     {
-      "t": "To se nám občas stane.",
-      "b": -2,
-      "r": "Tak to radši nezkouším."
-     },
-     {
-      "t": "Strhne přesně cenu programu.",
-      "b": 1,
-      "r": "Dobře."
-     }
-    ]
-   },
-   {
-    "t": "A kdyby to platbu nevzalo?",
-    "o": [
-     {
-      "t": "Zkuste to ještě jednou a pak mi zavolejte, pustím vám stroj na dálku.",
-      "b": 2,
-      "r": "To je služba."
-     },
-     {
-      "t": "To se stát nemůže.",
-      "b": -1,
-      "r": "Všechno se může stát."
-     },
-     {
-      "t": "Terminál občas vypadne, to je signálem.",
-      "b": -1,
-      "r": "Takže mám smůlu?"
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "voda",
-  "rod": "",
-  "kroky": [
-   {
-    "t": "Kolem vašeho automatu je louže. Teče to z něj?",
-    "o": [
-     {
-      "t": "Díky, že voláte. Posílám tam technika a stroj zatím odstavím.",
-      "b": 2,
-      "r": "Tak to je rychlovka, díky."
-     },
-     {
-      "t": "To bude po někom jiném.",
-      "b": -2,
-      "r": "A kdyby ne?"
-     },
-     {
-      "t": "Občas tam zůstane voda po vypouštění.",
-      "b": 0,
-      "r": "Je toho dost."
-     }
-    ]
-   },
-   {
-    "t": "Můžu ten stroj zatím používat, nebo se mi to vylije?",
-    "o": [
-     {
-      "t": "Nepoužívejte ho. Vedle je druhý, ten je v pořádku.",
-      "b": 2,
-      "r": "Tak zkusím ten."
-     },
-     {
-      "t": "Klidně perte, voda nikomu neublížila.",
-      "b": -2,
-      "r": "A když se zkratuje?"
-     },
-     {
-      "t": "Já bych to risknul.",
-      "b": -2,
-      "r": "Já teda ne."
-     }
-    ]
-   },
-   {
-    "t": "A dostanu něco za to, že jsem vám to nahlásil?",
-    "o": [
-     {
-      "t": "Praní zdarma, pošlu vám kód do zprávy. Díky, bez vás bych se to dozvěděl až od technika.",
-      "b": 2,
-      "r": "To mě potěšilo."
-     },
-     {
-      "t": "To po nás nikdo nemůže chtít.",
-      "b": -2,
-      "r": "Já nic nechtěl, jen se ptám."
-     },
-     {
-      "t": "Nic takového nemáme, ale díky.",
-      "b": 0,
-      "r": "Budiž."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "prasek",
-  "rod": "z",
-  "kroky": [
-   {
-    "t": "Jaký prášek tam dáváte? Mám citlivou pokožku a nesnesu silné parfémy.",
-    "o": [
-     {
-      "t": "Jede tam neparfémovaná drogerie. Složení vám pošlu, ať si to můžete ověřit.",
-      "b": 2,
-      "r": "To jste hodný, děkuju."
-     },
-     {
-      "t": "Běžný prášek jako všude.",
-      "b": -1,
-      "r": "To mi nic neříká."
-     },
-     {
-      "t": "To fakt nevím, to řeší kolega.",
-      "b": -2,
-      "r": "Tak mě s ním spojte."
-     }
-    ]
-   },
-   {
-    "t": "A můžu si přinést vlastní?",
-    "o": [
-     {
-      "t": "Můžete, je tam přihrádka. Dávkujte polovinu, stroje berou míň než domácí pračka.",
-      "b": 2,
-      "r": "Perfektní, tak to udělám."
-     },
-     {
-      "t": "To nejde, systém dávkuje sám.",
-      "b": -1,
-      "r": "Škoda."
-     },
-     {
-      "t": "Vlastní prášky zakazujeme, ničí nám to stroje.",
-      "b": -2,
-      "r": "Tak já zas ničím vaše stroje."
-     }
-    ]
-   },
-   {
-    "t": "A proplachuje se to mezi zákazníky, nebo peru v cizí pěně?",
-    "o": [
-     {
-      "t": "Po každém cyklu jede proplach čistou vodou, a jednou týdně dezinfekce bubnu.",
-      "b": 2,
-      "r": "To jsem chtěla slyšet."
-     },
-     {
-      "t": "Voda je voda.",
-      "b": -2,
-      "r": "To je dost nechutná odpověď."
-     },
-     {
-      "t": "Buben se proplachuje, to je v pořádku.",
-      "b": 1,
-      "r": "Dobře."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "kolo",
-  "rod": "m",
-  "kroky": [
-   {
-    "t": "Přijel jsem z vyjížďky, dres a bunda jsou od bláta. Dá se to u vás vyprat?",
-    "o": [
-     {
-      "t": "Dá, jen nejdřív oklepejte hrubé bláto venku — jinak to jde do filtru.",
-      "b": 2,
-      "r": "Tak to udělám."
-     },
-     {
-      "t": "Zablácené věci do automatu nepatří.",
-      "b": -2,
-      "r": "A kam teda patří?"
-     },
-     {
-      "t": "Hoďte to tam, to je jedno.",
-      "b": -1,
-      "r": "Nechci vám zanést stroj."
-     }
-    ]
-   },
-   {
-    "t": "A membránovou bundu to nezničí? Stála pět tisíc.",
-    "o": [
-     {
-      "t": "Dejte třicet stupňů, žádnou aviváž a nízké odstřeďování. Membrána to vydrží.",
-      "b": 2,
-      "r": "Díky, to jsem potřeboval."
-     },
-     {
-      "t": "Membrány se do automatu nedávají.",
-      "b": -1,
-      "r": "Tak to si vyperu doma."
-     },
-     {
-      "t": "To vám neřeknu, to je na výrobci.",
-      "b": 0,
-      "r": "Hm."
-     }
-    ]
-   },
-   {
-    "t": "A batoh? Je po něm celé auto.",
-    "o": [
-     {
-      "t": "Batoh vyndejte z rámu, zapněte všechny zipy a dejte na jemné. Sušičku ne, to by roztavilo zipy.",
-      "b": 2,
-      "r": "Jasně, díky za tip."
-     },
-     {
-      "t": "Batohy neperte, zničí se.",
-      "b": 0,
-      "r": "Takže mám smůlu."
-     },
-     {
-      "t": "To je mi jedno, zaplaceno máte.",
-      "b": -2,
-      "r": "Tak to přeju hezký den."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "zdrazeni",
-  "rod": "",
-  "kroky": [
-   {
-    "t": "Minule jsem platil míň. Vy jste zdražili?",
-    "o": [
-     {
-      "t": "Zdražili, o deset korun za cyklus. Šla nahoru voda a elektřina, dýl už jsme to držet nemohli.",
-      "b": 2,
-      "r": "Aspoň to říkáte na rovinu."
-     },
-     {
-      "t": "Ceny jsou pořád stejné.",
-      "b": -2,
-      "r": "Mám účtenku, na které to je jinak."
-     },
-     {
-      "t": "To rozhoduje vedení.",
-      "b": -1,
-      "r": "Vy jste vedení, ne?"
-     }
-    ]
-   },
-   {
-    "t": "A to jste nemohli dát vědět dopředu?",
-    "o": [
-     {
-      "t": "Máte pravdu, mělo to viset na dveřích týden předem. Příště to tak bude.",
-      "b": 2,
-      "r": "Tak dobře."
-     },
-     {
-      "t": "Cedule tam visela.",
-      "b": -1,
-      "r": "Nevšiml jsem si."
-     },
-     {
-      "t": "To nikdo nedělá.",
-      "b": -2,
-      "r": "Slušní lidi to dělají."
-     }
-    ]
-   },
-   {
-    "t": "Nemáte něco pro ty, co k vám chodí pravidelně?",
-    "o": [
-     {
-      "t": "Kredit na deset praní, tam je cena pořád ta stará. Můžu vám ho založit teď.",
-      "b": 2,
-      "r": "Tak to beru."
-     },
-     {
-      "t": "Nemáme a mít nebudeme.",
-      "b": -2,
-      "r": "Příště zkusím konkurenci."
-     },
-     {
-      "t": "Něco chystáme.",
-      "b": 0,
-      "r": "Dejte vědět."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "deti",
-  "rod": "z",
-  "kroky": [
-   {
-    "t": "U vašeho automatu si hrají děti, lezou do bubnu. Víte o tom?",
-    "o": [
-     {
-      "t": "Nevěděl, díky. Dám tam zámek dvířek mimo cyklus a zajedu se tam podívat.",
-      "b": 2,
-      "r": "To je dobře."
-     },
-     {
-      "t": "Za cizí děti neručíme.",
-      "b": -2,
-      "r": "Jde o to, aby se nikomu nic nestalo."
-     },
-     {
-      "t": "To mají hlídat rodiče.",
-      "b": -1,
-      "r": "To jistě, ale stroj je váš."
-     }
-    ]
-   },
-   {
-    "t": "A jdou ta dvířka zevnitř otevřít?",
-    "o": [
-     {
-      "t": "Jdou. Zámek drží jen při běhu a při výpadku proudu se sám rozepne.",
-      "b": 2,
-      "r": "To jsem chtěla slyšet."
-     },
-     {
-      "t": "To jsem nikdy nezkoušel.",
-      "b": -1,
-      "r": "Tak to zkuste."
-     },
-     {
-      "t": "Zevnitř ne, ale tam se nikdo nevejde.",
-      "b": -2,
-      "r": "Osmiletý kluk se vejde."
-     }
-    ]
-   },
-   {
-    "t": "Nechcete tam dát cedulku, ať to vidí i rodiče?",
-    "o": [
-     {
-      "t": "Dobrý nápad, objednám ji ještě dnes. Díky za postrčení.",
-      "b": 2,
-      "r": "Není zač."
-     },
-     {
-      "t": "Cedulky nikdo nečte.",
-      "b": -1,
-      "r": "Některé se čtou."
-     },
-     {
-      "t": "Máme tam dost cedulí.",
-      "b": -2,
-      "r": "Tak nashledanou."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "klub",
-  "rod": "m",
-  "kroky": [
-   {
-    "t": "Vedu fotbalový klub, dvacet dresů každý týden. Dá se to u vás domluvit?",
-    "o": [
-     {
-      "t": "Dá. Udělám vám klubový kredit a ukážu, jak to naskládat do dvou strojů.",
-      "b": 2,
-      "r": "To by nám hodně pomohlo."
-     },
-     {
-      "t": "Přijďte a plaťte jako každý.",
-      "b": -1,
-      "r": "Ptám se, jestli to jde domluvit."
-     },
-     {
-      "t": "Velké zakázky neděláme.",
-      "b": -2,
-      "r": "Dvacet dresů není velká zakázka."
-     }
-    ]
-   },
-   {
-    "t": "A kdy máte nejmíň lidí? Nechci blokovat celou provozovnu.",
-    "o": [
-     {
-      "t": "V úterý a ve středu dopoledne tam nikdo není. Vezměte to tehdy.",
-      "b": 2,
-      "r": "Zapíšu si to."
-     },
-     {
-      "t": "Pořád je to plné.",
-      "b": -1,
-      "r": "To mi nepomohlo."
-     },
-     {
-      "t": "To se nedá říct.",
-      "b": 0,
-      "r": "Hm."
-     }
-    ]
-   },
-   {
-    "t": "A dostanu na to fakturu pro klub?",
-    "o": [
-     {
-      "t": "Měsíční, se vším, co klub propere. Pošlu ji mailem.",
-      "b": 2,
-      "r": "Perfektní, domluveno."
-     },
-     {
-      "t": "Faktury neděláme.",
-      "b": -2,
-      "r": "Tak to si klub neproplatí."
-     },
-     {
-      "t": "To musíte řešit přes účetní.",
-      "b": -1,
-      "r": "Volám vám, ne účetní."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "qr",
-  "rod": "z",
-  "kroky": [
-   {
-    "t": "Načetla jsem QR kód telefonem a nic se nestalo. Platba neprošla.",
-    "o": [
-     {
-      "t": "Vidím to v systému — platba se zasekla na půl cesty a nic se nestrhlo. Pustím vám stroj ručně.",
-      "b": 2,
-      "r": "To je rychlé, děkuju."
-     },
-     {
-      "t": "To bude vaší bankou.",
-      "b": -2,
-      "r": "Zkoušela jsem to dvakrát."
-     },
-     {
-      "t": "Zkuste to ještě jednou.",
-      "b": -1,
-      "r": "A když se to strhne dvakrát?"
-     }
-    ]
-   },
-   {
-    "t": "A nestrhne se mi to nakonec dvakrát?",
-    "o": [
-     {
-      "t": "Když to projde dvakrát, jednu platbu vám vrátím a ozvu se vám sama.",
-      "b": 2,
-      "r": "Dobře, spoléhám na vás."
-     },
-     {
-      "t": "To se nestává.",
-      "b": -1,
-      "r": "Mně se právě stalo."
-     },
-     {
-      "t": "To si pak musíte vyřídit s bankou.",
-      "b": -2,
-      "r": "To je ale vaše platební brána."
-     }
-    ]
-   },
-   {
-    "t": "A nemáte to raději na kartu? Tomu rozumím líp.",
-    "o": [
-     {
-      "t": "Terminál je přímo na stroji, přiložíte kartu a jede to. QR je jen pro ty, co nechtějí tahat peněženku.",
-      "b": 2,
-      "r": "Tak příště kartou."
-     },
-     {
-      "t": "QR je moderní, zvykejte si.",
-      "b": -2,
-      "r": "Já si zvyknu na konkurenci."
-     },
-     {
-      "t": "Obojí funguje stejně.",
-      "b": 0,
-      "r": "To zjevně ne."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "cekani",
-  "rod": "m",
-  "kroky": [
-   {
-    "t": "Stojím u vás a všechny stroje běží. Jak dlouho mám čekat?",
-    "o": [
-     {
-      "t": "Koukám do systému: ten vlevo končí za jedenáct minut, druhý za dvacet.",
-      "b": 2,
-      "r": "Tak to počkám, díky."
-     },
-     {
-      "t": "To vám neřeknu.",
-      "b": -2,
-      "r": "Vždyť to musíte vidět."
-     },
-     {
-      "t": "Chvilku to potrvá.",
-      "b": -1,
-      "r": "Chvilku je kolik?"
-     }
-    ]
-   },
-   {
-    "t": "A dá se to nějak zamluvit dopředu, ať nejezdím zbytečně?",
-    "o": [
-     {
-      "t": "Rezervace neděláme, ale v aplikaci vidíte, co je volné, než vyrazíte.",
-      "b": 2,
-      "r": "To mi stačí."
-     },
-     {
-      "t": "Ne.",
-      "b": -1,
-      "r": "Aha."
-     },
-     {
-      "t": "Rezervujte si to u konkurence.",
-      "b": -2,
-      "r": "To nebyla moc chytrá odpověď."
-     }
-    ]
-   },
-   {
-    "t": "A co když si někdo nechá prádlo ve stroji a nejde pro něj?",
-    "o": [
-     {
-      "t": "Můžete ho vyndat do boxu vedle. Majiteli chodí upozornění, většinou dorazí do deseti minut.",
-      "b": 2,
-      "r": "Rozumím, tak to zkusím."
-     },
-     {
-      "t": "Do cizího prádla nesahejte.",
-      "b": -1,
-      "r": "A co mám dělat?"
-     },
-     {
-      "t": "Tak si počkejte.",
-      "b": -2,
-      "r": "Hezky jste mi poradil."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "mokre2",
-  "rod": "z",
-  "nalada": 18,
-  "kroky": [
-   {
-    "t": "Dobrý den, vytáhla jsem prádlo ze sušičky a je pořád úplně mokré. Zaplatila jsem dvě sušení!",
-    "o": [
-     {
-      "t": "To je naše chyba, obě sušení vám vracím. Zkuste prosím sušičku číslo dvě, tahle jde hned z provozu.",
-      "b": 2,
-      "r": "No vida, konečně někdo rozumný."
-     },
-     {
-      "t": "Asi jste ji přecpala, to je nejčastější důvod.",
-      "b": -2,
-      "r": "Takže si za to můžu sama?"
-     },
-     {
-      "t": "Zkuste to pustit ještě jednou, třeba to dojede.",
-      "b": -1,
-      "r": "Za třetí peníze? To snad ne."
-     }
-    ]
-   },
-   {
-    "t": "A co mám dělat teď? Mám tu tašku mokrého prádla a za hodinu jedu pryč.",
-    "o": [
-     {
-      "t": "Pustím vám dvojku na dálku zdarma, naskočí za minutu. Za půl hodiny je prádlo suché.",
-      "b": 2,
-      "r": "Děkuju, to mi zachrání den."
-     },
-     {
-      "t": "Tak si ho vezměte domů, doma to doschne.",
-      "b": -2,
-      "r": "Mokré prádlo v autě, výborně."
-     },
-     {
-      "t": "Můžete počkat na technika, ten dorazí odpoledne.",
-      "b": -1,
-      "r": "Odpoledne už budu pryč."
-     }
-    ]
-   },
-   {
-    "t": "A ty peníze za to první sušení?",
-    "o": [
-     {
-      "t": "Posílám zpátky na účet, do dvou dnů tam budou. Potvrzení přijde SMSkou.",
-      "b": 2,
-      "r": "Tak to beru, děkuju."
-     },
-     {
-      "t": "To se bohužel nevrací, stroj se spustil.",
-      "b": -2,
-      "r": "Spustil, ale neusušil!"
-     },
-     {
-      "t": "Napište si o to mailem, někdo se na to podívá.",
-      "b": -1,
-      "r": "Další papírování."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "barva",
-  "rod": "m",
-  "nalada": 10,
-  "kroky": [
-   {
-    "t": "Někdo nechal v bubnu červené tričko a mně se obarvila celá bílá várka. Košile do práce, všechno!",
-    "o": [
-     {
-      "t": "To je nepříjemné a omlouvám se. Spočítejte mi, co se zničilo, a já to proplatím.",
-      "b": 2,
-      "r": "Dobře. Aspoň něco."
-     },
-     {
-      "t": "Za obsah bubnu neručíme, to je na vás si ho zkontrolovat.",
-      "b": -2,
-      "r": "Vy jste neuvěřitelný."
-     },
-     {
-      "t": "To se stává, zkuste to vyprat s odbarvovačem.",
-      "b": -1,
-      "r": "Odbarvovač na košile do práce?"
-     }
-    ]
-   },
-   {
-    "t": "A jak zařídíte, aby se to nestalo zas?",
-    "o": [
-     {
-      "t": "Na dveře dám cedulku a obsluha bude kontrolovat bubny při každém úklidu. Doteď to nedělala, to je na nás.",
-      "b": 2,
-      "r": "To zní jako chlap, co to myslí vážně."
-     },
-     {
-      "t": "Nijak, lidi jsou nepořádní.",
-      "b": -2,
-      "r": "Tak to si příště vyperu jinde."
-     },
-     {
-      "t": "Určitě na to upozorníme.",
-      "b": 0,
-      "r": "Hm."
-     }
-    ]
-   },
-   {
-    "t": "Takže kolik mi dáte a kdy?",
-    "o": [
-     {
-      "t": "Pošlete fotky a účtenku, do tří dnů posílám peníze. Když se nedomluvíme, řeknete si, co vám přijde fér.",
-      "b": 2,
-      "r": "Fajn, fotky posílám."
-     },
-     {
-      "t": "Maximálně vám vrátíme to praní.",
-      "b": -2,
-      "r": "Tím mi košile nenahradíte."
-     },
-     {
-      "t": "To záleží, uvidíme.",
-      "b": -1,
-      "r": "Uvidíme. Jasně."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "prasek",
-  "rod": "z",
-  "nalada": 30,
-  "kroky": [
-   {
-    "t": "Dobrý den, ten automat na prášek je prázdný a já tu stojím s plnou taškou.",
-    "o": [
-     {
-      "t": "Mrzí mě to. Dávkovač je ve stroji dvojka plný, pustím vám ho s prášky zdarma.",
-      "b": 2,
-      "r": "To je milé, děkuju."
-     },
-     {
-      "t": "Prášek si můžete nosit vlastní, nikdo vám nebrání.",
-      "b": -2,
-      "r": "Tak proč tam ten automat máte?"
-     },
-     {
-      "t": "Doplňujeme ho jednou týdně, přijďte ve čtvrtek.",
-      "b": -1,
-      "r": "Ve čtvrtek? To už budu mít doma plíseň."
-     }
-    ]
-   },
-   {
-    "t": "A nejbližší obchod je kde?",
-    "o": [
-     {
-      "t": "Dvě minuty vedle je večerka, mají prášek za dvacet. Rozdíl vám vrátím v kreditu.",
-      "b": 2,
-      "r": "Tak to zvládnu."
-     },
-     {
-      "t": "To fakt nevím, nejsem navigace.",
-      "b": -2,
-      "r": "Hezky jste mi pomohl."
-     },
-     {
-      "t": "Někde v centru určitě něco bude.",
-      "b": -1,
-      "r": "Někde. Super."
-     }
-    ]
-   },
-   {
-    "t": "A doplníte to, nebo si mám nosit prášek napořád?",
-    "o": [
-     {
-      "t": "Doplním to dneska večer osobně a budu to hlídat týdně. Omlouvám se.",
-      "b": 2,
-      "r": "Dobře, dám vám ještě šanci."
-     },
-     {
-      "t": "Doplní se to, až se to doplní.",
-      "b": -2,
-      "r": "Takže nikdy."
-     },
-     {
-      "t": "Napíšu to kolegovi.",
-      "b": 0,
-      "r": "No doufám."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "zamceno",
-  "rod": "m",
-  "nalada": 12,
-  "kroky": [
-   {
-    "t": "Stojím před vaší prádelnou, na dveřích máte nonstop a je zamčeno. Jel jsem sem dvacet minut.",
-    "o": [
-     {
-      "t": "Zámek se zasekl, otevřu vám ho na dálku. Vydržte deset vteřin.",
-      "b": 2,
-      "r": "Tak to je služba, děkuju."
-     },
-     {
-      "t": "To není možné, nonstop je nonstop.",
-      "b": -2,
-      "r": "Chcete fotku?"
-     },
-     {
-      "t": "Asi vám nejde karta, zkuste ji přiložit líp.",
-      "b": -1,
-      "r": "Zkoušel jsem to pětkrát."
-     }
-    ]
-   },
-   {
-    "t": "Už jsem uvnitř. Ale příště radši pojedu jinam, když je to takhle.",
-    "o": [
-     {
-      "t": "Chápu. Dám vám na příště praní zdarma, ať ta cesta nebyla zbytečná.",
-      "b": 2,
-      "r": "Tak jo, to beru."
-     },
-     {
-      "t": "Jak chcete, konkurence je kousek.",
-      "b": -2,
-      "r": "Vy jste teda obchodník."
-     },
-     {
-      "t": "Snad se to nebude opakovat.",
-      "b": 0,
-      "r": "Snad."
-     }
-    ]
-   },
-   {
-    "t": "A co ten zámek, vyřešíte ho?",
-    "o": [
-     {
-      "t": "Technik tam jede ráno a vymění ho. Do té doby to mám pod dohledem z dispečinku.",
-      "b": 2,
-      "r": "Dobře, díky za upřímnost."
-     },
-     {
-      "t": "Zámek je v pořádku, to byla výjimka.",
-      "b": -2,
-      "r": "Výjimka, co mě stála večer."
-     },
-     {
-      "t": "Nahlásím to dál.",
-      "b": 0,
-      "r": "Hm."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "karta",
-  "rod": "z",
-  "nalada": 26,
-  "kroky": [
-   {
-    "t": "Terminál mi třikrát odmítl kartu a pak mi přišly tři zprávy z banky, že jsem platila. Co to je?",
-    "o": [
-     {
-      "t": "To jsou předautorizace, peníze se vrátí do tří dnů samy. Praní vám pustím hned.",
-      "b": 2,
-      "r": "Tak to se mi ulevilo."
-     },
-     {
-      "t": "To máte problém s bankou, ne s námi.",
-      "b": -2,
-      "r": "Tři platby u vás a problém mám já?"
-     },
-     {
-      "t": "Zkuste jinou kartu.",
-      "b": -1,
-      "r": "Jinou nemám."
-     }
-    ]
-   },
-   {
-    "t": "A jak si mám být jistá, že mi to opravdu přijde zpátky?",
-    "o": [
-     {
-      "t": "Posílám vám potvrzení o zrušení všech tří plateb na mail. Kdyby do tří dnů nepřišly, volejte mi přímo.",
-      "b": 2,
-      "r": "Dobře, to mi stačí."
-     },
-     {
-      "t": "Musíte nám věřit.",
-      "b": -2,
-      "r": "Věřit. Po tomhle."
-     },
-     {
-      "t": "Obvykle to chodí.",
-      "b": 0,
-      "r": "Obvykle."
-     }
-    ]
-   },
-   {
-    "t": "A ten terminál spravíte?",
-    "o": [
-     {
-      "t": "Vyměňujeme ho zítra. Dneska tam jede platba přes QR kód, ta funguje spolehlivě.",
-      "b": 2,
-      "r": "Fajn, děkuju za jasnou odpověď."
-     },
-     {
-      "t": "Terminál je v pořádku.",
-      "b": -2,
-      "r": "Jasně, to já si vymýšlím."
-     },
-     {
-      "t": "Podíváme se na to.",
-      "b": 0,
-      "r": "Hm."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "proud",
-  "rod": "m",
-  "nalada": 20,
-  "kroky": [
-   {
-    "t": "Uprostřed praní vypadl proud a stroj je zablokovaný i s mým prádlem uvnitř.",
-    "o": [
-     {
-      "t": "Po naběhnutí proudu program dojede od místa, kde skončil. Dveře odemknu na dálku, kdybyste to potřeboval dřív.",
-      "b": 2,
-      "r": "Aha, tak to je dobré vědět."
-     },
-     {
-      "t": "Za výpadky elektřiny neodpovídáme.",
-      "b": -2,
-      "r": "To mě uklidnilo."
-     },
-     {
-      "t": "Počkejte, ono to naskočí.",
-      "b": -1,
-      "r": "Jak dlouho mám čekat?"
-     }
-    ]
-   },
-   {
-    "t": "A to praní budu platit znovu?",
-    "o": [
-     {
-      "t": "Ne. Cyklus pokračuje na původní platbu a kdyby ne, pustím vám nový zdarma.",
-      "b": 2,
-      "r": "Férové."
-     },
-     {
-      "t": "Samozřejmě, stroj se spustil.",
-      "b": -2,
-      "r": "A dojel do půlky!"
-     },
-     {
-      "t": "To budeme řešit potom.",
-      "b": -1,
-      "r": "Potom. Pořád potom."
-     }
-    ]
-   },
-   {
-    "t": "Nemáte tam záložní zdroj? V mrazáku vedle to taky vypadlo.",
-    "o": [
-     {
-      "t": "Máme ho jen na zámky a osvětlení, abyste se vždycky dostal ven a k prádlu. Na stroje ne, to by byl jiný kalibr.",
-      "b": 2,
-      "r": "Rozumím, to dává smysl."
-     },
-     {
-      "t": "Takové věci neřešíme.",
-      "b": -2,
-      "r": "Vy neřešíte nic."
-     },
-     {
-      "t": "Něco tam asi je.",
-      "b": -1,
-      "r": "Asi."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "penezenka",
-  "rod": "z",
-  "nalada": 16,
-  "kroky": [
-   {
-    "t": "Nechala jsem u vás v prádelně peněženku a za hodinu jsem se vrátila a byla pryč.",
-    "o": [
-     {
-      "t": "To je mrzuté. Kamera tam je, projdu záznam hned teď a ozvu se vám do hodiny.",
-      "b": 2,
-      "r": "Děkuju, aspoň něco."
-     },
-     {
-      "t": "Za odložené věci neručíme, je to na cedulce.",
-      "b": -2,
-      "r": "Já vím, co je na cedulce. Ptám se na pomoc."
-     },
-     {
-      "t": "Zeptejte se ostatních zákazníků.",
-      "b": -1,
-      "r": "Kterých, jsou pryč."
-     }
-    ]
-   },
-   {
-    "t": "A když ji na kameře uvidíte, co s tím uděláte?",
-    "o": [
-     {
-      "t": "Záznam předám policii, to je jediná správná cesta. Vy si podejte oznámení a já jim ho pošlu rovnou.",
-      "b": 2,
-      "r": "Dobře, udělám to."
-     },
-     {
-      "t": "Nic, do toho se nebudeme plést.",
-      "b": -2,
-      "r": "Takže nic."
-     },
-     {
-      "t": "Uvidíme podle toho, co tam bude.",
-      "b": 0,
-      "r": "Hm."
-     }
-    ]
-   },
-   {
-    "t": "Můžu ten záznam vidět?",
-    "o": [
-     {
-      "t": "Sám vám ho ukázat nesmím, jsou tam i jiní lidé. Policii ho vydám okamžitě a vy u toho můžete být.",
-      "b": 2,
-      "r": "To chápu, díky za rovnou řeč."
-     },
-     {
-      "t": "Kamery stejně nefungují.",
-      "b": -2,
-      "r": "Tak proč tam visí?"
-     },
-     {
-      "t": "To asi nepůjde.",
-      "b": -1,
-      "r": "Proč ne?"
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "mastnota",
-  "rod": "m",
-  "nalada": 14,
-  "kroky": [
-   {
-    "t": "V bubnu byla mastnota po někom a mám zničené dvě mikiny. Prý tam někdo pral montérky.",
-    "o": [
-     {
-      "t": "Omlouvám se. Mikiny proplatím a stroj stahuju na vyčištění ještě dneska.",
-      "b": 2,
-      "r": "Dobře, tak to beru."
-     },
-     {
-      "t": "Měl jste si buben zkontrolovat.",
-      "b": -2,
-      "r": "Mám kontrolovat po vás?"
-     },
-     {
-      "t": "Zkuste to vyprat ještě jednou.",
-      "b": -1,
-      "r": "Už dvakrát jsem to zkoušel."
-     }
-    ]
-   },
-   {
-    "t": "A proč někdo pere montérky v obyčejné pračce?",
-    "o": [
-     {
-      "t": "Protože to zatím nikdo nehlídal. Dám do provozovny jeden stroj označený na pracovní prádlo a na ostatní to zakážu.",
-      "b": 2,
-      "r": "To je rozumné řešení."
-     },
-     {
-      "t": "Protože lidi jsou prasata.",
-      "b": -1,
-      "r": "Hezky jste to řekl o svých zákaznících."
-     },
-     {
-      "t": "To se nedá uhlídat.",
-      "b": -2,
-      "r": "Tak to je váš byznys, ne?"
-     }
-    ]
-   },
-   {
-    "t": "Jak dlouho bude ten stroj mimo?",
-    "o": [
-     {
-      "t": "Do večera. Vyčistí ho profík, ne já s hadrem. Napíšu vám, až pojede.",
-      "b": 2,
-      "r": "Fajn, díky."
-     },
-     {
-      "t": "Nevím.",
-      "b": -2,
-      "r": "Nic nevíte."
-     },
-     {
-      "t": "Pár dní.",
-      "b": 0,
-      "r": "Hm."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "voda",
-  "rod": "z",
-  "nalada": 22,
-  "kroky": [
-   {
-    "t": "U vás teče voda po podlaze, málem jsem upadla. S malým dítětem!",
-    "o": [
-     {
-      "t": "Beru to vážně. Provozovnu hned zavírám, než to uklidí — děkuju, že jste zavolala.",
-      "b": 2,
-      "r": "Aspoň někdo to bere vážně."
-     },
-     {
-      "t": "Trochu vody po praní je normální.",
-      "b": -2,
-      "r": "Normální je, aby si tam někdo rozbil hlavu?"
-     },
-     {
-      "t": "Dejte na to pozor a vyhněte se tomu.",
-      "b": -2,
-      "r": "To mi radíte vážně?"
-     }
-    ]
-   },
-   {
-    "t": "A odkud to teče?",
-    "o": [
-     {
-      "t": "Nejspíš prasklá hadice u trojky. Technik tam bude do hodiny a do té doby je stroj odstavený.",
-      "b": 2,
-      "r": "Dobře, díky."
-     },
-     {
-      "t": "To se nedá poznat na dálku.",
-      "b": -1,
-      "r": "Tak tam někoho pošlete."
-     },
-     {
-      "t": "Asi to někdo rozlil.",
-      "b": -1,
-      "r": "Deset litrů?"
-     }
-    ]
-   },
-   {
-    "t": "Já tam mám rozdělané praní, co s ním?",
-    "o": [
-     {
-      "t": "Dojede v pořádku, trojka s tím nesouvisí. Praní máte u mě příště zdarma za to zdržení.",
-      "b": 2,
-      "r": "Děkuju, to je slušné."
-     },
-     {
-      "t": "Přijďte si pro něj zítra.",
-      "b": -2,
-      "r": "Zítra pracuju."
-     },
-     {
-      "t": "To si musíte vyřešit sama.",
-      "b": -2,
-      "r": "Děkuju za nic."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "drahe",
-  "rod": "m",
-  "nalada": 34,
-  "kroky": [
-   {
-    "t": "Zdražili jste o dvacku a vedle to mají levnější. Proč bych chodil k vám?",
-    "o": [
-     {
-      "t": "Protože u nás vyperete i o půlnoci a stroj je vždycky čistý. Jestli ne, chci o tom vědět hned.",
-      "b": 2,
-      "r": "To zní rozumně."
-     },
-     {
-      "t": "Tak jděte vedle.",
-      "b": -2,
-      "r": "Hezké jednání se zákazníkem."
-     },
-     {
-      "t": "Zdražila energie, s tím nic nenaděláme.",
-      "b": 0,
-      "r": "To slyším všude."
-     }
-    ]
-   },
-   {
-    "t": "A nějaká sleva pro stálé zákazníky?",
-    "o": [
-     {
-      "t": "Každé desáté praní zdarma, stačí mi dát číslo, pod kterým vás povedu. Zapisuju vás teď.",
-      "b": 2,
-      "r": "Tak to beru."
-     },
-     {
-      "t": "Žádné slevy nemáme.",
-      "b": -1,
-      "r": "Škoda."
-     },
-     {
-      "t": "Zeptejte se na pobočce.",
-      "b": -1,
-      "r": "Volám přece na infolinku."
-     }
-    ]
-   },
-   {
-    "t": "A nezdražíte zas za měsíc?",
-    "o": [
-     {
-      "t": "Do konce roku ne, to vám říkám rovnou. Kdyby ano, napíšu to na dveře dva týdny dopředu.",
-      "b": 2,
-      "r": "Férové, díky."
-     },
-     {
-      "t": "To vám nikdo neslíbí.",
-      "b": 0,
-      "r": "Hm."
-     },
-     {
-      "t": "Klidně, trh je trh.",
-      "b": -2,
-      "r": "Tak s vámi nepočítejte."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "faktura",
-  "rod": "z",
-  "nalada": 38,
-  "kroky": [
-   {
-    "t": "Potřebuju fakturu na firmu, pereme u vás prádlo z penzionu. Z automatu leze jen útržek.",
-    "o": [
-     {
-      "t": "Fakturu vystavím. Pošlete mi IČO a za hodinu ji máte v mailu.",
-      "b": 2,
-      "r": "Výborně, posílám."
-     },
-     {
-      "t": "My faktury neděláme, jsme samoobsluha.",
-      "b": -2,
-      "r": "Takže u vás firma prát nemůže?"
-     },
-     {
-      "t": "Zkuste napsat na mail, možná se někdo ozve.",
-      "b": -1,
-      "r": "Možná?"
-     }
-    ]
-   },
-   {
-    "t": "A šlo by to pravidelně měsíčně, ať neřeším každé praní?",
-    "o": [
-     {
-      "t": "Ano. Založím vám firemní účet, praní se načítá a jednou měsíčně přijde souhrnná faktura.",
-      "b": 2,
-      "r": "Tak to nám hodně pomůže."
-     },
-     {
-      "t": "To je moc složité.",
-      "b": -2,
-      "r": "Pro vás nebo pro mě?"
-     },
-     {
-      "t": "Teoreticky asi ano.",
-      "b": 0,
-      "r": "Teoreticky."
-     }
-    ]
-   },
-   {
-    "t": "A dostaneme na ten objem nějakou cenu?",
-    "o": [
-     {
-      "t": "Nad padesát praní měsíčně patnáct procent dolů. Napíšu to do smlouvy, ať to neplatí jen do příště.",
-      "b": 2,
-      "r": "S tím jdu za majitelem."
-     },
-     {
-      "t": "Ceny máme pro všechny stejné.",
-      "b": 0,
-      "r": "Hm."
-     },
-     {
-      "t": "To bych musel řešit s někým jiným.",
-      "b": -1,
-      "r": "Tak ho sežeňte."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "svatky",
-  "rod": "m",
-  "nalada": 42,
-  "kroky": [
-   {
-    "t": "Máte otevřeno na Štědrý den? Na webu je to rozporuplné.",
-    "o": [
-     {
-      "t": "Otevřeno je nonstop, i na Štědrý den. Web opravím ještě dneska, díky za upozornění.",
-      "b": 2,
-      "r": "Děkuju, to je jasná odpověď."
-     },
-     {
-      "t": "To nevím, zavolejte po svátcích.",
-      "b": -2,
-      "r": "Po svátcích mi to je k ničemu."
-     },
-     {
-      "t": "Asi ano.",
-      "b": -1,
-      "r": "Asi mi nestačí."
-     }
-    ]
-   },
-   {
-    "t": "A bude tam někdo, kdyby se stroj zasekl?",
-    "o": [
-     {
-      "t": "Na lince jsem já, i o svátcích. Stroj odemknu na dálku a technik je na telefonu.",
-      "b": 2,
-      "r": "To je dobré vědět."
-     },
-     {
-      "t": "O svátcích nikdo nejezdí.",
-      "b": -1,
-      "r": "Takže riziko beru já."
-     },
-     {
-      "t": "To se uvidí.",
-      "b": -2,
-      "r": "Vy jste ale jistota."
-     }
-    ]
-   },
-   {
-    "t": "A ceny o svátcích nahoru nejdou?",
-    "o": [
-     {
-      "t": "Ne, cena je stejná každý den v roce. Žádné svátkové přirážky u nás nejsou.",
-      "b": 2,
-      "r": "Výborně."
-     },
-     {
-      "t": "Zatím ne.",
-      "b": 0,
-      "r": "Zatím."
-     },
-     {
-      "t": "O svátcích je příplatek.",
-      "b": -2,
-      "r": "Tak to vyperu doma."
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "svetr",
-  "rod": "z",
-  "nalada": 15,
-  "kroky": [
-   {
-    "t": "Vaše sušička mi srazila svetr z merino vlny. Stál dva tisíce!",
-    "o": [
-     {
-      "t": "Omlouvám se. Pošlete fotku a účtenku, řeším to jako škodu a proplatím ji.",
-      "b": 2,
-      "r": "Tak to jsem nečekala, děkuju."
-     },
-     {
-      "t": "Vlna se do sušičky nedává, to ví každý.",
-      "b": -2,
-      "r": "Tak to tam napište, chytráku!"
-     },
-     {
-      "t": "To bude asi tím svetrem.",
-      "b": -1,
-      "r": "Svetr byl v pořádku, než jsem ho dala k vám."
-     }
-    ]
-   },
-   {
-    "t": "A proč na tom programu není napsáno, že vlnu zničí?",
-    "o": [
-     {
-      "t": "Protože to tam chybí, a to je chyba na naší straně. Dneska doplníme popisky ke každému programu.",
-      "b": 2,
-      "r": "Děkuju, že to přiznáte."
-     },
-     {
-      "t": "Protože to je samozřejmé.",
-      "b": -2,
-      "r": "Mně to samozřejmé nebylo."
-     },
-     {
-      "t": "Dáme to na seznam vylepšení.",
-      "b": 0,
-      "r": "Na seznam. Jasně."
-     }
-    ]
-   },
-   {
-    "t": "Kdy ty peníze dostanu?",
-    "o": [
-     {
-      "t": "Do tří pracovních dnů od fotky. Kdyby to vázlo, volejte mi přímo, mám to u sebe.",
-      "b": 2,
-      "r": "Dobře, tak posílám fotku."
-     },
-     {
-      "t": "To záleží na vedení.",
-      "b": -1,
-      "r": "Vy jste vedení, ne?"
-     },
-     {
-      "t": "Nic vám vracet nebudeme.",
-      "b": -2,
-      "r": "Tak se uvidíme u soudu."
-     }
-    ]
-   }
-  ]
- }
+  {
+    "id": "stovka",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Dobrý den, váš automat mi spolkl stovku a nic se nespustilo.",
+        "o": [
+          {
+            "t": "Mrzí mě to. Pošlu vám ji zpátky na účet.",
+            "b": 2,
+            "r": "Dobře, to je fér."
+          },
+          {
+            "t": "Bez dokladu nic nevracíme, to je u samoobsluhy běžné.",
+            "b": -2,
+            "r": "Takže mě okradete a je to?"
+          },
+          {
+            "t": "To se občas stane, zkuste to znovu a snad to projde — mincovníky někdy naberou vlhkost a zasekne se jim mechanika.",
+            "b": -1,
+            "r": "Takže mám hodit další stovku?"
+          }
+        ]
+      },
+      {
+        "t": "A jak dlouho to trvá, než mi ty peníze přijdou?",
+        "o": [
+          {
+            "t": "Do dvou dnů. Kdyby ne, ozvěte se mi přímo.",
+            "b": 2,
+            "r": "Beru."
+          },
+          {
+            "t": "Těžko říct, to má na starosti účetní.",
+            "b": -1,
+            "r": "No super."
+          },
+          {
+            "t": "Obvykle to bývá rychlé.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      },
+      {
+        "t": "A co teď? Potřebuju to vyprat dneska.",
+        "o": [
+          {
+            "t": "Pustím vám stroj na dálku, za minutu naskočí.",
+            "b": 2,
+            "r": "Vy jste zlato, děkuju!"
+          },
+          {
+            "t": "Tak přijďte zítra.",
+            "b": -2,
+            "r": "Zítra mi to je k ničemu."
+          },
+          {
+            "t": "Zkuste ten vedlejší, tam jde platit i kartou, ale jestli je volný, to vám odsud neřeknu.",
+            "b": 1,
+            "r": "Tak to zkusím."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "svetr",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Prala jsem u vás vlněný svetr a je z něj dětská velikost.",
+        "o": [
+          {
+            "t": "To je mi líto. Co jste na něj dala za program?",
+            "b": 2,
+            "r": "Hned se ptáte věcně, to je dobré."
+          },
+          {
+            "t": "Vlna do automatu nepatří, to je vaše chyba.",
+            "b": -2,
+            "r": "Tak to mi teda pomohlo."
+          },
+          {
+            "t": "Za sražení neručíme, máte to napsané na stroji i v podmínkách na webu, podívejte se tam.",
+            "b": -2,
+            "r": "Volám kvůli svetru, ne kvůli podmínkám."
+          }
+        ]
+      },
+      {
+        "t": "Dala jsem šedesát, bylo to předvolené.",
+        "o": [
+          {
+            "t": "Tak to je na vlnu moc. Dám k tomu stroji lepší popisek, ať to nepotká dalšího.",
+            "b": 2,
+            "r": "Aspoň něco."
+          },
+          {
+            "t": "No vidíte, tak to je jasné.",
+            "b": -1,
+            "r": "To mě teda potěšilo."
+          },
+          {
+            "t": "Šedesát je standard, to nemůže nikomu uškodit.",
+            "b": -2,
+            "r": "Tak proč mám ze svetru hadr?"
+          }
+        ]
+      },
+      {
+        "t": "A kdo mi ten svetr zaplatí?",
+        "o": [
+          {
+            "t": "Pošlete mi fotku a účtenku, domluvíme se.",
+            "b": 2,
+            "r": "Dobře, pošlu."
+          },
+          {
+            "t": "Nikdo, prala jste si sama a na stroji je napsané, co do něj patří.",
+            "b": -2,
+            "r": "Končím s váma."
+          },
+          {
+            "t": "Můžu vám dát praní zdarma, víc bohužel ne.",
+            "b": 1,
+            "r": "No, lepší než nic."
+          }
+        ]
+      },
+      {
+        "t": "Dobře. A jak to mám prát příště?",
+        "o": [
+          {
+            "t": "Třicet a nikdy do sušičky.",
+            "b": 2,
+            "r": "Zapsáno. Děkuju."
+          },
+          {
+            "t": "Nějak to zkuste, od toho je to samoobsluha.",
+            "b": -2,
+            "r": "To myslíte vážně?"
+          },
+          {
+            "t": "Vlnu bych radši doma v ruce, v automatu je to vždycky risk, i když dáte nejnižší program a pomalé otáčky.",
+            "b": 0,
+            "r": "Tak to k vám s vlnou nepůjdu."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "drahe",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Jste moc drazí. Za rohem perou levněji.",
+        "o": [
+          {
+            "t": "Kolik tam platíte?",
+            "b": 2,
+            "r": "Ptáte se správně."
+          },
+          {
+            "t": "Tak jděte za roh, nikdo vás tu nedrží.",
+            "b": -2,
+            "r": "Nebojte, půjdu."
+          },
+          {
+            "t": "Naše ceny vycházejí z toho, že máme nové stroje, otevřeno nonstop a technika do druhého dne.",
+            "b": 1,
+            "r": "To zní jako z letáku."
+          }
+        ]
+      },
+      {
+        "t": "Sto třicet za pračku. U vás dvě stě.",
+        "o": [
+          {
+            "t": "U nás vyperete osmnáct kilo naráz, tam nejspíš šest.",
+            "b": 2,
+            "r": "Hm, to mě nenapadlo."
+          },
+          {
+            "t": "To nejde porovnávat, každý má jiné stroje, jinou vodu i jiné náklady, takže cenu za cyklus fakt neřešte.",
+            "b": -1,
+            "r": "Proč ne?"
+          },
+          {
+            "t": "Tak si tam jděte.",
+            "b": -2,
+            "r": "Však jo."
+          }
+        ]
+      },
+      {
+        "t": "Hm. A dáte mi slevu, nebo vám napíšu recenzi?",
+        "o": [
+          {
+            "t": "Recenzi si napište. Jedno praní vám dám zdarma, ať to zkusíte.",
+            "b": 2,
+            "r": "Tak dobře, zkusím to."
+          },
+          {
+            "t": "Dám vám padesát procent napořád.",
+            "b": -1,
+            "r": "Beru! A řeknu to všem."
+          },
+          {
+            "t": "Tak si pište.",
+            "b": -2,
+            "r": "Spolehněte se."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dvirka",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Nejdou mi otevřít dvířka a mám uvnitř všechno prádlo.",
+        "o": [
+          {
+            "t": "Dotáčí se a odpouští vodu. Dvě minuty a povolí.",
+            "b": 2,
+            "r": "Aha, tak počkám."
+          },
+          {
+            "t": "Zatáhněte za ně pořádně.",
+            "b": -2,
+            "r": "Já vám je ulomím!"
+          },
+          {
+            "t": "Zámek je bezpečnostní a nejde s ním nic dělat, technik přijede nejdřív zítra, do té doby to tam asi zůstane.",
+            "b": -1,
+            "r": "Zítra?!"
+          }
+        ]
+      },
+      {
+        "t": "Už to povolilo. Ale prádlo je úplně mokré.",
+        "o": [
+          {
+            "t": "Neproběhlo odstřeďování. Sušičku máte u mě zdarma, kód pošlu SMSkou.",
+            "b": 2,
+            "r": "To je slušné, děkuju."
+          },
+          {
+            "t": "Tak to dejte do sušičky, je vedle.",
+            "b": 0,
+            "r": "Za další peníze?"
+          },
+          {
+            "t": "To se stává, odstřeďování občas vynechá a nic se tím nezkazí, prádlo doschne doma na balkoně.",
+            "b": -2,
+            "r": "To mi nestačí."
+          }
+        ]
+      },
+      {
+        "t": "A proč to vůbec spadlo?",
+        "o": [
+          {
+            "t": "Mrknu do stroje. Jestli je to závada, pošlu tam dnes technika.",
+            "b": 2,
+            "r": "Dobře, díky."
+          },
+          {
+            "t": "Nejspíš jste ji přecpala.",
+            "b": -1,
+            "r": "Zase si to můžu za všechno sama."
+          },
+          {
+            "t": "Netuším.",
+            "b": -2,
+            "r": "Tak to je mi platné."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "novy",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Dobrý den, jdu kolem a nevím, jak to funguje. Je to prádelna?",
+        "o": [
+          {
+            "t": "Samoobsluha. Naházíte prádlo, zaplatíte a za 35 minut máte hotovo.",
+            "b": 2,
+            "r": "Aha, tak to zkusím."
+          },
+          {
+            "t": "Je to přece jasné z názvu, kdyby to byla prádelna, stál by tam někdo za pultem a bral vám to prádlo.",
+            "b": -2,
+            "r": "Tohle je zbytečné."
+          },
+          {
+            "t": "Samoobsluha.",
+            "b": 0,
+            "r": "No... dobře."
+          }
+        ]
+      },
+      {
+        "t": "A prášek si mám přinést?",
+        "o": [
+          {
+            "t": "Nemusíte, dávkovač je ve stroji.",
+            "b": 2,
+            "r": "Výborně."
+          },
+          {
+            "t": "To je na vás, každý si to dělá po svém.",
+            "b": 0,
+            "r": "Tak co mi radíte?"
+          },
+          {
+            "t": "Jasně, bez vlastního prášku to nemá cenu, náš dávkovač stejně dávkuje málo a prádlo pak není pořádně vyprané.",
+            "b": -2,
+            "r": "Tak to je skvělá reklama."
+          }
+        ]
+      },
+      {
+        "t": "Kolik ho mám dát?",
+        "o": [
+          {
+            "t": "Odměřený díl. Víc prášku líp nevypere.",
+            "b": 2,
+            "r": "Dobrá rada."
+          },
+          {
+            "t": "Co myslíte, že je potřeba. Já u toho stroje nestojím.",
+            "b": -1,
+            "r": "Proto se ptám vás."
+          },
+          {
+            "t": "Přečtěte si to na obalu, je tam tabulka podle tvrdosti vody a míry zašpinění.",
+            "b": -1,
+            "r": "Stojím u stroje, ne doma."
+          }
+        ]
+      },
+      {
+        "t": "A kde zaplatím?",
+        "o": [
+          {
+            "t": "Kartou na terminálu u dvířek, nebo mincemi.",
+            "b": 2,
+            "r": "Super, jdu na to."
+          },
+          {
+            "t": "Někde tam to je.",
+            "b": -2,
+            "r": "To mi teda pomohlo."
+          },
+          {
+            "t": "Platí se až po doprání.",
+            "b": -2,
+            "r": "Tak to mi stroj nenaskočil."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "pes",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Můžu u vás vyprat deku po psovi? Nechci si zanést vlastní pračku.",
+        "o": [
+          {
+            "t": "Klidně. Přesně na to to je.",
+            "b": 2,
+            "r": "Super."
+          },
+          {
+            "t": "Zvířecí věci u nás neperem.",
+            "b": -1,
+            "r": "Tak to jdu jinam."
+          },
+          {
+            "t": "To je mi jedno, perte si co chcete.",
+            "b": -2,
+            "r": "Pěkný přístup."
+          }
+        ]
+      },
+      {
+        "t": "A nebude to vadit tomu, kdo bude prát po mně?",
+        "o": [
+          {
+            "t": "Nebude, stroj mezi cykly vypláchne buben sám.",
+            "b": 2,
+            "r": "To je dobře vymyšlené."
+          },
+          {
+            "t": "To nevím, nikdo si zatím nestěžoval, ale asi by jim to vadit mohlo, kdyby to věděli.",
+            "b": -1,
+            "r": "Vy nevíte, jak funguje váš stroj?"
+          },
+          {
+            "t": "Těm je to jedno.",
+            "b": -2,
+            "r": "Mně by to jedno nebylo."
+          }
+        ]
+      },
+      {
+        "t": "A dám ji potom do sušičky?",
+        "o": [
+          {
+            "t": "Klidně, chlupy padají do filtru.",
+            "b": 2,
+            "r": "Děkuju za radu."
+          },
+          {
+            "t": "Sušičku radši ne.",
+            "b": 0,
+            "r": "Aha, tak jo."
+          },
+          {
+            "t": "Dělejte si, co chcete.",
+            "b": -2,
+            "r": "To jsem si mohl ušetřit telefon."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "smrad",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Prádlo mi po praní smrdí. To není normální.",
+        "o": [
+          {
+            "t": "To opravdu není. Který stroj to byl?",
+            "b": 2,
+            "r": "Dobře, že se ptáte."
+          },
+          {
+            "t": "Smrdělo asi už předtím, stroj za to nemůže.",
+            "b": -2,
+            "r": "To je neuvěřitelné."
+          },
+          {
+            "t": "Zkuste přidat víc aviváže, to to obvykle přebije a prádlo pak voní i několik dní.",
+            "b": -2,
+            "r": "Já nechci přebít smrad, chci ho nemít."
+          }
+        ]
+      },
+      {
+        "t": "Ten krajní, u silnice.",
+        "o": [
+          {
+            "t": "Díky. Nechám mu vyčistit buben a praní máte u mě zdarma.",
+            "b": 2,
+            "r": "To je slušné."
+          },
+          {
+            "t": "Podíváme se na to někdy, až tam technik pojede kvůli něčemu jinému.",
+            "b": -1,
+            "r": "Někdy?"
+          },
+          {
+            "t": "Na ten si nikdo nestěžoval.",
+            "b": -2,
+            "r": "Tak já jsem první."
+          }
+        ]
+      },
+      {
+        "t": "A jak poznám, že je to spravené?",
+        "o": [
+          {
+            "t": "Dám vám vědět, až to technik udělá.",
+            "b": 2,
+            "r": "Budu čekat, děkuju."
+          },
+          {
+            "t": "Prostě to zkusíte.",
+            "b": -1,
+            "r": "Za svoje peníze."
+          },
+          {
+            "t": "To poznáte.",
+            "b": -2,
+            "r": "Díky za nic."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "penzion",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Mám penzion a potřebuju prát povlečení. Zvládnete to?",
+        "o": [
+          {
+            "t": "Zvládneme. Kolik toho týdně je?",
+            "b": 2,
+            "r": "Hned k věci, to se mi líbí."
+          },
+          {
+            "t": "Přijďte jako každý jiný, rezervace neděláme a pořadí se tu nedrží.",
+            "b": 0,
+            "r": "Tak to asi ne."
+          },
+          {
+            "t": "To nás nezajímá, jedeme na samoobsluhu a ne na firmy.",
+            "b": -2,
+            "r": "Škoda pro vás."
+          }
+        ]
+      },
+      {
+        "t": "Asi sto kilo týdně.",
+        "o": [
+          {
+            "t": "To je pět praní. Domluvím vám pevnou cenu a stroje podržím.",
+            "b": 2,
+            "r": "To zní výborně."
+          },
+          {
+            "t": "Tak to vám bude chvíli trvat, pět praní po pětatřiceti minutách jsou skoro tři hodiny, počítejte s tím.",
+            "b": -1,
+            "r": "To mi moc nepomohlo."
+          },
+          {
+            "t": "Tolik toho nepereme.",
+            "b": -2,
+            "r": "Na co tam ty stroje máte?"
+          }
+        ]
+      },
+      {
+        "t": "A co když bude obsazeno?",
+        "o": [
+          {
+            "t": "Dám vám číslo, zavoláte a já vám stroj uvolním.",
+            "b": 2,
+            "r": "Beru, ozvu se."
+          },
+          {
+            "t": "Tak počkáte.",
+            "b": -2,
+            "r": "S prádlem z penzionu?"
+          },
+          {
+            "t": "To se nestává.",
+            "b": -1,
+            "r": "To mi nestačí."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "soused",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Váš prádlomat stojí pod mými okny a v noci hučí.",
+        "o": [
+          {
+            "t": "To mě mrzí. V kolik vás to budí nejvíc?",
+            "b": 2,
+            "r": "Aspoň někdo poslouchá."
+          },
+          {
+            "t": "Máme na to povolení od města i hlukovou studii, takže z naší strany je všechno v pořádku.",
+            "b": -1,
+            "r": "To mě netěší."
+          },
+          {
+            "t": "To je váš problém, měl jste se dívat, co se vám staví pod okny.",
+            "b": -2,
+            "r": "Uvidíme, čí to bude problém."
+          }
+        ]
+      },
+      {
+        "t": "Kolem jedenácté, kdy jdou lidi z práce.",
+        "o": [
+          {
+            "t": "Dám tam noční režim s nižšími otáčkami. Vyzkoušíme to týden.",
+            "b": 2,
+            "r": "To by pomohlo."
+          },
+          {
+            "t": "S tím nic nenadělám, stroje běží jak běží a vypínat je na noc kvůli jednomu člověku nebudu.",
+            "b": -2,
+            "r": "Tak to budu řešit jinde."
+          },
+          {
+            "t": "Lidi musí taky prát.",
+            "b": -1,
+            "r": "A já musím spát."
+          }
+        ]
+      },
+      {
+        "t": "A když to nepomůže?",
+        "o": [
+          {
+            "t": "Přijdu se podívat a změříme to.",
+            "b": 2,
+            "r": "Tak to beru."
+          },
+          {
+            "t": "Tak si stěžujte.",
+            "b": -2,
+            "r": "Spolehněte se."
+          },
+          {
+            "t": "Pomůže.",
+            "b": -1,
+            "r": "To uvidíme."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "tenisky",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Můžu u vás vyprat tenisky?",
+        "o": [
+          {
+            "t": "Můžete. Do sáčku a na třicet.",
+            "b": 2,
+            "r": "Super, díky."
+          },
+          {
+            "t": "Boty ne.",
+            "b": -1,
+            "r": "Aha, škoda."
+          },
+          {
+            "t": "Zkuste to, uvidíte, já vám to nezakazuju ani nedoporučuju.",
+            "b": -2,
+            "r": "To mi teda pomohlo."
+          }
+        ]
+      },
+      {
+        "t": "A do sušičky?",
+        "o": [
+          {
+            "t": "Ty ne, rozlepily by se. Nechte je doschnout doma.",
+            "b": 2,
+            "r": "Dobře, že to vím."
+          },
+          {
+            "t": "Klidně.",
+            "b": -2,
+            "r": "Tak to mi je zničíte."
+          },
+          {
+            "t": "Jak chcete.",
+            "b": -1,
+            "r": "Ptám se, co je lepší."
+          }
+        ]
+      },
+      {
+        "t": "A nezničí mi to buben?",
+        "o": [
+          {
+            "t": "Ne, proto ten sáček.",
+            "b": 2,
+            "r": "Jasně. Děkuju."
+          },
+          {
+            "t": "Může, podrážky jsou tvrdé a buben je plech.",
+            "b": -1,
+            "r": "Tak to tam nedám."
+          },
+          {
+            "t": "To nevím, nikdy jsem to nezkoušel, ale podrážky jsou tvrdé, takže bych se asi nedivil, kdyby jo.",
+            "b": -1,
+            "r": "Tak to mě teda uklidnilo."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "karta",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Dobrý den, zaplatil jsem kartou a strhlo se to dvakrát.",
+        "o": [
+          {
+            "t": "Jednu platbu vám hned zruším.",
+            "b": 2,
+            "r": "Děkuju, to je rychlovka."
+          },
+          {
+            "t": "To dělá banka, ne my.",
+            "b": -2,
+            "r": "Peníze mám ale u vás."
+          },
+          {
+            "t": "Podívám se na to, ale terminál občas pošle dvě předautorizace a jedna se sama uvolní, takže možná stačí počkat.",
+            "b": 0,
+            "r": "A co když se neuvolní?"
+          }
+        ]
+      },
+      {
+        "t": "A jak to poznám na výpisu?",
+        "o": [
+          {
+            "t": "To já nevím.",
+            "b": -2,
+            "r": "Tak kde si to mám ověřit?"
+          },
+          {
+            "t": "Přijde vám vratka ve stejné částce, obvykle do tří dnů. Kdyby ne, zavolejte a dořeším to.",
+            "b": 2,
+            "r": "Dobře, díky."
+          },
+          {
+            "t": "Bude tam napsáno storno.",
+            "b": 1,
+            "r": "Tak se podívám."
+          }
+        ]
+      },
+      {
+        "t": "A můžu zatím prát?",
+        "o": [
+          {
+            "t": "Jasně, pustím vám stroj na dálku.",
+            "b": 2,
+            "r": "Super."
+          },
+          {
+            "t": "Až se ta platba vyřeší, do té doby vám stroj nepustím.",
+            "b": -2,
+            "r": "To mám chodit s košem domů?"
+          },
+          {
+            "t": "Zkuste platit mincemi, ale drobné u sebe asi nemáte, že.",
+            "b": -1,
+            "r": "Nemám."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mraz",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Teď v zimě to vůbec jede? Je mínus deset.",
+        "o": [
+          {
+            "t": "Jede. Stroj je vyhřívaný a voda nezamrzne.",
+            "b": 2,
+            "r": "To jsem nevěděl."
+          },
+          {
+            "t": "To zkuste.",
+            "b": -2,
+            "r": "Ptám se vás."
+          },
+          {
+            "t": "Když je takhle zima, radši to nechte na jindy, mohlo by to zamrznout a pak z toho máme opravu.",
+            "b": -2,
+            "r": "Tak na co to tam je."
+          }
+        ]
+      },
+      {
+        "t": "A neztuhne mi prádlo, než ho donesu k autu?",
+        "o": [
+          {
+            "t": "Neztuhne.",
+            "b": 0,
+            "r": "To mi jako má stačit?"
+          },
+          {
+            "t": "Nechte ho projet sušičkou, vyjde teplé a cestou domů nezmrzne.",
+            "b": 2,
+            "r": "Dobrý nápad."
+          },
+          {
+            "t": "Vezměte si rukavice.",
+            "b": -1,
+            "r": "Děkuju za radu století."
+          }
+        ]
+      },
+      {
+        "t": "A kdyby to přece jen zamrzlo?",
+        "o": [
+          {
+            "t": "Zavolejte, pošlu technika hned.",
+            "b": 2,
+            "r": "Beru."
+          },
+          {
+            "t": "To se nám zatím nestalo, takže s tím ani nepočítám.",
+            "b": -1,
+            "r": "Ale stát se to může."
+          },
+          {
+            "t": "Tak to máte smůlu, mráz je vyšší moc.",
+            "b": -2,
+            "r": "Pěkné."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "otviracka",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Do kolika máte otevřeno?",
+        "o": [
+          {
+            "t": "Nonstop. Stroj stojí venku a jede pořád.",
+            "b": 2,
+            "r": "To je super."
+          },
+          {
+            "t": "Do osmi večer.",
+            "b": -2,
+            "r": "Tak to nikdy nestihnu."
+          },
+          {
+            "t": "Otevřeno vlastně nemáme, protože to není prádelna, ale stroj, a ten se nezavírá.",
+            "b": 1,
+            "r": "Aha, rozumím."
+          }
+        ]
+      },
+      {
+        "t": "A v noci je to tam bezpečné?",
+        "o": [
+          {
+            "t": "Klidně.",
+            "b": -1,
+            "r": "To mě moc neuklidnilo."
+          },
+          {
+            "t": "Je tam světlo a kamera na automat. Ale v noci je tam člověk sám, to vám nebudu zastírat.",
+            "b": 2,
+            "r": "Oceňuju, že to řeknete na rovinu."
+          },
+          {
+            "t": "To vám nezaručím.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      },
+      {
+        "t": "A o svátcích?",
+        "o": [
+          {
+            "t": "Taky. Nic nezavíráme.",
+            "b": 2,
+            "r": "Výborně."
+          },
+          {
+            "t": "Svátky řešíme individuálně.",
+            "b": -1,
+            "r": "Co to znamená?"
+          },
+          {
+            "t": "Nevím, podívejte se na web.",
+            "b": -2,
+            "r": "Volám, abych se nemusel dívat."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "peri",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Vejde se mi do toho peřina? Mám dvoulůžkovou.",
+        "o": [
+          {
+            "t": "Do velkého stroje ano, bere osm kilo suchého prádla.",
+            "b": 2,
+            "r": "Tak to vezmu."
+          },
+          {
+            "t": "Nevejde.",
+            "b": -2,
+            "r": "A to víte odkud?"
+          },
+          {
+            "t": "Zkuste to tam nacpat, ono se to většinou nějak vejde, a když ne, tak to zase vytáhnete.",
+            "b": -2,
+            "r": "Nacpat peřinu do pračky, to je tedy rada."
+          }
+        ]
+      },
+      {
+        "t": "A vyschne mi v sušičce?",
+        "o": [
+          {
+            "t": "Dejte ji na delší program a přihoďte dva suché ručníky, naberou vlhkost a peří se neslepí.",
+            "b": 2,
+            "r": "To zkusím, díky."
+          },
+          {
+            "t": "Vyschne.",
+            "b": 0,
+            "r": "Určitě?"
+          },
+          {
+            "t": "Peřiny radši nesušíme.",
+            "b": -1,
+            "r": "A co s ní mám podle vás dělat?"
+          }
+        ]
+      },
+      {
+        "t": "Nezničím tím to peří?",
+        "o": [
+          {
+            "t": "Ne, když nedáte vysokou teplotu.",
+            "b": 2,
+            "r": "Dobře, děkuju."
+          },
+          {
+            "t": "To se stát může.",
+            "b": -1,
+            "r": "Tak mi poraďte, jak ne."
+          },
+          {
+            "t": "Peří je peří, to vydrží všechno.",
+            "b": -2,
+            "r": "To si zrovna nemyslím."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "barva",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Prala jsem po někom a obarvilo mi to bílé triko.",
+        "o": [
+          {
+            "t": "To je nepříjemné. Který stroj to byl a kdy?",
+            "b": 2,
+            "r": "Dneska ráno, ten prostřední."
+          },
+          {
+            "t": "To si pustil někdo jiný, s tím nic nenaděláme.",
+            "b": -2,
+            "r": "Takže nic."
+          },
+          {
+            "t": "Stroj po každém praní vypláchne buben, takže v něm barva zbýt nemůže — spíš se to obarvilo od něčeho vašeho.",
+            "b": -1,
+            "r": "Vy mi tvrdíte, že lžu?"
+          }
+        ]
+      },
+      {
+        "t": "Dneska ráno, ten prostřední.",
+        "o": [
+          {
+            "t": "Dobře, poznamenám si to.",
+            "b": 0,
+            "r": "A dál?"
+          },
+          {
+            "t": "Pustím na něj prázdný cyklus a prověřím to. Za to triko vám dám praní zdarma.",
+            "b": 2,
+            "r": "To je slušné."
+          },
+          {
+            "t": "To už se nedá dokázat.",
+            "b": -2,
+            "r": "Tak nashledanou."
+          }
+        ]
+      },
+      {
+        "t": "A dá se to triko ještě zachránit?",
+        "o": [
+          {
+            "t": "Zkuste ho vyprat hned znovu, dokud barva nezaschla.",
+            "b": 2,
+            "r": "Jdu to udělat."
+          },
+          {
+            "t": "To nevím, nejsem chemik.",
+            "b": -1,
+            "r": "Stačilo říct, co byste udělal vy."
+          },
+          {
+            "t": "Asi ne, s tím už vám nepomůžu, tohle je spíš na čistírnu.",
+            "b": -1,
+            "r": "Děkuju za optimismus."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "susicka",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Sušička mi nedosušila, prádlo je po celém cyklu vlhké.",
+        "o": [
+          {
+            "t": "To nemá být. Byl ten buben plný?",
+            "b": 2,
+            "r": "No, nacpala jsem ho dost."
+          },
+          {
+            "t": "Dala jste tam moc věcí.",
+            "b": -1,
+            "r": "To říkáte, aniž byste věděl kolik."
+          },
+          {
+            "t": "Sušení záleží na spoustě věcí — na tom, co sušíte, jak to bylo odstředěné a jak je venku chladno.",
+            "b": 0,
+            "r": "Takže?"
+          }
+        ]
+      },
+      {
+        "t": "No, nacpala jsem ho dost.",
+        "o": [
+          {
+            "t": "No vidíte.",
+            "b": -2,
+            "r": "Nemusíte mě poučovat."
+          },
+          {
+            "t": "Tak to bude tím — sušička potřebuje, aby se prádlo volně otáčelo. Dejte půlku a uvidíte rozdíl.",
+            "b": 2,
+            "r": "Dobře, zkusím to."
+          },
+          {
+            "t": "I tak to mělo usušit.",
+            "b": 0,
+            "r": "Tak co teda?"
+          }
+        ]
+      },
+      {
+        "t": "A zaplatím si to sušení znovu?",
+        "o": [
+          {
+            "t": "Ne, tohle jedno vám pustím zdarma.",
+            "b": 2,
+            "r": "Děkuju."
+          },
+          {
+            "t": "Zaplatíte, stroj běžel.",
+            "b": -1,
+            "r": "Ale nedosušil."
+          },
+          {
+            "t": "To už neřeším, stroj běžel a tím to pro mě končí.",
+            "b": -2,
+            "r": "Skvělý přístup."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "miminko",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Můžu u vás prát věci po miminku?",
+        "o": [
+          {
+            "t": "Můžete. Dejte šedesát, to je na dětské prádlo tak akorát.",
+            "b": 2,
+            "r": "Dobře."
+          },
+          {
+            "t": "Jasně.",
+            "b": 0,
+            "r": "A na kolik stupňů?"
+          },
+          {
+            "t": "Klidně, ale upřímně bych dětské věci do veřejné pračky nedával, nikdy nevíte, co tam kdo pral před vámi.",
+            "b": -2,
+            "r": "Tak proč to provozujete?"
+          }
+        ]
+      },
+      {
+        "t": "A zbyde tam prášek po tom, kdo pral přede mnou?",
+        "o": [
+          {
+            "t": "Nezbyde.",
+            "b": 1,
+            "r": "Tak dobře."
+          },
+          {
+            "t": "Ne, stroj mezi praními vypláchne buben čistou vodou a prášek si dávkuje sám, takže se nic nenahromadí.",
+            "b": 2,
+            "r": "To mě uklidnilo."
+          },
+          {
+            "t": "Něco tam vždycky zbyde.",
+            "b": -2,
+            "r": "Tak to teda ne."
+          }
+        ]
+      },
+      {
+        "t": "A aviváž tam mám dávat?",
+        "o": [
+          {
+            "t": "U dětských věcí ji radši vynechte.",
+            "b": 2,
+            "r": "Děkuju za radu."
+          },
+          {
+            "t": "Dejte si, co chcete, do toho vám mluvit nebudu.",
+            "b": -1,
+            "r": "Ptala jsem se na doporučení."
+          },
+          {
+            "t": "To je jedno, aviváž ještě nikdy nikomu nic nezkazila.",
+            "b": -1,
+            "r": "U dětské kůže bych si tím nebyla tak jistá."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "faktura",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Potřeboval bych na praní doklad pro firmu.",
+        "o": [
+          {
+            "t": "Pošlu vám fakturu na mail. Jaké máte IČO?",
+            "b": 2,
+            "r": "Hned vám ho nadiktuju."
+          },
+          {
+            "t": "Doklady u samoobsluhy neděláme.",
+            "b": -2,
+            "r": "Tak to si prádlo odvezu jinam."
+          },
+          {
+            "t": "Terminál tiskne útržek z platby, ale ten vám do účetnictví asi nestačí, takže nevím, co s tím.",
+            "b": -1,
+            "r": "Proto právě volám."
+          }
+        ]
+      },
+      {
+        "t": "Jsme eseróčko, platíme firemní kartou.",
+        "o": [
+          {
+            "t": "Tak to je jednoduché.",
+            "b": 0,
+            "r": "A co mám tedy udělat?"
+          },
+          {
+            "t": "Výborně, ty platby umím v systému dohledat a poslat vám souhrnnou fakturu jednou měsíčně.",
+            "b": 2,
+            "r": "To by nám sedlo."
+          },
+          {
+            "t": "Firemní karty tu radši nepoužívejte.",
+            "b": -2,
+            "r": "Proč ne?"
+          }
+        ]
+      },
+      {
+        "t": "A dá se to nastavit natrvalo?",
+        "o": [
+          {
+            "t": "Dá. Nastavím vám to ještě dneska.",
+            "b": 2,
+            "r": "Děkuju."
+          },
+          {
+            "t": "Uvidíme, teď vám nic slibovat nebudu.",
+            "b": -1,
+            "r": "To není odpověď."
+          },
+          {
+            "t": "To byste musel na účetní, ta tu ale dneska není a zítra má volno.",
+            "b": -1,
+            "r": "Vy to nevyřídíte?"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "kamery",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Někdo mi z automatu vzal prádlo. Máte tam kamery?",
+        "o": [
+          {
+            "t": "Kamera tam je. Řekněte mi čas a podívám se na záznam.",
+            "b": 2,
+            "r": "Bylo to kolem páté odpoledne."
+          },
+          {
+            "t": "Máme, hned vám ten záznam pošlu.",
+            "b": -2,
+            "r": "To byste asi jen tak posílat neměl, ne?"
+          },
+          {
+            "t": "Kamery tam jsou, ale záznam vám dát nemůžu, ten se předává policii.",
+            "b": 1,
+            "r": "Aspoň něco."
+          }
+        ]
+      },
+      {
+        "t": "Bylo to kolem páté odpoledne.",
+        "o": [
+          {
+            "t": "Podívám se.",
+            "b": 1,
+            "r": "Dobře."
+          },
+          {
+            "t": "Projdu to, a když tam někdo bude, předám to policii. Vám dám potvrzení, že se to stalo.",
+            "b": 2,
+            "r": "To mi pomůže."
+          },
+          {
+            "t": "V pět tam chodí spousta lidí, to nedohledám.",
+            "b": -2,
+            "r": "Ani jste se nepodíval."
+          }
+        ]
+      },
+      {
+        "t": "A nahradíte mi to?",
+        "o": [
+          {
+            "t": "To bohužel ne, ale příští praní jde za mnou.",
+            "b": 2,
+            "r": "Fér."
+          },
+          {
+            "t": "Za věci ve stroji neručíme, je to tam napsané.",
+            "b": -1,
+            "r": "Technicky máte pravdu, lidsky ne."
+          },
+          {
+            "t": "To jste si měl hlídat.",
+            "b": -2,
+            "r": "Děkuju za pochopení."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "prepln",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Vypral jsem si a prádlo je pořád špinavé.",
+        "o": [
+          {
+            "t": "Podívám se na ten stroj. Kolik jste toho dal dovnitř? Buben má být tak do tří čtvrtin.",
+            "b": 2,
+            "r": "No, byl plný až nahoru."
+          },
+          {
+            "t": "Dal jste tam moc.",
+            "b": -1,
+            "r": "To přece nemůžete vědět."
+          },
+          {
+            "t": "Tak si perte doma.",
+            "b": -2,
+            "r": "Pěkné."
+          }
+        ]
+      },
+      {
+        "t": "No, byl plný až nahoru.",
+        "o": [
+          {
+            "t": "To je ono.",
+            "b": 0,
+            "r": "A co teď?"
+          },
+          {
+            "t": "Pak se prádlo nemá jak hýbat a nevypere se. Příště nechte nahoře dlaň místa.",
+            "b": 2,
+            "r": "Aha, to dává smysl."
+          },
+          {
+            "t": "No vidíte, takže to není vada stroje, ale chyba obsluhy, tedy vaše.",
+            "b": -2,
+            "r": "Nemusíte mi to podávat takhle."
+          }
+        ]
+      },
+      {
+        "t": "Dobře, a vyperu to znovu za svoje?",
+        "o": [
+          {
+            "t": "Tentokrát to jde za mnou.",
+            "b": 2,
+            "r": "To je slušné, děkuju."
+          },
+          {
+            "t": "Ano, stroj běžel správně.",
+            "b": -1,
+            "r": "Chápu, ale mrzí mě to."
+          },
+          {
+            "t": "Zkuste to znovu a uvidíme, jak to dopadne.",
+            "b": -1,
+            "r": "Co uvidíme?"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "monterky",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Můžu u vás vyprat montérky od oleje?",
+        "o": [
+          {
+            "t": "Vyprat ano. Ale do sušičky je pak nedávejte.",
+            "b": 2,
+            "r": "Proč ne?"
+          },
+          {
+            "t": "Klidně, všechno.",
+            "b": -2,
+            "r": "I do sušičky?"
+          },
+          {
+            "t": "Můžete, u nás si každý pere, co chce — montérky, hadry, klidně i koberce, stroj to zvládne.",
+            "b": -1,
+            "r": "To mě zrovna neuklidnilo."
+          }
+        ]
+      },
+      {
+        "t": "Proč ne?",
+        "o": [
+          {
+            "t": "Je to tak doporučené.",
+            "b": 0,
+            "r": "Ale proč?"
+          },
+          {
+            "t": "Zbytky oleje se v horkém bubnu můžou vznítit. Nechte je doschnout na vzduchu, je to bezpečnější.",
+            "b": 2,
+            "r": "To jsem netušil, díky."
+          },
+          {
+            "t": "Protože by to smrdělo.",
+            "b": -1,
+            "r": "To mi nepřijde jako důvod."
+          }
+        ]
+      },
+      {
+        "t": "A nezanesu tím stroj ostatním?",
+        "o": [
+          {
+            "t": "Ne, stroj po vás buben vypláchne.",
+            "b": 2,
+            "r": "Dobře, díky."
+          },
+          {
+            "t": "Trochu jo, ale to nikdo nepozná.",
+            "b": -2,
+            "r": "To se mi vůbec nelíbí."
+          },
+          {
+            "t": "Těžko říct, to vám takhle po telefonu nepovím.",
+            "b": -1,
+            "r": "Vy to nevíte?"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "koberec",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Vejde se do vaší pračky předložka z koupelny?",
+        "o": [
+          {
+            "t": "Látková ano. Gumová ne, ta se v bubnu drolí.",
+            "b": 2,
+            "r": "Ta moje je látková."
+          },
+          {
+            "t": "Nevejde.",
+            "b": -1,
+            "r": "Ani malá?"
+          },
+          {
+            "t": "To záleží na tom, jak je velká, jak je těžká, kolik nasákne a co má na spodní straně.",
+            "b": 0,
+            "r": "Je to obyčejná předložka."
+          }
+        ]
+      },
+      {
+        "t": "Ta moje je látková, metr na půl metru.",
+        "o": [
+          {
+            "t": "Tak to jde.",
+            "b": 1,
+            "r": "Fajn."
+          },
+          {
+            "t": "V pohodě. Dejte ji samotnou, nasákne hodně vody a s dalším prádlem by stroj nestíhal.",
+            "b": 2,
+            "r": "Dobře, vezmu ji zvlášť."
+          },
+          {
+            "t": "Zkuste to a uvidíte.",
+            "b": -1,
+            "r": "Radši bych to věděl předem."
+          }
+        ]
+      },
+      {
+        "t": "A usuším ji u vás?",
+        "o": [
+          {
+            "t": "Ano, na nižší teplotu a déle.",
+            "b": 2,
+            "r": "Jasné, děkuju."
+          },
+          {
+            "t": "Sušička je na prádlo, ne na koberce.",
+            "b": -1,
+            "r": "Vždyť jste říkal, že se to vyprat dá."
+          },
+          {
+            "t": "To už je na vás.",
+            "b": -2,
+            "r": "Ptám se vás, vy to tam provozujete."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "proud",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Uprostřed praní vypadl proud a stroj stojí s mým prádlem uvnitř.",
+        "o": [
+          {
+            "t": "Odemknu vám dvířka na dálku. Vydržte minutu.",
+            "b": 2,
+            "r": "Děkuju!"
+          },
+          {
+            "t": "To je výpadek u distributora, s tím nic nenadělám.",
+            "b": -2,
+            "r": "A moje prádlo?"
+          },
+          {
+            "t": "Počkejte, až se to rozjede — stroj si pamatuje, kde skončil, a dopere to sám, i když to může chvíli trvat.",
+            "b": 1,
+            "r": "Tak počkám."
+          }
+        ]
+      },
+      {
+        "t": "A dopere se to, nebo začínám znovu?",
+        "o": [
+          {
+            "t": "Dopere.",
+            "b": 1,
+            "r": "Tak jo."
+          },
+          {
+            "t": "Naváže tam, kde skončil. A kdyby ne, pustím vám celý cyklus znovu a zdarma.",
+            "b": 2,
+            "r": "To je fér."
+          },
+          {
+            "t": "To vám neřeknu.",
+            "b": -2,
+            "r": "Vy jste ta infolinka, ne?"
+          }
+        ]
+      },
+      {
+        "t": "A stává se to často?",
+        "o": [
+          {
+            "t": "Ne. Za celý rok podruhé.",
+            "b": 2,
+            "r": "Tak to beru."
+          },
+          {
+            "t": "Občas se to stane, na té lokalitě je to dané.",
+            "b": -1,
+            "r": "To nezní dobře."
+          },
+          {
+            "t": "Elektřina je u nás vůbec problém, loni jsme to řešili snad pětkrát.",
+            "b": -2,
+            "r": "Tak to tam radši prát nebudu."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "sleva",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Chodím k vám třikrát týdně. Nemáte něco pro stálé zákazníky?",
+        "o": [
+          {
+            "t": "Můžu vám založit předplacený kredit se slevou. Chcete?",
+            "b": 2,
+            "r": "To zní dobře."
+          },
+          {
+            "t": "Nemáme.",
+            "b": -1,
+            "r": "Škoda."
+          },
+          {
+            "t": "Slevy nedáváme, cena je pro všechny stejná, a kdybychom slevili jednomu, chtěli by to hned všichni.",
+            "b": -1,
+            "r": "Nemusíte mi vysvětlovat ekonomiku."
+          }
+        ]
+      },
+      {
+        "t": "A kolik by ta sleva byla?",
+        "o": [
+          {
+            "t": "Pár procent.",
+            "b": 0,
+            "r": "Kolik přesně?"
+          },
+          {
+            "t": "Při dobití na deset praní desetina dolů. Kredit nepropadá, zůstane vám, dokud ho nevyberete.",
+            "b": 2,
+            "r": "Tak to beru."
+          },
+          {
+            "t": "To ještě vymyslíme.",
+            "b": -1,
+            "r": "Radši bych slyšel číslo."
+          }
+        ]
+      },
+      {
+        "t": "A platí to i na sušičku?",
+        "o": [
+          {
+            "t": "Platí, na obojí.",
+            "b": 2,
+            "r": "Výborně."
+          },
+          {
+            "t": "Zatím jen na praní, sušičku jsme do toho nedali.",
+            "b": 0,
+            "r": "Aha, tak dobře."
+          },
+          {
+            "t": "To nevím, musel bych se podívat, jak to máme nastavené v systému.",
+            "b": -1,
+            "r": "Tak mi zavolejte, až to budete vědět."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "parkovani",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Dá se u vašeho automatu zaparkovat? Vozím prádlo autem.",
+        "o": [
+          {
+            "t": "Jsou tam dvě místa přímo u stroje, většinou bývá volno.",
+            "b": 2,
+            "r": "Tak to je dobré."
+          },
+          {
+            "t": "Nevím.",
+            "b": -2,
+            "r": "To je přece vaše místo."
+          },
+          {
+            "t": "Parkování neřešíme, to je věc města a my k tomu nemáme co říct.",
+            "b": -1,
+            "r": "Ptám se prakticky, ne úředně."
+          }
+        ]
+      },
+      {
+        "t": "A v sobotu, když je vedle trh?",
+        "o": [
+          {
+            "t": "To bude horší.",
+            "b": 0,
+            "r": "Tak kdy teda?"
+          },
+          {
+            "t": "V sobotu dopoledne je plno. Kdybyste přijel po poledni, máte to tam volné.",
+            "b": 2,
+            "r": "Díky, zařídím se podle toho."
+          },
+          {
+            "t": "Tak přijeďte jindy.",
+            "b": -1,
+            "r": "Děkuju za radu."
+          }
+        ]
+      },
+      {
+        "t": "A zastavit aspoň na chvíli u dvířek?",
+        "o": [
+          {
+            "t": "To jde, na vyložení to tam stačí.",
+            "b": 2,
+            "r": "Super."
+          },
+          {
+            "t": "Stát tam nesmíte, je tam zákaz, to snad víte.",
+            "b": -1,
+            "r": "Ani na minutu?"
+          },
+          {
+            "t": "Nedoporučuju, chodí tam strážníci a pokutují.",
+            "b": 1,
+            "r": "Dobře, že to vím."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "svatba",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Zítra se vdávám a na šatech mám flek od vína. Zvládne to váš automat?",
+        "o": [
+          {
+            "t": "Svatební šaty bych do automatu nedávala. Zkuste čistírnu, tohle je na ruční práci.",
+            "b": 2,
+            "r": "Děkuju za upřímnost."
+          },
+          {
+            "t": "Jasně, hoďte to tam, program na jemné to dá.",
+            "b": -2,
+            "r": "A když to zničím, co pak?"
+          },
+          {
+            "t": "To záleží na materiálu.",
+            "b": 0,
+            "r": "Je to hedvábí."
+          }
+        ]
+      },
+      {
+        "t": "A kdybych to jen vymáchala, abych to měla aspoň svěží?",
+        "o": [
+          {
+            "t": "Když to musí být dneska, dejte ruční program na dvacet stupňů bez odstřeďování. Ale ten flek to nevezme.",
+            "b": 2,
+            "r": "Dobře, zkusím to opatrně."
+          },
+          {
+            "t": "To je jedno, máchání je máchání.",
+            "b": -1,
+            "r": "Tak to mi moc nepomohlo."
+          },
+          {
+            "t": "Radši nic.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      },
+      {
+        "t": "A sušičku na to pustit můžu?",
+        "o": [
+          {
+            "t": "V žádném případě. Hedvábí v sušičce se srazí a je po šatech.",
+            "b": 2,
+            "r": "Tak to teda ne. Díky!"
+          },
+          {
+            "t": "Chvilku na nejnižší teplotu klidně.",
+            "b": -2,
+            "r": "Vy mi ty šaty chcete zničit?"
+          },
+          {
+            "t": "To už je na vás.",
+            "b": -1,
+            "r": "Ptám se, protože vy tomu máte rozumět."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "nocni",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Dělám na nočních. Dostanu se k vám ve tři ráno?",
+        "o": [
+          {
+            "t": "Dostanete, je to nonstop. Odemyká se kartou nebo přes aplikaci.",
+            "b": 2,
+            "r": "To je přesně to, co potřebuju."
+          },
+          {
+            "t": "V noci tam radši nechoďte.",
+            "b": -2,
+            "r": "Tak proč to máte otevřené?"
+          },
+          {
+            "t": "Otevřeno je pořád, ale v noci tam nikdo není.",
+            "b": 0,
+            "r": "To mi je jasné, je to samoobsluha."
+          }
+        ]
+      },
+      {
+        "t": "A je tam v noci vidět? Nerad bych tam šmátral po tmě.",
+        "o": [
+          {
+            "t": "Světlo se rozsvítí na pohyb a svítí celý cyklus.",
+            "b": 2,
+            "r": "Výborně."
+          },
+          {
+            "t": "Vezměte si baterku.",
+            "b": -2,
+            "r": "To myslíte vážně?"
+          },
+          {
+            "t": "Něco tam svítí.",
+            "b": -1,
+            "r": "Tak to zní nejistě."
+          }
+        ]
+      },
+      {
+        "t": "A kdyby se to v noci zaseklo, komu volám?",
+        "o": [
+          {
+            "t": "Mně. Tohle číslo bere člověk i ve tři ráno.",
+            "b": 2,
+            "r": "Tak to je slovo do pranice. Díky."
+          },
+          {
+            "t": "Napište nám mail, ráno to vyřídíme.",
+            "b": -1,
+            "r": "A co mám do rána dělat s mokrým prádlem?"
+          },
+          {
+            "t": "V noci nikdo nebere, ale stroj si to pamatuje a ráno to doběhne.",
+            "b": -1,
+            "r": "Hm, uvidím."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ztrata",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Zapomněla jsem si u vás prádlo v bubnu, byla jsem tam před hodinou.",
+        "o": [
+          {
+            "t": "Podívám se do systému, který stroj to byl, a zamknu ho, dokud nedorazíte.",
+            "b": 2,
+            "r": "To jste mě zachránil."
+          },
+          {
+            "t": "To už tam asi nebude.",
+            "b": -2,
+            "r": "Vy mě fakt umíte uklidnit."
+          },
+          {
+            "t": "Zajeďte se tam podívat.",
+            "b": 0,
+            "r": "To jsem chtěla udělat tak jako tak."
+          }
+        ]
+      },
+      {
+        "t": "A co když to někdo vyndal? Byly tam dětské věci.",
+        "o": [
+          {
+            "t": "Vyndané prádlo dáváme do boxu vedle stroje, nikdo s tím neodchází.",
+            "b": 2,
+            "r": "Tak to se mi ulevilo."
+          },
+          {
+            "t": "Za věci v automatu neručíme, to je v podmínkách.",
+            "b": -2,
+            "r": "Ptám se, co s tím uděláte, ne co nemusíte."
+          },
+          {
+            "t": "Většinou se nic neztratí.",
+            "b": 0,
+            "r": "Většinou."
+          }
+        ]
+      },
+      {
+        "t": "A co mi poradíte, abych to zas nezapomněla?",
+        "o": [
+          {
+            "t": "Zapněte si v aplikaci upozornění na konec praní. Pípne vám to.",
+            "b": 2,
+            "r": "To si nastavím hned."
+          },
+          {
+            "t": "Prostě si to pamatujte.",
+            "b": -2,
+            "r": "Děkuju za radu."
+          },
+          {
+            "t": "Dejte si budík v telefonu.",
+            "b": 1,
+            "r": "To není špatný nápad."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mince",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Stojím u automatu a nemám drobné. Bere to mince, nebo kartu?",
+        "o": [
+          {
+            "t": "Kartou i telefonem, mince nepotřebujete vůbec.",
+            "b": 2,
+            "r": "Super, tak to zkusím."
+          },
+          {
+            "t": "Mince jsou jistota, zajeďte si vyměnit.",
+            "b": -2,
+            "r": "Kam, ve čtvrt na deset večer?"
+          },
+          {
+            "t": "Obojí, jak chcete.",
+            "b": 1,
+            "r": "Tak dobře."
+          }
+        ]
+      },
+      {
+        "t": "A nestrhne mi to víc, než kolik propeřu?",
+        "o": [
+          {
+            "t": "Předautorizuje se vyšší částka a zbytek se vrátí do dvou dnů. Zaplatíte jen to, co propral.",
+            "b": 2,
+            "r": "Aha, tak to je v pořádku."
+          },
+          {
+            "t": "To se nám občas stane.",
+            "b": -2,
+            "r": "Tak to radši nezkouším."
+          },
+          {
+            "t": "Strhne přesně cenu programu.",
+            "b": 1,
+            "r": "Dobře."
+          }
+        ]
+      },
+      {
+        "t": "A kdyby to platbu nevzalo?",
+        "o": [
+          {
+            "t": "Zkuste to ještě jednou a pak mi zavolejte, pustím vám stroj na dálku.",
+            "b": 2,
+            "r": "To je služba."
+          },
+          {
+            "t": "To se stát nemůže.",
+            "b": -1,
+            "r": "Všechno se může stát."
+          },
+          {
+            "t": "Terminál občas vypadne, to je signálem.",
+            "b": -1,
+            "r": "Takže mám smůlu?"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "voda",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Kolem vašeho automatu je louže. Teče to z něj?",
+        "o": [
+          {
+            "t": "Díky, že voláte. Posílám tam technika a stroj zatím odstavím.",
+            "b": 2,
+            "r": "Tak to je rychlovka, díky."
+          },
+          {
+            "t": "To bude po někom jiném.",
+            "b": -2,
+            "r": "A kdyby ne?"
+          },
+          {
+            "t": "Občas tam zůstane voda po vypouštění.",
+            "b": 0,
+            "r": "Je toho dost."
+          }
+        ]
+      },
+      {
+        "t": "Můžu ten stroj zatím používat, nebo se mi to vylije?",
+        "o": [
+          {
+            "t": "Nepoužívejte ho. Vedle je druhý, ten je v pořádku.",
+            "b": 2,
+            "r": "Tak zkusím ten."
+          },
+          {
+            "t": "Klidně perte, voda nikomu neublížila.",
+            "b": -2,
+            "r": "A když se zkratuje?"
+          },
+          {
+            "t": "Já bych to risknul.",
+            "b": -2,
+            "r": "Já teda ne."
+          }
+        ]
+      },
+      {
+        "t": "A dostanu něco za to, že jsem vám to nahlásil?",
+        "o": [
+          {
+            "t": "Praní zdarma, pošlu vám kód do zprávy. Díky, bez vás bych se to dozvěděl až od technika.",
+            "b": 2,
+            "r": "To mě potěšilo."
+          },
+          {
+            "t": "To po nás nikdo nemůže chtít.",
+            "b": -2,
+            "r": "Já nic nechtěl, jen se ptám."
+          },
+          {
+            "t": "Nic takového nemáme, ale díky.",
+            "b": 0,
+            "r": "Budiž."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "prasek",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Jaký prášek tam dáváte? Mám citlivou pokožku a nesnesu silné parfémy.",
+        "o": [
+          {
+            "t": "Jede tam neparfémovaná drogerie. Složení vám pošlu, ať si to můžete ověřit.",
+            "b": 2,
+            "r": "To jste hodný, děkuju."
+          },
+          {
+            "t": "Běžný prášek jako všude.",
+            "b": -1,
+            "r": "To mi nic neříká."
+          },
+          {
+            "t": "To fakt nevím, to řeší kolega.",
+            "b": -2,
+            "r": "Tak mě s ním spojte."
+          }
+        ]
+      },
+      {
+        "t": "A můžu si přinést vlastní?",
+        "o": [
+          {
+            "t": "Můžete, je tam přihrádka. Dávkujte polovinu, stroje berou míň než domácí pračka.",
+            "b": 2,
+            "r": "Perfektní, tak to udělám."
+          },
+          {
+            "t": "To nejde, systém dávkuje sám.",
+            "b": -1,
+            "r": "Škoda."
+          },
+          {
+            "t": "Vlastní prášky zakazujeme, ničí nám to stroje.",
+            "b": -2,
+            "r": "Tak já zas ničím vaše stroje."
+          }
+        ]
+      },
+      {
+        "t": "A proplachuje se to mezi zákazníky, nebo peru v cizí pěně?",
+        "o": [
+          {
+            "t": "Po každém cyklu jede proplach čistou vodou, a jednou týdně dezinfekce bubnu.",
+            "b": 2,
+            "r": "To jsem chtěla slyšet."
+          },
+          {
+            "t": "Voda je voda.",
+            "b": -2,
+            "r": "To je dost nechutná odpověď."
+          },
+          {
+            "t": "Buben se proplachuje, to je v pořádku.",
+            "b": 1,
+            "r": "Dobře."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "kolo",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Přijel jsem z vyjížďky, dres a bunda jsou od bláta. Dá se to u vás vyprat?",
+        "o": [
+          {
+            "t": "Dá, jen nejdřív oklepejte hrubé bláto venku — jinak to jde do filtru.",
+            "b": 2,
+            "r": "Tak to udělám."
+          },
+          {
+            "t": "Zablácené věci do automatu nepatří.",
+            "b": -2,
+            "r": "A kam teda patří?"
+          },
+          {
+            "t": "Hoďte to tam, to je jedno.",
+            "b": -1,
+            "r": "Nechci vám zanést stroj."
+          }
+        ]
+      },
+      {
+        "t": "A membránovou bundu to nezničí? Stála pět tisíc.",
+        "o": [
+          {
+            "t": "Dejte třicet stupňů, žádnou aviváž a nízké odstřeďování. Membrána to vydrží.",
+            "b": 2,
+            "r": "Díky, to jsem potřeboval."
+          },
+          {
+            "t": "Membrány se do automatu nedávají.",
+            "b": -1,
+            "r": "Tak to si vyperu doma."
+          },
+          {
+            "t": "To vám neřeknu, to je na výrobci.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      },
+      {
+        "t": "A batoh? Je po něm celé auto.",
+        "o": [
+          {
+            "t": "Batoh vyndejte z rámu, zapněte všechny zipy a dejte na jemné. Sušičku ne, to by roztavilo zipy.",
+            "b": 2,
+            "r": "Jasně, díky za tip."
+          },
+          {
+            "t": "Batohy neperte, zničí se.",
+            "b": 0,
+            "r": "Takže mám smůlu."
+          },
+          {
+            "t": "To je mi jedno, zaplaceno máte.",
+            "b": -2,
+            "r": "Tak to přeju hezký den."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "zdrazeni",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Minule jsem platil míň. Vy jste zdražili?",
+        "o": [
+          {
+            "t": "Zdražili, o deset korun za cyklus. Šla nahoru voda a elektřina, dýl už jsme to držet nemohli.",
+            "b": 2,
+            "r": "Aspoň to říkáte na rovinu."
+          },
+          {
+            "t": "Ceny jsou pořád stejné.",
+            "b": -2,
+            "r": "Mám účtenku, na které to je jinak."
+          },
+          {
+            "t": "To rozhoduje vedení.",
+            "b": -1,
+            "r": "Vy jste vedení, ne?"
+          }
+        ]
+      },
+      {
+        "t": "A to jste nemohli dát vědět dopředu?",
+        "o": [
+          {
+            "t": "Máte pravdu, mělo to viset na dveřích týden předem. Příště to tak bude.",
+            "b": 2,
+            "r": "Tak dobře."
+          },
+          {
+            "t": "Cedule tam visela.",
+            "b": -1,
+            "r": "Nevšiml jsem si."
+          },
+          {
+            "t": "To nikdo nedělá.",
+            "b": -2,
+            "r": "Slušní lidi to dělají."
+          }
+        ]
+      },
+      {
+        "t": "Nemáte něco pro ty, co k vám chodí pravidelně?",
+        "o": [
+          {
+            "t": "Kredit na deset praní, tam je cena pořád ta stará. Můžu vám ho založit teď.",
+            "b": 2,
+            "r": "Tak to beru."
+          },
+          {
+            "t": "Nemáme a mít nebudeme.",
+            "b": -2,
+            "r": "Příště zkusím konkurenci."
+          },
+          {
+            "t": "Něco chystáme.",
+            "b": 0,
+            "r": "Dejte vědět."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "deti",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "U vašeho automatu si hrají děti, lezou do bubnu. Víte o tom?",
+        "o": [
+          {
+            "t": "Nevěděl, díky. Dám tam zámek dvířek mimo cyklus a zajedu se tam podívat.",
+            "b": 2,
+            "r": "To je dobře."
+          },
+          {
+            "t": "Za cizí děti neručíme.",
+            "b": -2,
+            "r": "Jde o to, aby se nikomu nic nestalo."
+          },
+          {
+            "t": "To mají hlídat rodiče.",
+            "b": -1,
+            "r": "To jistě, ale stroj je váš."
+          }
+        ]
+      },
+      {
+        "t": "A jdou ta dvířka zevnitř otevřít?",
+        "o": [
+          {
+            "t": "Jdou. Zámek drží jen při běhu a při výpadku proudu se sám rozepne.",
+            "b": 2,
+            "r": "To jsem chtěla slyšet."
+          },
+          {
+            "t": "To jsem nikdy nezkoušel.",
+            "b": -1,
+            "r": "Tak to zkuste."
+          },
+          {
+            "t": "Zevnitř ne, ale tam se nikdo nevejde.",
+            "b": -2,
+            "r": "Osmiletý kluk se vejde."
+          }
+        ]
+      },
+      {
+        "t": "Nechcete tam dát cedulku, ať to vidí i rodiče?",
+        "o": [
+          {
+            "t": "Dobrý nápad, objednám ji ještě dnes. Díky za postrčení.",
+            "b": 2,
+            "r": "Není zač."
+          },
+          {
+            "t": "Cedulky nikdo nečte.",
+            "b": -1,
+            "r": "Některé se čtou."
+          },
+          {
+            "t": "Máme tam dost cedulí.",
+            "b": -2,
+            "r": "Tak nashledanou."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "klub",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Vedu fotbalový klub, dvacet dresů každý týden. Dá se to u vás domluvit?",
+        "o": [
+          {
+            "t": "Dá. Udělám vám klubový kredit a ukážu, jak to naskládat do dvou strojů.",
+            "b": 2,
+            "r": "To by nám hodně pomohlo."
+          },
+          {
+            "t": "Přijďte a plaťte jako každý.",
+            "b": -1,
+            "r": "Ptám se, jestli to jde domluvit."
+          },
+          {
+            "t": "Velké zakázky neděláme.",
+            "b": -2,
+            "r": "Dvacet dresů není velká zakázka."
+          }
+        ]
+      },
+      {
+        "t": "A kdy máte nejmíň lidí? Nechci blokovat celou provozovnu.",
+        "o": [
+          {
+            "t": "V úterý a ve středu dopoledne tam nikdo není. Vezměte to tehdy.",
+            "b": 2,
+            "r": "Zapíšu si to."
+          },
+          {
+            "t": "Pořád je to plné.",
+            "b": -1,
+            "r": "To mi nepomohlo."
+          },
+          {
+            "t": "To se nedá říct.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      },
+      {
+        "t": "A dostanu na to fakturu pro klub?",
+        "o": [
+          {
+            "t": "Měsíční, se vším, co klub propere. Pošlu ji mailem.",
+            "b": 2,
+            "r": "Perfektní, domluveno."
+          },
+          {
+            "t": "Faktury neděláme.",
+            "b": -2,
+            "r": "Tak to si klub neproplatí."
+          },
+          {
+            "t": "To musíte řešit přes účetní.",
+            "b": -1,
+            "r": "Volám vám, ne účetní."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "qr",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Načetla jsem QR kód telefonem a nic se nestalo. Platba neprošla.",
+        "o": [
+          {
+            "t": "Vidím to v systému — platba se zasekla na půl cesty a nic se nestrhlo. Pustím vám stroj ručně.",
+            "b": 2,
+            "r": "To je rychlé, děkuju."
+          },
+          {
+            "t": "To bude vaší bankou.",
+            "b": -2,
+            "r": "Zkoušela jsem to dvakrát."
+          },
+          {
+            "t": "Zkuste to ještě jednou.",
+            "b": -1,
+            "r": "A když se to strhne dvakrát?"
+          }
+        ]
+      },
+      {
+        "t": "A nestrhne se mi to nakonec dvakrát?",
+        "o": [
+          {
+            "t": "Když to projde dvakrát, jednu platbu vám vrátím a ozvu se vám sama.",
+            "b": 2,
+            "r": "Dobře, spoléhám na vás."
+          },
+          {
+            "t": "To se nestává.",
+            "b": -1,
+            "r": "Mně se právě stalo."
+          },
+          {
+            "t": "To si pak musíte vyřídit s bankou.",
+            "b": -2,
+            "r": "To je ale vaše platební brána."
+          }
+        ]
+      },
+      {
+        "t": "A nemáte to raději na kartu? Tomu rozumím líp.",
+        "o": [
+          {
+            "t": "Terminál je přímo na stroji, přiložíte kartu a jede to. QR je jen pro ty, co nechtějí tahat peněženku.",
+            "b": 2,
+            "r": "Tak příště kartou."
+          },
+          {
+            "t": "QR je moderní, zvykejte si.",
+            "b": -2,
+            "r": "Já si zvyknu na konkurenci."
+          },
+          {
+            "t": "Obojí funguje stejně.",
+            "b": 0,
+            "r": "To zjevně ne."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "cekani",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Stojím u vás a všechny stroje běží. Jak dlouho mám čekat?",
+        "o": [
+          {
+            "t": "Koukám do systému: ten vlevo končí za jedenáct minut, druhý za dvacet.",
+            "b": 2,
+            "r": "Tak to počkám, díky."
+          },
+          {
+            "t": "To vám neřeknu.",
+            "b": -2,
+            "r": "Vždyť to musíte vidět."
+          },
+          {
+            "t": "Chvilku to potrvá.",
+            "b": -1,
+            "r": "Chvilku je kolik?"
+          }
+        ]
+      },
+      {
+        "t": "A dá se to nějak zamluvit dopředu, ať nejezdím zbytečně?",
+        "o": [
+          {
+            "t": "Rezervace neděláme, ale v aplikaci vidíte, co je volné, než vyrazíte.",
+            "b": 2,
+            "r": "To mi stačí."
+          },
+          {
+            "t": "Ne.",
+            "b": -1,
+            "r": "Aha."
+          },
+          {
+            "t": "Rezervujte si to u konkurence.",
+            "b": -2,
+            "r": "To nebyla moc chytrá odpověď."
+          }
+        ]
+      },
+      {
+        "t": "A co když si někdo nechá prádlo ve stroji a nejde pro něj?",
+        "o": [
+          {
+            "t": "Můžete ho vyndat do boxu vedle. Majiteli chodí upozornění, většinou dorazí do deseti minut.",
+            "b": 2,
+            "r": "Rozumím, tak to zkusím."
+          },
+          {
+            "t": "Do cizího prádla nesahejte.",
+            "b": -1,
+            "r": "A co mám dělat?"
+          },
+          {
+            "t": "Tak si počkejte.",
+            "b": -2,
+            "r": "Hezky jste mi poradil."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mokre2",
+    "rod": "z",
+    "nalada": 18,
+    "kroky": [
+      {
+        "t": "Dobrý den, vytáhla jsem prádlo ze sušičky a je pořád úplně mokré. Zaplatila jsem dvě sušení!",
+        "o": [
+          {
+            "t": "To je naše chyba, obě sušení vám vracím. Zkuste prosím sušičku číslo dvě, tahle jde hned z provozu.",
+            "b": 2,
+            "r": "No vida, konečně někdo rozumný."
+          },
+          {
+            "t": "Asi jste ji přecpala, to je nejčastější důvod.",
+            "b": -2,
+            "r": "Takže si za to můžu sama?"
+          },
+          {
+            "t": "Zkuste to pustit ještě jednou, třeba to dojede.",
+            "b": -1,
+            "r": "Za třetí peníze? To snad ne."
+          }
+        ]
+      },
+      {
+        "t": "A co mám dělat teď? Mám tu tašku mokrého prádla a za hodinu jedu pryč.",
+        "o": [
+          {
+            "t": "Pustím vám dvojku na dálku zdarma, naskočí za minutu. Za půl hodiny je prádlo suché.",
+            "b": 2,
+            "r": "Děkuju, to mi zachrání den."
+          },
+          {
+            "t": "Tak si ho vezměte domů, doma to doschne.",
+            "b": -2,
+            "r": "Mokré prádlo v autě, výborně."
+          },
+          {
+            "t": "Můžete počkat na technika, ten dorazí odpoledne.",
+            "b": -1,
+            "r": "Odpoledne už budu pryč."
+          }
+        ]
+      },
+      {
+        "t": "A ty peníze za to první sušení?",
+        "o": [
+          {
+            "t": "Posílám zpátky na účet, do dvou dnů tam budou. Potvrzení přijde SMSkou.",
+            "b": 2,
+            "r": "Tak to beru, děkuju."
+          },
+          {
+            "t": "To se bohužel nevrací, stroj se spustil.",
+            "b": -2,
+            "r": "Spustil, ale neusušil!"
+          },
+          {
+            "t": "Napište si o to mailem, někdo se na to podívá.",
+            "b": -1,
+            "r": "Další papírování."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "barva-2",
+    "rod": "m",
+    "nalada": 10,
+    "kroky": [
+      {
+        "t": "Někdo nechal v bubnu červené tričko a mně se obarvila celá bílá várka. Košile do práce, všechno!",
+        "o": [
+          {
+            "t": "To je nepříjemné a omlouvám se. Spočítejte mi, co se zničilo, a já to proplatím.",
+            "b": 2,
+            "r": "Dobře. Aspoň něco."
+          },
+          {
+            "t": "Za obsah bubnu neručíme, to je na vás si ho zkontrolovat.",
+            "b": -2,
+            "r": "Vy jste neuvěřitelný."
+          },
+          {
+            "t": "To se stává, zkuste to vyprat s odbarvovačem.",
+            "b": -1,
+            "r": "Odbarvovač na košile do práce?"
+          }
+        ]
+      },
+      {
+        "t": "A jak zařídíte, aby se to nestalo zas?",
+        "o": [
+          {
+            "t": "Na dveře dám cedulku a obsluha bude kontrolovat bubny při každém úklidu. Doteď to nedělala, to je na nás.",
+            "b": 2,
+            "r": "To zní jako chlap, co to myslí vážně."
+          },
+          {
+            "t": "Nijak, lidi jsou nepořádní.",
+            "b": -2,
+            "r": "Tak to si příště vyperu jinde."
+          },
+          {
+            "t": "Určitě na to upozorníme.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      },
+      {
+        "t": "Takže kolik mi dáte a kdy?",
+        "o": [
+          {
+            "t": "Pošlete fotky a účtenku, do tří dnů posílám peníze. Když se nedomluvíme, řeknete si, co vám přijde fér.",
+            "b": 2,
+            "r": "Fajn, fotky posílám."
+          },
+          {
+            "t": "Maximálně vám vrátíme to praní.",
+            "b": -2,
+            "r": "Tím mi košile nenahradíte."
+          },
+          {
+            "t": "To záleží, uvidíme.",
+            "b": -1,
+            "r": "Uvidíme. Jasně."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "prasek-2",
+    "rod": "z",
+    "nalada": 30,
+    "kroky": [
+      {
+        "t": "Dobrý den, ten automat na prášek je prázdný a já tu stojím s plnou taškou.",
+        "o": [
+          {
+            "t": "Mrzí mě to. Dávkovač je ve stroji dvojka plný, pustím vám ho s prášky zdarma.",
+            "b": 2,
+            "r": "To je milé, děkuju."
+          },
+          {
+            "t": "Prášek si můžete nosit vlastní, nikdo vám nebrání.",
+            "b": -2,
+            "r": "Tak proč tam ten automat máte?"
+          },
+          {
+            "t": "Doplňujeme ho jednou týdně, přijďte ve čtvrtek.",
+            "b": -1,
+            "r": "Ve čtvrtek? To už budu mít doma plíseň."
+          }
+        ]
+      },
+      {
+        "t": "A nejbližší obchod je kde?",
+        "o": [
+          {
+            "t": "Dvě minuty vedle je večerka, mají prášek za dvacet. Rozdíl vám vrátím v kreditu.",
+            "b": 2,
+            "r": "Tak to zvládnu."
+          },
+          {
+            "t": "To fakt nevím, nejsem navigace.",
+            "b": -2,
+            "r": "Hezky jste mi pomohl."
+          },
+          {
+            "t": "Někde v centru určitě něco bude.",
+            "b": -1,
+            "r": "Někde. Super."
+          }
+        ]
+      },
+      {
+        "t": "A doplníte to, nebo si mám nosit prášek napořád?",
+        "o": [
+          {
+            "t": "Doplním to dneska večer osobně a budu to hlídat týdně. Omlouvám se.",
+            "b": 2,
+            "r": "Dobře, dám vám ještě šanci."
+          },
+          {
+            "t": "Doplní se to, až se to doplní.",
+            "b": -2,
+            "r": "Takže nikdy."
+          },
+          {
+            "t": "Napíšu to kolegovi.",
+            "b": 0,
+            "r": "No doufám."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "zamceno",
+    "rod": "m",
+    "nalada": 12,
+    "kroky": [
+      {
+        "t": "Stojím před vaší prádelnou, na dveřích máte nonstop a je zamčeno. Jel jsem sem dvacet minut.",
+        "o": [
+          {
+            "t": "Zámek se zasekl, otevřu vám ho na dálku. Vydržte deset vteřin.",
+            "b": 2,
+            "r": "Tak to je služba, děkuju."
+          },
+          {
+            "t": "To není možné, nonstop je nonstop.",
+            "b": -2,
+            "r": "Chcete fotku?"
+          },
+          {
+            "t": "Asi vám nejde karta, zkuste ji přiložit líp.",
+            "b": -1,
+            "r": "Zkoušel jsem to pětkrát."
+          }
+        ]
+      },
+      {
+        "t": "Už jsem uvnitř. Ale příště radši pojedu jinam, když je to takhle.",
+        "o": [
+          {
+            "t": "Chápu. Dám vám na příště praní zdarma, ať ta cesta nebyla zbytečná.",
+            "b": 2,
+            "r": "Tak jo, to beru."
+          },
+          {
+            "t": "Jak chcete, konkurence je kousek.",
+            "b": -2,
+            "r": "Vy jste teda obchodník."
+          },
+          {
+            "t": "Snad se to nebude opakovat.",
+            "b": 0,
+            "r": "Snad."
+          }
+        ]
+      },
+      {
+        "t": "A co ten zámek, vyřešíte ho?",
+        "o": [
+          {
+            "t": "Technik tam jede ráno a vymění ho. Do té doby to mám pod dohledem z dispečinku.",
+            "b": 2,
+            "r": "Dobře, díky za upřímnost."
+          },
+          {
+            "t": "Zámek je v pořádku, to byla výjimka.",
+            "b": -2,
+            "r": "Výjimka, co mě stála večer."
+          },
+          {
+            "t": "Nahlásím to dál.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "karta-2",
+    "rod": "z",
+    "nalada": 26,
+    "kroky": [
+      {
+        "t": "Terminál mi třikrát odmítl kartu a pak mi přišly tři zprávy z banky, že jsem platila. Co to je?",
+        "o": [
+          {
+            "t": "To jsou předautorizace, peníze se vrátí do tří dnů samy. Praní vám pustím hned.",
+            "b": 2,
+            "r": "Tak to se mi ulevilo."
+          },
+          {
+            "t": "To máte problém s bankou, ne s námi.",
+            "b": -2,
+            "r": "Tři platby u vás a problém mám já?"
+          },
+          {
+            "t": "Zkuste jinou kartu.",
+            "b": -1,
+            "r": "Jinou nemám."
+          }
+        ]
+      },
+      {
+        "t": "A jak si mám být jistá, že mi to opravdu přijde zpátky?",
+        "o": [
+          {
+            "t": "Posílám vám potvrzení o zrušení všech tří plateb na mail. Kdyby do tří dnů nepřišly, volejte mi přímo.",
+            "b": 2,
+            "r": "Dobře, to mi stačí."
+          },
+          {
+            "t": "Musíte nám věřit.",
+            "b": -2,
+            "r": "Věřit. Po tomhle."
+          },
+          {
+            "t": "Obvykle to chodí.",
+            "b": 0,
+            "r": "Obvykle."
+          }
+        ]
+      },
+      {
+        "t": "A ten terminál spravíte?",
+        "o": [
+          {
+            "t": "Vyměňujeme ho zítra. Dneska tam jede platba přes QR kód, ta funguje spolehlivě.",
+            "b": 2,
+            "r": "Fajn, děkuju za jasnou odpověď."
+          },
+          {
+            "t": "Terminál je v pořádku.",
+            "b": -2,
+            "r": "Jasně, to já si vymýšlím."
+          },
+          {
+            "t": "Podíváme se na to.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "proud-2",
+    "rod": "m",
+    "nalada": 20,
+    "kroky": [
+      {
+        "t": "Uprostřed praní vypadl proud a stroj je zablokovaný i s mým prádlem uvnitř.",
+        "o": [
+          {
+            "t": "Po naběhnutí proudu program dojede od místa, kde skončil. Dveře odemknu na dálku, kdybyste to potřeboval dřív.",
+            "b": 2,
+            "r": "Aha, tak to je dobré vědět."
+          },
+          {
+            "t": "Za výpadky elektřiny neodpovídáme.",
+            "b": -2,
+            "r": "To mě uklidnilo."
+          },
+          {
+            "t": "Počkejte, ono to naskočí.",
+            "b": -1,
+            "r": "Jak dlouho mám čekat?"
+          }
+        ]
+      },
+      {
+        "t": "A to praní budu platit znovu?",
+        "o": [
+          {
+            "t": "Ne. Cyklus pokračuje na původní platbu a kdyby ne, pustím vám nový zdarma.",
+            "b": 2,
+            "r": "Férové."
+          },
+          {
+            "t": "Samozřejmě, stroj se spustil.",
+            "b": -2,
+            "r": "A dojel do půlky!"
+          },
+          {
+            "t": "To budeme řešit potom.",
+            "b": -1,
+            "r": "Potom. Pořád potom."
+          }
+        ]
+      },
+      {
+        "t": "Nemáte tam záložní zdroj? V mrazáku vedle to taky vypadlo.",
+        "o": [
+          {
+            "t": "Máme ho jen na zámky a osvětlení, abyste se vždycky dostal ven a k prádlu. Na stroje ne, to by byl jiný kalibr.",
+            "b": 2,
+            "r": "Rozumím, to dává smysl."
+          },
+          {
+            "t": "Takové věci neřešíme.",
+            "b": -2,
+            "r": "Vy neřešíte nic."
+          },
+          {
+            "t": "Něco tam asi je.",
+            "b": -1,
+            "r": "Asi."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "penezenka",
+    "rod": "z",
+    "nalada": 16,
+    "kroky": [
+      {
+        "t": "Nechala jsem u vás v prádelně peněženku a za hodinu jsem se vrátila a byla pryč.",
+        "o": [
+          {
+            "t": "To je mrzuté. Kamera tam je, projdu záznam hned teď a ozvu se vám do hodiny.",
+            "b": 2,
+            "r": "Děkuju, aspoň něco."
+          },
+          {
+            "t": "Za odložené věci neručíme, je to na cedulce.",
+            "b": -2,
+            "r": "Já vím, co je na cedulce. Ptám se na pomoc."
+          },
+          {
+            "t": "Zeptejte se ostatních zákazníků.",
+            "b": -1,
+            "r": "Kterých, jsou pryč."
+          }
+        ]
+      },
+      {
+        "t": "A když ji na kameře uvidíte, co s tím uděláte?",
+        "o": [
+          {
+            "t": "Záznam předám policii, to je jediná správná cesta. Vy si podejte oznámení a já jim ho pošlu rovnou.",
+            "b": 2,
+            "r": "Dobře, udělám to."
+          },
+          {
+            "t": "Nic, do toho se nebudeme plést.",
+            "b": -2,
+            "r": "Takže nic."
+          },
+          {
+            "t": "Uvidíme podle toho, co tam bude.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      },
+      {
+        "t": "Můžu ten záznam vidět?",
+        "o": [
+          {
+            "t": "Sám vám ho ukázat nesmím, jsou tam i jiní lidé. Policii ho vydám okamžitě a vy u toho můžete být.",
+            "b": 2,
+            "r": "To chápu, díky za rovnou řeč."
+          },
+          {
+            "t": "Kamery stejně nefungují.",
+            "b": -2,
+            "r": "Tak proč tam visí?"
+          },
+          {
+            "t": "To asi nepůjde.",
+            "b": -1,
+            "r": "Proč ne?"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mastnota",
+    "rod": "m",
+    "nalada": 14,
+    "kroky": [
+      {
+        "t": "V bubnu byla mastnota po někom a mám zničené dvě mikiny. Prý tam někdo pral montérky.",
+        "o": [
+          {
+            "t": "Omlouvám se. Mikiny proplatím a stroj stahuju na vyčištění ještě dneska.",
+            "b": 2,
+            "r": "Dobře, tak to beru."
+          },
+          {
+            "t": "Měl jste si buben zkontrolovat.",
+            "b": -2,
+            "r": "Mám kontrolovat po vás?"
+          },
+          {
+            "t": "Zkuste to vyprat ještě jednou.",
+            "b": -1,
+            "r": "Už dvakrát jsem to zkoušel."
+          }
+        ]
+      },
+      {
+        "t": "A proč někdo pere montérky v obyčejné pračce?",
+        "o": [
+          {
+            "t": "Protože to zatím nikdo nehlídal. Dám do provozovny jeden stroj označený na pracovní prádlo a na ostatní to zakážu.",
+            "b": 2,
+            "r": "To je rozumné řešení."
+          },
+          {
+            "t": "Protože lidi jsou prasata.",
+            "b": -1,
+            "r": "Hezky jste to řekl o svých zákaznících."
+          },
+          {
+            "t": "To se nedá uhlídat.",
+            "b": -2,
+            "r": "Tak to je váš byznys, ne?"
+          }
+        ]
+      },
+      {
+        "t": "Jak dlouho bude ten stroj mimo?",
+        "o": [
+          {
+            "t": "Do večera. Vyčistí ho profík, ne já s hadrem. Napíšu vám, až pojede.",
+            "b": 2,
+            "r": "Fajn, díky."
+          },
+          {
+            "t": "Nevím.",
+            "b": -2,
+            "r": "Nic nevíte."
+          },
+          {
+            "t": "Pár dní.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "voda-2",
+    "rod": "z",
+    "nalada": 22,
+    "kroky": [
+      {
+        "t": "U vás teče voda po podlaze, málem jsem upadla. S malým dítětem!",
+        "o": [
+          {
+            "t": "Beru to vážně. Provozovnu hned zavírám, než to uklidí — děkuju, že jste zavolala.",
+            "b": 2,
+            "r": "Aspoň někdo to bere vážně."
+          },
+          {
+            "t": "Trochu vody po praní je normální.",
+            "b": -2,
+            "r": "Normální je, aby si tam někdo rozbil hlavu?"
+          },
+          {
+            "t": "Dejte na to pozor a vyhněte se tomu.",
+            "b": -2,
+            "r": "To mi radíte vážně?"
+          }
+        ]
+      },
+      {
+        "t": "A odkud to teče?",
+        "o": [
+          {
+            "t": "Nejspíš prasklá hadice u trojky. Technik tam bude do hodiny a do té doby je stroj odstavený.",
+            "b": 2,
+            "r": "Dobře, díky."
+          },
+          {
+            "t": "To se nedá poznat na dálku.",
+            "b": -1,
+            "r": "Tak tam někoho pošlete."
+          },
+          {
+            "t": "Asi to někdo rozlil.",
+            "b": -1,
+            "r": "Deset litrů?"
+          }
+        ]
+      },
+      {
+        "t": "Já tam mám rozdělané praní, co s ním?",
+        "o": [
+          {
+            "t": "Dojede v pořádku, trojka s tím nesouvisí. Praní máte u mě příště zdarma za to zdržení.",
+            "b": 2,
+            "r": "Děkuju, to je slušné."
+          },
+          {
+            "t": "Přijďte si pro něj zítra.",
+            "b": -2,
+            "r": "Zítra pracuju."
+          },
+          {
+            "t": "To si musíte vyřešit sama.",
+            "b": -2,
+            "r": "Děkuju za nic."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "drahe-2",
+    "rod": "m",
+    "nalada": 34,
+    "kroky": [
+      {
+        "t": "Zdražili jste o dvacku a vedle to mají levnější. Proč bych chodil k vám?",
+        "o": [
+          {
+            "t": "Protože u nás vyperete i o půlnoci a stroj je vždycky čistý. Jestli ne, chci o tom vědět hned.",
+            "b": 2,
+            "r": "To zní rozumně."
+          },
+          {
+            "t": "Tak jděte vedle.",
+            "b": -2,
+            "r": "Hezké jednání se zákazníkem."
+          },
+          {
+            "t": "Zdražila energie, s tím nic nenaděláme.",
+            "b": 0,
+            "r": "To slyším všude."
+          }
+        ]
+      },
+      {
+        "t": "A nějaká sleva pro stálé zákazníky?",
+        "o": [
+          {
+            "t": "Každé desáté praní zdarma, stačí mi dát číslo, pod kterým vás povedu. Zapisuju vás teď.",
+            "b": 2,
+            "r": "Tak to beru."
+          },
+          {
+            "t": "Žádné slevy nemáme.",
+            "b": -1,
+            "r": "Škoda."
+          },
+          {
+            "t": "Zeptejte se na pobočce.",
+            "b": -1,
+            "r": "Volám přece na infolinku."
+          }
+        ]
+      },
+      {
+        "t": "A nezdražíte zas za měsíc?",
+        "o": [
+          {
+            "t": "Do konce roku ne, to vám říkám rovnou. Kdyby ano, napíšu to na dveře dva týdny dopředu.",
+            "b": 2,
+            "r": "Férové, díky."
+          },
+          {
+            "t": "To vám nikdo neslíbí.",
+            "b": 0,
+            "r": "Hm."
+          },
+          {
+            "t": "Klidně, trh je trh.",
+            "b": -2,
+            "r": "Tak s vámi nepočítejte."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "faktura-2",
+    "rod": "z",
+    "nalada": 38,
+    "kroky": [
+      {
+        "t": "Potřebuju fakturu na firmu, pereme u vás prádlo z penzionu. Z automatu leze jen útržek.",
+        "o": [
+          {
+            "t": "Fakturu vystavím. Pošlete mi IČO a za hodinu ji máte v mailu.",
+            "b": 2,
+            "r": "Výborně, posílám."
+          },
+          {
+            "t": "My faktury neděláme, jsme samoobsluha.",
+            "b": -2,
+            "r": "Takže u vás firma prát nemůže?"
+          },
+          {
+            "t": "Zkuste napsat na mail, možná se někdo ozve.",
+            "b": -1,
+            "r": "Možná?"
+          }
+        ]
+      },
+      {
+        "t": "A šlo by to pravidelně měsíčně, ať neřeším každé praní?",
+        "o": [
+          {
+            "t": "Ano. Založím vám firemní účet, praní se načítá a jednou měsíčně přijde souhrnná faktura.",
+            "b": 2,
+            "r": "Tak to nám hodně pomůže."
+          },
+          {
+            "t": "To je moc složité.",
+            "b": -2,
+            "r": "Pro vás nebo pro mě?"
+          },
+          {
+            "t": "Teoreticky asi ano.",
+            "b": 0,
+            "r": "Teoreticky."
+          }
+        ]
+      },
+      {
+        "t": "A dostaneme na ten objem nějakou cenu?",
+        "o": [
+          {
+            "t": "Nad padesát praní měsíčně patnáct procent dolů. Napíšu to do smlouvy, ať to neplatí jen do příště.",
+            "b": 2,
+            "r": "S tím jdu za majitelem."
+          },
+          {
+            "t": "Ceny máme pro všechny stejné.",
+            "b": 0,
+            "r": "Hm."
+          },
+          {
+            "t": "To bych musel řešit s někým jiným.",
+            "b": -1,
+            "r": "Tak ho sežeňte."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "svatky",
+    "rod": "m",
+    "nalada": 42,
+    "kroky": [
+      {
+        "t": "Máte otevřeno na Štědrý den? Na webu je to rozporuplné.",
+        "o": [
+          {
+            "t": "Otevřeno je nonstop, i na Štědrý den. Web opravím ještě dneska, díky za upozornění.",
+            "b": 2,
+            "r": "Děkuju, to je jasná odpověď."
+          },
+          {
+            "t": "To nevím, zavolejte po svátcích.",
+            "b": -2,
+            "r": "Po svátcích mi to je k ničemu."
+          },
+          {
+            "t": "Asi ano.",
+            "b": -1,
+            "r": "Asi mi nestačí."
+          }
+        ]
+      },
+      {
+        "t": "A bude tam někdo, kdyby se stroj zasekl?",
+        "o": [
+          {
+            "t": "Na lince jsem já, i o svátcích. Stroj odemknu na dálku a technik je na telefonu.",
+            "b": 2,
+            "r": "To je dobré vědět."
+          },
+          {
+            "t": "O svátcích nikdo nejezdí.",
+            "b": -1,
+            "r": "Takže riziko beru já."
+          },
+          {
+            "t": "To se uvidí.",
+            "b": -2,
+            "r": "Vy jste ale jistota."
+          }
+        ]
+      },
+      {
+        "t": "A ceny o svátcích nahoru nejdou?",
+        "o": [
+          {
+            "t": "Ne, cena je stejná každý den v roce. Žádné svátkové přirážky u nás nejsou.",
+            "b": 2,
+            "r": "Výborně."
+          },
+          {
+            "t": "Zatím ne.",
+            "b": 0,
+            "r": "Zatím."
+          },
+          {
+            "t": "O svátcích je příplatek.",
+            "b": -2,
+            "r": "Tak to vyperu doma."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "svetr-2",
+    "rod": "z",
+    "nalada": 15,
+    "kroky": [
+      {
+        "t": "Vaše sušička mi srazila svetr z merino vlny. Stál dva tisíce!",
+        "o": [
+          {
+            "t": "Omlouvám se. Pošlete fotku a účtenku, řeším to jako škodu a proplatím ji.",
+            "b": 2,
+            "r": "Tak to jsem nečekala, děkuju."
+          },
+          {
+            "t": "Vlna se do sušičky nedává, to ví každý.",
+            "b": -2,
+            "r": "Tak to tam napište, chytráku!"
+          },
+          {
+            "t": "To bude asi tím svetrem.",
+            "b": -1,
+            "r": "Svetr byl v pořádku, než jsem ho dala k vám."
+          }
+        ]
+      },
+      {
+        "t": "A proč na tom programu není napsáno, že vlnu zničí?",
+        "o": [
+          {
+            "t": "Protože to tam chybí, a to je chyba na naší straně. Dneska doplníme popisky ke každému programu.",
+            "b": 2,
+            "r": "Děkuju, že to přiznáte."
+          },
+          {
+            "t": "Protože to je samozřejmé.",
+            "b": -2,
+            "r": "Mně to samozřejmé nebylo."
+          },
+          {
+            "t": "Dáme to na seznam vylepšení.",
+            "b": 0,
+            "r": "Na seznam. Jasně."
+          }
+        ]
+      },
+      {
+        "t": "Kdy ty peníze dostanu?",
+        "o": [
+          {
+            "t": "Do tří pracovních dnů od fotky. Kdyby to vázlo, volejte mi přímo, mám to u sebe.",
+            "b": 2,
+            "r": "Dobře, tak posílám fotku."
+          },
+          {
+            "t": "To záleží na vedení.",
+            "b": -1,
+            "r": "Vy jste vedení, ne?"
+          },
+          {
+            "t": "Nic vám vracet nebudeme.",
+            "b": -2,
+            "r": "Tak se uvidíme u soudu."
+          }
+        ]
+      }
+    ]
+  }
 ]

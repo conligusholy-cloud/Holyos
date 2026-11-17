@@ -12233,7 +12233,7 @@ function predplatneHtml() {
           + '<button class="btn sm ghost" data-sub-zrus="' + (p.obnovi_se ? '1' : '0') + '">'
           + (p.obnovi_se ? esc(tx('hra.zrusit_obnovovani')) : esc(tx('hra.nechat_bezet_dal'))) + '</button></div>'
           + (PAYMENTS_ON && treba > p.qty
-              ? tx('hra.na_vsechny_pobocky_potrebujes', { p1: treba, p2: (c.price_czk * treba) })
+              ? tx('hra.na_vsechny_pobocky_potrebujes', { p1: treba, p2: cenaReal(c.price_czk * treba) })
               : '')
         : tx('veta.div_class_kv_span_cena_span', { p1: cenaReal(c.price_czk), p2: esc(tx('hra.za_technika_a_tyden')), p3: esc(tx('hra.jeden_technik_zvladne')), p4: c.kapacita, p5: pocet, p6: mn(pocet, esc(tx('hra.pobocku')), esc(tx('hra.pobocky')), esc(tx('hra.pobocek'))), p7: treba, p8: esc(tx('hra.tydne_zaplatis')) })
             + cenaReal((c.price_czk * treba)) + '</b></div>'

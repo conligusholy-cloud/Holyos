@@ -232,10 +232,7 @@
   "mapa.dodani": "Delivery",
   "mapa.vytizena_vyroba": "(production busy)",
   "mapa.zatim_nemas_ani_jeden_pradlomat": "You don't have a single laundromat yet.",
-  "mapa.misto_je": {
-    "one": "spot is",
-    "other": "spots are"
-  },
+  "mapa.misto_je": "spot is",
   "mapa.mista_jsou": "spots are",
   "mapa.mist_je": "spots are",
   "mapa.stroju": "machines",
@@ -738,18 +735,9 @@
   "hra.zrusit_obnovovani": "Cancel renewal",
   "hra.nechat_bezet_dal": "Keep running",
   "hra.jeden_technik_zvladne": "One technician handles",
-  "hra.pobocku": {
-    "one": "depot",
-    "other": "depots"
-  },
-  "hra.pobocky": {
-    "one": "depot",
-    "other": "depots"
-  },
-  "hra.pobocek": {
-    "one": "depot",
-    "other": "depots"
-  },
+  "hra.pobocku": "depot",
+  "hra.pobocky": "depots",
+  "hra.pobocek": "depots",
   "hra.tydne_zaplatis": "Weekly cost",
   "hra.prodej_se_teprve_spousti": "Sale just starting.",
   "hra.dluzis": "You owe",
@@ -757,18 +745,9 @@
   "hra.hrat_dal_se_skraloupem": "Keep playing with the stain",
   "hra.zacit_znovu_s_cistym_stitem": "Start fresh with clean slate",
   "hra.rozprodano": "Sold out",
-  "hra.misto_se_uvolnilo": {
-    "one": "spot opened up",
-    "other": "spots opened up"
-  },
-  "hra.mista_se_uvolnila": {
-    "one": "spot opened up",
-    "other": "spots opened up"
-  },
-  "hra.mist_se_uvolnilo": {
-    "one": "spot opened up",
-    "other": "spots opened up"
-  },
+  "hra.misto_se_uvolnilo": "spot opened up",
+  "hra.mista_se_uvolnila": "spots opened up",
+  "hra.mist_se_uvolnilo": "spots opened up",
   "hra.rozumim_2": "Got it",
   "hra.mazu_2": "Deleting…",
   "hra.zacit_znovu_s_cistym_stitem_2": "Start over with a clean slate",
@@ -1705,10 +1684,7 @@
   "hra.jeste_nehral": "hasn't played yet",
   "hra.u_hry_ted_2": "playing now",
   "hra.zatim_ti_nic_nepriteka_postav": "Nothing coming in yet — build your first laundromat, or borrow from the bank.",
-  "hra.herni_mesic_3": {
-    "one": "game month",
-    "other": "game months"
-  },
+  "hra.herni_mesic_3": "game month",
   "hra.herni_mesice_2": "game months",
   "hra.hernich_mesicu_2": "game months",
   "hra.dni": "days",
@@ -1783,18 +1759,9 @@
   "hra.zatim_nic_nepostavil": "hasn't built anything yet",
   "hra.nema_zadny_uver": "has no loan",
   "hra.nechava_stat_porouchane_stroje": "leaves broken machines standing",
-  "hra.hotova_provozovna": {
-    "one": "ready laundromat",
-    "other": "ready laundromats"
-  },
-  "hra.hotove_provozovny": {
-    "one": "ready laundromat",
-    "other": "ready laundromats"
-  },
-  "hra.hotovych_provozoven": {
-    "one": "ready laundromat",
-    "other": "ready laundromats"
-  },
+  "hra.hotova_provozovna": "ready laundromat",
+  "hra.hotove_provozovny": "ready laundromats",
+  "hra.hotovych_provozoven": "ready laundromats",
   "hra.trziste_zrovna_nikdo_nic_nenabizi": "Marketplace — nobody's selling right now",
   "hra.pradlomat_4": "Laundromat",
   "hra.pradlomat_5": "Laundromat",
@@ -1806,18 +1773,9 @@
   "hra.majitel_site": "Chain Owner",
   "hra.magnat": "Tycoon",
   "hra.baron_pradla": "Laundry Baron",
-  "hra.tvuj_pradlomat": {
-    "one": "your laundromat",
-    "other": "your laundromats"
-  },
-  "hra.tvoje_pradlomaty": {
-    "one": "your laundromat",
-    "other": "your laundromats"
-  },
-  "hra.tvych_pradlomatu": {
-    "one": "your laundromat",
-    "other": "your laundromats"
-  },
+  "hra.tvuj_pradlomat": "your laundromat",
+  "hra.tvoje_pradlomaty": "your laundromats",
+  "hra.tvych_pradlomatu": "your laundromats",
   "hra.startovni_kapital": "Starting capital",
   "hra.misto_6": "spot",
   "hra.stavebni_technika_2": "Construction crew",
@@ -1891,18 +1849,9 @@
   "hra.koupeny_pradlomat": "Laundromat purchased",
   "hra.nemas_zakladnu_odkud_technika_poslat_2": "No depot to send technician from.",
   "hra.sidlo_2": "HQ",
-  "hra.mesic_3": {
-    "one": "month",
-    "other": "months"
-  },
-  "hra.mesice_2": {
-    "one": "month",
-    "other": "months"
-  },
-  "hra.mesicu_2": {
-    "one": "month",
-    "other": "months"
-  },
+  "hra.mesic_3": "month",
+  "hra.mesice_2": "months",
+  "hra.mesicu_2": "months",
   "hra.pradlomat_7": "laundromat",
   "hra.na_ceste_2": "(en route)",
   "hra.misto_zruseno": "spot cancelled",
@@ -1915,18 +1864,9 @@
   "hra.misto_je_obsazene": "Spot is taken.",
   "hra.pozemek_je_tvuj_postavit_na": "Plot is yours. Build on it when ready.",
   "hra.server_neodpovida_32": "Server not responding.",
-  "hra.hrac_4": {
-    "one": "player",
-    "other": "players"
-  },
-  "hra.hraci_4": {
-    "one": "player",
-    "other": "players"
-  },
-  "hra.hracu_4": {
-    "one": "player",
-    "other": "players"
-  },
+  "hra.hrac_4": "player",
+  "hra.hraci_4": "players",
+  "hra.hracu_4": "players",
   "hra.krize_je_zazehnana_zakaznici_se": "Crisis averted, customers are returning.",
   "hra.napis_mesto_a_posli_tam_2": "Type a city and send someone to scout it. Spots are hidden — until you explore a city, you won't see anything on the map.",
   "hra.herni_mesic_4": "game month",
@@ -2077,7 +2017,7 @@
   "veta.p_class_fine_co_to_misto": "<p class=\"fine\">Only the owner knows what the spot earns and how much rent they pay. Judge the offer by what you know yourself.</p>",
   "veta.h3_zrusit_pobocku_h3_p_class": "<h3>Close depot {p1}</h3><p class=\"muted small\">The stock will clear and the person will leave. Machine delivery and technician callouts will then be charged from the next nearest depot — spots nearby will cost more.</p><div class=\"kv\"><span>{p2}</span><b class=\"ok\">{p3}</b></div><div class=\"kv\"><span>{p4}</span><b class=\"ok\">{p5}</b></div><button class=\"btn big\" id=\"do-zrus-ano\" style=\"width:100%;margin-top:12px\">{p6}</button><button class=\"btn sec\" id=\"do-zrus-ne\" style=\"width:100%;margin-top:8px\">{p7}</button>",
   "veta.h3_h3_p_class_muted_small_2": "<h3>{p1}</h3><p class=\"muted small\">Write a city. We'll send someone to scout it and find spots where a laundromat would make money. The first scouted city becomes your company headquarters — in the city, not at the laundromat address — and machine delivery is charged from there.</p><label class=\"fld\"><span>{p2}</span><input id=\"sidlo-mesto\" class=\"inp\" type=\"text\" maxlength=\"60\" placeholder=\"e.g. Pardubice\"></label><p class=\"fine\" id=\"city-note\"></p><button class=\"btn big\" id=\"sidlo-go\">{p3}</button><p class=\"fine\">Scouting costs {p4}. You can scout as many cities as you want later, but headquarters stays where you start.</p>",
-  "veta.h3_h3_p_class_muted_small_3": "<h3>{p1}</h3><p class=\"muted small\">This call cost you some reputation. A hotline operator will pick up every call you miss — and your reputation stays where it was.</p><div class=\"kv\"><span>{p2}</span><b>0</b></div><button class=\"btn big\" data-linka=\"{p3}\">{p4} for {p5} Kč</button><button class=\"btn sec\" id=\"linka-ne\" style=\"width:100%;margin-top:8px\">{p6}</button><p class=\"fine\">{p7}</p>",
+  "veta.h3_h3_p_class_muted_small_3": "<h3>{p1}</h3><p class=\"muted small\">This call cost you some reputation. A hotline operator will pick up every call you miss — and your reputation stays where it was.</p><div class=\"kv\"><span>{p2}</span><b>0</b></div><button class=\"btn big\" data-linka=\"{p3}\">{p4} for {p5}</button><button class=\"btn sec\" id=\"linka-ne\" style=\"width:100%;margin-top:8px\">{p6}</button><p class=\"fine\">{p7}</p>",
   "veta.na_tohle_nemas_volnou_hotovost_chybi": "You don't have free cash for this — you're short {p1}. ",
   "veta.o_vic_nez_za_kolik_se": "{p1}% more than it was sold for.",
   "veta.drzis_firmy": "You hold {p1}% of company {p2} {p3}",
@@ -2629,7 +2569,7 @@
   "veta.dalsi_vyrovnani_p_div_class_akce": "{p1} · next settlement {p2}</p><div class=\"akce\"><button class=\"btn sm sec\" data-odkup=\"{p3}\">",
   "veta.b_b_b_div_p_class": "{p1}</b><b>{p2}</b></div><p class=\"muted small\" style=\"margin:2px 0 6px\">{p3} annually · paid {p4} of {p5} · ",
   "veta.h3_p_class_muted_small_b": "{p1}</h3><p class=\"muted small\">{p2} {p3} <b>{p4}</b> — and all go to you, even the losing ones. Together with winner's balance due you always get at least the reserve price.</p><p class=\"fine\">{p5}</p>",
-  "veta.za_mesic_na_to_budes_mit": "{p1} per month you'll have {p2} in {p3} {p4}, so about in {p5} {p6}.",
+  "veta.za_mesic_na_to_budes_mit": "{p1} per month you'll have it in {p2} {p3}, so about {p4} {p5}.",
   "veta.h3_h3_p_class_muted_small_21": "<h3>{p1}</h3><p class=\"muted small\">You're selling the entire operation: machine, lease, connections and floor layout. Until it sells, it keeps earning for you.</p><div style=\"display:flex;flex-direction:column;gap:8px;margin-top:12px\">",
   "veta.p_label_class_fld_style_margin": "</p><label class=\"fld\" style=\"margin-top:8px\"><span>{p1}</span><input id=\"pron-cena\" class=\"inp\" type=\"number\" min=\"0\" step=\"100\" value=\"{p2}\"></label><p class=\"fine\">Typical rent in the area is {p3} {p4}</p><button class=\"btn big\" id=\"do-pronajem\" style=\"width:100%;margin-top:8px\">",
   "veta.div_p_class_muted_small_style_3": "</div><p class=\"muted small\" style=\"margin:4px 0 8px\">{p1} will build their laundromat there and you'll receive rent.</p><div class=\"seg sub najem-seg\"><button class=\"",
@@ -2773,7 +2713,7 @@
   "veta.zmena_splatnosti": "Instalment change — {p1}",
   "veta.dalsich": " (+{p1} more)",
   "veta.ted_ma": " (now has {p1}",
-  "veta.p_class_fine_delku_splaceni_uz": "<p class=\"fine\">You've already negotiated the payment term once.</p>",
+  "veta.p_class_fine_delku_splaceni_uz": "<p class=\"fine\">You've already negotiated the payment term once{p1}.</p>",
   "veta.br_i_class_muted_small_uz": "<br><i class=\"muted small\">already on marketplace for {p1}</i>",
   "veta.mimoradna_splatka": "Extra instalment — {p1}",
   "veta.neuspesne_vyjednavani": "Failed negotiation — {p1}",
@@ -3104,7 +3044,7 @@
   "hra.provize_2": "Commission",
   "hra.distributor_2": "Distributor",
   "hra.provize_z": " · commission from {p1}",
-  "hra.laundrech": "laundrech (L$)",
+  "hra.laundrech": "laundrs (L$)",
   "hra.odznaky_2": "Badges",
   "hra.ze_tri": "{p1} of 3. ",
   "hra.nastavit_heslo_3": "Set password",
@@ -3380,7 +3320,7 @@
   "hra.prikoupit_technika": "Hire a technician",
   "hra.ubrat_technika": "Remove a technician",
   "hra.techniku_ted_mas": "You now have {p1} technicians.",
-  "hra.na_vsechny_pobocky_potrebujes": "<p class=\"fine\">For all depots you'd need {p1} technicians — that would cost CZK{p2} per week. The difference will be settled in the next payment, so hiring mid-week means paying only half.</p>",
+  "hra.na_vsechny_pobocky_potrebujes": "<p class=\"fine\">For all depots you'd need {p1} technicians — that would cost {p2} per week. The difference is settled in the next payment, so hiring mid-week means paying only half.</p>",
   "hra.zal_moje_sit": "My network",
   "hra.zal_mista": "Spots",
   "hra.zal_vyvoj": "Progress",

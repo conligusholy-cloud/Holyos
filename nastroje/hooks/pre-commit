@@ -18,6 +18,22 @@ fi
 node nastroje/texty-kontrola.js
 STAV=$?
 
+# Prohlídka hlídá to horší než chybějící překlad: že přeložené JE, ale špatně.
+# Chybějící značka ubere z věty číslo, rozbitá stavba shodí celé okno, z korun
+# se stanou herní peníze. Tohle commit zastaví — takhle to hráči nefunguje.
+# Každý cizí jazyk v katalogu se prohlédne zvlášť.
+for KATALOG in services/game/texty/*.json; do
+  JAZYK=$(basename "$KATALOG" .json)
+  case "$JAZYK" in cs|*.meta|linka.*|slovnik) continue ;; esac
+  if ! node nastroje/texty-prohlidka.js "$JAZYK"; then
+    echo ""
+    echo "STOP: překlad do $JAZYK má tvrdé nálezy (viz výš)."
+    echo "Chybějící překlad commit nezastaví, rozbitý ano — hra by se hráči"
+    echo "rozsypala a vypadalo by to jako chyba hry, ne překladu."
+    exit 1
+  fi
+done
+
 if [ "$STAV" -eq 2 ]; then
   echo ""
   echo "STOP: v kódu je klíč, ke kterému v katalogu není žádný text."
