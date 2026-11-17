@@ -149,6 +149,16 @@ router.post('/players/:id/privedl', api(async (req, res) => {
 }));
 
 // GET /nahlasene → zprávy, na které si někdo stěžoval
+// GET /jmeni-srovnani → co hlásí hra proti tomu, co si spočítá server.
+// Čistě ke čtení. Je to podklad k posunu prahů hodností, až se žebříček
+// přepne na serverové počítání jmění. Posílá se jako holý text, aby se dal
+// otevřít v prohlížeči a rovnou zkopírovat.
+router.get('/jmeni-srovnani', api(async (req, res) => {
+  const { srovnani, tisk } = require('../services/game/srovnani');
+  const kolik = Math.max(10, Math.min(500, parseInt(req.query.kolik, 10) || 40));
+  res.type('text/plain; charset=utf-8').send(tisk(await srovnani(), kolik));
+}));
+
 router.get('/nahlasene', api(async (req, res) => {
   const vse = String(req.query.vse || '') === '1';
   const rows = await prisma.gameMessage.findMany({
