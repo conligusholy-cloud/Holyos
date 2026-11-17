@@ -1302,7 +1302,7 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
     // hráč od posledního uložení vůbec mohl vydělat, a nesedící skok zapíše
     // do logu. Ukládání nebrzdí ani neblokuje — až bude z provozu vidět,
     // kolik to dělá planých poplachů, stane se z meze skutečný strop.
-    require('../services/game/strop').zkontroluj(req.player, st.cash)
+    require('../services/game/strop').zkontroluj(req.player, st)
       .catch((e) => console.warn('[game-strop]', e && e.message));
 
     const ted = new Date();

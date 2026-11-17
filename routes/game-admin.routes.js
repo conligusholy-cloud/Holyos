@@ -159,6 +159,85 @@ router.get('/jmeni-srovnani', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(tisk(await srovnani(), kolik));
 }));
 
+// GET /strop-prehled → kolik uložení přeteklo mez přírůstku hotovosti.
+// Tohle je ladicí pohled, ne obvinění: mez je zatím schválně velkorysá a
+// zajímá nás hlavně, kolik planých poplachů dělá, než se z ní stane strop.
+router.get('/strop-prehled', api(async (req, res) => {
+  const dnu = Math.max(1, Math.min(90, parseInt(req.query.dnu, 10) || 7));
+  const od = new Date(Date.now() - dnu * 86400000);
+  const [celkem, mimo] = await Promise.all([
+    prisma.gameSnapshot.count({ where: { created_at: { gte: od } } }),
+    prisma.gameSnapshot.findMany({
+      where: { sedi: false, created_at: { gte: od } },
+      orderBy: { created_at: 'desc' }, take: 300,
+    }),
+  ]);
+  const hraci = await prisma.gamePlayer.findMany({
+    where: { id: { in: Array.from(new Set(mimo.map((x) => x.player_id))) } },
+    select: { id: true, nick: true },
+  });
+  const jmena = new Map(hraci.map((h) => [h.id, h.nick]));
+  const poHraci = new Map();
+  mimo.forEach((x) => {
+    const a = poHraci.get(x.player_id) || { kolik: 0, max: 0 };
+    a.kolik++;
+    a.max = Math.max(a.max, (x.prirustek || 0) - (x.strop || 0));
+    poHraci.set(x.player_id, a);
+  });
+  const kc = (n) => Math.round(n).toLocaleString('cs-CZ');
+  const out = [];
+  out.push('Posledních ' + dnu + ' dnů · otisků celkem ' + celkem
+    + ' · mimo mez ' + mimo.length);
+  out.push('');
+  if (!mimo.length) {
+    out.push('Žádné uložení mez nepřeteklo. To je buď dobře, nebo je mez moc');
+    out.push('velkorysá — pozná se podle toho, až ji začneme utahovat.');
+  } else {
+    out.push('hráč                 kolikrát      nejvíc nad mez');
+    out.push('-'.repeat(52));
+    Array.from(poHraci.entries())
+      .sort((a, b) => b[1].kolik - a[1].kolik)
+      .forEach(([id, a]) => {
+        out.push(String(jmena.get(id) || ('#' + id)).padEnd(20).slice(0, 20)
+          + String(a.kolik).padStart(10) + kc(a.max).padStart(20));
+      });
+    out.push('');
+    out.push('posledních 30 jednotlivě:');
+    mimo.slice(0, 30).forEach((x) => {
+      out.push('  ' + new Date(x.created_at).toISOString().slice(0, 16).replace('T', ' ')
+        + '  ' + String(jmena.get(x.player_id) || ('#' + x.player_id)).padEnd(16).slice(0, 16)
+        + ' přidal ' + kc(x.prirustek).padStart(14)
+        + ' · strop ' + kc(x.strop || 0).padStart(14)
+        + ' · ' + x.pradlomatu + ' prádlomatů'
+        + ' · za ' + Math.round((x.od_ms || 0) / 60000) + ' min');
+    });
+  }
+  res.type('text/plain; charset=utf-8').send(out.join('\n'));
+}));
+
+// GET /players/:id/otisky → jak hráči rostla hotovost a jmění v čase.
+// Jediná historie, kterou o rozehrané hře máme: uložený stav si drží
+// jen poslední podobu.
+router.get('/players/:id/otisky', api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const kolik = Math.max(10, Math.min(500, parseInt(req.query.kolik, 10) || 100));
+  const rows = await prisma.gameSnapshot.findMany({
+    where: { player_id: id }, orderBy: { created_at: 'desc' }, take: kolik,
+  });
+  const kc = (n) => Math.round(n || 0).toLocaleString('cs-CZ');
+  const out = ['kdy                 hotovost            jmění      prádlomatů   přírůstek'];
+  out.push('-'.repeat(78));
+  rows.forEach((x) => {
+    out.push(new Date(x.created_at).toISOString().slice(0, 16).replace('T', ' ')
+      + kc(x.hotovost).padStart(16)
+      + kc(x.jmeni).padStart(18)
+      + String(x.pradlomatu).padStart(12)
+      + kc(x.prirustek).padStart(14)
+      + (x.sedi ? '' : '   ← mimo mez'));
+  });
+  res.type('text/plain; charset=utf-8').send(out.join('\n'));
+}));
+
 router.get('/nahlasene', api(async (req, res) => {
   const vse = String(req.query.vse || '') === '1';
   const rows = await prisma.gameMessage.findMany({

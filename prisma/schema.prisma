@@ -8156,6 +8156,32 @@ model GameDelivery {
   @@map("game_deliveries")
 }
 
+// Otisk hry v čase. Ukládaný stav si drží jen poslední podobu, takže na
+// otázku „kam se podělo dvacet milionů" se dnes nedá odpovědět — historie
+// prostě neexistuje. Tahle tabulka je nejlevnější historie, jaká dává smysl:
+// pár čísel při ukládání, nanejvýš jednou za deset minut na hráče, a vždycky
+// když přírůstek hotovosti přeteče mez, kterou si server spočítá sám.
+//
+// Čísla jsou DOUBLE, ne INTEGER: jmění velkého hráče přeroste dvě miliardy
+// a celočíselný sloupec by přetekl zrovna u toho, koho je potřeba hlídat.
+model GameSnapshot {
+  id         Int      @id @default(autoincrement())
+  player_id  Int
+  hotovost   Float
+  jmeni      Float?
+  pradlomatu Int      @default(0)
+  // O kolik hotovost skočila od minulého uložení a co server čekal jako strop.
+  prirustek  Float    @default(0)
+  strop      Float?
+  sedi       Boolean  @default(true)
+  od_ms      Int      @default(0)
+  created_at DateTime @default(now())
+
+  @@index([player_id, created_at])
+  @@index([sedi, created_at])
+  @@map("game_snapshots")
+}
+
 // Pozvánky: kdo otevřel sdílený odkaz. Dřív to viselo v paměti serveru a každé
 // nasazení hráčům počítadlo vynulovalo — proto je to teď v databázi.
 // `visitor` je otisk adresy návštěvníka, ne adresa samotná.

@@ -11,11 +11,13 @@ const puvodni = Module.prototype.require;
 
 let CLAIMS = [];
 let DORUCENKY = [];
+let OTISKY = [];
 Module.prototype.require = function (co) {
   if (/config\/database$/.test(co)) {
     return { prisma: {
       gameSpotClaim: { findMany: async () => CLAIMS },
       gameDelivery: { findMany: async () => DORUCENKY },
+      gameSnapshot: { create: async (x) => { OTISKY.push(x.data); return x.data; } },
     } };
   }
   return puvodni.apply(this, arguments);
@@ -95,10 +97,35 @@ function hrac(hotovost, predMs) {
   const prvni = await strop.prirustek({ id: 2, state: null, state_at: null }, 999999999);
   ok('bez předchozího uložení se nehlásí nic', prvni.sedi);
 
+  // ── Otisk hry v čase ───────────────────────────────────────────────────
+  CLAIMS = [{ model: 'max' }];
+  DORUCENKY = [];
+  OTISKY = [];
+  const stav = { cash: 1200000, units: [{}, {}, {}] };
+  await strop.zkontroluj({ id: 77, nick: 'Otisk', state: { cash: 1000000 },
+    state_at: new Date(Date.now() - MESIC) }, stav);
+  ok('při ukládání se zapíše otisk', OTISKY.length === 1,
+    OTISKY.length ? '— hotovost ' + OTISKY[0].hotovost + ', přírůstek ' + OTISKY[0].prirustek : '');
+  ok('otisk nese počet prádlomatů z evidence, ne ze stavu',
+    OTISKY.length === 1 && OTISKY[0].pradlomatu === 1);
+
+  // Druhé uložení hned po sobě už otisk nepíše — jinak by byl řádek
+  // při každém uložení a tabulka by za týden měla miliony řádků.
+  await strop.zkontroluj({ id: 77, nick: 'Otisk', state: { cash: 1200000 },
+    state_at: new Date(Date.now() - 60000) }, { cash: 1250000, units: [] });
+  ok('druhé uložení hned po sobě otisk nepřidá', OTISKY.length === 1,
+    '— otisků ' + OTISKY.length);
+
+  // Nesedící přírůstek se zapíše vždycky, i hned po předchozím otisku.
+  await strop.zkontroluj({ id: 77, nick: 'Otisk', state: { cash: 1200000 },
+    state_at: new Date(Date.now() - 60000) }, { cash: 999999999, units: [] });
+  ok('nesedící přírůstek se zapíše i mimo odstup', OTISKY.length === 2
+    && OTISKY[1].sedi === false, '— otisků ' + OTISKY.length);
+
   // ── Výpadek databáze ukládání hry nesmí shodit ─────────────────────────
   const puvodniClaims = CLAIMS;
   CLAIMS = null;   // findMany vrátí null → reduce spadne
-  const pad = await strop.zkontroluj(hrac(0, MESIC), 999999999);
+  const pad = await strop.zkontroluj(hrac(0, MESIC), { cash: 999999999 });
   ok('chyba uvnitř kontroly nezastaví ukládání', pad === true);
   CLAIMS = puvodniClaims;
 

@@ -122,12 +122,54 @@ function zapis(p, v) {
     + ', ze serveru ' + v.ze_serveru + ')');
 }
 
-// Co se volá z ukládání hry. Nikdy nevyhodí výjimku a nikdy neblokuje —
-// zatím jen měří. Vrací true, když je přírůstek v mezích.
-async function zkontroluj(p, novaHotovost) {
+// ─── Otisk hry v čase ────────────────────────────────────────────────────────
+// Ukládaný stav si drží jen poslední podobu. Když se hráč zeptá, kam se
+// podělo dvacet milionů, nemáme co otevřít — historie neexistuje. Otisk je
+// nejlevnější historie, jaká dává smysl: pár čísel, ne celý stav.
+//
+// Zapisuje se nanejvýš jednou za deset minut na hráče, aby z toho nebyl
+// řádek při každém uložení, ale vždycky, když přírůstek přeteče mez — právě
+// ty řádky jsou k něčemu. Kdy se naposled zapsalo, si držíme v paměti:
+// po restartu se jednou zapíše navíc, což nevadí.
+const OTISK_ODSTUP = 10 * 60000;
+const naposled = new Map();
+
+async function otisk(p, st, v) {
+  const ted = Date.now();
+  const minule = naposled.get(p.id) || 0;
+  if (v.sedi && ted - minule < OTISK_ODSTUP) return;
+  naposled.set(p.id, ted);
+  // Mapa by jinak rostla s každým hráčem, co kdy hrál. Když je velká,
+  // vyhodíme z ní ty, co se dlouho neozvali — příště se jim zapíše otisk
+  // navíc a nic se nestane.
+  if (naposled.size > 5000) {
+    naposled.forEach((kdy, id) => { if (ted - kdy > 6 * 3600000) naposled.delete(id); });
+  }
+  let jmeni = null;
   try {
-    const v = await prirustek(p, novaHotovost);
+    const acct = require('../../routes/game-account.routes');
+    if (typeof acct._cisteJmeni === 'function') jmeni = Math.round(acct._cisteJmeni(st) || 0);
+  } catch (e) { /* bez jmění to má pořád cenu */ }
+  await prisma.gameSnapshot.create({ data: {
+    player_id: p.id,
+    hotovost: Math.round(Number(st && st.cash) || 0),
+    jmeni,
+    pradlomatu: v.pradlomatu != null ? v.pradlomatu
+      : (Array.isArray(st && st.units) ? st.units.length : 0),
+    prirustek: Math.round(v.rozdil || 0),
+    strop: v.strop != null ? Math.round(v.strop) : null,
+    sedi: !!v.sedi,
+    od_ms: Math.min(2147483647, Math.max(0, Math.round(v.od || 0))),
+  } });
+}
+
+// Co se volá z ukládání hry. Nikdy nevyhodí výjimku a nikdy neblokuje —
+// zatím jen měří a zapisuje otisk. Vrací true, když je přírůstek v mezích.
+async function zkontroluj(p, st) {
+  try {
+    const v = await prirustek(p, st && st.cash);
     if (!v.sedi) zapis(p, v);
+    await otisk(p, st, v).catch((e) => console.warn('[game-otisk]', e && e.message));
     return v.sedi;
   } catch (e) {
     console.warn('[game-strop]', e && e.message);
@@ -135,5 +177,5 @@ async function zkontroluj(p, novaHotovost) {
   }
 }
 
-module.exports = { zkontroluj, prirustek, stropStroje, stropSite,
-  MESIC_MS, NAVSTEVNOST_STROP, REZERVA, STROJE };
+module.exports = { zkontroluj, prirustek, otisk, stropStroje, stropSite,
+  MESIC_MS, NAVSTEVNOST_STROP, REZERVA, STROJE, OTISK_ODSTUP };
