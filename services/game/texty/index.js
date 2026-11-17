@@ -17,13 +17,27 @@ function nacti() {
     try {
       KATALOGY[j] = JSON.parse(fs.readFileSync(path.join(__dirname, j + '.json'), 'utf8'));
     } catch (e) {
-      console.warn('[game-texty] katalog ' + j + ' se nenačetl:', e && e.message);
+      // Jazyk může být v seznamu dřív, než je přeložený — to není chyba,
+      // jen se hráči zatím nenabídne (viz jazykyHotove).
+      if (e && e.code === 'ENOENT') console.log('[game-texty] ' + j + ': zatím nepřeloženo');
+      else console.warn('[game-texty] katalog ' + j + ' se nenačetl:', e && e.message);
       KATALOGY[j] = KATALOGY[j] || {};
     }
   });
 }
 nacti();
 const P = new jadro.Preklady(KATALOGY);
+
+// Které řeči jsou opravdu k mání. Jazyk, pro který ještě nic není přeložené,
+// se hráči nenabízí: viděl by češtinu s cizí vlajkou a vypadalo by to jako
+// chyba. Prahem je polovina klíčů — rozdělaný překlad taky není hotová hra.
+function jazykyHotove() {
+  const vse = Object.keys(KATALOGY[jadro.ZDROJ] || {}).length;
+  return jadro.JAZYKY.filter((j) => {
+    if (j === jadro.ZDROJ) return true;
+    return Object.keys(KATALOGY[j] || {}).length >= vse / 2;
+  });
+}
 
 // Jazyk hráče. Hodnota mimo seznam (stará data, překlep) spadne na češtinu.
 function jazykHrace(hrac) {
@@ -64,7 +78,7 @@ function scenare(jazyk) {
 }
 
 module.exports = {
-  t, tHraci, jazykHrace, katalogPro, nacti, scenare,
+  t, tHraci, jazykHrace, katalogPro, jazykyHotove, nacti, scenare,
   JAZYKY: jadro.JAZYKY, ZDROJ: jadro.ZDROJ,
   cislo: jadro.cislo, penize: jadro.penize, datum: jadro.datum,
   _katalogy: KATALOGY,

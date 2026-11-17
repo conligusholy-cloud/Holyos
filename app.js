@@ -1154,9 +1154,11 @@ app.use((req, res, next) => {
     const T = require('./services/game/texty');
     const ucty = require('./routes/game-account.routes');
     const posli = (jazyk) => {
+      // Seznam řečí jde do stránky s katalogem: přepínač v hráčově panelu se
+      // z něj poskládá sám, takže přibytí další řeči neznamená sáhnout do hry.
       const telo = jazyk === 'cs'
-        ? { jazyk: jazyk }
-        : { jazyk: jazyk, texty: T.katalogPro(jazyk) };
+        ? { jazyk: jazyk, jazyky: T.jazykyHotove() }
+        : { jazyk: jazyk, jazyky: T.jazykyHotove(), texty: T.katalogPro(jazyk) };
       res.send('window.__TEXTY_HRAC = ' + JSON.stringify(telo) + ';');
     };
     let pid = null;

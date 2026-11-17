@@ -16,11 +16,13 @@
   'use strict';
 
   var ZDROJ = 'cs';                 // v téhle řeči se texty píšou
-  var JAZYKY = ['cs', 'en'];
+  var JAZYKY = ['cs', 'en', 'pl'];
 
   // ─── Množné číslo ─────────────────────────────────────────────────────────
-  // Čeština má tři tvary (1 / 2–4 / 5 a víc), angličtina dva. Tvary se v
-  // katalogu píšou jako { one, few, other }; angličtina 'few' prostě nemá.
+  // Každá řeč jinak. Čeština tři tvary (1 / 2–4 / 5 a víc), angličtina dva,
+  // polština čtyři — a ten čtvrtý je ten nejčastější, takže se na něj nedá
+  // zapomenout: 5 prádlomatów, ale 22 prádlomaty. Tvary se v katalogu píšou
+  // jako { one, few, many, other }; co která řeč nemá, prostě chybí.
   function tvar(jazyk, n) {
     var a = Math.abs(n);
     if (jazyk === 'cs') {
@@ -28,15 +30,24 @@
       if (a >= 2 && a <= 4) return 'few';
       return 'other';
     }
+    if (jazyk === 'pl') {
+      if (a === 1) return 'one';
+      var des = a % 10, sto = a % 100;
+      // 2–4 na konci, ale ne 12–14: 22 few, ale 12 many
+      if (des >= 2 && des <= 4 && !(sto >= 12 && sto <= 14)) return 'few';
+      return 'many';
+    }
     return a === 1 ? 'one' : 'other';
   }
 
   // ─── Čísla, peníze, čas ───────────────────────────────────────────────────
-  // Čeština píše 1 234 567, angličtina 1,234,567. Měna zůstává L$ v obou —
-  // je to herní měna, ne koruna.
+  // Čeština píše 1 234 567, angličtina 1,234,567, polština zase po svém.
+  // Měna zůstává L$ ve všech — je to herní měna, ne koruna ani zlotý.
+  var LOCALE = { cs: 'cs-CZ', en: 'en-GB', pl: 'pl-PL' };
+  function locale(jazyk) { return LOCALE[jazyk] || LOCALE[ZDROJ]; }
   function cislo(n, jazyk) {
     var x = Math.round(Number(n) || 0);
-    try { return x.toLocaleString(jazyk === 'en' ? 'en-GB' : 'cs-CZ'); }
+    try { return x.toLocaleString(locale(jazyk)); }
     catch (e) { return String(x); }
   }
   function penize(n, jazyk) { return cislo(n, jazyk) + ' L$'; }
@@ -44,7 +55,7 @@
     var t = (d instanceof Date) ? d : new Date(d);
     if (isNaN(t.getTime())) return '';
     try {
-      return t.toLocaleString(jazyk === 'en' ? 'en-GB' : 'cs-CZ',
+      return t.toLocaleString(locale(jazyk),
         { day: 'numeric', month: 'numeric', year: '2-digit', hour: '2-digit', minute: '2-digit' });
     } catch (e) { return t.toISOString().slice(0, 16).replace('T', ' '); }
   }
@@ -83,11 +94,14 @@
     // Tvary množného čísla: vybere se podle {n} v údajích.
     if (typeof zaznam === 'object') {
       var n = udaje && udaje.n != null ? Number(udaje.n) : 0;
-      zaznam = zaznam[tvar(j, n)] || zaznam.other || zaznam.one || '';
+      // Chybějící tvar nesmí shodit větu na prázdno. Bereme, co je po ruce —
+      // špatný pád je pořád lepší než díra v textu.
+      zaznam = zaznam[tvar(j, n)] || zaznam.other || zaznam.many
+        || zaznam.few || zaznam.one || '';
     }
     return dosad(zaznam, udaje, j);
   };
 
-  return { ZDROJ: ZDROJ, JAZYKY: JAZYKY, Preklady: Preklady,
-    tvar: tvar, cislo: cislo, penize: penize, datum: datum, dosad: dosad };
+  return { ZDROJ: ZDROJ, JAZYKY: JAZYKY, LOCALE: LOCALE, Preklady: Preklady,
+    tvar: tvar, locale: locale, cislo: cislo, penize: penize, datum: datum, dosad: dosad };
 }));

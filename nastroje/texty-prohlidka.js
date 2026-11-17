@@ -67,12 +67,21 @@ function kostra(s) {
 function menaSedi(c, e) {
   if (/L\$/.test(c) && !/L\$/.test(e)) return 'herní měna L$ se z překladu ztratila';
   if (/Kč/.test(c) && /L\$/.test(e)) return 'z korun se staly herní L$ (skutečné peníze vydávané za herní)';
+  // Značku skutečné měny si vybírá server podle jazyka hráče. Kdyby ji
+  // překlad napsal natvrdo, Polák by viděl zlotý i tam, kde platí v eurech.
+  if (!/zł|PLN|\$|€/.test(c) && /\bzł\b|\bPLN\b/.test(e)) {
+    return 'překlad si dosadil zlotý natvrdo — měnu určuje server, ne text';
+  }
   if (!/L\$/.test(c) && /L\$/.test(e)) return 'L$ v překladu přibylo, i když v předloze nebylo';
   return null;
 }
 
 // ─── Tvary množného čísla ────────────────────────────────────────────────────
-const TVARY = { cs: ['one', 'few', 'other'], en: ['one', 'other'] };
+// Co která řeč potřebuje. Musí sedět s tvar() v jadro.js — kdyby se rozešly,
+// hra by pro část čísel sáhla po tvaru, který v katalogu není, a věta by
+// spadla na jiný pád nebo na prázdno.
+const TVARY = { cs: ['one', 'few', 'other'], en: ['one', 'other'],
+  pl: ['one', 'few', 'many'] };
 function tvaryChybi(hodnota, jazyk) {
   if (typeof hodnota !== 'object' || !hodnota) return ['není objekt s tvary'];
   const chce = TVARY[jazyk] || ['one', 'other'];

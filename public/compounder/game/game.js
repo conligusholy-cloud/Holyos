@@ -21,6 +21,10 @@
 // podle jeho účtu. Proto se jazyk přepíná znovunačtením stránky — překreslit
 // to nestačí, tabulky nahoře se už podruhé nepočítají.
 var HRAC_TEXTY = window.__TEXTY_HRAC || { jazyk: 'cs' };
+// Řeči, které jsou opravdu přeložené. Rozdělaný překlad se nenabízí — hráč by
+// viděl češtinu pod cizí vlajkou a vypadalo by to jako rozbitá hra.
+var JAZYKY_HOTOVE = (HRAC_TEXTY.jazyky && HRAC_TEXTY.jazyky.length)
+  ? HRAC_TEXTY.jazyky : ['cs', 'en'];
 var JAZYK = HRAC_TEXTY.jazyk || 'cs';
 var PREKLADY = (window.T18N
   ? new window.T18N.Preklady(
@@ -8997,11 +9001,14 @@ function paintMe() {
       // Jazyk sedí u účtu, takže přepnutí platí i na druhém zařízení.
       + '<p class="muted small" style="margin:14px 0 6px"><b>' + esc(tx('jazyk.nadpis')) + '</b><br>'
       + esc(tx('jazyk.popis')) + '</p>'
+      // Tlačítka se skládají ze seznamu, který přišel se stránkou. Další řeč
+      // se tím objeví sama, jakmile je přeložená — bez sahání do hry.
       + '<div class="drz-tl">'
-      + '<button class="btn sm' + (JAZYK === 'cs' ? '' : ' sec') + '" data-jazyk="cs">'
-      + esc(tx('jazyk.cs')) + '</button>'
-      + '<button class="btn sm' + (JAZYK === 'en' ? '' : ' sec') + '" data-jazyk="en">'
-      + esc(tx('jazyk.en')) + '</button></div>'
+      + JAZYKY_HOTOVE.map(function (j) {
+          return '<button class="btn sm' + (JAZYK === j ? '' : ' sec') + '" data-jazyk="' + esc(j) + '">'
+            + esc(tx('jazyk.' + j)) + '</button>';
+        }).join('')
+      + '</div>'
       + '</div>'
     : '')
     + '<div class="card"><h3>' + esc(p.name) + '</h3>'

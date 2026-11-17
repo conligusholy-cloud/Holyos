@@ -2,15 +2,16 @@
 // =============================================================================
 // Dopřeložení chybějících a zastaralých textů
 // =============================================================================
-// Projde katalog, najde klíče bez anglického protějšku nebo s otiskem, který
-// nesedí s českou předlohou, a nechá je přeložit. Slovník pojmů jde do zadání
-// s sebou — bez něj by z prádlomatu byl jednou laundromat a podruhé
+// Projde katalog, najde klíče bez protějšku v cílovém jazyce nebo s otiskem,
+// který nesedí s českou předlohou, a nechá je přeložit. Slovník pojmů jde do
+// zadání s sebou — bez něj by z prádlomatu byl jednou laundromat a podruhé
 // laundrette a hráč by si myslel, že jsou to dvě věci.
 //
 // Klíč k API se bere z prostředí (ANTHROPIC_API_KEY). Do repozitáře nepatří
 // a tenhle nástroj si ho nikam neukládá.
 //
-// POUŽITÍ:  node nastroje/texty-prelozit.js [--davka 40] [--nanecisto]
+// POUŽITÍ:  node nastroje/texty-prelozit.js [--jazyk=pl] [--davka=40] [--nanecisto]
+//           bez --jazyk se překládá do angličtiny
 'use strict';
 
 // Klíč bereme z .env, když tam je — je gitignorovaný a stejně ho tam projekt
@@ -32,16 +33,27 @@ const cesta = (f) => path.join(TEXTY, f);
 const nacti = (f, v) => { try { return JSON.parse(fs.readFileSync(cesta(f), 'utf8')); } catch (e) { return v; } };
 const zapis = (f, o) => fs.writeFileSync(cesta(f), JSON.stringify(o, null, 2) + '\n', 'utf8');
 
-const ZADANI = `Překládáš texty počítačové hry Laundromat Tycoon z češtiny do angličtiny.
+// Co o jazyce potřebuje vědět zadání. Tvary množného čísla musí sedět s tím,
+// co umí jadro.js — kdyby se rozešly, hra by pro část čísel sáhla po tvaru,
+// který v katalogu není.
+const JAZYKY = {
+  en: { nazev: 'angličtiny', tvary: 'one a other (angličtina nemá few ani many)' },
+  pl: { nazev: 'polštiny',
+    tvary: 'one, few a many. Polština: 1 = one; 2–4 na konci kromě 12–14 = few'
+      + ' (22 few, ale 12 many); zbytek = many. Tvar "other" polština nepotřebuje' },
+};
+
+const ZADANI = `Překládáš texty počítačové hry Laundromat Tycoon z češtiny do {JAZYK}.
 Hra je o budování sítě samoobslužných prádelen. Mluví na hráče přímo a věcně,
-krátkými větami, občas suše. Stejně má znít i angličtina — ne marketingově.
+krátkými větami, občas suše. Stejně má znít i překlad — ne marketingově.
 
 PRAVIDLA
 - Zachovej značky {takhle} přesně, včetně tvarů {penize:cena} a {cislo:n}.
-- Zachovej HTML, pokud v textu je.
+- Zachovej HTML, pokud v textu je — včetně id a class, hra se podle nich řídí.
 - Nepřekládej L$ — je to herní měna.
-- U textů s tvary množného čísla vrať objekt s klíči one a other (angličtina
-  nemá few). Čeština má one/few/other.
+- Kč je skutečná měna, ne herní. Nepřepisuj ji na L$.
+- U textů s tvary množného čísla vrať objekt s klíči {TVARY}.
+  Čeština má one/few/other.
 - Drž se slovníku pojmů níž. Je závazný.
 
 SLOVNÍK POJMŮ
@@ -49,7 +61,7 @@ SLOVNÍK POJMŮ
 
 Vrať POUZE JSON objekt {klíč: překlad}, nic jiného.`;
 
-async function prelozDavku(davka, slovnik) {
+async function prelozDavku(davka, slovnik, jazyk) {
   const klic = process.env.ANTHROPIC_API_KEY;
   if (!klic) throw new Error('chybí ANTHROPIC_API_KEY v prostředí');
   const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -57,7 +69,9 @@ async function prelozDavku(davka, slovnik) {
     headers: { 'content-type': 'application/json', 'x-api-key': klic,
       'anthropic-version': '2023-06-01' },
     body: JSON.stringify({ model: MODEL, max_tokens: 8000,
-      system: ZADANI.replace('{SLOVNIK}', slovnik),
+      system: ZADANI.replace('{JAZYK}', (JAZYKY[jazyk] || JAZYKY.en).nazev)
+        .replace('{TVARY}', (JAZYKY[jazyk] || JAZYKY.en).tvary)
+        .replace('{SLOVNIK}', slovnik),
       messages: [{ role: 'user', content: JSON.stringify(davka, null, 1) }] }),
   });
   if (!r.ok) throw new Error('API ' + r.status + ': ' + (await r.text()).slice(0, 200));
@@ -84,21 +98,34 @@ async function main() {
   }
   const velikost = Number((process.argv.find((a) => a.startsWith('--davka=')) || '').split('=')[1]) || 40;
   const nanecisto = process.argv.includes('--nanecisto');
+  const jazyk = (process.argv.find((a) => a.startsWith('--jazyk=')) || '--jazyk=en').split('=')[1];
+  if (!JAZYKY[jazyk]) {
+    console.error('Jazyk ' + jazyk + ' neumím. Znám: ' + Object.keys(JAZYKY).join(', '));
+    console.error('Nový jazyk se přidává v JAZYKY tady a v services/game/texty/jadro.js.');
+    process.exit(1);
+  }
+  const souborJ = jazyk + '.json', souborM = jazyk + '.meta.json';
   const cs = nacti('cs.json', {});
-  const en = nacti('en.json', {});
-  const meta = nacti('en.meta.json', {});
+  const en = nacti(souborJ, {});
+  const meta = nacti(souborM, {});
+  // Slovník pojmů pro cílový jazyk, jinak ten obecný. Bez něj to jede taky,
+  // jen se pojmy rozejdou.
   let slovnik = '';
-  try { slovnik = fs.readFileSync(cesta('slovnik.md'), 'utf8'); } catch (e) { /* bez něj to jde taky, jen hůř */ }
+  for (const f of ['slovnik.' + jazyk + '.md', 'slovnik.md']) {
+    try { slovnik = fs.readFileSync(cesta(f), 'utf8'); console.log('slovník: ' + f); break; }
+    catch (e) { /* zkusíme další */ }
+  }
+  console.log('překládám do: ' + jazyk);
 
   const kdopotrebuje = Object.keys(cs).filter((k) =>
     en[k] == null || (meta[k] && meta[k] !== otisk(cs[k])));
   console.log('k překladu: ' + kdopotrebuje.length + ' z ' + Object.keys(cs).length);
   if (nanecisto) {
     console.log(kdopotrebuje.slice(0, 20).join('\n'));
-    await linka(slovnik);
+    await linka(slovnik, jazyk);
     return;
   }
-  if (!kdopotrebuje.length) { await linka(slovnik); return; }
+  if (!kdopotrebuje.length) { await linka(slovnik, jazyk); return; }
 
   let hotovo = 0;
   for (let i = 0; i < kdopotrebuje.length; i += velikost) {
@@ -106,22 +133,22 @@ async function main() {
     const davka = {};
     klice.forEach((k) => { davka[k] = cs[k]; });
     try {
-      const vysledek = await prelozDavku(davka, slovnik);
+      const vysledek = await prelozDavku(davka, slovnik, jazyk);
       klice.forEach((k) => {
         if (vysledek[k] == null) return;
         en[k] = vysledek[k];
         meta[k] = otisk(cs[k]);
         hotovo++;
       });
-      zapis('en.json', en);
-      zapis('en.meta.json', meta);
+      zapis(souborJ, en);
+      zapis(souborM, meta);
       console.log('  ' + Math.min(i + velikost, kdopotrebuje.length) + '/' + kdopotrebuje.length);
     } catch (e) {
       console.error('  dávka od ' + i + ' selhala: ' + e.message);
     }
   }
   console.log('přeloženo: ' + hotovo);
-  await linka(slovnik);
+  await linka(slovnik, jazyk);
 }
 
 // -----------------------------------------------------------------------------
@@ -130,11 +157,12 @@ async function main() {
 // Souvislá próza, ne klíče — překládá se po celých scénářích, aby odpovědi
 // seděly na otázky. Otisk je u celého scénáře; když se jeden upraví, přeloží
 // se znovu jen on.
-async function linka(slovnik) {
+async function linka(slovnik, jazyk) {
   const cs = nacti('linka.cs.json', null);
   if (!cs) return;
-  const en = nacti('linka.en.json', []);
-  const meta = nacti('linka.en.meta.json', {});
+  const souborJ = 'linka.' + jazyk + '.json', souborM = 'linka.' + jazyk + '.meta.json';
+  const en = nacti(souborJ, []);
+  const meta = nacti(souborM, {});
   // Podle pořadí, ne podle id. Dva scénáře se stejným id si jinak přepíšou
   // překlad navzájem a jeden z nich dostane text toho druhého — což se taky
   // stalo. Id jsou sice teď jedinečná, ale pořadí je jistota.
@@ -153,15 +181,15 @@ async function linka(slovnik) {
       const vysledek = await prelozDavku({ scenar: JSON.stringify(scenar) }, slovnik
         + '\n\nTohle je scénář hovoru na infolince. Vrať ho jako JSON se stejnou'
         + ' stavbou a stejnými klíči. Přelož jen hodnoty t a r. Klíče id, b a rod'
-        + ' nech beze změny — podle nich hra hovor řídí. Vrať {"scenar": "<JSON jako text>"}.');
+        + ' nech beze změny — podle nich hra hovor řídí. Vrať {"scenar": "<JSON jako text>"}.', jazyk);
       const prelozeny = JSON.parse(vysledek.scenar);
       if (prelozeny.id !== scenar.id) throw new Error('scénář se vrátil s jiným id');
       hotove[poradi] = prelozeny;
       meta[scenar.id] = otisk(scenar);
       // Zapisuje se celé pole v pořadí předlohy. Zatím nepřeložené scénáře
       // drží svoje místo, ať se ostatní neposunou na cizí pozici.
-      zapis('linka.en.json', hotove.map((x, i) => x || en[i] || null).filter(Boolean));
-      zapis('linka.en.meta.json', meta);
+      zapis(souborJ, hotove.map((x, i) => x || en[i] || null).filter(Boolean));
+      zapis(souborM, meta);
       console.log('  ' + scenar.id);
     } catch (e) {
       console.error('  scénář ' + scenar.id + ' selhal: ' + e.message);
