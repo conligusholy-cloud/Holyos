@@ -4076,9 +4076,23 @@ function drawMap() {
   paintServis();
   paintTrhBadge();
 }
+// Klíč oblasti je slug („hradec kralove"). Pro hráče z něj uděláme název
+// města s velkými písmeny — jinde ho stejně nikde neskladujeme.
+function mestoZKlice(k) {
+  var a = S && S.areas && S.areas[k];
+  if (a && a.name) return a.name;
+  return String(k || '').replace(/(^|\s)\S/g, function (x) { return x.toUpperCase(); });
+}
+// Zavře panel a přiletí mapou na dané místo.
+function naMapu(lat, lon) {
+  if (lat == null || lon == null || !map) return false;
+  closeSheet();
+  map.setView([lat, lon], Math.max(16, map.getZoom()));
+  return true;
+}
 // Panel cizího prádlomatu v neprozkoumaném městě.
 function cizi(c) {
-  var mesto = (c.area_key || '').replace(/(^|\s)\S/g, function (x) { return x.toUpperCase(); });
+  var mesto = mestoZKlice(c.area_key);
   var zem = c.pozemek && !c.model;
   sheet(tx('veta.h3_h3_p_class_muted_small_23', { p1: esc(c.name || (zem ? esc(tx('mapa.cizi_pozemek')) : esc(tx('mapa.cizi_pradlomat')))), p2: (c.znak ? znakSvg(c.znak, 20) + ' ' : ''), p3: (zem ? esc(tx('hra.tenhle_pozemek_vlastni')) + ' ' + '<b>' : esc(tx('hra.tohle_misto_drzi_3')) + ' ' + '<b>'), p4: esc(c.firma || c.nick), p5: esc(c.nick), p6: (zem ? '' : ' · ' + esc((MODELS[c.model] || {}).name || c.model)), p7: (c.takeovers ? tx('veta.uz', { p1: c.takeovers, p2: esc(tx('mapa.zmenilo_majitele')) }): ''), p8: (zem ? '<p class="muted small">' + esc(tx('hra.pradlomat_tu_zatim_nestoji_je')) + ' '
         + (c.pronajem ? tx('veta.majitel_ji_nabizi_k_pronajmu_za', { p1: kcFull(c.pronajem.cena) })
@@ -7816,6 +7830,7 @@ function strukturaSheet(id) {
         + '<b>' + procentaPodilu(x.podil) + '</b></div>';
     };
     var odz = (d.hrac.odznaky || []);
+    var mista = d.pradlomaty || [];
     sheet('<h3>' + esc(d.hrac.firma) + '</h3>'
       + '<p class="muted small">' + esc(d.hrac.nick)
       + (d.hrac.hodnost_nazev ? ' · <b>' + esc(d.hrac.hodnost_nazev) + '</b>' : '')
@@ -7837,10 +7852,57 @@ function strukturaSheet(id) {
       + (d.drzi.length
           ? d.drzi.map(function (x) { return radek(x); }).join('')
           : '<p class="muted small">' + esc(tx('hra.v_zadne_cizi_firme_podil')) + '</p>')
-      + '<p class="fine" style="margin-top:12px">' + esc(tx('hra.klepnutim_na_firmu_se_podivas')) + '</p>');
+      // Kde má provozovny. Klepnutí přiletí mapou — kde komu stojí prádlomat,
+      // je stejně vidět, tohle k tomu jen ušetří hledání.
+      + '<h3 style="margin-top:18px">' + esc(tx('mapa.pradlomaty'))
+      + (mista.length ? ' <span class="muted small">(' + mista.length + ')</span>' : '') + '</h3>'
+      + (mista.length
+          ? mista.map(function (m, i) {
+              var mo = MODELS[m.model];
+              return '<div class="area-item struk-m" data-struk-misto="' + i + '">'
+                + '<div style="min-width:0"><div class="nm">' + esc(jmenoStroje(m.name || tx('hra.pradlomat_5'))) + '</div>'
+                + '<div class="sub">' + esc(mestoZKlice(m.area_key))
+                + (mo ? ' · ' + esc(mo.name) : '') + '</div></div>'
+                + (m.lat != null ? '<span class="muted small">' + esc(tx('mapa.ukazat_na_mape')) + '</span>' : '')
+                + '</div>';
+            }).join('')
+          : '<p class="muted small">' + esc(tx('hra.zadny_pradlomat_zatim_nema')) + '</p>')
+      + '<p class="fine" style="margin-top:12px">' + esc(tx('hra.klepnutim_na_firmu_se_podivas')) + '</p>'
+      // Proklik na hráče: odsud se dá rovnou obchodovat, nebo si ho prohlédnout
+      // na mapě celého.
+      + (d.hrac.id !== (ME && ME.id)
+          ? '<button class="btn big" id="struk-obchod" style="width:100%;margin-top:10px">'
+            + esc(tx('hra.obchodovat_s_nim')) + '</button>'
+          : '')
+      + (mista.filter(function (m) { return m.lat != null; }).length
+          ? '<button class="btn sec" id="struk-mapa" style="width:100%;margin-top:8px">'
+            + esc(tx('hra.ukazat_ho_na_mape')) + '</button>'
+          : ''));
     [].forEach.call($('sheet-body').querySelectorAll('[data-struk]'), function (el) {
       el.onclick = function () { strukturaSheet(Number(el.getAttribute('data-struk'))); };
     });
+    [].forEach.call($('sheet-body').querySelectorAll('[data-struk-misto]'), function (el) {
+      el.onclick = function () {
+        var m = mista[Number(el.getAttribute('data-struk-misto'))];
+        if (!m || !naMapu(m.lat, m.lon)) return toast(esc(tx('hra.tohle_misto_na_mape_nenajdu')), 'err');
+      };
+    });
+    if ($('struk-obchod')) {
+      $('struk-obchod').onclick = function () { majetekSheet(d.hrac.id); };
+    }
+    if ($('struk-mapa')) {
+      $('struk-mapa').onclick = function () {
+        var b = mista.filter(function (m) { return m.lat != null; });
+        if (!b.length || !map) return;
+        closeSheet();
+        if (b.length === 1) return map.setView([b[0].lat, b[0].lon], Math.max(16, map.getZoom()));
+        // Víc provozoven: mapa se nastaví tak, aby byly vidět všechny najednou.
+        var hr = L.latLngBounds([]);
+        b.forEach(function (m) { hr.extend([m.lat, m.lon]); });
+        if (hr.isValid()) map.fitBounds(hr, { padding: [40, 40], maxZoom: 15 });
+        else map.setView([b[0].lat, b[0].lon], 13);
+      };
+    }
   }).catch(function () { toast(esc(tx('hra.server_neodpovida_18')), 'err'); });
 }
 // Procenta podílu tak, aby se neztratila desetina u malých podílů.

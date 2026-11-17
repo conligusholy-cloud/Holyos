@@ -828,11 +828,16 @@ router.get('/trade/struktura/:id', hrac, api(async (req, res) => {
     select: { id: true, nick: true, company: true, disabled: true, hodnost: true } });
   if (!p || p.disabled) return res.status(404).json({ error: stx(req)('server.takovy_hrac_tu_neni_3') });
   const jazyk = TEXTY.jazykHrace(req.player);
-  const [vMe, jinde] = await Promise.all([
+  const [vMe, jinde, mista] = await Promise.all([
     prisma.gameEquity.findMany({ where: { firma_id: id, stav: 'bezi' },
       orderBy: { podil: 'desc' }, take: 50 }),
     prisma.gameEquity.findMany({ where: { investor_id: id, stav: 'bezi' },
       orderBy: { podil: 'desc' }, take: 50 }),
+    // Kde komu stojí prádlomat, je vidět na mapě — v rejstříku to tedy patří
+    // taky. Holé pozemky (model je prázdný) do seznamu provozoven nejdou.
+    prisma.gameSpotClaim.findMany({ where: { player_id: id, NOT: { model: '' } },
+      select: { spot_id: true, name: true, model: true, area_key: true, lat: true, lon: true },
+      orderBy: [{ area_key: 'asc' }, { spot_id: 'asc' }], take: 60 }),
   ]);
   const ids = Array.from(new Set(vMe.map((e) => e.investor_id).concat(jinde.map((e) => e.firma_id))));
   const nazvy = new Map();
@@ -866,6 +871,9 @@ router.get('/trade/struktura/:id', hrac, api(async (req, res) => {
         .map((o) => ({ kod: o.kod, nazev: o.nazev, ikona: o.ikona, popis: o.popis,
           barva: o.barva || null })) },
     prodano,
+    // Kde má provozovny. Nájem, obrat ani zisk ven nejdou — to je věc majitele.
+    pradlomaty: mista.map((m) => ({ spot_id: m.spot_id, name: m.name || null,
+      model: m.model, area_key: m.area_key, lat: m.lat, lon: m.lon })),
     // Kdo drží kus téhle firmy.
     podilnici: sect(vMe, 'investor_id'),
     // A kde má tenhle hráč podíl on sám.

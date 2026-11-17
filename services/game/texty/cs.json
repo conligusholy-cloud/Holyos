@@ -3384,5 +3384,9 @@
   "hra.jaky_podil_chces_do_zastavy": "Jaký podíl chceš do zástavy (%)",
   "veta.pct_firmy_do_zastavy": "{p1} % firmy",
   "veta.pri_prvni_nezaplacene_splatce_ti_podil": "Při první nezaplacené splátce ti propadne {p1} % jeho firmy. Podíl si pak můžeš nechat, prodat ho nebo nabídnout zpátky k odkupu.",
-  "hra.jedna_nezaplacena_splatka_a_podil": "Jedna nezaplacená splátka a podíl v jeho firmě je tvůj."
+  "hra.jedna_nezaplacena_splatka_a_podil": "Jedna nezaplacená splátka a podíl v jeho firmě je tvůj.",
+  "hra.zadny_pradlomat_zatim_nema": "Zatím nemá ani jeden prádlomat.",
+  "hra.obchodovat_s_nim": "Obchodovat s ním",
+  "hra.ukazat_ho_na_mape": "Ukázat všechny na mapě",
+  "hra.tohle_misto_na_mape_nenajdu": "Tohle místo na mapě nenajdu."
 }
