@@ -46,5 +46,24 @@ zkus('text končící uvozovkou před čárkou',
 zkus('HTML s atributy v hodnotě',
   '{"a": "<b class=\\"x\\">text</b>"}',
   { a: '<b class="x">text</b>' });
+// Půlení dávky: má zafungovat na pokaženou odpověď, ale NE na chybu
+// přístupu — tam je menší dávka k ničemu a jen se opakuje totéž.
+{
+  const zac = src.indexOf('function stojiZaPuleni');
+  const kon = src.indexOf('\n}\n', zac) + 3;
+  const stojiZaPuleni = eval('(' + src.slice(zac, kon).replace('function stojiZaPuleni', 'function') + ')');
+  const zk = (zprava, ceka) => {
+    const v = stojiZaPuleni(new Error(zprava));
+    const ok = v === ceka;
+    console.log((ok ? 'OK    ' : 'CHYBA ') + (ceka ? 'půlí se: ' : 'nepůlí se: ') + zprava);
+    if (!ok) chyb++;
+  };
+  zk('Expected \',\' or \'}\' after property value in JSON', true);
+  zk('odpověď bez JSON', true);
+  zk('API 401: Unauthorized', false);
+  zk('API 429: rate limit', false);
+  zk('API 529: overloaded', false);
+  zk('chybí ANTHROPIC_API_KEY v prostředí', false);
+}
 console.log(chyb ? '\n' + chyb + ' CHYB' : '\nvšechno sedí');
 process.exit(chyb ? 1 : 0);

@@ -107,11 +107,18 @@ let POSLI = fetch;
 // nezdaru půlíme a zkoušíme znovu; co nakonec selže, je jeden text, ne celá
 // dávka, a ten se doplní při dalším spuštění. Bez tohohle se čtyřicet textů
 // ztratilo na jednom řádku v logu, kterého si nikdo nevšiml.
+// Půlit má smysl jen u pokažené odpovědi. Když API odmítne přihlášení nebo
+// hlásí limit, menší dávka s tím nic neudělá a jen se třiatřicetkrát zeptáme
+// na totéž — což se stalo při pokusu o španělštinu, kde proxy klíč nepustila.
+function stojiZaPuleni(e) {
+  return !/API (4\d\d|5\d\d)|ANTHROPIC_API_KEY/.test(String(e && e.message));
+}
 async function poDavkach(davka, slovnik, jazyk) {
   const klice = Object.keys(davka);
   try {
     return await prelozDavku(davka, slovnik, jazyk);
   } catch (e) {
+    if (!stojiZaPuleni(e)) throw e;     // chyba není v dávce, je v přístupu
     if (klice.length === 1) {
       console.error('    text ' + klice[0] + ' se nepovedl: ' + e.message);
       return {};
