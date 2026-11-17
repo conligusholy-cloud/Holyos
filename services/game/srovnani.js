@@ -285,9 +285,16 @@ async function sklad() {
     const hraNaceste = Array.isArray(st.orders) ? st.orders.length : 0;
     const a = podleHrace.get(h.id) || { skladem: 0, naceste: 0 };
     if (!hraSkladem && !hraNaceste && !a.skladem && !a.naceste) return;
+    // Rozhoduje součet, ne přihrádky. Zásilka, která doletěla, je pro server
+    // sklad, ale hra ji vede na cestě, dokud si pro ni hráč nepřijde —
+    // a obojí je správně. Rozdíl v přihrádkách tedy není chyba, chybí-li
+    // nebo přebývá-li stroj, to ano.
+    const hraCelkem = hraSkladem + hraNaceste;
+    const serverCelkem = a.skladem + a.naceste;
     out.push({ nick: h.nick, hraSkladem, hraNaceste,
       serverSkladem: a.skladem, serverNaceste: a.naceste,
-      sedi: hraSkladem === a.skladem && hraNaceste === a.naceste });
+      hraCelkem, serverCelkem, sedi: hraCelkem === serverCelkem,
+      prihradky: hraSkladem !== a.skladem || hraNaceste !== a.naceste });
   });
   out.sort((x, y) => (x.sedi === y.sedi ? 0 : x.sedi ? 1 : -1));
   out.zapsano = zapsano;
@@ -297,17 +304,21 @@ async function sklad() {
 
 function tiskSklad(rows) {
   const nesedi = rows.filter((r) => !r.sedi);
+  const jenPrihradky = rows.filter((r) => r.sedi && r.prihradky);
   const out = [];
   out.push('Hráčů se strojem na cestě nebo ve skladu: ' + rows.length);
-  out.push('Z toho se serveru a hře rozchází: ' + nesedi.length);
+  out.push('Z toho se serveru a hře rozchází počtem: ' + nesedi.length);
+  out.push('Jen jinak zařazené (doletěná zásilka, kterou si hráč ještě '
+    + 'nevyzvedl): ' + jenPrihradky.length);
   out.push('');
-  out.push('nick                 hra skl/cesta   server skl/cesta');
-  out.push('-'.repeat(56));
+  out.push('nick                 hra skl/cesta   server skl/cesta   celkem');
+  out.push('-'.repeat(68));
   rows.slice(0, 60).forEach((r) => {
     out.push(String(r.nick || '').padEnd(20).slice(0, 20)
       + (r.hraSkladem + '/' + r.hraNaceste).padStart(14)
       + (r.serverSkladem + '/' + r.serverNaceste).padStart(19)
-      + (r.sedi ? '' : '   \u2190 nesedí'));
+      + (r.hraCelkem + ' : ' + r.serverCelkem).padStart(10)
+      + (r.sedi ? (r.prihradky ? '   \u00b7 jen zařazení' : '') : '   \u2190 NESEDÍ'));
   });
   if (rows.length > 60) out.push('\u2026 a dalších ' + (rows.length - 60));
   out.push('');
