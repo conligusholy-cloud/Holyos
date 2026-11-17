@@ -9170,11 +9170,8 @@ function paintMe() {
     + pozvaniHtml() + '</div>'
     + knihaHtml()
     + distHtml()
-    + '<div class="card"><h3>' + esc(tx('hra.tvoje_udaje')) + '</h3>'
-    + '<p class="muted small" style="margin:2px 0 10px">' + esc(tx('hra.co_o_tobe_hra_vede')) + '</p>'
-    + '<button class="btn sec" id="do-udaje" style="width:100%">' + esc(tx('hra.stahnout_moje_udaje')) + '</button>'
-    + '<button class="btn sec" id="do-smazat" style="width:100%;margin-top:8px">' + esc(tx('hra.smazat_ucet')) + '</button></div>'
-    + '<button class="btn sec big" id="do-reset">' + esc(tx('hra.zacit_znovu_od_nuly')) + '</button>';
+    + '<button class="btn sec big" id="do-reset">' + esc(tx('hra.zacit_znovu_od_nuly')) + '</button>'
+    + '<button class="btn sec" id="do-smazat" style="width:100%;margin-top:8px">' + esc(tx('hra.smazat_ucet')) + '</button>';
   if (drzFirma != null && $('me-firma')) $('me-firma').value = drzFirma;
   var fb = $('me-firma-ulozit');
   if (fb) fb.onclick = function () {
