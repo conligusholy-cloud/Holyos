@@ -220,6 +220,44 @@ router.post('/stripe/subscribe/zrusit', express.json({ limit: '8kb' }), acct._re
   } catch (e) { next(e); }
 });
 
+// POST /stripe/subscribe/pocet { kind, qty } → změní počet kusů u běžícího
+// předplatného. Dřív to nešlo vůbec: koupit se dalo jen předplatné, které
+// ještě neběží, takže kdo měl jednoho technika a potřeboval čtyři, musel
+// zrušit a koupit znovu — a přišel o zaplacené období.
+//
+// Mění se množství u položky ve Stripu, ne nové předplatné. Rozdíl se dorovná
+// v nejbližší faktuře (proration), takže kdo přidá technika v půlce týdne,
+// doplatí jen půlku, a kdo uberá, má to ve prospěch.
+router.post('/stripe/subscribe/pocet', express.json({ limit: '8kb' }), acct._requirePlayer, async (req, res, next) => {
+  try {
+    if (!paymentsOn()) return res.status(503).json({ error: 'Platby zatím nejsou spuštěné.' });
+    const kind = String((req.body || {}).kind || '');
+    const qty = Math.max(1, Math.min(MAX_TECHNIKU, parseInt((req.body || {}).qty, 10) || 1));
+    const row = await prisma.gameSubscription.findFirst({
+      where: { player_id: req.player.id, kind, status: { in: ['active', 'past_due'] } },
+      orderBy: { id: 'desc' }
+    });
+    if (!row || !row.stripe_sub) return res.status(404).json({ error: 'Žádné běžící předplatné.' });
+    if (row.qty === qty) {
+      return res.json({ ok: true, qty: row.qty, predplatne: await acct._predplatneHrace(req.player) });
+    }
+    // Id položky zná jen Stripe — naše tabulka drží jen id předplatného.
+    const sub = await stripeGet('subscriptions/' + row.stripe_sub);
+    const polozka = ((sub.items && sub.items.data) || [])[0];
+    if (!polozka) return res.status(409).json({ error: 'Předplatné nemá položku ke změně.' });
+    const novy = await stripePost('subscriptions/' + row.stripe_sub, {
+      items: [{ id: polozka.id, quantity: String(qty) }],
+      proration_behavior: 'create_prorations',
+    });
+    const dal = ((novy.items && novy.items.data) || [])[0];
+    await prisma.gameSubscription.update({ where: { id: row.id },
+      data: { qty: (dal && dal.quantity) || qty,
+        plati_do: novy.current_period_end ? new Date(novy.current_period_end * 1000) : row.plati_do } });
+    res.json({ ok: true, qty: (dal && dal.quantity) || qty,
+      predplatne: await acct._predplatneHrace(req.player) });
+  } catch (e) { next(e); }
+});
+
 // GET /stripe/status?s=cs_… → jak dopadla platba (klient se ptá po návratu)
 router.get('/stripe/status', acct._requirePlayer, async (req, res, next) => {
   try {

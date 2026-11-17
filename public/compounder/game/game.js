@@ -11755,6 +11755,9 @@ function predplatneNa(kind) {
     return x.kind === kind && (!x.plati_do || new Date(x.plati_do).getTime() > ted);
   })[0] || null;
 }
+// Stejný strop jako na serveru (MAX_TECHNIKU v game-stripe.routes.js) — ať
+// tlačítko nenabízí, co by se stejně odmítlo.
+var DISPECER_MAX = 10;
 function dispecerKapacita() {
   var p = predplatneNa('dispecer');
   if (!p) return 0;
@@ -12054,8 +12057,22 @@ function predplatneHtml() {
               + esc(tx('hra.dokud_se_nestrhne_vedouci_nevyjizdi')) + '</p>' : '')
           + (pocet > kap ? tx('hra.p_class_fine_warn_mas_pobocek', { p1: pocet, p2: kap }) : '')
           + '<div class="gcard-act">'
+          // Počet techniků šel dřív nastavit jen při prvním nákupu. Kdo měl
+          // jednoho a potřeboval čtyři, musel zrušit a koupit znovu.
+          + (PAYMENTS_ON
+              ? '<button class="btn sm" data-sub-pocet="' + (p.qty + 1) + '"'
+                + (p.qty >= DISPECER_MAX ? ' disabled' : '') + '>'
+                + esc(tx('hra.prikoupit_technika')) + '</button>'
+                + (p.qty > 1
+                    ? '<button class="btn sm ghost" data-sub-pocet="' + (p.qty - 1) + '">'
+                      + esc(tx('hra.ubrat_technika')) + '</button>'
+                    : '')
+              : '')
           + '<button class="btn sm ghost" data-sub-zrus="' + (p.obnovi_se ? '1' : '0') + '">'
           + (p.obnovi_se ? esc(tx('hra.zrusit_obnovovani')) : esc(tx('hra.nechat_bezet_dal'))) + '</button></div>'
+          + (PAYMENTS_ON && treba > p.qty
+              ? tx('hra.na_vsechny_pobocky_potrebujes', { p1: treba, p2: (c.price_czk * treba) })
+              : '')
         : tx('veta.div_class_kv_span_cena_span', { p1: c.price_czk.toLocaleString('cs-CZ'), p2: esc(tx('hra.kc_za_technika_a_tyden')), p3: esc(tx('hra.jeden_technik_zvladne')), p4: c.kapacita, p5: pocet, p6: mn(pocet, esc(tx('hra.pobocku')), esc(tx('hra.pobocky')), esc(tx('hra.pobocek'))), p7: treba, p8: esc(tx('hra.tydne_zaplatis')) })
             + (c.price_czk * treba).toLocaleString('cs-CZ') + ' ' + esc(tx('hra.kc_7')) + '</b></div>'
           + (PAYMENTS_ON
@@ -12066,6 +12083,21 @@ function predplatneHtml() {
 function bindPredplatne() {
   var k = document.querySelector('[data-sub-koupit]');
   if (k) k.onclick = function () { zapniPredplatne('dispecer', k.getAttribute('data-sub-koupit')); };
+  [].forEach.call(document.querySelectorAll('[data-sub-pocet]'), function (b) {
+    b.onclick = function () {
+      var qty = parseInt(b.getAttribute('data-sub-pocet'), 10) || 1;
+      b.disabled = true; b.textContent = esc(tx('hra.menim_u2026_2'));
+      apiJson('/stripe/subscribe/pocet', { kind: 'dispecer', qty: qty }).then(function (r) {
+        if (!r.ok) {
+          b.disabled = false;
+          return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_40')), 'err');
+        }
+        PREDPLATNE = r.j.predplatne || [];
+        toast(tx('hra.techniku_ted_mas', { p1: r.j.qty }), 'ok');
+        paintCards();
+      }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida_8')), 'err'); });
+    };
+  });
   var z = document.querySelector('[data-sub-zrus]');
   if (z) z.onclick = function () {
     var obnovit = z.getAttribute('data-sub-zrus') === '0';

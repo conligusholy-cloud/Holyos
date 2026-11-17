@@ -3311,5 +3311,9 @@
   "dor.konec_odkup_podilu": "{p1} skončil ve hře — za tvůj podíl ti z jeho hotovosti přišlo {penize:penize}.",
   "dor.konec_podil_zanikl": "{p1} skončil ve hře, tvůj podíl {p2} % v jeho firmě tím zaniká. Nepokrytá část {penize:penize} se odepisuje.",
   "dor.konec_veritel_skoncil": "{p1} skončil ve hře. Co jsi mu dlužil, se odepisuje — splátky ti dál chodit nebudou.",
-  "dor.konec_podilnik_skoncil": "{p1} skončil ve hře, jeho podíl {p2} % ve tvé firmě zaniká. Výplaty mu posílat nebudeš."
-}
+  "dor.konec_podilnik_skoncil": "{p1} skončil ve hře, jeho podíl {p2} % ve tvé firmě zaniká. Výplaty mu posílat nebudeš.",
+  "hra.prikoupit_technika": "Přikoupit technika",
+  "hra.ubrat_technika": "Ubrat technika",
+  "hra.techniku_ted_mas": "Techniků teď máš {p1}.",
+  "hra.na_vsechny_pobocky_potrebujes": "<p class=\"fine\">Na všechny pobočky bys potřeboval {p1} techniky — vyšlo by to na {cislo:p2} Kč týdně. Rozdíl se dorovná v nejbližší platbě, takže v půlce týdne doplatíš jen půlku.</p>",
+ 
