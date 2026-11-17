@@ -1065,8 +1065,20 @@
             + j.nakupy.map(function (o) { return '<tr><td class="note">' + dt(o.created_at) + '</td><td>' + esc(o.kind) + '</td>'
               + '<td class="num">' + o.qty + '</td><td class="num">' + cz(o.castka) + ' Kč</td>'
               + '<td><span class="st ' + esc(o.status) + '">' + esc(o.status) + '</span></td></tr>'; }).join('')
-            + '</tbody></table></div>' : '<p class="note" style="margin-top:16px">Zatím nic nekoupil.</p>');
+            + '</tbody></table></div>' : '<p class="note" style="margin-top:16px">Zatím nic nekoupil.</p>'
+          + '<h3 style="font-size:14px;margin:22px 0 8px">Herní transakce</h3><div id="tx-box"><p class="note">Načítám…</p></div>');
 
+        // Herní transakce se dočtou zvlášť, ať detail naskočí hned.
+        get('/players/' + id + '/transakce').then(function (t) {
+          var box = DLG.querySelector('#tx-box'); if (!box) return;
+          var s = t.stav, th = function (x) { return '<th>' + x + '</th>'; };
+          var tab = function (hlava, radky, prazdno) { return radky.length ? '<div class="tbl-wrap"><table class="data-table"><thead><tr>' + hlava.map(th).join('') + '</tr></thead><tbody>' + radky.join('') + '</tbody></table></div>' : '<p class="note">' + prazdno + '</p>'; };
+          box.innerHTML = '<p class="note" style="margin:0 0 10px">Uložený stav hry: naposledy <b>' + dt(s.state_at) + '</b> · verze ' + s.state_rev + ' · ' + s.kb + ' kB · hotovost ' + cz(s.hotovost) + ' L$ · prádlomatů <b>' + s.pradlomatu + '</b> (se ziskem ' + s.se_ziskem + ') · součet zisku ' + cz(s.eco_profit) + ' L$ · zbyde měsíčně <b>' + cz(s.zbyde_mesicne) + ' L$</b></p>'
+            + '<h4 style="margin:12px 0 6px">Podíly</h4>' + tab(['Firma', 'Investor', 'Podíl', 'Cena', 'Vyplaceno', 'Stav', 'Další výplata', 'Koupeno'], t.podily.map(function (e) { return '<tr><td>' + esc(e.firma) + '</td><td>' + esc(e.investor) + '</td><td>' + Math.round(e.podil * 100) + ' %</td><td>' + cz(e.cena) + '</td><td>' + cz(e.vyplaceno) + '</td><td>' + esc(e.stav) + '</td><td class="note">' + dt(e.dalsi) + '</td><td class="note">' + dt(e.kdy) + '</td></tr>'; }), 'Žádné podíly.')
+            + '<h4 style="margin:12px 0 6px">Burza</h4>' + tab(['Kdy', 'Od', 'Komu', 'Co', 'Cena', 'Stav'], t.obchody.map(function (o) { return '<tr><td class="note">' + dt(o.kdy) + '</td><td>' + esc(o.od) + '</td><td>' + esc(o.komu) + '</td><td>' + esc(o.smer + ' ' + o.predmet) + '</td><td>' + cz(o.cena) + '</td><td>' + esc(o.stav) + '</td></tr>'; }), 'Žádné obchody.')
+            + '<h4 style="margin:12px 0 6px">Půjčky</h4>' + tab(['Věřitel', 'Dlužník', 'Částka', 'Splaceno', 'Zmeškáno', 'Stav'], t.pujcky.map(function (l) { return '<tr><td>' + esc(l.veritel) + '</td><td>' + esc(l.dluznik) + '</td><td>' + cz(l.castka) + '</td><td>' + l.splaceno + '/' + l.mesicu + '</td><td>' + l.zmeskano + '</td><td>' + esc(l.stav) + '</td></tr>'; }), 'Žádné půjčky.')
+            + '<h4 style="margin:12px 0 6px">Doručenky (peníze, stroje, zprávy)</h4>' + tab(['Kdy', 'Druh', 'Částka', 'Přijato', 'Popis'], t.dorucenky.map(function (d) { return '<tr><td class="note">' + dt(d.kdy) + '</td><td>' + esc(d.kind) + '</td><td class="num">' + (d.amount == null ? '' : cz(d.amount)) + '</td><td>' + (d.prijato ? '✓' : 'čeká') + '</td><td>' + esc(d.popis) + '</td></tr>'; }), 'Žádné doručenky.');
+        }).catch(function (e) { var box = DLG.querySelector('#tx-box'); if (box) box.innerHTML = '<p class="note" style="color:#f87171">' + esc(e.message) + '</p>'; });
         DLG.querySelector('[data-close]').onclick = function () { OV.classList.remove('open'); };
         var pd = DLG.querySelector('[data-prehrat-d]');
         if (pd) pd.onclick = function () { prehraj(pd.getAttribute('data-prehrat-d')); };

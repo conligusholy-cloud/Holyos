@@ -195,6 +195,32 @@ router.get('/players-vyber', api(async (req, res) => {
     firma: p.company || (p.nick + ' s.r.o.') })) });
 }));
 
+// GET /players/:id/transakce → herní transakce hráče: uložený stav, doručenky, burza, podíly, půjčky
+router.get('/players/:id/transakce', api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const p = await prisma.gamePlayer.findUnique({ where: { id } });
+  if (!p) return res.status(404).json({ error: 'Hráč nenalezen.' });
+  const st = p.state || {};
+  const units = Array.isArray(st.units) ? st.units : [];
+  const [dor, obch, pod, puj] = await Promise.all([
+    prisma.gameDelivery.findMany({ where: { player_id: id }, orderBy: { created_at: 'desc' }, take: 150 }),
+    prisma.gameTrade.findMany({ where: { OR: [{ from_id: id }, { to_id: id }] }, orderBy: { created_at: 'desc' }, take: 100 }),
+    prisma.gameEquity.findMany({ where: { OR: [{ firma_id: id }, { investor_id: id }] }, orderBy: { created_at: 'desc' } }),
+    prisma.gameLoan.findMany({ where: { OR: [{ lender_id: id }, { borrower_id: id }] }, orderBy: { created_at: 'desc' } }),
+  ]);
+  res.json({ ok: true,
+    stav: { state_at: p.state_at, state_rev: p.state_rev, kb: Math.round(JSON.stringify(st).length / 1024),
+      hotovost: Math.round(st.cash || 0), pradlomatu: units.length,
+      se_ziskem: units.filter((u) => u.eco && u.eco.profit > 0).length,
+      eco_profit: Math.round(units.reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0)),
+      zbyde_mesicne: acct._zbydeMesicne(st) },
+    dorucenky: dor.map((d) => ({ kdy: d.created_at, kind: d.kind, amount: d.amount, prijato: d.claimed_at, popis: d.popis || d.text_kod || '' })),
+    obchody: obch.map((t) => ({ id: t.id, kdy: t.created_at, od: t.from_nick, komu: t.to_nick, smer: t.smer, predmet: t.predmet, cena: t.cena, stav: t.stav, data: t.data })),
+    podily: pod.map((e) => ({ id: e.id, firma: e.firma_nick, investor: e.investor_nick, podil: e.podil, cena: e.cena, vyplaceno: e.vyplaceno, stav: e.stav, dalsi: e.dalsi_at, kdy: e.created_at })),
+    pujcky: puj.map((l) => ({ id: l.id, veritel: l.lender_nick, dluznik: l.borrower_nick, castka: l.castka, splaceno: l.splaceno, mesicu: l.mesicu, zmeskano: l.zmeskano, stav: l.stav })),
+  });
+}));
+
 // GET /players/:id → detail: co hráč vlastní, co utratil, kde stojí
 router.get('/players/:id', api(async (req, res) => {
   const id = parseInt(req.params.id, 10);
