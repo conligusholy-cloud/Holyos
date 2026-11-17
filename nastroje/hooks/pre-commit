@@ -64,6 +64,16 @@ if git diff --cached --name-only | grep -qE 'nastroje/texty-prelozit'; then
   fi
 fi
 
+# Čisté jmění a hodnosti. Rozhodují o žebříčku i o odměnách, které se za
+# hodnosti vyplácejí v herních penězích a kartách. Commit zastaví.
+if git diff --cached --name-only | grep -qE 'services/game/(jmeni|hodnosti)'; then
+  if ! node nastroje/tjmeni.js; then
+    echo ""
+    echo "STOP: serverové jmění nebo hodnosti nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Dopočet skladu. Sáhne na majetek všech hráčů najednou, takže nesmí nikomu
 # nic ubrat a druhé spuštění nesmí nic přidat. Commit zastaví.
 if git diff --cached --name-only | grep -qE 'services/game/sklad'; then

@@ -15,11 +15,12 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../config/database');
-const { HODNOSTI, hodnost, ODZNAKY, ODZNAK,
+const { HODNOSTI, hodnost, zmrazena, ODZNAKY, ODZNAK,
   hodnostiPro, odznakyPro, nazevOdmeny } = require('../services/game/hodnosti');
 const TEXTY = require('../services/game/texty');
 const MENY = require('../services/game/meny');
 const POZEMKY = require('../services/game/pozemky');
+const JMENI = require('../services/game/jmeni');
 // Zkratka do obsluhy: stx(req)('server.neco') vrátí hlášku v jazyce hráče.
 // Skládá se pro toho, KOMU se posílá — ne pro toho, kdo akci vyvolal.
 function stx(req) {
@@ -1459,9 +1460,16 @@ async function pripisOdmenu(playerId, druh, kod, cash, karta) {
 // Dopočítat hodnost po uložení hry a doplatit, co k ní patří.
 async function resHodnost(p, st) {
   const cfg = await nastaveniHodnosti();
-  const h = hodnost(cisteJmeni(st));
+  // Jmění počítá server z vlastních dat. Vychází o něco níž než dřívější
+  // číslo ze stavu hry, protože nezapočítává přípravy ploch, pobočky a
+  // četu — proto hodnost nikdy nejde dolů: jednou dosažená meta se
+  // neztrácí. Bez toho by tři hráči po přepnutí spadli o stupeň a brali
+  // by to jako trest za něco, co neudělali.
+  const jmeniServ = await JMENI.proHrace(p.id, st).catch(() => cisteJmeni(st));
+  const spoctena = hodnost(jmeniServ);
   const prvni = !p.hodnost;          // hráče vidíme s hodností poprvé
   const stary = HODNOSTI.findIndex((x) => x.id === p.hodnost);
+  const h = zmrazena(p.hodnost, spoctena);
   if (h.id !== p.hodnost) {
     await prisma.gamePlayer.update({ where: { id: p.id }, data: { hodnost: h.id } })
       .catch(() => {});
@@ -1818,7 +1826,7 @@ function dropZeb() { _zeb = { okno: -1, data: null }; }
 async function zebricky() {
   const okno = Math.floor(Date.now() / ZEB_OKNO);
   if (_zeb.okno === okno && _zeb.data) return _zeb.data;
-  const [mista, hraci, zemeMap] = await Promise.all([
+  const [mista, hraci, zemeMap, majetek] = await Promise.all([
     // Počítají se postavené prádlomaty, ne zabraná místa — prázdný pozemek
     // do žebříčku nepatří.
     prisma.gameSpotClaim.groupBy({ by: ['player_id', 'nick'], _count: { _all: true },
@@ -1831,7 +1839,17 @@ async function zebricky() {
     // Kdyby sloupec se zemí ještě nebyl v databázi, žebříček kvůli vlaječkám
     // spadnout nesmí — prostě se nevykreslí.
     zemeHracu().catch(() => ({})),
+    // Majetek ze serverových dat: stroje na místech, koupená zem, sklad a
+    // zboží na cestě. Dva dotazy na celý žebříček, ne pět set.
+    JMENI.majetekVsech().catch(() => new Map()),
   ]);
+  // Jmění hráče = serverový majetek plus jeho hotovost mínus dluh. Kdyby
+  // se majetek nenačetl, spadne se na dřívější číslo ze stavu hry — žebříček
+  // kvůli tomu padat nesmí.
+  const jmeniHrace = (h, st) => {
+    const m = majetek.get(h.id);
+    return m ? m.celkem + JMENI.hotovostADluh(st) : cisteJmeni(st);
+  };
   // Firmy doplníme k nickům z míst — v žebříčku chceme vidět, kdo je kdo.
   const firmy = await firmyMapa();
   // Do žebříčku prádlomatů patří každý, kdo hru rozehrál — i ten, kdo zatím
@@ -1847,7 +1865,7 @@ async function zebricky() {
     viden.add(h.id);
     // Hodnost počítáme ze stavu uloženého na serveru — ne z toho, co o sobě
     // tvrdí prohlížeč. V žebříčku a na burze to má být záruka, ne jmenovka.
-    hodnostHrace.set(h.id, hodnost(cisteJmeni(h.state || {})).id);
+    hodnostHrace.set(h.id, hodnost(jmeniHrace(h, h.state || {})).id);
     poMistech.push({ id: h.id, nick: h.nick, firma: h.company || (h.nick + ' s.r.o.'),
       znak: h.emblem || null, zeme: zemeMap[h.id] || [], hodnota: pocetMist.get(h.id) || 0,
       hodnost: hodnostHrace.get(h.id) });
@@ -1870,14 +1888,14 @@ async function zebricky() {
     const mesicne = zbydeMesicne(st);
     const fi = h.company || (h.nick + ' s.r.o.');
     const zm = zemeMap[h.id] || [];
-    const hd = hodnostHrace.get(h.id) || hodnost(cisteJmeni(st)).id;
+    const hd = hodnostHrace.get(h.id) || hodnost(jmeniHrace(h, st)).id;
     if (mesicne > 0) zisk.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm, hodnota: Math.round(mesicne), hodnost: hd });
     if (st.refs > 0) pozvanky.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm, hodnota: st.refs, hodnost: hd });
     // Do žebříčku jmění patří i ten, kdo je v minusu — právě to je vidět.
     if (st.profile) {
       // Jmění se dopočítá k teď, aby neaktivní hráč nevisel na starém čísle.
       const dop = dopoctiStav(st, h.state_at);
-      const cj = cisteJmeni(dop.st);
+      const cj = jmeniHrace(h, dop.st);
       // Hodnost zůstává z uloženého stavu: je to meta, kterou hra hráči
       // opravdu udělila. Z dopočítaného jmění by mu žebříček maloval metu,
       // kterou ještě nedostal.

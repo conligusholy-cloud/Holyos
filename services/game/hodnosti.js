@@ -56,6 +56,20 @@ function hodnost(jmeni, jazyk) {
   };
 }
 
+// Jednou dosažená hodnost se neztrácí. Potřeba to bylo ve chvíli, kdy jmění
+// začal počítat server z vlastních dat: vychází o něco níž než dřívější číslo
+// ze stavu hry, protože nezapočítává přípravy ploch, pobočky a četu. Bez
+// tohohle by tři hráči spadli o stupeň a brali by to jako trest za něco,
+// co neudělali.
+//
+// Dolů to nejde ani později, až hráč prodá síť — odměnu za stupeň dostal
+// jednou a žádná se nevyplácí znovu.
+function zmrazena(staraId, spoctena, jazyk) {
+  const stary = HODNOSTI.findIndex((x) => x.id === staraId);
+  if (stary < 0 || !spoctena) return spoctena;
+  return (stary > spoctena.stupen) ? hodnost(HODNOSTI[stary].od, jazyk) : spoctena;
+}
+
 // ─── Odznaky ─────────────────────────────────────────────────────────────────
 // Odměnou je karta, ne hotovost. Bankéře i Investora si dva domluvení hráči
 // vyrobí, ale za jednu kartu to nikdo dělat nebude — kdyby to sypalo peníze,
@@ -92,5 +106,5 @@ function nazevOdmeny(druh, kod, jazyk) {
   return (o && o.nazev) || kod;
 }
 
-module.exports = { HODNOSTI, hodnost, ODZNAKY, ODZNAK,
+module.exports = { HODNOSTI, hodnost, zmrazena, ODZNAKY, ODZNAK,
   nazevHodnosti, hodnostiPro, odznakPro, odznakyPro, nazevOdmeny };
