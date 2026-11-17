@@ -223,6 +223,13 @@ const SUB_KINDS = Object.keys(SUBS);
 // vzniká jen tím, že ji někdo hráči přidá, a nese vlastní částku.
 const CASH_CUSTOM = 'cash_dar';
 const ALL = Object.assign({}, CARDS, CASH, SUBS, LINKA, KAMPAN, RAMEC);
+// Co se hráči počítá mezi nevyzvednuté kusy. Je to všechno, co se dá koupit
+// jako kus, tedy ALL bez předplatného — to se nekupuje po kusech a bydlí
+// v GameSubscription. Rodina, která tu chybí, znamená zaplacenou kartu, o
+// které se hra nikdy nedozví: přesně tohle potkalo kampaně hned první den.
+// Proto se seznam nevypisuje ručně, ale odvozuje — nová rodina v ALL je tu
+// automaticky. Hlídá to nastroje/tvlastni.js.
+const POCITANE_KINDS = Object.keys(ALL).filter((k) => !SUBS[k]).concat([CASH_CUSTOM]);
 
 // ─── Nastavení hry ───────────────────────────────────────────────────────────
 // Přepínače, které jde cvaknout z administrace bez nasazování. Držíme je
@@ -419,10 +426,7 @@ async function pub(p) {
     select: { kind: true }
   });
   const counts = {};
-  // Balíčky infolinky patří do seznamu taky — hra se jinak o zaplaceném
-  // balíčku nedozví a nikdy si ho nevyzvedne.
-  CARD_KINDS.concat(CASH_KINDS).concat(LINKA_KINDS).concat(RAMEC_KINDS).concat([CASH_CUSTOM])
-    .forEach((k) => { counts[k] = 0; });
+  POCITANE_KINDS.forEach((k) => { counts[k] = 0; });
   cards.forEach((c) => { if (counts[c.kind] != null) counts[c.kind]++; });
   return {
     nick: p.nick, company: p.company || (p.nick + ' s.r.o.'), emblem: p.emblem || null,
@@ -2293,6 +2297,9 @@ module.exports._cenaKusuVBalicku = cenaKusuVBalicku;
 module.exports._cardKinds = CARD_KINDS;
 module.exports._subKinds = SUB_KINDS;
 module.exports._linkaKinds = LINKA_KINDS;
+module.exports._kampanKinds = KAMPAN_KINDS;
+module.exports._pocitaneKinds = POCITANE_KINDS;
+module.exports._subKinds = SUB_KINDS;
 module.exports._ramecKinds = RAMEC_KINDS;
 module.exports._ramecKatalog = RAMEC;
 module.exports._ramecUroven = ramecUroven;

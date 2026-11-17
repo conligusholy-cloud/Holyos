@@ -64,6 +64,17 @@ if git diff --cached --name-only | grep -qE 'nastroje/texty-prelozit'; then
   fi
 fi
 
+# Co se prodává, musí jít vyzvednout. Zapomenutá rodina položek ve výčtu
+# znamená zaplacenou kartu, o které se hra nikdy nedozví — stalo se to
+# kampaním hned první den prodeje. Je to přímo o penězích, takže commit zastaví.
+if git diff --cached --name-only | grep -qE 'routes/game-account'; then
+  if ! node nastroje/tvlastni.js; then
+    echo ""
+    echo "STOP: něco, co jde koupit, se hráči nepočítá mezi nevyzvednuté (viz výš)."
+    exit 1
+  fi
+fi
+
 # Platby. Dvojí doručení webhooku nesmí nikdy připsat zboží dvakrát — tohle
 # je přímo o penězích, takže commit zastaví.
 if git diff --cached --name-only | grep -qE 'routes/game-stripe'; then

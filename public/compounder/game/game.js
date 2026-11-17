@@ -13177,7 +13177,9 @@ function checkPayment() {
       if (r.ok && r.j.status === 'paid') {
         ev('game_paid', true);
         if (ME) ME.cards = r.j.owned;
-        if (/^linka/.test(r.j.kind || '')) {
+        if (/^linka/.test(r.j.kind || '') || /^kampan/.test(r.j.kind || '')) {
+          // Kampaň se musí spustit hned po návratu z platby. Dřív spadla do
+          // větve „karta je tvoje" a na kampaň se čekalo až na minutový tik.
           return claimCash(function () { paintCards(); switchTab('cards'); });
         }
         if (/^ramec/.test(r.j.kind || '')) {
