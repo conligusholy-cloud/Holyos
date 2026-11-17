@@ -8,6 +8,7 @@ const router = express.Router();
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const acct = require('./game-account.routes');
+const MENY = require('../services/game/meny');
 
 router.use(express.json({ limit: '64kb' }));
 router.use(requireAuth);
@@ -28,6 +29,12 @@ router.use((req, res, next) => {
   next();
 });
 
+// Nákupy jsou v měně hráče (koruny, nebo eura). Součty v adminu se počítají v korunách
+// přepočtem kurzem z nastavení hry — eura se nikdy nesčítají s korunami „po hlavě".
+let KURZ_EUR = 25;
+router.use(async (req, res, next) => { try { KURZ_EUR = await MENY.kurzEur(); } catch (e) { /* zůstane poslední */ } next(); });
+const jeEur = (n) => String(n && n.currency || 'czk').toLowerCase() === 'eur';
+const kcZ = (n) => (n.amount_cents / 100) * (jeEur(n) ? KURZ_EUR : 1);
 const api = (fn) => (req, res, next) => fn(req, res).catch(next);
 const den = (d) => new Date(d).toISOString().slice(0, 10);
 
@@ -48,8 +55,8 @@ router.get('/players', api(async (req, res) => {
   const [spots, cards, pays, privedl, zvouci] = await Promise.all([
     prisma.gameSpotClaim.groupBy({ by: ['player_id'], where: { player_id: { in: ids } }, _count: { _all: true } }),
     prisma.gameCard.groupBy({ by: ['player_id'], where: { player_id: { in: ids } }, _count: { _all: true } }),
-    prisma.gamePurchase.groupBy({ by: ['player_id'], where: { player_id: { in: ids }, status: 'paid' },
-      _sum: { amount_cents: true }, _count: { _all: true } }),
+    prisma.gamePurchase.findMany({ where: { player_id: { in: ids }, status: 'paid' }, select: { player_id: true, amount_cents: true, currency: true } })
+      .then((nak) => { const m = {}; nak.forEach((n) => { const o = m[n.player_id] || (m[n.player_id] = { player_id: n.player_id, _sum: { amount_cents: 0 }, _count: { _all: 0 } }); o._sum.amount_cents += kcZ(n) * 100; o._count._all++; }); return Object.keys(m).map((k) => m[k]); }),
     // Kolik hráčů kdo přivedl — základ pro distributorský program.
     prisma.gamePlayer.groupBy({ by: ['invited_by_id'], where: { invited_by_id: { in: ids } }, _count: { _all: true } }),
     prisma.gamePlayer.findMany({ where: { invited: { some: { id: { in: ids } } } }, select: { id: true, nick: true, company: true } }),
@@ -234,7 +241,7 @@ router.get('/players/:id', api(async (req, res) => {
     prisma.gamePlayer.findMany({
       where: { invited_by_id: id }, orderBy: { created_at: 'desc' }, take: 200,
       select: { id: true, nick: true, company: true, created_at: true, invited_at: true, last_login_at: true,
-        purchases: { where: { status: 'paid' }, select: { amount_cents: true } } },
+        purchases: { where: { status: 'paid' }, select: { amount_cents: true, currency: true } } },
     }),
     p.invited_by_id
       ? prisma.gamePlayer.findUnique({ where: { id: p.invited_by_id }, select: { id: true, nick: true, company: true } })
@@ -277,9 +284,9 @@ router.get('/players/:id', api(async (req, res) => {
   privedeni: privedeni.map((h) => ({
     id: h.id, nick: h.nick, firma: h.company || (h.nick + ' s.r.o.'),
     kdy: h.invited_at || h.created_at, posledne: h.last_login_at,
-    utratil: h.purchases.reduce((a, x) => a + x.amount_cents, 0) / 100,
+    utratil: h.purchases.reduce((a, x) => a + kcZ(x), 0),
   })),
-  nakupy: nakupy.map((o) => ({ id: o.id, kind: o.kind, qty: o.qty, castka: o.amount_cents / 100,
+  nakupy: nakupy.map((o) => ({ id: o.id, kind: o.kind, qty: o.qty, castka: o.amount_cents / 100, mena: jeEur(o) ? 'eur' : 'czk',
     status: o.status, created_at: o.created_at, paid_at: o.paid_at })) });
 }));
 
@@ -331,11 +338,13 @@ router.get('/orders', api(async (req, res) => {
     orderBy: { created_at: 'desc' }, take,
     include: { player: { select: { nick: true, email: true, created_at: true } } },
   });
-  const paid = await prisma.gamePurchase.aggregate({ where: { status: 'paid' }, _sum: { amount_cents: true }, _count: { _all: true } });
+  const paid = await prisma.gamePurchase.groupBy({ by: ['currency'], where: { status: 'paid' }, _sum: { amount_cents: true }, _count: { _all: true } });
+  const poMenach = {}; let ks = 0, kc = 0;
+  paid.forEach((r) => { const c = String(r.currency || 'czk').toLowerCase(); poMenach[c] = (poMenach[c] || 0) + (r._sum.amount_cents || 0) / 100; ks += r._count._all; kc += (r._sum.amount_cents || 0) / 100 * (c === 'eur' ? KURZ_EUR : 1); });
   res.json({ ok: true,
-    souhrn: { zaplaceno_ks: paid._count._all, zaplaceno_kc: (paid._sum.amount_cents || 0) / 100 },
+    souhrn: { zaplaceno_ks: ks, zaplaceno_kc: kc, po_menach: poMenach, kurz_eur: KURZ_EUR },
     orders: rows.map((o) => ({
-      id: o.id, kind: o.kind, qty: o.qty, castka: o.amount_cents / 100, status: o.status,
+      id: o.id, kind: o.kind, qty: o.qty, castka: o.amount_cents / 100, mena: jeEur(o) ? 'eur' : 'czk', status: o.status,
       nick: o.player ? o.player.nick : null, registrace: o.player ? o.player.created_at : null, email: o.email || (o.player ? o.player.email : null),
       session: o.stripe_session, created_at: o.created_at, paid_at: o.paid_at,
       // Období předplatného se zapisuje s ID faktury Stripe (in_…), jednorázový nákup s ID checkoutu (cs_…)
@@ -743,7 +752,7 @@ router.get('/stats', api(async (req, res) => {
 
   const [hraci, nakupy, udalosti, mista, celkem] = await Promise.all([
     prisma.gamePlayer.findMany({ where: { created_at: { gte: od } }, select: { created_at: true } }),
-    prisma.gamePurchase.findMany({ where: { status: 'paid', paid_at: { gte: od } }, select: { paid_at: true, amount_cents: true, kind: true } }),
+    prisma.gamePurchase.findMany({ where: { status: 'paid', paid_at: { gte: od } }, select: { paid_at: true, amount_cents: true, currency: true, kind: true } }),
     prisma.compounderEvent.findMany({ where: { created_at: { gte: od }, event: { startsWith: 'game_' } },
       select: { created_at: true, event: true, sid: true } }),
     prisma.gameSpotClaim.count(),
@@ -761,14 +770,14 @@ router.get('/stats', api(async (req, res) => {
     }
   });
   hraci.forEach((h) => { const d = den(h.created_at); if (dni[d]) dni[d].registraci++; });
-  nakupy.forEach((n) => { const d = den(n.paid_at); if (dni[d]) dni[d].trzba += n.amount_cents / 100; });
+  nakupy.forEach((n) => { const d = den(n.paid_at); if (dni[d]) dni[d].trzba += kcZ(n); });
 
   // Trychtýř: kolik lidí hru otevřelo a kolik jich došlo dál.
   const sidy = new Set(udalosti.filter((e) => e.event === 'game_open').map((e) => e.sid));
   const krok = (ev) => new Set(udalosti.filter((e) => e.event === ev).map((e) => e.sid)).size;
-  const trzbaCelkem = nakupy.reduce((a, n) => a + n.amount_cents / 100, 0);
+  const trzbaCelkem = nakupy.reduce((a, n) => a + kcZ(n), 0);
   const podleDruhu = {};
-  nakupy.forEach((n) => { podleDruhu[n.kind] = (podleDruhu[n.kind] || 0) + n.amount_cents / 100; });
+  nakupy.forEach((n) => { podleDruhu[n.kind] = (podleDruhu[n.kind] || 0) + kcZ(n); });
 
   // Retence: vrátil se hráč den po registraci? A po týdnu? Bereme to podle
   // toho, kdy si naposledy uložil stav — hra ukládá průběžně, takže „poslední
@@ -838,10 +847,10 @@ router.get('/stats/reklama', api(async (req, res) => {
   const dny = seznam.length;
   const od = new Date(new Date(odK + 'T00:00:00Z').getTime() - 86400e3), dok = new Date(new Date(doK + 'T00:00:00Z').getTime() + 2 * 86400e3);
   const [nakupy, hraci] = await Promise.all([
-    prisma.gamePurchase.findMany({ where: { status: 'paid', paid_at: { gte: od, lt: dok } }, select: { paid_at: true, amount_cents: true } }),
+    prisma.gamePurchase.findMany({ where: { status: 'paid', paid_at: { gte: od, lt: dok } }, select: { paid_at: true, amount_cents: true, currency: true } }),
     prisma.gamePlayer.findMany({ where: { created_at: { gte: od, lt: dok } }, select: { created_at: true } }),
   ]);
-  nakupy.forEach((n) => { const r = dni[dk(n.paid_at)]; if (r) { r.trzba += n.amount_cents / 100 / 1.21; r.nakupu++; } });
+  nakupy.forEach((n) => { const r = dni[dk(n.paid_at)]; if (r) { r.trzba += kcZ(n) / 1.21; r.nakupu++; } });
   hraci.forEach((h) => { const r = dni[dk(h.created_at)]; if (r) r.registraci++; });
 
   const ads = require('./ads-center.routes');
@@ -1014,8 +1023,8 @@ router.get('/odkud', api(async (req, res) => {
   const od = new Date(Date.now() - dny * 86400e3);
   const hraci = await prisma.gamePlayer.findMany({ where: { created_at: { gte: od }, disabled: false }, select: { id: true, zdroj: true, invited_by_id: true, invited_by_ref: true, created_at: true } });
   const ids = hraci.map((h) => h.id);
-  const nak = ids.length ? await prisma.gamePurchase.findMany({ where: { status: 'paid', player_id: { in: ids } }, select: { player_id: true, amount_cents: true } }) : [];
-  const plat = {}; nak.forEach((n) => { plat[n.player_id] = (plat[n.player_id] || 0) + n.amount_cents / 100; });
+  const nak = ids.length ? await prisma.gamePurchase.findMany({ where: { status: 'paid', player_id: { in: ids } }, select: { player_id: true, amount_cents: true, currency: true } }) : [];
+  const plat = {}; nak.forEach((n) => { plat[n.player_id] = (plat[n.player_id] || 0) + kcZ(n); });
   const sk = {}, zdroje = {};
   // Po dnech (pražský čas): kolik účtů z které skupiny ten den vzniklo
   const denK = (d) => new Date(d).toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
@@ -1098,7 +1107,7 @@ async function sesbirejDataHry(reklama) {
     prisma.compounderEvent.findMany({ where: { created_at: { gte: od }, event: { startsWith: 'game_' } }, select: { event: true, sid: true, created_at: true }, take: 300000 }),
     prisma.gamePlayer.findMany({ where: { disabled: false }, take: 4000, orderBy: { created_at: 'desc' },
       select: { id: true, created_at: true, state_at: true, state: true, zdroj: true, hra_s_celkem: true, invited_by_id: true } }),
-    prisma.gamePurchase.findMany({ where: { status: 'paid' }, select: { player_id: true, kind: true, qty: true, amount_cents: true, paid_at: true } }),
+    prisma.gamePurchase.findMany({ where: { status: 'paid' }, select: { player_id: true, kind: true, qty: true, amount_cents: true, currency: true, paid_at: true } }),
     prisma.gamePrice.findMany({ select: { kind: true, price: true, name: true, active: true } }),
     prisma.gameReplay.count().catch(() => 0),
   ]);
@@ -1134,7 +1143,7 @@ async function sesbirejDataHry(reklama) {
     { krok: 'zaplatili', udalost: 'game_paid', pocet: u('game_paid'), z_predchoziho_pct: pct(u('game_paid'), u('game_build')), jmenovatel: 'game_build' },
   ];
 
-  const plat = {}; nakupy.forEach((n) => { const o = plat[n.player_id] || (plat[n.player_id] = { n: 0, kc: 0, prvni: null }); o.n++; o.kc += n.amount_cents / 100; const t = new Date(n.paid_at).getTime(); if (!o.prvni || t < o.prvni) o.prvni = t; });
+  const plat = {}; nakupy.forEach((n) => { const o = plat[n.player_id] || (plat[n.player_id] = { n: 0, kc: 0, prvni: null }); o.n++; o.kc += kcZ(n); const t = new Date(n.paid_at).getTime(); if (!o.prvni || t < o.prvni) o.prvni = t; });
   const bucket = (v, hr) => { for (const [lbl, max] of hr) if (v < max) return lbl; return hr[hr.length - 1][0]; };
   const B = { pradlomatu: {}, cas_ve_hre: {}, dni_od_registrace_do_posledni_aktivity: {}, profil: {}, zdroj: {}, pozvany: {} };
   const pridej = (skupina, klic, plati) => { const o = skupina[klic] || (skupina[klic] = { hracu: 0, platicich: 0 }); o.hracu++; if (plati) o.platicich++; };
@@ -1152,7 +1161,7 @@ async function sesbirejDataHry(reklama) {
     if (minut > 0) casy.push(minut);
     if (plati && plat[h.id].prvni) dnuDoPlatby.push((plat[h.id].prvni - new Date(h.created_at).getTime()) / 86400e3);
   });
-  const podleDruhu = {}; nakupy.forEach((n) => { const o = podleDruhu[n.kind] || (podleDruhu[n.kind] = { nakupu: 0, kc: 0 }); o.nakupu++; o.kc += n.amount_cents / 100; });
+  const podleDruhu = {}; nakupy.forEach((n) => { const o = podleDruhu[n.kind] || (podleDruhu[n.kind] = { nakupu: 0, kc: 0 }); o.nakupu++; o.kc += kcZ(n); });
   const platici = Object.keys(plat).length;
   return {
     obdobi_udalosti_dnu: dny,
