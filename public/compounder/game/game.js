@@ -3662,6 +3662,32 @@ function mapaPohled(moje) {
   drawMap();
   drawAuta();
 }
+// ─── Výchozí pohled na mapě ──────────────────────────────────────────────
+// Mapa se dřív vždycky otevřela nad středem Česka. Komu stojí prádlomaty
+// v šesti zemích, tomu to k ničemu není — než najde, kde zrovna něco řeší,
+// musí mapu přetáhnout přes půl Evropy. Vybranou základnu si hra pamatuje
+// ve stavu, takže platí i na druhém zařízení.
+var MAPA_ZOOM = 12;        // přiblížení, ve kterém je vidět okolí základny
+function zakladny() {
+  var out = [];
+  if (S.sidlo && S.sidlo.lat != null) {
+    out.push({ id: 'sidlo', nazev: S.sidlo.name, lat: S.sidlo.lat, lon: S.sidlo.lon, sidlo: true });
+  }
+  (S.pobocky || []).forEach(function (b) {
+    if (b && b.lat != null) out.push({ id: 'pob:' + b.name, nazev: b.name, lat: b.lat, lon: b.lon });
+  });
+  return out;
+}
+// Kterou si hráč vybral. Bez volby bereme první pobočku — tam většinou
+// sedí jeho hlavní provoz — a teprve když žádnou nemá, sídlo.
+function vychoziZakladna() {
+  var vse = zakladny();
+  if (!vse.length) return null;
+  var vybrana = vse.filter(function (z) { return z.id === S.mapaOd; })[0];
+  if (vybrana) return vybrana;
+  var pobocka = vse.filter(function (z) { return !z.sidlo; })[0];
+  return pobocka || vse[0];
+}
 function initMap() {
   if (map) return;
   // Mapa jede z CDN. Když se nenačte (slabá síť, blokovaný skript), hra musí běžet dál
@@ -3674,8 +3700,9 @@ function initMap() {
   }
   // Vlastní, nenápadný podpis místo širokého pruhu přes půl mapy. Úplně ho
   // smazat nejde — Esri nám dlaždice pouští zdarma právě proti uvedení zdroje.
+  var odkud = vychoziZakladna();
   map = L.map('map', { zoomControl: false, attributionControl: false, minZoom: GLOBUS_ZOOM })
-    .setView([49.82, 15.47], 7);
+    .setView(odkud ? [odkud.lat, odkud.lon] : [49.82, 15.47], odkud ? MAPA_ZOOM : 7);
   // Změna přiblížení rozhoduje, jestli se volná místa kreslí — překreslíme.
   // A kdo se oddálí až na doraz, dostane místo rozložené mapy glóbus.
   map.on('zoomend', function () {
@@ -9005,6 +9032,18 @@ function paintMe() {
       + '<button class="btn sec" id="me-znak" style="width:100%;margin-top:8px">'
       + (ME.emblem ? esc(tx('hra.zmenit_znak_firmy')) : esc(tx('hra.vygenerovat_znak_firmy'))) + '</button>'
       + '<button class="btn sec" id="me-nick" style="width:100%;margin-top:8px">' + esc(tx('hra.zmenit_jmeno_hrace')) + '</button>'
+      // Kde se má otevřít mapa. Má smysl teprve, když je z čeho vybírat.
+      + (zakladny().length > 1
+          ? '<p class="muted small" style="margin:14px 0 6px"><b>' + esc(tx('hra.kde_zacina_mapa')) + '</b><br>'
+            + esc(tx('hra.po_prihlaseni_te_mapa_vezme')) + '</p>'
+            + '<div class="drz-tl">'
+            + zakladny().map(function (z) {
+                var je = vychoziZakladna() && vychoziZakladna().id === z.id;
+                return '<button class="btn sm' + (je ? '' : ' sec') + '" data-mapa-od="' + esc(z.id) + '">'
+                  + (z.sidlo ? esc(tx('hra.sidlo')) + ' · ' : '') + esc(z.nazev) + '</button>';
+              }).join('')
+            + '</div>'
+          : '')
       // Jazyk sedí u účtu, takže přepnutí platí i na druhém zařízení.
       + '<p class="muted small" style="margin:14px 0 6px"><b>' + esc(tx('jazyk.nadpis')) + '</b><br>'
       + esc(tx('jazyk.popis')) + '</p>'
@@ -9082,6 +9121,17 @@ function paintMe() {
   // Přepínač jazyka. Po přepnutí se panel překreslí, ať je hned vidět, co to udělalo.
   [].forEach.call($('me-body').querySelectorAll('[data-jazyk]'), function (b) {
     b.onclick = function () { prepniJazyk(b.getAttribute('data-jazyk'), paintMe); };
+  });
+  [].forEach.call($('me-body').querySelectorAll('[data-mapa-od]'), function (b) {
+    b.onclick = function () {
+      S.mapaOd = b.getAttribute('data-mapa-od');
+      save(); syncState(true).catch(function () {});
+      var z = vychoziZakladna();
+      // Ať je vidět, co se vybralo: mapa tam rovnou skočí.
+      if (z && map) map.setView([z.lat, z.lon], Math.max(MAPA_ZOOM, map.getZoom()));
+      paintMe();
+      if (z) toast(tx('veta.mapa_bude_zacinat_u', { p1: z.nazev }), 'ok');
+    };
   });
   $('do-share').onclick = function () { shareGame($('do-share')); };
   // Výdej údajů: prohlížeč si soubor stáhne sám, server ho posílá jako

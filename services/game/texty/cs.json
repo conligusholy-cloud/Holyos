@@ -3389,5 +3389,8 @@
   "jazyk.de": "Němčina",
   "veta.za_jednotku_meny": "Za {p1}",
   "jazyk.es": "Španělština",
-  "jazyk.fr": "Francouzština"
+  "jazyk.fr": "Francouzština",
+  "hra.kde_zacina_mapa": "Kde začíná mapa",
+  "hra.po_prihlaseni_te_mapa_vezme": "Po přihlášení tě mapa vezme k téhle základně. Bez volby to je první pobočka.",
+  "veta.mapa_bude_zacinat_u": "Mapa bude začínat u {p1}."
 }
