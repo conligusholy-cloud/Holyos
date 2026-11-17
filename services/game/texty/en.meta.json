@@ -2651,7 +2651,7 @@
   "hra.kupuje_dalsich": "ebb74cf48edc",
   "hra.dokud_mas_nevyuzitych_dalsi_zdarma_nechodi": "55523908769b",
   "hra.p_class_fine_warn_nacerpano_mas": "75ae02ca668d",
-  "hra.div_class_pack_l_b_b": "99d41e57b6de",
+  "hra.div_class_pack_l_b_b": "f0465f870361",
   "hra.bezi_jeste": "837abe037bc3",
   "hra.chybi_ti": "dbcd2e50c847",
   "hra.p_class_fine_ok_vymena_se": "52c7cdb22b6f",
@@ -3321,5 +3321,16 @@
   "linka.pauza_nabidka": "daaf9a96aec2",
   "linka.zapnuta": "0172f1bd6307",
   "linka.vypnuta": "b9520194415e",
-  "linka.stoji_zbyva": "03e43d00e36f"
+  "linka.stoji_zbyva": "03e43d00e36f",
+  "hra.vzal_jsem": "530402a2f417",
+  "hra.pred_hodin": "90baf3b53fbf",
+  "hra.pred_dnu": "58b01af94a7c",
+  "hra.za_technika_a_tyden": "8921d98e8f5f",
+  "hra.doplacis_jen_rozdil_proti": "69e456fdeab5",
+  "obecne.mena_vychozi": "ef2f19488d0f",
+  "hra.zdarma_zavorka": "ae1738d90930",
+  "hra.chce_koupit_od_tebe": "92ba1ebd6054",
+  "hra.doba_1_rok": "bd40773043a3",
+  "hra.doba_3_roky": "7d0bd617a4c3",
+  "hra.doba_5_let": "6050e7d079dd"
 }

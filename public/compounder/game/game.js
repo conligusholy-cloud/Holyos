@@ -12100,11 +12100,26 @@ function linkaPacksHtml() {
 }
 // Evidence hovorů. Ukazujeme posledních dvacet z padesáti, co si hra pamatuje —
 // u každého, kdo volal, o co šlo a jestli ho vzal hráč, nebo operátor.
+// Záznam hovoru drží jméno a téma tak, jak se zapsaly. Starší záznamy mají místo
+// jména holý klíč katalogu (překlad tehdy chyběl), jiné český text. Při zobrazení
+// obojí převedeme na jazyk hráče: klíč přímo, český text zpětným dohledáním klíče.
+var HOVOR_OBRAT = null;
+function hovorText(t) {
+  t = String(t == null ? '' : t);
+  if (/^[a-z]+(\.[a-z0-9_]+)+$/.test(t)) return tx(t);
+  if (JAZYK === 'cs') return t;
+  if (!HOVOR_OBRAT) {
+    HOVOR_OBRAT = {};
+    var cz = window.__TEXTY_CS || {};
+    Object.keys(cz).forEach(function (k) { if (typeof cz[k] === 'string' && !HOVOR_OBRAT[cz[k]]) HOVOR_OBRAT[cz[k]] = k; });
+  }
+  return HOVOR_OBRAT[t] ? tx(HOVOR_OBRAT[t]) : t;
+}
 function hovorLogHtml() {
   var l = ((S && S.hovorLog) || []).slice().reverse().slice(0, 20);
   if (!l.length) return '';
   var kolik = ((S && S.hovorLog) || []).length;
-  var vzal = { ja: 'vzal jsem', operator: esc(tx('hra.vzal_operator')), nevzat: esc(tx('hra.nevzaty')) };
+  var vzal = { ja: esc(tx('hra.vzal_jsem')), operator: esc(tx('hra.vzal_operator')), nevzat: esc(tx('hra.nevzaty')) };
   return '<h3 style="margin:18px 0 2px">' + esc(tx('hra.evidence_hovoru')) + '</h3>'
     + '<p class="muted small" style="margin:0 0 8px">'
     + mn(l.length, esc(tx('hra.posledni_hovor')), tx('veta.posledni_hovory', { p1: l.length }), tx('veta.poslednich_hovoru', { p1: l.length }))
@@ -12113,7 +12128,7 @@ function hovorLogHtml() {
         var tr = z.konec === 'ja' ? (z.zmena > 0 ? 'ok' : (z.zmena < 0 ? 'err' : 'muted'))
           : (z.konec === 'operator' ? 'muted' : 'err');
         return '<div class="hov-radek">'
-          + '<div class="hov-kdo"><b>' + esc(z.jmeno) + '</b><i>' + esc(z.tema) + '</i></div>'
+          + '<div class="hov-kdo"><b>' + esc(hovorText(z.jmeno)) + '</b><i>' + esc(hovorText(z.tema)) + '</i></div>'
           + '<div class="hov-vysl"><span class="' + tr + '">' + (vzal[z.konec] || z.konec) + '</span>'
           + '<em>' + casPred(z.kdy)
           + (z.zmena ? tx('veta.povest', { p1: (z.zmena > 0 ? '+' : '\u2212'), p2: String(Math.abs(z.zmena)).replace('.', desZnak()) }) : '') + '</em></div></div>';
@@ -12126,9 +12141,9 @@ function casPred(kdy) {
   var m = Math.round(s / 60);
   if (m < 60) return tx('veta.pred_min_2', { p1: m });
   var h = Math.round(m / 60);
-  if (h < 24) return tx('veta.pred_2', { p1: h, p2: mn(h, 'hodinou', 'hodinami', 'hodinami') });
+  if (h < 24) return tx('hra.pred_hodin', { p1: h });
   var d = Math.round(h / 24);
-  return tx('veta.pred_2', { p1: d, p2: mn(d, 'dnem', 'dny', 'dny') });
+  return tx('hra.pred_dnu', { p1: d });
 }
 // Karta předplatného — jediná věc ve hře, která se strhává opakovaně, takže
 // se o tom musí psát narovinu: co to stojí, kdy se to strhne a jak to zrušit.
