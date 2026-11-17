@@ -1677,6 +1677,21 @@ function kampanAdd() {
     kampanJednorazova() ? (Number(S.kampan.add) || 0) : 0);
 }
 function kampanZbyva() { return kampanJednorazova() ? S.kampan.do - Date.now() : 0; }
+// Návštěvnost bez kampaně. Je to podíl kolemjdoucích, kteří k prádlomatu
+// opravdu zajdou: základ 45 %, každý přivedený hráč +5 bodů, strop 110 %.
+// Pověst a krize násobí až výsledek, takže se do poměru nepromítnou.
+function navstevnostBez() {
+  var boost = (S && S.boost) ? S.boost : 0;
+  var refs = (S && S.refs) ? S.refs : 0;
+  return Math.min(TRAFFIC_MAX + boost, TRAFFIC_BASE + refs * TRAFFIC_PER_REF + boost);
+}
+// O kolik procent vyrostou tržby, když návštěvnost povyskočí o add.
+// Tržba je přímo úměrná návštěvnosti, takže je to prostý poměr — a je vyšší
+// než číslo v názvu balíčku: +25 bodů ze 45 % je o víc než polovinu nahoru.
+function kampanTrzby(add) {
+  var z = navstevnostBez();
+  return z > 0 ? Math.round(add / z * 100) : 0;
+}
 // Týden v hodinách („za 168 h") nikdo nečte. Nad dva dny mluvíme ve dnech.
 function zbyvaDnyText(ms) {
   if (ms >= 2 * 86400000) return tx('hra.zbyva_dni', { n: Math.round(ms / 86400000) });
@@ -12494,7 +12509,8 @@ function kampanPacksHtml() {
           + (pred.obnovi_se ? esc(tx('hra.zrusit_obnovovani_2')) : esc(tx('hra.nechat_bezet_dal_2'))) + '</button></div>'
         : bezi
           ? '<div class="kv"><span>' + esc(tx('hra.dobehne_2')) + '</span><b>' + zbyvaDnyText(kampanZbyva()) + '</b></div>'
-          : '<p class="fine">' + esc(tx('hra.bez_kampane_chodi_jen_ti')) + '</p>')
+          : '')
+    + '<p class="fine">' + esc(tx('veta.kampan_jak_funguje', { p1: pct(navstevnostBez()) })) + '</p>'
     + (PAYMENTS_ON && !pred
         ? '<div class="kv" style="margin-top:10px"><span>' + esc(tx('hra.obnovovat_automaticky')) + '</span>'
           + '<button class="prep-sam' + (kampanAuto() ? ' on' : '') + '" id="kampan-auto">'
@@ -12504,8 +12520,9 @@ function kampanPacksHtml() {
               : esc(tx('hra.jednorazovy_nakup_kampan'))) + '</p>'
           + KAMPAN_CAT.map(function (c) {
               return '<div class="pack" data-kampan="' + esc(c.kind) + '">'
-                + '<div class="pack-l"><b>' + esc(polNazev(c)) + '</b><span class="fine">+'
-                + Math.round(c.add * 100) + ' % \u00b7 ' + dobaSlovy(c.dnu)
+                + '<div class="pack-l"><b>' + esc(polNazev(c)) + '</b><span class="fine">'
+                + esc(tx('veta.kampan_radek_balicku', { p1: pct(navstevnostBez()),
+                    p2: pct(navstevnostBez() + c.add), p3: kampanTrzby(c.add), p4: dobaSlovy(c.dnu) }))
                 + (kampanAuto() ? ' ' + esc(tx('hra.obnovuje_se')) : '') + '</span></div>'
                 + '<button class="btn sm">' + cenaReal(c.price_czk) + '</button></div>';
             }).join('')
@@ -12975,8 +12992,10 @@ function buyCash(kind) {
           + '<div class="kv"><span>' + esc(tx('hra.ted_mas')) + '</span><b>'
           + (ramecStrop() === null ? 'bez stropu' : kcFull(ramecStrop())) + '</b></div>'
         : kamp
-          ? '<div class="kv"><span>' + esc(tx('hra.navstevnost_vzroste_o')) + '</span><b class="ok">+'
-            + Math.round(c.add * 100) + ' %</b></div>'
+          ? '<div class="kv"><span>' + esc(tx('hra.navstevnost')) + '</span><b class="ok">'
+            + pct(navstevnostBez()) + ' \u2192 ' + pct(navstevnostBez() + c.add) + '</b></div>'
+            + '<div class="kv"><span>' + esc(tx('hra.trzby')) + '</span><b class="ok">+'
+            + kampanTrzby(c.add) + ' %</b></div>'
             + '<div class="kv"><span>' + esc(tx('hra.kampan_potrva')) + '</span><b>' + dobaSlovy(c.dnu) + '</b></div>'
         : hovory
           ? '<div class="kv"><span>' + esc(tx('hra.infolinka_pobezi')) + '</span><b class="ok">'
