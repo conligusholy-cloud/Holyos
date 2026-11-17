@@ -805,7 +805,9 @@ function mezibod(a, b, t) {
 // Kde je teď servisní auto: na cestě tam, u stroje, nebo na cestě zpátky.
 function autoPoloha(u) {
   var t = u && u.technik;
-  if (!t || u.lat == null || t.z.lat == null) return null;
+  // Technik bez výchozího bodu nemá kudy jet. Dřív to spadlo na t.z.lat
+  // a s ním celé vykreslení mapy — a to kvůli jednomu stroji.
+  if (!t || !t.z || u.lat == null || t.z.lat == null) return null;
   var ted = Date.now(), a = t.z, b = { lat: u.lat, lon: u.lon };
   if (ted < t.prijezd) {
     var f = t.prijezd > t.start ? (ted - t.start) / (t.prijezd - t.start) : 1;
@@ -3698,11 +3700,26 @@ var MISTA_OD_ZOOMU = 11;
 // ─── Správa servisu ──────────────────────────────────────────────
 // Odznak vlevo nahoře nad mapou řekne jedním pohledem, jak síť jede. Po klepnutí
 // se otevře celý přehled — který stroj stojí, kde je technik a kdy bude hotovo.
+// Katastrofa (požár, vichřice, vytopení) zastaví stroj stejně jako porucha —
+// dokud trvá, nevydělá ani korunu. Do počtů proto patří taky. Dřív se počítala
+// mezi jedoucí, takže přehled hlásil „139 ze 140 jede, stojí 0", i když dva
+// stroje stály. Pořadí je stejné jako v řádku: katastrofa má přednost před
+// poruchou, protože tu stejně nejde řešit, dokud se neopraví budova.
+function seOpravuje(u) {
+  if (jeVKatastrofe(u)) return !!u.katastrofa.hotovo;
+  return jeVPoruse(u) && !!u.technik;
+}
+function stojiNecinne(u) {
+  if (jeVKatastrofe(u)) return !u.katastrofa.hotovo;
+  return jeVPoruse(u) && !u.technik;
+}
+function jedeNormalne(u) { return !jeVPoruse(u) && !jeVKatastrofe(u) && !u.technik; }
 function servisStav() {
   var vse = S.units || [];
-  var stoji = vse.filter(function (u) { return jeVPoruse(u) && !u.technik; });
-  var resi = vse.filter(function (u) { return jeVPoruse(u) && u.technik; });
-  var vraci = vse.filter(function (u) { return !jeVPoruse(u) && u.technik; });
+  var stoji = vse.filter(stojiNecinne);
+  var resi = vse.filter(seOpravuje);
+  // Technik, co se vrací ze spravené poruchy — stroj už jede.
+  var vraci = vse.filter(function (u) { return !jeVPoruse(u) && !jeVKatastrofe(u) && u.technik; });
   return { vse: vse, stoji: stoji, resi: resi, vraci: vraci,
     jede: vse.length - stoji.length - resi.length };
 }
@@ -3755,8 +3772,9 @@ function servisRadek(u) {
 }
 function servisSheet() {
   var st = servisStav();
-  var poradi = st.stoji.concat(st.resi, st.vraci,
-    st.vse.filter(function (u) { return !jeVPoruse(u) && !u.technik; }));
+  // Poslední skupina jsou stroje, co jedou a nikdo u nich není. Bez vyřazení
+  // katastrof by se stroj v opravě objevil v seznamu dvakrát.
+  var poradi = st.stoji.concat(st.resi, st.vraci, st.vse.filter(jedeNormalne));
   sheet(tx('veta.h3_h3_p_class_muted_small_12', { p1: esc(tx('hra.sprava_servisu')), p2: st.jede, p3: st.vse.length, p4: esc(tx('hra.stoji_3')) }) + (st.stoji.length ? 'err' : '') + '">' + st.stoji.length + '</b></div>'
     + '<div><span>' + esc(tx('hra.techniku_na_ceste')) + '</span><b class="' + (st.resi.length + st.vraci.length ? 'warn' : '') + '">'
     + (st.resi.length + st.vraci.length) + '</b></div>'
