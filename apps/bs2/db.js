@@ -117,6 +117,9 @@ async function migrate() {
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'CZK';
     -- Tester: vidí funkce ve vývoji (např. záložku Výběry)
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS vybery_tester BOOLEAN NOT NULL DEFAULT false;
+    -- Zpřístupnění aplikací Prověření lokality / Vyhledávač míst i běžným uživatelům (záložky + možnost koupit balíček)
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS loc_app_location BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS loc_app_finder BOOLEAN NOT NULL DEFAULT false;
     -- Výběry: žádosti o výběr (status: requested = čeká na výplatu, paid = vyplaceno, rejected = zamítnuto)
     CREATE TABLE IF NOT EXISTS withdrawal_requests (
       id            SERIAL PRIMARY KEY,

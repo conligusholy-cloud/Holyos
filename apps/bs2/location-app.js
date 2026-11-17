@@ -9,7 +9,7 @@ const LIMITS = { basic: 3, plus: 10, premium: 10 };
 const SEARCH_LIMITS = { basic: 1, plus: 2, premium: 3 }; // Vyhledávač míst: vyhledání v ceně balíčku, další se dokupují
 const PKG_LABEL = { basic: 'Základ', plus: 'Plus', premium: 'Premium' };
 
-const NAV = (s) => [
+const NAV = (s) => (s && s.user_type !== 'location') ? require('./views').userNav(s) : [
   { id: 'loc', href: '/lokalita', label: 'Moje lokality', icon: 'box' },
   { id: 'anal', href: '/lokalita/analyza', label: 'Vyhledávač míst', icon: 'network' },
   { id: 'acc', href: '/password', label: 'Můj účet', icon: 'user', right: true },
@@ -600,8 +600,24 @@ function studiesPage(s, data) {
   ${st.length ? st.map(card).join('') : '<div class="card"><p class="muted" style="margin:0">Živá data se právě načítají – zkuste to prosím za chvíli.</p></div>'}
   ${st.length ? `<p class="small muted" style="margin-top:4px">${esc(data.note || '')} Zákazníci za den = průměrná měsíční tržba ÷ průměrná útrata na platbu ÷ 30,4 dne. Servis, energie a nájem jsou orientační dle interní metodiky Best Series; neobsahují financování a daň z příjmu. Historie a výsledky jiných lokalit nejsou zárukou výsledků vaší lokality.</p>` : ''}`);
 }
+// Aplikace zpřístupněná adminem, ale bez zakoupeného balíčku: nabídka ke koupi (vede na veřejnou objednávku s předvyplněnými údaji)
+function buyPage(s, which) {
+  const fnd = which === 'finder';
+  const name = fnd ? 'Vyhledávač míst' : 'Prověření lokality';
+  const qs = new URLSearchParams({ email: s.email || '', name: [s.first_name, s.last_name].filter(Boolean).join(' '), phone: s.phone || '' }).toString();
+  const href = (fnd ? '/findlocation' : '/location') + '?' + qs + '#objednat';
+  const desc = fnd
+    ? 'Najděte vhodná místa pro prádlomat v zadané oblasti: spádová oblast, konkurence, kandidáti na umístění a jejich kontakty.'
+    : 'Ověřte si konkrétní adresu: ekonomika provozu, bod zvratu, financování, orientační vyhodnocení a report k tisku.';
+  return page(s, name, fnd ? 'anal' : 'loc', `<div class="card" style="max-width:720px"><div class="eyebrow"><i></i>Aplikace</div><h1 style="margin:6px 0 8px">${fnd ? '🌐' : '🧠'} ${esc(name)}</h1>
+  <p class="muted" style="margin:0 0 14px">${esc(desc)}</p>
+  <p style="margin:0 0 16px">Aplikace zatím není součástí vašeho účtu. Po zaplacení balíčku se vám zpřístupní hned tady, přístup platí 12 měsíců.</p>
+  <div class="sc" style="margin-bottom:16px">${['basic', 'plus', 'premium'].map((k) => `<div class="c"><b>${PKG_LABEL[k]}</b><div class="small muted">${fnd ? SEARCH_LIMITS[k] + ' vyhledání v ceně' : LIMITS[k] + ' lokalit' + (k === 'premium' ? ' + místní šetření' : '')}</div></div>`).join('')}</div>
+  <a class="btn" href="${esc(href)}">Vybrat balíček a zaplatit</a>
+  <p class="small muted" style="margin:12px 0 0">Objednávku dokončíte na e-mail ${esc(s.email || '')} – platba se automaticky spáruje s tímto účtem.</p></div>`);
+}
 function expiredPage(s) {
   return page(s, 'Přístup vypršel', 'loc', `<div class="card"><h1 style="margin:0 0 6px">Platnost přístupu skončila</h1><p class="muted">Váš přístup k aplikaci Prověření lokality vypršel. Pro prodloužení nás kontaktujte přes Podporu.</p></div>`);
 }
 
-module.exports = { NAV, reportSections, analyzerPage, packagePage, LIMITS, SEARCH_LIMITS, PKG_LABEL, FIELDS, clean, calc, evaluate, siteForm, listPage, reportPage, checklistPage, studiesPage, expiredPage, num };
+module.exports = { NAV, reportSections, analyzerPage, packagePage, LIMITS, SEARCH_LIMITS, PKG_LABEL, FIELDS, clean, calc, evaluate, siteForm, listPage, reportPage, checklistPage, studiesPage, expiredPage, buyPage, num };

@@ -595,6 +595,8 @@ const PAGE = `<!DOCTYPE html>
       if(!v) localStorage.setItem(k, JSON.stringify({ t:Date.now(), a:{} })); } catch(e){} return {}; }
   try { firstTouch(); } catch(e){}
   var f=$('f'), msg=$('msg'), sub=$('sub'), STRIPE=false;
+  // Předvyplnění z účtu (odkaz z aplikace pro přihlášeného uživatele): ?email=&name=&phone=
+  try { var pq=new URLSearchParams(location.search); ['email','name','phone'].forEach(function(k){ var v=pq.get(k), el=f && f.elements[k]; if(v && el && !el.value) el.value=v; }); } catch(e){}
   var BTN_REQ='Odeslat žádost o objednávku', BTN_PAY='Zaplatit kartou a získat přístup';
   function setMsg(cls,t){ msg.className='msg '+cls; msg.textContent=t; }
   // Režim platby: Stripe Checkout, nebo ruční žádost (bez klíče na serveru).

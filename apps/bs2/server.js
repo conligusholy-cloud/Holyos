@@ -1127,6 +1127,12 @@ async function locGrantAccess(o, req) {
 async function requireLocation(req, res, next) {
   return requireUser(req, res, async () => {
     const u = req.user;
+    if (!u.location_package) {
+      // Zpřístupněno v adminu, ale bez balíčku → nabídka ke koupi (jen stránky aplikace, ne API)
+      const finder = /^\/lokalita\/analyza/.test(req.path);
+      if (req.method === 'GET' && /^\/lokalita/.test(req.path) && (finder ? u.loc_app_finder : u.loc_app_location)) return res.send(LAPP.buyPage(u, finder ? 'finder' : 'location'));
+      if (req.method === 'GET' && /^\/lokalita/.test(req.path) && (u.loc_app_finder || u.loc_app_location)) return res.send(LAPP.buyPage(u, u.loc_app_finder ? 'finder' : 'location'));
+    }
     if (!u.location_package) return res.status(403).send(V.errorPage('Bez přístupu', 'Aplikace Prověření lokality není součástí vašeho účtu.', '/'));
     if (u.location_expires_at && new Date(u.location_expires_at) < new Date()) return res.send(LAPP.expiredPage(u));
     next();
@@ -2758,8 +2764,8 @@ app.post('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
       if (lp) await q("UPDATE supporters SET location_package=$2, location_expires_at=CASE WHEN location_expires_at IS NULL OR location_expires_at < now() THEN now() + interval '12 months' ELSE location_expires_at END WHERE id=$1", [s.id, lp]);
       else await q('UPDATE supporters SET location_package=NULL WHERE id=$1', [s.id]);
     }
-    await q('UPDATE supporters SET vybery_tester=$2 WHERE id=$1', [s.id, req.body.vybery_tester === '1']);
-    await log(req.admin, 'update', { id: s.id, email, user_type: utype, vybery_tester: req.body.vybery_tester === '1' });
+    await q('UPDATE supporters SET vybery_tester=$2, loc_app_location=$3, loc_app_finder=$4 WHERE id=$1', [s.id, req.body.vybery_tester === '1', req.body.loc_app_location === '1', req.body.loc_app_finder === '1']);
+    await log(req.admin, 'update', { id: s.id, email, user_type: utype, vybery_tester: req.body.vybery_tester === '1', loc_app_location: req.body.loc_app_location === '1', loc_app_finder: req.body.loc_app_finder === '1' });
     // Ruční nastavení zůstatku DC: rozdíl proti aktuálnímu zůstatku se zapíše jako pohyb v credits (historie zůstává)
     let dcMsg = '';
     if (req.body.dc_balance != null && String(req.body.dc_balance).trim() !== '') {
