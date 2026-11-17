@@ -2478,6 +2478,11 @@ function zpetneTx(text) {
   }
   return text;
 }
+// Stav nabídky na burze přichází ze serveru jako kód (prijato, odmitnuto…).
+function stavNabidky(kod) {
+  var k = 'hra.stav_' + kod, v = tx(k);
+  return v && v !== k ? v : kod;
+}
 function upozorneniSheet() {
   var l = ((S && S.upoz) || []).slice().reverse();
   sheet(tx('veta.h3_h3_p_class_muted_small_22', { p1: esc(tx('hra.ud83d_udd14_upozorneni')) })
@@ -9798,7 +9803,7 @@ function radekObchodu(t) {
     + '<div class="row"><span class="muted small">' + esc(tx('hra.cena_4')) + '</span><span class="cena">' + esc(cenaPopis(t)) + '</span></div>'
     + (t.vzkaz ? '<p class="muted small" style="margin-top:6px">„' + esc(t.vzkaz) + '"</p>' : '')
     + nekrytoHtml(t)
-    + (t.stav !== 'ceka' ? '<p style="margin-top:8px"><span class="stav ' + esc(t.stav) + '">' + esc(t.stav) + '</span></p>' : '')
+    + (t.stav !== 'ceka' ? '<p style="margin-top:8px"><span class="stav ' + esc(t.stav) + '">' + esc(stavNabidky(t.stav)) + '</span></p>' : '')
     + jakToDopadloHtml(t)
     + (t.na_tahu
       ? '<div class="akce"><button class="btn sm" data-tr="' + t.id + '" data-akce="accept">' + esc(tx('hra.prijmout')) + '</button>'
