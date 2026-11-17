@@ -9556,6 +9556,69 @@ function splatitSheet(id, castka) {
 var bezici = function (x) {
   return x.stav !== 'splaceno' && x.stav !== 'propadlo' && x.stav !== 'odkoupeno';
 };
+// ─── Firmy v nouzi ───────────────────────────────────────────────────────────
+// Kdo nemá na splátku, je vidět. Není to udání — je to ta chvíle, kdy se dá
+// přijít s penězi a říct si o podmínky. Dokud to nikdo neviděl, propadla
+// zástava a hra se ani nestihla odehrát.
+var KRIZE = null;
+function loadKrize(then) {
+  api('/trade/krize').then(function (r) {
+    KRIZE = (r.ok && r.j) || { ja: null, firmy: [] };
+    if (then) then();
+  }).catch(function () { KRIZE = { ja: null, firmy: [] }; if (then) then(); });
+}
+// Vlastní stav. Varování vidí jen dlužník sám — proto je tady, ne v seznamu.
+function mojeKrizeHtml() {
+  var j = KRIZE && KRIZE.ja;
+  if (!j || j.stupen === 'ok') return '';
+  var zle = j.stupen === 'propadne';
+  return '<div class="card' + (zle ? ' agent' : '') + '">'
+    + '<h3>' + (zle ? '\u26A0\uFE0F ' : '') + esc(tx(zle ? 'krize.propadne_nadpis'
+        : j.stupen === 'krize' ? 'krize.krize_nadpis' : 'krize.varovani_nadpis')) + '</h3>'
+    + '<div class="kv"><span>' + esc(tx('krize.splatne_brzy')) + '</span><b>'
+    + kcFull(j.splatne_brzy) + '</b></div>'
+    + (j.chybi > 0
+        ? '<div class="kv"><span>' + esc(tx('krize.chybi')) + '</span><b class="err">'
+          + kcFull(j.chybi) + '</b></div>'
+        : '')
+    + (j.zmeskano
+        ? '<div class="kv"><span>' + esc(tx('krize.zmeskanych_splatek')) + '</span><b class="err">'
+          + j.zmeskano + '</b></div>'
+        : '')
+    + '<p class="fine ' + (zle ? 'err' : '') + '">'
+    + esc(tx(zle ? 'veta.krize_propadne_rada' : 'veta.krize_krize_rada')) + '</p>'
+    + '<p class="fine">' + esc(tx('veta.krize_jsi_videt')) + '</p>'
+    + '</div>';
+}
+// Nástěnka ostatních. Nejhorší nahoře — tam je nejmíň času a nejvíc prostoru
+// říct si o podmínky.
+function krizeHtml() {
+  var f = (KRIZE && KRIZE.firmy) || [];
+  if (!f.length) return '';
+  return '<div class="card"><h3>\uD83D\uDD25 ' + esc(tx('krize.nadpis_seznamu')) + '</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">' + esc(tx('veta.krize_k_cemu_to_je')) + '</p>'
+    + f.slice(0, 12).map(function (x) {
+        return '<div class="trade"><div class="row"><b>' + esc(x.firma) + '</b>'
+          + '<span class="pill ' + (x.stupen === 'propadne' ? 'bad' : 'mid') + '">'
+          + esc(tx(x.stupen === 'propadne' ? 'krize.stitek_propadne' : 'krize.stitek_krize')) + '</span></div>'
+          + '<div class="row"><span class="muted small">' + esc(tx('krize.chybi_mu')) + '</span>'
+          + '<span class="err">' + kcFull(x.chybi) + '</span></div>'
+          + '<div class="row"><span class="muted small">' + esc(tx('krize.dalsi_splatka_2')) + '</span>'
+          + '<span>' + (x.dalsi_at ? zaKolik(x.dalsi_at) : '\u2014') + '</span></div>'
+          + (x.zmeskano
+              ? '<div class="row"><span class="muted small">' + esc(tx('krize.uz_zmeskal')) + '</span>'
+                + '<span class="err">' + x.zmeskano + '</span></div>'
+              : '')
+          + '<p class="fine">' + esc(tx('krize.cim_muze_rucit')) + ' '
+          + tx('veta.krize_ruceni', { p1: x.volnych_mist,
+              p2: Math.round((x.volny_podil || 0) * 100) }) + '</p>'
+          + '<div class="gcard-act"><button class="btn sm" data-krize-pujcit="' + x.id + '">'
+          + esc(tx('krize.nabidnout_pujcku')) + '</button></div>'
+          + '</div>';
+      }).join('')
+    + '</div>';
+}
+
 function financeHtml() {
   var f = FINANCE;
   if (!f || (!(f.pujcky || []).filter(bezici).length && !(f.podily || []).filter(bezici).length)) return '';
@@ -10012,17 +10075,31 @@ function paintBurza() {
 
   if (FINANCE == null) loadFinance(paintBurza);
 
+  if (KRIZE == null) loadKrize(paintBurza);
+
   // Co čeká na odpověď hráče, je to nejdůležitější — když tam něco je, patří to
   // úplně nahoru, ještě před aukce a finance. Prázdná sekce zůstává na svém místě.
   var naMeHtml = sekce(esc(tx('drazba.ceka_na_tvoji_odpoved')), naMe, esc(tx('drazba.nikdo_ti_ted_nic_nenabizi')));
   box.innerHTML = (naMe.length ? naMeHtml : '')
+    + mojeKrizeHtml()
     + aukceHtml()
     + financeHtml()
+    + krizeHtml()
     + (naMe.length ? '' : naMeHtml)
     + sekce(esc(tx('drazba.cekas_na_odpoved')), odeslane, esc(tx('drazba.nemas_rozjednanou_zadnou_nabidku')))
     + (hotove.length ? sekce(esc(tx('drazba.uzavrene')), hotove, '') : '');
   bindAukce();
   bindFinance();
+  [].forEach.call(box.querySelectorAll('[data-krize-pujcit]'), function (b) {
+    b.onclick = function () {
+      var id = parseInt(b.getAttribute('data-krize-pujcit'), 10);
+      var x = ((KRIZE && KRIZE.firmy) || []).filter(function (y) { return y.id === id; })[0];
+      if (!x) return;
+      // Nabídka půjčky je ta, co ve hře dávno je — jen se otevře rovnou
+      // na tom, komu chybí peníze.
+      majetekSheet(x.id, 'pujcka');
+    };
+  });
 
   [].forEach.call(box.querySelectorAll('[data-tr]'), function (b) {
     b.onclick = function () {
@@ -10458,7 +10535,10 @@ function novaNabidkaSheet() {
   hraciVyberSheet(esc(tx('hra.komu_chces_nabidnout')), esc(tx('hra.vybrat_2')), function (id) { majetekSheet(id); });
 }
 
-function majetekSheet(id) {
+// rovnouKat = otevřít rovnou danou kategorii místo rozcestníku. Používá to
+// nástěnka firem v nouzi: tam je jasné, o co jde, a klikat se přes rozcestník
+// na půjčku je zbytečná překážka v situaci, kde jde o čas.
+function majetekSheet(id, rovnouKat) {
   sheet('<h3>' + esc(tx('mapa.co_ma')) + '</h3><p class="muted small">' + esc(tx('mapa.nacitam')) + '</p>');
   api('/trade/assets/' + id).then(function (r) {
     if (!r.ok) return toast(r.j.error || esc(tx('hra.nepovedlo_se_31')), 'err');
@@ -10579,7 +10659,7 @@ function majetekSheet(id) {
       });
     };
 
-    rozcestnik();
+    if (rovnouKat) kategorie(rovnouKat); else rozcestnik();
   }).catch(function () { toast(esc(tx('mapa.server_neodpovida_5')), 'err'); });
 }
 
