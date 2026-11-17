@@ -1298,6 +1298,13 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
       st.bank = Math.max(0, Number(st.bank) || 0) + (podlaha - mel);
       console.warn('[game] hráč', req.player.id, 'přišel o zástavu', podlaha - mel, '— doplněno');
     }
+    // Mez přírůstku hotovosti. Zatím se jen měří: server si spočítá, kolik
+    // hráč od posledního uložení vůbec mohl vydělat, a nesedící skok zapíše
+    // do logu. Ukládání nebrzdí ani neblokuje — až bude z provozu vidět,
+    // kolik to dělá planých poplachů, stane se z meze skutečný strop.
+    require('../services/game/strop').zkontroluj(req.player, st.cash)
+      .catch((e) => console.warn('[game-strop]', e && e.message));
+
     const ted = new Date();
     // Doručenky, které si hra do tohohle stavu zapsala, potvrdíme ve STEJNÉ
     // transakci. Dřív se potvrzovaly zvlášť, a když to potvrzení nedošlo,
