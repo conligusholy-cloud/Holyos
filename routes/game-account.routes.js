@@ -69,9 +69,10 @@ const CARDS = {
   rush: {
     kind: 'rush', icon: 'truck', price: 4900 },
   traffic: {
-    // Kampaň se kupuje po jedné. Její účinek platí natrvalo, takže nabízet ji
-    // po deseti kusech se slevou nedává smysl ani hráči, ani nám.
-    kind: 'traffic', icon: 'megaphone', price: 9900, bezBalicku: true },
+    // Trvalá kampaň. Z prodeje je pryč — vedle týdenních balíčků by ji nikdo
+    // nekoupil a prodala by se stejně jen jednou za hru. Kdo ji má, efekt mu
+    // zůstává napořád a může ji kdykoli použít; nenabízí se jen k nákupu.
+    kind: 'traffic', icon: 'megaphone', price: 9900, bezBalicku: true, skryty: true },
   connect: {
     kind: 'connect', icon: 'wrench', price: 7900 },
   credit: {
@@ -156,6 +157,23 @@ const LINKA = {
 };
 const LINKA_KINDS = Object.keys(LINKA);
 
+// ─── Reklamní kampaň ──────────────────────────────────────────────────
+// Dřív to byla jedna karta za 99 Kč, která zvedla návštěvnost natrvalo.
+// Natrvalo znamená, že se prodá jednou za hru — teď jedou kampaně na týden
+// ve třech silách. Kdo tu starou kartu koupil, efekt mu zůstává; z prodeje
+// jde pryč, protože vedle týdenních balíčků by ji nikdo nekoupil.
+//
+// add je přírůstek k násobiči návštěvnosti, ne procento z tržeb: základ je
+// 0,45 a strop 1,1, takže +0,25 je pro začátečníka o polovinu víc zákazníků
+// a pro hráče na stropu o čtvrtinu. Popisky mluví o procentech, protože to
+// hráči znají z té staré karty.
+const KAMPAN = {
+  kampan10: { kind: 'kampan10', icon: 'megaphone', price: 4900, dnu: 7, add: 0.10 },
+  kampan15: { kind: 'kampan15', icon: 'megaphone', price: 6900, dnu: 7, add: 0.15 },
+  kampan25: { kind: 'kampan25', icon: 'megaphone', price: 9900, dnu: 7, add: 0.25 },
+};
+const KAMPAN_KINDS = Object.keys(KAMPAN);
+
 // ─── Předplatné ──────────────────────────────────────────────────────────────
 // Co se strhává samo dokola. Cena je za JEDNOHO technika a týden; jeden
 // technik stihne obsloužit `kapacita` poboček. Víc poboček = víc techniků.
@@ -175,7 +193,15 @@ const SUBS = {
     price: 99900, interval: 'year', interval_count: 1, linka: true },
   dispecer: {
     kind: 'dispecer', icon: 'wrench', price: 3900,
-    interval: 'week', kapacita: 35 }
+    interval: 'week', kapacita: 35 },
+  // Kampaň na předplatné: totéž co balíček, jen se sama obnovuje. Běží,
+  // dokud běží předplatné.
+  kampan_sub10: { kind: 'kampan_sub10', icon: 'megaphone',
+    price: 4900, interval: 'week', interval_count: 1, kampan: true, add: 0.10, dnu: 7 },
+  kampan_sub15: { kind: 'kampan_sub15', icon: 'megaphone',
+    price: 6900, interval: 'week', interval_count: 1, kampan: true, add: 0.15, dnu: 7 },
+  kampan_sub25: { kind: 'kampan_sub25', icon: 'megaphone',
+    price: 9900, interval: 'week', interval_count: 1, kampan: true, add: 0.25, dnu: 7 },
 };
 const SUB_KINDS = Object.keys(SUBS);
 
@@ -183,7 +209,7 @@ const SUB_KINDS = Object.keys(SUBS);
 // znění se doplní při startu: potřebuje ho Stripe (název produktu na účtence)
 // a správa hry. Hráč vidí text složený v prohlížeči podle kódu položky, takže
 // každý ve svém jazyce.
-[CARDS, CASH, RAMEC, LINKA, SUBS].forEach((tab) => {
+[CARDS, CASH, RAMEC, LINKA, KAMPAN, SUBS].forEach((tab) => {
   Object.keys(tab).forEach((k) => {
     const x = tab[k];
     ['name', 'short', 'desc'].forEach((pole) => {
@@ -196,7 +222,7 @@ const SUB_KINDS = Object.keys(SUBS);
 // Ručně přidaná hotovost z administrace. Není v nabídce, nedá se koupit —
 // vzniká jen tím, že ji někdo hráči přidá, a nese vlastní částku.
 const CASH_CUSTOM = 'cash_dar';
-const ALL = Object.assign({}, CARDS, CASH, SUBS, LINKA, RAMEC);
+const ALL = Object.assign({}, CARDS, CASH, SUBS, LINKA, KAMPAN, RAMEC);
 
 // ─── Nastavení hry ───────────────────────────────────────────────────────────
 // Přepínače, které jde cvaknout z administrace bez nasazování. Držíme je
@@ -316,13 +342,24 @@ async function linkaPublic(prev) {
   }
   return out;
 }
+// Kampaně do ceníku. Posílá se i add a dnu — hra z nich spočítá, o kolik
+// to zvedne tržby zrovna tomuhle hráči, a nemusí to hádat podle názvu.
+async function kampanPublic(prev) {
+  const out = [];
+  for (const k of KAMPAN_KINDS) {
+    const c = await item(k); if (!c) continue;
+    out.push({ kind: c.kind, name: c.name, short: c.short, desc: c.desc,
+      price_czk: prev.zobraz(c.price), dnu: KAMPAN[k].dnu, add: KAMPAN[k].add });
+  }
+  return out;
+}
 async function subsPublic(prev) {
   const out = [];
   for (const k of SUB_KINDS) {
     const c = await item(k); if (!c) continue;
     out.push({ kind: c.kind, name: c.name, icon: c.icon, short: c.short, desc: c.desc,
       price_czk: prev.zobraz(c.price), interval: c.interval, interval_count: c.interval_count || 1,
-      linka: !!c.linka, kapacita: c.kapacita });
+      linka: !!c.linka, kampan: !!c.kampan, add: c.add, dnu: c.dnu, kapacita: c.kapacita });
   }
   return out;
 }
@@ -344,7 +381,10 @@ async function catalogPublic(prev) {
   for (const k of CARD_KINDS) {
     const c = await item(k); if (!c) continue;
     out.push({ kind: c.kind, name: c.name, icon: c.icon, short: c.short, desc: c.desc,
-      price_czk: prev.zobraz(c.price), bundles: balickyProKartu(c, prev) });
+      price_czk: prev.zobraz(c.price), bundles: balickyProKartu(c, prev),
+      // Stažená z prodeje. Z katalogu nemizí — kdo ji má (třeba za hodnost),
+      // musí ji pořád umět použít; hra jí jen schová tlačítko na koupi.
+      skryty: !!CARDS[k].skryty });
   }
   return out;
 }
@@ -1512,6 +1552,7 @@ router.get('/cards', async (req, res, next) => {
       ok: true, mena: prev.mena, mena_znak: prev.znak, mena_des: prev.des, mena_pred: prev.pred,
       catalog: await catalogPublic(prev), cash: await cashPublic(prev),
       linka: await linkaPublic(prev),
+      kampan: await kampanPublic(prev),
       onboarding_rychly: await rychlyOnboarding(),
       ramec: await ramecPublic(p ? p.id : null, prev),
       nick_pauza_ms: await nickPauzaMs(),
@@ -1571,6 +1612,10 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
         msg: LINKA[kind].stary
           ? t('karta.linka_prevedena_na_tyden')
           : t('karta.linka_bezi', { p1: doba }) };
+    } else if (KAMPAN[kind]) {
+      const k = KAMPAN[kind];
+      result = { effect: 'kampan', add: k.add, dnu: k.dnu,
+        msg: stx(req)('karta.kampan_bezi', { p1: Math.round(k.add * 100), p2: k.dnu }) };
     } else {
       result = EFFECTS[kind](stx(req));
     }

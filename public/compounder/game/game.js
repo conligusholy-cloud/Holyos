@@ -1392,7 +1392,7 @@ function rentOf(sp) {
 
 // Kolik lidí ti otevřelo sdílený odkaz → o tolik víc zákazníků chodí.
 // Strop návštěvnosti roste o to, co přidaly karty — jinak by zaplacená kampaň zapadla.
-function trafficMax() { return TRAFFIC_MAX + (S && S.boost ? S.boost : 0); }
+function trafficMax() { return TRAFFIC_MAX + (S && S.boost ? S.boost : 0) + kampanAdd(); }
 // Pověst z infolinky násobí výsledek až na konci — ať platí celý rozsah
 // i tomu, kdo už má návštěvnost na stropu.
 // ─── Ekonomika: konjunktura a krize ──────────────────────────────────────────
@@ -1652,9 +1652,55 @@ function ekonomikaHtml() {
 }
 function krizeKoef() { return KRIZE_PRUM != null ? KRIZE_PRUM : ekonomika().koef; }
 
+// Reklamní kampaň. Na rozdíl od staré trvalé karty (ta sedí v S.boost) běží
+// jen do data a pak sama zmizí — nic se nemaže, jen se přestane počítat.
+// Běží vždycky jedna: koupě další ji nahradí, takže se nedá naskládat
+// libovolně velký náskok, který by rozhodil žebříček i hodnosti.
+// Kampaň jde mít i na předplatné. Pak o ní nerozhoduje datum ve stavu hry,
+// ale to, co o předplatném říká server — klient si ji nesmí odkývat sám.
+var KAMPAN_SUB = { kampan10: 'kampan_sub10', kampan15: 'kampan_sub15', kampan25: 'kampan_sub25' };
+var KAMPAN_SUB_ADD = { kampan_sub10: 0.10, kampan_sub15: 0.15, kampan_sub25: 0.25 };
+function kampanPredplatne() {
+  var ted = Date.now();
+  return (PREDPLATNE || []).filter(function (x) {
+    return /^kampan_sub/.test(x.kind) && (!x.plati_do || new Date(x.plati_do).getTime() > ted);
+  })[0] || null;
+}
+function kampanJednorazova() {
+  return !!(S && S.kampan && S.kampan.do > Date.now() && S.kampan.add > 0);
+}
+function kampanBezi() { return !!kampanPredplatne() || kampanJednorazova(); }
+// Když by hráč měl obojí, platí to silnější — zaplatil si obě.
+function kampanAdd() {
+  var p = kampanPredplatne();
+  return Math.max(p ? (KAMPAN_SUB_ADD[p.kind] || 0) : 0,
+    kampanJednorazova() ? (Number(S.kampan.add) || 0) : 0);
+}
+function kampanZbyva() { return kampanJednorazova() ? S.kampan.do - Date.now() : 0; }
+// Týden v hodinách („za 168 h") nikdo nečte. Nad dva dny mluvíme ve dnech.
+function zbyvaDnyText(ms) {
+  if (ms >= 2 * 86400000) return tx('hra.zbyva_dni', { n: Math.round(ms / 86400000) });
+  return etaText(ms);
+}
+function kampanAuto() { return !!(S && S.kampanAuto); }
+function nastavKampanAuto(zap) {
+  if (!S) return;
+  S.kampanAuto = zap ? 1 : 0;
+  save(); syncState(true);
+}
+// Spustí kampaň. Vrací true, když se opravdu spustila.
+function spustKampan(add, dnu) {
+  add = Number(add) || 0;
+  var dny = Math.max(1, Number(dnu) || 7);
+  if (!(add > 0)) return false;
+  S.kampan = { add: add, do: Date.now() + dny * 86400000, od: Date.now() };
+  save(); paint(); refreshUnits();
+  return true;
+}
 function traffic() {
   var t = Math.min(trafficMax(),
-    TRAFFIC_BASE + (S && S.refs ? S.refs : 0) * TRAFFIC_PER_REF + (S && S.boost ? S.boost : 0));
+    TRAFFIC_BASE + (S && S.refs ? S.refs : 0) * TRAFFIC_PER_REF
+      + (S && S.boost ? S.boost : 0) + kampanAdd());
   return t * povestKoef() * krizeKoef();
 }
 // Servis, praní a úklid se platí z obratu - cim vic lidi pere, tim vic prace.
@@ -1837,6 +1883,9 @@ function dosypStav(o) {
     if (typeof o.linkaZbytek !== 'number') o.linkaZbytek = 0;
     if (typeof o.linkaStop !== 'number') o.linkaStop = 0;
     if (typeof o.linkaAuto !== 'number') o.linkaAuto = 0;
+    if (typeof o.kampanAuto !== 'number') o.kampanAuto = 0;
+    if (!o.kampan || typeof o.kampan !== 'object'
+      || typeof o.kampan.do !== 'number' || typeof o.kampan.add !== 'number') o.kampan = null;
     if ((o.linka || 0) > 0 && !o.linkaPrevod) {
       o.linkaDo = Math.max(o.linkaDo, Date.now() + LINKA_PREVOD_MS);
       o.linka = 0; o.linkaPrevod = 1;
@@ -2507,6 +2556,18 @@ function closeSheet() { $('sheet').classList.add('hidden'); }
 function bezOzdob(x) {
   return String(x == null ? '' : x).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toUpperCase().replace(/\s+/g, ' ').replace(/^ | $/g, '');
+}
+// Potvrzení pro kroky, které se dají vzít zpátky penězi, ne pro mazání:
+// stačí druhé kliknutí, opisovat slovo by tu bylo buzerace.
+function potvrdAno(o) {
+  sheet('<h3>' + esc(o.nadpis) + '</h3>'
+    + '<p class="muted small">' + o.popis + '</p>'
+    + '<button class="btn big" id="ano-ok" style="width:100%;margin-top:10px">'
+    + esc(o.tlacitko) + '</button>'
+    + '<button class="btn sec" id="ano-ne" style="width:100%;margin-top:8px">'
+    + esc(tx('hra.nechat_byt')) + '</button>');
+  $('ano-ne').onclick = closeSheet;
+  $('ano-ok').onclick = function () { closeSheet(); o.pak(); };
 }
 function potvrdSlovem(o) {
   sheet('<h3>' + esc(o.nadpis) + '</h3>'
@@ -6357,8 +6418,8 @@ var NABIDKY = [
   { kind: 'connect',
     kdy: function () { return (S.units || []).length >= 1 && (S.units || []).length <= 2; },
     duvod: tx('veta.prvni_pradlomat_stoji_kazde_dalsi_misto')},
-  { kind: 'traffic',
-    kdy: function () { var n = (S.units || []).length; return n >= 3 && n <= 6; },
+  { kind: 'kampan15', kampan: true,
+    kdy: function () { var n = (S.units || []).length; return n >= 3 && n <= 6 && !kampanBezi(); },
     duvod: tx('veta.sit_uz_mas_kampan_se_vyplati')},
   { kind: 'credit',
     kdy: function () { return (S.units || []).length >= 6 && S.loan > 0; },
@@ -6396,7 +6457,9 @@ function hlidejNabidky() {
   if (!S.nabidky) S.nabidky = {};
   if (S.nabidky.den === dnes) return;                 // jedna za den stačí
   for (var i = 0; i < NABIDKY.length; i++) {
-    var n = NABIDKY[i], c = (CARDS_CAT || []).filter(function (x) { return x.kind === n.kind; })[0];
+    var n = NABIDKY[i];
+    var c = (CARDS_CAT || []).concat(KAMPAN_CAT || [])
+      .filter(function (x) { return x.kind === n.kind; })[0];
     if (!c || S.nabidky[n.kind] || ownedOf(n.kind) > 0) continue;
     if (!n.kdy()) continue;
     S.nabidky[n.kind] = dnes; S.nabidky.den = dnes; save();
@@ -6414,7 +6477,7 @@ function nabidkaSheet(n, c) {
     + '<button class="btn big" id="nab-koupit">' + esc(tx('hra.koupit')) + '</button></div>'
     + '<button class="btn sec" id="nab-ne" style="width:100%;margin-top:8px">' + esc(tx('hra.ted_ne_3')) + '</button>'
     + '<p class="fine">' + esc(tx('hra.tuhle_nabidku_uz_ti_znovu')) + '</p>');
-  $('nab-koupit').onclick = function () { buyCard(c.kind); };
+  $('nab-koupit').onclick = function () { (n.kampan ? buyCash : buyCard)(c.kind); };
   $('nab-ne').onclick = closeSheet;
 }
 // Nová výpověď na mém místě se nesmí přehlédnout — hráč na ni má omezený čas.
@@ -12079,6 +12142,7 @@ function loadCards() {
     if (typeof r.j.mena_pred === 'boolean') MENA_PRED = r.j.mena_pred;
     SUBS_CAT = r.j.subs || null; PREDPLATNE = r.j.predplatne || [];
     LINKA_CAT = r.j.linka || null;
+    KAMPAN_CAT = r.j.kampan || null;
     if (typeof r.j.onboarding_rychly === 'boolean') ONBOARDING_RYCHLY = r.j.onboarding_rychly;
     if (typeof r.j.nick_pauza_ms === 'number') NICK_PAUZA_MS = r.j.nick_pauza_ms;
     if (r.j.ramec) { RAMEC = r.j.ramec; RAMEC_ZDARMA = r.j.ramec.zdarma || RAMEC_ZDARMA; }
@@ -12093,7 +12157,7 @@ function ownedOf(kind) { return (ME && ME.cards && ME.cards[kind]) || 0; }
 // Jestli běží, rozhoduje server — klient si to nesmí odkývat sám. Dispečer
 // nechává hráči čtvrt hodiny: kdo u hry sedí, zareaguje stejně rychleji sám,
 // a předplatné tak šetří pozornost, ne že by kupovalo výhodu.
-var SUBS_CAT = null, PREDPLATNE = [], LINKA_CAT = null;
+var SUBS_CAT = null, PREDPLATNE = [], LINKA_CAT = null, KAMPAN_CAT = null;
 // ─── Zrychlený start ────────────────────────────────────────────────────────
 // Cesta od založení firmy k prvnímu prádlomatu vedla přes osm úkonů, dva z nich
 // stály peníze a jeden se čekal. Tohle ji zkracuje na tři: město, místo, postav.
@@ -12198,6 +12262,8 @@ function paintCards() {
     + (vsechny ? '<p class="muted small">' + esc(tx('hra.od_kazde_karty_mas_jednu')) + '</p>' : '')
     + CARDS_CAT.map(function (c) {
       var n = ownedOf(c.kind), art = CARD_ART[c.kind] || { emoji: '⚡', tone: 'blue' };
+      // Stažená karta se ukazuje jen tomu, kdo ji má — koupit už nejde.
+      if (c.skryty && !n) return '';
       return '<div class="gcard ' + art.tone + '">'
         + '<div class="gcard-top"><span class="gcard-ico">' + art.emoji + '</span>'
         + '<div><h3>' + esc(polNazev(c)) + '</h3><p class="gcard-short">' + esc(polKratce(c)) + '</p></div>'
@@ -12208,13 +12274,38 @@ function paintCards() {
             : '')
         + '<div class="gcard-act">'
         + (n ? '<button class="btn sm" data-use="' + c.kind + '">' + esc(tx('hra.pouzit')) + '</button>' : '')
-        + (PAYMENTS_ON ? tx('veta.button_class_btn_sm_ghost_data', { p1: c.kind, p2: cenaReal(c.price_czk), p3: '', p4: ((c.bundles || []).length ? '<span class="fine bal-tip">nebo ' + c.bundles[c.bundles.length - 1].qty
+        + (c.skryty ? '<span class="fine">' + esc(tx('hra.uz_se_neprodava')) + '</span>'
+          : PAYMENTS_ON ? tx('veta.button_class_btn_sm_ghost_data', { p1: c.kind, p2: cenaReal(c.price_czk), p3: '', p4: ((c.bundles || []).length ? '<span class="fine bal-tip">nebo ' + c.bundles[c.bundles.length - 1].qty
               + '\u00d7 se slevou ' + c.bundles[c.bundles.length - 1].sleva + ' %</span>' : '') })
           : '<span class="fine">' + esc(tx('hra.prodej_se_teprve_spousti_4')) + '</span>')
         + '</div></div>';
     }).join('');
-  box.innerHTML += ramecPacksHtml() + predplatneHtml() + linkaPacksHtml();
+  box.innerHTML += ramecPacksHtml() + predplatneHtml() + kampanPacksHtml() + linkaPacksHtml();
   bindPredplatne();
+  [].forEach.call(box.querySelectorAll('[data-kampan]'), function (el) {
+    el.onclick = function () {
+      var kind = el.getAttribute('data-kampan');
+      if (kampanAuto() && KAMPAN_SUB[kind]) return zapniPredplatne(KAMPAN_SUB[kind], 1);
+      buyCash(kind);
+    };
+  });
+  if ($('kampan-auto')) $('kampan-auto').onclick = function () {
+    nastavKampanAuto(!kampanAuto()); paintCards();
+  };
+  var kz = box.querySelector('[data-kampan-zrus]');
+  if (kz) kz.onclick = function () {
+    var obnovit = kz.getAttribute('data-kampan-zrus') === '0';
+    kz.disabled = true; kz.textContent = esc(tx('hra.menim_u2026'));
+    apiJson('/stripe/subscribe/zrusit', { kind: kz.getAttribute('data-kind'), obnovit: obnovit })
+      .then(function (r) {
+        kz.disabled = false;
+        if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_38')), 'err');
+        PREDPLATNE = r.j.predplatne || [];
+        paint(); paintCards();
+        toast(r.j.obnovi_se ? esc(tx('hra.kampan_pobezi_dal'))
+          : esc(tx('hra.zruseno_zaplacene_obdobi_jeste_dojede')), 'ok', true);
+      }).catch(function () { kz.disabled = false; toast(esc(tx('hra.server_neodpovida_17')), 'err'); });
+  };
   [].forEach.call(box.querySelectorAll('[data-linka]'), function (el) {
     el.onclick = function () {
       var kind = el.getAttribute('data-linka');
@@ -12380,6 +12471,47 @@ var LINKA_SUB = { linka1d: 'linka_sub1d', linka3d: 'linka_sub3d', linka7d: 'link
 function dobaSlovy(dnu) {
   return dnu === 1 ? 'den' : dnu === 7 ? esc(tx('hra.tyden')) : dnu === 30 ? esc(tx('hra.mesic_4'))
     : dnu === 365 ? 'rok' : dnu + ' dny';
+}
+// ─── Reklamní kampaň: karta v záložce Karty ─────────────────────────────
+// Staví se stejně jako infolinka: tři balíčky, nebo totéž na předplatné,
+// které se samo obnovuje. Běží vždycky jedna — proto se u každého balíčku
+// píše, co se stane s tou, co zrovna jede.
+function kampanPacksHtml() {
+  if (!KAMPAN_CAT || !KAMPAN_CAT.length) return '';
+  var pred = kampanPredplatne();
+  var bezi = kampanBezi();
+  return '<div class="card"><h3>\uD83D\uDCE3 ' + esc(tx('hra.reklamni_kampan')) + '</h3>'
+    + '<div class="kv"><span>' + esc(tx('hra.stav')) + '</span><b class="' + (bezi ? 'ok' : 'warn') + '">'
+    + (bezi ? '+' + Math.round(kampanAdd() * 100) + ' %' : esc(tx('hra.nebezi'))) + '</b></div>'
+    + (pred
+        ? '<div class="kv"><span>' + (pred.obnovi_se ? esc(tx('hra.dalsi_platba_2')) : esc(tx('hra.dobehne_2'))) + '</span><b'
+          + (pred.obnovi_se ? '' : ' class="warn"') + '>'
+          + (pred.plati_do ? datumCas(new Date(pred.plati_do)) : esc(tx('hra.brzy'))) + '</b></div>'
+          + (pred.status === 'past_due'
+              ? '<p class="fine err">' + esc(tx('hra.posledni_platba_neprosla_dokud_se')) + '</p>' : '')
+          + '<div class="gcard-act"><button class="btn sm ghost" data-kampan-zrus="'
+          + (pred.obnovi_se ? '1' : '0') + '" data-kind="' + esc(pred.kind) + '">'
+          + (pred.obnovi_se ? esc(tx('hra.zrusit_obnovovani_2')) : esc(tx('hra.nechat_bezet_dal_2'))) + '</button></div>'
+        : bezi
+          ? '<div class="kv"><span>' + esc(tx('hra.dobehne_2')) + '</span><b>' + zbyvaDnyText(kampanZbyva()) + '</b></div>'
+          : '<p class="fine">' + esc(tx('hra.bez_kampane_chodi_jen_ti')) + '</p>')
+    + (PAYMENTS_ON && !pred
+        ? '<div class="kv" style="margin-top:10px"><span>' + esc(tx('hra.obnovovat_automaticky')) + '</span>'
+          + '<button class="prep-sam' + (kampanAuto() ? ' on' : '') + '" id="kampan-auto">'
+          + (kampanAuto() ? esc(tx('hra.zapnuto')) : esc(tx('hra.vypnuto'))) + '</button></div>'
+          + '<p class="fine">' + (kampanAuto()
+              ? esc(tx('hra.koupis_si_to_jako_predplatne'))
+              : esc(tx('hra.jednorazovy_nakup_kampan'))) + '</p>'
+          + KAMPAN_CAT.map(function (c) {
+              return '<div class="pack" data-kampan="' + esc(c.kind) + '">'
+                + '<div class="pack-l"><b>' + esc(polNazev(c)) + '</b><span class="fine">+'
+                + Math.round(c.add * 100) + ' % \u00b7 ' + dobaSlovy(c.dnu)
+                + (kampanAuto() ? ' ' + esc(tx('hra.obnovuje_se')) : '') + '</span></div>'
+                + '<button class="btn sm">' + cenaReal(c.price_czk) + '</button></div>';
+            }).join('')
+          + '<p class="fine">' + esc(tx('hra.kampan_naskoci_po_zaplaceni')) + '</p>'
+        : PAYMENTS_ON ? '' : '<p class="fine">' + esc(tx('hra.prodej_se_teprve_spousti_2')) + '</p>')
+    + '</div>';
 }
 function linkaPacksHtml() {
   if (!LINKA_CAT || !LINKA_CAT.length) return '';
@@ -12587,10 +12719,28 @@ function rushOrder(orderedAt, btn) {
 function useCard(kind) {
   if (kind === 'rush' && !(S.orders || []).length) return toast(esc(tx('hra.nemas_nic_na_ceste_nejdriv')), 'err');
   if (kind === 'connect' && S.connDiscount) return toast(esc(tx('hra.slevu_na_pripojky_uz_mas')), 'err');
+  // Běží vždycky jedna kampaň. Když by ta nová byla slabší než běžící,
+  // zeptáme se — zaplacený náskok se nemá zahodit omylem.
+  var nova = (KAMPAN_CAT || []).filter(function (c) { return c.kind === kind; })[0];
+  if (nova && kampanBezi() && nova.add < kampanAdd()) {
+    return potvrdAno({
+      nadpis: tx('hra.prebit_bezici_kampan'),
+      popis: tx('veta.ted_ti_bezi_kampan_novou_prebijes', {
+        p1: Math.round(kampanAdd() * 100),
+        p2: kampanPredplatne() ? esc(tx('hra.bezi_na_predplatne')) : zbyvaDnyText(kampanZbyva()),
+        p3: Math.round(nova.add * 100) }),
+      tlacitko: tx('hra.presto_spustit'),
+      pak: function () { pouzijKartu(kind); },
+    });
+  }
+  pouzijKartu(kind);
+}
+function pouzijKartu(kind) {
   apiJson('/cards/use', { kind: kind }).then(function (r) {
     if (!r.ok) return toast(r.j.error || esc(tx('hra.kartu_se_nepovedlo_pouzit')), 'err');
     if (ME) ME.cards = r.j.owned;
     applyCard(r.j.result);
+    if (r.j.result && r.j.result.effect === 'kampan') spustKampan(r.j.result.add, r.j.result.dnu);
     save(); syncState(true); paint(); paintCards();
     toast(r.j.result.msg, 'ok');
   }).catch(function () { toast(esc(tx('hra.server_neodpovida_28')), 'err'); });
@@ -12805,12 +12955,15 @@ function bindCashPacks() {
   });
 }
 function buyCash(kind) {
-  var c = (CASH_CAT || []).concat(LINKA_CAT || []).concat((RAMEC && RAMEC.balicky) || [])
+  var c = (CASH_CAT || []).concat(LINKA_CAT || []).concat(KAMPAN_CAT || [])
+    .concat((RAMEC && RAMEC.balicky) || [])
     .filter(function (x) { return x.kind === kind; })[0];
   if (!c) return;
   if (!ME) return toast(esc(tx('hra.nejdriv_se_prihlas')), 'err');
   if (!ME.has_details) return detailsSheet(null, kind);
-  var hovory = !!c.dnu;
+  // Kampaň má taky dnu, ale není to infolinka — rozhoduje add.
+  var kamp = c.add != null;
+  var hovory = !kamp && !!c.dnu;
   var ramec = c.uroven != null;
   // U rámce se platí jen rozdíl proti stupni, který hráč má.
   var nizsi = ramec ? ((RAMEC.balicky || []).filter(function (x) { return x.uroven === (RAMEC.uroven || 0); })[0]) : null;
@@ -12821,6 +12974,10 @@ function buyCash(kind) {
           + (c.strop === null ? 'bez stropu' : kcFull(c.strop)) + '</b></div>'
           + '<div class="kv"><span>' + esc(tx('hra.ted_mas')) + '</span><b>'
           + (ramecStrop() === null ? 'bez stropu' : kcFull(ramecStrop())) + '</b></div>'
+        : kamp
+          ? '<div class="kv"><span>' + esc(tx('hra.navstevnost_vzroste_o')) + '</span><b class="ok">+'
+            + Math.round(c.add * 100) + ' %</b></div>'
+            + '<div class="kv"><span>' + esc(tx('hra.kampan_potrva')) + '</span><b>' + dobaSlovy(c.dnu) + '</b></div>'
         : hovory
           ? '<div class="kv"><span>' + esc(tx('hra.infolinka_pobezi')) + '</span><b class="ok">'
             + (maLinku() ? etaText(linkaZbyva() + c.dnu * 86400000) + ' ' + esc(tx('hra.vcetne_zbytku'))
@@ -12830,6 +12987,9 @@ function buyCash(kind) {
     + (ramec
         ? (platba < c.price_czk
             ? tx('veta.p_class_fine_ok_plna_cena', { p1: cenaReal(c.price_czk), p2: esc(tx('hra.doplacis_jen_rozdil_proti')) }) : '')
+        : kamp
+          ? (kampanBezi()
+              ? '<p class="fine warn">' + esc(tx('hra.kampan_nahradi_bezici')) + '</p>' : '')
         : hovory
           ? '<div class="kv"><span>' + esc(tx('hra.za_den')) + '</span><b>' + cenaDen(c.za_den) + '</b></div>'
           // „Za korunu" platilo, dokud se platilo jen v korunách. Číslo je
@@ -12843,6 +13003,8 @@ function buyCash(kind) {
     + '<button class="btn big" id="do-pay">' + esc(tx('hra.zaplatit_kartou')) + '</button>'
     + '<p class="fine">' + (ramec
         ? tx('veta.strop_plati_naporad_a_nerusi_herni')
+        : kamp
+          ? esc(tx('hra.kampan_cas_bezi_od_zaplaceni'))
         : hovory
           ? esc(tx('hra.cas_bezi_od_zaplaceni_a')) + ' '
             + esc(tx('hra.po_celou_dobu_bere_operator'))
@@ -12867,7 +13029,11 @@ function claimCash(then) {
   // ho zvlášť, jinak by hráči zůstal ležet nevyzvednutý.
   else if ((ME.cards.cash_fb || 0) > 0) k = 'cash_fb';
   else {
-    var fond = (CASH_CAT || []).concat(LINKA_CAT || []);
+    // Kampaň se spustí sama, ale jen když tím hráč nepřijde o silnější,
+    // která mu zrovna běží. Slabší počká v Kartách, až ta běžící doběhne —
+    // jinak by si zaplacenou kampaň sám přebil tou levnější.
+    var fond = (CASH_CAT || []).concat(LINKA_CAT || [])
+      .concat((KAMPAN_CAT || []).filter(function (c) { return c.add >= kampanAdd(); }));
     var dluzne = fond.filter(function (c) { return (ME.cards[c.kind] || 0) > 0; });
     if (dluzne.length) k = dluzne[0].kind;
     // Staré kreditové balíčky infolinky už v nabídce nejsou, ale kdo si nějaký
@@ -12891,6 +13057,13 @@ function claimCash(then) {
       toast(v.msg, 'ok');
       if (v.effect === 'ramec') agentNavrat();
       return claimCash(then);   // může jich čekat víc
+    }
+    if (v && v.effect === 'kampan') {
+      spustKampan(v.add, v.dnu);
+      ME.cards = r.j.owned;
+      save(); paint(); syncState(true);
+      toast(v.msg, 'ok', true);
+      return claimCash(then);
     }
     if (v && v.effect === 'linka') {
       prodluzLinku(v.dnu || 0);

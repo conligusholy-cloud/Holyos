@@ -186,6 +186,10 @@ router.post('/stripe/subscribe', express.json({ limit: '8kb' }), acct._requirePl
     if (/^linka_sub/.test(kind) && bezi.some((x) => /^linka_sub/.test(x.kind))) {
       return res.status(409).json({ error: 'Infolinku už máš předplacenou. Nejdřív zruš tu stávající.' });
     }
+    // Kampaň taky: běží vždycky jedna, dvě vedle sebe by se jen překrývaly.
+    if (/^kampan_sub/.test(kind) && bezi.some((x) => /^kampan_sub/.test(x.kind))) {
+      return res.status(409).json({ error: 'Kampaň už máš předplacenou. Nejdřív zruš tu stávající.' });
+    }
 
     const row = await prisma.gameSubscription.create({
       data: { player_id: p.id, kind, qty, status: 'pending' }
