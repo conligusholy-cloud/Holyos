@@ -391,6 +391,27 @@ async function zalozPredplatne(sess) {
   catch (e) { console.warn('[game] načtení předplatného:', e.message); }
 }
 
+// Zabrání objednávky a připsání zboží. Stripe tutéž událost doručí klidně
+// dvakrát, a při opakování i současně — přečíst stav a pak teprve zapsat by
+// nestačilo, obě doručení by stihla přečíst „ještě nezaplaceno" a hráč by
+// dostal zboží dvakrát. Objednávku proto zabíráme jedním podmíněným zápisem:
+// připisuje ten, komu se ji povedlo přepnout, a zabrání i připsání drží jedna
+// transakce, takže projde buď obojí, nebo nic.
+// Vrací true, když zboží připsalo právě tohle doručení.
+async function zaberAPripis(db, pu, intent) {
+  return db.$transaction(async (tx) => {
+    const zabrano = await tx.gamePurchase.updateMany({
+      where: { id: pu.id, status: { not: 'paid' } },
+      data: { status: 'paid', paid_at: new Date(), stripe_intent: intent }
+    });
+    if (!zabrano.count) return false;
+    await tx.gameCard.createMany({
+      data: Array.from({ length: pu.qty }, () => ({ player_id: pu.player_id, kind: pu.kind, purchase_id: pu.id }))
+    });
+    return true;
+  });
+}
+
 const webhook = [express.raw({ type: '*/*', limit: '1mb' }), async (req, res) => {
   // Bez tajemství podpis neověříme — pak by kdokoli mohl podvrhnout „zaplaceno".
   const secret = hookSecret();
@@ -433,15 +454,17 @@ const webhook = [express.raw({ type: '*/*', limit: '1mb' }), async (req, res) =>
     if (!pid) return;
     const pu = await prisma.gamePurchase.findUnique({ where: { id: pid } });
     if (!pu || pu.status === 'paid') return; // webhook může přijít vícekrát
-    await prisma.$transaction([
-      prisma.gamePurchase.update({
-        where: { id: pu.id },
-        data: { status: 'paid', paid_at: new Date(), stripe_intent: sess.payment_intent || null }
-      }),
-      prisma.gameCard.createMany({
-        data: Array.from({ length: pu.qty }, () => ({ player_id: pu.player_id, kind: pu.kind, purchase_id: pu.id }))
-      })
-    ]);
+    // Stripe tutéž událost doručí klidně dvakrát, a při opakování i současně.
+    // Přečíst stav a pak teprve zapsat tady nestačí: obě doručení by stihla
+    // přečíst „ještě nezaplaceno" a hráč by dostal zboží dvakrát. Objednávku
+    // proto zabíráme jedním podmíněným zápisem — připisuje ten, komu se
+    // povedlo ji přepnout, a zabrání i připsání drží jedna transakce, takže
+    // projde buď obojí, nebo nic.
+    const pripsano = await zaberAPripis(prisma, pu, sess.payment_intent || null);
+    if (!pripsano) {
+      console.log('[game] webhook dorazil podruhé k objednávce', pu.id, '— nic se nepřipisuje');
+      return;
+    }
     console.log('[game] zaplaceno:', pu.qty + '× ' + pu.kind, '· hráč', pu.player_id);
     // Doklad (řada GM) — vystaví se vždy, odešle se podle nastavení v Účetní doklady → GAME
     require('../services/bs2-billing').issueGame(pu.id).then((r) => { if (r && !r.ok && !r.skipped) console.warn('[game] faktura:', r.error || r.reason); }).catch((e) => console.warn('[game] faktura selhala:', e.message));
@@ -458,6 +481,7 @@ const webhook = [express.raw({ type: '*/*', limit: '1mb' }), async (req, res) =>
 
 module.exports = router;
 module.exports._webhook = webhook;
+module.exports._zaberAPripis = zaberAPripis;
 module.exports._paymentsOn = paymentsOn;
 module.exports._zapisObdobi = zapisObdobi;
 module.exports._stripeGet = stripeGet;

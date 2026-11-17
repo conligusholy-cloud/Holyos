@@ -53,6 +53,16 @@ if git diff --cached --name-only | grep -qE 'services/game/meny'; then
   fi
 fi
 
+# Platby. Dvojí doručení webhooku nesmí nikdy připsat zboží dvakrát — tohle
+# je přímo o penězích, takže commit zastaví.
+if git diff --cached --name-only | grep -qE 'routes/game-stripe'; then
+  if ! node nastroje/twebhook.js; then
+    echo ""
+    echo "STOP: webhook plateb nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 if [ "$STAV" -eq 1 ]; then
   if [ -n "$ANTHROPIC_API_KEY" ]; then
     echo ""

@@ -20,7 +20,8 @@
     "texty:prelozit": "node nastroje/texty-prelozit.js",
     "texty:vytahni": "node nastroje/texty-vytahni.js",
     "texty:prohlidka": "node nastroje/texty-prohlidka.js",
-    "meny:kontrola": "node nastroje/tmenypl.js"
+    "meny:kontrola": "node nastroje/tmenypl.js",
+    "platby:kontrola": "node nastroje/twebhook.js"
   },
   "engines": {
     "node": ">=22.0.0"

@@ -9012,6 +9012,9 @@ function paintMe() {
     + pozvaniHtml() + '</div>'
     + knihaHtml()
     + distHtml()
+    + '<div class="card"><h3>' + esc(tx('hra.tvoje_udaje')) + '</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">' + esc(tx('hra.co_o_tobe_hra_vede')) + '</p>'
+    + '<button class="btn sec" id="do-udaje" style="width:100%">' + esc(tx('hra.stahnout_moje_udaje')) + '</button></div>'
     + '<button class="btn sec big" id="do-reset">' + esc(tx('hra.zacit_znovu_od_nuly')) + '</button>';
   if (drzFirma != null && $('me-firma')) $('me-firma').value = drzFirma;
   var fb = $('me-firma-ulozit');
@@ -9044,6 +9047,11 @@ function paintMe() {
     b.onclick = function () { prepniJazyk(b.getAttribute('data-jazyk'), paintMe); };
   });
   $('do-share').onclick = function () { shareGame($('do-share')); };
+  // Výdej údajů: prohlížeč si soubor stáhne sám, server ho posílá jako
+  // přílohu. Žádné potvrzování — nic se tím nemění.
+  if ($('do-udaje')) $('do-udaje').onclick = function () {
+    window.location.href = '/api/game/account/udaje';
+  };
   $('do-reset').onclick = function () {
     sheet(tx('veta.h3_h3_p_class_muted_small_4', { p1: esc(tx('hra.zacit_znovu')), p2: esc(tx('hra.ano_smazat_a_zacit_znovu')), p3: esc(tx('hra.nechat_byt')) }));
     $('no-reset').onclick = closeSheet;

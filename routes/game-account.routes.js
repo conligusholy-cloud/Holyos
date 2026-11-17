@@ -888,6 +888,58 @@ router.post('/account/reset', requirePlayer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /account/udaje → všechno, co o hráči vedeme, v jednom souboru.
+// Právo na přístup k vlastním údajům: hráč nemá prosit o výpis, prostě si ho
+// stáhne. Nic se tu nemaže ani nemění — je to čtení.
+// Záměrně se vydává i celý stav hry: je to jeho hra. Ven nejdou jen hesla
+// (držíme jen jejich otisk, ze kterého heslo nezjistí nikdo) a vnitřní
+// identifikátory Stripu, které hráči nic neřeknou a patří do účetnictví.
+router.get('/account/udaje', requirePlayer, async (req, res, next) => {
+  try {
+    const id = req.player.id;
+    const [p, nakupy, predplatne, odmeny, mista, pujcky, podily, dorucenky, obchody] = await Promise.all([
+      prisma.gamePlayer.findUnique({ where: { id } }),
+      prisma.gamePurchase.findMany({ where: { player_id: id }, orderBy: { created_at: 'asc' } }),
+      prisma.gameSubscription.findMany({ where: { player_id: id }, orderBy: { id: 'asc' } }),
+      prisma.gameOdmena.findMany({ where: { player_id: id }, orderBy: { id: 'asc' } }),
+      prisma.gameSpotClaim.findMany({ where: { player_id: id }, orderBy: { id: 'asc' } }),
+      prisma.gameLoan.findMany({ where: { OR: [{ borrower_id: id }, { lender_id: id }] }, orderBy: { id: 'asc' } }),
+      prisma.gameEquity.findMany({ where: { OR: [{ firma_id: id }, { investor_id: id }] }, orderBy: { id: 'asc' } }),
+      prisma.gameDelivery.findMany({ where: { player_id: id }, orderBy: { id: 'asc' }, take: 2000 }),
+      prisma.gameTrade.findMany({ where: { OR: [{ from_id: id }, { to_id: id }] }, orderBy: { id: 'asc' }, take: 2000 }),
+    ]);
+    if (!p) return res.status(404).json({ error: stx(req)('server.takovy_hrac_tu_neni') });
+    const ven = {
+      vydano: new Date().toISOString(),
+      co_to_je: stx(req)('server.vsechno_co_o_tobe_hra_vede'),
+      ucet: {
+        id: p.id, nick: p.nick, firma: p.company, znak: p.emblem, jazyk: p.jazyk,
+        hodnost: p.hodnost, email: p.email, jmeno: p.first_name, prijmeni: p.last_name,
+        zalozeno: p.created_at, posledni_prihlaseni: p.last_login_at,
+        stav_ulozen: p.state_at, zdroj_navstevy: p.zdroj,
+        odkaz_id: p.ref_id, pozval_me_id: p.invited_by_id, pozvan: p.invited_at,
+        cas_ve_hre_s: p.hra_s_celkem, distributor_do: p.distributor_do,
+        provize_celkem: p.provize_celkem, ucet_zablokovan: p.disabled,
+      },
+      stav_hry: p.state || null,
+      nakupy: nakupy.map((o) => ({ id: o.id, co: o.kind, pocet: o.qty,
+        castka: o.amount_cents / 100, mena: o.currency, stav: o.status,
+        zalozeno: o.created_at, zaplaceno: o.paid_at, email: o.email })),
+      predplatne: predplatne.map((x) => ({ id: x.id, co: x.kind, pocet: x.qty,
+        stav: x.status, plati_do: x.plati_do, obnovi_se: x.obnovi_se })),
+      odmeny, mista, pujcky, podily,
+      dorucenky: dorucenky.map((d) => ({ id: d.id, druh: d.kind, castka: d.amount,
+        popis: d.popis, vyzvednuto: d.claimed_at, kdy: d.created_at })),
+      obchody: obchody.map((t) => ({ id: t.id, smer: t.smer, co: t.predmet, cena: t.cena,
+        stav: t.stav, od: t.from_nick, komu: t.to_nick, vzkaz: t.vzkaz, kdy: t.created_at })),
+    };
+    res.setHeader('Content-Disposition',
+      'attachment; filename="laundromat-tycoon-udaje-' + id + '.json"');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.send(JSON.stringify(ven, null, 2));
+  } catch (e) { next(e); }
+});
+
 // GET /account/invited → koho hráč přivedl do hry
 // Přesný seznam, ne jen počet — na tomhle se dá postavit odměna pro „distributory".
 router.get('/account/invited', requirePlayer, async (req, res, next) => {

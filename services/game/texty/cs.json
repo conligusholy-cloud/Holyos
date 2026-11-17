@@ -3390,5 +3390,9 @@
   "hra.ukazat_ho_na_mape": "Ukázat všechny na mapě",
   "hra.tohle_misto_na_mape_nenajdu": "Tohle místo na mapě nenajdu.",
   "veta.vedouci_chysta_plan_servisu": " — vedoucí chystá plán servisu, technik vyrazí {p1}",
-  "veta.vedouci_nestiha_hlidat": "Vedoucí servisu hlídá jen {p1} z {p2} prádlomatů — na zbytek technici nestačí a tam stroj stojí, dokud ho nepošleš sám. Potřeboval bys {p3} techniků."
+  "veta.vedouci_nestiha_hlidat": "Vedoucí servisu hlídá jen {p1} z {p2} prádlomatů — na zbytek technici nestačí a tam stroj stojí, dokud ho nepošleš sám. Potřeboval bys {p3} techniků.",
+  "hra.tvoje_udaje": "Tvoje údaje",
+  "hra.co_o_tobe_hra_vede": "Všechno, co o tobě hra vede — účet, stav hry, nákupy, obchody. Stáhne se jako soubor. Hesla ven nejdou, držíme jen jejich otisk.",
+  "hra.stahnout_moje_udaje": "Stáhnout moje údaje",
+  "server.vsechno_co_o_tobe_hra_vede": "Všechno, co o tobě hra vede. Hesla ven nejdou — držíme jen jejich otisk."
 }
