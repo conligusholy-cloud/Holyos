@@ -3432,5 +3432,6 @@
     "other": "{n} dní"
   },
   "veta.kampan_radek_balicku": "návštěvnost {p1} → {p2} · tržby +{p3} % · {p4}",
-  "veta.kampan_jak_funguje": "Návštěvnost je podíl kolemjdoucích, kteří k tobě opravdu zajdou — teď máš {p1}. Kampaň ji zvedne ve všech prádlomatech najednou a tržby vyrostou ve stejném poměru. Proto je přírůstek tržeb vyšší než číslo v názvu balíčku."
+  "veta.kampan_jak_funguje": "Návštěvnost je podíl kolemjdoucích, kteří k tobě opravdu zajdou — teď máš {p1}. Kampaň ji zvedne ve všech prádlomatech najednou a tržby vyrostou ve stejném poměru. Proto je přírůstek tržeb vyšší než číslo v názvu balíčku.",
+  "server.takovy_stroj_nemas_skladem": "Takový stroj nemáš skladem. Nejdřív ho kup v Obchodě."
 }

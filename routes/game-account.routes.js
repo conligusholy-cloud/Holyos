@@ -249,7 +249,11 @@ const POCITANE_KINDS = Object.keys(ALL).filter((k) => !SUBS[k]).concat([CASH_CUS
 const NASTAVENI_VYCHOZI = { onboarding_rychly: '1', nick_pauza_dnu: '30', udalosti_zap: '1',
   // Odměny za hodnosti a odznaky běží. Zpětné vyplacení stávajícím hráčům je
   // vypnuté schválně: rozdané peníze a karty už zpátky nevezmeš.
-  hodnosti_odmeny: '1', hodnosti_zpetne: '0' };
+  hodnosti_odmeny: '1', hodnosti_zpetne: '0',
+  // Postavit půjde jen stroj, který má hráč podle serveru koupený. Dokud je
+  // to vypnuté, server si jen zapisuje, co by odmítl — zapíná se to teprve
+  // tehdy, až se ukáže, že by neodmítal nikoho poctivého.
+  sklad_povinny: '0' };
 let _nast = { at: 0, map: null };
 async function nastaveni() {
   if (_nast.map && Date.now() - _nast.at < 30e3) return _nast.map;
@@ -690,24 +694,36 @@ router.post('/account/nakup', requirePlayer, async (req, res, next) => {
 // nenajde, nic se neodmítá — hra pořád rozhoduje sama a tenhle zápis slouží
 // k tomu, aby šlo porovnat, jestli obojí sedí. Až se ukáže, že ano, stane se
 // z toho podmínka: postavit půjde jen stroj, který hráč opravdu koupil.
-async function spotrebujSklad(playerId, model, spot) {
-  if (!model) return null;
+// Hledání se dělá PŘED zabráním místa, označení AŽ POTOM, co se zabrání
+// povedlo. Kdyby se stroj odepsal dřív a zábor pak selhal, hráč by o něj
+// přišel — a ztracený stroj je mnohem horší než stroj navíc.
+async function najdiStroj(playerId, model, spot) {
+  if (!model) return { ok: true, id: null };
   try {
     const volny = await prisma.gameOrder.findFirst({
       where: { player_id: playerId, model, postaveno_at: null, zruseno_at: null },
       orderBy: { dorazi_at: 'asc' },
+      select: { id: true },
     });
-    if (!volny) {
-      console.warn('[game-sklad] hráč #' + playerId + ' staví ' + model + ' na ' + spot
-        + ', ale server mu žádný takový stroj neeviduje');
-      return null;
-    }
-    return await prisma.gameOrder.update({ where: { id: volny.id },
-      data: { postaveno_at: new Date(), spot_id: spot } });
+    if (volny) return { ok: true, id: volny.id };
+    const n = await nastaveni().catch(() => ({}));
+    const povinny = String(n.sklad_povinny || '0') === '1';
+    console.warn('[game-sklad] hráč #' + playerId + ' staví ' + model + ' na ' + spot
+      + ', ale server mu žádný takový stroj neeviduje'
+      + (povinny ? ' — ODMÍTNUTO' : ' — zatím se jen zapisuje'));
+    return { ok: !povinny, id: null, chybi: true };
   } catch (e) {
+    // Výpadek evidence skladu nesmí hráči zablokovat stavbu. Radši stroj
+    // navíc než hráč, kterému hra nejde hrát.
     console.warn('[game] sklad při stavbě:', e.message);
-    return null;
+    return { ok: true, id: null };
   }
+}
+async function oznacPostaveny(id, spot) {
+  if (!id) return;
+  try {
+    await prisma.gameOrder.update({ where: { id }, data: { postaveno_at: new Date(), spot_id: spot } });
+  } catch (e) { console.warn('[game] sklad při stavbě:', e.message); }
 }
 
 // GET /account/sklad → co má hráč podle serveru na cestě a ve skladu.
@@ -2109,13 +2125,18 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
       : null;
     const vaz = pozemek ? 0 : mesicu(b.doba_mesicu, VAZANOST_MAX);
     const vyp = pozemek ? 1 : Math.max(1, mesicu(b.vypoved_mesicu, VYPOVED_MAX));
+    // Stroj ze skladu se bere PŘED zabráním místa. Kdyby se bralo potom,
+    // odmítnutá stavba by po sobě nechala zabrané místo se strojem, který
+    // nikdy nevznikl — a to je horší než stroj navíc.
+    const sklad = await najdiStroj(req.player.id, model, spot);
+    if (!sklad.ok) return res.status(409).json({ error: stx(req)('server.takovy_stroj_nemas_skladem') });
     const c = await prisma.gameSpotClaim.create({
       data: { spot_id: spot, area_key: area, player_id: req.player.id, nick: req.player.nick,
         model, rent: pozemek ? 0 : rent, name: s(b.name, 160) || null,
         lat: Number(b.lat) || null, lon: Number(b.lon) || null, pozemek, cena: cenaZeme,
         vazano_do: vaz ? new Date(Date.now() + vaz * MESIC_MS) : null, vypoved_mesicu: vyp },
     });
-    await spotrebujSklad(req.player.id, model, spot);
+    await oznacPostaveny(sklad.id, spot);
     // Od téhle chvíle je místo zasíťované napořád, i kdyby ho hráč zítra opustil.
     try {
       await prisma.gameSpotBuilt.upsert({
@@ -2183,8 +2204,10 @@ router.post('/spots/stavba', requirePlayer, async (req, res, next) => {
     if (!cur || cur.player_id !== req.player.id) return res.status(409).json({ error: stx(req)('server.tohle_misto_ti_nepatri_2') });
     if (cur.model) return res.status(409).json({ error: stx(req)('server.tady_uz_neco_stoji') });
     if (cur.najemce_id) return res.status(409).json({ error: stx(req)('server.pozemek_mas_pronajaty_nejdriv_ukonci_najem') });
+    const sklad = await najdiStroj(req.player.id, model, spot);
+    if (!sklad.ok) return res.status(409).json({ error: stx(req)('server.takovy_stroj_nemas_skladem') });
     const upd = await prisma.gameSpotClaim.update({ where: { spot_id: spot }, data: { model } });
-    await spotrebujSklad(req.player.id, model, spot);
+    await oznacPostaveny(sklad.id, spot);
     res.json({ ok: true, spot: claimPub(upd, req.player.id, await firmyMapa()) });
   } catch (e) { next(e); }
 });
