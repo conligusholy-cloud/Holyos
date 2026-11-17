@@ -64,6 +64,16 @@ if git diff --cached --name-only | grep -qE 'nastroje/texty-prelozit'; then
   fi
 fi
 
+# Cena pozemku. Server a hra ji počítají každý zvlášť a musí se trefit do
+# stejného čísla — je to nemovitost, banka proti ní půjčuje. Commit zastaví.
+if git diff --cached --name-only | grep -qE 'services/game/pozemky'; then
+  if ! node nastroje/tpozemky.js; then
+    echo ""
+    echo "STOP: cena pozemku na serveru nesedí s hrou (viz výš)."
+    exit 1
+  fi
+fi
+
 # Mez přírůstku hotovosti. Je to první kámen serverového počítání peněz —
 # až se z meze stane strop, rozhoduje o tom, jestli poctivému hráči půjde
 # uložit hra. Commit zastaví.

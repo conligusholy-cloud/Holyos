@@ -19,6 +19,7 @@
 
 const { prisma } = require('../../config/database');
 const { HODNOSTI } = require('./hodnosti');
+const POZEMKY = require('./pozemky');
 
 // Musí sedět s CENY_STROJU v routes/game-account.routes.js.
 const CENY_STROJU = {
@@ -46,14 +47,19 @@ async function srovnani() {
     select: { id: true, nick: true, company: true, state: true, state_at: true },
   });
   const claims = await prisma.gameSpotClaim.findMany({
-    select: { player_id: true, model: true, pozemek: true },
+    select: { player_id: true, spot_id: true, model: true, pozemek: true, cena: true },
   });
 
   const podleHrace = new Map();
   claims.forEach((c) => {
-    const a = podleHrace.get(c.player_id) || { stroju: 0, pozemku: 0, hodnota: 0 };
+    const a = podleHrace.get(c.player_id) || { stroju: 0, pozemku: 0, hodnota: 0, zeme: 0 };
     if (c.model && CENY_STROJU[c.model]) { a.stroju++; a.hodnota += CENY_STROJU[c.model]; }
-    else if (c.pozemek) a.pozemku++;
+    // Koupená zem je nemovitost a patří do majetku i prázdná. U pozemků
+    // koupených dřív, než se cena ukládala, bereme střed cenového pásma.
+    if (c.pozemek) {
+      a.pozemku++;
+      a.zeme += (c.cena != null ? c.cena : POZEMKY.odhad(c.spot_id));
+    }
     podleHrace.set(c.player_id, a);
   });
 
@@ -62,14 +68,14 @@ async function srovnani() {
     const st = h.state || null;
     if (!st) return;
     const dnes = Math.round(acct._cisteJmeni(st) || 0);
-    const a = podleHrace.get(h.id) || { stroju: 0, pozemku: 0, hodnota: 0 };
+    const a = podleHrace.get(h.id) || { stroju: 0, pozemku: 0, hodnota: 0, zeme: 0 };
     const hotovost = Math.round(Number(st.cash) || 0);
     const dluh = Math.round(Number(st.loan) || 0);
-    const server = Math.round(a.hodnota + hotovost - dluh);
+    const server = Math.round(a.hodnota + a.zeme + hotovost - dluh);
     radky.push({
       id: h.id, nick: h.nick, dnes, server,
       pomer: dnes > 0 ? server / dnes : 1,
-      stroju: a.stroju, pozemku: a.pozemku,
+      stroju: a.stroju, pozemku: a.pozemku, zeme: a.zeme,
       unitu: Array.isArray(st.units) ? st.units.length : 0,
       hodnostDnes: stupen(dnes), hodnostServer: stupen(server),
     });

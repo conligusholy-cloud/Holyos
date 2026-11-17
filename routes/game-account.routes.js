@@ -19,6 +19,7 @@ const { HODNOSTI, hodnost, ODZNAKY, ODZNAK,
   hodnostiPro, odznakyPro, nazevOdmeny } = require('../services/game/hodnosti');
 const TEXTY = require('../services/game/texty');
 const MENY = require('../services/game/meny');
+const POZEMKY = require('../services/game/pozemky');
 // Zkratka do obsluhy: stx(req)('server.neco') vrátí hlášku v jazyce hráče.
 // Skládá se pro toho, KOMU se posílá — ne pro toho, kdo akci vyvolal.
 function stx(req) {
@@ -2032,12 +2033,19 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
       });
     }
     const pozemek = !!b.pozemek;
+    // Cenu země si počítá server sám z otisku místa a skóre, které posílá
+    // hra. Skóre jde zfalšovat, ale lukrativnost z něj roste jen v pevném
+    // rozsahu, takže nejvíc, co si tím hráč přilepší, je dvojnásobek — a to
+    // jen u pozemku, na kterém nic nestojí.
+    const cenaZeme = pozemek
+      ? POZEMKY.cena(spot, Math.max(0, Math.min(100, Math.round(Number(b.score) || 0))))
+      : null;
     const vaz = pozemek ? 0 : mesicu(b.doba_mesicu, VAZANOST_MAX);
     const vyp = pozemek ? 1 : Math.max(1, mesicu(b.vypoved_mesicu, VYPOVED_MAX));
     const c = await prisma.gameSpotClaim.create({
       data: { spot_id: spot, area_key: area, player_id: req.player.id, nick: req.player.nick,
         model, rent: pozemek ? 0 : rent, name: s(b.name, 160) || null,
-        lat: Number(b.lat) || null, lon: Number(b.lon) || null, pozemek,
+        lat: Number(b.lat) || null, lon: Number(b.lon) || null, pozemek, cena: cenaZeme,
         vazano_do: vaz ? new Date(Date.now() + vaz * MESIC_MS) : null, vypoved_mesicu: vyp },
     });
     // Od téhle chvíle je místo zasíťované napořád, i kdyby ho hráč zítra opustil.

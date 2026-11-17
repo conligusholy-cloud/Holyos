@@ -5467,8 +5467,10 @@ function koupitPozemek(sp, areaId, btn) {
   if (!f.ok) return zedSheet(tx('veta.pozemek_2', { p1: sp.name }), f, cena, function () { return cena; },
     { typ: 'pozemek', areaId: areaId, spotId: sp.id });
   if (btn) { btn.disabled = true; btn.textContent = esc(tx('hra.kupuji')); }
+  // Skóre posíláme proto, aby si server mohl spočítat cenu země sám —
+  // jinak o koupeném pozemku ví jen to, že existuje, a v jmění chybí.
   apiJson('/spots/claim', { spot_id: sp.id, area_key: areaId, model: '', rent: 0,
-    name: sp.name, lat: sp.lat, lon: sp.lon, pozemek: true }).then(function (r) {
+    name: sp.name, lat: sp.lat, lon: sp.lon, pozemek: true, score: sp.score }).then(function (r) {
     if (btn) { btn.disabled = false; btn.textContent = esc(tx('hra.koupit_pozemek_bez_stroje')); }
     if (!r.ok) {
       if (r.j.occupied) CLAIMS[sp.id] = r.j.occupied;
