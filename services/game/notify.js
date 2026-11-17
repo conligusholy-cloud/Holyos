@@ -64,11 +64,16 @@ async function dispatch(prisma, { title, body, data }) {
 }
 
 function fmtCzk(n) { return (Math.round(Number(n) || 0)).toLocaleString('cs-CZ') + ' Kč'; }
-// Částka v měně, ve které hráč platil (eura s centy, koruny celé).
+// Částka v měně, ve které hráč opravdu platil. Značku i počet desetinných
+// míst bereme z tabulky měn — kdyby se psaly tady zvlášť, dolarový nákup by
+// dřív nebo později přišel do Velínu jako koruny.
+const MENY_J = require('./meny-jadro');
 function fmtMena(n, mena) {
-  return String(mena || 'czk').toLowerCase() === 'eur'
-    ? (Number(n) || 0).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
-    : fmtCzk(n);
+  const m = MENY_J.MENY[String(mena || 'czk').toLowerCase()];
+  if (!m) return fmtCzk(n);
+  const cislo = (Number(n) || 0).toLocaleString('cs-CZ',
+    { minimumFractionDigits: m.des, maximumFractionDigits: m.des });
+  return m.pred ? m.znak + cislo : cislo + ' ' + m.znak;
 }
 function kdoJe(player) {
   if (!player) return 'někdo';

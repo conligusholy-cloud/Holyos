@@ -16,6 +16,10 @@ const { prisma } = require('../config/database');
 const acct = require('./game-account.routes');
 const TEXTY = require('../services/game/texty');
 const MENY = require('../services/game/meny');
+// Řeč platební stránky se řídí jazykem hráče, ne měnou — Polák platící
+// v eurech chce polskou stránku. Co Stripe nezná, nechá na 'auto'.
+const STRIPE_LOCALE = { cs: 'cs', en: 'en', pl: 'pl', de: 'de', sk: 'sk' };
+const stripeLocale = (jazyk) => STRIPE_LOCALE[String(jazyk || '')] || 'auto';
 
 const router = express.Router();
 const itemOf = acct._item;
@@ -131,7 +135,7 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
     const popisPol = polozka('short', c.short) || (c.laundry ? TEXTY.t('obchod.herni_laundry_popis', { p1: c.laundry.toLocaleString(jaz === 'cs' ? 'cs-CZ' : 'en-US') }, jaz) : undefined);
     const session = await stripePost('checkout/sessions', {
       mode: 'payment',
-      locale: prev.mena === 'czk' ? 'cs' : 'en',
+      locale: stripeLocale(TEXTY.jazykHrace(p)),
       invoice_creation: { enabled: 'true' },
       success_url: gameUrl() + '?platba=ok&s={CHECKOUT_SESSION_ID}',
       cancel_url: gameUrl() + '?platba=zrus',
@@ -191,7 +195,7 @@ router.post('/stripe/subscribe', express.json({ limit: '8kb' }), acct._requirePl
     const nazevPoz2 = polozka2('name', c.name), popisPoz2 = polozka2('short', c.short);
     const session = await stripePost('checkout/sessions', {
       mode: 'subscription',
-      locale: prev.mena === 'czk' ? 'cs' : 'en',
+      locale: stripeLocale(TEXTY.jazykHrace(p)),
       success_url: gameUrl() + '?predplatne=ok&s={CHECKOUT_SESSION_ID}',
       cancel_url: gameUrl() + '?predplatne=zrus',
       customer_email: p.email,

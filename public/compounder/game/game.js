@@ -11957,6 +11957,7 @@ function loadCards() {
     // hodnotou pak účtuje Stripe, takže si ji klient nedopočítává.
     if (r.j.mena) { MENA = r.j.mena; MENA_ZNAK = r.j.mena_znak || MENA_ZNAK; }
     if (typeof r.j.mena_des === 'number') MENA_DES = r.j.mena_des;
+    if (typeof r.j.mena_pred === 'boolean') MENA_PRED = r.j.mena_pred;
     SUBS_CAT = r.j.subs || null; PREDPLATNE = r.j.predplatne || [];
     LINKA_CAT = r.j.linka || null;
     if (typeof r.j.onboarding_rychly === 'boolean') ONBOARDING_RYCHLY = r.j.onboarding_rychly;
@@ -12627,25 +12628,32 @@ function polPopis(x) { return obchodText(x, 'desc'); }
 // klient počítal sám, dřív nebo později by ukázal jinou cenu, než jaká se
 // strhne.
 // Výchozí hodnoty platí jen do načtení ceníku, pak je přebije server.
-var MENA = 'czk', MENA_ZNAK = tx('obecne.mena_vychozi'), MENA_DES = 0;
+var MENA = 'czk', MENA_ZNAK = tx('obecne.mena_vychozi'), MENA_DES = 0, MENA_PRED = false;
+// Kde která řeč píše tisíce a desetinnou čárku. Neznámý jazyk bere češtinu —
+// pořád lepší než rozhozená čísla.
+var LOCALE_JAZYKA = { cs: 'cs-CZ', en: 'en-GB', pl: 'pl-PL', sk: 'sk-SK', de: 'de-DE' };
+function localeHrace() { return LOCALE_JAZYKA[JAZYK] || 'cs-CZ'; }
+// Značka patří k číslu tak, jak se to v té měně píše: 5 Kč, 5 zł, ale $5.
+// Říká to server spolu s měnou — klient si to nesmí odvozovat sám, jinak se
+// dřív nebo později ukáže číslo v jedné měně se značkou jiné.
+function sMenou(txt) { return MENA_PRED ? MENA_ZNAK + txt : txt + ' ' + MENA_ZNAK; }
 // Cena za den vychází z dělení, takže potřebuje desetinné místo i v korunách.
 function cenaDen(x) {
   var n = Number(x) || 0;
   var txt;
   try {
-    txt = n.toLocaleString(JAZYK === 'en' ? 'en-GB' : 'cs-CZ',
-      { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    txt = n.toLocaleString(localeHrace(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   } catch (e) { txt = n.toFixed(2); }
-  return txt + ' ' + MENA_ZNAK;
+  return sMenou(txt);
 }
 function cenaReal(x) {
   var n = Number(x) || 0;
   var txt;
   try {
-    txt = n.toLocaleString(JAZYK === 'en' ? 'en-GB' : 'cs-CZ',
+    txt = n.toLocaleString(localeHrace(),
       { minimumFractionDigits: MENA_DES, maximumFractionDigits: MENA_DES });
   } catch (e) { txt = String(MENA_DES ? n.toFixed(MENA_DES) : Math.round(n)); }
-  return txt + ' ' + MENA_ZNAK;
+  return sMenou(txt);
 }
 function cashPacksHtml() {
   if (!PAYMENTS_ON) {

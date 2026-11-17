@@ -1411,7 +1411,7 @@ router.get('/cards', async (req, res, next) => {
     // až tady — a stejnou funkcí, jakou pak Stripe počítá, co strhne.
     const prev = await MENY.prevodnik(TEXTY.jazykHrace(p));
     res.json({
-      ok: true, mena: prev.mena, mena_znak: prev.znak, mena_des: prev.des,
+      ok: true, mena: prev.mena, mena_znak: prev.znak, mena_des: prev.des, mena_pred: prev.pred,
       catalog: await catalogPublic(prev), cash: await cashPublic(prev),
       linka: await linkaPublic(prev),
       onboarding_rychly: await rychlyOnboarding(),

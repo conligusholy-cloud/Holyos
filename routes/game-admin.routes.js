@@ -29,12 +29,16 @@ router.use((req, res, next) => {
   next();
 });
 
-// Nákupy jsou v měně hráče (koruny, nebo eura). Součty v adminu se počítají v korunách
-// přepočtem kurzem z nastavení hry — eura se nikdy nesčítají s korunami „po hlavě".
-let KURZ_EUR = 25;
-router.use(async (req, res, next) => { try { KURZ_EUR = await MENY.kurzEur(); } catch (e) { /* zůstane poslední */ } next(); });
-const jeEur = (n) => String(n && n.currency || 'czk').toLowerCase() === 'eur';
-const kcZ = (n) => (n.amount_cents / 100) * (jeEur(n) ? KURZ_EUR : 1);
+// Nákupy jsou v měně hráče. Součty v adminu se počítají v korunách přepočtem
+// kurzem z nastavení hry — cizí měny se nikdy nesčítají s korunami „po hlavě".
+let KURZY = Object.assign({}, MENY.KURZY_VYCHOZI);
+let KURZ_EUR = MENY.KURZY_VYCHOZI.eur;
+router.use(async (req, res, next) => {
+  try { KURZY = await MENY.kurzy(); KURZ_EUR = KURZY.eur; } catch (e) { /* zůstanou poslední */ }
+  next();
+});
+const menaZ = (n) => String((n && n.currency) || 'czk').toLowerCase();
+const kcZ = (n) => MENY.naKoruny(n.amount_cents, menaZ(n), KURZY);
 const api = (fn) => (req, res, next) => fn(req, res).catch(next);
 const den = (d) => new Date(d).toISOString().slice(0, 10);
 
@@ -286,7 +290,7 @@ router.get('/players/:id', api(async (req, res) => {
     kdy: h.invited_at || h.created_at, posledne: h.last_login_at,
     utratil: h.purchases.reduce((a, x) => a + kcZ(x), 0),
   })),
-  nakupy: nakupy.map((o) => ({ id: o.id, kind: o.kind, qty: o.qty, castka: o.amount_cents / 100, mena: jeEur(o) ? 'eur' : 'czk',
+  nakupy: nakupy.map((o) => ({ id: o.id, kind: o.kind, qty: o.qty, castka: o.amount_cents / 100, mena: menaZ(o),
     status: o.status, created_at: o.created_at, paid_at: o.paid_at })) });
 }));
 
@@ -340,11 +344,11 @@ router.get('/orders', api(async (req, res) => {
   });
   const paid = await prisma.gamePurchase.groupBy({ by: ['currency'], where: { status: 'paid' }, _sum: { amount_cents: true }, _count: { _all: true } });
   const poMenach = {}; let ks = 0, kc = 0;
-  paid.forEach((r) => { const c = String(r.currency || 'czk').toLowerCase(); poMenach[c] = (poMenach[c] || 0) + (r._sum.amount_cents || 0) / 100; ks += r._count._all; kc += (r._sum.amount_cents || 0) / 100 * (c === 'eur' ? KURZ_EUR : 1); });
+  paid.forEach((r) => { const c = String(r.currency || 'czk').toLowerCase(); poMenach[c] = (poMenach[c] || 0) + (r._sum.amount_cents || 0) / 100; ks += r._count._all; kc += MENY.naKoruny(r._sum.amount_cents || 0, c, KURZY); });
   res.json({ ok: true,
-    souhrn: { zaplaceno_ks: ks, zaplaceno_kc: kc, po_menach: poMenach, kurz_eur: KURZ_EUR },
+    souhrn: { zaplaceno_ks: ks, zaplaceno_kc: kc, po_menach: poMenach, kurz_eur: KURZ_EUR, kurzy: KURZY },
     orders: rows.map((o) => ({
-      id: o.id, kind: o.kind, qty: o.qty, castka: o.amount_cents / 100, mena: jeEur(o) ? 'eur' : 'czk', status: o.status,
+      id: o.id, kind: o.kind, qty: o.qty, castka: o.amount_cents / 100, mena: menaZ(o), status: o.status,
       nick: o.player ? o.player.nick : null, registrace: o.player ? o.player.created_at : null, email: o.email || (o.player ? o.player.email : null),
       session: o.stripe_session, created_at: o.created_at, paid_at: o.paid_at,
       // Období předplatného se zapisuje s ID faktury Stripe (in_…), jednorázový nákup s ID checkoutu (cs_…)

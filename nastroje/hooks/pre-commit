@@ -41,6 +41,18 @@ if [ "$STAV" -eq 2 ]; then
   exit 1
 fi
 
+# Měny ceníku. Když se sáhne na tabulku měn nebo na kurzy, musí pořád platit,
+# že se nezaokrouhluje dolů, že značka stojí na správné straně čísla a že
+# žádný jazyk neukazuje na měnu, za kterou Stripe nic nestrhne. Tohle commit
+# zastaví — špatná měna v ceníku je horší než chybějící překlad.
+if git diff --cached --name-only | grep -qE 'services/game/meny'; then
+  if ! node nastroje/tmenypl.js; then
+    echo ""
+    echo "STOP: měny ceníku nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 if [ "$STAV" -eq 1 ]; then
   if [ -n "$ANTHROPIC_API_KEY" ]; then
     echo ""
