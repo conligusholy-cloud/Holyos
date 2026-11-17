@@ -3332,5 +3332,21 @@
   "linka.pauza_nabidka": "Můžeš ji kdykoli vypnout a brát hovory sám. Zbývající čas se zmrazí a po zapnutí běží dál — nic nepropadne.",
   "linka.zapnuta": "Operátor zase bere hovory za tebe.",
   "linka.vypnuta": "Linka stojí. Telefon teď zvoní tobě a zbývající čas se nespotřebovává.",
-  "linka.stoji_zbyva": "Linku máš pozastavenou, zbývá na ní {p1}. Hovory bereš sám, a jen z nich roste hodnocení."
+  "linka.stoji_zbyva": "Linku máš pozastavenou, zbývá na ní {p1}. Hovory bereš sám, a jen z nich roste hodnocení.",
+  "hra.zal_moje_sit": "Moje síť",
+  "hra.zal_mista": "Místa",
+  "hra.zal_vyvoj": "Vývoj",
+  "hra.zal_zebricek": "Žebříček",
+  "hra.zal_poruchy": "Poruchy",
+  "hra.zal_volna": "Volná",
+  "hra.zal_konkurence": "Konkurence",
+  "hra.zal_jmeni": "Jmění",
+  "hra.zal_hvezdicky": "Hvězdičky",
+  "hra.zal_pozvanky": "Pozvánky",
+  "hra.zal_zeme": "Země",
+  "hra.zal_nova_nabidka": "Nová nabídka",
+  "hra.zal_jak_si_vedu": "Jak si vedu od začátku →",
+  "hra.zal_obchod_popis": "Prádlomat si kup i bez místa — počká ti na skladě. Dodání trvá dva herní měsíce, to je jeden skutečný den.",
+  "hra.zal_karty_popis": "Zrychlující karty ti pomůžou přeskočit čekání. Kupují se za skutečné peníze a zůstávají navázané na tvůj účet, ne na tenhle telefon.",
+  "hra.zal_burza_popis": "Stroje, celé prádlomaty i karty si mezi sebou můžete prodávat. Nabídka jde tam a zpět, dokud ji někdo nepřijme. Půjčit se tu dají i peníze na úrok a prodat podíl ve vlastní firmě."
 }

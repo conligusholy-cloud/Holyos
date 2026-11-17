@@ -48,6 +48,19 @@ function prelozStatickyText() {
   dej('[data-mapa="moje"] b', 'hra.jen_moje'); dej('[data-mapa="moje"] i', 'hra.moje');
   var od = document.getElementById('open-areas'); if (od) od.textContent = '\uD83D\uDD0E ' + tx('hra.prozkoumat_mesto');
   dej('#map-hint', 'hra.mapa_napoveda');
+  dej('#v-shop > h2', 'hra.obchod'); dej('#v-shop > p', 'hra.zal_obchod_popis');
+  dej('#v-bank > h2', 'hra.banka');
+  dej('#v-cards > h2', 'hra.karty'); dej('#v-cards > p', 'hra.zal_karty_popis');
+  dej('#v-burza > h2', 'hra.burza'); dej('#v-burza > p', 'hra.zal_burza_popis'); dej('#burza-nova', 'hra.zal_nova_nabidka');
+  dej('#v-me > h2', 'hra.ja');
+  dej('#net-do-vyvoje', 'hra.zal_jak_si_vedu');
+  [['data-net', { moje: 'hra.zal_moje_sit', stroje: 'hra.stroje', mista: 'hra.zal_mista', vyvoj: 'hra.zal_vyvoj', zebricek: 'hra.zal_zebricek' }],
+   ['data-stroj', { zisk: 'hra.zisk', trzby: 'hra.trzby', poruchy: 'hra.zal_poruchy', navratnost: 'mapa.navratnost' }],
+   ['data-misto', { vse: 'hra.vse', moje: 'hra.moje', volna: 'hra.zal_volna', cizi: 'hra.zal_konkurence' }],
+   ['data-zeb', { pradlomaty: 'hra.pradlomaty', zisk: 'hra.zisk', jmeni: 'hra.zal_jmeni', hvezdy: 'hra.zal_hvezdicky', pozvanky: 'hra.zal_pozvanky', zeme: 'hra.zal_zeme' }]
+  ].forEach(function (g) {
+    Object.keys(g[1]).forEach(function (v) { dej('[' + g[0] + '="' + v + '"]', g[1][v]); });
+  });
   [['map', 'hra.mapa'], ['shop', 'hra.obchod'], ['net', 'hra.sit'], ['bank', 'hra.banka'], ['cards', 'hra.karty'], ['burza', 'hra.burza'], ['me', 'hra.ja']].forEach(function (p) {
     var b = document.querySelector('nav.tabs button[data-v="' + p[0] + '"]'); if (!b) return;
     for (var n = b.lastChild; n; n = n.previousSibling) { if (n.nodeType === 3 && n.textContent.trim()) { n.textContent = tx(p[1]); break; } }
@@ -4081,7 +4094,7 @@ function areasSheet(predvyplnit) {
     // kartou a špendlíkem se pak nad klávesnicí neukáže.
     + tx('veta.input_id_q_area_name_hledat')
     + (predvyplnit ? ' value="' + esc(predvyplnit) + '"' : '') + '>'
-    + '<button class="btn" id="do-scout"' + (S.cash < SCOUT_COST ? ' disabled' : '') + '>Hledat</button></div>'
+    + '<button class="btn" id="do-scout"' + (S.cash < SCOUT_COST ? ' disabled' : '') + '>' + esc(tx('hra.hledat')) + '</button></div>'
     + '<p class="fine" id="city-note">'
     + (predvyplnit ? esc(tx('hra.z_mapy')) + ' ' + '<b>' + esc(predvyplnit) + '</b>' + ' ' + esc(tx('hra.staci_klepnout_na_hledat')) : '') + '</p>'
     + (S.cash < SCOUT_COST ? '<p class="fine err">' + esc(tx('hra.na_cestu_nemas_dost_hotovosti')) + '</p>' : '')
@@ -11114,7 +11127,7 @@ function switchTab(v) {
 [].forEach.call(document.querySelectorAll('.tabs button'), function (b) {
   b.onclick = function () { switchTab(b.getAttribute('data-v')); };
 });
-$('open-areas').onclick = areasSheet;
+$('open-areas').onclick = function () { areasSheet(); };
 if ($('tut-skip')) $('tut-skip').onclick = tutSkip;
 // Hotovost v hlavičce je tlačítko — odtud se hráč dostane k penězům.
 if ($('t-penize')) $('t-penize').onclick = function () { penizeSheet(); };
