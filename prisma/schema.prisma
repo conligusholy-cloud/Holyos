@@ -8178,6 +8178,10 @@ model GameOrder {
   postaveno_at DateTime?
   spot_id      String?   @db.VarChar(120)
   zruseno_at   DateTime?
+  // Řádek nevznikl nákupem, ale dopočtem ze stavu hry u strojů koupených
+  // dřív, než se nákup začal zapisovat. U pozorovaných víme, že se opravdu
+  // kupovalo; u doplněných jen to, co tvrdí hra.
+  doplneno     Boolean   @default(false)
   created_at   DateTime  @default(now())
 
   @@index([player_id, postaveno_at])

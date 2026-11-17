@@ -167,6 +167,23 @@ router.get('/evidence-rozdily', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(tiskEvidence(await evidence()));
 }));
 
+// GET /sklad-doplnit → co by se doplnilo (naprázdno, nic se nemění)
+// POST /sklad-doplnit → doplnit opravdu
+//
+// Stroje koupené dřív, než se nákup začal zapisovat, server nezná. Dokud je
+// nedopočítáme, sklad se nikdy nesrovná a nejde z něj udělat podmínku stavby.
+// Nikomu to nic nebere — doplňuje jen to, co hráči proti jeho uložené hře chybí.
+router.get('/sklad-doplnit', api(async (req, res) => {
+  const sklad = require('../services/game/sklad');
+  res.type('text/plain; charset=utf-8').send(sklad.tisk(await sklad.doplnit({ ostro: false })));
+}));
+router.post('/sklad-doplnit', api(async (req, res) => {
+  const sklad = require('../services/game/sklad');
+  const z = await sklad.doplnit({ ostro: true });
+  console.log('[game-sklad] dopočteno ' + z.pridano + ' strojů u ' + z.hracu + ' hráčů');
+  res.type('text/plain; charset=utf-8').send(sklad.tisk(z));
+}));
+
 // GET /sklad-rozdily → co o skladu ví server proti tomu, co má hra.
 router.get('/sklad-rozdily', api(async (req, res) => {
   const { sklad, tiskSklad } = require('../services/game/srovnani');

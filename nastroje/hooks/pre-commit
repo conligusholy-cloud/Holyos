@@ -64,6 +64,16 @@ if git diff --cached --name-only | grep -qE 'nastroje/texty-prelozit'; then
   fi
 fi
 
+# Dopočet skladu. Sáhne na majetek všech hráčů najednou, takže nesmí nikomu
+# nic ubrat a druhé spuštění nesmí nic přidat. Commit zastaví.
+if git diff --cached --name-only | grep -qE 'services/game/sklad'; then
+  if ! node nastroje/tsklad.js; then
+    echo ""
+    echo "STOP: dopočet skladu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Cena pozemku. Server a hra ji počítají každý zvlášť a musí se trefit do
 # stejného čísla — je to nemovitost, banka proti ní půjčuje. Commit zastaví.
 if git diff --cached --name-only | grep -qE 'services/game/pozemky'; then
