@@ -404,7 +404,11 @@ router.post('/predplatne/:id/dorovnat', api(async (req, res) => {
 // onboarding (hotová města hned, první obhlídka zdarma, nájem na jedno
 // klepnutí, první stroj doručený okamžitě).
 router.get('/nastaveni', api(async (req, res) => {
-  res.json({ ok: true, nastaveni: await acct._nastaveni() });
+  // Kurzy a mapování jazyk → měna jsou taky nastavení hry a mění ceník
+  // skutečnými penězi, takže patří do přehledu i s tím, co zrovna platí.
+  res.json({ ok: true, nastaveni: await acct._nastaveni(),
+    meny: { kurzy: await MENY.kurzy(), vychozi: MENY.KURZY_VYCHOZI,
+      jazyk_mena: MENY.MENA_JAZYKA, umime: Object.keys(MENY.MENY) } });
 }));
 router.post('/nastaveni', api(async (req, res) => {
   const klic = String((req.body || {}).klic || '').slice(0, 40);
@@ -414,6 +418,9 @@ router.post('/nastaveni', api(async (req, res) => {
     where: { klic }, update: { hodnota }, create: { klic, hodnota },
   });
   acct._dropNastaveni();
+  // Měna se čte s pětiminutovou pamětí. Po ruční změně kurzu by se nový
+  // ceník rozjel až za chvíli a vypadalo by to, že se změna neuložila.
+  if (/^kurz_/.test(klic) || klic === 'meny_jazyku') MENY.zapomen();
   res.json({ ok: true, nastaveni: await acct._nastaveni() });
 }));
 

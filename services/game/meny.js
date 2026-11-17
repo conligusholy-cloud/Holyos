@@ -54,6 +54,9 @@ async function nactiNastaveni() {
   return _cache;
 }
 
+// Po změně kurzu v nastavení se nečeká pět minut. Admin si řekne sám.
+function zapomen() { _cache = { at: 0, kurzy: Object.assign({}, KURZY_VYCHOZI), mapa: _cache.mapa }; }
+
 // Kurz eura zvlášť — admin ho ukazuje v přehledu tržeb.
 async function kurzEur() { return (await nactiNastaveni()).kurzy.eur; }
 async function kurzy() { return (await nactiNastaveni()).kurzy; }
@@ -101,7 +104,7 @@ async function zkontroluj() {
 }
 
 module.exports = { MENY, MENA_JAZYKA, MENA_VYCHOZI, STRIPE_UMI, KURZY_VYCHOZI,
-  menaProJazyk, menaProJazykAsync, kurzEur, kurzy, naKoruny,
+  menaProJazyk, menaProJazykAsync, kurzEur, kurzy, naKoruny, zapomen,
   cenaProJazyk, prevodnik, zkontroluj,
   // zpětná kompatibilita: dřív se vozil jen kurz eura
   KURZ_VYCHOZI: KURZY_VYCHOZI.eur };

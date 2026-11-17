@@ -61,10 +61,43 @@ SLOVNÍK POJMŮ
 
 Vrať POUZE JSON objekt {klíč: překlad}, nic jiného.`;
 
+// Node si proxy z prostředí sám nevezme — curl ano, node ne. Za firemní
+// proxy nebo v kontejneru se tedy překlad neodehraje vůbec a jediné, co
+// z toho vypadne, je „fetch failed", což nikomu nic neřekne. Když proxy
+// v prostředí je, jedeme přes ni; když není, nic se nemění.
+// Síť přes proxy. Doma to nikdo nepotřebuje, ve firemní síti a v kontejneru
+// bez ní API nevidíš vůbec — a jediné, co z toho vypadne, je „fetch failed".
+// Dvě věci, na kterých to stojí a na kterých jsem se zdržel:
+//  • Vestavěný fetch v Node se s dispatcherem z projektového undici nesnese
+//    („invalid onRequestStart method"), takže bereme i fetch z undici.
+//  • ProxyAgent si přihlašovací údaje z adresy sám nevezme. Když se
+//    nepředají zvlášť, proxy vrátí holé „Unauthorized" a vypadá to jako
+//    zamítnutý klíč k API, i když klíč vůbec neodešel.
+let POSLI = fetch;
+(function proxyZProstredi() {
+  const adresa = process.env.HTTPS_PROXY || process.env.https_proxy;
+  if (!adresa) return;
+  try {
+    const u = require('undici');
+    const url = new URL(adresa);
+    const udaje = (url.username || url.password)
+      ? 'Basic ' + Buffer.from(decodeURIComponent(url.username) + ':'
+          + decodeURIComponent(url.password)).toString('base64')
+      : null;
+    const agent = new u.ProxyAgent(udaje
+      ? { uri: url.protocol + '//' + url.host, token: udaje }
+      : adresa);
+    POSLI = (odkud, opt) => u.fetch(odkud, Object.assign({}, opt, { dispatcher: agent }));
+    console.log('síť: přes proxy z prostředí' + (udaje ? ' (s přihlášením)' : ''));
+  } catch (e) {
+    console.warn('síť: proxy v prostředí je, ale nejde použít (' + e.message + ')');
+  }
+}());
+
 async function prelozDavku(davka, slovnik, jazyk) {
   const klic = process.env.ANTHROPIC_API_KEY;
   if (!klic) throw new Error('chybí ANTHROPIC_API_KEY v prostředí');
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
+  const r = await POSLI('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': klic,
       'anthropic-version': '2023-06-01' },
@@ -117,8 +150,27 @@ async function main() {
   }
   console.log('překládám do: ' + jazyk);
 
+  // Slovník pojmů je závazný a překlad se podle něj řídí. Když se změní,
+  // hotové texty se samy nepřeloží znovu — otisk je u české předlohy, ne
+  // u slovníku. Tiše by pak vedle sebe stály překlady podle dvou různých
+  // slovníků. Otisk slovníku proto držíme v metadatech a při neshodě se
+  // ozveme; přepsat všechno se dá přepínačem, ať se to nestane omylem.
+  const SLOVNIK_KLIC = '__slovnik';
+  const slovnikOtisk = otisk(slovnik);
+  const znovu = process.argv.includes('--znovu');
+  const hotovych = Object.keys(cs).filter((k) => en[k] != null).length;
+  if (meta[SLOVNIK_KLIC] && meta[SLOVNIK_KLIC] !== slovnikOtisk && hotovych) {
+    console.log('');
+    console.log('POZOR: slovník pojmů se od minulého překladu změnil.');
+    console.log(hotovych + ' textů je přeložených podle toho starého a samy se nepřeloží znovu.');
+    console.log('Když chceš, aby se podle nového slovníku přeložilo všechno:');
+    console.log('  node nastroje/texty-prelozit.js --jazyk=' + jazyk + ' --znovu');
+    console.log('Teď se doplní jen to, co chybí.');
+    console.log('');
+  }
+
   const kdopotrebuje = Object.keys(cs).filter((k) =>
-    en[k] == null || (meta[k] && meta[k] !== otisk(cs[k])));
+    znovu || en[k] == null || (meta[k] && meta[k] !== otisk(cs[k])));
   console.log('k překladu: ' + kdopotrebuje.length + ' z ' + Object.keys(cs).length);
   if (nanecisto) {
     console.log(kdopotrebuje.slice(0, 20).join('\n'));
@@ -140,6 +192,7 @@ async function main() {
         meta[k] = otisk(cs[k]);
         hotovo++;
       });
+      meta[SLOVNIK_KLIC] = slovnikOtisk;
       zapis(souborJ, en);
       zapis(souborM, meta);
       console.log('  ' + Math.min(i + velikost, kdopotrebuje.length) + '/' + kdopotrebuje.length);
@@ -148,6 +201,7 @@ async function main() {
     }
   }
   console.log('přeloženo: ' + hotovo);
+  if (hotovo) { meta[SLOVNIK_KLIC] = slovnikOtisk; zapis(souborM, meta); }
   await linka(slovnik, jazyk);
 }
 
