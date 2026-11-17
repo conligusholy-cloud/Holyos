@@ -8856,6 +8856,9 @@ function paintMe() {
       var y = $('yes-reset'); y.disabled = true; y.textContent = esc(tx('hra.mazu'));
       // Smazat jen prohlížeč nestačí — stav i zabraná místa drží server a po
       // obnovení stránky by se hra vrátila přesně tam, kde byla.
+      // Napřed stav uložíme: server z něj vyrovnává půjčky a podíly, takže
+      // musí mít tu hotovost, kterou hráč opravdu má, ne tu z minulé minuty.
+      syncState(true).catch(function () {}).then(function () {
       apiJson('/account/reset', {}).then(function (r) {
         if (!r.ok) { y.disabled = false; y.textContent = esc(tx('hra.ano_smazat_a_zacit_znovu_2')); return toast(r.j.error || esc(tx('hra.nepovedlo_se_18')), 'err'); }
         wiped = true;

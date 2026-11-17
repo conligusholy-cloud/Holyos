@@ -875,11 +875,14 @@ router.post('/account/details', requirePlayer, async (req, res, next) => {
 // POST /account/reset — hráč začíná od nuly. Účet i zaplacené karty mu zůstávají
 // (ty si koupil za skutečné peníze), ale síť, uložený stav a zabraná místa mizí.
 // Bez téhle routy by se stav po obnovení stránky vrátil ze serveru.
+// Čistý štít není mazací guma. Hráč může mít v běhu půjčku od jiného hráče
+// nebo podíl, za který mu někdo zaplatil hotovost — to nejsou jeho čísla,
+// to jsou peníze někoho jiného. Vyrovnání proto proběhne první a teprve pak
+// se maže. Podrobnosti v services/game/konec.js.
 router.post('/account/reset', requirePlayer, async (req, res, next) => {
   try {
-    const gone = await prisma.gameSpotClaim.deleteMany({ where: { player_id: req.player.id } });
-    await prisma.gamePlayer.update({ where: { id: req.player.id }, data: { state: null, state_at: null } });
-    res.json({ ok: true, released: gone.count });
+    const v = await require('../services/game/konec').ukonciHru(req.player.id);
+    res.json({ ok: true, vyrovnani: v });
   } catch (e) { next(e); }
 });
 

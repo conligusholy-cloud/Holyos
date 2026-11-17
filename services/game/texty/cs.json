@@ -3305,5 +3305,11 @@
   "server.misto_obsadil": "Tohle místo mezitím obsadil {p1}.",
   "server.stav_moc_velky_kb": "Stav hry je moc velký: {p1} kB, vejde se {p2} kB.",
   "dor.provize": "Provize {penize:penize} — {p1}",
-  "dor.najem": "Nájem {penize:penize} — {p1} ({p2})"
+  "dor.najem": "Nájem {penize:penize} — {p1} ({p2})",
+  "dor.konec_splatka_pujcky": "{p1} skončil ve hře — z jeho hotovosti ti přišlo {penize:penize} na doplacení půjčky.",
+  "dor.konec_pujcka_odepsana": "{p1} skončil ve hře a na zbytek půjčky neměl. {penize:penize} se odepisuje.",
+  "dor.konec_odkup_podilu": "{p1} skončil ve hře — za tvůj podíl ti z jeho hotovosti přišlo {penize:penize}.",
+  "dor.konec_podil_zanikl": "{p1} skončil ve hře, tvůj podíl {p2} % v jeho firmě tím zaniká. Nepokrytá část {penize:penize} se odepisuje.",
+  "dor.konec_veritel_skoncil": "{p1} skončil ve hře. Co jsi mu dlužil, se odepisuje — splátky ti dál chodit nebudou.",
+  "dor.konec_podilnik_skoncil": "{p1} skončil ve hře, jeho podíl {p2} % ve tvé firmě zaniká. Výplaty mu posílat nebudeš."
 }

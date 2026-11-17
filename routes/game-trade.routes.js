@@ -940,9 +940,14 @@ router.post('/trade/aukce/:id/koupit', hrac, api(async (req, res) => {
     const dorucenky = [
       { player_id: req.player.id, kind: 'cash', amount: -cena, popis: 'Koupil jsi z konkurzu: ' + a.popis,
         text_kod: 'dor.koupil_z_konkurzu', text_data: { p1: a.popis } },
-      { player_id: a.player_id, kind: 'cash', amount: cena, popis: 'Z konkurzu se prodalo: ' + a.popis,
-        text_kod: 'dor.prodalo_z_konkurzu', text_data: { p1: a.popis } },
     ];
+    // Z majetku po ukončené hře se prodávajícímu nic nevyplácí. Kdyby ano,
+    // vyplatilo by se resetovat se dokola a liquidaci inkasovat.
+    if (!(a.data && a.data.bez_vyplaty)) {
+      dorucenky.push({ player_id: a.player_id, kind: 'cash', amount: cena,
+        popis: 'Z konkurzu se prodalo: ' + a.popis,
+        text_kod: 'dor.prodalo_z_konkurzu', text_data: { p1: a.popis } });
+    }
     if (a.predmet === 'stroj') {
       dorucenky.push({ player_id: req.player.id, kind: 'stock', model: a.model, amount: 1, popis: 'Z konkurzu: ' + a.popis });
     } else if (a.predmet === 'pobocka') {
