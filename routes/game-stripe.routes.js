@@ -124,6 +124,11 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
       data: { player_id: p.id, kind, qty, amount_cents: kus * qty, currency: prev.mena, email: p.email }
     });
 
+    // Název a popis na Stripe stránce v jazyce hráče (z katalogu obchodu), jinak český základ.
+    const jaz = TEXTY.jazykHrace(p);
+    const polozka = (pole, zaloha) => { const k = 'obchod.' + kind + '.' + pole; const v = TEXTY.t(k, null, jaz); return (v && v !== k) ? v : zaloha; };
+    const nazevPol = polozka('name', c.name);
+    const popisPol = polozka('short', c.short) || (c.laundry ? TEXTY.t('obchod.herni_laundry_popis', { p1: c.laundry.toLocaleString(jaz === 'cs' ? 'cs-CZ' : 'en-US') }, jaz) : undefined);
     const session = await stripePost('checkout/sessions', {
       mode: 'payment',
       locale: prev.mena === 'czk' ? 'cs' : 'en',
@@ -138,8 +143,8 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
         quantity: qty,
         price_data: {
           currency: prev.mena, unit_amount: kus,
-          product_data: { name: 'Laundromat Tycoon — ' + c.name + (qty > 1 ? ' (' + qty + '×)' : ''),
-            description: c.short || (c.laundry ? c.laundry.toLocaleString('cs-CZ') + ' herních laundrů' : undefined) }
+          product_data: { name: 'Laundromat Tycoon — ' + nazevPol + (qty > 1 ? ' (' + qty + '×)' : ''),
+            description: popisPol || undefined }
         }
       }]
     });
@@ -181,6 +186,9 @@ router.post('/stripe/subscribe', express.json({ limit: '8kb' }), acct._requirePl
     const row = await prisma.gameSubscription.create({
       data: { player_id: p.id, kind, qty, status: 'pending' }
     });
+    const jaz2 = TEXTY.jazykHrace(p);
+    const polozka2 = (pole, zaloha) => { const k = 'obchod.' + kind + '.' + pole; const v = TEXTY.t(k, null, jaz2); return (v && v !== k) ? v : zaloha; };
+    const nazevPoz2 = polozka2('name', c.name), popisPoz2 = polozka2('short', c.short);
     const session = await stripePost('checkout/sessions', {
       mode: 'subscription',
       locale: prev.mena === 'czk' ? 'cs' : 'en',
@@ -196,8 +204,7 @@ router.post('/stripe/subscribe', express.json({ limit: '8kb' }), acct._requirePl
           currency: prev.mena, unit_amount: prev.halere(c.price),
           recurring: { interval: c.interval || 'week',
             interval_count: String(Math.max(1, parseInt(c.interval_count, 10) || 1)) },
-          product_data: { name: 'Laundromat Tycoon — ' + c.name,
-            description: c.short || undefined }
+          product_data: { name: 'Laundromat Tycoon — ' + nazevPoz2, description: popisPoz2 || undefined }
         }
       }]
     });

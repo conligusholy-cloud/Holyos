@@ -95,7 +95,7 @@ async function mailFrom(source) {
   if (source === 'game') return { from: process.env.GAME_BILLING_MAIL_FROM || process.env.BS2_BILLING_MAIL_FROM || process.env.SERVICE_BILLING_MAIL_FROM || our.email || undefined, fromName: process.env.GAME_BILLING_MAIL_FROM_NAME || 'Laundromat Tycoon' };
   return { from: process.env.BS2_BILLING_MAIL_FROM || process.env.SERVICE_BILLING_MAIL_FROM || our.email || undefined, fromName: process.env.BS2_BILLING_MAIL_FROM_NAME || 'Fakturace Best Series 2.0' };
 }
-const fmt = (n, cur) => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + cur;
+const fmt = (n, cur, en) => Number(n).toLocaleString(en ? 'en-GB' : 'cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + cur;
 const fmtD = (d) => { const x = new Date(d); return x.getDate() + '. ' + (x.getMonth() + 1) + '. ' + x.getFullYear(); };
 
 // Odešle fakturu e-mailem (PDF v příloze), zapíše stav doručení.
@@ -121,10 +121,14 @@ async function sendInvoice(invoiceId, kind) {
       body = 'Dobrý den,\n\nděkujeme za úhradu zálohy. V příloze zasíláme konečnou fakturu ' + inv.invoice_number + (inv.note ? ' (' + inv.note + ')' : '') + '.\nFaktura je uhrazena zálohou, k platbě nic nezbývá.\n\nS pozdravem\nBest Series s.r.o.';
     } else {
       subject = 'Faktura ' + inv.invoice_number + ' — ' + brandName;
+      if (inv.source === 'game' && inv.language === 'en') {
+        subject = 'Invoice ' + inv.invoice_number + ' — ' + brandName;
+        body = 'Hello,\n\nthank you for your payment. Attached is invoice ' + inv.invoice_number + ' for ' + fmt(inv.total, cur, true) + '. The invoice has already been paid.\n\nGood luck in the game!\nThe Laundromat Tycoon team';
+      } else
       body = 'Dobrý den,\n\nděkujeme za platbu. V příloze zasíláme fakturu ' + inv.invoice_number + ' na částku ' + fmt(inv.total, cur) + '. Faktura je již uhrazena.\n\nS pozdravem\nBest Series s.r.o.';
     }
-    if (inv.source === 'game') body = body.replace(/S pozdravem\nBest Series s\.r\.o\./, 'Hodně úspěchů ve hře!\nTým Laundromat Tycoon');
-    const r = await sendMail(Object.assign({}, await mailFrom(inv.source), { to, brand: inv.source === 'game' ? 'game' : 'bs2', subject, body, attachments: [{ filename: inv.invoice_number + '.pdf', content: pdf, contentType: 'application/pdf' }] }));
+    if (inv.source === 'game' && inv.language !== 'en') body = body.replace(/S pozdravem\nBest Series s\.r\.o\./, 'Hodně úspěchů ve hře!\nTým Laundromat Tycoon');
+    const r = await sendMail(Object.assign({}, await mailFrom(inv.source), { to, brand: inv.source === 'game' ? 'game' : 'bs2', lang: inv.language, subject, body, attachments: [{ filename: inv.invoice_number + '.pdf', content: pdf, contentType: 'application/pdf' }] }));
     if (!r || !r.sent) {
       const why = (r && (r.error || r.skipped)) || 'neodesláno';
       await prisma.invoice.update({ where: { id: invoiceId }, data: { delivery_status: 'failed', send_error: String(why).slice(0, 1000), sent_to: to } });
@@ -242,7 +246,7 @@ async function issueOnline(p, o) {
       invoice_number: no, external_number: ref, type: 'issued', direction: 'ar', invoice_role: 'full', language: p.language === 'en' ? 'en' : 'cs',
       company_id: company.id, currency, subtotal: b.subtotal, vat_amount: b.vat, total: b.total, paid_amount: b.total, vat_regime: vatRate > 0 ? 'standard' : (p.vat_regime || 'outside_scope'),
       date_issued: paidAt, date_taxable: paidAt, date_due: paidAt, variable_symbol: no.replace(/\D/g, '').slice(0, 10), payment_method: 'card',
-      status: 'paid', source: o.source, sent_to: (p.customer && p.customer.email) || null, note: 'Zaplaceno online kartou přes Stripe' + (p.note ? ' — ' + p.note : '') + '. Objednávka č. ' + p.ref + '.',
+      status: 'paid', source: o.source, sent_to: (p.customer && p.customer.email) || null, note: (p.language === 'en' ? 'Paid online by card via Stripe' : 'Zaplaceno online kartou přes Stripe') + (p.note ? ' — ' + p.note : '') + (p.language === 'en' ? '. Order no. ' : '. Objednávka č. ') + p.ref + '.',
       ...(await bankFields(o.cat, currency)),
       items: { create: b.rows },
     } });
@@ -260,14 +264,19 @@ async function issueGame(purchaseId, opts) {
   let name = pu.kind;
   try { const it = await require('../../routes/game-account.routes')._item(pu.kind); if (it && it.name) name = it.name; } catch (e) { /* název = kód */ }
   const pl = pu.player || {};
+  // Jazyk faktury, e-mailu i názvu položky = jazyk hráče (anglicky mluvící hráč platí eury a čeština mu nic neřekne).
+  const TEXTY = require('../game/texty');
+  const jaz = TEXTY.jazykHrace(pl);
+  const en = jaz !== 'cs';
+  if (en) { const k = 'obchod.' + pu.kind + '.name'; const v = TEXTY.t(k, null, jaz); if (v && v !== k) name = v; }
   const person = [pl.first_name, pl.last_name].filter(Boolean).join(' ');
   const customer = { name: person || pl.company || pl.nick || pu.email || 'Hráč', email: pu.email || pl.email || null };
   const cur = String(pu.currency || 'czk').toUpperCase();
   const qty = pu.qty || 1;
   return issueOnline({
-    ref: pu.id, currency: cur, gross: true, paid_at: pu.paid_at, send: opts.send,
-    customer, note: 'Hráč ' + (pl.nick || pu.player_id),
-    items: [{ description: 'Laundromat Tycoon — ' + name, quantity: qty, unit: 'ks', unit_price: (pu.amount_cents / 100) / qty }],
+    ref: pu.id, currency: cur, gross: true, paid_at: pu.paid_at, send: opts.send, language: en ? 'en' : 'cs',
+    customer, note: (en ? 'Player ' : 'Hráč ') + (pl.nick || pu.player_id),
+    items: [{ description: 'Laundromat Tycoon — ' + name, quantity: qty, unit: en ? 'pcs' : 'ks', unit_price: (pu.amount_cents / 100) / qty }],
   }, { cat: 'game', source: 'game', refPrefix: 'GAME-', series: 'bs2_game' });
 }
 

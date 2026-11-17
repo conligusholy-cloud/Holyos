@@ -160,11 +160,12 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
   }
 
   // ── Laundromat Tycoon (hra) — tmavá grafika, bez odkazu na Best Series ──
-  if (brand === 'game') {
+  if (brand === 'game' || brand === 'game:en') {
+    const gEn = brand === 'game:en';
     const gLink = link && link.startsWith('http') ? link : null;
     const bodyHtml = body ? escapeHtml(body).replace(/\n/g, '<br>') : '';
     return `<!DOCTYPE html>
-<html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"></head>
+<html lang="${gEn ? 'en' : 'cs'}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"></head>
 <body style="margin:0;padding:0;background:#0a0e1a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#eaf2ff;">
   ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}${"&zwnj;&nbsp;".repeat(70)}</div>` : ''}
   <table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0e1a" style="background:#0a0e1a;padding:32px 0;">
@@ -172,7 +173,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
       <table width="560" cellpadding="0" cellspacing="0" border="0" bgcolor="#121a30" style="max-width:560px;width:100%;background:#121a30;border:1px solid #243256;border-radius:18px;overflow:hidden;">
         <tr><td bgcolor="#2563eb" style="padding:24px 34px;background:#2563eb;background-image:linear-gradient(135deg,#1d4ed8,#7c3aed);">
           <div style="font-size:22px;font-weight:800;letter-spacing:.04em;color:#ffffff;">🧺 LAUNDROMAT TYCOON</div>
-          <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#dbe8ff;margin-top:6px;">Doklad o platbě</div>
+          <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#dbe8ff;margin-top:6px;">${gEn ? 'Proof of payment' : 'Doklad o platbě'}</div>
         </td></tr>
         <tr><td style="padding:28px 34px 6px;">
           <div style="font-size:22px;font-weight:800;color:#ffffff;line-height:1.3;">${escapeHtml(title || '')}</div>
@@ -374,6 +375,8 @@ async function isCustomerMailPaused() {
 
 async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, noLink, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, deliveryReceipt, audience, leadId, campaignId, unsubscribe, lang, onlySes, manual }) {
   if (!to) return { sent: false, skipped: 'no-recipient' };
+  // Hra: anglický hráč dostane anglickou hlavičku e-mailu
+  if (brand === 'game' && String(lang || '').toLowerCase().slice(0, 2) === 'en') brand = 'game:en';
   // Prádlomaty mimo Česko → značka LAUNDROMATS (hlavička šablony i jméno odesílatele)
   let unsubLabel = 'Odhlásit odběr';
   if (brand === 'pradlomaty') { const ll = laundroLang({ lang, from, link, body, subject }); if (ll) { brand = 'laundromats:' + ll; unsubLabel = (LAUNDRO_TXT[ll] || LAUNDRO_TXT.en).unsub; if (!fromName || /PR[ÁA]DLOMATY/i.test(fromName)) fromName = '💧 LAUNDROMATS 💧'; } }

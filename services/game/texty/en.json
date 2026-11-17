@@ -3420,5 +3420,8 @@
   "hra.za_min": "in {p1} min",
   "hra.zpusob_letecky": "by air",
   "hra.zpusob_autem": "by car",
-  "hra.zpusob_trajektem": "by ferry"
+  "hra.zpusob_trajektem": "by ferry",
+  "obchod.herni_laundry_popis": "{p1} in-game Laundrs",
+  "dor.podil_firma_nehraje": "{p1} quit the game, your {p2}% stake in their company closes. The uncovered portion of {penize:penize} is written off.",
+  "dor.podilnici_vyplaceni": "You were away too long, so stakeholders in your company cashed out and their stakes ended. There were {p1} of them and it cost {penize:penize} in cash."
 }

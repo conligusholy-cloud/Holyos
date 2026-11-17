@@ -64,6 +64,12 @@ async function dispatch(prisma, { title, body, data }) {
 }
 
 function fmtCzk(n) { return (Math.round(Number(n) || 0)).toLocaleString('cs-CZ') + ' Kč'; }
+// Částka v měně, ve které hráč platil (eura s centy, koruny celé).
+function fmtMena(n, mena) {
+  return String(mena || 'czk').toLowerCase() === 'eur'
+    ? (Number(n) || 0).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
+    : fmtCzk(n);
+}
 function kdoJe(player) {
   if (!player) return 'někdo';
   const firma = (player.company || '').trim();
@@ -140,16 +146,19 @@ async function purchasePaid(prisma, purchase, player, nazevPolozky) {
     const castka = (Number(purchase.amount_cents) || 0) / 100;
     let trzby = null;
     try {
-      const a = await prisma.gamePurchase.aggregate({
-        where: { status: 'paid' }, _sum: { amount_cents: true }
+      // Součet zvlášť po měnách — koruny a eura se nesmí sčítat dohromady.
+      const a = await prisma.gamePurchase.groupBy({
+        by: ['currency'], where: { status: 'paid' }, _sum: { amount_cents: true }
       });
-      trzby = (a._sum.amount_cents || 0) / 100;
+      trzby = a.filter((r) => r._sum.amount_cents)
+        .sort((x, y) => (String(x.currency) === 'czk' ? -1 : 1) - (String(y.currency) === 'czk' ? -1 : 1))
+        .map((r) => fmtMena((r._sum.amount_cents || 0) / 100, r.currency)).join(' + ') || null;
     } catch (e) { /* součet není důležitý */ }
     const nazev = nazevPolozky || purchase.kind;
     await dispatch(prisma, {
-      title: '💰 Nákup ve hře — ' + fmtCzk(castka),
+      title: '💰 Nákup ve hře — ' + fmtMena(castka, purchase.currency),
       body: kdoJe(player) + ': ' + purchase.qty + '× ' + nazev + '.'
-        + (trzby ? ' Tržby ze hry celkem ' + fmtCzk(trzby) + '.' : ''),
+        + (trzby ? ' Tržby ze hry celkem ' + trzby + '.' : ''),
       data: { udalost: 'milionar_nakup', purchase_id: purchase.id, player_id: purchase.player_id }
     });
   } catch (e) { console.warn('[milionar-notify] nákup:', e.message); }

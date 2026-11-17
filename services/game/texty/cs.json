@@ -3368,5 +3368,6 @@
   "hra.zpusob_autem": "autem",
   "hra.zpusob_trajektem": "trajektem",
   "dor.podil_firma_nehraje": "{p1} už hru nehraje, tvůj podíl {p2} % v jeho firmě se tím uzavírá. Nepokrytá část {penize:penize} se odepisuje.",
-  "dor.podilnici_vyplaceni": "Dlouho jsi nehrál, tak se podílníci ve tvé firmě vyplatili a jejich podíly skončily. Bylo jich {p1} a z hotovosti na to padlo {penize:penize}."
+  "dor.podilnici_vyplaceni": "Dlouho jsi nehrál, tak se podílníci ve tvé firmě vyplatili a jejich podíly skončily. Bylo jich {p1} a z hotovosti na to padlo {penize:penize}.",
+  "obchod.herni_laundry_popis": "{p1} herních laundrů"
 }

@@ -3339,5 +3339,8 @@
   "hra.za_min": "4bbf302b7495",
   "hra.zpusob_letecky": "a69f0101748d",
   "hra.zpusob_autem": "5e8c915581d2",
-  "hra.zpusob_trajektem": "861581ce6215"
+  "hra.zpusob_trajektem": "861581ce6215",
+  "obchod.herni_laundry_popis": "9bbb8c0df8f1",
+  "dor.podil_firma_nehraje": "b7b8bfc2ef21",
+  "dor.podilnici_vyplaceni": "947d08604cf1"
 }
