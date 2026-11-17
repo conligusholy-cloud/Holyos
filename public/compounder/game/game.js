@@ -12697,7 +12697,14 @@ function polPopis(x) { return obchodText(x, 'desc'); }
 // klient počítal sám, dřív nebo později by ukázal jinou cenu, než jaká se
 // strhne.
 // Výchozí hodnoty platí jen do načtení ceníku, pak je přebije server.
-var MENA = 'czk', MENA_ZNAK = tx('obecne.mena_vychozi'), MENA_DES = 0, MENA_PRED = false;
+// Než doběhne ceník ze serveru, platí značka, kterou poslal se stránkou —
+// podle jazyka hráče, ne podle překladu. Překladatel o měně nerozhoduje.
+var MENA = 'czk';
+// Bez značky raději holé číslo než cizí měna — na okamžik, než doběhne ceník,
+// je to lepší než ukázat koruny Španělovi.
+var MENA_ZNAK = HRAC_TEXTY.mena_znak || '';
+var MENA_DES = typeof HRAC_TEXTY.mena_des === 'number' ? HRAC_TEXTY.mena_des : 0;
+var MENA_PRED = !!HRAC_TEXTY.mena_pred;
 // Kde která řeč píše tisíce a desetinnou čárku. Neznámý jazyk bere češtinu —
 // pořád lepší než rozhozená čísla.
 var LOCALE_JAZYKA = { cs: 'cs-CZ', en: 'en-GB', pl: 'pl-PL', sk: 'sk-SK', de: 'de-DE', es: 'es-ES' };
@@ -12705,7 +12712,10 @@ function localeHrace() { return LOCALE_JAZYKA[JAZYK] || 'cs-CZ'; }
 // Značka patří k číslu tak, jak se to v té měně píše: 5 Kč, 5 zł, ale $5.
 // Říká to server spolu s měnou — klient si to nesmí odvozovat sám, jinak se
 // dřív nebo později ukáže číslo v jedné měně se značkou jiné.
-function sMenou(txt) { return MENA_PRED ? MENA_ZNAK + txt : txt + ' ' + MENA_ZNAK; }
+function sMenou(txt) {
+  if (!MENA_ZNAK) return txt;          // značka ještě nedorazila
+  return MENA_PRED ? MENA_ZNAK + txt : txt + ' ' + MENA_ZNAK;
+}
 // Cena za den vychází z dělení, takže potřebuje desetinné místo i v korunách.
 function cenaDen(x) {
   var n = Number(x) || 0;

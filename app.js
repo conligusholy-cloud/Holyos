@@ -1156,9 +1156,17 @@ app.use((req, res, next) => {
     const posli = (jazyk) => {
       // Seznam řečí jde do stránky s katalogem: přepínač v hráčově panelu se
       // z něj poskládá sám, takže přibytí další řeči neznamená sáhnout do hry.
+      // A s ním i značka měny, kterou ten jazyk platí. Dřív si ji klient bral
+      // z překladu, což znamenalo, že o měně rozhodoval překladatel: Němec
+      // i Španěl měli v katalogu „Kč", Angličan „CZK", a všichni tři přitom
+      // platí v eurech. Je to jen na okamžik, než doběhne ceník, ale lhát
+      // nemá ani ten okamžik.
+      const MENY = require('./services/game/meny-jadro');
+      const mena = MENY.MENY[MENY.menaZMapy(jazyk, null)] || MENY.MENY.czk;
       const telo = jazyk === 'cs'
-        ? { jazyk: jazyk, jazyky: T.jazykyHotove() }
-        : { jazyk: jazyk, jazyky: T.jazykyHotove(), texty: T.katalogPro(jazyk) };
+        ? { jazyk: jazyk, jazyky: T.jazykyHotove(), mena_znak: mena.znak, mena_des: mena.des, mena_pred: mena.pred }
+        : { jazyk: jazyk, jazyky: T.jazykyHotove(), mena_znak: mena.znak, mena_des: mena.des,
+            mena_pred: mena.pred, texty: T.katalogPro(jazyk) };
       res.send('window.__TEXTY_HRAC = ' + JSON.stringify(telo) + ';');
     };
     let pid = null;
