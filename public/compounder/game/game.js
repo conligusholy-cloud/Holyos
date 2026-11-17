@@ -1770,6 +1770,7 @@ function fresh(profileId) {
     hovoryPosl: [],   // rozhovory, které už padly — ať se hned neopakují
     hovorLog: [],     // evidence hovorů — kdo volal a jak to dopadlo
     linkaDo: 0,       // dokud běží infolinka, bere operátor všechny hovory
+    linkaAuto: 0,     // u nákupu balíčku brát rovnou předplatné, co se obnovuje
     linkaStop: 0,     // pozastavená linka: hovory bere hráč, čas se nespotřebovává
     linkaZbytek: 0,   // zmrazený zbytek času, dokud linka stojí
     pojisteni: false, // pojištění provozoven proti požáru, vytopení a vloupání
@@ -1840,6 +1841,7 @@ function dosypStav(o) {
     if (typeof o.linkaDo !== 'number') o.linkaDo = 0;
     if (typeof o.linkaZbytek !== 'number') o.linkaZbytek = 0;
     if (typeof o.linkaStop !== 'number') o.linkaStop = 0;
+    if (typeof o.linkaAuto !== 'number') o.linkaAuto = 0;
     if ((o.linka || 0) > 0 && !o.linkaPrevod) {
       o.linkaDo = Math.max(o.linkaDo, Date.now() + LINKA_PREVOD_MS);
       o.linka = 0; o.linkaPrevod = 1;
@@ -11941,12 +11943,12 @@ function paintCards() {
   [].forEach.call(box.querySelectorAll('[data-linka]'), function (el) {
     el.onclick = function () {
       var kind = el.getAttribute('data-linka');
-      if (LINKA_AUTO && LINKA_SUB[kind]) return zapniPredplatne(LINKA_SUB[kind], 1);
+      if (linkaAuto() && LINKA_SUB[kind]) return zapniPredplatne(LINKA_SUB[kind], 1);
       buyCash(kind);
     };
   });
   if ($('linka-auto')) $('linka-auto').onclick = function () {
-    LINKA_AUTO = !LINKA_AUTO; paintCards();
+    nastavLinkaAuto(!linkaAuto()); paintCards();
   };
   if ($('linka-stop')) $('linka-stop').onclick = function () {
     if (linkaStoji()) {
@@ -12084,9 +12086,18 @@ function ramecPacksHtml() {
     + '</div>';
 }
 // Přepínač „obnovovat automaticky": když je zapnutý, nekupuje se balíček na
-// čas, ale předplatné, které se samo platí dál. Drží se jen do zavření hry —
-// je to volba u nákupu, ne nastavení firmy.
-var LINKA_AUTO = false;
+// čas, ale předplatné, které se samo platí dál.
+//
+// Bydlí ve stavu hry, ne v proměnné stránky. Cesta k platbě vede přes Stripe
+// a zpátky, což je nové načtení stránky — v proměnné by volba zhasla přesně
+// ve chvíli, kdy ji hráč zapnul a šel podle ní koupit. Vypadalo to, že
+// přepínač nedrží.
+function linkaAuto() { return !!(S && S.linkaAuto); }
+function nastavLinkaAuto(zap) {
+  if (!S) return;
+  S.linkaAuto = zap ? 1 : 0;
+  save(); syncState(true);
+}
 // Balíček na čas → odpovídající předplatné. Jiný kalendář, stejná linka.
 var LINKA_SUB = { linka1d: 'linka_sub1d', linka3d: 'linka_sub3d', linka7d: 'linka_sub7d',
   linka30d: 'linka_sub30d', linka365d: 'linka_sub365d' };
@@ -12126,14 +12137,14 @@ function linkaPacksHtml() {
         : '')
     + (PAYMENTS_ON && !pred
         ? '<div class="kv" style="margin-top:10px"><span>' + esc(tx('hra.obnovovat_automaticky')) + '</span>'
-          + '<button class="prep-sam' + (LINKA_AUTO ? ' on' : '') + '" id="linka-auto">'
-          + (LINKA_AUTO ? esc(tx('hra.zapnuto')) : esc(tx('hra.vypnuto'))) + '</button></div>'
-          + '<p class="fine">' + (LINKA_AUTO
+          + '<button class="prep-sam' + (linkaAuto() ? ' on' : '') + '" id="linka-auto">'
+          + (linkaAuto() ? esc(tx('hra.zapnuto')) : esc(tx('hra.vypnuto'))) + '</button></div>'
+          + '<p class="fine">' + (linkaAuto()
               ? esc(tx('hra.koupis_si_to_jako_predplatne'))
               : esc(tx('hra.jednorazovy_nakup_az_cas_dobehne'))) + '</p>'
           + LINKA_CAT.map(function (c) {
               return '<div class="pack" data-linka="' + tx('hra.div_class_pack_l_b_b', { p1: esc(c.kind), p2: esc(polNazev(c)), p3: cenaDen(c.za_den) })
-                + (LINKA_AUTO ? ' ' + esc(tx('hra.obnovuje_se')) : '') + '</span></div>'
+                + (linkaAuto() ? ' ' + esc(tx('hra.obnovuje_se')) : '') + '</span></div>'
                 + '<button class="btn sm">' + cenaReal(c.price_czk) + '</button></div>';
             }).join('')
           + '<p class="fine">' + esc(tx('hra.platbu_zpracovava_stripe_infolinka_naskoci')) + '</p>'
