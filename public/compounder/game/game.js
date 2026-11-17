@@ -10012,9 +10012,13 @@ function paintBurza() {
 
   if (FINANCE == null) loadFinance(paintBurza);
 
-  box.innerHTML = aukceHtml()
+  // Co čeká na odpověď hráče, je to nejdůležitější — když tam něco je, patří to
+  // úplně nahoru, ještě před aukce a finance. Prázdná sekce zůstává na svém místě.
+  var naMeHtml = sekce(esc(tx('drazba.ceka_na_tvoji_odpoved')), naMe, esc(tx('drazba.nikdo_ti_ted_nic_nenabizi')));
+  box.innerHTML = (naMe.length ? naMeHtml : '')
+    + aukceHtml()
     + financeHtml()
-    + sekce(esc(tx('drazba.ceka_na_tvoji_odpoved')), naMe, esc(tx('drazba.nikdo_ti_ted_nic_nenabizi')))
+    + (naMe.length ? '' : naMeHtml)
     + sekce(esc(tx('drazba.cekas_na_odpoved')), odeslane, esc(tx('drazba.nemas_rozjednanou_zadnou_nabidku')))
     + (hotove.length ? sekce(esc(tx('drazba.uzavrene')), hotove, '') : '');
   bindAukce();
