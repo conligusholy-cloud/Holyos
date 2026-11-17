@@ -163,14 +163,25 @@ const LINKA_KINDS = Object.keys(LINKA);
 // ve třech silách. Kdo tu starou kartu koupil, efekt mu zůstává; z prodeje
 // jde pryč, protože vedle týdenních balíčků by ji nikdo nekoupil.
 //
-// add je přírůstek k násobiči návštěvnosti, ne procento z tržeb: základ je
-// 0,45 a strop 1,1, takže +0,25 je pro začátečníka o polovinu víc zákazníků
-// a pro hráče na stropu o čtvrtinu. Popisky mluví o procentech, protože to
-// hráči znají z té staré karty.
+// add je přírůstek k návštěvnosti v bodech, ne procento z tržeb: základ je
+// 0,45 a strop 1,1, takže +0,25 je pro začátečníka o 56 % víc tržeb a pro
+// hráče na stropu o 23 %. Popisky proto mluví o bodech — „+25 %" si hráči
+// četli jako čtvrtinu navíc na tržbách a balíček byl ve skutečnosti silnější.
+//
+// Ceny z toho vycházejí. První týden se prodávalo za 49/69/99, což bylo
+// postavené na tom mylném čtení: za 99 Kč dostal začátečník o polovinu vyšší
+// tržby na celý týden, zatímco infolinka za stejné peníze dělá zlomek toho.
+// Nová řada drží slevu za objem — čím silnější balíček, tím levnější bod —
+// a nejdražší kampaň je nad infolinkou, což odpovídá tomu, co umí.
+//   Letáky         +10 bodů   69 Kč   6,90 za bod
+//   Rádio a polep  +15 bodů   99 Kč   6,60 za bod
+//   Velká kampaň   +25 bodů  149 Kč   5,96 za bod
+// Kdo koupil dřív a levněji, o nic nepřichází: jednorázový balíček je
+// spotřebovaný a běžící předplatné si drží cenu, za kterou bylo založeno.
 const KAMPAN = {
-  kampan10: { kind: 'kampan10', icon: 'megaphone', price: 4900, dnu: 7, add: 0.10 },
-  kampan15: { kind: 'kampan15', icon: 'megaphone', price: 6900, dnu: 7, add: 0.15 },
-  kampan25: { kind: 'kampan25', icon: 'megaphone', price: 9900, dnu: 7, add: 0.25 },
+  kampan10: { kind: 'kampan10', icon: 'megaphone', price: 6900, dnu: 7, add: 0.10 },
+  kampan15: { kind: 'kampan15', icon: 'megaphone', price: 9900, dnu: 7, add: 0.15 },
+  kampan25: { kind: 'kampan25', icon: 'megaphone', price: 14900, dnu: 7, add: 0.25 },
 };
 const KAMPAN_KINDS = Object.keys(KAMPAN);
 
@@ -197,11 +208,11 @@ const SUBS = {
   // Kampaň na předplatné: totéž co balíček, jen se sama obnovuje. Běží,
   // dokud běží předplatné.
   kampan_sub10: { kind: 'kampan_sub10', icon: 'megaphone',
-    price: 4900, interval: 'week', interval_count: 1, kampan: true, add: 0.10, dnu: 7 },
+    price: 6900, interval: 'week', interval_count: 1, kampan: true, add: 0.10, dnu: 7 },
   kampan_sub15: { kind: 'kampan_sub15', icon: 'megaphone',
-    price: 6900, interval: 'week', interval_count: 1, kampan: true, add: 0.15, dnu: 7 },
+    price: 9900, interval: 'week', interval_count: 1, kampan: true, add: 0.15, dnu: 7 },
   kampan_sub25: { kind: 'kampan_sub25', icon: 'megaphone',
-    price: 9900, interval: 'week', interval_count: 1, kampan: true, add: 0.25, dnu: 7 },
+    price: 14900, interval: 'week', interval_count: 1, kampan: true, add: 0.25, dnu: 7 },
 };
 const SUB_KINDS = Object.keys(SUBS);
 
