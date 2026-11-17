@@ -13,6 +13,16 @@
 // spuštění nic nepřidá, protože se pokaždé počítá rozdíl proti skutečnosti,
 // ne přírůstek.
 //
+// Poprvé idempotentní nebylo a stálo to 21 strojů navíc. Rozdíl se počítal
+// zvlášť pro sklad a zvlášť pro zásilky na cestě — jenže to, ve které
+// přihrádce řádek je, se časem mění: zásilka doletí a stane se z ní sklad.
+// Doplněné zásilce se navíc nastavoval čas dodání na „za chvíli", takže do
+// minuty přeskočila do skladu, kdežto hra ji pořád vedla na cestě. Při
+// druhém běhu tedy vyšlo, že na cestě chybí, a doplnila se znovu.
+//
+// Proto se teď porovnává součet na model, ne přihrádky. Kdy co doletí, je
+// kosmetika; kolik toho hráč má, je to podstatné.
+//
 // Doplněné řádky nesou značku `doplneno`. U pozorovaných víme, že se opravdu
 // kupovalo; u doplněných jen to, co tvrdí hra — a to je slabší důkaz, se
 // kterým je potřeba počítat, až se sklad stane rozhodujícím.
@@ -60,30 +70,24 @@ async function doplnit(opt) {
       where: { player_id: h.id, postaveno_at: null, zruseno_at: null },
       select: { model: true, dorazi_at: true },
     });
-    const serverSkladem = {}, serverNaceste = {};
-    MODELY.forEach((m) => { serverSkladem[m] = 0; serverNaceste[m] = 0; });
-    serverove.forEach((r) => {
-      if (!MODELY.includes(r.model)) return;
-      if (new Date(r.dorazi_at).getTime() <= ted) serverSkladem[r.model]++;
-      else serverNaceste[r.model]++;
-    });
+    // Kolik má server na model dohromady — skladem i na cestě. Přihrádky
+    // se časem přelévají, součet ne.
+    const serverCelkem = {};
+    MODELY.forEach((m) => { serverCelkem[m] = 0; });
+    serverove.forEach((r) => { if (MODELY.includes(r.model)) serverCelkem[r.model]++; });
 
-    const kVytvoreni = [];
-    // Sklad: co hra tvrdí, že leží doma, a server o tom neví.
-    MODELY.forEach((m) => {
-      const chybi = ma.skladem[m] - serverSkladem[m];
-      for (let i = 0; i < chybi; i++) {
-        kVytvoreni.push({ model: m, dorazi: ted - 1000 });
-      }
-    });
-    // Na cestě: zásilky bereme od té, která dorazí nejdřív.
     const nacesteHry = ma.naceste.slice().sort((a, b) => a.dorazi - b.dorazi);
+    const kVytvoreni = [];
     MODELY.forEach((m) => {
       const moje = nacesteHry.filter((x) => x.model === m);
-      const chybi = moje.length - serverNaceste[m];
+      const hraCelkem = ma.skladem[m] + moje.length;
+      const chybi = hraCelkem - serverCelkem[m];
       for (let i = 0; i < chybi; i++) {
-        const z = moje[i] || { dorazi: ted + 1000 };
-        kVytvoreni.push({ model: m, dorazi: Math.max(ted + 1000, z.dorazi) });
+        // Nejdřív doplníme to, co hra vede jako sklad; na zásilky dojde
+        // potom a vezme se jejich vlastní čas dodání, ať je jakýkoli.
+        const jeSklad = i < ma.skladem[m];
+        const z = jeSklad ? null : moje[i - ma.skladem[m]];
+        kVytvoreni.push({ model: m, dorazi: z ? z.dorazi : ted - 1000 });
       }
     });
 
@@ -131,4 +135,36 @@ function tisk(z) {
   return out.join('\n');
 }
 
-module.exports = { doplnit, tisk, zeStavu, MODELY, CENY_STROJU };
+// Úklid po nepovedeném dopočtu. Maže jen řádky, které vznikly dopočtem a
+// na kterých zatím nic nestojí — koupené stroje a postavené prádlomaty se
+// nikdy nedotkne. Po úklidu se dá dopočet spustit znovu načisto.
+async function uklid(opt) {
+  const nanecisto = !(opt && opt.ostro === true);
+  const kSmazani = await prisma.gameOrder.findMany({
+    where: { doplneno: true, postaveno_at: null, zruseno_at: null },
+    select: { id: true, player_id: true, model: true },
+  });
+  if (!nanecisto && kSmazani.length) {
+    await prisma.gameOrder.deleteMany({ where: { id: { in: kSmazani.map((x) => x.id) } } });
+  }
+  const podleModelu = {};
+  kSmazani.forEach((x) => { podleModelu[x.model] = (podleModelu[x.model] || 0) + 1; });
+  return { nanecisto, smazano: kSmazani.length, podleModelu,
+    hracu: new Set(kSmazani.map((x) => x.player_id)).size };
+}
+
+function tiskUklid(z) {
+  const out = [];
+  out.push(z.nanecisto ? 'NANEČISTO — nic se nesmazalo' : 'OSTRO — smazáno');
+  out.push('');
+  out.push('Doplněných strojů, na kterých nic nestojí: ' + z.smazano
+    + ' u ' + z.hracu + ' hráčů');
+  Object.keys(z.podleModelu).forEach((m) => out.push('  ' + m + ': ' + z.podleModelu[m]));
+  out.push('');
+  out.push('Koupené stroje a postavené prádlomaty zůstávají nedotčené.');
+  if (z.nanecisto) out.push('Ostrý běh: POST na stejnou adresu.');
+  else out.push('Teď spusť dopočet znovu: GET /api/game-admin/sklad-doplnit');
+  return out.join('\n');
+}
+
+module.exports = { doplnit, tisk, uklid, tiskUklid, zeStavu, MODELY, CENY_STROJU };

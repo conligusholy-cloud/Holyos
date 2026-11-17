@@ -184,6 +184,23 @@ router.post('/sklad-doplnit', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(sklad.tisk(z));
 }));
 
+// GET /sklad-uklid → co by se smazalo (naprázdno)
+// POST /sklad-uklid → smazat doopravdy
+//
+// Úklid po nepovedeém dopočtu. Maže jen řádky, které vznikly dopočtem a na
+// kterých zatím nic nestojí — koupených strojů a postavených prádlomatů se
+// nedotkne. Po úklidu se dopočet pouští znovu načisto.
+router.get('/sklad-uklid', api(async (req, res) => {
+  const sklad = require('../services/game/sklad');
+  res.type('text/plain; charset=utf-8').send(sklad.tiskUklid(await sklad.uklid({ ostro: false })));
+}));
+router.post('/sklad-uklid', api(async (req, res) => {
+  const sklad = require('../services/game/sklad');
+  const z = await sklad.uklid({ ostro: true });
+  console.log('[game-sklad] úklid smazal ' + z.smazano + ' dopočtených strojů');
+  res.type('text/plain; charset=utf-8').send(sklad.tiskUklid(z));
+}));
+
 // GET /sklad-rozdily → co o skladu ví server proti tomu, co má hra.
 router.get('/sklad-rozdily', api(async (req, res) => {
   const { sklad, tiskSklad } = require('../services/game/srovnani');

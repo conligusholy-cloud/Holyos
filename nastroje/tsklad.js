@@ -19,12 +19,23 @@ Module.prototype.require = function (co) {
         // Podmínky dotazu ctíme schválně: právě ony rozhodují, co se počítá
         // jako sklad. Kdyby se v kódu ztratilo „jen nepostavené", postavený
         // stroj by se doplnil znovu a hráč by ho dostal dvakrát.
-        findMany: async (q) => OBJEDNAVKY.filter((o) => o.player_id === q.where.player_id
-          && (q.where.postaveno_at !== null || !o.postaveno_at)
-          && (q.where.zruseno_at !== null || !o.zruseno_at)),
+        findMany: async (q) => OBJEDNAVKY.filter((o) => {
+          const w = q.where || {};
+          if (w.player_id !== undefined && o.player_id !== w.player_id) return false;
+          if (w.doplneno !== undefined && !!o.doplneno !== w.doplneno) return false;
+          if (w.postaveno_at === null && o.postaveno_at) return false;
+          if (w.zruseno_at === null && o.zruseno_at) return false;
+          return true;
+        }),
         createMany: async (q) => {
           q.data.forEach((d) => { VYTVORENO.push(d); OBJEDNAVKY.push(d); });
           return { count: q.data.length };
+        },
+        deleteMany: async (q) => {
+          const ids = new Set(q.where.id.in);
+          const pred = OBJEDNAVKY.length;
+          OBJEDNAVKY = OBJEDNAVKY.filter((o) => !ids.has(o.id));
+          return { count: pred - OBJEDNAVKY.length };
         },
       },
     } };
@@ -122,6 +133,60 @@ function priprav(stav, serverove) {
   z = await sklad.doplnit({ ostro: false });
   ok('postavený stroj se do skladu nepočítá', z.pridano === 1,
     '— napočítáno ' + z.pridano);
+
+  // ── Zásilka, která mezitím doletěla, se nesmí doplnit znovu ────────────
+  // Tohle je ta chyba, co stála 21 strojů navíc. Hra pořád vede zásilku na
+  // cestě, server už ji má jako sklad — a protože se dřív porovnávaly
+  // přihrádky zvlášť, vyšlo z toho, že na cestě chybí.
+  priprav({ stock: {}, orders: [{ model: 'mini', arrivesAt: ZA_HODINU }] }, [
+    { model: 'mini', dorazi_at: new Date(Date.now() - 1000), postaveno_at: null, zruseno_at: null },
+  ]);
+  z = await sklad.doplnit({ ostro: true });
+  ok('doletěná zásilka se nedoplní znovu', VYTVORENO.length === 0,
+    '— vytvořeno ' + VYTVORENO.length);
+
+  // A naopak: hra má sklad, server to vede jako zásilku na cestě.
+  priprav({ stock: { mini: 1 } }, [
+    { model: 'mini', dorazi_at: new Date(ZA_HODINU), postaveno_at: null, zruseno_at: null },
+  ]);
+  z = await sklad.doplnit({ ostro: true });
+  ok('opačná přihrádka taky nic nepřidá', VYTVORENO.length === 0,
+    '— vytvořeno ' + VYTVORENO.length);
+
+  // ── Čas dodání zásilky se bere od hry, nepřepisuje se ──────────────────
+  priprav({ stock: {}, orders: [{ model: 'max', arrivesAt: ZA_HODINU }] }, []);
+  z = await sklad.doplnit({ ostro: true });
+  ok('doplněná zásilka si nese čas dodání ze hry',
+    VYTVORENO.length === 1 && Math.abs(VYTVORENO[0].dorazi_at.getTime() - ZA_HODINU) < 2000,
+    VYTVORENO.length ? '— ' + VYTVORENO[0].dorazi_at.toISOString() : '');
+
+  // ── Opakování do třetice ───────────────────────────────────────────────
+  priprav({ stock: { mini: 2 }, orders: [{ model: 'flex', arrivesAt: ZA_HODINU }] }, []);
+  await sklad.doplnit({ ostro: true });
+  const poPrvnim = OBJEDNAVKY.length;
+  await sklad.doplnit({ ostro: true });
+  await sklad.doplnit({ ostro: true });
+  ok('třetí a čtvrtý běh nepřidají nic', OBJEDNAVKY.length === poPrvnim,
+    '— po prvním ' + poPrvnim + ', nakonec ' + OBJEDNAVKY.length);
+
+  // ── Úklid smaže jen doplněné a nepostavené ─────────────────────────────
+  OBJEDNAVKY = [
+    { id: 1, player_id: 1, model: 'mini', doplneno: true, postaveno_at: null, zruseno_at: null },
+    { id: 2, player_id: 1, model: 'mini', doplneno: true, postaveno_at: new Date(), zruseno_at: null },
+    { id: 3, player_id: 1, model: 'flex', doplneno: false, postaveno_at: null, zruseno_at: null },
+  ];
+  const puvodniFind = OBJEDNAVKY.slice();
+  HRACI = [];
+  let u = await sklad.uklid({ ostro: false });
+  ok('úklid naprázdno nic nesmaže', OBJEDNAVKY.length === 3 && u.smazano === 1,
+    '— našel ' + u.smazano);
+  u = await sklad.uklid({ ostro: true });
+  ok('úklid smaže jen doplněný a nepostavený stroj',
+    OBJEDNAVKY.length === 2 && OBJEDNAVKY.every((o) => o.id !== 1),
+    '— zbylo ' + OBJEDNAVKY.map((o) => o.id).join(','));
+  ok('koupený stroj úklid nechá být', OBJEDNAVKY.some((o) => o.id === 3));
+  ok('postavený doplněný stroj úklid nechá být', OBJEDNAVKY.some((o) => o.id === 2));
+  void puvodniFind;
 
   console.log(chyb ? '\n' + chyb + ' chyb' : '\nvšechno sedí');
   process.exit(chyb ? 1 : 0);
