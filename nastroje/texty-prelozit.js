@@ -50,6 +50,8 @@ krátkými větami, občas suše. Stejně má znít i překlad — ne marketingo
 PRAVIDLA
 - Zachovej značky {takhle} přesně, včetně tvarů {penize:cena} a {cislo:n}.
 - Zachovej HTML, pokud v textu je — včetně id a class, hra se podle nich řídí.
+- Uvozovky uvnitř textu piš typograficky („takhle"), nikdy jako rovnou ".
+  Rovná uvozovka rozbije JSON, ve kterém odpovídáš.
 - Nepřekládej L$ — je to herní měna.
 - Kč je skutečná měna, ne herní. Nepřepisuj ji na L$.
 - U textů s tvary množného čísla vrať objekt s klíči {TVARY}.
@@ -136,7 +138,45 @@ async function prelozDavku(davka, slovnik, jazyk) {
   const text = (j.content || []).map((c) => c.text || '').join('');
   const m = text.match(/\{[\s\S]*\}/);
   if (!m) throw new Error('odpověď bez JSON');
-  return JSON.parse(m[0]);
+  try {
+    return JSON.parse(m[0]);
+  } catch (e) {
+    // Nejčastější důvod, proč se odpověď nedá přečíst: v překladu zůstala
+    // rovná uvozovka a neutekla se. Celá dávka pak padne kvůli jednomu
+    // znaku. Zkusíme ji opravit a přečíst znovu — a když ani to nepomůže,
+    // ukážeme kus okolo chyby, ať je vidět, co se vlastně vrátilo.
+    try { return JSON.parse(spravUvozovky(m[0])); } catch (e2) { /* vypíšeme níž */ }
+    const kde = Number((e.message.match(/position (\d+)/) || [])[1]);
+    const okolo = Number.isFinite(kde)
+      ? ' · kolem chyby: …' + m[0].slice(Math.max(0, kde - 60), kde + 40).replace(/\s+/g, ' ') + '…'
+      : '';
+    throw new Error(e.message + okolo);
+  }
+}
+
+// Uvnitř hodnoty je rovná uvozovka koncem řetězce jen tehdy, když po ní
+// (přes mezery) přijde čárka nebo složená závorka. Jinak patří do textu
+// a musí se escapovat. Na tvar {"klíč": "text"} to stačí a nic jiného
+// z API nechodí.
+function spravUvozovky(txt) {
+  let ven = '', vRetezci = false, jeKlic = false;
+  for (let i = 0; i < txt.length; i++) {
+    const z = txt[i];
+    if (z === '\\') { ven += z + (txt[i + 1] || ''); i++; continue; }
+    if (z !== '"') { ven += z; continue; }
+    if (!vRetezci) {
+      // Začátek řetězce. Klíč poznáme podle toho, že za ním přijde dvojtečka.
+      const konec = txt.indexOf('":', i);
+      const radek = txt.slice(i, konec + 2);
+      jeKlic = konec > i && !/[^\\]"/.test(radek.slice(1, -2));
+      vRetezci = true; ven += z; continue;
+    }
+    // Uvnitř řetězce: konec jen před čárkou nebo závorkou.
+    const dal = txt.slice(i + 1).match(/^\s*([,}:])/);
+    if (dal) { vRetezci = false; ven += z; continue; }
+    ven += jeKlic ? z : '\\"';
+  }
+  return ven;
 }
 
 async function main() {

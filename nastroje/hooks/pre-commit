@@ -53,6 +53,17 @@ if git diff --cached --name-only | grep -qE 'services/game/meny'; then
   fi
 fi
 
+# Překladač: záchranná síť na rozbité uvozovky v odpovědi od API. Když
+# přestane fungovat, padá celá dávka kvůli jednomu znaku a nikdo si toho
+# nevšimne, dokud nechybí čtyřicet textů.
+if git diff --cached --name-only | grep -qE 'nastroje/texty-prelozit'; then
+  if ! node nastroje/tprelozit.js; then
+    echo ""
+    echo "STOP: oprava uvozovek v překladači nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Platby. Dvojí doručení webhooku nesmí nikdy připsat zboží dvakrát — tohle
 # je přímo o penězích, takže commit zastaví.
 if git diff --cached --name-only | grep -qE 'routes/game-stripe'; then

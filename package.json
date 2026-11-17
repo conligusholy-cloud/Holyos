@@ -23,7 +23,8 @@
     "meny:kontrola": "node nastroje/tmenypl.js",
     "platby:kontrola": "node nastroje/twebhook.js",
     "texty:prelozit:pl": "node nastroje/texty-prelozit.js --jazyk=pl",
-    "texty:prohlidka:pl": "node nastroje/texty-prohlidka.js pl"
+    "texty:prohlidka:pl": "node nastroje/texty-prohlidka.js pl",
+    "texty:prelozit:kontrola": "node nastroje/tprelozit.js"
   },
   "engines": {
     "node": ">=22.0.0"
