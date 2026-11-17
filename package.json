@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node scripts/patch-fleet-frontend.js",
     "i18n:sync": "node scripts/compounder-i18n-sync.js",
+    "hra:jmeni": "node nastroje/jmeni-srovnani.js",
     "texty:kontrola": "node nastroje/texty-kontrola.js",
     "texty:prelozit": "node nastroje/texty-prelozit.js",
     "texty:vytahni": "node nastroje/texty-vytahni.js",
