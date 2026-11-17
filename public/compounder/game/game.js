@@ -12700,7 +12700,7 @@ function polPopis(x) { return obchodText(x, 'desc'); }
 var MENA = 'czk', MENA_ZNAK = tx('obecne.mena_vychozi'), MENA_DES = 0, MENA_PRED = false;
 // Kde která řeč píše tisíce a desetinnou čárku. Neznámý jazyk bere češtinu —
 // pořád lepší než rozhozená čísla.
-var LOCALE_JAZYKA = { cs: 'cs-CZ', en: 'en-GB', pl: 'pl-PL', sk: 'sk-SK', de: 'de-DE' };
+var LOCALE_JAZYKA = { cs: 'cs-CZ', en: 'en-GB', pl: 'pl-PL', sk: 'sk-SK', de: 'de-DE', es: 'es-ES' };
 function localeHrace() { return LOCALE_JAZYKA[JAZYK] || 'cs-CZ'; }
 // Značka patří k číslu tak, jak se to v té měně píše: 5 Kč, 5 zł, ale $5.
 // Říká to server spolu s měnou — klient si to nesmí odvozovat sám, jinak se

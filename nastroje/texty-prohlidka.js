@@ -119,12 +119,30 @@ function delkaSedi(c, e) {
     + '× delší než česky (' + c.length + ' → ' + e.length + ' znaků)';
 }
 
+// ─── Obrácená interpunkce (španělština) ─────────────────────────────
+// Otázka i zvolání mají ve španělštině znaménko na obou koncích: ¿Empezar
+// de nuevo? a ¡Listo! Při strojovém překladu se na to zapomíná a je to
+// v okně hned vidět. Kontrolujeme jen jednoduché texty — u souvětí a HTML
+// by se nedalo poznat, ke které části znaménko patří.
+function obracenaInterpunkce(c, e, jazyk) {
+  if (jazyk !== 'es') return null;
+  if (typeof c !== 'string' || typeof e !== 'string') return null;
+  if (/[<>{]/.test(c)) return null;
+  const chybi = [];
+  // Větu bereme podle konce: co končí otazníkem, má začínat obráceným.
+  const konec = e.trim().slice(-1);
+  if (konec === '?' && !e.includes('¿')) chybi.push('¿');
+  if (konec === '!' && !e.includes('¡')) chybi.push('¡');
+  if (!chybi.length) return null;
+  return 'chybí ' + chybi.join(' a ') + ' na začátku';
+}
+
 // ─── Tvary množného čísla ────────────────────────────────────────────────────
 // Co která řeč potřebuje. Musí sedět s tvar() v jadro.js — kdyby se rozešly,
 // hra by pro část čísel sáhla po tvaru, který v katalogu není, a věta by
 // spadla na jiný pád nebo na prázdno.
 const TVARY = { cs: ['one', 'few', 'other'], en: ['one', 'other'],
-  pl: ['one', 'few', 'many'], de: ['one', 'other'] };
+  pl: ['one', 'few', 'many'], de: ['one', 'other'], es: ['one', 'other'] };
 function tvaryChybi(hodnota, jazyk) {
   if (typeof hodnota !== 'object' || !hodnota) return ['není objekt s tvary'];
   const chce = TVARY[jazyk] || ['one', 'other'];
@@ -217,6 +235,8 @@ function main() {
     // Délka krátkých popisků — měkký nález, do layoutu se musí podívat člověk.
     const d = delkaSedi(c, e);
     if (d) pridej(mekke, k, 'dlouhý popisek', d);
+    const oi = obracenaInterpunkce(c, e, jazyk);
+    if (oi) pridej(mekke, k, 'obrácená interpunkce', oi + ': ' + e.slice(0, 50));
 
     // Zbytky češtiny. Jména volajících jsou česká schválně — operátor zvedá
     // telefon v Česku a paní Vondráčková se jmenuje pořád stejně.

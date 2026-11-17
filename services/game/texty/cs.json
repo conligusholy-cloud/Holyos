@@ -3388,5 +3388,6 @@
   "hra.ucet_zmizi_i_s_udaji": "Účet zmizí i s tvými údaji — jméno, e-mail, heslo i stav hry. Nejdřív proběhne konkurz, aby ostatní hráči nepřišli o to, co u tebe mají. Běžící předplatné se zruší ke konci zaplaceného období; peníze se nevracejí. Doklady o nákupech musíme ze zákona držet dál, ale bez tvého e-mailu. Tohle se nedá vrátit a do hry už se nevrátíš.",
   "jazyk.pl": "Polština",
   "jazyk.de": "Němčina",
-  "veta.za_jednotku_meny": "Za {p1}"
+  "veta.za_jednotku_meny": "Za {p1}",
+  "jazyk.es": "Španělština"
 }

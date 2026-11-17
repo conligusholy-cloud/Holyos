@@ -18,7 +18,7 @@ const TEXTY = require('../services/game/texty');
 const MENY = require('../services/game/meny');
 // Řeč platební stránky se řídí jazykem hráče, ne měnou — Polák platící
 // v eurech chce polskou stránku. Co Stripe nezná, nechá na 'auto'.
-const STRIPE_LOCALE = { cs: 'cs', en: 'en', pl: 'pl', de: 'de', sk: 'sk' };
+const STRIPE_LOCALE = { cs: 'cs', en: 'en', pl: 'pl', de: 'de', es: 'es', sk: 'sk' };
 const stripeLocale = (jazyk) => STRIPE_LOCALE[String(jazyk || '')] || 'auto';
 
 const router = express.Router();
