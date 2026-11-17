@@ -1,0 +1,3203 @@
+[
+  {
+    "id": "stovka",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Dzień dobry, automat połknął mi stówę i nic się nie uruchomiło.",
+        "o": [
+          {
+            "t": "Przykro mi. Zwrócę panu/pani ją na konto.",
+            "b": 2,
+            "r": "Dobrze, w porządku."
+          },
+          {
+            "t": "Bez dowodu nic nie zwracamy, to jest normalne przy samoobsłudze.",
+            "b": -2,
+            "r": "Czyli okradniecie mnie i już?"
+          },
+          {
+            "t": "To się czasem zdarza, proszę spróbować jeszcze raz i może przejdzie — automatom do monet czasem wchodzi wilgoć i mechanizm się zacina.",
+            "b": -1,
+            "r": "Czyli mam wrzucić kolejną stówę?"
+          }
+        ]
+      },
+      {
+        "t": "A ile to potrwa, zanim dostanę pieniądze?",
+        "o": [
+          {
+            "t": "Do dwóch dni. Gdyby nie, proszę się odezwać bezpośrednio do mnie.",
+            "b": 2,
+            "r": "Dobra."
+          },
+          {
+            "t": "Trudno powiedzieć, to załatwia księgowość.",
+            "b": -1,
+            "r": "No super."
+          },
+          {
+            "t": "Zazwyczaj bywa szybko.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      },
+      {
+        "t": "A co teraz? Muszę to wyprać dzisiaj.",
+        "o": [
+          {
+            "t": "Uruchomię pralkę zdalnie, za minutę ruszy.",
+            "b": 2,
+            "r": "Jesteś złoty/złota, dzięki!"
+          },
+          {
+            "t": "To proszę przyjść jutro.",
+            "b": -2,
+            "r": "Jutro mi się to na nic nie przyda."
+          },
+          {
+            "t": "Proszę spróbować tę obok, tam można płacić kartą, ale czy jest wolna, tego nie powiem stąd.",
+            "b": 1,
+            "r": "To spróbuję."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "svetr",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Prałam u was wełniany sweter i teraz jest w rozmiarze dziecięcym.",
+        "o": [
+          {
+            "t": "Przykro mi to słyszeć. Jaki program pani wybrała?",
+            "b": 2,
+            "r": "Od razu pytasz konkretnie, to dobrze."
+          },
+          {
+            "t": "Wełna nie należy do automatu, to pani błąd.",
+            "b": -2,
+            "r": "No to mi dopiero pomogłeś."
+          },
+          {
+            "t": "Za skurcz nie odpowiadamy, jest to napisane na pralce i w warunkach na stronie, proszę tam zajrzeć.",
+            "b": -2,
+            "r": "Dzwonię w sprawie swetra, nie warunków."
+          }
+        ]
+      },
+      {
+        "t": "Dałam sześćdziesiąt, było ustawione.",
+        "o": [
+          {
+            "t": "To za dużo na wełnę. Dam przy tej pralce lepszy opis, żeby to nie spotkało następnej osoby.",
+            "b": 2,
+            "r": "Przynajmniej coś."
+          },
+          {
+            "t": "No widzi pani, to jasne.",
+            "b": -1,
+            "r": "No to mnie ucieszyłeś."
+          },
+          {
+            "t": "Sześćdziesiąt to standard, nikomu nie może zaszkodzić.",
+            "b": -2,
+            "r": "To czemu mam ze swetra szmatkę?"
+          }
+        ]
+      },
+      {
+        "t": "A kto mi za ten sweter zapłaci?",
+        "o": [
+          {
+            "t": "Proszę przesłać zdjęcie i paragon, dogadamy się.",
+            "b": 2,
+            "r": "Dobra, wyślę."
+          },
+          {
+            "t": "Nikt, prała pani sama i na pralce jest napisane, co do niej pasuje.",
+            "b": -2,
+            "r": "Kończę z wami."
+          },
+          {
+            "t": "Mogę dać pranie za darmo, więcej niestety nie.",
+            "b": 1,
+            "r": "No, lepsze to niż nic."
+          }
+        ]
+      },
+      {
+        "t": "Dobrze. A jak mam to prać następnym razem?",
+        "o": [
+          {
+            "t": "Trzydzieści i nigdy do suszarki.",
+            "b": 2,
+            "r": "Zapisane. Dziękuję."
+          },
+          {
+            "t": "Jakoś to spróbuj, od tego jest samoobsługa.",
+            "b": -2,
+            "r": "Mówisz poważnie?"
+          },
+          {
+            "t": "Wełnę wolałbym w domu ręcznie, w automacie to zawsze ryzyko, nawet jak dasz najniższy program i wolne obroty.",
+            "b": 0,
+            "r": "To z wełną do was nie pójdę."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "drahe",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Jesteście za drodzy. Za rogiem piorą taniej.",
+        "o": [
+          {
+            "t": "Ile tam płacicie?",
+            "b": 2,
+            "r": "Pytacie o właściwą rzecz."
+          },
+          {
+            "t": "To idźcie za róg, nikt was tu nie zatrzymuje.",
+            "b": -2,
+            "r": "Nie martwcie się, pójdę."
+          },
+          {
+            "t": "Nasze ceny wynikają z tego, że mamy nowe pralki, otwarte non-stop i technika na drugi dzień.",
+            "b": 1,
+            "r": "To brzmi jak z ulotki."
+          }
+        ]
+      },
+      {
+        "t": "Sto trzydzieści za pralkę. U was dwieście.",
+        "o": [
+          {
+            "t": "U nas wypierzecie osiemnaście kilo na raz, tam pewnie sześć.",
+            "b": 2,
+            "r": "Hm, nie pomyślałem o tym."
+          },
+          {
+            "t": "Tego nie da się porównać, każdy ma inne pralki, inną wodę i inne koszty, więc ceny za cykl naprawdę nie ma co porównywać.",
+            "b": -1,
+            "r": "Dlaczego nie?"
+          },
+          {
+            "t": "To idźcie tam sobie.",
+            "b": -2,
+            "r": "No dobra."
+          }
+        ]
+      },
+      {
+        "t": "Hm. A dajecie rabat, czy mam wam napisać recenzję?",
+        "o": [
+          {
+            "t": "Recenzję sobie napiszcie. Jedno pranie dam wam za darmo, żebyście spróbowali.",
+            "b": 2,
+            "r": "No dobra, spróbuję."
+          },
+          {
+            "t": "Dam wam pięćdziesiąt procent na zawsze.",
+            "b": -1,
+            "r": "Biorę! I powiem wszystkim."
+          },
+          {
+            "t": "To sobie piszcie.",
+            "b": -2,
+            "r": "Możecie na to liczyć."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dvirka",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Nie mogę otworzyć drzwiczek, a w środku mam całe pranie.",
+        "o": [
+          {
+            "t": "Dokręca się i spuszcza wodę. Dwie minuty i puści.",
+            "b": 2,
+            "r": "Aha, to poczekam."
+          },
+          {
+            "t": "Pociągnij je porządnie.",
+            "b": -2,
+            "r": "Urwę je!"
+          },
+          {
+            "t": "Zamek jest zabezpieczający i nic się z nim nie da zrobić, technik przyjedzie najwcześniej jutro, do tego czasu to tam chyba zostanie.",
+            "b": -1,
+            "r": "Jutro?!"
+          }
+        ]
+      },
+      {
+        "t": "Już puszcza. Ale pranie jest całkiem mokre.",
+        "o": [
+          {
+            "t": "Nie zrobiło wirowania. Suszarkę masz u mnie za darmo, kod wyślę SMS-em.",
+            "b": 2,
+            "r": "To w porządku, dzięki."
+          },
+          {
+            "t": "To włóż do suszarki, jest obok.",
+            "b": 0,
+            "r": "Za kolejne pieniądze?"
+          },
+          {
+            "t": "To się zdarza, wirowanie czasem odpada i nic się tym nie psuje, pranie wyschnie w domu na balkonie.",
+            "b": -2,
+            "r": "To mi nie wystarcza."
+          }
+        ]
+      },
+      {
+        "t": "A dlaczego w ogóle się wysypało?",
+        "o": [
+          {
+            "t": "Sprawdzę pralkę. Jeśli to awaria, wyślę tam dzisiaj technika.",
+            "b": 2,
+            "r": "Dobrze, dzięki."
+          },
+          {
+            "t": "Pewnie przepełniłaś.",
+            "b": -1,
+            "r": "Znowu wszystko moja wina."
+          },
+          {
+            "t": "Nie mam pojęcia.",
+            "b": -2,
+            "r": "No to mi pomogłeś."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "pes",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Czy mogę u was wyprać koc po psie? Nie chcę zanieczyścić własnej pralki.",
+        "o": [
+          {
+            "t": "Spokojnie. Właśnie po to jesteśmy.",
+            "b": 2,
+            "r": "Super."
+          },
+          {
+            "t": "Rzeczy po zwierzętach u nas nie pierzemy.",
+            "b": -1,
+            "r": "To idę gdzie indziej."
+          },
+          {
+            "t": "Mnie to obojętne, pierz sobie co chcesz.",
+            "b": -2,
+            "r": "Fajne podejście."
+          }
+        ]
+      },
+      {
+        "t": "A nie będzie to przeszkadzać temu, kto będzie prał po mnie?",
+        "o": [
+          {
+            "t": "Nie będzie, pralka między cyklami sama płucze bęben.",
+            "b": 2,
+            "r": "To dobrze wymyślone."
+          },
+          {
+            "t": "Nie wiem, nikt się jeszcze nie skarżył, ale pewnie by im to przeszkadzało, gdyby wiedzieli.",
+            "b": -1,
+            "r": "Nie wiesz, jak działa twoja pralka?"
+          },
+          {
+            "t": "Им to obojętne.",
+            "b": -2,
+            "r": "Mnie by nie było obojętne."
+          }
+        ]
+      },
+      {
+        "t": "Adam go potem do suszarki?",
+        "o": [
+          {
+            "t": "Spokojnie, włosy wypadają do filtra.",
+            "b": 2,
+            "r": "Dzięki za radę."
+          },
+          {
+            "t": "Suszarki lepiej nie.",
+            "b": 0,
+            "r": "Aha, okej."
+          },
+          {
+            "t": "Rób sobie, co chcesz.",
+            "b": -2,
+            "r": "To mogłem sobie darować telefon."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "smrad",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Moje pranie śmierdzi po praniu. To nie jest normalne.",
+        "o": [
+          {
+            "t": "Rzeczywiście nie jest. Która to była pralka?",
+            "b": 2,
+            "r": "Dobrze, że pani/pan pyta."
+          },
+          {
+            "t": "Pewnie już wcześniej śmierdziało, pralka nie ma z tym nic wspólnego.",
+            "b": -2,
+            "r": "To niewiarygodne."
+          },
+          {
+            "t": "Proszę spróbować dodać więcej płynu do płukania, to zwykle przebija zapach i pranie pachnie przez kilka dni.",
+            "b": -2,
+            "r": "Nie chcę przebijać smrodu, chcę go nie mieć."
+          }
+        ]
+      },
+      {
+        "t": "Ta skrajna, przy drodze.",
+        "o": [
+          {
+            "t": "Dzięki. Każę wyczyścić bęben, a pranie ma pani/pan u mnie za darmo.",
+            "b": 2,
+            "r": "To uczciwe."
+          },
+          {
+            "t": "Przyjrzymy się temu kiedyś, jak technik będzie tam jechał w innej sprawie.",
+            "b": -1,
+            "r": "Kiedyś?"
+          },
+          {
+            "t": "Na tę nikt się nie skarżył.",
+            "b": -2,
+            "r": "To ja jestem pierwszy/pierwsza."
+          }
+        ]
+      },
+      {
+        "t": "A skąd poznam, że jest naprawione?",
+        "o": [
+          {
+            "t": "Dam pani/panu znać, jak technik to zrobi.",
+            "b": 2,
+            "r": "Będę czekać, dzięki."
+          },
+          {
+            "t": "Po prostu trzeba spróbować.",
+            "b": -1,
+            "r": "Za swoje pieniądze."
+          },
+          {
+            "t": "Pozna pani/pan.",
+            "b": -2,
+            "r": "Dzięki za nic."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "penzion",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Mam pensjonat i muszę prać pościel. Dajecie radę?",
+        "o": [
+          {
+            "t": "Dajemy radę. Ile tego tygodniowo?",
+            "b": 2,
+            "r": "Od razu do rzeczy, podoba mi się to."
+          },
+          {
+            "t": "Przyjdźcie jak każdy inny, nie robimy rezerwacji i nie trzymamy kolejki.",
+            "b": 0,
+            "r": "To chyba nie."
+          },
+          {
+            "t": "To nas nie interesuje, jedziemy na samoobsługę, a nie na firmy.",
+            "b": -2,
+            "r": "Szkoda dla was."
+          }
+        ]
+      },
+      {
+        "t": "Około stu kilo tygodniowo.",
+        "o": [
+          {
+            "t": "To pięć prań. Ustalę wam stałą cenę i przytrzymam pralki.",
+            "b": 2,
+            "r": "To brzmi świetnie."
+          },
+          {
+            "t": "To wam trochę potrwa, pięć prań po trzydzieści pięć minut to prawie trzy godziny, liczcie się z tym.",
+            "b": -1,
+            "r": "To mi mało pomogło."
+          },
+          {
+            "t": "Tyle nie pierzemy.",
+            "b": -2,
+            "r": "Po co tam macie te pralki?"
+          }
+        ]
+      },
+      {
+        "t": "A co jak będzie zajęte?",
+        "o": [
+          {
+            "t": "Dam wam numer, zadzwonicie i zwolnię wam pralkę.",
+            "b": 2,
+            "r": "Biorę, odezwę się."
+          },
+          {
+            "t": "To poczekajcie.",
+            "b": -2,
+            "r": "Z brudną pościelą z pensjonatu?"
+          },
+          {
+            "t": "To się nie zdarza.",
+            "b": -1,
+            "r": "To mi nie wystarcza."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "soused",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Wasza pralnia stoi pod moimi oknami i hałasuje w nocy.",
+        "o": [
+          {
+            "t": "Przykro mi to słyszeć. O której budzi pana najbardziej?",
+            "b": 2,
+            "r": "Przynajmniej ktoś słucha."
+          },
+          {
+            "t": "Mamy pozwolenie od miasta i badanie hałasu, więc z naszej strony wszystko jest w porządku.",
+            "b": -1,
+            "r": "To mnie nie cieszy."
+          },
+          {
+            "t": "To pana problem, trzeba było patrzeć, co się buduje pod oknami.",
+            "b": -2,
+            "r": "Zobaczymy, czyj to będzie problem."
+          }
+        ]
+      },
+      {
+        "t": "Koło jedenastej, gdy ludzie wracają z pracy.",
+        "o": [
+          {
+            "t": "Ustawię tam tryb nocny z niższymi obrotami. Sprawdzimy to przez tydzień.",
+            "b": 2,
+            "r": "To by pomogło."
+          },
+          {
+            "t": "Nic z tym nie zrobię, pralki działają jak działają i wyłączać je na noc przez jedną osobę nie będę.",
+            "b": -2,
+            "r": "To będę załatwiał gdzie indziej."
+          },
+          {
+            "t": "Ludzie też muszą prać.",
+            "b": -1,
+            "r": "A ja muszę spać."
+          }
+        ]
+      },
+      {
+        "t": "A jak nie pomoże?",
+        "o": [
+          {
+            "t": "Przyjdę sprawdzić i zmierzymy.",
+            "b": 2,
+            "r": "To biorę."
+          },
+          {
+            "t": "To proszę składać skargę.",
+            "b": -2,
+            "r": "Niech się pan nie martwi."
+          },
+          {
+            "t": "Pomoże.",
+            "b": -1,
+            "r": "Zobaczymy."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "tenisky",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Czy mogę u was wyprać tenisówki?",
+        "o": [
+          {
+            "t": "Można. Do worka i na trzydzieści.",
+            "b": 2,
+            "r": "Super, dzięki."
+          },
+          {
+            "t": "Butów nie.",
+            "b": -1,
+            "r": "Aha, szkoda."
+          },
+          {
+            "t": "Spróbuj, zobaczysz, ja ci tego nie zabraniamy ani nie polecam.",
+            "b": -2,
+            "r": "No to mi pomogłeś."
+          }
+        ]
+      },
+      {
+        "t": "A do suszarki?",
+        "o": [
+          {
+            "t": "Tych nie, rozkleiłyby się. Zostaw je do wyschnięcia w domu.",
+            "b": 2,
+            "r": "Dobrze, że wiem."
+          },
+          {
+            "t": "Spokojnie.",
+            "b": -2,
+            "r": "To mi je zniszczysz."
+          },
+          {
+            "t": "Jak chcesz.",
+            "b": -1,
+            "r": "Pytam się, co jest lepsze."
+          }
+        ]
+      },
+      {
+        "t": "A nie zniszczy mi to bębna?",
+        "o": [
+          {
+            "t": "Nie, do tego jest ten worek.",
+            "b": 2,
+            "r": "Jasne. Dzięki."
+          },
+          {
+            "t": "Może, podeszwy są twarde, a bęben to blacha.",
+            "b": -1,
+            "r": "To tego tam nie dam."
+          },
+          {
+            "t": "Nie wiem, nigdy nie próbowałem, ale podeszwy są twarde, więc pewnie bym się nie zdziwił, gdyby tak.",
+            "b": -1,
+            "r": "No to mnie uspokoiłeś."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "karta",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Dzień dobry, zapłaciłem kartą i pobrało dwa razy.",
+        "o": [
+          {
+            "t": "Jedną płatność od razu anuluję.",
+            "b": 2,
+            "r": "Dzięki, to szybko."
+          },
+          {
+            "t": "To robi bank, nie my.",
+            "b": -2,
+            "r": "Ale pieniądze mam u was."
+          },
+          {
+            "t": "Sprawdzę, ale terminal czasem wysyła dwie preautoryzacje i jedna sama się zwolni, więc może wystarczy poczekać.",
+            "b": 0,
+            "r": "A co jeśli się nie zwolni?"
+          }
+        ]
+      },
+      {
+        "t": "A jak to poznam na wyciągu?",
+        "o": [
+          {
+            "t": "Tego nie wiem.",
+            "b": -2,
+            "r": "To gdzie mam to sprawdzić?"
+          },
+          {
+            "t": "Przyjdzie zwrot w tej samej kwocie, zwykle do trzech dni. Jakby nie, zadzwoń i załatwię.",
+            "b": 2,
+            "r": "Dobrze, dzięki."
+          },
+          {
+            "t": "Będzie napisane storno.",
+            "b": 1,
+            "r": "To sprawdzę."
+          }
+        ]
+      },
+      {
+        "t": "A mogę już prać?",
+        "o": [
+          {
+            "t": "Jasne, puszczę pralkę zdalnie.",
+            "b": 2,
+            "r": "Super."
+          },
+          {
+            "t": "Jak się ta płatność wyjaśni, do tego czasu pralki nie puszczę.",
+            "b": -2,
+            "r": "To mam chodzić z koszem do domu?"
+          },
+          {
+            "t": "Spróbuj płacić monetami, ale drobnych pewnie nie masz, co.",
+            "b": -1,
+            "r": "Nie mam."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mraz",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Teraz w zimie to w ogóle działa? Jest minus dziesięć.",
+        "o": [
+          {
+            "t": "Działa. Urządzenie jest ogrzewane i woda nie zamarza.",
+            "b": 2,
+            "r": "Nie wiedziałem."
+          },
+          {
+            "t": "Spróbuj pan.",
+            "b": -2,
+            "r": "Pytam pana."
+          },
+          {
+            "t": "Jak jest tak zimno, lepiej zostaw to na inny raz, mogłoby zamarzać i potem mamy naprawę.",
+            "b": -2,
+            "r": "To po co to tam jest."
+          }
+        ]
+      },
+      {
+        "t": "A nie zesztywnieje mi pranie, zanim doniosę je do auta?",
+        "o": [
+          {
+            "t": "Nie zesztywnieje.",
+            "b": 0,
+            "r": "To mi ma wystarczyć?"
+          },
+          {
+            "t": "Zostaw je w suszarce, wyjdzie ciepłe i w drodze do domu nie zamarznie.",
+            "b": 2,
+            "r": "Dobry pomysł."
+          },
+          {
+            "t": "Weź pan rękawice.",
+            "b": -1,
+            "r": "Dzięki za radę stulecia."
+          }
+        ]
+      },
+      {
+        "t": "A gdyby jednak zamarzło?",
+        "o": [
+          {
+            "t": "Zadzwoń, wyślę technika od razu.",
+            "b": 2,
+            "r": "Biorę."
+          },
+          {
+            "t": "Jeszcze nam się to nie zdarzyło, więc z tym nawet nie liczę.",
+            "b": -1,
+            "r": "Ale może się zdarzyć."
+          },
+          {
+            "t": "To ma pan pecha, mróz to siła wyższa.",
+            "b": -2,
+            "r": "Ładnie."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "otviracka",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Do której macie otwarte?",
+        "o": [
+          {
+            "t": "Non-stop. Urządzenie stoi na zewnątrz i działa cały czas.",
+            "b": 2,
+            "r": "To super."
+          },
+          {
+            "t": "Do ósmej wieczorem.",
+            "b": -2,
+            "r": "To nigdy nie zdążę."
+          },
+          {
+            "t": "Otwarte właściwie nie mamy, bo to nie jest pralnia, tylko urządzenie, a ono się nie zamyka.",
+            "b": 1,
+            "r": "Aha, rozumiem."
+          }
+        ]
+      },
+      {
+        "t": "A w nocy jest tam bezpiecznie?",
+        "o": [
+          {
+            "t": "Spokojnie.",
+            "b": -1,
+            "r": "To mnie nie uspokaja."
+          },
+          {
+            "t": "Jest tam światło i kamera przy automacie. Ale w nocy jest się tam samemu, nie będę ukrywać.",
+            "b": 2,
+            "r": "Doceniam szczerość."
+          },
+          {
+            "t": "Tego nie zagwarantuję.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      },
+      {
+        "t": "A w święta?",
+        "o": [
+          {
+            "t": "Też. Nic nie zamykamy.",
+            "b": 2,
+            "r": "Doskonale."
+          },
+          {
+            "t": "Święta rozwiązujemy indywidualnie.",
+            "b": -1,
+            "r": "Co to znaczy?"
+          },
+          {
+            "t": "Nie wiem, sprawdź na stronie.",
+            "b": -2,
+            "r": "Dzwonię, żeby nie musieć sprawdzać."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "peri",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Zmieści się kołdra? Mam dwuosobową.",
+        "o": [
+          {
+            "t": "Do dużej pralki tak, bierze osiem kilo suchego prania.",
+            "b": 2,
+            "r": "To wezmę."
+          },
+          {
+            "t": "Nie zmieści się.",
+            "b": -2,
+            "r": "A skąd pani wie?"
+          },
+          {
+            "t": "Spróbuj wepchnąć, zwykle jakoś się mieści, a jak nie, to wyciągniesz.",
+            "b": -2,
+            "r": "Wepchnąć kołdrę do pralki, to dopiero rada."
+          }
+        ]
+      },
+      {
+        "t": "A wyschnie w suszarce?",
+        "o": [
+          {
+            "t": "Daj na dłuższy program i dorzuć dwa suche ręczniki, nabiorą wilgoć i pióra się nie skleją.",
+            "b": 2,
+            "r": "Spróbuję, dzięki."
+          },
+          {
+            "t": "Wyschnie.",
+            "b": 0,
+            "r": "Na pewno?"
+          },
+          {
+            "t": "Kołder raczej nie suszamy.",
+            "b": -1,
+            "r": "A co mam z nią zrobić?"
+          }
+        ]
+      },
+      {
+        "t": "Nie zniszczę piór?",
+        "o": [
+          {
+            "t": "Nie, jak nie dasz wysokiej temperatury.",
+            "b": 2,
+            "r": "Dobrze, dziękuję."
+          },
+          {
+            "t": "To się może zdarzyć.",
+            "b": -1,
+            "r": "To poradź, jak nie."
+          },
+          {
+            "t": "Pióro to pióro, wytrzyma wszystko.",
+            "b": -2,
+            "r": "Akurat tak nie myślę."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "barva",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Prałam po kimś i zabarwiło mi to białą koszulkę.",
+        "o": [
+          {
+            "t": "To nieprzyjemne. Która to była pralka i kiedy?",
+            "b": 2,
+            "r": "Dziś rano, ta środkowa."
+          },
+          {
+            "t": "To włączył ktoś inny, nic na to nie poradzimy.",
+            "b": -2,
+            "r": "Czyli nic."
+          },
+          {
+            "t": "Pralka po każdym praniu płucze bęben, więc farba nie może w nim zostać — raczej zabarwiło się od czegoś pani.",
+            "b": -1,
+            "r": "Twierdzi pani, że kłamię?"
+          }
+        ]
+      },
+      {
+        "t": "Dziś rano, ta środkowa.",
+        "o": [
+          {
+            "t": "Dobrze, zanotowałem.",
+            "b": 0,
+            "r": "I co dalej?"
+          },
+          {
+            "t": "Puszczę pusty cykl i to sprawdzę. Za tę koszulkę dam pani pranie za darmo.",
+            "b": 2,
+            "r": "To w porządku."
+          },
+          {
+            "t": "Tego już się nie da udowodnić.",
+            "b": -2,
+            "r": "To do widzenia."
+          }
+        ]
+      },
+      {
+        "t": "A da się jeszcze tę koszulkę uratować?",
+        "o": [
+          {
+            "t": "Proszę spróbować wyprać ją od razu, zanim farba nie wyschnie.",
+            "b": 2,
+            "r": "Idę to zrobić."
+          },
+          {
+            "t": "Nie wiem, nie jestem chemikiem.",
+            "b": -1,
+            "r": "Wystarczyło powiedzieć, co by pani zrobiła."
+          },
+          {
+            "t": "Raczej nie, tu już nie pomogę, to raczej sprawa dla pralni chemicznej.",
+            "b": -1,
+            "r": "Dzięki za optymizm."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "susicka",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Suszarka nie dosuszyła, pranie jest wilgotne po całym cyklu.",
+        "o": [
+          {
+            "t": "To nie powinno się zdarzyć. Bęben był pełny?",
+            "b": 2,
+            "r": "No, napchałam go dość mocno."
+          },
+          {
+            "t": "Włożyła pani za dużo rzeczy.",
+            "b": -1,
+            "r": "Mówi pan to, nie wiedząc ile."
+          },
+          {
+            "t": "Suszenie zależy od wielu rzeczy — od tego, co się suszy, jak było odwirowane i jak zimno jest na zewnątrz.",
+            "b": 0,
+            "r": "Czyli?"
+          }
+        ]
+      },
+      {
+        "t": "No, napchałam go dość mocno.",
+        "o": [
+          {
+            "t": "No widzi pani.",
+            "b": -2,
+            "r": "Nie musi mnie pan pouczać."
+          },
+          {
+            "t": "To będzie przez to — suszarka potrzebuje, żeby pranie się swobodnie obracało. Proszę dać połowę i zobaczy pani różnicę.",
+            "b": 2,
+            "r": "Dobrze, spróbuję."
+          },
+          {
+            "t": "I tak powinno wysuszyć.",
+            "b": 0,
+            "r": "To co teraz?"
+          }
+        ]
+      },
+      {
+        "t": "I zapłacę za to suszenie ponownie?",
+        "o": [
+          {
+            "t": "Nie, to jedno puszczę za darmo.",
+            "b": 2,
+            "r": "Dziękuję."
+          },
+          {
+            "t": "Zapłaci pani, maszyna działała.",
+            "b": -1,
+            "r": "Ale nie dosuszyła."
+          },
+          {
+            "t": "Tego już nie rozwiązuję, maszyna działała i dla mnie na tym koniec.",
+            "b": -2,
+            "r": "Świetne podejście."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "miminko",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Czy mogę u was prać rzeczy po niemowlęciu?",
+        "o": [
+          {
+            "t": "Oczywiście. Ustaw sześćdziesiąt, to akurat na dziecięce pranie.",
+            "b": 2,
+            "r": "Dobrze."
+          },
+          {
+            "t": "Jasne.",
+            "b": 0,
+            "r": "A na ile stopni?"
+          },
+          {
+            "t": "Spokojnie, ale szczerze mówiąc nie wrzucałbym dziecięcych rzeczy do publicznej pralki, nigdy nie wiadomo, co ktoś przed tobą prał.",
+            "b": -2,
+            "r": "To po co to prowadzicie?"
+          }
+        ]
+      },
+      {
+        "t": "A zostanie tam proszek po tym, kto prał przede mną?",
+        "o": [
+          {
+            "t": "Nie zostanie.",
+            "b": 1,
+            "r": "No dobrze."
+          },
+          {
+            "t": "Nie, pralka między praniami płucze bęben czystą wodą, a proszek dozuje sama, więc nic się nie nagromadzi.",
+            "b": 2,
+            "r": "To mnie uspokoiło."
+          },
+          {
+            "t": "Coś tam zawsze zostanie.",
+            "b": -2,
+            "r": "To w takim razie nie."
+          }
+        ]
+      },
+      {
+        "t": "A płyn do płukania mam dodawać?",
+        "o": [
+          {
+            "t": "Przy dziecięcych rzeczach lepiej go pominąć.",
+            "b": 2,
+            "r": "Dzięki za radę."
+          },
+          {
+            "t": "Dodaj co chcesz, nie będę ci w to gadać.",
+            "b": -1,
+            "r": "Pytałam o zalecenie."
+          },
+          {
+            "t": "Wszystko jedno, płyn do płukania jeszcze nigdy nikomu niczego nie zepsuł.",
+            "b": -1,
+            "r": "Przy dziecięcej skórze nie byłabym tego taka pewna."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "faktura",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Potrzebuję fakturę do prania dla firmy.",
+        "o": [
+          {
+            "t": "Wyślę fakturę mailem. Jaki jest Państwa NIP?",
+            "b": 2,
+            "r": "Zaraz go podam."
+          },
+          {
+            "t": "Nie wystawiamy dokumentów przy samoobsłudze.",
+            "b": -2,
+            "r": "To zabiorę pranie gdzie indziej."
+          },
+          {
+            "t": "Terminal drukuje paragon z płatności, ale do księgowości raczej nie wystarczy, więc nie wiem, co poradzić.",
+            "b": -1,
+            "r": "Dlatego właśnie dzwonię."
+          }
+        ]
+      },
+      {
+        "t": "Jesteśmy jednoosobową działalnością, płacimy firmową kartą.",
+        "o": [
+          {
+            "t": "To proste.",
+            "b": 0,
+            "r": "Co mam więc zrobić?"
+          },
+          {
+            "t": "Świetnie, te płatności mogę odnaleźć w systemie i wysłać zbiorczą fakturę raz w miesiącu.",
+            "b": 2,
+            "r": "To by nam pasowało."
+          },
+          {
+            "t": "Firmowych kart lepiej tu nie używać.",
+            "b": -2,
+            "r": "Dlaczego nie?"
+          }
+        ]
+      },
+      {
+        "t": "A da się to ustawić na stałe?",
+        "o": [
+          {
+            "t": "Da się. Ustawię to jeszcze dziś.",
+            "b": 2,
+            "r": "Dzięki."
+          },
+          {
+            "t": "Zobaczymy, teraz nic nie obiecuję.",
+            "b": -1,
+            "r": "To nie jest odpowiedź."
+          },
+          {
+            "t": "Musiałby Pan do księgowej, ale jej dziś nie ma, a jutro ma wolne.",
+            "b": -1,
+            "r": "Nie może Pan tego załatwić?"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "kamery",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Ktoś zabrał mi pranie z automatu. Macie tam kamery?",
+        "o": [
+          {
+            "t": "Kamera tam jest. Powiedz mi godzinę, a sprawdzę nagranie.",
+            "b": 2,
+            "r": "Było to koło piątej po południu."
+          },
+          {
+            "t": "Mamy, zaraz wyślę ci to nagranie.",
+            "b": -2,
+            "r": "Chyba nie powinieneś tak po prostu tego wysyłać, nie?"
+          },
+          {
+            "t": "Kamery tam są, ale nagrania nie mogę ci dać, to się przekazuje policji.",
+            "b": 1,
+            "r": "Przynajmniej coś."
+          }
+        ]
+      },
+      {
+        "t": "Było to koło piątej po południu.",
+        "o": [
+          {
+            "t": "Sprawdzę.",
+            "b": 1,
+            "r": "Dobrze."
+          },
+          {
+            "t": "Przejrzę to i jak ktoś tam będzie, przekażę policji. Tobie dam potwierdzenie, że to się wydarzyło.",
+            "b": 2,
+            "r": "To mi pomoże."
+          },
+          {
+            "t": "O piątej chodzi tam mnóstwo ludzi, tego nie wyśledzę.",
+            "b": -2,
+            "r": "Nawet się nie spojrzałeś."
+          }
+        ]
+      },
+      {
+        "t": "A zrekompensujecie mi to?",
+        "o": [
+          {
+            "t": "Niestety nie, ale następne pranie idzie na mój koszt.",
+            "b": 2,
+            "r": "W porządku."
+          },
+          {
+            "t": "Za rzeczy w pralce nie odpowiadamy, jest tam napisane.",
+            "b": -1,
+            "r": "Technicznie masz rację, po ludzku nie."
+          },
+          {
+            "t": "Powinieneś to był pilnować.",
+            "b": -2,
+            "r": "Dzięki za zrozumienie."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "prepln",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Wyprałem rzeczy, a pranie jest nadal brudne.",
+        "o": [
+          {
+            "t": "Sprawdzę tę pralkę. Ile włożyłeś do środka? Bęben powinien być zapełniony maksymalnie do trzech czwartych.",
+            "b": 2,
+            "r": "No, był pełny po brzegi."
+          },
+          {
+            "t": "Włożyłeś za dużo.",
+            "b": -1,
+            "r": "Nie może pan tego wiedzieć."
+          },
+          {
+            "t": "To se pierz w domu.",
+            "b": -2,
+            "r": "Ładnie."
+          }
+        ]
+      },
+      {
+        "t": "No, był pełny po brzegi.",
+        "o": [
+          {
+            "t": "Właśnie o to chodzi.",
+            "b": 0,
+            "r": "A co teraz?"
+          },
+          {
+            "t": "Wtedy pranie nie ma jak się ruszać i się nie wypierze. Następnym razem zostaw z góry dłoń miejsca.",
+            "b": 2,
+            "r": "Aha, to ma sens."
+          },
+          {
+            "t": "No widzi pan, więc to nie jest wada pralki, tylko błąd obsługi, czyli pana.",
+            "b": -2,
+            "r": "Nie musi mi pan tego tak podawać."
+          }
+        ]
+      },
+      {
+        "t": "Dobra, a wypiorę to jeszcze raz na swój koszt?",
+        "o": [
+          {
+            "t": "Tym razem to idzie na mój koszt.",
+            "b": 2,
+            "r": "To uczciwe, dzięki."
+          },
+          {
+            "t": "Tak, pralka działała prawidłowo.",
+            "b": -1,
+            "r": "Rozumiem, ale to mnie martwi."
+          },
+          {
+            "t": "Spróbuj jeszcze raz i zobaczymy, jak to wyjdzie.",
+            "b": -1,
+            "r": "Co zobaczymy?"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "monterky",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Czy mogę u was wyprać ubranie robocze od oleju?",
+        "o": [
+          {
+            "t": "Wyprać tak. Ale potem nie wkładaj do suszarki.",
+            "b": 2,
+            "r": "Dlaczego nie?"
+          },
+          {
+            "t": "Spokojnie, wszystko.",
+            "b": -2,
+            "r": "Też do suszarki?"
+          },
+          {
+            "t": "Możesz, u nas każdy pierze co chce — ubrania robocze, szmaty, spokojnie nawet dywany, maszyna to wytrzyma.",
+            "b": -1,
+            "r": "To mnie akurat nie uspokaja."
+          }
+        ]
+      },
+      {
+        "t": "Dlaczego nie?",
+        "o": [
+          {
+            "t": "Tak jest zalecane.",
+            "b": 0,
+            "r": "Ale dlaczego?"
+          },
+          {
+            "t": "Resztki oleju w gorącym bębnie mogą się zapalić. Zostaw je do wyschnięcia na powietrzu, tak jest bezpieczniej.",
+            "b": 2,
+            "r": "Nie miałem pojęcia, dzięki."
+          },
+          {
+            "t": "Bo by śmierdziało.",
+            "b": -1,
+            "r": "Nie wydaje mi się to powodem."
+          }
+        ]
+      },
+      {
+        "t": "A nie zanieczyszczę tym pralki innym?",
+        "o": [
+          {
+            "t": "Nie, pralka po tobie wypłucze bęben.",
+            "b": 2,
+            "r": "Dobra, dzięki."
+          },
+          {
+            "t": "Trochę tak, ale nikt tego nie pozna.",
+            "b": -2,
+            "r": "To mi się w ogóle nie podoba."
+          },
+          {
+            "t": "Trudno powiedzieć, nie powiem ci tego tak przez telefon.",
+            "b": -1,
+            "r": "Nie wiesz?"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "koberec",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Zmieści się dywanik z łazienki do pralki?",
+        "o": [
+          {
+            "t": "Materiałowy tak. Gumowy nie, kruszyłby się w bębnie.",
+            "b": 2,
+            "r": "Mój jest materiałowy."
+          },
+          {
+            "t": "Nie zmieści się.",
+            "b": -1,
+            "r": "Nawet mały?"
+          },
+          {
+            "t": "To zależy, jak duży jest, ile waży, ile wchłonie wody i co ma na spodzie.",
+            "b": 0,
+            "r": "To zwykły dywanik."
+          }
+        ]
+      },
+      {
+        "t": "Mój jest materiałowy, metr na pół metra.",
+        "o": [
+          {
+            "t": "To się zmieści.",
+            "b": 1,
+            "r": "Ok."
+          },
+          {
+            "t": "W porządku. Daj go samego, wchłonie dużo wody i z innym praniem pralka by nie dała rady.",
+            "b": 2,
+            "r": "Dobra, wezmę go osobno."
+          },
+          {
+            "t": "Spróbuj i zobaczysz.",
+            "b": -1,
+            "r": "Wolałbym wiedzieć z góry."
+          }
+        ]
+      },
+      {
+        "t": "A wysuszę go u was?",
+        "o": [
+          {
+            "t": "Tak, na niższą temperaturę i dłużej.",
+            "b": 2,
+            "r": "Jasne, dzięki."
+          },
+          {
+            "t": "Suszarka jest do prania, nie do dywanów.",
+            "b": -1,
+            "r": "Ale mówiłeś, że można wyprać."
+          },
+          {
+            "t": "To już twoja sprawa.",
+            "b": -2,
+            "r": "Pytam ciebie, ty tu prowadzisz."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "proud",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "W trakcie prania wypadł prąd i pralka stoi z moim praniem w środku.",
+        "o": [
+          {
+            "t": "Odblokuję ci drzwiczki zdalnie. Poczekaj minutę.",
+            "b": 2,
+            "r": "Dzięki!"
+          },
+          {
+            "t": "To awaria u dystrybutora, nic na to nie poradzę.",
+            "b": -2,
+            "r": "A moje pranie?"
+          },
+          {
+            "t": "Poczekaj, aż się uruchomi — pralka pamięta, gdzie skończyła, i dopierze sama, choć może to chwilę potrwać.",
+            "b": 1,
+            "r": "To poczekam."
+          }
+        ]
+      },
+      {
+        "t": "I dopierze się, czy zaczynam od nowa?",
+        "o": [
+          {
+            "t": "Dopierze.",
+            "b": 1,
+            "r": "No to ok."
+          },
+          {
+            "t": "Nawiąże tam, gdzie skończyła. A gdyby nie, puszczę ci cały cykl od nowa i za darmo.",
+            "b": 2,
+            "r": "To w porządku."
+          },
+          {
+            "t": "Tego ci nie powiem.",
+            "b": -2,
+            "r": "Wy jesteście tą infolinią, nie?"
+          }
+        ]
+      },
+      {
+        "t": "I zdarza się to często?",
+        "o": [
+          {
+            "t": "Nie. W całym roku drugi raz.",
+            "b": 2,
+            "r": "To biorę."
+          },
+          {
+            "t": "Czasem się zdarza, na tej lokalizacji tak już jest.",
+            "b": -1,
+            "r": "To nie brzmi dobrze."
+          },
+          {
+            "t": "Energia to u nas w ogóle problem, w zeszłym roku mieliśmy to chyba pięć razy.",
+            "b": -2,
+            "r": "To wolę tam nie prać."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "sleva",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Przychodzę do was trzy razy w tygodniu. Nie macie czegoś dla stałych klientów?",
+        "o": [
+          {
+            "t": "Mogę założyć ci przedpłacony kredyt ze zniżką. Chcesz?",
+            "b": 2,
+            "r": "To brzmi dobrze."
+          },
+          {
+            "t": "Nie mamy.",
+            "b": -1,
+            "r": "Szkoda."
+          },
+          {
+            "t": "Zniżek nie dajemy, cena jest dla wszystkich taka sama, a gdybyśmy zrobili zniżkę jednemu, od razu chcieliby wszyscy.",
+            "b": -1,
+            "r": "Nie musisz mi tłumaczyć ekonomii."
+          }
+        ]
+      },
+      {
+        "t": "A ile by wynosiła ta zniżka?",
+        "o": [
+          {
+            "t": "Kilka procent.",
+            "b": 0,
+            "r": "Ile dokładnie?"
+          },
+          {
+            "t": "Przy doładowaniu na dziesięć prań dziesiąta część taniej. Kredyt nie przepada, zostaje ci, dopóki go nie wykorzystasz.",
+            "b": 2,
+            "r": "To biorę."
+          },
+          {
+            "t": "To jeszcze wymyślimy.",
+            "b": -1,
+            "r": "Wolałbym usłyszeć konkretną liczbę."
+          }
+        ]
+      },
+      {
+        "t": "A obowiązuje to też na suszarkę?",
+        "o": [
+          {
+            "t": "Obowiązuje, na jedno i drugie.",
+            "b": 2,
+            "r": "Świetnie."
+          },
+          {
+            "t": "Na razie tylko na pranie, suszarki nie dodaliśmy do tego.",
+            "b": 0,
+            "r": "Aha, w porządku."
+          },
+          {
+            "t": "Nie wiem, musiałbym sprawdzić, jak to mamy ustawione w systemie.",
+            "b": -1,
+            "r": "To zadzwoń do mnie, jak będziesz wiedział."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "parkovani",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Czy można zaparkować przy waszym automacie? Przywożę pranie samochodem.",
+        "o": [
+          {
+            "t": "Są tam dwa miejsca tuż przy maszynie, zazwyczaj bywa wolne.",
+            "b": 2,
+            "r": "To dobrze."
+          },
+          {
+            "t": "Nie wiem.",
+            "b": -2,
+            "r": "To przecież wasze miejsce."
+          },
+          {
+            "t": "Nie zajmujemy się parkowaniem, to sprawa miasta i nie mamy do tego nic do powiedzenia.",
+            "b": -1,
+            "r": "Pytam praktycznie, nie urzędniczo."
+          }
+        ]
+      },
+      {
+        "t": "A w sobotę, kiedy obok jest targ?",
+        "o": [
+          {
+            "t": "Wtedy będzie trudniej.",
+            "b": 0,
+            "r": "To kiedy mam przyjechać?"
+          },
+          {
+            "t": "W sobotę przed południem jest pełno. Jakby pan przyjechał po południu, będzie wolne.",
+            "b": 2,
+            "r": "Dzięki, tak zrobię."
+          },
+          {
+            "t": "To przyjedź innym razem.",
+            "b": -1,
+            "r": "Dzięki za radę."
+          }
+        ]
+      },
+      {
+        "t": "A zatrzymać się chociaż na chwilę przy drzwiach?",
+        "o": [
+          {
+            "t": "To się da, na wyładowanie wystarczy.",
+            "b": 2,
+            "r": "Super."
+          },
+          {
+            "t": "Nie wolno tam stać, jest zakaz, chyba pan wie.",
+            "b": -1,
+            "r": "Nawet na minutę?"
+          },
+          {
+            "t": "Nie polecam, chodzą tam strażnicy i wystawiają mandaty.",
+            "b": 1,
+            "r": "Dobrze, że wiem."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "svatba",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Jutro biorę ślub i mam plamę po winie na sukni. Wasz automat da radę?",
+        "o": [
+          {
+            "t": "Sukni ślubnej bym nie dawała do automatu. Spróbuj pralnia chemiczna, to trzeba prać ręcznie.",
+            "b": 2,
+            "r": "Dzięki za szczerość."
+          },
+          {
+            "t": "Jasne, wrzuć to tam, program delikatny poradzi sobie.",
+            "b": -2,
+            "r": "A jak zniszczę, to co?"
+          },
+          {
+            "t": "To zależy od materiału.",
+            "b": 0,
+            "r": "To jedwab."
+          }
+        ]
+      },
+      {
+        "t": "A gdybym tylko przepłukała, żeby było przynajmniej świeże?",
+        "o": [
+          {
+            "t": "Jak musi być dzisiaj, daj program ręczny na dwadzieścia stopni bez wirowania. Ale plama nie zejdzie.",
+            "b": 2,
+            "r": "Dobra, spróbuję ostrożnie."
+          },
+          {
+            "t": "To bez znaczenia, płukanie to płukanie.",
+            "b": -1,
+            "r": "To mi za bardzo nie pomogło."
+          },
+          {
+            "t": "Lepiej nie.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      },
+      {
+        "t": "A suszarkę mogę na to włączyć?",
+        "o": [
+          {
+            "t": "W żadnym wypadku. Jedwab w suszarce się zmiecie i po sukni.",
+            "b": 2,
+            "r": "To na pewno nie. Dzięki!"
+          },
+          {
+            "t": "Chwilę na najniższej temperaturze spokojnie.",
+            "b": -2,
+            "r": "Chcesz mi zniszczyć suknię?"
+          },
+          {
+            "t": "To już twoja sprawa.",
+            "b": -1,
+            "r": "Pytam, bo ty masz się na tym znać."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "nocni",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Pracuję na nocnej zmianie. Mogę przyjść o trzeciej w nocy?",
+        "o": [
+          {
+            "t": "Tak, jest non-stop. Otwiera się kartą albo przez aplikację.",
+            "b": 2,
+            "r": "To dokładnie to, czego potrzebuję."
+          },
+          {
+            "t": "W nocy lepiej tam nie chodzić.",
+            "b": -2,
+            "r": "To po co jest otwarte?"
+          },
+          {
+            "t": "Otwarte jest zawsze, ale w nocy nikogo tam nie ma.",
+            "b": 0,
+            "r": "To jasne, to samoobsługa."
+          }
+        ]
+      },
+      {
+        "t": "A jest tam w nocy widno? Nie chciałbym grzebać po ciemku.",
+        "o": [
+          {
+            "t": "Światło włącza się na ruch i świeci cały cykl.",
+            "b": 2,
+            "r": "Świetnie."
+          },
+          {
+            "t": "Weź latarkę.",
+            "b": -2,
+            "r": "Mówisz poważnie?"
+          },
+          {
+            "t": "Coś tam świeci.",
+            "b": -1,
+            "r": "Brzmi niepewnie."
+          }
+        ]
+      },
+      {
+        "t": "A gdyby się w nocy zablokowało, do kogo dzwonić?",
+        "o": [
+          {
+            "t": "Do mnie. Ten numer odbiera człowiek nawet o trzeciej w nocy.",
+            "b": 2,
+            "r": "To się nazywa profeska. Dzięki."
+          },
+          {
+            "t": "Napisz maila, rano to załatwimy.",
+            "b": -1,
+            "r": "A co mam robić do rana z mokrym praniem?"
+          },
+          {
+            "t": "W nocy nikt nie odbiera, ale maszyna to pamięta i rano dokończy.",
+            "b": -1,
+            "r": "Hm, zobaczymy."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ztrata",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Zostawiłam pranie w pralce, byłam tam godzinę temu.",
+        "o": [
+          {
+            "t": "Sprawdzę w systemie, która to była pralka, i zablokuję ją, dopóki nie przyjedziesz.",
+            "b": 2,
+            "r": "Uratowałeś mnie."
+          },
+          {
+            "t": "Tego tam już chyba nie ma.",
+            "b": -2,
+            "r": "Naprawdę potrafisz mnie uspokoić."
+          },
+          {
+            "t": "Jedź się tam sprawdzić.",
+            "b": 0,
+            "r": "I tak to chciałam zrobić."
+          }
+        ]
+      },
+      {
+        "t": "A co jeśli ktoś to wyjął? Tam były rzeczy dziecięce.",
+        "o": [
+          {
+            "t": "Wyjęte pranie wkładamy do pojemnika obok pralki, nikt z tym nie odchodzi.",
+            "b": 2,
+            "r": "Uff, ulga."
+          },
+          {
+            "t": "Za rzeczy w pralce nie odpowiadamy, to jest w regulaminie.",
+            "b": -2,
+            "r": "Pytam, co z tym zrobicie, a nie czego nie musicie."
+          },
+          {
+            "t": "Zazwyczaj nic się nie gubi.",
+            "b": 0,
+            "r": "Zazwyczaj."
+          }
+        ]
+      },
+      {
+        "t": "A co mi poradzisz, żebym znowu nie zapomniała?",
+        "o": [
+          {
+            "t": "Włącz w aplikacji powiadomienie o końcu prania. Zapiszczy ci.",
+            "b": 2,
+            "r": "Ustawię to od razu."
+          },
+          {
+            "t": "Po prostu o tym pamiętaj.",
+            "b": -2,
+            "r": "Dzięki za radę."
+          },
+          {
+            "t": "Ustaw sobie budzik w telefonie.",
+            "b": 1,
+            "r": "Niezły pomysł."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mince",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Stoję przy automacie i nie mam drobnych. Przyjmuje monety czy kartę?",
+        "o": [
+          {
+            "t": "Kartą i telefonem, monety w ogóle nie są potrzebne.",
+            "b": 2,
+            "r": "Super, to spróbuję."
+          },
+          {
+            "t": "Monety to pewność, jedź wymienić.",
+            "b": -2,
+            "r": "Gdzie, o wpół do dziesiątej wieczorem?"
+          },
+          {
+            "t": "Jedno i drugie, jak wolisz.",
+            "b": 1,
+            "r": "No dobrze."
+          }
+        ]
+      },
+      {
+        "t": "A nie pobierze więcej niż za to, co wypiorę?",
+        "o": [
+          {
+            "t": "Preautoryzowana jest wyższa kwota, a reszta wraca w ciągu dwóch dni. Płacisz tylko za to, co wyprałeś.",
+            "b": 2,
+            "r": "Aha, to w porządku."
+          },
+          {
+            "t": "Zdarza się nam to czasem.",
+            "b": -2,
+            "r": "To wolę nie ryzykować."
+          },
+          {
+            "t": "Pobierze dokładnie cenę programu.",
+            "b": 1,
+            "r": "Dobrze."
+          }
+        ]
+      },
+      {
+        "t": "A gdyby nie przyjęło płatności?",
+        "o": [
+          {
+            "t": "Spróbuj jeszcze raz, a potem zadzwoń, uruchomię maszynę zdalnie.",
+            "b": 2,
+            "r": "To jest serwis."
+          },
+          {
+            "t": "To się nie może zdarzyć.",
+            "b": -1,
+            "r": "Wszystko może się zdarzyć."
+          },
+          {
+            "t": "Terminal czasem wypada, to kwestia sygnału.",
+            "b": -1,
+            "r": "Czyli mam pecha?"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "voda",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Wokół pralki jest kałuża. Cieknie z niej?",
+        "o": [
+          {
+            "t": "Dzięki za zgłoszenie. Wysyłam tam technika i na razie wyłączam pralkę.",
+            "b": 2,
+            "r": "To szybko, dzięki."
+          },
+          {
+            "t": "To pewnie po kimś innym.",
+            "b": -2,
+            "r": "A jak nie?"
+          },
+          {
+            "t": "Czasem zostaje woda po spuście.",
+            "b": 0,
+            "r": "Jest tego dużo."
+          }
+        ]
+      },
+      {
+        "t": "Mogę tej pralki używać, czy mi się wyleje?",
+        "o": [
+          {
+            "t": "Nie używaj jej. Obok jest druga, ta działa.",
+            "b": 2,
+            "r": "To spróbuję tę."
+          },
+          {
+            "t": "Spokojnie pierz, woda nikomu nie zaszkodziła.",
+            "b": -2,
+            "r": "A jak się zwarcie zrobi?"
+          },
+          {
+            "t": "Ja bym zaryzykował.",
+            "b": -2,
+            "r": "Ja nie."
+          }
+        ]
+      },
+      {
+        "t": "A dostanę coś za to, że zgłosiłem?",
+        "o": [
+          {
+            "t": "Pranie za darmo, wyślę kod w wiadomości. Dzięki, bez ciebie dowiedziałbym się od technika.",
+            "b": 2,
+            "r": "To miłe."
+          },
+          {
+            "t": "Tego nikt od nas nie może wymagać.",
+            "b": -2,
+            "r": "Nic nie chciałem, tylko pytam."
+          },
+          {
+            "t": "Nic takiego nie mamy, ale dzięki.",
+            "b": 0,
+            "r": "Niech będzie."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "prasek",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Jaki proszek tam dawacie? Mam wrażliwą skórę i nie znoszę mocnych perfum.",
+        "o": [
+          {
+            "t": "Mamy nieparfumowaną drogerię. Skład wyślę, żeby można było to sprawdzić.",
+            "b": 2,
+            "r": "Jesteście mili, dzięki."
+          },
+          {
+            "t": "Zwykły proszek jak wszędzie.",
+            "b": -1,
+            "r": "To mi nic nie mówi."
+          },
+          {
+            "t": "Naprawdę nie wiem, to załatwia kolega.",
+            "b": -2,
+            "r": "To połączcie mnie z nim."
+          }
+        ]
+      },
+      {
+        "t": "A mogę przynieść własny?",
+        "o": [
+          {
+            "t": "Można, jest przegródka. Dawkuj połowę, pralki biorą mniej niż domowa pralka.",
+            "b": 2,
+            "r": "Super, tak zrobię."
+          },
+          {
+            "t": "To nie działa, system dawkuje sam.",
+            "b": -1,
+            "r": "Szkoda."
+          },
+          {
+            "t": "Własne proszki zabraniamy, niszczy nam to pralki.",
+            "b": -2,
+            "r": "To ja znowu niszczę wasze pralki."
+          }
+        ]
+      },
+      {
+        "t": "A płucze się to między klientami, czy piorę w cudzej pianie?",
+        "o": [
+          {
+            "t": "Po każdym cyklu jest płukanie czystą wodą, a raz w tygodniu dezynfekcja bębna.",
+            "b": 2,
+            "r": "To chciałam usłyszeć."
+          },
+          {
+            "t": "Woda to woda.",
+            "b": -2,
+            "r": "To dość obrzydliwa odpowiedź."
+          },
+          {
+            "t": "Bęben się płucze, to jest w porządku.",
+            "b": 1,
+            "r": "Dobrze."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "kolo",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Wróciłem z przejażdżki, koszulka i kurtka ubłocone. Można to u was wyprać?",
+        "o": [
+          {
+            "t": "Można, tylko najpierw otrząśnij gruby błoto na zewnątrz — inaczej pójdzie do filtra.",
+            "b": 2,
+            "r": "To zrobię."
+          },
+          {
+            "t": "Ubłocone rzeczy nie należą do automatu.",
+            "b": -2,
+            "r": "A gdzie należą?"
+          },
+          {
+            "t": "Wrzuć tam, nie ma znaczenia.",
+            "b": -1,
+            "r": "Nie chcę zanieczyścić maszyny."
+          }
+        ]
+      },
+      {
+        "t": "A membranowej kurtki to nie zniszczy? Kosztowała pięć tysięcy.",
+        "o": [
+          {
+            "t": "Ustaw trzydzieści stopni, bez płynu do płukania i niskie wirowanie. Membrana to wytrzyma.",
+            "b": 2,
+            "r": "Dzięki, tego potrzebowałem."
+          },
+          {
+            "t": "Membrany nie wkłada się do automatu.",
+            "b": -1,
+            "r": "To wypiorę w domu."
+          },
+          {
+            "t": "Tego ci nie powiem, to zależy od producenta.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      },
+      {
+        "t": "A plecak? Jest po nim cały samochód.",
+        "o": [
+          {
+            "t": "Plecak wyjmij ze stelaża, zapnij wszystkie zamki i ustaw na delikatne. Suszarki nie, bo rozpuściłoby zamki.",
+            "b": 2,
+            "r": "Jasne, dzięki za poradę."
+          },
+          {
+            "t": "Plecaków nie pierz, zniszczą się.",
+            "b": 0,
+            "r": "Czyli mam pecha."
+          },
+          {
+            "t": "Mnie to obojętne, zapłacone masz.",
+            "b": -2,
+            "r": "To życzę miłego dnia."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "zdrazeni",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Ostatnio płaciłem mniej. Podnieśliście ceny?",
+        "o": [
+          {
+            "t": "Podnieśliśmy, o dziesięć złotych za cykl. Poszła w górę woda i prąd, dłużej nie mogliśmy tego utrzymać.",
+            "b": 2,
+            "r": "Przynajmniej mówicie wprost."
+          },
+          {
+            "t": "Ceny są wciąż takie same.",
+            "b": -2,
+            "r": "Mam paragon, na którym jest inaczej."
+          },
+          {
+            "t": "O tym decyduje kierownictwo.",
+            "b": -1,
+            "r": "Wy jesteście kierownictwem, nie?"
+          }
+        ]
+      },
+      {
+        "t": "A nie mogliście dać znać wcześniej?",
+        "o": [
+          {
+            "t": "Ma pan rację, powinno to wisieć na drzwiach tydzień wcześniej. Następnym razem tak będzie.",
+            "b": 2,
+            "r": "No dobrze."
+          },
+          {
+            "t": "Ogłoszenie tam wisiało.",
+            "b": -1,
+            "r": "Nie zauważyłem."
+          },
+          {
+            "t": "Nikt tego nie robi.",
+            "b": -2,
+            "r": "Przyzwoici ludzie to robią."
+          }
+        ]
+      },
+      {
+        "t": "Nie macie czegoś dla tych, co przychodzą regularnie?",
+        "o": [
+          {
+            "t": "Kredyt na dziesięć prań, tam cena jest wciąż ta stara. Mogę panu go założyć teraz.",
+            "b": 2,
+            "r": "To biorę."
+          },
+          {
+            "t": "Nie mamy i mieć nie będziemy.",
+            "b": -2,
+            "r": "Następnym razem spróbuję konkurencji."
+          },
+          {
+            "t": "Coś szykujemy.",
+            "b": 0,
+            "r": "Dajcie znać."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "deti",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Przy pani pralce bawią się dzieci, wchodzą do bębna. Wie pani o tym?",
+        "o": [
+          {
+            "t": "Nie wiedziałam, dzięki. Zablokuję drzwiczki poza cyklem i pojadę się tam przyjrzeć.",
+            "b": 2,
+            "r": "To dobrze."
+          },
+          {
+            "t": "Za cudze dzieci nie odpowiadamy.",
+            "b": -2,
+            "r": "Chodzi o to, żeby nikomu się nic nie stało."
+          },
+          {
+            "t": "To mają pilnować rodzice.",
+            "b": -1,
+            "r": "Oczywiście, ale maszyna jest pani."
+          }
+        ]
+      },
+      {
+        "t": "A da się te drzwiczki otworzyć od środka?",
+        "o": [
+          {
+            "t": "Da się. Blokada działa tylko podczas pracy, a przy awarii prądu sama się odblokuje.",
+            "b": 2,
+            "r": "To chciałam usłyszeć."
+          },
+          {
+            "t": "Tego nigdy nie sprawdzałam.",
+            "b": -1,
+            "r": "To proszę sprawdzić."
+          },
+          {
+            "t": "Od środka nie, ale tam się nikt nie zmieści.",
+            "b": -2,
+            "r": "Ośmioletni chłopak się zmieści."
+          }
+        ]
+      },
+      {
+        "t": "Może warto tam powiesić tabliczkę, żeby rodzice też to widzieli?",
+        "o": [
+          {
+            "t": "Dobry pomysł, zamówię ją jeszcze dziś. Dzięki za impuls.",
+            "b": 2,
+            "r": "Nie ma za co."
+          },
+          {
+            "t": "Tabliczek nikt nie czyta.",
+            "b": -1,
+            "r": "Niektóre się czytają."
+          },
+          {
+            "t": "Mamy tam dość tabliczek.",
+            "b": -2,
+            "r": "To do widzenia."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "klub",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Prowadzę klub piłkarski, dwadzieścia koszulek co tydzień. Czy można to u was załatwić?",
+        "o": [
+          {
+            "t": "Można. Zrobię wam kredyt klubowy i pokażę, jak to upakować do dwóch pralek.",
+            "b": 2,
+            "r": "To by nam bardzo pomogło."
+          },
+          {
+            "t": "Przyjdźcie i płaćcie jak każdy.",
+            "b": -1,
+            "r": "Pytam, czy można to załatwić."
+          },
+          {
+            "t": "Dużych zleceń nie robimy.",
+            "b": -2,
+            "r": "Dwadzieścia koszulek to nie jest duże zlecenie."
+          }
+        ]
+      },
+      {
+        "t": "A kiedy macie najmniej ludzi? Nie chcę blokować całej pralni.",
+        "o": [
+          {
+            "t": "We wtorek i w środę przed południem nie ma tam nikogo. Weźcie to wtedy.",
+            "b": 2,
+            "r": "Zapiszę sobie."
+          },
+          {
+            "t": "Ciągle jest pełno.",
+            "b": -1,
+            "r": "To mi nie pomogło."
+          },
+          {
+            "t": "Tego nie da się powiedzieć.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      },
+      {
+        "t": "A dostanę na to fakturę dla klubu?",
+        "o": [
+          {
+            "t": "Miesięczną, ze wszystkim, co klub wypierze. Wyślę mailem.",
+            "b": 2,
+            "r": "Super, dogadane."
+          },
+          {
+            "t": "Faktur nie robimy.",
+            "b": -2,
+            "r": "To klub mi nie zwróci."
+          },
+          {
+            "t": "To musicie załatwić przez księgowość.",
+            "b": -1,
+            "r": "Dzwonię do was, nie do księgowości."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "qr",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Zeskanowałam kod QR telefonem i nic się nie stało. Płatność nie przeszła.",
+        "o": [
+          {
+            "t": "Widzę to w systemie — płatność się zatrzymała w pół drogi i nic się nie pobrało. Uruchomię pralkę ręcznie.",
+            "b": 2,
+            "r": "To szybko, dziękuję."
+          },
+          {
+            "t": "To będzie przez pani bank.",
+            "b": -2,
+            "r": "Próbowałam dwa razy."
+          },
+          {
+            "t": "Proszę spróbować jeszcze raz.",
+            "b": -1,
+            "r": "A jak się pobierze dwa razy?"
+          }
+        ]
+      },
+      {
+        "t": "A nie pobierze mi się to na koniec dwa razy?",
+        "o": [
+          {
+            "t": "Jak przejdzie dwa razy, jedną płatność pani zwrócę i sama się odezwę.",
+            "b": 2,
+            "r": "Dobrze, liczę na panią."
+          },
+          {
+            "t": "To się nie zdarza.",
+            "b": -1,
+            "r": "Mi się właśnie zdarzyło."
+          },
+          {
+            "t": "To musi pani załatwić z bankiem.",
+            "b": -2,
+            "r": "Ale to jest pani bramka płatnicza."
+          }
+        ]
+      },
+      {
+        "t": "A nie macie tego lepiej na kartę? Tym się lepiej znam.",
+        "o": [
+          {
+            "t": "Terminal jest bezpośrednio na pralce, przykłada pani kartę i jedzie. QR jest tylko dla tych, co nie chcą wyciągać portfela.",
+            "b": 2,
+            "r": "To następnym razem kartą."
+          },
+          {
+            "t": "QR jest nowoczesne, przyzwyczajajcie się.",
+            "b": -2,
+            "r": "Ja się przyzwyczaję do konkurencji."
+          },
+          {
+            "t": "Jedno i drugie działa tak samo.",
+            "b": 0,
+            "r": "To wyraźnie nie."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mokre2",
+    "rod": "z",
+    "nalada": 18,
+    "kroky": [
+      {
+        "t": "Dzień dobry, wyjęłam pranie z suszarki i jest wciąż całkiem mokre. Zapłaciłam za dwa suszenia!",
+        "o": [
+          {
+            "t": "To nasza wina, zwracam za oba cykle. Proszę spróbować suszarkę numer dwa, ta idzie zaraz z eksploatacji.",
+            "b": 2,
+            "r": "No patrz, w końcu ktoś rozsądny."
+          },
+          {
+            "t": "Pewnie pani ją przepełniła, to najczęstsza przyczyna.",
+            "b": -2,
+            "r": "Czyli sama jestem sobie winna?"
+          },
+          {
+            "t": "Proszę spróbować jeszcze raz, może dokończy.",
+            "b": -1,
+            "r": "Za trzecie pieniądze? Chyba nie."
+          }
+        ]
+      },
+      {
+        "t": "A co mam teraz zrobić? Mam torbę mokrego prania, a za godzinę wyjeżdżam.",
+        "o": [
+          {
+            "t": "Włączę pani dwójkę zdalnie za darmo, ruszy za minutę. Za pół godziny pranie jest suche.",
+            "b": 2,
+            "r": "Dzięki, to ratuje mi dzień."
+          },
+          {
+            "t": "To proszę zabrać do domu, w domu wyschnie.",
+            "b": -2,
+            "r": "Mokre pranie w aucie, świetnie."
+          },
+          {
+            "t": "Może pani poczekać na technika, dotrze po południu.",
+            "b": -1,
+            "r": "Po południu już mnie nie będzie."
+          }
+        ]
+      },
+      {
+        "t": "A te pieniądze za pierwsze suszenie?",
+        "o": [
+          {
+            "t": "Wysyłam z powrotem na konto, będą w ciągu dwóch dni. Potwierdzenie przyjdzie SMS-em.",
+            "b": 2,
+            "r": "To biorę, dzięki."
+          },
+          {
+            "t": "Niestety się nie zwraca, urządzenie się uruchomiło.",
+            "b": -2,
+            "r": "Uruchomiło, ale nie wysuszyło!"
+          },
+          {
+            "t": "Proszę napisać o to mailem, ktoś się na to spojrzy.",
+            "b": -1,
+            "r": "Kolejna biurokracja."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "barva-2",
+    "rod": "m",
+    "nalada": 10,
+    "kroky": [
+      {
+        "t": "Ktoś zostawił w bębnie czerwoną koszulkę i cały mój biały pranie się zabarwiło. Koszule do pracy, wszystko!",
+        "o": [
+          {
+            "t": "To nieprzyjemne i przepraszam. Policz mi, co się zniszczyło, a ja to wypłacę.",
+            "b": 2,
+            "r": "Dobra. Przynajmniej coś."
+          },
+          {
+            "t": "Za zawartość bębna nie odpowiadamy, to na tobie żeby to sprawdzić.",
+            "b": -2,
+            "r": "Jesteś niesamowity."
+          },
+          {
+            "t": "To się zdarza, spróbuj wyprać z odbarwiaczem.",
+            "b": -1,
+            "r": "Odbarwiacz na koszule do pracy?"
+          }
+        ]
+      },
+      {
+        "t": "A jak załatwisz, żeby się to nie powtórzyło?",
+        "o": [
+          {
+            "t": "Na drzwiachdam tabliczkę, a obsługa będzie sprawdzać bębny przy każdym sprzątaniu. Do tej pory tego nie robiliśmy, to na nas.",
+            "b": 2,
+            "r": "To brzmi jak ktoś, kto to traktuje poważnie."
+          },
+          {
+            "t": "Nijak, ludzie są nieporządni.",
+            "b": -2,
+            "r": "To następnym razem wypiorę gdzie indziej."
+          },
+          {
+            "t": "Na pewno na to zwrócimy uwagę.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      },
+      {
+        "t": "Ile mi więc dasz i kiedy?",
+        "o": [
+          {
+            "t": "Wyślij zdjęcia i paragon, w ciągu trzech dni wysyłam pieniądze. Jak się nie dogadamy, powiesz, co uważasz za uczciwe.",
+            "b": 2,
+            "r": "Ok, wysyłam zdjęcia."
+          },
+          {
+            "t": "Maksymalnie zwrócimy ci za to pranie.",
+            "b": -2,
+            "r": "Tym koszul mi nie zastąpicie."
+          },
+          {
+            "t": "To zależy, zobaczymy.",
+            "b": -1,
+            "r": "Zobaczymy. Jasne."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "prasek-2",
+    "rod": "z",
+    "nalada": 30,
+    "kroky": [
+      {
+        "t": "Dzień dobry, ten automat z proszkiem jest pusty, a ja stoję tu z pełną torbą.",
+        "o": [
+          {
+            "t": "Przykro mi. Dozownik w pralce numer dwa jest pełny, puszczę pani pranie z proszkiem za darmo.",
+            "b": 2,
+            "r": "To miłe, dziękuję."
+          },
+          {
+            "t": "Proszek można nosić własny, nikt pani nie broni.",
+            "b": -2,
+            "r": "To po co ten automat tu macie?"
+          },
+          {
+            "t": "Uzupełniamy go raz w tygodniu, proszę przyjść w czwartek.",
+            "b": -1,
+            "r": "W czwartek? To w domu już będę miała pleśń."
+          }
+        ]
+      },
+      {
+        "t": "A gdzie jest najbliższy sklep?",
+        "o": [
+          {
+            "t": "Dwie minuty obok jest sklep nocny, mają proszek za dwadzieścia. Różnicę zwrócę w kredycie.",
+            "b": 2,
+            "r": "To dam radę."
+          },
+          {
+            "t": "Naprawdę nie wiem, nie jestem nawigacją.",
+            "b": -2,
+            "r": "Ładnie mi pan pomógł."
+          },
+          {
+            "t": "Gdzieś w centrum na pewno coś będzie.",
+            "b": -1,
+            "r": "Gdzieś. Super."
+          }
+        ]
+      },
+      {
+        "t": "I uzupełnicie to, czy mam nosić proszek na zawsze?",
+        "o": [
+          {
+            "t": "Uzupełnię to dziś wieczorem osobiście i będę pilnować co tydzień. Przepraszam.",
+            "b": 2,
+            "r": "Dobra, dam jeszcze jedną szansę."
+          },
+          {
+            "t": "Uzupełni się, jak się uzupełni.",
+            "b": -2,
+            "r": "Czyli nigdy."
+          },
+          {
+            "t": "Napiszę do kolegi.",
+            "b": 0,
+            "r": "No mam nadzieję."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "zamceno",
+    "rod": "m",
+    "nalada": 12,
+    "kroky": [
+      {
+        "t": "Stoję przed waszą pralnią, na drzwiach macie non-stop, a jest zamknięte. Jechałem tu dwadzieścia minut.",
+        "o": [
+          {
+            "t": "Zamek się zaciął, otworzę ci go zdalnie. Poczekaj dziesięć sekund.",
+            "b": 2,
+            "r": "To jest obsługa, dzięki."
+          },
+          {
+            "t": "To niemożliwe, non-stop to non-stop.",
+            "b": -2,
+            "r": "Chcesz zdjęcie?"
+          },
+          {
+            "t": "Pewnie nie działa ci karta, spróbuj ją lepiej przyłożyć.",
+            "b": -1,
+            "r": "Próbowałem pięć razy."
+          }
+        ]
+      },
+      {
+        "t": "Już jestem w środku. Ale następnym razem jadę raczej gdzie indziej, jak to tak.",
+        "o": [
+          {
+            "t": "Rozumiem. Dam ci następnym razem pranie za darmo, żeby ta droga nie poszła na marne.",
+            "b": 2,
+            "r": "No dobra, biorę."
+          },
+          {
+            "t": "Jak chcesz, konkurencja jest kawałek dalej.",
+            "b": -2,
+            "r": "Ty to jesteś kupiec."
+          },
+          {
+            "t": "Mam nadzieję, że się nie powtórzy.",
+            "b": 0,
+            "r": "Mam nadzieję."
+          }
+        ]
+      },
+      {
+        "t": "A co z tym zamkiem, naprawicie go?",
+        "o": [
+          {
+            "t": "Technik jedzie rano i wymieni go. Do tego czasu mam to pod kontrolą z dyspozytorni.",
+            "b": 2,
+            "r": "Dobrze, dzięki za szczerość."
+          },
+          {
+            "t": "Zamek jest w porządku, to był wyjątek.",
+            "b": -2,
+            "r": "Wyjątek, który mnie kosztował wieczór."
+          },
+          {
+            "t": "Zgłoszę to dalej.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "karta-2",
+    "rod": "z",
+    "nalada": 26,
+    "kroky": [
+      {
+        "t": "Terminal trzy razy odrzucił moją kartę, a potem dostałam trzy powiadomienia z banku, że płaciłam. Co to jest?",
+        "o": [
+          {
+            "t": "To są przedautoryzacje, pieniądze wrócą same w ciągu trzech dni. Pranie puszczę od razu.",
+            "b": 2,
+            "r": "No to ulga."
+          },
+          {
+            "t": "To ma pani problem z bankiem, nie z nami.",
+            "b": -2,
+            "r": "Trzy płatności u was, a problem mam ja?"
+          },
+          {
+            "t": "Proszę spróbować inną kartę.",
+            "b": -1,
+            "r": "Innej nie mam."
+          }
+        ]
+      },
+      {
+        "t": "A jak mam mieć pewność, że rzeczywiście mi to wróci?",
+        "o": [
+          {
+            "t": "Wysyłam potwierdzenie anulowania wszystkich trzech płatności na mail. Gdyby w ciągu trzech dni nie wróciły, proszę dzwonić bezpośrednio do mnie.",
+            "b": 2,
+            "r": "Dobrze, to mi wystarczy."
+          },
+          {
+            "t": "Musi nam pani zaufać.",
+            "b": -2,
+            "r": "Zaufać. Po tym wszystkim."
+          },
+          {
+            "t": "Zazwyczaj wraca.",
+            "b": 0,
+            "r": "Zazwyczaj."
+          }
+        ]
+      },
+      {
+        "t": "A ten terminal naprawicie?",
+        "o": [
+          {
+            "t": "Wymieniamy go jutro. Dzisiaj tam działa płatność przez kod QR, ta działa niezawodnie.",
+            "b": 2,
+            "r": "Ok, dzięki za jasną odpowiedź."
+          },
+          {
+            "t": "Terminal jest sprawny.",
+            "b": -2,
+            "r": "Jasne, to ja sobie wymyślam."
+          },
+          {
+            "t": "Przyjrzymy się temu.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "proud-2",
+    "rod": "m",
+    "nalada": 20,
+    "kroky": [
+      {
+        "t": "W trakcie prania wypadł prąd i pralka jest zablokowana z moim praniem w środku.",
+        "o": [
+          {
+            "t": "Po powrocie prądu program dokończy się od miejsca, w którym się zatrzymał. Drzwi odblokuję zdalnie, gdybyś potrzebował wcześniej.",
+            "b": 2,
+            "r": "Aha, to dobrze wiedzieć."
+          },
+          {
+            "t": "Za awarie prądu nie odpowiadamy.",
+            "b": -2,
+            "r": "To mnie uspokoiło."
+          },
+          {
+            "t": "Poczekaj, samo się włączy.",
+            "b": -1,
+            "r": "Jak długo mam czekać?"
+          }
+        ]
+      },
+      {
+        "t": "I będę musiał płacić za pranie ponownie?",
+        "o": [
+          {
+            "t": "Nie. Cykl kontynuuje na pierwotnej płatności, a gdyby nie, puszczę ci nowy za darmo.",
+            "b": 2,
+            "r": "Uczciwie."
+          },
+          {
+            "t": "Oczywiście, pralka się włączyła.",
+            "b": -2,
+            "r": "A dojechała do połowy!"
+          },
+          {
+            "t": "To rozwiążemy później.",
+            "b": -1,
+            "r": "Później. Ciągle później."
+          }
+        ]
+      },
+      {
+        "t": "Nie macie tam zasilania awaryjnego? W zamrażarce obok też wypadło.",
+        "o": [
+          {
+            "t": "Mamy je tylko na zamki i oświetlenie, żebyś zawsze mógł wyjść i dostać się do prania. Na pralki nie, to byłby inny kaliber.",
+            "b": 2,
+            "r": "Rozumiem, to ma sens."
+          },
+          {
+            "t": "Takimi rzeczami się nie zajmujemy.",
+            "b": -2,
+            "r": "Wy się niczym nie zajmujecie."
+          },
+          {
+            "t": "Coś tam chyba jest.",
+            "b": -1,
+            "r": "Chyba."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "penezenka",
+    "rod": "z",
+    "nalada": 16,
+    "kroky": [
+      {
+        "t": "Zostawiłam w pralni portfel i wróciłam po godzinie, a go nie było.",
+        "o": [
+          {
+            "t": "Przykro mi to słyszeć. Mamy tam kamerę, przejrzę nagranie teraz i odezwę się do godziny.",
+            "b": 2,
+            "r": "Dzięki, przynajmniej coś."
+          },
+          {
+            "t": "Nie odpowiadamy za pozostawione rzeczy, jest to na tabliczce.",
+            "b": -2,
+            "r": "Wiem, co jest na tabliczce. Pytam o pomoc."
+          },
+          {
+            "t": "Zapytaj innych klientów.",
+            "b": -1,
+            "r": "Których, już ich nie ma."
+          }
+        ]
+      },
+      {
+        "t": "A jak go zobaczysz na kamerze, co z tym zrobisz?",
+        "o": [
+          {
+            "t": "Nagranie przekażę policji, to jedyna słuszna droga. Złóż zawiadomienie, a ja im je wyślę od razu.",
+            "b": 2,
+            "r": "Dobrze, zrobię to."
+          },
+          {
+            "t": "Nic, nie będziemy się w to mieszać.",
+            "b": -2,
+            "r": "Czyli nic."
+          },
+          {
+            "t": "Zobaczymy, co tam będzie.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      },
+      {
+        "t": "Mogę zobaczyć to nagranie?",
+        "o": [
+          {
+            "t": "Sam nie mogę ci go pokazać, są tam też inne osoby. Policji wydam je natychmiast i możesz przy tym być.",
+            "b": 2,
+            "r": "Rozumiem, dzięki za szczerość."
+          },
+          {
+            "t": "Kamery i tak nie działają.",
+            "b": -2,
+            "r": "To po co tam wiszą?"
+          },
+          {
+            "t": "To chyba nie będzie możliwe.",
+            "b": -1,
+            "r": "Dlaczego nie?"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mastnota",
+    "rod": "m",
+    "nalada": 14,
+    "kroky": [
+      {
+        "t": "W bębnie był tłuszcz po kimś i mam zniszczone dwie bluzy. Podobno ktoś prał robocze ubrania.",
+        "o": [
+          {
+            "t": "Przepraszam. Zwrócę pieniądze za bluzy, a pralkę ściągam do czyszczenia jeszcze dziś.",
+            "b": 2,
+            "r": "Dobrze, to przyjmuję."
+          },
+          {
+            "t": "Powinien pan sprawdzić bęben.",
+            "b": -2,
+            "r": "Mam kontrolować po was?"
+          },
+          {
+            "t": "Spróbuj wyprać jeszcze raz.",
+            "b": -1,
+            "r": "Już dwa razy próbowałem."
+          }
+        ]
+      },
+      {
+        "t": "A dlaczego ktoś pierze robocze ubrania w zwykłej pralce?",
+        "o": [
+          {
+            "t": "Bo do tej pory nikt tego nie pilnował. Dam do pralni jedną pralkę oznaczoną do prania roboczego, a na pozostałych to zakazuję.",
+            "b": 2,
+            "r": "To rozsądne rozwiązanie."
+          },
+          {
+            "t": "Bo ludzie to świnie.",
+            "b": -1,
+            "r": "Ładnie powiedziałeś o swoich klientach."
+          },
+          {
+            "t": "Tego się nie da kontrolować.",
+            "b": -2,
+            "r": "A to nie jest wasz biznes?"
+          }
+        ]
+      },
+      {
+        "t": "Jak długo ta pralka będzie nieczynna?",
+        "o": [
+          {
+            "t": "Do wieczora. Wyczyści ją profesjonalista, nie ja ze ścierką. Napiszę, jak będzie działać.",
+            "b": 2,
+            "r": "Ok, dzięki."
+          },
+          {
+            "t": "Nie wiem.",
+            "b": -2,
+            "r": "Nic nie wiecie."
+          },
+          {
+            "t": "Kilka dni.",
+            "b": 0,
+            "r": "Hm."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "voda-2",
+    "rod": "z",
+    "nalada": 22,
+    "kroky": [
+      {
+        "t": "U was leje się woda po podłodze, o mało nie upadłam. Z małym dzieckiem!",
+        "o": [
+          {
+            "t": "Traktuję to poważnie. Pralnię natychmiast zamykam, dopóki nie posprzątają — dzięki, że zadzwoniłaś.",
+            "b": 2,
+            "r": "Przynajmniej ktoś traktuje to poważnie."
+          },
+          {
+            "t": "Trochę wody po praniu jest normalne.",
+            "b": -2,
+            "r": "Normalne jest, żeby sobie ktoś rozbił głowę?"
+          },
+          {
+            "t": "Uważaj i omijaj to miejsce.",
+            "b": -2,
+            "r": "Naprawdę tak mi radzisz?"
+          }
+        ]
+      },
+      {
+        "t": "A skąd to się leje?",
+        "o": [
+          {
+            "t": "Pewnie pękł wąż przy trójce. Technik będzie w ciągu godziny, a do tego czasu pralka jest wyłączona.",
+            "b": 2,
+            "r": "Dobrze, dzięki."
+          },
+          {
+            "t": "Tego nie da się stwierdzić zdalnie.",
+            "b": -1,
+            "r": "To wyślijcie kogoś."
+          },
+          {
+            "t": "Pewnie ktoś to rozlał.",
+            "b": -1,
+            "r": "Dziesięć litrów?"
+          }
+        ]
+      },
+      {
+        "t": "Mam tam rozłożone pranie, co z nim?",
+        "o": [
+          {
+            "t": "Skończy się normalnie, trójka z tym nie ma związku. Pranie masz u mnie następnym razem za darmo za to opóźnienie.",
+            "b": 2,
+            "r": "Dzięki, to uczciwe."
+          },
+          {
+            "t": "Przyjdź po nie jutro.",
+            "b": -2,
+            "r": "Jutro pracuję."
+          },
+          {
+            "t": "To musisz sama sobie poradzić.",
+            "b": -2,
+            "r": "Dzięki za nic."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "drahe-2",
+    "rod": "m",
+    "nalada": 34,
+    "kroky": [
+      {
+        "t": "Podnieśliście cenę o dwadzieścia, a obok jest taniej. Po co mam przychodzić do was?",
+        "o": [
+          {
+            "t": "Bo u nas wypierzesz nawet o północy, a pralka jest zawsze czysta. Jak nie, chcę o tym wiedzieć od razu.",
+            "b": 2,
+            "r": "Brzmi sensownie."
+          },
+          {
+            "t": "To idź obok.",
+            "b": -2,
+            "r": "Ładna obsługa klienta."
+          },
+          {
+            "t": "Podrożała energia, nic na to nie poradzimy.",
+            "b": 0,
+            "r": "To słyszę wszędzie."
+          }
+        ]
+      },
+      {
+        "t": "A jakaś zniżka dla stałych klientów?",
+        "o": [
+          {
+            "t": "Każde dziesiąte pranie za darmo, wystarczy podać numer, pod którym cię prowadzę. Zapisuję cię teraz.",
+            "b": 2,
+            "r": "To biorę."
+          },
+          {
+            "t": "Nie mamy żadnych zniżek.",
+            "b": -1,
+            "r": "Szkoda."
+          },
+          {
+            "t": "Zapytaj w bazie.",
+            "b": -1,
+            "r": "Przecież dzwonię na infolinię."
+          }
+        ]
+      },
+      {
+        "t": "A nie podniesiecie znowu za miesiąc?",
+        "o": [
+          {
+            "t": "Do końca roku nie, to ci mówię od razu. Gdyby tak, napiszę to na drzwiach dwa tygodnie wcześniej.",
+            "b": 2,
+            "r": "Uczciwie, dzięki."
+          },
+          {
+            "t": "Tego nikt ci nie obiecuje.",
+            "b": 0,
+            "r": "Hm."
+          },
+          {
+            "t": "Spokojnie, rynek to rynek.",
+            "b": -2,
+            "r": "To na was nie liczcie."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "faktura-2",
+    "rod": "z",
+    "nalada": 38,
+    "kroky": [
+      {
+        "t": "Potrzebuję faktury na firmę, pierzemy u was pranie z pensjonatu. Z automatu wylatuje tylko paragon.",
+        "o": [
+          {
+            "t": "Wystawię fakturę. Proszę przesłać NIP i za godzinę będzie w mailu.",
+            "b": 2,
+            "r": "Świetnie, wysyłam."
+          },
+          {
+            "t": "My nie robimy faktur, jesteśmy samoobsługą.",
+            "b": -2,
+            "r": "Czyli firma nie może u was prać?"
+          },
+          {
+            "t": "Spróbuj napisać na maila, może ktoś odpisze.",
+            "b": -1,
+            "r": "Może?"
+          }
+        ]
+      },
+      {
+        "t": "A da się to regularnie co miesiąc, żeby nie załatwiać przy każdym praniu?",
+        "o": [
+          {
+            "t": "Tak. Założę ci firmowe konto, prania się kumulują i raz w miesiącu przychodzi faktura zbiorcza.",
+            "b": 2,
+            "r": "To nam bardzo pomoże."
+          },
+          {
+            "t": "To jest zbyt skomplikowane.",
+            "b": -2,
+            "r": "Dla ciebie czy dla mnie?"
+          },
+          {
+            "t": "Teoretycznie chyba tak.",
+            "b": 0,
+            "r": "Teoretycznie."
+          }
+        ]
+      },
+      {
+        "t": "A dostaniemy jakąś cenę na tę ilość?",
+        "o": [
+          {
+            "t": "Powyżej pięćdziesięciu prań miesięcznie piętnaście procent w dół. Wpiszę to do umowy, żeby to nie obowiązywało tylko do następnego razu.",
+            "b": 2,
+            "r": "Z tym idę do właściciela."
+          },
+          {
+            "t": "Ceny mamy dla wszystkich takie same.",
+            "b": 0,
+            "r": "Hm."
+          },
+          {
+            "t": "To musiałbym załatwić z kimś innym.",
+            "b": -1,
+            "r": "To go znajdź."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "svatky",
+    "rod": "m",
+    "nalada": 42,
+    "kroky": [
+      {
+        "t": "Czy macie otwarte w Wigilię? Na stronie są sprzeczne informacje.",
+        "o": [
+          {
+            "t": "Otwarte non-stop, także w Wigilię. Poprawię stronę jeszcze dziś, dzięki za zwrócenie uwagi.",
+            "b": 2,
+            "r": "Dzięki, to jasna odpowiedź."
+          },
+          {
+            "t": "Nie wiem, proszę zadzwonić po świętach.",
+            "b": -2,
+            "r": "Po świętach to mi się nie przyda."
+          },
+          {
+            "t": "Chyba tak.",
+            "b": -1,
+            "r": "Chyba to za mało."
+          }
+        ]
+      },
+      {
+        "t": "A będzie tam ktoś, gdyby pralka się zablokowała?",
+        "o": [
+          {
+            "t": "Na infolinii jestem ja, także w święta. Odblokuję pralkę zdalnie, a technik jest na telefonie.",
+            "b": 2,
+            "r": "Dobrze wiedzieć."
+          },
+          {
+            "t": "W święta nikt nie jeździ.",
+            "b": -1,
+            "r": "Czyli ryzyko biorę na siebie."
+          },
+          {
+            "t": "Zobaczymy.",
+            "b": -2,
+            "r": "Wy jesteście pewni jak amen w pacierzu."
+          }
+        ]
+      },
+      {
+        "t": "A ceny w święta nie idą w górę?",
+        "o": [
+          {
+            "t": "Nie, cena jest taka sama każdego dnia w roku. Żadnych świątecznych dopłat u nas nie ma.",
+            "b": 2,
+            "r": "Świetnie."
+          },
+          {
+            "t": "Na razie nie.",
+            "b": 0,
+            "r": "Na razie."
+          },
+          {
+            "t": "W święta jest dopłata.",
+            "b": -2,
+            "r": "To wypiorę w domu."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "svetr-2",
+    "rod": "z",
+    "nalada": 15,
+    "kroky": [
+      {
+        "t": "Wasza suszarka skurczyła mi sweter z wełny merino. Kosztował dwa tysiące!",
+        "o": [
+          {
+            "t": "Przepraszam. Prześlij zdjęcie i paragon, załatwiam to jako szkodę i zwrócę pieniądze.",
+            "b": 2,
+            "r": "Tego się nie spodziewałam, dziękuję."
+          },
+          {
+            "t": "Wełny się nie daje do suszarki, to wie każdy.",
+            "b": -2,
+            "r": "To tam napiszcie, mądralo!"
+          },
+          {
+            "t": "To będzie chyba przez ten sweter.",
+            "b": -1,
+            "r": "Sweter był w porządku, zanim go dałam do was."
+          }
+        ]
+      },
+      {
+        "t": "A dlaczego na tym programie nie jest napisane, że zniszczy wełnę?",
+        "o": [
+          {
+            "t": "Bo tego tam brakuje, i to błąd po naszej stronie. Dziś uzupełnimy opisy przy każdym programie.",
+            "b": 2,
+            "r": "Dziękuję, że to przyznajecie."
+          },
+          {
+            "t": "Bo to oczywiste.",
+            "b": -2,
+            "r": "Dla mnie to nie było oczywiste."
+          },
+          {
+            "t": "Damy to na listę ulepszeń.",
+            "b": 0,
+            "r": "Na listę. Jasne."
+          }
+        ]
+      },
+      {
+        "t": "Kiedy dostanę te pieniądze?",
+        "o": [
+          {
+            "t": "W ciągu trzech dni roboczych od zdjęcia. Gdyby się ciągnęło, dzwoń do mnie bezpośrednio, mam to u siebie.",
+            "b": 2,
+            "r": "Dobrze, wysyłam zdjęcie."
+          },
+          {
+            "t": "To zależy od kierownictwa.",
+            "b": -1,
+            "r": "Wy jesteście kierownictwem, nie?"
+          },
+          {
+            "t": "Nic wam nie zwrócimy.",
+            "b": -2,
+            "r": "To zobaczymy się w sądzie."
+          }
+        ]
+      }
+    ]
+  }
+]

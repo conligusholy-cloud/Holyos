@@ -28,7 +28,7 @@ Tenhle soubor čte i automatický překlad ve fázi 3 — co je tady, to platí.
 | zástava | collateral | |
 | splátka | instalment | |
 | infolinka | hotline | |
-| Kč | CZK | **skutečné peníze, ne herní měna** — nikdy nepřekládat na L$ |
+| Kč | (nepřekládat) | **skutečné peníze, ne herní měna.** Nikdy na L$. A nikdy na jinou měnu: značku dosazuje server podle toho, kde hráč platí. Jediná výjimka je klíč `obecne.mena_vychozi`, který je sám značkou měny. |
 | L$ | L$ | herní měna, zůstává vždycky L$ |
 | hovor | call | |
 | hvězdičky | stars | hodnocení zákazníků |

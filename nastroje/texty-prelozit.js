@@ -217,13 +217,16 @@ async function linka(slovnik, jazyk) {
   const souborJ = 'linka.' + jazyk + '.json', souborM = 'linka.' + jazyk + '.meta.json';
   const en = nacti(souborJ, []);
   const meta = nacti(souborM, {});
-  // Podle pořadí, ne podle id. Dva scénáře se stejným id si jinak přepíšou
-  // překlad navzájem a jeden z nich dostane text toho druhého — což se taky
-  // stalo. Id jsou sice teď jedinečná, ale pořadí je jistota.
-  const hotove = cs.map((_, i) => en[i] || null);
+  // Páruje se podle id. Pořadí nestačí: když se jeden scénář nepřeloží,
+  // zápis se o něj zkrátí a všechny další se posunou na cizí pozici —
+  // u polštiny se takhle ztratily dva scénáře a zbytek se rozjel. Id jsou
+  // jedinečná (hlídá to prohlídka), takže párování podle nich drží.
+  const podleId = new Map();
+  en.forEach((x) => { if (x && x.id != null) podleId.set(x.id, x); });
+  const hotove = cs.map((x) => podleId.get(x.id) || null);
 
   const chybi = cs.map((s, i) => ({ s, i }))
-    .filter(({ s, i }) => !hotove[i] || hotove[i].id !== s.id || meta[s.id] !== otisk(s));
+    .filter(({ s, i }) => !hotove[i] || meta[s.id] !== otisk(s));
   console.log('scénářů linky k překladu: ' + chybi.length + ' z ' + cs.length);
   if (!chybi.length) return;
   if (process.argv.includes('--nanecisto')) { console.log(chybi.map(({ s }) => s.id).join(', ')); return; }
@@ -240,9 +243,10 @@ async function linka(slovnik, jazyk) {
       if (prelozeny.id !== scenar.id) throw new Error('scénář se vrátil s jiným id');
       hotove[poradi] = prelozeny;
       meta[scenar.id] = otisk(scenar);
-      // Zapisuje se celé pole v pořadí předlohy. Zatím nepřeložené scénáře
-      // drží svoje místo, ať se ostatní neposunou na cizí pozici.
-      zapis(souborJ, hotove.map((x, i) => x || en[i] || null).filter(Boolean));
+      // Zapisuje se v pořadí předlohy. Nepřeložené se vynechají — hra si
+      // scénář hledá podle id, takže mezera nevadí; co vadí, je přiřadit
+      // překlad k cizímu scénáři, a to párování podle id vylučuje.
+      zapis(souborJ, hotove.filter(Boolean));
       zapis(souborM, meta);
       console.log('  ' + scenar.id);
     } catch (e) {

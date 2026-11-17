@@ -55,7 +55,7 @@ Tenhle soubor čte automatický překlad — co je tady, to platí.
 | porucha | awaria | |
 | výjezd | wyjazd | technik jede k poruše |
 | prozkoumat město | zbadać miasto | |
-| Kč | PLN | **skutečné peníze, ne herní měna** — nikdy nepřekládat na L$ |
+| Kč | (nepřekládat) | **skutečné peníze, ne herní měna.** Nikdy na L$. A nikdy na zł: značku dosazuje server podle toho, kde hráč platí — Polák může platit v eurech. Jediná výjimka je klíč `obecne.mena_vychozi`, který je sám značkou měny. |
 | L$ | L$ | herní měna, zůstává vždycky L$ |
 
 ## Co se nepřekládá

@@ -64,12 +64,30 @@ function kostra(s) {
 // ─── Měna ────────────────────────────────────────────────────────────────────
 // L$ je herní měna a zůstává všude stejná. Kč jsou skutečné peníze — ty se
 // překládají na kód měny, ale nikdy na L$.
-function menaSedi(c, e) {
+// Jediný klíč, jehož úkolem JE nést značku měny: než doběhne ceník ze
+// serveru, musí klient něco ukázat. Server ho pak přebije.
+const MENA_SMI = new Set(['obecne.mena_vychozi']);
+function menaSedi(c, e, klic) {
+  if (MENA_SMI.has(klic)) return null;
   if (/L\$/.test(c) && !/L\$/.test(e)) return 'herní měna L$ se z překladu ztratila';
   if (/Kč/.test(c) && /L\$/.test(e)) return 'z korun se staly herní L$ (skutečné peníze vydávané za herní)';
   // Značku skutečné měny si vybírá server podle jazyka hráče. Kdyby ji
   // překlad napsal natvrdo, Polák by viděl zlotý i tam, kde platí v eurech.
-  if (!/zł|PLN|\$|€/.test(c) && /\bzł\b|\bPLN\b/.test(e)) {
+  // POZOR na \b: v regulárním výrazu platí jen pro ASCII, takže „zł" by
+  // uvnitř slova „złożony" prošlo jako značka měny a hlásilo by to nesmysly.
+  // Hledá se proto zł nebo PLN jako samostatné slovo, ručně.
+  const samostatne = (text, znacka) => {
+    const i0 = String(text).indexOf(znacka);
+    if (i0 < 0) return false;
+    for (let i = i0; i >= 0; i = String(text).indexOf(znacka, i + 1)) {
+      const pred = text[i - 1], po = text[i + znacka.length];
+      const okolo = (ch) => ch === undefined || /[\s(),.;:!?„""'\u00a0-]/.test(ch);
+      if (okolo(pred) && okolo(po)) return true;
+    }
+    return false;
+  };
+  const maMenu = (t) => samostatne(t, 'zł') || samostatne(t, 'PLN');
+  if (!/zł|PLN|\$|€/.test(c) && maMenu(e)) {
     return 'překlad si dosadil zlotý natvrdo — měnu určuje server, ne text';
   }
   if (!/L\$/.test(c) && /L\$/.test(e)) return 'L$ v překladu přibylo, i když v předloze nebylo';
@@ -169,7 +187,7 @@ function main() {
         + (navic.length ? ' · navíc ' + navic.slice(0, 3).join(' ') : ''));
     }
     // Měna
-    const m = menaSedi(c, e);
+    const m = menaSedi(c, e, k);
     if (m) pridej(tvrde, k, 'měna', m);
 
     // Zbytky češtiny. Jména volajících jsou česká schválně — operátor zvedá
@@ -186,18 +204,26 @@ function main() {
   const lcs = nacti('linka.' + ZDROJ + '.json', null);
   const len = nacti('linka.' + jazyk + '.json', null);
   if (lcs && len) {
-    // Porovnává se podle pořadí, ne podle id — překlad vzniká scénář po
-    // scénáři ve stejné řadě. Hledat podle id by u dvou stejných sedlo na
-    // špatný pár a hlásilo chyby, které tam nejsou.
-    if (lcs.length !== len.length) {
-      pridej(tvrde, 'linka', 'jiný počet scénářů', lcs.length + ' vs ' + len.length);
+    // Páruje se podle id, ne podle pořadí. Když se jeden scénář nepřeloží,
+    // pořadí se posune a porovnávání po pozicích pak hlásí rozdíl u každého
+    // dalšího — u polštiny z toho bylo 189 nálezů, z nichž ani jeden nebyl
+    // skutečná chyba překladu. Id jsou jedinečná (hlídá se to níž), takže
+    // párování podle nich sedne vždycky.
+    const podleId = new Map();
+    len.forEach((x) => { if (x && x.id != null) podleId.set(x.id, x); });
+    const chybejici = lcs.filter((c) => lmeta[c.id] === otisk(c) && !podleId.has(c.id));
+    if (chybejici.length) {
+      pridej(tvrde, 'linka', 'scénář chybí v překladu',
+        chybejici.map((c) => c.id).join(', '));
     }
-    lcs.forEach((c, i) => {
+    lcs.forEach((c) => {
       if (lmeta[c.id] !== otisk(c)) {
         ceka.push({ klic: 'linka:' + c.id, co: 'scénář čeká na překlad', detail: '' });
         return;
       }
-      scenarSedi(c, len[i]).forEach((x) => pridej(tvrde, 'linka:' + c.id, 'scénář', x));
+      const t = podleId.get(c.id);
+      if (!t) return;        // chybějící už je nahlášený výš, podruhé netřeba
+      scenarSedi(c, t).forEach((x) => pridej(tvrde, 'linka:' + c.id, 'scénář', x));
     });
     // Hra vybírá scénáře tak, že vynechá ty, co padly naposled — a pozná je
     // podle id. Dvě stejná id si tedy navzájem blokují místo v nabídce.

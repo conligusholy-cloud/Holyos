@@ -157,6 +157,32 @@ function main() {
   console.log('klíčů použitých v kódu a chybějících v katalogu: ' + chybejiciKlice.size);
   if (chybejiciKlice.size) [...chybejiciKlice].slice(0, 20).forEach((k) => console.log('  BEZ TEXTU  ' + k));
 
+  // ─── esc() na textu, který nese HTML ──────────────────────────────────
+  // Sloučené šablony vozí i stavbu okna. Když se taková hodnota prožene
+  // přes esc(), uvozovka v atributu se změní na &quot;, značka se nezavře
+  // a spolkne zbytek řádku. Na pobočkách se to stalo: řádky se slily do
+  // jednoho odstavce a křížek na zrušení zmizel. Okem se to v katalogu
+  // nepozná, protože samotný text vypadá v pořádku.
+  const sHtml = new Set(Object.keys(cs).filter((k) => {
+    const v = cs[k];
+    const t = typeof v === 'string' ? v : Object.keys(v || {}).map((x) => v[x]).join(' ');
+    return /[<>"]/.test(String(t));
+  }));
+  const escHtml = [];
+  soubory.forEach((f) => {
+    let txt = '';
+    try { txt = fs.readFileSync(f, 'utf8'); } catch (e) { return; }
+    txt = txt.split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n');
+    const re2 = /esc\(\s*(?:tx|stx\(req\)|TEXTY\.t)\(\s*'([a-z][\w.]+)'/g;
+    let m2;
+    while ((m2 = re2.exec(txt)) !== null) {
+      if (!sHtml.has(m2[1])) continue;
+      escHtml.push({ kde: path.basename(f), radek: txt.slice(0, m2.index).split('\n').length, klic: m2[1] });
+    }
+  });
+  console.log('textů s HTML prohnaných přes esc(): ' + escHtml.length);
+  escHtml.forEach((x) => console.log('  ROZBITÉ HTML  ' + x.kde + ' ř.' + x.radek + '  ' + x.klic));
+
   console.log('klíčů v češtině: ' + Object.keys(cs).length
     + ' · přeloženo: ' + (Object.keys(cs).length - chybi.length)
     + ' · chybí: ' + chybi.length
@@ -187,7 +213,8 @@ function main() {
   // pověsit automatický překlad.
   // Chybějící klíč je horší než chybějící překlad: hráč uvidí holý klíč.
   // Proto vlastní kód, ať jde odlišit od „je co dopřekládat".
-  if (chybejiciKlice.size) process.exit(2);
+  // Rozbité HTML je stejně zlé jako chybějící klíč — hráč uvidí slité okno.
+  if (chybejiciKlice.size || escHtml.length) process.exit(2);
   process.exit(chybi.length || zastarale.length || linkaChybi ? 1 : 0);
 }
 main();

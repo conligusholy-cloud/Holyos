@@ -7998,9 +7998,16 @@ function zakladnyHtml() {
     + (sidloLze()
         ? tx('hra.button_class_btn_sec_sm_id_2', { p1: kcFull(SIDLO_STEHOVANI) })
         : tx('hra.p_class_fine_sidlo_pujde_prestehovat', { p1: etaText(sidloOd() - Date.now()), p2: kcFull(SIDLO_STEHOVANI) }))
+    // Pozor na esc(): křížek a jeho title jsou kus HTML, ne text. Když se
+    // prohnaly přes esc(), uvozovka v atributu se změnila na &quot;, značka
+    // <button> se nezavřela a spolkla zbytek řádku — pobočky se pak slily do
+    // jednoho odstavce a křížek zmizel. Stavba patří do kódu, z katalogu jde
+    // jen popisek.
     + (S.pobocky || []).map(function (b, i) {
-        return '<div class="kv"><span>' + esc(tx('hra.pobocka')) + '</span><b>' + esc(b.name || esc(tx('hra.pobocka_2')))
-          + ' <button class="pob-zrus" data-pob-zrus="' + i + esc(tx('hra.title_zrusit_pobocku_u00d7')) + '</button></b></div>';
+        return '<div class="kv"><span>' + esc(tx('hra.pobocka')) + '</span><b>'
+          + esc(b.name || tx('hra.pobocka_2'))
+          + ' <button class="pob-zrus" data-pob-zrus="' + i + '" title="'
+          + esc(tx('hra.zrusit_pobocku')) + '">\u00d7</button></b></div>';
       }).join('')
     + (pobockyMesicne() > 0 ? '<div class="kv"><span>' + esc(tx('hra.provoz_pobocek')) + '</span><b class="warn">'
       + kcFull(pobockyMesicne()) + ' ' + esc(tx('hra.mesic_17')) + '</b></div>' : '')
