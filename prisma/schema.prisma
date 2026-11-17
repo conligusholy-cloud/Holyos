@@ -8322,6 +8322,26 @@ model GameMessage {
   @@map("game_messages")
 }
 
+// AI hlídání textů, které hráč ukazuje ostatním (vzkaz u obchodu, nick, firma).
+// verdikt: ok | podezrele | skodi | nezname. Při podezrele/skodi jde Velín push + zvonek.
+model GameModerace {
+  id          Int       @id @default(autoincrement())
+  player_id   Int
+  zdroj       String    @db.VarChar(12)
+  ref_id      Int?
+  komu        String?   @db.VarChar(60)
+  text        String    @db.VarChar(800)
+  verdikt     String    @db.VarChar(12)
+  cil         String?   @db.VarChar(120)
+  duvod       String?   @db.VarChar(300)
+  resolved_at DateTime?
+  created_at  DateTime  @default(now())
+
+  @@index([player_id, created_at])
+  @@index([verdikt, resolved_at])
+  @@map("game_moderace")
+}
+
 // Koho hráč nechce slyšet. Platí jednostranně: kdo blokuje, tomu už nic nepřijde.
 model GameBlock {
   id         Int      @id @default(autoincrement())

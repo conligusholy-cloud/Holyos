@@ -856,6 +856,7 @@ router.post('/account/zacni', async (req, res, next) => {
           ? String((req.body || {}).sid) : null,
         ...puvod(req) }
     });
+    { const mod = require('../services/game/moderace').zkontroluj; mod({ player: p, zdroj: 'nick', text: p.nick }); if (p.company && p.company !== p.nick + ' s.r.o.') mod({ player: p, zdroj: 'firma', text: p.company }); }
     try {
       await prisma.gameCard.createMany({ data: CARD_KINDS.map((k) => ({ player_id: p.id, kind: k })) });
     } catch (e) { console.warn('[game] uvítací karty:', e.message); }
@@ -912,6 +913,7 @@ router.post('/account/register', async (req, res, next) => {
           ? String((req.body || {}).sid) : null,
         ...puvod(req) }
     });
+    { const mod = require('../services/game/moderace').zkontroluj; mod({ player: p, zdroj: 'nick', text: p.nick }); if (p.company && p.company !== p.nick + ' s.r.o.') mod({ player: p, zdroj: 'firma', text: p.company }); }
     // Dárek do začátku: jedna od každé zrychlující karty. Dostane ho jen nový
     // účet — ne ten, kdo si hru resetuje, jinak by si karty takhle „vyráběl".
     try {
@@ -1189,6 +1191,7 @@ router.post('/account/company', requirePlayer, async (req, res, next) => {
     const f = s((req.body || {}).company, 60);
     if (!FIRMA_RE.test(f)) return res.status(400).json({ error: stx(req)('server.nazev_firmy_ma_2_60_znaku') });
     const p = await prisma.gamePlayer.update({ where: { id: req.player.id }, data: { company: f } });
+    require('../services/game/moderace').zkontroluj({ player: p, zdroj: 'firma', text: f });
     dropZeb();   // žebříček drží 30 s v paměti, po přejmenování ho zahodíme
     res.json({ ok: true, player: await pub(p) });
   } catch (e) { next(e); }
@@ -1224,6 +1227,7 @@ router.post('/account/nick', requirePlayer, async (req, res, next) => {
     const id = req.player.id;
     const p = await prisma.gamePlayer.update({ where: { id },
       data: { nick, nick_lower: lower, nick_at: new Date() } });
+    require('../services/game/moderace').zkontroluj({ player: p, zdroj: 'nick', text: nick });
     // Přepis podpisů všude jinde. Kdyby některý krok selhal, hra tím nepadne —
     // jen někde zůstane staré jméno, a to je menší zlo než půlka změny.
     try {

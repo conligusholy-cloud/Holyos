@@ -40,6 +40,34 @@ router.use(async (req, res, next) => {
 const menaZ = (n) => String((n && n.currency) || 'czk').toLowerCase();
 const kcZ = (n) => MENY.naKoruny(n.amount_cents, menaZ(n), KURZY);
 const api = (fn) => (req, res, next) => fn(req, res).catch(next);
+
+// Sídlo firmy ve hře (vybírá se na začátku; u starších her se dopočítá z prvního prádlomatu)
+const sidloZ = (st) => (st && st.sidlo && st.sidlo.name) ? String(st.sidlo.name).replace(/<[^>]*>/g, '').slice(0, 80) : null;
+// Kolik toho o hráči víme: seznam údajů, které máme / chybí, a procento.
+// Váhy: kontakt a identita víc, herní chování méně.
+function znalostHrace(p, extra) {
+  const st = p.state || {};
+  const x = extra || {};
+  const polozky = [
+    ['E-mail', !!p.email, 3], ['Jméno a příjmení', !!(p.first_name || p.last_name), 3],
+    ['Plný účet (heslo)', !!p.password_hash, 2], ['Odkud přišel', !!(p.zdroj || p.invited_by_id || p.invited_by_ref), 2],
+    ['Město z IP (ověřené)', p.geo_presnost === 'mesto' && !!p.geo_city, 1], ['Země / operátor', !!(p.geo_country || p.geo_isp), 1],
+    ['Sídlo ve hře', !!sidloZ(st), 1], ['Profil hráče', !!st.profile, 1],
+    ['Sleduje FB / IG', !!(p.facebook_at || p.instagram_at), 1], ['Něco koupil', (x.nakupu || 0) > 0, 2],
+    ['Přivedl hráče', (x.privedl || 0) > 0, 1], ['Hraje přes 1 h', (p.hra_s_celkem || 0) >= 3600, 1],
+    ['Otisk zařízení', !!p.dev_pid, 1],
+  ];
+  const max = polozky.reduce((a, q) => a + q[2], 0), ma = polozky.filter((q) => q[1]);
+  return { pct: Math.round(ma.reduce((a, q) => a + q[2], 0) / max * 100), ma: ma.map((q) => q[0]), chybi: polozky.filter((q) => !q[1]).map((q) => q[0]) };
+}
+// Zařízení z User-Agentu lidsky (jen hrubě: systém + prohlížeč)
+function zarizeni(ua) {
+  const u = String(ua || ''); if (!u) return null;
+  const os = /iPhone|iPad/.test(u) ? 'iOS' : /Android/.test(u) ? 'Android' : /Windows/.test(u) ? 'Windows' : /Mac OS X/.test(u) ? 'macOS' : /Linux/.test(u) ? 'Linux' : 'jiný systém';
+  const br = /FBAN|FBAV|FB_IAB/.test(u) ? 'Facebook (vestavěný prohlížeč)' : /Instagram/.test(u) ? 'Instagram (vestavěný prohlížeč)' : /Edg\//.test(u) ? 'Edge' : /SamsungBrowser/.test(u) ? 'Samsung Internet' : /Chrome\//.test(u) ? 'Chrome' : /Firefox\//.test(u) ? 'Firefox' : /Safari\//.test(u) ? 'Safari' : 'jiný prohlížeč';
+  const model = (/Android [\d.]+; ([^;)]+)/.exec(u) || [])[1];
+  return os + ' · ' + br + (model && !/^K$|wv/.test(model) ? ' · ' + model.trim() : '');
+}
 const den = (d) => new Date(d).toISOString().slice(0, 10);
 
 // ─── Hráči ───────────────────────────────────────────────────────────────────
@@ -65,6 +93,10 @@ router.get('/players', api(async (req, res) => {
     prisma.gamePlayer.groupBy({ by: ['invited_by_id'], where: { invited_by_id: { in: ids } }, _count: { _all: true } }),
     prisma.gamePlayer.findMany({ where: { invited: { some: { id: { in: ids } } } }, select: { id: true, nick: true, company: true } }),
   ]);
+  // Nevyřízená AI upozornění na texty hráče (škodí / podezřelé)
+  const MOD = {};
+  (await prisma.gameModerace.groupBy({ by: ['player_id'], where: { player_id: { in: ids }, verdikt: { in: ['skodi', 'podezrele'] }, resolved_at: null }, _count: { _all: true } }).catch(() => []))
+    .forEach((x) => { MOD[x.player_id] = x._count._all; });
   const by = (arr) => { const m = {}; arr.forEach((x) => { m[x.player_id] = x; }); return m; };
   const S = by(spots), C = by(cards), P = by(pays);
   const PRIV = {}; privedl.forEach((x) => { PRIV[x.invited_by_id] = x._count._all; });
@@ -107,6 +139,11 @@ router.get('/players', api(async (req, res) => {
       nakupu: (P[p.id] && P[p.id]._count._all) || 0,
       utraceno: ((P[p.id] && P[p.id]._sum.amount_cents) || 0) / 100,
       disabled: p.disabled,
+      // Sídlo firmy ve hře + co o hráči víme
+      sidlo: sidloZ(st),
+      hra_h: Math.round((p.hra_s_celkem || 0) / 360) / 10,
+      znalost: znalostHrace(p, { nakupu: (P[p.id] && P[p.id]._count._all) || 0, privedl: PRIV[p.id] || 0 }),
+      varovani: MOD[p.id] || 0,
     };
   }) });
 }));
@@ -468,6 +505,54 @@ router.get('/players/:id/transakce', api(async (req, res) => {
   });
 }));
 
+// Co hráč komu poslal / od koho dostal: vzkazy u obchodů, staré zprávy (do 14. 11. 2026) a AI posudky
+async function komunikaceHrace(id) {
+  const [tr, zpr, mod] = await Promise.all([
+    prisma.gameTrade.findMany({ where: { OR: [{ from_id: id }, { to_id: id }], vzkaz: { not: null } }, orderBy: { created_at: 'desc' }, take: 200,
+      select: { id: true, from_id: true, from_nick: true, to_nick: true, vzkaz: true, predmet: true, cena: true, created_at: true } }),
+    prisma.gameMessage.findMany({ where: { OR: [{ from_id: id }, { to_id: id }] }, orderBy: { created_at: 'desc' }, take: 200 }).catch(() => []),
+    prisma.gameModerace.findMany({ where: { player_id: id }, orderBy: { created_at: 'desc' }, take: 200 }).catch(() => []),
+  ]);
+  const nid = [...new Set(zpr.flatMap((m) => [m.from_id, m.to_id]))];
+  const nn = {}; (nid.length ? await prisma.gamePlayer.findMany({ where: { id: { in: nid } }, select: { id: true, nick: true } }) : []).forEach((x) => { nn[x.id] = x.nick; });
+  const posudek = {}; mod.filter((m) => m.zdroj === 'vzkaz' && m.ref_id).forEach((m) => { posudek[m.ref_id] = m; });
+  const pol = [];
+  tr.forEach((t) => { const m = posudek[t.id]; pol.push({ kdy: t.created_at, druh: 'vzkaz', smer: t.from_id === id ? 'poslal' : 'dostal', od: t.from_nick, komu: t.to_nick, text: t.vzkaz, k: t.predmet + (t.cena ? ' · ' + t.cena.toLocaleString('cs-CZ') + ' L$' : ''), verdikt: m ? m.verdikt : null, duvod: m ? m.duvod : null }); });
+  zpr.forEach((z) => pol.push({ kdy: z.created_at, druh: 'zprava', smer: z.from_id === id ? 'poslal' : 'dostal', od: nn[z.from_id] || ('#' + z.from_id), komu: nn[z.to_id] || ('#' + z.to_id), text: z.text, k: z.reported_at ? 'nahlášeno' : '', verdikt: null, duvod: null }));
+  mod.filter((m) => m.zdroj !== 'vzkaz').forEach((m) => pol.push({ kdy: m.created_at, druh: m.zdroj, smer: 'veřejné', od: null, komu: null, text: m.text, k: '', verdikt: m.verdikt, duvod: m.duvod }));
+  pol.sort((a, b) => new Date(b.kdy) - new Date(a.kdy));
+  return pol;
+}
+
+// GET /moderace?vse=1 — AI upozornění na texty hráčů (výchozí jen nevyřízená škodí/podezřelé)
+router.get('/moderace', api(async (req, res) => {
+  const vse = req.query.vse === '1';
+  const where = vse ? {} : { verdikt: { in: ['skodi', 'podezrele'] }, resolved_at: null };
+  if (req.query.hrac) where.player_id = parseInt(req.query.hrac, 10) || 0;
+  const rows = await prisma.gameModerace.findMany({ where, orderBy: { created_at: 'desc' }, take: 300 });
+  const ids = [...new Set(rows.map((r) => r.player_id))];
+  const nn = {}; (ids.length ? await prisma.gamePlayer.findMany({ where: { id: { in: ids } }, select: { id: true, nick: true, company: true } }) : []).forEach((x) => { nn[x.id] = x; });
+  const MD = require('../services/game/moderace');
+  res.json({ ok: true, nastaveni: await MD.nastaveni(), polozky: rows.map((r) => ({ id: r.id, kdy: r.created_at, hrac_id: r.player_id, nick: (nn[r.player_id] || {}).nick || ('#' + r.player_id), firma: (nn[r.player_id] || {}).company || null,
+    zdroj: MD.ZDROJE[r.zdroj] || r.zdroj, komu: r.komu, text: r.text, verdikt: r.verdikt, cil: r.cil, duvod: r.duvod, vyrizeno: r.resolved_at })) });
+}));
+router.post('/moderace/:id/vyrizeno', api(async (req, res) => {
+  const zpet = !!(req.body && req.body.zpet);
+  await prisma.gameModerace.update({ where: { id: parseInt(req.params.id, 10) }, data: { resolved_at: zpet ? null : new Date() } });
+  res.json({ ok: true });
+}));
+// POST /moderace/nastaveni { zapnuto, jmena[] } — hlídaná jména (provozovatel, partneři, Špagetka…)
+router.post('/moderace/nastaveni', api(async (req, res) => {
+  const MD = require('../services/game/moderace');
+  const cur = await MD.nastaveni(); const b = req.body || {};
+  const v = { zapnuto: b.zapnuto !== undefined ? !!b.zapnuto : cur.zapnuto,
+    jmena: Array.isArray(b.jmena) ? b.jmena.map((x) => String(x || '').trim().slice(0, 60)).filter(Boolean).slice(0, 60) : cur.jmena,
+    person_ids: Array.isArray(b.person_ids) ? b.person_ids.map(Number).filter((n) => Number.isInteger(n) && n > 0) : cur.person_ids };
+  const { setSetting } = require('../services/settings');
+  await setSetting(MD.KEY, v, { type: 'json', description: 'Laundromat Tycoon — AI hlídání textů hráčů (hlídaná jména, příjemci upozornění)', scope: 'game', userId: req.user && req.user.id });
+  res.json({ ok: true, nastaveni: v });
+}));
+
 // GET /players/:id → detail: co hráč vlastní, co utratil, kde stojí
 router.get('/players/:id', api(async (req, res) => {
   const id = parseInt(req.params.id, 10);
@@ -519,8 +604,22 @@ router.get('/players/:id', api(async (req, res) => {
     sid: p.sid || null,
     // Záznam první minuty, jestli se k účtu najde.
     zaznam: p.sid ? await zaznamInfo(p.sid) : null,
+    sidlo: sidloZ(st),
+    znalost: znalostHrace(p, { nakupu: nakupy.filter((o) => o.status === 'paid').length, privedl: privedeni.length }),
+    // Všechno, co o hráči víme (bez hesla)
+    dosie: {
+      firma: p.company || null, jazyk: p.jazyk || 'cs', hodnost: p.hodnost || null,
+      zdroj: p.zdroj || null, pozval_ref: p.invited_by_ref || null,
+      hra_h: Math.round((p.hra_s_celkem || 0) / 360) / 10, hra_dnes_min: p.hra_den ? Math.round((p.hra_s_den || 0) / 60) : null, hra_at: p.hra_at,
+      plny_ucet: !!p.password_hash, facebook_at: p.facebook_at, instagram_at: p.instagram_at, distributor_do: p.distributor_do, provize: p.provize_celkem,
+      geo: [p.geo_city, p.geo_region, p.geo_country].filter(Boolean).join(', ') || null, geo_presnost: p.geo_presnost, geo_isp: p.geo_isp, geo_tip: p.geo_tip, geo_at: p.geo_at,
+      reg_ip: p.reg_ip || null, zarizeni: zarizeni(p.reg_ua), reg_ua: p.reg_ua || null, dev_pid: p.dev_pid || null,
+      stejne_zarizeni: p.dev_pid ? await prisma.gamePlayer.count({ where: { dev_pid: p.dev_pid, id: { not: id } } }) : 0,
+      stejna_ip: p.reg_ip ? await prisma.gamePlayer.count({ where: { reg_ip: p.reg_ip, id: { not: id } } }) : 0,
+    },
     privedl_me: zvouci ? { id: zvouci.id, nick: zvouci.nick, firma: zvouci.company || zvouci.nick } : null,
   }, polozky, mista, ceka_hotovost: cekaHotovost,
+  komunikace: await komunikaceHrace(id),
   privedeni: privedeni.map((h) => ({
     id: h.id, nick: h.nick, firma: h.company || (h.nick + ' s.r.o.'),
     kdy: h.invited_at || h.created_at, posledne: h.last_login_at,

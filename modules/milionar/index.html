@@ -210,6 +210,20 @@
           <button class="btn sm on" data-nahl="">Nevyřízené</button>
           <button class="btn sm" data-nahl="1">Všechna nahlášení</button>
         </div>
+        <h3 style="font-size:15px;margin:4px 0 6px">🤖 AI hlídání textů hráčů</h3>
+        <p class="note" style="margin:0 0 10px">AI čte každý vzkaz u obchodu na Burze, nick a název firmy, které hráči vidí ostatní. Když text poškozuje nás nebo hlídaná jména (pomluva, „podvod", odkazy a kontakty mimo hru, lákání ke konkurenci, vulgarity), přijde upozornění do Velína a do zvonku.</p>
+        <div class="toolbar">
+          <button class="btn sm on" data-mod="">Nevyřízená upozornění</button>
+          <button class="btn sm" data-mod="1">Vše, co AI četla</button>
+        </div>
+        <div id="mod-body"><p class="note">Načítám…</p></div>
+        <div class="tbl-wrap" style="padding:12px 14px;margin:12px 0 22px">
+          <label class="note" for="mod-jmena">Hlídaná jména (oddělená čárkou) — vše, co se o nich píše, AI posoudí přísněji</label>
+          <textarea id="mod-jmena" rows="2" style="width:100%;margin:6px 0 8px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font:inherit"></textarea>
+          <label class="note" style="display:inline-flex;gap:6px;align-items:center;margin-right:12px"><input type="checkbox" id="mod-on"> Hlídání zapnuté</label>
+          <button class="btn sm" id="mod-save">Uložit nastavení</button> <span class="note" id="mod-stav"></span>
+        </div>
+        <h3 style="font-size:15px;margin:4px 0 6px">Nahlášené zprávy</h3>
         <p class="note" style="margin:0 0 12px">Zprávy, na které si někdo stěžoval. Odesílatele zablokuješ v jeho detailu.</p>
         <div id="nahl-body"></div>
       </div>
@@ -924,10 +938,13 @@
     function plRow(p) {
       return '<tr' + (p.disabled ? ' style="opacity:.45"' : '') + '><td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + p.id + '">' + esc(p.nick) + '</b>'
         + (p.profil ? '<div class="note">' + esc(p.profil) + '</div>' : '')
-        + (p.zdroj ? '<div class="note">z: ' + esc(p.zdroj) + '</div>' : '') + '</td>'
+        + (p.zdroj ? '<div class="note">z: ' + esc(p.zdroj) + '</div>' : '')
+        + (p.varovani ? '<div><span class="st" style="background:rgba(248,113,113,.18);color:#f87171" title="Nevyřízená AI upozornění na jeho texty">⚠️ ' + p.varovani + '</span></div>' : '') + '</td>'
+        + '<td class="num">' + znalostBadge(p.znalost) + '</td>'
         + '<td>' + (p.jmeno ? esc(p.jmeno) : '<span class="note">—</span>')
         + (p.email ? '<div class="note">' + esc(p.email) + '</div>' : '') + '</td>'
         + '<td>' + odkud(p) + '</td>'
+        + '<td>' + (p.sidlo ? '<b>' + esc(p.sidlo) + '</b>' : '<span class="note">—</span>') + '</td>'
         + '<td class="num">' + cz(p.pradlomatu) + '</td><td class="num">' + cz(p.mist) + '</td>'
         + '<td class="num">' + cz(p.mest)
         // Velikost uloženého stavu. Roste hlavně seznamem prozkoumaných míst
@@ -948,12 +965,20 @@
         + '<td><button class="btn sm" data-off="' + p.id + '" data-v="' + (p.disabled ? '0' : '1') + '">'
         + (p.disabled ? 'Odblokovat' : 'Zablokovat') + '</button></td></tr>';
     }
+    // Kolik o hráči víme (0–100 %): zelená ≥ 60, žlutá ≥ 35, jinak červená; v bublině co máme a co chybí
+    function znalostBadge(z) {
+      if (!z) return '—';
+      var c = z.pct >= 60 ? '#34d399' : z.pct >= 35 ? '#fbbf24' : '#f87171';
+      return '<b style="color:' + c + '" title="' + esc('Víme: ' + (z.ma.join(', ') || 'nic') + '\nChybí: ' + (z.chybi.join(', ') || 'nic')) + '">' + z.pct + ' %</b>';
+    }
     function plCols() {
       var n = function (k, l, f) { return { key: k, label: l, type: 'num', get: f }; };
       return [
         { key: 'nick', label: 'Nick', type: 'text', ph: 'Nick…', get: function (p) { return p.nick || ''; } },
+        n('znal', 'Známe', function (p) { return p.znalost ? p.znalost.pct : 0; }),
         { key: 'jmeno', label: 'Jméno a e-mail', type: 'text', ph: 'Jméno / e-mail…', get: function (p) { return (p.jmeno || '') + ' ' + (p.email || ''); } },
         { key: 'odkud', label: 'Odkud hraje', type: 'text', ph: 'Země / město…', get: function (p) { return [p.geo_mesto, p.geo_kraj, p.geo_zeme, p.geo_isp].filter(Boolean).join(' '); } },
+        { key: 'sidlo', label: 'Sídlo ve hře', type: 'text', ph: 'Město…', get: function (p) { return p.sidlo || ''; } },
         n('pradl', 'Prádlomatů', function (p) { return Number(p.pradlomatu) || 0; }), n('mist', 'Míst', function (p) { return Number(p.mist) || 0; }),
         n('mest', 'Měst', function (p) { return Number(p.mest) || 0; }), n('prijem', 'Zbyde / měsíc', function (p) { return Number(p.prijem) || 0; }),
         n('hot', 'Hotovost', function (p) { return p.hotovost == null ? null : Number(p.hotovost); }), n('uver', 'Úvěr', function (p) { return p.uver == null ? null : Number(p.uver); }),
@@ -969,7 +994,7 @@
       get('/players?limit=300' + (q ? '&q=' + encodeURIComponent(q) : '')).then(function (j) {
         var tbl = document.getElementById('pl-tbl');
         if (!PL_TBL) {
-          tbl.innerHTML = '<thead><tr><th>Nick</th><th>Jméno a e-mail</th><th>Odkud hraje</th>'
+          tbl.innerHTML = '<thead><tr><th>Nick</th><th class="num" title="Kolik o hráči víme — najeď myší na číslo">Známe</th><th>Jméno a e-mail</th><th>Odkud hraje</th><th>Sídlo ve hře</th>'
             + '<th class="num">Prádlomatů</th><th class="num">Míst</th><th class="num">Měst</th><th class="num">Zbyde / měsíc</th>'
             + '<th class="num">Hotovost</th><th class="num">Úvěr</th><th class="num">Otevření</th><th class="num">Přivedl</th>'
             + '<th class="num">Nákupů</th><th class="num">Utraceno</th><th>Založeno</th><th>Naposledy</th><th></th></tr></thead><tbody></tbody>';
@@ -1006,7 +1031,12 @@
           + mini(cz(p.pozvanek), 'Otevření odkazu')
           + mini(cz((j.privedeni || []).length), 'Přivedl hráčů')
           + mini(esc(p.profil || '—'), 'Profil')
+          + mini(esc(p.sidlo || '—'), 'Sídlo ve hře')
+          + mini(p.znalost ? znalostBadge(p.znalost) : '—', 'Kolik o něm víme')
           + '</div>'
+          + dosieHtml(p)
+          + '<h3 style="font-size:14px;margin:0 0 8px">Komunikace s hráči <span class="note">(vzkazy u obchodů, staré zprávy, nick a firma — s posudkem AI)</span></h3>'
+          + komunikaceHtml(j.komunikace || [])
           + '<div class="tbl-wrap" style="padding:14px 16px;margin-bottom:18px">'
           + '<h3 style="font-size:14px;margin:0 0 4px">Přidat hotovost</h3>'
           + '<p class="note" style="margin:0 0 10px">Laundry se hráči připíšou, jakmile bude mít hru otevřenou. '
@@ -1138,6 +1168,42 @@
         });
       }).catch(function (e) { DLG.innerHTML = '<button class="x" data-close>×</button><p class="note" style="color:#f87171">' + esc(e.message) + '</p>';
         DLG.querySelector('[data-close]').onclick = function () { OV.classList.remove('open'); }; });
+    }
+    var VERD = { ok: ['v pořádku', '#34d399'], podezrele: ['podezřelé', '#fbbf24'], skodi: ['ŠKODÍ', '#f87171'], nezname: ['neposouzeno', '#94a3b8'] };
+    function verdiktHtml(v, duvod) {
+      if (!v) return '<span class="note">—</span>';
+      var x = VERD[v] || [v, '#94a3b8'];
+      return '<b style="color:' + x[1] + '">' + x[0] + '</b>' + (duvod ? '<div class="note">' + esc(duvod) + '</div>' : '');
+    }
+    function dosieHtml(p) {
+      var d = p.dosie || {}, r = [];
+      var ad = function (k, v) { if (v !== null && v !== undefined && v !== '') r.push('<tr><td class="note" style="white-space:nowrap">' + k + '</td><td>' + v + '</td></tr>'); };
+      ad('Firma ve hře', esc(d.firma)); ad('Sídlo ve hře', esc(p.sidlo));
+      ad('Odkud přišel', esc(d.zdroj || (p.privedl_me ? 'pozvánka od ' + p.privedl_me.firma : d.pozval_ref ? 'pozvánka (kód ' + d.pozval_ref + ')' : '')));
+      ad('Připojení (IP)', esc([d.geo, d.geo_isp].filter(Boolean).join(' · ')) + (d.geo_presnost && d.geo_presnost !== 'mesto' ? ' <span class="note">(město nejisté' + (d.geo_tip ? ': ' + esc(d.geo_tip) : '') + ')</span>' : ''));
+      ad('Zařízení při registraci', esc(d.zarizeni) + (d.reg_ua ? ' <span class="note" title="' + esc(d.reg_ua) + '">ⓘ</span>' : ''));
+      ad('IP při registraci', esc(d.reg_ip) + (d.stejna_ip ? ' <b style="color:#fbbf24">· dalších účtů z té IP: ' + d.stejna_ip + '</b>' : ''));
+      ad('Otisk zařízení', d.dev_pid ? esc(d.dev_pid) + (d.stejne_zarizeni ? ' <b style="color:#f87171">· dalších účtů na zařízení: ' + d.stejne_zarizeni + '</b>' : '') : '');
+      ad('Čas ve hře', d.hra_h != null ? d.hra_h.toLocaleString('cs-CZ') + ' h' + (d.hra_dnes_min != null ? ' <span class="note">(poslední den ' + d.hra_dnes_min + ' min)</span>' : '') : '');
+      ad('Účet', d.plny_ucet ? 'plný (s heslem)' : 'jen z nicku — bez hesla a e-mailu');
+      ad('Jazyk · hodnost', esc([d.jazyk, d.hodnost].filter(Boolean).join(' · ')));
+      ad('Sociální sítě', [d.facebook_at ? 'sleduje Facebook (od ' + dt(d.facebook_at) + ')' : '', d.instagram_at ? 'sleduje Instagram (od ' + dt(d.instagram_at) + ')' : ''].filter(Boolean).join(' · ') || '<span class="note">nesleduje</span>');
+      if (d.distributor_do) ad('Distributor do', dt(d.distributor_do) + ' · provize ' + cz(d.provize || 0) + ' L$');
+      var z = p.znalost;
+      return '<div class="tbl-wrap" style="margin-bottom:18px"><table class="data-table"><tbody>' + r.join('') + '</tbody></table>'
+        + (z && z.chybi.length ? '<p class="note" style="margin:8px 12px">Chybí nám: ' + esc(z.chybi.join(', ')) + '</p>' : '') + '</div>';
+    }
+    function komunikaceHtml(k) {
+      if (!k.length) return '<p class="note" style="margin-bottom:18px">Nic nenapsal a nic nedostal.</p>';
+      return '<div class="tbl-wrap" style="margin-bottom:18px;max-height:360px;overflow:auto"><table class="data-table"><thead><tr><th>Kdy</th><th>Co</th><th>Od → komu</th><th>Text</th><th>AI</th></tr></thead><tbody>'
+        + k.map(function (m) {
+            var druh = { vzkaz: 'Vzkaz u obchodu', zprava: 'Zpráva (stará)', nick: 'Nick', firma: 'Název firmy' }[m.druh] || m.druh;
+            return '<tr' + (m.verdikt === 'skodi' ? ' style="background:rgba(248,113,113,.08)"' : '') + '><td class="note" style="white-space:nowrap">' + dt(m.kdy) + '</td>'
+              + '<td>' + esc(druh) + '<div class="note">' + esc(m.smer) + (m.k ? ' · ' + esc(m.k) : '') + '</div></td>'
+              + '<td class="note">' + (m.od ? esc(m.od) + ' → ' + esc(m.komu) : 'všichni') + '</td>'
+              + '<td style="max-width:360px;white-space:pre-wrap">' + esc(m.text) + '</td>'
+              + '<td>' + verdiktHtml(m.verdikt, m.duvod) + '</td></tr>';
+          }).join('') + '</tbody></table></div>';
     }
     function mini(v, l) { return '<div class="mini"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
 
@@ -1314,6 +1380,49 @@
       };
     });
 
+    // ── AI hlídání textů ─────────────────────────────────────
+    var MOD_VSE = '', MOD_HRAC = '';
+    function loadModerace() {
+      var box = document.getElementById('mod-body');
+      get('/moderace' + (MOD_VSE ? '?vse=1' : '') + (MOD_HRAC ? (MOD_VSE ? '&' : '?') + 'hrac=' + MOD_HRAC : '')).then(function (j) {
+        var n = j.nastaveni || {};
+        document.getElementById('mod-jmena').value = (n.jmena || []).join(', ');
+        document.getElementById('mod-on').checked = n.zapnuto !== false;
+        var z = j.polozky || [];
+        var cekaji = z.filter(function (m) { return !m.vyrizeno && (m.verdikt === 'skodi' || m.verdikt === 'podezrele'); }).length;
+        var odzn = document.getElementById('nahl-pocet'); if (odzn && !MOD_VSE && cekaji) odzn.textContent = ' ' + cekaji;
+        if (!z.length) { box.innerHTML = '<p class="note">' + (MOD_VSE ? 'AI zatím nic nečetla.' : 'Žádné nevyřízené upozornění. 👍') + '</p>'; return; }
+        box.innerHTML = (MOD_HRAC ? '<p class="note">Filtr: jen hráč #' + esc(MOD_HRAC) + ' · <a href="#" id="mod-zrus">zrušit</a></p>' : '')
+          + '<div class="tbl-wrap"><table class="data-table"><thead><tr><th>Kdy</th><th>Hráč</th><th>Kde</th><th>Text</th><th>Posudek AI</th><th>Koho poškozuje</th><th></th></tr></thead><tbody>'
+          + z.map(function (m) {
+              return '<tr' + (m.vyrizeno ? ' style="opacity:.55"' : '') + '><td class="note" style="white-space:nowrap">' + dt(m.kdy) + '</td>'
+                + '<td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + m.hrac_id + '">' + esc(m.nick) + '</b>' + (m.firma ? '<div class="note">' + esc(m.firma) + '</div>' : '') + '</td>'
+                + '<td>' + esc(m.zdroj) + (m.komu ? '<div class="note">komu: ' + esc(m.komu) + '</div>' : '') + '</td>'
+                + '<td style="max-width:380px;white-space:pre-wrap">' + esc(m.text) + '</td>'
+                + '<td>' + verdiktHtml(m.verdikt, m.duvod) + '</td><td>' + esc(m.cil || '—') + '</td>'
+                + '<td>' + (m.verdikt === 'skodi' || m.verdikt === 'podezrele' ? '<button class="btn sm" data-modvyr="' + m.id + '" data-zpet="' + (m.vyrizeno ? '1' : '') + '">' + (m.vyrizeno ? 'Vrátit' : 'Vyřízeno') + '</button>' : '') + '</td></tr>';
+            }).join('') + '</tbody></table></div>';
+        var zr = document.getElementById('mod-zrus'); if (zr) zr.onclick = function (e) { e.preventDefault(); MOD_HRAC = ''; loadModerace(); };
+        [].forEach.call(box.querySelectorAll('[data-detail]'), function (b) { b.onclick = function () { detail(b.getAttribute('data-detail')); }; });
+        [].forEach.call(box.querySelectorAll('[data-modvyr]'), function (b) {
+          b.onclick = function () { b.disabled = true; post('/moderace/' + b.getAttribute('data-modvyr') + '/vyrizeno', { zpet: b.getAttribute('data-zpet') === '1' }).then(loadModerace).catch(function (e) { b.disabled = false; alert(e.message); }); };
+        });
+      }).catch(function (e) { chyba('mod-body', e); });
+    }
+    [].forEach.call(document.querySelectorAll('[data-mod]'), function (b) {
+      b.onclick = function () {
+        MOD_VSE = b.getAttribute('data-mod');
+        [].forEach.call(document.querySelectorAll('[data-mod]'), function (x) { x.classList.toggle('on', x === b); });
+        loadModerace();
+      };
+    });
+    document.getElementById('mod-save').onclick = function () {
+      var st = document.getElementById('mod-stav'); st.textContent = 'Ukládám…';
+      post('/moderace/nastaveni', { zapnuto: document.getElementById('mod-on').checked,
+        jmena: document.getElementById('mod-jmena').value.split(',').map(function (x) { return x.trim(); }).filter(Boolean) })
+        .then(function () { st.textContent = 'Uloženo.'; }).catch(function (e) { st.textContent = e.message; });
+    };
+
     // ── Spojené účty ────────────────────────────────────────────────────────
     var MU_UROVEN = { vysoka: ['Stojí za pohled', '#f87171'], stredni: ['Možná nic', '#fbbf24'], nizka: ['Nejspíš nic', '#94a3b8'] };
     function muCas(s2) {
@@ -1478,7 +1587,7 @@
     };
 
     var LOADERY = { stats: loadStats, players: loadPlayers, orders: loadOrders,
-      prices: loadPrices, nastaveni: loadNastaveni, nahlasene: loadNahlasene, chyby: loadChyby, multi: loadMulti,
+      prices: loadPrices, nastaveni: loadNastaveni, nahlasene: function () { loadModerace(); loadNahlasene(); }, chyby: loadChyby, multi: loadMulti,
       drazby: loadDrazby };
     var AKTIVNI = 'stats';
     [].forEach.call(document.querySelectorAll('.module-tab'), function (t) {
@@ -1506,7 +1615,13 @@
     document.getElementById('pl-find').onclick = loadPlayers;
     document.getElementById('pl-q').onkeydown = function (e) { if (e.key === 'Enter') loadPlayers(); };
     document.getElementById('reload').onclick = function () { LOADERY[AKTIVNI](); };
-    loadStats();
+    (function () {
+      var q = new URLSearchParams(location.search), tab = q.get('tab'), hrac = q.get('hrac');
+      if (hrac && /^\d+$/.test(hrac)) MOD_HRAC = hrac;
+      var b = tab && document.querySelector('.module-tab[data-tab="' + tab.replace(/[^a-z]/g, '') + '"]');
+      if (b) b.click(); else loadStats();
+      if (MOD_HRAC) detail(MOD_HRAC);
+    })();
   })();
   </script>
 </body>

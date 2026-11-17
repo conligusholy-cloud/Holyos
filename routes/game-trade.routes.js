@@ -404,6 +404,8 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
     spot_id: predmet === 'pobocka' ? nab.pobocka : nab.spot_id, card_kind: nab.card_kind,
     cena, karty, data, vzkaz: s(b.vzkaz, 200) || null,
   } });
+  // AI hlídání vzkazu (na pozadí; při škodě/podezření jde upozornění do Velína)
+  if (t.vzkaz) require('../services/game/moderace').zkontroluj({ player: req.player, zdroj: 'vzkaz', refId: t.id, text: t.vzkaz, komu: druhy.nick });
   res.json({ ok: true, trade: verejny(t, req.player.id) });
 }));
 
@@ -476,6 +478,7 @@ router.post('/trade/:id/counter', hrac, api(async (req, res) => {
       cena, karty, data, vzkaz: s((req.body || {}).vzkaz, 200) || null, parent_id: t.id,
     } });
   });
+  if (novy && novy.vzkaz) require('../services/game/moderace').zkontroluj({ player: req.player, zdroj: 'vzkaz', refId: novy.id, text: novy.vzkaz, komu: t.from_nick });
   res.json({ ok: true, trade: verejny(novy, req.player.id) });
 }));
 
