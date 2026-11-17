@@ -22,6 +22,7 @@ const crypto = require('crypto');
 const { prisma } = require('../config/database');
 
 const ZAPSAT = process.argv.includes('--zapsat');
+const KLIC_HOTOVO = 'oprava_id_mest';
 
 function predponaMista(key) {
   const s = String(key).replace(/[^a-z0-9]+/g, '-');
@@ -39,7 +40,9 @@ function prejmenuj(id, mapa) {
   return mapa[zaklad] ? mapa[zaklad] + zbytek : null;
 }
 
-async function main() {
+// Zapisuje se s `zapsat`, jinak jen vypisuje. `tichy` drží pusu, když není
+// co dělat — při startu aplikace nemá cenu psát do logu, že nic nebylo.
+async function oprav({ zapsat, tichy }) {
   const oblasti = await prisma.gameArea.findMany();
   // Jen města, kterým se předpona mění.
   const dotcene = oblasti.map((a) => {
@@ -48,7 +51,10 @@ async function main() {
     return { a, stara, nova };
   }).filter((x) => x.stara !== x.nova);
 
-  if (!dotcene.length) { console.log('Žádné město s prázdnou předponou — není co opravovat.'); return; }
+  if (!dotcene.length) {
+    if (!tichy) console.log('Žádné město s prázdnou předponou — není co opravovat.');
+    return { nic: true };
+  }
 
   console.log('Měst k opravě: ' + dotcene.length);
   // Mapa id podle města. Id se skládalo jako <predpona>-<poradi>, takže
@@ -116,9 +122,8 @@ async function main() {
   // a o zbytku nevědět je horší než původní chyba, takže se radši zastavíme.
   const chybi = tabulky.filter(([m]) => !prisma[m]).map(([m]) => m);
   if (chybi.length) {
-    console.error('\nPrisma klient nezná: ' + chybi.join(', '));
-    console.error('Spusť nejdřív `npx prisma generate` a zkus to znovu.');
-    process.exit(2);
+    throw new Error('Prisma klient nezná: ' + chybi.join(', ')
+      + ' — spusť nejdřív `npx prisma generate`.');
   }
 
   const plan = [];
@@ -187,9 +192,9 @@ async function main() {
   console.log('\nHráčů se změnou stavu: ' + stavy.length);
   stavy.forEach((x) => console.log('  #' + x.id + ' ' + x.nick + ' · změn ' + x.zmen));
 
-  if (!ZAPSAT) {
+  if (!zapsat) {
     console.log('\n(zkouška nanečisto — provést přes --zapsat)');
-    return;
+    return { nanecisto: true };
   }
 
   // ── Zápis ─────────────────────────────────────────────────────────────────
@@ -221,6 +226,34 @@ async function main() {
 
   console.log('\nHotovo. Měst ' + dotcene.length + ', claimů ' + claimyKeZmene.length
     + ', dalších řádků ' + plan.length + ', stavů ' + stavy.length + '.');
+  return { mest: dotcene.length, claimu: claimyKeZmene.length,
+    radku: plan.length, stavu: stavy.length };
 }
 
-main().then(() => process.exit(0)).catch((e) => { console.error(e.message); process.exit(1); });
+// Spuštění při startu aplikace. Databáze je dosažitelná jen odtamtud, kde
+// hra běží — veřejný port Railway se mění a hádat ho z notebooku je ztráta
+// času. Opravu drží pojistka v nastavení, takže při dalším nasazení už jen
+// přečte příznak a nic nedělá.
+async function priStartu() {
+  try {
+    const hotovo = await prisma.gameSetting.findUnique({ where: { klic: KLIC_HOTOVO } });
+    if (hotovo && hotovo.hodnota === '1') return;
+    const v = await oprav({ zapsat: true, tichy: true });
+    await prisma.gameSetting.upsert({
+      where: { klic: KLIC_HOTOVO },
+      create: { klic: KLIC_HOTOVO, hodnota: '1' },
+      update: { hodnota: '1' },
+    });
+    if (v && !v.nic) console.log('[game] oprava id měst bez latinky proběhla');
+  } catch (e) {
+    console.warn('[game] oprava id měst:', e && e.message);
+  }
+}
+
+module.exports = { oprav, priStartu, predponaMista };
+
+if (require.main === module) {
+  oprav({ zapsat: ZAPSAT, tichy: false })
+    .then(() => process.exit(0))
+    .catch((e) => { console.error(e.message); process.exit(1); });
+}

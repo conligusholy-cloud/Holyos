@@ -1495,6 +1495,10 @@ server.listen(PORT, async () => {
     require('./services/game/udalosti').start();
     // Doběhlou dražbu musí někdo vypořádat, i když se zrovna nikdo nedívá.
     require('./services/game/drazby').start();
+    // Jednorázová oprava: města bez latinky (Москва, Львів) sdílela předponu
+    // id míst, takže jeden prádlomat svítil ve dvou městech. Drží to pojistka
+    // v nastavení, takže při dalším nasazení se jen přečte příznak.
+    require('./nastroje/opravit-id-mest').priStartu();
   } catch (err) {
     console.error('[app] game-finance nelze spustit:', err.message);
   }
