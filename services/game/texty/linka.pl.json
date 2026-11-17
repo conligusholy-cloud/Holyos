@@ -284,6 +284,92 @@
     ]
   },
   {
+    "id": "novy",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Dzień dobry, idę obok i nie wiem, jak to działa. To jest pralnia?",
+        "o": [
+          {
+            "t": "Samoobsługa. Wrzucasz pranie, płacisz i za 35 minut masz gotowe.",
+            "b": 2,
+            "r": "Aha, to spróbuję."
+          },
+          {
+            "t": "To jest przecież jasne z nazwy, gdyby to była pralnia, stałby tam ktoś za ladą i przyjmował pranie.",
+            "b": -2,
+            "r": "To jest bez sensu."
+          },
+          {
+            "t": "Samoobsługa.",
+            "b": 0,
+            "r": "No... dobrze."
+          }
+        ]
+      },
+      {
+        "t": "A proszek mam przynieść?",
+        "o": [
+          {
+            "t": "Nie musisz, dozownik jest w pralce.",
+            "b": 2,
+            "r": "Świetnie."
+          },
+          {
+            "t": "To zależy od ciebie, każdy robi to po swojemu.",
+            "b": 0,
+            "r": "Więc co radzisz?"
+          },
+          {
+            "t": "Jasne, bez własnego proszku nie ma sensu, nasz dozownik i tak dozuje mało i pranie nie jest porządnie wyprane.",
+            "b": -2,
+            "r": "To świetna reklama."
+          }
+        ]
+      },
+      {
+        "t": "Ile mam go dać?",
+        "o": [
+          {
+            "t": "Odmierzoną porcję. Więcej proszku nie wypiersz lepiej.",
+            "b": 2,
+            "r": "Dobra rada."
+          },
+          {
+            "t": "Ile uważasz, że trzeba. Ja przy tej pralce nie stoję.",
+            "b": -1,
+            "r": "Dlatego pytam ciebie."
+          },
+          {
+            "t": "Przeczytaj na opakowaniu, jest tam tabela według twardości wody i stopnia zabrudzenia.",
+            "b": -1,
+            "r": "Stoję przy pralce, nie w domu."
+          }
+        ]
+      },
+      {
+        "t": "A gdzie zapłacę?",
+        "o": [
+          {
+            "t": "Kartą na terminalu przy drzwiach albo monetami.",
+            "b": 2,
+            "r": "Super, idę do tego."
+          },
+          {
+            "t": "Gdzieś tam to jest.",
+            "b": -2,
+            "r": "To mi naprawdę pomogło."
+          },
+          {
+            "t": "Płaci się dopiero po praniu.",
+            "b": -2,
+            "r": "To mi pralka nie ruszyła."
+          }
+        ]
+      }
+    ]
+  },
+  {
     "id": "pes",
     "rod": "",
     "kroky": [
@@ -2324,6 +2410,72 @@
             "t": "Jedno i drugie działa tak samo.",
             "b": 0,
             "r": "To wyraźnie nie."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "cekani",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Stoję u was i wszystkie pralki pracują. Jak długo mam czekać?",
+        "o": [
+          {
+            "t": "Sprawdzam w systemie: ta po lewej kończy za jedenaście minut, druga za dwadzieścia.",
+            "b": 2,
+            "r": "To poczekam, dzięki."
+          },
+          {
+            "t": "Tego panu nie powiem.",
+            "b": -2,
+            "r": "Przecież musicie to widzieć."
+          },
+          {
+            "t": "Trochę to potrwa.",
+            "b": -1,
+            "r": "Trochę to ile?"
+          }
+        ]
+      },
+      {
+        "t": "A da się to jakoś zarezerwować z góry, żebym nie jeździł na darmo?",
+        "o": [
+          {
+            "t": "Rezerwacji nie robimy, ale w aplikacji widzicie, co jest wolne, zanim wyruszycie.",
+            "b": 2,
+            "r": "To mi wystarczy."
+          },
+          {
+            "t": "Nie.",
+            "b": -1,
+            "r": "Aha."
+          },
+          {
+            "t": "Proszę zarezerwować u konkurencji.",
+            "b": -2,
+            "r": "To nie była zbyt mądra odpowiedź."
+          }
+        ]
+      },
+      {
+        "t": "A co jak ktoś zostawi pranie w pralce i nie przyjdzie po nie?",
+        "o": [
+          {
+            "t": "Możecie je wyjąć do boksu obok. Właściciel dostaje powiadomienie, zazwyczaj przyjeżdża w ciągu dziesięciu minut.",
+            "b": 2,
+            "r": "Rozumiem, to spróbuję."
+          },
+          {
+            "t": "Nie dotykajcie cudzego prania.",
+            "b": -1,
+            "r": "A co mam robić?"
+          },
+          {
+            "t": "To proszę poczekać.",
+            "b": -2,
+            "r": "Ładnie mi pan poradził."
           }
         ]
       }

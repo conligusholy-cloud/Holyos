@@ -94,6 +94,30 @@ let POSLI = fetch;
   }
 }());
 
+// Jedna pokažená odpověď nesmí stát čtyřicet textů. Stane se, že se model
+// netrefí do JSONu — delší odpověď má víc příležitostí. Dávku proto při
+// nezdaru půlíme a zkoušíme znovu; co nakonec selže, je jeden text, ne celá
+// dávka, a ten se doplní při dalším spuštění. Bez tohohle se čtyřicet textů
+// ztratilo na jednom řádku v logu, kterého si nikdo nevšiml.
+async function poDavkach(davka, slovnik, jazyk) {
+  const klice = Object.keys(davka);
+  try {
+    return await prelozDavku(davka, slovnik, jazyk);
+  } catch (e) {
+    if (klice.length === 1) {
+      console.error('    text ' + klice[0] + ' se nepovedl: ' + e.message);
+      return {};
+    }
+    console.error('    dávka ' + klice.length + ' textů selhala (' + e.message.slice(0, 80)
+      + '), zkouším po polovinách');
+    const pul = Math.ceil(klice.length / 2);
+    const vyber = (ks) => { const o = {}; ks.forEach((k) => { o[k] = davka[k]; }); return o; };
+    const a = await poDavkach(vyber(klice.slice(0, pul)), slovnik, jazyk);
+    const b = await poDavkach(vyber(klice.slice(pul)), slovnik, jazyk);
+    return Object.assign({}, a, b);
+  }
+}
+
 async function prelozDavku(davka, slovnik, jazyk) {
   const klic = process.env.ANTHROPIC_API_KEY;
   if (!klic) throw new Error('chybí ANTHROPIC_API_KEY v prostředí');
@@ -185,7 +209,7 @@ async function main() {
     const davka = {};
     klice.forEach((k) => { davka[k] = cs[k]; });
     try {
-      const vysledek = await prelozDavku(davka, slovnik, jazyk);
+      const vysledek = await poDavkach(davka, slovnik, jazyk);
       klice.forEach((k) => {
         if (vysledek[k] == null) return;
         en[k] = vysledek[k];
@@ -200,7 +224,11 @@ async function main() {
       console.error('  dávka od ' + i + ' selhala: ' + e.message);
     }
   }
-  console.log('přeloženo: ' + hotovo);
+  // Stejně u textů: kolik se jich nepovedlo, musí být vidět na konci,
+  // ne jen v řádku uprostřed výpisu.
+  const zbyva = kdopotrebuje.length - hotovo;
+  console.log('přeloženo: ' + hotovo + (zbyva > 0
+    ? ' · nepovedlo se: ' + zbyva + ' (zůstávají česky, spusť příkaz znovu)' : ''));
   if (hotovo) { meta[SLOVNIK_KLIC] = slovnikOtisk; zapis(souborM, meta); }
   await linka(slovnik, jazyk);
 }
@@ -231,6 +259,7 @@ async function linka(slovnik, jazyk) {
   if (!chybi.length) return;
   if (process.argv.includes('--nanecisto')) { console.log(chybi.map(({ s }) => s.id).join(', ')); return; }
 
+  const nepovedlo = [];
   for (const { s: scenar, i: poradi } of chybi) {
     try {
       // Překládají se jen věty. id, bod a rod musí zůstat, jak jsou —
@@ -251,7 +280,15 @@ async function linka(slovnik, jazyk) {
       console.log('  ' + scenar.id);
     } catch (e) {
       console.error('  scénář ' + scenar.id + ' selhal: ' + e.message);
+      nepovedlo.push(scenar.id);
     }
+  }
+  // Ať se nestane, že se to ztratí v záplavě řádků. Nepřeložený scénář
+  // zůstane česky a hra jede dál, ale má se o tom vědět.
+  if (nepovedlo.length) {
+    console.log('');
+    console.log('scénáře, které se nepovedly: ' + nepovedlo.join(', '));
+    console.log('Zůstávají česky. Spusť příkaz znovu, zkusí se jen ony.');
   }
 }
 
