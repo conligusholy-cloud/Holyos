@@ -649,14 +649,81 @@ async function dorovnejProvize(zvouci) {
   return celkem;
 }
 
-// POST /account/nakup — hráč právě koupil stroj. Kdo ho do hry přivedl a platí
-// si distribuci, dostane provizi hned, bez čekání na dovoz a stavbu.
-// Částka se neposílá z klienta — server si ji spočítá z uložené sítě.
+// Dodací lhůta. Čím větší síť, tím déle se čeká — musí sedět s dodaniDnu()
+// v public/compounder/game/game.js. Počítá se z evidence míst, ne z toho, co
+// pošle prohlížeč.
+const DODANI_ZA = 50, DODANI_MAX_DNU = 5, DELIVERY_MONTHS = 2;
+async function dodaniMs(playerId) {
+  const n = await prisma.gameSpotClaim.count({ where: { player_id: playerId, model: { not: '' } } });
+  const dnu = Math.max(1, Math.min(DODANI_MAX_DNU, Math.ceil(n / DODANI_ZA)));
+  return dnu * DELIVERY_MONTHS * MESIC_MS;
+}
+
+// POST /account/nakup { model, hned } — hráč právě koupil stroj.
+// Dvě věci naráz: kdo ho do hry přivedl a platí si distribuci, dostane
+// provizi hned, bez čekání na dovoz a stavbu. A objednávka se zapíše, aby
+// server věděl, co má hráč na cestě a ve skladu — dosud to žilo jen
+// v prohlížeči, a proto serverové jmění sklad vůbec nevidělo.
+//
+// Zatím se jen zapisuje. Hra pořád jede podle svého a nic si odsud nebere;
+// teprve až se ukáže, že obojí sedí, může se sklad stát tím rozhodujícím.
 router.post('/account/nakup', requirePlayer, async (req, res, next) => {
   try {
+    const b = req.body || {};
+    const model = s(b.model, 10);
+    let objednavka = null;
+    if (CENY_STROJU[model]) {
+      const ted = Date.now();
+      const za = b.hned ? 0 : await dodaniMs(req.player.id);
+      objednavka = await prisma.gameOrder.create({ data: {
+        player_id: req.player.id, model, cena: CENY_STROJU[model],
+        dorazi_at: new Date(ted + za),
+      } });
+    }
     const zvouci = await kdoPrivedl(req.player);
     const vyplaceno = zvouci ? await dorovnejProvize(zvouci) : 0;
-    res.json({ ok: true, vyplaceno });
+    res.json({ ok: true, vyplaceno, objednavka: objednavka ? objednavka.id : null });
+  } catch (e) { next(e); }
+});
+
+// Stavba spotřebuje stroj ze skladu. Zatím je to jen značka: když se stroj
+// nenajde, nic se neodmítá — hra pořád rozhoduje sama a tenhle zápis slouží
+// k tomu, aby šlo porovnat, jestli obojí sedí. Až se ukáže, že ano, stane se
+// z toho podmínka: postavit půjde jen stroj, který hráč opravdu koupil.
+async function spotrebujSklad(playerId, model, spot) {
+  if (!model) return null;
+  try {
+    const volny = await prisma.gameOrder.findFirst({
+      where: { player_id: playerId, model, postaveno_at: null, zruseno_at: null },
+      orderBy: { dorazi_at: 'asc' },
+    });
+    if (!volny) {
+      console.warn('[game-sklad] hráč #' + playerId + ' staví ' + model + ' na ' + spot
+        + ', ale server mu žádný takový stroj neeviduje');
+      return null;
+    }
+    return await prisma.gameOrder.update({ where: { id: volny.id },
+      data: { postaveno_at: new Date(), spot_id: spot } });
+  } catch (e) {
+    console.warn('[game] sklad při stavbě:', e.message);
+    return null;
+  }
+}
+
+// GET /account/sklad → co má hráč podle serveru na cestě a ve skladu.
+// Hra si to zatím jen může porovnat se svým; rozhoduje pořád ona.
+router.get('/account/sklad', requirePlayer, async (req, res, next) => {
+  try {
+    const rows = await prisma.gameOrder.findMany({
+      where: { player_id: req.player.id, postaveno_at: null, zruseno_at: null },
+      orderBy: { dorazi_at: 'asc' },
+    });
+    const ted = Date.now();
+    res.json({ ok: true,
+      skladem: rows.filter((r) => new Date(r.dorazi_at).getTime() <= ted)
+        .map((r) => ({ id: r.id, model: r.model, cena: r.cena })),
+      na_ceste: rows.filter((r) => new Date(r.dorazi_at).getTime() > ted)
+        .map((r) => ({ id: r.id, model: r.model, cena: r.cena, dorazi: r.dorazi_at })) });
   } catch (e) { next(e); }
 });
 
@@ -2048,6 +2115,7 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
         lat: Number(b.lat) || null, lon: Number(b.lon) || null, pozemek, cena: cenaZeme,
         vazano_do: vaz ? new Date(Date.now() + vaz * MESIC_MS) : null, vypoved_mesicu: vyp },
     });
+    await spotrebujSklad(req.player.id, model, spot);
     // Od téhle chvíle je místo zasíťované napořád, i kdyby ho hráč zítra opustil.
     try {
       await prisma.gameSpotBuilt.upsert({
@@ -2116,6 +2184,7 @@ router.post('/spots/stavba', requirePlayer, async (req, res, next) => {
     if (cur.model) return res.status(409).json({ error: stx(req)('server.tady_uz_neco_stoji') });
     if (cur.najemce_id) return res.status(409).json({ error: stx(req)('server.pozemek_mas_pronajaty_nejdriv_ukonci_najem') });
     const upd = await prisma.gameSpotClaim.update({ where: { spot_id: spot }, data: { model } });
+    await spotrebujSklad(req.player.id, model, spot);
     res.json({ ok: true, spot: claimPub(upd, req.player.id, await firmyMapa()) });
   } catch (e) { next(e); }
 });

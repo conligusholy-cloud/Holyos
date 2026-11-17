@@ -248,4 +248,64 @@ function tiskEvidence(rows) {
   return out.join('\n');
 }
 
-module.exports = { srovnani, tisk, evidence, tiskEvidence, CENY_STROJU, stupen };
+// ─── Sklad: co o něm ví server proti tomu, co má hra ─────────────────────────
+// Nákup stroje se teď zapisuje i na server. Než na tom může stát jmění nebo
+// než se ze skladu stane podmínka stavby, musí být vidět, že se obojí trefuje
+// do stejných čísel. Rozdíly se dají čekat u hráčů, kteří kupovali dřív, než
+// se tohle zapínalo — ti budou mít serverový sklad prázdný.
+async function sklad() {
+  const hraci = await prisma.gamePlayer.findMany({
+    where: { disabled: false }, select: { id: true, nick: true, state: true },
+  });
+  const rows = await prisma.gameOrder.findMany({
+    where: { postaveno_at: null, zruseno_at: null },
+    select: { player_id: true, model: true, dorazi_at: true },
+  });
+  const ted = Date.now();
+  const podleHrace = new Map();
+  rows.forEach((r) => {
+    const a = podleHrace.get(r.player_id) || { skladem: 0, naceste: 0 };
+    if (new Date(r.dorazi_at).getTime() <= ted) a.skladem++; else a.naceste++;
+    podleHrace.set(r.player_id, a);
+  });
+
+  const out = [];
+  hraci.forEach((h) => {
+    const st = h.state || null;
+    if (!st) return;
+    const sk = st.stock && typeof st.stock === 'object' ? st.stock : {};
+    const hraSkladem = Object.keys(sk).reduce((a, k) => a + Math.max(0, Math.round(Number(sk[k]) || 0)), 0);
+    const hraNaceste = Array.isArray(st.orders) ? st.orders.length : 0;
+    const a = podleHrace.get(h.id) || { skladem: 0, naceste: 0 };
+    if (!hraSkladem && !hraNaceste && !a.skladem && !a.naceste) return;
+    out.push({ nick: h.nick, hraSkladem, hraNaceste,
+      serverSkladem: a.skladem, serverNaceste: a.naceste,
+      sedi: hraSkladem === a.skladem && hraNaceste === a.naceste });
+  });
+  out.sort((x, y) => (x.sedi === y.sedi ? 0 : x.sedi ? 1 : -1));
+  return out;
+}
+
+function tiskSklad(rows) {
+  const nesedi = rows.filter((r) => !r.sedi);
+  const out = [];
+  out.push('Hráčů se strojem na cestě nebo ve skladu: ' + rows.length);
+  out.push('Z toho se serveru a hře rozchází: ' + nesedi.length);
+  out.push('');
+  out.push('nick                 hra skl/cesta   server skl/cesta');
+  out.push('-'.repeat(56));
+  rows.slice(0, 60).forEach((r) => {
+    out.push(String(r.nick || '').padEnd(20).slice(0, 20)
+      + (r.hraSkladem + '/' + r.hraNaceste).padStart(14)
+      + (r.serverSkladem + '/' + r.serverNaceste).padStart(19)
+      + (r.sedi ? '' : '   \u2190 nesedí'));
+  });
+  if (rows.length > 60) out.push('\u2026 a dalších ' + (rows.length - 60));
+  out.push('');
+  out.push('Hráči, kteří kupovali dřív, než se nákup začal zapisovat, budou mít');
+  out.push('serverový sklad prázdný. Zajímavé jsou až ty, co koupili potom.');
+  return out.join('\n');
+}
+
+module.exports = { srovnani, tisk, evidence, tiskEvidence, sklad, tiskSklad,
+  CENY_STROJU, stupen };

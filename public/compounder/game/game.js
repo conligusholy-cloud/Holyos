@@ -5091,7 +5091,10 @@ function buySheet(modelKey, drz) {
     // se kupovalo — ten z ní spočte provizi tomu, kdo nás do hry přivedl.
     // Provize se platí hned při nákupu, ne až až stroj dorazí a postaví se.
     syncState(true).then(function () {
-      if (ME) apiJson('/account/nakup', { model: modelKey }).catch(function () { /* zkusí se přiště */ });
+      // hned = úplně první stroj, který dorazí bez čekání. Server si podle
+      // toho nastaví, kdy objednávka dorazí — bez toho by nováčkovi ležel
+      // první prádlomat den na cestě, i když ho ve hře má hned.
+      if (ME) apiJson('/account/nakup', { model: modelKey, hned: !!hned }).catch(function () { /* zkusí se přiště */ });
     });
     toast(hned ? tx('veta.je_na_sklade_dopravce_ho_privezl', { p1: m.name }): tx('veta.objednan_dorazi', { p1: m.name, p2: etaText(dodaniMs()) }), 'ok');
   };

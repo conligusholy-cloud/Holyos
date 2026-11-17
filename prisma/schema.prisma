@@ -8160,6 +8160,30 @@ model GameDelivery {
   @@map("game_deliveries")
 }
 
+// Objednané a skladem ležící stroje.
+// Nákup prádlomatu dosud žil jen v prohlížeči: server věděl, že se kupovalo
+// (platil z toho provizi), ale ne co a za kolik. Proto serverové jmění
+// nevidělo sklad ani zboží na cestě — u hráče uprostřed expanze je to
+// většina majetku.
+//
+// Jeden řádek = jeden stroj. Ve kterém je stavu, říkají data: dorazi_at
+// v budoucnu znamená na cestě, v minulosti bez stavby znamená skladem,
+// a vyplněné postaveno_at znamená, že stojí na místě spot_id.
+model GameOrder {
+  id           Int       @id @default(autoincrement())
+  player_id    Int
+  model        String    @db.VarChar(10)
+  cena         Int       @default(0)
+  dorazi_at    DateTime
+  postaveno_at DateTime?
+  spot_id      String?   @db.VarChar(120)
+  zruseno_at   DateTime?
+  created_at   DateTime  @default(now())
+
+  @@index([player_id, postaveno_at])
+  @@map("game_orders")
+}
+
 // Otisk hry v čase. Ukládaný stav si drží jen poslední podobu, takže na
 // otázku „kam se podělo dvacet milionů" se dnes nedá odpovědět — historie
 // prostě neexistuje. Tahle tabulka je nejlevnější historie, jaká dává smysl:

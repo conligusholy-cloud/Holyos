@@ -167,6 +167,12 @@ router.get('/evidence-rozdily', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(tiskEvidence(await evidence()));
 }));
 
+// GET /sklad-rozdily → co o skladu ví server proti tomu, co má hra.
+router.get('/sklad-rozdily', api(async (req, res) => {
+  const { sklad, tiskSklad } = require('../services/game/srovnani');
+  res.type('text/plain; charset=utf-8').send(tiskSklad(await sklad()));
+}));
+
 // GET /strop-prehled → kolik uložení přeteklo mez přírůstku hotovosti.
 // Tohle je ladicí pohled, ne obvinění: mez je zatím schválně velkorysá a
 // zajímá nás hlavně, kolik planých poplachů dělá, než se z ní stane strop.
