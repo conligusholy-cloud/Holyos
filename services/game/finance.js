@@ -20,7 +20,9 @@ const { prisma } = require('../../config/database');
 const MESIC_MS = 43200000;          // herní měsíc = 12 skutečných hodin
 const ZMESKAT_BEZ_ZASTAVY = 3;      // kolik odpuštěných splátek má dlužník bez zástavy
 const ZMESKAT_SE_ZASTAVOU = 1;      // se zástavou propadá hned při první nezaplacené
-const zmeskatMax = (p) => (p.zastava_spot ? ZMESKAT_SE_ZASTAVOU : ZMESKAT_BEZ_ZASTAVY);
+// Se zástavou — prádlomatem i podílem — propadá hned při první nezaplacené
+// splátce. Bez krytí má dlužník tři pokusy.
+const zmeskatMax = (p) => ((p.zastava_spot || p.zastava_podil) ? ZMESKAT_SE_ZASTAVOU : ZMESKAT_BEZ_ZASTAVY);
 const TIK_MS = 5 * 60000;           // jak často se kouká, co je splatné
 
 const stavu = (p) => (p && p.state) || {};
@@ -92,6 +94,35 @@ async function splatkyPujcek(ted) {
         continue;
       }
       const zbyva = Math.max(0, p.splatka * zbyvaSplatek);
+      if (p.zastava_podil) {
+        // Zastavený podíl přechází věřiteli. Od té chvíle je to jeho běžný
+        // podíl — může ho držet, prodat dál, nabídnout k odkupu i vydražit.
+        // Cenou je nesplacený zbytek: tolik ho ten podíl opravdu stál.
+        const firma = await prisma.gamePlayer.findUnique({ where: { id: p.borrower_id } });
+        const veritel = await prisma.gamePlayer.findUnique({ where: { id: p.lender_id } });
+        if (firma && veritel) {
+          await prisma.$transaction(async (tx) => {
+            await tx.gameEquity.create({ data: {
+              investor_id: p.lender_id, investor_nick: p.lender_nick,
+              firma_id: p.borrower_id, firma_nick: p.borrower_nick,
+              podil: p.zastava_podil, cena: Math.round(zbyva), vyplaceno: 0,
+              dalsi_at: new Date(ted.getTime() + MESIC_MS),
+            } });
+            await dorucit(tx, p.borrower_id, 'zprava', null,
+              'Nezaplatil jsi splátku a propadl zastavený podíl',
+              { text_kod: 'dor.propadl_podil_tobe',
+                text_data: { p1: Math.round(p.zastava_podil * 100), p2: p.lender_nick } });
+            await dorucit(tx, p.lender_id, 'zprava', null,
+              'Propadlý podíl od ' + p.borrower_nick,
+              { text_kod: 'dor.propadl_podil_tvuj',
+                text_data: { p1: Math.round(p.zastava_podil * 100), p2: p.borrower_nick } });
+            await tx.gameLoan.update({ where: { id: p.id }, data: { stav: 'propadlo', zmeskano } });
+          });
+          console.log('[game-finance] podíl ' + Math.round(p.zastava_podil * 100)
+            + ' % propadl ' + p.lender_nick);
+          continue;
+        }
+      }
       if (p.zastava_spot) {
         // Zástava propadá věřiteli i s místem.
         const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: p.zastava_spot } });

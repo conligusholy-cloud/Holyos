@@ -8092,6 +8092,9 @@ model GameLoan {
   zmeskano     Int       @default(0)
   zastava_spot String?   @db.VarChar(120)
   zastava_nazev String?  @db.VarChar(160)
+  // Zástava podílem: kus firmy, který při první nezaplacené splátce přejde
+  // věřiteli. 0,1 = deset procent. Vylučuje se se zástavou prádlomatem.
+  zastava_podil Float?
   // bezi | splaceno | propadlo | vymahano
   stav         String    @default("bezi") @db.VarChar(12)
   dalsi_at     DateTime

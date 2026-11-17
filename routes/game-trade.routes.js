@@ -246,9 +246,16 @@ async function hotovostStaci(hrac, cena, kromeId, t) {
 
 // Kolik procent firmy už je prodáno jinde.
 async function prodanyPodil(firmaId) {
-  const rows = await prisma.gameEquity.findMany({ where: { firma_id: firmaId, stav: 'bezi' },
-    select: { podil: true } });
-  return rows.reduce((a, x) => a + (x.podil || 0), 0);
+  const [rows, pujcky] = await Promise.all([
+    prisma.gameEquity.findMany({ where: { firma_id: firmaId, stav: 'bezi' }, select: { podil: true } }),
+    // Zastavený podíl je stejně vázaný jako prodaný. Bez tohohle by dlužník
+    // zastavil dvacet procent, hned prodal osmdesát někomu jinému a věřiteli
+    // by při propadnutí nezbylo nic — zástava by byla jen na oko.
+    prisma.gameLoan.findMany({ where: { borrower_id: firmaId, stav: 'bezi', zastava_podil: { not: null } },
+      select: { zastava_podil: true } }),
+  ]);
+  return rows.reduce((a, x) => a + (x.podil || 0), 0)
+    + pujcky.reduce((a, x) => a + (x.zastava_podil || 0), 0);
 }
 
 // Procenta do názvů a hlášek: 0,05 → „5", 0,025 → „2,5". Celá čísla zůstávají
@@ -304,7 +311,20 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
     // Věřitel může zástavu podmínit, i když ještě neví, čím mu dlužník ručí —
     // ten ji vybere, až bude nabídku přijímat.
     const zadam = smer === 'prodam' && !zast && !!b.zadam_zastavu;
+    // Zástava podílem. Procento si říká věřitel — je to cena za půjčku stejně
+    // jako úrok, dlužník to buď vezme, nebo ne. Vylučuje se se zástavou
+    // prádlomatem i s požadavkem „vyber si sám“.
+    let zastPodil = null;
+    if (!zast && !zadam && Number(b.zastava_podil) > 0) {
+      zastPodil = Math.max(PODIL_MIN, Math.min(PODIL_MAX, Number(b.zastava_podil)));
+      const volne = PODIL_MAX - await prodanyPodil(dluznik.id);
+      if (zastPodil > volne + 1e-9) {
+        return res.status(409).json({ error: stx(req)('server.na_zastavu_podilem_nema_tolik',
+          { p1: Math.round(zastPodil * 100), p2: Math.round(Math.max(0, volne) * 100) }) });
+      }
+    }
     data = { urok, mesicu, zastava: zast, zastava_nazev: zastavaNazev,
+      zastava_podil: zastPodil,
       zadam_zastavu: zadam, splatka: anuita(cena, urok, mesicu) };
   } else if (predmet === 'podil') {
     const podil = Math.max(PODIL_MIN, Math.min(PODIL_MAX, Number(b.podil) || 0));
@@ -530,6 +550,17 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
   }
   let zastavaSpot = t.predmet === 'pujcka' ? ((t.data || {}).zastava || null) : null;
   let zastavaNazev = t.predmet === 'pujcka' ? ((t.data || {}).zastava_nazev || null) : null;
+  const zastavaPodil = t.predmet === 'pujcka' ? (Number((t.data || {}).zastava_podil) || null) : null;
+  if (zastavaPodil) {
+    // Od vystavení nabídky mohl dlužník podíl prodat jinam. Zastavit se dá
+    // jen to, co je pořád volné.
+    const volne = PODIL_MAX - await prodanyPodil(kupujici.id);
+    if (zastavaPodil > volne + 1e-9) {
+      await prisma.gameTrade.update({ where: { id }, data: { stav: 'neplatne', resolved_at: new Date() } });
+      return res.status(409).json({ error: stx(req)('server.na_zastavu_podilem_uz_nema',
+        { p1: Math.round(zastavaPodil * 100), p2: Math.round(Math.max(0, volne) * 100) }) });
+    }
+  }
   if (zastavaSpot) {
     const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: zastavaSpot } });
     if (!c || c.player_id !== kupujici.id) {
@@ -613,6 +644,7 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
         borrower_id: kupujici.id, borrower_nick: kupujici.nick,
         castka: t.cena, urok, mesicu, splatka,
         zastava_spot: zastavaSpot, zastava_nazev: zastavaNazev,
+        zastava_podil: zastavaPodil,
         dalsi_at: new Date(Date.now() + MESIC_MS),
       } });
       await tx.gameDelivery.createMany({ data: [
@@ -741,7 +773,7 @@ router.get('/trade/finance', hrac, api(async (req, res) => {
       splaceno: p.splaceno, zmeskano: p.zmeskano, stav: p.stav, doplatek: doplatek(p),
       // Kolik už přes splátky proteklo a kolik má ještě přijít, v penězích.
       zaplaceno: p.splaceno * p.splatka, celkem: p.mesicu * p.splatka,
-      zastava: p.zastava_nazev || null, dalsi: p.dalsi_at })),
+      zastava: p.zastava_nazev || null, zastava_podil: p.zastava_podil || null, dalsi: p.dalsi_at })),
     podily: podily.map((e) => ({ id: e.id, trade_id: e.trade_id,
       moje: e.investor_id === ja ? 'mam' : 'prodal',
       kdo: e.investor_id === ja ? e.firma_nick : e.investor_nick,

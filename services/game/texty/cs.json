@@ -3375,5 +3375,14 @@
   "hra.stav_prijato": "přijato",
   "hra.stav_odmitnuto": "odmítnuto",
   "hra.stav_zruseno": "zrušeno",
-  "hra.stav_neplatne": "neplatné"
+  "hra.stav_neplatne": "neplatné",
+  "server.na_zastavu_podilem_nema_tolik": "Tolik podílu nemá volného — chceš {p1} %, ale volných je jen {p2} %.",
+  "server.na_zastavu_podilem_uz_nema": "Zastavených {p1} % už není volných, zbývá jen {p2} %. Nabídka tím padá.",
+  "dor.propadl_podil_tobe": "Nezaplatil jsi splátku a propadl zastavený podíl — {p1} % tvojí firmy má teď {p2}.",
+  "dor.propadl_podil_tvuj": "Propadla ti zástava: {p1} % firmy hráče {p2} je teď tvých. Naložíš s nimi, jak chceš.",
+  "hra.zastava_pradlomatem": "Prádlomatem",
+  "hra.jaky_podil_chces_do_zastavy": "Jaký podíl chceš do zástavy (%)",
+  "veta.pct_firmy_do_zastavy": "{p1} % firmy",
+  "veta.pri_prvni_nezaplacene_splatce_ti_podil": "Při první nezaplacené splátce ti propadne {p1} % jeho firmy. Podíl si pak můžeš nechat, prodat ho nebo nabídnout zpátky k odkupu.",
+  "hra.jedna_nezaplacena_splatka_a_podil": "Jedna nezaplacená splátka a podíl v jeho firmě je tvůj."
 }

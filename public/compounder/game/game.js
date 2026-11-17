@@ -9289,15 +9289,20 @@ function financeHtml() {
   var h = '<div class="card"><h3>' + esc(tx('hra.pujcky_a_podily')) + '</h3>';
   (f.pujcky || []).filter(bezici).forEach(function (p) {
     var dluzim = p.moje === 'dluzim';
-    h += '<div class="trade"><div class="row"><b>' + (dluzim ? esc(tx('hra.dluzis_2')) + ' ' : esc(tx('hra.pujcil_jsi')) + ' ') + tx('veta.b_b_b_div_p_class', { p1: esc(p.kdo), p2: kcFull(p.castka), p3: procenta(p.urok), p4: p.splaceno, p5: p.mesicu }) + (p.zastava ? tx('hra.zastava_4', { p1: esc(p.zastava) }) : esc(tx('hra.bez_zastavy_4'))) + '</p>'
+    h += '<div class="trade"><div class="row"><b>' + (dluzim ? esc(tx('hra.dluzis_2')) + ' ' : esc(tx('hra.pujcil_jsi')) + ' ') + tx('veta.b_b_b_div_p_class', { p1: esc(p.kdo), p2: kcFull(p.castka), p3: procenta(p.urok), p4: p.splaceno, p5: p.mesicu }) + (p.zastava ? tx('hra.zastava_4', { p1: esc(p.zastava) })
+          : p.zastava_podil
+            ? tx('hra.zastava_4', { p1: tx('veta.pct_firmy_do_zastavy', { p1: Math.round(p.zastava_podil * 100) }) })
+            : esc(tx('hra.bez_zastavy_4'))) + '</p>'
       + '<div class="row"><span class="muted small">' + (dluzim ? esc(tx('hra.zaplatil_jsi')) : esc(tx('hra.zaplatil_ti')))
       + '</span><span>' + kcFull(p.zaplaceno) + ' z ' + kcFull(p.celkem) + '</span></div>'
       + '<div class="row"><span class="muted small">' + (dluzim ? esc(tx('hra.dalsi_splatka')) : esc(tx('hra.dalsi_prijem'))) + '</span>'
       + '<span>' + kcFull(p.splatka) + ' ' + zaKolik(p.dalsi) + '</span></div>'
-      + (p.zastava
+      + ((p.zastava || p.zastava_podil)
           ? '<p class="fine ' + (dluzim ? 'err' : 'ok') + '">' + (dluzim
               ? esc(tx('hra.staci_jedna_nezaplacena_splatka_a'))
-              : esc(tx('hra.jedna_nezaplacena_splatka_a_zastava'))) + '</p>'
+              : p.zastava_podil
+                ? esc(tx('hra.jedna_nezaplacena_splatka_a_podil'))
+                : esc(tx('hra.jedna_nezaplacena_splatka_a_zastava'))) + '</p>'
           : p.zmeskano
             ? '<p class="small err" style="margin-top:6px">' + esc(tx('hra.zmeskane_splatky')) + ' ' + tx('hra.ze_tri', { p1: p.zmeskano })
               + (dluzim ? esc(tx('hra.po_treti_se_zbytek_dluhu'))
@@ -9798,9 +9803,8 @@ function radekObchodu(t) {
       ? '<div class="row"><span class="muted small">' + esc(tx('hra.splatka_za_herni_mesic_2')) + '</span><span>'
         + kcFull((t.data || {}).splatka || 0) + '</span></div>'
         + '<div class="row"><span class="muted small">' + esc(tx('hra.zastava_2')) + '</span><span' 
-        + ((t.data || {}).zadam_zastavu && !(t.data || {}).zastava_nazev ? ' class="warn"' : '') + '>'
-        + ((t.data || {}).zastava_nazev ? esc(t.data.zastava_nazev)
-            : (t.data || {}).zadam_zastavu ? esc(tx('hra.veritel_ji_vyzaduje_2')) : esc(tx('hra.bez_zastavy_5'))) + '</span></div>'
+        + (zastavaChybi(t.data) ? ' class="warn"' : '') + '>'
+        + zastavaPopis(t.data) + '</span></div>'
       : '')
     + '<div class="row"><span class="muted small">' + esc(tx('hra.cena_4')) + '</span><span class="cena">' + esc(cenaPopis(t)) + '</span></div>'
     + (t.vzkaz ? '<p class="muted small" style="margin-top:6px">„' + esc(t.vzkaz) + '"</p>' : '')
@@ -10060,10 +10064,9 @@ function protinavrhSheet(t) {
     + (pujcka ? tx('veta.castku_urok_i_delka_zustavaji', { p1: (buduDluznik ? ' ' + esc(tx('hra.a_zastavu')) : '') })
       : podil ? esc(tx('hra.cenu_i_to_o_kolik')) : esc(tx('hra.jen_cenu'))) + '</p>'
     + '<div class="kv"><span>' + esc(tx('hra.puvodni_nabidka')) + '</span><b>' + esc(cenaPopis(t)) + '</b></div>'
-    + (pujcka ? '<div class="kv"><span>' + esc(tx('hra.zastava')) + '</span><b' + (d.zadam_zastavu && !d.zastava_nazev ? ' class="warn"' : '') + '>'
-        + (d.zastava_nazev ? esc(d.zastava_nazev)
-            : d.zadam_zastavu ? esc(tx('hra.veritel_ji_vyzaduje')) : esc(tx('hra.bez_zastavy_2'))) + '</b></div>'
-      + (d.zadam_zastavu && !d.zastava_nazev && buduDluznik
+    + (pujcka ? '<div class="kv"><span>' + esc(tx('hra.zastava')) + '</span><b' + (zastavaChybi(d) ? ' class="warn"' : '') + '>'
+        + zastavaPopis(d) + '</b></div>'
+      + (zastavaChybi(d) && buduDluznik
           ? '<p class="fine warn">' + esc(tx('hra.bez_vybrane_zastavy_tuhle_pujcku')) + '</p>' : '') : '')
     + '<label class="fld"><span>' + esc(tx('hra.co_nabizis_ty_l')) + '</span>'
     + '<input id="pn-cena" class="inp" type="number" min="0" step="1000" value="' + (t.cena || 0) + '"></label>'
@@ -10351,6 +10354,19 @@ function hodnotaMojiFirmy() {
     zbyde_mesicne: zbyde, pradlomatu: (S.units || []).length,
     hodnota: Math.max(0, jmeni) };
 }
+// Jak se zástava u půjčky jmenuje v přehledech. Podíl má přednost — je to
+// tvrdší krytí než jeden prádlomat a vylučují se navzájem.
+function zastavaPopis(d) {
+  d = d || {};
+  if (d.zastava_podil) return tx('veta.pct_firmy_do_zastavy', { p1: Math.round(d.zastava_podil * 100) });
+  if (d.zastava_nazev) return esc(d.zastava_nazev);
+  if (d.zadam_zastavu) return esc(tx('hra.veritel_ji_vyzaduje'));
+  return esc(tx('hra.bez_zastavy_2'));
+}
+function zastavaChybi(d) {
+  d = d || {};
+  return !!(d.zadam_zastavu && !d.zastava_nazev && !d.zastava_podil);
+}
 function financeSheet(toId, kdo, co, a) {
   var pujcka = co === 'pujcim' || co === 'pujcim-si';
   // Ocenění firmy, o jejíž podíl jde: u sebe spočítáme, u cizí přišlo ze serveru.
@@ -10360,6 +10376,9 @@ function financeSheet(toId, kdo, co, a) {
   // Kolik procent z firmy ještě vůbec jde prodat. Bez toho hráč zadal šest
   // procent do firmy, kde zbývala čtyři, a nabídku mu odmítl až server.
   var zbyvaPodilu = Math.max(0, PODIL_MAX_HRA - Math.round(prodano * 100));
+  // U zástavy podílem jde o firmu dlužníka, ne o moji — kolik je v ní volného,
+  // přišlo ze serveru spolu s oceněním.
+  var zbyvaCizi = Math.max(0, PODIL_MAX_HRA - Math.round(((a && a.prodany_podil) || 0) * 100));
   var jaDavam = co === 'pujcim' || co === 'koupim-podil';     // z mé hotovosti
   var nadpis = co === 'pujcim' ? tx('veta.pujcit', { p1: esc(kdo.firma) }): co === 'pujcim-si' ? esc(tx('hra.pozadat_o_pujcku'))
     : co === 'koupim-podil' ? tx('veta.koupit_podil_v', { p1: esc(kdo.firma) }): esc(tx('hra.nabidnout_podil_ve_sve_firme'));
@@ -10386,7 +10405,11 @@ function financeSheet(toId, kdo, co, a) {
                     + mojeMista.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>'; }).join('')
                     + '</select></label>'
                   : '<p class="fine">' + esc(tx('hra.nemas_postaveny_pradlomat_takze_nabizis')) + '</p>')
-              : tx('veta.div_class_row_style_margin_10px', { p1: esc(tx('hra.chci_zastavu')) }))
+              : tx('veta.div_class_row_style_margin_10px', { p1: esc(tx('hra.chci_zastavu')) })
+                + '<label class="fld" id="fin-pod-box" style="display:none"><span>'
+                + esc(tx('hra.jaky_podil_chces_do_zastavy')) + '</span>'
+                + '<input id="fin-zast-podil" class="inp" type="number" inputmode="numeric" min="1" max="'
+                + Math.max(1, zbyvaCizi) + '" value="' + Math.min(20, Math.max(1, zbyvaCizi)) + '"></label>')
         : '<label class="fld"><span>' + esc(tx('hra.podil_v')) + '</span>'
           + '<input id="fin-podil" class="inp" type="number" inputmode="numeric" min="1" max="'
           + zbyvaPodilu + '" value="' + Math.min(10, zbyvaPodilu) + '"'
@@ -10408,14 +10431,33 @@ function financeSheet(toId, kdo, co, a) {
     + (jaDavam ? volneHtml(null) : ''));
   // Věřitel si zástavu může vymínit, aniž by věděl, čím mu dlužník ručí —
   // konkrétní prádlomat vybere dlužník, až bude půjčku přijímat.
-  var zadam = false;
+  // 0 = bez krytí, 1 = prádlomat (vybere si dlužník), 2 = podíl ve firmě.
+  // Podíl si na rozdíl od prádlomatu určuje věřitel — je to cena za půjčku
+  // stejně jako úrok.
+  var zadam = 0;
   if ($('fin-zadam')) {
     $('fin-zadam').onclick = function () {
-      zadam = !zadam;
-      $('fin-zadam').classList.toggle('on', zadam);
-      $('fin-zadam').textContent = zadam ? esc(tx('hra.vyzaduji')) : esc(tx('hra.nechci'));
-      $('fin-zadam-pop').textContent = zadam
-        ? tx('veta.dluznik_vybere_pradlomat_kterym_ruci_az'): tx('veta.pujcis_bez_kryti_kdyz_prestane_splacet');
+      zadam = (zadam + 1) % (zbyvaCizi > 0 ? 3 : 2);
+      $('fin-zadam').classList.toggle('on', zadam > 0);
+      $('fin-zadam').textContent = zadam === 2 ? esc(tx('mapa.podil_ve_firme'))
+        : zadam === 1 ? esc(tx('hra.zastava_pradlomatem')) : esc(tx('hra.nechci'));
+      $('fin-zadam-pop').textContent = zadam === 2
+        ? tx('veta.pri_prvni_nezaplacene_splatce_ti_podil', { p1: zastavaProcento() })
+        : zadam === 1 ? tx('veta.dluznik_vybere_pradlomat_kterym_ruci_az')
+        : tx('veta.pujcis_bez_kryti_kdyz_prestane_splacet');
+      if ($('fin-pod-box')) $('fin-pod-box').style.display = zadam === 2 ? '' : 'none';
+    };
+  }
+  // Kolik procent je zrovna v políčku, ořezané na to, co je ve firmě volné.
+  var zastavaProcento = function () {
+    return Math.max(1, Math.min(zbyvaCizi,
+      Math.round(Number(($('fin-zast-podil') || {}).value) || 0)));
+  };
+  if ($('fin-zast-podil')) {
+    $('fin-zast-podil').oninput = function () {
+      if (zadam === 2 && $('fin-zadam-pop')) {
+        $('fin-zadam-pop').textContent = tx('veta.pri_prvni_nezaplacene_splatce_ti_podil', { p1: zastavaProcento() });
+      }
     };
   }
   var prepocti = function () {
@@ -10528,7 +10570,10 @@ function financeSheet(toId, kdo, co, a) {
       telo.urok = Math.max(0, Math.min(UROK_MAX_HRA, Number($('fin-urok').value) || 0)) / 100;
       telo.mesicu = Math.max(1, Math.min(60, Math.round(Number($('fin-mesicu').value) || 1)));
       if ($('fin-zastava') && $('fin-zastava').value) telo.zastava = $('fin-zastava').value;
-      if (co === 'pujcim') telo.zadam_zastavu = zadam;
+      if (co === 'pujcim') {
+        telo.zadam_zastavu = zadam === 1;
+        if (zadam === 2) telo.zastava_podil = zastavaProcento() / 100;
+      }
     } else {
       var pp = Math.max(1, Math.round(Number($('fin-podil').value) || 0));
       if (co === 'prodam-podil' && poProdeji() > PODIL_VETSINA_HRA
