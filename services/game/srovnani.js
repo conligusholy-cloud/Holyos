@@ -425,6 +425,25 @@ async function sit() {
     });
   }
 
+  // K rozporům v modelu dohledáme nákup stroje postaveného na tom místě.
+  // Říká to, která strana se mýlí: když je zapsaný nákup na serverový model,
+  // hra o výměnu přišla a hráč za ni zaplatil. Když není, server si model
+  // zvedl sám — tahle cesta se na sklad dlouho neptala.
+  const sporneSpoty = [];
+  out.forEach((r) => r.sporne.forEach((x) => { if (x.co === 'model' && x.spot) sporneSpoty.push(x.spot); }));
+  if (sporneSpoty.length) {
+    const objednavky = await prisma.gameOrder.findMany({
+      where: { spot_id: { in: sporneSpoty }, postaveno_at: { not: null } },
+      select: { spot_id: true, model: true, doplneno: true },
+    }).catch(() => []);
+    const podle = new Map(objednavky.map((o) => [o.spot_id, o]));
+    out.forEach((r) => r.sporne.forEach((x) => {
+      if (x.co !== 'model' || !x.spot) return;
+      const o = podle.get(x.spot);
+      x.nakup = o ? (o.model + (o.doplneno ? ' (zpětně)' : ' (zaplaceno)')) : 'bez nákupu';
+    }));
+  }
+
   out.sort((a, b) => b.sporne.length - a.sporne.length);
   out.presne = presne; out.odhadem = odhadem; out.nezname = nezname;
   out.modelSpor = modelSpor; out.skoreSpor = skoreSpor;
@@ -617,14 +636,15 @@ function tiskSit(rows) {
     return out.join('\n');
   }
   out.push('');
-  out.push('nick                 co      hra        server     místo');
-  out.push('-'.repeat(78));
+  out.push('nick                 co      hra        server     nákup              místo');
+  out.push('-'.repeat(96));
   rows.slice(0, 40).forEach((r) => {
     r.sporne.slice(0, 5).forEach((x, i) => {
       out.push((i ? '' : String(r.nick || '').padEnd(20).slice(0, 20))
         .padEnd(20) + x.co.padEnd(8)
         + String(x.hra).padEnd(11).slice(0, 11)
         + String(x.server).padEnd(11).slice(0, 11)
+        + String(x.nakup || '').padEnd(19).slice(0, 19)
         + String(x.spot || ''));
     });
   });
