@@ -940,6 +940,7 @@
         + (p.profil ? '<div class="note">' + esc(p.profil) + '</div>' : '')
         + (p.zdroj ? '<div class="note">z: ' + esc(p.zdroj) + '</div>' : '')
         + (p.varovani ? '<div><span class="st" style="background:rgba(248,113,113,.18);color:#f87171" title="Nevyřízená AI upozornění na jeho texty">⚠️ ' + p.varovani + '</span></div>' : '') + '</td>'
+        + '<td class="num">' + podvodBadge(p.podvod) + '</td>'
         + '<td class="num">' + znalostBadge(p.znalost) + '</td>'
         + '<td>' + (p.jmeno ? esc(p.jmeno) : '<span class="note">—</span>')
         + (p.email ? '<div class="note">' + esc(p.email) + '</div>' : '') + '</td>'
@@ -971,10 +972,19 @@
       var c = z.pct >= 60 ? '#34d399' : z.pct >= 35 ? '#fbbf24' : '#f87171';
       return '<b style="color:' + c + '" title="' + esc('Víme: ' + (z.ma.join(', ') || 'nic') + '\nChybí: ' + (z.chybi.join(', ') || 'nic')) + '">' + z.pct + ' %</b>';
     }
+    // Podvodník: odhad 0–99 % (services/game/podvod.js) — barva podle míry, v bublině role, zisk a důvody
+    function podvodBadge(v) {
+      if (!v) return '<span class="note">—</span>';
+      var c = v.pct >= 70 ? '#f87171' : v.pct >= 40 ? '#fbbf24' : v.pct >= 20 ? '#94a3b8' : '#475569';
+      var tip = (v.role ? v.role.toUpperCase() + '\n' : '') + (v.zisk ? 'neoprávněný zisk ≈ ' + cz(v.zisk) + ' L$\n' : '') + v.duvody.map(function (d) { return '+' + d.b + ' ' + d.txt; }).join('\n');
+      return '<b style="color:' + c + ';cursor:help" title="' + esc(tip || 'bez podezřelých signálů') + '">' + v.pct + ' %</b>'
+        + (v.role ? '<div class="note" style="color:' + c + '">' + esc(v.role) + '</div>' : '');
+    }
     function plCols() {
       var n = function (k, l, f) { return { key: k, label: l, type: 'num', get: f }; };
       return [
         { key: 'nick', label: 'Nick', type: 'text', ph: 'Nick…', get: function (p) { return p.nick || ''; } },
+        n('podv', 'Podvodník', function (p) { return p.podvod ? p.podvod.pct : 0; }),
         n('znal', 'Známe', function (p) { return p.znalost ? p.znalost.pct : 0; }),
         { key: 'jmeno', label: 'Jméno a e-mail', type: 'text', ph: 'Jméno / e-mail…', get: function (p) { return (p.jmeno || '') + ' ' + (p.email || ''); } },
         { key: 'odkud', label: 'Odkud hraje', type: 'text', ph: 'Země / město…', get: function (p) { return [p.geo_mesto, p.geo_kraj, p.geo_zeme, p.geo_isp].filter(Boolean).join(' '); } },
@@ -994,7 +1004,7 @@
       get('/players?limit=300' + (q ? '&q=' + encodeURIComponent(q) : '')).then(function (j) {
         var tbl = document.getElementById('pl-tbl');
         if (!PL_TBL) {
-          tbl.innerHTML = '<thead><tr><th>Nick</th><th class="num" title="Kolik o hráči víme — najeď myší na číslo">Známe</th><th>Jméno a e-mail</th><th>Odkud hraje</th><th>Sídlo ve hře</th>'
+          tbl.innerHTML = '<thead><tr><th>Nick</th><th class="num" title="Odhad podvodu 0–99 % (multi účty, levný přeprodej strojů, provize) — najeď myší na číslo">Podvodník</th><th class="num" title="Kolik o hráči víme — najeď myší na číslo">Známe</th><th>Jméno a e-mail</th><th>Odkud hraje</th><th>Sídlo ve hře</th>'
             + '<th class="num">Prádlomatů</th><th class="num">Míst</th><th class="num">Měst</th><th class="num">Zbyde / měsíc</th>'
             + '<th class="num">Hotovost</th><th class="num">Úvěr</th><th class="num">Otevření</th><th class="num">Přivedl</th>'
             + '<th class="num">Nákupů</th><th class="num">Utraceno</th><th>Založeno</th><th>Naposledy</th><th></th></tr></thead><tbody></tbody>';
@@ -1034,6 +1044,10 @@
           + mini(esc(p.sidlo || '—'), 'Sídlo ve hře')
           + mini(p.znalost ? znalostBadge(p.znalost) : '—', 'Kolik o něm víme')
           + '</div>'
+          + (p.podvod && p.podvod.pct >= 20 ? '<div class="tbl-wrap" style="padding:14px 16px;margin-bottom:18px;border-color:' + (p.podvod.pct >= 70 ? '#f87171' : '#fbbf24') + '">'
+              + '<h3 style="font-size:14px;margin:0 0 6px">🚩 Podvodník: ' + podvodBadge(p.podvod) + (p.podvod.zisk ? ' <span class="note">· neoprávněný zisk ≈ ' + cz(p.podvod.zisk) + ' L$</span>' : '') + '</h3>'
+              + '<p class="note" style="margin:0 0 8px">Pomocný účet ' + p.podvod.mule + ' % · příjemce ' + p.podvod.ben + ' %. Odhad z kombinace signálů — rozhoduje člověk.</p>'
+              + '<ul style="margin:0;padding-left:18px">' + p.podvod.duvody.map(function (d) { return '<li><b>+' + d.b + '</b> ' + esc(d.txt) + ' <span class="note">(' + esc(d.r) + ')</span></li>'; }).join('') + '</ul></div>' : '')
           + dosieHtml(p)
           + '<h3 style="font-size:14px;margin:0 0 8px">Komunikace s hráči <span class="note">(vzkazy u obchodů, staré zprávy, nick a firma — s posudkem AI)</span></h3>'
           + komunikaceHtml(j.komunikace || [])

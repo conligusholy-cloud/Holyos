@@ -94,6 +94,8 @@ router.get('/players', api(async (req, res) => {
     prisma.gamePlayer.groupBy({ by: ['invited_by_id'], where: { invited_by_id: { in: ids } }, _count: { _all: true } }),
     prisma.gamePlayer.findMany({ where: { invited: { some: { id: { in: ids } } } }, select: { id: true, nick: true, company: true } }),
   ]);
+  // Odhad podvodu (multi účty, přelévání strojů, provize) — services/game/podvod.js
+  const PV = await require('../services/game/podvod').skore(prisma).catch((e) => { console.warn('[podvod]', e.message); return {}; });
   // Nevyřízená AI upozornění na texty hráče (škodí / podezřelé)
   const MOD = {};
   (await prisma.gameModerace.groupBy({ by: ['player_id'], where: { player_id: { in: ids }, verdikt: { in: ['skodi', 'podezrele'] }, resolved_at: null }, _count: { _all: true } }).catch(() => []))
@@ -145,6 +147,7 @@ router.get('/players', api(async (req, res) => {
       hra_h: Math.round((p.hra_s_celkem || 0) / 360) / 10,
       znalost: znalostHrace(p, { nakupu: (P[p.id] && P[p.id]._count._all) || 0, privedl: PRIV[p.id] || 0 }),
       varovani: MOD[p.id] || 0,
+      podvod: PV[p.id] || null,
     };
   }) });
 }));
@@ -620,6 +623,7 @@ router.get('/players/:id', api(async (req, res) => {
     // Záznam první minuty, jestli se k účtu najde.
     zaznam: p.sid ? await zaznamInfo(p.sid) : null,
     sidlo: sidloZ(st),
+    podvod: (await require('../services/game/podvod').skore(prisma).catch(() => ({})))[id] || null,
     znalost: znalostHrace(p, { nakupu: nakupy.filter((o) => o.status === 'paid').length, privedl: privedeni.length }),
     // Všechno, co o hráči víme (bez hesla)
     dosie: {
