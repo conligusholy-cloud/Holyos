@@ -8672,3 +8672,66 @@ model WashComplaint {
   @@index([email])
   @@map("wash_complaints")
 }
+
+// ─── Laundromat Tycoon: řízení zločinu (kontrola → soud → odvolání) ─────────
+// Případ vzniká z vyhodnocení v services/game/zlocin.js a běží podle času
+// (services/game/zlocin-rizeni.js). Peníze zmrazené při zahájení drží případ
+// v úschově (`zmrazeno`), hráči se odečetly doručenkou.
+model GameZlocin {
+  id               Int       @id @default(autoincrement())
+  hlavni_id        Int
+  hlavni_nick      String    @db.VarChar(24)
+  firma            String?   @db.VarChar(80)
+  typ              String    @db.VarChar(10)           // zvouci | kupec
+  utvar            String    @db.VarChar(20)
+  emblem           String?   @db.VarChar(8)
+  stav             String    @default("kontrola") @db.VarChar(12)  // kontrola | soud | odvolani | uzavreno | zruseno
+  skoda            Int       @default(0)
+  zmrazeno         Int       @default(0)
+  trest_uroven     String?   @db.VarChar(8)            // nejnizsi | stredni | nejvyssi
+  trest_castka     Int?
+  zahajeno_at      DateTime  @default(now())
+  kontrola_do      DateTime
+  soud_do          DateTime?
+  odvolani_do      DateTime?
+  uzavreno_at      DateTime?
+  odvolani_text    String?   @db.VarChar(1000)
+  odvolani_at      DateTime?
+  admin_rozhodnuti String?   @db.VarChar(12)           // potvrzeno | upraveno | zruseno
+  admin_poznamka   String?   @db.VarChar(500)
+  nedoplatek       Int       @default(0)
+  detail           Json?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  @@index([hlavni_id])
+  @@index([stav])
+  @@map("game_zlociny")
+}
+
+model GameZlocinHlas {
+  id         Int      @id @default(autoincrement())
+  zlocin_id  Int
+  player_id  Int
+  volba      String   @db.VarChar(8)                   // nejnizsi | stredni | nejvyssi
+  created_at DateTime @default(now())
+
+  @@unique([zlocin_id, player_id])
+  @@index([zlocin_id])
+  @@map("game_zlocin_hlasy")
+}
+
+// „Noviny": zprávy o průběhu případů, které vidí všichni hráči.
+model GameZlocinZprava {
+  id         Int      @id @default(autoincrement())
+  zlocin_id  Int?
+  nadpis     String   @db.VarChar(160)
+  text       String   @db.VarChar(600)
+  emblem     String?  @db.VarChar(8)
+  stav       String?  @db.VarChar(12)
+  created_at DateTime @default(now())
+
+  @@index([created_at])
+  @@index([zlocin_id])
+  @@map("game_zlocin_zpravy")
+}

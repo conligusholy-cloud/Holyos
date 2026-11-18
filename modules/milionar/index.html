@@ -236,6 +236,11 @@
           <div id="zl-pravidla"></div>
           <div style="margin-top:12px"><button class="btn sm" id="zl-uloz">Uložit pravidla</button> <span class="note" id="zl-stav"></span></div>
         </div>
+        <div class="tbl-wrap" style="padding:14px 16px;margin-bottom:18px">
+          <h3 style="font-size:14px;margin:0 0 4px">📋 Případy a odvolání <span id="zl-odv-pocet"></span></h3>
+          <p class="note" style="margin:0 0 8px">Odvolání čeká na tvoje rozhodnutí — majetek obviněného zůstává zmrazený, dokud ho nepotvrdíš, neupravíš nebo nezrušíš.</p>
+          <div id="zl-pripady"></div>
+        </div>
         <div class="toolbar"><button class="btn sm on" id="zl-spust">Vyhodnotit nanečisto</button></div>
         <div id="zl-sum"></div>
         <div id="zl-body"></div>
@@ -278,6 +283,11 @@
       <div class="module-panel" id="panel-nastaveni">
         <p class="note" style="margin:16px 0">Přepínače chování hry. Mění se za běhu, bez nasazování — hráčům se projeví do minuty.</p>
         <div id="nast-box" style="margin:0 0 18px"></div>
+        <div class="card" style="padding:14px 16px;border-radius:12px;background:#111827;border:1px solid #243049;margin:0 0 18px">
+          <b>Limit míst na prádlomaty podle země</b>
+          <div class="note" style="margin:6px 0 10px">Limit země = obyvatelé ÷ počet obyvatel na jedno místo (ČR ≈ 10,9 M ÷ 5 000 ≈ 2 180). Zabraná místa se nikomu neberou, nad limitem jen nejde zabrat další. Zemi určuje server podle oblasti / souřadnic místa.</div>
+          <div id="limit-box"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -999,8 +1009,20 @@
         + v.duvody.map(function (d) { return '+' + d.b + ' ' + d.txt; }).join('\n');
       var roleHtml = v.podvodnik ? '<div style="color:#f87171;font-weight:800;letter-spacing:.04em">🚩 PODVODNÍK</div>'
         : (v.role ? '<div class="note" style="color:' + c + '">' + esc(v.role) + (v.pro ? ' → ' + esc(v.pro) : '') + '</div>' : '');
+      // Pro podezřelé účty rovnou: kdo je přivedl, s kým souvisí a komu prodávaly stroje (za kolik % ceníku)
+      var detail = '';
+      if (v.pct >= 20) {
+        detail += '<div class="note">' + (v.pozval ? 'pozval: ' + esc(v.pozval) : 'nikdo ho nepozval') + '</div>';
+        if (v.souvisi && v.souvisi.length) detail += '<div class="note">souvisí s: ' + v.souvisi.map(esc).join(', ') + '</div>';
+        if (v.prodal && v.prodal.length) detail += v.prodal.map(function (x) {
+          var levne = x.pct != null && x.pct < 60;
+          return '<div class="note" style="' + (levne ? 'color:#f87171' : '') + '">prodal → ' + esc(x.komu)
+            + (x.pct != null ? ' za ' + x.pct + ' %' : '') + ' (' + cz(x.cena) + ')' + (x.okruh ? ' · z okruhu' : '') + '</div>';
+        }).join('');
+        else detail += '<div class="note">zatím nic neprodal</div>';
+      }
       return '<b style="color:' + c + ';cursor:help" title="' + esc(tip || 'bez podezřelých signálů') + '">' + v.pct + ' %</b>' + (v.dukaz ? ' <span title="Stejné zařízení obsloužilo obě strany obchodu — jeden člověk" style="color:#f87171">⚖</span>' : '')
-        + roleHtml;
+        + roleHtml + detail;
     }
     function plCols() {
       var n = function (k, l, f) { return { key: k, label: l, type: 'num', get: f }; };
@@ -1337,7 +1359,36 @@
           + 'provoz, ne běžný přepínač.'
       }
     };
+    // Limit míst podle země: přepínač, počet obyvatel na místo a tabulka zabráno / limit
+    function loadLimit() {
+      get('/limit-mist').then(function (j) {
+        var l = j.limit || {};
+        var rows = (l.zeme || []).map(function (z) {
+          var pct = z.limit ? Math.round(z.zabrano / z.limit * 100) : null;
+          return '<tr><td><b>' + esc(String(z.kod).toUpperCase()) + '</b></td><td class="num">' + (z.obyvatel ? cz(z.obyvatel) : '—') + '</td>'
+            + '<td class="num">' + (z.limit == null ? '<span class="note">bez limitu</span>' : cz(z.limit)) + '</td>'
+            + '<td class="num">' + cz(z.zabrano) + (pct != null ? ' <span class="note">(' + pct + ' %)</span>' : '') + '</td>'
+            + '<td class="num" style="' + (z.volno === 0 ? 'color:#f87171;font-weight:800' : '') + '">' + (z.volno == null ? '—' : cz(z.volno)) + '</td></tr>';
+        }).join('');
+        document.getElementById('limit-box').innerHTML =
+          '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">'
+          + '<span style="font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;background:' + (l.zapnuto ? 'rgba(34,197,94,.16);color:#4ade80' : 'rgba(148,163,184,.15);color:#94a3b8') + '">' + (l.zapnuto ? '● ZAPNUTO' : '○ VYPNUTO') + '</span>'
+          + '<label class="note">obyvatel na 1 místo <input id="limit-na" type="number" min="100" value="' + (l.obyvatel_na_misto || 5000) + '" style="width:90px"></label>'
+          + '<button class="btn sm" id="limit-uloz">Uložit</button>'
+          + '<button class="btn sm" id="limit-prep" style="background:#1d4ed8;border-color:#1d4ed8;color:#fff">' + (l.zapnuto ? 'Vypnout' : 'Zapnout') + '</button></div>'
+          + '<table class="data-table"><thead><tr><th>Země</th><th>Obyvatel</th><th>Limit míst</th><th>Zabráno</th><th>Volno</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        document.getElementById('limit-uloz').onclick = function () {
+          post('/limit-mist', { obyvatel_na_misto: Number(document.getElementById('limit-na').value) }).then(loadLimit).catch(function (e) { alert(e.message); });
+        };
+        document.getElementById('limit-prep').onclick = function () {
+          post('/limit-mist', { zapnuto: !l.zapnuto, obyvatel_na_misto: Number(document.getElementById('limit-na').value) }).then(loadLimit).catch(function (e) { alert(e.message); });
+        };
+      }).catch(function (e) {
+        document.getElementById('limit-box').innerHTML = '<p class="note" style="color:#f87171">' + esc(e.message) + '</p>';
+      });
+    }
     function loadNastaveni() {
+      loadLimit();
       get('/nastaveni').then(function (j) {
         var n = j.nastaveni || {};
         document.getElementById('nast-box').innerHTML = Object.keys(NASTAVENI_POPIS).map(function (k) {
@@ -1710,7 +1761,44 @@
       ['recidiva', 'Zákaz při recidivě'], ['hotovo', 'Vyřízeno']];
     var ZL_PRIZNAKY = [['chranit_platici', 'Platící hráč nesmí během kontroly a soudu smazat účet'],
       ['vratit_balicky', 'Koupené balíčky se platícímu hráči po rozsudku vrátí do hry znovu (trest se kryje z ostatního majetku)']];
+    var ZL_STAV = { kontrola: 'Kontrola', soud: 'Soud', odvolani: 'Rozsudek / odvolání', uzavreno: 'Uzavřeno', zruseno: 'Zrušeno' };
+    function zlPripady() {
+      var box = document.getElementById('zl-pripady');
+      get('/zlocin/pripady').then(function (j) {
+        var o = document.getElementById('zl-odv-pocet');
+        if (o) o.innerHTML = j.k_odvolani ? '<span class="st" style="background:rgba(248,113,113,.18);color:#f87171">' + j.k_odvolani + ' k rozhodnutí</span>' : '';
+        var z = j.pripady || [];
+        if (!z.length) { box.innerHTML = '<p class="note">Zatím žádný případ.</p>'; return; }
+        box.innerHTML = '<table class="data-table"><thead><tr><th>Hráč</th><th>Stav</th><th class="num">Škoda</th><th class="num">Zmrazeno</th><th>Trest / hlasy</th><th>Termíny</th><th>Odvolání</th><th></th></tr></thead><tbody>'
+          + z.map(function (r) {
+            var aktivni = r.stav === 'kontrola' || r.stav === 'soud' || r.stav === 'odvolani';
+            var hl = r.hlasy || {};
+            return '<tr' + (r.ceka_na_me ? ' style="background:rgba(248,113,113,.07)"' : '') + '><td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + r.hlavni_id + '">' + esc(r.emblem || '') + ' ' + esc(r.firma || r.hlavni_nick) + '</b><div class="note">' + esc(r.utvar) + ' · ' + esc(r.typ) + '</div></td>'
+              + '<td>' + esc(ZL_STAV[r.stav] || r.stav) + (r.admin_rozhodnuti ? '<div class="note">' + esc(r.admin_rozhodnuti) + '</div>' : '') + '</td>'
+              + '<td class="num">' + cz(r.skoda) + '</td><td class="num">' + cz(r.zmrazeno) + '</td>'
+              + '<td class="note">' + (r.trest_castka != null ? '<b>' + cz(r.trest_castka) + '</b> (' + esc(r.trest_uroven || '') + ')<br>' : '') + 'hlasy ' + (hl.nejnizsi || 0) + '/' + (hl.stredni || 0) + '/' + (hl.nejvyssi || 0)
+                + (r.nedoplatek ? '<br><span style="color:#fbbf24">nedoplatek ' + cz(r.nedoplatek) + ' (zabavit stroje ručně)</span>' : '') + '</td>'
+              + '<td class="note">od ' + dt(r.zahajeno_at) + (r.kontrola_do ? '<br>kontrola do ' + dt(r.kontrola_do) : '') + (r.soud_do ? '<br>soud do ' + dt(r.soud_do) : '') + (r.odvolani_do ? '<br>odvolání do ' + dt(r.odvolani_do) : '') + '</td>'
+              + '<td class="note" style="max-width:280px">' + (r.odvolani_text ? '<b style="color:#f87171">podáno ' + dt(r.odvolani_at) + '</b><br>' + esc(r.odvolani_text) : '—') + '</td>'
+              + '<td style="white-space:nowrap">' + (aktivni ? (r.stav === 'odvolani' ? '<button class="btn sm" data-zlr="' + r.id + '" data-akce="potvrdit">Potvrdit</button> <button class="btn sm" data-zlr="' + r.id + '" data-akce="upravit" data-trest="' + (r.trest_castka || 0) + '">Upravit</button> ' : '')
+                + '<button class="btn sm" data-zlr="' + r.id + '" data-akce="zrusit">Zrušit</button>' : '') + '</td></tr>';
+          }).join('') + '</tbody></table>';
+        [].forEach.call(box.querySelectorAll('[data-detail]'), function (b) { b.onclick = function () { detail(b.getAttribute('data-detail')); }; });
+        [].forEach.call(box.querySelectorAll('[data-zlr]'), function (b) {
+          b.onclick = function () {
+            var akce = b.getAttribute('data-akce'), body = { akce: akce }, txt = '';
+            if (akce === 'upravit') { var c = prompt('Nová výše trestu (L$):', b.getAttribute('data-trest')); if (c == null) return; body.castka = c.replace(/\s/g, ''); }
+            if (akce === 'zrusit' && !confirm('Zrušit případ? Zmrazený majetek se vrátí hráči.')) return;
+            if (akce === 'potvrdit' && !confirm('Potvrdit rozsudek? Trest se strhne.')) return;
+            var p = prompt('Poznámka k rozhodnutí (nepovinné):', ''); if (p) body.poznamka = p;
+            b.disabled = true;
+            post('/zlocin/pripady/' + b.getAttribute('data-zlr') + '/rozhodnuti', body).then(zlPripady).catch(function (e) { b.disabled = false; alert(e.message); });
+          };
+        });
+      }).catch(function (e) { chyba('zl-pripady', e); });
+    }
     function loadZlocin() {
+      zlPripady();
       get('/zlocin/pravidla').then(function (j) {
         var P = j.pravidla;
         document.getElementById('zl-pravidla').innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px">'
@@ -1726,7 +1814,7 @@
           + ZL_PRIZNAKY.map(function (f) {
             return '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-zlb="' + f[0] + '"' + (P[f[0]] ? ' checked' : '') + '> <span class="note">' + esc(f[1]) + '</span></label>';
           }).join('')
-          + '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="zl-zapnuto"' + (P.zapnuto ? ' checked' : '') + '> <span class="note">Automatické řízení ve hře (zatím bez účinku)</span></label></div>';
+          + '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="zl-zapnuto"' + (P.zapnuto ? ' checked' : '') + '> <span class="note"><b>Automatické řízení ve hře</b> — když je zapnuté, nové případy se otevírají samy (zmrazení, noviny, soud). Vypnuté = jen ruční otevření tlačítkem.</span></label></div>';
       }).catch(function (e) { chyba('zl-pravidla', e); });
     }
     function zlUloz() {
@@ -1745,7 +1833,7 @@
       if (!rows.length) return '<p class="note">' + esc(titulek) + ': nikdo.</p>';
       return '<h3 style="font-size:14px;margin:14px 0 6px">' + esc(titulek) + ' (' + rows.length + ')</h3><div class="tbl-wrap"><table class="data-table"><thead><tr>'
         + '<th>Hráč</th><th class="num">Pod ním</th><th class="num">Koncových</th><th class="num">Zrušených</th><th class="num">Živých mezi</th><th class="num">Hloubka</th>'
-        + '<th class="num">Provize</th><th class="num">Nákupů</th><th class="num">Sleva</th><th class="num">Škoda</th><th class="num">Zmrazit</th><th>Trest (min / střed / max)</th><th>Útvar</th><th class="num">Strojů</th><th class="num" title="Hodnota prádlomatů podle ceníku (bez odpisu)">Hodnota strojů</th><th class="num">Hotovost</th><th class="num" title="Hotovost + hodnota strojů">Majetek</th><th class="num" title="Kolik mu lze sebrat: nejvýš tolik, kolik má (hotovost + stroje), maximálně zmrazená částka">Lze sebrat</th><th class="num" title="Majetek po sebrání">Zbyde mu</th><th class="num">Platil</th></tr></thead><tbody>'
+        + '<th class="num">Provize</th><th class="num">Nákupů</th><th class="num">Sleva</th><th class="num">Škoda</th><th class="num">Zmrazit</th><th>Trest (min / střed / max)</th><th>Útvar</th><th class="num">Strojů</th><th class="num" title="Hodnota prádlomatů podle ceníku (bez odpisu)">Hodnota strojů</th><th class="num">Hotovost</th><th class="num" title="Hotovost + hodnota strojů">Majetek</th><th class="num" title="Kolik mu lze sebrat: nejvýš tolik, kolik má (hotovost + stroje), maximálně zmrazená částka">Lze sebrat</th><th class="num" title="Majetek po sebrání">Zbyde mu</th><th class="num">Platil</th><th></th></tr></thead><tbody>'
         + rows.map(function (r) {
           return '<tr><td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + r.id + '">' + esc(r.firma || r.nick) + '</b>'
             + '<div class="note">' + esc(r.nick) + (r.nadrazeny ? ' · pozval ' + esc(r.nadrazeny) : '') + (r.typ === 'kupec' ? ' · <b style="color:#fbbf24">KUPEC</b> (skupuje od zrušených účtů)' : '') + '</div>'
@@ -1770,7 +1858,8 @@
             + '<td class="num"><b>' + cz(r.majetek || 0) + '</b></td>'
             + '<td class="num"><b style="color:#f87171">' + cz(r.lze_sebrat || 0) + '</b>' + (r.chybi ? '<div class="note" style="color:#fbbf24">chybí ' + cz(r.chybi) + ' (dluh)</div>' : '') + '</td>'
             + '<td class="num"><b style="color:#34d399">' + cz(r.zbyde || 0) + '</b></td>'
-            + '<td class="num">' + (r.platici ? '<b title="Platící hráč: účet nesmí smazat, balíčky se mu vrátí">🔒 ' + cz(r.platil_kc) + ' Kč</b>' : '<span class="note">—</span>') + '</td></tr>';
+            + '<td class="num">' + (r.platici ? '<b title="Platící hráč: účet nesmí smazat, balíčky se mu vrátí">🔒 ' + cz(r.platil_kc) + ' Kč</b>' : '<span class="note">—</span>') + '</td>'
+            + '<td><button class="btn sm" data-zahaj="' + r.id + '" title="Ručně otevřít řízení: zmrazení, noviny pro všechny hráče, kontrola">Otevřít řízení</button></td></tr>';
         }).join('') + '</tbody></table></div>';
     }
     document.getElementById('zl-spust').onclick = function () {
@@ -1780,6 +1869,14 @@
         document.getElementById('zl-sum').innerHTML = '<p class="note">Počítá se <b>' + (j.pravidla.max_hloubka == 1 ? 'jen 1. linie (přímo přivedení)' : j.pravidla.max_hloubka + ' linií pod hráčem') + '</b> (nastavení „Kolik linií“). Z ' + cz(j.celkem_hracu) + ' hráčů by do kontroly spadlo <b>' + j.souhrn.kontrol + '</b>, celková škoda ' + cz(j.souhrn.skoda) + ' L$, zmrazit by se mělo ' + cz(j.souhrn.zmrazit) + ' L$. Škoda = provize + sleva na strojích oproti ceníku; peníze, které stroje vygenerovaly, se zatím nepočítají.</p>';
         box.innerHTML = zlTabulka(j.kontrola, 'Do kontroly') + zlTabulka(j.na_hrane, 'Na hraně (blízko pravidla)');
         [].forEach.call(box.querySelectorAll('[data-detail]'), function (b) { b.onclick = function () { detail(b.getAttribute('data-detail')); }; });
+        [].forEach.call(box.querySelectorAll('[data-zahaj]'), function (b) {
+          b.onclick = function () {
+            if (!confirm('Opravdu otevřít řízení? Hráči se zmrazí hotovost a všem hráčům přijde zpráva v novinách.')) return;
+            b.disabled = true;
+            post('/zlocin/zahaj', { id: b.getAttribute('data-zahaj') }).then(function () { b.textContent = 'Otevřeno'; zlPripady(); })
+              .catch(function (e) { b.disabled = false; alert(e.message); });
+          };
+        });
       }).catch(function (e) { chyba('zl-body', e); });
     };
 

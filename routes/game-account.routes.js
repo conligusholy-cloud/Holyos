@@ -2294,6 +2294,9 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
         occupied: claimPub(taken, req.player.id, await firmyMapa()),
       });
     }
+    // Limit míst podle země (obyvatelé / 5 000) — admin hry → Nastavení
+    const lim = await require('../services/game/limit-mist').smiZabrat(prisma, area, Number(b.lat), Number(b.lon));
+    if (!lim.ok) return res.status(409).json({ error: stx(req)('server.limit_mist_zeme', { p1: String(lim.zeme || '').toUpperCase(), p2: lim.limit }) });
     const pozemek = !!b.pozemek;
     // Cenu země si počítá server sám z otisku místa a skóre, které posílá
     // hra. Skóre jde zfalšovat, ale lukrativnost z něj roste jen v pevném

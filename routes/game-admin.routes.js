@@ -518,6 +518,45 @@ router.post('/zlocin/pravidla', api(async (req, res) => {
   const Z = require('../services/game/zlocin');
   res.json({ ok: true, pravidla: await Z.uloz(req.body) });
 }));
+// Případy: běžící, čekající na rozhodnutí o odvolání a uzavřené
+router.get('/zlocin/pripady', api(async (req, res) => {
+  const rows = await prisma.gameZlocin.findMany({ orderBy: { id: 'desc' }, take: 200 });
+  const ids = rows.map((r) => r.id);
+  const hl = ids.length ? await prisma.gameZlocinHlas.groupBy({ by: ['zlocin_id', 'volba'], where: { zlocin_id: { in: ids } }, _count: { _all: true } }) : [];
+  const H = {}; hl.forEach((x) => { (H[x.zlocin_id] = H[x.zlocin_id] || {})[x.volba] = x._count._all; });
+  res.json({ ok: true, pripady: rows.map((r) => Object.assign({}, r, { hlasy: H[r.id] || {},
+    ceka_na_me: r.stav === 'odvolani' && !!r.odvolani_at })),
+    k_odvolani: rows.filter((r) => r.stav === 'odvolani' && r.odvolani_at).length });
+}));
+// Ručně otevřít případ z vyhodnocení (hráč podle id)
+router.post('/zlocin/zahaj', api(async (req, res) => {
+  const Z = require('../services/game/zlocin'), RIZ = require('../services/game/zlocin-rizeni');
+  const id = parseInt((req.body || {}).id, 10);
+  if (await prisma.gameZlocin.findFirst({ where: { hlavni_id: id, stav: { in: RIZ.AKTIVNI } } })) return res.status(409).json({ error: 'U tohoto hráče už řízení běží.' });
+  const R = await Z.nastaveni();
+  const v = await Z.nanecisto(prisma, R);
+  const row = v.kontrola.concat(v.na_hrane).find((x) => x.id === id);
+  if (!row) return res.status(404).json({ error: 'Hráč není ve vyhodnocení.' });
+  const z = await RIZ.zahaj(prisma, R, row);
+  res.json({ ok: true, pripad: z });
+}));
+// Rozhodnutí admina: potvrdit / upravit trest / zrušit
+router.post('/zlocin/pripady/:id/rozhodnuti', api(async (req, res) => {
+  const RIZ = require('../services/game/zlocin-rizeni');
+  const z = await prisma.gameZlocin.findUnique({ where: { id: parseInt(req.params.id, 10) } });
+  if (!z || !RIZ.AKTIVNI.includes(z.stav)) return res.status(404).json({ error: 'Případ není aktivní.' });
+  const akce = String((req.body || {}).akce || ''), pozn = (req.body || {}).poznamka;
+  if (pozn) await prisma.gameZlocin.update({ where: { id: z.id }, data: { admin_poznamka: String(pozn).slice(0, 500) } });
+  if (akce === 'zrusit') return res.json({ ok: true, pripad: await RIZ.zrus(prisma, z, pozn) });
+  if (z.stav !== 'odvolani') return res.status(400).json({ error: 'Potvrdit nebo upravit lze až rozsudek (stav odvolání).' });
+  if (akce === 'potvrdit') return res.json({ ok: true, pripad: await RIZ.uzavri(prisma, z, 'potvrzeno') });
+  if (akce === 'upravit') {
+    const c = Number((req.body || {}).castka);
+    if (!Number.isFinite(c) || c < 0) return res.status(400).json({ error: 'Zadej částku trestu.' });
+    return res.json({ ok: true, pripad: await RIZ.uzavri(prisma, z, 'upraveno', c) });
+  }
+  res.status(400).json({ error: 'Neznámá akce.' });
+}));
 router.get('/zlocin/nanecisto', api(async (req, res) => {
   const Z = require('../services/game/zlocin');
   res.json(Object.assign({ ok: true }, await Z.nanecisto(prisma)));
@@ -1613,6 +1652,16 @@ router.get('/odkud', api(async (req, res) => {
 }));
 
 // ─── A/B test úvodní obrazovky ───────────────────────────────────────────────
+// Limit míst podle země (obyvatelé / N) — services/game/limit-mist.js
+router.get('/limit-mist', api(async (req, res) => {
+  res.json({ ok: true, limit: await require('../services/game/limit-mist').prehled(prisma) });
+}));
+router.post('/limit-mist', api(async (req, res) => {
+  const LM = require('../services/game/limit-mist');
+  await LM.uloz(req.body || {});
+  res.json({ ok: true, limit: await LM.prehled(prisma) });
+}));
+
 // Přepínač: off = jen původní úvod (A) · 50 = půl na půl · b = jen nový úvod (B).
 // Vyhodnocení: návštěvníci, kteří úvod viděli (game_intro) → registrace (game_register), podle varianty.
 router.get('/ab-intro', api(async (req, res) => {

@@ -94,8 +94,19 @@ async function seznam() {
   const prodano = new Map();
   podilyRows.forEach((e) => prodano.set(e.firma_id, (prodano.get(e.firma_id) || 0) + (e.podil || 0)));
 
+  // Zmrazená hotovost v řízení o zločinu je pořád firmy a kryje splátky
+  // (finance.js z ní splátku dorovná), takže se do krytí počítá.
+  const zmraz = new Map();
+  (await prisma.gameZlocin.findMany({
+    where: { hlavni_id: { in: idDluzniku }, stav: { in: ['kontrola', 'soud', 'odvolani'] } },
+    select: { hlavni_id: true, zmrazeno: true },
+  })).forEach((z) => zmraz.set(z.hlavni_id, (zmraz.get(z.hlavni_id) || 0) + (z.zmrazeno || 0)));
+
   const out = [];
-  for (const h of hraci) {
+  for (const h0 of hraci) {
+    const h = zmraz.has(h0.id)
+      ? Object.assign({}, h0, { state: Object.assign({}, h0.state || {}, { cash: (Number((h0.state || {}).cash) || 0) + zmraz.get(h0.id) }) })
+      : h0;
     const moje = pujcky.filter((p) => p.borrower_id === h.id);
     const s = stav(moje, h.state || {});
     if (s.stupen !== 'krize' && s.stupen !== 'propadne') continue;

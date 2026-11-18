@@ -1042,6 +1042,14 @@ button.kv:active{background:rgba(124,92,255,.12)}
   box-shadow:0 8px 20px rgba(0,0,0,.45)}
 .map-globus.on{border-color:var(--blue);background:rgba(79,209,255,.18)}
 .map-poradce{font-size:17px}
+/* Druhý řádek ikon nad mapou (noviny); klikatelné je jen samotné tlačítko */
+.map-rad2{--mb:clamp(28px,8.2vw,34px);display:flex;gap:6px;pointer-events:none;margin-top:-2px}
+.map-rad2>*{pointer-events:auto}
+.map-rad2:not(:has(button:not(.hidden))){display:none}
+/* Firma pod kontrolou nebo před soudem: svítí červeně a bliká */
+.zl-blik{color:#ff4d4d;font-weight:800;text-shadow:0 0 8px rgba(255,60,60,.9),0 0 2px rgba(255,60,60,.9);animation:zlblik 1s ease-in-out infinite}
+@keyframes zlblik{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.zl-blik{animation:none}}
 .por-tok{max-height:46vh;overflow:auto;display:flex;flex-direction:column;gap:8px;margin:10px 0}
 .por-z{padding:9px 12px;border-radius:12px;font-size:14px;line-height:1.45;max-width:88%;white-space:normal}
 .por-z.ja{align-self:flex-end;background:var(--blue);color:#06121b;font-weight:600}

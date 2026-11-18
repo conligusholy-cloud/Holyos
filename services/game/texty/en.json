@@ -2103,6 +2103,8 @@
   "server.nabidni_aspon_nejakou_cenu_nebo_kartu": "Offer at least some price or card.",
   "server.takovy_hrac_tu_neni_2": "No such player.",
   "server.nejmensi_pujcka_je": "Minimum loan is ",
+  "server.ucet_v_rizeni": "The account cannot be deleted while proceedings (inspection, court or appeal) are in progress.",
+  "server.limit_mist_zeme": "All laundromat spots in this country are taken (limit {p1}: {p2} spots).",
   "server.zastavou_muze_byt_jen_pradlomat_toho": "Collateral can only be a laundromat owned by the borrower.",
   "server.z_firmy_je_prodano_uz": "Already sold from the company: ",
   "server.takovy_podil_uz_nebezi": "That stake no longer exists.",
@@ -3602,5 +3604,6 @@
   "server.burza_je_docasne_pozastavena": "The exchange is temporarily suspended. Existing deals can be completed, new ones can't be made yet.",
   "dor.odskodne": "Compensation with apology: {p1}",
   "server.tvuj_podil_se_mezitim_zmenil": "Your stake in that company has changed in the meantime. Open the offer again and try.",
-  "server.takovy_hovor_neznam": "Call not found."
+  "server.takovy_hovor_neznam": "Call not found.",
+  "server.posli_cely_stav": "The game state must be sent in full. The game will try again shortly."
 }

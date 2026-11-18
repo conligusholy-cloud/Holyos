@@ -57,7 +57,18 @@ async function splatkyPujcek(ted) {
           data: { stav: 'splaceno', dalsi_at: new Date(ted.getTime() + MESIC_MS) } });
         continue;
       }
-      const hotovost = Math.round(stavu(dluznik).cash || 0);
+      // Řízení o zločinu: část hotovosti je zmrazená. Dluhy se platí dál —
+      // chybějící část splátky se bere ze zmrazené částky (uvolní se a hned
+      // odejde věřiteli), o stejnou sumu se pak sníží to, co soud zadržuje.
+      const rizeni = await prisma.gameZlocin.findFirst({
+        where: { hlavni_id: p.borrower_id, stav: { in: ['kontrola', 'soud', 'odvolani'] }, zmrazeno: { gt: 0 } },
+      });
+      const hotovostVolna = Math.round(stavu(dluznik).cash || 0);
+      let zeZmrazeneho = 0;
+      if (rizeni && hotovostVolna < p.splatka) {
+        zeZmrazeneho = Math.min(rizeni.zmrazeno, p.splatka - Math.max(0, hotovostVolna));
+      }
+      const hotovost = hotovostVolna + zeZmrazeneho;
       const zbyvaSplatek = Math.max(0, p.mesicu - p.splaceno);
       if (!zbyvaSplatek) {
         await prisma.gameLoan.update({ where: { id: p.id }, data: { stav: 'splaceno' } });
@@ -65,6 +76,11 @@ async function splatkyPujcek(ted) {
       }
       if (hotovost >= p.splatka) {
         await prisma.$transaction(async (tx) => {
+          if (zeZmrazeneho > 0) {
+            await tx.gameZlocin.update({ where: { id: rizeni.id }, data: { zmrazeno: rizeni.zmrazeno - zeZmrazeneho } });
+            await dorucit(tx, p.borrower_id, 'cash', zeZmrazeneho,
+              'Uvolněno ze zmrazené částky na splátku půjčky', {});
+          }
           await dorucit(tx, p.borrower_id, 'cash', -p.splatka,
             'Splátka půjčky — ' + p.lender_nick,
             { text_kod: 'dor.splatka_pujcky', text_data: { p1: p.lender_nick } });

@@ -7975,7 +7975,7 @@ function paintZeb() {
             + (x.id ? ' data-hrac="' + x.id + '"' : '') + '>'
             + '<i class="poradi' + (x.poradi <= 3 ? ' medaile m' + x.poradi : '') + '">' + x.poradi + '</i>'
             + (x.znak ? znakSvg(x.znak, 26) : '<i class="znak-mezera"></i>')
-            + '<span class="nick">' + esc(x.firma || x.nick)
+            + '<span class="nick">' + zlocinJmeno(x.id, x.firma || x.nick)
             // Pod firmou je hodnost místo nicku: v žebříčku je zajímavější,
             // jak velký ten soupeř je, než jak si říká. Hodnost počítá server.
             + '<i>' + esc(x.hodnost ? hodnostNazev(x.hodnost) || x.nick : x.nick) + '</i></span>'
@@ -9632,7 +9632,7 @@ function hraciVyberSheet(nadpis, popisTlacitka, pak) {
       sheet(tx('veta.h3_h3_div_class_seg_sub', { p1: esc(nadpis), p2: (filtr === 'online' ? 'on' : ''), p3: (online ? ' (' + online + ')' : ''), p4: (filtr === 'dnes' ? 'on' : ''), p5: (dnes ? ' (' + dnes + ')' : ''), p6: (filtr === 'vse' ? 'on' : '') }) + tx('veta.data_f_vse_vsichni_button_div', { p1: hraci.length, p2: esc(hledam) })
         + (k.length ? k.map(function (h) {
             var st = hracStav(h);
-            return '<div class="area-item"><div><div class="nm">' + esc(h.firma) + '</div>'
+            return '<div class="area-item"><div><div class="nm">' + zlocinJmeno(h.id, h.firma) + '</div>'
               + '<div class="sub">' + esc(h.hodnost_nazev || h.nick) + ' · <i class="' + st.tr + '">'
               + (st.kde === 'online' ? '● ' : '') + esc(st.text) + '</i></div></div>'
               + '<button class="btn sec sm" data-h="' + h.id + '">' + esc(popisTlacitka) + '</button></div>';
@@ -12609,6 +12609,120 @@ function api(path, opts) {
   return fetch('/api/game' + path, Object.assign({ credentials: 'same-origin' }, opts))
     .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); });
 }
+// ─── Noviny o zločinu: kontrola → soud → odvolání ───────────────────────────
+// Server posílá i texty rozhraní (ui), v kódu jsou jen údaje. Při každé změně
+// případu vyskočí všem hráčům okno, zprávy zůstávají v „novinách“.
+var ZLN = { data: null, mapa: {}, okno: false };
+function zlocinZnak(id) { var z = ZLN.mapa[id]; return z ? esc(z.emblem || '') + ' ' : ''; }
+// Jméno firmy pod kontrolou svítí červeně a bliká (štítek útvaru před ním)
+function zlocinJmeno(id, jmeno) {
+  var z = ZLN.mapa[id];
+  if (!z) return esc(jmeno);
+  return '<span class="zl-blik" title="' + esc(z.utvar || '') + '">' + esc(z.emblem || '') + ' ' + esc(jmeno) + '</span>';
+}
+function zlocinVidene() {
+  var v = 0; try { v = parseInt(localStorage.getItem('zlocin_po_' + (ME ? ME.id : 0)), 10) || 0; } catch (e) { v = 0; }
+  return v;
+}
+function zlocinOznac(id) { try { localStorage.setItem('zlocin_po_' + (ME ? ME.id : 0), String(id)); } catch (e) { /* bez paměti se okno ukáže znovu */ } }
+function zlocinNacti() {
+  if (!ME) return;
+  api('/zlocin/noviny').then(function (r) {
+    if (!r.ok || !r.j || !r.j.ok) return;
+    var d = r.j; ZLN.data = d; ZLN.mapa = {};
+    (d.pripady || []).forEach(function (p) { if (p.stav === 'kontrola' || p.stav === 'soud' || p.stav === 'odvolani') ZLN.mapa[p.hlavni_id] = p; });
+    var nejnovejsi = d.zpravy.length ? d.zpravy[0].id : 0;
+    var videne = zlocinVidene();
+    if (!videne && nejnovejsi) { zlocinOznac(nejnovejsi); videne = nejnovejsi; }   // první spuštění: starou historii nenabízíme
+    var nove = d.zpravy.filter(function (z) { return z.id > videne; }).reverse();
+    zlocinTlacitko(nove.length);
+    if (nove.length && !ZLN.okno) zlocinOkno(nove, nejnovejsi);
+    else if (ZLN.okno === 'noviny') zlocinNoviny();
+  }).catch(function () { /* noviny nesmí shodit hru */ });
+}
+function zlocinTlacitko(nove) {
+  // Tlačítko je v liště nad mapou (index.html), tady se jen ukazuje a plní odznakem
+  var b = document.getElementById('zl-btn');
+  if (!b) return;
+  var maObsah = ZLN.data && ((ZLN.data.zpravy || []).length || Object.keys(ZLN.mapa).length);
+  b.classList.toggle('hidden', !maObsah);
+  b.onclick = function () { zlocinNoviny(); };
+  b.innerHTML = '📰' + (nove ? '<span style="position:absolute;top:-5px;right:-5px;background:#c0392b;color:#fff;font-size:10px;font-weight:700;border-radius:9px;padding:1px 5px;line-height:1.2">' + nove + '</span>' : '');
+}
+function zlocinPrekryti(html, zavritFn) {
+  var o = document.getElementById('zl-over');
+  if (!o) {
+    o = document.createElement('div'); o.id = 'zl-over';
+    o.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.65);display:flex;align-items:flex-end;justify-content:center;padding:12px';
+    document.body.appendChild(o);
+  }
+  o.innerHTML = '<div style="background:#f4ecd8;color:#2b2416;font-family:Georgia,serif;max-width:520px;width:100%;max-height:86vh;overflow:auto;border-radius:12px;padding:16px 16px 14px;box-shadow:0 10px 40px rgba(0,0,0,.6)">' + html + '</div>';
+  o.onclick = function (e) { if (e.target === o) zavritFn(); };
+  return o;
+}
+function zlocinZavri() {
+  var o = document.getElementById('zl-over'); if (o) o.remove();
+  ZLN.okno = false;
+}
+function zlocinZprava(z) {
+  return '<div style="border-top:1px solid #c9b98f;padding:8px 0"><div style="font-weight:700;font-size:15px">' + esc(z.nadpis) + '</div>'
+    + '<div style="font-size:14px;line-height:1.45;margin-top:3px">' + esc(z.text) + '</div></div>';
+}
+// Vyskakovací okno s novými zprávami
+function zlocinOkno(nove, nejnovejsi) {
+  var ui = (ZLN.data && ZLN.data.ui) || {};
+  ZLN.okno = 'popup';
+  var o = zlocinPrekryti('<div style="text-align:center;font-weight:800;font-size:20px;letter-spacing:.04em;border-bottom:3px double #2b2416;padding-bottom:6px;margin-bottom:6px">📰 ' + esc(ui.noviny || '') + '</div>'
+    + nove.map(zlocinZprava).join('')
+    + '<button id="zl-ok" style="margin-top:12px;width:100%;padding:10px;border:0;border-radius:8px;background:#2b2416;color:#f4ecd8;font-weight:700;font-size:15px">' + esc(ui.precteno || '') + '</button>',
+    function () { zlocinOznac(nejnovejsi); zlocinZavri(); zlocinTlacitko(0); });
+  o.querySelector('#zl-ok').onclick = function () { zlocinOznac(nejnovejsi); zlocinZavri(); zlocinTlacitko(0); };
+}
+// Celé noviny: moje řízení, hlasování, běžící případy, archiv zpráv
+function zlocinNoviny() {
+  var d = ZLN.data; if (!d) return;
+  var ui = d.ui || {};
+  ZLN.okno = 'noviny';
+  if (d.zpravy.length) zlocinOznac(d.zpravy[0].id);
+  var h = '<div style="text-align:center;font-weight:800;font-size:20px;letter-spacing:.04em;border-bottom:3px double #2b2416;padding-bottom:6px;margin-bottom:8px">📰 ' + esc(ui.noviny || '') + '</div>';
+  if (d.moje) {
+    var m = d.moje;
+    h += '<div style="background:#ead9ae;border-radius:8px;padding:10px;margin-bottom:10px"><b>' + esc(m.emblem || '') + ' ' + esc(ui.moje || '') + '</b> · ' + esc((ui.stav || {})[m.stav] || m.stav) + '<div style="font-size:14px;margin-top:4px">'
+      + (m.trest_castka != null ? esc(ui.trest || '') + ' <b>' + kcFull(m.trest_castka) + '</b>' : esc(ui.skoda || '') + ' <b>' + kcFull(m.skoda) + '</b>') + '</div>';
+    if (m.muze_odvolat) {
+      h += '<textarea id="zl-odv-t" rows="3" maxlength="1000" placeholder="' + esc(ui.odvolani_ph || '') + '" style="width:100%;margin-top:8px;padding:8px;border:1px solid #c9b98f;border-radius:6px;font-family:inherit"></textarea>'
+        + '<button id="zl-odv" style="margin-top:6px;width:100%;padding:9px;border:0;border-radius:8px;background:#c0392b;color:#fff;font-weight:700">' + esc(ui.odeslat || '') + '</button>';
+    } else if (m.odvolani_podano) h += '<div style="font-size:13px;margin-top:6px">' + esc(ui.odvolani_podano || '') + '</div>';
+    h += '</div>';
+  }
+  (d.hlasovani || []).forEach(function (v) {
+    h += '<div style="background:#ead9ae;border-radius:8px;padding:10px;margin-bottom:10px"><b>⚖️ ' + esc(ui.hlasovani || '') + ': ' + esc(v.firma) + '</b>'
+      + '<div style="font-size:13px;margin:3px 0 6px">' + (v.moje_volba ? esc(ui.hlasoval || '') + ' (' + esc((ui.urovne || {})[v.moje_volba] || v.moje_volba) + ')' : '') + '</div>'
+      + v.urovne.map(function (u) {
+        return '<button data-zlh="' + v.id + '" data-v="' + u.klic + '" style="display:block;width:100%;margin:4px 0;padding:8px;border:1px solid #2b2416;border-radius:8px;background:' + (v.moje_volba === u.klic ? '#2b2416' : 'transparent') + ';color:' + (v.moje_volba === u.klic ? '#f4ecd8' : '#2b2416') + ';font-weight:600">'
+          + esc((ui.urovne || {})[u.klic] || u.klic) + ' — ' + kcFull(u.castka) + '</button>';
+      }).join('') + '</div>';
+  });
+  var bezi = (d.pripady || []).filter(function (p) { return p.stav === 'kontrola' || p.stav === 'soud' || p.stav === 'odvolani'; });
+  if (bezi.length) h += '<div style="font-weight:700;margin:6px 0 2px">' + esc(ui.bezi || '') + '</div>'
+    + bezi.map(function (p) { return '<div style="font-size:14px;padding:3px 0">' + esc(p.emblem || '') + ' <b>' + esc(p.firma) + '</b> — ' + esc(p.utvar) + ', ' + esc((ui.stav || {})[p.stav] || p.stav) + '</div>'; }).join('');
+  h += d.zpravy.length ? d.zpravy.map(zlocinZprava).join('') : '<p>' + esc(ui.zadne || '') + '</p>';
+  h += '<button id="zl-zavrit" style="margin-top:12px;width:100%;padding:10px;border:0;border-radius:8px;background:#2b2416;color:#f4ecd8;font-weight:700">' + esc(ui.zavrit || '') + '</button>';
+  var o = zlocinPrekryti(h, function () { zlocinZavri(); zlocinTlacitko(0); });
+  o.querySelector('#zl-zavrit').onclick = function () { zlocinZavri(); zlocinTlacitko(0); };
+  [].forEach.call(o.querySelectorAll('[data-zlh]'), function (b) {
+    b.onclick = function () {
+      api('/zlocin/' + b.getAttribute('data-zlh') + '/hlas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ volba: b.getAttribute('data-v') }) })
+        .then(function (r) { if (!r.ok) return toast(esc((r.j && r.j.error) || ''), 'err'); zlocinNacti(); });
+    };
+  });
+  var odv = o.querySelector('#zl-odv');
+  if (odv) odv.onclick = function () {
+    api('/zlocin/' + d.moje.id + '/odvolani', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: o.querySelector('#zl-odv-t').value }) })
+      .then(function (r) { if (!r.ok) return toast(esc((r.j && r.j.error) || ''), 'err'); zlocinNacti(); });
+  };
+}
+
 // ─── Překlady ────────────────────────────────────────────────────────────────
 // Jazyk drží účet, ne prohlížeč — hráč hraje na telefonu i na počítači a chce
 // to mít stejně. Katalog se tahá ze serveru; než dorazí, jede hra na češtině
@@ -14099,6 +14213,8 @@ function startGame() {
   loadTrh(drawMap);
   vyzvedniNasledky();
   loadTrades();
+  zlocinNacti();
+  setInterval(zlocinNacti, 60000);
   setInterval(function () { loadTrades(); loadTrh(drawMap); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }, 60000);
   checkPayment();
   setInterval(function () { tick(); save(); paint(); syncState(); hlidejUkladani(); }, 5000);

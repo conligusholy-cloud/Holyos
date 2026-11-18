@@ -22,7 +22,7 @@ const kc = (n) => Math.round(n).toLocaleString('cs-CZ');
 
 async function spocitej(prisma) {
   const [hraci, obchody, davky, mista, pristupy] = await Promise.all([
-    prisma.gamePlayer.findMany({ select: { id: true, nick: true, created_at: true, hra_s_celkem: true, dev_pid: true, reg_ip: true,
+    prisma.gamePlayer.findMany({ select: { id: true, nick: true, company: true, created_at: true, hra_s_celkem: true, dev_pid: true, reg_ip: true,
       invited_by_id: true, invited_by_ref: true, ref_id: true, disabled: true, email: true, last_login_at: true } }),
     prisma.gameTrade.findMany({ where: { stav: 'prijato', predmet: { in: STROJ_PREDMET.concat(['pobocka']) } },
       select: { id: true, from_id: true, to_id: true, smer: true, predmet: true, model: true, cena: true, created_at: true, resolved_at: true } }),
@@ -169,6 +169,13 @@ async function spocitej(prisma) {
     out[h.id] = { pct, dukaz: !!s.dukaz, podvodnik, role: pct < 20 ? null : (podvodnik ? 'PODVODNÍK' : ben > mule ? 'příjemce' : 'pomocný účet'), mule, ben, zisk: Math.round(s.zisk),
       provize: Math.round(s.provize || 0), sleva: Math.round(s.sleva || 0), pomocnych: s.pomocnych || 0, pozvanych: s.pozvanych || 0,
       levnych: s.koupilLevne || 0, pro: (!podvodnik && mule >= 45) ? (s.pro || null) : null,
+      // Kdo ho přivedl (null = nikdo), s kým sdílí zařízení/IP a komu prodával stroje — admin to vidí přímo v tabulce.
+      pozval: (zvouci(h) || {}).nick || null,
+      souvisi: [...sousede(h)].map((i) => P[i]).filter(Boolean).slice(0, 5).map((x) => x.nick),
+      prodal: prodeje.filter((x) => x.prod.id === h.id).sort((a, b) => b.kdy - a.kdy).slice(0, 6).map((x) => ({
+        komu: x.kup.company || x.kup.nick, nick: x.kup.nick, cena: Math.round(x.cena),
+        pct: x.pomer != null ? Math.round(x.pomer * 100) : null,
+        okruh: !!(sousede(h).has(x.kup.id) || (zvouci(h) && zvouci(h).id === x.kup.id)) })),
       duvody: s.duvody.sort((a, b) => b.b - a.b).slice(0, 10) };
   });
   return out;

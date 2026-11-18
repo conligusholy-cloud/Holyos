@@ -917,6 +917,7 @@ app.post('/api/game/stripe/webhook', require('./routes/game-stripe.routes')._web
 app.use('/api/game', require('./routes/game-account.routes')); // účty hráčů, uložený stav a karty
 app.use('/api/game', require('./routes/game-stripe.routes'));  // nákup karet přes Stripe
 app.use('/api/game', require('./routes/game-trade.routes'));   // burza — obchody mezi hráči
+app.use('/api/game', require('./routes/game-zlocin.routes'));  // noviny o zločinu, hlasování poroty, odvolání
 app.use('/api/game-admin', require('./routes/game-admin.routes')); // administrace hry (sekce Soukromé)
 app.use('/api/leasing', require('./routes/leasing.routes')); // Leasing/financující společnosti (financování prádlomatu)
 if (VYBERY_ENABLED) app.use('/api/vybery', require('./routes/vybery.routes')); // Výběry (vypnuto, zapíná VYBERY_ENABLED=1) — veřejná stránka bestseries.cash/vybery (ověření black list + magic link + admin)
@@ -1501,6 +1502,8 @@ server.listen(PORT, async () => {
   try {
     // Splátky půjček mezi hráči a výplaty podílů ve firmách.
     require('./services/game/finance').start();
+    // Kontroly, soud a odvolání u podvodů s účty (zapíná se v administraci hry → Zločin).
+    require('./services/game/zlocin-rizeni').start();
     // Povodně, festivaly a zdražení energií — jeden svět pro všechny hráče.
     require('./services/game/udalosti').start();
     // Doběhlou dražbu musí někdo vypořádat, i když se zrovna nikdo nedívá.

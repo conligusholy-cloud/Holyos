@@ -24,6 +24,10 @@ const VYCHOZI = {
   soud_mesicu: 1,
   porotce_min_mesicu: 2,       // porotce = hráč starší než tolik herních měsíců
   recidiva_dni: 3,             // zákaz provizí / nákupů / aliancí při dalším podvodu
+  odvolani_mesicu: 1,          // lhůta na odvolání po rozsudku (herních měsíců); bez odvolání rozsudek nabude účinnosti
+  min_porotcu: 3,              // méně hlasů = platí střední trest
+  porotce_aktivni_h: 48,       // porotce musí být přihlášen v posledních N hodinách
+  max_novych_za_tik: 3,        // pojistka: kolik případů se smí otevřít najednou
   hranice_nahled: 60,          // % — hráči nad touhle hranicí (ale pod pravidlem) jdou do „na hraně"
   // Ochrana platících: kdo za balíčky zaplatil skutečné peníze, nesmí během kontroly a soudu
   // smazat účet a jeho koupené balíčky / věci se mu po rozsudku vrátí do hry znovu
@@ -43,6 +47,7 @@ const LIMITY = {
   koef_zabaveni: [0.5, 5], trest_nejnizsi: [0.5, 5], trest_stredni: [0.5, 5], trest_nejvyssi: [0.5, 5],
   kontrola_mesicu: [0, 12], soud_mesicu: [0, 12], porotce_min_mesicu: [0, 24], recidiva_dni: [0, 90],
   hranice_nahled: [10, 100], min_kupu_od_mrtvych: [1, 100], kup_max_pomer: [5, 100],
+  odvolani_mesicu: [0, 12], min_porotcu: [0, 100], porotce_aktivni_h: [1, 720], max_novych_za_tik: [0, 50],
 };
 
 async function nastaveni() {
@@ -155,6 +160,7 @@ async function nanecisto(prisma, pravidla) {
       id: h.id, nick: h.nick, firma: h.company || null, zalozen: h.created_at,
       nadrazeny: (zvouci(h) || {}).nick || null,
       // Všichni pod ním s důvodem, proč je (ne)považujeme za zrušeného — ať jde hodnocení zkontrolovat ručně
+      pod_ids: ids.slice(0, 300),
       pod_ucty: ids.slice(0, 80).map((id) => {
         const x = P[id]; const sek = x.hra_s_celkem || 0;
         let duvod = null;
@@ -196,6 +202,7 @@ async function nanecisto(prisma, pravidla) {
       typ: 'kupec', pod_celkem: 0, koncovych: 0, mrtvych: prodejci.size, podil_mrtvych: 100, zivych_mezi: 0, hloubka: 0,
       provize: 0, nakupu_ks: levne.length, nakupu_od_mrtvych: levne.length, sleva: Math.round(sleva),
       mrtvi_nicky: [...prodejci].slice(0, 8).map((id) => P[id].nick),
+      pod_ids: [...prodejci].slice(0, 300),
       platil_kc: Math.round(platil[h.id] || 0),
     };
     radek.platici = radek.platil_kc > 0;
@@ -237,4 +244,4 @@ async function nanecisto(prisma, pravidla) {
   };
 }
 
-module.exports = { nastaveni, uloz, nanecisto, VYCHOZI };
+module.exports = { nastaveni, uloz, nanecisto, VYCHOZI, cenik };

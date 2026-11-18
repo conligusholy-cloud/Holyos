@@ -2090,6 +2090,8 @@
   "server.nabidni_aspon_nejakou_cenu_nebo_kartu": "Nabídni aspoň nějakou cenu nebo kartu.",
   "server.takovy_hrac_tu_neni_2": "Takový hráč tu není.",
   "server.nejmensi_pujcka_je": "Nejmenší půjčka je ",
+  "server.ucet_v_rizeni": "Účet nelze smazat, dokud probíhá řízení (kontrola, soud nebo odvolání).",
+  "server.limit_mist_zeme": "V této zemi už jsou obsazena všechna místa na prádlomaty (limit {p1}: {p2} míst).",
   "server.zastavou_muze_byt_jen_pradlomat_toho": "Zástavou může být jen prádlomat toho, kdo si půjčuje.",
   "server.z_firmy_je_prodano_uz": "Z firmy je prodáno už ",
   "server.takovy_podil_uz_nebezi": "Takový podíl už neběží.",
