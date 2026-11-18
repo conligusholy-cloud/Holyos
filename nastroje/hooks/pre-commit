@@ -64,10 +64,20 @@ if git diff --cached --name-only | grep -qE 'nastroje/texty-prelozit'; then
   fi
 fi
 
+# Co smí podílník podle velikosti podílu. Posunutý práh o setinu znamená
+# moc nad cizí firmou, na kterou ten člověk nemá.
+if git diff --cached --name-only | grep -qE 'services/game/prava'; then
+  if ! node nastroje/tprava.js; then
+    echo ""
+    echo "STOP: práva podílníků nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Dividendová politika. Rozhoduje, kolik peněz měsíčně odejde z firmy —
 # a jestli se ztráta krátí stejně jako zisk, což by byl úhyb většinového
 # podílníka na majitele.
-if git diff --cached --name-only | grep -qE 'services/game/(dividenda|finance)'; then
+if git diff --cached --name-only | grep -qE 'services/game/(dividenda|finance|prava)'; then
   if ! node nastroje/tdividenda.js; then
     echo ""
     echo "STOP: dividendová politika nesedí (viz výš)."

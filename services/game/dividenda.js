@@ -28,12 +28,14 @@
 
 'use strict';
 
+// Kdo politiku určuje, řeší prava.js — prahy mají být na jednom místě,
+// ať se nestane, že se většina počítá na dvou místech jinak.
+const PRAVA = require('./prava');
+
 const VYCHOZI = 1;      // tak se vyplácelo, než politika vznikla
 const MIN = 0;
 const MAX = 1;
-// Většina je víc než polovina. Rovná polovina nestačí — při přesných
-// padesáti procentech nemá navrch nikdo.
-const VETSINA = 0.5;
+const VETSINA = PRAVA.VETSINA;
 
 // Hodnota, se kterou se dá počítat. Nesmysl i chybějící údaj spadne na
 // výchozí sto procent, protože výplata musí proběhnout vždycky.
@@ -48,18 +50,8 @@ function platna(x) {
 }
 
 // Kdo politiku určuje: podílník s víc než polovinou. Jinak nikdo.
-function kdoUrcuje(podily) {
-  let nej = null;
-  (podily || []).forEach((e) => {
-    const p = Number(e.podil) || 0;
-    if (p > VETSINA && (!nej || p > nej.podil)) nej = { id: e.investor_id, podil: p };
-  });
-  return nej ? nej.id : null;
-}
-
-function smiMenit(podily, kdoId) {
-  return kdoUrcuje(podily) === kdoId && kdoId != null;
-}
+const kdoUrcuje = PRAVA.kdoUrcuje;
+const smiMenit = PRAVA.smiMenit;
 
 // Co se za měsíc vyplatí z jednoho podílu. Zisk se krátí politikou,
 // ztráta nikdy.

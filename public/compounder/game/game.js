@@ -9074,7 +9074,30 @@ function dividendaRadek(id, mojeFirma) {
         : esc(tx(mojeFirma ? 'dividenda.nikdo_neurcuje_moje' : 'dividenda.nikdo_neurcuje')))
     + '</p>'
     + (d.smim ? '<div class="gcard-act"><button class="btn sm" data-dividenda="' + id + '">'
-        + esc(tx('dividenda.nastavit')) + '</button></div>' : '');
+        + esc(tx('dividenda.nastavit')) + '</button></div>' : '')
+    + zastavaRadek(id, d, mojeFirma);
+}
+// Blokační menšina: kdo drží čtvrtinu firmy, může zakázat dát ji do zástavy.
+// Není to žádost o souhlas — je to přepínač, který si podílník nastaví
+// dopředu. Majitel tak na nikoho nečeká a rovnou vidí, na čem je.
+function zastavaRadek(id, d, mojeFirma) {
+  if (!d.smim_blokovat && !d.blokuje) return '';
+  var h = '<div class="row" style="margin-top:6px"><span class="muted small">'
+    + esc(tx('zastava.zastavit_majetek')) + '</span><span class="'
+    + (d.blokuje ? 'err' : 'ok') + '">'
+    + esc(tx(d.blokuje ? 'zastava.zakazano' : 'zastava.povoleno')) + '</span></div>';
+  if (d.blokuje && !d.smim_blokovat) {
+    h += '<p class="fine">' + (mojeFirma
+      ? tx('veta.zastavu_ti_blokuje', { p1: esc(d.blokuje_nick || '') })
+      : tx('veta.zastavu_blokuje', { p1: esc(d.blokuje_nick || '') })) + '</p>';
+  }
+  if (d.smim_blokovat) {
+    h += '<p class="fine">' + esc(tx('veta.zastava_blokace_rada')) + '</p>'
+      + '<div class="gcard-act"><button class="btn sm' + (d.muj_zakaz ? ' sec' : '')
+      + '" data-zastava="' + id + '" data-zakaz="' + (d.muj_zakaz ? '0' : '1') + '">'
+      + esc(tx(d.muj_zakaz ? 'zastava.zase_povolit' : 'zastava.zakazat')) + '</button></div>';
+  }
+  return h;
 }
 // Okno na nastavení. Je v něm jediné číslo, protože jediné číslo se tu mění:
 // zbytek firmy zůstává majiteli, nikdo mu do ní nesahá.
@@ -9148,6 +9171,18 @@ function bindPodily() {
       var nazev = mych.length ? (mych[0].kdo_firma || mych[0].kdo) : (ME && ME.company) || '';
       var mesicne = mych.reduce(function (a, x) { return a + x.mesicne; }, 0);
       dividendaSheet(id, nazev, mesicne);
+    };
+  });
+  [].forEach.call($('me-body').querySelectorAll('[data-zastava]'), function (b) {
+    b.onclick = function () {
+      var id = Number(b.getAttribute('data-zastava'));
+      var zakaz = b.getAttribute('data-zakaz') === '1';
+      b.disabled = true;
+      apiJson('/trade/zastava-souhlas', { firma_id: id, zakaz: zakaz }).then(function (r) {
+        if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+        FINANCE = null; loadTrades(paintMe);
+        toast(esc(tx(r.j.zakaz ? 'zastava.zakaz_zapnut' : 'zastava.zakaz_vypnut')), 'ok', true);
+      }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
     };
   });
   [].forEach.call($('me-body').querySelectorAll('[data-odkup-ja]'), function (b) {

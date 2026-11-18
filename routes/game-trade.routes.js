@@ -14,6 +14,7 @@ const express = require('express');
 const router = express.Router();
 const { prisma } = require('../config/database');
 const acct = require('./game-account.routes');
+const PRAVA = require('../services/game/prava');
 
 router.use(express.json({ limit: '32kb' }));
 
@@ -283,6 +284,28 @@ async function prodanyPodil(firmaId) {
 // celá, desetinná mají čárku — ať to v dražbě vypadá česky.
 const pct = (x) => String(Math.round((Number(x) || 0) * 1000) / 10).replace('.', ',');
 
+// Práva podílníků v jedné firmě: kdo určuje dividendu a kdo blokuje zástavu.
+// Podíly se sčítají na člověka — kdo koupil třikrát po dvaceti procentech,
+// drží šedesát a tři řádky v databázi na tom nic nemění.
+async function pravaFirmy(firmaId) {
+  const rows = await prisma.gameEquity.findMany({
+    where: { firma_id: firmaId, stav: 'bezi' },
+    select: { investor_id: true, podil: true, zakaz_zastavy: true },
+  });
+  return PRAVA.souhrn(rows);
+}
+
+// Kdo majiteli zakázal dát firmu do zástavy. Vrací jméno, se kterým se má
+// bavit, nebo null, když nikdo. Běžících půjček se zákaz netýká — platí
+// jen na nově sjednané zástavy.
+async function blokujeZastavu(firmaId) {
+  const kdo = PRAVA.kdoBlokuje(await pravaFirmy(firmaId));
+  if (!kdo) return null;
+  const h = await prisma.gamePlayer.findUnique({ where: { id: kdo },
+    select: { nick: true, company: true } });
+  return h ? (h.company || h.nick) : null;
+}
+
 // Kolik z téhle firmy drží jeden konkrétní investor. Rozhoduje to o většině:
 // padesát procent rozdrobených mezi pět lidí nikomu kontrolu nedává.
 async function podilInvestora(firmaId, investorId) {
@@ -352,6 +375,16 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
     let konvPodil = null;
     if (!zast && !zadam && !zastPodil && Number(b.konverze_podil) > 0) {
       konvPodil = Math.max(PODIL_MIN, Math.min(VSTUP_MAX, Number(b.konverze_podil)));
+    }
+    // Blokační menšina. Kdo drží čtvrtinu firmy, může zastavení zakázat —
+    // zástava je nevratná a propadne z ní majetek, na kterém visí i jeho
+    // peníze. Hlídá se to tady, aby se dlužník nedozvěděl až od protistrany,
+    // že se nabídka nedá přijmout.
+    if (zast || zastPodil || konvPodil) {
+      const blokuje = await blokujeZastavu(dluznik.id);
+      if (blokuje) {
+        return res.status(409).json({ error: stx(req)('server.zastavu_blokuje_podilnik', { p1: blokuje }) });
+      }
     }
     data = { urok, mesicu, zastava: zast, zastava_nazev: zastavaNazev,
       zastava_podil: zastPodil, konverze_podil: konvPodil,
@@ -629,6 +662,14 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
   const konverzePodil = t.predmet === 'pujcka'
     ? (Number((t.data || {}).konverze_podil) ? Math.min(VSTUP_MAX, Number((t.data || {}).konverze_podil)) : null)
     : null;
+  // Mezi vystavením a přijetím mohl podílník zákaz zapnout. Rozhoduje stav
+  // v okamžiku, kdy zástava doopravdy vzniká — tedy teď.
+  if (zastavaSpot || zastavaPodil || konverzePodil) {
+    const blokuje = await blokujeZastavu(kupujici.id);
+    if (blokuje) {
+      return res.status(409).json({ error: stx(req)('server.zastavu_blokuje_podilnik', { p1: blokuje }) });
+    }
+  }
   if (zastavaPodil) {
     // Od vystavení nabídky mohl dlužník podíl prodat jinam. Zastavit se dá
     // jen to, co je pořád volné.
@@ -935,6 +976,44 @@ router.post('/trade/prevzeti', hrac, api(async (req, res) => {
   res.json({ ok: true, nabidka: PREVZETI.verejna(t, req.player.id) });
 }));
 
+// POST /trade/zastava-souhlas { firma_id, zakaz } → blokační menšina
+// zapíná nebo vypíná zákaz zastavit majetek firmy.
+//
+// Je to přepínač, ne žádost o souhlas. Majitel na nic nečeká a rovnou vidí,
+// na čem je — kdyby to byla žádost, stál by s rozjednanou půjčkou tři dny,
+// než se podílník přihlásí.
+router.post('/trade/zastava-souhlas', hrac, api(async (req, res) => {
+  const b = req.body || {};
+  const firmaId = parseInt(b.firma_id, 10) || 0;
+  const firma = await prisma.gamePlayer.findUnique({ where: { id: firmaId } });
+  if (!firma) return res.status(404).json({ error: stx(req)('server.takovy_hrac_tu_neni') });
+
+  const seznam = await pravaFirmy(firmaId);
+  if (!PRAVA.smiBlokovat(seznam, req.player.id)) {
+    return res.status(403).json({ error: stx(req)('server.na_blokaci_zastavy_nemas_dost',
+      { p1: Math.round(PRAVA.BLOKACNI * 100) }) });
+  }
+  const zakaz = !!b.zakaz;
+  // Zákaz se zapisuje na všechny moje podíly v té firmě — nastavuje si ho
+  // člověk pro celý svůj podíl, ne pro jednu řádku v databázi.
+  await prisma.gameEquity.updateMany({
+    where: { firma_id: firmaId, investor_id: req.player.id, stav: 'bezi' },
+    data: { zakaz_zastavy: zakaz },
+  });
+
+  // Majitel se to musí dozvědět hned. Zjistit až od protistrany, že se
+  // sjednaná půjčka nedá přijmout, by bylo nepěkné.
+  await prisma.gameDelivery.create({ data: {
+    player_id: firmaId, kind: 'zprava',
+    popis: req.player.nick + (zakaz ? ' zakázal zastavit majetek firmy' : ' zastavení majetku firmy zase povolil'),
+    text_kod: zakaz ? 'dor.zastava_zakazana' : 'dor.zastava_povolena',
+    text_data: { p1: req.player.nick },
+  } });
+  console.log('[game] zástava: ' + req.player.nick + ' → ' + firma.nick
+    + ' · ' + (zakaz ? 'zákaz' : 'povoleno'));
+  res.json({ ok: true, zakaz });
+}));
+
 // POST /trade/dividenda { firma_id, pct } → většinový podílník určuje,
 // kolik procent měsíčního zisku firma vyplácí.
 //
@@ -1107,27 +1186,28 @@ router.get('/trade/finance', hrac, api(async (req, res) => {
     firmy.set(kdo, Math.round(acct._zbydeMesicne(stavu(f)) || 0));
     politiky.set(kdo, f || {});
   }
-  // Dividendová politika firmy a kdo ji určuje. Musí ji vidět majitel
-  // i podílníci — je to jediné číslo, které mění, kolik komu teče.
+  // Práva podílníků ve firmě: kdo určuje výplatu zisku a kdo blokuje
+  // zastavení majetku. Musí to vidět majitel i podílníci — jsou to jediná
+  // dvě nastavení, do kterých může mluvit někdo jiný než majitel.
   const DIVIDENDA = require('../services/game/dividenda');
+  async function jmeno(id) {
+    if (!id) return null;
+    const h = await prisma.gamePlayer.findUnique({ where: { id },
+      select: { nick: true, company: true } });
+    return h ? (h.company || h.nick) : null;
+  }
   async function politika(firmaId) {
     const f = politiky.get(firmaId) || {};
-    const vsechny = await prisma.gameEquity.findMany({
-      where: { firma_id: firmaId, stav: 'bezi' }, select: { investor_id: true, podil: true } });
-    // Dva podíly téhož investora se sčítají — většinu má člověk, ne řádka.
-    const souhrn = new Map();
-    vsechny.forEach((e) => souhrn.set(e.investor_id,
-      (souhrn.get(e.investor_id) || 0) + (e.podil || 0)));
-    const seznam = Array.from(souhrn, ([investor_id, podil]) => ({ investor_id, podil }));
-    const urcuje = DIVIDENDA.kdoUrcuje(seznam);
-    let nick = null;
-    if (urcuje) {
-      const h = await prisma.gamePlayer.findUnique({ where: { id: urcuje },
-        select: { nick: true, company: true } });
-      if (h) nick = h.company || h.nick;
-    }
-    return { pct: DIVIDENDA.platna(f.dividenda_pct), urcuje, urcuje_nick: nick,
-      smim: urcuje === ja, kdy: f.dividenda_at || null };
+    const seznam = await pravaFirmy(firmaId);
+    const pr = PRAVA.proHrace(seznam, ja);
+    return Object.assign({}, pr, {
+      pct: DIVIDENDA.platna(f.dividenda_pct),
+      urcuje_nick: await jmeno(pr.urcuje),
+      blokuje_nick: await jmeno(pr.blokuje),
+      // Jméno z dřívějška: klient ho zná jako „smím měnit dividendu".
+      smim: pr.smim_urcovat,
+      kdy: f.dividenda_at || null,
+    });
   }
   // U podílu je srozumitelnější název firmy než přezdívka hráče — kupuje se
   // kus firmy, ne kus člověka. Bereme aktuální název, ne ten z chvíle prodeje.

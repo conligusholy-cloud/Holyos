@@ -8139,6 +8139,10 @@ model GameEquity {
   podil         Float
   cena          Int
   vyplaceno     Int       @default(0)
+  // Blokační menšina: podílník se čtvrtinou firmy může zakázat, aby ji
+  // majitel dal do zástavy. Drží se to u podílu, ne u člověka — kdo podíl
+  // prodá, prodá i zákaz a nový držitel si ho zapíná sám.
+  zakaz_zastavy Boolean   @default(false)
   // bezi | odkoupeno
   stav          String    @default("bezi") @db.VarChar(12)
   dalsi_at      DateTime

@@ -3540,5 +3540,19 @@
   "veta.vyplata_nastavena_na": "Výplata zisku nastavena na {p1} %.",
   "hra.ulozit": "Uložit",
   "server.dividendu_urcuje_vetsinovy_podilnik": "Výplatu zisku určuje podílník s víc než polovinou firmy.",
-  "dor.dividenda_zmenena": "{p1} nastavil ve firmě {p2} výplatu zisku na {p3} % měsíčního zisku."
+  "dor.dividenda_zmenena": "{p1} nastavil ve firmě {p2} výplatu zisku na {p3} % měsíčního zisku.",
+  "zastava.zastavit_majetek": "Zastavit majetek firmy",
+  "zastava.zakazano": "zakázáno",
+  "zastava.povoleno": "povoleno",
+  "zastava.zakazat": "Zakázat zastavení",
+  "zastava.zase_povolit": "Zastavení zase povolit",
+  "zastava.zakaz_zapnut": "Zastavení majetku firmy je zakázané.",
+  "zastava.zakaz_vypnut": "Zastavení majetku firmy je zase povolené.",
+  "veta.zastavu_blokuje": "Zastavení blokuje {p1}. Drží ve firmě blokační menšinu.",
+  "veta.zastavu_ti_blokuje": "Zastavení ti blokuje {p1}. Drží ve firmě blokační menšinu — běžících půjček se to netýká, jen nových zástav.",
+  "veta.zastava_blokace_rada": "Zástava je nevratná: při nezaplacené splátce propadne a visí na ní i tvoje peníze. Proto ji můžeš zakázat dopředu.",
+  "server.zastavu_blokuje_podilnik": "Zastavení majetku firmy blokuje podílník {p1}.",
+  "server.na_blokaci_zastavy_nemas_dost": "Zakázat zastavení může podílník s aspoň {p1} % firmy.",
+  "dor.zastava_zakazana": "{p1} zakázal zastavit majetek tvé firmy. Běžící půjčky to nemění, jen nové zástavy.",
+  "dor.zastava_povolena": "{p1} zastavení majetku tvé firmy zase povolil."
 }
