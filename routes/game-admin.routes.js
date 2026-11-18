@@ -119,6 +119,8 @@ router.get('/players', api(async (req, res) => {
       hotovost: typeof st.cash === 'number' ? Math.round(st.cash) : null,
       uver: typeof st.loan === 'number' ? Math.round(st.loan) : null,
       pradlomatu: units.length,
+      // Objednané stroje, které ještě nedorazily (St.orders[].arrivesAt v budoucnu).
+      na_ceste: (Array.isArray(st.orders) ? st.orders : []).filter((o) => o && Number(o.arrivesAt) > Date.now()).length,
       mest: st.areas ? Object.keys(st.areas).length : 0,
       // Jak velký má uložený stav. Roste hlavně se seznamem prozkoumaných
       // míst a je to to, co dřív naráželo na strop a tiše blokovalo ukládání.

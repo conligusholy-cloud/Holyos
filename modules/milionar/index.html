@@ -946,7 +946,8 @@
         + (p.email ? '<div class="note">' + esc(p.email) + '</div>' : '') + '</td>'
         + '<td>' + odkud(p) + '</td>'
         + '<td>' + (p.sidlo ? '<b>' + esc(p.sidlo) + '</b>' : '<span class="note">—</span>') + '</td>'
-        + '<td class="num">' + cz(p.pradlomatu) + '</td><td class="num">' + cz(p.mist) + '</td>'
+        + '<td class="num">' + cz(p.pradlomatu) + '</td>'
+        + '<td class="num">' + (p.na_ceste ? '<b class="ok">' + cz(p.na_ceste) + '</b>' : cz(0)) + '</td><td class="num">' + cz(p.mist) + '</td>'
         + '<td class="num">' + cz(p.mest)
         // Velikost uloženého stavu. Roste hlavně seznamem prozkoumaných míst
         // a právě ta dva dny přerůstala strop, takže ukládání tiše padalo.
@@ -989,7 +990,7 @@
         { key: 'jmeno', label: 'Jméno a e-mail', type: 'text', ph: 'Jméno / e-mail…', get: function (p) { return (p.jmeno || '') + ' ' + (p.email || ''); } },
         { key: 'odkud', label: 'Odkud hraje', type: 'text', ph: 'Země / město…', get: function (p) { return [p.geo_mesto, p.geo_kraj, p.geo_zeme, p.geo_isp].filter(Boolean).join(' '); } },
         { key: 'sidlo', label: 'Sídlo ve hře', type: 'text', ph: 'Město…', get: function (p) { return p.sidlo || ''; } },
-        n('pradl', 'Prádlomatů', function (p) { return Number(p.pradlomatu) || 0; }), n('mist', 'Míst', function (p) { return Number(p.mist) || 0; }),
+        n('pradl', 'Prádlomatů', function (p) { return Number(p.pradlomatu) || 0; }), n('cesta', 'Na cestě', function (p) { return Number(p.na_ceste) || 0; }), n('mist', 'Míst', function (p) { return Number(p.mist) || 0; }),
         n('mest', 'Měst', function (p) { return Number(p.mest) || 0; }), n('prijem', 'Zbyde / měsíc', function (p) { return Number(p.prijem) || 0; }),
         n('hot', 'Hotovost', function (p) { return p.hotovost == null ? null : Number(p.hotovost); }), n('uver', 'Úvěr', function (p) { return p.uver == null ? null : Number(p.uver); }),
         n('otev', 'Otevření', function (p) { return Number(p.pozvanek) || 0; }), n('priv', 'Přivedl', function (p) { return Number(p.privedl) || 0; }),
@@ -1005,7 +1006,7 @@
         var tbl = document.getElementById('pl-tbl');
         if (!PL_TBL) {
           tbl.innerHTML = '<thead><tr><th>Nick</th><th class="num" title="Odhad podvodu 0–99 % (multi účty, levný přeprodej strojů, provize) — najeď myší na číslo">Podvodník</th><th class="num" title="Kolik o hráči víme — najeď myší na číslo">Známe</th><th>Jméno a e-mail</th><th>Odkud hraje</th><th>Sídlo ve hře</th>'
-            + '<th class="num">Prádlomatů</th><th class="num">Míst</th><th class="num">Měst</th><th class="num">Zbyde / měsíc</th>'
+            + '<th class="num">Prádlomatů</th><th class="num" title="Objednané prádlomaty, které ještě nedorazily">Na cestě</th><th class="num">Míst</th><th class="num">Měst</th><th class="num">Zbyde / měsíc</th>'
             + '<th class="num">Hotovost</th><th class="num">Úvěr</th><th class="num">Otevření</th><th class="num">Přivedl</th>'
             + '<th class="num">Nákupů</th><th class="num">Utraceno</th><th>Založeno</th><th>Naposledy</th><th></th></tr></thead><tbody></tbody>';
           PL_TBL = ColFilters.table({ table: '#pl-tbl', columns: plCols(), renderRow: plRow, noun: 'hráčů', emptyText: 'Zatím tu nikdo není.', limit: 1000 });
