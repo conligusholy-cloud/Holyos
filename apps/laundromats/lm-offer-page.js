@@ -295,6 +295,14 @@ function offerPage(o, token, opts) {
 .ox .refc p{margin:8px 0 14px;color:var(--tx2);line-height:1.6;font-size:15px}.ox .refc a{color:var(--az);font-weight:600;font-size:14px;text-decoration:none}.ox .refc a:hover{text-decoration:underline}.ox .refc .ico{font-size:22px}
 .ox .refstat{display:flex;flex-direction:column;justify-content:center;background:linear-gradient(160deg,rgba(30,134,224,.22),rgba(124,92,255,.18))}.ox .refstat .big{font-size:clamp(40px,4.4vw,56px);font-weight:800;letter-spacing:-.03em;background:linear-gradient(90deg,var(--az),#7aa8ff 55%,var(--vi));-webkit-background-clip:text;background-clip:text;color:transparent}
 .ox .refvid{display:grid;grid-template-columns:minmax(220px,300px) 1fr;gap:28px;align-items:center;margin-top:18px;padding:22px;border-radius:20px;background:rgba(14,22,40,.62);border:1px solid var(--line)}.ox .refvid video{width:100%;aspect-ratio:9/16;border-radius:16px;background:#000;display:block}.ox .refvid h3{font-size:22px;margin:0 0 4px}.ox .refvid .refvs{margin:0 0 14px;color:var(--tx3);font-size:14px}.ox .refvid ul{list-style:none;padding:0;margin:0;display:grid;gap:10px}.ox .refvid li{display:flex;gap:10px;color:var(--tx2);line-height:1.5}
+.ox .sec[data-s="reference"]{position:relative;margin-top:70px;padding:48px 40px 40px;border-radius:28px;background:radial-gradient(120% 90% at 0% 0%,rgba(30,134,224,.20),transparent 60%),radial-gradient(100% 80% at 100% 100%,rgba(124,92,255,.18),transparent 60%),rgba(12,20,38,.78);border:1px solid rgba(90,160,255,.45);box-shadow:0 0 0 1px rgba(90,160,255,.10),0 30px 90px -30px rgba(30,134,224,.55)}
+.ox .sec[data-s="reference"] h2{font-size:clamp(32px,4.2vw,52px)}
+.ox .sec[data-s="reference"] .sub{font-size:19px;color:var(--tx)}
+.ox .sec[data-s="reference"] .refstat{border-color:rgba(122,168,255,.6);box-shadow:0 0 50px -12px rgba(30,134,224,.7)}
+.ox .sec[data-s="reference"] .refstat .big{font-size:clamp(52px,6vw,78px)}
+.ox .sec[data-s="reference"] .refc{border-color:rgba(90,160,255,.35)}
+.ox .sec[data-s="reference"] .refend{font-size:20px;font-weight:700;color:var(--tx);margin-top:26px}
+@media (max-width:720px){.ox .sec[data-s="reference"]{padding:30px 18px 26px;border-radius:22px}}
 @media (max-width:720px){.ox .refvid{grid-template-columns:1fr}.ox .refvid video{max-width:320px;margin:0 auto}}
 .ox .refend{margin:26px 0 0;font-size:clamp(20px,2.2vw,26px);font-weight:750;letter-spacing:-.02em}
 .ox .card{background:rgba(14,22,40,.62);border:1px solid var(--line);border-radius:20px;padding:26px;backdrop-filter:blur(6px)}
