@@ -300,6 +300,27 @@ async function pravaFirmy(firmaId) {
   return ALIANCE.slucPodily(poHraci, await clenstvi(poHraci.map((e) => e.investor_id)));
 }
 
+// Aliance, které v téhle firmě drží podíl, i s jejich jmény.
+async function alianceBloky(firmaId) {
+  const rows = await prisma.gameEquity.findMany({
+    where: { firma_id: firmaId, stav: 'bezi' },
+    select: { investor_id: true, podil: true },
+  });
+  const poHraci = PRAVA.souhrn(rows);
+  const s = ALIANCE.souhrn(poHraci, await clenstvi(poHraci.map((e) => e.investor_id)));
+  if (!s.length) return [];
+  const [aliance, hraci] = await Promise.all([
+    prisma.gameAliance.findMany({ where: { id: { in: s.map((x) => x.aliance_id) } },
+      select: { id: true, nazev: true } }),
+    prisma.gamePlayer.findMany({ where: { id: { in: s.map((x) => x.mluvci).filter(Boolean) } },
+      select: { id: true, nick: true, company: true } }),
+  ]);
+  const nazvy = new Map(aliance.map((a) => [a.id, a.nazev]));
+  const jm = new Map(hraci.map((h) => [h.id, h.company || h.nick]));
+  return s.map((x) => ({ nazev: nazvy.get(x.aliance_id) || '', podil: x.podil,
+    clenu: x.clenu, mluvci: jm.get(x.mluvci) || '' }));
+}
+
 // Mapa hráč → aliance pro zadané hráče. Kdo v žádné není, v mapě chybí
 // a zůstává sám za sebe.
 async function clenstvi(ids) {
@@ -1404,8 +1425,13 @@ router.get('/trade/finance', hrac, api(async (req, res) => {
       const JMENI = require('../services/game/jmeni');
       minCena = PREVZETI.minCenaZaPct(await JMENI.proHrace(firmaId, stavu(f)));
     }
+    // Bloky, které v téhle firmě drží podíl. Majitel je musí vidět i se
+    // jménem — skrytý kartel by byl past: nechápal by, proč mu najednou
+    // někdo mluví do firmy, a neměl by se jak zařídit.
+    const bloky = await alianceBloky(firmaId);
     return Object.assign({}, pr, {
       pct: DIVIDENDA.platna(f.dividenda_pct),
+      bloky,
       smim_vystupni: smimVystupni, min_cena: minCena,
       urcuje_nick: await jmeno(pr.urcuje),
       blokuje_nick: await jmeno(pr.blokuje),

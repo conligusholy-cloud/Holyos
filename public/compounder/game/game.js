@@ -9076,7 +9076,21 @@ function dividendaRadek(id, mojeFirma) {
     + (d.smim ? '<div class="gcard-act"><button class="btn sm" data-dividenda="' + id + '">'
         + esc(tx('dividenda.nastavit')) + '</button></div>' : '')
     + zastavaRadek(id, d, mojeFirma)
+    + blokyRadek(d, mojeFirma)
     + vystupniRadek(id, d);
+}
+// Aliance, které ve firmě drží podíl. Majitel musí vidět, že proti němu
+// stojí blok, ne pět nesouvisejících lidí — skrytý kartel by byl past.
+function blokyRadek(d, mojeFirma) {
+  var l = (d && d.bloky) || [];
+  if (!l.length) return '';
+  return l.map(function (b) {
+    return '<div class="row" style="margin-top:6px"><span class="muted small">'
+      + esc(tx('aliance.blok')) + '</span><span>' + esc(b.nazev) + ' \u00b7 '
+      + pctHra(b.podil) + ' %</span></div>'
+      + '<p class="fine">' + tx(mojeFirma ? 'veta.blok_ve_tve_firme' : 'veta.blok_ve_firme',
+        { p1: b.clenu, p2: esc(b.mluvci || '') }) + '</p>';
+  }).join('');
 }
 // Výstupní nabídka. Kdo drží tři čtvrtiny firmy, může nechat viset trvalý
 // odkup zbytku — menšina pak má kudy ven, i když se měsíc neukáže. Prodat
@@ -9175,6 +9189,88 @@ function dividendaSheet(id, nazev, mesicneTed) {
   };
 }
 
+// ─── Investiční aliance ─────────────────────────────────────────────────────
+// Podíly členů se v jedné firmě sčítají, takže blok dosáhne na prahy, na
+// které sám nedosáhne nikdo. Za blok jedná ten, kdo v té firmě drží nejvíc.
+var ALIANCE = null;
+function loadAliance(then) {
+  api('/trade/aliance').then(function (r) {
+    ALIANCE = (r.ok && r.j) || { aliance: null, pozvanky: [] };
+    if (then) then();
+  }).catch(function () { ALIANCE = { aliance: null, pozvanky: [] }; if (then) then(); });
+}
+function alianceHtml() {
+  if (!ALIANCE) return '';
+  var a = ALIANCE.aliance;
+  var h = '<div class="card"><h3>\uD83E\uDD1D ' + esc(tx('aliance.nadpis')) + '</h3>';
+  if (a) {
+    h += '<div class="row"><b>' + esc(a.nazev) + '</b><span class="pill good">'
+      + tx('veta.clenu_z', { p1: a.clenove.filter(function (c) { return c.stav === 'clen'; }).length,
+        p2: ALIANCE.max_clenu }) + '</span></div>'
+      + a.clenove.map(function (c) {
+          return '<div class="row"><span>' + esc(c.kdo) + (c.ja ? ' \u00b7 ' + esc(tx('aliance.ty')) : '') + '</span>'
+            + '<span class="muted small">' + esc(tx(c.stav === 'clen' ? 'aliance.clen' : 'aliance.pozvan')) + '</span></div>';
+        }).join('')
+      + '<p class="fine">' + esc(tx('veta.aliance_jak_funguje')) + '</p>'
+      + '<div class="gcard-act"><button class="btn sec sm" id="al-odejit">'
+      + esc(tx('aliance.odejit')) + '</button></div>';
+  } else {
+    h += '<p class="muted small" style="margin:2px 0 8px">' + esc(tx('veta.aliance_k_cemu_je')) + '</p>';
+    (ALIANCE.pozvanky || []).forEach(function (p) {
+      h += '<div class="row"><b>' + esc(p.nazev) + '</b>'
+        + '<button class="btn sm" data-al-prijmout="' + p.aliance_id + '">'
+        + esc(tx('aliance.prijmout')) + '</button></div>';
+    });
+    if ((ALIANCE.pozvanky || []).length) {
+      h += '<p class="fine warn">' + esc(tx('veta.aliance_cena_za_vstup')) + '</p>';
+    }
+    h += '<div class="gcard-act"><button class="btn sm" id="al-zalozit">'
+      + esc(tx('aliance.zalozit')) + '</button></div>';
+  }
+  return h + '</div>';
+}
+function zalozAlianceSheet() {
+  sheet('<h3>' + esc(tx('aliance.zalozit')) + '</h3>'
+    + '<p class="muted small">' + esc(tx('veta.aliance_popis')) + '</p>'
+    + '<label class="fld"><span>' + esc(tx('aliance.nazev')) + '</span>'
+    + '<input id="al-nazev" class="inp" type="text" maxlength="24" value=""></label>'
+    + '<p class="fine">' + esc(tx('veta.aliance_cena_za_vstup')) + '</p>'
+    + '<button class="btn big" id="al-ok" style="width:100%;margin-top:10px">'
+    + esc(tx('aliance.zalozit')) + '</button>');
+  $('al-ok').onclick = function () {
+    var n = String($('al-nazev').value || '').trim();
+    if (n.length < 2) return toast(esc(tx('aliance.zadej_nazev')), 'err');
+    $('al-ok').disabled = true;
+    apiJson('/trade/aliance', { nazev: n }).then(function (r) {
+      if (!r.ok) { $('al-ok').disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+      closeSheet(); ALIANCE = null; FINANCE = null; loadAliance(paintMe);
+      toast(esc(tx('aliance.zalozena')), 'ok', true);
+    }).catch(function () { $('al-ok').disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+  };
+}
+function bindAliance(kde) {
+  var box = $(kde); if (!box) return;
+  if ($('al-zalozit')) $('al-zalozit').onclick = zalozAlianceSheet;
+  if ($('al-odejit')) $('al-odejit').onclick = function () {
+    apiJson('/trade/aliance/odejit', {}).then(function (r) {
+      if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
+      ALIANCE = null; FINANCE = null; loadAliance(paintMe);
+      toast(esc(tx('aliance.odesel_jsi')), 'ok', true);
+    }).catch(function () { toast(esc(tx('hra.server_neodpovida')), 'err'); });
+  };
+  [].forEach.call(box.querySelectorAll('[data-al-prijmout]'), function (b) {
+    b.onclick = function () {
+      b.disabled = true;
+      apiJson('/trade/aliance/prijmout', { aliance_id: Number(b.getAttribute('data-al-prijmout')) })
+        .then(function (r) {
+          if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+          ALIANCE = null; FINANCE = null; loadAliance(paintMe);
+          toast(esc(tx('aliance.vstoupil_jsi')), 'ok', true);
+        }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+    };
+  });
+}
+
 function podilyHtml() {
   if (!FINANCE) return '';
   var moje = (FINANCE.podily || []).filter(function (e) { return e.moje === 'mam' && bezici(e); });
@@ -9203,6 +9299,8 @@ function podilyHtml() {
   return h + '</div>';
 }
 function bindPodily() {
+  if (ALIANCE == null) loadAliance(paintMe);
+  bindAliance('me-body');
   [].forEach.call($('me-body').querySelectorAll('[data-dividenda]'), function (b) {
     b.onclick = function () {
       var id = Number(b.getAttribute('data-dividenda'));
@@ -9308,6 +9406,7 @@ function paintMe() {
     + hodnostHtml()
     + odznakyHtml()
     + podilyHtml()
+    + alianceHtml()
     + majetekHtml()
     + '<div class="card"><h3>' + esc(tx('hra.jak_se_hraje')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 0">' + esc(tx('hra.jeden_skutecny_den_jsou_ve')) + ' '
@@ -10986,7 +11085,8 @@ function majetekSheet(id, rovnouKat) {
       { k: 'pujcka', ico: '🏦', nazev: esc(tx('mapa.pujcka')), pod: esc(tx('mapa.penize_na_urok')) },
       { k: 'podil', ico: '📈', nazev: esc(tx('mapa.podil_ve_firme')), pod: esc(tx('mapa.procento_ze_zisku_i_ztraty')) },
       { k: 'vstup', ico: '💉', nazev: esc(tx('mapa.kapitalovy_vstup')), pod: esc(tx('mapa.penize_do_firmy_za_novy_podil')) },
-      { k: 'prevzeti', ico: '🏴', nazev: esc(tx('prevzeti.nadpis')), pod: esc(tx('prevzeti.dlazdice_pod')) }
+      { k: 'prevzeti', ico: '🏴', nazev: esc(tx('prevzeti.nadpis')), pod: esc(tx('prevzeti.dlazdice_pod')) },
+      { k: 'aliance', ico: '🤝', nazev: esc(tx('aliance.nadpis')), pod: esc(tx('aliance.dlazdice_pod')) }
     ];
     var kolikJe = function (kat) {
       var f = function (list) { return list.filter(function (x) { return x.predmet === kat; }).length; };
@@ -10998,7 +11098,7 @@ function majetekSheet(id, rovnouKat) {
     var rozcestnik = function () {
       sheet(hlava + '<div class="rozc">' + KATEGORIE.map(function (c) {
         var n = c.k === 'pujcka' || c.k === 'podil' || c.k === 'vstup' || c.k === 'prevzeti'
-          ? null : kolikJe(c.k);
+          || c.k === 'aliance' ? null : kolikJe(c.k);
         var pocty = n == null ? c.pod
           : !n.k && !n.p ? esc(tx('mapa.nema_ani_jeden_z_vas'))
             : [n.k ? n.k + esc(tx('hra.jeho')) : '', n.p ? n.p + esc(tx('mapa.tvych')) : ''].filter(Boolean).join(' · ');
@@ -11028,6 +11128,14 @@ function majetekSheet(id, rovnouKat) {
       var telo;
       if (kat === 'pujcka') {
         telo = tx('veta.p_class_muted_small_splaci_se', { p1: tx('veta.pradlomat_hned_pri_prvni_nezaplacene_splatce', { p1: esc(tx('mapa.pujcit_mu_penize')), p2: esc(tx('mapa.ty_das_hotovost_on_splaci')), p3: esc(tx('mapa.pozadat_ho_o_pujcku')), p4: esc(tx('mapa.on_da_hotovost_ty_splacis')) }) });
+      } else if (kat === 'aliance') {
+        var mam = ALIANCE && ALIANCE.aliance;
+        telo = '<p class="muted small">' + esc(tx(mam ? 'veta.aliance_pozvat_popis' : 'veta.aliance_nemas')) + '</p>'
+          + (mam
+            ? '<div class="area-item"><div><div class="nm">' + esc(mam.nazev)
+              + '</div><div class="sub">' + esc(tx('veta.aliance_cena_za_vstup')) + '</div></div>'
+              + '<button class="btn sec sm" id="aliance-go">' + esc(tx('aliance.pozvat')) + '</button></div>'
+            : '');
       } else if (kat === 'prevzeti') {
         telo = '<p class="muted small">' + esc(tx('veta.prevzeti_k_cemu_je')) + '</p>'
           + '<div class="area-item"><div><div class="nm">' + esc(tx('prevzeti.nadpis'))
@@ -11053,6 +11161,14 @@ function majetekSheet(id, rovnouKat) {
       $('rozc-zpet').onclick = rozcestnik;
       if ($('vstup-go')) $('vstup-go').onclick = function () { vstupSheet(id, a.hrac, a); };
       if ($('prevzeti-go')) $('prevzeti-go').onclick = function () { vyhlasitSheet(id, a.hrac, a); };
+      if ($('aliance-go')) $('aliance-go').onclick = function () {
+        var b = $('aliance-go'); b.disabled = true;
+        apiJson('/trade/aliance/pozvat', { player_id: id }).then(function (r) {
+          if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+          closeSheet();
+          toast(tx('veta.pozvanka_odeslana', { p1: esc(a.hrac.firma || a.hrac.nick) }), 'ok', true);
+        }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+      };
       [].forEach.call($('sheet-body').querySelectorAll('[data-fin]'), function (b) {
         b.onclick = function () { financeSheet(id, a.hrac, b.getAttribute('data-fin'), a); };
       });
