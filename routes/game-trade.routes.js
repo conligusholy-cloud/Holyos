@@ -21,7 +21,16 @@ const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 const MODELY = ['mini', 'flex', 'max'];
 const JMENI = require('../services/game/jmeni');
 const PODILY = require('../services/game/podily');
-const PREDMETY = ['stroj', 'pradlomat', 'karta', 'pobocka', 'pujcka', 'podil', 'odkup', 'prevod', 'vstup'];
+const PREDMETY = ['stroj', 'pradlomat', 'karta', 'pobocka', 'pujcka', 'podil', 'odkup', 'prevod', 'vstup', 'odklad'];
+// Odklad splátky. Dlužník, který ví, že na příští splátku nemá, si může
+// říct o posunutí — a nabídnout za to poplatek. Věřitel na tom bývá líp
+// než na propadlé zástavě: z rozprodané firmy dostane zlomek toho, co by
+// mu přinesla splacená půjčka.
+//
+// Rozhoduje každý věřitel za svou půjčku sám. Hlasování většinou pohledávek
+// by znamenalo nový aparát a jeden tvrdohlavý věřitel firmu položí stejně —
+// tohle je jednodušší a dramatičtější.
+const ODKLAD_MAX_MESICU = 6;
 // Kapitálový vstup: investor dá firmě peníze a dostane za ně NOVĚ VYDANÝ
 // podíl. Od prodeje podílu se to liší v tom, kdo se tím ředí — u prodeje
 // jen majitel, tady všichni, protože se celý koláč krájí znovu. Podrobně
@@ -219,7 +228,8 @@ async function zkontroluj(nab, prodavajici, t) {
     const pob = Array.isArray(st.pobocky) ? st.pobocky : [];
     if (!pob.some((x) => x && x.name === nab.pobocka)) return t('server.prodavajici_nema_pobocku');
   } else if (nab.predmet === 'pujcka' || nab.predmet === 'podil'
-    || nab.predmet === 'odkup' || nab.predmet === 'prevod' || nab.predmet === 'vstup') {
+    || nab.predmet === 'odkup' || nab.predmet === 'prevod' || nab.predmet === 'vstup'
+    || nab.predmet === 'odklad') {
     return null;        // peníze a podíl se kontrolují zvlášť, nic se nepřevádí ze skladu
   } else return t('server.tohle_se_obchodovat_neda');
   return null;
@@ -360,6 +370,20 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
     const kupujici = smer === 'koupim' ? req.player : druhy;
     const po = (await podilInvestora(firma.id, kupujici.id)) + podil;
     data = { podil, po_prodeji: po, vetsina: po > PODIL_VETSINA + 1e-9 };
+  } else if (predmet === 'odklad') {
+    // O odklad žádá vždycky dlužník, a vždycky u konkrétní půjčky.
+    const pujckaId = parseInt(b.loan_id, 10) || 0;
+    const mesicu2 = Math.max(1, Math.min(ODKLAD_MAX_MESICU, Math.round(Number(b.odklad_mesicu) || 1)));
+    const pujcka = await prisma.gameLoan.findUnique({ where: { id: pujckaId } });
+    if (!pujcka || pujcka.stav !== 'bezi') {
+      return res.status(409).json({ error: stx(req)('server.takova_pujcka_uz_nebezi') });
+    }
+    if (pujcka.borrower_id !== req.player.id || pujcka.lender_id !== druhy.id) {
+      return res.status(403).json({ error: stx(req)('server.o_odklad_zada_dluznik_sveho_veritele') });
+    }
+    data = { loan_id: pujcka.id, odklad_mesicu: mesicu2,
+      splatka: pujcka.splatka, zmeskano: pujcka.zmeskano,
+      zbyva_splatek: Math.max(0, (pujcka.mesicu || 0) - (pujcka.splaceno || 0)) };
   } else if (predmet === 'vstup') {
     // Peníze jdou do firmy, investor za ně dostane nově vydaný podíl a
     // všichni dosavadní se o stejný poměr zředí.
@@ -646,6 +670,7 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
     : t.predmet === 'pujcka' ? tx('predmet.pujcku')
     : t.predmet === 'podil' ? tx('predmet.podil_pct', { p1: Math.round(((t.data || {}).podil || 0) * 100) })
     : t.predmet === 'vstup' ? tx('predmet.vstup_pct', { p1: Math.round(((t.data || {}).podil || 0) * 100) })
+    : t.predmet === 'odklad' ? tx('predmet.odklad_mesicu', { p1: ((t.data || {}).odklad_mesicu || 1) })
     : t.predmet === 'odkup' ? tx('predmet.odkup_pct', { p1: Math.round(((t.data || {}).podil || 0) * 100) })
     : t.predmet === 'prevod' ? tx('predmet.podil_pct_firma',
       { p1: pct((t.data || {}).podil), p2: ((t.data || {}).firma_nick || '') })
@@ -721,6 +746,31 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
         firma_id: prodavajici.id, firma_nick: prodavajici.nick,
         podil, cena: t.cena, dalsi_at: new Date(Date.now() + MESIC_MS),
       } });
+    }
+    // 3b1. odklad: splátka se posune a zmeškané se odpustí. Je to jediné
+    // místo, kde se počítadlo zmeškaných vrací na nulu — dohodou obou stran.
+    // Proto se taky hned ověřuje, že půjčka pořád běží a pořád patří těmhle
+    // dvěma: od vystavení nabídky mohla propadnout.
+    if (t.predmet === 'odklad') {
+      const pid = parseInt((t.data || {}).loan_id, 10) || 0;
+      const mes = Math.max(1, Math.min(ODKLAD_MAX_MESICU, Math.round(Number((t.data || {}).odklad_mesicu) || 1)));
+      const pujcka = await tx.gameLoan.findUnique({ where: { id: pid } });
+      if (!pujcka || pujcka.stav !== 'bezi'
+        || pujcka.borrower_id !== kupujici.id || pujcka.lender_id !== prodavajici.id) {
+        throw new Error('odklad-neplatny');
+      }
+      await tx.gameLoan.update({ where: { id: pid }, data: {
+        zmeskano: 0,
+        dalsi_at: new Date(Math.max(Date.now(), new Date(pujcka.dalsi_at).getTime()) + mes * MESIC_MS),
+      } });
+      await tx.gameDelivery.createMany({ data: [
+        { player_id: kupujici.id, trade_id: t.id, kind: 'zprava',
+          popis: prodavajici.nick + ' ti odložil splátku', text_kod: 'dor.odklad_tobe',
+          text_data: { p1: prodavajici.nick, p2: mes } },
+        { player_id: prodavajici.id, trade_id: t.id, kind: 'zprava',
+          popis: 'Odložil jsi splátku ' + kupujici.nick, text_kod: 'dor.odklad_tvuj',
+          text_data: { p1: kupujici.nick, p2: mes } },
+      ] });
     }
     // 3b2. kapitálový vstup: peníze jdou majiteli firmy a investor za ně
     // dostane nově vydaný podíl. Dosavadní podíly se musí PŘEPOČÍTAT, ne jen
@@ -874,6 +924,8 @@ router.get('/trade/finance', hrac, api(async (req, res) => {
     pujcky: pujcky.map((p) => ({ id: p.id, trade_id: p.trade_id,
       moje: p.borrower_id === ja ? 'dluzim' : 'pujcil',
       kdo: p.borrower_id === ja ? p.lender_nick : p.borrower_nick,
+      // Komu psát, když si chce dlužník říct o odklad.
+      kdo_id: p.borrower_id === ja ? p.lender_id : p.borrower_id,
       castka: p.castka, urok: p.urok, mesicu: p.mesicu, splatka: p.splatka,
       splaceno: p.splaceno, zmeskano: p.zmeskano, stav: p.stav, doplatek: doplatek(p),
       // Kolik už přes splátky proteklo a kolik má ještě přijít, v penězích.

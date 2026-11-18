@@ -3471,5 +3471,15 @@
   "dor.konverze_tobe": "Nezaplatil jsi splátku, a půjčka se podle dohody změnila na podíl: {p1} % firmy má {p2}. Dluh tím skončil.",
   "dor.konverze_tvoje": "{p2} nezaplatil splátku, takže se půjčka podle dohody změnila na podíl — držíš {p1} % jeho firmy. Dluh tím skončil.",
   "hra.konverze_na_podil": "Konverze na podíl",
-  "veta.konverze_popis": "Když přestane splácet, půjčka se změní na {p1} % jeho firmy a dluh tím skončí. Podíl se vydá nově — všichni dosavadní podílníci se o stejný díl zředí. Nepotřebuje to volný podíl, takže to jde i u firmy, kde je prodané všechno."
+  "veta.konverze_popis": "Když přestane splácet, půjčka se změní na {p1} % jeho firmy a dluh tím skončí. Podíl se vydá nově — všichni dosavadní podílníci se o stejný díl zředí. Nepotřebuje to volný podíl, takže to jde i u firmy, kde je prodané všechno.",
+  "predmet.odklad_mesicu": "odklad splátky o {p1} herních měsíců",
+  "server.takova_pujcka_uz_nebezi": "Taková půjčka už neběží.",
+  "server.o_odklad_zada_dluznik_sveho_veritele": "O odklad žádá dlužník svého věřitele.",
+  "dor.odklad_tobe": "{p1} ti odložil splátku o {p2} herních měsíců a zmeškané ti odpustil.",
+  "dor.odklad_tvuj": "Odložil jsi {p1} splátku o {p2} herních měsíců. Zmeškané se mu odpustily.",
+  "hra.pozadat_o_odklad": "Požádat o odklad",
+  "hra.o_kolik_hernich_mesicu": "O kolik herních měsíců",
+  "hra.poplatek_za_odklad": "Poplatek za odklad",
+  "veta.odklad_jak_to_funguje": "Požádáš {p1} o posunutí splátky. Když kývne, zmeškané se ti odpustí a další splátka se posune — dluh zůstává celý.",
+  "veta.odklad_poplatek_rada": "Poplatek není povinný, ale zvyšuje šanci, že věřitel kývne. Jemu se odklad vyplatí i tak: z propadlé zástavy dostane zlomek toho, co by mu přinesla splacená půjčka."
 }

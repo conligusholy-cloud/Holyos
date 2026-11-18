@@ -9620,6 +9620,44 @@ function krizeHtml() {
     + '</div>';
 }
 
+// Odklad splátky. Dlužník si o něj řekne sám a může za něj nabídnout
+// poplatek — věřitel na tom bývá líp než na propadlé zástavě, protože
+// z rozprodané firmy dostane zlomek toho, co by mu přinesla splacená půjčka.
+function odkladSheet(p) {
+  sheet('<h3>' + esc(tx('hra.pozadat_o_odklad')) + '</h3>'
+    + '<p class="muted small">' + tx('veta.odklad_jak_to_funguje', { p1: esc(p.kdo) }) + '</p>'
+    + '<div class="kv"><span>' + esc(tx('hra.splatka')) + '</span><b>' + kcFull(p.splatka) + '</b></div>'
+    + (p.zmeskano
+        ? '<div class="kv"><span>' + esc(tx('hra.zmeskane_splatky')) + '</span><b class="err">'
+          + p.zmeskano + '</b></div>'
+        : '')
+    + '<label class="fld"><span>' + esc(tx('hra.o_kolik_hernich_mesicu')) + '</span>'
+    + '<input id="od-mesicu" class="inp" type="number" inputmode="numeric" min="1" max="6" value="2"></label>'
+    + '<label class="fld"><span>' + esc(tx('hra.poplatek_za_odklad')) + '</span>'
+    + '<input id="od-cena" class="inp" type="number" inputmode="numeric" min="0" value="'
+    + Math.round((p.splatka || 0) * 0.1) + '"></label>'
+    + '<p class="fine">' + esc(tx('veta.odklad_poplatek_rada')) + '</p>'
+    + '<label class="fld"><span>' + esc(tx('hra.vzkaz_nepovinny')) + '</span>'
+    + '<input id="od-vzkaz" class="inp" type="text" maxlength="200"></label>'
+    + '<button class="btn big" id="od-ok" style="width:100%;margin-top:10px">'
+    + esc(tx('hra.poslat_nabidku')) + '</button>');
+  $('od-ok').onclick = function () {
+    var c = Math.max(0, Math.round(Number($('od-cena').value) || 0));
+    if (c > volnaHotovost(null)) {
+      return toast(tx('veta.volne_hotovosti_mas_jen', { p1: kcFull(Math.max(0, volnaHotovost(null))), p2: esc(tx('hra.zbytek_drzi_rozjednane_nabidky')) }), 'err');
+    }
+    $('od-ok').disabled = true;
+    apiJson('/trade/offer', { to_id: p.kdo_id, predmet: 'odklad', cena: c, smer: 'koupim',
+      loan_id: p.id, odklad_mesicu: Math.max(1, Math.min(6, Math.round(Number($('od-mesicu').value) || 1))),
+      vzkaz: ($('od-vzkaz').value || '').slice(0, 200) })
+      .then(function (r) {
+        if (!r.ok) { $('od-ok').disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+        closeSheet(); loadTrades(paintBurza);
+        toast(esc(tx('hra.nabidka_odeslana_ted_je_to')), 'ok');
+      }).catch(function () { $('od-ok').disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+  };
+}
+
 function financeHtml() {
   var f = FINANCE;
   if (!f || (!(f.pujcky || []).filter(bezici).length && !(f.podily || []).filter(bezici).length)) return '';
@@ -9648,6 +9686,14 @@ function financeHtml() {
       + (dluzim && p.doplatek > 0
           ? tx('hra.div_class_akce_button_class_btn', { p1: p.id, p2: p.doplatek, p3: kcFull(p.doplatek) })
           : '')
+      // Odklad si řekne dlužník sám. Má cenu ho nabízet, i když zrovna
+      // nic nezmeškal — kdo ví dopředu, že na příští splátku nemá, má
+      // zkusit domluvu dřív, než mu propadne zástava.
+      + (dluzim
+          ? '<div class="akce"><button class="btn sm sec" data-odklad="' + p.id
+            + '" data-kdo="' + esc(p.kdo_id || '') + '">'
+            + esc(tx('hra.pozadat_o_odklad')) + '</button></div>'
+          : '')
       + '</div>';
   });
   (f.podily || []).filter(bezici).forEach(function (e) {
@@ -9665,6 +9711,13 @@ function financeHtml() {
   return h + '</div>';
 }
 function bindFinance() {
+  [].forEach.call($('burza-body').querySelectorAll('[data-odklad]'), function (b) {
+    b.onclick = function () {
+      var id = Number(b.getAttribute('data-odklad'));
+      var p = ((FINANCE && FINANCE.pujcky) || []).filter(function (x) { return x.id === id; })[0];
+      if (p) odkladSheet(p);
+    };
+  });
   [].forEach.call($('burza-body').querySelectorAll('[data-splatit]'), function (b) {
     b.onclick = function () { splatitSheet(b.getAttribute('data-splatit'), Number(b.getAttribute('data-castka'))); };
   });
