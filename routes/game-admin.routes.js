@@ -270,6 +270,20 @@ router.post('/duchove-uklid', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(S.tiskDuchoveUklid(z));
 }));
 
+// GET /model-srovnat → nanečisto, POST → ostro. Srovná model stroje podle
+// hry, oběma směry. Místa se zaplaceným nákupem na serverový model se
+// nepřepisují — tam o výměnu přišla hra a hráč za ni zaplatil.
+router.get('/model-srovnat', api(async (req, res) => {
+  const S = require('../services/game/srovnani');
+  res.type('text/plain; charset=utf-8').send(S.tiskModelSrovnat(await S.modelSrovnat({ ostro: false })));
+}));
+router.post('/model-srovnat', api(async (req, res) => {
+  const S = require('../services/game/srovnani');
+  const z = await S.modelSrovnat({ ostro: true });
+  console.log('[game-sit] model srovnán u ' + z.srovnano + ' míst');
+  res.type('text/plain; charset=utf-8').send(S.tiskModelSrovnat(z));
+}));
+
 // GET /odkazy-rozpor → u koho se rozchází počet přivedených hráčů.
 // Přivedenými se násobí tržba celé sítě, takže až se hotovost přesune na
 // server, bude z rozdílu v přehledu rozdíl v penězích.

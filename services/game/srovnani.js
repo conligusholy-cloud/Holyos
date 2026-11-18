@@ -451,6 +451,70 @@ async function sit() {
   return out;
 }
 
+// Srovnání modelu stroje podle hry.
+//
+// Rozhoduje hra, a to oběma směry — i když tím server o stroj přijde, i když
+// mu naopak přibude. Důvod je stejný jako u úklidu duchů: hráč hraje to, co
+// má v prohlížeči, a server má popisovat skutečnost, ne ji přepisovat.
+//
+// Výjimkou by byl zapsaný nákup na serverový model: to by znamenalo, že hra
+// o výměnu přišla a hráč za ni zaplatil. Taková místa se přeskočí a vypíšou,
+// ať se vyřeší jednotlivě — vzít hráči stroj, za který zaplatil, se nesmí.
+async function modelSrovnat(opts) {
+  const ostro = !!(opts && opts.ostro);
+  const stav = await sit();
+  const sporne = [];
+  (stav || []).forEach((r) => (r.sporne || []).forEach((x) => {
+    if (x.co === 'model' && x.spot) sporne.push({ nick: r.nick, id: r.id, spot: x.spot,
+      hra: x.hra, server: x.server, nakup: x.nakup });
+  }));
+  const out = { ostro, naslo: sporne.length, srovnano: 0, preskoceno: [], radky: [] };
+  if (!sporne.length) return out;
+
+  for (const x of sporne) {
+    if (x.nakup && /zaplaceno/.test(x.nakup)) {
+      out.preskoceno.push({ spot: x.spot, proc: 'je na něj zaplacený nákup (' + x.nakup + ')' });
+      continue;
+    }
+    // Ověření těsně před zápisem: mezi přehledem a úklidem mohl hráč model
+    // vyměnit doopravdy.
+    const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: x.spot },
+      select: { model: true, player_id: true } });
+    if (!c || c.player_id !== x.id) { out.preskoceno.push({ spot: x.spot, proc: 'místo už není jeho' }); continue; }
+    if (c.model === x.hra) { out.preskoceno.push({ spot: x.spot, proc: 'mezitím se srovnalo' }); continue; }
+    out.radky.push({ nick: x.nick, spot: x.spot, z: c.model, na: x.hra });
+    if (ostro) {
+      await prisma.gameSpotClaim.update({ where: { spot_id: x.spot }, data: { model: x.hra } });
+      out.srovnano++;
+    }
+  }
+  return out;
+}
+
+function tiskModelSrovnat(z) {
+  const out = [];
+  out.push(z.ostro ? 'OSTRO — zapsáno' : 'NANEČISTO — nic se nezměnilo');
+  out.push('Rozporů v modelu: ' + z.naslo + ' · ke srovnání ' + z.radky.length
+    + (z.ostro ? ' · srovnáno ' + z.srovnano : ''));
+  if (z.radky.length) {
+    out.push('');
+    out.push('hráč                 místo                          server → hra');
+    out.push('-'.repeat(72));
+    z.radky.forEach((r) => out.push(String(r.nick || '').padEnd(20).slice(0, 20)
+      + String(r.spot).padEnd(31).slice(0, 31) + r.z + ' → ' + r.na));
+  }
+  if (z.preskoceno.length) {
+    out.push('');
+    out.push('Přeskočeno:');
+    z.preskoceno.forEach((r) => out.push('  ' + String(r.spot).padEnd(31).slice(0, 31) + r.proc));
+  }
+  out.push('');
+  out.push('Rozhoduje hra, oběma směry. Místo se zaplaceným nákupem na model,');
+  out.push('který má server, se nepřepisuje — tam hra o výměnu přišla.');
+  if (!z.ostro) out.push('Ostrý běh: POST na stejnou adresu.');
+  return out.join('\n');
+}
+
 // Úklid strojů, o kterých ví jen server.
 //
 // Vymaže se JEN model, zábor zůstává. Hráč o místo nepřijde — přijde o stroj,
@@ -657,4 +721,5 @@ function tiskSit(rows) {
 
 module.exports = { srovnani, tisk, evidence, tiskEvidence, sklad, tiskSklad, sit, tiskSit,
   sitDoplnit, tiskSitDoplnit, duchoveUklid, tiskDuchoveUklid,
+  modelSrovnat, tiskModelSrovnat,
   CENY_STROJU, stupen };
