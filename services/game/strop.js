@@ -84,12 +84,30 @@ async function doruceno(playerId, od, do_) {
   }
 }
 
+// Půjčené peníze nejsou vydělané. Hráč se sítí má velký úvěrový rámec a
+// čerpá z něj miliony jedním klepnutím — strop počítaný z toho, co stihnou
+// vydělat stroje, by na takovém hráči vyskočil pokaždé, a byl by to planý
+// poplach. Rozpozná se to podle dluhu: půjčka zvedne hotovost i dluh
+// o stejnou částku, vymyšlené peníze jen hotovost.
+//
+// Nadsadit si dluh, aby se pod ním schovala vymyšlená hotovost, jde — jenže
+// dluh je ve hře skutečný: odečítá se od jmění, musí se splácet i s úrokem
+// a při zmeškané splátce propadá zástava. Kdo si ho nafoukne, platí za to
+// dvakrát.
+function dluhu(st) { return Math.round(Number((st || {}).loan) || 0); }
+function hotovosti(st) { return Math.round(Number((st || {}).cash) || 0); }
+
 // Hlavní otázka: je skok hotovosti, který klient poslal, vůbec možný?
 // Vrací popis, ne verdikt — rozhodnutí, co s tím, patří tomu, kdo volá.
-async function prirustek(p, novaHotovost) {
-  const stara = Math.round(Number((p.state || {}).cash) || 0);
-  const nova = Math.round(Number(novaHotovost) || 0);
+async function prirustek(p, novyStav) {
+  // Snese i holé číslo, aby starší volání nespadlo.
+  const st = (novyStav && typeof novyStav === 'object') ? novyStav : { cash: novyStav };
+  const stara = hotovosti(p.state);
+  const nova = hotovosti(st);
   const rozdil = nova - stara;
+  // Kolik z toho skoku je půjčka. Splátka dluh snižuje a hotovost taky,
+  // takže se ze záporného rozdílu nesmí stát povolenka.
+  const pujceno = Math.max(0, dluhu(st) - dluhu(p.state));
   const ted = Date.now();
   const naposledy = p.state_at ? new Date(p.state_at).getTime() : 0;
   // Bez předchozího uložení není co porovnávat — nový hráč, nebo první save
@@ -103,13 +121,16 @@ async function prirustek(p, novaHotovost) {
   });
   const zeStroju = stropSite(claims, od);
   const zeServeru = await doruceno(p.id, naposledy, ted);
-  const strop = Math.round(zeStroju + zeServeru + REZERVA);
+  // Půjčka se přičítá do stropu, ne odečítá od přírůstku: v otisku pak
+  // zůstane skutečný skok hotovosti a vedle něj mez, která ho vysvětluje.
+  const strop = Math.round(zeStroju + zeServeru + REZERVA + pujceno);
   return {
     sedi: rozdil <= strop,
     rozdil, strop, od,
     pradlomatu: claims.length,
     ze_stroju: Math.round(zeStroju),
     ze_serveru: Math.round(zeServeru),
+    pujceno,
   };
 }
 
@@ -119,7 +140,7 @@ function zapis(p, v) {
   console.warn('[game-strop] hráč #' + p.id + ' (' + (p.nick || '?') + ') přidal '
     + v.rozdil + ' L$ za ' + Math.round(v.od / 60000) + ' min, strop byl ' + v.strop
     + ' (' + v.pradlomatu + ' prádlomatů, ze strojů ' + v.ze_stroju
-    + ', ze serveru ' + v.ze_serveru + ')');
+    + ', ze serveru ' + v.ze_serveru + ', půjčeno ' + (v.pujceno || 0) + ')');
 }
 
 // ─── Otisk hry v čase ────────────────────────────────────────────────────────
@@ -167,7 +188,7 @@ async function otisk(p, st, v) {
 // zatím jen měří a zapisuje otisk. Vrací true, když je přírůstek v mezích.
 async function zkontroluj(p, st) {
   try {
-    const v = await prirustek(p, st && st.cash);
+    const v = await prirustek(p, st);
     if (!v.sedi) zapis(p, v);
     await otisk(p, st, v).catch((e) => console.warn('[game-otisk]', e && e.message));
     return v.sedi;

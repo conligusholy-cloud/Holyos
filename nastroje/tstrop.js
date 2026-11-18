@@ -94,6 +94,48 @@ function hrac(hotovost, predMs) {
   ok('utracení hotovosti mez neřeší', utratil.sedi && utratil.rozdil < 0);
 
   // ── První uložení nemá s čím porovnávat ────────────────────────────────
+  // ── Půjčka není vydělané ───────────────────────────────────────────────────
+  // Hráč se sítí má velký úvěrový rámec a čerpá z něj miliony jedním
+  // klepnutím. Kdyby to mez neuměla, vyskočila by na každém velkém hráči,
+  // který si sáhl do banky — a to je přesně ten planý poplach, kvůli kterému
+  // se strop dodnes nezapnul.
+  const pujcil = await strop.prirustek(hrac(1000000, 60000),
+    { cash: 11000000, loan: 10000000 });
+  ok('čerpání úvěru mez nepřeteče', pujcil.sedi,
+    '— přidal ' + pujcil.rozdil + ', strop ' + pujcil.strop + ', půjčeno ' + pujcil.pujceno);
+
+  // Tentýž skok bez dluhu je vymyšlená hotovost.
+  const vymyslel = await strop.prirustek(hrac(1000000, 60000), { cash: 11000000 });
+  ok('stejný skok bez dluhu mez přeteče', !vymyslel.sedi,
+    '— přidal ' + vymyslel.rozdil + ', strop ' + vymyslel.strop);
+
+  // Půjčka kryje jen sama sebe, ne cokoli navíc.
+  const pujcilAPridal = await strop.prirustek(hrac(1000000, 60000),
+    { cash: 60000000, loan: 10000000 });
+  ok('půjčka nekryje vymyšlené peníze nad ni', !pujcilAPridal.sedi,
+    '— přidal ' + pujcilAPridal.rozdil + ', strop ' + pujcilAPridal.strop);
+
+  // Splátka dluh i hotovost snižuje — nesmí z toho vzniknout povolenka.
+  const splatil = await strop.prirustek(
+    { id: 9, state: { cash: 5000000, loan: 8000000 }, state_at: new Date(Date.now() - 60000) },
+    { cash: 1000000, loan: 4000000 });
+  ok('splátka úvěru nedá povolenku na nic', splatil.sedi && splatil.rozdil < 0,
+    '— rozdíl ' + splatil.rozdil + ', půjčeno ' + (splatil.pujceno || 0));
+
+  // Splácení dluhu nesmí povolovat přírůstek hotovosti. Kdyby se počítal
+  // rozdíl dluhu v absolutní hodnotě, stačilo by splatit úvěr a pod tím si
+  // přidat stejnou částku.
+  const splatilAPridal = await strop.prirustek(
+    { id: 9, state: { cash: 1000000, loan: 8000000 }, state_at: new Date(Date.now() - 60000) },
+    { cash: 6000000, loan: 4000000 });
+  ok('splacený dluh nepovoluje přírůstek', !splatilAPridal.sedi,
+    '— přidal ' + splatilAPridal.rozdil + ', strop ' + splatilAPridal.strop
+    + ', půjčeno ' + (splatilAPridal.pujceno || 0));
+
+  // Chybějící údaj o dluhu se musí brát jako nula, ne jako nekonečná povolenka.
+  const bezDluhu = await strop.prirustek(hrac(1000000, 60000), { cash: 60000000, loan: null });
+  ok('chybějící dluh nic nepovolí', !bezDluhu.sedi, '— strop ' + bezDluhu.strop);
+
   const prvni = await strop.prirustek({ id: 2, state: null, state_at: null }, 999999999);
   ok('bez předchozího uložení se nehlásí nic', prvni.sedi);
 
