@@ -493,6 +493,20 @@ async function nastaveniPrehled() {
 // Do administrace se musí člověk přihlásit; do logu při nasazování kouká
 // stejně. Proto si to hra napíše sama.
 async function doLogu() {
+  // Skóre míst se doplňuje samo. Nová místa ho většinou dostanou rovnou při
+  // zabrání, ale ne všechna — a každé místo bez skóre je prádlomat, který
+  // server umí ocenit jen odhadem z nájmu. Spouštět to ručně znamená na to
+  // zapomenout; přesně to je práce pro hlídku.
+  try {
+    const SROV = require('./srovnani');
+    const v = await SROV.sitDoplnit({ ostro: true });
+    if (v.doplneno || (v.nesedi && v.nesedi.length)) {
+      console.log('[game-dohled] skóre doplněno k ' + v.doplneno + ' místům'
+        + (v.nesedi && v.nesedi.length ? ', nesedělo u ' + v.nesedi.length : ''));
+    }
+  } catch (e) {
+    console.warn('[game-dohled] doplnění skóre: ' + (e && e.message));
+  }
   for (const [nazev, fn] of [['nastavení', nastaveniPrehled],
     ['strop', stropPrehled], ['sklad', skladChybi]]) {
     try {
