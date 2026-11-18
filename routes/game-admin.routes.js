@@ -501,6 +501,20 @@ router.post('/nahlasene/:id/vyrizeno', api(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ─── Pravidla zločinu (kontroly, soud) + vyhodnocení nanečisto ───────────────
+router.get('/zlocin/pravidla', api(async (req, res) => {
+  const Z = require('../services/game/zlocin');
+  res.json({ ok: true, pravidla: await Z.nastaveni(), vychozi: Z.VYCHOZI });
+}));
+router.post('/zlocin/pravidla', api(async (req, res) => {
+  const Z = require('../services/game/zlocin');
+  res.json({ ok: true, pravidla: await Z.uloz(req.body) });
+}));
+router.get('/zlocin/nanecisto', api(async (req, res) => {
+  const Z = require('../services/game/zlocin');
+  res.json(Object.assign({ ok: true }, await Z.nanecisto(prisma)));
+}));
+
 // ─── Vyčíslení okruhu: zvoucí (provize) + kupec (levné stroje) ──────────────
 // GET /api/game-admin/okruh?a=Pinon&b=Petulak  → čitelný text (jen čte).
 // A = ten, kdo zakládá pomocné účty a bere provizi, B = ten, kdo od nich skupuje
