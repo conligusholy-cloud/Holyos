@@ -47,29 +47,68 @@ function poptavkaMista(score) {
   return POPTAVKA_SPICKA * Math.pow(sc / 100, POPTAVKA_SKLON);
 }
 
+// ─── Světové události ────────────────────────────────────────────────────────
+// Povodeň, festival, recese, zdražení energií. Vyhlašuje je server, takže
+// o nich ví sám — a dokud je nezapočítával, vycházel mu zisk sítě výš než
+// hře. Negativním událostem se hra vyhýbá hráčům s pěti a méně prádlomaty,
+// aby začátečníka nesrazila na kolena hned.
+const UDAL_OCHRANA = 5;
+const UDAL_DNO = 0.45;
+const UDAL_STROP = 1.8;
+
+function udalostKoef(udalosti, areaKey, pocetMist, ted) {
+  let navst = 1, nakl = 1;
+  const t = ted == null ? Date.now() : ted;
+  (udalosti || []).forEach((e) => {
+    if (!e.dobra && (Number(pocetMist) || 0) < UDAL_OCHRANA) return;
+    // mesta === null znamená celý svět.
+    if (e.mesta && e.mesta.indexOf(areaKey) < 0) return;
+    if (new Date(e.do).getTime() <= t) return;
+    const d = e.dopad || {};
+    navst *= 1 + (Number(d.navstevnost) || 0);
+    nakl *= 1 + (Number(d.naklady) || 0);
+  });
+  return { navstevnost: Math.max(UDAL_DNO, Math.min(UDAL_STROP, navst)),
+    naklady: Math.max(0.5, Math.min(2, nakl)) };
+}
+
 // Jeden prádlomat za jeden herní měsíc. podil < 1 znamená, že se o zákazníky
 // na tom místě dělí víc strojů.
-function jedenStroj(misto, navstevnost) {
+//
+// Pořadí výpočtu musí sedět s refreshUnits() v game.js do koruny:
+// servis se počítá z PLNÉ tržby (technik vyjede, i když stroj stojí),
+// energie až z té skutečné.
+function jedenStroj(misto, navstevnost, opts) {
   const m = MODELS[(misto && misto.model)] || MODELS.flex;
   const podil = misto && misto.podil != null ? Number(misto.podil) : 1;
+  const ud = (opts && opts.udalost) || { navstevnost: 1, naklady: 1 };
+  const chod = opts && opts.chod != null ? Math.max(0, Number(opts.chod)) : 1;
   const poptavka = poptavkaMista(misto && misto.score) * podil;
   const obslouzi = Math.min(m.kapacita, poptavka);
-  const perday = obslouzi * Math.max(0, Number(navstevnost) || 0);
-  const trzba = Math.round(perday * DNU_V_MESICI * m.spend * EUR);
-  const energie = Math.round(trzba * ENERGY_SHARE);
-  const servis = Math.round(trzba * SERVIS_SHARE);
+  const perday = obslouzi * Math.max(0, Number(navstevnost) || 0)
+    * (Number(ud.navstevnost) || 1);
+  const plne = Math.round(perday * DNU_V_MESICI * m.spend * EUR);
+  const trzba = Math.round(plne * chod);
+  const energie = Math.round(trzba * ENERGY_SHARE * (Number(ud.naklady) || 1));
+  const servis = Math.round(plne * SERVIS_SHARE * (Number(ud.naklady) || 1));
   // Na vlastní zemi se nájem neplatí. Jinak platí to, co je domluvené.
   const najem = misto && misto.pozemek ? 0 : Math.max(0, Math.round((misto && misto.rent) || 0));
   const naklady = energie + servis + najem;
-  return { trzba, energie, servis, najem, naklady, zisk: trzba - naklady };
+  return { trzba, plne, energie, servis, najem, naklady, zisk: trzba - naklady };
 }
 
 // Celá síť jednoho hráče. Vrací součty, ať se dá rovnou porovnat s tím,
 // co hlásí hra.
-function site(mista, navstevnost) {
+function site(mista, navstevnost, opts) {
   const out = { pradlomatu: 0, trzba: 0, energie: 0, servis: 0, najem: 0, naklady: 0, zisk: 0 };
+  const udalosti = (opts && opts.udalosti) || null;
+  const ted = opts && opts.ted;
+  const kolik = (mista || []).length;
   (mista || []).forEach((p) => {
-    const e = jedenStroj(p, navstevnost);
+    const e = jedenStroj(p, navstevnost, {
+      udalost: udalosti ? udalostKoef(udalosti, p.area_key, kolik, ted) : null,
+      chod: p.chod,
+    });
     out.pradlomatu++;
     out.trzba += e.trzba; out.energie += e.energie; out.servis += e.servis;
     out.najem += e.najem; out.naklady += e.naklady; out.zisk += e.zisk;
@@ -95,6 +134,7 @@ function skoreZNajmu(rent, deal) {
   return Math.max(0, Math.min(100, Math.round(sc)));
 }
 
-module.exports = { jedenStroj, site, poptavkaMista, skoreZNajmu,
+module.exports = { jedenStroj, site, poptavkaMista, skoreZNajmu, udalostKoef,
+  UDAL_OCHRANA, UDAL_DNO, UDAL_STROP,
   EUR, DNU_V_MESICI, ENERGY_SHARE, SERVIS_SHARE, POPTAVKA_SPICKA, POPTAVKA_SKLON,
   RENT_EUR, MODELS };

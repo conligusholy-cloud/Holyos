@@ -158,9 +158,33 @@ async function ziskSrovnani(p, st) {
 
   const claims = await prisma.gameSpotClaim.findMany({
     where: { player_id: p.id, model: { not: '' } },
-    select: { spot_id: true, model: true, rent: true, pozemek: true, score: true },
+    select: { spot_id: true, area_key: true, model: true, rent: true,
+      pozemek: true, score: true },
   });
   if (!claims.length) return null;
+
+  // Světové události vyhlašuje server, takže o nich ví sám — a dokud je
+  // nezapočítával, vycházel mu zisk sítě výš než hře. Skládají se stejně
+  // jako v herním výpočtu: celosvětová platí všude, zemní ve svých městech.
+  const ted2 = new Date();
+  const [eventy, oblasti] = await Promise.all([
+    prisma.gameEvent.findMany({ where: { do: { gt: ted2 } }, take: 60 }).catch(() => []),
+    prisma.gameArea.findMany({ where: { country: { not: null } },
+      select: { key: true, country: true }, take: 1000 }).catch(() => []),
+  ]);
+  const udalosti = eventy.map((e) => ({
+    dobra: e.dobra, dopad: e.dopad, do: e.do,
+    mesta: e.uroven === 'svet' ? null
+      : e.uroven === 'mesto' ? [e.area_key]
+        : oblasti.filter((o) => o.country === e.zeme).map((o) => o.key),
+  }));
+
+  // Porouchaný stroj vydělává míň. Chod žije ve stavu hry — bereme ho odtud
+  // a je to, stejně jako pověst, zbývající místo, kde se věří klientovi.
+  const chody = new Map();
+  (Array.isArray(st && st.units) ? st.units : []).forEach((u) => {
+    if (u && u.spotId && u.eco && u.eco.chod != null) chody.set(u.spotId, Number(u.eco.chod));
+  });
 
   // Kolik prádlomatů umí server ocenit přesně. Zbytku se skóre dopočítá
   // z nájmu, což je odhad — a je potřeba vědět, kolika se to týká.
@@ -171,11 +195,12 @@ async function ziskSrovnani(p, st) {
       const deal = 0.9 + POZEMKY.spotHash(c.spot_id, 'r') * 0.3;
       score = EKO.skoreZNajmu(c.rent, deal);
     } else presne++;
-    return { model: c.model, score: score || 0, rent: c.rent, pozemek: !!c.pozemek };
+    return { model: c.model, score: score || 0, rent: c.rent, pozemek: !!c.pozemek,
+      area_key: c.area_key, chod: chody.has(c.spot_id) ? chody.get(c.spot_id) : 1 };
   });
 
   const nav = await NAV.proHrace(p, st);
-  const server = EKO.site(mista, nav.navstevnost).zisk;
+  const server = EKO.site(mista, nav.navstevnost, { udalosti, ted: ted2.getTime() }).zisk;
   // Totéž podle hry: součet zisků jednotlivých prádlomatů z uloženého stavu.
   const units = Array.isArray(st && st.units) ? st.units : [];
   const hra = units.reduce((a, u) => a + Math.round((u && u.eco && u.eco.profit) || 0), 0);
