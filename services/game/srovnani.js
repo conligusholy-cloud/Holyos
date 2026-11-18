@@ -617,13 +617,15 @@ function tiskSit(rows) {
     return out.join('\n');
   }
   out.push('');
-  out.push('nick                 co      hra              server');
-  out.push('-'.repeat(62));
+  out.push('nick                 co      hra        server     místo');
+  out.push('-'.repeat(78));
   rows.slice(0, 40).forEach((r) => {
     r.sporne.slice(0, 5).forEach((x, i) => {
       out.push((i ? '' : String(r.nick || '').padEnd(20).slice(0, 20))
         .padEnd(20) + x.co.padEnd(8)
-        + String(x.hra).padEnd(17).slice(0, 17) + String(x.server));
+        + String(x.hra).padEnd(11).slice(0, 11)
+        + String(x.server).padEnd(11).slice(0, 11)
+        + String(x.spot || ''));
     });
   });
   out.push('');
