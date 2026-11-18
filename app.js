@@ -1509,6 +1509,9 @@ server.listen(PORT, async () => {
     // id míst, takže jeden prádlomat svítil ve dvou městech. Drží to pojistka
     // v nastavení, takže při dalším nasazení se jen přečte příznak.
     require('./nastroje/opravit-id-mest').priStartu();
+    // Kurzy měn z ČNB, jednou denně. Ručně je nikdo neaktualizuje, protože
+    // na to nikdo nemyslí — a účtuje se podle nich doopravdy.
+    require('./services/game/kurzy').start();
     // Měny ceníku: ať se nestane, že jazyk ukazuje na měnu, kterou Stripe
     // neumí nebo pro kterou není kurz. Jen hlásí, nic nezastavuje.
     require('./services/game/meny').zkontroluj().catch(() => {});

@@ -64,6 +64,16 @@ if git diff --cached --name-only | grep -qE 'nastroje/texty-prelozit'; then
   fi
 fi
 
+# Kurzy měn. Jediné místo, kde se počítají skutečné peníze — rozbor spletený
+# o řád znamená stonásobnou cenu a pozná se to až z výpisu.
+if git diff --cached --name-only | grep -qE 'services/game/(kurzy|meny)'; then
+  if ! node nastroje/tkurzy.js; then
+    echo ""
+    echo "STOP: kurzy měn nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Co smí podílník podle velikosti podílu. Posunutý práh o setinu znamená
 # moc nad cizí firmou, na kterou ten člověk nemá.
 if git diff --cached --name-only | grep -qE 'services/game/prava'; then

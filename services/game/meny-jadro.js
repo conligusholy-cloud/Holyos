@@ -8,7 +8,12 @@
 
 // Korun za jednotku. Výchozí hodnoty jsou jen záchrana, než se kurz nastaví —
 // drží se schválně nad trhem, ať se nikdy neprodává pod cenou.
-const KURZY_VYCHOZI = { czk: 1, eur: 25, usd: 23, pln: 6 };
+// Záchytné hodnoty pro případ, že ještě nikdy neproběhlo stažení z ČNB —
+// v novém prostředí nebo hned po nasazení. Skutečné kurzy si hra stahuje
+// sama (services/game/kurzy.js) a drží je v nastavení hry. Tahle čísla jsou
+// kurzy ČNB k 16. 11. 2026; předchozí byly odhad od oka a zlotý kvůli tomu
+// účtoval o osm procent míň, než měl.
+const KURZY_VYCHOZI = { czk: 1, eur: 24.43, usd: 22.182, pln: 5.548 };
 
 // krok = na kolik nejmenších jednotek se zaokrouhluje nahoru
 // pred = patří značka před číslo? ($5 ano, 5 Kč ne)
