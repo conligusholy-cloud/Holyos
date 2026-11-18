@@ -3,7 +3,24 @@
 // Rozhoduje to o tom, čí jméno se objeví ostatním na nástěnce — a být tam
 // omylem je nepříjemné. Stejně tak nebýt tam, když už mi za chvíli propadne
 // prádlomat.
+// Databázi podstrčíme, ať je vidět, s jakým dotazem se krize ptá. Jeden z
+// nich dřív posílal nulový bajt jako „nemožné id" a Postgres ho odmítal.
+const Module = require('module');
+const puvodni = Module.prototype.require;
+let DOTAZY = [];
+Module.prototype.require = function (co) {
+  if (/config\/database$/.test(co)) {
+    return { prisma: {
+      gameSpotClaim: { count: async (q) => { DOTAZY.push(q); return 3; } },
+      gameLoan: { findMany: async () => [] },
+      gameEquity: { findMany: async () => [] },
+      gamePlayer: { findMany: async () => [] },
+    } };
+  }
+  return puvodni.apply(this, arguments);
+};
 const KRIZE = require('../services/game/krize');
+Module.prototype.require = puvodni;
 
 let chyb = 0;
 function ok(co, podminka, detail) {
@@ -83,5 +100,26 @@ ok('prázdný stav hry se bere jako nula hotovosti',
 ok('záporná hotovost se bere jako nula',
   KRIZE.stav([pujcka({})], { cash: -5000 }).chybi === 100000);
 
-console.log(chyb ? '\n' + chyb + ' chyb' : '\nvšechno sedí');
+// ── Čím může hráč ručit ──────────────────────────────────────────────────────
+// Dotaz nesmí obsahovat nulový bajt. Dřív se jím obcházel prázdný seznam
+// zástav („nemožné id") a Postgres kvůli tomu každý takový dotaz odmítl
+// chybou o neplatném UTF8 — hráč bez zástavy se pak nedozvěděl, čím ručí.
+(async () => {
+  DOTAZY = [];
+  const bez = await KRIZE.cimRuci(1, [], 0);
+  const q = JSON.stringify(DOTAZY[0] || {});
+  ok('bez zástav se dotaz neomezuje nemožným id', q.indexOf('u0000') < 0 && q.indexOf('notIn') < 0, q);
+  ok('a hráč se stejně dozví, kolik má volných míst', bez.volnych_mist === 3);
+
+  DOTAZY = [];
+  await KRIZE.cimRuci(1, ['praha-1'], 0);
+  const q2 = JSON.stringify(DOTAZY[0] || {});
+  ok('se zástavou se zastavené místo vyřadí',
+    q2.indexOf('praha-1') >= 0 && q2.indexOf('notIn') >= 0, q2);
+
+  ok('volný podíl se počítá do sta procent',
+    (await KRIZE.cimRuci(1, [], 0.3)).volny_podil === 0.7);
+
+  console.log(chyb ? '\n' + chyb + ' chyb' : '\nvšechno sedí');
 process.exit(chyb ? 1 : 0);
+})();

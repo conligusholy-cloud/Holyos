@@ -84,6 +84,16 @@ if git diff --cached --name-only | grep -qE 'services/game/audit'; then
   fi
 fi
 
+# Kdo je v nouzi. Hlídá se i tvar dotazu: nulový bajt jako „nemožné id"
+# Postgres odmítne a hráč se pak nedozví, čím může ručit.
+if git diff --cached --name-only | grep -qE 'services/game/krize'; then
+  if ! node nastroje/tkrize.js; then
+    echo ""
+    echo "STOP: krize nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Přípojky. Server si je počítá sám z otisku místa a musí mu vyjít totéž co
 # hře — jinak to není menší díra v čekané změně hotovosti, ale jiný výdaj.
 if git diff --cached --name-only | grep -qE 'services/game/pozemky|public/compounder/game/game\.js'; then

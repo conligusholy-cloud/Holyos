@@ -67,10 +67,14 @@ function stav(pujcky, st) {
 // Čím může dlužník ručit, když si bude shánět peníze. Prádlomat, který už
 // v zástavě je, se nepočítá — ten je slíbený.
 async function cimRuci(playerId, zastaveneSpoty, prodanyPodil) {
-  const mist = await prisma.gameSpotClaim.count({
-    where: { player_id: playerId, model: { not: '' },
-      spot_id: { notIn: zastaveneSpoty.length ? zastaveneSpoty : ['\u0000'] } },
-  });
+  // Prázdný seznam zástav se dřív obcházel nemožným id '\u0000'. Jenže nulový
+  // bajt není platný text pro Postgres, takže každý takový dotaz skončil
+  // chybou „invalid byte sequence for encoding UTF8: 0x00" a hráč, který
+  // nemá nic v zástavě, se nedozvěděl, čím může ručit. Když není co vyřadit,
+  // se prostě nevyřazuje.
+  const kde = { player_id: playerId, model: { not: '' } };
+  if (zastaveneSpoty && zastaveneSpoty.length) kde.spot_id = { notIn: zastaveneSpoty };
+  const mist = await prisma.gameSpotClaim.count({ where: kde });
   return { volnych_mist: mist, volny_podil: Math.max(0, 1 - (prodanyPodil || 0)) };
 }
 
