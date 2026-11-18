@@ -10595,7 +10595,8 @@ function majetekSheet(id, rovnouKat) {
       { k: 'pobocka', ico: '🏢', nazev: esc(tx('mapa.pobocky')), pod: esc(tx('mapa.zakladny_pro_dopravu_a_cetu')) },
       { k: 'karta', ico: '⚡', nazev: esc(tx('hra.karty')), pod: esc(tx('mapa.zrychlovace_cekani')) },
       { k: 'pujcka', ico: '🏦', nazev: esc(tx('mapa.pujcka')), pod: esc(tx('mapa.penize_na_urok')) },
-      { k: 'podil', ico: '📈', nazev: esc(tx('mapa.podil_ve_firme')), pod: esc(tx('mapa.procento_ze_zisku_i_ztraty')) }
+      { k: 'podil', ico: '📈', nazev: esc(tx('mapa.podil_ve_firme')), pod: esc(tx('mapa.procento_ze_zisku_i_ztraty')) },
+      { k: 'vstup', ico: '💉', nazev: esc(tx('mapa.kapitalovy_vstup')), pod: esc(tx('mapa.penize_do_firmy_za_novy_podil')) }
     ];
     var kolikJe = function (kat) {
       var f = function (list) { return list.filter(function (x) { return x.predmet === kat; }).length; };
@@ -10606,7 +10607,7 @@ function majetekSheet(id, rovnouKat) {
 
     var rozcestnik = function () {
       sheet(hlava + '<div class="rozc">' + KATEGORIE.map(function (c) {
-        var n = c.k === 'pujcka' || c.k === 'podil' ? null : kolikJe(c.k);
+        var n = c.k === 'pujcka' || c.k === 'podil' || c.k === 'vstup' ? null : kolikJe(c.k);
         var pocty = n == null ? c.pod
           : !n.k && !n.p ? esc(tx('mapa.nema_ani_jeden_z_vas'))
             : [n.k ? n.k + esc(tx('hra.jeho')) : '', n.p ? n.p + esc(tx('mapa.tvych')) : ''].filter(Boolean).join(' · ');
@@ -10636,6 +10637,12 @@ function majetekSheet(id, rovnouKat) {
       var telo;
       if (kat === 'pujcka') {
         telo = tx('veta.p_class_muted_small_splaci_se', { p1: tx('veta.pradlomat_hned_pri_prvni_nezaplacene_splatce', { p1: esc(tx('mapa.pujcit_mu_penize')), p2: esc(tx('mapa.ty_das_hotovost_on_splaci')), p3: esc(tx('mapa.pozadat_ho_o_pujcku')), p4: esc(tx('mapa.on_da_hotovost_ty_splacis')) }) });
+      } else if (kat === 'vstup') {
+        telo = '<p class="muted small">' + esc(tx('veta.vstup_k_cemu_je')) + '</p>'
+          + '<div class="area-item"><div><div class="nm">'
+          + esc(tx('mapa.kapitalovy_vstup')) + '</div><div class="sub">'
+          + esc(tx('mapa.penize_do_firmy_za_novy_podil')) + '</div></div>'
+          + '<button class="btn sec sm" id="vstup-go">' + esc(tx('mapa.nabidnout')) + '</button></div>';
       } else if (kat === 'podil') {
         telo = tx('veta.p_class_muted_small_podilnik_nese', { p1: tx('veta.mesicne_chodi_nebo_doplaci_odkoupit_ho', { p1: esc(tx('mapa.koupit_podil_v_jeho_firme')), p2: esc(tx('mapa.dostavas_procento_z_jeho_zisku')), p3: esc(tx('mapa.nabidnout_mu_podil_ve_sve')), p4: esc(tx('mapa.dostanes_hotovost_on_procento_z')) }) });
       } else {
@@ -10648,6 +10655,7 @@ function majetekSheet(id, rovnouKat) {
       sheet('<div class="rozc-hlava">' + zpet + '<h3>' + (c.ico || '') + ' ' + esc(c.nazev || '') + '</h3></div>'
         + '<p class="muted small" style="margin:0 0 4px">' + esc(a.hrac.nick) + '</p>' + telo);
       $('rozc-zpet').onclick = rozcestnik;
+      if ($('vstup-go')) $('vstup-go').onclick = function () { vstupSheet(id, a.hrac, a); };
       [].forEach.call($('sheet-body').querySelectorAll('[data-fin]'), function (b) {
         b.onclick = function () { financeSheet(id, a.hrac, b.getAttribute('data-fin'), a); };
       });
@@ -10953,6 +10961,82 @@ function financeSheet(toId, kdo, co, a) {
     }).catch(function () { $('fin-ok').disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
   };
 }
+// ─── Kapitálový vstup ────────────────────────────────────────────────────────
+// Peníze jdou do firmy a investor za ně dostane nově vydaný podíl. Všichni
+// dosavadní podílníci se o stejný poměr zředí — včetně majitele.
+//
+// Má to vlastní okno, ne další větev v financeSheet: tam se řeší úrok,
+// splátky a zástava, což sem nepatří ani jedno, a ta funkce je rozvětvená
+// dost i bez toho.
+function vstupSheet(toId, kdo, a) {
+  var oc = (a && a.oceneni) || null;
+  // Hodnota firmy před vstupem. Když ji neznáme, nedá se poradit podíl —
+  // hráč si ho určí sám a je to jeho věc.
+  var pred = oc ? Math.max(0, oc.jmeni) : 0;
+  var VSTUP_MAX_HRA = 50;
+  sheet('<h3>' + tx('veta.vstoupit_do', { p1: esc(kdo.firma || kdo.nick) }) + '</h3>'
+    + '<p class="muted small">' + esc(tx('veta.vstup_jak_to_funguje')) + '</p>'
+    + '<label class="fld"><span>' + esc(tx('hra.kolik_vlozis')) + '</span>'
+    + '<input id="vs-castka" class="inp" type="number" inputmode="numeric" min="0" value="'
+    + (Math.round(pred * 0.25) || 1000000) + '"></label>'
+    + '<label class="fld"><span>' + esc(tx('hra.za_jaky_podil')) + '</span>'
+    + '<input id="vs-podil" class="inp" type="number" inputmode="numeric" min="1" max="'
+    + VSTUP_MAX_HRA + '" value="25"></label>'
+    + (oc ? oceneniHtml(oc, 'koupim-podil') : '')
+    + '<p class="fine" id="vs-rada"></p>'
+    + '<label class="fld"><span>' + esc(tx('hra.vzkaz_nepovinny')) + '</span>'
+    + '<input id="vs-vzkaz" class="inp" type="text" maxlength="200"></label>'
+    + '<div class="kv souhrn"><span>' + esc(tx('hra.po_vstupu_budes_drzet')) + '</span>'
+    + '<b id="vs-vysledek">\u2014</b></div>'
+    + '<button class="btn big" id="vs-ok" style="width:100%;margin-top:10px">'
+    + esc(tx('hra.poslat_nabidku')) + '</button>'
+    + '<p class="fine">' + esc(tx('hra.penize_odejdou_az_nabidku_prijme')) + '</p>'
+    + volneHtml(null));
+  var procento = function () {
+    return Math.max(1, Math.min(VSTUP_MAX_HRA, Math.round(Number($('vs-podil').value) || 0)));
+  };
+  var castka = function () { return Math.max(0, Math.round(Number($('vs-castka').value) || 0)); };
+  var prepocti = function () {
+    var p = procento(), c = castka();
+    // Co je v poli, musí být i ve výsledku. Když hráč napsal devadesát a
+    // hra mu tiše počítá s padesáti, pošle nabídku, o které si myslí něco
+    // jiného než server.
+    if ($('vs-podil').value !== String(p)) $('vs-podil').value = p;
+    $('vs-vysledek').textContent = p + ' % ' + esc(kdo.firma || kdo.nick);
+    // Kolik procent by za ty peníze slušelo: vklad děleno hodnotou po vstupu.
+    // Je to vodítko, ne povinnost — plácnout si můžou na čemkoli.
+    var el = $('vs-rada');
+    if (!oc || !c) { el.textContent = ''; return; }
+    var slusne = Math.round(c / (pred + c) * 100);
+    // Žlutě, když si investor říká o víc, než by za ty peníze slušelo —
+    // ne proto, že by to bylo zakázané, ale protože to majitel nejspíš
+    // odmítne a nabídka vyjde naprázdno.
+    el.className = 'fine' + (p > slusne + 5 ? ' warn' : '');
+    el.innerHTML = tx('veta.vstup_rada', { p1: kcFull(pred), p2: slusne, p3: p })
+      + (p > slusne + 5 ? ' ' + esc(tx('veta.vstup_chces_vic')) : '')
+      + (oc.zbyde_mesicne > 0
+          ? ' ' + tx('veta.vstup_vynos', { p1: kcFull(Math.round(oc.zbyde_mesicne * p / 100)) })
+          : '');
+  };
+  ['vs-castka', 'vs-podil'].forEach(function (id) { if ($(id)) $(id).oninput = prepocti; });
+  prepocti();
+  $('vs-ok').onclick = function () {
+    var c = castka();
+    if (!c) return toast(esc(tx('hra.zadej_castku')), 'err');
+    if (c > volnaHotovost(null)) {
+      return toast(tx('veta.volne_hotovosti_mas_jen', { p1: kcFull(Math.max(0, volnaHotovost(null))), p2: esc(tx('hra.zbytek_drzi_rozjednane_nabidky')) }), 'err');
+    }
+    $('vs-ok').disabled = true;
+    apiJson('/trade/offer', { to_id: toId, predmet: 'vstup', cena: c, smer: 'koupim',
+      podil: procento() / 100, vzkaz: ($('vs-vzkaz').value || '').slice(0, 200) })
+      .then(function (r) {
+        if (!r.ok) { $('vs-ok').disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+        closeSheet(); loadTrades(paintBurza);
+        toast(esc(tx('hra.nabidka_odeslana_ted_je_to')), 'ok');
+      }).catch(function () { $('vs-ok').disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+  };
+}
+
 function cenaSheet(toId, kdo, x) {
   var jaPlatim = x.smer === 'koupim';
   // U cizího prádlomatu neumíme nic počítat — a neměli bychom: jeho čísla

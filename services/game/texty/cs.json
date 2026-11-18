@@ -3456,5 +3456,16 @@
   "predmet.vstup_pct": "kapitálový vstup za {p1} % firmy",
   "server.do_vlastni_firmy_vstoupit_nejde": "Do vlastní firmy vstoupit nejde.",
   "dor.redeni_podilu": "Do firmy {p1} vstoupil nový investor za {p2} % — tvůj podíl se o stejný díl zředil.",
-  "krize.zatim_nikdo": "Zrovna nikomu nehoří. Jakmile někdo nebude mít na splátku, objeví se tady."
+  "krize.zatim_nikdo": "Zrovna nikomu nehoří. Jakmile někdo nebude mít na splátku, objeví se tady.",
+  "mapa.kapitalovy_vstup": "Kapitálový vstup",
+  "mapa.penize_do_firmy_za_novy_podil": "Peníze do firmy za nově vydaný podíl",
+  "veta.vstoupit_do": "Vstoupit do {p1}",
+  "veta.vstup_jak_to_funguje": "Dáš firmě peníze a ona za ně vydá nový podíl. Všichni dosavadní podílníci se o stejný díl zředí — i majitel.",
+  "veta.vstup_k_cemu_je": "Když už firma prodala většinu, nemá co dál prodávat a nemá ani čím ručit za půjčku. Vstup je jediná cesta, jak do ní dostat peníze.",
+  "veta.vstup_rada": "Firma má čisté jmění {p1}. Za tvoje peníze by slušel podíl kolem {p2} %, ty žádáš {p3} %.",
+  "veta.vstup_vynos": "Při dnešním výdělku by ti z podílu chodilo {p1} za herní měsíc.",
+  "hra.kolik_vlozis": "Kolik vložíš",
+  "hra.za_jaky_podil": "Za jaký podíl (v %)",
+  "hra.po_vstupu_budes_drzet": "Po vstupu budeš držet",
+  "veta.vstup_chces_vic": "Chceš víc, než by za ty peníze slušelo — počítej s tím, že to majitel může odmítnout."
 }
