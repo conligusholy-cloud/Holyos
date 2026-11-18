@@ -27,16 +27,26 @@ const cas = (d) => new Date(d).toISOString().slice(0, 16).replace('T', ' ');
 async function stropPrehled(dnu) {
   const d = Math.max(1, Math.min(90, parseInt(dnu, 10) || 7));
   const od = new Date(Date.now() - d * 86400000);
-  const [celkem, mimo] = await Promise.all([
+  const [celkem, mimo, cekane] = await Promise.all([
     prisma.gameSnapshot.count({ where: { created_at: { gte: od } } }),
     prisma.gameSnapshot.findMany({
       where: { sedi: false, created_at: { gte: od } },
       orderBy: { created_at: 'desc' }, take: 300,
     }),
+    // Druhý krok k pokladně: vedle skutečné změny hotovosti stojí ta, kterou
+    // server čeká. Dokud se soustavně rozcházejí, není co stěhovat.
+    prisma.gameSnapshot.findMany({
+      where: { created_at: { gte: od }, ocekavano: { not: null }, od_ms: { gt: 60000 } },
+      orderBy: { created_at: 'desc' }, take: 2000,
+      select: { player_id: true, prirustek: true, ocekavano: true },
+    }).catch(() => []),
   ]);
+  // Jména pro obě sestavy najednou: hráč z porovnání čekané změny nemusí být
+  // mezi těmi, kdo přetekli mez.
   const ids = Array.from(new Set(mimo.map((x) => x.player_id)));
-  const hraci = await prisma.gamePlayer.findMany({
-    where: { id: { in: ids } }, select: { id: true, nick: true } });
+  const vsechnyIds = Array.from(new Set(ids.concat(cekane.map((x) => x.player_id))));
+  const hraci = vsechnyIds.length ? await prisma.gamePlayer.findMany({
+    where: { id: { in: vsechnyIds } }, select: { id: true, nick: true } }) : [];
   const jmena = new Map(hraci.map((h) => [h.id, h.nick]));
   const poHraci = new Map();
   mimo.forEach((x) => {
@@ -49,6 +59,26 @@ async function stropPrehled(dnu) {
   const out = [];
   out.push('STROP HOTOVOSTI · posledních ' + d + ' dnů · otisků ' + celkem
     + ' · mimo mez ' + mimo.length + ' · hráčů ' + ids.length);
+  // Čekaná změna proti skutečné. Server nevidí do přípojek, poboček, čety
+  // ani ceníku, takže čeká víc, než se opravdu stalo — zajímavý je opačný
+  // směr: hráč, kterému hotovost roste rychleji, než se dá vysvětlit.
+  if (cekane.length) {
+    const nad = cekane.filter((x) => (x.prirustek || 0) > (x.ocekavano || 0) + 1000);
+    const poHracich = new Map();
+    nad.forEach((x) => poHracich.set(x.player_id,
+      (poHracich.get(x.player_id) || 0) + ((x.prirustek || 0) - (x.ocekavano || 0))));
+    out.push('');
+    out.push('ČEKANÁ ZMĚNA PROTI SKUTEČNÉ · porovnaných uložení ' + cekane.length);
+    out.push('  přibylo víc, než se dá vysvětlit: ' + nad.length
+      + ' u ' + poHracich.size + ' hráčů');
+    Array.from(poHracich.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10)
+      .forEach(([id, kolik]) => {
+        out.push('    ' + String(jmena.get(id) || ('#' + id)).padEnd(20).slice(0, 20)
+          + kc(kolik).padStart(16) + ' L$ navíc');
+      });
+    out.push('  Server nevidí do přípojek, poboček, čety ani ceníku, takže čeká');
+    out.push('  víc, než se stane. Zajímavý je proto jen tenhle směr.');
+  }
   if (!mimo.length) {
     out.push('Žádné uložení mez nepřeteklo. To je buď dobře, nebo je mez moc');
     out.push('velkorysá — pozná se podle toho, až ji začneme utahovat.');

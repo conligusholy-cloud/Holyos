@@ -8342,6 +8342,13 @@ model GameSnapshot {
   // peněz, které se nemají odkud vzít.
   pujceno    Float?
   ze_serveru Float?
+  // Kolik hotovosti hráči od minulého uložení MĚLO přibýt podle serveru:
+  // zisk sítě za ten čas, doručenky, nákupy, zem, čerpání a splátky úvěru.
+  // Vedle prirustek (skutečná změna) je z toho vidět, jestli by server uměl
+  // hotovost spočítat sám. Nevidí do přípojek, poboček, čety ani ceníku,
+  // takže vychází výš — sledovat má smysl opačný směr.
+  ocekavano  Float?
+  nakupy     Float?
   sedi       Boolean  @default(true)
   od_ms      Int      @default(0)
   // Zisk za prádlomaty podle hry a podle serveru, vedle sebe. Pobočky,

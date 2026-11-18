@@ -97,6 +97,23 @@ async function doruceno(playerId, od, do_) {
 function dluhu(st) { return Math.round(Number((st || {}).loan) || 0); }
 function hotovosti(st) { return Math.round(Number((st || {}).cash) || 0); }
 
+// Co hráč od minulého uložení utratil za věci, o kterých server ví: stroje
+// a koupenou zem. Přípojky, pobočky, četa ani karty z ceníku se sem zatím
+// nepočítají — server o nich evidenci nemá.
+async function utraceno(playerId, od, do_) {
+  const okno = { gte: new Date(od), lte: new Date(do_) };
+  const [stroje, zeme] = await Promise.all([
+    prisma.gameOrder.findMany({
+      where: { player_id: playerId, zruseno_at: null, created_at: okno },
+      select: { cena: true } }).catch(() => []),
+    prisma.gameSpotClaim.findMany({
+      where: { player_id: playerId, pozemek: true, created_at: okno },
+      select: { cena: true } }).catch(() => []),
+  ]);
+  const soucet = (l) => l.reduce((a, x) => a + Math.max(0, Number(x.cena) || 0), 0);
+  return soucet(stroje) + soucet(zeme);
+}
+
 // Hlavní otázka: je skok hotovosti, který klient poslal, vůbec možný?
 // Vrací popis, ne verdikt — rozhodnutí, co s tím, patří tomu, kdo volá.
 async function prirustek(p, novyStav) {
@@ -112,10 +129,13 @@ async function prirustek(p, novyStav) {
   const naposledy = p.state_at ? new Date(p.state_at).getTime() : 0;
   // Bez předchozího uložení není co porovnávat — nový hráč, nebo první save
   // po obnovení účtu.
-  if (!naposledy || rozdil <= 0) {
+  if (!naposledy) {
     return { sedi: true, rozdil, strop: null, od: 0 };
   }
   const od = Math.max(0, ted - naposledy);
+  // Ubylo-li, není co hlídat: strop je mez na přírůstek. Čas se ale vrací,
+  // aby si otisk uměl spočítat čekanou změnu i u takového uložení.
+  if (rozdil <= 0) return { sedi: true, rozdil, strop: null, od, pujceno };
   const claims = await prisma.gameSpotClaim.findMany({
     where: { player_id: p.id }, select: { model: true },
   });
@@ -131,6 +151,28 @@ async function prirustek(p, novyStav) {
     ze_stroju: Math.round(zeStroju),
     ze_serveru: Math.round(zeServeru),
     pujceno,
+  };
+}
+
+// Kolik hotovosti MĚLO přibýt. Zisk sítě za uplynulý čas plus doručenky a
+// čerpání úvěru, minus to, co hráč podle serveru koupil, a minus splátky.
+//
+// Zisk se bere z toho, co umí spočítat server sám — tedy ze stejného
+// výpočtu, který se u otisku porovnává s hrou. Měsíční zisk se poměrem
+// rozpočítá na uplynulý čas.
+async function ocekavanaZmena(p, st, od, zisk) {
+  const ted = Date.now();
+  const naposledy = ted - Math.max(0, od);
+  const mesicu = Math.max(0, od) / MESIC_MS;
+  const zeSite = zisk ? zisk.server * mesicu : 0;
+  const dorucenky = await doruceno(p.id, naposledy, ted);
+  const nakupy = await utraceno(p.id, naposledy, ted);
+  // Čerpání úvěru hotovost zvedá, splátka ji snižuje — a obojí je vidět na
+  // dluhu, ne na hotovosti.
+  const dluhZmena = dluhu(st) - dluhu(p.state);
+  return {
+    celkem: zeSite + dorucenky - nakupy + dluhZmena,
+    zeSite, dorucenky, nakupy, dluhZmena,
   };
 }
 
@@ -247,6 +289,11 @@ async function otisk(p, st, v) {
   // tedy nanejvýš jednou za deset minut na hráče — pro každé uložení by to
   // bylo pět dotazů navíc a nic by to nepřineslo.
   const zisk = await ziskSrovnani(p, st).catch(() => null);
+  // A z něj rovnou čekaná změna hotovosti — zisk sítě za uplynulý čas,
+  // doručenky, nákupy, čerpání a splátky úvěru. Počítá se tu ze stejného
+  // důvodu jako zisk: jsou to další dva dotazy a u každého uložení by to
+  // bylo zbytečné.
+  const cek = await ocekavanaZmena(p, st, v.od, zisk).catch(() => null);
   await prisma.gameSnapshot.create({ data: {
     player_id: p.id,
     hotovost: Math.round(Number(st && st.cash) || 0),
@@ -257,6 +304,8 @@ async function otisk(p, st, v) {
     strop: v.strop != null ? Math.round(v.strop) : null,
     pujceno: v.pujceno != null ? Math.round(v.pujceno) : null,
     ze_serveru: v.ze_serveru != null ? Math.round(v.ze_serveru) : null,
+    ocekavano: cek ? Math.round(cek.celkem) : null,
+    nakupy: cek ? Math.round(cek.nakupy) : null,
     sedi: !!v.sedi,
     od_ms: Math.min(2147483647, Math.max(0, Math.round(v.od || 0))),
     zisk_hra: zisk ? zisk.hra : null,
