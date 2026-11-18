@@ -356,7 +356,7 @@ async function sit() {
   const podleMista = new Map(claims.map((c) => [c.spot_id, c]));
 
   const out = [];
-  let presne = 0, odhadem = 0, nezname = 0, modelSpor = 0, skoreSpor = 0;
+  let presne = 0, odhadem = 0, nezname = 0, modelSpor = 0, skoreSpor = 0, cizich = 0;
   hraci.forEach((h) => {
     const st = h.state || null;
     if (!st || !Array.isArray(st.units)) return;
@@ -365,6 +365,15 @@ async function sit() {
       if (!u || !u.spotId) return;
       const c = podleMista.get(u.spotId);
       if (!c) { nezname++; return; }
+      // Místo může mezitím patřit někomu jinému — hráč o něj přišel ve
+      // výpovědi, ale jeho prohlížeč o tom ještě neví. Není to rozpor
+      // v modelu a přepisovat tam nic nesmíme: cizí stroj to je po právu.
+      if (c.player_id !== h.id) {
+        cizich++;
+        sporne.push({ spot: u.spotId, co: 'cizí místo', hra: (u.eco && u.eco.model) || '?',
+          server: c.model || '—' });
+        return;
+      }
       const modelHra = (u.eco && u.eco.model) || null;
       if (modelHra && c.model && modelHra !== c.model) {
         modelSpor++;
@@ -446,7 +455,7 @@ async function sit() {
 
   out.sort((a, b) => b.sporne.length - a.sporne.length);
   out.presne = presne; out.odhadem = odhadem; out.nezname = nezname;
-  out.modelSpor = modelSpor; out.skoreSpor = skoreSpor;
+  out.modelSpor = modelSpor; out.skoreSpor = skoreSpor; out.cizich = cizich;
   out.duchove = duchove;
   return out;
 }
@@ -678,6 +687,8 @@ function tiskSit(rows) {
   out.push('  neocení vůbec:                ' + (rows.nezname || 0) + ' \u00b7 ' + pct(rows.nezname || 0));
   out.push('');
   out.push('Rozpory: model ' + (rows.modelSpor || 0) + ' \u00b7 skóre ' + (rows.skoreSpor || 0));
+  out.push('Místa, která hra vede jako svá, ale patří už někomu jinému: '
+    + (rows.cizich || 0) + ' (hráč o ně přišel ve výpovědi a jeho hra to ještě neví)');
   const duchove = rows.duchove || [];
   out.push('Stroje, které vidí jen server (hra o nich neví): ' + duchove.length);
   if (duchove.length) {
