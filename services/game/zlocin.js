@@ -34,6 +34,8 @@ const VYCHOZI = {
   kup_max_pomer: 60,           // % ceníku — levnější než tohle se počítá jako „pod cenou"
   chranit_platici: true,
   vratit_balicky: true,
+  // Štítky u hráče v žebříčcích a profilu — mění se podle útvaru a fáze řízení
+  emblemy: { celni: '🛃', policie: '🚓', financni: '💼', soud: '⚖️', porota: '👥', recidiva: '🚫', hotovo: '✅' },
 };
 
 const LIMITY = {
@@ -54,6 +56,12 @@ async function uloz(vstup) {
   if ('zapnuto' in b) out.zapnuto = !!b.zapnuto;
   if ('chranit_platici' in b) out.chranit_platici = !!b.chranit_platici;
   if ('vratit_balicky' in b) out.vratit_balicky = !!b.vratit_balicky;
+  if (b.emblemy && typeof b.emblemy === 'object') {
+    out.emblemy = Object.assign({}, VYCHOZI.emblemy, out.emblemy || {});
+    Object.keys(VYCHOZI.emblemy).forEach((k) => {
+      if (typeof b.emblemy[k] === 'string' && b.emblemy[k].trim()) out.emblemy[k] = b.emblemy[k].trim().slice(0, 8);
+    });
+  }
   Object.keys(LIMITY).forEach((k) => {
     if (!(k in b)) return;
     const n = Number(b[k]);
@@ -167,6 +175,7 @@ async function nanecisto(prisma, pravidla) {
     radek.trest = { nejnizsi: Math.round(radek.skoda * R.trest_nejnizsi), stredni: Math.round(radek.skoda * R.trest_stredni), nejvyssi: Math.round(radek.skoda * R.trest_nejvyssi) };
     // Který útvar případ vede: podle převažujícího prohřešku
     radek.utvar = (provize >= sleva && provize > 0) ? 'Finanční úřad' : (kup.length ? 'Celní správa' : 'Policie');
+    radek.emblem = R.emblemy[radek.utvar === 'Finanční úřad' ? 'financni' : radek.utvar === 'Celní správa' ? 'celni' : 'policie'];
 
     if (koncove.length >= R.min_pod && podil >= R.podil_mrtvych && mamDukaz) { radek.stav = 'kontrola'; vysledek.push(radek); }
     else if (koncove.length >= Math.max(2, R.min_pod - 2) && podil >= R.hranice_nahled && mamDukaz) { radek.stav = 'na hraně'; nahled.push(radek); }
@@ -193,7 +202,7 @@ async function nanecisto(prisma, pravidla) {
     radek.skoda = radek.sleva;
     radek.zmrazit = Math.round(radek.skoda * R.koef_zabaveni);
     radek.trest = { nejnizsi: Math.round(radek.skoda * R.trest_nejnizsi), stredni: Math.round(radek.skoda * R.trest_stredni), nejvyssi: Math.round(radek.skoda * R.trest_nejvyssi) };
-    radek.utvar = 'Celní správa'; radek.stav = 'kontrola';
+    radek.utvar = 'Celní správa'; radek.emblem = R.emblemy.celni; radek.stav = 'kontrola';
     vysledek.push(radek);
   });
   // Kolik mu po trestu zbude: hotovost z uloženého stavu hry minus zmrazená částka / nejvyšší trest

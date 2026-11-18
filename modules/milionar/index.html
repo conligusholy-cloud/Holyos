@@ -1706,6 +1706,8 @@
       ['hranice_nahled', 'Hranice pro „na hraně"', '%'],
       ['min_kupu_od_mrtvych', 'Kupec: min. různých zrušených prodejců', ''], ['kup_max_pomer', 'Kupec: nákup levnější než (% ceníku)', '%']
     ];
+    var ZL_EMBLEMY = [['celni', 'Celní správa'], ['policie', 'Policie'], ['financni', 'Finanční úřad'], ['soud', 'Soud'], ['porota', 'Porota (hlasování)'],
+      ['recidiva', 'Zákaz při recidivě'], ['hotovo', 'Vyřízeno']];
     var ZL_PRIZNAKY = [['chranit_platici', 'Platící hráč nesmí během kontroly a soudu smazat účet'],
       ['vratit_balicky', 'Koupené balíčky se platícímu hráči po rozsudku vrátí do hry znovu (trest se kryje z ostatního majetku)']];
     function loadZlocin() {
@@ -1716,6 +1718,11 @@
             return '<label style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span class="note">' + esc(f[1]) + '</span>'
               + '<span><input type="number" step="any" data-zl="' + f[0] + '" value="' + esc(P[f[0]]) + '" style="width:80px"> <span class="note">' + esc(f[2]) + '</span></span></label>';
           }).join('')
+          + '<div style="grid-column:1/-1"><div class="note" style="margin:6px 0">Štítky u hráče v žebříčcích a profilu (mění se podle útvaru a fáze):</div>'
+          + ZL_EMBLEMY.map(function (f) {
+            return '<label style="display:inline-flex;gap:6px;align-items:center;margin:0 14px 6px 0"><span class="note">' + esc(f[1]) + '</span>'
+              + '<input type="text" data-zle="' + f[0] + '" value="' + esc((P.emblemy || {})[f[0]] || '') + '" maxlength="8" style="width:52px;text-align:center;font-size:18px"></label>';
+          }).join('') + '</div>'
           + ZL_PRIZNAKY.map(function (f) {
             return '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-zlb="' + f[0] + '"' + (P[f[0]] ? ' checked' : '') + '> <span class="note">' + esc(f[1]) + '</span></label>';
           }).join('')
@@ -1726,6 +1733,8 @@
       var b = {};
       [].forEach.call(document.querySelectorAll('[data-zl]'), function (i) { b[i.getAttribute('data-zl')] = i.value; });
       [].forEach.call(document.querySelectorAll('[data-zlb]'), function (i) { b[i.getAttribute('data-zlb')] = i.checked; });
+      b.emblemy = {};
+      [].forEach.call(document.querySelectorAll('[data-zle]'), function (i) { b.emblemy[i.getAttribute('data-zle')] = i.value; });
       var z = document.getElementById('zl-zapnuto'); if (z) b.zapnuto = z.checked;
       return post('/zlocin/pravidla', b).then(function () { document.getElementById('zl-stav').textContent = 'Uloženo.'; });
     }
@@ -1754,7 +1763,7 @@
             + '<td class="num">' + cz(r.provize) + '</td><td class="num">' + cz(r.nakupu_ks) + '<div class="note">od zrušených ' + cz(r.nakupu_od_mrtvych) + '</div></td><td class="num">' + cz(r.sleva) + '</td>'
             + '<td class="num"><b>' + cz(r.skoda) + ' L$</b></td><td class="num">' + cz(r.zmrazit) + '</td>'
             + '<td class="note">' + cz(r.trest.nejnizsi) + ' / ' + cz(r.trest.stredni) + ' / ' + cz(r.trest.nejvyssi) + '</td>'
-            + '<td>' + esc(r.utvar) + '</td>'
+            + '<td>' + esc(r.emblem || '') + ' ' + esc(r.utvar) + '</td>'
             + '<td class="num">' + cz(r.pradlomatu || 0) + ' ks</td>'
             + '<td class="num">' + cz(r.hodnota_stroju || 0) + '</td>'
             + '<td class="num">' + (r.hotovost == null ? '<span class="note">—</span>' : cz(r.hotovost)) + '</td>'
