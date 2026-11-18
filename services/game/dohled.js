@@ -101,13 +101,34 @@ async function skladChybi(dnu) {
     orderBy: { created_at: 'desc' }, take: 500,
   });
   const ids = Array.from(new Set(rows.map((r) => r.player_id)));
-  const [hraci, objednavky] = await Promise.all([
+  const [hraci, objednavky, vsechnyObj, claimy] = await Promise.all([
     prisma.gamePlayer.findMany({ where: { id: { in: ids } }, select: { id: true, nick: true } }),
     prisma.gameOrder.groupBy({ by: ['player_id'], where: { player_id: { in: ids } },
       _count: { _all: true } }).catch(() => []),
+    // Celá evidence nákupů těch hráčů. Samotný počet nákupů nic neříká —
+    // teprve vedle počtu postavených míst je vidět, jestli stroje odněkud
+    // přibývají, nebo jestli se jen nestihly zapsat.
+    prisma.gameOrder.findMany({ where: { player_id: { in: ids } },
+      select: { player_id: true, postaveno_at: true, zruseno_at: true, doplneno: true } }).catch(() => []),
+    prisma.gameSpotClaim.findMany({ where: { player_id: { in: ids }, model: { not: '' } },
+      select: { player_id: true } }).catch(() => []),
   ]);
   const jmena = new Map(hraci.map((h) => [h.id, h.nick]));
   const maObjednavky = new Map(objednavky.map((o) => [o.player_id, o._count._all]));
+  const bilance = new Map();
+  const dej = (id) => {
+    let a = bilance.get(id);
+    if (!a) { a = { mist: 0, nakupu: 0, doplnenych: 0, naSklade: 0 }; bilance.set(id, a); }
+    return a;
+  };
+  claimy.forEach((c) => { dej(c.player_id).mist++; });
+  vsechnyObj.forEach((o) => {
+    const a = dej(o.player_id);
+    if (o.zruseno_at) return;
+    a.nakupu++;
+    if (o.doplneno) a.doplnenych++;
+    if (!o.postaveno_at) a.naSklade++;
+  });
   const poHraci = new Map();
   rows.forEach((r) => {
     const a = poHraci.get(r.player_id) || { kolik: 0, posledni: r.created_at };
@@ -128,15 +149,18 @@ async function skladChybi(dnu) {
     return out.join('\n');
   }
   out.push('');
-  out.push('hráč                 kolikrát   zapsaných nákupů   naposledy');
-  out.push('-'.repeat(68));
+  out.push('hráč                 kolikrát   nákupů  z toho zpětně  míst  na skladě   naposledy');
+  out.push('-'.repeat(94));
   Array.from(poHraci.entries())
     .sort((a, b) => b[1].kolik - a[1].kolik)
     .slice(0, 60)
     .forEach(([id, a]) => {
       const obj = maObjednavky.get(id) || 0;
+      const b = bilance.get(id) || { mist: 0, doplnenych: 0, naSklade: 0 };
       out.push(String(jmena.get(id) || ('#' + id)).padEnd(20).slice(0, 20)
-        + String(a.kolik).padStart(10) + String(obj).padStart(19)
+        + String(a.kolik).padStart(10) + String(obj).padStart(9)
+        + String(b.doplnenych).padStart(15) + String(b.mist).padStart(6)
+        + String(b.naSklade).padStart(11)
         + '   ' + cas(a.posledni)
         + (obj > 0 ? '   ← tohohle by se přepnutí dotklo' : ''));
     });
@@ -147,6 +171,11 @@ async function skladChybi(dnu) {
       + '  ' + String(jmena.get(r.player_id) || ('#' + r.player_id)).padEnd(16).slice(0, 16)
       + '  ' + (r.detail || ''));
   });
+  out.push('');
+  out.push('Sloupec „míst" je počet postavených prádlomatů podle evidence míst,');
+  out.push('„nákupů" počet nezrušených objednávek a „z toho zpětně" ty, které');
+  out.push('nevznikly nákupem, ale dopočtem ze stavu hry. Je-li míst výrazně víc');
+  out.push('než nákupů, berou se stroje odněkud, kam server nevidí.');
   out.push('');
   out.push('Přepnout sklad_povinny na 1 má smysl teprve tehdy, až je řádek');
   out.push('„hráčů se zapsanými nákupy" nula — jinak by hra odmítla někoho,');
