@@ -6281,7 +6281,7 @@ function vyzvaNaMiste(spotId) {
   if (!c || !c.mine || c.pozemek || !c.vypoved_do || !c.vyzyva) return null;
   var do_ = new Date(c.vypoved_do).getTime();
   if (!(do_ > Date.now())) return null;
-  return { do: do_, nick: c.vyzyva.nick || 'konkurent', rent: c.vyzyva.rent || 0 };
+  return { do: do_, nick: c.vyzyva.firma || c.vyzyva.nick || 'konkurent', rent: c.vyzyva.rent || 0 };
 }
 // Karta s výpovědí v detailu prádlomatu. Dorovnání je ta pojistka, kvůli které
 // má smysl vyjednat si delší výpovědní dobu.
@@ -6571,11 +6571,24 @@ function obnovChybejiciUnity() {
 function reconcileUnits() {
   obnovChybejiciUnity();
   if (!S || !S.units.length) return;
+  // Skóre místa patří místu, ne stroji. U míst převzatých po někom jiném se
+  // hře občas rozešlo s evidencí a zůstalo jí nízké — hráč pak platil nájem
+  // za dobré místo a vydělával jako na špatném. Evidence rozhoduje: nájem
+  // z ní kdysi vznikl, takže je to ona, komu nájem sedí.
+  var opraveno = 0;
+  S.units.forEach(function (u) {
+    var c = CLAIMS[u.spotId];
+    if (!c || !c.mine || c.score == null) return;
+    if (Math.abs((Number(u.score) || 0) - c.score) <= 1) return;
+    u.score = c.score;
+    opraveno++;
+  });
+  if (opraveno) { refreshUnits(); save(); }
   var lost = [];
   S.units = S.units.filter(function (u) {
     var c = CLAIMS[u.spotId];
     if (S.prodano && S.prodano[u.spotId]) return false;   // prodaný, ne přetažený
-    if (c && !c.mine) { lost.push({ u: u, nick: c.nick }); return false; }
+    if (c && !c.mine) { lost.push({ u: u, nick: c.firma || c.nick }); return false; }
     return true;
   });
   if (!lost.length) return;
@@ -9657,7 +9670,7 @@ function predmetPopis(t) {
   }
   if (t.predmet === 'podil') return tx('veta.podil_ve_firme_2', { p1: Math.round(((t.data || {}).podil || 0) * 100) });
   if (t.predmet === 'odkup') return tx('veta.zpetny_odkup_podilu', { p1: Math.round(((t.data || {}).podil || 0) * 100) });
-  if (t.predmet === 'prevod') return tx('veta.podil_ve_firme', { p1: pctHra((t.data || {}).podil), p2: ((t.data || {}).firma_nick || '') });
+  if (t.predmet === 'prevod') return tx('veta.podil_ve_firme', { p1: pctHra((t.data || {}).podil), p2: ((t.data || {}).firma || (t.data || {}).firma_nick || '') });
   if (t.predmet === 'vstup') {
     var dv = t.data || {};
     return tx('veta.popis_vstup', { p1: Math.round((dv.podil || 0) * 100) });
@@ -10627,7 +10640,7 @@ function sekce(nadpis, list, prazdno) {
 }
 function radekObchodu(t) {
   var jaKupuji = (t.smer === 'koupim' && t.moje) || (t.smer === 'prodam' && !t.moje);
-  var protistrana = t.moje ? t.komu.nick : t.od.nick;
+  var protistrana = t.moje ? (t.komu.firma || t.komu.nick) : (t.od.firma || t.od.nick);
   var veta = t.moje
     ? (t.smer === 'koupim' ? tx('veta.chces_koupit_od', { p1: esc(protistrana) }): tx('veta.nabizis', { p1: esc(protistrana) }))
     : (t.smer === 'koupim' ? esc(protistrana) + ' ' + esc(tx('hra.chce_koupit_od_tebe')) : tx('veta.ti_nabizi', { p1: esc(protistrana) }));
@@ -10754,7 +10767,7 @@ function vetsinaSheet(t, pak) {
   var d = t.data || {};
   var pct = Math.round((d.podil || 0) * 100);
   var po = Math.round((d.po_prodeji || d.podil || 0) * 100);
-  var kdo = t.moje ? t.komu.nick : t.od.nick;
+  var kdo = t.moje ? (t.komu.firma || t.komu.nick) : (t.od.firma || t.od.nick);
   sheet(tx('veta.h3_h3_p_class_muted_small_6', { p1: esc(tx('hra.u26a0_ufe0f_prodavas_vetsinu_firmy')), p2: esc(kdo), p3: po }) + (po > pct ? tx('veta.ted_ma', { p1: (po - pct) }) + tx('hra.kupuje_dalsich', { p1: pct }) : '')
     + tx('veta.vic_nez_polovinu_p_div_class', { p1: esc(tx('hra.prodavas')), p2: pct, p3: kcFull(t.cena), p4: esc(tx('hra.zustane_ti')), p5: Math.max(0, 100 - Math.round(podilProdano() * 100) - pct), p6: esc(tx('hra.zpatky_ji_dostanes_jen_tak')), p7: esc(tx('hra.vynutit_to_nejde_a_cenu')), p8: esc(tx('hra.rozumim_tomu_a_vetsinu_prodavam')), p9: esc(tx('hra.prijmout_nabidku')), p10: esc(tx('hra.zatim_ne')) }));
   $('vet-ne').onclick = closeSheet;
@@ -10873,7 +10886,7 @@ function zastavaSheet(t) {
     return toast(esc(tx('hra.veritel_chce_zastavu_ale_ty')) + ' '
       + esc(tx('hra.posli_protinavrh_a_domluv_se')), 'err', true);
   }
-  sheet(tx('veta.h3_h3_p_class_muted_small_11', { p1: esc(tx('hra.cim_rucis')), p2: esc(t.od.nick), p3: esc(tx('hra.zastava_3')) })
+  sheet(tx('veta.h3_h3_p_class_muted_small_11', { p1: esc(tx('hra.cim_rucis')), p2: esc(t.od.firma || t.od.nick), p3: esc(tx('hra.zastava_3')) })
     + mista.map(function (m) {
         return '<option value="' + esc(m.id) + '">' + esc(m.name) + ' — ' + esc(m.pod) + '</option>';
       }).join('') + '</select></label>'

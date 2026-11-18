@@ -2121,13 +2121,18 @@ const claimPub = (c, me, firmy) => ({
   takeovers: c.takeovers, name: c.name, lat: c.lat, lon: c.lon,
   // Nájem říkáme jen majiteli. Ostatní přihazují naslepo — v tom je to riziko.
   rent: c.player_id === me ? c.rent : null,
+  // Skóre taky jen majiteli. Hra si ho drží u stroje a u míst převzatých po
+  // někom jiném se jí občas rozešlo s evidencí — pak platí nájem za dobré
+  // místo a vydělává jako na špatném.
+  score: c.player_id === me ? c.score : null,
   // Stejně tak podmínky smlouvy: kdo přihazuje, nesmí vědět, jak je nájemce krytý.
   vazano_do: c.player_id === me ? c.vazano_do : null,
   vypoved_mesicu: c.player_id === me ? c.vypoved_mesicu : null,
   vypoved_do: c.player_id === me ? c.vypoved_do : null,
   // Nájemci řekneme, kolik mu konkurent nabídl — bez toho by neměl co dorovnat.
   vyzyva: (c.player_id === me && c.vypoved_do)
-    ? { nick: c.vyzyvatel_nick, rent: c.vyzyvatel_rent } : null,
+    ? { nick: c.vyzyvatel_nick, rent: c.vyzyvatel_rent,
+        firma: (firmy && c.vyzyvatel_id && firmy[c.vyzyvatel_id] && firmy[c.vyzyvatel_id].firma) || null } : null,
   // A tomu, kdo přihodil, že na místo čeká. Datum ne — to by prozradilo smlouvu.
   moje_nabidka: (c.vyzyvatel_id && c.vyzyvatel_id === me) ? { rent: c.vyzyvatel_rent } : null,
   // Nabídka pronájmu pozemku je naopak veřejná — je to inzerát, má ji vidět
