@@ -1689,8 +1689,11 @@
       ['trest_stredni', 'Trest střední (× škoda)', '×'], ['trest_nejvyssi', 'Trest nejvyšší (× škoda)', '×'],
       ['kontrola_mesicu', 'Kontrola trvá', 'herních měs.'], ['soud_mesicu', 'Soud trvá', 'herních měs.'],
       ['porotce_min_mesicu', 'Porotce: hráč starší než', 'herních měs.'], ['recidiva_dni', 'Zákaz při recidivě', 'dní'],
-      ['hranice_nahled', 'Hranice pro „na hraně"', '%']
+      ['hranice_nahled', 'Hranice pro „na hraně"', '%'],
+      ['min_kupu_od_mrtvych', 'Kupec: min. různých zrušených prodejců', ''], ['kup_max_pomer', 'Kupec: nákup levnější než (% ceníku)', '%']
     ];
+    var ZL_PRIZNAKY = [['chranit_platici', 'Platící hráč nesmí během kontroly a soudu smazat účet'],
+      ['vratit_balicky', 'Koupené balíčky se platícímu hráči po rozsudku vrátí do hry znovu (trest se kryje z ostatního majetku)']];
     function loadZlocin() {
       get('/zlocin/pravidla').then(function (j) {
         var P = j.pravidla;
@@ -1699,12 +1702,16 @@
             return '<label style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span class="note">' + esc(f[1]) + '</span>'
               + '<span><input type="number" step="any" data-zl="' + f[0] + '" value="' + esc(P[f[0]]) + '" style="width:80px"> <span class="note">' + esc(f[2]) + '</span></span></label>';
           }).join('')
+          + ZL_PRIZNAKY.map(function (f) {
+            return '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-zlb="' + f[0] + '"' + (P[f[0]] ? ' checked' : '') + '> <span class="note">' + esc(f[1]) + '</span></label>';
+          }).join('')
           + '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="zl-zapnuto"' + (P.zapnuto ? ' checked' : '') + '> <span class="note">Automatické řízení ve hře (zatím bez účinku)</span></label></div>';
       }).catch(function (e) { chyba('zl-pravidla', e); });
     }
     document.getElementById('zl-uloz').onclick = function () {
       var b = {};
       [].forEach.call(document.querySelectorAll('[data-zl]'), function (i) { b[i.getAttribute('data-zl')] = i.value; });
+      [].forEach.call(document.querySelectorAll('[data-zlb]'), function (i) { b[i.getAttribute('data-zlb')] = i.checked; });
       var z = document.getElementById('zl-zapnuto'); if (z) b.zapnuto = z.checked;
       post('/zlocin/pravidla', b).then(function () { document.getElementById('zl-stav').textContent = 'Uloženo.'; loadZlocin(); })
         .catch(function (e) { document.getElementById('zl-stav').textContent = e.message; });
@@ -1713,17 +1720,18 @@
       if (!rows.length) return '<p class="note">' + esc(titulek) + ': nikdo.</p>';
       return '<h3 style="font-size:14px;margin:14px 0 6px">' + esc(titulek) + ' (' + rows.length + ')</h3><div class="tbl-wrap"><table class="data-table"><thead><tr>'
         + '<th>Hráč</th><th class="num">Pod ním</th><th class="num">Koncových</th><th class="num">Zrušených</th><th class="num">Živých mezi</th><th class="num">Hloubka</th>'
-        + '<th class="num">Provize</th><th class="num">Nákupů</th><th class="num">Sleva</th><th class="num">Škoda</th><th class="num">Zmrazit</th><th>Trest (min / střed / max)</th><th>Útvar</th></tr></thead><tbody>'
+        + '<th class="num">Provize</th><th class="num">Nákupů</th><th class="num">Sleva</th><th class="num">Škoda</th><th class="num">Zmrazit</th><th>Trest (min / střed / max)</th><th>Útvar</th><th class="num">Platil</th></tr></thead><tbody>'
         + rows.map(function (r) {
           return '<tr><td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + r.id + '">' + esc(r.firma || r.nick) + '</b>'
-            + '<div class="note">' + esc(r.nick) + (r.nadrazeny ? ' · pozval ' + esc(r.nadrazeny) : '') + '</div></td>'
+            + '<div class="note">' + esc(r.nick) + (r.nadrazeny ? ' · pozval ' + esc(r.nadrazeny) : '') + (r.typ === 'kupec' ? ' · <b style="color:#fbbf24">KUPEC</b> (skupuje od zrušených účtů)' : '') + '</div></td>'
             + '<td class="num">' + cz(r.pod_celkem) + '</td><td class="num">' + cz(r.koncovych) + '</td>'
             + '<td class="num"><b style="color:#f87171">' + cz(r.mrtvych) + '</b> <span class="note">(' + r.podil_mrtvych + ' %)</span></td>'
             + '<td class="num">' + cz(r.zivych_mezi) + '</td><td class="num">' + r.hloubka + '</td>'
             + '<td class="num">' + cz(r.provize) + '</td><td class="num">' + cz(r.nakupu_ks) + '<div class="note">od zrušených ' + cz(r.nakupu_od_mrtvych) + '</div></td><td class="num">' + cz(r.sleva) + '</td>'
             + '<td class="num"><b>' + cz(r.skoda) + ' L$</b></td><td class="num">' + cz(r.zmrazit) + '</td>'
             + '<td class="note">' + cz(r.trest.nejnizsi) + ' / ' + cz(r.trest.stredni) + ' / ' + cz(r.trest.nejvyssi) + '</td>'
-            + '<td>' + esc(r.utvar) + '</td></tr>';
+            + '<td>' + esc(r.utvar) + '</td>'
+            + '<td class="num">' + (r.platici ? '<b title="Platící hráč: účet nesmí smazat, balíčky se mu vrátí">🔒 ' + cz(r.platil_kc) + ' Kč</b>' : '<span class="note">—</span>') + '</td></tr>';
         }).join('') + '</tbody></table></div>';
     }
     document.getElementById('zl-spust').onclick = function () {

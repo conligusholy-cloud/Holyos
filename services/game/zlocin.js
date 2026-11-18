@@ -25,13 +25,22 @@ const VYCHOZI = {
   porotce_min_mesicu: 2,       // porotce = hráč starší než tolik herních měsíců
   recidiva_dni: 3,             // zákaz provizí / nákupů / aliancí při dalším podvodu
   hranice_nahled: 60,          // % — hráči nad touhle hranicí (ale pod pravidlem) jdou do „na hraně"
+  // Ochrana platících: kdo za balíčky zaplatil skutečné peníze, nesmí během kontroly a soudu
+  // smazat účet a jeho koupené balíčky / věci se mu po rozsudku vrátí do hry znovu
+  // (aby nemohl říct, že jsme ho ošidili). Trest se kryje z ostatního majetku.
+  // Druhá cesta: KUPEC — kdo skupuje stroje od zrušených / nehrajících účtů hluboko pod cenou,
+  // i když je nepozval (nemusí být ve stromu pozvaných).
+  min_kupu_od_mrtvych: 3,      // kolik různých zrušených prodejců
+  kup_max_pomer: 60,           // % ceníku — levnější než tohle se počítá jako „pod cenou"
+  chranit_platici: true,
+  vratit_balicky: true,
 };
 
 const LIMITY = {
   min_pod: [1, 100], podil_mrtvych: [10, 100], min_odehrano_min: [0, 600], max_hloubka: [1, 20],
   koef_zabaveni: [0.5, 5], trest_nejnizsi: [0.5, 5], trest_stredni: [0.5, 5], trest_nejvyssi: [0.5, 5],
   kontrola_mesicu: [0, 12], soud_mesicu: [0, 12], porotce_min_mesicu: [0, 24], recidiva_dni: [0, 90],
-  hranice_nahled: [10, 100],
+  hranice_nahled: [10, 100], min_kupu_od_mrtvych: [1, 100], kup_max_pomer: [5, 100],
 };
 
 async function nastaveni() {
@@ -43,6 +52,8 @@ async function uloz(vstup) {
   const out = Object.assign({}, await nastaveni());
   const b = vstup && typeof vstup === 'object' ? vstup : {};
   if ('zapnuto' in b) out.zapnuto = !!b.zapnuto;
+  if ('chranit_platici' in b) out.chranit_platici = !!b.chranit_platici;
+  if ('vratit_balicky' in b) out.vratit_balicky = !!b.vratit_balicky;
   Object.keys(LIMITY).forEach((k) => {
     if (!(k in b)) return;
     const n = Number(b[k]);
@@ -68,6 +79,15 @@ async function nanecisto(prisma, pravidla) {
       select: { id: true, from_id: true, to_id: true, smer: true, predmet: true, model: true, cena: true } }),
     prisma.gameSpotClaim.findMany({ select: { player_id: true, spot_id: true } }),
   ]);
+
+  // Kolik který hráč skutečně zaplatil (Kč přepočtem) — platící je chráněný před smazáním účtu
+  const platil = {};
+  try {
+    const MENY = require('./meny');
+    const kurzy = await MENY.kurzy();
+    const nak = await prisma.gamePurchase.findMany({ where: { status: 'paid' }, select: { player_id: true, amount_cents: true, currency: true } });
+    nak.forEach((n) => { platil[n.player_id] = (platil[n.player_id] || 0) + MENY.naKoruny(n.amount_cents, String(n.currency || 'czk').toLowerCase(), kurzy); });
+  } catch (e) { /* bez plateb se nanečisto počítá dál */ }
 
   const P = {}, podleRef = {};
   hraci.forEach((h) => { P[h.id] = h; if (h.ref_id) podleRef[h.ref_id] = h; });
@@ -130,6 +150,8 @@ async function nanecisto(prisma, pravidla) {
       provize: Math.round(provize), nakupu_ks: kup.length, nakupu_od_mrtvych: odMrtvych, sleva: Math.round(sleva),
       mrtvi_nicky: mrtve.slice(0, 8).map((id) => P[id].nick),
     };
+    radek.platil_kc = Math.round(platil[h.id] || 0);
+    radek.platici = radek.platil_kc > 0;
     radek.skoda = Math.round(provize + sleva);
     radek.zmrazit = Math.round(radek.skoda * R.koef_zabaveni);
     radek.trest = { nejnizsi: Math.round(radek.skoda * R.trest_nejnizsi), stredni: Math.round(radek.skoda * R.trest_stredni), nejvyssi: Math.round(radek.skoda * R.trest_nejvyssi) };
@@ -138,6 +160,31 @@ async function nanecisto(prisma, pravidla) {
 
     if (koncove.length >= R.min_pod && podil >= R.podil_mrtvych && mamDukaz) { radek.stav = 'kontrola'; vysledek.push(radek); }
     else if (koncove.length >= Math.max(2, R.min_pod - 2) && podil >= R.hranice_nahled && mamDukaz) { radek.stav = 'na hraně'; nahled.push(radek); }
+  });
+  // ── Druhá cesta: KUPEC (nákupy hluboko pod cenou od zrušených účtů, bez ohledu na strom pozvaných) ──
+  const maxPomer = R.kup_max_pomer / 100;
+  const radekPodleId = {}; vysledek.concat(nahled).forEach((r) => { radekPodleId[r.id] = r; });
+  hraci.forEach((h) => {
+    const levne = (nakupy[h.id] || []).filter((x) => P[x.od] && mrtvy(P[x.od]) && x.od !== h.id
+      && (Number(x.cena) || 0) < maxPomer * cenik(x.model));
+    const prodejci = new Set(levne.map((x) => x.od));
+    if (prodejci.size < R.min_kupu_od_mrtvych) return;
+    const sleva = levne.reduce((a, x) => a + Math.max(0, cenik(x.model) - x.cena), 0);
+    const ex = radekPodleId[h.id];
+    if (ex) { ex.kupuje_levne = levne.length; return; }   // už je ve výsledku přes strom pozvaných
+    const radek = {
+      id: h.id, nick: h.nick, firma: h.company || null, zalozen: h.created_at, nadrazeny: (zvouci(h) || {}).nick || null,
+      typ: 'kupec', pod_celkem: 0, koncovych: 0, mrtvych: prodejci.size, podil_mrtvych: 100, zivych_mezi: 0, hloubka: 0,
+      provize: 0, nakupu_ks: levne.length, nakupu_od_mrtvych: levne.length, sleva: Math.round(sleva),
+      mrtvi_nicky: [...prodejci].slice(0, 8).map((id) => P[id].nick),
+      platil_kc: Math.round(platil[h.id] || 0),
+    };
+    radek.platici = radek.platil_kc > 0;
+    radek.skoda = radek.sleva;
+    radek.zmrazit = Math.round(radek.skoda * R.koef_zabaveni);
+    radek.trest = { nejnizsi: Math.round(radek.skoda * R.trest_nejnizsi), stredni: Math.round(radek.skoda * R.trest_stredni), nejvyssi: Math.round(radek.skoda * R.trest_nejvyssi) };
+    radek.utvar = 'Celní správa'; radek.stav = 'kontrola';
+    vysledek.push(radek);
   });
   const rad = (a, b) => b.skoda - a.skoda;
   vysledek.sort(rad); nahled.sort(rad);
