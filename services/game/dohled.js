@@ -63,6 +63,14 @@ async function stropPrehled(dnu) {
       out.push(String(jmena.get(id) || ('#' + id)).padEnd(20).slice(0, 20)
         + String(a.kolik).padStart(10) + kc(a.max).padStart(20));
     });
+  // Kolik přetečení si vysvětlí půjčka nebo doručenka a kolik ne. Utahovat
+  // mez má smysl teprve tehdy, až druhé číslo pár dní zůstane na nule.
+  const sDuvodem = mimo.filter((x) => (x.pujceno || 0) > 0 || (x.ze_serveru || 0) > 0).length;
+  const bezUdaje = mimo.filter((x) => x.pujceno == null && x.ze_serveru == null).length;
+  out.push('');
+  out.push('z toho s nějakým serverovým důvodem (půjčka nebo doručenka): ' + sDuvodem
+    + ' · bez něj: ' + (mimo.length - sDuvodem - bezUdaje)
+    + (bezUdaje ? ' · starší otisky bez údaje: ' + bezUdaje : ''));
   out.push('');
   out.push('posledních 30 jednotlivě:');
   mimo.slice(0, 30).forEach((x) => {
@@ -71,7 +79,12 @@ async function stropPrehled(dnu) {
       + ' přidal ' + kc(x.prirustek).padStart(14)
       + ' · strop ' + kc(x.strop || 0).padStart(14)
       + ' · ' + x.pradlomatu + ' prádlomatů'
-      + ' · za ' + Math.round((x.od_ms || 0) / 60000) + ' min');
+      + ' · za ' + Math.round((x.od_ms || 0) / 60000) + ' min'
+      // Z čeho strop povolil, co povolil. Nula u obojího znamená, že na ten
+      // skok nebyl žádný serverem známý důvod — a to je ten případ, kvůli
+      // kterému se mez utahuje.
+      + (x.pujceno == null && x.ze_serveru == null ? ''
+        : ' · půjčeno ' + kc(x.pujceno || 0) + ', doručenky ' + kc(x.ze_serveru || 0)));
   });
   return out.join('\n');
 }

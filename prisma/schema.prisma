@@ -8328,6 +8328,11 @@ model GameSnapshot {
   // O kolik hotovost skočila od minulého uložení a co server čekal jako strop.
   prirustek  Float    @default(0)
   strop      Float?
+  // Z čeho strop povolil, co povolil: načerpaná půjčka a doručenky vyzvednuté
+  // v tom samém okně. Bez nich se u přetečení nepozná planý poplach od
+  // peněz, které se nemají odkud vzít.
+  pujceno    Float?
+  ze_serveru Float?
   sedi       Boolean  @default(true)
   od_ms      Int      @default(0)
   // Zisk za prádlomaty podle hry a podle serveru, vedle sebe. Pobočky,

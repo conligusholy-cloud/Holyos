@@ -255,6 +255,8 @@ async function otisk(p, st, v) {
       : (Array.isArray(st && st.units) ? st.units.length : 0),
     prirustek: Math.round(v.rozdil || 0),
     strop: v.strop != null ? Math.round(v.strop) : null,
+    pujceno: v.pujceno != null ? Math.round(v.pujceno) : null,
+    ze_serveru: v.ze_serveru != null ? Math.round(v.ze_serveru) : null,
     sedi: !!v.sedi,
     od_ms: Math.min(2147483647, Math.max(0, Math.round(v.od || 0))),
     zisk_hra: zisk ? zisk.hra : null,
