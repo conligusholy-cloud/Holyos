@@ -8248,6 +8248,40 @@ model GameOrder {
 // poplachů dělají, než se z nich stane skutečné odmítnutí. Řádka tu není
 // obvinění hráče — vznikne i tomu, kdo kupoval dřív, než se nákupy začaly
 // vůbec zapisovat.
+// Investiční aliance: podíly členů se v jedné firmě sčítají, takže blok
+// dosáhne na prahy, na které sám nedosáhne nikdo. Za blok jedná ten člen,
+// kdo v dané firmě drží nejvíc — nehlasuje se, aby majitel ani ostatní
+// nečekali na někoho, kdo se přihlásí za tři dny.
+//
+// Společná pokladna tu není a být nemůže: hotovost žije ve stavu hry
+// v prohlížeči, takže peníze členů nejde držet ani zamknout.
+model GameAliance {
+  id            Int      @id @default(autoincrement())
+  nazev         String   @db.VarChar(24)
+  zakladatel_id Int
+  created_at    DateTime @default(now())
+
+  @@map("game_aliance")
+}
+
+// Pozvánka i členství v jedné tabulce; stav říká, co z toho to je. Jedno
+// členství na hráče hlídá částečný unikátní index v migraci — na souběh
+// dvou přijetí ve stejnou vteřinu by se v kódu snadno zapomnělo.
+model GameAlianceClen {
+  id         Int      @id @default(autoincrement())
+  aliance_id Int
+  player_id  Int
+  // pozvan | clen
+  stav       String   @default("pozvan") @db.VarChar(10)
+  pozval_id  Int?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([aliance_id, player_id])
+  @@index([player_id, stav])
+  @@map("game_aliance_clen")
+}
+
 model GameDohled {
   id         Int      @id @default(autoincrement())
   player_id  Int

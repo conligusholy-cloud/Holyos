@@ -3569,5 +3569,14 @@
   "veta.vystupni_pod_ocenenim": "Pod ocenění firmy to nejde. Nejméně {p1} za procento.",
   "server.vystupni_nabidku_smi_az_od_pct": "Výstupní nabídku může vyhlásit podílník s aspoň {p1} % firmy.",
   "server.vystupni_cena_pod_ocenenim": "Výstupní nabídka nesmí být pod oceněním firmy. Nejméně {penize:p1} za procento.",
-  "server.stahnout_ji_muze_jen_kdo_ji_dal": "Stáhnout nabídku může jen ten, kdo ji vyhlásil."
+  "server.stahnout_ji_muze_jen_kdo_ji_dal": "Stáhnout nabídku může jen ten, kdo ji vyhlásil.",
+  "server.nazev_aliance_je_kratky_nebo_dlouhy": "Název aliance musí mít {p1} až {p2} znaků.",
+  "server.uz_v_alianci_jsi": "V alianci už jsi. Nejdřív z ní odejdi.",
+  "server.sam_sebe_zvat_nemusis": "Sám sebe zvát nemusíš.",
+  "server.v_zadne_alianci_nejsi": "V žádné alianci nejsi.",
+  "server.aliance_je_plna": "Aliance je plná — nejvýš {p1} členů včetně nevyřízených pozvánek.",
+  "server.ten_hrac_uz_alianci_ma": "Ten hráč už v alianci je.",
+  "server.takovou_pozvanku_nemas": "Takovou pozvánku nemáš.",
+  "dor.aliance_pozvanka": "{p1} tě zve do aliance {p2}. Podíly členů se ve firmách sčítají — a svůj hlas přenecháš tomu, kdo v dané firmě drží nejvíc.",
+  "dor.aliance_vstoupil": "{p1} vstoupil do aliance {p2}."
 }

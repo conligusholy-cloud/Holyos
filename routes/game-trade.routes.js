@@ -15,6 +15,7 @@ const router = express.Router();
 const { prisma } = require('../config/database');
 const acct = require('./game-account.routes');
 const PRAVA = require('../services/game/prava');
+const ALIANCE = require('../services/game/aliance');
 
 router.use(express.json({ limit: '32kb' }));
 
@@ -292,7 +293,24 @@ async function pravaFirmy(firmaId) {
     where: { firma_id: firmaId, stav: 'bezi' },
     select: { investor_id: true, podil: true, zakaz_zastavy: true },
   });
-  return PRAVA.souhrn(rows);
+  const poHraci = PRAVA.souhrn(rows);
+  // Aliance se slučují tady, na jediném místě. Všechno ostatní — dividenda,
+  // blokace zástavy, výstupní nabídka — pak funguje beze změny a bez výjimek
+  // pro bloky: právo prostě má ten, kdo za blok jedná.
+  return ALIANCE.slucPodily(poHraci, await clenstvi(poHraci.map((e) => e.investor_id)));
+}
+
+// Mapa hráč → aliance pro zadané hráče. Kdo v žádné není, v mapě chybí
+// a zůstává sám za sebe.
+async function clenstvi(ids) {
+  const m = new Map();
+  if (!ids || !ids.length) return m;
+  const rows = await prisma.gameAlianceClen.findMany({
+    where: { player_id: { in: ids }, stav: 'clen' },
+    select: { player_id: true, aliance_id: true },
+  }).catch(() => []);
+  rows.forEach((r) => m.set(r.player_id, r.aliance_id));
+  return m;
 }
 
 // Kdo majiteli zakázal dát firmu do zástavy. Vrací jméno, se kterým se má
@@ -1036,6 +1054,144 @@ router.post('/trade/zastava-souhlas', hrac, api(async (req, res) => {
   console.log('[game] zástava: ' + req.player.nick + ' → ' + firma.nick
     + ' · ' + (zakaz ? 'zákaz' : 'povoleno'));
   res.json({ ok: true, zakaz });
+}));
+
+// ─── Investiční aliance ──────────────────────────────────────────────────────
+// Podíly členů se v jedné firmě sčítají, takže blok dosáhne na prahy, na
+// které sám nedosáhne nikdo. Kdo vstoupí, přenechává svůj hlas mluvčímu —
+// je to skutečná cena za vstup a musí ji vidět dřív, než pozvánku přijme.
+
+// GET /trade/aliance → moje aliance, členové a nevyřízené pozvánky
+router.get('/trade/aliance', hrac, api(async (req, res) => {
+  const ja = req.player.id;
+  const moje = await prisma.gameAlianceClen.findFirst({
+    where: { player_id: ja, stav: 'clen' } });
+  const pozvanky = await prisma.gameAlianceClen.findMany({
+    where: { player_id: ja, stav: 'pozvan' }, orderBy: { created_at: 'desc' }, take: 10 });
+  const ids = Array.from(new Set(pozvanky.map((p) => p.aliance_id)
+    .concat(moje ? [moje.aliance_id] : [])));
+  const aliance = ids.length
+    ? await prisma.gameAliance.findMany({ where: { id: { in: ids } } }) : [];
+  const nazvy = new Map(aliance.map((a) => [a.id, a.nazev]));
+
+  let clenove = [];
+  if (moje) {
+    const rows = await prisma.gameAlianceClen.findMany({
+      where: { aliance_id: moje.aliance_id }, orderBy: { created_at: 'asc' } });
+    const hraci = await prisma.gamePlayer.findMany({
+      where: { id: { in: rows.map((r) => r.player_id) } },
+      select: { id: true, nick: true, company: true } });
+    const jm = new Map(hraci.map((h) => [h.id, h.company || h.nick]));
+    clenove = rows.map((r) => ({ id: r.player_id, kdo: jm.get(r.player_id) || ('#' + r.player_id),
+      stav: r.stav, ja: r.player_id === ja }));
+  }
+  res.json({ ok: true,
+    aliance: moje ? { id: moje.aliance_id, nazev: nazvy.get(moje.aliance_id) || '', clenove } : null,
+    pozvanky: pozvanky.map((p) => ({ aliance_id: p.aliance_id,
+      nazev: nazvy.get(p.aliance_id) || '' })),
+    max_clenu: ALIANCE.MAX_CLENU });
+}));
+
+// POST /trade/aliance { nazev } → založit
+router.post('/trade/aliance', hrac, api(async (req, res) => {
+  const nazev = ALIANCE.nazevOk((req.body || {}).nazev);
+  if (!nazev) return res.status(400).json({ error: stx(req)('server.nazev_aliance_je_kratky_nebo_dlouhy',
+    { p1: ALIANCE.NAZEV_MIN, p2: ALIANCE.NAZEV_MAX }) });
+  const uz = await prisma.gameAlianceClen.findFirst({ where: { player_id: req.player.id, stav: 'clen' } });
+  if (uz) return res.status(409).json({ error: stx(req)('server.uz_v_alianci_jsi') });
+  const a = await prisma.gameAliance.create({
+    data: { nazev, zakladatel_id: req.player.id } });
+  await prisma.gameAlianceClen.create({
+    data: { aliance_id: a.id, player_id: req.player.id, stav: 'clen' } });
+  console.log('[game] aliance #' + a.id + ' ' + nazev + ' založil ' + req.player.nick);
+  res.json({ ok: true, aliance_id: a.id, nazev });
+}));
+
+// POST /trade/aliance/pozvat { player_id }
+router.post('/trade/aliance/pozvat', hrac, api(async (req, res) => {
+  const koho = parseInt((req.body || {}).player_id, 10) || 0;
+  if (koho === req.player.id) return res.status(400).json({ error: stx(req)('server.sam_sebe_zvat_nemusis') });
+  const moje = await prisma.gameAlianceClen.findFirst({
+    where: { player_id: req.player.id, stav: 'clen' } });
+  if (!moje) return res.status(403).json({ error: stx(req)('server.v_zadne_alianci_nejsi') });
+  const kdo = await prisma.gamePlayer.findUnique({ where: { id: koho } });
+  if (!kdo || kdo.disabled) return res.status(404).json({ error: stx(req)('server.takovy_hrac_tu_neni') });
+
+  // Strop se počítá i s nevyřízenými pozvánkami: kdyby ne, pozve se jich
+  // deset a aliance se naplní podle toho, kdo byl zrovna u telefonu.
+  const kolik = await prisma.gameAlianceClen.count({ where: { aliance_id: moje.aliance_id } });
+  if (!ALIANCE.jeMisto(kolik)) {
+    return res.status(409).json({ error: stx(req)('server.aliance_je_plna', { p1: ALIANCE.MAX_CLENU }) });
+  }
+  const uzClen = await prisma.gameAlianceClen.findFirst({ where: { player_id: koho, stav: 'clen' } });
+  if (uzClen) return res.status(409).json({ error: stx(req)('server.ten_hrac_uz_alianci_ma') });
+
+  const a = await prisma.gameAliance.findUnique({ where: { id: moje.aliance_id } });
+  await prisma.gameAlianceClen.createMany({
+    data: [{ aliance_id: moje.aliance_id, player_id: koho, stav: 'pozvan', pozval_id: req.player.id }],
+    skipDuplicates: true,
+  });
+  await prisma.gameDelivery.create({ data: {
+    player_id: koho, kind: 'zprava',
+    popis: req.player.nick + ' tě zve do aliance ' + (a ? a.nazev : ''),
+    text_kod: 'dor.aliance_pozvanka',
+    text_data: { p1: req.player.nick, p2: a ? a.nazev : '' },
+  } });
+  res.json({ ok: true });
+}));
+
+// POST /trade/aliance/prijmout { aliance_id }
+router.post('/trade/aliance/prijmout', hrac, api(async (req, res) => {
+  const id = parseInt((req.body || {}).aliance_id, 10) || 0;
+  const p = await prisma.gameAlianceClen.findFirst({
+    where: { aliance_id: id, player_id: req.player.id, stav: 'pozvan' } });
+  if (!p) return res.status(404).json({ error: stx(req)('server.takovou_pozvanku_nemas') });
+  const kolik = await prisma.gameAlianceClen.count({ where: { aliance_id: id, stav: 'clen' } });
+  if (!ALIANCE.jeMisto(kolik)) {
+    return res.status(409).json({ error: stx(req)('server.aliance_je_plna', { p1: ALIANCE.MAX_CLENU }) });
+  }
+  try {
+    await prisma.gameAlianceClen.update({ where: { id: p.id }, data: { stav: 'clen' } });
+  } catch (e) {
+    // Částečný unikátní index: členství je jen jedno. Dvě přijetí ve stejnou
+    // vteřinu tu skončí, a je to tak správně.
+    return res.status(409).json({ error: stx(req)('server.uz_v_alianci_jsi') });
+  }
+  // Ostatní pozvánky padají — členství je jedno a visící pozvánky by jen
+  // mátly.
+  await prisma.gameAlianceClen.deleteMany({
+    where: { player_id: req.player.id, stav: 'pozvan' } }).catch(() => {});
+  const a = await prisma.gameAliance.findUnique({ where: { id } });
+  const ostatni = await prisma.gameAlianceClen.findMany({
+    where: { aliance_id: id, stav: 'clen', player_id: { not: req.player.id } },
+    select: { player_id: true } });
+  if (ostatni.length) {
+    await prisma.gameDelivery.createMany({ data: ostatni.map((o) => ({
+      player_id: o.player_id, kind: 'zprava',
+      popis: req.player.nick + ' vstoupil do aliance ' + (a ? a.nazev : ''),
+      text_kod: 'dor.aliance_vstoupil',
+      text_data: { p1: req.player.nick, p2: a ? a.nazev : '' },
+    })) });
+  }
+  res.json({ ok: true });
+}));
+
+// POST /trade/aliance/odejit → odchod je okamžitý, práva se přepočítají
+router.post('/trade/aliance/odejit', hrac, api(async (req, res) => {
+  const moje = await prisma.gameAlianceClen.findFirst({
+    where: { player_id: req.player.id, stav: 'clen' } });
+  if (!moje) return res.status(404).json({ error: stx(req)('server.v_zadne_alianci_nejsi') });
+  await prisma.gameAlianceClen.delete({ where: { id: moje.id } });
+  const zbyva = await prisma.gameAlianceClen.count({
+    where: { aliance_id: moje.aliance_id, stav: 'clen' } });
+  // Aliance bez členů nemá co držet. Pozvánky do ní by zůstaly viset.
+  if (!zbyva) {
+    await prisma.gameAlianceClen.deleteMany({ where: { aliance_id: moje.aliance_id } }).catch(() => {});
+    await prisma.gameAliance.delete({ where: { id: moje.aliance_id } }).catch(() => {});
+  }
+  console.log('[game] aliance #' + moje.aliance_id + ': odešel ' + req.player.nick
+    + ', zbývá ' + zbyva);
+  res.json({ ok: true, zrusena: !zbyva });
 }));
 
 // POST /trade/dividenda { firma_id, pct } → většinový podílník určuje,
