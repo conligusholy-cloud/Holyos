@@ -234,11 +234,22 @@ const { textDorucenky } = require('../services/game/doruceni');
 const hodnostNazev = (id, jazyk) => (id ? nazevHodnosti(id, jazyk) : null);
 
 // ─── Nabídky ─────────────────────────────────────────────────────────────────
-const verejny = (t, me) => ({
+// Názvy firem protistran — v hlášKách a na burze se má ukazovat firma, ne nick.
+async function firmyPro(rows) {
+  const ids = new Set();
+  (Array.isArray(rows) ? rows : [rows]).forEach((t) => { if (t) { ids.add(t.from_id); ids.add(t.to_id); } });
+  const F = {};
+  if (!ids.size) return F;
+  const lide = await prisma.gamePlayer.findMany({ where: { id: { in: [...ids] } }, select: { id: true, nick: true, company: true } });
+  lide.forEach((h) => { F[h.id] = h.company || (h.nick + ' s.r.o.'); });
+  return F;
+}
+const verejny = (t, me, F) => ({
   id: t.id, smer: t.smer, predmet: t.predmet, model: t.model, spot_id: t.spot_id,
   card_kind: t.card_kind, cena: t.cena, karty: t.karty || [], vzkaz: t.vzkaz, data: t.data || null,
   stav: t.stav, parent_id: t.parent_id, created_at: t.created_at,
-  od: { id: t.from_id, nick: t.from_nick }, komu: { id: t.to_id, nick: t.to_nick },
+  od: { id: t.from_id, nick: t.from_nick, firma: (F && F[t.from_id]) || null },
+  komu: { id: t.to_id, nick: t.to_nick, firma: (F && F[t.to_id]) || null },
   moje: t.from_id === me,       // nabídku poslal přihlášený hráč
   na_tahu: t.to_id === me && t.stav === 'ceka',
 });
@@ -250,7 +261,8 @@ router.get('/trade/list', hrac, api(async (req, res) => {
     where: { OR: [{ from_id: me }, { to_id: me }] },
     orderBy: { created_at: 'desc' }, take: 120,
   });
-  res.json({ ok: true, trades: rows.map((t) => verejny(t, me)),
+  const F = await firmyPro(rows);
+  res.json({ ok: true, trades: rows.map((t) => verejny(t, me, F)),
     ceka_na_me: rows.filter((t) => t.to_id === me && t.stav === 'ceka').length });
 }));
 
@@ -589,7 +601,7 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
   // AI hlídání vzkazu (na pozadí; při škodě/podezření jde upozornění do Velína)
   require('../services/game/pristupy').zapis(req, req.player.id, 'nabidka', t.id);
   if (t.vzkaz) require('../services/game/moderace').zkontroluj({ player: req.player, zdroj: 'vzkaz', refId: t.id, text: t.vzkaz, komu: druhy.nick });
-  res.json({ ok: true, trade: verejny(t, req.player.id) });
+  res.json({ ok: true, trade: verejny(t, req.player.id, await firmyPro(t)) });
 }));
 
 // POST /trade/:id/counter { cena, karty[], vzkaz } — protinávrh (otočí se role)
@@ -670,7 +682,7 @@ router.post('/trade/:id/counter', hrac, api(async (req, res) => {
   } catch (e) { if (SOUBEH.odpoved(e, res, stx(req))) return; throw e; }
   if (novy) require('../services/game/pristupy').zapis(req, req.player.id, 'protinavrh', novy.id);
   if (novy && novy.vzkaz) require('../services/game/moderace').zkontroluj({ player: req.player, zdroj: 'vzkaz', refId: novy.id, text: novy.vzkaz, komu: t.from_nick });
-  res.json({ ok: true, trade: verejny(novy, req.player.id) });
+  res.json({ ok: true, trade: verejny(novy, req.player.id, await firmyPro(novy)) });
 }));
 
 // POST /trade/:id/decline — odmítnutí
@@ -1687,11 +1699,15 @@ router.get('/trade/deliveries', hrac, api(async (req, res) => {
   // created_at posíláme kvůli účetní knize: doručenka mohla čekat i půl dne,
   // než si ji hráč vyzvedl, a v knize má být vidět, kdy ta provize vznikla.
   const jazyk = TEXTY.jazykHrace(req.player);
+  // nick → název firmy, ať hlášky ukazují firmy
+  const jmena = {};
+  (await prisma.gamePlayer.findMany({ select: { nick: true, company: true } }))
+    .forEach((h) => { if (h.nick && h.company) jmena[h.nick.toLowerCase()] = h.company; });
   res.json({ ok: true, deliveries: rows.map((d) => ({ id: d.id, kind: d.kind, model: d.model,
     amount: d.amount, spot_id: d.spot_id, data: d.data || null,
     // Věta se skládá až tady, v jazyce toho, kdo ji čte. Starší řádky mají
     // jen hotový český popis — ty se nechávají být.
-    popis: textDorucenky(d, jazyk),
+    popis: textDorucenky(d, jazyk, jmena),
     vzniklo: d.created_at })) });
 }));
 

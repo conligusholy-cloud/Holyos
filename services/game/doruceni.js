@@ -19,10 +19,25 @@ const DOPLN = {
   'odmena.odznak': (u, j) => ({ nazev: nazevOdmeny('odznak', u.kod, j) }),
 };
 
-function textDorucenky(d, jazyk) {
+// V hláškách se ukazuje název firmy, ne nick. V údajích doručenky je nick uložen
+// jako text (p1, p2…), takže u čtenáře ho nahradíme firmou, pokud známe hráče
+// s přesně takovým nickem. Starší řádky s hotovou českou větou zůstávají.
+function nahradNicky(u, jmena) {
+  if (!jmena) return u;
+  const o = Object.assign({}, u);
+  Object.keys(o).forEach((k) => {
+    if (/^p\d+$/.test(k) && typeof o[k] === 'string') {
+      const f = jmena[o[k].toLowerCase()];
+      if (f) o[k] = f;
+    }
+  });
+  return o;
+}
+
+function textDorucenky(d, jazyk, jmena) {
   if (!d) return '';
   if (!d.text_kod) return d.popis || '';
-  const u = d.text_data || {};
+  const u = nahradNicky(d.text_data || {}, jmena);
   const dopln = DOPLN[d.text_kod];
   try {
     const veta = TEXTY.t(d.text_kod, dopln ? dopln(u, jazyk) : u, jazyk);

@@ -501,6 +501,89 @@ router.post('/nahlasene/:id/vyrizeno', api(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ─── Vyčíslení okruhu: zvoucí (provize) + kupec (levné stroje) ──────────────
+// GET /api/game-admin/okruh?a=Pinon&b=Petulak  → čitelný text (jen čte).
+// A = ten, kdo zakládá pomocné účty a bere provizi, B = ten, kdo od nich skupuje
+// stroje pod cenou. Počítá: provize pro A, slevu B oproti ceníku, ztrátu pomocných účtů.
+router.get('/okruh', api(async (req, res) => {
+  const najdi = async (q) => {
+    const s = String(q || '').trim().toLowerCase();
+    if (!s) return null;
+    const v = await prisma.gamePlayer.findMany({ select: { id: true, nick: true, company: true, ref_id: true, created_at: true } });
+    return v.filter((p) => (p.nick || '').toLowerCase().includes(s) || (p.company || '').toLowerCase().includes(s));
+  };
+  const out = [];
+  const A = await najdi(req.query.a), B = await najdi(req.query.b);
+  res.type('text/plain; charset=utf-8');
+  if (!A || !B || A.length !== 1 || B.length !== 1) {
+    return res.send('Zadej ?a=<nick zvoucího>&b=<nick kupce>. Shody A: ' + (A || []).map((p) => p.nick).join(', ')
+      + ' | Shody B: ' + (B || []).map((p) => p.nick).join(', '));
+  }
+  const a = A[0], b = B[0];
+  const LIST = { mini: Math.round(35000 * 24.35 * 1.25), flex: Math.round(52000 * 24.35 * 1.25), max: Math.round(67000 * 24.35 * 1.25) };
+  const cenik = (t) => LIST[String(t.model || '').toLowerCase()] || LIST.mini;
+  const L = (n) => Math.round(n).toLocaleString('cs-CZ') + ' L$';
+  const dt = (d) => new Date(d).toLocaleString('cs-CZ');
+
+  // Pozvaní od A
+  const pozvani = await prisma.gamePlayer.findMany({
+    where: { OR: [{ invited_by_id: a.id }].concat(a.ref_id ? [{ invited_by_ref: a.ref_id }] : []) },
+    select: { id: true, nick: true, created_at: true, hra_s_celkem: true }
+  });
+  const ids = pozvani.map((p) => p.id);
+  const P = {}; pozvani.forEach((p) => { P[p.id] = p; });
+
+  // Provize pro A (jednotlivé doručenky), přiřazené pozvanému podle spot_id "nakup:<id>:…"
+  const provize = await prisma.gameDelivery.findMany({ where: { player_id: a.id, kind: 'cash', popis: { startsWith: 'Provize' } },
+    select: { amount: true, spot_id: true, created_at: true } });
+  const claims = await prisma.gameSpotClaim.findMany({ where: { player_id: { in: ids.length ? ids : [-1] } }, select: { player_id: true, spot_id: true } });
+  const majitel = {}; claims.forEach((c) => { majitel[c.spot_id] = c.player_id; });
+  const provizeZa = {}; let provizeNeprirazene = 0, provizeCelkem = 0;
+  provize.forEach((d) => {
+    const amt = Number(d.amount) || 0; provizeCelkem += amt;
+    const m = /^nakup:(\d+):/.exec(String(d.spot_id || '')); const za = m ? Number(m[1]) : majitel[d.spot_id];
+    if (za && P[za]) provizeZa[za] = (provizeZa[za] || 0) + amt; else provizeNeprirazene += amt;
+  });
+
+  // Obchody se stroji: pozvaní → B (a obecně cokoli od kohokoli k B)
+  const obch = await prisma.gameTrade.findMany({ where: { stav: 'prijato', predmet: { in: ['stroj', 'pradlomat'] } },
+    select: { id: true, from_id: true, to_id: true, smer: true, predmet: true, model: true, cena: true, created_at: true, resolved_at: true } });
+  const prodeje = obch.map((t) => {
+    const prod = t.smer === 'koupim' ? t.to_id : t.from_id, kup = t.smer === 'koupim' ? t.from_id : t.to_id;
+    return { id: t.id, prod, kup, cena: Number(t.cena) || 0, seznam: cenik(t), model: t.model, kdy: t.resolved_at || t.created_at };
+  });
+  const odPozvanych = prodeje.filter((x) => x.kup === b.id && P[x.prod]);
+  const odJinych = prodeje.filter((x) => x.kup === b.id && !P[x.prod] && x.prod !== a.id);
+  const slevaOd = (arr) => arr.reduce((s, x) => s + Math.max(0, x.seznam - x.cena), 0);
+
+  out.push('═══ OKRUH: zvoucí ' + a.nick + ' (#' + a.id + ')  →  kupec ' + b.nick + ' (#' + b.id + ') ═══');
+  out.push('Pozvaných účtů od ' + a.nick + ': ' + pozvani.length + ' (z toho obchodovalo s ' + b.nick + ': ' + new Set(odPozvanych.map((x) => x.prod)).size + ')');
+  out.push('');
+  out.push('1) PROVIZE pro ' + a.nick + ' z účtů, které pozval: ' + L(provizeCelkem) + ' (přiřazeno ke konkrétním účtům ' + L(provizeCelkem - provizeNeprirazene) + ')');
+  out.push('   z toho z účtů, které pak prodaly stroj ' + b.nick + ': ' + L(odPozvanych.reduce((s, x, i, arr) => arr.findIndex((y) => y.prod === x.prod) === i ? s + (provizeZa[x.prod] || 0) : s, 0)));
+  out.push('');
+  out.push('2) STROJE prodané ' + b.nick + ' účty pozvanými od ' + a.nick + ': ' + odPozvanych.length + ' ks');
+  odPozvanych.sort((x, y) => new Date(x.kdy) - new Date(y.kdy)).forEach((x) => out.push('   #' + x.id + '  ' + dt(x.kdy) + '  ' + P[x.prod].nick + ' → ' + b.nick
+    + '  ' + (x.model || '?') + '  cena ' + L(x.cena) + ' / ceník ' + L(x.seznam) + '  (' + Math.round(x.cena / x.seznam * 100) + ' %)  sleva ' + L(Math.max(0, x.seznam - x.cena))));
+  out.push('   Sleva ' + b.nick + ' oproti ceníku: ' + L(slevaOd(odPozvanych)));
+  out.push('');
+  out.push('3) Jiné nákupy ' + b.nick + ' (od účtů, které ' + a.nick + ' nepozval): ' + odJinych.length + ' ks, sleva oproti ceníku ' + L(slevaOd(odJinych)));
+  const levne = odJinych.filter((x) => x.cena < 0.3 * x.seznam);
+  if (levne.length) out.push('   z toho pod 30 % ceníku: ' + levne.length + ' ks, sleva ' + L(slevaOd(levne)));
+  out.push('');
+  const zisk = provizeCelkem + slevaOd(odPozvanych);
+  out.push('═══ SOUČET (okruh ' + a.nick + ' + ' + b.nick + ') ═══');
+  out.push('Provize ' + L(provizeCelkem) + '  +  sleva na strojích ' + L(slevaOd(odPozvanych)) + '  =  ' + L(zisk));
+  out.push('Pozn.: L$ jsou herní měna. Pro převod na Kč použij kurz hry; peníze reálně přišly jen z nákupů laundry/karet (GamePurchase).');
+
+  // Skutečné peníze, které pozvané účty a oba hráči zaplatili
+  const hrac = ids.concat([a.id, b.id]);
+  const nak = await prisma.gamePurchase.findMany({ where: { player_id: { in: hrac }, status: 'paid' }, select: { player_id: true, amount_cents: true, currency: true } });
+  let czk = 0; nak.forEach((n) => { czk += kcZ(n); });
+  out.push('Reálně zaplaceno těmito účty (pozvaní + ' + a.nick + ' + ' + b.nick + '): ' + Math.round(czk).toLocaleString('cs-CZ') + ' Kč v ' + nak.length + ' nákupech.');
+  res.send(out.join('\n'));
+}));
+
 // ─── Chyby z klientů (ukládání hry, chyby skriptu) ───────────────────────────
 router.get('/chyby', api(async (req, res) => {
   const vse = String(req.query.vse || '') === '1';
