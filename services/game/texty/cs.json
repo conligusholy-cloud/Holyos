@@ -3607,5 +3607,6 @@
   "veta.rozsirene_udaje_az_od": "Z čeho se ta cena skládá — majetek, hotovost, dluh — uvidíš, až budeš držet aspoň {p1} % firmy.",
   "hra.velikost_site": "Velikost sítě",
   "server.burza_je_docasne_pozastavena": "Burza je teď dočasně pozastavená. Rozjednané obchody se dokončit dají, nové se zatím uzavřít nedají.",
-  "dor.odskodne": "Odškodné s omluvou: {p1}"
+  "dor.odskodne": "Odškodné s omluvou: {p1}",
+  "server.tvuj_podil_se_mezitim_zmenil": "Tvůj podíl v té firmě se mezitím změnil. Otevři nabídku znovu a zkus to."
 }
