@@ -1708,13 +1708,15 @@
           + '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="zl-zapnuto"' + (P.zapnuto ? ' checked' : '') + '> <span class="note">Automatické řízení ve hře (zatím bez účinku)</span></label></div>';
       }).catch(function (e) { chyba('zl-pravidla', e); });
     }
-    document.getElementById('zl-uloz').onclick = function () {
+    function zlUloz() {
       var b = {};
       [].forEach.call(document.querySelectorAll('[data-zl]'), function (i) { b[i.getAttribute('data-zl')] = i.value; });
       [].forEach.call(document.querySelectorAll('[data-zlb]'), function (i) { b[i.getAttribute('data-zlb')] = i.checked; });
       var z = document.getElementById('zl-zapnuto'); if (z) b.zapnuto = z.checked;
-      post('/zlocin/pravidla', b).then(function () { document.getElementById('zl-stav').textContent = 'Uloženo.'; loadZlocin(); })
-        .catch(function (e) { document.getElementById('zl-stav').textContent = e.message; });
+      return post('/zlocin/pravidla', b).then(function () { document.getElementById('zl-stav').textContent = 'Uloženo.'; });
+    }
+    document.getElementById('zl-uloz').onclick = function () {
+      zlUloz().then(loadZlocin).catch(function (e) { document.getElementById('zl-stav').textContent = e.message; });
     };
     function zlTabulka(rows, titulek) {
       if (!rows.length) return '<p class="note">' + esc(titulek) + ': nikdo.</p>';
@@ -1736,7 +1738,8 @@
     }
     document.getElementById('zl-spust').onclick = function () {
       var box = document.getElementById('zl-body'); box.innerHTML = '<p class="note">Vyhodnocuji…</p>';
-      get('/zlocin/nanecisto').then(function (j) {
+      // Nejdřív uložíme rozeditovaná pravidla, ať se vyhodnocení opře o to, co je vidět ve formuláři
+      zlUloz().then(function () { return get('/zlocin/nanecisto'); }).then(function (j) {
         document.getElementById('zl-sum').innerHTML = '<p class="note">Z ' + cz(j.celkem_hracu) + ' hráčů by do kontroly spadlo <b>' + j.souhrn.kontrol + '</b>, celková škoda ' + cz(j.souhrn.skoda) + ' L$, zmrazit by se mělo ' + cz(j.souhrn.zmrazit) + ' L$. Škoda = provize + sleva na strojích oproti ceníku; peníze, které stroje vygenerovaly, se zatím nepočítají.</p>';
         box.innerHTML = zlTabulka(j.kontrola, 'Do kontroly') + zlTabulka(j.na_hrane, 'Na hraně (blízko pravidla)');
         [].forEach.call(box.querySelectorAll('[data-detail]'), function (b) { b.onclick = function () { detail(b.getAttribute('data-detail')); }; });
