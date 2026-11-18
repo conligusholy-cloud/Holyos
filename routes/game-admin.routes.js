@@ -286,6 +286,14 @@ router.post('/model-srovnat', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(S.tiskModelSrovnat(z));
 }));
 
+// GET /stav-rozpad?nick=... → co ve stavu hry zabírá místo.
+// Stav se posílá při každém uložení, takže jeho velikost platí hráč mobilními
+// daty i čekáním. Bez rozpadu se nedá poznat, co má smysl zmenšovat.
+router.get('/stav-rozpad', api(async (req, res) => {
+  const { stavRozpad } = require('../services/game/dohled');
+  res.type('text/plain; charset=utf-8').send(await stavRozpad(req.query.nick));
+}));
+
 // GET /odkazy-rozpor → u koho se rozchází počet přivedených hráčů.
 // Přivedenými se násobí tržba celé sítě, takže až se hotovost přesune na
 // server, bude z rozdílu v přehledu rozdíl v penězích.

@@ -241,6 +241,53 @@ async function skladChybi(dnu) {
 // Zajímá nás rozptyl, ne průměr: když se devadesát hráčů shodne do procenta
 // a tři se rozcházejí o polovinu, není to chyba vzorce, ale tři případy
 // k prohlédnutí.
+// Co ve stavu hry zabírá místo.
+//
+// Stav se posílá na server při každém uložení, tedy u aktivního hráče každých
+// patnáct vteřin. U největších hráčů je to přes půl megabajtu — z telefonu
+// a z mobilních dat. Strop je sice tři megabajty, takže zatím nic nepadá, ale
+// než se začne cokoli zmenšovat, musí být vidět, co z toho ten objem dělá.
+//
+// Měří se velikost každé položky nejvyšší úrovně, jak ji vidí JSON — tedy
+// přesně to, co jde po drátě.
+async function stavRozpad(nick) {
+  const kde = String(nick || '').trim()
+    ? { nick: String(nick).trim() }
+    : { disabled: false };
+  const hraci = await prisma.gamePlayer.findMany({
+    where: kde, select: { id: true, nick: true, state: true }, take: 400 });
+  const s = hraci.map((h) => ({ h, velikost: h.state ? JSON.stringify(h.state).length : 0 }))
+    .sort((a, b) => b.velikost - a.velikost);
+  if (!s.length || !s[0].velikost) return 'Žádný uložený stav.';
+
+  const out = [];
+  out.push('CO VE STAVU HRY ZABÍRÁ MÍSTO');
+  out.push('Stav jde na server při každém uložení — u aktivního hráče jednou za');
+  out.push('patnáct vteřin. Strop je ' + Math.round(3000000 / 1024) + ' kB.');
+  out.push('');
+  const kb = (n) => (Math.round(n / 102.4) / 10).toFixed(1).padStart(8) + ' kB';
+  s.slice(0, 5).forEach(({ h, velikost }) => {
+    out.push(String(h.nick || ('#' + h.id)).padEnd(20).slice(0, 20) + kb(velikost));
+    const st = h.state || {};
+    Object.keys(st)
+      .map((k) => ({ k, v: JSON.stringify(st[k] == null ? null : st[k]).length }))
+      .sort((a, b) => b.v - a.v)
+      .slice(0, 6)
+      .forEach((x) => {
+        const podil = Math.round((x.v / velikost) * 100);
+        out.push('    ' + String(x.k).padEnd(16).slice(0, 16) + kb(x.v)
+          + String(podil + ' %').padStart(7)
+          + (Array.isArray(st[x.k]) ? '   ' + st[x.k].length + ' položek'
+            : (st[x.k] && typeof st[x.k] === 'object'
+              ? '   ' + Object.keys(st[x.k]).length + ' klíčů' : '')));
+      });
+    out.push('');
+  });
+  out.push('Co z toho je kopie serverových dat (města, místa), se dá při');
+  out.push('ukládání vynechat a po načtení si to hra stáhne znovu.');
+  return out.join('\n');
+}
+
 // Sdílené odkazy: co o nich ví hra a co server.
 //
 // Přivedení hráči zvedají návštěvnost, a tou se násobí tržba celé sítě —
@@ -581,5 +628,5 @@ function start() {
   console.log('[game-dohled] denní přehled pojistek běží');
 }
 
-module.exports = { start, doLogu, stropPrehled, skladChybi, nastaveniPrehled, ziskRozbor, odkazyRozpor,
+module.exports = { start, doLogu, stropPrehled, skladChybi, nastaveniPrehled, ziskRozbor, odkazyRozpor, stavRozpad,
   vlastnictvi, ziskSrovnani };
