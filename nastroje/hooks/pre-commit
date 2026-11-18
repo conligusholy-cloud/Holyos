@@ -64,6 +64,17 @@ if git diff --cached --name-only | grep -qE 'nastroje/texty-prelozit'; then
   fi
 fi
 
+# Dividendová politika. Rozhoduje, kolik peněz měsíčně odejde z firmy —
+# a jestli se ztráta krátí stejně jako zisk, což by byl úhyb většinového
+# podílníka na majitele.
+if git diff --cached --name-only | grep -qE 'services/game/(dividenda|finance)'; then
+  if ! node nastroje/tdividenda.js; then
+    echo ""
+    echo "STOP: dividendová politika nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Veřejná nabídka na odkup. Jde o cizí firmu a cizí peníze; jedna špatně
 # spočítaná cena za procento znamená prodanou půlku firmy za cenu oběda.
 if git diff --cached --name-only | grep -qE 'services/game/prevzeti'; then

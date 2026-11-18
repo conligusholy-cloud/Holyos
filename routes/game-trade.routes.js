@@ -935,6 +935,54 @@ router.post('/trade/prevzeti', hrac, api(async (req, res) => {
   res.json({ ok: true, nabidka: PREVZETI.verejna(t, req.player.id) });
 }));
 
+// POST /trade/dividenda { firma_id, pct } → většinový podílník určuje,
+// kolik procent měsíčního zisku firma vyplácí.
+//
+// Je to první pravomoc, kterou většina ve hře má, a schválně je úzká: mění
+// se jedno číslo a nic jiného. Nikdo nesahá na cizí uloženou hru — majitel
+// si dál staví, co chce, jen mu z firmy odchází víc nebo míň peněz.
+router.post('/trade/dividenda', hrac, api(async (req, res) => {
+  const DIVIDENDA = require('../services/game/dividenda');
+  const b = req.body || {};
+  const firmaId = parseInt(b.firma_id, 10) || 0;
+  const firma = await prisma.gamePlayer.findUnique({ where: { id: firmaId } });
+  if (!firma || firma.disabled) return res.status(404).json({ error: stx(req)('server.takovy_hrac_tu_neni') });
+
+  // Většinu má člověk, ne řádka — dva podíly téhož investora se sčítají.
+  const vsechny = await prisma.gameEquity.findMany({
+    where: { firma_id: firmaId, stav: 'bezi' }, select: { investor_id: true, podil: true } });
+  const souhrn = new Map();
+  vsechny.forEach((e) => souhrn.set(e.investor_id,
+    (souhrn.get(e.investor_id) || 0) + (e.podil || 0)));
+  const seznam = Array.from(souhrn, ([investor_id, podil]) => ({ investor_id, podil }));
+  if (!DIVIDENDA.smiMenit(seznam, req.player.id)) {
+    return res.status(403).json({ error: stx(req)('server.dividendu_urcuje_vetsinovy_podilnik') });
+  }
+
+  const pct = DIVIDENDA.platna(b.pct);
+  if (pct === DIVIDENDA.platna(firma.dividenda_pct)) return res.json({ ok: true, pct });
+
+  await prisma.gamePlayer.update({ where: { id: firmaId },
+    data: { dividenda_pct: pct, dividenda_kdo: req.player.id, dividenda_at: new Date() } });
+
+  // Majitel i ostatní podílníci se to musí dozvědět. Mění se jim příjem —
+  // zjistit to až z výplaty by bylo nepěkné překvapení.
+  const komu = Array.from(new Set(seznam.map((e) => e.investor_id).concat([firmaId])))
+    .filter((x) => x !== req.player.id);
+  if (komu.length) {
+    await prisma.gameDelivery.createMany({ data: komu.map((pid) => ({
+      player_id: pid, kind: 'zprava',
+      popis: req.player.nick + ' nastavil ve firmě ' + firma.nick + ' výplatu zisku na '
+        + Math.round(pct * 100) + ' %',
+      text_kod: 'dor.dividenda_zmenena',
+      text_data: { p1: req.player.nick, p2: firma.nick, p3: Math.round(pct * 100) },
+    })) });
+  }
+  console.log('[game] dividenda: ' + req.player.nick + ' → ' + firma.nick
+    + ' · ' + Math.round(pct * 100) + ' %');
+  res.json({ ok: true, pct });
+}));
+
 // GET /trade/prevzeti → nabídky, které se mě týkají
 router.get('/trade/prevzeti', hrac, api(async (req, res) => {
   res.json({ ok: true, nabidky: await PREVZETI.proHrace(req.player.id) });
@@ -1050,11 +1098,36 @@ router.get('/trade/finance', hrac, api(async (req, res) => {
   // Čteme to z posledního uloženého stavu té firmy — stejné číslo, podle
   // kterého se podíl o půlnoci herního měsíce doopravdy vyplácí.
   const firmy = new Map();
+  const politiky = new Map();
   for (const e of podily) {
     const kdo = e.firma_id;
     if (firmy.has(kdo)) continue;
-    const f = await prisma.gamePlayer.findUnique({ where: { id: kdo }, select: { state: true } });
+    const f = await prisma.gamePlayer.findUnique({ where: { id: kdo },
+      select: { state: true, dividenda_pct: true, dividenda_kdo: true, dividenda_at: true } });
     firmy.set(kdo, Math.round(acct._zbydeMesicne(stavu(f)) || 0));
+    politiky.set(kdo, f || {});
+  }
+  // Dividendová politika firmy a kdo ji určuje. Musí ji vidět majitel
+  // i podílníci — je to jediné číslo, které mění, kolik komu teče.
+  const DIVIDENDA = require('../services/game/dividenda');
+  async function politika(firmaId) {
+    const f = politiky.get(firmaId) || {};
+    const vsechny = await prisma.gameEquity.findMany({
+      where: { firma_id: firmaId, stav: 'bezi' }, select: { investor_id: true, podil: true } });
+    // Dva podíly téhož investora se sčítají — většinu má člověk, ne řádka.
+    const souhrn = new Map();
+    vsechny.forEach((e) => souhrn.set(e.investor_id,
+      (souhrn.get(e.investor_id) || 0) + (e.podil || 0)));
+    const seznam = Array.from(souhrn, ([investor_id, podil]) => ({ investor_id, podil }));
+    const urcuje = DIVIDENDA.kdoUrcuje(seznam);
+    let nick = null;
+    if (urcuje) {
+      const h = await prisma.gamePlayer.findUnique({ where: { id: urcuje },
+        select: { nick: true, company: true } });
+      if (h) nick = h.company || h.nick;
+    }
+    return { pct: DIVIDENDA.platna(f.dividenda_pct), urcuje, urcuje_nick: nick,
+      smim: urcuje === ja, kdy: f.dividenda_at || null };
   }
   // U podílu je srozumitelnější název firmy než přezdívka hráče — kupuje se
   // kus firmy, ne kus člověka. Bereme aktuální název, ne ten z chvíle prodeje.
@@ -1087,8 +1160,11 @@ router.get('/trade/finance', hrac, api(async (req, res) => {
       podil: e.podil, cena: e.cena, vyplaceno: e.vyplaceno, stav: e.stav,
       // Co by z podílu přišlo při dnešním výdělku firmy. Záporné = firma
       // prodělává a podílník se na ztrátě podílí stejným dílem.
-      mesicne: Math.round((firmy.get(e.firma_id) || 0) * e.podil),
+      mesicne: DIVIDENDA.castka(firmy.get(e.firma_id) || 0, e.podil,
+        (politiky.get(e.firma_id) || {}).dividenda_pct),
       odkup: Math.round(e.cena * ODKUP_NASOBEK), dalsi: e.dalsi_at })),
+    dividendy: Object.fromEntries(await Promise.all(
+      Array.from(politiky.keys()).map(async (id) => [id, await politika(id)]))),
     odkup_nasobek: ODKUP_NASOBEK });
 }));
 

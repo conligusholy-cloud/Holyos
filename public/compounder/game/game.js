@@ -9055,6 +9055,63 @@ function podilRadek(e, mam) {
       + '</div>'
     + '</div>';
 }
+// Dividendová politika firmy: kolik procent měsíčního zisku se vyplácí
+// podílníkům. Určuje ji ten, kdo drží víc než polovinu — majitel ne.
+function dividendaFirmy(id) {
+  return (FINANCE && FINANCE.dividendy && FINANCE.dividendy[id]) || null;
+}
+function dividendaRadek(id, mojeFirma) {
+  var d = dividendaFirmy(id);
+  if (!d) return '';
+  var pct = Math.round(d.pct * 100);
+  return '<div class="row" style="margin-top:6px"><span class="muted small">'
+    + esc(tx('dividenda.vyplaci_se')) + '</span><span class="' + (pct < 100 ? 'warn' : '') + '">'
+    + pct + ' %</span></div>'
+    + '<p class="fine">'
+    + (d.urcuje
+        ? (d.smim ? esc(tx('dividenda.urcujes_ty'))
+          : tx('veta.dividendu_urcuje', { p1: esc(d.urcuje_nick || '') }))
+        : esc(tx(mojeFirma ? 'dividenda.nikdo_neurcuje_moje' : 'dividenda.nikdo_neurcuje')))
+    + '</p>'
+    + (d.smim ? '<div class="gcard-act"><button class="btn sm" data-dividenda="' + id + '">'
+        + esc(tx('dividenda.nastavit')) + '</button></div>' : '');
+}
+// Okno na nastavení. Je v něm jediné číslo, protože jediné číslo se tu mění:
+// zbytek firmy zůstává majiteli, nikdo mu do ní nesahá.
+function dividendaSheet(id, nazev, mesicneTed) {
+  var d = dividendaFirmy(id); if (!d) return;
+  var ted = Math.round(d.pct * 100);
+  sheet('<h3>' + tx('veta.vyplata_zisku_ve_firme', { p1: esc(nazev || '') }) + '</h3>'
+    + '<p class="muted small">' + esc(tx('veta.dividenda_popis')) + '</p>'
+    + '<label class="fld"><span>' + esc(tx('dividenda.kolik_se_vyplaci')) + '</span>'
+    + '<input id="dv-pct" class="inp" type="number" inputmode="numeric" min="0" max="100" value="'
+    + ted + '"></label>'
+    + '<div class="kv souhrn"><span>' + esc(tx('dividenda.tobe_mesicne')) + '</span>'
+    + '<b id="dv-vysledek">\u2014</b></div>'
+    + '<p class="fine">' + esc(tx('veta.dividenda_rada')) + '</p>'
+    + '<button class="btn big" id="dv-ok" style="width:100%;margin-top:10px">'
+    + esc(tx('hra.ulozit')) + '</button>');
+  var pct = function () {
+    var v = Math.round(Number($('dv-pct').value) || 0);
+    return Math.max(0, Math.min(100, v)) / 100;
+  };
+  var prepocti = function () {
+    if (Number($('dv-pct').value) > 100) $('dv-pct').value = 100;
+    // Náhled se počítá z toho, co teče teď, přepočtené na novou politiku.
+    var zaklad = d.pct > 0 ? mesicneTed / d.pct : 0;
+    $('dv-vysledek').textContent = kcFull(Math.round(zaklad * pct()));
+  };
+  $('dv-pct').oninput = prepocti; prepocti();
+  $('dv-ok').onclick = function () {
+    $('dv-ok').disabled = true;
+    apiJson('/trade/dividenda', { firma_id: id, pct: pct() }).then(function (r) {
+      if (!r.ok) { $('dv-ok').disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+      closeSheet(); FINANCE = null; loadTrades(paintMe);
+      toast(tx('veta.vyplata_nastavena_na', { p1: Math.round(r.j.pct * 100) }), 'ok', true);
+    }).catch(function () { $('dv-ok').disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+  };
+}
+
 function podilyHtml() {
   if (!FINANCE) return '';
   var moje = (FINANCE.podily || []).filter(function (e) { return e.moje === 'mam' && bezici(e); });
@@ -9065,18 +9122,34 @@ function podilyHtml() {
     var celkem = ciziVeMne.reduce(function (a, e) { return a + e.podil; }, 0);
     var mesicne = ciziVeMne.reduce(function (a, e) { return a + e.mesicne; }, 0);
     h += tx('veta.p_class_muted_small_style_margin_4', { p1: tx('veta.podilnikum_z_ni_mesicne_odchazi', { p1: Math.round(celkem * 100), p2: kcFull(mesicne) }), p2: (mesicne < 0 ? ' ' + esc(tx('hra.pri_ztrate_ti_naopak_doplaceji')) : '.') })
+      + dividendaRadek(ME && ME.id, true)
       + ciziVeMne.map(function (e) { return podilRadek(e, false); }).join('');
   }
   if (moje.length) {
+    var videno = {};
+    moje.forEach(function (e) {
+      e.prvni_v_firme = !videno[e.kdo_id]; videno[e.kdo_id] = true;
+    });
     var nese = moje.reduce(function (a, e) { return a + e.mesicne; }, 0);
     var dal = moje.reduce(function (a, e) { return a + e.cena; }, 0);
     var vzal = moje.reduce(function (a, e) { return a + e.vyplaceno; }, 0);
     h += '<h3 style="margin-top:' + (ciziVeMne.length ? '18px' : '2px') + tx('veta.h3_p_class_muted_small_style_5', { p1: esc(tx('hra.tvoje_podily_v_cizich_firmach')), p2: kcFull(dal), p3: kcFull(vzal), p4: kcFull(nese) })
-      + moje.map(function (e) { return podilRadek(e, true); }).join('');
+      + moje.map(function (e) { return podilRadek(e, true)
+          + (e.prvni_v_firme ? dividendaRadek(e.kdo_id, false) : ''); }).join('');
   }
   return h + '</div>';
 }
 function bindPodily() {
+  [].forEach.call($('me-body').querySelectorAll('[data-dividenda]'), function (b) {
+    b.onclick = function () {
+      var id = Number(b.getAttribute('data-dividenda'));
+      var mych = ((FINANCE && FINANCE.podily) || []).filter(function (x) {
+        return x.moje === 'mam' && x.kdo_id === id; });
+      var nazev = mych.length ? (mych[0].kdo_firma || mych[0].kdo) : (ME && ME.company) || '';
+      var mesicne = mych.reduce(function (a, x) { return a + x.mesicne; }, 0);
+      dividendaSheet(id, nazev, mesicne);
+    };
+  });
   [].forEach.call($('me-body').querySelectorAll('[data-odkup-ja]'), function (b) {
     b.onclick = function () {
       var id = Number(b.getAttribute('data-odkup-ja'));

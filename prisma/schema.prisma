@@ -7669,6 +7669,15 @@ model GamePlayer {
   hra_den       String?   @db.VarChar(10)
   hra_at        DateTime?
 
+  // Dividendová politika firmy: kolik procent měsíčního zisku se vyplácí
+  // podílníkům. Jedna = sto procent, jak se vyplácelo, než politika vznikla.
+  // Měnit ji smí jen podílník s víc než polovinou; majitel ne, jinak by si
+  // investory pozval a pak jim výplatu utnul. dividenda_kdo/at drží, čí ruka
+  // to byla a kdy — je to cizí zásah do vlastní firmy a musí být vidět.
+  dividenda_pct Float    @default(1)
+  dividenda_kdo Int?
+  dividenda_at  DateTime?
+
   // Kdy si hráč vyzvedl kartičky za sledování na Instagramu. Jednou za účet.
   instagram_at  DateTime?
   // Totéž pro dárek za sledování stránky na Facebooku.

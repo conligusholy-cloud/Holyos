@@ -3525,5 +3525,20 @@
   "veta.vyhlaseni_popis": "Nabídka míří na všechny podílníky najednou. Každý se rozhodne sám, mlčení je odmítnutí.",
   "veta.vyhlaseni_rada": "Co se nevykoupí, propadne s lhůtou. Peníze platíš jen za podíly, které ti někdo doopravdy prodá.",
   "veta.na_to_nemas_volne_mas": "Na to nemáš. Volného máš {p1}.",
-  "veta.prevzeti_k_cemu_je": "Chceš ovládnout firmu, ve které drží podíl víc lidí? Vyhlas jednu cenu za procento pro všechny — nemusíš obcházet každého zvlášť."
+  "veta.prevzeti_k_cemu_je": "Chceš ovládnout firmu, ve které drží podíl víc lidí? Vyhlas jednu cenu za procento pro všechny — nemusíš obcházet každého zvlášť.",
+  "dividenda.vyplaci_se": "Z měsíčního zisku se vyplácí",
+  "dividenda.urcujes_ty": "Výplatu určuješ ty — držíš ve firmě většinu.",
+  "veta.dividendu_urcuje": "Výplatu určuje {p1}. Drží ve firmě většinu.",
+  "dividenda.nikdo_neurcuje": "Většinu tu nemá nikdo, takže výplatu nemění nikdo.",
+  "dividenda.nikdo_neurcuje_moje": "Většinu ve tvé firmě nemá nikdo, takže ti do výplaty nikdo nemluví.",
+  "dividenda.nastavit": "Nastavit výplatu zisku",
+  "dividenda.kolik_se_vyplaci": "Kolik procent zisku se vyplácí",
+  "dividenda.tobe_mesicne": "Tobě měsíčně",
+  "veta.vyplata_zisku_ve_firme": "Výplata zisku ve firmě {p1}",
+  "veta.dividenda_popis": "Určuješ jedinou věc: kolik procent měsíčního zisku firma vyplatí podílníkům. Zbytek zůstane ve firmě a roste v její hodnotě.",
+  "veta.dividenda_rada": "Peníze teď, nebo hodnota potom. Do ničeho jiného majiteli nemluvíš — staví a nakupuje si dál sám.",
+  "veta.vyplata_nastavena_na": "Výplata zisku nastavena na {p1} %.",
+  "hra.ulozit": "Uložit",
+  "server.dividendu_urcuje_vetsinovy_podilnik": "Výplatu zisku určuje podílník s víc než polovinou firmy.",
+  "dor.dividenda_zmenena": "{p1} nastavil ve firmě {p2} výplatu zisku na {p3} % měsíčního zisku."
 }

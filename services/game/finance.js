@@ -16,6 +16,7 @@
 'use strict';
 
 const { prisma } = require('../../config/database');
+const DIVIDENDA = require('./dividenda');
 
 const MESIC_MS = 43200000;          // herní měsíc = 12 skutečných hodin
 const ZMESKAT_BEZ_ZASTAVY = 3;      // kolik odpuštěných splátek má dlužník bez zástavy
@@ -222,7 +223,10 @@ async function vyplatyPodilu(ted) {
         continue;
       }
       const zbyde = zbydeMesicne(stavu(firma));
-      const castka = Math.round(zbyde * e.podil);
+      // Dividendová politika krátí jen zisk. Ztrátu nese podílník vždycky
+      // celou — jinak by si většinový nastavil před ztrátovým měsícem nulu
+      // a doplatek nechal na majiteli.
+      const castka = DIVIDENDA.castka(zbyde, e.podil, firma.dividenda_pct);
       const dalsi = new Date(ted.getTime() + MESIC_MS);
       if (!castka) {
         await prisma.gameEquity.update({ where: { id: e.id }, data: { dalsi_at: dalsi } });
