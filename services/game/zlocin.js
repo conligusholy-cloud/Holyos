@@ -146,6 +146,7 @@ async function nanecisto(prisma, pravidla) {
     const radek = {
       id: h.id, nick: h.nick, firma: h.company || null, zalozen: h.created_at,
       nadrazeny: (zvouci(h) || {}).nick || null,
+      linie: (function () { const a = []; ids.forEach((id) => { const l = strom.get(id) - 1; a[l] = (a[l] || 0) + 1; }); return Array.from(a, (x) => x || 0); })(),
       pod_celkem: ids.length, koncovych: koncove.length, mrtvych: mrtve.length, podil_mrtvych: podil,
       zivych_mezi: zivychMezi.length, hloubka,
       provize: Math.round(provize), nakupu_ks: kup.length, nakupu_od_mrtvych: odMrtvych, sleva: Math.round(sleva),

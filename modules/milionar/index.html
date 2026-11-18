@@ -1684,7 +1684,7 @@
     // ── Zločin: pravidla + vyhodnocení nanečisto ───────────────────────────
     var ZL_POLE = [
       ['min_pod', 'Min. počet koncových účtů pod hráčem', ''], ['podil_mrtvych', 'Podíl zrušených / nehrajících', '%'],
-      ['min_odehrano_min', 'Min. odehráno (kratší = bere se jako zrušený)', 'min'], ['max_hloubka', 'Hloubka stromu pozvaných', 'úrovní'],
+      ['min_odehrano_min', 'Min. odehráno (kratší = bere se jako zrušený)', 'min'], ['max_hloubka', 'Kolik linií pod hráčem se počítá (1 = jen jím přivedení)', 'linií'],
       ['koef_zabaveni', 'Zmrazení při zahájení kontroly (× škoda)', '×'], ['trest_nejnizsi', 'Trest nejnižší (× škoda)', '×'],
       ['trest_stredni', 'Trest střední (× škoda)', '×'], ['trest_nejvyssi', 'Trest nejvyšší (× škoda)', '×'],
       ['kontrola_mesicu', 'Kontrola trvá', 'herních měs.'], ['soud_mesicu', 'Soud trvá', 'herních měs.'],
@@ -1726,7 +1726,9 @@
         + rows.map(function (r) {
           return '<tr><td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + r.id + '">' + esc(r.firma || r.nick) + '</b>'
             + '<div class="note">' + esc(r.nick) + (r.nadrazeny ? ' · pozval ' + esc(r.nadrazeny) : '') + (r.typ === 'kupec' ? ' · <b style="color:#fbbf24">KUPEC</b> (skupuje od zrušených účtů)' : '') + '</div></td>'
-            + '<td class="num">' + cz(r.pod_celkem) + '</td><td class="num">' + cz(r.koncovych) + '</td>'
+            + '<td class="num">' + cz(r.pod_celkem)
+            + (r.linie && r.linie.length ? '<div class="note">' + r.linie.map(function (n, i) { return (i + 1) + '. linie: ' + n; }).join(' · ') + '</div>' : '')
+            + '</td><td class="num">' + cz(r.koncovych) + '</td>'
             + '<td class="num"><b style="color:#f87171">' + cz(r.mrtvych) + '</b> <span class="note">(' + r.podil_mrtvych + ' %)</span></td>'
             + '<td class="num">' + cz(r.zivych_mezi) + '</td><td class="num">' + r.hloubka + '</td>'
             + '<td class="num">' + cz(r.provize) + '</td><td class="num">' + cz(r.nakupu_ks) + '<div class="note">od zrušených ' + cz(r.nakupu_od_mrtvych) + '</div></td><td class="num">' + cz(r.sleva) + '</td>'
