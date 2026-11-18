@@ -68,7 +68,7 @@ const MAX_CENA = 2000000000;
 function hrac(req, res, next) {
   acct._currentPlayer(req).then((p) => {
     if (!p) return res.status(401).json({ error: TEXTY.t('server.neprihlasen', {}, TEXTY.ZDROJ) });
-    req.player = p; next();
+    req.player = p; require('../services/game/pristupy').zapis(req, p.id, 'aktivita'); next();
     // Hláška se skládá v jazyce toho, KOMU ji posíláme. Na burze a v dražbě
     // se potkají dva hráči s různým nastavením a každý má dostat svoje.
   }).catch(next);
@@ -587,6 +587,7 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
     cena, karty, data, vzkaz: s(b.vzkaz, 200) || null,
   } });
   // AI hlídání vzkazu (na pozadí; při škodě/podezření jde upozornění do Velína)
+  require('../services/game/pristupy').zapis(req, req.player.id, 'nabidka', t.id);
   if (t.vzkaz) require('../services/game/moderace').zkontroluj({ player: req.player, zdroj: 'vzkaz', refId: t.id, text: t.vzkaz, komu: druhy.nick });
   res.json({ ok: true, trade: verejny(t, req.player.id) });
 }));
@@ -667,6 +668,7 @@ router.post('/trade/:id/counter', hrac, api(async (req, res) => {
     } });
   });
   } catch (e) { if (SOUBEH.odpoved(e, res, stx(req))) return; throw e; }
+  if (novy) require('../services/game/pristupy').zapis(req, req.player.id, 'protinavrh', novy.id);
   if (novy && novy.vzkaz) require('../services/game/moderace').zkontroluj({ player: req.player, zdroj: 'vzkaz', refId: novy.id, text: novy.vzkaz, komu: t.from_nick });
   res.json({ ok: true, trade: verejny(novy, req.player.id) });
 }));
@@ -694,6 +696,7 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
   const t = await prisma.gameTrade.findUnique({ where: { id } });
   if (!t) return res.status(404).json({ error: stx(req)('server.nabidka_nenalezena_3') });
   if (t.to_id !== req.player.id) return res.status(403).json({ error: stx(req)('server.prijmout_ji_muze_jen_ten_komu') });
+  if (t.stav === 'ceka') require('../services/game/pristupy').zapis(req, req.player.id, 'prijeti', t.id);
   if (t.stav !== 'ceka') return res.status(409).json({ error: stx(req)('server.tahle_nabidka_uz_neni_ve_hre_3') });
 
   const odesilatel = await prisma.gamePlayer.findUnique({ where: { id: t.from_id } });

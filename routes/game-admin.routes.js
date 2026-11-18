@@ -639,6 +639,15 @@ router.get('/players/:id', api(async (req, res) => {
     privedl_me: zvouci ? { id: zvouci.id, nick: zvouci.nick, firma: zvouci.company || zvouci.nick } : null,
   }, polozky, mista, ceka_hotovost: cekaHotovost,
   komunikace: await komunikaceHrace(id),
+  // Poslední přístupy (services/game/pristupy.js) + kdo další se objevil na stejném zařízení / otisku
+  pristupy: await (async () => {
+    const l = await prisma.gameAccess.findMany({ where: { player_id: id }, orderBy: { id: 'desc' }, take: 40 }).catch(() => []);
+    const fps = [...new Set(l.map((a) => a.fp).filter(Boolean))], devs = [...new Set(l.map((a) => a.dev).filter(Boolean))];
+    const jini = (fps.length || devs.length) ? await prisma.gameAccess.findMany({ where: { player_id: { not: id }, OR: [fps.length ? { fp: { in: fps } } : null, devs.length ? { dev: { in: devs } } : null].filter(Boolean) },
+      distinct: ['player_id'], select: { player_id: true }, take: 50 }).catch(() => []) : [];
+    const nn = jini.length ? await prisma.gamePlayer.findMany({ where: { id: { in: jini.map((x) => x.player_id) } }, select: { id: true, nick: true } }) : [];
+    return { log: l.map((a) => ({ kdy: a.created_at, druh: a.druh, ref: a.ref_id, ip: a.ip, dev: a.dev, fp: a.fp, hw: a.hw })), stejne_zarizeni: nn };
+  })(),
   privedeni: privedeni.map((h) => ({
     id: h.id, nick: h.nick, firma: h.company || (h.nick + ' s.r.o.'),
     kdy: h.invited_at || h.created_at, posledne: h.last_login_at,

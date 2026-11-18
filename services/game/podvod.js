@@ -21,13 +21,16 @@ const cenaSeznam = (t) => LIST[String(t.model || '').toLowerCase()] || LIST.mini
 const kc = (n) => Math.round(n).toLocaleString('cs-CZ');
 
 async function spocitej(prisma) {
-  const [hraci, obchody, davky, mista] = await Promise.all([
+  const [hraci, obchody, davky, mista, pristupy] = await Promise.all([
     prisma.gamePlayer.findMany({ select: { id: true, nick: true, created_at: true, hra_s_celkem: true, dev_pid: true, reg_ip: true,
       invited_by_id: true, invited_by_ref: true, ref_id: true, disabled: true, email: true, last_login_at: true } }),
     prisma.gameTrade.findMany({ where: { stav: 'prijato', predmet: { in: STROJ_PREDMET.concat(['pobocka']) } },
       select: { id: true, from_id: true, to_id: true, smer: true, predmet: true, model: true, cena: true, created_at: true, resolved_at: true } }),
     prisma.gameDelivery.findMany({ where: { kind: 'cash', popis: { startsWith: 'Provize' } }, select: { player_id: true, spot_id: true, amount: true } }),
     prisma.gameSpotClaim.findMany({ select: { player_id: true, spot_id: true } }),
+    // Přístupy za posledních 60 dní (services/game/pristupy.js) — před nasazením tabulky prázdné
+    prisma.gameAccess ? prisma.gameAccess.findMany({ where: { created_at: { gte: new Date(Date.now() - 60 * D) } },
+      select: { player_id: true, druh: true, ref_id: true, ip: true, dev: true, fp: true, hw: true, created_at: true }, orderBy: { id: 'asc' }, take: 300000 }).catch(() => []) : [],
   ]);
   const P = {}, podleRef = {};
   hraci.forEach((h) => { P[h.id] = h; if (h.ref_id) podleRef[h.ref_id] = h; h._s = { mule: 0, ben: 0, duvody: [], zisk: 0, prodalLevne: 0, koupilLevne: 0 }; });
@@ -37,7 +40,17 @@ async function spocitej(prisma) {
   // Skupiny podle zařízení a přesné IP
   const dev = {}, ip = {};
   hraci.forEach((h) => { if (h.dev_pid) (dev[h.dev_pid] = dev[h.dev_pid] || []).push(h); if (h.reg_ip) (ip[h.reg_ip] = ip[h.reg_ip] || []).push(h); });
-  const sousede = (h) => { const s = new Set(); (dev[h.dev_pid] || []).forEach((x) => s.add(x.id)); (ip[h.reg_ip] || []).forEach((x) => s.add(x.id)); s.delete(h.id); return s; };
+  // Zařízení a otisky ze záznamu přístupů: dev (id prohlížeče), fp (otisk prohlížeče — silné), hw (hardware — středně silné, stejný model telefonu)
+  const fpM = {}, hwM = {}, devA = {}, mojeFp = {}, mojeHw = {}, mojeDev = {};
+  const pridej = (map, k, h) => { if (!k || !h) return; const s = map[k] || (map[k] = new Set()); s.add(h.id); };
+  pristupy.forEach((a) => { const h = P[a.player_id]; if (!h) return;
+    pridej(fpM, a.fp, h); pridej(hwM, a.hw, h); pridej(devA, a.dev, h);
+    if (a.fp) (mojeFp[h.id] = mojeFp[h.id] || new Set()).add(a.fp); if (a.hw) (mojeHw[h.id] = mojeHw[h.id] || new Set()).add(a.hw); if (a.dev) (mojeDev[h.id] = mojeDev[h.id] || new Set()).add(a.dev); });
+  hraci.forEach((h) => { if (h.dev_pid) pridej(devA, h.dev_pid, h); });
+  const spolu = (h, map, moje) => { const s = new Set(); (moje[h.id] || []).forEach((k) => (map[k] || []).forEach((i) => s.add(i))); s.delete(h.id); return s; };
+  hraci.forEach((h) => { if (h.dev_pid) (mojeDev[h.id] = mojeDev[h.id] || new Set()).add(h.dev_pid); });
+  const zarSousede = (h) => { const s = spolu(h, devA, mojeDev); spolu(h, fpM, mojeFp).forEach((i) => s.add(i)); return s; };
+  const sousede = (h) => { const s = zarSousede(h); (ip[h.reg_ip] || []).forEach((x) => s.add(x.id)); s.delete(h.id); return s; };
 
   // Provize: kdo komu za koho
   const majitel = {}; mista.forEach((m) => { majitel[m.spot_id] = m.player_id; });
@@ -50,8 +63,25 @@ async function spocitej(prisma) {
     const prod = t.smer === 'koupim' ? t.to_id : t.from_id, kup = t.smer === 'koupim' ? t.from_id : t.to_id;
     const kdy = new Date(t.resolved_at || t.created_at).getTime();
     const pomer = STROJ_PREDMET.includes(t.predmet) ? (Number(t.cena) || 0) / cenaSeznam(t) : null;
-    return { prod: P[prod], kup: P[kup], cena: Number(t.cena) || 0, pomer, seznam: STROJ_PREDMET.includes(t.predmet) ? cenaSeznam(t) : 0, kdy };
+    return { id: t.id, prod: P[prod], kup: P[kup], cena: Number(t.cena) || 0, pomer, seznam: STROJ_PREDMET.includes(t.predmet) ? cenaSeznam(t) : 0, kdy };
   }).filter((x) => x.prod && x.kup);
+
+  // ── DŮKAZY ze záznamu přístupů ──
+  // a) Obchod: nabídku (nebo protinávrh) i přijetí udělalo stejné zařízení / stejný otisk → jeden člověk na obou stranách
+  const zaObchod = {}; pristupy.forEach((a) => { if (a.ref_id && ['nabidka', 'protinavrh', 'prijeti'].includes(a.druh)) (zaObchod[a.ref_id] = zaObchod[a.ref_id] || []).push(a); });
+  const jedenClovek = {}; // player id → [{ s: druhý, obchod, jak }]
+  obchody.forEach((t) => { const l = zaObchod[t.id] || []; const nab = l.filter((a) => a.druh !== 'prijeti'), pri = l.filter((a) => a.druh === 'prijeti');
+    nab.forEach((n) => pri.forEach((p) => { if (n.player_id === p.player_id) return;
+      const jak = (n.dev && n.dev === p.dev) ? 'stejné id prohlížeče' : (n.fp && n.fp === p.fp) ? 'stejný otisk prohlížeče' : null;
+      if (!jak) return;
+      [[n.player_id, p.player_id], [p.player_id, n.player_id]].forEach(([a, b]) => (jedenClovek[a] = jedenClovek[a] || []).push({ s: b, obchod: t.id, jak })); })); });
+  // b) Střídání: na stejném zařízení skončí účet A a do 3 minut je aktivní účet B (opakovaně)
+  const stridani = {}; // "a|b" → počet
+  const poZar = {}; pristupy.forEach((a) => { const k = a.fp || a.dev; if (k) (poZar[k] = poZar[k] || []).push(a); });
+  Object.keys(poZar).forEach((k) => { const l = poZar[k]; for (let i = 1; i < l.length; i++) {
+    const a = l[i - 1], b = l[i]; if (a.player_id === b.player_id) continue;
+    if (new Date(b.created_at) - new Date(a.created_at) < 3 * 60e3) { const kl = Math.min(a.player_id, b.player_id) + '|' + Math.max(a.player_id, b.player_id); stridani[kl] = (stridani[kl] || 0) + 1; } } });
+  const striduje = {}; Object.keys(stridani).forEach((kl) => { const [a, b] = kl.split('|').map(Number); [[a, b], [b, a]].forEach(([x, y]) => (striduje[x] = striduje[x] || []).push({ s: y, n: stridani[kl] })); });
 
   // Kdo skupuje levné stroje od více různých účtů (sběrač)
   const sberac = {};
@@ -60,8 +90,9 @@ async function spocitej(prisma) {
   // ── 1) POMOCNÝ ÚČET ──
   hraci.forEach((h) => {
     const s = h._s, d = (b, txt) => { s.mule += b; s.duvody.push({ r: 'pomocný', b, txt }); };
-    const naZar = h.dev_pid ? (dev[h.dev_pid] || []).length - 1 : 0, naIp = h.reg_ip ? (ip[h.reg_ip] || []).length - 1 : 0;
+    const naZar = zarSousede(h).size, naHw = spolu(h, hwM, mojeHw).size, naIp = h.reg_ip ? (ip[h.reg_ip] || []).length - 1 : 0;
     if (naZar >= 3) d(25, 'na stejném zařízení dalších ' + naZar + ' účtů'); else if (naZar >= 1) d(15, 'na stejném zařízení ještě ' + naZar + ' účet/y');
+    else if (naHw >= 1) d(8, 'stejný hardware (model zařízení) jako ' + naHw + ' účt(y) — středně silné');
     else if (naIp >= 3) d(6, 'ze stejné IP dalších ' + naIp + ' účtů (slabé — může být mobilní operátor)');
     const t0 = new Date(h.created_at).getTime();
     const davka = [...sousede(h)].map((i) => P[i]).filter((x) => Math.abs(new Date(x.created_at).getTime() - t0) < 3 * H).length;
@@ -81,6 +112,12 @@ async function spocitej(prisma) {
     const kSberaci = levne.filter((x) => sberac[x.kup.id] && sberac[x.kup.id].size >= 3 && !komuSvemu.includes(x));
     if (kSberaci.length) d(10, 'levně prodal hráči ' + kSberaci[0].kup.nick + ', který takto skoupil stroje od ' + sberac[kSberaci[0].kup.id].size + ' účtů');
     if (z && (nas.has(z.id) || moje.some((x) => x.kup.id === z.id))) d(10, 'zvoucí (' + z.nick + ') je ze stejného zařízení/IP nebo kupec');
+    const jc = jedenClovek[h.id] || [];
+    if (jc.length) { s.dukaz = true; const b = Math.min(60, 40 + (jc.length - 1) * 5); s.mule += 0; s.ben += 0;
+      s.duvody.push({ r: 'důkaz', b, txt: 'obchod ' + [...new Set(jc.map((x) => '#' + x.obchod))].slice(0, 3).join(', ') + ' s hráčem ' + [...new Set(jc.map((x) => (P[x.s] || {}).nick || '?'))].slice(0, 3).join(', ') + ' — nabídku i přijetí udělalo ' + jc[0].jak + ' (jeden člověk na obou stranách)' });
+      s.dukazB = b; }
+    const st = (striduje[h.id] || []).filter((x) => x.n >= 2);
+    if (st.length) { const b = st.some((x) => x.n >= 4) ? 25 : 15; s.duvody.push({ r: 'důkaz', b, txt: 'na stejném zařízení se střídá s ' + st.slice(0, 3).map((x) => ((P[x.s] || {}).nick || '?') + ' (' + x.n + '× do 3 min)').join(', ') }); s.stridaniB = b; }
     if (provizeZa[h.id] && (levne.length || smazan(h) || s30 < 1800)) d(5, 'vygeneroval provizi ' + kc(provizeZa[h.id].castka) + ' L$ pro ' + ((P[provizeZa[h.id].komu] || {}).nick || '?'));
   });
   const jeMule = (h) => h._s.mule >= 45;
@@ -104,16 +141,16 @@ async function spocitej(prisma) {
     }
     if (pozvani.length >= 3 && podezreli.length / pozvani.length >= 0.8) d(20, podezreli.length + ' z ' + pozvani.length + ' jeho pozvaných jsou podezřelé účty');
     // Stejné zařízení je silná stopa, samotná stejná IP slabá (mobilní operátor, rodina, kolej)
-    const muleZar = h.dev_pid ? (dev[h.dev_pid] || []).filter((x) => x.id !== h.id && jeMule(x)).length : 0;
-    const muleIp = h.reg_ip ? (ip[h.reg_ip] || []).filter((x) => x.id !== h.id && jeMule(x) && x.dev_pid !== h.dev_pid).length : 0;
+    const zs = zarSousede(h); const muleZar = [...zs].filter((i) => jeMule(P[i])).length;
+    const muleIp = h.reg_ip ? (ip[h.reg_ip] || []).filter((x) => x.id !== h.id && jeMule(x) && !zs.has(x.id)).length : 0;
     if (muleZar) d(20, 'sdílí zařízení s ' + muleZar + ' pomocnými účty'); else if (muleIp) d(4, 'stejná IP jako ' + muleIp + ' pomocných účtů (slabé)');
     if (s.zisk > 5e6) d(10, 'neoprávněný zisk ≈ ' + kc(s.zisk) + ' L$'); else if (s.zisk > 1e6) d(5, 'neoprávněný zisk ≈ ' + kc(s.zisk) + ' L$');
   });
 
   const out = {};
   hraci.forEach((h) => {
-    const s = h._s, mule = Math.min(99, s.mule), ben = Math.min(99, s.ben), pct = Math.max(mule, ben);
-    out[h.id] = { pct, role: pct < 20 ? null : (ben > mule ? 'příjemce' : 'pomocný účet'), mule, ben, zisk: Math.round(s.zisk),
+    const s = h._s, dk = (s.dukazB || 0) + (s.stridaniB || 0), mule = Math.min(99, s.mule + dk), ben = Math.min(99, s.ben + dk), pct = Math.max(mule, ben);
+    out[h.id] = { pct, dukaz: !!s.dukaz, role: pct < 20 ? null : (ben > mule ? 'příjemce' : 'pomocný účet'), mule, ben, zisk: Math.round(s.zisk),
       duvody: s.duvody.sort((a, b) => b.b - a.b).slice(0, 10) };
   });
   return out;

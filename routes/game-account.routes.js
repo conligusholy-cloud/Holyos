@@ -442,7 +442,7 @@ async function currentPlayer(req) {
 function requirePlayer(req, res, next) {
   currentPlayer(req).then((p) => {
     if (!p) return res.status(401).json({ error: stx(req)('server.nejsi_prihlaseny') });
-    req.player = p; next();
+    req.player = p; require('../services/game/pristupy').zapis(req, p.id, 'aktivita'); next();
   }).catch(next);
 }
 
@@ -902,6 +902,7 @@ router.post('/account/zacni', async (req, res, next) => {
         ...puvod(req) }
     });
     { const mod = require('../services/game/moderace').zkontroluj; mod({ player: p, zdroj: 'nick', text: p.nick }); if (p.company && p.company !== p.nick + ' s.r.o.') mod({ player: p, zdroj: 'firma', text: p.company }); }
+    require('../services/game/pristupy').zapis(req, p.id, 'registrace');
     try {
       await prisma.gameCard.createMany({ data: CARD_KINDS.map((k) => ({ player_id: p.id, kind: k })) });
     } catch (e) { console.warn('[game] uvítací karty:', e.message); }
@@ -959,6 +960,7 @@ router.post('/account/register', async (req, res, next) => {
         ...puvod(req) }
     });
     { const mod = require('../services/game/moderace').zkontroluj; mod({ player: p, zdroj: 'nick', text: p.nick }); if (p.company && p.company !== p.nick + ' s.r.o.') mod({ player: p, zdroj: 'firma', text: p.company }); }
+    require('../services/game/pristupy').zapis(req, p.id, 'registrace');
     // Dárek do začátku: jedna od každé zrychlující karty. Dostane ho jen nový
     // účet — ne ten, kdo si hru resetuje, jinak by si karty takhle „vyráběl".
     try {
@@ -1003,6 +1005,7 @@ router.post('/account/login', async (req, res, next) => {
     const ok = p && !p.disabled && p.password_hash && await bcrypt.compare(pwd, p.password_hash);
     if (!ok) return res.status(401).json({ error: stx(req)('server.nick_nebo_heslo_nesedi') });
     let hrac = await prisma.gamePlayer.update({ where: { id: p.id }, data: { last_login_at: new Date() } });
+    require('../services/game/pristupy').zapis(req, p.id, 'prihlaseni');
     // Účty z doby před pozvánkami si při prvním přihlášení nárokují svoje sdílené id.
     try { hrac = await narokujRef(hrac, (req.body || {}).ref); }
     catch (e) { console.warn('[game] pozvánky při přihlášení:', e.message); }

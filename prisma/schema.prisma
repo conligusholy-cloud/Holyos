@@ -8478,6 +8478,29 @@ model GameModerace {
   @@map("game_moderace")
 }
 
+// Přístupy hráčů — kdo, odkud, z jakého zařízení (services/game/pristupy.js).
+// druh: registrace | prihlaseni | aktivita | nabidka | protinavrh | prijeti (ref_id = id obchodu)
+// dev = trvalé id prohlížeče, fp = otisk prohlížeče, hw = otisk hardwaru. Pro odhalení multi účtů.
+model GameAccess {
+  id         Int      @id @default(autoincrement())
+  player_id  Int
+  druh       String   @db.VarChar(12)
+  ref_id     Int?
+  ip         String?  @db.VarChar(64)
+  dev        String?  @db.VarChar(40)
+  fp         String?  @db.VarChar(40)
+  hw         String?  @db.VarChar(40)
+  ua         String?  @db.VarChar(300)
+  created_at DateTime @default(now())
+
+  @@index([player_id, created_at])
+  @@index([dev])
+  @@index([fp])
+  @@index([hw])
+  @@index([ref_id])
+  @@map("game_access")
+}
+
 // Koho hráč nechce slyšet. Platí jednostranně: kdo blokuje, tomu už nic nepřijde.
 model GameBlock {
   id         Int      @id @default(autoincrement())

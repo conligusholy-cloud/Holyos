@@ -977,7 +977,7 @@
       if (!v) return '<span class="note">—</span>';
       var c = v.pct >= 70 ? '#f87171' : v.pct >= 40 ? '#fbbf24' : v.pct >= 20 ? '#94a3b8' : '#475569';
       var tip = (v.role ? v.role.toUpperCase() + '\n' : '') + (v.zisk ? 'neoprávněný zisk ≈ ' + cz(v.zisk) + ' L$\n' : '') + v.duvody.map(function (d) { return '+' + d.b + ' ' + d.txt; }).join('\n');
-      return '<b style="color:' + c + ';cursor:help" title="' + esc(tip || 'bez podezřelých signálů') + '">' + v.pct + ' %</b>'
+      return '<b style="color:' + c + ';cursor:help" title="' + esc(tip || 'bez podezřelých signálů') + '">' + v.pct + ' %</b>' + (v.dukaz ? ' <span title="Stejné zařízení obsloužilo obě strany obchodu — jeden člověk" style="color:#f87171">⚖</span>' : '')
         + (v.role ? '<div class="note" style="color:' + c + '">' + esc(v.role) + '</div>' : '');
     }
     function plCols() {
@@ -1049,6 +1049,11 @@
               + '<p class="note" style="margin:0 0 8px">Pomocný účet ' + p.podvod.mule + ' % · příjemce ' + p.podvod.ben + ' %. Odhad z kombinace signálů — rozhoduje člověk.</p>'
               + '<ul style="margin:0;padding-left:18px">' + p.podvod.duvody.map(function (d) { return '<li><b>+' + d.b + '</b> ' + esc(d.txt) + ' <span class="note">(' + esc(d.r) + ')</span></li>'; }).join('') + '</ul></div>' : '')
           + dosieHtml(p)
+          + ((j.pristupy && j.pristupy.log && j.pristupy.log.length) ? '<h3 style="font-size:14px;margin:0 0 8px">Přístupy <span class="note">(zařízení, otisk, IP — posledních 40)</span></h3>'
+              + (j.pristupy.stejne_zarizeni.length ? '<p class="note" style="margin:0 0 8px;color:#fbbf24">Na stejném zařízení / otisku hráli i: ' + j.pristupy.stejne_zarizeni.map(function (x) { return '<b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + x.id + '">' + esc(x.nick) + '</b>'; }).join(', ') + '</p>' : '')
+              + '<div class="tbl-wrap" style="margin-bottom:18px;max-height:260px;overflow:auto"><table class="data-table"><thead><tr><th>Kdy</th><th>Co</th><th>IP</th><th>Id prohlížeče</th><th>Otisk</th><th>Hardware</th></tr></thead><tbody>'
+              + j.pristupy.log.map(function (a) { return '<tr><td class="note">' + dt(a.kdy) + '</td><td>' + esc(a.druh) + (a.ref ? ' <span class="note">#' + a.ref + '</span>' : '') + '</td><td class="note">' + esc(a.ip || '—') + '</td><td class="note">' + esc(a.dev || '—') + '</td><td class="note">' + esc(a.fp || '—') + '</td><td class="note">' + esc(a.hw || '—') + '</td></tr>'; }).join('')
+              + '</tbody></table></div>' : '')
           + '<h3 style="font-size:14px;margin:0 0 8px">Komunikace s hráči <span class="note">(vzkazy u obchodů, staré zprávy, nick a firma — s posudkem AI)</span></h3>'
           + komunikaceHtml(j.komunikace || [])
           + '<div class="tbl-wrap" style="padding:14px 16px;margin-bottom:18px">'

@@ -12535,8 +12535,37 @@ function poradcePosli(q) {
     });
 }
 
+// Otisk zařízení pro ochranu proti multi účtům (posílá se v hlavičkách, hráči
+// se nikde neukazuje). fp = prohlížeč (canvas, WebGL, písma, obrazovka, jazyk…),
+// hw = hardware (WebGL čip, obrazovka, jádra, paměť, časová zóna) — přežije
+// smazání dat i jiný prohlížeč na stejném zařízení. Počítá se jednou.
+var OTISK = null;
+function otisk() {
+  if (OTISK) return OTISK;
+  var h = function (str) { var a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995; for (var i = 0; i < str.length; i++) { var c = str.charCodeAt(i); a = Math.imul(a ^ c, 16777619); b = Math.imul(b ^ c, 2246822507); } return ((a >>> 0).toString(36) + (b >>> 0).toString(36)).slice(0, 20); };
+  var cv = '', gl = '', fonty = '';
+  try { var c = document.createElement('canvas'); c.width = 240; c.height = 60; var x = c.getContext('2d');
+    x.textBaseline = 'top'; x.font = '16px Arial'; x.fillStyle = '#f60'; x.fillRect(100, 1, 62, 20); x.fillStyle = '#069'; x.fillText('Laundromat Tycoon ✓ ž 9', 2, 15);
+    x.fillStyle = 'rgba(102,204,0,0.7)'; x.font = '18px Georgia'; x.fillText('Pračka 18 kg €', 4, 32); cv = c.toDataURL(); } catch (e) { /* bez canvasu */ }
+  try { var g = document.createElement('canvas').getContext('webgl') || document.createElement('canvas').getContext('experimental-webgl');
+    if (g) { var d = g.getExtension('WEBGL_debug_renderer_info'); gl = [d ? g.getParameter(d.UNMASKED_VENDOR_WEBGL) : g.getParameter(g.VENDOR), d ? g.getParameter(d.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER), g.getParameter(g.MAX_TEXTURE_SIZE), g.getParameter(g.MAX_RENDERBUFFER_SIZE)].join('|'); } } catch (e) { /* bez WebGL */ }
+  try { var m = document.createElement('canvas').getContext('2d'), zaklad = 'mmmmmmmmmmlli1WW', sir = function (f) { m.font = '72px ' + f; return m.measureText(zaklad).width; }, b0 = sir('monospace');
+    fonty = ['Arial', 'Calibri', 'Cambria', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Ubuntu', 'Tahoma', 'Verdana', 'Courier New', 'Comic Sans MS', 'SF Pro Text', 'Noto Sans', 'Georgia', 'Trebuchet MS']
+      .map(function (f) { return sir("'" + f + "',monospace") !== b0 ? 1 : 0; }).join(''); } catch (e) { /* bez písem */ }
+  var n = navigator || {}, sc = screen || {}, tz = '';
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { /* nevadí */ }
+  var hw = [gl, sc.width + 'x' + sc.height + 'x' + sc.colorDepth, window.devicePixelRatio, n.hardwareConcurrency, n.deviceMemory, tz, n.maxTouchPoints, n.platform].join('#');
+  OTISK = { fp: h([hw, cv, fonty, (n.languages || []).join(','), n.userAgent].join('#')), hw: h(hw) };
+  return OTISK;
+}
+function hlavickyZarizeni() {
+  var o = {}; try { var ot = otisk(); o['X-LM-Fp'] = ot.fp; o['X-LM-Hw'] = ot.hw; var d = trvalePid(); if (d) o['X-LM-Dev'] = d; } catch (e) { /* nevadí */ }
+  return o;
+}
 function api(path, opts) {
-  return fetch('/api/game' + path, Object.assign({ credentials: 'same-origin' }, opts || {}))
+  opts = Object.assign({}, opts || {});
+  opts.headers = Object.assign({}, opts.headers || {}, hlavickyZarizeni());
+  return fetch('/api/game' + path, Object.assign({ credentials: 'same-origin' }, opts))
     .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); });
 }
 // ─── Překlady ────────────────────────────────────────────────────────────────
