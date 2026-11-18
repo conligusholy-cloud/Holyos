@@ -137,6 +137,16 @@ if git diff --cached --name-only | grep -qE 'services/game/brzda|routes/game-tra
   fi
 fi
 
+# Fond aliance. Počítají se v něm cizí peníze — kdo kolik vložil, co z toho
+# dostane a co si odnese při odchodu. Chyba o korunu se z provozu nepozná.
+if git diff --cached --name-only | grep -qE 'services/game/fond'; then
+  if ! node nastroje/tfond.js; then
+    echo ""
+    echo "STOP: výpočet fondu aliance nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Investiční aliance. Posouvá práva z člověka na blok — chyba tady znamená
 # moc nad cizí firmou, na kterou ten blok nemá, nebo ztrátu práva, které má.
 if git diff --cached --name-only | grep -qE 'services/game/(aliance|prava)'; then
