@@ -244,6 +244,15 @@ router.get('/sklad-rozdily', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(tiskSklad(await sklad()));
 }));
 
+// GET /sit-rozdily → vidí server stejnou síť jako hra?
+// Rozhoduje to o tom, jestli má vůbec smysl porovnávat zisk: dokud se
+// rozchází model stroje nebo skóre místa, nebyl by rozdíl chybou výpočtu,
+// ale tím, že se obě strany baví o jiné síti.
+router.get('/sit-rozdily', api(async (req, res) => {
+  const { sit, tiskSit } = require('../services/game/srovnani');
+  res.type('text/plain; charset=utf-8').send(tiskSit(await sit()));
+}));
+
 // GET /vlastnictvi → kdo kdy přišel o kus firmy a proč.
 // Volitelně ?firma=<id> nebo ?hrac=<id>, když jde o konkrétní spor.
 router.get('/vlastnictvi', api(async (req, res) => {

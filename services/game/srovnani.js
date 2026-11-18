@@ -337,5 +337,95 @@ function tiskSklad(rows) {
   return out.join('\n');
 }
 
-module.exports = { srovnani, tisk, evidence, tiskEvidence, sklad, tiskSklad,
+// ─── Vidí server stejnou síť jako hra? ──────────────────────────────────────
+// Evidence výš porovnává, na kterých MÍSTECH kdo stojí. Pro peníze je to
+// ale málo: o tržbě rozhoduje model stroje a skóre místa. Dokud se tyhle
+// dva údaje rozcházejí, nemá smysl porovnávat zisk — rozdíl by nebyl chybou
+// výpočtu, ale tím, že se obě strany baví o jiné síti.
+//
+// Výsledkem je jediné číslo, na kterém pokladna stojí: kolik procent
+// prádlomatů ve hře umí server ocenit přesně.
+async function sit() {
+  const EKO = require('./ekonomika');
+  const POZEMKY = require('./pozemky');
+  const hraci = await prisma.gamePlayer.findMany({
+    where: { disabled: false }, select: { id: true, nick: true, state: true } });
+  const claims = await prisma.gameSpotClaim.findMany({
+    select: { spot_id: true, player_id: true, model: true, rent: true,
+      pozemek: true, score: true } });
+  const podleMista = new Map(claims.map((c) => [c.spot_id, c]));
+
+  const out = [];
+  let presne = 0, odhadem = 0, nezname = 0, modelSpor = 0, skoreSpor = 0;
+  hraci.forEach((h) => {
+    const st = h.state || null;
+    if (!st || !Array.isArray(st.units)) return;
+    const sporne = [];
+    st.units.forEach((u) => {
+      if (!u || !u.spotId) return;
+      const c = podleMista.get(u.spotId);
+      if (!c) { nezname++; return; }
+      const modelHra = (u.eco && u.eco.model) || null;
+      if (modelHra && c.model && modelHra !== c.model) {
+        modelSpor++;
+        sporne.push({ spot: u.spotId, co: 'model', hra: modelHra, server: c.model });
+      }
+      if (c.score != null) {
+        presne++;
+        // Uložené skóre se smí lišit od toho, co hra tvrdí, jen o
+        // zaokrouhlení. Větší rozdíl znamená, že se místo mezitím změnilo,
+        // nebo že si ho hra přepisuje.
+        const hra = Math.round(Number(u.score) || 0);
+        if (Math.abs(hra - c.score) > 1) {
+          skoreSpor++;
+          sporne.push({ spot: u.spotId, co: 'skóre', hra, server: c.score });
+        }
+      } else {
+        const deal = 0.9 + POZEMKY.spotHash(u.spotId, 'r') * 0.3;
+        const odhad = EKO.skoreZNajmu(c.rent, deal);
+        if (c.pozemek || odhad == null) nezname++; else odhadem++;
+      }
+    });
+    if (sporne.length) out.push({ id: h.id, nick: h.nick, sporne });
+  });
+  out.sort((a, b) => b.sporne.length - a.sporne.length);
+  out.presne = presne; out.odhadem = odhadem; out.nezname = nezname;
+  out.modelSpor = modelSpor; out.skoreSpor = skoreSpor;
+  return out;
+}
+
+function tiskSit(rows) {
+  const celkem = (rows.presne || 0) + (rows.odhadem || 0) + (rows.nezname || 0);
+  const pct = (n) => (celkem ? Math.round((n / celkem) * 100) : 0) + ' %';
+  const out = [];
+  out.push('VIDÍ SERVER STEJNOU SÍŤ · prádlomatů ve hře ' + celkem);
+  out.push('  ocení přesně (skóre uložené): ' + (rows.presne || 0) + ' \u00b7 ' + pct(rows.presne || 0));
+  out.push('  ocení přibližně (z nájmu):    ' + (rows.odhadem || 0) + ' \u00b7 ' + pct(rows.odhadem || 0));
+  out.push('  neocení vůbec:                ' + (rows.nezname || 0) + ' \u00b7 ' + pct(rows.nezname || 0));
+  out.push('');
+  out.push('Rozpory: model ' + (rows.modelSpor || 0) + ' \u00b7 skóre ' + (rows.skoreSpor || 0));
+  if (!rows.length) {
+    out.push('');
+    out.push('Žádný rozpor. Server i hra se baví o stejných strojích na stejných');
+    out.push('místech — na tom se dá stavět porovnání zisku.');
+    return out.join('\n');
+  }
+  out.push('');
+  out.push('nick                 co      hra              server');
+  out.push('-'.repeat(62));
+  rows.slice(0, 40).forEach((r) => {
+    r.sporne.slice(0, 5).forEach((x, i) => {
+      out.push((i ? '' : String(r.nick || '').padEnd(20).slice(0, 20))
+        .padEnd(20) + x.co.padEnd(8)
+        + String(x.hra).padEnd(17).slice(0, 17) + String(x.server));
+    });
+  });
+  out.push('');
+  out.push('Skóre se ukládá teprve od 19. 11. 2026, takže u starších míst');
+  out.push('chybí a počítá se odhadem z nájmu. Procento vlevo poroste samo,');
+  out.push('jak budou hráči zabírat nová místa.');
+  return out.join('\n');
+}
+
+module.exports = { srovnani, tisk, evidence, tiskEvidence, sklad, tiskSklad, sit, tiskSit,
   CENY_STROJU, stupen };

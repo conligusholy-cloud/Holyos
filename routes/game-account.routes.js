@@ -2173,6 +2173,9 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
       data: { spot_id: spot, area_key: area, player_id: req.player.id, nick: req.player.nick,
         model, rent: pozemek ? 0 : rent, name: s(b.name, 160) || null,
         lat: Number(b.lat) || null, lon: Number(b.lon) || null, pozemek, cena: cenaZeme,
+        // Skóre klient posílá už kvůli ceně pozemku; dřív se zahazovalo.
+        // Bez něj server nespočítá, kolik lidí na místo chodí.
+        score: b.score == null ? null : Math.max(0, Math.min(100, Math.round(Number(b.score) || 0))),
         vazano_do: vaz ? new Date(Date.now() + vaz * MESIC_MS) : null, vypoved_mesicu: vyp },
     });
     await oznacPostaveny(sklad.id, spot);

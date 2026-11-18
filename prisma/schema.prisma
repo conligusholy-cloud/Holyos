@@ -7988,6 +7988,9 @@ model GameSpotClaim {
   lon        Float?
   // Kolikrát už místo změnilo majitele — hráči to ukážeme jako „žádané místo".
   takeovers  Int      @default(0)
+  // Skóre místa (0–100). Server z něj počítá, kolik lidí tam denně chodí.
+  // U míst zabraných dřív chybí a dopočítává se z nájmu — přibližně.
+  score      Int?
   // Kolik stála koupená zem. Počítá si ji server z otisku místa a skóre,
   // ať serverové jmění nevychází záporné hráči, který si vzal úvěr a koupil
   // pozemky. U míst koupených dřív chybí a bere se střed cenového pásma.

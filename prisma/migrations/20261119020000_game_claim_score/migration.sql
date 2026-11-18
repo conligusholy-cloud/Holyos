@@ -1,0 +1,11 @@
+-- Skóre místa k prádlomatu.
+--
+-- Server zná u každého postaveného prádlomatu model, nájem i pozemek, ale
+-- ne skóre místa — a bez něj nespočítá, kolik lidí tam denně chodí. Dokud
+-- ho nemá, musí si ho dopočítat z nájmu, což je odhad: nájem se zaokrouhluje
+-- na stovky a u vyjednaných smluv ze skóre vůbec nevznikl.
+--
+-- Klient skóre posílá už dnes (bere se z něj cena pozemku), jen se
+-- zahazovalo. Od teď se ukládá. U starších míst zůstane prázdné a dopočet
+-- z nájmu se použije jako nouzové řešení — je označený jako přibližný.
+ALTER TABLE "game_spot_claims" ADD COLUMN IF NOT EXISTS "score" INTEGER;
