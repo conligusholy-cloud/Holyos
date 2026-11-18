@@ -1253,6 +1253,20 @@
         popis: 'POZOR, nevratné. Zapnutím dostanou stávající hráči odměny za všechny stupně, '
           + 'které už mají — každý při nejbližším uložení hry. Rozdané peníze a karty zpátky '
           + 'nevezmeš. Nech vypnuté, dokud si neověříš, že hodnosti sedí.'
+      },
+      sklad_povinny: {
+        nazev: 'Stavět jen z koupeného skladu',
+        popis: 'Server pustí ke stavbě jen stroj, který má hráč podle svých nákupů skutečně '
+          + 'koupený. Dokud je to vypnuté, server si jen zapisuje, koho by odmítl — zapíná se '
+          + 'teprve tehdy, až se v záznamech pár dní neobjeví nikdo poctivý.'
+      },
+      obchod_pozastaven: {
+        nazev: 'Nouzová brzda burzy',
+        popis: 'Zapnutím se zastaví všechno, čím vzniká nový závazek: nabídky, půjčky, '
+          + 'převzetí, aliance, trh i dražby. Rozjednané věci se doběhnout nechají — přijmout, '
+          + 'odmítnout, splatit, vyzvednout doručenku nebo odejít z aliance jde pořád, aby '
+          + 'brzda nikoho nezamkla uprostřed obchodu. Je to nouzovka na díru nebo rozbitý '
+          + 'provoz, ne běžný přepínač.'
       }
     };
     function loadNastaveni() {
@@ -1281,6 +1295,11 @@
           b.onclick = function () {
             var k = b.getAttribute('data-nast'), na = b.getAttribute('data-na');
             // Zpětné vyplacení je jediný přepínač, který rozdá peníze a nejde vzít zpět.
+            // Brzda zastaví obchod všem najednou. Je to nouzovka, ne přepínač —
+            // má se o ni zakopnout, ne na ni omylem kliknout.
+            if (k === 'obchod_pozastaven' && na === '1'
+              && !confirm('Opravdu zastavit burzu?\n\nNikdo neuzavře novou nabídku, půjčku, '
+                + 'převzetí, alianci, inzerát ani dražbu. Rozjednané obchody se dokončit dají.')) return;
             if (k === 'hodnosti_zpetne' && na === '1'
               && !confirm('Opravdu vyplatit hodnosti zpětně?\n\nKaždý stávající hráč dostane odměny '
                 + 'za všechny stupně, které už má. Rozdané peníze a karty zpátky nevezmeš.')) return;
