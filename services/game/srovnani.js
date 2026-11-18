@@ -394,6 +394,83 @@ async function sit() {
   return out;
 }
 
+// Doplnění skóre k místům zabraným dřív, než se začalo ukládat.
+//
+// Skóre se bere ze stavu hry toho hráče — tedy odtud, odkud ho server
+// dostává i u nově zabraných míst. Není to tedy nový ústupek klientovi,
+// jen dohnání minulosti.
+//
+// Kde to jde, kontroluje se proti nájmu: ten ze skóre kdysi vznikl, takže
+// se musí potkat na pár bodů. Co se nepotká, se nedoplní a vypíše se —
+// radši díra, o které se ví, než číslo, kterému se nedá věřit. U míst na
+// vlastním pozemku se nájem neplatí a kontrolovat není proti čemu; ta se
+// doplní s tím, že je to z klienta.
+async function sitDoplnit(opts) {
+  const EKO = require('./ekonomika');
+  const POZEMKY = require('./pozemky');
+  const ostro = !!(opts && opts.ostro);
+  const hraci = await prisma.gamePlayer.findMany({
+    where: { disabled: false }, select: { id: true, nick: true, state: true } });
+  const chybi = await prisma.gameSpotClaim.findMany({
+    where: { score: null, model: { not: '' } },
+    select: { spot_id: true, player_id: true, rent: true, pozemek: true } });
+  const podleMista = new Map(chybi.map((c) => [c.spot_id, c]));
+
+  const out = { doplneno: 0, nesedi: [], bezKontroly: 0, bezSkore: 0, ostro };
+  for (const h of hraci) {
+    const st = h.state || null;
+    if (!st || !Array.isArray(st.units)) continue;
+    for (const u of st.units) {
+      if (!u || !u.spotId) continue;
+      const c = podleMista.get(u.spotId);
+      if (!c || c.player_id !== h.id) continue;
+      const sc = Math.max(0, Math.min(100, Math.round(Number(u.score) || 0)));
+      if (!sc) { out.bezSkore++; continue; }
+      if (c.pozemek || !c.rent) {
+        out.bezKontroly++;
+      } else {
+        const deal = 0.9 + POZEMKY.spotHash(u.spotId, 'r') * 0.3;
+        const zNajmu = EKO.skoreZNajmu(c.rent, deal);
+        if (zNajmu == null || Math.abs(zNajmu - sc) > 3) {
+          out.nesedi.push({ nick: h.nick, spot: u.spotId, hra: sc, zNajmu });
+          continue;
+        }
+      }
+      if (ostro) {
+        await prisma.gameSpotClaim.update({ where: { spot_id: u.spotId }, data: { score: sc } });
+      }
+      out.doplneno++;
+    }
+  }
+  return out;
+}
+
+function tiskSitDoplnit(v) {
+  const out = [];
+  out.push((v.ostro ? 'DOPLNĚNO' : 'NANEČISTO') + ' · skóre k místům: ' + v.doplneno);
+  out.push('  z toho bez kontroly proti nájmu (vlastní pozemek): ' + v.bezKontroly);
+  out.push('  místa bez skóre ve stavu hry: ' + v.bezSkore);
+  out.push('  nesedí proti nájmu, nedoplněno: ' + v.nesedi.length);
+  if (v.nesedi.length) {
+    out.push('');
+    out.push('nick                 místo                      hra   z nájmu');
+    out.push('-'.repeat(62));
+    v.nesedi.slice(0, 40).forEach((x) => {
+      out.push(String(x.nick || '').padEnd(20).slice(0, 20)
+        + String(x.spot || '').padEnd(27).slice(0, 27)
+        + String(x.hra).padStart(5) + String(x.zNajmu == null ? '—' : x.zNajmu).padStart(10));
+    });
+    out.push('');
+    out.push('Tyhle se nedoplnily schválně. Radši díra, o které se ví, než');
+    out.push('číslo, kterému se nedá věřit.');
+  }
+  if (!v.ostro) {
+    out.push('');
+    out.push('Nic se nezapsalo. Ostře: POST /api/game-admin/sit-doplnit');
+  }
+  return out.join('\n');
+}
+
 function tiskSit(rows) {
   const celkem = (rows.presne || 0) + (rows.odhadem || 0) + (rows.nezname || 0);
   const pct = (n) => (celkem ? Math.round((n / celkem) * 100) : 0) + ' %';
@@ -428,4 +505,5 @@ function tiskSit(rows) {
 }
 
 module.exports = { srovnani, tisk, evidence, tiskEvidence, sklad, tiskSklad, sit, tiskSit,
+  sitDoplnit, tiskSitDoplnit,
   CENY_STROJU, stupen };

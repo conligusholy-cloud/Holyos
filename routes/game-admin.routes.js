@@ -253,6 +253,20 @@ router.get('/sit-rozdily', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(tiskSit(await sit()));
 }));
 
+// GET /sit-doplnit → nanečisto, POST → ostro. Doplní skóre k místům
+// zabraným dřív, než se začalo ukládat. Bere ho ze stavu hry a kde to jde,
+// kontroluje proti nájmu.
+router.get('/sit-doplnit', api(async (req, res) => {
+  const S = require('../services/game/srovnani');
+  res.type('text/plain; charset=utf-8').send(S.tiskSitDoplnit(await S.sitDoplnit({ ostro: false })));
+}));
+router.post('/sit-doplnit', api(async (req, res) => {
+  const S = require('../services/game/srovnani');
+  const v = await S.sitDoplnit({ ostro: true });
+  console.log('[game-sit] doplněno skóre k ' + v.doplneno + ' místům');
+  res.type('text/plain; charset=utf-8').send(S.tiskSitDoplnit(v));
+}));
+
 // GET /vlastnictvi → kdo kdy přišel o kus firmy a proč.
 // Volitelně ?firma=<id> nebo ?hrac=<id>, když jde o konkrétní spor.
 router.get('/vlastnictvi', api(async (req, res) => {
