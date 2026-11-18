@@ -351,6 +351,8 @@ app.get('/img/stroj/:kind(mini|midi|max)', async (req, res) => {
   } catch (e) { if (c) return res.set('Content-Type', c.type).send(c.buf); res.status(404).end(); }
 });
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h', index: false }));
+// Finanční report master franšízy (z „fin report master franchise.xlsx", všechny listy) — neindexuje se
+app.get('/tabulka01', (req, res) => res.set('Cache-Control', 'no-cache').set('X-Robots-Tag', 'noindex, nofollow').sendFile(path.join(__dirname, 'tabulka01.html')));
 const BEZ_JAZYKA = /^\/(api|admin|sso|robots\.txt|sitemap\.xml)/;
 app.use((req, res, next) => {
   const m = /^\/(en|cs|pl|de)(\/|$)/.exec(req.path);
