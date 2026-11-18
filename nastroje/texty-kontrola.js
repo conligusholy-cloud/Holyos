@@ -96,7 +96,22 @@ function main() {
     // Posun každého řádku v celém souboru — potřeba na okolí kolem nálezu.
     const zacatky = []; let poz = 0;
     radkyS.forEach((l) => { zacatky.push(poz); poz += l.length + 1; });
+    // Úsek, který se schválně nepřekládá. Jsou místa, kde jsou řetězce
+    // technické a hráč je nikdy neuvidí — otisk prohlížeče zkouší písma a
+    // kreslí do plátna, takže tam stojí „16px Arial" i „Pračka 18 kg €".
+    // Hlásit je jako zapomenutý text znamená držet číslo natrvalo nad nulou,
+    // a pak si nikdo nevšimne toho jednoho, který tam opravdu nepatří.
+    // Hranice se značí komentáři v původním zdroji:
+    //   /* bez překladu od */ … /* bez překladu do */
+    const mimo = new Set();
+    let vUseku = false;
     radkyS.forEach((l, i) => {
+      if (/bez překladu od/.test(l)) vUseku = true;
+      if (vUseku) mimo.add(i);
+      if (/bez překladu do/.test(l)) vUseku = false;
+    });
+    radkyS.forEach((l, i) => {
+      if (mimo.has(i)) return;
       const bezKomentare = l.replace(/\/\/.*$/, '');
       // Výpis do konzole je pro nás, ne pro hráče.
       if (/\bconsole\.(log|warn|error|info)\s*\(/.test(bezKomentare)) return;
