@@ -12,11 +12,20 @@ const puvodni = Module.prototype.require;
 let CLAIMS = [];
 let DORUCENKY = [];
 let OTISKY = [];
+let OBJEDNAVKY = [];
+// Co se naposledy ptalo na doručenky — potřebujeme vidět, že se mezi ně
+// dostaly i ty vyzvedávané v tomhle uložení.
+let POSLEDNI_DOTAZ = null;
 Module.prototype.require = function (co) {
   if (/config\/database$/.test(co)) {
     return { prisma: {
-      gameSpotClaim: { findMany: async () => CLAIMS },
-      gameDelivery: { findMany: async () => DORUCENKY },
+      gameSpotClaim: { findMany: async (q) => {
+        // Pozemky si bere očekávaná změna, prádlomaty strop.
+        if (q && q.where && q.where.pozemek) return [];
+        return CLAIMS;
+      } },
+      gameDelivery: { findMany: async (q) => { POSLEDNI_DOTAZ = q; return DORUCENKY; } },
+      gameOrder: { findMany: async () => OBJEDNAVKY },
       gameSnapshot: { create: async (x) => { OTISKY.push(x.data); return x.data; } },
     } };
   }
@@ -163,6 +172,64 @@ function hrac(hotovost, predMs) {
     state_at: new Date(Date.now() - 60000) }, { cash: 999999999, units: [] });
   ok('nesedící přírůstek se zapíše i mimo odstup', OTISKY.length === 2
     && OTISKY[1].sedi === false, '— otisků ' + OTISKY.length);
+
+  // ── Doručenky vyzvednuté v tomtéž uložení ──────────────────────────────
+  // Potvrzují se až v transakci, která zapisuje stav — tedy po téhle
+  // kontrole. Kdyby se do meze nezapočítaly, vypadaly by peníze z balíku
+  // vyzvednutého v jednom kole se stavbou jako peníze odnikud.
+  CLAIMS = [{ model: 'mini' }];
+  DORUCENKY = [{ amount: 4000000 }];
+  OTISKY = [];
+  const sVyzvednutim = await strop.prirustek(
+    { id: 9, nick: 'Vyzvedavac', state: { cash: 1000000 }, state_at: new Date(Date.now() - 30000) },
+    { cash: 4500000, units: [] }, [11, 12]);
+  ok('vyzvedávané doručenky se do meze započítají',
+    sVyzvednutim.ze_serveru === 4000000 && sVyzvednutim.sedi,
+    'ze serveru ' + sVyzvednutim.ze_serveru + ', sedí ' + sVyzvednutim.sedi);
+  const vetve = ((POSLEDNI_DOTAZ || {}).where || {}).OR || [];
+  ok('dotaz hledá i nepotvrzené doručenky z tohohle uložení',
+    vetve.length === 2 && vetve[1].claimed_at === null
+    && JSON.stringify(vetve[1].id) === JSON.stringify({ in: [11, 12] }),
+    JSON.stringify(vetve[1] || null));
+  DORUCENKY = [];
+  const bezVyzvednuti = await strop.prirustek(
+    { id: 9, nick: 'Vyzvedavac', state: { cash: 1000000 }, state_at: new Date(Date.now() - 30000) },
+    { cash: 4500000, units: [] });
+  ok('bez vyzvednutí se na nepotvrzené neptáme',
+    (((POSLEDNI_DOTAZ || {}).where || {}).OR || []).length === 1
+    && !bezVyzvednuti.sedi, 'sedí ' + bezVyzvednuti.sedi);
+
+  // ── Čekaná změna hotovosti ─────────────────────────────────────────────
+  // Druhý krok k pokladně: ne „co ještě jde", ale „co mělo být".
+  CLAIMS = [{ model: 'max' }];
+  DORUCENKY = [{ amount: 50000 }];
+  OBJEDNAVKY = [{ cena: 200000 }];
+  OTISKY = [];
+  await strop.zkontroluj(
+    { id: 21, nick: 'Cekana', state: { cash: 1000000, loan: 0 },
+      state_at: new Date(Date.now() - MESIC / 2) },
+    { cash: 1100000, loan: 100000, units: [{}] });
+  const o = OTISKY[0] || {};
+  ok('otisk nese čekanou změnu i nákupy', o.ocekavano != null && o.nakupy === 200000,
+    'čekáno ' + o.ocekavano + ', nákupy ' + o.nakupy);
+  // Půl měsíce zisku + doručenky − nákupy + čerpání úvěru. Zisk serveru je
+  // z jednoho maxu, takže se tu nekontroluje na korunu, ale na skladbu:
+  // bez doručenek a nákupů by vyšlo o 150 tisíc jinak.
+  OBJEDNAVKY = [];
+  DORUCENKY = [];
+  OTISKY = [];
+  await strop.zkontroluj(
+    { id: 22, nick: 'Cekana2', state: { cash: 1000000, loan: 0 },
+      state_at: new Date(Date.now() - MESIC / 2) },
+    { cash: 1100000, loan: 100000, units: [{}] });
+  const o2 = OTISKY[0] || {};
+  ok('bez nákupů a doručenek vyjde čekaná změna o 150 tisíc jinak',
+    o2.ocekavano != null && o.ocekavano != null
+    && Math.abs((o2.ocekavano - o.ocekavano) - 150000) < 2,
+    'rozdíl ' + (o2.ocekavano - o.ocekavano));
+  ok('čerpání úvěru se do čekané změny počítá',
+    o2.ocekavano >= 100000, 'čekáno ' + o2.ocekavano);
+  OBJEDNAVKY = [];
 
   // ── Výpadek databáze ukládání hry nesmí shodit ─────────────────────────
   const puvodniClaims = CLAIMS;
