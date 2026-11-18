@@ -8193,7 +8193,10 @@ model GameTender {
   cena_za_pct  Int
   max_pct      Float
   koupeno_pct  Float    @default(0)
-  do           DateTime
+  // Trvalá výstupní nabídka od podílníka nad 75 % nemá konec — kdo byl
+  // týden pryč, může ji vzít, až se vrátí. Proto je "do" u ní prázdné.
+  do           DateTime?
+  trvala       Boolean  @default(false)
   // bezi | naplnena | dobehla | zrusena
   stav         String   @default("bezi") @db.VarChar(12)
   created_at   DateTime @default(now())

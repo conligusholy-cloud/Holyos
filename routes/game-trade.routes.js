@@ -932,6 +932,26 @@ router.post('/trade/prevzeti', hrac, api(async (req, res) => {
   const hodin = Math.max(PREVZETI.HODIN_MIN,
     Math.min(PREVZETI.HODIN_MAX, Math.round(Number(b.hodin) || PREVZETI.HODIN_VYCHOZI)));
 
+  // Výstupní nabídka: trvalý odkup zbytku od toho, kdo firmu ovládá. Nemá
+  // lhůtu a nevykupuje nikoho násilím — menšina prodat může, ale nemusí.
+  // Je to jediná cesta ven z firmy, do které už nikdo jiný neinvestuje.
+  const trvala = !!b.trvala;
+  if (trvala) {
+    const seznam = await pravaFirmy(firmaId);
+    if (!PREVZETI.smiVystupni(seznam, req.player.id)) {
+      return res.status(403).json({ error: stx(req)('server.vystupni_nabidku_smi_az_od_pct',
+        { p1: Math.round(PREVZETI.PRAH_VYSTUPNI * 100) }) });
+    }
+    // Cena nesmí být pod oceněním firmy. Pod ním už to není nabídka na
+    // odchod, ale pokuta za to, že někdo zůstal v menšině.
+    const JMENI = require('../services/game/jmeni');
+    const jmeni = await JMENI.proHrace(firma.id, stavu(firma));
+    const dno = PREVZETI.minCenaZaPct(jmeni);
+    if (cenaZaPct < dno) {
+      return res.status(409).json({ error: stx(req)('server.vystupni_cena_pod_ocenenim', { p1: dno }) });
+    }
+  }
+
   // Jedna běžící nabídka na firmu od jednoho útočníka. Dvě by si navzájem
   // přebíjely cenu a podílník by nevěděl, které věřit.
   const uz = await prisma.gameTender.findFirst({
@@ -942,7 +962,9 @@ router.post('/trade/prevzeti', hrac, api(async (req, res) => {
   // Peníze se nedají zamknout — hotovost žije ve stavu hry. Aspoň se
   // zkontroluje, že na celou nabídku teď má: útočník, co slibuje, co nemá,
   // by jinak zjistil až po prvním prodeji, že na zbytek nedosáhne.
-  const potreba = Math.round(pct * 100 * cenaZaPct);
+  // U trvalé nabídky se dopředu kontrolovat nedá: neví se, kolik jí kdo
+  // prodá ani kdy. Hlídá se proto při každém jednotlivém prodeji.
+  const potreba = trvala ? 0 : Math.round(pct * 100 * cenaZaPct);
   const hotovost = Math.round(stavu(req.player).cash || 0);
   if (potreba > hotovost) {
     return res.status(409).json({ error: stx(req)('server.na_celou_nabidku_nemas',
@@ -952,8 +974,10 @@ router.post('/trade/prevzeti', hrac, api(async (req, res) => {
   const t = await prisma.gameTender.create({ data: {
     utocnik_id: req.player.id, utocnik_nick: req.player.nick,
     firma_id: firma.id, firma_nick: firma.nick,
-    cena_za_pct: cenaZaPct, max_pct: pct,
-    do: new Date(Date.now() + hodin * 3600000),
+    cena_za_pct: cenaZaPct, trvala,
+    // Trvalá vykupuje, co kdo přinese, a konec nemá.
+    max_pct: trvala ? PREVZETI.PCT_MAX : pct,
+    do: trvala ? null : new Date(Date.now() + hodin * 3600000),
   } });
 
   // Podílníkům a majiteli to musí někdo říct — nabídka, o které nikdo neví,
@@ -1060,6 +1084,21 @@ router.post('/trade/dividenda', hrac, api(async (req, res) => {
   console.log('[game] dividenda: ' + req.player.nick + ' → ' + firma.nick
     + ' · ' + Math.round(pct * 100) + ' %');
   res.json({ ok: true, pct });
+}));
+
+// POST /trade/prevzeti/:id/zrusit → útočník stahuje svou nabídku
+router.post('/trade/prevzeti/:id/zrusit', hrac, api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const t = await prisma.gameTender.findUnique({ where: { id } });
+  if (!t || PREVZETI.stav(t) !== 'bezi') {
+    return res.status(409).json({ error: stx(req)('server.tahle_nabidka_uz_nebezi') });
+  }
+  if (t.utocnik_id !== req.player.id) {
+    return res.status(403).json({ error: stx(req)('server.stahnout_ji_muze_jen_kdo_ji_dal') });
+  }
+  await prisma.gameTender.update({ where: { id }, data: { stav: 'zrusena' } });
+  console.log('[game] převzetí #' + id + ' staženo: ' + req.player.nick);
+  res.json({ ok: true });
 }));
 
 // GET /trade/prevzeti → nabídky, které se mě týkají
@@ -1200,8 +1239,18 @@ router.get('/trade/finance', hrac, api(async (req, res) => {
     const f = politiky.get(firmaId) || {};
     const seznam = await pravaFirmy(firmaId);
     const pr = PRAVA.proHrace(seznam, ja);
+    // Výstupní nabídka: kdo firmu ovládá, může nechat viset trvalý odkup
+    // zbytku. Dno ceny se počítá z ocenění firmy, a jen jemu — ostatním
+    // by to byl dotaz navíc pro číslo, které stejně neuvidí.
+    const smimVystupni = PREVZETI.smiVystupni(seznam, ja);
+    let minCena = null;
+    if (smimVystupni) {
+      const JMENI = require('../services/game/jmeni');
+      minCena = PREVZETI.minCenaZaPct(await JMENI.proHrace(firmaId, stavu(f)));
+    }
     return Object.assign({}, pr, {
       pct: DIVIDENDA.platna(f.dividenda_pct),
+      smim_vystupni: smimVystupni, min_cena: minCena,
       urcuje_nick: await jmeno(pr.urcuje),
       blokuje_nick: await jmeno(pr.blokuje),
       // Jméno z dřívějška: klient ho zná jako „smím měnit dividendu".

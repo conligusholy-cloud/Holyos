@@ -63,5 +63,39 @@ ok('lhůta má dolní i horní mez', P.HODIN_MIN >= 1 && P.HODIN_MAX <= 168
 ok('podíl se kupuje po procentech, ne po tisícinách', P.PCT_MIN >= 0.01);
 ok('cena za procento má dno', P.CENA_MIN > 0);
 
+// ── Výstupní nabídka nad 75 % ────────────────────────────────────────────────
+// Trvalá nabídka je jediná, která nemá konec. Kdyby jí lhůta přece jen
+// doběhla, zmizela by přesně tomu, kvůli komu vznikla — hráči, co byl pryč.
+ok('trvalá nabídka nedoběhne ani po lhůtě',
+  P.stav(nabidka({ trvala: true, do: null })) === 'bezi');
+ok('trvalá se dá naplnit a zrušit jako každá jiná',
+  P.stav(nabidka({ trvala: true, do: null, koupeno_pct: 0.3 })) === 'naplnena'
+  && P.stav(nabidka({ trvala: true, do: null, stav: 'zrusena' })) === 'zrusena');
+ok('obyčejná nabídka po lhůtě pořád doběhne',
+  P.stav(nabidka({ do: PRED_HODINOU })) === 'dobehla');
+ok('ven jde, že je trvalá, a lhůta chybí',
+  P.verejna(nabidka({ trvala: true, do: null }), 3).trvala === true
+  && P.verejna(nabidka({ trvala: true, do: null }), 3).do === null);
+ok('u obyčejné zůstává trvalá vypnutá', P.verejna(nabidka({}), 3).trvala === false);
+
+ok('práh na výstupní nabídku jsou tři čtvrtiny', P.PRAH_VYSTUPNI === 0.75);
+ok('kdo má tři čtvrtiny, smí ji vyhlásit',
+  P.smiVystupni([{ investor_id: 7, podil: 0.75 }], 7) === true);
+ok('o setinu míň už ne',
+  P.smiVystupni([{ investor_id: 7, podil: 0.74 }], 7) === false);
+ok('podíly se sčítají na člověka',
+  P.smiVystupni([{ investor_id: 7, podil: 0.4 }, { investor_id: 7, podil: 0.4 }], 7) === true);
+ok('cizí podíly se mu nepřičítají',
+  P.smiVystupni([{ investor_id: 7, podil: 0.4 }, { investor_id: 8, podil: 0.4 }], 7) === false);
+ok('nepřihlášený nikdy', P.smiVystupni([{ investor_id: 7, podil: 0.9 }], null) === false);
+
+// Cena pod oceněním by z nabídky na odchod udělala pokutu za to, že někdo
+// zůstal v menšině.
+ok('nejnižší cena je setina jmění firmy', P.minCenaZaPct(10000000) === 100000,
+  '— ' + P.minCenaZaPct(10000000));
+ok('ani u bezcenné firmy neklesne pod dno', P.minCenaZaPct(0) === P.CENA_MIN);
+ok('záporné jmění taky spadne na dno', P.minCenaZaPct(-5000000) === P.CENA_MIN);
+ok('nesmysl nespadne na nulu', P.minCenaZaPct('kdoví') === P.CENA_MIN);
+
 console.log(chyb ? '\n' + chyb + ' chyb' : '\nvšechno sedí');
 process.exit(chyb ? 1 : 0);

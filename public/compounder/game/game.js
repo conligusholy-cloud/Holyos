@@ -9075,7 +9075,47 @@ function dividendaRadek(id, mojeFirma) {
     + '</p>'
     + (d.smim ? '<div class="gcard-act"><button class="btn sm" data-dividenda="' + id + '">'
         + esc(tx('dividenda.nastavit')) + '</button></div>' : '')
-    + zastavaRadek(id, d, mojeFirma);
+    + zastavaRadek(id, d, mojeFirma)
+    + vystupniRadek(id, d);
+}
+// Výstupní nabídka. Kdo drží tři čtvrtiny firmy, může nechat viset trvalý
+// odkup zbytku — menšina pak má kudy ven, i když se měsíc neukáže. Prodat
+// nikdo nemusí: tahle hra nikomu podíl násilím nebere.
+function vystupniRadek(id, d) {
+  if (!d.smim_vystupni) return '';
+  return '<p class="fine">' + esc(tx('veta.vystupni_k_cemu_je')) + '</p>'
+    + '<div class="gcard-act"><button class="btn sm" data-vystupni="' + id + '">'
+    + esc(tx('vystupni.vyhlasit')) + '</button></div>';
+}
+// Okno výstupní nabídky. Oproti obyčejné nemá lhůtu ani strop — vykoupí,
+// co kdo přinese, a visí, dokud ji útočník nestáhne.
+function vystupniSheet(id, nazev, dno) {
+  sheet('<h3>' + tx('veta.vystupni_nabidka_na', { p1: esc(nazev || '') }) + '</h3>'
+    + '<p class="muted small">' + esc(tx('veta.vystupni_popis')) + '</p>'
+    + '<label class="fld"><span>' + esc(tx('prevzeti.cena_za_procento')) + '</span>'
+    + '<input id="vn-cena" class="inp" type="number" inputmode="numeric" min="' + dno
+    + '" value="' + dno + '"></label>'
+    + '<div class="kv"><span>' + esc(tx('vystupni.nejmene')) + '</span><b>' + kcFull(dno) + '</b></div>'
+    + '<p class="fine" id="vn-dno"></p>'
+    + '<p class="fine">' + esc(tx('veta.vystupni_rada')) + '</p>'
+    + '<button class="btn big" id="vn-ok" style="width:100%;margin-top:10px">'
+    + esc(tx('vystupni.vyhlasit')) + '</button>');
+  var prepocti = function () {
+    var v = Math.round(Number($('vn-cena').value) || 0);
+    $('vn-dno').className = 'fine' + (v < dno ? ' err' : '');
+    $('vn-dno').textContent = v < dno ? tx('veta.vystupni_pod_ocenenim', { p1: kcFull(dno) }) : '';
+  };
+  $('vn-cena').oninput = prepocti; prepocti();
+  $('vn-ok').onclick = function () {
+    var v = Math.round(Number($('vn-cena').value) || 0);
+    if (v < dno) return toast(tx('veta.vystupni_pod_ocenenim', { p1: kcFull(dno) }), 'err');
+    $('vn-ok').disabled = true;
+    apiJson('/trade/prevzeti', { firma_id: id, cena_za_pct: v, trvala: true }).then(function (r) {
+      if (!r.ok) { $('vn-ok').disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+      closeSheet(); PREVZETI = null; FINANCE = null; loadTrades(paintMe);
+      toast(esc(tx('vystupni.vyhlasena')), 'ok', true);
+    }).catch(function () { $('vn-ok').disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+  };
 }
 // Blokační menšina: kdo drží čtvrtinu firmy, může zakázat dát ji do zástavy.
 // Není to žádost o souhlas — je to přepínač, který si podílník nastaví
@@ -9171,6 +9211,16 @@ function bindPodily() {
       var nazev = mych.length ? (mych[0].kdo_firma || mych[0].kdo) : (ME && ME.company) || '';
       var mesicne = mych.reduce(function (a, x) { return a + x.mesicne; }, 0);
       dividendaSheet(id, nazev, mesicne);
+    };
+  });
+  [].forEach.call($('me-body').querySelectorAll('[data-vystupni]'), function (b) {
+    b.onclick = function () {
+      var id = Number(b.getAttribute('data-vystupni'));
+      var d = dividendaFirmy(id); if (!d) return;
+      var mych = ((FINANCE && FINANCE.podily) || []).filter(function (x) {
+        return x.moje === 'mam' && x.kdo_id === id; });
+      var nazev = mych.length ? (mych[0].kdo_firma || mych[0].kdo) : '';
+      vystupniSheet(id, nazev, d.min_cena || 1000);
     };
   });
   [].forEach.call($('me-body').querySelectorAll('[data-zastava]'), function (b) {
@@ -9705,8 +9755,9 @@ function prevzetiHtml() {
           + '<div class="row"><span class="muted small">' + esc(tx('prevzeti.chce_koupit')) + '</span>'
           + '<span>' + pctHra(t.max_pct) + ' % \u00b7 ' + esc(tx('prevzeti.uz_koupeno')) + ' '
           + pctHra(t.koupeno_pct) + ' %</span></div>'
-          + '<div class="row"><span class="muted small">' + esc(tx('prevzeti.dobehne')) + '</span>'
-          + '<span>' + zaKolik(t.do) + '</span></div>'
+          + '<div class="row"><span class="muted small">'
+          + esc(tx(t.trvala ? 'prevzeti.plati' : 'prevzeti.dobehne')) + '</span>'
+          + '<span>' + (t.trvala ? esc(tx('prevzeti.bez_lhuty')) : zaKolik(t.do)) + '</span></div>'
           + (jaProdam
               ? '<div class="row"><span class="muted small">' + esc(tx('prevzeti.ty_drzis')) + '</span>'
                 + '<span class="ok">' + pctHra(t.muj_podil) + ' % \u00b7 '
@@ -9715,7 +9766,10 @@ function prevzetiHtml() {
                 + esc(tx('prevzeti.prodat_do_nabidky')) + '</button></div>'
               : t.na_moji_firmu
                 ? '<p class="fine warn">' + esc(tx('veta.prevzeti_na_tvoji_firmu_rada')) + '</p>'
-                : '')
+                : t.moje
+                  ? '<div class="gcard-act"><button class="btn sm sec" data-prevzeti-zrus="' + t.id + '">'
+                    + esc(tx('prevzeti.stahnout')) + '</button></div>'
+                  : '')
           + '</div>';
       }).join('')
     + '</div>';
@@ -10408,6 +10462,17 @@ function paintBurza() {
     + (hotove.length ? sekce(esc(tx('drazba.uzavrene')), hotove, '') : '');
   bindAukce();
   bindFinance();
+  [].forEach.call(box.querySelectorAll('[data-prevzeti-zrus]'), function (b) {
+    b.onclick = function () {
+      var id = Number(b.getAttribute('data-prevzeti-zrus'));
+      b.disabled = true;
+      apiJson('/trade/prevzeti/' + id + '/zrusit', {}).then(function (r) {
+        if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+        PREVZETI = null; loadTrades(paintBurza);
+        toast(esc(tx('prevzeti.stazena')), 'ok', true);
+      }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+    };
+  });
   [].forEach.call(box.querySelectorAll('[data-prevzeti]'), function (b) {
     b.onclick = function () {
       var id = Number(b.getAttribute('data-prevzeti'));

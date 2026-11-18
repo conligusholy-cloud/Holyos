@@ -3554,5 +3554,20 @@
   "server.zastavu_blokuje_podilnik": "Zastavení majetku firmy blokuje podílník {p1}.",
   "server.na_blokaci_zastavy_nemas_dost": "Zakázat zastavení může podílník s aspoň {p1} % firmy.",
   "dor.zastava_zakazana": "{p1} zakázal zastavit majetek tvé firmy. Běžící půjčky to nemění, jen nové zástavy.",
-  "dor.zastava_povolena": "{p1} zastavení majetku tvé firmy zase povolil."
+  "dor.zastava_povolena": "{p1} zastavení majetku tvé firmy zase povolil.",
+  "vystupni.vyhlasit": "Vyhlásit výstupní nabídku",
+  "vystupni.nejmene": "Nejméně podle ocenění",
+  "vystupni.vyhlasena": "Výstupní nabídka visí. Menšina ji může vzít, kdy se jí zachce.",
+  "prevzeti.plati": "Platí",
+  "prevzeti.bez_lhuty": "bez lhůty",
+  "prevzeti.stahnout": "Stáhnout nabídku",
+  "prevzeti.stazena": "Nabídka stažena.",
+  "veta.vystupni_k_cemu_je": "Držíš firmu celou. Můžeš nechat viset trvalý odkup zbytku — menšina pak má kudy ven, i když se měsíc neukáže. Prodat nikdo nemusí.",
+  "veta.vystupni_nabidka_na": "Výstupní nabídka na firmu {p1}",
+  "veta.vystupni_popis": "Trvalý odkup zbývajících podílů. Nemá lhůtu ani strop: visí, dokud ji nestáhneš, a vykoupí, co kdo přinese.",
+  "veta.vystupni_rada": "Platí se až ve chvíli, kdy někdo doopravdy prodá — a jen když na to zrovna máš. Nikoho k prodeji nenutíš.",
+  "veta.vystupni_pod_ocenenim": "Pod ocenění firmy to nejde. Nejméně {p1} za procento.",
+  "server.vystupni_nabidku_smi_az_od_pct": "Výstupní nabídku může vyhlásit podílník s aspoň {p1} % firmy.",
+  "server.vystupni_cena_pod_ocenenim": "Výstupní nabídka nesmí být pod oceněním firmy. Nejméně {penize:p1} za procento.",
+  "server.stahnout_ji_muze_jen_kdo_ji_dal": "Stáhnout nabídku může jen ten, kdo ji vyhlásil."
 }

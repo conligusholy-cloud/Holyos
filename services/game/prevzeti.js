@@ -26,13 +26,20 @@
 const { prisma } = require('../../config/database');
 
 const HODIN_MIN = 6, HODIN_MAX = 72, HODIN_VYCHOZI = 48;
+// Výstupní nabídka: kdo drží tři čtvrtiny firmy, může nechat viset trvalý
+// odkup zbytku. Nevykupuje tím nikoho násilím — menšina prodat může, ale
+// nemusí. Cena přitom nesmí být pod oceněním firmy, jinak by to byl jen
+// slušněji pojmenovaný nátlak na někoho, kdo už stejně nemá vliv.
+const PRAH_VYSTUPNI = 0.75;
 const PCT_MIN = 0.01, PCT_MAX = 1;
 const CENA_MIN = 1000;              // za jedno procento
 
 function stav(t, ted) {
   if (!t) return null;
   if (t.stav !== 'bezi') return t.stav;
-  if (new Date(t.do).getTime() <= (ted || Date.now())) return 'dobehla';
+  // Trvalá výstupní nabídka konec nemá. Je to její smysl: kdo byl pryč,
+  // najde ji po návratu pořád viset.
+  if (t.do && new Date(t.do).getTime() <= (ted || Date.now())) return 'dobehla';
   if (t.koupeno_pct >= t.max_pct - 1e-9) return 'naplnena';
   return 'bezi';
 }
@@ -56,10 +63,26 @@ function verejna(t, jaId, ted) {
     firma: t.firma_nick, firma_id: t.firma_id,
     cena_za_pct: t.cena_za_pct,
     max_pct: t.max_pct, koupeno_pct: t.koupeno_pct, zbyva_pct: zbyva(t),
-    do: t.do, stav: s,
+    do: t.do || null, trvala: !!t.trvala, stav: s,
     moje: t.utocnik_id === jaId,
     na_moji_firmu: t.firma_id === jaId,
   };
+}
+
+// Nejnižší cena za procento, za kterou smí výstupní nabídka jít ven:
+// setina jmění firmy. Pod tím už to není nabídka na odchod, ale pokuta
+// za to, že někdo zůstal v menšině.
+function minCenaZaPct(jmeni) {
+  return Math.max(CENA_MIN, Math.round((Number(jmeni) || 0) / 100));
+}
+
+// Smí tenhle člověk vyhlásit výstupní nabídku? Podíly se sčítají na
+// člověka, ne na řádku.
+function smiVystupni(podily, kdoId) {
+  if (kdoId == null) return false;
+  const moje = (podily || []).filter((e) => e.investor_id === kdoId)
+    .reduce((a, e) => a + (Number(e.podil) || 0), 0);
+  return moje >= PRAH_VYSTUPNI - 1e-9;
 }
 
 // Nabídky, které se týkají hráče: jeho vlastní, ty na jeho firmu, a ty na
@@ -84,5 +107,5 @@ async function proHrace(jaId) {
   })).filter((t) => t.stav === 'bezi');
 }
 
-module.exports = { stav, zbyva, cenaZa, verejna, proHrace,
-  HODIN_MIN, HODIN_MAX, HODIN_VYCHOZI, PCT_MIN, PCT_MAX, CENA_MIN };
+module.exports = { stav, zbyva, cenaZa, verejna, proHrace, minCenaZaPct, smiVystupni,
+  HODIN_MIN, HODIN_MAX, HODIN_VYCHOZI, PCT_MIN, PCT_MAX, CENA_MIN, PRAH_VYSTUPNI };
