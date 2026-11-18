@@ -188,9 +188,20 @@ async function ziskRozbor(nick) {
   const kc = (n) => Math.round(Number(n) || 0).toLocaleString('cs-CZ');
   const out = [];
   out.push('ROZBOR ZISKU · ' + p.nick + ' (#' + p.id + ')');
-  out.push('návštěvnost serveru ' + nav.navstevnost.toFixed(4)
-    + ' · přivedení ' + nav.refs + ' · boost ' + nav.boost
-    + ' · kampaň ' + nav.kampanAdd + ' · pověst ' + nav.povest + ' (z klienta)');
+  // Vstupy návštěvnosti vedle sebe. Rozdíl rozprostřený rovnoměrně přes
+  // všechny stroje bývá právě tady — tržba se návštěvností násobí, takže
+  // jeden přivedený hráč navíc posune celou síť o stejné procento.
+  const kampanHry = st.kampan && Number(st.kampan.add) ? Number(st.kampan.add) : 0;
+  const vstupyHry = { refs: Math.round(Number(st.refs) || 0), boost: Number(st.boost) || 0,
+    kampanAdd: kampanHry, povest: Number(st.povest) || 0 };
+  const navHry = NAV.spocti(vstupyHry, ted.getTime());
+  const par = (a, b) => String(a) + '/' + String(b);
+  out.push('návštěvnost hra/server ' + navHry.toFixed(4) + '/' + nav.navstevnost.toFixed(4)
+    + '  (' + (nav.navstevnost / (navHry || 1)).toFixed(4) + '×)');
+  out.push('  vstupy hra/server · přivedení ' + par(vstupyHry.refs, nav.refs)
+    + ' · boost ' + par(vstupyHry.boost, nav.boost)
+    + ' · kampaň ' + par(vstupyHry.kampanAdd, nav.kampanAdd)
+    + ' · pověst ' + par(vstupyHry.povest, nav.povest) + ' (pověst zná jen hra)');
   out.push('běžících událostí ' + eventy.length + ' · prádlomatů podle serveru '
     + claims.length + ', podle hry ' + units.length);
   // Stará uložená hra je nejčastější důvod rozdílu, který vypadá jako chyba:
