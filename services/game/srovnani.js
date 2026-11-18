@@ -388,7 +388,13 @@ async function sit() {
         const hra = Math.round(Number(u.score) || 0);
         if (Math.abs(hra - c.score) > 1) {
           skoreSpor++;
-          sporne.push({ spot: u.spotId, co: 'skóre', hra, server: c.score });
+          // Rozhodčí je nájem: ten ze skóre kdysi vznikl, takže se dá
+          // spočítat zpátky. Čí číslo mu sedí, ten má pravdu — bez toho
+          // je to tvrzení proti tvrzení.
+          const deal = 0.9 + POZEMKY.spotHash(u.spotId, 'r') * 0.3;
+          const zNajmu = c.pozemek ? null : EKO.skoreZNajmu(c.rent, deal);
+          sporne.push({ spot: u.spotId, co: 'skóre', hra, server: c.score,
+            nakup: zNajmu == null ? 'vlastní pozemek' : 'z nájmu ' + Math.round(zNajmu) });
         }
       } else {
         const deal = 0.9 + POZEMKY.spotHash(u.spotId, 'r') * 0.3;
