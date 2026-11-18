@@ -432,6 +432,74 @@ async function sit() {
   return out;
 }
 
+// Úklid strojů, o kterých ví jen server.
+//
+// Vymaže se JEN model, zábor zůstává. Hráč o místo nepřijde — přijde o stroj,
+// který ve své hře stejně nemá, takže nepozná vůbec nic. Server tím přestane
+// počítat zisk, který nikomu nepatří, a to je přesně to, co musí být čisté
+// dřív, než se hotovost přesune na server.
+//
+// Zrušit celý zábor by bylo čistší pro mapu, ale hráči, který ho ve své hře
+// pořád vidí jako svůj, by zmizel — a to vypadá jako chyba hry.
+//
+// Před zápisem se každé místo ověří znovu: mezi přehledem a úklidem mohl
+// hráč hru otevřít a stroj se mohl objevit.
+async function duchoveUklid(opts) {
+  const ostro = !!(opts && opts.ostro);
+  const stav = await sit();
+  const duchove = stav.duchove || [];
+  const out = { ostro, naslo: duchove.length, uklizeno: 0, preskoceno: [], radky: [] };
+  if (!duchove.length) return out;
+
+  const spoty = duchove.map((d) => d.spot);
+  const claims = await prisma.gameSpotClaim.findMany({
+    where: { spot_id: { in: spoty } },
+    select: { spot_id: true, player_id: true, model: true },
+  });
+  const hraci = await prisma.gamePlayer.findMany({
+    where: { id: { in: Array.from(new Set(claims.map((c) => c.player_id))) } },
+    select: { id: true, nick: true, state: true },
+  });
+  const stavy = new Map(hraci.map((h) => [h.id, h.state]));
+
+  for (const c of claims) {
+    const st = stavy.get(c.player_id);
+    const units = (st && Array.isArray(st.units)) ? st.units : null;
+    if (!units) { out.preskoceno.push({ spot: c.spot_id, proc: 'hráč nemá uložený stav' }); continue; }
+    if (units.some((u) => u && u.spotId === c.spot_id)) {
+      out.preskoceno.push({ spot: c.spot_id, proc: 'hra ten stroj mezitím má' });
+      continue;
+    }
+    if (!c.model) { out.preskoceno.push({ spot: c.spot_id, proc: 'stroj už tam není' }); continue; }
+    out.radky.push({ spot: c.spot_id, model: c.model });
+    if (ostro) {
+      await prisma.gameSpotClaim.update({ where: { spot_id: c.spot_id }, data: { model: '' } });
+      out.uklizeno++;
+    }
+  }
+  return out;
+}
+
+function tiskDuchoveUklid(z) {
+  const out = [];
+  out.push(z.ostro ? 'OSTRO — zapsáno' : 'NANEČISTO — nic se nezměnilo');
+  out.push('Strojů, o kterých ví jen server: ' + z.naslo
+    + ' · k vymazání ' + z.radky.length + (z.ostro ? ' · vymazáno ' + z.uklizeno : ''));
+  if (z.radky.length) {
+    out.push('');
+    z.radky.forEach((r) => out.push('  ' + String(r.spot).padEnd(28).slice(0, 28) + r.model));
+  }
+  if (z.preskoceno.length) {
+    out.push('');
+    out.push('Přeskočeno:');
+    z.preskoceno.forEach((r) => out.push('  ' + String(r.spot).padEnd(28).slice(0, 28) + r.proc));
+  }
+  out.push('');
+  out.push('Maže se jen stroj, zábor místa zůstává hráči.');
+  if (!z.ostro) out.push('Ostrý běh: POST na stejnou adresu.');
+  return out.join('\n');
+}
+
 // Doplnění skóre k místům zabraným dřív, než se začalo ukládat.
 //
 // Skóre se bere ze stavu hry toho hráče — tedy odtud, odkud ho server
@@ -566,5 +634,5 @@ function tiskSit(rows) {
 }
 
 module.exports = { srovnani, tisk, evidence, tiskEvidence, sklad, tiskSklad, sit, tiskSit,
-  sitDoplnit, tiskSitDoplnit,
+  sitDoplnit, tiskSitDoplnit, duchoveUklid, tiskDuchoveUklid,
   CENY_STROJU, stupen };

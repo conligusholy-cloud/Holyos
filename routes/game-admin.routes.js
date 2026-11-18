@@ -255,6 +255,21 @@ router.get('/zisk-srovnani', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(await ziskSrovnani(req.query.dnu));
 }));
 
+// GET /duchove-uklid → nanečisto, POST → ostro. Smaže stroj z míst, kde ho
+// vidí jen server. Zábor zůstává hráči: o místo nepřijde, jen o stroj, který
+// ve své hře stejně nemá. Dokud se to neuklidí, počítal by mu server zisk,
+// který nikomu nepatří.
+router.get('/duchove-uklid', api(async (req, res) => {
+  const S = require('../services/game/srovnani');
+  res.type('text/plain; charset=utf-8').send(S.tiskDuchoveUklid(await S.duchoveUklid({ ostro: false })));
+}));
+router.post('/duchove-uklid', api(async (req, res) => {
+  const S = require('../services/game/srovnani');
+  const z = await S.duchoveUklid({ ostro: true });
+  console.log('[game-sit] vymazán stroj u ' + z.uklizeno + ' míst, o kterých věděl jen server');
+  res.type('text/plain; charset=utf-8').send(S.tiskDuchoveUklid(z));
+}));
+
 // GET /odkazy-rozpor → u koho se rozchází počet přivedených hráčů.
 // Přivedenými se násobí tržba celé sítě, takže až se hotovost přesune na
 // server, bude z rozdílu v přehledu rozdíl v penězích.
