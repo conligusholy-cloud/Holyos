@@ -146,6 +146,14 @@ async function nanecisto(prisma, pravidla) {
     const radek = {
       id: h.id, nick: h.nick, firma: h.company || null, zalozen: h.created_at,
       nadrazeny: (zvouci(h) || {}).nick || null,
+      // Všichni pod ním s důvodem, proč je (ne)považujeme za zrušeného — ať jde hodnocení zkontrolovat ručně
+      pod_ucty: ids.slice(0, 80).map((id) => {
+        const x = P[id]; const sek = x.hra_s_celkem || 0;
+        let duvod = null;
+        if (x.nick === SMAZANY) duvod = 'smazaný účet'; else if (x.disabled) duvod = 'zablokovaný'; else if (sek < minSek) duvod = 'odehráno jen ' + Math.round(sek / 60) + ' min';
+        return { nick: x.nick, firma: x.company || null, linie: strom.get(id), koncovy: koncove.includes(id), mrtvy: !!duvod, duvod,
+          odehrano_min: Math.round(sek / 60), provize: Math.round(prov[id] || 0) };
+      }),
       linie: (function () { const a = []; ids.forEach((id) => { const l = strom.get(id) - 1; a[l] = (a[l] || 0) + 1; }); return Array.from(a, (x) => x || 0); })(),
       pod_celkem: ids.length, koncovych: koncove.length, mrtvych: mrtve.length, podil_mrtvych: podil,
       zivych_mezi: zivychMezi.length, hloubka,

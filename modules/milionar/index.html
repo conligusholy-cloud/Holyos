@@ -1739,7 +1739,13 @@
         + '<th class="num">Provize</th><th class="num">Nákupů</th><th class="num">Sleva</th><th class="num">Škoda</th><th class="num">Zmrazit</th><th>Trest (min / střed / max)</th><th>Útvar</th><th class="num">Strojů</th><th class="num" title="Hodnota prádlomatů podle ceníku (bez odpisu)">Hodnota strojů</th><th class="num">Hotovost</th><th class="num" title="Hotovost + hodnota strojů">Majetek</th><th class="num" title="Kolik mu lze sebrat: nejvýš tolik, kolik má (hotovost + stroje), maximálně zmrazená částka">Lze sebrat</th><th class="num" title="Majetek po sebrání">Zbyde mu</th><th class="num">Platil</th></tr></thead><tbody>'
         + rows.map(function (r) {
           return '<tr><td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + r.id + '">' + esc(r.firma || r.nick) + '</b>'
-            + '<div class="note">' + esc(r.nick) + (r.nadrazeny ? ' · pozval ' + esc(r.nadrazeny) : '') + (r.typ === 'kupec' ? ' · <b style="color:#fbbf24">KUPEC</b> (skupuje od zrušených účtů)' : '') + '</div></td>'
+            + '<div class="note">' + esc(r.nick) + (r.nadrazeny ? ' · pozval ' + esc(r.nadrazeny) : '') + (r.typ === 'kupec' ? ' · <b style="color:#fbbf24">KUPEC</b> (skupuje od zrušených účtů)' : '') + '</div>'
+            + (r.pod_ucty && r.pod_ucty.length ? '<details style="margin-top:6px"><summary class="note" style="cursor:pointer">Účty pod ním (' + r.pod_ucty.length + ') — kdo je „zrušený" a proč</summary>'
+              + '<div class="note" style="line-height:1.6;margin-top:4px">' + r.pod_ucty.map(function (u) {
+                return (u.mrtvy ? '<span style="color:#f87171">✗</span> ' : '<span style="color:#34d399">✓</span> ') + esc(u.firma || u.nick) + ' <span style="opacity:.7">(' + esc(u.nick) + ', ' + u.linie + '. linie'
+                  + (u.koncovy ? '' : ', má pod sebou další') + ', odehráno ' + u.odehrano_min + ' min' + (u.provize ? ', provize ' + cz(u.provize) : '') + ')</span>'
+                  + (u.duvod ? ' — <b style="color:#f87171">' + esc(u.duvod) + '</b>' : '');
+              }).join('<br>') + '</div></details>' : '') + '</td>'
             + '<td class="num">' + cz(r.pod_celkem)
             + (r.linie && r.linie.length ? '<div class="note">' + r.linie.map(function (n, i) { return (i + 1) + '. linie: ' + n; }).join(' · ') + '</div>' : '')
             + '</td><td class="num">' + cz(r.koncovych) + '</td>'
