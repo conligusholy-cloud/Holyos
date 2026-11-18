@@ -252,6 +252,14 @@ router.get('/zisk-srovnani', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(await ziskSrovnani(req.query.dnu));
 }));
 
+// GET /odkazy-rozpor → u koho se rozchází počet přivedených hráčů.
+// Přivedenými se násobí tržba celé sítě, takže až se hotovost přesune na
+// server, bude z rozdílu v přehledu rozdíl v penězích.
+router.get('/odkazy-rozpor', api(async (req, res) => {
+  const { odkazyRozpor } = require('../services/game/dohled');
+  res.type('text/plain; charset=utf-8').send(await odkazyRozpor());
+}));
+
 // GET /zisk-rozbor?nick=... → ten samý rozdíl, ale prádlomat po prádlomatu.
 // Souhrn řekne, že se čísla rozešla; tohle řekne, u kterého stroje a čím.
 router.get('/zisk-rozbor', api(async (req, res) => {

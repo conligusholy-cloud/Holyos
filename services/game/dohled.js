@@ -146,6 +146,71 @@ async function skladChybi(dnu) {
 // Zajímá nás rozptyl, ne průměr: když se devadesát hráčů shodne do procenta
 // a tři se rozcházejí o polovinu, není to chyba vzorce, ale tři případy
 // k prohlédnutí.
+// Sdílené odkazy: co o nich ví hra a co server.
+//
+// Přivedení hráči zvedají návštěvnost, a tou se násobí tržba celé sítě —
+// jeden přivedený navíc je u malého hráče skoro desetina příjmu. Dokud se
+// hotovost počítá v prohlížeči, je rozdíl jen v přehledu. Jakmile se přesune
+// na server, bude to rozdíl v penězích: hráč, o jehož odkazu server neví,
+// přijde o příjem a nepozná to — prostě mu bude vycházet míň.
+//
+// Rozcházet se to může dvěma způsoby a každý znamená něco jiného:
+//   účet bez odkazu   hra počítá přivedené pod id, které si drží jen
+//                     prohlížeč; server k účtu žádný odkaz navázaný nemá
+//   jiný počet        odkaz navázaný je, ale čísla nesedí — obvykle proto,
+//                     že prohlížeč má starý údaj a ještě si ho nestáhl
+async function odkazyRozpor() {
+  const NAV = require('./navstevnost');
+  const [hraci, refy] = await Promise.all([
+    prisma.gamePlayer.findMany({ where: { disabled: false },
+      select: { id: true, nick: true, ref_id: true, state: true } }),
+    prisma.gameRef.findMany({ select: { ref_id: true }, take: 50000 }).catch(() => []),
+  ]);
+  const pocty = new Map();
+  refy.forEach((r) => pocty.set(r.ref_id, (pocty.get(r.ref_id) || 0) + 1));
+
+  const l = [];
+  hraci.forEach((h) => {
+    const st = h.state || {};
+    const hra = Math.round(Number(st.refs) || 0);
+    const srv = h.ref_id ? Math.min(NAV.REF_MAX, pocty.get(h.ref_id) || 0) : 0;
+    if (hra === srv) return;
+    // O kolik se tím liší návštěvnost, a tedy tržba celé jeho sítě.
+    const spol = { boost: Number(st.boost) || 0,
+      kampanAdd: (st.kampan && Number(st.kampan.add)) || 0, povest: Number(st.povest) || 0 };
+    const ted = Date.now();
+    const aHra = NAV.spocti(Object.assign({ refs: hra }, spol), ted);
+    const aSrv = NAV.spocti(Object.assign({ refs: srv }, spol), ted);
+    l.push({ nick: h.nick, maOdkaz: !!h.ref_id, hra, srv,
+      pct: aHra ? ((aSrv - aHra) / aHra) * 100 : 0,
+      pradlomatu: Array.isArray(st.units) ? st.units.length : 0 });
+  });
+  l.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+
+  const out = [];
+  out.push('SDÍLENÉ ODKAZY: HRA PROTI SERVERU · hráčů ' + hraci.length
+    + ' · rozchází se ' + l.length);
+  const bezOdkazu = l.filter((r) => !r.maOdkaz);
+  out.push('  z toho účtů bez navázaného odkazu: ' + bezOdkazu.length
+    + ' (tyhle server nikdy nedopočítá sám)');
+  out.push('');
+  if (!l.length) { out.push('Nic se nerozchází.'); return out.join('\n'); }
+  out.push('nick                 odkaz   přivedení hra/server   návštěvnost  prádlomatů');
+  out.push('-'.repeat(78));
+  l.slice(0, 60).forEach((r) => {
+    out.push(String(r.nick).padEnd(20).slice(0, 20)
+      + (r.maOdkaz ? ' má   ' : ' CHYBÍ')
+      + (r.hra + '/' + r.srv).padStart(14)
+      + ((r.pct >= 0 ? '+' : '') + r.pct.toFixed(1) + ' %').padStart(14)
+      + String(r.pradlomatu).padStart(12));
+  });
+  out.push('');
+  out.push('Sloupec „návštěvnost" říká, o kolik by hráči klesl (nebo stoupl)');
+  out.push('příjem celé sítě, kdyby se počítalo podle serveru. Dokud hotovost');
+  out.push('žije v prohlížeči, je to rozdíl jen v přehledu.');
+  return out.join('\n');
+}
+
 // Rozbor jednoho hráče: prádlomat po prádlomatu, hra vedle serveru.
 //
 // Souhrn výš řekne, že se čísla rozešla, ale ne proč. Tohle ukáže, u kterého
@@ -402,5 +467,5 @@ function start() {
   console.log('[game-dohled] denní přehled pojistek běží');
 }
 
-module.exports = { start, doLogu, stropPrehled, skladChybi, nastaveniPrehled, ziskRozbor,
+module.exports = { start, doLogu, stropPrehled, skladChybi, nastaveniPrehled, ziskRozbor, odkazyRozpor,
   vlastnictvi, ziskSrovnani };
