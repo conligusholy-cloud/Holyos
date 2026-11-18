@@ -352,6 +352,18 @@ app.get('/img/stroj/:kind(mini|midi|max)', async (req, res) => {
 });
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h', index: false }));
 // Finanční report master franšízy (z „fin report master franchise.xlsx", všechny listy) — neindexuje se
+// Záložka „Ekonomika prádlomatu" v /tabulka01 = kalkulačka z laundromats.eu (skripty se načítají odtamtud);
+// její relativní volání API a fotky přeposíláme na laundromats.eu
+const LM_URL = String(process.env.LM_URL || 'https://laundromats.eu').replace(/\/$/, '');
+const lmJson = (p) => async (req, res) => {
+  try { const r = await fetch(LM_URL + p, { signal: AbortSignal.timeout(15000) }); const j = await r.json();
+    (j.machines || []).forEach((m) => { if (m && m.photo && m.photo.charAt(0) === '/') m.photo = LM_URL + m.photo; });
+    res.set('Cache-Control', 'public, max-age=1800').json(j);
+  } catch (e) { res.json({}); }
+};
+app.get('/api/ekonomika/fx', lmJson('/api/ekonomika/fx'));
+app.get('/api/compounder/portal/machines', lmJson('/api/compounder/portal/machines'));
+app.get('/media/:f([\\w.-]+)', (req, res) => res.redirect(302, LM_URL + '/media/' + req.params.f));
 app.get('/tabulka01', (req, res) => res.set('Cache-Control', 'no-cache').set('X-Robots-Tag', 'noindex, nofollow').sendFile(path.join(__dirname, 'tabulka01.html')));
 const BEZ_JAZYKA = /^\/(api|admin|sso|robots\.txt|sitemap\.xml)/;
 app.use((req, res, next) => {
