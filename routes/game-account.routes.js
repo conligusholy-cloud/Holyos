@@ -1422,6 +1422,18 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
   try {
     const st = (req.body || {}).state;
     if (!st || typeof st !== 'object') return res.status(400).json({ error: stx(req)('server.chybi_stav') });
+    // Prozkoumaná města jsou dvě třetiny stavu a nejsou to data hráče — hra si
+    // je stáhla odsud a od té doby se nemění. Posílá je proto jen při změně a
+    // jindy místo nich pošle značku; tady se doplní to, co už máme uložené.
+    // Kdyby se doplnit nedaly, uložení se odmítne — stav bez měst by hráči
+    // vymazal mapu, a to je horší než neuložené kolo.
+    if (st.areas === '=') {
+      const mame = (req.player.state || {}).areas;
+      if (!mame || typeof mame !== 'object') {
+        return res.status(409).json({ error: stx(req)('server.posli_cely_stav'), cely: true });
+      }
+      st.areas = mame;
+    }
     // Strop je pojistka proti nesmyslu, ne proti velké síti. Do hlášky i do logu
     // patří skutečná velikost — jinak hráč ani my nevíme, o kolik to přeteklo,
     // a ukládání se zastaví potichu. Přesně to dva dny drželo žebříčky na

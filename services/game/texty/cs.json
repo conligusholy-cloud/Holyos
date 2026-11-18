@@ -3609,5 +3609,6 @@
   "server.burza_je_docasne_pozastavena": "Burza je teď dočasně pozastavená. Rozjednané obchody se dokončit dají, nové se zatím uzavřít nedají.",
   "dor.odskodne": "Odškodné s omluvou: {p1}",
   "server.tvuj_podil_se_mezitim_zmenil": "Tvůj podíl v té firmě se mezitím změnil. Otevři nabídku znovu a zkus to.",
-  "server.takovy_hovor_neznam": "Takový hovor neznám."
+  "server.takovy_hovor_neznam": "Takový hovor neznám.",
+  "server.posli_cely_stav": "Stav se musí poslat celý. Hra to za chvíli zkusí znovu."
 }

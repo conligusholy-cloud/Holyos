@@ -12692,6 +12692,18 @@ var SYNC_SITE_PO_SOBE = 0, SYNC_KONFLIKTU_PO_SOBE = 0;   // krátký výpadek an
 // Proto se dočasné odpovědi serveru hlásí až při třetím selhání za sebou,
 // stejně jako výpadek sítě.
 var SYNC_SERVER_PO_SOBE = 0;
+// Prozkoumaná města jsou dvě třetiny uloženého stavu a nejsou to data hráče —
+// hra si je stáhla ze serveru a od té doby se nemění. Posílat je zpátky při
+// každém uložení znamená u velkého hráče přes tři sta kilobajtů každých
+// patnáct vteřin, z telefonu a z mobilních dat. Posílají se proto jen tehdy,
+// když se opravdu změnila; jinak jde místo nich značka a server si nechá to,
+// co má uložené.
+var AREAS_ZNACKA = '=';
+var AREAS_POSLANO = null;      // podpis toho, co server naposledy přijal
+function areasPodpis() {
+  try { return JSON.stringify(S.areas || {}).length + ':' + Object.keys(S.areas || {}).length; }
+  catch (e) { return null; }
+}
 var SYNC_DOCASNE = [500, 502, 503, 504];
 // Chyby ukládání a hry se hráči neukazují — jdou tiše na server do adminu hry
 // (záložka Chyby). Stejná chyba se z jednoho zařízení hlásí nejvýš jednou za 10 minut;
@@ -12748,7 +12760,16 @@ function syncState(force) {
   // aktivni říká serveru, jestli má hráč hru doopravdy před sebou — podle toho
   // se počítá čas strávený ve hře.
   var potvrzuju = NEPOTVRZENE.slice(0, 50);
-  return apiJson('/account/state', { state: S, aktivni: !document.hidden, rev: STATE_REV,
+  // Města se posílají jen při změně. Podpis se zapíše až po úspěšném uložení,
+  // takže po jakémkoli selhání jde příště zase celý stav.
+  var podpis = areasPodpis();
+  var posilam = S;
+  if (podpis && podpis === AREAS_POSLANO) {
+    posilam = {};
+    for (var k in S) if (Object.prototype.hasOwnProperty.call(S, k)) posilam[k] = S[k];
+    posilam.areas = AREAS_ZNACKA;
+  }
+  return apiJson('/account/state', { state: posilam, aktivni: !document.hidden, rev: STATE_REV,
     vyzvednuto: potvrzuju }, 'PUT', signal ? { signal: signal } : null)
     .then(function (r) {
       syncBusy = false;
@@ -12756,11 +12777,17 @@ function syncState(force) {
       if (prerus) clearTimeout(prerus);
       if (r.ok) {
         syncOk = Date.now(); syncVarovano = 0; SYNC_CHYBA = null; SYNC_SITE_PO_SOBE = 0; SYNC_KONFLIKTU_PO_SOBE = 0; SYNC_SERVER_PO_SOBE = 0; odesliChyby();
+        AREAS_POSLANO = podpis;
         // Server stav uložil a ve stejném zápisu potvrdil doručenky.
         NEPOTVRZENE = NEPOTVRZENE.filter(function (id) { return potvrzuju.indexOf(id) < 0; });
         if (r.j && r.j.rev != null) STATE_REV = r.j.rev;
         return;
       }
+      AREAS_POSLANO = null;      // neuložilo se — příště celý stav
+      // Server si města nemohl doplnit (první uložení po obnovení účtu).
+      // Není to konflikt dvou zařízení, jen si příště řekne o celý stav —
+      // a ten už mu pošleme, protože podpis je zahozený o řádek výš.
+      if (r.status === 409 && r.j && r.j.cely) { syncState(true); return; }
       if (r.status === 409 && r.j) {
         // Jinde je novější hra. Vezmeme ji — svoje poslední vteřiny raději
         // obětujeme než cizí postup z druhého zařízení.
@@ -12797,6 +12824,7 @@ function syncState(force) {
     })
     .catch(function (err) {
       syncBusy = false;
+      AREAS_POSLANO = null;      // neuložilo se — příště celý stav
       SYNC_ODPOVEDI++;
       if (prerus) clearTimeout(prerus);
       SYNC_CHYBA = (err && err.name === 'AbortError')
