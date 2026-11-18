@@ -245,125 +245,21 @@ router.get('/sklad-rozdily', api(async (req, res) => {
 }));
 
 // GET /sklad-chybi → komu by povinný sklad zabránil ve stavbě.
-//
-// Rozhodující číslo není „kolikrát", ale „kolika hráčům, kteří mají nákupy
-// zapsané". Kdo kupoval dřív, než se nákupy začaly ukládat, bude chybět
-// vždycky a přepnutí se ho netýká — ten stroj mu doplnil dopočet.
-router.get('/sklad-chybi', api(async (req, res) => {
-  const dnu = Math.max(1, Math.min(90, parseInt(req.query.dnu, 10) || 7));
-  const od = new Date(Date.now() - dnu * 86400000);
-  const rows = await prisma.gameDohled.findMany({
-    where: { druh: 'sklad', created_at: { gte: od } },
-    orderBy: { created_at: 'desc' }, take: 500,
-  });
-  const ids = Array.from(new Set(rows.map((r) => r.player_id)));
-  const [hraci, objednavky] = await Promise.all([
-    prisma.gamePlayer.findMany({ where: { id: { in: ids } }, select: { id: true, nick: true } }),
-    prisma.gameOrder.groupBy({ by: ['player_id'], where: { player_id: { in: ids } }, _count: { _all: true } })
-      .catch(() => []),
-  ]);
-  const jmena = new Map(hraci.map((h) => [h.id, h.nick]));
-  const maObjednavky = new Map(objednavky.map((o) => [o.player_id, o._count._all]));
-  const poHraci = new Map();
-  rows.forEach((r) => {
-    const a = poHraci.get(r.player_id) || { kolik: 0, posledni: r.created_at, detail: r.detail };
-    a.kolik++;
-    poHraci.set(r.player_id, a);
-  });
-  const sObjednavkami = ids.filter((id) => (maObjednavky.get(id) || 0) > 0);
-
-  const out = [];
-  out.push('Posledních ' + dnu + ' dnů · odmítnutí nanečisto ' + rows.length
-    + ' · hráčů ' + ids.length);
-  out.push('Z toho hráčů, kteří mají na serveru zapsané nákupy: ' + sObjednavkami.length);
-  out.push('');
-  if (!rows.length) {
-    out.push('Ani jednou. Buď od nasazení nikdo nestavěl stroj, který server');
-    out.push('nezná, nebo evidence sedí. Pozná se to tak, že si koupíš stroj,');
-    out.push('postavíš ho a číslo výš zůstane na nule.');
-  } else {
-    out.push('hráč                 kolikrát   zapsaných nákupů   naposledy');
-    out.push('-'.repeat(68));
-    Array.from(poHraci.entries())
-      .sort((a, b) => b[1].kolik - a[1].kolik)
-      .slice(0, 60)
-      .forEach(([id, a]) => {
-        const obj = maObjednavky.get(id) || 0;
-        out.push(String(jmena.get(id) || ('#' + id)).padEnd(20).slice(0, 20)
-          + String(a.kolik).padStart(10) + String(obj).padStart(19)
-          + '   ' + new Date(a.posledni).toISOString().slice(0, 16).replace('T', ' ')
-          + (obj > 0 ? '   \u2190 tohohle by se přepnutí dotklo' : ''));
-      });
-    out.push('');
-    out.push('posledních 30 jednotlivě:');
-    rows.slice(0, 30).forEach((r) => {
-      out.push('  ' + new Date(r.created_at).toISOString().slice(0, 16).replace('T', ' ')
-        + '  ' + String(jmena.get(r.player_id) || ('#' + r.player_id)).padEnd(16).slice(0, 16)
-        + '  ' + (r.detail || ''));
-    });
-    out.push('');
-    out.push('Přepnout sklad_povinny na 1 má smysl teprve tehdy, až je řádek');
-    out.push('„hráčů se zapsanými nákupy" nula — jinak by hra odmítla někoho,');
-    out.push('kdo si stroj poctivě koupil.');
-  }
-  res.type('text/plain; charset=utf-8').send(out.join('\n'));
-}));
-
 // GET /strop-prehled → kolik uložení přeteklo mez přírůstku hotovosti.
-// Tohle je ladicí pohled, ne obvinění: mez je zatím schválně velkorysá a
-// zajímá nás hlavně, kolik planých poplachů dělá, než se z ní stane strop.
-router.get('/strop-prehled', api(async (req, res) => {
-  const dnu = Math.max(1, Math.min(90, parseInt(req.query.dnu, 10) || 7));
-  const od = new Date(Date.now() - dnu * 86400000);
-  const [celkem, mimo] = await Promise.all([
-    prisma.gameSnapshot.count({ where: { created_at: { gte: od } } }),
-    prisma.gameSnapshot.findMany({
-      where: { sedi: false, created_at: { gte: od } },
-      orderBy: { created_at: 'desc' }, take: 300,
-    }),
-  ]);
-  const hraci = await prisma.gamePlayer.findMany({
-    where: { id: { in: Array.from(new Set(mimo.map((x) => x.player_id))) } },
-    select: { id: true, nick: true },
-  });
-  const jmena = new Map(hraci.map((h) => [h.id, h.nick]));
-  const poHraci = new Map();
-  mimo.forEach((x) => {
-    const a = poHraci.get(x.player_id) || { kolik: 0, max: 0 };
-    a.kolik++;
-    a.max = Math.max(a.max, (x.prirustek || 0) - (x.strop || 0));
-    poHraci.set(x.player_id, a);
-  });
-  const kc = (n) => Math.round(n).toLocaleString('cs-CZ');
-  const out = [];
-  out.push('Posledních ' + dnu + ' dnů · otisků celkem ' + celkem
-    + ' · mimo mez ' + mimo.length);
-  out.push('');
-  if (!mimo.length) {
-    out.push('Žádné uložení mez nepřeteklo. To je buď dobře, nebo je mez moc');
-    out.push('velkorysá — pozná se podle toho, až ji začneme utahovat.');
-  } else {
-    out.push('hráč                 kolikrát      nejvíc nad mez');
-    out.push('-'.repeat(52));
-    Array.from(poHraci.entries())
-      .sort((a, b) => b[1].kolik - a[1].kolik)
-      .forEach(([id, a]) => {
-        out.push(String(jmena.get(id) || ('#' + id)).padEnd(20).slice(0, 20)
-          + String(a.kolik).padStart(10) + kc(a.max).padStart(20));
-      });
-    out.push('');
-    out.push('posledních 30 jednotlivě:');
-    mimo.slice(0, 30).forEach((x) => {
-      out.push('  ' + new Date(x.created_at).toISOString().slice(0, 16).replace('T', ' ')
-        + '  ' + String(jmena.get(x.player_id) || ('#' + x.player_id)).padEnd(16).slice(0, 16)
-        + ' přidal ' + kc(x.prirustek).padStart(14)
-        + ' · strop ' + kc(x.strop || 0).padStart(14)
-        + ' · ' + x.pradlomatu + ' prádlomatů'
-        + ' · za ' + Math.round((x.od_ms || 0) / 60000) + ' min');
-    });
-  }
-  res.type('text/plain; charset=utf-8').send(out.join('\n'));
+//
+// Oba přehledy skládá services/game/dohled.js, protože totéž si hra jednou
+// denně píše do logu — do administrace se musí člověk přihlásit a za celou
+// dobu se do ní kvůli tomuhle nikdo nepodíval.
+router.get('/sklad-chybi', api(async (req, res) => {
+  const { skladChybi } = require('../services/game/dohled');
+  res.type('text/plain; charset=utf-8').send(await skladChybi(req.query.dnu));
 }));
+
+router.get('/strop-prehled', api(async (req, res) => {
+  const { stropPrehled } = require('../services/game/dohled');
+  res.type('text/plain; charset=utf-8').send(await stropPrehled(req.query.dnu));
+}));
+
 
 // GET /diagnostika-dat → prázdné řádky v seznamu hráčů: přišli o uložený stav,
 // nebo ho nikdy neměli? Rozhoduje `state_rev` — zvedá se při KAŽDÉM uložení hry:

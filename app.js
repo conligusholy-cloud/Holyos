@@ -1509,6 +1509,10 @@ server.listen(PORT, async () => {
     // id míst, takže jeden prádlomat svítil ve dvou městech. Drží to pojistka
     // v nastavení, takže při dalším nasazení se jen přečte příznak.
     require('./nastroje/opravit-id-mest').priStartu();
+    // Denní přehled pojistek do logu: strop hotovosti a povinný sklad.
+    // Čeká se u nich na rozhodnutí, jestli už smí odmítat, a to rozhodnutí
+    // potřebuje čísla — do administrace se kvůli nim nikdo nepřihlásí.
+    require('./services/game/dohled').start();
     // Kurzy měn z ČNB, jednou denně. Ručně je nikdo neaktualizuje, protože
     // na to nikdo nemyslí — a účtuje se podle nich doopravdy.
     require('./services/game/kurzy').start();
