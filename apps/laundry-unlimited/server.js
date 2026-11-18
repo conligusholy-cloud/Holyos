@@ -146,6 +146,7 @@ p{margin:0 0 14px}.lead{font-size:clamp(18px,1.5vw,22px);line-height:1.6;color:v
 .hw{z-index:2}
 .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:90px}
 .facts .gl{padding:26px 28px 24px;font-size:17px;line-height:1.5;color:#dfe9fb}
+.mach .mimg{margin:-6px -8px 14px;height:220px;display:flex;align-items:center;justify-content:center;border-radius:18px;background:radial-gradient(60% 60% at 50% 55%,rgba(79,209,255,.16),transparent 70%)}.mach .mimg img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 18px 30px rgba(0,0,0,.45))}
 .ic{display:grid;place-items:center;width:46px;height:46px;border-radius:14px;background:var(--grad);color:#03101c;margin-bottom:18px;box-shadow:0 10px 30px -10px rgba(34,230,255,.7)}.ic svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .tick{overflow:hidden;border-block:1px solid var(--line);padding:26px 0;background:rgba(255,255,255,.02);-webkit-mask:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
 .tick div{display:flex;gap:44px;width:max-content;align-items:center;animation:mq 46s linear infinite}
@@ -265,13 +266,13 @@ function landing(lang) {
 <div class="gl rv" style="padding:34px 38px;margin-top:16px"><h3>${esc(t.about_prod)}</h3><p>${esc(t.about_prod_p)}</p></div>
 ${t.perf && t.perf.length ? `<div class="gl rv" style="padding:34px 38px;margin-top:16px"><h3>${esc(t.perf_h)}</h3><ul class="ck">${li(t.perf)}</ul></div>` : ''}</div></section>
 <section id="machines"><div class="wrap"><div class="sec-h rv"><div><span class="lbl">${esc(t.mach_lbl)}</span><h2>${esc(t.mach_h)}</h2></div><p>${esc(t.mach_p)}</p></div>
-<div class="facts" style="margin-top:0">${t.machines.map((m, i) => `<div class="gl tilt rv" style="--i:${i}"><h3 style="font-size:38px;margin:0 0 4px">${esc(m[0])}</h3><small>${esc(m[1])}</small><p>${esc(m[2])}</p></div>`).join('')}</div>
+<div class="facts" style="margin-top:0">${t.machines.map((m, i) => `<div class="gl tilt rv mach" style="--i:${i}"><div class="mimg"><img src="/img/stroj/${['mini', 'midi', 'max'][i]}" alt="${esc(m[0])}" loading="lazy" decoding="async" onerror="this.parentNode.remove()"></div><h3 style="font-size:38px;margin:0 0 4px">${esc(m[0])}</h3><small>${esc(m[1])}</small><p>${esc(m[2])}</p></div>`).join('')}</div>
 <div class="duo" style="margin-top:16px"><div class="gl pan rv"><h3 class="col">${esc(t.feat_h)}</h3><ul class="ck">${li(t.feat)}</ul></div>
 <div class="gl pan rv" style="--i:1"><h3 class="col">${esc(t.ben_h)}</h3><ul class="ck">${li(t.ben)}</ul><p>${esc(t.mach_cmp)}</p></div></div>
 <div class="sec-h rv" style="margin-top:70px"><div><h2 style="font-size:clamp(26px,3vw,40px)">${esc(t.inst_h)}</h2></div><p>${esc(t.inst_p)}</p></div>
 <div class="brands rv"><figure class="tilt"><img src="/img/ireland.webp" alt="" loading="lazy" width="1200" height="900"></figure><figure class="tilt"><img src="/img/blue.webp" alt="" loading="lazy" width="900" height="1200"></figure><figure class="tilt"><img src="/img/orlen.webp" alt="" loading="lazy" width="1200" height="900"></figure></div></div></section>
 <section id="model"><div class="wrap"><div class="sec-h rv"><div><span class="lbl">${esc(t.nav_model)}</span><h2>${esc(t.model_h)}</h2></div><p>${esc(t.model_p)}</p></div>
-<div class="facts" style="margin-top:0">${t.fr_cols.map((c, i) => `<div class="gl rv${i === 1 ? ' node hot' : ''}" style="--i:${i};padding:34px 30px"><small>0${i + 1}</small><h3>${esc(c[0])}</h3><p>${esc(c[1])}</p><ul class="ck">${li(c[2].map((x, k) => (k + 1) + ') ' + x))}</ul></div>`).join('')}</div>
+<div class="facts" style="margin-top:0">${t.fr_cols.map((c, i) => `<div class="gl rv${i === 1 ? ' node hot' : ''}" style="--i:${i};padding:34px 30px"><h3>${esc(c[0])}</h3><p>${esc(c[1])}</p><ul class="ck">${li(c[2])}</ul></div>`).join('')}</div>
 <div class="duo" style="margin-top:16px"><div class="gl node hot rv"><small>${esc(t.market_h)}</small><h3>${esc(t.market_h)}</h3><p>${esc(t.market_p)}</p></div>
 <div class="gl pan rv" style="--i:1"><h3 class="col">${esc(t.rev_h)}</h3><ul class="ck">${li(t.rev)}</ul></div></div></div></section>
 <section id="offer"><div class="wrap"><div class="sec-h rv"><div><span class="lbl">${esc(t.nav_offer)}</span><h2>${esc(t.offer_h)}</h2></div></div>
@@ -333,6 +334,22 @@ function simplePage(lang, h, p, path0, noindex) {
 app.get('/api/health', async (req, res) => { let db = false; try { await q('SELECT 1'); db = true; } catch (e) { /* bez DB */ } res.json({ ok: true, app: 'laundry-unlimited', db }); });
 // HTML stránky se nikdy necachují, aby se po nasazení hned projevily změny
 app.use((req, res, next) => { if (!/\.(webp|png|jpe?g|svg|ico|css|js|woff2?)$/i.test(req.path)) res.set('Cache-Control', 'no-cache'); next(); });
+// Fotky strojů MINI / MIDI / MAX z Best Series 2.0 (BS2 je bere z ceníku HolyOS). Id položek ceníku jde přenastavit
+// v env LU_MACHINE_IMG="mini,midi,max" (výchozí 11,12,20). V paměti drží 6 h; při chybě se vrátí 404 a karta zůstane bez fotky.
+const BS2_URL = String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, '');
+const MACH_IDS = (() => { const a = String(process.env.LU_MACHINE_IMG || '11,12,20').split(',').map((x) => parseInt(x, 10)); return { mini: a[0] || 11, midi: a[1] || 12, max: a[2] || 20 }; })();
+const machImg = new Map();
+app.get('/img/stroj/:kind(mini|midi|max)', async (req, res) => {
+  const k = req.params.kind, c = machImg.get(k);
+  if (c && Date.now() - c.at < 6 * 3600e3) return res.set('Content-Type', c.type).set('Cache-Control', 'public, max-age=86400').send(c.buf);
+  try {
+    const r = await fetch(BS2_URL + '/img/product/' + MACH_IDS[k], { signal: AbortSignal.timeout(15000) });
+    if (!r.ok) throw new Error('BS2 ' + r.status);
+    const buf = Buffer.from(await r.arrayBuffer()), type = r.headers.get('content-type') || 'image/png';
+    machImg.set(k, { at: Date.now(), buf, type });
+    res.set('Content-Type', type).set('Cache-Control', 'public, max-age=86400').send(buf);
+  } catch (e) { if (c) return res.set('Content-Type', c.type).send(c.buf); res.status(404).end(); }
+});
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h', index: false }));
 const BEZ_JAZYKA = /^\/(api|admin|sso|robots\.txt|sitemap\.xml)/;
 app.use((req, res, next) => {
