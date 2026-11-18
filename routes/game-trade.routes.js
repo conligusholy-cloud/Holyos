@@ -867,6 +867,149 @@ function doplatek(p) {
 // GET /trade/finance → co komu dlužím, kdo dluží mně, kdo má podíl ve mně
 // a v kom mám podíl já.
 
+// ─── Veřejná nabídka na odkup podílů ────────────────────────────────────────
+// Míří na všechny podílníky firmy najednou. Prodat musí chtít, mlčení je
+// odmítnutí a převede se jen to, co kdo doopravdy prodal.
+const PREVZETI = require('../services/game/prevzeti');
+
+// POST /trade/prevzeti { firma_id, cena_za_pct, pct, hodin }
+router.post('/trade/prevzeti', hrac, api(async (req, res) => {
+  const b = req.body || {};
+  const firmaId = parseInt(b.firma_id, 10) || 0;
+  if (!firmaId || firmaId === req.player.id) {
+    return res.status(400).json({ error: stx(req)('server.na_vlastni_firmu_nabidku_nedavas') });
+  }
+  const firma = await prisma.gamePlayer.findUnique({ where: { id: firmaId } });
+  if (!firma || firma.disabled) return res.status(404).json({ error: stx(req)('server.takovy_hrac_tu_neni') });
+
+  const cenaZaPct = Math.max(PREVZETI.CENA_MIN, Math.round(Number(b.cena_za_pct) || 0));
+  const pct = Math.max(PREVZETI.PCT_MIN, Math.min(PREVZETI.PCT_MAX, Number(b.pct) || 0));
+  const hodin = Math.max(PREVZETI.HODIN_MIN,
+    Math.min(PREVZETI.HODIN_MAX, Math.round(Number(b.hodin) || PREVZETI.HODIN_VYCHOZI)));
+
+  // Jedna běžící nabídka na firmu od jednoho útočníka. Dvě by si navzájem
+  // přebíjely cenu a podílník by nevěděl, které věřit.
+  const uz = await prisma.gameTender.findFirst({
+    where: { utocnik_id: req.player.id, firma_id: firmaId, stav: 'bezi', do: { gt: new Date() } },
+  });
+  if (uz) return res.status(409).json({ error: stx(req)('server.na_tuhle_firmu_uz_nabidku_mas') });
+
+  // Peníze se nedají zamknout — hotovost žije ve stavu hry. Aspoň se
+  // zkontroluje, že na celou nabídku teď má: útočník, co slibuje, co nemá,
+  // by jinak zjistil až po prvním prodeji, že na zbytek nedosáhne.
+  const potreba = Math.round(pct * 100 * cenaZaPct);
+  const hotovost = Math.round(stavu(req.player).cash || 0);
+  if (potreba > hotovost) {
+    return res.status(409).json({ error: stx(req)('server.na_celou_nabidku_nemas',
+      { p1: potreba, p2: hotovost }) });
+  }
+
+  const t = await prisma.gameTender.create({ data: {
+    utocnik_id: req.player.id, utocnik_nick: req.player.nick,
+    firma_id: firma.id, firma_nick: firma.nick,
+    cena_za_pct: cenaZaPct, max_pct: pct,
+    do: new Date(Date.now() + hodin * 3600000),
+  } });
+
+  // Podílníkům a majiteli to musí někdo říct — nabídka, o které nikdo neví,
+  // je k ničemu a hráč by o ní zjistil, až by bylo po lhůtě.
+  const podilnici = await prisma.gameEquity.findMany({
+    where: { firma_id: firma.id, stav: 'bezi' }, select: { investor_id: true },
+  });
+  const komu = Array.from(new Set(podilnici.map((e) => e.investor_id).concat([firma.id])))
+    .filter((x) => x !== req.player.id);
+  if (komu.length) {
+    await prisma.gameDelivery.createMany({ data: komu.map((pid) => ({
+      player_id: pid, kind: 'zprava',
+      popis: req.player.nick + ' vyhlásil nabídku na odkup podílů ve firmě ' + firma.nick,
+      text_kod: 'dor.prevzeti_vyhlaseno',
+      text_data: { p1: req.player.nick, p2: firma.nick, p3: cenaZaPct },
+    })) });
+  }
+  console.log('[game] převzetí: ' + req.player.nick + ' → ' + firma.nick
+    + ' · ' + Math.round(pct * 100) + ' % za ' + cenaZaPct + ' L$/%');
+  res.json({ ok: true, nabidka: PREVZETI.verejna(t, req.player.id) });
+}));
+
+// GET /trade/prevzeti → nabídky, které se mě týkají
+router.get('/trade/prevzeti', hrac, api(async (req, res) => {
+  res.json({ ok: true, nabidky: await PREVZETI.proHrace(req.player.id) });
+}));
+
+// POST /trade/prevzeti/:id/prodat { podil } → podílník prodává svůj kus
+router.post('/trade/prevzeti/:id/prodat', hrac, api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const t = await prisma.gameTender.findUnique({ where: { id } });
+  if (!t || PREVZETI.stav(t) !== 'bezi') {
+    return res.status(409).json({ error: stx(req)('server.tahle_nabidka_uz_nebezi') });
+  }
+  if (t.utocnik_id === req.player.id) {
+    return res.status(400).json({ error: stx(req)('server.vlastni_nabidce_prodat_nejdes') });
+  }
+  const utocnik = await prisma.gamePlayer.findUnique({ where: { id: t.utocnik_id } });
+  if (!utocnik || utocnik.disabled) {
+    return res.status(409).json({ error: stx(req)('server.druhy_hrac_uz_nehraje') });
+  }
+
+  // Co hráč v té firmě drží. Prodat jde i kus.
+  const moje = await prisma.gameEquity.findMany({
+    where: { firma_id: t.firma_id, investor_id: req.player.id, stav: 'bezi' },
+    orderBy: { id: 'asc' },
+  });
+  const mam = moje.reduce((a, e) => a + (e.podil || 0), 0);
+  if (!(mam > 0)) return res.status(409).json({ error: stx(req)('server.v_teto_firme_nic_nedrzis') });
+
+  let podil = Number(req.body && req.body.podil) || 0;
+  if (!(podil > 0)) podil = mam;
+  podil = Math.min(podil, mam, PREVZETI.zbyva(t));
+  if (!(podil > 0)) return res.status(409).json({ error: stx(req)('server.nabidka_je_uz_naplnena') });
+
+  const cena = PREVZETI.cenaZa(t, podil);
+  const hotovostUtocnika = Math.round(stavu(utocnik).cash || 0);
+  if (cena > hotovostUtocnika) {
+    return res.status(409).json({ error: stx(req)('server.utocnik_uz_na_to_nema') });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // Bereme z vlastních podílů od nejstaršího, dokud není pokryto.
+    let zbyvaVzit = podil;
+    for (const e of moje) {
+      if (zbyvaVzit <= 1e-9) break;
+      const vezmi = Math.min(e.podil, zbyvaVzit);
+      const zbytek = e.podil - vezmi;
+      const dil = (v) => Math.round((Number(v) || 0) * (zbytek / e.podil));
+      if (zbytek < 1e-9) {
+        await tx.gameEquity.update({ where: { id: e.id }, data: {
+          investor_id: utocnik.id, investor_nick: utocnik.nick,
+          cena: PREVZETI.cenaZa(t, vezmi), vyplaceno: 0 } });
+      } else {
+        await tx.gameEquity.update({ where: { id: e.id },
+          data: { podil: zbytek, cena: dil(e.cena), vyplaceno: dil(e.vyplaceno) } });
+        await tx.gameEquity.create({ data: {
+          investor_id: utocnik.id, investor_nick: utocnik.nick,
+          firma_id: t.firma_id, firma_nick: t.firma_nick,
+          podil: vezmi, cena: PREVZETI.cenaZa(t, vezmi), dalsi_at: e.dalsi_at } });
+      }
+      zbyvaVzit -= vezmi;
+    }
+    const koupeno = (t.koupeno_pct || 0) + podil;
+    await tx.gameTender.update({ where: { id: t.id }, data: {
+      koupeno_pct: koupeno,
+      stav: koupeno >= t.max_pct - 1e-9 ? 'naplnena' : 'bezi' } });
+    await tx.gameDelivery.createMany({ data: [
+      { player_id: utocnik.id, kind: 'cash', amount: -cena,
+        popis: 'Odkoupil jsi podíl ve firmě ' + t.firma_nick,
+        text_kod: 'dor.prevzeti_koupil', text_data: { p1: Math.round(podil * 100), p2: t.firma_nick } },
+      { player_id: req.player.id, kind: 'cash', amount: cena,
+        popis: 'Prodal jsi podíl ve firmě ' + t.firma_nick,
+        text_kod: 'dor.prevzeti_prodal', text_data: { p1: Math.round(podil * 100), p2: t.firma_nick } },
+    ] });
+  });
+  console.log('[game] převzetí #' + t.id + ': ' + req.player.nick + ' prodal '
+    + Math.round(podil * 100) + ' % za ' + cena + ' L$');
+  res.json({ ok: true, prodano: podil, cena });
+}));
+
 // GET /trade/krize → kdo nemá na splátku.
 // Nikdo se o nic nehlásí a o nic nežádá: kdo nemá na splátku, ten je vidět.
 // Tak to chodí i doopravdy a je to lepší hra než tlačítko „požádat o pomoc",

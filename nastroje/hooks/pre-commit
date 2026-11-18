@@ -64,6 +64,16 @@ if git diff --cached --name-only | grep -qE 'nastroje/texty-prelozit'; then
   fi
 fi
 
+# Veřejná nabídka na odkup. Jde o cizí firmu a cizí peníze; jedna špatně
+# spočítaná cena za procento znamená prodanou půlku firmy za cenu oběda.
+if git diff --cached --name-only | grep -qE 'services/game/prevzeti'; then
+  if ! node nastroje/tprevzeti.js; then
+    echo ""
+    echo "STOP: veřejná nabídka na odkup nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Ředění podílů. Podíl rozhoduje o tom, komu kolik teče ze zisku — chyba tady
 # není chyba v zobrazení, ale krádež na splátky. Commit zastaví.
 if git diff --cached --name-only | grep -qE 'services/game/podily'; then

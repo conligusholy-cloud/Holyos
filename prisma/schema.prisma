@@ -8165,6 +8165,32 @@ model GameDelivery {
   @@map("game_deliveries")
 }
 
+// Veřejná nabídka na odkup podílů.
+// Dosud se podíl dal koupit jen od jednoho hráče a po dohodě. Kdo chtěl
+// ovládnout firmu, ve které drží podíl pět lidí, musel pětkrát vyjednávat —
+// a kdo prodával poslední, řekl si o cokoli. Nabídka míří na všechny
+// podílníky najednou: jedna cena za procento, jedna lhůta, každý se
+// rozhoduje sám za sebe. Mlčení je odmítnutí.
+model GameTender {
+  id           Int      @id @default(autoincrement())
+  utocnik_id   Int
+  utocnik_nick String   @db.VarChar(24)
+  firma_id     Int
+  firma_nick   String   @db.VarChar(24)
+  cena_za_pct  Int
+  max_pct      Float
+  koupeno_pct  Float    @default(0)
+  do           DateTime
+  // bezi | naplnena | dobehla | zrusena
+  stav         String   @default("bezi") @db.VarChar(12)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  @@index([firma_id, stav])
+  @@index([utocnik_id])
+  @@map("game_tenders")
+}
+
 // Objednané a skladem ležící stroje.
 // Nákup prádlomatu dosud žil jen v prohlížeči: server věděl, že se kupovalo
 // (platil z toho provizi), ale ne co a za kolik. Proto serverové jmění
