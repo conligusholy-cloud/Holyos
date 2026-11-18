@@ -711,12 +711,12 @@ function tiskSit(rows) {
     return out.join('\n');
   }
   out.push('');
-  out.push('nick                 co      hra        server     nákup              místo');
-  out.push('-'.repeat(96));
+  out.push('nick                 co           hra        server     nákup              místo');
+  out.push('-'.repeat(101));
   rows.slice(0, 40).forEach((r) => {
     r.sporne.slice(0, 5).forEach((x, i) => {
       out.push((i ? '' : String(r.nick || '').padEnd(20).slice(0, 20))
-        .padEnd(20) + x.co.padEnd(8)
+        .padEnd(20) + x.co.padEnd(13)
         + String(x.hra).padEnd(11).slice(0, 11)
         + String(x.server).padEnd(11).slice(0, 11)
         + String(x.nakup || '').padEnd(19).slice(0, 19)
