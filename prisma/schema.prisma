@@ -8255,6 +8255,27 @@ model GameOrder {
 //
 // Společná pokladna tu není a být nemůže: hotovost žije ve stavu hry
 // v prohlížeči, takže peníze členů nejde držet ani zamknout.
+// Kdo kdy přišel o kus firmy a proč. Po každé změně podílu zůstával
+// v databázi jen nový stav; když se hráč zeptal, kam se poděla pětina jeho
+// firmy, nebylo co otevřít. Zapisuje se uvnitř téže transakce jako sám
+// převod — audit, který může chybět, není audit.
+model GameVlastnictvi {
+  id             Int      @id @default(autoincrement())
+  firma_id       Int
+  investor_id    Int
+  podil_pred     Float
+  podil_po       Float
+  // prodej | odkup | prevod | vstup | konverze | zastava | prevzeti | drazba
+  duvod          String   @db.VarChar(16)
+  trade_id       Int?
+  protistrana_id Int?
+  created_at     DateTime @default(now())
+
+  @@index([firma_id, created_at])
+  @@index([investor_id, created_at])
+  @@map("game_vlastnictvi")
+}
+
 model GameAliance {
   id            Int      @id @default(autoincrement())
   nazev         String   @db.VarChar(24)

@@ -17,6 +17,7 @@
 
 const { prisma } = require('../../config/database');
 const DIVIDENDA = require('./dividenda');
+const AUDIT = require('./audit');
 
 const MESIC_MS = 43200000;          // herní měsíc = 12 skutečných hodin
 const ZMESKAT_BEZ_ZASTAVY = 3;      // kolik odpuštěných splátek má dlužník bez zástavy
@@ -104,6 +105,7 @@ async function splatkyPujcek(ted) {
         const PODILY = require('./podily');
         const f = Math.max(0, Math.min(1, Number(p.konverze_podil) || 0));
         await prisma.$transaction(async (tx) => {
+          const auditPred = await AUDIT.otisk(tx, p.borrower_id);
           const stavajici = await tx.gameEquity.findMany({
             where: { firma_id: p.borrower_id, stav: 'bezi' },
             select: { id: true, podil: true, investor_id: true },
@@ -134,6 +136,8 @@ async function splatkyPujcek(ted) {
                 text_data: { p1: p.borrower_nick, p2: Math.round(f * 100) } });
           }
           await tx.gameLoan.update({ where: { id: p.id }, data: { stav: 'propadlo', zmeskano } });
+          await AUDIT.zapis(tx, p.borrower_id, auditPred,
+            { duvod: 'konverze', protistrana_id: p.lender_id });
         });
         console.log('[game-finance] půjčka ' + p.id + ' se změnila na podíl '
           + Math.round(f * 100) + ' % pro ' + p.lender_nick);
@@ -147,6 +151,7 @@ async function splatkyPujcek(ted) {
         const veritel = await prisma.gamePlayer.findUnique({ where: { id: p.lender_id } });
         if (firma && veritel) {
           await prisma.$transaction(async (tx) => {
+            const auditPred = await AUDIT.otisk(tx, p.borrower_id);
             await tx.gameEquity.create({ data: {
               investor_id: p.lender_id, investor_nick: p.lender_nick,
               firma_id: p.borrower_id, firma_nick: p.borrower_nick,
@@ -162,6 +167,8 @@ async function splatkyPujcek(ted) {
               { text_kod: 'dor.propadl_podil_tvuj',
                 text_data: { p1: Math.round(p.zastava_podil * 100), p2: p.borrower_nick } });
             await tx.gameLoan.update({ where: { id: p.id }, data: { stav: 'propadlo', zmeskano } });
+            await AUDIT.zapis(tx, p.borrower_id, auditPred,
+              { duvod: 'zastava', protistrana_id: p.lender_id });
           });
           console.log('[game-finance] podíl ' + Math.round(p.zastava_podil * 100)
             + ' % propadl ' + p.lender_nick);

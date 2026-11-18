@@ -244,6 +244,14 @@ router.get('/sklad-rozdily', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(tiskSklad(await sklad()));
 }));
 
+// GET /vlastnictvi → kdo kdy přišel o kus firmy a proč.
+// Volitelně ?firma=<id> nebo ?hrac=<id>, když jde o konkrétní spor.
+router.get('/vlastnictvi', api(async (req, res) => {
+  const { vlastnictvi } = require('../services/game/dohled');
+  res.type('text/plain; charset=utf-8')
+    .send(await vlastnictvi(req.query.dnu, req.query.firma, req.query.hrac));
+}));
+
 // GET /sklad-chybi → komu by povinný sklad zabránil ve stavbě.
 // GET /strop-prehled → kolik uložení přeteklo mez přírůstku hotovosti.
 //

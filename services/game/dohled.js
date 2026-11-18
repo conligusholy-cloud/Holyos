@@ -141,6 +141,50 @@ async function skladChybi(dnu) {
   return out.join('\n');
 }
 
+// ─── Vlastnické změny ────────────────────────────────────────────────────────
+// Odpověď na otázku, kterou dřív nešlo zodpovědět: kam se poděl kus firmy.
+// Čte se to dvojím způsobem — co se dělo s firmou, a co se dělo s podílem
+// jednoho hráče — proto obojí.
+async function vlastnictvi(dnu, firmaId, hracId) {
+  const d = Math.max(1, Math.min(90, parseInt(dnu, 10) || 7));
+  const od = new Date(Date.now() - d * 86400000);
+  const kde = { created_at: { gte: od } };
+  if (firmaId) kde.firma_id = parseInt(firmaId, 10) || 0;
+  if (hracId) kde.investor_id = parseInt(hracId, 10) || 0;
+  const rows = await prisma.gameVlastnictvi.findMany({
+    where: kde, orderBy: { created_at: 'desc' }, take: 200 });
+  const ids = Array.from(new Set(rows.flatMap((r) => [r.firma_id, r.investor_id, r.protistrana_id])
+    .filter(Boolean)));
+  const hraci = ids.length ? await prisma.gamePlayer.findMany({
+    where: { id: { in: ids } }, select: { id: true, nick: true, company: true } }) : [];
+  const jm = new Map(hraci.map((h) => [h.id, h.company || h.nick]));
+  const kdo = (id) => (id ? (jm.get(id) || ('#' + id)) : '\u2014');
+  const pct = (x) => (Math.round((Number(x) || 0) * 1000) / 10).toFixed(1).replace('.', ',');
+
+  const out = [];
+  out.push('VLASTNICKÉ ZMĚNY · posledních ' + d + ' dnů · záznamů ' + rows.length
+    + (firmaId ? ' · firma ' + kdo(parseInt(firmaId, 10)) : '')
+    + (hracId ? ' · hráč ' + kdo(parseInt(hracId, 10)) : ''));
+  if (!rows.length) {
+    out.push('Nic. Buď se podíly nehýbaly, nebo se zápis nedaří — pozná se to');
+    out.push('tak, že se jeden podíl prodá a číslo výš se zvedne.');
+    return out.join('\n');
+  }
+  out.push('');
+  out.push('kdy               firma            podílník          z      na    důvod');
+  out.push('-'.repeat(78));
+  rows.forEach((r) => {
+    out.push(cas(r.created_at)
+      + '  ' + String(kdo(r.firma_id)).padEnd(16).slice(0, 16)
+      + ' ' + String(kdo(r.investor_id)).padEnd(17).slice(0, 17)
+      + (pct(r.podil_pred) + ' %').padStart(7)
+      + (pct(r.podil_po) + ' %').padStart(7)
+      + '  ' + r.duvod
+      + (r.protistrana_id ? ' \u00b7 ' + kdo(r.protistrana_id) : ''));
+  });
+  return out.join('\n');
+}
+
 // ─── Jak je co nastavené ─────────────────────────────────────────────────────
 // Výchozí hodnota v kódu a skutečně platná hodnota jsou dvě různé věci:
 // nastavení v databázi má přednost. Po každé změně výchozí hodnoty je proto
@@ -174,4 +218,4 @@ function start() {
   console.log('[game-dohled] denní přehled pojistek běží');
 }
 
-module.exports = { start, doLogu, stropPrehled, skladChybi, nastaveniPrehled };
+module.exports = { start, doLogu, stropPrehled, skladChybi, nastaveniPrehled, vlastnictvi };

@@ -16,6 +16,7 @@ const { prisma } = require('../config/database');
 const acct = require('./game-account.routes');
 const PRAVA = require('../services/game/prava');
 const ALIANCE = require('../services/game/aliance');
+const AUDIT = require('../services/game/audit');
 
 router.use(express.json({ limit: '32kb' }));
 
@@ -760,7 +761,17 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
       { p1: pct((t.data || {}).podil), p2: ((t.data || {}).firma_nick || '') })
     : tx('predmet.karta');
 
+  // Čí vlastnictví se tímhle obchodem může pohnout. U podílu a vstupu je to
+  // firma prodávajícího, u odkupu a převodu ta, ke které se podíl váže.
+  const auditFirma = t.predmet === 'podil' || t.predmet === 'vstup' ? prodavajici.id
+    : t.predmet === 'odkup' ? (odkupEq && odkupEq.firma_id)
+    : t.predmet === 'prevod' ? (prevodEq && prevodEq.firma_id)
+    : null;
+
   await prisma.$transaction(async (tx) => {
+    // Otisk před změnou. Zapisuje se uvnitř transakce: buď se stane převod
+    // i jeho záznam, nebo ani jedno.
+    const auditPred = auditFirma ? await AUDIT.otisk(tx, auditFirma) : null;
     // 1. karty přihozené k ceně → od kupujícího prodávajícímu
     for (const k of karty) {
       const c = await tx.gameCard.findFirst({ where: { player_id: kupujici.id, kind: k, used_at: null }, orderBy: { id: 'asc' } });
@@ -929,6 +940,10 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
       ] });
     }
     await tx.gameTrade.update({ where: { id }, data: { stav: 'prijato', resolved_at: new Date() } });
+    if (auditPred) {
+      await AUDIT.zapis(tx, auditFirma, auditPred,
+        { duvod: t.predmet, trade_id: t.id, protistrana_id: kupujici.id });
+    }
   });
 
   console.log('[game] obchod #' + id + ': ' + prodavajici.nick + ' → ' + kupujici.nick
@@ -1318,6 +1333,7 @@ router.post('/trade/prevzeti/:id/prodat', hrac, api(async (req, res) => {
   }
 
   await prisma.$transaction(async (tx) => {
+    const auditPred = await AUDIT.otisk(tx, t.firma_id);
     // Bereme z vlastních podílů od nejstaršího, dokud není pokryto.
     let zbyvaVzit = podil;
     for (const e of moje) {
@@ -1351,6 +1367,8 @@ router.post('/trade/prevzeti/:id/prodat', hrac, api(async (req, res) => {
         popis: 'Prodal jsi podíl ve firmě ' + t.firma_nick,
         text_kod: 'dor.prevzeti_prodal', text_data: { p1: Math.round(podil * 100), p2: t.firma_nick } },
     ] });
+    await AUDIT.zapis(tx, t.firma_id, auditPred,
+      { duvod: 'prevzeti', protistrana_id: utocnik.id });
   });
   console.log('[game] převzetí #' + t.id + ': ' + req.player.nick + ' prodal '
     + Math.round(podil * 100) + ' % za ' + cena + ' L$');
