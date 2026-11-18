@@ -141,11 +141,25 @@ async function skladChybi(dnu) {
   return out.join('\n');
 }
 
+// ─── Jak je co nastavené ─────────────────────────────────────────────────────
+// Výchozí hodnota v kódu a skutečně platná hodnota jsou dvě různé věci:
+// nastavení v databázi má přednost. Po každé změně výchozí hodnoty je proto
+// potřeba vidět, co doopravdy platí — jinak se čeká na účinek, který
+// přebitý řádek v databázi zrušil.
+async function nastaveniPrehled() {
+  const acct = require('../../routes/game-account.routes');
+  const n = typeof acct._nastaveni === 'function' ? await acct._nastaveni() : {};
+  const radek = (k) => k + ': ' + (n[k] == null ? '?' : n[k]);
+  return 'NASTAVENÍ · ' + ['sklad_povinny', 'hodnosti_odmeny', 'hodnosti_zpetne', 'udalosti_zap']
+    .map(radek).join(' · ');
+}
+
 // ─── Denní výpis do logu ─────────────────────────────────────────────────────
 // Do administrace se musí člověk přihlásit; do logu při nasazování kouká
 // stejně. Proto si to hra napíše sama.
 async function doLogu() {
-  for (const [nazev, fn] of [['strop', stropPrehled], ['sklad', skladChybi]]) {
+  for (const [nazev, fn] of [['nastavení', nastaveniPrehled],
+    ['strop', stropPrehled], ['sklad', skladChybi]]) {
     try {
       console.log('\n[game-dohled] ' + (await fn(7)) + '\n');
     } catch (e) {
@@ -160,4 +174,4 @@ function start() {
   console.log('[game-dohled] denní přehled pojistek běží');
 }
 
-module.exports = { start, doLogu, stropPrehled, skladChybi };
+module.exports = { start, doLogu, stropPrehled, skladChybi, nastaveniPrehled };

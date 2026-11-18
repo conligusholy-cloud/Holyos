@@ -248,9 +248,13 @@ const POCITANE_KINDS = Object.keys(ALL).filter((k) => !SUBS[k]).concat([CASH_CUS
 // Přepínače, které jde cvaknout z administrace bez nasazování. Držíme je
 // půl minuty v paměti, ať se kvůli každému načtení hry nechodí do databáze.
 const NASTAVENI_VYCHOZI = { onboarding_rychly: '1', nick_pauza_dnu: '30', udalosti_zap: '1',
-  // Odměny za hodnosti a odznaky běží. Zpětné vyplacení stávajícím hráčům je
-  // vypnuté schválně: rozdané peníze a karty už zpátky nevezmeš.
-  hodnosti_odmeny: '1', hodnosti_zpetne: '0',
+  // Odměny za hodnosti a odznaky běží. Zpětné vyplacení stávajícím hráčům
+  // bylo dlouho vypnuté, protože rozdané peníze a karty už zpátky nevezmeš —
+  // 18. 11. 2026 padlo rozhodnutí je pustit. Doplácí se každému při prvním
+  // uložení hry, jednou: řádek v game_odmeny hlídá, že se nic nevyplatí
+  // dvakrát. Nastavení v databázi má pořád přednost, takže se to dá zastavit
+  // bez nasazení.
+  hodnosti_odmeny: '1', hodnosti_zpetne: '1',
   // Postavit půjde jen stroj, který má hráč podle serveru koupený. Dokud je
   // to vypnuté, server si jen zapisuje, co by odmítl — zapíná se to teprve
   // tehdy, až se ukáže, že by neodmítal nikoho poctivého.
