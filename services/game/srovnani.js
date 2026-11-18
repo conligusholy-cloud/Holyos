@@ -349,7 +349,8 @@ async function sit() {
   const EKO = require('./ekonomika');
   const POZEMKY = require('./pozemky');
   const hraci = await prisma.gamePlayer.findMany({
-    where: { disabled: false }, select: { id: true, nick: true, state: true } });
+    where: { disabled: false },
+    select: { id: true, nick: true, state: true, state_at: true } });
   const claims = await prisma.gameSpotClaim.findMany({
     select: { spot_id: true, player_id: true, model: true, rent: true,
       pozemek: true, score: true } });
@@ -395,7 +396,10 @@ async function sit() {
         if (c.pozemek || odhad == null) nezname++; else odhadem++;
       }
     });
-    if (sporne.length) out.push({ id: h.id, nick: h.nick, sporne });
+    // Stáří uložené hry. U míst, která hráči mezitím někdo přebral, je to ta
+    // podstatná informace: hra si je sama vyřadí, jakmile ji hráč otevře.
+    // Starý zápis tedy není rozbitý mechanismus, jen hráč, který nehrál.
+    if (sporne.length) out.push({ id: h.id, nick: h.nick, sporne, ulozeno: h.state_at || null });
   });
 
   // A teď obráceně: místa, na kterých server vidí stroj, ale hra toho hráče
@@ -711,8 +715,9 @@ function tiskSit(rows) {
     return out.join('\n');
   }
   out.push('');
-  out.push('nick                 co           hra        server     nákup              místo');
-  out.push('-'.repeat(101));
+  out.push('nick                 co           hra        server     nákup              místo'
+    + '                      naposledy hrál');
+  out.push('-'.repeat(126));
   rows.slice(0, 40).forEach((r) => {
     r.sporne.slice(0, 5).forEach((x, i) => {
       out.push((i ? '' : String(r.nick || '').padEnd(20).slice(0, 20))
@@ -720,7 +725,8 @@ function tiskSit(rows) {
         + String(x.hra).padEnd(11).slice(0, 11)
         + String(x.server).padEnd(11).slice(0, 11)
         + String(x.nakup || '').padEnd(19).slice(0, 19)
-        + String(x.spot || ''));
+        + String(x.spot || '').padEnd(27).slice(0, 27)
+        + (i ? '' : (r.ulozeno ? 'uloženo ' + String(new Date(r.ulozeno).toISOString()).slice(0, 16).replace('T', ' ') : '')));
     });
   });
   out.push('');
