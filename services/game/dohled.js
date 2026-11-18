@@ -76,8 +76,31 @@ async function stropPrehled(dnu) {
         out.push('    ' + String(jmena.get(id) || ('#' + id)).padEnd(20).slice(0, 20)
           + kc(kolik).padStart(16) + ' L$ navíc');
       });
-    out.push('  Server nevidí do přípojek, poboček, čety ani ceníku, takže čeká');
-    out.push('  víc, než se stane. Zajímavý je proto jen tenhle směr.');
+    out.push('  Server nevidí do poboček, čety ani ceníku, takže čeká víc, než');
+    out.push('  se stane. Zajímavý je proto jen tenhle směr.');
+  }
+  // Přípojky: co naúčtovala hra proti tomu, co čekal server. Server počítá
+  // horní odhad — čtyři slevy nevidí — takže se hra smí pohybovat pod ním.
+  // Nad ním ne: tím by si hráč zvedl čekanou změnu a schoval pod ni hotovost.
+  const prip = await prisma.gameSpotClaim.findMany({
+    where: { pripojky: { not: null }, pripojky_srv: { not: null }, created_at: { gte: od } },
+    select: { spot_id: true, nick: true, pripojky: true, pripojky_srv: true },
+    take: 2000,
+  }).catch(() => []);
+  if (prip.length) {
+    const nad = prip.filter((x) => x.pripojky > x.pripojky_srv + 1000);
+    out.push('');
+    out.push('PŘÍPOJKY · staveb se zapsanou cenou ' + prip.length
+      + ' · hra si naúčtovala víc, než server čekal: ' + nad.length);
+    nad.slice(0, 10).forEach((x) => {
+      out.push('    ' + String(x.nick || '').padEnd(18).slice(0, 18)
+        + String(x.spot_id).padEnd(26).slice(0, 26)
+        + 'hra ' + kc(x.pripojky) + ' · server ' + kc(x.pripojky_srv));
+    });
+    if (!nad.length) {
+      out.push('  Nic nad odhadem. Nižší čísla jsou v pořádku — četa, hotový plán,');
+      out.push('  pronajatá plocha i karta na řemeslníka cenu snižují.');
+    }
   }
   if (!mimo.length) {
     out.push('Žádné uložení mez nepřeteklo. To je buď dobře, nebo je mez moc');

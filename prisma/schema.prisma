@@ -7991,6 +7991,12 @@ model GameSpotClaim {
   player_id  Int
   nick       String   @db.VarChar(24)
   model      String   @db.VarChar(10)
+  // Co hráč zaplatil za přípojky (pripojky) a kolik za ně server čekal
+  // (pripojky_srv, horní odhad z otisku místa). Čtyři slevy server nevidí —
+  // pronajatá plocha, předem zaplacená příprava, vlastní četa a karta na
+  // řemeslníka — takže se hra smí pohybovat pod jeho číslem.
+  pripojky     Int?
+  pripojky_srv Int?
   rent       Int
   name       String?  @db.VarChar(160)
   lat        Float?

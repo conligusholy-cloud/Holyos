@@ -736,6 +736,21 @@ async function najdiStroj(playerId, model, spot) {
     return { ok: true, id: null };
   }
 }
+// Přípojky: co hra naúčtovala a kolik za ně čekal server. Server počítá
+// horní odhad z otisku místa — čtyři slevy nevidí (pronajatá připravená
+// plocha, předem zaplacená příprava, vlastní četa, karta na řemeslníka),
+// takže se hra smí pohybovat pod jeho číslem, ne nad ním.
+async function pripojkyZa(spot, model, pozemek, poslano) {
+  let zasitovane = false;
+  try {
+    zasitovane = !!(await prisma.gameSpotBuilt.findUnique({
+      where: { spot_id: spot }, select: { spot_id: true } }));
+  } catch (e) { /* bez toho vyjde odhad výš, což je ta bezpečnější strana */ }
+  const srv = POZEMKY.pripojky(spot, model, { pozemek: !!pozemek, zasitovane });
+  const hra = poslano == null ? null : Math.max(0, Math.round(Number(poslano) || 0));
+  return { srv, hra };
+}
+
 async function oznacPostaveny(id, spot) {
   if (!id) return;
   try {
@@ -2261,9 +2276,11 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
     // nikdy nevznikl — a to je horší než stroj navíc.
     const sklad = await najdiStroj(req.player.id, model, spot);
     if (!sklad.ok) return res.status(409).json({ error: stx(req)('server.takovy_stroj_nemas_skladem') });
+    const prip = model ? await pripojkyZa(spot, model, pozemek, b.pripojky) : { srv: null, hra: null };
     const c = await prisma.gameSpotClaim.create({
       data: { spot_id: spot, area_key: area, player_id: req.player.id, nick: req.player.nick,
         model, rent: pozemek ? 0 : rent, name: s(b.name, 160) || null,
+        pripojky: prip.hra, pripojky_srv: prip.srv,
         lat: Number(b.lat) || null, lon: Number(b.lon) || null, pozemek, cena: cenaZeme,
         // Skóre klient posílá už kvůli ceně pozemku; dřív se zahazovalo.
         // Bez něj server nespočítá, kolik lidí na místo chodí.
@@ -2340,7 +2357,9 @@ router.post('/spots/stavba', requirePlayer, async (req, res, next) => {
     if (cur.najemce_id) return res.status(409).json({ error: stx(req)('server.pozemek_mas_pronajaty_nejdriv_ukonci_najem') });
     const sklad = await najdiStroj(req.player.id, model, spot);
     if (!sklad.ok) return res.status(409).json({ error: stx(req)('server.takovy_stroj_nemas_skladem') });
-    const upd = await prisma.gameSpotClaim.update({ where: { spot_id: spot }, data: { model } });
+    const prip = await pripojkyZa(spot, model, cur.pozemek, (req.body || {}).pripojky);
+    const upd = await prisma.gameSpotClaim.update({ where: { spot_id: spot },
+      data: { model, pripojky: prip.hra, pripojky_srv: prip.srv } });
     await oznacPostaveny(sklad.id, spot);
     res.json({ ok: true, spot: claimPub(upd, req.player.id, await firmyMapa()) });
   } catch (e) { next(e); }

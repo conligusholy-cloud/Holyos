@@ -111,16 +111,22 @@ function hotovosti(st) { return Math.round(Number((st || {}).cash) || 0); }
 // nepočítají — server o nich evidenci nemá.
 async function utraceno(playerId, od, do_) {
   const okno = { gte: new Date(od), lte: new Date(do_) };
-  const [stroje, zeme] = await Promise.all([
+  const [stroje, zeme, pripojky] = await Promise.all([
     prisma.gameOrder.findMany({
       where: { player_id: playerId, zruseno_at: null, created_at: okno },
       select: { cena: true } }).catch(() => []),
     prisma.gameSpotClaim.findMany({
       where: { player_id: playerId, pozemek: true, created_at: okno },
       select: { cena: true } }).catch(() => []),
+    // Přípojky se platí při každé stavbě a je to největší výdaj, o kterém
+    // server dlouho nevěděl. Bere se číslo, které naúčtovala hra — server
+    // k němu má vlastní horní odhad a rozdíl je vidět v přehledu.
+    prisma.gameSpotClaim.findMany({
+      where: { player_id: playerId, pripojky: { not: null }, created_at: okno },
+      select: { pripojky: true } }).catch(() => []),
   ]);
-  const soucet = (l) => l.reduce((a, x) => a + Math.max(0, Number(x.cena) || 0), 0);
-  return soucet(stroje) + soucet(zeme);
+  const soucet = (l, pole) => l.reduce((a, x) => a + Math.max(0, Number(x[pole]) || 0), 0);
+  return soucet(stroje, 'cena') + soucet(zeme, 'cena') + soucet(pripojky, 'pripojky');
 }
 
 // Hlavní otázka: je skok hotovosti, který klient poslal, vůbec možný?

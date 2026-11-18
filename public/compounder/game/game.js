@@ -5214,17 +5214,23 @@ function installSheet(sp, areaId, modelKey, drz, pad) {
     var nazev = sp.name + (pad ? tx('veta.stani', { p1: (pad + 1) }) : '');
     // Na vlastním pozemku zábor prvního stání už existuje — jen se do něj dopíše
     // stroj. Každé další stání dostane vlastní zábor na téže zemi.
+    // Co stojí přípojky, posíláme s sebou: server si k tomu přidá vlastní
+    // odhad z otisku místa a podle obojího pak umí spočítat, kolik hotovosti
+    // hráči za uplynulý čas mělo ubýt. Bez toho mu největší výdaj chyběl.
     var volani = pron
       ? apiJson('/spots/claim', { spot_id: spotId, area_key: areaId, model: modelKey,
-          rent: e.rent, name: sp.name, lat: sp.lat, lon: sp.lon, pozemek: true })
+          rent: e.rent, name: sp.name, lat: sp.lat, lon: sp.lon, pozemek: true,
+          pripojky: e.conn })
       : mam
       ? (pad
           ? apiJson('/spots/claim', { spot_id: spotId, area_key: areaId, model: modelKey, rent: 0,
-              name: nazev, lat: sp.lat + dlat, lon: sp.lon + dlon, pozemek: true })
-          : apiJson('/spots/stavba', { spot_id: sp.id, model: modelKey }))
+              name: nazev, lat: sp.lat + dlat, lon: sp.lon + dlon, pozemek: true,
+              pripojky: e.conn })
+          : apiJson('/spots/stavba', { spot_id: sp.id, model: modelKey, pripojky: e.conn }))
       : apiJson('/spots/claim', { spot_id: sp.id, area_key: areaId, model: modelKey,
           rent: e.rent, name: sp.name, lat: sp.lat, lon: sp.lon, pozemek: false,
-          doba_mesicu: sml.doba || 0, vypoved_mesicu: sml.vypoved || 1 });
+          doba_mesicu: sml.doba || 0, vypoved_mesicu: sml.vypoved || 1,
+          pripojky: e.conn });
     volani.then(function (r) {
       b.disabled = false; b.textContent = esc(tx('hra.postavit'));
       if (!r.ok) {

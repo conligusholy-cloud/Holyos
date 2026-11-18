@@ -84,6 +84,16 @@ if git diff --cached --name-only | grep -qE 'services/game/audit'; then
   fi
 fi
 
+# Přípojky. Server si je počítá sám z otisku místa a musí mu vyjít totéž co
+# hře — jinak to není menší díra v čekané změně hotovosti, ale jiný výdaj.
+if git diff --cached --name-only | grep -qE 'services/game/pozemky|public/compounder/game/game\.js'; then
+  if ! node nastroje/tpripojky.js; then
+    echo ""
+    echo "STOP: přípojky serveru nesedí s hrou (viz výš)."
+    exit 1
+  fi
+fi
+
 # Pověst z infolinky. Násobí tržbu celé sítě, takže je to poslední místo,
 # kde by si šlo přilepšit přepsáním jednoho čísla v uložené hře.
 if git diff --cached --name-only | grep -qE 'services/game/(povest|navstevnost)|services/game/texty/linka'; then

@@ -87,6 +87,31 @@ function uznana(spotId, poslana) {
   return Math.max(p.min, Math.min(p.max, n));
 }
 
+// ─── Přípojky ────────────────────────────────────────────────────────────────
+// Co stojí připojit stroj na místě: voda, odpad, elektřina, zapojení. Cena
+// vychází z otisku místa, takže si ji server spočítá sám — a to je důvod,
+// proč tu je. Přípojky se platí při každé stavbě a jsou největší výdaj, o
+// kterém server dosud nevěděl; bez nich čekaná změna hotovosti vycházela
+// soustavně výš, než jak to doopravdy chodí.
+//
+// Musí sedět s connPrice v public/compounder/game/game.js.
+const CONN_MIN = 50000, CONN_MAX = 100000;
+const CONN_MAX_MULT = 1.2;        // MAX má víc strojů, přípojky jsou o pětinu dražší
+const POZEMEK_STAVBA = 2.2;       // příprava louky proti běžným přípojkám
+const INSTALACE_PODIL = 0.1;      // na zasíťovaném místě se platí jen zapojení
+
+// Čtyři věci cenu snižují a server o nich neví: pronajatá připravená plocha,
+// předem zaplacená příprava pozemku, vlastní četa a karta na řemeslníka.
+// Tohle číslo je proto HORNÍ odhad — kdo měl některou z nich, zaplatil míň.
+function pripojky(spotId, model, opts) {
+  const o = opts || {};
+  let base = CONN_MIN + spotHash(spotId, 'c') * (CONN_MAX - CONN_MIN);
+  if (model === 'max') base *= CONN_MAX_MULT;
+  if (o.zasitovane) base *= INSTALACE_PODIL;
+  else if (o.pozemek) base *= POZEMEK_STAVBA;
+  return Math.round(base / 1000) * 1000;
+}
+
 // Odhad pro pozemek, u kterého cenu neznáme (koupený dřív, než se ukládala).
 function odhad(spotId) {
   const p = pasmo(spotId);
@@ -94,5 +119,6 @@ function odhad(spotId) {
 }
 
 module.exports = { spotHash, planRozmer, m2, zakladZaM2, lukrativ,
-  cena, pasmo, uznana, odhad,
+  cena, pasmo, uznana, odhad, pripojky,
+  CONN_MIN, CONN_MAX, CONN_MAX_MULT, POZEMEK_STAVBA, INSTALACE_PODIL,
   POZEMEK_M2_MIN, POZEMEK_M2_MAX, POZEMEK_ZA_M2_MIN, POZEMEK_ZA_M2_MAX };
