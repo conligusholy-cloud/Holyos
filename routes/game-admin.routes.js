@@ -9,6 +9,7 @@ const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const acct = require('./game-account.routes');
 const MENY = require('../services/game/meny');
+const TEXTY = require('../services/game/texty');
 
 router.use(express.json({ limit: '64kb' }));
 router.use(requireAuth);
@@ -655,6 +656,32 @@ router.post('/players/:id/cash', api(async (req, res) => {
   const kdo = (req.user && (req.user.displayName || req.user.username)) || 'admin';
   console.log('[game] hotovost: ' + castka.toLocaleString('cs-CZ') + ' L$ → ' + p.nick + ' (přidal ' + kdo + ')');
   res.json({ ok: true, amount: castka });
+}));
+
+// POST /players/:id/odskodne { amount, duvod } — doručenka s omluvou.
+// Od prosté hotovosti výš se liší tím, že je VIDĚT. Když hře něco pokazíme,
+// nemá se to spravovat potichu připsanou kartou — hráči by v účtu přibyly
+// peníze neznámo odkud a vypadalo by to jako další chyba. Takhle si přečte,
+// za co to je.
+//
+// Důvod píše administrátor svými slovy a zůstane v jazyce, ve kterém ho
+// napsal; omluva kolem něj se skládá v jazyce toho, kdo doručenku čte.
+router.post('/players/:id/odskodne', api(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const b = req.body || {};
+  const castka = Math.round(Number(b.amount) || 0);
+  const duvod = String(b.duvod == null ? '' : b.duvod).trim().slice(0, 120);
+  if (!(castka > 0) || castka > 1000000000) return res.status(400).json({ error: 'Zadej částku mezi 1 a 1 000 000 000 L$.' });
+  if (duvod.length < 3) return res.status(400).json({ error: 'Napiš, za co se omlouváme — hráč to uvidí.' });
+  const p = await prisma.gamePlayer.findUnique({ where: { id }, select: { id: true, nick: true } });
+  if (!p) return res.status(404).json({ error: 'Hráč nenalezen.' });
+  const popis = TEXTY.t('dor.odskodne', { p1: duvod }, TEXTY.ZDROJ);
+  const d = await prisma.gameDelivery.create({ data: { player_id: id, kind: 'cash',
+    amount: castka, popis: popis.slice(0, 200), text_kod: 'dor.odskodne', text_data: { p1: duvod } } });
+  const kdo = (req.user && (req.user.displayName || req.user.username)) || 'admin';
+  console.log('[game] odškodné: ' + castka.toLocaleString('cs-CZ') + ' L$ → ' + p.nick
+    + ' · ' + duvod + ' (poslal ' + kdo + ')');
+  res.json({ ok: true, amount: castka, dorucenka: d.id, popis });
 }));
 
 // POST /players/:id/revoke { kind } — odebere jeden nepoužitý kus (když se admin ukliknul)

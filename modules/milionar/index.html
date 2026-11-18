@@ -1049,6 +1049,20 @@
           + ['100000', '500000', '1000000'].map(function (v) {
               return '<button class="btn sm" data-cash="' + v + '">+' + cz(Number(v)) + '</button>'; }).join('')
           + '</div></div>'
+          // Odškodné je to samé v penězích, ale je VIDĚT. Když hře něco
+          // pokazíme, hráč má vědět za co — jinak mu peníze přibudou neznámo
+          // odkud a vypadá to jako další chyba.
+          + '<div class="tbl-wrap" style="padding:14px 16px;margin-bottom:18px">'
+          + '<h3 style="font-size:14px;margin:0 0 4px">Poslat odškodné s omluvou</h3>'
+          + '<p class="note" style="margin:0 0 10px">Přijde jako doručenka — hráč si přečte, za co to je. '
+          + 'Důvod piš jeho slovy, uvidí ho přesně tak, jak ho napíšeš.</p>'
+          + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+          + '<input class="price-in wide" id="odsk-amt" type="number" min="1" step="100000" value="1000000">'
+          + '<span class="note">L$</span>'
+          + '<input class="price-in" id="odsk-duvod" style="flex:1;min-width:240px" maxlength="120"'
+          + ' placeholder="za co se omlouváme">'
+          + '<button class="btn sm" id="odsk-go">Poslat odškodné</button>'
+          + '</div></div>'
           + '<h3 style="font-size:14px;margin:0 0 8px">Balíčky a karty</h3>'
           + '<div class="tbl-wrap"><table class="data-table"><thead><tr><th>Položka</th><th>Druh</th>'
           + '<th class="num">K dispozici</th><th class="num">Použito</th><th class="num">Z toho darem</th>'
@@ -1148,6 +1162,18 @@
         [].forEach.call(DLG.querySelectorAll('[data-cash]'), function (b) {
           b.onclick = function () { posliCash(Number(b.getAttribute('data-cash')), b); };
         });
+        var og = DLG.querySelector('#odsk-go');
+        if (og) og.onclick = function () {
+          var castka = Number(DLG.querySelector('#odsk-amt').value) || 0;
+          var duvod = (DLG.querySelector('#odsk-duvod').value || '').trim();
+          if (duvod.length < 3) { alert('Napiš, za co se omlouváme — hráč to uvidí.'); return; }
+          if (!confirm('Poslat ' + cz(castka) + ' L$ odškodného?\n\nHráč dostane doručenku:\n'
+            + '„Odškodné s omluvou: ' + duvod + '"')) return;
+          og.disabled = true; og.textContent = 'Posílám…';
+          post('/players/' + id + '/odskodne', { amount: castka, duvod: duvod })
+            .then(function () { detail(id); })
+            .catch(function (e) { og.disabled = false; og.textContent = 'Poslat odškodné'; alert(e.message); });
+        };
         [].forEach.call(DLG.querySelectorAll('[data-grant]'), function (b) {
           b.onclick = function () {
             var kind = b.getAttribute('data-grant');
