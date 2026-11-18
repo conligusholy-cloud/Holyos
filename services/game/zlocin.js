@@ -136,8 +136,9 @@ async function nanecisto(prisma, pravidla) {
 
     // Důkazy: provize ze stromu a nákupy od stromu
     const prov = provizeKomu[h.id] || {};
-    const provize = ids.reduce((a, id) => a + (prov[id] || 0), 0);
-    const kup = (nakupy[h.id] || []).filter((x) => strom.has(x.od));
+    // Škoda jen ze zrušených / nehrajících účtů — provize od živých hráčů je v pořádku
+    const provize = ids.reduce((a, id) => a + (mrtvy(P[id]) ? (prov[id] || 0) : 0), 0);
+    const kup = (nakupy[h.id] || []).filter((x) => strom.has(x.od) && mrtvy(P[x.od]));
     const sleva = kup.reduce((a, x) => a + Math.max(0, cenik(x.model) - x.cena), 0);
     const odMrtvych = kup.filter((x) => mrtvy(P[x.od])).length;
     const mamDukaz = provize > 0 || kup.length > 0;
