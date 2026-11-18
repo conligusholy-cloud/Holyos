@@ -196,9 +196,15 @@ async function nanecisto(prisma, pravidla) {
     vsechny.forEach((r) => {
       const s = S[r.id] || {};
       r.hotovost = typeof s.cash === 'number' ? Math.round(s.cash) : null;
-      r.pradlomatu = Array.isArray(s.units) ? s.units.length : 0;
-      r.zbude_zmrazeni = r.hotovost == null ? null : r.hotovost - r.zmrazit;
-      r.zbude_max = r.hotovost == null ? null : r.hotovost - r.trest.nejvyssi;
+      const units = Array.isArray(s.units) ? s.units : [];
+      r.pradlomatu = units.length;
+      // Hodnota prádlomatů v ceníkových cenách (bez odpisu) — dá se zabavit, když nestačí hotovost
+      r.hodnota_stroju = Math.round(units.reduce((a, u) => a + cenik((u && u.eco && u.eco.model) || (u && u.model)), 0));
+      const majetek = (r.hotovost || 0) + r.hodnota_stroju;
+      r.majetek = majetek;
+      r.zbude_hotovost = r.hotovost == null ? null : r.hotovost - r.zmrazit;
+      r.zbude_zmrazeni = r.hotovost == null ? null : majetek - r.zmrazit;
+      r.zbude_max = r.hotovost == null ? null : majetek - r.trest.nejvyssi;
     });
   }
   const rad = (a, b) => b.skoda - a.skoda;
