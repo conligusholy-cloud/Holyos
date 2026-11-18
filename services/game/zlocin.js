@@ -202,6 +202,10 @@ async function nanecisto(prisma, pravidla) {
       r.hodnota_stroju = Math.round(units.reduce((a, u) => a + cenik((u && u.eco && u.eco.model) || (u && u.model)), 0));
       const majetek = (r.hotovost || 0) + r.hodnota_stroju;
       r.majetek = majetek;
+      // Co lze reálně sebrat: nejvýš tolik, kolik má (hotovost + stroje); zbytek by byl dluh
+      r.lze_sebrat = Math.max(0, Math.min(r.zmrazit, majetek));
+      r.zbyde = majetek - r.lze_sebrat;
+      r.chybi = Math.max(0, r.zmrazit - majetek);
       r.zbude_hotovost = r.hotovost == null ? null : r.hotovost - r.zmrazit;
       r.zbude_zmrazeni = r.hotovost == null ? null : majetek - r.zmrazit;
       r.zbude_max = r.hotovost == null ? null : majetek - r.trest.nejvyssi;
