@@ -1165,14 +1165,20 @@ router.get('/multi', api(async (req, res) => {
   ]);
   // Přijaté obchody se stroji / prádlomaty / pobočkami — jestli účet stroje dál prodával (přeprodej), nebo jen nesl provizi
   const obchody = await prisma.gameTrade.findMany({ where: { stav: 'prijato', predmet: { in: ['stroj', 'pradlomat', 'pobocka'] } },
-    select: { from_id: true, to_id: true, smer: true, cena: true } });
-  const prodeje = {};   // id → { prodal, komu: [ids], za, koupil, od: [ids], zaplatil }
-  const pr0 = (id) => prodeje[id] || (prodeje[id] = { prodal: 0, komu: [], za: 0, koupil: 0, od: [], zaplatil: 0 });
+    select: { id: true, from_id: true, to_id: true, smer: true, cena: true, predmet: true, model: true, spot_id: true, resolved_at: true, created_at: true } });
+  const prodeje = {};   // id → { prodal, komu: [ids], za, koupil, od: [ids], zaplatil, polozky: [] }
+  const pr0 = (id) => prodeje[id] || (prodeje[id] = { prodal: 0, komu: [], za: 0, koupil: 0, od: [], zaplatil: 0, polozky: [] });
   obchody.forEach((t) => {
     const prod = t.smer === 'koupim' ? t.to_id : t.from_id, kup = t.smer === 'koupim' ? t.from_id : t.to_id;
+    const kdy = t.resolved_at || t.created_at;
     const a = pr0(prod); a.prodal++; a.komu.push(kup); a.za += Number(t.cena) || 0;
+    a.polozky.push({ co: 'prodal', id: t.id, predmet: t.predmet, model: t.model, spot: t.spot_id, cena: Number(t.cena) || 0, kdo: kup, kdy });
     const b = pr0(kup); b.koupil++; b.od.push(prod); b.zaplatil += Number(t.cena) || 0;
+    b.polozky.push({ co: 'koupil', id: t.id, predmet: t.predmet, model: t.model, spot: t.spot_id, cena: Number(t.cena) || 0, kdo: prod, kdy });
   });
+  // Kde je který prádlomat teď: majitel zábor podle místa
+  const dnesMajitel = {};
+  mista.forEach((m) => { dnesMajitel[m.spot_id] = m.player_id; });
   // Starší účty stopu u sebe nemají — dohledá se z první události té návštěvy.
   const sidy = hraci.filter((h) => !h.reg_ip && h.sid).map((h) => h.sid);
   const prvni = {};
@@ -1262,7 +1268,17 @@ router.get('/multi', api(async (req, res) => {
         provize_za_nej: pr ? pr.castka : 0, provizi_kusu: pr ? pr.kusu : 0,
         prodej: (() => { const x = prodeje[h.id]; if (!x) return null; return { prodal: x.prodal, prodal_ve_skupine: x.komu.filter((i) => ids[i]).length, za: x.za,
           koupil: x.koupil, koupil_ve_skupine: x.od.filter((i) => ids[i]).length, zaplatil: x.zaplatil,
-          komu: [...new Set(x.komu.map((i) => (podleId[i] || {}).nick || ('#' + i)))].slice(0, 4) }; })(),
+          komu: [...new Set(x.komu.map((i) => (podleId[i] || {}).nick || ('#' + i)))].slice(0, 4),
+          polozky: x.polozky.slice(0, 12).map((p) => ({ co: p.co, id: p.id, predmet: p.predmet, model: p.model, spot: p.spot, cena: p.cena, kdy: p.kdy,
+            ucet: (podleId[p.kdo] || {}).nick || ('#' + p.kdo), firma: (podleId[p.kdo] || {}).company || null,
+            ted_u: p.spot && dnesMajitel[p.spot] ? ((podleId[dnesMajitel[p.spot]] || {}).nick || null) : null })) }; })(),
+        // Co má účet ve stavu hry: postavené prádlomaty (a u koho jsou teď podle záboru), sklad a objednávky
+        stroje_detail: (() => { const st = h.state || {}; const un = Array.isArray(st.units) ? st.units : [];
+          const sk = (st.stock && typeof st.stock === 'object') ? st.stock : {};
+          return { postaveno: un.slice(0, 10).map((u) => ({ nazev: u.name || null, spot: u.spotId || null, model: (u.eco && u.eco.model) || null,
+              ted_u: u.spotId && dnesMajitel[u.spotId] ? ((podleId[dnesMajitel[u.spotId]] || {}).nick || null) : null })),
+            sklad: Object.keys(sk).filter((k) => Number(sk[k]) > 0).map((k) => k + ' ×' + sk[k]).join(', ') || null,
+            objednano: Array.isArray(st.orders) ? st.orders.length : 0 }; })(),
         smazan: h.nick === 'smazaný hráč',
         zdroj: h.zdroj || null, ma_email: !!h.email, zablokovan: !!h.disabled,
         zarizeni: h.dev_pid || null, ip: h._ip || null, sit: IP_SIT(h._ip),
