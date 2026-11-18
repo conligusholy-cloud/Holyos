@@ -302,13 +302,18 @@ async function ziskRozbor(nick) {
   const vstupyHry = { refs: Math.round(Number(st.refs) || 0), boost: Number(st.boost) || 0,
     kampanAdd: kampanHry, povest: Number(st.povest) || 0 };
   const navHry = NAV.spocti(vstupyHry, ted.getTime());
-  const par = (a, b) => String(a) + '/' + String(b);
+  // Zaokrouhlení na tři místa: boost vychází ze sčítání desetin a bez toho
+  // se v přehledu objeví 0.44999999999999996 proti 0.45.
+  const cis = (x) => (typeof x === 'number' ? String(Math.round(x * 1000) / 1000) : String(x));
+  const par = (a, b) => cis(a) + '/' + cis(b);
   out.push('návštěvnost hra/server ' + navHry.toFixed(4) + '/' + nav.navstevnost.toFixed(4)
     + '  (' + (nav.navstevnost / (navHry || 1)).toFixed(4) + '×)');
   out.push('  vstupy hra/server · přivedení ' + par(vstupyHry.refs, nav.refs)
     + ' · boost ' + par(vstupyHry.boost, nav.boost)
     + ' · kampaň ' + par(vstupyHry.kampanAdd, nav.kampanAdd)
-    + ' · pověst ' + par(vstupyHry.povest, nav.povest) + ' (pověst zná jen hra)');
+    + ' · pověst ' + par(vstupyHry.povest, nav.povest)
+    + ' (' + (((nav.zdroje || {}).povest === 'server')
+      ? 'pověst počítá server' : 'pověst zná jen hra') + ')');
   out.push('běžících událostí ' + eventy.length + ' · prádlomatů podle serveru '
     + claims.length + ', podle hry ' + units.length);
   // Stará uložená hra je nejčastější důvod rozdílu, který vypadá jako chyba:
