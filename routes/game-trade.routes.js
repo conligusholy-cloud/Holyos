@@ -79,6 +79,17 @@ function stx(req) {
 }
 const api = (fn) => (req, res, next) => fn(req, res).catch(next);
 
+// ─── Nouzová brzda ───────────────────────────────────────────────────────────
+// Co se zastavuje a proč je v services/game/brzda.js.
+const BRZDA = require('../services/game/brzda');
+router.use((req, res, next) => {
+  if (!BRZDA.zastavit(req.method, req.path)) return next();
+  acct._nastaveni().then((n) => {
+    if (!BRZDA.zataseno(n)) return next();
+    res.status(503).json({ error: stx(req)('server.burza_je_docasne_pozastavena') });
+  }).catch(next);
+});
+
 // Stav hry hráče — sklad a postavené prádlomaty jsou v něm.
 const stavu = (p) => (p && p.state) || {};
 const skladu = (st) => {

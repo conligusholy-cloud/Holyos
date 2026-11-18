@@ -84,6 +84,17 @@ if git diff --cached --name-only | grep -qE 'services/game/audit'; then
   fi
 fi
 
+# Nouzová brzda na burzu. Brzda, která zastaví víc, než má, zamkne hráče
+# uprostřed rozjednaného obchodu — a vypadá to jako rozbitá hra. Brzda, která
+# zastaví míň, nechá otevřenou díru, kvůli které se tahala.
+if git diff --cached --name-only | grep -qE 'services/game/brzda|routes/game-trade'; then
+  if ! node nastroje/tbrzda.js; then
+    echo ""
+    echo "STOP: nouzová brzda na burzu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Investiční aliance. Posouvá práva z člověka na blok — chyba tady znamená
 # moc nad cizí firmou, na kterou ten blok nemá, nebo ztrátu práva, které má.
 if git diff --cached --name-only | grep -qE 'services/game/(aliance|prava)'; then

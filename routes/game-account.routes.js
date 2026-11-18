@@ -258,7 +258,13 @@ const NASTAVENI_VYCHOZI = { onboarding_rychly: '1', nick_pauza_dnu: '30', udalos
   // Postavit půjde jen stroj, který má hráč podle serveru koupený. Dokud je
   // to vypnuté, server si jen zapisuje, co by odmítl — zapíná se to teprve
   // tehdy, až se ukáže, že by neodmítal nikoho poctivého.
-  sklad_povinny: '0' };
+  sklad_povinny: '0',
+  // Nouzová brzda na burzu. Když se ukáže díra, která se dá zneužít, nebo
+  // se něco rozbije uprostřed provozu, vypne tohle NOVÉ závazky — nabídky,
+  // půjčky, převzetí, aliance, trh i dražby. Rozjeté věci se doběhnout
+  // nechají: přijmout, odmítnout, splatit, vyzvednout nebo z aliance odejít
+  // jde pořád. Jinak by brzda zavřela hráče v rozjednaném obchodu.
+  obchod_pozastaven: '0' };
 let _nast = { at: 0, map: null };
 async function nastaveni() {
   if (_nast.map && Date.now() - _nast.at < 30e3) return _nast.map;

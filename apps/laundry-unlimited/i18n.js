@@ -191,7 +191,7 @@ Object.assign(T.en, {
   model_h: 'Franchise model',
   model_p: 'Three roles, one system. We provide the proven system, you build the region, franchisees run the laundromats.',
   fr_cols: [
-    ['We — Laundry Unlimited', 'Franchisor functions', ['Proven business system', 'Technology and machines', 'Support platform', 'Territory exclusivity', 'Marketplace access', 'Flexible scope of support']],
+    ['We — Laundry Unlimited', 'Franchisor functions', ['Proven business system', 'Technology and machines', 'Support platform', 'Marketplace access', 'Flexible scope of support']],
     ['You — master franchise', 'Regional operator functions', ['Set up the organization, buy laundromat(s), arrange location and installation', 'Start operating while the first franchisee(s) are being found', 'Sell franchise contract(s): laundromat + location based on delivered potential and economics', 'Develop your own retail locations', 'Marketplace access']],
     ['You / they — franchisee', 'Local operator functions', ['Laundromat operations', 'Marketplace access']]
   ],
@@ -224,7 +224,7 @@ Object.assign(T.cs, {
   model_h: 'Franšízový model',
   model_p: 'Tři role, jeden systém. My dodáme prověřený systém, ty vybuduješ region, franšízanti provozují prádlomaty.',
   fr_cols: [
-    ['My — Laundry Unlimited', 'Funkce franšízora', ['Prověřený obchodní systém', 'Technologie a stroje', 'Podpůrná platforma', 'Územní exkluzivita', 'Přístup na Marketplace', 'Flexibilní rozsah podpory']],
+    ['My — Laundry Unlimited', 'Funkce franšízora', ['Prověřený obchodní systém', 'Technologie a stroje', 'Podpůrná platforma', 'Přístup na Marketplace', 'Flexibilní rozsah podpory']],
     ['Ty — master franšíza', 'Funkce regionálního operátora', ['Založení organizace, nákup prádlomatu(ů), zajištění místa a instalace', 'Zahájení provozu, než se najdou první franšízanti', 'Prodej franšízových smluv: prádlomat + místo podle potenciálu a dodané ekonomiky', 'Rozvoj vlastních provozoven', 'Přístup na Marketplace']],
     ['Ty / oni — franšízant', 'Funkce místního operátora', ['Provoz prádlomatu', 'Přístup na Marketplace']]
   ],
