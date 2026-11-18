@@ -388,9 +388,33 @@ async function sit() {
     });
     if (sporne.length) out.push({ id: h.id, nick: h.nick, sporne });
   });
+
+  // A teď obráceně: místa, na kterých server vidí stroj, ale hra toho hráče
+  // o něm neví. Dokud se hotovost počítá v prohlížeči, je to jen nesoulad
+  // v přehledech. Jakmile bude počítat server, platil by hráči za stroj,
+  // který nemá — a právě proto se to musí vyčistit dřív než pokladna.
+  const mista = new Set();
+  hraci.forEach((h) => {
+    const st = h.state || null;
+    if (!st || !Array.isArray(st.units)) return;
+    st.units.forEach((u) => { if (u && u.spotId) mista.add(h.id + '|' + u.spotId); });
+  });
+  const jmena = new Map(hraci.map((h) => [h.id, h.nick]));
+  const maStav = new Set(hraci.filter((h) => h.state && Array.isArray(h.state.units))
+    .map((h) => h.id));
+  const duchove = [];
+  claims.forEach((c) => {
+    if (!c.model) return;                       // prázdný pozemek strojem není
+    if (!maStav.has(c.player_id)) return;       // bez uloženého stavu se nedá nic tvrdit
+    if (mista.has(c.player_id + '|' + c.spot_id)) return;
+    duchove.push({ spot: c.spot_id, nick: jmena.get(c.player_id) || ('#' + c.player_id),
+      model: c.model, rent: c.rent || 0 });
+  });
+
   out.sort((a, b) => b.sporne.length - a.sporne.length);
   out.presne = presne; out.odhadem = odhadem; out.nezname = nezname;
   out.modelSpor = modelSpor; out.skoreSpor = skoreSpor;
+  out.duchove = duchove;
   return out;
 }
 
@@ -489,6 +513,18 @@ function tiskSit(rows) {
   out.push('  neocení vůbec:                ' + (rows.nezname || 0) + ' \u00b7 ' + pct(rows.nezname || 0));
   out.push('');
   out.push('Rozpory: model ' + (rows.modelSpor || 0) + ' \u00b7 skóre ' + (rows.skoreSpor || 0));
+  const duchove = rows.duchove || [];
+  out.push('Stroje, které vidí jen server (hra o nich neví): ' + duchove.length);
+  if (duchove.length) {
+    out.push('');
+    out.push('  Tyhle je potřeba vyčistit dřív, než bude hotovost na serveru —');
+    out.push('  jinak by hráči platil za stroj, který nemá.');
+    duchove.slice(0, 20).forEach((d) => {
+      out.push('  ' + String(d.spot).padEnd(26).slice(0, 26)
+        + String(d.nick).padEnd(18).slice(0, 18)
+        + String(d.model).padEnd(6) + 'nájem ' + Math.round(d.rent));
+    });
+  }
   if (!rows.length) {
     out.push('');
     out.push('Žádný rozpor. Server i hra se baví o stejných strojích na stejných');
