@@ -12686,6 +12686,13 @@ var SYNC_CHYBA = null;
 // je nula i pokusů, hra uložení vůbec nepustila a chyba je na naší straně.
 var SYNC_POKUSU = 0, SYNC_ODPOVEDI = 0, SYNC_STATUS = null;
 var SYNC_SITE_PO_SOBE = 0, SYNC_KONFLIKTU_PO_SOBE = 0;   // krátký výpadek ani jednorázový konflikt se nehlásí
+// Restart serveru při nasazení vrátí 502 všem, kdo zrovna ukládali. Hra to
+// za minutu zkusí znovu a projde to — hlásit to jako chybu u každého hráče
+// zvlášť znamená zahltit přehled chyb tak, že v něm skutečná porucha zanikne.
+// Proto se dočasné odpovědi serveru hlásí až při třetím selhání za sebou,
+// stejně jako výpadek sítě.
+var SYNC_SERVER_PO_SOBE = 0;
+var SYNC_DOCASNE = [500, 502, 503, 504];
 // Chyby ukládání a hry se hráči neukazují — jdou tiše na server do adminu hry
 // (záložka Chyby). Stejná chyba se z jednoho zařízení hlásí nejvýš jednou za 10 minut;
 // co se nepovede odeslat (výpadek sítě), čeká ve frontě a odejde s dalším hlášením.
@@ -12748,7 +12755,7 @@ function syncState(force) {
       SYNC_ODPOVEDI++; SYNC_STATUS = r.status;
       if (prerus) clearTimeout(prerus);
       if (r.ok) {
-        syncOk = Date.now(); syncVarovano = 0; SYNC_CHYBA = null; SYNC_SITE_PO_SOBE = 0; SYNC_KONFLIKTU_PO_SOBE = 0; odesliChyby();
+        syncOk = Date.now(); syncVarovano = 0; SYNC_CHYBA = null; SYNC_SITE_PO_SOBE = 0; SYNC_KONFLIKTU_PO_SOBE = 0; SYNC_SERVER_PO_SOBE = 0; odesliChyby();
         // Server stav uložil a ve stejném zápisu potvrdil doručenky.
         NEPOTVRZENE = NEPOTVRZENE.filter(function (id) { return potvrzuju.indexOf(id) < 0; });
         if (r.j && r.j.rev != null) STATE_REV = r.j.rev;
@@ -12777,7 +12784,15 @@ function syncState(force) {
       if (r.status === 413) {
         SYNC_CHYBA = tx('veta.stav_hry_je_na_server_moc', { p1: Math.round(JSON.stringify(S).length / 1024) });
       }
-      hlasChybu('ulozeni', SYNC_CHYBA, { status: r.status });
+      // Dočasná odpověď serveru (restart při nasazení) se hlásí až při
+      // třetím selhání za sebou. Všechno ostatní — 400, 409, 413 — je
+      // skutečná odpověď, kterou server poslal schválně, a hlásí se hned.
+      var docasna = SYNC_DOCASNE.indexOf(r.status) >= 0;
+      if (docasna) SYNC_SERVER_PO_SOBE++; else SYNC_SERVER_PO_SOBE = 0;
+      if (!docasna || SYNC_SERVER_PO_SOBE >= 3) {
+        hlasChybu('ulozeni', SYNC_CHYBA, { status: r.status,
+          po_sobe: docasna ? SYNC_SERVER_PO_SOBE : undefined });
+      }
       console.warn(esc(tx('hra.hra_ulozeni_selhalo')), r.status, SYNC_CHYBA);
     })
     .catch(function (err) {
