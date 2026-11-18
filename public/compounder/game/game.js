@@ -10772,10 +10772,13 @@ function financeSheet(toId, kdo, co, a) {
                     + '</select></label>'
                   : '<p class="fine">' + esc(tx('hra.nemas_postaveny_pradlomat_takze_nabizis')) + '</p>')
               : tx('veta.div_class_row_style_margin_10px', { p1: esc(tx('hra.chci_zastavu')) })
+                // Strop políčka je padesát, protože se používá i pro konverzi,
+                // kde volný podíl ve firmě nerozhoduje — podíl se vydá nový.
+                // Na to, co je u zástavy volné, ořízne číslo zastavaProcento().
                 + '<label class="fld" id="fin-pod-box" style="display:none"><span>'
                 + esc(tx('hra.jaky_podil_chces_do_zastavy')) + '</span>'
-                + '<input id="fin-zast-podil" class="inp" type="number" inputmode="numeric" min="1" max="'
-                + Math.max(1, zbyvaCizi) + '" value="' + Math.min(20, Math.max(1, zbyvaCizi)) + '"></label>')
+                + '<input id="fin-zast-podil" class="inp" type="number" inputmode="numeric" min="1" max="50"'
+                + ' value="' + Math.min(20, Math.max(1, zbyvaCizi || 20)) + '"></label>')
         : '<label class="fld"><span>' + esc(tx('hra.podil_v')) + '</span>'
           + '<input id="fin-podil" class="inp" type="number" inputmode="numeric" min="1" max="'
           + zbyvaPodilu + '" value="' + Math.min(10, zbyvaPodilu) + '"'
@@ -10800,29 +10803,44 @@ function financeSheet(toId, kdo, co, a) {
   // 0 = bez krytí, 1 = prádlomat (vybere si dlužník), 2 = podíl ve firmě.
   // Podíl si na rozdíl od prádlomatu určuje věřitel — je to cena za půjčku
   // stejně jako úrok.
+  // 0 = bez krytí, 1 = prádlomat (vybere si dlužník), 2 = zastavený podíl,
+  // 3 = konverze na nově vydaný podíl.
+  //
+  // Dvojka potřebuje ve firmě volný podíl — zastavit jde jen to, co ještě
+  // není prodané. Trojka ne: podíl se vydá nový a všichni dosavadní se
+  // zředí. Proto je trojka v nabídce vždycky, i u firmy, kde je prodané
+  // všechno, a často je to tam jediná možnost, jak půjčku vůbec krýt.
+  var STAVY = zbyvaCizi > 0 ? [0, 1, 2, 3] : [0, 1, 3];
   var zadam = 0;
   if ($('fin-zadam')) {
     $('fin-zadam').onclick = function () {
-      zadam = (zadam + 1) % (zbyvaCizi > 0 ? 3 : 2);
+      zadam = STAVY[(STAVY.indexOf(zadam) + 1) % STAVY.length];
       $('fin-zadam').classList.toggle('on', zadam > 0);
-      $('fin-zadam').textContent = zadam === 2 ? esc(tx('mapa.podil_ve_firme'))
+      $('fin-zadam').textContent = zadam === 3 ? esc(tx('hra.konverze_na_podil'))
+        : zadam === 2 ? esc(tx('mapa.podil_ve_firme'))
         : zadam === 1 ? esc(tx('hra.zastava_pradlomatem')) : esc(tx('hra.nechci'));
-      $('fin-zadam-pop').textContent = zadam === 2
+      $('fin-zadam-pop').textContent = zadam === 3
+        ? tx('veta.konverze_popis', { p1: zastavaProcento() })
+        : zadam === 2
         ? tx('veta.pri_prvni_nezaplacene_splatce_ti_podil', { p1: zastavaProcento() })
         : zadam === 1 ? tx('veta.dluznik_vybere_pradlomat_kterym_ruci_az')
         : tx('veta.pujcis_bez_kryti_kdyz_prestane_splacet');
-      if ($('fin-pod-box')) $('fin-pod-box').style.display = zadam === 2 ? '' : 'none';
+      if ($('fin-pod-box')) $('fin-pod-box').style.display = (zadam === 2 || zadam === 3) ? '' : 'none';
     };
   }
   // Kolik procent je zrovna v políčku, ořezané na to, co je ve firmě volné.
   var zastavaProcento = function () {
-    return Math.max(1, Math.min(zbyvaCizi,
-      Math.round(Number(($('fin-zast-podil') || {}).value) || 0)));
+    var v = Math.max(1, Math.round(Number(($('fin-zast-podil') || {}).value) || 0));
+    // U konverze se podíl vydává nově, takže ho volný podíl ve firmě
+    // neomezuje — jen společný strop, který platí i pro kapitálový vstup.
+    return zadam === 3 ? Math.min(50, v) : Math.min(zbyvaCizi, v);
   };
   if ($('fin-zast-podil')) {
     $('fin-zast-podil').oninput = function () {
       if (zadam === 2 && $('fin-zadam-pop')) {
         $('fin-zadam-pop').textContent = tx('veta.pri_prvni_nezaplacene_splatce_ti_podil', { p1: zastavaProcento() });
+      } else if (zadam === 3 && $('fin-zadam-pop')) {
+        $('fin-zadam-pop').textContent = tx('veta.konverze_popis', { p1: zastavaProcento() });
       }
     };
   }
@@ -10939,6 +10957,7 @@ function financeSheet(toId, kdo, co, a) {
       if (co === 'pujcim') {
         telo.zadam_zastavu = zadam === 1;
         if (zadam === 2) telo.zastava_podil = zastavaProcento() / 100;
+        if (zadam === 3) telo.konverze_podil = zastavaProcento() / 100;
       }
     } else {
       var pp = Math.max(1, Math.round(Number($('fin-podil').value) || 0));

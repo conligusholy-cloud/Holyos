@@ -8099,6 +8099,11 @@ model GameLoan {
   // Zástava podílem: kus firmy, který při první nezaplacené splátce přejde
   // věřiteli. 0,1 = deset procent. Vylučuje se se zástavou prádlomatem.
   zastava_podil Float?
+  // Konverze na nově vydaný podíl. Dělá totéž co zástava podílem, ale podíl
+  // se vydá nově a všichni dosavadní se o stejný poměr zředí. Nepotřebuje
+  // proto volný podíl ve firmě — a tím je použitelná i tam, kde je prodané
+  // všechno. Vylučuje se se zástavou prádlomatem i podílem.
+  konverze_podil Float?
   // bezi | splaceno | propadlo | vymahano
   stav         String    @default("bezi") @db.VarChar(12)
   dalsi_at     DateTime

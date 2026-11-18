@@ -3467,5 +3467,9 @@
   "hra.kolik_vlozis": "Kolik vložíš",
   "hra.za_jaky_podil": "Za jaký podíl (v %)",
   "hra.po_vstupu_budes_drzet": "Po vstupu budeš držet",
-  "veta.vstup_chces_vic": "Chceš víc, než by za ty peníze slušelo — počítej s tím, že to majitel může odmítnout."
+  "veta.vstup_chces_vic": "Chceš víc, než by za ty peníze slušelo — počítej s tím, že to majitel může odmítnout.",
+  "dor.konverze_tobe": "Nezaplatil jsi splátku, a půjčka se podle dohody změnila na podíl: {p1} % firmy má {p2}. Dluh tím skončil.",
+  "dor.konverze_tvoje": "{p2} nezaplatil splátku, takže se půjčka podle dohody změnila na podíl — držíš {p1} % jeho firmy. Dluh tím skončil.",
+  "hra.konverze_na_podil": "Konverze na podíl",
+  "veta.konverze_popis": "Když přestane splácet, půjčka se změní na {p1} % jeho firmy a dluh tím skončí. Podíl se vydá nově — všichni dosavadní podílníci se o stejný díl zředí. Nepotřebuje to volný podíl, takže to jde i u firmy, kde je prodané všechno."
 }

@@ -94,6 +94,50 @@ async function splatkyPujcek(ted) {
         continue;
       }
       const zbyva = Math.max(0, p.splatka * zbyvaSplatek);
+      // Konverze: pohledávka se mění na NOVĚ VYDANÝ podíl. Na rozdíl od
+      // zastaveného podílu se nebere z toho, co je ve firmě volné — vydá se
+      // nový a všichni dosavadní podílníci se o stejný poměr zředí, přesně
+      // jako u kapitálového vstupu. Dluh tím končí: věřitel vyměnil
+      // pohledávku za kus firmy a víc mu nikdo nic nedluží.
+      if (p.konverze_podil) {
+        const PODILY = require('./podily');
+        const f = Math.max(0, Math.min(1, Number(p.konverze_podil) || 0));
+        await prisma.$transaction(async (tx) => {
+          const stavajici = await tx.gameEquity.findMany({
+            where: { firma_id: p.borrower_id, stav: 'bezi' },
+            select: { id: true, podil: true, investor_id: true },
+          });
+          for (const e of PODILY.redeni(stavajici, f)) {
+            await tx.gameEquity.update({ where: { id: e.id }, data: { podil: e.podil } });
+          }
+          await tx.gameEquity.create({ data: {
+            investor_id: p.lender_id, investor_nick: p.lender_nick,
+            firma_id: p.borrower_id, firma_nick: p.borrower_nick,
+            podil: f, cena: Math.round(zbyva), vyplaceno: 0,
+            dalsi_at: new Date(ted.getTime() + MESIC_MS),
+          } });
+          await dorucit(tx, p.borrower_id, 'zprava', null,
+            'Nezaplatil jsi splátku a půjčka se změnila na podíl',
+            { text_kod: 'dor.konverze_tobe',
+              text_data: { p1: Math.round(f * 100), p2: p.lender_nick } });
+          await dorucit(tx, p.lender_id, 'zprava', null,
+            'Půjčka ' + p.borrower_nick + ' se změnila na podíl',
+            { text_kod: 'dor.konverze_tvoje',
+              text_data: { p1: Math.round(f * 100), p2: p.borrower_nick } });
+          // Zředili se i ostatní podílníci a nikdo se jich neptal.
+          const komu = stavajici.filter((e) => e.investor_id !== p.lender_id);
+          for (const e of komu) {
+            await dorucit(tx, e.investor_id, 'zprava', null,
+              'Ve firmě ' + p.borrower_nick + ' se tvůj podíl zředil',
+              { text_kod: 'dor.redeni_podilu',
+                text_data: { p1: p.borrower_nick, p2: Math.round(f * 100) } });
+          }
+          await tx.gameLoan.update({ where: { id: p.id }, data: { stav: 'propadlo', zmeskano } });
+        });
+        console.log('[game-finance] půjčka ' + p.id + ' se změnila na podíl '
+          + Math.round(f * 100) + ' % pro ' + p.lender_nick);
+        continue;
+      }
       if (p.zastava_podil) {
         // Zastavený podíl přechází věřiteli. Od té chvíle je to jeho běžný
         // podíl — může ho držet, prodat dál, nabídnout k odkupu i vydražit.

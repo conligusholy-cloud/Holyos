@@ -334,8 +334,17 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
           { p1: Math.round(zastPodil * 100), p2: Math.round(Math.max(0, volne) * 100) }) });
       }
     }
+    // Konverze na nově vydaný podíl. Dělá totéž co zástava podílem — při
+    // poslední nezaplacené splátce dostane věřitel kus firmy — ale podíl se
+    // vydá nově a všichni dosavadní se o stejný poměr zředí. Nepotřebuje
+    // proto volný podíl, a je tím použitelná i tam, kde je prodané všechno.
+    // Právě taková firma přitom záchranné peníze potřebuje nejvíc.
+    let konvPodil = null;
+    if (!zast && !zadam && !zastPodil && Number(b.konverze_podil) > 0) {
+      konvPodil = Math.max(PODIL_MIN, Math.min(VSTUP_MAX, Number(b.konverze_podil)));
+    }
     data = { urok, mesicu, zastava: zast, zastava_nazev: zastavaNazev,
-      zastava_podil: zastPodil,
+      zastava_podil: zastPodil, konverze_podil: konvPodil,
       zadam_zastavu: zadam, splatka: anuita(cena, urok, mesicu) };
   } else if (predmet === 'podil') {
     const podil = Math.max(PODIL_MIN, Math.min(PODIL_MAX, Number(b.podil) || 0));
@@ -591,6 +600,11 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
   let zastavaSpot = t.predmet === 'pujcka' ? ((t.data || {}).zastava || null) : null;
   let zastavaNazev = t.predmet === 'pujcka' ? ((t.data || {}).zastava_nazev || null) : null;
   const zastavaPodil = t.predmet === 'pujcka' ? (Number((t.data || {}).zastava_podil) || null) : null;
+  // Konverze volný podíl nepotřebuje — vydává se nový — takže se tu na nic
+  // neptáme. Stačí, že se vejde do stropu, který platí i pro vstup.
+  const konverzePodil = t.predmet === 'pujcka'
+    ? (Number((t.data || {}).konverze_podil) ? Math.min(VSTUP_MAX, Number((t.data || {}).konverze_podil)) : null)
+    : null;
   if (zastavaPodil) {
     // Od vystavení nabídky mohl dlužník podíl prodat jinam. Zastavit se dá
     // jen to, co je pořád volné.
@@ -685,7 +699,7 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
         borrower_id: kupujici.id, borrower_nick: kupujici.nick,
         castka: t.cena, urok, mesicu, splatka,
         zastava_spot: zastavaSpot, zastava_nazev: zastavaNazev,
-        zastava_podil: zastavaPodil,
+        zastava_podil: zastavaPodil, konverze_podil: konverzePodil,
         dalsi_at: new Date(Date.now() + MESIC_MS),
       } });
       await tx.gameDelivery.createMany({ data: [
@@ -864,7 +878,8 @@ router.get('/trade/finance', hrac, api(async (req, res) => {
       splaceno: p.splaceno, zmeskano: p.zmeskano, stav: p.stav, doplatek: doplatek(p),
       // Kolik už přes splátky proteklo a kolik má ještě přijít, v penězích.
       zaplaceno: p.splaceno * p.splatka, celkem: p.mesicu * p.splatka,
-      zastava: p.zastava_nazev || null, zastava_podil: p.zastava_podil || null, dalsi: p.dalsi_at })),
+      zastava: p.zastava_nazev || null, zastava_podil: p.zastava_podil || null,
+      konverze_podil: p.konverze_podil || null, dalsi: p.dalsi_at })),
     podily: podily.map((e) => ({ id: e.id, trade_id: e.trade_id,
       moje: e.investor_id === ja ? 'mam' : 'prodal',
       kdo: e.investor_id === ja ? e.firma_nick : e.investor_nick,
