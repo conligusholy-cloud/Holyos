@@ -105,17 +105,17 @@ const REF = {
     stat: ['1 : 5 000', 'V západní Evropě připadá zhruba jeden prádlomat na 5 000 obyvatel. V Česku a okolí je síť teprve na začátku.'],
     mcore: ['M Core · Velká Británie', 'Evropský vlastník retail parků (portfolio cca 6 mld. £) otevřel 1. 10. 2026 s provozovatelem DNL Collective první samoobslužnou prádelnu Speed Queen v M Park Halewood. Do konce roku plánuje 6 provozoven, další v roce 2027 a rozvoj na 5 let — kvůli opakovaným návštěvám zákazníků v parcích.'],
     orlen: ['ORLEN · Česko', 'Jednička mezi čerpacími stanicemi v ČR spustila v lednu 2026 na D1 v Průhonicích pilotní prádlomat jako součást strategie nepalivových služeb. Dodali jsme ho my — pračky 8 a 18 kg a sušička 18 kg, vypráno a usušeno zhruba do hodiny.'],
-    src: 'Zdroj', end: 'Jedno mají společné: začíná to prádlomatem.' },
+    vidH: 'Náš prádlomat na ORLEN Průhonice (D1)', vidL: ['Otevřeno 24/7, bez obsluhy', 'Pračky 8 a 18 kg, sušička 18 kg', 'Ovládání v 6 jazycích na dotykovém displeji', 'Když je hotovo, přijde zákazníkovi SMS — mezitím si dá kávu a nakoupí'], src: 'Zdroj', end: 'Jedno mají společné: začíná to prádlomatem.' },
   en: { k: 'Why now', h: 'Western Europe is a look into the future', sub: 'In the West, self-service laundry is a standard service at stores and retail parks. Here the market is only opening up — whoever starts first takes the best locations.',
     stat: ['1 : 5,000', 'In Western Europe there is roughly one laundromat per 5,000 inhabitants. In Central Europe the network is only just starting.'],
     mcore: ['M Core · United Kingdom', 'A pan-European retail park owner (portfolio c. £6bn) opened its first Speed Queen self-service laundry with operator DNL Collective at M Park Halewood on 1 Oct 2026. Six stores are planned by year end, more in 2027 and a five-year rollout — driven by repeat visits to its parks.'],
     orlen: ['ORLEN · Czech Republic', 'The No. 1 fuel station network in Czechia launched a pilot laundromat at Průhonice on the D1 motorway in January 2026 as part of its non-fuel strategy. We supplied it — 8 and 18 kg washers and an 18 kg dryer, washed and dried in about an hour.'],
-    src: 'Source', end: 'They all have one thing in common: it starts with a laundromat.' },
+    vidH: 'Our laundromat at ORLEN Průhonice (D1)', vidL: ['Open 24/7, unstaffed', '8 and 18 kg washers, 18 kg dryer', 'Touchscreen operation in 6 languages', 'Customers get a text when it’s done — meanwhile they grab a coffee and shop'], src: 'Source', end: 'They all have one thing in common: it starts with a laundromat.' },
   pl: { k: 'Dlaczego teraz', h: 'Europa Zachodnia to spojrzenie w przyszłość', sub: 'Na Zachodzie samoobsługowe pralnie to standard przy sklepach i parkach handlowych. U nas rynek dopiero się otwiera — kto zacznie pierwszy, zajmie najlepsze miejsca.',
     stat: ['1 : 5 000', 'W Europie Zachodniej przypada około jednej pralni na 5 000 mieszkańców. W Europie Środkowej sieć dopiero powstaje.'],
     mcore: ['M Core · Wielka Brytania', 'Europejski właściciel parków handlowych (portfel ok. 6 mld £) otworzył 1.10.2026 z operatorem DNL Collective pierwszą samoobsługową pralnię Speed Queen w M Park Halewood. Do końca roku planuje 6 lokali, kolejne w 2027 i rozwój przez 5 lat — dzięki powracającym klientom.'],
     orlen: ['ORLEN · Czechy', 'Lider stacji paliw w Czechach uruchomił w styczniu 2026 na autostradzie D1 w Průhonicach pilotażową pralnię w ramach strategii usług pozapaliwowych. Dostarczyliśmy ją my — pralki 8 i 18 kg oraz suszarka 18 kg, wyprane i wysuszone w około godzinę.'],
-    src: 'Źródło', end: 'Jedno je łączy: wszystko zaczyna się od pralni.' },
+    vidH: 'Nasza pralnia na ORLEN Průhonice (D1)', vidL: ['Otwarte 24/7, bez obsługi', 'Pralki 8 i 18 kg, suszarka 18 kg', 'Obsługa w 6 językach na ekranie dotykowym', 'Gdy pranie jest gotowe, klient dostaje SMS — w międzyczasie kawa i zakupy'], src: 'Źródło', end: 'Jedno je łączy: wszystko zaczyna się od pralni.' },
 };
 const REF_URL = { mcore: 'https://www.mcoreproperty.com/news/m-core-ventures-and-dnl-collective-open-first-speed-queen-store-at-m-park-halewood-the-first-of-six-uk-openings-planned-by-year-end',
   orlen: 'https://www.orlen.cz/novinky/pizzamat-nebo-pradlomat-orlen-prinasi-nove-sluzby-pro-zakazniky-na-cestach' };
@@ -295,6 +295,8 @@ function offerPage(o, token, opts) {
 .ox .grid{display:grid;gap:18px;margin-top:36px}.ox .g3{grid-template-columns:repeat(3,1fr)}
 .ox .refc p{margin:8px 0 14px;color:var(--tx2);line-height:1.6;font-size:15px}.ox .refc a{color:var(--az);font-weight:600;font-size:14px;text-decoration:none}.ox .refc a:hover{text-decoration:underline}.ox .refc .ico{font-size:22px}
 .ox .refstat{display:flex;flex-direction:column;justify-content:center;background:linear-gradient(160deg,rgba(30,134,224,.22),rgba(124,92,255,.18))}.ox .refstat .big{font-size:clamp(40px,4.4vw,56px);font-weight:800;letter-spacing:-.03em;background:linear-gradient(90deg,var(--az),#7aa8ff 55%,var(--vi));-webkit-background-clip:text;background-clip:text;color:transparent}
+.ox .refvid{display:grid;grid-template-columns:minmax(220px,300px) 1fr;gap:28px;align-items:center;margin-top:18px;padding:22px;border-radius:20px;background:rgba(14,22,40,.62);border:1px solid var(--line)}.ox .refvid video{width:100%;aspect-ratio:9/16;border-radius:16px;background:#000;display:block}.ox .refvid h3{font-size:22px;margin:0 0 12px}.ox .refvid ul{list-style:none;padding:0;margin:0;display:grid;gap:10px}.ox .refvid li{display:flex;gap:10px;color:var(--tx2);line-height:1.5}
+@media (max-width:720px){.ox .refvid{grid-template-columns:1fr}.ox .refvid video{max-width:320px;margin:0 auto}}
 .ox .refend{margin:26px 0 0;font-size:clamp(20px,2.2vw,26px);font-weight:750;letter-spacing:-.02em}
 .ox .card{background:rgba(14,22,40,.62);border:1px solid var(--line);border-radius:20px;padding:26px;backdrop-filter:blur(6px)}
 .ox .ico{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;font-size:24px;background:linear-gradient(135deg,rgba(79,209,255,.16),rgba(124,92,255,.12));border:1px solid rgba(79,209,255,.22);margin-bottom:18px}
@@ -393,6 +395,7 @@ function offerPage(o, token, opts) {
   ${(() => { const R = REF[L]; const card = (k, ico) => `<div class="path refc"><div class="ico">${ico}</div><h3>${esc(R[k][0])}</h3><p>${esc(R[k][1])}</p><a href="${REF_URL[k]}" target="_blank" rel="noopener">${esc(R.src)} ↗</a></div>`;
     return `<section class="sec" data-s="reference">${kick(R.k)}<h2>${esc(R.h)}</h2><p class="sub">${esc(R.sub)}</p>
     <div class="grid g3"><div class="path refc refstat"><div class="big">${esc(R.stat[0])}</div><p>${esc(R.stat[1])}</p></div>${card('mcore', '🇬🇧')}${card('orlen', '⛽')}</div>
+    <div class="refvid"><video src="/media/orlen.mp4" poster="/media/orlen-poster.jpg" controls playsinline preload="none"></video><div><div class="ico">⛽</div><h3>${esc(R.vidH)}</h3><ul>${R.vidL.map((x) => `<li>${CHK}<span>${esc(x)}</span></li>`).join('')}</ul></div></div>
     <p class="refend">${esc(R.end)}</p></section>`; })()}
 
   <section class="sec" id="zajem" data-s="zajem">${kick(X.cta)}<div class="cta"><h2>${esc(t.ctaH)}</h2><p class="sub" style="margin-bottom:20px">${esc(t.ctaSub)}</p>
