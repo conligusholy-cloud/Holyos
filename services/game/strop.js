@@ -68,11 +68,19 @@ function stropSite(claims, odMs) {
 // půjček, dárky a výhry — hra si je připisuje na pokyn serveru, takže do
 // stropu patří celé. Rozhoduje chvíle vyzvednutí, ne založení: peníze
 // přistanou v hotovosti až tehdy, a doručenka může ležet i týden.
-async function doruceno(playerId, od, do_) {
+async function doruceno(playerId, od, do_, ted) {
   try {
+    // Doručenky vyzvednuté v TOMHLE uložení ještě nejsou označené: server je
+    // potvrzuje až v transakci, která stav zapisuje, a ta běží po téhle
+    // kontrole. Bez nich vypadaly peníze z vyzvednutého balíku jako peníze
+    // odnikud — a u hráče, který staví a vyzvedává v jednom kole, to mez
+    // přetékalo pořád.
     const rows = await prisma.gameDelivery.findMany({
       where: { player_id: playerId, amount: { gt: 0 },
-        claimed_at: { gte: new Date(od - 60000), lte: new Date(do_ + 60000) } },
+        OR: [
+          { claimed_at: { gte: new Date(od - 60000), lte: new Date(do_ + 60000) } },
+          ...(Array.isArray(ted) && ted.length ? [{ id: { in: ted }, claimed_at: null }] : []),
+        ] },
       select: { amount: true },
     });
     return rows.reduce((a, r) => a + Math.max(0, Number(r.amount) || 0), 0);
@@ -116,7 +124,7 @@ async function utraceno(playerId, od, do_) {
 
 // Hlavní otázka: je skok hotovosti, který klient poslal, vůbec možný?
 // Vrací popis, ne verdikt — rozhodnutí, co s tím, patří tomu, kdo volá.
-async function prirustek(p, novyStav) {
+async function prirustek(p, novyStav, vyzvednuto) {
   // Snese i holé číslo, aby starší volání nespadlo.
   const st = (novyStav && typeof novyStav === 'object') ? novyStav : { cash: novyStav };
   const stara = hotovosti(p.state);
@@ -135,12 +143,12 @@ async function prirustek(p, novyStav) {
   const od = Math.max(0, ted - naposledy);
   // Ubylo-li, není co hlídat: strop je mez na přírůstek. Čas se ale vrací,
   // aby si otisk uměl spočítat čekanou změnu i u takového uložení.
-  if (rozdil <= 0) return { sedi: true, rozdil, strop: null, od, pujceno };
+  if (rozdil <= 0) return { sedi: true, rozdil, strop: null, od, pujceno, vyzvednuto };
   const claims = await prisma.gameSpotClaim.findMany({
     where: { player_id: p.id }, select: { model: true },
   });
   const zeStroju = stropSite(claims, od);
-  const zeServeru = await doruceno(p.id, naposledy, ted);
+  const zeServeru = await doruceno(p.id, naposledy, ted, vyzvednuto);
   // Půjčka se přičítá do stropu, ne odečítá od přírůstku: v otisku pak
   // zůstane skutečný skok hotovosti a vedle něj mez, která ho vysvětluje.
   const strop = Math.round(zeStroju + zeServeru + REZERVA + pujceno);
@@ -151,6 +159,7 @@ async function prirustek(p, novyStav) {
     ze_stroju: Math.round(zeStroju),
     ze_serveru: Math.round(zeServeru),
     pujceno,
+    vyzvednuto,
   };
 }
 
@@ -160,12 +169,12 @@ async function prirustek(p, novyStav) {
 // Zisk se bere z toho, co umí spočítat server sám — tedy ze stejného
 // výpočtu, který se u otisku porovnává s hrou. Měsíční zisk se poměrem
 // rozpočítá na uplynulý čas.
-async function ocekavanaZmena(p, st, od, zisk) {
+async function ocekavanaZmena(p, st, od, zisk, vyzvednuto) {
   const ted = Date.now();
   const naposledy = ted - Math.max(0, od);
   const mesicu = Math.max(0, od) / MESIC_MS;
   const zeSite = zisk ? zisk.server * mesicu : 0;
-  const dorucenky = await doruceno(p.id, naposledy, ted);
+  const dorucenky = await doruceno(p.id, naposledy, ted, vyzvednuto);
   const nakupy = await utraceno(p.id, naposledy, ted);
   // Čerpání úvěru hotovost zvedá, splátka ji snižuje — a obojí je vidět na
   // dluhu, ne na hotovosti.
@@ -293,7 +302,7 @@ async function otisk(p, st, v) {
   // doručenky, nákupy, čerpání a splátky úvěru. Počítá se tu ze stejného
   // důvodu jako zisk: jsou to další dva dotazy a u každého uložení by to
   // bylo zbytečné.
-  const cek = await ocekavanaZmena(p, st, v.od, zisk).catch(() => null);
+  const cek = await ocekavanaZmena(p, st, v.od, zisk, v.vyzvednuto).catch(() => null);
   await prisma.gameSnapshot.create({ data: {
     player_id: p.id,
     hotovost: Math.round(Number(st && st.cash) || 0),
@@ -316,9 +325,9 @@ async function otisk(p, st, v) {
 
 // Co se volá z ukládání hry. Nikdy nevyhodí výjimku a nikdy neblokuje —
 // zatím jen měří a zapisuje otisk. Vrací true, když je přírůstek v mezích.
-async function zkontroluj(p, st) {
+async function zkontroluj(p, st, vyzvednuto) {
   try {
-    const v = await prirustek(p, st);
+    const v = await prirustek(p, st, vyzvednuto);
     if (!v.sedi) zapis(p, v);
     await otisk(p, st, v).catch((e) => console.warn('[game-otisk]', e && e.message));
     return v.sedi;

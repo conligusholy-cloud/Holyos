@@ -1439,7 +1439,13 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
     // hráč od posledního uložení vůbec mohl vydělat, a nesedící skok zapíše
     // do logu. Ukládání nebrzdí ani neblokuje — až bude z provozu vidět,
     // kolik to dělá planých poplachů, stane se z meze skutečný strop.
-    require('../services/game/strop').zkontroluj(req.player, st)
+    // Doručenky, které si hra v tomhle uložení vyzvedla, se musí do meze
+    // započítat — potvrzují se až níž, v transakci, takže by je kontrola
+    // jinak neviděla a peníze z nich by vypadaly jako peníze odnikud.
+    const vyzvedavane = Array.isArray((req.body || {}).vyzvednuto)
+      ? (req.body || {}).vyzvednuto.map((x) => parseInt(x, 10)).filter(Number.isFinite).slice(0, 100)
+      : [];
+    require('../services/game/strop').zkontroluj(req.player, st, vyzvedavane)
       .catch((e) => console.warn('[game-strop]', e && e.message));
 
     const ted = new Date();
@@ -1447,9 +1453,7 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
     // transakci. Dřív se potvrzovaly zvlášť, a když to potvrzení nedošlo,
     // server poslal totéž znovu a hra si peníze připsala podruhé. Takhle
     // projde buď obojí, nebo nic: stav bez potvrzení neexistuje.
-    const vyzvednuto = Array.isArray((req.body || {}).vyzvednuto)
-      ? (req.body || {}).vyzvednuto.map((x) => parseInt(x, 10)).filter(Number.isFinite).slice(0, 100)
-      : [];
+    const vyzvednuto = vyzvedavane;
     const [p] = await prisma.$transaction([
       prisma.gamePlayer.update({
         where: { id: req.player.id },
