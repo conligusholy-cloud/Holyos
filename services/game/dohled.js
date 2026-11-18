@@ -193,10 +193,15 @@ async function ziskRozbor(nick) {
     + ' · kampaň ' + nav.kampanAdd + ' · pověst ' + nav.povest + ' (z klienta)');
   out.push('běžících událostí ' + eventy.length + ' · prádlomatů podle serveru '
     + claims.length + ', podle hry ' + units.length);
+  // Stará uložená hra je nejčastější důvod rozdílu, který vypadá jako chyba:
+  // hra počítala s konjunkturou a událostmi svého posledního tiknutí.
+  const ulozeno = p.state_at ? new Date(p.state_at) : null;
+  out.push('uloženo ' + (ulozeno ? ulozeno.toISOString().slice(0, 16).replace('T', ' ')
+    + ' (před ' + Math.round((ted - ulozeno) / 60000) + ' minutami)' : 'neznámo'));
   out.push('');
   out.push('místo                     model  skóre   nájem     podíl chod'
-    + '      hra      server    rozdíl');
-  out.push('-'.repeat(104));
+    + '  událost hra/srv      hra      server    rozdíl');
+  out.push('-'.repeat(120));
 
   let hraC = 0, srvC = 0;
   claims.forEach((c) => {
@@ -209,9 +214,13 @@ async function ziskRozbor(nick) {
     const chod = eco.chod == null ? 1 : Number(eco.chod);
     // Server počítá tak, jak počítá doopravdy — včetně podílu na místě,
     // aby bylo vidět, jestli rozdíl dělá vstup, nebo vzorec.
+    const udSrv = EKO.udalostKoef(udalosti, c.area_key, claims.length, ted.getTime());
     const e = EKO.jedenStroj({ model: c.model, score: score || 0, rent: c.rent,
       pozemek: !!c.pozemek, podil, area_key: c.area_key },
-    nav.navstevnost, { udalost: EKO.udalostKoef(udalosti, c.area_key, claims.length, ted.getTime()), chod });
+    nav.navstevnost, { udalost: udSrv, chod });
+    // Hra si svůj koeficient událostí ukládá ke stroji, takže se dá postavit
+    // vedle serverového. Když se tyhle dva liší, není to ve vzorci.
+    const udHra = eco.udalost == null ? null : Number(eco.udalost);
     const hra = Math.round(eco.profit || 0);
     hraC += hra; srvC += e.zisk;
     const rozdil = hra ? ((e.zisk - hra) / Math.abs(hra)) * 100 : 0;
@@ -221,6 +230,7 @@ async function ziskRozbor(nick) {
       + kc(c.rent).padStart(8)
       + (c.pozemek ? ' vlastní' : '        ')
       + podil.toFixed(2).padStart(6) + chod.toFixed(2).padStart(5)
+      + ((udHra == null ? '—' : udHra.toFixed(3)) + '/' + udSrv.navstevnost.toFixed(3)).padStart(15)
       + kc(hra).padStart(10) + kc(e.zisk).padStart(12)
       + ((rozdil >= 0 ? '+' : '') + rozdil.toFixed(1) + ' %').padStart(10));
   });
@@ -231,14 +241,18 @@ async function ziskRozbor(nick) {
     const hra = Math.round((u.eco && u.eco.profit) || 0);
     hraC += hra;
     out.push(String(u.spotId).padEnd(26).slice(0, 26) + '— server o tomhle místě neví —'.padEnd(32)
-      + kc(hra).padStart(10) + '           —');
+      + kc(hra).padStart(25) + '           —');
   });
-  out.push('-'.repeat(104));
-  out.push('celkem'.padEnd(58) + kc(hraC).padStart(10) + kc(srvC).padStart(12)
+  out.push('-'.repeat(120));
+  out.push('celkem'.padEnd(73) + kc(hraC).padStart(10) + kc(srvC).padStart(12)
     + ((hraC ? (((srvC - hraC) / Math.abs(hraC)) * 100) : 0).toFixed(1) + ' %').padStart(10));
   out.push('');
   out.push('Podíl a chod se berou ze stavu hry — server je sám nezná. Vlnka');
   out.push('u skóre znamená, že ho server dopočítal z nájmu, místo aby ho měl.');
+  out.push('Sloupec „událost" staví koeficient, se kterým počítala hra, vedle');
+  out.push('serverového. Liší-li se, není chyba ve vzorci, ale ve vstupu — a');
+  out.push('taky se tím pozná stará uložená hra: hra počítala s tím, co platilo');
+  out.push('při jejím posledním tiknutí, server s tím, co platí teď.');
   return out.join('\n');
 }
 

@@ -182,8 +182,15 @@ async function ziskSrovnani(p, st) {
   // Porouchaný stroj vydělává míň. Chod žije ve stavu hry — bereme ho odtud
   // a je to, stejně jako pověst, zbývající místo, kde se věří klientovi.
   const chody = new Map();
+  // Druhý a třetí stroj na jednom pozemku si zákazníky nepřivede — dělí se o
+  // ty, co tam chodí tak jako tak. Server o tom dělení neví: evidence míst má
+  // na stroj jeden řádek a kolik z poptávky na něj připadá, drží jen hra.
+  // Bez toho vycházel serverový zisk takovému hráči o třetinu výš.
+  const podily = new Map();
   (Array.isArray(st && st.units) ? st.units : []).forEach((u) => {
-    if (u && u.spotId && u.eco && u.eco.chod != null) chody.set(u.spotId, Number(u.eco.chod));
+    if (!u || !u.spotId || !u.eco) return;
+    if (u.eco.chod != null) chody.set(u.spotId, Number(u.eco.chod));
+    if (u.eco.podil != null) podily.set(u.spotId, Number(u.eco.podil));
   });
 
   // Kolik prádlomatů umí server ocenit přesně. Zbytku se skóre dopočítá
@@ -196,7 +203,8 @@ async function ziskSrovnani(p, st) {
       score = EKO.skoreZNajmu(c.rent, deal);
     } else presne++;
     return { model: c.model, score: score || 0, rent: c.rent, pozemek: !!c.pozemek,
-      area_key: c.area_key, chod: chody.has(c.spot_id) ? chody.get(c.spot_id) : 1 };
+      area_key: c.area_key, chod: chody.has(c.spot_id) ? chody.get(c.spot_id) : 1,
+      podil: podily.has(c.spot_id) ? podily.get(c.spot_id) : 1 };
   });
 
   const nav = await NAV.proHrace(p, st);
