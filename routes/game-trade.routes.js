@@ -671,6 +671,10 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
     : t.predmet === 'podil' ? tx('predmet.podil_pct', { p1: Math.round(((t.data || {}).podil || 0) * 100) })
     : t.predmet === 'vstup' ? tx('predmet.vstup_pct', { p1: Math.round(((t.data || {}).podil || 0) * 100) })
     : t.predmet === 'odklad' ? tx('predmet.odklad_mesicu', { p1: ((t.data || {}).odklad_mesicu || 1) })
+    // Karta je poslední známý předmět, ne odkladiště pro všechno ostatní:
+    // dokud byla ve větvi „co zbyde", ukázal se každý nový druh obchodu
+    // jako „karta" bez názvu — v nabídce i v doručence.
+    : t.predmet !== 'karta' ? String(t.predmet || '?')
     : t.predmet === 'odkup' ? tx('predmet.odkup_pct', { p1: Math.round(((t.data || {}).podil || 0) * 100) })
     : t.predmet === 'prevod' ? tx('predmet.podil_pct_firma',
       { p1: pct((t.data || {}).podil), p2: ((t.data || {}).firma_nick || '') })

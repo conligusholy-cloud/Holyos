@@ -3492,5 +3492,7 @@
   "server.utocnik_uz_na_to_nema": "Vyhlašovatel na to teď nemá hotovost. Zkus to za chvíli, nebo prodej menší kus.",
   "dor.prevzeti_vyhlaseno": "{p1} vyhlásil nabídku na odkup podílů ve firmě {p2} za {penize:p3} za procento. Prodat můžeš, nemusíš.",
   "dor.prevzeti_koupil": "Odkoupil jsi {p1} % firmy {p2}.",
-  "dor.prevzeti_prodal": "Prodal jsi {p1} % firmy {p2}."
+  "dor.prevzeti_prodal": "Prodal jsi {p1} % firmy {p2}.",
+  "veta.popis_vstup": "kapitálový vstup za {p1} % firmy",
+  "veta.popis_odklad": "odklad splátky o {p1} herních měsíců"
 }

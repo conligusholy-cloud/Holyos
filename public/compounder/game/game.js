@@ -9401,8 +9401,23 @@ function predmetPopis(t) {
   if (t.predmet === 'podil') return tx('veta.podil_ve_firme_2', { p1: Math.round(((t.data || {}).podil || 0) * 100) });
   if (t.predmet === 'odkup') return tx('veta.zpetny_odkup_podilu', { p1: Math.round(((t.data || {}).podil || 0) * 100) });
   if (t.predmet === 'prevod') return tx('veta.podil_ve_firme', { p1: pctHra((t.data || {}).podil), p2: ((t.data || {}).firma_nick || '') });
-  var c = (CARDS_CAT || []).filter(function (x) { return x.kind === t.card_kind; })[0];
-  return tx('hra.karta_x', { p1: (c ? polNazev(c) : t.card_kind) });
+  if (t.predmet === 'vstup') {
+    var dv = t.data || {};
+    return tx('veta.popis_vstup', { p1: Math.round((dv.podil || 0) * 100) });
+  }
+  if (t.predmet === 'odklad') {
+    var dd = t.data || {};
+    return tx('veta.popis_odklad', { p1: (dd.odklad_mesicu || 1) });
+  }
+  // Karta je poslední známý předmět, ne odkladiště pro všechno ostatní.
+  // Dokud tu tahle větev byla jako „co zbyde", každý nový druh obchodu se
+  // hráči ukázal jako „karta" bez názvu — a ten se pak právem ptal, co to
+  // má být.
+  if (t.predmet === 'karta') {
+    var c = (CARDS_CAT || []).filter(function (x) { return x.kind === t.card_kind; })[0];
+    return tx('hra.karta_x', { p1: (c ? polNazev(c) : (t.card_kind || '?')) });
+  }
+  return esc(String(t.predmet || '?'));
 }
 function cenaPopis(t) {
   var casti = [];
