@@ -99,6 +99,25 @@ function cenaPradlomatu(zisk, invest) {
   if (!(invest > 0)) return podleZisku;
   return Math.max(Math.round(invest * 0.5), Math.min(Math.round(invest * 1.2), podleZisku));
 }
+// Práh pro rozšířené finanční údaje. Zadání má 10–24,99 % jako „přístup
+// k rozšířeným finančním informacím"; pod tím je hráč finanční investor.
+const PRAH_FINANCE = 0.10;
+
+// Co z ocenění uvidí konkrétní člověk. Vlastní firma a aliance se počítají
+// taky — kdo za blok jedná, potřebuje čísla stejně jako samostatný držitel.
+async function oceneniPro(oc, firmaId, divakId) {
+  if (!divakId || divakId === firmaId) return oc;
+  let muj = 0;
+  try {
+    const seznam = await pravaFirmy(firmaId);
+    seznam.forEach((e) => { if (e.investor_id === divakId) muj = Math.max(muj, e.podil || 0); });
+  } catch (e) { /* bez podílu se bere nula */ }
+  if (muj >= PRAH_FINANCE - 1e-9) return oc;
+  return { jmeni: oc.jmeni, hodnota: oc.hodnota, pradlomatu: oc.pradlomatu,
+    // Ať hra pozná, že zbytek není nula, ale schované číslo.
+    zkracene: true, prah_pct: Math.round(PRAH_FINANCE * 100) };
+}
+
 function oceneni(st) {
   const units = Array.isArray(st.units) ? st.units : [];
   const hotovost = Math.max(0, Math.round(Number(st.cash) || 0));
@@ -144,7 +163,16 @@ router.get('/trade/assets/:id', hrac, api(async (req, res) => {
       .filter((x) => x && x.name).map((x) => ({ name: x.name, lat: x.lat, lon: x.lon })),
     // Souhrnné ocenění firmy jde ven schválně: kdo kupuje podíl, má vědět,
     // do čeho jde. Čísla jednotlivých provozoven zůstávají majiteli.
-    oceneni: oceneni(st), prodany_podil: await prodanyPodil(id),
+    //
+    // Od desetiny firmy se ale ukáže víc. Rozdělení drží zadání: kdo drží
+    // pod deset procent, je finanční investor a vidí jen cenu; od deseti
+    // procent má nárok na rozšířené finanční údaje — z čeho se ta cena
+    // skládá, kolik je v hotovosti a kolik visí na dluhu.
+    //
+    // Cena samotná zůstává všem schválně: bez ní by se podíl nedal koupit
+    // ani prodat a práh by místo informační výhody udělal slepou burzu.
+    oceneni: await oceneniPro(oceneni(st), id, req.player.id),
+    prodany_podil: await prodanyPodil(id),
     karty: k });
 }));
 

@@ -3603,5 +3603,7 @@
   "veta.aliance_nemas": "Nejsi v žádné alianci. Nejdřív si ji založ v záložce Já.",
   "veta.pozvanka_odeslana": "Pozvánka pro {p1} odeslána.",
   "veta.blok_ve_firme": "Drží ji {p1} členů společně, jedná za ně {p2}.",
-  "veta.blok_ve_tve_firme": "Proti tobě stojí blok {p1} lidí, ne {p1} nesouvisejících podílníků. Jedná za ně {p2}."
+  "veta.blok_ve_tve_firme": "Proti tobě stojí blok {p1} lidí, ne {p1} nesouvisejících podílníků. Jedná za ně {p2}.",
+  "veta.rozsirene_udaje_az_od": "Z čeho se ta cena skládá — majetek, hotovost, dluh — uvidíš, až budeš držet aspoň {p1} % firmy.",
+  "hra.velikost_site": "Velikost sítě"
 }

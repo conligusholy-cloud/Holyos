@@ -11203,6 +11203,15 @@ function podilProdano() {
 function oceneniHtml(oc, co) {
   if (!oc) return '<p class="fine">' + esc(tx('hra.hodnotu_tehle_firmy_nezname_cena')) + '</p>';
   var cizi = co === 'koupim-podil';
+  // Rozšířené finanční údaje náleží až od desetiny firmy. Cena zůstává
+  // všem — bez ní by se podíl nedal koupit ani prodat.
+  if (oc.zkracene) {
+    return '<div class="kv" style="margin-top:10px"><span>' + esc(tx('hra.ciste_jmeni_firmy'))
+      + '</span><b class="' + (oc.jmeni >= 0 ? '' : 'err') + '">' + kcFull(oc.jmeni) + '</b></div>'
+      + '<div class="kv"><span>' + esc(tx('hra.velikost_site')) + '</span><b>' + oc.pradlomatu + ' '
+      + mn(oc.pradlomatu, esc(tx('hra.pradlomat_2')), esc(tx('hra.pradlomaty_5')), esc(tx('hra.pradlomatu_2'))) + '</b></div>'
+      + '<p class="fine">' + tx('veta.rozsirene_udaje_az_od', { p1: oc.prah_pct || 10 }) + '</p>';
+  }
   return tx('veta.div_class_kv_style_margin_top_2', { p1: (cizi ? esc(tx('hra.jeho_majetek')) : esc(tx('hra.tvuj_majetek'))), p2: oc.pradlomatu, p3: mn(oc.pradlomatu, esc(tx('hra.pradlomat_2')), esc(tx('hra.pradlomaty_5')), esc(tx('hra.pradlomatu_2'))), p4: kcFull(oc.majetek), p5: esc(tx('hra.hotovost_3')), p6: kcFull(oc.hotovost), p7: esc(tx('hra.dluh_u_banky_2')), p8: (oc.dluh ? 'warn' : ''), p9: kcFull(oc.dluh), p10: esc(tx('hra.ciste_jmeni_firmy')), p11: (oc.jmeni >= 0 ? '' : 'err'), p12: kcFull(oc.jmeni), p13: esc(tx('hra.podle_zisku_4_rocni')), p14: kcFull(oc.podle_zisku) });
 }
 // Kolik téhle firmy drží jeden konkrétní hráč. Většinu dělá jeden držitel,
