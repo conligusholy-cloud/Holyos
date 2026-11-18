@@ -1130,6 +1130,11 @@ router.post('/account/smazat', requirePlayer, async (req, res, next) => {
       return res.status(400).json({ error: stx(req)('server.napis_pro_potvrzeni',
         { p1: TEXTY.t('server.potvrzeni_smazat', null, jaz) }) });
     }
+    // Kdo je v kontrole, u soudu nebo v odvolání, účet smazat nesmí — majetek je zmrazený
+    try {
+      const pripad = await require('../services/game/zlocin-rizeni').aktivniPripad(prisma, req.player.id);
+      if (pripad) return res.status(409).json({ error: stx(req)('server.ucet_v_rizeni') });
+    } catch (e) { /* tabulka případů ještě nemusí existovat */ }
     const v = await require('../services/game/konec').smazUcet(req.player.id);
     if (!v.ok) return res.status(409).json({ error: stx(req)('server.ucet_uz_neexistuje') });
     // Přihlášení padá s token_version, cookie smažeme hned, ať se nikdo
@@ -2121,11 +2126,26 @@ async function dobehleVypovedi() {
   });
   for (const c of hotove) {
     try {
+      const novyModel = c.vyzyvatel_model || c.model;
+      // Stroj původního nájemce se neztratí — ve hře se vrátí na sklad a
+      // postaví se jinde. Server o tom dosud nevěděl, takže mu příští stavba
+      // vycházela jako stavba z ničeho. U hráčů, kterým konkurence přebírá
+      // místa, to byla většina odmítnutí povinného skladu.
+      if (c.model) {
+        await prisma.gameOrder.updateMany({
+          where: { player_id: c.player_id, spot_id: c.spot_id,
+            postaveno_at: { not: null }, zruseno_at: null },
+          data: { postaveno_at: null, spot_id: null },
+        }).catch((e) => console.warn('[game] vrácení stroje po výpovědi:', e.message));
+      }
+      // A naopak: nový nájemce si na to místo svůj stroj odveze, takže se mu
+      // ze skladu jeden odepíše. Dokud sklad jen měří, odmítnutí to nezpůsobí.
+      const sklad = await najdiStroj(c.vyzyvatel_id, novyModel, c.spot_id);
       await prisma.gameSpotClaim.update({
         where: { spot_id: c.spot_id },
         data: {
           player_id: c.vyzyvatel_id, nick: c.vyzyvatel_nick || '?',
-          model: c.vyzyvatel_model || c.model, rent: c.vyzyvatel_rent || c.rent,
+          model: novyModel, rent: c.vyzyvatel_rent || c.rent,
           takeovers: { increment: 1 },
           // Nový nájemce začíná na holé smlouvě — podmínky si sjedná sám.
           vazano_do: null, vypoved_mesicu: 1,
@@ -2133,6 +2153,7 @@ async function dobehleVypovedi() {
           vyzyvatel_rent: null, vyzyvatel_model: null,
         },
       });
+      await oznacPostaveny(sklad.id, c.spot_id);
       console.log('[game] místo přešlo po výpovědi:', c.spot_id, c.nick, '→', c.vyzyvatel_nick);
     } catch (e) { console.warn('[game] dobehnuti vypovedi:', e.message); }
   }
