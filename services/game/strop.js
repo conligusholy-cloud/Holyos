@@ -68,7 +68,7 @@ function stropSite(claims, odMs) {
 // půjček, dárky a výhry — hra si je připisuje na pokyn serveru, takže do
 // stropu patří celé. Rozhoduje chvíle vyzvednutí, ne založení: peníze
 // přistanou v hotovosti až tehdy, a doručenka může ležet i týden.
-async function doruceno(playerId, od, do_, ted) {
+async function doruceno(playerId, od, do_, vyzvedavane) {
   try {
     // Doručenky vyzvednuté v TOMHLE uložení ještě nejsou označené: server je
     // potvrzuje až v transakci, která stav zapisuje, a ta běží po téhle
@@ -79,7 +79,8 @@ async function doruceno(playerId, od, do_, ted) {
       where: { player_id: playerId, amount: { gt: 0 },
         OR: [
           { claimed_at: { gte: new Date(od - 60000), lte: new Date(do_ + 60000) } },
-          ...(Array.isArray(ted) && ted.length ? [{ id: { in: ted }, claimed_at: null }] : []),
+          ...(Array.isArray(vyzvedavane) && vyzvedavane.length
+            ? [{ id: { in: vyzvedavane }, claimed_at: null }] : []),
         ] },
       select: { amount: true },
     });
