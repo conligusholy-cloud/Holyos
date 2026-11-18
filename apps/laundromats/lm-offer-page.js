@@ -99,6 +99,26 @@ function ecoScript(d) {
 // Simulace pilotu na 10 let: půlka prádlomatů se postaví 1. měsíc, zbytek 2. měsíc (investice se platí postupně),
 // každý prádlomat po otevření nabíhá (skrytá náběhová křivka), na to sezónnost a lehké kolísání.
 // Dlouhodobý průměr = zadaný měsíční výsledek. Vrací kumulovaný výsledek po měsících + měsíc návratnosti.
+// Reference + motivace: západní Evropa je napřed, velcí hráči do samoobslužného praní vstupují (M Core UK, ORLEN ČR)
+const REF = {
+  cs: { k: 'Proč teď', h: 'Západní Evropa je pohledem do budoucnosti', sub: 'Samoobslužné praní je na Západě běžná služba u obchodů a retail parků. U nás se trh teprve otevírá — kdo začne první, obsadí nejlepší místa.',
+    stat: ['1 : 5 000', 'V západní Evropě připadá zhruba jeden prádlomat na 5 000 obyvatel. V Česku a okolí je síť teprve na začátku.'],
+    mcore: ['M Core · Velká Británie', 'Evropský vlastník retail parků (portfolio cca 6 mld. £) otevřel 1. 10. 2026 s provozovatelem DNL Collective první samoobslužnou prádelnu Speed Queen v M Park Halewood. Do konce roku plánuje 6 provozoven, další v roce 2027 a rozvoj na 5 let — kvůli opakovaným návštěvám zákazníků v parcích.'],
+    orlen: ['ORLEN · Česko', 'Jednička mezi čerpacími stanicemi v ČR spustila v lednu 2026 na D1 v Průhonicích pilotní prádlomat jako součást strategie nepalivových služeb. Dodali jsme ho my — pračky 8 a 18 kg a sušička 18 kg, vypráno a usušeno zhruba do hodiny.'],
+    src: 'Zdroj', end: 'Jedno mají společné: začíná to prádlomatem.' },
+  en: { k: 'Why now', h: 'Western Europe is a look into the future', sub: 'In the West, self-service laundry is a standard service at stores and retail parks. Here the market is only opening up — whoever starts first takes the best locations.',
+    stat: ['1 : 5,000', 'In Western Europe there is roughly one laundromat per 5,000 inhabitants. In Central Europe the network is only just starting.'],
+    mcore: ['M Core · United Kingdom', 'A pan-European retail park owner (portfolio c. £6bn) opened its first Speed Queen self-service laundry with operator DNL Collective at M Park Halewood on 1 Oct 2026. Six stores are planned by year end, more in 2027 and a five-year rollout — driven by repeat visits to its parks.'],
+    orlen: ['ORLEN · Czech Republic', 'The No. 1 fuel station network in Czechia launched a pilot laundromat at Průhonice on the D1 motorway in January 2026 as part of its non-fuel strategy. We supplied it — 8 and 18 kg washers and an 18 kg dryer, washed and dried in about an hour.'],
+    src: 'Source', end: 'They all have one thing in common: it starts with a laundromat.' },
+  pl: { k: 'Dlaczego teraz', h: 'Europa Zachodnia to spojrzenie w przyszłość', sub: 'Na Zachodzie samoobsługowe pralnie to standard przy sklepach i parkach handlowych. U nas rynek dopiero się otwiera — kto zacznie pierwszy, zajmie najlepsze miejsca.',
+    stat: ['1 : 5 000', 'W Europie Zachodniej przypada około jednej pralni na 5 000 mieszkańców. W Europie Środkowej sieć dopiero powstaje.'],
+    mcore: ['M Core · Wielka Brytania', 'Europejski właściciel parków handlowych (portfel ok. 6 mld £) otworzył 1.10.2026 z operatorem DNL Collective pierwszą samoobsługową pralnię Speed Queen w M Park Halewood. Do końca roku planuje 6 lokali, kolejne w 2027 i rozwój przez 5 lat — dzięki powracającym klientom.'],
+    orlen: ['ORLEN · Czechy', 'Lider stacji paliw w Czechach uruchomił w styczniu 2026 na autostradzie D1 w Průhonicach pilotażową pralnię w ramach strategii usług pozapaliwowych. Dostarczyliśmy ją my — pralki 8 i 18 kg oraz suszarka 18 kg, wyprane i wysuszone w około godzinę.'],
+    src: 'Źródło', end: 'Jedno je łączy: wszystko zaczyna się od pralni.' },
+};
+const REF_URL = { mcore: 'https://www.mcoreproperty.com/news/m-core-ventures-and-dnl-collective-open-first-speed-queen-store-at-m-park-halewood-the-first-of-six-uk-openings-planned-by-year-end',
+  orlen: 'https://www.orlen.cz/novinky/pizzamat-nebo-pradlomat-orlen-prinasi-nove-sluzby-pro-zakazniky-na-cestach' };
 const etapyTxt = (n) => { const a = []; for (let z = n; z > 0; z -= 4) a.push(Math.min(4, z)); return a.join(' + '); };
 function pilotSim(invest, monthly, units, N) {
   const n = Math.max(1, Math.round(units) || 1), unitInv = invest / n, unitNet = monthly / n;
@@ -273,6 +293,9 @@ function offerPage(o, token, opts) {
 .ox .sec{padding:70px 0 0;scroll-margin-top:70px}.ox .kicker{font-size:12.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--az);margin-bottom:14px}
 .ox h2{font-size:clamp(28px,3.4vw,42px);font-weight:820}.ox .sub{color:var(--tx2);margin:12px 0 0;font-size:17px;max-width:760px;line-height:1.55}
 .ox .grid{display:grid;gap:18px;margin-top:36px}.ox .g3{grid-template-columns:repeat(3,1fr)}
+.ox .refc p{margin:8px 0 14px;color:var(--tx2);line-height:1.6;font-size:15px}.ox .refc a{color:var(--az);font-weight:600;font-size:14px;text-decoration:none}.ox .refc a:hover{text-decoration:underline}.ox .refc .ico{font-size:22px}
+.ox .refstat{display:flex;flex-direction:column;justify-content:center;background:linear-gradient(160deg,rgba(30,134,224,.22),rgba(124,92,255,.18))}.ox .refstat .big{font-size:clamp(40px,4.4vw,56px);font-weight:800;letter-spacing:-.03em;background:linear-gradient(90deg,var(--az),#7aa8ff 55%,var(--vi));-webkit-background-clip:text;background-clip:text;color:transparent}
+.ox .refend{margin:26px 0 0;font-size:clamp(20px,2.2vw,26px);font-weight:750;letter-spacing:-.02em}
 .ox .card{background:rgba(14,22,40,.62);border:1px solid var(--line);border-radius:20px;padding:26px;backdrop-filter:blur(6px)}
 .ox .ico{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;font-size:24px;background:linear-gradient(135deg,rgba(79,209,255,.16),rgba(124,92,255,.12));border:1px solid rgba(79,209,255,.22);margin-bottom:18px}
 .ox .ico{position:relative;width:56px;height:56px;border-radius:16px;box-shadow:0 0 0 1px rgba(79,209,255,.08) inset,0 8px 28px -10px rgba(79,209,255,.55);transition:transform .3s,box-shadow .3s}
@@ -366,6 +389,11 @@ function offerPage(o, token, opts) {
   <section class="sec" data-s="video">${kick(X.vid)}<h2>${esc(t.vidH)}</h2><div class="vids">
     <figure><video src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" controls playsinline preload="none"></video><figcaption>${esc(t.vid1)}</figcaption></figure>
     <figure><video src="/media/krok.mp4" poster="/media/krok-poster.jpg" controls playsinline preload="none"></video><figcaption>${esc(t.vid2)}</figcaption></figure></div></section>
+
+  ${(() => { const R = REF[L]; const card = (k, ico) => `<div class="path refc"><div class="ico">${ico}</div><h3>${esc(R[k][0])}</h3><p>${esc(R[k][1])}</p><a href="${REF_URL[k]}" target="_blank" rel="noopener">${esc(R.src)} ↗</a></div>`;
+    return `<section class="sec" data-s="reference">${kick(R.k)}<h2>${esc(R.h)}</h2><p class="sub">${esc(R.sub)}</p>
+    <div class="grid g3"><div class="path refc refstat"><div class="big">${esc(R.stat[0])}</div><p>${esc(R.stat[1])}</p></div>${card('mcore', '🇬🇧')}${card('orlen', '⛽')}</div>
+    <p class="refend">${esc(R.end)}</p></section>`; })()}
 
   <section class="sec" id="zajem" data-s="zajem">${kick(X.cta)}<div class="cta"><h2>${esc(t.ctaH)}</h2><p class="sub" style="margin-bottom:20px">${esc(t.ctaSub)}</p>
     ${o.interest ? `<p style="margin:0;font-weight:700">✓ ${esc(t.done)}</p>` : `<button class="btn btn-p" type="button" id="of-open">${esc(t.cta)} →</button>
