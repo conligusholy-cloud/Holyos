@@ -14078,7 +14078,18 @@ function startGame() {
   hlidejDrazbu();
   document.addEventListener('visibilitychange', function () {
     // Po návratu do hry se hned podíváme, jestli nám konkurence nevyfoukla místo.
-    if (!document.hidden) { syncOk = Date.now(); syncState(true); tep(); tick(); save(); paint(); loadClaims(); loadTrades(); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }
+    if (!document.hidden) {
+      // Uložení, které odešlo před uspáním stránky, se na mobilu často už
+      // nevrátí: prohlížeč zmrazí i časovač, který ho měl přerušit. Zámek
+      // proti dvěma uložením naráz pak drží dál a hra mlčí, dokud nevyprší —
+      // v hlášeních o neukládání to vypadá přesně takhle: o jeden pokus víc
+      // než odpovědí a „běží" i po deseti minutách. Po návratu ho proto
+      // pustíme; server si dvojí zápis pohlídá sám podle verze.
+      if (syncBusy && Date.now() - syncBusyAt > 5000) syncBusy = false;
+      // syncOk se tu schválně nepřepisuje. Při uspání se ukládá natvrdo, takže
+      // ticho přes noc znamená, že to poslední uložení neprošlo — a to je
+      // přesně to, co má hlídač povědět, ne co má zamlčet.
+      syncState(true); tep(); tick(); save(); paint(); loadClaims(); loadTrades(); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }
     else { tep(); syncState(true); }
   });
   window.addEventListener('pagehide', function () { syncState(true); });
