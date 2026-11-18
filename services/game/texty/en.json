@@ -3599,5 +3599,7 @@
   "veta.blok_ve_tve_firme": "You face a bloc of {p1} people, not {p1} unrelated shareholders. {p2} acts for them.",
   "veta.rozsirene_udaje_az_od": "What that price is made of — assets, cash, debt — you'll see once you hold at least {p1}% of the company.",
   "hra.velikost_site": "Chain size",
-  "server.burza_je_docasne_pozastavena": "The exchange is temporarily suspended. Existing deals can be completed, new ones can't be made yet."
+  "server.burza_je_docasne_pozastavena": "The exchange is temporarily suspended. Existing deals can be completed, new ones can't be made yet.",
+  "dor.odskodne": "Compensation with apology: {p1}",
+  "server.tvuj_podil_se_mezitim_zmenil": "Your stake in that company has changed in the meantime. Open the offer again and try."
 }

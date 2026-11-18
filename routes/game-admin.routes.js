@@ -1006,6 +1006,16 @@ router.get('/multi', api(async (req, res) => {
       select: { player_id: true, spot_id: true, amount: true } }),
     prisma.gameSpotClaim.findMany({ select: { player_id: true, spot_id: true } }),
   ]);
+  // Přijaté obchody se stroji / prádlomaty / pobočkami — jestli účet stroje dál prodával (přeprodej), nebo jen nesl provizi
+  const obchody = await prisma.gameTrade.findMany({ where: { stav: 'prijato', predmet: { in: ['stroj', 'pradlomat', 'pobocka'] } },
+    select: { from_id: true, to_id: true, smer: true, cena: true } });
+  const prodeje = {};   // id → { prodal, komu: [ids], za, koupil, od: [ids], zaplatil }
+  const pr0 = (id) => prodeje[id] || (prodeje[id] = { prodal: 0, komu: [], za: 0, koupil: 0, od: [], zaplatil: 0 });
+  obchody.forEach((t) => {
+    const prod = t.smer === 'koupim' ? t.to_id : t.from_id, kup = t.smer === 'koupim' ? t.from_id : t.to_id;
+    const a = pr0(prod); a.prodal++; a.komu.push(kup); a.za += Number(t.cena) || 0;
+    const b = pr0(kup); b.koupil++; b.od.push(prod); b.zaplatil += Number(t.cena) || 0;
+  });
   // Starší účty stopu u sebe nemají — dohledá se z první události té návštěvy.
   const sidy = hraci.filter((h) => !h.reg_ip && h.sid).map((h) => h.sid);
   const prvni = {};
@@ -1093,6 +1103,10 @@ router.get('/multi', api(async (req, res) => {
         stroju: acct._strojeHrace(h.state).length,
         pozval: z ? z.nick : null, pozval_ze_skupiny: !!vlastni,
         provize_za_nej: pr ? pr.castka : 0, provizi_kusu: pr ? pr.kusu : 0,
+        prodej: (() => { const x = prodeje[h.id]; if (!x) return null; return { prodal: x.prodal, prodal_ve_skupine: x.komu.filter((i) => ids[i]).length, za: x.za,
+          koupil: x.koupil, koupil_ve_skupine: x.od.filter((i) => ids[i]).length, zaplatil: x.zaplatil,
+          komu: [...new Set(x.komu.map((i) => (podleId[i] || {}).nick || ('#' + i)))].slice(0, 4) }; })(),
+        smazan: h.nick === 'smazaný hráč',
         zdroj: h.zdroj || null, ma_email: !!h.email, zablokovan: !!h.disabled,
         zarizeni: h.dev_pid || null, ip: h._ip || null, sit: IP_SIT(h._ip),
         prohlizec: (h._ua || '').slice(0, 120) || null,

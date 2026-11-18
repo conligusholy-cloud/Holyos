@@ -1500,15 +1500,23 @@
             + '</div>'
             + '<div class="tbl-wrap"><table class="data-table"><thead><tr>'
             + '<th>Nick</th><th>Založeno</th><th>Odehráno</th><th>Strojů</th><th>Pozval</th>'
-            + '<th>Provize za něj</th><th>Zařízení</th><th>IP</th></tr></thead><tbody>'
+            + '<th>Provize za něj</th><th title="Prodal stroje / prádlomaty / pobočky dál přes Burzu, nebo jen přinesl provizi zvoucímu">Přeprodej strojů</th><th>Zařízení</th><th>IP</th></tr></thead><tbody>'
             + g.clenove.map(function (c) {
               return '<tr><td><b>' + esc(c.nick) + '</b>' + (c.firma ? '<br><span class="note">' + esc(c.firma) + '</span>' : '')
-                + (c.zablokovan ? ' <span class="note" style="color:#f87171">zablokován</span>' : '') + '</td>'
+                + (c.smazan ? ' <span class="note" style="color:#94a3b8" title="Hráč si účet smazal sám — účet je anonymizovaný a zamčený">smazal se sám</span>' : c.zablokovan ? ' <span class="note" style="color:#f87171">zablokován</span>' : '') + '</td>'
                 + '<td>' + dt(c.zalozeno) + '<br><span class="note">' + stari(c.zalozeno) + '</span></td>'
                 + '<td' + (c.odehrano_s < 300 ? ' style="color:#fbbf24"' : '') + '>' + muCas(c.odehrano_s) + '</td>'
                 + '<td>' + c.stroju + '</td>'
                 + '<td>' + (c.pozval ? esc(c.pozval) + (c.pozval_ze_skupiny ? ' <span style="color:#f87171">↔</span>' : '') : '—') + '</td>'
                 + '<td>' + (c.provize_za_nej ? cz(c.provize_za_nej) + ' L$' : '—') + '</td>'
+                + '<td>' + (function (p) {
+                    if (!p || (!p.prodal && !p.koupil)) return c.provize_za_nej ? '<span style="color:#fbbf24">jen provize</span>' : '<span class="note">—</span>';
+                    var t = [];
+                    if (p.prodal) t.push('<b style="color:#f87171">prodal ' + p.prodal + '×</b>' + (p.prodal_ve_skupine ? ' <span style="color:#f87171">(' + p.prodal_ve_skupine + '× ve skupině ↔)</span>' : '')
+                      + '<br><span class="note">za ' + cz(p.za) + ' L$ → ' + esc(p.komu.join(', ')) + '</span>');
+                    if (p.koupil) t.push('koupil ' + p.koupil + '×' + (p.koupil_ve_skupine ? ' <span style="color:#f87171">(' + p.koupil_ve_skupine + '× ve skupině ↔)</span>' : '') + ' <span class="note">za ' + cz(p.zaplatil) + ' L$</span>');
+                    return t.join('<br>');
+                  })(c.prodej) + '</td>'
                 + '<td><span class="note">' + (c.zarizeni ? esc(c.zarizeni) : '—') + '</span></td>'
                 + '<td><span class="note">' + (c.ip ? esc(c.ip) : '—') + '</span></td></tr>';
             }).join('')
