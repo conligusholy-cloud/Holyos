@@ -431,7 +431,14 @@ async function sitDoplnit(opts) {
       } else {
         const deal = 0.9 + POZEMKY.spotHash(u.spotId, 'r') * 0.3;
         const zNajmu = EKO.skoreZNajmu(c.rent, deal);
-        if (zNajmu == null || Math.abs(zNajmu - sc) > 3) {
+        // Kontrola je schválně jednostranná. Nájem se o místa přihazuje:
+        // kdo přeplatil souseda, platí víc, než by odpovídalo skóre, a
+        // dopočet mu vyjde vysoko — to není podezřelé, to je vyhraná
+        // dražba. Podezřelý je jen opačný směr: tvrdit, že je místo
+        // špičkové, a platit za něj jako za podprůměrné. Oboustranná
+        // kontrola zamítla 232 ze 645 míst, skoro všechna kvůli přihozenému
+        // nájmu.
+        if (zNajmu == null || zNajmu < sc - 3) {
           out.nesedi.push({ nick: h.nick, spot: u.spotId, hra: sc, zNajmu });
           continue;
         }
@@ -461,8 +468,9 @@ function tiskSitDoplnit(v) {
         + String(x.hra).padStart(5) + String(x.zNajmu == null ? '—' : x.zNajmu).padStart(10));
     });
     out.push('');
-    out.push('Tyhle se nedoplnily schválně. Radši díra, o které se ví, než');
-    out.push('číslo, kterému se nedá věřit.');
+    out.push('Tyhle se nedoplnily schválně: hra tvrdí lepší místo, než za jaké');
+    out.push('se platí nájem. Radši díra, o které se ví, než číslo, kterému se');
+    out.push('nedá věřit.');
   }
   if (!v.ostro) {
     out.push('');
