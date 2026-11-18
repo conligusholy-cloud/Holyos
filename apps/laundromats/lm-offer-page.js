@@ -88,12 +88,12 @@ const POT = {
 function ecoScript(d) {
   return '<script>(function(){var D=' + JSON.stringify(d) + ',t=D.t;var esc=function(x){return String(x).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",\'"\':"&quot;"}[c];});};'
     + 'var money=' + money.toString() + ';var pilotSim=' + pilotSim.toString() + ';var chartSvg=' + chartSvg.toString() + ';var potSim=' + potSim.toString() + ';var potHtml=' + potHtml.toString() + ';'
-    + 'var i=document.getElementById("eco-conn"),v=document.getElementById("eco-vis");if(!i||!v)return;function set(k,x){document.querySelectorAll("[data-k="+k+"]").forEach(function(e){e.textContent=x;});}'
+    + 'var i=document.getElementById("eco-conn"),v=document.getElementById("eco-vis");if(!v)return;function set(k,x){document.querySelectorAll("[data-k="+k+"]").forEach(function(e){e.textContent=x;});}'
     + 'function nv(){return Math.max(0,Number(String(v.value).replace(/\\s/g,"").replace(",","."))||0);}'
-    + 'function calc(){var c=Number(String(i.value).replace(/[^0-9]/g,""))||0,u=D.price+c+D.wCost,pi=u*D.units,sa=nv()*D.rpv,net=sa*0.7,pn=net*D.units;'
+    + 'function calc(){var c=i?(Number(String(i.value).replace(/[^0-9]/g,""))||0):0,u=D.price+c+D.wCost,pi=u*D.units,sa=nv()*D.rpv,net=sa*0.7,pn=net*D.units;'
     + 'set("uInv",money(u,D.cur));set("pInv",money(pi,D.cur));set("sales",money(sa,D.cur));set("en","− "+money(sa*0.1,D.cur));set("sv","− "+money(sa*0.2,D.cur));set("net",money(net,D.cur));set("pNet",money(pn,D.cur));'
     + 'set("uPay","≈ "+(net>0?Math.ceil(u/net):"–")+" "+t.months);var sm=pilotSim(pi,pn,D.units,120);set("pPay","≈ "+(sm.payback?sm.payback:"–")+" "+t.months);set("y5",money(sm.total,D.cur));var ch=document.getElementById("eco-chart");if(ch)ch.innerHTML=chartSvg(pi,pn,t,D.units);var pe=document.getElementById("eco-pot");if(pe&&D.stores)pe.innerHTML=potHtml(potSim(u,net,D.stores,15),D.pt,money,D.cur);}'
-    + 'i.addEventListener("input",calc);v.addEventListener("input",calc);i.addEventListener("blur",function(){var c=Number(String(i.value).replace(/[^0-9]/g,""))||0;i.value=c.toLocaleString("cs-CZ");});})();<\/script>';
+    + 'v.addEventListener("input",calc);if(i)i.addEventListener("input",calc);if(i)i.addEventListener("blur",function(){var c=Number(String(i.value).replace(/[^0-9]/g,""))||0;i.value=c.toLocaleString("cs-CZ");});})();<\/script>';
 }
 
 // Simulace pilotu na 10 let: půlka prádlomatů se postaví 1. měsíc, zbytek 2. měsíc (investice se platí postupně),
@@ -228,7 +228,7 @@ function offerPage(o, token, opts) {
   const kpi = (lbl, val, sub) => `<div class="k"><div class="kl">${esc(lbl)}</div><div class="kv">${val}</div>${sub ? `<div class="ks">${sub}</div>` : ''}</div>`;
   // Ekonomika ve dvou rovinách: 1 prádlomat (tržby − energie 10 % − servis 20 %) a celý pilot
   const E = ECO2[L], cur = o.currency, EUR = cur === 'EUR';
-  const conn = Number(o.conn_price) || (EUR ? 2200 : 55000), wy = Math.min(4, Math.max(0, Math.round(o.warranty_years == null || o.warranty_years === '' ? 4 : Number(o.warranty_years) || 0)));
+  const conn = 0, wy = Math.min(4, Math.max(0, Math.round(o.warranty_years == null || o.warranty_years === '' ? 4 : Number(o.warranty_years) || 0)));
   const wPrice = EUR ? 600 : 15000, wCost = wy * wPrice;
   // Tržby z návštěvnosti: 6 zákazníků / den = 2 073 € bez DPH měsíčně (CZK = × 25)
   const RPV = (EUR ? 2073 : 2073 * 25) / 6;
@@ -241,7 +241,7 @@ function offerPage(o, token, opts) {
   // sub je funkce — do klienta se neposílá (JSON ji zahodí), klient ji nepotřebuje
   const row = (l, v, cls) => `<div class="er${cls ? ' ' + cls : ''}"><span>${l}</span><b>${v}</b></div>`;
   const one = price ? `<div class="eco"><div class="ehead"><div><h3 class="eh">${esc(E.oneH)}</h3><div class="emod"><b>${esc(E.modT)}</b> ${esc(E.modS)}</div></div><div class="eimg"><img src="${o.image_v ? '/nabidka/' + token + '/img?v=' + o.image_v : '/img/model/flex'}" alt="FLEX" loading="lazy" data-zoom><span>FLEX</span></div></div><div class="etwo">
-      <div class="ecol"><div class="ect">${esc(E.invT)}</div>${row(esc(E.price) + (o.model ? ' <i>' + esc(o.model) + '</i>' : ''), money(price, cur))}<div class="er"><span>${esc(E.conn)} <em class="est">${esc(E.est)}</em></span><b><label class="edit"><input id="eco-conn" type="text" inputmode="numeric" value="${Math.round(conn).toLocaleString('cs-CZ')}" aria-label="${esc(E.conn)}">${EUR ? '€' : 'Kč'}</label></b></div>${wy ? row(esc(E.warr(wy)), money(wCost, cur)) : ''}${row(esc(E.invU), '<span data-k="uInv">' + money(uInv, cur) + '</span>', 'tot')}</div>
+      <div class="ecol"><div class="ect">${esc(E.invT)}</div>${row(esc(E.price) + (o.model ? ' <i>' + esc(o.model) + '</i>' : ''), money(price, cur))}${wy ? row(esc(E.warr(wy)), money(wCost, cur)) : ''}${row(esc(E.invU), '<span data-k="uInv">' + money(uInv, cur) + '</span>', 'tot')}</div>
       <div class="ecol"><div class="ect">${esc(E.opT)}</div><div class="er"><span>${esc(E.visits)} <em class="est">${esc(E.est)}</em></span><b><label class="edit"><input id="eco-vis" type="text" inputmode="decimal" value="${String(visits).replace('.', ',')}" aria-label="${esc(E.visits)}" style="width:44px">${esc(E.perDay)}</label></b></div>${row(esc(E.sales), '<span data-k="sales">' + money(sales, cur) + '</span>')}${row('− ' + esc(E.energy), '<span data-k="en">− ' + money(en, cur) + '</span>', 'neg')}${row('− ' + esc(E.service), '<span data-k="sv">− ' + money(sv, cur) + '</span>', 'neg')}${row(esc(E.net), '<span data-k="net">' + money(net, cur) + '</span>', 'tot')}${row(esc(t.pay), '<span data-k="uPay">≈ ' + (net > 0 ? Math.ceil(uInv / net) : '–') + ' ' + esc(t.months) + '</span>')}</div></div>
       <div class="ewar">🛡️ <span>${esc(E.warrNote(money(wPrice, cur), money(4 * wPrice, cur)))}</span></div></div>` : '';
   const eco = units && price ? `<section class="sec" id="eko" data-s="ekonomika">${kick(X.eco)}<h2>${esc(E.h)}</h2><p class="sub">${esc(t.ecoSub)}</p>${one}
