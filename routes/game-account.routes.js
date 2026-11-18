@@ -1442,12 +1442,19 @@ async function nastaveniHodnosti() {
 async function vyplatOdmenu(playerId, druh, kod, odmena, zpetne, platit) {
   const cash = (odmena && odmena.cash) || 0;
   const karta = (odmena && odmena.karta) || null;
-  try {
-    await prisma.gameOdmena.create({ data: { player_id: playerId, druh, kod,
-      cash, karta, zpetne: !!zpetne, vyplaceno: !!platit } });
-  } catch (e) {
-    return false;        // už tam je — unikátní index udělal svou práci
-  }
+  // Vkládá se přes createMany se skipDuplicates, ne přes create s odchycenou
+  // výjimkou. Dvě uložení hry ve stejnou vteřinu jsou běžná věc a create by
+  // při každém takovém souběhu vypsal prisma:error — v logu to pak přehluší
+  // všechno ostatní, a log je jediné místo, kam se na provoz dá koukat.
+  // Navíc: odchycená výjimka brala každou chybu databáze jako „už tam je",
+  // takže skutečný výpadek by odměnu potichu zahodil. Takhle se počet rovná
+  // nule jen u opravdového duplikátu a cokoli jiného vybouchne nahlas.
+  const vlozeno = await prisma.gameOdmena.createMany({
+    data: [{ player_id: playerId, druh, kod, cash, karta,
+      zpetne: !!zpetne, vyplaceno: !!platit }],
+    skipDuplicates: true,
+  });
+  if (!vlozeno.count) return false;        // už tam je
   if (!platit) return false;
   await pripisOdmenu(playerId, druh, kod, cash, karta);
   return true;
