@@ -9571,6 +9571,144 @@ function splatitSheet(id, castka) {
 var bezici = function (x) {
   return x.stav !== 'splaceno' && x.stav !== 'propadlo' && x.stav !== 'odkoupeno';
 };
+// ─── Veřejná nabídka na odkup podílů ────────────────────────────────────────
+// Míří na všechny podílníky firmy najednou. Prodat musí chtít, mlčení je
+// odmítnutí a převede se jen to, co kdo doopravdy prodal.
+var PREVZETI = null;
+function loadPrevzeti(then) {
+  api('/trade/prevzeti').then(function (r) {
+    PREVZETI = (r.ok && r.j.nabidky) || [];
+    if (then) then();
+  }).catch(function () { PREVZETI = []; if (then) then(); });
+}
+function prevzetiHtml() {
+  var l = PREVZETI || [];
+  if (!l.length) return '';
+  return '<div class="card"><h3>\uD83C\uDFF4 ' + esc(tx('prevzeti.nadpis')) + '</h3>'
+    + l.slice(0, 10).map(function (t) {
+        var jaProdam = !t.moje && t.muj_podil > 0;
+        return '<div class="trade">'
+          + '<div class="row"><b>' + esc(t.firma) + '</b>'
+          + '<span class="pill ' + (t.na_moji_firmu ? 'bad' : t.moje ? 'good' : 'mid') + '">'
+          + esc(tx(t.na_moji_firmu ? 'prevzeti.na_tvoji_firmu'
+              : t.moje ? 'prevzeti.tvoje' : 'prevzeti.drzis_podil')) + '</span></div>'
+          + '<p class="muted small" style="margin:2px 0 6px">'
+          + tx('veta.prevzeti_radek', { p1: esc(t.utocnik), p2: kcFull(t.cena_za_pct) }) + '</p>'
+          + '<div class="row"><span class="muted small">' + esc(tx('prevzeti.chce_koupit')) + '</span>'
+          + '<span>' + pctHra(t.max_pct) + ' % \u00b7 ' + esc(tx('prevzeti.uz_koupeno')) + ' '
+          + pctHra(t.koupeno_pct) + ' %</span></div>'
+          + '<div class="row"><span class="muted small">' + esc(tx('prevzeti.dobehne')) + '</span>'
+          + '<span>' + zaKolik(t.do) + '</span></div>'
+          + (jaProdam
+              ? '<div class="row"><span class="muted small">' + esc(tx('prevzeti.ty_drzis')) + '</span>'
+                + '<span class="ok">' + pctHra(t.muj_podil) + ' % \u00b7 '
+                + kcFull(Math.round(t.muj_podil * 100 * t.cena_za_pct)) + '</span></div>'
+                + '<div class="gcard-act"><button class="btn sm" data-prevzeti="' + t.id + '">'
+                + esc(tx('prevzeti.prodat_do_nabidky')) + '</button></div>'
+              : t.na_moji_firmu
+                ? '<p class="fine warn">' + esc(tx('veta.prevzeti_na_tvoji_firmu_rada')) + '</p>'
+                : '')
+          + '</div>';
+      }).join('')
+    + '</div>';
+}
+// Prodej do nabídky. Prodat jde i kus — kdo si chce část podílu nechat,
+// nemá důvod pouštět všechno.
+function prevzetiSheet(t) {
+  var maxPct = Math.min(t.muj_podil, t.zbyva_pct);
+  sheet('<h3>' + tx('veta.prodat_podil_v', { p1: esc(t.firma) }) + '</h3>'
+    + '<p class="muted small">' + tx('veta.prevzeti_prodej_popis', { p1: esc(t.utocnik), p2: kcFull(t.cena_za_pct) }) + '</p>'
+    + '<div class="kv"><span>' + esc(tx('prevzeti.ty_drzis')) + '</span><b>' + pctHra(t.muj_podil) + ' %</b></div>'
+    + '<div class="kv"><span>' + esc(tx('prevzeti.jeste_vykoupi')) + '</span><b>' + pctHra(t.zbyva_pct) + ' %</b></div>'
+    + '<label class="fld"><span>' + esc(tx('prevzeti.kolik_prodas')) + '</span>'
+    + '<input id="pz-pct" class="inp" type="number" inputmode="decimal" min="0.1" step="0.1" max="'
+    + pctHra(maxPct) + '" value="' + pctHra(maxPct) + '"></label>'
+    + '<div class="kv souhrn"><span>' + esc(tx('prevzeti.dostanes')) + '</span>'
+    + '<b id="pz-vysledek">\u2014</b></div>'
+    + '<p class="fine">' + esc(tx('veta.prevzeti_prodej_rada')) + '</p>'
+    + '<button class="btn big" id="pz-ok" style="width:100%;margin-top:10px">'
+    + esc(tx('prevzeti.prodat_do_nabidky')) + '</button>'
+    + '<button class="btn sec" id="pz-ne" style="width:100%;margin-top:8px">'
+    + esc(tx('hra.nechat_byt')) + '</button>');
+  var pct = function () {
+    var v = Number(($('pz-pct') || {}).value) || 0;
+    return Math.max(0, Math.min(maxPct, v / 100));
+  };
+  // Pole se srovná rovnou na místě. Číslo, které se jinak počítá, než jak je
+  // napsané, je horší než zakázané pole — hráč pak nevěří ani jednomu.
+  var prepocti = function () {
+    var p = pct();
+    if (Number($('pz-pct').value) > pctHra(maxPct)) $('pz-pct').value = pctHra(maxPct);
+    $('pz-vysledek').textContent = kcFull(Math.round(p * 100 * t.cena_za_pct));
+  };
+  $('pz-pct').oninput = prepocti; prepocti();
+  $('pz-ne').onclick = closeSheet;
+  $('pz-ok').onclick = function () {
+    if (!(pct() > 0)) return toast(esc(tx('prevzeti.zadej_kolik')), 'err');
+    $('pz-ok').disabled = true;
+    apiJson('/trade/prevzeti/' + t.id + '/prodat', { podil: pct() }).then(function (r) {
+      if (!r.ok) { $('pz-ok').disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+      closeSheet();
+      vyzvedniNasledky(); FINANCE = null; PREVZETI = null;
+      loadTrades(paintBurza);
+      toast(tx('veta.prodal_jsi_pct_za', { p1: pctHra(r.j.prodano), p2: kcFull(r.j.cena) }), 'ok', true);
+    }).catch(function () { $('pz-ok').disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+  };
+}
+// Vyhlášení nabídky. Cena se zadává za procento — je to jediné číslo, které
+// dává smysl porovnávat mezi firmami různé velikosti.
+function vyhlasitSheet(toId, kdo, a) {
+  var oc = (a && a.oceneni) || null;
+  var zaProcento = oc && oc.jmeni > 0 ? Math.round(oc.jmeni / 100) : 100000;
+  sheet('<h3>' + tx('veta.vyhlasit_nabidku_na', { p1: esc(kdo.firma || kdo.nick) }) + '</h3>'
+    + '<p class="muted small">' + esc(tx('veta.vyhlaseni_popis')) + '</p>'
+    + (oc ? oceneniHtml(oc, 'koupim-podil') : '')
+    + '<label class="fld"><span>' + esc(tx('prevzeti.cena_za_procento')) + '</span>'
+    + '<input id="vy-cena" class="inp" type="number" inputmode="numeric" min="1000" value="'
+    + zaProcento + '"></label>'
+    + '<label class="fld"><span>' + esc(tx('prevzeti.kolik_chces_koupit')) + '</span>'
+    + '<input id="vy-pct" class="inp" type="number" inputmode="numeric" min="1" max="100" value="30"></label>'
+    + '<label class="fld"><span>' + esc(tx('prevzeti.jak_dlouho_plati')) + '</span>'
+    + '<input id="vy-hodin" class="inp" type="number" inputmode="numeric" min="6" max="72" value="48"></label>'
+    + '<div class="kv souhrn"><span>' + esc(tx('prevzeti.celkem_slibujes')) + '</span>'
+    + '<b id="vy-vysledek">\u2014</b></div>'
+    + '<p class="fine" id="vy-kryti"></p>'
+    + '<p class="fine">' + esc(tx('veta.vyhlaseni_rada')) + '</p>'
+    + '<button class="btn big" id="vy-ok" style="width:100%;margin-top:10px">'
+    + esc(tx('prevzeti.vyhlasit')) + '</button>');
+  var celkem = function () {
+    var c = Math.max(0, Math.round(Number($('vy-cena').value) || 0));
+    var p = Math.max(1, Math.min(100, Math.round(Number($('vy-pct').value) || 0)));
+    return c * p;
+  };
+  var prepocti = function () {
+    var v = celkem();
+    $('vy-vysledek').textContent = kcFull(v);
+    var volne = volnaHotovost(null);
+    $('vy-kryti').className = 'fine' + (v > volne ? ' err' : '');
+    $('vy-kryti').textContent = v > volne
+      ? tx('veta.na_to_nemas_volne_mas', { p1: kcFull(Math.max(0, volne)) })
+      : '';
+  };
+  ['vy-cena', 'vy-pct', 'vy-hodin'].forEach(function (id) { if ($(id)) $(id).oninput = prepocti; });
+  prepocti();
+  $('vy-ok').onclick = function () {
+    if (celkem() > volnaHotovost(null)) {
+      return toast(tx('veta.na_to_nemas_volne_mas', { p1: kcFull(Math.max(0, volnaHotovost(null))) }), 'err');
+    }
+    $('vy-ok').disabled = true;
+    apiJson('/trade/prevzeti', { firma_id: toId,
+      cena_za_pct: Math.max(1000, Math.round(Number($('vy-cena').value) || 0)),
+      pct: Math.max(1, Math.min(100, Math.round(Number($('vy-pct').value) || 0))) / 100,
+      hodin: Math.max(6, Math.min(72, Math.round(Number($('vy-hodin').value) || 48))) })
+      .then(function (r) {
+        if (!r.ok) { $('vy-ok').disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+        closeSheet(); PREVZETI = null; loadTrades(paintBurza);
+        toast(esc(tx('prevzeti.vyhlaseno')), 'ok', true);
+      }).catch(function () { $('vy-ok').disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+  };
+}
+
 // ─── Firmy v nouzi ───────────────────────────────────────────────────────────
 // Kdo nemá na splátku, je vidět. Není to udání — je to ta chvíle, kdy se dá
 // přijít s penězi a říct si o podmínky. Dokud to nikdo neviděl, propadla
@@ -10146,11 +10284,14 @@ function paintBurza() {
 
   if (KRIZE == null) loadKrize(paintBurza);
 
+  if (PREVZETI == null) loadPrevzeti(paintBurza);
+
   // Co čeká na odpověď hráče, je to nejdůležitější — když tam něco je, patří to
   // úplně nahoru, ještě před aukce a finance. Prázdná sekce zůstává na svém místě.
   var naMeHtml = sekce(esc(tx('drazba.ceka_na_tvoji_odpoved')), naMe, esc(tx('drazba.nikdo_ti_ted_nic_nenabizi')));
   box.innerHTML = (naMe.length ? naMeHtml : '')
     + mojeKrizeHtml()
+    + prevzetiHtml()
     + aukceHtml()
     + financeHtml()
     + krizeHtml()
@@ -10159,6 +10300,13 @@ function paintBurza() {
     + (hotove.length ? sekce(esc(tx('drazba.uzavrene')), hotove, '') : '');
   bindAukce();
   bindFinance();
+  [].forEach.call(box.querySelectorAll('[data-prevzeti]'), function (b) {
+    b.onclick = function () {
+      var id = Number(b.getAttribute('data-prevzeti'));
+      var t = (PREVZETI || []).filter(function (x) { return x.id === id; })[0];
+      if (t) prevzetiSheet(t);
+    };
+  });
   [].forEach.call(box.querySelectorAll('[data-krize-pujcit]'), function (b) {
     b.onclick = function () {
       var id = parseInt(b.getAttribute('data-krize-pujcit'), 10);
@@ -10664,7 +10812,8 @@ function majetekSheet(id, rovnouKat) {
       { k: 'karta', ico: '⚡', nazev: esc(tx('hra.karty')), pod: esc(tx('mapa.zrychlovace_cekani')) },
       { k: 'pujcka', ico: '🏦', nazev: esc(tx('mapa.pujcka')), pod: esc(tx('mapa.penize_na_urok')) },
       { k: 'podil', ico: '📈', nazev: esc(tx('mapa.podil_ve_firme')), pod: esc(tx('mapa.procento_ze_zisku_i_ztraty')) },
-      { k: 'vstup', ico: '💉', nazev: esc(tx('mapa.kapitalovy_vstup')), pod: esc(tx('mapa.penize_do_firmy_za_novy_podil')) }
+      { k: 'vstup', ico: '💉', nazev: esc(tx('mapa.kapitalovy_vstup')), pod: esc(tx('mapa.penize_do_firmy_za_novy_podil')) },
+      { k: 'prevzeti', ico: '🏴', nazev: esc(tx('prevzeti.nadpis')), pod: esc(tx('prevzeti.dlazdice_pod')) }
     ];
     var kolikJe = function (kat) {
       var f = function (list) { return list.filter(function (x) { return x.predmet === kat; }).length; };
@@ -10675,7 +10824,8 @@ function majetekSheet(id, rovnouKat) {
 
     var rozcestnik = function () {
       sheet(hlava + '<div class="rozc">' + KATEGORIE.map(function (c) {
-        var n = c.k === 'pujcka' || c.k === 'podil' || c.k === 'vstup' ? null : kolikJe(c.k);
+        var n = c.k === 'pujcka' || c.k === 'podil' || c.k === 'vstup' || c.k === 'prevzeti'
+          ? null : kolikJe(c.k);
         var pocty = n == null ? c.pod
           : !n.k && !n.p ? esc(tx('mapa.nema_ani_jeden_z_vas'))
             : [n.k ? n.k + esc(tx('hra.jeho')) : '', n.p ? n.p + esc(tx('mapa.tvych')) : ''].filter(Boolean).join(' · ');
@@ -10705,6 +10855,11 @@ function majetekSheet(id, rovnouKat) {
       var telo;
       if (kat === 'pujcka') {
         telo = tx('veta.p_class_muted_small_splaci_se', { p1: tx('veta.pradlomat_hned_pri_prvni_nezaplacene_splatce', { p1: esc(tx('mapa.pujcit_mu_penize')), p2: esc(tx('mapa.ty_das_hotovost_on_splaci')), p3: esc(tx('mapa.pozadat_ho_o_pujcku')), p4: esc(tx('mapa.on_da_hotovost_ty_splacis')) }) });
+      } else if (kat === 'prevzeti') {
+        telo = '<p class="muted small">' + esc(tx('veta.prevzeti_k_cemu_je')) + '</p>'
+          + '<div class="area-item"><div><div class="nm">' + esc(tx('prevzeti.nadpis'))
+          + '</div><div class="sub">' + esc(tx('prevzeti.dlazdice_pod')) + '</div></div>'
+          + '<button class="btn sec sm" id="prevzeti-go">' + esc(tx('prevzeti.vyhlasit')) + '</button></div>';
       } else if (kat === 'vstup') {
         telo = '<p class="muted small">' + esc(tx('veta.vstup_k_cemu_je')) + '</p>'
           + '<div class="area-item"><div><div class="nm">'
@@ -10724,6 +10879,7 @@ function majetekSheet(id, rovnouKat) {
         + '<p class="muted small" style="margin:0 0 4px">' + esc(a.hrac.nick) + '</p>' + telo);
       $('rozc-zpet').onclick = rozcestnik;
       if ($('vstup-go')) $('vstup-go').onclick = function () { vstupSheet(id, a.hrac, a); };
+      if ($('prevzeti-go')) $('prevzeti-go').onclick = function () { vyhlasitSheet(id, a.hrac, a); };
       [].forEach.call($('sheet-body').querySelectorAll('[data-fin]'), function (b) {
         b.onclick = function () { financeSheet(id, a.hrac, b.getAttribute('data-fin'), a); };
       });
