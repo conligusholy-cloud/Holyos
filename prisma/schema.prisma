@@ -7652,6 +7652,15 @@ model GamePlayer {
   provize_celkem Int       @default(0)
 
   ref_id         String?   @unique @db.VarChar(24)
+  // Pověst počítaná serverem. Scénáře infolinky i váhy odpovědí server má,
+  // takže mu stačí vědět, co hráč vybral. NULL = ještě se nepočítalo a platí
+  // číslo ze stavu hry. povest_den a povest_off drží denní strop ztráty za
+  // nepřítomnost, povest_at čas posledního započteného hovoru — podle něj se
+  // pozná, že hovorů nemohlo proběhnout víc, než kolik se jich vejde do času.
+  povest         Float?
+  povest_den     String?   @db.VarChar(10)
+  povest_off     Float     @default(0)
+  povest_at      DateTime?
   invited_by_id  Int?
   invited_by_ref String?   @db.VarChar(24)
   // Odkud hráč přišel, když ho nikdo nepozval: utm_source z reklamy, fbclid

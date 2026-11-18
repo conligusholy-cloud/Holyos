@@ -2147,6 +2147,51 @@ const claimPub = (c, me, firmy) => ({
   since: c.created_at,
 });
 
+// POST /linka/udalost { typ, scenar, volby, kolik } — co se stalo na infolince.
+//
+// Pověst násobí tržbu celé sítě, a dokud se brala z uložené hry, stačilo
+// k jejímu nastavení přepsat jedno číslo. Celou infolinku na server stěhovat
+// kvůli tomu nemusíme: scénáře i váhy odpovědí tu server dávno má, takže mu
+// stačí vědět, CO hráč vybral. Váhu si najde sám a z klienta jde jen index.
+//
+// Váhy se berou vždy ze zdrojového katalogu, ne z překladu do jazyka hráče —
+// jinak by se dal výběrem jazyka vybrat i jiný výsledek.
+//
+// Hra si pověst počítá dál sama a hráč ji vidí hned; tenhle zápis je pro
+// server, který se podle něj časem začne ptát sám sebe, ne klienta.
+router.post('/linka/udalost', requirePlayer, async (req, res, next) => {
+  try {
+    const POVEST = require('../services/game/povest');
+    const b = req.body || {};
+    const typ = s(b.typ, 12);
+    let scenar = null;
+    if (typ === 'hovor') {
+      const id = s(b.scenar, 60);
+      scenar = (TEXTY.scenare(TEXTY.ZDROJ) || []).filter((x) => x && x.id === id)[0] || null;
+      if (!scenar) return res.status(400).json({ error: stx(req)('server.takovy_hovor_neznam') });
+    }
+    const v = POVEST.zmena(req.player, {
+      typ,
+      volby: Array.isArray(b.volby) ? b.volby.slice(0, 12).map((x) => parseInt(x, 10)) : [],
+      kolik: b.kolik,
+      // Než se pověst poprvé spočítá, navazuje se na to, co hlásí hra.
+      vychozi: Number((req.player.state || {}).povest) || 0,
+    }, scenar, Date.now());
+    if (v.chyba) return res.status(400).json({ error: stx(req)('server.takovy_hovor_neznam') });
+    const p = await prisma.gamePlayer.update({
+      where: { id: req.player.id },
+      data: { povest: v.nova, povest_den: v.povest_den,
+        povest_off: v.povest_off, povest_at: v.povest_at },
+      select: { povest: true },
+    });
+    if (v.zahozeno) {
+      console.warn('[game-linka] hráč #' + req.player.id + ' (' + req.player.nick + ') '
+        + v.duvod + ': ' + v.zahozeno);
+    }
+    res.json({ ok: true, povest: p.povest });
+  } catch (e) { next(e); }
+});
+
 // GET /spots → kdo kde stojí. Bez parametru vrátí VŠECHNY zábory: hráč má na
 // mapě vidět konkurenci i ve městech, která sám neprozkoumal — jinak by na ni
 // narazil až náhodou. Volná místa zůstávají schovaná, ta se musí najít.

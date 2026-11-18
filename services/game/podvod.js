@@ -119,6 +119,9 @@ async function spocitej(prisma) {
     const st = (striduje[h.id] || []).filter((x) => x.n >= 2);
     if (st.length) { const b = st.some((x) => x.n >= 4) ? 25 : 15; s.duvody.push({ r: 'důkaz', b, txt: 'na stejném zařízení se střídá s ' + st.slice(0, 3).map((x) => ((P[x.s] || {}).nick || '?') + ' (' + x.n + '× do 3 min)').join(', ') }); s.stridaniB = b; }
     if (provizeZa[h.id] && (levne.length || smazan(h) || s30 < 1800)) d(5, 'vygeneroval provizi ' + kc(provizeZa[h.id].castka) + ' L$ pro ' + ((P[provizeZa[h.id].komu] || {}).nick || '?'));
+    // Pro koho pracuje: komu šla provize, jinak kdo od něj levně koupil
+    const proKoho = (provizeZa[h.id] && P[provizeZa[h.id].komu]) || (levne[0] && levne[0].kup) || null;
+    if (proKoho && proKoho.id !== h.id) s.pro = proKoho.nick;
   });
   const jeMule = (h) => h._s.mule >= 45;
 
@@ -129,15 +132,25 @@ async function spocitej(prisma) {
     s.koupilLevne = koupe.length;
     if (koupe.length) {
       d(koupe.length >= 10 ? 45 : koupe.length >= 3 ? 35 : 20, 'koupil ' + koupe.length + '× stroj pod 30 % ceny');
-      s.zisk += koupe.reduce((a, x) => a + Math.max(0, x.seznam - x.cena), 0);
+      const slevaL = koupe.reduce((a, x) => a + Math.max(0, x.seznam - x.cena), 0);
+      s.zisk += slevaL; s.sleva = (s.sleva || 0) + slevaL;
       const mladi = koupe.filter((x) => x.kdy - new Date(x.prod.created_at).getTime() < 2 * D || smazan(x.prod) || jeMule(x.prod));
       if (mladi.length) d(mladi.length >= 3 ? 25 : 15, mladi.length + '× od účtu mladšího 2 dnů / smazaného / pomocného');
+    }
+    // Levnější nákup (30–60 % ceníku) od nového účtu (do 7 dní věku), smazaného nebo pomocného
+    const polo = prodeje.filter((x) => x.kup.id === h.id && x.pomer != null && x.pomer >= 0.3 && x.pomer < 0.6
+      && (x.kdy - new Date(x.prod.created_at).getTime() < 7 * D || smazan(x.prod) || jeMule(x.prod)));
+    if (polo.length) {
+      d(polo.length >= 5 ? 20 : polo.length >= 2 ? 12 : 6, 'koupil ' + polo.length + '× stroj za 30–60 % ceny od nového / smazaného / pomocného účtu');
+      const slevaP = polo.reduce((a, x) => a + Math.max(0, x.seznam - x.cena), 0);
+      s.zisk += slevaP; s.sleva = (s.sleva || 0) + slevaP; s.koupilLevne += polo.length;
     }
     const pozvani = hraci.filter((x) => zvouci(x) && zvouci(x).id === h.id && provizeZa[x.id] && provizeZa[x.id].komu === h.id);
     const podezreli = pozvani.filter((x) => jeMule(x) || smazan(x) || (x.hra_s_celkem || 0) < 1800 || x._s.prodalLevne);
     if (podezreli.length) {
       d(podezreli.length >= 10 ? 35 : podezreli.length >= 3 ? 25 : 12, 'provize za ' + podezreli.length + ' podezřelých pozvaných (smazaní / krátká hra / levný prodej)');
-      s.zisk += podezreli.reduce((a, x) => a + provizeZa[x.id].castka, 0);
+      const prov = podezreli.reduce((a, x) => a + provizeZa[x.id].castka, 0);
+      s.zisk += prov; s.provize = prov; s.pomocnych = podezreli.length; s.pozvanych = pozvani.length;
     }
     if (pozvani.length >= 3 && podezreli.length / pozvani.length >= 0.8) d(20, podezreli.length + ' z ' + pozvani.length + ' jeho pozvaných jsou podezřelé účty');
     // Stejné zařízení je silná stopa, samotná stejná IP slabá (mobilní operátor, rodina, kolej)
@@ -150,7 +163,12 @@ async function spocitej(prisma) {
   const out = {};
   hraci.forEach((h) => {
     const s = h._s, dk = (s.dukazB || 0) + (s.stridaniB || 0), mule = Math.min(99, s.mule + dk), ben = Math.min(99, s.ben + dk), pct = Math.max(mule, ben);
-    out[h.id] = { pct, dukaz: !!s.dukaz, role: pct < 20 ? null : (ben > mule ? 'příjemce' : 'pomocný účet'), mule, ben, zisk: Math.round(s.zisk),
+    // PODVODNÍK = ten, kdo bere provize z účelových účtů a/nebo skupuje od nových účtů stroje pod cenou.
+    // Pomocný účet je jen nástroj; tomu se píše, pro koho pracuje.
+    const podvodnik = ben >= 45 && ben >= mule && ((s.provize || 0) > 0 || (s.sleva || 0) > 0);
+    out[h.id] = { pct, dukaz: !!s.dukaz, podvodnik, role: pct < 20 ? null : (podvodnik ? 'PODVODNÍK' : ben > mule ? 'příjemce' : 'pomocný účet'), mule, ben, zisk: Math.round(s.zisk),
+      provize: Math.round(s.provize || 0), sleva: Math.round(s.sleva || 0), pomocnych: s.pomocnych || 0, pozvanych: s.pozvanych || 0,
+      levnych: s.koupilLevne || 0, pro: (!podvodnik && mule >= 45) ? (s.pro || null) : null,
       duvody: s.duvody.sort((a, b) => b.b - a.b).slice(0, 10) };
   });
   return out;

@@ -84,6 +84,16 @@ if git diff --cached --name-only | grep -qE 'services/game/audit'; then
   fi
 fi
 
+# Pověst z infolinky. Násobí tržbu celé sítě, takže je to poslední místo,
+# kde by si šlo přilepšit přepsáním jednoho čísla v uložené hře.
+if git diff --cached --name-only | grep -qE 'services/game/(povest|navstevnost)|services/game/texty/linka'; then
+  if ! node nastroje/tpovest.js; then
+    echo ""
+    echo "STOP: počítání pověsti nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Souběh na burze. Dva lidé ve stejnou vteřinu, nebo dvojklik: bez zámku se
 # jeden podíl převede dvěma lidem a cena vyplatí dvakrát. Test pouští
 # skutečnou obsluhu proti podstrčené databázi a uspí první požadavek přesně

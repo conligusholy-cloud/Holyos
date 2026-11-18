@@ -98,13 +98,18 @@ async function proHrace(hrac, st, t) {
     if (konec > ted) kampanAdd = Math.max(kampanAdd, k.add);
   });
 
-  const p = povest(st);
+  // Pověst: od zavedení hlášení z infolinky si ji server počítá sám z toho,
+  // co hráč v hovoru vybral. Dokud ji u hráče nikdy nepočítal (NULL), bere se
+  // ta ze stavu hry — jinak by hráči, který zrovna nevolal, spadla na nulu.
+  const zeServeru = hrac && hrac.povest != null;
+  const p = zeServeru ? Math.max(-100, Math.min(100, Number(hrac.povest))) : povest(st);
   return {
     navstevnost: spocti({ refs, boost, kampanAdd, povest: p }, ted),
     refs, boost, kampanAdd, povest: p,
-    // Odkud se co vzalo. Dokud je tu pověst z klienta, není návštěvnost
-    // serverová — je skoro serverová, a ten rozdíl se nesmí zamlčet.
-    zdroje: { refs: 'server', boost: 'server', kampan: 'server', povest: 'klient' },
+    // Odkud se co vzalo. U pověsti to platí na hráče, ne na celou hru:
+    // kdo od nasazení nevolal, má ji pořád z klienta.
+    zdroje: { refs: 'server', boost: 'server', kampan: 'server',
+      povest: zeServeru ? 'server' : 'klient' },
   };
 }
 

@@ -942,6 +942,9 @@
         + (p.varovani ? '<div><span class="st" style="background:rgba(248,113,113,.18);color:#f87171" title="Nevyřízená AI upozornění na jeho texty">⚠️ ' + p.varovani + '</span></div>' : '') + '</td>'
         + '<td class="num">' + podvodBadge(p.podvod) + '</td>'
         + '<td class="num">' + znalostBadge(p.znalost) + '</td>'
+        + '<td class="num">' + ((p.podvod && p.podvod.zisk) ? '<b style="color:#f87171">' + cz(p.podvod.zisk) + ' L$</b>'
+          + '<div class="note">prov. ' + cz(p.podvod.provize || 0) + ' · sleva ' + cz(p.podvod.sleva || 0) + '</div>'
+          + (p.podvod.pomocnych ? '<div class="note">' + p.podvod.pomocnych + ' pomocných účtů</div>' : '') : '<span class="note">—</span>') + '</td>'
         + '<td>' + (p.jmeno ? esc(p.jmeno) : '<span class="note">—</span>')
         + (p.email ? '<div class="note">' + esc(p.email) + '</div>' : '') + '</td>'
         + '<td>' + odkud(p) + '</td>'
@@ -977,16 +980,22 @@
     function podvodBadge(v) {
       if (!v) return '<span class="note">—</span>';
       var c = v.pct >= 70 ? '#f87171' : v.pct >= 40 ? '#fbbf24' : v.pct >= 20 ? '#94a3b8' : '#475569';
-      var tip = (v.role ? v.role.toUpperCase() + '\n' : '') + (v.zisk ? 'neoprávněný zisk ≈ ' + cz(v.zisk) + ' L$\n' : '') + v.duvody.map(function (d) { return '+' + d.b + ' ' + d.txt; }).join('\n');
+      var tip = (v.role ? v.role.toUpperCase() + '\n' : '')
+        + (v.zisk ? 'neoprávněný zisk ≈ ' + cz(v.zisk) + ' L$ (provize ' + cz(v.provize || 0) + ' + sleva na strojích ' + cz(v.sleva || 0) + ')\n' : '')
+        + (v.pro ? 'pracuje pro: ' + v.pro + '\n' : '')
+        + v.duvody.map(function (d) { return '+' + d.b + ' ' + d.txt; }).join('\n');
+      var roleHtml = v.podvodnik ? '<div style="color:#f87171;font-weight:800;letter-spacing:.04em">🚩 PODVODNÍK</div>'
+        : (v.role ? '<div class="note" style="color:' + c + '">' + esc(v.role) + (v.pro ? ' → ' + esc(v.pro) : '') + '</div>' : '');
       return '<b style="color:' + c + ';cursor:help" title="' + esc(tip || 'bez podezřelých signálů') + '">' + v.pct + ' %</b>' + (v.dukaz ? ' <span title="Stejné zařízení obsloužilo obě strany obchodu — jeden člověk" style="color:#f87171">⚖</span>' : '')
-        + (v.role ? '<div class="note" style="color:' + c + '">' + esc(v.role) + '</div>' : '');
+        + roleHtml;
     }
     function plCols() {
       var n = function (k, l, f) { return { key: k, label: l, type: 'num', get: f }; };
       return [
         { key: 'nick', label: 'Nick', type: 'text', ph: 'Nick…', get: function (p) { return p.nick || ''; } },
-        n('podv', 'Podvodník', function (p) { return p.podvod ? p.podvod.pct : 0; }),
+        n('podv', 'Podvodník', function (p) { return p.podvod ? p.podvod.pct + (p.podvod.podvodnik ? 100 : 0) : 0; }),
         n('znal', 'Známe', function (p) { return p.znalost ? p.znalost.pct : 0; }),
+        n('ziskp', 'Neopr. zisk', function (p) { return p.podvod ? Number(p.podvod.zisk) || 0 : 0; }),
         { key: 'jmeno', label: 'Jméno a e-mail', type: 'text', ph: 'Jméno / e-mail…', get: function (p) { return (p.jmeno || '') + ' ' + (p.email || ''); } },
         { key: 'odkud', label: 'Odkud hraje', type: 'text', ph: 'Země / město…', get: function (p) { return [p.geo_mesto, p.geo_kraj, p.geo_zeme, p.geo_isp].filter(Boolean).join(' '); } },
         { key: 'sidlo', label: 'Sídlo ve hře', type: 'text', ph: 'Město…', get: function (p) { return p.sidlo || ''; } },
@@ -1005,7 +1014,7 @@
       get('/players?limit=300' + (q ? '&q=' + encodeURIComponent(q) : '')).then(function (j) {
         var tbl = document.getElementById('pl-tbl');
         if (!PL_TBL) {
-          tbl.innerHTML = '<thead><tr><th>Nick</th><th class="num" title="Odhad podvodu 0–99 % (multi účty, levný přeprodej strojů, provize) — najeď myší na číslo">Podvodník</th><th class="num" title="Kolik o hráči víme — najeď myší na číslo">Známe</th><th>Jméno a e-mail</th><th>Odkud hraje</th><th>Sídlo ve hře</th>'
+          tbl.innerHTML = '<thead><tr><th>Nick</th><th class="num" title="Odhad podvodu 0–99 % (multi účty, levný přeprodej strojů, provize) — najeď myší na číslo">Podvodník</th><th class="num" title="Kolik o hráči víme — najeď myší na číslo">Známe</th><th class="num" title="Provize z účelových účtů + sleva při nákupu strojů od nových účtů">Neopr. zisk</th><th>Jméno a e-mail</th><th>Odkud hraje</th><th>Sídlo ve hře</th>'
             + '<th class="num">Prádlomatů</th><th class="num" title="Objednané prádlomaty, které ještě nedorazily">Na cestě</th><th class="num">Míst</th><th class="num">Měst</th><th class="num">Zbyde / měsíc</th>'
             + '<th class="num">Hotovost</th><th class="num">Úvěr</th><th class="num">Otevření</th><th class="num">Přivedl</th>'
             + '<th class="num">Nákupů</th><th class="num">Utraceno</th><th>Založeno</th><th>Naposledy</th><th></th></tr></thead><tbody></tbody>';

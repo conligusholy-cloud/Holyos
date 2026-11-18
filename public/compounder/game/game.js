@@ -2798,6 +2798,15 @@ function naladaHtml(h) {
     + '<span style="color:' + naladaBarva(n) + '">' + naladaSlovy(n) + '</span></div>';
 }
 function povest() { return Math.max(-100, Math.min(100, (S && S.povest) || 0)); }
+// Co se na lince stalo, se hlásí serveru. Ne proto, aby to spočítal za nás —
+// hra si pověst počítá dál sama a hráč ji vidí hned — ale proto, aby ji uměl
+// spočítat taky, a to z toho, co hráč vybral. Váhu odpovědi si najde ve svém
+// katalogu scénářů, takže se nedá poslat vymyšlená. Nepovede-li se to,
+// nevadí: hra běží dál a server si to srovná při příštím hovoru.
+function hlasLinku(co) {
+  if (!ME) return;
+  apiJson('/linka/udalost', co).catch(function () { /* hra tím nestojí */ });
+}
 // Násobitel návštěvnosti podle pověsti. Nula je normál, záporná pověst bolí víc,
 // než kladná pomůže — špatná pověst se roznese rychleji.
 function povestKoef() {
@@ -2990,6 +2999,7 @@ function linkaOffline(dt) {
   if (zmeskano) {
     ztrata = Math.min(OFF_POVEST_MAX, zmeskano, offPovestZbyva());
     if (ztrata) { S.offPovest.body += ztrata; zmenPovest(-ztrata); }
+    hlasLinku({ typ: 'zmeskano', kolik: zmeskano });
   }
   if (vzal) {
     zapisHovor(esc(tx('hra.operator_infolinky')), [{ t: tx('veta.vyridil_kdyz_jsi_byl_pryc', { p1: vzal, p2: mn(vzal, 'hovor', 'hovory', esc(tx('hra.hovoru'))) })}], 'operator', 0);
@@ -3034,7 +3044,7 @@ function zacniHovor() {
     rod: sc.rod, nalada: n0, nalada0: n0,
     scenar: sc.id, kroky: sc.kroky,
     poradi: sc.kroky.map(function (k) { return zamichej(k.o.length); }),
-    i: 0, body: 0, vaha: 0, odpovedi: [], prepis: [], ceka: false,
+    i: 0, body: 0, vaha: 0, odpovedi: [], volby: [], prepis: [], ceka: false,
     hvPred: hvezdy(), stav: 'zvoni', zvoniDo: Date.now() + HOVOR_ZVONI_MS
   };
   S.hovoryPosl = (S.hovoryPosl || []).concat([sc.id]).slice(-SCENARU_PAMET);
@@ -3054,7 +3064,10 @@ function odmitniHovor(samo) {
   // Zaplacená linka: hovor, který hráč nevezme, vyřídí operátor a pověst
   // nikam nejde. Kredit se strhne jen tehdy, když opravdu zaskakuje.
   var operator = maLinku();
-  if (!operator) zmenPovest(povestZaOdpoved(HOVOR_ODMITNUTI));
+  if (!operator) {
+    zmenPovest(povestZaOdpoved(HOVOR_ODMITNUTI));
+    hlasLinku({ typ: 'odmitnut' });
+  }
   S.hovoru = (S.hovoru || 0) + 1;
   zapisHovor(HOVOR.jmeno, HOVOR.kroky, operator ? 'operator' : 'nevzat',
     operator ? 0 : povestZaOdpoved(HOVOR_ODMITNUTI));
@@ -3098,6 +3111,9 @@ function odpovez(i) {
   h.nalada = Math.max(0, Math.min(100, (h.nalada == null ? 50 : h.nalada) + o.b * 13));
   h.vaha += povestZaOdpoved(o.b);
   h.odpovedi.push({ b: o.b, r: o.r });
+  // Index odpovědi v katalogu, ne na obrazovce — tlačítka jsou zamíchaná.
+  // Server si podle něj najde váhu sám; z klienta jde jen to, co hráč vybral.
+  h.volby.push(h.poradi[h.i][i]);
   h.prepis.push({ k: 'ja', t: o.t });
   h.ceka = true;
   paintHovor();
@@ -3118,6 +3134,7 @@ function hovorDal() {
   } else {
     HOVOR.stav = 'konec';
     zmenPovest(HOVOR.vaha);
+    hlasLinku({ typ: 'hovor', scenar: HOVOR.scenar, volby: HOVOR.volby });
     S.hovoru = (S.hovoru || 0) + 1;
     // Zvlášť si počítáme hovory, které hráč vzal sám — odznak Spojovatel se
     // nedá koupit infolinkou a bez vlastního počítadla by to nešlo odlišit.
