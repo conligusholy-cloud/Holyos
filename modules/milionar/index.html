@@ -1762,7 +1762,7 @@
       var box = document.getElementById('zl-body'); box.innerHTML = '<p class="note">Vyhodnocuji…</p>';
       // Nejdřív uložíme rozeditovaná pravidla, ať se vyhodnocení opře o to, co je vidět ve formuláři
       zlUloz().then(function () { return get('/zlocin/nanecisto'); }).then(function (j) {
-        document.getElementById('zl-sum').innerHTML = '<p class="note">Z ' + cz(j.celkem_hracu) + ' hráčů by do kontroly spadlo <b>' + j.souhrn.kontrol + '</b>, celková škoda ' + cz(j.souhrn.skoda) + ' L$, zmrazit by se mělo ' + cz(j.souhrn.zmrazit) + ' L$. Škoda = provize + sleva na strojích oproti ceníku; peníze, které stroje vygenerovaly, se zatím nepočítají.</p>';
+        document.getElementById('zl-sum').innerHTML = '<p class="note">Počítá se <b>' + (j.pravidla.max_hloubka == 1 ? 'jen 1. linie (přímo přivedení)' : j.pravidla.max_hloubka + ' linií pod hráčem') + '</b> (nastavení „Kolik linií“). Z ' + cz(j.celkem_hracu) + ' hráčů by do kontroly spadlo <b>' + j.souhrn.kontrol + '</b>, celková škoda ' + cz(j.souhrn.skoda) + ' L$, zmrazit by se mělo ' + cz(j.souhrn.zmrazit) + ' L$. Škoda = provize + sleva na strojích oproti ceníku; peníze, které stroje vygenerovaly, se zatím nepočítají.</p>';
         box.innerHTML = zlTabulka(j.kontrola, 'Do kontroly') + zlTabulka(j.na_hrane, 'Na hraně (blízko pravidla)');
         [].forEach.call(box.querySelectorAll('[data-detail]'), function (b) { b.onclick = function () { detail(b.getAttribute('data-detail')); }; });
       }).catch(function (e) { chyba('zl-body', e); });
