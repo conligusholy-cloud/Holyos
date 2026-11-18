@@ -8243,6 +8243,24 @@ model GameOrder {
 //
 // Čísla jsou DOUBLE, ne INTEGER: jmění velkého hráče přeroste dvě miliardy
 // a celočíselný sloupec by přetekl zrovna u toho, koho je potřeba hlídat.
+// Dohled: co by server odmítl, kdyby už odmítal. Pojistky hry zatím jen
+// měří a tahle tabulka je to místo, kde se dá spočítat, kolik planých
+// poplachů dělají, než se z nich stane skutečné odmítnutí. Řádka tu není
+// obvinění hráče — vznikne i tomu, kdo kupoval dřív, než se nákupy začaly
+// vůbec zapisovat.
+model GameDohled {
+  id         Int      @id @default(autoincrement())
+  player_id  Int
+  // sklad = server hráči ten stroj neeviduje
+  druh       String   @db.VarChar(16)
+  detail     String?  @db.VarChar(200)
+  created_at DateTime @default(now())
+
+  @@index([druh, created_at])
+  @@index([player_id])
+  @@map("game_dohled")
+}
+
 model GameSnapshot {
   id         Int      @id @default(autoincrement())
   player_id  Int

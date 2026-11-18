@@ -244,6 +244,71 @@ router.get('/sklad-rozdily', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(tiskSklad(await sklad()));
 }));
 
+// GET /sklad-chybi → komu by povinný sklad zabránil ve stavbě.
+//
+// Rozhodující číslo není „kolikrát", ale „kolika hráčům, kteří mají nákupy
+// zapsané". Kdo kupoval dřív, než se nákupy začaly ukládat, bude chybět
+// vždycky a přepnutí se ho netýká — ten stroj mu doplnil dopočet.
+router.get('/sklad-chybi', api(async (req, res) => {
+  const dnu = Math.max(1, Math.min(90, parseInt(req.query.dnu, 10) || 7));
+  const od = new Date(Date.now() - dnu * 86400000);
+  const rows = await prisma.gameDohled.findMany({
+    where: { druh: 'sklad', created_at: { gte: od } },
+    orderBy: { created_at: 'desc' }, take: 500,
+  });
+  const ids = Array.from(new Set(rows.map((r) => r.player_id)));
+  const [hraci, objednavky] = await Promise.all([
+    prisma.gamePlayer.findMany({ where: { id: { in: ids } }, select: { id: true, nick: true } }),
+    prisma.gameOrder.groupBy({ by: ['player_id'], where: { player_id: { in: ids } }, _count: { _all: true } })
+      .catch(() => []),
+  ]);
+  const jmena = new Map(hraci.map((h) => [h.id, h.nick]));
+  const maObjednavky = new Map(objednavky.map((o) => [o.player_id, o._count._all]));
+  const poHraci = new Map();
+  rows.forEach((r) => {
+    const a = poHraci.get(r.player_id) || { kolik: 0, posledni: r.created_at, detail: r.detail };
+    a.kolik++;
+    poHraci.set(r.player_id, a);
+  });
+  const sObjednavkami = ids.filter((id) => (maObjednavky.get(id) || 0) > 0);
+
+  const out = [];
+  out.push('Posledních ' + dnu + ' dnů · odmítnutí nanečisto ' + rows.length
+    + ' · hráčů ' + ids.length);
+  out.push('Z toho hráčů, kteří mají na serveru zapsané nákupy: ' + sObjednavkami.length);
+  out.push('');
+  if (!rows.length) {
+    out.push('Ani jednou. Buď od nasazení nikdo nestavěl stroj, který server');
+    out.push('nezná, nebo evidence sedí. Pozná se to tak, že si koupíš stroj,');
+    out.push('postavíš ho a číslo výš zůstane na nule.');
+  } else {
+    out.push('hráč                 kolikrát   zapsaných nákupů   naposledy');
+    out.push('-'.repeat(68));
+    Array.from(poHraci.entries())
+      .sort((a, b) => b[1].kolik - a[1].kolik)
+      .slice(0, 60)
+      .forEach(([id, a]) => {
+        const obj = maObjednavky.get(id) || 0;
+        out.push(String(jmena.get(id) || ('#' + id)).padEnd(20).slice(0, 20)
+          + String(a.kolik).padStart(10) + String(obj).padStart(19)
+          + '   ' + new Date(a.posledni).toISOString().slice(0, 16).replace('T', ' ')
+          + (obj > 0 ? '   \u2190 tohohle by se přepnutí dotklo' : ''));
+      });
+    out.push('');
+    out.push('posledních 30 jednotlivě:');
+    rows.slice(0, 30).forEach((r) => {
+      out.push('  ' + new Date(r.created_at).toISOString().slice(0, 16).replace('T', ' ')
+        + '  ' + String(jmena.get(r.player_id) || ('#' + r.player_id)).padEnd(16).slice(0, 16)
+        + '  ' + (r.detail || ''));
+    });
+    out.push('');
+    out.push('Přepnout sklad_povinny na 1 má smysl teprve tehdy, až je řádek');
+    out.push('„hráčů se zapsanými nákupy" nula — jinak by hra odmítla někoho,');
+    out.push('kdo si stroj poctivě koupil.');
+  }
+  res.type('text/plain; charset=utf-8').send(out.join('\n'));
+}));
+
 // GET /strop-prehled → kolik uložení přeteklo mez přírůstku hotovosti.
 // Tohle je ladicí pohled, ne obvinění: mez je zatím schválně velkorysá a
 // zajímá nás hlavně, kolik planých poplachů dělá, než se z ní stane strop.

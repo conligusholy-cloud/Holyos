@@ -712,6 +712,12 @@ async function najdiStroj(playerId, model, spot) {
     console.warn('[game-sklad] hráč #' + playerId + ' staví ' + model + ' na ' + spot
       + ', ale server mu žádný takový stroj neeviduje'
       + (povinny ? ' — ODMÍTNUTO' : ' — zatím se jen zapisuje'));
+    // Do konzole se z provozu nikdo nedívá, a přitom je to jediné číslo,
+    // podle kterého se dá rozhodnout, jestli už smí sklad odmítat. Zápis
+    // nesmí stavbu shodit ani zdržet — proto bez čekání a bez výjimky.
+    prisma.gameDohled.create({ data: { player_id: playerId, druh: 'sklad',
+      detail: (model + ' · ' + spot).slice(0, 200) } })
+      .catch((e) => console.warn('[game-dohled]', e && e.message));
     return { ok: !povinny, id: null, chybi: true };
   } catch (e) {
     // Výpadek evidence skladu nesmí hráči zablokovat stavbu. Radši stroj
