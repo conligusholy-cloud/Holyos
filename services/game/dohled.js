@@ -76,8 +76,8 @@ async function stropPrehled(dnu) {
         out.push('    ' + String(jmena.get(id) || ('#' + id)).padEnd(20).slice(0, 20)
           + kc(kolik).padStart(16) + ' L$ navíc');
       });
-    out.push('  Server nevidí do čety, karet z ceníku a oprav poruch, takže čeká');
-    out.push('  víc, než se stane. Zajímavý je proto jen tenhle směr.');
+    out.push('  Server nevidí do karet z ceníku a oprav poruch, takže čeká víc,');
+    out.push('  než se stane. Zajímavý je proto jen tenhle směr.');
   }
   // Přípojky: co naúčtovala hra proti tomu, co čekal server. Server počítá
   // horní odhad — čtyři slevy nevidí — takže se hra smí pohybovat pod ním.

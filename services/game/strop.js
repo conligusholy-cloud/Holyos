@@ -143,6 +143,14 @@ const REVEAL_COST = 5000;          // obhlídka jednoho místa
 const POBOCKA_CENA = 500000;       // zřízení pobočky
 const POBOCKA_VRATKA = 0.5;        // při zrušení se vybavení rozprodá za půlku
 const SIDLO_STEHOVANI = 300000;    // přestěhování sídla
+// Měsíční režie, kterou zisk ze sítě nezahrnuje: ten je jen za prádlomaty.
+// Pobočka, četa a pojištění se platí každý herní měsíc, takže se musí
+// rozpočítat na uplynulý čas stejně jako zisk.
+const POBOCKA_MESICNE = 15000;     // sklad a člověk na pobočce
+const CETA_CENA = 1530000;         // technika, kterou četa potřebuje
+const CETA_MZDY = 80000;           // dva lidi
+const SHANEC_MZDA = 50000;         // kdo místa vyhledává a domlouvá
+const POJISTNE_PODIL = 0.004;      // měsíčně z ceny stroje
 
 const kolikKlicu = (x) => (x && typeof x === 'object' ? Object.keys(x).length : 0);
 const kolikPrvku = (x) => (Array.isArray(x) ? x.length : 0);
@@ -158,12 +166,34 @@ function zRozdiluStavu(stary, novy) {
   const sidloStare = (st.sidlo && st.sidlo.areaId) || null;
   const sidloNove = (no.sidlo && no.sidlo.areaId) || null;
   const stehovani = (sidloStare && sidloNove && sidloStare !== sidloNove) ? 1 : 0;
+  // Četa se pořizuje jednou a je to velká položka.
+  const cetaNova = (!(st.ceta && st.ceta.od) && (no.ceta && no.ceta.od)) ? 1 : 0;
   return {
     celkem: mesta * SCOUT_COST + obhlidky * REVEAL_COST
       + pobockyNove * POBOCKA_CENA + stehovani * SIDLO_STEHOVANI
+      + cetaNova * CETA_CENA
       - pobockyZrusene * Math.round(POBOCKA_CENA * POBOCKA_VRATKA),
-    mesta, obhlidky, pobockyNove, pobockyZrusene, stehovani,
+    mesta, obhlidky, pobockyNove, pobockyZrusene, stehovani, cetaNova,
   };
+}
+
+// Měsíční režie, kterou zisk ze sítě nezahrnuje — ten je jen za prádlomaty.
+// Pobočky, četa a pojištění běží dál, ať se staví nebo ne, takže se stejně
+// jako zisk rozpočítají na uplynulý čas.
+function rezieZaMesic(st) {
+  const s = st || {};
+  const pobocek = Array.isArray(s.pobocky) ? s.pobocky.length : 0;
+  const ceta = (s.ceta && s.ceta.od)
+    ? CETA_MZDY + (s.ceta.shanec ? SHANEC_MZDA : 0) + (Number(s.ceta.phm) || 0) : 0;
+  // Pojištění je podíl z ceny strojů; ceny drží modul jmění.
+  const CENY = require('./jmeni').CENY_STROJU || {};
+  const pojisteni = s.pojisteni
+    ? Math.round((Array.isArray(s.units) ? s.units : []).reduce((a, u) => {
+      const m = (u && u.eco && u.eco.model) || 'mini';
+      return a + (CENY[m] || 0) * POJISTNE_PODIL;
+    }, 0)) : 0;
+  return { celkem: pobocek * POBOCKA_MESICNE + ceta + pojisteni,
+    pobocek, ceta, pojisteni };
 }
 
 // Hlavní otázka: je skok hotovosti, který klient poslal, vůbec možný?
@@ -223,13 +253,15 @@ async function ocekavanaZmena(p, st, od, zisk, vyzvednuto) {
   // A k tomu to, co se pozná z rozdílu dvou uložení: průzkum, obhlídky,
   // pobočky, stěhování sídla.
   const zeStavu = zRozdiluStavu(p.state, st);
-  const nakupy = zEvidence + zeStavu.celkem;
+  // Měsíční režie za uplynulý čas: pobočky, četa, pojištění.
+  const rezie = rezieZaMesic(st).celkem * mesicu;
+  const nakupy = zEvidence + zeStavu.celkem + rezie;
   // Čerpání úvěru hotovost zvedá, splátka ji snižuje — a obojí je vidět na
   // dluhu, ne na hotovosti.
   const dluhZmena = dluhu(st) - dluhu(p.state);
   return {
     celkem: zeSite + dorucenky - nakupy + dluhZmena,
-    zeSite, dorucenky, nakupy, dluhZmena, zEvidence, zeStavu,
+    zeSite, dorucenky, nakupy, dluhZmena, zEvidence, zeStavu, rezie,
   };
 }
 
@@ -385,5 +417,5 @@ async function zkontroluj(p, st, vyzvednuto) {
   }
 }
 
-module.exports = { zkontroluj, prirustek, otisk, stropStroje, stropSite, zRozdiluStavu,
+module.exports = { zkontroluj, prirustek, otisk, stropStroje, stropSite, zRozdiluStavu, rezieZaMesic,
   MESIC_MS, NAVSTEVNOST_STROP, REZERVA, STROJE, OTISK_ODSTUP };

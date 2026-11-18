@@ -258,6 +258,51 @@ function hrac(hotovost, predMs) {
   ok('první zapsané sídlo není stěhování',
     strop.zRozdiluStavu({ sidlo: null }, { sidlo: { areaId: 'a' } }).celkem === 0);
 
+  // Režie musí doopravdy dojít až do otisku, ne jen umět spočítat sebe.
+  CLAIMS = [{ model: 'max' }];
+  DORUCENKY = []; OBJEDNAVKY = []; OTISKY = [];
+  // Pobočky má hráč i v minulém uložení — jinak by se do rozdílu připočetlo
+  // i jejich pořízení (milion) a o režii by nebylo vidět nic.
+  await strop.zkontroluj(
+    { id: 31, nick: 'Rezie', state: { cash: 1000000, loan: 0, pobocky: [{}, {}] },
+      state_at: new Date(Date.now() - MESIC / 2) },
+    { cash: 1100000, loan: 0, units: [{}], pobocky: [{}, {}] });
+  const sRezii = (OTISKY[0] || {}).ocekavano;
+  OTISKY = [];
+  await strop.zkontroluj(
+    { id: 32, nick: 'BezRezie', state: { cash: 1000000, loan: 0 },
+      state_at: new Date(Date.now() - MESIC / 2) },
+    { cash: 1100000, loan: 0, units: [{}] });
+  const bezRezii = (OTISKY[0] || {}).ocekavano;
+  ok('měsíční režie se do čekané změny opravdu promítne',
+    sRezii != null && bezRezii != null && Math.abs((bezRezii - sRezii) - 15000) < 2,
+    'rozdíl ' + (bezRezii - sRezii) + ', čekáno 15000 (dvě pobočky za půl měsíce)');
+
+  // ── Měsíční režie ──────────────────────────────────────────────────────
+  // Zisk ze sítě je jen za prádlomaty. Pobočky, četa a pojištění běží dál,
+  // ať se staví nebo ne — bez nich by čekaná změna vycházela výš u každého,
+  // kdo má pobočku.
+  const bezRezie = strop.rezieZaMesic({ units: [] });
+  ok('nic z toho = žádná režie', bezRezie.celkem === 0);
+  const sPobockami = strop.rezieZaMesic({ pobocky: [{}, {}], units: [] });
+  ok('dvě pobočky stojí třicet tisíc měsíčně', sPobockami.celkem === 30000,
+    String(sPobockami.celkem));
+  const sCetou = strop.rezieZaMesic({ ceta: { od: 1 }, units: [] });
+  ok('četa stojí mzdy', sCetou.celkem === 80000, String(sCetou.celkem));
+  const sShanecem = strop.rezieZaMesic({ ceta: { od: 1, shanec: true, phm: 3000 }, units: [] });
+  ok('sháněč a nafta se připočtou', sShanecem.celkem === 80000 + 50000 + 3000,
+    String(sShanecem.celkem));
+  const sPojistenim = strop.rezieZaMesic({ pojisteni: true,
+    units: [{ eco: { model: 'max' } }, { eco: { model: 'mini' } }] });
+  ok('pojištění se počítá z ceny strojů', sPojistenim.celkem > 0
+    && sPojistenim.celkem < 30000, String(sPojistenim.celkem));
+  ok('bez pojistky se neplatí nic',
+    strop.rezieZaMesic({ units: [{ eco: { model: 'max' } }] }).celkem === 0);
+  // Pořízení čety je jednorázová velká položka a pozná se z rozdílu uložení.
+  ok('pořízení čety se započte jednou',
+    strop.zRozdiluStavu({ ceta: null }, { ceta: { od: 1 } }).celkem === 1530000
+    && strop.zRozdiluStavu({ ceta: { od: 1 } }, { ceta: { od: 1 } }).celkem === 0);
+
   // Ceny musí sedět s hrou — jinak se počítá jiný výdaj, ne menší díra.
   const hraSrc = require('fs').readFileSync(
     require('path').join(__dirname, '..', 'public', 'compounder', 'game', 'game.js'), 'utf8');
@@ -267,6 +312,10 @@ function hrac(hotovost, predMs) {
     ['REVEAL_COST', zHry(/var REVEAL_COST = (\d+)/), 5000],
     ['POBOCKA_CENA', zHry(/var POBOCKA_CENA = (\d+)/), 500000],
     ['SIDLO_STEHOVANI', zHry(/var SIDLO_STEHOVANI = (\d+)/), 300000],
+    ['POBOCKA_MESICNE', zHry(/var POBOCKA_MESICNE = (\d+)/), 15000],
+    ['CETA_MZDY', zHry(/var CETA_MZDY = (\d+)/), 80000],
+    ['SHANEC_MZDA', zHry(/var SHANEC_MZDA = (\d+)/), 50000],
+    ['POJISTNE_PODIL', zHry(/var POJISTNE_PODIL = ([\d.]+)/), 0.004],
   ];
   ceny.forEach(([nazev, vHre, vServeru]) => {
     ok('cena ' + nazev + ' sedí s hrou', vHre === vServeru,
