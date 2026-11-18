@@ -1722,7 +1722,7 @@
       if (!rows.length) return '<p class="note">' + esc(titulek) + ': nikdo.</p>';
       return '<h3 style="font-size:14px;margin:14px 0 6px">' + esc(titulek) + ' (' + rows.length + ')</h3><div class="tbl-wrap"><table class="data-table"><thead><tr>'
         + '<th>Hráč</th><th class="num">Pod ním</th><th class="num">Koncových</th><th class="num">Zrušených</th><th class="num">Živých mezi</th><th class="num">Hloubka</th>'
-        + '<th class="num">Provize</th><th class="num">Nákupů</th><th class="num">Sleva</th><th class="num">Škoda</th><th class="num">Zmrazit</th><th>Trest (min / střed / max)</th><th>Útvar</th><th class="num">Platil</th></tr></thead><tbody>'
+        + '<th class="num">Provize</th><th class="num">Nákupů</th><th class="num">Sleva</th><th class="num">Škoda</th><th class="num">Zmrazit</th><th>Trest (min / střed / max)</th><th>Útvar</th><th class="num">Hotovost</th><th class="num" title="Hotovost minus zmrazená částka; v závorce po nejvyšším trestu">Zbude</th><th class="num">Platil</th></tr></thead><tbody>'
         + rows.map(function (r) {
           return '<tr><td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + r.id + '">' + esc(r.firma || r.nick) + '</b>'
             + '<div class="note">' + esc(r.nick) + (r.nadrazeny ? ' · pozval ' + esc(r.nadrazeny) : '') + (r.typ === 'kupec' ? ' · <b style="color:#fbbf24">KUPEC</b> (skupuje od zrušených účtů)' : '') + '</div></td>'
@@ -1735,6 +1735,11 @@
             + '<td class="num"><b>' + cz(r.skoda) + ' L$</b></td><td class="num">' + cz(r.zmrazit) + '</td>'
             + '<td class="note">' + cz(r.trest.nejnizsi) + ' / ' + cz(r.trest.stredni) + ' / ' + cz(r.trest.nejvyssi) + '</td>'
             + '<td>' + esc(r.utvar) + '</td>'
+            + '<td class="num">' + (r.hotovost == null ? '<span class="note">—</span>' : cz(r.hotovost)) + '<div class="note">' + cz(r.pradlomatu || 0) + ' prádlomatů</div></td>'
+            + '<td class="num">' + (r.zbude_zmrazeni == null ? '<span class="note">—</span>'
+              : '<b style="color:' + (r.zbude_zmrazeni < 0 ? '#f87171' : '#34d399') + '">' + cz(r.zbude_zmrazeni) + '</b>'
+                + '<div class="note" style="color:' + (r.zbude_max < 0 ? '#f87171' : '') + '">(max: ' + cz(r.zbude_max) + ')</div>'
+                + (r.zbude_zmrazeni < 0 ? '<div class="note" style="color:#f87171">nestačí hotovost</div>' : '')) + '</td>'
             + '<td class="num">' + (r.platici ? '<b title="Platící hráč: účet nesmí smazat, balíčky se mu vrátí">🔒 ' + cz(r.platil_kc) + ' Kč</b>' : '<span class="note">—</span>') + '</td></tr>';
         }).join('') + '</tbody></table></div>';
     }

@@ -188,6 +188,19 @@ async function nanecisto(prisma, pravidla) {
     radek.utvar = 'Celní správa'; radek.stav = 'kontrola';
     vysledek.push(radek);
   });
+  // Kolik mu po trestu zbude: hotovost z uloženého stavu hry minus zmrazená částka / nejvyšší trest
+  const vsechny = vysledek.concat(nahled);
+  if (vsechny.length) {
+    const st = await prisma.gamePlayer.findMany({ where: { id: { in: vsechny.map((r) => r.id) } }, select: { id: true, state: true } });
+    const S = {}; st.forEach((x) => { S[x.id] = x.state || {}; });
+    vsechny.forEach((r) => {
+      const s = S[r.id] || {};
+      r.hotovost = typeof s.cash === 'number' ? Math.round(s.cash) : null;
+      r.pradlomatu = Array.isArray(s.units) ? s.units.length : 0;
+      r.zbude_zmrazeni = r.hotovost == null ? null : r.hotovost - r.zmrazit;
+      r.zbude_max = r.hotovost == null ? null : r.hotovost - r.trest.nejvyssi;
+    });
+  }
   const rad = (a, b) => b.skoda - a.skoda;
   vysledek.sort(rad); nahled.sort(rad);
   return {
