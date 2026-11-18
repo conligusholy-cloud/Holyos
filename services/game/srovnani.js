@@ -410,6 +410,20 @@ async function sit() {
     duchove.push({ spot: c.spot_id, nick: jmena.get(c.player_id) || ('#' + c.player_id),
       model: c.model, rent: c.rent || 0 });
   });
+  // Ke každému takovému místu dohledáme nákup stroje. Je to ten rozdíl, na
+  // kterém záleží: stroj, za který hráč zaplatil a server ho eviduje jako
+  // postavený, mu hra ztratila — a to je jeho škoda, ne jeho výhoda.
+  if (duchove.length) {
+    const objednavky = await prisma.gameOrder.findMany({
+      where: { spot_id: { in: duchove.map((d) => d.spot) }, postaveno_at: { not: null } },
+      select: { spot_id: true, model: true, doplneno: true, cena: true },
+    }).catch(() => []);
+    const podle = new Map(objednavky.map((o) => [o.spot_id, o]));
+    duchove.forEach((d) => {
+      const o = podle.get(d.spot);
+      d.koupeno = o ? (o.doplneno ? 'dopočteno' : 'zaplaceno') : 'bez nákupu';
+    });
+  }
 
   out.sort((a, b) => b.sporne.length - a.sporne.length);
   out.presne = presne; out.odhadem = odhadem; out.nezname = nezname;
@@ -518,11 +532,14 @@ function tiskSit(rows) {
   if (duchove.length) {
     out.push('');
     out.push('  Tyhle je potřeba vyčistit dřív, než bude hotovost na serveru —');
-    out.push('  jinak by hráči platil za stroj, který nemá.');
+    out.push('  jinak by hráči platil za stroj, který nemá. Poslední sloupec');
+    out.push('  říká, jestli k tomu místu existuje zaplacený nákup stroje:');
+    out.push('  „zaplaceno" znamená, že stroj hře nejspíš chybí, ne přebývá.');
     duchove.slice(0, 20).forEach((d) => {
       out.push('  ' + String(d.spot).padEnd(26).slice(0, 26)
         + String(d.nick).padEnd(18).slice(0, 18)
-        + String(d.model).padEnd(6) + 'nájem ' + Math.round(d.rent));
+        + String(d.model).padEnd(6) + ('nájem ' + Math.round(d.rent)).padEnd(14)
+        + (d.koupeno || '?'));
     });
   }
   if (!rows.length) {
