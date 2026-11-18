@@ -129,6 +129,43 @@ async function utraceno(playerId, od, do_) {
   return soucet(stroje, 'cena') + soucet(zeme, 'cena') + soucet(pripojky, 'pripojky');
 }
 
+// ─── Výdaje poznané z rozdílu dvou uložení ───────────────────────────────────
+// Některé věci mají pevnou cenu a server o nich nemá evidenci: průzkum města,
+// obhlídka místa, pobočka, stěhování sídla. Dají se ale poznat z toho, co
+// přibylo mezi minulým a tímhle uložením — a to je poctivější než nechat si
+// poslat částku. Kdo by průzkum zatajil, nemá to město; kdo by si ho naopak
+// přidal, zvedne si tím výdaje a vyjde mu, že hotovost přibyla NAD čekání.
+// Ani jedním směrem se tak nedá nic schovat.
+//
+// Musí sedět s konstantami v public/compounder/game/game.js.
+const SCOUT_COST = 20000;          // cesta do města a hledání míst
+const REVEAL_COST = 5000;          // obhlídka jednoho místa
+const POBOCKA_CENA = 500000;       // zřízení pobočky
+const POBOCKA_VRATKA = 0.5;        // při zrušení se vybavení rozprodá za půlku
+const SIDLO_STEHOVANI = 300000;    // přestěhování sídla
+
+const kolikKlicu = (x) => (x && typeof x === 'object' ? Object.keys(x).length : 0);
+const kolikPrvku = (x) => (Array.isArray(x) ? x.length : 0);
+
+function zRozdiluStavu(stary, novy) {
+  const st = stary || {}, no = novy || {};
+  const mesta = Math.max(0, kolikKlicu(no.areas) - kolikKlicu(st.areas));
+  const obhlidky = Math.max(0, kolikKlicu(no.revealed) - kolikKlicu(st.revealed));
+  const pobockyRozdil = kolikPrvku(no.pobocky) - kolikPrvku(st.pobocky);
+  const pobockyNove = Math.max(0, pobockyRozdil);
+  const pobockyZrusene = Math.max(0, -pobockyRozdil);
+  // Stěhování sídla se pozná podle toho, že se změnila adresa.
+  const sidloStare = (st.sidlo && st.sidlo.areaId) || null;
+  const sidloNove = (no.sidlo && no.sidlo.areaId) || null;
+  const stehovani = (sidloStare && sidloNove && sidloStare !== sidloNove) ? 1 : 0;
+  return {
+    celkem: mesta * SCOUT_COST + obhlidky * REVEAL_COST
+      + pobockyNove * POBOCKA_CENA + stehovani * SIDLO_STEHOVANI
+      - pobockyZrusene * Math.round(POBOCKA_CENA * POBOCKA_VRATKA),
+    mesta, obhlidky, pobockyNove, pobockyZrusene, stehovani,
+  };
+}
+
 // Hlavní otázka: je skok hotovosti, který klient poslal, vůbec možný?
 // Vrací popis, ne verdikt — rozhodnutí, co s tím, patří tomu, kdo volá.
 async function prirustek(p, novyStav, vyzvednuto) {
@@ -182,13 +219,17 @@ async function ocekavanaZmena(p, st, od, zisk, vyzvednuto) {
   const mesicu = Math.max(0, od) / MESIC_MS;
   const zeSite = zisk ? zisk.server * mesicu : 0;
   const dorucenky = await doruceno(p.id, naposledy, ted, vyzvednuto);
-  const nakupy = await utraceno(p.id, naposledy, ted);
+  const zEvidence = await utraceno(p.id, naposledy, ted);
+  // A k tomu to, co se pozná z rozdílu dvou uložení: průzkum, obhlídky,
+  // pobočky, stěhování sídla.
+  const zeStavu = zRozdiluStavu(p.state, st);
+  const nakupy = zEvidence + zeStavu.celkem;
   // Čerpání úvěru hotovost zvedá, splátka ji snižuje — a obojí je vidět na
   // dluhu, ne na hotovosti.
   const dluhZmena = dluhu(st) - dluhu(p.state);
   return {
     celkem: zeSite + dorucenky - nakupy + dluhZmena,
-    zeSite, dorucenky, nakupy, dluhZmena,
+    zeSite, dorucenky, nakupy, dluhZmena, zEvidence, zeStavu,
   };
 }
 
@@ -344,5 +385,5 @@ async function zkontroluj(p, st, vyzvednuto) {
   }
 }
 
-module.exports = { zkontroluj, prirustek, otisk, stropStroje, stropSite,
+module.exports = { zkontroluj, prirustek, otisk, stropStroje, stropSite, zRozdiluStavu,
   MESIC_MS, NAVSTEVNOST_STROP, REZERVA, STROJE, OTISK_ODSTUP };

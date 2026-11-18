@@ -231,6 +231,48 @@ function hrac(hotovost, predMs) {
     o2.ocekavano >= 100000, 'čekáno ' + o2.ocekavano);
   OBJEDNAVKY = [];
 
+  // ── Výdaje poznané z rozdílu dvou uložení ──────────────────────────────
+  // Průzkum, obhlídky, pobočky a stěhování sídla mají pevnou cenu a server
+  // o nich nemá evidenci. Poznají se z toho, co přibylo mezi dvěma uloženími
+  // — a to je poctivější než nechat si poslat částku.
+  const pred = { areas: { a: 1 }, revealed: { x: 1 }, pobocky: [{}], sidlo: { areaId: 'a' } };
+  const po = { areas: { a: 1, b: 1 }, revealed: { x: 1, y: 1, z: 1 },
+    pobocky: [{}, {}], sidlo: { areaId: 'b' } };
+  const r1 = strop.zRozdiluStavu(pred, po);
+  ok('nové město, obhlídky, pobočka i stěhování se sečtou',
+    r1.celkem === 20000 + 2 * 5000 + 500000 + 300000,
+    String(r1.celkem) + ' · ' + JSON.stringify(r1));
+  // Jen pobočka, ať se do toho nepočítá i stěhování sídla zpátky.
+  const dvePobocky = { pobocky: [{}, {}], sidlo: { areaId: 'a' } };
+  const jednaPobocka = { pobocky: [{}], sidlo: { areaId: 'a' } };
+  ok('zrušená pobočka půlku vrátí',
+    strop.zRozdiluStavu(dvePobocky, jednaPobocka).celkem === -250000,
+    String(strop.zRozdiluStavu(dvePobocky, jednaPobocka).celkem));
+  ok('přesun sídla tam a zpátky stojí pokaždé',
+    strop.zRozdiluStavu(po, pred).celkem === 300000 - 250000,
+    String(strop.zRozdiluStavu(po, pred).celkem));
+  ok('beze změny se neúčtuje nic', strop.zRozdiluStavu(pred, pred).celkem === 0);
+  ok('prázdný stav nespadne', strop.zRozdiluStavu(null, null).celkem === 0
+    && strop.zRozdiluStavu(undefined, { areas: { a: 1 } }).celkem === 20000);
+  // Stěhování se pozná jen podle změny adresy, ne podle prvního zápisu sídla.
+  ok('první zapsané sídlo není stěhování',
+    strop.zRozdiluStavu({ sidlo: null }, { sidlo: { areaId: 'a' } }).celkem === 0);
+
+  // Ceny musí sedět s hrou — jinak se počítá jiný výdaj, ne menší díra.
+  const hraSrc = require('fs').readFileSync(
+    require('path').join(__dirname, '..', 'public', 'compounder', 'game', 'game.js'), 'utf8');
+  const zHry = (re) => { const m = hraSrc.match(re); return m ? Number(m[1]) : null; };
+  const ceny = [
+    ['SCOUT_COST', zHry(/var SCOUT_COST = (\d+)/), 20000],
+    ['REVEAL_COST', zHry(/var REVEAL_COST = (\d+)/), 5000],
+    ['POBOCKA_CENA', zHry(/var POBOCKA_CENA = (\d+)/), 500000],
+    ['SIDLO_STEHOVANI', zHry(/var SIDLO_STEHOVANI = (\d+)/), 300000],
+  ];
+  ceny.forEach(([nazev, vHre, vServeru]) => {
+    ok('cena ' + nazev + ' sedí s hrou', vHre === vServeru,
+      'hra ' + vHre + ' / server ' + vServeru);
+  });
+
   // ── Výpadek databáze ukládání hry nesmí shodit ─────────────────────────
   const puvodniClaims = CLAIMS;
   CLAIMS = null;   // findMany vrátí null → reduce spadne
