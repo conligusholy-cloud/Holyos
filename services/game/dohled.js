@@ -146,6 +146,102 @@ async function skladChybi(dnu) {
 // Zajímá nás rozptyl, ne průměr: když se devadesát hráčů shodne do procenta
 // a tři se rozcházejí o polovinu, není to chyba vzorce, ale tři případy
 // k prohlédnutí.
+// Rozbor jednoho hráče: prádlomat po prádlomatu, hra vedle serveru.
+//
+// Souhrn výš řekne, že se čísla rozešla, ale ne proč. Tohle ukáže, u kterého
+// stroje se rozcházejí a který vstup za to může — skóre, nájem, podíl na
+// místě nebo chod. Jedno číslo vedle druhého; rozdíl bývá jen u jednoho
+// stroje a hned je vidět, čím to je.
+async function ziskRozbor(nick) {
+  const EKO = require('./ekonomika');
+  const NAV = require('./navstevnost');
+  const POZEMKY = require('./pozemky');
+  const jm = String(nick || '').trim();
+  if (!jm) return 'Zadej nick: /zisk-rozbor?nick=...';
+  const p = await prisma.gamePlayer.findFirst({ where: { nick: jm } });
+  if (!p) return 'Hráče „' + jm + '" neznám.';
+  const st = p.state || {};
+  const units = Array.isArray(st.units) ? st.units : [];
+  const claims = await prisma.gameSpotClaim.findMany({
+    where: { player_id: p.id, model: { not: '' } },
+    select: { spot_id: true, area_key: true, model: true, rent: true, pozemek: true, score: true },
+  });
+
+  const ted = new Date();
+  const [eventy, oblasti] = await Promise.all([
+    prisma.gameEvent.findMany({ where: { do: { gt: ted } }, take: 60 }).catch(() => []),
+    prisma.gameArea.findMany({ where: { country: { not: null } },
+      select: { key: true, country: true }, take: 1000 }).catch(() => []),
+  ]);
+  const udalosti = eventy.map((e) => ({
+    dobra: e.dobra, dopad: e.dopad, do: e.do,
+    mesta: e.uroven === 'svet' ? null
+      : e.uroven === 'mesto' ? [e.area_key]
+        : oblasti.filter((o) => o.country === e.zeme).map((o) => o.key),
+  }));
+  const nav = await NAV.proHrace(p, st);
+
+  // Stav hry podle spotId, ať se dá k místu přiřadit, co o něm říká hra.
+  const zHry = new Map();
+  units.forEach((u) => { if (u && u.spotId) zHry.set(u.spotId, u); });
+
+  const kc = (n) => Math.round(Number(n) || 0).toLocaleString('cs-CZ');
+  const out = [];
+  out.push('ROZBOR ZISKU · ' + p.nick + ' (#' + p.id + ')');
+  out.push('návštěvnost serveru ' + nav.navstevnost.toFixed(4)
+    + ' · přivedení ' + nav.refs + ' · boost ' + nav.boost
+    + ' · kampaň ' + nav.kampanAdd + ' · pověst ' + nav.povest + ' (z klienta)');
+  out.push('běžících událostí ' + eventy.length + ' · prádlomatů podle serveru '
+    + claims.length + ', podle hry ' + units.length);
+  out.push('');
+  out.push('místo                     model  skóre   nájem     podíl chod'
+    + '      hra      server    rozdíl');
+  out.push('-'.repeat(104));
+
+  let hraC = 0, srvC = 0;
+  claims.forEach((c) => {
+    const u = zHry.get(c.spot_id);
+    const eco = (u && u.eco) || {};
+    const presne = c.score != null;
+    const score = presne ? c.score
+      : EKO.skoreZNajmu(c.rent, 0.9 + POZEMKY.spotHash(c.spot_id, 'r') * 0.3);
+    const podil = eco.podil == null ? 1 : Number(eco.podil);
+    const chod = eco.chod == null ? 1 : Number(eco.chod);
+    // Server počítá tak, jak počítá doopravdy — včetně podílu na místě,
+    // aby bylo vidět, jestli rozdíl dělá vstup, nebo vzorec.
+    const e = EKO.jedenStroj({ model: c.model, score: score || 0, rent: c.rent,
+      pozemek: !!c.pozemek, podil, area_key: c.area_key },
+    nav.navstevnost, { udalost: EKO.udalostKoef(udalosti, c.area_key, claims.length, ted.getTime()), chod });
+    const hra = Math.round(eco.profit || 0);
+    hraC += hra; srvC += e.zisk;
+    const rozdil = hra ? ((e.zisk - hra) / Math.abs(hra)) * 100 : 0;
+    out.push(String(c.spot_id).padEnd(26).slice(0, 26)
+      + String(c.model || '?').padEnd(7)
+      + (String(Math.round(score)) + (presne ? '' : '~')).padStart(5)
+      + kc(c.rent).padStart(8)
+      + (c.pozemek ? ' vlastní' : '        ')
+      + podil.toFixed(2).padStart(6) + chod.toFixed(2).padStart(5)
+      + kc(hra).padStart(10) + kc(e.zisk).padStart(12)
+      + ((rozdil >= 0 ? '+' : '') + rozdil.toFixed(1) + ' %').padStart(10));
+  });
+  // Co hra počítá na místech, o kterých server neví.
+  const bezClaimu = units.filter((u) => u && u.spotId
+    && !claims.some((c) => c.spot_id === u.spotId));
+  bezClaimu.forEach((u) => {
+    const hra = Math.round((u.eco && u.eco.profit) || 0);
+    hraC += hra;
+    out.push(String(u.spotId).padEnd(26).slice(0, 26) + '— server o tomhle místě neví —'.padEnd(32)
+      + kc(hra).padStart(10) + '           —');
+  });
+  out.push('-'.repeat(104));
+  out.push('celkem'.padEnd(58) + kc(hraC).padStart(10) + kc(srvC).padStart(12)
+    + ((hraC ? (((srvC - hraC) / Math.abs(hraC)) * 100) : 0).toFixed(1) + ' %').padStart(10));
+  out.push('');
+  out.push('Podíl a chod se berou ze stavu hry — server je sám nezná. Vlnka');
+  out.push('u skóre znamená, že ho server dopočítal z nájmu, místo aby ho měl.');
+  return out.join('\n');
+}
+
 async function ziskSrovnani(dnu) {
   const d = Math.max(1, Math.min(90, parseInt(dnu, 10) || 7));
   const od = new Date(Date.now() - d * 86400000);
@@ -281,5 +377,5 @@ function start() {
   console.log('[game-dohled] denní přehled pojistek běží');
 }
 
-module.exports = { start, doLogu, stropPrehled, skladChybi, nastaveniPrehled,
+module.exports = { start, doLogu, stropPrehled, skladChybi, nastaveniPrehled, ziskRozbor,
   vlastnictvi, ziskSrovnani };

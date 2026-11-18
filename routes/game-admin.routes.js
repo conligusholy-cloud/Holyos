@@ -252,6 +252,13 @@ router.get('/zisk-srovnani', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(await ziskSrovnani(req.query.dnu));
 }));
 
+// GET /zisk-rozbor?nick=... → ten samý rozdíl, ale prádlomat po prádlomatu.
+// Souhrn řekne, že se čísla rozešla; tohle řekne, u kterého stroje a čím.
+router.get('/zisk-rozbor', api(async (req, res) => {
+  const { ziskRozbor } = require('../services/game/dohled');
+  res.type('text/plain; charset=utf-8').send(await ziskRozbor(req.query.nick));
+}));
+
 // GET /sit-rozdily → vidí server stejnou síť jako hra?
 // Rozhoduje to o tom, jestli má vůbec smysl porovnávat zisk: dokud se
 // rozchází model stroje nebo skóre místa, nebyl by rozdíl chybou výpočtu,
