@@ -141,6 +141,69 @@ async function skladChybi(dnu) {
   return out.join('\n');
 }
 
+// ─── Zisk: hra proti serveru ─────────────────────────────────────────────────
+// Měřítko, podle kterého se pozná, jestli se dá serverovému počítání věřit.
+// Zajímá nás rozptyl, ne průměr: když se devadesát hráčů shodne do procenta
+// a tři se rozcházejí o polovinu, není to chyba vzorce, ale tři případy
+// k prohlédnutí.
+async function ziskSrovnani(dnu) {
+  const d = Math.max(1, Math.min(90, parseInt(dnu, 10) || 7));
+  const od = new Date(Date.now() - d * 86400000);
+  const rows = await prisma.gameSnapshot.findMany({
+    where: { created_at: { gte: od }, zisk_server: { not: null } },
+    orderBy: { created_at: 'desc' }, take: 2000,
+    select: { player_id: true, zisk_hra: true, zisk_server: true, zisk_presne: true,
+      pradlomatu: true, created_at: true },
+  });
+  // Na hráče bereme jen jeho nejnovější otisk — jinak by aktivní hráči
+  // převážili ty, co se dnes přihlásili jednou.
+  const posledni = new Map();
+  rows.forEach((r) => { if (!posledni.has(r.player_id)) posledni.set(r.player_id, r); });
+  const l = Array.from(posledni.values());
+
+  const ids = l.map((r) => r.player_id);
+  const hraci = ids.length ? await prisma.gamePlayer.findMany({
+    where: { id: { in: ids } }, select: { id: true, nick: true } }) : [];
+  const jm = new Map(hraci.map((h) => [h.id, h.nick]));
+
+  const sOdchylkou = l.map((r) => {
+    const hra = Number(r.zisk_hra) || 0;
+    const srv = Number(r.zisk_server) || 0;
+    const zaklad = Math.max(Math.abs(hra), 1);
+    return { nick: jm.get(r.player_id) || ('#' + r.player_id),
+      hra, srv, pct: ((srv - hra) / zaklad) * 100,
+      presne: r.zisk_presne || 0, pradlomatu: r.pradlomatu || 0 };
+  }).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+
+  const kc = (n) => Math.round(n).toLocaleString('cs-CZ');
+  const out = [];
+  out.push('ZISK: HRA PROTI SERVERU · posledních ' + d + ' dnů · hráčů ' + l.length);
+  if (!l.length) {
+    out.push('Zatím nic. Porovnání se zapisuje k otisku hry, tedy nanejvýš');
+    out.push('jednou za deset minut na hráče — po nasazení chvíli trvá.');
+    return out.join('\n');
+  }
+  const doPct = (x) => sOdchylkou.filter((r) => Math.abs(r.pct) <= x).length;
+  out.push('  do 1 % od sebe:  ' + doPct(1) + ' hráčů');
+  out.push('  do 5 %:          ' + doPct(5));
+  out.push('  do 20 %:         ' + doPct(20));
+  out.push('  přes 20 %:       ' + (l.length - doPct(20)) + '  \u2190 tyhle prohlédnout');
+  out.push('');
+  out.push('nick                 hra            server         rozdíl   přesně/prádl.');
+  out.push('-'.repeat(78));
+  sOdchylkou.slice(0, 40).forEach((r) => {
+    out.push(String(r.nick).padEnd(20).slice(0, 20)
+      + kc(r.hra).padStart(14) + kc(r.srv).padStart(15)
+      + ((r.pct >= 0 ? '+' : '') + r.pct.toFixed(1) + ' %').padStart(10)
+      + ('   ' + r.presne + '/' + r.pradlomatu).padStart(16));
+  });
+  out.push('');
+  out.push('Obě čísla jsou jen za prádlomaty — pobočky, četa ani úvěry se');
+  out.push('do nich nepočítají. Sloupec vpravo říká, kolik z těch prádlomatů');
+  out.push('umí server ocenit přesně; u zbytku se skóre dopočítává z nájmu.');
+  return out.join('\n');
+}
+
 // ─── Vlastnické změny ────────────────────────────────────────────────────────
 // Odpověď na otázku, kterou dřív nešlo zodpovědět: kam se poděl kus firmy.
 // Čte se to dvojím způsobem — co se dělo s firmou, a co se dělo s podílem
@@ -218,4 +281,5 @@ function start() {
   console.log('[game-dohled] denní přehled pojistek běží');
 }
 
-module.exports = { start, doLogu, stropPrehled, skladChybi, nastaveniPrehled, vlastnictvi };
+module.exports = { start, doLogu, stropPrehled, skladChybi, nastaveniPrehled,
+  vlastnictvi, ziskSrovnani };

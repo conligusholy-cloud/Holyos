@@ -8330,6 +8330,14 @@ model GameSnapshot {
   strop      Float?
   sedi       Boolean  @default(true)
   od_ms      Int      @default(0)
+  // Zisk za prádlomaty podle hry a podle serveru, vedle sebe. Pobočky,
+  // četa ani úvěry se do nich nepočítají ani na jedné straně — jinak by
+  // se porovnávaly různé věci. zisk_presne říká, kolik prádlomatů z toho
+  // server umí ocenit přesně; bez toho by nešlo poznat, jestli rozdíl
+  // dělá chyba, nebo chybějící skóre.
+  zisk_hra    Float?
+  zisk_server Float?
+  zisk_presne Int?
   created_at DateTime @default(now())
 
   @@index([player_id, created_at])

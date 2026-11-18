@@ -143,6 +143,45 @@ function zapis(p, v) {
     + ', ze serveru ' + v.ze_serveru + ', půjčeno ' + (v.pujceno || 0) + ')');
 }
 
+// ─── Zisk: hra proti serveru ─────────────────────────────────────────────────
+// Server zná modely strojů, skóre míst, nájmy i návštěvnost, takže umí
+// spočítat, kolik síti měsíčně zbude. Tahle funkce postaví obě čísla vedle
+// sebe — nic nerozhoduje a nic neodmítá, jen měří.
+//
+// Porovnává se JEN zisk za prádlomaty. Pobočky, četa a úvěry se do něj
+// nepočítají ani na jedné straně; kdyby ano, porovnávaly by se různé věci
+// a rozdíl by neznamenal nic.
+async function ziskSrovnani(p, st) {
+  const EKO = require('./ekonomika');
+  const NAV = require('./navstevnost');
+  const POZEMKY = require('./pozemky');
+
+  const claims = await prisma.gameSpotClaim.findMany({
+    where: { player_id: p.id, model: { not: '' } },
+    select: { spot_id: true, model: true, rent: true, pozemek: true, score: true },
+  });
+  if (!claims.length) return null;
+
+  // Kolik prádlomatů umí server ocenit přesně. Zbytku se skóre dopočítá
+  // z nájmu, což je odhad — a je potřeba vědět, kolika se to týká.
+  let presne = 0;
+  const mista = claims.map((c) => {
+    let score = c.score;
+    if (score == null) {
+      const deal = 0.9 + POZEMKY.spotHash(c.spot_id, 'r') * 0.3;
+      score = EKO.skoreZNajmu(c.rent, deal);
+    } else presne++;
+    return { model: c.model, score: score || 0, rent: c.rent, pozemek: !!c.pozemek };
+  });
+
+  const nav = await NAV.proHrace(p, st);
+  const server = EKO.site(mista, nav.navstevnost).zisk;
+  // Totéž podle hry: součet zisků jednotlivých prádlomatů z uloženého stavu.
+  const units = Array.isArray(st && st.units) ? st.units : [];
+  const hra = units.reduce((a, u) => a + Math.round((u && u.eco && u.eco.profit) || 0), 0);
+  return { hra, server: Math.round(server), presne };
+}
+
 // ─── Otisk hry v čase ────────────────────────────────────────────────────────
 // Ukládaný stav si drží jen poslední podobu. Když se hráč zeptá, kam se
 // podělo dvacet milionů, nemáme co otevřít — historie neexistuje. Otisk je
@@ -171,6 +210,10 @@ async function otisk(p, st, v) {
     const acct = require('../../routes/game-account.routes');
     if (typeof acct._cisteJmeni === 'function') jmeni = Math.round(acct._cisteJmeni(st) || 0);
   } catch (e) { /* bez jmění to má pořád cenu */ }
+  // Zisk podle hry a podle serveru vedle sebe. Počítá se jen tady, u otisku,
+  // tedy nanejvýš jednou za deset minut na hráče — pro každé uložení by to
+  // bylo pět dotazů navíc a nic by to nepřineslo.
+  const zisk = await ziskSrovnani(p, st).catch(() => null);
   await prisma.gameSnapshot.create({ data: {
     player_id: p.id,
     hotovost: Math.round(Number(st && st.cash) || 0),
@@ -181,6 +224,9 @@ async function otisk(p, st, v) {
     strop: v.strop != null ? Math.round(v.strop) : null,
     sedi: !!v.sedi,
     od_ms: Math.min(2147483647, Math.max(0, Math.round(v.od || 0))),
+    zisk_hra: zisk ? zisk.hra : null,
+    zisk_server: zisk ? zisk.server : null,
+    zisk_presne: zisk ? zisk.presne : null,
   } });
 }
 

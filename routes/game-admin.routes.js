@@ -244,6 +244,13 @@ router.get('/sklad-rozdily', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(tiskSklad(await sklad()));
 }));
 
+// GET /zisk-srovnani → zisk podle hry proti zisku podle serveru.
+// Měřítko, podle kterého se pozná, jestli se dá serverovému počítání věřit.
+router.get('/zisk-srovnani', api(async (req, res) => {
+  const { ziskSrovnani } = require('../services/game/dohled');
+  res.type('text/plain; charset=utf-8').send(await ziskSrovnani(req.query.dnu));
+}));
+
 // GET /sit-rozdily → vidí server stejnou síť jako hra?
 // Rozhoduje to o tom, jestli má vůbec smysl porovnávat zisk: dokud se
 // rozchází model stroje nebo skóre místa, nebyl by rozdíl chybou výpočtu,
