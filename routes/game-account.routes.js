@@ -819,21 +819,50 @@ const REF_RE = /^[a-z0-9]{6,24}$/;
 // jednomu účtu a už se nepřepisuje, jinak by si hráč přihlášením na novém
 // zařízení přepsal odkaz, který má rozeslaný. Zároveň doplníme účet všem,
 // koho přivedl dřív, než se sám zaregistroval.
+// Volné id do odkazu, když to, se kterým prohlížeč přišel, nejde použít.
+// Účet bez id je horší než účet s jiným id: hra pak počítá přivedené pod
+// cizím odkazem a serveru to nesedí — a až bude hotovost na serveru, bude
+// z toho rozdíl v penězích.
+async function volneRefId() {
+  for (let i = 0; i < 8; i++) {
+    const id = crypto.randomBytes(16).toString('base64')
+      .replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 12);
+    if (!REF_RE.test(id)) continue;
+    const obsazeno = await prisma.gamePlayer.findUnique({ where: { ref_id: id }, select: { id: true } });
+    if (!obsazeno) return id;
+  }
+  return null;
+}
+
 async function narokujRef(player, ref) {
   const id = String(ref || '').toLowerCase();
-  if (!REF_RE.test(id)) return player;
   let p = player;
-  if (player.ref_id !== id) {
-    if (player.ref_id) return player;                       // svoje id už má
-    const obsazeno = await prisma.gamePlayer.findUnique({ where: { ref_id: id }, select: { id: true } });
-    if (obsazeno) return player;                            // id patří někomu jinému
-    try { p = await prisma.gamePlayer.update({ where: { id: player.id }, data: { ref_id: id } }); }
+  // Prohlížeč může přijít s id, které už patří jinému účtu — typicky když si
+  // tentýž člověk na témže zařízení založil druhý účet. Tiše ho nechat bez
+  // id se nesmí: hra by dál ukazovala přivedené hráče toho prvního účtu.
+  // Dostane proto vlastní, prázdné.
+  if (!player.ref_id) {
+    let chci = REF_RE.test(id) ? id : null;
+    if (chci) {
+      const obsazeno = await prisma.gamePlayer.findUnique({ where: { ref_id: chci }, select: { id: true } });
+      if (obsazeno) chci = null;
+    }
+    if (!chci) chci = await volneRefId();
+    if (!chci) return player;
+    try { p = await prisma.gamePlayer.update({ where: { id: player.id }, data: { ref_id: chci } }); }
     catch (e) { return player; }                            // závod dvou zařízení
+  } else if (player.ref_id !== id) {
+    return player;                                          // svoje id už má
   }
-  await prisma.gamePlayer.updateMany({
-    where: { invited_by_ref: id, invited_by_id: null, NOT: { id: p.id } },
-    data: { invited_by_id: p.id }
-  });
+  // Doplnit účet těm, koho přivedl dřív, než se sám zaregistroval. Hledá se
+  // podle id, které mu NAKONEC patří — ne podle toho, se kterým prohlížeč
+  // přišel. Jinak by si cizím id přitáhl cizí přivedené.
+  if (p.ref_id) {
+    await prisma.gamePlayer.updateMany({
+      where: { invited_by_ref: p.ref_id, invited_by_id: null, NOT: { id: p.id } },
+      data: { invited_by_id: p.id }
+    });
+  }
   return p;
 }
 
