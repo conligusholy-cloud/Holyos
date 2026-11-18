@@ -2456,7 +2456,29 @@ router.post('/spots/model', requirePlayer, async (req, res, next) => {
     if (!c || c.player_id !== req.player.id) {
       return res.status(404).json({ error: stx(req)('server.tohle_misto_neni_tvoje') });
     }
+    if (c.model === model) {
+      return res.json({ ok: true, spot: claimPub(c, req.player.id, await firmyMapa()) });
+    }
+    // Výměna je stavba jako každá jiná: nový stroj musí hráč mít. Dosud se
+    // tahle cesta na sklad neptala vůbec, takže se dal model na serveru
+    // zvednout z mini na max bez čehokoli — a je to právě serverový model,
+    // podle kterého se po přesunu pokladny budou počítat peníze.
+    // Odmítá se až tehdy, až se sklad zapne; do té doby se to jen zapisuje.
+    const sklad = await najdiStroj(req.player.id, model, spot);
+    if (!sklad.ok) return res.status(409).json({ error: stx(req)('server.takovy_stroj_nemas_skladem') });
+    // Starý stroj jde zpátky na sklad — ve hře to tak je, server to dosud
+    // nevěděl a hráči se tím sklad tiše ztenčoval. Vrací se ale JEN když se
+    // za něj opravdu jeden vzal: jinak by se dalo přepínáním modelu tam a
+    // zpátky nasbírat sklad z ničeho, a ten by po zapnutí povinného skladu
+    // stavěl zadarmo.
+    if (sklad.id) {
+      await prisma.gameOrder.updateMany({
+        where: { player_id: req.player.id, spot_id: spot, postaveno_at: { not: null }, zruseno_at: null },
+        data: { postaveno_at: null, spot_id: null },
+      }).catch((e) => console.warn('[game] vrácení stroje na sklad:', e.message));
+    }
     const up = await prisma.gameSpotClaim.update({ where: { spot_id: spot }, data: { model } });
+    await oznacPostaveny(sklad.id, spot);
     res.json({ ok: true, spot: claimPub(up, req.player.id, await firmyMapa()) });
   } catch (e) { next(e); }
 });
