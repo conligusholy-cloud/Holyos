@@ -39,6 +39,12 @@ function otiskStavu(st) {
       ? { od: s.ceta.od, shanec: !!s.ceta.shanec, phm: Number(s.ceta.phm) || 0 } : null,
     denni: s.denni ? { den: Number(s.denni.den) || 0, kdy: String(s.denni.kdy || '') } : null,
     pojisteni: !!s.pojisteni,
+    // Úvěry kvůli poplatku za změnu splatnosti: ten se pozná z počítadla
+    // přepsání a počítá se z nesplacené jistiny před změnou.
+    loans: (Array.isArray(s.loans) ? s.loans : []).map((l) => ({
+      id: l && l.id, zbyva: Math.round(Number((l || {}).zbyva) || 0),
+      prepsano: Number((l || {}).prepsano) || 0,
+    })),
     units: units.filter((u) => u && u.katastrofa).map((u) => ({
       spotId: u.spotId || u.id,
       eco: { model: ((u.eco || {}).model) || 'mini' },

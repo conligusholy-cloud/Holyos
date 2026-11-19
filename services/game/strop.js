@@ -126,7 +126,10 @@ async function utraceno(playerId, od, do_) {
       select: { pripojky: true } }).catch(() => []),
   ]);
   const soucet = (l, pole) => l.reduce((a, x) => a + Math.max(0, Number(x[pole]) || 0), 0);
-  return soucet(stroje, 'cena') + soucet(zeme, 'cena') + soucet(pripojky, 'pripojky');
+  // A kniha výdajů: výměna stroje, poplatek za vyjednávání, odstupné.
+  // Server je sám obsloužil, takže je nemusel nechat hlásit od klienta.
+  const kniha = await require('./vydaje').zaObdobi(playerId, od, do_);
+  return soucet(stroje, 'cena') + soucet(zeme, 'cena') + soucet(pripojky, 'pripojky') + kniha;
 }
 
 // ─── Výdaje poznané z rozdílu dvou uložení ───────────────────────────────────
@@ -331,16 +334,20 @@ async function ocekavanaZmena(p, st, od, zisk, vyzvednuto, zaklad) {
   const rezie = rezieZaMesic(st).celkem * mesicu;
   // Zaplacené opravy po poruše — výdaj, o kterém server nemá evidenci.
   const opravy = opravyZeStavu(zakl, st);
+  // Poplatek za změnu splatnosti úvěru. Tohle se odehraje celé v prohlížeči,
+  // takže se pozná jen z rozdílu dvou uložení: u úvěru vyskočí počítadlo
+  // přepsání a poplatek je podíl z jeho nesplacené jistiny.
+  const splatnosti = require('./vydaje').poplatkySplatnosti(zakl, st);
   // A příjem, který hra vyplácí sama: denní odměna.
   const prijmy = prijmyZeStavu(zakl, st, zisk ? zisk.server : 0);
-  const nakupy = zEvidence + zeStavu.celkem + rezie + opravy.celkem;
+  const nakupy = zEvidence + zeStavu.celkem + rezie + opravy.celkem + splatnosti.celkem;
   // Čerpání úvěru hotovost zvedá, splátka ji snižuje — a obojí je vidět na
   // dluhu, ne na hotovosti.
   const dluhZmena = dluhu(st) - dluhu(zakl);
   return {
     celkem: zeSite + dorucenky + prijmy.celkem - nakupy + dluhZmena,
     zeSite, dorucenky, nakupy, dluhZmena, zEvidence, zeStavu, rezie,
-    opravy, prijmy,
+    opravy, prijmy, splatnosti,
   };
 }
 

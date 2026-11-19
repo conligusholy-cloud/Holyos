@@ -20,6 +20,7 @@ const { HODNOSTI, hodnost, zmrazena, ODZNAKY, ODZNAK,
 const TEXTY = require('../services/game/texty');
 const MENY = require('../services/game/meny');
 const POZEMKY = require('../services/game/pozemky');
+const VYD = require('../services/game/vydaje');
 const JMENI = require('../services/game/jmeni');
 // Zkratka do obsluhy: stx(req)('server.neco') vrátí hlášku v jazyce hráče.
 // Skládá se pro toho, KOMU se posílá — ne pro toho, kdo akci vyvolal.
@@ -2348,10 +2349,17 @@ router.post('/spots/bid', requirePlayer, async (req, res, next) => {
     await dobehleVypovedi();
     const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
     if (!cur) return res.status(404).json({ error: stx(req)('server.tohle_misto_je_volne_stav_rovnou') });
-    if (cur.player_id === req.player.id) return res.status(409).json({ error: stx(req)('server.tady_stojis_ty_sam') });
+    // Hra strhne poplatek za cestu u každého odmítnutí kromě 404 (tam místo
+    // mezitím zmizelo). Server si ho zapisuje, aby s ním uměla počítat
+    // čekaná změna i pokladna — pozor, drží se toho, co hra OPRAVDU dělá.
+    if (cur.player_id === req.player.id) {
+      await VYD.zapis(req.player.id, 'vyjednavani', VYD.BID_FEE, spot);
+      return res.status(409).json({ error: stx(req)('server.tady_stojis_ty_sam') });
+    }
     // Vlastní pozemek se nepřeplácí — není komu nabízet nájem. Tohle hráči
     // řekneme na rovinu, ať zbytečně neplatí za cestu; je to veřejná informace.
     if (cur.pozemek) {
+      await VYD.zapis(req.player.id, 'vyjednavani', VYD.BID_FEE, spot);
       return res.status(409).json({ ok: false, won: false, nelze: true,
         error: stx(req)('server.tohle_misto_stoji_na_vlastnim_pozemku') });
     }
@@ -2364,6 +2372,7 @@ router.post('/spots/bid', requirePlayer, async (req, res, next) => {
     const nadNabidkou = cur.vypoved_do ? offer >= Math.ceil((cur.vyzyvatel_rent || 0) * TAKEOVER_MIN) : true;
     if (offer < need || kryty || !nadNabidkou) {
       // Kolik bylo potřeba, neprozradíme — jinak by stačilo zkoušet po tisícovkách.
+      await VYD.zapis(req.player.id, 'vyjednavani', VYD.BID_FEE, spot);
       return res.status(409).json({ ok: false, won: false, fee: BID_FEE, error: stx(req)('server.majitel_pozemku_tvoji_nabidku_odmitl_najemce') });
     }
     // Nájemce má výpovědní dobu: místo mu vydělává dál a může nabídku dorovnat.
@@ -2589,6 +2598,11 @@ router.post('/spots/model', requirePlayer, async (req, res, next) => {
         data: { postaveno_at: null, spot_id: null },
       }).catch((e) => console.warn('[game] vrácení stroje na sklad:', e.message));
     }
+    // Výměnu si server spočítá sám: doprava nového stroje z nejbližší
+    // základny a doplatek přípojek, když nový model potřebuje silnější.
+    const vym = VYD.vymena(req.player.state, c, c.model, model);
+    await VYD.zapis(req.player.id, 'vymena', vym.celkem, spot,
+      { z: c.model, na: model, doprava: vym.doprava, doplatek: vym.doplatek });
     const up = await prisma.gameSpotClaim.update({ where: { spot_id: spot }, data: { model } });
     await oznacPostaveny(sklad.id, spot);
     res.json({ ok: true, spot: claimPub(up, req.player.id, await firmyMapa()) });
@@ -2612,6 +2626,7 @@ router.post('/spots/release', requirePlayer, async (req, res, next) => {
         error: stx(req)('server.smlouva_je_na_dobu_urcitou_odejit') });
     }
     await prisma.gameSpotClaim.deleteMany({ where: { spot_id: spot, player_id: req.player.id } });
+    await VYD.zapis(req.player.id, 'odstupne', odstupne, spot);
     res.json({ ok: true, odstupne });
   } catch (e) { next(e); }
 });

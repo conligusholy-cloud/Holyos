@@ -8334,6 +8334,25 @@ model GameDohled {
   @@map("game_dohled")
 }
 
+// Výdaje, o kterých server ví, protože sám obsloužil požadavek, ale do téhle
+// chvíle je neměl kam zapsat: výměna stroje, poplatek za neúspěšné
+// vyjednávání, odstupné při výpovědi. Peníze strhává hra, server jen
+// zaznamenává, že se to stalo a za kolik — čekaná změna i pokladna z toho pak
+// počítají, a hráč pod nevysvětleným výdajem nemůže schovat hotovost navíc.
+model GameVydaj {
+  id         Int      @id @default(autoincrement())
+  player_id  Int
+  // vymena | vyjednavani | odstupne
+  druh       String   @db.VarChar(16)
+  castka     Int
+  spot_id    String?  @db.VarChar(120)
+  detail     Json?
+  created_at DateTime @default(now())
+
+  @@index([player_id, created_at])
+  @@map("game_vydaje")
+}
+
 // Stínová pokladna: hotovost, jak ji vede server sám. Zatím nerozhoduje —
 // hra běží dál na svém čísle a tohle stojí vedle něj. Teprve až se obě čísla
 // přestanou rozcházet, může se autorita přepnout sem.
