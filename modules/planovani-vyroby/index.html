@@ -235,11 +235,10 @@
           <select id="wp-ws" onchange="pv2RenderWork()" title="Jen jedno pracoviště"><option value="">Všechna pracoviště</option></select>
           <select id="wp-material" onchange="pv2RenderWork()" title="Stav materiálu pro operaci"><option value="">Materiál: vše</option><option value="on_site">🟢 na pracovišti</option><option value="in_stock">🔵 skladem ve firmě</option><option value="ordered">🟠 objednáno, čeká se</option><option value="missing">🔴 chybí — není objednáno</option><option value="problem">🟠+🔴 vyžaduje nákup</option></select>
           <label><input type="checkbox" id="wp-unassigned" onchange="pv2RenderWork()"> jen nepřiřazené</label>
-          <button type="button" class="btn" onclick="pv2SaveFilter()" title="Zapamatuje si aktuální filtr a při každém otevření Plánu práce ho nastaví sám">⭐ Uložit jako výchozí</button>
-          <button type="button" class="btn" onclick="pv2ResetFilter()" title="Smaže uložený výchozí filtr a vynuluje všechna pole">↺ Vynulovat</button>
           <span id="wp-count" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
         </div>
         <div style="font-size:11px;color:var(--text2);margin:-4px 0 8px;">Materiál: <span style="color:#22c55e;">🟢 na pracovišti</span> · <span style="color:#60a5fa;">🔵 skladem (jen přesun)</span> · <span style="color:#f59e0b;">🟠 objednáno</span> · <span style="color:#ef4444;">🔴 chybí, není objednáno</span> · ⚪ bez materiálu — najetím myší detail položek. &nbsp;Čas: <span style="color:#22c55e;">zelený = hotovo</span> · <span style="color:#f59e0b;">oranžový ⚠ = čas uplynul, nehotovo</span> · <span style="color:#14b8a6;">tyrkysový = právě probíhá</span> · <s style="color:var(--text2);">přeškrtnutý</s> = minulost.</div>
+        <div id="wp-colhead"></div>
         <div id="pv2-work-body" class="pv2-body">Načítám…</div>
       </section>
 
@@ -1956,6 +1955,47 @@
     } catch (e) { box.innerHTML = '<div class="pv2-empty">Chyba: ' + pv2Esc(e.message) + '</div>'; }
   };
   var pv2WorkOps = [];
+  // Standardní sloupcové filtry + řazení Plánu práce (js/column-filters.js).
+  // Hlavička a řádek filtrů jsou mimo seznam, ať se při psaní nepřekreslují.
+  var pv2WDay = function (v) { if (!v) return null; var d = new Date(v); return isNaN(d) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate()); };
+  var pv2WNames = function (o) { var w = (o.workers || []).map(function (x) { return x.person; }); if (!w.length && o.assigned_person) w = [o.assigned_person]; return w.map(function (p) { return p.first_name + ' ' + p.last_name; }).join(', '); };
+  var PV2_WCOLS = [
+    { key: 'cas', label: 'Čas', type: 'date', ph: 'dd.mm.rrrr', get: function (o) { return pv2WDay(o.planned_start); }, sortGet: function (o) { return o.planned_start; } },
+    { key: 'op', label: 'Operace', type: 'text', ph: 'Operace…', get: function (o) { return o.operation ? o.operation.step_number + '. ' + o.operation.name : ''; } },
+    { key: 'lide', label: 'Lidé', type: 'text', ph: 'Lidé…', enum: false, get: pv2WNames },
+    { key: 'mat', label: 'Materiál', type: 'text', ph: 'Materiál…', get: function (o) { var l = (o.material && o.material.level) || 'none'; return (PV2_MAT[l] || PV2_MAT.none)[0].replace(/^\S+\s/, ''); } },
+    { key: 'vyr', label: 'Výrobek', type: 'text', ph: 'Výrobek…', enum: false, get: function (o) { return o.batch.product.code + ' ' + o.batch.product.name; } },
+    { key: 'dav', label: 'Dávka', type: 'text', ph: 'Dávka…', enum: false, get: function (o) { return o.batch.batch_number + (o.batch.config_code ? ' ' + o.batch.config_code : ''); } },
+    { key: 'ws', label: 'Pracoviště', type: 'text', ph: 'Pracoviště…', get: function (o) { return o.workstation ? o.workstation.name : ''; } },
+    { key: 'stav', label: 'Stav', type: 'text', ph: 'Stav…', get: function (o) { return o.status || ''; } }
+  ];
+  var pv2WCf = null, pv2WSort = { key: null, dir: 1 };
+  function pv2WMarkSort() {
+    document.querySelectorAll('#wp-colhead .cf-sort').forEach(function (b) {
+      var on = pv2WSort.key === b.dataset.sk, d = pv2WSort.dir;
+      b.innerHTML = '<span style="' + (on && d === 1 ? 'color:#f59e0b;font-weight:900' : 'opacity:.4') + '">↑</span><span style="' + (on && d === -1 ? 'color:#f59e0b;font-weight:900' : 'opacity:.4') + '">↓</span>';
+      b.title = on ? 'Řazeno ' + (d === 1 ? 'vzestupně' : 'sestupně') + ' — klikni pro změnu' : 'Klikni pro řazení';
+    });
+  }
+  function pv2WInit() {
+    if (pv2WCf || typeof ColFilters === 'undefined') return;
+    pv2WCf = ColFilters.create({ columns: PV2_WCOLS, onChange: function () { pv2RenderWork(); } });
+    var h = document.getElementById('wp-colhead');
+    h.innerHTML = '<div class="pv2-op-head">' + PV2_WCOLS.map(function (c) {
+      return '<div style="white-space:nowrap">' + c.label + ' <button type="button" class="cf-sort" data-sk="' + c.key + '" style="background:none;border:none;color:var(--text2);cursor:pointer;padding:0 2px"></button></div>';
+    }).join('') + '</div><div class="pv2-op-head pv2-op-filter" style="padding-bottom:6px;text-transform:none;letter-spacing:0">' + PV2_WCOLS.map(function (c) { return '<div>' + pv2WCf.cellHtml(c.key) + '</div>'; }).join('') + '</div>';
+    pv2WCf.bind(h.querySelector('.pv2-op-filter'));
+    h.addEventListener('click', function (e) {
+      var b = e.target.closest('.cf-sort'); if (!b) return;
+      var c = PV2_WCOLS.filter(function (x) { return x.key === b.dataset.sk; })[0]; if (!c) return;
+      var order = c.type === 'text' ? [1, -1] : [-1, 1];
+      if (pv2WSort.key !== c.key) { pv2WSort.key = c.key; pv2WSort.dir = order[0]; }
+      else if (pv2WSort.dir === order[0]) pv2WSort.dir = order[1];
+      else pv2WSort.key = null;
+      pv2WMarkSort(); pv2RenderWork();
+    });
+    pv2WMarkSort();
+  }
   // Můj výchozí filtr Plánu práce — v prohlížeči (localStorage), použije se při otevření
   var pv2FilterApplied = false;
   var PV2_FILTER_KEY = 'pv2.work.filter';
@@ -2006,6 +2046,7 @@
   window.pv2RenderWork = function () {
     var box = document.getElementById('pv2-work-body');
     try {
+      pv2WInit();
       var q = (document.getElementById('wp-search').value || '').toLowerCase().trim();
       var sort = document.getElementById('wp-sort').value; var onlyPerson = parseInt(document.getElementById('wp-person').value) || 0; var onlyBatch = parseInt(document.getElementById('wp-batch').value) || 0; var onlyUn = document.getElementById('wp-unassigned').checked;
       var onlyMat = document.getElementById('wp-material').value; var onlyWs = parseInt(document.getElementById('wp-ws').value) || 0;
@@ -2019,6 +2060,8 @@
         var txt = [(o.operation && o.operation.name) || '', o.batch.batch_number, o.batch.product.code, o.batch.product.name, o.workstation ? o.workstation.name : '', o.status].concat(((o.workers || []).map(function (w) { return w.person.first_name + ' ' + w.person.last_name; }))).join(' ').toLowerCase();
         return txt.indexOf(q) !== -1;
       });
+      // Standardní sloupcové filtry (pod hlavičkou tabulky)
+      if (pv2WCf) ops = pv2WCf.apply(ops);
       if (!pv2WorkOps.length) { box.innerHTML = '<div class="pv2-empty">V tomto období nejsou naplánované žádné operace.<br><small>Operace vznikají z dávek (sekce Výrobní dávky) po naplánování.</small></div>'; document.getElementById('wp-count').textContent = ''; return; }
       var byPerson = new Map();
       // Operace s více lidmi (workers_count 2+) se ukáže u KAŽDÉHO přiřazeného člověka
@@ -2043,14 +2086,27 @@
       });
       document.getElementById('wp-count').textContent = groups.length + ' lidí · ' + ops.length + ' operací · ' + (Math.round(groups.reduce(function (s, g) { return s + hoursOf(g); }, 0) * 10) / 10) + ' h';
       if (!groups.length) { box.innerHTML = '<div class="pv2-empty">Filtru nic neodpovídá.</div>'; return; }
-      box.innerHTML = '<div class="pv2-op-head"><div>Čas</div><div>Operace</div><div>Lidé</div><div>Materiál</div><div>Výrobek</div><div>Dávka</div><div>Pracoviště</div><div>Stav</div></div>' + groups.map(function (g) {
+      // Řazení podle sloupce (šipky ↑↓ v hlavičce): uvnitř člověka, bez dělení po dnech
+      var sortCol = pv2WSort.key ? PV2_WCOLS.filter(function (c) { return c.key === pv2WSort.key; })[0] : null;
+      if (sortCol) {
+        var sg = sortCol.sortGet || sortCol.get, dirS = pv2WSort.dir;
+        var sval = function (o) { var v = sg(o); if (v == null || v === '') return null; if (sortCol.type === 'date') { var d = +new Date(v); return isNaN(d) ? null : d; } return String(v).toLowerCase(); };
+        groups.forEach(function (g) {
+          g.ops = g.ops.slice().sort(function (a, b) {
+            var x = sval(a), y = sval(b);
+            if (x == null || y == null) return x == null && y == null ? 0 : x == null ? 1 : -1;
+            return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y), 'cs')) * dirS;
+          });
+        });
+      }
+      box.innerHTML = groups.map(function (g) {
         var name = g.person ? (g.person.first_name + ' ' + g.person.last_name) : '⚠️ Nepřiřazeno';
         var minutes = g.ops.reduce(function (s, o) { return s + (o.planned_end && o.planned_start ? (new Date(o.planned_end) - new Date(o.planned_start)) / 60000 : 0); }, 0);
         var html = '<div class="pv2-person"><div class="pv2-person-head">👤 ' + pv2Esc(name) + '<span class="cnt">' + g.ops.length + ' operací · ' + Math.round(minutes / 60 * 10) / 10 + ' h</span></div>';
         var lastDay = '';
         g.ops.forEach(function (o) {
           var day = pv2Date(o.planned_start);
-          if (day !== lastDay) { html += '<div class="pv2-day">' + day + '</div>'; lastDay = day; }
+          if (!sortCol && day !== lastDay) { html += '<div class="pv2-day">' + day + '</div>'; lastDay = day; }
           var nowT = Date.now(), stT = new Date(o.planned_start).getTime(), enT = new Date(o.planned_end).getTime();
           var isDone = o.status === 'done' || o.status === 'completed';
           var cls = enT < nowT ? ('past ' + (isDone ? 'ok' : 'missed')) : (stT <= nowT && o.status !== 'done' ? 'running' : '');
