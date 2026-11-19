@@ -3551,5 +3551,18 @@
   "podil.bloky": "cf46fa75dba1",
   "veta.blok_ve_firme": "4ca7189897f2",
   "veta.blok_ve_tve_firme": "cb9e146898ba",
-  "veta.blok_jedinec": "32b30acb6507"
+  "veta.blok_jedinec": "32b30acb6507",
+  "server.takovy_fond_tu_neni": "198f8f44600e",
+  "server.nabidka_nejde": "3cf65b304e2f",
+  "server.nabidka_neni": "634e166e3300",
+  "server.nabidka_neni_tvoje": "fff8f4a824d4",
+  "server.nabidka_uz_nebezi": "13a9f09a504b",
+  "server.protinavrh_uz_byl": "25f4184869bc",
+  "dor.fond_nabidka_zvenci": "2910900c15ec",
+  "dor.fond_protinavrh": "9a9eb1446241",
+  "dor.fond_protinavrh_tobe": "f8f1ad70cec8",
+  "dor.fond_nabidka_prijata": "2d833aa6310b",
+  "dor.fond_nabidka_odmitnuta": "61b762c41b56",
+  "dor.fond_nabidka_koupeno": "3ea9030119b9",
+  "dor.nabidka_fondu_prodano": "7d3026b68f72"
 }

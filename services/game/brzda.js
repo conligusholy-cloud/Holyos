@@ -27,6 +27,11 @@ const CESTY = [
   /^\/trade\/aliance\/fond\/prevod$/,
   /^\/trade\/aliance\/fond\/navrh$/,  // nový návrh je nový závazek fondu
   /^\/trade\/aliance\/fond\/navrh\/[^/]+\/provest$/,
+  // Nabídka podílu fondu zvenču: nová nabídka i protinávrh zakládají závazek,
+  // takže se zastavují. Odpověď majitele a stažení vlastní nabídky ne — to
+  // už je dokončování rozjednané věci a brzda nemá nikoho zamykat uprostřed.
+  /^\/trade\/fond\/nabidka$/,
+  /^\/trade\/aliance\/fond\/navrh\/[^/]+\/protinavrh$/,
 
   /^\/trade\/trh$/,                     // nový inzerát na trhu
   /^\/trade\/trh\/\d+\/koupit$/,

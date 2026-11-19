@@ -3571,5 +3571,18 @@
   "podil.bloky": "Bloques en la empresa",
   "veta.blok_ve_firme": "La tienen {p1} conjuntamente, representados por {p2}.",
   "veta.blok_ve_tve_firme": "Tienes enfrente a {p1} actuando juntos, no a ese número de accionistas independientes. Habla por ellos {p2}.",
-  "veta.blok_jedinec": "La tiene a través de un fondo un único miembro: {p1}."
+  "veta.blok_jedinec": "La tiene a través de un fondo un único miembro: {p1}.",
+  "server.takovy_fond_tu_neni": "Ese fondo no existe.",
+  "server.nabidka_nejde": "Esta oferta no se puede presentar ahora.",
+  "server.nabidka_neni": "Esa oferta no existe.",
+  "server.nabidka_neni_tvoje": "Esta oferta no es tuya.",
+  "server.nabidka_uz_nebezi": "Esta oferta ya no espera respuesta.",
+  "server.protinavrh_uz_byl": "Ya hubo una contraoferta: solo se negocia una ronda.",
+  "dor.fond_nabidka_zvenci": "{p1} ofrece al fondo {p2} una participación del {cislo:p3} % en su empresa por {penize:p4}.",
+  "dor.fond_protinavrh": "{p1} sometió a votación en el fondo {p2} una contraoferta: {cislo:p3} % por {penize:p4}.",
+  "dor.fond_protinavrh_tobe": "El fondo {p1} cambió tu oferta a {cislo:p2} % por {penize:p3}. Acéptala o recházala.",
+  "dor.fond_nabidka_prijata": "{p1} aceptó la contraoferta del fondo {p2}.",
+  "dor.fond_nabidka_odmitnuta": "{p1} rechazó la contraoferta del fondo {p2}.",
+  "dor.fond_nabidka_koupeno": "El fondo {p1} compró el {cislo:p3} % de {p2} por {penize:p4}.",
+  "dor.nabidka_fondu_prodano": "El fondo {p1} compró el {cislo:p2} % de tu empresa por {penize:p3}."
 }

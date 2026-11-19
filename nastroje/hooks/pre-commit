@@ -137,6 +137,16 @@ if git diff --cached --name-only | grep -qE 'services/game/brzda|routes/game-tra
   fi
 fi
 
+# Nabídka podílu fondu zvenču. Jediné místo, kde do fondu vstupuje člověk,
+# který v něm není — a platí se tu cizími penězi.
+if git diff --cached --name-only | grep -qE 'services/game/fond-nabidka|routes/game-trade'; then
+  if ! node nastroje/tfondnabidka.js; then
+    echo ""
+    echo "STOP: nabídka podílu fondu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Jmění podle skutečného vlastnictví. Když se tentýž podíl spočte majiteli
 # i držiteli, je hra bohatší, než je — a když ani jednomu, peníze zmizí.
 if git diff --cached --name-only | grep -qE 'services/game/vlastnictvi|services/game/jmeni|routes/game-account'; then

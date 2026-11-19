@@ -3724,5 +3724,18 @@
   "podil.tvuj_podil": "Tvůj podíl celkem",
   "podil.pravidla": "Pravidla firmy",
   "podil.bloky": "Bloky ve firmě",
-  "veta.blok_jedinec": "Drží ji přes fond jediný člen — {p1}."
+  "veta.blok_jedinec": "Drží ji přes fond jediný člen — {p1}.",
+  "server.takovy_fond_tu_neni": "Takový fond tu není.",
+  "server.nabidka_nejde": "Tuhle nabídku teď podat nejde.",
+  "server.nabidka_neni": "Taková nabídka tu není.",
+  "server.nabidka_neni_tvoje": "Tohle není tvoje nabídka.",
+  "server.nabidka_uz_nebezi": "Tahle nabídka už na odpověď nečeká.",
+  "server.protinavrh_uz_byl": "Protinávrh už jednou padl — smlouvá se jedno kolo.",
+  "dor.fond_nabidka_zvenci": "{p1} nabízí fondu {p2} podíl {cislo:p3} % ve své firmě za {penize:p4}.",
+  "dor.fond_protinavrh": "{p1} dal ve fondu {p2} hlasovat o protinávrhu: {cislo:p3} % za {penize:p4}.",
+  "dor.fond_protinavrh_tobe": "Fond {p1} přepsal tvoji nabídku na {cislo:p2} % za {penize:p3}. Přijmi ji, nebo odmítni.",
+  "dor.fond_nabidka_prijata": "{p1} přijal protinávrh fondu {p2}.",
+  "dor.fond_nabidka_odmitnuta": "{p1} protinávrh fondu {p2} odmítl.",
+  "dor.fond_nabidka_koupeno": "Fond {p1} koupil {cislo:p3} % ve firmě {p2} za {penize:p4}.",
+  "dor.nabidka_fondu_prodano": "Fond {p1} koupil {cislo:p2} % tvojí firmy za {penize:p3}."
 }

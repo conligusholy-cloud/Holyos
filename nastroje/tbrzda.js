@@ -50,6 +50,11 @@ const OCEKAVANI = {
   // Provedení přijatého návrhu zastavujeme: vyhlašuje se tím veřejná
   // nabídka, a ta je nový závazek stejně jako hráčova.
   '/trade/aliance/fond/navrh/:id/provest': true,
+  // Nabídka podílu fondu zvenču.
+  '/trade/fond/nabidka': true,
+  '/trade/aliance/fond/navrh/:id/protinavrh': true,
+  '/trade/fond/nabidka/:id/odpoved': false,
+  '/trade/fond/nabidka/:id/stahnout': false,
   // Stažení vlastního návrhu je opak nového závazku — brzda ho nezastavuje.
   '/trade/aliance/fond/navrh/:id/zrusit': false,
   '/trade/dividenda': false,            // pravidlo vlastní firmy, ne nový závazek

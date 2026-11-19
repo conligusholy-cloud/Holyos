@@ -3570,5 +3570,18 @@
   "podil.bloky": "Blocs dans la société",
   "veta.blok_ve_firme": "Détenue conjointement par {p1}, représentés par {p2}.",
   "veta.blok_ve_tve_firme": "Tu as face à toi {p1} agissant ensemble, et non autant d’actionnaires indépendants. {p2} parle en leur nom.",
-  "veta.blok_jedinec": "Détenue via un fonds par un seul membre — {p1}."
+  "veta.blok_jedinec": "Détenue via un fonds par un seul membre — {p1}.",
+  "server.takovy_fond_tu_neni": "Ce fonds n’existe pas.",
+  "server.nabidka_nejde": "Cette offre ne peut pas être faite pour le moment.",
+  "server.nabidka_neni": "Cette offre n’existe pas.",
+  "server.nabidka_neni_tvoje": "Ce n’est pas ton offre.",
+  "server.nabidka_uz_nebezi": "Cette offre n’attend plus de réponse.",
+  "server.protinavrh_uz_byl": "Une contre-offre a déjà eu lieu — on ne négocie qu’un tour.",
+  "dor.fond_nabidka_zvenci": "{p1} propose au fonds {p2} une part de {cislo:p3} % dans sa société pour {penize:p4}.",
+  "dor.fond_protinavrh": "{p1} a soumis au vote du fonds {p2} une contre-offre : {cislo:p3} % pour {penize:p4}.",
+  "dor.fond_protinavrh_tobe": "Le fonds {p1} a modifié ton offre à {cislo:p2} % pour {penize:p3}. Accepte-la ou refuse-la.",
+  "dor.fond_nabidka_prijata": "{p1} a accepté la contre-offre du fonds {p2}.",
+  "dor.fond_nabidka_odmitnuta": "{p1} a refusé la contre-offre du fonds {p2}.",
+  "dor.fond_nabidka_koupeno": "Le fonds {p1} a acheté {cislo:p3} % de {p2} pour {penize:p4}.",
+  "dor.nabidka_fondu_prodano": "Le fonds {p1} a acheté {cislo:p2} % de ta société pour {penize:p3}."
 }

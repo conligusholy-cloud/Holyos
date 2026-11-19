@@ -3717,5 +3717,18 @@
   "podil.tvuj_podil": "Your total stake",
   "podil.pravidla": "Company rules",
   "podil.bloky": "Blocks in the company",
-  "veta.blok_jedinec": "Held through a fund by a single member — {p1}."
+  "veta.blok_jedinec": "Held through a fund by a single member — {p1}.",
+  "server.takovy_fond_tu_neni": "There is no such fund.",
+  "server.nabidka_nejde": "This offer cannot be made right now.",
+  "server.nabidka_neni": "There is no such offer.",
+  "server.nabidka_neni_tvoje": "This is not your offer.",
+  "server.nabidka_uz_nebezi": "This offer is no longer waiting for an answer.",
+  "server.protinavrh_uz_byl": "A counter-offer has already been made — only one round of haggling.",
+  "dor.fond_nabidka_zvenci": "{p1} is offering fund {p2} a {cislo:p3} % stake in their company for {penize:p4}.",
+  "dor.fond_protinavrh": "{p1} put a counter-offer to a vote in fund {p2}: {cislo:p3} % for {penize:p4}.",
+  "dor.fond_protinavrh_tobe": "Fund {p1} changed your offer to {cislo:p2} % for {penize:p3}. Accept it or turn it down.",
+  "dor.fond_nabidka_prijata": "{p1} accepted the counter-offer from fund {p2}.",
+  "dor.fond_nabidka_odmitnuta": "{p1} turned down the counter-offer from fund {p2}.",
+  "dor.fond_nabidka_koupeno": "Fund {p1} bought {cislo:p3} % of {p2} for {penize:p4}.",
+  "dor.nabidka_fondu_prodano": "Fund {p1} bought {cislo:p2} % of your company for {penize:p3}."
 }

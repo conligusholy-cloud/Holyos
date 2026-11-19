@@ -3571,5 +3571,18 @@
   "podil.bloky": "Blöcke in der Firma",
   "veta.blok_ve_firme": "Gemeinsam gehalten von {p1}, vertreten durch {p2}.",
   "veta.blok_ve_tve_firme": "Gegen dich stehen {p1} gemeinsam, nicht ebenso viele unabhängige Anteilseigner. Für sie spricht {p2}.",
-  "veta.blok_jedinec": "Wird über einen Fonds von einem einzigen Mitglied gehalten — {p1}."
+  "veta.blok_jedinec": "Wird über einen Fonds von einem einzigen Mitglied gehalten — {p1}.",
+  "server.takovy_fond_tu_neni": "So einen Fonds gibt es nicht.",
+  "server.nabidka_nejde": "Dieses Angebot lässt sich gerade nicht stellen.",
+  "server.nabidka_neni": "So ein Angebot gibt es nicht.",
+  "server.nabidka_neni_tvoje": "Das ist nicht dein Angebot.",
+  "server.nabidka_uz_nebezi": "Dieses Angebot wartet auf keine Antwort mehr.",
+  "server.protinavrh_uz_byl": "Ein Gegenangebot gab es bereits — es wird nur eine Runde verhandelt.",
+  "dor.fond_nabidka_zvenci": "{p1} bietet dem Fonds {p2} einen Anteil von {cislo:p3} % an der eigenen Firma für {penize:p4}.",
+  "dor.fond_protinavrh": "{p1} ließ im Fonds {p2} über ein Gegenangebot abstimmen: {cislo:p3} % für {penize:p4}.",
+  "dor.fond_protinavrh_tobe": "Der Fonds {p1} hat dein Angebot auf {cislo:p2} % für {penize:p3} geändert. Nimm es an oder lehne ab.",
+  "dor.fond_nabidka_prijata": "{p1} hat das Gegenangebot des Fonds {p2} angenommen.",
+  "dor.fond_nabidka_odmitnuta": "{p1} hat das Gegenangebot des Fonds {p2} abgelehnt.",
+  "dor.fond_nabidka_koupeno": "Der Fonds {p1} hat {cislo:p3} % an {p2} für {penize:p4} gekauft.",
+  "dor.nabidka_fondu_prodano": "Der Fonds {p1} hat {cislo:p2} % deiner Firma für {penize:p3} gekauft."
 }

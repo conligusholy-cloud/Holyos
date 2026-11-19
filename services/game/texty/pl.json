@@ -3578,5 +3578,18 @@
   "podil.bloky": "Bloki w firmie",
   "veta.blok_ve_firme": "Trzyma ją {p1} wspólnie, reprezentuje ich {p2}.",
   "veta.blok_ve_tve_firme": "Naprzeciw ciebie stoi {p1} działających razem, a nie tylu niezależnych udziałowców. W ich imieniu występuje {p2}.",
-  "veta.blok_jedinec": "Trzyma ją przez fundusz jeden członek — {p1}."
+  "veta.blok_jedinec": "Trzyma ją przez fundusz jeden członek — {p1}.",
+  "server.takovy_fond_tu_neni": "Takiego funduszu tu nie ma.",
+  "server.nabidka_nejde": "Tej oferty nie da się teraz złożyć.",
+  "server.nabidka_neni": "Takiej oferty tu nie ma.",
+  "server.nabidka_neni_tvoje": "To nie jest twoja oferta.",
+  "server.nabidka_uz_nebezi": "Ta oferta nie czeka już na odpowiedź.",
+  "server.protinavrh_uz_byl": "Kontroferta już padła — negocjuje się jedną rundę.",
+  "dor.fond_nabidka_zvenci": "{p1} oferuje funduszowi {p2} udział {cislo:p3} % w swojej firmie za {penize:p4}.",
+  "dor.fond_protinavrh": "{p1} poddał w funduszu {p2} pod głosowanie kontrofertę: {cislo:p3} % za {penize:p4}.",
+  "dor.fond_protinavrh_tobe": "Fundusz {p1} zmienił twoją ofertę na {cislo:p2} % za {penize:p3}. Przyjmij ją albo odrzuć.",
+  "dor.fond_nabidka_prijata": "{p1} przyjął kontrofertę funduszu {p2}.",
+  "dor.fond_nabidka_odmitnuta": "{p1} odrzucił kontrofertę funduszu {p2}.",
+  "dor.fond_nabidka_koupeno": "Fundusz {p1} kupił {cislo:p3} % w firmie {p2} za {penize:p4}.",
+  "dor.nabidka_fondu_prodano": "Fundusz {p1} kupił {cislo:p2} % twojej firmy za {penize:p3}."
 }
