@@ -3597,5 +3597,15 @@
   "server.ten_neni_ve_fondu": "fad32c2e461e",
   "dor.fond_vklad": "c8dc4fdb96fd",
   "dor.fond_vyplata": "cbd5b1c15159",
-  "dor.fond_prevod": "19f84bbdc306"
+  "dor.fond_prevod": "19f84bbdc306",
+  "server.navrh_neznamy_druh": "6a6303ba6503",
+  "server.navrh_uz_bezi": "4bb9d416942b",
+  "server.navrh_neni": "67d4c3120845",
+  "server.navrh_dobehl": "aa1e0a67c5a6",
+  "server.ve_fondu_nehlasujes": "4c39da743322",
+  "server.fond_na_to_nema": "176cb4bd3411",
+  "dor.fond_navrh_prijat": "9a4dfccb75ac",
+  "dor.fond_navrh_zamitnut": "816c5d3678b0",
+  "dor.fond_navrh_koupit": "9f4a2ad0513a",
+  "dor.fond_navrh_vyplatit": "486d852b505a"
 }

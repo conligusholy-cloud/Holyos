@@ -3617,5 +3617,15 @@
   "server.ten_neni_ve_fondu": "That person is not a member of this alliance.",
   "dor.fond_vklad": "Contribution to the {p1} alliance fund",
   "dor.fond_vyplata": "Payout from the {p1} alliance fund for a {p2} share",
-  "dor.fond_prevod": "{p1} transferred you a share in the {p2} alliance fund"
+  "dor.fond_prevod": "{p1} transferred you a share in the {p2} alliance fund",
+  "server.navrh_neznamy_druh": "The fund does not know that kind of proposal.",
+  "server.navrh_uz_bezi": "A proposal like that is already running in the fund.",
+  "server.navrh_neni": "There is no such proposal.",
+  "server.navrh_dobehl": "Voting on this proposal is over.",
+  "server.ve_fondu_nehlasujes": "You have no contribution in the fund, so you do not vote.",
+  "server.fond_na_to_nema": "The fund cannot afford it. Its treasury holds {penize:p1}.",
+  "dor.fond_navrh_prijat": "The {p1} alliance fund approved: {p2}",
+  "dor.fond_navrh_zamitnut": "The {p1} alliance fund did not approve: {p2}",
+  "dor.fond_navrh_koupit": "{p1} put the purchase of a {p3}% share in {p4} to a vote in the {p2} alliance fund.",
+  "dor.fond_navrh_vyplatit": "{p1} put a payout of {penize:p3} from the fund to a vote in the {p2} alliance fund."
 }

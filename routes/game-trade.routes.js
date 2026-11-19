@@ -1461,6 +1461,150 @@ router.post('/trade/aliance/fond/prevod', hrac, api(async (req, res) => {
   res.json({ ok: true, castka });
 }));
 
+// ─── Návrhy a hlasování ve fondu ─────────────────────────────────────────────
+// O penězích fondu nerozhoduje jeden člověk. Váhu hlasu dává podíl na
+// vkladech, mlčení je ne, a dokud návrh neprojde, nestane se nic. Prahy jsou
+// stejné jako u firem, ať se hráč neučí dvoje pravidlo: nákup podílu je
+// běžné rozhodnutí (víc než polovina), výplata z fondu zásadní (tři
+// čtvrtiny) — rozdávat peníze má být těžší než je investovat.
+const NAVRH_HODIN = 24;
+// Popis návrhu se neskládá v kódu: každý druh má vlastní text v katalogu,
+// aby se věta složila až u toho, kdo ji čte, v jeho jazyce.
+const DRUHY = {
+  koupit: { prah: FOND.prahDruhu('koupit'), kod: 'dor.fond_navrh_koupit',
+    udaje: (d, kdo, al) => ({ p1: kdo, p2: al, p3: Math.round((d.pct || 0) * 100),
+      p4: d.firma_nick || '' }) },
+  vyplatit: { prah: FOND.prahDruhu('vyplatit'), kod: 'dor.fond_navrh_vyplatit',
+    udaje: (d, kdo, al) => ({ p1: kdo, p2: al, p3: Math.round(d.castka || 0) }) },
+};
+
+async function hlasyNavrhu(navrhId) {
+  const rows = await prisma.gameFondHlas.findMany({ where: { navrh_id: navrhId } });
+  const m = {};
+  rows.forEach((h) => { m[h.clen_id] = h.volba; });
+  return m;
+}
+
+// Spočítá, jak návrh stojí. Nerozhoduje — to dělá volající, protože
+// rozhodnutí se zapisuje a odesílají se k němu zprávy.
+async function stavNavrhu(navrh) {
+  const radky = await vkladyFondu(navrh.aliance_id);
+  const hlasy = await hlasyNavrhu(navrh.id);
+  return FOND.hlasovani(radky, hlasy, navrh.prah);
+}
+
+// GET /trade/aliance/fond/navrhy → co se ve fondu zrovna rozhoduje
+router.get('/trade/aliance/fond/navrhy', hrac, api(async (req, res) => {
+  const moje = await mojeAliance(req.player.id);
+  if (!moje) return res.json({ ok: true, navrhy: [] });
+  const rows = await prisma.gameFondNavrh.findMany({
+    where: { aliance_id: moje.aliance_id }, orderBy: { id: 'desc' }, take: 20 });
+  const out = [];
+  for (const n of rows) {
+    const v = n.stav === 'bezi' ? await stavNavrhu(n) : (n.vysledek || {});
+    const muj = n.stav === 'bezi'
+      ? await prisma.gameFondHlas.findUnique({
+        where: { navrh_id_clen_id: { navrh_id: n.id, clen_id: req.player.id } } })
+      : null;
+    out.push({ id: n.id, druh: n.druh, detail: n.detail, prah: n.prah, stav: n.stav,
+      do: n.do, autor_id: n.autor_id, muj_hlas: muj ? muj.volba : null,
+      pro: v.pro || 0, proti: v.proti || 0, mlci: v.mlci || 0, chybi: v.chybi || 0 });
+  }
+  res.json({ ok: true, navrhy: out });
+}));
+
+// POST /trade/aliance/fond/navrh { druh, ... } → dát věc k hlasování
+router.post('/trade/aliance/fond/navrh', hrac, api(async (req, res) => {
+  const moje = await mojeAliance(req.player.id);
+  if (!moje) return res.status(404).json({ error: stx(req)('server.v_zadne_alianci_nejsi') });
+  const b = req.body || {};
+  const druh = String(b.druh || '');
+  if (!DRUHY[druh]) return res.status(400).json({ error: stx(req)('server.navrh_neznamy_druh') });
+
+  // Navrhovat smí jen ten, kdo do fondu vložil — o cizí peníze se nehlasuje.
+  const radky = await vkladyFondu(moje.aliance_id);
+  if (!radky.some((r) => r.clen_id === req.player.id && r.castka > 0)) {
+    return res.status(403).json({ error: stx(req)('server.ve_fondu_nehlasujes') });
+  }
+  const al = await prisma.gameAliance.findUnique({ where: { id: moje.aliance_id } });
+
+  let detail = null;
+  if (druh === 'koupit') {
+    const firmaId = parseInt(b.firma_id, 10) || 0;
+    const firma = await prisma.gamePlayer.findUnique({ where: { id: firmaId } });
+    if (!firma || firma.disabled) return res.status(404).json({ error: stx(req)('server.takovy_hrac_tu_neni') });
+    const pct = Math.max(0.01, Math.min(1, Number(b.pct) || 0));
+    const cena = Math.max(0, Math.round(Number(b.cena) || 0));
+    // Co fond nemá, o tom nemá smysl hlasovat den a pak zjistit, že to nejde.
+    if (cena > Math.round((al && al.pokladna) || 0)) {
+      return res.status(409).json({ error: stx(req)('server.fond_na_to_nema',
+        { p1: Math.round((al && al.pokladna) || 0) }) });
+    }
+    detail = { firma_id: firmaId, firma_nick: firma.company || firma.nick, pct, cena };
+  } else {
+    const castka = Math.max(1, Math.round(Number(b.castka) || 0));
+    if (castka > Math.round((al && al.pokladna) || 0)) {
+      return res.status(409).json({ error: stx(req)('server.fond_na_to_nema',
+        { p1: Math.round((al && al.pokladna) || 0) }) });
+    }
+    detail = { castka };
+  }
+
+  // Dva stejné návrhy naráz by si braly hlasy a ani jeden by neprošel.
+  const uz = await prisma.gameFondNavrh.findFirst({
+    where: { aliance_id: moje.aliance_id, druh, stav: 'bezi' } });
+  if (uz) return res.status(409).json({ error: stx(req)('server.navrh_uz_bezi') });
+
+  const n = await prisma.gameFondNavrh.create({ data: {
+    aliance_id: moje.aliance_id, autor_id: req.player.id, druh, detail,
+    prah: DRUHY[druh].prah,
+    do: new Date(Date.now() + NAVRH_HODIN * 3600000) } });
+  // Navrhovatel je pro — jinak by musel hlasovat o vlastním návrhu zvlášť.
+  await prisma.gameFondHlas.create({ data: {
+    navrh_id: n.id, clen_id: req.player.id, volba: 'pro' } }).catch(() => {});
+
+  const komu = radky.map((r) => r.clen_id).filter((x) => x !== req.player.id);
+  if (komu.length) {
+    const udaje = DRUHY[druh].udaje(detail, req.player.nick, al ? al.nazev : '');
+    await prisma.gameDelivery.createMany({ data: komu.map((pid) => ({
+      player_id: pid, kind: 'zprava',
+      text_kod: DRUHY[druh].kod, text_data: udaje,
+    })) });
+  }
+  res.json({ ok: true, id: n.id });
+}));
+
+// POST /trade/aliance/fond/navrh/:id/hlas { volba } → pro, nebo proti
+router.post('/trade/aliance/fond/navrh/:id/hlas', hrac, api(async (req, res) => {
+  const moje = await mojeAliance(req.player.id);
+  if (!moje) return res.status(404).json({ error: stx(req)('server.v_zadne_alianci_nejsi') });
+  const n = await prisma.gameFondNavrh.findUnique({
+    where: { id: parseInt(req.params.id, 10) || 0 } });
+  if (!n || n.aliance_id !== moje.aliance_id) {
+    return res.status(404).json({ error: stx(req)('server.navrh_neni') });
+  }
+  if (n.stav !== 'bezi' || new Date(n.do) <= new Date()) {
+    return res.status(409).json({ error: stx(req)('server.navrh_dobehl') });
+  }
+  const radky = await vkladyFondu(moje.aliance_id);
+  if (!radky.some((r) => r.clen_id === req.player.id && r.castka > 0)) {
+    return res.status(403).json({ error: stx(req)('server.ve_fondu_nehlasujes') });
+  }
+  const volba = String((req.body || {}).volba || '') === 'proti' ? 'proti' : 'pro';
+  await prisma.gameFondHlas.upsert({
+    where: { navrh_id_clen_id: { navrh_id: n.id, clen_id: req.player.id } },
+    create: { navrh_id: n.id, clen_id: req.player.id, volba },
+    update: { volba } });
+  const v = await stavNavrhu(n);
+  // Jakmile je většina pro, nemá smysl čekat na lhůtu — výsledek se už
+  // nezmění. Mlčení je ne, takže zbytek hlasů návrh nepřehlasuje.
+  if (v.proslo) {
+    await prisma.gameFondNavrh.update({ where: { id: n.id },
+      data: { stav: 'prijat', vysledek: v } });
+  }
+  res.json({ ok: true, volba, pro: v.pro, chybi: v.chybi, prijat: !!v.proslo });
+}));
+
 // POST /trade/dividenda { firma_id, pct } → většinový podílník určuje,
 // kolik procent měsíčního zisku firma vyplácí.
 //

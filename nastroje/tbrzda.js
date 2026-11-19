@@ -37,6 +37,11 @@ const OCEKAVANI = {
   // přesně ta věc, kterou při díře nechceš nechat běžet.
   '/trade/aliance/fond/vklad': true,
   '/trade/aliance/fond/prevod': true,
+  // Nový návrh zastavujeme: je to nový závazek fondu. Hlasování o už
+  // běžícím návrhu ne — jinak by brzda zavřela členy v rozjednané věci,
+  // stejně jako u rozjetého obchodu.
+  '/trade/aliance/fond/navrh': true,
+  '/trade/aliance/fond/navrh/:id/hlas': false,
   '/trade/dividenda': false,            // pravidlo vlastní firmy, ne nový závazek
   '/trade/pujcka/:id/splatit': false,
   '/trade/deliveries/claim': false,

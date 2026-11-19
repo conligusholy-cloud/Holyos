@@ -25,6 +25,8 @@ const CESTY = [
   /^\/trade\/aliance\/pozvat$/,
   /^\/trade\/aliance\/fond\/vklad$/,   // nový vklad do fondu je nový závazek
   /^\/trade\/aliance\/fond\/prevod$/,
+  /^\/trade\/aliance\/fond\/navrh$/,  // nový návrh je nový závazek fondu
+
   /^\/trade\/trh$/,                     // nový inzerát na trhu
   /^\/trade\/trh\/\d+\/koupit$/,
   /^\/trade\/aukce\/[^/]+\/koupit$/,

@@ -122,5 +122,22 @@ const cely = F.prevod(tri, 3, 1, 100000);
 ok('kdo převede všechno, ve fondu zůstat nemusí',
   cely.ok && cely.podily.filter((x) => x.clen_id === 3).length === 0);
 
+// ── Který práh na co ─────────────────────────────────────────────────────────
+// Rozdávat peníze má být těžší než je investovat: investice se dá prodat
+// zpátky, vyplacené peníze se z cizí kapsy neberou.
+ok('nákup podílu je běžné rozhodnutí', F.prahDruhu('koupit') === F.BEZNE);
+ok('výplata z fondu je zásadní', F.prahDruhu('vyplatit') === F.ZASADNI);
+ok('a výplata je těžší než nákup', F.prahDruhu('vyplatit') > F.prahDruhu('koupit'));
+ok('neznámý druh nemá práh', F.prahDruhu('cokoli') === null);
+
+// A co z toho plyne u hlasování: vklady 60/40.
+const dvaClenove = [{ clen_id: 1, castka: 600000 }, { clen_id: 2, castka: 400000 }];
+ok('šedesát procent koupit schválí',
+  F.hlasovani(dvaClenove, { 1: 'pro' }, F.prahDruhu('koupit')).proslo === true);
+ok('ale na výplatu nestačí',
+  F.hlasovani(dvaClenove, { 1: 'pro' }, F.prahDruhu('vyplatit')).proslo === false);
+ok('na výplatu musí být oba',
+  F.hlasovani(dvaClenove, { 1: 'pro', 2: 'pro' }, F.prahDruhu('vyplatit')).proslo === true);
+
 console.log(chyb ? '\n' + chyb + ' chyb' : '\nvšechno sedí');
 process.exit(chyb ? 1 : 0);

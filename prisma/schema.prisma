@@ -8321,6 +8321,41 @@ model GameAliance {
   @@map("game_aliance")
 }
 
+// Návrh ve fondu aliance. O penězích fondu nerozhoduje jeden člověk: váha
+// hlasu je podíl na vkladech, mlčení je ne, a dokud návrh neprojde, nic se
+// nestane. Prahy jsou stejné jako u firem, ať se hráč neučí dvoje pravidlo.
+model GameFondNavrh {
+  id         Int      @id @default(autoincrement())
+  aliance_id Int
+  autor_id   Int
+  // koupit | vyplatit
+  druh       String   @db.VarChar(12)
+  detail     Json?
+  prah       Float    @default(0.5)
+  // bezi | prijat | zamitnut | proveden | zrusen
+  stav       String   @default("bezi") @db.VarChar(12)
+  vysledek   Json?
+  do         DateTime
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([aliance_id, stav])
+  @@map("game_fond_navrh")
+}
+
+// Jeden hlas jednoho člena. Váhu mu dává jeho vklad, ne tenhle řádek.
+model GameFondHlas {
+  id         Int      @id @default(autoincrement())
+  navrh_id   Int
+  clen_id    Int
+  // pro | proti
+  volba      String   @db.VarChar(6)
+  created_at DateTime @default(now())
+
+  @@unique([navrh_id, clen_id])
+  @@map("game_fond_hlas")
+}
+
 // Vklad člena do fondu aliance. Jeden řádek na člena: opakované vklady se
 // sčítají, protože jeden člověk je pořád jeden podílník.
 //

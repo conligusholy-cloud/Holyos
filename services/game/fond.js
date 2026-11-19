@@ -160,5 +160,12 @@ function prevod(radky, zKoho, komu, castka) {
   return { ok: true, radky: slozene, podily: podily(slozene) };
 }
 
+// Který práh na co. Je to herní pravidlo, ne detail obsluhy, a patří sem
+// vedle prahů samotných: nákup podílu je běžné rozhodnutí, výplata z fondu
+// zásadní. Rozdávat peníze má být těžší než je investovat — investice se dá
+// prodat zpátky, vyplacené peníze se z cizí kapsy neberou.
+const PRAHY = { koupit: BEZNE, vyplatit: ZASADNI };
+const prahDruhu = (druh) => (PRAHY[druh] == null ? null : PRAHY[druh]);
+
 module.exports = { vklady, podily, rozdeleni, hlasovani, kdoRozhoduje, odchod, prevod,
-  BEZNE, ZASADNI };
+  prahDruhu, PRAHY, BEZNE, ZASADNI };
