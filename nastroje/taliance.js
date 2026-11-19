@@ -114,7 +114,11 @@ ok('název se ořeže a zdvojené mezery zmizí', A.nazevOk('  Severní   blok '
 ok('jedno písmeno nestačí', A.nazevOk('x') === null);
 ok('příliš dlouhý název neprojde', A.nazevOk('x'.repeat(A.NAZEV_MAX + 1)) === null);
 ok('prázdný název neprojde', A.nazevOk('   ') === null && A.nazevOk(null) === null);
-ok('pět členů je strop', A.jeMisto(A.MAX_CLENU - 1) === true && A.jeMisto(A.MAX_CLENU) === false);
+ok('strop členů drží', A.jeMisto(A.MAX_CLENU - 1) === true && A.jeMisto(A.MAX_CLENU) === false,
+  '— ' + A.MAX_CLENU);
+// Deset podle zadání (R4, rozhodnuto 19. 11.). Kdyby to někdo snížil zpátky,
+// změní se tím rovnováha prahů ve všech firmách naráz — ať to není potichu.
+ok('a je jich deset', A.MAX_CLENU === 10, '— ' + A.MAX_CLENU);
 
 console.log(chyb ? '\n' + chyb + ' chyb' : '\nvšechno sedí');
 process.exit(chyb ? 1 : 0);

@@ -10,9 +10,10 @@
 //
 // Co aliance vědomě NENÍ:
 //
-//   Není společná pokladna. Hotovost žije ve stavu hry v prohlížeči, takže
-//   peníze členů nejde držet ani zamknout. Až bude pokladna na serveru,
-//   dá se o tom bavit znovu.
+//   Nebyla společná pokladna. To už neplatí: od 19. 11. má aliance fond
+//   (services/game/fond.js) s vlastní pokladnou, vklady a hlasováním.
+//   Aliance a fond jsou ale dvě různé věci — aliance sčítá podíly, které
+//   členové drží sami, fond drží podíly za ně.
 //
 //   Není hlasování. Za blok jedná jediný člověk — ten, kdo v té firmě drží
 //   nejvíc. Kdyby se hlasovalo, čekal by majitel i ostatní na někoho, kdo se
@@ -28,7 +29,12 @@
 
 'use strict';
 
-const MAX_CLENU = 5;
+// Kolik lidí smí být v jedné alianci. Zadání mluvilo o deseti, dlouho tu
+// stálo pět: při pár desítkách hráčů by pětičlenný blok sečetl většinu
+// skoro v každé firmě a prahy by přestaly něco znamenat. 19. 11. padlo
+// rozhodnutí jít na deset podle zadání — hráčů je víc a aliance má nově
+// fond, do kterého se vkládá, takže velký blok není zadarmo.
+const MAX_CLENU = 10;
 const NAZEV_MIN = 2, NAZEV_MAX = 24;
 
 // Kdo mluví za alianci v téhle konkrétní firmě: člen s největším podílem.
