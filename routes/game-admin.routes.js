@@ -551,6 +551,20 @@ router.get('/zlocin/pripady/:id/porota', api(async (req, res) => {
   const z = await prisma.gameZlocin.findUnique({ where: { id: parseInt(req.params.id, 10) } });
   if (!z) return res.status(404).json({ error: 'Případ nenalezen.' });
   const R = await ZL.nastaveni();
+  const hrac0 = { id: true, nick: true, company: true, created_at: true, last_login_at: true };
+  // ?hledej=jméno → proč konkrétní hráči (nick / firma) smějí, nebo nesmějí hlasovat
+  const hl0 = String(req.query.hledej || '').trim();
+  if (hl0) {
+    const nalezeni = await prisma.gamePlayer.findMany({ where: { OR: [
+      { nick: { contains: hl0, mode: 'insensitive' } }, { company: { contains: hl0, mode: 'insensitive' } }] }, select: hrac0, take: 10 });
+    const out = [];
+    for (const k of nalezeni) {
+      const s = await RIZ.smiHlasovat(prisma, R, k, z);
+      out.push({ id: k.id, nick: k.nick, firma: k.company || null, smi: s.ok, duvod: s.ok ? null : s.duvod,
+        ucet_od: k.created_at, posledni_prihlaseni: k.last_login_at });
+    }
+    return res.json({ ok: true, hledane: out });
+  }
   const hlasy = await prisma.gameZlocinHlas.findMany({ where: { zlocin_id: z.id }, orderBy: { id: 'asc' } });
   const hrac = { id: true, nick: true, company: true, created_at: true, last_login_at: true };
   const hlasujici = hlasy.length ? await prisma.gamePlayer.findMany({ where: { id: { in: hlasy.map((h) => h.player_id) } }, select: hrac }) : [];

@@ -1787,6 +1787,17 @@
         [].forEach.call(box.querySelectorAll('[data-detail]'), function (b) { b.onclick = function () { detail(b.getAttribute('data-detail')); }; });
         [].forEach.call(box.querySelectorAll('[data-zlp]'), function (b) {
           b.onclick = function () {
+            var hled = prompt('Zjistit, proč konkrétní hráč nemůže hlasovat — zadej nick nebo firmu.\nPrázdné = přehled poroty.', '');
+            if (hled == null) return;
+            if (hled.trim()) {
+              get('/zlocin/pripady/' + b.getAttribute('data-zlp') + '/porota?hledej=' + encodeURIComponent(hled.trim())).then(function (p) {
+                alert((p.hledane || []).map(function (x) {
+                  return (x.firma || x.nick) + ' (' + x.nick + '): ' + (x.smi ? 'SMÍ hlasovat' : 'NESMÍ — ' + x.duvod)
+                    + '\n   účet od ' + dt(x.ucet_od) + ', naposledy přihlášen ' + dt(x.posledni_prihlaseni);
+                }).join('\n\n') || 'Nikdo takový nenalezen.');
+              }).catch(function (e) { alert(e.message); });
+              return;
+            }
             get('/zlocin/pripady/' + b.getAttribute('data-zlp') + '/porota').then(function (p) {
               var jm = function (x) { return (x.firma || x.nick || '#' + x.id) + (x.firma && x.nick ? ' (' + x.nick + ')' : ''); };
               var VOLBA = { nejnizsi: 'nejnižší', stredni: 'střední', nejvyssi: 'nejvyšší' };
