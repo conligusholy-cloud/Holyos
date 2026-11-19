@@ -76,11 +76,14 @@ function minCenaZaPct(jmeni) {
   return Math.max(CENA_MIN, Math.round((Number(jmeni) || 0) / 100));
 }
 
-// Smí tenhle člověk vyhlásit výstupní nabídku? Podíly se sčítají na
-// člověka, ne na řádku.
-function smiVystupni(podily, kdoId) {
-  if (kdoId == null) return false;
-  const moje = (podily || []).filter((e) => e.investor_id === kdoId)
+// Smí tenhle držitel vyhlásit výstupní nabídku? Podíly se sčítají na
+// držitele, ne na řádku — a držitelem může být i fond aliance, takže se
+// porovnává klíč, ne investor_id. Snese se obojí: id hráče i hotový klíč.
+function smiVystupni(podily, kdo) {
+  const DRZ = require('./drzitel');
+  if (kdo == null) return false;
+  const k = (typeof kdo === 'string' && /^[hf]:/.test(kdo)) ? kdo : 'h:' + kdo;
+  const moje = (podily || []).filter((e) => (e.drzitel || DRZ.klic(e)) === k)
     .reduce((a, e) => a + (Number(e.podil) || 0), 0);
   return moje >= PRAH_VYSTUPNI - 1e-9;
 }

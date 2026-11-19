@@ -261,6 +261,23 @@ async function vyplatyPodilu(ted) {
         continue;
       }
       const pct = Math.round(e.podil * 100) + ' %';
+      // Podíl může držet fond aliance. Fond nemá doručenky — peníze mu
+      // chodí rovnou do jeho pokladny, odkud si je členové rozdělují.
+      // Doplatek ze ztráty se mu strhává stejnou cestou.
+      if (e.fond_id != null) {
+        await prisma.$transaction(async (tx) => {
+          await tx.gameAliance.update({ where: { id: e.fond_id },
+            data: { pokladna: { increment: castka } } });
+          await tx.gameDelivery.create({ data: {
+            player_id: e.firma_id, kind: 'cash', amount: -castka,
+            popis: 'Výplata podílu — fond aliance',
+            text_kod: 'dor.vyplata_podilu', text_data: { p1: 'fond' } } });
+          await tx.gameEquity.update({ where: { id: e.id },
+            data: { vyplaceno: e.vyplaceno + castka, dalsi_at: dalsi,
+              nedoplatek: r.nedoplatek } });
+        });
+        continue;
+      }
       await prisma.$transaction(async (tx) => {
         if (castka > 0) {
           await dorucit(tx, e.investor_id, 'cash', castka, 'Podíl ' + pct + ' ve firmě ' + e.firma_nick,

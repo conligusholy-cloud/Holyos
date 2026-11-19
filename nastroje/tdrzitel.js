@@ -95,5 +95,36 @@ ok('ředění nese držitele dál',
   D.klic(poRedeni[0]) === 'h:1' && D.klic(poRedeni[1]) === 'f:9',
   '— ' + D.klic(poRedeni[1]));
 
+// ── Převzetí: výstupní nabídku smí i fond ────────────────────────────────────
+const PREVZETI = require('../services/game/prevzeti');
+const velkyFond = [{ fond_id: 5, investor_id: null, podil: 0.8 }];
+ok('fond s osmdesáti procenty smí výstupní nabídku',
+  PREVZETI.smiVystupni(velkyFond, 'f:5') === true);
+ok('hráč 5 se za něj neschová', PREVZETI.smiVystupni(velkyFond, 5) === false);
+ok('a hráč to pořád smí po svém',
+  PREVZETI.smiVystupni([{ investor_id: 5, podil: 0.8 }], 5) === true);
+
+// ── Aliance: fondův podíl patří do bloku své aliance rovnou ──────────────────
+const AL = require('../services/game/aliance');
+// Hráč 7 je v alianci 1, fond aliance 1 drží taky. Dohromady jeden blok.
+const vBloku = AL.souhrn(
+  [{ investor_id: 7, podil: 0.2 }, { fond_id: 1, investor_id: null, podil: 0.3 }],
+  new Map([[7, 1]]));
+ok('fond a člen téže aliance jsou jeden blok',
+  vBloku.length === 1 && Math.abs(vBloku[0].podil - 0.5) < 1e-9,
+  '— ' + JSON.stringify(vBloku));
+ok('a blok se pozná jako fondový', vBloku[0].fond === true);
+// Za fondový blok nejedná mluvčí: rozhodují o něm členové společně.
+ok('fondový blok nemá mluvčího', vBloku[0].mluvci === null);
+
+const slouceno = AL.slucPodily(
+  [{ investor_id: 7, podil: 0.2 }, { fond_id: 1, investor_id: null, podil: 0.3 }],
+  new Map([[7, 1]]));
+const nesou = slouceno.filter((x) => x.za_blok);
+ok('blok nese právě jeden řádek', nesou.length === 1, '— ' + nesou.length);
+ok('a nese ho fond, ne člen', nesou[0].fond_id === 1, '— ' + JSON.stringify(nesou[0]));
+ok('součet bloku je celý na něm',
+  Math.abs(nesou[0].podil - 0.5) < 1e-9, '— ' + nesou[0].podil);
+
 console.log(chyb ? '\n' + chyb + ' nesedí' : '\nvšechno sedí');
 process.exit(chyb ? 1 : 0);

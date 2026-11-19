@@ -56,17 +56,24 @@ function mluvci(clenove, podily) {
 //
 // clenstvi je mapa hráč → id aliance. Kdo v ní není, zůstává sám za sebe.
 function slucPodily(podily, clenstvi) {
-  const kam = (id) => (clenstvi && (clenstvi.get ? clenstvi.get(id) : clenstvi[id])) || null;
+  const kamHrac = (id) => (clenstvi && (clenstvi.get ? clenstvi.get(id) : clenstvi[id])) || null;
+  // Podíl, který drží fond aliance, patří do bloku té aliance rovnou —
+  // fond JE ta aliance, nemusí se hledat přes členství.
+  const kam = (e) => (e && e.fond_id != null ? e.fond_id : kamHrac(e && e.investor_id));
   const bloky = new Map();
   (podily || []).forEach((e) => {
-    const a = kam(e.investor_id);
+    const a = kam(e);
     if (!a) return;
     const d = bloky.get(a) || { clenove: new Set(), podil: 0, zakaz: false };
-    d.clenove.add(e.investor_id);
+    // Fond vlastního mluvčího nepotřebuje: za blok mluví on sám.
+    if (e.fond_id == null) d.clenove.add(e.investor_id);
     d.podil += Number(e.podil) || 0;
     d.zakaz = d.zakaz || !!e.zakaz;
     bloky.set(a, d);
   });
+  // Které bloky drží fond. Tam mluvčího nepotřebujeme.
+  const maFond = new Set();
+  (podily || []).forEach((e) => { if (e && e.fond_id != null) maFond.add(e.fond_id); });
   // Mluvčí se hledá z původních podílů, ne ze sloučených.
   const mluvciBloku = new Map();
   bloky.forEach((d, a) => {
@@ -77,10 +84,14 @@ function slucPodily(podily, clenstvi) {
   // celý blok, sečetlo by se to dvakrát a blok by měl dvojnásobnou moc.
   const uzPolozeno = new Set();
   return (podily || []).map((e) => {
-    const a = kam(e.investor_id);
+    const a = kam(e);
     if (!a) return Object.assign({}, e);
     const d = bloky.get(a);
-    const nese = e.investor_id === mluvciBloku.get(a) && !uzPolozeno.has(a);
+    // Blok nese jeho mluvčí — ledaže v něm je fond. Pak ho nese fond,
+    // protože o fondu rozhodují členové společně a mluvčí za něj nemluví.
+    const nese = (maFond.has(a)
+      ? e.fond_id === a
+      : e.investor_id === mluvciBloku.get(a)) && !uzPolozeno.has(a);
     if (nese) uzPolozeno.add(a);
     return Object.assign({}, e, {
       podil: nese ? d.podil : 0,
@@ -94,19 +105,25 @@ function slucPodily(podily, clenstvi) {
 // Kolik která aliance v téhle firmě drží — pro majitele i pro podílníky.
 // Majitel musí vidět, že proti němu stojí blok, ne pět nesouvisejících lidí.
 function souhrn(podily, clenstvi) {
-  const kam = (id) => (clenstvi && (clenstvi.get ? clenstvi.get(id) : clenstvi[id])) || null;
+  const kamHrac = (id) => (clenstvi && (clenstvi.get ? clenstvi.get(id) : clenstvi[id])) || null;
+  // Fondův podíl patří do bloku své aliance rovnou — fond JE ta aliance.
+  const kam = (e) => (e && e.fond_id != null ? e.fond_id : kamHrac(e && e.investor_id));
   const out = new Map();
   (podily || []).forEach((e) => {
-    const a = kam(e.investor_id);
+    const a = kam(e);
     if (!a) return;
     const d = out.get(a) || { aliance_id: a, podil: 0, clenu: new Set() };
     d.podil += Number(e.podil) || 0;
-    d.clenu.add(e.investor_id);
+    if (e.fond_id == null) d.clenu.add(e.investor_id);
+    else d.fond = true;
     out.set(a, d);
   });
   return Array.from(out.values())
     .map((d) => ({ aliance_id: d.aliance_id, podil: d.podil, clenu: d.clenu.size,
-      mluvci: mluvci(Array.from(d.clenu), podily) }))
+      // Když za blok drží podíl fond, nejedná za něj mluvčí: rozhodují
+      // o něm členové společně a majitel firmy se baví s aliancí.
+      fond: !!d.fond,
+      mluvci: d.fond ? null : mluvci(Array.from(d.clenu), podily) }))
     .sort((a, b) => b.podil - a.podil);
 }
 
