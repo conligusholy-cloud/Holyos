@@ -3578,8 +3578,8 @@
   "veta.aliance_pozvat_popis": "d1b60691b04b",
   "veta.aliance_nemas": "48698ef443e3",
   "veta.pozvanka_odeslana": "27d8e452fcd2",
-  "veta.blok_ve_firme": "c7002f54e692",
-  "veta.blok_ve_tve_firme": "e9b656126666",
+  "veta.blok_ve_firme": "4ca7189897f2",
+  "veta.blok_ve_tve_firme": "cb9e146898ba",
   "veta.rozsirene_udaje_az_od": "12f874a9dc0a",
   "hra.velikost_site": "c127bb23ac8c",
   "server.burza_je_docasne_pozastavena": "e0ae1922c502",
@@ -3691,5 +3691,11 @@
   "veta.fond_odchod_popis": "582cd544fe90",
   "veta.fond_odchod_posledni": "ee27cb30b142",
   "hra.splatka_neprosla_jinde": "abda57a0ce48",
-  "mapa.zabrano_z_mist": "b018543f54b6"
+  "mapa.zabrano_z_mist": "b018543f54b6",
+  "hra.clenove": "f557fb84c315",
+  "hra.clenu": "ba35e8e5c943",
+  "podil.tvuj_podil": "eb1dfea51b75",
+  "podil.pravidla": "04d350a5e2a8",
+  "podil.bloky": "cf46fa75dba1",
+  "veta.blok_jedinec": "32b30acb6507"
 }

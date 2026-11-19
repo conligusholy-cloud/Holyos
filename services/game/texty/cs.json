@@ -3606,8 +3606,8 @@
   "veta.aliance_pozvat_popis": "Pozvaný rozhodne sám. Do fondu se vejde {cislo:p1} lidí včetně nevyřízených pozvánek.",
   "veta.aliance_nemas": "V žádném fondu nejsi. Nejdřív si ho založ v záložce Já.",
   "veta.pozvanka_odeslana": "Pozvánka pro {p1} odeslána.",
-  "veta.blok_ve_firme": "Drží ji {p1} členů společně, jedná za ně {p2}.",
-  "veta.blok_ve_tve_firme": "Proti tobě stojí blok {p1} lidí, ne {p1} nesouvisejících podílníků. Jedná za ně {p2}.",
+  "veta.blok_ve_firme": "Drží ji {p1} společně, jedná za ně {p2}.",
+  "veta.blok_ve_tve_firme": "Proti tobě stojí {p1} společně, ne stejný počet nesouvisejících podílníků. Jedná za ně {p2}.",
   "veta.rozsirene_udaje_az_od": "Z čeho se ta cena skládá — majetek, hotovost, dluh — uvidíš, až budeš držet aspoň {p1} % firmy.",
   "hra.velikost_site": "Velikost sítě",
   "server.burza_je_docasne_pozastavena": "Burza je teď dočasně pozastavená. Rozjednané obchody se dokončit dají, nové se zatím uzavřít nedají.",
@@ -3718,5 +3718,11 @@
   "veta.fond_odchod_popis": "Vyplatí se ti {penize:p1} — tvůj díl hotovosti v pokladně. Podíly ve firmách se kvůli tomu neprodávají, takže co fond už investoval, si neodnášíš. Zpátky se dostaneš jedině na pozvánku.",
   "veta.fond_odchod_posledni": "Jsi poslední člen — odchodem se fond zruší celý.",
   "hra.splatka_neprosla_jinde": "Splátka neproběhla — tuhle hru máš otevřenou ještě jinde a platí ta druhá. Zavři ji a zkus to znovu.",
-  "mapa.zabrano_z_mist": "zabráno {p1} z {p2} míst"
+  "mapa.zabrano_z_mist": "zabráno {p1} z {p2} míst",
+  "hra.clenove": "členové",
+  "hra.clenu": "členů",
+  "podil.tvuj_podil": "Tvůj podíl celkem",
+  "podil.pravidla": "Pravidla firmy",
+  "podil.bloky": "Bloky ve firmě",
+  "veta.blok_jedinec": "Drží ji přes fond jediný člen — {p1}."
 }

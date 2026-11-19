@@ -9152,35 +9152,26 @@ function vyplataZa(e) {
   if (h >= 1) return 'za ' + h + ' h ' + (m ? m + ' min' : '');
   return 'za ' + Math.max(1, m) + ' min';
 }
-function podilRadek(e, mam) {
+// Jeden podílNÍK v mojí firmě. Svoje vlastní podíly v cizích firmách kreslí
+// firmaBlok — tam se slévají po firmách, tady jde o seznam lidí.
+function podilRadek(e) {
   var pct = procentaPodilu(e.podil);
   // U podílu jde o firmu, ne o člověka — proto název firmy, když ho známe.
   var kdo = e.kdo_firma || e.kdo;
-  var navratnost = e.mesicne > 0 ? e.cena / (e.mesicne * 12) : null;
-  var vraceno = e.cena > 0 ? Math.round(e.vyplaceno / e.cena * 100) : 0;
   return '<div class="trade"><div class="row"><b>' + pct + ' · ' + esc(kdo) + '</b>'
     + '<b class="' + (e.mesicne > 0 ? 'ok' : e.mesicne < 0 ? 'err' : '') + '">'
     + (e.mesicne > 0 ? '+' : '') + kcFull(e.mesicne) + ' ' + esc(tx('hra.mes_5')) + '</b></div>'
-    + '<div class="kv"><span>' + (mam ? esc(tx('hra.koupil_jsi_za')) : esc(tx('hra.prodal_jsi_za'))) + '</span><b>'
+    + '<div class="kv"><span>' + esc(tx('hra.prodal_jsi_za')) + '</span><b>'
     + kcFull(e.cena) + '</b></div>'
-    + '<div class="kv"><span>' + (e.vyplaceno >= 0
-        ? (mam ? esc(tx('drazba.zatim_vyneslo')) : esc(tx('drazba.zatim_jsi_vyplatil')))
-        : (mam ? esc(tx('drazba.zatim_jsi_doplatil')) : esc(tx('drazba.zatim_ti_doplatil')))) + '</span><b class="'
-    + (e.vyplaceno > 0 ? (mam ? 'ok' : 'warn') : '') + '">' + kcFull(Math.abs(e.vyplaceno)) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx(e.vyplaceno >= 0
+        ? 'drazba.zatim_jsi_vyplatil' : 'drazba.zatim_ti_doplatil')) + '</span><b class="'
+    + (e.vyplaceno > 0 ? 'warn' : '') + '">' + kcFull(Math.abs(e.vyplaceno)) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('drazba.nejblizsi_vyplata')) + '</span><b class="'
     + (vyplataZa(e) === esc(tx('drazba.ted')) ? 'ok' : '') + '">' + vyplataZa(e) + '</b></div>'
-    + (mam
-        ? '<div class="bar"><i style="width:' + Math.min(100, Math.max(0, vraceno)) + '%"></i></div>'
-          + '<p class="fine">' + (e.vyplaceno >= e.cena
-              ? tx('veta.vraceno_cele_a_nad_to_od', { p1: kcFull(e.vyplaceno - e.cena) })
-              : tx('veta.vraceno_ceny', { p1: Math.max(0, vraceno) })
-                + (navratnost ? tx('hra.pri_dnesnim_vydelku_zbyva_roku_do', { p1: navratnost.toFixed(1).replace('.', desZnak()) }) : esc(tx('podil.firma_nevydelava')))) + '</p>'
-        : '<p class="fine">' + esc(tx('hra.vyrovnava_se_kazdy_herni_mesic')) + ' '
-          + esc(tx('hra.odkoupit_ho_zpatky_jde_jen')) + '</p>')
+    + '<p class="fine">' + esc(tx('hra.vyrovnava_se_kazdy_herni_mesic')) + ' '
+    + esc(tx('hra.odkoupit_ho_zpatky_jde_jen')) + '</p>'
     + '<div class="akce"><button class="btn sm sec" data-odkup-ja="' + e.id + '">'
-      + (mam ? esc(tx('drazba.nabidnout_odkup_majiteli')) : esc(tx('drazba.nabidnout_odkup'))) + '</button>'
-      + (mam ? '<button class="btn sm sec" data-prevod="' + e.id + '">' + esc(tx('drazba.prodat_jinemu')) + '</button>' : '')
-      + '</div>'
+    + esc(tx('drazba.nabidnout_odkup')) + '</button></div>'
     + '</div>';
 }
 // Dividendová politika firmy: kolik procent měsíčního zisku se vyplácí
@@ -9212,13 +9203,31 @@ function dividendaRadek(id, mojeFirma) {
 function blokyRadek(d, mojeFirma) {
   var l = (d && d.bloky) || [];
   if (!l.length) return '';
-  return l.map(function (b) {
-    return '<div class="row" style="margin-top:6px"><span class="muted small">'
-      + esc(tx('aliance.blok')) + '</span><span>' + esc(b.nazev) + ' \u00b7 '
-      + pctHra(b.podil) + ' %</span></div>'
-      + '<p class="fine">' + tx(mojeFirma ? 'veta.blok_ve_tve_firme' : 'veta.blok_ve_firme',
-        { p1: b.clenu, p2: esc(b.mluvci || '') }) + '</p>';
-  }).join('');
+  var se = l.slice().sort(function (a, b) { return b.podil - a.podil; });
+  // Rozepisuje se jen blok, který má aspoň blokaní menšinu. Blok s jedním
+  // procentem nezmůže nic a tři takové řádky přebijí ten jediný, na kterém
+  // záleží — a právě ten má hráč uvidět.
+  var vazne = se.filter(function (b) { return b.podil >= 0.25 - 1e-9; });
+  return '<p class="pod-podnadpis">' + esc(tx('podil.bloky')) + '</p>'
+    + se.map(function (b) {
+        return '<div class="kv"><span>' + esc(b.nazev) + '</span><b>'
+          + pctHra(b.podil) + ' %</b></div>';
+      }).join('')
+    + vazne.map(function (b) {
+        // Jeden člen není blok — je to jeden člověk přes fond, a tak se to má
+        // taky říct. Společná věta by z něj udělala „1 člen společně“.
+        var veta = b.clenu === 1
+          ? tx('veta.blok_jedinec', { p1: esc(b.mluvci || '') })
+          : tx(mojeFirma ? 'veta.blok_ve_tve_firme' : 'veta.blok_ve_firme',
+              { p1: clenuSlovy(b.clenu), p2: esc(b.mluvci || '') });
+        return '<p class="fine">' + esc(b.nazev) + ' \u00b7 ' + veta + '</p>';
+      }).join('');
+}
+// Počet členů se správným tvarem slova. „1 členů“ je drobnost, která celému
+// panelu ubere na důvěryhodnosti — a tenhle panel mluví o cizích penězích.
+function clenuSlovy(n) {
+  var k = n === 1 ? 'aliance.clen' : (n >= 2 && n <= 4 ? 'hra.clenove' : 'hra.clenu');
+  return n + ' ' + esc(tx(k));
 }
 // Výstupní nabídka. Kdo drží tři čtvrtiny firmy, může nechat viset trvalý
 // odkup zbytku — menšina pak má kudy ven, i když se měsíc neukáže. Prodat
@@ -9854,21 +9863,92 @@ function podilyHtml() {
     var mesicne = ciziVeMne.reduce(function (a, e) { return a + e.mesicne; }, 0);
     h += tx('veta.p_class_muted_small_style_margin_4', { p1: tx('veta.podilnikum_z_ni_mesicne_odchazi', { p1: Math.round(celkem * 100), p2: kcFull(mesicne) }), p2: (mesicne < 0 ? ' ' + esc(tx('hra.pri_ztrate_ti_naopak_doplaceji')) : '.') })
       + dividendaRadek(ME && ME.id, true)
-      + ciziVeMne.map(function (e) { return podilRadek(e, false); }).join('');
+      + ciziVeMne.map(podilRadek).join('');
   }
   if (moje.length) {
-    var videno = {};
-    moje.forEach(function (e) {
-      e.prvni_v_firme = !videno[e.kdo_id]; videno[e.kdo_id] = true;
-    });
     var nese = moje.reduce(function (a, e) { return a + e.mesicne; }, 0);
     var dal = moje.reduce(function (a, e) { return a + e.cena; }, 0);
     var vzal = moje.reduce(function (a, e) { return a + e.vyplaceno; }, 0);
     h += '<h3 style="margin-top:' + (ciziVeMne.length ? '18px' : '2px') + tx('veta.h3_p_class_muted_small_style_5', { p1: esc(tx('hra.tvoje_podily_v_cizich_firmach')), p2: kcFull(dal), p3: kcFull(vzal), p4: kcFull(nese) })
-      + moje.map(function (e) { return podilRadek(e, true)
-          + (e.prvni_v_firme ? dividendaRadek(e.kdo_id, false) : ''); }).join('');
+      + poFirmach(moje).map(firmaBlok).join('');
   }
   return h + '</div>';
+}
+// Podíly se slévají po firmách. Dřív měl každý nákup vlastní kartu a pravidla
+// firmy se vykreslila za tu PRVNÍ z nich — ležela tedy mezi dvěma kartami,
+// mimo obě, a nikde nebylo napsané, ke které firmě patří. Kdo měl v jedné
+// firmě tři nákupy, viděl tři karty, mezi nimi cizí nastavení, a nikde,
+// kolik té firmy vlastní dohromady.
+function poFirmach(podily) {
+  var podle = {}, poradi = [];
+  podily.forEach(function (e) {
+    var f = podle[e.kdo_id];
+    if (!f) {
+      f = podle[e.kdo_id] = { id: e.kdo_id, nazev: e.kdo_firma || e.kdo, kusy: [],
+        podil: 0, cena: 0, vyplaceno: 0, mesicne: 0, dalsi: null };
+      poradi.push(f);
+    }
+    f.kusy.push(e);
+    f.podil += e.podil; f.cena += e.cena;
+    f.vyplaceno += e.vyplaceno; f.mesicne += e.mesicne;
+    // Nejbližší výplata je ta nejdřívější ze všech nákupů v té firmě.
+    if (e.dalsi && (!f.dalsi || new Date(e.dalsi) < new Date(f.dalsi))) f.dalsi = e.dalsi;
+  });
+  return poradi.sort(function (a, b) { return b.mesicne - a.mesicne || b.podil - a.podil; });
+}
+function akceNakupu(e) {
+  return '<button class="btn sm sec" data-odkup-ja="' + e.id + '">'
+    + esc(tx('drazba.nabidnout_odkup_majiteli')) + '</button>'
+    + '<button class="btn sm sec" data-prevod="' + e.id + '">'
+    + esc(tx('drazba.prodat_jinemu')) + '</button>';
+}
+// Jednotlivé nákupy. Při jediném nákupu se seznam nekreslí — souhrn nahoru
+// je pak týž nákup a opakovat ho podruhé nemá smysl.
+function nakupyHtml(f) {
+  if (f.kusy.length < 2) return '<div class="akce">' + akceNakupu(f.kusy[0]) + '</div>';
+  return '<div class="pod-nakupy"><h4>' + esc(tx('hra.nakupy')) + '</h4>'
+    + f.kusy.map(function (e) {
+        // Podíl, který nepřišel nákupem (propadlá zástava), nemá cenu —
+        // „koupil jsi za 0“ by byla lží.
+        return '<div class="pod-kus">'
+          + (e.cena > 0
+              ? '<div class="kv"><span><b>' + procentaPodilu(e.podil) + '</b> \u00b7 '
+                + esc(tx('hra.koupil_jsi_za')) + '</span><b>' + kcFull(e.cena) + '</b></div>'
+              : '<div class="kv"><span><b>' + procentaPodilu(e.podil) + '</b></span><b></b></div>')
+          + '<div class="kv"><span>' + esc(tx('drazba.zatim_vyneslo')) + '</span><b class="'
+          + (e.vyplaceno > 0 ? 'ok' : '') + '">' + kcFull(e.vyplaceno) + '</b></div>'
+          + '<div class="akce">' + akceNakupu(e) + '</div></div>';
+      }).join('') + '</div>';
+}
+// Jedna firma: co v ní mám dohromady, z čeho se to skládá a jaká v ní platí
+// pravidla. Pravidla mají vlastní rámeček s názvem firmy, aby bylo vidět,
+// že jsou její — ne moje.
+function firmaBlok(f) {
+  var vraceno = f.cena > 0 ? Math.round(f.vyplaceno / f.cena * 100) : 0;
+  var navratnost = f.mesicne > 0 ? f.cena / (f.mesicne * 12) : null;
+  return '<div class="trade"><div class="row"><b>' + esc(f.nazev) + '</b>'
+    + '<b class="' + (f.mesicne > 0 ? 'ok' : f.mesicne < 0 ? 'err' : '') + '">'
+    + (f.mesicne > 0 ? '+' : '') + kcFull(f.mesicne) + ' ' + esc(tx('hra.mes_5')) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('podil.tvuj_podil')) + '</span><b>'
+    + procentaPodilu(f.podil) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.koupil_jsi_za')) + '</span><b>'
+    + kcFull(f.cena) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('drazba.zatim_vyneslo')) + '</span><b class="'
+    + (f.vyplaceno > 0 ? 'ok' : '') + '">' + kcFull(f.vyplaceno) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('drazba.nejblizsi_vyplata')) + '</span><b>'
+    + vyplataZa({ dalsi: f.dalsi }) + '</b></div>'
+    + '<div class="bar"><i style="width:' + Math.min(100, Math.max(0, vraceno)) + '%"></i></div>'
+    + '<p class="fine">' + (f.vyplaceno >= f.cena
+        ? tx('veta.vraceno_cele_a_nad_to_od', { p1: kcFull(f.vyplaceno - f.cena) })
+        : tx('veta.vraceno_ceny', { p1: Math.max(0, vraceno) })
+          + (navratnost
+              ? tx('hra.pri_dnesnim_vydelku_zbyva_roku_do',
+                  { p1: navratnost.toFixed(1).replace('.', desZnak()) })
+              : esc(tx('podil.firma_nevydelava')))) + '</p>'
+    + nakupyHtml(f)
+    + '<div class="pod-pravidla"><h4>' + esc(tx('podil.pravidla')) + ' \u00b7 '
+    + esc(f.nazev) + '</h4>' + dividendaRadek(f.id, false) + '</div>'
+    + '</div>';
 }
 function bindPodily() {
   if (ALIANCE == null) loadAliance(paintMe);

@@ -3599,8 +3599,8 @@
   "veta.aliance_pozvat_popis": "The invited player decides for themselves. A fund holds {cislo:p1} people including pending invitations.",
   "veta.aliance_nemas": "You're not in any fund. Start one first on the Me tab.",
   "veta.pozvanka_odeslana": "Invite sent to {p1}.",
-  "veta.blok_ve_firme": "Held by {p1} members together, {p2} acts for them.",
-  "veta.blok_ve_tve_firme": "You face a bloc of {p1} people, not {p1} unrelated shareholders. {p2} acts for them.",
+  "veta.blok_ve_firme": "Held jointly by {p1}, represented by {p2}.",
+  "veta.blok_ve_tve_firme": "You are up against {p1} acting together, not that many unrelated shareholders. {p2} speaks for them.",
   "veta.rozsirene_udaje_az_od": "What that price is made of — assets, cash, debt — you'll see once you hold at least {p1}% of the company.",
   "hra.velikost_site": "Chain size",
   "server.burza_je_docasne_pozastavena": "The exchange is temporarily suspended. Existing deals can be completed, new ones can't be made yet.",
@@ -3711,5 +3711,11 @@
   "veta.fond_odchod_popis": "You will be paid {penize:p1} — your share of the cash in the treasury. Stakes in companies are not sold off for this, so whatever the fund already invested does not go with you. You can only get back in by invitation.",
   "veta.fond_odchod_posledni": "You are the last member — leaving dissolves the fund.",
   "hra.splatka_neprosla_jinde": "The payment did not go through — this game is open somewhere else and that one wins. Close it and try again.",
-  "mapa.zabrano_z_mist": "{p1} of {p2} spots taken"
+  "mapa.zabrano_z_mist": "{p1} of {p2} spots taken",
+  "hra.clenove": "members",
+  "hra.clenu": "members",
+  "podil.tvuj_podil": "Your total stake",
+  "podil.pravidla": "Company rules",
+  "podil.bloky": "Blocks in the company",
+  "veta.blok_jedinec": "Held through a fund by a single member — {p1}."
 }

@@ -3570,5 +3570,13 @@
   "server.vystupni_nabidku_smi_az_od_pct": "Ofertę odkupu może ogłosić udziałowiec z co najmniej {p1}% firmy.",
   "server.vystupni_cena_pod_ocenenim": "Oferta odkupu nie może być poniżej wyceny firmy. Minimum {penize:p1} za procent.",
   "server.stahnout_ji_muze_jen_kdo_ji_dal": "Wycofać ofertę może tylko ten, kto ją ogłosił.",
-  "mapa.zabrano_z_mist": "zajęte {p1} z {p2} lokalizacji"
+  "mapa.zabrano_z_mist": "zajęte {p1} z {p2} lokalizacji",
+  "hra.clenove": "członkowie",
+  "hra.clenu": "członków",
+  "podil.tvuj_podil": "Twój udział łącznie",
+  "podil.pravidla": "Zasady firmy",
+  "podil.bloky": "Bloki w firmie",
+  "veta.blok_ve_firme": "Trzyma ją {p1} wspólnie, reprezentuje ich {p2}.",
+  "veta.blok_ve_tve_firme": "Naprzeciw ciebie stoi {p1} działających razem, a nie tylu niezależnych udziałowców. W ich imieniu występuje {p2}.",
+  "veta.blok_jedinec": "Trzyma ją przez fundusz jeden członek — {p1}."
 }

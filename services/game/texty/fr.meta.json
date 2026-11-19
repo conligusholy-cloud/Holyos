@@ -3542,5 +3542,13 @@
   "server.vystupni_nabidku_smi_az_od_pct": "faaaea9e8809",
   "server.vystupni_cena_pod_ocenenim": "0ed667da1d8e",
   "server.stahnout_ji_muze_jen_kdo_ji_dal": "d8592431afa6",
-  "mapa.zabrano_z_mist": "b018543f54b6"
+  "mapa.zabrano_z_mist": "b018543f54b6",
+  "hra.clenove": "f557fb84c315",
+  "hra.clenu": "ba35e8e5c943",
+  "podil.tvuj_podil": "eb1dfea51b75",
+  "podil.pravidla": "04d350a5e2a8",
+  "podil.bloky": "cf46fa75dba1",
+  "veta.blok_ve_firme": "4ca7189897f2",
+  "veta.blok_ve_tve_firme": "cb9e146898ba",
+  "veta.blok_jedinec": "32b30acb6507"
 }

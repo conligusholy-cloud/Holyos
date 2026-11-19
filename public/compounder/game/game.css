@@ -740,6 +740,18 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .trade .cena{font-size:16px;font-weight:800}
 .trade .akce{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .trade .akce .btn{flex:1 1 auto}
+/* Podíly seskupené po firmách. Nákupy i pravidla mají vlastní, viditelně
+   oddělenou část — pravidla jsou pravidla CIZÍ firmy a dřív visela volně
+   mezi kartami, takže vypadala jako nastavení hráčovy vlastní firmy. */
+.pod-nakupy,.pod-pravidla{margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+.pod-nakupy h4,.pod-pravidla h4{margin:0 0 6px;font-size:11.5px;font-weight:600;
+  letter-spacing:.04em;text-transform:uppercase;color:var(--text3)}
+.pod-kus{padding:8px 0}
+.pod-kus + .pod-kus{border-top:1px dashed var(--border)}
+.pod-kus .kv span b{font-size:13.5px;color:var(--text)}
+.pod-kus .akce{margin-top:7px}
+.pod-podnadpis{margin:10px 0 2px;font-size:11.5px;font-weight:600;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--text3)}
 .stav{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;background:rgba(142,162,194,.15)}
 .stav.prijato{background:rgba(47,227,160,.18);color:var(--ok)}
 .stav.odmitnuto,.stav.zruseno,.stav.neplatne{background:rgba(255,93,108,.16);color:var(--err)}

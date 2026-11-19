@@ -3563,5 +3563,13 @@
   "server.vystupni_nabidku_smi_az_od_pct": "Publicar oferta de salida requiere al menos {p1} % de la empresa.",
   "server.vystupni_cena_pod_ocenenim": "La oferta de salida no puede estar por debajo de la valoración de la empresa. Mínimo {penize:p1} por punto porcentual.",
   "server.stahnout_ji_muze_jen_kdo_ji_dal": "Solo quien publicó la oferta puede retirarla.",
-  "mapa.zabrano_z_mist": "{p1} de {p2} ubicaciones ocupadas"
+  "mapa.zabrano_z_mist": "{p1} de {p2} ubicaciones ocupadas",
+  "hra.clenove": "miembros",
+  "hra.clenu": "miembros",
+  "podil.tvuj_podil": "Tu participación total",
+  "podil.pravidla": "Reglas de la empresa",
+  "podil.bloky": "Bloques en la empresa",
+  "veta.blok_ve_firme": "La tienen {p1} conjuntamente, representados por {p2}.",
+  "veta.blok_ve_tve_firme": "Tienes enfrente a {p1} actuando juntos, no a ese número de accionistas independientes. Habla por ellos {p2}.",
+  "veta.blok_jedinec": "La tiene a través de un fondo un único miembro: {p1}."
 }
