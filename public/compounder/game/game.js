@@ -12653,10 +12653,11 @@ function zlocinPrekryti(html, zavritFn) {
   var o = document.getElementById('zl-over');
   if (!o) {
     o = document.createElement('div'); o.id = 'zl-over';
-    o.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.65);display:flex;align-items:flex-end;justify-content:center;padding:12px';
+    // z-index nad mapou a jejími ovládacími prvky (Leaflet má stovky), jinak je okno na PC schované pod mapou
+    o.style.cssText = 'position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.65);display:flex;align-items:' + (window.innerWidth >= 720 ? 'center' : 'flex-end') + ';justify-content:center;padding:12px';
     document.body.appendChild(o);
   }
-  o.innerHTML = '<div style="background:#f4ecd8;color:#2b2416;font-family:Georgia,serif;max-width:520px;width:100%;max-height:86vh;overflow:auto;border-radius:12px;padding:16px 16px 14px;box-shadow:0 10px 40px rgba(0,0,0,.6)">' + html + '</div>';
+  o.innerHTML = '<div style="background:#f4ecd8;color:#2b2416;font-family:Georgia,serif;max-width:520px;width:100%;max-height:86vh;max-height:86dvh;overflow:auto;border-radius:12px;padding:16px 16px 14px;box-shadow:0 10px 40px rgba(0,0,0,.6)">' + html + '</div>';
   o.onclick = function (e) { if (e.target === o) zavritFn(); };
   return o;
 }
