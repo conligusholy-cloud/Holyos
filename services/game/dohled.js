@@ -604,8 +604,23 @@ async function nastaveniPrehled() {
   const acct = require('../../routes/game-account.routes');
   const n = typeof acct._nastaveni === 'function' ? await acct._nastaveni() : {};
   const radek = (k) => k + ': ' + (n[k] == null ? '?' : n[k]);
-  return 'NASTAVENÍ · ' + ['sklad_povinny', 'hodnosti_odmeny', 'hodnosti_zpetne', 'udalosti_zap']
+  const zakl = 'NASTAVENÍ · ' + ['sklad_povinny', 'hodnosti_odmeny', 'hodnosti_zpetne', 'udalosti_zap']
     .map(radek).join(' · ');
+  // Kurzy si hra bere z ČNB sama. Když se to rozbije, nevypadne chyba —
+  // jen se tiše jede na starém kurzu a cizinci platí jinou cenu, než mají.
+  // Proto je tady vidět, kdy se to naposled povedlo.
+  let kurzy = '';
+  try {
+    const K = require('./kurzy');
+    const st = await K.stav();
+    kurzy = '\nKURZY Z ČNB · '
+      + (st.kdy
+        ? ('naposled před ' + st.dnu + ' dny' + (st.den ? ' · ČNB ' + st.den : ''))
+        : 'nikdy se nestáhly')
+      + (st.stary ? '  ← POZOR: starší než ' + K.STARY_PO_DNECH + ' dny, cizinci možná platí špatnou cenu'
+        : '');
+  } catch (e) { kurzy = '\nKURZY Z ČNB · nepodařilo se zjistit: ' + (e && e.message); }
+  return zakl + kurzy;
 }
 
 // ─── Denní výpis do logu ─────────────────────────────────────────────────────

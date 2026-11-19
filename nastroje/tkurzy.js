@@ -97,5 +97,22 @@ ok('a všechny projdou pojistkami proti dosavadním hodnotám',
   '— ' + K.sledovane().map((m) => m.kod + ' ' + (K.proc_ne(vysledek[m.iso],
     require('../services/game/meny-jadro').KURZY_VYCHOZI[m.kod]) || 'ok')).join(' · '));
 
+// ── Kdy se kurz naposled povedlo stáhnout ────────────────────────────────────
+// Bez tohohle záznamu nejde poznat tichý výpadek: rozbitý rozbor nevyhodí
+// chybu, jen se jede dál na starém kurzu a cizinci platí jinou cenu.
+const DEN = 86400000;
+function stavZ(kdy, ted) {
+  // Stejný výpočet, jaký dělá kurzy.stav() — tady se zkouší jeho pravidlo.
+  const dnu = (ted - new Date(kdy).getTime()) / DEN;
+  return { dnu: Math.round(dnu * 10) / 10, stary: dnu > K.STARY_PO_DNECH };
+}
+const TED = Date.UTC(2026, 10, 19, 12, 0, 0);
+ok('čerstvý kurz není starý', stavZ(new Date(TED - 2 * DEN).toISOString(), TED).stary === false);
+// ČNB vydává jen v pracovní dny, takže víkend ani svátek nemá bliknout.
+ok('tři dny jsou pořád v pořádku (víkend a svátek)',
+  stavZ(new Date(TED - 3 * DEN).toISOString(), TED).stary === false);
+ok('pět dnů už je podezřelých', stavZ(new Date(TED - 5 * DEN).toISOString(), TED).stary === true);
+ok('hranice je čtyři dny', K.STARY_PO_DNECH === 4, '— ' + K.STARY_PO_DNECH);
+
 console.log(chyb ? '\n' + chyb + ' chyb' : '\nvšechno sedí');
 process.exit(chyb ? 1 : 0);

@@ -95,6 +95,39 @@ async function stahni() {
 
 // Jedno kolo: stáhnout, rozebrat, zapsat jen to, co projde pojistkami.
 // Vrací přehled, ať se dá totéž spustit ručně z admina a vidět výsledek.
+async function zapisKdy(datum) {
+  const zapis = async (klic, hodnota) => prisma.gameSetting.upsert({
+    where: { klic }, update: { hodnota }, create: { klic, hodnota } });
+  await zapis(KLIC_KDY, new Date().toISOString());
+  await zapis(KLIC_DEN, String(datum || '').slice(0, 60));
+}
+
+// Jak dlouho smí být kurz starý, než je to podezřelé. ČNB vydává jen
+// v pracovní dny, takže přes Vánoce nebo dlouhý víkend je pauza normální;
+// čtyři dny už normální nejsou.
+const STARY_PO_DNECH = 4;
+
+// Stav pro přehled v administraci. Vrací popis, ne verdikt.
+async function stav() {
+  const row = async (klic) => (await prisma.gameSetting.findUnique({ where: { klic } })
+    .catch(() => null));
+  const kdy = await row(KLIC_KDY);
+  const den = await row(KLIC_DEN);
+  if (!kdy) return { kdy: null, den: null, stary: true, dnu: null };
+  const ms = Date.now() - new Date(kdy.hodnota).getTime();
+  const dnu = ms / 86400000;
+  return { kdy: kdy.hodnota, den: den ? den.hodnota : null,
+    dnu: Math.round(dnu * 10) / 10, stary: dnu > STARY_PO_DNECH };
+}
+
+// Kdy se naposled povedlo stáhnout a z jakého dne ČNB to bylo. Bez toho
+// nejde poznat tichý výpadek: když se rozbor rozbije nebo ČNB změní formát,
+// nevypadne chyba — jen se jede dál na starém kurzu a ceny v cizí měně se
+// pomalu rozcházejí se skutečností. Tohle je to jediné, podle čeho se to
+// pozná zvenčí.
+const KLIC_KDY = 'kurzy_stazeno_at';
+const KLIC_DEN = 'kurzy_stazeno_den';
+
 async function obnov(stahovac) {
   const text = await (stahovac || stahni)();
   const kurzy = rozeber(text);
@@ -129,6 +162,10 @@ async function obnov(stahovac) {
     console.log('[game-kurzy] ' + prehled.zmeneno
       .map((z) => z.kod + ' ' + z.z + ' → ' + z.na).join(', '));
   }
+  // Zapisuje se i tehdy, když se žádný kurz nezměnil: podstatné je, že ČNB
+  // odpověděla a text se dal přečíst. Kurz, který se den nepohnul, je
+  // v pořádku; kurz, který se nestáhl, není.
+  await zapisKdy(prehled.datum).catch(() => {});
   return prehled;
 }
 
@@ -148,5 +185,5 @@ function start() {
   console.log('[game-kurzy] denní kurzy z ČNB běží');
 }
 
-module.exports = { start, tik, obnov, rozeber, proc_ne, sledovane,
+module.exports = { start, tik, obnov, rozeber, proc_ne, sledovane, stav, STARY_PO_DNECH,
   URL_CNB, MAX_SKOK, ROZSAH };
