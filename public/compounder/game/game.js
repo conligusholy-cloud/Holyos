@@ -8151,10 +8151,14 @@ function strukturaSheet(id) {
   }).catch(function () { toast(esc(tx('hra.server_neodpovida_18')), 'err'); });
 }
 // Procenta podílu tak, aby se neztratila desetina u malých podílů.
-function procentaPodilu(x) {
-  var v = Math.round((Number(x) || 0) * 1000) / 10;
-  return tCislo2(String(v)) + ' %';
+// Procento podílu se VŠUDE ukazuje stejně, na jedno desetinné místo. Podíly
+// nejsou celá čísla — kapitálový vstup je ředí a po rozštěpení vzniknou
+// půlprocenta. Když je karta zaokrouhlila na jednotky, hráč viděl 20 % a 1 %
+// a v prodejním okně 20,5 % — a mysli si, že jedno z těch čísel je špatně.
+function pctPodilu(x) {
+  return tCislo2(String(Math.round((Number(x) || 0) * 1000) / 10));
 }
+function procentaPodilu(x) { return pctPodilu(x) + ' %'; }
 
 // Pověst z infolinky — ať je vidět i mimo hovor, co to s návštěvností dělá.
 function povestHtml() {
@@ -9122,12 +9126,12 @@ function vyplataZa(e) {
   return 'za ' + Math.max(1, m) + ' min';
 }
 function podilRadek(e, mam) {
-  var pct = Math.round(e.podil * 100);
+  var pct = procentaPodilu(e.podil);
   // U podílu jde o firmu, ne o člověka — proto název firmy, když ho známe.
   var kdo = e.kdo_firma || e.kdo;
   var navratnost = e.mesicne > 0 ? e.cena / (e.mesicne * 12) : null;
   var vraceno = e.cena > 0 ? Math.round(e.vyplaceno / e.cena * 100) : 0;
-  return '<div class="trade"><div class="row"><b>' + pct + ' % · ' + esc(kdo) + '</b>'
+  return '<div class="trade"><div class="row"><b>' + pct + ' · ' + esc(kdo) + '</b>'
     + '<b class="' + (e.mesicne > 0 ? 'ok' : e.mesicne < 0 ? 'err' : '') + '">'
     + (e.mesicne > 0 ? '+' : '') + kcFull(e.mesicne) + ' ' + esc(tx('hra.mes_5')) + '</b></div>'
     + '<div class="kv"><span>' + (mam ? esc(tx('hra.koupil_jsi_za')) : esc(tx('hra.prodal_jsi_za'))) + '</span><b>'
@@ -9351,11 +9355,11 @@ function fondVnitrek() {
       : '');
   if (ja) {
     h += '<div class="kv"><span>' + esc(tx('fond.muj_dil')) + '</span><b class="ok">'
-      + Math.round(ja.podil * 100) + ' % \u00b7 ' + kcFull(ja.hodnota) + '</b></div>';
+      + procentaPodilu(ja.podil) + ' \u00b7 ' + kcFull(ja.hodnota) + '</b></div>';
   }
   (f.podilnici || []).forEach(function (x) {
     h += '<div class="row"><span>' + esc(tx('veta.fond_dil_radek', { p1: esc(x.kdo), p2: x.vlozil }))
-      + '</span><span class="muted small">' + Math.round(x.podil * 100) + ' %</span></div>';
+      + '</span><span class="muted small">' + procentaPodilu(x.podil) + '</span></div>';
   });
   if (!ja) h += '<p class="fine warn">' + esc(tx('fond.nic_nedrzis')) + '</p>';
 
@@ -10269,7 +10273,7 @@ function prevzetiHtml() {
           + '<span>' + (t.trvala ? esc(tx('prevzeti.bez_lhuty')) : zaKolik(t.do)) + '</span></div>'
           + (jaProdam
               ? '<div class="row"><span class="muted small">' + esc(tx('prevzeti.ty_drzis')) + '</span>'
-                + '<span class="ok">' + pctHra(t.muj_podil) + ' % \u00b7 '
+                + '<span class="ok">' + procentaPodilu(t.muj_podil) + ' \u00b7 '
                 + kcFull(Math.round(t.muj_podil * 100 * t.cena_za_pct)) + '</span></div>'
                 + '<div class="gcard-act"><button class="btn sm" data-prevzeti="' + t.id + '">'
                 + esc(tx('prevzeti.prodat_do_nabidky')) + '</button></div>'
@@ -10289,8 +10293,8 @@ function prevzetiSheet(t) {
   var maxPct = Math.min(t.muj_podil, t.zbyva_pct);
   sheet('<h3>' + tx('veta.prodat_podil_v', { p1: esc(t.firma) }) + '</h3>'
     + '<p class="muted small">' + tx('veta.prevzeti_prodej_popis', { p1: esc(t.utocnik), p2: kcFull(t.cena_za_pct) }) + '</p>'
-    + '<div class="kv"><span>' + esc(tx('prevzeti.ty_drzis')) + '</span><b>' + pctHra(t.muj_podil) + ' %</b></div>'
-    + '<div class="kv"><span>' + esc(tx('prevzeti.jeste_vykoupi')) + '</span><b>' + pctHra(t.zbyva_pct) + ' %</b></div>'
+    + '<div class="kv"><span>' + esc(tx('prevzeti.ty_drzis')) + '</span><b>' + procentaPodilu(t.muj_podil) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('prevzeti.jeste_vykoupi')) + '</span><b>' + procentaPodilu(t.zbyva_pct) + '</b></div>'
     + '<label class="fld"><span>' + esc(tx('prevzeti.kolik_prodas')) + '</span>'
     + '<input id="pz-pct" class="inp" type="number" inputmode="decimal" min="0.1" step="0.1" max="'
     + pctHra(maxPct) + '" value="' + pctHra(maxPct) + '"></label>'
@@ -10522,7 +10526,7 @@ function financeHtml() {
   });
   (f.podily || []).filter(bezici).forEach(function (e) {
     var mam = e.moje === 'mam';
-    h += '<div class="trade"><div class="row"><b>' + Math.round(e.podil * 100) + ' % '
+    h += '<div class="trade"><div class="row"><b>' + procentaPodilu(e.podil) + ' '
       + (mam ? tx('hra.ve_firme', { p1: esc(e.kdo_firma || e.kdo) }) : tx('hra.tve_firmy_drzi', { p1: esc(e.kdo) })) + '</b>'
       + '<b>' + kcFull(e.cena) + '</b></div>'
       + '<p class="muted small" style="margin:2px 0 6px">'
@@ -11180,8 +11184,8 @@ function odkupSheet(e) {
   var majitel = e.moje === 'prodal';       // odkupuje majitel firmy
   sheet('<h3>' + (majitel ? esc(tx('drazba.odkoupit_podil_zpatky')) : esc(tx('drazba.nabidnout_podil_k_odkupu'))) + '</h3>'
     + '<p class="muted small">' + (majitel
-        ? tx('veta.drzi_tve_firmy_posli_mu_nabidku', { p1: esc(e.kdo), p2: Math.round(e.podil * 100) }): tx('veta.drzis_firmy', { p1: Math.round(e.podil * 100), p2: esc(e.kdo_firma || e.kdo), p3: esc(tx('drazba.nabidni_jejimu_majiteli_at_si')) })) + '</p>'
-    + '<div class="kv"><span>' + esc(tx('drazba.podil_2')) + '</span><b>' + Math.round(e.podil * 100) + ' %</b></div>'
+        ? tx('veta.drzi_tve_firmy_posli_mu_nabidku', { p1: esc(e.kdo), p2: pctPodilu(e.podil) }): tx('veta.drzis_firmy', { p1: pctPodilu(e.podil), p2: esc(e.kdo_firma || e.kdo), p3: esc(tx('drazba.nabidni_jejimu_majiteli_at_si')) })) + '</p>'
+    + '<div class="kv"><span>' + esc(tx('drazba.podil_2')) + '</span><b>' + procentaPodilu(e.podil) + '</b></div>'
     + '<div class="kv"><span>' + (majitel ? esc(tx('hra.prodal_jsi_ho_za')) : esc(tx('hra.koupil_jsi_ho_za'))) + '</span><b>'
     + kcFull(e.cena) + '</b></div>'
     + '<div class="kv"><span>' + (e.vyplaceno >= 0 ? esc(tx('drazba.zatim_vyplaceno')) : esc(tx('drazba.zatim_doplaceno'))) + '</span><b>'
