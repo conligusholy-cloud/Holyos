@@ -1297,6 +1297,26 @@ router.post('/trade/aliance/odejit', hrac, api(async (req, res) => {
   const moje = await prisma.gameAlianceClen.findFirst({
     where: { player_id: req.player.id, stav: 'clen' } });
   if (!moje) return res.status(404).json({ error: stx(req)('server.v_zadne_alianci_nejsi') });
+  // Z fondu se neodnáší vklad, ale díl dnešní hodnoty. Kdo vložil do fondu,
+  // který mezitím vydělal, odchází bohatší; kdo do prodělečného, chudší.
+  const al = await prisma.gameAliance.findUnique({ where: { id: moje.aliance_id } });
+  const radky = await vkladyFondu(moje.aliance_id);
+  const odch = FOND.odchod(radky, req.player.id, (al && al.pokladna) || 0);
+  if (odch.vyplatit > 0 || odch.vklad) {
+    await prisma.$transaction(async (tx) => {
+      await tx.gameFondVklad.deleteMany({
+        where: { aliance_id: moje.aliance_id, clen_id: req.player.id } });
+      if (odch.vyplatit > 0) {
+        await tx.gameAliance.update({ where: { id: moje.aliance_id },
+          data: { pokladna: { decrement: odch.vyplatit } } });
+        await tx.gameDelivery.create({ data: {
+          player_id: req.player.id, kind: 'cash', amount: odch.vyplatit,
+          popis: 'Výplata z fondu aliance ' + (al ? al.nazev : ''),
+          text_kod: 'dor.fond_vyplata',
+          text_data: { p1: al ? al.nazev : '', p2: Math.round(odch.podil * 100) + ' %' } } });
+      }
+    });
+  }
   await prisma.gameAlianceClen.delete({ where: { id: moje.id } });
   const zbyva = await prisma.gameAlianceClen.count({
     where: { aliance_id: moje.aliance_id, stav: 'clen' } });
@@ -1308,6 +1328,126 @@ router.post('/trade/aliance/odejit', hrac, api(async (req, res) => {
   console.log('[game] aliance #' + moje.aliance_id + ': odešel ' + req.player.nick
     + ', zbývá ' + zbyva);
   res.json({ ok: true, zrusena: !zbyva });
+}));
+
+// ─── Fond aliance ────────────────────────────────────────────────────────────
+// Aliance dosud byla jen hlasovací blok: podíly členů se sečetly a za blok
+// jednal mluvčí. Fond je něco jiného — členové do něj skládají peníze a
+// podle vložené částky z něj mají díl. Kdo vloží víc, má větší slovo
+// i větší výplatu; kdo odejde, nedostane zpátky svůj vklad, ale svůj díl
+// dnešní hodnoty fondu.
+//
+// Peníze se hýbou doručenkou, stejně jako u všeho ostatního: server vloží
+// zápornou doručenku a hra si ji připíše. Vlastní výpočet — podíly,
+// rozdělení, odchod, převod — dělá services/game/fond.js, který se počítá
+// bez databáze a je otestovaný do koruny.
+const FOND = require('../services/game/fond');
+const VKLAD_MIN = 10000;
+
+async function mojeAliance(playerId) {
+  return prisma.gameAlianceClen.findFirst({ where: { player_id: playerId, stav: 'clen' } });
+}
+async function vkladyFondu(alianceId) {
+  const rows = await prisma.gameFondVklad.findMany({ where: { aliance_id: alianceId } });
+  return rows.map((r) => ({ clen_id: r.clen_id, castka: r.castka, vlozeno: r.vlozeno, id: r.id }));
+}
+
+// GET /trade/aliance/fond → kolik fond drží, kdo kolik vložil a jaký má díl
+router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
+  const moje = await mojeAliance(req.player.id);
+  if (!moje) return res.json({ ok: true, fond: null });
+  const [al, radky] = await Promise.all([
+    prisma.gameAliance.findUnique({ where: { id: moje.aliance_id } }),
+    vkladyFondu(moje.aliance_id),
+  ]);
+  const p = FOND.podily(radky);
+  const ids = p.map((x) => x.clen_id);
+  const lide = ids.length ? await prisma.gamePlayer.findMany({
+    where: { id: { in: ids } }, select: { id: true, nick: true, company: true } }) : [];
+  const jmena = new Map(lide.map((h) => [h.id, h.company || h.nick]));
+  const vlozil = new Map(radky.map((r) => [r.clen_id, r.vlozeno]));
+  const hodnota = Math.round((al && al.pokladna) || 0);
+  res.json({ ok: true, fond: {
+    aliance_id: moje.aliance_id, nazev: al ? al.nazev : '',
+    pokladna: hodnota, vkladu_celkem: Math.round(p.celkem || 0),
+    vklad_min: VKLAD_MIN,
+    podilnici: p.map((x) => ({
+      clen_id: x.clen_id, kdo: jmena.get(x.clen_id) || ('#' + x.clen_id),
+      vklad: Math.round(x.vklad), vlozil: Math.round(vlozil.get(x.clen_id) || 0),
+      podil: x.podil, hodnota: Math.round(hodnota * x.podil),
+      ja: x.clen_id === req.player.id })),
+  } });
+}));
+
+// POST /trade/aliance/fond/vklad { castka } → složit do fondu
+router.post('/trade/aliance/fond/vklad', hrac, api(async (req, res) => {
+  const moje = await mojeAliance(req.player.id);
+  if (!moje) return res.status(404).json({ error: stx(req)('server.v_zadne_alianci_nejsi') });
+  const castka = Math.round(Number((req.body || {}).castka) || 0);
+  if (castka < VKLAD_MIN) {
+    return res.status(400).json({ error: stx(req)('server.vklad_je_maly', { p1: VKLAD_MIN }) });
+  }
+  // Co je slíbené jinde, se vložit nedá — jinak by šel jedněmi penězi
+  // podložit nabídka na převzetí i vklad do fondu.
+  const REZ = require('../services/game/rezervace');
+  const v = await REZ.vejdeSe(req.player, stavu(req.player), castka);
+  if (!v.ok) return res.status(409).json({ error: stx(req)('server.na_vklad_nemas', { p1: v.volne }) });
+
+  const al = await prisma.gameAliance.findUnique({ where: { id: moje.aliance_id } });
+  if (!al) return res.status(404).json({ error: stx(req)('server.v_zadne_alianci_nejsi') });
+  await prisma.$transaction(async (tx) => {
+    await tx.gameFondVklad.upsert({
+      where: { aliance_id_clen_id: { aliance_id: moje.aliance_id, clen_id: req.player.id } },
+      create: { aliance_id: moje.aliance_id, clen_id: req.player.id,
+        castka, vlozeno: castka },
+      update: { castka: { increment: castka }, vlozeno: { increment: castka } },
+    });
+    await tx.gameAliance.update({ where: { id: moje.aliance_id },
+      data: { pokladna: { increment: castka } } });
+    await tx.gameDelivery.create({ data: {
+      player_id: req.player.id, kind: 'cash', amount: -castka,
+      popis: 'Vklad do fondu aliance ' + al.nazev,
+      text_kod: 'dor.fond_vklad', text_data: { p1: al.nazev } } });
+  });
+  console.log('[game] fond #' + moje.aliance_id + ': ' + req.player.nick + ' vložil ' + castka);
+  res.json({ ok: true, castka });
+}));
+
+// POST /trade/aliance/fond/prevod { komu, castka } → převod podílu ve fondu
+// Nehýbe se žádná hotovost: mění se jen to, komu z fondu kolik patří.
+router.post('/trade/aliance/fond/prevod', hrac, api(async (req, res) => {
+  const moje = await mojeAliance(req.player.id);
+  if (!moje) return res.status(404).json({ error: stx(req)('server.v_zadne_alianci_nejsi') });
+  const b = req.body || {};
+  const komu = parseInt(b.komu, 10) || 0;
+  if (komu === req.player.id) return res.status(400).json({ error: stx(req)('server.prevod_sam_sobe') });
+  const cil = await prisma.gameAlianceClen.findFirst({
+    where: { aliance_id: moje.aliance_id, player_id: komu, stav: 'clen' } });
+  if (!cil) return res.status(404).json({ error: stx(req)('server.ten_neni_ve_fondu') });
+
+  const radky = await vkladyFondu(moje.aliance_id);
+  const r = FOND.prevod(radky, req.player.id, komu, b.castka);
+  if (!r.ok) {
+    return res.status(409).json({ error: stx(req)(r.duvod === 'tolik nedrží'
+      ? 'server.tolik_ve_fondu_nedrzis' : 'server.ve_fondu_nic_nemas') });
+  }
+  const castka = Math.round(Number(b.castka) || 0);
+  const al = await prisma.gameAliance.findUnique({ where: { id: moje.aliance_id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.gameFondVklad.update({
+      where: { aliance_id_clen_id: { aliance_id: moje.aliance_id, clen_id: req.player.id } },
+      data: { castka: { decrement: castka } } });
+    await tx.gameFondVklad.upsert({
+      where: { aliance_id_clen_id: { aliance_id: moje.aliance_id, clen_id: komu } },
+      create: { aliance_id: moje.aliance_id, clen_id: komu, castka, vlozeno: 0 },
+      update: { castka: { increment: castka } } });
+    await tx.gameDelivery.create({ data: {
+      player_id: komu, kind: 'zprava',
+      popis: req.player.nick + ' ti převedl podíl ve fondu aliance ' + (al ? al.nazev : ''),
+      text_kod: 'dor.fond_prevod',
+      text_data: { p1: req.player.nick, p2: al ? al.nazev : '' } } });
+  });
+  res.json({ ok: true, castka });
 }));
 
 // POST /trade/dividenda { firma_id, pct } → většinový podílník určuje,

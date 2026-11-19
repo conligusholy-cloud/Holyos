@@ -32,6 +32,11 @@ const OCEKAVANI = {
   '/trade/aliance/pozvat': true,
   '/trade/aliance/prijmout': false,
   '/trade/aliance/odejit': false,
+  // Vklad do fondu je nový závazek — zastavuje se. Převod podílu ve fondu
+  // taky: nehýbe hotovostí, ale mění, komu z fondu kolik patří, a to je
+  // přesně ta věc, kterou při díře nechceš nechat běžet.
+  '/trade/aliance/fond/vklad': true,
+  '/trade/aliance/fond/prevod': true,
   '/trade/dividenda': false,            // pravidlo vlastní firmy, ne nový závazek
   '/trade/pujcka/:id/splatit': false,
   '/trade/deliveries/claim': false,

@@ -3608,5 +3608,14 @@
   "server.takovy_hovor_neznam": "Call not found.",
   "server.posli_cely_stav": "The game state must be sent in full. The game will try again shortly.",
   "server.minimum_nad_zisk": "The minimum payout cannot be set higher than what the company currently earns per month ({penize:p1}).",
-  "dor.dividenda_min_zmenena": "{p1} set the minimum monthly payout at {p2} to {penize:p3}."
+  "dor.dividenda_min_zmenena": "{p1} set the minimum monthly payout at {p2} to {penize:p3}.",
+  "server.vklad_je_maly": "The smallest contribution to the fund is {penize:p1}.",
+  "server.na_vklad_nemas": "You do not have enough for that contribution. You have {penize:p1} free.",
+  "server.ve_fondu_nic_nemas": "You hold nothing in the fund.",
+  "server.tolik_ve_fondu_nedrzis": "You do not hold that much in the fund.",
+  "server.prevod_sam_sobe": "You cannot transfer a share to yourself.",
+  "server.ten_neni_ve_fondu": "That person is not a member of this alliance.",
+  "dor.fond_vklad": "Contribution to the {p1} alliance fund",
+  "dor.fond_vyplata": "Payout from the {p1} alliance fund for a {p2} share",
+  "dor.fond_prevod": "{p1} transferred you a share in the {p2} alliance fund"
 }

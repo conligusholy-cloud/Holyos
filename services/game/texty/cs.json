@@ -3615,5 +3615,14 @@
   "server.takovy_hovor_neznam": "Takový hovor neznám.",
   "server.posli_cely_stav": "Stav se musí poslat celý. Hra to za chvíli zkusí znovu.",
   "server.minimum_nad_zisk": "Minimální výplatu nejde slíbit vyšší, než kolik firma teď měsíčně vydělá ({penize:p1}).",
-  "dor.dividenda_min_zmenena": "{p1} nastavil ve firmě {p2} minimální měsíční výplatu na {penize:p3}."
+  "dor.dividenda_min_zmenena": "{p1} nastavil ve firmě {p2} minimální měsíční výplatu na {penize:p3}.",
+  "server.vklad_je_maly": "Nejmenší vklad do fondu je {penize:p1}.",
+  "server.na_vklad_nemas": "Na takový vklad nemáš. Volných máš {penize:p1}.",
+  "server.ve_fondu_nic_nemas": "Ve fondu nic nedržíš.",
+  "server.tolik_ve_fondu_nedrzis": "Tolik ve fondu nedržíš.",
+  "server.prevod_sam_sobe": "Převést podíl sám sobě nejde.",
+  "server.ten_neni_ve_fondu": "Ten člověk není členem téhle aliance.",
+  "dor.fond_vklad": "Vklad do fondu aliance {p1}",
+  "dor.fond_vyplata": "Výplata z fondu aliance {p1} za podíl {p2}",
+  "dor.fond_prevod": "{p1} ti převedl podíl ve fondu aliance {p2}"
 }

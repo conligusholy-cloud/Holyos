@@ -3588,5 +3588,14 @@
   "server.posli_cely_stav": "0614e4970a8c",
   "server.na_nabidku_mas_zamcene": "ba7ca906f5c2",
   "server.minimum_nad_zisk": "20890a15f966",
-  "dor.dividenda_min_zmenena": "4d64986fcdd4"
+  "dor.dividenda_min_zmenena": "4d64986fcdd4",
+  "server.vklad_je_maly": "168529993460",
+  "server.na_vklad_nemas": "29eb27dddbcd",
+  "server.ve_fondu_nic_nemas": "08c878efbd9f",
+  "server.tolik_ve_fondu_nedrzis": "da43d9fef5d6",
+  "server.prevod_sam_sobe": "989d0841236e",
+  "server.ten_neni_ve_fondu": "fad32c2e461e",
+  "dor.fond_vklad": "c8dc4fdb96fd",
+  "dor.fond_vyplata": "cbd5b1c15159",
+  "dor.fond_prevod": "19f84bbdc306"
 }

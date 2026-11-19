@@ -8307,9 +8307,33 @@ model GameAliance {
   id            Int      @id @default(autoincrement())
   nazev         String   @db.VarChar(24)
   zakladatel_id Int
+  // Hotovost, kterou fond opravdu drží. Vklady vedle toho říkají, komu
+  // z ní kolik patří — to jsou dvě různé věci: pokladna se mění výplatami
+  // a nákupy, vklady jen tím, kdo kolik složil nebo převedl.
+  pokladna      Float    @default(0)
   created_at    DateTime @default(now())
 
   @@map("game_aliance")
+}
+
+// Vklad člena do fondu aliance. Jeden řádek na člena: opakované vklady se
+// sčítají, protože jeden člověk je pořád jeden podílník.
+//
+// castka je to, co mu z fondu patří dnes (mění ji i převod podílu), vlozeno
+// je součet všeho, co kdy opravdu složil — podle něj se pozná, jestli na
+// fondu vydělal, nebo prodělal.
+model GameFondVklad {
+  id         Int      @id @default(autoincrement())
+  aliance_id Int
+  clen_id    Int
+  castka     Float    @default(0)
+  vlozeno    Float    @default(0)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([aliance_id, clen_id])
+  @@index([clen_id])
+  @@map("game_fond_vklad")
 }
 
 // Pozvánka i členství v jedné tabulce; stav říká, co z toho to je. Jedno
