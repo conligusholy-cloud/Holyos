@@ -3704,5 +3704,10 @@
   "veta.fond_graf_od": "since {p1}",
   "aliance.pozvanku_zrusit": "Withdraw invitation",
   "aliance.odmitnout": "Decline",
-  "dor.fond_pozvanka_zrusena": "The invitation to the fund {p1} was withdrawn."
+  "dor.fond_pozvanka_zrusena": "The invitation to the fund {p1} was withdrawn.",
+  "aliance.odejit_slovo": "LEAVE",
+  "aliance.odchazim": "Leaving…",
+  "aliance.pozvanka_odeslana": "Invitation sent.",
+  "veta.fond_odchod_popis": "You will be paid {penize:p1} — your share of the cash in the treasury. Stakes in companies are not sold off for this, so whatever the fund already invested does not go with you. You can only get back in by invitation.",
+  "veta.fond_odchod_posledni": "You are the last member — leaving dissolves the fund."
 }

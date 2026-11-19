@@ -3684,5 +3684,10 @@
   "veta.fond_graf_od": "4d6f85ff7559",
   "aliance.pozvanku_zrusit": "f23ac4d066a8",
   "aliance.odmitnout": "2378cf3406ef",
-  "dor.fond_pozvanka_zrusena": "3e6d464e2da7"
+  "dor.fond_pozvanka_zrusena": "3e6d464e2da7",
+  "aliance.odejit_slovo": "e93d17f89139",
+  "aliance.odchazim": "ea36b82bb356",
+  "aliance.pozvanka_odeslana": "89ef51015460",
+  "veta.fond_odchod_popis": "582cd544fe90",
+  "veta.fond_odchod_posledni": "ee27cb30b142"
 }

@@ -9678,8 +9678,13 @@ function alianceHtml() {
               : '<span class="muted small">' + esc(tx('aliance.clen')) + '</span>') + '</div>';
         }).join('')
       + '<p class="fine">' + esc(tx('veta.aliance_jak_funguje')) + '</p>'
-      + '<div class="gcard-act"><button class="btn sec sm" id="al-odejit">'
-      + esc(tx('aliance.odejit')) + '</button></div>';
+      // Pozvat šlo dosud jen z tržiště nebo z profilu hráče. Kdo měl fond
+      // otevřený před sebou, neměl jak — a to je to místo, kde člověka napadne,
+      // že by tam někoho chtěl.
+      + '<div class="gcard-act">'
+      + '<button class="btn sm" id="al-pozvat">' + esc(tx('aliance.pozvat')) + '</button>'
+      + '<button class="btn sec sm" id="al-odejit">' + esc(tx('aliance.odejit')) + '</button>'
+      + '</div>';
 
   } else {
     h += '<p class="muted small" style="margin:2px 0 8px">' + esc(tx('veta.aliance_k_cemu_je')) + '</p>';
@@ -9745,12 +9750,42 @@ function bindAliance(kde) {
   bindFond(kde);
   var v = function (id) { return box.querySelector('#' + id); };
   if (v('al-zalozit')) v('al-zalozit').onclick = zalozAlianceSheet;
+  if (v('al-pozvat')) v('al-pozvat').onclick = function () {
+    // Výběr hráče přepisuje tentýž překryv, ve kterém fond právě je, takže
+    // si pamatujeme, kam se po pozvání vrátit — zavření překryvu to zapomíná.
+    var kam = FOND_KAM;
+    hraciVyberSheet(esc(tx('aliance.pozvat')), esc(tx('hra.vybrat')), function (id) {
+      apiJson('/trade/aliance/pozvat', { player_id: id }).then(function (r) {
+        if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
+        closeSheet(); FOND_KAM = kam;
+        ALIANCE = null; loadAliance(kam || paintMe);
+        toast(esc(tx('aliance.pozvanka_odeslana')), 'ok');
+      }).catch(function () { toast(esc(tx('hra.server_neodpovida')), 'err'); });
+    });
+  };
   if (v('al-odejit')) v('al-odejit').onclick = function () {
-    apiJson('/trade/aliance/odejit', {}).then(function (r) {
-      if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
-      ALIANCE = null; FINANCE = null; loadAliance(paintMe);
-      toast(esc(tx('aliance.odesel_jsi')), 'ok', true);
-    }).catch(function () { toast(esc(tx('hra.server_neodpovida')), 'err'); });
+    // Odchod se nedá vzít zpátky a není to jen o penězích: vyplatí se díl
+    // HOTOVOSTI, ne hodnoty fondu. Co už fond investoval do firem, zůstává
+    // tam — a zpátky se dá jen na pozvánku. Proto se slovo opisuje.
+    var ja = fondJa();
+    var a = ALIANCE && ALIANCE.aliance;
+    var clenu = a ? a.clenove.filter(function (c) { return c.stav === 'clen'; }).length : 1;
+    potvrdSlovem({
+      nadpis: tx('aliance.odejit'),
+      popis: esc(tx('veta.fond_odchod_popis', { p1: (ja && ja.hodnota) || 0 }))
+        + (clenu <= 1 ? ' <b>' + esc(tx('veta.fond_odchod_posledni')) + '</b>' : ''),
+      slovo: tx('aliance.odejit_slovo'),
+      tlacitko: tx('aliance.odejit'),
+      pracuji: tx('aliance.odchazim'),
+      pak: function (_, zpet) {
+        apiJson('/trade/aliance/odejit', {}).then(function (r) {
+          if (!r.ok) { zpet(); return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+          closeSheet();
+          ALIANCE = null; FINANCE = null; FOND = null; loadAliance(FOND_KAM || paintMe);
+          toast(esc(tx('aliance.odesel_jsi')), 'ok', true);
+        }).catch(function () { zpet(); toast(esc(tx('hra.server_neodpovida')), 'err'); });
+      },
+    });
   };
   // Stažení i odmítnutí pozvánky — obojí jen překreslí kartu.
   var alAkce = function (vyber, cesta, telo) {

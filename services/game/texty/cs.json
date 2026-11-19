@@ -3711,5 +3711,10 @@
   "veta.fond_graf_od": "od {p1}",
   "aliance.pozvanku_zrusit": "Stáhnout pozvánku",
   "aliance.odmitnout": "Odmítnout",
-  "dor.fond_pozvanka_zrusena": "Pozvánka do fondu {p1} byla stažena."
+  "dor.fond_pozvanka_zrusena": "Pozvánka do fondu {p1} byla stažena.",
+  "aliance.odejit_slovo": "ODEJÍT",
+  "aliance.odchazim": "Odcházím…",
+  "aliance.pozvanka_odeslana": "Pozvánka odeslána.",
+  "veta.fond_odchod_popis": "Vyplatí se ti {penize:p1} — tvůj díl hotovosti v pokladně. Podíly ve firmách se kvůli tomu neprodávají, takže co fond už investoval, si neodnášíš. Zpátky se dostaneš jedině na pozvánku.",
+  "veta.fond_odchod_posledni": "Jsi poslední člen — odchodem se fond zruší celý."
 }
