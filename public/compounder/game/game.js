@@ -8554,8 +8554,18 @@ function splatitUverSheet(id) {
   $('sp-go').onclick = function () {
     var dal = splatitUver(id, Number(i.value) || 0);
     if (!dal) return toast(esc(tx('hra.zadej_castku_kterou_mas')), 'err');
-    save(); paint(); paintBank(); closeSheet(); syncState(true);
-    toast(tx('veta.splaceno_2', { p1: kcFull(dal) }), 'ok');
+    save(); paint(); paintBank(); closeSheet();
+    // „Splaceno" se řekne až když to opravdu drží. Když zatím vyhraje hra
+    // otevřená jinde, splátka propadne i s penězi — a hráč by jinak zůstal
+    // s hláškou „splaceno" a úvěrem, který se vrátil.
+    var kdy = PREVZATO_AT;
+    syncState(true).then(function () {
+      if (PREVZATO_AT !== kdy) {
+        paint(); paintBank();
+        return toast(esc(tx('hra.splatka_neprosla_jinde')), 'err', true);
+      }
+      toast(tx('veta.splaceno_2', { p1: kcFull(dal) }), 'ok');
+    }).catch(function () { toast(tx('veta.splaceno_2', { p1: kcFull(dal) }), 'ok'); });
   };
 }
 // Panel: vyjednání delší splatnosti u běžícího úvěru.
@@ -13445,6 +13455,11 @@ window.addEventListener('error', function (e) {
 window.addEventListener('unhandledrejection', function (e) {
   if (CHYBY_JS++ < 10) hlasChybu('js-promise', String((e && e.reason && (e.reason.message || e.reason)) || esc(tx('hra.odmitnuty_slib'))), {});
 });
+// Kdy naposled vyhrál stav z druhého zařízení. Pro běžné hraní to nevadí —
+// obětuje se pár vteřin. U peněžního kroku, který hráč udělal vědomě, je to
+// ale něco jiného: mimořádná splátka tím propadne a úvěr se vrátí, jako by
+// se nic nestalo. Musí se to poznát a říct.
+var PREVZATO_AT = 0;
 function syncState(force) {
   if (wiped || !ME || !S) return Promise.resolve();
   if (syncBusy) {
@@ -13509,6 +13524,7 @@ function syncState(force) {
         // Jednorázový konflikt je normální (druhé zařízení); hlásí se až když se opakuje.
         if (++SYNC_KONFLIKTU_PO_SOBE >= 3) hlasChybu('ulozeni-konflikt', SYNC_CHYBA, { status: 409, po_sobe: SYNC_KONFLIKTU_PO_SOBE });
         if (prevezmiStav(r.j.state, r.j.rev)) {
+          PREVZATO_AT = Date.now();
           // Náš zápis propadl i s doručenkami — ty zůstanou na serveru
           // nepotvrzené a přijdou znovu k tomu stavu, který vyhrál.
           NEPOTVRZENE = [];
