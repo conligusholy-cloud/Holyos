@@ -270,6 +270,16 @@ if git diff --cached --name-only | grep -qE 'services/game/(finance|dividenda|dr
   fi
 fi
 
+# Retence záloh databáze. Smazaná záloha se nevrací a chyba se pozná až
+# ve chvíli, kdy ji někdo potřebuje. Commit zastaví.
+if git diff --cached --name-only | grep -qE 'services/backup/db-backup'; then
+  if ! node nastroje/tzalohy.js; then
+    echo ""
+    echo "STOP: retence záloh nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Kdo drží podíl. Od chvíle, kdy do firem investuje i fond aliance, můžou
 # ve firmě sedět hráč i fond vedle sebe. Kdyby se někde sečetly podle
 # investor_id, fondu by se podíl ztratil — a podíl rozhoduje o většině

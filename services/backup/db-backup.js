@@ -15,7 +15,17 @@ const { getSetting, setSetting } = require('../settings');
 
 const MAGIC = Buffer.from('HOSBK1');
 const PREFIX = 'db-backups/';
-const KEEP_DAILY = 30, KEEP_MONTHLY = 12;
+// Zálohuje se každé tři hodiny, ne jednou za noc. Důvod je prostý: dump
+// trvá sedmnáct vteřin, ale havárie ve tři odpoledne by u denní zálohy
+// znamenala ztrátu celého dne hraní. Tři hodiny jsou nejhorší případ, který
+// se dá obhájit, a nestojí to nic než místo v R2.
+//
+// Retence je proto časová, ne na počet. „Posledních třicet" by při osmi
+// zálohách denně znamenalo necelé čtyři dny historie.
+const JEMNE_DNU = 3;        // tři dny se nechává všechno, co vzniklo
+const KEEP_DAILY = 30;      // pak poslední z každého dne, třicet dnů zpátky
+const KEEP_MONTHLY = 12;    // a první z každého měsíce, rok zpátky
+const KAZDYCH_HODIN = 3;
 const STATUS_KEY = 'backup.status';
 let running = false;
 
@@ -58,12 +68,39 @@ async function listAll() {
   return out.sort((a, b) => a.key.localeCompare(b.key));
 }
 
+// Které zálohy si necháme. Čistý výpočet nad seznamem klíčů, aby se dal
+// otestovat — smazaná záloha se nevrací a na „mělo by to fungovat" se tu
+// spolehnout nedá.
+//
+//   poslední tři dny   všechno, co vzniklo (osm zálohy denně)
+//   třicet dnů zpátky  poslední z každého dne
+//   rok zpátky         první z každého měsíce
+//
+// Klíč je db-backups/YYYY-MM-DD_HHmm.dump.enc, takže abecední řazení je
+// zároveň chronologické a den i měsíc se z něj dají přečíst bez parsování dat.
+function vyberKZachovani(klice, ted) {
+  const serazene = (klice || []).slice().sort();
+  const den = (k) => k.slice(PREFIX.length, PREFIX.length + 10);
+  const mesic = (k) => k.slice(PREFIX.length, PREFIX.length + 7);
+  const hranice = new Date((ted || Date.now()) - JEMNE_DNU * 86400000)
+    .toISOString().slice(0, 10);
+  const keep = new Set();
+  // Jemné okno: všechno z posledních dnů.
+  serazene.forEach((k) => { if (den(k) >= hranice) keep.add(k); });
+  // Poslední z každého dne, třicet dnů zpátky.
+  const dny = new Map();
+  serazene.forEach((k) => dny.set(den(k), k));
+  Array.from(dny.values()).slice(-KEEP_DAILY).forEach((k) => keep.add(k));
+  // První z každého měsíce, rok zpátky.
+  const mesice = new Map();
+  serazene.forEach((k) => { if (!mesice.has(mesic(k))) mesice.set(mesic(k), k); });
+  Array.from(mesice.values()).slice(-KEEP_MONTHLY).forEach((k) => keep.add(k));
+  return keep;
+}
+
 async function applyRetention() {
   const all = await listAll(); // klíče: db-backups/YYYY-MM-DD_HHmm.dump.enc → řazení = chronologicky
-  const keep = new Set(all.slice(-KEEP_DAILY).map((o) => o.key));
-  const months = new Map();
-  for (const o of all) { const m = o.key.slice(PREFIX.length, PREFIX.length + 7); if (!months.has(m)) months.set(m, o.key); }
-  Array.from(months.values()).slice(-KEEP_MONTHLY).forEach((k) => keep.add(k));
+  const keep = vyberKZachovani(all.map((o) => o.key), Date.now());
   let deleted = 0;
   for (const o of all) if (!keep.has(o.key)) { await r2.getClient().send(new DeleteObjectCommand({ Bucket: process.env.R2_BACKUP_BUCKET, Key: o.key })); deleted++; }
   return deleted;
@@ -129,9 +166,13 @@ function start() {
   const tick = async () => {
     try {
       const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Prague' }));
-      if (now.getHours() === 2 && now.getMinutes() >= 30 && now.getMinutes() < 45) {
+      // Každé tři hodiny, ve 32. minutě. Odstup se měří od poslední úspěšné
+      // zálohy, ne od hodiny — po restartu nebo výpadku se tím doběhne samo.
+      if (now.getHours() % KAZDYCH_HODIN === 2 % KAZDYCH_HODIN
+        && now.getMinutes() >= 30 && now.getMinutes() < 45) {
         const s = await getSetting(STATUS_KEY, { type: 'json', defaultValue: null }).catch(() => null);
-        if (!(s && s.ok && Date.now() - new Date(s.at).getTime() < 20 * 3600e3)) await runBackup('auto');
+        const odstup = (KAZDYCH_HODIN - 1) * 3600e3;
+        if (!(s && s.ok && Date.now() - new Date(s.at).getTime() < odstup)) await runBackup('auto');
       }
     } catch (e) { console.warn('[backup] tick:', e.message); }
   };
@@ -139,9 +180,9 @@ function start() {
   // doběh po startu (např. po výpadku): bez úspěšné zálohy za posledních 26 h spustit za 3 min
   setTimeout(async () => {
     const s = await getSetting(STATUS_KEY, { type: 'json', defaultValue: null }).catch(() => null);
-    if (!(s && s.ok && Date.now() - new Date(s.at).getTime() < 26 * 3600e3)) await runBackup('catchup');
+    if (!(s && s.ok && Date.now() - new Date(s.at).getTime() < (KAZDYCH_HODIN + 1) * 3600e3)) await runBackup('catchup');
   }, 3 * 60e3).unref();
-  console.log('[backup] plánovač zapnut (denně 2:30)');
+  console.log('[backup] plánovač zapnut (každé ' + KAZDYCH_HODIN + ' h)');
 }
 
-module.exports = { runBackup, status, start, configured, openDownload, _encryptFile: encryptFile };
+module.exports = { runBackup, status, start, configured, openDownload, _encryptFile: encryptFile, vyberKZachovani };
