@@ -3695,5 +3695,15 @@
   "dor.fond_stazeno": "Fond {p1} stáhl nabídku na firmu {p2}.",
   "dor.fond_vyplata_dil": "Výplata z fondu {p1} — tvůj díl",
   "dor.fond_podil_zanikl": "{p1} skončil ve hře. Fondu {p2} se za podíl v jeho firmě vrátilo {penize:p3}, nepokrytá část {penize:penize} se odepisuje.",
-  "dor.fond_podil_nehraje": "{p1} už hru nehraje. Fondu {p2} se za podíl v jeho firmě vrátilo {penize:p3}, nepokrytá část {penize:penize} se odepisuje."
+  "dor.fond_podil_nehraje": "{p1} už hru nehraje. Fondu {p2} se za podíl v jeho firmě vrátilo {penize:p3}, nepokrytá část {penize:penize} se odepisuje.",
+  "fond.drzi": "Co fond drží",
+  "fond.vetsina": "většina",
+  "fond.navrh_dividenda": "Nastavit dividendu",
+  "fond.pct_vyplaty": "Kolik procent zisku vyplácet",
+  "fond.min_vyplata": "Minimální měsíční výplata",
+  "fond.nemas_vetsinu": "Fond zatím nikde nemá většinu, takže nemá kde určovat výplatu zisku.",
+  "veta.fond_dividenda_popis": "Nastavit ve firmě {p1} výplatu zisku na {cislo:p2} %",
+  "server.fond_v_te_firme_nerozhoduje": "Fond v té firmě nemá většinu — výplatu zisku určuje většinový podílník.",
+  "dor.fond_navrh_dividenda": "{p1} dal ve fondu {p2} hlasovat o výplatě zisku ve firmě {p3} na {cislo:p4} %.",
+  "dor.fond_dividenda": "Fond {p1} nastavil ve firmě {p2} výplatu zisku na {cislo:p3} %."
 }

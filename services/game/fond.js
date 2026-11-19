@@ -167,7 +167,9 @@ function prevod(radky, zKoho, komu, castka) {
 // Stáhnout vyvěšenou nabídku je běžné rozhodnutí: co většina vyvěsila, to
 // většina smí vzít zpět. Vyšší práh by znamenal, že menšina udrží fondu
 // zamčené peníze proti vůli ostatních.
-const PRAHY = { koupit: BEZNE, vyplatit: ZASADNI, zrusit: BEZNE };
+// Nastavit dividendu ve firmě, kde má fond většinu, je běžné rozhodnutí —
+// je to správa toho, co fond už koupil, ne rozdávání jeho peněz.
+const PRAHY = { koupit: BEZNE, vyplatit: ZASADNI, zrusit: BEZNE, dividenda: BEZNE };
 const prahDruhu = (druh) => (PRAHY[druh] == null ? null : PRAHY[druh]);
 
 // ─── Žebríček fondů ──────────────────────────────────────────────

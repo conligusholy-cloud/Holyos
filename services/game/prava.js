@@ -44,12 +44,15 @@ const VETSINA = 0.5;
 function souhrn(radky) {
   const m = new Map();
   (radky || []).forEach((e) => {
-    const k = DRZ.klic(e);
+    // Sní­ se obojí: syrový řádek z databáze i už sečtený záznam, který
+    // nese hotový klíč. Bez toho nebyl souhrn idempotentní a druhé sečtení
+    // by sečtené řádky zahodilo.
+    const k = e.drzitel || DRZ.klic(e);
     if (k == null) return;      // podíl bez držitele neexistuje, viz drzitel.js
     const d = m.get(k) || { drzitel: k, investor_id: e.investor_id == null ? null : e.investor_id,
       fond_id: e.fond_id == null ? null : e.fond_id, podil: 0, zakaz: false };
     d.podil += Number(e.podil) || 0;
-    d.zakaz = d.zakaz || !!e.zakaz_zastavy;
+    d.zakaz = d.zakaz || !!e.zakaz_zastavy || !!e.zakaz;
     m.set(k, d);
   });
   return Array.from(m.values());
@@ -58,7 +61,12 @@ function souhrn(radky) {
 // Kdo určuje dividendovou politiku: držitel s víc než polovinou. Jinak nikdo.
 // Vrací KLÍČ, ne id — jinak by se většina fondu nedala odlišit od většiny
 // hráče se stejným číslem.
-function kdoUrcuje(podily) {
+// Oba se schválně ptá na SOUČET držitele, ne na jednotlivé řádky. Kdo koupil
+// třikrát po dvaceti procentech, drží šedesát — a dřív neurčoval nic, protože
+// se porovnával každý nákup zvlášť a žádný sám přes polovinu nebyl. Souhrn
+// je idempotentní, takže ho sní­ i už sečtený seznam.
+function kdoUrcuje(radky) {
+  const podily = souhrn(radky);
   let nej = null;
   (podily || []).forEach((e) => {
     const p = Number(e.podil) || 0;
@@ -92,7 +100,8 @@ function smiBlokovat(podily, kdo) {
 
 // Kdo zastavení doopravdy blokuje. Vrací největšího z těch, kdo na to mají
 // podíl a zákaz si zapnuli — majitel má vědět, s kým se má bavit.
-function kdoBlokuje(podily) {
+function kdoBlokuje(radky) {
+  const podily = souhrn(radky);
   let nej = null;
   (podily || []).forEach((e) => {
     const p = Number(e.podil) || 0;

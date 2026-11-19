@@ -3668,5 +3668,15 @@
   "dor.fond_stazeno": "59c1a7eb3192",
   "dor.fond_vyplata_dil": "e097fa3123bc",
   "dor.fond_podil_zanikl": "37d0cebe3a08",
-  "dor.fond_podil_nehraje": "e2d4cc328774"
+  "dor.fond_podil_nehraje": "e2d4cc328774",
+  "fond.drzi": "8bbb0afce11b",
+  "fond.vetsina": "485a15aebc7d",
+  "fond.navrh_dividenda": "dcb86fafc49e",
+  "fond.pct_vyplaty": "9bc51428cbc5",
+  "fond.min_vyplata": "2485bbfdb13d",
+  "fond.nemas_vetsinu": "9906292b2353",
+  "veta.fond_dividenda_popis": "7b9b027837a8",
+  "server.fond_v_te_firme_nerozhoduje": "6cc334198939",
+  "dor.fond_navrh_dividenda": "c7073c68304a",
+  "dor.fond_dividenda": "d58d041188c0"
 }

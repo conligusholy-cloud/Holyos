@@ -67,5 +67,35 @@ ok('a politika ji krátí stejně',
 ok('ve ztrátě se naopak celá vrací do firmy',
   D.odchoziCelkem(-1000000, l, 0) === -500000);
 
+// ── Většina, kterou drží fond ────────────────────────────────────
+// Obsluha dividendy dřív skládala seznam jen z investor_id. U podílu, který
+// drží fond, je prázdné — a fondová většina se tím ztratila. Nebyla to jen
+// nepříjemnost pro fond: většinu pak „neměl nikdo" a politika zamrzla i
+// ostatním podílníkům.
+const sFondem = [
+  { investor_id: null, fond_id: 3, podil: 0.51 },
+  { investor_id: 7, fond_id: null, podil: 0.2 },
+];
+ok('fond s většinou politiku určuje', D.smiMenit(sFondem, 'f:3') === true);
+ok('a menšinový hráč vedle něj ne', D.smiMenit(sFondem, 7) === false);
+ok('určujicí je vidět pod klíčem fondu',
+  D.kdoUrcuje(sFondem) === 'f:3', '— ' + D.kdoUrcuje(sFondem));
+// A tohle je přesně ta stará chyba, pro případ, že by se seznam někdy
+// zase skládal po starém.
+const poStaru = sFondem.map((e) => ({ investor_id: e.investor_id, podil: e.podil }));
+ok('seznam bez fond_id většinu ztrácí', D.kdoUrcuje(poStaru) === null);
+ok('a pak nerozhoduje nikdo',
+  D.smiMenit(poStaru, 7) === false && D.smiMenit(poStaru, 'f:3') === false);
+// Tři nákupy po dvaceti procentech jsou šedesát procent jednoho fondu.
+const poKouskach = [
+  { investor_id: null, fond_id: 3, podil: 0.2 },
+  { investor_id: null, fond_id: 3, podil: 0.2 },
+  { investor_id: null, fond_id: 3, podil: 0.2 },
+];
+ok('podíly téhož fondu se sčítají', D.smiMenit(poKouskach, 'f:3') === true);
+// A fond 3 není hráč 3.
+ok('hráč se stejným číslem se do toho neplete',
+  D.smiMenit(poKouskach, 3) === false);
+
 console.log(chyb ? '\n' + chyb + ' chyb' : '\nvšechno sedí');
 process.exit(chyb ? 1 : 0);

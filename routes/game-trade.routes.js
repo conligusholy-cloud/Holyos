@@ -15,6 +15,8 @@ const router = express.Router();
 const { prisma } = require('../config/database');
 const acct = require('./game-account.routes');
 const PRAVA = require('../services/game/prava');
+// Dividendu potřebuje i obsluha fondu, ne jen vlastní politika firmy.
+const DIVIDENDA = require('../services/game/dividenda');
 const ALIANCE = require('../services/game/aliance');
 const AUDIT = require('../services/game/audit');
 const SOUBEH = require('../services/game/soubeh');
@@ -1368,13 +1370,16 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
   const moje = await mojeAliance(req.player.id);
   if (!moje) return res.json({ ok: true, fond: null });
   const REZ = require('../services/game/rezervace');
-  const [al, radky, nabidky] = await Promise.all([
+  const [al, radky, nabidky, drzene] = await Promise.all([
     prisma.gameAliance.findUnique({ where: { id: moje.aliance_id } }),
     vkladyFondu(moje.aliance_id),
     // Co má fond vyvěšené. Bez toho člen neviděl, kde leží peníze, které
     // v pokladně jsou, ale už je nejde utratit.
     prisma.gameTender.findMany({ where: { fond_id: moje.aliance_id, stav: 'bezi' },
       orderBy: { id: 'desc' }, take: 20 }).catch(() => []),
+    // Co už fond koupí. Bez toho člen neviděl, kam peníze z pokladny odešly.
+    prisma.gameEquity.findMany({ where: { fond_id: moje.aliance_id, stav: 'bezi' },
+      select: { firma_id: true, firma_nick: true, podil: true, cena: true } }).catch(() => []),
   ]);
   const p = FOND.podily(radky);
   const ids = p.map((x) => x.clen_id);
@@ -1391,6 +1396,20 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
     pokladna: hodnota, vkladu_celkem: Math.round(p.celkem || 0),
     vklad_min: VKLAD_MIN,
     zamceno: Math.round(zamceno), volne: Math.round(hodnota - zamceno),
+    // Podíly se sčítají po firmách: tři nákupy po deseti procentech jsou
+    // třicet procent jedné firmy, ne tři různé podíly. Většina se měří
+    // z toho součtu — stejně jako ji měří práva.
+    drzi: (() => {
+      const m = new Map();
+      drzene.forEach((e) => {
+        const r = m.get(e.firma_id) || { firma_id: e.firma_id, firma_nick: e.firma_nick,
+          podil: 0, cena: 0 };
+        r.podil += e.podil || 0; r.cena += e.cena || 0;
+        m.set(e.firma_id, r);
+      });
+      return [...m.values()].map((r) => Object.assign(r, {
+        cena: Math.round(r.cena), vetsina: r.podil > PRAVA.VETSINA + 1e-9 }));
+    })(),
     nabidky: bezici.map((t) => ({ id: t.id, firma_nick: t.firma_nick,
       cena_za_pct: t.cena_za_pct, max_pct: t.max_pct, koupeno_pct: t.koupeno_pct,
       do: t.do, zamceno: REZ.zbyvaZNabidky(t) })),
@@ -1490,7 +1509,19 @@ const DRUHY = {
     udaje: (d, kdo, al) => ({ p1: kdo, p2: al, p3: Math.round(d.castka || 0) }) },
   zrusit: { prah: FOND.prahDruhu('zrusit'), kod: 'dor.fond_navrh_zrusit',
     udaje: (d, kdo, al) => ({ p1: kdo, p2: al, p3: d.firma_nick || '' }) },
+  dividenda: { prah: FOND.prahDruhu('dividenda'), kod: 'dor.fond_navrh_dividenda',
+    udaje: (d, kdo, al) => ({ p1: kdo, p2: al, p3: d.firma_nick || '',
+      p4: Math.round((d.pct || 0) * 100) }) },
 };
+
+// Kolik fond drží v jedné firmě a jestli to stačí na většinu. Dividendu
+// nastavuje většinový podílník — a tím může být i fond.
+async function fondVeFirme(alianceId, firmaId) {
+  const radky = await prisma.gameEquity.findMany({
+    where: { firma_id: firmaId, stav: 'bezi' },
+    select: { investor_id: true, fond_id: true, podil: true } });
+  return { radky, smi: DIVIDENDA.smiMenit(radky, 'f:' + alianceId) };
+}
 
 async function hlasyNavrhu(navrhId) {
   const rows = await prisma.gameFondHlas.findMany({ where: { navrh_id: navrhId } });
@@ -1566,6 +1597,22 @@ router.post('/trade/aliance/fond/navrh', hrac, api(async (req, res) => {
         { p1: Math.round((al && al.pokladna) || 0) }) });
     }
     detail = { firma_id: firmaId, firma_nick: firma.company || firma.nick, pct, cena };
+  } else if (druh === 'dividenda') {
+    const firmaId = parseInt(b.firma_id, 10) || 0;
+    const firma = await prisma.gamePlayer.findUnique({ where: { id: firmaId } });
+    if (!firma || firma.disabled) return res.status(404).json({ error: stx(req)('server.takovy_hrac_tu_neni') });
+    // Hlasovat o věci, kterou fond stejně nemůže provést, je ztráta dne.
+    const ve = await fondVeFirme(moje.aliance_id, firmaId);
+    if (!ve.smi) {
+      return res.status(403).json({ error: stx(req)('server.fond_v_te_firme_nerozhoduje') });
+    }
+    const pct = DIVIDENDA.platna(b.pct);
+    const minChce = DIVIDENDA.platnyMin(b.min);
+    const stropMin = DIVIDENDA.stropMin(acct._zbydeMesicne(stavu(firma)) || 0);
+    if (minChce > stropMin) {
+      return res.status(409).json({ error: stx(req)('server.minimum_nad_zisk', { p1: stropMin }) });
+    }
+    detail = { firma_id: firmaId, firma_nick: firma.company || firma.nick, pct, min: minChce };
   } else if (druh === 'zrusit') {
     const t = await prisma.gameTender.findUnique({
       where: { id: parseInt(b.tender_id, 10) || 0 } });
@@ -1723,6 +1770,40 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
     return res.json({ ok: true });
   }
 
+  // ── Dividendová politika ve firmě, kde má fond většinu ──────────────
+  // Většina se ověřuje znovu: mezi hlasováním a provedením mohl fond část
+  // podílu prodat, a pak už mu to nepřísluší.
+  if (n.druh === 'dividenda') {
+    const firma = await prisma.gamePlayer.findUnique({ where: { id: d.firma_id || 0 } });
+    if (!firma || firma.disabled) {
+      return res.status(404).json({ error: stx(req)('server.takovy_hrac_tu_neni') });
+    }
+    const ve = await fondVeFirme(moje.aliance_id, firma.id);
+    if (!ve.smi) {
+      return res.status(403).json({ error: stx(req)('server.fond_v_te_firme_nerozhoduje') });
+    }
+    const pct = DIVIDENDA.platna(d.pct);
+    const minChce = DIVIDENDA.platnyMin(d.min);
+    const stropMin = DIVIDENDA.stropMin(acct._zbydeMesicne(stavu(firma)) || 0);
+    if (minChce > stropMin) {
+      return res.status(409).json({ error: stx(req)('server.minimum_nad_zisk', { p1: stropMin }) });
+    }
+    await prisma.gamePlayer.update({ where: { id: firma.id },
+      data: { dividenda_pct: pct, dividenda_min: minChce,
+        dividenda_kdo: req.player.id, dividenda_at: new Date() } });
+    await prisma.gameFondNavrh.update({ where: { id: n.id }, data: { stav: 'proveden' } });
+    const komu = await komuVeFirme(ve.radky, firma.id, req.player.id);
+    if (komu.length) {
+      await prisma.gameDelivery.createMany({ data: komu.map((pid) => ({
+        player_id: pid, kind: 'zprava', text_kod: 'dor.fond_dividenda',
+        text_data: { p1: (al && al.nazev) || '', p2: firma.company || firma.nick,
+          p3: Math.round(pct * 100) } })) });
+    }
+    console.log('[game] fond #' + moje.aliance_id + ': dividenda ve firmě '
+      + firma.nick + ' na ' + Math.round(pct * 100) + ' %');
+    return res.json({ ok: true, pct });
+  }
+
   // ── Výplata členům ────────────────────────────────────────────────────────
   // Schválená výplata se dosud neměla čím provést: návrh se překlopil na
   // „přijatý" a tím to skončilo. Peníze se dělí podle dílů ve fondu, po celých
@@ -1806,6 +1887,27 @@ async function fondZamceno(alianceId) {
 // Je to první pravomoc, kterou většina ve hře má, a schválně je úzká: mění
 // se jedno číslo a nic jiného. Nikdo nesahá na cizí uloženou hru — majitel
 // si dál staví, co chce, jen mu z firmy odchází víc nebo míň peněz.
+// Komu ve firmě poslat zprávu o změně politiky: podílníkům-hráčům, členům
+// fondů, které v ní drží podíl, a majiteli firmy. Fond sám zvonek nemá a
+// doručenka na jeho prázdné investor_id by zápis shodila.
+async function komuVeFirme(radky, firmaId, krome) {
+  const lide = new Set();
+  const fondy = [];
+  (radky || []).forEach((e) => {
+    if (e.fond_id != null) fondy.push(e.fond_id);
+    else if (e.investor_id != null) lide.add(e.investor_id);
+  });
+  if (fondy.length) {
+    const vklady = await prisma.gameFondVklad.findMany({
+      where: { aliance_id: { in: [...new Set(fondy)] }, castka: { gt: 0 } },
+      select: { clen_id: true } }).catch(() => []);
+    vklady.forEach((v) => lide.add(v.clen_id));
+  }
+  if (firmaId != null) lide.add(firmaId);
+  if (krome != null) lide.delete(krome);
+  return [...lide];
+}
+
 router.post('/trade/dividenda', hrac, api(async (req, res) => {
   const DIVIDENDA = require('../services/game/dividenda');
   const b = req.body || {};
@@ -1813,13 +1915,13 @@ router.post('/trade/dividenda', hrac, api(async (req, res) => {
   const firma = await prisma.gamePlayer.findUnique({ where: { id: firmaId } });
   if (!firma || firma.disabled) return res.status(404).json({ error: stx(req)('server.takovy_hrac_tu_neni') });
 
-  // Většinu má člověk, ne řádka — dva podíly téhož investora se sčítají.
-  const vsechny = await prisma.gameEquity.findMany({
-    where: { firma_id: firmaId, stav: 'bezi' }, select: { investor_id: true, podil: true } });
-  const souhrn = new Map();
-  vsechny.forEach((e) => souhrn.set(e.investor_id,
-    (souhrn.get(e.investor_id) || 0) + (e.podil || 0)));
-  const seznam = Array.from(souhrn, ([investor_id, podil]) => ({ investor_id, podil }));
+  // Většinu má držitel, ne řádka — a držitelem může být i fond aliance.
+  // Sčítat podle investor_id znamenalo, že fondový podíl spadl pod prázdný
+  // klíč: fond svou většinu neměl a zároveň ji „neměl nikdo", takže politika
+  // zamrzla i ostatním podílníkům.
+  const seznam = await prisma.gameEquity.findMany({
+    where: { firma_id: firmaId, stav: 'bezi' },
+    select: { investor_id: true, fond_id: true, podil: true } });
   if (!DIVIDENDA.smiMenit(seznam, req.player.id)) {
     return res.status(403).json({ error: stx(req)('server.dividendu_urcuje_vetsinovy_podilnik') });
   }
@@ -1844,8 +1946,7 @@ router.post('/trade/dividenda', hrac, api(async (req, res) => {
 
   // Majitel i ostatní podílníci se to musí dozvědět. Mění se jim příjem —
   // zjistit to až z výplaty by bylo nepěkné překvapení.
-  const komu = Array.from(new Set(seznam.map((e) => e.investor_id).concat([firmaId])))
-    .filter((x) => x !== req.player.id);
+  const komu = await komuVeFirme(seznam, firmaId, req.player.id);
   if (komu.length) {
     await prisma.gameDelivery.createMany({ data: komu.map((pid) => ({
       player_id: pid, kind: 'zprava',

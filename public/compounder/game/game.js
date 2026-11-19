@@ -9334,6 +9334,10 @@ function fondNavrhPopis(n) {
   if (n.druh === 'zrusit') {
     return tx('veta.fond_zrusit_popis', { p1: esc(d.firma_nick || '') });
   }
+  if (n.druh === 'dividenda') {
+    return tx('veta.fond_dividenda_popis', { p1: esc(d.firma_nick || ''),
+      p2: Math.round((d.pct || 0) * 100) });
+  }
   return tx('veta.fond_vyplatit_popis', { p1: kcFull(d.castka || 0) });
 }
 // Vnitřek fondu. Není to vlastní karta: aliance a fond jsou jedna věc —
@@ -9362,6 +9366,17 @@ function fondVnitrek() {
       + '</span><span class="muted small">' + procentaPodilu(x.podil) + '</span></div>';
   });
   if (!ja) h += '<p class="fine warn">' + esc(tx('fond.nic_nedrzis')) + '</p>';
+
+  // Co už fond koupil. Bez toho člen neviděl, kam peníze z pokladny odešly.
+  if ((f.drzi || []).length) {
+    h += '<h4 style="margin:12px 0 4px">' + esc(tx('fond.drzi')) + '</h4>';
+    f.drzi.forEach(function (x) {
+      h += '<div class="row"><span><b>' + esc(x.firma_nick || '') + '</b> \u00b7 '
+        + procentaPodilu(x.podil)
+        + (x.vetsina ? ' <i class="pill good">' + esc(tx('fond.vetsina')) + '</i>' : '')
+        + '</span><span class="muted small">' + kcFull(x.cena) + '</span></div>';
+    });
+  }
 
   // Co už fond vyvěsil. Hlasování je jedna věc, bežící nabídka druhá — a do
   // téhle chvíle nebylo odnikud vidět, že nějaká běží.
@@ -9398,7 +9413,8 @@ function fondVnitrek() {
       }
     } else {
       var popisek = n.druh === 'koupit' ? 'fond.vyhlasit'
-        : (n.druh === 'zrusit' ? 'fond.stahnout' : 'fond.vyplatit_provest');
+        : (n.druh === 'zrusit' ? 'fond.stahnout'
+          : (n.druh === 'dividenda' ? 'fond.navrh_dividenda' : 'fond.vyplatit_provest'));
       h += '<p class="fine ok">' + esc(tx('fond.schvaleno')) + '</p>'
         + (n.druh === 'koupit'
           ? '<p class="fine">' + esc(tx('veta.fond_navrh_nikomu_nebere')) + '</p>' : '')
@@ -9482,6 +9498,8 @@ function fondNavrhSheet() {
     .then(function (r) { vykresli((r.ok && r.j && r.j.players) || []); })
     .catch(function () { vykresli([]); });
 
+  var vetsinove = ((FOND && FOND.fond && FOND.fond.drzi) || [])
+    .filter(function (x) { return x.vetsina; });
   function vykresli(hraci) {
     var ostatni = [];
     hraci.forEach(function (h) {
@@ -9511,6 +9529,19 @@ function fondNavrhSheet() {
           + '<p class="fine">' + esc(tx('veta.fond_navrh_nikomu_nebere')) + '</p>'
           + '<button class="btn" id="fo-koupit" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>'
         : '<p class="fine">' + esc(tx('fond.nemas_firmu')) + '</p>')
+      // Dividendu nastavuje většinový podílník, takže se nabízejí jen firmy,
+      // kde většinu má fond. Jinde by se hlasovalo o věci, kterou nelze provést.
+      + '<h4 style="margin-top:14px">' + esc(tx('fond.navrh_dividenda')) + '</h4>'
+      + (vetsinove.length
+        ? '<label class="fld"><span>' + esc(tx('fond.firma')) + '</span><select id="fo-dfirma" class="inp">'
+          + volby(vetsinove.map(function (x) { return { id: x.firma_id, nazev: x.firma_nick }; }))
+          + '</select></label>'
+          + '<label class="fld"><span>' + esc(tx('fond.pct_vyplaty')) + '</span>'
+          + '<input id="fo-dpct" class="inp" type="number" min="0" max="100" step="1" value="100"></label>'
+          + '<label class="fld"><span>' + esc(tx('fond.min_vyplata')) + '</span>'
+          + '<input id="fo-dmin" class="inp" type="number" min="0" step="1000" value="0"></label>'
+          + '<button class="btn sec" id="fo-dividenda" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>'
+        : '<p class="fine">' + esc(tx('fond.nemas_vetsinu')) + '</p>')
       + '<h4 style="margin-top:14px">' + esc(tx('fond.navrh_vyplatit')) + '</h4>'
       + '<label class="fld"><span>' + esc(tx('fond.kolik')) + '</span>'
       + '<input id="fo-castka" class="inp" type="number" min="1" step="1000" value="0"></label>'
@@ -9520,6 +9551,11 @@ function fondNavrhSheet() {
       posli({ druh: 'koupit', firma_id: Number($('fo-firma').value) || 0,
         pct: (Number($('fo-pct').value) || 0) / 100,
         cena: Number($('fo-cena').value) || 0 }, $('fo-koupit'));
+    };
+    if ($('fo-dividenda')) $('fo-dividenda').onclick = function () {
+      posli({ druh: 'dividenda', firma_id: Number($('fo-dfirma').value) || 0,
+        pct: (Number($('fo-dpct').value) || 0) / 100,
+        min: Number($('fo-dmin').value) || 0 }, $('fo-dividenda'));
     };
     $('fo-vyplatit').onclick = function () {
       posli({ druh: 'vyplatit', castka: Number($('fo-castka').value) || 0 }, $('fo-vyplatit'));

@@ -23,9 +23,29 @@ ok('tři nákupy po dvaceti procentech dají šedesát',
   '— ' + JSON.stringify(s));
 ok('a většinu z toho má', P.kdoUrcuje(s) === 'h:7');
 ok('a jako id hráče taky', P.kdoUrcujeHrace(s) === 7);
-ok('kdyby se nesčítaly, nemá ji nikdo',
+// Dřív se tady tvrdilo, že sečíst se musel volající — kdo poslal syrové
+// řádky, nedostal nikoho. Byla to past: stačilo jednou zapomenout na souhrn
+// a většinový podílník přestal existovat. Teď si to funkce sečte sama.
+ok('syrové řádky si funkce sečte sama',
   P.kdoUrcuje([{ investor_id: 7, podil: 0.2 }, { investor_id: 7, podil: 0.2 },
-    { investor_id: 7, podil: 0.2 }]) === null);
+    { investor_id: 7, podil: 0.2 }]) === 'h:7');
+ok('a dvakrát sečtený seznam dá totéž', P.kdoUrcuje(P.souhrn(s)) === 'h:7');
+// Totéž platí pro blokaci: dva nákupy po pātnácti procentech jsou třicet,
+// a to už na blokační čtvrtinu stačí. Po řádcích by nestačil žádný z nich.
+const dvaKousky = [
+  { investor_id: 9, podil: 0.15, zakaz_zastavy: true },
+  { investor_id: 9, podil: 0.15, zakaz_zastavy: false },
+];
+ok('blokační čtvrtina se taky sčítá po držiteli',
+  P.kdoBlokuje(dvaKousky) === 'h:9', '— ' + P.kdoBlokuje(dvaKousky));
+// Souhrn musí rozumět i záznamu, který nese jen hotový klíč — jinak by
+// druhé sečtení tiše vyhodilo všechno, co už sečtené bylo.
+const jenKlic = [{ drzitel: 'f:3', podil: 0.6 }];
+ok('záznam jen s klíčem se neztratí',
+  P.souhrn(jenKlic).length === 1 && P.kdoUrcuje(jenKlic) === 'f:3',
+  '— ' + JSON.stringify(P.souhrn(jenKlic)));
+ok('bez zákazu neblokuje nikdo',
+  P.kdoBlokuje(dvaKousky.map((e) => ({ investor_id: e.investor_id, podil: e.podil }))) === null);
 // Na pořadí řádek nesmí záležet: kdyby zákaz přebíjela poslední z nich,
 // stačilo by přikoupit podíl a zákaz by sám zmizel.
 ok('zákaz na jedné řádce platí pro celý podíl, ať je kdekoli',
