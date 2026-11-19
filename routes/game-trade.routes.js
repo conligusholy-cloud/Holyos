@@ -2007,6 +2007,9 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
       return res.status(409).json({ error: nabidkaChyba(req, kontrola.duvod, { prodano, volne }) });
     }
     await prisma.$transaction(async (tx) => {
+      // Otisk před změnou — bez něj by tahle cesta byla jediná, po které
+      // v evidenci vlastnictví nezůstane stopa.
+      const auditPred = await AUDIT.otisk(tx, firma.id);
       // Podíl patří FONDU, ne komukoli z členů — investor_id zůstává prázdné
       // a CHECK v databázi to hlídá.
       await tx.gameEquity.create({ data: {
@@ -2022,6 +2025,7 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
         text_data: { p1: (al && al.nazev) || '', p2: Math.round(na.podil * 100),
           p3: Math.round(na.cena) } } });
       await tx.gameFondNavrh.update({ where: { id: n.id }, data: { stav: 'proveden' } });
+      await AUDIT.zapis(tx, firma.id, auditPred, { duvod: 'nabidka' });
     });
     await zprava('dor.fond_nabidka_koupeno',
       { p1: (al && al.nazev) || '', p2: firma.company || firma.nick,

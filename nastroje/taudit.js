@@ -10,7 +10,9 @@ function ok(co, podminka, detail) {
   console.log((podminka ? 'OK    ' : 'CHYBA ') + co + (detail ? '  ' + detail : ''));
   if (!podminka) chyb++;
 }
-const mapa = (o) => new Map(Object.entries(o).map(([k, v]) => [Number(k), v]));
+// Otištěná mapa se klíčuje DRŽITELEM, ne číslem: 'h:7' je hráč, 'f:3' fond.
+// Bez toho by dva různé fondy v jedné firmě spadly do jednoho koše.
+const mapa = (o) => new Map(Object.entries(o).map(([k, v]) => [/^[hf]:/.test(k) ? k : 'h:' + k, v]));
 
 // ── Rozdíl dvou otisků ───────────────────────────────────────────────────────
 let z = A.zmeny(mapa({ 7: 0.4 }), mapa({ 7: 0.3 }));
@@ -29,7 +31,7 @@ ok('odkoupený podíl se zapíše na nulu', z.length === 1 && z[0].pred === 0.25
 // Kapitálový vstup sáhne na všechny dosavadní investory najednou.
 z = A.zmeny(mapa({ 7: 0.4, 8: 0.2 }), mapa({ 7: 0.3, 8: 0.15, 9: 0.25 }));
 ok('ředění zapíše všechny tři, ne jen nového',
-  z.length === 3, '— ' + z.map((x) => x.investor_id).join(','));
+  z.length === 3, '— ' + z.map((x) => x.drzitel).join(','));
 ok('a u každého je vidět, z čeho na co',
   z[0].pred === 0.4 && z[0].po === 0.3 && z[2].pred === 0 && z[2].po === 0.25);
 
@@ -42,23 +44,24 @@ ok('ale miliontina už změna je', z.length === 1);
 
 // ── Pořadí a úplnost ─────────────────────────────────────────────────────────
 z = A.zmeny(mapa({ 9: 0.1, 7: 0.1 }), mapa({ 9: 0.2, 7: 0.2 }));
-ok('zapisuje se v pořadí podle investora, ať je výpis čitelný',
-  z[0].investor_id === 7 && z[1].investor_id === 9);
+ok('zapisuje se v pořadí podle držitele, ať je výpis čitelný',
+  z[0].drzitel === 'h:7' && z[1].drzitel === 'h:9');
 ok('prázdné otisky nic neshodí', A.zmeny(new Map(), new Map()).length === 0);
 
 // ── Celý zápis proti podstrčené databázi ─────────────────────────────────────
 let zapsano = null;
 const tx = {
   gameEquity: { findMany: async () => [
-    { investor_id: 7, podil: 0.2 }, { investor_id: 7, podil: 0.1 }, { investor_id: 8, podil: 0.25 }] },
+    { investor_id: 7, fond_id: null, podil: 0.2 }, { investor_id: 7, fond_id: null, podil: 0.1 },
+    { investor_id: 8, fond_id: null, podil: 0.25 }] },
   gameVlastnictvi: { createMany: async (x) => { zapsano = x.data; return { count: x.data.length }; } },
 };
 (async () => {
   // Dvě řádky téhož investora se musí sečíst, jinak by to vypadalo,
   // že o svůj podíl přišel a hned ho dostal zpátky.
   const pred = await A.otisk(tx, 1);
-  ok('víc řádek jednoho investora se sečte', Math.abs(pred.get(7) - 0.3) < 1e-9,
-    '— ' + pred.get(7));
+  ok('víc řádek jednoho investora se sečte', Math.abs(pred.get('h:7') - 0.3) < 1e-9,
+    '— ' + pred.get('h:7'));
 
   const kolik = await A.zapis(tx, 1, mapa({ 7: 0.3, 8: 0.4 }), { duvod: 'prevzeti', trade_id: 5 });
   ok('zapíše se jen ten, komu se podíl změnil', kolik === 1 && zapsano.length === 1,
@@ -79,6 +82,41 @@ const tx = {
   zapsano = null;
   await A.zapis(tx, 1, mapa({ 7: 0.9 }), null);
   ok('chybějící důvod nic neshodí', zapsano && zapsano[0].duvod === '?');
+
+  // ── Podíl, který patří FONDU ──────────────────────────────────
+  // Tohle je ta chyba, kvůli které se tenhle blok píše: investor_id je
+  // u fondového podílu prázdné a zápis na něj padal na NOT NULL. Prodej do
+  // fondové nabídky tak skončil chybou databáze a neproběhl vůbec.
+  const txFond = {
+    gameEquity: { findMany: async () => [
+      { investor_id: null, fond_id: 3, podil: 0.4 },
+      { investor_id: 9, fond_id: null, podil: 0.1 }] },
+    gameVlastnictvi: { createMany: async (x) => { zapsano = x.data; return { count: x.data.length }; } },
+  };
+  const otiskFond = await A.otisk(txFond, 1);
+  ok('fond má vlastní klíč, neslévá se s hráčem',
+    otiskFond.get('f:3') === 0.4 && otiskFond.get('h:9') === 0.1,
+    '— ' + JSON.stringify(Array.from(otiskFond)));
+
+  zapsano = null;
+  await A.zapis(txFond, 1, mapa({ 'h:9': 0.5 }), { duvod: 'prevzeti' });
+  const radekFondu = (zapsano || []).filter((x) => x.fond_id === 3)[0];
+  ok('fondový podíl se zapíše pod fond_id, ne pod investor_id',
+    !!radekFondu && radekFondu.investor_id === null,
+    '— ' + JSON.stringify(zapsano));
+  ok('a hráčův podíl pořád pod investor_id',
+    (zapsano || []).some((x) => x.investor_id === 9 && x.fond_id === null));
+  // CHECK v databázi: právě jeden z obou sloupců musí být vyplněný.
+  ok('žádný zápis nemá oba sloupce ani žádný',
+    (zapsano || []).every((x) => (x.investor_id == null) !== (x.fond_id == null)));
+
+  // Dva fondy v jedné firmě se nesmí slít do jednoho.
+  const txDvaFondy = { gameEquity: { findMany: async () => [
+    { investor_id: null, fond_id: 3, podil: 0.2 },
+    { investor_id: null, fond_id: 4, podil: 0.3 }] } };
+  const dva = await A.otisk(txDvaFondy, 1);
+  ok('dva fondy zůstanou dva', dva.get('f:3') === 0.2 && dva.get('f:4') === 0.3,
+    '— ' + JSON.stringify(Array.from(dva)));
 
   console.log(chyb ? '\n' + chyb + ' chyb' : '\nvšechno sedí');
   process.exit(chyb ? 1 : 0);

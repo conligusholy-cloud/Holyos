@@ -25,16 +25,21 @@
 
 'use strict';
 
-// Kdo ve firmě kolik drží. Mapa investor → podíl, sečtená na člověka,
-// protože jeden investor může mít víc řádek.
+const DRZ = require('./drzitel');
+
+// Kdo ve firmě kolik drží. Mapa držitel → podíl, sečtená na držitele,
+// protože jeden držitel může mít víc řádek.
+//
+// Klíčuje se klíčem držitele ('h:17', 'f:3'), ne investor_id. Dokud se tu
+// četlo investor_id naprímo, spadly všechny fondové podíly do jediného koše
+// pod klíčem null — dva různé fondy v jedné firmě se slévaly v jeden
+// a zápis pak padal na NOT NULL, protože žádné investor_id neexistovalo.
 async function otisk(tx, firmaId) {
   const rows = await tx.gameEquity.findMany({
     where: { firma_id: firmaId, stav: 'bezi' },
-    select: { investor_id: true, podil: true },
+    select: { investor_id: true, fond_id: true, podil: true },
   });
-  const m = new Map();
-  rows.forEach((r) => m.set(r.investor_id, (m.get(r.investor_id) || 0) + (Number(r.podil) || 0)));
-  return m;
+  return DRZ.soucet(rows);
 }
 
 // Rozdíl dvou otisků. Vrací jen to, co se doopravdy pohnulo — drobné
@@ -43,12 +48,14 @@ const PRAH = 1e-9;
 function zmeny(pred, po) {
   const out = [];
   const vsichni = new Set(Array.from(pred.keys()).concat(Array.from(po.keys())));
-  vsichni.forEach((id) => {
-    const a = pred.get(id) || 0;
-    const b = po.get(id) || 0;
-    if (Math.abs(b - a) > PRAH) out.push({ investor_id: id, pred: a, po: b });
+  vsichni.forEach((k) => {
+    const a = pred.get(k) || 0;
+    const b = po.get(k) || 0;
+    if (Math.abs(b - a) > PRAH) out.push({ drzitel: k, pred: a, po: b });
   });
-  return out.sort((x, y) => x.investor_id - y.investor_id);
+  // Řadí se podle klíče, který je řetězec — číselné odečítání by tu dávalo
+  // NaN a pořadí by záviselo na tom, jak se mapa zrovna probírá.
+  return out.sort((x, y) => String(x.drzitel).localeCompare(String(y.drzitel)));
 }
 
 // Zápis rozdílu. Volá se na konci transakce, se stejným tx.
@@ -59,7 +66,12 @@ async function zapis(tx, firmaId, pred, info) {
   await tx.gameVlastnictvi.createMany({
     data: l.map((z) => ({
       firma_id: firmaId,
-      investor_id: z.investor_id,
+      // Klíč zpátky na sloupce. Držitel bez platného klíče se sem nedostane:
+      // soucet() takový řádek vůbec nezapočítá.
+      investor_id: (DRZ.zKlice(z.drzitel) || {}).typ === 'hrac'
+        ? DRZ.zKlice(z.drzitel).id : null,
+      fond_id: (DRZ.zKlice(z.drzitel) || {}).typ === 'fond'
+        ? DRZ.zKlice(z.drzitel).id : null,
       podil_pred: z.pred,
       podil_po: z.po,
       duvod: String((info && info.duvod) || '?').slice(0, 16),

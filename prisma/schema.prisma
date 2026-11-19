@@ -8301,7 +8301,10 @@ model GameOrder {
 model GameVlastnictvi {
   id             Int      @id @default(autoincrement())
   firma_id       Int
-  investor_id    Int
+  // Držitel je buď hráč, nebo fond aliance — nikdy obojí a nikdy ani jeden.
+  // Hlídá to CHECK v migraci, stejně jako u game_equity.
+  investor_id    Int?
+  fond_id        Int?
   podil_pred     Float
   podil_po       Float
   // prodej | odkup | prevod | vstup | konverze | zastava | prevzeti | drazba
@@ -8312,6 +8315,7 @@ model GameVlastnictvi {
 
   @@index([firma_id, created_at])
   @@index([investor_id, created_at])
+  @@index([fond_id])
   @@map("game_vlastnictvi")
 }
 

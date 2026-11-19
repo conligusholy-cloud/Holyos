@@ -569,6 +569,14 @@ async function vlastnictvi(dnu, firmaId, hracId) {
     where: { id: { in: ids } }, select: { id: true, nick: true, company: true } }) : [];
   const jm = new Map(hraci.map((h) => [h.id, h.company || h.nick]));
   const kdo = (id) => (id ? (jm.get(id) || ('#' + id)) : '\u2014');
+  // Podíl může držet i fond aliance. Bez tohohle by u každé fondové změny
+  // stála jen pomlčka a výpis by tvrdil, že podíl nepatří nikomu.
+  const fondIds = Array.from(new Set(rows.map((r) => r.fond_id).filter(Boolean)));
+  const fondy = fondIds.length ? await prisma.gameAliance.findMany({
+    where: { id: { in: fondIds } }, select: { id: true, nazev: true } }).catch(() => []) : [];
+  const jmF = new Map(fondy.map((f) => [f.id, 'fond ' + f.nazev]));
+  const drzitel = (r) => (r.fond_id ? (jmF.get(r.fond_id) || ('fond #' + r.fond_id))
+    : kdo(r.investor_id));
   const pct = (x) => (Math.round((Number(x) || 0) * 1000) / 10).toFixed(1).replace('.', ',');
 
   const out = [];
@@ -586,7 +594,7 @@ async function vlastnictvi(dnu, firmaId, hracId) {
   rows.forEach((r) => {
     out.push(cas(r.created_at)
       + '  ' + String(kdo(r.firma_id)).padEnd(16).slice(0, 16)
-      + ' ' + String(kdo(r.investor_id)).padEnd(17).slice(0, 17)
+      + ' ' + String(drzitel(r)).padEnd(17).slice(0, 17)
       + (pct(r.podil_pred) + ' %').padStart(7)
       + (pct(r.podil_po) + ' %').padStart(7)
       + '  ' + r.duvod
