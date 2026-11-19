@@ -12293,6 +12293,12 @@ function vyzvedniNasledky(then) {
     // Když ubylo místo, banka se hned podívá na rámec — limit se počítá z toho,
     // kolik doplacených prádlomatů má hráč v provozu.
     if (d.some(function (x) { return x.kind === 'unit_remove' || x.kind === 'unit_add'; })) prehodnotRamec(false, true);
+    // Když dojde doručenka, změnilo se něco na serveru — a půjčky, podíly
+    // a fond si hra drží v paměti z předchozího načtení. Poslední splátka tak
+    // sice strhla peníze, ale půjčka hráči v seznamu zůstala visít jako běžící,
+    // dokud sám neklikl někam, co seznam načeťá znovu. Zahodíme ho raději
+    // celý: doručenky nechodí tak často, aby na tom záleželo.
+    FINANCE = null; PREVZETI = null; FOND = null;
     // Nejdřív do fronty k potvrzení, teprve pak uložení — ať jede obojí naráz.
     vse.forEach(function (x) { if (NEPOTVRZENE.indexOf(x.id) < 0) NEPOTVRZENE.push(x.id); });
     save(); paint(); drawMap(); syncState(true);
