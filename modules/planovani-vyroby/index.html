@@ -235,6 +235,8 @@
           <select id="wp-ws" onchange="pv2RenderWork()" title="Jen jedno pracoviště"><option value="">Všechna pracoviště</option></select>
           <select id="wp-material" onchange="pv2RenderWork()" title="Stav materiálu pro operaci"><option value="">Materiál: vše</option><option value="on_site">🟢 na pracovišti</option><option value="in_stock">🔵 skladem ve firmě</option><option value="ordered">🟠 objednáno, čeká se</option><option value="missing">🔴 chybí — není objednáno</option><option value="problem">🟠+🔴 vyžaduje nákup</option></select>
           <label><input type="checkbox" id="wp-unassigned" onchange="pv2RenderWork()"> jen nepřiřazené</label>
+          <button type="button" class="btn" onclick="pv2SaveFilter()" title="Zapamatuje si aktuální filtr a při každém otevření Plánu práce ho nastaví sám">⭐ Uložit jako výchozí</button>
+          <button type="button" class="btn" onclick="pv2ResetFilter()" title="Smaže uložený výchozí filtr a vynuluje všechna pole">↺ Vynulovat</button>
           <span id="wp-count" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
         </div>
         <div style="font-size:11px;color:var(--text2);margin:-4px 0 8px;">Materiál: <span style="color:#22c55e;">🟢 na pracovišti</span> · <span style="color:#60a5fa;">🔵 skladem (jen přesun)</span> · <span style="color:#f59e0b;">🟠 objednáno</span> · <span style="color:#ef4444;">🔴 chybí, není objednáno</span> · ⚪ bez materiálu — najetím myší detail položek. &nbsp;Čas: <span style="color:#22c55e;">zelený = hotovo</span> · <span style="color:#f59e0b;">oranžový ⚠ = čas uplynul, nehotovo</span> · <span style="color:#14b8a6;">tyrkysový = právě probíhá</span> · <s style="color:var(--text2);">přeškrtnutý</s> = minulost.</div>
@@ -1938,6 +1940,8 @@
       pv2WorkOps = d.operations || [];
       // naplň filtry lidí a dávek
       var pSel = document.getElementById('wp-person'), bSel = document.getElementById('wp-batch');
+      // Při prvním načtení nastavit uložený výchozí filtr (⭐ Uložit jako výchozí)
+      if (!pv2FilterApplied) { pv2FilterApplied = true; pv2ApplySavedFilter(); }
       var pKeep = pSel.value, bKeep = bSel.value;
       var people = {}, batches = {};
       pv2WorkOps.forEach(function (o) { ((o.workers && o.workers.length) ? o.workers.map(function (w) { return w.person; }) : (o.assigned_person ? [o.assigned_person] : [])).forEach(function (p) { people[p.id] = p.first_name + ' ' + p.last_name; }); batches[o.batch.id] = o.batch.batch_number + ' · ' + o.batch.product.code; });
@@ -1952,6 +1956,29 @@
     } catch (e) { box.innerHTML = '<div class="pv2-empty">Chyba: ' + pv2Esc(e.message) + '</div>'; }
   };
   var pv2WorkOps = [];
+  // Můj výchozí filtr Plánu práce — v prohlížeči (localStorage), použije se při otevření
+  var pv2FilterApplied = false;
+  var PV2_FILTER_KEY = 'pv2.work.filter';
+  var PV2_FILTER_IDS = ['wp-search', 'wp-sort', 'wp-person', 'wp-batch', 'wp-ws', 'wp-material'];
+  window.pv2SaveFilter = function () {
+    var f = { unassigned: document.getElementById('wp-unassigned').checked };
+    PV2_FILTER_IDS.forEach(function (id) { f[id] = document.getElementById(id).value; });
+    try { localStorage.setItem(PV2_FILTER_KEY, JSON.stringify(f)); alert('⭐ Filtr uložen jako výchozí.'); }
+    catch (e) { alert('Filtr se nepodařilo uložit: ' + e.message); }
+  };
+  window.pv2ApplySavedFilter = function () {
+    var f = null;
+    try { f = JSON.parse(localStorage.getItem(PV2_FILTER_KEY) || 'null'); } catch (e) { /* poškozeno → ignorovat */ }
+    if (!f) return;
+    PV2_FILTER_IDS.forEach(function (id) { if (f[id] != null) document.getElementById(id).value = f[id]; });
+    document.getElementById('wp-unassigned').checked = !!f.unassigned;
+  };
+  window.pv2ResetFilter = function () {
+    try { localStorage.removeItem(PV2_FILTER_KEY); } catch (e) { /* nevadí */ }
+    PV2_FILTER_IDS.forEach(function (id) { var el = document.getElementById(id); el.value = id === 'wp-sort' ? 'first_asc' : ''; });
+    document.getElementById('wp-unassigned').checked = false;
+    pv2RenderWork();
+  };
   // Přeplánovat všechny aktivní dávky (planned/released/paused) — nedokončené operace dostanou nový čas
   window.pv2ReplanAll = async function () {
     if (!confirm('Přeplánovat všechny aktivní dávky?\n\nNedokončené operace dostanou nový plán podle aktuální pracovní doby, obsazenosti lidí a pracovišť (práce lidí navazuje bez prodlev). Hotové a rozpracované operace se nemění.')) return;

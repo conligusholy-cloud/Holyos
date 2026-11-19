@@ -250,8 +250,20 @@
     .att-subtab { display: none; }
     .att-subtab.active { display: block; }
 
-    /* Presence grid */
+    /* Lidé v práci — kartičky seskupené po odděleních */
     .presence-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+    .presence-dept { margin-bottom: 22px; }
+    .presence-dept-head {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+      font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase;
+      color: var(--text2);
+    }
+    .presence-dept-head::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .presence-dept-count {
+      background: #10b98120; color: #10b981; border-radius: 10px;
+      padding: 1px 8px; font-size: 11px; text-transform: none; letter-spacing: 0;
+    }
+    .presence-since { font-size: 12px; color: #10b981; font-weight: 600; white-space: nowrap; }
     .presence-card {
       background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
       padding: 14px; display: flex; align-items: center; gap: 12px; transition: all 0.2s;
@@ -383,7 +395,7 @@
       <div class="tab-content" id="tab-attendance">
         <!-- Sub-tabs within attendance -->
         <div class="sub-tabs">
-          <div class="sub-tab active" data-subtab="presence" onclick="switchAttSubTab('presence')">📡 Přehled přítomnosti</div>
+          <div class="sub-tab active" data-subtab="presence" onclick="switchAttSubTab('presence')">👷 Lidé v práci</div>
           <div class="sub-tab" data-subtab="records" onclick="switchAttSubTab('records')">📋 Záznamy</div>
           <div class="sub-tab" data-subtab="shifts" onclick="switchAttSubTab('shifts')">⏰ Směny</div>
           <div class="sub-tab" data-subtab="absence-types" onclick="switchAttSubTab('absence-types')">🏷️ Typy nepřítomnosti</div>
@@ -399,6 +411,7 @@
         <div class="att-subtab active" id="att-presence">
           <div class="toolbar">
             <button class="btn btn-primary" onclick="loadPresence()">🔄 Obnovit</button>
+            <div id="presence-souhrn" style="color:var(--text2);font-size:13px;"></div>
             <div style="flex:1"></div>
             <a href="modules/lide-hr/kiosk.html" target="_blank" class="btn btn-secondary">📱 Otevřít kiosek</a>
           </div>
@@ -796,7 +809,8 @@
     function switchTab(tab) {
       document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
       document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + tab));
-      if (tab === 'attendance') loadPresence();
+      // Docházka se otevírá na podkartě „Lidé v práci" — spustit i obnovování.
+      if (tab === 'attendance') { loadPresence(); presenceAutoStart(); } else { presenceAutoStop(); }
       if (tab === 'org') loadDepartments();
       if (tab === 'roles') loadRoles();
       if (tab === 'documents') { loadDocuments(); populateDocPersonFilter(); }
@@ -1866,7 +1880,8 @@
     function switchAttSubTab(tab) {
       document.querySelectorAll('.sub-tab').forEach(t => t.classList.toggle('active', t.dataset.subtab === tab));
       document.querySelectorAll('.att-subtab').forEach(t => t.classList.toggle('active', t.id === 'att-' + tab));
-      if (tab === 'presence') loadPresence();
+      // Samo se obnovuje jen „Lidé v práci"; jinde se časovač zruší.
+      if (tab === 'presence') { loadPresence(); presenceAutoStart(); } else { presenceAutoStop(); }
       if (tab === 'records') loadAttendance();
       if (tab === 'shifts') loadShifts();
       if (tab === 'absence-types') loadAbsenceTypes();
@@ -1879,39 +1894,89 @@
     }
 
     // ============================================================
-    // PRESENCE (real-time)
+    // LIDÉ V PRÁCI
     // ============================================================
+    // ── Lidé v práci ──────────────────────────────────────────────
+    // Kdo má dnes příchod a nemá odchod. Seznam se sám obnovuje, takže jakmile
+    // někdo odpíchne odchod, do půl minuty z karty zmizí. (Požadavek #156)
+    var PRESENCE_TIMER = null;
+    var PRESENCE_INTERVAL = 30000;
+
     async function loadPresence() {
       try {
         const res = await fetch('/api/hr/presence');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const list = await res.json();
         renderPresence(list);
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error(e);
+        const el = document.getElementById('presence-grid');
+        if (el) el.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Seznam se nepodařilo načíst</h3><p>' + escHtml(e.message || e) + '</p></div>';
+        const s = document.getElementById('presence-souhrn');
+        if (s) s.textContent = '';
+      }
     }
 
     function renderPresence(list) {
       const el = document.getElementById('presence-grid');
+      const souhrn = document.getElementById('presence-souhrn');
       if (!list || list.length === 0) {
-        el.innerHTML = '<div class="empty-state"><div class="empty-icon">📡</div><h3>Žádní zaměstnanci</h3><p>Přidejte zaměstnance v záložce Lidé</p></div>';
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏠</div><h3>Nikdo není v práci</h3><p>Zatím dnes nikdo nemá zaznamenaný příchod bez odchodu.</p></div>';
+        if (souhrn) souhrn.textContent = '';
         return;
       }
-      const statusLabels = { present: 'Přítomen', absent: 'Nepřítomen', on_break: 'Pauza', left: 'Odešel' };
-      el.innerHTML = '<div class="presence-grid">' + list.map(p => {
-        const avatar = p.photo_url
-          ? `<img src="${p.photo_url}" alt="">`
-          : (p.first_name[0] + p.last_name[0]);
-        const timeInfo = p.clock_in ? `Příchod: ${p.clock_in}${p.clock_out ? ' → Odchod: ' + p.clock_out : ''}` : 'Dosud nepřítomen';
-        const absInfo = p.current_absence ? ` (${p.current_absence})` : '';
-        return `<div class="presence-card">
-          <div class="presence-avatar">${avatar}</div>
-          <div class="presence-info">
-            <div class="presence-name">${p.last_name} ${p.first_name}</div>
-            <div class="presence-role">${p.role_name || '—'}</div>
-            <div class="presence-time">${timeInfo}</div>
-          </div>
-          <div class="presence-status ${p.status}">${statusLabels[p.status] || p.status}${absInfo}</div>
-        </div>`;
-      }).join('') + '</div>';
+      if (souhrn) souhrn.textContent = 'V práci je ' + list.length + ' ' + sklonujLidi(list.length);
+
+      // Seskupit po odděleních; kdo oddělení nemá, spadne do skupiny na konci.
+      const skupiny = new Map();
+      for (const p of list) {
+        const klic = p.department_name || '—';
+        if (!skupiny.has(klic)) skupiny.set(klic, []);
+        skupiny.get(klic).push(p);
+      }
+
+      el.innerHTML = [...skupiny.entries()].map(([nazev, lide]) => {
+        const karty = lide.map(p => {
+          const iniciály = ((p.first_name || ' ')[0] || '') + ((p.last_name || ' ')[0] || '');
+          const avatar = p.photo_url
+            ? '<img src="' + escHtml(p.photo_url) + '" alt="">'
+            : escHtml(iniciály.trim() || '?');
+          return '<div class="presence-card">'
+            + '<div class="presence-avatar">' + avatar + '</div>'
+            + '<div class="presence-info">'
+              + '<div class="presence-name">' + escHtml((p.last_name || '') + ' ' + (p.first_name || '')) + '</div>'
+              + '<div class="presence-role">' + escHtml(p.role_name || 'Bez role') + '</div>'
+            + '</div>'
+            + '<div class="presence-since">od ' + escHtml(p.clock_in || '—') + '</div>'
+          + '</div>';
+        }).join('');
+        return '<div class="presence-dept">'
+          + '<div class="presence-dept-head">' + escHtml(nazev === '—' ? 'Bez oddělení' : nazev)
+            + '<span class="presence-dept-count">' + lide.length + '</span></div>'
+          + '<div class="presence-grid">' + karty + '</div>'
+        + '</div>';
+      }).join('');
+    }
+
+    function sklonujLidi(n) {
+      if (n === 1) return 'člověk';
+      if (n >= 2 && n <= 4) return 'lidé';
+      return 'lidí';
+    }
+
+    // Obnovovat jen když je karta opravdu vidět — na skryté záložce by to jen
+    // zbytečně tlouklo na server.
+    function presenceAutoStart() {
+      presenceAutoStop();
+      PRESENCE_TIMER = setInterval(() => {
+        if (document.hidden) return;
+        const karta = document.getElementById('att-presence');
+        if (!karta || !karta.classList.contains('active')) return;
+        loadPresence();
+      }, PRESENCE_INTERVAL);
+    }
+    function presenceAutoStop() {
+      if (PRESENCE_TIMER) { clearInterval(PRESENCE_TIMER); PRESENCE_TIMER = null; }
     }
 
     // ============================================================

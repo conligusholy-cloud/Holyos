@@ -1717,7 +1717,11 @@ router.delete('/attendance/:id', async (req, res, next) => {
 
 // ─── PŘÍTOMNOST (kdo je právě v práci) ────────────────────────────────────
 
-// GET /api/hr/presence
+// GET /api/hr/presence — kdo je právě v práci (Požadavek #156)
+// Přítomný = má dnes zaznamenaný příchod a NEMÁ odchod. Jen type 'work' —
+// otevřená přestávka je samostatný řádek docházky a neznamená další osobu.
+// Vrací PLOCHÝ tvar připravený k vykreslení: dřív to byly syrové záznamy
+// s vnořeným person a karta četla p.first_name, takže nezobrazovala nic.
 router.get('/presence', async (req, res, next) => {
   try {
     // Pražský kalendářní den, ne lokální půlnoc procesu — viz /stats. (Požadavek #134)
@@ -1726,22 +1730,52 @@ router.get('/presence', async (req, res, next) => {
     const records = await prisma.attendance.findMany({
       where: {
         date: today,
+        type: 'work',
         clock_in: { not: null },
+        clock_out: null,
+        person: { active: true },
       },
       include: {
         person: {
           select: {
-            id: true, first_name: true, last_name: true,
+            id: true, first_name: true, last_name: true, photo_url: true,
             department: { select: { id: true, name: true } },
-            shift: true,
-            photo_url: true,
+            role: { select: { id: true, name: true } },
           },
         },
       },
       orderBy: { clock_in: 'asc' },
     });
 
-    res.json(records);
+    // Jeden člověk = jedna kartička, i kdyby mu omylem zůstaly otevřené dva
+    // záznamy. Řazení výš zaručuje, že si necháme ten nejstarší příchod.
+    const videni = new Set();
+    const lide = [];
+    for (const r of records) {
+      const p = r.person;
+      if (!p || videni.has(p.id)) continue;
+      videni.add(p.id);
+      lide.push({
+        attendance_id: r.id,
+        person_id: p.id,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        photo_url: p.photo_url || null,
+        role_name: (p.role && p.role.name) || null,
+        department_id: (p.department && p.department.id) || null,
+        department_name: (p.department && p.department.name) || null,
+        clock_in: r.clock_in,
+      });
+    }
+
+    // Seřadit podle oddělení (bez oddělení na konec), uvnitř podle příchodu
+    lide.sort((a, b) => {
+      if (!!a.department_name !== !!b.department_name) return a.department_name ? -1 : 1;
+      const d = (a.department_name || '').localeCompare(b.department_name || '', 'cs');
+      return d || (a.clock_in || '').localeCompare(b.clock_in || '');
+    });
+
+    res.json(lide);
   } catch (err) {
     next(err);
   }
