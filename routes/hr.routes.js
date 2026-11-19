@@ -2466,25 +2466,45 @@ router.post('/permissions/:roleId', requireRoleEditor, async (req, res, next) =>
         .map(([module_id, access_level]) => ({ module_id, access_level }));
     }
 
-    // Normalizace + filtr neplatných / 'none' záznamů
-    const toCreate = permArr
-      .filter(p => p && p.module_id && typeof p.access_level === 'string' && p.access_level !== 'none')
-      .map(p => ({
-        role_id: roleId,
-        module_id: String(p.module_id),
-        access_level: p.access_level,
-      }));
+    // Normalizace: bereme jen platné řádky se známou úrovní přístupu.
+    const UROVNE = ['none', 'read', 'write'];
+    const poslane = permArr
+      .filter(p => p && p.module_id && typeof p.access_level === 'string' && UROVNE.includes(p.access_level))
+      .map(p => ({ module_id: String(p.module_id), access_level: p.access_level }));
 
-    // Smazat stávající a vytvořit nové (transakce)
+    // Měníme JEN moduly, které formulář opravdu poslal. Dřív se mazala všechna
+    // oprávnění role a znovu se založila jen ta z formuláře — jenže formulář
+    // zná jen moduly ze svého seznamu (PERM_MODULES). Každé uložení role tím
+    // potichu maže oprávnění k modulům, které v tom seznamu chybí (Materiálový
+    // tok, Reporty, Nastavení, CAD výkresy, AI agenti, Požadavky, Historie změn…).
+    // Role tak po uložení ztrácela přístupy, o kterých uživatel nevěděl.
+    // (Požadavek #153)
+    const smazat = poslane.filter(p => p.access_level === 'none').map(p => p.module_id);
+    const nastavit = poslane.filter(p => p.access_level !== 'none');
+
     await prisma.$transaction([
-      prisma.permission.deleteMany({ where: { role_id: roleId } }),
-      ...toCreate.map(data => prisma.permission.create({ data })),
+      ...(smazat.length ? [prisma.permission.deleteMany({
+        where: { role_id: roleId, module_id: { in: smazat } },
+      })] : []),
+      ...nastavit.map(p => prisma.permission.upsert({
+        where: { role_id_module_id: { role_id: roleId, module_id: p.module_id } },
+        update: { access_level: p.access_level },
+        create: { role_id: roleId, module_id: p.module_id, access_level: p.access_level },
+      })),
     ]);
 
     const updated = await prisma.permission.findMany({
       where: { role_id: roleId },
       orderBy: { module_id: 'asc' },
     });
+
+    await logAudit({
+      action: 'update', entity: 'role', entity_id: roleId,
+      description: 'Upravena oprávnění role: ' + (nastavit.map(p => p.module_id + '=' + p.access_level).join(', ') || 'bez přístupů')
+        + (smazat.length ? ' · odebráno: ' + smazat.join(', ') : ''),
+      user: req.user,
+    }).catch(() => {});
+
     res.json(updated);
   } catch (err) {
     next(err);

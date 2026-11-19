@@ -3009,15 +3009,15 @@
       if (!res.ok) { alert('Roli se nepodařilo uložit: ' + (savedRole.error || ('chyba ' + res.status)) + (res.status === 403 ? '\n\nNemáte oprávnění upravovat role. Požádejte správce HolyOS, ať vás přidá mezi lidi, kteří smí upravovat role.' : '')); return; }
       const roleId = id || savedRole.id;
 
-      // Save permissions for this role — backend čeká { permissions: [{ module_id, access_level }] }
+      // Oprávnění: posíláme VŠECHNY moduly z formuláře včetně „žádný". Server
+      // mění jen to, co dostane — modul, který formulář nezná, nechá být.
+      // (Dřív se posílaly jen přístupy ≠ žádný a server zbytek mazal.)
       const permsList = [];
       const permsMap = {};
       for (const m of PERM_MODULES) {
         const level = form.get('perm_' + m.id) || 'none';
         permsMap[m.id] = level;
-        if (level && level !== 'none') {
-          permsList.push({ module_id: m.id, access_level: level });
-        }
+        permsList.push({ module_id: m.id, access_level: level });
       }
       try {
         const pr = await fetch('/api/hr/permissions/' + roleId, {
@@ -3026,7 +3026,25 @@
           body: JSON.stringify({ permissions: permsList })
         });
         if (!pr.ok) { const pe = await pr.json().catch(() => ({})); alert('Oprávnění se neuložila: ' + (pe.error || ('chyba ' + pr.status)) + (pr.status === 403 ? '\n\nNemáte oprávnění upravovat role a oprávnění.' : '')); return; }
-        allPermissions[String(roleId)] = permsMap;
+
+        // Ověření ze serveru: co se opravdu uložilo. Bez tohohle by tiché
+        // neuložení vypadalo úplně stejně jako úspěch. (Požadavek #153)
+        const ulozeno = await pr.json().catch(() => null);
+        if (Array.isArray(ulozeno)) {
+          const vDb = {};
+          ulozeno.forEach(r => { vDb[r.module_id] = r.access_level; });
+          const nesedi = PERM_MODULES.filter(m => (vDb[m.id] || 'none') !== permsMap[m.id]);
+          if (nesedi.length) {
+            alert('Některá oprávnění se neuložila podle zadání:\n'
+              + nesedi.slice(0, 10).map(m => '• ' + m.name + ' — zadáno „' + PERM_LABEL[permsMap[m.id]]
+                + '", uloženo „' + PERM_LABEL[vDb[m.id] || 'none'] + '"').join('\n')
+              + (nesedi.length > 10 ? '\n…a další' : '')
+              + '\n\nZkus to prosím znovu; když to bude přetrvávat, pošli tuhle hlášku správci.');
+          }
+          allPermissions[String(roleId)] = vDb;
+        } else {
+          allPermissions[String(roleId)] = permsMap;
+        }
       } catch (e) { console.error('Permissions save error:', e); alert('Oprávnění se neuložila: ' + e.message); return; }
 
       closeModal();
@@ -3081,7 +3099,21 @@
       { id: 'chat',                name: 'Zprávy',                 color: '#a78bfa' },
       { id: 'kiosky',              name: 'Kiosky',                 color: '#06b6d4' },
       { id: 'planovani-vyroby',    name: 'Plánování výroby',       color: '#3b82f6' },
+      // Doplněno podle sidebaru — dřív tu chyběly a jejich oprávnění se při
+      // každém uložení role potichu mazala. (Požadavek #153)
+      { id: 'material',            name: 'Materiálový tok',        color: '#10b981' },
+      { id: 'reporty',             name: 'Reporty a analýzy',      color: '#ef4444' },
+      { id: 'nastaveni',           name: 'Nastavení',              color: '#6c8cff' },
+      { id: 'cad-vykresy',         name: 'CAD výkresy',            color: '#0ea5e9' },
+      { id: 'ai-agenti',           name: 'AI agenti',              color: '#a855f7' },
+      { id: 'ai-vyvojar',          name: 'AI vývojář',             color: '#8b5cf6' },
+      { id: 'dev-hub',             name: 'Dev Hub',                color: '#64748b' },
+      { id: 'mindmap',             name: 'Myšlenková mapa',        color: '#14b8a6' },
+      { id: 'admin-tasks',         name: 'Požadavky',              color: '#a78bfa' },
+      { id: 'audit-log',           name: 'Historie změn',          color: '#f59e0b' },
     ];
+
+    const PERM_LABEL = { none: 'Žádný', read: 'Čtení', write: 'Úprava' };
 
     // Mapa role_id -> { module_id: access_level }
     let allPermissions = {};
