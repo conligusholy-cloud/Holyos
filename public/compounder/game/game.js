@@ -12296,9 +12296,15 @@ function vyzvedniNasledky(then) {
     // Když dojde doručenka, změnilo se něco na serveru — a půjčky, podíly
     // a fond si hra drží v paměti z předchozího načtení. Poslední splátka tak
     // sice strhla peníze, ale půjčka hráči v seznamu zůstala visít jako běžící,
-    // dokud sám neklikl někam, co seznam načeťá znovu. Zahodíme ho raději
-    // celý: doručenky nechodí tak často, aby na tom záleželo.
-    FINANCE = null; PREVZETI = null; FOND = null;
+    // dokud sám neklikl někam, co seznam načeťá znovu.
+    //
+    // Natažení, ne vynulování: stará data zůstanou na očích, dokud nedorazí
+    // nová. Nulou by seznam na okamžik zmizel úplně — a „půjčky se ztratily"
+    // je horší záhada než ta, kterou to spravuje. Načítá se jen to, co už
+    // hráč měl otevřené.
+    if (FINANCE) loadFinance();
+    if (PREVZETI) loadPrevzeti();
+    if (FOND) loadFond();
     // Nejdřív do fronty k potvrzení, teprve pak uložení — ať jede obojí naráz.
     vse.forEach(function (x) { if (NEPOTVRZENE.indexOf(x.id) < 0) NEPOTVRZENE.push(x.id); });
     save(); paint(); drawMap(); syncState(true);
