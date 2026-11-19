@@ -282,6 +282,17 @@ if git diff --cached --name-only | grep -qE 'services/game/(vydaje|pozemky|strop
   fi
 fi
 
+# Výpadek za poruchu. Jedna porucha umaže až půl herního roku tržby toho
+# stroje, takže chyba ve výpočtu je rovnou v milionech. Konstanty navíc musí
+# sedět s hrou — rozejdou se tiše. Commit zastaví.
+if git diff --cached --name-only | grep -qE 'services/game/strop|public/compounder/game/game.js'; then
+  if ! node nastroje/tporuchy.js; then
+    echo ""
+    echo "STOP: výpadek za poruchu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Stínová pokladna. Dvě vlastnosti, na kterých stojí, se dají rozbít jedním
 # řádkem: nesmí se srovnávat sama (to by zahodilo, co má měřit) a musí
 # počítat od svého posledního kroku, ne od minulého uložení hry (jinak jí

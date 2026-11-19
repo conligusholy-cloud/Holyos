@@ -45,13 +45,17 @@ function otiskStavu(st) {
       id: l && l.id, zbyva: Math.round(Number((l || {}).zbyva) || 0),
       prepsano: Number((l || {}).prepsano) || 0,
     })),
-    units: units.filter((u) => u && u.katastrofa).map((u) => ({
+    // Stroje s rozjetou poruchou nebo katastrofou. U ostatních není co
+    // poznat: zaplacená oprava i nově naskočená porucha se poznají jen tím,
+    // že se proti minulému kroku změnily.
+    units: units.filter((u) => u && (u.katastrofa || u.porucha)).map((u) => ({
       spotId: u.spotId || u.id,
       eco: { model: ((u.eco || {}).model) || 'mini' },
-      katastrofa: {
+      katastrofa: u.katastrofa ? {
         platim: Math.round(Number(u.katastrofa.platim) || 0),
         hotovo: u.katastrofa.hotovo || null,
-      },
+      } : null,
+      porucha: u.porucha ? { od: Number(u.porucha.od) || 0 } : null,
     })),
   };
 }

@@ -8438,6 +8438,9 @@ model GameSnapshot {
   // vyzvednutá denní odměna (příjem) a zaplacené opravy po poruše (výdaj).
   odmena     Float?
   opravy     Float?
+  // Co umazaly nově naskočené poruchy. Jedna jde zpětně až o půl herního
+  // roku, takže to bývá největší jednotlivá položka čekané změny.
+  poruchy    Float?
   sedi       Boolean  @default(true)
   od_ms      Int      @default(0)
   // Zisk za prádlomaty podle hry a podle serveru, vedle sebe. Pobočky,

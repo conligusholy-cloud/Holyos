@@ -268,6 +268,52 @@ function opravyZeStavu(stary, novy) {
   return { celkem, kusu: stroju.length, stroje: stroju.slice(0, 5) };
 }
 
+// ─── Výpadek za poruchu ──────────────────────────────────────────────────────
+// Když se stroj porouchá, hra k tomu připíše jednorázovou ztrátu ZPĚTNĚ: ona
+// se ta porucha stala někdy během doby, co hráč nebyl ve hře, a od té chvíle
+// stroj nevydělával. Zpětně to jde až o půl herního roku, takže jedna porucha
+// u velkého stroje umaže klidně milion.
+//
+// Server o tom nevěděl a čekal pořád plný výdělek. U malé sítě se to ztratí,
+// u velké to byla v stínové pokladně ta největší zbývající položka.
+//
+// Od klienta se bere jedině TO, CO SE STALO: který stroj a od kdy je
+// porouchaný. Částku si server spočítá sám, ze své vlastní tržby toho stroje.
+// Novou díru to neotvírá: komu se porucha nehodí, ten ji může zatajit úplně
+// — a to platilo i předtím, protože chod stroje server bere ze stavu hry.
+//
+// Musí sedět s hlidejPoruchy v public/compounder/game/game.js.
+const ENERGIE_PODIL = 0.09;                 // energie ≈ 9 % obratu
+const PORUCHA_CHOD = { mini: 0, flex: 0.5, max: 0.5 };
+const PORUCHA_ZPETNE_MAX = 6 * MESIC_MS;    // nejvýš půl herního roku zpětně
+
+function vypadekStroje(trzbaPlna, model, zpetMs) {
+  const zpet = Math.max(0, Math.min(PORUCHA_ZPETNE_MAX, Number(zpetMs) || 0));
+  const chod = PORUCHA_CHOD[model] == null ? 0 : PORUCHA_CHOD[model];
+  const t = Math.max(0, Number(trzbaPlna) || 0);
+  return Math.max(0, Math.round(t * (1 - ENERGIE_PODIL) * (1 - chod) * (zpet / MESIC_MS)));
+}
+
+// Poruchy, které mezi dvěma kroky nově naskočily.
+function vypadky(zaklad, novy, trzby, kdy) {
+  const sez = (x) => (Array.isArray((x || {}).units) ? x.units : []);
+  const drive = new Set();
+  sez(zaklad).forEach((u) => { if (u && u.porucha) drive.add(unitKlic(u)); });
+  const ted = Number(kdy) || Date.now();
+  let celkem = 0; let kusu = 0;
+  sez(novy).forEach((u) => {
+    if (!u || !u.porucha) return;
+    const klic = unitKlic(u);
+    if (drive.has(klic)) return;                 // porouchaný byl už minule
+    const t = (trzby && trzby.get) ? trzby.get(klic) : null;
+    if (!t) return;                              // místo, které server nezná
+    const od = Number(u.porucha.od) || ted;
+    celkem += vypadekStroje(t.plne, t.model || ((u.eco || {}).model), ted - od);
+    kusu += 1;
+  });
+  return { celkem, kusu };
+}
+
 // Hlavní otázka: je skok hotovosti, který klient poslal, vůbec možný?
 // Vrací popis, ne verdikt — rozhodnutí, co s tím, patří tomu, kdo volá.
 async function prirustek(p, novyStav, vyzvednuto) {
@@ -338,16 +384,20 @@ async function ocekavanaZmena(p, st, od, zisk, vyzvednuto, zaklad) {
   // takže se pozná jen z rozdílu dvou uložení: u úvěru vyskočí počítadlo
   // přepsání a poplatek je podíl z jeho nesplacené jistiny.
   const splatnosti = require('./vydaje').poplatkySplatnosti(zakl, st);
+  // Nově naskočené poruchy: hra k nim připsala zpětnou ztrátu, server čekal
+  // pořád plný výdělek.
+  const poruchy = vypadky(zakl, st, zisk ? zisk.trzby : null, ted);
   // A příjem, který hra vyplácí sama: denní odměna.
   const prijmy = prijmyZeStavu(zakl, st, zisk ? zisk.server : 0);
-  const nakupy = zEvidence + zeStavu.celkem + rezie + opravy.celkem + splatnosti.celkem;
+  const nakupy = zEvidence + zeStavu.celkem + rezie + opravy.celkem + splatnosti.celkem
+    + poruchy.celkem;
   // Čerpání úvěru hotovost zvedá, splátka ji snižuje — a obojí je vidět na
   // dluhu, ne na hotovosti.
   const dluhZmena = dluhu(st) - dluhu(zakl);
   return {
     celkem: zeSite + dorucenky + prijmy.celkem - nakupy + dluhZmena,
     zeSite, dorucenky, nakupy, dluhZmena, zEvidence, zeStavu, rezie,
-    opravy, prijmy, splatnosti,
+    opravy, prijmy, splatnosti, poruchy,
   };
 }
 
@@ -413,12 +463,17 @@ async function ziskSrovnani(p, st) {
   // Kolik prádlomatů umí server ocenit přesně. Zbytku se skóre dopočítá
   // z nájmu, což je odhad — a je potřeba vědět, kolika se to týká.
   let presne = 0;
+  // Plná tržba každého stroje, tedy bez krácení chodem. Z ní se počítá
+  // výpadek za poruchu — a počítá se SERVEROVÝM číslem, ne tím od hry.
+  const trzby = new Map();
+  const spoty = [];
   const mista = claims.map((c) => {
     let score = c.score;
     if (score == null) {
       const deal = 0.9 + POZEMKY.spotHash(c.spot_id, 'r') * 0.3;
       score = EKO.skoreZNajmu(c.rent, deal);
     } else presne++;
+    spoty.push(c.spot_id);
     return { model: c.model, score: score || 0, rent: c.rent, pozemek: !!c.pozemek,
       area_key: c.area_key, chod: chody.has(c.spot_id) ? chody.get(c.spot_id) : 1,
       podil: podily.has(c.spot_id) ? podily.get(c.spot_id) : 1 };
@@ -426,10 +481,15 @@ async function ziskSrovnani(p, st) {
 
   const nav = await NAV.proHrace(p, st);
   const server = EKO.site(mista, nav.navstevnost, { udalosti, ted: ted2.getTime() }).zisk;
+  mista.forEach((m, i) => {
+    const e = EKO.jedenStroj(m, nav.navstevnost, {
+      udalost: EKO.udalostKoef(udalosti, m.area_key, mista.length, ted2.getTime()), chod: 1 });
+    trzby.set(spoty[i], { plne: e.plne, model: m.model });
+  });
   // Totéž podle hry: součet zisků jednotlivých prádlomatů z uloženého stavu.
   const units = Array.isArray(st && st.units) ? st.units : [];
   const hra = units.reduce((a, u) => a + Math.round((u && u.eco && u.eco.profit) || 0), 0);
-  return { hra, server: Math.round(server), presne };
+  return { hra, server: Math.round(server), presne, trzby };
 }
 
 // ─── Otisk hry v čase ────────────────────────────────────────────────────────
@@ -488,6 +548,7 @@ async function otisk(p, st, v) {
     nakupy: cek ? Math.round(cek.nakupy) : null,
     odmena: cek && cek.prijmy ? Math.round(cek.prijmy.denni) : null,
     opravy: cek && cek.opravy ? Math.round(cek.opravy.celkem) : null,
+    poruchy: cek && cek.poruchy ? Math.round(cek.poruchy.celkem) : null,
     sedi: !!v.sedi,
     od_ms: Math.min(2147483647, Math.max(0, Math.round(v.od || 0))),
     zisk_hra: zisk ? zisk.hra : null,
@@ -513,4 +574,5 @@ async function zkontroluj(p, st, vyzvednuto) {
 module.exports = { zkontroluj, prirustek, otisk, stropStroje, stropSite, zRozdiluStavu, rezieZaMesic,
   ocekavanaZmena,
   denniOdmena, prijmyZeStavu, opravyZeStavu,
+  vypadky, vypadekStroje,
   MESIC_MS, NAVSTEVNOST_STROP, REZERVA, STROJE, OTISK_ODSTUP };

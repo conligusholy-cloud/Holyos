@@ -38,7 +38,7 @@ async function stropPrehled(dnu) {
     prisma.gameSnapshot.findMany({
       where: { created_at: { gte: od }, ocekavano: { not: null }, od_ms: { gt: 60000 } },
       orderBy: { created_at: 'desc' }, take: 2000,
-      select: { player_id: true, prirustek: true, ocekavano: true, odmena: true, opravy: true },
+      select: { player_id: true, prirustek: true, ocekavano: true, odmena: true, opravy: true, poruchy: true },
     }).catch(() => []),
   ]);
   // Jména pro obě sestavy najednou: hráč z porovnání čekané změny nemusí být
@@ -82,6 +82,9 @@ async function stropPrehled(dnu) {
       + kc(suma(odmen, 'odmena')) + ' L$');
     out.push('  zaplacené opravy po poruše:   ' + oprav.length + ' uložení · '
       + kc(suma(oprav, 'opravy')) + ' L$');
+    const porouch = cekane.filter((x) => (x.poruchy || 0) > 0);
+    out.push('  výpadek za nové poruchy:      ' + porouch.length + ' uložení · '
+      + kc(suma(porouch, 'poruchy')) + ' L$');
     Array.from(poHracich.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10)
       .forEach(([id, kolik]) => {
         out.push('    ' + String(jmena.get(id) || ('#' + id)).padEnd(20).slice(0, 20)
