@@ -137,6 +137,16 @@ if git diff --cached --name-only | grep -qE 'services/game/brzda|routes/game-tra
   fi
 fi
 
+# Jmění podle skutečného vlastnictví. Když se tentýž podíl spočte majiteli
+# i držiteli, je hra bohatší, než je — a když ani jednomu, peníze zmizí.
+if git diff --cached --name-only | grep -qE 'services/game/vlastnictvi|services/game/jmeni|routes/game-account'; then
+  if ! node nastroje/tvlastnictvi.js; then
+    echo ""
+    echo "STOP: jmění podle vlastnictví nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Verze uloženého stavu. Je to jediná zábrana proti tomu, aby druhá
 # rozehraná hra přepsala novější stav — když povolí, mizí hráčům peníze.
 if git diff --cached --name-only | grep -qE 'services/game/stav-verze|routes/game-account'; then

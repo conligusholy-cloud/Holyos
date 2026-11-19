@@ -24,6 +24,7 @@ const VYD = require('../services/game/vydaje');
 const JMENI = require('../services/game/jmeni');
 const FOND = require('../services/game/fond');
 const VERZE = require('../services/game/stav-verze');
+const VLAST = require('../services/game/vlastnictvi');
 // Zkratka do obsluhy: stx(req)('server.neco') vrátí hlášku v jazyce hráče.
 // Skládá se pro toho, KOMU se posílá — ne pro toho, kdo akci vyvolal.
 function stx(req) {
@@ -1597,7 +1598,11 @@ async function resHodnost(p, st) {
   // neztrácí. Bez toho by tři hráči po přepnutí spadli o stupeň a brali
   // by to jako trest za něco, co neudělali.
   const jmeniServ = await JMENI.proHrace(p.id, st).catch(() => cisteJmeni(st));
-  const spoctena = hodnost(jmeniServ);
+  // Podíly v cizích firmách a peníze ve fondu jsou taky hráčův majetek — meta
+  // se má počítat z toho, co opravdu vlastní. Bere se vyšší z obou čísel:
+  // odložené může být o půl minuty starší a hodnost nikdy nejde dolů.
+  const jmeniVlast = VLAST.odlozene(p.id, 10 * 60 * 1000);
+  const spoctena = hodnost(jmeniVlast == null ? jmeniServ : Math.max(jmeniServ, jmeniVlast));
   const prvni = !p.hodnost;          // hráče vidíme s hodností poprvé
   const stary = HODNOSTI.findIndex((x) => x.id === p.hodnost);
   const h = zmrazena(p.hodnost, spoctena);
@@ -1957,7 +1962,7 @@ function dropZeb() { _zeb = { okno: -1, data: null }; }
 async function zebricky() {
   const okno = Math.floor(Date.now() / ZEB_OKNO);
   if (_zeb.okno === okno && _zeb.data) return _zeb.data;
-  const [mista, hraci, zemeMap, majetek, aliance, clenove, drzeneFondy] = await Promise.all([
+  const [mista, hraci, zemeMap, majetek, aliance, clenove, equityVse, vkladyFondu] = await Promise.all([
     // Počítají se postavené prádlomaty, ne zabraná místa — prázdný pozemek
     // do žebříčku nepatří.
     prisma.gameSpotClaim.groupBy({ by: ['player_id', 'nick'], _count: { _all: true },
@@ -1979,18 +1984,43 @@ async function zebricky() {
       .catch(() => []),
     prisma.gameAlianceClen.groupBy({ by: ['aliance_id'], _count: { _all: true },
       where: { stav: 'clen' } }).catch(() => []),
-    prisma.gameEquity.findMany({ where: { fond_id: { not: null }, stav: 'bezi' },
-      select: { fond_id: true, firma_id: true, podil: true, cena: true } }).catch(() => []),
+    // Všechny běžící podíly, ne jen fondové. Potřebujeme je dvakrát: fondům
+    // k ocenění toho, co drží, a jmění hráče k tomu, aby se tentýž podíl
+    // nepočítal majiteli i držiteli.
+    prisma.gameEquity.findMany({ where: { stav: 'bezi' },
+      select: { investor_id: true, fond_id: true, firma_id: true, podil: true, cena: true } })
+      .catch(() => []),
+    prisma.gameFondVklad.findMany({ select: { aliance_id: true, clen_id: true, castka: true } })
+      .catch(() => []),
   ]);
-  // Jmění hráče = serverový majetek plus jeho hotovost mínus dluh. Kdyby
-  // se majetek nenačetl, spadne se na dřívější číslo ze stavu hry — žebříček
-  // kvůli tomu padat nesmí.
+  // HODNOTA FIRMY = serverový majetek plus hotovost mínus dluh. Je to provozní
+  // číslo: cení se jím podíly i to, co drží fond. Jmění HRÁČE z něj vznikne až
+  // níž, přes vlastnictví. Kdyby se majetek nenačetl, spadne se na dřívější
+  // číslo ze stavu hry — žebříček kvůli tomu padat nesmí.
   const jmeniHrace = (h, st) => {
     const m = majetek.get(h.id);
     return m ? m.celkem + JMENI.hotovostADluh(st) : cisteJmeni(st);
   };
   // Firmy doplníme k nickům z míst — v žebříčku chceme vidět, kdo je kdo.
   const firmy = await firmyMapa();
+  // Podklady pro vlastnictví. Fond drží jen to, co má fond_id — zbytek drží
+  // hráči přímo.
+  const drzeneFondy = equityVse.filter((e) => e && e.fond_id != null);
+  const vlastData = { equity: equityVse, fondy: aliance, vklady: vkladyFondu };
+  // Hodnost se počítá z ULOŽENÉHO stavu, ne z dopočítaného — meta má být za to,
+  // co hráč opravdu má, ne za odhad. Proto tu vzniká vlastní sada hodnot firem.
+  const firmaUlozena = new Map();
+  hraci.forEach((h) => {
+    if (!(h.state || {}).profile) return;
+    firmaUlozena.set(h.id, jmeniHrace(h, h.state || {}));
+  });
+  const jmeniUlozene = VLAST.spocti(firmaUlozena, vlastData);
+  // Hodnost při ukládání hry si tohle číslo přečte — počítat vlastnictví znovu
+  // při každém uložení by znamenalo načítat stavy všech hráčů dvakrát za minutu.
+  VLAST.odloz(jmeniUlozene);
+  const jmeniProHodnost = (h) => (jmeniUlozene.has(h.id)
+    ? jmeniUlozene.get(h.id) : jmeniHrace(h, h.state || {}));
+
   // Do žebříčku prádlomatů patří každý, kdo hru rozehrál — i ten, kdo zatím
   // nic nepostavil. Jinak polovina hráčů v seznamu vůbec není a nedá se
   // poznat, že tam jsou. Nula je taky výsledek.
@@ -2004,7 +2034,7 @@ async function zebricky() {
     viden.add(h.id);
     // Hodnost počítáme ze stavu uloženého na serveru — ne z toho, co o sobě
     // tvrdí prohlížeč. V žebříčku a na burze to má být záruka, ne jmenovka.
-    hodnostHrace.set(h.id, hodnost(jmeniHrace(h, h.state || {})).id);
+    hodnostHrace.set(h.id, hodnost(jmeniProHodnost(h)).id);
     poMistech.push({ id: h.id, nick: h.nick, firma: h.company || (h.nick + ' s.r.o.'),
       znak: h.emblem || null, zeme: zemeMap[h.id] || [], hodnota: pocetMist.get(h.id) || 0,
       hodnost: hodnostHrace.get(h.id) });
@@ -2051,6 +2081,14 @@ async function zebricky() {
         hodnota: hvezdyZPovesti(st), hodnost: hd });
     }
   });
+  // Teď teprve z hodnot firem vznikne jmění HRÁČE: hodnota jeho firmy bez
+  // toho, co z ní drží někdo jiný, plus podíly v cizích firmách a podíl na
+  // fondech, kam vložil. jmeniFirmy zůstává provozní hodnotou — tou se cení
+  // podíly i to, co drží fond, a kdyby do ní vlastnictví vstoupilo, točilo by
+  // se to dokola.
+  const jmeniPlne = VLAST.spocti(jmeniFirmy, vlastData);
+  jmeni.forEach((x) => { if (jmeniPlne.has(x.id)) x.hodnota = jmeniPlne.get(x.id); });
+
   zisk.sort((a, b) => b.hodnota - a.hodnota);
   pozvanky.sort((a, b) => b.hodnota - a.hodnota);
   jmeni.sort((a, b) => b.hodnota - a.hodnota);
