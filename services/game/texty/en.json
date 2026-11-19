@@ -3606,5 +3606,7 @@
   "dor.odskodne": "Compensation with apology: {p1}",
   "server.tvuj_podil_se_mezitim_zmenil": "Your stake in that company has changed in the meantime. Open the offer again and try.",
   "server.takovy_hovor_neznam": "Call not found.",
-  "server.posli_cely_stav": "The game state must be sent in full. The game will try again shortly."
+  "server.posli_cely_stav": "The game state must be sent in full. The game will try again shortly.",
+  "server.minimum_nad_zisk": "The minimum payout cannot be set higher than what the company currently earns per month ({penize:p1}).",
+  "dor.dividenda_min_zmenena": "{p1} set the minimum monthly payout at {p2} to {penize:p3}."
 }

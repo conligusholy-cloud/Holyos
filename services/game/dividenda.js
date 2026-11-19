@@ -21,10 +21,16 @@
 // by si před ztrátovým měsícem nastavil nulu a nechal ji na majiteli — a to
 // už není politika, to je úhyb.
 //
-// Co tahle verze vědomě neumí: vynutit výplatu, když firma zrovna nevydělává.
-// K tomu by byla potřeba firemní pokladna oddělená od kapsy majitele; dokud
-// je hotovost firmy jeho hotovost, minimální dividenda by byla jen jiné
-// jméno pro vymáhání peněz z cizího účtu.
+// Minimální dividenda (19. 11.) řeší druhou polovinu: většina může firmě
+// uložit, kolik měsíčně vyplatí NEJMÉNĚ. Původní námitka — že vynucená
+// výplata je vymáhání peněz z cizího účtu, dokud je hotovost firmy
+// hotovostí majitele — pořád platí, a proto se nic nevymáhá. Co firma
+// nevydělá, se nikomu nebere: rozdíl se zapíše podílníkovi jako NEDOPLATEK
+// a vyplatí se, jakmile firma vydělá. Slib tím má váhu (dokud nedoplatek
+// běží, majitel nesmí nové závazky), ale nikdo nesahá na cizí hotovost.
+//
+// Víc než svůj díl zisku firma nevyplatí nikdy. To je ta mez, která z toho
+// dělá dividendu, a ne exekuci.
 
 'use strict';
 
@@ -67,5 +73,42 @@ function odchoziCelkem(zbyde, podily, pct) {
   return (podily || []).reduce((a, e) => a + castka(zbyde, e.podil, pct), 0);
 }
 
-module.exports = { platna, kdoUrcuje, smiMenit, castka, odchoziCelkem,
-  VYCHOZI, MIN, MAX, VETSINA };
+// Minimální měsíční výplata. Nesmysl i chybějící údaj je nula, tedy stav
+// před touhle pravomocí: vyplácí se jen podíl ze zisku.
+function platnyMin(x) {
+  const n = Math.round(Number(x) || 0);
+  return n > 0 ? n : 0;
+}
+
+// Strop, který se dá slíbit: co firma teď měsíčně vydělá. Kdyby šlo slíbit
+// víc, nebyla by to dividendová politika, ale způsob, jak majiteli
+// nasbírat nedoplatek, který nemůže splatit, a tím mu zavřít obchod.
+function stropMin(zbyde) {
+  return Math.max(0, Math.round(Number(zbyde) || 0));
+}
+
+// Co se podílníkovi za měsíc vyplatí a co z toho zůstane dlužné.
+//
+//   zaklad  dnešní výplata podle politiky (podíl ze zisku krácený pct)
+//   slib    co se dluží: minimum na tenhle podíl plus starý nedoplatek
+//   strop   svůj díl zisku — víc firma nevyplatí ani kdyby dlužila víc
+//
+// Ztráta se nemění: podílník nese svůj díl celý jako dřív, a minimum se
+// za takový měsíc celé zapíše do nedoplatku.
+function rozpad(zbyde, podil, pct, min, nedoplatek) {
+  const z = Number(zbyde) || 0;
+  const p = Number(podil) || 0;
+  const stary = Math.max(0, Math.round(Number(nedoplatek) || 0));
+  const slib = Math.round(platnyMin(min) * p) + stary;
+  if (z < 0) {
+    // Ztrátový měsíc: doplatek od podílníka jako dřív, slib se jen zapíše.
+    return { vyplata: castka(z, p, pct), nedoplatek: slib, zaklad: castka(z, p, pct), slib };
+  }
+  const zaklad = castka(z, p, pct);
+  const strop = Math.max(0, Math.round(z * p));
+  const vyplata = Math.min(strop, Math.max(zaklad, slib));
+  return { vyplata, nedoplatek: Math.max(0, slib - vyplata), zaklad, slib, strop };
+}
+
+module.exports = { platna, platnyMin, stropMin, rozpad, kdoUrcuje, smiMenit, castka,
+  odchoziCelkem, VYCHOZI, MIN, MAX, VETSINA };

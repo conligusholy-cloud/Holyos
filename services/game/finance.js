@@ -249,10 +249,15 @@ async function vyplatyPodilu(ted) {
       // Dividendová politika krátí jen zisk. Ztrátu nese podílník vždycky
       // celou — jinak by si většinový nastavil před ztrátovým měsícem nulu
       // a doplatek nechal na majiteli.
-      const castka = DIVIDENDA.castka(zbyde, e.podil, firma.dividenda_pct);
+      // Minimální dividenda: co firma nevydělá, se nikomu nebere — rozdíl
+      // zůstane zapsaný jako nedoplatek a vyplatí se, až firma vydělá.
+      const r = DIVIDENDA.rozpad(zbyde, e.podil, firma.dividenda_pct,
+        firma.dividenda_min, e.nedoplatek);
+      const castka = r.vyplata;
       const dalsi = new Date(ted.getTime() + MESIC_MS);
       if (!castka) {
-        await prisma.gameEquity.update({ where: { id: e.id }, data: { dalsi_at: dalsi } });
+        await prisma.gameEquity.update({ where: { id: e.id },
+          data: { dalsi_at: dalsi, nedoplatek: r.nedoplatek } });
         continue;
       }
       const pct = Math.round(e.podil * 100) + ' %';
@@ -270,7 +275,8 @@ async function vyplatyPodilu(ted) {
             { text_kod: 'dor.doplatek_od_podilnika', text_data: { p1: e.investor_nick } });
         }
         await tx.gameEquity.update({ where: { id: e.id },
-          data: { vyplaceno: e.vyplaceno + castka, dalsi_at: dalsi } });
+          data: { vyplaceno: e.vyplaceno + castka, dalsi_at: dalsi,
+            nedoplatek: r.nedoplatek } });
       });
     } catch (err) {
       console.warn('[game-finance] podíl #' + e.id + ':', err.message);

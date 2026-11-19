@@ -6,10 +6,15 @@
 const Module = require('module');
 const puvodni = Module.prototype.require;
 let NABIDKY = [];
+let PODILY = [];
 Module.prototype.require = function (co) {
   if (/config\/database$/.test(co)) {
-    return { prisma: { gameTender: { findMany: async (q) => NABIDKY.filter((t) =>
-      t.utocnik_id === q.where.utocnik_id && t.stav === q.where.stav && t.trvala === q.where.trvala) } } };
+    return { prisma: {
+      gameTender: { findMany: async (q) => NABIDKY.filter((t) =>
+        t.utocnik_id === q.where.utocnik_id && t.stav === q.where.stav && t.trvala === q.where.trvala) },
+      gameEquity: { findMany: async (q) => PODILY.filter((e) =>
+        e.firma_id === q.where.firma_id && e.stav === q.where.stav) },
+    } };
   }
   return puvodni.apply(this, arguments);
 };
@@ -29,7 +34,7 @@ const nabidka = (x) => Object.assign({ utocnik_id: 1, stav: 'bezi', trvala: fals
   max_pct: 0.3, koupeno_pct: 0, cena_za_pct: 10000, do: ZITRA }, x || {});
 
 (async () => {
-  NABIDKY = [];
+  NABIDKY = []; PODILY = [];
   let v = await REZ.volne(HRAC, { cash: 1000000 });
   ok('bez nabídek je volné všechno', v.volne === 1000000 && v.zamceno === 0);
 
@@ -82,6 +87,30 @@ const nabidka = (x) => Object.assign({ utocnik_id: 1, stav: 'bezi', trvala: fals
   v = await REZ.volne(HRAC, { cash: 100000 });
   ok('volné nejde pod nulu', v.volne === 0, '— ' + v.volne);
 
+  // ── Nedoplatek dividendy drží stejně jako nabídka ──────────────────────────
+  // Dokud firma dluží podílníkům, nemá si její majitel brát další závazky.
+  NABIDKY = [];
+  PODILY = [{ firma_id: 1, stav: 'bezi', nedoplatek: 250000 },
+    { firma_id: 1, stav: 'bezi', nedoplatek: 50000 },
+    { firma_id: 2, stav: 'bezi', nedoplatek: 900000 }];
+  v = await REZ.volne(HRAC, { cash: 1000000 });
+  ok('nedoplatky dividendy se sčítají a drží',
+    v.zamceno === 300000 && v.volne === 700000, '— ' + v.zamceno);
+  ok('cizí firma mi nic nedrží', v.zamceno === 300000);
+
+  NABIDKY = [nabidka()];
+  v = await REZ.volne(HRAC, { cash: 1000000 });
+  ok('nabídka a nedoplatek se sčítají dohromady',
+    v.zamceno === 600000, '— ' + v.zamceno);
+  r = await REZ.vejdeSe(HRAC, { cash: 1000000 }, 500000);
+  ok('a nová nabídka se měří proti zbytku', r.ok === false, '— volné ' + r.volne);
+
+  PODILY = [{ firma_id: 1, stav: 'bezi', nedoplatek: 0 }];
+  NABIDKY = [];
+  ok('splacený nedoplatek nedrží nic',
+    (await REZ.volne(HRAC, { cash: 10 })).zamceno === 0);
+
+  PODILY = [];
   ok('prázdný stav nic neshodí', (await REZ.volne(HRAC, null)).volne === 0);
 
   console.log(chyb ? '\n' + chyb + ' nesedí' : '\nvšechno sedí');

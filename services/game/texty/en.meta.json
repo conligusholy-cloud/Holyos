@@ -3586,5 +3586,7 @@
   "server.tvuj_podil_se_mezitim_zmenil": "578fb4119869",
   "server.takovy_hovor_neznam": "150460f4b181",
   "server.posli_cely_stav": "0614e4970a8c",
-  "server.na_nabidku_mas_zamcene": "ba7ca906f5c2"
+  "server.na_nabidku_mas_zamcene": "ba7ca906f5c2",
+  "server.minimum_nad_zisk": "20890a15f966",
+  "dor.dividenda_min_zmenena": "4d64986fcdd4"
 }

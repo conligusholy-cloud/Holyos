@@ -248,6 +248,17 @@ if git diff --cached --name-only | grep -qE 'services/game/strop'; then
   fi
 fi
 
+# Minimální dividenda. Stojí celá na jediné mezi: víc než svůj díl zisku
+# firma nevyplatí nikdy. Bez ní by z dividendy byla exekuce na hotovost
+# majitele. Commit zastaví.
+if git diff --cached --name-only | grep -qE 'services/game/(dividenda|finance)'; then
+  if ! node nastroje/tdividendamin.js; then
+    echo ""
+    echo "STOP: minimální dividenda nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Rezervace peněz pod běžícími nabídkami. Bez ní jde vyhlásit tři nabídky
 # z jedněch peněz a dvěma podílníkům pak říct, že se to nepovedlo. Commit
 # zastaví.

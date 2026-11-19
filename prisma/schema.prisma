@@ -7684,6 +7684,11 @@ model GamePlayer {
   // investory pozval a pak jim výplatu utnul. dividenda_kdo/at drží, čí ruka
   // to byla a kdy — je to cizí zásah do vlastní firmy a musí být vidět.
   dividenda_pct Float    @default(1)
+  // Kolik firma vyplatí měsíčně nejméně, ať vydělá, nebo ne. Nula = jako
+  // dřív, vyplácí se jen podíl ze zisku. Určuje ji stejná většina jako pct
+  // a nesmí být víc, než kolik firma teď měsíčně vydělá — jinak by to
+  // nebyla dividenda, ale způsob, jak majitele ochromit.
+  dividenda_min Int      @default(0)
   dividenda_kdo Int?
   dividenda_at  DateTime?
 
@@ -8157,6 +8162,10 @@ model GameEquity {
   podil         Float
   cena          Int
   vyplaceno     Int       @default(0)
+  // Co firma dluží z minimální dividendy. Vzniká v měsíci, kdy na slíbenou
+  // výplatu nevydělala: nikomu se nic nebere, jen se to zapíše a vyplatí,
+  // jakmile firma vydělá. Dokud nedoplatek běží, majitel nesmí nové závazky.
+  nedoplatek    Float     @default(0)
   // Blokační menšina: podílník se čtvrtinou firmy může zakázat, aby ji
   // majitel dal do zástavy. Drží se to u podílu, ne u člověka — kdo podíl
   // prodá, prodá i zákaz a nový držitel si ho zapíná sám.

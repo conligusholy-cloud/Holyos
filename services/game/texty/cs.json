@@ -3613,5 +3613,7 @@
   "dor.odskodne": "Odškodné s omluvou: {p1}",
   "server.tvuj_podil_se_mezitim_zmenil": "Tvůj podíl v té firmě se mezitím změnil. Otevři nabídku znovu a zkus to.",
   "server.takovy_hovor_neznam": "Takový hovor neznám.",
-  "server.posli_cely_stav": "Stav se musí poslat celý. Hra to za chvíli zkusí znovu."
+  "server.posli_cely_stav": "Stav se musí poslat celý. Hra to za chvíli zkusí znovu.",
+  "server.minimum_nad_zisk": "Minimální výplatu nejde slíbit vyšší, než kolik firma teď měsíčně vydělá ({penize:p1}).",
+  "dor.dividenda_min_zmenena": "{p1} nastavil ve firmě {p2} minimální měsíční výplatu na {penize:p3}."
 }

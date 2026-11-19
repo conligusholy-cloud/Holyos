@@ -28,15 +28,24 @@ function zbyvaZNabidky(t) {
   return Math.round(zbyva * 100 * (Number(t.cena_za_pct) || 0));
 }
 
-// Kolik má hráč zamčeného pod běžícími nabídkami.
+// Kolik má hráč zamčeného pod běžícími nabídkami a nesplacenými
+// nedoplatky dividendy. Nedoplatek je dluh firmy vůči podílníkům: dokud
+// běží, nemá si její majitel brát další závazky.
 async function zamceno(playerId) {
   const ted = new Date();
-  const rows = await prisma.gameTender.findMany({
-    where: { utocnik_id: playerId, stav: 'bezi', trvala: false },
-  }).catch(() => []);
-  return rows
+  const [rows, dluhy] = await Promise.all([
+    prisma.gameTender.findMany({
+      where: { utocnik_id: playerId, stav: 'bezi', trvala: false },
+    }).catch(() => []),
+    prisma.gameEquity.findMany({
+      where: { firma_id: playerId, stav: 'bezi' }, select: { nedoplatek: true },
+    }).catch(() => []),
+  ]);
+  const zNabidek = rows
     .filter((t) => !t.do || new Date(t.do) > ted)
     .reduce((a, t) => a + zbyvaZNabidky(t), 0);
+  const zDividend = dluhy.reduce((a, x) => a + Math.max(0, Number(x.nedoplatek) || 0), 0);
+  return Math.round(zNabidek + zDividend);
 }
 
 // Volná hotovost = co hra ukazuje, minus zamčené. Bere se číslo hry, ne

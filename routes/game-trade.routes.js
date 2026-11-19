@@ -1335,10 +1335,22 @@ router.post('/trade/dividenda', hrac, api(async (req, res) => {
   }
 
   const pct = DIVIDENDA.platna(b.pct);
-  if (pct === DIVIDENDA.platna(firma.dividenda_pct)) return res.json({ ok: true, pct });
+  // Minimální měsíční výplata. Slíbit jde nanejvýš to, co firma teď vydělá:
+  // nad tím by to nebyla dividendová politika, ale způsob, jak majiteli
+  // nasbírat nedoplatek, který nemůže splatit, a tím mu zavřít obchod.
+  const minChce = DIVIDENDA.platnyMin(b.min != null ? b.min : firma.dividenda_min);
+  const stropMin = DIVIDENDA.stropMin(acct._zbydeMesicne(stavu(firma)) || 0);
+  if (minChce > stropMin) {
+    return res.status(409).json({ error: stx(req)('server.minimum_nad_zisk', { p1: stropMin }) });
+  }
+  const minStary = DIVIDENDA.platnyMin(firma.dividenda_min);
+  if (pct === DIVIDENDA.platna(firma.dividenda_pct) && minChce === minStary) {
+    return res.json({ ok: true, pct, min: minChce });
+  }
 
   await prisma.gamePlayer.update({ where: { id: firmaId },
-    data: { dividenda_pct: pct, dividenda_kdo: req.player.id, dividenda_at: new Date() } });
+    data: { dividenda_pct: pct, dividenda_min: minChce,
+      dividenda_kdo: req.player.id, dividenda_at: new Date() } });
 
   // Majitel i ostatní podílníci se to musí dozvědět. Mění se jim příjem —
   // zjistit to až z výplaty by bylo nepěkné překvapení.
@@ -1352,6 +1364,16 @@ router.post('/trade/dividenda', hrac, api(async (req, res) => {
       text_kod: 'dor.dividenda_zmenena',
       text_data: { p1: req.player.nick, p2: firma.nick, p3: Math.round(pct * 100) },
     })) });
+    // Minimum je druhý slib a mění příjem jinak než procento — vlastní zpráva.
+    if (minChce !== minStary) {
+      await prisma.gameDelivery.createMany({ data: komu.map((pid) => ({
+        player_id: pid, kind: 'zprava',
+        popis: req.player.nick + ' nastavil ve firmě ' + firma.nick
+          + ' minimální měsíční výplatu na ' + minChce,
+        text_kod: 'dor.dividenda_min_zmenena',
+        text_data: { p1: req.player.nick, p2: firma.nick, p3: minChce },
+      })) });
+    }
   }
   console.log('[game] dividenda: ' + req.player.nick + ' → ' + firma.nick
     + ' · ' + Math.round(pct * 100) + ' %');
