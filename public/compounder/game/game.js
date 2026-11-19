@@ -618,15 +618,45 @@ function dobaProstoje(ms) {
 // kolik to dělá dohromady, aby se to dalo odečíst z výnosu za celé období.
 // Zpětně jdeme nejvýš PORUCHA_ZPETNE_MAX, ať dvoutýdenní pauza nesmaže všechno.
 var PORUCHA_ZPETNE_MAX = 6 * MONTH_MS;    // nejvýš půl herního roku zpětně
+// ─── Kdy se stroj porouchá ──────────────────────────────────────────────────
+// Dřív to byl los: Math.random při každém návratu do hry. Server o poruše
+// věděl jen to, co mu napsal prohlížeč, takže kdo si hru upravil, mohl mít
+// poruch kolik chtěl — nebo žádnou. Bylo to poslední místo, kde si server
+// nemohl spočítat svoje.
+//
+// Nově je porucha vlastností MÍSTA A ČASU. Herní měsíc je okno a z otisku
+// místa se spočítá, jestli se v něm stroj porouchal, kdy a jaká závada to
+// byla. Server počítá totéž (services/game/poruchy.js) a musí mu vyjít
+// stejné číslo — na to je test, který obě strany porovnává.
+//
+// Pro hráče to znamená, že porucha nezávisí na tom, kdy hru načte. Dřív mohl
+// dvěma načteními dostat dvě různé, teď dostane tu samou — a právě proto si
+// ji nemůže odkliknout pryč.
+var SANCE_V_OKNE = PORUCHA_ROCNE / 12;
+function poruchaVOkne(spotId, okno) {
+  var klic = String(spotId) + ':' + okno;
+  if (spotHash(klic, 'porucha') >= SANCE_V_OKNE) return null;
+  return { okno: okno, od: okno * MONTH_MS + Math.floor(spotHash(klic, 'kdy') * MONTH_MS),
+    zavada: spotHash(klic, 'zavada') };
+}
+function poslednPorucha(spotId, od, do_) {
+  var a = Math.max(0, Number(od) || 0), b = Math.max(a, Number(do_) || 0), nej = null;
+  for (var w = Math.floor(a / MONTH_MS); w <= Math.floor(b / MONTH_MS); w++) {
+    var p = poruchaVOkne(spotId, w);
+    if (p && p.od >= a && p.od <= b) nej = p;
+  }
+  return nej;
+}
 function hlidejPoruchy(dt) {
   if (!(dt > 0)) return 0;
-  var sance = Math.min(0.5, dt / (YEAR_MS / PORUCHA_ROCNE));
   var ted = Date.now(), ztrata = 0;
   (S.units || []).forEach(function (u) {
     if (jeVPoruse(u) || u.technik) return;
-    if (Math.random() >= sance) return;
-    var z = ZAVADY[Math.floor(Math.random() * ZAVADY.length)];
-    var zpet = Math.random() * Math.min(dt, PORUCHA_ZPETNE_MAX);
+    var p = poslednPorucha(u.spotId, ted - dt, ted);
+    if (!p) return;
+    var z = ZAVADY[Math.floor(p.zavada * ZAVADY.length)] || ZAVADY[0];
+    // Zpětně nejvýš půl herního roku — stejná mez jako dřív.
+    var zpet = Math.min(ted - p.od, PORUCHA_ZPETNE_MAX);
     u.porucha = { od: ted - zpet, zav: z.zav, text: z.text };
     u.vady = (u.vady || 0) + 1;
     // Co stroj za tu dobu nevydělal: plný obrat bez energie (ta se stojícím

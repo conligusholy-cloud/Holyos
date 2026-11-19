@@ -326,6 +326,17 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|rout
   fi
 fi
 
+# Deterministické poruchy. Celé to stojí na tom, že hra i server počítají
+# STEJNĚ — kdyby se rozešly, hra by ukazovala poruchu, o které server neví,
+# a v pokladně by z toho byl nevysvětlený rozdíl. Commit zastaví.
+if git diff --cached --name-only | grep -qE 'services/game/(poruchy|pozemky)|public/compounder/game/game.js'; then
+  if ! node nastroje/tporuchydet.js; then
+    echo ""
+    echo "STOP: hra a server se neshodnou na poruchách (viz výš)."
+    exit 1
+  fi
+fi
+
 # Výpadek za poruchu. Jedna porucha umaže až půl herního roku tržby toho
 # stroje, takže chyba ve výpočtu je rovnou v milionech. Konstanty navíc musí
 # sedět s hrou — rozejdou se tiše. Commit zastaví.

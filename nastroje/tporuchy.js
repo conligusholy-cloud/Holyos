@@ -57,32 +57,43 @@ ok('nulová doba je nulová ztráta', S.vypadekStroje(300000, 'mini', 0) === 0);
 ok('záporná doba ztrátu nevyrobí', S.vypadekStroje(300000, 'mini', -MESIC) === 0);
 ok('neznámý model se bere jako stojící', S.vypadekStroje(300000, 'xxx', MESIC) > 0);
 
-// ── Pozná se jen NOVÁ porucha ────────────────────────────────────────────────
-let r = S.vypadky({ units: [stroj('a', null)] }, { units: [stroj('a', MESIC)] }, TRZBY, TED);
-ok('nově naskočená porucha se započítá', r.kusu === 1 && r.celkem > 0, '— ' + r.celkem);
+// ── Server si poruchu počítá sám, ne z toho, co hlásí klient ────────────────
+// Tohle je ta změna z 19. 11.: do výpadku už nevstupuje u.porucha.od od
+// prohlížeče. Server se zeptá vlastního modulu, které místo se kdy
+// porouchalo, a ocení to svou tržbou.
+const POR = require('../services/game/poruchy');
+const MES = POR.MESIC_MS;
+// Najdeme okno, ve kterém se 'a' opravdu porouchalo — ať test nestojí
+// na tom, že zrovna tohle číslo vyjde.
+let oknoS = null;
+for (let w = 900; w < 960 && oknoS == null; w++) if (POR.vOkne('a', w)) oknoS = w;
+ok('nějaké okno s poruchou se našlo', oknoS != null, '— ' + oknoS);
+const p0 = POR.vOkne('a', oknoS);
+const doKdy = p0.od + MES / 2;
 
-r = S.vypadky({ units: [stroj('a', MESIC)] }, { units: [stroj('a', MESIC)] }, TRZBY, TED);
-ok('porucha, která běžela už minule, se nepočítá podruhé',
-  r.celkem === 0, '— ' + r.celkem);
+let r = S.vypadky({ units: [] }, { units: [] }, TRZBY, doKdy, p0.od - 1);
+ok('porucha v okně se započítá i bez hlášení od klienta',
+  r.kusu === 1 && r.celkem > 0, '— ' + JSON.stringify(r));
+ok('a sedí na vlastní tržbě serveru',
+  r.celkem === S.vypadekStroje(300000, 'mini', doKdy - p0.od), '— ' + r.celkem);
 
-r = S.vypadky({ units: [stroj('a', null)] }, { units: [stroj('a', null)] }, TRZBY, TED);
-ok('stroj bez poruchy nic nepřidá', r.celkem === 0);
+// Kdo byl porouchaný už minule, se nepočítá znovu — zrcadlí to hlidejPoruchy.
+r = S.vypadky({ units: [{ spotId: 'a', porucha: { od: 1 } }] }, { units: [] },
+  TRZBY, doKdy, p0.od - 1);
+ok('už porouchaný stroj se nepočítá podruhé', r.celkem === 0, '— ' + r.celkem);
 
-// Server počítá ze SVÉ tržby — stroj, o kterém neví, mu ztrátu nevyrobí.
-r = S.vypadky({ units: [] }, { units: [{ spotId: 'neznamy', porucha: { od: TED - MESIC } }] },
-  TRZBY, TED);
-ok('místo, které server nezná, ztrátu nevyrobí', r.celkem === 0, '— ' + r.celkem);
+// Okno, ve kterém se nic nestalo.
+let oknoBez = null;
+for (let w = 900; w < 960 && oknoBez == null; w++) if (!POR.vOkne('a', w)) oknoBez = w;
+r = S.vypadky({ units: [] }, { units: [] }, TRZBY,
+  oknoBez * MES + MES - 1, oknoBez * MES);
+ok('v okně bez poruchy se nezapočítá nic', r.celkem === 0, '— ' + r.celkem);
 
-// Dvě poruchy najednou se sečtou.
-r = S.vypadky({ units: [stroj('a', null), stroj('b', null)] },
-  { units: [stroj('a', MESIC), stroj('b', MESIC)] }, TRZBY, TED);
-ok('dvě nové poruchy se sečtou',
-  r.kusu === 2 && r.celkem === S.vypadekStroje(300000, 'mini', MESIC)
-    + S.vypadekStroje(300000, 'max', MESIC), '— ' + r.celkem);
-
-ok('prázdný stav nic neshodí', S.vypadky(null, null, null, TED).celkem === 0);
-ok('chybějící tržby nic neshodí',
-  S.vypadky({ units: [] }, { units: [stroj('a', MESIC)] }, null, TED).celkem === 0);
+// Místo, které server nezná, ztrátu nevyrobí — počítá se jen z vlastní evidence.
+r = S.vypadky({ units: [] }, { units: [] }, new Map(), doKdy, p0.od - 1);
+ok('bez vlastních tržeb se nepočítá nic', r.celkem === 0);
+ok('obrácené okno nic nevyrobí', S.vypadky({ units: [] }, { units: [] }, TRZBY, 100, 200).celkem === 0);
+ok('prázdné vstupy nic neshodí', S.vypadky(null, null, null, doKdy, 0).celkem === 0);
 
 // ── Proti skutečnému kódu hry ────────────────────────────────────────────────
 // Konstanty musí sedět. Kdyby se ve hře změnily a tady ne, server by poruchy

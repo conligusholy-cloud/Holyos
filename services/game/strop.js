@@ -294,21 +294,27 @@ function vypadekStroje(trzbaPlna, model, zpetMs) {
   return Math.max(0, Math.round(t * (1 - ENERGIE_PODIL) * (1 - chod) * (zpet / MESIC_MS)));
 }
 
-// Poruchy, které mezi dvěma kroky nově naskočily.
-function vypadky(zaklad, novy, trzby, kdy) {
+// Poruchy, které v okně nastaly. Od 19. 11. si je server počítá SÁM
+// (services/game/poruchy.js) — z otisku místa a času, ne z toho, co mu
+// napíše klient. Tím zmizelo poslední místo, kde se hra dala upravit tak,
+// aby serveru hlásila jiné poruchy, než jaké doopravdy měla.
+//
+// Zrcadlí se tu hlidejPoruchy z game.js: jeden stroj, jedna porucha za
+// okno, a ta poslední. Kdo byl porouchaný už minule, se nepočítá znovu.
+function vypadky(zaklad, novy, trzby, kdy, odKdy) {
+  const POR = require('./poruchy');
   const sez = (x) => (Array.isArray((x || {}).units) ? x.units : []);
   const drive = new Set();
   sez(zaklad).forEach((u) => { if (u && u.porucha) drive.add(unitKlic(u)); });
   const ted = Number(kdy) || Date.now();
+  const od = Math.max(0, Number(odKdy) || 0);
   let celkem = 0; let kusu = 0;
-  sez(novy).forEach((u) => {
-    if (!u || !u.porucha) return;
-    const klic = unitKlic(u);
-    if (drive.has(klic)) return;                 // porouchaný byl už minule
-    const t = (trzby && trzby.get) ? trzby.get(klic) : null;
-    if (!t) return;                              // místo, které server nezná
-    const od = Number(u.porucha.od) || ted;
-    celkem += vypadekStroje(t.plne, t.model || ((u.eco || {}).model), ted - od);
+  if (!trzby || !trzby.forEach || !(od < ted)) return { celkem, kusu };
+  trzby.forEach((t, spotId) => {
+    if (drive.has(String(spotId))) return;       // porouchaný byl už minule
+    const p = POR.posledni(spotId, od, ted);
+    if (!p) return;
+    celkem += vypadekStroje(t.plne, t.model, ted - p.od);
     kusu += 1;
   });
   return { celkem, kusu };
@@ -386,7 +392,7 @@ async function ocekavanaZmena(p, st, od, zisk, vyzvednuto, zaklad) {
   const splatnosti = require('./vydaje').poplatkySplatnosti(zakl, st);
   // Nově naskočené poruchy: hra k nim připsala zpětnou ztrátu, server čekal
   // pořád plný výdělek.
-  const poruchy = vypadky(zakl, st, zisk ? zisk.trzby : null, ted);
+  const poruchy = vypadky(zakl, st, zisk ? zisk.trzby : null, ted, naposledy);
   // A příjem, který hra vyplácí sama: denní odměna.
   const prijmy = prijmyZeStavu(zakl, st, zisk ? zisk.server : 0);
   const nakupy = zEvidence + zeStavu.celkem + rezie + opravy.celkem + splatnosti.celkem
