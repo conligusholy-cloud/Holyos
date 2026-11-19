@@ -3644,12 +3644,15 @@
   "fond.muj_hlas": "f054bfd97b1f",
   "fond.nic_nedrzis": "fbc93f719cec",
   "fond.neni_komu": "36fa03a86515",
-  "fond.nemas_firmu": "8aa954ab7790",
+  "fond.nemas_firmu": "fdfefef27bb0",
   "veta.fond_chybi_hlasu": "4937e6a7c5aa",
   "veta.fond_dil_radek": "3877580057fd",
   "veta.fond_koupit_popis": "be7ffa0a03a8",
   "veta.fond_vyplatit_popis": "54391e4de898",
   "server.navrh_cena_mala": "29c0bfed124b",
   "fond.zrusit": "f6991c4824eb",
-  "server.navrh_neni_tvuj": "1634bb8d6851"
+  "server.navrh_neni_tvuj": "1634bb8d6851",
+  "fond.kde_drzis": "e9fba4c9169c",
+  "fond.ostatni_firmy": "8286f067f48e",
+  "veta.fond_navrh_nikomu_nebere": "c71369911f6f"
 }

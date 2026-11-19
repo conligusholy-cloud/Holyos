@@ -3671,12 +3671,15 @@
   "fond.muj_hlas": "Tvůj hlas",
   "fond.nic_nedrzis": "Ve fondu zatím nic nedržíš, takže nehlasuješ.",
   "fond.neni_komu": "Ve fondu zatím není komu převádět.",
-  "fond.nemas_firmu": "Nedržíš podíl v žádné firmě, kterou by šlo navrhnout.",
+  "fond.nemas_firmu": "Zatím není žádná firma, kterou by šlo navrhnout.",
   "veta.fond_chybi_hlasu": "Chybí ještě {p1} % hlasů z {p2} %.",
   "veta.fond_dil_radek": "{p1} · vložil {penize:p2}",
   "veta.fond_koupit_popis": "Koupit {p1} % ve firmě {p2} za {penize:p3}",
   "veta.fond_vyplatit_popis": "Vyplatit {penize:p1} z fondu",
   "server.navrh_cena_mala": "Za tolik se podíl nekupuje. Nejméně {penize:p1}.",
   "fond.zrusit": "Zrušit návrh",
-  "server.navrh_neni_tvuj": "Zrušit návrh může jen ten, kdo ho podal."
+  "server.navrh_neni_tvuj": "Zrušit návrh může jen ten, kdo ho podal.",
+  "fond.kde_drzis": "Kde držíš podíl",
+  "fond.ostatni_firmy": "Ostatní firmy",
+  "veta.fond_navrh_nikomu_nebere": "Z přijatého návrhu se stane veřejná nabídka na tu firmu. Fond nikomu podíl nebere — každý podílník se rozhodne sám, jestli prodá."
 }

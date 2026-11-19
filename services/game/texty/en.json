@@ -3664,12 +3664,15 @@
   "fond.muj_hlas": "Your vote",
   "fond.nic_nedrzis": "You hold nothing in the fund yet, so you do not vote.",
   "fond.neni_komu": "There's nobody in the fund to transfer to yet.",
-  "fond.nemas_firmu": "You hold no share in any company that could be proposed.",
+  "fond.nemas_firmu": "There is no company to propose yet.",
   "veta.fond_chybi_hlasu": "Still {p1}% short of the {p2}% needed.",
   "veta.fond_dil_radek": "{p1} · contributed {penize:p2}",
   "veta.fond_koupit_popis": "Buy {p1}% in {p2} for {penize:p3}",
   "veta.fond_vyplatit_popis": "Pay out {penize:p1} from the fund",
   "server.navrh_cena_mala": "That is too little for a share. At least {penize:p1}.",
   "fond.zrusit": "Withdraw",
-  "server.navrh_neni_tvuj": "Only the person who made the proposal can withdraw it."
+  "server.navrh_neni_tvuj": "Only the person who made the proposal can withdraw it.",
+  "fond.kde_drzis": "Where you hold a share",
+  "fond.ostatni_firmy": "Other companies",
+  "veta.fond_navrh_nikomu_nebere": "An approved proposal becomes a public offer on that company. The fund takes nobody's stake — every shareholder decides for themselves whether to sell."
 }

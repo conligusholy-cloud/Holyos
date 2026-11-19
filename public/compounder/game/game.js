@@ -9426,33 +9426,64 @@ function fondPrevestSheet() {
   };
 }
 function fondNavrhSheet() {
-  // Navrhnout nákup jde jen ve firmě, kterou hráč zná — tedy v té, kde sám
-  // drží podíl. Jinak by to byl dotaz na číslo firmy, a to není nabídka.
-  var firmy = ((FINANCE && FINANCE.podily) || []).filter(function (e) {
-    return e.moje === 'mam' && bezici(e);
-  });
-  var videno = {}, vyber = [];
-  firmy.forEach(function (e) {
-    if (videno[e.kdo_id]) return;
-    videno[e.kdo_id] = true; vyber.push(e);
+  // Navrhnout jde vstup do kterékoli firmy ve hře. Nahoře jsou ty, kde hráč
+  // sám drží podíl — tam ví, do čeho jde — a pod nimi ostatní, ať se dá
+  // navrhnout i vstup ke konkurentovi, kterého hráč zná jen z mapy.
+  var videno = {}, prvni = [];
+  ((FINANCE && FINANCE.podily) || []).forEach(function (e) {
+    if (e.moje !== 'mam' || !bezici(e) || videno[e.kdo_id]) return;
+    videno[e.kdo_id] = true; prvni.push({ id: e.kdo_id, nazev: e.kdo });
   });
   sheet('<h3>' + esc(tx('fond.dat_hlasovat')) + '</h3>'
-    + (vyber.length
-      ? '<h4>' + esc(tx('fond.navrh_koupit')) + '</h4>'
-        + '<label class="fld"><span>' + esc(tx('fond.firma')) + '</span><select id="fo-firma" class="inp">'
-        + vyber.map(function (e) {
-            return '<option value="' + e.kdo_id + '">' + esc(e.kdo) + '</option>';
-          }).join('') + '</select></label>'
-        + '<label class="fld"><span>' + esc(tx('fond.pct')) + '</span>'
-        + '<input id="fo-pct" class="inp" type="number" min="1" max="100" step="1" value="10"></label>'
-        + '<label class="fld"><span>' + esc(tx('fond.cena')) + '</span>'
-        + '<input id="fo-cena" class="inp" type="number" min="0" step="10000" value="0"></label>'
-        + '<button class="btn" id="fo-koupit" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>'
-      : '<p class="fine">' + esc(tx('fond.nemas_firmu')) + '</p>')
-    + '<h4 style="margin-top:14px">' + esc(tx('fond.navrh_vyplatit')) + '</h4>'
-    + '<label class="fld"><span>' + esc(tx('fond.kolik')) + '</span>'
-    + '<input id="fo-castka" class="inp" type="number" min="1" step="1000" value="0"></label>'
-    + '<button class="btn sec" id="fo-vyplatit" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>');
+    + '<p class="muted small">' + esc(tx('hra.nacitam_hrace')) + '</p>');
+  // Kdyby seznam hráčů nedorazil, zbydou aspoň firmy, kde hráč podíl drží.
+  api('/trade/players')
+    .then(function (r) { vykresli((r.ok && r.j && r.j.players) || []); })
+    .catch(function () { vykresli([]); });
+
+  function vykresli(hraci) {
+    var ostatni = [];
+    hraci.forEach(function (h) {
+      if (videno[h.id]) return;
+      videno[h.id] = true; ostatni.push({ id: h.id, nazev: h.firma || h.nick });
+    });
+    ostatni.sort(function (a, b) { return String(a.nazev).localeCompare(String(b.nazev)); });
+    var volby = function (list) {
+      return list.map(function (x) {
+        return '<option value="' + x.id + '">' + esc(x.nazev) + '</option>';
+      }).join('');
+    };
+    var skupina = function (klic, list) {
+      return list.length
+        ? '<optgroup label="' + esc(tx(klic)) + '">' + volby(list) + '</optgroup>' : '';
+    };
+    sheet('<h3>' + esc(tx('fond.dat_hlasovat')) + '</h3>'
+      + (prvni.length || ostatni.length
+        ? '<h4>' + esc(tx('fond.navrh_koupit')) + '</h4>'
+          + '<label class="fld"><span>' + esc(tx('fond.firma')) + '</span><select id="fo-firma" class="inp">'
+          + skupina('fond.kde_drzis', prvni) + skupina('fond.ostatni_firmy', ostatni)
+          + '</select></label>'
+          + '<label class="fld"><span>' + esc(tx('fond.pct')) + '</span>'
+          + '<input id="fo-pct" class="inp" type="number" min="1" max="100" step="1" value="10"></label>'
+          + '<label class="fld"><span>' + esc(tx('fond.cena')) + '</span>'
+          + '<input id="fo-cena" class="inp" type="number" min="0" step="10000" value="0"></label>'
+          + '<p class="fine">' + esc(tx('veta.fond_navrh_nikomu_nebere')) + '</p>'
+          + '<button class="btn" id="fo-koupit" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>'
+        : '<p class="fine">' + esc(tx('fond.nemas_firmu')) + '</p>')
+      + '<h4 style="margin-top:14px">' + esc(tx('fond.navrh_vyplatit')) + '</h4>'
+      + '<label class="fld"><span>' + esc(tx('fond.kolik')) + '</span>'
+      + '<input id="fo-castka" class="inp" type="number" min="1" step="1000" value="0"></label>'
+      + '<button class="btn sec" id="fo-vyplatit" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>');
+
+    if ($('fo-koupit')) $('fo-koupit').onclick = function () {
+      posli({ druh: 'koupit', firma_id: Number($('fo-firma').value) || 0,
+        pct: (Number($('fo-pct').value) || 0) / 100,
+        cena: Number($('fo-cena').value) || 0 }, $('fo-koupit'));
+    };
+    $('fo-vyplatit').onclick = function () {
+      posli({ druh: 'vyplatit', castka: Number($('fo-castka').value) || 0 }, $('fo-vyplatit'));
+    };
+  }
   function posli(telo, btn) {
     btn.disabled = true;
     apiJson('/trade/aliance/fond/navrh', telo).then(function (r) {
@@ -9460,14 +9491,6 @@ function fondNavrhSheet() {
       closeSheet(); fondZnovu();
     }).catch(function () { btn.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
   }
-  if ($('fo-koupit')) $('fo-koupit').onclick = function () {
-    posli({ druh: 'koupit', firma_id: Number($('fo-firma').value) || 0,
-      pct: (Number($('fo-pct').value) || 0) / 100,
-      cena: Number($('fo-cena').value) || 0 }, $('fo-koupit'));
-  };
-  $('fo-vyplatit').onclick = function () {
-    posli({ druh: 'vyplatit', castka: Number($('fo-castka').value) || 0 }, $('fo-vyplatit'));
-  };
 }
 function bindFond(kde) {
   var box = $(kde); if (!box || !FOND) return;
