@@ -137,6 +137,16 @@ if git diff --cached --name-only | grep -qE 'services/game/brzda|routes/game-tra
   fi
 fi
 
+# Které měřítko škody platí u soudu. Počítá se z toho trest v desítkách
+# milionů — chyba tady není překlep, je to cizí majetek.
+if git diff --cached --name-only | grep -qE 'services/game/zlocin\.js'; then
+  if ! node nastroje/tzlocinmeritko.js; then
+    echo ""
+    echo "STOP: měřítko škody nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Škoda u běžícího případu. Počítá se z ní trest, takže chyba tady je buď
 # trest z čísla starého týden, nebo naopak zmrazení, na které hráč nemá.
 if git diff --cached --name-only | grep -qE 'services/game/zlocin-rizeni'; then

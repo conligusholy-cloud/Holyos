@@ -82,6 +82,22 @@ const cenik = (m) => LIST[String(m || '').toLowerCase()] || LIST.mini;
 const SMAZANY = 'smazaný hráč';
 
 // Vyhodnocení nanečisto: kdo by dnes spadl do kontroly.
+// Ze dvou měřítek platí větší. Samostatně, aby se dalo ověřit bez databáze —
+// počítá se z toho trest a to není číslo, které se zkouší v provozu.
+function vetsiSkoda(radek, pv, R) {
+  const uzka = Math.max(0, Math.round(radek.skoda || 0));
+  const siroka = Math.max(0, Math.round((pv && pv.zisk) || 0));
+  radek.skoda_uzka = uzka;
+  radek.zisk_podvod = siroka;
+  radek.skoda = Math.max(uzka, siroka);
+  radek.skoda_podle = siroka > uzka ? 'podvody' : 'rizeni';
+  radek.zmrazit = Math.round(radek.skoda * R.koef_zabaveni);
+  radek.trest = { nejnizsi: Math.round(radek.skoda * R.trest_nejnizsi),
+    stredni: Math.round(radek.skoda * R.trest_stredni),
+    nejvyssi: Math.round(radek.skoda * R.trest_nejvyssi) };
+  return radek;
+}
+
 async function nanecisto(prisma, pravidla) {
   const R = pravidla || await nastaveni();
   const [hraci, davky, obchody, mista] = await Promise.all([
@@ -235,6 +251,26 @@ async function nanecisto(prisma, pravidla) {
       r.zbude_max = r.hotovost == null ? null : majetek - r.trest.nejvyssi;
     });
   }
+  // ── Škoda se měří dvěma měřítky a platí to větší ────────────────────
+  //
+  // Tenhle výpočet byl schválně opatrný: provizi počítal jen z účtů, které
+  // sám uzná za mrtvé — smazané, zablokované nebo téměř nehrající. „Provize od
+  // živých hráčů je v pořádku" zní rozumně, dokud nepotkáš člověka, který si
+  // pomocné účty drží při životu: chvíli s nimi hraje, stroje si od nich kupuje
+  // pod cenou — a na papíře je každý z nich živý hráč.
+  //
+  // Takový případ pak šel k soudu s pětinou toho, co ten člověk opravdu vzal:
+  // Pinon 5 323 513 proti 24 584 346, které mu počítalo vyhodnocení podvodů ze
+  // stejných dat. Bere se proto větší z obou čísel a obojí se zapisuje, ať je
+  // poté vidět, odkud trest vzešel.
+  //
+  // Rozšiřuje to výši trestu, ne okruh obviněných: kdo nemá důkaz podle
+  // pravidel výš, se před soud nedostane ani teď.
+  const PV = await require('./podvod').skore(prisma).catch((e) => {
+    console.warn('[zlocin] vyhodnocení podvodů:', e && e.message); return {};
+  });
+  vysledek.concat(nahled).forEach((radek) => vetsiSkoda(radek, PV[radek.id], R));
+
   const rad = (a, b) => b.skoda - a.skoda;
   vysledek.sort(rad); nahled.sort(rad);
   return {
@@ -244,4 +280,4 @@ async function nanecisto(prisma, pravidla) {
   };
 }
 
-module.exports = { nastaveni, uloz, nanecisto, VYCHOZI, cenik };
+module.exports = { nastaveni, uloz, nanecisto, vetsiSkoda, VYCHOZI, cenik };
