@@ -9374,6 +9374,12 @@ function fondNavrhPopis(n) {
     return tx('veta.fond_dividenda_popis', { p1: esc(d.firma_nick || ''),
       p2: Math.round((d.pct || 0) * 100) });
   }
+  if (n.druh === 'nabidka') {
+    // Platí to, co je na stole: po protinávrhu už ne původní podmínky.
+    var na = d.protinavrh || d;
+    return tx('veta.fond_nabidka_popis', { p1: esc(d.firma_nick || ''),
+      p2: Math.round((na.podil || 0) * 100), p3: na.cena || 0 });
+  }
   return tx('veta.fond_vyplatit_popis', { p1: kcFull(d.castka || 0) });
 }
 // Vnitřek fondu. Není to vlastní karta: aliance a fond jsou jedna věc —
@@ -9470,14 +9476,30 @@ function fondVnitrek() {
   }
 
   h += '<h4 style="margin:12px 0 4px">' + esc(tx('fond.navrhy')) + '</h4>';
-  var bezi = (FOND.navrhy || []).filter(function (n) { return n.stav === 'bezi' || n.stav === 'prijat'; });
+  var bezi = (FOND.navrhy || []).filter(function (n) {
+    return n.stav === 'bezi' || n.stav === 'prijat' || n.stav === 'protinavrh';
+  });
   if (!bezi.length) h += '<p class="fine">' + esc(tx('fond.zadne')) + '</p>';
   bezi.forEach(function (n) {
     h += '<div class="row"><span>' + fondNavrhPopis(n) + '</span><span class="muted small">'
       + Math.round((n.pro || 0) * 100) + ' % ' + esc(tx('fond.pro')) + '</span></div>';
-    if (n.stav === 'bezi') {
+    // U nabídky zvenču musí být předem vidět, jestli by fond tím získal ve
+    // firmě většinu. Rozhoduje kolektivně a zpátky se to nekoupí.
+    if (n.druh === 'nabidka' && (n.detail || {}).vetsina) {
+      h += '<p class="fine warn">' + tx('veta.fond_nabidka_vetsina',
+        { p1: Math.round(((n.detail || {}).podil_po || 0) * 100) }) + '</p>';
+    }
+    if (n.stav === 'protinavrh') {
+      h += '<p class="fine ok">' + esc(tx('fond.ceka_na_majitele')) + '</p>';
+    } else if (n.stav === 'bezi') {
       h += '<p class="fine">' + esc(tx('veta.fond_chybi_hlasu',
         { p1: Math.ceil((n.chybi || 0) * 100), p2: Math.round((n.prah || 0) * 100) })) + '</p>';
+      // Protinávrh jde podat jednou. Podruhé už tlačítko není — jinak by se
+      // nabídka dala blokovat donekonečna, protože každé kolo je nové hlasování.
+      if (ja && n.druh === 'nabidka' && !(n.detail || {}).protinavrh) {
+        h += '<div class="gcard-act"><button class="btn sec sm" data-fond-protinavrh="'
+          + n.id + '">' + esc(tx('fond.protinavrh_dat')) + '</button></div>';
+      }
       if (ja) {
         h += '<div class="gcard-act">'
           + '<button class="btn sm' + (n.muj_hlas === 'pro' ? '' : ' sec') + '" data-fond-hlas="'
@@ -9488,7 +9510,8 @@ function fondVnitrek() {
     } else {
       var popisek = n.druh === 'koupit' ? 'fond.vyhlasit'
         : (n.druh === 'zrusit' ? 'fond.stahnout'
-          : (n.druh === 'dividenda' ? 'fond.navrh_dividenda' : 'fond.vyplatit_provest'));
+          : (n.druh === 'dividenda' ? 'fond.navrh_dividenda'
+            : (n.druh === 'nabidka' ? 'fond.nabidka_provest' : 'fond.vyplatit_provest')));
       h += '<p class="fine ok">' + esc(tx('fond.schvaleno')) + '</p>'
         + (n.druh === 'koupit'
           ? '<p class="fine">' + esc(tx('veta.fond_navrh_nikomu_nebere')) + '</p>' : '')
@@ -9643,6 +9666,33 @@ function fondNavrhSheet() {
     }).catch(function () { btn.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
   }
 }
+// Protinávrh na nabídku zvenču. Podává se jednou: hlasy se tím mažou,
+// protože se hlasovalo o jiných podmínkách, a míč se pak vrací majiteli.
+function fondProtinavrhSheet(n) {
+  var d = n.detail || {};
+  var pct = Math.round((d.podil || 0) * 100);
+  sheet('<h3>' + esc(tx('fond.protinavrh')) + '</h3>'
+    + '<p class="muted small">' + fondNavrhPopis(n) + '</p>'
+    + '<label class="fld"><span>' + esc(tx('fond.kolik_procent')) + '</span>'
+    + '<input id="pn-pct" class="inp" type="number" inputmode="numeric" min="1" max="100" value="'
+    + pct + '"></label>'
+    + '<label class="fld"><span>' + esc(tx('fond.za_kolik')) + '</span>'
+    + '<input id="pn-cena" class="inp" type="number" inputmode="numeric" min="1000" step="10000" value="'
+    + Math.round(d.cena || 0) + '"></label>'
+    + '<p class="fine">' + esc(tx('veta.fond_protinavrh_rada')) + '</p>'
+    + '<button class="btn big" id="pn-ok" style="width:100%;margin-top:10px">'
+    + esc(tx('fond.protinavrh_dat')) + '</button>');
+  $('pn-ok').onclick = function () {
+    $('pn-ok').disabled = true;
+    apiJson('/trade/aliance/fond/navrh/' + n.id + '/protinavrh', {
+      podil: Math.max(1, Math.min(100, Math.round(Number($('pn-pct').value) || 0))) / 100,
+      cena: Math.max(0, Math.round(Number($('pn-cena').value) || 0)),
+    }).then(function (r) {
+      if (!r.ok) { $('pn-ok').disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+      closeSheet(); fondZnovu();
+    }).catch(function () { $('pn-ok').disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+  };
+}
 function bindFond(kde) {
   var box = $(kde); if (!box || !FOND) return;
   // Fond se kreslí na dvě místa — do záložky Já i do překryvu z mapy — takže
@@ -9660,6 +9710,13 @@ function bindFond(kde) {
         if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
         fondZnovu();
       }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+    };
+  });
+  [].forEach.call(box.querySelectorAll('[data-fond-protinavrh]'), function (b) {
+    b.onclick = function () {
+      var id = Number(b.getAttribute('data-fond-protinavrh'));
+      var n = (FOND.navrhy || []).filter(function (x) { return x.id === id; })[0];
+      if (n) fondProtinavrhSheet(n);
     };
   });
   [].forEach.call(box.querySelectorAll('[data-fond-zrusit]'), function (b) {
@@ -10726,6 +10783,129 @@ function odkladSheet(p) {
   };
 }
 
+// ─── Nabídka podílu fondu ───────────────────────────────────────────────────
+// Majitel firmy nabídne fondu podíl ve své firmě. Fond o tom hlasuje a může
+// místo přijetí navrhnout jiné podmínky — pak se míč vrací sem.
+var FONDY = null, MOJE_NABIDKY = null;
+function loadFondNabidky(then) {
+  Promise.all([api('/leaderboard'), api('/trade/fond/nabidky')])
+    .then(function (v) {
+      FONDY = (v[0].ok && v[0].j && v[0].j.fondy) || [];
+      MOJE_NABIDKY = (v[1].ok && v[1].j && v[1].j.nabidky) || [];
+      if (then) then();
+    }).catch(function () { FONDY = FONDY || []; MOJE_NABIDKY = MOJE_NABIDKY || []; if (then) then(); });
+}
+function nabidkaFonduHtml() {
+  if (MOJE_NABIDKY == null) return '';
+  var h = '<div class="card"><h3>' + esc(tx('fond.nabidnout_podil')) + '</h3>'
+    + '<p class="muted small" style="margin:2px 0 8px">' + esc(tx('veta.fond_nabidka_k_cemu')) + '</p>'
+    + '<div class="gcard-act"><button class="btn sm" id="fn-nova">'
+    + esc(tx('fond.nabidnout_podil')) + '</button></div>';
+  var bezi = MOJE_NABIDKY.filter(function (n) {
+    return n.stav === 'bezi' || n.stav === 'protinavrh' || n.stav === 'prijat';
+  });
+  if (bezi.length) {
+    h += '<h4 style="margin:12px 0 4px">' + esc(tx('fond.moje_nabidky')) + '</h4>';
+    bezi.forEach(function (n) {
+      var na = n.na_stole || {};
+      h += '<div class="trade"><div class="row"><b>' + esc(n.fond) + '</b>'
+        + '<b>' + kcFull(na.cena || 0) + '</b></div>'
+        + '<div class="kv"><span>' + esc(tx('fond.kolik_procent')) + '</span><b>'
+        + procentaPodilu(na.podil || 0) + '</b></div>';
+      // Protinávrh znamená, že fond chce jiné podmínky a čeká se na mě.
+      if (n.stav === 'protinavrh') {
+        // Bez původních podmínek se nedá posoudit, o kolik fond utáhl —
+        // a právě to je to jediné, co se tu rozhoduje.
+        var puv = n.detail || {};
+        h += '<p class="fine warn">' + esc(tx('fond.protinavrh')) + '</p>'
+          + '<p class="fine">' + tx('veta.fond_puvodne',
+            { p1: Math.round((puv.podil || 0) * 100), p2: puv.cena || 0 }) + '</p>'
+          + '<div class="akce">'
+          + '<button class="btn sm" data-fn-odpoved="' + n.id + '" data-volba="prijmout">'
+          + esc(tx('fond.nabidku_prijmout')) + '</button>'
+          + '<button class="btn sm sec" data-fn-odpoved="' + n.id + '" data-volba="odmitnout">'
+          + esc(tx('fond.nabidku_odmitnout')) + '</button></div>';
+      } else if (n.stav === 'prijat') {
+        h += '<p class="fine ok">' + esc(tx('fond.schvaleno')) + '</p>';
+      } else {
+        h += '<p class="fine">' + esc(tx('fond.ceka_hlasovani')) + '</p>'
+          + '<div class="akce"><button class="btn sm sec" data-fn-stahnout="' + n.id + '">'
+          + esc(tx('fond.nabidku_stahnout')) + '</button></div>';
+      }
+      h += '</div>';
+    });
+  }
+  return h + '</div>';
+}
+function nabidkaFonduSheet() {
+  var l = (FONDY || []).filter(function (f) { return f.id; });
+  if (!l.length) return toast(esc(tx('fond.zadny_fond')), 'err');
+  sheet('<h3>' + esc(tx('fond.nabidnout_podil')) + '</h3>'
+    + '<p class="muted small">' + esc(tx('veta.fond_nabidka_popis_okno')) + '</p>'
+    + '<label class="fld"><span>' + esc(tx('fond.vyber_fond')) + '</span>'
+    + '<select id="fn-fond" class="inp">'
+    + l.map(function (f) {
+        return '<option value="' + f.id + '">' + esc(f.nazev) + '</option>';
+      }).join('') + '</select></label>'
+    + '<p class="fine" id="fn-kasa"></p>'
+    + '<label class="fld"><span>' + esc(tx('fond.kolik_procent')) + '</span>'
+    + '<input id="fn-pct" class="inp" type="number" inputmode="numeric" min="1" max="100" value="10"></label>'
+    + '<label class="fld"><span>' + esc(tx('fond.za_kolik')) + '</span>'
+    + '<input id="fn-cena" class="inp" type="number" inputmode="numeric" min="1000" step="10000" value="1000000"></label>'
+    + '<p class="fine" id="fn-pozn"></p>'
+    + '<button class="btn big" id="fn-ok" style="width:100%;margin-top:10px">'
+    + esc(tx('fond.odeslat_nabidku')) + '</button>');
+  var prepis = function () {
+    var f = l.filter(function (x) { return String(x.id) === $('fn-fond').value; })[0];
+    // Pokladna, ne hodnota fondu: zaplatit se dá jen z peněz, ne z podílů,
+    // které fond drží.
+    $('fn-kasa').textContent = f ? tx('veta.fond_v_pokladne', { p1: f.pokladna || 0 }) : '';
+    var pct = Math.max(0, Math.min(100, Math.round(Number($('fn-pct').value) || 0)));
+    $('fn-pozn').textContent = tx('veta.fond_bude_drzet', { p1: pct });
+  };
+  $('fn-fond').onchange = prepis; $('fn-pct').oninput = prepis; prepis();
+  $('fn-ok').onclick = function () {
+    var pct = Math.max(1, Math.min(100, Math.round(Number($('fn-pct').value) || 0)));
+    var cena = Math.max(0, Math.round(Number($('fn-cena').value) || 0));
+    $('fn-ok').disabled = true;
+    apiJson('/trade/fond/nabidka', { aliance_id: Number($('fn-fond').value),
+      podil: pct / 100, cena: cena }).then(function (r) {
+      if (!r.ok) { $('fn-ok').disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+      closeSheet(); MOJE_NABIDKY = null; loadFondNabidky(paintBurza);
+      toast(esc(tx('fond.nabidka_odeslana')), 'ok', true);
+    }).catch(function () { $('fn-ok').disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+  };
+}
+function bindNabidkaFondu(kde) {
+  var box = $(kde || 'burza-body');
+  if (!box) return;
+  var b = $('fn-nova');
+  if (b) b.onclick = function () {
+    if (FONDY == null) return loadFondNabidky(function () { nabidkaFonduSheet(); });
+    nabidkaFonduSheet();
+  };
+  [].forEach.call(box.querySelectorAll('[data-fn-stahnout]'), function (t) {
+    t.onclick = function () {
+      t.disabled = true;
+      apiJson('/trade/fond/nabidka/' + t.getAttribute('data-fn-stahnout') + '/stahnout', {})
+        .then(function (r) {
+          if (!r.ok) { t.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+          MOJE_NABIDKY = null; loadFondNabidky(paintBurza);
+        }).catch(function () { t.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+    };
+  });
+  [].forEach.call(box.querySelectorAll('[data-fn-odpoved]'), function (t) {
+    t.onclick = function () {
+      t.disabled = true;
+      apiJson('/trade/fond/nabidka/' + t.getAttribute('data-fn-odpoved') + '/odpoved',
+        { volba: t.getAttribute('data-volba') }).then(function (r) {
+          if (!r.ok) { t.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+          MOJE_NABIDKY = null; loadFondNabidky(paintBurza);
+        }).catch(function () { t.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+    };
+  });
+}
+
 function financeHtml() {
   var f = FINANCE;
   if (!f || (!(f.pujcky || []).filter(bezici).length && !(f.podily || []).filter(bezici).length)) return '';
@@ -11208,6 +11388,7 @@ function paintBurza() {
     + mojeKrizeHtml()
     + prevzetiHtml()
     + aukceHtml()
+    + nabidkaFonduHtml()
     + financeHtml()
     + krizeHtml()
     + (naMe.length ? '' : naMeHtml)
@@ -11215,6 +11396,8 @@ function paintBurza() {
     + (hotove.length ? sekce(esc(tx('drazba.uzavrene')), hotove, '') : '');
   bindAukce();
   bindFinance();
+  if (MOJE_NABIDKY == null) loadFondNabidky(paintBurza);
+  bindNabidkaFondu('burza-body');
   [].forEach.call(box.querySelectorAll('[data-prevzeti-zrus]'), function (b) {
     b.onclick = function () {
       var id = Number(b.getAttribute('data-prevzeti-zrus'));
