@@ -9509,9 +9509,7 @@ function bindFond(kde) {
 function alianceHtml() {
   if (!ALIANCE) return '';
   var a = ALIANCE.aliance;
-  // Dokud aliance není, není ani fond — karta se pak jmenuje po alianci.
-  var h = '<div class="card"><h3>' + (a ? '\uD83C\uDFE6 ' + esc(tx('fond.nadpis'))
-    : '\uD83E\uDD1D ' + esc(tx('aliance.nadpis_karta'))) + '</h3>';
+  var h = '<div class="card"><h3>\uD83C\uDFE6 ' + esc(tx('fond.nadpis')) + '</h3>';
   if (a) {
     h += '<div class="row"><b>' + esc(a.nazev) + '</b><span class="pill good">'
       + tx('veta.clenu_z', { p1: a.clenove.filter(function (c) { return c.stav === 'clen'; }).length,
@@ -11401,7 +11399,7 @@ function majetekSheet(id, rovnouKat) {
       { k: 'podil', ico: '📈', nazev: esc(tx('mapa.podil_ve_firme')), pod: esc(tx('mapa.procento_ze_zisku_i_ztraty')) },
       { k: 'vstup', ico: '💉', nazev: esc(tx('mapa.kapitalovy_vstup')), pod: esc(tx('mapa.penize_do_firmy_za_novy_podil')) },
       { k: 'prevzeti', ico: '🏴', nazev: esc(tx('prevzeti.nadpis')), pod: esc(tx('prevzeti.dlazdice_pod')) },
-      { k: 'aliance', ico: '🤝', nazev: esc(tx('aliance.nadpis')), pod: esc(tx('aliance.dlazdice_pod')) }
+      { k: 'aliance', ico: '🏦', nazev: esc(tx('aliance.nadpis')), pod: esc(tx('aliance.dlazdice_pod')) }
     ];
     var kolikJe = function (kat) {
       var f = function (list) { return list.filter(function (x) { return x.predmet === kat; }).length; };
@@ -11445,7 +11443,9 @@ function majetekSheet(id, rovnouKat) {
         telo = tx('veta.p_class_muted_small_splaci_se', { p1: tx('veta.pradlomat_hned_pri_prvni_nezaplacene_splatce', { p1: esc(tx('mapa.pujcit_mu_penize')), p2: esc(tx('mapa.ty_das_hotovost_on_splaci')), p3: esc(tx('mapa.pozadat_ho_o_pujcku')), p4: esc(tx('mapa.on_da_hotovost_ty_splacis')) }) });
       } else if (kat === 'aliance') {
         var mam = ALIANCE && ALIANCE.aliance;
-        telo = '<p class="muted small">' + esc(tx(mam ? 'veta.aliance_pozvat_popis' : 'veta.aliance_nemas')) + '</p>'
+        telo = '<p class="muted small">' + esc(mam
+          ? tx('veta.aliance_pozvat_popis', { p1: (ALIANCE && ALIANCE.max_clenu) || 0 })
+          : tx('veta.aliance_nemas')) + '</p>'
           + (mam
             ? '<div class="area-item"><div><div class="nm">' + esc(mam.nazev)
               + '</div><div class="sub">' + esc(tx('veta.aliance_cena_za_vstup')) + '</div></div>'
