@@ -3693,5 +3693,7 @@
   "veta.fond_zrusit_popis": "Stáhnout nabídku na firmu {p1}",
   "dor.fond_navrh_zrusit": "{p1} dal ve fondu {p2} hlasovat o stažení nabídky na firmu {p3}.",
   "dor.fond_stazeno": "Fond {p1} stáhl nabídku na firmu {p2}.",
-  "dor.fond_vyplata_dil": "Výplata z fondu {p1} — tvůj díl"
+  "dor.fond_vyplata_dil": "Výplata z fondu {p1} — tvůj díl",
+  "dor.fond_podil_zanikl": "{p1} skončil ve hře. Fondu {p2} se za podíl v jeho firmě vrátilo {penize:p3}, nepokrytá část {penize:penize} se odepisuje.",
+  "dor.fond_podil_nehraje": "{p1} už hru nehraje. Fondu {p2} se za podíl v jeho firmě vrátilo {penize:p3}, nepokrytá část {penize:penize} se odepisuje."
 }

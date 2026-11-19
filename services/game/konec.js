@@ -47,6 +47,25 @@ function rozdel(kDeleni, naroky) {
   });
 }
 
+// Podíl může držet hráč, nebo fond aliance. Peníze za fondový podíl nejdou
+// doručenkou — žádný takový hráč neexistuje a sloupec na to ani není, je
+// NOT NULL — ale do pokladny fondu. Zprávu dostanou členové, protože fond
+// žádný zvonek nemá. Bez tohohle vyrovnání celé firmy padalo na chybě databáze
+// a podíly zůstávaly viset.
+async function fondyPodilu(radky) {
+  const ids = [...new Set((radky || []).map((e) => e && e.fond_id).filter((x) => x != null))];
+  const m = new Map();
+  if (!ids.length) return m;
+  const [aliance, vklady] = await Promise.all([
+    prisma.gameAliance.findMany({ where: { id: { in: ids } }, select: { id: true, nazev: true } }),
+    prisma.gameFondVklad.findMany({ where: { aliance_id: { in: ids }, castka: { gt: 0 } },
+      select: { aliance_id: true, clen_id: true } }),
+  ]);
+  aliance.forEach((a) => m.set(a.id, { nazev: a.nazev, clenove: [] }));
+  vklady.forEach((v) => { const f = m.get(v.aliance_id); if (f) f.clenove.push(v.clen_id); });
+  return m;
+}
+
 function zprava(player_id, kod, data) {
   return {
     player_id, kind: 'zprava', text_kod: kod, text_data: data || null,
@@ -97,6 +116,9 @@ async function ukonciHru(playerId) {
 
   let hotovost = cele(st.cash);
   const dorucenky = [];
+  // Co se má připsat pokladnám fondů místo doručenky hráči.
+  const fondy = await fondyPodilu(podilyVeMne);
+  const fondKredit = new Map();
   const prehled = { splaceno: 0, odepsano: 0, odkoupeno: 0, nevyplaceno: 0 };
 
   // ── 1. Nejdřív to, co dluží jiným hráčům ───────────────────────────────────
@@ -133,16 +155,32 @@ async function ukonciHru(playerId) {
   const dily = rozdel(kDeleni, nevraceno.map((x) => x.dluh));
   nevraceno.forEach(({ e, dluh }, i) => {
     const dam = dily[i];
+    const fond = e.fond_id != null ? fondy.get(e.fond_id) : null;
     if (dam > 0) {
-      dorucenky.push({ player_id: e.investor_id, kind: 'cash', amount: dam,
-        text_kod: 'dor.konec_odkup_podilu', text_data: { p1: hrac.nick, penize: dam },
-        popis: TEXTY.t('dor.konec_odkup_podilu', { p1: hrac.nick, penize: dam }, 'cs') });
-      prehled.odkoupeno += dam;
+      if (e.fond_id != null) {
+        // Když už fond mezitím není, nemá se to komu připsat ani komu říct.
+        if (fond) {
+          fondKredit.set(e.fond_id, (fondKredit.get(e.fond_id) || 0) + dam);
+          prehled.odkoupeno += dam;
+        }
+      } else {
+        dorucenky.push({ player_id: e.investor_id, kind: 'cash', amount: dam,
+          text_kod: 'dor.konec_odkup_podilu', text_data: { p1: hrac.nick, penize: dam },
+          popis: TEXTY.t('dor.konec_odkup_podilu', { p1: hrac.nick, penize: dam }, 'cs') });
+        prehled.odkoupeno += dam;
+      }
     }
     const chybi = dluh - dam;
     if (chybi > 0) prehled.nevyplaceno += chybi;
-    dorucenky.push(zprava(e.investor_id, 'dor.konec_podil_zanikl',
-      { p1: hrac.nick, p2: Math.round(e.podil * 100), penize: chybi }));
+    if (e.fond_id != null) {
+      if (fond) {
+        fond.clenove.forEach((pid) => dorucenky.push(zprava(pid, 'dor.fond_podil_zanikl',
+          { p1: hrac.nick, p2: fond.nazev, p3: dam, penize: chybi })));
+      }
+    } else {
+      dorucenky.push(zprava(e.investor_id, 'dor.konec_podil_zanikl',
+        { p1: hrac.nick, p2: Math.round(e.podil * 100), penize: chybi }));
+    }
   });
 
   // ── 3. Co měl u ostatních on ──────────────────────────────────────────────
@@ -190,6 +228,10 @@ async function ukonciHru(playerId) {
     // Nevyzvednuté následky patří starému životu, do nového nesmí.
     await tx.gameDelivery.deleteMany({ where: { player_id: playerId, claimed_at: null } });
     if (aukce.length) await tx.gameAuction.createMany({ data: aukce });
+    for (const [alianceId, castka] of fondKredit) {
+      await tx.gameAliance.update({ where: { id: alianceId },
+        data: { pokladna: { increment: castka } } });
+    }
     if (dorucenky.length) await tx.gameDelivery.createMany({ data: dorucenky });
     await tx.gameSpotClaim.deleteMany({ where: { player_id: playerId } });
     await tx.gamePlayer.update({ where: { id: playerId },
@@ -238,20 +280,38 @@ async function vyrovnejPodilyFirmy(firma, duvod) {
   const st = stavu(firma);
   let hotovost = cele(st.cash);
   const dorucenky = [];
+  const fondy = await fondyPodilu(podily);
+  const fondKredit = new Map();
   const nevraceno = podily.map((e) => ({ e, dluh: Math.max(0, cele(e.cena) - cele(e.vyplaceno)) }));
   const suma = nevraceno.reduce((a, x) => a + x.dluh, 0);
   const kDeleni = suma > 0 ? Math.min(hotovost, suma) : 0;
   const dily = rozdel(kDeleni, nevraceno.map((x) => x.dluh));
-  const rozdano = dily.reduce((a, b) => a + b, 0);
+  // Sečte se, co se opravdu vyplatilo — ne co se napočítalo. Podíl fondu,
+  // který už neexistuje, nemá komu dojít, a firmě se za něj nesmí stržit
+  // hotovost: jinak by peníze zmizely ze světa.
+  let rozdano = 0;
   nevraceno.forEach(({ e, dluh }, i) => {
     const dam = dily[i];
-    if (dam > 0) {
+    const fond = e.fond_id != null ? fondy.get(e.fond_id) : null;
+    if (dam > 0 && e.fond_id == null) {
       dorucenky.push({ player_id: e.investor_id, kind: 'cash', amount: dam,
         text_kod: 'dor.konec_odkup_podilu', text_data: { p1: firma.nick, penize: dam },
         popis: TEXTY.t('dor.konec_odkup_podilu', { p1: firma.nick, penize: dam }, 'cs') });
+      rozdano += dam;
     }
-    dorucenky.push(zprava(e.investor_id, 'dor.podil_firma_nehraje',
-      { p1: firma.nick, p2: Math.round(e.podil * 100), penize: dluh - dam }));
+    if (dam > 0 && fond) {
+      fondKredit.set(e.fond_id, (fondKredit.get(e.fond_id) || 0) + dam);
+      rozdano += dam;
+    }
+    if (e.fond_id != null) {
+      if (fond) {
+        fond.clenove.forEach((pid) => dorucenky.push(zprava(pid, 'dor.fond_podil_nehraje',
+          { p1: firma.nick, p2: fond.nazev, p3: dam, penize: dluh - dam })));
+      }
+    } else {
+      dorucenky.push(zprava(e.investor_id, 'dor.podil_firma_nehraje',
+        { p1: firma.nick, p2: Math.round(e.podil * 100), penize: dluh - dam }));
+    }
   });
   // Majiteli taky — vrátí se po měsíci a jinak by nechápal, kam se poděly
   // peníze a proč mu ve firmě zmizeli podílníci.
@@ -261,6 +321,10 @@ async function vyrovnejPodilyFirmy(firma, duvod) {
   await prisma.$transaction(async (tx) => {
     for (const { e } of nevraceno) {
       await tx.gameEquity.update({ where: { id: e.id }, data: { stav: 'odkoupeno' } });
+    }
+    for (const [alianceId, castka] of fondKredit) {
+      await tx.gameAliance.update({ where: { id: alianceId },
+        data: { pokladna: { increment: castka } } });
     }
     if (dorucenky.length) await tx.gameDelivery.createMany({ data: dorucenky });
     // Hotovost firmy se tím zmenšila. Když stav vůbec není, není co upravovat.

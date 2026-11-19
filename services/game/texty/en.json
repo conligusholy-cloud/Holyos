@@ -3686,5 +3686,7 @@
   "veta.fond_zrusit_popis": "Withdraw the offer on {p1}",
   "dor.fond_navrh_zrusit": "{p1} put to a vote in the fund {p2}: withdrawing the offer on {p3}.",
   "dor.fond_stazeno": "The fund {p1} withdrew its offer on {p2}.",
-  "dor.fond_vyplata_dil": "Payout from the fund {p1} — your share"
+  "dor.fond_vyplata_dil": "Payout from the fund {p1} — your share",
+  "dor.fond_podil_zanikl": "{p1} quit the game. The fund {p2} got {penize:p3} back for its stake in their company; the uncovered balance of {penize:penize} is written off.",
+  "dor.fond_podil_nehraje": "{p1} no longer plays. The fund {p2} got {penize:p3} back for its stake in their company; the uncovered balance of {penize:penize} is written off."
 }

@@ -137,6 +137,17 @@ if git diff --cached --name-only | grep -qE 'services/game/brzda|routes/game-tra
   fi
 fi
 
+# Ukončení hry a úklid podílů. Podíl může držet i fond — a fond nemá zvonek,
+# takže se mu peníze musí připsat do pokladny. Doručenka na prázdné id shodí
+# vyrovnání celé firmy a nikdo se to z provozu nedozví.
+if git diff --cached --name-only | grep -qE 'services/game/konec'; then
+  if ! node nastroje/tkonecfond.js; then
+    echo ""
+    echo "STOP: vyrovnání podílů s fondem nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Fond aliance. Počítají se v něm cizí peníze — kdo kolik vložil, co z toho
 # dostane a co si odnese při odchodu. Chyba o korunu se z provozu nepozná.
 if git diff --cached --name-only | grep -qE 'services/game/fond'; then

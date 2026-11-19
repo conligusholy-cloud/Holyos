@@ -3666,5 +3666,7 @@
   "veta.fond_zrusit_popis": "f678736c6314",
   "dor.fond_navrh_zrusit": "abaceea345b9",
   "dor.fond_stazeno": "59c1a7eb3192",
-  "dor.fond_vyplata_dil": "e097fa3123bc"
+  "dor.fond_vyplata_dil": "e097fa3123bc",
+  "dor.fond_podil_zanikl": "37d0cebe3a08",
+  "dor.fond_podil_nehraje": "e2d4cc328774"
 }
