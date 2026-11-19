@@ -1925,7 +1925,7 @@
         if (souhrn) souhrn.textContent = '';
         return;
       }
-      if (souhrn) souhrn.textContent = 'V práci je ' + list.length + ' ' + sklonujLidi(list.length);
+      if (souhrn) souhrn.textContent = vetaLidiVPraci(list.length);
 
       // Seskupit po odděleních; kdo oddělení nemá, spadne do skupiny na konci.
       const skupiny = new Map();
@@ -1958,10 +1958,11 @@
       }).join('');
     }
 
-    function sklonujLidi(n) {
-      if (n === 1) return 'člověk';
-      if (n >= 2 && n <= 4) return 'lidé';
-      return 'lidí';
+    // Čeština počítá jinak u 1, u 2–4 a u 5 a víc — mění se i sloveso.
+    function vetaLidiVPraci(n) {
+      if (n === 1) return 'V práci je 1 člověk';
+      if (n >= 2 && n <= 4) return 'V práci jsou ' + n + ' lidé';
+      return 'V práci je ' + n + ' lidí';
     }
 
     // Obnovovat jen když je karta opravdu vidět — na skryté záložce by to jen
