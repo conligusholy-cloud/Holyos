@@ -550,9 +550,9 @@ router.get('/zlocin/pripady', api(async (req, res) => {
   const zatim = (r) => {
     const h = H[r.id] || {}, n = UR.reduce((s, u) => s + (h[u] || 0), 0);
     const mx = Math.max.apply(null, UR.map((u) => h[u] || 0)), v = UR.filter((u) => (h[u] || 0) === mx);
-    const uroven = (n >= Rn.min_porotcu && v.length === 1) ? v[0] : 'stredni';
+    const uroven = (n > 0 && v.length === 1) ? v[0] : 'stredni';
     return { uroven, castka: Math.round(r.skoda * Rn['trest_' + uroven]), hlasu: n, min: Rn.min_porotcu,
-      rozhodne: n >= Rn.min_porotcu && v.length === 1 };
+      rozhodne: n > 0 && v.length === 1 };
   };
   res.json({ ok: true, pripady: rows.map((r) => Object.assign({}, r, { hlasy: H[r.id] || {},
     hlasujici: vsechnyHlasy.filter((x) => x.zlocin_id === r.id).map((x) => ({ kdo: J[x.player_id] || ('#' + x.player_id), volba: x.volba })),
@@ -587,8 +587,7 @@ router.get('/zlocin/pripady/:id/porota', api(async (req, res) => {
   // Kandidáti: dost starý účet a nedávno přihlášený (zbytek ověří smiHlasovat)
   const ted = Date.now();
   const kand = await prisma.gamePlayer.findMany({ where: { disabled: false, id: { notIn: hlasy.map((h) => h.player_id).concat([z.hlavni_id]) },
-    created_at: { lte: new Date(ted - R.porotce_min_mesicu * 43200000) },
-    last_login_at: { gte: new Date(ted - R.porotce_aktivni_h * 3600e3) } }, select: hrac, take: 400 });
+    created_at: { lte: new Date(ted - R.porotce_min_mesicu * 43200000) } }, select: hrac, take: 400 });
   const smi = [];
   for (const k of kand) { const s = await RIZ.smiHlasovat(prisma, R, k, z); if (s.ok) smi.push({ id: k.id, nick: k.nick, firma: k.company || null }); }
   res.json({ ok: true, hlasovali: hlasy.map((h) => ({ id: h.player_id, nick: (P[h.player_id] || {}).nick, firma: (P[h.player_id] || {}).company || null, volba: h.volba, kdy: h.created_at })),

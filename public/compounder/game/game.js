@@ -12700,12 +12700,12 @@ function zlocinNoviny() {
       + '<div style="font-size:13px;margin:3px 0 6px">' + (v.moje_volba ? esc(ui.hlasoval || '') + ' (' + esc((ui.urovne || {})[v.moje_volba] || v.moje_volba) + ')' : '') + '</div>'
       + v.urovne.map(function (u) {
         return '<button data-zlh="' + v.id + '" data-v="' + u.klic + '" style="display:block;width:100%;margin:4px 0;padding:8px;border:1px solid #2b2416;border-radius:8px;background:' + (v.moje_volba === u.klic ? '#2b2416' : 'transparent') + ';color:' + (v.moje_volba === u.klic ? '#f4ecd8' : '#2b2416') + ';font-weight:600">'
-          + esc((ui.urovne || {})[u.klic] || u.klic) + ' — ' + kcFull(u.castka) + '</button>';
+          + esc((ui.urovne || {})[u.klic] || u.klic) + ' — ' + kcFull(u.castka) + ' · ' + (u.hlasu || 0) + ' ' + esc(ui.hlasu || '') + '</button>';
       }).join('') + '</div>';
   });
   var bezi = (d.pripady || []).filter(function (p) { return p.stav === 'kontrola' || p.stav === 'soud' || p.stav === 'odvolani'; });
   if (bezi.length) h += '<div style="font-weight:700;margin:6px 0 2px">' + esc(ui.bezi || '') + '</div>'
-    + bezi.map(function (p) { return '<div style="font-size:14px;padding:3px 0">' + esc(p.emblem || '') + ' <b>' + esc(p.firma) + '</b> — ' + esc(p.utvar) + ', ' + esc((ui.stav || {})[p.stav] || p.stav) + '</div>'; }).join('');
+    + bezi.map(function (p) { return '<div style="font-size:14px;padding:3px 0">' + esc(p.emblem || '') + ' <b>' + esc(p.firma) + '</b> — ' + esc(p.utvar) + ', ' + esc((ui.stav || {})[p.stav] || p.stav) + (p.hlasy ? ' · ' + esc(ui.hlasy || '') + ' ' + p.hlasy.nejnizsi + '/' + p.hlasy.stredni + '/' + p.hlasy.nejvyssi : '') + '</div>'; }).join('');
   h += d.zpravy.length ? d.zpravy.map(zlocinZprava).join('') : '<p>' + esc(ui.zadne || '') + '</p>';
   h += '<button id="zl-zavrit" style="margin-top:12px;width:100%;padding:10px;border:0;border-radius:8px;background:#2b2416;color:#f4ecd8;font-weight:700">' + esc(ui.zavrit || '') + '</button>';
   var o = zlocinPrekryti(h, function () { zlocinZavri(); zlocinTlacitko(0); });

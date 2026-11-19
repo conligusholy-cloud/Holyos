@@ -59,16 +59,9 @@ async function zahaj(prisma, R, row) {
 // Kdo smí hlasovat v případu.
 async function smiHlasovat(prisma, R, hrac, z) {
   if (!hrac || hrac.id === z.hlavni_id) return { ok: false, duvod: 'obviněný' };
+  // Jediné pravidlo: účet starší než zadaný čas (výchozí 24 h). Hlasovat není povinnost.
   const ted = Date.now();
-  if (new Date(hrac.created_at).getTime() > ted - R.porotce_min_mesicu * MESIC_MS) return { ok: false, duvod: 'účet je příliš mladý' };
-  if (!hrac.last_login_at || new Date(hrac.last_login_at).getTime() < ted - R.porotce_aktivni_h * 3600e3) return { ok: false, duvod: 'neaktivní' };
-  if (((z.detail || {}).pod_ids || []).includes(hrac.id)) return { ok: false, duvod: 'je ve stromu obviněného' };
-  const cl = await prisma.gameAlianceClen.findMany({ where: { player_id: { in: [hrac.id, z.hlavni_id] }, stav: 'clen' }, select: { aliance_id: true, player_id: true } });
-  const a = cl.find((x) => x.player_id === hrac.id), b = cl.find((x) => x.player_id === z.hlavni_id);
-  if (a && b && a.aliance_id === b.aliance_id) return { ok: false, duvod: 'stejná aliance' };
-  const obch = await prisma.gameTrade.count({ where: { stav: 'prijato',
-    OR: [{ from_id: hrac.id, to_id: z.hlavni_id }, { from_id: z.hlavni_id, to_id: hrac.id }] } });
-  if (obch) return { ok: false, duvod: 'obchodoval s obviněným' };
+  if (new Date(hrac.created_at).getTime() > ted - R.porotce_min_mesicu * MESIC_MS) return { ok: false, duvod: 'účet je mladší než ' + Math.round(R.porotce_min_mesicu * 12) + ' h' };
   return { ok: true };
 }
 
@@ -104,7 +97,8 @@ async function verdikt(prisma, R, z) {
   let uroven = 'stredni', pozn = '';
   const max = Math.max(pocty.nejnizsi, pocty.stredni, pocty.nejvyssi);
   const vitezu = UROVNE.filter((u) => pocty[u] === max);
-  if (hlasy.length < R.min_porotcu) pozn = 'Porota neměla dost hlasů (' + hlasy.length + '), platí střední trest.';
+  // Počet hlasujících nehraje roli: hlasování se uzavře po lhůtě, rozhoduje většina
+  if (!hlasy.length) pozn = 'Nikdo nehlasoval, platí střední trest.';
   else if (vitezu.length === 1) uroven = vitezu[0];
   else pozn = 'Hlasy se rozdělily nerozhodně, platí střední trest.';
   const koef = R['trest_' + uroven];

@@ -1782,7 +1782,7 @@
               + '<td class="note" style="min-width:200px">' + (function () {
                 var zt = r.zatim || {}, VOL = { nejnizsi: 'nejnižší', stredni: 'střední', nejvyssi: 'nejvyšší' };
                 var out = '<b style="color:' + (zt.rozhodne ? '#4ade80' : '#fbbf24') + '">' + esc(VOL[zt.uroven] || '') + ' trest · ' + cz(zt.castka || 0) + '</b>'
-                  + '<div>' + (zt.hlasu || 0) + ' hlasů z min. ' + (zt.min || 0) + (zt.rozhodne ? '' : ' — zatím nerozhodnuto, platil by střední') + '</div>';
+                  + '<div>' + (zt.hlasu || 0) + ' hlasů' + (zt.rozhodne ? '' : ' — remíza / nikdo nehlasoval, platil by střední') + '</div>';
                 (r.hlasujici || []).forEach(function (h) { out += '<div>• ' + esc(h.kdo) + ' — ' + esc(VOL[h.volba] || h.volba) + '</div>'; });
                 return out;
               })() + '</td>'
@@ -1808,7 +1808,7 @@
             get('/zlocin/pripady/' + b.getAttribute('data-zlp') + '/porota').then(function (p) {
               var jm = function (x) { return (x.firma || x.nick || '#' + x.id) + (x.firma && x.nick ? ' (' + x.nick + ')' : ''); };
               var VOLBA = { nejnizsi: 'nejnižší', stredni: 'střední', nejvyssi: 'nejvyšší' };
-              alert('Hlasovali (' + p.hlasovali.length + ', min. ' + p.min_porotcu + '):\n'
+              alert('Hlasovali (' + p.hlasovali.length + '):\n'
                 + (p.hlasovali.map(function (x) { return '• ' + jm(x) + ' — ' + (VOLBA[x.volba] || x.volba); }).join('\n') || '— nikdo —')
                 + '\n\nSmí hlasovat, ale ještě nehlasoval (' + p.smi_hlasovat.length + '):\n'
                 + (p.smi_hlasovat.slice(0, 40).map(function (x) { return '• ' + jm(x); }).join('\n') || '— nikdo —'));

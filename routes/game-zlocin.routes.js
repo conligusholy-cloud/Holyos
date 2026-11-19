@@ -37,6 +37,11 @@ router.get('/zlocin/noviny', hrac, api(async (req, res) => {
     prisma.gameZlocin.findMany({ where: { stav: { in: ['uzavreno', 'zruseno'] } }, orderBy: { id: 'desc' }, take: 10 }),
   ]);
   const R = await ZL.nastaveni();
+  // Průběžné výsledky hlasování — jen počty, nikdy kdo jak hlasoval
+  const poctyHlasu = {};
+  const hl = aktivni.length ? await prisma.gameZlocinHlas.groupBy({ by: ['zlocin_id', 'volba'], where: { zlocin_id: { in: aktivni.map((x) => x.id) } }, _count: { _all: true } }) : [];
+  hl.forEach((x) => { (poctyHlasu[x.zlocin_id] = poctyHlasu[x.zlocin_id] || { nejnizsi: 0, stredni: 0, nejvyssi: 0 })[x.volba] = x._count._all; });
+  const hlasyPro = (z) => (z.stav === 'soud' || z.stav === 'odvolani') ? (poctyHlasu[z.id] || { nejnizsi: 0, stredni: 0, nejvyssi: 0 }) : null;
   const moje = aktivni.find((z) => z.hlavni_id === me.id) || null;
   // Hlasování: případy ve stavu soud, kde smím hlasovat
   const hlasovani = [];
@@ -46,18 +51,18 @@ router.get('/zlocin/noviny', hrac, api(async (req, res) => {
     const h = await prisma.gameZlocinHlas.findUnique({ where: { zlocin_id_player_id: { zlocin_id: z.id, player_id: me.id } } });
     hlasovani.push({ id: z.id, firma: z.firma || z.hlavni_nick, skoda: z.skoda, soud_do: z.soud_do,
       moje_volba: h ? h.volba : null,
-      urovne: RIZ.UROVNE.map((u) => ({ klic: u, castka: Math.round(z.skoda * R['trest_' + u]), koef: R['trest_' + u] })) });
+      urovne: RIZ.UROVNE.map((u) => ({ klic: u, castka: Math.round(z.skoda * R['trest_' + u]), koef: R['trest_' + u], hlasu: (hlasyPro(z) || {})[u] || 0 })) });
   }
   // Texty rozhraní posílá server (čeština) — v klientu jsou jen údaje
   const ui = { noviny: 'Prádelní noviny', precteno: 'Přečteno', hlasovani: 'Hlasování poroty', hlasuj: 'Hlasovat', bezi: 'Běžící případy',
     zadne: 'Zatím žádné zprávy.', trest: 'Trest:', skoda: 'Škoda:', moje: 'Řízení proti tvé firmě', odvolat: 'Odvolat se', odeslat: 'Odeslat odvolání',
-    odvolani_ph: 'Napiš, proč se odvoláváš (aspoň pár vět)', hlasoval: 'Tvůj hlas je zapsán', zavrit: 'Zavřít',
+    odvolani_ph: 'Napiš, proč se odvoláváš (aspoň pár vět)', hlasoval: 'Tvůj hlas je zapsán', zavrit: 'Zavřít', hlasy: 'hlasy (nejnižší/střední/nejvyšší):', hlasu: 'hlasů',
     odvolani_podano: 'Odvolání podáno, čeká na rozhodnutí správy hry. Majetek zůstává zmrazen.',
     stav: { kontrola: 'kontrola', soud: 'soud', odvolani: 'rozsudek / odvolání', uzavreno: 'uzavřeno', zruseno: 'zrušeno' },
     urovne: { nejnizsi: 'Nejnižší trest', stredni: 'Střední trest', nejvyssi: 'Nejvyšší trest' } };
   res.json({ ok: true, ui,
     zpravy: zpravy.map((z) => ({ id: z.id, nadpis: z.nadpis, text: z.text, emblem: z.emblem, stav: z.stav, kdy: z.created_at })),
-    pripady: aktivni.concat(uzavrene).map(verejny),
+    pripady: aktivni.concat(uzavrene).map((z) => Object.assign(verejny(z), { hlasy: hlasyPro(z) })),
     moje: moje ? Object.assign(verejny(moje), { muze_odvolat: moje.stav === 'odvolani' && !moje.odvolani_at && new Date(moje.odvolani_do) > new Date() }) : null,
     hlasovani });
 }));
