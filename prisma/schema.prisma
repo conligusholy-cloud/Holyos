@@ -8369,6 +8369,21 @@ model GameFondHlas {
 // castka je to, co mu z fondu patří dnes (mění ji i převod podílu), vlozeno
 // je součet všeho, co kdy opravdu složil — podle něj se pozná, jestli na
 // fondu vydělal, nebo prodělal.
+// Vzorky hodnoty fondu v čase. Zapisuje je těp financí, nejvýš jednou za
+// hodinu — hustěji by to byl šum, řidčeji by graf skákal.
+model GameFondHistorie {
+  id         Int      @id @default(autoincrement())
+  aliance_id Int
+  kdy        DateTime @default(now())
+  pokladna   Float    @default(0)
+  podily     Float    @default(0)
+  hodnota    Float    @default(0)
+  clenu      Int      @default(0)
+
+  @@index([aliance_id, kdy])
+  @@map("game_fond_historie")
+}
+
 model GameFondVklad {
   id         Int      @id @default(autoincrement())
   aliance_id Int

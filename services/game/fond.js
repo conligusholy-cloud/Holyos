@@ -180,7 +180,10 @@ const prahDruhu = (druh) => (PRAHY[druh] == null ? null : PRAHY[druh]);
 //
 // Firma bez uloženého stavu se ocení pořizovací cenou podílu. Nula by tvrdila,
 // že ten podíl nestojí nic, a to je horší odhad než to, co se za něj zaplatilo.
-function zebricek(aliance, clenu, drzene, jmeniFirmy) {
+// `vse` je pro historii: do žebříčku prázdný fond nepatří, ale do grafu ano.
+// Fond, který o všechno přišel, by jinak přestal zapisovat a křivka by skončila
+// posledním nenulovým bodem — jako by se nic nestalo.
+function zebricek(aliance, clenu, drzene, jmeniFirmy, vse) {
   const dej = (m, k) => (m && typeof m.get === 'function' ? m.get(k) : (m || {})[k]);
   const drzi = new Map();
   (drzene || []).forEach((e) => {
@@ -205,7 +208,7 @@ function zebricek(aliance, clenu, drzene, jmeniFirmy) {
       hodnota: Math.round(pokl + (d ? d.hodnota : 0)) };
   })
     // Prázdná aliance do žebříčku fondů nepatří — fond je to, co něco drží.
-    .filter((f) => f.hodnota > 0)
+    .filter((f) => vse || f.hodnota > 0)
     .sort((a, b) => b.hodnota - a.hodnota || a.id - b.id);
 }
 

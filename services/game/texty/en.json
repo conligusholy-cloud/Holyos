@@ -3698,5 +3698,8 @@
   "veta.fond_dividenda_popis": "Set the profit payout in {p1} to {cislo:p2} %",
   "server.fond_v_te_firme_nerozhoduje": "The fund holds no majority in that company — the majority shareholder sets the payout.",
   "dor.fond_navrh_dividenda": "{p1} put to a vote in the fund {p2}: setting the profit payout in {p3} to {cislo:p4} %.",
-  "dor.fond_dividenda": "The fund {p1} set the profit payout in {p2} to {cislo:p3} %."
+  "dor.fond_dividenda": "The fund {p1} set the profit payout in {p2} to {cislo:p3} %.",
+  "fond.vyvoj": "How the fund’s value grows",
+  "fond.graf_zatim": "The chart appears once there is something to draw — the value is recorded once an hour.",
+  "veta.fond_graf_od": "since {p1}"
 }

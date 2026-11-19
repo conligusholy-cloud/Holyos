@@ -9343,11 +9343,49 @@ function fondNavrhPopis(n) {
 // Vnitřek fondu. Není to vlastní karta: aliance a fond jsou jedna věc —
 // každá aliance má právě jeden fond a žádný fond neexistuje bez aliance.
 // Dvě karty vedle sebe tvrdily opak a hráči hledali fond jinde.
+// Křivka hodnoty fondu. Kreslí se ručně do SVG — kvůli jedné čáře se nebude
+// stahovat grafická knihovna. Podíly jsou spodní plocha, pokladna to, co je
+// nad ní: na první pohled je vidět, jestli fond peníze drží, nebo už je
+// investoval.
+function fondGraf(body) {
+  if (!body || body.length < 2) {
+    return '<p class="fine">' + esc(tx('fond.graf_zatim')) + '</p>';
+  }
+  var S = 300, V = 80;
+  var max = 0;
+  body.forEach(function (b) { if (b.hodnota > max) max = b.hodnota; });
+  if (max <= 0) max = 1;
+  var x = function (i) { return (i / (body.length - 1)) * S; };
+  var y = function (v) { return V - (Math.max(0, v) / max) * V; };
+  var cara = function (kdo) {
+    return body.map(function (b, i) {
+      return x(i).toFixed(1) + ',' + y(b[kdo]).toFixed(1);
+    }).join(' ');
+  };
+  var plocha = '0,' + V + ' ' + cara('podily') + ' ' + S + ',' + V;
+  return '<svg class="fond-graf" viewBox="0 0 ' + S + ' ' + V + '" preserveAspectRatio="none"'
+    + ' role="img" aria-label="' + esc(tx('fond.vyvoj')) + '">'
+    + '<polygon points="' + plocha + '" class="g-podily"/>'
+    + '<polyline points="' + cara('hodnota') + '" class="g-hodnota"'
+    + ' vector-effect="non-scaling-stroke"/>'
+    + '</svg>'
+    + '<div class="row"><span class="muted small">'
+    + esc(tx('veta.fond_graf_od', { p1: datumKratce(body[0].kdy) })) + '</span>'
+    + '<span class="muted small">' + kcFull(max) + '</span></div>';
+}
+// Krátké datum do popisku grafu. Rok se nepise — vzorky se drží čtvrt roku.
+function datumKratce(x) {
+  var d = new Date(x);
+  if (isNaN(d.getTime())) return '';
+  return d.getDate() + '. ' + (d.getMonth() + 1) + '.';
+}
 function fondVnitrek() {
   if (!FOND) return '';
   var f = FOND.fond;
   var ja = fondJa();
   var h = '<p class="muted small" style="margin:2px 0 8px">' + esc(tx('fond.popis')) + '</p>'
+    + '<h4 style="margin:10px 0 2px">' + esc(tx('fond.vyvoj')) + '</h4>'
+    + fondGraf(f.historie)
     + '<div class="kv"><span>' + esc(tx('fond.pokladna')) + '</span><b>' + kcFull(f.pokladna) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('fond.vklady')) + '</span><b>' + kcFull(f.vkladu_celkem) + '</b></div>'
     // Zamčené se ukazuje jen když něco zamčeného je — jinak by to byl řádek

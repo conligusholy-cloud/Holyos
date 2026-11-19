@@ -1370,7 +1370,8 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
   const moje = await mojeAliance(req.player.id);
   if (!moje) return res.json({ ok: true, fond: null });
   const REZ = require('../services/game/rezervace');
-  const [al, radky, nabidky, drzene] = await Promise.all([
+  const HIST = require('../services/game/fond-historie');
+  const [al, radky, nabidky, drzene, historie] = await Promise.all([
     prisma.gameAliance.findUnique({ where: { id: moje.aliance_id } }),
     vkladyFondu(moje.aliance_id),
     // Co má fond vyvěšené. Bez toho člen neviděl, kde leží peníze, které
@@ -1380,6 +1381,9 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
     // Co už fond koupí. Bez toho člen neviděl, kam peníze z pokladny odešly.
     prisma.gameEquity.findMany({ where: { fond_id: moje.aliance_id, stav: 'bezi' },
       select: { firma_id: true, firma_nick: true, podil: true, cena: true } }).catch(() => []),
+    // Křivka jde s fondem v jedné odpovědi — je to pár kilobajtů a hra se
+    // nemusí ptát podruhé. Když tabulka ještě není, graf prostě nebude.
+    HIST.proFond(moje.aliance_id).catch(() => []),
   ]);
   const p = FOND.podily(radky);
   const ids = p.map((x) => x.clen_id);
@@ -1396,6 +1400,7 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
     pokladna: hodnota, vkladu_celkem: Math.round(p.celkem || 0),
     vklad_min: VKLAD_MIN,
     zamceno: Math.round(zamceno), volne: Math.round(hodnota - zamceno),
+    historie,
     // Podíly se sčítají po firmách: tři nákupy po deseti procentech jsou
     // třicet procent jedné firmy, ne tři různé podíly. Většina se měří
     // z toho součtu — stejně jako ji měří práva.

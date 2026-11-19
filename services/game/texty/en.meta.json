@@ -3678,5 +3678,8 @@
   "veta.fond_dividenda_popis": "7b9b027837a8",
   "server.fond_v_te_firme_nerozhoduje": "6cc334198939",
   "dor.fond_navrh_dividenda": "c7073c68304a",
-  "dor.fond_dividenda": "d58d041188c0"
+  "dor.fond_dividenda": "d58d041188c0",
+  "fond.vyvoj": "87c6c1b3f3b4",
+  "fond.graf_zatim": "f684f6c36ad4",
+  "veta.fond_graf_od": "4d6f85ff7559"
 }

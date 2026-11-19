@@ -312,6 +312,12 @@ async function tik() {
     // Podíl ve firmě, kterou už nikdo nehraje, by se jinak vyplácel donekonečna
     // a vyplácel nulu. Uzavře se a investorovi se vrátí, co z firmy zbylo.
     await require('./konec').uklidMrtvePodily();
+    // Hodnota fondu se nikam jinam neukládá — bez vzorků by graf neměl
+    // z čeho vzniknout. Zapisuje se nejvýš jednou za hodinu, tik běží po
+    // pěti minutách, takže se tu většinou jen podívá a odeše.
+    const H = require('./fond-historie');
+    await H.vzorkuj(ted);
+    await H.uklid(ted);
   } catch (e) {
     console.warn('[game-finance] tik:', e && e.message);
   } finally { bezi = false; }

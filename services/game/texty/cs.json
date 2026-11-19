@@ -3705,5 +3705,8 @@
   "veta.fond_dividenda_popis": "Nastavit ve firmě {p1} výplatu zisku na {cislo:p2} %",
   "server.fond_v_te_firme_nerozhoduje": "Fond v té firmě nemá většinu — výplatu zisku určuje většinový podílník.",
   "dor.fond_navrh_dividenda": "{p1} dal ve fondu {p2} hlasovat o výplatě zisku ve firmě {p3} na {cislo:p4} %.",
-  "dor.fond_dividenda": "Fond {p1} nastavil ve firmě {p2} výplatu zisku na {cislo:p3} %."
+  "dor.fond_dividenda": "Fond {p1} nastavil ve firmě {p2} výplatu zisku na {cislo:p3} %.",
+  "fond.vyvoj": "Jak roste hodnota fondu",
+  "fond.graf_zatim": "Graf se objeví, až bude co kreslit — hodnota se zapisuje jednou za hodinu.",
+  "veta.fond_graf_od": "od {p1}"
 }
