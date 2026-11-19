@@ -9327,6 +9327,9 @@ function fondNavrhPopis(n) {
     return tx('veta.fond_koupit_popis', { p1: Math.round((d.pct || 0) * 100),
       p2: esc(d.firma_nick || ''), p3: kcFull(d.cena || 0) });
   }
+  if (n.druh === 'zrusit') {
+    return tx('veta.fond_zrusit_popis', { p1: esc(d.firma_nick || '') });
+  }
   return tx('veta.fond_vyplatit_popis', { p1: kcFull(d.castka || 0) });
 }
 // Vnitřek fondu. Není to vlastní karta: aliance a fond jsou jedna věc —
@@ -9365,7 +9368,11 @@ function fondVnitrek() {
         + '<span class="muted small">' + (n.do ? etaText(new Date(n.do).getTime() - Date.now()) : '') + '</span></div>'
         + '<p class="fine">' + esc(tx('veta.fond_nabidka_detail', {
             p1: Math.round((n.max_pct || 0) * 100), p2: n.cena_za_pct || 0,
-            p3: Math.round((n.koupeno_pct || 0) * 100), p4: n.zamceno || 0 })) + '</p>';
+            p3: Math.round((n.koupeno_pct || 0) * 100), p4: n.zamceno || 0 })) + '</p>'
+        // Stáhnout nabídku nesmí jeden člen sám — vyvěsila ji většina, bere ji
+        // zpět zase většina. Tlačítko tedy jen zakládá hlasování.
+        + (ja ? '<div class="gcard-act"><button class="btn sec sm" data-fond-stahnout="'
+            + n.id + '">' + esc(tx('fond.dat_stahnout')) + '</button></div>' : '');
     });
   }
 
@@ -9385,11 +9392,14 @@ function fondVnitrek() {
           + '<button class="btn sm' + (n.muj_hlas === 'proti' ? '' : ' sec') + '" data-fond-hlas="'
           + n.id + '" data-volba="proti">' + esc(tx('fond.proti')) + '</button></div>';
       }
-    } else if (n.druh === 'koupit') {
+    } else {
+      var popisek = n.druh === 'koupit' ? 'fond.vyhlasit'
+        : (n.druh === 'zrusit' ? 'fond.stahnout' : 'fond.vyplatit_provest');
       h += '<p class="fine ok">' + esc(tx('fond.schvaleno')) + '</p>'
-        + '<p class="fine">' + esc(tx('veta.fond_navrh_nikomu_nebere')) + '</p>'
+        + (n.druh === 'koupit'
+          ? '<p class="fine">' + esc(tx('veta.fond_navrh_nikomu_nebere')) + '</p>' : '')
         + '<div class="gcard-act"><button class="btn sm" data-fond-provest="' + n.id + '">'
-        + esc(tx('fond.vyhlasit')) + '</button></div>';
+        + esc(tx(popisek)) + '</button></div>';
     }
     // Vlastní návrh jde stáhnout, dokud se nevyhlásil — kvůli překlepům.
     if (ME && n.autor_id === ME.id && n.stav !== 'proveden') {
@@ -9540,6 +9550,17 @@ function bindFond(kde) {
     b.onclick = function () {
       b.disabled = true;
       apiJson('/trade/aliance/fond/navrh/' + b.getAttribute('data-fond-zrusit') + '/zrusit', {})
+        .then(function (r) {
+          if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+          fondZnovu();
+        }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+    };
+  });
+  [].forEach.call(box.querySelectorAll('[data-fond-stahnout]'), function (b) {
+    b.onclick = function () {
+      b.disabled = true;
+      apiJson('/trade/aliance/fond/navrh',
+        { druh: 'zrusit', tender_id: Number(b.getAttribute('data-fond-stahnout')) })
         .then(function (r) {
           if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
           fondZnovu();

@@ -3659,5 +3659,12 @@
   "fond.zamceno": "cdf1970ce774",
   "fond.volne": "6b6dc61bf6d9",
   "fond.schvaleno": "9a5874820fcc",
-  "veta.fond_nabidka_detail": "8714bfe8a258"
+  "veta.fond_nabidka_detail": "8714bfe8a258",
+  "fond.dat_stahnout": "a12653be43d4",
+  "fond.stahnout": "973607ee003e",
+  "fond.vyplatit_provest": "40f487fd1e54",
+  "veta.fond_zrusit_popis": "f678736c6314",
+  "dor.fond_navrh_zrusit": "abaceea345b9",
+  "dor.fond_stazeno": "59c1a7eb3192",
+  "dor.fond_vyplata_dil": "e097fa3123bc"
 }

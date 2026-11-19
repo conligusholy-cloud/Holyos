@@ -3686,5 +3686,12 @@
   "fond.zamceno": "Zamčené v nabídkách",
   "fond.volne": "Volné k utracení",
   "fond.schvaleno": "Schváleno — čeká na vyhlášení.",
-  "veta.fond_nabidka_detail": "do {cislo:p1} % · {penize:p2} za procento · koupeno {cislo:p3} % · zamčeno {penize:p4}"
+  "veta.fond_nabidka_detail": "do {cislo:p1} % · {penize:p2} za procento · koupeno {cislo:p3} % · zamčeno {penize:p4}",
+  "fond.dat_stahnout": "Dát hlasovat o stažení",
+  "fond.stahnout": "Stáhnout nabídku",
+  "fond.vyplatit_provest": "Vyplatit členům",
+  "veta.fond_zrusit_popis": "Stáhnout nabídku na firmu {p1}",
+  "dor.fond_navrh_zrusit": "{p1} dal ve fondu {p2} hlasovat o stažení nabídky na firmu {p3}.",
+  "dor.fond_stazeno": "Fond {p1} stáhl nabídku na firmu {p2}.",
+  "dor.fond_vyplata_dil": "Výplata z fondu {p1} — tvůj díl"
 }

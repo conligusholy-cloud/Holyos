@@ -1488,6 +1488,8 @@ const DRUHY = {
       p4: d.firma_nick || '' }) },
   vyplatit: { prah: FOND.prahDruhu('vyplatit'), kod: 'dor.fond_navrh_vyplatit',
     udaje: (d, kdo, al) => ({ p1: kdo, p2: al, p3: Math.round(d.castka || 0) }) },
+  zrusit: { prah: FOND.prahDruhu('zrusit'), kod: 'dor.fond_navrh_zrusit',
+    udaje: (d, kdo, al) => ({ p1: kdo, p2: al, p3: d.firma_nick || '' }) },
 };
 
 async function hlasyNavrhu(navrhId) {
@@ -1560,19 +1562,33 @@ router.post('/trade/aliance/fond/navrh', hrac, api(async (req, res) => {
         { p1: Math.round((al && al.pokladna) || 0) }) });
     }
     detail = { firma_id: firmaId, firma_nick: firma.company || firma.nick, pct, cena };
+  } else if (druh === 'zrusit') {
+    const t = await prisma.gameTender.findUnique({
+      where: { id: parseInt(b.tender_id, 10) || 0 } });
+    if (!t || t.fond_id !== moje.aliance_id || PREVZETI.stav(t) !== 'bezi') {
+      return res.status(404).json({ error: stx(req)('server.tahle_nabidka_uz_nebezi') });
+    }
+    detail = { tender_id: t.id, firma_nick: t.firma_nick };
   } else {
     const castka = Math.max(1, Math.round(Number(b.castka) || 0));
-    if (castka > Math.round((al && al.pokladna) || 0)) {
-      return res.status(409).json({ error: stx(req)('server.fond_na_to_nema',
-        { p1: Math.round((al && al.pokladna) || 0) }) });
+    // Měří se proti volným penězům, ne proti celé pokladně: co je slíbené ve
+    // vyvěšené nabídce, se nesmí rozdat podruhé.
+    const volne = Math.round(((al && al.pokladna) || 0) - await fondZamceno(moje.aliance_id));
+    if (castka > volne) {
+      return res.status(409).json({ error: stx(req)('server.fond_na_to_nema', { p1: volne }) });
     }
     detail = { castka };
   }
 
-  // Dva stejné návrhy naráz by si braly hlasy a ani jeden by neprošel.
-  const uz = await prisma.gameFondNavrh.findFirst({
+  // Dva stejné návrhy naráz by si braly hlasy a ani jeden by neprošel. U stažení
+  // se ale sráží jen návrhy na tutéž nabídku — dvě různé nabídky se dají
+  // stahovat každá zvlášť.
+  const bezici = await prisma.gameFondNavrh.findMany({
     where: { aliance_id: moje.aliance_id, druh, stav: 'bezi' } });
-  if (uz) return res.status(409).json({ error: stx(req)('server.navrh_uz_bezi') });
+  const koliduje = druh === 'zrusit'
+    ? bezici.some((x) => (x.detail || {}).tender_id === detail.tender_id)
+    : bezici.length > 0;
+  if (koliduje) return res.status(409).json({ error: stx(req)('server.navrh_uz_bezi') });
 
   const n = await prisma.gameFondNavrh.create({ data: {
     aliance_id: moje.aliance_id, autor_id: req.player.id, druh, detail,
@@ -1655,7 +1671,7 @@ router.post('/trade/aliance/fond/navrh/:id/zrusit', hrac, api(async (req, res) =
   res.json({ ok: true });
 }));
 
-// POST /trade/aliance/fond/navrh/:id/provest → přijatý nákup se vyhlásí
+// POST /trade/aliance/fond/navrh/:id/provest → přijatý návrh se provede
 //
 // Fond nikomu podíl nebere. Co se provedením stane, je VEŘEJNÁ NABÍDKA na
 // firmu: cena za procento a lhůta, a každý podílník se rozhoduje sám za
@@ -1665,7 +1681,7 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
   if (!moje) return res.status(404).json({ error: stx(req)('server.v_zadne_alianci_nejsi') });
   const n = await prisma.gameFondNavrh.findUnique({
     where: { id: parseInt(req.params.id, 10) || 0 } });
-  if (!n || n.aliance_id !== moje.aliance_id || n.druh !== 'koupit') {
+  if (!n || n.aliance_id !== moje.aliance_id || !DRUHY[n.druh]) {
     return res.status(404).json({ error: stx(req)('server.navrh_neni') });
   }
   if (n.stav === 'proveden') return res.status(409).json({ error: stx(req)('server.navrh_uz_proveden') });
@@ -1673,6 +1689,63 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
 
   const d = n.detail || {};
   const al = await prisma.gameAliance.findUnique({ where: { id: moje.aliance_id } });
+  const clenove = (await vkladyFondu(moje.aliance_id)).filter((r) => r.castka > 0);
+  const zprava = async (kod, udaje, komu) => {
+    const lide = (komu || clenove.map((r) => r.clen_id)).filter((x) => x != null);
+    if (!lide.length) return;
+    await prisma.gameDelivery.createMany({ data: lide.map((pid) => ({
+      player_id: pid, kind: 'zprava', text_kod: kod, text_data: udaje })) });
+  };
+
+  // ── Stažení vyvěšené nabídky ───────────────────────────────────────────────
+  // Dokud tohle nebylo, neměl fond jak nabídku vzít zpět: stáhnout ji smí jen
+  // ten, kdo ji vyhlásil, a fondová nabídka žádného hráče jako vyhlašovatele
+  // nemá. Peníze pod ní zůstávaly zamčené až do konce lhůty.
+  if (n.druh === 'zrusit') {
+    const t = await prisma.gameTender.findUnique({ where: { id: d.tender_id || 0 } });
+    const uzavri = () => prisma.gameFondNavrh.update({ where: { id: n.id },
+      data: { stav: 'proveden' } });
+    // Nabídka mezitím doběhla nebo se naplnila — není co stahovat, ale návrh
+    // nemá důvod viset dál.
+    if (!t || t.fond_id !== moje.aliance_id || PREVZETI.stav(t) !== 'bezi') {
+      await uzavri();
+      return res.json({ ok: true, uz_nebezi: true });
+    }
+    await prisma.gameTender.update({ where: { id: t.id }, data: { stav: 'zrusena' } });
+    await uzavri();
+    await zprava('dor.fond_stazeno',
+      { p1: (al && al.nazev) || '', p2: t.firma_nick || '' });
+    console.log('[game] fond #' + moje.aliance_id + ': stáhl nabídku na ' + t.firma_nick);
+    return res.json({ ok: true });
+  }
+
+  // ── Výplata členům ────────────────────────────────────────────────────────
+  // Schválená výplata se dosud neměla čím provést: návrh se překlopil na
+  // „přijatý" a tím to skončilo. Peníze se dělí podle dílů ve fondu, po celých
+  // korunách a beze zbytku — součet výplat se rovná rozdělované částce.
+  if (n.druh === 'vyplatit') {
+    const castka = Math.max(0, Math.round(d.castka || 0));
+    const volne = Math.round(((al && al.pokladna) || 0) - await fondZamceno(moje.aliance_id));
+    if (castka > volne) {
+      return res.status(409).json({ error: stx(req)('server.fond_na_to_nema', { p1: volne }) });
+    }
+    const dily = FOND.rozdeleni(castka, clenove).filter((x) => x.castka > 0);
+    await prisma.$transaction(async (tx) => {
+      await tx.gameAliance.update({ where: { id: moje.aliance_id },
+        data: { pokladna: { decrement: castka } } });
+      for (const x of dily) {
+        await tx.gameDelivery.create({ data: {
+          player_id: x.clen_id, kind: 'cash', amount: x.castka,
+          popis: 'Výplata z fondu ' + ((al && al.nazev) || ''),
+          text_kod: 'dor.fond_vyplata_dil',
+          text_data: { p1: (al && al.nazev) || '', p2: x.castka } } });
+      }
+      await tx.gameFondNavrh.update({ where: { id: n.id }, data: { stav: 'proveden' } });
+    });
+    console.log('[game] fond #' + moje.aliance_id + ': vyplatil ' + castka + ' členům');
+    return res.json({ ok: true, vyplaceno: castka });
+  }
+
   const volne = Math.round(((al && al.pokladna) || 0) - await fondZamceno(moje.aliance_id));
   const cena = Math.max(0, Math.round(d.cena || 0));
   if (cena > volne) {

@@ -164,7 +164,10 @@ function prevod(radky, zKoho, komu, castka) {
 // vedle prahů samotných: nákup podílu je běžné rozhodnutí, výplata z fondu
 // zásadní. Rozdávat peníze má být těžší než je investovat — investice se dá
 // prodat zpátky, vyplacené peníze se z cizí kapsy neberou.
-const PRAHY = { koupit: BEZNE, vyplatit: ZASADNI };
+// Stáhnout vyvěšenou nabídku je běžné rozhodnutí: co většina vyvěsila, to
+// většina smí vzít zpět. Vyšší práh by znamenal, že menšina udrží fondu
+// zamčené peníze proti vůli ostatních.
+const PRAHY = { koupit: BEZNE, vyplatit: ZASADNI, zrusit: BEZNE };
 const prahDruhu = (druh) => (PRAHY[druh] == null ? null : PRAHY[druh]);
 
 // ─── Žebríček fondů ──────────────────────────────────────────────

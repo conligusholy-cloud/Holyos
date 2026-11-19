@@ -139,5 +139,15 @@ ok('ale na výplatu nestačí',
 ok('na výplatu musí být oba',
   F.hlasovani(dvaClenove, { 1: 'pro', 2: 'pro' }, F.prahDruhu('vyplatit')).proslo === true);
 
+// Stáhnout vyvěšenou nabídku musí jít stejně snadno, jako se vyvěsila. Kdyby
+// na to byl vyšší práh, menšina by udržela fondu zamčené peníze proti vůli
+// ostatních a nikdo by s tím nesvedl nic až do konce lhůty.
+ok('stažení nabídky je běžné rozhodnutí', F.prahDruhu('zrusit') === F.BEZNE,
+  '— ' + F.prahDruhu('zrusit'));
+ok('a je stejně snadné jako vyvěšení',
+  F.prahDruhu('zrusit') === F.prahDruhu('koupit'));
+ok('ale lehčí než rozdání peněz',
+  F.prahDruhu('zrusit') < F.prahDruhu('vyplatit'));
+
 console.log(chyb ? '\n' + chyb + ' chyb' : '\nvšechno sedí');
 process.exit(chyb ? 1 : 0);

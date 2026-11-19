@@ -3679,5 +3679,12 @@
   "fond.zamceno": "Locked in offers",
   "fond.volne": "Free to spend",
   "fond.schvaleno": "Approved — waiting to be announced.",
-  "veta.fond_nabidka_detail": "up to {cislo:p1} % · {penize:p2} per percent · bought {cislo:p3} % · locked {penize:p4}"
+  "veta.fond_nabidka_detail": "up to {cislo:p1} % · {penize:p2} per percent · bought {cislo:p3} % · locked {penize:p4}",
+  "fond.dat_stahnout": "Put withdrawal to a vote",
+  "fond.stahnout": "Withdraw the offer",
+  "fond.vyplatit_provest": "Pay out to members",
+  "veta.fond_zrusit_popis": "Withdraw the offer on {p1}",
+  "dor.fond_navrh_zrusit": "{p1} put to a vote in the fund {p2}: withdrawing the offer on {p3}.",
+  "dor.fond_stazeno": "The fund {p1} withdrew its offer on {p2}.",
+  "dor.fond_vyplata_dil": "Payout from the fund {p1} — your share"
 }
