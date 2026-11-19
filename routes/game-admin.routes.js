@@ -541,7 +541,22 @@ router.get('/zlocin/pripady', api(async (req, res) => {
   const ids = rows.map((r) => r.id);
   const hl = ids.length ? await prisma.gameZlocinHlas.groupBy({ by: ['zlocin_id', 'volba'], where: { zlocin_id: { in: ids } }, _count: { _all: true } }) : [];
   const H = {}; hl.forEach((x) => { (H[x.zlocin_id] = H[x.zlocin_id] || {})[x.volba] = x._count._all; });
+  // Kdo jak hlasoval (jména) a jaký by byl rozsudek podle dosavadních hlasů
+  const vsechnyHlasy = ids.length ? await prisma.gameZlocinHlas.findMany({ where: { zlocin_id: { in: ids } }, orderBy: { id: 'asc' } }) : [];
+  const hrci = vsechnyHlasy.length ? await prisma.gamePlayer.findMany({ where: { id: { in: Array.from(new Set(vsechnyHlasy.map((h) => h.player_id))) } }, select: { id: true, nick: true, company: true } }) : [];
+  const J = {}; hrci.forEach((p) => { J[p.id] = p.company || p.nick; });
+  const Rn = await require('../services/game/zlocin').nastaveni();
+  const UR = ['nejnizsi', 'stredni', 'nejvyssi'];
+  const zatim = (r) => {
+    const h = H[r.id] || {}, n = UR.reduce((s, u) => s + (h[u] || 0), 0);
+    const mx = Math.max.apply(null, UR.map((u) => h[u] || 0)), v = UR.filter((u) => (h[u] || 0) === mx);
+    const uroven = (n >= Rn.min_porotcu && v.length === 1) ? v[0] : 'stredni';
+    return { uroven, castka: Math.round(r.skoda * Rn['trest_' + uroven]), hlasu: n, min: Rn.min_porotcu,
+      rozhodne: n >= Rn.min_porotcu && v.length === 1 };
+  };
   res.json({ ok: true, pripady: rows.map((r) => Object.assign({}, r, { hlasy: H[r.id] || {},
+    hlasujici: vsechnyHlasy.filter((x) => x.zlocin_id === r.id).map((x) => ({ kdo: J[x.player_id] || ('#' + x.player_id), volba: x.volba })),
+    zatim: zatim(r),
     ceka_na_me: r.stav === 'odvolani' && !!r.odvolani_at })),
     k_odvolani: rows.filter((r) => r.stav === 'odvolani' && r.odvolani_at).length });
 }));

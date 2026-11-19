@@ -1769,7 +1769,7 @@
         if (o) o.innerHTML = j.k_odvolani ? '<span class="st" style="background:rgba(248,113,113,.18);color:#f87171">' + j.k_odvolani + ' k rozhodnutí</span>' : '';
         var z = j.pripady || [];
         if (!z.length) { box.innerHTML = '<p class="note">Zatím žádný případ.</p>'; return; }
-        box.innerHTML = '<table class="data-table"><thead><tr><th>Hráč</th><th>Stav</th><th class="num">Škoda</th><th class="num">Zmrazeno</th><th>Trest / hlasy</th><th>Termíny</th><th>Odvolání</th><th></th></tr></thead><tbody>'
+        box.innerHTML = '<table class="data-table"><thead><tr><th>Hráč</th><th>Stav</th><th class="num">Škoda</th><th class="num">Zmrazeno</th><th>Trest / hlasy</th><th>Výsledek hlasování (zatím)</th><th>Termíny</th><th>Odvolání</th><th></th></tr></thead><tbody>'
           + z.map(function (r) {
             var aktivni = r.stav === 'kontrola' || r.stav === 'soud' || r.stav === 'odvolani';
             var hl = r.hlasy || {};
@@ -1779,6 +1779,13 @@
               + '<td class="note">' + (r.trest_castka != null ? '<b>' + cz(r.trest_castka) + '</b> (' + esc(r.trest_uroven || '') + ')<br>' : '') + 'hlasy ' + (hl.nejnizsi || 0) + '/' + (hl.stredni || 0) + '/' + (hl.nejvyssi || 0)
                 + (r.nedoplatek ? '<br><span style="color:#fbbf24">nedoplatek ' + cz(r.nedoplatek) + ' (po zabavení strojů)</span>' : '')
                 + '<br><button class="btn sm" data-zlp="' + r.id + '">👥 Porota</button></td>'
+              + '<td class="note" style="min-width:200px">' + (function () {
+                var zt = r.zatim || {}, VOL = { nejnizsi: 'nejnižší', stredni: 'střední', nejvyssi: 'nejvyšší' };
+                var out = '<b style="color:' + (zt.rozhodne ? '#4ade80' : '#fbbf24') + '">' + esc(VOL[zt.uroven] || '') + ' trest · ' + cz(zt.castka || 0) + '</b>'
+                  + '<div>' + (zt.hlasu || 0) + ' hlasů z min. ' + (zt.min || 0) + (zt.rozhodne ? '' : ' — zatím nerozhodnuto, platil by střední') + '</div>';
+                (r.hlasujici || []).forEach(function (h) { out += '<div>• ' + esc(h.kdo) + ' — ' + esc(VOL[h.volba] || h.volba) + '</div>'; });
+                return out;
+              })() + '</td>'
               + '<td class="note">od ' + dt(r.zahajeno_at) + (r.kontrola_do ? '<br>kontrola do ' + dt(r.kontrola_do) : '') + (r.soud_do ? '<br>soud do ' + dt(r.soud_do) : '') + (r.odvolani_do ? '<br>odvolání do ' + dt(r.odvolani_do) : '') + '</td>'
               + '<td class="note" style="max-width:280px">' + (r.odvolani_text ? '<b style="color:#f87171">podáno ' + dt(r.odvolani_at) + '</b><br>' + esc(r.odvolani_text) : '—') + '</td>'
               + '<td style="white-space:nowrap">' + (aktivni ? (r.stav === 'odvolani' ? '<button class="btn sm" data-zlr="' + r.id + '" data-akce="potvrdit">Potvrdit</button> <button class="btn sm" data-zlr="' + r.id + '" data-akce="upravit" data-trest="' + (r.trest_castka || 0) + '">Upravit</button> ' : '')
