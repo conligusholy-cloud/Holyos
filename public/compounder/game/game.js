@@ -9340,6 +9340,11 @@ function fondHtml() {
       h += '<div class="gcard-act"><button class="btn sm" data-fond-provest="' + n.id + '">'
         + esc(tx('fond.vyhlasit')) + '</button></div>';
     }
+    // Vlastní návrh jde stáhnout, dokud se nevyhlásil — kvůli překlepům.
+    if (ME && n.autor_id === ME.id && n.stav !== 'proveden') {
+      h += '<div class="gcard-act"><button class="btn sec sm" data-fond-zrusit="' + n.id + '">'
+        + esc(tx('fond.zrusit')) + '</button></div>';
+    }
   });
 
   h += '<div class="gcard-act">'
@@ -9448,6 +9453,16 @@ function bindFond(kde) {
         if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
         fondZnovu();
       }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+    };
+  });
+  [].forEach.call(box.querySelectorAll('[data-fond-zrusit]'), function (b) {
+    b.onclick = function () {
+      b.disabled = true;
+      apiJson('/trade/aliance/fond/navrh/' + b.getAttribute('data-fond-zrusit') + '/zrusit', {})
+        .then(function (r) {
+          if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+          fondZnovu();
+        }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
     };
   });
   [].forEach.call(box.querySelectorAll('[data-fond-provest]'), function (b) {

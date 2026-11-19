@@ -1535,6 +1535,13 @@ router.post('/trade/aliance/fond/navrh', hrac, api(async (req, res) => {
     if (!firma || firma.disabled) return res.status(404).json({ error: stx(req)('server.takovy_hrac_tu_neni') });
     const pct = Math.max(0.01, Math.min(1, Number(b.pct) || 0));
     const cena = Math.max(0, Math.round(Number(b.cena) || 0));
+    // Nula projít nesmí. Nabídka se vyhlašuje jako cena za procento a ta má
+    // svoje dno — návrh „koupit sto procent za nic" by se vyhlásil za to dno
+    // a nikdo by nechápal, odkud se ta cena vzala.
+    const cenaMin = Math.round(PREVZETI.CENA_MIN * pct * 100);
+    if (cena < cenaMin) {
+      return res.status(400).json({ error: stx(req)('server.navrh_cena_mala', { p1: cenaMin }) });
+    }
     // Co fond nemá, o tom nemá smysl hlasovat den a pak zjistit, že to nejde.
     if (cena > Math.round((al && al.pokladna) || 0)) {
       return res.status(409).json({ error: stx(req)('server.fond_na_to_nema',
@@ -1562,6 +1569,15 @@ router.post('/trade/aliance/fond/navrh', hrac, api(async (req, res) => {
   // Navrhovatel je pro — jinak by musel hlasovat o vlastním návrhu zvlášť.
   await prisma.gameFondHlas.create({ data: {
     navrh_id: n.id, clen_id: req.player.id, volba: 'pro' } }).catch(() => {});
+  // A hned se podívat, jestli to tím neprošlo. Kdo drží většinu vkladů sám
+  // — třeba jediný člen fondu — má rozhodnuto už tímhle hlasem a nemá na co
+  // čekat. Bez tohohle řádku návrh uvízl: stav se překlápěl jen při
+  // hlasování, takže už schválený návrh nešlo vyhlásit.
+  const hned = await stavNavrhu(n);
+  if (hned.proslo) {
+    await prisma.gameFondNavrh.update({ where: { id: n.id },
+      data: { stav: 'prijat', vysledek: hned } });
+  }
 
   const komu = radky.map((r) => r.clen_id).filter((x) => x !== req.player.id);
   if (komu.length) {
@@ -1571,7 +1587,7 @@ router.post('/trade/aliance/fond/navrh', hrac, api(async (req, res) => {
       text_kod: DRUHY[druh].kod, text_data: udaje,
     })) });
   }
-  res.json({ ok: true, id: n.id });
+  res.json({ ok: true, id: n.id, prijat: !!hned.proslo });
 }));
 
 // POST /trade/aliance/fond/navrh/:id/hlas { volba } → pro, nebo proti
@@ -1603,6 +1619,28 @@ router.post('/trade/aliance/fond/navrh/:id/hlas', hrac, api(async (req, res) => 
       data: { stav: 'prijat', vysledek: v } });
   }
   res.json({ ok: true, volba, pro: v.pro, chybi: v.chybi, prijat: !!v.proslo });
+}));
+
+// POST /trade/aliance/fond/navrh/:id/zrusit → stáhnout vlastní návrh
+//
+// Překlep v ceně se jinak nedá vzít zpátky a návrh by na kartě visel
+// napořád. Stáhnout ho smí jen ten, kdo ho podal — cizí návrh se přebíjí
+// hlasováním, ne mazáním. Co už se vyhlásilo, se neruší: nabídka běží ve
+// hře a podílníci se podle ní rozhodují.
+router.post('/trade/aliance/fond/navrh/:id/zrusit', hrac, api(async (req, res) => {
+  const moje = await mojeAliance(req.player.id);
+  if (!moje) return res.status(404).json({ error: stx(req)('server.v_zadne_alianci_nejsi') });
+  const n = await prisma.gameFondNavrh.findUnique({
+    where: { id: parseInt(req.params.id, 10) || 0 } });
+  if (!n || n.aliance_id !== moje.aliance_id) {
+    return res.status(404).json({ error: stx(req)('server.navrh_neni') });
+  }
+  if (n.autor_id !== req.player.id) {
+    return res.status(403).json({ error: stx(req)('server.navrh_neni_tvuj') });
+  }
+  if (n.stav === 'proveden') return res.status(409).json({ error: stx(req)('server.navrh_uz_proveden') });
+  await prisma.gameFondNavrh.update({ where: { id: n.id }, data: { stav: 'zrusen' } });
+  res.json({ ok: true });
 }));
 
 // POST /trade/aliance/fond/navrh/:id/provest → přijatý nákup se vyhlásí

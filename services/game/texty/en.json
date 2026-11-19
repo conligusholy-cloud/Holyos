@@ -3662,5 +3662,8 @@
   "veta.fond_chybi_hlasu": "Still {p1}% short of the {p2}% needed.",
   "veta.fond_dil_radek": "{p1} · contributed {penize:p2}",
   "veta.fond_koupit_popis": "Buy {p1}% in {p2} for {penize:p3}",
-  "veta.fond_vyplatit_popis": "Pay out {penize:p1} from the fund"
+  "veta.fond_vyplatit_popis": "Pay out {penize:p1} from the fund",
+  "server.navrh_cena_mala": "That is too little for a share. At least {penize:p1}.",
+  "fond.zrusit": "Withdraw",
+  "server.navrh_neni_tvuj": "Only the person who made the proposal can withdraw it."
 }

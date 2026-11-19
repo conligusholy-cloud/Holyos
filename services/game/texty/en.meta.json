@@ -3642,5 +3642,8 @@
   "veta.fond_chybi_hlasu": "4937e6a7c5aa",
   "veta.fond_dil_radek": "3877580057fd",
   "veta.fond_koupit_popis": "be7ffa0a03a8",
-  "veta.fond_vyplatit_popis": "54391e4de898"
+  "veta.fond_vyplatit_popis": "54391e4de898",
+  "server.navrh_cena_mala": "29c0bfed124b",
+  "fond.zrusit": "f6991c4824eb",
+  "server.navrh_neni_tvuj": "1634bb8d6851"
 }
