@@ -57,7 +57,7 @@ podily = [{ investor_id: 7, podil: 0.3 }, { investor_id: 8, podil: 0.3 }];
 clenstvi = new Map([[7, 1], [8, 1]]);
 slouceno = A.slucPodily(podily, clenstvi);
 ok('dva po třiceti procentech určují dohromady výplatu zisku',
-  PRAVA.kdoUrcuje(slouceno) === 7 && PRAVA.kdoUrcuje(podily) === null);
+  PRAVA.kdoUrcuje(slouceno) === 'h:7' && PRAVA.kdoUrcuje(podily) === null);
 
 // Kdo v alianci není, zůstává sám za sebe.
 podily = [{ investor_id: 7, podil: 0.3 }, { investor_id: 8, podil: 0.3 },
@@ -73,7 +73,7 @@ slouceno = A.slucPodily(podily, new Map([[7, 1], [8, 1], [9, 2], [10, 2]]));
 ok('každá aliance má svůj vlastní součet',
   skoro(drzi(slouceno, 7), 0.4) && skoro(drzi(slouceno, 9), 0.6),
   '— první ' + drzi(slouceno, 7) + ', druhá ' + drzi(slouceno, 9));
-ok('a většinu má ta větší', PRAVA.kdoUrcuje(slouceno) === 9);
+ok('a většinu má ta větší', PRAVA.kdoUrcuje(slouceno) === 'h:9');
 
 // Dva podíly téhož člena se sčítají stejně jako dřív.
 slouceno = A.slucPodily([{ investor_id: 7, podil: 0.2 }, { investor_id: 7, podil: 0.2 },
@@ -88,7 +88,7 @@ ok('víc řádek jednoho člena nerozbije součet',
 podily = [{ investor_id: 7, podil: 0.1 }, { investor_id: 8, podil: 0.2, zakaz: true }];
 slouceno = A.slucPodily(podily, new Map([[7, 1], [8, 1]]));
 ok('zákaz kteréhokoli člena platí pro celý blok',
-  PRAVA.kdoBlokuje(slouceno) === 8, '— ' + PRAVA.kdoBlokuje(slouceno));
+  PRAVA.kdoBlokuje(slouceno) === 'h:8', '— ' + PRAVA.kdoBlokuje(slouceno));
 ok('sám by na blokaci nedosáhl', PRAVA.kdoBlokuje(podily) === null);
 
 // ── Co se posílá majiteli ────────────────────────────────────────────────────

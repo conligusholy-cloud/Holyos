@@ -69,7 +69,7 @@ ok('majitel je pořád zbytek do sta procent',
 ok('ředění se nezměnilo',
   PODILY.redeni(jenHraci, 0.25)[0].podil === 0.6 * 0.75);
 ok('většinu pozná jako dřív',
-  PRAVA.kdoUrcuje(jenHraci.map((e) => ({ investor_id: e.investor_id, podil: e.podil }))) === 1);
+  PRAVA.kdoUrcuje(jenHraci.map((e) => ({ investor_id: e.investor_id, podil: e.podil }))) === 'h:1');
 ok('dividenda se nezměnila', DIVIDENDA.castka(1000000, 0.6, 1) === 600000);
 
 // S fondem: podíl fondu nesmí zmizet ze součtu ani z majitelova zbytku.

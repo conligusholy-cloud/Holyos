@@ -13,7 +13,7 @@ function ok(co, podminka, detail) {
 
 // ── Kdo politiku určuje ──────────────────────────────────────────────────────
 ok('nad polovinou rozhoduje podílník',
-  D.kdoUrcuje([{ investor_id: 7, podil: 0.6 }]) === 7);
+  D.kdoUrcuje([{ investor_id: 7, podil: 0.6 }]) === 'h:7');
 ok('přesná polovina nestačí',
   D.kdoUrcuje([{ investor_id: 7, podil: 0.5 }]) === null,
   '— ' + D.kdoUrcuje([{ investor_id: 7, podil: 0.5 }]));
@@ -25,7 +25,7 @@ ok('prázdný seznam nic neshodí', D.kdoUrcuje(null) === null);
 // Dva podíly téhož investora se v téhle funkci nesčítají — sčítá je volající.
 // Kontroluje se, že se nevybere menší z nich.
 ok('vybere se ten, kdo má víc',
-  D.kdoUrcuje([{ investor_id: 7, podil: 0.55 }, { investor_id: 8, podil: 0.9 }]) === 8);
+  D.kdoUrcuje([{ investor_id: 7, podil: 0.55 }, { investor_id: 8, podil: 0.9 }]) === 'h:8');
 
 ok('majitel firmy politiku nemění', D.smiMenit([{ investor_id: 7, podil: 0.6 }], 9) === false);
 ok('menšinový podílník taky ne', D.smiMenit([{ investor_id: 7, podil: 0.6 }], 7) === true

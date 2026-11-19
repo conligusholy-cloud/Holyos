@@ -57,6 +57,7 @@ function platna(x) {
 
 // Kdo politiku určuje: podílník s víc než polovinou. Jinak nikdo.
 const kdoUrcuje = PRAVA.kdoUrcuje;
+const kdoUrcujeHrace = PRAVA.kdoUrcujeHrace;
 const smiMenit = PRAVA.smiMenit;
 
 // Co se za měsíc vyplatí z jednoho podílu. Zisk se krátí politikou,
@@ -110,5 +111,5 @@ function rozpad(zbyde, podil, pct, min, nedoplatek) {
   return { vyplata, nedoplatek: Math.max(0, slib - vyplata), zaklad, slib, strop };
 }
 
-module.exports = { platna, platnyMin, stropMin, rozpad, kdoUrcuje, smiMenit, castka,
+module.exports = { platna, platnyMin, stropMin, rozpad, kdoUrcuje, kdoUrcujeHrace, smiMenit, castka,
   odchoziCelkem, VYCHOZI, MIN, MAX, VETSINA };

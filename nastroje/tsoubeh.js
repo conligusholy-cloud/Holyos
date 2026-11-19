@@ -322,7 +322,7 @@ function retez() {
   });
   ok('kruhové vlastnictví výpočet nezacyklí', Date.now() - zacatek < 1000);
   ok('v každé firmě rozhoduje jen její přímý podílník',
-    v[0].urcuje === 2 && v[1].urcuje === 3 && v[2].urcuje === 1,
+    v[0].urcuje === 'h:2' && v[1].urcuje === 'h:3' && v[2].urcuje === 'h:1',
     v.map((x) => x.firma + '→' + x.urcuje).join(' · '));
   ok('vliv se neřetězí: kdo drží matku, nemá hlas ve vnučce',
     v.every((x) => x.lide.length === 1),

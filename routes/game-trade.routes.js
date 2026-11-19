@@ -391,9 +391,20 @@ async function clenstvi(ids) {
 // bavit, nebo null, když nikdo. Běžících půjček se zákaz netýká — platí
 // jen na nově sjednané zástavy.
 async function blokujeZastavu(firmaId) {
-  const kdo = PRAVA.kdoBlokuje(await pravaFirmy(firmaId));
-  if (!kdo) return null;
-  const h = await prisma.gamePlayer.findUnique({ where: { id: kdo },
+  const seznam = await pravaFirmy(firmaId);
+  const klic = PRAVA.kdoBlokuje(seznam);
+  if (!klic) return null;
+  const DRZ = require('../services/game/drzitel');
+  const d = DRZ.zKlice(klic);
+  if (!d) return null;
+  // Blokovat může i fond aliance. Majitel má vědět, s kým se má bavit, a
+  // u fondu je to jméno aliance, ne jméno hráče.
+  if (d.typ === 'fond') {
+    const al = await prisma.gameAliance.findUnique({ where: { id: d.id },
+      select: { nazev: true } }).catch(() => null);
+    return al ? al.nazev : null;
+  }
+  const h = await prisma.gamePlayer.findUnique({ where: { id: d.id },
     select: { nick: true, company: true } });
   return h ? (h.company || h.nick) : null;
 }

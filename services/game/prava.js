@@ -22,6 +22,15 @@
 
 'use strict';
 
+// Od chvíle, kdy do firem investuje i fond aliance, nestačí sčítat podle
+// investor_id: hráč 3 a fond 3 jsou dva různí držitelé. Pracuje se proto
+// s klíčem z drzitel.js — 'h:3' versus 'f:3'.
+const DRZ = require('./drzitel');
+
+// Volající se ptají svým id hráče. Snese se obojí: číslo i hotový klíč.
+const klicZ = (kdo) => (kdo == null ? null
+  : (typeof kdo === 'string' && /^[hf]:/.test(kdo) ? kdo : 'h:' + kdo));
+
 // Blokační menšina. Čtvrtina firmy je dost na to, aby se bez ní nedala
 // zastavit — zástava je nevratná a týká se přímo jejích peněz.
 const BLOKACNI = 0.25;
@@ -35,34 +44,49 @@ const VETSINA = 0.5;
 function souhrn(radky) {
   const m = new Map();
   (radky || []).forEach((e) => {
-    const id = e.investor_id;
-    const d = m.get(id) || { investor_id: id, podil: 0, zakaz: false };
+    const k = DRZ.klic(e);
+    if (k == null) return;      // podíl bez držitele neexistuje, viz drzitel.js
+    const d = m.get(k) || { drzitel: k, investor_id: e.investor_id == null ? null : e.investor_id,
+      fond_id: e.fond_id == null ? null : e.fond_id, podil: 0, zakaz: false };
     d.podil += Number(e.podil) || 0;
     d.zakaz = d.zakaz || !!e.zakaz_zastavy;
-    m.set(id, d);
+    m.set(k, d);
   });
   return Array.from(m.values());
 }
 
-// Kdo určuje dividendovou politiku: podílník s víc než polovinou. Jinak nikdo.
+// Kdo určuje dividendovou politiku: držitel s víc než polovinou. Jinak nikdo.
+// Vrací KLÍČ, ne id — jinak by se většina fondu nedala odlišit od většiny
+// hráče se stejným číslem.
 function kdoUrcuje(podily) {
   let nej = null;
   (podily || []).forEach((e) => {
     const p = Number(e.podil) || 0;
-    if (p > VETSINA && (!nej || p > nej.podil)) nej = { id: e.investor_id, podil: p };
+    const k = e.drzitel || DRZ.klic(e);
+    if (k == null) return;
+    if (p > VETSINA && (!nej || p > nej.podil)) nej = { klic: k, podil: p };
   });
-  return nej ? nej.id : null;
+  return nej ? nej.klic : null;
 }
 
-function smiMenit(podily, kdoId) {
-  return kdoUrcuje(podily) === kdoId && kdoId != null;
+// Totéž, ale jako id hráče — pro zápis do databáze a pro zobrazení jména.
+// Když většinu drží fond, vrací null: není to hráč a tvářit se tak nesmí.
+function kdoUrcujeHrace(podily) {
+  const d = DRZ.zKlice(kdoUrcuje(podily));
+  return d && d.typ === 'hrac' ? d.id : null;
+}
+
+function smiMenit(podily, kdo) {
+  const k = klicZ(kdo);
+  return k != null && kdoUrcuje(podily) === k;
 }
 
 // Smí tenhle člověk zastavení zakázat? Rozhoduje velikost podílu, ne to,
 // jestli zákaz zrovna má zapnutý.
-function smiBlokovat(podily, kdoId) {
-  if (kdoId == null) return false;
-  return (podily || []).some((e) => e.investor_id === kdoId
+function smiBlokovat(podily, kdo) {
+  const k = klicZ(kdo);
+  if (k == null) return false;
+  return (podily || []).some((e) => (e.drzitel || DRZ.klic(e)) === k
     && (Number(e.podil) || 0) >= BLOKACNI - 1e-9);
 }
 
@@ -72,24 +96,37 @@ function kdoBlokuje(podily) {
   let nej = null;
   (podily || []).forEach((e) => {
     const p = Number(e.podil) || 0;
+    const k = e.drzitel || DRZ.klic(e);
+    if (k == null) return;
     if (e.zakaz && p >= BLOKACNI - 1e-9 && (!nej || p > nej.podil)) {
-      nej = { id: e.investor_id, podil: p };
+      nej = { klic: k, podil: p };
     }
   });
-  return nej ? nej.id : null;
+  return nej ? nej.klic : null;
+}
+
+// Kdo blokuje, jako id hráče. Fond vrací null — jméno se mu hledá jinde.
+function kdoBlokujeHrace(podily) {
+  const d = DRZ.zKlice(kdoBlokuje(podily));
+  return d && d.typ === 'hrac' ? d.id : null;
 }
 
 // Co se o firmě posílá hráči ven. Jeden tvar pro majitele i pro podílníka —
 // liší se jen tím, co je v něm pravda pro koho.
+// urcuje a blokuje zůstávají id hráče, protože hra podle nich hledá jméno.
+// Když drží většinu fond, jsou prázdné a pravda je v klíčích vedle nich.
 function proHrace(podily, jaId) {
+  const ja = klicZ(jaId);
   return {
-    urcuje: kdoUrcuje(podily),
+    urcuje: kdoUrcujeHrace(podily),
+    urcuje_drzitel: kdoUrcuje(podily),
     smim_urcovat: smiMenit(podily, jaId),
-    blokuje: kdoBlokuje(podily),
+    blokuje: kdoBlokujeHrace(podily),
+    blokuje_drzitel: kdoBlokuje(podily),
     smim_blokovat: smiBlokovat(podily, jaId),
-    muj_zakaz: (podily || []).some((e) => e.investor_id === jaId && e.zakaz),
+    muj_zakaz: (podily || []).some((e) => (e.drzitel || DRZ.klic(e)) === ja && e.zakaz),
   };
 }
 
-module.exports = { souhrn, kdoUrcuje, smiMenit, smiBlokovat, kdoBlokuje, proHrace,
-  BLOKACNI, VETSINA };
+module.exports = { souhrn, kdoUrcuje, kdoUrcujeHrace, smiMenit, smiBlokovat,
+  kdoBlokuje, kdoBlokujeHrace, proHrace, BLOKACNI, VETSINA };
