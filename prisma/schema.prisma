@@ -8334,6 +8334,33 @@ model GameDohled {
   @@map("game_dohled")
 }
 
+// Stínová pokladna: hotovost, jak ji vede server sám. Zatím nerozhoduje —
+// hra běží dál na svém čísle a tohle stojí vedle něj. Teprve až se obě čísla
+// přestanou rozcházet, může se autorita přepnout sem.
+//
+// Posouvá se o to, co si server spočítal: zisk sítě za uplynulý čas,
+// doručenky, nákupy, zem, přípojky, úvěry, denní odměna a opravy. Nikdy se
+// nebere číslo od hry — jinak by se rozdíl ztratil, a ten je celý smysl.
+model GamePokladna {
+  player_id   Int      @id
+  hotovost    Float    @default(0)
+  // Poslední číslo od hry, jen pro porovnání.
+  hra         Float    @default(0)
+  // Z jakého stavu se počítal poslední posun. Jen pole, která do výpočtu
+  // vstupují — bez toho by se při vynechaném otisku interval ztratil.
+  stav        Json?
+  kroku       Int      @default(0)
+  zalozeno_at DateTime @default(now())
+  at          DateTime @default(now())
+  // Ruční srovnání: kdy a o kolik. Dokud se příčina rozdílu nenajde,
+  // nesrovnává se — rozdíl se má sčítat.
+  srovnano_at DateTime?
+  srovnano_o  Float     @default(0)
+
+  @@index([at])
+  @@map("game_pokladna")
+}
+
 model GameSnapshot {
   id         Int      @id @default(autoincrement())
   player_id  Int

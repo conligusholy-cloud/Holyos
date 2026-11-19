@@ -356,6 +356,23 @@ router.get('/strop-prehled', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(await stropPrehled(req.query.dnu));
 }));
 
+// GET /pokladna → hotovost podle serveru proti číslu od hry. Poslední měření
+// před přesunem pokladny.
+router.get('/pokladna', api(async (req, res) => {
+  const { pokladnaPrehled } = require('../services/game/dohled');
+  res.type('text/plain; charset=utf-8').send(await pokladnaPrehled(req.query.limit));
+}));
+
+// POST /pokladna/srovnat { id } → srovná pokladnu jednoho hráče na číslo hry.
+// Dělá se, AŽ se příčina rozdílu najde a opraví — jinak se rozdíl má sčítat.
+router.post('/pokladna/srovnat', api(async (req, res) => {
+  const id = parseInt((req.body || {}).id, 10);
+  if (!id) return res.status(400).json({ error: 'Chybí id hráče.' });
+  const r = await require('../services/game/pokladna').srovnej(id);
+  if (!r.ok) return res.status(404).json({ error: r.error });
+  res.json({ ok: true, srovnano_o: r.o, hotovost: r.hotovost });
+}));
+
 
 // GET /diagnostika-dat → prázdné řádky v seznamu hráčů: přišli o uložený stav,
 // nebo ho nikdy neměli? Rozhoduje `state_rev` — zvedá se při KAŽDÉM uložení hry:

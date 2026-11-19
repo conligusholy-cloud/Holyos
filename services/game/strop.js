@@ -152,8 +152,12 @@ const CETA_MZDY = 80000;           // dva lidi
 const SHANEC_MZDA = 50000;         // kdo místa vyhledává a domlouvá
 const POJISTNE_PODIL = 0.004;      // měsíčně z ceny stroje
 
-const kolikKlicu = (x) => (x && typeof x === 'object' ? Object.keys(x).length : 0);
-const kolikPrvku = (x) => (Array.isArray(x) ? x.length : 0);
+// Stínová pokladna si minulý stav neukládá celý, jen počty — proto obě
+// pomůcky snesou i holé číslo.
+const kolikKlicu = (x) => (typeof x === 'number' ? Math.max(0, Math.round(x))
+  : (x && typeof x === 'object' ? Object.keys(x).length : 0));
+const kolikPrvku = (x) => (typeof x === 'number' ? Math.max(0, Math.round(x))
+  : (Array.isArray(x) ? x.length : 0));
 
 function zRozdiluStavu(stary, novy) {
   const st = stary || {}, no = novy || {};
@@ -308,7 +312,12 @@ async function prirustek(p, novyStav, vyzvednuto) {
 // Zisk se bere z toho, co umí spočítat server sám — tedy ze stejného
 // výpočtu, který se u otisku porovnává s hrou. Měsíční zisk se poměrem
 // rozpočítá na uplynulý čas.
-async function ocekavanaZmena(p, st, od, zisk, vyzvednuto) {
+// `zaklad` je stav, proti kterému se počítají rozdíly (průzkum, pobočky,
+// odměna, opravy). U otisku je to minulé uložení; stínová pokladna si posílá
+// vlastní — ta se posouvá po delších krocích a minulé uložení by jí
+// vynechaný interval ztratilo.
+async function ocekavanaZmena(p, st, od, zisk, vyzvednuto, zaklad) {
+  const zakl = zaklad === undefined ? p.state : zaklad;
   const ted = Date.now();
   const naposledy = ted - Math.max(0, od);
   const mesicu = Math.max(0, od) / MESIC_MS;
@@ -317,17 +326,17 @@ async function ocekavanaZmena(p, st, od, zisk, vyzvednuto) {
   const zEvidence = await utraceno(p.id, naposledy, ted);
   // A k tomu to, co se pozná z rozdílu dvou uložení: průzkum, obhlídky,
   // pobočky, stěhování sídla.
-  const zeStavu = zRozdiluStavu(p.state, st);
+  const zeStavu = zRozdiluStavu(zakl, st);
   // Měsíční režie za uplynulý čas: pobočky, četa, pojištění.
   const rezie = rezieZaMesic(st).celkem * mesicu;
   // Zaplacené opravy po poruše — výdaj, o kterém server nemá evidenci.
-  const opravy = opravyZeStavu(p.state, st);
+  const opravy = opravyZeStavu(zakl, st);
   // A příjem, který hra vyplácí sama: denní odměna.
-  const prijmy = prijmyZeStavu(p.state, st, zisk ? zisk.server : 0);
+  const prijmy = prijmyZeStavu(zakl, st, zisk ? zisk.server : 0);
   const nakupy = zEvidence + zeStavu.celkem + rezie + opravy.celkem;
   // Čerpání úvěru hotovost zvedá, splátka ji snižuje — a obojí je vidět na
   // dluhu, ne na hotovosti.
-  const dluhZmena = dluhu(st) - dluhu(p.state);
+  const dluhZmena = dluhu(st) - dluhu(zakl);
   return {
     celkem: zeSite + dorucenky + prijmy.celkem - nakupy + dluhZmena,
     zeSite, dorucenky, nakupy, dluhZmena, zEvidence, zeStavu, rezie,
@@ -453,6 +462,11 @@ async function otisk(p, st, v) {
   // důvodu jako zisk: jsou to další dva dotazy a u každého uložení by to
   // bylo zbytečné.
   const cek = await ocekavanaZmena(p, st, v.od, zisk, v.vyzvednuto).catch(() => null);
+  // A posun stínové pokladny. Ta si počítá od svého posledního kroku, ne od
+  // minulého uložení — jinak by jí vynechané intervaly propadly. Spadnout
+  // nesmí: ukládání hry na ní nestojí, jen měří.
+  await require('./pokladna').posun(p, st, zisk, v.vyzvednuto)
+    .catch((e) => console.warn('[game-pokladna]', e && e.message));
   await prisma.gameSnapshot.create({ data: {
     player_id: p.id,
     hotovost: Math.round(Number(st && st.cash) || 0),
@@ -490,5 +504,6 @@ async function zkontroluj(p, st, vyzvednuto) {
 }
 
 module.exports = { zkontroluj, prirustek, otisk, stropStroje, stropSite, zRozdiluStavu, rezieZaMesic,
+  ocekavanaZmena,
   denniOdmena, prijmyZeStavu, opravyZeStavu,
   MESIC_MS, NAVSTEVNOST_STROP, REZERVA, STROJE, OTISK_ODSTUP };

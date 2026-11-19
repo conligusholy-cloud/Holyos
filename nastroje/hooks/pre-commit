@@ -248,6 +248,18 @@ if git diff --cached --name-only | grep -qE 'services/game/strop'; then
   fi
 fi
 
+# Stínová pokladna. Dvě vlastnosti, na kterých stojí, se dají rozbít jedním
+# řádkem: nesmí se srovnávat sama (to by zahodilo, co má měřit) a musí
+# počítat od svého posledního kroku, ne od minulého uložení hry (jinak jí
+# vynechané intervaly propadnou). Commit zastaví.
+if git diff --cached --name-only | grep -qE 'services/game/(pokladna|strop)'; then
+  if ! node nastroje/tpokladna.js; then
+    echo ""
+    echo "STOP: stínová pokladna nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Čekaná změna hotovosti: denní odměna (příjem) a opravy po poruše (výdaj).
 # Obojí se pozná jen z rozdílu dvou uložení, takže se to snadno rozbije
 # přejmenováním pole ve stavu hry. Odměna navíc musí počítat ze zisku, který

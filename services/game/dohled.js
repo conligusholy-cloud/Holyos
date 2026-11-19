@@ -639,5 +639,44 @@ function start() {
   console.log('[game-dohled] denní přehled pojistek běží');
 }
 
-module.exports = { start, doLogu, stropPrehled, skladChybi, nastaveniPrehled, ziskRozbor, odkazyRozpor, stavRozpad,
+// ─── Stínová pokladna ────────────────────────────────────────────────────────
+// Hotovost, jak ji vede server, proti číslu od hry. Tohle je poslední měření
+// před přesunem pokladny: dokud se čísla rozcházejí, není co stěhovat.
+//
+// Rozdíl se schválně sčítá a nesrovnává se sám, takže řádek, který sedí,
+// znamená, že server uměl hotovost spočítat celou dobu — ne že se zrovna
+// potkali. Kolik se u hráče celkem srovnalo ručně, je proto taky vidět:
+// pokladna, která se srovnávala každý den, hotová není.
+async function pokladnaPrehled(limit) {
+  const POK = require('./pokladna');
+  const p = await POK.prehled(parseInt(limit, 10) || 25);
+  const ids = p.radky.map((r) => r.player_id);
+  const hraci = ids.length ? await prisma.gamePlayer.findMany({
+    where: { id: { in: ids } }, select: { id: true, nick: true } }) : [];
+  const jmena = new Map(hraci.map((h) => [h.id, h.nick]));
+  const out = [];
+  out.push('STÍNOVÁ POKLADNA · hráčů ' + p.pocet
+    + ' · sedí do tisícovky ' + p.sedi
+    + ' · ručně srovnávaných ' + p.srovnavanych);
+  out.push('');
+  if (!p.pocet) {
+    out.push('  Zatím prázdná — zakládá se hráči při prvním otisku po nasazení.');
+    return out.join('\n');
+  }
+  out.push('  ' + 'hráč'.padEnd(18) + 'server'.padStart(16) + 'hra'.padStart(16)
+    + 'rozdíl'.padStart(16) + '  kroků  srovnáno');
+  p.radky.forEach((r) => {
+    out.push('  ' + String(jmena.get(r.player_id) || ('#' + r.player_id)).padEnd(18).slice(0, 18)
+      + kc(r.hotovost).padStart(16) + kc(r.hra).padStart(16) + kc(r.rozdil).padStart(16)
+      + String(r.kroku).padStart(7)
+      + (r.srovnano_at ? ('  ' + kc(r.srovnano_o)) : ''));
+  });
+  out.push('');
+  out.push('  Kladný rozdíl = server čeká víc hotovosti, než hra ukazuje.');
+  out.push('  Záporný = hře přibylo víc, než se dá vysvětlit — ten směr je ten zajímavý.');
+  out.push('  Srovnat se dá ručně, až se příčina najde: POST /pokladna/srovnat {id}.');
+  return out.join('\n');
+}
+
+module.exports = { start, doLogu, stropPrehled, pokladnaPrehled, skladChybi, nastaveniPrehled, ziskRozbor, odkazyRozpor, stavRozpad,
   vlastnictvi, ziskSrovnani };
