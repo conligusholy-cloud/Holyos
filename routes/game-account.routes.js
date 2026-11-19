@@ -1404,9 +1404,13 @@ async function zastavaPodlaha(playerId) {
 // ─── Jazyk hry ───────────────────────────────────────────────────────────────
 // GET /texty/:jazyk → celý katalog pro prohlížeč. Angličtina přichází
 // podložená češtinou, takže hře nikdy nechybí klíč a nemusí řešit pády sama.
+// Katalog se NEKEŠUJE natvrdo. Pět minut staré pameti stačilo na to, aby si
+// hráč po nasazení stáhl nový kód a starý katalog — a místo textů mu v kartě
+// svítily klíče jako „fond.zamceno". no-cache neznamená „stahuj pokaždé":
+// prohlížeč se jen zeptá a na nezměněný katalog dostane 304 bez těla.
 router.get('/texty/:jazyk', (req, res) => {
   const j = String(req.params.jazyk || '').slice(0, 5);
-  res.set('Cache-Control', 'public, max-age=300');
+  res.set('Cache-Control', 'no-cache');
   res.json({ ok: true, jazyk: TEXTY.JAZYKY.indexOf(j) >= 0 ? j : TEXTY.ZDROJ,
     texty: TEXTY.katalogPro(j) });
 });
@@ -1417,7 +1421,7 @@ router.get('/texty/:jazyk', (req, res) => {
 // než infolinka, která nezvoní.
 router.get('/texty/linka/:jazyk', (req, res) => {
   const j = String(req.params.jazyk || '').slice(0, 5);
-  res.set('Cache-Control', 'public, max-age=300');
+  res.set('Cache-Control', 'no-cache');
   res.json({ ok: true, scenare: TEXTY.scenare(j) });
 });
 
