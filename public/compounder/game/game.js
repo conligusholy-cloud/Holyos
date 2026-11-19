@@ -2593,7 +2593,7 @@ function upozorneniSheet() {
   if (zmena) { save(); paintZvon(); }
 }
 function sheet(html) { $('sheet-body').innerHTML = html; $('sheet').classList.remove('hidden'); }
-function closeSheet() { $('sheet').classList.add('hidden'); }
+function closeSheet() { FOND_KAM = null; $('sheet').classList.add('hidden'); }
 // Krok, který nejde vzít zpátky, se nesmí stát ukliknutím. Hráč musí slovo
 // opsat a tlačítko zůstane zamčené, dokud nesedí. Diakritika ani velikost
 // písmen se neřeší — kdo napíše „zacit znova", myslel to stejně vážně.
@@ -9383,7 +9383,10 @@ function fondVnitrek() {
     + '</div>';
   return h;
 }
-function fondZnovu() { FOND = null; loadFond(paintMe); }
+// Kam se po akci ve fondu překresluje. Z mapy se fond otevírá v překryvu
+// a překreslit záložku Já pod ním by nikdo neviděl. Zavření to vrací zpět.
+var FOND_KAM = null, FOND_ZEB = null;
+function fondZnovu() { FOND = null; loadFond(FOND_KAM || paintMe); }
 function fondVlozitSheet() {
   sheet('<h3>' + esc(tx('fond.vlozit')) + '</h3>'
     + '<p class="muted small">' + esc(tx('fond.popis')) + '</p>'
@@ -9494,9 +9497,13 @@ function fondNavrhSheet() {
 }
 function bindFond(kde) {
   var box = $(kde); if (!box || !FOND) return;
-  if ($('fond-vlozit')) $('fond-vlozit').onclick = fondVlozitSheet;
-  if ($('fond-prevest')) $('fond-prevest').onclick = fondPrevestSheet;
-  if ($('fond-navrh')) $('fond-navrh').onclick = fondNavrhSheet;
+  // Fond se kreslí na dvě místa — do záložky Já i do překryvu z mapy — takže
+  // stejná id jsou v DOM dvakrát. Hledá se uvnitř toho, co se zrovna kreslí;
+  // globální hledání by tlačítka navazovalo na schovanou kopii.
+  var v = function (id) { return box.querySelector('#' + id); };
+  if (v('fond-vlozit')) v('fond-vlozit').onclick = fondVlozitSheet;
+  if (v('fond-prevest')) v('fond-prevest').onclick = fondPrevestSheet;
+  if (v('fond-navrh')) v('fond-navrh').onclick = fondNavrhSheet;
   [].forEach.call(box.querySelectorAll('[data-fond-hlas]'), function (b) {
     b.onclick = function () {
       b.disabled = true;
@@ -9562,6 +9569,29 @@ function alianceHtml() {
   }
   return h + '</div>';
 }
+// Fond z mapy: vlastní fond a pod ním žebříček. Je to to samé, co je v záložce
+// Já — jen po ruce, ať se hráč k hlasování dostane, aniž by opouštěl mapu.
+function fondSheetPaint() {
+  sheet('<h3>' + esc(tx('hra.zal_fondy')) + '</h3>'
+    + (ALIANCE ? alianceHtml() : '<p class="muted small">' + esc(tx('hra.nacitam_4')) + '</p>')
+    + (FOND_ZEB === null
+      ? '<p class="muted small">' + esc(tx('hra.nacitam_4')) + '</p>'
+      : (FOND_ZEB.length
+        ? '<div class="card"><h3>' + esc(tx('mapa.nejsilnejsi_fondy')) + '</h3>'
+          + '<div class="zeb">' + FOND_ZEB.map(fondRadek).join('') + '</div></div>'
+        : '<p class="fine">' + esc(tx('hra.zadny_fond_zatim_nic_nedrzi')) + '</p>')));
+  bindAliance('sheet-body');
+}
+function fondSheet() {
+  FOND_KAM = fondSheetPaint; FOND_ZEB = null;
+  fondSheetPaint();
+  if (ALIANCE == null) loadAliance(function () { if (FOND_KAM) fondSheetPaint(); });
+  // Žebriček je jen přídavek — když nedorazi, fond se ukáže stejně.
+  api('/leaderboard').then(function (r) {
+    FOND_ZEB = (r.ok && r.j && r.j.fondy) || [];
+    if (FOND_KAM) fondSheetPaint();
+  }).catch(function () { FOND_ZEB = []; if (FOND_KAM) fondSheetPaint(); });
+}
 function zalozAlianceSheet() {
   sheet('<h3>' + esc(tx('aliance.zalozit')) + '</h3>'
     + '<p class="muted small">' + esc(tx('veta.aliance_popis')) + '</p>'
@@ -9584,8 +9614,9 @@ function zalozAlianceSheet() {
 function bindAliance(kde) {
   var box = $(kde); if (!box) return;
   bindFond(kde);
-  if ($('al-zalozit')) $('al-zalozit').onclick = zalozAlianceSheet;
-  if ($('al-odejit')) $('al-odejit').onclick = function () {
+  var v = function (id) { return box.querySelector('#' + id); };
+  if (v('al-zalozit')) v('al-zalozit').onclick = zalozAlianceSheet;
+  if (v('al-odejit')) v('al-odejit').onclick = function () {
     apiJson('/trade/aliance/odejit', {}).then(function (r) {
       if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
       ALIANCE = null; FINANCE = null; loadAliance(paintMe);
@@ -12570,6 +12601,8 @@ $('burza-nova').onclick = novaNabidkaSheet;
     paintStroje();
   };
 });
+var fondBtn = document.getElementById('fond-btn');
+if (fondBtn) { fondBtn.classList.remove('hidden'); fondBtn.onclick = fondSheet; }
 [].forEach.call(document.querySelectorAll('[data-zeb]'), function (b) {
   b.onclick = function () {
     ZEB_KAT = b.getAttribute('data-zeb');
