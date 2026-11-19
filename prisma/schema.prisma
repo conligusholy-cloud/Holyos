@@ -8342,7 +8342,7 @@ model GameDohled {
 model GameVydaj {
   id         Int      @id @default(autoincrement())
   player_id  Int
-  // vymena | vyjednavani | odstupne
+  // doprava | vymena | vyjednavani | odstupne
   druh       String   @db.VarChar(16)
   castka     Int
   spot_id    String?  @db.VarChar(120)

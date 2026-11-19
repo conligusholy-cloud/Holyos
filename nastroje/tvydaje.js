@@ -97,6 +97,66 @@ const BRNO = { lat: 49.195, lon: 16.608 };
     VYD.poplatkySplatnosti(pred, novyUver).celkem === 0);
   ok('prázdný stav nic neshodí', VYD.poplatkySplatnosti(null, null).celkem === 0);
 
+  // ── Doprava proti SKUTEČNÉMU kódu hry ──────────────────────────────────────
+  // „Server si ji spočítá sám" musí znamenat „stejně jako hra". Proto se tu
+  // neporovnává s mým výpočtem, ale s funkcí dopravaNa vytaženou z game.js.
+  const fs = require('fs');
+  const path = require('path');
+  const vm = require('vm');
+  const hra = fs.readFileSync(
+    path.join(__dirname, '..', 'public', 'compounder', 'game', 'game.js'), 'utf8');
+  function vytahni(re, co) {
+    const m = hra.match(re);
+    if (!m) { ok('v game.js se našlo: ' + co, false); return ''; }
+    return m[0];
+  }
+  const kusy = [
+    vytahni(/var DOPRAVA_PAUSAL = [^\n]*\n/, 'DOPRAVA_PAUSAL'),
+    vytahni(/var DOPRAVA_KM = [^\n]*\n/, 'DOPRAVA_KM'),
+    vytahni(/var SILNICE = [^\n]*\n/, 'SILNICE'),
+    vytahni(/function kmMezi\(a, b\) \{[\s\S]*?\n\}/, 'kmMezi'),
+    vytahni(/function nejblizsiZakladna\(sp\) \{[\s\S]*?\n\}/, 'nejblizsiZakladna'),
+    vytahni(/function dopravaNa\(sp, modelKey\) \{[\s\S]*?\n\}/, 'dopravaNa'),
+  ];
+  if (kusy.some((x) => !x)) { console.log('\n' + chyb + ' nesedí'); process.exit(1); }
+
+  // Sem se podstrčí základny a počet strojů — jediné dvě věci, na kterých
+  // dopravaNa kromě místa stojí.
+  const box = { S: { units: [{}] }, zakladny: () => box.__z };
+  vm.createContext(box);
+  vm.runInContext(kusy.join('\n'), box);
+
+  const mista = [PRAHA, BRNO, { lat: 49.74, lon: 13.38 }, { lat: 50.77, lon: 15.06 },
+    { lat: 48.97, lon: 14.47 }, { lat: 49.59, lon: 17.25 }];
+  const sady = [
+    { nazev: 'jen sídlo', st: sidloPraha, z: [{ lat: PRAHA.lat, lon: PRAHA.lon }] },
+    { nazev: 'sídlo i pobočka', st: sPobockou,
+      z: [{ lat: PRAHA.lat, lon: PRAHA.lon }, { lat: BRNO.lat, lon: BRNO.lon }] },
+  ];
+  let kombinaci = 0, sedi = 0;
+  sady.forEach((sada) => {
+    box.__z = sada.z;
+    mista.forEach((m) => {
+      ['mini', 'flex', 'max'].forEach((model) => {
+        kombinaci++;
+        const vHre = box.dopravaNa(m, model);
+        const naServeru = VYD.doprava(sada.st, m, model);
+        if (vHre === naServeru) sedi++;
+        else if (sedi + 3 > kombinaci) {
+          console.log('    rozdíl: ' + sada.nazev + ' ' + model
+            + ' → hra ' + vHre + ', server ' + naServeru);
+        }
+      });
+    });
+  });
+  ok('server počítá dopravu stejně jako hra', sedi === kombinaci,
+    sedi + ' z ' + kombinaci + ' kombinací');
+
+  // A pojistka, kterou hra má taky: první stroj veze dodavatel zadarmo.
+  box.__z = [];
+  ok('bez základny je doprava zdarma v obou',
+    box.dopravaNa(BRNO, 'max') === 0 && VYD.doprava({ pobocky: [] }, BRNO, 'max') === 0);
+
   console.log(chyb ? '\n' + chyb + ' nesedí' : '\nvšechno sedí');
   process.exit(chyb ? 1 : 0);
 })();

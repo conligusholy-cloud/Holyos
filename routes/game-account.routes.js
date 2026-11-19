@@ -2325,6 +2325,15 @@ router.post('/spots/claim', requirePlayer, async (req, res, next) => {
         vazano_do: vaz ? new Date(Date.now() + vaz * MESIC_MS) : null, vypoved_mesicu: vyp },
     });
     await oznacPostaveny(sklad.id, spot);
+    // Doprava stroje na místo. Platí se při KAŽDÉ stavbě, ne jen při výměně,
+    // a server o ní dosud nevěděl — v pokladně se to projevilo tím, že u
+    // velkých hráčů čekal o miliony víc hotovosti, než doopravdy měli.
+    // První stroj veze dodavatel zdarma; server to pozná sám, protože tehdy
+    // hráč ještě nemá sídlo, ze kterého by se vozilo.
+    if (model) {
+      await VYD.zapis(req.player.id, 'doprava',
+        VYD.doprava(req.player.state, c, model), spot, { model });
+    }
     // Od téhle chvíle je místo zasíťované napořád, i kdyby ho hráč zítra opustil.
     try {
       await prisma.gameSpotBuilt.upsert({
@@ -2406,6 +2415,9 @@ router.post('/spots/stavba', requirePlayer, async (req, res, next) => {
     const upd = await prisma.gameSpotClaim.update({ where: { spot_id: spot },
       data: { model, pripojky: prip.hra, pripojky_srv: prip.srv } });
     await oznacPostaveny(sklad.id, spot);
+    // Doprava stroje — i na vlastní pozemek se musí dovézt.
+    await VYD.zapis(req.player.id, 'doprava',
+      VYD.doprava(req.player.state, upd, model), spot, { model });
     res.json({ ok: true, spot: claimPub(upd, req.player.id, await firmyMapa()) });
   } catch (e) { next(e); }
 });

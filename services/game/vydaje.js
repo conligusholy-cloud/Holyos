@@ -1,10 +1,14 @@
 // =============================================================================
 // Laundromat Tycoon — výdaje, o kterých server ví ze svého
 // =============================================================================
-// Tři položky, které hra strhává z hotovosti, ale server je nikam nezapisoval:
-// výměna stroje, poplatek za neúspěšné vyjednávání a odstupné při výpovědi.
-// U všech tří obsluhuje požadavek server, takže je nemusí nechat hlásit od
-// klienta — spočítá si je sám a zapíše.
+// Položky, které hra strhává z hotovosti, ale server je nikam nezapisoval:
+// doprava stroje na místo, výměna stroje, poplatek za neúspěšné vyjednávání
+// a odstupné při výpovědi. U všech obsluhuje požadavek server, takže je
+// nemusí nechat hlásit od klienta — spočítá si je sám a zapíše.
+//
+// Doprava je z nich největší: platí se při každé stavbě a roste se
+// vzdáleností od nejbližší základny. Právě ona dělala v stínové pokladně ten
+// rozdíl, který rostl s velikostí sítě.
 //
 // Proč na tom záleží: čekaná změna i stínová pokladna odečítají výdaje. Když
 // výdaj chybí, čeká server víc hotovosti, než se opravdu stane, a ten rozdíl
