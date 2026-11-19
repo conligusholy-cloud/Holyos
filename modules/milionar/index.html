@@ -1777,13 +1777,26 @@
               + '<td>' + esc(ZL_STAV[r.stav] || r.stav) + (r.admin_rozhodnuti ? '<div class="note">' + esc(r.admin_rozhodnuti) + '</div>' : '') + '</td>'
               + '<td class="num">' + cz(r.skoda) + '</td><td class="num">' + cz(r.zmrazeno) + '</td>'
               + '<td class="note">' + (r.trest_castka != null ? '<b>' + cz(r.trest_castka) + '</b> (' + esc(r.trest_uroven || '') + ')<br>' : '') + 'hlasy ' + (hl.nejnizsi || 0) + '/' + (hl.stredni || 0) + '/' + (hl.nejvyssi || 0)
-                + (r.nedoplatek ? '<br><span style="color:#fbbf24">nedoplatek ' + cz(r.nedoplatek) + ' (zabavit stroje ručně)</span>' : '') + '</td>'
+                + (r.nedoplatek ? '<br><span style="color:#fbbf24">nedoplatek ' + cz(r.nedoplatek) + ' (po zabavení strojů)</span>' : '')
+                + '<br><button class="btn sm" data-zlp="' + r.id + '">👥 Porota</button></td>'
               + '<td class="note">od ' + dt(r.zahajeno_at) + (r.kontrola_do ? '<br>kontrola do ' + dt(r.kontrola_do) : '') + (r.soud_do ? '<br>soud do ' + dt(r.soud_do) : '') + (r.odvolani_do ? '<br>odvolání do ' + dt(r.odvolani_do) : '') + '</td>'
               + '<td class="note" style="max-width:280px">' + (r.odvolani_text ? '<b style="color:#f87171">podáno ' + dt(r.odvolani_at) + '</b><br>' + esc(r.odvolani_text) : '—') + '</td>'
               + '<td style="white-space:nowrap">' + (aktivni ? (r.stav === 'odvolani' ? '<button class="btn sm" data-zlr="' + r.id + '" data-akce="potvrdit">Potvrdit</button> <button class="btn sm" data-zlr="' + r.id + '" data-akce="upravit" data-trest="' + (r.trest_castka || 0) + '">Upravit</button> ' : '')
                 + '<button class="btn sm" data-zlr="' + r.id + '" data-akce="zrusit">Zrušit</button>' : '') + '</td></tr>';
           }).join('') + '</tbody></table>';
         [].forEach.call(box.querySelectorAll('[data-detail]'), function (b) { b.onclick = function () { detail(b.getAttribute('data-detail')); }; });
+        [].forEach.call(box.querySelectorAll('[data-zlp]'), function (b) {
+          b.onclick = function () {
+            get('/zlocin/pripady/' + b.getAttribute('data-zlp') + '/porota').then(function (p) {
+              var jm = function (x) { return (x.firma || x.nick || '#' + x.id) + (x.firma && x.nick ? ' (' + x.nick + ')' : ''); };
+              var VOLBA = { nejnizsi: 'nejnižší', stredni: 'střední', nejvyssi: 'nejvyšší' };
+              alert('Hlasovali (' + p.hlasovali.length + ', min. ' + p.min_porotcu + '):\n'
+                + (p.hlasovali.map(function (x) { return '• ' + jm(x) + ' — ' + (VOLBA[x.volba] || x.volba); }).join('\n') || '— nikdo —')
+                + '\n\nSmí hlasovat, ale ještě nehlasoval (' + p.smi_hlasovat.length + '):\n'
+                + (p.smi_hlasovat.slice(0, 40).map(function (x) { return '• ' + jm(x); }).join('\n') || '— nikdo —'));
+            }).catch(function (e) { alert(e.message); });
+          };
+        });
         [].forEach.call(box.querySelectorAll('[data-zlr]'), function (b) {
           b.onclick = function () {
             var akce = b.getAttribute('data-akce'), body = { akce: akce }, txt = '';

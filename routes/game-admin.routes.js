@@ -545,6 +545,26 @@ router.get('/zlocin/pripady', api(async (req, res) => {
     ceka_na_me: r.stav === 'odvolani' && !!r.odvolani_at })),
     k_odvolani: rows.filter((r) => r.stav === 'odvolani' && r.odvolani_at).length });
 }));
+// Porota případu: kdo už hlasoval (a jak) a kdo by smět hlasovat, ale ještě nehlasoval
+router.get('/zlocin/pripady/:id/porota', api(async (req, res) => {
+  const ZL = require('../services/game/zlocin'), RIZ = require('../services/game/zlocin-rizeni');
+  const z = await prisma.gameZlocin.findUnique({ where: { id: parseInt(req.params.id, 10) } });
+  if (!z) return res.status(404).json({ error: 'Případ nenalezen.' });
+  const R = await ZL.nastaveni();
+  const hlasy = await prisma.gameZlocinHlas.findMany({ where: { zlocin_id: z.id }, orderBy: { id: 'asc' } });
+  const hrac = { id: true, nick: true, company: true, created_at: true, last_login_at: true };
+  const hlasujici = hlasy.length ? await prisma.gamePlayer.findMany({ where: { id: { in: hlasy.map((h) => h.player_id) } }, select: hrac }) : [];
+  const P = {}; hlasujici.forEach((p) => { P[p.id] = p; });
+  // Kandidáti: dost starý účet a nedávno přihlášený (zbytek ověří smiHlasovat)
+  const ted = Date.now();
+  const kand = await prisma.gamePlayer.findMany({ where: { disabled: false, id: { notIn: hlasy.map((h) => h.player_id).concat([z.hlavni_id]) },
+    created_at: { lte: new Date(ted - R.porotce_min_mesicu * 43200000) },
+    last_login_at: { gte: new Date(ted - R.porotce_aktivni_h * 3600e3) } }, select: hrac, take: 400 });
+  const smi = [];
+  for (const k of kand) { const s = await RIZ.smiHlasovat(prisma, R, k, z); if (s.ok) smi.push({ id: k.id, nick: k.nick, firma: k.company || null }); }
+  res.json({ ok: true, hlasovali: hlasy.map((h) => ({ id: h.player_id, nick: (P[h.player_id] || {}).nick, firma: (P[h.player_id] || {}).company || null, volba: h.volba, kdy: h.created_at })),
+    smi_hlasovat: smi, min_porotcu: R.min_porotcu });
+}));
 // Ručně otevřít případ z vyhodnocení (hráč podle id)
 router.post('/zlocin/zahaj', api(async (req, res) => {
   const Z = require('../services/game/zlocin'), RIZ = require('../services/game/zlocin-rizeni');
