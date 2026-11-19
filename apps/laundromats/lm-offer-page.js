@@ -203,6 +203,9 @@ const EXTRA = {
 };
 // Nadpis: bílá část + gradientní část (rozdělí se před posledním „u / pro / pod / at / for / dla / przy")
 function splitTitle(title) {
+  // Dvě věty („Praní během nákupu. Nová služba…") → druhá věta jde barevně na nový řádek
+  const v = String(title || '').match(/^(.+?[.!?])\s+(\S.+)$/);
+  if (v) return [v[1], v[2]];
   const m = String(title || '').match(/^(.*\S)\s+((?:u|pro|pod|at|for|under|dla|przy|pod)\s+.+)$/i);
   return m ? [m[1], m[2]] : [String(title || ''), ''];
 }
