@@ -1269,6 +1269,38 @@ router.post('/trade/aliance/pozvat', hrac, api(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// POST /trade/aliance/pozvanku-zrusit { player_id } → stáhnout pozvánku
+//
+// Nevyřízená pozvánka drží místo: do stropu se počítá s ní stejně jako se
+// členem. Kdo nikdy neodpoví, tak fondu jedno místo zablokuje napořád — a
+// stáhnout ji dosud neměl kdo. Stáhnout ji smí kterýkoli člen: zvát smí taky.
+router.post('/trade/aliance/pozvanku-zrusit', hrac, api(async (req, res) => {
+  const koho = parseInt((req.body || {}).player_id, 10) || 0;
+  const moje = await prisma.gameAlianceClen.findFirst({
+    where: { player_id: req.player.id, stav: 'clen' } });
+  if (!moje) return res.status(403).json({ error: stx(req)('server.v_zadne_alianci_nejsi') });
+  const p = await prisma.gameAlianceClen.findFirst({
+    where: { aliance_id: moje.aliance_id, player_id: koho, stav: 'pozvan' } });
+  if (!p) return res.status(404).json({ error: stx(req)('server.takovou_pozvanku_nemas') });
+  const a = await prisma.gameAliance.findUnique({ where: { id: moje.aliance_id } });
+  await prisma.gameAlianceClen.delete({ where: { id: p.id } });
+  // Pozvaný už zprávu dostal, takže se musí dozvědět i to, že už neplatí.
+  await prisma.gameDelivery.create({ data: {
+    player_id: koho, kind: 'zprava', text_kod: 'dor.fond_pozvanka_zrusena',
+    text_data: { p1: (a && a.nazev) || '' } } });
+  res.json({ ok: true });
+}));
+
+// POST /trade/aliance/odmitnout { aliance_id } → pozvaný děkuje, nechce
+router.post('/trade/aliance/odmitnout', hrac, api(async (req, res) => {
+  const id = parseInt((req.body || {}).aliance_id, 10) || 0;
+  const p = await prisma.gameAlianceClen.findFirst({
+    where: { aliance_id: id, player_id: req.player.id, stav: 'pozvan' } });
+  if (!p) return res.status(404).json({ error: stx(req)('server.takovou_pozvanku_nemas') });
+  await prisma.gameAlianceClen.delete({ where: { id: p.id } });
+  res.json({ ok: true });
+}));
+
 // POST /trade/aliance/prijmout { aliance_id }
 router.post('/trade/aliance/prijmout', hrac, api(async (req, res) => {
   const id = parseInt((req.body || {}).aliance_id, 10) || 0;

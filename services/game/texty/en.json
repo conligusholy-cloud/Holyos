@@ -3701,5 +3701,8 @@
   "dor.fond_dividenda": "The fund {p1} set the profit payout in {p2} to {cislo:p3} %.",
   "fond.vyvoj": "How the fund’s value grows",
   "fond.graf_zatim": "The chart appears once there is something to draw — the value is recorded once an hour.",
-  "veta.fond_graf_od": "since {p1}"
+  "veta.fond_graf_od": "since {p1}",
+  "aliance.pozvanku_zrusit": "Withdraw invitation",
+  "aliance.odmitnout": "Decline",
+  "dor.fond_pozvanka_zrusena": "The invitation to the fund {p1} was withdrawn."
 }

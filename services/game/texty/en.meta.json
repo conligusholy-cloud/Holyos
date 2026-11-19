@@ -3681,5 +3681,8 @@
   "dor.fond_dividenda": "d58d041188c0",
   "fond.vyvoj": "87c6c1b3f3b4",
   "fond.graf_zatim": "f684f6c36ad4",
-  "veta.fond_graf_od": "4d6f85ff7559"
+  "veta.fond_graf_od": "4d6f85ff7559",
+  "aliance.pozvanku_zrusit": "f23ac4d066a8",
+  "aliance.odmitnout": "2378cf3406ef",
+  "dor.fond_pozvanka_zrusena": "3e6d464e2da7"
 }

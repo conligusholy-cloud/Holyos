@@ -9670,8 +9670,12 @@ function alianceHtml() {
       + fondVnitrek()
       + '<h4 style="margin:12px 0 4px">' + esc(tx('aliance.clenove')) + '</h4>'
       + a.clenove.map(function (c) {
+          // Nevyřízená pozvánka drží místo ve fondu, takže musí jít stáhnout.
           return '<div class="row"><span>' + esc(c.kdo) + (c.ja ? ' \u00b7 ' + esc(tx('aliance.ty')) : '') + '</span>'
-            + '<span class="muted small">' + esc(tx(c.stav === 'clen' ? 'aliance.clen' : 'aliance.pozvan')) + '</span></div>';
+            + (c.stav === 'pozvan'
+              ? '<button class="btn sec sm" data-al-pozvanku-zrusit="' + c.id + '">'
+                + esc(tx('aliance.pozvanku_zrusit')) + '</button>'
+              : '<span class="muted small">' + esc(tx('aliance.clen')) + '</span>') + '</div>';
         }).join('')
       + '<p class="fine">' + esc(tx('veta.aliance_jak_funguje')) + '</p>'
       + '<div class="gcard-act"><button class="btn sec sm" id="al-odejit">'
@@ -9680,9 +9684,11 @@ function alianceHtml() {
   } else {
     h += '<p class="muted small" style="margin:2px 0 8px">' + esc(tx('veta.aliance_k_cemu_je')) + '</p>';
     (ALIANCE.pozvanky || []).forEach(function (p) {
-      h += '<div class="row"><b>' + esc(p.nazev) + '</b>'
+      h += '<div class="row"><b>' + esc(p.nazev) + '</b><span>'
         + '<button class="btn sm" data-al-prijmout="' + p.aliance_id + '">'
-        + esc(tx('aliance.prijmout')) + '</button></div>';
+        + esc(tx('aliance.prijmout')) + '</button> '
+        + '<button class="btn sec sm" data-al-odmitnout="' + p.aliance_id + '">'
+        + esc(tx('aliance.odmitnout')) + '</button></span></div>';
     });
     if ((ALIANCE.pozvanky || []).length) {
       h += '<p class="fine warn">' + esc(tx('veta.aliance_cena_za_vstup')) + '</p>';
@@ -9746,6 +9752,22 @@ function bindAliance(kde) {
       toast(esc(tx('aliance.odesel_jsi')), 'ok', true);
     }).catch(function () { toast(esc(tx('hra.server_neodpovida')), 'err'); });
   };
+  // Stažení i odmítnutí pozvánky — obojí jen překreslí kartu.
+  var alAkce = function (vyber, cesta, telo) {
+    [].forEach.call(box.querySelectorAll(vyber), function (b) {
+      b.onclick = function () {
+        b.disabled = true;
+        apiJson(cesta, telo(b)).then(function (r) {
+          if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
+          ALIANCE = null; FOND = null; loadAliance(FOND_KAM || paintMe);
+        }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+      };
+    });
+  };
+  alAkce('[data-al-pozvanku-zrusit]', '/trade/aliance/pozvanku-zrusit',
+    function (b) { return { player_id: Number(b.getAttribute('data-al-pozvanku-zrusit')) }; });
+  alAkce('[data-al-odmitnout]', '/trade/aliance/odmitnout',
+    function (b) { return { aliance_id: Number(b.getAttribute('data-al-odmitnout')) }; });
   [].forEach.call(box.querySelectorAll('[data-al-prijmout]'), function (b) {
     b.onclick = function () {
       b.disabled = true;

@@ -3708,5 +3708,8 @@
   "dor.fond_dividenda": "Fond {p1} nastavil ve firmě {p2} výplatu zisku na {cislo:p3} %.",
   "fond.vyvoj": "Jak roste hodnota fondu",
   "fond.graf_zatim": "Graf se objeví, až bude co kreslit — hodnota se zapisuje jednou za hodinu.",
-  "veta.fond_graf_od": "od {p1}"
+  "veta.fond_graf_od": "od {p1}",
+  "aliance.pozvanku_zrusit": "Stáhnout pozvánku",
+  "aliance.odmitnout": "Odmítnout",
+  "dor.fond_pozvanka_zrusena": "Pozvánka do fondu {p1} byla stažena."
 }
