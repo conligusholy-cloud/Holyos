@@ -315,9 +315,13 @@ async function tik() {
     // Hodnota fondu se nikam jinam neukládá — bez vzorků by graf neměl
     // z čeho vzniknout. Zapisuje se nejvýš jednou za hodinu, tik běží po
     // pěti minutách, takže se tu většinou jen podívá a odeše.
-    const H = require('./fond-historie');
-    await H.vzorkuj(ted);
-    await H.uklid(ted);
+    // Vlastní záchyt schválně: graf je přídavek, nesmí se tvářit jako
+    // selhaný těp. Dokud nedoběhne migrace, tahle tabulka ještě není.
+    try {
+      const H = require('./fond-historie');
+      await H.vzorkuj(ted);
+      await H.uklid(ted);
+    } catch (e) { console.warn('[game-finance] vzorek fondu:', e && e.message); }
   } catch (e) {
     console.warn('[game-finance] tik:', e && e.message);
   } finally { bezi = false; }
