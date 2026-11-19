@@ -2191,10 +2191,15 @@ router.get('/overtime-all', async (req, res, next) => {
       // Roční přesčas pro limit dle zákoníku práce = součet KLADNÝCH měsíčních
       // přesčasů. Manko z jednoho měsíce nesmí umazat přesčas z jiného — zákon
       // počítá odpracované přesčasové hodiny, ne saldo.
+      // Přesčas za zvolené období (měsíc / celý rok) = součet KLADNÝCH měsíčních
+      // přesčasů v něm. Nikdy záporný a nikdy ne roční saldo. (Požadavek #154)
       let yearOvertime = 0;
+      let periodOvertime = 0;
       for (const [mo, worked] of byMonth) {
         const fund = workingDaysInMonth(targetYear, mo) * dailyFundMins;
-        yearOvertime += Math.max(0, worked - fund);
+        const ot = Math.max(0, worked - fund);
+        yearOvertime += ot;
+        if (!month || mo === month) periodOvertime += ot;
       }
 
       overtimeData.push({
@@ -2205,7 +2210,7 @@ router.get('/overtime-all', async (req, res, next) => {
         days_worked: periodDays,
         total_worked_mins: Math.round(periodWorked),
         total_fund_mins: periodFund,
-        overtime_mins: Math.round(periodWorked - periodFund),
+        overtime_mins: Math.round(periodOvertime),
         overtime_year_total_mins: Math.round(yearOvertime),
       });
     }
