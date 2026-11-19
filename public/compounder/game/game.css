@@ -717,6 +717,15 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .zeme-mod i.je{color:var(--text2);background:var(--card2)}
 .zeme-mod i.nic{color:var(--text3);opacity:.5}
 .zeme-mod b{font-size:10.5px;font-weight:500;color:var(--text3)}
+/* Obsazenost země: tenký proužek a pod ním čísla. Proužek je tu proto, že
+   „465 z 2 180“ nikdo neporovná očima mezi dvanácti zeměmi, ale délku ano. */
+.zeme-kap{display:block;margin-top:5px;font-style:normal}
+.zeme-kap em{display:block;height:3px;border-radius:2px;background:var(--card2);
+  overflow:hidden;font-style:normal}
+.zeme-kap em>b{display:block;height:100%;border-radius:2px;background:var(--text3)}
+.zeme-kap em>b.plno{background:var(--err,#e2556a)}
+.zeme-kap span{display:block;margin-top:3px;font-size:10.5px;color:var(--text3);
+  font-variant-numeric:tabular-nums}
 
 /* Burza — sedmá záložka, proto menší písmo v liště. */
 .tabs button{font-size:9.5px}

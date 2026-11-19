@@ -3562,5 +3562,6 @@
   "veta.vystupni_pod_ocenenim": "Unter der Firmenbewertung geht das nicht. Mindestens {p1} pro Prozent.",
   "server.vystupni_nabidku_smi_az_od_pct": "Abfindungsangebot kann ein Anteilseigner mit mindestens {p1} % der Firma ausrufen.",
   "server.vystupni_cena_pod_ocenenim": "Abfindungsangebot darf nicht unter der Firmenbewertung sein. Mindestens {penize:p1} pro Prozent.",
-  "server.stahnout_ji_muze_jen_kdo_ji_dal": "Angebot zurückziehen kann nur der, der es ausgerufen hat."
+  "server.stahnout_ji_muze_jen_kdo_ji_dal": "Angebot zurückziehen kann nur der, der es ausgerufen hat.",
+  "mapa.zabrano_z_mist": "{p1} von {p2} Standorten belegt"
 }

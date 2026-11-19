@@ -3542,5 +3542,6 @@
   "veta.vystupni_pod_ocenenim": "1c55f2466a60",
   "server.vystupni_nabidku_smi_az_od_pct": "faaaea9e8809",
   "server.vystupni_cena_pod_ocenenim": "0ed667da1d8e",
-  "server.stahnout_ji_muze_jen_kdo_ji_dal": "d8592431afa6"
+  "server.stahnout_ji_muze_jen_kdo_ji_dal": "d8592431afa6",
+  "mapa.zabrano_z_mist": "b018543f54b6"
 }

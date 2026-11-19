@@ -114,4 +114,4 @@ async function smiZabrat(prisma, areaKey, lat, lon) {
   return { ok: zab < limit, zeme: kod, limit, zabrano: zab };
 }
 
-module.exports = { nastaveni, uloz, prehled, smiZabrat, zemeMista, OBYVATELE };
+module.exports = { nastaveni, uloz, prehled, smiZabrat, zemeMista, limitZeme, OBYVATELE };

@@ -25,6 +25,7 @@ const JMENI = require('../services/game/jmeni');
 const FOND = require('../services/game/fond');
 const VERZE = require('../services/game/stav-verze');
 const VLAST = require('../services/game/vlastnictvi');
+const LIMITMIST = require('../services/game/limit-mist');
 // Zkratka do obsluhy: stx(req)('server.neco') vrátí hlášku v jazyce hráče.
 // Skládá se pro toho, KOMU se posílá — ne pro toho, kdo akci vyvolal.
 function stx(req) {
@@ -2111,10 +2112,13 @@ function moje(list, id) {
 // Kolik prádlomatů stojí v které zemi a jakých modelů — přes všechny hráče.
 // Země se bere z města, ve kterém místo leží; města bez známé země vypadnou.
 async function zemeSPocty() {
-  const [zabory, mesta] = await Promise.all([
-    prisma.gameSpotClaim.findMany({ where: { model: { not: '' } },
-      select: { area_key: true, model: true, player_id: true } }),
+  // Berí se všechna zabraná místa, ne jen postavené prádlomaty. Do počtů
+  // modelů patří jen postavené, ale obsazenost země dělá i koupený pozemek
+  // bez stroje — místo je zabrané a nikdo jiný ho už nedostane.
+  const [zabory, mesta, limit] = await Promise.all([
+    prisma.gameSpotClaim.findMany({ select: { area_key: true, model: true, player_id: true } }),
     prisma.gameArea.findMany({ where: { country: { not: null } }, select: { key: true, country: true } }),
+    LIMITMIST.nastaveni().catch(() => null),
   ]);
   const kod = {};
   mesta.forEach((m) => { if (m.country && m.country !== 'xx') kod[m.key] = m.country; });
@@ -2122,8 +2126,10 @@ async function zemeSPocty() {
   zabory.forEach((z) => {
     const cc = kod[z.area_key];
     if (!cc) return;
-    const r = out[cc] || (out[cc] = { kod: cc, mini: 0, flex: 0, max: 0, celkem: 0,
+    const r = out[cc] || (out[cc] = { kod: cc, mini: 0, flex: 0, max: 0, celkem: 0, zabrano: 0,
       hraci: new Set(), podle: {} });
+    r.zabrano += 1;
+    if (!z.model) return;        // koupený pozemek bez stroje — místo zabrané, prádlomat žádný
     const m = String(z.model || 'mini').toLowerCase();
     if (m === 'flex' || m === 'max') r[m] += 1; else r.mini += 1;
     r.celkem += 1;
@@ -2153,10 +2159,18 @@ async function zemeSPocty() {
     return h ? { nick: h.nick, firma: h.company || (h.nick + ' s.r.o.'),
       znak: h.emblem || null, pocet: x.pocet } : null;
   };
+  // Kapacita země: kolik míst se do ní podle počtu obyvatel vejde. U země,
+  // kde počet obyvatel neznáme, kapacita není — posílá se null a hra pro ni
+  // řádek s obsazeností nekreslí.
+  const kapacita = (kod) => {
+    if (!limit) return null;
+    try { return LIMITMIST.limitZeme(limit, kod); } catch (e) { return null; }
+  };
   return Object.keys(out).map((k) => {
     const top = (spicka[k] || []).map(ven).filter(Boolean);
     return { kod: out[k].kod, mini: out[k].mini, flex: out[k].flex,
       max: out[k].max, celkem: out[k].celkem, hracu: out[k].hraci.size,
+      zabrano: out[k].zabrano, kapacita: kapacita(out[k].kod),
       // kral zůstává kvůli starším verzím hry, co ještě nečtou top
       kral: top[0] || null, top };
   }).sort((a, b) => b.celkem - a.celkem || a.kod.localeCompare(b.kod));

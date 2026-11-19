@@ -3710,5 +3710,6 @@
   "aliance.pozvanka_odeslana": "Invitation sent.",
   "veta.fond_odchod_popis": "You will be paid {penize:p1} — your share of the cash in the treasury. Stakes in companies are not sold off for this, so whatever the fund already invested does not go with you. You can only get back in by invitation.",
   "veta.fond_odchod_posledni": "You are the last member — leaving dissolves the fund.",
-  "hra.splatka_neprosla_jinde": "The payment did not go through — this game is open somewhere else and that one wins. Close it and try again."
+  "hra.splatka_neprosla_jinde": "The payment did not go through — this game is open somewhere else and that one wins. Close it and try again.",
+  "mapa.zabrano_z_mist": "{p1} of {p2} spots taken"
 }

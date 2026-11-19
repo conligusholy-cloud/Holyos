@@ -3717,5 +3717,6 @@
   "aliance.pozvanka_odeslana": "Pozvánka odeslána.",
   "veta.fond_odchod_popis": "Vyplatí se ti {penize:p1} — tvůj díl hotovosti v pokladně. Podíly ve firmách se kvůli tomu neprodávají, takže co fond už investoval, si neodnášíš. Zpátky se dostaneš jedině na pozvánku.",
   "veta.fond_odchod_posledni": "Jsi poslední člen — odchodem se fond zruší celý.",
-  "hra.splatka_neprosla_jinde": "Splátka neproběhla — tuhle hru máš otevřenou ještě jinde a platí ta druhá. Zavři ji a zkus to znovu."
+  "hra.splatka_neprosla_jinde": "Splátka neproběhla — tuhle hru máš otevřenou ještě jinde a platí ta druhá. Zavři ji a zkus to znovu.",
+  "mapa.zabrano_z_mist": "zabráno {p1} z {p2} míst"
 }

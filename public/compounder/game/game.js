@@ -7962,6 +7962,22 @@ function zemeRadek(z) {
   // Ať je vidět nejen král, ale i s kým se dá o druhé místo poprat.
   var top = z.top && z.top.length ? z.top : (z.kral ? [z.kral] : []);
   var MEDAILE = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
+  // Obsazenost země. Do zabraných se počítají i koupené pozemky bez stroje —
+  // místo už nikdo jiný nedostane, i když na něm zatím nic nestojí. Proto je to
+  // víc než počet prádlomatů vpravo. Země, u které neznáme počet obyvatel,
+  // kapacitu nemá a proužek se jí nekreslí.
+  var kap = '';
+  if (z.kapacita > 0) {
+    var cis = function (n) {
+      try { return Number(n).toLocaleString(localeHrace()); } catch (e) { return String(n); }
+    };
+    var zabrano = Math.max(0, Number(z.zabrano) || 0);
+    var pct = Math.min(100, Math.round(zabrano / z.kapacita * 100));
+    kap = '<i class="zeme-kap"><em><b class="' + (pct >= 90 ? 'plno' : '')
+      + '" style="width:' + pct + '%"></b></em><span>'
+      + tx('mapa.zabrano_z_mist', { p1: cis(zabrano), p2: cis(z.kapacita) })
+      + ' \u00b7 ' + pct + ' %</span></i>';
+  }
   return '<div class="zeb-row zeme">'
     + '<i class="zeb-vlaj">' + (vlajka(z.kod) || esc(String(z.kod || '').toUpperCase())) + '</i>'
     + '<span class="nick">' + esc(zemeNazev(z.kod))
@@ -7973,6 +7989,7 @@ function zemeRadek(z) {
           + '<b>' + esc(k.firma) + '</b> <span>' + esc(k.nick) + '</span>'
           + ' \u00b7 ' + k.pocet + '\u00d7</i>';
       }).join('')
+    + kap
     + '</span>'
     + '<b>' + z.celkem + '×</b></div>';
 }

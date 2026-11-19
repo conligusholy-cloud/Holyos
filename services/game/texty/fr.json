@@ -3561,5 +3561,6 @@
   "veta.vystupni_pod_ocenenim": "Impossible en dessous de la valorisation. Au minimum {p1} par pourcent.",
   "server.vystupni_nabidku_smi_az_od_pct": "L'offre de sortie nécessite au moins {p1} % de la société.",
   "server.vystupni_cena_pod_ocenenim": "L'offre de sortie ne peut pas être inférieure à la valorisation. Au minimum {penize:p1} par pourcent.",
-  "server.stahnout_ji_muze_jen_kdo_ji_dal": "Seul celui qui a fait l'offre peut la retirer."
+  "server.stahnout_ji_muze_jen_kdo_ji_dal": "Seul celui qui a fait l'offre peut la retirer.",
+  "mapa.zabrano_z_mist": "{p1} emplacements occupés sur {p2}"
 }

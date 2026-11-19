@@ -3562,5 +3562,6 @@
   "veta.vystupni_pod_ocenenim": "No puede estar por debajo de la valoración de la empresa. Mínimo {p1} por punto porcentual.",
   "server.vystupni_nabidku_smi_az_od_pct": "Publicar oferta de salida requiere al menos {p1} % de la empresa.",
   "server.vystupni_cena_pod_ocenenim": "La oferta de salida no puede estar por debajo de la valoración de la empresa. Mínimo {penize:p1} por punto porcentual.",
-  "server.stahnout_ji_muze_jen_kdo_ji_dal": "Solo quien publicó la oferta puede retirarla."
+  "server.stahnout_ji_muze_jen_kdo_ji_dal": "Solo quien publicó la oferta puede retirarla.",
+  "mapa.zabrano_z_mist": "{p1} de {p2} ubicaciones ocupadas"
 }
