@@ -248,6 +248,17 @@ if git diff --cached --name-only | grep -qE 'services/game/strop'; then
   fi
 fi
 
+# Rezervace peněz pod běžícími nabídkami. Bez ní jde vyhlásit tři nabídky
+# z jedněch peněz a dvěma podílníkům pak říct, že se to nepovedlo. Commit
+# zastaví.
+if git diff --cached --name-only | grep -qE 'services/game/rezervace|routes/game-trade'; then
+  if ! node nastroje/trezervace.js; then
+    echo ""
+    echo "STOP: rezervace peněz nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Výdaje, o kterých server ví ze svého: výměna stroje, poplatek za
 # vyjednávání, odstupné a poplatek za změnu splatnosti. Musí sedět s cenami
 # ve hře — rozejdou se tichounce a projeví se až jako nevysvětlený rozdíl

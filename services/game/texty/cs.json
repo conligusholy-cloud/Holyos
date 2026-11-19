@@ -3487,6 +3487,7 @@
   "server.na_vlastni_firmu_nabidku_nedavas": "Na vlastní firmu nabídku nedáváš.",
   "server.na_tuhle_firmu_uz_nabidku_mas": "Na tuhle firmu ti jedna nabídka běží. Počkej, až doběhne.",
   "server.na_celou_nabidku_nemas": "Na celou nabídku teď nemáš. Potřebuješ {penize:p1}, máš {penize:p2}.",
+  "server.na_nabidku_mas_zamcene": "Na celou nabídku teď nemáš. Potřebuješ {penize:p1}, volných máš {penize:p2} — {penize:p3} ti drží jiná běžící nabídka.",
   "server.tahle_nabidka_uz_nebezi": "Tahle nabídka už neběží.",
   "server.vlastni_nabidce_prodat_nejdes": "Do vlastní nabídky prodat nejde.",
   "server.v_teto_firme_nic_nedrzis": "V téhle firmě nedržíš žádný podíl.",

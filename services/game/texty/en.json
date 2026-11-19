@@ -3480,6 +3480,7 @@
   "server.na_vlastni_firmu_nabidku_nedavas": "You don't make an offer on your own company.",
   "server.na_tuhle_firmu_uz_nabidku_mas": "You already have an offer running on this company. Wait for it to finish.",
   "server.na_celou_nabidku_nemas": "You don't have enough for the full offer right now. You need {penize:p1}, you have {penize:p2}.",
+  "server.na_nabidku_mas_zamcene": "You do not have enough for the whole offer. You need {penize:p1} and have {penize:p2} free; {penize:p3} is tied up in another running offer.",
   "server.tahle_nabidka_uz_nebezi": "This offer is no longer active.",
   "server.vlastni_nabidce_prodat_nejdes": "You can't sell into your own offer.",
   "server.v_teto_firme_nic_nedrzis": "You don't hold any stake in this company.",

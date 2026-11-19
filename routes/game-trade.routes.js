@@ -1087,16 +1087,22 @@ router.post('/trade/prevzeti', hrac, api(async (req, res) => {
   });
   if (uz) return res.status(409).json({ error: stx(req)('server.na_tuhle_firmu_uz_nabidku_mas') });
 
-  // Peníze se nedají zamknout — hotovost žije ve stavu hry. Aspoň se
-  // zkontroluje, že na celou nabídku teď má: útočník, co slibuje, co nemá,
-  // by jinak zjistil až po prvním prodeji, že na zbytek nedosáhne.
+  // Peníze se doopravdy zamknout nedají — hotovost žije ve stavu hry. Co se
+  // ale dá, je nepustit druhý slib z týchž peněz: co zbývá doplatit pod už
+  // běžícími nabídkami, se z hotovosti odečítá. Bez toho šlo vyhlásit tři
+  // nabídky na tři firmy z jedněch peněz a dvěma podílníkům pak říct, že se
+  // to nějak nepovedlo.
   // U trvalé nabídky se dopředu kontrolovat nedá: neví se, kolik jí kdo
   // prodá ani kdy. Hlídá se proto při každém jednotlivém prodeji.
   const potreba = trvala ? 0 : Math.round(pct * 100 * cenaZaPct);
-  const hotovost = Math.round(stavu(req.player).cash || 0);
-  if (potreba > hotovost) {
-    return res.status(409).json({ error: stx(req)('server.na_celou_nabidku_nemas',
-      { p1: potreba, p2: hotovost }) });
+  const REZ = require('../services/game/rezervace');
+  const r = await REZ.vejdeSe(req.player, stavu(req.player), potreba);
+  if (!r.ok) {
+    return res.status(409).json(r.zamceno > 0
+      ? { error: stx(req)('server.na_nabidku_mas_zamcene',
+        { p1: potreba, p2: r.volne, p3: r.zamceno }) }
+      : { error: stx(req)('server.na_celou_nabidku_nemas',
+        { p1: potreba, p2: r.hotovost }) });
   }
 
   const t = await prisma.gameTender.create({ data: {
