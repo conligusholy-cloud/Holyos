@@ -56,7 +56,7 @@ router.get('/zlocin/noviny', hrac, api(async (req, res) => {
   // Texty rozhraní posílá server (čeština) — v klientu jsou jen údaje
   const ui = { noviny: 'Prádelní noviny', precteno: 'Přečteno', hlasovani: 'Hlasování poroty', hlasuj: 'Hlasovat', bezi: 'Běžící případy',
     zadne: 'Zatím žádné zprávy.', trest: 'Trest:', skoda: 'Škoda:', moje: 'Řízení proti tvé firmě', odvolat: 'Odvolat se', odeslat: 'Odeslat odvolání',
-    odvolani_ph: 'Napiš, proč se odvoláváš (aspoň pár vět)', hlasoval: 'Tvůj hlas je zapsán', zavrit: 'Zavřít', hlasy: 'hlasy (nejnižší/střední/nejvyšší):', hlasu: 'hlasů',
+    odvolani_ph: 'Napiš, proč se odvoláváš (aspoň pár vět)', hlasoval: 'Tvůj hlas je zapsán', konci: 'Hlasování končí', zavrit: 'Zavřít', hlasy: 'hlasy (nejnižší/střední/nejvyšší):', hlasu: 'hlasů',
     odvolani_podano: 'Odvolání podáno, čeká na rozhodnutí správy hry. Majetek zůstává zmrazen.',
     stav: { kontrola: 'kontrola', soud: 'soud', odvolani: 'rozsudek / odvolání', uzavreno: 'uzavřeno', zruseno: 'zrušeno' },
     urovne: { nejnizsi: 'Nejnižší trest', stredni: 'Střední trest', nejvyssi: 'Nejvyšší trest' } };

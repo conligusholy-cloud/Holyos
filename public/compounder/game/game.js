@@ -13001,7 +13001,14 @@ function zlocinNoviny() {
     h += '</div>';
   }
   (d.hlasovani || []).forEach(function (v) {
+    // Do kdy se hlasuje. Bez toho porotce neví, jestli si to má rozmyslet
+    // do rána, nebo mu hlasování uteče, než zavře telefon.
+    var konci = v.soud_do
+      ? '<div style="font-size:13px;margin:3px 0 0;opacity:.75">' + esc(ui.konci || '') + ' '
+        + etaText(new Date(v.soud_do).getTime() - Date.now()) + '</div>'
+      : '';
     h += '<div style="background:#ead9ae;border-radius:8px;padding:10px;margin-bottom:10px"><b>⚖️ ' + esc(ui.hlasovani || '') + ': ' + esc(v.firma) + '</b>'
+      + konci
       + '<div style="font-size:13px;margin:3px 0 6px">' + (v.moje_volba ? esc(ui.hlasoval || '') + ' (' + esc((ui.urovne || {})[v.moje_volba] || v.moje_volba) + ')' : '') + '</div>'
       + v.urovne.map(function (u) {
         return '<button data-zlh="' + v.id + '" data-v="' + u.klic + '" style="display:block;width:100%;margin:4px 0;padding:8px;border:1px solid #2b2416;border-radius:8px;background:' + (v.moje_volba === u.klic ? '#2b2416' : 'transparent') + ';color:' + (v.moje_volba === u.klic ? '#f4ecd8' : '#2b2416') + ';font-weight:600">'
