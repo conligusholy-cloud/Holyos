@@ -1522,6 +1522,10 @@ router.get('/trade/aliance/fond/navrhy', hrac, api(async (req, res) => {
       : null;
     out.push({ id: n.id, druh: n.druh, detail: n.detail, prah: n.prah, stav: n.stav,
       do: n.do, autor_id: n.autor_id, muj_hlas: muj ? muj.volba : null,
+      // Jestli je návrh můj, rozhodne server. Hra to dřív porovnávala sama proti
+      // ME.id — jenže ME se naplňuje až při jiných krocích a často je prázdné,
+      // takže tlačítko „Zrušit" se u vlastního návrhu většinou neukázalo.
+      muj: n.autor_id === req.player.id,
       pro: v.pro || 0, proti: v.proti || 0, mlci: v.mlci || 0, chybi: v.chybi || 0 });
   }
   res.json({ ok: true, navrhy: out });

@@ -9405,8 +9405,10 @@ function fondVnitrek() {
         + '<div class="gcard-act"><button class="btn sm" data-fond-provest="' + n.id + '">'
         + esc(tx(popisek)) + '</button></div>';
     }
-    // Vlastní návrh jde stáhnout, dokud se nevyhlásil — kvůli překlepům.
-    if (ME && n.autor_id === ME.id && n.stav !== 'proveden') {
+    // Vlastní návrh jde stáhnout, dokud se nevyhlásil — kvůli překlepům
+    // i kvůli tomu, že se schválený návrh dá přestat chtít. Kdo je autor, říká
+    // server: ME bývá prázdné a tlačítko se pak neukázalo ani vlastnímu autorovi.
+    if (n.muj && n.stav !== 'proveden') {
       h += '<div class="gcard-act"><button class="btn sec sm" data-fond-zrusit="' + n.id + '">'
         + esc(tx('fond.zrusit')) + '</button></div>';
     }
