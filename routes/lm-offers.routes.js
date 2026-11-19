@@ -31,7 +31,7 @@ const LINK_LABEL = { cs: 'Zobrazit obchodní návrh', en: 'View the business pro
 // Veřejná podoba nabídky (bez interních poznámek a kontaktů na odesílatele navíc)
 function publicView(o) {
   return { token: o.token, company: o.company, contact_name: o.contact_name, lang: o.lang, currency: o.currency, title: o.title, intro: o.intro,
-    points: o.points, perex: o.perex, refs: o.refs, image_v: o.image_v || null, model: o.model, units: o.units, unit_price: o.unit_price, monthly_revenue: o.monthly_revenue, conn_price: o.conn_price || null, footfall: o.footfall || null, stores: o.stores || null, warranty_years: o.warranty_years || null, valid_until: o.valid_until,
+    points: o.points, perex: o.perex, refs: o.refs, image_v: o.image_v || null, hide_eco: !!o.hide_eco, model: o.model, units: o.units, unit_price: o.unit_price, monthly_revenue: o.monthly_revenue, conn_price: o.conn_price || null, footfall: o.footfall || null, stores: o.stores || null, warranty_years: o.warranty_years || null, valid_until: o.valid_until,
     sender_name: o.sender_name, sender_phone: o.sender_phone, reply_to: o.reply_to, interest: o.interest ? { at: o.interest.at } : null };
 }
 
@@ -72,6 +72,8 @@ router.post('/', async (req, res, next) => {
       points: s(b.points, 4000), perex: s(b.perex, 600), refs: s(b.refs, 3000), model: s(b.model, 80), units: num(b.units), unit_price: num(b.unit_price), monthly_revenue: num(b.monthly_revenue), conn_price: num(b.conn_price), footfall: num(b.footfall), stores: num(b.stores) ? Math.round(num(b.stores)) : null, warranty_years: num(b.warranty_years) ? Math.min(4, Math.round(num(b.warranty_years))) : null,
       valid_until: /^\d{4}-\d{2}-\d{2}$/.test(String(b.valid_until || '')) ? b.valid_until : null, note: s(b.note, 2000),
       sender_name: s(b.sender_name, 120), sender_phone: s(b.sender_phone, 40), reply_to: reply, updated_at: now,
+      // Skrýt sekci Ekonomika na webové nabídce. Formulář posílá eco_form=1 + show_eco (zaškrtávátko); jiné volání pole nemění.
+      hide_eco: b.eco_form ? !(b.show_eco === '1' || b.show_eco === true || b.show_eco === 'on') : (b.hide_eco != null ? !!b.hide_eco : !!o.hide_eco),
     });
     if (!o.company) return res.status(400).json({ error: 'Vyplňte název společnosti' });
     await save(list);
