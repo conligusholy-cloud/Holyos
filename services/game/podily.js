@@ -29,7 +29,11 @@ function redeni(stavajici, f) {
   const n = Math.max(0, Math.min(1, Number(f) || 0));
   return (stavajici || []).map((e) => ({
     id: e.id,
+    // Držitel se nese dál beze změny: ředí se podíl, ne to, komu patří.
+    // Fondův řádek má investor_id prázdné a bez fond_id by se z něj stal
+    // podíl bez držitele — tedy podíl, který ze všech součtů tiše zmizí.
     investor_id: e.investor_id,
+    fond_id: e.fond_id == null ? null : e.fond_id,
     podil_pred: Number(e.podil) || 0,
     podil: Math.max(0, (Number(e.podil) || 0) * (1 - n)),
   }));

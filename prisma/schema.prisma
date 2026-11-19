@@ -8155,8 +8155,12 @@ model GameLoan {
 model GameEquity {
   id            Int       @id @default(autoincrement())
   trade_id      Int?
-  investor_id   Int
+  // Podíl drží buď hráč, nebo fond aliance — nikdy obojí a nikdy ani jedno.
+  // Hlídá to CHECK v migraci: řádek, který nepatří nikomu, by tiše mizel ze
+  // všech součtů a nikdo by si ho nevšiml.
+  investor_id   Int?
   investor_nick String    @db.VarChar(24)
+  fond_id       Int?
   firma_id      Int
   firma_nick    String    @db.VarChar(24)
   podil         Float
@@ -8179,6 +8183,7 @@ model GameEquity {
   @@index([stav, dalsi_at])
   @@index([firma_id])
   @@index([investor_id])
+  @@index([fond_id])
   @@map("game_equity")
 }
 

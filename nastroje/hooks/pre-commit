@@ -259,6 +259,18 @@ if git diff --cached --name-only | grep -qE 'services/game/(dividenda|finance)';
   fi
 fi
 
+# Kdo drží podíl. Od chvíle, kdy do firem investuje i fond aliance, můžou
+# ve firmě sedět hráč i fond vedle sebe. Kdyby se někde sečetly podle
+# investor_id, fondu by se podíl ztratil — a podíl rozhoduje o většině
+# i o výplatách. Commit zastaví.
+if git diff --cached --name-only | grep -qE 'services/game/(drzitel|podily|prava|prevzeti)'; then
+  if ! node nastroje/tdrzitel.js; then
+    echo ""
+    echo "STOP: držitel podílu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Rezervace peněz pod běžícími nabídkami. Bez ní jde vyhlásit tři nabídky
 # z jedněch peněz a dvěma podílníkům pak říct, že se to nepovedlo. Commit
 # zastaví.
