@@ -23,6 +23,7 @@ const POZEMKY = require('../services/game/pozemky');
 const VYD = require('../services/game/vydaje');
 const JMENI = require('../services/game/jmeni');
 const FOND = require('../services/game/fond');
+const VERZE = require('../services/game/stav-verze');
 // Zkratka do obsluhy: stx(req)('server.neco') vrátí hlášku v jazyce hráče.
 // Skládá se pro toho, KOMU se posílá — ne pro toho, kdo akci vyvolal.
 function stx(req) {
@@ -1480,9 +1481,17 @@ router.put('/account/state', requirePlayer, async (req, res, next) => {
     // Verze: klient posílá tu, ze které vychází. Když se mezitím uložilo odjinud
     // (druhé zařízení), uložení odmítneme a pošleme zpátky novější stav — jinak
     // by si hráč přepsal to, co před chvílí udělal jinde.
+    //
+    // Chybějící verze se dřív brala jako „nekontroluj“, a to byla díra přesně tam,
+    // kde je hlídání nejvíc potřeba: hra, která svoji verzi ještě nezná, přepsala
+    // naslepo i stav o mnoho novější. Jednomu hráči tak zmizelo 57 M i se
+    // splaceným úvěrem — druhá rozehraná hra ho přepsala svým starým stavem.
+    // Bez verze se proto ukládá jen do účtu, který ještě žádný stav nemá.
+    // Je to samoopravné: klient na 409 stav převezme a verzi si z odpovědi
+    // vezme, takže ztratí nanejvýš jedno kolo a dál už jede správně.
     const rev = (req.body || {}).rev;
     const akt = Number(req.player.state_rev || 0);
-    if (rev != null && Number(rev) !== akt) {
+    if (VERZE.konflikt(rev, req.player.state_rev, req.player.state)) {
       return res.status(409).json({ error: stx(req)('server.hra_se_mezitim_ulozila_z_jineho'),
         rev: akt, state: req.player.state || null });
     }

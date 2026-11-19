@@ -137,6 +137,16 @@ if git diff --cached --name-only | grep -qE 'services/game/brzda|routes/game-tra
   fi
 fi
 
+# Verze uloženého stavu. Je to jediná zábrana proti tomu, aby druhá
+# rozehraná hra přepsala novější stav — když povolí, mizí hráčům peníze.
+if git diff --cached --name-only | grep -qE 'services/game/stav-verze|routes/game-account'; then
+  if ! node nastroje/trevverze.js; then
+    echo ""
+    echo "STOP: hlídání verze stavu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Které měřítko škody platí u soudu. Počítá se z toho trest v desítkách
 # milionů — chyba tady není překlep, je to cizí majetek.
 if git diff --cached --name-only | grep -qE 'services/game/zlocin\.js'; then
