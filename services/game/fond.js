@@ -167,5 +167,42 @@ function prevod(radky, zKoho, komu, castka) {
 const PRAHY = { koupit: BEZNE, vyplatit: ZASADNI };
 const prahDruhu = (druh) => (PRAHY[druh] == null ? null : PRAHY[druh]);
 
+// ─── Žebríček fondů ──────────────────────────────────────────────
+// Kolik fond doopravdy drží: hotovost v pokladně plus podíly ve firmách
+// oceněné jměním těch firem. Oceňuje se stejným číslem, jakým žebříček měří
+// firmy samotné — kdyby si fond počítal hodnotu po svém, byla by ve hře dvě
+// různá „kolik ta firma stojí" a hráč by nevěděl, kterému věřit.
+//
+// Firma bez uloženého stavu se ocení pořizovací cenou podílu. Nula by tvrdila,
+// že ten podíl nestojí nic, a to je horší odhad než to, co se za něj zaplatilo.
+function zebricek(aliance, clenu, drzene, jmeniFirmy) {
+  const dej = (m, k) => (m && typeof m.get === 'function' ? m.get(k) : (m || {})[k]);
+  const drzi = new Map();
+  (drzene || []).forEach((e) => {
+    if (!e || e.fond_id == null) return;
+    const r = drzi.get(e.fond_id) || { hodnota: 0, firmy: new Set() };
+    // Ceníme jměním firmy krát podíl. Když firmu neznáme, bereme to, co se
+    // za ten podíl zaplatilo — to je cena celého podílu, ne celé firmy, takže
+    // se už ničím nenásobí.
+    const jm = dej(jmeniFirmy, e.firma_id);
+    r.hodnota += Number.isFinite(Number(jm))
+      ? Math.max(0, cislo(jm)) * Math.max(0, cislo(e.podil))
+      : Math.max(0, cislo(e.cena));
+    r.firmy.add(e.firma_id);
+    drzi.set(e.fond_id, r);
+  });
+  return (aliance || []).map((a) => {
+    const d = drzi.get(a.id);
+    const pokl = Math.max(0, Math.round(cislo(a.pokladna)));
+    return { id: a.id, nazev: a.nazev,
+      clenu: Math.max(0, Math.round(cislo(dej(clenu, a.id)))),
+      pokladna: pokl, firem: d ? d.firmy.size : 0,
+      hodnota: Math.round(pokl + (d ? d.hodnota : 0)) };
+  })
+    // Prázdná aliance do žebříčku fondů nepatří — fond je to, co něco drží.
+    .filter((f) => f.hodnota > 0)
+    .sort((a, b) => b.hodnota - a.hodnota || a.id - b.id);
+}
+
 module.exports = { vklady, podily, rozdeleni, hlasovani, kdoRozhoduje, odchod, prevod,
-  prahDruhu, PRAHY, BEZNE, ZASADNI };
+  prahDruhu, PRAHY, BEZNE, ZASADNI, zebricek };

@@ -22,6 +22,7 @@ const MENY = require('../services/game/meny');
 const POZEMKY = require('../services/game/pozemky');
 const VYD = require('../services/game/vydaje');
 const JMENI = require('../services/game/jmeni');
+const FOND = require('../services/game/fond');
 // Zkratka do obsluhy: stx(req)('server.neco') vrátí hlášku v jazyce hráče.
 // Skládá se pro toho, KOMU se posílá — ne pro toho, kdo akci vyvolal.
 function stx(req) {
@@ -1943,7 +1944,7 @@ function dropZeb() { _zeb = { okno: -1, data: null }; }
 async function zebricky() {
   const okno = Math.floor(Date.now() / ZEB_OKNO);
   if (_zeb.okno === okno && _zeb.data) return _zeb.data;
-  const [mista, hraci, zemeMap, majetek] = await Promise.all([
+  const [mista, hraci, zemeMap, majetek, aliance, clenove, drzeneFondy] = await Promise.all([
     // Počítají se postavené prádlomaty, ne zabraná místa — prázdný pozemek
     // do žebříčku nepatří.
     prisma.gameSpotClaim.groupBy({ by: ['player_id', 'nick'], _count: { _all: true },
@@ -1959,6 +1960,14 @@ async function zebricky() {
     // Majetek ze serverových dat: stroje na místech, koupená zem, sklad a
     // zboží na cestě. Dva dotazy na celý žebříček, ne pět set.
     JMENI.majetekVsech().catch(() => new Map()),
+    // Fondy aliancí. Kdyby jejich tabulky v databázi ještě nebyly, žebříček
+    // na tom spadnout nesmí — prostě žádné fondy nebudou.
+    prisma.gameAliance.findMany({ select: { id: true, nazev: true, pokladna: true } })
+      .catch(() => []),
+    prisma.gameAlianceClen.groupBy({ by: ['aliance_id'], _count: { _all: true },
+      where: { stav: 'clen' } }).catch(() => []),
+    prisma.gameEquity.findMany({ where: { fond_id: { not: null }, stav: 'bezi' },
+      select: { fond_id: true, firma_id: true, podil: true, cena: true } }).catch(() => []),
   ]);
   // Jmění hráče = serverový majetek plus jeho hotovost mínus dluh. Kdyby
   // se majetek nenačetl, spadne se na dřívější číslo ze stavu hry — žebříček
@@ -1999,6 +2008,9 @@ async function zebricky() {
   const seSiti = poMistech.filter((x) => x.hodnota > 0).length;
 
   const zisk = [], pozvanky = [], jmeni = [], hvezdy = [];
+  // Čím se ocení podíl, který drží fond: jměním té firmy. Sbírá se rovnou tady,
+  // ať se nepočítá podruhé a jiným způsobem.
+  const jmeniFirmy = new Map();
   hraci.forEach((h) => {
     const st = h.state || {};
     // To, co hráči opravdu zbyde — stejně jako mu to svítí v hlavičce hry.
@@ -2018,6 +2030,7 @@ async function zebricky() {
       // kterou ještě nedostal.
       jmeni.push({ id: h.id, nick: h.nick, firma: fi, znak: h.emblem || null, zeme: zm,
         hodnota: cj, hodnost: hd, odhad: dop.odhad, naposledy: h.state_at });
+      jmeniFirmy.set(h.id, cj);
     }
     // Kdo ještě žádný hovor neměl, nemá se podle čeho hodnotit — startuje se na třech.
     if (st.profile && (st.hovoru || 0) > 0) {
@@ -2029,8 +2042,11 @@ async function zebricky() {
   pozvanky.sort((a, b) => b.hodnota - a.hodnota);
   jmeni.sort((a, b) => b.hodnota - a.hodnota);
   hvezdy.sort((a, b) => b.hodnota - a.hodnota);
+  const clenuVFondu = new Map();
+  clenove.forEach((c) => clenuVFondu.set(c.aliance_id, c._count._all));
+  const fondy = FOND.zebricek(aliance, clenuVFondu, drzeneFondy, jmeniFirmy);
 
-  _zeb = { okno, data: { pradlomaty: poMistech, zisk, pozvanky, jmeni, hvezdy, seSiti,
+  _zeb = { okno, data: { pradlomaty: poMistech, zisk, pozvanky, jmeni, hvezdy, fondy, seSiti,
     // Ke kterému okamžiku žebříček platí. Posílá se do hry, ať je rozdíl mezi
     // dvěma telefony vysvětlený, a ne záhadný.
     aktualizovano: new Date(okno * ZEB_OKNO).toISOString() } };
@@ -2098,7 +2114,12 @@ async function zemeSPocty() {
 router.get('/leaderboard', async (req, res, next) => {
   try {
     const p = await currentPlayer(req);
-    const [z, zeme] = await Promise.all([zebricky(), zemeSPocty()]);
+    const [z, zeme, mujFond] = await Promise.all([zebricky(), zemeSPocty(),
+      // Ve kterém fondu hráč je — ať svou příčku najde, i když se do špičky
+      // nevejde. Bez přihlášeného hráče se nehledá nic.
+      p ? prisma.gameAlianceClen.findFirst({ where: { player_id: p.id, stav: 'clen' },
+        select: { aliance_id: true } }).catch(() => null) : null,
+    ]);
     const orez = (l) => l.slice(0, ZEB_TOP).map((x, i) => ({ poradi: i + 1, id: x.id, nick: x.nick,
       firma: x.firma || (x.nick + ' s.r.o.'), znak: x.znak || null, zeme: x.zeme || [],
       // Hodnost jde ven s každým řádkem — v žebříčku ji hra ukazuje místo nicku.
@@ -2106,10 +2127,15 @@ router.get('/leaderboard', async (req, res, next) => {
     res.json({ ok: true,
       pradlomaty: orez(z.pradlomaty), zisk: orez(z.zisk), pozvanky: orez(z.pozvanky),
       jmeni: orez(z.jmeni), hvezdy: orez(z.hvezdy), zeme: zeme,
+      // Fond nemá nick ani vlaječky, takže jde ven po svém, ne přes ořez.
+      fondy: (z.fondy || []).slice(0, ZEB_TOP).map((f, i) => ({ poradi: i + 1, id: f.id,
+        nazev: f.nazev, clenu: f.clenu, firem: f.firem, pokladna: f.pokladna,
+        hodnota: f.hodnota, ja: !!(mujFond && f.id === mujFond.aliance_id) })),
       aktualizovano: z.aktualizovano || null,
       ja: p ? { pradlomaty: moje(z.pradlomaty, p.id), zisk: moje(z.zisk, p.id),
         pozvanky: moje(z.pozvanky, p.id), jmeni: moje(z.jmeni, p.id),
-        hvezdy: moje(z.hvezdy, p.id) } : null,
+        hvezdy: moje(z.hvezdy, p.id),
+        fondy: mujFond ? moje(z.fondy || [], mujFond.aliance_id) : null } : null,
       hracu: z.pradlomaty.length, se_siti: z.seSiti });
   } catch (e) { next(e); }
 });

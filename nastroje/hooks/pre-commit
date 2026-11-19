@@ -145,6 +145,13 @@ if git diff --cached --name-only | grep -qE 'services/game/fond'; then
     echo "STOP: výpočet fondu aliance nesedí (viz výš)."
     exit 1
   fi
+  # Žebříček fondů je jediné místo, kde se o cizím fondu říká číslo veřejně.
+  # Hráč si ho nemá jak přepočítat, takže chybu by nikdo neohlásil.
+  if ! node nastroje/tfondzeb.js; then
+    echo ""
+    echo "STOP: žebříček fondů nesedí (viz výš)."
+    exit 1
+  fi
 fi
 
 # Investiční aliance. Posouvá práva z člověka na blok — chyba tady znamená

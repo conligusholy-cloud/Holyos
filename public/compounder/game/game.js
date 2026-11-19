@@ -61,7 +61,7 @@ function prelozStatickyText() {
   [['data-net', { moje: 'hra.zal_moje_sit', stroje: 'hra.stroje', mista: 'hra.zal_mista', vyvoj: 'hra.zal_vyvoj', zebricek: 'hra.zal_zebricek' }],
    ['data-stroj', { zisk: 'hra.zisk', trzby: 'hra.trzby', poruchy: 'hra.zal_poruchy', navratnost: 'mapa.navratnost' }],
    ['data-misto', { vse: 'hra.vse', moje: 'hra.moje', volna: 'hra.zal_volna', cizi: 'hra.zal_konkurence' }],
-   ['data-zeb', { pradlomaty: 'hra.pradlomaty', zisk: 'hra.zisk', jmeni: 'hra.zal_jmeni', hvezdy: 'hra.zal_hvezdicky', pozvanky: 'hra.zal_pozvanky', zeme: 'hra.zal_zeme' }]
+   ['data-zeb', { pradlomaty: 'hra.pradlomaty', zisk: 'hra.zisk', jmeni: 'hra.zal_jmeni', fondy: 'hra.zal_fondy', hvezdy: 'hra.zal_hvezdicky', pozvanky: 'hra.zal_pozvanky', zeme: 'hra.zal_zeme' }]
   ].forEach(function (g) {
     Object.keys(g[1]).forEach(function (v) { dej('[' + g[0] + '="' + v + '"]', g[1][v]); });
   });
@@ -7911,12 +7911,14 @@ var ZEB_POPIS = {
   zeme: { nadpis: esc(tx('mapa.pradlomaty_po_zemich')), jed: function (v) { return v + '×'; },
     pod: tx('veta.kolik_pradlomatu_stoji_v_ktere_zemi')},
   jmeni: { nadpis: esc(tx('mapa.nejvetsi_ciste_jmeni')), jed: function (v) { return kcFull(v); },
-    pod: tx('veta.co_hrac_ma_minus_co_dluzi')}
+    pod: tx('veta.co_hrac_ma_minus_co_dluzi')},
+  fondy: { nadpis: esc(tx('mapa.nejsilnejsi_fondy')), jed: function (v) { return kcFull(v); },
+    pod: tx('veta.pokladna_fondu_plus_podily')}
 };
 function loadZeb() {
   // Při výpadku nastavíme prázdný žebříček — jinak by panel zůstal viset
   // na „Načítám…" a hráč by nevěděl, že se něco pokazilo.
-  var prazdny = { pradlomaty: [], zisk: [], pozvanky: [], jmeni: [], hvezdy: [], zeme: [],
+  var prazdny = { pradlomaty: [], zisk: [], pozvanky: [], jmeni: [], hvezdy: [], fondy: [], zeme: [],
     ja: null, hracu: 0, chyba: true };
   return api('/leaderboard')
     .then(function (r) { ZEB = r.ok ? r.j : prazdny; })
@@ -7984,10 +7986,35 @@ function zebKdy() {
   var dv = function (n) { return (n < 10 ? '0' : '') + n; };
   return tx('veta.plati_k', { p1: tx('veta.prepocitava_se_po_pulminute_takze_kdo', { p1: dv(d.getHours()), p2: dv(d.getMinutes()), p3: dv(d.getSeconds()) }) });
 }
+// Řádek žebříčku fondů. Fond nemá nick ani vlaječky — má název, kolik je
+// v něm lidí, v kolika firmách drží podíl a kolik mu leží v pokladně.
+function fondRadek(f) {
+  return '<div class="zeb-row' + (f.ja ? ' ja' : '') + '">'
+    + '<i class="poradi' + (f.poradi <= 3 ? ' medaile m' + f.poradi : '') + '">' + f.poradi + '</i>'
+    + '<i class="znak-mezera"></i>'
+    + '<span class="nick">' + esc(f.nazev)
+    + '<i>' + esc(tx('veta.fond_zeb_pod', { p1: f.clenu, p2: f.firem, p3: f.pokladna })) + '</i></span>'
+    + '<b>' + kcFull(f.hodnota) + '</b></div>';
+}
 function paintZeb() {
   var box = $('zeb-body');
   if (!ZEB) { box.innerHTML = '<p class="muted small">' + esc(tx('hra.nacitam_4')) + '</p>'; return loadZeb().then(paintZeb); }
   var list = ZEB[ZEB_KAT] || [], popis = ZEB_POPIS[ZEB_KAT];
+  if (ZEB_KAT === 'fondy') {
+    var jaF = ZEB.ja ? ZEB.ja.fondy : null;
+    box.innerHTML = '<h3 style="margin:14px 0 2px">' + popis.nadpis + '</h3>'
+      + '<p class="muted small" style="margin:0 0 10px">' + popis.pod + zebKdy() + '</p>'
+      + (list.length
+        ? '<div class="zeb">' + list.map(fondRadek).join('') + '</div>'
+        : '<div class="empty">' + (ZEB.chyba
+            ? esc(tx('hra.zebricek_se_nepodarilo_nacist_zkus'))
+            : esc(tx('hra.zadny_fond_zatim_nic_nedrzi'))) + '</div>')
+      + (jaF && jaF.poradi > list.length
+        ? tx('veta.p_class_muted_small_style_margin_6',
+            { p1: jaF.poradi, p2: jaF.z, p3: popis.jed(jaF.hodnota) })
+        : '');
+    return;
+  }
   if (ZEB_KAT === 'zeme') {
     box.innerHTML = '<h3 style="margin:14px 0 2px">' + popis.nadpis + '</h3>'
       + '<p class="muted small" style="margin:0 0 10px">' + popis.pod + zebKdy() + '</p>'
@@ -9480,7 +9507,7 @@ function bindFond(kde) {
 function alianceHtml() {
   if (!ALIANCE) return '';
   var a = ALIANCE.aliance;
-  var h = '<div class="card"><h3>\uD83E\uDD1D ' + esc(tx('aliance.nadpis')) + '</h3>';
+  var h = '<div class="card"><h3>\uD83E\uDD1D ' + esc(tx('aliance.nadpis_karta')) + '</h3>';
   if (a) {
     h += '<div class="row"><b>' + esc(a.nazev) + '</b><span class="pill good">'
       + tx('veta.clenu_z', { p1: a.clenove.filter(function (c) { return c.stav === 'clen'; }).length,
@@ -9508,7 +9535,7 @@ function alianceHtml() {
   }
   // Fond je vlastní karta pod aliancí: aliance je hlasovací blok, fond
   // společná kasa, a plést to do jedné karty by jen mátlo.
-  return h + '</div>' + fondHtml();
+  return h + '</div>';
 }
 function zalozAlianceSheet() {
   sheet('<h3>' + esc(tx('aliance.zalozit')) + '</h3>'
@@ -9685,10 +9712,13 @@ function paintMe() {
     + '<div class="kv"><span>' + esc(tx('hra.prozkoumanych_oblasti')) + '</span><b>' + Object.keys(S.areas).length + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('hra.proverenych_mist')) + '</span><b>' + Object.keys(S.revealed).length + '</b></div>'
     + '</div>'
+    // Fond a aliance hned pod profilem: je to to první, co hráč na téhle
+    // záložce hledá, a dole pod majetkem to nikdo nenašel.
+    + fondHtml()
+    + alianceHtml()
     + hodnostHtml()
     + odznakyHtml()
     + podilyHtml()
-    + alianceHtml()
     + majetekHtml()
     + '<div class="card"><h3>' + esc(tx('hra.jak_se_hraje')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 0">' + esc(tx('hra.jeden_skutecny_den_jsou_ve')) + ' '
