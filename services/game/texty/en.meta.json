@@ -3654,5 +3654,10 @@
   "server.navrh_neni_tvuj": "1634bb8d6851",
   "fond.kde_drzis": "e9fba4c9169c",
   "fond.ostatni_firmy": "8286f067f48e",
-  "veta.fond_navrh_nikomu_nebere": "c71369911f6f"
+  "veta.fond_navrh_nikomu_nebere": "c71369911f6f",
+  "fond.nabidky": "59acab9fe841",
+  "fond.zamceno": "cdf1970ce774",
+  "fond.volne": "6b6dc61bf6d9",
+  "fond.schvaleno": "9a5874820fcc",
+  "veta.fond_nabidka_detail": "8714bfe8a258"
 }

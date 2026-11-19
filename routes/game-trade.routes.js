@@ -1367,9 +1367,14 @@ async function vkladyFondu(alianceId) {
 router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
   const moje = await mojeAliance(req.player.id);
   if (!moje) return res.json({ ok: true, fond: null });
-  const [al, radky] = await Promise.all([
+  const REZ = require('../services/game/rezervace');
+  const [al, radky, nabidky] = await Promise.all([
     prisma.gameAliance.findUnique({ where: { id: moje.aliance_id } }),
     vkladyFondu(moje.aliance_id),
+    // Co má fond vyvěšené. Bez toho člen neviděl, kde leží peníze, které
+    // v pokladně jsou, ale už je nejde utratit.
+    prisma.gameTender.findMany({ where: { fond_id: moje.aliance_id, stav: 'bezi' },
+      orderBy: { id: 'desc' }, take: 20 }).catch(() => []),
   ]);
   const p = FOND.podily(radky);
   const ids = p.map((x) => x.clen_id);
@@ -1378,10 +1383,17 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
   const jmena = new Map(lide.map((h) => [h.id, h.company || h.nick]));
   const vlozil = new Map(radky.map((r) => [r.clen_id, r.vlozeno]));
   const hodnota = Math.round((al && al.pokladna) || 0);
+  const ted = new Date();
+  const bezici = nabidky.filter((t) => !t.do || new Date(t.do) > ted);
+  const zamceno = bezici.reduce((a, t) => a + REZ.zbyvaZNabidky(t), 0);
   res.json({ ok: true, fond: {
     aliance_id: moje.aliance_id, nazev: al ? al.nazev : '',
     pokladna: hodnota, vkladu_celkem: Math.round(p.celkem || 0),
     vklad_min: VKLAD_MIN,
+    zamceno: Math.round(zamceno), volne: Math.round(hodnota - zamceno),
+    nabidky: bezici.map((t) => ({ id: t.id, firma_nick: t.firma_nick,
+      cena_za_pct: t.cena_za_pct, max_pct: t.max_pct, koupeno_pct: t.koupeno_pct,
+      do: t.do, zamceno: REZ.zbyvaZNabidky(t) })),
     podilnici: p.map((x) => ({
       clen_id: x.clen_id, kdo: jmena.get(x.clen_id) || ('#' + x.clen_id),
       vklad: Math.round(x.vklad), vlozil: Math.round(vlozil.get(x.clen_id) || 0),
@@ -1667,6 +1679,13 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
     return res.status(409).json({ error: stx(req)('server.fond_na_to_nema', { p1: volne }) });
   }
   const pct = Math.max(0.01, Math.min(1, Number(d.pct) || 0));
+  // Stejná spodní mez jako při podání návrhu. Starý návrh, schválený ještě
+  // než mez vznikla, by se jinak vyvěsil za dno a nikdo by nechápal, odkud
+  // se ta cena vzala. Autor takový návrh stáhne a dá hlasovat znovu.
+  const cenaMin = Math.round(PREVZETI.CENA_MIN * pct * 100);
+  if (cena < cenaMin) {
+    return res.status(400).json({ error: stx(req)('server.navrh_cena_mala', { p1: cenaMin }) });
+  }
   const cenaZaPct = Math.max(PREVZETI.CENA_MIN, Math.round(cena / (pct * 100)));
 
   const t = await prisma.gameTender.create({ data: {

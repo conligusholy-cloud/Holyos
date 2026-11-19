@@ -3674,5 +3674,10 @@
   "server.navrh_neni_tvuj": "Only the person who made the proposal can withdraw it.",
   "fond.kde_drzis": "Where you hold a share",
   "fond.ostatni_firmy": "Other companies",
-  "veta.fond_navrh_nikomu_nebere": "An approved proposal becomes a public offer on that company. The fund takes nobody's stake — every shareholder decides for themselves whether to sell."
+  "veta.fond_navrh_nikomu_nebere": "An approved proposal becomes a public offer on that company. The fund takes nobody's stake — every shareholder decides for themselves whether to sell.",
+  "fond.nabidky": "Standing offers",
+  "fond.zamceno": "Locked in offers",
+  "fond.volne": "Free to spend",
+  "fond.schvaleno": "Approved — waiting to be announced.",
+  "veta.fond_nabidka_detail": "up to {cislo:p1} % · {penize:p2} per percent · bought {cislo:p3} % · locked {penize:p4}"
 }

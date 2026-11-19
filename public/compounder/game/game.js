@@ -9338,7 +9338,14 @@ function fondVnitrek() {
   var ja = fondJa();
   var h = '<p class="muted small" style="margin:2px 0 8px">' + esc(tx('fond.popis')) + '</p>'
     + '<div class="kv"><span>' + esc(tx('fond.pokladna')) + '</span><b>' + kcFull(f.pokladna) + '</b></div>'
-    + '<div class="kv"><span>' + esc(tx('fond.vklady')) + '</span><b>' + kcFull(f.vkladu_celkem) + '</b></div>';
+    + '<div class="kv"><span>' + esc(tx('fond.vklady')) + '</span><b>' + kcFull(f.vkladu_celkem) + '</b></div>'
+    // Zamčené se ukazuje jen když něco zamčeného je — jinak by to byl řádek
+    // s nulou, který nikomu nic neřekne.
+    + (f.zamceno > 0
+      ? '<div class="kv"><span>' + esc(tx('fond.zamceno')) + '</span><b class="warn">'
+        + kcFull(f.zamceno) + '</b></div>'
+        + '<div class="kv"><span>' + esc(tx('fond.volne')) + '</span><b>' + kcFull(f.volne) + '</b></div>'
+      : '');
   if (ja) {
     h += '<div class="kv"><span>' + esc(tx('fond.muj_dil')) + '</span><b class="ok">'
       + Math.round(ja.podil * 100) + ' % \u00b7 ' + kcFull(ja.hodnota) + '</b></div>';
@@ -9348,6 +9355,19 @@ function fondVnitrek() {
       + '</span><span class="muted small">' + Math.round(x.podil * 100) + ' %</span></div>';
   });
   if (!ja) h += '<p class="fine warn">' + esc(tx('fond.nic_nedrzis')) + '</p>';
+
+  // Co už fond vyvěsil. Hlasování je jedna věc, bežící nabídka druhá — a do
+  // téhle chvíle nebylo odnikud vidět, že nějaká běží.
+  if ((f.nabidky || []).length) {
+    h += '<h4 style="margin:12px 0 4px">' + esc(tx('fond.nabidky')) + '</h4>';
+    f.nabidky.forEach(function (n) {
+      h += '<div class="row"><span><b>' + esc(n.firma_nick || '') + '</b></span>'
+        + '<span class="muted small">' + (n.do ? etaText(new Date(n.do).getTime() - Date.now()) : '') + '</span></div>'
+        + '<p class="fine">' + esc(tx('veta.fond_nabidka_detail', {
+            p1: Math.round((n.max_pct || 0) * 100), p2: n.cena_za_pct || 0,
+            p3: Math.round((n.koupeno_pct || 0) * 100), p4: n.zamceno || 0 })) + '</p>';
+    });
+  }
 
   h += '<h4 style="margin:12px 0 4px">' + esc(tx('fond.navrhy')) + '</h4>';
   var bezi = (FOND.navrhy || []).filter(function (n) { return n.stav === 'bezi' || n.stav === 'prijat'; });
@@ -9366,7 +9386,9 @@ function fondVnitrek() {
           + n.id + '" data-volba="proti">' + esc(tx('fond.proti')) + '</button></div>';
       }
     } else if (n.druh === 'koupit') {
-      h += '<div class="gcard-act"><button class="btn sm" data-fond-provest="' + n.id + '">'
+      h += '<p class="fine ok">' + esc(tx('fond.schvaleno')) + '</p>'
+        + '<p class="fine">' + esc(tx('veta.fond_navrh_nikomu_nebere')) + '</p>'
+        + '<div class="gcard-act"><button class="btn sm" data-fond-provest="' + n.id + '">'
         + esc(tx('fond.vyhlasit')) + '</button></div>';
     }
     // Vlastní návrh jde stáhnout, dokud se nevyhlásil — kvůli překlepům.
