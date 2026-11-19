@@ -687,18 +687,39 @@ router.post('/account/nakup', requirePlayer, async (req, res, next) => {
   try {
     const b = req.body || {};
     const model = s(b.model, 10);
+    // Klíč nákupu od klienta. Hlášení se opakuje, dokud ho server nepotvrdí
+    // — to je ta oprava, kvůli které tenhle klíč vznikl. Bez něj by každé
+    // opakování založilo další stroj, tedy přesně opačnou chybu.
+    const klic = s(b.klic, 48) || null;
     let objednavka = null;
-    if (CENY_STROJU[model]) {
+    if (klic) {
+      objednavka = await prisma.gameOrder.findUnique({ where: { klic } }).catch(() => null);
+      // Cizí klíč nehlásíme jako chybu: hráč by se zasekl v opakování. Jen
+      // se nic nezaloží a klient dostane potvrzení, ať na to zapomene.
+      if (objednavka && objednavka.player_id !== req.player.id) {
+        return res.json({ ok: true, vyplaceno: 0, objednavka: null, klic });
+      }
+    }
+    if (!objednavka && CENY_STROJU[model]) {
       const ted = Date.now();
       const za = b.hned ? 0 : await dodaniMs(req.player.id);
-      objednavka = await prisma.gameOrder.create({ data: {
-        player_id: req.player.id, model, cena: CENY_STROJU[model],
-        dorazi_at: new Date(ted + za),
-      } });
+      try {
+        objednavka = await prisma.gameOrder.create({ data: {
+          player_id: req.player.id, model, cena: CENY_STROJU[model],
+          dorazi_at: new Date(ted + za), klic,
+        } });
+      } catch (e) {
+        // Dvě hlášení téhož nákupu ve stejnou chvíli: jedno projde, druhé
+        // narazí na klíč. Není to chyba, je to přesně to, co má klíč dělat.
+        if (e.code !== 'P2002') throw e;
+        objednavka = klic
+          ? await prisma.gameOrder.findUnique({ where: { klic } }).catch(() => null)
+          : null;
+      }
     }
     const zvouci = await kdoPrivedl(req.player);
     const vyplaceno = zvouci ? await dorovnejProvize(zvouci) : 0;
-    res.json({ ok: true, vyplaceno, objednavka: objednavka ? objednavka.id : null });
+    res.json({ ok: true, vyplaceno, objednavka: objednavka ? objednavka.id : null, klic });
   } catch (e) { next(e); }
 });
 

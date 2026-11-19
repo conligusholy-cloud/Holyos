@@ -315,6 +315,17 @@ if git diff --cached --name-only | grep -qE 'services/game/(vydaje|pozemky|strop
   fi
 fi
 
+# Hlášení nákupu stroje. Když se ztratí, server o stroji neví: povinný sklad
+# pak odmítne stavbu a v pokladně chybí největší výdaj ze všech. Fronta musí
+# žít v ukládaném stavu a opakovat se se STEJNÝM klíčem. Commit zastaví.
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|routes/game-account'; then
+  if ! node nastroje/tnakup.js; then
+    echo ""
+    echo "STOP: hlášení nákupu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Výpadek za poruchu. Jedna porucha umaže až půl herního roku tržby toho
 # stroje, takže chyba ve výpočtu je rovnou v milionech. Konstanty navíc musí
 # sedět s hrou — rozejdou se tiše. Commit zastaví.

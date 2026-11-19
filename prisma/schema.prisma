@@ -8265,6 +8265,9 @@ model GameOrder {
   // dřív, než se nákup začal zapisovat. U pozorovaných víme, že se opravdu
   // kupovalo; u doplněných jen to, co tvrdí hra.
   doplneno     Boolean   @default(false)
+  // Klíč, který k nákupu vyrobil klient. Hlášení nákupu se opakuje, dokud ho
+  // server nepotvrdí — bez klíče by každé opakování založilo další stroj.
+  klic         String?   @unique @db.VarChar(48)
   created_at   DateTime  @default(now())
 
   @@index([player_id, postaveno_at])

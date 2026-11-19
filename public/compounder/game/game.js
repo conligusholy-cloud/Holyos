@@ -5107,12 +5107,16 @@ function buySheet(modelKey, drz) {
     // Nejdřív uložíme síť (je v ní nová objednávka) a pak řekneme serveru, že
     // se kupovalo — ten z ní spočte provizi tomu, kdo nás do hry přivedl.
     // Provize se platí hned při nákupu, ne až až stroj dorazí a postaví se.
-    syncState(true).then(function () {
-      // hned = úplně první stroj, který dorazí bez čekání. Server si podle
-      // toho nastaví, kdy objednávka dorazí — bez toho by nováčkovi ležel
-      // první prádlomat den na cestě, i když ho ve hře má hned.
-      if (ME) apiJson('/account/nakup', { model: modelKey, hned: !!hned }).catch(function () { /* zkusí se přiště */ });
-    });
+    // hned = úplně první stroj, který dorazí bez čekání. Server si podle
+    // toho nastaví, kdy objednávka dorazí — bez toho by nováčkovi ležel
+    // první prádlomat den na cestě, i když ho ve hře má hned.
+    //
+    // Do fronty se to dá PŘED uložením, ať je nákup zapsaný ve stavu dřív,
+    // než se cokoli pošle. Kdyby se to pořadí otočilo a hráč zavřel hru mezi
+    // tím, server by o nákupu nevěděl a nebylo by se k čemu vrátit.
+    doFronty(modelKey, hned);
+    save();
+    syncState(true).then(nahlasNakupy);
     toast(hned ? tx('veta.je_na_sklade_dopravce_ho_privezl', { p1: m.name }): tx('veta.objednan_dorazi', { p1: m.name, p2: etaText(dodaniMs()) }), 'ok');
   };
 }
@@ -12985,6 +12989,58 @@ function prevezmiStav(srv, rev) {
 // Doručenky, které jsme si zapsali do stavu, ale server o tom ještě neví.
 // Jedou s nejbližším uložením hry, aby se potvrzení a zápis staly naráz —
 // bez toho projde jedno bez druhého a peníze se připíšou dvakrát.
+// ─── Nehlášené nákupy ───────────────────────────────────────────────────────
+// Nákup stroje se serveru hlásí zvlášť — z něj se počítá provize tomu, kdo
+// hráče přivedl, a hlavně se z něj zapisuje objednávka, podle které server
+// ví, co má hráč na skladě.
+//
+// Dřív se to posílalo jednou a při neúspěchu se na to zapomnělo. Komentář
+// u toho sliboval, že se to zkusí příště, jenže nic takového se nedělo:
+// když spadlo uložení, nespustilo se to vůbec, a když spadlo samo hlášení,
+// spolkl to catch. Hráč stroj zaplatil a měl, server o něm nevěděl — pak mu
+// povinný sklad odmítl stavbu a v pokladně mu chyběl největší výdaj ze všech.
+// Při patnácti nasazeních za den je taková ztracená vteřina skoro jistota.
+//
+// Fronta proto žije v UKLÁDANÉM stavu, ne v paměti: po načtení stránky se
+// nesmí ztratit. Každý nákup má svůj klíč a opakuje se, dokud ho server
+// nepotvrdí; klíč je to, co brání tomu, aby z opakování vznikly dva stroje.
+var NAHLASIT_MAX = 50;         // víc už je rozbitý klient, ne špatná síť
+function klicNakupu() {
+  return String((ME && ME.id) || 0) + ':' + Date.now() + ':'
+    + Math.random().toString(36).slice(2, 8);
+}
+function doFronty(model, hned) {
+  if (!S) return;
+  if (!Array.isArray(S.nahlasit)) S.nahlasit = [];
+  if (S.nahlasit.length >= NAHLASIT_MAX) S.nahlasit.shift();
+  S.nahlasit.push({ klic: klicNakupu(), model: model, hned: !!hned, kdy: Date.now() });
+}
+var nahlasBezi = false;
+function nahlasNakupy() {
+  if (nahlasBezi || !ME || !S || !Array.isArray(S.nahlasit) || !S.nahlasit.length) {
+    return Promise.resolve();
+  }
+  nahlasBezi = true;
+  var n = S.nahlasit[0];
+  var odeslani;
+  // I výjimka hozená rovnou z volání musí skončit ve větvi „zkusí se
+  // příště". Na téhle cestě se nesmí ztratit nákup za dva miliony.
+  try {
+    odeslani = apiJson('/account/nakup', { model: n.model, hned: !!n.hned, klic: n.klic });
+  } catch (e) { nahlasBezi = false; return Promise.resolve(); }
+  return odeslani
+    .then(function (r) {
+      nahlasBezi = false;
+      if (!r.ok) return;                       // zkusí se při příštím uložení
+      // Vyhazuje se podle klíče, ne podle pořadí: mezitím mohl přibýt další.
+      S.nahlasit = (S.nahlasit || []).filter(function (x) { return x.klic !== n.klic; });
+      save();
+      if (S.nahlasit.length) return nahlasNakupy();   // fronta se vyprázdní celá
+      return null;
+    })
+    .catch(function () { nahlasBezi = false; });
+}
+
 var NEPOTVRZENE = [];
 // Zaseknutý požadavek nesmí ukládání zastavit navždy. Na mobilu se fetch při
 // přepnutí sítě (5G ↔ Wi-Fi) umí nevrátit vůbec — a protože se další uložení
@@ -13100,6 +13156,9 @@ function syncState(force) {
         // Server stav uložil a ve stejném zápisu potvrdil doručenky.
         NEPOTVRZENE = NEPOTVRZENE.filter(function (id) { return potvrzuju.indexOf(id) < 0; });
         if (r.j && r.j.rev != null) STATE_REV = r.j.rev;
+        // Uložení prošlo, takže spojení je zdravé — je to nejlepší chvíle
+        // doposlat nákupy, které se předtím nepovedlo nahlásit.
+        if (S && S.nahlasit && S.nahlasit.length) nahlasNakupy();
         return;
       }
       AREAS_POSLANO = null;      // neuložilo se — příště celý stav
@@ -14415,6 +14474,9 @@ function startGame() {
   loadTrades();
   zlocinNacti();
   setInterval(zlocinNacti, 60000);
+  // Nákupy, které se minule nepodařilo nahlásit, se doposílají hned po
+  // načtení hry — hráč mohl zavřít prohlížeč dřív, než spojení naběhlo.
+  nahlasNakupy();
   setInterval(function () { loadTrades(); loadTrh(drawMap); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }, 60000);
   checkPayment();
   setInterval(function () { tick(); save(); paint(); syncState(); hlidejUkladani(); }, 5000);
