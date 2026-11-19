@@ -137,6 +137,16 @@ if git diff --cached --name-only | grep -qE 'services/game/brzda|routes/game-tra
   fi
 fi
 
+# Škoda u běžícího případu. Počítá se z ní trest, takže chyba tady je buď
+# trest z čísla starého týden, nebo naopak zmrazení, na které hráč nemá.
+if git diff --cached --name-only | grep -qE 'services/game/zlocin-rizeni'; then
+  if ! node nastroje/tzlocinskoda.js; then
+    echo ""
+    echo "STOP: přeměření škody nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Vzorky hodnoty fondu. Když se píšou moc často, je z křivky šum a tabulka
 # roste zbytečně; když se nepíšou vůbec, graf tiše zmizí a vypadá to jako
 # „zatím nic".

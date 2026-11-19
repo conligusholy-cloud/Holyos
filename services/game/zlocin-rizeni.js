@@ -56,6 +56,50 @@ async function zahaj(prisma, R, row) {
   return z;
 }
 
+// Přeměření škody u běžícího případu.
+//
+// Škoda se dosud spočítala při zahájení kontroly a už se jí nikdo
+// neotevřel — jenže řízení trvá dny a podvod mezitím jede dál. Provize
+// nabíhají, levné nákupy přibývají, a soud pak soudil číslo staré týden.
+// Trest počítaný z takové škody byl zlomek toho, co člověk opravdu získal.
+//
+// Měří se znovu při každém tiku, dokud se nevyhlásí rozsudek. Škoda přitom
+// nikdy neklesne: kdo by si mezi kontrolou a soudem odklidil účty, jinak by
+// si tím snížil trest. Po rozsudku se nesáhá — odvolání se vede proti
+// číslu, které už padlo.
+const MERITELNE = ['kontrola', 'soud'];
+async function premer(prisma, R, z, row) {
+  if (!row || MERITELNE.indexOf(z.stav) < 0) return z;
+  const nova = Math.round(row.skoda || 0);
+  const stara = Math.round(z.skoda || 0);
+  if (nova <= stara) return z;
+  // Zmrazené se dovybere na stejný poměr jako při zahájení — nejvýš ale to,
+  // co hráč opravdu má. Co není, se nezmrazí.
+  const cil = Math.round(nova * R.koef_zabaveni);
+  let pridat = 0;
+  const chybi = Math.max(0, cil - (z.zmrazeno || 0));
+  if (chybi > 0) {
+    const h = await prisma.gamePlayer.findUnique({ where: { id: z.hlavni_id }, select: { state: true } });
+    const cash = Math.max(0, Math.round(((h && h.state) || {}).cash || 0));
+    pridat = Math.min(chybi, cash);
+  }
+  const u = await prisma.gameZlocin.update({ where: { id: z.id }, data: {
+    skoda: nova, zmrazeno: (z.zmrazeno || 0) + pridat,
+    detail: Object.assign({}, z.detail || {}, {
+      skoda_pri_zahajeni: (z.detail || {}).skoda_pri_zahajeni != null
+        ? (z.detail || {}).skoda_pri_zahajeni : stara,
+      premereno_at: new Date().toISOString(), zmrazit_cil: cil }) } });
+  if (pridat > 0) {
+    await dorucenka(prisma, z.hlavni_id, -pridat,
+      'Zmrazeno navíc po přeměření škody: ' + L(pridat));
+  }
+  await zprava(prisma, u, (u.emblem || '') + ' Škoda přepočtena: ' + jmeno(u),
+    'U firmy ' + jmeno(u) + ' narostla škoda za dobu řízení z ' + L(stara) + ' na ' + L(nova)
+    + '. Trest se počítá z nového čísla.');
+  console.log('[zlocin] případ #' + z.id + ': škoda ' + stara + ' → ' + nova);
+  return u;
+}
+
 // Kdo smí hlasovat v případu.
 async function smiHlasovat(prisma, R, hrac, z) {
   if (!hrac || hrac.id === z.hlavni_id) return { ok: false, duvod: 'obviněný' };
@@ -171,9 +215,22 @@ async function tik() {
     const R = await ZL.nastaveni();
     const ted = new Date();
     // 1) posun stávajících případů
+    // Čerstvé vyhodnocení napřed: běžící případ se má měřit podle toho, co je
+    // dnes, ne podle toho, co bylo při zahájení. Týž sken pak poslouží
+    // i na zakládání nových případů — běží jednou, ne dvakrát.
+    let sken = null, podleId = new Map();
+    if (R.zapnuto) {
+      sken = await ZL.nanecisto(prisma, R).catch((e) => {
+        console.warn('[zlocin] vyhodnocení:', e && e.message); return null;
+      });
+      if (sken) {
+        sken.kontrola.concat(sken.na_hrane || []).forEach((r) => podleId.set(r.id, r));
+      }
+    }
     const aktivni = await prisma.gameZlocin.findMany({ where: { stav: { in: AKTIVNI } } });
-    for (const z of aktivni) {
+    for (const zz of aktivni) {
       try {
+        const z = await premer(prisma, R, zz, podleId.get(zz.hlavni_id));
         if (z.stav === 'kontrola' && ted >= z.kontrola_do) {
           const u = await prisma.gameZlocin.update({ where: { id: z.id }, data: { stav: 'soud', soud_do: new Date(ted.getTime() + R.soud_mesicu * MESIC_MS) } });
           await zprava(prisma, u, '⚖️ Soud s firmou ' + jmeno(u),
@@ -183,14 +240,13 @@ async function tik() {
         } else if (z.stav === 'odvolani' && !z.odvolani_at && z.odvolani_do && ted >= z.odvolani_do) {
           await uzavri(prisma, z, 'automaticky');
         }
-      } catch (e) { console.warn('[zlocin] případ #' + z.id + ':', e && e.message); }
+      } catch (e) { console.warn('[zlocin] případ #' + zz.id + ':', e && e.message); }
     }
     // 2) nové případy z vyhodnocení (jen když jsou pravidla zapnutá)
-    if (R.zapnuto) {
-      const v = await ZL.nanecisto(prisma, R);
+    if (R.zapnuto && sken) {
       const mam = new Set((await prisma.gameZlocin.findMany({ select: { hlavni_id: true } })).map((x) => x.hlavni_id));
       let n = 0;
-      for (const row of v.kontrola) {
+      for (const row of sken.kontrola) {
         if (n >= R.max_novych_za_tik) break;
         if (mam.has(row.id)) continue;
         await zahaj(prisma, R, row); n++;
@@ -211,4 +267,4 @@ async function aktivniPripad(prisma, playerId) {
   return prisma.gameZlocin.findFirst({ where: { hlavni_id: playerId, stav: { in: AKTIVNI } } });
 }
 
-module.exports = { start, tik, zahaj, hlasuj, odvolej, verdikt, uzavri, zrus, smiHlasovat, aktivniPripad, AKTIVNI, UROVNE, MESIC_MS };
+module.exports = { start, tik, zahaj, premer, hlasuj, odvolej, verdikt, uzavri, zrus, smiHlasovat, aktivniPripad, AKTIVNI, MERITELNE, UROVNE, MESIC_MS };
