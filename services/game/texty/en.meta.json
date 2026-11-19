@@ -3607,5 +3607,9 @@
   "dor.fond_navrh_prijat": "9a4dfccb75ac",
   "dor.fond_navrh_zamitnut": "816c5d3678b0",
   "dor.fond_navrh_koupit": "9f4a2ad0513a",
-  "dor.fond_navrh_vyplatit": "486d852b505a"
+  "dor.fond_navrh_vyplatit": "486d852b505a",
+  "server.navrh_neni_prijaty": "129954b29e82",
+  "server.navrh_uz_proveden": "e5a21ea92b6c",
+  "dor.fond_koupil": "20aecf1d3588",
+  "dor.fond_nabidka": "0396fe64c1df"
 }

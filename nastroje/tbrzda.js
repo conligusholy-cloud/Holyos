@@ -42,6 +42,9 @@ const OCEKAVANI = {
   // stejně jako u rozjetého obchodu.
   '/trade/aliance/fond/navrh': true,
   '/trade/aliance/fond/navrh/:id/hlas': false,
+  // Provedení přijatého návrhu zastavujeme: vyhlašuje se tím veřejná
+  // nabídka, a ta je nový závazek stejně jako hráčova.
+  '/trade/aliance/fond/navrh/:id/provest': true,
   '/trade/dividenda': false,            // pravidlo vlastní firmy, ne nový závazek
   '/trade/pujcka/:id/splatit': false,
   '/trade/deliveries/claim': false,

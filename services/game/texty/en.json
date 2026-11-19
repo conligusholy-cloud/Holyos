@@ -3627,5 +3627,9 @@
   "dor.fond_navrh_prijat": "The {p1} alliance fund approved: {p2}",
   "dor.fond_navrh_zamitnut": "The {p1} alliance fund did not approve: {p2}",
   "dor.fond_navrh_koupit": "{p1} put the purchase of a {p3}% share in {p4} to a vote in the {p2} alliance fund.",
-  "dor.fond_navrh_vyplatit": "{p1} put a payout of {penize:p3} from the fund to a vote in the {p2} alliance fund."
+  "dor.fond_navrh_vyplatit": "{p1} put a payout of {penize:p3} from the fund to a vote in the {p2} alliance fund.",
+  "server.navrh_neni_prijaty": "This proposal has not been decided yet.",
+  "server.navrh_uz_proveden": "This proposal has already been carried out.",
+  "dor.fond_koupil": "The {p1} alliance fund bought a {p2}% share in {p3}.",
+  "dor.fond_nabidka": "The {p1} alliance fund announced an offer to buy shares in {p2}."
 }

@@ -8218,8 +8218,11 @@ model GameDelivery {
 // rozhoduje sám za sebe. Mlčení je odmítnutí.
 model GameTender {
   id           Int      @id @default(autoincrement())
-  utocnik_id   Int
+  // Nabídku může vyhlásit hráč, nebo fond aliance — právě jeden z nich.
+  // Hlídá to CHECK v migraci, stejně jako u podílu.
+  utocnik_id   Int?
   utocnik_nick String   @db.VarChar(24)
+  fond_id      Int?
   firma_id     Int
   firma_nick   String   @db.VarChar(24)
   cena_za_pct  Int
@@ -8236,6 +8239,7 @@ model GameTender {
 
   @@index([firma_id, stav])
   @@index([utocnik_id])
+  @@index([fond_id])
   @@map("game_tenders")
 }
 

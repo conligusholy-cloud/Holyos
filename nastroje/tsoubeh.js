@@ -58,6 +58,18 @@ function model(nazev, zurnal) {
     const puv = Object.assign({}, r);
     vratit(() => { Object.keys(r).forEach((k) => { delete r[k]; }); Object.assign(r, puv); });
   });
+  // Prisma umí u čísel { increment } a { decrement }. Bez toho by se do
+  // sloupce uložil ten objekt a test by tiše prošel kolem chyby v penězích.
+  const polozit = (r, data) => {
+    Object.keys(data || {}).forEach((k) => {
+      const v = data[k];
+      if (v && typeof v === 'object' && !(v instanceof Date)
+        && ('increment' in v || 'decrement' in v)) {
+        const zaklad = Number(r[k]) || 0;
+        r[k] = zaklad + (Number(v.increment) || 0) - (Number(v.decrement) || 0);
+      } else r[k] = v;
+    });
+  };
   const pribyl = (r) => vratit(() => {
     const i = T[nazev].indexOf(r);
     if (i >= 0) T[nazev].splice(i, 1);
@@ -84,12 +96,12 @@ function model(nazev, zurnal) {
       await pred();
       const r = najdi(where)[0];
       if (!r) throw new Error('update: řádek nenalezen v ' + nazev);
-      zapisuji([r]); Object.assign(r, data); return kopie(r);
+      zapisuji([r]); polozit(r, data); return kopie(r);
     },
     updateMany: async ({ where, data }) => {
       await pred();
       const l = najdi(where);
-      zapisuji(l); l.forEach((r) => Object.assign(r, data));
+      zapisuji(l); l.forEach((r) => polozit(r, data));
       return { count: l.length };
     },
     delete: async ({ where }) => {
@@ -336,10 +348,87 @@ function retez() {
     Math.round(celkem * 100) + ' %');
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. Nabídku vyhlásil fond aliance
+// ─────────────────────────────────────────────────────────────────────────────
+// Fond nikomu podíl nebere: vyhlásí nabídku a podílník se rozhodne sám.
+// Zajímavé je, co se stane po prodeji. Podíl musí patřit FONDU, ne komukoli
+// z členů, peníze musí odejít z pokladny fondu (doručenku nemá kdo vyzvednout)
+// a členové se to musí dozvědět — jsou to jejich peníze.
+async function fondKupuje() {
+  vycisti();
+  const a = hrac(2, 'Anna', 0);
+  const clen = hrac(5, 'Clen', 0);
+  T.gamePlayer = [a, clen]; POSLEDNI.gamePlayer = 5;
+  T.gameAliance = [{ id: 4, nazev: 'Parta', zakladatel_id: 5, pokladna: 5000000 }];
+  POSLEDNI.gameAliance = 4;
+  T.gameAlianceClen = [{ id: 1, aliance_id: 4, player_id: 5, stav: 'clen' }];
+  POSLEDNI.gameAlianceClen = 1;
+  T.gameTender = [{ id: 20, utocnik_id: null, fond_id: 4, utocnik_nick: 'Parta',
+    firma_id: 9, firma_nick: 'Cil', cena_za_pct: 10000, max_pct: 0.5, koupeno_pct: 0,
+    stav: 'bezi', do: new Date(Date.now() + 86400000), trvala: false }];
+  POSLEDNI.gameTender = 20;
+  T.gameEquity = [{ id: 1, firma_id: 9, firma_nick: 'Cil', investor_id: 2,
+    investor_nick: 'Anna', fond_id: null, podil: 0.4, cena: 0, vyplaceno: 0,
+    stav: 'bezi', dalsi_at: null }];
+  POSLEDNI.gameEquity = 1;
+
+  const v = await zavolej('/trade/prevzeti/:id/prodat', a, { id: '20' }, {});
+  ok('prodej do fondové nabídky projde', v.stav === 200, JSON.stringify(v.telo));
+
+  const podil = (T.gameEquity || []).filter((e) => bezici(e))[0] || {};
+  ok('podíl patří fondu', podil.fond_id === 4, '— ' + JSON.stringify(podil));
+  // Tohle je ta past: kdyby zůstalo investor_id, podíl by držel člen osobně.
+  ok('a nepatří žádnému hráči', podil.investor_id == null, '— ' + podil.investor_id);
+  ok('prodávající už ho nedrží', drzi(9, 2) === 0);
+
+  ok('peníze odešly z pokladny fondu', T.gameAliance[0].pokladna === 5000000 - 400000,
+    '— ' + T.gameAliance[0].pokladna);
+  const cash = (T.gameDelivery || []).filter((d) => d.kind === 'cash');
+  ok('prodávající dostal zaplaceno doručenkou',
+    cash.length === 1 && cash[0].player_id === 2 && cash[0].amount === 400000,
+    '— ' + JSON.stringify(cash));
+  // Doručenka pro fond by zůstala ležet navždycky — fond si ji nevyzvedne.
+  ok('fondu žádná hotovostní doručenka nechodí',
+    !cash.some((d) => d.player_id === 4 || d.player_id == null));
+  ok('členové se o nákupu dozvěděli',
+    (T.gameDelivery || []).some((d) => d.player_id === 5 && d.text_kod === 'dor.fond_koupil'));
+}
+
+// A co když fond na nákup nemá. Kontrola proti pokladně se čte uvnitř
+// transakce: mezi dvěma prodeji do téže nabídky se mohla ztenčit a bez ní
+// by fond nakoupil za peníze, které nemá.
+async function fondNema() {
+  vycisti();
+  const a = hrac(2, 'Anna', 0);
+  T.gamePlayer = [a]; POSLEDNI.gamePlayer = 2;
+  T.gameAliance = [{ id: 4, nazev: 'Parta', zakladatel_id: 5, pokladna: 100000 }];
+  POSLEDNI.gameAliance = 4;
+  T.gameAlianceClen = []; POSLEDNI.gameAlianceClen = 0;
+  T.gameTender = [{ id: 20, utocnik_id: null, fond_id: 4, utocnik_nick: 'Parta',
+    firma_id: 9, firma_nick: 'Cil', cena_za_pct: 10000, max_pct: 0.5, koupeno_pct: 0,
+    stav: 'bezi', do: new Date(Date.now() + 86400000), trvala: false }];
+  POSLEDNI.gameTender = 20;
+  T.gameEquity = [{ id: 1, firma_id: 9, firma_nick: 'Cil', investor_id: 2,
+    investor_nick: 'Anna', fond_id: null, podil: 0.4, cena: 0, vyplaceno: 0,
+    stav: 'bezi', dalsi_at: null }];
+  POSLEDNI.gameEquity = 1;
+
+  // 40 % po deseti tisících za procento je 400 tisíc; v pokladně je sto.
+  const v = await zavolej('/trade/prevzeti/:id/prodat', a, { id: '20' }, {});
+  ok('prodej se odmítne, když fond nemá', v.stav === 409, v.stav + ' · ' + JSON.stringify(v.telo));
+  ok('a nic se nepřevedlo', drzi(9, 2) === 0.4, '— ' + drzi(9, 2));
+  ok('pokladna zůstala nedotčená', T.gameAliance[0].pokladna === 100000,
+    '— ' + T.gameAliance[0].pokladna);
+  ok('a nevznikla žádná hotovostní doručenka', hotovostnich() === 0);
+}
+
 (async () => {
   await dvaDoJedne();
   await jedenDoDvou();
   await dvakratPrijato();
+  await fondKupuje();
+  await fondNema();
   retez();
   console.log(chyb ? '\n' + chyb + ' chyb' : '\nvšechno sedí');
   process.exit(chyb ? 1 : 0);
