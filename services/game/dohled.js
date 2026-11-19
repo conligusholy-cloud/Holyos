@@ -38,7 +38,7 @@ async function stropPrehled(dnu) {
     prisma.gameSnapshot.findMany({
       where: { created_at: { gte: od }, ocekavano: { not: null }, od_ms: { gt: 60000 } },
       orderBy: { created_at: 'desc' }, take: 2000,
-      select: { player_id: true, prirustek: true, ocekavano: true },
+      select: { player_id: true, prirustek: true, ocekavano: true, odmena: true, opravy: true },
     }).catch(() => []),
   ]);
   // Jména pro obě sestavy najednou: hráč z porovnání čekané změny nemusí být
@@ -59,9 +59,10 @@ async function stropPrehled(dnu) {
   const out = [];
   out.push('STROP HOTOVOSTI · posledních ' + d + ' dnů · otisků ' + celkem
     + ' · mimo mez ' + mimo.length + ' · hráčů ' + ids.length);
-  // Čekaná změna proti skutečné. Server nevidí do přípojek, poboček, čety
-  // ani ceníku, takže čeká víc, než se opravdu stalo — zajímavý je opačný
-  // směr: hráč, kterému hotovost roste rychleji, než se dá vysvětlit.
+  // Čekaná změna proti skutečné. Zbývají dvě místa, kam server nevidí —
+  // výměna stroje a dva drobné poplatky — takže čeká o něco víc, než se
+  // opravdu stalo. Zajímavý je proto pořád hlavně opačný směr: hráč,
+  // kterému hotovost roste rychleji, než se dá vysvětlit.
   if (cekane.length) {
     const nad = cekane.filter((x) => (x.prirustek || 0) > (x.ocekavano || 0) + 1000);
     const poHracich = new Map();
@@ -71,13 +72,23 @@ async function stropPrehled(dnu) {
     out.push('ČEKANÁ ZMĚNA PROTI SKUTEČNÉ · porovnaných uložení ' + cekane.length);
     out.push('  přibylo víc, než se dá vysvětlit: ' + nad.length
       + ' u ' + poHracich.size + ' hráčů');
+    // Denní odměna a opravy zvlášť: do 19. 11. o nich server nevěděl, takže
+    // vyzvednutá odměna vypadala jako hotovost odnikud. Když tahle čísla
+    // nejsou nulová a „přibylo víc“ přesto klesá, je to ono.
+    const odmen = cekane.filter((x) => (x.odmena || 0) > 0);
+    const oprav = cekane.filter((x) => (x.opravy || 0) > 0);
+    const suma = (l, k) => l.reduce((a2, x) => a2 + (x[k] || 0), 0);
+    out.push('  z toho vysvětlí denní odměna: ' + odmen.length + ' uložení · '
+      + kc(suma(odmen, 'odmena')) + ' L$');
+    out.push('  zaplacené opravy po poruše:   ' + oprav.length + ' uložení · '
+      + kc(suma(oprav, 'opravy')) + ' L$');
     Array.from(poHracich.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10)
       .forEach(([id, kolik]) => {
         out.push('    ' + String(jmena.get(id) || ('#' + id)).padEnd(20).slice(0, 20)
           + kc(kolik).padStart(16) + ' L$ navíc');
       });
-    out.push('  Server nevidí do karet z ceníku a oprav poruch, takže čeká víc,');
-    out.push('  než se stane. Zajímavý je proto jen tenhle směr.');
+    out.push('  Zbývá výměna stroje a dva drobné poplatky, takže server čeká');
+    out.push('  o něco víc, než se stane. Zajímavý je proto hlavně tenhle směr.');
   }
   // Přípojky: co naúčtovala hra proti tomu, co čekal server. Server počítá
   // horní odhad — čtyři slevy nevidí — takže se hra smí pohybovat pod ním.

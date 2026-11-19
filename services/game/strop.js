@@ -196,6 +196,71 @@ function rezieZaMesic(st) {
     pobocek, ceta, pojisteni };
 }
 
+// ─── Denní odměna ────────────────────────────────────────────────────────────
+// Hra ji vyplácí za přihlášení v sedmidenní řadě. Od určité velikosti firmy to
+// není pevná částka, ale podíl z měsíčního zisku — sedmý den čtvrtina, což u
+// velké sítě dělá miliony. Server o ní neměl evidenci, takže poctivý hráč,
+// který si ji vyzvedl, vypadal, že mu hotovost přibyla odnikud.
+//
+// Pozná se z rozdílu dvou uložení: vyzvednutím se přepíše datum v S.denni.
+// Podíl se počítá ze zisku, který si spočítal SERVER, ne z čísla poslaného
+// hrou — jinak by si šlo odměnu nafouknout a schovat pod ni hotovost navíc.
+// Musí sedět s DENNI_DNO a DENNI_PODIL v public/compounder/game/game.js.
+const DENNI_DNO = [5000, 10000, 15000, 20000, 30000, 40000, 100000];
+const DENNI_PODIL = [0.03, 0.04, 0.05, 0.06, 0.08, 0.10, 0.25];
+
+function denniOdmena(den, ziskMesicne) {
+  const i = Math.max(0, Math.min(DENNI_DNO.length - 1, (Number(den) || 1) - 1));
+  const z = Math.max(0, Number(ziskMesicne) || 0);
+  return Math.max(DENNI_DNO[i], Math.round(z * DENNI_PODIL[i]));
+}
+
+// Příjmy poznané z rozdílu dvou uložení. Zatím jen denní odměna.
+function prijmyZeStavu(stary, novy, ziskMesicne) {
+  const d0 = (stary || {}).denni || {};
+  const d1 = (novy || {}).denni || {};
+  const vzal = !!(d1.kdy && d1.kdy !== d0.kdy);
+  const den = vzal ? (Number(d1.den) || 1) : 0;
+  const denni = vzal ? denniOdmena(den, ziskMesicne) : 0;
+  return { celkem: denni, denni, den };
+}
+
+// ─── Opravy po poruše ────────────────────────────────────────────────────────
+// Stroj po požáru nebo vytopení stojí, dokud hráč opravu nezaplatí. Platí se
+// podíl z ceny stroje, s pojištěním pětina — u MAXu to jsou statisíce.
+// Zaplacení se pozná tak, že se u poruchy objeví termín dokončení: předtím
+// `hotovo` není, potom je. Když oprava mezi dvěma uloženími i doběhne, porucha
+// z uložení zmizí celá — i to se počítá jako zaplacená oprava.
+//
+// Částku hlásí hra, ale server ji zastropuje vlastní cenou stroje: nafouknutá
+// oprava by zvedla výdaje a tím pod sebou schovala hotovost navíc.
+const unitKlic = (u) => String((u && (u.spotId || u.id)) || '');
+
+function castkaOpravy(stary, novy) {
+  const k = (stary || {}).katastrofa || {};
+  const model = ((novy || {}).eco || {}).model || ((stary || {}).eco || {}).model || 'mini';
+  const CENY = require('./jmeni').CENY_STROJU || {};
+  const strop = Math.round(CENY[model] || 0);
+  return Math.min(Math.max(0, Math.round(Number(k.platim) || 0)), strop);
+}
+
+function opravyZeStavu(stary, novy) {
+  const stare = new Map();
+  const sez = (x) => (Array.isArray((x || {}).units) ? x.units : []);
+  sez(stary).forEach((u) => { const k = unitKlic(u); if (k) stare.set(k, u); });
+  let celkem = 0; const stroju = [];
+  sez(novy).forEach((u) => {
+    const s = stare.get(unitKlic(u));
+    if (!s) return;
+    const ks = s.katastrofa, kn = u.katastrofa;
+    if (!ks || ks.hotovo) return;        // dřív se na zaplacení nečekalo
+    if (kn && !kn.hotovo) return;        // pořád se čeká — nezaplaceno
+    const c = castkaOpravy(s, u);
+    if (c > 0) { celkem += c; stroju.push(unitKlic(u)); }
+  });
+  return { celkem, kusu: stroju.length, stroje: stroju.slice(0, 5) };
+}
+
 // Hlavní otázka: je skok hotovosti, který klient poslal, vůbec možný?
 // Vrací popis, ne verdikt — rozhodnutí, co s tím, patří tomu, kdo volá.
 async function prirustek(p, novyStav, vyzvednuto) {
@@ -255,13 +320,18 @@ async function ocekavanaZmena(p, st, od, zisk, vyzvednuto) {
   const zeStavu = zRozdiluStavu(p.state, st);
   // Měsíční režie za uplynulý čas: pobočky, četa, pojištění.
   const rezie = rezieZaMesic(st).celkem * mesicu;
-  const nakupy = zEvidence + zeStavu.celkem + rezie;
+  // Zaplacené opravy po poruše — výdaj, o kterém server nemá evidenci.
+  const opravy = opravyZeStavu(p.state, st);
+  // A příjem, který hra vyplácí sama: denní odměna.
+  const prijmy = prijmyZeStavu(p.state, st, zisk ? zisk.server : 0);
+  const nakupy = zEvidence + zeStavu.celkem + rezie + opravy.celkem;
   // Čerpání úvěru hotovost zvedá, splátka ji snižuje — a obojí je vidět na
   // dluhu, ne na hotovosti.
   const dluhZmena = dluhu(st) - dluhu(p.state);
   return {
-    celkem: zeSite + dorucenky - nakupy + dluhZmena,
+    celkem: zeSite + dorucenky + prijmy.celkem - nakupy + dluhZmena,
     zeSite, dorucenky, nakupy, dluhZmena, zEvidence, zeStavu, rezie,
+    opravy, prijmy,
   };
 }
 
@@ -395,6 +465,8 @@ async function otisk(p, st, v) {
     ze_serveru: v.ze_serveru != null ? Math.round(v.ze_serveru) : null,
     ocekavano: cek ? Math.round(cek.celkem) : null,
     nakupy: cek ? Math.round(cek.nakupy) : null,
+    odmena: cek && cek.prijmy ? Math.round(cek.prijmy.denni) : null,
+    opravy: cek && cek.opravy ? Math.round(cek.opravy.celkem) : null,
     sedi: !!v.sedi,
     od_ms: Math.min(2147483647, Math.max(0, Math.round(v.od || 0))),
     zisk_hra: zisk ? zisk.hra : null,
@@ -418,4 +490,5 @@ async function zkontroluj(p, st, vyzvednuto) {
 }
 
 module.exports = { zkontroluj, prirustek, otisk, stropStroje, stropSite, zRozdiluStavu, rezieZaMesic,
+  denniOdmena, prijmyZeStavu, opravyZeStavu,
   MESIC_MS, NAVSTEVNOST_STROP, REZERVA, STROJE, OTISK_ODSTUP };

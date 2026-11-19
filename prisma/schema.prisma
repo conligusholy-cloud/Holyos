@@ -8351,10 +8351,14 @@ model GameSnapshot {
   // Kolik hotovosti hráči od minulého uložení MĚLO přibýt podle serveru:
   // zisk sítě za ten čas, doručenky, nákupy, zem, čerpání a splátky úvěru.
   // Vedle prirustek (skutečná změna) je z toho vidět, jestli by server uměl
-  // hotovost spočítat sám. Nevidí do přípojek, poboček, čety ani ceníku,
-  // takže vychází výš — sledovat má smysl opačný směr.
+  // hotovost spočítat sám. Nevidí do výměny stroje a dvou drobných poplatků,
+  // takže vychází o něco výš — sledovat má smysl hlavně opačný směr.
   ocekavano  Float?
   nakupy     Float?
+  // Dvě položky čekané změny zvlášť, protože se na ně nejčastěji ptáme:
+  // vyzvednutá denní odměna (příjem) a zaplacené opravy po poruše (výdaj).
+  odmena     Float?
+  opravy     Float?
   sedi       Boolean  @default(true)
   od_ms      Int      @default(0)
   // Zisk za prádlomaty podle hry a podle serveru, vedle sebe. Pobočky,

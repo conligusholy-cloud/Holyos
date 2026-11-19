@@ -248,6 +248,18 @@ if git diff --cached --name-only | grep -qE 'services/game/strop'; then
   fi
 fi
 
+# Čekaná změna hotovosti: denní odměna (příjem) a opravy po poruše (výdaj).
+# Obojí se pozná jen z rozdílu dvou uložení, takže se to snadno rozbije
+# přejmenováním pole ve stavu hry. Odměna navíc musí počítat ze zisku, který
+# si spočítal server — jinak by si šlo částku nafouknout. Commit zastaví.
+if git diff --cached --name-only | grep -qE 'services/game/strop'; then
+  if ! node nastroje/tcekana.js; then
+    echo ""
+    echo "STOP: denní odměna nebo opravy v čekané změně nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Co se prodává, musí jít vyzvednout. Zapomenutá rodina položek ve výčtu
 # znamená zaplacenou kartu, o které se hra nikdy nedozví — stalo se to
 # kampaním hned první den prodeje. Je to přímo o penězích, takže commit zastaví.
