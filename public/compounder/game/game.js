@@ -9329,12 +9329,14 @@ function fondNavrhPopis(n) {
   }
   return tx('veta.fond_vyplatit_popis', { p1: kcFull(d.castka || 0) });
 }
-function fondHtml() {
+// Vnitřek fondu. Není to vlastní karta: aliance a fond jsou jedna věc —
+// každá aliance má právě jeden fond a žádný fond neexistuje bez aliance.
+// Dvě karty vedle sebe tvrdily opak a hráči hledali fond jinde.
+function fondVnitrek() {
   if (!FOND) return '';
   var f = FOND.fond;
   var ja = fondJa();
-  var h = '<div class="card"><h3>\uD83C\uDFE6 ' + esc(tx('fond.nadpis')) + '</h3>'
-    + '<p class="muted small" style="margin:2px 0 8px">' + esc(tx('fond.popis')) + '</p>'
+  var h = '<p class="muted small" style="margin:2px 0 8px">' + esc(tx('fond.popis')) + '</p>'
     + '<div class="kv"><span>' + esc(tx('fond.pokladna')) + '</span><b>' + kcFull(f.pokladna) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('fond.vklady')) + '</span><b>' + kcFull(f.vkladu_celkem) + '</b></div>';
   if (ja) {
@@ -9379,7 +9381,7 @@ function fondHtml() {
     + (ja ? '<button class="btn sec sm" id="fond-prevest">' + esc(tx('fond.prevest')) + '</button>'
       + '<button class="btn sec sm" id="fond-navrh">' + esc(tx('fond.dat_hlasovat')) + '</button>' : '')
     + '</div>';
-  return h + '</div>';
+  return h;
 }
 function fondZnovu() { FOND = null; loadFond(paintMe); }
 function fondVlozitSheet() {
@@ -9507,11 +9509,15 @@ function bindFond(kde) {
 function alianceHtml() {
   if (!ALIANCE) return '';
   var a = ALIANCE.aliance;
-  var h = '<div class="card"><h3>\uD83E\uDD1D ' + esc(tx('aliance.nadpis_karta')) + '</h3>';
+  // Dokud aliance není, není ani fond — karta se pak jmenuje po alianci.
+  var h = '<div class="card"><h3>' + (a ? '\uD83C\uDFE6 ' + esc(tx('fond.nadpis'))
+    : '\uD83E\uDD1D ' + esc(tx('aliance.nadpis_karta'))) + '</h3>';
   if (a) {
     h += '<div class="row"><b>' + esc(a.nazev) + '</b><span class="pill good">'
       + tx('veta.clenu_z', { p1: a.clenove.filter(function (c) { return c.stav === 'clen'; }).length,
         p2: ALIANCE.max_clenu }) + '</span></div>'
+      + fondVnitrek()
+      + '<h4 style="margin:12px 0 4px">' + esc(tx('aliance.clenove')) + '</h4>'
       + a.clenove.map(function (c) {
           return '<div class="row"><span>' + esc(c.kdo) + (c.ja ? ' \u00b7 ' + esc(tx('aliance.ty')) : '') + '</span>'
             + '<span class="muted small">' + esc(tx(c.stav === 'clen' ? 'aliance.clen' : 'aliance.pozvan')) + '</span></div>';
@@ -9533,8 +9539,6 @@ function alianceHtml() {
     h += '<div class="gcard-act"><button class="btn sm" id="al-zalozit">'
       + esc(tx('aliance.zalozit')) + '</button></div>';
   }
-  // Fond je vlastní karta pod aliancí: aliance je hlasovací blok, fond
-  // společná kasa, a plést to do jedné karty by jen mátlo.
   return h + '</div>';
 }
 function zalozAlianceSheet() {
@@ -9712,9 +9716,8 @@ function paintMe() {
     + '<div class="kv"><span>' + esc(tx('hra.prozkoumanych_oblasti')) + '</span><b>' + Object.keys(S.areas).length + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('hra.proverenych_mist')) + '</span><b>' + Object.keys(S.revealed).length + '</b></div>'
     + '</div>'
-    // Fond a aliance hned pod profilem: je to to první, co hráč na téhle
-    // záložce hledá, a dole pod majetkem to nikdo nenašel.
-    + fondHtml()
+    // Fond hned pod firmou: je to to první, co hráč na téhle záložce hledá,
+    // a dole pod majetkem to nikdo nenašel.
     + alianceHtml()
     + hodnostHtml()
     + odznakyHtml()
