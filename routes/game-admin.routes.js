@@ -346,6 +346,14 @@ router.get('/vlastnictvi', api(async (req, res) => {
 // Oba přehledy skládá services/game/dohled.js, protože totéž si hra jednou
 // denně píše do logu — do administrace se musí člověk přihlásit a za celou
 // dobu se do ní kvůli tomuhle nikdo nepodíval.
+// GET /pujcky-divne?hrac=<nick nebo firma> → půjčky a úvěry, co vypadají
+// splaceně, ale pořád běží. S parametrem vysype všechno, co ten hráč má —
+// včetně bankovních úvěrů, které jsou jinak schované v uložené hře.
+router.get('/pujcky-divne', api(async (req, res) => {
+  const { pujckyDivne } = require('../services/game/dohled');
+  res.type('text/plain; charset=utf-8').send(await pujckyDivne(req.query.hrac));
+}));
+
 router.get('/sklad-chybi', api(async (req, res) => {
   const { skladChybi } = require('../services/game/dohled');
   res.type('text/plain; charset=utf-8').send(await skladChybi(req.query.dnu));

@@ -600,6 +600,88 @@ async function vlastnictvi(dnu, firmaId, hracId) {
 // nastavení v databázi má přednost. Po každé změně výchozí hodnoty je proto
 // potřeba vidět, co doopravdy platí — jinak se čeká na účinek, který
 // přebitý řádek v databázi zrušil.
+// ─── Půjčky a úvěry, které vypadají splaceně, ale pořád běží ────────────
+//
+// Hráči hlásí „splatil jsem to a pořád mi to tam visí" a nejde to ověřit:
+// půjčka od hráče je řádek v databázi, ale bankovní úvěr žije uvnitř uložené
+// hry a nikdo se na něj zvenku nedíval. Tenhle přehled kouká na obojí.
+//
+// Nic nemění. Je to čtení, které má z „prý" udělat číslo.
+async function pujckyDivne(nick) {
+  const hledany = String(nick || '').trim().toLowerCase();
+  const out = [];
+  const kc = (n) => Math.round(Number(n) || 0).toLocaleString('cs-CZ') + ' L$';
+
+  const pujcky = await prisma.gameLoan.findMany({ orderBy: { id: 'asc' }, take: 1000 });
+  const hraci = await prisma.gamePlayer.findMany({
+    where: { disabled: false }, select: { id: true, nick: true, company: true, state: true } });
+  const jmeno = new Map(hraci.map((h) => [h.id, h.company || h.nick]));
+  const sedi = (h) => !hledany
+    || String(h.nick || '').toLowerCase().includes(hledany)
+    || String(h.company || '').toLowerCase().includes(hledany);
+
+  // 1. Půjčky mezi hráči — řádky, které si odporují samy se sebou.
+  const spatne = pujcky.filter((p) => (p.stav === 'bezi' && p.splaceno >= p.mesicu)
+    || (p.stav === 'splaceno' && p.splaceno < p.mesicu));
+  out.push('PŮJČKY MEZI HRÁČI · celkem ' + pujcky.length
+    + ' · beží ' + pujcky.filter((p) => p.stav === 'bezi').length
+    + ' · rozporů ' + spatne.length);
+  if (spatne.length) {
+    out.push('  id    dlužník → věřitel            splaceno  stav');
+    spatne.forEach((p) => out.push('  ' + String(p.id).padEnd(6)
+      + (p.borrower_nick + ' → ' + p.lender_nick).slice(0, 30).padEnd(31)
+      + (p.splaceno + ' z ' + p.mesicu).padEnd(10) + p.stav));
+  } else {
+    out.push('  žádný řádek si neodporuje — splacená půjčka má stav splaceno a nezobrazuje se.');
+  }
+  out.push('');
+
+  // 2. Bankovní úvěry z uložených stavů. Drobek pod korunu je přesně ten
+  // případ, kdy hráč říká „už je to splacené" a karta pořád svítí.
+  const drobky = [];
+  hraci.forEach((h) => {
+    const uvery = ((h.state || {}).loans) || [];
+    if (!uvery.length) return;
+    uvery.forEach((l) => {
+      const zbyva = Number(l && l.zbyva) || 0;
+      if (zbyva > 0 && zbyva < 1) drobky.push({ h, l, zbyva });
+    });
+  });
+  out.push('BANKOVNÍ ÚVĚRY · drobky pod korunou: ' + drobky.length);
+  if (drobky.length) {
+    out.push('  (úvěr se zavírá až pod jednou korunou — tyhle zmizí při další splátce)');
+    drobky.forEach((d) => out.push('  ' + String(jmeno.get(d.h.id) || d.h.nick).slice(0, 24).padEnd(25)
+      + d.zbyva.toFixed(2) + ' L$'));
+  }
+  out.push('');
+
+  // 3. A když se ptáme na konkrétního hráče, vysypeme všechno, co má.
+  if (hledany) {
+    const kdo = hraci.filter(sedi);
+    if (!kdo.length) { out.push('Hráč „' + nick + '" nenalezen.'); return out.join('\n'); }
+    kdo.forEach((h) => {
+      out.push('── ' + (h.company || h.nick) + ' (' + h.nick + ', id ' + h.id + ') ──');
+      const moje = pujcky.filter((p) => p.borrower_id === h.id || p.lender_id === h.id);
+      if (!moje.length) out.push('  žádné půjčky mezi hráči');
+      moje.forEach((p) => out.push('  #' + p.id + '  '
+        + (p.borrower_id === h.id ? 'dluží ' + p.lender_nick : 'půjčil ' + p.borrower_nick).padEnd(24)
+        + kc(p.castka).padStart(14) + '  splátek ' + p.splaceno + ' z ' + p.mesicu
+        + '  zmeškaných ' + (p.zmeskano || 0) + '  stav ' + p.stav));
+      const uvery = ((h.state || {}).loans) || [];
+      out.push('  bankovní úvěry: ' + uvery.length
+        + (uvery.length ? '' : '  (žádný — v bance nic nedluží)'));
+      uvery.forEach((l) => out.push('    ' + String(l.popis || l.id || 'úvěr').slice(0, 28).padEnd(29)
+        + ('zbývá ' + kc(l.zbyva)).padStart(20)
+        + '  splátka ' + kc(l.splatka) + '  měsíců ' + (l.zbyvaMesicu == null ? '?' : l.zbyvaMesicu)
+        + '  zmeškaných ' + (l.zmeskano || 0)));
+      out.push('  hotovost ve stavu: ' + kc((h.state || {}).cash)
+        + ' · dluh celkem: ' + kc((h.state || {}).loan));
+      out.push('');
+    });
+  }
+  return out.join('\n');
+}
+
 async function nastaveniPrehled() {
   const acct = require('../../routes/game-account.routes');
   const n = typeof acct._nastaveni === 'function' ? await acct._nastaveni() : {};
@@ -696,5 +778,5 @@ async function pokladnaPrehled(limit) {
   return out.join('\n');
 }
 
-module.exports = { start, doLogu, stropPrehled, pokladnaPrehled, skladChybi, nastaveniPrehled, ziskRozbor, odkazyRozpor, stavRozpad,
+module.exports = { start, doLogu, stropPrehled, pokladnaPrehled, skladChybi, nastaveniPrehled, ziskRozbor, odkazyRozpor, stavRozpad, pujckyDivne,
   vlastnictvi, ziskSrovnani };
