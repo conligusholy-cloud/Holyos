@@ -3608,5 +3608,6 @@
   "veta.fond_nabidka_k_cemu": "Tu peux vendre une partie de ta société à un fonds d’alliance. Le fonds vote dessus et peut proposer d’autres conditions.",
   "veta.fond_nabidka_popis_okno": "Tu vends une partie de TA société. Le fonds décide par un vote et peut, au lieu d’accepter, te proposer une fois un autre prix ou un autre pourcentage.",
   "veta.fond_protinavrh_rada": "Possible une seule fois. Les votes sont effacés et l’offre retourne au propriétaire, qui l’accepte ou la refuse.",
-  "veta.fond_puvodne": "Tu proposais au départ {cislo:p1} % pour {penize:p2}."
+  "veta.fond_puvodne": "Tu proposais au départ {cislo:p1} % pour {penize:p2}.",
+  "veta.od_data_techniku": "À partir du {p1}, il y en aura {cislo:p2} — ce que tu as retiré fonctionne jusqu’à la fin de la période payée."
 }

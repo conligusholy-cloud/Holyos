@@ -7854,7 +7854,12 @@ model GameSubscription {
   id             Int       @id @default(autoincrement())
   player_id      Int
   kind           String    @db.VarChar(24)
+  // Počet, který se bude účtovat při nejbližší platbě.
   qty            Int       @default(1)
+  // Počet, za který už hráč zaplatil běžící období. Do konce toho období mu
+  // patří, i když mezitím ubral — a když přikoupil, dostane víc hned a platí
+  // až od dalšího období. Prázdné u starších řádků znamená „stejně jako qty“.
+  qty_zaplaceno  Int?
   status         String    @default("pending") @db.VarChar(16) // pending | active | past_due | canceled
   stripe_sub     String?   @unique @db.VarChar(100)
   stripe_session String?   @unique @db.VarChar(100)

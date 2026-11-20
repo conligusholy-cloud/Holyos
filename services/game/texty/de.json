@@ -3609,5 +3609,6 @@
   "veta.fond_nabidka_k_cemu": "Du kannst ein Stück deiner Firma an einen Allianzfonds verkaufen. Der Fonds stimmt darüber ab und kann andere Bedingungen vorschlagen.",
   "veta.fond_nabidka_popis_okno": "Du verkaufst ein Stück DEINER Firma. Der Fonds entscheidet per Abstimmung und kann dir statt einer Zusage einmal einen anderen Preis oder Prozentsatz vorschlagen.",
   "veta.fond_protinavrh_rada": "Es geht nur einmal. Die Stimmen werden gelöscht und das Angebot geht an den Inhaber zurück, der es dann annimmt oder ablehnt.",
-  "veta.fond_puvodne": "Ursprünglich hast du {cislo:p1} % für {penize:p2} angeboten."
+  "veta.fond_puvodne": "Ursprünglich hast du {cislo:p1} % für {penize:p2} angeboten.",
+  "veta.od_data_techniku": "Ab {p1} laufen {cislo:p2} — was du entfernt hast, läuft bis zum Ende des bezahlten Zeitraums."
 }

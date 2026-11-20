@@ -137,6 +137,16 @@ if git diff --cached --name-only | grep -qE 'services/game/brzda|routes/game-tra
   fi
 fi
 
+# Předplatné na techniky: co se účtuje a co hráč dostane. Jsou to skutečné
+# peníze — chyba tady buď okrade hráče, nebo dá obejít placení.
+if git diff --cached --name-only | grep -qE 'services/game/predplatne|routes/game-stripe|routes/game-account'; then
+  if ! node nastroje/tpredplatne.js; then
+    echo ""
+    echo "STOP: počty u předplatného nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Nabídka podílu fondu zvenču. Jediné místo, kde do fondu vstupuje člověk,
 # který v něm není — a platí se tu cizími penězi.
 if git diff --cached --name-only | grep -qE 'services/game/fond-nabidka|routes/game-trade'; then

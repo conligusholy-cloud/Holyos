@@ -25,6 +25,7 @@ const JMENI = require('../services/game/jmeni');
 const FOND = require('../services/game/fond');
 const VERZE = require('../services/game/stav-verze');
 const VLAST = require('../services/game/vlastnictvi');
+const PREDPL = require('../services/game/predplatne');
 const LIMITMIST = require('../services/game/limit-mist');
 // Zkratka do obsluhy: stx(req)('server.neco') vrátí hlášku v jazyce hráče.
 // Skládá se pro toho, KOMU se posílá — ne pro toho, kdo akci vyvolal.
@@ -412,8 +413,15 @@ async function predplatneHrace(p) {
   });
   const ted = Date.now();
   const zive = rows.filter((r) => !r.plati_do || new Date(r.plati_do).getTime() > ted);
-  return zive.map((r) => ({ kind: r.kind, qty: r.qty, status: r.status,
-    plati_do: r.plati_do, obnovi_se: r.obnovi_se }));
+  // qty je to, co hráč opravdu dostane: větší z „co se bude účtovat“ a „za co
+  // je zaplaceno běžící období“. Přikoupěný technik tak jede hned a ubraný
+  // doběhne do konce zaplaceného období. qty_uctuje posíláme zvlášť, aby hra
+  // mohla říct, kolik jich bude od příští platby — bez toho by zmizel technik,
+  // o kterém hráč neví, že odchází.
+  return zive.map((r) => ({ kind: r.kind,
+    qty: PREDPL.platnyPocet(r.qty, r.qty_zaplaceno),
+    qty_uctuje: PREDPL.uctovanyPocet(r.qty),
+    status: r.status, plati_do: r.plati_do, obnovi_se: r.obnovi_se }));
 }
 async function catalogPublic(prev) {
   const out = [];

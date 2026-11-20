@@ -247,9 +247,22 @@ router.post('/stripe/subscribe/zrusit', express.json({ limit: '8kb' }), acct._re
 // ještě neběží, takže kdo měl jednoho technika a potřeboval čtyři, musel
 // zrušit a koupit znovu — a přišel o zaplacené období.
 //
-// Mění se množství u položky ve Stripu, ne nové předplatné. Rozdíl se dorovná
-// v nejbližší faktuře (proration), takže kdo přidá technika v půlce týdne,
-// doplatí jen půlku, a kdo uberá, má to ve prospěch.
+// Mění se množství u položky ve Stripu, ne nové předplatné. Žádné doplatky ani
+// dobropisy za rozježděné období se nedělají — účtuje se vždycky celé období
+// novým počtem až od příští platby.
+//
+// Dřív to bylo přes proration a vypadalo to jako chyba: karta slíbila 234 Kč,
+// na výpisu bylo 309,68. Částka byla správně, jen v ní byl doplatek za dva
+// techniky přidané během předchozího týdne, o kterém karta mlčela. Prostá
+// cena „počet krát týdenní sazba“ se dá spočítat z hlavy a to je víc, než
+// kolik se tím vydělá.
+//
+// Co hráč dostane, se tím rozchází s tím, co platí, a drží se to zvlášť:
+// qty je počet k účtování, qty_zaplaceno počet, který běží do konce
+// zaplaceného období. Hráč má vždycky ten větší z nich.
+//   přikoupí — technik jede hned, platí se za něj až příště (bonus)
+//   ubere   — účtovat se bude míň, ale do konce zaplaceného týdne mu běží
+//             to, co si zaplatil; nejde tím ani obejít placení
 router.post('/stripe/subscribe/pocet', express.json({ limit: '8kb' }), acct._requirePlayer, async (req, res, next) => {
   try {
     if (!paymentsOn()) return res.status(503).json({ error: 'Platby zatím nejsou spuštěné.' });
@@ -269,7 +282,7 @@ router.post('/stripe/subscribe/pocet', express.json({ limit: '8kb' }), acct._req
     if (!polozka) return res.status(409).json({ error: 'Předplatné nemá položku ke změně.' });
     const novy = await stripePost('subscriptions/' + row.stripe_sub, {
       items: [{ id: polozka.id, quantity: String(qty) }],
-      proration_behavior: 'create_prorations',
+      proration_behavior: 'none',
     });
     const dal = ((novy.items && novy.items.data) || [])[0];
     await prisma.gameSubscription.update({ where: { id: row.id },
@@ -358,6 +371,10 @@ async function zapisObdobi(row, faktura, castka, email, mena) {
     if (e.code === 'P2002') return null;      // tohle období už zapsané máme
     throw e;
   }
+  // Období je zaplacené za ten počet, který se právě vyfakturoval. Do jeho konce
+  // hráči patří, i kdyby mezitím ubral — a když přikoupí, dostane víc hned.
+  await prisma.gameSubscription.update({ where: { id: row.id },
+    data: { qty_zaplaceno: row.qty || 1 } }).catch(() => {});
   console.log('[game] předplatné zaplaceno:', row.kind, '· hráč', row.player_id,
     '·', Math.round(castka) / 100 + ' ' + String(mena || 'czk').toUpperCase());
   require('../services/bs2-billing').issueGame(pu.id)

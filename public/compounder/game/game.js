@@ -14468,15 +14468,22 @@ function predplatneHtml() {
   var treba = dispecerPotreba(pocet);
   var kap = dispecerKapacita();
   var do_ = p && p.plati_do ? new Date(p.plati_do) : null;
+  // Co hráč právě teď má (p.qty) a co se bude účtovat příště (uct) jsou od
+  // zrušení doplatků dvě různá čísla. Karta musí ukázat obě: kdo ubral,
+  // vidí, že mu technik doběhne, a nediví se, až příští týden zmizí.
+  var uct = p ? (p.qty_uctuje == null ? p.qty : p.qty_uctuje) : 0;
   return '<div class="gcard sub">'
     + '<div class="gcard-top"><span class="gcard-ico">\uD83D\uDD27</span>'
     + '<div><h3>' + esc(polNazev(c)) + '</h3><p class="gcard-short">' + esc(polKratce(c)) + '</p></div>'
     + (p ? '<b class="gcard-n ok">' + esc(tx('hra.jede')) + '</b>' : '') + '</div>'
     + '<p class="muted small">' + esc(polPopis(c)) + '</p>'
     + (p
-        ? tx('veta.div_class_kv_span_span_b_2', { p1: esc(tx('hra.techniku')), p2: p.qty, p3: kap, p4: esc(tx('hra.platis')) }) + cenaReal((c.price_czk * p.qty)) + '</b></div>'
+        ? tx('veta.div_class_kv_span_span_b_2', { p1: esc(tx('hra.techniku')), p2: p.qty, p3: kap, p4: esc(tx('hra.platis')) }) + cenaReal((c.price_czk * uct)) + '</b></div>'
           + (do_ ? '<div class="kv"><span>' + (p.obnovi_se ? esc(tx('hra.dalsi_platba')) : esc(tx('hra.dobehne')))
             + '</span><b' + (p.obnovi_se ? '' : ' class="warn"') + '>' + datumCas(do_) + '</b></div>' : '')
+          + (uct < p.qty && do_
+              ? '<p class="fine">' + tx('veta.od_data_techniku',
+                  { p1: datumCas(do_), p2: uct }) + '</p>' : '')
           + (p.status === 'past_due' ? '<p class="fine err">' + esc(tx('hra.posledni_platba_neprosla')) + ' '
               + esc(tx('hra.dokud_se_nestrhne_vedouci_nevyjizdi')) + '</p>' : '')
           + (pocet > kap ? tx('hra.p_class_fine_warn_mas_pobocek', { p1: pocet, p2: kap }) : '')
@@ -14484,17 +14491,17 @@ function predplatneHtml() {
           // Počet techniků šel dřív nastavit jen při prvním nákupu. Kdo měl
           // jednoho a potřeboval čtyři, musel zrušit a koupit znovu.
           + (PAYMENTS_ON
-              ? '<button class="btn sm" data-sub-pocet="' + (p.qty + 1) + '"'
-                + (p.qty >= DISPECER_MAX ? ' disabled' : '') + '>'
+              ? '<button class="btn sm" data-sub-pocet="' + (uct + 1) + '"'
+                + (uct >= DISPECER_MAX ? ' disabled' : '') + '>'
                 + esc(tx('hra.prikoupit_technika')) + '</button>'
-                + (p.qty > 1
-                    ? '<button class="btn sm ghost" data-sub-pocet="' + (p.qty - 1) + '">'
+                + (uct > 1
+                    ? '<button class="btn sm ghost" data-sub-pocet="' + (uct - 1) + '">'
                       + esc(tx('hra.ubrat_technika')) + '</button>'
                     : '')
               : '')
           + '<button class="btn sm ghost" data-sub-zrus="' + (p.obnovi_se ? '1' : '0') + '">'
           + (p.obnovi_se ? esc(tx('hra.zrusit_obnovovani')) : esc(tx('hra.nechat_bezet_dal'))) + '</button></div>'
-          + (PAYMENTS_ON && treba > p.qty
+          + (PAYMENTS_ON && treba > uct
               ? tx('hra.na_vsechny_pobocky_potrebujes', { p1: treba, p2: cenaReal(c.price_czk * treba) })
               : '')
         : tx('veta.div_class_kv_span_cena_span', { p1: cenaReal(c.price_czk), p2: esc(tx('hra.za_technika_a_tyden')), p3: esc(tx('hra.jeden_technik_zvladne')), p4: c.kapacita, p5: pocet, p6: mn(pocet, esc(tx('hra.pobocku')), esc(tx('hra.pobocky')), esc(tx('hra.pobocek'))), p7: treba, p8: esc(tx('hra.tydne_zaplatis')) })

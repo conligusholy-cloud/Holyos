@@ -3755,5 +3755,6 @@
   "veta.fond_nabidka_k_cemu": "You can sell a piece of your company to an alliance fund. The fund votes on it and may propose different terms.",
   "veta.fond_nabidka_popis_okno": "You are selling a piece of YOUR company. The fund decides by a vote and may once propose a different price or percentage instead of accepting.",
   "veta.fond_protinavrh_rada": "It can be made once. The votes are cleared and the offer goes back to the owner, who then accepts or turns it down.",
-  "veta.fond_puvodne": "You originally offered {cislo:p1} % for {penize:p2}."
+  "veta.fond_puvodne": "You originally offered {cislo:p1} % for {penize:p2}.",
+  "veta.od_data_techniku": "From {p1} there will be {cislo:p2} — what you removed runs until the paid period ends."
 }
