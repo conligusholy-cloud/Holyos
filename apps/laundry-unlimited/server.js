@@ -209,6 +209,14 @@ section{padding:80px 0}.hero{padding:140px 0 40px}.facts{margin-top:50px}.sec-h{
 
 const CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h17M14 5l7 7-7 7"/></svg>';
 
+const LGI_CSS = `.lgi{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;margin-left:10px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);color:#e8f0ff;transition:.2s;flex:none}.lgi svg{width:20px;height:20px}.lgi:hover{border-color:#22e6ff;color:#22e6ff;box-shadow:0 0 18px rgba(34,230,255,.35)}.lgmsg{padding:12px 14px;border-radius:12px;border:1px solid rgba(34,230,255,.4);background:rgba(34,230,255,.08);margin:0 0 16px}.lgalt{margin-top:22px;padding-top:18px;border-top:1px solid rgba(255,255,255,.1);font-size:14px;opacity:.85}.lgalt a{color:#22e6ff}`;
+// Texty přihlašovací stránky (společné přihlášení pro partnery i tým)
+const LG = {
+  en: { h: 'Sign in', lead: 'Enter your e-mail. We will send you a sign-in link — it works for partners and for the team.', email: 'E-mail', send: 'Send sign-in link', sent: 'If this e-mail has access, we have sent you a sign-in link. It is valid for 1 hour.', team: 'Team member?', holyos: 'Sign in with HolyOS' },
+  cs: { h: 'Přihlášení', lead: 'Zadejte e-mail. Pošleme vám přihlašovací odkaz — platí pro partnery i pro tým.', email: 'E-mail', send: 'Poslat přihlašovací odkaz', sent: 'Pokud k e-mailu existuje přístup, poslali jsme vám přihlašovací odkaz. Platí 1 hodinu.', team: 'Člen týmu?', holyos: 'Přihlásit přes HolyOS' },
+  pl: { h: 'Logowanie', lead: 'Podaj e-mail. Wyślemy Ci link do logowania — dla partnerów i zespołu.', email: 'E-mail', send: 'Wyślij link', sent: 'Jeśli ten e-mail ma dostęp, wysłaliśmy link do logowania. Ważny 1 godzinę.', team: 'Członek zespołu?', holyos: 'Zaloguj przez HolyOS' },
+  de: { h: 'Anmelden', lead: 'E-Mail eingeben. Wir senden Ihnen einen Anmeldelink — für Partner und Team.', email: 'E-Mail', send: 'Anmeldelink senden', sent: 'Wenn diese E-Mail Zugang hat, haben wir Ihnen einen Anmeldelink gesendet. Gültig 1 Stunde.', team: 'Teammitglied?', holyos: 'Mit HolyOS anmelden' },
+};
 function page({ lang, title, desc, body, canonicalPath, noindex }) {
   const t = T[lang];
   const alts = LANGS.map((l) => `<link rel="alternate" hreflang="${l}" href="${PUBLIC_URL}${l === 'en' ? '' : '/' + l}${canonicalPath === '/' ? '' : canonicalPath}">`).join('');
@@ -218,11 +226,11 @@ function page({ lang, title, desc, body, canonicalPath, noindex }) {
 <title>${esc(title || t.title)}</title><meta name="description" content="${esc(desc || t.desc)}">
 ${noindex ? '<meta name="robots" content="noindex">' : alts}<meta name="theme-color" content="#04080f">
 <meta property="og:title" content="${esc(title || t.title)}"><meta property="og:description" content="${esc(desc || t.desc)}"><meta property="og:type" content="website"><meta property="og:image" content="${PUBLIC_URL}/img/ireland.webp">
-<script>document.documentElement.className+=' js'</script><style>${SITE_CSS}</style></head><body>
+<script>document.documentElement.className+=' js'</script><style>${SITE_CSS}${LGI_CSS}</style></head><body>
 <div class="aur"><i></i><i></i><i></i></div><div class="prog" id="prog"></div>
 <div class="bar"><div class="wrap"><a href="${base || '/'}" style="display:block">${logoHtml(50)}</a>
 <nav><a class="hide" href="${base}/#about">${esc(t.nav_about)}</a><a class="hide" href="${base}/#machines">${esc(t.nav_machines)}</a><a class="hide" href="${base}/#model">${esc(t.nav_model)}</a><a class="hide" href="${base}/#offer">${esc(t.nav_offer)}</a><a class="hide" href="${base}/#who">${esc(t.nav_who)}</a>
-<div class="lang">${sw}</div><a class="btn" href="${base}/apply"><span>${esc(t.nav_apply)}${CHEV}</span></a></nav></div></div>
+<div class="lang">${sw}</div><a class="btn" href="${base}/apply"><span>${esc(t.nav_apply)}${CHEV}</span></a><a class="lgi" href="${base}/login" rel="nofollow" aria-label="${esc((LG[lang] || LG.en).h)}" title="${esc((LG[lang] || LG.en).h)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></a></nav></div></div>
 ${body}
 <footer><div class="wrap"><b>Laundry Unlimited</b> — ${esc(t.foot.replace(/^Laundry Unlimited\s*·\s*/, ''))}</div></footer>
 <script>(function(){var els=[].slice.call(document.querySelectorAll('.rv')),pg=document.getElementById('prog'),sf=document.getElementById('sfill'),st=document.getElementById('steps');
@@ -371,7 +379,7 @@ app.get('/api/compounder/portal/machines', lmJson('/api/compounder/portal/machin
 app.get('/media/:f([\\w.-]+)', (req, res) => res.redirect(302, LM_URL + '/media/' + req.params.f));
 // Finanční report je jen v administraci (dřív veřejně na /tabulka01)
 app.get('/tabulka01', (req, res) => res.redirect(302, '/admin/m/report'));
-const BEZ_JAZYKA = /^\/(api|admin|portal|sso|robots\.txt|sitemap\.xml)/;
+const BEZ_JAZYKA = /^\/(api|admin|portal|login|sso|robots\.txt|sitemap\.xml)/;
 app.use((req, res, next) => {
   const m = /^\/(en|cs|pl|de)(\/|$)/.exec(req.path);
   if (m) { req.lang = m[1]; req.url = req.url.slice(m[0].length - (m[2] === '/' ? 1 : 0)) || '/'; if (req.url.charAt(0) === '?') req.url = '/' + req.url; return next(); }
@@ -467,8 +475,8 @@ function topBar(o) {
     ? [{ k: 'leady', href: '/admin', t: 'Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, t: x.cs })))
     : SEKCE.filter((x) => (o.sekce || []).includes(x.k)).map((x) => ({ k: x.k, href: '/portal/m/' + x.k, t: en ? x.en : x.cs }));
   const rt = o.mode === 'admin'
-    ? `<a href="${HOLYOS_URL}" class="rtl">${uico('holyos')}<span>HolyOS</span></a>`
-    : `<span class="who">${esc(o.user || '')}</span><a href="/portal/logout">${en ? 'Log out' : 'Odhlásit'}</a>`;
+    ? `<a href="/portal" class="rtl">${uico('report')}<span>Uživatelské prostředí</span></a><a href="${HOLYOS_URL}" class="rtl">${uico('holyos')}<span>HolyOS</span></a><a href="/portal/logout" class="rtl"><span>Odhlásit</span></a>`
+    : `<span class="who">${esc(o.user || '')}</span>${o.admin ? `<a href="/admin" class="rtl">${uico('leady')}<span>Administrace</span></a>` : ''}<a href="/portal/logout">${en ? 'Log out' : 'Odhlásit'}</a>`;
   return `<aside class="uside"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="lugr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22e6ff"/><stop offset="1" stop-color="#2f7bff"/></linearGradient></defs></svg><a class="brand" href="${o.mode === 'admin' ? '/admin' : '/portal'}">${logoHtml(30)}<span class="ttl">${o.mode === 'admin' ? 'Administrace' : (en ? 'Partner portal' : 'Partnerský portál')}<small>${o.mode === 'admin' ? 'jen pro tým' : 'Laundry Unlimited'}</small></span></a>
 <nav>${tabs.map((x) => `<a href="${x.href}"${x.k === o.active ? ' class="on"' : ''}>${uico(x.k)}<span>${esc(x.t)}</span></a>`).join('')}</nav><div class="rt">${rt}</div></aside>`;
 }
@@ -482,6 +490,58 @@ function materialsPage(sekce, bar, title) {
     .replace('</head>', '<style>' + BAR_CSS + 'body .wrap{padding-top:20px}</style><script>window.__ALLOW=' + JSON.stringify(s.listy) + ';</script></head>')
     .replace(/<title>[^<]*<\/title>/, '<title>' + esc(title + ' — ' + (s ? s.cs : '')) + '</title>');
 }
+
+// ── Společné přihlášení (/login): partner i admin přes odkaz v e-mailu ─────
+const ADMIN_EMAILS = String(process.env.LU_ADMIN_EMAILS || 'tomas.holy@bestseries.cz').toLowerCase().split(/[,;\s]+/).filter(Boolean);
+function loginPage(lang, msg, err) {
+  const t = LG[lang] || LG.en, base = lang === 'en' ? '' : '/' + lang;
+  const body = `<div class="page"><div class="wrap"><span class="tag w">${esc(t.h)}</span><h2>${esc(t.h)}</h2><p class="sub">${esc(t.lead)}</p>
+<div class="box" style="max-width:520px">${msg ? `<div class="lgmsg">${esc(msg)}</div>` : ''}${err ? `<div class="err">${esc(err)}</div>` : ''}
+${msg ? '' : `<form method="post" action="${base}/login"><label style="margin-top:0">${esc(t.email)}</label><input name="email" type="email" required maxlength="160" autocomplete="email" autofocus><div style="margin-top:22px"><button class="btn o" type="submit"><span>${esc(t.send)}${CHEV}</span></button></div></form>`}
+<div class="lgalt">${esc(t.team)} <a href="${toHolyos()}">${esc(t.holyos)}</a></div></div></div></div>`;
+  return page({ lang, title: t.h + ' — Laundry Unlimited', body, canonicalPath: '/login', noindex: true });
+}
+const loginLang = (req) => (req.lang && req.lang !== 'en') ? req.lang : (/^\s*(cs|sk)/i.test(String(req.headers['accept-language'] || '')) ? 'cs' : 'en');
+app.get('/login', async (req, res) => {
+  res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex');
+  if (adminOf(req) || await userOf(req)) return res.redirect(302, adminOf(req) ? '/admin' : '/portal');
+  res.send(loginPage(loginLang(req)));
+});
+// Odeslání odkazu: e-mail týmu → odkaz do administrace, e-mail partnera → odkaz do portálu. Odpověď je pokaždé stejná.
+async function sendAdminLink(email, lang) {
+  try {
+    if (!LU_SECRET || !USER_KEY) return false;
+    const cs = lang === 'cs';
+    const tok = jwt.sign({ email, aud: 'lu-admin-link', iss: 'laundry-unlimited' }, USER_KEY, { expiresIn: '1h' });
+    const link = PUBLIC_URL + '/admin/auth?t=' + encodeURIComponent(tok);
+    const svc = jwt.sign({ aud: 'holyos-api', iss: 'laundry-unlimited' }, LU_SECRET, { expiresIn: '1m' });
+    const resp = await fetch(HOLYOS_URL + '/api/auth/lu/mail', { method: 'POST', headers: { Authorization: 'Bearer ' + svc, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: email, subject: cs ? 'Přihlášení do administrace Laundry Unlimited' : 'Sign in to Laundry Unlimited administration', body: cs ? 'Dobrý den,\n\nzde je váš odkaz do administrace Laundry Unlimited. Platí 1 hodinu.\n\nLaundry Unlimited' : 'Hello,\n\nhere is your link to the Laundry Unlimited administration. It is valid for 1 hour.\n\nLaundry Unlimited', link, linkLabel: cs ? 'Otevřít administraci' : 'Open administration', lang: cs ? 'cs' : 'en' }), signal: AbortSignal.timeout(20000) });
+    if (!resp.ok) { console.warn('[lu] admin mail ' + resp.status); return false; }
+    return true;
+  } catch (e) { console.warn('[lu] admin mail:', e.message); return false; }
+}
+async function doLogin(req, res, lang, back) {
+  const email = String(req.body.email || '').trim().toLowerCase().slice(0, 160);
+  if (!portalLimited(String(req.ip || '')) && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    if (ADMIN_EMAILS.includes(email)) await sendAdminLink(email, lang === 'cs' ? 'cs' : 'en');
+    else {
+      const r = (await q('SELECT * FROM inquiries WHERE lower(email)=$1 AND portal_access ORDER BY id DESC LIMIT 1', [email]).catch(() => ({ rows: [] }))).rows[0];
+      if (r) await sendPortalLink(r);
+    }
+  }
+  res.set('Cache-Control', 'no-store').send(back((LG[lang] || LG.en).sent));
+}
+app.post('/login', form, (req, res) => { const lang = loginLang(req); return doLogin(req, res, lang, (m) => loginPage(lang, m)); });
+app.get('/admin/auth', (req, res) => {
+  try {
+    const t = jwt.verify(String(req.query.t || ''), USER_KEY, { audience: 'lu-admin-link', issuer: 'laundry-unlimited' });
+    if (!ADMIN_EMAILS.includes(String(t.email || '').toLowerCase())) throw new Error('není admin');
+    const session = jwt.sign({ name: t.email, aud: 'lu-admin', iss: 'laundry-unlimited' }, SESSION_KEY, { expiresIn: '8h' });
+    res.set('Set-Cookie', COOKIE + '=' + encodeURIComponent(session) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + 8 * 3600);
+    res.set('Cache-Control', 'no-store').redirect(302, '/admin');
+  } catch (e) { res.status(401).set('Cache-Control', 'no-store').send(loginPage(loginLang(req), '', LG[loginLang(req)].h + ': odkaz vypršel nebo je neplatný / link expired.')); }
+});
 
 // ── Partnerský portál (/portal) ───────────────────────────────────────────
 // Partner = lead s portal_access. Přihlášení bez hesla: e-mail → odkaz (24 h) → cookie na 30 dní.
@@ -506,6 +566,12 @@ async function sendPortalLink(r) {
     return true;
   } catch (e) { console.warn('[lu] portál mail:', e.message); return false; }
 }
+// Admin v uživatelském prostředí vidí všechny sekce (náhled očima partnera) a může přepnout zpět do administrace
+async function portalUser(req) {
+  const a = adminOf(req);
+  if (a) return { name: a.name || 'Admin', lang: 'cs', portal_sections: SEKCE.map((x) => x.k), _admin: true };
+  return userOf(req);
+}
 async function userOf(req) {
   if (!USER_KEY) return null;
   try {
@@ -525,22 +591,17 @@ const loginBox = (lang, msg) => { const T2 = ptx(lang); return `<div class="pbox
 const plang = (req) => (/^cs\b/i.test(String(req.query.lang || req.headers['accept-language'] || '')) ? 'cs' : 'en');
 app.get('/portal', async (req, res) => {
   res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex');
-  const u = await userOf(req);
-  if (!u) return res.send(portalShell(plang(req), loginBox(plang(req))));
+  const u = await portalUser(req);
+  if (!u) return res.redirect(302, plang(req) === 'cs' ? '/cs/login' : '/login');
   const sek = (u.portal_sections || []).filter((k) => SEKCE.some((x) => x.k === k));
   if (sek.length) return res.redirect(302, '/portal/m/' + SEKCE.find((x) => sek.includes(x.k)).k);
   const T2 = ptx(u.lang);
-  res.send(portalShell(u.lang, `<div class="pbox"><h1>${esc(T2.hi)}${u.name ? ', ' + esc(u.name) : ''}</h1><p>${esc(T2.none)}</p></div>`, topBar({ mode: 'portal', lang: u.lang, sekce: [], user: u.name })));
+  res.send(portalShell(u.lang, `<div class="pbox"><h1>${esc(T2.hi)}${u.name ? ', ' + esc(u.name) : ''}</h1><p>${esc(T2.none)}</p></div>`, topBar({ mode: 'portal', lang: u.lang, sekce: [], user: u.name, admin: u._admin })));
 });
 app.post('/portal/login', form, async (req, res) => {
   const lang = req.body.lang === 'cs' ? 'cs' : 'en';
-  const email = String(req.body.email || '').trim().toLowerCase().slice(0, 160);
-  if (!portalLimited(String(req.ip || '')) && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    const r = (await q('SELECT * FROM inquiries WHERE lower(email)=$1 AND portal_access ORDER BY id DESC LIMIT 1', [email]).catch(() => ({ rows: [] }))).rows[0];
-    if (r) await sendPortalLink(r);
-  }
   // Stejná odpověď vždy — nikdo nezjistí, které e-maily mají přístup
-  res.set('Cache-Control', 'no-store').send(portalShell(lang, loginBox(lang, ptx(lang).sent)));
+  return doLogin(req, res, lang, (m) => portalShell(lang, loginBox(lang, m)));
 });
 app.get('/portal/auth', async (req, res) => {
   try {
@@ -554,13 +615,13 @@ app.get('/portal/auth', async (req, res) => {
   } catch (e) { res.status(401).set('Cache-Control', 'no-store').send(portalShell(plang(req), loginBox(plang(req), ptx(plang(req)).bad) + '<p style="text-align:center"><a href="/portal">→ ' + esc(ptx(plang(req)).send) + '</a></p>')); }
 });
 app.get('/portal/m/:sekce(report|ekonomika|technika|proc)', async (req, res) => {
-  const u = await userOf(req);
+  const u = await portalUser(req);
   if (!u) return res.redirect(302, '/portal');
   const sek = (u.portal_sections || []);
   if (!sek.includes(req.params.sekce)) return res.redirect(302, '/portal');
-  res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex').send(materialsPage(req.params.sekce, topBar({ mode: 'portal', lang: u.lang, sekce: sek, active: req.params.sekce, user: u.name }), ptx(u.lang).title));
+  res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex').send(materialsPage(req.params.sekce, topBar({ mode: 'portal', lang: u.lang, sekce: sek, active: req.params.sekce, user: u.name, admin: u._admin }), ptx(u.lang).title));
 });
-app.get('/portal/logout', (req, res) => { res.set('Set-Cookie', UCOOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'); res.redirect(302, '/portal'); });
+app.get('/portal/logout', (req, res) => { res.set('Set-Cookie', [UCOOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0', COOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0']); res.redirect(302, '/login'); });
 
 // ── Administrace (SSO z HolyOS) ────────────────────────────────────────────
 function adminOf(req) { if (!SESSION_KEY) return null; try { const t = jwt.verify(readCookie(req, COOKIE), SESSION_KEY, { audience: 'lu-admin', issuer: 'laundry-unlimited' }); return { name: t.name || '' }; } catch (e) { return null; } }
@@ -574,11 +635,11 @@ app.get('/sso', (req, res) => {
     res.set('Cache-Control', 'no-store').redirect(302, '/admin');
   } catch (e) { res.status(401).type('text/plain').send('Přihlášení vypršelo. Otevři sekci Laundry Unlimited znovu z HolyOS.'); }
 });
-app.get('/admin/logout', (req, res) => { res.set('Set-Cookie', COOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'); res.redirect(302, '/'); });
+app.get('/admin/logout', (req, res) => { res.set('Set-Cookie', [COOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0', UCOOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0']); res.redirect(302, '/'); });
 const requireAdmin = (req, res, next) => {
   const a = adminOf(req); if (a) { req.admin = a; return next(); }
   if (req.path.startsWith('/admin/api/')) return res.status(401).json({ ok: false, error: 'Přihlášení vypršelo. Otevři sekci znovu z HolyOS.' });
-  res.redirect(302, toHolyos());
+  res.redirect(302, '/login');
 };
 const STATUSES = [['new', 'Nová'], ['contacted', 'Kontaktován'], ['talks', 'Jednání'], ['won', 'Partner'], ['lost', 'Ztraceno'], ['spam', 'Spam']];
 const stLabel = (s) => (STATUSES.find((x) => x[0] === s) || [s, s])[1];
