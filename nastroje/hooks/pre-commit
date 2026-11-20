@@ -147,6 +147,16 @@ if git diff --cached --name-only | grep -qE 'services/game/zlocin'; then
   fi
 fi
 
+# Křivka hodnoty fondu. Vzorkuje se po každém pohybu penězi — bez toho se
+# člen po nákupu za desítky milionů dívá na rovnou čáru až hodinu.
+if git diff --cached --name-only | grep -qE 'services/game/fond-historie|routes/game-trade'; then
+  if ! node nastroje/tfondkrivka.js; then
+    echo ""
+    echo "STOP: křivka hodnoty fondu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Prodej majitele do veřejné nabídky na vlastní firmu. Majitel nemá v evidenci
 # řádek a dřív proto prodat nemohl vůbec. Chyba tady buď prodej zablokuje,
 # nebo pustí majitele pod sto procent firmy.

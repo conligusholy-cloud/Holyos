@@ -64,6 +64,41 @@ async function vzorkuj(ted) {
   return nove.length;
 }
 
+// Vzorek hned po události, která fondem pohnula — vklad, výplata, nákup
+// podílu, odchod člena. Hodinové vzorkování je na to, aby křivka vůbec
+// existovala; na nákup za šedesát milionů se ale nedá čekat hodinu. Člen
+// se po takovém obchodu podívá do grafu okamžitě a dosud viděl rovnou čáru,
+// jako by se nic nestalo.
+//
+// Nový bod se zapíše jen tehdy, když se čísla opravdu změnila. Bez toho by
+// pět prodejů do jedné nabídky během minuty udělalo pět bodů na stejné výšce
+// a graf by zhoustl šumem.
+// Má nový bod smysl? Jen když se proti poslednímu něco pohnulo. Pět prodejů
+// do jedné nabídky během minuty by jinak udělalo pět bodů na stejné výšce.
+// Oceňuje se zaokrouhleně, protože zaokrouhleně se to i ukládá — jinak by
+// setina rozdílu, kterou nikdo neuvidí, zakládala bod po bodu.
+function stojiZaZapis(posledni, f) {
+  if (!posledni || !f) return !!f;
+  return Math.round(posledni.pokladna) !== Math.round(f.pokladna)
+    || Math.round(posledni.hodnota) !== Math.round(f.hodnota);
+}
+
+async function vzorkujFond(alianceId, ted) {
+  const id = parseInt(alianceId, 10);
+  if (!Number.isFinite(id)) return 0;
+  const kdy = ted instanceof Date ? ted : new Date();
+  const f = (await hodnoty()).find((x) => x.id === id);
+  if (!f) return 0;
+  const [posl] = await prisma.gameFondHistorie.findMany({
+    where: { aliance_id: id }, orderBy: { kdy: 'desc' }, take: 1,
+    select: { pokladna: true, hodnota: true } });
+  if (!stojiZaZapis(posl, f)) return 0;
+  await prisma.gameFondHistorie.create({ data: {
+    aliance_id: id, kdy, pokladna: f.pokladna,
+    podily: Math.max(0, f.hodnota - f.pokladna), hodnota: f.hodnota, clenu: f.clenu } });
+  return 1;
+}
+
 // Staré vzorky se nehromadí donekonečna. Čtvrt roku zpátky je víc, než
 // kdo v grafu přečte.
 async function uklid(ted) {
@@ -84,4 +119,4 @@ async function proFond(alianceId, limit) {
     hodnota: Math.round(r.hodnota) }));
 }
 
-module.exports = { hodnoty, vzorkuj, uklid, proFond, VZOREK_MS, DRZET_DNU, BODU_MAX };
+module.exports = { hodnoty, vzorkuj, vzorkujFond, stojiZaZapis, uklid, proFond, VZOREK_MS, DRZET_DNU, BODU_MAX };

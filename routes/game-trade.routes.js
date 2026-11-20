@@ -1370,6 +1370,7 @@ router.post('/trade/aliance/odejit', hrac, api(async (req, res) => {
     await prisma.gameAlianceClen.deleteMany({ where: { aliance_id: moje.aliance_id } }).catch(() => {});
     await prisma.gameAliance.delete({ where: { id: moje.aliance_id } }).catch(() => {});
   }
+  vzorekFondu(moje.aliance_id);
   console.log('[game] aliance #' + moje.aliance_id + ': odešel ' + req.player.nick
     + ', zbývá ' + zbyva);
   res.json({ ok: true, zrusena: !zbyva });
@@ -1510,6 +1511,7 @@ router.post('/trade/aliance/fond/vklad', hrac, api(async (req, res) => {
       text_kod: 'dor.fond_vklad', text_data: { p1: al.nazev } } });
   });
   console.log('[game] fond #' + moje.aliance_id + ': ' + req.player.nick + ' vložil ' + castka);
+  vzorekFondu(moje.aliance_id);
   res.json({ ok: true, castka });
 }));
 
@@ -1822,6 +1824,17 @@ async function fondDrziVeFirme(alianceId, firmaId) {
     where: { fond_id: alianceId, firma_id: firmaId, stav: 'bezi' }, select: { podil: true } });
   return r.reduce((a, x) => a + (Number(x.podil) || 0), 0);
 }
+// Křivka hodnoty fondu se vzorkuje jednou za hodinu — na to, aby vůbec
+// existovala. Po pohybu penězi ale musí mít bod hned: člen se po nákupu za
+// šedesát milionů podívá do grafu okamžitě a dosud viděl rovnou čáru, jako
+// by se nestalo nic. Volá se AŽ PO dokončení transakce, jinak by se vzorek
+// vzal ze stavu před zápisem. Selhat smí tiše — graf není důvod shodit
+// hráči obchod, který už proběhl.
+const vzorekFondu = (alianceId) => {
+  require('../services/game/fond-historie').vzorkujFond(alianceId)
+    .catch((e) => console.warn('[game-fond-historie]', e && e.message));
+};
+
 // Volné peníze fondu: pokladna mínus to, co je slíbené ve vyvěšených nabídkách.
 // Vrací se i ta zamčená částka — bez ní je hláška „fond na to nemá" k ničemu.
 // Podílník vidí v pokladně šedesát milionů a nemá šanci uhodnout, že dvě
@@ -2062,6 +2075,7 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
     await zprava('dor.fond_nabidka_koupeno',
       { p1: (al && al.nazev) || '', p2: firma.company || firma.nick,
         p3: Math.round(na.podil * 100), p4: Math.round(na.cena) });
+    vzorekFondu(moje.aliance_id);
     console.log('[game] fond #' + moje.aliance_id + ': koupil ' + Math.round(na.podil * 100)
       + ' % ve firmě ' + firma.nick + ' za ' + na.cena);
     return res.json({ ok: true, podil: na.podil, cena: na.cena });
@@ -2125,6 +2139,7 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
       await tx.gameFondNavrh.update({ where: { id: n.id }, data: { stav: 'proveden' } });
     });
     console.log('[game] fond #' + moje.aliance_id + ': vyplatil ' + castka + ' členům');
+  vzorekFondu(moje.aliance_id);
     return res.json({ ok: true, vyplaceno: castka });
   }
 
@@ -2438,6 +2453,7 @@ router.post('/trade/prevzeti/:id/prodat', hrac, api(async (req, res) => {
   } catch (e) { if (SOUBEH.odpoved(e, res, stx(req))) return; throw e; }
   console.log('[game] převzetí #' + t.id + ': ' + req.player.nick + ' prodal '
     + Math.round(prodano * 100) + ' % za ' + zaplaceno + ' L$');
+  if (fond) vzorekFondu(fond.id);
   res.json({ ok: true, prodano, cena: zaplaceno });
 }));
 
