@@ -10917,6 +10917,27 @@ function akcieKartaHtml(f) {
     + esc(tx('akcie.podrobnosti')) + '</button></div>'
     + '</div>';
 }
+// Napojení karet. Stejné karty stojí na burze i v záložce Burza, takže
+// se napójí jednou a na obou místech stejně.
+function akcieNapoj(box) {
+  if (!box) return;
+  var smerem = function (atr, smer) {
+    [].forEach.call(box.querySelectorAll('[' + atr + ']'), function (b) {
+      b.onclick = function () { akcieTrhSheet(Number(b.getAttribute(atr)), smer); };
+    });
+  };
+  smerem('data-akcie-trh', null);
+  smerem('data-akcie-koupit', 'koupit');
+  smerem('data-akcie-prodat', 'prodat');
+  // Celá karta se dá rozkliknout k podrobnostem. Kliknutí na tlačítko uvnitř
+  // má ale svůj vlastní význam, takže se karta v tu chvíli neotvírá.
+  [].forEach.call(box.querySelectorAll('[data-akcie-karta]'), function (k) {
+    k.onclick = function (e) {
+      if (e.target && e.target.closest && e.target.closest('button')) return;
+      akcieTrhSheet(Number(k.getAttribute('data-akcie-karta')));
+    };
+  });
+}
 function akcieBurzaSheet() {
   if (AKCIE_SEZNAM == null) {
     sheet('<h3>📈 ' + esc(tx('akcie.burza')) + '</h3>'
@@ -10931,24 +10952,7 @@ function akcieBurzaSheet() {
         : '<p class="fine">' + esc(tx('akcie.nic_v_obehu')) + '</p>')
     + '<button class="btn sec" id="ab-zavrit" style="width:100%;margin-top:8px">'
     + esc(tx('hra.nechat_byt')) + '</button>');
-  var box = $('sheet-body');
-  [].forEach.call(box.querySelectorAll('[data-akcie-trh]'), function (b) {
-    b.onclick = function () { akcieTrhSheet(Number(b.getAttribute('data-akcie-trh'))); };
-  });
-  [].forEach.call(box.querySelectorAll('[data-akcie-koupit]'), function (b) {
-    b.onclick = function () { akcieTrhSheet(Number(b.getAttribute('data-akcie-koupit')), 'koupit'); };
-  });
-  [].forEach.call(box.querySelectorAll('[data-akcie-prodat]'), function (b) {
-    b.onclick = function () { akcieTrhSheet(Number(b.getAttribute('data-akcie-prodat')), 'prodat'); };
-  });
-  // Celá karta se dá rozkliknout k podrobnostem. Kliknutí na tlačítko uvnitř
-  // má ale svůj vlastní význam, takže se karta v tu chvíli neotvírá.
-  [].forEach.call(box.querySelectorAll('[data-akcie-karta]'), function (k) {
-    k.onclick = function (e) {
-      if (e.target && e.target.closest && e.target.closest('button')) return;
-      akcieTrhSheet(Number(k.getAttribute('data-akcie-karta')));
-    };
-  });
+  akcieNapoj($('sheet-body'));
   $('ab-zavrit').onclick = function () { AKCIE_KAM = null; closeSheet(); };
 }
 
@@ -10994,7 +10998,13 @@ function akcieTrhSheet(id, smer) {
     + akcieGraf(a.graf)
     + '<div class="kv"><span>' + esc(tx('akcie.moje_kusy')) + '</span><b class="'
     + (a.moje_kusy ? 'ok' : '') + '">' + tCislo(a.moje_kusy) + '</b></div>'
-    + (jenSmer ? '' : podrobnosti)
+    // I v obchodu musí být vidět strop toho směru: kolik fond ještě prodá,
+    // kolik vykoupí. Bez toho hráč zadá počet a dozví se to až z chybové hlášky.
+    + (jenSmer
+        ? '<div class="kv"><span>'
+          + esc(tx(smer === 'prodat' ? 'akcie.fond_vykoupi' : 'akcie.fond_jeste_proda'))
+          + '</span><b>' + tCislo(smer === 'prodat' ? a.vykoupi : a.volne) + '</b></div>'
+        : podrobnosti)
     + '<h4 style="margin:14px 0 2px">' + esc(tx('akcie.kolik')) + '</h4>'
     + '<label class="fld"><span>' + esc(tx('akcie.kusu')) + '</span>'
     + '<input id="ak-pocet" class="inp" type="number" inputmode="numeric" min="1" step="1" value="1"></label>'
@@ -11052,26 +11062,15 @@ function akcieTrhSheet(id, smer) {
   if ($('ak-prodat')) $('ak-prodat').onclick = function () { posli('prodat', this); };
 }
 
-// Karta na Burze. Vidí ji každý, i ten, kdo v žádném fondu není — o to
-// u akcií jde.
+// Karta na záložce Burza. Vidí ji každý, i ten, kdo v žádném fondu není — o to
+// u akcií jde. Kreslí se stejnou kartou jako burza pod ikonou na mapě, aby
+// hráč nemusel číst dvě různé podoby téhož.
 function akcieSeznamHtml() {
   var l = AKCIE_SEZNAM || [];
   if (!l.length) return '';
   return '<div class="card"><h3>📈 ' + esc(tx('akcie.nadpis')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 8px">' + esc(tx('akcie.popis')) + '</p>'
-    + l.map(function (f) {
-        return '<div class="trade">'
-          + '<div class="row"><b>' + esc(f.nazev) + '</b>'
-          + '<span><b class="ok">' + kcFull(f.cena) + '</b></span></div>'
-          + '<div class="row"><span class="muted small">' + esc(tx('akcie.ucetni')) + '</span>'
-          + '<span>' + kcFull(f.ucetni) + '</span></div>'
-          + (f.moje_kusy ? '<div class="row"><span class="muted small">'
-              + esc(tx('akcie.moje_kusy')) + '</span><span class="ok">'
-              + tCislo(f.moje_kusy) + '</span></div>' : '')
-          + '<div class="gcard-act"><button class="btn sm" data-akcie-trh="' + f.aliance_id + '">'
-          + esc(tx('akcie.otevrit_trh')) + '</button></div>'
-          + '</div>';
-      }).join('')
+    + l.map(akcieKartaHtml).join('')
     + '</div>';
 }
 
@@ -11951,9 +11950,7 @@ function paintBurza() {
     + (hotove.length ? sekce(esc(tx('drazba.uzavrene')), hotove, '') : '');
   bindAukce();
   bindFinance();
-  [].forEach.call(box.querySelectorAll('[data-akcie-trh]'), function (b) {
-    b.onclick = function () { akcieTrhSheet(Number(b.getAttribute('data-akcie-trh'))); };
-  });
+  akcieNapoj(box);
   if (MOJE_NABIDKY == null) loadFondNabidky(paintBurza);
   // Akcie vidí každý, i kdo v žádném fondu není — o to u nich jde.
   if (AKCIE_SEZNAM == null) loadAkcieSeznam(paintBurza);

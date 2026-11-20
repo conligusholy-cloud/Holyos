@@ -104,6 +104,11 @@ ok('a rovnou obě tlačítka', /data-akcie-koupit/.test(usekSeznam) && /data-akc
 ok('prodej je zhasnutý, dokud akcie nedržím',
   /f\.moje_kusy \? '' : ' disabled'/.test(usekSeznam));
 ok('karta se dá rozkliknout k podrobnostem', /data-akcie-karta/.test(usekSeznam));
+// Stejná karta na obou místech: pod ikonou na mapě i v záložce Burza. Dvě
+// různé podoby téhož by hráč četl jako dvě různé věci.
+ok('záložka Burza kreslí stejnou kartu', /l\.map\(akcieKartaHtml\)\.join\(''\)/.test(hra));
+ok('a napájí se jedním místem', /function akcieNapoj\(box\)/.test(hra)
+  && (hra.match(/akcieNapoj\(/g) || []).length >= 3);
 ok('kliknutí na tlačítko kartu neotevře',
   /closest\('button'\)\) return;/.test(seznam.slice(0, seznam.indexOf('function akcieTrhSheet'))));
 
@@ -112,6 +117,18 @@ const usekTrh = trh.slice(0, trh.indexOf('// Karta na Burze'));
 // Se zadaným směrem je to rovnou obchod: jedno tlačítko, žádné druhé.
 ok('se zadaným směrem je jen jedno tlačítko', /jenSmer\s*\n?\s*\?\s*'<button/.test(usekTrh));
 ok('a vede z něj cesta k podrobnostem', /id="ak-detail"/.test(usekTrh));
+// I v obchodu musí být vidět strop toho směru. Hráč jinak zadá počet a dozví
+// se až z chybové hlášky, že fond tolik kusů nemá nebo na ně nemá peníze.
+const vetev = (function () {
+  const i = usekTrh.indexOf('+ (jenSmer\n');
+  const j = usekTrh.indexOf(': podrobnosti)', i);
+  return i > 0 && j > i ? usekTrh.slice(i, j) : '';
+}());
+ok('větev se zadaným směrem se v kódu našla', !!vetev);
+ok('při prodeji je v obchodu vidět, kolik fond vykoupí',
+  /akcie\.fond_vykoupi/.test(vetev) && /a\.vykoupi/.test(vetev));
+ok('a při nákupu, kolik ještě prodá',
+  /akcie\.fond_jeste_proda/.test(vetev) && /a\.volne/.test(vetev));
 // Návrat. Zavřít se musí tam, odkud hráč přišel.
 ok('zavřít vede zpátky, ne na mapu', /\$\('ak-zavrit'\)\.onclick = akcieZpet/.test(usekTrh));
 const zpet = hra.slice(hra.indexOf('function akcieZpet'));
