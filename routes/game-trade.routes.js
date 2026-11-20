@@ -1418,6 +1418,19 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
     // nemusí ptát podruhé. Když tabulka ještě není, graf prostě nebude.
     HIST.proFond(moje.aliance_id).catch(() => []),
   ]);
+  // Kolik z držených podílů fondu měsíčně teče. Bez toho panel ukazoval, co
+  // fond koupil a za kolik, ale už ne, jestli to vůbec něco nese — a právě
+  // kvůli tomu se do fondu skládají peníze. Čte se to z posledního uloženého
+  // stavu té firmy, tedy ze stejného čísla, podle kterého se podíl o půlnoci
+  // herního měsíce doopravdy vyplácí.
+  const firmyFondu = new Map();
+  for (const e of drzene) {
+    if (firmyFondu.has(e.firma_id)) continue;
+    const f = await prisma.gamePlayer.findUnique({ where: { id: e.firma_id },
+      select: { state: true, dividenda_pct: true } }).catch(() => null);
+    firmyFondu.set(e.firma_id, { zbyde: Math.round(acct._zbydeMesicne(stavu(f)) || 0),
+      pct: f ? f.dividenda_pct : null });
+  }
   const p = FOND.podily(radky);
   const ids = p.map((x) => x.clen_id);
   const lide = ids.length ? await prisma.gamePlayer.findMany({
@@ -1445,8 +1458,15 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
         r.podil += e.podil || 0; r.cena += e.cena || 0;
         m.set(e.firma_id, r);
       });
-      return [...m.values()].map((r) => Object.assign(r, {
-        cena: Math.round(r.cena), vetsina: r.podil > PRAVA.VETSINA + 1e-9 }));
+      return [...m.values()].map((r) => {
+        const f = firmyFondu.get(r.firma_id) || {};
+        return Object.assign(r, {
+          cena: Math.round(r.cena), vetsina: r.podil > PRAVA.VETSINA + 1e-9,
+          // Kolik fondu z toho podílu teče měsíčně a jakou část zisku ta firma
+          // vůbec vyplácí — při nule nenese ani většinový podíl nic.
+          mesicne: DIVIDENDA.castka(f.zbyde || 0, r.podil, f.pct),
+          dividenda_pct: DIVIDENDA.platna(f.pct) });
+      });
     })(),
     nabidky: bezici.map((t) => ({ id: t.id, firma_nick: t.firma_nick,
       cena_za_pct: t.cena_za_pct, max_pct: t.max_pct, koupeno_pct: t.koupeno_pct,

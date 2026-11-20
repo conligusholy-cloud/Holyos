@@ -3610,5 +3610,8 @@
   "veta.fond_nabidka_popis_okno": "Du verkaufst ein Stück DEINER Firma. Der Fonds entscheidet per Abstimmung und kann dir statt einer Zusage einmal einen anderen Preis oder Prozentsatz vorschlagen.",
   "veta.fond_protinavrh_rada": "Es geht nur einmal. Die Stimmen werden gelöscht und das Angebot geht an den Inhaber zurück, der es dann annimmt oder ablehnt.",
   "veta.fond_puvodne": "Ursprünglich hast du {cislo:p1} % für {penize:p2} angeboten.",
-  "veta.od_data_techniku": "Ab {p1} laufen {cislo:p2} — was du entfernt hast, läuft bis zum Ende des bezahlten Zeitraums."
+  "veta.od_data_techniku": "Ab {p1} laufen {cislo:p2} — was du entfernt hast, läuft bis zum Ende des bezahlten Zeitraums.",
+  "fond.nese_mesicne": "Bringt monatlich",
+  "veta.fond_drzi_nese": "{penize:p1} monatlich · die Firma schüttet {cislo:p2} % des Gewinns aus",
+  "veta.fond_drzi_nenese": "Noch nichts — die Firma schüttet {cislo:p1} % des Gewinns aus"
 }

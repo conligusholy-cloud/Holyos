@@ -3617,5 +3617,8 @@
   "veta.fond_nabidka_popis_okno": "Sprzedajesz część SWOJEJ firmy. Fundusz decyduje w głosowaniu i zamiast przyjąć może raz zaproponować inną cenę albo inny procent.",
   "veta.fond_protinavrh_rada": "Można ją złożyć raz. Głosy zostają wyzerowane, a oferta wraca do właściciela, który ją przyjmie albo odrzuci.",
   "veta.fond_puvodne": "Pierwotnie oferowałeś {cislo:p1} % za {penize:p2}.",
-  "veta.od_data_techniku": "Od {p1} będzie ich {cislo:p2} — to, co zdjąłeś, działa do końca opłaconego okresu."
+  "veta.od_data_techniku": "Od {p1} będzie ich {cislo:p2} — to, co zdjąłeś, działa do końca opłaconego okresu.",
+  "fond.nese_mesicne": "Przynosi miesięcznie",
+  "veta.fond_drzi_nese": "{penize:p1} miesięcznie · firma wypłaca {cislo:p2} % zysku",
+  "veta.fond_drzi_nenese": "Na razie nic — firma wypłaca {cislo:p1} % zysku"
 }

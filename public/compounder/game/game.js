@@ -9450,12 +9450,24 @@ function fondVnitrek() {
   // Co už fond koupil. Bez toho člen neviděl, kam peníze z pokladny odešly.
   if ((f.drzi || []).length) {
     h += '<h4 style="margin:12px 0 4px">' + esc(tx('fond.drzi')) + '</h4>';
+    var neseCelkem = 0;
     f.drzi.forEach(function (x) {
+      neseCelkem += Number(x.mesicne) || 0;
+      var pct = Math.round((x.dividenda_pct == null ? 1 : x.dividenda_pct) * 100);
       h += '<div class="row"><span><b>' + esc(x.firma_nick || '') + '</b> \u00b7 '
         + procentaPodilu(x.podil)
         + (x.vetsina ? ' <i class="pill good">' + esc(tx('fond.vetsina')) + '</i>' : '')
-        + '</span><span class="muted small">' + kcFull(x.cena) + '</span></div>';
+        + '</span><span class="muted small">' + kcFull(x.cena) + '</span></div>'
+        // Za kolik se to koupilo je minulost; člena zajímá, co to nese teď.
+        // Nula se neschovává: většinový podíl ve firmě, která nevyplácí nic,
+        // je právě to, co má být vidět.
+        + '<p class="fine' + ((Number(x.mesicne) || 0) > 0 ? ' ok' : '') + '">'
+        + ((Number(x.mesicne) || 0) !== 0
+            ? tx('veta.fond_drzi_nese', { p1: x.mesicne, p2: pct })
+            : tx('veta.fond_drzi_nenese', { p1: pct })) + '</p>';
     });
+    h += '<div class="kv souhrn"><span>' + esc(tx('fond.nese_mesicne')) + '</span><b class="'
+      + (neseCelkem > 0 ? 'ok' : '') + '">' + kcFull(neseCelkem) + '</b></div>';
   }
 
   // Co už fond vyvěsil. Hlasování je jedna věc, bežící nabídka druhá — a do
