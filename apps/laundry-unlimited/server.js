@@ -536,9 +536,11 @@ app.get('/login', async (req, res) => {
   res.send(loginPage(loginLang(req)));
 });
 // Odeslání odkazu: e-mail týmu → odkaz do administrace, e-mail partnera → odkaz do portálu. Odpověď je pokaždé stejná.
+let luMailErr = '';
 async function sendAdminLink(email, lang, kind) {
+  luMailErr = '';
   try {
-    if (!LU_SECRET || !USER_KEY) return false;
+    if (!LU_SECRET || !USER_KEY) { luMailErr = 'Na serveru Laundry Unlimited chybí LU_SSO_SECRET'; return false; }
     const cs = lang === 'cs', setup = kind === 'setup';
     const row = setup ? (await q('SELECT name, password_hash FROM admin_users WHERE lower(email)=$1', [email]).catch(() => ({ rows: [] }))).rows[0] : null;
     const tok = setup
@@ -554,9 +556,9 @@ async function sendAdminLink(email, lang, kind) {
     const label = setup ? (cs ? 'Nastavit heslo' : 'Set password') : (cs ? 'Otevřít administraci' : 'Open administration');
     const resp = await fetch(HOLYOS_URL + '/api/auth/lu/mail', { method: 'POST', headers: { Authorization: 'Bearer ' + svc, 'Content-Type': 'application/json' },
       body: JSON.stringify({ to: email, subject, body, link, linkLabel: label, lang: cs ? 'cs' : 'en' }), signal: AbortSignal.timeout(20000) });
-    if (!resp.ok) { console.warn('[lu] admin mail ' + resp.status); return false; }
+    if (!resp.ok) { let d = ''; try { d = (await resp.json()).error || ''; } catch (e) { /* bez těla */ } luMailErr = 'HolyOS odpovědělo ' + resp.status + (d ? ': ' + d : ''); console.warn('[lu] admin mail ' + luMailErr); return false; }
     return true;
-  } catch (e) { console.warn('[lu] admin mail:', e.message); return false; }
+  } catch (e) { luMailErr = e.message; console.warn('[lu] admin mail:', e.message); return false; }
 }
 // Nastavení hesla z pozvánky (odkaz platí 7 dní, po nastavení hesla přestane fungovat)
 function setupPage(t, err) {
@@ -807,7 +809,7 @@ const um=document.getElementById('um');
 // Okno se zavírá jen křížkem (ne kliknutím mimo ani klávesou Esc)
 function modal(title,html,onSubmit,btn){const o=document.createElement('div');o.className='mov';o.innerHTML='<div class="mbox"><button type="button" class="mx" aria-label="Zavřít">✕</button><h3>'+title+'</h3><form>'+html+'<div class="mer"></div><div style="margin-top:14px"><button class="btn" type="submit">'+(btn||'Uložit')+'</button></div></form></div>';document.body.appendChild(o);
 o.querySelector('.mx').onclick=()=>o.remove();const f=o.querySelector('form'),er=o.querySelector('.mer');const fi=f.querySelector('input');if(fi)fi.focus();
-f.onsubmit=async ev=>{ev.preventDefault();er.textContent='';const d={};f.querySelectorAll('input').forEach(i=>{d[i.name]=i.value});const j=await onSubmit(d);if(j.ok){if(j.sent===false)alert('Uživatel byl vytvořen, ale e-mail se nepodařilo odeslat. Použijte tlačítko „Pozvánka / nové heslo“ v seznamu.');location.reload()}else er.textContent=j.error||'Chyba'};}
+f.onsubmit=async ev=>{ev.preventDefault();er.textContent='';const d={};f.querySelectorAll('input').forEach(i=>{d[i.name]=i.value});const j=await onSubmit(d);if(j.ok){if(j.sent===false)alert('Uživatel byl vytvořen, ale e-mail se nepodařilo odeslat ('+(j.error||'neznámá chyba')+'). Použijte tlačítko „Pozvánka / nové heslo“ v seznamu.');location.reload()}else er.textContent=j.error||'Chyba'};}
 const pwf='<label>Heslo * (min. 8 znaků)</label><input name="password" type="password" minlength="8" maxlength="200" autocomplete="new-password" required>';
 document.getElementById('unew').onclick=()=>{modal('Vytvořit uživatele administrace','<div class="mrow"><div><label>Jméno *</label><input name="first_name" maxlength="60" required autocomplete="off"></div><div><label>Příjmení *</label><input name="last_name" maxlength="60" required autocomplete="off"></div></div><label>E-mail *</label><input name="email" type="email" maxlength="160" required autocomplete="off"><label>Telefon *</label><input name="phone" type="tel" maxlength="40" required autocomplete="off">'+'<p class="mut" style="margin:14px 0 0">Uživateli přijde e-mail s odkazem — při prvním přihlášení si sám vymyslí heslo.</p>',d=>call('/admin/api/users',d),'Vytvořit a poslat pozvánku')};
 document.addEventListener('click',async e=>{const b=e.target.closest('.ulink,.utog,.udel,.upw');if(!b)return;const id=b.dataset.id;
@@ -823,7 +825,7 @@ app.post('/admin/api/users', requireAdmin, express.json({ limit: '2kb' }), async
   if (!first || !last) return res.json({ ok: false, error: 'Vyplňte jméno i příjmení' });
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.json({ ok: false, error: 'Neplatný e-mail' });
   if (phone.replace(/\D/g, '').length < 7) return res.json({ ok: false, error: 'Vyplňte telefonní číslo' });
-  try { await q('INSERT INTO admin_users (email, name, first_name, last_name, phone) VALUES ($1,$2,$3,$4,$5)', [email, first + ' ' + last, first, last, phone]); res.json({ ok: true, sent: await sendAdminLink(email, 'cs', 'setup') }); }
+  try { await q('INSERT INTO admin_users (email, name, first_name, last_name, phone) VALUES ($1,$2,$3,$4,$5)', [email, first + ' ' + last, first, last, phone]); { const sent = await sendAdminLink(email, 'cs', 'setup'); res.json({ ok: true, sent, error: sent ? undefined : luMailErr }); } }
   catch (e) { res.json({ ok: false, error: /unique|duplicate/i.test(e.message) ? 'Tento e-mail už je v seznamu' : 'Uložení se nepovedlo' }); }
 });
 app.post('/admin/api/users/:id(\\d+)', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
@@ -841,7 +843,7 @@ app.post('/admin/api/users/:id(\\d+)/password', requireAdmin, express.json({ lim
 app.post('/admin/api/users/:id(\\d+)/link', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   const r = (await q('SELECT * FROM admin_users WHERE id=$1 AND active', [req.params.id])).rows[0];
   if (!r) return res.json({ ok: false, error: 'Uživatel nenalezen nebo je zakázán' });
-  res.json({ ok: await sendAdminLink(String(r.email).toLowerCase(), 'cs', 'setup') });
+  { const ok = await sendAdminLink(String(r.email).toLowerCase(), 'cs', 'setup'); res.json({ ok, error: ok ? undefined : 'E-mail se nepodařilo odeslat — ' + luMailErr }); }
 });
 app.post('/admin/api/users/:id(\\d+)/delete', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   const r = (await q('SELECT email FROM admin_users WHERE id=$1', [req.params.id])).rows[0];
