@@ -140,5 +140,26 @@ function prodat(stav, pocet) {
     podil_po: hodnotaPo > 0 ? Math.min(PODIL_MAX, akcionariPo / hodnotaPo) : 0 };
 }
 
-module.exports = { vydani, ucetni, dilClenu, cenaPo, castkaZa, koupit, prodat,
+// Kolik peněz fondu akcie doopravdy přinesly.
+//
+// Počítá se jen to, kde protistranou byl FOND. Obchod bez prodávajícího jsou
+// nově vydané kusy — peníze šly do pokladny. Obchod bez kupujícího je zpětný
+// výkup — peníze z pokladny odešly. Obchod dvou hráčů mezi sebou, takové
+// řádky zůstaly z dřívějšího pořadníku, fondem nehnul ani o korunu a nesmí
+// se počítat na žádnou stranu.
+//
+// Vrací se hrubé i čisté číslo: hrubé by lhalo fondu, ze kterého akcionáři
+// zase vystoupili.
+function kapital(obchody) {
+  let vybrano = 0, vyplaceno = 0;
+  (obchody || []).forEach((o) => {
+    if (!o) return;
+    const castka = castkaZa(penize(o.cena), kusy(o.pocet));
+    if (o.prodavajici_id == null) vybrano += castka;
+    else if (!(cislo(o.kupujici_id) > 0)) vyplaceno += castka;
+  });
+  return { vybrano, vyplaceno, kapital: vybrano - vyplaceno };
+}
+
+module.exports = { vydani, ucetni, dilClenu, cenaPo, castkaZa, koupit, prodat, kapital,
   CENA_MIN, CENA_MAX, POCET_MIN, POCET_MAX, PODIL_MAX, CITLIVOST };

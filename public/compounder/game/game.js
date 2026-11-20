@@ -9577,6 +9577,33 @@ function fondVnitrek() {
         + kcFull(f.zamceno) + '</b></div>'
         + '<div class="kv"><span>' + esc(tx('fond.volne')) + '</span><b>' + kcFull(f.volne) + '</b></div>'
       : '');
+
+  // Akcie fondu. Vedle vkladu členů stojí kapitál od akcionářů a člen to musí
+  // vidět tady, ne až na burze: je to jeho fond, který se tím zčásti prodal.
+  if (f.akcie_celkem > 0) {
+    var smA = smerVynosu(f.akcie_cena,
+      (f.akcie_graf || []).length ? f.akcie_graf[0].cena : null);
+    h += '<h4 style="margin:12px 0 2px">' + esc(tx('fond.akcie_nadpis')) + '</h4>'
+      + '<div class="kv"><span>' + esc(tx('akcie.cena_ted')) + '</span><b class="ok">'
+      + kcFull(f.akcie_cena)
+      + (smA ? ' ' + sipkaHtml(smA) + '<span class="muted small">'
+          + kcFull(Math.abs(smA.rozdil)) + '</span>' : '') + '</b></div>'
+      + (akcieKrivka(f.akcie_graf, true)
+          || '<p class="fine">' + esc(tx('akcie.bez_obchodu')) + '</p>')
+      + '<div class="kv"><span>' + esc(tx('akcie.vydano')) + '</span><b>'
+      + tx('veta.fond_akcie_vydano_z', { p1: f.akcie_vydano, p2: f.akcie_celkem })
+      + ' · ' + procentaPodilu(f.akcie_podil) + esc(tx('akcie.fondu')) + '</b></div>'
+      // To hlavní číslo: kolik peněz fondu akcie doopravdy přinesly. Vybrané
+      // mínus to, co se zpátky vykoupilo — hrubé číslo by lžalo tomu, kdo z fondu
+      // zase vystoupil.
+      + '<div class="kv souhrn"><span>' + esc(tx('fond.akcie_kapital')) + '</span><b class="ok">'
+      + kcFull(f.akcie_kapital) + '</b></div>'
+      + '<p class="fine">' + tx('veta.fond_akcie_tok',
+          { p1: f.akcie_vybrano, p2: f.akcie_vyplaceno }) + '</p>'
+      + '<div class="gcard-act"><button class="btn sec sm" id="fond-burza">'
+      + esc(tx('fond.akcie_burza')) + '</button></div>';
+  }
+
   if (ja) {
     h += '<div class="kv"><span>' + esc(tx('fond.muj_dil')) + '</span><b class="ok">'
       + procentaPodilu(ja.podil) + ' \u00b7 ' + kcFull(ja.hodnota) + '</b></div>';
@@ -9925,6 +9952,15 @@ function bindFond(kde) {
   // globální hledání by tlačítka navazovalo na schovanou kopii.
   var v = function (id) { return box.querySelector('#' + id); };
   if (v('fond-vlozit')) v('fond-vlozit').onclick = fondVlozitSheet;
+  // Z fondu se na burzu chodí a zpátky do fondu se vrací. fondZavriAZnovu
+  // drží cíl návratu přes zavření překryvu a načte fond znovu — po obchodu
+  // už kapitál z akcií i cena sedí na nový stav.
+  if (v('fond-burza')) {
+    v('fond-burza').onclick = function () {
+      AKCIE_KAM = fondZavriAZnovu;
+      akcieTrhSheet(FOND.fond.aliance_id);
+    };
+  }
   if (v('fond-prevest')) v('fond-prevest').onclick = fondPrevestSheet;
   if (v('fond-navrh')) v('fond-navrh').onclick = fondNavrhSheet;
   [].forEach.call(box.querySelectorAll('[data-fond-hlas]'), function (b) {
@@ -10851,9 +10887,14 @@ function akcieSipka(f) {
 // ─── Burza akcií ─────────────────────────────────────────────────────────────
 // Vlastní ikona na mapě. Co je právě v oběhu, u každé akcie graf, dnešní cena
 // a rovnou tlačítka koupit/prodat. Podrobnosti jsou o klik dál.
-var AKCIE_KAM = null;        // 'burza' = zavřením obchodu se vracíme do seznamu
+// Kam se obchod s akciemi vrací, když ho hráč zavře. Je to funkce, ne jméno
+// místa: otevřít se dá ze seznamu burzy i z panelu fondu a do obojího se musí
+// vracet tam, odkud hráč přišel.
+var AKCIE_KAM = null;
 function akcieZpet() {
-  if (AKCIE_KAM === 'burza') { AKCIE_KAM = null; return akcieBurzaSheet(); }
+  var kam = AKCIE_KAM;
+  AKCIE_KAM = null;
+  if (typeof kam === 'function') return kam();
   closeSheet();
 }
 function akcieKartaHtml(f) {
@@ -10882,7 +10923,7 @@ function akcieBurzaSheet() {
       + '<p class="muted small">' + esc(tx('hra.nacitam')) + '</p>');
     return loadAkcieSeznam(akcieBurzaSheet);
   }
-  AKCIE_KAM = 'burza';
+  AKCIE_KAM = akcieBurzaSheet;
   var l = AKCIE_SEZNAM || [];
   sheet('<h3>📈 ' + esc(tx('akcie.burza')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">' + esc(tx('akcie.burza_popis')) + '</p>'
@@ -10972,7 +11013,7 @@ function akcieTrhSheet(id, smer) {
           + esc(tx('akcie.podrobnosti')) + '</button>'
         : '')
     + '<button class="btn sec" id="ak-zavrit" style="width:100%;margin-top:8px">'
-    + esc(AKCIE_KAM === 'burza' ? tx('hra.zpet') : tx('hra.nechat_byt')) + '</button>');
+    + esc(AKCIE_KAM ? tx('hra.zpet') : tx('hra.nechat_byt')) + '</button>');
 
   var kusu = function () {
     return Math.max(0, Math.floor(Number(($('ak-pocet') || {}).value) || 0));

@@ -108,6 +108,27 @@ ok('když výplata spolkne celý fond, díl je nula, ne zápor',
   naNulu.ok === true && naNulu.podil_po === 0);
 ok('a nedělí se nulou', Number.isFinite(naNulu.podil_po));
 
+// ─── Kapitál z akcií ──────────────────────────────────────────────
+// Kolik peněz fondu akcie doopravdy přinesly. Člen se podle toho dívá, jestli
+// se vyplatilo prodat kus fondu cízím lidem — nesmí se mu tedy do čísla připočíst
+// nic, co fondem neprošlo.
+const kap = A.kapital([
+  { pocet: 10, cena: 100000, kupujici_id: 5, prodavajici_id: null },  // fond prodal nové kusy
+  { pocet: 2, cena: 90000, kupujici_id: 0, prodavajici_id: 5 },       // fond je vykoupil zpátky
+  { pocet: 3, cena: 95000, kupujici_id: 7, prodavajici_id: 5 },       // hráč hráči, starý pořadník
+]);
+ok('vybralo se to, co fond prodal', kap.vybrano === 1000000);
+ok('vyplatilo se to, co fond vykoupil', kap.vyplaceno === 180000);
+ok('obchod dvou hráčů mezi sebou fondem nehnul', kap.kapital === 820000);
+// Hrubé číslo by lhalo fondu, ze kterého akcionáři zase vystoupili.
+const vrat = A.kapital([
+  { pocet: 10, cena: 100000, kupujici_id: 5, prodavajici_id: null },
+  { pocet: 10, cena: 100000, kupujici_id: 0, prodavajici_id: 5 },
+]);
+ok('co se vrátilo, už kapitál není', vrat.kapital === 0 && vrat.vybrano === 1000000);
+ok('prázdno je nula', A.kapital([]).kapital === 0 && A.kapital(null).kapital === 0);
+ok('nesmysly nic neshodí', A.kapital([null, {}, { pocet: 'x', cena: 'y' }]).kapital === 0);
+
 // ─── Zapojení ────────────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');

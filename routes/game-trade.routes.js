@@ -1429,7 +1429,7 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
   if (!moje) return res.json({ ok: true, fond: null });
   const REZ = require('../services/game/rezervace');
   const HIST = require('../services/game/fond-historie');
-  const [al, radky, nabidky, drzene, historie, drzbyPred] = await Promise.all([
+  const [al, radky, nabidky, drzene, historie, drzbyPred, akcieObchody] = await Promise.all([
     prisma.gameAliance.findUnique({ where: { id: moje.aliance_id } }),
     vkladyFondu(moje.aliance_id),
     // Co má fond vyvěšené. Bez toho člen neviděl, kde leží peníze, které
@@ -1444,7 +1444,17 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
     HIST.proFond(moje.aliance_id).catch(() => []),
     // Poslední zapsaný výnos u každého podílu — proti němu se kreslí šipka.
     HIST.drzbyPred(moje.aliance_id).catch(() => new Map()),
+    // Obchody s akciemi fondu. Z nich je graf ceny i to, kolik peněz fondu
+    // akcie doopravdy přinesly — člen to jinak nemá odkud vědět.
+    prisma.gameAkcieObchod.findMany({ where: { aliance_id: moje.aliance_id },
+      orderBy: { kdy: 'asc' }, take: 2000,
+      select: { kdy: true, cena: true, pocet: true,
+        kupujici_id: true, prodavajici_id: true } }).catch(() => []),
   ]);
+  // Kolik fondu akcie vynesly. Počítá to services/game/akcie — je to otázka
+  // o skutečných penězích členů a patří k ostatnímu počítání akcií, ne do
+  // routy.
+  const akcieKap = require('../services/game/akcie').kapital(akcieObchody);
   // Kolik z držených podílů fondu měsíčně teče. Bez toho panel ukazoval, co
   // fond koupil a za kolik, ale už ne, jestli to vůbec něco nese — a právě
   // kvůli tomu se do fondu skládají peníze. Čte se to z posledního uloženého
@@ -1477,6 +1487,14 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
     hodnota_fondu: await hodnotaFondu(moje.aliance_id),
     akcie_vydano: Math.max(0, (al && al.akcie_vydano) || 0),
     akcie_podil: Math.max(0, (al && al.akcie_podil) || 0),
+    akcie_celkem: Math.max(0, (al && al.akcie_celkem) || 0),
+    akcie_cena: Math.max(0, Math.round((al && al.akcie_cena) || 0)),
+    // Kapitál z akcií: co se vybralo, minus co se zpátky vykoupilo. Tohle
+    // je ta částka, kterou do fondu přinesli akcionáři místo členů.
+    akcie_vybrano: akcieKap.vybrano,
+    akcie_vyplaceno: akcieKap.vyplaceno,
+    akcie_kapital: akcieKap.kapital,
+    akcie_graf: akcieObchody.slice(-30).map((o) => ({ kdy: o.kdy, cena: o.cena })),
     vklad_min: VKLAD_MIN,
     zamceno: Math.round(zamceno), volne: Math.round(hodnota - zamceno),
     historie,

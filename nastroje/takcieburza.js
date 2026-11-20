@@ -115,8 +115,13 @@ ok('a vede z něj cesta k podrobnostem', /id="ak-detail"/.test(usekTrh));
 // Návrat. Zavřít se musí tam, odkud hráč přišel.
 ok('zavřít vede zpátky, ne na mapu', /\$\('ak-zavrit'\)\.onclick = akcieZpet/.test(usekTrh));
 const zpet = hra.slice(hra.indexOf('function akcieZpet'));
-ok('a ze seznamu se vrací do seznamu',
-  /AKCIE_KAM === 'burza'[\s\S]{0,80}akcieBurzaSheet\(\)/.test(zpet.slice(0, 400)));
+// Cíl návratu je funkce, ne jméno místa: obchod se otevírá ze seznamu burzy
+// i z panelu fondu a do obojího se musí vracet tam, odkud hráč přišel.
+ok('návrat se volá, když je kam', /typeof kam === 'function'\) return kam\(\)/.test(zpet.slice(0, 400)));
+ok('a zahodí se, ať nezbyde na příště',
+  /var kam = AKCIE_KAM;\s*\n\s*AKCIE_KAM = null;/.test(zpet.slice(0, 400)));
+ok('seznam burzy se jako cíl návratu nastavuje',
+  /AKCIE_KAM = akcieBurzaSheet;/.test(hra));
 ok('zavřené okno návratové místo zahodí',
   /function closeSheet\(\) \{[^}]*AKCIE_KAM = null/.test(hra));
 // Po obchodu je seznam zastaralý — cena i počty se pohnuly.
@@ -132,6 +137,31 @@ ok('graf jde od nejstaršího obchodu', /obchody\.slice\(\)\.reverse\(\)/.test(u
 ok('a nese cenu, proti které se šipka měří',
   /cena_drive: graf\.length \? graf\[0\]\.cena : null/.test(usekR));
 ok('bez obchodu je null, ne nula', !/cena_drive: graf\.length \? graf\[0\]\.cena : 0/.test(usekR));
+
+// ─── Akcie v panelu fondu ────────────────────────────────────────
+// Člen vidí vklady členů. Vedle nich stojí kapitál od akcionářů a cena, za
+// kterou se jeho fond prodává — bez toho mu z panelu chíbí půl příběhu.
+const vnitrek = hra.slice(hra.indexOf('function fondVnitrek'));
+const usekF = vnitrek.slice(0, vnitrek.indexOf('var FOND_KAM'));
+ok('panel fondu ukazuje kapitál z akcií',
+  /fond\.akcie_kapital[\s\S]{0,120}kcFull\(f\.akcie_kapital\)/.test(usekF));
+ok('a graf ceny akcie', /akcieKrivka\(f\.akcie_graf, true\)/.test(usekF));
+ok('i dnešní cenu', /kcFull\(f\.akcie_cena\)/.test(usekF));
+ok('rozdíl mezi vybraným a vykoupeným je vidět',
+  /f\.akcie_vybrano[\s\S]{0,60}f\.akcie_vyplaceno/.test(usekF));
+// Fond, který akcie nevydal, nemá co ukazovat — řádek s nulou nikomu nic neřekne.
+ok('fond bez akcií blok nemá', /if \(f\.akcie_celkem > 0\) \{/.test(usekF));
+ok('z fondu vede cesta na burzu', /id="fond-burza"/.test(usekF));
+ok('a z burzy zpátky do fondu',
+  /AKCIE_KAM = fondZavriAZnovu;/.test(hra));
+
+// Co posílá server do panelu fondu.
+const fondR = routy.slice(routy.indexOf("router.get('/trade/aliance/fond'"));
+const usekFR = fondR.slice(0, 6000);
+ok('fond nese kapitál z akcií', /akcie_kapital: akcieKap\.kapital/.test(usekFR));
+ok('a graf ceny', /akcie_graf: akcieObchody\.slice\(-30\)/.test(usekFR));
+ok('kapitál počítá služba, ne routa',
+  /require\('\.\.\/services\/game\/akcie'\)\.kapital\(akcieObchody\)/.test(usekFR));
 
 console.log(chyb ? '\n' + chyb + ' nesedí' : '\nSedí.');
 process.exit(chyb ? 1 : 0);

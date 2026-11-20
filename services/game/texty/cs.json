@@ -3865,5 +3865,10 @@
   "akcie.podrobnosti": "Podrobnosti",
   "akcie.fond_vykoupi": "Fond vykoupí",
   "akcie.posledni_obchody": "Poslední obchody",
-  "akcie.bez_obchodu": "Zatím se neobchodovalo."
+  "akcie.bez_obchodu": "Zatím se neobchodovalo.",
+  "fond.akcie_nadpis": "Akcie fondu",
+  "fond.akcie_kapital": "Kapitál z akcií",
+  "fond.akcie_burza": "Otevřít burzu",
+  "veta.fond_akcie_vydano_z": "{cislo:p1} z {cislo:p2}",
+  "veta.fond_akcie_tok": "Za akcie se vybralo {penize:p1}, zpátky se jich vykoupilo za {penize:p2}."
 }
