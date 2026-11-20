@@ -1068,7 +1068,10 @@ function serveGamePage(req, res) {
   try {
     const js = fs.statSync(path.join(dir, 'game.js')).mtimeMs;
     const css = fs.statSync(path.join(dir, 'game.css')).mtimeMs;
-    v = String(Math.round(Math.max(js, css)));
+    // Do verze patří i katalog textů — jinak telefon vezme nový game.js se starým
+    // katalogem z mezipaměti a místo textů ukáže klíče (fond.nabidnout_podil…).
+    let tx = 0; try { tx = fs.statSync(path.join(__dirname, 'services', 'game', 'texty', 'cs.json')).mtimeMs; } catch (e) { /* nevadí */ }
+    v = String(Math.round(Math.max(js, css, tx)));
   } catch (e) { /* když se čas nepovede zjistit, stránku pošleme beze změny */ }
   fs.readFile(path.join(dir, 'index.html'), 'utf8', async (err, html) => {
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -1076,7 +1079,8 @@ function serveGamePage(req, res) {
     // Náhled sdíleného odkazu (Facebook, WhatsApp…): personalizovaná pozvánka od hráče z ?ref=
     let og = '';
     try { og = await require('./services/game/pozvanka').metaZnacky(req.query.ref, 'https://' + reqHostname(req)); } catch (e) { og = ''; }
-    let out = html.replace('/game/game.css', '/game/game.css?v=' + v).replace('/game/game.js', '/game/game.js?v=' + v);
+    let out = html.replace('/game/game.css', '/game/game.css?v=' + v).replace('/game/game.js', '/game/game.js?v=' + v)
+      .replace('/game/texty.js"', '/game/texty.js?v=' + v + '"').replace('/game/texty-cs.js"', '/game/texty-cs.js?v=' + v + '"');
     if (og) out = out.replace(/<meta property="og:title"[^>]*>\s*/, '').replace('</head>', og + '\n</head>');
     res.type('html').send(out);
   });

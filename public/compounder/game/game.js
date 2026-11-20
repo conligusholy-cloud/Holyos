@@ -8082,7 +8082,7 @@ function strukturaSheet(id) {
     if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_13')), 'err');
     var d = r.j;
     var radek = function (x) {
-      return '<div class="area-item struk-r" data-struk="' + x.id + '">'
+      return '<div class="area-item struk-r"' + (x.id ? ' data-struk="' + x.id + '"' : '') + '>'
         + '<div style="display:flex;align-items:center;gap:10px;min-width:0">'
         + (x.znak ? znakSvg(x.znak, 26) : '<i class="znak-mezera"></i>')
         + '<div style="min-width:0"><div class="nm">' + esc(x.firma) + '</div>'

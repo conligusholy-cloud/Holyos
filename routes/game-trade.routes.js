@@ -2550,6 +2550,7 @@ router.post('/trade/pujcka/:id/splatit', hrac, api(async (req, res) => {
 // ty jsou věc těch dvou, co se domluvili.
 router.get('/trade/struktura/:id', hrac, api(async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(404).json({ error: stx(req)('server.takovy_hrac_tu_neni_3') });
   const p = await prisma.gamePlayer.findUnique({ where: { id },
     select: { id: true, nick: true, company: true, disabled: true, hodnost: true } });
   if (!p || p.disabled) return res.status(404).json({ error: stx(req)('server.takovy_hrac_tu_neni_3') });
@@ -2565,7 +2566,14 @@ router.get('/trade/struktura/:id', hrac, api(async (req, res) => {
       select: { spot_id: true, name: true, model: true, area_key: true, lat: true, lon: true },
       orderBy: [{ area_key: 'asc' }, { spot_id: 'asc' }], take: 60 }),
   ]);
-  const ids = Array.from(new Set(vMe.map((e) => e.investor_id).concat(jinde.map((e) => e.firma_id))));
+  // Podíl může držet i fond (investor_id je prázdné, vyplněné fond_id) — null do dotazu nesmí, shodil by ho.
+  const ids = Array.from(new Set(vMe.map((e) => e.investor_id).concat(jinde.map((e) => e.firma_id)))).filter((i) => Number.isInteger(i));
+  const fondIds = Array.from(new Set(vMe.filter((e) => !e.investor_id && e.fond_id).map((e) => e.fond_id)));
+  const fondy = new Map();
+  if (fondIds.length) {
+    (await prisma.gameAliance.findMany({ where: { id: { in: fondIds } }, select: { id: true, nazev: true } }).catch(() => []))
+      .forEach((a) => fondy.set(a.id, a.nazev));
+  }
   const nazvy = new Map();
   if (ids.length) {
     const lide = await prisma.gamePlayer.findMany({ where: { id: { in: ids } },
@@ -2581,6 +2589,12 @@ router.get('/trade/struktura/:id', hrac, api(async (req, res) => {
     const m = new Map();
     rows.forEach((e) => {
       const i = e[klic];
+      // Držitelem je fond: vlastní řádek, bez odkazu na hráče
+      if (i == null && klic === 'investor_id' && e.fond_id) {
+        const k = 'fond:' + e.fond_id, nazev = fondy.get(e.fond_id) || e.investor_nick || '?';
+        const f = m.get(k) || { id: null, fond: true, podil: 0, smluv: 0, nick: nazev, firma: nazev, znak: null };
+        f.podil += e.podil; f.smluv++; m.set(k, f); return;
+      }
       const x = m.get(i) || { id: i, podil: 0, smluv: 0,
         nick: kdo(i).nick, firma: kdo(i).firma, znak: kdo(i).znak };
       x.podil += e.podil; x.smluv++;
