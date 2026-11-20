@@ -10,6 +10,11 @@ const { prisma } = require('../../config/database');
 const { computePrevMonthRevenue } = require('./kiosk-revenue');
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+// Odkaz „Výpočet nesedí" v e-mailu — podepsaný token na id podkladu (bez přihlášení)
+const crypto = require('crypto');
+const disputeSecret = () => process.env.RENT_DISPUTE_SECRET || process.env.JWT_SECRET || 'holyos-rent-dispute';
+function disputeToken(id) { return crypto.createHmac('sha256', disputeSecret()).update('rent-dispute:' + id).digest('hex').slice(0, 32); }
+function disputeUrl(id) { return (process.env.PUBLIC_BASE_URL || 'https://app.holyos.cz') + '/api/compounder/rent-dispute/' + id + '?t=' + disputeToken(id); }
 
 // ─── Fakturace v cizí měně (např. EUR pro zahraniční subjekt) ─────────────────
 // Výpočet podkladu zůstává v Kč; výsledné nájemné se přepočte aktuálním kurzem ČNB (Kč za 1 jednotku měny).
@@ -259,7 +264,8 @@ async function mailFrom() {
 function mailText(st, contract, test) {
   const cur = st.currency || 'CZK'; const f = (n) => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + cur;
   const rent = Number(st.rent) || 0;
-  const hi = contract && contract.contact_name ? 'Dobrý den, ' + String(contract.contact_name).split(' ')[0] + ',' : 'Dobrý den,';
+  let voc = ''; try { voc = contract && contract.contact_name ? require('../vocative').vocativeFirstName(contract.contact_name) : ''; } catch (e) { voc = ''; }
+  const hi = voc ? 'Dobrý den, ' + voc + ',' : 'Dobrý den,';
   return (test ? 'TESTOVACÍ E-MAIL — takto bude vypadat zpráva pro kompetentní osobu. Podklad v příloze je ukázka.\n\n' : '')
     + hi + '\n\nv příloze zasíláme podklad pro fakturaci nájemného kiosku ' + st.kiosk_code + ' za období ' + st.period_ym + (st.doc_number ? ' (' + st.doc_number + ')' : '') + '.\n\n'
     + 'Tržby s DPH (A): ' + f(st.revenue_gross) + '\nServisní a provozní poplatek (C): ' + f(st.fee_net) + '\n'
@@ -269,7 +275,7 @@ function mailText(st, contract, test) {
       + (rent > 0 && !st.reverse_charge && Number(st.vat_rate) > 0 ? 'Nájemné k fakturaci vč. DPH ' + Number(st.vat_rate) + ' %: ' + (Math.round(Number(st.rent_invoice) * (100 + Number(st.vat_rate))) / 100).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + st.invoice_currency + '\n' : '') : '')
     + '\n'
     + (st.reverse_charge ? 'Fakturu prosím vystavte BEZ DPH s textem „Reverse charge / přenesení daňové povinnosti“ (čl. 196 směrnice 2006/112/ES).\n\n' : '')
-    + 'Podle tohoto podkladu prosím vystavte fakturu.\n\nS pozdravem\nLaundromats.eu';
+    + 'Podle tohoto podkladu prosím vystavte fakturu. Pokud vám výpočet nesedí, klikněte na tlačítko „Výpočet nesedí“ níže a napište nám, co je potřeba opravit.\n\nS pozdravem\nLaundromats.eu';
 }
 async function sendStatementMail(st, contract, opts) {
   opts = opts || {};
@@ -278,7 +284,7 @@ async function sendStatementMail(st, contract, opts) {
   const cc = !opts.to && contract.cc_emails ? contract.cc_emails : undefined;
   const buf = await pdf(st);
   const r = await sendMail(Object.assign({}, await mailFrom(), {
-    to: cc ? to + ', ' + cc : to, brand: 'laundromats:cs', noLink: true,
+    to: cc ? to + ', ' + cc : to, brand: 'laundromats:cs', noLink: !st.id, link: st.id ? disputeUrl(st.id) : undefined, linkLabel: '⚠ Výpočet nesedí — napsat nám',
     subject: (opts.test ? '[TEST] ' : '') + 'Podklad pro fakturaci nájmu kiosku ' + st.kiosk_code + ' — ' + st.period_ym,
     body: mailText(st, contract, !!opts.test),
     attachments: [{ filename: 'najem-' + st.kiosk_code + '-' + st.period_ym + '.pdf', content: buf, contentType: 'application/pdf' }],
@@ -325,4 +331,4 @@ async function deliver(statementId, contract) {
   return { statement: upd, sent: !!r.sent, error: r.sent ? null : (r.error || r.skipped || 'neodesláno') };
 }
 
-module.exports = { kwMatch, onePerCat, calc, generate, update, html, pdf, sendTest, processContract, deliver, sendStatementMail, CATS };
+module.exports = { disputeToken, disputeUrl, kwMatch, onePerCat, calc, generate, update, html, pdf, sendTest, processContract, deliver, sendStatementMail, CATS };

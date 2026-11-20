@@ -3956,7 +3956,8 @@
       const ymEl = document.getElementById('rent-ym');
       if (!ymEl.value) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); ymEl.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
       const ym = ymEl.value; const tb = document.querySelector('#rent-table tbody');
-      const [rc, rr, ra] = await Promise.all([api('GET', '/api/compounder/rent-contracts'), api('GET', '/api/compounder/rent-statements?ym=' + encodeURIComponent(ym)), api('GET', '/api/compounder/rent-statements')]);
+      const [rc, rr, ra, rd] = await Promise.all([api('GET', '/api/compounder/rent-contracts'), api('GET', '/api/compounder/rent-statements?ym=' + encodeURIComponent(ym)), api('GET', '/api/compounder/rent-statements'), api('GET', '/api/compounder/rent-disputes')]);
+      window.__rentDisputes = Array.isArray(rd.data) ? rd.data : [];
       if (rc.status !== 200 || !Array.isArray(rc.data)) { tb.innerHTML = '<tr><td colspan="9" class="empty-hint">Chyba načtení (' + rc.status + ')</td></tr>'; return; }
       window.__rentContracts = rc.data;
       window.__rentSt = Array.isArray(ra.data) ? ra.data : (Array.isArray(rr.data) ? rr.data : []);
@@ -4002,6 +4003,9 @@
         return num('revenue_gross') + num('revenue_net') + num('fee_net', true) + docCell('cost_d', 'D', 'faktura za nájem') + docCell('cost_e', 'E', 'faktura za energie') + num('cost_f', true)
           + '<td style="text-align:right;white-space:nowrap;"><b style="color:' + (Number(x.rent) < 0 ? '#ef4444' : '#16a34a') + '">' + rentMoney(x.rent, x.currency) + '</b>' + (x.invoice_currency && x.rent_invoice != null ? '<div style="font-size:11px;color:var(--text2);" title="Přepočet kurzem ČNB ' + x.fx_rate + (x.fx_rate_date ? ' ze dne ' + x.fx_rate_date : '') + '">= ' + rentMoney(x.rent_invoice, x.invoice_currency) + '</div>' : '') + '</td>';
       };
+      // Námitky „Výpočet nesedí" z e-mailu (otevřené červeně, vyřízené šedě)
+      const dispBadge = (x) => { const ds = (window.__rentDisputes || []).filter(d => d.statement_id === x.id); if (!ds.length) return '';
+        return ds.map(d => '<div style="margin-top:4px;"><a href="javascript:void(0)" onclick="rentDisputeShow(' + d.id + ')" title="' + escapeHtml((d.name ? d.name + ': ' : '') + d.text) + '" style="font-size:11px;font-weight:700;text-decoration:none;color:' + (d.done ? 'var(--text2)' : '#ef4444') + ';">' + (d.done ? '✓ námitka vyřízena' : '⚠ Výpočet nesedí') + ' · ' + new Date(d.at).toLocaleDateString('cs-CZ') + '</a></div>').join(''); };
       const createdCell = (x) => '<td style="white-space:nowrap;">' + (x && x.created_at ? new Date(x.created_at).toLocaleDateString('cs-CZ') + '<div style="font-size:11px;color:var(--text2);">' + new Date(x.created_at).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }) + '</div>' : '<span style="color:var(--text2)">—</span>') + '</td>';
       const pRows = planned.map(p => { const late = p.date < new Date(now.getFullYear(), now.getMonth(), now.getDate());
         return '<tr style="background:rgba(99,102,241,.07)"><td><span style="color:#818cf8;font-weight:700;">plánováno</span></td><td>' + escapeHtml(p.c.kiosk_code) + '</td><td>' + escapeHtml(p.c.customer_name || '—') + '</td><td>' + periodCell(pym, p.st) + '</td>' + calcCells(p.st) + createdCell(p.st) +
@@ -4013,7 +4017,7 @@
       const drafts = window.__rentSt.filter(x => x.status !== 'issued' && !plannedIds.has(x.id));
       const draftRows = drafts.map(x => '<tr><td><span style="color:#f59e0b;font-weight:700;">koncept</span></td><td>' + escapeHtml(x.kiosk_code) + inb(x) + '</td><td>' + escapeHtml(x.customer_name || '—') + '</td><td>' + periodCell(x.period_ym, x) + '</td>' + calcCells(x) + createdCell(x) + '<td>' + (x.send_error ? '<span style="color:#f59e0b;">' + escapeHtml(x.send_error) + '</span>' : '—') + '</td>' +
         '<td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" onclick="openRentModal(' + x.id + ')">Otevřít</button> <a class="btn btn-secondary btn-sm" href="/api/compounder/rent-statements/' + x.id + '/pdf" target="_blank">📄 PDF</a> <button class="btn btn-danger btn-sm" onclick="rentDeleteRow(' + x.id + ')">Smazat</button></td></tr>');
-      const issuedRows = window.__rentSt.filter(x => x.status === 'issued').map(x => '<tr><td><b>' + escapeHtml(x.doc_number || '') + '</b></td><td>' + escapeHtml(x.kiosk_code) + inb(x) + '</td><td>' + escapeHtml(x.customer_name || '—') + '</td><td>' + periodCell(x.period_ym, x) + '</td>' + calcCells(x) + createdCell(x) + '<td>' + (x.sent_at ? '✅ ' + new Date(x.sent_at).toLocaleDateString('cs-CZ') + ' → ' + escapeHtml(x.sent_to || '') : (x.send_error ? '<span style="color:#ef4444;">' + escapeHtml(x.send_error) + '</span>' : '—')) + '</td>' +
+      const issuedRows = window.__rentSt.filter(x => x.status === 'issued').map(x => '<tr><td><b>' + escapeHtml(x.doc_number || '') + '</b></td><td>' + escapeHtml(x.kiosk_code) + inb(x) + '</td><td>' + escapeHtml(x.customer_name || '—') + '</td><td>' + periodCell(x.period_ym, x) + '</td>' + calcCells(x) + createdCell(x) + '<td>' + (x.sent_at ? '✅ ' + new Date(x.sent_at).toLocaleDateString('cs-CZ') + ' → ' + escapeHtml(x.sent_to || '') : (x.send_error ? '<span style="color:#ef4444;">' + escapeHtml(x.send_error) + '</span>' : '—')) + dispBadge(x) + '</td>' +
         '<td style="white-space:nowrap;"><button class="btn btn-secondary btn-sm" onclick="openRentModal(' + x.id + ')">Otevřít</button> <a class="btn btn-secondary btn-sm" href="/api/compounder/rent-statements/' + x.id + '/pdf" target="_blank">📄 PDF</a> <button class="btn btn-primary btn-sm" onclick="rentSendNow(' + x.id + ')">' + (x.sent_at ? '✉ Poslat znovu' : '✉ Odeslat') + '</button></td></tr>');
       const issuedList = window.__rentSt.filter(x => x.status === 'issued');
       const docRows = planned.map((p, i) => ({ html: pRows[i], state: 'plánováno', kiosk: p.c.kiosk_code, cust: p.c.customer_name, ym: pym, x: p.st, when: p.date }))
@@ -4033,6 +4037,14 @@
       const on = kind === 'issue' ? (c.auto_mode === 'issue' || c.auto_mode === 'send') : c.auto_mode === 'send';
       const t = kind === 'issue' ? (on ? 'Podklad se v den vystavení sám vystaví — kliknutím vypnout (vznikne jen koncept)' : 'Vypnuto — v den vystavení vznikne jen koncept. Kliknutím zapnout') : (on ? 'Vystavený podklad se sám odešle na ' + (c.contact_email || '') + ' — kliknutím vypnout' : 'Vypnuto — podklad odešleš ručně. Kliknutím zapnout');
       return '<td style="text-align:center;"><label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;" title="' + escapeHtml(t) + '"><input type="checkbox" ' + (on ? 'checked ' : '') + 'onchange="rentToggleAuto(' + c.id + ',\'' + kind + '\',this.checked,this)"> <span style="font-size:11px;font-weight:600;color:' + (on ? '#16a34a' : '#ef4444') + ';">' + (on ? 'ANO' : 'NE') + '</span></label></td>';
+    };
+    window.rentDisputeShow = async function(did) {
+      const d = (window.__rentDisputes || []).find(x => x.id === did); if (!d) return;
+      const msg = 'Námitka k podkladu ' + (d.doc_number || '') + ' (' + d.kiosk_code + ', ' + d.period_ym + ')\n' + new Date(d.at).toLocaleString('cs-CZ') + (d.name ? '\nOd: ' + d.name : '') + '\n\n' + d.text + '\n\n' + (d.done ? 'Vyřízeno. Znovu otevřít?' : 'Označit jako vyřízené?');
+      if (!confirm(msg)) return;
+      const r = await api('PUT', '/api/compounder/rent-disputes/' + did, { done: !d.done });
+      if (r.status !== 200) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
+      loadRent();
     };
     window.rentToggleAuto = async function(id, kind, on, el) {
       const c = (window.__rentContracts || []).find(x => x.id === id); if (!c) return;

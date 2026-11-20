@@ -4993,6 +4993,68 @@ router.delete('/service-subscriptions/:id', requireAuth, async (req, res, next) 
 });
 // ─── Podklady pro fakturaci nájmu kiosku (čl. VI: nájemné = B − C − D − E − F) ───
 // GET /rent-statements?ym=2026-09 — podklady za měsíc (nebo všechny)
+// ─── Nájem kiosku: „Výpočet nesedí" — odkaz z e-mailu s podkladem (veřejné, podepsaný token) ───
+// Námitky se ukládají do AppSetting rent.disputes (pole), notifikace: AppSetting rent.dispute_notify_person_ids (výchozí [1]).
+const RENT_DISPUTES_KEY = 'rent.disputes';
+const _rdLimit = new Map();
+function _rdOk(req) { const RS = require('../services/compounder/rent-statement'); const id = parseInt(req.params.id, 10); const t = String((req.query && req.query.t) || (req.body && req.body.t) || ''); return id > 0 && t.length === 32 && crypto.timingSafeEqual(Buffer.from(t), Buffer.from(RS.disputeToken(id))) ? id : 0; }
+function _rdPage(title, inner) {
+  const e = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  return '<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + e(title) + '</title><style>body{margin:0;background:#eaf2ff;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f2444}.w{max-width:560px;margin:28px auto;background:#fff;border:1px solid #cfe0fb;border-radius:18px;overflow:hidden}.h{padding:22px 28px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff}.h b{font-size:20px;letter-spacing:.04em}.h div{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#dbe8ff;margin-top:5px}.c{padding:24px 28px}h1{font-size:20px;margin:0 0 10px}p{line-height:1.6;color:#334867}textarea,input{width:100%;box-sizing:border-box;border:1px solid #cfe0fb;border-radius:10px;padding:10px;font:inherit;margin:6px 0 14px}textarea{min-height:140px}button{background:#2563eb;color:#fff;border:0;border-radius:10px;padding:13px 24px;font-size:15px;font-weight:700;cursor:pointer}.k{background:#f3f7ff;border-radius:10px;padding:10px 14px;font-size:14px;color:#334867}</style></head><body><div class="w"><div class="h"><b>💧 LAUNDROMATS 💧</b><div>Samoobslužné prádelny</div></div><div class="c">' + inner + '</div></div></body></html>';
+}
+router.get('/rent-dispute/:id', async (req, res, next) => {
+  try {
+    const id = _rdOk(req); if (!id) return res.status(404).send(_rdPage('Odkaz neplatí', '<h1>Odkaz neplatí</h1><p>Odkaz je neúplný nebo neplatný. Odpovězte prosím přímo na e-mail s podkladem.</p>'));
+    const st = await prisma.kioskRentStatement.findUnique({ where: { id } }); if (!st) return res.status(404).send(_rdPage('Podklad nenalezen', '<h1>Podklad nenalezen</h1>'));
+    const e = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const m = (n) => Number(n || 0).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (st.currency || 'CZK');
+    res.set('Cache-Control', 'no-store').send(_rdPage('Výpočet nesedí', '<h1>Výpočet nesedí</h1><div class="k">Podklad ' + e(st.doc_number || '') + ' · kiosk ' + e(st.kiosk_code) + ' · ' + e(st.period_ym) + '<br>Nájemné bez DPH: <b>' + m(st.rent) + '</b></div>'
+      + '<form method="post"><input type="hidden" name="t" value="' + e(req.query.t) + '"><p>Napište nám prosím, co v podkladu nesedí (např. tržby, energie, nájem lokality, chybějící doklad). Ozveme se a podklad opravíme.</p>'
+      + '<label>Co nesedí *</label><textarea name="text" required maxlength="3000" placeholder="Např. Energie za říjen jsme platili 3 200 Kč, ne 4 500 Kč…"></textarea>'
+      + '<label>Vaše jméno / telefon (nepovinné)</label><input name="name" maxlength="200"><button type="submit">Odeslat</button></form>'));
+  } catch (err) { next(err); }
+});
+router.post('/rent-dispute/:id', express.urlencoded({ extended: false, limit: '20kb' }), async (req, res, next) => {
+  try {
+    const id = _rdOk(req); if (!id) return res.status(404).send(_rdPage('Odkaz neplatí', '<h1>Odkaz neplatí</h1>'));
+    const text = String((req.body && req.body.text) || '').trim().slice(0, 3000); const name = String((req.body && req.body.name) || '').trim().slice(0, 200);
+    if (!text) return res.status(400).send(_rdPage('Chybí text', '<h1>Napište prosím, co nesedí</h1><p><a href="javascript:history.back()">Zpět</a></p>'));
+    const ip = String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.ip || '').trim();
+    const now = Date.now(), k = id + ':' + ip, last = _rdLimit.get(k) || []; const recent = last.filter((t) => now - t < 3600e3); if (recent.length >= 5) return res.status(429).send(_rdPage('Příliš mnoho zpráv', '<h1>Děkujeme, zprávu už máme</h1><p>Zkuste to prosím později.</p>'));
+    recent.push(now); _rdLimit.set(k, recent); if (_rdLimit.size > 5000) _rdLimit.clear();
+    const st = await prisma.kioskRentStatement.findUnique({ where: { id } }); if (!st) return res.status(404).send(_rdPage('Podklad nenalezen', '<h1>Podklad nenalezen</h1>'));
+    const { getSetting, setSetting } = require('../services/settings');
+    let list = await getSetting(RENT_DISPUTES_KEY, { type: 'json', defaultValue: [] }).catch(() => []); if (!Array.isArray(list)) list = [];
+    const did = (list.reduce((mx, d) => Math.max(mx, Number(d.id) || 0), 0)) + 1;
+    list.push({ id: did, statement_id: id, kiosk_code: st.kiosk_code, period_ym: st.period_ym, doc_number: st.doc_number || null, text, name: name || null, ip, at: new Date().toISOString(), done: false });
+    if (list.length > 500) list = list.slice(-500);
+    await setSetting(RENT_DISPUTES_KEY, list, { type: 'json' });
+    // Notifikace (Velín push + zvonek)
+    try {
+      let ids = await getSetting('rent.dispute_notify_person_ids', { type: 'json', defaultValue: null }).catch(() => null); if (!Array.isArray(ids) || !ids.length) ids = [1];
+      const persons = await prisma.person.findMany({ where: { id: { in: ids.map(Number) } }, select: { id: true, user_id: true } });
+      const title = '⚠ Výpočet nájmu nesedí — ' + st.kiosk_code + ' ' + st.period_ym; const body = (name ? name + ': ' : '') + text.slice(0, 160);
+      const link = '/modules/ucetni-doklady/index.html?tab=servicebilling';
+      const { notifyPerson } = require('../services/push/expo-push');
+      let createNotification = null; try { createNotification = require('./notifications.routes').createNotification; } catch (e) { /* bez zvonku */ }
+      for (const p of persons) { notifyPerson(prisma, p.id, { title, body, data: { type: 'rent_dispute', id, link }, sound: 'default' }).catch(() => {}); if (p.user_id && createNotification) createNotification({ userId: p.user_id, type: 'system', title, body, link }).catch(() => {}); }
+    } catch (e) { console.warn('[rent-dispute] notifikace:', e.message); }
+    res.send(_rdPage('Děkujeme', '<h1>Děkujeme, zprávu jsme přijali</h1><p>Výpočet zkontrolujeme a ozveme se vám. Do té doby prosím fakturu podle tohoto podkladu nevystavujte.</p>'));
+  } catch (err) { next(err); }
+});
+// GET /rent-disputes — námitky k podkladům (interní); PUT /rent-disputes/:did { done } — označit jako vyřízené
+router.get('/rent-disputes', requireAuth, async (req, res, next) => {
+  try { const list = await require('../services/settings').getSetting(RENT_DISPUTES_KEY, { type: 'json', defaultValue: [] }).catch(() => []); res.json(Array.isArray(list) ? list : []); } catch (err) { next(err); }
+});
+router.put('/rent-disputes/:did', requireAuth, async (req, res, next) => {
+  try {
+    const { getSetting, setSetting } = require('../services/settings');
+    const list = await getSetting(RENT_DISPUTES_KEY, { type: 'json', defaultValue: [] }).catch(() => []); const d = (Array.isArray(list) ? list : []).find((x) => Number(x.id) === parseInt(req.params.did, 10));
+    if (!d) return res.status(404).json({ error: 'Námitka nenalezena' });
+    d.done = !!(req.body && req.body.done); d.done_at = d.done ? new Date().toISOString() : null;
+    await setSetting(RENT_DISPUTES_KEY, list, { type: 'json' }); res.json(d);
+  } catch (err) { next(err); }
+});
 router.get('/rent-statements', requireAuth, async (req, res, next) => {
   try {
     const where = {}; if (req.query.ym && /^\d{4}-\d{2}$/.test(req.query.ym)) where.period_ym = req.query.ym;
