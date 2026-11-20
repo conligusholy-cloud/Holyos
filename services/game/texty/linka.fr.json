@@ -3285,5 +3285,71 @@
         ]
       }
     ]
+  },
+  {
+    "id": "penzion",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "J’ai une pension et j’ai besoin de laver le linge de lit. Vous pouvez gérer ça ?",
+        "o": [
+          {
+            "t": "On peut. Ça fait combien par semaine ?",
+            "b": 2,
+            "r": "Droit au but, ça me plaît."
+          },
+          {
+            "t": "Venez comme tout le monde, on ne fait pas de réservations et on ne garde pas les tours.",
+            "b": 0,
+            "r": "Alors non, sans doute."
+          },
+          {
+            "t": "Ça ne nous intéresse pas, on fait du libre-service, pas des entreprises.",
+            "b": -2,
+            "r": "Tant pis pour vous."
+          }
+        ]
+      },
+      {
+        "t": "Une centaine de kilos par semaine.",
+        "o": [
+          {
+            "t": "Ça fait cinq lavages. Je vous fixe un prix ferme et je vous garde les machines.",
+            "b": 2,
+            "r": "Ça me va très bien."
+          },
+          {
+            "t": "Alors ça va vous prendre un moment, cinq lavages de trente-cinq minutes font presque trois heures, prévoyez-le.",
+            "b": -1,
+            "r": "Ça ne m’aide pas beaucoup."
+          },
+          {
+            "t": "On ne lave pas autant que ça.",
+            "b": -2,
+            "r": "À quoi vous servent ces machines, alors ?"
+          }
+        ]
+      },
+      {
+        "t": "Et s’il n’y a plus de place ?",
+        "o": [
+          {
+            "t": "Je vous donne un numéro, vous appelez et je vous libère une machine.",
+            "b": 2,
+            "r": "D’accord, je vous appelle."
+          },
+          {
+            "t": "Eh bien vous attendrez.",
+            "b": -2,
+            "r": "Avec le linge de la pension ?"
+          },
+          {
+            "t": "Ça n’arrive pas.",
+            "b": -1,
+            "r": "Ça ne me suffit pas."
+          }
+        ]
+      }
+    ]
   }
 ]

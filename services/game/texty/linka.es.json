@@ -3285,5 +3285,71 @@
         ]
       }
     ]
+  },
+  {
+    "id": "kamery",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Alguien me ha sacado la ropa de la lavadora. ¿Tenéis cámaras ahí?",
+        "o": [
+          {
+            "t": "Cámara hay. Dígame la hora y miro la grabación.",
+            "b": 2,
+            "r": "Fue sobre las cinco de la tarde."
+          },
+          {
+            "t": "Sí, ahora mismo le mando la grabación.",
+            "b": -2,
+            "r": "Eso no debería mandarlo así sin más, ¿no?"
+          },
+          {
+            "t": "Cámaras hay, pero la grabación no se la puedo dar, eso se entrega a la policía.",
+            "b": 1,
+            "r": "Algo es algo."
+          }
+        ]
+      },
+      {
+        "t": "Fue sobre las cinco de la tarde.",
+        "o": [
+          {
+            "t": "Voy a mirarlo.",
+            "b": 1,
+            "r": "De acuerdo."
+          },
+          {
+            "t": "Lo repaso, y si hay alguien, lo paso a la policía. A usted le doy un justificante de que ocurrió.",
+            "b": 2,
+            "r": "Eso me ayuda."
+          },
+          {
+            "t": "A las cinco pasa mucha gente, eso no lo encuentro.",
+            "b": -2,
+            "r": "Ni siquiera ha mirado."
+          }
+        ]
+      },
+      {
+        "t": "¿Y me lo van a reponer?",
+        "o": [
+          {
+            "t": "Eso no, lo siento, pero el próximo lavado corre de mi cuenta.",
+            "b": 2,
+            "r": "Justo."
+          },
+          {
+            "t": "De las cosas dentro de la máquina no respondemos, está puesto ahí.",
+            "b": -1,
+            "r": "Técnicamente tiene razón, humanamente no."
+          },
+          {
+            "t": "Haber estado pendiente.",
+            "b": -2,
+            "r": "Gracias por la comprensión."
+          }
+        ]
+      }
+    ]
   }
 ]
