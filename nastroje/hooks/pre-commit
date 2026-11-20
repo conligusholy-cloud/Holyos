@@ -147,6 +147,16 @@ if git diff --cached --name-only | grep -qE 'services/game/zlocin'; then
   fi
 fi
 
+# Návrat do fondu po vlastní akci. Dokud se nerozlišovalo ruční zavření od
+# toho po hlasování, vyhodilo to hráče z fondu na mapu.
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; then
+  if ! node nastroje/tfondnavrat.js; then
+    echo ""
+    echo "STOP: návrat do fondu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Akcie fondu: kolik fondu se vydáním prodá a jak se páruje pořadník nabídek.
 # Obojí je o skutečných penězích hráčů — chyba ve vydání okrade členy o díl,
 # chyba v párování toho, kdo v knize čekal.

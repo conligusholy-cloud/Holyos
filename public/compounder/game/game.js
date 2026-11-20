@@ -5563,13 +5563,20 @@ function mamPozemek(spotId) {
 function pozemkyHodnota() {
   return pozemky().reduce(function (a, z) { return a + (z.cena || 0) + (z.priprava || 0); }, 0);
 }
+// Co jsem za tu zem dal — výchozí vyvolávací cena při jejím prodeji.
+function pozemekCenaZe(spotId) {
+  var z = pozemky().filter(function (x) { return x.spotId === spotId; })[0];
+  return (z && z.cena) || 100000;
+}
 function pozemkyPrazdne() {
   return pozemky().filter(function (z) { return !z.zastaveno; });
 }
 // Vlastní pozemek pod prádlomatem — zjistí se z toho, co o místě ví server.
 function maPozemek(spotId) {
   var c = CLAIMS[spotId];
-  return !!(c && c.pozemek);
+  // Prodanou zem pod sebou už nevlastním — od té chvíle za ni platím nájem,
+  // i když zábor dál drží moje firma. (Požadavek #158)
+  return !!(c && c.pozemek && !c.pozemek_majitel);
 }
 // Koupě samotné země. Zábor na serveru vznikne hned, i když na něm zatím nic
 // nestojí — jinak by pozemek pod rukama koupil někdo jiný.
@@ -9679,6 +9686,17 @@ function fondVnitrek() {
 // a překreslit záložku Já pod ním by nikdo neviděl. Zavření to vrací zpět.
 var FOND_KAM = null, FOND_ZEB = null;
 function fondZnovu() { FOND = null; loadFond(FOND_KAM || paintMe); }
+// Zavřít okno po vlastní akci a zůstat tam, odkud se otevřelo.
+// closeSheet() schválně zahazuje FOND_KAM: ruční zavření překryvu má hráče
+// vrátit na záložku, kde byl. Jenže po hlasování, novém návrhu nebo vkladu
+// se okno zavírá samo — a hráč chce zůstat ve fondu, ne spadnout na mapu.
+// Proto se cíl návratu schová přes zavření a vrátí zpátky.
+function fondZavriAZnovu(pak) {
+  var kam = FOND_KAM;
+  closeSheet();
+  FOND_KAM = kam;
+  if (pak) pak(); else fondZnovu();
+}
 function fondVlozitSheet() {
   sheet('<h3>' + esc(tx('fond.vlozit')) + '</h3>'
     + '<p class="muted small">' + esc(tx('fond.popis')) + '</p>'
@@ -9693,7 +9711,7 @@ function fondVlozitSheet() {
       .then(function (r) {
         if (!r.ok) { $('fo-ok').disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
         // Vklad odešel zápornou doručenkou — ať se hotovost srovná hned.
-        closeSheet(); vyzvedniNasledky(function () { fondZnovu(); });
+        fondZavriAZnovu(function () { vyzvedniNasledky(function () { fondZnovu(); }); });
       }).catch(function () { $('fo-ok').disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
   };
 }
@@ -9716,7 +9734,7 @@ function fondPrevestSheet() {
     apiJson('/trade/aliance/fond/prevod', { komu: Number($('fo-komu').value) || 0,
       castka: Number($('fo-kolik').value) || 0 }).then(function (r) {
       if (!r.ok) { $('fo-ok').disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
-      closeSheet(); fondZnovu();
+      fondZavriAZnovu();
     }).catch(function () { $('fo-ok').disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
   };
 }
@@ -9840,7 +9858,7 @@ function fondNavrhSheet() {
     btn.disabled = true;
     apiJson('/trade/aliance/fond/navrh', telo).then(function (r) {
       if (!r.ok) { btn.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
-      closeSheet(); fondZnovu();
+      fondZavriAZnovu();
     }).catch(function () { btn.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
   }
 }
@@ -9867,7 +9885,7 @@ function fondProtinavrhSheet(n) {
       cena: Math.max(0, Math.round(Number($('pn-cena').value) || 0)),
     }).then(function (r) {
       if (!r.ok) { $('pn-ok').disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
-      closeSheet(); fondZnovu();
+      fondZavriAZnovu();
     }).catch(function () { $('pn-ok').disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
   };
 }
@@ -9977,6 +9995,11 @@ function alianceHtml() {
 // Fond z mapy: vlastní fond a pod ním žebříček. Je to to samé, co je v záložce
 // Já — jen po ruce, ať se hráč k hlasování dostane, aniž by opouštěl mapu.
 function fondSheetPaint() {
+  // Překreslení po hlasování nebo vkladu vrací okno na začátek a hráč pak
+  // hledá, kde to byl. Panel fondu je dlouhý — drží podíly, nabídky,
+  // návrhy i žebříček — takže se posun schová a po překreslení vrátí.
+  var telo = $('sheet-body');
+  var kde = telo ? telo.scrollTop : 0;
   sheet('<h3>' + esc(tx('hra.zal_fondy')) + '</h3>'
     + (ALIANCE ? alianceHtml() : '<p class="muted small">' + esc(tx('hra.nacitam_4')) + '</p>')
     + (FOND_ZEB === null
@@ -9986,6 +10009,9 @@ function fondSheetPaint() {
           + '<div class="zeb">' + FOND_ZEB.map(fondRadek).join('') + '</div></div>'
         : '<p class="fine">' + esc(tx('hra.zadny_fond_zatim_nic_nedrzi')) + '</p>')));
   bindAliance('sheet-body');
+  // Až po vykreslení — dřív nemá obsah výšku a posun by se zahodil.
+  var nove = $('sheet-body');
+  if (nove && kde > 0) nove.scrollTop = kde;
 }
 function fondSheet() {
   FOND_KAM = fondSheetPaint; FOND_ZEB = null;
@@ -12282,10 +12308,17 @@ function majetekSheet(id, rovnouKat) {
           + tx('veta.100_zisk_mes_br_i_class', { p1: Math.round(u.score), p2: kcFull(u.eco.profit), p3: kcFull(cenaPradlomatu(u.eco.profit, u.eco.invest)) })
           + (dluh > 0 ? tx('hra.i_class_cena_dluh_visi_na', { p1: kcFull(dluh) }) : '') });
     });
-    // Nabídnout jde jen holá zem — zastavěná jde s prádlomatem. (Požadavek #158)
+    // Zem jde nabídnout holá i ta pod vlastním prádlomatem — u druhé zůstává
+    // stroj mně a platím za něj nájem novému majiteli. (Požadavek #158)
     pozemkyPrazdne().forEach(function (z) {
       moje.push({ smer: 'prodam', predmet: 'pozemek', spot_id: z.spotId,
         popis: esc(z.name || tx('hra.pozemek')), pod: esc(tx('mapa.koupena_zem')) });
+    });
+    (S.units || []).forEach(function (u) {
+      if (!maPozemek(u.spotId)) return;
+      moje.push({ smer: 'prodam', predmet: 'pozemek', spot_id: u.spotId, pod_pradlomatem: true,
+        popis: tx('veta.zem_pod', { p1: esc(jmenoStroje(u.name)) }),
+        pod: esc(tx('mapa.zem_pod_mym_pradlomatem')) });
     });
     (S.pobocky || []).forEach(function (b) {
       moje.push({ smer: 'prodam', predmet: 'pobocka', pobocka: b.name,
@@ -12828,6 +12861,15 @@ function cenaSheet(toId, kdo, x) {
     + '<label class="fld"><span>' + esc(tx('hra.cena_l_2')) + '</span>'
     + '<input id="na-cena" class="inp" type="number" min="0" step="1000" value="' + (orient || 0) + '"></label>'
     + '<p class="fine" id="na-verdikt"></p>'
+    + (x.pod_pradlomatem
+        ? '<p class="fine">' + esc(tx('drazba.zem_pod_vysvetleni')) + '</p>'
+          + '<label class="fld"><span>' + esc(tx('drazba.najem_ktery_budu_platit')) + '</span>'
+          + '<input id="na-najem" class="inp" type="number" min="0" step="1000" value="0"></label>'
+          + '<label class="fld"><span>' + esc(tx('drazba.vazanost_mesicu')) + '</span>'
+          + '<input id="na-vaz" class="inp" type="number" min="0" max="60" value="12"></label>'
+          + '<label class="fld"><span>' + esc(tx('drazba.vypoved_mesicu')) + '</span>'
+          + '<input id="na-vyp" class="inp" type="number" min="1" max="12" value="3"></label>'
+        : '')
     + (jaPlatim ? kartyVyber('na') : '')
     + '<label class="fld"><span>' + esc(tx('hra.vzkaz_nepovinny_2')) + '</span><input id="na-vzkaz" class="inp" type="text" maxlength="200"></label>'
     + '<button class="btn big" id="na-ok">' + esc(tx('hra.odeslat_nabidku')) + '</button>'
@@ -12875,9 +12917,16 @@ function cenaSheet(toId, kdo, x) {
       return toast(esc(tx('hra.na_tohle_nemas_volnou_hotovost')), 'err');
     }
     b.disabled = true;
-    apiJson('/trade/offer', { to_id: toId, smer: x.smer, predmet: x.predmet, model: x.model || null,
+    var telo = { to_id: toId, smer: x.smer, predmet: x.predmet, model: x.model || null,
       spot_id: x.spot_id || null, card_kind: x.card_kind || null, pobocka: x.pobocka || null,
-      cena: Number($('na-cena').value) || 0, karty: vybrane(), vzkaz: $('na-vzkaz').value })
+      cena: Number($('na-cena').value) || 0, karty: vybrane(), vzkaz: $('na-vzkaz').value };
+    // Zem pod prádlomatem se nabízí i s podmínkami, za kterých tam zůstanu stát.
+    if (x.pod_pradlomatem) {
+      telo.najem = Math.max(0, Math.round(Number(($('na-najem') || {}).value) || 0));
+      telo.vazanost_mesicu = Math.max(0, Math.round(Number(($('na-vaz') || {}).value) || 0));
+      telo.vypoved_mesicu = Math.max(1, Math.round(Number(($('na-vyp') || {}).value) || 1));
+    }
+    apiJson('/trade/offer', telo)
       .then(function (r) {
         b.disabled = false;
         if (!r.ok) return toast(r.j.error || esc(tx('hra.nepovedlo_se_33')), 'err');
@@ -12931,6 +12980,21 @@ function vyzvedniNasledky(then) {
         S.prodano = S.prodano || {};
         S.prodano[x.spot_id] = 1;   // ať se stroj nevrátí na sklad jako při přetažení
         S.units = S.units.filter(function (u) { return u.spotId !== x.spot_id; });
+      } else if (x.kind === 'pozemek_pod_prodan') {
+        // Zem pode mnou se prodala. Zábor mi zůstává, jen ho mám teď na cizím
+        // a platím nájem — mapa i ekonomika to poznají z CLAIMS. (Požadavek #158)
+        var pp = x.data || {};
+        S.pozemky = pozemky().filter(function (z) { return z.spotId !== x.spot_id; });
+        if (CLAIMS[x.spot_id]) {
+          CLAIMS[x.spot_id].pozemek_majitel = { id: pp.majitel_id, nick: pp.majitel_nick, najem: pp.najem };
+        }
+      } else if (x.kind === 'pozemek_pod_koupen') {
+        var pk = x.data || {};
+        if (!pozemky().some(function (z) { return z.spotId === x.spot_id; })) {
+          pozemky().push({ spotId: x.spot_id, areaId: pk.area_key || '',
+            name: pk.name || esc(tx('hra.zem_pod_pradlomatem')), lat: pk.lat, lon: pk.lon,
+            cena: 0, zastaveno: 1, od: Date.now() });
+        }
       } else if (x.kind === 'pozemek_remove') {
         // Zem změnila majitele — pryč ze seznamu i z evidence míst. (Požadavek #158)
         S.pozemky = pozemky().filter(function (z) { return z.spotId !== x.spot_id; });
@@ -13237,8 +13301,16 @@ function drazbaVyvolatSheet() {
     polozky.push({ predmet: 'pobocka', pobocka: bq.name, popis: tx('veta.pobocka_3', { p1: esc(bq.name) }),
       pod: esc(tx('drazba.zakladna_pro_dopravu_a_cetu')), navrh: POBOCKA_CENA });
   });
-  // Jen holá zem. Zastavěný pozemek se draží jako prádlomat — zábor si zem
-  // nese s sebou, takže by jinak šel do dražby dvakrát. (Požadavek #158)
+  // Zem pod vlastním prádlomatem: prodává se jen pozemek, stroj zůstává mně
+  // a od prodeje za něj platím nájem novému majiteli. (Požadavek #158)
+  (S.units || []).forEach(function (u) {
+    if (!maPozemek(u.spotId)) return;
+    polozky.push({ predmet: 'pozemek', spot_id: u.spotId, pod_pradlomatem: true,
+      popis: tx('veta.zem_pod', { p1: esc(jmenoStroje(u.name)) }),
+      pod: esc(tx('drazba.pozemek_pod_pradlomatem')),
+      navrh: pozemekCenaZe(u.spotId) });
+  });
+  // Holá zem — zábor bez stroje.
   pozemkyPrazdne().forEach(function (z) {
     var c = CLAIMS[z.spotId] || {};
     polozky.push({ predmet: 'pozemek', spot_id: z.spotId,
@@ -13326,6 +13398,15 @@ function drazbaCenaSheet(x) {
     + (jePodil || jePrevod
         ? tx('veta.label_class_fld_span_kolik_procent', { p1: (jePrevod ? ' ' + esc(tx('drazba.z_podilu_pustis')) : ' firmy'), p2: Math.min(1, maxPct), p3: maxPct, p4: krok, p5: vychozi, p6: (jePrevod ? tx('hra.p_class_fine_drzis_co_nevydrazis', { p1: pctHra(x.podil_max) }) : '') })
         : '')
+    + (x.pod_pradlomatem
+        ? '<p class="fine">' + esc(tx('drazba.zem_pod_vysvetleni')) + '</p>'
+          + '<label class="fld"><span>' + esc(tx('drazba.najem_ktery_budu_platit')) + '</span>'
+          + '<input id="drz-najem" class="inp" type="number" min="0" step="1000" value="0"></label>'
+          + '<label class="fld"><span>' + esc(tx('drazba.vazanost_mesicu')) + '</span>'
+          + '<input id="drz-vaz" class="inp" type="number" min="0" max="60" value="12"></label>'
+          + '<label class="fld"><span>' + esc(tx('drazba.vypoved_mesicu')) + '</span>'
+          + '<input id="drz-vyp" class="inp" type="number" min="1" max="12" value="3"></label>'
+        : '')
     + tx('veta.label_class_fld_span_span_input', { p1: esc(tx('drazba.vyvolavaci_cena_l')), p2: Math.max(10000, Math.round(x.navrh || 100000)), p3: esc(tx('drazba.spustit_drazbu')) }));
   var rada = function () {
     var c = Math.max(0, Math.round(Number($('drz-cena-in').value) || 0));
@@ -13348,6 +13429,11 @@ function drazbaCenaSheet(x) {
     var telo = { predmet: x.predmet, model: x.model, spot_id: x.spot_id, pobocka: x.pobocka,
       card_kind: x.card_kind, equity_id: x.equity_id,
       vyvolavaci: Math.max(0, Math.round(Number($('drz-cena-in').value) || 0)) };
+    if (x.pod_pradlomatem) {
+      telo.najem = Math.max(0, Math.round(Number($('drz-najem').value) || 0));
+      telo.vazanost_mesicu = Math.max(0, Math.round(Number($('drz-vaz').value) || 0));
+      telo.vypoved_mesicu = Math.max(1, Math.round(Number($('drz-vyp').value) || 1));
+    }
     if (jePodil) {
       telo.podil = Math.max(1, Math.min(100, Math.round(Number($('drz-podil').value) || 10))) / 100;
     } else if (jePrevod) {
