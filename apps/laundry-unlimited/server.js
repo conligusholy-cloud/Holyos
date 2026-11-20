@@ -445,19 +445,32 @@ const BAR_CSS = `.uside{position:fixed;left:0;top:0;bottom:0;width:244px;z-index
 body:has(> .uside){padding-left:244px}.uside .brand{display:flex;flex-direction:column;gap:8px;text-decoration:none;padding:4px 6px 14px;border-bottom:1px solid rgba(255,255,255,.08)}
 .uside .ttl{font-weight:800;font-size:15px;color:#fff}.uside .ttl small{display:block;font-weight:600;font-size:10.5px;color:#9fb0cc;letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
 .uside nav{display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto}.uside nav a{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:11px;color:#a9b8d3;text-decoration:none;font-weight:700;font-size:14px}
-.uside nav a i{font-style:normal;width:22px;text-align:center}.uside nav a:hover{color:#fff;background:rgba(255,255,255,.05)}.uside nav a.on{color:#fff;background:linear-gradient(90deg,rgba(34,230,255,.16),rgba(47,123,255,.08));box-shadow:inset 3px 0 0 #22e6ff}
+.uside .uic{display:inline-grid;place-items:center;width:32px;height:32px;flex:none;border-radius:10px;background:linear-gradient(135deg,rgba(34,230,255,.10),rgba(47,123,255,.08));box-shadow:inset 0 0 0 1px rgba(34,230,255,.18);transition:box-shadow .2s,background .2s}.uside .uic svg{width:17px;height:17px}
+.uside nav a:hover .uic{box-shadow:inset 0 0 0 1px rgba(34,230,255,.45)}.uside nav a.on .uic{background:linear-gradient(135deg,rgba(34,230,255,.28),rgba(47,123,255,.22));box-shadow:inset 0 0 0 1px rgba(34,230,255,.6),0 6px 18px -6px rgba(34,230,255,.6)}
+.uside .rt a.rtl{display:flex;align-items:center;gap:10px;justify-content:flex-start;padding:7px 10px}.uside .rt a.rtl .uic{width:26px;height:26px;border-radius:8px}.uside .rt a.rtl .uic svg{width:14px;height:14px}
+body:has(> .uside) .wrap,body:has(> .uside) .adm{max-width:none!important;margin:0!important;padding-left:32px!important;padding-right:32px!important}.uside nav a:hover{color:#fff;background:rgba(255,255,255,.05)}.uside nav a.on{color:#fff;background:linear-gradient(90deg,rgba(34,230,255,.16),rgba(47,123,255,.08));box-shadow:inset 3px 0 0 #22e6ff}
 .uside .rt{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)}.uside .rt a{color:#dbe7ff;text-decoration:none;font-size:13px;font-weight:700;padding:9px 12px;border:1px solid rgba(255,255,255,.14);border-radius:10px;text-align:center}.uside .rt a:hover{border-color:#22e6ff}.uside .who{color:#9fb0cc;font-size:12.5px;padding:0 4px}
 @media(max-width:900px){body:has(> .uside){padding-left:0}.uside{position:sticky;width:auto;bottom:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;border-right:0;border-bottom:1px solid rgba(255,255,255,.08)}.uside .brand{flex-direction:row;align-items:center;border:0;padding:0}.uside nav{flex-direction:row;flex-basis:100%;order:3;overflow-x:auto;scrollbar-width:none}.uside nav::-webkit-scrollbar{display:none}.uside nav a{white-space:nowrap;padding:8px 11px}.uside .rt{flex-direction:row;margin-left:auto;border:0;padding:0}.uside .who{display:none}}`;
+// Ikony bočního menu: tenké linky s přechodem v barvách značky
+const UICO = {
+  leady: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  report: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-7"/><path d="M17 7h3v3"/>',
+  ekonomika: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8"/><path d="M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h.01M12 19h4"/>',
+  technika: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  proc: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.74c.6.48 1 1.17 1 1.94V17h6v-.32c0-.77.4-1.46 1-1.94A7 7 0 0 0 12 2z"/>',
+  holyos: '<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
+};
+const uico = (k) => `<span class="uic"><svg viewBox="0 0 24 24" fill="none" stroke="url(#lugr)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${UICO[k] || ''}</svg></span>`;
 function topBar(o) {
   const en = o.lang && o.lang !== 'cs';
   const tabs = o.mode === 'admin'
-    ? [{ k: 'leady', href: '/admin', i: '👥', t: 'Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, i: x.ico, t: x.cs })))
-    : SEKCE.filter((x) => (o.sekce || []).includes(x.k)).map((x) => ({ k: x.k, href: '/portal/m/' + x.k, i: x.ico, t: en ? x.en : x.cs }));
+    ? [{ k: 'leady', href: '/admin', t: 'Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, t: x.cs })))
+    : SEKCE.filter((x) => (o.sekce || []).includes(x.k)).map((x) => ({ k: x.k, href: '/portal/m/' + x.k, t: en ? x.en : x.cs }));
   const rt = o.mode === 'admin'
-    ? `<a href="${HOLYOS_URL}">← HolyOS</a>`
+    ? `<a href="${HOLYOS_URL}" class="rtl">${uico('holyos')}<span>HolyOS</span></a>`
     : `<span class="who">${esc(o.user || '')}</span><a href="/portal/logout">${en ? 'Log out' : 'Odhlásit'}</a>`;
-  return `<aside class="uside"><a class="brand" href="${o.mode === 'admin' ? '/admin' : '/portal'}">${logoHtml(30)}<span class="ttl">${o.mode === 'admin' ? 'Administrace' : (en ? 'Partner portal' : 'Partnerský portál')}<small>${o.mode === 'admin' ? 'jen pro tým' : 'Laundry Unlimited'}</small></span></a>
-<nav>${tabs.map((x) => `<a href="${x.href}"${x.k === o.active ? ' class="on"' : ''}><i>${x.i}</i>${esc(x.t)}</a>`).join('')}</nav><div class="rt">${rt}</div></aside>`;
+  return `<aside class="uside"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="lugr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22e6ff"/><stop offset="1" stop-color="#2f7bff"/></linearGradient></defs></svg><a class="brand" href="${o.mode === 'admin' ? '/admin' : '/portal'}">${logoHtml(30)}<span class="ttl">${o.mode === 'admin' ? 'Administrace' : (en ? 'Partner portal' : 'Partnerský portál')}<small>${o.mode === 'admin' ? 'jen pro tým' : 'Laundry Unlimited'}</small></span></a>
+<nav>${tabs.map((x) => `<a href="${x.href}"${x.k === o.active ? ' class="on"' : ''}>${uico(x.k)}<span>${esc(x.t)}</span></a>`).join('')}</nav><div class="rt">${rt}</div></aside>`;
 }
 // Stránka materiálů v liště administrace / portálu
 let T01 = null;
