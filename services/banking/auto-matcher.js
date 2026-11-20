@@ -67,7 +67,7 @@ function accountsEqual(a, b) {
 
 const INVOICE_SELECT = {
   id: true, invoice_number: true, external_number: true, direction: true, status: true,
-  total: true, paid_amount: true, currency: true, variable_symbol: true, date_due: true,
+  total: true, paid_amount: true, currency: true, variable_symbol: true, date_due: true, date_issued: true,
   partner_bank_account: true, partner_iban: true,
   company: { select: { id: true, name: true, ico: true, bank_account: true, verified_bank_accounts: true } },
 };
@@ -126,7 +126,12 @@ function scoreCandidates(tx, invoices) {
     if (!vsOk && !accOk) continue;
     const exact = Math.abs(remaining - txAmount) <= 0.01;
     const partial = txAmount < remaining - 0.01;
-    list.push({ ...inv, remaining, match: { vs: vsOk, msg: msgOk, account: accOk, account_known: accKnown, exact, partial } });
+    // Pojistka proti spárování s úplně jiným dokladem: platba i faktura mají VS, ale jiný (a faktura není ve zprávě),
+    // nebo platba přišla dřív, než byla faktura vystavena → shoda jen podle účtu a částky nestačí na automatiku.
+    const invVs = normalizeVs(inv.variable_symbol);
+    const vsConflict = !vsOk && !!txVs && !!invVs && txVs !== invVs;
+    const beforeIssue = !!(tx.transaction_date && inv.date_issued) && new Date(tx.transaction_date) < new Date(inv.date_issued);
+    list.push({ ...inv, remaining, match: { vs: vsOk, msg: msgOk, account: accOk, account_known: accKnown, exact, partial, vs_conflict: vsConflict, before_issue: beforeIssue } });
   }
   // nejlepší nahoře: VS+účet+částka > VS+částka > účet+částka > VS > účet
   const sc = (c) => (c.match.vs ? 4 : 0) + (c.match.account ? 2 : 0) + (c.match.exact ? 3 : 0);
@@ -162,7 +167,10 @@ async function findMatchCandidates(tx, prismaCtx, opts = {}) {
     if (withAcc.length === 1) return { decision: 'auto_match', candidates: withAcc, reason: `VS + účet + částka sedí na ${withAcc[0].invoice_number}.` };
     return { decision: 'needs_review', candidates: vsExact, reason: `${vsExact.length} faktur se stejným VS a částkou — vyber ručně.` };
   }
-  const accExact = list.filter((c) => c.match.account && c.match.exact);
+  const accExactAll = list.filter((c) => c.match.account && c.match.exact);
+  // Automaticky jen když VS neodporuje a platba nepředchází vystavení faktury; ostatní jde ke kontrole
+  const accExact = accExactAll.filter((c) => !c.match.vs_conflict && !c.match.before_issue);
+  const accSuspect = accExactAll.filter((c) => c.match.vs_conflict || c.match.before_issue);
   if (accExact.length === 1) return { decision: 'auto_match', candidates: accExact, reason: `Účet protistrany + částka sedí na ${accExact[0].invoice_number}.` };
   const vsAll = list.filter((c) => c.match.vs);
   if (vsAll.length === 1 && vsAll[0].match.partial && (vsAll[0].match.account || !vsAll[0].match.account_known || !tx.counterparty_account)) {
@@ -171,6 +179,12 @@ async function findMatchCandidates(tx, prismaCtx, opts = {}) {
   if (vsAll.length === 1 && vsAll[0].match.partial) return { decision: 'needs_review', candidates: list, reason: `VS ${txVs} sedí (částečná úhrada ${vsAll[0].invoice_number}), ale účet protistrany neodpovídá — zkontroluj ručně.` };
   if (vsAll.length === 1) return { decision: 'needs_review', candidates: list, reason: `VS ${txVs} sedí na ${vsAll[0].invoice_number}, ale platba je vyšší než zbývá doplatit (${vsAll[0].remaining}).` };
   if (vsAll.length) return { decision: 'needs_review', candidates: list, reason: `VS ${txVs} odpovídá ${vsAll.length} fakturám — vyber ručně.` };
+  if (!accExact.length && accSuspect.length) {
+    const c0 = accSuspect[0];
+    return { decision: 'needs_review', candidates: accSuspect, reason: c0.match.vs_conflict
+      ? `Účet a částka sedí na ${c0.invoice_number}, ale VS platby (${txVs}) je jiný než VS faktury (${normalizeVs(c0.variable_symbol)}) — zkontroluj ručně.`
+      : `Účet a částka sedí na ${c0.invoice_number}, ale platba je ze dne před vystavením faktury — zkontroluj ručně.` };
+  }
   if (accExact.length > 1) return { decision: 'needs_review', candidates: accExact, reason: `${accExact.length} faktur stejné protistrany se stejnou částkou — vyber ručně.` };
   return { decision: 'no_match', candidates: list, reason: 'Sedí jen účet protistrany, ne VS ani částka — případně spáruj ručně.' };
 }
