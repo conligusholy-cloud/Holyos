@@ -71,6 +71,7 @@ async function initDb() {
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS first_name TEXT');
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS last_name TEXT');
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS phone TEXT');
+  await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS password_hash TEXT');
   // Partnerský portál: přístup a viditelné sekce nastavuje admin v detailu leadu
   await q('ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS portal_access BOOLEAN NOT NULL DEFAULT false');
   await q("ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS portal_sections JSONB NOT NULL DEFAULT '[]'::jsonb");
@@ -508,11 +509,23 @@ function materialsPage(sekce, bar, title) {
 
 // ── Společné přihlášení (/login): partner i admin přes odkaz v e-mailu ─────
 const ADMIN_EMAILS = String(process.env.LU_ADMIN_EMAILS || 'tomas.holy@bestseries.cz').toLowerCase().split(/[,;\s]+/).filter(Boolean);
+const hashPw = (pw) => { const salt = crypto.randomBytes(16).toString('hex'); return salt + ':' + crypto.scryptSync(pw, salt, 64).toString('hex'); };
+function verifyPw(pw, stored) {
+  try { const [salt, h] = String(stored).split(':'); const a = Buffer.from(h, 'hex'), b = crypto.scryptSync(pw, salt, 64); return a.length === b.length && crypto.timingSafeEqual(a, b); } catch (e) { return false; }
+}
+const pwHits = new Map();
+function pwLimited(key) { const now = Date.now(), a = (pwHits.get(key) || []).filter((x) => now - x < 900e3); a.push(now); pwHits.set(key, a); if (pwHits.size > 5000) pwHits.clear(); return a.length > 8; }
+const LGP = {
+  en: { pw: 'Password (team accounts)', bad: 'Incorrect e-mail or password.', hint: 'Partners: leave the password empty — we will send a sign-in link.', go: 'Sign in' },
+  cs: { pw: 'Heslo (týmové účty)', bad: 'Nesprávný e-mail nebo heslo.', hint: 'Partneři: heslo nechte prázdné — pošleme vám přihlašovací odkaz.', go: 'Přihlásit' },
+  pl: { pw: 'Hasło (konta zespołu)', bad: 'Nieprawidłowy e-mail lub hasło.', hint: 'Partnerzy: zostaw hasło puste — wyślemy link do logowania.', go: 'Zaloguj' },
+  de: { pw: 'Passwort (Teamkonten)', bad: 'E-Mail oder Passwort falsch.', hint: 'Partner: Passwort leer lassen — wir senden Ihnen einen Anmeldelink.', go: 'Anmelden' },
+};
 function loginPage(lang, msg, err) {
   const t = LG[lang] || LG.en, base = lang === 'en' ? '' : '/' + lang;
   const body = `<div class="page"><div class="wrap"><span class="tag w">${esc(t.h)}</span><h2>${esc(t.h)}</h2><p class="sub">${esc(t.lead)}</p>
 <div class="box" style="max-width:520px">${msg ? `<div class="lgmsg">${esc(msg)}</div>` : ''}${err ? `<div class="err">${esc(err)}</div>` : ''}
-${msg ? '' : `<form method="post" action="${base}/login"><label style="margin-top:0">${esc(t.email)}</label><input name="email" type="email" required maxlength="160" autocomplete="email" autofocus><div style="margin-top:22px"><button class="btn o" type="submit"><span>${esc(t.send)}${CHEV}</span></button></div></form>`}
+${msg ? '' : `<form method="post" action="${base}/login"><label style="margin-top:0">${esc(t.email)}</label><input name="email" type="email" required maxlength="160" autocomplete="email" autofocus><label>${esc((LGP[lang] || LGP.en).pw)}</label><input name="password" type="password" maxlength="200" autocomplete="current-password"><p class="sub" style="font-size:13px;margin:8px 0 0">${esc((LGP[lang] || LGP.en).hint)}</p><div style="margin-top:22px"><button class="btn o" type="submit"><span>${esc((LGP[lang] || LGP.en).go)}${CHEV}</span></button></div></form>`}
 <div class="lgalt">${esc(t.team)} <a href="${toHolyos()}">${esc(t.holyos)}</a></div></div></div></div>`;
   return page({ lang, title: t.h + ' — Laundry Unlimited', body, canonicalPath: '/login', noindex: true });
 }
@@ -554,7 +567,21 @@ async function doLogin(req, res, lang, back) {
   }
   res.set('Cache-Control', 'no-store').send(back((LG[lang] || LG.en).sent));
 }
-app.post('/login', form, (req, res) => { const lang = loginLang(req); return doLogin(req, res, lang, (m) => loginPage(lang, m)); });
+app.post('/login', form, async (req, res) => {
+  const lang = loginLang(req), pw = String(req.body.password || '').slice(0, 200);
+  if (pw) {
+    const email = String(req.body.email || '').trim().toLowerCase().slice(0, 160);
+    const bad = () => res.status(401).set('Cache-Control', 'no-store').send(loginPage(lang, '', (LGP[lang] || LGP.en).bad));
+    if (pwLimited(String(req.ip || '') + '|' + email)) return bad();
+    const au = await adminUserOf(email);
+    if (!au || au.active === false || !au.password_hash || !verifyPw(pw, au.password_hash)) return bad();
+    if (au.id) q('UPDATE admin_users SET last_login_at=now() WHERE id=$1', [au.id]).catch(() => {});
+    const session = jwt.sign({ name: au.name || email, email, aud: 'lu-admin', iss: 'laundry-unlimited' }, SESSION_KEY, { expiresIn: '8h' });
+    res.set('Set-Cookie', COOKIE + '=' + encodeURIComponent(session) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + 8 * 3600);
+    return res.set('Cache-Control', 'no-store').redirect(302, '/admin');
+  }
+  return doLogin(req, res, lang, (m) => loginPage(lang, m));
+});
 app.get('/admin/auth', async (req, res) => {
   try {
     const t = jwt.verify(String(req.query.t || ''), USER_KEY, { audience: 'lu-admin-link', issuer: 'laundry-unlimited' });
@@ -723,19 +750,25 @@ app.get('/admin/users', requireAdmin, async (req, res) => {
   const envOnly = ADMIN_EMAILS.filter((e) => !inDb.has(e));
   const me = String((req.admin && req.admin.email) || '').toLowerCase();
   const tr = envOnly.map((e) => `<tr><td>—</td><td>${esc(e)}</td><td>—</td><td><span class="chip ok">z konfigurace</span></td><td class="mut">—</td><td class="mut small">nelze smazat</td></tr>`).concat(rows.map((r) => `<tr><td>${esc(r.name || '—')}</td><td>${esc(r.email)}</td><td>${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '—'}</td><td>${r.active ? '<span class="chip ok">aktivní</span>' : '<span class="chip">zakázán</span>'}</td><td class="mut small">${esc(fmtDt(r.last_login_at))}</td>
-<td style="text-align:right;white-space:nowrap"><button class="btn sm ghost ulink" data-id="${r.id}">Poslat odkaz</button> <button class="btn sm ghost utog" data-id="${r.id}" data-a="${r.active ? 0 : 1}">${r.active ? 'Zakázat' : 'Povolit'}</button>${String(r.email).toLowerCase() === me ? '' : ` <button class="btn sm ghost udel" data-id="${r.id}">Smazat</button>`}</td></tr>`)).join('');
+<td style="text-align:right;white-space:nowrap"><button class="btn sm ghost upw" data-id="${r.id}">Heslo</button> <button class="btn sm ghost ulink" data-id="${r.id}">Poslat odkaz</button> <button class="btn sm ghost utog" data-id="${r.id}" data-a="${r.active ? 0 : 1}">${r.active ? 'Zakázat' : 'Povolit'}</button>${String(r.email).toLowerCase() === me ? '' : ` <button class="btn sm ghost udel" data-id="${r.id}">Smazat</button>`}</td></tr>`)).join('');
   res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Uživatelé administrace — Laundry Unlimited</title>
 <style>${ADMIN_CSS}.adm{max-width:1000px;margin:0 auto;padding:22px}.mut{color:var(--mut);font-size:13px}.small{font-size:12px}.chip{border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:12px;background:#07111f}.chip.ok{border-color:#22c55e;color:#86efac}
-table{width:100%;border-collapse:collapse;margin-top:14px}th,td{text-align:left;padding:11px 10px;border-bottom:1px solid var(--line);font-size:14px}th{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.05em}.new{display:grid;grid-template-columns:1fr 1fr 1.3fr 1fr auto;gap:10px;align-items:end;margin-top:14px;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--card)}.new label{font-size:12px;color:var(--mut);font-weight:700}.msg{font-size:13px;color:#86efac;margin-top:8px}${BAR_CSS}.adm{padding-top:8px}@media(max-width:700px){.new{grid-template-columns:1fr}}
-</style></head><body>${topBar({ mode: 'admin', active: 'uzivatele' })}<div class="adm"><h3 style="margin:10px 0 0">Uživatelé administrace <span class="mut" style="font-weight:400">— týmové účty, oddělené od leadů</span></h3>
-<p class="mut" style="margin:6px 0 0">Přihlašují se e-mailem na <b>/login</b> — přijde jim odkaz do administrace. Do uživatelského prostředí se z administrace přepnou tlačítkem vpravo nahoře.</p>
-<div class="new"><div><label>Jméno *</label><input id="un" maxlength="60" placeholder="Jan" autocomplete="off"></div><div><label>Příjmení *</label><input id="ul" maxlength="60" placeholder="Novák" autocomplete="off"></div><div><label>E-mail *</label><input id="ue" type="email" maxlength="160" placeholder="jmeno@firma.cz" autocomplete="off"></div><div><label>Telefon *</label><input id="up" type="tel" maxlength="40" placeholder="+420 777 123 456" autocomplete="off"></div><button class="btn" id="uadd">Přidat uživatele</button></div><div class="msg" id="um"></div>
+table{width:100%;border-collapse:collapse;margin-top:14px}th,td{text-align:left;padding:11px 10px;border-bottom:1px solid var(--line);font-size:14px}th{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.05em}.new{display:grid;grid-template-columns:1fr 1fr 1.3fr 1fr auto;gap:10px;align-items:end;margin-top:14px;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--card)}.new label{font-size:12px;color:var(--mut);font-weight:700}.msg{font-size:13px;color:#86efac;margin-top:8px}.mov{position:fixed;inset:0;z-index:200;background:rgba(2,6,14,.78);display:flex;align-items:center;justify-content:center;padding:16px}.mbox{width:min(520px,100%);max-height:92vh;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 24px;position:relative}.mbox h3{margin:0 40px 14px 0}.mx{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#07111f;color:var(--text);font-size:18px;line-height:1;cursor:pointer}.mx:hover{border-color:var(--cy)}.mbox label{display:block;font-size:12px;color:var(--mut);font-weight:700;margin:12px 0 4px}.mrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mer{color:#fca5a5;font-size:13px;margin-top:10px;min-height:18px}${BAR_CSS}.adm{padding-top:8px}@media(max-width:700px){.mrow{grid-template-columns:1fr}}
+</style></head><body>${topBar({ mode: 'admin', active: 'uzivatele' })}<div class="adm"><div style="display:flex;align-items:center;gap:12px;margin-top:10px"><h3 style="margin:0">Uživatelé administrace <span class="mut" style="font-weight:400">— týmové účty, oddělené od leadů</span></h3><span style="flex:1"></span><button class="btn" id="unew">+ Vytvořit uživatele</button></div>
+<p class="mut" style="margin:6px 0 0">Přihlašují se na <b>/login</b> e-mailem a heslem (nebo odkazem z e-mailu). Do uživatelského prostředí se z administrace přepnou tlačítkem vpravo nahoře.</p>
+<div class="msg" id="um"></div>
 <table><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Stav</th><th>Poslední přihlášení</th><th></th></tr></thead><tbody>${tr || '<tr><td colspan="6" class="mut">Zatím žádní uživatelé.</td></tr>'}</tbody></table></div>
 <script>
 async function call(u,b){const r=await fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b||{})});return r.json()}
 const um=document.getElementById('um');
-document.getElementById('uadd').onclick=async()=>{const j=await call('/admin/api/users',{first_name:document.getElementById('un').value,last_name:document.getElementById('ul').value,email:document.getElementById('ue').value,phone:document.getElementById('up').value});if(j.ok)location.reload();else um.textContent=j.error||'Chyba'};
-document.addEventListener('click',async e=>{const b=e.target.closest('.ulink,.utog,.udel');if(!b)return;const id=b.dataset.id;
+// Okno se zavírá jen křížkem (ne kliknutím mimo ani klávesou Esc)
+function modal(title,html,onSubmit){const o=document.createElement('div');o.className='mov';o.innerHTML='<div class="mbox"><button type="button" class="mx" aria-label="Zavřít">✕</button><h3>'+title+'</h3><form>'+html+'<div class="mer"></div><div style="margin-top:14px"><button class="btn" type="submit">Uložit</button></div></form></div>';document.body.appendChild(o);
+o.querySelector('.mx').onclick=()=>o.remove();const f=o.querySelector('form'),er=o.querySelector('.mer');const fi=f.querySelector('input');if(fi)fi.focus();
+f.onsubmit=async ev=>{ev.preventDefault();er.textContent='';const d={};f.querySelectorAll('input').forEach(i=>{d[i.name]=i.value});const j=await onSubmit(d);if(j.ok)location.reload();else er.textContent=j.error||'Chyba'};}
+const pwf='<label>Heslo * (min. 8 znaků)</label><input name="password" type="password" minlength="8" maxlength="200" autocomplete="new-password" required>';
+document.getElementById('unew').onclick=()=>{modal('Vytvořit uživatele administrace','<div class="mrow"><div><label>Jméno *</label><input name="first_name" maxlength="60" required autocomplete="off"></div><div><label>Příjmení *</label><input name="last_name" maxlength="60" required autocomplete="off"></div></div><label>E-mail *</label><input name="email" type="email" maxlength="160" required autocomplete="off"><label>Telefon *</label><input name="phone" type="tel" maxlength="40" required autocomplete="off">'+pwf,d=>call('/admin/api/users',d))};
+document.addEventListener('click',async e=>{const b=e.target.closest('.ulink,.utog,.udel,.upw');if(!b)return;const id=b.dataset.id;
+if(b.classList.contains('upw')){modal('Nastavit heslo',pwf,d=>call('/admin/api/users/'+id+'/password',d));return}
 if(b.classList.contains('ulink')){if(!confirm('Poslat uživateli e-mail s přihlašovacím odkazem?'))return;const j=await call('/admin/api/users/'+id+'/link');um.textContent=j.ok?'Odkaz odeslán ✓':(j.error||'Chyba');return}
 if(b.classList.contains('utog')){const j=await call('/admin/api/users/'+id,{active:b.dataset.a==='1'});if(j.ok)location.reload();else um.textContent=j.error||'Chyba';return}
 if(!confirm('Opravdu smazat tohoto uživatele administrace?'))return;const j=await call('/admin/api/users/'+id+'/delete');if(j.ok)location.reload();else um.textContent=j.error||'Chyba'});
@@ -747,7 +780,9 @@ app.post('/admin/api/users', requireAdmin, express.json({ limit: '2kb' }), async
   if (!first || !last) return res.json({ ok: false, error: 'Vyplňte jméno i příjmení' });
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.json({ ok: false, error: 'Neplatný e-mail' });
   if (phone.replace(/\D/g, '').length < 7) return res.json({ ok: false, error: 'Vyplňte telefonní číslo' });
-  try { await q('INSERT INTO admin_users (email, name, first_name, last_name, phone) VALUES ($1,$2,$3,$4,$5)', [email, first + ' ' + last, first, last, phone]); res.json({ ok: true }); }
+  const pw = String(b.password || '');
+  if (pw.length < 8) return res.json({ ok: false, error: 'Heslo musí mít aspoň 8 znaků' });
+  try { await q('INSERT INTO admin_users (email, name, first_name, last_name, phone, password_hash) VALUES ($1,$2,$3,$4,$5,$6)', [email, first + ' ' + last, first, last, phone, hashPw(pw)]); res.json({ ok: true }); }
   catch (e) { res.json({ ok: false, error: /unique|duplicate/i.test(e.message) ? 'Tento e-mail už je v seznamu' : 'Uložení se nepovedlo' }); }
 });
 app.post('/admin/api/users/:id(\\d+)', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
@@ -755,6 +790,12 @@ app.post('/admin/api/users/:id(\\d+)', requireAdmin, express.json({ limit: '2kb'
   if (!r) return res.json({ ok: false, error: 'Nenalezeno' });
   if (req.body.active === false && String(r.email).toLowerCase() === String((req.admin && req.admin.email) || '').toLowerCase()) return res.json({ ok: false, error: 'Sám sebe zakázat nelze' });
   await q('UPDATE admin_users SET active=$2 WHERE id=$1', [req.params.id, !!req.body.active]); res.json({ ok: true });
+});
+app.post('/admin/api/users/:id(\\d+)/password', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
+  const pw = String((req.body || {}).password || '');
+  if (pw.length < 8) return res.json({ ok: false, error: 'Heslo musí mít aspoň 8 znaků' });
+  const r = await q('UPDATE admin_users SET password_hash=$2 WHERE id=$1', [req.params.id, hashPw(pw)]);
+  res.json({ ok: r.rowCount > 0, error: r.rowCount ? undefined : 'Nenalezeno' });
 });
 app.post('/admin/api/users/:id(\\d+)/link', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   const r = (await q('SELECT * FROM admin_users WHERE id=$1 AND active', [req.params.id])).rows[0];
