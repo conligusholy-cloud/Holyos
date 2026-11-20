@@ -4893,9 +4893,29 @@ function loadPodily(then) {
     if (then) then();
   }).catch(function () { PODILY_MOJE = false; if (then) then(); });
 }
+// Co držím v akciích fondů. Počítá se ze seznamu burzy — ten už nese
+// i dnešní cenu, takže se server nemusí ptát podruhé.
+function akcieMoje() {
+  var out = { pocet: 0, fondu: 0, hodnota: 0, mesicne: 0 };
+  (AKCIE_SEZNAM || []).forEach(function (f) {
+    // Rozbitá odpověď nesmí shodit celou záložku Já — karta majetku se
+    // kreslí i bez akcií, co jim chybí, se prostě nepočítá.
+    if (!f) return;
+    var kusu = Math.max(0, Math.round(Number(f.moje_kusy) || 0));
+    if (!kusu) return;
+    out.pocet += kusu;
+    out.fondu += 1;
+    out.hodnota += kusu * Math.max(0, Math.round(Number(f.cena) || 0));
+    out.mesicne += kusu * Math.max(0, Math.round(Number(f.na_akcii_mesicne) || 0));
+  });
+  return out;
+}
 // Má smysl ten blok vůbec kreslit? Jen když je co ukázat — hráč bez fondu
-// a bez podílů nemá koukat na tři nulové řádky.
+// a bez podílů nemá koukat na tři nulové řádky. Akcie se počítají taky:
+// kdo není v žádném fondu, ale akcie drží, měl do téhle chvíle svůj majetek
+// nikde.
 function podilyMamCo(p) {
+  if (akcieMoje().hodnota > 0) return true;
   if (!p) return false;
   return !!((p.fond_celkem || 0) || (p.drzim && p.drzim.hodnota)
     || (p.prodano && p.prodano.hodnota));
@@ -9114,6 +9134,8 @@ function majetekHtml() {
     + '<div class="kv souhrn"><span>' + esc(tx('hra.ciste_jmeni_2')) + '</span><b class="' + (cisteJmeni() >= 0 ? 'ok' : 'err') + '">'
     + kcFull(cisteJmeni()) + '</b></div>'
     + (podilyMamCo(PODILY_MOJE) ? (function (p) {
+        p = p || {};
+        var ak = akcieMoje();
         var h = '<h4 style="margin:14px 0 4px">' + esc(tx('hra.co_vlastnim_jinde')) + '</h4>'
           + '<p class="muted small" style="margin:0 0 6px">' + esc(tx('hra.podily_mimo_vlastni_firmu')) + '</p>';
         (p.fondy || []).forEach(function (f) {
@@ -9133,8 +9155,18 @@ function majetekHtml() {
             + ' <i class="muted small">' + p.prodano.pocet + '\u00d7</i></span><b class="err">\u2212'
             + kcFull(p.prodano.hodnota) + '</b></div>';
         }
+        // Akcie fondů. Je to majetek jako podíl — jen se s ním dá kdykoli
+        // vyjít z fondu ven. Napravo dnešní cena, pod tím co nesou za měsíc.
+        if (ak.hodnota) {
+          h += '<div class="kv"><span>' + esc(tx('hra.akcie_fondu'))
+            + ' <i class="muted small">' + tCislo(ak.pocet) + '\u00d7</i></span><b class="ok">'
+            + kcFull(ak.hodnota) + '</b></div>'
+            + (ak.mesicne ? '<p class="fine">' + tx('veta.akcie_nesou_mesicne',
+                { p1: ak.mesicne }) + '</p>' : '');
+        }
         return h + '<div class="kv souhrn"><span>' + esc(tx('hra.vcetne_podilu'))
-          + '</span><b class="ok">' + kcFull(cisteJmeni() + (p.celkem || 0)) + '</b></div>';
+          + '</span><b class="ok">' + kcFull(cisteJmeni() + (p.celkem || 0) + ak.hodnota)
+          + '</b></div>';
       }(PODILY_MOJE)) : '')
     + '<h3 style="margin:16px 0 4px">' + esc(tx('hra.moje_pozemky')) + '</h3>'
     + (zem.length
@@ -10335,6 +10367,9 @@ function paintMe() {
   // Podíly dotáhneme při prvním otevření záložky a kartu pak překreslíme.
   // Dokud nedorazí, karta vypadá jako dřív — nic nebliká a nic nechybí.
   if (PODILY_MOJE == null) { PODILY_MOJE = false; loadPodily(paintMe); }
+  // Akcie fondů patří do majetku stejně jako podíly. Seznam burzy nese
+  // i dnešní cenu, takže z něj karta spočítá, co hráč v akciích drží.
+  if (AKCIE_SEZNAM == null) loadAkcieSeznam(paintMe);
   var p = PROFILES[S.profile];
   // Co má hráč rozepsané, přežije překreslení.
   var drzFirma = $('me-firma') ? $('me-firma').value : null;
@@ -10897,6 +10932,15 @@ function akcieZpet() {
   if (typeof kam === 'function') return kam();
   closeSheet();
 }
+// Výnos akcie v procentech a za jak dlouho se při něm cena vrátí. Počítá se
+// stejně jako u držených podílů ve fondu, ať hráč nemá dvě různá měřítka.
+function akcieVynosHtml(f) {
+  var v = podilVynos({ cena: f.cena, mesicne: f.na_akcii_mesicne });
+  if (!v) return '';
+  return '<p class="fine">' + (v.nevrati
+    ? tx('fond.vynos_nevrati', { p1: pctHra(v.podil) })
+    : tx('fond.vynos', { p1: pctHra(v.podil), p2: v.mesicu })) + '</p>';
+}
 function akcieKartaHtml(f) {
   return '<div class="trade" data-akcie-karta="' + f.aliance_id + '">'
     + '<div class="row"><b>' + esc(f.nazev) + '</b>'
@@ -10905,6 +10949,12 @@ function akcieKartaHtml(f) {
         || '<p class="fine" style="margin:2px 0">' + esc(tx('akcie.bez_obchodu')) + '</p>')
     + '<div class="row"><span class="muted small">' + esc(tx('akcie.vydano')) + '</span>'
     + '<span>' + tCislo(f.vydano) + ' · ' + procentaPodilu(f.podil) + esc(tx('akcie.fondu')) + '</span></div>'
+    // Co akcie nese. Cena je spekulace, tohle je výdělek — hráč musí vidět
+    // obojí vedle sebe, jinak kupuje jen graf.
+    + '<div class="row"><span class="muted small">' + esc(tx('akcie.nese_mesicne')) + '</span>'
+    + '<span class="' + (f.na_akcii_mesicne > 0 ? 'ok' : 'muted') + '">'
+    + kcFull(f.na_akcii_mesicne) + '</span></div>'
+    + akcieVynosHtml(f)
     + (f.moje_kusy ? '<div class="row"><span class="muted small">'
         + esc(tx('akcie.moje_kusy')) + '</span><span class="ok">'
         + tCislo(f.moje_kusy) + '</span></div>' : '')
@@ -10983,6 +11033,13 @@ function akcieTrhSheet(id, smer) {
     + tCislo(a.volne) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('akcie.fond_vykoupi')) + '</span><b>'
     + tCislo(a.vykoupi) + '</b></div>'
+    // Dividenda je to, co fond doopravdy vyhlásil a vyplatil. Dokud
+    // nevyhlásí nic, je tu nula — a to je poctivá informace.
+    + '<div class="kv"><span>' + esc(tx('akcie.dividenda_posledni')) + '</span><b class="'
+    + (a.dividenda_posledni > 0 ? 'ok' : '') + '">' + kcFull(a.dividenda_posledni) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('akcie.dividenda_celkem')) + '</span><b>'
+    + kcFull(a.dividenda_celkem) + '</b></div>'
+    + '<p class="fine">' + esc(tx('akcie.dividenda_popis')) + '</p>'
     + (posledni.length
         ? '<h4 style="margin:14px 0 2px">' + esc(tx('akcie.posledni_obchody')) + '</h4>'
           + posledni.map(function (o) {
@@ -10996,6 +11053,10 @@ function akcieTrhSheet(id, smer) {
     + kcFull(a.cena) + '</b></div>'
     + '<h4 style="margin:10px 0 2px">' + esc(tx('akcie.graf')) + '</h4>'
     + akcieGraf(a.graf)
+    // Co akcie nese, stojí hned u ceny: jedna věc je spekulace, druhá výdělek.
+    + '<div class="kv"><span>' + esc(tx('akcie.nese_mesicne')) + '</span><b class="'
+    + (a.na_akcii_mesicne > 0 ? 'ok' : '') + '">' + kcFull(a.na_akcii_mesicne) + '</b></div>'
+    + akcieVynosHtml(a)
     + '<div class="kv"><span>' + esc(tx('akcie.moje_kusy')) + '</span><b class="'
     + (a.moje_kusy ? 'ok' : '') + '">' + tCislo(a.moje_kusy) + '</b></div>'
     // I v obchodu musí být vidět strop toho směru: kolik fond ještě prodá,

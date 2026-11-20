@@ -3825,5 +3825,11 @@
   "fond.akcie_kapital": "Capital issu des actions",
   "fond.akcie_burza": "Ouvrir la bourse",
   "veta.fond_akcie_vydano_z": "{cislo:p1} sur {cislo:p2}",
-  "veta.fond_akcie_tok": "Les actions ont rapporté {penize:p1}, et {penize:p2} sont repartis en rachats."
+  "veta.fond_akcie_tok": "Les actions ont rapporté {penize:p1}, et {penize:p2} sont repartis en rachats.",
+  "akcie.nese_mesicne": "Par action et par mois",
+  "akcie.dividenda_posledni": "Dernier dividende",
+  "akcie.dividenda_celkem": "Versé par action",
+  "akcie.dividenda_popis": "« Par action et par mois » est la part du revenu mensuel du fonds qui revient à une action. Elle est versée dès que le fonds la déclare en dividende — le cours est une chose, le rendement en est une autre.",
+  "hra.akcie_fondu": "Actions de fonds",
+  "veta.akcie_nesou_mesicne": "Elles rapportent {penize:p1} par mois, dès que le fonds le déclare en dividende."
 }

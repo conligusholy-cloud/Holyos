@@ -3798,5 +3798,11 @@
   "fond.akcie_kapital": "f3dde11bebfc",
   "fond.akcie_burza": "9a573ba91203",
   "veta.fond_akcie_vydano_z": "622f7f5630c6",
-  "veta.fond_akcie_tok": "dcbecb4f93bd"
+  "veta.fond_akcie_tok": "dcbecb4f93bd",
+  "akcie.nese_mesicne": "d59dc571d545",
+  "akcie.dividenda_posledni": "4691612b5974",
+  "akcie.dividenda_celkem": "7a1709d1dfd4",
+  "akcie.dividenda_popis": "4a8969ab74e9",
+  "hra.akcie_fondu": "86d1ac5831db",
+  "veta.akcie_nesou_mesicne": "885fb2f99537"
 }

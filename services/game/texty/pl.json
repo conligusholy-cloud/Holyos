@@ -3832,5 +3832,11 @@
   "fond.akcie_kapital": "Kapitał z akcji",
   "fond.akcie_burza": "Otwórz giełdę",
   "veta.fond_akcie_vydano_z": "{cislo:p1} z {cislo:p2}",
-  "veta.fond_akcie_tok": "Za akcje wpłynęło {penize:p1}, a {penize:p2} wyszło z powrotem na odkupy."
+  "veta.fond_akcie_tok": "Za akcje wpłynęło {penize:p1}, a {penize:p2} wyszło z powrotem na odkupy.",
+  "akcie.nese_mesicne": "Na akcję miesięcznie",
+  "akcie.dividenda_posledni": "Ostatnia dywidenda",
+  "akcie.dividenda_celkem": "Wypłacono na akcję",
+  "akcie.dividenda_popis": "„Na akcję miesięcznie” to część miesięcznego dochodu funduszu przypadająca na jedną akcję. Wypłaci się, gdy fundusz ogłosi ją jako dywidendę — czym innym jest cena akcji, a czym innym to, co przynosi.",
+  "hra.akcie_fondu": "Akcje funduszy",
+  "veta.akcie_nesou_mesicne": "Przynoszą {penize:p1} miesięcznie, gdy fundusz ogłosi to jako dywidendę."
 }

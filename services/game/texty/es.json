@@ -3825,5 +3825,11 @@
   "fond.akcie_kapital": "Capital de las acciones",
   "fond.akcie_burza": "Abrir la bolsa",
   "veta.fond_akcie_vydano_z": "{cislo:p1} de {cislo:p2}",
-  "veta.fond_akcie_tok": "Las acciones recaudaron {penize:p1} y {penize:p2} volvieron a salir en recompras."
+  "veta.fond_akcie_tok": "Las acciones recaudaron {penize:p1} y {penize:p2} volvieron a salir en recompras.",
+  "akcie.nese_mesicne": "Por acción al mes",
+  "akcie.dividenda_posledni": "Último dividendo",
+  "akcie.dividenda_celkem": "Pagado por acción",
+  "akcie.dividenda_popis": "«Por acción al mes» es la parte del rendimiento mensual del fondo que corresponde a una acción. Se paga cuando el fondo la declara como dividendo: una cosa es el precio y otra lo que renta.",
+  "hra.akcie_fondu": "Acciones de fondos",
+  "veta.akcie_nesou_mesicne": "Rinden {penize:p1} al mes, cuando el fondo lo declare como dividendo."
 }

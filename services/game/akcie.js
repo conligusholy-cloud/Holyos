@@ -161,5 +161,23 @@ function kapital(obchody) {
   return { vybrano, vyplaceno, kapital: vybrano - vyplaceno };
 }
 
-module.exports = { vydani, ucetni, dilClenu, cenaPo, castkaZa, koupit, prodat, kapital,
+// Co jedna akcie vydělává za měsíc.
+//
+// Fond nese měsíčně to, co mu teče z držených podílů. Akcionářům z toho
+// patří jejich díl fondu — a na jednu akcii připadá tenhle díl dělený počtem
+// vydaných kusů. Je to nárok, ne výplata: dividendu musí fond teprve
+// vyhlásit hlasováním. Spekulace s cenou je druhá věc a s tímhle číslem
+// nesouvisí.
+//
+// Bez vydaných kusů se nedělí nulou a ztráta fondu se na akcii nepřenáší:
+// akcionář nedoplácí, nanejvýš nedostane nic.
+function vynosNaAkcii(neseMesicne, podil, vydano) {
+  const n = cislo(neseMesicne);
+  const p = Math.max(0, Math.min(1, cislo(podil)));
+  const v = kusy(vydano);
+  if (!(v > 0) || !(n > 0) || !(p > 0)) return 0;
+  return Math.round((n * p) / v);
+}
+
+module.exports = { vydani, ucetni, dilClenu, cenaPo, castkaZa, koupit, prodat, kapital, vynosNaAkcii,
   CENA_MIN, CENA_MAX, POCET_MIN, POCET_MAX, PODIL_MAX, CITLIVOST };

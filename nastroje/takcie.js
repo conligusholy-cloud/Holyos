@@ -129,6 +129,25 @@ ok('co se vrátilo, už kapitál není', vrat.kapital === 0 && vrat.vybrano === 
 ok('prázdno je nula', A.kapital([]).kapital === 0 && A.kapital(null).kapital === 0);
 ok('nesmysly nic neshodí', A.kapital([null, {}, { pocet: 'x', cena: 'y' }]).kapital === 0);
 
+// ─── Co akcie nese ────────────────────────────────────────────────
+// Spekulace s cenou je jedna věc, výdělek druhá. Na akcii připadá díl
+// měsíčního výnosu fondu, který patří akcionářům, dělený počtem kusů.
+ok('na akcii připadá díl akcionářů dělený počtem kusů',
+  A.vynosNaAkcii(1000000, 0.5, 100) === 5000);
+ok('větší díl akcionářů nese víc',
+  A.vynosNaAkcii(1000000, 0.8, 100) > A.vynosNaAkcii(1000000, 0.5, 100));
+ok('víc vydaných kusů nese na kus mín',
+  A.vynosNaAkcii(1000000, 0.5, 200) === 2500);
+// Bez vydaných kusů se nedělí nulou.
+ok('bez vydaných kusů je to nula', A.vynosNaAkcii(1000000, 0.5, 0) === 0);
+ok('a vrací se číslo, ne nekonečno', Number.isFinite(A.vynosNaAkcii(1e6, 0.5, 0)));
+// Ztráta fondu se na akcii nepřenáší: akcionář nedoplácí.
+ok('ztráta fondu akcii do mínusu nestahuje', A.vynosNaAkcii(-500000, 0.5, 100) === 0);
+ok('fond, který nenese nic, nenese nic ani na akcii',
+  A.vynosNaAkcii(0, 0.5, 100) === 0);
+ok('bez dílu akcionářů taky nic', A.vynosNaAkcii(1000000, 0, 100) === 0);
+ok('nesmysly nic nerozbijí', A.vynosNaAkcii('x', 'y', 'z') === 0);
+
 // ─── Zapojení ────────────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');

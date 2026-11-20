@@ -3825,5 +3825,11 @@
   "fond.akcie_kapital": "Capital from shares",
   "fond.akcie_burza": "Open the exchange",
   "veta.fond_akcie_vydano_z": "{cislo:p1} of {cislo:p2}",
-  "veta.fond_akcie_tok": "Shares raised {penize:p1}, and {penize:p2} went back out on buybacks."
+  "veta.fond_akcie_tok": "Shares raised {penize:p1}, and {penize:p2} went back out on buybacks.",
+  "akcie.nese_mesicne": "Per share monthly",
+  "akcie.dividenda_posledni": "Last dividend",
+  "akcie.dividenda_celkem": "Paid out per share",
+  "akcie.dividenda_popis": "“Per share monthly” is the slice of the fund’s monthly income that falls on one share. It is paid out once the fund declares it as a dividend — the share price is one thing, what it earns is another.",
+  "hra.akcie_fondu": "Fund shares",
+  "veta.akcie_nesou_mesicne": "They earn {penize:p1} a month, once the fund declares it as a dividend."
 }

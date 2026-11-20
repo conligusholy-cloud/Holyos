@@ -2671,6 +2671,36 @@ function akcieStav(al, hodnota) {
     ucetni: AKCIE.ucetni(hodnota, al.akcie_podil || 0, vydano) };
 }
 
+// Co akcie vydělávají. Dvě různé věci, které si hráč nesmí plést:
+//  • nárok — díl měsíčního výnosu fondu, který na akcii připadá,
+//  • dividenda — co fond doopravdy vyhlásil a vyplatil.
+// První je příslib, druhé jsou peníze, které už přišly.
+async function akcieVynosy(ids) {
+  const out = new Map();
+  if (!ids.length) return out;
+  const HIST = require('../services/game/fond-historie');
+  const [drzby, dividendy] = await Promise.all([
+    HIST.drzby().catch(() => []),
+    prisma.gameFondNavrh.findMany({ where: { aliance_id: { in: ids },
+      druh: 'akcie_dividenda', stav: 'proveden' }, orderBy: { id: 'desc' },
+      select: { aliance_id: true, detail: true } }).catch(() => []),
+  ]);
+  ids.forEach((id) => out.set(id, { nese: 0, posledni: 0, celkem: 0 }));
+  drzby.forEach((d) => {
+    const r = out.get(d.aliance_id);
+    if (r) r.nese += Math.max(0, Math.round(d.mesicne || 0));
+  });
+  dividendy.forEach((n) => {
+    const r = out.get(n.aliance_id);
+    if (!r) return;
+    const naAkcii = Math.max(0, Math.round(((n.detail || {}).na_akcii) || 0));
+    // Pořadí je od nejnovějšího, takže první nalezená je ta poslední.
+    if (!r.posledni) r.posledni = naAkcii;
+    r.celkem += naAkcii;
+  });
+  return out;
+}
+
 // Kolik obchodů se vejde do malého grafu v seznamu. Dost na to, aby byl
 // vidět pohyb, a málo na to, aby seznam nenesl stovky čísel pro nic.
 const AKCIE_GRAF_SEZNAM = 30;
@@ -2688,6 +2718,7 @@ router.get('/trade/akcie', hrac, api(async (req, res) => {
   ]);
   const mam = new Map(moje.map((x) => [x.aliance_id, x.pocet]));
   const zajimave = fondy.filter((f) => (f.akcie_celkem || 0) > 0);
+  const vynosy = await akcieVynosy(zajimave.map((f) => f.id));
   const out = [];
   for (const f of zajimave) {
     // Graf se ptá fond po fondu schválně: jeden společný dotaz s limitem by
@@ -2700,9 +2731,15 @@ router.get('/trade/akcie', hrac, api(async (req, res) => {
     ]);
     const graf = obchody.slice().reverse();
     const s = akcieStav(f, hodnota);
+    const vyn = vynosy.get(f.id) || { nese: 0, posledni: 0, celkem: 0 };
     out.push({ aliance_id: f.id, nazev: f.nazev, cena: s.cena, ucetni: s.ucetni,
       vydano: s.vydano, volne: s.volne, podil: s.podil,
       moje_kusy: mam.get(f.id) || 0,
+      // Co akcie nese a co už vyplatila — jedno je nárok, druhé peníze.
+      nese_mesicne: vyn.nese,
+      na_akcii_mesicne: AKCIE.vynosNaAkcii(vyn.nese, s.podil, s.vydano),
+      dividenda_posledni: vyn.posledni,
+      dividenda_celkem: vyn.celkem,
       graf,
       // Cena na začátku grafu. Null = ještě se neobchodovalo, a to není
       // pokles: šipka se pak neukáže vůbec.
@@ -2725,9 +2762,15 @@ router.get('/trade/akcie/:id', hrac, api(async (req, res) => {
     fondVolne(alianceId, al),
   ]);
   const s = akcieStav(al, hodnota);
+  const vyn = (await akcieVynosy([alianceId])).get(alianceId)
+    || { nese: 0, posledni: 0, celkem: 0 };
   res.json({ ok: true, akcie: Object.assign(s, {
     aliance_id: alianceId, nazev: al.nazev,
     moje_kusy: moje,
+    nese_mesicne: vyn.nese,
+    na_akcii_mesicne: AKCIE.vynosNaAkcii(vyn.nese, s.podil, s.vydano),
+    dividenda_posledni: vyn.posledni,
+    dividenda_celkem: vyn.celkem,
     // Kolik kusů fond ještě vykoupí, než mu dojdou volné peníze. Hráč to
     // musí vidět dřív, než zadá prodej, který by neprošel.
     vykoupi: s.cena > 0 ? Math.floor(Math.max(0, fondVolno.volne) / s.cena) : 0,

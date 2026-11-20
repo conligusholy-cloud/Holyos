@@ -3859,5 +3859,11 @@
   "fond.akcie_kapital": "Kapitál z akcií",
   "fond.akcie_burza": "Otevřít burzu",
   "veta.fond_akcie_vydano_z": "{cislo:p1} z {cislo:p2}",
-  "veta.fond_akcie_tok": "Za akcie se vybralo {penize:p1}, zpátky se jich vykoupilo za {penize:p2}."
+  "veta.fond_akcie_tok": "Za akcie se vybralo {penize:p1}, zpátky se jich vykoupilo za {penize:p2}.",
+  "akcie.nese_mesicne": "Na akcii měsíčně",
+  "akcie.dividenda_posledni": "Poslední dividenda",
+  "akcie.dividenda_celkem": "Vyplaceno na akcii",
+  "akcie.dividenda_popis": "„Na akcii měsíčně“ je díl měsíčního výnosu fondu, který na jednu akcii připadá. Vyplatí se, až ho fond vyhlásí jako dividendu — jedna věc je cena akcie, druhá to, co nese.",
+  "hra.akcie_fondu": "Akcie fondů",
+  "veta.akcie_nesou_mesicne": "Nesou {penize:p1} měsíčně, až to fond vyhlásí jako dividendu."
 }

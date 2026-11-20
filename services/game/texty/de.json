@@ -3825,5 +3825,11 @@
   "fond.akcie_kapital": "Kapital aus Aktien",
   "fond.akcie_burza": "Börse öffnen",
   "veta.fond_akcie_vydano_z": "{cislo:p1} von {cislo:p2}",
-  "veta.fond_akcie_tok": "Für Aktien kamen {penize:p1} herein, für Rückkäufe gingen {penize:p2} wieder hinaus."
+  "veta.fond_akcie_tok": "Für Aktien kamen {penize:p1} herein, für Rückkäufe gingen {penize:p2} wieder hinaus.",
+  "akcie.nese_mesicne": "Je Aktie monatlich",
+  "akcie.dividenda_posledni": "Letzte Dividende",
+  "akcie.dividenda_celkem": "Je Aktie ausgezahlt",
+  "akcie.dividenda_popis": "„Je Aktie monatlich“ ist der Anteil am Monatsertrag des Fonds, der auf eine Aktie entfällt. Ausgezahlt wird er, sobald ihn der Fonds als Dividende beschließt — der Kurs ist das eine, der Ertrag das andere.",
+  "hra.akcie_fondu": "Fondsaktien",
+  "veta.akcie_nesou_mesicne": "Sie bringen {penize:p1} im Monat, sobald der Fonds es als Dividende beschließt."
 }

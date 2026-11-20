@@ -21,12 +21,16 @@ function ok(co, podminka, detail) {
 const hra = fs.readFileSync(
   path.join(__dirname, '..', 'public', 'compounder', 'game', 'game.js'), 'utf8');
 const kus = (hra.match(/function podilyMamCo\(p\) \{[\s\S]*?\n\}/) || [''])[0];
+const kusAk = (hra.match(/function akcieMoje\(\) \{[\s\S]*?\n\}/) || [''])[0];
 ok('v game.js se našlo: podilyMamCo', !!kus);
-if (!kus) { console.log('\n' + chyb + ' nesedí'); process.exit(1); }
-const box = {};
+ok('v game.js se našlo: akcieMoje', !!kusAk);
+if (!kus || !kusAk) { console.log('\n' + chyb + ' nesedí'); process.exit(1); }
+const box = { AKCIE_SEZNAM: null };
 vm.createContext(box);
-vm.runInContext(kus + '\n', box);
+vm.runInContext(kusAk + '\n' + kus + '\n', box);
 const mamCo = box.podilyMamCo;
+const akcie = box.akcieMoje;
+const sAkciemi = (l, f) => { box.AKCIE_SEZNAM = l; const r = f(); box.AKCIE_SEZNAM = null; return r; };
 
 // ─── Kdy se blok kreslí ──────────────────────────────────────────────────────
 ok('hráč s podílem ve fondu blok vidí',
@@ -43,6 +47,32 @@ ok('hráč bez fondu a bez podílů blok nevidí',
 ok('dokud se nenačte, blok není', mamCo(null) === false && mamCo(false) === false);
 ok('prázdná odpověď blok nedělá', mamCo({}) === false);
 
+// ─── Akcie fondů ────────────────────────────────────────────────
+// Akcie se dají koupit i bez členství ve fondu. Kdo žádný vklad nemá, ale
+// akcie drží, měl svůj majetek do téhle chvíle nikde — ani v kartě, ani
+// v součtu.
+const burza = [
+  { aliance_id: 1, cena: 145919, moje_kusy: 65, na_akcii_mesicne: 762 },
+  { aliance_id: 2, cena: 50000, moje_kusy: 0, na_akcii_mesicne: 100 },
+  { aliance_id: 3, cena: 20000, moje_kusy: 3, na_akcii_mesicne: 0 },
+];
+const mam = sAkciemi(burza, akcie);
+ok('sčítají se kusy ze všech fondů', mam.pocet === 68);
+ok('fond, kde nic nedržím, se nepočítá', mam.fondu === 2);
+ok('hodnota je kusy krát dnešní cena', mam.hodnota === 65 * 145919 + 3 * 20000);
+ok('a ví se, co nesou za měsíc', mam.mesicne === 65 * 762);
+ok('bez načteného seznamu je to nula',
+  akcie().hodnota === 0 && akcie().pocet === 0);
+ok('nesmysly nic neshodí',
+  sAkciemi([{ cena: 'x', moje_kusy: 'y' }, null && {}], akcie).hodnota === 0);
+// A blok se kvůli nim kreslí, i když hráč není v žádném fondu.
+ok('kdo drží jen akcie, blok vidí',
+  sAkciemi(burza, () => mamCo({ fond_celkem: 0, drzim: { hodnota: 0 },
+    prodano: { hodnota: 0 } })) === true);
+ok('a bez akcií i bez podílů pořád ne',
+  sAkciemi([{ aliance_id: 1, cena: 1000, moje_kusy: 0 }],
+    () => mamCo({ fond_celkem: 0, drzim: { hodnota: 0 }, prodano: { hodnota: 0 } })) === false);
+
 // ─── Součet ──────────────────────────────────────────────────────────────────
 // Server posílá celkem = fond + držené podíly − co z mé firmy drží jiní.
 // Hra k němu přičte čisté jmění. Tady se kontroluje jen ta aritmetika
@@ -56,9 +86,12 @@ ok('a nedostane se nad hodnotu fondu', celkem(ja) < ja.fond_celkem);
 ok('karta majetku blok kreslí', hra.indexOf('podilyMamCo(PODILY_MOJE)') > 0);
 ok('prodaná část má v kartě minus',
   /z_me_firmy_drzi_jini[\s\S]{0,200}err">\\u2212/.test(hra));
+ok('a akcie jsou v kartě taky', /hra\.akcie_fondu[\s\S]{0,200}kcFull\(ak\.hodnota\)/.test(hra));
+ok('a v součtu', /kcFull\(cisteJmeni\(\) \+ \(p\.celkem \|\| 0\) \+ ak\.hodnota\)/.test(hra));
 // Čisté jmění se tím měnit nesmí: váže se na něj hodnost i úvěrový rámec.
 const fn = (hra.match(/function cisteJmeni\(\) \{[\s\S]*?\n\}/) || [''])[0];
 ok('čisté jmění o podílech neví', fn.indexOf('PODILY_MOJE') < 0 && fn.indexOf('podil') < 0);
+ok('ani o akciích', fn.indexOf('AKCIE') < 0 && fn.indexOf('akcie') < 0);
 
 // Neúspěšné načtení nesmí nechat stav, kvůli kterému se kreslení ptá pořád
 // dokola — paintMe se volá při každém překreslení záložky.

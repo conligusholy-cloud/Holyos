@@ -97,6 +97,10 @@ ok('a ikona v hře doopravdy je', /id="akcie-btn"/.test(html));
 const seznam = hra.slice(hra.indexOf('function akcieKartaHtml'));
 const usekSeznam = seznam.slice(0, seznam.indexOf('function akcieTrhSheet'));
 ok('na kartě je graf', /akcieKrivka\(f\.graf, true\)/.test(usekSeznam));
+// Cena je spekulace, tohle je výdělek. Kdo vidí jen graf, kupuje naslepo.
+ok('na kartě je i to, co akcie nese',
+  /akcie\.nese_mesicne/.test(usekSeznam) && /kcFull\(f\.na_akcii_mesicne\)/.test(usekSeznam));
+ok('a výnos v procentech', /akcieVynosHtml\(f\)/.test(usekSeznam));
 ok('na kartě je cena i šipka', /kcFull\(f\.cena\)/.test(usekSeznam) && /akcieSipka\(f\)/.test(usekSeznam));
 ok('a rovnou obě tlačítka', /data-akcie-koupit/.test(usekSeznam) && /data-akcie-prodat/.test(usekSeznam));
 // Prodat nejde, co nedržím. Tlačítko, které jen spadne na chybu, je horší
@@ -171,6 +175,23 @@ ok('fond bez akcií blok nemá', /if \(f\.akcie_celkem > 0\) \{/.test(usekF));
 ok('z fondu vede cesta na burzu', /id="fond-burza"/.test(usekF));
 ok('a z burzy zpátky do fondu',
   /AKCIE_KAM = fondZavriAZnovu;/.test(hra));
+
+// Dividenda je to, co fond doopravdy vyplatil — patří k podrobnostem vedle
+// nároku, ne místo něj.
+ok('podrobnosti ukazují poslední dividendu',
+  /akcie\.dividenda_posledni[\s\S]{0,200}a\.dividenda_posledni/.test(usekTrh));
+ok('i co se na akcii vyplatilo celkem',
+  /akcie\.dividenda_celkem[\s\S]{0,200}a\.dividenda_celkem/.test(usekTrh));
+ok('a vysvětlení, že nárok není výplata', /akcie\.dividenda_popis/.test(usekTrh));
+
+// Co posílá server do seznamu a detailu akcií.
+const rA = routy.slice(routy.indexOf('async function akcieVynosy'));
+const usekV = rA.slice(0, rA.indexOf('// Kolik obchod'));
+ok('výnos fondu se bere z držeb, ne z pokladny', /HIST\.drzby\(\)/.test(usekV));
+ok('dividendy jen z provedených návrhů',
+  /druh: 'akcie_dividenda', stav: 'proveden'/.test(usekV));
+ok('poslední dividenda je ta nejnovější', /orderBy: \{ id: 'desc' \}/.test(usekV));
+ok('nárok na akcii počítá služba', /AKCIE\.vynosNaAkcii\(vyn\.nese/.test(routy));
 
 // Co posílá server do panelu fondu.
 const fondR = routy.slice(routy.indexOf("router.get('/trade/aliance/fond'"));
