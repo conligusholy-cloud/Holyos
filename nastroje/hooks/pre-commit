@@ -147,6 +147,17 @@ if git diff --cached --name-only | grep -qE 'services/game/zlocin'; then
   fi
 fi
 
+# Stavba na místě, kde zábor už leží, a náhrobek po odebraném stroji. Obojí
+# bralo hráči zaplacený prádlomat: jednou se nedalo postavit na vlastní ploše,
+# podruhé stroj po stavbě zmizel z mapy a nevrátil se ani na sklad.
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; then
+  if ! node nastroje/tstavba.js; then
+    echo ""
+    echo "STOP: stavba na vlastním místě nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Předplatné na techniky: co se účtuje a co hráč dostane. Jsou to skutečné
 # peníze — chyba tady buď okrade hráče, nebo dá obejít placení.
 if git diff --cached --name-only | grep -qE 'services/game/predplatne|routes/game-stripe|routes/game-account'; then

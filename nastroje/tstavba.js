@@ -28,13 +28,14 @@ function vytahni(re, co) {
 const kusy = [
   vytahni(/function padId\(spotId, i\) \{[^\n]*\n/, 'padId'),
   vytahni(/function dopsatStroj\(claim\) \{[^\n]*\n/, 'dopsatStroj'),
+  vytahni(/function zrusNahrobek\(spotId\) \{[\s\S]*?\n\}/, 'zrusNahrobek'),
 ];
 if (kusy.some((x) => !x)) { console.log('\n' + chyb + ' nesedí'); process.exit(1); }
 
 const box = {};
 vm.createContext(box);
 vm.runInContext(kusy.join('\n'), box);
-const { padId, dopsatStroj } = box;
+const { padId, dopsatStroj, zrusNahrobek } = box;
 
 // ─── Čím se staví ────────────────────────────────────────────────────────────
 // Volný zábor je ten, do kterého se jen dopíše stroj. Nic jiného.
@@ -73,6 +74,38 @@ ok('na stání, kde stroj pořád stojí, se nestaví',
 // Třetí stání nikdy nikdo nezabral — tam se místo zabírá normálně.
 ok('na dosud nezabrané stání se zabírá nově',
   dopsatStroj(poSoudu[padId('fabriano-1', 2)]) === false);
+
+// ─── Zapojení do stavby ──────────────────────────────────────────────────────
+// Pomocník sám o sobě nestačí: musí se při dokončení stavby opravdu zavolat,
+// a dřív, než se stroj přidá do sítě. Tohle se nedá ověřit spuštěním, protože
+// dokončení stavby je obsluha tlačítka — hlídá se tedy v samotném zdroji.
+const dokonceni = hra.slice(hra.indexOf('var volani = dopsatStroj('));
+const iZrus = dokonceni.indexOf('zrusNahrobek(spotId);');
+const iPush = dokonceni.indexOf('S.units.push({ spotId: spotId');
+ok('dokončená stavba náhrobek ruší', iZrus > 0);
+ok('ruší ho dřív, než stroj přidá do sítě', iZrus > 0 && iPush > 0 && iZrus < iPush);
+
+// ─── Náhrobek po odebraném stroji ────────────────────────────────────────────
+// Tohle je ten případ, kdy hráč přišel o zaplacený stroj úplně: soud mu
+// zabavil prádlomat, místo si to poznamenalo, a když na stejné místo postavil
+// nový, srovnání se serverem ho smazalo — a na sklad ho nevrátilo.
+box.S = { prodano: { 'horice-0': 1, 'fabriano-1': 1 } };
+ok('nová stavba náhrobek ruší',
+  zrusNahrobek('horice-0') === true && box.S.prodano['horice-0'] === undefined);
+ok('cizí náhrobky zůstávají — o ty stroje hráč přišel u soudu',
+  box.S.prodano['fabriano-1'] === 1);
+ok('místo bez náhrobku se stavbou nemění',
+  zrusNahrobek('praha-5') === false);
+// Druhá stavba na témže místě už nemá co rušit; nesmí spadnout.
+ok('zrušení dvakrát po sobě nevadí', zrusNahrobek('horice-0') === false);
+
+// Bez uloženého stavu se nesmí sáhnout do ničeho — hra volá stavbu i dřív,
+// než je stav načtený, a výjimka by shodila celé dokončení stavby: hráč by
+// měl stroj zaplacený, server by ho měl zapsaný a hra by o něm nevěděla.
+box.S = null;
+ok('bez stavu hry to jen nic neudělá', zrusNahrobek('horice-0') === false);
+box.S = {};
+ok('bez seznamu náhrobků to jen nic neudělá', zrusNahrobek('horice-0') === false);
 
 console.log(chyb ? '\n' + chyb + ' nesedí' : '\nSedí.');
 process.exit(chyb ? 1 : 0);

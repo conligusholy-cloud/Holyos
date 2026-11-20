@@ -5295,6 +5295,7 @@ function installSheet(sp, areaId, modelKey, drz, pad) {
         toast(tx('veta.sidlo_firmy_mas_v_zmenit_se', { p1: S.sidlo.name }), 'ok');
       }
       S.stock[modelKey] = inStock(modelKey) - 1;
+      zrusNahrobek(spotId);
       S.units.push({ spotId: spotId, areaId: areaId, name: nazev, kind: sp.kind, score: sp.score,
         lat: sp.lat + dlat, lon: sp.lon + dlon, builtAt: Date.now(), eco: e });
       ev('game_build');
@@ -5499,6 +5500,20 @@ function padId(spotId, i) { return i ? spotId + '#' + i : spotId; }
 // u prvního stání na vlastním pozemku a pak všude, kde stroj zmizel —
 // zbouraný hrou nebo zabavený soudem. Zábor hráči zůstává, mizí jen stroj.
 function dopsatStroj(claim) { return !!(claim && claim.mine && !claim.model); }
+// Náhrobek po odebraném stroji. Doručenka unit_remove si místo poznamená,
+// aby se stroj nevracel na sklad a neobnovoval se ze záboru — u stroje
+// zabaveného soudem je to tak správně. Jenže poznámka platila napořád:
+// když hráč na tomtéž místě později postavil nový stroj, srovnání se
+// serverem ho zase smazalo a na sklad ho nevrátilo, protože tahle větev
+// s ním nepočítá. Stroj se hráči ztratil úplně, i s tím, co za něj dal.
+// Vlastní nová stavba proto náhrobek ruší: od té chvíle je to zase
+// normální místo. Samo od sebe se nezruší nikdy — jinak by se tím vracely
+// i stroje, o které hráč přišel u soudu.
+function zrusNahrobek(spotId) {
+  if (!S || !S.prodano || !S.prodano[spotId]) return false;
+  delete S.prodano[spotId];
+  return true;
+}
 function padObsazen(sp, i) {
   var id = padId(sp.id, i);
   return S.units.some(function (u) { return u.spotId === id; });
