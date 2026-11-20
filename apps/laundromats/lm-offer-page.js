@@ -22,7 +22,7 @@ const T = {
     ecoH: 'Ekonomika pilotu', ecoSub: 'Orientační čísla — ekonomiku ověříme podle konkrétních lokalit.',
     units: 'Počet prádlomatů', inv: 'Investice celkem', unit: 'cena za prádlomat', mon: 'Čistý výsledek / měsíc', monU: 'na prádlomat', pay: 'Návratnost', payNote: 's postupnou stavbou (4 + 4 + 4) a náběhem tržeb', stages: '(po etapách, měsíc po měsíci)', months: 'měsíců', y5: 'Výsledek za 10 let', resY: (n) => 'Výsledek po ' + n + ' letech', chart: 'Kumulovaný výsledek pilotu (orientačně)', start: 'start', yr: 'rok', vat: 'Ceny bez DPH. Nejde o garantovaný výsledek — odvozeno z provozu existujících prádlomatů.', model: 'Model',
     vidH: 'Jak se prádlomat používá', vid1: 'Prádlomat v provozu', vid2: 'Krok za krokem',
-    ctaH: 'Pojďme to probrat — 17,5 minuty stačí', ctaSub: 'Ukážeme investiční i provozní model a navrhneme vhodné lokality pro pilot.', cta: 'Mám zájem — domluvit schůzku', name: 'Jméno a příjmení', phone: 'Telefon', email: 'E-mail', note: 'Poznámka (nepovinné)', send: 'Odeslat', thanks: 'Děkujeme! Ozveme se do jednoho pracovního dne a domluvíme termín.', done: 'Zájem jsme už zaznamenali — děkujeme.', err: 'Nepodařilo se odeslat. Zkuste to prosím znovu.', contact: 'Kontakt', write: 'Napsat e-mail',
+    ctaH: 'Pojďme to probrat — 17,5 minuty stačí', ctaSub: 'Ukážeme investiční i provozní model a navrhneme vhodné lokality pro pilot.', cta: 'Mám zájem — domluvit video hovor', name: 'Jméno a příjmení', phone: 'Telefon', email: 'E-mail', note: 'Poznámka (nepovinné)', send: 'Odeslat', thanks: 'Děkujeme! Ozveme se do jednoho pracovního dne a domluvíme termín.', done: 'Zájem jsme už zaznamenali — děkujeme.', err: 'Nepodařilo se odeslat. Zkuste to prosím znovu.', contact: 'Kontakt', write: 'Napsat e-mail',
   },
   en: {
     kick: 'Business proposal', for: 'for', valid: 'Valid until',
@@ -41,7 +41,7 @@ const T = {
     ecoH: 'Pilot economics', ecoSub: 'Indicative figures — to be validated for the specific locations.',
     units: 'Number of machines', inv: 'Total investment', unit: 'per machine', mon: 'Net result / month', monU: 'per machine', pay: 'Payback', payNote: 'with staged build-out (4 + 4 + 4) and revenue ramp-up', stages: '(in stages, month by month)', months: 'months', y5: '10-year result', resY: (n) => 'Result after ' + n + ' years', chart: 'Cumulative pilot result (indicative)', start: 'start', yr: 'year', vat: 'Prices excl. VAT. Not a guaranteed result — derived from existing operations.', model: 'Model',
     vidH: 'How it is used', vid1: 'Laundromat in operation', vid2: 'Step by step',
-    ctaH: "Let's talk — 17.5 minutes is enough", ctaSub: 'We will present the investment and operating model and propose suitable pilot locations.', cta: "I'm interested — book a meeting", name: 'Full name', phone: 'Phone', email: 'E-mail', note: 'Note (optional)', send: 'Send', thanks: 'Thank you! We will get back to you within one business day.', done: 'Your interest has already been recorded — thank you.', err: 'Sending failed. Please try again.', contact: 'Contact', write: 'Write an e-mail',
+    ctaH: "Let's talk — 17.5 minutes is enough", ctaSub: 'We will present the investment and operating model and propose suitable pilot locations.', cta: "I'm interested — book a video call", name: 'Full name', phone: 'Phone', email: 'E-mail', note: 'Note (optional)', send: 'Send', thanks: 'Thank you! We will get back to you within one business day.', done: 'Your interest has already been recorded — thank you.', err: 'Sending failed. Please try again.', contact: 'Contact', write: 'Write an e-mail',
   },
   pl: {
     kick: 'Propozycja biznesowa', for: 'dla', valid: 'Ważna do',
@@ -60,7 +60,7 @@ const T = {
     ecoH: 'Ekonomika pilotażu', ecoSub: 'Liczby orientacyjne — do weryfikacji dla konkretnych lokalizacji.',
     units: 'Liczba urządzeń', inv: 'Inwestycja łącznie', unit: 'za urządzenie', mon: 'Wynik netto / miesiąc', monU: 'na urządzenie', pay: 'Zwrot', payNote: 'z etapową budową (4 + 4 + 4) i rozruchem', stages: '(etapami, miesiąc po miesiącu)', months: 'miesięcy', y5: 'Wynik za 10 lat', resY: (n) => 'Wynik po ' + n + ' latach', chart: 'Skumulowany wynik pilotażu (orientacyjnie)', start: 'start', yr: 'rok', vat: 'Ceny netto. To nie jest gwarantowany wynik — na podstawie istniejących punktów.', model: 'Model',
     vidH: 'Jak się z tego korzysta', vid1: 'Urządzenie w działaniu', vid2: 'Krok po kroku',
-    ctaH: 'Porozmawiajmy — wystarczy 17,5 minuty', ctaSub: 'Przedstawimy model inwestycyjny i operacyjny oraz zaproponujemy lokalizacje pilotażu.', cta: 'Jestem zainteresowany — umówić spotkanie', name: 'Imię i nazwisko', phone: 'Telefon', email: 'E-mail', note: 'Uwagi (opcjonalnie)', send: 'Wyślij', thanks: 'Dziękujemy! Odezwiemy się w ciągu jednego dnia roboczego.', done: 'Twoje zainteresowanie zostało już zapisane — dziękujemy.', err: 'Nie udało się wysłać. Spróbuj ponownie.', contact: 'Kontakt', write: 'Napisz e-mail',
+    ctaH: 'Porozmawiajmy — wystarczy 17,5 minuty', ctaSub: 'Przedstawimy model inwestycyjny i operacyjny oraz zaproponujemy lokalizacje pilotażu.', cta: 'Jestem zainteresowany — umówić rozmowę wideo', name: 'Imię i nazwisko', phone: 'Telefon', email: 'E-mail', note: 'Uwagi (opcjonalnie)', send: 'Wyślij', thanks: 'Dziękujemy! Odezwiemy się w ciągu jednego dnia roboczego.', done: 'Twoje zainteresowanie zostało już zapisane — dziękujemy.', err: 'Nie udało się wysłać. Spróbuj ponownie.', contact: 'Kontakt', write: 'Napisz e-mail',
   },
 };
 // Výchozí reference (v administraci jde přepsat: každý řádek „Název | popis | obrázek")
@@ -314,13 +314,13 @@ function offerPage(o, token, opts) {
 .ox h2{font-size:clamp(28px,3.4vw,42px);font-weight:820}.ox .sub{color:var(--tx2);margin:12px 0 0;font-size:17px;max-width:760px;line-height:1.55}
 .ox .grid{display:grid;gap:18px;margin-top:36px}.ox .g3{grid-template-columns:repeat(3,1fr)}
 .ox .refc p{margin:8px 0 14px;color:var(--tx2);line-height:1.6;font-size:15px}.ox .refc a{color:var(--az);font-weight:600;font-size:14px;text-decoration:none}.ox .refc a:hover{text-decoration:underline}.ox .refc .ico{font-size:22px}
-.ox .refstat{display:flex;flex-direction:column;justify-content:center;background:linear-gradient(160deg,rgba(30,134,224,.22),rgba(124,92,255,.18))}.ox .refstat .big{font-size:clamp(40px,4.4vw,56px);font-weight:800;letter-spacing:-.03em;background:linear-gradient(90deg,var(--az),#7aa8ff 55%,var(--vi));-webkit-background-clip:text;background-clip:text;color:transparent}
+.ox .refstat{display:flex;flex-direction:column;justify-content:center;background:linear-gradient(160deg,rgba(30,134,224,.22),rgba(124,92,255,.18))}.ox .refstat .big{font-size:clamp(34px,3.7vw,52px);white-space:nowrap;line-height:1.05;font-weight:800;letter-spacing:-.03em;background:linear-gradient(90deg,var(--az),#7aa8ff 55%,var(--vi));-webkit-background-clip:text;background-clip:text;color:transparent}
 .ox .refvid{display:grid;grid-template-columns:minmax(220px,300px) 1fr;gap:28px;align-items:center;margin-top:18px;padding:22px;border-radius:20px;background:rgba(14,22,40,.62);border:1px solid var(--line)}.ox .refvid video{width:100%;aspect-ratio:9/16;border-radius:16px;background:#000;display:block}.ox .refvid h3{font-size:22px;margin:0 0 4px}.ox .refvid .refvs{margin:0 0 14px;color:var(--tx3);font-size:14px}.ox .refvid ul{list-style:none;padding:0;margin:0;display:grid;gap:10px}.ox .refvid li{display:flex;gap:10px;color:var(--tx2);line-height:1.5}
 .ox .sec[data-s="reference"]{position:relative;margin-top:70px;padding:48px 40px 40px;border-radius:28px;background:radial-gradient(120% 90% at 0% 0%,rgba(30,134,224,.20),transparent 60%),radial-gradient(100% 80% at 100% 100%,rgba(124,92,255,.18),transparent 60%),rgba(12,20,38,.78);border:1px solid rgba(90,160,255,.45);box-shadow:0 0 0 1px rgba(90,160,255,.10),0 30px 90px -30px rgba(30,134,224,.55)}
 .ox .sec[data-s="reference"] h2{font-size:clamp(32px,4.2vw,52px)}
 .ox .sec[data-s="reference"] .sub{font-size:19px;color:var(--tx)}
 .ox .sec[data-s="reference"] .refstat{border-color:rgba(122,168,255,.6);box-shadow:0 0 50px -12px rgba(30,134,224,.7)}
-.ox .sec[data-s="reference"] .refstat .big{font-size:clamp(52px,6vw,78px)}
+.ox .sec[data-s="reference"] .refstat .big{font-size:clamp(34px,3.7vw,54px);white-space:nowrap;line-height:1.05;margin:0 0 14px}
 .ox .sec[data-s="reference"] .refc{border-color:rgba(90,160,255,.35)}
 .ox .sec[data-s="reference"] .refend{font-size:20px;font-weight:700;color:var(--tx);margin-top:26px}
 @media (max-width:720px){.ox .sec[data-s="reference"]{padding:30px 18px 26px;border-radius:22px}}
