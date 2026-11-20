@@ -400,7 +400,7 @@ function offerPage(o, token, opts) {
       <p class="lead">${esc(o.perex || t.heroSub(o.company || ''))}</p>
       <ul class="chk">${t.chips.map((x) => `<li>${CHK}${esc(x)}</li>`).join('')}</ul>
       <div class="meta">${esc(t.kick)} ${esc(t.for)} <b>${c}</b></div>
-      ${print ? '' : `<p style="margin:16px 0 0"><a class="btn pdfbtn" href="/nabidka/${token}/pdf" download style="display:inline-block;text-decoration:none;font-size:14px;padding:10px 18px">⬇ ${esc(PDFT[L])}</a></p>`}
+
     </div>
     <div class="visual"><div class="glow"></div><video src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" autoplay muted loop playsinline preload="metadata"></video>
       <div class="statcard globe">${GLOBE}<div class="gt"><b>${CZF(20)} ${esc(X.statCard[0])}</b><p>🌍 ${esc(X.statCard[1])}</p></div></div></div>
@@ -480,7 +480,37 @@ document.addEventListener('visibilitychange',function(){tick();if(document.hidde
   let html = layout({ title: (o.title || t.kick) + ' — ' + (o.company || ''), back: false, body: body + TRACK + (print ? PRINT_CSS : '') }).replace('<html lang="cs">', '<html lang="' + L + '">');
   // Nabídka je samostatná stránka: bez menu webu a bez čísla verze (zůstává logo a přepínač jazyka)
   html = html.replace(/<nav class="lnav"[\s\S]*?<\/nav>/, '').replace(/<span class="lsp">[\s\S]*?<!--\/PRIV--><\/span>/, '<span class="lsp"></span>').replace(/(<a class="brand") href="[^"]*"/, '$1 href="#"');
+  if (!print) html = offerNav(html, L, token, o);
   return html;
+}
+
+// Ukotvená lišta nabídky: odkazy na sekce (jen ty, které na stránce opravdu jsou), PDF a „Mám zájem"
+const NAVT = {
+  cs: { verze: 'Verze', znacka: 'Vaše značka', prinosy: 'Přínosy', ekonomika: 'Ekonomika', pilot: 'Pilot', reference: 'Proč teď', video: 'Video', spoluprace: 'Spolupráce', pdf: 'PDF', zajem: 'Mám zájem' },
+  en: { verze: 'Versions', znacka: 'Your brand', prinosy: 'Benefits', ekonomika: 'Economics', pilot: 'Pilot', reference: 'Why now', video: 'Video', spoluprace: 'Cooperation', pdf: 'PDF', zajem: "I'm interested" },
+  pl: { verze: 'Wersje', znacka: 'Twoja marka', prinosy: 'Korzyści', ekonomika: 'Ekonomika', pilot: 'Pilotaż', reference: 'Dlaczego teraz', video: 'Wideo', spoluprace: 'Współpraca', pdf: 'PDF', zajem: 'Jestem zainteresowany' },
+};
+function offerNav(html, L, token, o) {
+  const N = NAVT[L] || NAVT.cs;
+  const poradi = []; const re = /<section[^>]*data-s="([a-z-]+)"/g; let m;
+  while ((m = re.exec(html))) if (N[m[1]] && m[1] !== 'zajem' && poradi.indexOf(m[1]) < 0) poradi.push(m[1]);
+  const odkazy = poradi.map((k) => `<a href="#${k}" data-go="${k}">${esc(N[k])}</a>`).join('');
+  const css = `<style>.lhdr .ofnav{display:flex;gap:2px;align-items:center;margin-left:18px;min-width:0;overflow-x:auto;scrollbar-width:none}.lhdr .ofnav::-webkit-scrollbar{display:none}
+.lhdr .ofnav a{white-space:nowrap;padding:7px 12px;border-radius:999px;font-size:13.5px;font-weight:600;color:#a9b8d3;text-decoration:none;transition:color .15s,background .15s}.lhdr .ofnav a:hover{color:#fff;background:rgba(120,160,255,.10)}.lhdr .ofnav a.on{color:#fff;background:rgba(79,209,255,.14);box-shadow:inset 0 0 0 1px rgba(79,209,255,.35)}
+.lhdr .ofbtn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 14px;border-radius:10px;font-size:13px;font-weight:700;text-decoration:none;white-space:nowrap;flex:none}
+.lhdr .ofbtn.pdf{color:#dbe7ff;border:1px solid rgba(120,160,255,.32);background:rgba(255,255,255,.03)}.lhdr .ofbtn.pdf:hover{border-color:#4fd1ff;color:#fff}
+.lhdr .ofbtn.cta{color:#fff;background:linear-gradient(90deg,#1e86e0,#3a6cf5 55%,#7c5cff);box-shadow:0 6px 20px -8px rgba(58,108,245,.8);margin-left:6px}.lhdr .ofbtn.cta:hover{filter:brightness(1.1)}
+.lhdr .ofbtn svg{width:15px;height:15px}
+@media(max-width:1100px){.lhdr .ofnav{display:none}}@media(max-width:560px){.lhdr .ofbtn.pdf span{display:none}.lhdr .ofbtn{padding:0 10px}}</style>`;
+  const pdfIco = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>';
+  const btns = `<a class="ofbtn pdf" href="/nabidka/${token}/pdf" download title="${esc(N.pdf)}">${pdfIco}<span>${esc(N.pdf)}</span></a>${o.interest ? '' : `<a class="ofbtn cta" href="#zajem" data-go="zajem">${esc(N.zajem)} →</a>`}`;
+  const js = `<script>(function(){var h=document.getElementById('lhdr')||document.querySelector('.lhdr');function go(k){var el=document.querySelector('[data-s="'+k+'"]');if(!el)return;var y=el.getBoundingClientRect().top+scrollY-((h&&h.offsetHeight)||64)-12;scrollTo({top:y,behavior:'smooth'});}
+document.querySelectorAll('[data-go]').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault();go(a.getAttribute('data-go'));});});
+var links=[].slice.call(document.querySelectorAll('.ofnav a'));if('IntersectionObserver' in window&&links.length){var io=new IntersectionObserver(function(es){es.forEach(function(x){if(x.isIntersecting){var k=x.target.getAttribute('data-s');links.forEach(function(l){l.classList.toggle('on',l.getAttribute('data-go')===k);});}});},{rootMargin:'-45% 0px -50% 0px'});
+document.querySelectorAll('[data-s]').forEach(function(s){io.observe(s);});}})();<\/script>`;
+  return html.replace('<span class="lsp"></span>', `<nav class="ofnav">${odkazy}</nav><span class="lsp"></span>`)
+    .replace('<span style="margin-left:auto"></span>', '<span style="margin-left:auto"></span>' + btns)
+    .replace('</head>', css + '</head>').replace('</body>', js + '</body>');
 }
 
 module.exports = { offerPage, REFS, T };
