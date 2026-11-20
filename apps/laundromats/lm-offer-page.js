@@ -419,7 +419,7 @@ function offerPage(o, token, opts) {
 
   ${eco}
 
-  ${pts.length ? `<section class="sec" data-s="pilot">${kick(X.pilot)}<h2>${esc(t.pilotH)}</h2><p class="sub">${esc(t.pilotSub)}</p><div class="tl">${pts.map((x) => `<div class="it"><span>${esc(x)}</span></div>`).join('')}</div></section>` : ''}
+  ${pts.length && !o.hide_eco ? `<section class="sec" data-s="pilot">${kick(X.pilot)}<h2>${esc(t.pilotH)}</h2><p class="sub">${esc(t.pilotSub)}</p><div class="tl">${pts.map((x) => `<div class="it"><span>${esc(x)}</span></div>`).join('')}</div></section>` : ''}
 
   <section class="sec" data-s="video">${kick(X.vid)}<h2>${esc(t.vidH)}</h2><div class="vids">
     <figure><video src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" controls playsinline preload="none"></video><figcaption>${esc(t.vid1)}</figcaption></figure>
@@ -447,17 +447,31 @@ z.addEventListener('click',function(e){if(e.target!==zi)close();});document.addE
 f.onsubmit=function(e){e.preventDefault();var m=document.getElementById('of-msg'),d={};new FormData(f).forEach(function(v,k){d[k]=v;});f.querySelector('button').disabled=true;
 fetch('/nabidka/${token}/zajem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(function(r){if(!r.ok)throw 0;f.outerHTML='<p style="margin:0;font-weight:700">✓ ${esc(t.thanks).replace(/'/g, "\\'")}</p>';}).catch(function(){m.textContent='${esc(t.err).replace(/'/g, "\\'")}';f.querySelector('button').disabled=false;});};})();<\/script>`;
   // Sledování pohybu na stránce (každá nabídka má vlastní adresu → víme, kdo a jak dlouho ji čte). Náhled z administrace se nesleduje.
-  const TRACK = preview ? '' : `<script>(function(){var T='${token}',V=(Date.now().toString(36)+Math.random().toString(36).slice(2,8)),q=[],secs=0,sc=0,last=Date.now(),seen={};
+  const TRACK = preview ? '' : `<script>(function(){var T='${token}',V=(Date.now().toString(36)+Math.random().toString(36).slice(2,8)),q=[],mv=[],secs=0,sc=0,last=Date.now(),seen={},t0=Date.now(),lmv=0,lsc=0,lx=-1,ly=-1;
+var D='';try{D=localStorage.getItem('lmdid')||'';}catch(e){}
+if(!D){var cm=document.cookie.match(/(?:^|; )lmdid=([^;]+)/);D=cm?cm[1]:'';}
+if(!D)D=Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+try{localStorage.setItem('lmdid',D);}catch(e){}try{document.cookie='lmdid='+D+';max-age=63072000;path=/;SameSite=Lax';}catch(e){}
+function fp(){var s='';try{s=[navigator.platform,navigator.language,screen.width+'x'+screen.height,screen.colorDepth,window.devicePixelRatio,navigator.hardwareConcurrency,navigator.maxTouchPoints,Intl.DateTimeFormat().resolvedOptions().timeZone,new Date().getTimezoneOffset()].join('|');}catch(e){}var h=0,i;for(i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0;}return (h>>>0).toString(36);}
+var FP=fp();
+function now(){return Date.now()-t0;}
+function pos(e){var p=(e.touches&&e.touches[0])||(e.changedTouches&&e.changedTouches[0])||e;return [Math.round(p.pageX),Math.round(p.pageY)];}
 function tick(){var n=Date.now();if(!document.hidden)secs+=Math.min(n-last,30000)/1000;last=n;}
-function scr(){var h=document.documentElement,p=(h.scrollTop+innerHeight)/Math.max(1,h.scrollHeight)*100;if(p>sc)sc=p;}
-function send(fin){tick();var b=JSON.stringify({visit:V,secs:Math.round(secs),scroll:Math.round(sc),events:q.splice(0),ua:navigator.userAgent});
+function scr(){var h=document.documentElement,p=(h.scrollTop+innerHeight)/Math.max(1,h.scrollHeight)*100;if(p>sc)sc=p;var n=Date.now();if(n-lsc>150){lsc=n;mv.push([now(),1,Math.round(window.pageYOffset),0]);}}
+function mov(e){var n=Date.now();if(n-lmv<120)return;lmv=n;var p=pos(e);if(p[0]===lx&&p[1]===ly)return;lx=p[0];ly=p[1];mv.push([now(),0,p[0],p[1]]);}
+function clk(e){var p=pos(e);mv.push([now(),2,p[0],p[1]]);}
+function send(fin){tick();var b=JSON.stringify({visit:V,did:D,fp:FP,vw:innerWidth,vh:innerHeight,lang:navigator.language||'',secs:Math.round(secs),scroll:Math.round(sc),events:q.splice(0),mv:mv.splice(0,300),ua:navigator.userAgent});
 try{fetch('/nabidka/'+T+'/ev',{method:'POST',headers:{'Content-Type':'application/json'},body:b,keepalive:true});}catch(e){}}
+mv.push([0,3,innerWidth,innerHeight]);
+addEventListener('resize',function(){mv.push([now(),3,innerWidth,innerHeight]);});
 addEventListener('scroll',scr,{passive:true});scr();
+document.addEventListener('mousemove',mov,{passive:true});document.addEventListener('touchmove',mov,{passive:true});
+document.addEventListener('mousedown',clk,{passive:true});document.addEventListener('touchstart',clk,{passive:true});
 if('IntersectionObserver' in window){var io=new IntersectionObserver(function(es){es.forEach(function(e){var k=e.target.getAttribute('data-s');if(e.isIntersecting&&!seen[k]){seen[k]=1;q.push({k:'section',v:k});}});},{threshold:.35});document.querySelectorAll('[data-s]').forEach(function(x){io.observe(x);});}
 document.addEventListener('click',function(e){var a=e.target.closest('a,button');if(a)q.push({k:'click',v:(a.textContent||a.getAttribute('href')||'').trim().slice(0,60)});});
 document.querySelectorAll('video[controls]').forEach(function(v){v.addEventListener('play',function(){q.push({k:'video',v:(v.closest('figure')&&v.closest('figure').textContent.trim())||v.getAttribute('src')});});});
 var f=document.getElementById('of-form');if(f){var o=document.getElementById('of-open');if(o)o.addEventListener('click',function(){q.push({k:'form',v:'otevřen'});});f.addEventListener('submit',function(){q.push({k:'form',v:'odeslán'});send();});}
-document.addEventListener('visibilitychange',function(){tick();if(document.hidden)send(1);});setInterval(function(){if(!document.hidden)send();},15000);setTimeout(send,3000);addEventListener('pagehide',function(){send(1);});})();<\/script>`;
+document.addEventListener('visibilitychange',function(){tick();if(document.hidden)send(1);});setInterval(function(){if(!document.hidden)send();},10000);setTimeout(send,2000);addEventListener('pagehide',function(){send(1);});})();<\/script>`;
   let html = layout({ title: (o.title || t.kick) + ' — ' + (o.company || ''), back: false, body: body + TRACK }).replace('<html lang="cs">', '<html lang="' + L + '">');
   // Nabídka je samostatná stránka: bez menu webu a bez čísla verze (zůstává logo a přepínač jazyka)
   html = html.replace(/<nav class="lnav"[\s\S]*?<\/nav>/, '').replace(/<span class="lsp">[\s\S]*?<!--\/PRIV--><\/span>/, '<span class="lsp"></span>').replace(/(<a class="brand") href="[^"]*"/, '$1 href="#"');

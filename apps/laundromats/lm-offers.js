@@ -143,8 +143,15 @@ module.exports = function mountOffers(app, ctx) {
   // Odeslání pohybu na stránce (sekce, čas, scroll, kliky, videa) → HolyOS
   app.post('/nabidka/:token([a-f0-9]{32})/ev', async (req, res) => {
     if (rateLimited && rateLimited('offev:' + req.ip, 600, 3600e3)) return res.status(429).end();
-    try { await hos('POST', '/public/' + req.params.token + '/events', req.body || {}); res.status(204).end(); } catch (e) { res.status(e.status || 502).end(); }
+    try {
+      // IP, prohlížeč a jazyk návštěvníka předáváme HolyOS v hlavičkách (HolyOS vidí jen náš server)
+      const h = { 'X-Fwd-IP': String(req.ip || ''), 'X-Fwd-UA': String(req.headers['user-agent'] || '').slice(0, 300), 'X-Fwd-Lang': String(req.headers['accept-language'] || '').slice(0, 60) };
+      const r = await fetch(HOLYOS_URL + BASE + '/public/' + req.params.token + '/events', { method: 'POST', headers: Object.assign({ Authorization: 'Bearer ' + tok(), 'Content-Type': 'application/json' }, h), body: JSON.stringify(req.body || {}), signal: AbortSignal.timeout(20000) });
+      res.status(r.ok ? 204 : (r.status >= 500 ? 502 : r.status)).end();
+    } catch (e) { res.status(502).end(); }
   });
+  // Záznam pohybu jedné návštěvy (přehrání v administraci)
+  app.get('/admin/api/offers/:id(\\d+)/session/:vid([a-z0-9-]{6,40})', requireAdmin, J((req) => hos('GET', '/' + req.params.id + '/session/' + req.params.vid)));
   // Každá nabídka má vlastní adresu: /nabidka/<firma>/<token> (i krátká /nabidka/<token>)
   app.get(['/nabidka/:slug([a-z0-9-]{1,40})/:token([a-f0-9]{32})', '/nabidka/:token([a-f0-9]{32})'], async (req, res) => {
     let o;
@@ -231,13 +238,44 @@ function renderList(){var w=P.querySelector('.of-list');if(!list){w.innerHTML='<
   +'<td class="a"><button class="btn sec sm" data-of-edit=""'+o.id+'">Upravit</button> <a class="btn sec sm" target="_blank" href="/nabidka/'+slug(o.company)+'/'+e(o.token)+'?preview=1">Náhled</a> <button class="btn sec sm" data-of-act="'+o.id+'">Aktivita'+((o.visits||[]).length?' ('+o.visits.length+')':'')+'</button> <button class="btn sec sm" data-of-copy="'+o.id+'" title="Zkopírovat odkaz na nabídku">🔗</button> <button class="btn sm" data-of-send="'+o.id+'">'+(o.sent_at?'Odeslat znovu':'Odeslat')+'</button> <button class="btn sec sm" data-of-del="'+o.id+'" title="Smazat" style="color:#f87171">🗑</button></td></tr>';}).join('')+'</tbody></table>';}
 var SEC={uvod:'Úvod',provozovny:'Provozovny','o-co-jde':'O co jde','co-umi':'Co umí',prinosy:'Přínosy',pilot:'Pilot',ekonomika:'Ekonomika',video:'Videa',zajem:'Další krok / zájem'};
 function mm(sec){sec=sec||0;return sec<60?sec+' s':Math.floor(sec/60)+' min '+(sec%60)+' s';}
+function uaLabel(ua){ua=String(ua||'');var os=/iPhone/.test(ua)?'iPhone':/iPad/.test(ua)?'iPad':/Android/.test(ua)?'Android':/Windows/.test(ua)?'Windows':/Mac OS/.test(ua)?'Mac':/Linux/.test(ua)?'Linux':'?';var br=/Edg\\//.test(ua)?'Edge':/OPR\\//.test(ua)?'Opera':/Firefox/.test(ua)?'Firefox':/Chrome|CriOS/.test(ua)?'Chrome':/Safari/.test(ua)?'Safari':'?';return os+' · '+br;}
+function geoTxt(g){if(!g)return '';return [g.city||'',g.country||'',g.isp||''].filter(Boolean).join(', ')+(!g.city&&g.tip?' ('+g.tip+')':'');}
+function devs(vs){var m={},ord=[];vs.forEach(function(v){if(v.bot)return;var k=v.did||('fp:'+v.fp);if(!m[k]){m[k]={key:k,letter:String.fromCharCode(65+ord.length),visits:[],ips:{},secs:0};ord.push(k);}var d=m[k];d.visits.push(v);d.secs+=v.secs||0;if(v.ip)d.ips[v.ip]=v.geo||d.ips[v.ip]||true;});return ord.map(function(k){return m[k];});}
 function activity(o){var w=P.querySelector('.of-act');if(!w){w=document.createElement('div');w.className='of-act card';P.querySelector('.of-list').before(w);}w.style.display='';
- var vs=o.visits||[];w.innerHTML='<div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0">Aktivita na nabídce — '+e(o.company)+'</h3><span style="flex:1"></span><button class="btn sec sm of-actclose">Zavřít</button></div>'
- +'<div class="muted small" style="margin:6px 0 10px">Adresa nabídky: <a href="'+e(link(o))+'" target="_blank">'+e(link(o))+'</a> · '+vs.length+' návštěv · celkem '+mm(o.time_total||0)+'</div>'
- +(vs.length?'<table class="of-tbl"><thead><tr><th>Kdy</th><th>Zařízení</th><th>Čas na stránce</th><th>Dočteno</th><th>Viděné sekce</th><th>Videa</th><th>Kliknutí / formulář</th></tr></thead><tbody>'+vs.map(function(v){
-  return '<tr><td class="small">'+dt(v.at)+(v.last&&v.last!==v.at?'<div class="muted">do '+new Date(v.last).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})+'</div>':'')+'</td><td class="small">'+e(v.device||'')+'</td><td><b>'+mm(v.secs)+'</b></td><td>'+(v.scroll||0)+' %</td>'
-  +'<td class="small">'+(v.sections||[]).map(function(x){return e(SEC[x]||x);}).join(', ')+'</td><td class="small">'+e((v.videos||[]).join(', ')||'—')+'</td><td class="small">'+e((v.clicks||[]).slice(-8).join(' · ')||'—')+(v.form?'<div style="color:#22c55e">formulář '+e(v.form)+'</div>':'')+'</td></tr>';}).join('')+'</tbody></table>':'<div class="muted">Zatím nikdo stránku neotevřel (náhled z administrace se nepočítá).</div>');
- w.scrollIntoView({behavior:'smooth',block:'start'});}
+ var vs=(o.visits||[]).slice().sort(function(a,b){return String(b.at).localeCompare(String(a.at));}),ds=devs(vs),bots=vs.filter(function(v){return v.bot;}),dl={};ds.forEach(function(d){d.visits.forEach(function(v){dl[v.id]=d.letter;});});
+ var fw=o.forward,h='<div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0">Aktivita na nabídce — '+e(o.company)+'</h3><span style="flex:1"></span><button class="btn sec sm of-actclose">Zavřít</button></div>'
+ +'<div class="muted small" style="margin:6px 0 10px">Adresa nabídky: <a href="'+e(link(o))+'" target="_blank">'+e(link(o))+'</a> · '+vs.length+' návštěv · '+ds.length+' '+(ds.length===1?'zařízení':ds.length<5?'zařízení':'zařízení')+' · celkem '+mm(o.time_total||0)+'</div>';
+ if(fw&&ds.length>1)h+='<div style="margin:0 0 12px;padding:10px 12px;border-radius:8px;border:1px solid '+(fw.level==='other_net'?'#f59e0b':'#64748b')+';background:'+(fw.level==='other_net'?'rgba(245,158,11,.12)':'rgba(100,116,139,.12)')+'"><b>'+(fw.level==='other_net'?'↗️ Odkaz byl pravděpodobně přeposlán':'ℹ️ Další zařízení ve stejné síti')+'</b><div class="small muted">'+(fw.level==='other_net'?'Nabídku otevřelo '+ds.length+' různých zařízení, naposledy nové z jiné sítě (IP '+e(fw.ip||'?')+') dne '+dt(fw.at)+'.':'Nabídku otevřelo '+ds.length+' zařízení ze stejné sítě (kolega ve firmě nebo jiný počítač téže osoby).')+'</div></div>';
+ if(ds.length){h+='<h4 style="margin:6px 0">Zařízení</h4><table class="of-tbl"><thead><tr><th></th><th>Zařízení</th><th>Návštěv</th><th>Čas celkem</th><th>První / poslední</th><th>IP adresy a poloha</th></tr></thead><tbody>'+ds.map(function(d){var f=d.visits[d.visits.length-1],l=d.visits[0];
+  return '<tr><td><b>'+d.letter+'</b></td><td class="small">'+(f.device==='mobil'?'📱 ':'💻 ')+e(uaLabel(f.ua))+'<div class="muted">'+e(f.lang||'')+(f.vw?' · okno '+f.vw+'×'+(f.vh||'?'):'')+'</div></td><td>'+d.visits.length+'</td><td><b>'+mm(d.secs)+'</b></td><td class="small">'+dt(f.at)+'<div class="muted">'+dt(l.last||l.at)+'</div></td>'
+  +'<td class="small">'+Object.keys(d.ips).map(function(ip){var g=d.ips[ip];return '<div>'+e(ip)+(g&&g!==true?' <span class="muted">'+e(geoTxt(g))+'</span>':'')+'</div>';}).join('')+'</td></tr>';}).join('')+'</tbody></table>';}
+ if(bots.length)h+='<div class="muted small" style="margin:6px 0">+ '+bots.length+'× automatické otevření (skener pošty / náhled odkazu) — nepočítá se jako zařízení.</div>';
+ h+='<h4 style="margin:12px 0 6px">Návštěvy</h4>'+(vs.length?'<table class="of-tbl"><thead><tr><th>Kdy</th><th>Zař.</th><th>IP / poloha</th><th>Čas</th><th>Dočteno</th><th>Viděné sekce</th><th>Videa</th><th>Kliknutí / formulář</th><th>Záznam</th></tr></thead><tbody>'+vs.map(function(v){
+  return '<tr'+(v.bot?' style="opacity:.55"':'')+'><td class="small">'+dt(v.at)+(v.last&&v.last!==v.at?'<div class="muted">do '+new Date(v.last).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})+'</div>':'')+'</td><td><b>'+(v.bot?'🤖':(dl[v.id]||''))+'</b></td><td class="small">'+e(v.ip||'—')+(v.geo?'<div class="muted">'+e(geoTxt(v.geo))+'</div>':'')+'</td><td><b>'+mm(v.secs)+'</b></td><td>'+(v.scroll||0)+' %</td>'
+  +'<td class="small">'+(v.sections||[]).map(function(x){return e(SEC[x]||x);}).join(', ')+'</td><td class="small">'+e((v.videos||[]).join(', ')||'—')+'</td><td class="small">'+e((v.clicks||[]).slice(-8).join(' · ')||'—')+(v.form?'<div style="color:#22c55e">formulář '+e(v.form)+'</div>':'')+'</td>'
+  +'<td>'+(v.mvn?'<button class="btn sec sm" data-of-replay="'+o.id+'|'+e(v.id)+'">▶ Přehrát</button>':'<span class="muted small">—</span>')+'</td></tr>';}).join('')+'</tbody></table>':'<div class="muted">Zatím žádná návštěva.</div>');
+ w.innerHTML=h;w.scrollIntoView({behavior:'smooth',block:'start'});}
+function replay(o,vid){req('/admin/api/offers/'+o.id+'/session/'+vid).then(function(j){var mv=j.mv||[];if(!mv.length){alert('Záznam pohybu není k dispozici.');return;}
+ var vw=j.vw||1200,vh=j.vh||800;mv.forEach(function(m){if(m[1]===3&&m[0]===0){vw=m[2]||vw;vh=m[3]||vh;}});
+ var ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.82);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px;gap:8px';
+ var sc=Math.min(1,(innerWidth-30)/vw,(innerHeight-120)/vh);
+ ov.innerHTML='<div style="display:flex;gap:10px;align-items:center;color:#fff;font-size:13px;flex-wrap:wrap;justify-content:center"><b>Záznam návštěvy — '+e(o.company)+'</b><button class="btn sm rp-play" type="button">⏸</button><select class="rp-sp"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option><option value="8">8×</option></select><input class="rp-rng" type="range" min="0" max="1000" value="0" style="width:min(380px,50vw)"><span class="rp-t">0:00</span><button class="btn sec sm rp-x" type="button">✕ Zavřít</button></div>'
+ +'<div class="rp-box" style="position:relative;overflow:hidden;background:#fff;width:'+Math.round(vw*sc)+'px;height:'+Math.round(vh*sc)+'px;border-radius:6px"><div style="position:absolute;left:0;top:0;width:'+vw+'px;height:'+vh+'px;transform:scale('+sc+');transform-origin:0 0"><iframe class="rp-fr" src="/nabidka/'+e(o.token)+'?preview=1" style="width:'+vw+'px;height:'+vh+'px;border:0;pointer-events:none"></iframe><div class="rp-cur" style="position:absolute;left:0;top:0;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;background:rgba(239,68,68,.75);border:2px solid #fff;box-shadow:0 0 6px rgba(0,0,0,.5);pointer-events:none;display:none"></div></div></div>';
+ document.body.appendChild(ov);var fr=ov.querySelector('.rp-fr'),cu=ov.querySelector('.rp-cur'),pl=ov.querySelector('.rp-play'),rg=ov.querySelector('.rp-rng'),tl=ov.querySelector('.rp-t'),sp=ov.querySelector('.rp-sp');
+ var total=mv[mv.length-1][0]+500,t=0,idx=0,run=true,ready=false,sy=0,cx=0,cy=0,lt=0,raf=0;
+ function fmt(ms){var s=Math.round(ms/1000);return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2);}
+ function show(){cu.style.display='';cu.style.left=cx+'px';cu.style.top=(cy-sy)+'px';}
+ function apply(m){if(m[1]===0){cx=m[2];cy=m[3];show();}else if(m[1]===1){sy=m[2];try{fr.contentWindow.scrollTo(0,sy);}catch(x){}show();}else if(m[1]===2){cx=m[2];cy=m[3];show();cu.style.background='rgba(34,197,94,.9)';setTimeout(function(){cu.style.background='rgba(239,68,68,.75)';},250);}}
+ function seek(to){t=to;idx=0;sy=0;cx=0;cy=0;try{fr.contentWindow.scrollTo(0,0);}catch(x){}while(idx<mv.length&&mv[idx][0]<=t){apply(mv[idx]);idx++;}}
+ function frame(n){raf=requestAnimationFrame(frame);var d=n-lt;lt=n;if(!run||!ready)return;if(d>200)d=16;t+=d*Number(sp.value);if(idx<mv.length&&mv[idx][0]-t>2500)t=mv[idx][0]-400;while(idx<mv.length&&mv[idx][0]<=t){apply(mv[idx]);idx++;}
+  if(t>=total){t=total;run=false;pl.textContent='▶';}rg.value=Math.round(t/total*1000);tl.textContent=fmt(t)+' / '+fmt(total);}
+ fr.addEventListener('load',function(){setTimeout(function(){ready=true;},600);});
+ pl.onclick=function(){if(t>=total)seek(0);run=!run;pl.textContent=run?'⏸':'▶';};
+ rg.oninput=function(){seek(Number(rg.value)/1000*total);};
+ function close(){cancelAnimationFrame(raf);document.removeEventListener('keydown',esc);ov.remove();}
+ function esc(ev){if(ev.key==='Escape')close();}
+ ov.querySelector('.rp-x').onclick=close;ov.addEventListener('mousedown',function(ev){if(ev.target===ov)close();});document.addEventListener('keydown',esc);raf=requestAnimationFrame(frame);
+ }).catch(function(er){alert(er.message);});}
 function load(){list=null;renderList();req('/admin/api/offers').then(function(j){list=j.offers||[];renderList();}).catch(function(er){P.querySelector('.of-list').innerHTML='<div style="color:#f87171">'+e(er.message)+'</div>';});}
 function F(n,l,v,cls,t){return '<div class="'+(cls||'')+'"><label>'+l+'</label>'+(t==='ta'?'<textarea name="'+n+'" rows="'+(cls==='w4'?10:6)+'">'+e(v)+'</textarea>':'<input name="'+n+'" value="'+e(v)+'"'+(t?' type="'+t+'"':'')+'>')+'</div>';}
 function edit(o){cur=o||{lang:'cs',currency:'CZK',sender_name:'Tomáš Holý'};var w=P.querySelector('.of-edit');w.style.display='';
@@ -267,6 +305,7 @@ P.addEventListener('click',function(ev){var t=ev.target;
  if(t.closest('.of-save')){var b=t.closest('.of-save');b.disabled=true;req('/admin/api/offers',form()).then(function(j){cur=j.offer;b.disabled=false;P.querySelector('.of-edit').style.display='none';load();}).catch(function(er){b.disabled=false;alert(er.message);});return;}
  var id;
  if((id=t.getAttribute('data-of-edit'))){var o=(list||[]).find(function(x){return x.id==id;});if(o)edit(o);return;}
+ if((id=t.getAttribute('data-of-replay'))){var pr=id.split('|'),orp=(list||[]).find(function(x){return x.id==pr[0];});if(orp)replay(orp,pr[1]);return;}
  if((id=t.getAttribute('data-of-act'))){var oa=(list||[]).find(function(x){return x.id==id;});if(oa)activity(oa);return;}
  if(t.closest('.of-actclose')){P.querySelector('.of-act').style.display='none';return;}
  if((id=t.getAttribute('data-of-eco'))){var oe=(list||[]).find(function(x){return x.id==id;});if(!oe)return;var dd=Object.assign({},oe);delete dd.visits;dd.hide_eco=!oe.hide_eco;t.disabled=true;

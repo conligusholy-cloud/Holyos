@@ -141,30 +141,88 @@ router.post('/public/:token([a-f0-9]{32})/interest', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /public/:token/events — pohyb na stránce nabídky {visit, events:[{k, v}], scroll, secs, ua}
+// POST /public/:token/events — pohyb na stránce nabídky {visit, did, fp, vw, secs, scroll, events:[{k, v}], mv:[[ms,druh,a,b]]}
 // k: section (viděná sekce), click (tlačítko/odkaz), video (přehrání), form (otevření/odeslání formuláře)
+// mv druhy: 0 pohyb myši/prstu (x,y na stránce), 1 scroll (y), 2 klik/dotek (x,y), 3 velikost okna (šířka,výška)
+// IP, prohlížeč a jazyk návštěvníka přicházejí v hlavičkách X-Fwd-* (volá nás server Laundromats).
+const TRK_KEY = (id, vid) => 'lm_corp_offer_trk.' + id + '.' + vid;
+const TRK_MAX = 3000; // max. vzorků pohybu na návštěvu
+const BOT_RE = /bot|crawl|spider|preview|headless|python|curl|wget|safelinks|proofpoint|mimecast|barracuda|slurp|facebookexternalhit|whatsapp|telegram|skype|outlook|lighthouse/i;
+let _chain = Promise.resolve();
+const serial = (fn) => { const p = _chain.then(fn, fn); _chain = p.catch(() => {}); return p; }; // zápisy po jednom (bez ztráty dat při souběhu)
+
 router.post('/public/:token([a-f0-9]{32})/events', async (req, res, next) => {
   try {
-    const list = await load(); const o = list.find((x) => x.token === req.params.token);
-    if (!o) return res.status(404).json({ error: 'Nabídka nenalezena' });
-    const b = req.body || {}; const vid = s(b.visit, 40); if (!/^[a-z0-9-]{6,40}$/.test(vid)) return res.status(400).json({ error: 'Chybí návštěva' });
-    o.visits = Array.isArray(o.visits) ? o.visits : [];
-    let v = o.visits.find((x) => x.id === vid);
-    const now = new Date().toISOString();
-    if (!v) { v = { id: vid, at: now, last: now, secs: 0, scroll: 0, sections: [], clicks: [], videos: [], form: null, ua: s(b.ua, 160), device: /mobi|android|iphone/i.test(String(b.ua || '')) ? 'mobil' : 'počítač' }; o.visits.unshift(v); o.visits = o.visits.slice(0, 100); }
-    v.last = now;
-    const secs = Number(b.secs); if (isFinite(secs) && secs >= 0) v.secs = Math.max(v.secs || 0, Math.min(Math.round(secs), 6 * 3600));
-    const sc = Number(b.scroll); if (isFinite(sc)) v.scroll = Math.max(v.scroll || 0, Math.min(100, Math.round(sc)));
-    (Array.isArray(b.events) ? b.events.slice(0, 50) : []).forEach((e) => {
-      const k = s(e && e.k, 20), val = s(e && e.v, 80); if (!val) return;
-      if (k === 'section' && !v.sections.includes(val)) v.sections.push(val);
-      else if (k === 'click') { v.clicks.push(val); v.clicks = v.clicks.slice(-40); }
-      else if (k === 'video' && !v.videos.includes(val)) v.videos.push(val);
-      else if (k === 'form') v.form = val;
+    const b = req.body || {}; const vid = s(b.visit, 40);
+    if (!/^[a-z0-9-]{6,40}$/.test(vid)) return res.status(400).json({ error: 'Chybí návštěva' });
+    const ip = s(req.headers['x-fwd-ip'], 60).replace(/^::ffff:/, ''), ua = s(req.headers['x-fwd-ua'] || b.ua, 300), lang = s(b.lang || req.headers['x-fwd-lang'], 40);
+    const out = await serial(async () => {
+      const list = await load(); const o = list.find((x) => x.token === req.params.token);
+      if (!o) return null;
+      o.visits = Array.isArray(o.visits) ? o.visits : [];
+      let v = o.visits.find((x) => x.id === vid);
+      const now = new Date().toISOString();
+      let isNew = false;
+      if (!v) {
+        isNew = true;
+        v = { id: vid, at: now, last: now, secs: 0, scroll: 0, sections: [], clicks: [], videos: [], form: null, ua: s(ua, 200), device: /mobi|android|iphone/i.test(ua) ? 'mobil' : 'počítač',
+          ip: ip || null, did: s(b.did, 40) || null, fp: s(b.fp, 20) || null, lang, vw: Math.round(Number(b.vw)) || null, vh: Math.round(Number(b.vh)) || null, bot: BOT_RE.test(ua) };
+        o.visits.push(v); if (o.visits.length > 300) o.visits = o.visits.slice(-300);
+      }
+      v.last = now;
+      const secs = Number(b.secs); if (isFinite(secs) && secs >= 0) v.secs = Math.max(v.secs || 0, Math.min(Math.round(secs), 6 * 3600));
+      const sc = Number(b.scroll); if (isFinite(sc)) v.scroll = Math.max(v.scroll || 0, Math.min(100, Math.round(sc)));
+      (Array.isArray(b.events) ? b.events.slice(0, 50) : []).forEach((e) => {
+        const k = s(e && e.k, 20), val = s(e && e.v, 80); if (!val) return;
+        if (k === 'section' && !v.sections.includes(val)) v.sections.push(val);
+        else if (k === 'click') { v.clicks.push(val); v.clicks = v.clicks.slice(-40); }
+        else if (k === 'video' && !v.videos.includes(val)) v.videos.push(val);
+        else if (k === 'form') v.form = val;
+      });
+      o.time_total = o.visits.reduce((a, x) => a + (x.secs || 0), 0);
+      // Nové zařízení = jiné did (cookie/localStorage), příp. otisk; roboti (skenery pošty) se nepočítají
+      let alert = null;
+      if (isNew && !v.bot) {
+        const key = v.did || ('fp:' + v.fp);
+        const prev = o.visits.filter((x) => x.id !== vid && !x.bot);
+        const known = new Set(prev.map((x) => x.did || ('fp:' + x.fp)));
+        if (prev.length && !known.has(key)) {
+          const sameNet = !!ip && prev.some((x) => x.ip === ip);
+          o.forward = { at: now, level: sameNet ? 'same_net' : 'other_net', ip: ip || null, devices: known.size + 1 };
+          alert = sameNet ? 'Nabídku otevřelo další zařízení ve stejné síti (kolega / jiný počítač).' : 'Nabídku otevřelo nové zařízení z jiné sítě — odkaz byl pravděpodobně někomu přeposlán.';
+        } else o.forward = o.forward || null;
+      }
+      // Pohyb (vzorky) ukládáme zvlášť po návštěvách
+      const mv = (Array.isArray(b.mv) ? b.mv : []).slice(0, 320).map((m) => Array.isArray(m) ? [Math.round(Number(m[0])) || 0, Math.round(Number(m[1])) || 0, Math.round(Number(m[2])) || 0, Math.round(Number(m[3])) || 0] : null).filter((m) => m && m[1] >= 0 && m[1] <= 3);
+      if (mv.length && !v.bot) {
+        const cur = await settings.getSetting(TRK_KEY(o.id, vid), { type: 'json', defaultValue: null }).catch(() => null) || { mv: [] };
+        if (cur.mv.length < TRK_MAX) { cur.mv = cur.mv.concat(mv).slice(0, TRK_MAX); await settings.setSetting(TRK_KEY(o.id, vid), cur, { type: 'json', scope: 'laundromats' }); v.mvn = cur.mv.length; }
+      }
+      await save(list);
+      return { isNew, ip, company: o.company, alert, bot: v.bot, id: o.id, vid };
     });
-    o.time_total = o.visits.reduce((a, x) => a + (x.secs || 0), 0);
-    await save(list);
+    if (!out) return res.status(404).json({ error: 'Nabídka nenalezena' });
     res.json({ ok: true });
+    if (out.isNew && out.ip && !out.bot) { // poloha IP na pozadí
+      setImmediate(async () => {
+        try {
+          const g = await require('../services/game/geo').dohledej(out.ip);
+          if (g) await serial(async () => { const list = await load(); const o = list.find((x) => x.id === out.id); const v = o && (o.visits || []).find((x) => x.id === out.vid); if (v) { v.geo = { city: g.city || null, region: g.region || null, country: g.country || null, cc: g.cc || null, isp: g.isp || null, tip: g.tip || null }; await save(list); } });
+        } catch (e) { /* bez polohy */ }
+      });
+    }
+    if (out.alert) notifyBoss('↗️ Nabídka pro ' + out.company + ': nové zařízení', out.alert + (out.ip ? ' (IP ' + out.ip + ')' : ''));
+  } catch (e) { next(e); }
+});
+
+// GET /:id/session/:vid — záznam pohybu jedné návštěvy (administrace, přehrání)
+router.get('/:id(\\d+)/session/:vid([a-z0-9-]{6,40})', async (req, res, next) => {
+  try {
+    const list = await load(); const o = list.find((x) => x.id === Number(req.params.id));
+    if (!o) return res.status(404).json({ error: 'Nabídka nenalezena' });
+    const v = (o.visits || []).find((x) => x.id === req.params.vid);
+    const t = await settings.getSetting(TRK_KEY(o.id, req.params.vid), { type: 'json', defaultValue: null }).catch(() => null);
+    res.set('Cache-Control', 'no-store').json({ mv: (t && t.mv) || [], vw: v && v.vw, vh: v && v.vh, secs: v && v.secs });
   } catch (e) { next(e); }
 });
 
