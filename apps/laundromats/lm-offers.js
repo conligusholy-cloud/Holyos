@@ -166,6 +166,7 @@ module.exports = function mountOffers(app, ctx) {
     let o;
     try { o = (await hos('GET', '/public/' + req.params.token + (req.query.preview === '1' || req.query.print === '1' ? '?track=0' : ''))).offer; }
     catch (e) { return res.status(e.status === 404 ? 404 : 502).type('html').send(layout({ title: 'Nabídka', back: false, body: `<div class="card" style="max-width:560px;margin:40px auto"><h1 style="margin-top:0">${e.status === 404 ? 'Nabídka nenalezena' : 'Nabídka je dočasně nedostupná'}</h1><p class="muted">${e.status === 404 ? 'Odkaz už neplatí nebo je neúplný.' : 'Zkuste to prosím za chvíli.'}</p></div>` })); }
+    if (req.query.print === '1') return res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex, nofollow').type('html').send(require('./lm-offer-page').offerLetter(o, req.params.token, { models: await models() }));
     res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex, nofollow').type('html').send(require('./lm-offer-page').offerPage(o, req.params.token, { preview: req.query.preview === '1', print: req.query.print === '1', models: await models() }));
   });
   app.post('/nabidka/:token([a-f0-9]{32})/zajem', js, async (req, res) => {

@@ -234,7 +234,7 @@ router.get('/public/:token([a-f0-9]{32})/pdf', async (req, res, next) => {
   try {
     const list = await load(); const o = list.find((x) => x.token === req.params.token);
     if (!o) return res.status(404).json({ error: 'Nabídka nenalezena' });
-    const ck = o.token + ':' + (o.updated_at || '') + ':' + (o.image_v || '');
+    const ck = 'v2:' + o.token + ':' + (o.updated_at || '') + ':' + (o.image_v || '');
     const slug = slugOf(o.company);
     const hdr = { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="Nabidka-Laundromats-' + slug + '.pdf"', 'Cache-Control': 'no-store' };
     const hit = _pdfCache.get(ck);
@@ -242,17 +242,22 @@ router.get('/public/:token([a-f0-9]{32})/pdf', async (req, res, next) => {
     const puppeteer = require('puppeteer');
     if (!_pdfBrowser || !_pdfBrowser.isConnected()) _pdfBrowser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox', '--font-render-hinting=none'] });
     page = await _pdfBrowser.newPage();
-    await page.setViewport({ width: 1280, height: 1810 });
-    await page.emulateMediaType('screen');
+    await page.setViewport({ width: 794, height: 1123 });
+    await page.emulateMediaType('print');
     const base = String(process.env.LM_URL || 'https://laundromats.eu').replace(/\/$/, '');
     await page.goto(base + '/nabidka/' + slug + '/' + o.token + '?print=1', { waitUntil: 'networkidle0', timeout: 45000 });
-    // Videa nahradíme úvodním snímkem, počkáme na obrázky a písma
     await page.evaluate(async () => {
-      document.querySelectorAll('video').forEach((v) => { if (!v.poster) { v.remove(); return; } const i = new Image(); i.src = v.poster; i.className = v.className; i.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:inherit'; v.replaceWith(i); });
       await Promise.all(Array.from(document.images).map((im) => (im.complete ? 0 : new Promise((r) => { im.onload = im.onerror = r; }))));
       if (document.fonts && document.fonts.ready) await document.fonts.ready;
     });
-    const buf = Buffer.from(await page.pdf({ width: '1280px', height: '1810px', printBackground: true, margin: { top: 0, right: 0, bottom: 0, left: 0 }, preferCSSPageSize: false }));
+    // Hlavička a zápatí na každé straně (šablony Puppeteer: bez externích obrázků, logo jako inline SVG)
+    const H = { cs: ['Obchodní návrh', 'Strana', 'z'], en: ['Business proposal', 'Page', 'of'], pl: ['Propozycja biznesowa', 'Strona', 'z'] }[o.lang] || ['Obchodní návrh', 'Strana', 'z'];
+    const x = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const logo = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0b7fb8" stroke-width="2" style="vertical-align:-3px;margin-right:6px"><rect x="3" y="2" width="18" height="20" rx="3"/><circle cx="12" cy="13" r="5"/><circle cx="12" cy="13" r="2" fill="#0b7fb8"/></svg>';
+    const headerTemplate = '<div style="width:100%;font-family:Arial,sans-serif;font-size:8.5px;color:#64748b;padding:0 18mm;display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;font-weight:700;color:#0f172a">' + logo + 'Laundromats<span style="color:#0b7fb8">.eu</span></span><span>' + x(H[0]) + ' · ' + x(o.company) + '</span></div>';
+    const contact = [o.sender_name, o.sender_phone, o.reply_to].filter(Boolean).map(x).join(' · ');
+    const footerTemplate = '<div style="width:100%;box-sizing:border-box;font-family:Arial,sans-serif;font-size:8px;color:#64748b;padding:0 18mm"><div style="display:flex;justify-content:space-between;border-top:1px solid #cbd5e1;padding-top:5px"><span>Laundromats.eu' + (contact ? ' · ' + contact : '') + '</span><span>' + x(H[1]) + ' <span class="pageNumber"></span> ' + x(H[2]) + ' <span class="totalPages"></span></span></div></div>';
+    const buf = Buffer.from(await page.pdf({ format: 'A4', printBackground: true, displayHeaderFooter: true, headerTemplate, footerTemplate, margin: { top: '24mm', right: '18mm', bottom: '20mm', left: '18mm' } }));
     if (_pdfCache.size > 30) _pdfCache.clear();
     _pdfCache.set(ck, { at: Date.now(), buf });
     res.set(hdr).send(buf);
