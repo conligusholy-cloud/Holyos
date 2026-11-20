@@ -190,5 +190,24 @@ const zrus = routy.slice(routy.indexOf("router.post('/trade/akcie/nabidka/:id/zr
 ok('cizí nabídku stáhnout nejde',
   /n\.player_id !== req\.player\.id/.test(zrus.slice(0, 900)));
 
+// ─── Dvě pasti, na které to jednou spadlo ────────────────────────────────────
+// 1. Složený klíč se v Prisma klientovi NEJMENUJE podle @@unique(map: ...) —
+//    `map` přejmenuje jen omezení v databázi. Volání podle toho jména
+//    neexistuje a celý nákup skončí na vnitřní chybě serveru.
+ok('nikde se nesahá na složený klíč jménem z map()',
+  routy.indexOf('game_akcie_fond_hrac') < 0);
+ok('místo toho se hledá přes findFirst',
+  /async function akciiRadek\(klient, alianceId, playerId\)/.test(routy)
+  && /klient\.gameAkcie\.findFirst/.test(routy));
+
+// 2. Hodnota fondu načítá stavy VŠECH hráčů. Uvnitř transakce je to dotaz
+//    na časový strop, po kterém spadne celý nákup — a je to i špatně:
+//    vydání se má počítat z hodnoty PŘED tímhle nákupem.
+const transakce = usekTrh.slice(usekTrh.indexOf('prisma.$transaction'));
+ok('hodnota fondu se uvnitř transakce nepočítá',
+  transakce.indexOf('hodnotaFondu(') < 0);
+ok('počítá se před ní', /const hodPred = await hodnotaFondu\(alianceId\);/.test(usekTrh));
+ok('a vydání z ní vychází', /AKCIE\.vydani\(hodPred,/.test(usekTrh));
+
 console.log(chyb ? '\n' + chyb + ' nesedí' : '\nSedí.');
 process.exit(chyb ? 1 : 0);

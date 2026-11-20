@@ -2624,9 +2624,17 @@ router.post('/trade/prevzeti/:id/prodat', hrac, api(async (req, res) => {
 const AKCIE = require('../services/game/akcie');
 
 // Kolik akcií hráč drží. Nedržené se nevrací nulou, ale nic — řádek se maže.
+// Složený klíč se v klientovi NEJMENUJE podle @@unique(map: ...) — `map`
+// přejmenuje jen omezení v databázi. Spoléhat se na vygenerované jméno je
+// past, na které tohle jednou spadlo: celý nákup skončil na vnitřní chybě
+// serveru. Hledá se proto přes findFirst, kde na jménu nezáleží; v transakci
+// je to stejně bezpečné, protože řádek drží zámek do konce.
+async function akciiRadek(klient, alianceId, playerId) {
+  return klient.gameAkcie.findFirst({
+    where: { aliance_id: alianceId, player_id: playerId } });
+}
 async function akciiDrzi(alianceId, playerId) {
-  const r = await prisma.gameAkcie.findUnique({
-    where: { game_akcie_fond_hrac: { aliance_id: alianceId, player_id: playerId } } }).catch(() => null);
+  const r = await akciiRadek(prisma, alianceId, playerId).catch(() => null);
   return r ? Math.max(0, r.pocet) : 0;
 }
 
@@ -2726,6 +2734,11 @@ router.post('/trade/akcie/:id/nabidka', hrac, api(async (req, res) => {
   const v = await REZ.volne(req.player, stavu(req.player));
   const k = AKCIE.zkontroluj(smer, pocet, cena, drzi, v.volne);
   if (!k.ok) return res.status(409).json({ error: akcieChyba(req, k.duvod) });
+  // Hodnota fondu se počítá PŘED transakcí. Uvnitř by to byl dotaz na stavy
+  // všech hráčů s otevřenou transakcí — pomalé a hlavně na časový strop
+  // transakce, po kterém celý nákup spadne na vnitřní chybu. Je to navíc
+  // správné číslo: vydání se počítá z hodnoty PŘED tímhle nákupem.
+  const hodPred = await hodnotaFondu(alianceId);
 
   let vysledek = null;
   try {
@@ -2762,18 +2775,21 @@ router.post('/trade/akcie/:id/nabidka', hrac, api(async (req, res) => {
         pocet: o.pocet, cena: o.cena, kdy: ted } });
 
       // Kusy ke kupujícímu.
-      await tx.gameAkcie.upsert({
-        where: { game_akcie_fond_hrac: { aliance_id: alianceId, player_id: kupujiciId } },
-        create: { aliance_id: alianceId, player_id: kupujiciId,
-          pocet: o.pocet, porizovaci: BigInt(o.castka) },
-        update: { pocet: { increment: o.pocet }, porizovaci: { increment: BigInt(o.castka) } } });
+      const kup = await akciiRadek(tx, alianceId, kupujiciId);
+      if (kup) {
+        await tx.gameAkcie.update({ where: { id: kup.id },
+          data: { pocet: { increment: o.pocet },
+            porizovaci: { increment: BigInt(o.castka) } } });
+      } else {
+        await tx.gameAkcie.create({ data: { aliance_id: alianceId, player_id: kupujiciId,
+          pocet: o.pocet, porizovaci: BigInt(o.castka) } });
+      }
       // Kusy od prodávajícího. Fond žádný řádek nemá — jeho akcie teprve
       // vznikají, proto se jen připočte k vydaným.
       if (prodavajiciId === 0) {
         kusuFondu += o.pocet; castkaFondu += o.castka;
       } else {
-        const pred = await tx.gameAkcie.findUnique({
-          where: { game_akcie_fond_hrac: { aliance_id: alianceId, player_id: prodavajiciId } } });
+        const pred = await akciiRadek(tx, alianceId, prodavajiciId);
         if (!pred || pred.pocet < o.pocet) throw new SOUBEH.Soubeh('server.tolik_akcii_nedrzis');
         const zbytek = pred.pocet - o.pocet;
         // Pořizovací cena se krátí poměrně, ať u zbytku dál sedí.
@@ -2802,8 +2818,7 @@ router.post('/trade/akcie/:id/nabidka', hrac, api(async (req, res) => {
     // nekoupil. Každá prodaná tranše je vlastní malé vydání.
     if (kusuFondu > 0) {
       const alTed = await tx.gameAliance.findUnique({ where: { id: alianceId } });
-      const hod = await hodnotaFondu(alianceId);
-      const vyd = AKCIE.vydani(hod, alTed.akcie_vydano || 0, alTed.akcie_podil || 0,
+      const vyd = AKCIE.vydani(hodPred, alTed.akcie_vydano || 0, alTed.akcie_podil || 0,
         kusuFondu, Math.round(castkaFondu / kusuFondu));
       if (!vyd.ok) throw new SOUBEH.Soubeh('server.nabidka_nejde');
       await tx.gameAliance.update({ where: { id: alianceId }, data: {
