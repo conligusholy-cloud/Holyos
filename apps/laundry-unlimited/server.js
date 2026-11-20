@@ -68,6 +68,9 @@ async function initDb() {
     last_login_at TIMESTAMPTZ
   )`);
   await q('CREATE UNIQUE INDEX IF NOT EXISTS admin_users_email_idx ON admin_users (lower(email))');
+  await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS first_name TEXT');
+  await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS last_name TEXT');
+  await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS phone TEXT');
   // Partnerský portál: přístup a viditelné sekce nastavuje admin v detailu leadu
   await q('ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS portal_access BOOLEAN NOT NULL DEFAULT false');
   await q("ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS portal_sections JSONB NOT NULL DEFAULT '[]'::jsonb");
@@ -719,19 +722,19 @@ app.get('/admin/users', requireAdmin, async (req, res) => {
   const inDb = new Set(rows.map((r) => String(r.email).toLowerCase()));
   const envOnly = ADMIN_EMAILS.filter((e) => !inDb.has(e));
   const me = String((req.admin && req.admin.email) || '').toLowerCase();
-  const tr = envOnly.map((e) => `<tr><td>—</td><td>${esc(e)}</td><td><span class="chip ok">z konfigurace</span></td><td class="mut">—</td><td class="mut small">nelze smazat</td></tr>`).concat(rows.map((r) => `<tr><td>${esc(r.name || '—')}</td><td>${esc(r.email)}</td><td>${r.active ? '<span class="chip ok">aktivní</span>' : '<span class="chip">zakázán</span>'}</td><td class="mut small">${esc(fmtDt(r.last_login_at))}</td>
+  const tr = envOnly.map((e) => `<tr><td>—</td><td>${esc(e)}</td><td>—</td><td><span class="chip ok">z konfigurace</span></td><td class="mut">—</td><td class="mut small">nelze smazat</td></tr>`).concat(rows.map((r) => `<tr><td>${esc(r.name || '—')}</td><td>${esc(r.email)}</td><td>${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '—'}</td><td>${r.active ? '<span class="chip ok">aktivní</span>' : '<span class="chip">zakázán</span>'}</td><td class="mut small">${esc(fmtDt(r.last_login_at))}</td>
 <td style="text-align:right;white-space:nowrap"><button class="btn sm ghost ulink" data-id="${r.id}">Poslat odkaz</button> <button class="btn sm ghost utog" data-id="${r.id}" data-a="${r.active ? 0 : 1}">${r.active ? 'Zakázat' : 'Povolit'}</button>${String(r.email).toLowerCase() === me ? '' : ` <button class="btn sm ghost udel" data-id="${r.id}">Smazat</button>`}</td></tr>`)).join('');
   res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Uživatelé administrace — Laundry Unlimited</title>
 <style>${ADMIN_CSS}.adm{max-width:1000px;margin:0 auto;padding:22px}.mut{color:var(--mut);font-size:13px}.small{font-size:12px}.chip{border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:12px;background:#07111f}.chip.ok{border-color:#22c55e;color:#86efac}
-table{width:100%;border-collapse:collapse;margin-top:14px}th,td{text-align:left;padding:11px 10px;border-bottom:1px solid var(--line);font-size:14px}th{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.05em}.new{display:grid;grid-template-columns:1fr 1.3fr auto;gap:10px;align-items:end;margin-top:14px;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--card)}.new label{font-size:12px;color:var(--mut);font-weight:700}.msg{font-size:13px;color:#86efac;margin-top:8px}${BAR_CSS}.adm{padding-top:8px}@media(max-width:700px){.new{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse;margin-top:14px}th,td{text-align:left;padding:11px 10px;border-bottom:1px solid var(--line);font-size:14px}th{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.05em}.new{display:grid;grid-template-columns:1fr 1fr 1.3fr 1fr auto;gap:10px;align-items:end;margin-top:14px;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--card)}.new label{font-size:12px;color:var(--mut);font-weight:700}.msg{font-size:13px;color:#86efac;margin-top:8px}${BAR_CSS}.adm{padding-top:8px}@media(max-width:700px){.new{grid-template-columns:1fr}}
 </style></head><body>${topBar({ mode: 'admin', active: 'uzivatele' })}<div class="adm"><h3 style="margin:10px 0 0">Uživatelé administrace <span class="mut" style="font-weight:400">— týmové účty, oddělené od leadů</span></h3>
 <p class="mut" style="margin:6px 0 0">Přihlašují se e-mailem na <b>/login</b> — přijde jim odkaz do administrace. Do uživatelského prostředí se z administrace přepnou tlačítkem vpravo nahoře.</p>
-<div class="new"><div><label>Jméno</label><input id="un" maxlength="120" placeholder="Jan Novák"></div><div><label>E-mail</label><input id="ue" type="email" maxlength="160" placeholder="jmeno@firma.cz"></div><button class="btn" id="uadd">Přidat uživatele</button></div><div class="msg" id="um"></div>
-<table><thead><tr><th>Jméno</th><th>E-mail</th><th>Stav</th><th>Poslední přihlášení</th><th></th></tr></thead><tbody>${tr || '<tr><td colspan="5" class="mut">Zatím žádní uživatelé.</td></tr>'}</tbody></table></div>
+<div class="new"><div><label>Jméno *</label><input id="un" maxlength="60" placeholder="Jan" autocomplete="off"></div><div><label>Příjmení *</label><input id="ul" maxlength="60" placeholder="Novák" autocomplete="off"></div><div><label>E-mail *</label><input id="ue" type="email" maxlength="160" placeholder="jmeno@firma.cz" autocomplete="off"></div><div><label>Telefon *</label><input id="up" type="tel" maxlength="40" placeholder="+420 777 123 456" autocomplete="off"></div><button class="btn" id="uadd">Přidat uživatele</button></div><div class="msg" id="um"></div>
+<table><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Stav</th><th>Poslední přihlášení</th><th></th></tr></thead><tbody>${tr || '<tr><td colspan="6" class="mut">Zatím žádní uživatelé.</td></tr>'}</tbody></table></div>
 <script>
 async function call(u,b){const r=await fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b||{})});return r.json()}
 const um=document.getElementById('um');
-document.getElementById('uadd').onclick=async()=>{const j=await call('/admin/api/users',{name:document.getElementById('un').value,email:document.getElementById('ue').value});if(j.ok)location.reload();else um.textContent=j.error||'Chyba'};
+document.getElementById('uadd').onclick=async()=>{const j=await call('/admin/api/users',{first_name:document.getElementById('un').value,last_name:document.getElementById('ul').value,email:document.getElementById('ue').value,phone:document.getElementById('up').value});if(j.ok)location.reload();else um.textContent=j.error||'Chyba'};
 document.addEventListener('click',async e=>{const b=e.target.closest('.ulink,.utog,.udel');if(!b)return;const id=b.dataset.id;
 if(b.classList.contains('ulink')){if(!confirm('Poslat uživateli e-mail s přihlašovacím odkazem?'))return;const j=await call('/admin/api/users/'+id+'/link');um.textContent=j.ok?'Odkaz odeslán ✓':(j.error||'Chyba');return}
 if(b.classList.contains('utog')){const j=await call('/admin/api/users/'+id,{active:b.dataset.a==='1'});if(j.ok)location.reload();else um.textContent=j.error||'Chyba';return}
@@ -739,9 +742,12 @@ if(!confirm('Opravdu smazat tohoto uživatele administrace?'))return;const j=awa
 </script></body></html>`);
 });
 app.post('/admin/api/users', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
-  const email = String(req.body.email || '').trim().toLowerCase().slice(0, 160), name = String(req.body.name || '').trim().slice(0, 120);
+  const b = req.body || {}, c = (v, n) => String(v || '').trim().slice(0, n);
+  const first = c(b.first_name, 60), last = c(b.last_name, 60), email = c(b.email, 160).toLowerCase(), phone = c(b.phone, 40);
+  if (!first || !last) return res.json({ ok: false, error: 'Vyplňte jméno i příjmení' });
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.json({ ok: false, error: 'Neplatný e-mail' });
-  try { await q('INSERT INTO admin_users (email, name) VALUES ($1,$2)', [email, name]); res.json({ ok: true }); }
+  if (phone.replace(/\D/g, '').length < 7) return res.json({ ok: false, error: 'Vyplňte telefonní číslo' });
+  try { await q('INSERT INTO admin_users (email, name, first_name, last_name, phone) VALUES ($1,$2,$3,$4,$5)', [email, first + ' ' + last, first, last, phone]); res.json({ ok: true }); }
   catch (e) { res.json({ ok: false, error: /unique|duplicate/i.test(e.message) ? 'Tento e-mail už je v seznamu' : 'Uložení se nepovedlo' }); }
 });
 app.post('/admin/api/users/:id(\\d+)', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
