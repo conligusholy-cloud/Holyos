@@ -3831,5 +3831,11 @@
   "akcie.dividenda_celkem": "Versé par action",
   "akcie.dividenda_popis": "« Par action et par mois » est la part du revenu mensuel du fonds qui revient à une action. Elle est versée dès que le fonds la déclare en dividende — le cours est une chose, le rendement en est une autre.",
   "hra.akcie_fondu": "Actions de fonds",
-  "veta.akcie_nesou_mesicne": "Elles rapportent {penize:p1} par mois, dès que le fonds le déclare en dividende."
+  "veta.akcie_nesou_mesicne": "Elles rapportent {penize:p1} par mois, dès que le fonds le déclare en dividende.",
+  "hra.objednat": "Commander",
+  "hra.kolik_stroju": "Combien",
+  "hra.cena_za_kus": "Prix à l’unité",
+  "veta.objednat_kusu": "Commander {cislo:p1}×",
+  "veta.objednano_kusu": "{cislo:p1}× {p2} commandé. Arrive {p3}.",
+  "veta.pradlomatu_kusu": "{cislo:p1}× Laverie {p2}"
 }

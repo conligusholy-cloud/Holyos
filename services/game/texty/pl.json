@@ -3838,5 +3838,11 @@
   "akcie.dividenda_celkem": "Wypłacono na akcję",
   "akcie.dividenda_popis": "„Na akcję miesięcznie” to część miesięcznego dochodu funduszu przypadająca na jedną akcję. Wypłaci się, gdy fundusz ogłosi ją jako dywidendę — czym innym jest cena akcji, a czym innym to, co przynosi.",
   "hra.akcie_fondu": "Akcje funduszy",
-  "veta.akcie_nesou_mesicne": "Przynoszą {penize:p1} miesięcznie, gdy fundusz ogłosi to jako dywidendę."
+  "veta.akcie_nesou_mesicne": "Przynoszą {penize:p1} miesięcznie, gdy fundusz ogłosi to jako dywidendę.",
+  "hra.objednat": "Zamów",
+  "hra.kolik_stroju": "Ile sztuk",
+  "hra.cena_za_kus": "Cena za sztukę",
+  "veta.objednat_kusu": "Zamów {cislo:p1}×",
+  "veta.objednano_kusu": "{cislo:p1}× {p2} zamówione. Dotrze {p3}.",
+  "veta.pradlomatu_kusu": "{cislo:p1}× Pralnia {p2}"
 }

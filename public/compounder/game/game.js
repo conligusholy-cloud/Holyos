@@ -5155,44 +5155,85 @@ function paintShop() {
     b.onclick = function () { buySheet(b.getAttribute('data-buy')); };
   });
 }
-function buySheet(modelKey, drz) {
+// Kolik kusů jednoho stroje jde objednat naráz. Padesát je strop fronty
+// hlášení serveru a každý kus je v ní jeden záznam — dvacet je bezpečně pod
+// ním a víc než dost: kdo staví víc, objedná znovu.
+var NAKUP_MAX = 20;
+function buyPocet(n) {
+  return Math.max(1, Math.min(NAKUP_MAX, Math.floor(Number(n) || 1)));
+}
+// Co se má objednat: seznam zásilek. Vytažený zvlášť, protože na něm visí
+// dvě věci, které se špatně hledají zpětně. orderedAt je klíč, podle kterého
+// Expresní dovoz pozná zásilku — dva kusy ve stejné milisekundě by ho
+// sdílely. A „dorazí hned" patří jen prvnímu kusu: je to úlevť pro člověka,
+// který hru vidí poprvé, ne sleva na dodací lhůtu pro celý sklad.
+function buyZasilky(modelKey, n, ted, hned, zaMs) {
+  var out = [];
+  for (var i = 0; i < buyPocet(n); i++) {
+    var prvni = !!hned && i === 0;
+    out.push({ model: modelKey, orderedAt: ted + i,
+      arrivesAt: prvni ? ted : ted + zaMs, hned: prvni });
+  }
+  return out;
+}
+function buySheet(modelKey, drz, pocet) {
   if (!drz) FIN_OWN = null;
-  var cena = machinePrice(MODELS[modelKey]);
+  var n = buyPocet(pocet);
+  var zaKus = machinePrice(MODELS[modelKey]);
+  // Financuje se celá objednávka naráz: jeden úvěr na pět strojů, ne pět
+  // úvěrů po jednom. Banka to tak taky posuzuje.
+  var cena = zaKus * n;
   var m = MODELS[modelKey], f = canFinance(cena, FIN_OWN, zamerStrop(modelKey, cena));
   sheet(tx('veta.h3_koupit_h3_p_class_muted', { p1: m.name, p2: dodaniSlovy() })
     + (dodaniDnu() > 1 ? tx('hra.cim_vetsi_sit_mas_tim_je', { p1: DODANI_ZA, p2: DODANI_MAX_DNU }) : '') + '</p>'
     + (jeZacatek() ? tx('hra.p_class_fine_ok_na_prvni', { p1: esc(tx('hra.u_pripojek_na_miste_uz')) }) : '')
+    // Kdo staví deset stejných kiosků, nemá klikat desětkrát. Cena za kus
+    // zůstává vidět, ať je poznat, co se násobí.
+    + '<label class="fld"><span>' + esc(tx('hra.kolik_stroju')) + '</span>'
+    + '<input id="buy-pocet" class="inp" type="number" inputmode="numeric" min="1" max="'
+    + NAKUP_MAX + '" step="1" value="' + n + '"></label>'
+    + (n > 1 ? '<div class="kv"><span>' + esc(tx('hra.cena_za_kus')) + '</span><b>'
+        + kcFull(zaKus) + '</b></div>' : '')
     + financeRows(f)
-    + '<button class="btn big" id="do-buy"' + (f.ok ? '' : ' disabled') + '>Objednat</button>'
+    + '<button class="btn big" id="do-buy"' + (f.ok ? '' : ' disabled') + '>'
+    + (n > 1 ? tx('veta.objednat_kusu', { p1: n }) : esc(tx('hra.objednat'))) + '</button>'
     + (f.ok ? '' : '<p class="fine err">' + esc(f.duvod || '') + '</p>'
         + '<p class="fine">' + esc(dohnat(f.chybi)) + ' ' + esc(tx('hra.nebo_splat_cast_uveru_tim')) + '</p>'
         + agentHtml(cena, function () { return zamerStrop(modelKey, cena); },
             { typ: 'stroj', model: modelKey })));
-  bindFinance(function () { buySheet(modelKey, true); });
+  bindFinance(function () { buySheet(modelKey, true, n); });
   bindAgent();
+  // Změna počtu překresluje celý panel: s cenou se hne akontace, úvěr i to,
+  // jestli na to vůbec má. Akontace se přitom pouští znovu od hry — číslo
+  // zadané pro jeden kus nemá u pěti co říct.
+  var pole = $('buy-pocet');
+  if (pole) {
+    pole.onchange = function () { buySheet(modelKey, false, pole.value); };
+  }
   var b = $('do-buy');
   if (b) b.onclick = function () {
-    doFinance(f, { druh: 'stroj', popis: tx('veta.pradlomat', { p1: m.name })});
+    doFinance(f, { druh: 'stroj', popis: n > 1
+      ? tx('veta.pradlomatu_kusu', { p1: n, p2: m.name })
+      : tx('veta.pradlomat', { p1: m.name })});
     // První stroj dorazí hned. Čekat den na dodání je u člověka, který hru
-    // vidí poprvé, nejkratší cesta k tomu, že se už nevrátí.
+    // vidí poprvé, nejkratší cesta k tomu, že se už nevrátí. Z objednávky na
+    // víc kusů to platí jen pro ten první — zbytek jede normální cestou.
     var hned = zacatecnik() && !(S.orders || []).length && !mamStroj();
-    S.orders.push({ model: modelKey, orderedAt: Date.now(),
-      arrivesAt: hned ? Date.now() : Date.now() + dodaniMs() });
+    buyZasilky(modelKey, n, Date.now(), hned, dodaniMs()).forEach(function (z) {
+      S.orders.push({ model: z.model, orderedAt: z.orderedAt, arrivesAt: z.arrivesAt });
+      // Do fronty se to dává PŘED uložením, ať je nákup zapsaný ve stavu
+      // dřív, než se cokoli pošle. Server zakládá jednu objednávku na kus
+      // a provizi počítá z každé — proto jeden záznam na kus, ne jeden
+      // na celou objednávku.
+      doFronty(z.model, z.hned);
+    });
     save(); paint(); closeSheet();
-    // Nejdřív uložíme síť (je v ní nová objednávka) a pak řekneme serveru, že
-    // se kupovalo — ten z ní spočte provizi tomu, kdo nás do hry přivedl.
-    // Provize se platí hned při nákupu, ne až až stroj dorazí a postaví se.
-    // hned = úplně první stroj, který dorazí bez čekání. Server si podle
-    // toho nastaví, kdy objednávka dorazí — bez toho by nováčkovi ležel
-    // první prádlomat den na cestě, i když ho ve hře má hned.
-    //
-    // Do fronty se to dá PŘED uložením, ať je nákup zapsaný ve stavu dřív,
-    // než se cokoli pošle. Kdyby se to pořadí otočilo a hráč zavřel hru mezi
-    // tím, server by o nákupu nevěděl a nebylo by se k čemu vrátit.
-    doFronty(modelKey, hned);
     save();
     syncState(true).then(nahlasNakupy);
-    toast(hned ? tx('veta.je_na_sklade_dopravce_ho_privezl', { p1: m.name }): tx('veta.objednan_dorazi', { p1: m.name, p2: etaText(dodaniMs()) }), 'ok');
+    toast(n > 1
+      ? tx('veta.objednano_kusu', { p1: n, p2: m.name, p3: etaText(dodaniMs()) })
+      : (hned ? tx('veta.je_na_sklade_dopravce_ho_privezl', { p1: m.name })
+        : tx('veta.objednan_dorazi', { p1: m.name, p2: etaText(dodaniMs()) })), 'ok');
   };
 }
 
@@ -15664,7 +15705,7 @@ function buyCard(kind, qty) {
   var dlazdice = [{ qty: 1, price_czk: c.price_czk, sleva: 0 }].concat(bal);
   sheet('<h3>' + esc(polNazev(c)) + '</h3>'
     + '<p class="muted small">' + esc(polPopis(c)) + '</p>'
-    + (bal.length ? '<p class="muted small" style="margin:12px 0 6px">' + esc(tx('hra.kolik_kusu')) + '</p>'
+    + (bal.length ? '<p class="muted small" style="margin:12px 0 6px">' + esc(tx('hra.kolik_stroju')) + '</p>'
         + '<div class="balicky">' + dlazdice.map(function (b) {
             return '<button class="balik' + (b.qty === qty ? ' on' : '') + '" data-qty="' + b.qty + '">'
               + '<b>' + b.qty + '\u00d7</b>'

@@ -3831,5 +3831,11 @@
   "akcie.dividenda_celkem": "Je Aktie ausgezahlt",
   "akcie.dividenda_popis": "„Je Aktie monatlich“ ist der Anteil am Monatsertrag des Fonds, der auf eine Aktie entfällt. Ausgezahlt wird er, sobald ihn der Fonds als Dividende beschließt — der Kurs ist das eine, der Ertrag das andere.",
   "hra.akcie_fondu": "Fondsaktien",
-  "veta.akcie_nesou_mesicne": "Sie bringen {penize:p1} im Monat, sobald der Fonds es als Dividende beschließt."
+  "veta.akcie_nesou_mesicne": "Sie bringen {penize:p1} im Monat, sobald der Fonds es als Dividende beschließt.",
+  "hra.objednat": "Bestellen",
+  "hra.kolik_stroju": "Wie viele",
+  "hra.cena_za_kus": "Preis je Stück",
+  "veta.objednat_kusu": "{cislo:p1}× bestellen",
+  "veta.objednano_kusu": "{cislo:p1}× {p2} bestellt. Kommt {p3}.",
+  "veta.pradlomatu_kusu": "{cislo:p1}× Waschsalon {p2}"
 }

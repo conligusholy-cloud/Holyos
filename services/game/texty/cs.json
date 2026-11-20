@@ -3865,5 +3865,11 @@
   "akcie.dividenda_celkem": "Vyplaceno na akcii",
   "akcie.dividenda_popis": "„Na akcii měsíčně“ je díl měsíčního výnosu fondu, který na jednu akcii připadá. Vyplatí se, až ho fond vyhlásí jako dividendu — jedna věc je cena akcie, druhá to, co nese.",
   "hra.akcie_fondu": "Akcie fondů",
-  "veta.akcie_nesou_mesicne": "Nesou {penize:p1} měsíčně, až to fond vyhlásí jako dividendu."
+  "veta.akcie_nesou_mesicne": "Nesou {penize:p1} měsíčně, až to fond vyhlásí jako dividendu.",
+  "hra.objednat": "Objednat",
+  "hra.kolik_stroju": "Kolik kusů",
+  "hra.cena_za_kus": "Cena za kus",
+  "veta.objednat_kusu": "Objednat {cislo:p1}×",
+  "veta.objednano_kusu": "{cislo:p1}× {p2} objednáno. Dorazí {p3}.",
+  "veta.pradlomatu_kusu": "{cislo:p1}× prádlomat {p2}"
 }

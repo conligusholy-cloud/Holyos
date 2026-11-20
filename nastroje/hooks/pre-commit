@@ -167,6 +167,17 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; th
   fi
 fi
 
+# Nákup víc kiosků naráz. Objednávka sahá na peníze i na sklad: cena musí
+# být za celou objednávku a každá zásilka musí mít vlastní klíč, jinak
+# Expresní dovoz zrychlí všechny kusy naráz.
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; then
+  if ! node nastroje/tnakupvic.js; then
+    echo ""
+    echo "STOP: nákup víc kusů nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Přecenění akcie podle hodnoty fondu. Sáhá na cenu, za kterou hráči kupují,
 # a to bez jejich přičinění — chyba tu hráče okrade, aniž by něco udělal.
 if git diff --cached --name-only | grep -qE 'services/game/akcie|services/game/fond-historie|routes/game-trade'; then

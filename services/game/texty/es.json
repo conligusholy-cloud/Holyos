@@ -3831,5 +3831,11 @@
   "akcie.dividenda_celkem": "Pagado por acción",
   "akcie.dividenda_popis": "«Por acción al mes» es la parte del rendimiento mensual del fondo que corresponde a una acción. Se paga cuando el fondo la declara como dividendo: una cosa es el precio y otra lo que renta.",
   "hra.akcie_fondu": "Acciones de fondos",
-  "veta.akcie_nesou_mesicne": "Rinden {penize:p1} al mes, cuando el fondo lo declare como dividendo."
+  "veta.akcie_nesou_mesicne": "Rinden {penize:p1} al mes, cuando el fondo lo declare como dividendo.",
+  "hra.objednat": "Pedir",
+  "hra.kolik_stroju": "Cuántos",
+  "hra.cena_za_kus": "Precio por unidad",
+  "veta.objednat_kusu": "Pedir {cislo:p1}×",
+  "veta.objednano_kusu": "{cislo:p1}× {p2} pedido. Llega {p3}.",
+  "veta.pradlomatu_kusu": "{cislo:p1}× Lavandería {p2}"
 }
