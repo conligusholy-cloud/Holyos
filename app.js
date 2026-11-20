@@ -1477,6 +1477,9 @@ server.listen(PORT, async () => {
   } catch (err) {
     console.error('[app] vyrovnani startovni hotovosti selhalo:', err.message);
   }
+  // Účetnictví: do poznámek „za co platím" doplní město z položek (HM Jirkov → „… Jirkov"). Idempotentní, na pozadí.
+  setTimeout(() => require('./services/accounting/payment-note').backfillLocations()
+    .catch((err) => console.error('[app] doplnění měst do poznámek selhalo:', err.message)), 20000);
   // Hra: k městům, která se prozkoumala dřív, než se ukládala země, ji doplníme.
   // Běží na pozadí — geokodér je pomalý a start serveru na něj nemá čekat.
   require('./services/game/zeme').doplnZemeMest()

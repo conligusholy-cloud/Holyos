@@ -19,6 +19,24 @@ function normNote(v) {
   return t ? t.slice(0, NOTE_MAX) : null;
 }
 
+// Místo z položek dokladu: u Tesca je v popisu „HM Jirkov; Elektrická energie…" / „HM Ivancice; Nájemné…".
+// Vrací město (např. „Jirkov") nebo null. Bere se první položka, která místo obsahuje.
+function locationFromItems(items) {
+  for (const i of (items || [])) {
+    const m = /(?:^|\s)(?:HM|SM|Hypermarket|Supermarket)\s+([A-Za-zÁ-Žá-ž][A-Za-zÁ-Žá-ž.\- ]{1,28}?)\s*[;,:(]/.exec(String(i.description || '').trim());
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+// Připojí město, pokud poznámka už neobsahuje (bez ohledu na diakritiku a velikost písmen). Max 60 znaků.
+const fold = (v) => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function withLocation(note, items) {
+  const city = locationFromItems(items);
+  if (!note || !city || fold(note).includes(fold(city))) return note;
+  const out = (note + ' ' + city);
+  return out.length <= NOTE_MAX ? out : (note.slice(0, NOTE_MAX - city.length - 1).trim() + ' ' + city);
+}
+
 function heuristic(inv) {
   const items = (inv.items || []).map((i) => String(i.description || '').trim()).filter(Boolean);
   if (!items.length) return null;
@@ -33,13 +51,14 @@ async function aiSummary(inv) {
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const prompt = 'Shrň jedním až třemi slovy česky, ZA CO se platí tato přijatá faktura (co se nakoupilo / jaká služba). ' +
-    'Příklady dobrých odpovědí: „Nájem Brno", „Spojovací materiál", „Pohonné hmoty", „Elektřina", „Software licence", „Doprava". ' +
+    'Příklady dobrých odpovědí: „Nájem Brno", „Elektřina Jirkov", „Spojovací materiál", „Pohonné hmoty", „Software licence", „Doprava". ' +
+    'U nájmu, energií a služeb k provozovně VŽDY uveď i město / lokalitu z popisu položek (např. „HM Jirkov" → Jirkov). ' +
     'Bez názvu dodavatele, bez čísel faktur, bez uvozovek a tečky. Max 30 znaků.\n\n' +
     'Dodavatel: ' + (inv.company?.name || '?') + '\nPoložky:\n' + (items || '(bez položek)') +
     (inv.internal_note ? '\nPoznámka: ' + String(inv.internal_note).slice(0, 200) : '');
   const resp = await client.messages.create({ model: MODEL, max_tokens: 40, messages: [{ role: 'user', content: prompt }] });
   const txt = (resp.content || []).map((c) => c.text || '').join('').replace(/["„“”'.]/g, '').replace(/\s+/g, ' ').trim();
-  return txt ? txt.slice(0, 30) : null;
+  return txt ? txt.slice(0, 40) : null;
 }
 
 /** Všechna pravidla „za co platím" podle dodavatele: { "<company_id>": "text" }. */
@@ -105,14 +124,35 @@ async function ensurePaymentNote(invoiceId) {
   // Pravidlo dodavatele má přednost před AI — ušetří dotaz a drží jednotný text.
   const fromRule = await ruleFor(inv.company_id);
   if (fromRule) {
-    await prisma.invoice.update({ where: { id: invoiceId }, data: { payment_note: fromRule } }).catch(() => {});
-    return fromRule;
+    const withCity = withLocation(fromRule, inv.items);
+    await prisma.invoice.update({ where: { id: invoiceId }, data: { payment_note: withCity } }).catch(() => {});
+    return withCity;
   }
   let note = null;
   try { note = await aiSummary(inv); } catch (e) { console.warn('[payment-note] AI selhalo:', e.message); }
   if (!note) note = heuristic(inv);
+  note = withLocation(note, inv.items);
   if (note) await prisma.invoice.update({ where: { id: invoiceId }, data: { payment_note: note.slice(0, NOTE_MAX) } }).catch(() => {});
   return note;
+}
+
+/**
+ * Jednorázově (idempotentně) doplní město do už existujících poznámek přijatých dokladů,
+ * kde je v položkách místo (např. „HM Jirkov") a poznámka ho ještě neobsahuje.
+ * Jen připojuje na konec — nic nemaže ani nepřepisuje.
+ */
+async function backfillLocations(limit = 2000) {
+  const rows = await prisma.invoice.findMany({
+    where: { direction: 'ap', payment_note: { not: null } }, orderBy: { id: 'desc' }, take: limit,
+    select: { id: true, payment_note: true, items: { select: { description: true }, orderBy: { line_order: 'asc' } } },
+  });
+  let n = 0;
+  for (const r of rows) {
+    const novy = withLocation(r.payment_note, r.items);
+    if (novy && novy !== r.payment_note) { await prisma.invoice.update({ where: { id: r.id }, data: { payment_note: novy } }).catch(() => {}); n++; }
+  }
+  if (n) console.log('[payment-note] město doplněno do ' + n + ' poznámek');
+  return n;
 }
 
 /** Doplní poznámky u více dokladů (po 4 souběžně). */
@@ -125,4 +165,4 @@ async function ensureMany(ids, limit = 4) {
   return out;
 }
 
-module.exports = { ensurePaymentNote, ensureMany, getRules, ruleFor, setRule, applyRuleToInvoices, normNote, RULES_KEY };
+module.exports = { backfillLocations, locationFromItems, withLocation, ensurePaymentNote, ensureMany, getRules, ruleFor, setRule, applyRuleToInvoices, normNote, RULES_KEY };
