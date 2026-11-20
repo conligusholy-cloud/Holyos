@@ -9461,6 +9461,23 @@ function fondJa() {
 // z čeho počítat. Podíl, který nenese nic, taky ne — o tom už mluví řádek
 // nad ním a dělit nulou by dalo nekonečno.
 var NAVRATNOST_MAX = 1200;        // sto herních let; výš je to „nevrátí se"
+// Kudy se výnos pohnul proti minulému vzorku. Zelená nahoru, červená dolů,
+// beze změny nic — šipka u čísla, které stojí, je jen šum. Když se nemá
+// s čím srovnat (první vzorek, nový podíl), taky nic: nula není pokles.
+function smerVynosu(ted, pred) {
+  var t = Math.round(Number(ted) || 0);
+  if (pred == null || !Number.isFinite(Number(pred))) return null;
+  var p = Math.round(Number(pred));
+  if (t === p) return null;
+  return { nahoru: t > p, rozdil: t - p };
+}
+// Šipka do HTML. Znak se bere z Unicode, ne z obrázku — musí být čitelný
+// i na telefonu v tmavém režimu.
+function sipkaHtml(sm) {
+  if (!sm) return '';
+  return '<i class="' + (sm.nahoru ? 'ok' : 'err') + '">'
+    + (sm.nahoru ? '\u2191' : '\u2193') + '</i> ';
+}
 function podilVynos(x) {
   var cena = Math.round(Number(x && x.cena) || 0);
   var mesicne = Math.round(Number(x && x.mesicne) || 0);
@@ -9573,20 +9590,30 @@ function fondVnitrek() {
   // Co už fond koupil. Bez toho člen neviděl, kam peníze z pokladny odešly.
   if ((f.drzi || []).length) {
     h += '<h4 style="margin:12px 0 4px">' + esc(tx('fond.drzi')) + '</h4>';
-    var neseCelkem = 0;
+    var neseCelkem = 0, nesloPred = null;
     f.drzi.forEach(function (x) {
       neseCelkem += Number(x.mesicne) || 0;
+      // Do součtu „předtím" jde jen to, u čeho se má s čím srovnat. Kdyby se
+      // za chybějící vzorek dosadila nula, vypadal by nový podíl jako obrovský
+      // nárůst celku.
+      if (x.mesicne_pred != null) nesloPred = (nesloPred || 0) + (Number(x.mesicne_pred) || 0);
+      else if (nesloPred != null) nesloPred += Number(x.mesicne) || 0;
       var pct = Math.round((x.dividenda_pct == null ? 1 : x.dividenda_pct) * 100);
+      // Napravo stojí to, kvůli čemu se podíl drží: co nese za měsíc.
+      // Za kolik se koupil je minulost a patří dolů k detailu. Šipka říká,
+      // kam se výnos pohnul proti minulému vzorku.
+      var sm = smerVynosu(x.mesicne, x.mesicne_pred);
       h += '<div class="row"><span><b>' + esc(x.firma_nick || '') + '</b> \u00b7 '
         + procentaPodilu(x.podil)
         + (x.vetsina ? ' <i class="pill good">' + esc(tx('fond.vetsina')) + '</i>' : '')
-        + '</span><span class="muted small">' + kcFull(x.cena) + '</span></div>'
-        // Za kolik se to koupilo je minulost; člena zajímá, co to nese teď.
+        + '</span><span><b class="' + (sm ? (sm.nahoru ? 'ok' : 'err')
+            : ((Number(x.mesicne) || 0) > 0 ? 'ok' : '')) + '">'
+        + sipkaHtml(sm) + kcFull(x.mesicne) + '</b></span></div>'
         // Nula se neschovává: většinový podíl ve firmě, která nevyplácí nic,
         // je právě to, co má být vidět.
-        + '<p class="fine' + ((Number(x.mesicne) || 0) > 0 ? ' ok' : '') + '">'
+        + '<p class="fine">'
         + ((Number(x.mesicne) || 0) !== 0
-            ? tx('veta.fond_drzi_nese', { p1: x.mesicne, p2: pct })
+            ? tx('veta.fond_drzi_zaplaceno', { p1: x.cena, p2: pct })
             : tx('veta.fond_drzi_nenese', { p1: pct })) + '</p>'
         + (function (v) {
             if (!v) return '';
@@ -9595,8 +9622,10 @@ function fondVnitrek() {
               : tx('fond.vynos', { p1: pctHra(v.podil), p2: v.mesicu })) + '</p>';
           }(podilVynos(x)));
     });
+    var smCelkem = smerVynosu(neseCelkem, nesloPred);
     h += '<div class="kv souhrn"><span>' + esc(tx('fond.nese_mesicne')) + '</span><b class="'
-      + (neseCelkem > 0 ? 'ok' : '') + '">' + kcFull(neseCelkem) + '</b></div>';
+      + (smCelkem ? (smCelkem.nahoru ? 'ok' : 'err') : (neseCelkem > 0 ? 'ok' : ''))
+      + '">' + sipkaHtml(smCelkem) + kcFull(neseCelkem) + '</b></div>';
   }
 
   // Co už fond vyvěsil. Hlasování je jedna věc, bežící nabídka druhá — a do

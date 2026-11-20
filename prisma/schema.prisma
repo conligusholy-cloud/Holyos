@@ -8049,6 +8049,15 @@ model GameSpotClaim {
   najem_od        DateTime?
   najem_do        DateTime?
 
+  // Prodaná zem pod vlastním prádlomatem. Zábor zůstává provozovateli —
+  // nepřejmenovává se, takže plány, mapa ani ekonomika se nehnou — jen se
+  // u něj eviduje, komu patří zem pod ním a za jakých podmínek tam stojí.
+  // null = zem patří tomu, kdo zábor drží. (Požadavek #158)
+  // Nájem se účtuje přes pronajem_cena stejně jako u pronajaté holé země;
+  // vazano_do a vypoved_mesicu drží podmínky dohodnuté při prodeji.
+  pozemek_majitel_id   Int?
+  pozemek_majitel_nick String? @db.VarChar(24)
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -8056,6 +8065,7 @@ model GameSpotClaim {
   @@index([player_id])
   @@index([vypoved_do])
   @@index([najemce_id])
+  @@index([pozemek_majitel_id])
   @@map("game_spot_claims")
 }
 
@@ -8342,6 +8352,21 @@ model GameAliance {
   created_at    DateTime @default(now())
 
   @@map("game_aliance")
+}
+
+// Kolik který držený podíl fondu nesl měsíčně. Hodnota fondu se vzorkuje jako
+// celek; u jednotlivého podílu nebylo s čím srovnat, a tak u něj nešlo říct,
+// jestli roste, nebo padá. Vzorkuje se spolu s hodnotou fondu.
+model GameFondDrzba {
+  id         Int      @id @default(autoincrement())
+  aliance_id Int
+  firma_id   Int
+  mesicne    Int      @default(0)
+  kdy        DateTime @default(now())
+
+  @@index([aliance_id, firma_id, kdy], map: "game_fond_drzba_posledni")
+  @@index([kdy])
+  @@map("game_fond_drzba")
 }
 
 // Kdo kolik akcií fondu drží. Nula se maže — v seznamu nemají co dělat lidé,

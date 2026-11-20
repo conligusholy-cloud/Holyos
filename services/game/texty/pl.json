@@ -3826,5 +3826,6 @@
   "veta.akcie_odhad": "Zbierze się {penize:p1}, a akcjonariusze mieliby {p2} % funduszu.",
   "veta.akcie_zobchodovano": "Zobrotowano {p1} akcji za {penize:p2}.",
   "veta.fond_akcie_popis": "Wydać {cislo:p1} akcji po {penize:p2}",
-  "veta.fond_akcie_dividenda_popis": "Wypłacić akcjonariuszom {penize:p1} na akcję"
+  "veta.fond_akcie_dividenda_popis": "Wypłacić akcjonariuszom {penize:p1} na akcję",
+  "veta.fond_drzi_zaplaceno": "zapłacono {penize:p1} · firma wypłaca {cislo:p2} % zysku"
 }

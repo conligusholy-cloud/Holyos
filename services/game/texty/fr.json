@@ -3819,5 +3819,6 @@
   "veta.akcie_odhad": "Cela lève {penize:p1} et les actionnaires détiendraient {p2} % du fonds.",
   "veta.akcie_zobchodovano": "{p1} actions échangées pour {penize:p2}.",
   "veta.fond_akcie_popis": "Émettre {cislo:p1} actions à {penize:p2}",
-  "veta.fond_akcie_dividenda_popis": "Verser aux actionnaires {penize:p1} par action"
+  "veta.fond_akcie_dividenda_popis": "Verser aux actionnaires {penize:p1} par action",
+  "veta.fond_drzi_zaplaceno": "payé {penize:p1} · la société verse {cislo:p2} % de son bénéfice"
 }

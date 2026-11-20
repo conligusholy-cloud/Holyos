@@ -147,6 +147,16 @@ if git diff --cached --name-only | grep -qE 'services/game/zlocin'; then
   fi
 fi
 
+# Šipka u měsíčního výnosu drženého podílu. Měří se proti minulému vzorku;
+# kdyby se za chybějící vzorek dosadila nula, vypadal by nový podíl jako propad.
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|services/game/fond-historie'; then
+  if ! node nastroje/tfondsipka.js; then
+    echo ""
+    echo "STOP: šipka u výnosu podílu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Návrat do fondu po vlastní akci. Dokud se nerozlišovalo ruční zavření od
 # toho po hlasování, vyhodilo to hráče z fondu na mapu.
 if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; then

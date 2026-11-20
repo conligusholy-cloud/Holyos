@@ -3819,5 +3819,6 @@
   "veta.akcie_odhad": "That raises {penize:p1} and shareholders would hold {p2} % of the fund.",
   "veta.akcie_zobchodovano": "Traded {p1} shares for {penize:p2}.",
   "veta.fond_akcie_popis": "Issue {cislo:p1} shares at {penize:p2} each",
-  "veta.fond_akcie_dividenda_popis": "Pay shareholders {penize:p1} per share"
+  "veta.fond_akcie_dividenda_popis": "Pay shareholders {penize:p1} per share",
+  "veta.fond_drzi_zaplaceno": "paid {penize:p1} · the company pays out {cislo:p2} % of its profit"
 }

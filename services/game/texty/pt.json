@@ -3812,5 +3812,6 @@
   "veta.akcie_odhad": "Isso levanta {penize:p1} e os acionistas teriam {p2} % do fundo.",
   "veta.akcie_zobchodovano": "{p1} ações negociadas por {penize:p2}.",
   "veta.fond_akcie_popis": "Emitir {cislo:p1} ações a {penize:p2}",
-  "veta.fond_akcie_dividenda_popis": "Pagar aos acionistas {penize:p1} por ação"
+  "veta.fond_akcie_dividenda_popis": "Pagar aos acionistas {penize:p1} por ação",
+  "veta.fond_drzi_zaplaceno": "pago {penize:p1} · a empresa paga {cislo:p2} % do lucro"
 }

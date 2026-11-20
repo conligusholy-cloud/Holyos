@@ -3819,5 +3819,6 @@
   "veta.akcie_odhad": "Das bringt {penize:p1} ein, die Aktionäre hielten {p2} % des Fonds.",
   "veta.akcie_zobchodovano": "{p1} Aktien für {penize:p2} gehandelt.",
   "veta.fond_akcie_popis": "{cislo:p1} Aktien zu je {penize:p2} ausgeben",
-  "veta.fond_akcie_dividenda_popis": "Aktionären {penize:p1} je Aktie auszahlen"
+  "veta.fond_akcie_dividenda_popis": "Aktionären {penize:p1} je Aktie auszahlen",
+  "veta.fond_drzi_zaplaceno": "bezahlt {penize:p1} · die Firma schüttet {cislo:p2} % des Gewinns aus"
 }

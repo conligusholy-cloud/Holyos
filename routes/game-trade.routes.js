@@ -288,7 +288,10 @@ async function zkontroluj(nab, prodavajici, t) {
     // protože zábor si zem nese s sebou. (Požadavek #158)
     const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: nab.spot_id || '' } });
     if (!c || c.player_id !== prodavajici.id || !c.pozemek) return t('server.pozemek_uz_nepatri');
-    if (c.model) return t('server.na_pozemku_stoji_pradlomat');
+    // Zem pod vlastním prádlomatem prodat jde — provozovatel zůstane stát a
+    // od té chvíle platí nájem novému majiteli. Co už jednou prodané je,
+    // prodat podruhé nelze. (Požadavek #158)
+    if (c.pozemek_majitel_id) return t('server.zem_uz_patri_nekomu_jinemu');
   } else if (nab.predmet === 'karta') {
     const k = await prisma.gameCard.count({ where: { player_id: prodavajici.id, kind: nab.card_kind || '', used_at: null } });
     if (!k) return t('server.prodavajici_nema_kartu');
@@ -506,6 +509,11 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
     data = { urok, mesicu, zastava: zast, zastava_nazev: zastavaNazev,
       zastava_podil: zastPodil, konverze_podil: konvPodil,
       zadam_zastavu: zadam, splatka: anuita(cena, urok, mesicu) };
+  } else if (predmet === 'pozemek') {
+    // U země pod prádlomatem jde s nabídkou i nájem a podmínky smlouvy —
+    // kupující musí vidět, co mu zem ponese a jak je vázaný. (Požadavek #158)
+    const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: s(b.spot_id, 120) } });
+    if (c && c.model) data = podminkyNajmu(b);
   } else if (predmet === 'podil') {
     const podil = Math.max(PODIL_MIN, Math.min(PODIL_MAX, Number(b.podil) || 0));
     // Podíl prodává majitel firmy — u „koupim" je to ten druhý, u „prodam" já.
@@ -900,7 +908,7 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
           popis: 'Koupil jsi prádlomat ' + (c.name || '') , text_kod: 'dor.koupil_jsi_pradlomat', text_data: { p1: (c.name || '') }},
       ] });
     } else if (t.predmet === 'pozemek') {
-      const davky = await prevedPozemek(tx, t.spot_id, prodavajici, kupujici);
+      const davky = await prevedPozemek(tx, t.spot_id, prodavajici, kupujici, t.data);
       await tx.gameDelivery.createMany({ data: davky.map((d) => ({ ...d, trade_id: t.id })) });
     } else if (t.predmet === 'pobocka') {
       // Pobočka se přesouvá přes doručenky — stav hry si ji přepíše sám.
@@ -1421,7 +1429,7 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
   if (!moje) return res.json({ ok: true, fond: null });
   const REZ = require('../services/game/rezervace');
   const HIST = require('../services/game/fond-historie');
-  const [al, radky, nabidky, drzene, historie] = await Promise.all([
+  const [al, radky, nabidky, drzene, historie, drzbyPred] = await Promise.all([
     prisma.gameAliance.findUnique({ where: { id: moje.aliance_id } }),
     vkladyFondu(moje.aliance_id),
     // Co má fond vyvěšené. Bez toho člen neviděl, kde leží peníze, které
@@ -1434,6 +1442,8 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
     // Křivka jde s fondem v jedné odpovědi — je to pár kilobajtů a hra se
     // nemusí ptát podruhé. Když tabulka ještě není, graf prostě nebude.
     HIST.proFond(moje.aliance_id).catch(() => []),
+    // Poslední zapsaný výnos u každého podílu — proti němu se kreslí šipka.
+    HIST.drzbyPred(moje.aliance_id).catch(() => new Map()),
   ]);
   // Kolik z držených podílů fondu měsíčně teče. Bez toho panel ukazoval, co
   // fond koupil a za kolik, ale už ne, jestli to vůbec něco nese — a právě
@@ -1485,6 +1495,10 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
         const f = firmyFondu.get(r.firma_id) || {};
         return Object.assign(r, {
           cena: Math.round(r.cena), vetsina: r.podil > PRAVA.VETSINA + 1e-9,
+          // Kolik ten podíl nesl při minulém vzorku. Z toho je šipka: proti
+          // předchozímu vzorku, ne proti tomu, co kdo kdy viděl — jinak by
+          // každý člen viděl jinou šipku u téhož podílu.
+          mesicne_pred: drzbyPred.has(r.firma_id) ? drzbyPred.get(r.firma_id) : null,
           // Kolik fondu z toho podílu teče měsíčně a jakou část zisku ta firma
           // vůbec vyplácí — při nule nenese ani většinový podíl nic.
           mesicne: DIVIDENDA.castka(f.zbyde || 0, r.podil, f.pct),
@@ -3390,9 +3404,17 @@ router.post('/trade/drazba', hrac, api(async (req, res) => {
     spotId = s(b.spot_id, 120);
     const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spotId } });
     if (!c || c.player_id !== ja.id || !c.pozemek) return res.status(409).json({ error: stx(req)('server.ten_pozemek_ti_nepatri') });
-    if (c.model) return res.status(409).json({ error: stx(req)('server.na_pozemku_stoji_pradlomat') });
-    nazev = 'pozemek ' + (c.name || spotId);
-    nazevKod = { kod: 'drazba.nazev_pozemek', cast: (c.name || spotId) };
+    if (c.pozemek_majitel_id) return res.status(409).json({ error: stx(req)('server.zem_uz_patri_nekomu_jinemu') });
+    if (c.model) {
+      // Zem pod vlastním prádlomatem. Nájem a podmínky smlouvy jdou do dražby
+      // s sebou, ať dražící ví, co mu zem ponese a jak dlouho je vázaný.
+      data = podminkyNajmu(b);
+      nazev = 'pozemek pod prádlomatem ' + (c.name || spotId);
+      nazevKod = { kod: 'drazba.nazev_pozemek_pod', cast: (c.name || spotId) };
+    } else {
+      nazev = 'pozemek ' + (c.name || spotId);
+      nazevKod = { kod: 'drazba.nazev_pozemek', cast: (c.name || spotId) };
+    }
   } else if (predmet === 'pobocka') {
     spotId = s(b.pobocka, 120);
     const pob = Array.isArray(st.pobocky) ? st.pobocky : [];
@@ -3571,11 +3593,58 @@ async function vyporadejDrazbu(id) {
 }
 
 
+// Podmínky nájmu, za kterých zůstane prodávající stát na prodané zemi.
+// Vázanost drží kupujícího (do té doby nemůže vypovědět), výpovědní doba je
+// lhůta po ní. Obojí si volí prodávající při vyvolání. (Požadavek #158)
+const NAJEM_MAX_HRA = 5000000;
+const VAZANOST_MAX_HRA = 60, VYPOVED_MAX_HRA = 12;
+function podminkyNajmu(b) {
+  const mes = (v, max) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)));
+  return {
+    pod_pradlomatem: true,
+    najem: Math.max(0, Math.min(NAJEM_MAX_HRA, Math.round(Number((b || {}).najem) || 0))),
+    vazanost_mesicu: mes((b || {}).vazanost_mesicu, VAZANOST_MAX_HRA),
+    vypoved_mesicu: Math.max(1, mes((b || {}).vypoved_mesicu, VYPOVED_MAX_HRA)),
+  };
+}
+
 // Převod pozemku. Zem je zábor jako každý jiný, takže stačí přepsat majitele;
 // nájemní smlouva visí na témže řádku, a proto přechází i s ním — nájemce
 // o místo nepřijde, jen od teď platí někomu jinému. (Požadavek #158)
 // Vrací doručenky k zapsání, aby si je volající mohl doplnit o trade_id.
-async function prevedPozemek(tx, spotId, prodavajici, kupujici) {
+async function prevedPozemek(tx, spotId, prodavajici, kupujici, podminky) {
+  const pred = await tx.gameSpotClaim.findUnique({ where: { spot_id: spotId } });
+  if (!pred) throw new Error('pozemek zmizel');
+
+  // Zem pod prádlomatem: zábor zůstává provozovateli i se svým spot_id —
+  // nepřejmenovává se, takže plány, mapa ani ekonomika se nehnou. Mění se
+  // jen to, komu zem patří a za jakých podmínek tam prodávající stojí.
+  if (pred.model) {
+    const u = podminky || {};
+    const ted = new Date();
+    const c2 = await tx.gameSpotClaim.update({ where: { spot_id: spotId }, data: {
+      pozemek_majitel_id: kupujici.id, pozemek_majitel_nick: kupujici.nick,
+      pronajem_cena: Math.max(0, Math.round(Number(u.najem) || 0)) || null,
+      vazano_do: u.vazanost_mesicu ? new Date(Date.now() + u.vazanost_mesicu * MESIC_MS) : null,
+      vypoved_mesicu: Math.max(1, Math.round(Number(u.vypoved_mesicu) || 1)),
+      najem_od: ted, najem_do: ted,
+    } });
+    const jm = c2.name || spotId;
+    const najem = Math.max(0, Math.round(Number(u.najem) || 0));
+    return [
+      { player_id: prodavajici.id, kind: 'pozemek_pod_prodan', spot_id: spotId,
+        data: { majitel_id: kupujici.id, majitel_nick: kupujici.nick, najem: najem,
+          vazano_do: c2.vazano_do, vypoved_mesicu: c2.vypoved_mesicu },
+        popis: 'Zem pod ' + jm + ' je teď ' + kupujici.nick,
+        text_kod: 'dor.zem_pod_prodana', text_data: { p1: jm, p2: kupujici.nick, penize: najem } },
+      { player_id: kupujici.id, kind: 'pozemek_pod_koupen', spot_id: spotId,
+        data: { name: c2.name, lat: c2.lat, lon: c2.lon, area_key: c2.area_key,
+          najemce_id: prodavajici.id, najemce_nick: prodavajici.nick, najem: najem },
+        popis: 'Koupil jsi zem pod ' + jm,
+        text_kod: 'dor.zem_pod_koupena', text_data: { p1: jm, p2: prodavajici.nick, penize: najem } },
+    ];
+  }
+
   const c = await tx.gameSpotClaim.update({ where: { spot_id: spotId },
     data: { player_id: kupujici.id, nick: kupujici.nick } });
   const popis = c.name || spotId;
@@ -3623,7 +3692,7 @@ async function prevedVydrazene(tx, d, prodavajici, vitez) {
         popis: 'Vydražil jsi ' + popis , text_kod: 'dor.vydrazil_jsi', text_data: { p1: popis }},
     ] });
   } else if (d.predmet === 'pozemek') {
-    await tx.gameDelivery.createMany({ data: await prevedPozemek(tx, d.spot_id, prodavajici, vitez) });
+    await tx.gameDelivery.createMany({ data: await prevedPozemek(tx, d.spot_id, prodavajici, vitez, d.data) });
   } else if (d.predmet === 'pobocka') {
     await tx.gameDelivery.createMany({ data: [
       { player_id: prodavajici.id, kind: 'pobocka_remove', spot_id: d.spot_id, popis: 'Vydražila se tvá ' + popis , text_kod: 'dor.vydrazila_se_tva', text_data: { p1: popis }},

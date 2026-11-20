@@ -3841,5 +3841,18 @@
   "veta.akcie_odhad": "Vybere se {penize:p1} a akcionáři by drželi {p2} % fondu.",
   "veta.akcie_zobchodovano": "Zobchodováno {p1} akcií za {penize:p2}.",
   "veta.fond_akcie_popis": "Vydat {cislo:p1} akcií po {penize:p2}",
-  "veta.fond_akcie_dividenda_popis": "Vyplatit akcionářům {penize:p1} na akcii"
+  "veta.fond_akcie_dividenda_popis": "Vyplatit akcionářům {penize:p1} na akcii",
+  "server.zem_uz_patri_nekomu_jinemu": "Zem pod tím prádlomatem už patří někomu jinému.",
+  "drazba.nazev_pozemek_pod": "pozemek pod prádlomatem {p1}",
+  "dor.zem_pod_prodana": "Zem pod {p1} je teď {p2}. Nájem {penize} za herní měsíc.",
+  "dor.zem_pod_koupena": "Koupil jsi zem pod {p1}. {p2} tam zůstává a platí ti {penize} za herní měsíc.",
+  "drazba.pozemek_pod_pradlomatem": "zem pod mým prádlomatem — stroj zůstává mně",
+  "drazba.najem_ktery_budu_platit": "Nájem, který budu platit (L$ / herní měsíc)",
+  "drazba.vazanost_mesicu": "Vázanost — do té doby mě nemůže vypovědět (herních měsíců)",
+  "drazba.vypoved_mesicu": "Výpovědní doba po vázanosti (herních měsíců)",
+  "drazba.zem_pod_vysvetleni": "Prodáváš jen zem. Prádlomat zůstává tobě a od prodeje za něj platíš nájem novému majiteli — podle podmínek, které zadáš teď.",
+  "hra.zem_pod_pradlomatem": "zem pod prádlomatem",
+  "mapa.zem_pod_mym_pradlomatem": "zem pod mým prádlomatem",
+  "veta.zem_pod": "zem pod {p1}",
+  "veta.fond_drzi_zaplaceno": "zaplaceno {penize:p1} · firma vyplácí {cislo:p2} % zisku"
 }
