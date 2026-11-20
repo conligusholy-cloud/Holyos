@@ -466,8 +466,12 @@ router.post('/lu/mail', express.json({ limit: '20kb' }), async (req, res, next) 
     let linkHost = ''; try { linkHost = new URL(link).host.replace(/^www\./, ''); } catch (e) { /* neplatný */ }
     if (!/^https:\/\//.test(link) || !luHost || linkHost !== luHost) return res.status(400).json({ error: 'Odkaz mimo Laundry Unlimited' });
     const { sendMail } = require('../services/email');
+    // Odesílatel: LU_MAIL_FROM → schránka Laundromats/Compounder (ověřená, send-as přes Graph) → výchozí; výchozí SMTP může mít neplatné přihlášení (535)
+    let luFrom = process.env.LU_MAIL_FROM || null;
+    if (!luFrom) { try { luFrom = await require('./compounder.routes').funnelMailFrom('schuzka'); } catch (e) { luFrom = null; } }
+    luFrom = luFrom || process.env.COMPOUNDER_MAIL_FROM || undefined;
     const r = await sendMail({ to, subject: String(b.subject || 'Laundry Unlimited').slice(0, 160), body: String(b.body || '').slice(0, 3000),
-      link, linkLabel: String(b.linkLabel || 'Otevřít').slice(0, 60), from: process.env.LU_MAIL_FROM || undefined, fromName: 'Laundry Unlimited', audience: 'customer', manual: true, lang: String(b.lang || '') });
+      link, linkLabel: String(b.linkLabel || 'Otevřít').slice(0, 60), from: luFrom, fromName: 'Laundry Unlimited', audience: 'customer', manual: true, lang: String(b.lang || '') });
     if (r && r.sent === false) return res.status(502).json({ error: r.error || r.skipped || 'Neodesláno' });
     res.json({ ok: true });
   } catch (err) { next(err); }
