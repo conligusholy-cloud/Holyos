@@ -7,7 +7,7 @@ function api(url,body){var o=body?{method:'POST',headers:{'Content-Type':'applic
   return fetch(url,o).then(function(r){return r.json().catch(function(){return {};}).then(function(j){if(!r.ok||j.ok===false)throw new Error(j.error||('Chyba '+r.status));return j;});});}
 function kpi(l,v){return '<div class="card" style="flex:1;min-width:130px;padding:12px"><div class="muted small">'+l+'</div><div style="font-size:24px;font-weight:700">'+v+'</div></div>';}
 function render(){
-  var k=D.kpi,h='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'+kpi('Nabízí se',k.published)+kpi('Rezervováno',k.reserved)+kpi('Skryto',k.hidden)+kpi('Uživatelů s přístupem',k.users_with_access)+kpi('Zobrazení (30 d)',k.views_30d)+kpi('Návštěvníků (30 d)',k.viewers_30d)+kpi('Zájem (30 d)',k.interests_30d)+'</div>';
+  var k=D.kpi,h='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'+kpi('Nabízí se',k.published)+kpi('Rezervováno',k.reserved)+kpi('Prodáno',k.sold||0)+kpi('Skryto',k.hidden)+kpi('Uživatelů s přístupem',k.users_with_access)+kpi('Zobrazení (30 d)',k.views_30d)+kpi('Návštěvníků (30 d)',k.viewers_30d)+kpi('Zájem (30 d)',k.interests_30d)+'</div>';
   var ST={new:'Nový',contacted:'Kontaktován',negotiating:'Jednáme',won:'Prodáno (zmizí z nabídky)',lost:'Zrušeno (vrátí se do nabídky)'};
   h+='<div class="card" style="margin-bottom:14px;overflow:auto"><h3 style="margin:0 0 8px">Rezervace a závazné zájmy ('+(D.requests||[]).length+')</h3>';
   if(!(D.requests||[]).length)h+='<p class="muted small">Zatím žádný závazný zájem. Objeví se tu poté, co zákazník dvakrát potvrdí „Mám zájem“.</p>';
@@ -21,14 +21,15 @@ function render(){
   h+='<div class="card" style="margin-bottom:14px;overflow:auto"><h3 style="margin:0 0 8px">Lokality v nabídce</h3><label class="small muted" style="display:block;margin:-4px 0 8px"><input type="checkbox" data-mphid="1"'+(showHid?' checked':'')+'> Zobrazit i skryté ('+k.hidden+')</label>';
   var LS=D.listings.filter(function(l){return showHid||l.published;});
   if(!LS.length)h+='<p class="muted small">Žádná lokalita se zatím nenabízí. Zapněte „Nabízí se“ v HolyOS → Site Development → Marketplace.</p>';
-  else{h+='<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left" class="muted"><th>Lokalita</th><th>Nájem</th><th>Fotky</th><th>Nabízí se</th><th>Rezervováno</th><th title="Zobrazit v rozmazané veřejné ukázce bez přihlášení">Veřejně</th><th>Zájem</th><th>Poslední zájem</th><th></th></tr></thead><tbody>';
+  else{h+='<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left" class="muted"><th>Lokalita</th><th>Nájem</th><th>Fotky</th><th>Nabízí se</th><th>Rezervováno</th><th title="Prodáno — v Marketplace zůstane přeškrtnuté s nálepkou PRODÁNO">Prodáno</th><th title="Zobrazit v rozmazané veřejné ukázce bez přihlášení">Veřejně</th><th>Zájem</th><th>Poslední zájem</th><th></th></tr></thead><tbody>';
     LS.forEach(function(l){
       var rent=l.rent_monthly!=null?(Number(l.rent_monthly).toLocaleString('cs-CZ')+' '+esc(l.rent_currency)+' '+(l.rent_vat==='s'?'s DPH':'bez DPH')):'–';
       var warn=[];if(!l.title)warn.push('chybí název');if(!l.has_cover)warn.push('bez titulní fotky');if(!l.address)warn.push('bez adresy');
       h+='<tr style="border-top:1px solid var(--line,#333)"><td style="padding:6px 8px"><b>'+esc(l.title||l.name)+'</b><div class="muted small">'+esc(l.name)+(l.city?' · '+esc(l.city):'')+' · '+esc(l.code)+'</div>'+(warn.length?'<div class="small" style="color:#e6a23c">⚠ '+esc(warn.join(', '))+'</div>':'')+'</td>'
         +'<td style="padding:6px 8px">'+rent+'</td><td style="padding:6px 8px">'+(l.gallery!=null?l.gallery:l.photos)+'</td>'
         +'<td style="padding:6px 8px"><label><input type="checkbox" data-mpp="'+l.id+'"'+(l.published?' checked':'')+'> ano</label></td>'
-        +'<td style="padding:6px 8px"><label><input type="checkbox" data-mpr="'+l.id+'"'+(l.reserved?' checked':'')+'> ano</label></td>'
+        +'<td style="padding:6px 8px"><label><input type="checkbox" data-mpr="'+l.id+'"'+(l.reserved?' checked':'')+(l.sold?' disabled':'')+'> ano</label></td>'
+        +'<td style="padding:6px 8px"><label style="'+(l.sold?'color:#f87171;font-weight:700':'')+'"><input type="checkbox" data-mps="'+l.id+'"'+(l.sold?' checked':'')+'> '+(l.sold?'prodáno':'ano')+'</label></td>'
         +'<td style="padding:6px 8px"><label><input type="checkbox" data-mpt="'+l.id+'"'+(l.public_teaser?' checked':'')+'> ano</label></td>'
         +'<td style="padding:6px 8px">'+l.interests+'</td><td style="padding:6px 8px">'+dt(l.last_interest)+'</td><td style="padding:6px 8px;text-align:right"><button class="btn sec sm" data-mpd="'+l.id+'">Detail</button></td></tr>';});
     h+='</tbody></table>';}
@@ -86,8 +87,8 @@ P.addEventListener('change',function(e){var t=e.target;
   if(t.hasAttribute('data-mphid')){showHid=t.checked;render();return;}
   if(t.hasAttribute('data-rst')){api('/admin/api/marketplace/request/'+encodeURIComponent(t.getAttribute('data-rst')),{status:t.value}).then(load).catch(function(er){alert(er.message);load();});return;}
   if(t.hasAttribute('data-rnote')){api('/admin/api/marketplace/request/'+encodeURIComponent(t.getAttribute('data-rnote')),{note:t.value}).then(function(){t.style.outline='1px solid #3c9';setTimeout(function(){t.style.outline='';},900);}).catch(function(er){alert(er.message);});return;}
-  var id=t.getAttribute('data-mpp')||t.getAttribute('data-mpr')||t.getAttribute('data-mpt');if(!id)return;
-  var body={};if(t.hasAttribute('data-mpp'))body.published=t.checked;else if(t.hasAttribute('data-mpt'))body.public_teaser=t.checked;else body.reserved=t.checked;
+  var id=t.getAttribute('data-mpp')||t.getAttribute('data-mpr')||t.getAttribute('data-mpt')||t.getAttribute('data-mps');if(!id)return;
+  var body={};if(t.hasAttribute('data-mpp'))body.published=t.checked;else if(t.hasAttribute('data-mpt'))body.public_teaser=t.checked;else if(t.hasAttribute('data-mps'))body.sold=t.checked;else body.reserved=t.checked;
   api('/admin/api/marketplace/'+id,body).then(load).catch(function(er){alert(er.message);load();});});
 P.addEventListener('click',function(e){var dd=e.target.closest('[data-mpd]');if(dd){openDet(+dd.getAttribute('data-mpd'));return;}
   var a=e.target.closest('[data-mpa]');

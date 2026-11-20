@@ -130,7 +130,7 @@ router.get('/', async (req, res, next) => {
 
     // Marketplace: nabízí se místo na laundromats.eu (published) / rezervováno / ne
     const mp = await mpAll();
-    items.forEach((it) => { const m = mp[it.id]; it.marketplace = m && m.published ? (m.reserved ? 'rezervováno' : 'nabízí se') : 'ne'; });
+    items.forEach((it) => { const m = mp[it.id]; it.marketplace = m && m.published ? (m.sold ? 'prodáno' : m.reserved ? 'rezervováno' : 'nabízí se') : 'ne'; });
     res.json({ items, total, page, per_page: perPage, stats });
   } catch (err) {
     next(err);
@@ -339,7 +339,10 @@ router.put('/:id(\\d+)/marketplace', async (req, res, next) => {
       price_note: t(b.price_note, 300), availability: t(b.availability, 200), area_m2: num(b.area_m2), rent_monthly: num(b.rent_monthly),
       parking: t(b.parking, 120), photo_fx: Math.max(0, Math.min(100, Number(b.photo_fx) || 0)) || (b.photo_fx === 0 || b.photo_fx === '0' ? 0 : 50), photo_fy: Math.max(0, Math.min(100, Number(b.photo_fy) || 0)) || (b.photo_fy === 0 || b.photo_fy === '0' ? 0 : 50), photo_fit: b.photo_fit === 'contain' ? 'contain' : 'cover', footfall: t(b.footfall, 300), occupy_until: /^\d{4}-\d{2}-\d{2}$/.test(t(b.occupy_until, 10)) ? t(b.occupy_until, 10) : '', energy: t(b.energy, 300), connections_price: t(b.connections_price, 300), rent_vat: ['bez', 's', 'neplatce'].includes(b.rent_vat) ? b.rent_vat : 'bez', address: t(b.address, 300), image_url: /^https?:\/\//.test(t(b.image_url, 500)) ? t(b.image_url, 500) : '', photo_id: Number(b.photo_id) > 0 ? Number(b.photo_id) : null, gallery: (Array.isArray(b.gallery) ? b.gallery : []).map(Number).filter((x) => x > 0).slice(0, 30), updated_at: new Date().toISOString() };
     if (zaznam.published && !zaznam.title) return res.status(400).json({ error: 'Pro zveřejnění v Marketplace vyplň veřejný název.' });
-    const all = await mpAll(); all[id] = zaznam;
+    const all = await mpAll();
+    // „Prodáno" se nastavuje v administraci Laundromats — formulář ho neposílá, tak ho nezahodit
+    zaznam.sold = b.sold !== undefined ? !!b.sold : !!(all[id] && all[id].sold);
+    all[id] = zaznam;
     await require('../services/settings').setSetting(MP_SITE_KEY, all, { type: 'json', description: 'Lokality — data pro Marketplace lokalit na laundromats.eu' });
     res.json({ ok: true, marketplace: zaznam });
   } catch (err) { next(err); }

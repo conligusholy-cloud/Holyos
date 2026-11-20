@@ -201,7 +201,7 @@ router.get('/marketplace', async (req, res, next) => {
         rent_monthly: m.rent_monthly != null ? m.rent_monthly : (x.rent_monthly != null ? Number(x.rent_monthly) : null), rent_currency: x.rent_currency || 'CZK',
         price_note: m.price_note || null, energy: m.energy || null, occupy_until: m.occupy_until || null, connections_price: m.connections_price || null, rent_vat: m.rent_vat || 'bez', address: m.address || [x.address, [x.zip, x.city].filter(Boolean).join(' ')].filter(Boolean).join(', ') || null, exact: (x.latitude != null && x.longitude != null) ? (Number(x.latitude) + ',' + Number(x.longitude)) : null, availability: m.availability || null, parking: m.parking || null, footfall: m.footfall || null,
         image_url: m.image_url || null, photo: !!m.photo_id, photo_fx: m.photo_fx != null ? m.photo_fx : 50, photo_fy: m.photo_fy != null ? m.photo_fy : 50, photo_fit: m.photo_fit === 'contain' ? 'contain' : 'cover',
-        photos: [m.photo_id].concat(Array.isArray(m.gallery) ? m.gallery : (vsechnyFotky.get(id) || [])).map(Number).filter((v, i, a) => v > 0 && a.indexOf(v) === i), reserved: !!m.reserved, updated_at: m.updated_at || null };
+        photos: [m.photo_id].concat(Array.isArray(m.gallery) ? m.gallery : (vsechnyFotky.get(id) || [])).map(Number).filter((v, i, a) => v > 0 && a.indexOf(v) === i), reserved: !!m.reserved, sold: !!m.sold, updated_at: m.updated_at || null };
     }).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
     res.json({ ok: true, items });
   } catch (err) { next(err); }
@@ -227,6 +227,7 @@ router.post('/marketplace-interest', async (req, res, next) => {
     const list = await jsonSetting(REQ_KEY); const arr = Array.isArray(list) ? list : [];
     const open = arr.find((r) => r.account_id === accId && r.site_id === sid && r.status !== 'lost');
     if (open) return res.json({ ok: true, duplicate: true, id: open.id });
+    if (m.sold) return res.status(409).json({ ok: false, error: 'Lokalita je už prodaná.' });
     if (m.reserved) return res.status(409).json({ ok: false, error: 'Lokalita je právě rezervovaná jiným zájemcem.' });
     const now = new Date().toISOString();
     const rec = { id: 'r' + Date.now().toString(36) + crypto.randomBytes(2).toString('hex'), site_id: sid, code: 'L' + sid, place: m.title || ('Lokalita #' + sid), account_id: acc.id,
@@ -247,7 +248,7 @@ router.post('/marketplace-requests/:id', async (req, res, next) => {
     if (b.note !== undefined) r.note = s(b.note, 2000);
     r.updated_at = new Date().toISOString();
     await saveJson(REQ_KEY, arr, 'Laundromats — evidence rezervací / zájmů o lokality z Marketplace');
-    if (b.status === 'won') await setMpFlags(r.site_id, { reserved: false, published: false }); // prodáno → zmizí z nabídky
+    if (b.status === 'won') await setMpFlags(r.site_id, { reserved: false, sold: true }); // prodáno → v nabídce přeškrtnuté s nálepkou Prodáno
     else if (b.status === 'lost' && !arr.some((x) => x.site_id === r.site_id && x.id !== r.id && ['new', 'contacted', 'negotiating'].includes(x.status))) await setMpFlags(r.site_id, { reserved: false }); // vrátí se do nabídky
     else if (['new', 'contacted', 'negotiating'].includes(b.status)) await setMpFlags(r.site_id, { reserved: true });
     res.json({ ok: true, request: r });
@@ -276,7 +277,7 @@ router.get('/marketplace-admin', async (req, res, next) => {
     const accAll = await jsonSetting('lm_account_access').catch(() => ({}));
     const withAccess = accounts.filter((a) => (accAll[a.id] || {}).marketplace === true).map((a) => ({ id: a.id, name: a.name, email: a.email, company: a.company, disabled: a.disabled }));
     const listings = ids.map((id) => { const m = all[id] || {}, x = by.get(id); const c = cnt['L' + id] || { n: 0, last: null };
-      return { id, code: 'L' + id, name: x ? x.name : ('Lokalita #' + id), city: x ? x.city : null, site_status: x ? x.status : null, title: m.title || '', published: !!m.published, reserved: !!m.reserved, public_teaser: !!m.public_teaser,
+      return { id, code: 'L' + id, name: x ? x.name : ('Lokalita #' + id), city: x ? x.city : null, site_status: x ? x.status : null, title: m.title || '', published: !!m.published, reserved: !!m.reserved, sold: !!m.sold, public_teaser: !!m.public_teaser,
         rent_monthly: m.rent_monthly != null ? m.rent_monthly : (x && x.rent_monthly != null ? Number(x.rent_monthly) : null), rent_currency: (x && x.rent_currency) || 'CZK', rent_vat: m.rent_vat || 'bez',
         detail: { highlight: m.highlight || '', description: m.description || '', price_note: m.price_note || '', availability: m.availability || '', area_m2: m.area_m2 != null ? m.area_m2 : null,
           energy: m.energy || '', connections_price: m.connections_price || '', parking: m.parking || '', occupy_until: m.occupy_until || '',
@@ -286,7 +287,7 @@ router.get('/marketplace-admin', async (req, res, next) => {
       .sort((a, b) => (b.published - a.published) || String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
     const reqsRaw = await jsonSetting(REQ_KEY); const requests = Array.isArray(reqsRaw) ? reqsRaw : [];
     res.json({ ok: true, requests, listings, interests: interests.slice(0, 60), access: withAccess,
-      kpi: { published: listings.filter((l) => l.published && !l.reserved).length, reserved: listings.filter((l) => l.published && l.reserved).length, hidden: listings.filter((l) => !l.published).length,
+      kpi: { published: listings.filter((l) => l.published && !l.reserved && !l.sold).length, reserved: listings.filter((l) => l.published && l.reserved && !l.sold).length, sold: listings.filter((l) => l.sold).length, hidden: listings.filter((l) => !l.published).length,
         users_with_access: withAccess.length, views_30d: views.length, viewers_30d: new Set(views.map((v) => v.sid)).size, interests_30d: interests.filter((i) => new Date(i.at).getTime() >= d30).length } });
   } catch (err) { next(err); }
 });
@@ -297,10 +298,11 @@ router.post('/marketplace-admin/:sid(\\d+)', async (req, res, next) => {
     if (!m) return res.status(404).json({ error: 'Lokalita nemá vyplněná data pro Marketplace (HolyOS → Site Development → Marketplace).' });
     if (b.published !== undefined) { if (b.published && !m.title) return res.status(400).json({ error: 'Pro zveřejnění chybí veřejný název (HolyOS → Marketplace).' }); m.published = !!b.published; }
     if (b.reserved !== undefined) m.reserved = !!b.reserved;
+    if (b.sold !== undefined) { m.sold = !!b.sold; if (m.sold) m.reserved = false; }
     if (b.public_teaser !== undefined) m.public_teaser = !!b.public_teaser;
     m.updated_at = new Date().toISOString(); all[sid] = m;
     await require('../services/settings').setSetting('site_marketplace', all, { type: 'json', description: 'Lokality — data pro Marketplace lokalit na laundromats.eu' });
-    res.json({ ok: true, published: !!m.published, reserved: !!m.reserved });
+    res.json({ ok: true, published: !!m.published, reserved: !!m.reserved, sold: !!m.sold });
   } catch (err) { next(err); }
 });
 // ─── Veřejná (omezená) ukázka Marketplace: bez přihlášení, jen město + rozmazaná náhledovka ──────────
@@ -319,7 +321,7 @@ async function pubListings() {
 router.get('/marketplace-public', async (req, res, next) => {
   try {
     const list = await pubListings();
-    res.json({ ok: true, items: list.map((l) => ({ ref: pubRef(l.sid), city: l.site.city || '', country: l.site.country || 'CZ', reserved: !!l.m.reserved, occupy_until: l.m.occupy_until || null })) });
+    res.json({ ok: true, items: list.map((l) => ({ ref: pubRef(l.sid), city: l.site.city || '', country: l.site.country || 'CZ', reserved: !!l.m.reserved, sold: !!l.m.sold, occupy_until: l.m.occupy_until || null })) });
   } catch (err) { next(err); }
 });
 router.get('/marketplace-public/photo/:ref([a-f0-9]{14})', async (req, res, next) => {

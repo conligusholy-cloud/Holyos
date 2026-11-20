@@ -471,7 +471,7 @@ app.get('/admin/api/marketplace/photo/:sid(\\d+)', requireAdmin, async (req, res
   } catch (e) { res.status(502).end(); }
 });
 app.get('/admin/api/marketplace', requireAdmin, api(async () => holyosSvc('GET', '/api/auth/lm/accounts/marketplace-admin')));
-app.post('/admin/api/marketplace/:sid(\\d+)', requireAdmin, api((req) => { const b = req.body || {}; const o = {}; if (b.published !== undefined) o.published = !!b.published; if (b.reserved !== undefined) o.reserved = !!b.reserved; if (b.public_teaser !== undefined) o.public_teaser = !!b.public_teaser; return holyosSvc('POST', '/api/auth/lm/accounts/marketplace-admin/' + req.params.sid, o); }));
+app.post('/admin/api/marketplace/:sid(\\d+)', requireAdmin, api((req) => { const b = req.body || {}; const o = {}; if (b.published !== undefined) o.published = !!b.published; if (b.reserved !== undefined) o.reserved = !!b.reserved; if (b.sold !== undefined) o.sold = !!b.sold; if (b.public_teaser !== undefined) o.public_teaser = !!b.public_teaser; return holyosSvc('POST', '/api/auth/lm/accounts/marketplace-admin/' + req.params.sid, o); }));
 app.post('/admin/api/users/:id(\\d+)/marketplace', requireAdmin, api((req) => holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/marketplace', { on: !!(req.body || {}).on })));
 app.post('/admin/api/users/:id(\\d+)/disabled', requireAdmin, api((req) => holyosSvc('POST', '/api/auth/lm/accounts/' + req.params.id + '/disabled', { disabled: !!(req.body || {}).disabled })));
 // Sloupcove filtry tabulek bereme primo z HolyOS (/js/column-filters.js), aby se admin
