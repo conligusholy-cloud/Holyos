@@ -1658,9 +1658,13 @@ router.post('/trade/aliance/fond/navrh', hrac, api(async (req, res) => {
       return res.status(400).json({ error: stx(req)('server.navrh_cena_mala', { p1: cenaMin }) });
     }
     // Co fond nemá, o tom nemá smysl hlasovat den a pak zjistit, že to nejde.
-    if (cena > Math.round((al && al.pokladna) || 0)) {
-      return res.status(409).json({ error: stx(req)('server.fond_na_to_nema',
-        { p1: Math.round((al && al.pokladna) || 0) }) });
+    // Měřit se musí proti VOLNÝM penězům, ne proti celé pokladně: co je
+    // slíbené ve vyvěšených nabídkách, se nesmí utratit podruhé. Proti
+    // pokladně to procházelo a provedení pak padlo na tutéž hlášku o den
+    // později — fond mezitím o návrhu celý den hlasoval pro nic.
+    const volne = Math.round(((al && al.pokladna) || 0) - await fondZamceno(moje.aliance_id));
+    if (cena > volne) {
+      return res.status(409).json({ error: stx(req)('server.fond_na_to_nema', { p1: volne }) });
     }
     detail = { firma_id: firmaId, firma_nick: firma.company || firma.nick, pct, cena };
   } else if (druh === 'dividenda') {

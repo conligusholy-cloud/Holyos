@@ -9388,11 +9388,15 @@ function fondJa() {
   if (!FOND) return null;
   return (FOND.fond.podilnici || []).filter(function (x) { return x.ja; })[0] || null;
 }
+// Peníze se do textů posílají jako ČÍSLO. Značka {penize:pN} si je zformátuje
+// sama; kdo pošle hotový text z kcFull(), dostane z „60 000 000 L$" po Number()
+// NaN a jádro z toho udělá nulu. Hráč pak na kartě čte, že fond kupuje čtvrtinu
+// firmy za 0 L$, a nechápe, proč mu server odpoví, že na to fond nemá.
 function fondNavrhPopis(n) {
   var d = n.detail || {};
   if (n.druh === 'koupit') {
     return tx('veta.fond_koupit_popis', { p1: Math.round((d.pct || 0) * 100),
-      p2: esc(d.firma_nick || ''), p3: kcFull(d.cena || 0) });
+      p2: esc(d.firma_nick || ''), p3: d.cena || 0 });
   }
   if (n.druh === 'zrusit') {
     return tx('veta.fond_zrusit_popis', { p1: esc(d.firma_nick || '') });
@@ -9407,7 +9411,7 @@ function fondNavrhPopis(n) {
     return tx('veta.fond_nabidka_popis', { p1: esc(d.firma_nick || ''),
       p2: Math.round((na.podil || 0) * 100), p3: na.cena || 0 });
   }
-  return tx('veta.fond_vyplatit_popis', { p1: kcFull(d.castka || 0) });
+  return tx('veta.fond_vyplatit_popis', { p1: d.castka || 0 });
 }
 // Vnitřek fondu. Není to vlastní karta: aliance a fond jsou jedna věc —
 // každá aliance má právě jeden fond a žádný fond neexistuje bez aliance.

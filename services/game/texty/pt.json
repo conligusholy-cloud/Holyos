@@ -3617,7 +3617,7 @@
   "server.navrh_neni": "Essa proposta não existe.",
   "server.navrh_dobehl": "A votação dessa proposta já encerrou.",
   "server.ve_fondu_nehlasujes": "Você não tem investimento no fundo, então não vota.",
-  "server.fond_na_to_nema": "O fundo não tem recursos. No caixa há {penize:p1}.",
+  "server.fond_na_to_nema": "O fundo não tem recursos. Livre para gastar tem {penize:p1}.",
   "dor.fond_navrh_prijat": "O fundo {p1} aprovou: {p2}",
   "dor.fond_navrh_zamitnut": "O fundo {p1} rejeitou: {p2}",
   "dor.fond_navrh_koupit": "{p1} colocou em votação no fundo {p2} a compra de participação de {p3}% na empresa {p4}.",

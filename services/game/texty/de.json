@@ -3673,7 +3673,7 @@
   "server.navrh_neni": "So einen Antrag gibt es nicht.",
   "server.navrh_dobehl": "Über diesen Antrag wird nicht mehr abgestimmt.",
   "server.ve_fondu_nehlasujes": "Du hast keine Einlage im Fonds, also stimmst du nicht ab.",
-  "server.fond_na_to_nema": "Der Fonds hat dafür nicht genug. In der Kasse sind {penize:p1}.",
+  "server.fond_na_to_nema": "Der Fonds hat dafür nicht genug. Frei verfügbar sind {penize:p1}.",
   "dor.fond_navrh_prijat": "Der Fonds {p1} hat zugestimmt: {p2}",
   "dor.fond_navrh_zamitnut": "Der Fonds {p1} hat abgelehnt: {p2}",
   "dor.fond_navrh_koupit": "{p1} hat im Fonds {p2} über den Kauf eines Anteils von {p3} % an der Firma {p4} abstimmen lassen.",

@@ -3680,7 +3680,7 @@
   "server.navrh_neni": "Nie ma takiego wniosku.",
   "server.navrh_dobehl": "Nad tym wnioskiem już się nie głosuje.",
   "server.ve_fondu_nehlasujes": "Nie masz wkładu w funduszu, więc nie głosujesz.",
-  "server.fond_na_to_nema": "Fundusz na to nie ma. W kasie jest {penize:p1}.",
+  "server.fond_na_to_nema": "Fundusz na to nie ma. Wolnych do wydania ma {penize:p1}.",
   "dor.fond_navrh_prijat": "Fundusz {p1} zatwierdził: {p2}",
   "dor.fond_navrh_zamitnut": "Fundusz {p1} nie zatwierdził: {p2}",
   "dor.fond_navrh_koupit": "{p1} poddał w funduszu {p2} pod głosowanie zakup {p3} % udziału w firmie {p4}.",

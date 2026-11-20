@@ -62,6 +62,47 @@ function casti(obsah) {
   return out;
 }
 
+// Vyřízne { ... } od dané pozice, se závorkami v páru a bez ohledu na to, co
+// je uvnitř řetězců. Na regulárním výrazu se to udělat nedá: parametry běžně
+// obsahují další volání i zanořené objekty.
+function vyrez(s, i) {
+  let hloubka = 0, vRetezci = null;
+  for (let j = i; j < s.length; j++) {
+    const c = s[j];
+    if (vRetezci) {
+      if (c === '\\') { j++; continue; }
+      if (c === vRetezci) vRetezci = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') { vRetezci = c; continue; }
+    if (c === '{' || c === '(' || c === '[') hloubka++;
+    else if (c === '}' || c === ')' || c === ']') {
+      hloubka--;
+      if (hloubka === 0) return s.slice(i + 1, j);
+    }
+  }
+  return null;
+}
+// Rozdělí tělo objektu na „pN: výraz" — čárky uvnitř závorek a řetězců nedělí.
+function dvojice(telo) {
+  const kusy = [];
+  let hloubka = 0, vRetezci = null, start = 0;
+  for (let j = 0; j < telo.length; j++) {
+    const c = telo[j];
+    if (vRetezci) {
+      if (c === '\\') { j++; continue; }
+      if (c === vRetezci) vRetezci = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') { vRetezci = c; continue; }
+    if (c === '{' || c === '(' || c === '[') hloubka++;
+    else if (c === '}' || c === ')' || c === ']') hloubka--;
+    else if (c === ',' && hloubka === 0) { kusy.push(telo.slice(start, j)); start = j + 1; }
+  }
+  kusy.push(telo.slice(start));
+  return kusy;
+}
+
 function main() {
   const cs = nacti('cs.json', {});
   const en = nacti('en.json', {});
@@ -198,6 +239,41 @@ function main() {
   console.log('textů s HTML prohnaných přes esc(): ' + escHtml.length);
   escHtml.forEach((x) => console.log('  ROZBITÉ HTML  ' + x.kde + ' ř.' + x.radek + '  ' + x.klic));
 
+  // ─── Dvakrát zformátované peníze ───────────────────────────────────────────
+  // Značka {penize:pN} i {cislo:pN} si hodnotu zformátuje sama. Kdo do ní
+  // pošle hotový text z kcFull(), dostane z „60 000 000 L$" po Number() NaN
+  // a jádro z toho udělá nulu. Je to tichá chyba: nic nespadne, hra jen
+  // hráči napíše, že fond kupuje čtvrtinu firmy za 0 L$. Proto se to hlídá
+  // stejně přísně jako rozbité HTML.
+  const FORMATUJE = /\b(kcFull|kc|cislo|penize|procenta|pct)\s*\(/;
+  const dvakrat = [];
+  soubory.forEach((f) => {
+    let txt = '';
+    try { txt = fs.readFileSync(f, 'utf8'); } catch (e) { return; }
+    const re3 = /\b(?:tx|stx\(req\)|TEXTY\.t)\(\s*'([a-z][\w.]+)'\s*,\s*\{/g;
+    let m3;
+    while ((m3 = re3.exec(txt)) !== null) {
+      const predloha = cs[m3[1]];
+      if (typeof predloha !== 'string') continue;
+      const telo = vyrez(txt, m3.index + m3[0].length - 1);
+      if (!telo) continue;
+      dvojice(telo).forEach((kus) => {
+        const km = /^\s*(p\d+)\s*:\s*([\s\S]*)$/.exec(kus);
+        if (!km) return;
+        ['penize', 'cislo'].forEach((znacka) => {
+          if (predloha.indexOf('{' + znacka + ':' + km[1] + '}') < 0) return;
+          if (!FORMATUJE.test(km[2])) return;
+          dvakrat.push({ kde: path.basename(f), klic: m3[1], param: km[1], znacka,
+            radek: txt.slice(0, m3.index).split('\n').length,
+            vyraz: km[2].replace(/\s+/g, ' ').trim().slice(0, 50) });
+        });
+      });
+    }
+  });
+  console.log('dvakrát zformátovaných čísel: ' + dvakrat.length);
+  dvakrat.forEach((x) => console.log('  UKÁŽE NULU  ' + x.kde + ' ř.' + x.radek + '  '
+    + x.klic + ' · ' + x.param + ' → {' + x.znacka + ':' + x.param + '}  ' + x.vyraz));
+
   console.log('klíčů v češtině: ' + Object.keys(cs).length
     + ' · přeloženo: ' + (Object.keys(cs).length - chybi.length)
     + ' · chybí: ' + chybi.length
@@ -229,7 +305,7 @@ function main() {
   // Chybějící klíč je horší než chybějící překlad: hráč uvidí holý klíč.
   // Proto vlastní kód, ať jde odlišit od „je co dopřekládat".
   // Rozbité HTML je stejně zlé jako chybějící klíč — hráč uvidí slité okno.
-  if (chybejiciKlice.size || escHtml.length) process.exit(2);
+  if (chybejiciKlice.size || escHtml.length || dvakrat.length) process.exit(2);
   process.exit(chybi.length || zastarale.length || linkaChybi ? 1 : 0);
 }
 main();

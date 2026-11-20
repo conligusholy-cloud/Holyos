@@ -3631,7 +3631,7 @@
   "server.navrh_neni": "Takový návrh tu není.",
   "server.navrh_dobehl": "O tomhle návrhu se už nehlasuje.",
   "server.ve_fondu_nehlasujes": "Ve fondu nemáš vklad, takže nehlasuješ.",
-  "server.fond_na_to_nema": "Fond na to nemá. V pokladně je {penize:p1}.",
+  "server.fond_na_to_nema": "Fond na to nemá. Volné k utracení má {penize:p1}.",
   "dor.fond_navrh_prijat": "Fond {p1} schválil: {p2}",
   "dor.fond_navrh_zamitnut": "Fond {p1} neschválil: {p2}",
   "dor.fond_navrh_koupit": "{p1} dal ve fondu {p2} hlasovat o nákupu podílu {p3} % ve firmě {p4}.",
