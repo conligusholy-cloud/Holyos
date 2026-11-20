@@ -379,6 +379,13 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
     // automaticky. EmailIngest skončí v `awaiting_review` (tab Aktivní) a uživatel
     // musí v UI ručně schválit směr a založit fakturu. Past z 2026-04-27 (BestDrive
     // HROMADNÁ FAKTURA, atypický small-print layout dodavatele).
+    // Doklad není vystaven na nás (odběratel je jiná firma) → nezakládat vůbec, ani ke kontrole.
+    if (result.not_ours) {
+      result.ignore_note = result.not_ours_reason;
+      nonInvoiceResults.push(result);
+      console.log(`[email-ingest] ${result.attachment.filename}: ${result.not_ours_reason}`);
+      continue;
+    }
     if (result.direction_suspicious) {
       awaitingReviewResults.push(result);
       console.log(`[email-ingest] Direction sanity check selhal pro ${result.attachment.filename}: ${result.direction_reason}. Posílám do awaiting_review.`);
@@ -494,7 +501,7 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
   if (nonInvoiceResults.length > 0 && awaitingReviewResults.length === 0 && lowConfidenceResults.length === 0) {
     await prisma.emailIngest.update({
       where: { id: ingest.id },
-      data: { status: 'ignored', confidence: avgConfidence, note: 'Není faktura (soupis / přehled / výpis) — doklad nebyl založen.', sender_notify_reason: null },
+      data: { status: 'ignored', confidence: avgConfidence, note: (nonInvoiceResults.find((r) => r.ignore_note) || {}).ignore_note || 'Není faktura (soupis / přehled / výpis) — doklad nebyl založen.', sender_notify_reason: null },
     });
     logAudit({
       action: 'update', entity: 'email_ingest', entity_id: ingest.id,

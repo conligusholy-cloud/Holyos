@@ -232,7 +232,21 @@ async function runPipeline(filePath, ctx = {}) {
 
   // ─── Pass 3 — ARES lookup ─────────────────────────────────────────────
   let aresResult = null, aresCross = null;
-  let det = detectDirection(header, await loadOurNames());
+  const ourNamesList = await loadOurNames();
+  // Doklad NENÍ vystaven na nás: odběratel je jiná firma a my nejsme ani dodavatelem (např. faktura za energie pro cizí provozovnu).
+  // Takový doklad se nesmí založit vůbec — žádné přepínání rolí ani ruční kontrola. Nutné: máme nastavená naše IČO a doklad má
+  // aspoň IČO nebo název odběratele (jinak jde o nečitelný doklad a řeší to běžná kontrola).
+  const notOurs = (() => {
+    if (!OUR_COMPANY_ICOS_NORM.length) return null;
+    const sIco = normalizeIco(header?.supplier?.ico), cIco = normalizeIco(header?.customer?.ico);
+    const cName = header?.customer?.name || '';
+    if (!cIco && !String(cName).trim()) return null;
+    const nm = (n) => { const x = normName(n); return !!x && ourNamesList.some((o) => x === o || x.includes(o) || o.includes(x)); };
+    const us = OUR_COMPANY_ICOS_NORM.includes(sIco) || OUR_COMPANY_ICOS_NORM.includes(cIco) || nm(header?.supplier?.name) || nm(cName);
+    if (us) return null;
+    return `Doklad není vystaven na nás — odběratel je ${cName || '?'}${header?.customer?.ico ? ' (IČO ' + header.customer.ico + ')' : ''}, ne naše firma. Doklad nebyl založen.`;
+  })();
+  let det = detectDirection(header, ourNamesList);
   // Schránka pro příchozí faktury (invoice@) dostává VÝHRADNĚ doklady vystavené na nás — vždy je to přijatá faktura (AP).
   // Směr proto nehádáme: nikdy „podezřelé", a když OCR vyhodnotila nás jako dodavatele, prohodíme dodavatele a odběratele.
   // Vypnutí: INVOICE_MAILBOX_AP_ONLY=0.
@@ -482,6 +496,8 @@ async function runPipeline(filePath, ctx = {}) {
     direction,
     direction_suspicious: directionSuspicious,
     direction_reason: directionReason,
+    not_ours: !!notOurs,
+    not_ours_reason: notOurs || null,
     matched_company_id: matchedCompanyId,
     header,
     items,
