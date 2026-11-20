@@ -441,20 +441,23 @@ const SEKCE = [
   { k: 'technika', ico: '🛠', cs: 'Technické parametry', en: 'Technical parameters', listy: ['TECH'] },
   { k: 'proc', ico: '💡', cs: 'Proč Laundry Unlimited', en: 'Why Laundry Unlimited', listy: ['FR', 'MFR'] },
 ];
-const BAR_CSS = `.ubar{position:sticky;top:0;z-index:50;background:rgba(5,10,24,.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.10)}
-.ubar .in{max-width:1300px;margin:0 auto;padding:10px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}.ubar .ttl{font-weight:800;font-size:16px;color:#fff;white-space:nowrap}.ubar .ttl small{display:block;font-weight:500;font-size:11px;color:#9fb0cc;letter-spacing:.08em;text-transform:uppercase}
-.ubar nav{display:flex;gap:4px;flex-wrap:wrap;flex:1}.ubar nav a{padding:8px 13px;border-radius:10px;color:#9fb0cc;text-decoration:none;font-weight:700;font-size:13.5px;white-space:nowrap}.ubar nav a:hover{color:#fff;background:rgba(255,255,255,.05)}.ubar nav a.on{color:#fff;background:rgba(34,230,255,.12);box-shadow:inset 0 0 0 1px rgba(34,230,255,.35)}
-.ubar .rt{display:flex;gap:8px;align-items:center}.ubar .rt a{color:#dbe7ff;text-decoration:none;font-size:13px;font-weight:700;padding:7px 12px;border:1px solid rgba(255,255,255,.14);border-radius:10px}.ubar .rt a:hover{border-color:#22e6ff}.ubar .who{color:#9fb0cc;font-size:13px}`;
+const BAR_CSS = `.uside{position:fixed;left:0;top:0;bottom:0;width:244px;z-index:60;display:flex;flex-direction:column;gap:14px;padding:18px 14px;background:rgba(5,10,24,.94);border-right:1px solid rgba(255,255,255,.08);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+body:has(> .uside){padding-left:244px}.uside .brand{display:flex;flex-direction:column;gap:8px;text-decoration:none;padding:4px 6px 14px;border-bottom:1px solid rgba(255,255,255,.08)}
+.uside .ttl{font-weight:800;font-size:15px;color:#fff}.uside .ttl small{display:block;font-weight:600;font-size:10.5px;color:#9fb0cc;letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
+.uside nav{display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto}.uside nav a{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:11px;color:#a9b8d3;text-decoration:none;font-weight:700;font-size:14px}
+.uside nav a i{font-style:normal;width:22px;text-align:center}.uside nav a:hover{color:#fff;background:rgba(255,255,255,.05)}.uside nav a.on{color:#fff;background:linear-gradient(90deg,rgba(34,230,255,.16),rgba(47,123,255,.08));box-shadow:inset 3px 0 0 #22e6ff}
+.uside .rt{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)}.uside .rt a{color:#dbe7ff;text-decoration:none;font-size:13px;font-weight:700;padding:9px 12px;border:1px solid rgba(255,255,255,.14);border-radius:10px;text-align:center}.uside .rt a:hover{border-color:#22e6ff}.uside .who{color:#9fb0cc;font-size:12.5px;padding:0 4px}
+@media(max-width:900px){body:has(> .uside){padding-left:0}.uside{position:sticky;width:auto;bottom:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;border-right:0;border-bottom:1px solid rgba(255,255,255,.08)}.uside .brand{flex-direction:row;align-items:center;border:0;padding:0}.uside nav{flex-direction:row;flex-basis:100%;order:3;overflow-x:auto;scrollbar-width:none}.uside nav::-webkit-scrollbar{display:none}.uside nav a{white-space:nowrap;padding:8px 11px}.uside .rt{flex-direction:row;margin-left:auto;border:0;padding:0}.uside .who{display:none}}`;
 function topBar(o) {
   const en = o.lang && o.lang !== 'cs';
   const tabs = o.mode === 'admin'
-    ? [{ k: 'leady', href: '/admin', t: '👥 Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, t: x.ico + ' ' + x.cs })))
-    : SEKCE.filter((x) => (o.sekce || []).includes(x.k)).map((x) => ({ k: x.k, href: '/portal/m/' + x.k, t: x.ico + ' ' + (en ? x.en : x.cs) }));
+    ? [{ k: 'leady', href: '/admin', i: '👥', t: 'Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, i: x.ico, t: x.cs })))
+    : SEKCE.filter((x) => (o.sekce || []).includes(x.k)).map((x) => ({ k: x.k, href: '/portal/m/' + x.k, i: x.ico, t: en ? x.en : x.cs }));
   const rt = o.mode === 'admin'
     ? `<a href="${HOLYOS_URL}">← HolyOS</a>`
     : `<span class="who">${esc(o.user || '')}</span><a href="/portal/logout">${en ? 'Log out' : 'Odhlásit'}</a>`;
-  return `<div class="ubar"><div class="in"><a href="${o.mode === 'admin' ? '/admin' : '/portal'}" style="display:flex;align-items:center;gap:12px;text-decoration:none">${logoHtml(30)}<span class="ttl">${o.mode === 'admin' ? 'Administrace' : (en ? 'Partner portal' : 'Partnerský portál')}<small>${o.mode === 'admin' ? 'jen pro tým Laundry Unlimited' : 'Laundry Unlimited'}</small></span></a>
-<nav>${tabs.map((x) => `<a href="${x.href}"${x.k === o.active ? ' class="on"' : ''}>${x.t}</a>`).join('')}</nav><div class="rt">${rt}</div></div></div>`;
+  return `<aside class="uside"><a class="brand" href="${o.mode === 'admin' ? '/admin' : '/portal'}">${logoHtml(30)}<span class="ttl">${o.mode === 'admin' ? 'Administrace' : (en ? 'Partner portal' : 'Partnerský portál')}<small>${o.mode === 'admin' ? 'jen pro tým' : 'Laundry Unlimited'}</small></span></a>
+<nav>${tabs.map((x) => `<a href="${x.href}"${x.k === o.active ? ' class="on"' : ''}><i>${x.i}</i>${esc(x.t)}</a>`).join('')}</nav><div class="rt">${rt}</div></aside>`;
 }
 // Stránka materiálů v liště administrace / portálu
 let T01 = null;
