@@ -213,7 +213,8 @@ async function update(id, body) {
 }
 
 // ─── HTML / PDF ─────────────────────────────────────────────────────────────
-function html(st, ourCompany) {
+function html(st, ourCompany, buyer) {
+  buyer = buyer || {};
   const bs2 = require('../pdf/bs2-doc-style'); const esc = bs2.esc;
   const cur = st.currency || 'CZK';
   const m = (n) => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + cur;
@@ -234,8 +235,8 @@ function html(st, ourCompany) {
   const vatAmtFx = fxOn ? rr2(Number(st.rent_invoice) * vr / 100) : 0, rentGrossFx = fxOn ? rr2(Number(st.rent_invoice) + vatAmtFx) : 0;
   const fm = (n) => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (st.invoice_currency || '');
   return bs2.page({ title: 'Podklad pro fakturaci nájemného', number: st.doc_number || 'KONCEPT', pill: 'Nájem kiosku · ' + st.kiosk_code, ext: st.status === 'issued' ? '' : (st.test ? 'TESTOVACÍ UKÁZKA' : 'Koncept — nevydáno') }, `
-  <div class="parties"><div class="party"><span class="h">Nájemce (provozovatel)</span><div class="name">${esc(st.customer_name || '—')}</div>${st.buyer_ico ? `<div class="row">IČO ${esc(st.buyer_ico)}</div>` : ''}${st.buyer_vat_id ? `<div class="row">DIČ / VAT ID ${esc(st.buyer_vat_id)}</div>` : ''}<div class="row">Kiosk: ${esc(st.kiosk_code)}</div></div>
-    <div class="party"><span class="h">Pronajímatel</span><div class="name">${esc((ourCompany && ourCompany.name) || 'Best Series s.r.o.')}</div>${ourCompany && ourCompany.ico ? `<div class="row">IČO ${esc(ourCompany.ico)}</div>` : ''}</div></div>
+  <div class="parties"><div class="party"><span class="h">Nájemce (provozovatel)</span><div class="name">${esc(st.customer_name || '—')}</div>${(buyer.lines || []).map((l) => `<div class="row">${esc(l)}</div>`).join('')}${st.buyer_ico ? `<div class="row">IČO ${esc(st.buyer_ico)}</div>` : ''}${buyer.dic && buyer.dic !== st.buyer_vat_id ? `<div class="row">DIČ ${esc(buyer.dic)}</div>` : ''}${st.buyer_vat_id ? `<div class="row">DIČ / VAT ID ${esc(st.buyer_vat_id)}</div>` : ''}<div class="row">Kiosk: ${esc(st.kiosk_code)}</div></div>
+    <div class="party"><span class="h">Pronajímatel</span><div class="name">${esc((ourCompany && ourCompany.name) || 'Best Series s.r.o.')}</div>${ourCompany && ourCompany.address ? `<div class="row">${esc(ourCompany.address)}</div>` : ''}${ourCompany && (ourCompany.zip || ourCompany.city) ? `<div class="row">${esc([ourCompany.zip, ourCompany.city].filter(Boolean).join(' '))}${ourCompany.country && ourCompany.country !== 'CZ' ? ', ' + esc(ourCompany.country) : ''}</div>` : ''}${ourCompany && ourCompany.ico ? `<div class="row">IČO ${esc(ourCompany.ico)}</div>` : ''}${ourCompany && ourCompany.dic ? `<div class="row">DIČ ${esc(ourCompany.dic)}</div>` : ''}</div></div>
   <div class="meta"><div><div class="l">Období</div><div class="v">${d(st.period_from)} – ${d(st.period_to)}</div></div><div><div class="l">Měsíc</div><div class="v">${esc(st.period_ym)}</div></div><div><div class="l">DPH</div><div class="v">${Number(st.vat_rate)} %</div></div><div><div class="l">Poplatek Nájemce</div><div class="v">${Number(st.fee_pct)} % z tržeb</div></div></div>
   <table class="items"><thead><tr><th>Položka výpočtu (čl. VI)</th><th class="r">Částka vč. DPH</th><th class="r">Bez DPH</th></tr></thead><tbody>
     <tr><td><b>A. Tržby s DPH</b> <span style="color:#5b6b86">(SIS${Number(st.revenue_adjust) ? ', vč. úpravy ' + m(st.revenue_adjust) : ''})</span></td><td class="r"><b>${m(st.revenue_gross)}</b></td><td class="r"></td></tr>
@@ -254,7 +255,24 @@ function html(st, ourCompany) {
 }
 
 async function ourCompany() { try { return await require('../settings').getOurCompany(); } catch (e) { return null; } }
-async function pdf(st) { return require('../pdf/contracts').htmlToPdfBuffer(html(st, await ourCompany())); }
+// Adresa Nájemce: ručně ze smlouvy (buyer_address) → firma v adresáři podle IČO → ARES podle IČO
+async function buyerInfo(st, contract) {
+  try {
+    let c = contract || null;
+    if (!c && st.contract_id) c = await prisma.kioskRentContract.findUnique({ where: { id: st.contract_id } }).catch(() => null);
+    const manual = c && c.buyer_address ? String(c.buyer_address).split(/\r?\n|,\s*(?=\d{3}\s?\d{2}\b)/).map((s) => s.trim()).filter(Boolean) : [];
+    if (manual.length) return { lines: manual };
+    const ico = String(st.buyer_ico || (c && c.buyer_ico) || '').replace(/\s/g, '');
+    if (!ico) return {};
+    const co = await prisma.company.findFirst({ where: { ico }, select: { address: true, city: true, zip: true, country: true, dic: true } }).catch(() => null);
+    const fmt = (x) => [x.address, [x.zip, x.city].filter(Boolean).join(' ') + (x.country && x.country !== 'CZ' ? ', ' + x.country : '')].map((s) => String(s || '').trim()).filter(Boolean);
+    if (co && (co.address || co.city)) return { lines: fmt(co), dic: co.dic || null };
+    const a = await require('../ares-lookup').lookupByIco(ico).catch(() => null);
+    if (a && (a.address || a.city)) return { lines: fmt(a), dic: a.dic || null };
+  } catch (e) { console.warn('[rent-statement] adresa nájemce:', e.message); }
+  return {};
+}
+async function pdf(st, contract) { return require('../pdf/contracts').htmlToPdfBuffer(html(st, await ourCompany(), await buyerInfo(st, contract))); }
 
 // ─── E-mail ─────────────────────────────────────────────────────────────────
 async function mailFrom() {
@@ -282,7 +300,7 @@ async function sendStatementMail(st, contract, opts) {
   const { sendMail } = require('../email');
   const to = opts.to || contract.contact_email; if (!to) return { sent: false, error: 'Chybí e-mail kompetentní osoby' };
   const cc = !opts.to && contract.cc_emails ? contract.cc_emails : undefined;
-  const buf = await pdf(st);
+  const buf = await pdf(st, contract);
   const r = await sendMail(Object.assign({}, await mailFrom(), {
     to: cc ? to + ', ' + cc : to, brand: 'laundromats:cs', noLink: !st.id, link: st.id ? disputeUrl(st.id) : undefined, linkLabel: '⚠ Výpočet nesedí — napsat nám',
     subject: (opts.test ? '[TEST] ' : '') + 'Podklad pro fakturaci nájmu kiosku ' + st.kiosk_code + ' — ' + st.period_ym,

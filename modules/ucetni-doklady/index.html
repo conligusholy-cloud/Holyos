@@ -4046,6 +4046,14 @@
       if (r.status !== 200) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
       loadRent();
     };
+    window.rentAresFill = async function() {
+      const ico = (document.getElementById('rc-ico').value || '').replace(/\s/g, ''); if (!/^\d{6,8}$/.test(ico)) return alert('Zadej české IČO (6–8 číslic). U zahraniční firmy vyplň adresu ručně.');
+      const r = await api('GET', '/api/wh/ares/' + encodeURIComponent(ico.padStart(8, '0')));
+      if (r.status !== 200 || !r.data) return alert('IČO se v ARES nepodařilo najít.');
+      const a = r.data; document.getElementById('rc-addr').value = [a.address, [a.zip, a.city].filter(Boolean).join(' ')].filter(Boolean).join('\n');
+      if (a.name && !document.getElementById('rc-name').value.trim()) document.getElementById('rc-name').value = a.name;
+      if (a.dic && !document.getElementById('rc-vatid').value.trim() && !document.getElementById('rc-rc').checked) { /* DIČ tuzemské firmy se v PDF ukáže z ARES automaticky */ }
+    };
     window.rentToggleAuto = async function(id, kind, on, el) {
       const c = (window.__rentContracts || []).find(x => x.id === id); if (!c) return;
       const issue = c.auto_mode === 'issue' || c.auto_mode === 'send', send = c.auto_mode === 'send';
@@ -4163,7 +4171,8 @@
             <div style="display:grid; grid-template-columns: 170px 1fr; gap:10px; align-items:center;">
               <label>Stroj (Compounding) *</label>${comboHtml('rc-kiosk', 'Začni psát: lokalita, název nebo kód stroje…', kioskLabel, c ? c.kiosk_code : '', !!c, inp)}
               <label>Subjekt (Nájemce) *</label><input id="rc-name" value="${v('customer_name', '')}" placeholder="Doplní se z Compoundingu po výběru stroje" style="${inp}">
-              <label>IČO subjektu</label><input id="rc-ico" value="${v('buyer_ico', '')}" style="${inp}">
+              <label>IČO subjektu</label><div style="display:flex;gap:8px;"><input id="rc-ico" value="${v('buyer_ico', '')}" style="${inp}"><button type="button" class="btn btn-secondary btn-sm" style="white-space:nowrap;" title="Doplnit adresu sídla (a DIČ) z ARES podle IČO" onclick="rentAresFill()">Načíst z ARES</button></div>
+              <label style="align-self:start;padding-top:6px;" title="Uvede se v podkladu (PDF) u Nájemce. Prázdné = adresa se dohledá podle IČO (adresář firem / ARES).">Adresa sídla subjektu</label><div><textarea id="rc-addr" rows="2" placeholder="Ulice č.p.&#10;PSČ Město, stát" style="${inp}resize:vertical;">${v('buyer_address', '')}</textarea><div style="font-size:11px;color:var(--text2);margin-top:2px;">Každý řádek = řádek v podkladu. U českých firem stačí IČO (adresa se dohledá v ARES), u zahraničních ji vyplň ručně.</div></div>
               <label>Kompetentní osoba</label><input id="rc-contact" value="${v('contact_name', '')}" placeholder="jméno a příjmení" style="${inp}">
               <label>E-mail pro podklad *</label><input id="rc-email" type="email" value="${v('contact_email', '')}" placeholder="kam se podklad pošle" style="${inp}">
               <label>Další příjemci (kopie)</label><input id="rc-cc" value="${v('cc_emails', '')}" placeholder="volitelně, oddělené čárkou" style="${inp}">
@@ -4237,7 +4246,7 @@
     function rcBody() {
       const g = (i) => document.getElementById(i).value.trim();
       const clean = (rs) => rs.filter(r => r.company_id).map(r => ({ company_id: r.company_id, keyword: (r.keyword || '').trim() || null, share_pct: Number(r.share_pct) || 100 }));
-      return { kiosk_code: g('rc-kiosk'), customer_name: g('rc-name') || null, buyer_ico: g('rc-ico') || null, contact_name: g('rc-contact') || null, contact_email: g('rc-email') || null, cc_emails: g('rc-cc') || null,
+      return { kiosk_code: g('rc-kiosk'), customer_name: g('rc-name') || null, buyer_ico: g('rc-ico') || null, buyer_address: document.getElementById('rc-addr').value.trim() || null, contact_name: g('rc-contact') || null, contact_email: g('rc-email') || null, cc_emails: g('rc-cc') || null,
         effective_from: g('rc-from'), effective_to: g('rc-to') || null, issue_day: Math.min(28, Math.max(1, parseInt(g('rc-day'), 10) || 5)), auto_mode: document.getElementById('rc-autosend').checked ? 'send' : (document.getElementById('rc-autoissue').checked ? 'issue' : 'draft'),
         rent_fixed_net: g('rc-rentfix') === '' ? null : (Number(g('rc-rentfix')) || null), fee_pct: Number(g('rc-fee')) || 13, vat_rate: Number(g('rc-vat')) || 21, currency: (g('rc-cur') || 'CZK').toUpperCase(), invoice_currency: document.getElementById('rc-invcur').value, reverse_charge: document.getElementById('rc-rc').checked, buyer_vat_id: g('rc-vatid') || null, vat_deductible: true,
         energy_advances: rcAdvances(),
