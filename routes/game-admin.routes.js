@@ -265,11 +265,64 @@ router.get('/duchove-uklid', api(async (req, res) => {
   const S = require('../services/game/srovnani');
   res.type('text/plain; charset=utf-8').send(S.tiskDuchoveUklid(await S.duchoveUklid({ ostro: false })));
 }));
+// POST ?spoty=a,b,c → uklidí jen vyjmenovaná místa. Bez seznamu to projede
+// všechno, a to je nebezpečné: mezi duchy sedí i místa s běžící výpovědí a
+// místa se zaplaceným nákupem, kde stroj hře CHYBÍ, ne přebývá — tam by se
+// smazal stroj, za který hráč dal peníze. Celý průjezd proto chce ?vse=1,
+// ať si ho nikdo neodklikne omylem.
 router.post('/duchove-uklid', api(async (req, res) => {
   const S = require('../services/game/srovnani');
-  const z = await S.duchoveUklid({ ostro: true });
-  console.log('[game-sit] vymazán stroj u ' + z.uklizeno + ' míst, o kterých věděl jen server');
+  const zdroj = String((req.query && req.query.spoty) || (req.body && req.body.spoty) || '');
+  const spoty = zdroj.split(',').map((x) => x.trim()).filter(Boolean);
+  const vse = String((req.query && req.query.vse) || (req.body && req.body.vse) || '') === '1';
+  if (!spoty.length && !vse) {
+    return res.status(400).type('text/plain; charset=utf-8').send(
+      'Chybí výběr míst.\n\n'
+      + 'Uklidit vybraná:  POST ?spoty=fabriano-1,foligno-0\n'
+      + 'Uklidit všechna:  POST ?vse=1   (projede i výpovědi a zaplacené nákupy)\n');
+  }
+  // Prázdný seznam sem smí jen při ?vse=1; výběru ničeho se musí vyhnout,
+  // jinak by celý průjezd uklidil nic a tvářil se, že je hotovo.
+  const z = await S.duchoveUklid({ ostro: true, spoty: spoty.length ? spoty : undefined });
+  console.log('[game-sit] vymazán stroj u ' + z.uklizeno + ' míst, o kterých věděl jen server'
+    + (spoty.length ? ' (výběr: ' + spoty.join(', ') + ')' : ' (všechna)'));
   res.type('text/plain; charset=utf-8').send(S.tiskDuchoveUklid(z));
+}));
+
+// Náhrobek po odebraném stroji. Hra si místo po doručence unit_remove
+// poznamená, aby se stroj nevracel — u zabavení správně. Když se ale místo
+// vrátí do hry jinak, poznámka na něm drží stroj mimo hru napořád. Tohle ji
+// sundá z jednoho místa jednoho hráče; hromadně to nejde schválně, aby se
+// tím nevracely stroje, o které hráči u soudu opravdu přišli.
+// GET  = co se stane · POST = zapsat
+router.all('/nahrobek', api(async (req, res) => {
+  const N = require('../services/game/nahrobek');
+  const q = Object.assign({}, req.query || {}, req.body || {});
+  const id = parseInt(q.player_id, 10);
+  const spot = String(q.spot_id || '').trim();
+  const ostro = req.method === 'POST';
+  const odpoved = (t) => res.type('text/plain; charset=utf-8').send(t);
+  if (!Number.isFinite(id) || !spot) {
+    return res.status(400).type('text/plain; charset=utf-8').send(
+      'Použití: /nahrobek?player_id=36&spot_id=horice-0   (GET nanečisto, POST ostro)\n');
+  }
+  const hrac = await prisma.gamePlayer.findUnique({ where: { id },
+    select: { id: true, nick: true, state: true, state_rev: true } });
+  if (!hrac) return res.status(404).type('text/plain; charset=utf-8').send('Hráč #' + id + ' není.\n');
+  const r = N.sundej(hrac.state, spot);
+  const hlava = (ostro ? 'OSTRO' : 'NANEČISTO — nic se nezměnilo') + '\n'
+    + 'hráč: ' + hrac.nick + ' (#' + hrac.id + ') · místo: ' + spot + '\n'
+    + 'stroj na tom místě hra vede: ' + (N.maStroj(hrac.state, spot) ? 'ano' : 'ne') + '\n';
+  if (!r.zmena) return odpoved(hlava + '\nNáhrobek tam žádný není — nic k sundání.\n');
+  if (!ostro) return odpoved(hlava + '\nNáhrobek tam je. POST ho sundá.\n');
+  // Verzi je nutné zvednout: klient se příštím uložením ohlásí se starou,
+  // dostane 409, převezme tenhle stav a teprve pak si stroj doplní ze záboru.
+  // Bez zvednuté verze by svoje staré uložení prosadil a náhrobek vrátil.
+  const p2 = await prisma.gamePlayer.update({ where: { id: hrac.id },
+    data: { state: r.state, state_rev: Number(hrac.state_rev || 0) + 1, state_at: new Date() } });
+  console.log('[game-nahrobek] sundán u hráče #' + hrac.id + ' na ' + spot);
+  odpoved(hlava + '\nNáhrobek sundán. Verze stavu ' + (hrac.state_rev || 0) + ' → ' + p2.state_rev
+    + '.\nHra si stroj doplní ze záboru při nejbližším načtení.\n');
 }));
 
 // GET /model-srovnat → nanečisto, POST → ostro. Srovná model stroje podle

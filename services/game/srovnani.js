@@ -546,11 +546,37 @@ function tiskModelSrovnat(z) {
 //
 // Před zápisem se každé místo ověří znovu: mezi přehledem a úklidem mohl
 // hráč hru otevřít a stroj se mohl objevit.
+// Výběr míst k úklidu. Bez seznamu projdou všechna nalezená; se seznamem jen
+// ta vyjmenovaná. Co je v seznamu a mezi duchy není, se vrací zvlášť — překlep
+// v id by jinak vypadal jako hotová práce a ten skutečný zábor by zůstal.
+function vyberDuchy(vsichni, spoty) {
+  const vse = Array.isArray(vsichni) ? vsichni : [];
+  // Rozhoduje to, jestli seznam přišel, ne jestli v něm po očištění něco
+  // zbylo. Seznam samých mezer znamená, že volající chtěl vybírat a vybral
+  // nic — tak se uklidí nic. Kdyby se to bralo jako „žádný seznam", smazal
+  // by překlep stroje na všech místech najednou.
+  if (!Array.isArray(spoty)) return { duchove: vse, nenalezeno: [] };
+  const chci = spoty.map((x) => String(x == null ? '' : x).trim()).filter(Boolean);
+  const vyber = new Set(chci);
+  const duchove = vse.filter((d) => vyber.has(String(d && d.spot)));
+  const nalezene = new Set(duchove.map((d) => String(d.spot)));
+  const nenalezeno = [];
+  vyber.forEach((id) => { if (!nalezene.has(id)) nenalezeno.push(id); });
+  return { duchove, nenalezeno };
+}
+
 async function duchoveUklid(opts) {
   const ostro = !!(opts && opts.ostro);
+  // Výběr míst. Bez něj se uklízí všechno, co se našlo — a to je hrubý
+  // nástroj: mezi duchy sedí i místa s běžící výpovědí nebo s nákupem, za
+  // který hráč zaplatil, a tam by se smazal stroj, který mu doopravdy chybí.
+  // Se seznamem se uklidí jen to, co někdo přečetl a rozhodl o tom.
   const stav = await sit();
-  const duchove = stav.duchove || [];
-  const out = { ostro, naslo: duchove.length, uklizeno: 0, preskoceno: [], radky: [] };
+  const vsichni = stav.duchove || [];
+  const v = vyberDuchy(vsichni, opts && opts.spoty);
+  const duchove = v.duchove;
+  const out = { ostro, naslo: vsichni.length, vybrano: duchove.length,
+    uklizeno: 0, preskoceno: [], radky: [], nenalezeno: v.nenalezeno };
   if (!duchove.length) return out;
 
   const spoty = duchove.map((d) => d.spot);
@@ -586,7 +612,13 @@ function tiskDuchoveUklid(z) {
   const out = [];
   out.push(z.ostro ? 'OSTRO — zapsáno' : 'NANEČISTO — nic se nezměnilo');
   out.push('Strojů, o kterých ví jen server: ' + z.naslo
+    + (z.vybrano != null && z.vybrano !== z.naslo ? ' · vybráno ' + z.vybrano : '')
     + ' · k vymazání ' + z.radky.length + (z.ostro ? ' · vymazáno ' + z.uklizeno : ''));
+  if (z.nenalezeno && z.nenalezeno.length) {
+    out.push('');
+    out.push('NENAŠEL JSEM mezi duchy: ' + z.nenalezeno.join(', '));
+    out.push('(překlep v id, nebo se to místo mezitím spravilo samo)');
+  }
   if (z.radky.length) {
     out.push('');
     z.radky.forEach((r) => out.push('  ' + String(r.spot).padEnd(28).slice(0, 28) + r.model));
@@ -743,6 +775,6 @@ function tiskSit(rows) {
 }
 
 module.exports = { srovnani, tisk, evidence, tiskEvidence, sklad, tiskSklad, sit, tiskSit,
-  sitDoplnit, tiskSitDoplnit, duchoveUklid, tiskDuchoveUklid,
+  sitDoplnit, tiskSitDoplnit, duchoveUklid, tiskDuchoveUklid, vyberDuchy,
   modelSrovnat, tiskModelSrovnat,
   CENY_STROJU, stupen };
