@@ -166,6 +166,11 @@ const fond = (x) => Object.assign({ akcie_celkem: 1000, akcie_vydano: 1000,
   ok('obchod zapisuje bod do řady cen',
     /CENA\.zapisCenu\(tx, alianceId, r\.cena_po, 'obchod'/.test(routy));
   ok('graf se čte z řady cen, ne z obchodů', /CENA\.radaCen\(/.test(routy));
+  // Tohle shodilo seznam akcií na živo: require se omylem přilepil dovnitř
+  // jedné funkce, takže CENA bylo v jejím rozsahu a routa o něm nevěděla.
+  // Hlídá se, že stojí na úrovni modulu — tedy bez odsazení.
+  ok('CENA se načítá na úrovni modulu, ne uvnitř funkce',
+    /^const CENA = require\('\.\.\/services\/game\/akcie-cena'\);$/m.test(routy));
 
   console.log(chyb ? '\n' + chyb + ' nesedí' : '\nSedí.');
   process.exit(chyb ? 1 : 0);

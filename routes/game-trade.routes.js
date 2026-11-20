@@ -1751,7 +1751,6 @@ router.post('/trade/aliance/fond/navrh', hrac, api(async (req, res) => {
     detail = { firma_id: firmaId, firma_nick: firma.company || firma.nick, pct, min: minChce };
   } else if (druh === 'akcie') {
     const AKCIE = require('../services/game/akcie');
-const CENA = require('../services/game/akcie-cena');
     const pocet = Math.max(0, Math.floor(Number(b.pocet) || 0));
     const cena = Math.max(0, Math.round(Number(b.cena) || 0));
     // Hodnotu fondu bereme k dnešku jen na kontrolu: o den později se
@@ -2648,6 +2647,7 @@ router.post('/trade/prevzeti/:id/prodat', hrac, api(async (req, res) => {
 // hlasováním a pak s ní hýbe jen obchodování. Protistranou je vždycky fond:
 // prodává ze svých nevydaných kusů a vykupuje zpátky z pokladny.
 const AKCIE = require('../services/game/akcie');
+const CENA = require('../services/game/akcie-cena');
 
 // Složený klíč se v Prisma klientovi NEJMENUJE podle @@unique(map: ...) —
 // `map` přejmenuje jen omezení v databázi. Spoléhat se na vygenerované jméno
