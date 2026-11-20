@@ -476,7 +476,7 @@ function topBar(o) {
     ? [{ k: 'leady', href: '/admin', t: 'Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, t: x.cs })))
     : SEKCE.filter((x) => (o.sekce || []).includes(x.k)).map((x) => ({ k: x.k, href: '/portal/m/' + x.k, t: en ? x.en : x.cs }));
   const rt = o.mode === 'admin'
-    ? `<a href="/portal" class="rtl">${uico('report')}<span>Uživatelské prostředí</span></a><a href="${HOLYOS_URL}" class="rtl">${uico('holyos')}<span>HolyOS</span></a><a href="/portal/logout" class="rtl"><span>Odhlásit</span></a>`
+    ? `<a href="/portal" class="rtl">${uico('report')}<span>Uživatelské prostředí</span></a><a href="/portal/logout" class="rtl"><span>Odhlásit</span></a>`
     : `<span class="who">${esc(o.user || '')}</span>${o.admin ? `<a href="/admin" class="rtl">${uico('leady')}<span>Administrace</span></a>` : ''}<a href="/portal/logout">${en ? 'Log out' : 'Odhlásit'}</a>`;
   return `<aside class="uside"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="lugr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22e6ff"/><stop offset="1" stop-color="#2f7bff"/></linearGradient></defs></svg><a class="brand" href="${o.mode === 'admin' ? '/admin' : '/portal'}">${logoHtml(30)}<span class="ttl">${o.mode === 'admin' ? 'Administrace' : (en ? 'Partner portal' : 'Partnerský portál')}<small>${o.mode === 'admin' ? 'jen pro tým' : 'Laundry Unlimited'}</small></span></a>
 <nav>${tabs.map((x) => `<a href="${x.href}"${x.k === o.active ? ' class="on"' : ''}>${uico(x.k)}<span>${esc(x.t)}</span></a>`).join('')}</nav></aside><div class="utop">${rt}</div>`;
