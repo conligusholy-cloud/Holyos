@@ -236,6 +236,39 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
   }
 
   // ── Prádlomaty brand (modrá grafika jako stránka specialisty / leták) ─────
+  // ── Laundry Unlimited (administrace, partnerský portál): vlastní značka, bez patičky HolyOS ──
+  if (brand === 'laundry-unlimited') {
+    const lPath = noLink ? '' : (link && link.startsWith('http') ? link : '');
+    const lBody = body ? escapeHtml(body).replace(/\n/g, '<br>') : '';
+    return `<!DOCTYPE html>
+<html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"></head>
+<body style="margin:0;padding:0;background:#eef3f9;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0b1b33;">
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}${"&zwnj;&nbsp;".repeat(70)}</div>` : ''}
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef3f9;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border:1px solid #d6e2f1;border-radius:18px;overflow:hidden;">
+        <tr><td style="padding:26px 34px;background:linear-gradient(135deg,#050a14,#0b2a52);">
+          <div style="font-size:22px;font-weight:800;letter-spacing:.14em;color:#ffffff;">LAUNDRY <span style="color:#22e6ff;">UNLIMITED</span></div>
+        </td></tr>
+        <tr><td style="padding:30px 34px 8px;">
+          <div style="font-size:22px;font-weight:700;color:#0b1b33;line-height:1.3;">${escapeHtml(title || '')}</div>
+        </td></tr>
+        <tr><td style="padding:14px 34px 4px;">
+          ${lBody ? `<div style="font-size:15px;line-height:1.7;color:#33496a;">${lBody}</div>` : ''}
+          ${lPath ? `
+            <div style="margin:26px 0 8px;">
+              <a href="${escapeHtml(lPath)}" style="display:inline-block;padding:14px 28px;background:#1e7cff;color:#ffffff;text-decoration:none;border-radius:10px;font-size:15px;font-weight:700;">${escapeHtml(linkLabel || 'Otevřít')}</a>
+            </div>
+            <div style="font-size:12px;color:#6b7d99;margin-top:14px;word-break:break-all;">${escapeHtml(lPath)}</div>` : ''}
+        </td></tr>
+        <tr><td style="height:24px;line-height:24px;font-size:0;">&nbsp;</td></tr>
+      </table>
+    </td></tr>
+  </table>
+  ${pixelImg}
+</body></html>`;
+  }
+
   if (brand === 'pradlomaty' || String(brand || '').startsWith('laundromats')) {
     // Mimo Česko (brand 'laundromats:<jazyk>') = značka LAUNDROMATS a texty šablony v jazyce leadu
     const lLang = String(brand).startsWith('laundromats') ? (String(brand).split(':')[1] || 'en') : null;

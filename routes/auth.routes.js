@@ -471,7 +471,7 @@ router.post('/lu/mail', express.json({ limit: '20kb' }), async (req, res, next) 
     if (!luFrom) { try { luFrom = await require('./compounder.routes').funnelMailFrom('schuzka'); } catch (e) { luFrom = null; } }
     luFrom = luFrom || process.env.COMPOUNDER_MAIL_FROM || undefined;
     const r = await sendMail({ to, subject: String(b.subject || 'Laundry Unlimited').slice(0, 160), body: String(b.body || '').slice(0, 3000),
-      link, linkLabel: String(b.linkLabel || 'Otevřít').slice(0, 60), from: luFrom, fromName: 'Laundry Unlimited', audience: 'customer', manual: true, lang: String(b.lang || '') });
+      link, linkLabel: String(b.linkLabel || 'Otevřít').slice(0, 60), from: luFrom, fromName: 'Laundry Unlimited', brand: 'laundry-unlimited', unsubscribe: false, audience: 'customer', manual: true, lang: String(b.lang || '') });
     if (r && r.sent === false) return res.status(502).json({ error: r.error || r.skipped || 'Neodesláno' });
     res.json({ ok: true });
   } catch (err) { next(err); }
