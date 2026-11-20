@@ -3604,7 +3604,7 @@
   "server.navrh_neni": "67d4c3120845",
   "server.navrh_dobehl": "aa1e0a67c5a6",
   "server.ve_fondu_nehlasujes": "4c39da743322",
-  "server.fond_na_to_nema": "dc476e4b0d18",
+  "server.fond_na_to_nema": "b23d8456253d",
   "dor.fond_navrh_prijat": "64e7bb93a46a",
   "dor.fond_navrh_zamitnut": "f0df2cc9b576",
   "dor.fond_navrh_koupit": "da36b7cd5611",
@@ -3740,5 +3740,6 @@
   "fond.nese_mesicne": "0953a3c4fbc1",
   "veta.fond_drzi_nese": "fe3f9e426524",
   "veta.fond_drzi_nenese": "9b616711c5d8",
-  "jazyk.pt": "bbafff37653e"
+  "jazyk.pt": "bbafff37653e",
+  "fond.na_provedeni_chybi": "fc187459b4b8"
 }

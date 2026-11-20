@@ -3673,7 +3673,7 @@
   "server.navrh_neni": "No existe esa propuesta.",
   "server.navrh_dobehl": "Ya no se vota sobre esta propuesta.",
   "server.ve_fondu_nehlasujes": "No tienes aportación en el fondo, así que no votas.",
-  "server.fond_na_to_nema": "El fondo no tiene para eso. Libre para gastar tiene {penize:p1}.",
+  "server.fond_na_to_nema": "El fondo no tiene para eso. Libre para gastar tiene {penize:p1}, y otros {penize:p2} están comprometidos en ofertas abiertas.",
   "dor.fond_navrh_prijat": "El fondo {p1} ha aprobado: {p2}",
   "dor.fond_navrh_zamitnut": "El fondo {p1} no ha aprobado: {p2}",
   "dor.fond_navrh_koupit": "{p1} ha sometido a votación en el fondo {p2} la compra de un {p3} % de la empresa {p4}.",
@@ -3760,5 +3760,6 @@
   "veta.fond_odchod_popis": "Se te pagarán {penize:p1}: tu parte del efectivo en caja. Las participaciones en empresas no se venden por esto, así que lo que el fondo ya invirtió no se va contigo. Volver solo se puede por invitación.",
   "veta.fond_odchod_posledni": "Eres el último miembro: al salir, el fondo se disuelve entero.",
   "hra.splatka_neprosla_jinde": "El pago no se ha realizado: esta partida está abierta en otro sitio y manda la otra. Ciérrala e inténtalo de nuevo.",
-  "jazyk.pt": "Portugués (BR)"
+  "jazyk.pt": "Portugués (BR)",
+  "fond.na_provedeni_chybi": "Faltan {penize:p1}. Las ofertas abiertas retienen {penize:p2}."
 }

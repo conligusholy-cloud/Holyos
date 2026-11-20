@@ -1662,9 +1662,9 @@ router.post('/trade/aliance/fond/navrh', hrac, api(async (req, res) => {
     // slíbené ve vyvěšených nabídkách, se nesmí utratit podruhé. Proti
     // pokladně to procházelo a provedení pak padlo na tutéž hlášku o den
     // později — fond mezitím o návrhu celý den hlasoval pro nic.
-    const volne = Math.round(((al && al.pokladna) || 0) - await fondZamceno(moje.aliance_id));
+    const { volne, zamceno } = await fondVolne(moje.aliance_id, al);
     if (cena > volne) {
-      return res.status(409).json({ error: stx(req)('server.fond_na_to_nema', { p1: volne }) });
+      return res.status(409).json({ error: nestaciHlaska(req, volne, zamceno) });
     }
     detail = { firma_id: firmaId, firma_nick: firma.company || firma.nick, pct, cena };
   } else if (druh === 'dividenda') {
@@ -1694,9 +1694,9 @@ router.post('/trade/aliance/fond/navrh', hrac, api(async (req, res) => {
     const castka = Math.max(1, Math.round(Number(b.castka) || 0));
     // Měří se proti volným penězům, ne proti celé pokladně: co je slíbené ve
     // vyvěšené nabídce, se nesmí rozdat podruhé.
-    const volne = Math.round(((al && al.pokladna) || 0) - await fondZamceno(moje.aliance_id));
+    const { volne, zamceno } = await fondVolne(moje.aliance_id, al);
     if (castka > volne) {
-      return res.status(409).json({ error: stx(req)('server.fond_na_to_nema', { p1: volne }) });
+      return res.status(409).json({ error: nestaciHlaska(req, volne, zamceno) });
     }
     detail = { castka };
   }
@@ -1823,11 +1823,19 @@ async function fondDrziVeFirme(alianceId, firmaId) {
   return r.reduce((a, x) => a + (Number(x.podil) || 0), 0);
 }
 // Volné peníze fondu: pokladna mínus to, co je slíbené ve vyvěšených nabídkách.
-async function fondVolne(alianceId) {
-  const al = await prisma.gameAliance.findUnique({ where: { id: alianceId } });
-  if (!al) return { al: null, volne: 0 };
-  return { al, volne: Math.round((al.pokladna || 0) - await fondZamceno(alianceId)) };
+// Vrací se i ta zamčená částka — bez ní je hláška „fond na to nemá" k ničemu.
+// Podílník vidí v pokladně šedesát milionů a nemá šanci uhodnout, že dvě
+// třetiny z nich drží sedm nabídek, které fond sám vyvěsil.
+async function fondVolne(alianceId, alianceHotova) {
+  const al = alianceHotova
+    || await prisma.gameAliance.findUnique({ where: { id: alianceId } });
+  if (!al) return { al: null, volne: 0, zamceno: 0 };
+  const zamceno = Math.round(await fondZamceno(alianceId));
+  return { al, zamceno, volne: Math.round((al.pokladna || 0) - zamceno) };
 }
+// Jediné znění pro všechna místa, kde fondu nestačí peníze.
+const nestaciHlaska = (req, volne, zamceno) =>
+  stx(req)('server.fond_na_to_nema', { p1: volne, p2: zamceno });
 // Hláška k důvodu, proč nabídka neprošla. Jeden překlad pro obě místa, kde se
 // kontroluje — při podání a znovu při provedení.
 function nabidkaChyba(req, duvod, udaje) {
@@ -1835,7 +1843,7 @@ function nabidkaChyba(req, duvod, udaje) {
   if (duvod === 'uz_prodano') {
     return stx(req)('server.z_firmy_je_prodano_uz_pct', { p1: Math.round((udaje.prodano || 0) * 100) });
   }
-  if (duvod === 'fond_nema') return stx(req)('server.fond_na_to_nema', { p1: udaje.volne || 0 });
+  if (duvod === 'fond_nema') return nestaciHlaska(req, udaje.volne || 0, udaje.zamceno || 0);
   return stx(req)('server.nabidka_nejde');
 }
 
@@ -1843,7 +1851,7 @@ function nabidkaChyba(req, duvod, udaje) {
 router.post('/trade/fond/nabidka', hrac, api(async (req, res) => {
   const b = req.body || {};
   const alianceId = parseInt(b.aliance_id, 10) || 0;
-  const { al, volne } = await fondVolne(alianceId);
+  const { al, volne, zamceno } = await fondVolne(alianceId);
   if (!al) return res.status(404).json({ error: stx(req)('server.takovy_fond_tu_neni') });
   const podil = Math.max(FONDNAB.PODIL_MIN,
     Math.min(FONDNAB.PODIL_MAX, Number(b.podil) || 0));
@@ -1851,7 +1859,7 @@ router.post('/trade/fond/nabidka', hrac, api(async (req, res) => {
   const prodano = await prodanyPodil(req.player.id);
   const kontrola = FONDNAB.zkontroluj(podil, cena, prodano, volne);
   if (!kontrola.ok) {
-    return res.status(409).json({ error: nabidkaChyba(req, kontrola.duvod, { prodano, volne }) });
+    return res.status(409).json({ error: nabidkaChyba(req, kontrola.duvod, { prodano, volne, zamceno }) });
   }
   const nasl = FONDNAB.nasledky(podil, await fondDrziVeFirme(alianceId, req.player.id));
   const detail = { firma_id: req.player.id,
@@ -1897,12 +1905,12 @@ router.post('/trade/aliance/fond/navrh/:id/protinavrh', hrac, api(async (req, re
   const podil = Math.max(FONDNAB.PODIL_MIN,
     Math.min(FONDNAB.PODIL_MAX, Number(b.podil) || 0));
   const cena = Math.max(0, Math.min(MAX_CENA, Math.round(Number(b.cena) || 0)));
-  const { al, volne } = await fondVolne(moje.aliance_id);
+  const { al, volne, zamceno } = await fondVolne(moje.aliance_id);
   const firmaId = (n.detail || {}).firma_id || 0;
   const prodano = await prodanyPodil(firmaId);
   const kontrola = FONDNAB.zkontroluj(podil, cena, prodano, volne);
   if (!kontrola.ok) {
-    return res.status(409).json({ error: nabidkaChyba(req, kontrola.duvod, { prodano, volne }) });
+    return res.status(409).json({ error: nabidkaChyba(req, kontrola.duvod, { prodano, volne, zamceno }) });
   }
   const nasl = FONDNAB.nasledky(podil, await fondDrziVeFirme(moje.aliance_id, firmaId));
   const detail = Object.assign({}, n.detail, { podil_po: nasl.podil_po, vetsina: nasl.vetsina,
@@ -2024,11 +2032,11 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
       return res.status(404).json({ error: stx(req)('server.takovy_hrac_tu_neni') });
     }
     const na = FONDNAB.naStole(d);
-    const volne = Math.round(((al && al.pokladna) || 0) - await fondZamceno(moje.aliance_id));
+    const { volne, zamceno } = await fondVolne(moje.aliance_id, al);
     const prodano = await prodanyPodil(firma.id);
     const kontrola = FONDNAB.zkontroluj(na.podil, na.cena, prodano, volne);
     if (!kontrola.ok) {
-      return res.status(409).json({ error: nabidkaChyba(req, kontrola.duvod, { prodano, volne }) });
+      return res.status(409).json({ error: nabidkaChyba(req, kontrola.duvod, { prodano, volne, zamceno }) });
     }
     await prisma.$transaction(async (tx) => {
       // Otisk před změnou — bez něj by tahle cesta byla jediná, po které
@@ -2099,9 +2107,9 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
   // korunách a beze zbytku — součet výplat se rovná rozdělované částce.
   if (n.druh === 'vyplatit') {
     const castka = Math.max(0, Math.round(d.castka || 0));
-    const volne = Math.round(((al && al.pokladna) || 0) - await fondZamceno(moje.aliance_id));
+    const { volne, zamceno } = await fondVolne(moje.aliance_id, al);
     if (castka > volne) {
-      return res.status(409).json({ error: stx(req)('server.fond_na_to_nema', { p1: volne }) });
+      return res.status(409).json({ error: nestaciHlaska(req, volne, zamceno) });
     }
     const dily = FOND.rozdeleni(castka, clenove).filter((x) => x.castka > 0);
     await prisma.$transaction(async (tx) => {
@@ -2120,10 +2128,10 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
     return res.json({ ok: true, vyplaceno: castka });
   }
 
-  const volne = Math.round(((al && al.pokladna) || 0) - await fondZamceno(moje.aliance_id));
+  const { volne, zamceno } = await fondVolne(moje.aliance_id, al);
   const cena = Math.max(0, Math.round(d.cena || 0));
   if (cena > volne) {
-    return res.status(409).json({ error: stx(req)('server.fond_na_to_nema', { p1: volne }) });
+    return res.status(409).json({ error: nestaciHlaska(req, volne, zamceno) });
   }
   const pct = Math.max(0.01, Math.min(1, Number(d.pct) || 0));
   // Stejná spodní mez jako při podání návrhu. Starý návrh, schválený ještě

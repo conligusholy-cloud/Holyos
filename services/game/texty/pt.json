@@ -3617,7 +3617,7 @@
   "server.navrh_neni": "Essa proposta não existe.",
   "server.navrh_dobehl": "A votação dessa proposta já encerrou.",
   "server.ve_fondu_nehlasujes": "Você não tem investimento no fundo, então não vota.",
-  "server.fond_na_to_nema": "O fundo não tem recursos. Livre para gastar tem {penize:p1}.",
+  "server.fond_na_to_nema": "O fundo não tem recursos. Livre para gastar tem {penize:p1}, e outros {penize:p2} estão presos nas ofertas abertas.",
   "dor.fond_navrh_prijat": "O fundo {p1} aprovou: {p2}",
   "dor.fond_navrh_zamitnut": "O fundo {p1} rejeitou: {p2}",
   "dor.fond_navrh_koupit": "{p1} colocou em votação no fundo {p2} a compra de participação de {p3}% na empresa {p4}.",
@@ -3753,5 +3753,6 @@
   "fond.nese_mesicne": "Rende por mês",
   "veta.fond_drzi_nese": "{penize:p1} por mês · empresa paga {cislo:p2} % do lucro",
   "veta.fond_drzi_nenese": "Ainda nada — empresa paga {cislo:p1} % do lucro",
-  "jazyk.pt": "Português (BR)"
+  "jazyk.pt": "Português (BR)",
+  "fond.na_provedeni_chybi": "Faltam {penize:p1}. As ofertas abertas seguram {penize:p2}."
 }

@@ -9392,6 +9392,20 @@ function fondJa() {
 // sama; kdo pošle hotový text z kcFull(), dostane z „60 000 000 L$" po Number()
 // NaN a jádro z toho udělá nulu. Hráč pak na kartě čte, že fond kupuje čtvrtinu
 // firmy za 0 L$, a nechápe, proč mu server odpoví, že na to fond nemá.
+// Co schválenému návrhu chybí, aby šel provést. Měří se proti VOLNÝM penězům
+// fondu — pokladna mínus to, co je slíbené ve vyvěšených nabídkách. Stejně to
+// počítá server; tohle je jen to, aby se na to nemuselo klikat naslepo.
+// Vrací null, když je všechno v pořádku nebo když na návrhu nic platit není.
+function fondNavrhChybi(n) {
+  if (!FOND || !FOND.fond) return null;
+  var d = n.detail || {};
+  var potreba = n.druh === 'koupit' ? Math.round(d.cena || 0)
+    : (n.druh === 'vyplatit' ? Math.round(d.castka || 0) : 0);
+  if (!potreba) return null;
+  var volne = Math.round(FOND.fond.volne || 0);
+  if (potreba <= volne) return null;
+  return { chybi: potreba - volne, zamceno: Math.round(FOND.fond.zamceno || 0) };
+}
 function fondNavrhPopis(n) {
   var d = n.detail || {};
   if (n.druh === 'koupit') {
@@ -9555,9 +9569,16 @@ function fondVnitrek() {
         : (n.druh === 'zrusit' ? 'fond.stahnout'
           : (n.druh === 'dividenda' ? 'fond.navrh_dividenda'
             : (n.druh === 'nabidka' ? 'fond.nabidka_provest' : 'fond.vyplatit_provest')));
+      // Kolik na vyhlášení chybí, patří na kartu, ne až do hlášky po kliknutí.
+      // Podílník se jinak dívá na pokladnu plnou peněz, zmáčkne tlačítko a
+      // dozví se, že fond nemá — aniž by tušil, že dvě třetiny pokladny drží
+      // nabídky, které fond sám vyvěsil.
+      var chybi = fondNavrhChybi(n);
       h += '<p class="fine ok">' + esc(tx('fond.schvaleno')) + '</p>'
         + (n.druh === 'koupit'
           ? '<p class="fine">' + esc(tx('veta.fond_navrh_nikomu_nebere')) + '</p>' : '')
+        + (chybi ? '<p class="fine err">'
+            + tx('fond.na_provedeni_chybi', { p1: chybi.chybi, p2: chybi.zamceno }) + '</p>' : '')
         + '<div class="gcard-act"><button class="btn sm" data-fond-provest="' + n.id + '">'
         + esc(tx(popisek)) + '</button></div>';
     }

@@ -3673,7 +3673,7 @@
   "server.navrh_neni": "So einen Antrag gibt es nicht.",
   "server.navrh_dobehl": "Über diesen Antrag wird nicht mehr abgestimmt.",
   "server.ve_fondu_nehlasujes": "Du hast keine Einlage im Fonds, also stimmst du nicht ab.",
-  "server.fond_na_to_nema": "Der Fonds hat dafür nicht genug. Frei verfügbar sind {penize:p1}.",
+  "server.fond_na_to_nema": "Der Fonds hat dafür nicht genug. Frei verfügbar sind {penize:p1}, weitere {penize:p2} sind in laufenden Angeboten gebunden.",
   "dor.fond_navrh_prijat": "Der Fonds {p1} hat zugestimmt: {p2}",
   "dor.fond_navrh_zamitnut": "Der Fonds {p1} hat abgelehnt: {p2}",
   "dor.fond_navrh_koupit": "{p1} hat im Fonds {p2} über den Kauf eines Anteils von {p3} % an der Firma {p4} abstimmen lassen.",
@@ -3760,5 +3760,6 @@
   "veta.fond_odchod_popis": "Ausgezahlt werden dir {penize:p1} — dein Anteil am Bargeld in der Kasse. Anteile an Firmen werden dafür nicht verkauft, was der Fonds also schon investiert hat, nimmst du nicht mit. Zurück kommst du nur auf Einladung.",
   "veta.fond_odchod_posledni": "Du bist das letzte Mitglied — mit deinem Austritt wird der Fonds ganz aufgelöst.",
   "hra.splatka_neprosla_jinde": "Die Zahlung ging nicht durch — dieses Spiel ist noch woanders offen und das andere gilt. Schließ es und versuch es noch einmal.",
-  "jazyk.pt": "Portugiesisch (BR)"
+  "jazyk.pt": "Portugiesisch (BR)",
+  "fond.na_provedeni_chybi": "Es fehlen {penize:p1}. Laufende Angebote binden {penize:p2}."
 }

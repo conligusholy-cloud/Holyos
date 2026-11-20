@@ -3680,7 +3680,7 @@
   "server.navrh_neni": "Nie ma takiego wniosku.",
   "server.navrh_dobehl": "Nad tym wnioskiem już się nie głosuje.",
   "server.ve_fondu_nehlasujes": "Nie masz wkładu w funduszu, więc nie głosujesz.",
-  "server.fond_na_to_nema": "Fundusz na to nie ma. Wolnych do wydania ma {penize:p1}.",
+  "server.fond_na_to_nema": "Fundusz na to nie ma. Wolnych do wydania ma {penize:p1}, a kolejne {penize:p2} trzymają wystawione oferty.",
   "dor.fond_navrh_prijat": "Fundusz {p1} zatwierdził: {p2}",
   "dor.fond_navrh_zamitnut": "Fundusz {p1} nie zatwierdził: {p2}",
   "dor.fond_navrh_koupit": "{p1} poddał w funduszu {p2} pod głosowanie zakup {p3} % udziału w firmie {p4}.",
@@ -3767,5 +3767,6 @@
   "veta.fond_odchod_popis": "Wypłacimy ci {penize:p1} — twoją część gotówki w kasie. Udziały w firmach nie są przez to sprzedawane, więc tego, co fundusz już zainwestował, nie zabierasz. Wrócić można tylko na zaproszenie.",
   "veta.fond_odchod_posledni": "Jesteś ostatnim członkiem — twoje odejście rozwiązuje cały fundusz.",
   "hra.splatka_neprosla_jinde": "Spłata nie przeszła — ta gra jest otwarta jeszcze gdzie indziej i liczy się tamta. Zamknij ją i spróbuj ponownie.",
-  "jazyk.pt": "Portugalski (BR)"
+  "jazyk.pt": "Portugalski (BR)",
+  "fond.na_provedeni_chybi": "Brakuje {penize:p1}. Wystawione oferty trzymają {penize:p2}."
 }

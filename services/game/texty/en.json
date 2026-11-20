@@ -3624,7 +3624,7 @@
   "server.navrh_neni": "There is no such proposal.",
   "server.navrh_dobehl": "Voting on this proposal is over.",
   "server.ve_fondu_nehlasujes": "You have no contribution in the fund, so you do not vote.",
-  "server.fond_na_to_nema": "The fund cannot afford it. It has {penize:p1} free to spend.",
+  "server.fond_na_to_nema": "The fund cannot afford it. It has {penize:p1} free to spend; another {penize:p2} is tied up in its open offers.",
   "dor.fond_navrh_prijat": "The fund {p1} approved: {p2}",
   "dor.fond_navrh_zamitnut": "The fund {p1} rejected: {p2}",
   "dor.fond_navrh_koupit": "{p1} put to a vote in the fund {p2}: buying a {p3} % stake in {p4}.",
@@ -3760,5 +3760,6 @@
   "fond.nese_mesicne": "Brings in monthly",
   "veta.fond_drzi_nese": "{penize:p1} a month · the company pays out {cislo:p2} % of its profit",
   "veta.fond_drzi_nenese": "Nothing yet — the company pays out {cislo:p1} % of its profit",
-  "jazyk.pt": "Portuguese (BR)"
+  "jazyk.pt": "Portuguese (BR)",
+  "fond.na_provedeni_chybi": "{penize:p1} short. Open offers are holding {penize:p2}."
 }
