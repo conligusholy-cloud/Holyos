@@ -4005,7 +4005,7 @@
       };
       // Námitky „Výpočet nesedí" z e-mailu (otevřené červeně, vyřízené šedě)
       const dispBadge = (x) => { const ds = (window.__rentDisputes || []).filter(d => d.statement_id === x.id); if (!ds.length) return '';
-        return ds.map(d => '<div style="margin-top:4px;"><a href="javascript:void(0)" onclick="rentDisputeShow(' + d.id + ')" title="' + escapeHtml((d.name ? d.name + ': ' : '') + d.text) + '" style="font-size:11px;font-weight:700;text-decoration:none;color:' + (d.done ? 'var(--text2)' : '#ef4444') + ';">' + (d.done ? '✓ námitka vyřízena' : '⚠ Výpočet nesedí') + ' · ' + new Date(d.at).toLocaleDateString('cs-CZ') + '</a></div>').join(''); };
+        return ds.map(d => '<div style="margin-top:4px;"><a href="javascript:void(0)" onclick="rentDisputeShow(' + d.id + ')" title="' + escapeHtml((d.name ? d.name + ': ' : '') + (d.text || '')) + '" style="font-size:11px;font-weight:700;text-decoration:none;color:' + (d.done ? 'var(--text2)' : (d.kind === 'agree' ? '#16a34a' : '#ef4444')) + ';">' + (d.kind === 'agree' ? (d.done ? '✓ potvrzeno nájemcem · zkontrolováno' : '✅ Nájemce potvrdil — zkontrolovat') : (d.done ? '✓ námitka vyřízena' : '⚠ Výpočet nesedí')) + ' · ' + new Date(d.at).toLocaleDateString('cs-CZ') + '</a></div>').join(''); };
       const createdCell = (x) => '<td style="white-space:nowrap;">' + (x && x.created_at ? new Date(x.created_at).toLocaleDateString('cs-CZ') + '<div style="font-size:11px;color:var(--text2);">' + new Date(x.created_at).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }) + '</div>' : '<span style="color:var(--text2)">—</span>') + '</td>';
       const pRows = planned.map(p => { const late = p.date < new Date(now.getFullYear(), now.getMonth(), now.getDate());
         return '<tr style="background:rgba(99,102,241,.07)"><td><span style="color:#818cf8;font-weight:700;">plánováno</span></td><td>' + escapeHtml(p.c.kiosk_code) + '</td><td>' + escapeHtml(p.c.customer_name || '—') + '</td><td>' + periodCell(pym, p.st) + '</td>' + calcCells(p.st) + createdCell(p.st) +
@@ -4040,7 +4040,7 @@
     };
     window.rentDisputeShow = async function(did) {
       const d = (window.__rentDisputes || []).find(x => x.id === did); if (!d) return;
-      const msg = 'Námitka k podkladu ' + (d.doc_number || '') + ' (' + d.kiosk_code + ', ' + d.period_ym + ')\n' + new Date(d.at).toLocaleString('cs-CZ') + (d.name ? '\nOd: ' + d.name : '') + '\n\n' + d.text + '\n\n' + (d.done ? 'Vyřízeno. Znovu otevřít?' : 'Označit jako vyřízené?');
+      const msg = (d.kind === 'agree' ? 'Nájemce potvrdil výpočet podkladu ' : 'Námitka k podkladu ') + (d.doc_number || '') + ' (' + d.kiosk_code + ', ' + d.period_ym + ')\n' + new Date(d.at).toLocaleString('cs-CZ') + (d.name ? '\nOd: ' + d.name : '') + '\n\n' + (d.text || '(bez poznámky)') + '\n\n' + (d.done ? 'Vyřízeno. Znovu otevřít?' : (d.kind === 'agree' ? 'Zkontrolováno ručně — označit jako vyřízené?' : 'Označit jako vyřízené?'));
       if (!confirm(msg)) return;
       const r = await api('PUT', '/api/compounder/rent-disputes/' + did, { done: !d.done });
       if (r.status !== 200) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));

@@ -4997,49 +4997,65 @@ router.delete('/service-subscriptions/:id', requireAuth, async (req, res, next) 
 // Námitky se ukládají do AppSetting rent.disputes (pole), notifikace: AppSetting rent.dispute_notify_person_ids (výchozí [1]).
 const RENT_DISPUTES_KEY = 'rent.disputes';
 const _rdLimit = new Map();
-function _rdOk(req) { const RS = require('../services/compounder/rent-statement'); const id = parseInt(req.params.id, 10); const t = String((req.query && req.query.t) || (req.body && req.body.t) || ''); return id > 0 && t.length === 32 && crypto.timingSafeEqual(Buffer.from(t), Buffer.from(RS.disputeToken(id))) ? id : 0; }
 function _rdPage(title, inner) {
   const e = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   return '<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + e(title) + '</title><style>body{margin:0;background:#eaf2ff;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f2444}.w{max-width:560px;margin:28px auto;background:#fff;border:1px solid #cfe0fb;border-radius:18px;overflow:hidden}.h{padding:22px 28px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff}.h b{font-size:20px;letter-spacing:.04em}.h div{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#dbe8ff;margin-top:5px}.c{padding:24px 28px}h1{font-size:20px;margin:0 0 10px}p{line-height:1.6;color:#334867}textarea,input{width:100%;box-sizing:border-box;border:1px solid #cfe0fb;border-radius:10px;padding:10px;font:inherit;margin:6px 0 14px}textarea{min-height:140px}button{background:#2563eb;color:#fff;border:0;border-radius:10px;padding:13px 24px;font-size:15px;font-weight:700;cursor:pointer}.k{background:#f3f7ff;border-radius:10px;padding:10px 14px;font-size:14px;color:#334867}</style></head><body><div class="w"><div class="h"><b>💧 LAUNDROMATS 💧</b><div>Samoobslužné prádelny</div></div><div class="c">' + inner + '</div></div></body></html>';
 }
+// Odkaz z e-mailu: ?a=ok (výpočet souhlasí) | ?a=no (nesedí). GET jen ukáže potvrzovací stránku — uloží se až POSTem
+// (skenery odkazů v poštovních serverech odkazy otevírají, nesmí tím nic potvrdit). Klíč test-<contractId> = testovací e-mail, nic se neukládá.
+function _rdKey(req) { const RS = require('../services/compounder/rent-statement'); const key = String(req.params.id || ''); const t = String((req.query && req.query.t) || (req.body && req.body.t) || '');
+  if (!/^(\d+|test-\d+)$/.test(key) || t.length !== 32) return null; const exp = RS.disputeToken(key);
+  return crypto.timingSafeEqual(Buffer.from(t), Buffer.from(exp)) ? { key, test: key.startsWith('test-'), id: key.startsWith('test-') ? 0 : parseInt(key, 10), cid: key.startsWith('test-') ? parseInt(key.slice(5), 10) : 0 } : null; }
+const _rdE = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+async function _rdLoad(k) {
+  if (!k.test) return prisma.kioskRentStatement.findUnique({ where: { id: k.id } });
+  const c = await prisma.kioskRentContract.findUnique({ where: { id: k.cid } }); return c ? { id: 0, kiosk_code: c.kiosk_code, period_ym: 'ukázka', doc_number: 'TEST', rent: null, currency: c.currency || 'CZK' } : null;
+}
 router.get('/rent-dispute/:id', async (req, res, next) => {
   try {
-    const id = _rdOk(req); if (!id) return res.status(404).send(_rdPage('Odkaz neplatí', '<h1>Odkaz neplatí</h1><p>Odkaz je neúplný nebo neplatný. Odpovězte prosím přímo na e-mail s podkladem.</p>'));
-    const st = await prisma.kioskRentStatement.findUnique({ where: { id } }); if (!st) return res.status(404).send(_rdPage('Podklad nenalezen', '<h1>Podklad nenalezen</h1>'));
-    const e = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const k = _rdKey(req); if (!k) return res.status(404).send(_rdPage('Odkaz neplatí', '<h1>Odkaz neplatí</h1><p>Odkaz je neúplný nebo neplatný. Odpovězte prosím přímo na e-mail s podkladem.</p>'));
+    const st = await _rdLoad(k); if (!st) return res.status(404).send(_rdPage('Podklad nenalezen', '<h1>Podklad nenalezen</h1>'));
     const m = (n) => Number(n || 0).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (st.currency || 'CZK');
-    res.set('Cache-Control', 'no-store').send(_rdPage('Výpočet nesedí', '<h1>Výpočet nesedí</h1><div class="k">Podklad ' + e(st.doc_number || '') + ' · kiosk ' + e(st.kiosk_code) + ' · ' + e(st.period_ym) + '<br>Nájemné bez DPH: <b>' + m(st.rent) + '</b></div>'
-      + '<form method="post"><input type="hidden" name="t" value="' + e(req.query.t) + '"><p>Napište nám prosím, co v podkladu nesedí (např. tržby, energie, nájem lokality, chybějící doklad). Ozveme se a podklad opravíme.</p>'
+    const head = (k.test ? '<div class="k" style="background:#fff7e6;margin-bottom:10px;">🧪 Testovací e-mail — odeslání se jen předvede, nic se neuloží.</div>' : '') + '<div class="k">Podklad ' + _rdE(st.doc_number || '') + ' · kiosk ' + _rdE(st.kiosk_code) + ' · ' + _rdE(st.period_ym) + (st.rent != null ? '<br>Nájemné bez DPH: <b>' + m(st.rent) + '</b>' : '') + '</div>';
+    const hid = '<input type="hidden" name="t" value="' + _rdE(req.query.t) + '">';
+    res.set('Cache-Control', 'no-store');
+    if (req.query.a === 'ok') return res.send(_rdPage('Výpočet souhlasí', '<h1>Potvrzení výpočtu</h1>' + head + '<form method="post">' + hid + '<input type="hidden" name="a" value="ok"><p>Potvrzujete, že výpočet v podkladu souhlasí a fakturu vystavíte podle něj?</p><label>Vaše jméno (nepovinné)</label><input name="name" maxlength="200"><label>Poznámka (nepovinné)</label><textarea name="text" maxlength="3000" style="min-height:70px" placeholder="Např. číslo faktury, kterou vystavíme"></textarea><button type="submit" style="background:#16a34a">✓ Potvrdit — výpočet souhlasí</button></form><p style="font-size:13px;margin-top:18px">Nesouhlasí? <a href="?t=' + _rdE(req.query.t) + '&a=no">Napište nám, co je špatně</a>.</p>'));
+    res.send(_rdPage('Výpočet nesedí', '<h1>Výpočet nesedí</h1>' + head
+      + '<form method="post">' + hid + '<input type="hidden" name="a" value="no"><p>Napište nám prosím, co v podkladu nesedí (např. tržby, energie, nájem lokality, chybějící doklad). Ozveme se a podklad opravíme.</p>'
       + '<label>Co nesedí *</label><textarea name="text" required maxlength="3000" placeholder="Např. Energie za říjen jsme platili 3 200 Kč, ne 4 500 Kč…"></textarea>'
-      + '<label>Vaše jméno / telefon (nepovinné)</label><input name="name" maxlength="200"><button type="submit">Odeslat</button></form>'));
+      + '<label>Vaše jméno / telefon (nepovinné)</label><input name="name" maxlength="200"><button type="submit" style="background:#dc2626">Odeslat</button></form>'));
   } catch (err) { next(err); }
 });
 router.post('/rent-dispute/:id', express.urlencoded({ extended: false, limit: '20kb' }), async (req, res, next) => {
   try {
-    const id = _rdOk(req); if (!id) return res.status(404).send(_rdPage('Odkaz neplatí', '<h1>Odkaz neplatí</h1>'));
+    const k = _rdKey(req); if (!k) return res.status(404).send(_rdPage('Odkaz neplatí', '<h1>Odkaz neplatí</h1>'));
+    const ok = String((req.body && req.body.a) || '') === 'ok';
     const text = String((req.body && req.body.text) || '').trim().slice(0, 3000); const name = String((req.body && req.body.name) || '').trim().slice(0, 200);
-    if (!text) return res.status(400).send(_rdPage('Chybí text', '<h1>Napište prosím, co nesedí</h1><p><a href="javascript:history.back()">Zpět</a></p>'));
+    if (!ok && !text) return res.status(400).send(_rdPage('Chybí text', '<h1>Napište prosím, co nesedí</h1><p><a href="javascript:history.back()">Zpět</a></p>'));
     const ip = String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.ip || '').trim();
-    const now = Date.now(), k = id + ':' + ip, last = _rdLimit.get(k) || []; const recent = last.filter((t) => now - t < 3600e3); if (recent.length >= 5) return res.status(429).send(_rdPage('Příliš mnoho zpráv', '<h1>Děkujeme, zprávu už máme</h1><p>Zkuste to prosím později.</p>'));
-    recent.push(now); _rdLimit.set(k, recent); if (_rdLimit.size > 5000) _rdLimit.clear();
-    const st = await prisma.kioskRentStatement.findUnique({ where: { id } }); if (!st) return res.status(404).send(_rdPage('Podklad nenalezen', '<h1>Podklad nenalezen</h1>'));
+    const now = Date.now(), lk = k.key + ':' + ip, recent = (_rdLimit.get(lk) || []).filter((t) => now - t < 3600e3); if (recent.length >= 5) return res.status(429).send(_rdPage('Příliš mnoho zpráv', '<h1>Děkujeme, zprávu už máme</h1><p>Zkuste to prosím později.</p>'));
+    recent.push(now); _rdLimit.set(lk, recent); if (_rdLimit.size > 5000) _rdLimit.clear();
+    const st = await _rdLoad(k); if (!st) return res.status(404).send(_rdPage('Podklad nenalezen', '<h1>Podklad nenalezen</h1>'));
+    const thanks = ok ? _rdPage('Děkujeme', '<h1>Děkujeme za potvrzení</h1><p>Výpočet je potvrzený. Fakturu prosím vystavte podle podkladu.</p>') : _rdPage('Děkujeme', '<h1>Děkujeme, zprávu jsme přijali</h1><p>Výpočet zkontrolujeme a ozveme se vám. Do té doby prosím fakturu podle tohoto podkladu nevystavujte.</p>');
+    if (k.test) return res.send(thanks.replace('</h1>', '</h1><div class="k" style="background:#fff7e6">🧪 Test — nic se neuložilo ani neodeslalo.</div>'));
     const { getSetting, setSetting } = require('../services/settings');
     let list = await getSetting(RENT_DISPUTES_KEY, { type: 'json', defaultValue: [] }).catch(() => []); if (!Array.isArray(list)) list = [];
     const did = (list.reduce((mx, d) => Math.max(mx, Number(d.id) || 0), 0)) + 1;
-    list.push({ id: did, statement_id: id, kiosk_code: st.kiosk_code, period_ym: st.period_ym, doc_number: st.doc_number || null, text, name: name || null, ip, at: new Date().toISOString(), done: false });
+    list.push({ id: did, kind: ok ? 'agree' : 'dispute', statement_id: k.id, kiosk_code: st.kiosk_code, period_ym: st.period_ym, doc_number: st.doc_number || null, text: text || null, name: name || null, ip, at: new Date().toISOString(), done: false });
     if (list.length > 500) list = list.slice(-500);
     await setSetting(RENT_DISPUTES_KEY, list, { type: 'json' });
-    // Notifikace (Velín push + zvonek)
+    // Notifikace do Velínu + zvonek: souhlas = zkontrolovat ručně a zaevidovat fakturu, nesouhlas = opravit podklad
     try {
       let ids = await getSetting('rent.dispute_notify_person_ids', { type: 'json', defaultValue: null }).catch(() => null); if (!Array.isArray(ids) || !ids.length) ids = [1];
       const persons = await prisma.person.findMany({ where: { id: { in: ids.map(Number) } }, select: { id: true, user_id: true } });
-      const title = '⚠ Výpočet nájmu nesedí — ' + st.kiosk_code + ' ' + st.period_ym; const body = (name ? name + ': ' : '') + text.slice(0, 160);
+      const title = (ok ? '✅ Nájemce potvrdil výpočet — zkontrolovat ručně' : '⚠ Výpočet nájmu nesedí') + ' · ' + st.kiosk_code + ' ' + st.period_ym;
+      const body = (st.doc_number ? st.doc_number + ' · ' : '') + (name ? name + ': ' : '') + (text ? text.slice(0, 160) : (ok ? 'Zkontroluj podklad a zaeviduj fakturu od Nájemce.' : ''));
       const link = '/modules/ucetni-doklady/index.html?tab=servicebilling';
       const { notifyPerson } = require('../services/push/expo-push');
       let createNotification = null; try { createNotification = require('./notifications.routes').createNotification; } catch (e) { /* bez zvonku */ }
-      for (const p of persons) { notifyPerson(prisma, p.id, { title, body, data: { type: 'rent_dispute', id, link }, sound: 'default' }).catch(() => {}); if (p.user_id && createNotification) createNotification({ userId: p.user_id, type: 'system', title, body, link }).catch(() => {}); }
+      for (const p of persons) { notifyPerson(prisma, p.id, { title, body, data: { type: ok ? 'rent_agree' : 'rent_dispute', id: k.id, link }, sound: 'default' }).catch(() => {}); if (p.user_id && createNotification) createNotification({ userId: p.user_id, type: 'system', title, body, link }).catch(() => {}); }
     } catch (e) { console.warn('[rent-dispute] notifikace:', e.message); }
-    res.send(_rdPage('Děkujeme', '<h1>Děkujeme, zprávu jsme přijali</h1><p>Výpočet zkontrolujeme a ozveme se vám. Do té doby prosím fakturu podle tohoto podkladu nevystavujte.</p>'));
+    res.send(thanks);
   } catch (err) { next(err); }
 });
 // GET /rent-disputes — námitky k podkladům (interní); PUT /rent-disputes/:did { done } — označit jako vyřízené

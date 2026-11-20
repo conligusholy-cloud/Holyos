@@ -14,7 +14,7 @@ const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const crypto = require('crypto');
 const disputeSecret = () => process.env.RENT_DISPUTE_SECRET || process.env.JWT_SECRET || 'holyos-rent-dispute';
 function disputeToken(id) { return crypto.createHmac('sha256', disputeSecret()).update('rent-dispute:' + id).digest('hex').slice(0, 32); }
-function disputeUrl(id) { return (process.env.PUBLIC_BASE_URL || 'https://app.holyos.cz') + '/api/compounder/rent-dispute/' + id + '?t=' + disputeToken(id); }
+function disputeUrl(id, action) { return (process.env.PUBLIC_BASE_URL || 'https://app.holyos.cz') + '/api/compounder/rent-dispute/' + id + '?t=' + disputeToken(id) + (action ? '&a=' + action : ''); }
 
 // ─── Fakturace v cizí měně (např. EUR pro zahraniční subjekt) ─────────────────
 // Výpočet podkladu zůstává v Kč; výsledné nájemné se přepočte aktuálním kurzem ČNB (Kč za 1 jednotku měny).
@@ -277,7 +277,8 @@ async function pdf(st, contract) { return require('../pdf/contracts').htmlToPdfB
 // ─── E-mail ─────────────────────────────────────────────────────────────────
 async function mailFrom() {
   const our = await ourCompany();
-  return { from: process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined, fromName: process.env.RENT_MAIL_FROM_NAME || '🧾 Fakturace Laundromats.eu' };
+  // RENT_MAIL_FROM = vlastní odesílatel podkladů nájmu (např. adresa na laundromats.eu v Amazon SES — tam se jméno odesílatele zachová; M365 ho přepíše jménem schránky)
+  return { from: process.env.RENT_MAIL_FROM || process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined, fromName: process.env.RENT_MAIL_FROM_NAME || '🧾 Fakturace Laundromats.eu' };
 }
 function mailText(st, contract, test) {
   const cur = st.currency || 'CZK'; const f = (n) => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + cur;
@@ -293,7 +294,7 @@ function mailText(st, contract, test) {
       + (rent > 0 && !st.reverse_charge && Number(st.vat_rate) > 0 ? 'Nájemné k fakturaci vč. DPH ' + Number(st.vat_rate) + ' %: ' + (Math.round(Number(st.rent_invoice) * (100 + Number(st.vat_rate))) / 100).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + st.invoice_currency + '\n' : '') : '')
     + '\n'
     + (st.reverse_charge ? 'Fakturu prosím vystavte BEZ DPH s textem „Reverse charge / přenesení daňové povinnosti“ (čl. 196 směrnice 2006/112/ES).\n\n' : '')
-    + 'Podle tohoto podkladu prosím vystavte fakturu. Pokud vám výpočet nesedí, klikněte na tlačítko „Výpočet nesedí“ níže a napište nám, co je potřeba opravit.\n\nS pozdravem\nLaundromats.eu';
+    + 'Podle tohoto podkladu prosím vystavte fakturu. Tlačítkem níže nám prosím potvrďte, že výpočet souhlasí, nebo nám napište, co je potřeba opravit.\n\nS pozdravem\nLaundromats.eu';
 }
 async function sendStatementMail(st, contract, opts) {
   opts = opts || {};
@@ -302,7 +303,7 @@ async function sendStatementMail(st, contract, opts) {
   const cc = !opts.to && contract.cc_emails ? contract.cc_emails : undefined;
   const buf = await pdf(st, contract);
   const r = await sendMail(Object.assign({}, await mailFrom(), {
-    to: cc ? to + ', ' + cc : to, brand: 'laundromats:cs', noLink: !st.id, link: st.id ? disputeUrl(st.id) : undefined, linkLabel: '⚠ Výpočet nesedí — napsat nám',
+    to: cc ? to + ', ' + cc : to, brand: 'laundromats:cs', noLink: true, buttons: (() => { const key = st.id ? st.id : (opts.test && contract && contract.id ? 'test-' + contract.id : null); return key ? [{ href: disputeUrl(key, 'ok'), label: '✓ Výpočet souhlasí', bg: '#16a34a' }, { href: disputeUrl(key, 'no'), label: '⚠ Výpočet nesedí', bg: '#dc2626' }] : undefined; })(),
     subject: (opts.test ? '[TEST] ' : '') + 'Podklad pro fakturaci nájmu kiosku ' + st.kiosk_code + ' — ' + st.period_ym,
     body: mailText(st, contract, !!opts.test),
     attachments: [{ filename: 'najem-' + st.kiosk_code + '-' + st.period_ym + '.pdf', content: buf, contentType: 'application/pdf' }],

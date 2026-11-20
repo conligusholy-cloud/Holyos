@@ -58,9 +58,9 @@ function parseAddrLite(s) { const m = /^\s*(?:"?([^"<]*)"?\s*)?<([^>]+)>\s*$/.ex
 function sameAddr(a, b) { return parseAddrLite(a).address.toLowerCase() === parseAddrLite(b).address.toLowerCase(); }
 async function getGateway(force) { if (!force && _gw.cfg !== null && Date.now() - _gw.at < 60000) return _gw.cfg; try { const { getSetting } = require('./settings'); const v = await getSetting(GATEWAY_KEY, { type: 'json', defaultValue: null }); _gw = { at: Date.now(), cfg: v && typeof v === 'object' && v.host ? v : false }; } catch (e) { _gw = { at: Date.now(), cfg: false }; } return _gw.cfg; }
 function gatewayTransport(cfg) { const nodemailer = require('nodemailer'); const port = parseInt(cfg.port, 10) || 587; return nodemailer.createTransport({ host: String(cfg.host).trim(), port, secure: !!cfg.secure || port === 465, auth: cfg.user ? { user: String(cfg.user).trim(), pass: String(cfg.pass || '') } : undefined, tls: { rejectUnauthorized: false }, connectionTimeout: 15000, greetingTimeout: 15000, socketTimeout: 30000 }); }
-async function sendViaGateway(cfg, { to, cc, subject, body, link, linkLabel, preheader, noLink, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, fromName }) {
+async function sendViaGateway(cfg, { to, cc, subject, body, link, linkLabel, preheader, noLink, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, buttons, fromName }) {
   try { const tx = gatewayTransport(cfg); const fa = parseAddrLite(cfg.from); const name = fromName || fa.name || cfg.from_name || ''; const fromHeader = name ? '"' + name.replace(/"/g, '') + '" <' + fa.address + '>' : fa.address;
-    const info = await tx.sendMail({ from: fromHeader, to, cc: cc || undefined, replyTo: replyTo || undefined, subject: subject || 'Zpráva', text: body ? body + (link ? `\n\n${link}` : '') : '', html: renderEmailHtml({ title: subject, body, link, linkLabel, preheader, noLink, brand, trackingPixel, flyerUrl, rawHtml }), attachments: Array.isArray(attachments) && attachments.length ? attachments : undefined });
+    const info = await tx.sendMail({ from: fromHeader, to, cc: cc || undefined, replyTo: replyTo || undefined, subject: subject || 'Zpráva', text: body ? body + (link ? `\n\n${link}` : '') : '', html: renderEmailHtml({ title: subject, body, link, linkLabel, preheader, noLink, brand, trackingPixel, flyerUrl, rawHtml, buttons }), attachments: Array.isArray(attachments) && attachments.length ? attachments : undefined });
     console.log(`[Email] odesláno přes SMTP bránu (${cfg.host}) → ${to} (from ${fa.address})`); return { sent: true, via: 'smtp-gateway', from: fa.address, messageId: info.messageId };
   } catch (e) { return { sent: false, error: e.message }; }
 }
@@ -98,7 +98,7 @@ function laundroLang({ lang, from, link, body, subject }) {
   return 'en';
 }
 
-function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', preheader, noLink, brand, trackingPixel, flyerUrl, rawHtml }) {
+function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', preheader, noLink, brand, trackingPixel, flyerUrl, rawHtml, buttons }) {
   // Odkaz je v HTML e-mailu jen pod tlačítkem (jednou, malým písmem) – z textu zprávy se vyjme (i s dvojtečkou před ním)
   if (link && body && !rawHtml) {
     const esc = String(link).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -268,6 +268,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
               </a>
             </div>
             <div style="font-size:12px;color:#6b7d99;margin-top:14px;word-break:break-all;">${escapeHtml(pLink)}</div>` : ''}
+          ${Array.isArray(buttons) && buttons.length ? `<div style="margin:24px 0 6px;">${buttons.filter((b) => b && b.href).map((b) => `<a href="${escapeHtml(b.href)}" style="display:inline-block;margin:0 10px 10px 0;padding:13px 22px;background:${escapeHtml(b.bg || '#2563eb')};color:#ffffff;text-decoration:none;border-radius:10px;font-size:15px;font-weight:700;">${escapeHtml(b.label || 'Otevřít')}</a>`).join('')}</div>` : ''}
           ${flyerHtml('#cfe0fb', pLink)}
         </td></tr>
         <tr><td style="height:18px;line-height:18px;font-size:0;">&nbsp;</td></tr>
@@ -374,7 +375,7 @@ async function isCustomerMailPaused() {
   try { const { getSetting } = require('./settings'); return (await getSetting(CUSTOMER_MAIL_PAUSE_KEY, { type: 'boolean', defaultValue: false })) === true; } catch (e) { return false; }
 }
 
-async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, noLink, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, deliveryReceipt, audience, leadId, campaignId, unsubscribe, lang, onlySes, manual }) {
+async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, noLink, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, buttons, deliveryReceipt, audience, leadId, campaignId, unsubscribe, lang, onlySes, manual }) {
   if (!to) return { sent: false, skipped: 'no-recipient' };
   // Hra: anglický hráč dostane anglickou hlavičku e-mailu
   if (brand === 'game' && String(lang || '').toLowerCase().slice(0, 2) === 'en') brand = 'game:en';
@@ -393,7 +394,7 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
       const EL = require('./ses/email-log');
       // unsubscribe: false = bez patičky, string s https = vlastní odhlašovací odkaz (rozesílky BS2 mají svůj seznam vyřazených)
       const unsubUrl = unsubscribe === false ? null : (typeof unsubscribe === 'string' && /^https:\/\//.test(unsubscribe) ? unsubscribe : EL.unsubscribeUrl(to));
-      let html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, noLink, brand, trackingPixel, flyerUrl, rawHtml });
+      let html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, noLink, brand, trackingPixel, flyerUrl, rawHtml, buttons });
       if (unsubUrl) html = html.replace(/<\/body>/i, '<div style="text-align:center;font-size:11px;color:#8ea2c2;padding:10px 0 18px"><a href="' + unsubUrl + '" style="color:#8ea2c2;text-decoration:underline">' + escapeHtml(unsubLabel) + '</a></div></body>');
       const fa = parseAddrLite(sf); const fromHeader = fromName ? '"' + String(fromName).replace(/"/g, '') + '" <' + fa.address + '>' : sf;
       const r = await M.sendEmail({ to, subject, html, from: fromHeader, replyTo, inlineImages: [], attachments }); await EL.logMessage(r, { to, subject, campaignId: campaignId || (brand ? 'brand:' + brand : null), leadId });
@@ -406,7 +407,7 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
     } else if (onlySes) { return { sent: false, error: 'Odesílatel ' + (from || '—') + ' není mezi odesílateli Amazon SES.' }; } } else if (onlySes) { return { sent: false, error: 'Amazon SES není nastavené.' }; } } catch (e) { console.error('[Email] SES:', e.message); if (onlySes) return { sent: false, error: 'Amazon SES: ' + e.message }; }
 
   // 0) SMTP brána z Centra reklamy (Brevo / Amazon SES / M365 SMTP) – pokud je `from` její adresa (nebo from chybí a brána je výchozí)
-  try { const gw = await getGateway(); if (gw && gw.host && gw.from && (!from || sameAddr(from, gw.from) || (gw.default_for_all && !from))) { const r = await sendViaGateway(gw, { to, cc, subject, body, link, linkLabel, preheader, noLink, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, fromName }); if (r.sent) return r; console.error('[Email] SMTP brána selhala, zkouším další cestu:', r.error); } } catch (e) { console.error('[Email] SMTP brána:', e.message); }
+  try { const gw = await getGateway(); if (gw && gw.host && gw.from && (!from || sameAddr(from, gw.from) || (gw.default_for_all && !from))) { const r = await sendViaGateway(gw, { to, cc, subject, body, link, linkLabel, preheader, noLink, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, buttons, fromName }); if (r.sent) return r; console.error('[Email] SMTP brána selhala, zkouším další cestu:', r.error); } } catch (e) { console.error('[Email] SMTP brána:', e.message); }
 
   // 1) Microsoft Graph send-as (preferovaná cesta pokud je `from` zadán a Graph
   //    je nakonfigurovaný — tedy Azure App z Fáze 3 s Mail.Send permission)
@@ -417,7 +418,7 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
       const msGraph = require('./ms-graph-client');
       if (msGraph.isConfigured && msGraph.isConfigured()) {
         graphConfigured = true;
-        const html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, noLink, brand, trackingPixel, flyerUrl, rawHtml });
+        const html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, noLink, brand, trackingPixel, flyerUrl, rawHtml, buttons });
         await msGraph.sendMailAs(from, {
           to,
           cc: cc || undefined,
@@ -463,7 +464,7 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
       replyTo: replyTo || undefined,
       subject: subject || 'HolyOS — notifikace',
       text: body ? body + (link ? `\n\n${link}` : '') : '',
-      html: renderEmailHtml({ title: subject, body, link, linkLabel, preheader, noLink, brand, trackingPixel, flyerUrl, rawHtml }),
+      html: renderEmailHtml({ title: subject, body, link, linkLabel, preheader, noLink, brand, trackingPixel, flyerUrl, rawHtml, buttons }),
     };
     if (Array.isArray(attachments) && attachments.length > 0) {
       mailOpts.attachments = attachments;
