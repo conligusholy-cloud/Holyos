@@ -139,5 +139,56 @@ ok('nabídka za nulu neprojde', A.zkontroluj('koupit', 10, 0, 0, 1e9).duvod === 
 ok('nesmysl ve směru neprojde', A.zkontroluj('darovat', 1, 1, 9, 9).duvod === 'smer');
 ok('platná nabídka vrátí, co stojí', A.zkontroluj('koupit', 3, 250, 0, 1e9).castka === 750);
 
+// ─── Zapojení ────────────────────────────────────────────────────────────────
+// Pravidla sama nestačí. Tohle jsou čtyři místa, kde se dá propojit špatně
+// a hráč na tom tratí, aniž by se cokoli zdálo rozbité.
+const fs = require('fs');
+const path = require('path');
+const koren = path.join(__dirname, '..');
+const routy = fs.readFileSync(path.join(koren, 'routes', 'game-trade.routes.js'), 'utf8');
+const rez = fs.readFileSync(path.join(koren, 'services', 'game', 'rezervace.js'), 'utf8');
+
+// 1. Ležící nákupní nabídka musí zamykat peníze. Bez toho hráč jedněmi
+//    penězi podloží deset nabídek a devíti lidem server řekne, že to nejde.
+ok('nákupní nabídka v knize zamyká peníze',
+  /gameAkcieNabidka[\s\S]{0,200}smer: 'koupit'/.test(rez));
+ok('a zamyká kusy krát cena, ne jen kusy',
+  /zAkcii[\s\S]{0,160}zbyva[\s\S]{0,80}cena/.test(rez));
+ok('zamčené akcie se přičítají k celkové rezervaci',
+  /zNabidek \+ zDividend \+ zAkcii/.test(rez));
+
+// 2. Vydání NESMÍ hned posunout díl akcionářů. Kdyby ano, členové by se
+//    zředili za akcie, které si nikdo nekoupil.
+const vydani = routy.slice(routy.indexOf("if (n.druh === 'akcie') {"));
+const usekVydani = vydani.slice(0, vydani.indexOf("if (n.druh === 'akcie_dividenda')"));
+ok('vydání jen vyvěsí nabídku do knihy',
+  /gameAkcieNabidka\.create/.test(usekVydani));
+ok('vydání nehýbe dílem akcionářů ani pokladnou',
+  !/akcie_podil:/.test(usekVydani) && !/pokladna:/.test(usekVydani));
+
+// 3. Díl se posune teprve tím, co se z vydání opravdu prodá.
+const trh = routy.slice(routy.indexOf("router.post('/trade/akcie/:id/nabidka'"));
+const usekTrh = trh.slice(0, trh.indexOf("router.post('/trade/akcie/nabidka/"));
+ok('prodej z vydání posouvá díl akcionářů',
+  /kusuFondu > 0[\s\S]{0,600}akcie_podil: vyd\.podil_po/.test(usekTrh));
+ok('a zároveň přidá peníze do pokladny fondu',
+  /pokladna: \{ increment: castkaFondu \}/.test(usekTrh));
+
+// 4. Vlastní nabídky se nesmí párovat samy se sebou — hráč by si prodával
+//    sám sobě a jen tím hýbal cenou v grafu.
+ok('vlastní nabídky se nepárují',
+  /filter\(\(x\) => x\.player_id !== req\.player\.id\)/.test(usekTrh));
+// Ukrojení z ležící nabídky musí mít v podmínce původní zbyva, jinak si
+// dva kupující naráz vezmou totéž.
+ok('ukrojení z knihy je zamčené proti souběhu',
+  /updateMany\(\{[\s\S]{0,160}zbyva: puvodni\.zbyva/.test(usekTrh));
+// Peníze kupujícího odejdou doručenkou, jinak by zaplatil jen na papíře.
+ok('kupující platí zápornou doručenkou', /amount: -o\.castka/.test(usekTrh));
+ok('prodávající dostane kladnou', /amount: o\.castka/.test(usekTrh));
+// Cizí nabídku nesmí stáhnout nikdo jiný než její autor.
+const zrus = routy.slice(routy.indexOf("router.post('/trade/akcie/nabidka/:id/zrus'"));
+ok('cizí nabídku stáhnout nejde',
+  /n\.player_id !== req\.player\.id/.test(zrus.slice(0, 900)));
+
 console.log(chyb ? '\n' + chyb + ' nesedí' : '\nSedí.');
 process.exit(chyb ? 1 : 0);

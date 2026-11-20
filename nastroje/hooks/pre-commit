@@ -150,7 +150,7 @@ fi
 # Akcie fondu: kolik fondu se vydáním prodá a jak se páruje pořadník nabídek.
 # Obojí je o skutečných penězích hráčů — chyba ve vydání okrade členy o díl,
 # chyba v párování toho, kdo v knize čekal.
-if git diff --cached --name-only | grep -qE 'services/game/akcie'; then
+if git diff --cached --name-only | grep -qE 'services/game/akcie|services/game/rezervace|routes/game-trade'; then
   if ! node nastroje/takcie.js; then
     echo ""
     echo "STOP: akcie fondu nesedí (viz výš)."

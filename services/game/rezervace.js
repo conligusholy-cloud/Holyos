@@ -33,19 +33,33 @@ function zbyvaZNabidky(t) {
 // běží, nemá si její majitel brát další závazky.
 async function zamceno(playerId) {
   const ted = new Date();
-  const [rows, dluhy] = await Promise.all([
+  const [rows, dluhy, akcie] = await Promise.all([
     prisma.gameTender.findMany({
       where: { utocnik_id: playerId, stav: 'bezi', trvala: false },
     }).catch(() => []),
     prisma.gameEquity.findMany({
       where: { firma_id: playerId, stav: 'bezi' }, select: { nedoplatek: true },
     }).catch(() => []),
+    // Nákupní nabídka v pořadníku akcií je stejný slib jako nabídka na
+    // převzetí: kdokoli mi do ní může prodat a já musím zaplatit. Bez téhle
+    // položky by hráč jedněmi penězi podložil deset nabídek a devíti lidem
+    // by pak server řekl, že se to nepovedlo.
+    // Tabulka nemusí v klientovi existovat — třeba když se po nasazení
+    // nestihl přegenerovat. Rezervace gatují KAŽDÝ nákup ve hře, takže je
+    // nesmí shodit chybějící tabulka: radši se nezamkne nic, než aby se
+    // nedalo hrát. Proto se na ni sahá přes volitelný přístup, ne natvrdo.
+    (prisma.gameAkcieNabidka ? prisma.gameAkcieNabidka.findMany({
+      where: { player_id: playerId, stav: 'bezi', smer: 'koupit' },
+      select: { zbyva: true, cena: true },
+    }).catch(() => []) : Promise.resolve([])),
   ]);
   const zNabidek = rows
     .filter((t) => !t.do || new Date(t.do) > ted)
     .reduce((a, t) => a + zbyvaZNabidky(t), 0);
   const zDividend = dluhy.reduce((a, x) => a + Math.max(0, Number(x.nedoplatek) || 0), 0);
-  return Math.round(zNabidek + zDividend);
+  const zAkcii = akcie.reduce((a, x) =>
+    a + Math.max(0, Math.floor(Number(x.zbyva) || 0)) * Math.max(0, Math.round(Number(x.cena) || 0)), 0);
+  return Math.round(zNabidek + zDividend + zAkcii);
 }
 
 // Volná hotovost = co hra ukazuje, minus zamčené. Bere se číslo hry, ne

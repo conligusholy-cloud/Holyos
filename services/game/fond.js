@@ -169,7 +169,10 @@ function prevod(radky, zKoho, komu, castka) {
 // zamčené peníze proti vůli ostatních.
 // Nastavit dividendu ve firmě, kde má fond většinu, je běžné rozhodnutí —
 // je to správa toho, co fond už koupil, ne rozdávání jeho peněz.
-const PRAHY = { koupit: BEZNE, vyplatit: ZASADNI, zrusit: BEZNE, dividenda: BEZNE };
+// Vydání akcií je ZÁSADNÍ: prodává se kus fondu a každému členovi tím klesne
+// díl. Dividenda akcionářům je běžná — rozděluje se jen to, co fond vydělal.
+const PRAHY = { koupit: BEZNE, vyplatit: ZASADNI, zrusit: BEZNE, dividenda: BEZNE,
+  akcie: ZASADNI, akcie_dividenda: BEZNE };
 const prahDruhu = (druh) => (PRAHY[druh] == null ? null : PRAHY[druh]);
 
 // ─── Žebríček fondů ──────────────────────────────────────────────

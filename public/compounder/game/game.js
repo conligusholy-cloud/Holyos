@@ -9484,6 +9484,12 @@ function fondNavrhPopis(n) {
     return tx('veta.fond_dividenda_popis', { p1: esc(d.firma_nick || ''),
       p2: Math.round((d.pct || 0) * 100) });
   }
+  if (n.druh === 'akcie') {
+    return tx('veta.fond_akcie_popis', { p1: Math.round(d.pocet || 0), p2: d.cena || 0 });
+  }
+  if (n.druh === 'akcie_dividenda') {
+    return tx('veta.fond_akcie_dividenda_popis', { p1: d.na_akcii || 0 });
+  }
   if (n.druh === 'nabidka') {
     // Platí to, co je na stole: po protinávrhu už ne původní podmínky.
     var na = d.protinavrh || d;
@@ -9636,10 +9642,10 @@ function fondVnitrek() {
           + n.id + '" data-volba="proti">' + esc(tx('fond.proti')) + '</button></div>';
       }
     } else {
-      var popisek = n.druh === 'koupit' ? 'fond.vyhlasit'
-        : (n.druh === 'zrusit' ? 'fond.stahnout'
-          : (n.druh === 'dividenda' ? 'fond.navrh_dividenda'
-            : (n.druh === 'nabidka' ? 'fond.nabidka_provest' : 'fond.vyplatit_provest')));
+      var popisky = { koupit: 'fond.vyhlasit', zrusit: 'fond.stahnout',
+        dividenda: 'fond.navrh_dividenda', nabidka: 'fond.nabidka_provest',
+        akcie: 'fond.akcie_vydat', akcie_dividenda: 'fond.akcie_vyplatit' };
+      var popisek = popisky[n.druh] || 'fond.vyplatit_provest';
       // Kolik na vyhlášení chybí, patří na kartu, ne až do hlášky po kliknutí.
       // Podílník se jinak dívá na pokladnu plnou peněz, zmáčkne tlačítko a
       // dozví se, že fond nemá — aniž by tušil, že dvě třetiny pokladny drží
@@ -9777,7 +9783,22 @@ function fondNavrhSheet() {
       + '<h4 style="margin-top:14px">' + esc(tx('fond.navrh_vyplatit')) + '</h4>'
       + '<label class="fld"><span>' + esc(tx('fond.kolik')) + '</span>'
       + '<input id="fo-castka" class="inp" type="number" min="1" step="1000" value="0"></label>'
-      + '<button class="btn sec" id="fo-vyplatit" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>');
+      + '<button class="btn sec" id="fo-vyplatit" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>'
+      // Vydání akcií prodá kus fondu komukoli. Hlasuje se o ceně a počtu
+      // kusů, ne o procentu — kolik se tím prodá, vyjde z hodnoty fondu až
+      // při provedení. Levná cena ředí členy víc, proto ten odhad vedle.
+      + '<h4 style="margin-top:14px">' + esc(tx('fond.navrh_akcie')) + '</h4>'
+      + '<p class="muted small" style="margin:0 0 6px">' + esc(tx('fond.akcie_popis')) + '</p>'
+      + '<label class="fld"><span>' + esc(tx('akcie.kusu')) + '</span>'
+      + '<input id="fo-apocet" class="inp" type="number" min="1" step="1" value="1000"></label>'
+      + '<label class="fld"><span>' + esc(tx('akcie.za_kus')) + '</span>'
+      + '<input id="fo-acena" class="inp" type="number" min="1" step="1000" value="10000"></label>'
+      + '<p class="fine" id="fo-aodhad">\u2014</p>'
+      + '<button class="btn sec" id="fo-akcie" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>'
+      + '<h4 style="margin-top:14px">' + esc(tx('fond.navrh_akcie_dividenda')) + '</h4>'
+      + '<label class="fld"><span>' + esc(tx('akcie.na_akcii')) + '</span>'
+      + '<input id="fo-adiv" class="inp" type="number" min="1" step="100" value="0"></label>'
+      + '<button class="btn sec" id="fo-akciediv" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>');
 
     if ($('fo-koupit')) $('fo-koupit').onclick = function () {
       posli({ druh: 'koupit', firma_id: Number($('fo-firma').value) || 0,
@@ -9791,6 +9812,28 @@ function fondNavrhSheet() {
     };
     $('fo-vyplatit').onclick = function () {
       posli({ druh: 'vyplatit', castka: Number($('fo-castka').value) || 0 }, $('fo-vyplatit'));
+    };
+    // Odhad ředění se počítá rovnou pod políčky: za co se fond prodává je
+    // to jediné číslo, které člena opravdu zajímá, a z ceny za kus ho
+    // nikdo z hlavy nespočítá.
+    var odhad = function () {
+      var p = Number($('fo-apocet').value) || 0, c = Number($('fo-acena').value) || 0;
+      var h = (FOND && FOND.fond && FOND.fond.hodnota_fondu) || 0;
+      var pole = $('fo-aodhad');
+      if (!pole) return;
+      if (!(p > 0) || !(c > 0) || !(h > 0)) { pole.textContent = ''; return; }
+      var vybrano = p * c;
+      pole.textContent = tx('veta.akcie_odhad', { p1: vybrano,
+        p2: pctHra(vybrano / (h + vybrano)) });
+    };
+    $('fo-apocet').oninput = odhad; $('fo-acena').oninput = odhad; odhad();
+    $('fo-akcie').onclick = function () {
+      posli({ druh: 'akcie', pocet: Number($('fo-apocet').value) || 0,
+        cena: Number($('fo-acena').value) || 0 }, $('fo-akcie'));
+    };
+    $('fo-akciediv').onclick = function () {
+      posli({ druh: 'akcie_dividenda', na_akcii: Number($('fo-adiv').value) || 0 },
+        $('fo-akciediv'));
     };
   }
   function posli(telo, btn) {
@@ -10677,6 +10720,177 @@ function splatitSheet(id, castka) {
 var bezici = function (x) {
   return x.stav !== 'splaceno' && x.stav !== 'propadlo' && x.stav !== 'odkoupeno';
 };
+// ─── Akcie fondů ─────────────────────────────────────────────────────────────
+// Fond může vydat akcie a prodat tím kus sebe. Akcionář nemusí být člen a o
+// chování fondu nehlasuje — rozhodují dál členové podle vkladů. Co akcionář
+// má: díl na hodnotě fondu a nárok na dividendu, kterou fond vyhlásí.
+//
+// Cena vzniká v pořadníku nabídek, ne hlasováním: kdo chce koupit, řekne počet
+// a nejvyšší cenu, kdo prodat, počet a nejnižší. Co se potká, to se zobchoduje
+// za cenu té nabídky, která ležela dřív.
+var AKCIE_SEZNAM = null;     // fondy, jejichž akcie se dají koupit
+var AKCIE_TRH = null;        // kniha a graf jednoho fondu
+function loadAkcieSeznam(then) {
+  api('/trade/akcie').then(function (r) {
+    AKCIE_SEZNAM = (r.ok && r.j.fondy) || [];
+    if (then) then();
+  }).catch(function () { AKCIE_SEZNAM = []; if (then) then(); });
+}
+function loadAkcieTrh(id, then) {
+  api('/trade/akcie/' + id).then(function (r) {
+    AKCIE_TRH = (r.ok && r.j.akcie) || null;
+    if (then) then();
+  }).catch(function () { AKCIE_TRH = null; if (then) then(); });
+}
+
+// Graf ceny: řada uzavřených obchodů. Cena akcie není nic jiného než poslední
+// obchod, který se doopravdy stal — proto se nekreslí nic jiného.
+function akcieGraf(body) {
+  if (!body || body.length < 2) {
+    return '<p class="fine">' + esc(tx('akcie.graf_zatim')) + '</p>';
+  }
+  var S = 300, V = 80;
+  var max = 0, min = Infinity;
+  body.forEach(function (b) {
+    if (b.cena > max) max = b.cena;
+    if (b.cena < min) min = b.cena;
+  });
+  if (!(max > 0)) max = 1;
+  // U ceny se nezačíná od nuly: pohyb o pár procent by se u drahé akcie
+  // ztratil v rovné čáře. Dno je o desetinu rozpětí pod nejnižší cenou.
+  var dno = min === max ? Math.max(0, min * 0.9) : min - (max - min) * 0.1;
+  var rozsah = max - dno || 1;
+  var x = function (i) { return (i / (body.length - 1)) * S; };
+  var y = function (v) { return V - ((Math.max(dno, v) - dno) / rozsah) * V; };
+  var cara = body.map(function (b, i) {
+    return x(i).toFixed(1) + ',' + y(b.cena).toFixed(1);
+  }).join(' ');
+  return '<svg class="fond-graf" viewBox="0 0 ' + S + ' ' + V + '" preserveAspectRatio="none"'
+    + ' role="img" aria-label="' + esc(tx('akcie.graf')) + '">'
+    + '<polyline points="' + cara + '" class="g-hodnota" vector-effect="non-scaling-stroke"/>'
+    + '</svg>'
+    + '<div class="row"><span class="muted small">'
+    + esc(tx('veta.fond_graf_od', { p1: datumKratce(body[0].kdy) })) + '</span>'
+    + '<span class="muted small">' + kcFull(max) + '</span></div>';
+}
+
+// Jedna strana knihy. Nejlepší nabídka nahoře — tak se na burzu kouká.
+function akcieKniha(l, smer) {
+  if (!l || !l.length) return '<p class="fine">' + esc(tx('akcie.kniha_prazdna')) + '</p>';
+  return l.slice(0, 8).map(function (x) {
+    return '<div class="row"><span class="muted small">'
+      + (x.fond ? esc(tx('akcie.od_fondu')) : esc(x.nick || ''))
+      + (x.moje ? ' · ' + esc(tx('akcie.moje')) : '') + '</span>'
+      + '<span><b class="' + (smer === 'prodat' ? 'err' : 'ok') + '">' + kcFull(x.cena)
+      + '</b> <i class="muted small">×' + tCislo(x.zbyva) + '</i>'
+      + (x.moje ? ' <button class="btn sec sm" data-akcie-zrus="' + x.id + '">'
+          + esc(tx('akcie.stahnout')) + '</button>' : '') + '</span></div>';
+  }).join('');
+}
+
+// Trh jednoho fondu: graf, kniha a políčka na zadání nabídky.
+function akcieTrhSheet(id) {
+  if (!AKCIE_TRH || AKCIE_TRH.aliance_id !== id) {
+    return loadAkcieTrh(id, function () { akcieTrhSheet(id); });
+  }
+  var a = AKCIE_TRH;
+  // Odkud vzít cenu do políčka: poslední obchod, jinak účetní hodnota.
+  // Prázdné políčko na burze nikomu nepomůže.
+  var navrh = a.posledni_cena || a.ucetni || 1;
+  sheet('<h3>' + tx('veta.akcie_fondu', { p1: esc(a.nazev) }) + '</h3>'
+    + '<h4 style="margin:10px 0 2px">' + esc(tx('akcie.graf')) + '</h4>'
+    + akcieGraf(a.graf)
+    + '<div class="kv"><span>' + esc(tx('akcie.posledni_cena')) + '</span><b>'
+    + (a.posledni_cena ? kcFull(a.posledni_cena) : esc(tx('akcie.zatim_neobchodovano'))) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('akcie.ucetni')) + '</span><b>' + kcFull(a.ucetni) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('akcie.vydano')) + '</span><b>' + tCislo(a.vydano)
+    + ' · ' + procentaPodilu(a.podil) + esc(tx('akcie.fondu')) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('akcie.moje_kusy')) + '</span><b class="'
+    + (a.moje_kusy ? 'ok' : '') + '">' + tCislo(a.moje_kusy) + '</b></div>'
+    + '<h4 style="margin:12px 0 2px">' + esc(tx('akcie.nekdo_prodava')) + '</h4>'
+    + akcieKniha(a.prodat, 'prodat')
+    + '<h4 style="margin:12px 0 2px">' + esc(tx('akcie.nekdo_kupuje')) + '</h4>'
+    + akcieKniha(a.koupit, 'koupit')
+    + '<h4 style="margin:14px 0 2px">' + esc(tx('akcie.zadat')) + '</h4>'
+    + '<label class="fld"><span>' + esc(tx('akcie.kusu')) + '</span>'
+    + '<input id="ak-pocet" class="inp" type="number" inputmode="numeric" min="1" step="1" value="1"></label>'
+    + '<label class="fld"><span>' + esc(tx('akcie.za_kus')) + '</span>'
+    + '<input id="ak-cena" class="inp" type="number" inputmode="numeric" min="1" step="1" value="'
+    + navrh + '"></label>'
+    + '<div class="kv souhrn"><span>' + esc(tx('akcie.dohromady')) + '</span><b id="ak-soucet">—</b></div>'
+    + '<p class="fine">' + esc(tx('akcie.rada')) + '</p>'
+    + '<div class="gcard-act">'
+    + '<button class="btn sm" id="ak-koupit">' + esc(tx('akcie.koupit')) + '</button>'
+    + '<button class="btn sec sm" id="ak-prodat">' + esc(tx('akcie.prodat')) + '</button></div>'
+    + '<button class="btn sec" id="ak-zavrit" style="width:100%;margin-top:8px">'
+    + esc(tx('hra.nechat_byt')) + '</button>');
+
+  var cti = function () {
+    return { pocet: Math.max(0, Math.floor(Number(($('ak-pocet') || {}).value) || 0)),
+      cena: Math.max(0, Math.round(Number(($('ak-cena') || {}).value) || 0)) };
+  };
+  var prepocti = function () {
+    var v = cti();
+    $('ak-soucet').textContent = kcFull(v.pocet * v.cena);
+  };
+  $('ak-pocet').oninput = prepocti; $('ak-cena').oninput = prepocti; prepocti();
+  $('ak-zavrit').onclick = closeSheet;
+  var posli = function (smer, btn) {
+    var v = cti();
+    if (!(v.pocet > 0) || !(v.cena > 0)) return toast(esc(tx('akcie.vypln')), 'err');
+    btn.disabled = true;
+    apiJson('/trade/akcie/' + id + '/nabidka', { smer: smer, pocet: v.pocet, cena: v.cena })
+      .then(function (r) {
+        btn.disabled = false;
+        if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
+        // Zobchodovaná část se projeví doručenkami, ležící zůstane v knize.
+        vyzvedniNasledky();
+        toast(r.j.zobchodovano
+          ? tx('veta.akcie_zobchodovano', { p1: r.j.zobchodovano, p2: r.j.castka })
+          : esc(tx('akcie.lezi_v_knize')), 'ok');
+        AKCIE_SEZNAM = null;
+        loadAkcieTrh(id, function () { akcieTrhSheet(id); });
+      }).catch(function () { btn.disabled = false; toast(esc(tx('mapa.server_neodpovida_6')), 'err'); });
+  };
+  $('ak-koupit').onclick = function () { posli('koupit', this); };
+  $('ak-prodat').onclick = function () { posli('prodat', this); };
+  [].forEach.call($('sheet-body').querySelectorAll('[data-akcie-zrus]'), function (b) {
+    b.onclick = function () {
+      b.disabled = true;
+      apiJson('/trade/akcie/nabidka/' + b.getAttribute('data-akcie-zrus') + '/zrus', {})
+        .then(function (r) {
+          if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || '', 'err'); }
+          AKCIE_SEZNAM = null;
+          loadAkcieTrh(id, function () { akcieTrhSheet(id); });
+        }).catch(function () { b.disabled = false; });
+    };
+  });
+}
+
+// Karta na Burze: akcie fondů, které se dají koupit. Vidí ji každý, i ten,
+// kdo v žádném fondu není — o to u akcií jde.
+function akcieSeznamHtml() {
+  var l = AKCIE_SEZNAM || [];
+  if (!l.length) return '';
+  return '<div class="card"><h3>📈 ' + esc(tx('akcie.nadpis')) + '</h3>'
+    + '<p class="muted small" style="margin:2px 0 8px">' + esc(tx('akcie.popis')) + '</p>'
+    + l.map(function (f) {
+        return '<div class="trade">'
+          + '<div class="row"><b>' + esc(f.nazev) + '</b>'
+          + '<span>' + (f.posledni_cena ? kcFull(f.posledni_cena)
+              : esc(tx('akcie.zatim_neobchodovano'))) + '</span></div>'
+          + '<div class="row"><span class="muted small">' + esc(tx('akcie.ucetni')) + '</span>'
+          + '<span>' + kcFull(f.ucetni) + '</span></div>'
+          + (f.moje_kusy ? '<div class="row"><span class="muted small">'
+              + esc(tx('akcie.moje_kusy')) + '</span><span class="ok">'
+              + tCislo(f.moje_kusy) + '</span></div>' : '')
+          + '<div class="gcard-act"><button class="btn sm" data-akcie-trh="' + f.aliance_id + '">'
+          + esc(tx('akcie.otevrit_trh')) + '</button></div>'
+          + '</div>';
+      }).join('')
+    + '</div>';
+}
+
 // ─── Veřejná nabídka na odkup podílů ────────────────────────────────────────
 // Míří na všechny podílníky firmy najednou. Prodat musí chtít, mlčení je
 // odmítnutí a převede se jen to, co kdo doopravdy prodal.
@@ -11543,6 +11757,7 @@ function paintBurza() {
   box.innerHTML = (naMe.length ? naMeHtml : '')
     + mojeKrizeHtml()
     + prevzetiHtml()
+    + akcieSeznamHtml()
     + aukceHtml()
     + nabidkaFonduHtml()
     + financeHtml()
@@ -11552,7 +11767,12 @@ function paintBurza() {
     + (hotove.length ? sekce(esc(tx('drazba.uzavrene')), hotove, '') : '');
   bindAukce();
   bindFinance();
+  [].forEach.call(box.querySelectorAll('[data-akcie-trh]'), function (b) {
+    b.onclick = function () { akcieTrhSheet(Number(b.getAttribute('data-akcie-trh'))); };
+  });
   if (MOJE_NABIDKY == null) loadFondNabidky(paintBurza);
+  // Akcie vidí každý, i kdo v žádném fondu není — o to u nich jde.
+  if (AKCIE_SEZNAM == null) loadAkcieSeznam(paintBurza);
   bindNabidkaFondu('burza-body');
   [].forEach.call(box.querySelectorAll('[data-prevzeti-zrus]'), function (b) {
     b.onclick = function () {
@@ -12034,6 +12254,10 @@ function majetekSheet(id, rovnouKat) {
       polozky.push({ smer: 'koupim', predmet: 'pradlomat', spot_id: m.spot_id, model: m.model,
         popis: esc(m.name || m.spot_id), pod: (MODELS[m.model] || {}).name + ' ' + esc(tx('mapa.postaveny_pradlomat')) });
     });
+    (a.pozemky || []).forEach(function (z) {
+      polozky.push({ smer: 'koupim', predmet: 'pozemek', spot_id: z.spot_id,
+        popis: esc(z.name || z.spot_id), pod: esc(tx('mapa.koupena_zem')) });
+    });
     (a.pobocky || []).forEach(function (b) {
       polozky.push({ smer: 'koupim', predmet: 'pobocka', pobocka: b.name,
         popis: tx('veta.pobocka_2', { p1: esc(b.name) }), pod: esc(tx('mapa.zakladna_pro_dopravu_a_cetu')) });
@@ -12058,6 +12282,11 @@ function majetekSheet(id, rovnouKat) {
           + tx('veta.100_zisk_mes_br_i_class', { p1: Math.round(u.score), p2: kcFull(u.eco.profit), p3: kcFull(cenaPradlomatu(u.eco.profit, u.eco.invest)) })
           + (dluh > 0 ? tx('hra.i_class_cena_dluh_visi_na', { p1: kcFull(dluh) }) : '') });
     });
+    // Nabídnout jde jen holá zem — zastavěná jde s prádlomatem. (Požadavek #158)
+    pozemkyPrazdne().forEach(function (z) {
+      moje.push({ smer: 'prodam', predmet: 'pozemek', spot_id: z.spotId,
+        popis: esc(z.name || tx('hra.pozemek')), pod: esc(tx('mapa.koupena_zem')) });
+    });
     (S.pobocky || []).forEach(function (b) {
       moje.push({ smer: 'prodam', predmet: 'pobocka', pobocka: b.name,
         popis: tx('veta.moje_pobocka', { p1: esc(b.name) }), pod: tx('veta.provoz_te_stoji', { p1: kcFull(POBOCKA_MESICNE), p2: esc(tx('mapa.mesic')) })});
@@ -12073,6 +12302,7 @@ function majetekSheet(id, rovnouKat) {
     var KATEGORIE = [
       { k: 'pradlomat', ico: '🧺', nazev: esc(tx('mapa.pradlomaty')), pod: esc(tx('mapa.hotove_provozovny_i_s_mistem')) },
       { k: 'stroj', ico: '📦', nazev: esc(tx('hra.stroje')), pod: esc(tx('mapa.co_ma_kdo_skladem')) },
+      { k: 'pozemek', ico: '🏞', nazev: esc(tx('mapa.pozemky')), pod: esc(tx('mapa.zeme_bez_stroje')) },
       { k: 'pobocka', ico: '🏢', nazev: esc(tx('mapa.pobocky')), pod: esc(tx('mapa.zakladny_pro_dopravu_a_cetu')) },
       { k: 'karta', ico: '⚡', nazev: esc(tx('hra.karty')), pod: esc(tx('mapa.zrychlovace_cekani')) },
       { k: 'pujcka', ico: '🏦', nazev: esc(tx('mapa.pujcka')), pod: esc(tx('mapa.penize_na_urok')) },
@@ -12701,6 +12931,17 @@ function vyzvedniNasledky(then) {
         S.prodano = S.prodano || {};
         S.prodano[x.spot_id] = 1;   // ať se stroj nevrátí na sklad jako při přetažení
         S.units = S.units.filter(function (u) { return u.spotId !== x.spot_id; });
+      } else if (x.kind === 'pozemek_remove') {
+        // Zem změnila majitele — pryč ze seznamu i z evidence míst. (Požadavek #158)
+        S.pozemky = pozemky().filter(function (z) { return z.spotId !== x.spot_id; });
+        delete CLAIMS[x.spot_id];
+      } else if (x.kind === 'pozemek_add') {
+        var zd = x.data || {};
+        if (!pozemky().some(function (z) { return z.spotId === x.spot_id; })) {
+          pozemky().push({ spotId: x.spot_id, areaId: zd.area_key || '',
+            name: zd.name || esc(tx('hra.pozemek')), lat: zd.lat, lon: zd.lon,
+            m2: zd.m2 || null, cena: zd.cena || 0, od: Date.now() });
+        }
       } else if (x.kind === 'pobocka_remove') {
         S.pobocky = (S.pobocky || []).filter(function (b) { return b.name !== x.spot_id; });
       } else if (x.kind === 'pobocka_add') {
@@ -12996,6 +13237,16 @@ function drazbaVyvolatSheet() {
     polozky.push({ predmet: 'pobocka', pobocka: bq.name, popis: tx('veta.pobocka_3', { p1: esc(bq.name) }),
       pod: esc(tx('drazba.zakladna_pro_dopravu_a_cetu')), navrh: POBOCKA_CENA });
   });
+  // Jen holá zem. Zastavěný pozemek se draží jako prádlomat — zábor si zem
+  // nese s sebou, takže by jinak šel do dražby dvakrát. (Požadavek #158)
+  pozemkyPrazdne().forEach(function (z) {
+    var c = CLAIMS[z.spotId] || {};
+    polozky.push({ predmet: 'pozemek', spot_id: z.spotId,
+      popis: esc(z.name || tx('hra.pozemek')),
+      pod: c.najemce_id ? esc(tx('drazba.pronajaty_najem_jde_s_nim'))
+        : tx('drazba.pozemek_m2_pod', { p1: (z.m2 || '?'), p2: kcFull(z.cena || 0) }),
+      navrh: z.cena || 100000 });
+  });
   (CARDS_CAT || []).forEach(function (c) {
     if (ownedOf(c.kind) > 0) polozky.push({ predmet: 'karta', card_kind: c.kind,
       popis: tx('hra.karta_x', { p1: polNazev(c) }), pod: ownedOf(c.kind) + esc(tx('hra.k_dispozici_3')), navrh: 100000 });
@@ -13015,6 +13266,7 @@ function drazbaVyvolatSheet() {
   var KAT = [
     { k: 'pradlomat', ico: '\u{1F9FA}', nazev: esc(tx('drazba.pradlomaty')), pod: esc(tx('drazba.hotove_provozovny_i_s_mistem')) },
     { k: 'stroj', ico: '\u{1F4E6}', nazev: esc(tx('hra.stroje_2')), pod: esc(tx('drazba.co_mas_skladem')) },
+    { k: 'pozemek', ico: '\u{1F3DE}', nazev: esc(tx('drazba.pozemky')), pod: esc(tx('drazba.zeme_bez_stroje')) },
     { k: 'pobocka', ico: '\u{1F3E2}', nazev: esc(tx('drazba.pobocky')), pod: esc(tx('drazba.zakladny_pro_dopravu_a_cetu')) },
     { k: 'karta', ico: '\u26A1', nazev: esc(tx('hra.karty_2')), pod: esc(tx('drazba.zrychlovace_cekani')) },
     { k: 'prevod', ico: '\u{1F4C8}', nazev: esc(tx('drazba.podily_v_cizich')), pod: esc(tx('drazba.co_drzis_v_cizich_firmach')) },
