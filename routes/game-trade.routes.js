@@ -1751,6 +1751,7 @@ router.post('/trade/aliance/fond/navrh', hrac, api(async (req, res) => {
     detail = { firma_id: firmaId, firma_nick: firma.company || firma.nick, pct, min: minChce };
   } else if (druh === 'akcie') {
     const AKCIE = require('../services/game/akcie');
+const CENA = require('../services/game/akcie-cena');
     const pocet = Math.max(0, Math.floor(Number(b.pocet) || 0));
     const cena = Math.max(0, Math.round(Number(b.cena) || 0));
     // Hodnotu fondu bereme k dnešku jen na kontrolu: o den později se
@@ -2721,15 +2722,12 @@ router.get('/trade/akcie', hrac, api(async (req, res) => {
   const vynosy = await akcieVynosy(zajimave.map((f) => f.id));
   const out = [];
   for (const f of zajimave) {
-    // Graf se ptá fond po fondu schválně: jeden společný dotaz s limitem by
-    // u fondu, kde se obchoduje nejvíc, sebral řádky všem ostatním.
-    const [hodnota, obchody] = await Promise.all([
+    // Řada cen se čte fond po fondu schválně: jeden společný dotaz s limitem
+    // by u fondu, kde se děje nejvíc, sebral řádky všem ostatním.
+    const [hodnota, graf] = await Promise.all([
       hodnotaFondu(f.id),
-      prisma.gameAkcieObchod.findMany({ where: { aliance_id: f.id },
-        orderBy: { kdy: 'desc' }, take: AKCIE_GRAF_SEZNAM,
-        select: { kdy: true, cena: true } }),
+      CENA.radaCen(f.id, AKCIE_GRAF_SEZNAM),
     ]);
-    const graf = obchody.slice().reverse();
     const s = akcieStav(f, hodnota);
     const vyn = vynosy.get(f.id) || { nese: 0, posledni: 0, celkem: 0 };
     out.push({ aliance_id: f.id, nazev: f.nazev, cena: s.cena, ucetni: s.ucetni,
@@ -2741,8 +2739,8 @@ router.get('/trade/akcie', hrac, api(async (req, res) => {
       dividenda_posledni: vyn.posledni,
       dividenda_celkem: vyn.celkem,
       graf,
-      // Cena na začátku grafu. Null = ještě se neobchodovalo, a to není
-      // pokles: šipka se pak neukáže vůbec.
+      // Cena na začátku grafu. Null = cena se zatím nikdy nepohnula, a to
+      // není pokles: šipka se pak neukáže vůbec.
       cena_drive: graf.length ? graf[0].cena : null });
   }
   res.json({ ok: true, fondy: out });
@@ -2753,10 +2751,12 @@ router.get('/trade/akcie/:id', hrac, api(async (req, res) => {
   const alianceId = parseInt(req.params.id, 10) || 0;
   const al = await prisma.gameAliance.findUnique({ where: { id: alianceId } });
   if (!al) return res.status(404).json({ error: stx(req)('server.takovy_fond_tu_neni') });
-  const [obchody, moje, hodnota, fondVolno] = await Promise.all([
-    // Graf je prostě řada uzavřených obchodů. Cena akcie není nic jiného.
+  const [obchody, ceny, moje, hodnota, fondVolno] = await Promise.all([
+    // Obchody jsou na výpis posledních obchodů. Graf se kreslí z řady cen —
+    // ta nese i přecenění, když se pohnula hodnota fondu.
     prisma.gameAkcieObchod.findMany({ where: { aliance_id: alianceId },
       orderBy: { kdy: 'desc' }, take: 200 }),
+    CENA.radaCen(alianceId, 200),
     akciiDrzi(alianceId, req.player.id),
     hodnotaFondu(alianceId),
     fondVolne(alianceId, al),
@@ -2775,7 +2775,9 @@ router.get('/trade/akcie/:id', hrac, api(async (req, res) => {
     // musí vidět dřív, než zadá prodej, který by neprošel.
     vykoupi: s.cena > 0 ? Math.floor(Math.max(0, fondVolno.volne) / s.cena) : 0,
     posledni_cena: obchody.length ? obchody[0].cena : null,
-    graf: obchody.slice().reverse().map((o) => ({ kdy: o.kdy, cena: o.cena, pocet: o.pocet })),
+    graf: ceny.map((c) => ({ kdy: c.kdy, cena: c.cena, duvod: c.duvod })),
+    // Poslední obchody zvlášť: graf je o ceně, tohle o tom, kdo kolik koupil.
+    obchody: obchody.slice(0, 6).map((o) => ({ kdy: o.kdy, cena: o.cena, pocet: o.pocet })),
   }) });
 }));
 
@@ -2815,11 +2817,20 @@ router.post('/trade/akcie/:id/obchod', hrac, api(async (req, res) => {
     // Stav fondu čteme znovu uvnitř: mezi kontrolou a zápisem mohl koupit
     // někdo další a posunout cenu i počty. Podmínkou zápisu je přesně to,
     // s čím jsme počítali — netrefí-li se, padá celá transakce.
+    // Účetní hodnota PO obchodu. Zapisuje se spolu s cenou, protože obchod
+    // cenou pohnul po svém — kdyby se reference nechala stará, hodinové
+    // přecenění by ten pohyb vzalo ještě jednou.
+    const hodnotaPo = Math.max(0, smer === 'koupit' ? hodPred + r.castka : hodPred - r.castka);
+    const ucetniPo = AKCIE.ucetniPresna(hodnotaPo, r.podil_po, r.vydano_po);
     SOUBEH.zamkni(await tx.gameAliance.updateMany({
       where: { id: alianceId, akcie_cena: al.akcie_cena, akcie_vydano: al.akcie_vydano },
       data: { akcie_cena: r.cena_po, akcie_vydano: r.vydano_po, akcie_podil: r.podil_po,
+        akcie_ucetni: ucetniPo,
         pokladna: smer === 'koupit' ? { increment: r.castka } : { decrement: r.castka } } }),
       'server.cena_akcie_se_zmenila');
+    // Bod do řady cen. Graf se kreslí odsud, ne z obchodů: cena se hýbe
+    // i tehdy, když se s akciemi neobchoduje.
+    await CENA.zapisCenu(tx, alianceId, r.cena_po, 'obchod', ucetniPo);
 
     const radek = await akciiRadek(tx, alianceId, req.player.id);
     if (smer === 'koupit') {

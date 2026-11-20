@@ -154,7 +154,9 @@ const routy = fs.readFileSync(path.join(__dirname, '..', 'routes',
 const r = routy.slice(routy.indexOf("router.get('/trade/akcie'"));
 const usekR = r.slice(0, r.indexOf("router.get('/trade/akcie/:id'"));
 ok('seznam nese graf', /graf,/.test(usekR));
-ok('graf jde od nejstaršího obchodu', /obchody\.slice\(\)\.reverse\(\)/.test(usekR));
+// Graf už není řada obchodů, ale řada CEN: cena se hybe i tehdy, když se
+// s akciemi neobchoduje a jen se pohnula hodnota fondu.
+ok('graf se čte z řady cen', /CENA\.radaCen\(f\.id, AKCIE_GRAF_SEZNAM\)/.test(usekR));
 ok('a nese cenu, proti které se šipka měří',
   /cena_drive: graf\.length \? graf\[0\]\.cena : null/.test(usekR));
 ok('bez obchodu je null, ne nula', !/cena_drive: graf\.length \? graf\[0\]\.cena : 0/.test(usekR));

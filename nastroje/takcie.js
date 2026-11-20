@@ -129,6 +129,34 @@ ok('co se vrátilo, už kapitál není', vrat.kapital === 0 && vrat.vybrano === 
 ok('prázdno je nula', A.kapital([]).kapital === 0 && A.kapital(null).kapital === 0);
 ok('nesmysly nic neshodí', A.kapital([null, {}, { pocet: 'x', cena: 'y' }]).kapital === 0);
 
+// ─── Přecenění ──────────────────────────────────────────────────
+// Cenou nehýbe jen obchodování. Když fond koupí podíl pod cenou, vyroste
+// účetní hodnota akcie — a cena má jít s tím, stejným poměrem.
+ok('růst účetní hodnoty o desetinu zvedne cenu o desetinu',
+  A.precena(100000, 20000, 22000) === 110000);
+ok('propad ji srazí stejně', A.precena(100000, 20000, 10000) === 50000);
+ok('beze změny se cena nehne', A.precena(100000, 20000, 20000) === 100000);
+// Prémie, kterou na akcii trh má, musí zůstat — přecenění neurčuje, za kolik
+// se obchoduje, jen s tím posouvá základ.
+ok('prémie proti účetní hodnotě zůstane',
+  A.precena(60000, 20000, 40000) / 40000 === 60000 / 20000);
+// Bez čísla, proti kterému se měří, se cena NESMÍ hnout.
+ok('bez reference se cena nehne', A.precena(100000, 0, 22000) === 100000);
+ok('bez dnešní hodnoty taky ne', A.precena(100000, 20000, 0) === 100000);
+ok('a nedělí se nulou', Number.isFinite(A.precena(100000, 0, 0)));
+ok('nesmysly cenu nerozbijí', A.precena(100000, 'x', 'y') === 100000);
+// Hranice platí i tady: zdesetinásobení fondu nesmí vystřelit cenu do nesmyslu.
+ok('cena nejde nad strop', A.precena(1000000, 1, 1000000) === A.CENA_MAX);
+ok('ani pod dno', A.precena(10, 1000000, 1) === A.CENA_MIN);
+
+// Účetní hodnota nezaokrouhleně. Proti ní se měří další přecenění, takže
+// zaokrouhlení by se v každém kroku přičetlo k ceně jako skutečný pohyb.
+ok('nezaokrouhlená účetní hodnota se opravdu nezaokrouhluje',
+  A.ucetniPresna(100000000, 1 / 3, 1000) !== A.ucetni(100000000, 1 / 3, 1000));
+ok('a jinak říká totéž',
+  Math.round(A.ucetniPresna(100000000, 1 / 3, 1000)) === A.ucetni(100000000, 1 / 3, 1000));
+ok('bez vydaných kusů je nula', A.ucetniPresna(1e8, 0.5, 0) === 0);
+
 // ─── Co akcie nese ────────────────────────────────────────────────
 // Spekulace s cenou je jedna věc, výdělek druhá. Na akcii připadá díl
 // měsíčního výnosu fondu, který patří akcionářům, dělený počtem kusů.

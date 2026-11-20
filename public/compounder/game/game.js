@@ -11024,7 +11024,9 @@ function akcieTrhSheet(id, smer) {
     var hyb = Math.min(1, kusu / a.celkem);
     return Math.max(1, Math.round(a.cena * (s === 'prodat' ? 1 - hyb : 1 + hyb)));
   };
-  var posledni = (a.graf || []).slice(-6).reverse();
+  // Poslední obchody chodí ze serveru zvlášť: graf je řada CEN a je v něm
+  // i přecenění, u kterého žádný obchod nebyl.
+  var posledni = (a.obchody || []);
   var podrobnosti = ''
     + '<div class="kv"><span>' + esc(tx('akcie.ucetni')) + '</span><b>' + kcFull(a.ucetni) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('akcie.vydano')) + '</span><b>' + tCislo(a.vydano)

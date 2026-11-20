@@ -70,6 +70,16 @@ function ucetni(hodnotaFondu, podilAkcionaru, akcii) {
   return Math.max(0, Math.round((Math.max(0, cislo(hodnotaFondu)) * f) / a));
 }
 
+// Tatáž účetní hodnota nezaokrouhlená. Používá se tam, kde se proti ní měří
+// další změna — při přecenění. Zaokrouhlená reference by do každého kroku
+// přidala pár korun chyby a cena by se pomalu rozcházela s tím, co za ní stojí.
+function ucetniPresna(hodnotaFondu, podilAkcionaru, akcii) {
+  const a = kusy(akcii);
+  if (!(a > 0)) return 0;
+  const f = Math.max(0, Math.min(1, cislo(podilAkcionaru)));
+  return Math.max(0, (Math.max(0, cislo(hodnotaFondu)) * f) / a);
+}
+
 // Co z fondu zbývá členům. Mezi sebou si to dělí dál podle vkladů.
 function dilClenu(podilAkcionaru) {
   return Math.max(0, 1 - Math.max(0, Math.min(1, cislo(podilAkcionaru))));
@@ -179,5 +189,24 @@ function vynosNaAkcii(neseMesicne, podil, vydano) {
   return Math.round((n * p) / v);
 }
 
-module.exports = { vydani, ucetni, dilClenu, cenaPo, castkaZa, koupit, prodat, kapital, vynosNaAkcii,
+// Přecenění akcie podle toho, co za ní stojí.
+//
+// Cenou nehýbe jen obchodování. Když fond koupí podíl pod cenou nebo mu
+// držená firma poroste, vyroste i účetní hodnota akcie — a cena má jít s tím.
+// Posouvá se STEJNĚM POMĚREM, takže prémie nebo diskont proti účetní hodnotě
+// zůstane, jaký byl: trh dál oceňuje fond po svém, jen už nestojí na místě,
+// když se jmění pod ním hne.
+//
+// Bez čísla, proti kterému se měří (první běh, fond bez vydaných akcií),
+// se cena nehne — jen se zapamatuje, kde teď je.
+function precena(cena, ucetniPred, ucetniTed) {
+  const c = penize(cena);
+  const pred = Math.max(0, cislo(ucetniPred));
+  const ted = Math.max(0, cislo(ucetniTed));
+  if (!(c > 0) || !(pred > 0) || !(ted > 0)) return c;
+  const nova = Math.round(c * (ted / pred));
+  return Math.max(CENA_MIN, Math.min(CENA_MAX, nova));
+}
+
+module.exports = { vydani, ucetni, ucetniPresna, dilClenu, cenaPo, castkaZa, koupit, prodat, kapital, vynosNaAkcii, precena,
   CENA_MIN, CENA_MAX, POCET_MIN, POCET_MAX, PODIL_MAX, CITLIVOST };

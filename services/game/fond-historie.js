@@ -13,6 +13,7 @@
 const { prisma } = require('../../config/database');
 const FOND = require('./fond');
 const JMENI = require('./jmeni');
+const PRECENA = require('./akcie-cena');
 
 const VZOREK_MS = 3600000;      // jak často se bere vzorek
 const DRZET_DNU = 120;          // jak dlouho se vzorky nechávají
@@ -111,6 +112,13 @@ async function vzorkuj(ted) {
     where: { aliance_id: { in: fondy.map((f) => f.id) }, kdy: { gt: mez } },
     select: { aliance_id: true } });
   radky.forEach((r) => posledni.set(r.aliance_id, true));
+  // Přecenění akcií jde s každým kolem: cena akcie se hýbe s hodnotou fondu,
+  // ne jen s obchodováním. Dělá se u všech fondů, i u těch, kterým se vzorek
+  // teď nepíše — vzorek se vynechá kvůli času, přecenění kvůli ničemu.
+  for (const f of fondy) {
+    await PRECENA.precenFondu(f.id, f.hodnota)
+      .catch((e) => console.warn('[game-akcie-precena]', e && e.message));
+  }
   const nove = fondy.filter((f) => !posledni.has(f.id)).map((f) => ({
     aliance_id: f.id, kdy,
     pokladna: f.pokladna, podily: Math.max(0, f.hodnota - f.pokladna),
@@ -146,6 +154,11 @@ async function vzorkujFond(alianceId, ted) {
   const kdy = ted instanceof Date ? ted : new Date();
   const f = (await hodnoty()).find((x) => x.id === id);
   if (!f) return 0;
+  // Nejdřív přecenění: nákup podílu pod cenou zhodnotil i akcie a hráč to
+  // má vidět hned, ne až za hodinu. Běží i tehdy, když se vzorek nakonec
+  // nezapíše — rovná čára v grafu ceny by lhala stejně jako v grafu fondu.
+  await PRECENA.precenFondu(id, f.hodnota)
+    .catch((e) => console.warn('[game-akcie-precena]', e && e.message));
   const [posl] = await prisma.gameFondHistorie.findMany({
     where: { aliance_id: id }, orderBy: { kdy: 'desc' }, take: 1,
     select: { pokladna: true, hodnota: true } });

@@ -8355,6 +8355,10 @@ model GameAliance {
   akcie_vydano  Int      @default(0)
   akcie_podil   Float    @default(0)
   akcie_cena    Int      @default(0)
+  // Účetní hodnota akcie, proti které se měří další přecenění. Cenou totiž
+  // nehýbe jen obchodování: když fond koupí podíl pod cenou nebo mu držená
+  // firma poroste, vyroste i to, co za akcií stojí — a cena jde s tím.
+  akcie_ucetni  Float    @default(0)
   created_at    DateTime @default(now())
 
   @@map("game_aliance")
@@ -8408,6 +8412,23 @@ model GameAkcieObchod {
   @@index([aliance_id, kdy], map: "game_akcie_obchod_graf")
   @@index([kupujici_id])
   @@map("game_akcie_obchod")
+}
+
+// Řada cen akcie. Graf se kreslí odsud, ne z obchodů: cena se hýbe i tehdy,
+// když se s akciemi vůbec neobchoduje — stačí, aby se pohnula hodnota fondu.
+// Důvod se ukládá s ní, ať je poznat obchod od přecenění.
+model GameAkcieCena {
+  id         Int      @id @default(autoincrement())
+  aliance_id Int
+  cena       Int
+  // obchod | precena
+  duvod      String   @db.VarChar(12)
+  // Účetní hodnota akcie v tu chvíli.
+  ucetni     Float    @default(0)
+  kdy        DateTime @default(now())
+
+  @@index([aliance_id, kdy], map: "game_akcie_cena_graf")
+  @@map("game_akcie_cena")
 }
 
 // Návrh ve fondu aliance. O penězích fondu nerozhoduje jeden člověk: váha
