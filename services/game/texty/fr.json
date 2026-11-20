@@ -3508,7 +3508,7 @@
   "prevzeti.vyhlasit": "Lancer l'offre",
   "prevzeti.vyhlaseno": "Offre en cours. Les actionnaires la voient sur la place d'échange.",
   "veta.prevzeti_radek": "{p1} offre {p2} par pourcent.",
-  "veta.prevzeti_na_tvoji_firmu_rada": "Les actionnaires décident seuls. Ta propre part, personne ne peut te la prendre.",
+  "veta.prevzeti_na_tvoji_firmu_rada": "Chaque associé décide pour lui-même. Personne ne peut te prendre ta part — tu ne la vends que si tu le veux.",
   "veta.prodat_podil_v": "Vendre une part dans l'entreprise {p1}",
   "veta.prevzeti_prodej_popis": "{p1} rachète les parts à {p2} le pourcent.",
   "veta.prevzeti_prodej_rada": "Tu ne vends que ce que tu indiques ici. Le reste de ta part reste à toi.",
@@ -3761,5 +3761,6 @@
   "hra.splatka_neprosla_jinde": "Le paiement n’est pas passé — cette partie est ouverte ailleurs et c’est l’autre qui compte. Ferme-la et réessaie.",
   "hra.na_graf_je_jeste_brzo": "Il est encore trop tôt pour un graphique.",
   "jazyk.pt": "Portugais (BR)",
-  "fond.na_provedeni_chybi": "Il manque {penize:p1}. Les offres en cours immobilisent {penize:p2}."
+  "fond.na_provedeni_chybi": "Il manque {penize:p1}. Les offres en cours immobilisent {penize:p2}.",
+  "prevzeti.ztratis_vetsinu": "Cette vente te fait perdre la majorité dans ta propre société — il te resterait {p1} %. C’est sans retour."
 }

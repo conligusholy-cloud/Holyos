@@ -3505,7 +3505,7 @@
   "prevzeti.vyhlasit": "Anunciar oferta",
   "prevzeti.vyhlaseno": "Oferta em andamento. Os sócios vão ver na central de trocas.",
   "veta.prevzeti_radek": "{p1} oferece {p2} por cada por cento.",
-  "veta.prevzeti_na_tvoji_firmu_rada": "Os sócios decidem por si. Ninguém pode tomar sua própria participação.",
+  "veta.prevzeti_na_tvoji_firmu_rada": "Os sócios decidem por si. Ninguém pode tomar sua parte — você só a vende se quiser.",
   "veta.prodat_podil_v": "Vender participação na empresa {p1}",
   "veta.prevzeti_prodej_popis": "{p1} recompra participações por {p2} por um por cento.",
   "veta.prevzeti_prodej_rada": "Você vende só o que informar aqui. O resto da participação fica com você.",
@@ -3754,5 +3754,6 @@
   "veta.fond_drzi_nese": "{penize:p1} por mês · empresa paga {cislo:p2} % do lucro",
   "veta.fond_drzi_nenese": "Ainda nada — empresa paga {cislo:p1} % do lucro",
   "jazyk.pt": "Português (BR)",
-  "fond.na_provedeni_chybi": "Faltam {penize:p1}. As ofertas abertas seguram {penize:p2}."
+  "fond.na_provedeni_chybi": "Faltam {penize:p1}. As ofertas abertas seguram {penize:p2}.",
+  "prevzeti.ztratis_vetsinu": "Com esta venda você perde a maioria na sua própria empresa — ficaria com {p1} %. Não dá para desfazer."
 }

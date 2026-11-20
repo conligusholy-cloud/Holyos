@@ -2315,10 +2315,17 @@ router.post('/trade/prevzeti/:id/prodat', hrac, api(async (req, res) => {
   // Předběžně, ať se hráč dozví slušnou hlášku dřív, než se sáhne na
   // databázi. Závazné je ale až to, co se spočítá uvnitř transakce —
   // mezi těmihle řádky a zápisem může prodat někdo další.
-  const mamHrube = (await prisma.gameEquity.findMany({
-    where: { firma_id: t.firma_id, investor_id: req.player.id, stav: 'bezi' },
-    select: { podil: true },
-  })).reduce((a, e) => a + (e.podil || 0), 0);
+  // Majitel firmy v evidenci podílů řádek nemá — drží ten zbytek, který
+  // nikomu neprodal. Dřív se tady odmítl s tím, že v té firmě nic nedrží,
+  // takže do nabídky na vlastní firmu nemohl prodat vůbec. Přitom nabídka
+  // míří hlavně na něj: ostatní podílníci drží jen to, co jim sám prodal.
+  const jsemFirma = t.firma_id === req.player.id;
+  const mamHrube = jsemFirma
+    ? await PREVZETI.zbyvaMajiteli(t.firma_id)
+    : (await prisma.gameEquity.findMany({
+        where: { firma_id: t.firma_id, investor_id: req.player.id, stav: 'bezi' },
+        select: { podil: true },
+      })).reduce((a, e) => a + (e.podil || 0), 0);
   if (!(mamHrube > 0)) return res.status(409).json({ error: stx(req)('server.v_teto_firme_nic_nedrzis') });
   const zadano = Number(req.body && req.body.podil) || 0;
 
@@ -2335,7 +2342,9 @@ router.post('/trade/prevzeti/:id/prodat', hrac, api(async (req, res) => {
       where: { firma_id: tt.firma_id, investor_id: req.player.id, stav: 'bezi' },
       orderBy: { id: 'asc' },
     });
-    const mam = moje.reduce((a, e) => a + (e.podil || 0), 0);
+    const mam = jsemFirma
+      ? await PREVZETI.zbyvaMajiteli(tt.firma_id)
+      : moje.reduce((a, e) => a + (e.podil || 0), 0);
     if (!(mam > 0)) throw new SOUBEH.Soubeh('server.v_teto_firme_nic_nedrzis');
 
     const podil = Math.min(zadano > 0 ? zadano : mam, mam, PREVZETI.zbyva(tt));
@@ -2371,7 +2380,16 @@ router.post('/trade/prevzeti/:id/prodat', hrac, api(async (req, res) => {
     const komuPatri = fond
       ? { investor_id: null, investor_nick: fond.nazev, fond_id: fond.id }
       : { investor_id: utocnik.id, investor_nick: utocnik.nick, fond_id: null };
-    let zbyvaVzit = podil;
+    // Majitel nemá z čeho ukrajovat — jeho podíl je dopočet do sta procent.
+    // Prodejem tedy jen přibude řádek kupujícímu a majiteli se zbytek
+    // zmenší sám tím, že prodaného je víc.
+    if (jsemFirma) {
+      await tx.gameEquity.create({ data: Object.assign({
+        firma_id: tt.firma_id, firma_nick: tt.firma_nick,
+        podil, cena: PREVZETI.cenaZa(tt, podil),
+        dalsi_at: new Date(Date.now() + MESIC_MS) }, komuPatri) });
+    }
+    let zbyvaVzit = jsemFirma ? 0 : podil;
     for (const e of moje) {
       if (zbyvaVzit <= 1e-9) break;
       const vezmi = Math.min(e.podil, zbyvaVzit);

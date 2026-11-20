@@ -10632,24 +10632,39 @@ function prevzetiHtml() {
           + '<div class="row"><span class="muted small">'
           + esc(tx(t.trvala ? 'prevzeti.plati' : 'prevzeti.dobehne')) + '</span>'
           + '<span>' + (t.trvala ? esc(tx('prevzeti.bez_lhuty')) : zaKolik(t.do)) + '</span></div>'
+          // Na vlastní firmu platí obojí naráz: nikdo mi podíl nevezme, a
+          // zároveň ho můžu prodat, když chci. Dřív se tyhle dvě věci
+          // vylučovaly a majitel viděl jen tu větu — tlačítko k prodeji
+          // nedostal, i když nabídka mířila především na jeho podíl.
+          + (t.na_moji_firmu
+              ? '<p class="fine warn">' + esc(tx('veta.prevzeti_na_tvoji_firmu_rada')) + '</p>' : '')
           + (jaProdam
               ? '<div class="row"><span class="muted small">' + esc(tx('prevzeti.ty_drzis')) + '</span>'
                 + '<span class="ok">' + procentaPodilu(t.muj_podil) + ' \u00b7 '
                 + kcFull(Math.round(t.muj_podil * 100 * t.cena_za_pct)) + '</span></div>'
                 + '<div class="gcard-act"><button class="btn sm" data-prevzeti="' + t.id + '">'
                 + esc(tx('prevzeti.prodat_do_nabidky')) + '</button></div>'
-              : t.na_moji_firmu
-                ? '<p class="fine warn">' + esc(tx('veta.prevzeti_na_tvoji_firmu_rada')) + '</p>'
-                : t.moje
-                  ? '<div class="gcard-act"><button class="btn sm sec" data-prevzeti-zrus="' + t.id + '">'
-                    + esc(tx('prevzeti.stahnout')) + '</button></div>'
-                  : '')
+              : t.moje
+                ? '<div class="gcard-act"><button class="btn sm sec" data-prevzeti-zrus="' + t.id + '">'
+                  + esc(tx('prevzeti.stahnout')) + '</button></div>'
+                : '')
           + '</div>';
       }).join('')
     + '</div>';
 }
 // Prodej do nabídky. Prodat jde i kus — kdo si chce část podílu nechat,
 // nemá důvod pouštět všechno.
+// Co z firmy zbude mně, když do nabídky prodám. Řekne se to tehdy, když tím
+// přijdu o většinu ve vlastní firmě — o tom, kdo určuje dividendu, rozhoduje
+// nadpoloviční podíl a prodej zpátky vzít nejde. Na cizí firmu se nic neříká:
+// tam jsem podílník jako každý jiný a žádnou většinu neztrácím.
+var VETSINA_PODILU = 0.5;
+function prevzetiVarovani(t, prodam) {
+  if (!t.na_moji_firmu || !(prodam > 0)) return '';
+  var po = (t.muj_podil || 0) - prodam;
+  if (!((t.muj_podil || 0) > VETSINA_PODILU && po <= VETSINA_PODILU)) return '';
+  return tx('prevzeti.ztratis_vetsinu', { p1: Math.round(po * 1000) / 10 });
+}
 function prevzetiSheet(t) {
   var maxPct = Math.min(t.muj_podil, t.zbyva_pct);
   sheet('<h3>' + tx('veta.prodat_podil_v', { p1: esc(t.firma) }) + '</h3>'
@@ -10661,6 +10676,7 @@ function prevzetiSheet(t) {
     + pctHra(maxPct) + '" value="' + pctHra(maxPct) + '"></label>'
     + '<div class="kv souhrn"><span>' + esc(tx('prevzeti.dostanes')) + '</span>'
     + '<b id="pz-vysledek">\u2014</b></div>'
+    + '<p class="fine err" id="pz-varovani" style="display:none"></p>'
     + '<p class="fine">' + esc(tx('veta.prevzeti_prodej_rada')) + '</p>'
     + '<button class="btn big" id="pz-ok" style="width:100%;margin-top:10px">'
     + esc(tx('prevzeti.prodat_do_nabidky')) + '</button>'
@@ -10676,6 +10692,8 @@ function prevzetiSheet(t) {
     var p = pct();
     if (Number($('pz-pct').value) > pctHra(maxPct)) $('pz-pct').value = pctHra(maxPct);
     $('pz-vysledek').textContent = kcFull(Math.round(p * 100 * t.cena_za_pct));
+    var v = prevzetiVarovani(t, p), pole = $('pz-varovani');
+    if (pole) { pole.textContent = v; pole.style.display = v ? '' : 'none'; }
   };
   $('pz-pct').oninput = prepocti; prepocti();
   $('pz-ne').onclick = closeSheet;

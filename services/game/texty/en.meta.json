@@ -3491,7 +3491,7 @@
   "prevzeti.vyhlasit": "5bb0cf861721",
   "prevzeti.vyhlaseno": "a0c2f4212c15",
   "veta.prevzeti_radek": "95383bee551a",
-  "veta.prevzeti_na_tvoji_firmu_rada": "6bb563a1144f",
+  "veta.prevzeti_na_tvoji_firmu_rada": "2c6b2a1452ad",
   "veta.prodat_podil_v": "171933607e59",
   "veta.prevzeti_prodej_popis": "a172a79d1652",
   "veta.prevzeti_prodej_rada": "0a0ae09af7a8",
@@ -3741,5 +3741,6 @@
   "veta.fond_drzi_nese": "fe3f9e426524",
   "veta.fond_drzi_nenese": "9b616711c5d8",
   "jazyk.pt": "bbafff37653e",
-  "fond.na_provedeni_chybi": "fc187459b4b8"
+  "fond.na_provedeni_chybi": "fc187459b4b8",
+  "prevzeti.ztratis_vetsinu": "48ea057fcf34"
 }

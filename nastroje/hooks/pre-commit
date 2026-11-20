@@ -147,6 +147,17 @@ if git diff --cached --name-only | grep -qE 'services/game/zlocin'; then
   fi
 fi
 
+# Prodej majitele do veřejné nabídky na vlastní firmu. Majitel nemá v evidenci
+# řádek a dřív proto prodat nemohl vůbec. Chyba tady buď prodej zablokuje,
+# nebo pustí majitele pod sto procent firmy.
+if git diff --cached --name-only | grep -qE 'services/game/prevzeti|routes/game-trade|public/compounder/game/game.js'; then
+  if ! node nastroje/tprodejmajitele.js; then
+    echo ""
+    echo "STOP: prodej majitele do nabídky nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Co schválenému návrhu fondu chybí, aby šel provést. Měří se proti volným
 # penězům, ne proti pokladně — proti pokladně se návrh dostal na hlasování
 # a po dni hlasování spadl na to, že fond nemá.

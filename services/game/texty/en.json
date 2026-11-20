@@ -3512,7 +3512,7 @@
   "prevzeti.vyhlasit": "Post offer",
   "prevzeti.vyhlaseno": "Offer is live. Shareholders will see it on the exchange.",
   "veta.prevzeti_radek": "{p1} offers {p2} for each percent.",
-  "veta.prevzeti_na_tvoji_firmu_rada": "Shareholders decide for themselves. No one can take your own stake.",
+  "veta.prevzeti_na_tvoji_firmu_rada": "Shareholders decide for themselves. Nobody can take your stake — you sell it only if you want to.",
   "veta.prodat_podil_v": "Sell stake in company {p1}",
   "veta.prevzeti_prodej_popis": "{p1} is buying out stakes for {p2} per one percent.",
   "veta.prevzeti_prodej_rada": "You only sell what you enter here. The rest of your stake stays with you.",
@@ -3761,5 +3761,6 @@
   "veta.fond_drzi_nese": "{penize:p1} a month · the company pays out {cislo:p2} % of its profit",
   "veta.fond_drzi_nenese": "Nothing yet — the company pays out {cislo:p1} % of its profit",
   "jazyk.pt": "Portuguese (BR)",
-  "fond.na_provedeni_chybi": "{penize:p1} short. Open offers are holding {penize:p2}."
+  "fond.na_provedeni_chybi": "{penize:p1} short. Open offers are holding {penize:p2}.",
+  "prevzeti.ztratis_vetsinu": "This sale costs you majority control of your own company — you would keep {p1} %. It cannot be undone."
 }

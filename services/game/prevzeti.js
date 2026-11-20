@@ -90,6 +90,27 @@ function smiVystupni(podily, kdo) {
 
 // Nabídky, které se týkají hráče: jeho vlastní, ty na jeho firmu, a ty na
 // firmy, ve kterých drží podíl. Do cizích sporů mu nic není.
+// Kolik firmy drží ještě její majitel. Prodané podíly i podíl zastavený
+// u věřitele se počítají stejně — oboje je pryč, oboje se nesmí prodat
+// podruhé. Stejné pravidlo jako u nabídky podílu fondu.
+async function zbyvaMajiteli(firmaId) {
+  const [eq, zastavy] = await Promise.all([
+    prisma.gameEquity.findMany({
+      where: { firma_id: firmaId, stav: 'bezi' }, select: { podil: true } }),
+    prisma.gameLoan.findMany({
+      where: { borrower_id: firmaId, stav: 'bezi', zastava_podil: { not: null } },
+      select: { zastava_podil: true } }),
+  ]);
+  return zbyvaZ(eq.map((x) => x.podil), zastavy.map((x) => x.zastava_podil));
+}
+// Samotný počet, oddělený od databáze, aby se dal otestovat. Přeprodaná firma
+// je chyba dat, ne nabídka k prodeji: zápor se ořízne na nulu, jinak by se
+// z něj po vynásobení cenou stala záporná částka k výplatě.
+function zbyvaZ(prodane, zastavene) {
+  const souc = (p) => (Array.isArray(p) ? p : []).reduce((a, x) => a + (Number(x) || 0), 0);
+  return Math.max(0, Math.min(1, 1 - souc(prodane) - souc(zastavene)));
+}
+
 async function proHrace(jaId) {
   const ted = Date.now();
   const moje = await prisma.gameEquity.findMany({
@@ -105,10 +126,17 @@ async function proHrace(jaId) {
   });
   const drzim = new Map();
   moje.forEach((e) => drzim.set(e.firma_id, (drzim.get(e.firma_id) || 0) + (e.podil || 0)));
+  // Majitel firmy nemá v evidenci podílů žádný řádek: jeho podíl je ten
+  // zbytek, který nikomu neprodal. Bez tohohle čísla mu u nabídky na vlastní
+  // firmu nesvítilo tlačítko a server mu tvrdil, že v ní nic nedrží —
+  // přitom je to právě on, kdo ten podíl má, a nabídka míří hlavně na něj.
+  // Zastavený podíl se počítá jako prodaný: je vázaný u věřitele.
+  const vlastni = rows.some((t) => t.firma_id === jaId)
+    ? await zbyvaMajiteli(jaId) : 0;
   return rows.map((t) => Object.assign(verejna(t, jaId, ted), {
-    muj_podil: drzim.get(t.firma_id) || 0,
+    muj_podil: t.firma_id === jaId ? vlastni : (drzim.get(t.firma_id) || 0),
   })).filter((t) => t.stav === 'bezi');
 }
 
-module.exports = { stav, zbyva, cenaZa, verejna, proHrace, minCenaZaPct, smiVystupni,
+module.exports = { stav, zbyva, cenaZa, verejna, proHrace, zbyvaMajiteli, zbyvaZ, minCenaZaPct, smiVystupni,
   HODIN_MIN, HODIN_MAX, HODIN_VYCHOZI, PCT_MIN, PCT_MAX, CENA_MIN, PRAH_VYSTUPNI };

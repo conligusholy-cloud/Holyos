@@ -3509,7 +3509,7 @@
   "prevzeti.vyhlasit": "Anunciar oferta",
   "prevzeti.vyhlaseno": "Oferta en marcha. Los socios la verán en el mercado.",
   "veta.prevzeti_radek": "{p1} ofrece {p2} por cada por ciento.",
-  "veta.prevzeti_na_tvoji_firmu_rada": "Los socios deciden por sí mismos. Tu propia participación nadie te la puede quitar.",
+  "veta.prevzeti_na_tvoji_firmu_rada": "Los accionistas deciden por sí mismos. Nadie puede quitarte tu parte — la vendes solo si quieres.",
   "veta.prodat_podil_v": "Vender participación en la empresa {p1}",
   "veta.prevzeti_prodej_popis": "{p1} recompra participaciones por {p2} por cada por ciento.",
   "veta.prevzeti_prodej_rada": "Vendes solo lo que indiques aquí. El resto de la participación te queda.",
@@ -3761,5 +3761,6 @@
   "veta.fond_odchod_posledni": "Eres el último miembro: al salir, el fondo se disuelve entero.",
   "hra.splatka_neprosla_jinde": "El pago no se ha realizado: esta partida está abierta en otro sitio y manda la otra. Ciérrala e inténtalo de nuevo.",
   "jazyk.pt": "Portugués (BR)",
-  "fond.na_provedeni_chybi": "Faltan {penize:p1}. Las ofertas abiertas retienen {penize:p2}."
+  "fond.na_provedeni_chybi": "Faltan {penize:p1}. Las ofertas abiertas retienen {penize:p2}.",
+  "prevzeti.ztratis_vetsinu": "Con esta venta pierdes la mayoría en tu propia empresa — te quedaría {p1} %. No se puede deshacer."
 }

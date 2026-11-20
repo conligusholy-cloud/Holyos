@@ -3516,7 +3516,7 @@
   "prevzeti.vyhlasit": "Ogłosić ofertę",
   "prevzeti.vyhlaseno": "Oferta działa. Udziałowcy zobaczą ją na giełdzie.",
   "veta.prevzeti_radek": "{p1} oferuje {p2} za każdy procent.",
-  "veta.prevzeti_na_tvoji_firmu_rada": "Udziałowcy decydują sami za siebie. Twojego własnego udziału nikt ci nie może zabrać.",
+  "veta.prevzeti_na_tvoji_firmu_rada": "Udziałowcy decydują sami za siebie. Twojego udziału nikt ci nie zabierze — sprzedasz go tylko, jeśli sam zechcesz.",
   "veta.prodat_podil_v": "Sprzedać udział w firmie {p1}",
   "veta.prevzeti_prodej_popis": "{p1} skupuje udziały za {p2} za jeden procent.",
   "veta.prevzeti_prodej_rada": "Sprzedajesz tylko tyle, ile tu podasz. Reszta udziału zostaje przy tobie.",
@@ -3768,5 +3768,6 @@
   "veta.fond_odchod_posledni": "Jesteś ostatnim członkiem — twoje odejście rozwiązuje cały fundusz.",
   "hra.splatka_neprosla_jinde": "Spłata nie przeszła — ta gra jest otwarta jeszcze gdzie indziej i liczy się tamta. Zamknij ją i spróbuj ponownie.",
   "jazyk.pt": "Portugalski (BR)",
-  "fond.na_provedeni_chybi": "Brakuje {penize:p1}. Wystawione oferty trzymają {penize:p2}."
+  "fond.na_provedeni_chybi": "Brakuje {penize:p1}. Wystawione oferty trzymają {penize:p2}.",
+  "prevzeti.ztratis_vetsinu": "Tą sprzedażą tracisz większość we własnej firmie — zostanie ci {p1} %. Tego nie da się cofnąć."
 }

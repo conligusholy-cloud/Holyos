@@ -3519,7 +3519,7 @@
   "prevzeti.vyhlasit": "Vyhlásit nabídku",
   "prevzeti.vyhlaseno": "Nabídka běží. Podílníci ji uvidí na burze.",
   "veta.prevzeti_radek": "{p1} nabízí {p2} za každé procento.",
-  "veta.prevzeti_na_tvoji_firmu_rada": "Podílníci se rozhodují sami za sebe. Tvůj vlastní podíl ti nikdo vzít nemůže.",
+  "veta.prevzeti_na_tvoji_firmu_rada": "Podílníci se rozhodují sami za sebe. Tvůj podíl ti nikdo vzít nemůže — prodáš ho, jen když sám chceš.",
   "veta.prodat_podil_v": "Prodat podíl ve firmě {p1}",
   "veta.prevzeti_prodej_popis": "{p1} vykupuje podíly za {p2} za jedno procento.",
   "veta.prevzeti_prodej_rada": "Prodáváš jen tolik, kolik tady zadáš. Zbytek podílu ti zůstane.",
@@ -3768,5 +3768,6 @@
   "veta.fond_drzi_nese": "{penize:p1} měsíčně · firma vyplácí {cislo:p2} % zisku",
   "veta.fond_drzi_nenese": "Zatím nic — firma vyplácí {cislo:p1} % zisku",
   "jazyk.pt": "Portugalština (BR)",
-  "fond.na_provedeni_chybi": "Na provedení chybí {penize:p1}. Vyvěšené nabídky drží {penize:p2}."
+  "fond.na_provedeni_chybi": "Na provedení chybí {penize:p1}. Vyvěšené nabídky drží {penize:p2}.",
+  "prevzeti.ztratis_vetsinu": "Tímhle prodejem přijdeš o většinu ve vlastní firmě — zbude ti {p1} %. Zpátky to vzít nejde."
 }

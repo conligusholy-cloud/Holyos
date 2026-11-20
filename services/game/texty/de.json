@@ -3509,7 +3509,7 @@
   "prevzeti.vyhlasit": "Angebot starten",
   "prevzeti.vyhlaseno": "Angebot läuft. Anteilseigner sehen es auf der Börse.",
   "veta.prevzeti_radek": "{p1} bietet {p2} pro Prozent.",
-  "veta.prevzeti_na_tvoji_firmu_rada": "Anteilseigner entscheiden selbst. Deinen eigenen Anteil kann dir niemand nehmen.",
+  "veta.prevzeti_na_tvoji_firmu_rada": "Die Anteilseigner entscheiden selbst. Deinen Anteil kann dir niemand nehmen — du verkaufst ihn nur, wenn du willst.",
   "veta.prodat_podil_v": "Anteil an Firma {p1} verkaufen",
   "veta.prevzeti_prodej_popis": "{p1} kauft Anteile für {p2} pro Prozent.",
   "veta.prevzeti_prodej_rada": "Du verkaufst nur so viel, wie du hier eingibst. Der Rest deines Anteils bleibt dir.",
@@ -3761,5 +3761,6 @@
   "veta.fond_odchod_posledni": "Du bist das letzte Mitglied — mit deinem Austritt wird der Fonds ganz aufgelöst.",
   "hra.splatka_neprosla_jinde": "Die Zahlung ging nicht durch — dieses Spiel ist noch woanders offen und das andere gilt. Schließ es und versuch es noch einmal.",
   "jazyk.pt": "Portugiesisch (BR)",
-  "fond.na_provedeni_chybi": "Es fehlen {penize:p1}. Laufende Angebote binden {penize:p2}."
+  "fond.na_provedeni_chybi": "Es fehlen {penize:p1}. Laufende Angebote binden {penize:p2}.",
+  "prevzeti.ztratis_vetsinu": "Mit diesem Verkauf verlierst du die Mehrheit an deiner eigenen Firma — dir blieben {p1} %. Das lässt sich nicht rückgängig machen."
 }
