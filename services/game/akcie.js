@@ -208,5 +208,25 @@ function precena(cena, ucetniPred, ucetniTed) {
   return Math.max(CENA_MIN, Math.min(CENA_MAX, nova));
 }
 
-module.exports = { vydani, ucetni, ucetniPresna, dilClenu, cenaPo, castkaZa, koupit, prodat, kapital, vynosNaAkcii, precena,
+// Kniha akcionářů: co komu patří.
+//
+// Dvě různá procenta, která se snadno pletou:
+//   podil_akcii  kolik má ten člověk mezi akcionáři — z VYDANÝCH kusů,
+//   podil_fondu  co to znamená v celém fondu — tedy krát díl akcionářů.
+// První říká, kdo má mezi akcionáři navíc, druhé, co doopravdy vlastní.
+// Nevydané kusy do knihy nepatří: ty drží fond sám a nikomu je nepočítáme.
+function kniha(radky, vydano, podilAkcionaru, cena) {
+  const v = kusy(vydano);
+  const f = Math.max(0, Math.min(1, cislo(podilAkcionaru)));
+  const c = penize(cena);
+  return (radky || []).filter((r) => r && kusy(r.pocet) > 0).map((r) => {
+    const n = kusy(r.pocet);
+    return { player_id: r.player_id, kusy: n,
+      podil_akcii: v > 0 ? n / v : 0,
+      podil_fondu: v > 0 ? f * (n / v) : 0,
+      hodnota: castkaZa(c, n) };
+  });
+}
+
+module.exports = { vydani, ucetni, ucetniPresna, dilClenu, kniha, cenaPo, castkaZa, koupit, prodat, kapital, vynosNaAkcii, precena,
   CENA_MIN, CENA_MAX, POCET_MIN, POCET_MAX, PODIL_MAX, CITLIVOST };

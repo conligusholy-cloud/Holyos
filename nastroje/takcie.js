@@ -176,6 +176,32 @@ ok('fond, který nenese nic, nenese nic ani na akcii',
 ok('bez dílu akcionářů taky nic', A.vynosNaAkcii(1000000, 0, 100) === 0);
 ok('nesmysly nic nerozbijí', A.vynosNaAkcii('x', 'y', 'z') === 0);
 
+// ─── Kniha akcionářů ────────────────────────────────────────────
+// Dvě různá procenta, která se snadno pletou: kolik má kdo mezi akcionáři,
+// a co to znamená v celém fondu. Podle prvního se pozná, kdo může hnout cenou;
+// podle druhého, co doopravdy vlastní.
+const kn = A.kniha([{ player_id: 1, pocet: 300 }, { player_id: 2, pocet: 200 }],
+  500, 0.4, 1000);
+ok('v knize jsou oba', kn.length === 2);
+ok('podíl z akcií je z vydaných kusů', blizko(kn[0].podil_akcii, 0.6));
+ok('a podíly akcionářů dávají dohromady celek',
+  blizko(kn[0].podil_akcii + kn[1].podil_akcii, 1));
+ok('podíl z fondu je ten první krát díl akcionářů', blizko(kn[0].podil_fondu, 0.24));
+ok('a dohromady dávají díl akcionářů',
+  blizko(kn[0].podil_fondu + kn[1].podil_fondu, 0.4));
+ok('hodnota je kusy krát cena', kn[0].hodnota === 300000);
+// Nevydané kusy do knihy nepatří — ty drží fond sám. Kdyby se počítaly do
+// jmenovatele, vypadal by každý akcionář slabší, než je.
+ok('počítá se z vydaných, ne ze všech kusů',
+  blizko(A.kniha([{ player_id: 1, pocet: 300 }], 500, 0.4, 0)[0].podil_akcii, 0.6));
+// Nula akcií v řádku je zbytek po prodeji — do knihy nepatří.
+ok('kdo už nic nedrží, v knize není',
+  A.kniha([{ player_id: 1, pocet: 0 }, { player_id: 2, pocet: 5 }], 5, 1, 10).length === 1);
+ok('bez vydaných kusů se nedělí nulou',
+  A.kniha([{ player_id: 1, pocet: 3 }], 0, 0.5, 10)[0].podil_akcii === 0);
+ok('prázdno a nesmysly nic neshodí',
+  A.kniha(null, 10, 0.5, 10).length === 0 && A.kniha([null, {}], 10, 0.5, 10).length === 0);
+
 // ─── Zapojení ────────────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');

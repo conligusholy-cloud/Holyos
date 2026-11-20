@@ -2781,6 +2781,40 @@ router.get('/trade/akcie/:id', hrac, api(async (req, res) => {
   }) });
 }));
 
+// GET /trade/akcie/:id/kniha → kdo drží akcie fondu a kolik
+//
+// Kniha akcionářů je veřejná schválně: akcie si může koupit kdokoli a kdo
+// do fondu dává peníze, má vědět, s kým je v tom — a jestli už někdo nedírží
+// balík, kterým se dá hnout cenou.
+router.get('/trade/akcie/:id/kniha', hrac, api(async (req, res) => {
+  const alianceId = parseInt(req.params.id, 10) || 0;
+  const al = await prisma.gameAliance.findUnique({ where: { id: alianceId } });
+  if (!al) return res.status(404).json({ error: stx(req)('server.takovy_fond_tu_neni') });
+  const radky = await prisma.gameAkcie.findMany({
+    where: { aliance_id: alianceId, pocet: { gt: 0 } },
+    orderBy: { pocet: 'desc' }, take: 200,
+    select: { player_id: true, pocet: true } });
+  const lide = radky.length ? await prisma.gamePlayer.findMany({
+    where: { id: { in: radky.map((r) => r.player_id) } },
+    select: { id: true, nick: true, company: true } }) : [];
+  const jm = new Map(lide.map((h) => [h.id, h.company || h.nick]));
+  const celkem = Math.max(0, al.akcie_celkem || 0);
+  const vydano = Math.max(0, al.akcie_vydano || 0);
+  const cena = Math.max(0, Math.round(al.akcie_cena || 0));
+  const podil = Math.max(0, al.akcie_podil || 0);
+  res.json({ ok: true, kniha: {
+    aliance_id: alianceId, nazev: al.nazev, celkem, vydano, cena,
+    // Co fond nevydal, drží dál sám — patří to do knihy, jinak procínta
+    // neseděla na sto.
+    nevydano: Math.max(0, celkem - vydano),
+    // Pročentu počítá services/game/akcie — dvě různá procenta, která se
+    // snadno pletou, patří k ostatnímu počítání akcií, ne do routy.
+    akcionari: AKCIE.kniha(radky, vydano, podil, cena).map((x) => Object.assign(x, {
+      kdo: jm.get(x.player_id) || ('#' + x.player_id),
+      ja: x.player_id === req.player.id })),
+  } });
+}));
+
 // POST /trade/akcie/:id/obchod { smer, pocet } → koupit od fondu / prodat fondu
 //
 // Cena se neposílá. Bere se ta, která právě platí, a po obchodu se posune —

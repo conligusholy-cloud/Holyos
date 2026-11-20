@@ -3837,5 +3837,11 @@
   "hra.cena_za_kus": "Precio por unidad",
   "veta.objednat_kusu": "Pedir {cislo:p1}×",
   "veta.objednano_kusu": "{cislo:p1}× {p2} pedido. Llega {p3}.",
-  "veta.pradlomatu_kusu": "{cislo:p1}× Lavandería {p2}"
+  "veta.pradlomatu_kusu": "{cislo:p1}× Lavandería {p2}",
+  "akcie.kniha": "Libro de accionistas",
+  "akcie.kniha_popis": "quién tiene acciones del fondo y cuántas",
+  "akcie.kniha_nikdo": "Todavía nadie tiene acciones.",
+  "akcie.fond_sam": "Sin emitir, las tiene el fondo",
+  "akcie.ty": "tú",
+  "veta.akcie_kniha_radek": "{cislo:p1} acciones · {p2} % del fondo · {penize:p3}"
 }

@@ -9674,7 +9674,9 @@ function fondVnitrek() {
       + '<p class="fine">' + tx('veta.fond_akcie_tok',
           { p1: f.akcie_vybrano, p2: f.akcie_vyplaceno }) + '</p>'
       + '<div class="gcard-act"><button class="btn sec sm" id="fond-burza">'
-      + esc(tx('fond.akcie_burza')) + '</button></div>';
+      + esc(tx('fond.akcie_burza')) + '</button>'
+      + '<button class="btn sec sm" id="fond-kniha">'
+      + esc(tx('akcie.kniha')) + '</button></div>';
   }
 
   if (ja) {
@@ -10032,6 +10034,12 @@ function bindFond(kde) {
     v('fond-burza').onclick = function () {
       AKCIE_KAM = fondZavriAZnovu;
       akcieTrhSheet(FOND.fond.aliance_id);
+    };
+  }
+  if (v('fond-kniha')) {
+    v('fond-kniha').onclick = function () {
+      AKCIE_KAM = fondZavriAZnovu;
+      akcieKnihaSheet(FOND.fond.aliance_id);
     };
   }
   if (v('fond-prevest')) v('fond-prevest').onclick = fondPrevestSheet;
@@ -11029,6 +11037,49 @@ function akcieNapoj(box) {
     };
   });
 }
+// Kniha akcionářů. Kdo drží akcie fondu a kolik — veřejné schválně: kdo do
+// fondu dává peníze, má vědět, s kým je v tom a jestli už někdo nedrží balík,
+// kterým se dá hnout cenou.
+var AKCIE_KNIHA = null;
+function loadAkcieKniha(id, then) {
+  api('/trade/akcie/' + id + '/kniha').then(function (r) {
+    AKCIE_KNIHA = (r.ok && r.j.kniha) || null;
+    if (then) then();
+  }).catch(function () { AKCIE_KNIHA = null; if (then) then(); });
+}
+function akcieKnihaSheet(id) {
+  if (!AKCIE_KNIHA || AKCIE_KNIHA.aliance_id !== id) {
+    sheet('<h3>\uD83D\uDCD2 ' + esc(tx('akcie.kniha')) + '</h3>'
+      + '<p class="muted small">' + esc(tx('hra.nacitam')) + '</p>');
+    return loadAkcieKniha(id, function () { akcieKnihaSheet(id); });
+  }
+  var k = AKCIE_KNIHA;
+  var l = k.akcionari || [];
+  sheet('<h3>\uD83D\uDCD2 ' + esc(tx('akcie.kniha')) + '</h3>'
+    + '<p class="muted small" style="margin:2px 0 8px">' + esc(k.nazev || '') + ' · '
+    + esc(tx('akcie.kniha_popis')) + '</p>'
+    + '<div class="kv"><span>' + esc(tx('akcie.vydano')) + '</span><b>'
+    + tx('veta.fond_akcie_vydano_z', { p1: k.vydano, p2: k.celkem }) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('akcie.cena_ted')) + '</span><b>' + kcFull(k.cena) + '</b></div>'
+    + (l.length
+      ? l.map(function (x) {
+          return '<div class="row"><span><b>' + esc(x.kdo) + '</b>'
+            + (x.ja ? ' <i class="pill good">' + esc(tx('akcie.ty')) + '</i>' : '')
+            + '</span><span><b class="' + (x.ja ? 'ok' : '') + '">'
+            + pctHra(x.podil_akcii) + ' %</b></span></div>'
+            + '<p class="fine">' + tx('veta.akcie_kniha_radek',
+                { p1: x.kusy, p2: pctHra(x.podil_fondu), p3: x.hodnota }) + '</p>';
+        }).join('')
+      : '<p class="fine">' + esc(tx('akcie.kniha_nikdo')) + '</p>')
+    // Co fond nevydal, drží dál sám. Bez tohohle řádku by procenta neseděla
+    // na sto a vypadalo by to, že zbytek akcií někde zmizel.
+    + (k.nevydano
+      ? '<div class="row"><span>' + esc(tx('akcie.fond_sam')) + '</span><span class="muted small">'
+        + tCislo(k.nevydano) + ' ×</span></div>' : '')
+    + '<button class="btn sec" id="ak-kniha-zpet" style="width:100%;margin-top:10px">'
+    + esc(AKCIE_KAM ? tx('hra.zpet') : tx('hra.nechat_byt')) + '</button>');
+  $('ak-kniha-zpet').onclick = akcieZpet;
+}
 function akcieBurzaSheet() {
   if (AKCIE_SEZNAM == null) {
     sheet('<h3>📈 ' + esc(tx('akcie.burza')) + '</h3>'
@@ -11083,6 +11134,8 @@ function akcieTrhSheet(id, smer) {
     + '<div class="kv"><span>' + esc(tx('akcie.dividenda_celkem')) + '</span><b>'
     + kcFull(a.dividenda_celkem) + '</b></div>'
     + '<p class="fine">' + esc(tx('akcie.dividenda_popis')) + '</p>'
+    + '<div class="gcard-act"><button class="btn sec sm" id="ak-kniha">'
+    + esc(tx('akcie.kniha')) + '</button></div>'
     + (posledni.length
         ? '<h4 style="margin:14px 0 2px">' + esc(tx('akcie.posledni_obchody')) + '</h4>'
           + posledni.map(function (o) {
@@ -11146,6 +11199,15 @@ function akcieTrhSheet(id, smer) {
   $('ak-pocet').oninput = prepocti; prepocti();
   $('ak-zavrit').onclick = akcieZpet;
   if ($('ak-detail')) $('ak-detail').onclick = function () { akcieTrhSheet(id); };
+  // Z knihy se vracíme sem, a kam odsud, to se schová a vrátí — jinak by se
+  // cesta zpátky na burzu nebo do fondu cestou ztratila.
+  if ($('ak-kniha')) {
+    $('ak-kniha').onclick = function () {
+      var kam = AKCIE_KAM;
+      AKCIE_KAM = function () { AKCIE_KAM = kam; akcieTrhSheet(id); };
+      akcieKnihaSheet(id);
+    };
+  }
   var posli = function (s, btn) {
     var n = kusu();
     if (!(n > 0)) return toast(esc(tx('akcie.vypln')), 'err');

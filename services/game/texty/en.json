@@ -3837,5 +3837,11 @@
   "hra.cena_za_kus": "Price each",
   "veta.objednat_kusu": "Order {cislo:p1}×",
   "veta.objednano_kusu": "{cislo:p1}× {p2} ordered. Arriving {p3}.",
-  "veta.pradlomatu_kusu": "{cislo:p1}× Laundromat {p2}"
+  "veta.pradlomatu_kusu": "{cislo:p1}× Laundromat {p2}",
+  "akcie.kniha": "Share register",
+  "akcie.kniha_popis": "who holds the fund’s shares and how many",
+  "akcie.kniha_nikdo": "Nobody holds any shares yet.",
+  "akcie.fond_sam": "Unissued, held by the fund",
+  "akcie.ty": "you",
+  "veta.akcie_kniha_radek": "{cislo:p1} shares · {p2} % of the fund · {penize:p3}"
 }

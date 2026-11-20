@@ -3844,5 +3844,11 @@
   "hra.cena_za_kus": "Cena za sztukę",
   "veta.objednat_kusu": "Zamów {cislo:p1}×",
   "veta.objednano_kusu": "{cislo:p1}× {p2} zamówione. Dotrze {p3}.",
-  "veta.pradlomatu_kusu": "{cislo:p1}× Pralnia {p2}"
+  "veta.pradlomatu_kusu": "{cislo:p1}× Pralnia {p2}",
+  "akcie.kniha": "Księga akcjonariuszy",
+  "akcie.kniha_popis": "kto ma akcje funduszu i ile",
+  "akcie.kniha_nikdo": "Nikt jeszcze nie ma akcji.",
+  "akcie.fond_sam": "Niewydane, trzyma je fundusz",
+  "akcie.ty": "ty",
+  "veta.akcie_kniha_radek": "{cislo:p1} akcji · {p2} % funduszu · {penize:p3}"
 }

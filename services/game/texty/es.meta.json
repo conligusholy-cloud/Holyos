@@ -3817,5 +3817,11 @@
   "hra.cena_za_kus": "c3fb9edb9411",
   "veta.objednat_kusu": "1ee1679ca080",
   "veta.objednano_kusu": "6e2ebc97a361",
-  "veta.pradlomatu_kusu": "2a2937afbc5f"
+  "veta.pradlomatu_kusu": "2a2937afbc5f",
+  "akcie.kniha": "835f1f2f23b8",
+  "akcie.kniha_popis": "9a70d51494c0",
+  "akcie.kniha_nikdo": "3d5dc8420a0c",
+  "akcie.fond_sam": "74bac10d5882",
+  "akcie.ty": "32ad247f77b8",
+  "veta.akcie_kniha_radek": "a380e5d7b6f3"
 }

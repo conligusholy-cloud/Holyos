@@ -186,6 +186,29 @@ ok('i co se na akcii vyplatilo celkem',
   /akcie\.dividenda_celkem[\s\S]{0,200}a\.dividenda_celkem/.test(usekTrh));
 ok('a vysvětlení, že nárok není výplata', /akcie\.dividenda_popis/.test(usekTrh));
 
+// Kniha akcionářů. Kdo dává do fondu peníze, má vědět, s kým je v tom.
+ok('z podrobností vede cesta do knihy', /id="ak-kniha"/.test(usekTrh));
+ok('a z panelu fondu taky', /id="fond-kniha"/.test(hra));
+const kniha = hra.slice(hra.indexOf('function akcieKnihaSheet'));
+const usekK = kniha.slice(0, kniha.indexOf('function akcieBurzaSheet'));
+ok('kniha ukazuje procenta každého', /pctHra\(x\.podil_akcii\)/.test(usekK));
+ok('i co to dělá v celém fondu', /x\.podil_fondu/.test(usekK));
+// Nevydané kusy drží fond sám. Bez toho řádku by procenta neseděla na sto
+// a vypadalo by to, že zbytek akcií někde zmizel.
+ok('a nevydané kusy taky', /akcie\.fond_sam[\s\S]{0,160}k\.nevydano/.test(usekK));
+ok('ze knihy se vracíme tam, odkud jsme přišli',
+  /\$\('ak-kniha-zpet'\)\.onclick = akcieZpet;/.test(usekK));
+// Cesta zpátky se musí schovat a vrátit: z podrobností do knihy a zase zpátky
+// do podrobností, aniž by se ztratila cesta na burzu nebo do fondu.
+ok('cesta zpátky se přes knihu neztratí',
+  /AKCIE_KAM = function \(\) \{ AKCIE_KAM = kam; akcieTrhSheet\(id\); \};/.test(usekTrh));
+
+const kn = routy.slice(routy.indexOf("router.get('/trade/akcie/:id/kniha'"));
+const usekKn = kn.slice(0, kn.indexOf("router.post('/trade/akcie/:id/obchod'"));
+ok('server knihu počítá službou', /AKCIE\.kniha\(radky, vydano, podil, cena\)/.test(usekKn));
+ok('a bere jen ty, kdo něco drží', /pocet: \{ gt: 0 \}/.test(usekKn));
+ok('největší držitel je nahoře', /orderBy: \{ pocet: 'desc' \}/.test(usekKn));
+
 // Co posílá server do seznamu a detailu akcií.
 const rA = routy.slice(routy.indexOf('async function akcieVynosy'));
 const usekV = rA.slice(0, rA.indexOf('// Kolik obchod'));

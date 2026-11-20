@@ -3837,5 +3837,11 @@
   "hra.cena_za_kus": "Preis je Stück",
   "veta.objednat_kusu": "{cislo:p1}× bestellen",
   "veta.objednano_kusu": "{cislo:p1}× {p2} bestellt. Kommt {p3}.",
-  "veta.pradlomatu_kusu": "{cislo:p1}× Waschsalon {p2}"
+  "veta.pradlomatu_kusu": "{cislo:p1}× Waschsalon {p2}",
+  "akcie.kniha": "Aktienbuch",
+  "akcie.kniha_popis": "wer Aktien des Fonds hält und wie viele",
+  "akcie.kniha_nikdo": "Noch hält niemand Aktien.",
+  "akcie.fond_sam": "Nicht ausgegeben, beim Fonds",
+  "akcie.ty": "du",
+  "veta.akcie_kniha_radek": "{cislo:p1} Aktien · {p2} % des Fonds · {penize:p3}"
 }

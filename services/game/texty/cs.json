@@ -3871,5 +3871,11 @@
   "hra.cena_za_kus": "Cena za kus",
   "veta.objednat_kusu": "Objednat {cislo:p1}×",
   "veta.objednano_kusu": "{cislo:p1}× {p2} objednáno. Dorazí {p3}.",
-  "veta.pradlomatu_kusu": "{cislo:p1}× prádlomat {p2}"
+  "veta.pradlomatu_kusu": "{cislo:p1}× prádlomat {p2}",
+  "akcie.kniha": "Kniha akcionářů",
+  "akcie.kniha_popis": "kdo drží akcie fondu a kolik",
+  "akcie.kniha_nikdo": "Akcie zatím nikdo nedrží.",
+  "akcie.fond_sam": "Nevydané drží fond",
+  "akcie.ty": "ty",
+  "veta.akcie_kniha_radek": "{cislo:p1} akcií · {p2} % fondu · {penize:p3}"
 }
