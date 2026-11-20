@@ -3759,5 +3759,6 @@
   "aliance.pozvanka_odeslana": "Invitación enviada.",
   "veta.fond_odchod_popis": "Se te pagarán {penize:p1}: tu parte del efectivo en caja. Las participaciones en empresas no se venden por esto, así que lo que el fondo ya invirtió no se va contigo. Volver solo se puede por invitación.",
   "veta.fond_odchod_posledni": "Eres el último miembro: al salir, el fondo se disuelve entero.",
-  "hra.splatka_neprosla_jinde": "El pago no se ha realizado: esta partida está abierta en otro sitio y manda la otra. Ciérrala e inténtalo de nuevo."
+  "hra.splatka_neprosla_jinde": "El pago no se ha realizado: esta partida está abierta en otro sitio y manda la otra. Ciérrala e inténtalo de nuevo.",
+  "jazyk.pt": "Portugués (BR)"
 }

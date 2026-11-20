@@ -3759,5 +3759,6 @@
   "veta.fond_odchod_popis": "On te versera {penize:p1} — ta part des liquidités en caisse. Les parts dans les sociétés ne sont pas vendues pour autant, donc ce que le fonds a déjà investi ne part pas avec toi. On ne revient que sur invitation.",
   "veta.fond_odchod_posledni": "Tu es le dernier membre — en partant, le fonds est dissous.",
   "hra.splatka_neprosla_jinde": "Le paiement n’est pas passé — cette partie est ouverte ailleurs et c’est l’autre qui compte. Ferme-la et réessaie.",
-  "hra.na_graf_je_jeste_brzo": "Il est encore trop tôt pour un graphique."
+  "hra.na_graf_je_jeste_brzo": "Il est encore trop tôt pour un graphique.",
+  "jazyk.pt": "Portugais (BR)"
 }

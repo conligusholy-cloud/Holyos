@@ -3759,5 +3759,6 @@
   "aliance.pozvanka_odeslana": "Einladung gesendet.",
   "veta.fond_odchod_popis": "Ausgezahlt werden dir {penize:p1} — dein Anteil am Bargeld in der Kasse. Anteile an Firmen werden dafür nicht verkauft, was der Fonds also schon investiert hat, nimmst du nicht mit. Zurück kommst du nur auf Einladung.",
   "veta.fond_odchod_posledni": "Du bist das letzte Mitglied — mit deinem Austritt wird der Fonds ganz aufgelöst.",
-  "hra.splatka_neprosla_jinde": "Die Zahlung ging nicht durch — dieses Spiel ist noch woanders offen und das andere gilt. Schließ es und versuch es noch einmal."
+  "hra.splatka_neprosla_jinde": "Die Zahlung ging nicht durch — dieses Spiel ist noch woanders offen und das andere gilt. Schließ es und versuch es noch einmal.",
+  "jazyk.pt": "Portugiesisch (BR)"
 }

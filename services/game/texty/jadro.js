@@ -16,7 +16,7 @@
   'use strict';
 
   var ZDROJ = 'cs';                 // v téhle řeči se texty píšou
-  var JAZYKY = ['cs', 'en', 'pl', 'de', 'es', 'fr'];
+  var JAZYKY = ['cs', 'en', 'pl', 'de', 'es', 'fr', 'pt'];
 
   // ─── Množné číslo ─────────────────────────────────────────────────────────
   // Každá řeč jinak. Čeština tři tvary (1 / 2–4 / 5 a víc), angličtina,
@@ -41,14 +41,17 @@
     // Francouzština bere jako jednotné číslo i nulu: 0 prádlomat, ne
     // 0 prádlomatů. Vypadá to jako drobnost, ale „0 machine" proti
     // „0 machines" je rozdíl, kterého si Francouz všimne hned.
-    if (jazyk === 'fr') return (a === 0 || a === 1) ? 'one' : 'other';
+    // Brazilská portugalština bere nulu stejně jako francouzština:
+    // 0 lavanderia, ne 0 lavanderias.
+    if (jazyk === 'fr' || jazyk === 'pt') return (a === 0 || a === 1) ? 'one' : 'other';
     return a === 1 ? 'one' : 'other';
   }
 
   // ─── Čísla, peníze, čas ───────────────────────────────────────────────────
   // Čeština píše 1 234 567, angličtina 1,234,567, polština zase po svém.
   // Měna zůstává L$ ve všech — je to herní měna, ne koruna ani zlotý.
-  var LOCALE = { cs: 'cs-CZ', en: 'en-GB', pl: 'pl-PL', de: 'de-DE', es: 'es-ES', fr: 'fr-FR' };
+  var LOCALE = { cs: 'cs-CZ', en: 'en-GB', pl: 'pl-PL', de: 'de-DE', es: 'es-ES',
+                 fr: 'fr-FR', pt: 'pt-BR' };
   function locale(jazyk) { return LOCALE[jazyk] || LOCALE[ZDROJ]; }
   function cislo(n, jazyk) {
     var x = Math.round(Number(n) || 0);

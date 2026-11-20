@@ -173,7 +173,7 @@ function mezeraPredInterpunkci(c, e, jazyk) {
 // spadla na jiný pád nebo na prázdno.
 const TVARY = { cs: ['one', 'few', 'other'], en: ['one', 'other'],
   pl: ['one', 'few', 'many'], de: ['one', 'other'], es: ['one', 'other'],
-  fr: ['one', 'other'] };
+  fr: ['one', 'other'], pt: ['one', 'other'] };
 function tvaryChybi(hodnota, jazyk) {
   if (typeof hodnota !== 'object' || !hodnota) return ['není objekt s tvary'];
   const chce = TVARY[jazyk] || ['one', 'other'];

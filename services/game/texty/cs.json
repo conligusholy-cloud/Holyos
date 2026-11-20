@@ -3766,5 +3766,6 @@
   "veta.od_data_techniku": "Od {p1} jich poběží {cislo:p2} — co jsi ubral, ti doběhne do konce zaplaceného období.",
   "fond.nese_mesicne": "Nese měsíčně",
   "veta.fond_drzi_nese": "{penize:p1} měsíčně · firma vyplácí {cislo:p2} % zisku",
-  "veta.fond_drzi_nenese": "Zatím nic — firma vyplácí {cislo:p1} % zisku"
+  "veta.fond_drzi_nenese": "Zatím nic — firma vyplácí {cislo:p1} % zisku",
+  "jazyk.pt": "Portugalština (BR)"
 }

@@ -3766,5 +3766,6 @@
   "aliance.pozvanka_odeslana": "Zaproszenie wysłane.",
   "veta.fond_odchod_popis": "Wypłacimy ci {penize:p1} — twoją część gotówki w kasie. Udziały w firmach nie są przez to sprzedawane, więc tego, co fundusz już zainwestował, nie zabierasz. Wrócić można tylko na zaproszenie.",
   "veta.fond_odchod_posledni": "Jesteś ostatnim członkiem — twoje odejście rozwiązuje cały fundusz.",
-  "hra.splatka_neprosla_jinde": "Spłata nie przeszła — ta gra jest otwarta jeszcze gdzie indziej i liczy się tamta. Zamknij ją i spróbuj ponownie."
+  "hra.splatka_neprosla_jinde": "Spłata nie przeszła — ta gra jest otwarta jeszcze gdzie indziej i liczy się tamta. Zamknij ją i spróbuj ponownie.",
+  "jazyk.pt": "Portugalski (BR)"
 }

@@ -3759,5 +3759,6 @@
   "veta.od_data_techniku": "From {p1} there will be {cislo:p2} — what you removed runs until the paid period ends.",
   "fond.nese_mesicne": "Brings in monthly",
   "veta.fond_drzi_nese": "{penize:p1} a month · the company pays out {cislo:p2} % of its profit",
-  "veta.fond_drzi_nenese": "Nothing yet — the company pays out {cislo:p1} % of its profit"
+  "veta.fond_drzi_nenese": "Nothing yet — the company pays out {cislo:p1} % of its profit",
+  "jazyk.pt": "Portuguese (BR)"
 }
