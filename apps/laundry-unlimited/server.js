@@ -58,6 +58,16 @@ async function initDb() {
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`);
   await q('CREATE INDEX IF NOT EXISTS inquiries_status_idx ON inquiries (status, created_at DESC)');
+  // Uživatelé administrace (týmové účty) — odděleně od leadů
+  await q(`CREATE TABLE IF NOT EXISTS admin_users (
+    id SERIAL PRIMARY KEY,
+    email TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_login_at TIMESTAMPTZ
+  )`);
+  await q('CREATE UNIQUE INDEX IF NOT EXISTS admin_users_email_idx ON admin_users (lower(email))');
   // Partnerský portál: přístup a viditelné sekce nastavuje admin v detailu leadu
   await q('ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS portal_access BOOLEAN NOT NULL DEFAULT false');
   await q("ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS portal_sections JSONB NOT NULL DEFAULT '[]'::jsonb");
@@ -456,10 +466,10 @@ body:has(> .uside){padding-left:244px}.uside .brand{display:flex;flex-direction:
 .uside .uic{display:inline-grid;place-items:center;width:32px;height:32px;flex:none;border-radius:10px;background:linear-gradient(135deg,rgba(34,230,255,.10),rgba(47,123,255,.08));box-shadow:inset 0 0 0 1px rgba(34,230,255,.18);transition:box-shadow .2s,background .2s}.uside .uic svg{width:17px;height:17px}
 .uside nav a:hover .uic{box-shadow:inset 0 0 0 1px rgba(34,230,255,.45)}.uside nav a.on .uic{background:linear-gradient(135deg,rgba(34,230,255,.28),rgba(47,123,255,.22));box-shadow:inset 0 0 0 1px rgba(34,230,255,.6),0 6px 18px -6px rgba(34,230,255,.6)}
 .uside .rt a.rtl{display:flex;align-items:center;gap:10px;justify-content:flex-start;padding:7px 10px}.uside .rt a.rtl .uic{width:26px;height:26px;border-radius:8px}.uside .rt a.rtl .uic svg{width:14px;height:14px}
-body:has(> .uside) .wrap,body:has(> .uside) .adm{max-width:none!important;margin:0!important;padding-left:32px!important;padding-right:32px!important}.uside nav a:hover{color:#fff;background:rgba(255,255,255,.05)}.uside nav a.on{color:#fff;background:linear-gradient(90deg,rgba(34,230,255,.16),rgba(47,123,255,.08));box-shadow:inset 3px 0 0 #22e6ff}
+body:has(> .uside) .wrap,body:has(> .uside) .adm{max-width:none!important;margin:0!important;padding-left:32px!important;padding-right:32px!important}.uside nav.ubot{flex:none;border-top:1px solid rgba(255,255,255,.08);padding-top:10px}.uside nav a:hover{color:#fff;background:rgba(255,255,255,.05)}.uside nav a.on{color:#fff;background:linear-gradient(90deg,rgba(34,230,255,.16),rgba(47,123,255,.08));box-shadow:inset 3px 0 0 #22e6ff}
 .uside .rt{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)}.uside .rt a{color:#dbe7ff;text-decoration:none;font-size:13px;font-weight:700;padding:9px 12px;border:1px solid rgba(255,255,255,.14);border-radius:10px;text-align:center}.uside .rt a:hover{border-color:#22e6ff}.uside .who{color:#9fb0cc;font-size:12.5px;padding:0 4px}
 .utop{position:fixed;top:12px;right:20px;z-index:61;display:flex;gap:8px;align-items:center}.utop a{display:inline-flex;align-items:center;gap:8px;color:#dbe7ff;text-decoration:none;font-size:13px;font-weight:700;padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:10px;background:rgba(5,10,24,.85);backdrop-filter:blur(10px)}.utop a:hover{border-color:#22e6ff}.utop a .uic{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:8px;background:linear-gradient(135deg,rgba(34,230,255,.10),rgba(47,123,255,.08));box-shadow:inset 0 0 0 1px rgba(34,230,255,.18)}.utop a .uic svg{width:14px;height:14px}.utop .who{color:#9fb0cc;font-size:12.5px;padding:0 4px}
-@media(max-width:900px){.utop{position:static;justify-content:flex-end;flex-wrap:wrap;padding:8px 14px}.utop .who{display:none}body:has(> .uside){padding-left:0}.uside{position:sticky;width:auto;bottom:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;border-right:0;border-bottom:1px solid rgba(255,255,255,.08)}.uside .brand{flex-direction:row;align-items:center;border:0;padding:0}.uside nav{flex-direction:row;flex-basis:100%;order:3;overflow-x:auto;scrollbar-width:none}.uside nav::-webkit-scrollbar{display:none}.uside nav a{white-space:nowrap;padding:8px 11px}.uside .rt{flex-direction:row;margin-left:auto;border:0;padding:0}.uside .who{display:none}}`;
+@media(max-width:900px){.uside nav.ubot{order:4;flex-basis:100%;border:0;padding:0}.utop{position:static;justify-content:flex-end;flex-wrap:wrap;padding:8px 14px}.utop .who{display:none}body:has(> .uside){padding-left:0}.uside{position:sticky;width:auto;bottom:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;border-right:0;border-bottom:1px solid rgba(255,255,255,.08)}.uside .brand{flex-direction:row;align-items:center;border:0;padding:0}.uside nav{flex-direction:row;flex-basis:100%;order:3;overflow-x:auto;scrollbar-width:none}.uside nav::-webkit-scrollbar{display:none}.uside nav a{white-space:nowrap;padding:8px 11px}.uside .rt{flex-direction:row;margin-left:auto;border:0;padding:0}.uside .who{display:none}}`;
 // Ikony bočního menu: tenké linky s přechodem v barvách značky
 const UICO = {
   leady: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
@@ -467,6 +477,7 @@ const UICO = {
   ekonomika: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8"/><path d="M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h.01M12 19h4"/>',
   technika: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
   proc: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.74c.6.48 1 1.17 1 1.94V17h6v-.32c0-.77.4-1.46 1-1.94A7 7 0 0 0 12 2z"/>',
+  uzivatele: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M16 11h6"/>',
   holyos: '<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
 };
 const uico = (k) => `<span class="uic"><svg viewBox="0 0 24 24" fill="none" stroke="url(#lugr)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${UICO[k] || ''}</svg></span>`;
@@ -479,7 +490,7 @@ function topBar(o) {
     ? `<a href="/portal" class="rtl">${uico('report')}<span>Uživatelské prostředí</span></a><a href="/portal/logout" class="rtl"><span>Odhlásit</span></a>`
     : `<span class="who">${esc(o.user || '')}</span>${o.admin ? `<a href="/admin" class="rtl">${uico('leady')}<span>Administrace</span></a>` : ''}<a href="/portal/logout">${en ? 'Log out' : 'Odhlásit'}</a>`;
   return `<aside class="uside"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="lugr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22e6ff"/><stop offset="1" stop-color="#2f7bff"/></linearGradient></defs></svg><a class="brand" href="${o.mode === 'admin' ? '/admin' : '/portal'}">${logoHtml(30)}<span class="ttl">${o.mode === 'admin' ? 'Administrace' : (en ? 'Partner portal' : 'Partnerský portál')}<small>${o.mode === 'admin' ? 'jen pro tým' : 'Laundry Unlimited'}</small></span></a>
-<nav>${tabs.map((x) => `<a href="${x.href}"${x.k === o.active ? ' class="on"' : ''}>${uico(x.k)}<span>${esc(x.t)}</span></a>`).join('')}</nav></aside><div class="utop">${rt}</div>`;
+<nav>${tabs.map((x) => `<a href="${x.href}"${x.k === o.active ? ' class="on"' : ''}>${uico(x.k)}<span>${esc(x.t)}</span></a>`).join('')}</nav>${o.mode === 'admin' ? `<nav class="ubot"><a href="/admin/users"${o.active === 'uzivatele' ? ' class="on"' : ''}>${uico('uzivatele')}<span>Uživatelé administrace</span></a></nav>` : ''}</aside><div class="utop">${rt}</div>`;
 }
 // Stránka materiálů v liště administrace / portálu
 let T01 = null;
@@ -522,10 +533,17 @@ async function sendAdminLink(email, lang) {
     return true;
   } catch (e) { console.warn('[lu] admin mail:', e.message); return false; }
 }
+async function adminUserOf(email) {
+  email = String(email || '').toLowerCase();
+  if (ADMIN_EMAILS.includes(email)) { const r = (await q('SELECT * FROM admin_users WHERE lower(email)=$1', [email]).catch(() => ({ rows: [] }))).rows[0]; return r || { email, name: '', active: true, env: true }; }
+  const r = (await q('SELECT * FROM admin_users WHERE lower(email)=$1 AND active', [email]).catch(() => ({ rows: [] }))).rows[0];
+  return r || null;
+}
 async function doLogin(req, res, lang, back) {
   const email = String(req.body.email || '').trim().toLowerCase().slice(0, 160);
   if (!portalLimited(String(req.ip || '')) && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    if (ADMIN_EMAILS.includes(email)) await sendAdminLink(email, lang === 'cs' ? 'cs' : 'en');
+    const au = await adminUserOf(email);
+    if (au && au.active !== false) await sendAdminLink(email, lang === 'cs' ? 'cs' : 'en');
     else {
       const r = (await q('SELECT * FROM inquiries WHERE lower(email)=$1 AND portal_access ORDER BY id DESC LIMIT 1', [email]).catch(() => ({ rows: [] }))).rows[0];
       if (r) await sendPortalLink(r);
@@ -534,11 +552,13 @@ async function doLogin(req, res, lang, back) {
   res.set('Cache-Control', 'no-store').send(back((LG[lang] || LG.en).sent));
 }
 app.post('/login', form, (req, res) => { const lang = loginLang(req); return doLogin(req, res, lang, (m) => loginPage(lang, m)); });
-app.get('/admin/auth', (req, res) => {
+app.get('/admin/auth', async (req, res) => {
   try {
     const t = jwt.verify(String(req.query.t || ''), USER_KEY, { audience: 'lu-admin-link', issuer: 'laundry-unlimited' });
-    if (!ADMIN_EMAILS.includes(String(t.email || '').toLowerCase())) throw new Error('není admin');
-    const session = jwt.sign({ name: t.email, aud: 'lu-admin', iss: 'laundry-unlimited' }, SESSION_KEY, { expiresIn: '8h' });
+    const au = await adminUserOf(t.email);
+    if (!au || au.active === false) throw new Error('není admin');
+    if (au.id) q('UPDATE admin_users SET last_login_at=now() WHERE id=$1', [au.id]).catch(() => {});
+    const session = jwt.sign({ name: au.name || t.email, email: String(t.email).toLowerCase(), aud: 'lu-admin', iss: 'laundry-unlimited' }, SESSION_KEY, { expiresIn: '8h' });
     res.set('Set-Cookie', COOKIE + '=' + encodeURIComponent(session) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + 8 * 3600);
     res.set('Cache-Control', 'no-store').redirect(302, '/admin');
   } catch (e) { res.status(401).set('Cache-Control', 'no-store').send(loginPage(loginLang(req), '', LG[loginLang(req)].h + ': odkaz vypršel nebo je neplatný / link expired.')); }
@@ -625,7 +645,7 @@ app.get('/portal/m/:sekce(report|ekonomika|technika|proc)', async (req, res) => 
 app.get('/portal/logout', (req, res) => { res.set('Set-Cookie', [UCOOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0', COOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0']); res.redirect(302, '/login'); });
 
 // ── Administrace (SSO z HolyOS) ────────────────────────────────────────────
-function adminOf(req) { if (!SESSION_KEY) return null; try { const t = jwt.verify(readCookie(req, COOKIE), SESSION_KEY, { audience: 'lu-admin', issuer: 'laundry-unlimited' }); return { name: t.name || '' }; } catch (e) { return null; } }
+function adminOf(req) { if (!SESSION_KEY) return null; try { const t = jwt.verify(readCookie(req, COOKIE), SESSION_KEY, { audience: 'lu-admin', issuer: 'laundry-unlimited' }); return { name: t.name || '', email: t.email || '' }; } catch (e) { return null; } }
 const toHolyos = () => HOLYOS_URL + '/api/auth/sso/laundry-unlimited';
 app.get('/sso', (req, res) => {
   try {
@@ -693,6 +713,53 @@ app.post('/admin/api/inquiry/:id(\\d+)', requireAdmin, express.json({ limit: '20
     await q('UPDATE inquiries SET portal_access=$2, portal_sections=$3::jsonb WHERE id=$1', [id, !!b.portal_access, JSON.stringify(sek)]);
   }
   res.json({ ok: true });
+});
+app.get('/admin/users', requireAdmin, async (req, res) => {
+  const rows = (await q('SELECT * FROM admin_users ORDER BY created_at').catch(() => ({ rows: [] }))).rows;
+  const inDb = new Set(rows.map((r) => String(r.email).toLowerCase()));
+  const envOnly = ADMIN_EMAILS.filter((e) => !inDb.has(e));
+  const me = String((req.admin && req.admin.email) || '').toLowerCase();
+  const tr = envOnly.map((e) => `<tr><td>—</td><td>${esc(e)}</td><td><span class="chip ok">z konfigurace</span></td><td class="mut">—</td><td class="mut small">nelze smazat</td></tr>`).concat(rows.map((r) => `<tr><td>${esc(r.name || '—')}</td><td>${esc(r.email)}</td><td>${r.active ? '<span class="chip ok">aktivní</span>' : '<span class="chip">zakázán</span>'}</td><td class="mut small">${esc(fmtDt(r.last_login_at))}</td>
+<td style="text-align:right;white-space:nowrap"><button class="btn sm ghost ulink" data-id="${r.id}">Poslat odkaz</button> <button class="btn sm ghost utog" data-id="${r.id}" data-a="${r.active ? 0 : 1}">${r.active ? 'Zakázat' : 'Povolit'}</button>${String(r.email).toLowerCase() === me ? '' : ` <button class="btn sm ghost udel" data-id="${r.id}">Smazat</button>`}</td></tr>`)).join('');
+  res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Uživatelé administrace — Laundry Unlimited</title>
+<style>${ADMIN_CSS}.adm{max-width:1000px;margin:0 auto;padding:22px}.mut{color:var(--mut);font-size:13px}.small{font-size:12px}.chip{border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:12px;background:#07111f}.chip.ok{border-color:#22c55e;color:#86efac}
+table{width:100%;border-collapse:collapse;margin-top:14px}th,td{text-align:left;padding:11px 10px;border-bottom:1px solid var(--line);font-size:14px}th{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.05em}.new{display:grid;grid-template-columns:1fr 1.3fr auto;gap:10px;align-items:end;margin-top:14px;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--card)}.new label{font-size:12px;color:var(--mut);font-weight:700}.msg{font-size:13px;color:#86efac;margin-top:8px}${BAR_CSS}.adm{padding-top:8px}@media(max-width:700px){.new{grid-template-columns:1fr}}
+</style></head><body>${topBar({ mode: 'admin', active: 'uzivatele' })}<div class="adm"><h3 style="margin:10px 0 0">Uživatelé administrace <span class="mut" style="font-weight:400">— týmové účty, oddělené od leadů</span></h3>
+<p class="mut" style="margin:6px 0 0">Přihlašují se e-mailem na <b>/login</b> — přijde jim odkaz do administrace. Do uživatelského prostředí se z administrace přepnou tlačítkem vpravo nahoře.</p>
+<div class="new"><div><label>Jméno</label><input id="un" maxlength="120" placeholder="Jan Novák"></div><div><label>E-mail</label><input id="ue" type="email" maxlength="160" placeholder="jmeno@firma.cz"></div><button class="btn" id="uadd">Přidat uživatele</button></div><div class="msg" id="um"></div>
+<table><thead><tr><th>Jméno</th><th>E-mail</th><th>Stav</th><th>Poslední přihlášení</th><th></th></tr></thead><tbody>${tr || '<tr><td colspan="5" class="mut">Zatím žádní uživatelé.</td></tr>'}</tbody></table></div>
+<script>
+async function call(u,b){const r=await fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b||{})});return r.json()}
+const um=document.getElementById('um');
+document.getElementById('uadd').onclick=async()=>{const j=await call('/admin/api/users',{name:document.getElementById('un').value,email:document.getElementById('ue').value});if(j.ok)location.reload();else um.textContent=j.error||'Chyba'};
+document.addEventListener('click',async e=>{const b=e.target.closest('.ulink,.utog,.udel');if(!b)return;const id=b.dataset.id;
+if(b.classList.contains('ulink')){if(!confirm('Poslat uživateli e-mail s přihlašovacím odkazem?'))return;const j=await call('/admin/api/users/'+id+'/link');um.textContent=j.ok?'Odkaz odeslán ✓':(j.error||'Chyba');return}
+if(b.classList.contains('utog')){const j=await call('/admin/api/users/'+id,{active:b.dataset.a==='1'});if(j.ok)location.reload();else um.textContent=j.error||'Chyba';return}
+if(!confirm('Opravdu smazat tohoto uživatele administrace?'))return;const j=await call('/admin/api/users/'+id+'/delete');if(j.ok)location.reload();else um.textContent=j.error||'Chyba'});
+</script></body></html>`);
+});
+app.post('/admin/api/users', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase().slice(0, 160), name = String(req.body.name || '').trim().slice(0, 120);
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.json({ ok: false, error: 'Neplatný e-mail' });
+  try { await q('INSERT INTO admin_users (email, name) VALUES ($1,$2)', [email, name]); res.json({ ok: true }); }
+  catch (e) { res.json({ ok: false, error: /unique|duplicate/i.test(e.message) ? 'Tento e-mail už je v seznamu' : 'Uložení se nepovedlo' }); }
+});
+app.post('/admin/api/users/:id(\\d+)', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
+  const r = (await q('SELECT email FROM admin_users WHERE id=$1', [req.params.id])).rows[0];
+  if (!r) return res.json({ ok: false, error: 'Nenalezeno' });
+  if (req.body.active === false && String(r.email).toLowerCase() === String((req.admin && req.admin.email) || '').toLowerCase()) return res.json({ ok: false, error: 'Sám sebe zakázat nelze' });
+  await q('UPDATE admin_users SET active=$2 WHERE id=$1', [req.params.id, !!req.body.active]); res.json({ ok: true });
+});
+app.post('/admin/api/users/:id(\\d+)/link', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
+  const r = (await q('SELECT * FROM admin_users WHERE id=$1 AND active', [req.params.id])).rows[0];
+  if (!r) return res.json({ ok: false, error: 'Uživatel nenalezen nebo je zakázán' });
+  res.json({ ok: await sendAdminLink(String(r.email).toLowerCase(), 'cs') });
+});
+app.post('/admin/api/users/:id(\\d+)/delete', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
+  const r = (await q('SELECT email FROM admin_users WHERE id=$1', [req.params.id])).rows[0];
+  if (!r) return res.json({ ok: false, error: 'Nenalezeno' });
+  if (String(r.email).toLowerCase() === String((req.admin && req.admin.email) || '').toLowerCase()) return res.json({ ok: false, error: 'Sám sebe smazat nelze' });
+  await q('DELETE FROM admin_users WHERE id=$1', [req.params.id]); res.json({ ok: true });
 });
 app.get('/admin/m/:sekce(report|ekonomika|technika|proc)', requireAdmin, (req, res) => {
   res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex').send(materialsPage(req.params.sekce, topBar({ mode: 'admin', active: req.params.sekce }), 'Administrace'));
