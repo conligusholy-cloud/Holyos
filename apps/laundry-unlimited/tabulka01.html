@@ -44,7 +44,7 @@ td.sec{color:var(--cy);font-weight:700;letter-spacing:.05em;font-size:12px}td.gr
 .note{color:var(--mut);font-size:12.5px;margin:12px 2px 0}
 @media(max-width:900px){.kpis,.charts{grid-template-columns:1fr 1fr}}@media(max-width:560px){.kpis,.charts{grid-template-columns:1fr}}
 </style></head><body><div class="wrap">
-<header><img src="/logo.png" alt="Laundry Unlimited"><div><h1><b>Master franchise</b> — finanční report 2026</h1><p class="sub">P&amp;L a cash flow master franšízanta po měsících · částky v EUR · plánovaná čísla</p></div></header>
+<!--HDR--><header><img src="/logo.png" alt="Laundry Unlimited"><div><h1><b>Master franchise</b> — finanční report 2026</h1><p class="sub">P&amp;L a cash flow master franšízanta po měsících · částky v EUR · plánovaná čísla</p></div></header><!--/HDR-->
 <div class="tabs" id="tabs"></div><div id="view"></div><div id="eko" style="display:none"><style>
   .ek-metrics{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:6px 0 18px}
   .ek-m{position:relative;background:var(--card);border:1px solid rgba(120,160,255,.18);border-radius:15px;padding:16px 16px 14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
@@ -274,6 +274,8 @@ function prehled(sh){var t=D.tot,C=D.charts;
 var tabs=document.getElementById('tabs'),view=document.getElementById('view');
 function show(i){[].forEach.call(tabs.children,function(b,j){b.classList.toggle('on',i===j);});var sh=D.sheets[i];var ek=document.getElementById('eko'),ekd=document.getElementById('ekod'),spec=['EKO','EKOD','TECH','FR','MFR'].indexOf(sh.name)>=0;document.getElementById('fr').style.display=sh.name==='FR'?'':'none';document.getElementById('mfr').style.display=sh.name==='MFR'?'':'none';document.getElementById('tech').style.display=sh.name==='TECH'?'':'none';ek.style.display=sh.name==='EKO'?'':'none';ekd.style.display=sh.name==='EKOD'?'':'none';if(sh.name==='EKOD')mountDetail();view.style.display=spec?'none':'';if(!spec)view.innerHTML=sh.name==='PŘEHLED'?prehled(sh):table(sh);try{history.replaceState(null,'','#'+i);}catch(e){}}
 D.sheets.push({name:'EKO'},{name:'EKOD'},{name:'TECH'},{name:'FR'},{name:'MFR'});
+// V administraci / portálu se ukazuje jen skupina záložek (window.__ALLOW nastaví server); jedna záložka = bez lišty
+if(window.__ALLOW){D.sheets=D.sheets.filter(function(s){return window.__ALLOW.indexOf(s.name)>=0;});if(D.sheets.length<2)document.getElementById('tabs').style.display='none';}
 D.sheets.forEach(function(sh,i){var b=document.createElement('button');b.textContent=NAMES[sh.name]||sh.name;b.onclick=function(){show(i);};tabs.appendChild(b);});
 show(Math.min(D.sheets.length-1,parseInt((location.hash||'#0').slice(1),10)||0));
 </script></body></html>

@@ -451,6 +451,28 @@ router.post('/lu/notify', express.json({ limit: '20kb' }), async (req, res, next
   } catch (err) { next(err); }
 });
 
+// POST /api/auth/lu/mail — Laundry Unlimited posílá partnerovi přihlašovací odkaz do portálu (jen na e-mail leadu; tajemství LU_SSO_SECRET)
+router.post('/lu/mail', express.json({ limit: '20kb' }), async (req, res, next) => {
+  try {
+    const secret = process.env.LU_SSO_SECRET;
+    const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+    if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
+    try { jwt.verify(m[1], secret, { audience: 'holyos-api', issuer: 'laundry-unlimited' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
+    const b = req.body || {};
+    const to = String(b.to || '').trim().slice(0, 160);
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: 'Neplatný e-mail' });
+    const link = String(b.link || '');
+    const luHost = (() => { try { return new URL(String(process.env.LU_URL || 'https://laundry-unlimited.com')).host.replace(/^www\./, ''); } catch (e) { return ''; } })();
+    let linkHost = ''; try { linkHost = new URL(link).host.replace(/^www\./, ''); } catch (e) { /* neplatný */ }
+    if (!/^https:\/\//.test(link) || !luHost || linkHost !== luHost) return res.status(400).json({ error: 'Odkaz mimo Laundry Unlimited' });
+    const { sendMail } = require('../services/email');
+    const r = await sendMail({ to, subject: String(b.subject || 'Laundry Unlimited').slice(0, 160), body: String(b.body || '').slice(0, 3000),
+      link, linkLabel: String(b.linkLabel || 'Otevřít').slice(0, 60), fromName: 'Laundry Unlimited', audience: 'customer', manual: true, lang: String(b.lang || '') });
+    if (r && r.sent === false) return res.status(502).json({ error: r.error || r.skipped || 'Neodesláno' });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // GET /api/auth/bs2/products — aktivní stroje z prodejního ceníku pro záložku Produkty v BS2.
 // Volá server BS2 (ne prohlížeč); ověřuje se krátkým JWT podepsaným sdíleným BS2_SSO_SECRET (aud 'holyos-api').
 router.get('/bs2/products', async (req, res, next) => {

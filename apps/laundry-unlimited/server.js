@@ -58,6 +58,11 @@ async function initDb() {
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`);
   await q('CREATE INDEX IF NOT EXISTS inquiries_status_idx ON inquiries (status, created_at DESC)');
+  // Partnerský portál: přístup a viditelné sekce nastavuje admin v detailu leadu
+  await q('ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS portal_access BOOLEAN NOT NULL DEFAULT false');
+  await q("ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS portal_sections JSONB NOT NULL DEFAULT '[]'::jsonb");
+  await q('ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS portal_login_at TIMESTAMPTZ');
+  await q('ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS portal_link_at TIMESTAMPTZ');
 }
 
 // ── Notifikace do HolyOS (Velín) ───────────────────────────────────────────
@@ -364,8 +369,9 @@ const lmJson = (p) => async (req, res) => {
 app.get('/api/ekonomika/fx', lmJson('/api/ekonomika/fx'));
 app.get('/api/compounder/portal/machines', lmJson('/api/compounder/portal/machines'));
 app.get('/media/:f([\\w.-]+)', (req, res) => res.redirect(302, LM_URL + '/media/' + req.params.f));
-app.get('/tabulka01', (req, res) => res.set('Cache-Control', 'no-cache').set('X-Robots-Tag', 'noindex, nofollow').sendFile(path.join(__dirname, 'tabulka01.html')));
-const BEZ_JAZYKA = /^\/(api|admin|sso|robots\.txt|sitemap\.xml)/;
+// Finanční report je jen v administraci (dřív veřejně na /tabulka01)
+app.get('/tabulka01', (req, res) => res.redirect(302, '/admin/m/report'));
+const BEZ_JAZYKA = /^\/(api|admin|portal|sso|robots\.txt|sitemap\.xml)/;
 app.use((req, res, next) => {
   const m = /^\/(en|cs|pl|de)(\/|$)/.exec(req.path);
   if (m) { req.lang = m[1]; req.url = req.url.slice(m[0].length - (m[2] === '/' ? 1 : 0)) || '/'; if (req.url.charAt(0) === '?') req.url = '/' + req.url; return next(); }
@@ -426,6 +432,120 @@ app.post('/questionnaire/:token', form, async (req, res) => {
   } catch (e) { console.error('[lu] questionnaire:', e.message); res.status(500).send(questionnairePage(lang, req.params.token, T[lang].f_err_server)); }
 });
 
+// ── Společná horní lišta (administrace i partnerský portál) ─────────────────
+// Materiály (report, ekonomika, technika, proč LU) jsou jedna stránka tabulka01.html; server z ní
+// ukáže jen skupinu záložek a nahradí hlavičku touhle lištou.
+const SEKCE = [
+  { k: 'report', ico: '📊', cs: 'Finanční report', en: 'Financial report', listy: ['PŘEHLED', 'DATA', 'podklad'] },
+  { k: 'ekonomika', ico: '🧮', cs: 'Ekonomika prádlomatu', en: 'Laundromat economics', listy: ['EKO', 'EKOD'] },
+  { k: 'technika', ico: '🛠', cs: 'Technické parametry', en: 'Technical parameters', listy: ['TECH'] },
+  { k: 'proc', ico: '💡', cs: 'Proč Laundry Unlimited', en: 'Why Laundry Unlimited', listy: ['FR', 'MFR'] },
+];
+const BAR_CSS = `.ubar{position:sticky;top:0;z-index:50;background:rgba(5,10,24,.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.10)}
+.ubar .in{max-width:1300px;margin:0 auto;padding:10px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}.ubar .ttl{font-weight:800;font-size:16px;color:#fff;white-space:nowrap}.ubar .ttl small{display:block;font-weight:500;font-size:11px;color:#9fb0cc;letter-spacing:.08em;text-transform:uppercase}
+.ubar nav{display:flex;gap:4px;flex-wrap:wrap;flex:1}.ubar nav a{padding:8px 13px;border-radius:10px;color:#9fb0cc;text-decoration:none;font-weight:700;font-size:13.5px;white-space:nowrap}.ubar nav a:hover{color:#fff;background:rgba(255,255,255,.05)}.ubar nav a.on{color:#fff;background:rgba(34,230,255,.12);box-shadow:inset 0 0 0 1px rgba(34,230,255,.35)}
+.ubar .rt{display:flex;gap:8px;align-items:center}.ubar .rt a{color:#dbe7ff;text-decoration:none;font-size:13px;font-weight:700;padding:7px 12px;border:1px solid rgba(255,255,255,.14);border-radius:10px}.ubar .rt a:hover{border-color:#22e6ff}.ubar .who{color:#9fb0cc;font-size:13px}`;
+function topBar(o) {
+  const en = o.lang && o.lang !== 'cs';
+  const tabs = o.mode === 'admin'
+    ? [{ k: 'leady', href: '/admin', t: '👥 Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, t: x.ico + ' ' + x.cs })))
+    : SEKCE.filter((x) => (o.sekce || []).includes(x.k)).map((x) => ({ k: x.k, href: '/portal/m/' + x.k, t: x.ico + ' ' + (en ? x.en : x.cs) }));
+  const rt = o.mode === 'admin'
+    ? `<a href="${HOLYOS_URL}">← HolyOS</a>`
+    : `<span class="who">${esc(o.user || '')}</span><a href="/portal/logout">${en ? 'Log out' : 'Odhlásit'}</a>`;
+  return `<div class="ubar"><div class="in"><a href="${o.mode === 'admin' ? '/admin' : '/portal'}" style="display:flex;align-items:center;gap:12px;text-decoration:none">${logoHtml(30)}<span class="ttl">${o.mode === 'admin' ? 'Administrace' : (en ? 'Partner portal' : 'Partnerský portál')}<small>${o.mode === 'admin' ? 'jen pro tým Laundry Unlimited' : 'Laundry Unlimited'}</small></span></a>
+<nav>${tabs.map((x) => `<a href="${x.href}"${x.k === o.active ? ' class="on"' : ''}>${x.t}</a>`).join('')}</nav><div class="rt">${rt}</div></div></div>`;
+}
+// Stránka materiálů v liště administrace / portálu
+let T01 = null;
+function materialsPage(sekce, bar, title) {
+  if (!T01) T01 = fs.readFileSync(path.join(__dirname, 'tabulka01.html'), 'utf8');
+  const s = SEKCE.find((x) => x.k === sekce);
+  return T01.replace(/<!--HDR-->[\s\S]*?<!--\/HDR-->/, '')
+    .replace('<body>', '<body>' + bar)
+    .replace('</head>', '<style>' + BAR_CSS + 'body .wrap{padding-top:20px}</style><script>window.__ALLOW=' + JSON.stringify(s.listy) + ';</script></head>')
+    .replace(/<title>[^<]*<\/title>/, '<title>' + esc(title + ' — ' + (s ? s.cs : '')) + '</title>');
+}
+
+// ── Partnerský portál (/portal) ───────────────────────────────────────────
+// Partner = lead s portal_access. Přihlášení bez hesla: e-mail → odkaz (24 h) → cookie na 30 dní.
+// Co vidí, určují zaškrtávátka portal_sections v detailu leadu.
+const UCOOKIE = 'lu_user';
+const USER_KEY = LU_SECRET ? crypto.createHmac('sha256', LU_SECRET).update('lu-portal-session').digest('hex') : '';
+const PT = {
+  cs: { title: 'Partnerský portál', lead: 'Zadejte e-mail, na který vám přijde přihlašovací odkaz.', email: 'E-mail', send: 'Poslat odkaz', sent: 'Pokud k e-mailu existuje přístup, poslali jsme vám přihlašovací odkaz. Platí 24 hodin.', bad: 'Odkaz vypršel nebo je neplatný. Vyžádejte si nový.', none: 'Zatím pro vás nemáme zpřístupněné žádné materiály. Ozveme se.', hi: 'Vítejte', subj: 'Přihlášení do partnerského portálu Laundry Unlimited', body: (n) => 'Dobrý den' + (n ? ', ' + n : '') + ',\n\nzde je váš odkaz do partnerského portálu Laundry Unlimited. Platí 24 hodin.\n\nLaundry Unlimited', btn: 'Otevřít portál' },
+  en: { title: 'Partner portal', lead: 'Enter your e-mail and we will send you a sign-in link.', email: 'E-mail', send: 'Send link', sent: 'If this e-mail has access, we have sent you a sign-in link. It is valid for 24 hours.', bad: 'The link has expired or is invalid. Please request a new one.', none: 'No materials have been shared with you yet. We will be in touch.', hi: 'Welcome', subj: 'Sign in to the Laundry Unlimited partner portal', body: (n) => 'Hello' + (n ? ' ' + n : '') + ',\n\nhere is your link to the Laundry Unlimited partner portal. It is valid for 24 hours.\n\nLaundry Unlimited', btn: 'Open the portal' },
+};
+const ptx = (lang) => PT[lang === 'cs' ? 'cs' : 'en'];
+async function sendPortalLink(r) {
+  try {
+    if (!LU_SECRET || !USER_KEY) return false;
+    const t = jwt.sign({ id: r.id, aud: 'lu-portal-link', iss: 'laundry-unlimited' }, USER_KEY, { expiresIn: '24h' });
+    const T2 = ptx(r.lang), link = PUBLIC_URL + '/portal/auth?t=' + encodeURIComponent(t);
+    const svc = jwt.sign({ aud: 'holyos-api', iss: 'laundry-unlimited' }, LU_SECRET, { expiresIn: '1m' });
+    const resp = await fetch(HOLYOS_URL + '/api/auth/lu/mail', { method: 'POST', headers: { Authorization: 'Bearer ' + svc, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: r.email, subject: T2.subj, body: T2.body(r.name), link, linkLabel: T2.btn, lang: r.lang }), signal: AbortSignal.timeout(20000) });
+    if (!resp.ok) { console.warn('[lu] portál mail ' + resp.status); return false; }
+    await q('UPDATE inquiries SET portal_link_at=now() WHERE id=$1', [r.id]);
+    return true;
+  } catch (e) { console.warn('[lu] portál mail:', e.message); return false; }
+}
+async function userOf(req) {
+  if (!USER_KEY) return null;
+  try {
+    const t = jwt.verify(readCookie(req, UCOOKIE), USER_KEY, { audience: 'lu-portal', issuer: 'laundry-unlimited' });
+    const r = (await q('SELECT * FROM inquiries WHERE id=$1 AND portal_access', [t.id])).rows[0];
+    return r || null;
+  } catch (e) { return null; }
+}
+const portalHits = new Map();
+function portalLimited(ip) { const now = Date.now(), a = (portalHits.get(ip) || []).filter((x) => now - x < 3600e3); a.push(now); portalHits.set(ip, a); if (portalHits.size > 5000) portalHits.clear(); return a.length > 8; }
+function portalShell(lang, body, bar) {
+  const T2 = ptx(lang);
+  return `<!doctype html><html lang="${lang === 'cs' ? 'cs' : 'en'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${esc(T2.title)} — Laundry Unlimited</title>
+<style>${ADMIN_CSS}${BAR_CSS}.pbox{max-width:460px;margin:70px auto;padding:30px;border:1px solid var(--line);border-radius:20px;background:var(--card)}.pbox h1{margin:0 0 8px;font-size:26px}.pbox p{color:var(--mut)}.pbox input{width:100%;margin:6px 0 14px}</style></head><body>${bar || ''}${body}</body></html>`;
+}
+const loginBox = (lang, msg) => { const T2 = ptx(lang); return `<div class="pbox"><div style="margin-bottom:18px">${logoHtml(34)}</div><h1>${esc(T2.title)}</h1><p>${esc(msg || T2.lead)}</p>${msg ? '' : `<form method="post" action="/portal/login"><input type="hidden" name="lang" value="${esc(lang)}"><label>${esc(T2.email)}</label><input name="email" type="email" required maxlength="160" autocomplete="email"><button class="btn">${esc(T2.send)}</button></form>`}</div>`; };
+const plang = (req) => (/^cs\b/i.test(String(req.query.lang || req.headers['accept-language'] || '')) ? 'cs' : 'en');
+app.get('/portal', async (req, res) => {
+  res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex');
+  const u = await userOf(req);
+  if (!u) return res.send(portalShell(plang(req), loginBox(plang(req))));
+  const sek = (u.portal_sections || []).filter((k) => SEKCE.some((x) => x.k === k));
+  if (sek.length) return res.redirect(302, '/portal/m/' + SEKCE.find((x) => sek.includes(x.k)).k);
+  const T2 = ptx(u.lang);
+  res.send(portalShell(u.lang, `<div class="pbox"><h1>${esc(T2.hi)}${u.name ? ', ' + esc(u.name) : ''}</h1><p>${esc(T2.none)}</p></div>`, topBar({ mode: 'portal', lang: u.lang, sekce: [], user: u.name })));
+});
+app.post('/portal/login', form, async (req, res) => {
+  const lang = req.body.lang === 'cs' ? 'cs' : 'en';
+  const email = String(req.body.email || '').trim().toLowerCase().slice(0, 160);
+  if (!portalLimited(String(req.ip || '')) && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    const r = (await q('SELECT * FROM inquiries WHERE lower(email)=$1 AND portal_access ORDER BY id DESC LIMIT 1', [email]).catch(() => ({ rows: [] }))).rows[0];
+    if (r) await sendPortalLink(r);
+  }
+  // Stejná odpověď vždy — nikdo nezjistí, které e-maily mají přístup
+  res.set('Cache-Control', 'no-store').send(portalShell(lang, loginBox(lang, ptx(lang).sent)));
+});
+app.get('/portal/auth', async (req, res) => {
+  try {
+    const t = jwt.verify(String(req.query.t || ''), USER_KEY, { audience: 'lu-portal-link', issuer: 'laundry-unlimited' });
+    const r = (await q('SELECT * FROM inquiries WHERE id=$1 AND portal_access', [t.id])).rows[0];
+    if (!r) throw new Error('bez přístupu');
+    const ses = jwt.sign({ id: r.id, aud: 'lu-portal', iss: 'laundry-unlimited' }, USER_KEY, { expiresIn: '30d' });
+    await q('UPDATE inquiries SET portal_login_at=now() WHERE id=$1', [r.id]);
+    res.set('Set-Cookie', UCOOKIE + '=' + encodeURIComponent(ses) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + 30 * 86400);
+    res.set('Cache-Control', 'no-store').redirect(302, '/portal');
+  } catch (e) { res.status(401).set('Cache-Control', 'no-store').send(portalShell(plang(req), loginBox(plang(req), ptx(plang(req)).bad) + '<p style="text-align:center"><a href="/portal">→ ' + esc(ptx(plang(req)).send) + '</a></p>')); }
+});
+app.get('/portal/m/:sekce(report|ekonomika|technika|proc)', async (req, res) => {
+  const u = await userOf(req);
+  if (!u) return res.redirect(302, '/portal');
+  const sek = (u.portal_sections || []);
+  if (!sek.includes(req.params.sekce)) return res.redirect(302, '/portal');
+  res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex').send(materialsPage(req.params.sekce, topBar({ mode: 'portal', lang: u.lang, sekce: sek, active: req.params.sekce, user: u.name }), ptx(u.lang).title));
+});
+app.get('/portal/logout', (req, res) => { res.set('Set-Cookie', UCOOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'); res.redirect(302, '/portal'); });
+
 // ── Administrace (SSO z HolyOS) ────────────────────────────────────────────
 function adminOf(req) { if (!SESSION_KEY) return null; try { const t = jwt.verify(readCookie(req, COOKIE), SESSION_KEY, { audience: 'lu-admin', issuer: 'laundry-unlimited' }); return { name: t.name || '' }; } catch (e) { return null; } }
 const toHolyos = () => HOLYOS_URL + '/api/auth/sso/laundry-unlimited';
@@ -463,31 +583,48 @@ app.get('/admin', requireAdmin, async (req, res) => {
 <div class="det"><div class="g"><div><div class="k">E-mail</div><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></div><div><div class="k">Telefon</div>${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '—'}</div></div>
 <div class="ans">${ans(r.answers)}</div>${r.utm && Object.keys(r.utm).length ? `<div class="mut small">Zdroj: ${esc(JSON.stringify(r.utm))}</div>` : ''}
 <div class="act"><select data-id="${r.id}" class="st">${STATUSES.map((x) => `<option value="${x[0]}"${x[0] === r.status ? ' selected' : ''}>${x[1]}</option>`).join('')}</select>
-<input class="note" data-id="${r.id}" placeholder="Poznámka…" value="${esc(r.note || '')}"><button class="btn sm save" data-id="${r.id}">Uložit</button><button class="btn sm ghost del" data-id="${r.id}" title="Smazat poptávku">Smazat</button><span class="msg"></span></div></div></details>`).join('');
+<input class="note" data-id="${r.id}" placeholder="Poznámka…" value="${esc(r.note || '')}"><button class="btn sm save" data-id="${r.id}">Uložit</button><button class="btn sm ghost del" data-id="${r.id}" title="Smazat poptávku">Smazat</button><span class="msg"></span>
+<div class="portal" style="flex-basis:100%"><div class="k" style="margin-bottom:6px">Partnerský portál</div><label><input type="checkbox" class="pacc"${r.portal_access ? ' checked' : ''}> <b>Má přístup do portálu</b></label>
+<div style="margin-top:4px"><span class="mut small">Co v portálu uvidí:</span><br>${SEKCE.map((x) => `<label><input type="checkbox" class="psec" value="${x.k}"${(r.portal_sections || []).includes(x.k) ? ' checked' : ''}> ${x.ico} ${esc(x.cs)}</label>`).join('')}</div>
+<div style="margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn sm ghost plink" data-id="${r.id}" type="button">✉ Poslat přihlašovací odkaz</button><span class="mut small">${r.portal_login_at ? 'Naposledy přihlášen ' + fmtDt(r.portal_login_at) : 'Zatím se nepřihlásil'}${r.portal_link_at ? ' · odkaz poslán ' + fmtDt(r.portal_link_at) : ''}</span></div></div></div></div></details>`).join('');
   const chips = [['', 'Vše (' + total + ')']].concat(STATUSES.map((x) => [x[0], x[1] + ' (' + (counts[x[0]] || 0) + ')'])).map((x) => `<a class="chip${st === x[0] ? ' on' : ''}" href="/admin?s=${x[0]}${qs ? '&q=' + encodeURIComponent(qs) : ''}">${esc(x[1])}</a>`).join('');
   res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Laundry Unlimited — administrace</title>
 <style>${ADMIN_CSS}.adm{max-width:1100px;margin:0 auto;padding:22px}.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}.chip{border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;color:var(--text);text-decoration:none;background:#07111f}.chip.on{background:var(--bl)}.chip.ok{border-color:#22c55e;color:#86efac}
 .r{border:1px solid var(--line);border-radius:14px;background:var(--card);margin:8px 0}.r summary{list-style:none;cursor:pointer;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px}.r summary::-webkit-details-marker{display:none}.sp{flex:1}
 .dot{width:10px;height:10px;border-radius:50%}.mut{color:var(--mut);font-size:13px}.small{font-size:12px}.det{padding:0 16px 16px;border-top:1px solid var(--line)}.g{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}.k{color:var(--mut);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-right:6px}
 .ans div{margin:4px 0}.act{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px}.act select{width:auto}.act .note{flex:1;min-width:180px}.msg{font-size:13px;color:#86efac}
-.atabs{display:flex;gap:6px;margin:18px 0 6px;border-bottom:1px solid var(--line)}.atabs a{padding:10px 16px;color:var(--mut);text-decoration:none;font-weight:700;font-size:14px;border-bottom:2px solid transparent;margin-bottom:-1px}.atabs a.on{color:#fff;border-color:var(--cy)}.atabs a:hover{color:#fff}</style></head><body><div class="adm">
-<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">${logoHtml(36)}<h2 style="margin:0">Administrace</h2><span class="sp"></span><a class="btn sm ghost" href="${HOLYOS_URL}"><span>← HolyOS</span></a></div>
-<nav class="atabs"><a class="on" href="/admin">👥 Leady</a><a href="/tabulka01" target="_blank" rel="noopener">📊 Finanční report ↗</a><a href="/docs/Laundry-Unlimited-Technical-Parameters.pdf" target="_blank" rel="noopener">📄 Technické parametry (PDF) ↗</a></nav>
+.atabs{display:flex;gap:6px;margin:18px 0 6px;border-bottom:1px solid var(--line)}.atabs a{padding:10px 16px;color:var(--mut);text-decoration:none;font-weight:700;font-size:14px;border-bottom:2px solid transparent;margin-bottom:-1px}.atabs a.on{color:#fff;border-color:var(--cy)}.atabs a:hover{color:#fff}${BAR_CSS}.adm{padding-top:8px}.portal{margin-top:14px;padding:12px 14px;border:1px dashed rgba(34,230,255,.35);border-radius:12px;background:rgba(34,230,255,.04)}.portal label{display:inline-flex;align-items:center;gap:6px;margin:4px 14px 4px 0;font-size:13.5px;cursor:pointer}.portal input{width:auto;margin:0}
+</style></head><body>${topBar({ mode: 'admin', active: 'leady' })}<div class="adm">
 <div style="display:flex;align-items:center;gap:10px;margin-top:10px"><h3 style="margin:0">Leady <span class="mut" style="font-weight:400">— poptávky z webu</span></h3><span class="sp"></span><a class="btn sm ghost" href="/admin/export.csv"><span>⬇ CSV</span></a></div>
 <div class="bar">${chips}<form method="get" action="/admin" style="margin-left:auto;display:flex;gap:6px"><input type="hidden" name="s" value="${esc(st)}"><input name="q" value="${esc(qs)}" placeholder="Hledat jméno, e-mail, zemi…" style="width:240px"><button class="btn sm">Hledat</button></form></div>
 ${tr || '<p class="mut">Zatím žádné leady.</p>'}</div>
 <script>
 async function call(url,body){const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});return r.json()}
-document.addEventListener('click',async e=>{const b=e.target.closest('.save,.del');if(!b)return;const id=b.dataset.id,box=b.closest('.act'),m=box.querySelector('.msg');
+document.addEventListener('click',async e=>{const pl=e.target.closest('.plink');if(pl){const box=pl.closest('.act'),m=box.querySelector('.msg');if(!confirm('Poslat partnerovi e-mail s přihlašovacím odkazem do portálu? (Nejdřív ulož změny.)'))return;pl.disabled=true;const j=await call('/admin/api/inquiry/'+pl.dataset.id+'/portal-link',{});pl.disabled=false;m.textContent=j.ok?'Odkaz odeslán ✓':(j.error||'Chyba');return}
+const b=e.target.closest('.save,.del');if(!b)return;const id=b.dataset.id,box=b.closest('.act'),m=box.querySelector('.msg');
 if(b.classList.contains('del')){if(!confirm('Opravdu smazat tuto poptávku? Nelze vrátit.'))return;const j=await call('/admin/api/inquiry/'+id+'/delete',{});if(j.ok)location.reload();else m.textContent=j.error||'Chyba';return}
-const j=await call('/admin/api/inquiry/'+id,{status:box.querySelector('.st').value,note:box.querySelector('.note').value});m.textContent=j.ok?'Uloženo ✓':(j.error||'Chyba');if(j.ok)setTimeout(()=>location.reload(),500)});
+const pb=box.querySelector('.portal');const j=await call('/admin/api/inquiry/'+id,{status:box.querySelector('.st').value,note:box.querySelector('.note').value,portal_access:!!(pb&&pb.querySelector('.pacc').checked),portal_sections:pb?[].map.call(pb.querySelectorAll('.psec:checked'),function(x){return x.value}):undefined});m.textContent=j.ok?'Uloženo ✓':(j.error||'Chyba');if(j.ok)setTimeout(()=>location.reload(),500)});
 </script></body></html>`);
 });
 app.post('/admin/api/inquiry/:id(\\d+)', requireAdmin, express.json({ limit: '20kb' }), async (req, res) => {
   const b = req.body || {}; const id = Number(req.params.id);
   if (!STATUSES.some((x) => x[0] === b.status)) return res.status(400).json({ ok: false, error: 'Neplatný stav' });
   await q('UPDATE inquiries SET status=$2, note=$3, updated_at=now() WHERE id=$1', [id, b.status, String(b.note || '').slice(0, 2000) || null]);
+  if (b.portal_access !== undefined) {
+    const sek = Array.isArray(b.portal_sections) ? b.portal_sections.filter((k) => SEKCE.some((x) => x.k === k)) : [];
+    await q('UPDATE inquiries SET portal_access=$2, portal_sections=$3::jsonb WHERE id=$1', [id, !!b.portal_access, JSON.stringify(sek)]);
+  }
   res.json({ ok: true });
+});
+app.get('/admin/m/:sekce(report|ekonomika|technika|proc)', requireAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex').send(materialsPage(req.params.sekce, topBar({ mode: 'admin', active: req.params.sekce }), 'Administrace'));
+});
+app.post('/admin/api/inquiry/:id(\\d+)/portal-link', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
+  const r = (await q('SELECT * FROM inquiries WHERE id=$1', [Number(req.params.id)])).rows[0];
+  if (!r) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
+  if (!r.portal_access) return res.status(400).json({ ok: false, error: 'Lead nemá zaškrtnutý přístup do portálu (ulož změny).' });
+  const ok = await sendPortalLink(r);
+  res.status(ok ? 200 : 502).json(ok ? { ok: true } : { ok: false, error: 'E-mail se nepodařilo odeslat' });
 });
 app.post('/admin/api/inquiry/:id(\\d+)/delete', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   await q('DELETE FROM inquiries WHERE id=$1', [Number(req.params.id)]); res.json({ ok: true });
