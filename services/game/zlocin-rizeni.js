@@ -174,14 +174,28 @@ async function uzavri(prisma, z, rozhodnuti, castka) {
     // Nestačí hotovost → propadnou prádlomaty (od nejlevnějšího, dokud se trest nepokryje).
     // Zabavený majetek mizí ze hry: nikomu se nepřevádí, místo se uvolní.
     if (zbyva > 0) {
-      const claims = await prisma.gameSpotClaim.findMany({ where: { player_id: z.hlavni_id } });
+      // Propadají PRÁDLOMATY, ne holá zem. Dokud se nefiltrovalo na model,
+      // bral soud i koupené pozemky bez stavby — cenik('') spadne na MINI,
+      // takže se pozemek ocenil jako stroj, který na něm nestojí, a jako
+      // nejlevnější šel ke dnu první. Hráč o zem přišel, trestu se započetla
+      // cena neexistujícího stroje a doručenka unit_remove neměla ve hře co
+      // odebrat — pozemek mu v mapě zůstal a nedalo se na něm stavět.
+      const claims = await prisma.gameSpotClaim.findMany({
+        where: { player_id: z.hlavni_id, model: { not: '' } } });
       const sCenou = claims.map((c) => ({ c, v: ZL.cenik(c.model) })).sort((a, b) => a.v - b.v);
       const zabaveno = [];
       for (const x of sCenou) {
         if (zbyva <= 0) break;
-        await prisma.gameDelivery.create({ data: { player_id: z.hlavni_id, kind: 'unit_remove', spot_id: x.c.spot_id,
-          popis: 'Soud: zabaven prádlomat ' + (x.c.name || x.c.spot_id) + ' (propadl státu)' } });
-        await prisma.gameSpotClaim.deleteMany({ where: { spot_id: x.c.spot_id, player_id: z.hlavni_id } });
+        // Doručenka a zrušení záboru patří k sobě. Dokud to byly dva samostatné
+        // zápisy, mohl projít jen jeden: hráčovi stroj zmizel ze hry a serveru
+        // zůstal zábor, takže místo blokoval stroj, který soud už vzal.
+        await prisma.$transaction([
+          prisma.gameDelivery.create({ data: { player_id: z.hlavni_id, kind: 'unit_remove',
+            spot_id: x.c.spot_id,
+            popis: 'Soud: zabaven prádlomat ' + (x.c.name || x.c.spot_id) + ' (propadl státu)' } }),
+          prisma.gameSpotClaim.deleteMany({
+            where: { spot_id: x.c.spot_id, player_id: z.hlavni_id } }),
+        ]);
         zabaveno.push(x.c.name || x.c.spot_id);
         zbyva -= x.v;
       }

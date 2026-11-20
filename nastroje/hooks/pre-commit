@@ -137,6 +137,16 @@ if git diff --cached --name-only | grep -qE 'services/game/brzda|routes/game-tra
   fi
 fi
 
+# Co propadá soudu. Bralo to i koupenou zem a ocenilo ji jako MINI — hráč
+# přišel o pozemek, který mu zůstal viset ve hře a nedalo se na něm stavět.
+if git diff --cached --name-only | grep -qE 'services/game/zlocin'; then
+  if ! node nastroje/tzabaveni.js; then
+    echo ""
+    echo "STOP: zabavení majetku nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Předplatné na techniky: co se účtuje a co hráč dostane. Jsou to skutečné
 # peníze — chyba tady buď okrade hráče, nebo dá obejít placení.
 if git diff --cached --name-only | grep -qE 'services/game/predplatne|routes/game-stripe|routes/game-account'; then

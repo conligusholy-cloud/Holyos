@@ -764,7 +764,9 @@ router.get('/players/:id/transakce', api(async (req, res) => {
       se_ziskem: units.filter((u) => u.eco && u.eco.profit > 0).length,
       eco_profit: Math.round(units.reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0)),
       zbyde_mesicne: acct._zbydeMesicne(st) },
-    dorucenky: dor.map((d) => ({ kdy: d.created_at, kind: d.kind, amount: d.amount, prijato: d.claimed_at, popis: d.popis || d.text_kod || '' })),
+    // spot_id patří ven: u zabavení je to jediný záznam o tom, které místo
+    // soud vzal — zábor se mazá a jinde po něm nezbyde stopa.
+    dorucenky: dor.map((d) => ({ kdy: d.created_at, kind: d.kind, amount: d.amount, spot_id: d.spot_id, prijato: d.claimed_at, popis: d.popis || d.text_kod || '' })),
     obchody: obch.map((t) => ({ id: t.id, kdy: t.created_at, od: t.from_nick, komu: t.to_nick, smer: t.smer, predmet: t.predmet, cena: t.cena, stav: t.stav, data: t.data })),
     podily: pod.map((e) => ({ id: e.id, firma: e.firma_nick, investor: e.investor_nick, podil: e.podil, cena: e.cena, vyplaceno: e.vyplaceno, stav: e.stav, dalsi: e.dalsi_at, kdy: e.created_at })),
     pujcky: puj.map((l) => ({ id: l.id, veritel: l.lender_nick, dluznik: l.borrower_nick, castka: l.castka, splaceno: l.splaceno, mesicu: l.mesicu, zmeskano: l.zmeskano, stav: l.stav })),
