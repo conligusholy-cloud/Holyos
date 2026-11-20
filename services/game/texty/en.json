@@ -3784,7 +3784,7 @@
   "dor.akcie_prodal": "You sold {cislo:p2} shares of the fund {p1} at {penize:p3} each.",
   "dor.akcie_koupil": "You bought {cislo:p2} shares of the fund {p1} at {penize:p3} each.",
   "akcie.nadpis": "Fund shares",
-  "akcie.popis": "A fund sold a piece of itself. Anyone can buy shares — you do not have to be a member.",
+  "akcie.popis": "A fund sold a piece of itself. Anyone can buy shares — you need not be a member. The fund is always the counterparty.",
   "akcie.graf": "Share price",
   "akcie.graf_zatim": "The chart appears after the second trade — a share price is nothing but what actually changed hands.",
   "akcie.kniha_prazdna": "Nobody is offering anything here yet.",
@@ -3809,7 +3809,7 @@
   "akcie.zatim_neobchodovano": "not traded yet",
   "akcie.lezi_v_knize": "Your order is resting in the book, waiting for the other side.",
   "akcie.vypln": "Fill in both the count and the price.",
-  "akcie.rada": "Price is not negotiated: whatever meets in the book trades at the price of the order that was there first.",
+  "akcie.rada": "The buyer does not set the price. Buying pushes it up, selling pushes it down — the bigger the lot, the more.",
   "fond.navrh_akcie": "Issue shares",
   "fond.navrh_akcie_dividenda": "Dividend to shareholders",
   "fond.akcie_vydat": "Issue the shares",
@@ -3820,5 +3820,9 @@
   "veta.akcie_zobchodovano": "Traded {p1} shares for {penize:p2}.",
   "veta.fond_akcie_popis": "Issue {cislo:p1} shares at {penize:p2} each",
   "veta.fond_akcie_dividenda_popis": "Pay shareholders {penize:p1} per share",
-  "veta.fond_drzi_zaplaceno": "paid {penize:p1} · the company pays out {cislo:p2} % of its profit"
+  "veta.fond_drzi_zaplaceno": "paid {penize:p1} · the company pays out {cislo:p2} % of its profit",
+  "akcie.cena_ted": "Share price",
+  "akcie.kolik": "How many shares",
+  "akcie.fond_jeste_proda": "The fund still sells",
+  "veta.akcie_posun": "After buying the price would be {penize:p1}, after selling {penize:p2}."
 }

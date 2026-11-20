@@ -62,12 +62,9 @@ const OCEKAVANI = {
   '/trade/deliveries/claim': false,
   '/trade/konkurz': false,              // únikový východ se nezavírá
   '/trade/aukce/:id/koupit': true,
-  // Akcie fondu: zadání nabídky je nový závazek a jediná cesta, kterou se
-  // hýbe cenou — stojí. Stažení vlastní nabídky je opak závazku a musí jít
-  // i při zatažené brzdě, jinak hráči zůstanou peníze zamčené pod nabídkou,
-  // kterou nemůže sundat.
-  '/trade/akcie/:id/nabidka': true,
-  '/trade/akcie/nabidka/:id/zrus': false,
+  // Akcie fondu: obchod je jediná cesta, kterou se hýbe cenou, a mění
+  // hotovost i pokladnu fondu. Při díře stojí.
+  '/trade/akcie/:id/obchod': true,
   '/trade/trh': true,
   '/trade/trh/:id/stahnout': false,
   '/trade/trh/:id/koupit': true,

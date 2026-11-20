@@ -7,9 +7,6 @@ const Module = require('module');
 const puvodni = Module.prototype.require;
 let NABIDKY = [];
 let PODILY = [];
-let AKCIE = [];
-// Atrapa databáze se drží stranou, aby se z ní dala tabulka za běhu sundat —
-// přesně to se stane, když se po nasazení nepřegeneruje klient.
 let PRISMA = null;
 Module.prototype.require = function (co) {
   if (/config\/database$/.test(co)) {
@@ -18,9 +15,6 @@ Module.prototype.require = function (co) {
         t.utocnik_id === q.where.utocnik_id && t.stav === q.where.stav && t.trvala === q.where.trvala) },
       gameEquity: { findMany: async (q) => PODILY.filter((e) =>
         e.firma_id === q.where.firma_id && e.stav === q.where.stav) },
-      gameAkcieNabidka: { findMany: async (q) => AKCIE.filter((n) =>
-        n.player_id === q.where.player_id && n.stav === q.where.stav
-        && n.smer === q.where.smer) },
     };
     return { prisma: PRISMA };
   }
@@ -120,43 +114,6 @@ const nabidka = (x) => Object.assign({ utocnik_id: 1, stav: 'bezi', trvala: fals
 
   PODILY = [];
   ok('prázdný stav nic neshodí', (await REZ.volne(HRAC, null)).volne === 0);
-
-  // ─── Nabídky v pořadníku akcií ─────────────────────────────────────────────
-  // Ležící nákup akcií je stejný slib jako nabídka na převzetí: kdokoli mi
-  // do něj může prodat a já musím zaplatit. Bez téhle položky by hráč
-  // jedněmi penězi podložil deset nabídek.
-  NABIDKY = []; PODILY = [];
-  AKCIE = [{ player_id: 1, stav: 'bezi', smer: 'koupit', zbyva: 10, cena: 5000 }];
-  v = await REZ.volne(HRAC, { cash: 1000000 });
-  ok('ležící nákup akcií zamkne kusy krát cenu',
-    v.zamceno === 50000 && v.volne === 950000, '— ' + v.zamceno);
-
-  // Částečně splněná nabídka drží už jen zbytek, ne původní počet.
-  AKCIE = [{ player_id: 1, stav: 'bezi', smer: 'koupit', zbyva: 3, cena: 5000, pocet: 10 }];
-  v = await REZ.volne(HRAC, { cash: 1000000 });
-  ok('po částečném plnění drží jen zbytek', v.zamceno === 15000, '— ' + v.zamceno);
-
-  // Prodej akcií nezamyká peníze — prodávající žádné neslibuje.
-  AKCIE = [{ player_id: 1, stav: 'bezi', smer: 'prodat', zbyva: 10, cena: 5000 }];
-  v = await REZ.volne(HRAC, { cash: 1000000 });
-  ok('prodej akcií peníze nezamyká', v.zamceno === 0, '— ' + v.zamceno);
-
-  // A sečte se to se zbytkem: nabídka na převzetí i nákup akcií naráz.
-  NABIDKY = [nabidka()];
-  AKCIE = [{ player_id: 1, stav: 'bezi', smer: 'koupit', zbyva: 10, cena: 5000 }];
-  v = await REZ.volne(HRAC, { cash: 1000000 });
-  ok('sčítá se s ostatními závazky', v.zamceno === 350000, '— ' + v.zamceno);
-  AKCIE = [];
-
-  // Klient bez téhle tabulky — stane se, když se po nasazení nepřegeneruje.
-  // Rezervace gatují KAŽDÝ nákup ve hře, takže je chybějící tabulka nesmí
-  // shodit: radši se nezamkne nic, než aby se nedalo hrát.
-  NABIDKY = [nabidka()];
-  const zaloha = PRISMA.gameAkcieNabidka;
-  delete PRISMA.gameAkcieNabidka;
-  v = await REZ.volne(HRAC, { cash: 1000000 });
-  ok('bez tabulky akcií rezervace nespadnou', v.zamceno === 300000, '— ' + v.zamceno);
-  PRISMA.gameAkcieNabidka = zaloha;
 
   console.log(chyb ? '\n' + chyb + ' nesedí' : '\nvšechno sedí');
   process.exit(chyb ? 1 : 0);

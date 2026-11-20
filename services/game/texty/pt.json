@@ -3777,7 +3777,7 @@
   "dor.akcie_prodal": "Você vendeu {cislo:p2} ações do fundo {p1} a {penize:p3}.",
   "dor.akcie_koupil": "Você comprou {cislo:p2} ações do fundo {p1} a {penize:p3}.",
   "akcie.nadpis": "Ações de fundos",
-  "akcie.popis": "Um fundo vendeu um pedaço de si. Qualquer um pode comprar ações — não precisa ser membro.",
+  "akcie.popis": "Um fundo vendeu um pedaço de si. Qualquer um pode comprar — não precisa ser membro. A contraparte é sempre o fundo.",
   "akcie.graf": "Preço da ação",
   "akcie.graf_zatim": "O gráfico aparece depois da segunda negociação — o preço é só aquilo que de fato foi negociado.",
   "akcie.kniha_prazdna": "Aqui ainda ninguém oferece nada.",
@@ -3802,7 +3802,7 @@
   "akcie.zatim_neobchodovano": "ainda sem negociação",
   "akcie.lezi_v_knize": "Sua ordem fica no livro esperando a outra ponta.",
   "akcie.vypln": "Preencha quantidade e preço.",
-  "akcie.rada": "O preço não se negocia: o que se encontra no livro negocia ao preço da ordem que chegou antes.",
+  "akcie.rada": "O preço não é definido por quem compra. Comprar sobe, vender desce — quanto maior o lote, mais.",
   "fond.navrh_akcie": "Emitir ações",
   "fond.navrh_akcie_dividenda": "Dividendo aos acionistas",
   "fond.akcie_vydat": "Emitir as ações",
@@ -3813,5 +3813,9 @@
   "veta.akcie_zobchodovano": "{p1} ações negociadas por {penize:p2}.",
   "veta.fond_akcie_popis": "Emitir {cislo:p1} ações a {penize:p2}",
   "veta.fond_akcie_dividenda_popis": "Pagar aos acionistas {penize:p1} por ação",
-  "veta.fond_drzi_zaplaceno": "pago {penize:p1} · a empresa paga {cislo:p2} % do lucro"
+  "veta.fond_drzi_zaplaceno": "pago {penize:p1} · a empresa paga {cislo:p2} % do lucro",
+  "akcie.cena_ted": "Preço da ação",
+  "akcie.kolik": "Quantas ações",
+  "akcie.fond_jeste_proda": "O fundo ainda vende",
+  "veta.akcie_posun": "Depois da compra o preço seria {penize:p1}, depois da venda {penize:p2}."
 }

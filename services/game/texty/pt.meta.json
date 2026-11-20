@@ -3757,7 +3757,7 @@
   "dor.akcie_prodal": "7827ab175a1b",
   "dor.akcie_koupil": "76931d498b05",
   "akcie.nadpis": "86d1ac5831db",
-  "akcie.popis": "8681d75bf666",
+  "akcie.popis": "b6c20b305eb9",
   "akcie.graf": "a45958eb55d1",
   "akcie.graf_zatim": "e608c27176f5",
   "akcie.kniha_prazdna": "75d4cd5e31d0",
@@ -3782,7 +3782,7 @@
   "akcie.zatim_neobchodovano": "169c163e735b",
   "akcie.lezi_v_knize": "ff43f7e10062",
   "akcie.vypln": "e39efa6d594b",
-  "akcie.rada": "00cebd54a819",
+  "akcie.rada": "7484cce38452",
   "fond.navrh_akcie": "df42426bf044",
   "fond.navrh_akcie_dividenda": "9b63ae9ad4c9",
   "fond.akcie_vydat": "df42426bf044",
@@ -3793,5 +3793,9 @@
   "veta.akcie_zobchodovano": "52b6b1ca5145",
   "veta.fond_akcie_popis": "e3c6f3282e54",
   "veta.fond_akcie_dividenda_popis": "8379786a7f31",
-  "veta.fond_drzi_zaplaceno": "eea1745e1525"
+  "veta.fond_drzi_zaplaceno": "eea1745e1525",
+  "akcie.cena_ted": "a45958eb55d1",
+  "akcie.kolik": "545d73997cdd",
+  "akcie.fond_jeste_proda": "193babd36f2f",
+  "veta.akcie_posun": "7c8f2c034106"
 }

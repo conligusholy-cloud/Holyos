@@ -3806,7 +3806,7 @@
   "mapa.zeme_bez_stroje": "zem, na které nic nestojí",
   "mapa.koupena_zem": "koupená zem",
   "akcie.nadpis": "Akcie fondů",
-  "akcie.popis": "Fond prodal kus sebe. Akcie si může koupit kdokoli — členem fondu být nemusíš.",
+  "akcie.popis": "Fond prodal kus sebe. Akcie si může koupit kdokoli — členem fondu být nemusíš. Protistranou je vždycky fond.",
   "akcie.graf": "Cena akcie",
   "akcie.graf_zatim": "Graf se objeví po druhém obchodu — cena akcie není nic jiného než to, co se doopravdy zobchodovalo.",
   "akcie.kniha_prazdna": "Tady zatím nikdo nic nenabízí.",
@@ -3831,7 +3831,7 @@
   "akcie.zatim_neobchodovano": "zatím se neobchodovalo",
   "akcie.lezi_v_knize": "Nabídka leží v knize a čeká na protistranu.",
   "akcie.vypln": "Vyplň počet i cenu.",
-  "akcie.rada": "Cena se nedomlouvá: co se potká v knize, to se zobchoduje za cenu nabídky, která ležela dřív.",
+  "akcie.rada": "Cenu neurčuje kupující. Nákup ji povytlačí nahoru, prodej srazí dolů — tím víc, čím větší kus naráz.",
   "fond.navrh_akcie": "Vydat akcie",
   "fond.navrh_akcie_dividenda": "Dividenda akcionářům",
   "fond.akcie_vydat": "Vydat akcie",
@@ -3854,5 +3854,9 @@
   "hra.zem_pod_pradlomatem": "zem pod prádlomatem",
   "mapa.zem_pod_mym_pradlomatem": "zem pod mým prádlomatem",
   "veta.zem_pod": "zem pod {p1}",
-  "veta.fond_drzi_zaplaceno": "zaplaceno {penize:p1} · firma vyplácí {cislo:p2} % zisku"
+  "veta.fond_drzi_zaplaceno": "zaplaceno {penize:p1} · firma vyplácí {cislo:p2} % zisku",
+  "akcie.cena_ted": "Cena akcie",
+  "akcie.kolik": "Kolik kusů",
+  "akcie.fond_jeste_proda": "Fond ještě prodá",
+  "veta.akcie_posun": "Po nákupu by cena byla {penize:p1}, po prodeji {penize:p2}."
 }

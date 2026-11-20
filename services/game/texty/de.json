@@ -3784,7 +3784,7 @@
   "dor.akcie_prodal": "Du hast {cislo:p2} Aktien des Fonds {p1} zu je {penize:p3} verkauft.",
   "dor.akcie_koupil": "Du hast {cislo:p2} Aktien des Fonds {p1} zu je {penize:p3} gekauft.",
   "akcie.nadpis": "Fondsaktien",
-  "akcie.popis": "Ein Fonds hat ein Stück von sich verkauft. Aktien kann jeder kaufen — Mitglied musst du nicht sein.",
+  "akcie.popis": "Ein Fonds hat ein Stück von sich verkauft. Aktien kann jeder kaufen — Mitglied musst du nicht sein. Gegenpartei ist immer der Fonds.",
   "akcie.graf": "Aktienkurs",
   "akcie.graf_zatim": "Der Chart erscheint nach dem zweiten Handel — ein Kurs ist nichts als das, was wirklich gehandelt wurde.",
   "akcie.kniha_prazdna": "Hier bietet noch niemand etwas an.",
@@ -3809,7 +3809,7 @@
   "akcie.zatim_neobchodovano": "noch nicht gehandelt",
   "akcie.lezi_v_knize": "Dein Angebot liegt im Buch und wartet auf die Gegenseite.",
   "akcie.vypln": "Trag Stückzahl und Preis ein.",
-  "akcie.rada": "Der Preis wird nicht verhandelt: Was sich im Buch trifft, wird zum Preis des zuerst liegenden Angebots gehandelt.",
+  "akcie.rada": "Den Kurs bestimmt nicht der Käufer. Kaufen treibt ihn hoch, Verkaufen drückt ihn — je größer das Paket, desto mehr.",
   "fond.navrh_akcie": "Aktien ausgeben",
   "fond.navrh_akcie_dividenda": "Dividende an Aktionäre",
   "fond.akcie_vydat": "Aktien ausgeben",
@@ -3820,5 +3820,9 @@
   "veta.akcie_zobchodovano": "{p1} Aktien für {penize:p2} gehandelt.",
   "veta.fond_akcie_popis": "{cislo:p1} Aktien zu je {penize:p2} ausgeben",
   "veta.fond_akcie_dividenda_popis": "Aktionären {penize:p1} je Aktie auszahlen",
-  "veta.fond_drzi_zaplaceno": "bezahlt {penize:p1} · die Firma schüttet {cislo:p2} % des Gewinns aus"
+  "veta.fond_drzi_zaplaceno": "bezahlt {penize:p1} · die Firma schüttet {cislo:p2} % des Gewinns aus",
+  "akcie.cena_ted": "Aktienkurs",
+  "akcie.kolik": "Wie viele Stück",
+  "akcie.fond_jeste_proda": "Der Fonds verkauft noch",
+  "veta.akcie_posun": "Nach dem Kauf wäre der Kurs {penize:p1}, nach dem Verkauf {penize:p2}."
 }

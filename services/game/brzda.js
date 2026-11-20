@@ -33,11 +33,9 @@ const CESTY = [
   /^\/trade\/fond\/nabidka$/,
   /^\/trade\/aliance\/fond\/navrh\/[^/]+\/protinavrh$/,
 
-  // Akcie fondu. Zadání nabídky do pořadníku je nový závazek — a navíc
-  // jediná cesta, kterou se na trhu hýbe cenou, takže při díře stojí.
-  // Stažení vlastní nabídky ne: brzda nemá nikoho zamykat v rozjednané
-  // věci a stažení je opak nového závazku.
-  /^\/trade\/akcie\/[^/]+\/nabidka$/,
+  // Akcie fondu: obchod je jediná cesta, kterou se hýbe cenou, a mění
+  // hotovost i pokladnu fondu. Při díře stojí.
+  /^\/trade\/akcie\/[^/]+\/obchod$/,
 
   /^\/trade\/trh$/,                     // nový inzerát na trhu
   /^\/trade\/trh\/\d+\/koupit$/,

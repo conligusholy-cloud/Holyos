@@ -8344,11 +8344,17 @@ model GameAliance {
   // a nákupy, vklady jen tím, kdo kolik složil nebo převedl.
   pokladna      Float    @default(0)
   // Akcie fondu. Fond může vydat akcie a prodat tím kus sebe komukoli;
-  // akcionář nemusí být člen a o chování fondu nehlasuje. akcie_vydano je,
-  // kolik kusů je venku, akcie_podil jaký díl fondu akcionáři dohromady drží.
-  // Členům zbývá zbytek a ten si dělí podle vkladů jako dosud.
+  // akcionář nemusí být člen a o chování fondu nehlasuje.
+  //   akcie_celkem  kolik kusů vůbec existuje (vydáním vzniknou)
+  //   akcie_vydano  kolik z nich drží hráči; zbytek drží fond jako nevydané
+  //   akcie_podil   jaký díl fondu akcionáři dohromady drží
+  //   akcie_cena    co stojí jedna akcie teď
+  // Členům zbývá zbytek dílu a ten si dělí podle vkladů jako dosud. Cenu
+  // určí při vydání hlasování; pak s ní hýbe jen obchodování.
+  akcie_celkem  Int      @default(0)
   akcie_vydano  Int      @default(0)
   akcie_podil   Float    @default(0)
+  akcie_cena    Int      @default(0)
   created_at    DateTime @default(now())
 
   @@map("game_aliance")
@@ -8385,28 +8391,6 @@ model GameAkcie {
   @@unique([aliance_id, player_id], map: "game_akcie_fond_hrac")
   @@index([player_id])
   @@map("game_akcie")
-}
-
-// Pořadník nabídek. Kdo chce koupit, řekne počet a nejvyšší cenu; kdo prodat,
-// počet a nejnižší. Co se potká, to se zobchoduje za cenu nabídky, která
-// ležela dřív. `zbyva` je, kolik kusů ještě leží — částečné plnění je běžný
-// stav, ne výjimka.
-model GameAkcieNabidka {
-  id          Int       @id @default(autoincrement())
-  aliance_id  Int
-  player_id   Int
-  nick        String    @db.VarChar(24)
-  smer        String    @db.VarChar(8)
-  pocet       Int
-  zbyva       Int
-  cena        Int
-  stav        String    @default("bezi") @db.VarChar(12)
-  created_at  DateTime  @default(now())
-  uzavreno_at DateTime?
-
-  @@index([aliance_id, stav, smer, cena, id], map: "game_akcie_nabidka_kniha")
-  @@index([player_id])
-  @@map("game_akcie_nabidka")
 }
 
 // Uzavřené obchody — z nich se kreslí graf ceny. Cena akcie není nic jiného

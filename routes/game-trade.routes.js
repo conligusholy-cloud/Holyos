@@ -2226,18 +2226,21 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
     const h = await hodnotaFondu(moje.aliance_id);
     const v = AKCIE.vydani(h, (al && al.akcie_vydano) || 0, (al && al.akcie_podil) || 0, pocet, cena);
     if (!v.ok) return res.status(409).json({ error: akcieChyba(req, v.duvod) });
-    const nab = await prisma.$transaction(async (tx) => {
-      const r = await tx.gameAkcieNabidka.create({ data: {
-        aliance_id: moje.aliance_id, player_id: 0, nick: (al && al.nazev) || '',
-        smer: 'prodat', pocet, zbyva: pocet, cena } });
+    // Akcie se vydáním NEPRODÁVAJÍ nikomu konkrétnímu: jen vzniknou a fond
+    // je drží jako nevydané. Díl akcionářů se posune teprve tím, co se
+    // opravdu prodá — kdyby se posunul hned, členové by se zředili za akcie,
+    // které si nikdo nekoupil. Odhlasovaná cena je ta vyvolávací; od ní pak
+    // s cenou hýbe jen obchodování.
+    await prisma.$transaction(async (tx) => {
+      await tx.gameAliance.update({ where: { id: moje.aliance_id },
+        data: { akcie_celkem: { increment: pocet }, akcie_cena: cena } });
       await tx.gameFondNavrh.update({ where: { id: n.id }, data: { stav: 'proveden' } });
-      return r;
     });
     await zprava('dor.fond_akcie_vydany',
       { p1: (al && al.nazev) || '', p2: pocet, p3: cena });
     console.log('[game] fond #' + moje.aliance_id + ': vydal ' + pocet
       + ' akcií po ' + cena);
-    return res.json({ ok: true, nabidka_id: nab.id, pocet, cena });
+    return res.json({ ok: true, pocet, cena });
   }
 
   // ── Dividenda akcionářům ──────────────────────────────────────────────────
@@ -2621,14 +2624,16 @@ router.post('/trade/prevzeti/:id/prodat', hrac, api(async (req, res) => {
 // ─── Akcie fondu ─────────────────────────────────────────────────────────────
 // Akcionář nemusí být člen fondu: akcie si může koupit kdokoli. Proto tyhle
 // cesty nekontrolují členství — jen to, jestli hráč má co prodat a čím platit.
+//
+// Cenu si NEURČUJE kupující. Je jedna platná cena, při vydání ji určí fond
+// hlasováním a pak s ní hýbe jen obchodování. Protistranou je vždycky fond:
+// prodává ze svých nevydaných kusů a vykupuje zpátky z pokladny.
 const AKCIE = require('../services/game/akcie');
 
-// Kolik akcií hráč drží. Nedržené se nevrací nulou, ale nic — řádek se maže.
-// Složený klíč se v klientovi NEJMENUJE podle @@unique(map: ...) — `map`
-// přejmenuje jen omezení v databázi. Spoléhat se na vygenerované jméno je
-// past, na které tohle jednou spadlo: celý nákup skončil na vnitřní chybě
-// serveru. Hledá se proto přes findFirst, kde na jménu nezáleží; v transakci
-// je to stejně bezpečné, protože řádek drží zámek do konce.
+// Složený klíč se v Prisma klientovi NEJMENUJE podle @@unique(map: ...) —
+// `map` přejmenuje jen omezení v databázi. Spoléhat se na vygenerované jméno
+// je past, na které tohle jednou spadlo: celý nákup skončil na vnitřní chybě
+// serveru. Hledá se proto přes findFirst, kde na jménu nezáleží.
 async function akciiRadek(klient, alianceId, playerId) {
   return klient.gameAkcie.findFirst({
     where: { aliance_id: alianceId, player_id: playerId } });
@@ -2637,221 +2642,142 @@ async function akciiDrzi(alianceId, playerId) {
   const r = await akciiRadek(prisma, alianceId, playerId).catch(() => null);
   return r ? Math.max(0, r.pocet) : 0;
 }
+// Co o akciích fondu potřebuje vědět obchod i přehled.
+function akcieStav(al, hodnota) {
+  const celkem = Math.max(0, al.akcie_celkem || 0);
+  const vydano = Math.max(0, al.akcie_vydano || 0);
+  return { celkem, vydano, volne: Math.max(0, celkem - vydano),
+    podil: Math.max(0, al.akcie_podil || 0),
+    cena: Math.max(0, Math.round(al.akcie_cena || 0)),
+    hodnota: Math.max(0, Math.round(hodnota || 0)),
+    ucetni: AKCIE.ucetni(hodnota, al.akcie_podil || 0, vydano) };
+}
 
 // GET /trade/akcie → fondy, jejichž akcie se dají koupit
-//
-// Akcionář nemusí být člen, takže tenhle seznam vidí každý. Jsou v něm fondy,
-// které už akcie vydaly, a fondy, které je právě nabízejí — jinak by o prvním
-// vydání nikdo nevěděl a akcie by se nikdy neprodaly.
 router.get('/trade/akcie', hrac, api(async (req, res) => {
-  const [fondy, lezi, moje] = await Promise.all([
-    prisma.gameAliance.findMany({ select: { id: true, nazev: true, akcie_vydano: true,
-      akcie_podil: true, pokladna: true } }),
-    prisma.gameAkcieNabidka.findMany({ where: { stav: 'bezi' },
-      select: { aliance_id: true, smer: true, zbyva: true, cena: true, player_id: true } }),
+  const [fondy, moje] = await Promise.all([
+    prisma.gameAliance.findMany({ select: { id: true, nazev: true, akcie_celkem: true,
+      akcie_vydano: true, akcie_podil: true, akcie_cena: true } }),
     prisma.gameAkcie.findMany({ where: { player_id: req.player.id, pocet: { gt: 0 } },
       select: { aliance_id: true, pocet: true } }),
   ]);
   const mam = new Map(moje.map((x) => [x.aliance_id, x.pocet]));
-  const vKnize = new Set(lezi.map((x) => x.aliance_id));
-  const zajimave = fondy.filter((f) => (f.akcie_vydano || 0) > 0 || vKnize.has(f.id));
-  if (!zajimave.length) return res.json({ ok: true, fondy: [] });
-  const posledni = await prisma.gameAkcieObchod.findMany({
-    where: { aliance_id: { in: zajimave.map((f) => f.id) } },
-    orderBy: { kdy: 'desc' }, take: 200, select: { aliance_id: true, cena: true } });
-  const cena = new Map();
-  posledni.forEach((o) => { if (!cena.has(o.aliance_id)) cena.set(o.aliance_id, o.cena); });
-  const hodnoty = new Map();
-  for (const f of zajimave) hodnoty.set(f.id, await hodnotaFondu(f.id));
-  res.json({ ok: true, fondy: zajimave.map((f) => {
-    const nejlevnejsi = lezi.filter((x) => x.aliance_id === f.id && x.smer === 'prodat')
-      .reduce((a, x) => (a == null || x.cena < a ? x.cena : a), null);
-    const nejdrazsi = lezi.filter((x) => x.aliance_id === f.id && x.smer === 'koupit')
-      .reduce((a, x) => (a == null || x.cena > a ? x.cena : a), null);
-    return { aliance_id: f.id, nazev: f.nazev,
-      vydano: Math.max(0, f.akcie_vydano || 0), podil: Math.max(0, f.akcie_podil || 0),
-      ucetni: AKCIE.ucetni(hodnoty.get(f.id) || 0, f.akcie_podil || 0, f.akcie_vydano || 0),
-      posledni_cena: cena.has(f.id) ? cena.get(f.id) : null,
-      nejlevnejsi_prodej: nejlevnejsi, nejdrazsi_nakup: nejdrazsi,
-      moje_kusy: mam.get(f.id) || 0 };
-  }) });
+  const zajimave = fondy.filter((f) => (f.akcie_celkem || 0) > 0);
+  const out = [];
+  for (const f of zajimave) {
+    const s = akcieStav(f, await hodnotaFondu(f.id));
+    out.push({ aliance_id: f.id, nazev: f.nazev, cena: s.cena, ucetni: s.ucetni,
+      vydano: s.vydano, volne: s.volne, podil: s.podil,
+      moje_kusy: mam.get(f.id) || 0 });
+  }
+  res.json({ ok: true, fondy: out });
 }));
 
-// GET /trade/akcie/:id → stav akcií fondu, kniha nabídek, moje kusy a graf.
+// GET /trade/akcie/:id → cena, stav a graf
 router.get('/trade/akcie/:id', hrac, api(async (req, res) => {
   const alianceId = parseInt(req.params.id, 10) || 0;
   const al = await prisma.gameAliance.findUnique({ where: { id: alianceId } });
   if (!al) return res.status(404).json({ error: stx(req)('server.takovy_fond_tu_neni') });
-  const [kniha, obchody, moje, hodnota] = await Promise.all([
-    prisma.gameAkcieNabidka.findMany({ where: { aliance_id: alianceId, stav: 'bezi' },
-      orderBy: { id: 'asc' } }),
+  const [obchody, moje, hodnota, fondVolno] = await Promise.all([
     // Graf je prostě řada uzavřených obchodů. Cena akcie není nic jiného.
     prisma.gameAkcieObchod.findMany({ where: { aliance_id: alianceId },
       orderBy: { kdy: 'desc' }, take: 200 }),
     akciiDrzi(alianceId, req.player.id),
     hodnotaFondu(alianceId),
+    fondVolne(alianceId, al),
   ]);
-  const ven = (x) => ({ id: x.id, smer: x.smer, pocet: x.pocet, zbyva: x.zbyva,
-    cena: x.cena, nick: x.nick, fond: x.player_id === 0, moje: x.player_id === req.player.id,
-    kdy: x.created_at });
-  const posledni = obchody.length ? obchody[0].cena : null;
-  res.json({ ok: true, akcie: {
+  const s = akcieStav(al, hodnota);
+  res.json({ ok: true, akcie: Object.assign(s, {
     aliance_id: alianceId, nazev: al.nazev,
-    vydano: Math.max(0, al.akcie_vydano || 0),
-    podil: Math.max(0, al.akcie_podil || 0),
-    hodnota_fondu: hodnota,
-    // Účetní hodnota je dno, o které se cena opírá — ne strop ani příkaz.
-    ucetni: AKCIE.ucetni(hodnota, al.akcie_podil || 0, al.akcie_vydano || 0),
-    posledni_cena: posledni,
     moje_kusy: moje,
-    koupit: AKCIE.serad(kniha.filter((x) => x.smer === 'koupit')
-      .map((x) => Object.assign({}, x, { poradi: x.id })), 'koupit').map(ven),
-    prodat: AKCIE.serad(kniha.filter((x) => x.smer === 'prodat')
-      .map((x) => Object.assign({}, x, { poradi: x.id })), 'prodat').map(ven),
+    // Kolik kusů fond ještě vykoupí, než mu dojdou volné peníze. Hráč to
+    // musí vidět dřív, než zadá prodej, který by neprošel.
+    vykoupi: s.cena > 0 ? Math.floor(Math.max(0, fondVolno.volne) / s.cena) : 0,
+    posledni_cena: obchody.length ? obchody[0].cena : null,
     graf: obchody.slice().reverse().map((o) => ({ kdy: o.kdy, cena: o.cena, pocet: o.pocet })),
-  } });
+  }) });
 }));
 
-// POST /trade/akcie/:id/nabidka { smer, pocet, cena } → zadat nabídku
+// POST /trade/akcie/:id/obchod { smer, pocet } → koupit od fondu / prodat fondu
 //
-// Nabídka se nejdřív pokusí spárovat s protistranou a co zbyde, zůstane ležet
-// v knize. Všechno se děje v JEDNÉ transakci: kdyby se kniha četla venku,
-// dva kupující by si naráz ukrojili z téže nabídky a prodávající by prodal
-// dvakrát to, co má jednou.
-router.post('/trade/akcie/:id/nabidka', hrac, api(async (req, res) => {
+// Cena se neposílá. Bere se ta, která právě platí, a po obchodu se posune —
+// nahoru při nákupu, dolů při prodeji, tím víc, čím větší kus naráz.
+router.post('/trade/akcie/:id/obchod', hrac, api(async (req, res) => {
   const alianceId = parseInt(req.params.id, 10) || 0;
   const b = req.body || {};
   const smer = String(b.smer || '');
   const pocet = Math.max(0, Math.floor(Number(b.pocet) || 0));
-  const cena = Math.max(0, Math.round(Number(b.cena) || 0));
+  if (smer !== 'koupit' && smer !== 'prodat') {
+    return res.status(400).json({ error: akcieChyba(req, 'smer') });
+  }
   const al = await prisma.gameAliance.findUnique({ where: { id: alianceId } });
   if (!al) return res.status(404).json({ error: stx(req)('server.takovy_fond_tu_neni') });
-
-  const drzi = await akciiDrzi(alianceId, req.player.id);
-  // Peníze se měří proti VOLNÉ hotovosti: co je slíbené pod jinou nabídkou,
-  // se utratit podruhé nesmí.
+  if (!(al.akcie_celkem > 0)) {
+    return res.status(409).json({ error: stx(req)('server.fond_akcie_nevydal') });
+  }
+  // Hodnota fondu se počítá PŘED transakcí: uvnitř by to byl dotaz na stavy
+  // všech hráčů s otevřenou transakcí, tedy na její časový strop.
+  const hodPred = await hodnotaFondu(alianceId);
   const REZ = require('../services/game/rezervace');
   const v = await REZ.volne(req.player, stavu(req.player));
-  const k = AKCIE.zkontroluj(smer, pocet, cena, drzi, v.volne);
-  if (!k.ok) return res.status(409).json({ error: akcieChyba(req, k.duvod) });
-  // Hodnota fondu se počítá PŘED transakcí. Uvnitř by to byl dotaz na stavy
-  // všech hráčů s otevřenou transakcí — pomalé a hlavně na časový strop
-  // transakce, po kterém celý nákup spadne na vnitřní chybu. Je to navíc
-  // správné číslo: vydání se počítá z hodnoty PŘED tímhle nákupem.
-  const hodPred = await hodnotaFondu(alianceId);
+  const drzi = await akciiDrzi(alianceId, req.player.id);
+  const fondV = await fondVolne(alianceId, al);
+  const s = akcieStav(al, hodPred);
 
-  let vysledek = null;
+  const r = smer === 'koupit'
+    ? AKCIE.koupit(Object.assign({}, s, { hotovost: v.volne }), pocet)
+    : AKCIE.prodat(Object.assign({}, s, { drzi, fond_volne: fondV.volne }), pocet);
+  if (!r.ok) return res.status(409).json({ error: akcieChyba(req, r.duvod) });
+
   try {
   await prisma.$transaction(async (tx) => {
-    const protistrana = await tx.gameAkcieNabidka.findMany({
-      where: { aliance_id: alianceId, stav: 'bezi',
-        smer: smer === 'koupit' ? 'prodat' : 'koupit' },
-      orderBy: { id: 'asc' } });
-    // Vlastní nabídky se nepárují samy se sebou — hráč by si prodával sám
-    // sobě a jen tím hýbal cenou v grafu.
-    const cizi = protistrana.filter((x) => x.player_id !== req.player.id)
-      .map((x) => Object.assign({}, x, { poradi: x.id }));
-    const s = AKCIE.sparuj({ smer, pocet, cena }, cizi);
+    // Stav fondu čteme znovu uvnitř: mezi kontrolou a zápisem mohl koupit
+    // někdo další a posunout cenu i počty. Podmínkou zápisu je přesně to,
+    // s čím jsme počítali — netrefí-li se, padá celá transakce.
+    SOUBEH.zamkni(await tx.gameAliance.updateMany({
+      where: { id: alianceId, akcie_cena: al.akcie_cena, akcie_vydano: al.akcie_vydano },
+      data: { akcie_cena: r.cena_po, akcie_vydano: r.vydano_po, akcie_podil: r.podil_po,
+        pokladna: smer === 'koupit' ? { increment: r.castka } : { decrement: r.castka } } }),
+      'server.cena_akcie_se_zmenila');
 
-    const ted = new Date();
-    let kusuFondu = 0, castkaFondu = 0;
-    for (const o of s.obchody) {
-      // Podmínkou je přesně to zbyva, se kterým jsme počítali. Kdyby ho
-      // mezitím někdo ukrojil, netrefíme se a padá celá transakce.
-      const puvodni = cizi.filter((x) => x.id === o.proti_id)[0];
-      const zbylo = puvodni.zbyva - o.pocet;
-      SOUBEH.zamkni(await tx.gameAkcieNabidka.updateMany({
-        where: { id: o.proti_id, stav: 'bezi', zbyva: puvodni.zbyva },
-        data: zbylo > 0 ? { zbyva: zbylo }
-          : { zbyva: 0, stav: 'splneno', uzavreno_at: ted } }),
-        'server.nabidka_se_mezitim_zmenila');
-
-      const kupujiciId = smer === 'koupit' ? req.player.id : puvodni.player_id;
-      const prodavajiciId = smer === 'koupit' ? puvodni.player_id : req.player.id;
-      await tx.gameAkcieObchod.create({ data: { aliance_id: alianceId,
-        kupujici_id: kupujiciId,
-        // Prodej z vydání nemá prodávajícího: akcie tehdy vznikly.
-        prodavajici_id: prodavajiciId === 0 ? null : prodavajiciId,
-        pocet: o.pocet, cena: o.cena, kdy: ted } });
-
-      // Kusy ke kupujícímu.
-      const kup = await akciiRadek(tx, alianceId, kupujiciId);
-      if (kup) {
-        await tx.gameAkcie.update({ where: { id: kup.id },
-          data: { pocet: { increment: o.pocet },
-            porizovaci: { increment: BigInt(o.castka) } } });
+    const radek = await akciiRadek(tx, alianceId, req.player.id);
+    if (smer === 'koupit') {
+      if (radek) {
+        await tx.gameAkcie.update({ where: { id: radek.id },
+          data: { pocet: { increment: r.pocet },
+            porizovaci: { increment: BigInt(r.castka) } } });
       } else {
-        await tx.gameAkcie.create({ data: { aliance_id: alianceId, player_id: kupujiciId,
-          pocet: o.pocet, porizovaci: BigInt(o.castka) } });
+        await tx.gameAkcie.create({ data: { aliance_id: alianceId,
+          player_id: req.player.id, pocet: r.pocet, porizovaci: BigInt(r.castka) } });
       }
-      // Kusy od prodávajícího. Fond žádný řádek nemá — jeho akcie teprve
-      // vznikají, proto se jen připočte k vydaným.
-      if (prodavajiciId === 0) {
-        kusuFondu += o.pocet; castkaFondu += o.castka;
-      } else {
-        const pred = await akciiRadek(tx, alianceId, prodavajiciId);
-        if (!pred || pred.pocet < o.pocet) throw new SOUBEH.Soubeh('server.tolik_akcii_nedrzis');
-        const zbytek = pred.pocet - o.pocet;
+    } else {
+      if (!radek || radek.pocet < r.pocet) throw new SOUBEH.Soubeh('server.tolik_akcii_nedrzis');
+      const zbytek = radek.pocet - r.pocet;
+      if (zbytek > 0) {
         // Pořizovací cena se krátí poměrně, ať u zbytku dál sedí.
-        const porizDil = pred.pocet > 0
-          ? BigInt(Math.round(Number(pred.porizovaci) * (zbytek / pred.pocet))) : BigInt(0);
-        if (zbytek > 0) {
-          await tx.gameAkcie.update({ where: { id: pred.id },
-            data: { pocet: zbytek, porizovaci: porizDil } });
-        } else {
-          await tx.gameAkcie.delete({ where: { id: pred.id } });
-        }
-        await tx.gameDelivery.create({ data: { player_id: prodavajiciId, kind: 'cash',
-          amount: o.castka, popis: 'Prodal jsi akcie fondu ' + al.nazev,
-          text_kod: 'dor.akcie_prodal',
-          text_data: { p1: al.nazev, p2: o.pocet, p3: o.cena } } });
+        await tx.gameAkcie.update({ where: { id: radek.id }, data: { pocet: zbytek,
+          porizovaci: BigInt(Math.round(Number(radek.porizovaci) * (zbytek / radek.pocet))) } });
+      } else {
+        await tx.gameAkcie.delete({ where: { id: radek.id } });
       }
-      // Kupující platí z hotovosti.
-      await tx.gameDelivery.create({ data: { player_id: kupujiciId, kind: 'cash',
-        amount: -o.castka, popis: 'Koupil jsi akcie fondu ' + al.nazev,
-        text_kod: 'dor.akcie_koupil',
-        text_data: { p1: al.nazev, p2: o.pocet, p3: o.cena } } });
     }
-
-    // Co se prodalo z vydání, to teprve TEĎ posune díl akcionářů. Kdyby se
-    // posunul už při vydání, členové by se zředili za akcie, které si nikdo
-    // nekoupil. Každá prodaná tranše je vlastní malé vydání.
-    if (kusuFondu > 0) {
-      const alTed = await tx.gameAliance.findUnique({ where: { id: alianceId } });
-      const vyd = AKCIE.vydani(hodPred, alTed.akcie_vydano || 0, alTed.akcie_podil || 0,
-        kusuFondu, Math.round(castkaFondu / kusuFondu));
-      if (!vyd.ok) throw new SOUBEH.Soubeh('server.nabidka_nejde');
-      await tx.gameAliance.update({ where: { id: alianceId }, data: {
-        pokladna: { increment: castkaFondu },
-        akcie_vydano: vyd.akcie_po, akcie_podil: vyd.podil_po } });
-    }
-
-    if (s.zbyva > 0) {
-      await tx.gameAkcieNabidka.create({ data: { aliance_id: alianceId,
-        player_id: req.player.id, nick: req.player.nick, smer,
-        pocet: s.zbyva, zbyva: s.zbyva, cena } });
-    }
-    vysledek = { zobchodovano: s.kusu, castka: s.castka, lezi: s.zbyva };
+    await tx.gameAkcieObchod.create({ data: { aliance_id: alianceId,
+      kupujici_id: smer === 'koupit' ? req.player.id : 0,
+      // Prodej od fondu nemá prodávajícího: akcie tehdy vznikly.
+      prodavajici_id: smer === 'koupit' ? null : req.player.id,
+      pocet: r.pocet, cena: r.cena } });
+    // Hotovost hráče hýbe doručenkou — drží ji jeho prohlížeč.
+    await tx.gameDelivery.create({ data: { player_id: req.player.id, kind: 'cash',
+      amount: smer === 'koupit' ? -r.castka : r.castka,
+      popis: (smer === 'koupit' ? 'Koupil jsi akcie fondu ' : 'Prodal jsi akcie fondu ') + al.nazev,
+      text_kod: smer === 'koupit' ? 'dor.akcie_koupil' : 'dor.akcie_prodal',
+      text_data: { p1: al.nazev, p2: r.pocet, p3: r.cena } } });
   });
   } catch (e) { if (SOUBEH.odpoved(e, res, stx(req))) return; throw e; }
   console.log('[game] akcie #' + alianceId + ': ' + req.player.nick + ' ' + smer
-    + ' ' + pocet + ' po ' + cena + ' → zobchodováno ' + vysledek.zobchodovano);
+    + ' ' + r.pocet + ' po ' + r.cena + ' → cena ' + r.cena_po);
   vzorekFondu(alianceId);
-  res.json(Object.assign({ ok: true }, vysledek));
-}));
-
-// POST /trade/akcie/nabidka/:id/zrus → stáhnout vlastní nabídku z knihy
-router.post('/trade/akcie/nabidka/:id/zrus', hrac, api(async (req, res) => {
-  const id = parseInt(req.params.id, 10) || 0;
-  const n = await prisma.gameAkcieNabidka.findUnique({ where: { id } });
-  if (!n || n.stav !== 'bezi') return res.status(409).json({ error: stx(req)('server.tahle_nabidka_uz_nebezi') });
-  // Nabídku fondu stáhne jen hlasování, ne jednotlivec — je to majetek všech
-  // členů. Proto sem pustíme jen vlastníka nabídky.
-  if (n.player_id !== req.player.id) return res.status(403).json({ error: stx(req)('server.tahle_nabidka_neni_tvoje') });
-  SOUBEH.zamkni(await prisma.gameAkcieNabidka.updateMany({
-    where: { id, stav: 'bezi' }, data: { stav: 'zrusena', uzavreno_at: new Date() } }),
-    'server.tahle_nabidka_uz_nebezi');
-  res.json({ ok: true });
+  res.json({ ok: true, pocet: r.pocet, cena: r.cena, castka: r.castka, cena_po: r.cena_po });
 }));
 
 // GET /trade/krize → kdo nemá na splátku.

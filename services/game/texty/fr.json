@@ -3784,7 +3784,7 @@
   "dor.akcie_prodal": "Tu as vendu {cislo:p2} actions du fonds {p1} à {penize:p3}.",
   "dor.akcie_koupil": "Tu as acheté {cislo:p2} actions du fonds {p1} à {penize:p3}.",
   "akcie.nadpis": "Actions de fonds",
-  "akcie.popis": "Un fonds a vendu un morceau de lui-même. N’importe qui peut acheter des actions — pas besoin d’être membre.",
+  "akcie.popis": "Un fonds a vendu un morceau de lui-même. N’importe qui peut acheter — pas besoin d’être membre. La contrepartie est toujours le fonds.",
   "akcie.graf": "Cours de l’action",
   "akcie.graf_zatim": "Le graphique apparaît après la deuxième transaction — un cours n’est que ce qui s’est vraiment échangé.",
   "akcie.kniha_prazdna": "Personne ne propose encore rien ici.",
@@ -3809,7 +3809,7 @@
   "akcie.zatim_neobchodovano": "pas encore échangée",
   "akcie.lezi_v_knize": "Ton ordre reste dans le carnet, en attente de contrepartie.",
   "akcie.vypln": "Indique la quantité et le prix.",
-  "akcie.rada": "Le prix ne se négocie pas : ce qui se rencontre dans le carnet s’échange au prix de l’ordre arrivé en premier.",
+  "akcie.rada": "Le prix n’est pas fixé par l’acheteur. Acheter le pousse à la hausse, vendre à la baisse — plus le lot est gros, plus l’effet est fort.",
   "fond.navrh_akcie": "Émettre des actions",
   "fond.navrh_akcie_dividenda": "Dividende aux actionnaires",
   "fond.akcie_vydat": "Émettre les actions",
@@ -3820,5 +3820,9 @@
   "veta.akcie_zobchodovano": "{p1} actions échangées pour {penize:p2}.",
   "veta.fond_akcie_popis": "Émettre {cislo:p1} actions à {penize:p2}",
   "veta.fond_akcie_dividenda_popis": "Verser aux actionnaires {penize:p1} par action",
-  "veta.fond_drzi_zaplaceno": "payé {penize:p1} · la société verse {cislo:p2} % de son bénéfice"
+  "veta.fond_drzi_zaplaceno": "payé {penize:p1} · la société verse {cislo:p2} % de son bénéfice",
+  "akcie.cena_ted": "Cours de l’action",
+  "akcie.kolik": "Combien d’actions",
+  "akcie.fond_jeste_proda": "Le fonds vend encore",
+  "veta.akcie_posun": "Après achat le cours serait {penize:p1}, après vente {penize:p2}."
 }

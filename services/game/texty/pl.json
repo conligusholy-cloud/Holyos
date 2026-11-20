@@ -3791,7 +3791,7 @@
   "dor.akcie_prodal": "Sprzedałeś {cislo:p2} akcji funduszu {p1} po {penize:p3}.",
   "dor.akcie_koupil": "Kupiłeś {cislo:p2} akcji funduszu {p1} po {penize:p3}.",
   "akcie.nadpis": "Akcje funduszy",
-  "akcie.popis": "Fundusz sprzedał kawałek siebie. Akcje może kupić każdy — nie musisz być członkiem.",
+  "akcie.popis": "Fundusz sprzedał kawałek siebie. Akcje może kupić każdy — nie musisz być członkiem. Drugą stroną jest zawsze fundusz.",
   "akcie.graf": "Cena akcji",
   "akcie.graf_zatim": "Wykres pojawi się po drugiej transakcji — cena akcji to nic innego niż to, co naprawdę zmieniło właściciela.",
   "akcie.kniha_prazdna": "Tu jeszcze nikt nic nie oferuje.",
@@ -3816,7 +3816,7 @@
   "akcie.zatim_neobchodovano": "jeszcze nie handlowano",
   "akcie.lezi_v_knize": "Twoja oferta leży w księdze i czeka na drugą stronę.",
   "akcie.vypln": "Podaj liczbę i cenę.",
-  "akcie.rada": "Ceny się nie negocjuje: co spotka się w księdze, idzie po cenie oferty, która leżała wcześniej.",
+  "akcie.rada": "Ceny nie ustala kupujący. Kupno podnosi ją, sprzedaż obniża — im większa paczka, tym mocniej.",
   "fond.navrh_akcie": "Wydać akcje",
   "fond.navrh_akcie_dividenda": "Dywidenda dla akcjonariuszy",
   "fond.akcie_vydat": "Wydaj akcje",
@@ -3827,5 +3827,9 @@
   "veta.akcie_zobchodovano": "Zobrotowano {p1} akcji za {penize:p2}.",
   "veta.fond_akcie_popis": "Wydać {cislo:p1} akcji po {penize:p2}",
   "veta.fond_akcie_dividenda_popis": "Wypłacić akcjonariuszom {penize:p1} na akcję",
-  "veta.fond_drzi_zaplaceno": "zapłacono {penize:p1} · firma wypłaca {cislo:p2} % zysku"
+  "veta.fond_drzi_zaplaceno": "zapłacono {penize:p1} · firma wypłaca {cislo:p2} % zysku",
+  "akcie.cena_ted": "Cena akcji",
+  "akcie.kolik": "Ile sztuk",
+  "akcie.fond_jeste_proda": "Fundusz jeszcze sprzeda",
+  "veta.akcie_posun": "Po kupnie cena byłaby {penize:p1}, po sprzedaży {penize:p2}."
 }
