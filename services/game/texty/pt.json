@@ -3755,5 +3755,7 @@
   "veta.fond_drzi_nenese": "Ainda nada — empresa paga {cislo:p1} % do lucro",
   "jazyk.pt": "Português (BR)",
   "fond.na_provedeni_chybi": "Faltam {penize:p1}. As ofertas abertas seguram {penize:p2}.",
-  "prevzeti.ztratis_vetsinu": "Com esta venda você perde a maioria na sua própria empresa — ficaria com {p1} %. Não dá para desfazer."
+  "prevzeti.ztratis_vetsinu": "Com esta venda você perde a maioria na sua própria empresa — ficaria com {p1} %. Não dá para desfazer.",
+  "fond.vynos": "{p1} % ao mês · retorno em {cislo:p2} meses",
+  "fond.vynos_nevrati": "{p1} % ao mês · com este pagamento não retorna"
 }

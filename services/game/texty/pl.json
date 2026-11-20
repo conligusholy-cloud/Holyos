@@ -3769,5 +3769,7 @@
   "hra.splatka_neprosla_jinde": "Spłata nie przeszła — ta gra jest otwarta jeszcze gdzie indziej i liczy się tamta. Zamknij ją i spróbuj ponownie.",
   "jazyk.pt": "Portugalski (BR)",
   "fond.na_provedeni_chybi": "Brakuje {penize:p1}. Wystawione oferty trzymają {penize:p2}.",
-  "prevzeti.ztratis_vetsinu": "Tą sprzedażą tracisz większość we własnej firmie — zostanie ci {p1} %. Tego nie da się cofnąć."
+  "prevzeti.ztratis_vetsinu": "Tą sprzedażą tracisz większość we własnej firmie — zostanie ci {p1} %. Tego nie da się cofnąć.",
+  "fond.vynos": "{p1} % miesięcznie · zwrot w {cislo:p2} mies.",
+  "fond.vynos_nevrati": "{p1} % miesięcznie · przy tej wypłacie się nie zwróci"
 }

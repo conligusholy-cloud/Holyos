@@ -3762,5 +3762,7 @@
   "hra.splatka_neprosla_jinde": "Die Zahlung ging nicht durch — dieses Spiel ist noch woanders offen und das andere gilt. Schließ es und versuch es noch einmal.",
   "jazyk.pt": "Portugiesisch (BR)",
   "fond.na_provedeni_chybi": "Es fehlen {penize:p1}. Laufende Angebote binden {penize:p2}.",
-  "prevzeti.ztratis_vetsinu": "Mit diesem Verkauf verlierst du die Mehrheit an deiner eigenen Firma — dir blieben {p1} %. Das lässt sich nicht rückgängig machen."
+  "prevzeti.ztratis_vetsinu": "Mit diesem Verkauf verlierst du die Mehrheit an deiner eigenen Firma — dir blieben {p1} %. Das lässt sich nicht rückgängig machen.",
+  "fond.vynos": "{p1} % pro Monat · amortisiert in {cislo:p2} Mon.",
+  "fond.vynos_nevrati": "{p1} % pro Monat · bei dieser Ausschüttung nie amortisiert"
 }

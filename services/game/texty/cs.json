@@ -3769,5 +3769,7 @@
   "veta.fond_drzi_nenese": "Zatím nic — firma vyplácí {cislo:p1} % zisku",
   "jazyk.pt": "Portugalština (BR)",
   "fond.na_provedeni_chybi": "Na provedení chybí {penize:p1}. Vyvěšené nabídky drží {penize:p2}.",
-  "prevzeti.ztratis_vetsinu": "Tímhle prodejem přijdeš o většinu ve vlastní firmě — zbude ti {p1} %. Zpátky to vzít nejde."
+  "prevzeti.ztratis_vetsinu": "Tímhle prodejem přijdeš o většinu ve vlastní firmě — zbude ti {p1} %. Zpátky to vzít nejde.",
+  "fond.vynos": "{p1} % měsíčně · návratnost {cislo:p2} měs.",
+  "fond.vynos_nevrati": "{p1} % měsíčně · při téhle výplatě se nevrátí"
 }

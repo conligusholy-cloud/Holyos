@@ -9396,6 +9396,23 @@ function fondJa() {
 // fondu — pokladna mínus to, co je slíbené ve vyvěšených nabídkách. Stejně to
 // počítá server; tohle je jen to, aby se na to nemuselo klikat naslepo.
 // Vrací null, když je všechno v pořádku nebo když na návrhu nic platit není.
+// Co držený podíl nese z toho, co za něj fond zaplatil, a za kolik měsíců
+// se vrátí. Samotná částka měsíčně nic neříká: 633 672 L$ ze zaplacených
+// 17 625 000 je výborný obchod, 130 276 L$ ze šedesáti milionů je špatný,
+// a vedle sebe to na první pohled poznat nejde. Teprve podíl obojího
+// srovnává nákupy mezi sebou.
+//
+// Nulová cena (podíl, který fond nekoupil, ale získal jinak) nemá výnos
+// z čeho počítat. Podíl, který nenese nic, taky ne — o tom už mluví řádek
+// nad ním a dělit nulou by dalo nekonečno.
+var NAVRATNOST_MAX = 1200;        // sto herních let; výš je to „nevrátí se"
+function podilVynos(x) {
+  var cena = Math.round(Number(x && x.cena) || 0);
+  var mesicne = Math.round(Number(x && x.mesicne) || 0);
+  if (!(cena > 0) || !(mesicne > 0)) return null;
+  var mesicu = Math.round(cena / mesicne);
+  return { podil: mesicne / cena, mesicu: mesicu, nevrati: mesicu > NAVRATNOST_MAX };
+}
 function fondNavrhChybi(n) {
   if (!FOND || !FOND.fond) return null;
   var d = n.detail || {};
@@ -9509,7 +9526,13 @@ function fondVnitrek() {
         + '<p class="fine' + ((Number(x.mesicne) || 0) > 0 ? ' ok' : '') + '">'
         + ((Number(x.mesicne) || 0) !== 0
             ? tx('veta.fond_drzi_nese', { p1: x.mesicne, p2: pct })
-            : tx('veta.fond_drzi_nenese', { p1: pct })) + '</p>';
+            : tx('veta.fond_drzi_nenese', { p1: pct })) + '</p>'
+        + (function (v) {
+            if (!v) return '';
+            return '<p class="fine">' + (v.nevrati
+              ? tx('fond.vynos_nevrati', { p1: pctHra(v.podil) })
+              : tx('fond.vynos', { p1: pctHra(v.podil), p2: v.mesicu })) + '</p>';
+          }(podilVynos(x)));
     });
     h += '<div class="kv souhrn"><span>' + esc(tx('fond.nese_mesicne')) + '</span><b class="'
       + (neseCelkem > 0 ? 'ok' : '') + '">' + kcFull(neseCelkem) + '</b></div>';

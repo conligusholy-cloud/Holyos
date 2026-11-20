@@ -147,6 +147,16 @@ if git diff --cached --name-only | grep -qE 'services/game/zlocin'; then
   fi
 fi
 
+# Výnos a návratnost drženého podílu. Samotná částka měsíčně neřekne nic;
+# teprve podíl k zaplacené ceně srovná nákupy mezi sebou.
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; then
+  if ! node nastroje/tfondvynos.js; then
+    echo ""
+    echo "STOP: výnos drženého podílu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Křivka hodnoty fondu. Vzorkuje se po každém pohybu penězi — bez toho se
 # člen po nákupu za desítky milionů dívá na rovnou čáru až hodinu.
 if git diff --cached --name-only | grep -qE 'services/game/fond-historie|routes/game-trade'; then

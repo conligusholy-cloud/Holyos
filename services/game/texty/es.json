@@ -3762,5 +3762,7 @@
   "hra.splatka_neprosla_jinde": "El pago no se ha realizado: esta partida está abierta en otro sitio y manda la otra. Ciérrala e inténtalo de nuevo.",
   "jazyk.pt": "Portugués (BR)",
   "fond.na_provedeni_chybi": "Faltan {penize:p1}. Las ofertas abiertas retienen {penize:p2}.",
-  "prevzeti.ztratis_vetsinu": "Con esta venta pierdes la mayoría en tu propia empresa — te quedaría {p1} %. No se puede deshacer."
+  "prevzeti.ztratis_vetsinu": "Con esta venta pierdes la mayoría en tu propia empresa — te quedaría {p1} %. No se puede deshacer.",
+  "fond.vynos": "{p1} % al mes · se recupera en {cislo:p2} meses",
+  "fond.vynos_nevrati": "{p1} % al mes · con este reparto no se recupera"
 }

@@ -3762,5 +3762,7 @@
   "veta.fond_drzi_nenese": "Nothing yet — the company pays out {cislo:p1} % of its profit",
   "jazyk.pt": "Portuguese (BR)",
   "fond.na_provedeni_chybi": "{penize:p1} short. Open offers are holding {penize:p2}.",
-  "prevzeti.ztratis_vetsinu": "This sale costs you majority control of your own company — you would keep {p1} %. It cannot be undone."
+  "prevzeti.ztratis_vetsinu": "This sale costs you majority control of your own company — you would keep {p1} %. It cannot be undone.",
+  "fond.vynos": "{p1} % a month · pays back in {cislo:p2} mo.",
+  "fond.vynos_nevrati": "{p1} % a month · at this payout it never pays back"
 }

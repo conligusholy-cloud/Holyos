@@ -3762,5 +3762,7 @@
   "hra.na_graf_je_jeste_brzo": "Il est encore trop tôt pour un graphique.",
   "jazyk.pt": "Portugais (BR)",
   "fond.na_provedeni_chybi": "Il manque {penize:p1}. Les offres en cours immobilisent {penize:p2}.",
-  "prevzeti.ztratis_vetsinu": "Cette vente te fait perdre la majorité dans ta propre société — il te resterait {p1} %. C’est sans retour."
+  "prevzeti.ztratis_vetsinu": "Cette vente te fait perdre la majorité dans ta propre société — il te resterait {p1} %. C’est sans retour.",
+  "fond.vynos": "{p1} % par mois · remboursé en {cislo:p2} mois",
+  "fond.vynos_nevrati": "{p1} % par mois · à ce versement, jamais remboursé"
 }
