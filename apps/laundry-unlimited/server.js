@@ -536,19 +536,62 @@ app.get('/login', async (req, res) => {
   res.send(loginPage(loginLang(req)));
 });
 // Odeslání odkazu: e-mail týmu → odkaz do administrace, e-mail partnera → odkaz do portálu. Odpověď je pokaždé stejná.
-async function sendAdminLink(email, lang) {
+async function sendAdminLink(email, lang, kind) {
   try {
     if (!LU_SECRET || !USER_KEY) return false;
-    const cs = lang === 'cs';
-    const tok = jwt.sign({ email, aud: 'lu-admin-link', iss: 'laundry-unlimited' }, USER_KEY, { expiresIn: '1h' });
-    const link = PUBLIC_URL + '/admin/auth?t=' + encodeURIComponent(tok);
+    const cs = lang === 'cs', setup = kind === 'setup';
+    const row = setup ? (await q('SELECT name, password_hash FROM admin_users WHERE lower(email)=$1', [email]).catch(() => ({ rows: [] }))).rows[0] : null;
+    const tok = setup
+      ? jwt.sign({ email, pv: String((row && row.password_hash) || '').slice(0, 12), aud: 'lu-admin-setup', iss: 'laundry-unlimited' }, USER_KEY, { expiresIn: '7d' })
+      : jwt.sign({ email, aud: 'lu-admin-link', iss: 'laundry-unlimited' }, USER_KEY, { expiresIn: '1h' });
+    const link = PUBLIC_URL + (setup ? '/admin/setup?t=' : '/admin/auth?t=') + encodeURIComponent(tok);
+    const nm = row && row.name ? ', ' + row.name : '';
     const svc = jwt.sign({ aud: 'holyos-api', iss: 'laundry-unlimited' }, LU_SECRET, { expiresIn: '1m' });
+    const subject = setup ? (cs ? 'Váš účet v administraci Laundry Unlimited — nastavte si heslo' : 'Your Laundry Unlimited administration account — set your password') : (cs ? 'Přihlášení do administrace Laundry Unlimited' : 'Sign in to Laundry Unlimited administration');
+    const body = setup
+      ? (cs ? 'Dobrý den' + nm + ',\n\nbyl vám vytvořen účet v administraci Laundry Unlimited. Kliknutím na tlačítko si nastavíte vlastní heslo a rovnou se přihlásíte. Odkaz platí 7 dní.\n\nLaundry Unlimited' : 'Hello' + nm + ',\n\nan account has been created for you in the Laundry Unlimited administration. Use the button to choose your password and sign in. The link is valid for 7 days.\n\nLaundry Unlimited')
+      : (cs ? 'Dobrý den,\n\nzde je váš odkaz do administrace Laundry Unlimited. Platí 1 hodinu.\n\nLaundry Unlimited' : 'Hello,\n\nhere is your link to the Laundry Unlimited administration. It is valid for 1 hour.\n\nLaundry Unlimited');
+    const label = setup ? (cs ? 'Nastavit heslo' : 'Set password') : (cs ? 'Otevřít administraci' : 'Open administration');
     const resp = await fetch(HOLYOS_URL + '/api/auth/lu/mail', { method: 'POST', headers: { Authorization: 'Bearer ' + svc, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to: email, subject: cs ? 'Přihlášení do administrace Laundry Unlimited' : 'Sign in to Laundry Unlimited administration', body: cs ? 'Dobrý den,\n\nzde je váš odkaz do administrace Laundry Unlimited. Platí 1 hodinu.\n\nLaundry Unlimited' : 'Hello,\n\nhere is your link to the Laundry Unlimited administration. It is valid for 1 hour.\n\nLaundry Unlimited', link, linkLabel: cs ? 'Otevřít administraci' : 'Open administration', lang: cs ? 'cs' : 'en' }), signal: AbortSignal.timeout(20000) });
+      body: JSON.stringify({ to: email, subject, body, link, linkLabel: label, lang: cs ? 'cs' : 'en' }), signal: AbortSignal.timeout(20000) });
     if (!resp.ok) { console.warn('[lu] admin mail ' + resp.status); return false; }
     return true;
   } catch (e) { console.warn('[lu] admin mail:', e.message); return false; }
 }
+// Nastavení hesla z pozvánky (odkaz platí 7 dní, po nastavení hesla přestane fungovat)
+function setupPage(t, err) {
+  const body = `<div class="page"><div class="wrap"><span class="tag w">Laundry Unlimited</span><h2>Nastavte si heslo</h2><p class="sub">Vymyslete si heslo (min. 8 znaků). Po uložení se rovnou přihlásíte do administrace.</p>
+<form class="box" method="post" action="/admin/setup" style="max-width:520px">${err ? `<div class="err">${esc(err)}</div>` : ''}<input type="hidden" name="t" value="${esc(t)}">
+<label style="margin-top:0">Heslo *</label><input name="password" type="password" minlength="8" maxlength="200" required autocomplete="new-password" autofocus>
+<label>Heslo znovu *</label><input name="password2" type="password" minlength="8" maxlength="200" required autocomplete="new-password">
+<div style="margin-top:22px"><button class="btn o" type="submit"><span>Uložit heslo a přihlásit${CHEV}</span></button></div></form></div></div>`;
+  return page({ lang: 'cs', title: 'Nastavení hesla — Laundry Unlimited', body, canonicalPath: '/admin/setup', noindex: true });
+}
+async function setupToken(t) {
+  const d = jwt.verify(String(t || ''), USER_KEY, { audience: 'lu-admin-setup', issuer: 'laundry-unlimited' });
+  const r = (await q('SELECT * FROM admin_users WHERE lower(email)=$1 AND active', [String(d.email).toLowerCase()])).rows[0];
+  if (!r || String(r.password_hash || '').slice(0, 12) !== String(d.pv || '')) throw new Error('použitý nebo neplatný odkaz');
+  return r;
+}
+app.get('/admin/setup', async (req, res) => {
+  res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex');
+  try { await setupToken(req.query.t); res.send(setupPage(String(req.query.t))); }
+  catch (e) { res.status(401).send(loginPage('cs', '', 'Odkaz vypršel, už byl použit, nebo je neplatný. Požádejte o novou pozvánku.')); }
+});
+app.post('/admin/setup', form, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const t = String(req.body.t || '');
+  try {
+    const r = await setupToken(t);
+    const pw = String(req.body.password || '');
+    if (pw.length < 8) return res.status(400).send(setupPage(t, 'Heslo musí mít aspoň 8 znaků.'));
+    if (pw !== String(req.body.password2 || '')) return res.status(400).send(setupPage(t, 'Hesla se neshodují.'));
+    await q('UPDATE admin_users SET password_hash=$2, last_login_at=now() WHERE id=$1', [r.id, hashPw(pw)]);
+    const session = jwt.sign({ name: r.name || r.email, email: String(r.email).toLowerCase(), aud: 'lu-admin', iss: 'laundry-unlimited' }, SESSION_KEY, { expiresIn: '8h' });
+    res.set('Set-Cookie', COOKIE + '=' + encodeURIComponent(session) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + 8 * 3600);
+    res.redirect(302, '/admin');
+  } catch (e) { res.status(401).send(loginPage('cs', '', 'Odkaz vypršel, už byl použit, nebo je neplatný. Požádejte o novou pozvánku.')); }
+});
 async function adminUserOf(email) {
   email = String(email || '').toLowerCase();
   if (ADMIN_EMAILS.includes(email)) { const r = (await q('SELECT * FROM admin_users WHERE lower(email)=$1', [email]).catch(() => ({ rows: [] }))).rows[0]; return r || { email, name: '', active: true, env: true }; }
@@ -749,8 +792,8 @@ app.get('/admin/users', requireAdmin, async (req, res) => {
   const inDb = new Set(rows.map((r) => String(r.email).toLowerCase()));
   const envOnly = ADMIN_EMAILS.filter((e) => !inDb.has(e));
   const me = String((req.admin && req.admin.email) || '').toLowerCase();
-  const tr = envOnly.map((e) => `<tr><td>—</td><td>${esc(e)}</td><td>—</td><td><span class="chip ok">z konfigurace</span></td><td class="mut">—</td><td class="mut small">nelze smazat</td></tr>`).concat(rows.map((r) => `<tr><td>${esc(r.name || '—')}</td><td>${esc(r.email)}</td><td>${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '—'}</td><td>${r.active ? '<span class="chip ok">aktivní</span>' : '<span class="chip">zakázán</span>'}</td><td class="mut small">${esc(fmtDt(r.last_login_at))}</td>
-<td style="text-align:right;white-space:nowrap"><button class="btn sm ghost upw" data-id="${r.id}">Heslo</button> <button class="btn sm ghost ulink" data-id="${r.id}">Poslat odkaz</button> <button class="btn sm ghost utog" data-id="${r.id}" data-a="${r.active ? 0 : 1}">${r.active ? 'Zakázat' : 'Povolit'}</button>${String(r.email).toLowerCase() === me ? '' : ` <button class="btn sm ghost udel" data-id="${r.id}">Smazat</button>`}</td></tr>`)).join('');
+  const tr = envOnly.map((e) => `<tr><td>—</td><td>${esc(e)}</td><td>—</td><td><span class="chip ok">z konfigurace</span></td><td class="mut">—</td><td class="mut small">nelze smazat</td></tr>`).concat(rows.map((r) => `<tr><td>${esc(r.name || '—')}</td><td>${esc(r.email)}</td><td>${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '—'}</td><td>${!r.active ? '<span class="chip">zakázán</span>' : r.password_hash ? '<span class="chip ok">aktivní</span>' : '<span class="chip" style="border-color:#f59e0b;color:#fcd34d">čeká na nastavení hesla</span>'}</td><td class="mut small">${esc(fmtDt(r.last_login_at))}</td>
+<td style="text-align:right;white-space:nowrap"><button class="btn sm ghost upw" data-id="${r.id}">Heslo</button> <button class="btn sm ghost ulink" data-id="${r.id}">Pozvánka / nové heslo</button> <button class="btn sm ghost utog" data-id="${r.id}" data-a="${r.active ? 0 : 1}">${r.active ? 'Zakázat' : 'Povolit'}</button>${String(r.email).toLowerCase() === me ? '' : ` <button class="btn sm ghost udel" data-id="${r.id}">Smazat</button>`}</td></tr>`)).join('');
   res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Uživatelé administrace — Laundry Unlimited</title>
 <style>${ADMIN_CSS}.adm{max-width:1000px;margin:0 auto;padding:22px}.mut{color:var(--mut);font-size:13px}.small{font-size:12px}.chip{border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:12px;background:#07111f}.chip.ok{border-color:#22c55e;color:#86efac}
 table{width:100%;border-collapse:collapse;margin-top:14px}th,td{text-align:left;padding:11px 10px;border-bottom:1px solid var(--line);font-size:14px}th{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.05em}.new{display:grid;grid-template-columns:1fr 1fr 1.3fr 1fr auto;gap:10px;align-items:end;margin-top:14px;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--card)}.new label{font-size:12px;color:var(--mut);font-weight:700}.msg{font-size:13px;color:#86efac;margin-top:8px}.mov{position:fixed;inset:0;z-index:200;background:rgba(2,6,14,.78);display:flex;align-items:center;justify-content:center;padding:16px}.mbox{width:min(520px,100%);max-height:92vh;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 24px;position:relative}.mbox h3{margin:0 40px 14px 0}.mx{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#07111f;color:var(--text);font-size:18px;line-height:1;cursor:pointer}.mx:hover{border-color:var(--cy)}.mbox label{display:block;font-size:12px;color:var(--mut);font-weight:700;margin:12px 0 4px}.mrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mer{color:#fca5a5;font-size:13px;margin-top:10px;min-height:18px}${BAR_CSS}@media(max-width:700px){.mrow{grid-template-columns:1fr}}
@@ -762,14 +805,14 @@ table{width:100%;border-collapse:collapse;margin-top:14px}th,td{text-align:left;
 async function call(u,b){const r=await fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b||{})});return r.json()}
 const um=document.getElementById('um');
 // Okno se zavírá jen křížkem (ne kliknutím mimo ani klávesou Esc)
-function modal(title,html,onSubmit){const o=document.createElement('div');o.className='mov';o.innerHTML='<div class="mbox"><button type="button" class="mx" aria-label="Zavřít">✕</button><h3>'+title+'</h3><form>'+html+'<div class="mer"></div><div style="margin-top:14px"><button class="btn" type="submit">Uložit</button></div></form></div>';document.body.appendChild(o);
+function modal(title,html,onSubmit,btn){const o=document.createElement('div');o.className='mov';o.innerHTML='<div class="mbox"><button type="button" class="mx" aria-label="Zavřít">✕</button><h3>'+title+'</h3><form>'+html+'<div class="mer"></div><div style="margin-top:14px"><button class="btn" type="submit">'+(btn||'Uložit')+'</button></div></form></div>';document.body.appendChild(o);
 o.querySelector('.mx').onclick=()=>o.remove();const f=o.querySelector('form'),er=o.querySelector('.mer');const fi=f.querySelector('input');if(fi)fi.focus();
-f.onsubmit=async ev=>{ev.preventDefault();er.textContent='';const d={};f.querySelectorAll('input').forEach(i=>{d[i.name]=i.value});const j=await onSubmit(d);if(j.ok)location.reload();else er.textContent=j.error||'Chyba'};}
+f.onsubmit=async ev=>{ev.preventDefault();er.textContent='';const d={};f.querySelectorAll('input').forEach(i=>{d[i.name]=i.value});const j=await onSubmit(d);if(j.ok){if(j.sent===false)alert('Uživatel byl vytvořen, ale e-mail se nepodařilo odeslat. Použijte tlačítko „Pozvánka / nové heslo“ v seznamu.');location.reload()}else er.textContent=j.error||'Chyba'};}
 const pwf='<label>Heslo * (min. 8 znaků)</label><input name="password" type="password" minlength="8" maxlength="200" autocomplete="new-password" required>';
-document.getElementById('unew').onclick=()=>{modal('Vytvořit uživatele administrace','<div class="mrow"><div><label>Jméno *</label><input name="first_name" maxlength="60" required autocomplete="off"></div><div><label>Příjmení *</label><input name="last_name" maxlength="60" required autocomplete="off"></div></div><label>E-mail *</label><input name="email" type="email" maxlength="160" required autocomplete="off"><label>Telefon *</label><input name="phone" type="tel" maxlength="40" required autocomplete="off">'+pwf,d=>call('/admin/api/users',d))};
+document.getElementById('unew').onclick=()=>{modal('Vytvořit uživatele administrace','<div class="mrow"><div><label>Jméno *</label><input name="first_name" maxlength="60" required autocomplete="off"></div><div><label>Příjmení *</label><input name="last_name" maxlength="60" required autocomplete="off"></div></div><label>E-mail *</label><input name="email" type="email" maxlength="160" required autocomplete="off"><label>Telefon *</label><input name="phone" type="tel" maxlength="40" required autocomplete="off">'+'<p class="mut" style="margin:14px 0 0">Uživateli přijde e-mail s odkazem — při prvním přihlášení si sám vymyslí heslo.</p>',d=>call('/admin/api/users',d),'Vytvořit a poslat pozvánku')};
 document.addEventListener('click',async e=>{const b=e.target.closest('.ulink,.utog,.udel,.upw');if(!b)return;const id=b.dataset.id;
 if(b.classList.contains('upw')){modal('Nastavit heslo',pwf,d=>call('/admin/api/users/'+id+'/password',d));return}
-if(b.classList.contains('ulink')){if(!confirm('Poslat uživateli e-mail s přihlašovacím odkazem?'))return;const j=await call('/admin/api/users/'+id+'/link');um.textContent=j.ok?'Odkaz odeslán ✓':(j.error||'Chyba');return}
+if(b.classList.contains('ulink')){if(!confirm('Poslat uživateli e-mail s odkazem pro nastavení hesla?'))return;const j=await call('/admin/api/users/'+id+'/link');um.textContent=j.ok?'E-mail odeslán ✓':(j.error||'E-mail se nepodařilo odeslat');return}
 if(b.classList.contains('utog')){const j=await call('/admin/api/users/'+id,{active:b.dataset.a==='1'});if(j.ok)location.reload();else um.textContent=j.error||'Chyba';return}
 if(!confirm('Opravdu smazat tohoto uživatele administrace?'))return;const j=await call('/admin/api/users/'+id+'/delete');if(j.ok)location.reload();else um.textContent=j.error||'Chyba'});
 </script></body></html>`);
@@ -780,9 +823,7 @@ app.post('/admin/api/users', requireAdmin, express.json({ limit: '2kb' }), async
   if (!first || !last) return res.json({ ok: false, error: 'Vyplňte jméno i příjmení' });
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.json({ ok: false, error: 'Neplatný e-mail' });
   if (phone.replace(/\D/g, '').length < 7) return res.json({ ok: false, error: 'Vyplňte telefonní číslo' });
-  const pw = String(b.password || '');
-  if (pw.length < 8) return res.json({ ok: false, error: 'Heslo musí mít aspoň 8 znaků' });
-  try { await q('INSERT INTO admin_users (email, name, first_name, last_name, phone, password_hash) VALUES ($1,$2,$3,$4,$5,$6)', [email, first + ' ' + last, first, last, phone, hashPw(pw)]); res.json({ ok: true }); }
+  try { await q('INSERT INTO admin_users (email, name, first_name, last_name, phone) VALUES ($1,$2,$3,$4,$5)', [email, first + ' ' + last, first, last, phone]); res.json({ ok: true, sent: await sendAdminLink(email, 'cs', 'setup') }); }
   catch (e) { res.json({ ok: false, error: /unique|duplicate/i.test(e.message) ? 'Tento e-mail už je v seznamu' : 'Uložení se nepovedlo' }); }
 });
 app.post('/admin/api/users/:id(\\d+)', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
@@ -800,7 +841,7 @@ app.post('/admin/api/users/:id(\\d+)/password', requireAdmin, express.json({ lim
 app.post('/admin/api/users/:id(\\d+)/link', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   const r = (await q('SELECT * FROM admin_users WHERE id=$1 AND active', [req.params.id])).rows[0];
   if (!r) return res.json({ ok: false, error: 'Uživatel nenalezen nebo je zakázán' });
-  res.json({ ok: await sendAdminLink(String(r.email).toLowerCase(), 'cs') });
+  res.json({ ok: await sendAdminLink(String(r.email).toLowerCase(), 'cs', 'setup') });
 });
 app.post('/admin/api/users/:id(\\d+)/delete', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   const r = (await q('SELECT email FROM admin_users WHERE id=$1', [req.params.id])).rows[0];
