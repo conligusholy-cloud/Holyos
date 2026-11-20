@@ -395,7 +395,7 @@ function offerPage(o, token, opts) {
       <h1><span>${esc(h1a)}</span>${h1b ? `<span class="grad">${esc(h1b)}</span>` : ''}</h1>
       <p class="lead">${esc(o.perex || t.heroSub(o.company || ''))}</p>
       <ul class="chk">${t.chips.map((x) => `<li>${CHK}${esc(x)}</li>`).join('')}</ul>
-      <div class="meta">${esc(t.kick)} ${esc(t.for)} <b>${c}</b>${valid ? ' · ' + esc(t.valid) + ' ' + esc(valid) : ''}</div>
+      <div class="meta">${esc(t.kick)} ${esc(t.for)} <b>${c}</b></div>
     </div>
     <div class="visual"><div class="glow"></div><video src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" autoplay muted loop playsinline preload="metadata"></video>
       <div class="statcard globe">${GLOBE}<div class="gt"><b>${CZF(20)} ${esc(X.statCard[0])}</b><p>🌍 ${esc(X.statCard[1])}</p></div></div></div>
