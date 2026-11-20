@@ -254,7 +254,7 @@ async function pdf(st) { return require('../pdf/contracts').htmlToPdfBuffer(html
 // ─── E-mail ─────────────────────────────────────────────────────────────────
 async function mailFrom() {
   const our = await ourCompany();
-  return { from: process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined, fromName: process.env.SERVICE_BILLING_MAIL_FROM_NAME || '🧾 Fakturace Best Series - Prádlomat' };
+  return { from: process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined, fromName: process.env.RENT_MAIL_FROM_NAME || '🧾 Fakturace Laundromats.eu' };
 }
 function mailText(st, contract, test) {
   const cur = st.currency || 'CZK'; const f = (n) => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + cur;
@@ -269,7 +269,7 @@ function mailText(st, contract, test) {
       + (rent > 0 && !st.reverse_charge && Number(st.vat_rate) > 0 ? 'Nájemné k fakturaci vč. DPH ' + Number(st.vat_rate) + ' %: ' + (Math.round(Number(st.rent_invoice) * (100 + Number(st.vat_rate))) / 100).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + st.invoice_currency + '\n' : '') : '')
     + '\n'
     + (st.reverse_charge ? 'Fakturu prosím vystavte BEZ DPH s textem „Reverse charge / přenesení daňové povinnosti“ (čl. 196 směrnice 2006/112/ES).\n\n' : '')
-    + 'Podle tohoto podkladu prosím vystavte fakturu.\n\nS pozdravem\nBest Series';
+    + 'Podle tohoto podkladu prosím vystavte fakturu.\n\nS pozdravem\nLaundromats.eu';
 }
 async function sendStatementMail(st, contract, opts) {
   opts = opts || {};
@@ -278,7 +278,7 @@ async function sendStatementMail(st, contract, opts) {
   const cc = !opts.to && contract.cc_emails ? contract.cc_emails : undefined;
   const buf = await pdf(st);
   const r = await sendMail(Object.assign({}, await mailFrom(), {
-    to: cc ? to + ', ' + cc : to, brand: 'bs2',
+    to: cc ? to + ', ' + cc : to, brand: 'laundromats:cs', noLink: true,
     subject: (opts.test ? '[TEST] ' : '') + 'Podklad pro fakturaci nájmu kiosku ' + st.kiosk_code + ' — ' + st.period_ym,
     body: mailText(st, contract, !!opts.test),
     attachments: [{ filename: 'najem-' + st.kiosk_code + '-' + st.period_ym + '.pdf', content: buf, contentType: 'application/pdf' }],

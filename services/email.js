@@ -74,6 +74,7 @@ function escapeHtml(s) {
 
 // Prádlomaty mimo Česko = značka LAUNDROMATS (laundromats.eu). Texty šablony podle jazyka leadu.
 const LAUNDRO_TXT = {
+  cs: { sub: 'Samoobslužné prádelny', unsub: 'Odhlásit odběr', open: 'Otevřít' }, // jen pro výslovný brand 'laundromats:cs' (laundroLang vrací pro cs null)
   en: { sub: 'Self-service laundromats', unsub: 'Unsubscribe', open: 'Open' },
   pl: { sub: 'Samoobsługowe pralnie', unsub: 'Wypisz się', open: 'Otwórz' },
   sk: { sub: 'Samoobslužné práčovne', unsub: 'Odhlásiť odber', open: 'Otvoriť' },
