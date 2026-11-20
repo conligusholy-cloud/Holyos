@@ -167,6 +167,17 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; th
   fi
 fi
 
+# Burza akcií: graf, šipka u ceny a návrat ze seznamu. Hráč se podle grafu
+# rozhoduje o skutečných penězích — rovná čára u ceny, která se hejbe, je
+# lž, a šipka bez obchodu by dělala z prvního dne propad.
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|public/compounder/game/index.html|routes/game-trade'; then
+  if ! node nastroje/takcieburza.js; then
+    echo ""
+    echo "STOP: burza akcií nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Akcie fondu: kolik fondu se vydáním prodá a jak se páruje pořadník nabídek.
 # Obojí je o skutečných penězích hráčů — chyba ve vydání okrade členy o díl,
 # chyba v párování toho, kdo v knize čekal.

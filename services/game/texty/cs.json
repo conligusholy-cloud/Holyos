@@ -3858,5 +3858,12 @@
   "akcie.cena_ted": "Cena akcie",
   "akcie.kolik": "Kolik kusů",
   "akcie.fond_jeste_proda": "Fond ještě prodá",
-  "veta.akcie_posun": "Po nákupu by cena byla {penize:p1}, po prodeji {penize:p2}."
+  "veta.akcie_posun": "Po nákupu by cena byla {penize:p1}, po prodeji {penize:p2}.",
+  "akcie.burza": "Akciová burza",
+  "akcie.burza_popis": "Co je právě v oběhu. Cenu neurčuje kupující — hýbe s ní jen obchodování. Protistranou je vždycky fond, takže koupit i prodat jde kdykoli.",
+  "akcie.nic_v_obehu": "Zatím žádný fond akcie nevydal.",
+  "akcie.podrobnosti": "Podrobnosti",
+  "akcie.fond_vykoupi": "Fond vykoupí",
+  "akcie.posledni_obchody": "Poslední obchody",
+  "akcie.bez_obchodu": "Zatím se neobchodovalo."
 }

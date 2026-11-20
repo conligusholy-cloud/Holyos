@@ -2653,7 +2653,14 @@ function akcieStav(al, hodnota) {
     ucetni: AKCIE.ucetni(hodnota, al.akcie_podil || 0, vydano) };
 }
 
+// Kolik obchodů se vejde do malého grafu v seznamu. Dost na to, aby byl
+// vidět pohyb, a málo na to, aby seznam nenesl stovky čísel pro nic.
+const AKCIE_GRAF_SEZNAM = 30;
+
 // GET /trade/akcie → fondy, jejichž akcie se dají koupit
+//
+// Seznam nese i malý graf a cenu na jeho začátku. Šipka u ceny se měří
+// proti ní, aby ukazovala právě ten pohyb, který je v grafu vidět.
 router.get('/trade/akcie', hrac, api(async (req, res) => {
   const [fondy, moje] = await Promise.all([
     prisma.gameAliance.findMany({ select: { id: true, nazev: true, akcie_celkem: true,
@@ -2665,10 +2672,23 @@ router.get('/trade/akcie', hrac, api(async (req, res) => {
   const zajimave = fondy.filter((f) => (f.akcie_celkem || 0) > 0);
   const out = [];
   for (const f of zajimave) {
-    const s = akcieStav(f, await hodnotaFondu(f.id));
+    // Graf se ptá fond po fondu schválně: jeden společný dotaz s limitem by
+    // u fondu, kde se obchoduje nejvíc, sebral řádky všem ostatním.
+    const [hodnota, obchody] = await Promise.all([
+      hodnotaFondu(f.id),
+      prisma.gameAkcieObchod.findMany({ where: { aliance_id: f.id },
+        orderBy: { kdy: 'desc' }, take: AKCIE_GRAF_SEZNAM,
+        select: { kdy: true, cena: true } }),
+    ]);
+    const graf = obchody.slice().reverse();
+    const s = akcieStav(f, hodnota);
     out.push({ aliance_id: f.id, nazev: f.nazev, cena: s.cena, ucetni: s.ucetni,
       vydano: s.vydano, volne: s.volne, podil: s.podil,
-      moje_kusy: mam.get(f.id) || 0 });
+      moje_kusy: mam.get(f.id) || 0,
+      graf,
+      // Cena na začátku grafu. Null = ještě se neobchodovalo, a to není
+      // pokles: šipka se pak neukáže vůbec.
+      cena_drive: graf.length ? graf[0].cena : null });
   }
   res.json({ ok: true, fondy: out });
 }));
