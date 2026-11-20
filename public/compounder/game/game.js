@@ -10942,7 +10942,7 @@ function akcieTrhSheet(id, smer) {
         ? '<h4 style="margin:14px 0 2px">' + esc(tx('akcie.posledni_obchody')) + '</h4>'
           + posledni.map(function (o) {
               return '<div class="row"><span class="muted small">' + esc(datumKratce(o.kdy))
-                + ' · ' + tCislo(o.pocet) + ' ' + esc(tx('akcie.kusu')) + '</span>'
+                + ' · ' + tCislo(o.pocet) + ' ×</span>'
                 + '<span>' + kcFull(o.cena) + '</span></div>';
             }).join('')
         : '');
