@@ -72,6 +72,9 @@ async function initDb() {
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS last_name TEXT');
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS phone TEXT');
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS password_hash TEXT');
+  await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS invite_sent_at TIMESTAMPTZ');
+  await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS invite_count INT NOT NULL DEFAULT 0');
+  await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS invite_error TEXT');
   // Partnerský portál: přístup a viditelné sekce nastavuje admin v detailu leadu
   await q('ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS portal_access BOOLEAN NOT NULL DEFAULT false');
   await q("ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS portal_sections JSONB NOT NULL DEFAULT '[]'::jsonb");
@@ -538,6 +541,14 @@ app.get('/login', async (req, res) => {
 // Odeslání odkazu: e-mail týmu → odkaz do administrace, e-mail partnera → odkaz do portálu. Odpověď je pokaždé stejná.
 let luMailErr = '';
 async function sendAdminLink(email, lang, kind) {
+  const ok = await sendAdminLinkRaw(email, lang, kind);
+  if (kind === 'setup') {
+    const sql = ok ? 'UPDATE admin_users SET invite_sent_at=now(), invite_count=invite_count+1, invite_error=NULL WHERE lower(email)=$1' : 'UPDATE admin_users SET invite_error=$2 WHERE lower(email)=$1';
+    q(sql, ok ? [String(email).toLowerCase()] : [String(email).toLowerCase(), String(luMailErr || 'neznámá chyba').slice(0, 300)]).catch(() => {});
+  }
+  return ok;
+}
+async function sendAdminLinkRaw(email, lang, kind) {
   luMailErr = '';
   try {
     if (!LU_SECRET || !USER_KEY) { luMailErr = 'Na serveru Laundry Unlimited chybí LU_SSO_SECRET'; return false; }
@@ -794,7 +805,7 @@ app.get('/admin/users', requireAdmin, async (req, res) => {
   const inDb = new Set(rows.map((r) => String(r.email).toLowerCase()));
   const envOnly = ADMIN_EMAILS.filter((e) => !inDb.has(e));
   const me = String((req.admin && req.admin.email) || '').toLowerCase();
-  const tr = envOnly.map((e) => `<tr><td>—</td><td>${esc(e)}</td><td>—</td><td><span class="chip ok">z konfigurace</span></td><td class="mut">—</td><td class="mut small">nelze smazat</td></tr>`).concat(rows.map((r) => `<tr><td>${esc(r.name || '—')}</td><td>${esc(r.email)}</td><td>${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '—'}</td><td>${!r.active ? '<span class="chip">zakázán</span>' : r.password_hash ? '<span class="chip ok">aktivní</span>' : '<span class="chip" style="border-color:#f59e0b;color:#fcd34d">čeká na nastavení hesla</span>'}</td><td class="mut small">${esc(fmtDt(r.last_login_at))}</td>
+  const tr = envOnly.map((e) => `<tr><td>—</td><td>${esc(e)}</td><td>—</td><td><span class="chip ok">z konfigurace</span></td><td class="mut">—</td><td class="mut small">nelze smazat</td></tr>`).concat(rows.map((r) => `<tr><td>${esc(r.name || '—')}</td><td>${esc(r.email)}</td><td>${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '—'}</td><td>${!r.active ? '<span class="chip">zakázán</span>' : r.password_hash ? '<span class="chip ok">aktivní</span>' : '<span class="chip" style="border-color:#f59e0b;color:#fcd34d">čeká na nastavení hesla</span>' + (r.invite_error ? `<div class="small" style="color:#fca5a5;margin-top:4px">Pozvánka se neodeslala: ${esc(r.invite_error)}</div>` : r.invite_sent_at ? `<div class="mut small" style="margin-top:4px">✉ Pozvánka odeslána ${esc(fmtDt(r.invite_sent_at))}${r.invite_count > 1 ? ' (' + r.invite_count + '×)' : ''}</div>` : '<div class="small" style="color:#fca5a5;margin-top:4px">Pozvánka zatím neodeslána</div>')}</td><td class="mut small">${esc(fmtDt(r.last_login_at))}</td>
 <td style="text-align:right;white-space:nowrap"><button class="btn sm ghost upw" data-id="${r.id}">Heslo</button> <button class="btn sm ghost ulink" data-id="${r.id}">Pozvánka / nové heslo</button> <button class="btn sm ghost utog" data-id="${r.id}" data-a="${r.active ? 0 : 1}">${r.active ? 'Zakázat' : 'Povolit'}</button>${String(r.email).toLowerCase() === me ? '' : ` <button class="btn sm ghost udel" data-id="${r.id}">Smazat</button>`}</td></tr>`)).join('');
   res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Uživatelé administrace — Laundry Unlimited</title>
 <style>${ADMIN_CSS}.adm{max-width:1000px;margin:0 auto;padding:22px}.mut{color:var(--mut);font-size:13px}.small{font-size:12px}.chip{border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:12px;background:#07111f}.chip.ok{border-color:#22c55e;color:#86efac}
