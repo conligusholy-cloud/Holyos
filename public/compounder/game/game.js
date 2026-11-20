@@ -5251,16 +5251,23 @@ function installSheet(sp, areaId, modelKey, drz, pad) {
     // Co stojí přípojky, posíláme s sebou: server si k tomu přidá vlastní
     // odhad z otisku místa a podle obojího pak umí spočítat, kolik hotovosti
     // hráči za uplynulý čas mělo ubýt. Bez toho mu největší výdaj chyběl.
-    var volani = pron
+    // Na tomhle stání už můj zábor může ležet i bez stroje: u prvního stání
+    // na vlastním pozemku vždycky, u dalších tehdy, když stroj zmizel —
+    // zbourala ho hra nebo o něj hráč přišel u soudu. Zábor hráči zůstává,
+    // zmizí jen stroj. V obou případech se do záboru jen dopíše stroj;
+    // kdyby se místo zabíralo znovu, narazil by nový zábor na ten starý
+    // a hra by hlásila „Tady už stojíš." na místě, které je hráčovo vlastní.
+    var muj = CLAIMS[spotId];
+    var volani = dopsatStroj(muj)
+      ? apiJson('/spots/stavba', { spot_id: spotId, model: modelKey, pripojky: e.conn })
+      : pron
       ? apiJson('/spots/claim', { spot_id: spotId, area_key: areaId, model: modelKey,
           rent: e.rent, name: sp.name, lat: sp.lat, lon: sp.lon, pozemek: true,
           pripojky: e.conn })
       : mam
-      ? (pad
-          ? apiJson('/spots/claim', { spot_id: spotId, area_key: areaId, model: modelKey, rent: 0,
-              name: nazev, lat: sp.lat + dlat, lon: sp.lon + dlon, pozemek: true,
-              pripojky: e.conn })
-          : apiJson('/spots/stavba', { spot_id: sp.id, model: modelKey, pripojky: e.conn }))
+      ? apiJson('/spots/claim', { spot_id: spotId, area_key: areaId, model: modelKey, rent: 0,
+          name: nazev, lat: sp.lat + dlat, lon: sp.lon + dlon, pozemek: true,
+          pripojky: e.conn })
       : apiJson('/spots/claim', { spot_id: sp.id, area_key: areaId, model: modelKey,
           rent: e.rent, name: sp.name, lat: sp.lat, lon: sp.lon, pozemek: false,
           doba_mesicu: sml.doba || 0, vypoved_mesicu: sml.vypoved || 1,
@@ -5487,6 +5494,11 @@ function pozemky() {
 // Na jeden pozemek se vejde víc prádlomatů. První stání drží zábor pozemku,
 // každé další dostane vlastní — v žebříčku je to samostatný prádlomat.
 function padId(spotId, i) { return i ? spotId + '#' + i : spotId; }
+// Čím se staví: do záboru, který na tom stání už mám (jen se do něj dopíše
+// stroj), nebo úplně novým záborem. Vlastní zábor bez stroje vzniká dvakrát:
+// u prvního stání na vlastním pozemku a pak všude, kde stroj zmizel —
+// zbouraný hrou nebo zabavený soudem. Zábor hráči zůstává, mizí jen stroj.
+function dopsatStroj(claim) { return !!(claim && claim.mine && !claim.model); }
 function padObsazen(sp, i) {
   var id = padId(sp.id, i);
   return S.units.some(function (u) { return u.spotId === id; });
