@@ -256,8 +256,12 @@ function benIco(i) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${g}${P[i] || P[2]}</svg>`;
 }
 
+// Úprava vzhledu pro export do PDF: bez animací, videí a formuláře, sekce se nelámou přes stránky
+const PRINT_CSS = '<style>*{animation:none!important;transition:none!important}[data-s=video],.refvid,#of-open,#of-form,.pdfbtn,.lsp{display:none!important}section,.cta,.vers>*{break-inside:avoid;page-break-inside:avoid}html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style>';
+
 function offerPage(o, token, opts) {
-  const preview = !!(opts && opts.preview);
+  const print = !!(opts && opts.print), preview = !!(opts && (opts.preview || opts.print));
+  const PDFT = { cs: 'Stáhnout nabídku v PDF', en: 'Download the offer as PDF', pl: 'Pobierz ofertę w PDF' };
   const L = o.lang === 'en' ? 'en' : o.lang === 'pl' ? 'pl' : 'cs', t = T[L], X = EXTRA[L];
   const c = esc(o.company || '');
   const pts = String(o.points || '').split('\n').map((x) => x.replace(/^[-•*\s]+/, '').trim()).filter(Boolean);
@@ -396,6 +400,7 @@ function offerPage(o, token, opts) {
       <p class="lead">${esc(o.perex || t.heroSub(o.company || ''))}</p>
       <ul class="chk">${t.chips.map((x) => `<li>${CHK}${esc(x)}</li>`).join('')}</ul>
       <div class="meta">${esc(t.kick)} ${esc(t.for)} <b>${c}</b></div>
+      ${print ? '' : `<p style="margin:16px 0 0"><a class="btn pdfbtn" href="/nabidka/${token}/pdf" download style="display:inline-block;text-decoration:none;font-size:14px;padding:10px 18px">⬇ ${esc(PDFT[L])}</a></p>`}
     </div>
     <div class="visual"><div class="glow"></div><video src="/media/provoz.mp4" poster="/media/provoz-poster.jpg" autoplay muted loop playsinline preload="metadata"></video>
       <div class="statcard globe">${GLOBE}<div class="gt"><b>${CZF(20)} ${esc(X.statCard[0])}</b><p>🌍 ${esc(X.statCard[1])}</p></div></div></div>
@@ -472,7 +477,7 @@ document.addEventListener('click',function(e){var a=e.target.closest('a,button')
 document.querySelectorAll('video[controls]').forEach(function(v){v.addEventListener('play',function(){q.push({k:'video',v:(v.closest('figure')&&v.closest('figure').textContent.trim())||v.getAttribute('src')});});});
 var f=document.getElementById('of-form');if(f){var o=document.getElementById('of-open');if(o)o.addEventListener('click',function(){q.push({k:'form',v:'otevřen'});});f.addEventListener('submit',function(){q.push({k:'form',v:'odeslán'});send();});}
 document.addEventListener('visibilitychange',function(){tick();if(document.hidden)send(1);});setInterval(function(){if(!document.hidden)send();},10000);setTimeout(send,2000);addEventListener('pagehide',function(){send(1);});})();<\/script>`;
-  let html = layout({ title: (o.title || t.kick) + ' — ' + (o.company || ''), back: false, body: body + TRACK }).replace('<html lang="cs">', '<html lang="' + L + '">');
+  let html = layout({ title: (o.title || t.kick) + ' — ' + (o.company || ''), back: false, body: body + TRACK + (print ? PRINT_CSS : '') }).replace('<html lang="cs">', '<html lang="' + L + '">');
   // Nabídka je samostatná stránka: bez menu webu a bez čísla verze (zůstává logo a přepínač jazyka)
   html = html.replace(/<nav class="lnav"[\s\S]*?<\/nav>/, '').replace(/<span class="lsp">[\s\S]*?<!--\/PRIV--><\/span>/, '<span class="lsp"></span>').replace(/(<a class="brand") href="[^"]*"/, '$1 href="#"');
   return html;

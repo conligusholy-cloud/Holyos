@@ -226,6 +226,39 @@ router.get('/:id(\\d+)/session/:vid([a-z0-9-]{6,40})', async (req, res, next) =>
   } catch (e) { next(e); }
 });
 
+// GET /public/:token/pdf — PDF nabídky (headless Chromium načte stránku ?print=1 z laundromats.eu), cache 10 min
+const _pdfCache = new Map();
+let _pdfBrowser = null;
+router.get('/public/:token([a-f0-9]{32})/pdf', async (req, res, next) => {
+  let page = null;
+  try {
+    const list = await load(); const o = list.find((x) => x.token === req.params.token);
+    if (!o) return res.status(404).json({ error: 'Nabídka nenalezena' });
+    const ck = o.token + ':' + (o.updated_at || '') + ':' + (o.image_v || '');
+    const slug = slugOf(o.company);
+    const hdr = { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="Nabidka-Laundromats-' + slug + '.pdf"', 'Cache-Control': 'no-store' };
+    const hit = _pdfCache.get(ck);
+    if (hit && Date.now() - hit.at < 600000) return res.set(hdr).send(hit.buf);
+    const puppeteer = require('puppeteer');
+    if (!_pdfBrowser || !_pdfBrowser.isConnected()) _pdfBrowser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox', '--font-render-hinting=none'] });
+    page = await _pdfBrowser.newPage();
+    await page.setViewport({ width: 1280, height: 1810 });
+    await page.emulateMediaType('screen');
+    const base = String(process.env.LM_URL || 'https://laundromats.eu').replace(/\/$/, '');
+    await page.goto(base + '/nabidka/' + slug + '/' + o.token + '?print=1', { waitUntil: 'networkidle0', timeout: 45000 });
+    // Videa nahradíme úvodním snímkem, počkáme na obrázky a písma
+    await page.evaluate(async () => {
+      document.querySelectorAll('video').forEach((v) => { if (!v.poster) { v.remove(); return; } const i = new Image(); i.src = v.poster; i.className = v.className; i.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:inherit'; v.replaceWith(i); });
+      await Promise.all(Array.from(document.images).map((im) => (im.complete ? 0 : new Promise((r) => { im.onload = im.onerror = r; }))));
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    });
+    const buf = Buffer.from(await page.pdf({ width: '1280px', height: '1810px', printBackground: true, margin: { top: 0, right: 0, bottom: 0, left: 0 }, preferCSSPageSize: false }));
+    if (_pdfCache.size > 30) _pdfCache.clear();
+    _pdfCache.set(ck, { at: Date.now(), buf });
+    res.set(hdr).send(buf);
+  } catch (e) { next(e); } finally { if (page) { try { await page.close(); } catch (e) { /* nic */ } } }
+});
+
 // ── Obrázek personalizovaného prádlomatu (v barvách firmy) — samostatně v AppSetting lm_corp_offer_img.<id> ──
 const IMG_KEY = (id) => 'lm_corp_offer_img.' + id;
 router.post('/:id(\\d+)/image', async (req, res, next) => {

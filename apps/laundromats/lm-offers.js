@@ -152,12 +152,21 @@ module.exports = function mountOffers(app, ctx) {
   });
   // Záznam pohybu jedné návštěvy (přehrání v administraci)
   app.get('/admin/api/offers/:id(\\d+)/session/:vid([a-z0-9-]{6,40})', requireAdmin, J((req) => hos('GET', '/' + req.params.id + '/session/' + req.params.vid)));
+  // Stažení nabídky jako PDF (renderuje HolyOS přes headless Chromium z verze stránky ?print=1)
+  app.get('/nabidka/:token([a-f0-9]{32})/pdf', async (req, res) => {
+    if (rateLimited && rateLimited('offpdf:' + req.ip, 20, 3600e3)) return res.status(429).type('text').send('Příliš mnoho stažení, zkuste to později.');
+    try {
+      const r = await fetch(HOLYOS_URL + BASE + '/public/' + req.params.token + '/pdf', { headers: { Authorization: 'Bearer ' + tok() }, signal: AbortSignal.timeout(90000) });
+      if (!r.ok) return res.status(r.status === 404 ? 404 : 502).type('text').send('PDF se nepodařilo vytvořit.');
+      res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': r.headers.get('content-disposition') || 'attachment; filename="Nabidka-Laundromats.pdf"', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }).send(Buffer.from(await r.arrayBuffer()));
+    } catch (e) { res.status(502).type('text').send('PDF je dočasně nedostupné.'); }
+  });
   // Každá nabídka má vlastní adresu: /nabidka/<firma>/<token> (i krátká /nabidka/<token>)
   app.get(['/nabidka/:slug([a-z0-9-]{1,40})/:token([a-f0-9]{32})', '/nabidka/:token([a-f0-9]{32})'], async (req, res) => {
     let o;
-    try { o = (await hos('GET', '/public/' + req.params.token + (req.query.preview === '1' ? '?track=0' : ''))).offer; }
+    try { o = (await hos('GET', '/public/' + req.params.token + (req.query.preview === '1' || req.query.print === '1' ? '?track=0' : ''))).offer; }
     catch (e) { return res.status(e.status === 404 ? 404 : 502).type('html').send(layout({ title: 'Nabídka', back: false, body: `<div class="card" style="max-width:560px;margin:40px auto"><h1 style="margin-top:0">${e.status === 404 ? 'Nabídka nenalezena' : 'Nabídka je dočasně nedostupná'}</h1><p class="muted">${e.status === 404 ? 'Odkaz už neplatí nebo je neúplný.' : 'Zkuste to prosím za chvíli.'}</p></div>` })); }
-    res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex, nofollow').type('html').send(require('./lm-offer-page').offerPage(o, req.params.token, { preview: req.query.preview === '1', models: await models() }));
+    res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex, nofollow').type('html').send(require('./lm-offer-page').offerPage(o, req.params.token, { preview: req.query.preview === '1', print: req.query.print === '1', models: await models() }));
   });
   app.post('/nabidka/:token([a-f0-9]{32})/zajem', js, async (req, res) => {
     if (rateLimited && rateLimited('offer:' + req.ip, 10, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho pokusů.' });
