@@ -33,6 +33,30 @@
     .data-table tr:hover td { background: rgba(8,145,178,0.06); }
     .data-table tr { cursor: pointer; }
 
+    /* Nájem kiosku — použitelné i na malých monitorech: vodorovný posuv uvnitř karty,
+       přilepený první sloupec (stroj / číslo) a poslední sloupec (akce), kompaktnější buňky */
+    #sbsec-rent .rent-scroll { overflow: auto; max-width: 100%; max-height: calc(100vh - 140px); border-radius: 8px; scrollbar-width: auto; scrollbar-color: #4b5a7a #1b2236; }
+    #sbsec-rent .rent-scroll::-webkit-scrollbar { height: 14px; width: 12px; }
+    #sbsec-rent .rent-scroll::-webkit-scrollbar-track { background: #1b2236; border-radius: 8px; }
+    #sbsec-rent .rent-scroll::-webkit-scrollbar-thumb { background: #4b5a7a; border-radius: 8px; border: 3px solid #1b2236; }
+    #sbsec-rent .data-table { width: 100%; }
+    #sbsec-rent .data-table th:first-child, #sbsec-rent .data-table td:first-child { position: sticky; left: 0; z-index: 2; background-color: var(--surface); box-shadow: 6px 0 8px -6px rgba(0,0,0,.6); }
+    #sbsec-rent .data-table th:last-child, #sbsec-rent .data-table td:last-child { position: sticky; right: 0; z-index: 2; background-color: var(--surface); box-shadow: -6px 0 8px -6px rgba(0,0,0,.6); }
+    #sbsec-rent .data-table th:first-child, #sbsec-rent .data-table th:last-child { background-color: var(--surface2); z-index: 3; }
+    #sbsec-rent .data-table td[colspan] { position: static; box-shadow: none; background-color: transparent; }
+    #sbsec-rent .rent-info summary { cursor: pointer; font-size: 13px; color: var(--text2); margin-bottom: 8px; user-select: none; }
+    #sbsec-rent .rent-info[open] summary { margin-bottom: 10px; }
+    @media (max-width: 1700px) {
+      #sbsec-rent .pb-card { padding: 14px 14px; }
+      #sbsec-rent .data-table th { padding: 7px 8px; font-size: 10.5px; letter-spacing: .2px; white-space: normal !important; }
+      #sbsec-rent .data-table td { padding: 7px 8px; font-size: 12px; }
+      #sbsec-rent .data-table td .btn-sm { padding: 4px 8px; font-size: 11.5px; }
+      #sbsec-rent .data-table td:last-child { white-space: normal !important; min-width: 96px; }
+      #sbsec-rent .data-table td:last-child > .btn { display: block; width: 100%; margin: 2px 0; text-align: center; box-sizing: border-box; }
+      #rentdocs-table { min-width: 1080px !important; }
+      #rent-table { min-width: 1000px; }
+    }
+
     /* Filtry */
     .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
     .filters label { color: var(--text2); font-size: 0.88em; }
@@ -714,6 +738,9 @@
         <div id="sbsec-rent" style="display:none;">
           <div class="pb-card">
             <h3>🏭 Nájem kiosku — podklady k fakturaci</h3>
+            <div style="font-size:13px; margin-bottom:8px;"><b>Měsíční nájemné = B − C − D − E − F</b> <span style="color:var(--text2);">(obrat bez DPH − 13 % servisní poplatek − nájem lokality − energie − servis/díly)</span></div>
+            <details class="rent-info">
+            <summary>ℹ Jak se podklad počítá a jak funguje automatika</summary>
             <div style="font-size:13px; color:var(--text2); line-height:1.5; margin-bottom:12px;">
               Podle čl. VI nájemní smlouvy: <b>Měsíční nájemné = B − C − D − E − F</b>, kde <b>A</b> = tržby s DPH ze SIS (po vratkách), <b>B</b> = obrat bez DPH, <b>C</b> = 13 % z A (servisní a provozní poplatek Nájemce, bez DPH),
               <b>D</b> = náklad na užívání lokality, <b>E</b> = energie a provozní média, <b>F</b> = pozáruční servis a náhradní díly (D–F bez DPH po odečtu nároku na odpočet).
@@ -724,6 +751,7 @@
               Tržby (A) se berou ze SIS, <b>13 % servisní poplatek</b> se dopočítá z obratu a faktury za <b>nájem lokality (D)</b> a <b>energie (E)</b> se automaticky vyhledají v <b>přijatých dokladech</b> podle dodavatele a klíčového slova.
               Režim: jen koncept · vystavit · <b>vystavit a automaticky odeslat</b> kompetentní osobě. Vizualizaci můžeš kdykoli poslat na <b>testovací e-mail</b>.
             </div>
+            </details>
             <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
               <button class="btn btn-primary btn-sm" onclick="openRentContractModal()">+ Nová nájemní smlouva kiosku</button>
               <label style="font-size:13px;">Měsíc <input type="month" id="rent-ym" onchange="loadRent()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;"></label>
@@ -732,14 +760,14 @@
           </div>
           <div class="pb-card" style="margin-top:16px;">
             <h3>📋 Nájemní smlouvy kiosků <span id="rent-inactive-hint" style="font-size:12px;font-weight:400;color:var(--text2);margin-left:10px;"></span></h3>
-            <table class="data-table" id="rent-table" style="width:100%;">
+            <div class="rent-scroll"><table class="data-table" id="rent-table" style="width:100%;">
               <thead><tr><th>Stroj (kód)</th><th>Subjekt</th><th>Kompetentní osoba</th><th>Účinnost</th><th>Den vystavení</th><th>Automatizace</th><th>Poplatek</th><th title="Pevný nájem lokality bez DPH / měsíc (D)">Nájem (pevně)</th><th title="Pevná záloha na elektřinu bez DPH / měsíc (E)">Elektřina</th><th title="Pevná záloha na vodné a stočné bez DPH / měsíc (E)">Vodné a stočné</th><th title="V jaké měně se podle podkladu fakturuje (výpočet vždy v Kč, EUR = přepočet kurzem ČNB). RC = fakturace bez DPH (reverse charge).">Fakturační měna</th><th title="Aktivní smlouvu zpracovává automatika (plánování, vystavení, odeslání)">Automatika zapnutá</th><th></th></tr></thead>
               <tbody><tr><td colspan="13" class="empty-hint">Načítám…</td></tr></tbody>
-            </table>
+            </table></div>
           </div>
           <div class="pb-card" style="margin-top:16px;">
             <h3>🧾 Podklady k fakturaci nájmu — plánované a vystavené</h3>
-            <div style="overflow-x:auto;"><table class="data-table" id="rentdocs-table" style="width:100%;min-width:1250px;">
+            <div class="rent-scroll"><table class="data-table" id="rentdocs-table" style="width:100%;min-width:1250px;">
               <thead><tr><th>Číslo / stav</th><th>Stroj</th><th>Subjekt</th><th>Za měsíc</th><th class="r" title="A — tržby s DPH (SIS)">Tržby s DPH (A)</th><th class="r" title="B — obrat bez DPH">Obrat bez DPH (B)</th><th class="r" title="C — servisní a provozní poplatek (13 % z A)">Servisní poplatek (C)</th><th class="r" title="D — nájem lokality">Nájem lokality (D)</th><th class="r" title="E — energie a provozní média">Energie (E)</th><th class="r" title="F — pozáruční servis a díly">Servis / díly (F)</th><th class="r" title="B − C − D − E − F">Nájemné</th><th>Odesláno / plán</th><th></th></tr></thead>
               <tbody><tr><td colspan="13" class="empty-hint">Načítám…</td></tr></tbody>
             </table></div>
