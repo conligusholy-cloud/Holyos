@@ -1509,7 +1509,7 @@
   "hra.majitel_drzi": "El dueño tiene",
   "hra.podilnici": "Socios",
   "hra.firmu_nedrzi_nikdo_jiny_je": "Nadie más tiene participación en la empresa — es completamente del dueño.",
-  "hra.podily_v_cizich_firmach": "Participaciones en empresas ajenas",
+  "hra.podily_v_cizich_firmach": "Participaciones en otras empresas",
   "hra.v_zadne_cizi_firme_podil": "No tiene participación en ninguna empresa ajena.",
   "hra.klepnutim_na_firmu_se_podivas": "Toca la empresa para ver su estructura.",
   "hra.server_neodpovida_18": "El servidor no responde.",
@@ -3764,5 +3764,10 @@
   "fond.na_provedeni_chybi": "Faltan {penize:p1}. Las ofertas abiertas retienen {penize:p2}.",
   "prevzeti.ztratis_vetsinu": "Con esta venta pierdes la mayoría en tu propia empresa — te quedaría {p1} %. No se puede deshacer.",
   "fond.vynos": "{p1} % al mes · se recupera en {cislo:p2} meses",
-  "fond.vynos_nevrati": "{p1} % al mes · con este reparto no se recupera"
+  "fond.vynos_nevrati": "{p1} % al mes · con este reparto no se recupera",
+  "hra.co_vlastnim_jinde": "Lo que tengo en otras partes",
+  "hra.podily_mimo_vlastni_firmu": "No cuenta en el patrimonio neto — el rango y el crédito salen solo de tu empresa.",
+  "hra.podil_ve_fondu": "Parte en el fondo",
+  "hra.z_me_firmy_drzi_jini": "De mi empresa, otros tienen",
+  "hra.vcetne_podilu": "Con participaciones"
 }

@@ -1510,7 +1510,7 @@
   "hra.majitel_drzi": "Le propriétaire détient",
   "hra.podilnici": "Associés",
   "hra.firmu_nedrzi_nikdo_jiny_je": "Personne d'autre ne détient l'entreprise — elle appartient entièrement au propriétaire.",
-  "hra.podily_v_cizich_firmach": "Parts dans d'autres entreprises",
+  "hra.podily_v_cizich_firmach": "Parts dans d’autres sociétés",
   "hra.v_zadne_cizi_firme_podil": "N'a de part dans aucune autre entreprise.",
   "hra.klepnutim_na_firmu_se_podivas": "Clique sur l'entreprise pour voir sa structure.",
   "hra.server_neodpovida_18": "Le serveur ne répond pas.",
@@ -3764,5 +3764,10 @@
   "fond.na_provedeni_chybi": "Il manque {penize:p1}. Les offres en cours immobilisent {penize:p2}.",
   "prevzeti.ztratis_vetsinu": "Cette vente te fait perdre la majorité dans ta propre société — il te resterait {p1} %. C’est sans retour.",
   "fond.vynos": "{p1} % par mois · remboursé en {cislo:p2} mois",
-  "fond.vynos_nevrati": "{p1} % par mois · à ce versement, jamais remboursé"
+  "fond.vynos_nevrati": "{p1} % par mois · à ce versement, jamais remboursé",
+  "hra.co_vlastnim_jinde": "Ce que je possède ailleurs",
+  "hra.podily_mimo_vlastni_firmu": "Non compté dans le patrimoine net — le rang et le crédit ne regardent que ta société.",
+  "hra.podil_ve_fondu": "Part dans le fonds",
+  "hra.z_me_firmy_drzi_jini": "De ma société, d’autres détiennent",
+  "hra.vcetne_podilu": "Avec les parts"
 }

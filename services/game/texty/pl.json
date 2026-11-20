@@ -1517,7 +1517,7 @@
   "hra.majitel_drzi": "Właściciel trzyma",
   "hra.podilnici": "Udziałowcy",
   "hra.firmu_nedrzi_nikdo_jiny_je": "Firmy nie trzyma nikt inny — jest w całości właściciela.",
-  "hra.podily_v_cizich_firmach": "Udziały w obcych firmach",
+  "hra.podily_v_cizich_firmach": "Udziały w cudzych firmach",
   "hra.v_zadne_cizi_firme_podil": "W żadnej obcej firmie udziału nie ma.",
   "hra.klepnutim_na_firmu_se_podivas": "Kliknięciem na firmę zobaczysz jej strukturę.",
   "hra.server_neodpovida_18": "Serwer nie odpowiada.",
@@ -3771,5 +3771,10 @@
   "fond.na_provedeni_chybi": "Brakuje {penize:p1}. Wystawione oferty trzymają {penize:p2}.",
   "prevzeti.ztratis_vetsinu": "Tą sprzedażą tracisz większość we własnej firmie — zostanie ci {p1} %. Tego nie da się cofnąć.",
   "fond.vynos": "{p1} % miesięcznie · zwrot w {cislo:p2} mies.",
-  "fond.vynos_nevrati": "{p1} % miesięcznie · przy tej wypłacie się nie zwróci"
+  "fond.vynos_nevrati": "{p1} % miesięcznie · przy tej wypłacie się nie zwróci",
+  "hra.co_vlastnim_jinde": "Co mam gdzie indziej",
+  "hra.podily_mimo_vlastni_firmu": "Nie liczy się do majątku netto — ranga i kredyt mierzą tylko własną firmę.",
+  "hra.podil_ve_fondu": "Udział w funduszu",
+  "hra.z_me_firmy_drzi_jini": "Z mojej firmy mają inni",
+  "hra.vcetne_podilu": "Łącznie z udziałami"
 }

@@ -4875,6 +4875,31 @@ function odmenaSlovy(o) {
 // i stroje na skladě a na cestě, pobočky a technika čety — to všechno už je zaplacené.
 // Musí sedět s cisteJmeni() v routes/game-account.routes.js, podle kterého se staví
 // žebříček. Když se vzorce rozejdou, hráč vidí dvě různá čísla pro tutéž věc.
+// Co hráč vlastní mimo zdi své firmy: díl ve fondu, koupené podíly v cizích
+// firmách a — se záporným znaménkem — to, co z jeho vlastní firmy drží někdo
+// jiný. V kartě majetku to dlouho nebylo vůbec, takže kdo do fondu složil
+// sedmdesát milionů, je u sebe neviděl, zatímco žebříček o něm tvrdil o
+// desítky milionů víc. Oceňuje to server stejně jako žebříček.
+//
+// Čisté jmění se tím schválně NEMĚNÍ: váže se na něj hodnost i to, kolik
+// půjčí banka, a ta pravidla se kvůli jednomu řádku v kartě hýbat nemají.
+// Podíly stojí vedle jako druhý součet.
+var PODILY_MOJE = null;
+function loadPodily(then) {
+  api('/account/podily').then(function (r) {
+    // Neúspěch se musí zapsat taky, jinak by překreslení zkoušelo načíst
+    // podíly pořád dokola. Karta v tom případě vypadá jako dřív.
+    PODILY_MOJE = (r.ok && r.j) || false;
+    if (then) then();
+  }).catch(function () { PODILY_MOJE = false; if (then) then(); });
+}
+// Má smysl ten blok vůbec kreslit? Jen když je co ukázat — hráč bez fondu
+// a bez podílů nemá koukat na tři nulové řádky.
+function podilyMamCo(p) {
+  if (!p) return false;
+  return !!((p.fond_celkem || 0) || (p.drzim && p.drzim.hodnota)
+    || (p.prodano && p.prodano.hodnota));
+}
 function cisteJmeni() {
   var majetek = investedTotal();
   MODEL_ORDER.forEach(function (k) { majetek += inStock(k) * machinePrice(MODELS[k]); });
@@ -9081,6 +9106,29 @@ function majetekHtml() {
     + (S.loan ? '\u2212' + kcFull(S.loan) : kcFull(0)) + '</b></div>'
     + '<div class="kv souhrn"><span>' + esc(tx('hra.ciste_jmeni_2')) + '</span><b class="' + (cisteJmeni() >= 0 ? 'ok' : 'err') + '">'
     + kcFull(cisteJmeni()) + '</b></div>'
+    + (podilyMamCo(PODILY_MOJE) ? (function (p) {
+        var h = '<h4 style="margin:14px 0 4px">' + esc(tx('hra.co_vlastnim_jinde')) + '</h4>'
+          + '<p class="muted small" style="margin:0 0 6px">' + esc(tx('hra.podily_mimo_vlastni_firmu')) + '</p>';
+        (p.fondy || []).forEach(function (f) {
+          h += '<div class="kv"><span>' + esc(tx('hra.podil_ve_fondu')) + ' <i class="muted small">'
+            + esc(f.nazev || '') + ' \u00b7 ' + procentaPodilu(f.podil) + '</i></span><b class="ok">'
+            + kcFull(f.hodnota) + '</b></div>';
+        });
+        if (p.drzim && p.drzim.hodnota) {
+          h += '<div class="kv"><span>' + esc(tx('hra.podily_v_cizich_firmach'))
+            + ' <i class="muted small">' + p.drzim.pocet + '\u00d7</i></span><b class="ok">'
+            + kcFull(p.drzim.hodnota) + '</b></div>';
+        }
+        // Záporná položka: tahle část mé firmy už není moje, i když
+        // prádlomaty na ní v kartě výš pořád stojí.
+        if (p.prodano && p.prodano.hodnota) {
+          h += '<div class="kv"><span>' + esc(tx('hra.z_me_firmy_drzi_jini'))
+            + ' <i class="muted small">' + p.prodano.pocet + '\u00d7</i></span><b class="err">\u2212'
+            + kcFull(p.prodano.hodnota) + '</b></div>';
+        }
+        return h + '<div class="kv souhrn"><span>' + esc(tx('hra.vcetne_podilu'))
+          + '</span><b class="ok">' + kcFull(cisteJmeni() + (p.celkem || 0)) + '</b></div>';
+      }(PODILY_MOJE)) : '')
     + '<h3 style="margin:16px 0 4px">' + esc(tx('hra.moje_pozemky')) + '</h3>'
     + (zem.length
         ? zem.map(function (z) {
@@ -10150,6 +10198,9 @@ function bindPrevod(kde) {
 }
 
 function paintMe() {
+  // Podíly dotáhneme při prvním otevření záložky a kartu pak překreslíme.
+  // Dokud nedorazí, karta vypadá jako dřív — nic nebliká a nic nechybí.
+  if (PODILY_MOJE == null) { PODILY_MOJE = false; loadPodily(paintMe); }
   var p = PROFILES[S.profile];
   // Co má hráč rozepsané, přežije překreslení.
   var drzFirma = $('me-firma') ? $('me-firma').value : null;
@@ -13152,6 +13203,10 @@ function switchTab(v) {
   if (v === 'burza') { AUKCE = null; loadTrades(paintBurza); }
   if (v === 'me' && POZVANI == null) loadPozvani().then(paintMe);
   if (v === 'me' && DIST == null) loadDist(paintMe);
+  // Podíly se ptají pokaždé: fond mohl mezitím nakoupit nebo někdo
+  // odkoupit kus firmy, a karta majetku je to jediné místo, kde se to
+  // hráč dozví. Jeden dotaz na otevření záložky.
+  if (v === 'me') { PODILY_MOJE = null; loadPodily(paintMe); }
 }
 [].forEach.call(document.querySelectorAll('.tabs button'), function (b) {
   b.onclick = function () { switchTab(b.getAttribute('data-v')); };

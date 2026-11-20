@@ -3737,5 +3737,10 @@
   "fond.na_provedeni_chybi": "fc187459b4b8",
   "prevzeti.ztratis_vetsinu": "48ea057fcf34",
   "fond.vynos": "559e02cdc372",
-  "fond.vynos_nevrati": "8a3532216628"
+  "fond.vynos_nevrati": "8a3532216628",
+  "hra.co_vlastnim_jinde": "2c14c1775a69",
+  "hra.podily_mimo_vlastni_firmu": "6d66101123c6",
+  "hra.podil_ve_fondu": "a2dd43dda8bf",
+  "hra.z_me_firmy_drzi_jini": "8b2c294e976a",
+  "hra.vcetne_podilu": "3ff971868c9f"
 }

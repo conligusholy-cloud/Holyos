@@ -2389,6 +2389,76 @@ router.get('/spots', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /account/podily → co hráč vlastní mimo zdi své firmy
+//
+// Karta „Můj majetek" umí jen to, co hráč drží fyzicky: prádlomaty, stroje,
+// pozemky, pobočky, hotovost minus dluh. Vklad do fondu a koupené podíly
+// v ní nebyly vůbec, takže kdo do fondu složil sedmdesát milionů, je ve
+// své kartě neviděl — a žebříček o něm přitom tvrdil o desítky milionů víc,
+// protože ten vlastnictví počítá. Dvě čísla o téže věci.
+//
+// Oceňuje se STEJNĚ jako v žebříčku, přes vlastnictvi.js — kdyby se vzorce
+// rozešly, byl by z toho zase rozpor, jen o patro níž.
+router.get('/account/podily', requirePlayer, async (req, res, next) => {
+  try {
+    const ja = req.player.id;
+    const [equity, vklady, fondy] = await Promise.all([
+      prisma.gameEquity.findMany({ where: { stav: 'bezi' },
+        select: { firma_id: true, firma_nick: true, investor_id: true,
+          fond_id: true, podil: true, cena: true } }),
+      prisma.gameFondVklad.findMany({ select: { aliance_id: true, clen_id: true, castka: true } }),
+      prisma.gameAliance.findMany({ select: { id: true, nazev: true, pokladna: true } }),
+    ]);
+    // Ocenit stačí firmy, kterých se to týká: moje, ty, ve kterých něco
+    // držím já nebo můj fond. Počítat jmění všech hráčů kvůli jedné kartě
+    // by byl dotaz na celou databázi při každém otevření záložky.
+    const mojeFondy = new Set(vklady.filter((v) => v.clen_id === ja).map((v) => v.aliance_id));
+    const potreba = new Set([ja]);
+    equity.forEach((e) => {
+      if (e.investor_id === ja || e.firma_id === ja
+        || (e.fond_id != null && mojeFondy.has(e.fond_id))) potreba.add(e.firma_id);
+    });
+    const hraci = await prisma.gamePlayer.findMany({
+      where: { id: { in: Array.from(potreba) } }, select: { id: true, state: true } });
+    const hodnotaFirmy = new Map();
+    for (const h of hraci) {
+      hodnotaFirmy.set(h.id, Math.max(0, await JMENI.proHrace(h.id, h.state || {}).catch(() => 0)));
+    }
+    const hod = (e) => VLAST.hodnotaPodilu(hodnotaFirmy, e);
+
+    // Podíl ve fondu: díl z hodnoty fondu podle toho, kolik kdo vložil.
+    // Hodnota fondu je pokladna plus to, co fond drží — stejně jako v grafu.
+    const fondHodnota = VLAST.hodnotyFondu(hodnotaFirmy, fondy, equity);
+    const vkladCelkem = new Map();
+    vklady.forEach((v) => vkladCelkem.set(v.aliance_id,
+      (vkladCelkem.get(v.aliance_id) || 0) + Math.max(0, Number(v.castka) || 0)));
+    const nazvy = new Map(fondy.map((a) => [a.id, a.nazev]));
+    const vFondech = vklady.filter((v) => v.clen_id === ja && Number(v.castka) > 0)
+      .map((v) => {
+        const celkem = vkladCelkem.get(v.aliance_id) || 0;
+        const dil = celkem > 0 ? Math.max(0, Number(v.castka) || 0) / celkem : 0;
+        return { nazev: nazvy.get(v.aliance_id) || '', podil: dil, vlozil: Math.round(v.castka),
+          hodnota: Math.round((Number(fondHodnota.get(v.aliance_id)) || 0) * dil) };
+      });
+
+    const drzim = equity.filter((e) => e.investor_id === ja);
+    // Co z MÉ firmy drží někdo jiný. Je to záporná položka: tahle část mé
+    // firmy už není moje, i když prádlomaty v kartě pořád stojí.
+    const prodano = equity.filter((e) => e.firma_id === ja);
+
+    const soucet = (l) => Math.round(l.reduce((a, e) => a + hod(e), 0));
+    const fondCelkem = vFondech.reduce((a, x) => a + x.hodnota, 0);
+    res.json({ ok: true,
+      fondy: vFondech,
+      fond_celkem: fondCelkem,
+      drzim: { pocet: drzim.length, hodnota: soucet(drzim),
+        firmy: drzim.map((e) => ({ firma_nick: e.firma_nick, podil: e.podil,
+          hodnota: Math.round(hod(e)) })) },
+      prodano: { pocet: prodano.length, hodnota: soucet(prodano) },
+      celkem: Math.round(fondCelkem + soucet(drzim) - soucet(prodano)) });
+  } catch (e) { next(e); }
+});
+
 // GET /spots/mine → vlastní místa (klient podle nich pozná, o které přišel)
 router.get('/spots/mine', requirePlayer, async (req, res, next) => {
   try {

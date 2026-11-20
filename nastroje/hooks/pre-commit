@@ -147,6 +147,16 @@ if git diff --cached --name-only | grep -qE 'services/game/zlocin'; then
   fi
 fi
 
+# Co hráč vlastní mimo svou firmu: fond a podíly v karte majetku. Nejzrádnější
+# je znaménko — co z MÉ firmy drží jiní, se musí odečíst, ne přičíst.
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|routes/game-account'; then
+  if ! node nastroje/tmujmajetek.js; then
+    echo ""
+    echo "STOP: karta majetku nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Výnos a návratnost drženého podílu. Samotná částka měsíčně neřekne nic;
 # teprve podíl k zaplacené ceně srovná nákupy mezi sebou.
 if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; then

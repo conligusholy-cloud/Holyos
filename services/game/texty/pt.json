@@ -3757,5 +3757,10 @@
   "fond.na_provedeni_chybi": "Faltam {penize:p1}. As ofertas abertas seguram {penize:p2}.",
   "prevzeti.ztratis_vetsinu": "Com esta venda você perde a maioria na sua própria empresa — ficaria com {p1} %. Não dá para desfazer.",
   "fond.vynos": "{p1} % ao mês · retorno em {cislo:p2} meses",
-  "fond.vynos_nevrati": "{p1} % ao mês · com este pagamento não retorna"
+  "fond.vynos_nevrati": "{p1} % ao mês · com este pagamento não retorna",
+  "hra.co_vlastnim_jinde": "O que tenho em outros lugares",
+  "hra.podily_mimo_vlastni_firmu": "Não entra no patrimônio líquido — patente e crédito medem só a sua empresa.",
+  "hra.podil_ve_fondu": "Parte no fundo",
+  "hra.z_me_firmy_drzi_jini": "Da minha empresa, outros têm",
+  "hra.vcetne_podilu": "Com participações"
 }

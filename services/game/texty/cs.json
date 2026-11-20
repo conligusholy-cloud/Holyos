@@ -3771,5 +3771,10 @@
   "fond.na_provedeni_chybi": "Na provedení chybí {penize:p1}. Vyvěšené nabídky drží {penize:p2}.",
   "prevzeti.ztratis_vetsinu": "Tímhle prodejem přijdeš o většinu ve vlastní firmě — zbude ti {p1} %. Zpátky to vzít nejde.",
   "fond.vynos": "{p1} % měsíčně · návratnost {cislo:p2} měs.",
-  "fond.vynos_nevrati": "{p1} % měsíčně · při téhle výplatě se nevrátí"
+  "fond.vynos_nevrati": "{p1} % měsíčně · při téhle výplatě se nevrátí",
+  "hra.co_vlastnim_jinde": "Co vlastním jinde",
+  "hra.podily_mimo_vlastni_firmu": "Do čistého jmění se to nepočítá — hodnost i úvěr se měří jen z vlastní firmy.",
+  "hra.podil_ve_fondu": "Podíl ve fondu",
+  "hra.z_me_firmy_drzi_jini": "Z mé firmy drží jiní",
+  "hra.vcetne_podilu": "Včetně podílů"
 }

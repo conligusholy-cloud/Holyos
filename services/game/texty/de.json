@@ -1510,7 +1510,7 @@
   "hra.majitel_drzi": "Eigentümer hält",
   "hra.podilnici": "Anteilseigner",
   "hra.firmu_nedrzi_nikdo_jiny_je": "Niemand sonst hält die Firma — sie gehört ganz dem Eigentümer.",
-  "hra.podily_v_cizich_firmach": "Anteile in fremden Firmen",
+  "hra.podily_v_cizich_firmach": "Anteile an fremden Firmen",
   "hra.v_zadne_cizi_firme_podil": "Hat in keiner fremden Firma einen Anteil.",
   "hra.klepnutim_na_firmu_se_podivas": "Mit einem Klick auf die Firma siehst du ihre Struktur.",
   "hra.server_neodpovida_18": "Server antwortet nicht.",
@@ -3764,5 +3764,10 @@
   "fond.na_provedeni_chybi": "Es fehlen {penize:p1}. Laufende Angebote binden {penize:p2}.",
   "prevzeti.ztratis_vetsinu": "Mit diesem Verkauf verlierst du die Mehrheit an deiner eigenen Firma — dir blieben {p1} %. Das lässt sich nicht rückgängig machen.",
   "fond.vynos": "{p1} % pro Monat · amortisiert in {cislo:p2} Mon.",
-  "fond.vynos_nevrati": "{p1} % pro Monat · bei dieser Ausschüttung nie amortisiert"
+  "fond.vynos_nevrati": "{p1} % pro Monat · bei dieser Ausschüttung nie amortisiert",
+  "hra.co_vlastnim_jinde": "Was mir anderswo gehört",
+  "hra.podily_mimo_vlastni_firmu": "Zählt nicht zum Reinvermögen — Rang und Kredit messen nur die eigene Firma.",
+  "hra.podil_ve_fondu": "Anteil am Fonds",
+  "hra.z_me_firmy_drzi_jini": "Von meiner Firma halten andere",
+  "hra.vcetne_podilu": "Mit Anteilen"
 }

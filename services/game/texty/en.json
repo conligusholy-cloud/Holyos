@@ -3764,5 +3764,10 @@
   "fond.na_provedeni_chybi": "{penize:p1} short. Open offers are holding {penize:p2}.",
   "prevzeti.ztratis_vetsinu": "This sale costs you majority control of your own company — you would keep {p1} %. It cannot be undone.",
   "fond.vynos": "{p1} % a month · pays back in {cislo:p2} mo.",
-  "fond.vynos_nevrati": "{p1} % a month · at this payout it never pays back"
+  "fond.vynos_nevrati": "{p1} % a month · at this payout it never pays back",
+  "hra.co_vlastnim_jinde": "What I own elsewhere",
+  "hra.podily_mimo_vlastni_firmu": "Not counted in net worth — rank and credit are measured from your own company only.",
+  "hra.podil_ve_fondu": "Share in the fund",
+  "hra.z_me_firmy_drzi_jini": "Of my company, others hold",
+  "hra.vcetne_podilu": "Including stakes"
 }
