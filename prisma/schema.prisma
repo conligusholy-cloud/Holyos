@@ -8333,9 +8333,72 @@ model GameAliance {
   // z ní kolik patří — to jsou dvě různé věci: pokladna se mění výplatami
   // a nákupy, vklady jen tím, kdo kolik složil nebo převedl.
   pokladna      Float    @default(0)
+  // Akcie fondu. Fond může vydat akcie a prodat tím kus sebe komukoli;
+  // akcionář nemusí být člen a o chování fondu nehlasuje. akcie_vydano je,
+  // kolik kusů je venku, akcie_podil jaký díl fondu akcionáři dohromady drží.
+  // Členům zbývá zbytek a ten si dělí podle vkladů jako dosud.
+  akcie_vydano  Int      @default(0)
+  akcie_podil   Float    @default(0)
   created_at    DateTime @default(now())
 
   @@map("game_aliance")
+}
+
+// Kdo kolik akcií fondu drží. Nula se maže — v seznamu nemají co dělat lidé,
+// kteří všechno prodali.
+model GameAkcie {
+  id          Int      @id @default(autoincrement())
+  aliance_id  Int
+  player_id   Int
+  pocet       Int      @default(0)
+  // Za kolik to dohromady koupil; slouží jen k tomu, aby hráč viděl, jestli
+  // na akciích vydělal. Na nic se podle toho nerozhoduje.
+  porizovaci  BigInt   @default(0)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now()) @updatedAt
+
+  @@unique([aliance_id, player_id], map: "game_akcie_fond_hrac")
+  @@index([player_id])
+  @@map("game_akcie")
+}
+
+// Pořadník nabídek. Kdo chce koupit, řekne počet a nejvyšší cenu; kdo prodat,
+// počet a nejnižší. Co se potká, to se zobchoduje za cenu nabídky, která
+// ležela dřív. `zbyva` je, kolik kusů ještě leží — částečné plnění je běžný
+// stav, ne výjimka.
+model GameAkcieNabidka {
+  id          Int       @id @default(autoincrement())
+  aliance_id  Int
+  player_id   Int
+  nick        String    @db.VarChar(24)
+  smer        String    @db.VarChar(8)
+  pocet       Int
+  zbyva       Int
+  cena        Int
+  stav        String    @default("bezi") @db.VarChar(12)
+  created_at  DateTime  @default(now())
+  uzavreno_at DateTime?
+
+  @@index([aliance_id, stav, smer, cena, id], map: "game_akcie_nabidka_kniha")
+  @@index([player_id])
+  @@map("game_akcie_nabidka")
+}
+
+// Uzavřené obchody — z nich se kreslí graf ceny. Cena akcie není nic jiného
+// než poslední obchod, který se doopravdy stal. Vydání se zapisuje taky,
+// s prodavajici_id prázdným: akcie tehdy vznikly, nikdo je neprodal.
+model GameAkcieObchod {
+  id             Int      @id @default(autoincrement())
+  aliance_id     Int
+  kupujici_id    Int
+  prodavajici_id Int?
+  pocet          Int
+  cena           Int
+  kdy            DateTime @default(now())
+
+  @@index([aliance_id, kdy], map: "game_akcie_obchod_graf")
+  @@index([kupujici_id])
+  @@map("game_akcie_obchod")
 }
 
 // Návrh ve fondu aliance. O penězích fondu nerozhoduje jeden člověk: váha

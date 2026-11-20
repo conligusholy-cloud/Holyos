@@ -147,6 +147,17 @@ if git diff --cached --name-only | grep -qE 'services/game/zlocin'; then
   fi
 fi
 
+# Akcie fondu: kolik fondu se vydáním prodá a jak se páruje pořadník nabídek.
+# Obojí je o skutečných penězích hráčů — chyba ve vydání okrade členy o díl,
+# chyba v párování toho, kdo v knize čekal.
+if git diff --cached --name-only | grep -qE 'services/game/akcie'; then
+  if ! node nastroje/takcie.js; then
+    echo ""
+    echo "STOP: akcie fondu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Co hráč vlastní mimo svou firmu: fond a podíly v karte majetku. Nejzrádnější
 # je znaménko — co z MÉ firmy drží jiní, se musí odečíst, ne přičíst.
 if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|routes/game-account'; then
