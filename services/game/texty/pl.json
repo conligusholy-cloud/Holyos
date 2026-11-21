@@ -3902,6 +3902,5 @@
   "akcie.prumerna_cena": "Kupione po",
   "akcie.prodejem_dostanes": "Sprzedaż da",
   "akcie.zisk": "Zysk",
-  "akcie.ztrata": "Strata",
-  "veta.akcie_vykoupi_jen": "Fundusz odkupi teraz tylko {cislo:p1} twoich akcji — nie ma wolnych pieniędzy na cały pakiet."
+  "akcie.ztrata": "Strata"
 }

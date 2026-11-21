@@ -3929,6 +3929,5 @@
   "akcie.prumerna_cena": "Nakoupeno za",
   "akcie.prodejem_dostanes": "Prodejem dostaneš",
   "akcie.zisk": "Zisk",
-  "akcie.ztrata": "Ztráta",
-  "veta.akcie_vykoupi_jen": "Fond teď vykoupí jen {cislo:p1} z tvých akcií — na celý balík nemá volné peníze."
+  "akcie.ztrata": "Ztráta"
 }

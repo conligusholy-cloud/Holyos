@@ -3895,6 +3895,5 @@
   "akcie.prumerna_cena": "Comprado a",
   "akcie.prodejem_dostanes": "La venta da",
   "akcie.zisk": "Ganancia",
-  "akcie.ztrata": "Pérdida",
-  "veta.akcie_vykoupi_jen": "Ahora el fondo solo recompra {cislo:p1} de tus acciones — no tiene efectivo libre para todo el paquete."
+  "akcie.ztrata": "Pérdida"
 }

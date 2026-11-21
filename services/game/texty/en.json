@@ -3895,6 +3895,5 @@
   "akcie.prumerna_cena": "Bought at",
   "akcie.prodejem_dostanes": "Selling pays",
   "akcie.zisk": "Gain",
-  "akcie.ztrata": "Loss",
-  "veta.akcie_vykoupi_jen": "The fund can only buy back {cislo:p1} of your shares right now — it has no free cash for the whole packet."
+  "akcie.ztrata": "Loss"
 }

@@ -3895,6 +3895,5 @@
   "akcie.prumerna_cena": "Acheté à",
   "akcie.prodejem_dostanes": "La vente rapporte",
   "akcie.zisk": "Gain",
-  "akcie.ztrata": "Perte",
-  "veta.akcie_vykoupi_jen": "Le fonds ne rachète que {cislo:p1} de tes actions pour l'instant — il n'a pas de liquidités libres pour tout le paquet."
+  "akcie.ztrata": "Perte"
 }

@@ -3895,6 +3895,5 @@
   "akcie.prumerna_cena": "Gekauft für",
   "akcie.prodejem_dostanes": "Verkauf bringt",
   "akcie.zisk": "Gewinn",
-  "akcie.ztrata": "Verlust",
-  "veta.akcie_vykoupi_jen": "Der Fonds kauft gerade nur {cislo:p1} deiner Aktien zurück — für das ganze Paket hat er kein freies Geld."
+  "akcie.ztrata": "Verlust"
 }

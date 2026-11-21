@@ -59,13 +59,13 @@ ma(z.indexOf('akcie.ztrata') > 0, 'ztráta se jmenuje ztráta');
 ma(z.indexOf('class="err"') > 0, 'ztráta je červeně');
 ma(z.indexOf('−500 000 L$ · -25 %') > 0, 'ztráta se nemaskuje plusem', '1,5 mil. proti 2 mil.');
 
-console.log('\nNa prodej musí mít fond peníze');
-const malo = ctx.akcieBalikHtml({ moje_kusy: 202, moje_porizovaci: 21412000, cena: 159400,
-  fond_volne: 1594000 }, false);
-ma(malo.indexOf('veta.akcie_vykoupi_jen:10') > 0, 'řekne se, kolik kusů fond vykoupí', '1 594 000 / 159 400');
-const dost = ctx.akcieBalikHtml({ moje_kusy: 202, moje_porizovaci: 21412000, cena: 159400,
-  fond_volne: 99000000 }, false);
-ma(dost.indexOf('veta.akcie_vykoupi_jen') < 0, 'když fond má, nestraší se zbytečně');
+console.log('\nO pokladně fondu se na kartě nemluví');
+// Prodat se dá i mezi hráči, takže volná pokladna fondu není strop — varování
+// u balíku by hráče zbytečně strašilo. Karta ukazuje jen moje čísla.
+const malo = mezery(ctx.akcieBalikHtml({ moje_kusy: 202, moje_porizovaci: 21412000, cena: 159400,
+  fond_volne: 1594000 }, false));
+ma(malo.indexOf('vykoupi') < 0 && malo.indexOf('fond') < 0, 'o pokladně fondu se u balíku nemluví');
+ma(malo.indexOf('32 198 800 L$') > 0, 'objem při prodeji zůstává celý');
 const bezUdaje = mezery(ctx.akcieBalikHtml({ moje_kusy: 202, moje_porizovaci: 0, cena: 159400,
   fond_volne: null }, false));
 ma(bezUdaje.indexOf('akcie.prumerna_cena') < 0, 'bez pořizovací ceny se průměr nevymýšlí');
@@ -89,8 +89,10 @@ ma(/select: \{ aliance_id: true, pocet: true, dividenda_do: true, porizovaci: tr
 ma(/moje_porizovaci: mam\.get\(f\.id\) \? porizovaci\.get\(f\.id\) \|\| 0 : 0/.test(trade),
   'seznam akcií pořizovací cenu posílá');
 ma(/Number\(x\.porizovaci \|\| 0\)/.test(trade), 'BigInt se převádí na číslo (jinak JSON spadne)');
-ma(/fond_volne: mam\.get\(f\.id\) \? \(await fondVolne\(f\.id, f\)\)\.volne : null/.test(trade),
-  'volná pokladna fondu jde s tím');
+// Uvnitř obchodu se volná pokladna počítá dál (fond má z čeho vykupovat),
+// jen se neposílá hráči na kartu.
+ma(!/fond_volne: mam\.get/.test(trade) && !/fond_volne: fondVolno/.test(trade),
+  'server volnou pokladnu ke kartě neposílá');
 ma(/moje_porizovaci: mujRadek \? Number\(mujRadek\.porizovaci \|\| 0\) : 0/.test(trade),
   'podrobnosti akcie posílají totéž');
 

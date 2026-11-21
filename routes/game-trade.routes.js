@@ -2925,10 +2925,9 @@ router.get('/trade/akcie', hrac, api(async (req, res) => {
     out.push({ aliance_id: f.id, nazev: f.nazev, cena: s.cena, ucetni: s.ucetni,
       vydano: s.vydano, volne: s.volne, podil: s.podil,
       moje_kusy: mam.get(f.id) || 0,
-      // Pořizovací cena balíku a volná pokladna fondu. Bez obojího se z karty
-      // nepozná, jestli se prodej vyplatí a jestli ho fond vůbec zaplatí.
+      // Pořizovací cena balíku. Bez ní se z karty nepozná, jestli se prodej
+      // vyplatí — cena akcie sama o sobě to neřekne.
       moje_porizovaci: mam.get(f.id) ? porizovaci.get(f.id) || 0 : 0,
-      fond_volne: mam.get(f.id) ? (await fondVolne(f.id, f)).volne : null,
       // Co akcie nese a co už vyplatila — jedno je nárok, druhé peníze.
       nese_mesicne: vyn.nese,
       na_akcii_mesicne: AKCIE.vynosNaAkcii(vyn.nese, s.podil, s.vydano),
@@ -2971,7 +2970,6 @@ router.get('/trade/akcie/:id', hrac, api(async (req, res) => {
     // Za kolik má hráč svoje kusy pořízené — proti dnešní ceně je z toho
     // vidět zisk nebo ztráta. (Karta na burze ukazuje totéž.)
     moje_porizovaci: mujRadek ? Number(mujRadek.porizovaci || 0) : 0,
-    fond_volne: fondVolno.volne,
     nese_mesicne: vyn.nese,
     na_akcii_mesicne: AKCIE.vynosNaAkcii(vyn.nese, s.podil, s.vydano),
     dividenda_posledni: vyn.posledni,

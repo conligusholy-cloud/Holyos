@@ -11293,8 +11293,7 @@ setInterval(function () {
 // a objem v penězích si hráč z ceny krát kusů počítat nemá. Pořizovací cenu
 // vede server u držby a při prodeji ji krátí, takže je to průměr toho, co mi
 // v ruce zbylo, ne historie všech nákupů. Balík se prodává za jednu cenu,
-// tu dnešní, takže výnos z prodeje je prostě kusy × cena — jen na něj fond
-// musí mít volné peníze, jinak se prodá jen část.
+// tu dnešní, takže výnos z prodeje je prostě kusy × cena.
 function akcieBalikHtml(f, kv) {
   var kusu = Math.max(0, Math.round(Number(f.moje_kusy) || 0));
   if (!kusu) return '';
@@ -11303,8 +11302,6 @@ function akcieBalikHtml(f, kv) {
   var dnes = kusu * cena;
   var rozdil = dnes - por;
   var pct = por > 0 ? Math.round(rozdil / por * 100) : 0;
-  var volne = f.fond_volne == null ? null : Math.round(Number(f.fond_volne) || 0);
-  var vykoupi = volne != null && cena > 0 ? Math.floor(Math.max(0, volne) / cena) : null;
   var radek = function (popis, hodnota, trida) {
     return kv
       ? '<div class="kv"><span>' + popis + '</span><b class="' + (trida || '') + '">' + hodnota + '</b></div>'
@@ -11317,9 +11314,6 @@ function akcieBalikHtml(f, kv) {
         ? radek(esc(tx(rozdil < 0 ? 'akcie.ztrata' : 'akcie.zisk')),
             (rozdil > 0 ? '+' : '') + kcFull(rozdil) + ' · ' + (rozdil > 0 ? '+' : '') + pct + ' %',
             rozdil < 0 ? 'err' : 'ok')
-        : '')
-    + (vykoupi != null && vykoupi < kusu
-        ? '<p class="fine err">' + tx('veta.akcie_vykoupi_jen', { p1: vykoupi }) + '</p>'
         : '');
 }
 function akcieKartaHtml(f) {
