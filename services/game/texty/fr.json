@@ -3901,5 +3901,11 @@
   "fond.hlasovani_do": "Le vote se termine",
   "fond.hlasovani_pozdeji": "Je déciderai plus tard",
   "fond.hlasovano_pro": "Tu as voté pour.",
-  "fond.hlasovano_proti": "Tu as voté contre."
+  "fond.hlasovano_proti": "Tu as voté contre.",
+  "hodnost.miliardar": "Milliardaire",
+  "hra.miliardar": "Milliardaire",
+  "hodnost.kral": "Roi du linge",
+  "hra.kral_pradla": "Roi du linge",
+  "hodnost.cisar": "Empereur du linge",
+  "hra.cisar_pradla": "Empereur du linge"
 }

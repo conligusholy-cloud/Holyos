@@ -3901,5 +3901,11 @@
   "fond.hlasovani_do": "Abstimmung endet",
   "fond.hlasovani_pozdeji": "Ich entscheide später",
   "fond.hlasovano_pro": "Du hast dafür gestimmt.",
-  "fond.hlasovano_proti": "Du hast dagegen gestimmt."
+  "fond.hlasovano_proti": "Du hast dagegen gestimmt.",
+  "hodnost.miliardar": "Milliardär",
+  "hra.miliardar": "Milliardär",
+  "hodnost.kral": "Wäschekönig",
+  "hra.kral_pradla": "Wäschekönig",
+  "hodnost.cisar": "Wäschekaiser",
+  "hra.cisar_pradla": "Wäschekaiser"
 }

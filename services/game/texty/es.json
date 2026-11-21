@@ -3901,5 +3901,11 @@
   "fond.hlasovani_do": "La votación termina",
   "fond.hlasovani_pozdeji": "Lo decidiré luego",
   "fond.hlasovano_pro": "Has votado a favor.",
-  "fond.hlasovano_proti": "Has votado en contra."
+  "fond.hlasovano_proti": "Has votado en contra.",
+  "hodnost.miliardar": "Multimillonario",
+  "hra.miliardar": "Multimillonario",
+  "hodnost.kral": "Rey de la colada",
+  "hra.kral_pradla": "Rey de la colada",
+  "hodnost.cisar": "Emperador de la colada",
+  "hra.cisar_pradla": "Emperador de la colada"
 }

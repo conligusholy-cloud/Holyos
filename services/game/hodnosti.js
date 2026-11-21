@@ -29,6 +29,13 @@ const HODNOSTI = [
   { id: 'magnat', od: 80e6, odmena: { karta: 'traffic' } },
   { id: 'baron', od: 200e6, odmena: { cash: 5e6 } },
   { id: 'legenda', od: 500e6, odmena: { karta: 'credit' } },
+  // Nad Legendou pokračuje žebřík do miliard. Odměna zůstává gestem — kolem
+  // dvou procent jmění, za které se na stupeň hráč vyšplhal — a platí se
+  // v hotovosti: karty se na téhle úrovni opakovat nedají, trvalou kampaň
+  // i lepšího bankéře hráč dávno má.
+  { id: 'miliardar', od: 1e9, odmena: { cash: 20e6 } },
+  { id: 'kral', od: 2.5e9, odmena: { cash: 50e6 } },
+  { id: 'cisar', od: 5e9, odmena: { cash: 100e6 } },
 ];
 
 function nazevHodnosti(id, jazyk) {

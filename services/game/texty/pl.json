@@ -3908,5 +3908,11 @@
   "fond.hlasovani_do": "Głosowanie kończy się",
   "fond.hlasovani_pozdeji": "Zdecyduję później",
   "fond.hlasovano_pro": "Zagłosowałeś za.",
-  "fond.hlasovano_proti": "Zagłosowałeś przeciw."
+  "fond.hlasovano_proti": "Zagłosowałeś przeciw.",
+  "hodnost.miliardar": "Miliarder",
+  "hra.miliardar": "Miliarder",
+  "hodnost.kral": "Król prania",
+  "hra.kral_pradla": "Król prania",
+  "hodnost.cisar": "Cesarz prania",
+  "hra.cisar_pradla": "Cesarz prania"
 }

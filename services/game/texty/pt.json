@@ -3894,5 +3894,11 @@
   "fond.hlasovani_do": "A votação acaba",
   "fond.hlasovani_pozdeji": "Decido mais tarde",
   "fond.hlasovano_pro": "Votaste a favor.",
-  "fond.hlasovano_proti": "Votaste contra."
+  "fond.hlasovano_proti": "Votaste contra.",
+  "hodnost.miliardar": "Bilionário",
+  "hra.miliardar": "Bilionário",
+  "hodnost.kral": "Rei da roupa",
+  "hra.kral_pradla": "Rei da roupa",
+  "hodnost.cisar": "Imperador da roupa",
+  "hra.cisar_pradla": "Imperador da roupa"
 }

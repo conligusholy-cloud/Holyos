@@ -3874,5 +3874,11 @@
   "fond.hlasovani_do": "d05cd41248ff",
   "fond.hlasovani_pozdeji": "500bc90562f2",
   "fond.hlasovano_pro": "9e8af3c88ae1",
-  "fond.hlasovano_proti": "9ac41b8a9b99"
+  "fond.hlasovano_proti": "9ac41b8a9b99",
+  "hodnost.miliardar": "cfba748f6cdf",
+  "hra.miliardar": "cfba748f6cdf",
+  "hodnost.kral": "bbe329d5cd55",
+  "hra.kral_pradla": "bbe329d5cd55",
+  "hodnost.cisar": "3adbe01937f2",
+  "hra.cisar_pradla": "3adbe01937f2"
 }

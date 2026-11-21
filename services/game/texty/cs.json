@@ -3935,5 +3935,11 @@
   "fond.hlasovani_do": "Hlasování končí",
   "fond.hlasovani_pozdeji": "Rozhodnu se později",
   "fond.hlasovano_pro": "Hlasoval jsi pro.",
-  "fond.hlasovano_proti": "Hlasoval jsi proti."
+  "fond.hlasovano_proti": "Hlasoval jsi proti.",
+  "hodnost.miliardar": "Miliardář",
+  "hra.miliardar": "Miliardář",
+  "hodnost.kral": "Král prádla",
+  "hra.kral_pradla": "Král prádla",
+  "hodnost.cisar": "Císař prádla",
+  "hra.cisar_pradla": "Císař prádla"
 }

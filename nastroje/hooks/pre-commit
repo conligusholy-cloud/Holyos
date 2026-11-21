@@ -200,6 +200,16 @@ if git diff --cached --name-only | grep -qE 'services/game/fond|services/game/vl
   fi
 fi
 
+# Žebřík hodností. Server a hra si ho drží každý zvlášť — když se rozejdou,
+# hráč vidí v liště jiný titul, než jaký u něj vidí ostatní.
+if git diff --cached --name-only | grep -qE 'services/game/hodnosti|public/compounder/game/game.js|services/game/texty'; then
+  if ! node nastroje/thodnosti.js; then
+    echo ""
+    echo "STOP: žebřík hodností nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Slevové balíčky karet. Cena za kus × počet se musí trefit do toho, co hráč
 # vidí v nabídce — jinak mu Stripe strhne jinou částku.
 if git diff --cached --name-only | grep -qE 'routes/game-account|routes/game-stripe|public/compounder/game/game.css'; then

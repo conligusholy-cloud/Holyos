@@ -4786,7 +4786,10 @@ var HODNOSTI_HRA = [
   { id: 'sitar', nazev: esc(tx('hra.majitel_site')), od: 30e6, odmena: { cash: 1e6 } },
   { id: 'magnat', nazev: esc(tx('hra.magnat')), od: 80e6, odmena: { karta: 'traffic' } },
   { id: 'baron', nazev: esc(tx('hra.baron_pradla')), od: 200e6, odmena: { cash: 5e6 } },
-  { id: 'legenda', nazev: esc(tx('hra.legenda')), od: 500e6, odmena: { karta: 'credit' } }
+  { id: 'legenda', nazev: esc(tx('hra.legenda')), od: 500e6, odmena: { karta: 'credit' } },
+  { id: 'miliardar', nazev: esc(tx('hra.miliardar')), od: 1e9, odmena: { cash: 20e6 } },
+  { id: 'kral', nazev: esc(tx('hra.kral_pradla')), od: 2.5e9, odmena: { cash: 50e6 } },
+  { id: 'cisar', nazev: esc(tx('hra.cisar_pradla')), od: 5e9, odmena: { cash: 100e6 } }
 ];
 function hodnostHra(jmeni) {
   var j = Number(jmeni) || 0, i = 0;
