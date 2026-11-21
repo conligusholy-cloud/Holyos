@@ -2874,6 +2874,9 @@ module.exports._requirePlayer = requirePlayer;
 module.exports._pub = pub;
 module.exports._item = item;
 module.exports._cenaKusuVBalicku = cenaKusuVBalicku;
+// Počty kusů, které se u karet doopravdy prodávají. Platba se o ně opírá,
+// aby se na bráně nemohl objevit jiný počet, než na který hráč klikl.
+module.exports._balickyQty = BALICKY.map((b) => b.qty);
 module.exports._cardKinds = CARD_KINDS;
 module.exports._subKinds = SUB_KINDS;
 module.exports._linkaKinds = LINKA_KINDS;

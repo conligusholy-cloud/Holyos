@@ -23,7 +23,13 @@ const stripeLocale = (jazyk) => STRIPE_LOCALE[String(jazyk || '')] || 'auto';
 
 const router = express.Router();
 const itemOf = acct._item;
+// U karet platí jen počty, které jsou v nabídce: jedna, nebo některý
+// z balíčků. Dokud se počet ořezával natvrdo na deset, skončil hráč, který
+// klikl na balíček třiceti kusů, na bráně s deseti — a tedy s jinou částkou,
+// než na jakou klikl. Zboží mimo karty (balíky laundrů, infolinka) se kupuje
+// po kusech dál, tam strop zůstává.
 const MAX_QTY = 10;
+const POVOLENE_KUSY = [1].concat(acct._balickyQty || []);
 
 const key = () => process.env.STRIPE_SECRET_KEY || '';
 const gameUrl = () => (process.env.PRADLOMATY_BASE_URL || 'https://pradlomaty.info').replace(/\/+$/, '') + '/game';
@@ -87,7 +93,16 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
     }
     const c = await itemOf(kind);   // cena z ceníku, ne z kódu
     if (!c) return res.status(400).json({ error: 'Tohle se teď neprodává.' });
-    let qty = Math.max(1, Math.min(MAX_QTY, parseInt((req.body || {}).qty, 10) || 1));
+    // Karta se pozná podle sebe: nenese laundry (balík peněz), hovory (balíček
+    // infolinky) ani interval (předplatné). Slevové balíčky platí jen na karty.
+    const jeKarta = !c.laundry && !c.hovory && !c.dnu && !c.interval && !c.bezBalicku;
+    let qty = Math.max(1, parseInt((req.body || {}).qty, 10) || 1);
+    // Počet se nesmí tiše oříznout — to by znamenalo jinou částku, než jakou
+    // hráč viděl na dlaždici. Co není v nabídce, se odmítne.
+    if (jeKarta && POVOLENE_KUSY.indexOf(qty) < 0) {
+      return res.status(400).json({ error: 'Tenhle počet kusů se neprodává.' });
+    }
+    if (!jeKarta) qty = Math.min(MAX_QTY, qty);
     // Balíček rámce je trvalé odemčení, ne zboží na kusy: kupuje se jeden
     // a kdo má nižší stupeň, doplácí jen rozdíl. Počítá to server — hráč si
     // cenu určovat nesmí.
@@ -115,9 +130,6 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
     // už v jejich odstupňování a podruhé ji nedostanou. Nespoléháme se na
     // seznam druhů: kdyby se nedotáhl, účtovali bychom jinou cenu, než jakou
     // hráč viděl.
-    // Karta se pozná podle sebe: nenese laundry (balík peněz), hovory (balíček
-    // infolinky) ani interval (předplatné). Slevové balíčky platí jen na karty.
-    const jeKarta = !c.laundry && !c.hovory && !c.dnu && !c.interval && !c.bezBalicku;
     const kusKc = doplatek != null ? doplatek : (jeKarta ? acct._cenaKusuVBalicku(c.price, qty) : c.price);
     // Měna podle jazyka hráče. Stejný výpočet jako v ceníku — kdyby se
     // počítaly zvlášť, rozešla by se zobrazená cena s tou účtovanou.

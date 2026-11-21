@@ -48,6 +48,8 @@ vm.createContext(ctx);
 vm.runInContext(zdroj.slice(zacBal, konBal + 1) + ';\n'
   + telo(zdroj, 'cenaKusuVBalicku') + '\n' + telo(zdroj, 'balickyProKartu'), ctx);
 
+// const se ve vm nestane vlastností kontextu — ceník si proto vyzvedneme.
+const BAL = vm.runInContext('BALICKY', ctx);
 const prev = { zobraz: (h) => h / 100 };     // haléře → koruny, bez převodu měny
 const RUSH = 4900;                           // expresní dovoz, 49 Kč
 
@@ -94,10 +96,62 @@ ma(ctx.cenaKusuVBalicku(RUSH, 7) === RUSH, 'počet, který balíček nemá, plat
 ma(ctx.balickyProKartu({ price: RUSH, bezBalicku: true }, prev).length === 0,
   'karta mimo prodej balíčky nenabízí');
 
-console.log('\nDlaždice se musí vejít na obrazovku');
+// ─── Platba musí přijmout právě ty počty, které jsou v nabídce ─────────────
+// Dokud se počet na bráně ořezával natvrdo na deset, klikl hráč na balíček
+// třiceti kusů a Stripe mu ukázal deset — jinou částku, než na jakou klikl.
+console.log('\nNa bránu projde jen počet, který je v nabídce');
+const stripeZdroj = fs.readFileSync(path.join(KOREN, 'routes/game-stripe.routes.js'), 'utf8');
+const iCheck = stripeZdroj.indexOf("router.post('/stripe/checkout'");
+const zacH = stripeZdroj.indexOf('async (req, res, next) => {', iCheck);
+const handlerSrc = usek(stripeZdroj, stripeZdroj.indexOf('{', zacH + 26));
+const sctx = {
+  paymentsOn: () => true,
+  acct: { _subKinds: [], _ramecKinds: [], _ramecKatalog: {}, _ramecUroven: async () => 0,
+    _cenaKusuVBalicku: ctx.cenaKusuVBalicku, _balickyQty: BAL.map((b) => b.qty) },
+  itemOf: async () => ({ kind: 'rush', price: RUSH, name: 'Expresní dovoz' }),
+  MAX_QTY: 10,
+  POVOLENE_KUSY: [1].concat(BAL.map((b) => b.qty)),
+  // Dál už se test nedostane — chce to Stripe i databázi. Nám stačí, že se
+  // počet nezastavil o kontrolu a nešel do ceny oříznutý.
+  MENY: { prevodnik: async () => { throw new Error('STOP'); } },
+  TEXTY: { jazykHrace: () => 'cs' },
+  console, Math, String, parseInt,
+};
+vm.createContext(sctx);
+const checkout = vm.runInContext('(async (req, res, next) => ' + handlerSrc + ')', sctx);
+async function zkus(qty) {
+  const v = { stav: 200, telo: null, chyba: null };
+  const res = {
+    status: (s) => { v.stav = s; return { json: (x) => { v.telo = x; } }; },
+    json: (x) => { v.telo = x; },
+  };
+  await checkout({ body: { kind: 'rush', qty: qty },
+    player: { id: 7, email: 'a@b.cz', first_name: 'Tomáš', last_name: 'Holý' } },
+    res, (e) => { v.chyba = e && e.message; });
+  return v;
+}
+(async () => {
+  for (const q of [1, 3, 5, 10, 30, 100]) {
+    const v = await zkus(q);
+    ma(v.stav !== 400, q + '× projde na bránu', v.stav === 400 ? v.telo.error : 'dál do platby');
+  }
+  for (const q of [2, 7, 31, 999]) {
+    const v = await zkus(q);
+    ma(v.stav === 400, q + '× se odmítne, místo aby se tiše oříznul',
+      v.stav === 400 ? v.telo.error : 'prošlo!');
+  }
+  ma(!/Math\.min\(MAX_QTY, parseInt/.test(stripeZdroj),
+    'počet se u karet neořezává natvrdo');
+  // Seznam povolených počtů se musí brát z ceníku. Ručně opsaný by se při
+  // přidání balíčku neaktualizoval a nový balíček by brána odmítala.
+  ma(/const POVOLENE_KUSY = \[1\]\.concat\(acct\._balickyQty/.test(stripeZdroj),
+    'povolené počty se berou z ceníku, ne z ruky');
+
+  console.log('\nDlaždice se musí vejít na obrazovku');
 const css = fs.readFileSync(path.join(KOREN, 'public/compounder/game/game.css'), 'utf8');
 ma(/\.balicky:has\(> :nth-child\(5\)\)\{grid-template-columns:repeat\(3,1fr\)\}/.test(css),
   'šest dlaždic (1× a pět balíčků) se láme po třech na 3 + 3');
 
-console.log(chyb ? '\nNEPROŠLO: ' + chyb + ' chyb' : '\nVšechno sedí.');
-process.exit(chyb ? 1 : 0);
+  console.log(chyb ? '\nNEPROŠLO: ' + chyb + ' chyb' : '\nVšechno sedí.');
+  process.exit(chyb ? 1 : 0);
+})();
