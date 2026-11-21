@@ -1660,15 +1660,28 @@ const ODZNAK_PAUZA_MS = 5 * 60000;
 const odznakyKdy = new Map();
 const HVEZDY_TYDEN = 7 * 86400e3;
 const PUJCKA_MIN_MESICU = 6;
+// Mladší odznaky. Laťka je nízko schválně: odznak není meta, ale stopa po tom,
+// že hráč tu část hry vůbec zkusil.
+const AKCII_MIN = 10;              // akcionář: aspoň deset akcií jednoho fondu
+const VKLAD_MIN_ODZNAK = 1e6;      // společník: milion složený do fondu
+const DRAZEB_MIN = 3;              // kladivo: tři vyhrané dražby
 
 async function splneneOdznaky(p, st) {
   const ja = p.id;
-  const [pujcky, podily, zeme, pozvani] = await Promise.all([
+  const [pujcky, podily, zeme, pozvani, akcie, vklady, najemci, drazby] = await Promise.all([
     prisma.gameLoan.count({ where: { lender_id: ja, stav: 'splaceno', splaceno: { gte: PUJCKA_MIN_MESICU } } }),
     prisma.gameEquity.findMany({ where: { investor_id: ja }, select: { firma_id: true, vyplaceno: true } }),
     zemeHracu().catch(() => ({})),
     prisma.gamePlayer.findMany({ where: { invited_by_id: ja, disabled: false },
       select: { state: true }, take: 50 }),
+    // Akcie, vklad do fondu, pronajatá vlastní zem a vyhrané dražby — tohle
+    // všechno stojí v databázi, takže se to nedá nahrát z prohlížeče.
+    prisma.gameAkcie.count({ where: { player_id: ja, pocet: { gte: AKCII_MIN } } }).catch(() => 0),
+    prisma.gameFondVklad.aggregate({ where: { clen_id: ja }, _sum: { castka: true } })
+      .catch(() => ({ _sum: { castka: 0 } })),
+    prisma.gameSpotClaim.count({ where: { player_id: ja, pozemek: true, najemce_id: { not: null } } })
+      .catch(() => 0),
+    prisma.gameDrazba.count({ where: { vitez_id: ja, stav: 'hotovo' } }).catch(() => 0),
   ]);
   const firmy = new Set(podily.map((e) => e.firma_id));
   const neslo = podily.some((e) => (e.vyplaceno || 0) !== 0);
@@ -1683,6 +1696,10 @@ async function splneneOdznaky(p, st) {
   if (st.krizovka) out.push('krizovka');
   if (st.mrchozrout) out.push('mrchozrout');
   if (postavili >= 3) out.push('naborar');
+  if (akcie > 0) out.push('akcionar');
+  if (((vklady && vklady._sum && vklady._sum.castka) || 0) >= VKLAD_MIN_ODZNAK) out.push('spolecnik');
+  if (najemci > 0) out.push('domaci');
+  if (drazby >= DRAZEB_MIN) out.push('kladivo');
   return out;
 }
 async function resOdznaky(p, st, cfg) {

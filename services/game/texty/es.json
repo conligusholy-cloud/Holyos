@@ -3907,5 +3907,17 @@
   "hodnost.kral": "Rey de la colada",
   "hra.kral_pradla": "Rey de la colada",
   "hodnost.cisar": "Emperador de la colada",
-  "hra.cisar_pradla": "Emperador de la colada"
+  "hra.cisar_pradla": "Emperador de la colada",
+  "odznak.akcionar.nazev": "Accionista",
+  "odznak.akcionar.popis": "Tiene acciones de un fondo: un trozo de un negocio ajeno, sin voz en él.",
+  "odznak.akcionar.jak": "Compra al menos diez acciones de cualquier fondo en la bolsa.",
+  "odznak.spolecnik.nazev": "Socio",
+  "odznak.spolecnik.popis": "Metió un millón en un fondo y decide con los demás qué compra.",
+  "odznak.spolecnik.jak": "Entra en un fondo y aporta al menos un millón en total.",
+  "odznak.domaci.nazev": "Casero",
+  "odznak.domaci.popis": "Alguien construye en su terreno y le paga alquiler por él.",
+  "odznak.domaci.jak": "Compra un terreno, ofrécelo en alquiler y espera a que alguien lo tome.",
+  "odznak.kladivo.nazev": "El Martillo",
+  "odznak.kladivo.popis": "Ganó tres subastas de lo que otros soltaron.",
+  "odznak.kladivo.jak": "Gana tres subastas en la bolsa."
 }

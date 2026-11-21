@@ -91,6 +91,13 @@ const ODZNAKY = [
   { kod: 'krizovka', barva: ['#67e8f9', '#0e7490'], ikona: '🌊', odmena: { karta: 'connect' } },
   { kod: 'mrchozrout', barva: ['#fda4af', '#9f1239'], ikona: '🧯', odmena: { karta: 'rush' } },
   { kod: 'naborar', barva: ['#86efac', '#15803d'], ikona: '🤝', odmena: { karta: 'traffic' } },
+  // Čtyři mladší odznaky: hra mezitím dostala fondy s akciemi, pronájem
+  // vlastní země a dražby. Všechny čtyři si ověří server z databáze, takže
+  // na nich nezáleží, co pošle prohlížeč.
+  { kod: 'akcionar', barva: ['#60a5fa', '#1d4ed8'], ikona: '📊', odmena: { karta: 'rush' } },
+  { kod: 'spolecnik', barva: ['#c4b5fd', '#6d28d9'], ikona: '🏛️', odmena: { karta: 'connect' } },
+  { kod: 'domaci', barva: ['#fcd34d', '#b45309'], ikona: '🔑', odmena: { karta: 'rush' } },
+  { kod: 'kladivo', barva: ['#fca5a5', '#b91c1c'], ikona: '🔨', odmena: { karta: 'traffic' } },
 ];
 const ODZNAK = {};
 ODZNAKY.forEach((o) => { ODZNAK[o.kod] = o; });

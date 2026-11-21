@@ -3914,5 +3914,17 @@
   "hodnost.kral": "Król prania",
   "hra.kral_pradla": "Król prania",
   "hodnost.cisar": "Cesarz prania",
-  "hra.cisar_pradla": "Cesarz prania"
+  "hra.cisar_pradla": "Cesarz prania",
+  "odznak.akcionar.nazev": "Akcjonariusz",
+  "odznak.akcionar.popis": "Ma akcje funduszu — kawałek cudzego biznesu, bez prawa głosu.",
+  "odznak.akcionar.jak": "Kup na giełdzie co najmniej dziesięć akcji dowolnego funduszu.",
+  "odznak.spolecnik.nazev": "Wspólnik",
+  "odznak.spolecnik.popis": "Włożył do funduszu milion i razem z innymi decyduje, co fundusz kupi.",
+  "odznak.spolecnik.jak": "Wejdź do funduszu i wpłać do niego łącznie co najmniej milion.",
+  "odznak.domaci.nazev": "Właściciel",
+  "odznak.domaci.popis": "Ktoś buduje na jego ziemi i płaci mu za nią czynsz.",
+  "odznak.domaci.jak": "Kup działkę, wystaw ją na wynajem i poczekaj, aż ktoś ją weźmie.",
+  "odznak.kladivo.nazev": "Młotek",
+  "odznak.kladivo.popis": "Trzy razy wylicytował to, co inni puścili.",
+  "odznak.kladivo.jak": "Wygraj trzy licytacje na giełdzie."
 }

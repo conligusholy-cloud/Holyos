@@ -3900,5 +3900,17 @@
   "hodnost.kral": "Rei da roupa",
   "hra.kral_pradla": "Rei da roupa",
   "hodnost.cisar": "Imperador da roupa",
-  "hra.cisar_pradla": "Imperador da roupa"
+  "hra.cisar_pradla": "Imperador da roupa",
+  "odznak.akcionar.nazev": "Acionista",
+  "odznak.akcionar.popis": "Tem ações de um fundo — um pedaço do negócio de outro, sem voz nele.",
+  "odznak.akcionar.jak": "Compra pelo menos dez ações de qualquer fundo na bolsa.",
+  "odznak.spolecnik.nazev": "Sócio",
+  "odznak.spolecnik.popis": "Pôs um milhão num fundo e decide com os outros o que o fundo compra.",
+  "odznak.spolecnik.jak": "Entra num fundo e deposita nele pelo menos um milhão no total.",
+  "odznak.domaci.nazev": "Senhorio",
+  "odznak.domaci.popis": "Alguém constrói na terra dele e paga-lhe renda por ela.",
+  "odznak.domaci.jak": "Compra um terreno, oferece-o para arrendar e espera que alguém o tome.",
+  "odznak.kladivo.nazev": "O Martelo",
+  "odznak.kladivo.popis": "Arrematou três vezes o que os outros largaram.",
+  "odznak.kladivo.jak": "Ganha três leilões na bolsa."
 }

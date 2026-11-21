@@ -3907,5 +3907,17 @@
   "hodnost.kral": "Wäschekönig",
   "hra.kral_pradla": "Wäschekönig",
   "hodnost.cisar": "Wäschekaiser",
-  "hra.cisar_pradla": "Wäschekaiser"
+  "hra.cisar_pradla": "Wäschekaiser",
+  "odznak.akcionar.nazev": "Aktionär",
+  "odznak.akcionar.popis": "Hält Fondsaktien — ein Stück fremdes Geschäft, ohne mitzureden.",
+  "odznak.akcionar.jak": "Kauf an der Börse mindestens zehn Aktien eines beliebigen Fonds.",
+  "odznak.spolecnik.nazev": "Teilhaber",
+  "odznak.spolecnik.popis": "Hat eine Million in einen Fonds gelegt und entscheidet mit, was er kauft.",
+  "odznak.spolecnik.jak": "Tritt einem Fonds bei und leg insgesamt mindestens eine Million ein.",
+  "odznak.domaci.nazev": "Vermieter",
+  "odznak.domaci.popis": "Jemand baut auf seinem Land und zahlt dafür Miete.",
+  "odznak.domaci.jak": "Kauf ein Grundstück, biete es zur Miete an und warte, bis es jemand nimmt.",
+  "odznak.kladivo.nazev": "Der Hammer",
+  "odznak.kladivo.popis": "Hat dreimal ersteigert, was andere losgelassen haben.",
+  "odznak.kladivo.jak": "Gewinne drei Auktionen an der Börse."
 }

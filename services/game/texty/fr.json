@@ -3907,5 +3907,17 @@
   "hodnost.kral": "Roi du linge",
   "hra.kral_pradla": "Roi du linge",
   "hodnost.cisar": "Empereur du linge",
-  "hra.cisar_pradla": "Empereur du linge"
+  "hra.cisar_pradla": "Empereur du linge",
+  "odznak.akcionar.nazev": "Actionnaire",
+  "odznak.akcionar.popis": "Détient des actions d'un fonds : un bout d'affaire qui n'est pas la sienne.",
+  "odznak.akcionar.jak": "Achète au moins dix actions d'un fonds à la bourse.",
+  "odznak.spolecnik.nazev": "Associé",
+  "odznak.spolecnik.popis": "A mis un million dans un fonds et décide avec les autres de ses achats.",
+  "odznak.spolecnik.jak": "Rejoins un fonds et dépose au moins un million au total.",
+  "odznak.domaci.nazev": "Propriétaire",
+  "odznak.domaci.popis": "Quelqu’un construit sur son terrain et lui paie un loyer.",
+  "odznak.domaci.jak": "Achète un terrain, propose-le à la location et attends que quelqu’un le prenne.",
+  "odznak.kladivo.nazev": "Le Marteau",
+  "odznak.kladivo.popis": "A remporté trois enchères sur ce que d'autres ont lâché.",
+  "odznak.kladivo.jak": "Gagne trois enchères à la bourse."
 }

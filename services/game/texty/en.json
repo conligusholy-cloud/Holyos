@@ -3907,5 +3907,17 @@
   "hodnost.kral": "Laundry King",
   "hra.kral_pradla": "Laundry King",
   "hodnost.cisar": "Laundry Emperor",
-  "hra.cisar_pradla": "Laundry Emperor"
+  "hra.cisar_pradla": "Laundry Emperor",
+  "odznak.akcionar.nazev": "Shareholder",
+  "odznak.akcionar.popis": "Holds fund shares — a slice of someone else's business, with no say in it.",
+  "odznak.akcionar.jak": "Buy at least ten shares of any fund on the exchange.",
+  "odznak.spolecnik.nazev": "Partner",
+  "odznak.spolecnik.popis": "Put a million into a fund and decides with the others what it buys.",
+  "odznak.spolecnik.jak": "Join a fund and deposit at least a million in total.",
+  "odznak.domaci.nazev": "Landlord",
+  "odznak.domaci.popis": "Someone is building on their land and paying rent for it.",
+  "odznak.domaci.jak": "Buy a plot, offer it for rent and wait for someone to take it.",
+  "odznak.kladivo.nazev": "The Hammer",
+  "odznak.kladivo.popis": "Won three auctions for what others let go.",
+  "odznak.kladivo.jak": "Win three auctions on the exchange."
 }

@@ -3941,5 +3941,17 @@
   "hodnost.kral": "Král prádla",
   "hra.kral_pradla": "Král prádla",
   "hodnost.cisar": "Císař prádla",
-  "hra.cisar_pradla": "Císař prádla"
+  "hra.cisar_pradla": "Císař prádla",
+  "odznak.akcionar.nazev": "Akcionář",
+  "odznak.akcionar.popis": "Drží akcie fondu — kus cizího podnikání, do kterého nemluví.",
+  "odznak.akcionar.jak": "Kup si na burze aspoň deset akcií kteréhokoli fondu.",
+  "odznak.spolecnik.nazev": "Společník",
+  "odznak.spolecnik.popis": "Složil do fondu milion a rozhoduje s ostatními, co fond koupí.",
+  "odznak.spolecnik.jak": "Vstup do fondu a vlož do něj dohromady aspoň milion.",
+  "odznak.domaci.nazev": "Domácí",
+  "odznak.domaci.popis": "Někdo staví na jeho zemi a platí mu za ni nájem.",
+  "odznak.domaci.jak": "Kup pozemek, nabídni ho k pronájmu a počkej, až si ho někdo vezme.",
+  "odznak.kladivo.nazev": "Kladivo",
+  "odznak.kladivo.popis": "Třikrát vydražil, co ostatní pustili z ruky.",
+  "odznak.kladivo.jak": "Vyhraj tři dražby na burze."
 }

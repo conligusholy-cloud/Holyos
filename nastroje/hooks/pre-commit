@@ -210,6 +210,16 @@ if git diff --cached --name-only | grep -qE 'routes/game-trade|public/compounder
   fi
 fi
 
+# Odznaky. Chybějící text nebo podmínka, kterou nejde splnit, je v panelu
+# hned vidět — a odměna v hotovosti by z odznaků udělala příjem.
+if git diff --cached --name-only | grep -qE 'services/game/hodnosti|routes/game-account|services/game/texty'; then
+  if ! node nastroje/todznaky.js; then
+    echo ""
+    echo "STOP: odznaky nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Žebřík hodností. Server a hra si ho drží každý zvlášť — když se rozejdou,
 # hráč vidí v liště jiný titul, než jaký u něj vidí ostatní.
 if git diff --cached --name-only | grep -qE 'services/game/hodnosti|public/compounder/game/game.js|services/game/texty'; then

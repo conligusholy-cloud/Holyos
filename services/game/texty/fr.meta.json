@@ -3887,5 +3887,17 @@
   "hodnost.kral": "bbe329d5cd55",
   "hra.kral_pradla": "bbe329d5cd55",
   "hodnost.cisar": "3adbe01937f2",
-  "hra.cisar_pradla": "3adbe01937f2"
+  "hra.cisar_pradla": "3adbe01937f2",
+  "odznak.akcionar.nazev": "3283ab002e25",
+  "odznak.akcionar.popis": "da171a837c26",
+  "odznak.akcionar.jak": "75856b687b28",
+  "odznak.spolecnik.nazev": "805d021891fc",
+  "odznak.spolecnik.popis": "733e594eab63",
+  "odznak.spolecnik.jak": "3da727ad4b12",
+  "odznak.domaci.nazev": "5499264a2aaf",
+  "odznak.domaci.popis": "500608488bca",
+  "odznak.domaci.jak": "9dee04addace",
+  "odznak.kladivo.nazev": "5e305faa58c1",
+  "odznak.kladivo.popis": "c0488081a782",
+  "odznak.kladivo.jak": "3c1ce97bc263"
 }
