@@ -3860,7 +3860,7 @@
   "akcie.nasbirano": "Naliczone od ostatniego razu",
   "akcie.fond_nema_na_dividendu": "Fundusz nie ma teraz wolnych pieniędzy, więc dywidenda się nie nalicza. Ruszy, gdy je będzie mieć.",
   "veta.fond_akcie_sazba_popis": "dywidenda z akcji {p1} % za rok gry",
-  "veta.akcie_sazba_na_akcii": "{p1} % rocznie · {penize:p2} na akcję miesięcznie",
+  "veta.akcie_sazba_na_akcii": "{p1} % p.a. · {penize:p2} / mies.",
   "veta.akcie_sazba_rocne": "{p1} % rocznie · {penize:p2} miesięcznie",
   "veta.akcie_sazba_odhad": "Fundusz zapłaci za to {penize:p1} za miesiąc gry, czyli {penize:p2} za rok gry.",
   "dor.fond_navrh_akcie_sazba": "{p1} proponuje w funduszu {p2}: dywidenda z akcji {p3} % za rok gry.",

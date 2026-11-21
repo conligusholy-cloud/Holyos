@@ -3853,7 +3853,7 @@
   "akcie.nasbirano": "Seit dem letzten Mal angesammelt",
   "akcie.fond_nema_na_dividendu": "Der Fonds hat gerade kein freies Geld, die Dividende läuft also nicht auf. Sie startet wieder, sobald er welches hat.",
   "veta.fond_akcie_sazba_popis": "Aktiendividende {p1} % je Spieljahr",
-  "veta.akcie_sazba_na_akcii": "{p1} % p.a. · {penize:p2} je Aktie und Monat",
+  "veta.akcie_sazba_na_akcii": "{p1} % p.a. · {penize:p2} / Mon.",
   "veta.akcie_sazba_rocne": "{p1} % p.a. · {penize:p2} im Monat",
   "veta.akcie_sazba_odhad": "Der Fonds zahlt dafür {penize:p1} je Spielmonat, also {penize:p2} je Spieljahr.",
   "dor.fond_navrh_akcie_sazba": "{p1} schlägt im Fonds {p2} vor: Aktiendividende {p3} % je Spieljahr.",

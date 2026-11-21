@@ -3853,7 +3853,7 @@
   "akcie.nasbirano": "Acumulado desde la última vez",
   "akcie.fond_nema_na_dividendu": "El fondo no tiene ahora dinero libre, así que el dividendo no se acumula. Volverá a correr en cuanto lo tenga.",
   "veta.fond_akcie_sazba_popis": "dividendo de acciones {p1} % por año de juego",
-  "veta.akcie_sazba_na_akcii": "{p1} % anual · {penize:p2} por acción al mes",
+  "veta.akcie_sazba_na_akcii": "{p1} % anual · {penize:p2} / mes",
   "veta.akcie_sazba_rocne": "{p1} % anual · {penize:p2} al mes",
   "veta.akcie_sazba_odhad": "El fondo pagará {penize:p1} por mes de juego, es decir {penize:p2} por año de juego.",
   "dor.fond_navrh_akcie_sazba": "{p1} propone en el fondo {p2}: dividendo de acciones {p3} % por año de juego.",

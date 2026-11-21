@@ -3853,7 +3853,7 @@
   "akcie.nasbirano": "Collected since last time",
   "akcie.fond_nema_na_dividendu": "The fund has no free money right now, so the dividend is not accruing. It starts again as soon as it does.",
   "veta.fond_akcie_sazba_popis": "share dividend {p1} % per game year",
-  "veta.akcie_sazba_na_akcii": "{p1} % p.a. · {penize:p2} per share a month",
+  "veta.akcie_sazba_na_akcii": "{p1} % p.a. · {penize:p2} / mo",
   "veta.akcie_sazba_rocne": "{p1} % p.a. · {penize:p2} a month",
   "veta.akcie_sazba_odhad": "The fund will pay {penize:p1} per game month, that is {penize:p2} per game year.",
   "dor.fond_navrh_akcie_sazba": "{p1} proposes in the fund {p2}: share dividend {p3} % per game year.",

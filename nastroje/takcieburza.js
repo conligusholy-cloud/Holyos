@@ -192,6 +192,24 @@ ok('server poslá změnu proti předchozímu obchodu',
 const casF = (hra.match(/function casKratce\(x\) \{[\s\S]*?\n\}/) || [''])[0];
 ok('čas se nebere z místního formátu', !!casF && !/toLocale/.test(casF));
 
+// Řádek se slíbenou dividendou se musí vejít na JEDEN řádek i na úzkém
+// telefonu — zalomený popisek vedle zalomené hodnoty se čte mizerně. Je to
+// věc délky textu, takže se hlídá tady: ve všech jazycích krátký tvar.
+(function () {
+  const fsx = require('fs');
+  const pathx = require('path');
+  const dlouhe = [];
+  ['cs', 'en', 'de', 'es', 'fr', 'pl', 'pt'].forEach(function (j) {
+    const k = JSON.parse(fsx.readFileSync(pathx.join(__dirname, '..', 'services',
+      'game', 'texty', j + '.json'), 'utf8'))['veta.akcie_sazba_na_akcii'] || '';
+    // Bez značek: {p1} se nahradí číslem, {penize:p2} částkou. Počítá se, co
+    // z věty zbyde navíc — slova a oddělovače.
+    const holy = k.replace(/\{[^}]+\}/g, '');
+    if (holy.length > 18) dlouhe.push(j + ' (' + holy.trim() + ')');
+  });
+  ok('slíbená dividenda je krátká ve všech jazycích', dlouhe.length === 0, dlouhe.join(', '));
+}());
+
 // Dividenda je to, co fond doopravdy vyplatil — patří k podrobnostem vedle
 // nároku, ne místo něj.
 ok('podrobnosti ukazují poslední dividendu',
