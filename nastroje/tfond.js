@@ -149,5 +149,37 @@ ok('a je stejně snadné jako vyvěšení',
 ok('ale lehčí než rozdání peněz',
   F.prahDruhu('zrusit') < F.prahDruhu('vyplatit'));
 
+// ─── Druh návrhu se musí vejít do sloupce ──────────────────────────────
+// Tohle už jednou spadlo na živo: sloupec byl VARCHAR(12) z doby, kdy nejdelší
+// druh byl „dividenda", a „akcie_dividenda" se do něj nevejšlo. Hráč zmáčkl
+// Dát hlasovat a dostal jen „Interní chyba serveru" — na zápisu, který neměl
+// jak projít. Stejně tak stav návrhu.
+const fs = require('fs');
+const path = require('path');
+const schema = fs.readFileSync(
+  path.join(__dirname, '..', 'prisma', 'schema.prisma'), 'utf8');
+const routy = fs.readFileSync(
+  path.join(__dirname, '..', 'routes', 'game-trade.routes.js'), 'utf8');
+const navrh = schema.slice(schema.indexOf('model GameFondNavrh'));
+const delka = (pole) => {
+  const m = navrh.slice(0, navrh.indexOf('@@map'))
+    .match(new RegExp(pole + '\\s+String[^\\n]*VarChar\\((\\d+)\\)'));
+  return m ? Number(m[1]) : 0;
+};
+const DRUHY_V_KODU = (() => {
+  const blok = routy.slice(routy.indexOf('const DRUHY = {'));
+  const konec = blok.indexOf('\n};');
+  return (blok.slice(0, konec).match(/^\s{2}([a-z_]+):/gm) || [])
+    .map((x) => x.trim().replace(':', ''));
+})();
+ok('druhy návrhů se v kódu našly', DRUHY_V_KODU.length >= 7, DRUHY_V_KODU.join(', '));
+const nejdelsi = DRUHY_V_KODU.reduce((a, x) => (x.length > a.length ? x : a), '');
+ok('sloupec druh unáší i ten nejdelší druh',
+  delka('druh') >= nejdelsi.length, nejdelsi + ' = ' + nejdelsi.length
+    + ' znaků, sloupec ' + delka('druh'));
+const STAVY = ['bezi', 'prijat', 'zamitnut', 'proveden', 'zrusen', 'protinavrh'];
+ok('a sloupec stav unáší všechny stavy',
+  delka('stav') >= Math.max.apply(null, STAVY.map((x) => x.length)));
+
 console.log(chyb ? '\n' + chyb + ' chyb' : '\nvšechno sedí');
 process.exit(chyb ? 1 : 0);

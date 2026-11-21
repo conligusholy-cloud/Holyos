@@ -8445,8 +8445,10 @@ model GameFondNavrh {
   id         Int      @id @default(autoincrement())
   aliance_id Int
   autor_id   Int
-  // koupit | vyplatit
-  druh       String   @db.VarChar(12)
+  // koupit | vyplatit | zrusit | dividenda | nabidka | akcie | akcie_dividenda
+  // | akcie_sazba — délka sloupce musí unést i ten nejdelší z nich, jinak
+  // návrh spadne na vnitřní chybu serveru a hráč neví proč.
+  druh       String   @db.VarChar(24)
   detail     Json?
   prah       Float    @default(0.5)
   // bezi | prijat | zamitnut | proveden | zrusen
