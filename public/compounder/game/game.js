@@ -11288,6 +11288,40 @@ setInterval(function () {
     el.textContent = kcFull(Math.max(0, ((Date.now() - od) / 1000) * sec));
   });
 }, 1000);
+// Můj balík akcií: za co je mám, co bych za ně dnes dostal a kolik je to
+// proti nákupu. Samotná cena akcie totiž neřekne, jestli se prodej vyplatí —
+// a objem v penězích si hráč z ceny krát kusů počítat nemá. Pořizovací cenu
+// vede server u držby a při prodeji ji krátí, takže je to průměr toho, co mi
+// v ruce zbylo, ne historie všech nákupů. Balík se prodává za jednu cenu,
+// tu dnešní, takže výnos z prodeje je prostě kusy × cena — jen na něj fond
+// musí mít volné peníze, jinak se prodá jen část.
+function akcieBalikHtml(f, kv) {
+  var kusu = Math.max(0, Math.round(Number(f.moje_kusy) || 0));
+  if (!kusu) return '';
+  var por = Math.max(0, Math.round(Number(f.moje_porizovaci) || 0));
+  var cena = Math.max(0, Math.round(Number(f.cena) || 0));
+  var dnes = kusu * cena;
+  var rozdil = dnes - por;
+  var pct = por > 0 ? Math.round(rozdil / por * 100) : 0;
+  var volne = f.fond_volne == null ? null : Math.round(Number(f.fond_volne) || 0);
+  var vykoupi = volne != null && cena > 0 ? Math.floor(Math.max(0, volne) / cena) : null;
+  var radek = function (popis, hodnota, trida) {
+    return kv
+      ? '<div class="kv"><span>' + popis + '</span><b class="' + (trida || '') + '">' + hodnota + '</b></div>'
+      : '<div class="row"><span class="muted small">' + popis + '</span><span class="'
+        + (trida || '') + '">' + hodnota + '</span></div>';
+  };
+  return (por > 0 ? radek(esc(tx('akcie.prumerna_cena')), kcFull(Math.round(por / kusu))) : '')
+    + radek(esc(tx('akcie.prodejem_dostanes')), kcFull(dnes), 'ok')
+    + (por > 0
+        ? radek(esc(tx(rozdil < 0 ? 'akcie.ztrata' : 'akcie.zisk')),
+            (rozdil > 0 ? '+' : '') + kcFull(rozdil) + ' · ' + (rozdil > 0 ? '+' : '') + pct + ' %',
+            rozdil < 0 ? 'err' : 'ok')
+        : '')
+    + (vykoupi != null && vykoupi < kusu
+        ? '<p class="fine err">' + tx('veta.akcie_vykoupi_jen', { p1: vykoupi }) + '</p>'
+        : '');
+}
 function akcieKartaHtml(f) {
   return '<div class="trade" data-akcie-karta="' + f.aliance_id + '">'
     + '<div class="row"><b>' + esc(f.nazev) + '</b>'
@@ -11306,6 +11340,7 @@ function akcieKartaHtml(f) {
     + (f.moje_kusy ? '<div class="row"><span class="muted small">'
         + esc(tx('akcie.moje_kusy')) + '</span><span class="ok">'
         + tCislo(f.moje_kusy) + '</span></div>' : '')
+    + akcieBalikHtml(f, false)
     + '<div class="gcard-act">'
     + '<button class="btn sm" data-akcie-koupit="' + f.aliance_id + '">'
     + esc(tx('akcie.koupit')) + '</button>'
@@ -11473,6 +11508,7 @@ function akcieTrhSheet(id, smer) {
     + akcieVynosHtml(a)
     + '<div class="kv"><span>' + esc(tx('akcie.moje_kusy')) + '</span><b class="'
     + (a.moje_kusy ? 'ok' : '') + '">' + tCislo(a.moje_kusy) + '</b></div>'
+    + akcieBalikHtml(a, true)
     // I v obchodu musí být vidět strop toho směru: kolik fond ještě prodá,
     // kolik vykoupí. Bez toho hráč zadá počet a dozví se to až z chybové hlášky.
     + (jenSmer

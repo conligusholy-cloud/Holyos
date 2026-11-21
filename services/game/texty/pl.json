@@ -3898,5 +3898,10 @@
   "server.podil_nema_cenu": "Ten udział teraz nic nie jest wart, fundusz kupowałby powietrze.",
   "dor.fond_navrh_odkup_podilu": "{p1} proponuje w funduszu {p2}: odkupić udział {p4} % w firmie {p3} za {penize:p5}.",
   "dor.fond_koupil_podil": "Fundusz {p1} kupił od ciebie udział {cislo:p3} % w firmie {p2} za {penize:p4}.",
-  "dor.fond_odkoupil_podil": "Fundusz {p1} odkupił udział {cislo:p3} % w firmie {p2} za {penize:p4}."
+  "dor.fond_odkoupil_podil": "Fundusz {p1} odkupił udział {cislo:p3} % w firmie {p2} za {penize:p4}.",
+  "akcie.prumerna_cena": "Kupione po",
+  "akcie.prodejem_dostanes": "Sprzedaż da",
+  "akcie.zisk": "Zysk",
+  "akcie.ztrata": "Strata",
+  "veta.akcie_vykoupi_jen": "Fundusz odkupi teraz tylko {cislo:p1} twoich akcji — nie ma wolnych pieniędzy na cały pakiet."
 }

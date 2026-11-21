@@ -3871,5 +3871,10 @@
   "server.podil_nema_cenu": "4288e501bce1",
   "dor.fond_navrh_odkup_podilu": "9d87a448cbec",
   "dor.fond_koupil_podil": "e5bcb3127354",
-  "dor.fond_odkoupil_podil": "ca2f046b7ba3"
+  "dor.fond_odkoupil_podil": "ca2f046b7ba3",
+  "akcie.prumerna_cena": "ed558d4d5c6a",
+  "akcie.prodejem_dostanes": "fa002e349c50",
+  "akcie.zisk": "0725984e0cbf",
+  "akcie.ztrata": "51880916c3a6",
+  "veta.akcie_vykoupi_jen": "a8db5b7d6fcd"
 }

@@ -200,6 +200,16 @@ if git diff --cached --name-only | grep -qE 'services/game/fond|services/game/vl
   fi
 fi
 
+# Můj balík akcií na burze: za co jsem je koupil, co bych dnes dostal a jestli
+# na to fond má. Špatné číslo tady znamená špatně prodaný balík.
+if git diff --cached --name-only | grep -qE 'routes/game-trade|public/compounder/game/game.js|services/game/texty'; then
+  if ! node nastroje/takciebalik.js; then
+    echo ""
+    echo "STOP: balík akcií nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Pozemky: soud bere stroje, ne zaplacenou zem; inzerát „k pronájmu“ musí jít
 # otevřít; zábor zrušený soudem se musí dát vrátit. Všechno tři hlásili hráči.
 if git diff --cached --name-only | grep -qE 'services/game/zlocin-rizeni|public/compounder/game/game.js'; then

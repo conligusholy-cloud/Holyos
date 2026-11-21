@@ -3891,5 +3891,10 @@
   "server.podil_nema_cenu": "That stake is worth nothing right now, the fund would be buying air.",
   "dor.fond_navrh_odkup_podilu": "{p1} proposes in the fund {p2}: buy a {p4} % stake in {p3} for {penize:p5}.",
   "dor.fond_koupil_podil": "The fund {p1} bought your {cislo:p3} % stake in {p2} for {penize:p4}.",
-  "dor.fond_odkoupil_podil": "The fund {p1} bought a {cislo:p3} % stake in {p2} for {penize:p4}."
+  "dor.fond_odkoupil_podil": "The fund {p1} bought a {cislo:p3} % stake in {p2} for {penize:p4}.",
+  "akcie.prumerna_cena": "Bought at",
+  "akcie.prodejem_dostanes": "Selling pays",
+  "akcie.zisk": "Gain",
+  "akcie.ztrata": "Loss",
+  "veta.akcie_vykoupi_jen": "The fund can only buy back {cislo:p1} of your shares right now — it has no free cash for the whole packet."
 }

@@ -3891,5 +3891,10 @@
   "server.podil_nema_cenu": "Dieser Anteil ist gerade nichts wert, der Fonds würde Luft kaufen.",
   "dor.fond_navrh_odkup_podilu": "{p1} schlägt im Fonds {p2} vor: Anteil von {p4} % an {p3} für {penize:p5} kaufen.",
   "dor.fond_koupil_podil": "Der Fonds {p1} hat deinen Anteil von {cislo:p3} % an {p2} für {penize:p4} gekauft.",
-  "dor.fond_odkoupil_podil": "Der Fonds {p1} hat einen Anteil von {cislo:p3} % an {p2} für {penize:p4} gekauft."
+  "dor.fond_odkoupil_podil": "Der Fonds {p1} hat einen Anteil von {cislo:p3} % an {p2} für {penize:p4} gekauft.",
+  "akcie.prumerna_cena": "Gekauft für",
+  "akcie.prodejem_dostanes": "Verkauf bringt",
+  "akcie.zisk": "Gewinn",
+  "akcie.ztrata": "Verlust",
+  "veta.akcie_vykoupi_jen": "Der Fonds kauft gerade nur {cislo:p1} deiner Aktien zurück — für das ganze Paket hat er kein freies Geld."
 }

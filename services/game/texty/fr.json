@@ -3891,5 +3891,10 @@
   "server.podil_nema_cenu": "Cette participation ne vaut rien en ce moment, le fonds achèterait du vent.",
   "dor.fond_navrh_odkup_podilu": "{p1} propose dans le fonds {p2} : racheter une part de {p4} % dans {p3} pour {penize:p5}.",
   "dor.fond_koupil_podil": "Le fonds {p1} t’a acheté la part de {cislo:p3} % dans {p2} pour {penize:p4}.",
-  "dor.fond_odkoupil_podil": "Le fonds {p1} a acheté une part de {cislo:p3} % dans {p2} pour {penize:p4}."
+  "dor.fond_odkoupil_podil": "Le fonds {p1} a acheté une part de {cislo:p3} % dans {p2} pour {penize:p4}.",
+  "akcie.prumerna_cena": "Acheté à",
+  "akcie.prodejem_dostanes": "La vente rapporte",
+  "akcie.zisk": "Gain",
+  "akcie.ztrata": "Perte",
+  "veta.akcie_vykoupi_jen": "Le fonds ne rachète que {cislo:p1} de tes actions pour l'instant — il n'a pas de liquidités libres pour tout le paquet."
 }

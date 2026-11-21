@@ -2903,10 +2903,13 @@ router.get('/trade/akcie', hrac, api(async (req, res) => {
       akcie_vydano: true, akcie_podil: true, akcie_cena: true,
       akcie_sazba: true, akcie_ucetni: true, pokladna: true } }),
     prisma.gameAkcie.findMany({ where: { player_id: req.player.id, pocet: { gt: 0 } },
-      select: { aliance_id: true, pocet: true, dividenda_do: true } }),
+      select: { aliance_id: true, pocet: true, dividenda_do: true, porizovaci: true } }),
   ]);
   const mam = new Map(moje.map((x) => [x.aliance_id, x.pocet]));
   const odKdy = new Map(moje.map((x) => [x.aliance_id, x.dividenda_do]));
+  // Za kolik hráč své kusy pořídil. Server si to vede u držby a při prodeji
+  // krátí, takže je to cena toho, co mu v ruce zbylo. BigInt do JSONu neumí.
+  const porizovaci = new Map(moje.map((x) => [x.aliance_id, Number(x.porizovaci || 0)]));
   const zajimave = fondy.filter((f) => (f.akcie_celkem || 0) > 0);
   const vynosy = await akcieVynosy(zajimave.map((f) => f.id));
   const out = [];
@@ -2922,6 +2925,10 @@ router.get('/trade/akcie', hrac, api(async (req, res) => {
     out.push({ aliance_id: f.id, nazev: f.nazev, cena: s.cena, ucetni: s.ucetni,
       vydano: s.vydano, volne: s.volne, podil: s.podil,
       moje_kusy: mam.get(f.id) || 0,
+      // Pořizovací cena balíku a volná pokladna fondu. Bez obojího se z karty
+      // nepozná, jestli se prodej vyplatí a jestli ho fond vůbec zaplatí.
+      moje_porizovaci: mam.get(f.id) ? porizovaci.get(f.id) || 0 : 0,
+      fond_volne: mam.get(f.id) ? (await fondVolne(f.id, f)).volne : null,
       // Co akcie nese a co už vyplatila — jedno je nárok, druhé peníze.
       nese_mesicne: vyn.nese,
       na_akcii_mesicne: AKCIE.vynosNaAkcii(vyn.nese, s.podil, s.vydano),
@@ -2961,6 +2968,10 @@ router.get('/trade/akcie/:id', hrac, api(async (req, res) => {
   res.json({ ok: true, akcie: Object.assign(s, {
     aliance_id: alianceId, nazev: al.nazev,
     moje_kusy: moje,
+    // Za kolik má hráč svoje kusy pořízené — proti dnešní ceně je z toho
+    // vidět zisk nebo ztráta. (Karta na burze ukazuje totéž.)
+    moje_porizovaci: mujRadek ? Number(mujRadek.porizovaci || 0) : 0,
+    fond_volne: fondVolno.volne,
     nese_mesicne: vyn.nese,
     na_akcii_mesicne: AKCIE.vynosNaAkcii(vyn.nese, s.podil, s.vydano),
     dividenda_posledni: vyn.posledni,

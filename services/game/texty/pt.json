@@ -3884,5 +3884,10 @@
   "server.podil_nema_cenu": "Essa participação não vale nada agora, o fundo compraria ar.",
   "dor.fond_navrh_odkup_podilu": "{p1} propõe no fundo {p2}: comprar uma participação de {p4} % em {p3} por {penize:p5}.",
   "dor.fond_koupil_podil": "O fundo {p1} comprou-te a participação de {cislo:p3} % em {p2} por {penize:p4}.",
-  "dor.fond_odkoupil_podil": "O fundo {p1} comprou uma participação de {cislo:p3} % em {p2} por {penize:p4}."
+  "dor.fond_odkoupil_podil": "O fundo {p1} comprou uma participação de {cislo:p3} % em {p2} por {penize:p4}.",
+  "akcie.prumerna_cena": "Comprado a",
+  "akcie.prodejem_dostanes": "A venda dá",
+  "akcie.zisk": "Lucro",
+  "akcie.ztrata": "Perda",
+  "veta.akcie_vykoupi_jen": "O fundo só recompra {cislo:p1} das tuas ações agora — não tem dinheiro livre para o pacote todo."
 }
