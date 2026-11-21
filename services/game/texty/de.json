@@ -3875,5 +3875,7 @@
   "veta.fond_clen_sazba_popis": "Mitgliederdividende {p1} % je Spieljahr",
   "dor.fond_navrh_clen_sazba": "{p1} schlägt im Fonds {p2} vor: Mitgliederdividende {p3} % je Spieljahr.",
   "dor.fond_clen_sazba": "Der Fonds {p1} hat eine Mitgliederdividende beschlossen: {p2} % je Spieljahr.",
-  "dor.fond_dividenda_sazba": "Dividende aus dem Fonds {p1}: {penize:p2}."
+  "dor.fond_dividenda_sazba": "Dividende aus dem Fonds {p1}: {penize:p2}.",
+  "veta.fond_prah_radek": "Braucht {p1} % der Einlagen · du hast {p2} %.",
+  "fond.prah_nestaci": "Allein bringst du es nicht durch, jemand muss mitziehen."
 }

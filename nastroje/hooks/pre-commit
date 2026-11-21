@@ -189,6 +189,16 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; th
   fi
 fi
 
+# Prahy hlasování ve fondu. Člen musí PŘEDEM vidět, kolik hlasů je potřeba —
+# jinak dá návrh hlasovat, nic se nestane a vypadá to jako porouchaná hra.
+if git diff --cached --name-only | grep -qE 'services/game/fond|routes/game-trade|public/compounder/game/game.js'; then
+  if ! node nastroje/tprahy.js; then
+    echo ""
+    echo "STOP: prahy hlasování nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Průběžná dividenda členům fondu. Teče z téže pokladny jako akcionářská
 # a dělí se podle vkladů — chyba v dělení vezme jednomu členovi a dá druhému.
 if git diff --cached --name-only | grep -qE 'services/game/fond|services/game/akcie|routes/game-trade'; then

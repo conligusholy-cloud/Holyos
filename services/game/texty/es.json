@@ -3875,5 +3875,7 @@
   "veta.fond_clen_sazba_popis": "dividendo para miembros {p1} % por año de juego",
   "dor.fond_navrh_clen_sazba": "{p1} propone en el fondo {p2}: dividendo para miembros {p3} % por año de juego.",
   "dor.fond_clen_sazba": "El fondo {p1} ha declarado un dividendo para miembros: {p2} % por año de juego.",
-  "dor.fond_dividenda_sazba": "Dividendo del fondo {p1}: {penize:p2}."
+  "dor.fond_dividenda_sazba": "Dividendo del fondo {p1}: {penize:p2}.",
+  "veta.fond_prah_radek": "Necesita el {p1} % de las aportaciones · tú tienes el {p2} %.",
+  "fond.prah_nestaci": "Solo no lo sacas adelante, alguien más tiene que sumarse."
 }

@@ -9595,6 +9595,20 @@ function fondSazbaUdrzitelna(neseMesicne, zakladAkcii) {
   if (!(n > 0) || !(z > 0)) return null;
   return (n * 12) / z;
 }
+// Kolik hlasů je na tenhle druh rozhodnutí potřeba — a kolik mám sám.
+// Bez toho dá člen návrh hlasovat, nic se nestane a vypadá to jako porouchaná
+// hra; přitom návrh jen čeká na někoho dalšího. Červeně, když sám nestačím.
+function fondPrahRadek(druh) {
+  if (!FOND || !FOND.fond) return '';
+  var prah = ((FOND.fond.prahy || {})[druh]);
+  if (prah == null) return '';
+  var ja = fondJa();
+  var muj = ja ? (ja.podil || 0) : 0;
+  var staci = muj >= prah - 1e-9;
+  return '<p class="fine' + (staci ? '' : ' warn') + '">'
+    + tx('veta.fond_prah_radek', { p1: pctHra(prah), p2: pctHra(muj) })
+    + (staci ? '' : ' ' + esc(tx('fond.prah_nestaci'))) + '</p>';
+}
 function fondNavrhPopis(n) {
   var d = n.detail || {};
   if (n.druh === 'koupit') {
@@ -10012,6 +10026,7 @@ function fondNavrhSheet() {
           + '<input id="fo-cena" class="inp" type="number" min="0" step="10000" value="0"></label>'
           + '<p class="fine">' + esc(tx('veta.fond_navrh_nikomu_nebere')) + '</p>'
           + '<button class="btn" id="fo-koupit" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>'
+          + fondPrahRadek('koupit')
         : '<p class="fine">' + esc(tx('fond.nemas_firmu')) + '</p>')
       // Dividendu nastavuje většinový podílník, takže se nabízejí jen firmy,
       // kde většinu má fond. Jinde by se hlasovalo o věci, kterou nelze provést.
@@ -10025,11 +10040,13 @@ function fondNavrhSheet() {
           + '<label class="fld"><span>' + esc(tx('fond.min_vyplata')) + '</span>'
           + '<input id="fo-dmin" class="inp" type="number" min="0" step="1000" value="0"></label>'
           + '<button class="btn sec" id="fo-dividenda" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>'
+          + fondPrahRadek('dividenda')
         : '<p class="fine">' + esc(tx('fond.nemas_vetsinu')) + '</p>')
       + '<h4 style="margin-top:14px">' + esc(tx('fond.navrh_vyplatit')) + '</h4>'
       + '<label class="fld"><span>' + esc(tx('fond.kolik')) + '</span>'
       + '<input id="fo-castka" class="inp" type="number" min="1" step="1000" value="0"></label>'
       + '<button class="btn sec" id="fo-vyplatit" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>'
+      + fondPrahRadek('vyplatit')
       // Vydání akcií prodá kus fondu komukoli. Hlasuje se o ceně a počtu
       // kusů, ne o procentu — kolik se tím prodá, vyjde z hodnoty fondu až
       // při provedení. Levná cena ředí členy víc, proto ten odhad vedle.
@@ -10041,10 +10058,12 @@ function fondNavrhSheet() {
       + '<input id="fo-acena" class="inp" type="number" min="1" step="1000" value="10000"></label>'
       + '<p class="fine" id="fo-aodhad">\u2014</p>'
       + '<button class="btn sec" id="fo-akcie" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>'
+      + fondPrahRadek('akcie')
       + '<h4 style="margin-top:14px">' + esc(tx('fond.navrh_akcie_dividenda')) + '</h4>'
       + '<label class="fld"><span>' + esc(tx('akcie.na_akcii')) + '</span>'
       + '<input id="fo-adiv" class="inp" type="number" min="1" step="100" value="0"></label>'
       + '<button class="btn sec" id="fo-akciediv" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>'
+      + fondPrahRadek('akcie_dividenda')
       + '<h4 style="margin-top:14px">' + esc(tx('fond.navrh_akcie_sazba')) + '</h4>'
       + '<p class="muted small" style="margin:0 0 6px">' + esc(tx('fond.akcie_sazba_popis')) + '</p>'
       + '<label class="fld"><span>' + esc(tx('fond.akcie_sazba_pole')) + '</span>'
@@ -10052,13 +10071,15 @@ function fondNavrhSheet() {
       + pctHra((FOND && FOND.fond && FOND.fond.akcie_sazba) || 0) + '"></label>'
       + '<p class="fine" id="fo-asazbaodhad"></p>'
       + '<button class="btn sec" id="fo-akciesazba" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>'
+      + fondPrahRadek('akcie_sazba')
       + '<h4 style="margin-top:14px">' + esc(tx('fond.navrh_clen_sazba')) + '</h4>'
       + '<p class="muted small" style="margin:0 0 6px">' + esc(tx('fond.clen_sazba_popis')) + '</p>'
       + '<label class="fld"><span>' + esc(tx('fond.akcie_sazba_pole')) + '</span>'
       + '<input id="fo-csazba" class="inp" type="number" min="0" max="100" step="0.5" value="'
       + pctHra((FOND && FOND.fond && FOND.fond.clen_sazba) || 0) + '"></label>'
       + '<p class="fine" id="fo-csazbaodhad"></p>'
-      + '<button class="btn sec" id="fo-clensazba" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>');
+      + '<button class="btn sec" id="fo-clensazba" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>'
+      + fondPrahRadek('clen_sazba'));
 
     if ($('fo-koupit')) $('fo-koupit').onclick = function () {
       posli({ druh: 'koupit', firma_id: Number($('fo-firma').value) || 0,

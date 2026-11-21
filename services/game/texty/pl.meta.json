@@ -3855,5 +3855,7 @@
   "veta.fond_clen_sazba_popis": "cc95c05e38fd",
   "dor.fond_navrh_clen_sazba": "8c57955cff69",
   "dor.fond_clen_sazba": "3f18eeac29b6",
-  "dor.fond_dividenda_sazba": "782709807451"
+  "dor.fond_dividenda_sazba": "782709807451",
+  "veta.fond_prah_radek": "0e7d545d3017",
+  "fond.prah_nestaci": "42d708d4176a"
 }

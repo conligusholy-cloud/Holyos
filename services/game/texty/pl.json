@@ -3882,5 +3882,7 @@
   "veta.fond_clen_sazba_popis": "dywidenda dla członków {p1} % za rok gry",
   "dor.fond_navrh_clen_sazba": "{p1} proponuje w funduszu {p2}: dywidenda dla członków {p3} % za rok gry.",
   "dor.fond_clen_sazba": "Fundusz {p1} ogłosił dywidendę dla członków: {p2} % za rok gry.",
-  "dor.fond_dividenda_sazba": "Dywidenda z funduszu {p1}: {penize:p2}."
+  "dor.fond_dividenda_sazba": "Dywidenda z funduszu {p1}: {penize:p2}.",
+  "veta.fond_prah_radek": "Wymaga {p1} % wkładów · masz {p2} %.",
+  "fond.prah_nestaci": "Sam tego nie przeforsujesz, ktoś musi się dołączyć."
 }

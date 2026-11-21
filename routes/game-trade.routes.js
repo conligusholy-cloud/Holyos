@@ -1544,6 +1544,10 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
     nabidky: bezici.map((t) => ({ id: t.id, firma_nick: t.firma_nick,
       cena_za_pct: t.cena_za_pct, max_pct: t.max_pct, koupeno_pct: t.koupeno_pct,
       do: t.do, zamceno: REZ.zbyvaZNabidky(t) })),
+    // Práh u každého druhu rozhodnutí. Člen musí vědět PŘEDEM, kolik hlasů
+    // je potřeba — jinak dá návrh hlasovat, nic se nestane a vypadá to jako
+    // porouchaná hra. Přitom jen čeká na někoho dalšího.
+    prahy: Object.keys(DRUHY).reduce((m, k) => Object.assign(m, { [k]: DRUHY[k].prah }), {}),
     podilnici: p.map((x) => ({
       clen_id: x.clen_id, kdo: jmena.get(x.clen_id) || ('#' + x.clen_id),
       vklad: Math.round(x.vklad), vlozil: Math.round(vlozil.get(x.clen_id) || 0),
