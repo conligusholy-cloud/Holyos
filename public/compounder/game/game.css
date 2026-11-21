@@ -414,8 +414,11 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .den.hotovo b::after{content:' \2713';color:var(--ok,#2fe3a0)}
 .den.ted{border-color:var(--ok,#2fe3a0);background:rgba(47,227,160,.12)}
 .den.ted span{color:var(--ok,#2fe3a0);font-weight:700}
-/* Výběr počtu kusů u karty. Dlaždice vedle sebe, vybraná svítí. */
+/* Výběr počtu kusů u karty. Dlaždice vedle sebe, vybraná svítí.
+   Čtyři se vejdou do jedné řady. Při pěti se přepne na tři sloupce, ať to
+   vyjde 3 + 2 — čtyři sloupce by pátou dlaždici nechaly samotnou a čtvrtinovou. */
 .balicky{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 0 12px}
+.balicky:has(> :nth-child(5)){grid-template-columns:repeat(3,1fr)}
 .balik{display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 4px;cursor:pointer;
   background:var(--bg2,#131c2e);border:1px solid var(--border2);border-radius:12px;color:inherit;font-family:inherit}
 .balik b{font-size:17px;font-weight:800}
