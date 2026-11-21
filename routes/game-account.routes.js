@@ -2612,8 +2612,17 @@ router.post('/spots/stavba', requirePlayer, async (req, res, next) => {
     const sklad = await najdiStroj(req.player.id, model, spot);
     if (!sklad.ok) return res.status(409).json({ error: stx(req)('server.takovy_stroj_nemas_skladem') });
     const prip = await pripojkyZa(spot, model, cur.pozemek, (req.body || {}).pripojky);
+    // Na čem stojí stroj, se nepronajímá — stará nabídka musí pryč. Dokud se
+    // při stavbě nemazala, zůstal na pozemku viset inzerát „k pronájmu“:
+    // na mapě sliboval zem, kterou si nikdo pronajmout nemohl, protože
+    // /spots/pronajem i /spots/najmout ji se strojem odmítají.
+    //
+    // Na cizí zemi je to ale obráceně: tam pronajem_cena NENÍ inzerát, ale
+    // nájem, který platím majiteli země pod sebou. Ten se stavbou nemaže,
+    // jinak by si provozovatel smazal dluh tím, že postaví. (Požadavek #158)
     const upd = await prisma.gameSpotClaim.update({ where: { spot_id: spot },
-      data: { model, pripojky: prip.hra, pripojky_srv: prip.srv } });
+      data: Object.assign({ model, pripojky: prip.hra, pripojky_srv: prip.srv },
+        cur.pozemek_majitel_id ? {} : { pronajem_cena: null, pronajem_sit: false }) });
     await oznacPostaveny(sklad.id, spot);
     // Doprava stroje — i na vlastní pozemek se musí dovézt.
     await VYD.zapis(req.player.id, 'doprava',

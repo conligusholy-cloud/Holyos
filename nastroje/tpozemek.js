@@ -146,11 +146,64 @@ function panel() {
     'větev vlastního pozemku volá obnovu, když zábor chybí');
 }
 
+// ─── 5. Stavba na vlastním pozemku smaže starou nabídku pronájmu ────────────
+async function stavba() {
+  console.log('\nStavba na vlastní zemi stahuje inzerát k pronájmu');
+  const zdroj = fs.readFileSync(path.join(KOREN, 'routes/game-account.routes.js'), 'utf8');
+  const i = zdroj.indexOf("router.post('/spots/stavba'");
+  ma(i > 0, 'routa /spots/stavba existuje');
+  const zac = zdroj.indexOf('async (req, res, next) => {', i);
+  let hloubka = 0, telo = null;
+  for (let j = zdroj.indexOf('{', zac + 20); j < zdroj.length; j++) {
+    if (zdroj[j] === '{') hloubka++;
+    else if (zdroj[j] === '}') { hloubka--; if (!hloubka) { telo = zdroj.slice(zdroj.indexOf('{', zac + 20), j + 1); break; } }
+  }
+  const zapsano = [];
+  const ctx = {
+    s: (x) => String(x || ''),
+    stx: () => (k) => k,
+    prisma: { gameSpotClaim: {
+      findUnique: async () => ({ spot_id: 'liberec-14', player_id: 7, model: '', pozemek: true,
+        pronajem_cena: 9000, pronajem_sit: true, najemce_id: null }),
+      update: async (a) => { zapsano.push(a.data); return Object.assign({ spot_id: 'liberec-14' }, a.data); },
+    } },
+    najdiStroj: async () => ({ ok: true, id: 1 }),
+    pripojkyZa: async () => ({ hra: 1000, srv: 1200 }),
+    oznacPostaveny: async () => ({}),
+    VYD: { zapis: async () => ({}), doprava: () => 0 },
+    claimPub: (c) => c,
+    firmyMapa: async () => ({}),
+    console,
+  };
+  vm.createContext(ctx);
+  const handler = vm.runInContext('(async (req, res, next) => ' + telo + ')', ctx);
+  let odpoved = null;
+  await handler({ body: { spot_id: 'liberec-14', model: 'flex' }, player: { id: 7, state: {} } },
+    { json: (x) => { odpoved = x; }, status: () => ({ json: (x) => { odpoved = x; } }) },
+    (e) => { odpoved = { chyba: e && e.message }; });
+  ma(odpoved && odpoved.ok, 'stavba na vlastním pozemku projde', odpoved && odpoved.chyba);
+  ma(zapsano.length === 1 && zapsano[0].model === 'flex', 'stroj se zapíše');
+  ma(zapsano.length === 1 && zapsano[0].pronajem_cena === null, 'cena pronájmu se maže');
+  ma(zapsano.length === 1 && zapsano[0].pronajem_sit === false, 'a s ní i připravená plocha');
+
+  // Na cizí zemi je pronajem_cena nájem majiteli země, ne inzerát. Stavbou se
+  // dluh nemaže — jinak by se platit přestalo tím, že si tam něco postavím.
+  zapsano.length = 0;
+  ctx.prisma.gameSpotClaim.findUnique = async () => ({ spot_id: 'rubi-5', player_id: 7,
+    model: '', pozemek: true, pronajem_cena: 9000, pronajem_sit: true, najemce_id: null,
+    pozemek_majitel_id: 9 });
+  await handler({ body: { spot_id: 'rubi-5', model: 'flex' }, player: { id: 7, state: {} } },
+    { json: () => {}, status: () => ({ json: () => {} }) }, () => {});
+  ma(zapsano.length === 1 && !('pronajem_cena' in zapsano[0]),
+    'nájem majiteli cizí země se stavbou nemaže');
+}
+
 (async () => {
   await soud();
   inzerat();
   await obnova();
   panel();
+  await stavba();
   console.log(chyb ? '\nNEPROŠLO: ' + chyb + ' chyb' : '\nVšechno sedí.');
   process.exit(chyb ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

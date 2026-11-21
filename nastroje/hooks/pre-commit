@@ -222,7 +222,7 @@ fi
 
 # Pozemky: soud bere stroje, ne zaplacenou zem; inzerát „k pronájmu“ musí jít
 # otevřít; zábor zrušený soudem se musí dát vrátit. Všechno tři hlásili hráči.
-if git diff --cached --name-only | grep -qE 'services/game/zlocin-rizeni|public/compounder/game/game.js'; then
+if git diff --cached --name-only | grep -qE 'services/game/zlocin-rizeni|routes/game-account|public/compounder/game/game.js'; then
   if ! node nastroje/tpozemek.js; then
     echo ""
     echo "STOP: pozemky nesedí (viz výš)."
