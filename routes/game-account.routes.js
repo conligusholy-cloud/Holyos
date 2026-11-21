@@ -2291,6 +2291,16 @@ const claimPub = (c, me, firmy) => ({
   // Že místo stojí na vlastním pozemku, je veřejná věc — konkurence musí vědět,
   // že tam přihazovat nemá smysl.
   pozemek: !!c.pozemek,
+  // Komu patří zem pod tímhle prádlomatem, když ji provozovatel prodal.
+  // Taky veřejné — kdo zem vlastní, je na mapě stejně vidět. Nájem a podmínky
+  // smlouvy vidí jen ti dva, kterých se týkají. (Požadavek #158)
+  pozemek_majitel: c.pozemek_majitel_id
+    ? { id: c.pozemek_majitel_id, nick: c.pozemek_majitel_nick,
+        firma: (firmy && firmy[c.pozemek_majitel_id] && firmy[c.pozemek_majitel_id].firma)
+          || (c.pozemek_majitel_nick + ' s.r.o.'),
+        ja: c.pozemek_majitel_id === me,
+        najem: (c.pozemek_majitel_id === me || c.player_id === me) ? c.pronajem_cena : null }
+    : null,
   takeovers: c.takeovers, name: c.name, lat: c.lat, lon: c.lon,
   // Nájem říkáme jen majiteli. Ostatní přihazují naslepo — v tom je to riziko.
   rent: c.player_id === me ? c.rent : null,
@@ -2707,7 +2717,12 @@ router.post('/spots/najem-konec', requirePlayer, async (req, res, next) => {
 async function dorovnejNajmy(majitel) {
   if (!majitel || !majitel.id) return 0;
   const rows = await prisma.gameSpotClaim.findMany({
-    where: { player_id: majitel.id, najemce_id: { not: null } },
+    where: { OR: [
+      { player_id: majitel.id, najemce_id: { not: null } },
+      // Zem prodaná pod cizím prádlomatem: zábor drží provozovatel, ale nájem
+      // patří tomu, komu patří zem pod ním. (Požadavek #158)
+      { pozemek_majitel_id: majitel.id },
+    ] },
   });
   let celkem = 0;
   for (const c of rows) {
@@ -2717,12 +2732,15 @@ async function dorovnejNajmy(majitel) {
     const mesicu = Math.floor((Date.now() - od) / MESIC_MS);
     if (mesicu < 1) continue;
     const castka = cena * mesicu;
+    // Kdo platí: u pronajaté holé země nájemce, u prodané země pod prádlomatem
+    // ten, kdo zábor drží — tedy provozovatel.
+    const platce = c.pozemek_majitel_id === majitel.id ? c.nick : c.najemce_nick;
     await prisma.gameDelivery.create({
       data: { player_id: majitel.id, kind: 'cash', amount: castka,
         spot_id: 'najem:' + c.spot_id + ':' + Math.round(od / MESIC_MS),
-        text_kod: 'dor.najem', text_data: { penize: castka, p1: (c.name || 'pozemek'), p2: c.najemce_nick },
+        text_kod: 'dor.najem', text_data: { penize: castka, p1: (c.name || 'pozemek'), p2: platce },
         popis: 'Nájem ' + castka.toLocaleString('cs-CZ') + ' L$ — ' + (c.name || 'pozemek')
-          + ' (' + c.najemce_nick + ')' },
+          + ' (' + platce + ')' },
     });
     await prisma.gameSpotClaim.update({
       where: { spot_id: c.spot_id }, data: { najem_do: new Date(od + mesicu * MESIC_MS) },

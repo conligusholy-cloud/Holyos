@@ -19,7 +19,7 @@ const DRAZBA_MS = 60000;        // základní odpočet
 const PRIHOZ_MS = 3000;         // co přidá jeden příhoz
 const PRIHOZ_MIN = 1000;        // nejmenší příhoz
 const VYVOLAVACI_MIN = 10000;   // pod tím nemá dražba smysl
-const PREDMETY = ['stroj', 'pradlomat', 'pobocka', 'karta', 'podil', 'prevod'];
+const PREDMETY = ['stroj', 'pradlomat', 'pozemek', 'pobocka', 'karta', 'podil', 'prevod'];
 // Rychlé předvolby pro tlačítka v okně dražby. Nejsou pevné: přihodit se musí
 // aspoň tolik, kolik přihodil poslední, takže se žebřík posouvá nahoru s ním.
 // První tlačítko je vždycky „stejně jako on", další jsou násobky.
