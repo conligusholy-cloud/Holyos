@@ -123,21 +123,21 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
       }
       doplatek = Math.max(100, c.price - zaplaceno);   // Stripe nebere nulu
     }
-    // Cena za kus padá s počtem, ale jen u karet — balíčky laundrů mají svoje
-    // vlastní odstupňování a slevu podruhé nedostanou. Počítá to server,
-    // klient si cenu určovat nesmí.
-    // Karta se pozná podle toho, že nenese laundry — u balíků peněz je sleva
-    // už v jejich odstupňování a podruhé ji nedostanou. Nespoléháme se na
-    // seznam druhů: kdyby se nedotáhl, účtovali bychom jinou cenu, než jakou
-    // hráč viděl.
-    const kusKc = doplatek != null ? doplatek : (jeKarta ? acct._cenaKusuVBalicku(c.price, qty) : c.price);
+    // Balíček jde na bránu jako JEDNA položka s celkovou cenou, ne jako počet
+    // × cena za kus. Dokud se posílalo po kusech, musela být cena za kus celá
+    // koruna a celek jejím násobkem — 590 Kč za třicet kusů tak nešlo nastavit
+    // vůbec. Hráč na bráně vidí „Expresní dovoz (30×)" a jednu částku, tu samou,
+    // na kterou klikl. Slevové balíčky platí jen na karty; balíky laundrů mají
+    // svoje vlastní odstupňování a slevu podruhé nedostanou.
+    const celkemKc = doplatek != null ? doplatek
+      : (jeKarta ? acct._cenaBalicku(c, qty) : c.price * qty);
     // Měna podle jazyka hráče. Stejný výpočet jako v ceníku — kdyby se
     // počítaly zvlášť, rozešla by se zobrazená cena s tou účtovanou.
     const prev = await MENY.prevodnik(TEXTY.jazykHrace(p));
-    const kus = prev.halere(kusKc);
+    const celkem = prev.halere(celkemKc);
 
     const purchase = await prisma.gamePurchase.create({
-      data: { player_id: p.id, kind, qty, amount_cents: kus * qty, currency: prev.mena, email: p.email }
+      data: { player_id: p.id, kind, qty, amount_cents: celkem, currency: prev.mena, email: p.email }
     });
 
     // Název a popis na Stripe stránce v jazyce hráče (z katalogu obchodu), jinak český základ.
@@ -156,9 +156,9 @@ router.post('/stripe/checkout', express.json({ limit: '8kb' }), acct._requirePla
       metadata: { purchase_id: purchase.id, player_id: p.id, kind, qty },
       payment_intent_data: { metadata: { purchase_id: purchase.id } },
       line_items: [{
-        quantity: qty,
+        quantity: 1,
         price_data: {
-          currency: prev.mena, unit_amount: kus,
+          currency: prev.mena, unit_amount: celkem,
           product_data: { name: 'Laundromat Tycoon — ' + nazevPol + (qty > 1 ? ' (' + qty + '×)' : ''),
             description: popisPol || undefined }
         }

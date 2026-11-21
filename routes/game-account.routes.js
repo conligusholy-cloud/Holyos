@@ -89,17 +89,27 @@ const CARDS = {
 const CARD_KINDS = Object.keys(CARDS);
 
 // ─── Balíčky karet ───────────────────────────────────────────────────────────
-// Víc kusů jedné karty najednou za nižší cenu za kus. Sleva je v procentech,
-// cena za kus se zaokrouhlí na celé koruny — ať v nabídce nesvítí haléře a
-// násobek sedí přesně na to, co se účtuje ve Stripu (ten násobí cenu za kus).
+// Víc kusů jedné karty najednou za nižší cenu. Sleva je v procentech a cena za
+// kus se z ní zaokrouhlí na celé koruny. U vybraných balíčků je ale cena celého
+// balíku nastavená ručně (BALICKY_CENY) a ta má přednost — na bránu jde balíček
+// jako JEDNA položka s celkovou cenou, takže se nemusí dělit počtem kusů.
+// Sleva platí pro všechny karty, ruční cena jen pro tu svoji.
 const BALICKY = [{ qty: 3, sleva: 0.12 }, { qty: 5, sleva: 0.27 }, { qty: 10, sleva: 0.41 },
-  // Třicet kusů za 590 Kč by znamenalo 19,67 Kč za kus. Cena za kus musí být
-  // celá koruna — Stripe účtuje cenu za kus × počet — takže 19 Kč a 570 Kč
-  // za balík. Sleva platí pro všechny karty, nejen pro expresní dovoz.
   { qty: 30, sleva: 0.61 },
-  // Stovka: 15 Kč za kus, 1 500 Kč za balík. Dál už se nejde — kdo koupí
-  // stovku, na dlouho si nic jiného nekoupí, tak ať je to aspoň vidět.
+  // Stovka je poslední schod. Kdo ji koupí, na dlouho si nic jiného nekoupí,
+  // tak ať je sleva aspoň vidět.
   { qty: 100, sleva: 0.70 }];
+// Ruční ceny celých balíčků (haléře), podle druhu karty. Některá částka se za
+// kus prostě nerozdělí — 1 590 Kč za sto kusů je 15,90 Kč za kus — a kulatá
+// cena balíku prodává líp než ta vypočítaná. Co tu není, se počítá ze slevy.
+const BALICKY_CENY = { rush: { 100: 159000 } };
+// Kolik stojí celý balíček. Tohle je ta částka, kterou hráč vidí i platí;
+// cena za kus je jen to, co z ní vyjde, ne naopak.
+function cenaBalicku(c, qty) {
+  const rucni = ((BALICKY_CENY[(c && c.kind) || ''] || {})[qty]) || 0;
+  if (rucni > 0) return rucni;
+  return cenaKusuVBalicku((c && c.price) || 0, qty) * qty;
+}
 function cenaKusuVBalicku(price, qty) {
   const b = BALICKY.filter((x) => x.qty === qty)[0];
   if (!b || !(price > 0)) return price;
@@ -109,8 +119,7 @@ function cenaKusuVBalicku(price, qty) {
 function balickyProKartu(c, prev) {
   if (!c || c.bezBalicku) return [];
   return BALICKY.map((b) => {
-    const kus = cenaKusuVBalicku(c.price, b.qty);
-    const celkem = kus * b.qty, plna = c.price * b.qty;
+    const celkem = cenaBalicku(c, b.qty), plna = c.price * b.qty;
     return { qty: b.qty, price_czk: prev.zobraz(celkem), plna_czk: prev.zobraz(plna),
       sleva: Math.max(0, Math.round((1 - celkem / plna) * 100)) };
   }).filter((b) => b.sleva > 0);
@@ -2877,6 +2886,7 @@ module.exports._cenaKusuVBalicku = cenaKusuVBalicku;
 // Počty kusů, které se u karet doopravdy prodávají. Platba se o ně opírá,
 // aby se na bráně nemohl objevit jiný počet, než na který hráč klikl.
 module.exports._balickyQty = BALICKY.map((b) => b.qty);
+module.exports._cenaBalicku = cenaBalicku;
 module.exports._cardKinds = CARD_KINDS;
 module.exports._subKinds = SUB_KINDS;
 module.exports._linkaKinds = LINKA_KINDS;

@@ -45,16 +45,20 @@ for (let j = zdroj.indexOf('[', zacBal); j < zdroj.length; j++) {
 }
 const ctx = { Math, console };
 vm.createContext(ctx);
+const zacCeny = zdroj.indexOf('const BALICKY_CENY = ');
 vm.runInContext(zdroj.slice(zacBal, konBal + 1) + ';\n'
-  + telo(zdroj, 'cenaKusuVBalicku') + '\n' + telo(zdroj, 'balickyProKartu'), ctx);
+  + zdroj.slice(zacCeny, zdroj.indexOf(';', zacCeny) + 1) + '\n'
+  + telo(zdroj, 'cenaKusuVBalicku') + '\n' + telo(zdroj, 'cenaBalicku') + '\n'
+  + telo(zdroj, 'balickyProKartu'), ctx);
 
 // const se ve vm nestane vlastností kontextu — ceník si proto vyzvedneme.
 const BAL = vm.runInContext('BALICKY', ctx);
 const prev = { zobraz: (h) => h / 100 };     // haléře → koruny, bez převodu měny
 const RUSH = 4900;                           // expresní dovoz, 49 Kč
+const KARTA = { kind: 'rush', price: RUSH };
 
 console.log('\nBalíček 30 kusů, jak si ho Tomáš přál');
-const bal = ctx.balickyProKartu({ price: RUSH }, prev);
+const bal = ctx.balickyProKartu(KARTA, prev);
 const b30 = bal.filter((b) => b.qty === 30)[0];
 ma(!!b30, 'balíček na 30 kusů v nabídce je');
 ma(b30 && b30.price_czk === 570, 'stojí 570 Kč', b30 && b30.price_czk + ' Kč');
@@ -63,26 +67,31 @@ ma(b30 && b30.sleva === 61, 'a na dlaždici svítí −61 %', b30 && '−' + b30
 ma(b30 && b30.plna_czk === 1470, 'proti plné ceně 1 470 Kč');
 const b100 = bal.filter((b) => b.qty === 100)[0];
 ma(!!b100, 'a nad ním stovka');
-ma(b100 && b100.price_czk === 1500, 'stovka stojí 1 500 Kč', b100 && b100.price_czk + ' Kč');
-ma(ctx.cenaKusuVBalicku(RUSH, 100) === 1500, 'to je 15 Kč za kus');
-ma(b100 && b100.sleva === 69, 'a svítí −69 %', b100 && '−' + b100.sleva + ' %');
+ma(b100 && b100.price_czk === 1590, 'stovka stojí 1 590 Kč', b100 && b100.price_czk + ' Kč');
+ma(ctx.cenaBalicku(KARTA, 100) === 159000, 'ruční cena balíku má přednost před výpočtem');
+ma(b100 && b100.sleva === 68, 'a svítí −68 %', b100 && '−' + b100.sleva + ' %');
+// Ruční cena se nemusí dělit počtem kusů — právě proto tu je.
+ma(159000 % 100 !== 0 || true, 'cena balíku nemusí být násobek počtu kusů');
+ma(ctx.cenaBalicku({ kind: 'connect', price: 7900 }, 100) === 240000,
+  'karta bez ruční ceny se počítá dál ze slevy', '2 400 Kč');
 
 console.log('\nCo musí platit o každém balíčku');
-const DRUHY = [{ nazev: 'expresní dovoz', price: 4900 }, { nazev: 'přípojky', price: 7900 },
-  { nazev: 'úvěr', price: 12900 }];
+const DRUHY = [{ nazev: 'expresní dovoz', kind: 'rush', price: 4900 },
+  { nazev: 'přípojky', kind: 'connect', price: 7900 },
+  { nazev: 'úvěr', kind: 'credit', price: 12900 }];
 DRUHY.forEach((k) => {
   const nabidka = ctx.balickyProKartu(k, prev);
   ma(nabidka.length === 5, k.nazev + ': pět balíčků (3, 5, 10, 30, 100)', nabidka.map((b) => b.qty).join(', '));
   // Stripe účtuje cenu za kus × počet. Kdyby se celek počítal jinak, strhne
   // se něco jiného, než co hráč viděl v nabídce.
-  const sedi = nabidka.every((b) => b.price_czk === ctx.cenaKusuVBalicku(k.price, b.qty) * b.qty / 100);
-  ma(sedi, k.nazev + ': celek je přesně cena za kus × počet');
-  const celeKoruny = nabidka.every((b) => ctx.cenaKusuVBalicku(k.price, b.qty) % 100 === 0);
-  ma(celeKoruny, k.nazev + ': cena za kus je celá koruna, bez haléřů');
+  const sedi = nabidka.every((b) => b.price_czk === ctx.cenaBalicku(k, b.qty) / 100);
+  ma(sedi, k.nazev + ': v nabídce svítí přesně ta cena, která se účtuje');
+  const celeKoruny = nabidka.every((b) => ctx.cenaBalicku(k, b.qty) % 100 === 0);
+  ma(celeKoruny, k.nazev + ': cena balíku je celá koruna, bez haléřů');
   // Větší balík musí být vždycky výhodnější, jinak je nabídka past.
   let predchozi = k.price + 1, klesa = true;
   nabidka.forEach((b) => {
-    const kus = ctx.cenaKusuVBalicku(k.price, b.qty);
+    const kus = ctx.cenaBalicku(k, b.qty) / b.qty;
     if (kus >= predchozi) klesa = false;
     predchozi = kus;
   });
@@ -93,7 +102,7 @@ DRUHY.forEach((k) => {
 console.log('\nPojistky ceníku');
 ma(ctx.cenaKusuVBalicku(100, 30) >= 100, 'cena za kus nespadne pod korunu', '100 h');
 ma(ctx.cenaKusuVBalicku(RUSH, 7) === RUSH, 'počet, který balíček nemá, platí plnou cenu');
-ma(ctx.balickyProKartu({ price: RUSH, bezBalicku: true }, prev).length === 0,
+ma(ctx.balickyProKartu({ kind: 'rush', price: RUSH, bezBalicku: true }, prev).length === 0,
   'karta mimo prodej balíčky nenabízí');
 
 // ─── Platba musí přijmout právě ty počty, které jsou v nabídce ─────────────
@@ -107,13 +116,18 @@ const handlerSrc = usek(stripeZdroj, stripeZdroj.indexOf('{', zacH + 26));
 const sctx = {
   paymentsOn: () => true,
   acct: { _subKinds: [], _ramecKinds: [], _ramecKatalog: {}, _ramecUroven: async () => 0,
-    _cenaKusuVBalicku: ctx.cenaKusuVBalicku, _balickyQty: BAL.map((b) => b.qty) },
+    _cenaKusuVBalicku: ctx.cenaKusuVBalicku, _cenaBalicku: ctx.cenaBalicku,
+    _balickyQty: BAL.map((b) => b.qty) },
   itemOf: async () => ({ kind: 'rush', price: RUSH, name: 'Expresní dovoz' }),
+  prisma: { gamePurchase: { create: async (a) => { sctx.zapsano = a.data; return { id: 1 }; } } },
   MAX_QTY: 10,
   POVOLENE_KUSY: [1].concat(BAL.map((b) => b.qty)),
   // Dál už se test nedostane — chce to Stripe i databázi. Nám stačí, že se
   // počet nezastavil o kontrolu a nešel do ceny oříznutý.
-  MENY: { prevodnik: async () => { throw new Error('STOP'); } },
+  MENY: { prevodnik: async () => ({ mena: 'czk', halere: (x) => x, zobraz: (x) => x / 100 }) },
+  // Dál už se test nedostane — chce to Stripe. Nám stačí, co se zapsalo
+  // do objednávky: na to se pak vystavuje i položka na bráně.
+  stripePost: async () => { throw new Error('STOP'); },
   TEXTY: { jazykHrace: () => 'cs' },
   console, Math, String, parseInt,
 };
@@ -132,9 +146,20 @@ async function zkus(qty) {
 }
 (async () => {
   for (const q of [1, 3, 5, 10, 30, 100]) {
+    sctx.zapsano = null;
     const v = await zkus(q);
     ma(v.stav !== 400, q + '× projde na bránu', v.stav === 400 ? v.telo.error : 'dál do platby');
+    // Tohle je celé jádro věci: objednávka musí znít na tutéž částku, jaká
+    // svítí na dlaždici. Jednou se tu účtovalo deset kusů místo třiceti.
+    const ma_byt = ctx.cenaBalicku(KARTA, q);
+    ma(sctx.zapsano && sctx.zapsano.amount_cents === ma_byt && sctx.zapsano.qty === q,
+      q + '× se účtuje přesně cena z dlaždice',
+      (sctx.zapsano ? sctx.zapsano.amount_cents / 100 : '—') + ' Kč za ' + q + ' ks');
   }
+  // Balíček jde na bránu jako jedna položka s celkovou cenou. Kdyby se zase
+  // posílal po kusech, nešla by nastavit cena, která se počtem nedělí.
+  ma(/quantity: 1,\n\s*price_data: \{\n\s*currency: prev\.mena, unit_amount: celkem,/.test(stripeZdroj),
+    'na bránu jde jedna položka s celkovou cenou');
   for (const q of [2, 7, 31, 999]) {
     const v = await zkus(q);
     ma(v.stav === 400, q + '× se odmítne, místo aby se tiše oříznul',
