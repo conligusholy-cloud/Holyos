@@ -92,7 +92,11 @@ const CARD_KINDS = Object.keys(CARDS);
 // Víc kusů jedné karty najednou za nižší cenu za kus. Sleva je v procentech,
 // cena za kus se zaokrouhlí na celé koruny — ať v nabídce nesvítí haléře a
 // násobek sedí přesně na to, co se účtuje ve Stripu (ten násobí cenu za kus).
-const BALICKY = [{ qty: 3, sleva: 0.12 }, { qty: 5, sleva: 0.27 }, { qty: 10, sleva: 0.41 }];
+const BALICKY = [{ qty: 3, sleva: 0.12 }, { qty: 5, sleva: 0.27 }, { qty: 10, sleva: 0.41 },
+  // Třicet kusů za 590 Kč by znamenalo 19,67 Kč za kus. Cena za kus musí být
+  // celá koruna — Stripe účtuje cenu za kus × počet — takže 19 Kč a 570 Kč
+  // za balík. Sleva platí pro všechny karty, nejen pro expresní dovoz.
+  { qty: 30, sleva: 0.61 }];
 function cenaKusuVBalicku(price, qty) {
   const b = BALICKY.filter((x) => x.qty === qty)[0];
   if (!b || !(price > 0)) return price;

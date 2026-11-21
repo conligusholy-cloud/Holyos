@@ -200,6 +200,16 @@ if git diff --cached --name-only | grep -qE 'services/game/fond|services/game/vl
   fi
 fi
 
+# Slevové balíčky karet. Cena za kus × počet se musí trefit do toho, co hráč
+# vidí v nabídce — jinak mu Stripe strhne jinou částku.
+if git diff --cached --name-only | grep -qE 'routes/game-account|routes/game-stripe|public/compounder/game/game.css'; then
+  if ! node nastroje/tbalicky.js; then
+    echo ""
+    echo "STOP: ceník balíčků nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Okno „ve fondu se hlasuje“. Návrh propadá mlčením, takže když se okno
 # neukáže, člen o hlasování neví a fond se nerozhodne.
 if git diff --cached --name-only | grep -qE 'routes/game-trade|public/compounder/game/game.js'; then
