@@ -180,7 +180,12 @@ function prevod(radky, zKoho, komu, castka) {
 // a tak se většina omezuje sama. Sobě si však většina odhlasovat průběžný
 // odliv z fondu nemá — je to táž věc jako výplata, jen rozložená v čase.
 const PRAHY = { koupit: BEZNE, vyplatit: ZASADNI, zrusit: BEZNE, dividenda: BEZNE,
-  akcie: ZASADNI, akcie_dividenda: BEZNE, akcie_sazba: BEZNE, clen_sazba: ZASADNI };
+  akcie: ZASADNI, akcie_dividenda: BEZNE, akcie_sazba: BEZNE, clen_sazba: ZASADNI,
+  // Odkup podílu od vlastního člena je ZÁSADNÍ. Prodávající je ve fondu a
+  // hlasuje o svém vlastním obchodu — při běžném prahu by si většinový člen
+  // prodal do fondu, co by chtěl, svým vlastním hlasem. Cenu si sice neurčuje
+  // (bere se ocenění), ale jestli to fond vůbec chce, musí říct i ostatní.
+  odkup_podilu: ZASADNI };
 const prahDruhu = (druh) => (PRAHY[druh] == null ? null : PRAHY[druh]);
 
 // ─── Žebríček fondů ──────────────────────────────────────────────

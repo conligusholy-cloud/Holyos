@@ -3857,5 +3857,19 @@
   "dor.fond_clen_sazba": "3f18eeac29b6",
   "dor.fond_dividenda_sazba": "782709807451",
   "veta.fond_prah_radek": "0e7d545d3017",
-  "fond.prah_nestaci": "42d708d4176a"
+  "fond.prah_nestaci": "42d708d4176a",
+  "drazba.prodat_fondu": "eebe0387678e",
+  "fond.odkup_nadpis": "196694eb9f8a",
+  "fond.odkup_popis": "ff709474266b",
+  "fond.odkup_cena": "a8ff9bc71d56",
+  "fond.odkup_dat_hlasovat": "b499ea386ab6",
+  "fond.odkup_nejsi_clen": "e0ee48a4aff3",
+  "fond.odkup_fond_nema": "63b602a2072c",
+  "fond.navrh_dan": "0d0cc70ddf79",
+  "veta.fond_odkup_podilu_popis": "93a26e90d7f1",
+  "server.takovy_podil_nemas": "c65bf638230b",
+  "server.podil_nema_cenu": "4288e501bce1",
+  "dor.fond_navrh_odkup_podilu": "9d87a448cbec",
+  "dor.fond_koupil_podil": "e5bcb3127354",
+  "dor.fond_odkoupil_podil": "ca2f046b7ba3"
 }

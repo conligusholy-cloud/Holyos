@@ -3877,5 +3877,19 @@
   "dor.fond_clen_sazba": "El fondo {p1} ha declarado un dividendo para miembros: {p2} % por año de juego.",
   "dor.fond_dividenda_sazba": "Dividendo del fondo {p1}: {penize:p2}.",
   "veta.fond_prah_radek": "Necesita el {p1} % de las aportaciones · tú tienes el {p2} %.",
-  "fond.prah_nestaci": "Solo no lo sacas adelante, alguien más tiene que sumarse."
+  "fond.prah_nestaci": "Solo no lo sacas adelante, alguien más tiene que sumarse.",
+  "drazba.prodat_fondu": "Vender al fondo",
+  "fond.odkup_nadpis": "Vender la participación al fondo",
+  "fond.odkup_popis": "El fondo compra tu participación a la valoración de hoy: no pones el precio, es el patrimonio de la empresa por tu participación. Se vota solo si el fondo la quiere.",
+  "fond.odkup_cena": "El fondo paga",
+  "fond.odkup_dat_hlasovat": "Llevarlo a votación del fondo",
+  "fond.odkup_nejsi_clen": "No estás en ningún fondo, no hay a quién ofrecerla.",
+  "fond.odkup_fond_nema": "El fondo no tiene ahora dinero libre para esto. Votarlo no tiene sentido hasta que lo tenga.",
+  "fond.navrh_dan": "La propuesta está en el fondo y espera votos.",
+  "veta.fond_odkup_podilu_popis": "comprar a {p1} una participación del {p2} % en {p3} por {penize:p4}",
+  "server.takovy_podil_nemas": "Esa participación no la tienes.",
+  "server.podil_nema_cenu": "Esa participación ahora no vale nada, el fondo compraría aire.",
+  "dor.fond_navrh_odkup_podilu": "{p1} propone en el fondo {p2}: comprar una participación del {p4} % en {p3} por {penize:p5}.",
+  "dor.fond_koupil_podil": "El fondo {p1} te ha comprado la participación del {cislo:p3} % en {p2} por {penize:p4}.",
+  "dor.fond_odkoupil_podil": "El fondo {p1} ha comprado una participación del {cislo:p3} % en {p2} por {penize:p4}."
 }

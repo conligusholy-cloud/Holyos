@@ -3884,5 +3884,19 @@
   "dor.fond_clen_sazba": "Fundusz {p1} ogłosił dywidendę dla członków: {p2} % za rok gry.",
   "dor.fond_dividenda_sazba": "Dywidenda z funduszu {p1}: {penize:p2}.",
   "veta.fond_prah_radek": "Wymaga {p1} % wkładów · masz {p2} %.",
-  "fond.prah_nestaci": "Sam tego nie przeforsujesz, ktoś musi się dołączyć."
+  "fond.prah_nestaci": "Sam tego nie przeforsujesz, ktoś musi się dołączyć.",
+  "drazba.prodat_fondu": "Sprzedać funduszowi",
+  "fond.odkup_nadpis": "Sprzedać udział funduszowi",
+  "fond.odkup_popis": "Fundusz kupi twój udział po dzisiejszej wycenie — ceny nie ustalasz, to majątek firmy razy twój udział. Głosuje się tylko o tym, czy fundusz go chce.",
+  "fond.odkup_cena": "Fundusz zapłaci",
+  "fond.odkup_dat_hlasovat": "Dać funduszowi do głosowania",
+  "fond.odkup_nejsi_clen": "Nie jesteś w żadnym funduszu, nie masz komu go zaoferować.",
+  "fond.odkup_fond_nema": "Fundusz nie ma teraz na to wolnych pieniędzy. Głosowanie nie ma sensu, dopóki ich nie będzie.",
+  "fond.navrh_dan": "Wniosek jest w funduszu i czeka na głosy.",
+  "veta.fond_odkup_podilu_popis": "odkupić od {p1} udział {p2} % w firmie {p3} za {penize:p4}",
+  "server.takovy_podil_nemas": "Takiego udziału nie masz.",
+  "server.podil_nema_cenu": "Ten udział teraz nic nie jest wart, fundusz kupowałby powietrze.",
+  "dor.fond_navrh_odkup_podilu": "{p1} proponuje w funduszu {p2}: odkupić udział {p4} % w firmie {p3} za {penize:p5}.",
+  "dor.fond_koupil_podil": "Fundusz {p1} kupił od ciebie udział {cislo:p3} % w firmie {p2} za {penize:p4}.",
+  "dor.fond_odkoupil_podil": "Fundusz {p1} odkupił udział {cislo:p3} % w firmie {p2} za {penize:p4}."
 }

@@ -10484,7 +10484,58 @@ function akceNakupu(e) {
   return '<button class="btn sm sec" data-odkup-ja="' + e.id + '">'
     + esc(tx('drazba.nabidnout_odkup_majiteli')) + '</button>'
     + '<button class="btn sm sec" data-prevod="' + e.id + '">'
-    + esc(tx('drazba.prodat_jinemu')) + '</button>';
+    + esc(tx('drazba.prodat_jinemu')) + '</button>'
+    // Třetí cesta ven: prodat podíl vlastnímu fondu. Není to obchod dvou
+    // lidí — fond je společný, takže se o tom hlasuje.
+    + '<button class="btn sm sec" data-fondodkup="' + e.id + '">'
+    + esc(tx('drazba.prodat_fondu')) + '</button>';
+}
+// Prodat podíl fondu. Cenu si prodávající neurčuje — počítá ji server ze
+// jmění firmy — ale musí ji vidět dřív, než dá hlasovat.
+function fondOdkupSheet(e) {
+  sheet('<h3>' + esc(tx('fond.odkup_nadpis')) + '</h3>'
+    + '<p class="muted small">' + esc(tx('hra.nacitam')) + '</p>');
+  api('/trade/fond/odkup/' + e.id).then(function (r) {
+    if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
+    var d = r.j;
+    if (!d.fond) {
+      sheet('<h3>' + esc(tx('fond.odkup_nadpis')) + '</h3>'
+        + '<p class="fine warn">' + esc(tx('fond.odkup_nejsi_clen')) + '</p>'
+        + '<button class="btn sec" id="fo-zavrit" style="width:100%;margin-top:8px">'
+        + esc(tx('hra.nechat_byt')) + '</button>');
+      $('fo-zavrit').onclick = closeSheet;
+      return;
+    }
+    var staci = d.cena > 0 && d.cena <= d.fond.volne;
+    sheet('<h3>' + esc(tx('fond.odkup_nadpis')) + '</h3>'
+      + '<p class="muted small">' + esc(tx('fond.odkup_popis')) + '</p>'
+      + '<div class="kv"><span>' + esc(tx('fond.firma')) + '</span><b>'
+      + esc(d.firma_nick || e.firma_nick || '') + '</b></div>'
+      + '<div class="kv"><span>' + esc(tx('drazba.podil')) + '</span><b>'
+      + procentaPodilu(d.podil) + '</b></div>'
+      + '<div class="kv souhrn"><span>' + esc(tx('fond.odkup_cena')) + '</span><b class="ok">'
+      + kcFull(d.cena) + '</b></div>'
+      + '<div class="kv"><span>' + esc(tx('fond.volne')) + '</span><b class="'
+      + (staci ? '' : 'err') + '">' + kcFull(d.fond.volne) + '</b></div>'
+      + (staci ? '' : '<p class="fine err">' + esc(tx('fond.odkup_fond_nema')) + '</p>')
+      + fondPrahRadek('odkup_podilu')
+      + '<button class="btn big" id="fo-odkup"' + (staci ? '' : ' disabled')
+      + ' style="width:100%;margin-top:10px">' + esc(tx('fond.odkup_dat_hlasovat')) + '</button>'
+      + '<button class="btn sec" id="fo-zavrit" style="width:100%;margin-top:8px">'
+      + esc(tx('hra.nechat_byt')) + '</button>');
+    $('fo-zavrit').onclick = closeSheet;
+    if ($('fo-odkup')) $('fo-odkup').onclick = function () {
+      var b = this; b.disabled = true;
+      apiJson('/trade/aliance/fond/navrh', { druh: 'odkup_podilu', equity_id: e.id })
+        .then(function (r2) {
+          b.disabled = false;
+          if (!r2.ok) return toast((r2.j && r2.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
+          FOND = null;
+          closeSheet();
+          toast(esc(tx(r2.j.prijat ? 'fond.schvaleno' : 'fond.navrh_dan')), 'ok', true);
+        }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+    };
+  }).catch(function () { toast(esc(tx('hra.server_neodpovida')), 'err'); });
 }
 // Jednotlivé nákupy. Při jediném nákupu se seznam nekreslí — souhrn nahoru
 // je pak týž nákup a opakovat ho podruhé nemá smysl.
@@ -10580,6 +10631,14 @@ function bindPodily() {
 }
 // Prodat podíl dál — stejné tlačítko v Já i na Burze.
 function bindPrevod(kde) {
+  // Prodat fondu visi u téhož podílu, takže se napájí na stejných místech.
+  [].forEach.call($(kde).querySelectorAll('[data-fondodkup]'), function (b) {
+    b.onclick = function () {
+      var id = Number(b.getAttribute('data-fondodkup'));
+      var e = ((FINANCE && FINANCE.podily) || []).filter(function (x) { return x.id === id; })[0];
+      if (e) fondOdkupSheet(e);
+    };
+  });
   [].forEach.call($(kde).querySelectorAll('[data-prevod]'), function (b) {
     b.onclick = function () {
       var id = Number(b.getAttribute('data-prevod'));

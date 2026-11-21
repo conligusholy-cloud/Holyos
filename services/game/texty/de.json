@@ -3877,5 +3877,19 @@
   "dor.fond_clen_sazba": "Der Fonds {p1} hat eine Mitgliederdividende beschlossen: {p2} % je Spieljahr.",
   "dor.fond_dividenda_sazba": "Dividende aus dem Fonds {p1}: {penize:p2}.",
   "veta.fond_prah_radek": "Braucht {p1} % der Einlagen · du hast {p2} %.",
-  "fond.prah_nestaci": "Allein bringst du es nicht durch, jemand muss mitziehen."
+  "fond.prah_nestaci": "Allein bringst du es nicht durch, jemand muss mitziehen.",
+  "drazba.prodat_fondu": "An den Fonds verkaufen",
+  "fond.odkup_nadpis": "Anteil an den Fonds verkaufen",
+  "fond.odkup_popis": "Der Fonds kauft deinen Anteil zur heutigen Bewertung — den Preis bestimmst du nicht, er ist das Vermögen der Firma mal dein Anteil. Abgestimmt wird nur darüber, ob der Fonds ihn will.",
+  "fond.odkup_cena": "Der Fonds zahlt",
+  "fond.odkup_dat_hlasovat": "Im Fonds abstimmen lassen",
+  "fond.odkup_nejsi_clen": "Du bist in keinem Fonds, es gibt niemanden, dem du ihn anbieten könntest.",
+  "fond.odkup_fond_nema": "Der Fonds hat dafür gerade kein freies Geld. Abstimmen lohnt sich erst, wenn er welches hat.",
+  "fond.navrh_dan": "Der Vorschlag liegt im Fonds und wartet auf Stimmen.",
+  "veta.fond_odkup_podilu_popis": "von {p1} einen Anteil von {p2} % an {p3} für {penize:p4} kaufen",
+  "server.takovy_podil_nemas": "Diesen Anteil hältst du nicht.",
+  "server.podil_nema_cenu": "Dieser Anteil ist gerade nichts wert, der Fonds würde Luft kaufen.",
+  "dor.fond_navrh_odkup_podilu": "{p1} schlägt im Fonds {p2} vor: Anteil von {p4} % an {p3} für {penize:p5} kaufen.",
+  "dor.fond_koupil_podil": "Der Fonds {p1} hat deinen Anteil von {cislo:p3} % an {p2} für {penize:p4} gekauft.",
+  "dor.fond_odkoupil_podil": "Der Fonds {p1} hat einen Anteil von {cislo:p3} % an {p2} für {penize:p4} gekauft."
 }

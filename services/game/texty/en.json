@@ -3877,5 +3877,19 @@
   "dor.fond_clen_sazba": "The fund {p1} declared a member dividend: {p2} % per game year.",
   "dor.fond_dividenda_sazba": "Dividend from the fund {p1}: {penize:p2}.",
   "veta.fond_prah_radek": "Needs {p1} % of contributions · you hold {p2} %.",
-  "fond.prah_nestaci": "You cannot pass it alone, someone else has to join in."
+  "fond.prah_nestaci": "You cannot pass it alone, someone else has to join in.",
+  "drazba.prodat_fondu": "Sell to the fund",
+  "fond.odkup_nadpis": "Sell the stake to the fund",
+  "fond.odkup_popis": "The fund buys your stake at today’s valuation — you do not set the price, it is the firm’s net worth times your stake. The vote is only about whether the fund wants it.",
+  "fond.odkup_cena": "The fund pays",
+  "fond.odkup_dat_hlasovat": "Put it to the fund’s vote",
+  "fond.odkup_nejsi_clen": "You are not in any fund, so there is nobody to offer it to.",
+  "fond.odkup_fond_nema": "The fund has no free money for this right now. Voting on it makes no sense until it has.",
+  "fond.navrh_dan": "The proposal is in the fund and waiting for votes.",
+  "veta.fond_odkup_podilu_popis": "buy from {p1} a {p2} % stake in {p3} for {penize:p4}",
+  "server.takovy_podil_nemas": "You do not hold that stake.",
+  "server.podil_nema_cenu": "That stake is worth nothing right now, the fund would be buying air.",
+  "dor.fond_navrh_odkup_podilu": "{p1} proposes in the fund {p2}: buy a {p4} % stake in {p3} for {penize:p5}.",
+  "dor.fond_koupil_podil": "The fund {p1} bought your {cislo:p3} % stake in {p2} for {penize:p4}.",
+  "dor.fond_odkoupil_podil": "The fund {p1} bought a {cislo:p3} % stake in {p2} for {penize:p4}."
 }

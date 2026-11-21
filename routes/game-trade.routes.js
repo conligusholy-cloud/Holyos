@@ -1674,7 +1674,27 @@ const DRUHY = {
   clen_sazba: { prah: FOND.prahDruhu('clen_sazba'), kod: 'dor.fond_navrh_clen_sazba',
     udaje: (d, kdo, al) => ({ p1: kdo, p2: al,
       p3: Math.round((d.sazba || 0) * 1000) / 10 }) },
+  // Člen prodává fondu podíl, který sám drží v cizí firmě. Cenu si neurčuje:
+  // bere se ocenění, kterým hra měří každý podíl. Hlasuje se jen o tom,
+  // jestli to fond chce.
+  odkup_podilu: { prah: FOND.prahDruhu('odkup_podilu'), kod: 'dor.fond_navrh_odkup_podilu',
+    udaje: (d, kdo, al) => ({ p1: kdo, p2: al, p3: d.firma_nick || '',
+      p4: Math.round((d.podil || 0) * 100), p5: Math.round(d.cena || 0) }) },
 };
+
+// Co fond za podíl zaplatí. Není to číslo od prodávajícího — kdyby si cenu
+// říkal sám a ještě pro ni hlasoval, prodal by fondu cokoli za cokoli.
+// Oceňuje se stejně jako všude jinde: jmění firmy krát podíl.
+async function cenaPodiluDnes(e) {
+  const VLAST = require('../services/game/vlastnictvi');
+  const firma = await prisma.gamePlayer.findUnique({ where: { id: e.firma_id },
+    select: { id: true, state: true } }).catch(() => null);
+  const jm = new Map();
+  if (firma) {
+    jm.set(firma.id, Math.max(0, await JMENI.proHrace(firma.id, firma.state || {}).catch(() => 0)));
+  }
+  return Math.max(0, Math.round(VLAST.hodnotaPodilu(jm, e)));
+}
 
 // Kolik fond drží v jedné firmě a jestli to stačí na většinu. Dividendu
 // nastavuje většinový podílník — a tím může být i fond.
@@ -1722,6 +1742,27 @@ router.get('/trade/aliance/fond/navrhy', hrac, api(async (req, res) => {
       pro: v.pro || 0, proti: v.proti || 0, mlci: v.mlci || 0, chybi: v.chybi || 0 });
   }
   res.json({ ok: true, navrhy: out });
+}));
+
+// GET /trade/fond/odkup/:equityId → za kolik by fond ten podíl koupil
+//
+// Cenu musí člen vidět PŘEDEM. Neurčuje si ji — je to ocenění, kterým hra
+// měří každý podíl — ale je rozdíl dát hlasovat o částce, kterou vidíš,
+// a o částce, kterou se dozvíš až potom.
+router.get('/trade/fond/odkup/:equityId', hrac, api(async (req, res) => {
+  const moje = await mojeAliance(req.player.id);
+  const e = await prisma.gameEquity.findUnique({
+    where: { id: parseInt(req.params.equityId, 10) || 0 } });
+  if (!e || e.investor_id !== req.player.id || e.stav !== 'bezi') {
+    return res.status(404).json({ error: stx(req)('server.takovy_podil_nemas') });
+  }
+  const cena = await cenaPodiluDnes(e);
+  if (!moje) return res.json({ ok: true, cena, fond: null });
+  const v = await fondVolne(moje.aliance_id);
+  res.json({ ok: true, cena,
+    fond: { aliance_id: moje.aliance_id, nazev: (v.al && v.al.nazev) || '',
+      volne: v.volne, zamceno: v.zamceno },
+    firma_nick: e.firma_nick, podil: e.podil });
 }));
 
 // POST /trade/aliance/fond/navrh { druh, ... } → dát věc k hlasování
@@ -1808,6 +1849,23 @@ router.post('/trade/aliance/fond/navrh', hrac, api(async (req, res) => {
     const vydano = Math.max(0, Math.round((al && al.akcie_vydano) || 0));
     if (!vydano) return res.status(409).json({ error: stx(req)('server.fond_akcie_nevydal') });
     detail = { sazba: pct / 100 };
+  } else if (druh === 'odkup_podilu') {
+    const e = await prisma.gameEquity.findUnique({
+      where: { id: parseInt(b.equity_id, 10) || 0 } });
+    // Prodávat jde jen vlastní, běžící podíl. Cizí by člen fondu prodal
+    // něco, co mu nepatří, a odkoupený už neexistuje.
+    if (!e || e.investor_id !== req.player.id || e.stav !== 'bezi') {
+      return res.status(404).json({ error: stx(req)('server.takovy_podil_nemas') });
+    }
+    // Fond nekupuje podíl v sobě samém ani to, co už drží.
+    const cena = await cenaPodiluDnes(e);
+    if (!(cena > 0)) return res.status(409).json({ error: stx(req)('server.podil_nema_cenu') });
+    const { volne, zamceno } = await fondVolne(moje.aliance_id, al);
+    if (cena > volne) {
+      return res.status(409).json({ error: nestaciHlaska(req, volne, zamceno) });
+    }
+    detail = { equity_id: e.id, firma_id: e.firma_id, firma_nick: e.firma_nick,
+      podil: e.podil, cena };
   } else if (druh === 'clen_sazba') {
     // Sazba se zadává v procentech za herní rok. Nula je platná hodnota —
     // tak se dividenda členům vypíná.
@@ -2319,6 +2377,52 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
     console.log('[game] fond #' + moje.aliance_id + ': sazba dividendy '
       + Math.round(sazba * 1000) / 10 + ' % p.a.');
     return res.json({ ok: true, sazba });
+  }
+
+  // ── Odkup podílu od člena ───────────────────────────────────
+  // Podíl přejde na fond a člen dostane peníze. Cena se počítá ZNOVU k dnešku:
+  // mezi hlasováním a provedením může uběhnout den a firma se mezitím hne.
+  if (n.druh === 'odkup_podilu') {
+    const e = await prisma.gameEquity.findUnique({
+      where: { id: parseInt(d.equity_id, 10) || 0 } });
+    if (!e || e.stav !== 'bezi' || e.investor_id == null) {
+      return res.status(409).json({ error: stx(req)('server.takovy_podil_nemas') });
+    }
+    const prodavajici = e.investor_id;
+    const cena = await cenaPodiluDnes(e);
+    const { volne, zamceno } = await fondVolne(moje.aliance_id, al);
+    if (cena > volne) {
+      return res.status(409).json({ error: nestaciHlaska(req, volne, zamceno) });
+    }
+    try {
+      await prisma.$transaction(async (tx) => {
+        const auditPred = await AUDIT.otisk(tx, e.firma_id);
+        // Podíl teď patří FONDU: investor_id se vyprázdní, fond_id se vyplní.
+        // CHECK v databázi hlídá, že to není obojí ani ani jedno.
+        const presun = await tx.gameEquity.updateMany({
+          where: { id: e.id, stav: 'bezi', investor_id: prodavajici },
+          data: { investor_id: null, investor_nick: (al && al.nazev) || '',
+            fond_id: moje.aliance_id } });
+        if (!presun.count) throw new SOUBEH.Soubeh('server.takovy_podil_nemas');
+        await tx.gameAliance.update({ where: { id: moje.aliance_id },
+          data: { pokladna: { decrement: cena } } });
+        // Peníze jdou doručenkou — hotovost drží prohlížeč prodávajícího.
+        await tx.gameDelivery.create({ data: { player_id: prodavajici, kind: 'cash',
+          amount: cena, popis: 'Fond ' + ((al && al.nazev) || '') + ' koupil tvůj podíl',
+          text_kod: 'dor.fond_koupil_podil',
+          text_data: { p1: (al && al.nazev) || '', p2: e.firma_nick,
+            p3: Math.round((e.podil || 0) * 100), p4: cena } } });
+        await tx.gameFondNavrh.update({ where: { id: n.id }, data: { stav: 'proveden' } });
+        await AUDIT.zapis(tx, e.firma_id, auditPred, { duvod: 'odkup_fondem' });
+      });
+    } catch (er) { if (SOUBEH.odpoved(er, res, stx(req))) return; throw er; }
+    vzorekFondu(moje.aliance_id);
+    await zprava('dor.fond_odkoupil_podil',
+      { p1: (al && al.nazev) || '', p2: e.firma_nick,
+        p3: Math.round((e.podil || 0) * 100), p4: cena });
+    console.log('[game] fond #' + moje.aliance_id + ': odkoupil podíl ' + e.id
+      + ' od #' + prodavajici + ' za ' + cena);
+    return res.json({ ok: true, cena });
   }
 
   // ── Sazba dividendy členům ───────────────────────────────────

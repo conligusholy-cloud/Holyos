@@ -189,6 +189,17 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; th
   fi
 fi
 
+# Prodej podílu vlastnímu fondu. Prodávající je zároveň ten, kdo o nákupu
+# hlasuje — cenu si proto neurčuje a práh je zásadní. Chyba tu bere ze
+# společné pokladny a dává jednomu členovi.
+if git diff --cached --name-only | grep -qE 'services/game/fond|services/game/vlastnictvi|routes/game-trade|public/compounder/game/game.js'; then
+  if ! node nastroje/tfondodkup.js; then
+    echo ""
+    echo "STOP: prodej podílu fondu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Prahy hlasování ve fondu. Člen musí PŘEDEM vidět, kolik hlasů je potřeba —
 # jinak dá návrh hlasovat, nic se nestane a vypadá to jako porouchaná hra.
 if git diff --cached --name-only | grep -qE 'services/game/fond|routes/game-trade|public/compounder/game/game.js'; then
