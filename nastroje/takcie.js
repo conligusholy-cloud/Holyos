@@ -176,6 +176,37 @@ ok('fond, který nenese nic, nenese nic ani na akcii',
 ok('bez dílu akcionářů taky nic', A.vynosNaAkcii(1000000, 0, 100) === 0);
 ok('nesmysly nic nerozbijí', A.vynosNaAkcii('x', 'y', 'z') === 0);
 
+// ─── Dividenda, která nabíhá ───────────────────────────────────────
+// Fond slíbí procento účetní hodnoty akcie za HERNÍ rok a to pak nabíhá
+// plynule. Herní rok je dvanáct herních měsíců, tedy šest skutečných dní —
+// kdyby se počítal skutečný rok, akcionář by za večer neviděl nic.
+const ROK = A.ROK_MS;
+ok('herní rok je dvanáct herních měsíců', ROK === 12 * 43200000);
+ok('za celý herní rok se vyplatí celá sazba',
+  A.dividendaZa(100, 10000, 0.12, ROK) === 120000);
+ok('za půlku roku půlka', A.dividendaZa(100, 10000, 0.12, ROK / 2) === 60000);
+ok('víc kusů nese víc',
+  A.dividendaZa(200, 10000, 0.12, ROK) === 2 * A.dividendaZa(100, 10000, 0.12, ROK));
+// Zaokrouhluje se DOLŪ: fond nemá platit koruny, které nevydělal.
+ok('zaokrouhluje se dolů', A.dividendaZa(1, 1000, 0.1, ROK / 3) === 33);
+// Setiny koruny: nula. Volající podle toho pozná, že se čas nemá posouvat.
+ok('ze setin je nula', A.dividendaZa(1, 100, 0.01, 1000) === 0);
+ok('bez sazby nenabíhá nic', A.dividendaZa(100, 10000, 0, ROK) === 0);
+ok('bez akcií taky ne', A.dividendaZa(0, 10000, 0.12, ROK) === 0);
+ok('bez účetní hodnoty taky ne', A.dividendaZa(100, 0, 0.12, ROK) === 0);
+ok('zpáteční čas nic nevyrobí', A.dividendaZa(100, 10000, 0.12, -ROK) === 0);
+ok('sazba nad strop se uřízne',
+  A.dividendaZa(100, 10000, 5, ROK) === A.dividendaZa(100, 10000, A.SAZBA_MAX, ROK));
+ok('nesmysly nic nerozbijí', A.dividendaZa('x', 'y', 'z', 'w') === 0);
+// Počítadlo v panelu se kreslí z částky za sekundu — musí sedět s tím,
+// co se pak doopravdy vyplatí.
+const zaSek = A.dividendaZaSekundu(100, 10000, 0.12);
+ok('částka za sekundu sedí s částkou za rok',
+  Math.abs(zaSek * (ROK / 1000) - A.dividendaZa(100, 10000, 0.12, ROK)) < 1);
+ok('a vrací se nezaokrouhleně', A.dividendaZaSekundu(1, 100, 0.01) > 0
+  && A.dividendaZaSekundu(1, 100, 0.01) < 1);
+ok('bez sazby je počítadlo nula', A.dividendaZaSekundu(100, 10000, 0) === 0);
+
 // ─── Kniha akcionářů ────────────────────────────────────────────
 // Dvě různá procenta, která se snadno pletou: kolik má kdo mezi akcionáři,
 // a co to znamená v celém fondu. Podle prvního se pozná, kdo může hnout cenou;

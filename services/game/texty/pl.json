@@ -3850,5 +3850,20 @@
   "akcie.kniha_nikdo": "Nikt jeszcze nie ma akcji.",
   "akcie.fond_sam": "Niewydane, trzyma je fundusz",
   "akcie.ty": "ty",
-  "veta.akcie_kniha_radek": "{cislo:p1} akcji · {p2} % funduszu · {penize:p3}"
+  "veta.akcie_kniha_radek": "{cislo:p1} akcji · {p2} % funduszu · {penize:p3}",
+  "fond.navrh_akcie_sazba": "Dywidenda z akcji (stawka)",
+  "fond.akcie_sazba_popis": "Ile procent wartości księgowej akcji fundusz wypłaca za rok gry. Nalicza się akcjonariuszom na bieżąco i płaci z wolnych pieniędzy funduszu — gdy fundusz nie ma, nic się nie nalicza. Zero wyłącza dywidendę.",
+  "fond.akcie_sazba_pole": "% za rok gry",
+  "fond.akcie_sazba_radek": "Dywidenda z akcji",
+  "fond.akcie_sazba_zadna": "żadna",
+  "akcie.dividenda_sazba": "Obiecana dywidenda",
+  "akcie.nasbirano": "Naliczone od ostatniego razu",
+  "akcie.fond_nema_na_dividendu": "Fundusz nie ma teraz wolnych pieniędzy, więc dywidenda się nie nalicza. Ruszy, gdy je będzie mieć.",
+  "veta.fond_akcie_sazba_popis": "dywidenda z akcji {p1} % za rok gry",
+  "veta.akcie_sazba_na_akcii": "{p1} % rocznie · {penize:p2} na akcję miesięcznie",
+  "veta.akcie_sazba_rocne": "{p1} % rocznie · {penize:p2} miesięcznie",
+  "veta.akcie_sazba_odhad": "Fundusz zapłaci za to {penize:p1} za miesiąc gry, czyli {penize:p2} za rok gry.",
+  "dor.fond_navrh_akcie_sazba": "{p1} proponuje w funduszu {p2}: dywidenda z akcji {p3} % za rok gry.",
+  "dor.fond_akcie_sazba": "Fundusz {p1} ogłosił dywidendę z akcji: {p2} % za rok gry.",
+  "dor.akcie_dividenda_sazba": "Dywidenda z akcji funduszu {p1}: {penize:p2}."
 }

@@ -3877,5 +3877,20 @@
   "akcie.kniha_nikdo": "Akcie zatím nikdo nedrží.",
   "akcie.fond_sam": "Nevydané drží fond",
   "akcie.ty": "ty",
-  "veta.akcie_kniha_radek": "{cislo:p1} akcií · {p2} % fondu · {penize:p3}"
+  "veta.akcie_kniha_radek": "{cislo:p1} akcií · {p2} % fondu · {penize:p3}",
+  "fond.navrh_akcie_sazba": "Dividenda z akcií (sazba)",
+  "fond.akcie_sazba_popis": "Kolik procent účetní hodnoty akcie fond vyplácí za herní rok. Nabíhá akcionářům plynule a platí se z volných peněz fondu — když fond nemá, nenabíhá nic. Nula dividendu vypne.",
+  "fond.akcie_sazba_pole": "% za herní rok",
+  "fond.akcie_sazba_radek": "Dividenda z akcií",
+  "fond.akcie_sazba_zadna": "žádná",
+  "akcie.dividenda_sazba": "Slíbená dividenda",
+  "akcie.nasbirano": "Nasbíráno od minule",
+  "akcie.fond_nema_na_dividendu": "Fond teď nemá volné peníze, takže dividenda nenabíhá. Rozběhne se, jakmile je mít bude.",
+  "veta.fond_akcie_sazba_popis": "dividenda z akcií {p1} % za herní rok",
+  "veta.akcie_sazba_na_akcii": "{p1} % p.a. · {penize:p2} na akcii za měsíc",
+  "veta.akcie_sazba_rocne": "{p1} % p.a. · {penize:p2} měsíčně",
+  "veta.akcie_sazba_odhad": "Fond za to zaplatí {penize:p1} za herní měsíc, tedy {penize:p2} za herní rok.",
+  "dor.fond_navrh_akcie_sazba": "{p1} navrhuje ve fondu {p2}: dividenda z akcií {p3} % za herní rok.",
+  "dor.fond_akcie_sazba": "Fond {p1} vyhlásil dividendu z akcií: {p2} % za herní rok.",
+  "dor.akcie_dividenda_sazba": "Dividenda z akcií fondu {p1}: {penize:p2}."
 }

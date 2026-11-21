@@ -8359,6 +8359,10 @@ model GameAliance {
   // nehýbe jen obchodování: když fond koupí podíl pod cenou nebo mu držená
   // firma poroste, vyroste i to, co za akcií stojí — a cena jde s tím.
   akcie_ucetni  Float    @default(0)
+  // Dividenda z akcií: kolik procent účetní hodnoty akcie fond vyplácí za
+  // herní rok. Nabíhá plynule a připisuje se, když se hráč podívá — ale jen
+  // dokud má fond volné peníze. Nula = fond dividendu neslíbil.
+  akcie_sazba   Float    @default(0)
   created_at    DateTime @default(now())
 
   @@map("game_aliance")
@@ -8389,6 +8393,9 @@ model GameAkcie {
   // Za kolik to dohromady koupil; slouží jen k tomu, aby hráč viděl, jestli
   // na akciích vydělal. Na nic se podle toho nerozhoduje.
   porizovaci  BigInt   @default(0)
+  // Dokdy je dividenda z těchto akcií vyplacená. Od téhle chvíle se počítá
+  // další — bez toho by se po každém otevření hry vyplatilo všechno znovu.
+  dividenda_do DateTime @default(now())
   created_at  DateTime @default(now())
   updated_at  DateTime @default(now()) @updatedAt
 

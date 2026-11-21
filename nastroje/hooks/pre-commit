@@ -178,6 +178,16 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; th
   fi
 fi
 
+# Dividenda z akcií, která nabíhá. Teče z ní pokladna fondu akcionářům,
+# takže chyba tu bere peníze jedním a dává druhým, aniž by si toho někdo všiml.
+if git diff --cached --name-only | grep -qE 'services/game/akcie|services/game/fond|routes/game-trade'; then
+  if ! node nastroje/tdividendanabeh.js; then
+    echo ""
+    echo "STOP: nabíhající dividenda nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Přecenění akcie podle hodnoty fondu. Sáhá na cenu, za kterou hráči kupují,
 # a to bez jejich přičinění — chyba tu hráče okrade, aniž by něco udělal.
 if git diff --cached --name-only | grep -qE 'services/game/akcie|services/game/fond-historie|routes/game-trade'; then

@@ -3843,5 +3843,20 @@
   "akcie.kniha_nikdo": "Nobody holds any shares yet.",
   "akcie.fond_sam": "Unissued, held by the fund",
   "akcie.ty": "you",
-  "veta.akcie_kniha_radek": "{cislo:p1} shares · {p2} % of the fund · {penize:p3}"
+  "veta.akcie_kniha_radek": "{cislo:p1} shares · {p2} % of the fund · {penize:p3}",
+  "fond.navrh_akcie_sazba": "Share dividend (rate)",
+  "fond.akcie_sazba_popis": "What share of a share’s book value the fund pays out per game year. It accrues to shareholders continuously and is paid from the fund’s free money — when the fund has none, nothing accrues. Zero turns the dividend off.",
+  "fond.akcie_sazba_pole": "% per game year",
+  "fond.akcie_sazba_radek": "Share dividend",
+  "fond.akcie_sazba_zadna": "none",
+  "akcie.dividenda_sazba": "Promised dividend",
+  "akcie.nasbirano": "Collected since last time",
+  "akcie.fond_nema_na_dividendu": "The fund has no free money right now, so the dividend is not accruing. It starts again as soon as it does.",
+  "veta.fond_akcie_sazba_popis": "share dividend {p1} % per game year",
+  "veta.akcie_sazba_na_akcii": "{p1} % p.a. · {penize:p2} per share a month",
+  "veta.akcie_sazba_rocne": "{p1} % p.a. · {penize:p2} a month",
+  "veta.akcie_sazba_odhad": "The fund will pay {penize:p1} per game month, that is {penize:p2} per game year.",
+  "dor.fond_navrh_akcie_sazba": "{p1} proposes in the fund {p2}: share dividend {p3} % per game year.",
+  "dor.fond_akcie_sazba": "The fund {p1} declared a share dividend: {p2} % per game year.",
+  "dor.akcie_dividenda_sazba": "Dividend from the shares of the fund {p1}: {penize:p2}."
 }

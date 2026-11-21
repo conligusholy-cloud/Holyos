@@ -228,5 +228,39 @@ function kniha(radky, vydano, podilAkcionaru, cena) {
   });
 }
 
-module.exports = { vydani, ucetni, ucetniPresna, dilClenu, kniha, cenaPo, castkaZa, koupit, prodat, kapital, vynosNaAkcii, precena,
+// ─── Dividenda, která nabíhá ───────────────────────────────────────
+// Fond si odhlasuje sazbu — kolik procent účetní hodnoty akcie vyplatí za
+// HERNÍ rok — a ta pak nabíhá plynule. Akcionář vidí, jak mu to přibývá,
+// hned po koupi; nemusí čekat, až se členové na něčem shodnou.
+//
+// Počítá se z účetní hodnoty, ne z ceny na burze. Cena je spekulace: kdo by
+// ji vyhnal nahoru, zvýšil by si tím i to, co mu fond platí, a členové by
+// na to doplatili.
+const ROK_MS = 12 * 43200000;   // herní rok = 12 herních měsíců = 6 skutečných dní
+const SAZBA_MAX = 1;            // sto procent za herní rok je strop
+
+// Kolik naběhlo za uplynulý čas. Zaokrouhluje se DOLŮ: fond nemá platit
+// koruny, které nevydělal, a zbytek se neztrácí — kdo nabírá setiny, tomu
+// se čas neposune a nabírá dál.
+function dividendaZa(pocetKusu, ucetniAkcie, sazba, msUplynulo) {
+  const n = kusy(pocetKusu);
+  const u = Math.max(0, cislo(ucetniAkcie));
+  const s = Math.max(0, Math.min(SAZBA_MAX, cislo(sazba)));
+  const ms = Math.max(0, cislo(msUplynulo));
+  if (!(n > 0) || !(u > 0) || !(s > 0) || !(ms > 0)) return 0;
+  return Math.floor(n * u * s * (ms / ROK_MS));
+}
+
+// Kolik to dělá za sekundu. Z toho si hra kreslí počítadlo, které běží
+// akcionáři před očima — vrací se nezaokrouhleně, aby se na něm poznal
+// i pohyb menší než koruna.
+function dividendaZaSekundu(pocetKusu, ucetniAkcie, sazba) {
+  const n = kusy(pocetKusu);
+  const u = Math.max(0, cislo(ucetniAkcie));
+  const s = Math.max(0, Math.min(SAZBA_MAX, cislo(sazba)));
+  if (!(n > 0) || !(u > 0) || !(s > 0)) return 0;
+  return (n * u * s) / (ROK_MS / 1000);
+}
+
+module.exports = { vydani, ucetni, ucetniPresna, dilClenu, dividendaZa, dividendaZaSekundu, ROK_MS, SAZBA_MAX, kniha, cenaPo, castkaZa, koupit, prodat, kapital, vynosNaAkcii, precena,
   CENA_MIN, CENA_MAX, POCET_MIN, POCET_MAX, PODIL_MAX, CITLIVOST };

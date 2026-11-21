@@ -3816,5 +3816,20 @@
   "akcie.kniha_nikdo": "3d5dc8420a0c",
   "akcie.fond_sam": "74bac10d5882",
   "akcie.ty": "32ad247f77b8",
-  "veta.akcie_kniha_radek": "a380e5d7b6f3"
+  "veta.akcie_kniha_radek": "a380e5d7b6f3",
+  "fond.navrh_akcie_sazba": "d8f492288a8f",
+  "fond.akcie_sazba_popis": "8ebe49c70bc8",
+  "fond.akcie_sazba_pole": "52edbcc7f26c",
+  "fond.akcie_sazba_radek": "aeb3dbdaf4b8",
+  "fond.akcie_sazba_zadna": "4fb867433e1b",
+  "akcie.dividenda_sazba": "71bf9542b7ad",
+  "akcie.nasbirano": "c2b10b0edfa8",
+  "akcie.fond_nema_na_dividendu": "ac2c897a50c8",
+  "veta.fond_akcie_sazba_popis": "eb0e8aced0ea",
+  "veta.akcie_sazba_na_akcii": "0e582e0a9b5e",
+  "veta.akcie_sazba_rocne": "21c2ee9db9ef",
+  "veta.akcie_sazba_odhad": "b9414127048a",
+  "dor.fond_navrh_akcie_sazba": "f0c4a7c7068e",
+  "dor.fond_akcie_sazba": "df97d9965cb1",
+  "dor.akcie_dividenda_sazba": "aa2dd18fbf26"
 }

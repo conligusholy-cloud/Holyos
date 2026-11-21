@@ -3843,5 +3843,20 @@
   "akcie.kniha_nikdo": "Personne ne détient encore d’actions.",
   "akcie.fond_sam": "Non émises, détenues par le fonds",
   "akcie.ty": "toi",
-  "veta.akcie_kniha_radek": "{cislo:p1} actions · {p2} % du fonds · {penize:p3}"
+  "veta.akcie_kniha_radek": "{cislo:p1} actions · {p2} % du fonds · {penize:p3}",
+  "fond.navrh_akcie_sazba": "Dividende des actions (taux)",
+  "fond.akcie_sazba_popis": "Quel pourcentage de la valeur comptable d’une action le fonds verse par année de jeu. Il s’accumule aux actionnaires en continu et se paie sur l’argent libre du fonds — si le fonds n’en a pas, rien ne s’accumule. Zéro coupe le dividende.",
+  "fond.akcie_sazba_pole": "% par année de jeu",
+  "fond.akcie_sazba_radek": "Dividende des actions",
+  "fond.akcie_sazba_zadna": "aucun",
+  "akcie.dividenda_sazba": "Dividende promis",
+  "akcie.nasbirano": "Accumulé depuis la dernière fois",
+  "akcie.fond_nema_na_dividendu": "Le fonds n’a pas d’argent libre en ce moment, le dividende ne s’accumule donc pas. Il repart dès qu’il en aura.",
+  "veta.fond_akcie_sazba_popis": "dividende des actions {p1} % par année de jeu",
+  "veta.akcie_sazba_na_akcii": "{p1} % par an · {penize:p2} par action et par mois",
+  "veta.akcie_sazba_rocne": "{p1} % par an · {penize:p2} par mois",
+  "veta.akcie_sazba_odhad": "Le fonds paiera {penize:p1} par mois de jeu, soit {penize:p2} par année de jeu.",
+  "dor.fond_navrh_akcie_sazba": "{p1} propose dans le fonds {p2} : dividende des actions {p3} % par année de jeu.",
+  "dor.fond_akcie_sazba": "Le fonds {p1} a déclaré un dividende des actions : {p2} % par année de jeu.",
+  "dor.akcie_dividenda_sazba": "Dividende des actions du fonds {p1} : {penize:p2}."
 }

@@ -9587,6 +9587,9 @@ function fondNavrhPopis(n) {
   if (n.druh === 'akcie_dividenda') {
     return tx('veta.fond_akcie_dividenda_popis', { p1: d.na_akcii || 0 });
   }
+  if (n.druh === 'akcie_sazba') {
+    return tx('veta.fond_akcie_sazba_popis', { p1: pctHra(d.sazba || 0) });
+  }
   if (n.druh === 'nabidka') {
     // Platí to, co je na stole: po protinávrhu už ne původní podmínky.
     var na = d.protinavrh || d;
@@ -9671,6 +9674,13 @@ function fondVnitrek() {
       // zase vystoupil.
       + '<div class="kv souhrn"><span>' + esc(tx('fond.akcie_kapital')) + '</span><b class="ok">'
       + kcFull(f.akcie_kapital) + '</b></div>'
+      // Co fond akcionářům průběžně platí. Nula = neslíbil nic.
+      + '<div class="kv"><span>' + esc(tx('fond.akcie_sazba_radek')) + '</span><b class="'
+      + (f.akcie_sazba > 0 ? 'warn' : '') + '">'
+      + (f.akcie_sazba > 0
+          ? tx('veta.akcie_sazba_rocne', { p1: pctHra(f.akcie_sazba),
+              p2: Math.round((f.akcie_dividenda_rocne || 0) / 12) })
+          : esc(tx('fond.akcie_sazba_zadna'))) + '</b></div>'
       + '<p class="fine">' + tx('veta.fond_akcie_tok',
           { p1: f.akcie_vybrano, p2: f.akcie_vyplaceno }) + '</p>'
       + '<div class="gcard-act"><button class="btn sec sm" id="fond-burza">'
@@ -9947,7 +9957,14 @@ function fondNavrhSheet() {
       + '<h4 style="margin-top:14px">' + esc(tx('fond.navrh_akcie_dividenda')) + '</h4>'
       + '<label class="fld"><span>' + esc(tx('akcie.na_akcii')) + '</span>'
       + '<input id="fo-adiv" class="inp" type="number" min="1" step="100" value="0"></label>'
-      + '<button class="btn sec" id="fo-akciediv" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>');
+      + '<button class="btn sec" id="fo-akciediv" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>'
+      + '<h4 style="margin-top:14px">' + esc(tx('fond.navrh_akcie_sazba')) + '</h4>'
+      + '<p class="muted small" style="margin:0 0 6px">' + esc(tx('fond.akcie_sazba_popis')) + '</p>'
+      + '<label class="fld"><span>' + esc(tx('fond.akcie_sazba_pole')) + '</span>'
+      + '<input id="fo-asazba" class="inp" type="number" min="0" max="100" step="0.5" value="'
+      + pctHra((FOND && FOND.fond && FOND.fond.akcie_sazba) || 0) + '"></label>'
+      + '<p class="fine" id="fo-asazbaodhad"></p>'
+      + '<button class="btn sec" id="fo-akciesazba" style="width:100%">' + esc(tx('fond.dat_hlasovat')) + '</button>');
 
     if ($('fo-koupit')) $('fo-koupit').onclick = function () {
       posli({ druh: 'koupit', firma_id: Number($('fo-firma').value) || 0,
@@ -9979,6 +9996,25 @@ function fondNavrhSheet() {
     $('fo-akcie').onclick = function () {
       posli({ druh: 'akcie', pocet: Number($('fo-apocet').value) || 0,
         cena: Number($('fo-acena').value) || 0 }, $('fo-akcie'));
+    };
+    // Kolik to bude fond stát za herní měsíc. Člen hlasuje o procentu, ale
+    // z pokladny odcházejí koruny — ať je vidí dřív, než zvedne ruku.
+    var odhadSazby = function () {
+      var pole = $('fo-asazbaodhad');
+      if (!pole || !FOND || !FOND.fond) return;
+      var pct = Number($('fo-asazba').value) || 0;
+      var vydano = Math.round(FOND.fond.akcie_vydano || 0);
+      var ucetni = vydano > 0
+        ? (Math.round(FOND.fond.hodnota_fondu || 0) * (FOND.fond.akcie_podil || 0)) / vydano : 0;
+      if (!(pct > 0) || !(vydano > 0) || !(ucetni > 0)) { pole.textContent = ''; return; }
+      var rocne = ucetni * (pct / 100) * vydano;
+      pole.textContent = tx('veta.akcie_sazba_odhad',
+        { p1: Math.round(rocne / 12), p2: Math.round(rocne) });
+    };
+    if ($('fo-asazba')) { $('fo-asazba').oninput = odhadSazby; odhadSazby(); }
+    if ($('fo-akciesazba')) $('fo-akciesazba').onclick = function () {
+      posli({ druh: 'akcie_sazba', sazba_pct: Number($('fo-asazba').value) || 0 },
+        $('fo-akciesazba'));
     };
     $('fo-akciediv').onclick = function () {
       posli({ druh: 'akcie_dividenda', na_akcii: Number($('fo-adiv').value) || 0 },
@@ -10990,6 +11026,28 @@ function akcieVynosHtml(f) {
     ? tx('fond.vynos_nevrati', { p1: pctHra(v.podil) })
     : tx('fond.vynos', { p1: pctHra(v.podil), p2: v.mesicu })) + '</p>';
 }
+// Slíbená dividenda: kolik procent účetní hodnoty akcie fond vyplácí za herní
+// rok. Je to něco jiného než „na akcii měsíčně" o řádek výš — tam stojí, co
+// akcie vydělává, tady co z toho fond doopravdy posílá ven.
+function akcieSazbaHtml(f) {
+  var d = f && f.dividenda;
+  if (!d || !(d.sazba > 0)) return '';
+  return '<div class="row"><span class="muted small">' + esc(tx('akcie.dividenda_sazba'))
+    + '</span><span class="ok">' + tx('veta.akcie_sazba_na_akcii',
+        { p1: pctHra(d.sazba), p2: Math.round((d.na_akcii_rocne || 0) / 12) })
+    + '</span></div>';
+}
+// Počítadlo, které běží před očima. Jeden časovač na celou hru: hledá prvek
+// podle id a když tam není, nedělá nic — žádné zakládání a rušení časovačů
+// při každém překreslení, na kterém se dá zapomenout.
+setInterval(function () {
+  var el = document.getElementById('ak-tik');
+  if (!el) return;
+  var od = Number(el.getAttribute('data-od')) || 0;
+  var sec = Number(el.getAttribute('data-sec')) || 0;
+  if (!od || !sec) return;
+  el.textContent = kcFull(Math.max(0, ((Date.now() - od) / 1000) * sec));
+}, 1000);
 function akcieKartaHtml(f) {
   return '<div class="trade" data-akcie-karta="' + f.aliance_id + '">'
     + '<div class="row"><b>' + esc(f.nazev) + '</b>'
@@ -11004,6 +11062,7 @@ function akcieKartaHtml(f) {
     + '<span class="' + (f.na_akcii_mesicne > 0 ? 'ok' : 'muted') + '">'
     + kcFull(f.na_akcii_mesicne) + '</span></div>'
     + akcieVynosHtml(f)
+    + akcieSazbaHtml(f)
     + (f.moje_kusy ? '<div class="row"><span class="muted small">'
         + esc(tx('akcie.moje_kusy')) + '</span><span class="ok">'
         + tCislo(f.moje_kusy) + '</span></div>' : '')
@@ -11134,6 +11193,21 @@ function akcieTrhSheet(id, smer) {
     + '<div class="kv"><span>' + esc(tx('akcie.dividenda_celkem')) + '</span><b>'
     + kcFull(a.dividenda_celkem) + '</b></div>'
     + '<p class="fine">' + esc(tx('akcie.dividenda_popis')) + '</p>'
+    // Slíbená sazba a co z ní na moje kusy naběhlo od posledního pohledu.
+    // Připíše se samo, jakmile se hra zeptá serveru — počítadlo je jen
+    // to, co už je moje.
+    + (a.dividenda && a.dividenda.sazba > 0
+      ? '<div class="kv"><span>' + esc(tx('akcie.dividenda_sazba')) + '</span><b class="ok">'
+        + tx('veta.akcie_sazba_na_akcii', { p1: pctHra(a.dividenda.sazba),
+            p2: Math.round((a.dividenda.na_akcii_rocne || 0) / 12) }) + '</b></div>'
+        + (a.moje_kusy
+          ? '<div class="kv"><span>' + esc(tx('akcie.nasbirano')) + '</span>'
+            + '<b class="ok" id="ak-tik" data-od="' + Math.round(a.dividenda.od || 0)
+            + '" data-sec="' + (a.dividenda.za_sekundu || 0) + '">' + kcFull(0) + '</b></div>'
+          : '')
+        + (a.dividenda_ma_z_ceho ? ''
+          : '<p class="fine err">' + esc(tx('akcie.fond_nema_na_dividendu')) + '</p>')
+      : '')
     + '<div class="gcard-act"><button class="btn sec sm" id="ak-kniha">'
     + esc(tx('akcie.kniha')) + '</button></div>'
     + (posledni.length

@@ -3843,5 +3843,20 @@
   "akcie.kniha_nikdo": "Todavía nadie tiene acciones.",
   "akcie.fond_sam": "Sin emitir, las tiene el fondo",
   "akcie.ty": "tú",
-  "veta.akcie_kniha_radek": "{cislo:p1} acciones · {p2} % del fondo · {penize:p3}"
+  "veta.akcie_kniha_radek": "{cislo:p1} acciones · {p2} % del fondo · {penize:p3}",
+  "fond.navrh_akcie_sazba": "Dividendo de acciones (tasa)",
+  "fond.akcie_sazba_popis": "Qué porcentaje del valor contable de una acción paga el fondo por año de juego. Se acumula a los accionistas de forma continua y se paga del dinero libre del fondo: si el fondo no tiene, no se acumula nada. Cero apaga el dividendo.",
+  "fond.akcie_sazba_pole": "% por año de juego",
+  "fond.akcie_sazba_radek": "Dividendo de acciones",
+  "fond.akcie_sazba_zadna": "ninguno",
+  "akcie.dividenda_sazba": "Dividendo prometido",
+  "akcie.nasbirano": "Acumulado desde la última vez",
+  "akcie.fond_nema_na_dividendu": "El fondo no tiene ahora dinero libre, así que el dividendo no se acumula. Volverá a correr en cuanto lo tenga.",
+  "veta.fond_akcie_sazba_popis": "dividendo de acciones {p1} % por año de juego",
+  "veta.akcie_sazba_na_akcii": "{p1} % anual · {penize:p2} por acción al mes",
+  "veta.akcie_sazba_rocne": "{p1} % anual · {penize:p2} al mes",
+  "veta.akcie_sazba_odhad": "El fondo pagará {penize:p1} por mes de juego, es decir {penize:p2} por año de juego.",
+  "dor.fond_navrh_akcie_sazba": "{p1} propone en el fondo {p2}: dividendo de acciones {p3} % por año de juego.",
+  "dor.fond_akcie_sazba": "El fondo {p1} ha declarado un dividendo de acciones: {p2} % por año de juego.",
+  "dor.akcie_dividenda_sazba": "Dividendo de las acciones del fondo {p1}: {penize:p2}."
 }

@@ -171,8 +171,12 @@ function prevod(radky, zKoho, komu, castka) {
 // je to správa toho, co fond už koupil, ne rozdávání jeho peněz.
 // Vydání akcií je ZÁSADNÍ: prodává se kus fondu a každému členovi tím klesne
 // díl. Dividenda akcionářům je běžná — rozděluje se jen to, co fond vydělal.
+// Sazba dividendy z akcií je běžné rozhodnutí, ačkoli váže peníze do
+// budoucna: platí se jen z toho, co fond doopravdy má, a táž většina ji
+// může kdykoli snížit. Zásadní práh by znamenal, že ji menšina udrží
+// zapnutou proti vůli ostatních — a to je horší než ji zapnout.
 const PRAHY = { koupit: BEZNE, vyplatit: ZASADNI, zrusit: BEZNE, dividenda: BEZNE,
-  akcie: ZASADNI, akcie_dividenda: BEZNE };
+  akcie: ZASADNI, akcie_dividenda: BEZNE, akcie_sazba: BEZNE };
 const prahDruhu = (druh) => (PRAHY[druh] == null ? null : PRAHY[druh]);
 
 // ─── Žebríček fondů ──────────────────────────────────────────────

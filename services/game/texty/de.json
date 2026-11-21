@@ -3843,5 +3843,20 @@
   "akcie.kniha_nikdo": "Noch hält niemand Aktien.",
   "akcie.fond_sam": "Nicht ausgegeben, beim Fonds",
   "akcie.ty": "du",
-  "veta.akcie_kniha_radek": "{cislo:p1} Aktien · {p2} % des Fonds · {penize:p3}"
+  "veta.akcie_kniha_radek": "{cislo:p1} Aktien · {p2} % des Fonds · {penize:p3}",
+  "fond.navrh_akcie_sazba": "Aktiendividende (Satz)",
+  "fond.akcie_sazba_popis": "Wie viel Prozent des Buchwerts einer Aktie der Fonds je Spieljahr auszahlt. Es läuft den Aktionären laufend auf und wird aus dem freien Geld des Fonds bezahlt — hat der Fonds keins, läuft nichts auf. Null schaltet die Dividende ab.",
+  "fond.akcie_sazba_pole": "% je Spieljahr",
+  "fond.akcie_sazba_radek": "Aktiendividende",
+  "fond.akcie_sazba_zadna": "keine",
+  "akcie.dividenda_sazba": "Zugesagte Dividende",
+  "akcie.nasbirano": "Seit dem letzten Mal angesammelt",
+  "akcie.fond_nema_na_dividendu": "Der Fonds hat gerade kein freies Geld, die Dividende läuft also nicht auf. Sie startet wieder, sobald er welches hat.",
+  "veta.fond_akcie_sazba_popis": "Aktiendividende {p1} % je Spieljahr",
+  "veta.akcie_sazba_na_akcii": "{p1} % p.a. · {penize:p2} je Aktie und Monat",
+  "veta.akcie_sazba_rocne": "{p1} % p.a. · {penize:p2} im Monat",
+  "veta.akcie_sazba_odhad": "Der Fonds zahlt dafür {penize:p1} je Spielmonat, also {penize:p2} je Spieljahr.",
+  "dor.fond_navrh_akcie_sazba": "{p1} schlägt im Fonds {p2} vor: Aktiendividende {p3} % je Spieljahr.",
+  "dor.fond_akcie_sazba": "Der Fonds {p1} hat eine Aktiendividende beschlossen: {p2} % je Spieljahr.",
+  "dor.akcie_dividenda_sazba": "Dividende aus den Aktien des Fonds {p1}: {penize:p2}."
 }

@@ -1425,6 +1425,9 @@ async function vkladyFondu(alianceId) {
 
 // GET /trade/aliance/fond → kolik fond drží, kdo kolik vložil a jaký má díl
 router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
+  // Člen fondu bývá i akcionářem. Panel fondu je místo, kam se dívá nejčastěji,
+  // takže se tu naběhlá dividenda doúčtuje taky.
+  await DIV.dorovnej(req.player.id).catch(() => 0);
   const moje = await mojeAliance(req.player.id);
   if (!moje) return res.json({ ok: true, fond: null });
   const REZ = require('../services/game/rezervace');
@@ -1489,6 +1492,12 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
     akcie_podil: Math.max(0, (al && al.akcie_podil) || 0),
     akcie_celkem: Math.max(0, (al && al.akcie_celkem) || 0),
     akcie_cena: Math.max(0, Math.round((al && al.akcie_cena) || 0)),
+    // Sazba dividendy, kterou fond slíbil akcionářům. Člen musí vidět, co se
+    // z pokladny průběžně odlévá.
+    akcie_sazba: Math.max(0, (al && al.akcie_sazba) || 0),
+    akcie_dividenda_rocne: Math.round(Math.max(0, (al && al.akcie_ucetni) || 0)
+      * Math.max(0, (al && al.akcie_sazba) || 0)
+      * Math.max(0, (al && al.akcie_vydano) || 0)),
     // Kapitál z akcií: co se vybralo, minus co se zpátky vykoupilo. Tohle
     // je ta částka, kterou do fondu přinesli akcionáři místo členů.
     akcie_vybrano: akcieKap.vybrano,
@@ -1642,6 +1651,11 @@ const DRUHY = {
   // akcionář drží kusy a chce vědět, kolik dostane za jeden.
   akcie_dividenda: { prah: FOND.prahDruhu('akcie_dividenda'), kod: 'dor.fond_navrh_akcie_dividenda',
     udaje: (d, kdo, al) => ({ p1: kdo, p2: al, p3: Math.round(d.na_akcii || 0) }) },
+  // Sazba dividendy: kolik procent účetní hodnoty akcie fond vyplatí za
+  // herní rok. Nabíhá pak plynule, dokud má fond volné peníze.
+  akcie_sazba: { prah: FOND.prahDruhu('akcie_sazba'), kod: 'dor.fond_navrh_akcie_sazba',
+    udaje: (d, kdo, al) => ({ p1: kdo, p2: al,
+      p3: Math.round((d.sazba || 0) * 1000) / 10 }) },
 };
 
 // Kolik fond drží v jedné firmě a jestli to stačí na většinu. Dividendu
@@ -1769,6 +1783,13 @@ router.post('/trade/aliance/fond/navrh', hrac, api(async (req, res) => {
     const { volne, zamceno } = await fondVolne(moje.aliance_id, al);
     if (naAkcii * vydano > volne) return res.status(409).json({ error: nestaciHlaska(req, volne, zamceno) });
     detail = { na_akcii: naAkcii, kusu: vydano };
+  } else if (druh === 'akcie_sazba') {
+    // Sazba se zadává v procentech za herní rok. Nula je platná hodnota —
+    // tak se dividenda vypíná.
+    const pct = Math.max(0, Math.min(AKCIE.SAZBA_MAX * 100, Number(b.sazba_pct) || 0));
+    const vydano = Math.max(0, Math.round((al && al.akcie_vydano) || 0));
+    if (!vydano) return res.status(409).json({ error: stx(req)('server.fond_akcie_nevydal') });
+    detail = { sazba: pct / 100 };
   } else if (druh === 'zrusit') {
     const t = await prisma.gameTender.findUnique({
       where: { id: parseInt(b.tender_id, 10) || 0 } });
@@ -1924,11 +1945,7 @@ const vzorekFondu = (alianceId) => {
 // Podílník vidí v pokladně šedesát milionů a nemá šanci uhodnout, že dvě
 // třetiny z nich drží sedm nabídek, které fond sám vyvěsil.
 async function fondVolne(alianceId, alianceHotova) {
-  const al = alianceHotova
-    || await prisma.gameAliance.findUnique({ where: { id: alianceId } });
-  if (!al) return { al: null, volne: 0, zamceno: 0 };
-  const zamceno = Math.round(await fondZamceno(alianceId));
-  return { al, zamceno, volne: Math.round((al.pokladna || 0) - zamceno) };
+  return VOLNE.volne(alianceId, alianceHotova);
 }
 // Jediné znění pro všechna místa, kde fondu nestačí peníze.
 const nestaciHlaska = (req, volne, zamceno) =>
@@ -2261,6 +2278,26 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
     return res.json({ ok: true, pocet, cena });
   }
 
+  // ── Sazba dividendy ─────────────────────────────────────────
+  // Nic se teď nevyplácí — jen se zapne nabíhání. Od téhle chvíle, ne zpětně:
+  // akcionářům se proto posune začátek na teď, jinak by první pohled do hry
+  // vyplatil celou dobu, kdy žádná sazba neplatila.
+  if (n.druh === 'akcie_sazba') {
+    const sazba = Math.max(0, Math.min(AKCIE.SAZBA_MAX, Number(d.sazba) || 0));
+    await prisma.$transaction(async (tx) => {
+      await tx.gameAliance.update({ where: { id: moje.aliance_id },
+        data: { akcie_sazba: sazba } });
+      await tx.gameAkcie.updateMany({ where: { aliance_id: moje.aliance_id },
+        data: { dividenda_do: new Date() } });
+      await tx.gameFondNavrh.update({ where: { id: n.id }, data: { stav: 'proveden' } });
+    });
+    await zprava('dor.fond_akcie_sazba',
+      { p1: (al && al.nazev) || '', p2: Math.round(sazba * 1000) / 10 });
+    console.log('[game] fond #' + moje.aliance_id + ': sazba dividendy '
+      + Math.round(sazba * 1000) / 10 + ' % p.a.');
+    return res.json({ ok: true, sazba });
+  }
+
   // ── Dividenda akcionářům ──────────────────────────────────────────────────
   // Platí se po kusech z pokladny. Akcionář nemusí být člen fondu, takže
   // doručenka je jediná cesta, jak mu peníze poslat.
@@ -2365,13 +2402,11 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
 
 // Co má fond zamčené pod svými běžícími nabídkami. Stejná úvaha jako
 // u hráče: slíbené peníze se nedají slíbit podruhé.
+// Počítá services/game/fond-volne — stejné číslo potřebuje i nabíhající
+// dividenda a dvě různé odpovědi na „kolik fond může utratit" by byly past.
+const VOLNE = require('../services/game/fond-volne');
 async function fondZamceno(alianceId) {
-  const REZ = require('../services/game/rezervace');
-  const rows = await prisma.gameTender.findMany({
-    where: { fond_id: alianceId, stav: 'bezi' } }).catch(() => []);
-  const ted = new Date();
-  return rows.filter((t) => !t.do || new Date(t.do) > ted)
-    .reduce((a, t) => a + REZ.zbyvaZNabidky(t), 0);
+  return VOLNE.zamceno(alianceId);
 }
 
 // POST /trade/dividenda { firma_id, pct } → většinový podílník určuje,
@@ -2648,6 +2683,7 @@ router.post('/trade/prevzeti/:id/prodat', hrac, api(async (req, res) => {
 // prodává ze svých nevydaných kusů a vykupuje zpátky z pokladny.
 const AKCIE = require('../services/game/akcie');
 const CENA = require('../services/game/akcie-cena');
+const DIV = require('../services/game/akcie-dividenda');
 
 // Složený klíč se v Prisma klientovi NEJMENUJE podle @@unique(map: ...) —
 // `map` přejmenuje jen omezení v databázi. Spoléhat se na vygenerované jméno
@@ -2711,13 +2747,18 @@ const AKCIE_GRAF_SEZNAM = 30;
 // Seznam nese i malý graf a cenu na jeho začátku. Šipka u ceny se měří
 // proti ní, aby ukazovala právě ten pohyb, který je v grafu vidět.
 router.get('/trade/akcie', hrac, api(async (req, res) => {
+  // Nejdřív se doúčtuje, co akcionáři naběhlo od minulého pohledu — jinak by
+  // se díval na počítadlo, které běží, ale peníze nikde.
+  await DIV.dorovnej(req.player.id).catch(() => 0);
   const [fondy, moje] = await Promise.all([
     prisma.gameAliance.findMany({ select: { id: true, nazev: true, akcie_celkem: true,
-      akcie_vydano: true, akcie_podil: true, akcie_cena: true } }),
+      akcie_vydano: true, akcie_podil: true, akcie_cena: true,
+      akcie_sazba: true, akcie_ucetni: true, pokladna: true } }),
     prisma.gameAkcie.findMany({ where: { player_id: req.player.id, pocet: { gt: 0 } },
-      select: { aliance_id: true, pocet: true } }),
+      select: { aliance_id: true, pocet: true, dividenda_do: true } }),
   ]);
   const mam = new Map(moje.map((x) => [x.aliance_id, x.pocet]));
+  const odKdy = new Map(moje.map((x) => [x.aliance_id, x.dividenda_do]));
   const zajimave = fondy.filter((f) => (f.akcie_celkem || 0) > 0);
   const vynosy = await akcieVynosy(zajimave.map((f) => f.id));
   const out = [];
@@ -2738,6 +2779,9 @@ router.get('/trade/akcie', hrac, api(async (req, res) => {
       na_akcii_mesicne: AKCIE.vynosNaAkcii(vyn.nese, s.podil, s.vydano),
       dividenda_posledni: vyn.posledni,
       dividenda_celkem: vyn.celkem,
+      // Sazba, která nabíhá plynule, a co z ní padá na moje kusy za sekundu.
+      // Hra si z toho kreslí počítadlo běžící před očima.
+      dividenda: DIV.stav(f, mam.get(f.id) || 0, odKdy.get(f.id)),
       graf,
       // Cena na začátku grafu. Null = cena se zatím nikdy nepohnula, a to
       // není pokles: šipka se pak neukáže vůbec.
@@ -2749,9 +2793,10 @@ router.get('/trade/akcie', hrac, api(async (req, res) => {
 // GET /trade/akcie/:id → cena, stav a graf
 router.get('/trade/akcie/:id', hrac, api(async (req, res) => {
   const alianceId = parseInt(req.params.id, 10) || 0;
+  await DIV.dorovnej(req.player.id).catch(() => 0);
   const al = await prisma.gameAliance.findUnique({ where: { id: alianceId } });
   if (!al) return res.status(404).json({ error: stx(req)('server.takovy_fond_tu_neni') });
-  const [obchody, ceny, moje, hodnota, fondVolno] = await Promise.all([
+  const [obchody, ceny, moje, hodnota, fondVolno, mujRadek] = await Promise.all([
     // Obchody jsou na výpis posledních obchodů. Graf se kreslí z řady cen —
     // ta nese i přecenění, když se pohnula hodnota fondu.
     prisma.gameAkcieObchod.findMany({ where: { aliance_id: alianceId },
@@ -2760,6 +2805,7 @@ router.get('/trade/akcie/:id', hrac, api(async (req, res) => {
     akciiDrzi(alianceId, req.player.id),
     hodnotaFondu(alianceId),
     fondVolne(alianceId, al),
+    akciiRadek(prisma, alianceId, req.player.id).catch(() => null),
   ]);
   const s = akcieStav(al, hodnota);
   const vyn = (await akcieVynosy([alianceId])).get(alianceId)
@@ -2771,6 +2817,10 @@ router.get('/trade/akcie/:id', hrac, api(async (req, res) => {
     na_akcii_mesicne: AKCIE.vynosNaAkcii(vyn.nese, s.podil, s.vydano),
     dividenda_posledni: vyn.posledni,
     dividenda_celkem: vyn.celkem,
+    dividenda: DIV.stav(al, moje, mujRadek && mujRadek.dividenda_do),
+    // Má fond vůbec z čeho platit? Když ne, dividenda NENABÍHÁ a hráč to má
+    // vědět dřív, než si akcii koupí kvůli ní.
+    dividenda_ma_z_ceho: fondVolno.volne > 0,
     // Kolik kusů fond ještě vykoupí, než mu dojdou volné peníze. Hráč to
     // musí vidět dřív, než zadá prodej, který by neprošel.
     vykoupi: s.cena > 0 ? Math.floor(Math.max(0, fondVolno.volne) / s.cena) : 0,
@@ -2834,6 +2884,9 @@ router.post('/trade/akcie/:id/obchod', hrac, api(async (req, res) => {
   }
   // Hodnota fondu se počítá PŘED transakcí: uvnitř by to byl dotaz na stavy
   // všech hráčů s otevřenou transakcí, tedy na její časový strop.
+  // Doúčtovat naběhlou dividendu MUSÍ PŘED obchodem: po prodeji už ty akcie
+  // nedrží a to, co mu na nich naběhlo, by propadlo.
+  await DIV.dorovnej(req.player.id).catch(() => 0);
   const hodPred = await hodnotaFondu(alianceId);
   const REZ = require('../services/game/rezervace');
   const v = await REZ.volne(req.player, stavu(req.player));
