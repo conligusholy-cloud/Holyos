@@ -96,7 +96,10 @@ const BALICKY = [{ qty: 3, sleva: 0.12 }, { qty: 5, sleva: 0.27 }, { qty: 10, sl
   // Třicet kusů za 590 Kč by znamenalo 19,67 Kč za kus. Cena za kus musí být
   // celá koruna — Stripe účtuje cenu za kus × počet — takže 19 Kč a 570 Kč
   // za balík. Sleva platí pro všechny karty, nejen pro expresní dovoz.
-  { qty: 30, sleva: 0.61 }];
+  { qty: 30, sleva: 0.61 },
+  // Stovka: 15 Kč za kus, 1 500 Kč za balík. Dál už se nejde — kdo koupí
+  // stovku, na dlouho si nic jiného nekoupí, tak ať je to aspoň vidět.
+  { qty: 100, sleva: 0.70 }];
 function cenaKusuVBalicku(price, qty) {
   const b = BALICKY.filter((x) => x.qty === qty)[0];
   if (!b || !(price > 0)) return price;

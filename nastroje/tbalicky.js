@@ -59,13 +59,18 @@ ma(b30 && b30.price_czk === 570, 'stojí 570 Kč', b30 && b30.price_czk + ' Kč'
 ma(ctx.cenaKusuVBalicku(RUSH, 30) === 1900, 'to je 19 Kč za kus');
 ma(b30 && b30.sleva === 61, 'a na dlaždici svítí −61 %', b30 && '−' + b30.sleva + ' %');
 ma(b30 && b30.plna_czk === 1470, 'proti plné ceně 1 470 Kč');
+const b100 = bal.filter((b) => b.qty === 100)[0];
+ma(!!b100, 'a nad ním stovka');
+ma(b100 && b100.price_czk === 1500, 'stovka stojí 1 500 Kč', b100 && b100.price_czk + ' Kč');
+ma(ctx.cenaKusuVBalicku(RUSH, 100) === 1500, 'to je 15 Kč za kus');
+ma(b100 && b100.sleva === 69, 'a svítí −69 %', b100 && '−' + b100.sleva + ' %');
 
 console.log('\nCo musí platit o každém balíčku');
 const DRUHY = [{ nazev: 'expresní dovoz', price: 4900 }, { nazev: 'přípojky', price: 7900 },
   { nazev: 'úvěr', price: 12900 }];
 DRUHY.forEach((k) => {
   const nabidka = ctx.balickyProKartu(k, prev);
-  ma(nabidka.length === 4, k.nazev + ': čtyři balíčky (3, 5, 10, 30)', nabidka.map((b) => b.qty).join(', '));
+  ma(nabidka.length === 5, k.nazev + ': pět balíčků (3, 5, 10, 30, 100)', nabidka.map((b) => b.qty).join(', '));
   // Stripe účtuje cenu za kus × počet. Kdyby se celek počítal jinak, strhne
   // se něco jiného, než co hráč viděl v nabídce.
   const sedi = nabidka.every((b) => b.price_czk === ctx.cenaKusuVBalicku(k.price, b.qty) * b.qty / 100);
@@ -92,7 +97,7 @@ ma(ctx.balickyProKartu({ price: RUSH, bezBalicku: true }, prev).length === 0,
 console.log('\nDlaždice se musí vejít na obrazovku');
 const css = fs.readFileSync(path.join(KOREN, 'public/compounder/game/game.css'), 'utf8');
 ma(/\.balicky:has\(> :nth-child\(5\)\)\{grid-template-columns:repeat\(3,1fr\)\}/.test(css),
-  'pět dlaždic (1× a čtyři balíčky) se láme na 3 + 2');
+  'šest dlaždic (1× a pět balíčků) se láme po třech na 3 + 3');
 
 console.log(chyb ? '\nNEPROŠLO: ' + chyb + ' chyb' : '\nVšechno sedí.');
 process.exit(chyb ? 1 : 0);
