@@ -3929,5 +3929,11 @@
   "akcie.prumerna_cena": "Nakoupeno za",
   "akcie.prodejem_dostanes": "Prodejem dostaneš",
   "akcie.zisk": "Zisk",
-  "akcie.ztrata": "Ztráta"
+  "akcie.ztrata": "Ztráta",
+  "fond.hlasovani_nadpis": "Ve fondu se hlasuje",
+  "fond.hlasovani_popis": "Tvůj hlas ještě chybí. Návrh má lhůtu a co se nestihne, propadne — mlčení se počítá jako zdržení se.",
+  "fond.hlasovani_do": "Hlasování končí",
+  "fond.hlasovani_pozdeji": "Rozhodnu se později",
+  "fond.hlasovano_pro": "Hlasoval jsi pro.",
+  "fond.hlasovano_proti": "Hlasoval jsi proti."
 }

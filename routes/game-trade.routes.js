@@ -1744,6 +1744,35 @@ router.get('/trade/aliance/fond/navrhy', hrac, api(async (req, res) => {
   res.json({ ok: true, navrhy: out });
 }));
 
+// GET /trade/aliance/hlasovani → běžící návrhy, u kterých člen ještě nehlasoval
+//
+// Hlasování ve fondu má lhůtu a propadne mlčením. Kdo panel fondu neotevře,
+// o návrhu vůbec neví — a většina členů ho neotevře. Hra se proto ptá při
+// spuštění a nehlasovaný návrh ukáže ve vyskakovacím okně.
+//
+// Schválně to NENÍ celé /navrhy: tahle routa běží každému při každém spuštění
+// hry, takže se musí rychle a lacino rozhodnout, že se hráče netýká. Kdo není
+// v žádném fondu, odejde po jednom dotazu.
+router.get('/trade/aliance/hlasovani', hrac, api(async (req, res) => {
+  const moje = await mojeAliance(req.player.id);
+  if (!moje) return res.json({ ok: true, navrhy: [] });
+  const rows = await prisma.gameFondNavrh.findMany({
+    where: { aliance_id: moje.aliance_id, stav: 'bezi' }, orderBy: { id: 'desc' }, take: 10 });
+  const ted = new Date();
+  const out = [];
+  for (const n of rows) {
+    // Po lhůtě se nehlasuje, i když uklízeč ještě nedoběhl.
+    if (n.do && new Date(n.do) <= ted) continue;
+    const muj = await prisma.gameFondHlas.findUnique({
+      where: { navrh_id_clen_id: { navrh_id: n.id, clen_id: req.player.id } } });
+    if (muj) continue;
+    const v = await stavNavrhu(n);
+    out.push({ id: n.id, druh: n.druh, detail: n.detail, prah: n.prah, do: n.do,
+      pro: v.pro || 0, chybi: v.chybi || 0 });
+  }
+  res.json({ ok: true, navrhy: out });
+}));
+
 // GET /trade/fond/odkup/:equityId → za kolik by fond ten podíl koupil
 //
 // Cenu musí člen vidět PŘEDEM. Neurčuje si ji — je to ocenění, kterým hra

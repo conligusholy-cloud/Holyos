@@ -3895,5 +3895,11 @@
   "akcie.prumerna_cena": "Bought at",
   "akcie.prodejem_dostanes": "Selling pays",
   "akcie.zisk": "Gain",
-  "akcie.ztrata": "Loss"
+  "akcie.ztrata": "Loss",
+  "fond.hlasovani_nadpis": "A fund vote is running",
+  "fond.hlasovani_popis": "Your vote is still missing. The proposal has a deadline and whatever misses it falls through — silence counts as abstaining.",
+  "fond.hlasovani_do": "Voting ends",
+  "fond.hlasovani_pozdeji": "I'll decide later",
+  "fond.hlasovano_pro": "You voted in favour.",
+  "fond.hlasovano_proti": "You voted against."
 }

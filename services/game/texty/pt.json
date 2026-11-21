@@ -3888,5 +3888,11 @@
   "akcie.prumerna_cena": "Comprado a",
   "akcie.prodejem_dostanes": "A venda dá",
   "akcie.zisk": "Lucro",
-  "akcie.ztrata": "Perda"
+  "akcie.ztrata": "Perda",
+  "fond.hlasovani_nadpis": "Há uma votação no fundo",
+  "fond.hlasovani_popis": "Falta o teu voto. A proposta tem prazo e o que não chega a tempo cai — ficar calado conta como abstenção.",
+  "fond.hlasovani_do": "A votação acaba",
+  "fond.hlasovani_pozdeji": "Decido mais tarde",
+  "fond.hlasovano_pro": "Votaste a favor.",
+  "fond.hlasovano_proti": "Votaste contra."
 }

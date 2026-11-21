@@ -3902,5 +3902,11 @@
   "akcie.prumerna_cena": "Kupione po",
   "akcie.prodejem_dostanes": "Sprzedaż da",
   "akcie.zisk": "Zysk",
-  "akcie.ztrata": "Strata"
+  "akcie.ztrata": "Strata",
+  "fond.hlasovani_nadpis": "W funduszu trwa głosowanie",
+  "fond.hlasovani_popis": "Brakuje twojego głosu. Wniosek ma termin i co się nie zdąży, przepada — milczenie liczy się jako wstrzymanie.",
+  "fond.hlasovani_do": "Głosowanie kończy się",
+  "fond.hlasovani_pozdeji": "Zdecyduję później",
+  "fond.hlasovano_pro": "Zagłosowałeś za.",
+  "fond.hlasovano_proti": "Zagłosowałeś przeciw."
 }

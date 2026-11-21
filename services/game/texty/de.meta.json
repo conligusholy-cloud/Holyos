@@ -3875,5 +3875,11 @@
   "akcie.prumerna_cena": "ed558d4d5c6a",
   "akcie.prodejem_dostanes": "fa002e349c50",
   "akcie.zisk": "0725984e0cbf",
-  "akcie.ztrata": "51880916c3a6"
+  "akcie.ztrata": "51880916c3a6",
+  "fond.hlasovani_nadpis": "fde4cd78e2d5",
+  "fond.hlasovani_popis": "bc0df08011c3",
+  "fond.hlasovani_do": "d05cd41248ff",
+  "fond.hlasovani_pozdeji": "500bc90562f2",
+  "fond.hlasovano_pro": "9e8af3c88ae1",
+  "fond.hlasovano_proti": "9ac41b8a9b99"
 }

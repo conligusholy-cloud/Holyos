@@ -9649,6 +9649,65 @@ function fondPrahRadek(druh) {
     + tx('veta.fond_prah_radek', { p1: pctHra(prah), p2: pctHra(muj) })
     + (staci ? '' : ' ' + esc(tx('fond.prah_nestaci'))) + '</p>';
 }
+// ─── Hlasování ve fondu: upozornění, které nejde přehlédnout ────────────────
+// Návrh ve fondu má lhůtu a propadne mlčením. Kdo panel fondu neotevře, o něm
+// neví — a většina členů ho neotevře. Hra se proto při spuštění zeptá, jestli
+// někde nechybí můj hlas, a takový návrh ukáže v okně rovnou s tlačítky.
+//
+// Jednou za spuštění hry: kdo okno zavře, uvidí ho zase, až hru otevře příště.
+// Otravovat uprostřed hraní by znamenalo, že si na okno hráč zvykne a zavře
+// ho dřív, než si ho přečte.
+var HLASOVANI_UKAZANO = {};
+function hlidejHlasovani() {
+  if (!ME) return;
+  api('/trade/aliance/hlasovani').then(function (r) {
+    var n = ((r.ok && r.j && r.j.navrhy) || []).filter(function (x) {
+      return !HLASOVANI_UKAZANO[x.id];
+    })[0];
+    if (!n) return;
+    // Do rozdělané práce se okno necpe — přebilo by panel, který má hráč
+    // zrovna otevřený. Zkusí to znovu za minutu.
+    if (!$('sheet') || !$('sheet').classList.contains('hidden')) return;
+    HLASOVANI_UKAZANO[n.id] = 1;
+    hlasovaniSheet(n);
+  }).catch(function () {});
+}
+function hlasovaniSheet(n) {
+  sheet('<h3>' + esc(tx('fond.hlasovani_nadpis')) + '</h3>'
+    + '<p class="muted small">' + esc(tx('fond.hlasovani_popis')) + '</p>'
+    + '<div class="card"><h3>' + fondNavrhPopis(n) + '</h3>'
+    + '<div class="kv"><span>' + esc(tx('fond.pro')) + '</span><b class="ok">'
+    + Math.round((n.pro || 0) * 100) + ' %</b></div>'
+    + '<p class="fine">' + esc(tx('veta.fond_chybi_hlasu',
+        { p1: Math.ceil((n.chybi || 0) * 100), p2: Math.round((n.prah || 0) * 100) })) + '</p>'
+    + (n.do
+        ? '<p class="fine">' + esc(tx('fond.hlasovani_do')) + ' '
+          + esc(etaText(new Date(n.do).getTime() - Date.now())) + '</p>'
+        : '')
+    + '</div>'
+    + '<div class="gcard-act">'
+    + '<button class="btn" id="hl-pro">' + esc(tx('fond.pro')) + '</button>'
+    + '<button class="btn sec" id="hl-proti">' + esc(tx('fond.proti')) + '</button></div>'
+    + '<button class="btn sec" id="hl-pozdeji" style="width:100%;margin-top:8px">'
+    + esc(tx('fond.hlasovani_pozdeji')) + '</button>');
+  var posli = function (volba, b) {
+    b.disabled = true;
+    apiJson('/trade/aliance/fond/navrh/' + n.id + '/hlas', { volba: volba }).then(function (r) {
+      if (!r.ok) {
+        b.disabled = false;
+        return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
+      }
+      closeSheet();
+      toast(esc(tx(volba === 'pro' ? 'fond.hlasovano_pro' : 'fond.hlasovano_proti')), 'ok');
+    }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
+  };
+  var p = $('hl-pro');
+  if (p) p.onclick = function () { posli('pro', p); };
+  var q = $('hl-proti');
+  if (q) q.onclick = function () { posli('proti', q); };
+  var z = $('hl-pozdeji');
+  if (z) z.onclick = function () { closeSheet(); };
+}
 function fondNavrhPopis(n) {
   var d = n.detail || {};
   if (n.druh === 'koupit') {
@@ -16285,6 +16344,11 @@ function startGame() {
   // načtení hry — hráč mohl zavřít prohlížeč dřív, než spojení naběhlo.
   nahlasNakupy();
   setInterval(function () { loadTrades(); loadTrh(drawMap); nactiNajmy(vyzvedniNasledky); loadCards().then(function () { claimCash(); }); }, 60000);
+  // Hlasování ve fondu: zeptáme se hned po spuštění a pak jednou za minutu —
+  // ne kvůli otravování, ale aby okno doletělo i k tomu, kdo měl při startu
+  // otevřený jiný panel, a k návrhu, který vznikl až během hraní.
+  hlidejHlasovani();
+  setInterval(hlidejHlasovani, 60000);
   checkPayment();
   setInterval(function () { tick(); save(); paint(); syncState(); hlidejUkladani(); }, 5000);
   // Vlastní, rychlejší tep jen pro naskakující čísla nad prádlomaty.

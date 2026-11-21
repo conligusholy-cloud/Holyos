@@ -200,6 +200,16 @@ if git diff --cached --name-only | grep -qE 'services/game/fond|services/game/vl
   fi
 fi
 
+# Okno „ve fondu se hlasuje“. Návrh propadá mlčením, takže když se okno
+# neukáže, člen o hlasování neví a fond se nerozhodne.
+if git diff --cached --name-only | grep -qE 'routes/game-trade|public/compounder/game/game.js'; then
+  if ! node nastroje/thlasovaniokno.js; then
+    echo ""
+    echo "STOP: upozornění na hlasování nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Můj balík akcií na burze: za co jsem je koupil, co bych dnes dostal a jestli
 # na to fond má. Špatné číslo tady znamená špatně prodaný balík.
 if git diff --cached --name-only | grep -qE 'routes/game-trade|public/compounder/game/game.js|services/game/texty'; then

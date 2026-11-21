@@ -3895,5 +3895,11 @@
   "akcie.prumerna_cena": "Gekauft für",
   "akcie.prodejem_dostanes": "Verkauf bringt",
   "akcie.zisk": "Gewinn",
-  "akcie.ztrata": "Verlust"
+  "akcie.ztrata": "Verlust",
+  "fond.hlasovani_nadpis": "Im Fonds wird abgestimmt",
+  "fond.hlasovani_popis": "Deine Stimme fehlt noch. Der Antrag hat eine Frist, und was sie verpasst, verfällt — Schweigen gilt als Enthaltung.",
+  "fond.hlasovani_do": "Abstimmung endet",
+  "fond.hlasovani_pozdeji": "Ich entscheide später",
+  "fond.hlasovano_pro": "Du hast dafür gestimmt.",
+  "fond.hlasovano_proti": "Du hast dagegen gestimmt."
 }
