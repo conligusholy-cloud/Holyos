@@ -10,7 +10,12 @@
 // provozovatel platí majiteli země (Požadavek #158). Ten se nemaže — proto
 // se berou jen řádky bez pozemek_majitel_id.
 //
-// Spouští se u sebe na stroji, proti databázi z .env:
+// Jednorázový úklid už proběhl migrací 20261121180000_uklid_starych_pronajmu,
+// která běží při nasazení rovnou na ostré databázi. Tenhle skript zůstává jako
+// kontrola: ukáže, jestli se někde zase něco nesrovnalo.
+//
+// Spouští se u sebe na stroji, proti databázi z .env (pozor: Railway mění
+// adresu proxy, takže ji .env musí mít aktuální):
 //   node nastroje/uklid-pronajmy.js            → jen vypíše, co by uklidil
 //   node nastroje/uklid-pronajmy.js --opravdu  → doopravdy uklidí
 // =============================================================================
