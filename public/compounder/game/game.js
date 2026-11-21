@@ -8461,7 +8461,12 @@ function pobockaSheet() {
       ? '<div class="zeb">' + mesta.map(function (m) {
           return '<div class="zeb-row"><span class="nick">' + esc(m.name)
             + '<i>' + (m.uz ? esc(tx('hra.tady_uz_zakladnu_mas')) : esc(tx('hra.prozkoumane_mesto'))) + '</i></span>'
-            + (m.uz || S.cash < POBOCKA_CENA ? '' : '<button class="btn sm" data-pob="' + esc(m.id) + '">' + esc(tx('hra.zridit')) + '</button>')
+            // Bez peněz tlačítko nemizí, jen zešedne. Když se schovalo úplně,
+            // vypadal seznam měst jako výpis bez jediné akce a hráč hledal,
+            // kde se pobočka vlastně zřizuje — chybějící částka je nad ním.
+            + (m.uz ? '' : '<button class="btn sm" data-pob="' + esc(m.id) + '"'
+                + (S.cash < POBOCKA_CENA ? ' disabled' : '') + '>'
+                + esc(tx('hra.zridit')) + '</button>')
             + '</div>';
         }).join('') + '</div>'
       : '<div class="empty">' + esc(tx('hra.nemas_prozkoumane_zadne_mesto')) + '</div>'));
