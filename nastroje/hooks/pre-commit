@@ -200,6 +200,16 @@ if git diff --cached --name-only | grep -qE 'services/game/fond|services/game/vl
   fi
 fi
 
+# Jména firem v nabídkách fondu. Hráč zná firmu jménem, ne přezdívkou
+# majitele — pod nickem ji v seznamu nenajde a myslí si, že tam není.
+if git diff --cached --name-only | grep -qE 'routes/game-trade|public/compounder/game/game.js'; then
+  if ! node nastroje/tjmenafirem.js; then
+    echo ""
+    echo "STOP: jména firem nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Žebřík hodností. Server a hra si ho drží každý zvlášť — když se rozejdou,
 # hráč vidí v liště jiný titul, než jaký u něj vidí ostatní.
 if git diff --cached --name-only | grep -qE 'services/game/hodnosti|public/compounder/game/game.js|services/game/texty'; then

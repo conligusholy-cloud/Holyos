@@ -9918,7 +9918,7 @@ function fondVnitrek() {
       // Za kolik se koupil je minulost a patří dolů k detailu. Šipka říká,
       // kam se výnos pohnul proti minulému vzorku.
       var sm = smerVynosu(x.mesicne, x.mesicne_pred);
-      h += '<div class="row"><span><b>' + esc(x.firma_nick || '') + '</b> \u00b7 '
+      h += '<div class="row"><span><b>' + esc(x.firma_nazev || x.firma_nick || '') + '</b> \u00b7 '
         + procentaPodilu(x.podil)
         + (x.vetsina ? ' <i class="pill good">' + esc(tx('fond.vetsina')) + '</i>' : '')
         + '</span><span><b class="' + (sm ? (sm.nahoru ? 'ok' : 'err')
@@ -10089,7 +10089,10 @@ function fondNavrhSheet() {
   var videno = {}, prvni = [];
   ((FINANCE && FINANCE.podily) || []).forEach(function (e) {
     if (e.moje !== 'mam' || !bezici(e) || videno[e.kdo_id]) return;
-    videno[e.kdo_id] = true; prvni.push({ id: e.kdo_id, nazev: e.kdo });
+    // Firma se jmenuje jinak než její majitel. Dokud se tu psal nick, hledal
+    // hráč v seznamu „Mýdlový prádlo" a viděl „Josef" — a svou vlastní firmu
+    // v nabídce nenašel.
+    videno[e.kdo_id] = true; prvni.push({ id: e.kdo_id, nazev: e.kdo_firma || e.kdo });
   });
   sheet('<h3>' + esc(tx('fond.dat_hlasovat')) + '</h3>'
     + '<p class="muted small">' + esc(tx('hra.nacitam_hrace')) + '</p>');
@@ -10135,7 +10138,9 @@ function fondNavrhSheet() {
       + '<h4 style="margin-top:14px">' + esc(tx('fond.navrh_dividenda')) + '</h4>'
       + (vetsinove.length
         ? '<label class="fld"><span>' + esc(tx('fond.firma')) + '</span><select id="fo-dfirma" class="inp">'
-          + volby(vetsinove.map(function (x) { return { id: x.firma_id, nazev: x.firma_nick }; }))
+          + volby(vetsinove.map(function (x) {
+              return { id: x.firma_id, nazev: x.firma_nazev || x.firma_nick };
+            }))
           + '</select></label>'
           + '<label class="fld"><span>' + esc(tx('fond.pct_vyplaty')) + '</span>'
           + '<input id="fo-dpct" class="inp" type="number" min="0" max="100" step="1" value="100"></label>'

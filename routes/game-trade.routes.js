@@ -1469,9 +1469,13 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
   for (const e of drzene) {
     if (firmyFondu.has(e.firma_id)) continue;
     const f = await prisma.gamePlayer.findUnique({ where: { id: e.firma_id },
-      select: { state: true, dividenda_pct: true } }).catch(() => null);
+      select: { state: true, dividenda_pct: true, nick: true, company: true } }).catch(() => null);
     firmyFondu.set(e.firma_id, { zbyde: Math.round(acct._zbydeMesicne(stavu(f)) || 0),
-      pct: f ? f.dividenda_pct : null });
+      pct: f ? f.dividenda_pct : null,
+      // Jméno firmy, ne přezdívka majitele. V zábor koupeném přes equity je
+      // uložený nick, takže se v nabídkách svítilo „Josef" u firmy, kterou
+      // hráč zná jako „Mýdlový prádlo" — a tu firmu pak v seznamu nenašel.
+      nazev: f ? (f.company || (f.nick + ' s.r.o.')) : null });
   }
   const p = FOND.podily(radky);
   const ids = p.map((x) => x.clen_id);
@@ -1530,6 +1534,7 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
       return [...m.values()].map((r) => {
         const f = firmyFondu.get(r.firma_id) || {};
         return Object.assign(r, {
+          firma_nazev: f.nazev || r.firma_nick,
           cena: Math.round(r.cena), vetsina: r.podil > PRAVA.VETSINA + 1e-9,
           // Kolik ten podíl nesl při minulém vzorku. Z toho je šipka: proti
           // předchozímu vzorku, ne proti tomu, co kdo kdy viděl — jinak by
