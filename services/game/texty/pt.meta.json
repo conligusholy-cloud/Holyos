@@ -3831,5 +3831,13 @@
   "veta.akcie_sazba_odhad": "b9414127048a",
   "dor.fond_navrh_akcie_sazba": "f0c4a7c7068e",
   "dor.fond_akcie_sazba": "df97d9965cb1",
-  "dor.akcie_dividenda_sazba": "aa2dd18fbf26"
+  "dor.akcie_dividenda_sazba": "aa2dd18fbf26",
+  "fond.udrzitelnost": "70bc6d74c394",
+  "fond.z_firem_mesicne": "b409c1a29416",
+  "fond.akcionarum_mesicne": "2fd5df36e22c",
+  "fond.zbyva_fondu": "acecdccd7765",
+  "veta.fond_dividenda_ukrajuje": "f6e3f96b95a8",
+  "veta.fond_dividenda_nad_vynos": "bfb8fe98df6b",
+  "veta.fond_pokladna_vydrzi": "bfa9c5288e27",
+  "veta.fond_sazba_udrzitelna": "391c8c8ab8a2"
 }

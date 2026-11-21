@@ -3865,5 +3865,13 @@
   "veta.akcie_sazba_odhad": "Fundusz zapłaci za to {penize:p1} za miesiąc gry, czyli {penize:p2} za rok gry.",
   "dor.fond_navrh_akcie_sazba": "{p1} proponuje w funduszu {p2}: dywidenda z akcji {p3} % za rok gry.",
   "dor.fond_akcie_sazba": "Fundusz {p1} ogłosił dywidendę z akcji: {p2} % za rok gry.",
-  "dor.akcie_dividenda_sazba": "Dywidenda z akcji funduszu {p1}: {penize:p2}."
+  "dor.akcie_dividenda_sazba": "Dywidenda z akcji funduszu {p1}: {penize:p2}.",
+  "fond.udrzitelnost": "Udźwignie to fundusz?",
+  "fond.z_firem_mesicne": "Z firm miesięcznie",
+  "fond.akcionarum_mesicne": "Akcjonariuszom miesięcznie",
+  "fond.zbyva_fondu": "Zostaje funduszowi",
+  "veta.fond_dividenda_ukrajuje": "Dywidenda zjada {p1} % tego, co funduszowi przynoszą firmy.",
+  "veta.fond_dividenda_nad_vynos": "Fundusz wypłaca o {penize:p1} miesięcznie więcej, niż zarabia — różnica idzie z kasy.",
+  "veta.fond_pokladna_vydrzi": "Przy tej stawce wolne pieniądze starczą jeszcze na {cislo:p1} miesięcy gry.",
+  "veta.fond_sazba_udrzitelna": "Z tego, co zarabiają firmy, dałoby się bez końca płacić stawkę {p1} % rocznie."
 }

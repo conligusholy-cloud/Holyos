@@ -9568,6 +9568,30 @@ function fondNavrhChybi(n) {
   if (potreba <= volne) return null;
   return { chybi: potreba - volne, zamceno: Math.round(FOND.fond.zamceno || 0) };
 }
+// Udrží to fond? Jediná otázka, která u dividendy opravdu rozhoduje: co teče
+// z držených firem dovnitř a co odteče akcionářům ven. Rozdíl se bere
+// z pokladny, a ta není bezedná.
+function fondUdrzitelnost(zFirem, akcionarum, volne) {
+  var z = Math.round(Number(zFirem) || 0);
+  var a = Math.round(Number(akcionarum) || 0);
+  var v = Math.max(0, Math.round(Number(volne) || 0));
+  var zbyva = z - a;
+  return { zFirem: z, akcionarum: a, zbyva: zbyva,
+    // Kolik výnosu spolkne dividenda. Bez výnosu to není nula ani sto procent,
+    // takže se nevrací nic — kreslit „0 %“ by bylo lež.
+    ukrajuje: z > 0 ? a / z : null,
+    // Kolik herních měsíců vydrží volné peníze, když se rozdíl doplácí.
+    // Kdo nevyplácí víc, než vydělá, nemá co doplácet.
+    vydrzi: zbyva < 0 ? Math.floor(v / -zbyva) : null };
+}
+// Jaká sazba by šla z výnosu firem platit do nekonečna. Základ je účetní
+// hodnota všech vydaných akcií, tedy díl akcionářů na hodnotě fondu.
+function fondSazbaUdrzitelna(neseMesicne, zakladAkcii) {
+  var n = Math.max(0, Math.round(Number(neseMesicne) || 0));
+  var z = Math.max(0, Math.round(Number(zakladAkcii) || 0));
+  if (!(n > 0) || !(z > 0)) return null;
+  return (n * 12) / z;
+}
 function fondNavrhPopis(n) {
   var d = n.detail || {};
   if (n.druh === 'koupit') {
@@ -9654,6 +9678,13 @@ function fondVnitrek() {
         + '<div class="kv"><span>' + esc(tx('fond.volne')) + '</span><b>' + kcFull(f.volne) + '</b></div>'
       : '');
 
+  // Co fondu teče z držených firem. Počítá se už tady, protože na tom stojí
+  // úloha o udržitelnosti dividendy — dole v „Co fond drží" se ze stejných
+  // čísel skládá řádek „Nese měsíčně".
+  var zFirem = (f.drzi || []).reduce(function (a2, x) {
+    return a2 + (Number(x.mesicne) || 0);
+  }, 0);
+
   // Akcie fondu. Vedle vkladu členů stojí kapitál od akcionářů a člen to musí
   // vidět tady, ne až na burze: je to jeho fond, který se tím zčásti prodal.
   if (f.akcie_celkem > 0) {
@@ -9681,6 +9712,33 @@ function fondVnitrek() {
           ? tx('veta.akcie_sazba_rocne', { p1: pctHra(f.akcie_sazba),
               p2: Math.round((f.akcie_dividenda_rocne || 0) / 12) })
           : esc(tx('fond.akcie_sazba_zadna'))) + '</b></div>'
+      // Udrží to fond? Jediné číslo, podle kterého se dá říct, jestli se
+      // nevyplácí moc: co teče z firem dovnitř proti tomu, co odteče ven.
+      + (function (u) {
+          var zaklad = Math.round((f.hodnota_fondu || 0) * (f.akcie_podil || 0));
+          var udrz = fondSazbaUdrzitelna(u.zFirem, zaklad);
+          return '<h4 style="margin:12px 0 2px">' + esc(tx('fond.udrzitelnost')) + '</h4>'
+            + '<div class="kv"><span>' + esc(tx('fond.z_firem_mesicne')) + '</span><b class="'
+            + (u.zFirem > 0 ? 'ok' : '') + '">' + kcFull(u.zFirem) + '</b></div>'
+            + '<div class="kv"><span>' + esc(tx('fond.akcionarum_mesicne')) + '</span><b class="'
+            + (u.akcionarum > 0 ? 'warn' : '') + '">'
+            + (u.akcionarum > 0 ? '\u2212' : '') + kcFull(u.akcionarum) + '</b></div>'
+            + '<div class="kv souhrn"><span>' + esc(tx('fond.zbyva_fondu')) + '</span><b class="'
+            + (u.zbyva >= 0 ? 'ok' : 'err') + '">'
+            + (u.zbyva < 0 ? '\u2212' + kcFull(-u.zbyva) : kcFull(u.zbyva)) + '</b></div>'
+            + (u.ukrajuje != null && u.akcionarum > 0
+                ? '<p class="fine">' + tx('veta.fond_dividenda_ukrajuje',
+                    { p1: pctHra(u.ukrajuje) }) + '</p>' : '')
+            // Kdo vyplácí víc, než vydělá, bere to z pokladny — a ta není bezedná.
+            + (u.zbyva < 0
+                ? '<p class="fine err">' + tx('veta.fond_dividenda_nad_vynos',
+                    { p1: -u.zbyva }) + ' '
+                  + (u.vydrzi != null ? tx('veta.fond_pokladna_vydrzi', { p1: u.vydrzi }) : '')
+                  + '</p>' : '')
+            + (udrz != null
+                ? '<p class="fine">' + tx('veta.fond_sazba_udrzitelna',
+                    { p1: pctHra(udrz) }) + '</p>' : '');
+        }(fondUdrzitelnost(zFirem, Math.round((f.akcie_dividenda_rocne || 0) / 12), f.volne)))
       + '<p class="fine">' + tx('veta.fond_akcie_tok',
           { p1: f.akcie_vybrano, p2: f.akcie_vyplaceno }) + '</p>'
       + '<div class="gcard-act"><button class="btn sec sm" id="fond-burza">'
@@ -10008,8 +10066,16 @@ function fondNavrhSheet() {
         ? (Math.round(FOND.fond.hodnota_fondu || 0) * (FOND.fond.akcie_podil || 0)) / vydano : 0;
       if (!(pct > 0) || !(vydano > 0) || !(ucetni > 0)) { pole.textContent = ''; return; }
       var rocne = ucetni * (pct / 100) * vydano;
+      // A hlavně: utáhne to fond z toho, co mu teče z firem? Tohle je to
+      // číslo, podle kterého se má člen rozhodovat, ne procento samo o sobě.
+      var zFirem = (FOND.fond.drzi || []).reduce(function (a2, x) {
+        return a2 + (Number(x.mesicne) || 0);
+      }, 0);
+      var udrz = fondSazbaUdrzitelna(zFirem,
+        Math.round((FOND.fond.hodnota_fondu || 0) * (FOND.fond.akcie_podil || 0)));
       pole.textContent = tx('veta.akcie_sazba_odhad',
-        { p1: Math.round(rocne / 12), p2: Math.round(rocne) });
+        { p1: Math.round(rocne / 12), p2: Math.round(rocne) })
+        + (udrz != null ? ' ' + tx('veta.fond_sazba_udrzitelna', { p1: pctHra(udrz) }) : '');
     };
     if ($('fo-asazba')) { $('fo-asazba').oninput = odhadSazby; odhadSazby(); }
     if ($('fo-akciesazba')) $('fo-akciesazba').onclick = function () {

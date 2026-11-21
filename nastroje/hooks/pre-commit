@@ -178,6 +178,17 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; th
   fi
 fi
 
+# Utáhne fond dividendu, kterou slíbil? Podle těch čísel se člen rozhoduje,
+# jestli sazbu zvednout nebo srazit — špatně změřený odliv ho poslal buď do
+# paniky, nebo do rozdávání, na které fond nemá.
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; then
+  if ! node nastroje/tudrzitelnost.js; then
+    echo ""
+    echo "STOP: bilance dividendy nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Dividenda z akcií, která nabíhá. Teče z ní pokladna fondu akcionářům,
 # takže chyba tu bere peníze jedním a dává druhým, aniž by si toho někdo všiml.
 if git diff --cached --name-only | grep -qE 'services/game/akcie|services/game/fond|routes/game-trade'; then

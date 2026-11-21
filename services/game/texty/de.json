@@ -3858,5 +3858,13 @@
   "veta.akcie_sazba_odhad": "Der Fonds zahlt dafür {penize:p1} je Spielmonat, also {penize:p2} je Spieljahr.",
   "dor.fond_navrh_akcie_sazba": "{p1} schlägt im Fonds {p2} vor: Aktiendividende {p3} % je Spieljahr.",
   "dor.fond_akcie_sazba": "Der Fonds {p1} hat eine Aktiendividende beschlossen: {p2} % je Spieljahr.",
-  "dor.akcie_dividenda_sazba": "Dividende aus den Aktien des Fonds {p1}: {penize:p2}."
+  "dor.akcie_dividenda_sazba": "Dividende aus den Aktien des Fonds {p1}: {penize:p2}.",
+  "fond.udrzitelnost": "Trägt der Fonds das?",
+  "fond.z_firem_mesicne": "Von Firmen im Monat",
+  "fond.akcionarum_mesicne": "An Aktionäre im Monat",
+  "fond.zbyva_fondu": "Bleibt dem Fonds",
+  "veta.fond_dividenda_ukrajuje": "Die Dividende frisst {p1} % dessen, was die Firmen dem Fonds bringen.",
+  "veta.fond_dividenda_nad_vynos": "Der Fonds zahlt {penize:p1} im Monat mehr aus, als er verdient — die Differenz geht aus der Kasse.",
+  "veta.fond_pokladna_vydrzi": "Bei diesem Satz reicht das freie Geld noch {cislo:p1} Spielmonate.",
+  "veta.fond_sazba_udrzitelna": "Aus dem Ertrag der Firmen ließe sich dauerhaft ein Satz von {p1} % p.a. zahlen."
 }

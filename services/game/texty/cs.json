@@ -3892,5 +3892,13 @@
   "veta.akcie_sazba_odhad": "Fond za to zaplatí {penize:p1} za herní měsíc, tedy {penize:p2} za herní rok.",
   "dor.fond_navrh_akcie_sazba": "{p1} navrhuje ve fondu {p2}: dividenda z akcií {p3} % za herní rok.",
   "dor.fond_akcie_sazba": "Fond {p1} vyhlásil dividendu z akcií: {p2} % za herní rok.",
-  "dor.akcie_dividenda_sazba": "Dividenda z akcií fondu {p1}: {penize:p2}."
+  "dor.akcie_dividenda_sazba": "Dividenda z akcií fondu {p1}: {penize:p2}.",
+  "fond.udrzitelnost": "Utáhne to fond?",
+  "fond.z_firem_mesicne": "Z firem měsíčně",
+  "fond.akcionarum_mesicne": "Akcionářům měsíčně",
+  "fond.zbyva_fondu": "Zbývá fondu",
+  "veta.fond_dividenda_ukrajuje": "Dividenda ukrajuje {p1} % toho, co fondu nesou držené firmy.",
+  "veta.fond_dividenda_nad_vynos": "Fond vyplácí o {penize:p1} měsíčně víc, než vydělá — rozdíl jde z pokladny.",
+  "veta.fond_pokladna_vydrzi": "Volné peníze při téhle sazbě vydrží ještě {cislo:p1} herních měsíců.",
+  "veta.fond_sazba_udrzitelna": "Z výnosu firem by šla do nekonečna platit sazba {p1} % p.a."
 }

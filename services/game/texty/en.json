@@ -3858,5 +3858,13 @@
   "veta.akcie_sazba_odhad": "The fund will pay {penize:p1} per game month, that is {penize:p2} per game year.",
   "dor.fond_navrh_akcie_sazba": "{p1} proposes in the fund {p2}: share dividend {p3} % per game year.",
   "dor.fond_akcie_sazba": "The fund {p1} declared a share dividend: {p2} % per game year.",
-  "dor.akcie_dividenda_sazba": "Dividend from the shares of the fund {p1}: {penize:p2}."
+  "dor.akcie_dividenda_sazba": "Dividend from the shares of the fund {p1}: {penize:p2}.",
+  "fond.udrzitelnost": "Can the fund carry it?",
+  "fond.z_firem_mesicne": "From firms a month",
+  "fond.akcionarum_mesicne": "To shareholders a month",
+  "fond.zbyva_fondu": "Left for the fund",
+  "veta.fond_dividenda_ukrajuje": "The dividend eats {p1} % of what the firms bring the fund.",
+  "veta.fond_dividenda_nad_vynos": "The fund pays out {penize:p1} a month more than it earns — the difference comes out of the treasury.",
+  "veta.fond_pokladna_vydrzi": "At this rate the free money lasts another {cislo:p1} game months.",
+  "veta.fond_sazba_udrzitelna": "What the firms earn would sustain a rate of {p1} % p.a. indefinitely."
 }

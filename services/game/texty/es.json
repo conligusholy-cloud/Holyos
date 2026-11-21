@@ -3858,5 +3858,13 @@
   "veta.akcie_sazba_odhad": "El fondo pagará {penize:p1} por mes de juego, es decir {penize:p2} por año de juego.",
   "dor.fond_navrh_akcie_sazba": "{p1} propone en el fondo {p2}: dividendo de acciones {p3} % por año de juego.",
   "dor.fond_akcie_sazba": "El fondo {p1} ha declarado un dividendo de acciones: {p2} % por año de juego.",
-  "dor.akcie_dividenda_sazba": "Dividendo de las acciones del fondo {p1}: {penize:p2}."
+  "dor.akcie_dividenda_sazba": "Dividendo de las acciones del fondo {p1}: {penize:p2}.",
+  "fond.udrzitelnost": "¿Lo aguanta el fondo?",
+  "fond.z_firem_mesicne": "De las empresas al mes",
+  "fond.akcionarum_mesicne": "A los accionistas al mes",
+  "fond.zbyva_fondu": "Le queda al fondo",
+  "veta.fond_dividenda_ukrajuje": "El dividendo se come el {p1} % de lo que las empresas traen al fondo.",
+  "veta.fond_dividenda_nad_vynos": "El fondo paga {penize:p1} al mes más de lo que gana: la diferencia sale de la caja.",
+  "veta.fond_pokladna_vydrzi": "A esta tasa el dinero libre dura {cislo:p1} meses de juego más.",
+  "veta.fond_sazba_udrzitelna": "Con lo que ganan las empresas se podría pagar indefinidamente una tasa del {p1} % anual."
 }
