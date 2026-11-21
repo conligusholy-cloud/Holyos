@@ -23,7 +23,7 @@ const vytahni = (re, jmeno) => {
   return m ? m[0] : '';
 };
 const kusy = [
-  vytahni(/function fondUdrzitelnost\(zFirem, akcionarum, volne\) \{[\s\S]*?\n\}/, 'fondUdrzitelnost'),
+  vytahni(/function fondUdrzitelnost\(zFirem, akcionarum, clenum, volne\) \{[\s\S]*?\n\}/, 'fondUdrzitelnost'),
   vytahni(/function fondSazbaUdrzitelna\(neseMesicne, zakladAkcii\) \{[\s\S]*?\n\}/, 'fondSazbaUdrzitelna'),
 ];
 if (chyb) { console.log('\n' + chyb + ' nesedí'); process.exit(1); }
@@ -33,7 +33,7 @@ vm.runInContext(kusy.join('\n'), box);
 const U = box.fondUdrzitelnost, S = box.fondSazbaUdrzitelna;
 
 // ─── Bilance ─────────────────────────────────────────────────────────────────
-const u = U(1302000, 886168, 45000000);
+const u = U(1302000, 886168, 0, 45000000);
 ok('z firem teče, co teče', u.zFirem === 1302000);
 ok('akcionářům odtéká, co odtéká', u.akcionarum === 886168);
 ok('zbytek je rozdíl', u.zbyva === 1302000 - 886168);
@@ -45,22 +45,33 @@ ok('kdo vydělá víc, než rozdá, pokladnu nečerpá', u.vydrzi === null);
 // ─── Když se vyplácí víc, než se vydělá ──────────────────────────────────────
 // Tohle je ten případ, kvůli kterému to číslo vzniklo. Fond může chvíli
 // dotovat dividendu z pokladny, ale musí být vidět, jak dlouho.
-const p = U(500000, 900000, 8000000);
+const p = U(500000, 900000, 0, 8000000);
 ok('schodek je záporný', p.zbyva === -400000);
 ok('a ví se, kolik měsíců pokladna vydrží', p.vydrzi === 20);
 ok('ukrajuje víc než celý výnos', p.ukrajuje > 1);
 // Prázdná pokladna vydrží nula měsíců, ne „nekonečno" a ne pád.
-ok('prázdná pokladna vydrží nula měsíců', U(0, 100000, 0).vydrzi === 0);
-ok('záporná pokladna se bere jako prázdná', U(0, 100000, -5000).vydrzi === 0);
+ok('prázdná pokladna vydrží nula měsíců', U(0, 100000, 0, 0).vydrzi === 0);
+ok('záporná pokladna se bere jako prázdná', U(0, 100000, 0, -5000).vydrzi === 0);
+
+// ─── Ven teče obojí ─────────────────────────────────────────────
+// Fond platí akcionářům i členům a pokladna mezi nimi nerozlišuje. Kdyby se
+// do bilance počítala jen jedna strana, vypadal by fond zdravěji, než je.
+const obe = U(1000000, 400000, 400000, 10000000);
+ok('ven jde součet obou dividend', obe.ven === 800000);
+ok('a zbytek je po obou', obe.zbyva === 200000);
+ok('ukrajuje se počítá z obou', Math.abs(obe.ukrajuje - 0.8) < 1e-9);
+const jenClenum = U(500000, 0, 900000, 8000000);
+ok('sama dividenda členům udělá schodek', jenClenum.zbyva === -400000);
+ok('a pokladna na něj vydrží stejně', jenClenum.vydrzi === 20);
 
 // ─── Hranice ─────────────────────────────────────────────────────────────────
 // Fond, který nic nedrží, nemá z čeho měřit podíl — nula procent by lhala.
-ok('bez výnosu se podíl nekreslí', U(0, 100000, 1000000).ukrajuje === null);
-ok('ale schodek se spočítá pořád', U(0, 100000, 1000000).zbyva === -100000);
-ok('bez dividendy zbyde všechno', U(1000000, 0, 0).zbyva === 1000000);
-ok('a nic se nespolkne', U(1000000, 0, 0).ukrajuje === 0);
-ok('přesně na nulu není schodek', U(900000, 900000, 100).vydrzi === null);
-ok('nesmysly nic neshodí', U('x', 'y', 'z').zbyva === 0);
+ok('bez výnosu se podíl nekreslí', U(0, 100000, 0, 1000000).ukrajuje === null);
+ok('ale schodek se spočítá pořád', U(0, 100000, 0, 1000000).zbyva === -100000);
+ok('bez dividendy zbyde všechno', U(1000000, 0, 0, 0).zbyva === 1000000);
+ok('a nic se nespolkne', U(1000000, 0, 0, 0).ukrajuje === 0);
+ok('přesně na nulu není schodek', U(900000, 900000, 0, 100).vydrzi === null);
+ok('nesmysly nic neshodí', U('x', 'y', 'z', 'w').zbyva === 0);
 
 // ─── Udržitelná sazba ────────────────────────────────────────────────────────
 // Kolik procent by šlo platit do nekonečna: roční výnos dělený tím, co akcie
@@ -77,6 +88,14 @@ ok('nesmysly taky ne', S('x', 'y') === null);
 const vnitrek = hra.slice(hra.indexOf('function fondVnitrek'));
 const usek = vnitrek.slice(0, vnitrek.indexOf('var FOND_KAM'));
 ok('panel fondu bilanci ukazuje', /fondUdrzitelnost\(zFirem,/.test(usek));
+// Dividenda členům nesmí viset uvnitř bloku akcií: fond nemusí žádné akcie
+// vydat a přitom členům platit, a otázka „utáhne to fond?" platí vždycky.
+ok('bilance stojí mimo blok akcií',
+  usek.indexOf("if (f.akcie_celkem > 0) {") < usek.indexOf('fondUdrzitelnost(zFirem,')
+  && usek.slice(usek.indexOf('fondUdrzitelnost(zFirem,')).indexOf('id="fond-kniha"') < 0);
+ok('a dividenda členům taky', /fond\.clen_sazba_nadpis/.test(usek));
+ok('měsíční odliv členům se bere z roční sazby',
+  /Math\.round\(\(f\.clen_dividenda_rocne \|\| 0\) \/ 12\), f\.volne\)/.test(usek));
 // Dividenda se musí měřit MĚSÍČNĚ proti měsíčnímu výnosu, ne ročně —
 // dvanáctkrát nafouknutý odliv by vypadal jako katastrofa.
 ok('a měří měsíc proti měsíci',

@@ -3866,5 +3866,14 @@
   "veta.fond_dividenda_ukrajuje": "The dividend eats {p1} % of what the firms bring the fund.",
   "veta.fond_dividenda_nad_vynos": "The fund pays out {penize:p1} a month more than it earns — the difference comes out of the treasury.",
   "veta.fond_pokladna_vydrzi": "At this rate the free money lasts another {cislo:p1} game months.",
-  "veta.fond_sazba_udrzitelna": "What the firms earn would sustain a rate of {p1} % p.a. indefinitely."
+  "veta.fond_sazba_udrzitelna": "What the firms earn would sustain a rate of {p1} % p.a. indefinitely.",
+  "fond.navrh_clen_sazba": "Member dividend (rate)",
+  "fond.clen_sazba_popis": "What share of their part of the fund’s value members get per game year. It is split by contributions and paid from the same treasury as the shareholder dividend — when the fund has no free money, nothing accrues. Zero turns it off.",
+  "fond.clen_sazba_nadpis": "Member dividend",
+  "fond.clen_sazba_radek": "Rate for members",
+  "fond.clenum_mesicne": "To members a month",
+  "veta.fond_clen_sazba_popis": "member dividend {p1} % per game year",
+  "dor.fond_navrh_clen_sazba": "{p1} proposes in the fund {p2}: member dividend {p3} % per game year.",
+  "dor.fond_clen_sazba": "The fund {p1} declared a member dividend: {p2} % per game year.",
+  "dor.fond_dividenda_sazba": "Dividend from the fund {p1}: {penize:p2}."
 }

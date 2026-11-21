@@ -3873,5 +3873,14 @@
   "veta.fond_dividenda_ukrajuje": "Dywidenda zjada {p1} % tego, co funduszowi przynoszą firmy.",
   "veta.fond_dividenda_nad_vynos": "Fundusz wypłaca o {penize:p1} miesięcznie więcej, niż zarabia — różnica idzie z kasy.",
   "veta.fond_pokladna_vydrzi": "Przy tej stawce wolne pieniądze starczą jeszcze na {cislo:p1} miesięcy gry.",
-  "veta.fond_sazba_udrzitelna": "Z tego, co zarabiają firmy, dałoby się bez końca płacić stawkę {p1} % rocznie."
+  "veta.fond_sazba_udrzitelna": "Z tego, co zarabiają firmy, dałoby się bez końca płacić stawkę {p1} % rocznie.",
+  "fond.navrh_clen_sazba": "Dywidenda dla członków (stawka)",
+  "fond.clen_sazba_popis": "Ile procent swojej części wartości funduszu dostaną członkowie za rok gry. Dzieli się według wkładów i płaci z tej samej kasy co dywidenda z akcji — gdy fundusz nie ma wolnych pieniędzy, nic się nie nalicza. Zero ją wyłącza.",
+  "fond.clen_sazba_nadpis": "Dywidenda dla członków",
+  "fond.clen_sazba_radek": "Stawka dla członków",
+  "fond.clenum_mesicne": "Członkom miesięcznie",
+  "veta.fond_clen_sazba_popis": "dywidenda dla członków {p1} % za rok gry",
+  "dor.fond_navrh_clen_sazba": "{p1} proponuje w funduszu {p2}: dywidenda dla członków {p3} % za rok gry.",
+  "dor.fond_clen_sazba": "Fundusz {p1} ogłosił dywidendę dla członków: {p2} % za rok gry.",
+  "dor.fond_dividenda_sazba": "Dywidenda z funduszu {p1}: {penize:p2}."
 }

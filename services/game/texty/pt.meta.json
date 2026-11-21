@@ -3839,5 +3839,14 @@
   "veta.fond_dividenda_ukrajuje": "f6e3f96b95a8",
   "veta.fond_dividenda_nad_vynos": "bfb8fe98df6b",
   "veta.fond_pokladna_vydrzi": "bfa9c5288e27",
-  "veta.fond_sazba_udrzitelna": "391c8c8ab8a2"
+  "veta.fond_sazba_udrzitelna": "391c8c8ab8a2",
+  "fond.navrh_clen_sazba": "af28d0f44a49",
+  "fond.clen_sazba_popis": "a5264035b80a",
+  "fond.clen_sazba_nadpis": "6ca073a699b6",
+  "fond.clen_sazba_radek": "05399a466398",
+  "fond.clenum_mesicne": "90097df9a87a",
+  "veta.fond_clen_sazba_popis": "cc95c05e38fd",
+  "dor.fond_navrh_clen_sazba": "8c57955cff69",
+  "dor.fond_clen_sazba": "3f18eeac29b6",
+  "dor.fond_dividenda_sazba": "782709807451"
 }

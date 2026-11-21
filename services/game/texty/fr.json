@@ -3866,5 +3866,14 @@
   "veta.fond_dividenda_ukrajuje": "Le dividende absorbe {p1} % de ce que les sociétés rapportent au fonds.",
   "veta.fond_dividenda_nad_vynos": "Le fonds verse {penize:p1} par mois de plus qu’il ne gagne — la différence sort de la caisse.",
   "veta.fond_pokladna_vydrzi": "À ce taux, l’argent libre tient encore {cislo:p1} mois de jeu.",
-  "veta.fond_sazba_udrzitelna": "Ce que rapportent les sociétés permettrait de tenir un taux de {p1} % par an indéfiniment."
+  "veta.fond_sazba_udrzitelna": "Ce que rapportent les sociétés permettrait de tenir un taux de {p1} % par an indéfiniment.",
+  "fond.navrh_clen_sazba": "Dividende des membres (taux)",
+  "fond.clen_sazba_popis": "Quel pourcentage de leur part de la valeur du fonds les membres reçoivent par année de jeu. Il se partage selon les apports et se paie sur la même caisse que le dividende des actions — si le fonds n’a pas d’argent libre, rien ne s’accumule. Zéro le coupe.",
+  "fond.clen_sazba_nadpis": "Dividende des membres",
+  "fond.clen_sazba_radek": "Taux pour les membres",
+  "fond.clenum_mesicne": "Aux membres par mois",
+  "veta.fond_clen_sazba_popis": "dividende des membres {p1} % par année de jeu",
+  "dor.fond_navrh_clen_sazba": "{p1} propose dans le fonds {p2} : dividende des membres {p3} % par année de jeu.",
+  "dor.fond_clen_sazba": "Le fonds {p1} a déclaré un dividende des membres : {p2} % par année de jeu.",
+  "dor.fond_dividenda_sazba": "Dividende du fonds {p1} : {penize:p2}."
 }

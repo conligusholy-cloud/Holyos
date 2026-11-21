@@ -189,6 +189,16 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; th
   fi
 fi
 
+# Průběžná dividenda členům fondu. Teče z téže pokladny jako akcionářská
+# a dělí se podle vkladů — chyba v dělení vezme jednomu členovi a dá druhému.
+if git diff --cached --name-only | grep -qE 'services/game/fond|services/game/akcie|routes/game-trade'; then
+  if ! node nastroje/tdividendaclen.js; then
+    echo ""
+    echo "STOP: dividenda členům nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Dividenda z akcií, která nabíhá. Teče z ní pokladna fondu akcionářům,
 # takže chyba tu bere peníze jedním a dává druhým, aniž by si toho někdo všiml.
 if git diff --cached --name-only | grep -qE 'services/game/akcie|services/game/fond|routes/game-trade'; then

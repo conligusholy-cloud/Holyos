@@ -1420,7 +1420,8 @@ async function mojeAliance(playerId) {
 }
 async function vkladyFondu(alianceId) {
   const rows = await prisma.gameFondVklad.findMany({ where: { aliance_id: alianceId } });
-  return rows.map((r) => ({ clen_id: r.clen_id, castka: r.castka, vlozeno: r.vlozeno, id: r.id }));
+  return rows.map((r) => ({ clen_id: r.clen_id, castka: r.castka, vlozeno: r.vlozeno,
+    id: r.id, dividenda_do: r.dividenda_do }));
 }
 
 // GET /trade/aliance/fond → kolik fond drží, kdo kolik vložil a jaký má díl
@@ -1428,6 +1429,7 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
   // Člen fondu bývá i akcionářem. Panel fondu je místo, kam se dívá nejčastěji,
   // takže se tu naběhlá dividenda doúčtuje taky.
   await DIV.dorovnej(req.player.id).catch(() => 0);
+  await DIVC.dorovnej(req.player.id).catch(() => 0);
   const moje = await mojeAliance(req.player.id);
   if (!moje) return res.json({ ok: true, fond: null });
   const REZ = require('../services/game/rezervace');
@@ -1495,6 +1497,13 @@ router.get('/trade/aliance/fond', hrac, api(async (req, res) => {
     // Sazba dividendy, kterou fond slíbil akcionářům. Člen musí vidět, co se
     // z pokladny průběžně odlévá.
     akcie_sazba: Math.max(0, (al && al.akcie_sazba) || 0),
+    // Průběžná dividenda členům: sazba, co to stojí fond za rok a co z toho
+    // nabíhá právě tomuhle členovi.
+    clen_sazba: Math.max(0, (al && al.clen_sazba) || 0),
+    clen_dividenda_rocne: Math.round(Math.max(0, (al && al.clen_zaklad) || 0)
+      * Math.max(0, (al && al.clen_sazba) || 0)),
+    clen_dividenda: DIVC.stav(al, (p.find((x) => x.clen_id === req.player.id) || {}).podil || 0,
+      (radky.find((x) => x.clen_id === req.player.id) || {}).dividenda_do),
     akcie_dividenda_rocne: Math.round(Math.max(0, (al && al.akcie_ucetni) || 0)
       * Math.max(0, (al && al.akcie_sazba) || 0)
       * Math.max(0, (al && al.akcie_vydano) || 0)),
@@ -1656,6 +1665,11 @@ const DRUHY = {
   akcie_sazba: { prah: FOND.prahDruhu('akcie_sazba'), kod: 'dor.fond_navrh_akcie_sazba',
     udaje: (d, kdo, al) => ({ p1: kdo, p2: al,
       p3: Math.round((d.sazba || 0) * 1000) / 10 }) },
+  // Průběžná dividenda členům: totéž pro ty, kdo do fondu složili peníze.
+  // Platí se z dílu, který nepatří akcionářům, a dělí se podle vkladů.
+  clen_sazba: { prah: FOND.prahDruhu('clen_sazba'), kod: 'dor.fond_navrh_clen_sazba',
+    udaje: (d, kdo, al) => ({ p1: kdo, p2: al,
+      p3: Math.round((d.sazba || 0) * 1000) / 10 }) },
 };
 
 // Kolik fond drží v jedné firmě a jestli to stačí na většinu. Dividendu
@@ -1789,6 +1803,11 @@ router.post('/trade/aliance/fond/navrh', hrac, api(async (req, res) => {
     const pct = Math.max(0, Math.min(AKCIE.SAZBA_MAX * 100, Number(b.sazba_pct) || 0));
     const vydano = Math.max(0, Math.round((al && al.akcie_vydano) || 0));
     if (!vydano) return res.status(409).json({ error: stx(req)('server.fond_akcie_nevydal') });
+    detail = { sazba: pct / 100 };
+  } else if (druh === 'clen_sazba') {
+    // Sazba se zadává v procentech za herní rok. Nula je platná hodnota —
+    // tak se dividenda členům vypíná.
+    const pct = Math.max(0, Math.min(AKCIE.SAZBA_MAX * 100, Number(b.sazba_pct) || 0));
     detail = { sazba: pct / 100 };
   } else if (druh === 'zrusit') {
     const t = await prisma.gameTender.findUnique({
@@ -2298,6 +2317,26 @@ router.post('/trade/aliance/fond/navrh/:id/provest', hrac, api(async (req, res) 
     return res.json({ ok: true, sazba });
   }
 
+  // ── Sazba dividendy členům ───────────────────────────────────
+  // Stejně jako u akcionářů: nic se teď nevyplácí, jen se zapne nabíhání
+  // od téhle chvíle. Zpětně by první pohled vyplatil celou dobu, kdy žádná
+  // sazba neplatila.
+  if (n.druh === 'clen_sazba') {
+    const sazba = Math.max(0, Math.min(AKCIE.SAZBA_MAX, Number(d.sazba) || 0));
+    await prisma.$transaction(async (tx) => {
+      await tx.gameAliance.update({ where: { id: moje.aliance_id },
+        data: { clen_sazba: sazba } });
+      await tx.gameFondVklad.updateMany({ where: { aliance_id: moje.aliance_id },
+        data: { dividenda_do: new Date() } });
+      await tx.gameFondNavrh.update({ where: { id: n.id }, data: { stav: 'proveden' } });
+    });
+    await zprava('dor.fond_clen_sazba',
+      { p1: (al && al.nazev) || '', p2: Math.round(sazba * 1000) / 10 });
+    console.log('[game] fond #' + moje.aliance_id + ': sazba dividendy členům '
+      + Math.round(sazba * 1000) / 10 + ' % p.a.');
+    return res.json({ ok: true, sazba });
+  }
+
   // ── Dividenda akcionářům ──────────────────────────────────────────────────
   // Platí se po kusech z pokladny. Akcionář nemusí být člen fondu, takže
   // doručenka je jediná cesta, jak mu peníze poslat.
@@ -2684,6 +2723,7 @@ router.post('/trade/prevzeti/:id/prodat', hrac, api(async (req, res) => {
 const AKCIE = require('../services/game/akcie');
 const CENA = require('../services/game/akcie-cena');
 const DIV = require('../services/game/akcie-dividenda');
+const DIVC = require('../services/game/fond-dividenda');
 
 // Složený klíč se v Prisma klientovi NEJMENUJE podle @@unique(map: ...) —
 // `map` přejmenuje jen omezení v databázi. Spoléhat se na vygenerované jméno

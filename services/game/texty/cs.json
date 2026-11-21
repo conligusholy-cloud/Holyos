@@ -3900,5 +3900,14 @@
   "veta.fond_dividenda_ukrajuje": "Dividenda ukrajuje {p1} % toho, co fondu nesou držené firmy.",
   "veta.fond_dividenda_nad_vynos": "Fond vyplácí o {penize:p1} měsíčně víc, než vydělá — rozdíl jde z pokladny.",
   "veta.fond_pokladna_vydrzi": "Volné peníze při téhle sazbě vydrží ještě {cislo:p1} herních měsíců.",
-  "veta.fond_sazba_udrzitelna": "Z výnosu firem by šla do nekonečna platit sazba {p1} % p.a."
+  "veta.fond_sazba_udrzitelna": "Z výnosu firem by šla do nekonečna platit sazba {p1} % p.a.",
+  "fond.navrh_clen_sazba": "Dividenda členům (sazba)",
+  "fond.clen_sazba_popis": "Kolik procent svého dílu na hodnotě fondu dostanou členové za herní rok. Dělí se podle vkladů a platí ze stejné pokladny jako dividenda akcionářům — když fond nemá volné peníze, nenabíhá nic. Nula ji vypne.",
+  "fond.clen_sazba_nadpis": "Dividenda členům",
+  "fond.clen_sazba_radek": "Sazba členům",
+  "fond.clenum_mesicne": "Členům měsíčně",
+  "veta.fond_clen_sazba_popis": "dividenda členům {p1} % za herní rok",
+  "dor.fond_navrh_clen_sazba": "{p1} navrhuje ve fondu {p2}: dividenda členům {p3} % za herní rok.",
+  "dor.fond_clen_sazba": "Fond {p1} vyhlásil dividendu členům: {p2} % za herní rok.",
+  "dor.fond_dividenda_sazba": "Dividenda z fondu {p1}: {penize:p2}."
 }

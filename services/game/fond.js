@@ -175,8 +175,12 @@ function prevod(radky, zKoho, komu, castka) {
 // budoucna: platí se jen z toho, co fond doopravdy má, a táž většina ji
 // může kdykoli snížit. Zásadní práh by znamenal, že ji menšina udrží
 // zapnutou proti vůli ostatních — a to je horší než ji zapnout.
+// Průběžná dividenda členům je ZÁSADNÍ, ačkoli sazba akcionářům je běžná.
+// Rozdíl je v tom, komu peníze tečou: akcionářům je členové platí ze svého,
+// a tak se většina omezuje sama. Sobě si však většina odhlasovat průběžný
+// odliv z fondu nemá — je to táž věc jako výplata, jen rozložená v čase.
 const PRAHY = { koupit: BEZNE, vyplatit: ZASADNI, zrusit: BEZNE, dividenda: BEZNE,
-  akcie: ZASADNI, akcie_dividenda: BEZNE, akcie_sazba: BEZNE };
+  akcie: ZASADNI, akcie_dividenda: BEZNE, akcie_sazba: BEZNE, clen_sazba: ZASADNI };
 const prahDruhu = (druh) => (PRAHY[druh] == null ? null : PRAHY[druh]);
 
 // ─── Žebríček fondů ──────────────────────────────────────────────

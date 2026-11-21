@@ -17,6 +17,7 @@
 
 const { prisma } = require('../../config/database');
 const AKCIE = require('./akcie');
+const cislo = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0);
 
 // Bod do řady cen. Píše se jen tehdy, když se cena opravdu změnila — jinak
 // by hodinové přeceňování vyrobilo graf z bodů na stejné výšce.
@@ -45,9 +46,17 @@ async function precenFondu(alianceId, hodnota) {
   const al = await prisma.gameAliance.findUnique({ where: { id },
     select: { akcie_celkem: true, akcie_vydano: true, akcie_podil: true,
       akcie_cena: true, akcie_ucetni: true } }).catch(() => null);
+  if (!al) return 0;
+  // Díl členů na hodnotě fondu — to, co nepatří akcionářům. Z něj se
+  // počítá průběžná dividenda členům a ukládá se tady, protože tady už je
+  // hodnota fondu spočítaná. Jinak by se kvůli každé výplatě muselo znovu
+  // ocenit jmění všech firem, které fond drží.
+  const dilClenu = Math.max(0, cislo(hodnota) * (1 - Math.max(0, Math.min(1, al.akcie_podil || 0))));
+  await prisma.gameAliance.update({ where: { id },
+    data: { clen_zaklad: dilClenu } }).catch(() => null);
   // Fond bez vydaných akcií nemá co přeceňovat: cena nevydaných kusů je
   // vyvolávací cena z hlasování a ta se hýbat nemá, dokud je nikdo nekoupí.
-  if (!al || !(al.akcie_celkem > 0) || !(al.akcie_vydano > 0)) return 0;
+  if (!(al.akcie_celkem > 0) || !(al.akcie_vydano > 0)) return 0;
   // Nezaokrouhleně: proti téhle hodnotě se měří příští přecenění, a pár korun
   // zaokrouhlení by se v každém kroku přičetlo k ceně jako skutečný pohyb.
   const ted = AKCIE.ucetniPresna(hodnota, al.akcie_podil, al.akcie_vydano);

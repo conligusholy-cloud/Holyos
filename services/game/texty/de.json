@@ -3866,5 +3866,14 @@
   "veta.fond_dividenda_ukrajuje": "Die Dividende frisst {p1} % dessen, was die Firmen dem Fonds bringen.",
   "veta.fond_dividenda_nad_vynos": "Der Fonds zahlt {penize:p1} im Monat mehr aus, als er verdient — die Differenz geht aus der Kasse.",
   "veta.fond_pokladna_vydrzi": "Bei diesem Satz reicht das freie Geld noch {cislo:p1} Spielmonate.",
-  "veta.fond_sazba_udrzitelna": "Aus dem Ertrag der Firmen ließe sich dauerhaft ein Satz von {p1} % p.a. zahlen."
+  "veta.fond_sazba_udrzitelna": "Aus dem Ertrag der Firmen ließe sich dauerhaft ein Satz von {p1} % p.a. zahlen.",
+  "fond.navrh_clen_sazba": "Mitgliederdividende (Satz)",
+  "fond.clen_sazba_popis": "Wie viel Prozent ihres Anteils am Fondswert die Mitglieder je Spieljahr bekommen. Sie wird nach Einlagen geteilt und aus derselben Kasse gezahlt wie die Aktiendividende — hat der Fonds kein freies Geld, läuft nichts auf. Null schaltet sie ab.",
+  "fond.clen_sazba_nadpis": "Mitgliederdividende",
+  "fond.clen_sazba_radek": "Satz für Mitglieder",
+  "fond.clenum_mesicne": "An Mitglieder im Monat",
+  "veta.fond_clen_sazba_popis": "Mitgliederdividende {p1} % je Spieljahr",
+  "dor.fond_navrh_clen_sazba": "{p1} schlägt im Fonds {p2} vor: Mitgliederdividende {p3} % je Spieljahr.",
+  "dor.fond_clen_sazba": "Der Fonds {p1} hat eine Mitgliederdividende beschlossen: {p2} % je Spieljahr.",
+  "dor.fond_dividenda_sazba": "Dividende aus dem Fonds {p1}: {penize:p2}."
 }

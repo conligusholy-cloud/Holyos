@@ -8363,6 +8363,11 @@ model GameAliance {
   // herní rok. Nabíhá plynule a připisuje se, když se hráč podívá — ale jen
   // dokud má fond volné peníze. Nula = fond dividendu neslíbil.
   akcie_sazba   Float    @default(0)
+  // Totéž pro členy: kolik procent svého dílu na hodnotě fondu dostanou za
+  // herní rok. clen_zaklad je ta hodnota — díl členů (co nepatří akcionářům),
+  // dopočítaná při přecenění, aby se u každé výplaty nepočítala znovu.
+  clen_sazba    Float    @default(0)
+  clen_zaklad   Float    @default(0)
   created_at    DateTime @default(now())
 
   @@map("game_aliance")
@@ -8502,6 +8507,9 @@ model GameFondVklad {
   clen_id    Int
   castka     Float    @default(0)
   vlozeno    Float    @default(0)
+  // Dokdy je členovi vyplacená průběžná dividenda. Od téhle chvíle se počítá
+  // další — stejně jako u akcionářů.
+  dividenda_do DateTime @default(now())
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
