@@ -2975,7 +2975,11 @@ router.get('/trade/akcie/:id', hrac, api(async (req, res) => {
     posledni_cena: obchody.length ? obchody[0].cena : null,
     graf: ceny.map((c) => ({ kdy: c.kdy, cena: c.cena, duvod: c.duvod })),
     // Poslední obchody zvlášť: graf je o ceně, tohle o tom, kdo kolik koupil.
-    obchody: obchody.slice(0, 6).map((o) => ({ kdy: o.kdy, cena: o.cena, pocet: o.pocet })),
+    // Ke každému se pošle i to, o kolik cenou hnul — obchody chodí od
+    // nejnovějšího, takže předchozí cena je ta o řádek níž. Bez toho se ze
+    // seznamu nepozná, jestli šla cena nahoru, nebo dolů.
+    obchody: obchody.slice(0, 6).map((o, i) => ({ kdy: o.kdy, cena: o.cena, pocet: o.pocet,
+      zmena: obchody[i + 1] ? o.cena - obchody[i + 1].cena : null })),
   }) });
 }));
 

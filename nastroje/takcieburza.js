@@ -178,6 +178,20 @@ ok('z fondu vede cesta na burzu', /id="fond-burza"/.test(usekF));
 ok('a z burzy zpátky do fondu',
   /AKCIE_KAM = fondZavriAZnovu;/.test(hra));
 
+// Poslední obchody: čas a směr. Ze samotného data a ceny se nepozná, jestli
+// cena šla nahoru nebo dolů — a při páru obchodů za hodinu ani kdy se staly.
+ok('u obchodu je i čas', /casKratce\(o\.kdy\)/.test(usekTrh));
+ok('a je vidět, kam cenou hnul',
+  /smerVynosu\(o\.cena, o\.zmena == null \? null : o\.cena - o\.zmena\)/.test(usekTrh));
+ok('nahoru zeleně, dolů červeně',
+  /sm \? \(sm\.nahoru \? 'ok' : 'err'\) : ''/.test(usekTrh));
+ok('server poslá změnu proti předchozímu obchodu',
+  /zmena: obchody\[i \+ 1\] \? o\.cena - obchody\[i \+ 1\]\.cena : null/.test(routy));
+// Čas se skládá z čísel: formát podle češtiny by v jiném jazyce přidal
+// dopoledne/odpoledne a řádek obchodu by se rozjel.
+const casF = (hra.match(/function casKratce\(x\) \{[\s\S]*?\n\}/) || [''])[0];
+ok('čas se nebere z místního formátu', !!casF && !/toLocale/.test(casF));
+
 // Dividenda je to, co fond doopravdy vyplatil — patří k podrobnostem vedle
 // nároku, ne místo něj.
 ok('podrobnosti ukazují poslední dividendu',

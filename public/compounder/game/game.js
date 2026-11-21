@@ -7244,6 +7244,13 @@ function datumKratce(x) {
   try { return new Date(x).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' }); }
   catch (e) { return ''; }
 }
+// Hodina a minuta. Skládá se z čísel schválně: formát podle češtiny by
+// v jiném jazyce přidal dopoledne/odpoledne a řádek obchodu by se rozjel.
+function casKratce(x) {
+  var d = new Date(x);
+  if (isNaN(d.getTime())) return '';
+  return d.getHours() + ':' + ('0' + d.getMinutes()).slice(-2);
+}
 function pullRefs() {
   if (!S || !S.pid) return;
   fetch('/api/game/ref/' + encodeURIComponent(S.pid), { cache: 'no-store' })
@@ -11413,9 +11420,13 @@ function akcieTrhSheet(id, smer) {
     + (posledni.length
         ? '<h4 style="margin:14px 0 2px">' + esc(tx('akcie.posledni_obchody')) + '</h4>'
           + posledni.map(function (o) {
+              // Kam obchod cenou hnul. První známý obchod nemá proti čemu měřit,
+              // a nula není pokles — tam se šipka nekreslí vůbec.
+              var sm = smerVynosu(o.cena, o.zmena == null ? null : o.cena - o.zmena);
               return '<div class="row"><span class="muted small">' + esc(datumKratce(o.kdy))
-                + ' · ' + tCislo(o.pocet) + ' ×</span>'
-                + '<span>' + kcFull(o.cena) + '</span></div>';
+                + ' ' + esc(casKratce(o.kdy)) + ' · ' + tCislo(o.pocet) + ' ×</span>'
+                + '<span class="' + (sm ? (sm.nahoru ? 'ok' : 'err') : '') + '">'
+                + sipkaHtml(sm) + kcFull(o.cena) + '</span></div>';
             }).join('')
         : '');
   sheet('<h3>' + tx('veta.akcie_fondu', { p1: esc(a.nazev) }) + '</h3>'
