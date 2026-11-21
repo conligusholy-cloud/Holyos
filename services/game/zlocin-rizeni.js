@@ -193,8 +193,17 @@ async function uzavri(prisma, z, rozhodnuti, castka) {
           prisma.gameDelivery.create({ data: { player_id: z.hlavni_id, kind: 'unit_remove',
             spot_id: x.c.spot_id,
             popis: 'Soud: zabaven prádlomat ' + (x.c.name || x.c.spot_id) + ' (propadl státu)' } }),
-          prisma.gameSpotClaim.deleteMany({
-            where: { spot_id: x.c.spot_id, player_id: z.hlavni_id } }),
+          // Vlastní zem soud nebere — propadá stroj, ne zaplacený pozemek.
+          // Dokud se rušil celý zábor, přišel hráč i o pozemek: server o něm
+          // přestal vědět, hra ho dál ukazovala jako jeho, a pronájem pak
+          // hlásil, že pozemek hráči nepatří. Na pozemku proto zábor zůstává,
+          // jen se z něj smaže stroj. Jinde se místo uvolní jako dřív.
+          x.c.pozemek
+            ? prisma.gameSpotClaim.updateMany({
+              where: { spot_id: x.c.spot_id, player_id: z.hlavni_id },
+              data: { model: '', rent: 0, pripojky: null, pripojky_srv: null } })
+            : prisma.gameSpotClaim.deleteMany({
+              where: { spot_id: x.c.spot_id, player_id: z.hlavni_id } }),
         ]);
         zabaveno.push(x.c.name || x.c.spot_id);
         zbyva -= x.v;

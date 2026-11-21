@@ -4607,6 +4607,11 @@ function spotSheet(sp, areaId) {
   }
   // Na vlastním pozemku se rovnou staví — zem je zaplacená.
   if (mamPozemek(sp.id)) {
+    // Zábor mohl zmizet (prádlomat zabavený soudem). Než panel nabídne
+    // pronájem nebo stavbu, ať o pozemku server zase ví.
+    if (!CLAIMS[sp.id] && !ZABOR_ZKUSEN[sp.id]) {
+      return obnovZaborPozemku(sp, areaId, function () { spotSheet(sp, areaId); });
+    }
     var zem0 = pozemky().filter(function (z) { return z.spotId === sp.id; })[0] || {};
     var najemce0 = claim && claim.najemce ? claim.najemce : null;
     var pl0 = planMista(sp.id);
@@ -5617,6 +5622,29 @@ function padPodil(kolikatyUz) {
 }
 function mamPozemek(spotId) {
   return pozemky().some(function (z) { return z.spotId === spotId; });
+}
+// Zem zůstává hráči, i když mu soud vezme prádlomat — stroj propadne státu,
+// ale pozemek je zaplacený majetek. Rozsudek ale rušil celý zábor, takže
+// server o pozemku přestal vědět, zatímco hra ho dál ukazovala jako můj:
+// pronájem pak skončil hláškou, že pozemek hráči nepatří. Když tedy pozemek
+// v evidenci mám a server o něm neví, zapíšeme zábor zpátky. Když ho mezitím
+// zabral někdo jiný, zmizí mi ze seznamu — zem už není moje.
+var ZABOR_ZKUSEN = {};
+function obnovZaborPozemku(sp, areaId, then) {
+  ZABOR_ZKUSEN[sp.id] = 1;
+  apiJson('/spots/claim', { spot_id: sp.id, area_key: areaId, model: '', rent: 0,
+    name: sp.name, lat: sp.lat, lon: sp.lon, pozemek: true, score: sp.score }).then(function (r) {
+    if (r.ok) CLAIMS[sp.id] = r.j.spot;
+    else if (r.j && r.j.occupied) {
+      CLAIMS[sp.id] = r.j.occupied;
+      if (!r.j.occupied.mine) {
+        S.pozemky = pozemky().filter(function (z) { return z.spotId !== sp.id; });
+        save();
+      }
+    }
+    drawMap();
+    if (then) then();
+  }).catch(function () { if (then) then(); });
 }
 // Do majetku patří všechna koupená zem, i ta pod stojícím prádlomatem — a k ní
 // příprava plochy, pokud ji hráč zaplatil dopředu, ještě bez stroje. V investici
@@ -6862,6 +6890,11 @@ function vypovedMajiteleHtml(u) {
 
 // Panel cizího prádlomatu: koho přebíráš a za kolik to zkusíš.
 function rivalSheet(sp, areaId, c) {
+  // Cizí zem bez stroje má svůj vlastní panel — a když ji majitel nabízí,
+  // dá se z něj rovnou pronajmout. Z mapy se sem ale chodí rovnou, takže
+  // bez téhle odbočky skončil špendlík „k pronájmu“ v panelu, kde se
+  // pronajmout nedalo. Hráči to hlásili jako chybu, a právem.
+  if (c.pozemek && !c.model) return cizipozemekSheet(sp, areaId, c);
   // Pozemek se nepřeplácí — zem patří majiteli a ten ji prodávat nemusí.
   if (c.pozemek) {
     sheet('<h3>' + esc(sp.name) + '</h3>'

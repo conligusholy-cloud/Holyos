@@ -200,6 +200,16 @@ if git diff --cached --name-only | grep -qE 'services/game/fond|services/game/vl
   fi
 fi
 
+# Pozemky: soud bere stroje, ne zaplacenou zem; inzerát „k pronájmu“ musí jít
+# otevřít; zábor zrušený soudem se musí dát vrátit. Všechno tři hlásili hráči.
+if git diff --cached --name-only | grep -qE 'services/game/zlocin-rizeni|public/compounder/game/game.js'; then
+  if ! node nastroje/tpozemek.js; then
+    echo ""
+    echo "STOP: pozemky nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Prahy hlasování ve fondu. Člen musí PŘEDEM vidět, kolik hlasů je potřeba —
 # jinak dá návrh hlasovat, nic se nestane a vypadá to jako porouchaná hra.
 if git diff --cached --name-only | grep -qE 'services/game/fond|routes/game-trade|public/compounder/game/game.js'; then
