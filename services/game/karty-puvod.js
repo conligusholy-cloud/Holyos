@@ -190,8 +190,15 @@ async function zprava(prisma, kdoJeMule) {
   const poradi = [...sporne.entries()].sort((a, b) => b[1].length - a[1].length);
   for (const [playerId, l] of poradi) {
     const h = data.P.get(playerId);
+    // Souhrn po druzích napřed: výpis se krátí na dvacet řádků, takže bez něj
+    // nejde poznat, jestli je v těch stovkách karet jedna na návštěvnost,
+    // nebo třicet — a právě na tom záleží.
+    const poDruhu = new Map();
+    l.forEach((x) => poDruhu.set(x.kind, (poDruhu.get(x.kind) || 0) + 1));
     out.push((h ? (h.company || h.nick) + ' (' + h.nick + ' #' + playerId + ')' : '#' + playerId)
-      + ' — ' + l.length + ' karet');
+      + ' — ' + l.length + ' karet: '
+      + [...poDruhu.entries()].sort((a, b) => b[1] - a[1])
+        .map(([k, n]) => n + '× ' + k).join(', '));
     l.slice(0, 20).forEach((x) => {
       out.push('   ' + String(x.kind).padEnd(10) + String(x.jak).padEnd(8)
         + 'od ' + String(x.od).padEnd(18) + ('za ' + kc(x.cena) + ' L$').padStart(16)
