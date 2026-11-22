@@ -217,6 +217,16 @@ if git diff --cached --name-only | grep -qE 'services/game/navstevnost|routes/ga
   fi
 fi
 
+# Názvy zemí. Ručně přeložených je hrstka, zbytek pojmenuje prohlížeč —
+# bez toho svítí v žebříčku jen dvoupísmenné kódy.
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; then
+  if ! node nastroje/tzemenazvy.js; then
+    echo ""
+    echo "STOP: názvy zemí nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Uvítací karta se nepřevádí. Dokud šla, stačilo zakládat účty a sbírat z nich
 # karty na návštěvnost — jeden hráč si takhle vydělával desetinásobek.
 if git diff --cached --name-only | grep -qE 'routes/game-trade|routes/game-account|public/compounder/game/game.js|prisma/'; then

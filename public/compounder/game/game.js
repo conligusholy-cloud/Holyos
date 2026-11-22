@@ -8123,20 +8123,36 @@ function loadZeb() {
 // ─── Vlaječky zemí ─────────────────────────────────────────────────
 // Vlajka je dvojice znaků „regional indicator“ — telefon z nich slöží obrázek
 // vlajky sám. Kde na to písmo není (Windows), ukáže aspoň kód země, což stačí.
-var ZEME_NAZEV = { cz: esc(tx('hra.cesko')), sk: esc(tx('hra.slovensko')), pl: esc(tx('hra.polsko')), de: esc(tx('hra.nemecko')), at: esc(tx('hra.rakousko')),
-  hu: esc(tx('hra.madarsko')), si: esc(tx('hra.slovinsko')), hr: esc(tx('hra.chorvatsko')), it: esc(tx('hra.italie')), es: esc(tx('hra.spanelsko')),
-  fr: esc(tx('hra.francie')), nl: esc(tx('hra.nizozemsko')), be: esc(tx('hra.belgie')), ch: esc(tx('hra.svycarsko')), gb: esc(tx('hra.velka_britanie')),
-  ie: esc(tx('hra.irsko')), dk: esc(tx('hra.dansko')), se: esc(tx('hra.svedsko')), no: esc(tx('hra.norsko')), fi: esc(tx('hra.finsko')), pt: esc(tx('hra.portugalsko')),
-  ro: esc(tx('hra.rumunsko')), bg: esc(tx('hra.bulharsko')), gr: esc(tx('hra.recko')), ua: esc(tx('hra.ukrajina')), us: esc(tx('hra.spojene_staty')),
-  ca: esc(tx('hra.kanada')) };
+var ZEME_NAZEV = { cz: tx('hra.cesko'), sk: tx('hra.slovensko'), pl: tx('hra.polsko'), de: tx('hra.nemecko'), at: tx('hra.rakousko'),
+  hu: tx('hra.madarsko'), si: tx('hra.slovinsko'), hr: tx('hra.chorvatsko'), it: tx('hra.italie'), es: tx('hra.spanelsko'),
+  fr: tx('hra.francie'), nl: tx('hra.nizozemsko'), be: tx('hra.belgie'), ch: tx('hra.svycarsko'), gb: tx('hra.velka_britanie'),
+  ie: tx('hra.irsko'), dk: tx('hra.dansko'), se: tx('hra.svedsko'), no: tx('hra.norsko'), fi: tx('hra.finsko'), pt: tx('hra.portugalsko'),
+  ro: tx('hra.rumunsko'), bg: tx('hra.bulharsko'), gr: tx('hra.recko'), ua: tx('hra.ukrajina'), us: tx('hra.spojene_staty'),
+  ca: tx('hra.kanada') };
 function vlajka(kod) {
   var k = String(kod || '').toUpperCase();
   if (!/^[A-Z]{2}$/.test(k)) return '';
   return String.fromCodePoint(0x1F1E6 + k.charCodeAt(0) - 65, 0x1F1E6 + k.charCodeAt(1) - 65);
 }
+// Zemí, ve kterých se dá stavět, jsou přes dvě stovky — ručně přeložených
+// je jen hrstka výš. Zbytek umí pojmenovat sám prohlížeč, a rovnou v jazyce
+// hráče. Kde to neumí, zůstane kód země jako dřív.
+var ZEME_INTL;
+function zemeNazevSystem(K) {
+  if (ZEME_INTL === undefined) {
+    try { ZEME_INTL = new Intl.DisplayNames([localeHrace()], { type: 'region' }); }
+    catch (e) { ZEME_INTL = null; }
+  }
+  if (!ZEME_INTL) return '';
+  try { var n = ZEME_INTL.of(K); return (n && n !== K) ? n : ''; } catch (e) { return ''; }
+}
+// Pozor: vrací holý text, escapuje až ten, kdo ho lepí do HTML.
 function zemeNazev(kod) {
   var k = String(kod || '').toLowerCase();
-  return ZEME_NAZEV[k] || k.toUpperCase();
+  if (ZEME_NAZEV[k]) return ZEME_NAZEV[k];
+  var K = k.toUpperCase();
+  if (!/^[A-Z]{2}$/.test(K)) return K;
+  return zemeNazevSystem(K) || K;
 }
 // Vlaječky zemí, ve kterých hráči stojí prádlomaty — od té, kde jich má nejvíc.
 function vlajkyHtml(zeme) {
