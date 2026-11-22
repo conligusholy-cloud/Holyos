@@ -986,6 +986,28 @@ function splatitDluh(castka) {
   prepocitejDluh();
   return splaceno;
 }
+// Úvěr vázaný na jedno místo. Když se prádlomat prodá, doplatí se z ceny —
+// peníze proto zůstaly u kupujícího a hotovosti se tohle nedotkne, jen se
+// umaže dluh. Vrací, kolik z částky zbylo (úvěr byl mezitím menší, třeba
+// proto, že hráč mezitím splácel) — to se vrátí do hotovosti, ne do banky.
+function splatitUverMista(spotId, castka) {
+  castka = Math.max(0, Math.round(castka || 0));
+  if (!spotId || !castka || !S.loans || !S.loans.length) return castka;
+  var dosplaceno = 0;
+  S.loans.forEach(function (l) {
+    if (castka <= 0 || !l || l.spotId !== spotId || l.zbyva <= 0) return;
+    var dam = Math.min(castka, l.zbyva);
+    l.zbyva -= dam; castka -= dam;
+    S.bank = Math.min(bankCap(), S.bank + dam);   // splácením se uvolňuje rámec
+    if (l.zbyva < 1) { l.zbyva = 0; dosplaceno++; zapisDoplacene(l); }
+  });
+  if (dosplaceno) {
+    S.stats.splaceno = (S.stats.splaceno || 0) + dosplaceno;
+    S.loans = S.loans.filter(function (l) { return l.zbyva > 0; });
+  }
+  prepocitejDluh();
+  return castka;
+}
 // Mimořádná splátka jednoho konkrétního úvěru — hráč si vybírá sám, protože
 // nejdražší úvěr nemusí být ten, kterého se chce zbavit. Splátka zůstává
 // stejně vysoká a úvěr skončí dřív — tak ušetří nejvíc na úrocích.
@@ -11263,6 +11285,20 @@ function predmetPopis(t) {
   }
   return esc(String(t.predmet || '?'));
 }
+// Co na nabízeném prádlomatu vázne. Kupující to musí vidět dřív, než
+// zaplatí: z ceny se dluh doplatí a prodávajícímu zbyde zbytek. Dřív se
+// claim jen přepsal a kupující platil stroj, na kterém visely cizí splátky.
+function dluhMistaHtml(data, cena) {
+  var dluh = Math.max(0, Math.round(Number((data || {}).dluh) || 0));
+  if (!dluh) return '';
+  var c = Math.max(0, Math.round(Number(cena) || 0));
+  var doplati = Math.min(c, dluh);
+  return '<div class="row"><span class="muted small">' + esc(tx('hra.vazne_na_nem_uver'))
+    + '</span><span class="warn">' + kcFull(dluh) + '</span></div>'
+    + '<p class="fine">' + (doplati >= dluh
+      ? tx('veta.uver_se_doplati_z_ceny', { p1: doplati, p2: Math.max(0, c - doplati) })
+      : tx('veta.uver_cena_nepokryje', { p1: doplati })) + '</p>';
+}
 function cenaPopis(t) {
   var casti = [];
   if (t.cena) casti.push(kcFull(t.cena));
@@ -12802,6 +12838,7 @@ function radekObchodu(t) {
         + zastavaPopis(t.data) + '</span></div>'
       : '')
     + '<div class="row"><span class="muted small">' + esc(tx('hra.cena_4')) + '</span><span class="cena">' + esc(cenaPopis(t)) + '</span></div>'
+    + (t.predmet === 'pradlomat' ? dluhMistaHtml(t.data, t.cena) : '')
     + (t.vzkaz ? '<p class="muted small" style="margin-top:6px">„' + esc(t.vzkaz) + '"</p>' : '')
     + nekrytoHtml(t)
     + (t.stav !== 'ceka' ? '<p style="margin-top:8px"><span class="stav ' + esc(t.stav) + '">' + esc(stavNabidky(t.stav)) + '</span></p>' : '')
@@ -13890,6 +13927,16 @@ function vyzvedniNasledky(then) {
         if (S.cash < 0) { pricistDluh(-S.cash, prirazkaZa(-S.cash)); S.bank = Math.max(0, S.bank + S.cash); S.cash = 0; }
       }
       else if (x.kind === 'stock') { S.stock[x.model] = Math.max(0, inStock(x.model) + (x.amount || 0)); }
+      else if (x.kind === 'uver_splatka') {
+        // Z ceny prodaného prádlomatu se doplatil úvěr, který na něm visel.
+        // Hotovost se nehýbe — ta zůstala v ceně. Co z částky přebylo, se
+        // vrátí hráči: tolik už na tom místě nedlužil.
+        var zbylo = splatitUverMista(x.spot_id, x.amount || 0);
+        if (zbylo > 0) {
+          S.cash += zbylo;
+          zapis('prijem', x.popis || esc(tx('hra.pripsano_na_ucet')), zbylo, 0, x.vzniklo);
+        }
+      }
       else if (x.kind === 'unit_remove') {
         S.prodano = S.prodano || {};
         S.prodano[x.spot_id] = 1;   // ať se stroj nevrátí na sklad jako při přetažení
@@ -14159,6 +14206,7 @@ function paintDrazba() {
   box.innerHTML = tx('veta.h3_drazba', { p1: tx('veta.h3_p_class_muted_small_style_10', { p1: esc(drzNazev(d)), p2: (d.moje ? esc(tx('hra.vyvolal_jsi_ji_ty'))
         : d.tajny_prodavajici ? esc(tx('drazba.kdo_ji_vyvolal_se_ukaze'))
           : tx('veta.vyvolal', { p1: esc(d.prodavajici_nick) })) }) })
+    + dluhMistaHtml(d.data, cena)   // u prádlomatu; jinde dluh v datech není
     // Hodiny jsou hrdina okna — odpočet rozhoduje, cena je až druhá v pořadí.
     + tx('veta.div_class_drz_hodiny_id_drz', { p1: esc(tx('drazba.vterin')), p2: drzLideHtml(d), p3: esc(tx('drazba.cena_ted')), p4: kcFull(cena), p5: esc(tx('drazba.vyvolavaci_cena')), p6: kcFull(d.vyvolavaci), p7: d.prihozu, p8: kcFull(d.suma) }) + (pod ? '' : ' style="display:none"')
     + tx('veta.prihozy_prerostly_vyvolavaci_cenu_od_tehle') + (d.vedu ? 'ok' : '') + '">'

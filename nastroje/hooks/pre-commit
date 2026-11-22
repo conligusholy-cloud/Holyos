@@ -227,6 +227,16 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; th
   fi
 fi
 
+# Dluh na prodaném prádlomatu. Kupující má dostat stroj, ne cizí splátky —
+# a zastavený prádlomat se nesmí prodejem zbavit zástavy.
+if git diff --cached --name-only | grep -qE 'services/game/dluh-mista|routes/game-trade|public/compounder/game/game.js|services/game/texty/'; then
+  if ! node nastroje/tdluhpradlomat.js; then
+    echo ""
+    echo "STOP: doplacení dluhu z ceny prádlomatu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Uvítací karta se nepřevádí. Dokud šla, stačilo zakládat účty a sbírat z nich
 # karty na návštěvnost — jeden hráč si takhle vydělával desetinásobek.
 if git diff --cached --name-only | grep -qE 'routes/game-trade|routes/game-account|public/compounder/game/game.js|prisma/'; then

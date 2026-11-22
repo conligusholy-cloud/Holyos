@@ -235,6 +235,8 @@ router.get('/trade/players', hrac, api(async (req, res) => {
 }));
 
 const { HODNOSTI, ODZNAK, nazevHodnosti, odznakPro } = require('../services/game/hodnosti');
+// Co vázne na prádlomatu — při prodeji se to doplácí z ceny.
+const DLUH = require('../services/game/dluh-mista');
 const TEXTY = require('../services/game/texty');
 const { textDorucenky } = require('../services/game/doruceni');
 // Název hodnosti se skládá pro toho, KOMU se posílá — na burze se potkají
@@ -616,8 +618,16 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
       vyplaceno: dilP(e.vyplaceno), firma_id: e.firma_id, firma_nick: e.firma_nick };
   }
   // Kdo věc má: u „koupim" ji má ten druhý, u „prodam" ji mám já.
-  const chyba = await zkontroluj(nab, smer === 'koupim' ? druhy : req.player, stx(req));
+  const majitel = smer === 'koupim' ? druhy : req.player;
+  const chyba = await zkontroluj(nab, majitel, stx(req));
   if (chyba) return res.status(409).json({ error: chyba });
+  // Dluh na prádlomatu patří do nabídky, ne do překvapení po zaplacení.
+  // Je to číslo k dnešku — závazné je až přepočtení při přijetí.
+  if (predmet === 'pradlomat') {
+    const d = await DLUH.naMiste(prisma, majitel, nab.spot_id);
+    data = Object.assign({}, data || {}, { dluh: d.celkem,
+      dluh_banka: d.banka, dluh_zastava: d.zastava });
+  }
   // Karty přihozené k ceně platí vždycky ten, kdo kupuje.
   const platici = smer === 'koupim' ? req.player : druhy;
   for (const k of karty) {
@@ -745,6 +755,47 @@ router.post('/trade/:id/decline', hrac, api(async (req, res) => {
 }));
 
 // POST /trade/:id/accept — přijetí a samotný převod
+// Doplacení toho, co na prádlomatu vázne, z ceny. Volá to obchod i dražba —
+// když se změní jedno, musí se i druhé. Vrací doručenky k zapsání a to, co
+// z ceny zbyde prodávajícímu.
+async function doplatDluhZCeny(tx, prodavajici, spotId, cena) {
+  const vse = Math.max(0, Math.round(Number(cena) || 0));
+  const vazne = await DLUH.naMiste(tx, prodavajici, spotId);
+  if (!vazne.celkem) return { davky: [], prodavajicimu: vse };
+  const d = DLUH.rozdel(vse, vazne);
+  const davky = [];
+  const doplacene = new Set(d.pujcky.map((x) => x.id));
+  // Na co cena nestačila: zástava stejně mizí, prádlomat je pryč. Věřitel
+  // se to musí dozvědět hned — ne až mu při nezaplacené splátce zůstane
+  // místo stroje jenom vymáhání.
+  for (const pj of vazne.pujcky) {
+    if (doplacene.has(pj.id)) continue;
+    await tx.gameLoan.update({ where: { id: pj.id }, data: { zastava_spot: null } });
+    davky.push({ player_id: pj.lender_id, kind: 'zprava', amount: null,
+      popis: prodavajici.nick + ' prodal zastavený prádlomat — půjčka běží dál bez zástavy',
+      text_kod: 'dor.zastava_zmizela_pujcka_bezi', text_data: { p1: prodavajici.nick } });
+  }
+  for (const pj of d.pujcky) {
+    await tx.gameLoan.update({ where: { id: pj.id },
+      data: { stav: 'splaceno', splaceno: pj.mesicu, zmeskano: 0, zastava_spot: null } });
+    davky.push({ player_id: pj.lender_id, kind: 'cash', amount: pj.zaplatit,
+      popis: prodavajici.nick + ' prodal zastavený prádlomat a půjčku doplatil',
+      text_kod: 'dor.zastava_prodana_pujcka_doplacena', text_data: { p1: prodavajici.nick } });
+    davky.push({ player_id: prodavajici.id, kind: 'zprava', amount: null,
+      popis: 'Z ceny se doplatila půjčka — ' + pj.lender_nick,
+      text_kod: 'dor.z_ceny_doplacena_pujcka', text_data: { p1: pj.lender_nick, penize: pj.zaplatit } });
+  }
+  if (d.banka > 0) {
+    // Bankovní úvěr zná jen hra. Dostane pokyn s částkou i místem a splatí,
+    // co na tom místě opravdu má; co přebude, vrátí do hotovosti.
+    davky.push({ player_id: prodavajici.id, kind: 'uver_splatka',
+      spot_id: spotId, amount: d.banka,
+      popis: 'Z ceny se doplatil úvěr na ' + (spotId || ''),
+      text_kod: 'dor.z_ceny_doplacen_uver', text_data: { penize: d.banka } });
+  }
+  return { davky, prodavajicimu: d.prodavajicimu };
+}
+
 router.post('/trade/:id/accept', hrac, api(async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const t = await prisma.gameTrade.findUnique({ where: { id } });
@@ -1056,10 +1107,24 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
     }
     // 3. peníze
     if (t.cena > 0) {
-      await tx.gameDelivery.createMany({ data: [
-        { player_id: kupujici.id, trade_id: t.id, kind: 'cash', amount: -t.cena, popis: 'Zaplatil jsi za ' + popisPredmetu },
-        { player_id: prodavajici.id, trade_id: t.id, kind: 'cash', amount: t.cena, popis: 'Utržil jsi za ' + popisPredmetu , text_kod: 'dor.utrzil_jsi_za', text_data: { p1: popisPredmetu }},
-      ] });
+      const davky = [{ player_id: kupujici.id, trade_id: t.id, kind: 'cash',
+        amount: -t.cena, popis: 'Zaplatil jsi za ' + popisPredmetu,
+        text_kod: 'dor.zaplatil_jsi_za', text_data: { p1: popisPredmetu } }];
+      let prodavajicimu = t.cena;
+      // Prádlomat se prodává bez dluhu. Co na něm vázne, se doplatí z ceny
+      // dřív, než se prodávajícímu něco připíše — jinak kupující platí
+      // stroj a k tomu zdědí cizí splátky.
+      if (t.predmet === 'pradlomat') {
+        const vyr = await doplatDluhZCeny(tx, prodavajici, t.spot_id, t.cena);
+        prodavajicimu = vyr.prodavajicimu;
+        vyr.davky.forEach((x) => davky.push(Object.assign({ trade_id: t.id }, x)));
+      }
+      if (prodavajicimu > 0) {
+        davky.push({ player_id: prodavajici.id, trade_id: t.id, kind: 'cash', amount: prodavajicimu,
+          popis: 'Utržil jsi za ' + popisPredmetu,
+          text_kod: 'dor.utrzil_jsi_za', text_data: { p1: popisPredmetu } });
+      }
+      await tx.gameDelivery.createMany({ data: davky });
     }
     if (auditPred) {
       await AUDIT.zapis(tx, auditFirma, auditPred,
@@ -1076,13 +1141,9 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
 // Kolik stojí doplatit půjčku hned. Je to současná hodnota zbývajících splátek:
 // dlužník vrátí jistinu, úrok platí jen za dobu, kterou peníze měl. Lichvu
 // za předčasné splacení hra nedělá — kdo má, může kdykoli skončit.
-function doplatek(p) {
-  const zbyva = Math.max(0, (p.mesicu || 0) - (p.splaceno || 0));
-  if (!zbyva) return 0;
-  const r = (Number(p.urok) || 0) / 12;
-  if (r <= 0) return Math.round(p.splatka * zbyva);
-  return Math.round(p.splatka * (1 - Math.pow(1 + r, -zbyva)) / r);
-}
+// Počítá se na jednom místě: stejné číslo platí i při prodeji zastaveného
+// prádlomatu, kde se půjčka doplácí z ceny.
+const doplatek = DLUH.doplatek;
 
 // ─── Půjčky a podíly: přehled a odkup ───────────────────────────────────────
 // GET /trade/finance → co komu dlužím, kdo dluží mně, kdo má podíl ve mně
@@ -3782,6 +3843,11 @@ router.post('/trade/drazba', hrac, api(async (req, res) => {
     if (!c || c.player_id !== ja.id || !c.model) return res.status(409).json({ error: stx(req)('server.ten_pradlomat_ti_nepatri') });
     nazev = 'prádlomat ' + (c.name || spotId);
     nazevKod = { kod: 'drazba.nazev_pradlomat', cast: (c.name || spotId) };
+    // Co na prádlomatu vázne, musí dražící vědět dřív, než přihodí —
+    // z vydražené ceny se to doplatí a prodávajícímu zbyde zbytek.
+    const dl = await DLUH.naMiste(prisma, ja, spotId);
+    data = Object.assign({}, data || {}, { dluh: dl.celkem,
+      dluh_banka: dl.banka, dluh_zastava: dl.zastava });
   } else if (predmet === 'pozemek') {
     spotId = s(b.spot_id, 120);
     const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spotId } });
@@ -3951,10 +4017,18 @@ async function vyporadejDrazbu(id) {
         await tx.gameDelivery.create({ data: { player_id: p.player_id, kind: 'cash', amount: -c,
           popis: 'Příhozy v dražbě: ' + d.nazev , text_kod: 'dor.prihozy_v_drazbe', text_data: { p1: d.nazev }} });
       }
-      // 2. prodávající dostane příhozy i doplatek
-      if (d.suma + (vitez ? cena : 0) > 0) {
+      // 2. prodávající dostane příhozy i doplatek — a u prádlomatu až to,
+      //    co zbyde po doplacení dluhu, který na něm vázne. Vydražený
+      //    prádlomat má být bez dluhu stejně jako koupený v obchodu.
+      let utrzil = d.suma + (vitez ? cena : 0);
+      if (vitez && prodavajici && d.predmet === 'pradlomat' && utrzil > 0) {
+        const vyr = await doplatDluhZCeny(tx, prodavajici, d.spot_id, utrzil);
+        utrzil = vyr.prodavajicimu;
+        for (const x of vyr.davky) await tx.gameDelivery.create({ data: x });
+      }
+      if (utrzil > 0) {
         await tx.gameDelivery.create({ data: { player_id: d.prodavajici_id, kind: 'cash',
-          amount: d.suma + (vitez ? cena : 0),
+          amount: utrzil,
           popis: vitez ? ('Vydražil jsi ' + d.nazev) : ('Dražba bez vítěze: ' + d.nazev) } });
       }
       // 3. vítěz doplatí a dostane věc. Bez příhozu se nic nepřevádí a
