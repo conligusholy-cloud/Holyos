@@ -3931,5 +3931,6 @@
   "fond.clenove": "Mitglieder",
   "fond.ty": "du",
   "fond.vizitka_popis": "Öffentlich ist hier, was auch anderswo sichtbar ist — das Aktienbuch, die Anteilseigner der Firmen und der Wert in der Rangliste. Worüber der Fonds abstimmt und wer wie viel eingelegt hat, sehen nur seine Mitglieder.",
-  "server.uvitaci_karta_se_neprevadi": "Die Willkommenskarte, die jeder am Anfang gratis bekommt, lässt sich nicht übertragen — du kannst sie nur selbst einsetzen."
+  "server.uvitaci_karta_se_neprevadi": "Die Willkommenskarte, die jeder am Anfang gratis bekommt, lässt sich nicht übertragen — du kannst sie nur selbst einsetzen.",
+  "server.kampani_uz_mas_strop": "Mehr als {cislo:p1} dauerhafte Kampagnen gehen nicht. Eine weitere Karte würde nichts bringen — heb sie auf oder verkauf sie."
 }

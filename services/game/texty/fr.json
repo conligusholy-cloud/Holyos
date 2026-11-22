@@ -3931,5 +3931,6 @@
   "fond.clenove": "Membres",
   "fond.ty": "toi",
   "fond.vizitka_popis": "Public ici, c’est ce qui se voit aussi ailleurs : le registre des actions, les associés des entreprises et la valeur au classement. Ce sur quoi le fonds vote et qui a déposé combien ne regarde que ses membres.",
-  "server.uvitaci_karta_se_neprevadi": "La carte de bienvenue que tout le monde reçoit gratuitement au début ne se transfère pas — tu peux seulement l’utiliser toi-même."
+  "server.uvitaci_karta_se_neprevadi": "La carte de bienvenue que tout le monde reçoit gratuitement au début ne se transfère pas — tu peux seulement l’utiliser toi-même.",
+  "server.kampani_uz_mas_strop": "Tu peux avoir au plus {cislo:p1} campagnes permanentes. Une carte de plus n’ajouterait rien — garde-la ou vends-la."
 }

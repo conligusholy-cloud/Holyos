@@ -3965,5 +3965,6 @@
   "fond.clenove": "Členové",
   "fond.ty": "ty",
   "fond.vizitka_popis": "Veřejné je to, co je vidět i jinde — kniha akcionářů, podílníci firem a hodnota v žebříčku. O čem fond zrovna hlasuje a kdo kolik vložil, vidí jen jeho členové.",
-  "server.uvitaci_karta_se_neprevadi": "Uvítací kartu, kterou každý dostane zdarma na začátku, převést nejde — použít ji můžeš jen sám."
+  "server.uvitaci_karta_se_neprevadi": "Uvítací kartu, kterou každý dostane zdarma na začátku, převést nejde — použít ji můžeš jen sám.",
+  "server.kampani_uz_mas_strop": "Trvalých kampaní jde mít nejvýš {cislo:p1}. Další karta by už návštěvnost nezvedla, tak si ji nech — nebo ji prodej."
 }

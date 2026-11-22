@@ -1422,7 +1422,15 @@ function rentOf(sp) {
 
 // Kolik lidí ti otevřelo sdílený odkaz → o tolik víc zákazníků chodí.
 // Strop návštěvnosti roste o to, co přidaly karty — jinak by zaplacená kampaň zapadla.
-function trafficMax() { return TRAFFIC_MAX + (S && S.boost ? S.boost : 0) + kampanAdd(); }
+// Strop na trvalý boost z karet — musí sedět se services/game/navstevnost.js.
+// Týdenní kampaně se nikdy nesčítaly (běží vždycky jedna), trvalá karta tohle
+// ošetření neměla a sčítala se bez omezení: třicet karet dělalo devítinásobnou
+// návštěvnost, a ta násobí tržbu celé sítě.
+var BOOST_KARET_MAX = 6;
+var BOOST_MAX = BOOST_KARET_MAX * 0.15;
+function boostHry() { return Math.min(BOOST_MAX, (S && S.boost) ? S.boost : 0); }
+function boostKaret() { return Math.round(boostHry() / 0.15); }
+function trafficMax() { return TRAFFIC_MAX + boostHry() + kampanAdd(); }
 // Pověst z infolinky násobí výsledek až na konci — ať platí celý rozsah
 // i tomu, kdo už má návštěvnost na stropu.
 // ─── Ekonomika: konjunktura a krize ──────────────────────────────────────────
@@ -1711,7 +1719,7 @@ function kampanZbyva() { return kampanJednorazova() ? S.kampan.do - Date.now() :
 // opravdu zajdou: základ 45 %, každý přivedený hráč +5 bodů, strop 110 %.
 // Pověst a krize násobí až výsledek, takže se do poměru nepromítnou.
 function navstevnostBez() {
-  var boost = (S && S.boost) ? S.boost : 0;
+  var boost = boostHry();
   var refs = (S && S.refs) ? S.refs : 0;
   return Math.min(TRAFFIC_MAX + boost, TRAFFIC_BASE + refs * TRAFFIC_PER_REF + boost);
 }
@@ -1745,7 +1753,7 @@ function spustKampan(add, dnu) {
 function traffic() {
   var t = Math.min(trafficMax(),
     TRAFFIC_BASE + (S && S.refs ? S.refs : 0) * TRAFFIC_PER_REF
-      + (S && S.boost ? S.boost : 0) + kampanAdd());
+      + boostHry() + kampanAdd());
   return t * povestKoef() * krizeKoef();
 }
 // Servis, praní a úklid se platí z obratu - cim vic lidi pere, tim vic prace.
@@ -15944,7 +15952,7 @@ function applyCard(e) {
     if (next) next.arrivesAt = Date.now() - 1;
     deliverOrders();
   } else if (e.effect === 'traffic') {
-    S.boost = (S.boost || 0) + (e.add || 0);
+    S.boost = Math.min(BOOST_MAX, (S.boost || 0) + (e.add || 0));
   } else if (e.effect === 'connect') {
     S.connDiscount = e.discount || 0;
   } else if (e.effect === 'credit') {

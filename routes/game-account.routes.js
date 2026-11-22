@@ -1889,6 +1889,17 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
       where: { player_id: req.player.id, kind, used_at: null }, orderBy: { id: 'asc' }, select: { id: true, amount: true }
     });
     if (!card) return res.status(409).json({ error: stx(req)('server.tuhle_kartu_nemas') });
+    // Trvalý boost má strop. Karta nad něj by se spálila a nic nepřidala —
+    // to by hráč právem bral jako okradení, tak ji radši nepustíme použít.
+    if (kind === 'traffic') {
+      const NAV = require('../services/game/navstevnost');
+      const uz = await prisma.gameCard.count({
+        where: { player_id: req.player.id, kind: 'traffic', used_at: { not: null } } });
+      if (uz >= NAV.BOOST_KARET_MAX) {
+        return res.status(409).json({ error: stx(req)('server.kampani_uz_mas_strop',
+          { p1: NAV.BOOST_KARET_MAX }) });
+      }
+    }
     // updateMany s podmínkou used_at: null — dvojklik ani dvě záložky kartu nespotřebují dvakrát
     const done = await prisma.gameCard.updateMany({
       where: { id: card.id, used_at: null },

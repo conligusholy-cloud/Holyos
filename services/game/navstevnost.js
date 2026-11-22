@@ -33,6 +33,13 @@ const POVEST_DOLU = 0.2;           // při nejhorší pověsti spadne návštěv
 const POVEST_NAHORU = 0.1;         // při nejlepší stoupne o desetinu
 const REF_MAX = 500;               // musí sedět s routes/game.routes.js
 const BOOST_ZA_KARTU = 0.15;       // EFFECTS.traffic v routes/game-account.routes.js
+// Strop na trvalý boost z karet. Týdenní kampaně se nikdy nesčítaly — běží
+// vždycky jedna a další ji nahradí — ale trvalá karta tohle ošetření nikdy
+// nedostala a sčítala se bez omezení. Třicet karet znamenalo devítinásobnou
+// návštěvnost oproti hráči bez nich, a protože návštěvnost násobí tržbu celé
+// sítě, rozhodila jedna karta žebříček víc než sto prádlomatů.
+const BOOST_KARET_MAX = 6;
+const BOOST_MAX = BOOST_KARET_MAX * BOOST_ZA_KARTU;
 // Kampaně z ceníku: kolik přidají a jak dlouho běží.
 const KAMPANE = {
   kampan10: { add: 0.10, dnu: 7 }, kampan15: { add: 0.15, dnu: 7 }, kampan25: { add: 0.25, dnu: 7 },
@@ -51,7 +58,9 @@ function povestKoef(p) {
 // stropu koupil zbytečně a nepoznal to.
 function spocti(v, t) {
   const refs = Math.max(0, Math.min(REF_MAX, Math.round(Number(v && v.refs) || 0)));
-  const boost = Math.max(0, Number(v && v.boost) || 0);
+  // Strop se drží tady, v jediném vzorci — ať se boost spočítal z karet na
+  // serveru, nebo přišel ze stavu hry, výš než na BOOST_MAX se nedostane.
+  const boost = Math.min(BOOST_MAX, Math.max(0, Number(v && v.boost) || 0));
   const kampan = Math.max(0, Number(v && v.kampanAdd) || 0);
   const strop = TRAFFIC_MAX + boost + kampan;
   const zaklad = TRAFFIC_BASE + refs * TRAFFIC_PER_REF + boost + kampan;
@@ -69,7 +78,7 @@ async function proHrace(hrac, st, t) {
   const karet = await prisma.gameCard.count({
     where: { player_id: hrac.id, kind: 'traffic', used_at: { not: null } },
   }).catch(() => 0);
-  const boost = karet * BOOST_ZA_KARTU;
+  const boost = Math.min(BOOST_MAX, karet * BOOST_ZA_KARTU);
 
   // Kampaň: běžící předplatné, nebo jednorázová karta, která ještě neodběhla.
   // Bere se ta silnější, stejně jako ve hře.
@@ -115,4 +124,4 @@ async function proHrace(hrac, st, t) {
 
 module.exports = { spocti, povestKoef, povest, proHrace,
   TRAFFIC_BASE, TRAFFIC_PER_REF, TRAFFIC_MAX, POVEST_DOLU, POVEST_NAHORU,
-  REF_MAX, BOOST_ZA_KARTU, KAMPANE };
+  REF_MAX, BOOST_ZA_KARTU, BOOST_KARET_MAX, BOOST_MAX, KAMPANE };

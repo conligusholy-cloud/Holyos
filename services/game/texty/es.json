@@ -3931,5 +3931,6 @@
   "fond.clenove": "Miembros",
   "fond.ty": "tú",
   "fond.vizitka_popis": "Aquí es público lo que también se ve en otros sitios: el registro de acciones, los socios de las empresas y el valor en la clasificación. Sobre qué vota el fondo y quién aportó cuánto lo ven solo sus miembros.",
-  "server.uvitaci_karta_se_neprevadi": "La carta de bienvenida que todos reciben gratis al empezar no se puede transferir: solo puedes usarla tú."
+  "server.uvitaci_karta_se_neprevadi": "La carta de bienvenida que todos reciben gratis al empezar no se puede transferir: solo puedes usarla tú.",
+  "server.kampani_uz_mas_strop": "Puedes tener como máximo {cislo:p1} campañas permanentes. Otra carta ya no subiría nada: guárdala o véndela."
 }
