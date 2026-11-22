@@ -245,10 +245,76 @@ function hra() {
   ma(/dluhMistaHtml\(d\.data, cena\)/.test(HRA), 'i v okně dražby');
 }
 
+// ─── 5b. Kupující vidí, co se mu nabízí ─────────────────────────────────────
+function coSeNabizi() {
+  console.log('\nCo se vlastně nabízí');
+  // Server musí k nabídce i k dražbě zapsat místo.
+  ma((TRADE.match(/misto: \{/g) || []).length >= 2, 'místo se ukládá k nabídce i k dražbě',
+    (TRADE.match(/misto: \{/g) || []).length + '×');
+  // Oba zápisy místa musí nést všechno, co kupující potřebuje.
+  const bloky = [];
+  let od = -1;
+  while ((od = TRADE.indexOf('misto: {', od + 1)) >= 0) {
+    let h = 0;
+    for (let j = TRADE.indexOf('{', od); j < TRADE.length; j++) {
+      if (TRADE[j] === '{') h++;
+      else if (TRADE[j] === '}') { h--; if (!h) { bloky.push(TRADE.slice(od, j + 1)); break; } }
+    }
+  }
+  ma(bloky.length === 2, 'našly se oba zápisy místa', bloky.length);
+  // A nabídka si to opravdu bere z evidence míst, ne odnikud.
+  ma(/predmet === 'pradlomat'[\s\S]{0,400}gameSpotClaim\.findUnique[\s\S]{0,500}\bc \? \{ misto: \{/.test(TRADE),
+    'nabídka čte místo z evidence a bez něj ho nevymýšlí');
+  bloky.forEach((b, i) => {
+    const chybi = ['name', 'model', 'area_key', 'score', 'rent', 'lat', 'lon', 'pozemek', 'cizi_zem']
+      .filter((pole) => !new RegExp('\\b' + pole + ':').test(b));
+    ma(!chybi.length, (i ? 'dražba' : 'nabídka') + ': jde ven všechno', chybi.join(', ') || '9 údajů');
+  });
+
+  const ctx = vm.createContext({ Math, Number, String, console,
+    esc: (x) => String(x),
+    tx: (k) => k,
+    kcFull: (n) => String(Math.round(n)) + ' L$',
+    mestoZKlice: (k) => (k === 'hradec-kralove' ? 'Hradec Králové' : String(k || '')),
+    MODELS: { max: { name: 'MAX' }, mini: { name: 'MINI' } } });
+  vm.runInContext(telo(HRA, 'mistoNabidkyHtml') + '\n' + telo(HRA, 'predmetPopis')
+    + '\nthis.M = mistoNabidkyHtml; this.P = predmetPopis;', ctx);
+  const M = ctx.M, P = ctx.P;
+
+  const misto = { name: 'U Nemocnice', model: 'max', area_key: 'hradec-kralove',
+    score: 88, rent: 12500, lat: 50.2, lon: 15.8, pozemek: false, cizi_zem: false };
+  const h = M({ misto });
+  ma(/U Nemocnice/.test(h), 'je vidět, které místo to je');
+  ma(/Hradec Králové/.test(h), 'i ve kterém městě');
+  ma(/MAX/.test(h), 'i jaký stroj tam stojí');
+  ma(/88 \/ 100/.test(h), 'i jak dobré to místo je');
+  ma(/12500 L\$/.test(h), 'i co se tam platí na nájmu');
+  ma(/data-trmapa="50\.2,15\.8"/.test(h), 'a dá se to ukázat na mapě');
+
+  const vlastni = M({ misto: Object.assign({}, misto, { pozemek: true, rent: 0 }) });
+  ma(/hra\.vlastni_zem/.test(vlastni), 'na vlastní zemi se nájem neplatí');
+  const cizi = M({ misto: Object.assign({}, misto, { pozemek: true, cizi_zem: true, rent: 9000 }) });
+  ma(/9000 L\$/.test(cizi) && !/vlastni_zem/.test(cizi),
+    'prodaná zem pod prádlomatem znamená nájem, ne vlastní zem');
+
+  ma(M({}) === '' && M(null) === '', 'stará nabídka bez místa nic nekreslí');
+  const bezMesta = M({ misto: { model: 'mini', rent: 0 } });
+  ma(/MINI/.test(bezMesta), 'neúplné místo se nezahodí celé');
+
+  ma(P({ predmet: 'pradlomat', data: { misto } }) === 'MAX · U Nemocnice',
+    'nadpis nabídky řekne stroj i místo', P({ predmet: 'pradlomat', data: { misto } }));
+  ma(P({ predmet: 'pradlomat', data: {} }) === 'hra.pradlomat_na_miste',
+    'stará nabídka má pořád svůj původní nadpis');
+
+  ma(/mistoNabidkyHtml\(t\.data\)/.test(HRA), 'kreslí se u nabídky');
+  ma(/mistoNabidkyHtml\(d\.data\)/.test(HRA), 'i v okně dražby');
+  ma(/data-trmapa\]/.test(HRA), 'a odkaz na mapu je napojený');
+}
+
 // ─── 6. Texty ───────────────────────────────────────────────────────────────
 function texty() {
   console.log('\nTexty ve všech jazycích');
-  const klice = ['hra.vazne_na_nem_uver', 'veta.uver_se_doplati_z_ceny', 'veta.uver_cena_nepokryje',
+  const klice = ['hra.vlastni_zem', 'hra.ukazat_na_mape', 'hra.vazne_na_nem_uver', 'veta.uver_se_doplati_z_ceny', 'veta.uver_cena_nepokryje',
     'dor.zastava_prodana_pujcka_doplacena', 'dor.z_ceny_doplacena_pujcka',
     'dor.z_ceny_doplacen_uver', 'dor.zastava_zmizela_pujcka_bezi', 'dor.zaplatil_jsi_za'];
   ['cs', 'en', 'de', 'es', 'fr', 'pl', 'pt'].forEach((j) => {
@@ -267,6 +333,7 @@ function texty() {
   await server();
   obeCesty();
   hra();
+  coSeNabizi();
   texty();
   console.log(chyb ? '\n' + chyb + ' CHYB' : '\nVšechno sedí.');
   process.exit(chyb ? 1 : 0);

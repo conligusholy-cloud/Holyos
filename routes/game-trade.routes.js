@@ -621,12 +621,23 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
   const majitel = smer === 'koupim' ? druhy : req.player;
   const chyba = await zkontroluj(nab, majitel, stx(req));
   if (chyba) return res.status(409).json({ error: chyba });
-  // Dluh na prádlomatu patří do nabídky, ne do překvapení po zaplacení.
-  // Je to číslo k dnešku — závazné je až přepočtení při přijetí.
+  // Co se vlastně nabízí. „prádlomat na místě" bez dalšího slova je nabídka
+  // naslepo: kupující nevidí jaký stroj, kde stojí, co se tam platí na nájmu
+  // ani jestli na něm vázne dluh. Zapíše se to proto do nabídky ve chvíli
+  // jejího vzniku. Čísla jsou k dnešku — závazné je až přepočtení při přijetí.
   if (predmet === 'pradlomat') {
+    const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: nab.spot_id || '' } });
     const d = await DLUH.naMiste(prisma, majitel, nab.spot_id);
     data = Object.assign({}, data || {}, { dluh: d.celkem,
-      dluh_banka: d.banka, dluh_zastava: d.zastava });
+      dluh_banka: d.banka, dluh_zastava: d.zastava },
+      c ? { misto: {
+        name: c.name || null, model: c.model || null, area_key: c.area_key || null,
+        score: c.score == null ? null : c.score,
+        rent: Math.max(0, Math.round(c.rent || 0)),
+        lat: c.lat == null ? null : c.lat, lon: c.lon == null ? null : c.lon,
+        // Vlastní zem se neplatí; cizí zem pod sebou znamená nájem majiteli.
+        pozemek: !!c.pozemek, cizi_zem: !!c.pozemek_majitel_id,
+      } } : {});
   }
   // Karty přihozené k ceně platí vždycky ten, kdo kupuje.
   const platici = smer === 'koupim' ? req.player : druhy;
@@ -3847,7 +3858,12 @@ router.post('/trade/drazba', hrac, api(async (req, res) => {
     // z vydražené ceny se to doplatí a prodávajícímu zbyde zbytek.
     const dl = await DLUH.naMiste(prisma, ja, spotId);
     data = Object.assign({}, data || {}, { dluh: dl.celkem,
-      dluh_banka: dl.banka, dluh_zastava: dl.zastava });
+      dluh_banka: dl.banka, dluh_zastava: dl.zastava,
+      misto: { name: c.name || null, model: c.model || null, area_key: c.area_key || null,
+        score: c.score == null ? null : c.score,
+        rent: Math.max(0, Math.round(c.rent || 0)),
+        lat: c.lat == null ? null : c.lat, lon: c.lon == null ? null : c.lon,
+        pozemek: !!c.pozemek, cizi_zem: !!c.pozemek_majitel_id } });
   } else if (predmet === 'pozemek') {
     spotId = s(b.spot_id, 120);
     const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spotId } });

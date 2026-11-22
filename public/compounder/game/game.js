@@ -11300,7 +11300,16 @@ function volneHtml(krome) {
 
 function predmetPopis(t) {
   if (t.predmet === 'stroj') return 'stroj ' + ((MODELS[t.model] || {}).name || t.model);
-  if (t.predmet === 'pradlomat') return esc(tx('hra.pradlomat_na_miste'));
+  if (t.predmet === 'pradlomat') {
+    // Dokud nabídka nenesla ani jméno místa, byl nadpis „prádlomat na místě"
+    // jediné, co kupující viděl — a musel se ptát, co mu to vlastně nabízí.
+    var mi = (t.data || {}).misto;
+    if (mi && (mi.name || mi.model)) {
+      var stroj = mi.model ? ((MODELS[mi.model] || {}).name || mi.model) : '';
+      return (stroj ? stroj + ' · ' : '') + (mi.name || esc(tx('hra.pradlomat_na_miste')));
+    }
+    return esc(tx('hra.pradlomat_na_miste'));
+  }
   if (t.predmet === 'pujcka') {
     var d = t.data || {};
     return tx('veta.pujcka_rocne_na_hernich_mesicu', { p1: kcFull(t.cena), p2: procenta(d.urok), p3: (d.mesicu || 0) });
@@ -11329,6 +11338,33 @@ function predmetPopis(t) {
 // Co na nabízeném prádlomatu vázne. Kupující to musí vidět dřív, než
 // zaplatí: z ceny se dluh doplatí a prodávajícímu zbyde zbytek. Dřív se
 // claim jen přepsal a kupující platil stroj, na kterém visely cizí splátky.
+// Co se nabízí: kde to stojí, jaký je tam stroj, jak dobré je místo a co se
+// platí na nájmu. Bez toho je nabídka prádlomatu kočka v pytli.
+function mistoNabidkyHtml(data) {
+  var m = (data || {}).misto;
+  if (!m) return '';
+  var radek = function (k, v) {
+    return '<div class="row"><span class="muted small">' + k + '</span><span>' + v + '</span></div>';
+  };
+  var ven = '';
+  var mesto = m.area_key ? mestoZKlice(m.area_key) : '';
+  if (m.name || mesto) {
+    ven += radek(esc(tx('hra.misto')), esc(m.name || '')
+      + (mesto && mesto !== m.name ? ' <span class="muted small">' + esc(mesto) + '</span>' : ''));
+  }
+  if (m.model) ven += radek(esc(tx('hra.stroj')), esc((MODELS[m.model] || {}).name || m.model));
+  if (m.score != null) ven += radek(esc(tx('hra.skore_mista')), Math.round(m.score) + ' / 100');
+  // Nájem je to, co kupujícího bude stát každý měsíc. Vlastní zem se neplatí,
+  // a to je u prádlomatu zpráva stejně důležitá jako cena.
+  ven += radek(esc(tx('hra.najem_mesic')), (m.pozemek && !m.cizi_zem)
+    ? '<span class="ok">' + esc(tx('hra.vlastni_zem')) + '</span>'
+    : kcFull(m.rent || 0));
+  if (m.lat != null && m.lon != null) {
+    ven += '<p class="fine"><a href="#" data-trmapa="' + m.lat + ',' + m.lon + '">'
+      + esc(tx('hra.ukazat_na_mape')) + '</a></p>';
+  }
+  return ven;
+}
 function dluhMistaHtml(data, cena) {
   var dluh = Math.max(0, Math.round(Number((data || {}).dluh) || 0));
   if (!dluh) return '';
@@ -12824,6 +12860,16 @@ function paintBurza() {
     };
   });
 
+  // Odkaz „ukázat na mapě" u nabízeného prádlomatu — kupující se na místo
+  // podívá dřív, než zaplatí.
+  [].forEach.call(box.querySelectorAll('[data-trmapa]'), function (a) {
+    a.onclick = function (e) {
+      e.preventDefault();
+      var c = String(a.getAttribute('data-trmapa') || '').split(',');
+      naMapu(Number(c[0]), Number(c[1]));
+    };
+  });
+
   [].forEach.call(box.querySelectorAll('[data-tr]'), function (b) {
     b.onclick = function () {
       var id = b.getAttribute('data-tr'), co = b.getAttribute('data-akce');
@@ -12884,7 +12930,7 @@ function radekObchodu(t) {
         + zastavaPopis(t.data) + '</span></div>'
       : '')
     + '<div class="row"><span class="muted small">' + esc(tx('hra.cena_4')) + '</span><span class="cena">' + esc(cenaPopis(t)) + '</span></div>'
-    + (t.predmet === 'pradlomat' ? dluhMistaHtml(t.data, t.cena) : '')
+    + (t.predmet === 'pradlomat' ? mistoNabidkyHtml(t.data) + dluhMistaHtml(t.data, t.cena) : '')
     + (t.vzkaz ? '<p class="muted small" style="margin-top:6px">„' + esc(t.vzkaz) + '"</p>' : '')
     + nekrytoHtml(t)
     + (t.stav !== 'ceka' ? '<p style="margin-top:8px"><span class="stav ' + esc(t.stav) + '">' + esc(stavNabidky(t.stav)) + '</span></p>' : '')
@@ -14252,7 +14298,8 @@ function paintDrazba() {
   box.innerHTML = tx('veta.h3_drazba', { p1: tx('veta.h3_p_class_muted_small_style_10', { p1: esc(drzNazev(d)), p2: (d.moje ? esc(tx('hra.vyvolal_jsi_ji_ty'))
         : d.tajny_prodavajici ? esc(tx('drazba.kdo_ji_vyvolal_se_ukaze'))
           : tx('veta.vyvolal', { p1: esc(d.prodavajici_nick) })) }) })
-    + dluhMistaHtml(d.data, cena)   // u prádlomatu; jinde dluh v datech není
+    + mistoNabidkyHtml(d.data)      // u prádlomatu; jinde místo v datech není
+    + dluhMistaHtml(d.data, cena)
     // Hodiny jsou hrdina okna — odpočet rozhoduje, cena je až druhá v pořadí.
     + tx('veta.div_class_drz_hodiny_id_drz', { p1: esc(tx('drazba.vterin')), p2: drzLideHtml(d), p3: esc(tx('drazba.cena_ted')), p4: kcFull(cena), p5: esc(tx('drazba.vyvolavaci_cena')), p6: kcFull(d.vyvolavaci), p7: d.prihozu, p8: kcFull(d.suma) }) + (pod ? '' : ' style="display:none"')
     + tx('veta.prihozy_prerostly_vyvolavaci_cenu_od_tehle') + (d.vedu ? 'ok' : '') + '">'
