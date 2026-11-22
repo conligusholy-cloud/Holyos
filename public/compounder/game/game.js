@@ -2479,9 +2479,19 @@ var TOAST_MS = 5200;
 // Hláška dole jen probliknutí — nic nezůstává viset. Co má přežít, jde do
 // zvonku: tam si to hráč přečte, až bude chtít. `drz` (a chyby) proto nemění
 // to, jak dlouho hláška svítí, ale jestli se zapíše mezi upozornění.
+// Hlášky visí pod hlavičkou, ne nad spodními tlačítky — dole překrývaly
+// „Koupit" a hráč je mačkal místo něj. Výška hlavičky se liší jazykem
+// i telefonem, tak si ji změříme, místo abychom ji hádali v CSS.
+function toastyPodHlavicku(box) {
+  var hl = document.querySelector('header.top') || document.querySelector('.firma-lista');
+  if (!hl || !hl.getBoundingClientRect) return;
+  var dole = hl.getBoundingClientRect().bottom;
+  if (dole > 0) box.style.top = Math.round(dole + 8) + 'px';
+}
 function toast(msg, kind, drz) {
   var box = $('toasty');
   if (!box) return;
+  toastyPodHlavicku(box);
   var doZvonku = drz === true || kind === 'err';
   var el = document.createElement('div');
   el.className = 'toast' + (kind ? ' ' + kind : '');
