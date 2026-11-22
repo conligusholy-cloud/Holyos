@@ -9949,19 +9949,60 @@ function fondNavrhPopis(n) {
 // stahovat grafická knihovna. Podíly jsou spodní plocha, pokladna to, co je
 // nad ní: na první pohled je vidět, jestli fond peníze drží, nebo už je
 // investoval.
+// Vzorky na časovou osu. Burzovní graf má vodorovně čas, ne pořadí vzorku.
+// Hodnota fondu se vzorkuje jednou za hodinu, ale po každém pohybu penězi
+// navíc — a tři obchody v jedné minutě tak zabraly stejný kus šířky jako
+// tři klidné hodiny. Z grafu byl hřeben, který nic neříkal.
+//
+// Vzorky se proto slijí do stejně dlouhých oken a z každého zůstane ten
+// poslední: závěrečná hodnota okna, stejně jako na burze. První vzorek se
+// drží vždycky, ať graf začíná tam, kde začíná jeho popisek.
+function vzorkyPoCase(body, oken) {
+  var n = (body || []).length;
+  if (n < 3) return (body || []).slice();
+  var cas = [], i;
+  for (i = 0; i < n; i++) {
+    var t = new Date(body[i].kdy).getTime();
+    if (!isFinite(t)) return body.slice();     // bez času se líp poradit nedá
+    cas.push(t);
+  }
+  var sirka = (cas[n - 1] - cas[0]) / Math.max(2, oken || 60);
+  if (!(sirka > 0)) return body.slice();
+  var ven = [body[0]], posledni = -1;
+  for (i = 1; i < n; i++) {
+    var okno = Math.floor((cas[i] - cas[0]) / sirka);
+    if (okno === posledni) ven[ven.length - 1] = body[i];
+    else { ven.push(body[i]); posledni = okno; }
+  }
+  return ven;
+}
+// Kde vzorek leží na časové ose, 0 až 1. Bez použitelných časů se vrátí
+// k pořadí — rovnoměrně rozložený graf je pořád lepší než žádný.
+function podilCasu(body) {
+  var od = new Date(body[0].kdy).getTime();
+  var sirka = new Date(body[body.length - 1].kdy).getTime() - od;
+  return function (b, i) {
+    if (!(sirka > 0)) return body.length > 1 ? i / (body.length - 1) : 0;
+    var t = new Date(b.kdy).getTime();
+    return isFinite(t) ? (t - od) / sirka : i / (body.length - 1);
+  };
+}
 function fondGraf(body) {
   if (!body || body.length < 2) {
     return '<p class="fine">' + esc(tx('fond.graf_zatim')) + '</p>';
   }
+  var vse = body;
+  body = vzorkyPoCase(body, 60);
   var S = 300, V = 80;
   var max = 0;
   body.forEach(function (b) { if (b.hodnota > max) max = b.hodnota; });
   if (max <= 0) max = 1;
-  var x = function (i) { return (i / (body.length - 1)) * S; };
+  var kam = podilCasu(body);
+  var x = function (b, i) { return kam(b, i) * S; };
   var y = function (v) { return V - (Math.max(0, v) / max) * V; };
   var cara = function (kdo) {
     return body.map(function (b, i) {
-      return x(i).toFixed(1) + ',' + y(b[kdo]).toFixed(1);
+      return x(b, i).toFixed(1) + ',' + y(b[kdo]).toFixed(1);
     }).join(' ');
   };
   var plocha = '0,' + V + ' ' + cara('podily') + ' ' + S + ',' + V;
@@ -9972,7 +10013,7 @@ function fondGraf(body) {
     + ' vector-effect="non-scaling-stroke"/>'
     + '</svg>'
     + '<div class="row"><span class="muted small">'
-    + esc(tx('veta.fond_graf_od', { p1: datumKratce(body[0].kdy) })) + '</span>'
+    + esc(tx('veta.fond_graf_od', { p1: datumKratce(vse[0].kdy) })) + '</span>'
     + '<span class="muted small">' + kcFull(max) + '</span></div>';
 }
 // Krátké datum do popisku grafu. Rok se nepise — vzorky se drží čtvrt roku.
@@ -11482,6 +11523,10 @@ function loadAkcieTrh(id, then) {
 // pod ni nic nepíše — na seznamu jde o tvar, ne o čísla.
 function akcieKrivka(body, maly) {
   if (!body || body.length < 2) return '';
+  // Čas vodorovně, obchody v jedné minutě do jednoho okna — jinak deset
+  // obchodů z jedné chvíle udělá z poloviny grafu pilu. Na malé kartě jde
+  // o tvar, tam stačí hrubší okna.
+  body = vzorkyPoCase(body, maly ? 30 : 60);
   var S = 300, V = maly ? 44 : 80;
   var max = 0, min = Infinity;
   body.forEach(function (b) {
@@ -11493,10 +11538,11 @@ function akcieKrivka(body, maly) {
   // ztratil v rovné čáře.
   var dno = min === max ? Math.max(0, min * 0.9) : min - (max - min) * 0.1;
   var rozsah = max - dno || 1;
-  var x = function (i) { return (i / (body.length - 1)) * S; };
+  var kam = podilCasu(body);
+  var x = function (b, i) { return kam(b, i) * S; };
   var y = function (v) { return V - ((Math.max(dno, v) - dno) / rozsah) * V; };
   var cara = body.map(function (b, i) {
-    return x(i).toFixed(1) + ',' + y(b.cena).toFixed(1);
+    return x(b, i).toFixed(1) + ',' + y(b.cena).toFixed(1);
   }).join(' ');
   return '<svg class="fond-graf' + (maly ? ' graf-maly' : '') + '" viewBox="0 0 ' + S + ' ' + V + '"'
     + ' preserveAspectRatio="none" role="img" aria-label="' + esc(tx('akcie.graf')) + '">'

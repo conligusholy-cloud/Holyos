@@ -29,6 +29,10 @@ const vytahni = (re, jmeno) => {
   return m ? m[0] : '';
 };
 const kusy = [
+  // Křivka od listopadu 2026 kreslí podle času a slévá vzorky do oken —
+  // bez těchhle dvou by se ani nespustila.
+  vytahni(/function vzorkyPoCase\(body, oken\) \{[\s\S]*?\n\}/, 'vzorkyPoCase'),
+  vytahni(/function podilCasu\(body\) \{[\s\S]*?\n\}/, 'podilCasu'),
   vytahni(/function akcieKrivka\(body, maly\) \{[\s\S]*?\n\}/, 'akcieKrivka'),
   vytahni(/function akcieSipka\(f\) \{[\s\S]*?\n\}/, 'akcieSipka'),
   vytahni(/function smerVynosu\(ted, pred\) \{[\s\S]*?\n\}/, 'smerVynosu'),
