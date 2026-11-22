@@ -2472,6 +2472,41 @@ app.get('/admin/vybery-vyplaty.xlsx', requireAdmin, wrap(async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="vybery-${tab}-${new Date().toISOString().slice(0, 10)}.xlsx"`);
   res.send(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
 }));
+// Chytrý export: jeden řádek na uživatele (a měnu) — vyplacené částky se sečtou, i když se vyplácelo vícekrát (např. ruční opravy)
+app.get('/admin/vybery-vyplaty-chytry.xlsx', requireAdmin, wrap(async (req, res) => {
+  const XLSX = require('xlsx');
+  const { rows, month } = await vyberyPayoutRows('vyplaceno', req.query.m);
+  const paid = rows.filter((r) => r.status === 'paid');
+  const fmt = (d) => (d ? new Date(d).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' }) : '');
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const amtOf = (r) => Number(r.paid_amount != null ? r.paid_amount : r.amount) || 0;
+  const g = new Map();
+  paid.forEach((r) => { const k = r.supporter_id + '|' + (r.currency || 'CZK'); if (!g.has(k)) g.set(k, []); g.get(k).push(r); });
+  const uniq = (a) => [...new Set(a.filter(Boolean).map(String))];
+  const data = [...g.values()].map((a) => {
+    a.sort((x, y) => new Date(x.paid_at || x.decided_at || 0) - new Date(y.paid_at || y.decided_at || 0));
+    const f = a[0], l = a[a.length - 1], sum = r2(a.reduce((t, r) => t + amtOf(r), 0));
+    const st = f.st_total != null && f.st_total !== '' ? Number(f.st_total) : null, ex = f.ex_total != null && f.ex_total !== '' ? Number(f.ex_total) : null;
+    const tot = (st != null || ex != null) ? r2((st || 0) + (ex || 0)) : null;
+    const sameCur = (f.currency || 'CZK') === (f.st_cur === 'EUR' ? 'EUR' : 'CZK');
+    return { 'Příjmení': f.last_name || '', 'Jméno': f.first_name || '', 'Nick': f.nick || '', 'E-mail': f.email, 'Měna': f.currency, 'Vyplaceno celkem': sum, 'Počet výplat': a.length,
+      'První výplata': fmt(f.paid_at || f.decided_at), 'Poslední výplata': fmt(l.paid_at || l.decided_at), 'Jednotlivé částky': a.map((r) => amtOf(r)).join(' + '),
+      'VS': uniq(a.map((r) => r.vs)).join(', '), 'Účet / IBAN': uniq(a.map((r) => r.account)).join(', '), 'Způsob': uniq(a.map((r) => r.pay_method)).join(', '),
+      'Poznámky': uniq(a.map((r) => r.pay_note || r.note)).join(' | '), 'ST podpora': st != null ? st : '', 'EX podpora': ex != null ? ex : '', 'Podpořeno celkem (ST+EX)': tot != null ? tot : '',
+      '% z podpory (vše vyplaceno)': tot > 0 && sameCur ? Math.round(sum / tot * 10000) / 100 : '', 'Pozice': f.pos || '' };
+  }).sort((x, y) => String(x['Příjmení']).localeCompare(String(y['Příjmení']), 'cs') || String(x['Jméno']).localeCompare(String(y['Jméno']), 'cs'));
+  const det = paid.map((r) => ({ 'Příjmení': r.last_name || '', 'Jméno': r.first_name || '', 'E-mail': r.email, 'Částka': amtOf(r), 'Měna': r.currency, 'VS': r.vs || '', 'Účet / IBAN': r.account || '', 'Vyřízeno': fmt(r.paid_at || r.decided_at), 'Způsob': r.pay_method || '', 'Poznámka': r.pay_note || r.note || '', 'Vyplatil': r.paid_by || '' }));
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [16, 14, 16, 30, 6, 16, 11, 20, 20, 30, 24, 30, 16, 30, 14, 14, 18, 14, 12].map((w) => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Po uživatelích');
+  const ws2 = XLSX.utils.json_to_sheet(det);
+  ws2['!cols'] = [16, 14, 30, 12, 6, 14, 30, 20, 16, 30, 16].map((w) => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, ws2, 'Jednotlivé výplaty');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="vybery-po-uzivatelich-${month === 'all' ? 'vse' : month}-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+  res.send(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+}));
 app.get('/admin/vybery', requireAdmin, wrap(async (req, res) => {
   try { await VYB_CHECK.recheckStale(false); } catch (e) { /* přepočet kontrol není kritický */ }
   const qs = String(req.query.q || '').trim().slice(0, 80);
