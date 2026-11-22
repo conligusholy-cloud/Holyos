@@ -3912,5 +3912,16 @@
   "odznak.domaci.jak": "Compra um terreno, oferece-o para arrendar e espera que alguém o tome.",
   "odznak.kladivo.nazev": "O Martelo",
   "odznak.kladivo.popis": "Arrematou três vezes o que os outros largaram.",
-  "odznak.kladivo.jak": "Ganha três leilões na bolsa."
+  "odznak.kladivo.jak": "Ganha três leilões na bolsa.",
+  "fond.vizitka": "Fundo",
+  "fond.tvuj": "o teu",
+  "fond.hodnota": "Valor do fundo",
+  "fond.clenu": "Membros",
+  "fond.firem": "Empresas detidas",
+  "fond.akcie": "Ações do fundo",
+  "fond.drzi_podily": "O que o fundo detém",
+  "fond.nic_nedrzi": "Ainda não detém participação em nenhuma empresa.",
+  "fond.clenove": "Membros",
+  "fond.ty": "tu",
+  "fond.vizitka_popis": "Público aqui é o que também se vê noutros sítios — o livro de acionistas, os sócios das empresas e o valor na classificação. Sobre o que o fundo vota e quem depositou quanto, só os membros veem."
 }

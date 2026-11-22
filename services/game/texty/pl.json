@@ -3926,5 +3926,16 @@
   "odznak.domaci.jak": "Kup działkę, wystaw ją na wynajem i poczekaj, aż ktoś ją weźmie.",
   "odznak.kladivo.nazev": "Młotek",
   "odznak.kladivo.popis": "Trzy razy wylicytował to, co inni puścili.",
-  "odznak.kladivo.jak": "Wygraj trzy licytacje na giełdzie."
+  "odznak.kladivo.jak": "Wygraj trzy licytacje na giełdzie.",
+  "fond.vizitka": "Fundusz",
+  "fond.tvuj": "twój",
+  "fond.hodnota": "Wartość funduszu",
+  "fond.clenu": "Członków",
+  "fond.firem": "Firm w posiadaniu",
+  "fond.akcie": "Akcje funduszu",
+  "fond.drzi_podily": "Co fundusz trzyma",
+  "fond.nic_nedrzi": "Nie ma jeszcze udziału w żadnej firmie.",
+  "fond.clenove": "Członkowie",
+  "fond.ty": "ty",
+  "fond.vizitka_popis": "Jawne jest to, co widać i gdzie indziej — księga akcjonariuszy, udziałowcy firm i wartość w rankingu. Nad czym fundusz głosuje i kto ile wpłacił, widzą tylko jego członkowie."
 }

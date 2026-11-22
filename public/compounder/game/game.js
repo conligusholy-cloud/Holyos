@@ -8168,13 +8168,74 @@ function zebKdy() {
 }
 // Řádek žebříčku fondů. Fond nemá nick ani vlaječky — má název, kolik je
 // v něm lidí, v kolika firmách drží podíl a kolik mu leží v pokladně.
+// Řádek žebříčku fondů se dá rozkliknout — jméno a jedno číslo o cizím fondu
+// nic neřeknou. Vizitku kreslí fondInfoSheet, data jsou veřejná.
 function fondRadek(f) {
-  return '<div class="zeb-row' + (f.ja ? ' ja' : '') + '">'
+  return '<div class="zeb-row klik' + (f.ja ? ' ja' : '') + '" data-fond-info="' + f.id + '">'
     + '<i class="poradi' + (f.poradi <= 3 ? ' medaile m' + f.poradi : '') + '">' + f.poradi + '</i>'
     + '<i class="znak-mezera"></i>'
     + '<span class="nick">' + esc(f.nazev)
     + '<i>' + esc(tx('veta.fond_zeb_pod', { p1: f.clenu, p2: f.firem, p3: f.pokladna })) + '</i></span>'
     + '<b>' + kcFull(f.hodnota) + '</b></div>';
+}
+function fondInfoNapoj(box) {
+  var el = typeof box === 'string' ? $(box) : box;
+  if (!el) return;
+  [].forEach.call(el.querySelectorAll('[data-fond-info]'), function (r) {
+    r.onclick = function () { fondInfoSheet(Number(r.getAttribute('data-fond-info'))); };
+  });
+}
+// ─── Vizitka cizího fondu ───────────────────────────────────────────────────
+// Co fond drží, kolik má členů a jestli vydal akcie. Ven jde jen to, co je
+// stejně veřejné jinde — o čem se zrovna hlasuje a kdo kolik vložil, je věc
+// členů toho fondu.
+function fondInfoSheet(id) {
+  sheet('<h3>' + esc(tx('fond.vizitka')) + '</h3>'
+    + '<p class="muted small">' + esc(tx('hra.nacitam_4')) + '</p>');
+  api('/trade/fond/' + id).then(function (r) {
+    if (!r.ok || !r.j.fond) {
+      return sheet('<h3>' + esc(tx('fond.vizitka')) + '</h3><p class="fine err">'
+        + esc((r.j && r.j.error) || tx('hra.nepovedlo_se_7')) + '</p>');
+    }
+    var f = r.j.fond;
+    var radek = function (popis, hodnota, trida) {
+      return '<div class="kv"><span>' + popis + '</span><b class="' + (trida || '')
+        + '">' + hodnota + '</b></div>';
+    };
+    sheet('<h3>' + esc(f.nazev) + (f.muj ? ' \u00b7 ' + esc(tx('fond.tvuj')) : '') + '</h3>'
+      + '<div class="kv souhrn"><span>' + esc(tx('fond.hodnota')) + '</span><b class="ok">'
+      + kcFull(f.hodnota) + '</b></div>'
+      + radek(esc(tx('fond.pokladna')), kcFull(f.pokladna))
+      + radek(esc(tx('fond.clenu')), tCislo((f.clenove || []).length))
+      + radek(esc(tx('fond.firem')), tCislo((f.drzi || []).length))
+      + (f.akcie
+        ? '<h4 style="margin:14px 0 2px">' + esc(tx('fond.akcie')) + '</h4>'
+          + radek(esc(tx('akcie.cena_ted')), kcFull(f.akcie.cena), 'ok')
+          + radek(esc(tx('akcie.vydano')), tCislo(f.akcie.vydano) + ' \u00b7 '
+              + procentaPodilu(f.akcie.podil) + esc(tx('akcie.fondu')))
+          + (f.akcie.sazba > 0
+            ? radek(esc(tx('akcie.dividenda_sazba')), pctHra(f.akcie.sazba) + ' % p.a.', 'ok')
+            : '')
+        : '')
+      + '<h4 style="margin:14px 0 2px">' + esc(tx('fond.drzi_podily')) + '</h4>'
+      + ((f.drzi || []).length
+        ? f.drzi.map(function (d) {
+            return '<div class="row"><span>' + esc(d.nazev) + '</span><span class="'
+              + (d.vetsina ? 'ok' : 'muted small') + '">' + procentaPodilu(d.podil)
+              + (d.vetsina ? ' \u00b7 ' + esc(tx('fond.vetsina')) : '') + '</span></div>';
+          }).join('')
+        : '<p class="fine">' + esc(tx('fond.nic_nedrzi')) + '</p>')
+      + '<h4 style="margin:14px 0 2px">' + esc(tx('fond.clenove')) + '</h4>'
+      + (f.clenove || []).map(function (c) {
+          return '<div class="row"><span>' + esc(c.nazev)
+            + (c.ja ? ' \u00b7 ' + esc(tx('fond.ty')) : '') + '</span>'
+            + '<span class="muted small">' + esc(c.nick || '') + '</span></div>';
+        }).join('')
+      + '<p class="fine">' + esc(tx('fond.vizitka_popis')) + '</p>');
+  }).catch(function () {
+    sheet('<h3>' + esc(tx('fond.vizitka')) + '</h3><p class="fine err">'
+      + esc(tx('hra.server_neodpovida')) + '</p>');
+  });
 }
 function paintZeb() {
   var box = $('zeb-body');
@@ -8193,6 +8254,7 @@ function paintZeb() {
         ? tx('veta.p_class_muted_small_style_margin_6',
             { p1: jaF.poradi, p2: jaF.z, p3: popis.jed(jaF.hodnota) })
         : '');
+    fondInfoNapoj(box);
     return;
   }
   if (ZEB_KAT === 'zeme') {
@@ -10444,6 +10506,7 @@ function fondSheetPaint() {
           + '<div class="zeb">' + FOND_ZEB.map(fondRadek).join('') + '</div></div>'
         : '<p class="fine">' + esc(tx('hra.zadny_fond_zatim_nic_nedrzi')) + '</p>')));
   bindAliance('sheet-body');
+  fondInfoNapoj('sheet-body');
   // Až po vykreslení — dřív nemá obsah výšku a posun by se zahodil.
   var nove = $('sheet-body');
   if (nove && kde > 0) nove.scrollTop = kde;

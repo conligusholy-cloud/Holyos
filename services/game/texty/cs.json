@@ -3953,5 +3953,16 @@
   "odznak.domaci.jak": "Kup pozemek, nabídni ho k pronájmu a počkej, až si ho někdo vezme.",
   "odznak.kladivo.nazev": "Kladivo",
   "odznak.kladivo.popis": "Třikrát vydražil, co ostatní pustili z ruky.",
-  "odznak.kladivo.jak": "Vyhraj tři dražby na burze."
+  "odznak.kladivo.jak": "Vyhraj tři dražby na burze.",
+  "fond.vizitka": "Fond",
+  "fond.tvuj": "tvůj",
+  "fond.hodnota": "Hodnota fondu",
+  "fond.clenu": "Členů",
+  "fond.firem": "Firem v držení",
+  "fond.akcie": "Akcie fondu",
+  "fond.drzi_podily": "Co fond drží",
+  "fond.nic_nedrzi": "Zatím nedrží podíl v žádné firmě.",
+  "fond.clenove": "Členové",
+  "fond.ty": "ty",
+  "fond.vizitka_popis": "Veřejné je to, co je vidět i jinde — kniha akcionářů, podílníci firem a hodnota v žebříčku. O čem fond zrovna hlasuje a kdo kolik vložil, vidí jen jeho členové."
 }

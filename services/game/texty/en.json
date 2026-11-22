@@ -3919,5 +3919,16 @@
   "odznak.domaci.jak": "Buy a plot, offer it for rent and wait for someone to take it.",
   "odznak.kladivo.nazev": "The Hammer",
   "odznak.kladivo.popis": "Won three auctions for what others let go.",
-  "odznak.kladivo.jak": "Win three auctions on the exchange."
+  "odznak.kladivo.jak": "Win three auctions on the exchange.",
+  "fond.vizitka": "Fund",
+  "fond.tvuj": "yours",
+  "fond.hodnota": "Fund value",
+  "fond.clenu": "Members",
+  "fond.firem": "Firms held",
+  "fond.akcie": "Fund shares",
+  "fond.drzi_podily": "What the fund holds",
+  "fond.nic_nedrzi": "Holds no stake in any firm yet.",
+  "fond.clenove": "Members",
+  "fond.ty": "you",
+  "fond.vizitka_popis": "Public here is what is visible elsewhere too — the share register, firms’ shareholders and the value in the leaderboard. What the fund is voting on and who deposited how much is for its members only."
 }

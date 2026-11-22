@@ -3919,5 +3919,16 @@
   "odznak.domaci.jak": "Kauf ein Grundstück, biete es zur Miete an und warte, bis es jemand nimmt.",
   "odznak.kladivo.nazev": "Der Hammer",
   "odznak.kladivo.popis": "Hat dreimal ersteigert, was andere losgelassen haben.",
-  "odznak.kladivo.jak": "Gewinne drei Auktionen an der Börse."
+  "odznak.kladivo.jak": "Gewinne drei Auktionen an der Börse.",
+  "fond.vizitka": "Fonds",
+  "fond.tvuj": "deiner",
+  "fond.hodnota": "Fondswert",
+  "fond.clenu": "Mitglieder",
+  "fond.firem": "Firmen im Besitz",
+  "fond.akcie": "Fondsaktien",
+  "fond.drzi_podily": "Was der Fonds hält",
+  "fond.nic_nedrzi": "Hält noch keinen Anteil an einer Firma.",
+  "fond.clenove": "Mitglieder",
+  "fond.ty": "du",
+  "fond.vizitka_popis": "Öffentlich ist hier, was auch anderswo sichtbar ist — das Aktienbuch, die Anteilseigner der Firmen und der Wert in der Rangliste. Worüber der Fonds abstimmt und wer wie viel eingelegt hat, sehen nur seine Mitglieder."
 }

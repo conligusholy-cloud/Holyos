@@ -200,6 +200,16 @@ if git diff --cached --name-only | grep -qE 'services/game/fond|services/game/vl
   fi
 fi
 
+# Vizitka cizího fondu. Ven smí jen to, co je veřejné i jinde — o čem fond
+# hlasuje a kdo kolik vložil, je věc jeho členů.
+if git diff --cached --name-only | grep -qE 'routes/game-trade|public/compounder/game/game'; then
+  if ! node nastroje/tfondvizitka.js; then
+    echo ""
+    echo "STOP: vizitka fondu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Jména firem v nabídkách fondu. Hráč zná firmu jménem, ne přezdívkou
 # majitele — pod nickem ji v seznamu nenajde a myslí si, že tam není.
 if git diff --cached --name-only | grep -qE 'routes/game-trade|public/compounder/game/game.js'; then

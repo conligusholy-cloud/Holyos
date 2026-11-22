@@ -688,6 +688,8 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .zeb{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
 .zeb-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--border)}
 .zeb-row:first-child{border-top:0}
+.zeb-row.klik{cursor:pointer}
+.zeb-row.klik:active{background:rgba(124,92,255,.14)}
 .zeb-row.ja{background:rgba(124,92,255,.14)}
 .zeb-row[data-hrac]{cursor:pointer}
 .struk-r{cursor:pointer}

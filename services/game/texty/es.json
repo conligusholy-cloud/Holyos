@@ -3919,5 +3919,16 @@
   "odznak.domaci.jak": "Compra un terreno, ofrécelo en alquiler y espera a que alguien lo tome.",
   "odznak.kladivo.nazev": "El Martillo",
   "odznak.kladivo.popis": "Ganó tres subastas de lo que otros soltaron.",
-  "odznak.kladivo.jak": "Gana tres subastas en la bolsa."
+  "odznak.kladivo.jak": "Gana tres subastas en la bolsa.",
+  "fond.vizitka": "Fondo",
+  "fond.tvuj": "el tuyo",
+  "fond.hodnota": "Valor del fondo",
+  "fond.clenu": "Miembros",
+  "fond.firem": "Empresas en cartera",
+  "fond.akcie": "Acciones del fondo",
+  "fond.drzi_podily": "Lo que tiene el fondo",
+  "fond.nic_nedrzi": "Todavía no tiene participación en ninguna empresa.",
+  "fond.clenove": "Miembros",
+  "fond.ty": "tú",
+  "fond.vizitka_popis": "Aquí es público lo que también se ve en otros sitios: el registro de acciones, los socios de las empresas y el valor en la clasificación. Sobre qué vota el fondo y quién aportó cuánto lo ven solo sus miembros."
 }

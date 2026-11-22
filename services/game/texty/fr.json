@@ -3919,5 +3919,16 @@
   "odznak.domaci.jak": "Achète un terrain, propose-le à la location et attends que quelqu’un le prenne.",
   "odznak.kladivo.nazev": "Le Marteau",
   "odznak.kladivo.popis": "A remporté trois enchères sur ce que d'autres ont lâché.",
-  "odznak.kladivo.jak": "Gagne trois enchères à la bourse."
+  "odznak.kladivo.jak": "Gagne trois enchères à la bourse.",
+  "fond.vizitka": "Fonds",
+  "fond.tvuj": "le tien",
+  "fond.hodnota": "Valeur du fonds",
+  "fond.clenu": "Membres",
+  "fond.firem": "Entreprises détenues",
+  "fond.akcie": "Actions du fonds",
+  "fond.drzi_podily": "Ce que le fonds détient",
+  "fond.nic_nedrzi": "Ne détient encore aucune part dans une entreprise.",
+  "fond.clenove": "Membres",
+  "fond.ty": "toi",
+  "fond.vizitka_popis": "Public ici, c’est ce qui se voit aussi ailleurs : le registre des actions, les associés des entreprises et la valeur au classement. Ce sur quoi le fonds vote et qui a déposé combien ne regarde que ses membres."
 }

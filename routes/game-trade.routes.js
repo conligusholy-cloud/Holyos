@@ -1778,6 +1778,62 @@ router.get('/trade/aliance/hlasovani', hrac, api(async (req, res) => {
   res.json({ ok: true, navrhy: out });
 }));
 
+// GET /trade/fond/:id → veřejná vizitka cizího fondu
+//
+// Žebříček fondů ukazoval jen jméno a číslo. Kdo chtěl vědět, s kým má co do
+// činění — jestli ten fond něco drží, kolik má členů, jestli vydal akcie —
+// neměl se kde podívat. Ven jde to, co je stejně veřejné jinde: kniha
+// akcionářů, podílníci firem na jejich vizitce, hodnota v žebříčku. Nejde
+// ven, o čem fond zrovna hlasuje a kdo kolik vložil — to je věc členů.
+router.get('/trade/fond/:id', hrac, api(async (req, res) => {
+  const alianceId = parseInt(req.params.id, 10) || 0;
+  const al = await prisma.gameAliance.findUnique({ where: { id: alianceId } });
+  if (!al) return res.status(404).json({ error: stx(req)('server.takovy_fond_tu_neni') });
+  const moje = await mojeAliance(req.player.id);
+  const [hodnota, clenove, drzene] = await Promise.all([
+    hodnotaFondu(alianceId),
+    prisma.gameAlianceClen.findMany({ where: { aliance_id: alianceId, stav: 'clen' },
+      select: { player_id: true } }),
+    prisma.gameEquity.findMany({ where: { fond_id: alianceId, stav: 'bezi' },
+      select: { firma_id: true, firma_nick: true, podil: true } }).catch(() => []),
+  ]);
+  const ids = Array.from(new Set(clenove.map((c) => c.player_id)
+    .concat(drzene.map((e) => e.firma_id))));
+  const lide = ids.length ? await prisma.gamePlayer.findMany({ where: { id: { in: ids } },
+    select: { id: true, nick: true, company: true } }) : [];
+  const jm = new Map(lide.map((h) => [h.id, h]));
+  const jmeno = (id, zaloha) => {
+    const h = jm.get(id);
+    return (h && (h.company || (h.nick + ' s.r.o.'))) || zaloha || ('#' + id);
+  };
+  // Podíly se sčítají po firmách — tři nákupy po deseti procentech jedné firmy
+  // jsou třicet procent, ne tři různé podíly. Za kolik je fond koupil, ven
+  // nejde: to je věc toho obchodu.
+  const m = new Map();
+  drzene.forEach((e) => {
+    const r = m.get(e.firma_id) || { firma_id: e.firma_id, nazev: jmeno(e.firma_id, e.firma_nick),
+      nick: e.firma_nick, podil: 0 };
+    r.podil += e.podil || 0;
+    m.set(e.firma_id, r);
+  });
+  const s = akcieStav(al, hodnota);
+  res.json({ ok: true, fond: {
+    id: al.id, nazev: al.nazev, zalozen: al.created_at,
+    hodnota, pokladna: Math.max(0, Math.round(al.pokladna || 0)),
+    muj: !!(moje && moje.aliance_id === alianceId),
+    clenove: clenove.map((c) => ({ id: c.player_id, nazev: jmeno(c.player_id),
+      nick: (jm.get(c.player_id) || {}).nick || null,
+      ja: c.player_id === req.player.id })),
+    drzi: [...m.values()].map((r) => Object.assign(r,
+      { vetsina: r.podil > PRAVA.VETSINA + 1e-9 })).sort((a, b) => b.podil - a.podil),
+    // Akcie fondu jsou veřejné už z burzy — tady jen patří k vizitce.
+    akcie: s.celkem > 0
+      ? { celkem: s.celkem, vydano: s.vydano, volne: s.volne, podil: s.podil,
+        cena: s.cena, ucetni: s.ucetni, sazba: Math.max(0, al.akcie_sazba || 0) }
+      : null,
+  } });
+}));
+
 // GET /trade/fond/odkup/:equityId → za kolik by fond ten podíl koupil
 //
 // Cenu musí člen vidět PŘEDEM. Neurčuje si ji — je to ocenění, kterým hra
