@@ -220,6 +220,16 @@ if git diff --cached --name-only | grep -qE 'routes/game-trade|public/compounder
   fi
 fi
 
+# Výkon mapy. Překresluje se po každé stavbě i průzkumu — hledání v poli
+# strojů pro každé místo zvlášť sekalo hru hráčům s velkou sítí.
+if git diff --cached --name-only | grep -q 'public/compounder/game/game.js'; then
+  if ! node nastroje/tmapavykon.js; then
+    echo ""
+    echo "STOP: mapa se překresluje draze (viz výš)."
+    exit 1
+  fi
+fi
+
 # Umístění hlášek. Dole kryly tlačítka panelu — hráč mačkal „Koupit"
 # a trefil hlášku, která se mu tam zrovna objevila.
 if git diff --cached --name-only | grep -qE 'public/compounder/game/game'; then

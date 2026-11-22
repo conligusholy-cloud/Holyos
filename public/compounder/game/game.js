@@ -4181,10 +4181,20 @@ function drawMap() {
   var blizko = !map || map.getZoom() >= MISTA_OD_ZOOMU;
   var moje = MAPA_MOJE;
   var naProdej = trhPodleMist();
+  // Stroj a koupenou zem si napřed srovnáme podle místa. Hledat je pro každé
+  // místo zvlášť znamenalo u velké sítě statisíce průchodů polem při každém
+  // překreslení — mapa se pak při stavbě a průzkumu viditelně sekala. Hráč
+  // s třemi sty stroji a dvěma tisíci místy to odnesl nejvíc.
+  var strojNaMiste = {};
+  (S.units || []).forEach(function (u) {
+    if (u && u.spotId && !strojNaMiste[u.spotId]) strojNaMiste[u.spotId] = u;
+  });
+  var mojePozemky = {};
+  pozemky().forEach(function (z) { if (z && z.spotId) mojePozemky[z.spotId] = 1; });
   Object.keys(S.areas).forEach(function (aid) {
     S.areas[aid].spots.forEach(function (sp) {
       any = true; zname[sp.id] = 1;
-      var unit = S.units.filter(function (u) { return u.spotId === sp.id; })[0];
+      var unit = strojNaMiste[sp.id];
       var rival = !unit && CLAIMS[sp.id] && !CLAIMS[sp.id].mine ? CLAIMS[sp.id] : null;
       // V pohledu „jen moje“ mizí konkurence. Prozkoumaná i volná místa zůstávají
       // — právě na nich se staví, bez nich by mapa k ničemu nebyla.
@@ -4196,22 +4206,26 @@ function drawMap() {
       var seen = !!S.revealed[sp.id];
       // Pozemek na prodej má svůj pin, i když tam hráč ještě nebyl — cedule
       // „na prodej" je na parcele vidět z ulice, na rozdíl od výše nájmu.
-      var mujPoz = !unit && mamPozemek(sp.id);
+      var mujPoz = !unit && !!mojePozemky[sp.id];
       // Cizí zem bez stroje není konkurenční prádlomat — má svůj špendlík,
       // a když ji majitel nabízí, je to vidět.
       var ciziPoz = rival && rival.pozemek && !rival.model ? rival : null;
       if (ciziPoz && ciziPoz.najemce && ciziPoz.najemce.ja) return;
       var nabidka = !unit && naProdej[sp.id] ? naProdej[sp.id] : null;
-      var icon = unit ? unitIcon(unit)
-        : nabidka ? trhIcon(nabidka)
-        : ciziPoz ? ciziPozemekIcon(ciziPoz)
-        : rival ? rivalIcon(rival)
-        : mujPoz ? pozemekIcon(sp)
-        : jePozemek(sp) ? pozemekSkoreIcon(sp, seen)
-        : seen ? skoreIcon('known', sp.score)
-        : pinIcon('unknown', '?');
+      // Ikona se staví až při kreslení. Většina špendlíků skončí ve shluku
+      // a nenakreslí se vůbec — stavět pro ně HTML bylo zahozená práce.
+      var dejIkonu = function () {
+        return unit ? unitIcon(unit)
+          : nabidka ? trhIcon(nabidka)
+          : ciziPoz ? ciziPozemekIcon(ciziPoz)
+          : rival ? rivalIcon(rival)
+          : mujPoz ? pozemekIcon(sp)
+          : jePozemek(sp) ? pozemekSkoreIcon(sp, seen)
+          : seen ? skoreIcon('known', sp.score)
+          : pinIcon('unknown', '?');
+      };
       kusy.push({ lat: sp.lat, lon: sp.lon, moje: !!unit || mujPoz, kresli: function () {
-        L.marker([sp.lat, sp.lon], { icon: icon })
+        L.marker([sp.lat, sp.lon], { icon: dejIkonu() })
           .addTo(layer)
           .on('click', function () {
             if (nabidka) return trhKoupitSheet(nabidka);
@@ -4232,7 +4246,8 @@ function drawMap() {
     var zem = c.pozemek && !c.model;
     var nab = naProdej[sid] || null;
     kusy.push({ lat: c.lat, lon: c.lon, moje: false, kresli: function () {
-      L.marker([c.lat, c.lon], { icon: nab ? trhIcon(nab) : zem ? ciziPozemekIcon(c) : rivalIcon(c) })
+      L.marker([c.lat, c.lon],
+        { icon: nab ? trhIcon(nab) : zem ? ciziPozemekIcon(c) : rivalIcon(c) })
         .addTo(layer)
         .on('click', function () { if (nab) return trhKoupitSheet(nab); cizi(c); });
     } });
