@@ -362,6 +362,18 @@ router.get('/zisk-rozbor', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(await ziskRozbor(req.query.nick));
 }));
 
+// GET /karty-puvod → odkud se vzaly karty a co z nich kape
+//
+// Karta na návštěvnost je trvalá a násobí tržbu celé sítě, takže je cennější
+// než kterýkoli stroj — a dá se převést. Tohle ukáže, komu karty přišly od
+// pomocných, smazaných nebo čerstvých účtů, a kolik mu za herní měsíc nesou.
+router.get('/karty-puvod', api(async (req, res) => {
+  const K = require('../services/game/karty-puvod');
+  const sk = await require('../services/game/podvod').skore(prisma).catch(() => ({}));
+  const jeMule = (id) => !!(sk[id] && sk[id].mule >= 45);
+  res.type('text/plain; charset=utf-8').send(await K.zprava(prisma, jeMule));
+}));
+
 // GET /sit-rozdily → vidí server stejnou síť jako hra?
 // Rozhoduje to o tom, jestli má vůbec smysl porovnávat zisk: dokud se
 // rozchází model stroje nebo skóre místa, nebyl by rozdíl chybou výpočtu,
