@@ -564,10 +564,36 @@ const POBOCKA_MESICNE = 15000, CETA_MZDY = 80000, SHANEC_MZDA = 50000;
 // v prohlížeči, takže žebříček ukazoval o pojistku vyšší zisk, než hráč sám
 // viděl, a čísla si odporovala.
 const POJISTNE_PODIL = 0.004;     // měsíční pojistné = 0,4 % ceny stroje
+// Uložený stav mohl být spočítaný s boostem nad stropem — hra ho přepočítá
+// až při dalším otevření, ale žebříček a Velín se na něj dívají hned. Dokud
+// se hráč nepřihlásí, by tam svítil zisk, který už neplatí. Tržba je
+// návštěvnosti přímo úměrná, takže stačí poměr obou návštěvností; pověst
+// i sezóna se v něm vykrátí.
+function korekceBoostu(st) {
+  const NAV = require('../services/game/navstevnost');
+  const b = Math.max(0, Number((st || {}).boost) || 0);
+  if (!(b > NAV.BOOST_MAX + 1e-9)) return 1;
+  const refs = Math.max(0, Math.min(NAV.REF_MAX, Number(st.refs) || 0));
+  const kam = (st.kampan && Number(st.kampan.do) > Date.now() && Number(st.kampan.add) > 0)
+    ? Number(st.kampan.add) : 0;
+  const t = (boost) => Math.min(NAV.TRAFFIC_MAX + boost + kam,
+    NAV.TRAFFIC_BASE + refs * NAV.TRAFFIC_PER_REF + boost + kam);
+  const stary = t(b);
+  return stary > 0 ? t(NAV.BOOST_MAX) / stary : 1;
+}
 function zbydeMesicne(st) {
   if (!st) return 0;
   const units = Array.isArray(st.units) ? st.units : [];
-  const provozni = units.reduce((a, u) => a + ((u.eco && u.eco.profit) || 0), 0);
+  const kor = korekceBoostu(st);
+  const provozni = units.reduce((a, u) => {
+    const e = (u && u.eco) || {};
+    if (kor >= 1) return a + (e.profit || 0);
+    // Energie i servis jsou procenta z tržby, nájem je pevný — proto se
+    // nedá škrtnout rovnou zisk, musí se přepočítat celý stroj.
+    const trzba = (Number(e.revenue) || 0) * kor;
+    return a + (trzba - Math.round(trzba * 0.09) - Math.round(trzba * 0.13)
+      - (Number(e.rent) || 0));
+  }, 0);
   const pobocky = (Array.isArray(st.pobocky) ? st.pobocky.length : 0) * POBOCKA_MESICNE;
   const ceta = (st.ceta && st.ceta.od)
     ? CETA_MZDY + (st.ceta.shanec ? SHANEC_MZDA : 0) + (Number(st.ceta.phm) || 0) : 0;
@@ -2946,6 +2972,7 @@ module.exports._defaults = ALL;
 module.exports._cashCustom = CASH_CUSTOM;
 module.exports._urokMesicne = urokMesicne;
 module.exports._zbydeMesicne = zbydeMesicne;
+module.exports._korekceBoostu = korekceBoostu;
 module.exports._cisteJmeni = cisteJmeni;
 module.exports._kdoPrivedl = kdoPrivedl;
 // Id hráče z cookie, bez sahání do databáze. Používá hledání měst, aby se
