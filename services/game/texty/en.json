@@ -3930,5 +3930,6 @@
   "fond.nic_nedrzi": "Holds no stake in any firm yet.",
   "fond.clenove": "Members",
   "fond.ty": "you",
-  "fond.vizitka_popis": "Public here is what is visible elsewhere too — the share register, firms’ shareholders and the value in the leaderboard. What the fund is voting on and who deposited how much is for its members only."
+  "fond.vizitka_popis": "Public here is what is visible elsewhere too — the share register, firms’ shareholders and the value in the leaderboard. What the fund is voting on and who deposited how much is for its members only.",
+  "server.uvitaci_karta_se_neprevadi": "The welcome card everyone gets for free at the start cannot be transferred — you can only use it yourself."
 }

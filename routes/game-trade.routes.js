@@ -293,8 +293,16 @@ async function zkontroluj(nab, prodavajici, t) {
     // prodat podruhé nelze. (Požadavek #158)
     if (c.pozemek_majitel_id) return t('server.zem_uz_patri_nekomu_jinemu');
   } else if (nab.predmet === 'karta') {
-    const k = await prisma.gameCard.count({ where: { player_id: prodavajici.id, kind: nab.card_kind || '', used_at: null } });
-    if (!k) return t('server.prodavajici_nema_kartu');
+    // Uvítací karta se nepřevádí — nabídka s ní je mrtvá hned, ne až při přijetí.
+    // Kdo ji má, musí se dozvědět proč: „kartu nemáš" by u karty, která mu
+    // svítí v ruce, vypadalo jako porucha.
+    const k = await prisma.gameCard.count({ where: { player_id: prodavajici.id,
+      kind: nab.card_kind || '', used_at: null, puvod: null } });
+    if (!k) {
+      const vse = await prisma.gameCard.count({ where: { player_id: prodavajici.id,
+        kind: nab.card_kind || '', used_at: null } });
+      return t(vse ? 'server.uvitaci_karta_se_neprevadi' : 'server.prodavajici_nema_kartu');
+    }
   } else if (nab.predmet === 'pobocka') {
     // Pobočky žijí ve stavu hry, ne v tabulce — hledáme ji podle názvu.
     const pob = Array.isArray(st.pobocky) ? st.pobocky : [];
@@ -613,7 +621,8 @@ router.post('/trade/offer', hrac, api(async (req, res) => {
   // Karty přihozené k ceně platí vždycky ten, kdo kupuje.
   const platici = smer === 'koupim' ? req.player : druhy;
   for (const k of karty) {
-    const m = await prisma.gameCard.count({ where: { player_id: platici.id, kind: k, used_at: null } });
+    const m = await prisma.gameCard.count({ where: { player_id: platici.id, kind: k,
+      used_at: null, puvod: null } });
     if (!m) return res.status(409).json({ error: stx(req)('server.karta_chybi_platicimu', { p1: k }) });
   }
 
@@ -883,13 +892,15 @@ router.post('/trade/:id/accept', hrac, api(async (req, res) => {
     const auditPred = auditFirma ? await AUDIT.otisk(tx, auditFirma) : null;
     // 1. karty přihozené k ceně → od kupujícího prodávajícímu
     for (const k of karty) {
-      const c = await tx.gameCard.findFirst({ where: { player_id: kupujici.id, kind: k, used_at: null }, orderBy: { id: 'asc' } });
+      const c = await tx.gameCard.findFirst({ where: { player_id: kupujici.id, kind: k,
+        used_at: null, puvod: null }, orderBy: { id: 'asc' } });
       if (!c) throw new Error(stx(req)('server.karta_se_ztratila', { p1: k }));
       await tx.gameCard.update({ where: { id: c.id }, data: { player_id: prodavajici.id } });
     }
     // 2. samotný předmět
     if (t.predmet === 'karta') {
-      const c = await tx.gameCard.findFirst({ where: { player_id: prodavajici.id, kind: t.card_kind, used_at: null }, orderBy: { id: 'asc' } });
+      const c = await tx.gameCard.findFirst({ where: { player_id: prodavajici.id,
+        kind: t.card_kind, used_at: null, puvod: null }, orderBy: { id: 'asc' } });
       if (!c) throw new Error(stx(req)('server.karta_se_ztratila_2'));
       await tx.gameCard.update({ where: { id: c.id }, data: { player_id: kupujici.id } });
     } else if (t.predmet === 'stroj') {
@@ -3794,8 +3805,14 @@ router.post('/trade/drazba', hrac, api(async (req, res) => {
     nazevKod = { kod: 'drazba.nazev_pobocka', cast: spotId };
   } else if (predmet === 'karta') {
     cardKind = s(b.card_kind, 24);
-    const k = await prisma.gameCard.count({ where: { player_id: ja.id, kind: cardKind, used_at: null } });
-    if (!k) return res.status(409).json({ error: stx(req)('server.tu_kartu_nemas') });
+    const k = await prisma.gameCard.count({ where: { player_id: ja.id, kind: cardKind,
+      used_at: null, puvod: null } });
+    if (!k) {
+      const vse = await prisma.gameCard.count({ where: { player_id: ja.id, kind: cardKind,
+        used_at: null } });
+      return res.status(409).json({ error: stx(req)(vse
+        ? 'server.uvitaci_karta_se_neprevadi' : 'server.tu_kartu_nemas') });
+    }
     // V dražbě musí být poznat, o co se hraje — „karta connect" nikomu nic neřekne.
     const kat = (acct._cards || {})[cardKind];
     nazev = 'karta ' + ((kat && kat.name) || cardKind);
@@ -4043,7 +4060,7 @@ async function prevedVydrazene(tx, d, prodavajici, vitez) {
   const popis = d.nazev;
   if (d.predmet === 'karta') {
     const c = await tx.gameCard.findFirst({ where: { player_id: prodavajici.id,
-      kind: d.card_kind, used_at: null }, orderBy: { id: 'asc' } });
+      kind: d.card_kind, used_at: null, puvod: null }, orderBy: { id: 'asc' } });
     // Dražbu vyhodnocuje úloha na pozadí, ne požadavek hráče — hláška se proto
     // skládá v jazyce prodávajícího, ne přes stx(req), který tu nemá odkud vzít req.
     if (!c) throw new Error(TEXTY.tHraci(prodavajici, 'server.karta_se_ztratila_2'));

@@ -13154,8 +13154,9 @@ function majetekSheet(id, rovnouKat) {
         popis: tx('veta.moje_pobocka', { p1: esc(b.name) }), pod: tx('veta.provoz_te_stoji', { p1: kcFull(POBOCKA_MESICNE), p2: esc(tx('mapa.mesic')) })});
     });
     (CARDS_CAT || []).forEach(function (c) {
-      if (ownedOf(c.kind) > 0) moje.push({ smer: 'prodam', predmet: 'karta', card_kind: c.kind,
-        popis: tx('hra.moje_karta_x', { p1: polNazev(c) }), pod: ownedOf(c.kind) + esc(tx('hra.k_dispozici_2')) });
+      var kusu = prevoditelnychKaret(c.kind);
+      if (kusu > 0) moje.push({ smer: 'prodam', predmet: 'karta', card_kind: c.kind,
+        popis: tx('hra.moje_karta_x', { p1: polNazev(c) }), pod: kusu + esc(tx('hra.k_dispozici_2')) });
     });
 
     // ── Rozcestník ─────────────────────────────────────────────────────────
@@ -14149,8 +14150,9 @@ function drazbaVyvolatSheet() {
       navrh: z.cena || 100000 });
   });
   (CARDS_CAT || []).forEach(function (c) {
-    if (ownedOf(c.kind) > 0) polozky.push({ predmet: 'karta', card_kind: c.kind,
-      popis: tx('hra.karta_x', { p1: polNazev(c) }), pod: ownedOf(c.kind) + esc(tx('hra.k_dispozici_3')), navrh: 100000 });
+    var kusu = prevoditelnychKaret(c.kind);
+    if (kusu > 0) polozky.push({ predmet: 'karta', card_kind: c.kind,
+      popis: tx('hra.karta_x', { p1: polNazev(c) }), pod: kusu + esc(tx('hra.k_dispozici_3')), navrh: 100000 });
   });
   ((FINANCE && FINANCE.podily) || []).forEach(function (e) {
     if (e.moje !== 'mam' || !bezici(e)) return;
@@ -15326,6 +15328,14 @@ function loadCards() {
   }).catch(function () { });
 }
 function ownedOf(kind) { return (ME && ME.cards && ME.cards[kind]) || 0; }
+// Kolik karet jde nabídnout dál. Uvítací kartu, kterou dostane každý nový
+// účet zdarma, převést nejde — nabízet ji k prodeji by znamenalo, že hráč
+// vypíše nabídku a odmítne ji až server.
+function prevoditelnychKaret(kind) {
+  if (!ME) return 0;
+  if (ME.cards_prevod && ME.cards_prevod[kind] != null) return ME.cards_prevod[kind];
+  return ownedOf(kind);
+}
 // ─── Předplatné: vedoucí servisních techniků ─────────────────────────────────
 // Jestli běží, rozhoduje server — klient si to nesmí odkývat sám. Dispečer
 // nechává hráči čtvrt hodiny: kdo u hry sedí, zareaguje stejně rychleji sám,

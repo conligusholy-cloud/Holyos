@@ -479,11 +479,17 @@ function requirePlayer(req, res, next) {
 async function pub(p) {
   const cards = await prisma.gameCard.findMany({
     where: { player_id: p.id, used_at: null },
-    select: { kind: true }
+    select: { kind: true, puvod: true }
   });
   const counts = {};
   POCITANE_KINDS.forEach((k) => { counts[k] = 0; });
   cards.forEach((c) => { if (counts[c.kind] != null) counts[c.kind]++; });
+  // Kolik z nich jde nabídnout dál. Uvítací karta se nepřevádí, takže hra
+  // nesmí nabízet k prodeji víc kusů, než kolik se doopravdy převede —
+  // jinak hráč nabídku vypíše a dozví se to až od serveru.
+  const prevod = {};
+  POCITANE_KINDS.forEach((k) => { prevod[k] = 0; });
+  cards.forEach((c) => { if (prevod[c.kind] != null && c.puvod !== 'uvitaci') prevod[c.kind]++; });
   return {
     nick: p.nick, company: p.company || (p.nick + ' s.r.o.'), emblem: p.emblem || null,
     nick_at: p.nick_at || null,
@@ -493,7 +499,7 @@ async function pub(p) {
     first_name: p.first_name || null, last_name: p.last_name || null,
     has_details: !!(p.email && p.first_name && p.last_name),
     ma_heslo: !!p.password_hash,
-    cards: counts, state_at: p.state_at
+    cards: counts, cards_prevod: prevod, state_at: p.state_at
   };
 }
 
@@ -969,7 +975,10 @@ router.post('/account/zacni', async (req, res, next) => {
     { const mod = require('../services/game/moderace').zkontroluj; mod({ player: p, zdroj: 'nick', text: p.nick }); if (p.company && p.company !== p.nick + ' s.r.o.') mod({ player: p, zdroj: 'firma', text: p.company }); }
     require('../services/game/pristupy').zapis(req, p.id, 'registrace');
     try {
-      await prisma.gameCard.createMany({ data: CARD_KINDS.map((k) => ({ player_id: p.id, kind: k })) });
+      // Uvítací karty se nepřevádí — jinak by se z nových účtů staly
+      // automaty na karty. Značka puvod je to jediné, co je odlišuje.
+      await prisma.gameCard.createMany({
+        data: CARD_KINDS.map((k) => ({ player_id: p.id, kind: k, puvod: 'uvitaci' })) });
     } catch (e) { console.warn('[game] uvítací karty:', e.message); }
     let hrac = p;
     try {
@@ -1029,7 +1038,10 @@ router.post('/account/register', async (req, res, next) => {
     // Dárek do začátku: jedna od každé zrychlující karty. Dostane ho jen nový
     // účet — ne ten, kdo si hru resetuje, jinak by si karty takhle „vyráběl".
     try {
-      await prisma.gameCard.createMany({ data: CARD_KINDS.map((k) => ({ player_id: p.id, kind: k })) });
+      // Uvítací karty se nepřevádí — jinak by se z nových účtů staly
+      // automaty na karty. Značka puvod je to jediné, co je odlišuje.
+      await prisma.gameCard.createMany({
+        data: CARD_KINDS.map((k) => ({ player_id: p.id, kind: k, puvod: 'uvitaci' })) });
     } catch (e) { console.warn('[game] uvítací karty:', e.message); }
     // Pozvánky: hráč si drží svoje sdílené id a zapíšeme, kdo ho přivedl.
     let hrac = p;

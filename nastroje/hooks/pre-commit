@@ -200,6 +200,16 @@ if git diff --cached --name-only | grep -qE 'services/game/fond|services/game/vl
   fi
 fi
 
+# Uvítací karta se nepřevádí. Dokud šla, stačilo zakládat účty a sbírat z nich
+# karty na návštěvnost — jeden hráč si takhle vydělával desetinásobek.
+if git diff --cached --name-only | grep -qE 'routes/game-trade|routes/game-account|public/compounder/game/game.js|prisma/'; then
+  if ! node nastroje/tuvitacikarta.js; then
+    echo ""
+    echo "STOP: uvítací karta nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Vizitka cizího fondu. Ven smí jen to, co je veřejné i jinde — o čem fond
 # hlasuje a kdo kolik vložil, je věc jeho členů.
 if git diff --cached --name-only | grep -qE 'routes/game-trade|public/compounder/game/game'; then

@@ -7803,6 +7803,11 @@ model GameCard {
   // Jen u ručně přidané hotovosti z administrace: kolik laundrů karta nese.
   amount      Int?
   purchase_id Int?
+  // Odkud karta je. Zatím jediná hodnota: 'uvitaci' — karta z uvítacího
+  // balíčku, kterou dostane každý nový účet zdarma. Ta se nepřevádí: jinak
+  // stačí založit účet, vybrat ji a poslat hlavnímu účtu, a z návštěvnosti
+  // se stane měna, kterou si každý natiskne, kolik chce.
+  puvod       String?   @db.VarChar(16)
   used_at     DateTime?
   used_on     String?   @db.VarChar(80)
   created_at  DateTime  @default(now())
