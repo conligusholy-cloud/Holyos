@@ -59,15 +59,29 @@ const skutecneIntl = { DisplayNames: Intl.DisplayNames };
   assert.strictEqual(new Set([cs, de, fr]).size, 3, 'jazyk hráče se nepromítá do názvu');
 }
 
-// 4) Bez prohlížečové podpory se nic nerozbije — zůstane kód jako dřív.
+// 4) Bez prohlížečové podpory se jméno vezme z české zálohy — nikdy kód.
 {
   const bez = postav('cs-CZ', {});
-  assert.strictEqual(vm.runInContext("zemeNazev('co')", bez), 'CO', 'bez Intl má zůstat kód');
+  assert.strictEqual(vm.runInContext("zemeNazev('co')", bez), 'Kolumbie', 'bez Intl má naskočit záloha');
   assert.strictEqual(vm.runInContext("zemeNazev('cz')", bez), 'Česko', 'katalog funguje i bez Intl');
   const rozbity = postav('cs-CZ', { DisplayNames: function () { throw new Error('ne'); } });
-  assert.strictEqual(vm.runInContext("zemeNazev('co')", rozbity), 'CO', 'spadlé Intl nesmí shodit hru');
+  assert.strictEqual(vm.runInContext("zemeNazev('co')", rozbity), 'Kolumbie', 'spadlé Intl nesmí shodit hru');
   const lzivy = postav('cs-CZ', { DisplayNames: function () { this.of = () => { throw new Error('ne'); }; } });
-  assert.strictEqual(vm.runInContext("zemeNazev('co')", lzivy), 'CO', 'spadlé .of() nesmí shodit hru');
+  assert.strictEqual(vm.runInContext("zemeNazev('co')", lzivy), 'Kolumbie', 'spadlé .of() nesmí shodit hru');
+  // I kdyby prohlížeč vracel jen kód (neznámá země v jeho seznamu).
+  const hluchy = postav('cs-CZ', { DisplayNames: function () { this.of = (K) => K; } });
+  assert.strictEqual(vm.runInContext("zemeNazev('ps')", hluchy), 'Palestinská území',
+    'prohlížeč vrátil kód a záloha nenaskočila');
+}
+
+// 4b) Ani jedna země z Honzovy obrazovky nesmí skončit jako kód — ani
+//     v prohlížeči, který Intl neumí.
+{
+  const bez = postav('cs-CZ', {});
+  for (const kod of ['co', 'gi', 'li', 'ps', 'fo', 'tr', 'fr', 'cz']) {
+    const m = vm.runInContext("zemeNazev('" + kod + "')", bez);
+    assert.ok(m !== kod.toUpperCase() && m.length > 2, kod + ' zůstalo zkratkou: ' + m);
+  }
 }
 
 // 5) Nesmysly nesmí nic shodit.
@@ -94,6 +108,36 @@ const skutecneIntl = { DisplayNames: Intl.DisplayNames };
   // A místo, kde se jméno lepí přes map(), musí esc() obalovat celek.
   const mapa = radky.find((l) => /map\(zemeNazev\)/.test(l));
   assert.ok(!mapa || /esc\(/.test(mapa), 'seznam zemí v title jde ven bez esc()');
+}
+
+// 7) Záloha musí pokrýt svět, ne jen pár zemí.
+{
+  const c = postav('cs-CZ', skutecneIntl);
+  const z = vm.runInContext('ZEME_ZALOHA', c);
+  const kody = Object.keys(z);
+  assert.ok(kody.length > 200, 'záloha pokrývá jen ' + kody.length + ' zemí');
+  for (const k of kody) {
+    assert.ok(/^[a-z]{2}$/.test(k), 'divný kód v záloze: ' + k);
+    assert.strictEqual(typeof z[k], 'string', k + ' nemá jméno');
+    assert.ok(z[k].length > 2 && z[k] !== k.toUpperCase(), k + ' má místo jména kód: ' + z[k]);
+  }
+  // Velké země ať jsou doopravdy uvnitř, ne jen počtem.
+  for (const [k, cekam] of [['us', 'Spojené státy'], ['de', 'Německo'], ['cn', 'Čína'],
+    ['br', 'Brazílie'], ['in', 'Indie'], ['xk', 'Kosovo']]) {
+    assert.strictEqual(z[k], cekam, k + ' je v záloze jako ' + z[k]);
+  }
+  // Záloha se nesmí plést do cesty ručnímu překladu.
+  const rucne = vm.runInContext('ZEME_NAZEV', c);
+  for (const k of Object.keys(rucne)) {
+    assert.strictEqual(vm.runInContext("zemeNazev('" + k + "')", c), rucne[k],
+      k + ': ruční překlad má přednost');
+  }
+}
+
+// 8) Opravdu neznámý kód zůstane kódem — ať je vidět, že jsou špatně data.
+{
+  const c = postav('cs-CZ', skutecneIntl);
+  assert.strictEqual(vm.runInContext("zemeNazev('qq')", c), 'QQ', 'neznámý kód se nemá vymýšlet');
 }
 
 console.log('tzemenazvy: ok');
