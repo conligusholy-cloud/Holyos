@@ -70,20 +70,29 @@ async function puvod(prisma) {
   });
 
   // Rozpad po hráči a druhu karty.
+  // Uvítací balíček: při registraci dostane každý nový účet jednu kartu od
+  // každého druhu. Poznají se podle toho, že vznikly v tutéž chvíli jako účet.
+  // Bez téhle kategorie by vypadaly jako karty z neznáma — a právě ony jsou
+  // tím, co se dá sbírat na pomocných účtech a převádět dál.
   const podle = new Map();
   karty.forEach((c) => {
     const k = c.player_id + '|' + c.kind;
     const r = podle.get(k) || { player_id: c.player_id, kind: c.kind, celkem: 0, koupeno: 0,
-      pouzito: 0, prevzato: [], zOdmen: zOdmen.get(k) || 0 };
+      pouzito: 0, prevzato: [], uvitaci: 0, zOdmen: zOdmen.get(k) || 0 };
     r.celkem++;
     if (c.purchase_id) r.koupeno++;
     if (c.used_at) r.pouzito++;
+    const h = P.get(c.player_id);
+    if (!c.purchase_id && h && !r.uvitaci
+      && Math.abs(new Date(c.created_at).getTime() - new Date(h.created_at).getTime()) < 120e3) {
+      r.uvitaci = 1;
+    }
     podle.set(k, r);
   });
   podle.forEach((r, k) => { r.prevzato = doHrace.get(k) || []; });
   // Co nejde doložit ničím: ani nákupem, ani odměnou, ani převodem od někoho.
   podle.forEach((r) => {
-    r.neznamo = Math.max(0, r.celkem - r.koupeno - r.zOdmen - r.prevzato.length);
+    r.neznamo = Math.max(0, r.celkem - r.koupeno - r.zOdmen - r.prevzato.length - r.uvitaci);
   });
   return { podle, prevody, P, karty };
 }
@@ -156,17 +165,20 @@ async function zprava(prisma, kdoJeMule) {
   // nebo pravidlo.
   const druhy = new Map();
   data.podle.forEach((r) => {
-    const d = druhy.get(r.kind) || { celkem: 0, koupeno: 0, odmena: 0, prevod: 0, neznamo: 0, pouzito: 0 };
+    const d = druhy.get(r.kind) || { celkem: 0, koupeno: 0, odmena: 0, uvitaci: 0, prevod: 0,
+      neznamo: 0, pouzito: 0 };
     d.celkem += r.celkem; d.koupeno += r.koupeno; d.odmena += Math.min(r.zOdmen, r.celkem);
-    d.prevod += r.prevzato.length; d.neznamo += r.neznamo; d.pouzito += r.pouzito;
+    d.uvitaci += r.uvitaci; d.prevod += r.prevzato.length; d.neznamo += r.neznamo;
+    d.pouzito += r.pouzito;
     druhy.set(r.kind, d);
   });
-  out.push('druh        celkem  koupeno  odměna  převodem  nedoloženo  použito');
-  out.push('-'.repeat(70));
+  out.push('druh        celkem  koupeno  odměna  uvítací  převodem  nedoloženo  použito');
+  out.push('-'.repeat(78));
   [...druhy.entries()].sort((a, b) => b[1].celkem - a[1].celkem).forEach(([kind, d]) => {
     out.push(String(kind).padEnd(12) + String(d.celkem).padStart(6) + String(d.koupeno).padStart(9)
-      + String(d.odmena).padStart(8) + String(d.prevod).padStart(10)
-      + String(d.neznamo).padStart(12) + String(d.pouzito).padStart(9));
+      + String(d.odmena).padStart(8) + String(d.uvitaci).padStart(9)
+      + String(d.prevod).padStart(10) + String(d.neznamo).padStart(12)
+      + String(d.pouzito).padStart(9));
   });
   out.push('');
   if (!sporne.size) {
