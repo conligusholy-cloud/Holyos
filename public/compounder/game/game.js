@@ -4983,6 +4983,25 @@ function podilyMamCo(p) {
   return !!((p.fond_celkem || 0) || (p.drzim && p.drzim.hodnota)
     || (p.prodano && p.prodano.hodnota));
 }
+// Půjčky mezi hráči v penězích. Dlužník má minus, věřitel plus — zbytek se
+// počítá stejně jako na serveru při propadnutí zástavy: splátka × zbývající
+// splátky. Dokud přehled nedorazil, vrací se nuly a karta vypadá jako dřív.
+function pujckyMoje() {
+  var out = { dluzim: 0, pujcil: 0, nejblizsi: 0 };
+  ((FINANCE && FINANCE.pujcky) || []).forEach(function (p) {
+    if (!p || !bezici(p)) return;
+    var zbyva = Math.max(0, Math.round((Number(p.splatka) || 0)
+      * Math.max(0, (Number(p.mesicu) || 0) - (Number(p.splaceno) || 0))));
+    if (!zbyva) return;
+    if (p.moje === 'dluzim') {
+      out.dluzim += zbyva;
+      var kdy = Number(new Date(p.dalsi)) || 0;
+      if (kdy && (!out.nejblizsi || kdy < out.nejblizsi)) out.nejblizsi = kdy;
+    } else out.pujcil += zbyva;
+  });
+  return out;
+}
+
 function cisteJmeni() {
   var majetek = investedTotal();
   MODEL_ORDER.forEach(function (k) { majetek += inStock(k) * machinePrice(MODELS[k]); });
@@ -4992,7 +5011,11 @@ function cisteJmeni() {
   majetek += (S.pobocky || []).length * POBOCKA_CENA;
   if (maCetu()) majetek += CETA_CENA;
   majetek += pozemkyHodnota();
-  return Math.round(majetek + S.cash - S.loan);
+  // Půjčka od hráče je dluh jako ta od banky: hotovost z ní se do jmění
+  // přičítá, tak se musí odečíst i to, co se má vrátit. Dokud přehled
+  // nedorazil ze serveru, počítá se jako dřív.
+  var pj = pujckyMoje();
+  return Math.round(majetek + S.cash - S.loan - pj.dluzim + pj.pujcil);
 }
 function stockValue() {
   var v = 0;
@@ -9448,6 +9471,7 @@ function majetekHtml() {
     { n: esc(tx('hra.pobocky_a_servisni_ceta')), m: (S.pobocky || []).length + tx('veta.pobocka_5', { p1: (maCetu() ? esc(tx('hra.ceta_v_souhrnu')) : '') }), v: zazemi }
   ];
   var najem = najmyMesicne();
+  var pj = pujckyMoje();
   return '<div class="card"><h3>' + esc(tx('hra.muj_majetek')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 8px">' + esc(tx('hra.co_vsechno_vlastnis_a_kolik')) + '</p>'
     + polozky.map(function (x) {
@@ -9459,6 +9483,18 @@ function majetekHtml() {
     + '<div class="kv"><span>' + esc(tx('hra.hotovost_2')) + '</span><b>' + kcFull(S.cash) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('hra.dluh_u_banky')) + '</span>' + '<b class="' + (S.loan ? 'err' : '') + '">'
     + (S.loan ? '\u2212' + kcFull(S.loan) : kcFull(0)) + '</b></div>'
+    // Dluh u hráče byl vidět jen na burze dole v kartě půjček. Kdo si půjčil,
+    // hledal splátku u sebe ve firmě — a našel jenom banku.
+    + (pj.dluzim
+      ? '<div class="kv"><span>' + esc(tx('hra.dluzim_hracum'))
+        + (pj.nejblizsi ? ' <i class="muted small">' + esc(tx('hra.dalsi_splatka')) + ' '
+            + esc(zaKolik(pj.nejblizsi)) + '</i>' : '')
+        + '</span><b class="err">\u2212' + kcFull(pj.dluzim) + '</b></div>'
+      : '')
+    + (pj.pujcil
+      ? '<div class="kv"><span>' + esc(tx('hra.pujcil_jsem_hracum')) + '</span><b class="ok">'
+        + kcFull(pj.pujcil) + '</b></div>'
+      : '')
     + '<div class="kv souhrn"><span>' + esc(tx('hra.ciste_jmeni_2')) + '</span><b class="' + (cisteJmeni() >= 0 ? 'ok' : 'err') + '">'
     + kcFull(cisteJmeni()) + '</b></div>'
     + (podilyMamCo(PODILY_MOJE) ? (function (p) {
@@ -11118,6 +11154,10 @@ function paintMe() {
     + odznakyHtml()
     + podilyHtml()
     + majetekHtml()
+    // Komu dlužím a co mi kdo dluží. Dosud to stálo jen na burze pod aukcemi
+    // a akciemi: hráč, co si půjčil, hledal splátku u sebe ve firmě a nenašel
+    // ji — a s ní ani tlačítko na odkup podílu.
+    + financeHtml()
     + '<div class="card"><h3>' + esc(tx('hra.jak_se_hraje')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 0">' + esc(tx('hra.jeden_skutecny_den_jsou_ve')) + ' '
     + esc(tx('hra.mista_na_mape_jsou_skutecna')) + ' '
@@ -11156,6 +11196,7 @@ function paintMe() {
   if (FINANCE == null) loadFinance(paintMe);
   if (ODZNAKY_HRA == null) loadOdznaky(paintMe);
   bindPodily();
+  bindPujcky('me-body');
   bindOdznaky();
   bindDist();
   bindMajetek();
@@ -11579,7 +11620,7 @@ function splatitSheet(id, castka) {
     var b = $('spl-ok'); b.disabled = true;
     apiJson('/trade/pujcka/' + id + '/splatit', {}).then(function (r) {
       if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_20')), 'err'); }
-      closeSheet(); vyzvedniNasledky(); FINANCE = null; loadFinance(paintBurza);
+      closeSheet(); vyzvedniNasledky(); FINANCE = null; financeZnovu();
       toast(esc(tx('hra.pujcka_je_doplacena')), 'ok');
     }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida_22')), 'err'); });
   };
@@ -12266,7 +12307,7 @@ function odkladSheet(p) {
       vzkaz: ($('od-vzkaz').value || '').slice(0, 200) })
       .then(function (r) {
         if (!r.ok) { $('od-ok').disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err'); }
-        closeSheet(); loadTrades(paintBurza);
+        closeSheet(); FINANCE = null; financeZnovu();
         toast(esc(tx('hra.nabidka_odeslana_ted_je_to')), 'ok');
       }).catch(function () { $('od-ok').disabled = false; toast(esc(tx('hra.server_neodpovida')), 'err'); });
   };
@@ -12447,25 +12488,43 @@ function financeHtml() {
   });
   return h + '</div>';
 }
-function bindFinance() {
-  [].forEach.call($('burza-body').querySelectorAll('[data-odklad]'), function (b) {
+// POZOR: tahle funkce se jmenovala taky bindFinance a tím přepsala tu nahoře,
+// co napojuje akontaci v nákupním okně. Výsledek: políčko „Kolik dáš ze svého"
+// nereagovalo při nákupu stroje, přípojek ani čety — hráč do něj psal a úvěr
+// se nepřepočítal. Odtud to jméno navíc.
+//
+// Kontejner se předává, protože karta půjček stojí na dvou místech: na burze
+// a v panelu Já pod majetkem.
+// Karta půjček stojí na dvou místech, takže se po akci musí překreslit ta,
+// na kterou se hráč zrovná dívá. Jinak mu na obrazovce zůstane splátka,
+// kterou právě doplatil.
+function financeZnovu() {
+  var me = $('v-me');
+  if (me && !me.classList.contains('hidden')) { loadTrades(paintMe); return; }
+  loadTrades(paintBurza);
+}
+
+function bindPujcky(kam) {
+  var box = $(kam);
+  if (!box) return;
+  [].forEach.call(box.querySelectorAll('[data-odklad]'), function (b) {
     b.onclick = function () {
       var id = Number(b.getAttribute('data-odklad'));
       var p = ((FINANCE && FINANCE.pujcky) || []).filter(function (x) { return x.id === id; })[0];
       if (p) odkladSheet(p);
     };
   });
-  [].forEach.call($('burza-body').querySelectorAll('[data-splatit]'), function (b) {
+  [].forEach.call(box.querySelectorAll('[data-splatit]'), function (b) {
     b.onclick = function () { splatitSheet(b.getAttribute('data-splatit'), Number(b.getAttribute('data-castka'))); };
   });
-  [].forEach.call($('burza-body').querySelectorAll('[data-odkup]'), function (b) {
+  [].forEach.call(box.querySelectorAll('[data-odkup]'), function (b) {
     b.onclick = function () {
       var id = Number(b.getAttribute('data-odkup'));
       var e = ((FINANCE && FINANCE.podily) || []).filter(function (x) { return x.id === id; })[0];
       if (e) odkupSheet(e);
     };
   });
-  bindPrevod('burza-body');
+  bindPrevod(kam);
 }
 
 // Konkurzní rozprodej — kdo zkrachoval, toho majetek je tu měsíc za klesající cenu.
@@ -12891,7 +12950,7 @@ function paintBurza() {
     + sekce(esc(tx('drazba.cekas_na_odpoved')), odeslane, esc(tx('drazba.nemas_rozjednanou_zadnou_nabidku')))
     + (hotove.length ? sekce(esc(tx('drazba.uzavrene')), hotove, '') : '');
   bindAukce();
-  bindFinance();
+  bindPujcky('burza-body');
   akcieNapoj(box);
   if (MOJE_NABIDKY == null) loadFondNabidky(paintBurza);
   // Akcie vidí každý, i kdo v žádném fondu není — o to u nich jde.
@@ -13160,7 +13219,7 @@ function odkupSheet(e) {
       smer: majitel ? 'koupim' : 'prodam', cena: c, vzkaz: $('odk-vzkaz').value })
       .then(function (r) {
         if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_28')), 'err'); }
-        closeSheet(); TRADES = null; loadTrades(paintBurza);
+        closeSheet(); TRADES = null; FINANCE = null; financeZnovu();
         toast(esc(tx('drazba.nabidka_na_odkup_odeslana_ted')), 'ok');
       }).catch(function () { b.disabled = false; toast(esc(tx('drazba.server_neodpovida_4')), 'err'); });
   };

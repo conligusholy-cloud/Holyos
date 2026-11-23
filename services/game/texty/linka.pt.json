@@ -1030,6 +1030,72 @@
     ]
   },
   {
+    "id": "susicka",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "A secadora não secou direito, a roupa ficou úmida depois do ciclo todo.",
+        "o": [
+          {
+            "t": "Isso não deveria acontecer. O tambor estava cheio?",
+            "b": 2,
+            "r": "Bom, eu coloquei bastante coisa."
+          },
+          {
+            "t": "Você colocou coisas demais.",
+            "b": -1,
+            "r": "Você está dizendo isso sem saber quanto era."
+          },
+          {
+            "t": "A secagem depende de várias coisas — do que você está secando, de como foi centrifugado e de como está o frio lá fora.",
+            "b": 0,
+            "r": "E daí?"
+          }
+        ]
+      },
+      {
+        "t": "Bom, eu coloquei bastante coisa.",
+        "o": [
+          {
+            "t": "Está vendo.",
+            "b": -2,
+            "r": "Você não precisa me dar sermão."
+          },
+          {
+            "t": "Então é isso — a secadora precisa que a roupa gire livremente. Coloque metade e você vai ver a diferença.",
+            "b": 2,
+            "r": "Tá bom, vou tentar."
+          },
+          {
+            "t": "Mesmo assim deveria ter secado.",
+            "b": 0,
+            "r": "Então o que é?"
+          }
+        ]
+      },
+      {
+        "t": "E vou pagar por essa secagem de novo?",
+        "o": [
+          {
+            "t": "Não, essa eu libero de graça pra você.",
+            "b": 2,
+            "r": "Obrigada."
+          },
+          {
+            "t": "Vai pagar sim, a máquina funcionou.",
+            "b": -1,
+            "r": "Mas não secou."
+          },
+          {
+            "t": "Isso eu não resolvo, a máquina funcionou e por mim acabou aí.",
+            "b": -2,
+            "r": "Que ótimo atendimento."
+          }
+        ]
+      }
+    ]
+  },
+  {
     "id": "miminko",
     "rod": "z",
     "kroky": [
@@ -1486,6 +1552,72 @@
             "t": "Não sei, teria que verificar como está configurado no sistema.",
             "b": -1,
             "r": "Então me ligue quando souber."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "parkovani",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Dá para estacionar perto da sua máquina? Levo a roupa de carro.",
+        "o": [
+          {
+            "t": "Tem duas vagas bem na frente, geralmente tem lugar.",
+            "b": 2,
+            "r": "Que bom."
+          },
+          {
+            "t": "Não sei.",
+            "b": -2,
+            "r": "Mas é seu estabelecimento."
+          },
+          {
+            "t": "Não cuidamos de estacionamento, isso é com a prefeitura e não temos nada a ver com isso.",
+            "b": -1,
+            "r": "Estou perguntando na prática, não burocraticamente."
+          }
+        ]
+      },
+      {
+        "t": "E no sábado, quando tem feira do lado?",
+        "o": [
+          {
+            "t": "Aí fica mais difícil.",
+            "b": 0,
+            "r": "Então quando?"
+          },
+          {
+            "t": "No sábado de manhã fica lotado. Se você vier depois do meio-dia, tem vaga tranquilo.",
+            "b": 2,
+            "r": "Valeu, vou me organizar."
+          },
+          {
+            "t": "Então venha outro dia.",
+            "b": -1,
+            "r": "Obrigado pelo conselho."
+          }
+        ]
+      },
+      {
+        "t": "E parar pelo menos um instante na porta?",
+        "o": [
+          {
+            "t": "Isso dá, para descarregar dá tempo.",
+            "b": 2,
+            "r": "Ótimo."
+          },
+          {
+            "t": "Não pode parar ali, é proibido, você sabe disso.",
+            "b": -1,
+            "r": "Nem por um minuto?"
+          },
+          {
+            "t": "Não recomendo, passam guardas por ali e multam.",
+            "b": 1,
+            "r": "Bom saber."
           }
         ]
       }

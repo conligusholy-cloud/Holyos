@@ -32,6 +32,42 @@ const CENY_STROJU = {
   max: Math.round(67000 * 24.35 * 1.25),
 };
 
+// Půjčky mezi hráči. Hotovost z půjčky se dlužníkovi do jmění přičte (leží
+// mu na účtu), ale dluh se nikde neodečítal — kdo si půjčil padesát milionů,
+// vyskočil v žebříčku o padesát milionů nahoru. A věřiteli ty peníze z účtu
+// odešly, aniž by mu proti nim něco stálo.
+//
+// Nesplacený zbytek se měří stejně jako při propadnutí zástavy
+// (services/game/finance.js): splátka × zbývající splátky. Dlužníkovi mínus,
+// věřiteli plus — ve hře se tím hodnota jen přesune, nevznikne ani nezmizí.
+function zbyvaZPujcky(p) {
+  return Math.max(0, Math.round((Number(p.splatka) || 0)
+    * Math.max(0, (Number(p.mesicu) || 0) - (Number(p.splaceno) || 0))));
+}
+
+async function pujckyVsech() {
+  const radky = await prisma.gameLoan.findMany({ where: { stav: 'bezi' },
+    select: { lender_id: true, borrower_id: true, splatka: true, mesicu: true, splaceno: true } });
+  const out = new Map();
+  const pricti = (id, x) => { if (id) out.set(id, (out.get(id) || 0) + x); };
+  radky.forEach((p) => {
+    const zbyva = zbyvaZPujcky(p);
+    if (!zbyva) return;
+    pricti(p.borrower_id, -zbyva);
+    pricti(p.lender_id, zbyva);
+  });
+  return out;
+}
+
+// Totéž pro jednoho hráče — na rozpad se nenačítá celá tabulka.
+async function pujckyHrace(playerId) {
+  const radky = await prisma.gameLoan.findMany({
+    where: { stav: 'bezi', OR: [{ lender_id: playerId }, { borrower_id: playerId }] },
+    select: { lender_id: true, borrower_id: true, splatka: true, mesicu: true, splaceno: true } });
+  return radky.reduce((a, p) => a
+    + (p.borrower_id === playerId ? -zbyvaZPujcky(p) : zbyvaZPujcky(p)), 0);
+}
+
 function hotovostADluh(st) {
   return Math.round(Number((st || {}).cash) || 0) - Math.round(Number((st || {}).loan) || 0);
 }
@@ -61,7 +97,9 @@ async function rozpad(playerId, st) {
   ]);
   const m = majetekZ(claims, objednavky);
   const penize = hotovostADluh(st);
-  return Object.assign({}, m, { hotovost_dluh: penize, jmeni: m.celkem + penize });
+  const pujcky = await pujckyHrace(playerId).catch(() => 0);
+  return Object.assign({}, m, { pujcky, celkem: m.celkem + pujcky,
+    hotovost_dluh: penize, jmeni: m.celkem + pujcky + penize });
 }
 
 async function proHrace(playerId, st) {
@@ -72,11 +110,12 @@ async function proHrace(playerId, st) {
 // Vrací mapu id → { stroje, zeme, sklad, celkem }, hotovost si každý
 // volající přičte ze stavu, který stejně drží v ruce.
 async function majetekVsech() {
-  const [claims, objednavky] = await Promise.all([
+  const [claims, objednavky, pujcky] = await Promise.all([
     prisma.gameSpotClaim.findMany({
       select: { player_id: true, spot_id: true, model: true, pozemek: true, cena: true } }),
     prisma.gameOrder.findMany({ where: { postaveno_at: null, zruseno_at: null },
       select: { player_id: true, model: true, cena: true } }),
+    pujckyVsech().catch(() => new Map()),
   ]);
   const poHraci = new Map();
   const dej = (id) => {
@@ -86,10 +125,18 @@ async function majetekVsech() {
   };
   claims.forEach((c) => dej(c.player_id).claims.push(c));
   objednavky.forEach((o) => dej(o.player_id).objednavky.push(o));
+  // Kdo nemá na mapě nic a jen někomu půjčil, musí v žebříčku být taky —
+  // jinak by mu ta pohledávka propadla.
+  pujcky.forEach((v, id) => dej(id));
 
   const out = new Map();
-  poHraci.forEach((v, id) => out.set(id, majetekZ(v.claims, v.objednavky)));
+  poHraci.forEach((v, id) => {
+    const m = majetekZ(v.claims, v.objednavky);
+    const p = pujcky.get(id) || 0;
+    out.set(id, Object.assign(m, { pujcky: p, celkem: m.celkem + p }));
+  });
   return out;
 }
 
-module.exports = { proHrace, rozpad, majetekZ, majetekVsech, hotovostADluh, CENY_STROJU };
+module.exports = { proHrace, rozpad, majetekZ, majetekVsech, hotovostADluh,
+  pujckyVsech, pujckyHrace, zbyvaZPujcky, CENY_STROJU };
