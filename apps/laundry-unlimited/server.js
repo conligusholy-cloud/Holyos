@@ -895,8 +895,8 @@ const MODEL_CSS = `
 .n{position:absolute;min-width:120px;max-width:280px;padding:12px 16px;border-radius:14px;background:#0d1b30;border:2px solid var(--c,#22e6ff);color:#eef4ff;font-size:15px;line-height:1.35;cursor:move;box-shadow:0 8px 26px -10px rgba(0,0,0,.7),0 0 18px -8px var(--c,#22e6ff)}
 .n .t{white-space:pre-wrap;word-break:break-word;min-height:20px;outline:none;cursor:inherit}.n.edit{cursor:text;user-select:text;-webkit-user-select:text}.n.edit .t{cursor:text}
 .n.sel{box-shadow:0 0 0 3px rgba(255,255,255,.85),0 0 26px -4px var(--c,#22e6ff)}.n.tgt{box-shadow:0 0 0 3px #22c55e,0 0 26px -4px #22c55e}
-.n .h{position:absolute;right:-10px;top:50%;width:18px;height:18px;margin-top:-9px;border-radius:50%;background:var(--c,#22e6ff);border:2px solid #050a14;cursor:crosshair;opacity:0;transition:opacity .15s,transform .15s}
-.n:hover .h,.n.sel .h{opacity:1}.n .h:hover{transform:scale(1.25)}
+.n .h{position:absolute;width:18px;height:18px;border-radius:50%;background:var(--c,#22e6ff);border:2px solid #050a14;cursor:crosshair;opacity:0;transition:opacity .15s,transform .15s}
+.n .h-r{right:-10px;top:50%;margin-top:-9px}.n .h-l{left:-10px;top:50%;margin-top:-9px}.n .h-t{top:-10px;left:50%;margin-left:-9px}.n .h-b{bottom:-10px;left:50%;margin-left:-9px}.n:hover .h,.n.sel .h{opacity:1}.n .h:hover{transform:scale(1.25)}
 #mb-bar{position:absolute;left:14px;top:12px;max-width:calc(100% - 400px);z-index:5;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-radius:14px;background:rgba(10,18,36,.92);border:1px solid var(--line);backdrop-filter:blur(10px)}
 #mb-bar button,#mb-bar select{background:#07111f;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:7px 11px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;width:auto}
 #mb-bar button:hover:not(:disabled){border-color:var(--cy)}#mb-bar button:disabled{opacity:.35;cursor:default}
@@ -925,7 +925,7 @@ const modelClean = (d) => {
   const str = (v, n) => String(v == null ? '' : v).slice(0, n), num = (v) => { const x = Math.round(Number(v)); return isFinite(x) ? Math.max(-100000, Math.min(100000, x)) : 0; };
   const nodes = (Array.isArray(d && d.nodes) ? d.nodes : []).slice(0, 500).map((n) => ({ id: str(n.id, 40).replace(/[^\w-]/g, ''), x: num(n.x), y: num(n.y), text: str(n.text, 2000), color: /^#[0-9a-f]{6}$/i.test(String(n.color || '')) ? n.color : '#22e6ff' })).filter((n) => n.id);
   const ids = new Set(nodes.map((n) => n.id));
-  const edges = (Array.isArray(d && d.edges) ? d.edges : []).slice(0, 1500).map((e) => ({ id: str(e.id, 40).replace(/[^\w-]/g, ''), from: str(e.from, 40).replace(/[^\w-]/g, ''), to: str(e.to, 40).replace(/[^\w-]/g, '') })).filter((e) => e.id && ids.has(e.from) && ids.has(e.to) && e.from !== e.to);
+  const edges = (Array.isArray(d && d.edges) ? d.edges : []).slice(0, 1500).map((e) => ({ id: str(e.id, 40).replace(/[^\w-]/g, ''), from: str(e.from, 40).replace(/[^\w-]/g, ''), to: str(e.to, 40).replace(/[^\w-]/g, ''), fs: /^[lrtb]$/.test(String(e.fs)) ? e.fs : undefined, ts: /^[lrtb]$/.test(String(e.ts)) ? e.ts : undefined })).filter((e) => e.id && ids.has(e.from) && ids.has(e.to) && e.from !== e.to);
   return { nodes, edges };
 };
 app.get('/admin/api/model/boards', requireAdmin, async (req, res) => {
