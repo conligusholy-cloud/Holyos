@@ -147,7 +147,7 @@
   function yv(a, i) { var x = a && a[i]; return typeof x === 'number' && isFinite(x) ? x : 0; }
   function sumTo(a, n) { var s = 0; for (var i = 0; i <= n; i++) s += yv(a, i); return s; }
   // Řádky s „licencí“/operátorem se odvíjejí od počtu operátorů, ostatní od prádlomatů; transakce a „z prádlomatu“ vždy od prádlomatů
-  function driverOf(r) { return (r.freq === 'tx' || r.freq === 'month_unit') ? 'pr' : (/operát|operat|licen/i.test(r.name || '') ? 'op' : 'pr'); }
+  function driverOf(r) { if (r.freq === 'tx' || /market|předplat/i.test(r.name || '')) return 'sub'; if (r.freq === 'month_unit') return 'pr'; return /operát|operat|licen/i.test(r.name || '') ? 'op' : 'pr'; }
   function yearEur(r, e, t, P) {
     var d = driverOf(r), a = P[d], nw = yv(a, t), run = sumTo(a, t - 1) + nw / 2;   // v provozu = průměr za rok
     if (r.freq === 'once') return nw * e;
@@ -158,7 +158,8 @@
   }
   function planCalc() {
     var P = PL(), out = { run: [], ops: [], pos: [] }, t;
-    for (t = 0; t < 10; t++) { out.run.push(sumTo(P.pr, t)); out.ops.push(sumTo(P.op, t)); }
+    out.subs = [];
+    for (t = 0; t < 10; t++) { out.run.push(sumTo(P.pr, t)); out.ops.push(sumTo(P.op, t)); out.subs.push(sumTo(P.sub, t)); }
     selCols().forEach(function (c) {
       var parts = cardRows(c).filter(function (r) { return r.freq; }).map(function (r) {
         var e = eurOf(r, r.v[c.id]), vals = []; for (var i = 0; i < 10; i++) vals.push(e == null ? 0 : yearEur(r, e, i, P)); return { name: r.name || '(bez názvu)', vals: vals };
@@ -185,22 +186,22 @@
   function planHtml() {
     var P = PL(), cs = selCols(), h = '<h3 class="plh">Výhled na 10 let <span class="dph">tržby po rocích · EUR bez DPH</span></h3>' +
       '<p class="mut" style="margin:4px 0 0;max-width:900px">Doplň pro každý rok, kolik se postaví nových prádlomatů a kolik nových operátorů si Master partner najde. Jednorázové řádky (Stroj, Přípojky + místo, Licence OPERATOR…) se spočítají z nových kusů, pravidelné platby z prádlomatů nebo operátorů v provozu (v roce průměr), licence na 5 / 10 let se obnovují po uplynutí lhůty. Částky bere z tabulky nahoře, objemy z karet výše se do výhledu nepoužívají.</p>' +
-      '<div class="plp">Transakcí za měsíc na 1 prádlomat: <input class="pin" data-k="txm" inputmode="decimal" autocomplete="off" placeholder="20" value="' + esc(typeof P.txm === 'number' ? fmt(P.txm) : '') + '"> <span>(pro řádky „Z každé transakce“)</span></div>' +
-      '<div class="plw"><table class="pt"><thead><tr><th>Rok</th><th>Nové prádlomaty</th><th>Noví operátoři</th><th>Prádlomaty v provozu</th><th>Operátoři celkem</th>' +
+      '<div class="plp">Transakcí za měsíc na 1 předplatitele Market Place: <input class="pin" data-k="txm" inputmode="decimal" autocomplete="off" placeholder="20" value="' + esc(typeof P.txm === 'number' ? fmt(P.txm) : '') + '"> <span>(pro řádky „Z každé transakce“; předplatitelé se berou z tabulky níže)</span></div>' +
+      '<div class="plw"><table class="pt"><thead><tr><th>Rok</th><th>Nové prádlomaty</th><th>Noví operátoři</th><th>Noví předplatitelé Market Place</th><th>Prádlomaty v provozu</th><th>Operátoři celkem</th><th>Předplatitelé Market Place celkem</th>' +
       cs.map(function (c) { return '<th>' + esc(c.name || 'Pozice') + ' / rok</th>' + (/operát|operat/i.test(c.name) ? '<th>Ø na 1 operátora</th>' : ''); }).join('') + '</tr></thead><tbody>';
     for (var i = 0; i < 10; i++) {
-      h += '<tr><td class="cc">Rok ' + (i + 1) + '</td><td><input class="pin" data-k="pr" data-y="' + i + '" inputmode="decimal" autocomplete="off" placeholder="0" value="' + esc(P.pr && typeof P.pr[i] === 'number' ? fmt(P.pr[i]) : '') + '"></td><td><input class="pin" data-k="op" data-y="' + i + '" inputmode="decimal" autocomplete="off" placeholder="0" value="' + esc(P.op && typeof P.op[i] === 'number' ? fmt(P.op[i]) : '') + '"></td><td data-p="run" data-y="' + i + '"></td><td data-p="ops" data-y="' + i + '"></td>' +
+      h += '<tr><td class="cc">Rok ' + (i + 1) + '</td><td><input class="pin" data-k="pr" data-y="' + i + '" inputmode="decimal" autocomplete="off" placeholder="0" value="' + esc(P.pr && typeof P.pr[i] === 'number' ? fmt(P.pr[i]) : '') + '"></td><td><input class="pin" data-k="op" data-y="' + i + '" inputmode="decimal" autocomplete="off" placeholder="0" value="' + esc(P.op && typeof P.op[i] === 'number' ? fmt(P.op[i]) : '') + '"></td><td><input class="pin" data-k="sub" data-y="' + i + '" inputmode="decimal" autocomplete="off" placeholder="0" value="' + esc(P.sub && typeof P.sub[i] === 'number' ? fmt(P.sub[i]) : '') + '"></td><td data-p="run" data-y="' + i + '"></td><td data-p="ops" data-y="' + i + '"></td><td data-p="subs" data-y="' + i + '"></td>' +
         cs.map(function (c) { return '<td class="cv" data-p="pos" data-c="' + c.id + '" data-y="' + i + '"></td>' + (/operát|operat/i.test(c.name) ? '<td data-p="avg" data-c="' + c.id + '" data-y="' + i + '"></td>' : ''); }).join('') + '</tr>';
     }
-    h += '</tbody><tfoot><tr><td>Σ 10 let</td><td data-p="spr"></td><td data-p="sop"></td><td></td><td></td>' + cs.map(function (c) { return '<td data-p="spos" data-c="' + c.id + '"></td>' + (/operát|operat/i.test(c.name) ? '<td></td>' : ''); }).join('') + '</tr></tfoot></table></div>' +
+    h += '</tbody><tfoot><tr><td>Σ 10 let</td><td data-p="spr"></td><td data-p="sop"></td><td data-p="ssub"></td><td></td><td></td><td></td>' + cs.map(function (c) { return '<td data-p="spos" data-c="' + c.id + '"></td>' + (/operát|operat/i.test(c.name) ? '<td></td>' : ''); }).join('') + '</tr></tfoot></table></div>' +
       '<div class="pcharts">' + cs.map(function (c) { return '<div class="pch" data-c="' + c.id + '"><h4>' + esc(c.name || 'Pozice') + ' — tržby za 10 let</h4><div class="pc"></div></div>'; }).join('') + '</div>';
     return h;
   }
   function paintPlan() {
     var box = $('#fx-model'); if (!box) return; var o = planCalc(), P = PL();
     function set(sel, txt) { var el = box.querySelector(sel); if (el) el.textContent = txt; }
-    o.run.forEach(function (v, i) { set('[data-p="run"][data-y="' + i + '"]', fmt(v)); set('[data-p="ops"][data-y="' + i + '"]', fmt(o.ops[i])); });
-    set('[data-p="spr"]', fmt(sumTo(P.pr, 9))); set('[data-p="sop"]', fmt(sumTo(P.op, 9)));
+    o.run.forEach(function (v, i) { set('[data-p="run"][data-y="' + i + '"]', fmt(v)); set('[data-p="ops"][data-y="' + i + '"]', fmt(o.ops[i])); set('[data-p="subs"][data-y="' + i + '"]', fmt(o.subs[i])); });
+    set('[data-p="spr"]', fmt(sumTo(P.pr, 9))); set('[data-p="sop"]', fmt(sumTo(P.op, 9))); set('[data-p="ssub"]', fmt(sumTo(P.sub, 9)));
     o.pos.forEach(function (p) {
       var all = 0; p.tot.forEach(function (v, i) { all += v; set('[data-p="pos"][data-c="' + p.c.id + '"][data-y="' + i + '"]', eur2(v)); set('[data-p="avg"][data-c="' + p.c.id + '"][data-y="' + i + '"]', o.ops[i] > 0 ? eur2(v / o.ops[i]) : '—'); });
       set('[data-p="spos"][data-c="' + p.c.id + '"]', eur2(all));

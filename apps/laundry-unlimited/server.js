@@ -929,7 +929,7 @@ const finClean = (d) => {
     const pl = m.plan && typeof m.plan === 'object' ? m.plan : {};
     const yr = (a) => Array.from({ length: 10 }, (_, i) => { const x = Array.isArray(a) && a[i] != null && a[i] !== '' ? Number(a[i]) : null; return x != null && isFinite(x) && x >= 0 ? Math.min(1e6, Math.round(x * 100) / 100) : null; });
     const tm = pl.txm != null && pl.txm !== '' ? Number(pl.txm) : null;
-    const plan = { pr: yr(pl.pr), op: yr(pl.op), txm: tm != null && isFinite(tm) && tm >= 0 ? Math.min(1e7, tm) : null };
+    const plan = { pr: yr(pl.pr), op: yr(pl.op), sub: yr(pl.sub), txm: tm != null && isFinite(tm) && tm >= 0 ? Math.min(1e7, tm) : null };
     model = { sel: Array.isArray(m.sel) ? m.sel.map(String).filter((x) => ids.has(x)) : null, vol, plan };
   }
   return { cols, rows, model };
