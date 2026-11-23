@@ -929,20 +929,22 @@ const FIN_CSS = `
 .fxbar button{background:#07111f;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 13px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;width:auto}.fxbar button:hover{border-color:var(--cy)}
 #fx-st{font-size:12.5px;color:#86efac;margin-left:6px}
 .fxw{overflow:auto;border:1px solid var(--line);border-radius:14px;background:rgba(8,15,30,.6);max-width:100%}
-#fx{border-collapse:separate;border-spacing:0;width:100%;min-width:760px}
-#fx th{position:sticky;top:0;background:#0b1630;z-index:2;text-align:left;padding:10px 8px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--line)}
-#fx td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:middle}
+#fx{border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed}
+#fx th{position:sticky;top:0;background:#0b1630;z-index:2;text-align:left;padding:10px 6px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--line)}
+#fx td{padding:6px 5px;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:middle}
 #fx tbody tr:hover td{background:rgba(34,230,255,.04)}
-#fx .c0{width:34px;color:var(--mut);text-align:center}#fx .cn{min-width:230px}#fx .cm{min-width:190px;width:190px}#fx .ain{text-align:right;font-variant-numeric:tabular-nums;padding-right:26px}#fx .cp{min-width:215px;width:215px}#fx .dph{display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;background:rgba(251,191,36,.16);color:#fcd34d;font-size:10.5px;letter-spacing:.04em;vertical-align:middle}#fx .cf{min-width:160px;width:160px}#fx select.fin{background:#07111f;border:1px solid transparent;border-radius:8px;color:var(--text);font:inherit;font-size:14px;padding:7px 8px;width:100%;box-sizing:border-box;cursor:pointer}#fx select.fin:hover{border-color:var(--line)}#fx select.fin:focus{outline:none;border-color:var(--cy)}#fx select.fin option{background:#0b1630}#fx .cs{width:130px;white-space:nowrap}#fx .ca{width:150px;white-space:nowrap;text-align:right}
+#fx .c0{width:34px;color:var(--mut);text-align:center}#fx .cn{width:17%}#fx .cm{width:172px}#fx .cf{width:132px}#fx .cp{min-width:0}#fx .cs{width:112px;white-space:nowrap}#fx .ca{width:104px;white-space:nowrap;text-align:right}
+#fx .ain{text-align:right;font-variant-numeric:tabular-nums;padding-right:26px}#fx .dph{display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;background:rgba(251,191,36,.16);color:#fcd34d;font-size:10.5px;letter-spacing:.04em;vertical-align:middle}
+#fx select.fin{background:#07111f;border:1px solid transparent;border-radius:8px;color:var(--text);font:inherit;font-size:14px;padding:7px 6px;width:100%;box-sizing:border-box;cursor:pointer}#fx select.fin:hover{border-color:var(--line)}#fx select.fin:focus{outline:none;border-color:var(--cy)}#fx select.fin option{background:#0b1630}
 #fx input{background:#07111f;border:1px solid transparent;border-radius:8px;color:var(--text);font:inherit;font-size:14px;padding:7px 9px;width:100%;box-sizing:border-box}
 #fx input:hover{border-color:var(--line)}#fx input:focus{outline:none;border-color:var(--cy);background:#0a1830}
 #fx .hin{font-weight:700;text-transform:none;letter-spacing:0;color:#eaf6ff;font-size:13.5px;background:rgba(34,230,255,.07)}
 #fx .ch{display:flex;align-items:center;gap:4px}#fx .x{background:none;border:0;color:#6f84a6;cursor:pointer;font-size:13px;padding:2px 4px;width:auto}#fx .x:hover{color:#fca5a5}
 #fx .pc{position:relative;display:block}#fx .pc .vin{text-align:right;padding-right:26px;font-variant-numeric:tabular-nums}#fx .pc i{position:absolute;right:9px;top:50%;transform:translateY(-50%);color:var(--mut);font-style:normal;font-size:13px;pointer-events:none}
 .fxc{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700}.fxc.ok{background:rgba(34,197,94,.18);color:#86efac}.fxc.w{background:rgba(251,191,36,.16);color:#fcd34d}.fxc.bad{background:rgba(248,113,113,.2);color:#fca5a5}.fxc.n{color:var(--mut)}
-#fx .ib{background:none;border:1px solid transparent;border-radius:7px;color:#9fb4d6;cursor:pointer;font-size:14px;padding:4px 7px;width:auto}#fx .ib:hover{border-color:var(--line);color:#fff}
+#fx .ib{background:none;border:1px solid transparent;border-radius:7px;color:#9fb4d6;cursor:pointer;font-size:13px;padding:3px 4px;width:auto}#fx .ib:hover{border-color:var(--line);color:#fff}
 #fx .empty{text-align:center;color:var(--mut);padding:34px 14px;line-height:1.7}
-@media(max-width:900px){#fx .cm{display:none}}`;
+@media(max-width:900px){.fxw{overflow-x:auto}#fx{min-width:820px}}`;
 app.get('/admin/finance', requireAdmin, (req, res) => {
   res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Rozdělení financí — Laundry Unlimited</title>
 <style>${ADMIN_CSS}${BAR_CSS}.adm{max-width:none;padding:22px}.mut{color:var(--mut);font-size:13px}${FIN_CSS}</style></head><body>${topBar({ mode: 'admin', active: 'split' })}
