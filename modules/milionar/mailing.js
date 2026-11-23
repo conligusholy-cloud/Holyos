@@ -385,7 +385,7 @@
       '<div id="gme-facets"></div>' +
       '<div style="margin-top:8px"><button class="btn sm" id="gme-count" type="button">Spočítat příjemce</button> <span id="gme-cnt" class="note"></span></div></div></div>' +
       schedHtml + aiHtml + contentHtml +
-      '<div class="gm-row"><label>Tlačítko v e-mailu</label><div><div class="gm-2"><input id="gme-link" class="gm-in" placeholder="https://… (volitelné)" value="' + esc(c.link || '') + '"><input id="gme-ll" class="gm-in" placeholder="Popisek tlačítka" value="' + esc(c.link_label || '') + '"></div><div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><button class="btn sm" type="button" id="gme-game">🎮 Odkaz na hru</button><span class="note">Odkaz na hru dostane u každého příjemce značku kampaně — v detailu hráče pak uvidíš v „Odkud přišel“ <b>email / gm-č. kampaně / k-č. kontaktu</b>.</span></div></div></div>' +
+      '<div class="gm-row"><label>Tlačítko v e-mailu</label><div><div class="gm-2"><input id="gme-link" class="gm-in" placeholder="https://… (volitelné)" value="' + esc(c.link || '') + '"><input id="gme-ll" class="gm-in" placeholder="Popisek tlačítka" value="' + esc(c.link_label || '') + '"></div><div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><button class="btn sm" type="button" id="gme-game">🎮 Odkaz na hru</button><label class="note" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="gme-top"' + (/\[\[\s*tlacitko\s*\]\]/i.test(c.body || '') ? ' checked' : '') + '> Tlačítko i nahoře (po úvodním odstavci)</label><span class="note">Odkaz na hru dostane u každého příjemce značku kampaně — v detailu hráče pak uvidíš v „Odkud přišel“ <b>email / gm-č. kampaně / k-č. kontaktu</b>.</span></div></div></div>' +
       '<div class="gm-row"><label>Obrázek v e-mailu</label><div><div class="gm-img"><input type="file" id="gme-imgf" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none"><button class="btn sm" type="button" id="gme-imgb">🖼 Nahrát obrázek</button><input id="gme-img" class="gm-in" style="flex:1;min-width:220px" placeholder="nebo adresa obrázku https://…" value="' + esc(c.image_url || '') + '"><span id="gme-imgt"></span></div><div class="note" style="margin-top:4px">Zobrazí se pod textem (šířka e-mailu ~500 px, ideálně 1000 px široký). Když je vyplněné tlačítko, obrázek na něj také prokliká.</div></div></div>' +
       '<div class="gm-row"><label>Testovací e-mail</label><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input id="gme-tto" class="gm-in" style="flex:1;min-width:220px" placeholder="kam poslat test (prázdné = tvůj e-mail z HolyOS)"><button class="btn sm" type="button" id="gme-tbtn">✉ Poslat test</button><span id="gme-tres" class="note"></span></div></div>' +
       '<p id="gme-err" class="note" style="color:#f87171"></p><div class="gm-btns"><button class="btn on" id="gme-save">Uložit</button><button class="btn" id="gme-x">Zavřít</button></div></div>' +
@@ -444,6 +444,21 @@
     // ── obrázek ──
     function imgThumb() { var u = q('gme-img').value.trim(); q('gme-imgt').innerHTML = /^https:\/\//.test(u) ? '<img src="' + esc(u) + '" alt=""> <button class="btn sm" type="button" id="gme-imgx">Odebrat</button>' : ''; var x = q('gme-imgx'); if (x) x.onclick = function () { q('gme-img').value = ''; imgThumb(); preview(); }; }
     imgThumb(); q('gme-img').addEventListener('change', imgThumb);
+    // ── tlačítko nahoře: vloží / odebere značku [[tlacitko]] za úvodní odstavec (první blok po oslovení) ──
+    (function () {
+      var cb = q('gme-top'); if (!cb) return;
+      if (!q('gme-body')) { cb.parentNode.style.display = 'none'; return; }
+      var RE = /\n*\[\[\s*tlacitko\s*\]\]\n*/gi;
+      cb.onchange = function () {
+        var ta = q('gme-body'), t = ta.value.replace(RE, '\n\n');
+        if (cb.checked) {
+          var blocks = t.replace(/^\s+|\s+$/g, '').split(/\n{2,}/), at = blocks.length > 2 ? 2 : blocks.length;
+          if (/^(dobr|ahoj|vážen|hello|hi|dear)/i.test(blocks[0] || '') === false) at = Math.min(1, blocks.length);
+          blocks.splice(at, 0, '[[tlacitko]]'); t = blocks.join('\n\n');
+        } else t = t.replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
+        ta.value = t;
+      };
+    })();
     q('gme-imgb').onclick = function () { q('gme-imgf').click(); };
     q('gme-imgf').onchange = function () {
       var f = q('gme-imgf').files[0]; if (!f) return; if (f.size > 5 * 1024 * 1024) { alert('Obrázek je větší než 5 MB.'); return; }
