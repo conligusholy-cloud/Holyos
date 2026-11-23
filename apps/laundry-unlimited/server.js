@@ -119,6 +119,19 @@ async function initDb() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`);
   await q('CREATE INDEX IF NOT EXISTS lu_task_log_task_idx ON lu_task_log (task_id)');
+  // Přílohy tasků (libovolný soubor, v databázi)
+  await q(`CREATE TABLE IF NOT EXISTS lu_task_files (
+    id SERIAL PRIMARY KEY,
+    task_id INT NOT NULL REFERENCES lu_tasks(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    mime TEXT,
+    size INT NOT NULL DEFAULT 0,
+    data BYTEA NOT NULL,
+    author_key TEXT,
+    author_name TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+  await q('CREATE INDEX IF NOT EXISTS lu_task_files_task_idx ON lu_task_files (task_id)');
   // Kdo se přihlásil z HolyOS (SSO) — aby šel vybrat jako řešitel úkolu
   await q(`CREATE TABLE IF NOT EXISTS sso_people (
     pid INT PRIMARY KEY,
@@ -990,7 +1003,7 @@ app.get('/admin/api/tasks/count', requireAdmin, async (req, res) => {
 });
 app.get('/admin/api/tasks', requireAdmin, async (req, res) => {
   try {
-    const rows = (await q("SELECT t.*, (SELECT count(*)::int FROM lu_task_log l WHERE l.task_id=t.id AND l.kind='comment') AS comments FROM lu_tasks t ORDER BY (t.status IN ('done','cancel')), t.due_date NULLS LAST, t.id DESC LIMIT 2000")).rows;
+    const rows = (await q("SELECT t.*, (SELECT count(*)::int FROM lu_task_log l WHERE l.task_id=t.id AND l.kind='comment') AS comments, (SELECT count(*)::int FROM lu_task_files f WHERE f.task_id=t.id) AS files FROM lu_tasks t ORDER BY (t.status IN ('done','cancel')), t.due_date NULLS LAST, t.id DESC LIMIT 2000")).rows;
     res.set('Cache-Control', 'no-store').json({ ok: true, me: taskMe(req), people: await taskPeople(), tasks: rows, statuses: TASK_ST, priorities: TASK_PRI });
   } catch (e) { console.warn('[lu] tasks:', e.message); res.json({ ok: false, error: 'Úkoly se nepodařilo načíst' }); }
 });
@@ -998,7 +1011,8 @@ app.get('/admin/api/tasks/:id(\\d+)', requireAdmin, async (req, res) => {
   try {
     const t = (await q('SELECT * FROM lu_tasks WHERE id=$1', [req.params.id])).rows[0]; if (!t) return res.json({ ok: false, error: 'Úkol nenalezen' });
     const log = (await q('SELECT * FROM lu_task_log WHERE task_id=$1 ORDER BY created_at, id', [req.params.id])).rows;
-    res.set('Cache-Control', 'no-store').json({ ok: true, task: t, log });
+    const files = (await q('SELECT id, name, mime, size, author_key, author_name, created_at FROM lu_task_files WHERE task_id=$1 ORDER BY id', [req.params.id])).rows;
+    res.set('Cache-Control', 'no-store').json({ ok: true, task: t, log, files });
   } catch (e) { res.json({ ok: false, error: 'Úkol se nepodařilo načíst' }); }
 });
 const taskIn = (b, people) => {
@@ -1070,6 +1084,49 @@ app.post('/admin/api/tasks/:id(\\d+)/delete', requireAdmin, express.json({ limit
     await q('DELETE FROM lu_tasks WHERE id=$1', [req.params.id]); res.json({ ok: true });
   } catch (e) { res.json({ ok: false, error: 'Smazání se nepovedlo' }); }
 });
+
+// ── Přílohy tasků ───────────────────────────────────────────────────────────
+const TASK_FILE_MAX = 15 * 1024 * 1024, TASK_FILE_COUNT = 20;
+const fileName = (n) => String(n || 'priloha').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_').replace(/^\.+/, '').trim().slice(0, 150) || 'priloha';
+const fmtSize = (b) => b >= 1048576 ? (Math.round(b / 104857.6) / 10) + ' MB' : b >= 1024 ? Math.round(b / 1024) + ' kB' : b + ' B';
+app.post('/admin/api/tasks/:id(\\d+)/files', requireAdmin, express.raw({ type: () => true, limit: '16mb' }), async (req, res) => {
+  try {
+    const me = taskMe(req), t = (await q('SELECT id, title FROM lu_tasks WHERE id=$1', [req.params.id])).rows[0];
+    if (!t) return res.json({ ok: false, error: 'Úkol nenalezen' });
+    const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    if (!buf.length) return res.json({ ok: false, error: 'Soubor je prázdný' });
+    if (buf.length > TASK_FILE_MAX) return res.json({ ok: false, error: 'Soubor je větší než 15 MB' });
+    const cnt = (await q('SELECT count(*)::int AS n FROM lu_task_files WHERE task_id=$1', [t.id])).rows[0].n;
+    if (cnt >= TASK_FILE_COUNT) return res.json({ ok: false, error: 'K tasku lze přiložit nejvýše ' + TASK_FILE_COUNT + ' souborů' });
+    let name = String(req.query.name || ''); try { name = decodeURIComponent(name); } catch (e) { /* ponechat */ }
+    name = fileName(name); const mime = String(req.headers['content-type'] || 'application/octet-stream').split(';')[0].slice(0, 100);
+    const f = (await q('INSERT INTO lu_task_files (task_id, name, mime, size, data, author_key, author_name) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, name, mime, size, author_name, created_at', [t.id, name, mime, buf.length, buf, me.key, me.name])).rows[0];
+    await q('UPDATE lu_tasks SET updated_at=now() WHERE id=$1', [t.id]);
+    taskLog(t.id, 'change', me, 'Přiložil soubor ' + name + ' (' + fmtSize(buf.length) + ')');
+    res.locals.audit = { id: t.id, label: '#' + t.id + ' ' + t.title, summary: 'Přiložen soubor „' + name + '“ (' + fmtSize(buf.length) + ')' };
+    res.json({ ok: true, file: f });
+  } catch (e) { console.warn('[lu] task file:', e.message); res.json({ ok: false, error: 'Soubor se nepodařilo uložit' }); }
+});
+app.get('/admin/api/tasks/:id(\\d+)/files/:fid(\\d+)', requireAdmin, async (req, res) => {
+  const f = (await q('SELECT name, mime, size, data FROM lu_task_files WHERE id=$1 AND task_id=$2', [req.params.fid, req.params.id]).catch(() => ({ rows: [] }))).rows[0];
+  if (!f) return res.status(404).type('text/plain').send('Soubor nenalezen');
+  // Zobrazit přímo jen bezpečné typy; vše ostatní (např. HTML, SVG) se jen stáhne
+  const inline = !req.query.dl && /^(image\/(png|jpe?g|gif|webp)|application\/pdf|text\/plain)$/i.test(f.mime || '');
+  res.set({ 'Content-Type': inline ? f.mime : 'application/octet-stream', 'Content-Length': f.data.length, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, max-age=300', 'Content-Security-Policy': "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'", 'Content-Disposition': (inline ? 'inline' : 'attachment') + "; filename*=UTF-8''" + encodeURIComponent(f.name) });
+  res.send(f.data);
+});
+app.post('/admin/api/tasks/:id(\\d+)/files/:fid(\\d+)/delete', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
+  try {
+    const me = taskMe(req);
+    const f = (await q('SELECT f.id, f.name, f.author_key, t.creator_key, t.title, t.id AS tid FROM lu_task_files f JOIN lu_tasks t ON t.id=f.task_id WHERE f.id=$1 AND f.task_id=$2', [req.params.fid, req.params.id])).rows[0];
+    if (!f) return res.json({ ok: false, error: 'Soubor nenalezen' });
+    if (f.author_key !== me.key && f.creator_key && f.creator_key !== me.key) return res.json({ ok: false, error: 'Přílohu může smazat jen ten, kdo ji přiložil, nebo zakladatel tasku.' });
+    await q('DELETE FROM lu_task_files WHERE id=$1', [f.id]);
+    taskLog(f.tid, 'change', me, 'Odebral přílohu ' + f.name);
+    res.locals.audit = { id: f.tid, label: '#' + f.tid + ' ' + f.title, summary: 'Smazána příloha „' + f.name + '“' };
+    res.json({ ok: true });
+  } catch (e) { res.json({ ok: false, error: 'Smazání se nepovedlo' }); }
+});
 app.get('/admin/tasks', requireAdmin, (req, res) => {
   res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Tasky — Laundry Unlimited</title>
 <style>${ADMIN_CSS}${BAR_CSS}${TASK_CSS}</style></head><body>${topBar({ mode: 'admin', active: 'ukoly' })}
@@ -1081,6 +1138,8 @@ app.get('/admin/tasks', requireAdmin, (req, res) => {
 const TASK_CSS = `.adm{max-width:none;padding:22px}.mut{color:var(--mut);font-size:13px}
 :root{--border:var(--line);--text2:var(--mut);--surface2:#0b1630}
 .tkh{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:10px 0 6px}.tkh h3{margin:0}
+.atl{display:flex;flex-direction:column;gap:6px;margin:6px 0 0}.at{display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:#07111f;font-size:13px}.at img{width:38px;height:38px;object-fit:cover;border-radius:6px;flex:none}.at .ic{width:38px;height:38px;flex:none;display:flex;align-items:center;justify-content:center;font-size:20px;background:#0b1630;border-radius:6px}.at a{color:#cfe8ff;font-weight:700;text-decoration:none;word-break:break-all}.at a:hover{text-decoration:underline}.at .sz{color:var(--mut);font-size:11.5px}.at .x{margin-left:auto;background:none;border:0;color:var(--mut);cursor:pointer;font-size:16px;width:auto;padding:2px 6px}.at .x:hover{color:#fca5a5}
+.dz{display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;margin-top:8px;border:1.5px dashed var(--line);border-radius:12px;color:var(--mut);font-size:13px;cursor:pointer;text-align:center}.dz:hover,.dz.over{border-color:var(--cy);color:#fff;background:rgba(34,230,255,.06)}.dz input{display:none}.attst{font-size:12px;color:#86efac;margin-top:4px;min-height:16px}
 .tkq{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0 14px}.tkq button{background:#07111f;border:1px solid var(--line);color:var(--text);border-radius:999px;padding:6px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;width:auto}.tkq button.on{border-color:var(--cy);background:rgba(34,230,255,.12);color:#fff}.tkq button b{color:#7f93b5;font-weight:600;margin-left:4px}
 .tkw{overflow:auto;border:1px solid var(--line);border-radius:14px;background:rgba(8,15,30,.6)}.tkw .cf-info{padding:10px 14px 4px;margin:0!important}
 .tkt{width:100%;border-collapse:separate;border-spacing:0}.tkt th{position:sticky;top:0;background:#0b1630;z-index:2;text-align:left;padding:10px 8px;font-size:11.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--line)}.tkt .cf-filter-row th{position:static;padding:4px 6px 8px}

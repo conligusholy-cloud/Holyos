@@ -45,6 +45,8 @@ function deviceOf(ua) {
 
 // Cesta požadavku → oblast a název akce
 const RULES = [
+  [/^\/admin\/api\/tasks\/(\d+)\/files\/\d+\/delete$/, 'Tasky', 'Smazání přílohy', 'task'],
+  [/^\/admin\/api\/tasks\/(\d+)\/files$/, 'Tasky', 'Příloha k tasku', 'task'],
   [/^\/admin\/api\/tasks\/(\d+)\/comment$/, 'Tasky', 'Komentář k tasku', 'task'],
   [/^\/admin\/api\/tasks\/(\d+)\/delete$/, 'Tasky', 'Smazání tasku', 'task'],
   [/^\/admin\/api\/tasks\/(\d+)$/, 'Tasky', 'Úprava tasku', 'task'],

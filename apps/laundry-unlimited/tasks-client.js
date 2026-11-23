@@ -37,7 +37,7 @@
       '<td>' + esc(t.creator_name || '') + '</td>' +
       '<td' + (late(t) ? ' class="late" title="Po termínu"' : '') + '>' + (t.due_date ? fd(dOnly(t.due_date)) + (late(t) ? ' ⚠' : '') : '<span class="mut">—</span>') + '</td>' +
       '<td class="mut">' + fdt(t.updated_at) + '</td>' +
-      '<td class="mut">' + (t.comments ? '💬 ' + t.comments : '') + '</td></tr>';
+      '<td class="mut">' + (t.comments ? '💬 ' + t.comments : '') + (t.files ? ' 📎 ' + t.files : '') + '</td></tr>';
   }
   function build() {
     $('#tk').innerHTML = '<thead><tr><th>Úkol</th><th>Stav</th><th>Priorita</th><th>Řešitel</th><th>Zadal</th><th>Termín</th><th>Změna</th><th></th></tr></thead><tbody></tbody>';
@@ -74,6 +74,31 @@
   function peopleOpts(sel) {
     return '<option value="">— nepřiřazeno —</option>' + D.people.map(function (p) { return '<option value="' + esc(p.key) + '"' + (p.key === sel ? ' selected' : '') + '>' + esc(p.name) + (p.key === D.me.key ? ' (já)' : '') + '</option>'; }).join('');
   }
+  // ── Přílohy ──
+  var MAXF = 15 * 1024 * 1024, MAXN = 20;
+  var fsz = function (b) { return b >= 1048576 ? (Math.round(b / 104857.6) / 10) + ' MB' : b >= 1024 ? Math.round(b / 1024) + ' kB' : b + ' B'; };
+  function fico(m) { m = String(m || ''); return /^image\//.test(m) ? '🖼' : /pdf/.test(m) ? '📕' : /zip|rar|7z|compressed/.test(m) ? '🗜' : /sheet|excel|csv/.test(m) ? '📊' : /word|document|rtf/.test(m) ? '📝' : /^video\//.test(m) ? '🎞' : /^audio\//.test(m) ? '🎵' : '📎'; }
+  function upload(tid, file) {
+    return fetch('/admin/api/tasks/' + tid + '/files?name=' + encodeURIComponent(file.name || 'priloha'), { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file })
+      .then(function (r) { return r.json(); }).catch(function () { return { ok: false, error: 'Spojení selhalo' }; });
+  }
+  function attItem(tid, f) {
+    var url = '/admin/api/tasks/' + tid + '/files/' + f.id, img = /^image\/(png|jpe?g|gif|webp)$/i.test(f.mime || '');
+    return '<div class="at">' + (img ? '<img src="' + url + '" alt="">' : '<span class="ic">' + fico(f.mime) + '</span>') + '<div><a href="' + url + '" target="_blank" rel="noopener">' + esc(f.name) + '</a><div class="sz">' + fsz(f.size) + ' · ' + esc(f.author_name || '') + ' · ' + fdt(f.created_at) + '</div></div><a class="sz" href="' + url + '?dl=1" title="Stáhnout">⬇</a><button type="button" class="x" data-fd="' + f.id + '" title="Smazat přílohu">✕</button></div>';
+  }
+  function attBox() {
+    return '<div class="atw"><label>Přílohy</label><div class="atl" id="at-list"></div><label class="dz" id="at-dz">📎 Přetáhni sem soubory, vlož je (Ctrl+V) nebo klikni pro výběr — libovolný typ, do 15 MB<input type="file" multiple id="at-in"></label><div class="attst" id="at-st"></div></div>';
+  }
+  // Výběr souborů: tlačítko, přetažení i vložení ze schránky (např. snímek obrazovky)
+  function wireAttach(o, onFiles) {
+    var dz = o.querySelector('#at-dz'), inp = o.querySelector('#at-in');
+    var take = function (list) { var a = [].slice.call(list || []); if (a.length) onFiles(a); };
+    inp.onchange = function () { take(inp.files); inp.value = ''; };
+    ['dragenter', 'dragover'].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add('over'); }); });
+    ['dragleave', 'drop'].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.remove('over'); }); });
+    dz.addEventListener('drop', function (e) { take(e.dataTransfer && e.dataTransfer.files); });
+    o.addEventListener('paste', function (e) { var fs = []; [].forEach.call((e.clipboardData && e.clipboardData.items) || [], function (it) { if (it.kind === 'file') { var f = it.getAsFile(); if (f) { if (!f.name || f.name === 'image.png') { try { f = new File([f], 'snimek-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.png', { type: f.type }); } catch (x) { /* ponechat */ } } fs.push(f); } } }); if (fs.length) { e.preventDefault(); onFiles(fs); } });
+  }
   function formHtml(t) {
     t = t || { status: 'todo', priority: 'normal' };
     var opt = function (map, v) { return Object.keys(map).map(function (k) { return '<option value="' + k + '"' + (k === v ? ' selected' : '') + '>' + esc(map[k]) + '</option>'; }).join(''); };
@@ -82,7 +107,7 @@
       '<div class="mrow"><div><label>Řešitel</label><select name="assignee_key">' + peopleOpts(t.assignee_key || (t.id ? '' : '')) + '</select></div>' +
       '<div><label>Termín</label><input name="due_date" type="date" value="' + esc(dOnly(t.due_date)) + '"></div>' +
       '<div><label>Priorita</label><select name="priority">' + opt(D.priorities, t.priority) + '</select></div>' +
-      '<div><label>Stav</label><select name="status">' + opt(D.statuses, t.status) + '</select></div></div>';
+      '<div><label>Stav</label><select name="status">' + opt(D.statuses, t.status) + '</select></div></div>' + attBox();
   }
   function readForm(box) { var d = {}; box.querySelectorAll('input[name],textarea[name],select[name]').forEach(function (i) { d[i.name] = i.value; }); return d; }
   function modal(title, inner) {
@@ -95,9 +120,28 @@
   function newTask() {
     var o = modal('Nový task', '<form>' + formHtml(null) + '<div class="mer"></div><div class="mact"><span class="mut">Řešiteli přijde upozornění do Velínu (kdo v HolyOS není, dostane e-mail).</span><button class="btn sm" type="submit">Založit task</button></div></form>');
     var f = o.querySelector('form'); f.querySelector('input[name="title"]').focus();
+    var PF = [];
+    function draw() {
+      o.querySelector('#at-list').innerHTML = PF.map(function (x, i) { return '<div class="at"><span class="ic">' + fico(x.type) + '</span><div><b>' + esc(x.name) + '</b><div class="sz">' + fsz(x.size) + ' · nahraje se po založení tasku</div></div><button type="button" class="x" data-pf="' + i + '" title="Odebrat">✕</button></div>'; }).join('');
+    }
+    wireAttach(o, function (files) {
+      var msg = '';
+      files.forEach(function (x) { if (x.size > MAXF) msg = '„' + x.name + '“ je větší než 15 MB — vynecháno.'; else if (!x.size) msg = '„' + x.name + '“ je prázdný — vynecháno.'; else if (PF.length >= MAXN) msg = 'Nejvýše ' + MAXN + ' souborů.'; else PF.push(x); });
+      o.querySelector('#at-st').style.color = msg ? '#fca5a5' : ''; o.querySelector('#at-st').textContent = msg; draw();
+    });
+    o.querySelector('#at-list').onclick = function (e) { var b = e.target.closest('[data-pf]'); if (b) { PF.splice(+b.getAttribute('data-pf'), 1); draw(); } };
     f.onsubmit = function (e) {
       e.preventDefault(); var d = readForm(f); if (!d.title.trim()) return;
-      call('/admin/api/tasks', d).then(function (j) { if (!j.ok) { f.querySelector('.mer').textContent = j.error || 'Chyba'; return; } closeModal(); load(); });
+      var btn = f.querySelector('button[type=submit]'); btn.disabled = true;
+      call('/admin/api/tasks', d).then(function (j) {
+        if (!j.ok) { btn.disabled = false; f.querySelector('.mer').textContent = j.error || 'Chyba'; return; }
+        var errs = [], i = 0, st2 = o.querySelector('#at-st'); st2.style.color = '';
+        (function next() {
+          if (i >= PF.length) { closeModal(); load(); if (errs.length) alert('Task je založený, ale tyto přílohy se nenahrály:\n' + errs.join('\n')); return; }
+          st2.textContent = 'Nahrávám přílohy… ' + (i + 1) + ' / ' + PF.length;
+          var cur = PF[i++]; upload(j.task.id, cur).then(function (r) { if (!r.ok) errs.push(cur.name + ' — ' + (r.error || 'chyba')); next(); });
+        })();
+      });
     };
   }
   function logHtml(log) {
@@ -109,10 +153,31 @@
   function openTask(id) {
     call('/admin/api/tasks/' + id).then(function (j) {
       if (!j.ok) { alert(j.error || 'Task nenalezen'); return; }
-      var t = j.task;
+      var t = j.task, files = j.files || [];
       var o = modal('Task #' + t.id, '<form>' + formHtml(t) + '<div class="mer"></div><div class="mact"><span class="mut">Založil(a) ' + esc(t.creator_name || '') + ' · ' + fdt(t.created_at) + (t.done_at ? ' · hotovo ' + fdt(t.done_at) : '') + '</span><span style="display:flex;gap:8px">' + (t.creator_key === D.me.key || !t.creator_key ? '<button class="btn sm ghost" type="button" data-del>Smazat</button>' : '') + '<button class="btn sm" type="submit">Uložit změny</button></span></div></form>' +
         '<div class="lg"><h4>Průběh řešení</h4><div id="tk-log">' + logHtml(j.log) + '</div><div class="cm"><textarea id="tk-cm" maxlength="5000" placeholder="Napište komentář — jak to vypadá, co je potřeba…"></textarea><button class="btn sm" type="button" id="tk-cmb">Přidat</button></div></div>');
       var f = o.querySelector('form');
+      var drawFiles = function () { o.querySelector('#at-list').innerHTML = files.map(function (x) { return attItem(t.id, x); }).join(''); };
+      drawFiles();
+      wireAttach(o, function (list) {
+        var st2 = o.querySelector('#at-st'), i = 0, errs = []; st2.style.color = '';
+        (function next() {
+          if (i >= list.length) { st2.style.color = errs.length ? '#fca5a5' : ''; st2.textContent = errs.join(' · '); call('/admin/api/tasks/' + t.id).then(function (k) { if (k.ok) { files = k.files || []; drawFiles(); o.querySelector('#tk-log').innerHTML = logHtml(k.log); } }); load(); return; }
+          var cur = list[i++];
+          if (cur.size > MAXF) { errs.push('„' + cur.name + '“ je větší než 15 MB'); return next(); }
+          if (!cur.size) { errs.push('„' + cur.name + '“ je prázdný'); return next(); }
+          st2.textContent = 'Nahrávám ' + cur.name + '…';
+          upload(t.id, cur).then(function (r) { if (!r.ok) errs.push(cur.name + ': ' + (r.error || 'chyba')); next(); });
+        })();
+      });
+      o.querySelector('#at-list').onclick = function (e) {
+        var b = e.target.closest('[data-fd]'); if (!b) return;
+        if (!confirm('Smazat přílohu?')) return;
+        call('/admin/api/tasks/' + t.id + '/files/' + b.getAttribute('data-fd') + '/delete', {}).then(function (r) {
+          if (!r.ok) { alert(r.error || 'Chyba'); return; }
+          files = files.filter(function (x) { return String(x.id) !== b.getAttribute('data-fd'); }); drawFiles(); load();
+        });
+      };
       f.onsubmit = function (e) {
         e.preventDefault(); var d = readForm(f);
         call('/admin/api/tasks/' + t.id, d).then(function (r) { if (!r.ok) { f.querySelector('.mer').textContent = r.error || 'Chyba'; return; } closeModal(); load(); });
