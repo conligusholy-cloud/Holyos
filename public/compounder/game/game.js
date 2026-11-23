@@ -12606,10 +12606,16 @@ function trhVyberSheet() {
 // Co banka na hotovou provozovnu půjčí. Na rozdíl od stavby na zelené louce
 // tu je vidět, co místo vydělává — půjčuje se tedy proti jeho zisku, ale vždy
 // jen do 80 % ceny. Zbytek je spoluúčast kupujícího.
+// Spoluúčast je to NEJMÉNĚ, co banka chce vidět z vlastní kapsy — ne to,
+// kolik má hráč zaplatit. Dokud se posílala jako „chci zaplatit tolik",
+// bral si na každou koupenou provozovnu maximální úvěr i hráč, který měl
+// cenu desetkrát v hotovosti: zaplatil celou cenu a ještě mu zbyl dluh na
+// osmdesát procent. Všude jinde ve hře se platí z kapsy, co jde, a půjčuje
+// se zbytek — tady to má být stejné.
 function trhFinance(n, chci) {
   var minVlastni = Math.ceil(n.cena * TRH_SPOLUUCAST);
   var zisk = Math.round(trhZiskUMe(n).profit);
-  var f = canFinance(n.cena, chci == null ? minVlastni : Math.max(minVlastni, chci),
+  var f = canFinance(n.cena, chci == null ? null : Math.max(minVlastni, chci),
     stropPodleZisku(Math.max(0, zisk), n.cena));
   f.minVlastni = minVlastni;
   if (f.own < minVlastni - 0.5) {

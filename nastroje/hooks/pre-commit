@@ -227,6 +227,17 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; th
   fi
 fi
 
+# Nákup hotové provozovny z tržiště. Spoluúčast je minimum banky, ne to,
+# kolik má hráč zaplatit — jinak si bere maximální úvěr i ten, kdo má cenu
+# v hotovosti, a vypadá to, že zaplatil dvakrát.
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; then
+  if ! node nastroje/ttrhuver.js; then
+    echo ""
+    echo "STOP: financování nákupu z tržiště nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Grafy fondu a akcie. Vzorkuje se po každém pohybu penězi, takže bez
 # časové osy z nich je hřeben.
 if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; then
