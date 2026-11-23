@@ -24,6 +24,11 @@ const VYCHOZI = {
   soud_mesicu: 1,
   porotce_min_mesicu: 2,       // porotce = hráč starší než tolik herních měsíců
   recidiva_dni: 3,             // zákaz provizí / nákupů / aliancí při dalším podvodu
+  // Opakovaný případ. Škoda se počítá z celé historie, takže se od ní musí
+  // odečíst to, co hráč v uzavřených případech už dostal — jinak by se za
+  // totéž soudil pořád dokola. Nový případ se otevře, až nová škoda přeroste
+  // tuhle hranici; potrestaný hráč tím nezískává doživotní imunitu.
+  recidiva_min_skoda: 1000000,
   odvolani_mesicu: 1,          // lhůta na odvolání po rozsudku (herních měsíců); bez odvolání rozsudek nabude účinnosti
   min_porotcu: 3,              // méně hlasů = platí střední trest
   porotce_aktivni_h: 48,       // porotce musí být přihlášen v posledních N hodinách
@@ -48,6 +53,7 @@ const LIMITY = {
   kontrola_mesicu: [0, 12], soud_mesicu: [0, 12], porotce_min_mesicu: [0, 24], recidiva_dni: [0, 90],
   hranice_nahled: [10, 100], min_kupu_od_mrtvych: [1, 100], kup_max_pomer: [5, 100],
   odvolani_mesicu: [0, 12], min_porotcu: [0, 100], porotce_aktivni_h: [1, 720], max_novych_za_tik: [0, 50],
+  recidiva_min_skoda: [0, 1000000000],
 };
 
 async function nastaveni() {

@@ -47,7 +47,10 @@ async function zahaj(prisma, R, row) {
     hlavni_id: row.id, hlavni_nick: row.nick, firma: h.company || row.firma || null, typ: row.typ === 'kupec' ? 'kupec' : 'zvouci',
     utvar: row.utvar, emblem: row.emblem || null, stav: 'kontrola', skoda: row.skoda, zmrazeno,
     kontrola_do: new Date(ted.getTime() + R.kontrola_mesicu * MESIC_MS),
-    detail: { pod_ids: row.pod_ids || [], provize: row.provize, sleva: row.sleva, zmrazit_cil: row.zmrazit, platici: !!row.platici },
+    detail: { pod_ids: row.pod_ids || [], provize: row.provize, sleva: row.sleva, zmrazit_cil: row.zmrazit,
+      platici: !!row.platici,
+      // U opakovaného případu je vidět, že se soudí jen to nové.
+      drive_odsouzeno: row.drive_odsouzeno || 0 },
   } });
   if (zmrazeno > 0) await dorucenka(prisma, row.id, -zmrazeno, 'Zmrazeno kvůli kontrole (' + row.utvar + '): ' + L(zmrazeno));
   await zprava(prisma, z, (z.emblem || '') + ' Kontrola firmy ' + jmeno(z),
@@ -267,11 +270,34 @@ async function tik() {
     }
     // 2) nové případy z vyhodnocení (jen když jsou pravidla zapnutá)
     if (R.zapnuto && sken) {
-      const mam = new Set((await prisma.gameZlocin.findMany({ select: { hlavni_id: true } })).map((x) => x.hlavni_id));
+      // Jen kdo má případ PRÁVĚ TEĎ. Dokud se tu braly všechny případy včetně
+      // dávno uzavřených, měl každý jednou potrestaný hráč do konce hry klid —
+      // a to, že někoho potrestáme, neznamená, že nemůže podvádět dál.
+      const bezi = new Set((await prisma.gameZlocin.findMany({
+        where: { stav: { in: AKTIVNI } }, select: { hlavni_id: true } })).map((x) => x.hlavni_id));
+      // Co už bylo odsouzeno, se nesoudí podruhé: škoda se počítá z celé
+      // historie provizí a nákupů, takže se od ní odečte škoda z uzavřených
+      // případů. Zbyde to, co hráč napáchal od posledního rozsudku.
+      const odsouzeno = new Map();
+      (await prisma.gameZlocin.findMany({ where: { stav: 'uzavreno' },
+        select: { hlavni_id: true, skoda: true } }))
+        .forEach((x) => odsouzeno.set(x.hlavni_id, (odsouzeno.get(x.hlavni_id) || 0) + (x.skoda || 0)));
       let n = 0;
-      for (const row of sken.kontrola) {
+      for (const puvodni of sken.kontrola) {
         if (n >= R.max_novych_za_tik) break;
-        if (mam.has(row.id)) continue;
+        if (bezi.has(puvodni.id)) continue;
+        let row = puvodni;
+        const uz = odsouzeno.get(puvodni.id) || 0;
+        if (uz > 0) {
+          const nova = Math.max(0, Math.round((puvodni.skoda || 0) - uz));
+          if (nova < (R.recidiva_min_skoda || 0)) continue;
+          row = Object.assign({}, puvodni, { skoda: nova,
+            zmrazit: Math.round(nova * R.koef_zabaveni),
+            drive_odsouzeno: uz,
+            trest: { nejnizsi: Math.round(nova * R.trest_nejnizsi),
+              stredni: Math.round(nova * R.trest_stredni),
+              nejvyssi: Math.round(nova * R.trest_nejvyssi) } });
+        }
         await zahaj(prisma, R, row); n++;
       }
     }
