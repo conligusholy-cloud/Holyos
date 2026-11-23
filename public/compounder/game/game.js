@@ -8911,7 +8911,13 @@ function uverMesicu(l) {
   return Math.max(1, Math.min(smlouva, n));
 }
 function uveryHtml() {
-  var l = (S.loans || []).slice().sort(function (a, b) { return b.zbyva - a.zbyva; });
+  // Pořadí podle stáří, ne podle zbývající částky. Dokud se řadilo podle
+  // dluhu, prohodila se po každé větší splátce karta nahoře — Honza splatil
+  // 27 milionů na sedmiletém úvěru, na jeho místo vyskočil desetiletý
+  // s šedesáti miliony a vypadalo to, že se splátka nikde neprojevila.
+  var l = (S.loans || []).slice().sort(function (a, b) {
+    return ((a && a.zalozen) || 0) - ((b && b.zalozen) || 0);
+  });
   if (!l.length) return '';
   return '<div class="card"><h3>' + esc(tx('banka.tvoje_uvery')) + '</h3>'
     + '<p class="muted small" style="margin:2px 0 10px">' + esc(tx('hra.kazdy_ma_svoji_sazbu_a')) + ' '
@@ -8920,7 +8926,11 @@ function uveryHtml() {
         var urok = Math.round(u.zbyva * u.sazba / 12);
         var splatka = Math.min(u.splatka, u.zbyva + urok);
         return '<div class="uver' + (u.zmeskano ? ' dluzi' : '') + '">'
-          + '<div class="uver-hl"><b>' + esc(u.popis || esc(tx('banka.uver_2'))) + '</b>'
+          // Dva úvěry od banky se můžou jmenovat stejně — rozezná je datum,
+          // kdy si je hráč vzal.
+          + '<div class="uver-hl"><b>' + esc(u.popis || esc(tx('banka.uver_2')))
+          + (u.zalozen ? ' <span class="muted small">'
+            + esc(tx('veta.fond_graf_od', { p1: datumKratce(u.zalozen) })) + '</span>' : '') + '</b>'
           + '<span>' + (u.sazba * 100).toFixed(1).replace('.', desZnak()) + tx('veta.span_div_div_class_kv_span', { p1: esc(tx('banka.zbyva_splatit')), p2: kcFull(u.zbyva), p3: esc(tx('banka.splatka_mesic_2')), p4: kcFull(splatka), p5: kcFull(urok), p6: esc(tx('banka.zbyva_mesicu')) }) + uverMesicu(u) + ' z ' + (u.mesicu || 60) + '</b></div>'
           + ((u.prepsano || u.prodlouzeno) ? tx('veta.p_class_fine_delku_splaceni_uz', { p1: ((u.prepsano || u.prodlouzeno) > 1 ? ' (' + (u.prepsano || u.prodlouzeno) + '×)' : '') }) : '')
           + (u.zmeskano ? tx('hra.p_class_fine_err_ze_kdyz', { p1: esc(tx('hra.nezaplacena_splatka')), p2: u.zmeskano, p3: KRACH_SPLATEK })

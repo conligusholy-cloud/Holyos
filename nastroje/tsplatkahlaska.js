@@ -129,6 +129,33 @@ function postav(hotovost, uvery) {
   ma(!/\(u\.zbyvaMesicu \|\| 0\) \+ ' z '/.test(HRA), 'a starý počítač měsíců v kódu nezbyl');
 }
 
+// ─── Seznam úvěrů nesmí skákat ──────────────────────────────────────────────
+{
+  console.log('\nPořadí úvěrů v bance');
+  const ctx = vm.createContext({ Math, Number });
+  // Řazení vytažené přímo z uveryHtml(), ať se netestuje opis.
+  const src = telo(HRA, 'uveryHtml');
+  const m = src.match(/var l = \(S\.loans \|\| \[\]\)\.slice\(\)\.sort\([\s\S]*?\n  \}\);/);
+  ma(!!m, 'řazení se v uveryHtml() našlo');
+  vm.runInContext('this.F = function (loans) { var S = { loans: loans }; '
+    + (m ? m[0] : 'var l = [];') + ' return l; };', ctx);
+  const F = ctx.F;
+
+  // Honzovy dva úvěry: sedmiletý vzatý dřív, desetiletý později.
+  const sedm = { id: 'a', popis: 'Úvěr z banky na 7 let', zbyva: 66927136, zalozen: 1000 };
+  const deset = { id: 'b', popis: 'Úvěr z banky na 10 let', zbyva: 61027000, zalozen: 2000 };
+  const pred = F([sedm, deset]).map((x) => x.id).join(',');
+  // Po splátce zbývá na sedmiletém míň než na desetiletém.
+  const po = F([Object.assign({}, sedm, { zbyva: 39291965 }), deset]).map((x) => x.id).join(',');
+  ma(pred === 'a,b', 'starší úvěr je nahoře', pred);
+  ma(po === pred, 'a po splátce se pořadí nezmění', pred + ' → ' + po);
+  ma(F([deset, sedm]).map((x) => x.id).join(',') === 'a,b', 'pořadí nezáleží na tom, jak přišly');
+  ma(F([]).length === 0 && F([{ id: 'x', zbyva: 1 }]).length === 1, 'prázdno a jeden úvěr nic neshodí');
+
+  // A dva stejně pojmenované úvěry musí jít rozeznat.
+  ma(/datumKratce\(u\.zalozen\)/.test(HRA), 'u úvěru je vidět, kdy si ho hráč vzal');
+}
+
 // ─── Hlášky jsou v kódu i ve všech jazycích ─────────────────────────────────
 {
   console.log('\nHlášky');
