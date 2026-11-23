@@ -241,9 +241,21 @@ async function spust(pravidla, sken, zlociny) {
     'administrace ukazuje, co se nepočítá znovu');
   ma(/ZL_SKUTKY/.test(ADMIN), 'a rozpis škody po skutcích');
   const SRCR = fs.readFileSync(path.join(__dirname, '..', 'services/game/zlocin-rizeni.js'), 'utf8');
-  ma(/Co se jí konkrétně vyčítá: ' \+ skutek\(z\)/.test(SRCR), 'noviny píšou, čím přesně se provinil');
-  ma(/Odsouzena za: ' \+ skutek\(u\)/.test(SRCR), 'a rozsudek taky');
-  ma(/Škoda dohromady[\s\S]{0,120}\+ uzOdsouzeno\(z\)/.test(SRCR),
+  // Zpráva se skládá až u čtenáře (viz tzlocintexty.js), takže se tu neměří
+  // věta v kódu, ale co z novin vyleze.
+  const ZT = require('../services/game/zlocin-texty');
+  const stary = { typ: 'zvouci', firma: 'Pinon s.r.o.', hlavni_nick: 'pinon', skoda: 41081460,
+    detail: { provize: 41081460, sleva: 0, mrtvych: 22, mrtvi_nicky: ['a', 'b'],
+      nakupu_od_mrtvych: 0, drive_odsouzeno: 5323513 } };
+  const obv = ZT.obvineni(stary);
+  const bezMezer = (x) => String(x).replace(/\u00a0/g, ' ');
+  const nov = bezMezer(ZT.vykresli({ text_kod: 'kontrola',
+    text_data: { firma: 'Pinon s.r.o.', utvar: 'Policie', skoda: 41081460, obvineni: obv } }, 'cs').text);
+  ma(/provize/.test(nov) && /22 účtů/.test(nov), 'noviny píšou, čím přesně se provinil', nov.slice(0, 90));
+  const roz = bezMezer(ZT.vykresli({ text_kod: 'rozsudek',
+    text_data: { firma: 'Pinon s.r.o.', trest: 1, skoda: 41081460, koef: 1, obvineni: obv, hlasy: {} } }, 'cs').text);
+  ma(/provize/.test(roz), 'a rozsudek taky', roz.slice(0, 90));
+  ma(/5 323 513/.test(nov) && /nepočítají/.test(nov),
     'a u opakovaného případu i to, co se nepočítá znovu');
   ma(/slice\(0, 1200\)/.test(SRCR), 'na delší text je v novinách místo');
 

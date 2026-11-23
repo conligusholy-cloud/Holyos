@@ -9002,6 +9002,11 @@ model GameZlocinZprava {
   // 1200 znaků: zpráva musí vypsat skutky i s čísly, jinak se proti obvinění
   // nedá bránit. Viz migrace 20261123210000_zlocin_zprava_delsi.
   text       String   @db.VarChar(1200)
+  // Zpráva leží v novinách dny a čte ji každý hráč, ne jen ten, komu se píše.
+  // Proto se ukládá kód a údaje a věta se skládá až u čtenáře — stejně jako
+  // u doručenek. nadpis/text zůstávají jako záloha pro starší řádky.
+  text_kod   String?  @db.VarChar(60)
+  text_data  Json?
   emblem     String?  @db.VarChar(8)
   stav       String?  @db.VarChar(12)
   created_at DateTime @default(now())

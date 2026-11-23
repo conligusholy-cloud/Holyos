@@ -12,6 +12,8 @@
 'use strict';
 
 const ZL = require('./zlocin');
+const ZT = require('./zlocin-texty');
+const TEXTY = require('./texty');
 const MESIC_MS = 43200000;               // herní měsíc = 12 skutečných hodin
 const TIK_MS = 5 * 60 * 1000;
 const AKTIVNI = ['kontrola', 'soud', 'odvolani'];
@@ -19,15 +21,24 @@ const UROVNE = ['nejnizsi', 'stredni', 'nejvyssi'];
 const L = (n) => Math.round(Number(n) || 0).toLocaleString('cs-CZ') + ' L$';
 const jmeno = (z) => z.firma || z.hlavni_nick;
 
-async function zprava(prisma, z, nadpis, text) {
+// Zpráva do novin: do databáze jde KÓD a údaje, ne hotová věta. Noviny čte
+// i hráč, který má nastavený jiný jazyk než ten, komu se píše — věta se
+// složí až u čtenáře (zlocin-texty.js). Český text se ukládá vedle jako
+// záloha pro řádky z doby, kdy se ukládala rovnou věta.
+async function zprava(prisma, z, kod, data) {
+  const v = ZT.vykresli({ text_kod: kod, text_data: data, emblem: z.emblem }, TEXTY.ZDROJ);
   await prisma.gameZlocinZprava.create({ data: {
-    zlocin_id: z.id, nadpis: String(nadpis).slice(0, 160), text: String(text).slice(0, 1200),
+    zlocin_id: z.id, nadpis: String(v.nadpis).slice(0, 160), text: String(v.text).slice(0, 1200),
+    text_kod: kod, text_data: data,
     emblem: z.emblem || null, stav: z.stav || null } });
 }
 
-async function dorucenka(prisma, playerId, amount, popis) {
+// Doručenka taky kódem — čte ji obviněný, a ten může hrát jakkoli.
+async function dorucenka(prisma, playerId, amount, kod, data) {
   if (!amount) return;
-  await prisma.gameDelivery.create({ data: { player_id: playerId, kind: 'cash', amount: Math.round(amount), popis: String(popis).slice(0, 200) } });
+  await prisma.gameDelivery.create({ data: { player_id: playerId, kind: 'cash', amount: Math.round(amount),
+    text_kod: kod, text_data: data,
+    popis: String(TEXTY.t(kod, data, TEXTY.ZDROJ)).slice(0, 200) } });
 }
 
 // Z čeho se škoda skládá. Pevná pravidla (zvoucí i kupec) počítají z jednoho
@@ -43,59 +54,11 @@ function rozpisRadku(row) {
   return { pravidla: Math.round((row && row.skoda) || 0) };
 }
 
-const PODEZRENI_AGENT = {
-  spojene_obchody: 'obchody mezi účty jednoho člověka za cenu mimo ceník',
-  drazby: 'přihazování na vlastní dražbu z druhého účtu',
-  fond: 'prodej podílu do společného fondu přes vlastní účet',
-  pujcky: 'půjčky mezi vlastními účty, které se nesplácejí',
-};
-// Čím přesně se provinil. „Podezření ze zvoucího" nikomu nic neřekne a hráč
-// se proti tomu nemá jak bránit — tohle vypíše skutky i s čísly, aby šlo
-// každé tvrzení ověřit.
-function skutek(z) {
-  const d = (z && z.detail) || {};
-  const casti = [];
-  if (z && z.typ === 'agent' && Array.isArray(d.nalezy)) {
-    d.nalezy.forEach((n) => {
-      if (!n) return;
-      const dk = (n.dukazy || []).slice(0, 2).map((x) => x && x.text).filter(Boolean).join('; ');
-      casti.push((n.nazev || '?') + ' — ' + L(n.skoda) + (dk ? ' (' + dk + ')' : ''));
-    });
-  } else {
-    if (d.provize > 0) {
-      const kdo = Array.isArray(d.mrtvi_nicky) && d.mrtvi_nicky.length
-        ? ' (' + d.mrtvi_nicky.slice(0, 5).join(', ') + (d.mrtvych > 5 ? ' a další' : '') + ')' : '';
-      casti.push('provize ' + L(d.provize) + ' za ' + (d.mrtvych || 0)
-        + ' účtů, které si sám pozval a které přestaly hrát nebo zmizely' + kdo);
-    }
-    if (d.sleva > 0) {
-      casti.push('nákup ' + (d.nakupu_od_mrtvych || d.nakupu_ks || 0)
-        + ' prádlomatů od takových účtů pod ceníkem — rozdíl proti ceníku ' + L(d.sleva));
-    }
-  }
-  if (!casti.length) casti.push(podezreni(z));
-  return casti.join('; ');
-}
-
-// Věta o tom, co se NEsoudí znovu. Bez ní vypadá druhý případ jako druhý
-// trest za totéž.
-function uzOdsouzeno(z) {
-  const d = (z && z.detail) || {};
-  const kolik = Math.round(d.drive_odsouzeno || 0);
-  if (!(kolik > 0)) return '';
-  return ' Za dřívější skutky už firma odsouzená byla (' + L(kolik)
-    + ') — ty se do téhle škody nepočítají, soudí se jen to, co přibylo od minula.';
-}
-
-function podezreni(z) {
-  if (z && z.typ === 'agent') {
-    const kod = ((z.detail || {}).kod) || '';
-    return PODEZRENI_AGENT[kod] || 'přelévání hodnoty mezi účty jednoho člověka';
-  }
-  return (z && z.typ) === 'kupec'
-    ? 'skupování prádlomatů od zrušených účtů hluboko pod cenou'
-    : 'provize z účelově založených a zrušených účtů';
-}
+// Skutky, podezření a věta o dřívějším odsouzení se skládají v jazyce
+// čtenáře — tady zůstávají jen české obálky pro administraci.
+const skutek = (z) => ZT.skutek(ZT.obvineni(z), TEXTY.ZDROJ);
+const uzOdsouzeno = (z) => ZT.uzOdsouzeno(ZT.obvineni(z), TEXTY.ZDROJ);
+const podezreni = (z) => ZT.podezreni(ZT.obvineni(z), TEXTY.ZDROJ);
 
 // Otevře případ z řádku vyhodnocení.
 async function zahaj(prisma, R, row) {
@@ -123,12 +86,8 @@ async function zahaj(prisma, R, row) {
       // Nález agenta: podle čeho se případ vede a čím je doložený.
       kod: row.kod || null, nalezy: row.nalezy || null },
   } });
-  if (zmrazeno > 0) await dorucenka(prisma, row.id, -zmrazeno, 'Zmrazeno kvůli kontrole (' + row.utvar + '): ' + L(zmrazeno));
-  await zprava(prisma, z, (z.emblem || '') + ' Kontrola firmy ' + jmeno(z),
-    row.utvar + ' zahájila kontrolu firmy ' + jmeno(z) + '. Podezření: ' + podezreni(z)
-    + '. Co se jí konkrétně vyčítá: ' + skutek(z) + '. Škoda dohromady ' + L(z.skoda) + '.'
-    + uzOdsouzeno(z)
-    + ' Kontrola potrvá 1 herní měsíc, majetek firmy je zmrazen.');
+  if (zmrazeno > 0) await dorucenka(prisma, row.id, -zmrazeno, 'dor.zlocin_zmrazeno', { p1: row.utvar, p2: zmrazeno });
+  await zprava(prisma, z, 'kontrola', { firma: jmeno(z), utvar: z.utvar, skoda: z.skoda, obvineni: ZT.obvineni(z) });
   return z;
 }
 
@@ -166,33 +125,33 @@ async function premer(prisma, R, z, row) {
         ? (z.detail || {}).skoda_pri_zahajeni : stara,
       premereno_at: new Date().toISOString(), zmrazit_cil: cil }) } });
   if (pridat > 0) {
-    await dorucenka(prisma, z.hlavni_id, -pridat,
-      'Zmrazeno navíc po přeměření škody: ' + L(pridat));
+    await dorucenka(prisma, z.hlavni_id, -pridat, 'dor.zlocin_zmrazeno_navic', { p1: pridat });
   }
-  await zprava(prisma, u, (u.emblem || '') + ' Škoda přepočtena: ' + jmeno(u),
-    'U firmy ' + jmeno(u) + ' narostla škoda za dobu řízení z ' + L(stara) + ' na ' + L(nova)
-    + '. Trest se počítá z nového čísla.');
+  await zprava(prisma, u, 'premer', { firma: jmeno(u), stara, nova });
   console.log('[zlocin] případ #' + z.id + ': škoda ' + stara + ' → ' + nova);
   return u;
 }
 
 // Kdo smí hlasovat v případu.
 async function smiHlasovat(prisma, R, hrac, z) {
-  if (!hrac || hrac.id === z.hlavni_id) return { ok: false, duvod: 'obviněný' };
+  if (!hrac || hrac.id === z.hlavni_id) return { ok: false, duvod: 'zlocin.err.duvod_obvineny' };
   // Jediné pravidlo: účet starší než zadaný čas (výchozí 24 h). Hlasovat není povinnost.
   const ted = Date.now();
-  if (new Date(hrac.created_at).getTime() > ted - R.porotce_min_mesicu * MESIC_MS) return { ok: false, duvod: 'účet je mladší než ' + Math.round(R.porotce_min_mesicu * 12) + ' h' };
+  if (new Date(hrac.created_at).getTime() > ted - R.porotce_min_mesicu * MESIC_MS) {
+    return { ok: false, duvod: 'zlocin.err.duvod_mlady_ucet', udaje: { p1: Math.round(R.porotce_min_mesicu * 12) } };
+  }
   return { ok: true };
 }
 
 async function hlasuj(prisma, hracId, zlocinId, volba) {
-  if (!UROVNE.includes(volba)) return { ok: false, error: 'Neplatná volba.' };
+  if (!UROVNE.includes(volba)) return { ok: false, klic: 'zlocin.err.volba' };
   const R = await ZL.nastaveni();
   const z = await prisma.gameZlocin.findUnique({ where: { id: zlocinId } });
-  if (!z || z.stav !== 'soud' || (z.soud_do && new Date(z.soud_do) < new Date())) return { ok: false, error: 'Hlasování už neběží.' };
+  if (!z || z.stav !== 'soud' || (z.soud_do && new Date(z.soud_do) < new Date())) return { ok: false, klic: 'zlocin.err.hlasovani_skoncilo' };
   const hrac = await prisma.gamePlayer.findUnique({ where: { id: hracId }, select: { id: true, created_at: true, last_login_at: true } });
   const s = await smiHlasovat(prisma, R, hrac, z);
-  if (!s.ok) return { ok: false, error: 'V tomto případu nemůžeš hlasovat (' + s.duvod + ').' };
+  // Důvod se skládá u čtenáře: hlásí se hráči, ne do logu.
+  if (!s.ok) return { ok: false, klic: 'zlocin.err.nemuzes_hlasovat', duvod: s.duvod, duvod_udaje: s.udaje || null };
   await prisma.gameZlocinHlas.upsert({ where: { zlocin_id_player_id: { zlocin_id: z.id, player_id: hracId } },
     create: { zlocin_id: z.id, player_id: hracId, volba }, update: { volba } });
   return { ok: true };
@@ -200,12 +159,12 @@ async function hlasuj(prisma, hracId, zlocinId, volba) {
 
 async function odvolej(prisma, hracId, zlocinId, text) {
   const z = await prisma.gameZlocin.findUnique({ where: { id: zlocinId } });
-  if (!z || z.hlavni_id !== hracId) return { ok: false, error: 'Případ nenalezen.' };
-  if (z.stav !== 'odvolani' || z.odvolani_at || !z.odvolani_do || new Date(z.odvolani_do) < new Date()) return { ok: false, error: 'Odvolat se už nelze.' };
+  if (!z || z.hlavni_id !== hracId) return { ok: false, klic: 'zlocin.err.pripad_nenalezen' };
+  if (z.stav !== 'odvolani' || z.odvolani_at || !z.odvolani_do || new Date(z.odvolani_do) < new Date()) return { ok: false, klic: 'zlocin.err.odvolat_nelze' };
   const t = String(text || '').trim().slice(0, 1000);
-  if (t.length < 10) return { ok: false, error: 'Napiš aspoň stručné zdůvodnění odvolání.' };
+  if (t.length < 10) return { ok: false, klic: 'zlocin.err.odvolani_kratke' };
   const u = await prisma.gameZlocin.update({ where: { id: z.id }, data: { odvolani_text: t, odvolani_at: new Date() } });
-  await zprava(prisma, u, '📄 Odvolání firmy ' + jmeno(u), 'Firma ' + jmeno(u) + ' se odvolala proti rozsudku. Majetek zůstává zmrazen, dokud o odvolání nerozhodne správa hry.');
+  await zprava(prisma, u, 'odvolani', { ikona: '📄', firma: jmeno(u) });
   return { ok: true };
 }
 
@@ -214,24 +173,22 @@ async function verdikt(prisma, R, z) {
   const hlasy = await prisma.gameZlocinHlas.findMany({ where: { zlocin_id: z.id } });
   const pocty = { nejnizsi: 0, stredni: 0, nejvyssi: 0 };
   hlasy.forEach((h) => { if (pocty[h.volba] != null) pocty[h.volba]++; });
-  let uroven = 'stredni', pozn = '';
+  let uroven = 'stredni', pozn = '', poznKod = null;
   const max = Math.max(pocty.nejnizsi, pocty.stredni, pocty.nejvyssi);
   const vitezu = UROVNE.filter((u) => pocty[u] === max);
   // Počet hlasujících nehraje roli: hlasování se uzavře po lhůtě, rozhoduje většina
-  if (!hlasy.length) pozn = 'Nikdo nehlasoval, platí střední trest.';
+  if (!hlasy.length) poznKod = 'nikdo';
   else if (vitezu.length === 1) uroven = vitezu[0];
-  else pozn = 'Hlasy se rozdělily nerozhodně, platí střední trest.';
+  else poznKod = 'nerozhodne';
+  if (poznKod) pozn = TEXTY.t('zlocin.pozn.' + poznKod, null, TEXTY.ZDROJ);
   const koef = R['trest_' + uroven];
   const castka = Math.round(z.skoda * koef);
   const odvolani_do = new Date(Date.now() + R.odvolani_mesicu * MESIC_MS);
   const u = await prisma.gameZlocin.update({ where: { id: z.id }, data: {
     stav: 'odvolani', trest_uroven: uroven, trest_castka: castka, odvolani_do,
     detail: Object.assign({}, z.detail || {}, { hlasy: pocty, hlasu: hlasy.length, pozn }) } });
-  await zprava(prisma, u, '⚖️ Rozsudek: firma ' + jmeno(u),
-    'Soud a porota rozhodly: firmě ' + jmeno(u) + ' se ukládá trest ' + L(castka)
-    + ' (škoda ' + L(u.skoda) + ' × ' + koef + '). Odsouzena za: ' + skutek(u) + '. '
-    + 'Hlasy: ' + pocty.nejnizsi + '/' + pocty.stredni + '/' + pocty.nejvyssi + '. ' + pozn
-    + ' Obviněný má 1 herní měsíc na odvolání, do té doby je majetek zmrazen.');
+  await zprava(prisma, u, 'rozsudek', { ikona: '⚖️', firma: jmeno(u), trest: castka, skoda: u.skoda,
+    koef, obvineni: ZT.obvineni(u), hlasy: pocty, pozn: poznKod });
   return u;
 }
 
@@ -240,14 +197,14 @@ async function uzavri(prisma, z, rozhodnuti, castka) {
   const trest = Math.max(0, Math.round(castka != null ? castka : (z.trest_castka || 0)));
   const zm = z.zmrazeno || 0;
   let nedoplatek = 0;
-  if (zm > trest) await dorucenka(prisma, z.hlavni_id, zm - trest, 'Soud: vráceno ze zmrazené částky ' + L(zm - trest));
+  if (zm > trest) await dorucenka(prisma, z.hlavni_id, zm - trest, 'dor.zlocin_vraceno', { p1: zm - trest });
   else if (trest > zm) {
     const h = await prisma.gamePlayer.findUnique({ where: { id: z.hlavni_id }, select: { state: true } });
     const cash = Math.max(0, Math.round(((h && h.state) || {}).cash || 0));
     const dopl = trest - zm;
     const zHotovosti = Math.min(dopl, cash);
     let zbyva = dopl - zHotovosti;
-    if (zHotovosti > 0) await dorucenka(prisma, z.hlavni_id, -zHotovosti, 'Soud: doplatek trestu ' + L(zHotovosti));
+    if (zHotovosti > 0) await dorucenka(prisma, z.hlavni_id, -zHotovosti, 'dor.zlocin_doplatek', { p1: zHotovosti });
     // Nestačí hotovost → propadnou prádlomaty (od nejlevnějšího, dokud se trest nepokryje).
     // Zabavený majetek mizí ze hry: nikomu se nepřevádí, místo se uvolní.
     if (zbyva > 0) {
@@ -269,7 +226,9 @@ async function uzavri(prisma, z, rozhodnuti, castka) {
         await prisma.$transaction([
           prisma.gameDelivery.create({ data: { player_id: z.hlavni_id, kind: 'unit_remove',
             spot_id: x.c.spot_id,
-            popis: 'Soud: zabaven prádlomat ' + (x.c.name || x.c.spot_id) + ' (propadl státu)' } }),
+            text_kod: 'dor.zlocin_zabaven_pradlomat', text_data: { p1: x.c.name || x.c.spot_id },
+            popis: TEXTY.t('dor.zlocin_zabaven_pradlomat',
+              { p1: x.c.name || x.c.spot_id }, TEXTY.ZDROJ) } }),
           // Vlastní zem soud nebere — propadá stroj, ne zaplacený pozemek.
           // Dokud se rušil celý zábor, přišel hráč i o pozemek: server o něm
           // přestal vědět, hra ho dál ukazovala jako jeho, a pronájem pak
@@ -291,18 +250,16 @@ async function uzavri(prisma, z, rozhodnuti, castka) {
   }
   const u = await prisma.gameZlocin.update({ where: { id: z.id }, data: {
     stav: 'uzavreno', uzavreno_at: new Date(), trest_castka: trest, nedoplatek, admin_rozhodnuti: rozhodnuti || null } });
-  await zprava(prisma, u, '✅ Případ ' + jmeno(u) + ' uzavřen',
-    'Rozsudek proti firmě ' + jmeno(u) + ' nabyl účinnosti. Odebráno ' + L(trest) + '. Zabavené peníze i majetek propadly a zmizely ze hry.'
-    + (z.zabaveno_stroju && z.zabaveno_stroju.length ? ' Propadlo ' + z.zabaveno_stroju.length + ' prádlomatů.' : '')
-    + (nedoplatek > 0 ? ' Nedoplatek ' + L(nedoplatek) + ' zůstává dluhem.' : ''));
+  await zprava(prisma, u, 'uzavreno', { ikona: '✅', firma: jmeno(u), trest,
+    propadlo: (z.zabaveno_stroju || []).length, nedoplatek });
   return u;
 }
 
 async function zrus(prisma, z, poznamka) {
-  if ((z.zmrazeno || 0) > 0) await dorucenka(prisma, z.hlavni_id, z.zmrazeno, 'Případ zrušen: vráceno ' + L(z.zmrazeno));
+  if ((z.zmrazeno || 0) > 0) await dorucenka(prisma, z.hlavni_id, z.zmrazeno, 'dor.zlocin_zruseno_vraceno', { p1: z.zmrazeno });
   const u = await prisma.gameZlocin.update({ where: { id: z.id }, data: {
     stav: 'zruseno', uzavreno_at: new Date(), admin_rozhodnuti: 'zruseno', admin_poznamka: poznamka ? String(poznamka).slice(0, 500) : null } });
-  await zprava(prisma, u, '🚫 Případ ' + jmeno(u) + ' zrušen', 'Řízení proti firmě ' + jmeno(u) + ' bylo zrušeno. Zmrazený majetek je vrácen.');
+  await zprava(prisma, u, 'zruseno', { ikona: '🚫', firma: jmeno(u) });
   return u;
 }
 
@@ -333,8 +290,8 @@ async function tik() {
         const z = await premer(prisma, R, zz, podleId.get(zz.hlavni_id));
         if (z.stav === 'kontrola' && ted >= z.kontrola_do) {
           const u = await prisma.gameZlocin.update({ where: { id: z.id }, data: { stav: 'soud', soud_do: new Date(ted.getTime() + R.soud_mesicu * MESIC_MS) } });
-          await zprava(prisma, u, '⚖️ Soud s firmou ' + jmeno(u),
-            'Kontrola firmy ' + jmeno(u) + ' skončila, případ jde k soudu. Škoda ' + L(u.skoda) + '. Porota hlasuje o trestu 1 herní měsíc — v noviny můžeš hlasovat, pokud máš účet starší než ' + (R.porotce_min_mesicu * 12) + ' hodin.');
+          await zprava(prisma, u, 'soud', { ikona: '⚖️', firma: jmeno(u), skoda: u.skoda,
+            hodin: R.porotce_min_mesicu * 12 });
         } else if (z.stav === 'soud' && z.soud_do && ted >= z.soud_do) {
           await verdikt(prisma, R, z);
         } else if (z.stav === 'odvolani' && !z.odvolani_at && z.odvolani_do && ted >= z.odvolani_do) {

@@ -54,11 +54,13 @@ function spojeneObchody(data, S, R) {
   const dolni = (R.agent_levne_pomer || 60) / 100;
   const horni = (R.agent_drahe_pomer || 160) / 100;
   const nalezy = new Map();
-  const pridej = (id, skoda, text, obchod) => {
+  // Důkaz nese vedle české věty i klíč a údaje — v novinách se skládá
+  // v jazyce čtenáře (zlocin-texty.js). text zůstává jako záloha.
+  const pridej = (id, skoda, text, obchod, dukaz) => {
     const n = nalezy.get(id) || { id, kod: 'spojene_obchody', nazev: 'Obchody mezi vlastními účty',
       utvar: 'Celní správa', skoda: 0, dukazy: [] };
     n.skoda += skoda;
-    if (n.dukazy.length < 12) n.dukazy.push({ obchod, text });
+    if (n.dukazy.length < 12) n.dukazy.push(Object.assign({ obchod, text }, dukaz || {}));
     nalezy.set(id, n);
   };
   (data.obchody || []).forEach((t) => {
@@ -73,11 +75,13 @@ function spojeneObchody(data, S, R) {
     if (cena < fer * dolni) {
       if (!po(data, kup, kdyT)) return;
       pridej(kup, fer - cena, 'koupil ' + t.predmet + ' od svého účtu za ' + L(cena)
-        + ' místo ' + L(fer), t.id);
+        + ' místo ' + L(fer), t.id,
+      { klic: 'levne', predmet: t.predmet, u: { p2: cena, p3: fer } });
     } else if (cena > fer * horni) {
       if (!po(data, prod, kdyT)) return;
       pridej(prod, cena - fer, 'prodal ' + t.predmet + ' svému účtu za ' + L(cena)
-        + ' místo ' + L(fer), t.id);
+        + ' místo ' + L(fer), t.id,
+      { klic: 'drahe', predmet: t.predmet, u: { p2: cena, p3: fer } });
     }
   });
   return [...nalezy.values()];
@@ -110,7 +114,8 @@ function drazbyNaoko(data, S) {
     n.skoda += cizi;
     if (n.dukazy.length < 12) {
       n.dukazy.push({ drazba: d.id, text: 'na vlastní dražbu „' + (d.nazev || '') + '" přihazoval i jeho účet '
-        + (nastrceni[0].nick || '') + '; ostatní v ní nechali ' + L(cizi) });
+        + (nastrceni[0].nick || '') + '; ostatní v ní nechali ' + L(cizi),
+      klic: 'drazba', u: { p1: d.nazev || '', p2: nastrceni[0].nick || '', p3: cizi } });
     }
     nalezy.set(d.prodavajici_id, n);
   });
@@ -140,7 +145,8 @@ function fondAkcie(data, S) {
     n.skoda += cena;
     if (n.dukazy.length < 12) {
       n.dukazy.push({ equity: e.id, text: 'fond koupil ' + Math.round((e.podil || 0) * 100)
-        + ' % jeho firmy za ' + L(cena) + ', a ve fondu sedí i jeho účet' });
+        + ' % jeho firmy za ' + L(cena) + ', a ve fondu sedí i jeho účet',
+      klic: 'fond', u: { p1: Math.round((e.podil || 0) * 100), p2: cena } });
     }
     nalezy.set(e.firma_id, n);
   });
@@ -166,7 +172,9 @@ function pujckyNaoko(data, S) {
     if (n.dukazy.length < 12) {
       n.dukazy.push({ pujcka: p.id, text: 'půjčil ' + L(p.castka) + ' svému účtu ' + (p.borrower_nick || '')
         + (p.zastava_spot ? ' proti zástavě ' + p.zastava_spot : '') + ', nesplaceno ' + L(zbyva)
-        + ' (stav ' + p.stav + ')' });
+        + ' (stav ' + p.stav + ')',
+      klic: 'pujcka', zastava: p.zastava_spot || null,
+      u: { p1: cislo(p.castka), p2: p.borrower_nick || '', p4: zbyva, p5: p.stav } });
     }
     nalezy.set(p.lender_id, n);
   });

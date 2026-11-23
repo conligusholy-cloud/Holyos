@@ -802,7 +802,9 @@ router.get('/zlocin/pripady/:id/porota', api(async (req, res) => {
     const out = [];
     for (const k of nalezeni) {
       const s = await RIZ.smiHlasovat(prisma, R, k, z);
-      out.push({ id: k.id, nick: k.nick, firma: k.company || null, smi: s.ok, duvod: s.ok ? null : s.duvod,
+      // smiHlasovat vrací klíč do katalogu, administrace je česky
+      const duvod = s.ok ? null : TEXTY.t(s.duvod, s.udaje, 'cs');
+      out.push({ id: k.id, nick: k.nick, firma: k.company || null, smi: s.ok, duvod,
         ucet_od: k.created_at, posledni_prihlaseni: k.last_login_at });
     }
     return res.json({ ok: true, hledane: out });

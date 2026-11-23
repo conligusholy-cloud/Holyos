@@ -10,12 +10,14 @@ const { prisma } = require('../config/database');
 const acct = require('./game-account.routes');
 const ZL = require('../services/game/zlocin');
 const RIZ = require('../services/game/zlocin-rizeni');
+const ZT = require('../services/game/zlocin-texty');
+const TEXTY = require('../services/game/texty');
 
 router.use(express.json({ limit: '8kb' }));
 
 function hrac(req, res, next) {
   acct._currentPlayer(req).then((p) => {
-    if (!p) return res.status(401).json({ error: 'Nejsi přihlášen.' });
+    if (!p) return res.status(401).json({ error: TEXTY.t('server.neprihlasen', {}, TEXTY.ZDROJ) });
     req.player = p; next();
   }).catch(next);
 }
@@ -31,6 +33,7 @@ const verejny = (z) => ({
 router.get('/zlocin/noviny', hrac, api(async (req, res) => {
   const po = parseInt(req.query.po, 10) || 0;
   const me = req.player;
+  const jazyk = TEXTY.jazykHrace(me);
   const [zpravy, aktivni, uzavrene] = await Promise.all([
     prisma.gameZlocinZprava.findMany({ where: po ? { id: { gt: po } } : {}, orderBy: { id: 'desc' }, take: po ? 30 : 40 }),
     prisma.gameZlocin.findMany({ where: { stav: { in: RIZ.AKTIVNI } }, orderBy: { id: 'desc' }, take: 40 }),
@@ -53,29 +56,44 @@ router.get('/zlocin/noviny', hrac, api(async (req, res) => {
       moje_volba: h ? h.volba : null,
       urovne: RIZ.UROVNE.map((u) => ({ klic: u, castka: Math.round(z.skoda * R['trest_' + u]), koef: R['trest_' + u], hlasu: (hlasyPro(z) || {})[u] || 0 })) });
   }
-  // Texty rozhraní posílá server (čeština) — v klientu jsou jen údaje
-  const ui = { noviny: 'Prádelní noviny', precteno: 'Přečteno', hlasovani: 'Hlasování poroty', hlasuj: 'Hlasovat', bezi: 'Běžící případy',
-    zadne: 'Zatím žádné zprávy.', trest: 'Trest:', skoda: 'Škoda:', moje: 'Řízení proti tvé firmě', odvolat: 'Odvolat se', odeslat: 'Odeslat odvolání',
-    odvolani_ph: 'Napiš, proč se odvoláváš (aspoň pár vět)', hlasoval: 'Tvůj hlas je zapsán', konci: 'Hlasování končí', zavrit: 'Zavřít', hlasy: 'hlasy (nejnižší/střední/nejvyšší):', hlasu: 'hlasů',
-    odvolani_podano: 'Odvolání podáno, čeká na rozhodnutí správy hry. Majetek zůstává zmrazen.',
-    stav: { kontrola: 'kontrola', soud: 'soud', odvolani: 'rozsudek / odvolání', uzavreno: 'uzavřeno', zruseno: 'zrušeno' },
-    urovne: { nejnizsi: 'Nejnižší trest', stredni: 'Střední trest', nejvyssi: 'Nejvyšší trest' } };
+  // Texty rozhraní posílá server — v klientu jsou jen údaje. Skládají se
+  // v jazyce čtenáře, ne v češtině: noviny čte i hráč, co hraje italsky.
+  const u = (klic) => TEXTY.t('zlocin.ui.' + klic, null, jazyk);
+  const ui = { noviny: u('noviny'), precteno: u('precteno'), hlasovani: u('hlasovani'), hlasuj: u('hlasuj'), bezi: u('bezi'),
+    zadne: u('zadne'), trest: u('trest'), skoda: u('skoda'), moje: u('moje'), odvolat: u('odvolat'), odeslat: u('odeslat'),
+    odvolani_ph: u('odvolani_ph'), hlasoval: u('hlasoval'), konci: u('konci'), zavrit: u('zavrit'), hlasy: u('hlasy'), hlasu: u('hlasu'),
+    odvolani_podano: u('odvolani_podano'),
+    stav: { kontrola: u('stav_kontrola'), soud: u('stav_soud'), odvolani: u('stav_odvolani'), uzavreno: u('stav_uzavreno'), zruseno: u('stav_zruseno') },
+    urovne: { nejnizsi: u('uroven_nejnizsi'), stredni: u('uroven_stredni'), nejvyssi: u('uroven_nejvyssi') } };
   res.json({ ok: true, ui,
-    zpravy: zpravy.map((z) => ({ id: z.id, nadpis: z.nadpis, text: z.text, emblem: z.emblem, stav: z.stav, kdy: z.created_at })),
+    zpravy: zpravy.map((z) => {
+      const v = ZT.vykresli(z, jazyk);
+      return { id: z.id, nadpis: v.nadpis, text: v.text, emblem: z.emblem, stav: z.stav, kdy: z.created_at };
+    }),
     pripady: aktivni.concat(uzavrene).map((z) => Object.assign(verejny(z), { hlasy: hlasyPro(z) })),
     moje: moje ? Object.assign(verejny(moje), { muze_odvolat: moje.stav === 'odvolani' && !moje.odvolani_at && new Date(moje.odvolani_do) > new Date() }) : null,
     hlasovani });
 }));
 
+// Chyba z řízení přijde jako klíč do katalogu. U nepovoleného hlasování je
+// uvnitř ještě druhý klíč (proč to nejde) — ten se musí složit dřív.
+function chyba(r, jazyk) {
+  const t = (klic, udaje) => TEXTY.t(klic, udaje, jazyk);
+  if (!r.klic) return String(r.error || '');
+  const udaje = Object.assign({}, r.udaje || {});
+  if (r.duvod) udaje.p1 = t(r.duvod, r.duvod_udaje || null);
+  return t(r.klic, udaje);
+}
+
 router.post('/zlocin/:id/hlas', hrac, api(async (req, res) => {
   const r = await RIZ.hlasuj(prisma, req.player.id, parseInt(req.params.id, 10), String((req.body || {}).volba || ''));
-  if (!r.ok) return res.status(400).json({ error: r.error });
+  if (!r.ok) return res.status(400).json({ error: chyba(r, TEXTY.jazykHrace(req.player)) });
   res.json({ ok: true });
 }));
 
 router.post('/zlocin/:id/odvolani', hrac, api(async (req, res) => {
   const r = await RIZ.odvolej(prisma, req.player.id, parseInt(req.params.id, 10), (req.body || {}).text);
-  if (!r.ok) return res.status(400).json({ error: r.error });
+  if (!r.ok) return res.status(400).json({ error: chyba(r, TEXTY.jazykHrace(req.player)) });
   res.json({ ok: true });
 }));
 
