@@ -389,9 +389,18 @@ router.get('/trziste-prodeje', api(async (req, res) => {
   const davky = await prisma.gameDelivery.findMany({
     where: { kind: 'cash', created_at: { gte: new Date(od.getTime() - 60000) } },
     select: { player_id: true, amount: true, popis: true, created_at: true } });
+  // A co na prodaném místě viselo prodávajícímu za dluh. Bankovní úvěr žije
+  // v jeho uloženém stavu, zastavené půjčky v tabulce — obojí podle místa.
+  const DLUH = require('../services/game/dluh-mista');
+  const prodavajici = await prisma.gamePlayer.findMany({
+    where: { id: { in: [...new Set(prodeje.map((m) => m.player_id))] } },
+    select: { id: true, nick: true, state: true } });
+  const stavy = new Map(prodavajici.map((h) => [h.id, h.state || {}]));
+  const zastavy = await prisma.gameLoan.findMany({
+    where: { zastava_spot: { in: prodeje.map((m) => m.spot_id) }, stav: 'bezi' } });
   const kc = (n) => Math.round(n).toLocaleString('cs-CZ') + ' L$';
   const radky = [];
-  let zaplaceno = 0, prijato = 0;
+  let zaplaceno = 0, prijato = 0, dluhuCelkem = 0;
   for (const m of prodeje) {
     // Celá věta, ne jen jméno: „Alnatura" je kus „Alnatura Super Natur Markt"
     // a obě doručenky by se započítaly k jednomu prodeji.
@@ -402,10 +411,15 @@ router.get('/trziste-prodeje', api(async (req, res) => {
       && String(d.popis || '').indexOf(klic) >= 0).reduce((a, d) => a + d.amount, 0);
     zaplaceno += -kupujici; prijato += prodavajici;
     const sedi = Math.abs(-kupujici - m.cena) < 1 && Math.abs(prodavajici - m.cena) < 1;
+    const dluhBanka = DLUH.banka(stavy.get(m.player_id) || {}, m.spot_id);
+    const dluhZastava = zastavy.filter((pj) => pj.zastava_spot === m.spot_id
+      && pj.borrower_id === m.player_id).reduce((a, pj) => a + DLUH.doplatek(pj), 0);
+    dluhuCelkem += dluhBanka + dluhZastava;
     radky.push((sedi ? '  ok  ' : '  !!  ') + ((m.name || m.spot_id) + '                         ').slice(0, 26)
       + ' cena ' + (kc(m.cena) + '            ').slice(0, 14)
       + ' kupující ' + (kc(kupujici) + '            ').slice(0, 14)
       + ' prodávající ' + (kc(prodavajici) + '            ').slice(0, 14)
+      + ' dluh na místě ' + (kc(dluhBanka + dluhZastava) + '            ').slice(0, 14)
       + ' ' + m.nick + ' → ' + (m.koupil_nick || '?'));
   }
   const text = 'TRŽIŠTĚ — PRODEJE ZA POSLEDNÍCH ' + minut + ' MINUT\n\n'
@@ -414,6 +428,7 @@ router.get('/trziste-prodeje', api(async (req, res) => {
     + 'cena celkem        ' + kc(prodeje.reduce((a, m) => a + m.cena, 0)) + '\n'
     + 'strženo kupujícím  ' + kc(zaplaceno) + '\n'
     + 'připsáno prodávajícím ' + kc(prijato) + '\n'
+    + 'dluh na prodaných místech ' + kc(dluhuCelkem) + '\n'
     + (Math.abs(zaplaceno - prijato) < 1 ? 'Sedí — co se strhlo, to se připsalo.'
       : 'NESEDÍ — rozdíl ' + kc(prijato - zaplaceno));
   res.type('text/plain; charset=utf-8').send(text);

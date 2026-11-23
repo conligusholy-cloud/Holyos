@@ -3802,6 +3802,10 @@ router.post('/trade/trh/:id/koupit', hrac, api(async (req, res) => {
     return res.status(409).json({ error: stx(req)('server.pradlomat_uz_prodavajicimu_nepatri_nabidku_jsme') });
   }
 
+  // Prodávající — kvůli dluhu, který na prádlomatu vázne. Platí tu totéž co
+  // v obchodu i v dražbě: kupující má dostat prádlomat, ne cizí splátky.
+  const prodavajici = await prisma.gamePlayer.findUnique({ where: { id: m.player_id } });
+
   try {
   await prisma.$transaction(async (tx) => {
     const zabrano = await tx.gameMarket.updateMany({
@@ -3812,16 +3816,21 @@ router.post('/trade/trh/:id/koupit', hrac, api(async (req, res) => {
     await tx.gameSpotClaim.update({ where: { spot_id: m.spot_id },
       data: { player_id: req.player.id, nick: req.player.nick } });
     const popis = 'prádlomat ' + (m.name || m.spot_id) + ' z tržiště';
-    await tx.gameDelivery.createMany({ data: [
+    const vyr = prodavajici
+      ? await doplatDluhZCeny(tx, prodavajici, m.spot_id, m.cena)
+      : { davky: [], prodavajicimu: m.cena };
+    await tx.gameDelivery.createMany({ data: ([
       { player_id: m.player_id, kind: 'unit_remove', spot_id: m.spot_id,
         popis: 'Prodal jsi ' + popis + ' hráči ' + req.player.nick , text_kod: 'dor.prodal_jsi_hraci', text_data: { p1: popis, p2: req.player.nick }},
       { player_id: req.player.id, kind: 'unit_add', spot_id: m.spot_id, model: m.model,
         data: { name: m.name, lat: m.lat, lon: m.lon, rent: m.rent, area_key: m.area_key,
           kind: m.kind, score: m.score, invest: m.cena, plan: m.plan || null },
         popis: 'Koupil jsi ' + popis },
-      { player_id: req.player.id, kind: 'cash', amount: -m.cena, popis: 'Zaplatil jsi za ' + popis },
-      { player_id: m.player_id, kind: 'cash', amount: m.cena, popis: 'Utržil jsi za ' + popis , text_kod: 'dor.utrzil_jsi_za', text_data: { p1: popis }},
-    ] });
+      { player_id: req.player.id, kind: 'cash', amount: -m.cena, popis: 'Zaplatil jsi za ' + popis,
+        text_kod: 'dor.zaplatil_jsi_za', text_data: { p1: popis } },
+    ].concat(vyr.davky).concat(vyr.prodavajicimu > 0
+      ? [{ player_id: m.player_id, kind: 'cash', amount: vyr.prodavajicimu, popis: 'Utržil jsi za ' + popis , text_kod: 'dor.utrzil_jsi_za', text_data: { p1: popis }}]
+      : [])) });
   });
   } catch (e) { if (SOUBEH.odpoved(e, res, stx(req))) return; throw e; }
 

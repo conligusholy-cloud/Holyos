@@ -182,7 +182,12 @@ async function server() {
 function obeCesty() {
   console.log('\nDoplácí se v obchodu i v dražbě');
   const volani = (TRADE.match(/doplatDluhZCeny\(/g) || []).length;
-  ma(volani >= 3, 'pomocník se volá z obou cest', volani + '× (1 definice + 2 volání)');
+  ma(volani >= 4, 'pomocník se volá ze všech cest prodeje',
+    volani + '× (1 definice + obchod, dražba, tržiště)');
+  ma(/koupil_nick: req\.player\.nick[\s\S]{0,900}doplatDluhZCeny\(tx, prodavajici, m\.spot_id, m\.cena\)/.test(TRADE),
+    'tržiště: doplácí se i tam');
+  ma(/vyr\.prodavajicimu > 0[\s\S]{0,200}amount: vyr\.prodavajicimu/.test(TRADE),
+    'a prodávající dostane až zbytek');
   ma(/predmet === 'pradlomat'[\s\S]{0,200}doplatDluhZCeny/.test(TRADE), 'obchod: jen u prádlomatu');
   ma(/d\.predmet === 'pradlomat'[\s\S]{0,200}doplatDluhZCeny/.test(TRADE), 'dražba: jen u prádlomatu');
   ma(/utrzil = vyr\.prodavajicimu/.test(TRADE), 'dražba platí prodávajícímu až zbytek');
