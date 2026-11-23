@@ -919,7 +919,15 @@ const finClean = (d) => {
     const amt = Number(r.amt);
     return { id: idc(r.id), name: str(r.name, 200), freq: ['once', 'tx', 'day', 'week', 'month', 'month_unit', 'quarter', 'half', 'year', 'y5', 'y10'].includes(r.freq) ? r.freq : undefined, amt: r.amt != null && r.amt !== '' && isFinite(amt) && amt >= 0 ? Math.min(1e12, Math.round(amt * 100) / 100) : undefined, pct: r.pct != null && r.pct !== '' && isFinite(Number(r.pct)) && Number(r.pct) >= 0 ? Math.min(1000, Math.round(Number(r.pct) * 100) / 100) : undefined, price: r.price != null && r.price !== '' && isFinite(Number(r.price)) && Number(r.price) >= 0 ? Math.min(1e12, Math.round(Number(r.price) * 100) / 100) : undefined, v };
   }).filter((r) => r.id);
-  return { cols, rows };
+  // modelace výdělku: vybrané pozice + objemy (pozice × řádek)
+  const rowIds = new Set(rows.map((r) => r.id)), m = (d && d.model) || null;
+  let model = null;
+  if (m && typeof m === 'object') {
+    const vol = {};
+    Object.keys(m.vol || {}).forEach((cid) => { if (!ids.has(cid) || !m.vol[cid] || typeof m.vol[cid] !== 'object') return; vol[cid] = {}; Object.keys(m.vol[cid]).forEach((rid) => { const x = Number(m.vol[cid][rid]); if (rowIds.has(rid) && isFinite(x) && x >= 0) vol[cid][rid] = Math.min(1e9, Math.round(x * 10000) / 10000); }); });
+    model = { sel: Array.isArray(m.sel) ? m.sel.map(String).filter((x) => ids.has(x)) : null, vol };
+  }
+  return { cols, rows, model };
 };
 app.get('/admin/api/finance', requireAdmin, async (req, res) => {
   try {
@@ -958,14 +966,25 @@ const FIN_CSS = `
 .fxc{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700}.fxc.ok{background:rgba(34,197,94,.18);color:#86efac}.fxc.w{background:rgba(251,191,36,.16);color:#fcd34d}.fxc.bad{background:rgba(248,113,113,.2);color:#fca5a5}.fxc.n{color:var(--mut)}
 #fx .ib{background:none;border:1px solid transparent;border-radius:7px;color:#9fb4d6;cursor:pointer;font-size:13px;padding:3px 4px;width:auto}#fx .ib:hover{border-color:var(--line);color:#fff}
 #fx .empty{text-align:center;color:var(--mut);padding:34px 14px;line-height:1.7}
-@media(max-width:900px){.fxw{overflow-x:auto}#fx{min-width:820px}}`;
+@media(max-width:900px){.fxw{overflow-x:auto}#fx{min-width:820px}}
+#fx-model{margin:34px 0 40px}.mdh{margin:0;font-size:18px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.mdh .dph{display:inline-block;padding:2px 9px;border-radius:999px;background:rgba(251,191,36,.16);color:#fcd34d;font-size:11px;font-weight:700;letter-spacing:.03em}
+.mchips{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:0 0 16px}.mchip{background:#07111f;border:1px solid var(--line);color:var(--text);border-radius:999px;padding:6px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;width:auto}.mchip:hover{border-color:var(--cy)}.mchip.on{background:var(--cy);color:#04101c;border-color:var(--cy)}
+.mcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:16px}
+.mcard{border:1px solid var(--line);border-radius:16px;background:rgba(8,15,30,.6);padding:16px 18px}
+.mch{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap;margin-bottom:12px}.mtt{font-size:17px;font-weight:800}.mrole{font-size:12.5px;color:#7f93b5;margin-top:3px;max-width:430px;line-height:1.45}
+.mk{font-size:14px;color:#9fb4d6;text-align:right}.mk b{font-size:20px;color:#86efac;font-variant-numeric:tabular-nums}.mu2{margin:0 4px;color:#586b8c}
+.mt{width:100%;border-collapse:collapse}.mt th{text-align:left;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);padding:6px 6px;border-bottom:1px solid var(--line)}.mt td{padding:7px 6px;border-bottom:1px solid rgba(255,255,255,.06);font-size:13.5px;vertical-align:middle}.mt .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.mt .m{color:#9fb4d6;white-space:nowrap}.mt .mo{font-weight:700;color:#eaf6ff}
+.mt .min{width:84px;background:#07111f;border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;font-size:14px;padding:6px 8px;text-align:right;box-sizing:border-box}.mt .min:focus{outline:none;border-color:var(--cy)}.mt .min:disabled{opacity:.4}.mt .un{margin-left:8px;font-size:11.5px;color:#7f93b5}
+@media(max-width:700px){.mcards{grid-template-columns:1fr}}`;
 app.get('/admin/finance', requireAdmin, (req, res) => {
   res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Rozdělení financí — Laundry Unlimited</title>
 <style>${ADMIN_CSS}${BAR_CSS}.adm{max-width:none;padding:22px}.mut{color:var(--mut);font-size:13px}${FIN_CSS}</style></head><body>${topBar({ mode: 'admin', active: 'split' })}
 <div class="adm"><div class="fxh"><h3>Rozdělení financí</h3></div>
 <p class="mut" style="margin:4px 0 0;max-width:820px">Řádek = cokoli, co se dělí (např. cena prádlomatu, provize, servis). Sloupec = pozice, mezi které se dělí. Nejdřív zadej cenu a kolik z ní jsou volné prostředky na rozdělení (např. 10 %). Do pozic pak napiš podíl v % z ceny — dohromady maximálně tolik, kolik je k rozdělení; pod procentem se ukáže částka v €. Vše se ukládá samo.</p>
 <div class="fxbar"><button id="fx-addrow" type="button">＋ Přidat řádek</button><button id="fx-addcol" type="button">＋ Přidat pozici</button><span id="fx-st"></span></div>
-<div class="fxw"><table id="fx"></table></div></div>
+<div class="fxw"><table id="fx"></table></div>
+<div id="fx-model"></div></div>
 <script src="/admin/column-filters.js"></script><script src="/admin/finance.js"></script></body></html>`);
 });
 app.get('/admin/model.js', requireAdmin, (req, res) => {

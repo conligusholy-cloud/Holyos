@@ -14,7 +14,7 @@
 
   // ── Ukládání ──
   function backup() { try { localStorage.setItem('lu_fx_bk', JSON.stringify({ rev: rev, data: D })); } catch (e) { /* bez paměti */ } }
-  function changed() { dirty = true; backup(); status('Ukládám…', false); clearTimeout(saveT); saveT = setTimeout(save, 450); }
+  function changed() { dirty = true; backup(); status('Ukládám…', false); clearTimeout(saveT); saveT = setTimeout(save, 450); var ae = document.activeElement; if (!(ae && ae.closest && ae.closest('#fx-model'))) renderModel(); }
   function save(keepalive) {
     if (!loaded || conflict) return;
     if (saving) { clearTimeout(saveT); saveT = setTimeout(save, 350); return; }
@@ -106,7 +106,68 @@
       T = window.ColFilters.table({ table: '#fx', columns: cfColumns(), renderRow: rowHtml, limit: 500, noun: 'řádků', emptyText: EMPTY });
     }
     T.setRows(D.rows);
+    renderModel();
   }
+
+
+  // ── Modelace výdělku pozic (z tržeb): objem × částka pozice z tabulky × frekvence ──
+  var FACT = { once: 1, tx: 1, day: 365 / 12, week: 52 / 12, month: 1, month_unit: 1, quarter: 1 / 3, half: 1 / 6, year: 1 / 12, y5: 1 / 60, y10: 1 / 120 };
+  var FLAT = { day: 1, week: 1, month: 1, quarter: 1, half: 1, year: 1, y5: 1, y10: 1 };   // pravidelné platby: prázdný objem = 1×
+  var UNIT = { once: 'nových případů / měsíc', tx: 'transakcí / měsíc', month_unit: 'prádlomatů v provozu' };
+  var ROLE = [[/master/i, 'Získává operátory, kteří naplní MARKET PLACE, prodává místa s prádlomaty a koordinuje umístění prádlomatů a infolinku.'], [/operát|operat/i, 'Hledá místo, nacení ho, dělá přípojky a prodává na MARKET PLACE; stará se o údržbu a servis strojů v provozu.']];
+  function MD() { if (!D.model) D.model = { sel: null, vol: {} }; if (!D.model.vol) D.model.vol = {}; return D.model; }
+  function selCols() {
+    var m = MD(), ids = Array.isArray(m.sel) ? m.sel : D.cols.filter(function (c) { return /master|operát|operat/i.test(c.name); }).map(function (c) { return c.id; });
+    return D.cols.filter(function (c) { return ids.indexOf(c.id) >= 0; });
+  }
+  function eur2(x) { return fmtAmt(Math.round(x * 100) / 100) + ' €'; }
+  function volOf(c, r) { var v = MD().vol[c.id] && MD().vol[c.id][r.id]; return typeof v === 'number' ? v : null; }
+  function monthlyOf(c, r) {
+    var e = eurOf(r, r.v && r.v[c.id]); if (e == null || !r.freq) return 0;
+    var v = volOf(c, r); if (v == null) v = FLAT[r.freq] ? 1 : 0;
+    return v * e * (FACT[r.freq] || 0);
+  }
+  function cardRows(c) { return D.rows.filter(function (r) { return r.v && typeof r.v[c.id] === 'number' && r.v[c.id] > 0; }); }
+  function kpiHtml(tot) { return '<b>' + esc(eur2(tot)) + '</b> / měsíc <span class="mu2">·</span> <b>' + esc(eur2(tot * 12)) + '</b> / rok'; }
+  function cardHtml(c) {
+    var rows = cardRows(c), tot = 0, role = ''; ROLE.forEach(function (x) { if (!role && x[0].test(c.name)) role = x[1]; });
+    var body = rows.map(function (r) {
+      var e = eurOf(r, r.v[c.id]), m = monthlyOf(c, r), v = volOf(c, r), noF = !r.freq; tot += m;
+      var unit = noF ? 'doplň frekvenci v tabulce' : (UNIT[r.freq] || 'počet (prázdné = 1×)');
+      return '<tr data-r="' + r.id + '"><td>' + esc(r.name || '(bez názvu)') + '</td><td class="m">' + esc(noF ? '—' : FREQ_LABEL[r.freq]) + '</td><td><input class="min" data-c="' + c.id + '" data-r="' + r.id + '" value="' + esc(v == null ? '' : fmt(v)) + '" inputmode="decimal" autocomplete="off" placeholder="' + (FLAT[r.freq] ? '1' : '0') + '"' + (noF ? ' disabled' : '') + '><span class="un">' + esc(unit) + '</span></td><td class="num">' + (e == null ? '—' : esc(eur2(e))) + '</td><td class="num mo">' + esc(eur2(m)) + '</td></tr>';
+    }).join('');
+    return '<div class="mcard" data-c="' + c.id + '"><div class="mch"><div><div class="mtt">' + esc(c.name || 'Pozice') + '</div>' + (role ? '<div class="mrole">' + esc(role) + '</div>' : '') + '</div><div class="mk">' + kpiHtml(tot) + '</div></div>' +
+      (rows.length ? '<table class="mt"><thead><tr><th>Řádek</th><th>Frekvence</th><th>Objem</th><th class="num">€ za jednotku</th><th class="num">€ / měsíc</th></tr></thead><tbody>' + body + '</tbody></table>' : '<div class="mut" style="padding:10px 2px">Tato pozice zatím nemá v tabulce nahoře žádný podíl.</div>') + '</div>';
+  }
+  function renderModel() {
+    var box = $('#fx-model'); if (!box) return;
+    var sel = selCols().map(function (c) { return c.id; });
+    var h = '<h3 class="mdh">Modelace výdělku pozic <span class="dph">z tržeb · bez nákladů · EUR bez DPH</span></h3>' +
+      '<p class="mut" style="margin:4px 0 12px;max-width:900px">Výdělek pozice = objem × částka pozice z tabulky × frekvence. Objem je u jednorázových řádků počet nových případů za měsíc (např. nových operátorů, prodaných strojů), u transakcí počet transakcí za měsíc, u „Měsíčně z prádlomatu“ počet prádlomatů v provozu. U pravidelných plateb je prázdný objem 1×. Řádky bez frekvence se nepočítají.</p>' +
+      '<div class="mchips"><span class="mut">Modelovat:</span>' + D.cols.map(function (c) { return '<button type="button" class="mchip' + (sel.indexOf(c.id) >= 0 ? ' on' : '') + '" data-mc="' + c.id + '">' + esc(c.name || 'Pozice') + '</button>'; }).join('') + '</div>' +
+      '<div class="mcards">' + selCols().map(cardHtml).join('') + '</div>';
+    box.innerHTML = h;
+  }
+  function paintCard(card) {
+    var c = D.cols.filter(function (x) { return x.id === card.getAttribute('data-c'); })[0]; if (!c) return; var tot = 0;
+    card.querySelectorAll('tbody tr').forEach(function (tr) { var r = D.rows.filter(function (x) { return x.id === tr.getAttribute('data-r'); })[0]; if (!r) return; var m = monthlyOf(c, r); tot += m; tr.querySelector('.mo').textContent = eur2(m); });
+    card.querySelector('.mk').innerHTML = kpiHtml(tot);
+  }
+  (function () {
+    var box = $('#fx-model'); if (!box) return;
+    box.addEventListener('input', function (ev) {
+      var t = ev.target; if (!t.classList || !t.classList.contains('min')) return;
+      var m = MD(), cid = t.getAttribute('data-c'), rid = t.getAttribute('data-r'), v = parseAmt(t.value);
+      m.vol[cid] = m.vol[cid] || {}; if (v == null) delete m.vol[cid][rid]; else m.vol[cid][rid] = v;
+      paintCard(t.closest('.mcard')); changed();
+    });
+    box.addEventListener('click', function (ev) {
+      var b = ev.target.closest && ev.target.closest('.mchip'); if (!b) return;
+      var m = MD(), cur = selCols().map(function (c) { return c.id; }), id = b.getAttribute('data-mc');
+      m.sel = cur.indexOf(id) >= 0 ? cur.filter(function (x) { return x !== id; }) : cur.concat([id]);
+      renderModel(); changed();
+    });
+  })();
 
   // ── Události ──
   var tbl = $('#fx');
@@ -164,9 +225,9 @@
   // ── Načtení (s obnovou nedoukládané zálohy) ──
   fetch('/admin/api/finance').then(function (r) { return r.json(); }).then(function (j) {
     if (!j.ok) { status(j.error || 'Tabulku se nepodařilo načíst', true); return; }
-    D = { cols: (j.data && j.data.cols) || [], rows: (j.data && j.data.rows) || [] }; rev = j.rev; loaded = true;
+    D = { cols: (j.data && j.data.cols) || [], rows: (j.data && j.data.rows) || [], model: (j.data && j.data.model) || null }; rev = j.rev; loaded = true;
     var restored = false;
-    try { var bk = JSON.parse(localStorage.getItem('lu_fx_bk') || 'null'); if (bk && bk.data && bk.rev === j.rev && JSON.stringify(bk.data) !== JSON.stringify(D)) { D = { cols: bk.data.cols || [], rows: bk.data.rows || [] }; restored = true; } else if (bk) localStorage.removeItem('lu_fx_bk'); } catch (e) { /* bez zálohy */ }
-    render(); if (restored) changed(); else status('', false);
+    try { var bk = JSON.parse(localStorage.getItem('lu_fx_bk') || 'null'); if (bk && bk.data && bk.rev === j.rev && JSON.stringify(bk.data) !== JSON.stringify(D)) { D = { cols: bk.data.cols || [], rows: bk.data.rows || [], model: bk.data.model || null }; restored = true; } else if (bk) localStorage.removeItem('lu_fx_bk'); } catch (e) { /* bez zálohy */ }
+    render(); renderModel(); if (restored) changed(); else status('', false);
   }).catch(function () { status('Tabulku se nepodařilo načíst', true); });
 })();
