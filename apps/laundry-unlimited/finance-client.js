@@ -37,6 +37,8 @@
   // ── Výpočty ──
   function num(v) { if (v === '' || v == null) return null; var x = Number(String(v).replace(',', '.').replace(/[^\d.\-]/g, '')); return isFinite(x) ? Math.max(0, Math.min(100, Math.round(x * 100) / 100)) : null; }
   function fmt(x) { return x == null ? '' : String(x).replace('.', ','); }
+  function parseAmt(v) { if (v === '' || v == null) return null; var x = Number(String(v).replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '')); return isFinite(x) ? Math.min(1e12, Math.round(x * 100) / 100) : null; }
+  function fmtAmt(x) { if (typeof x !== 'number') return ''; var p = x.toFixed(2).replace(/\.00$/, '').split('.'); p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0'); return p.join(','); }
   function rowSum(r) { var s = 0, any = false; D.cols.forEach(function (c) { var x = r.v && r.v[c.id]; if (typeof x === 'number') { s += x; any = true; } }); return any ? Math.round(s * 100) / 100 : null; }
   function sumChip(r) {
     var s = rowSum(r); if (s == null) return '<span class="fxc n">—</span>';
@@ -47,11 +49,11 @@
 
   // ── Vykreslení ──
   function render() {
-    var t = $('#fx'), h = '<thead><tr><th class="c0">#</th><th class="cn">Co se dělí (řádek)</th><th class="cm">Poznámka</th>';
+    var t = $('#fx'), h = '<thead><tr><th class="c0">#</th><th class="cn">Co se dělí (řádek)</th><th class="cm">Průměrná transakce / jednotku</th>';
     D.cols.forEach(function (c) { h += '<th class="cp"><div class="ch"><input class="hin" data-c="' + c.id + '" value="' + esc(c.name) + '" maxlength="60" title="Název pozice"><button type="button" class="x" data-dc="' + c.id + '" title="Odebrat pozici">✕</button></div></th>'; });
     h += '<th class="cs">Součet</th><th class="ca"></th></tr></thead><tbody>';
     D.rows.forEach(function (r, i) {
-      h += '<tr data-r="' + r.id + '"><td class="c0">' + (i + 1) + '</td><td class="cn"><input class="rin" data-f="name" value="' + esc(r.name) + '" maxlength="200" placeholder="např. Prodej prádlomatu"></td><td class="cm"><input class="rin" data-f="note" value="' + esc(r.note || '') + '" maxlength="300" placeholder="volitelně"></td>';
+      h += '<tr data-r="' + r.id + '"><td class="c0">' + (i + 1) + '</td><td class="cn"><input class="rin" data-f="name" value="' + esc(r.name) + '" maxlength="200" placeholder="např. Prodej prádlomatu"></td><td class="cm"><input class="ain" value="' + esc(fmtAmt(r.amt)) + '" inputmode="decimal" autocomplete="off" placeholder="0" title="Průměrná transakce na jednotku (editovatelné)"></td>';
       D.cols.forEach(function (c) { var x = r.v && r.v[c.id]; h += '<td class="cp"><span class="pc"><input class="vin" data-c="' + c.id + '" value="' + esc(fmt(typeof x === 'number' ? x : null)) + '" inputmode="decimal" autocomplete="off"><i>%</i></span></td>'; });
       h += '<td class="cs">' + sumChip(r) + '</td><td class="ca"><button type="button" class="ib" data-eq="' + r.id + '" title="Rozdělit rovným dílem">⚖</button><button type="button" class="ib" data-up="' + r.id + '" title="Posunout nahoru">↑</button><button type="button" class="ib" data-dn="' + r.id + '" title="Posunout dolů">↓</button><button type="button" class="ib" data-dr="' + r.id + '" title="Smazat řádek">🗑</button></td></tr>';
     });
@@ -70,9 +72,12 @@
     if (t.classList.contains('vin')) {
       var v = num(t.value); r.v = r.v || {}; if (v == null) delete r.v[t.getAttribute('data-c')]; else r.v[t.getAttribute('data-c')] = v;
       updateRowSum(tr); changed();
-    } else if (t.classList.contains('rin')) { r[t.getAttribute('data-f')] = t.value; changed(); }
+    } else if (t.classList.contains('ain')) { var a = parseAmt(t.value); if (a == null) delete r.amt; else r.amt = a; changed(); }
+    else if (t.classList.contains('rin')) { r[t.getAttribute('data-f')] = t.value; changed(); }
   });
-  tbl.addEventListener('focusout', function (ev) { var t = ev.target; if (t.classList && t.classList.contains('vin')) { var tr = t.closest('tr'), r = D.rows.filter(function (x) { return x.id === tr.getAttribute('data-r'); })[0], x = r && r.v && r.v[t.getAttribute('data-c')]; t.value = fmt(typeof x === 'number' ? x : null); } });
+  tbl.addEventListener('focusout', function (ev) { var t = ev.target;
+    if (t.classList && t.classList.contains('ain')) { var ar = D.rows.filter(function (x) { return x.id === t.closest('tr').getAttribute('data-r'); })[0]; t.value = ar ? fmtAmt(ar.amt) : ''; return; }
+    if (t.classList && t.classList.contains('vin')) { var tr = t.closest('tr'), r = D.rows.filter(function (x) { return x.id === tr.getAttribute('data-r'); })[0], x = r && r.v && r.v[t.getAttribute('data-c')]; t.value = fmt(typeof x === 'number' ? x : null); } });
   tbl.addEventListener('click', function (ev) {
     var b = ev.target.closest && ev.target.closest('button'); if (!b) return;
     var id;
@@ -95,7 +100,7 @@
   });
   $('#fx-addrow').onclick = function () {
     if (D.rows.length >= 300) return alert('Maximum je 300 řádků.');
-    D.rows.push({ id: uid('r'), name: '', note: '', v: {} }); render(); changed();
+    D.rows.push({ id: uid('r'), name: '', v: {} }); render(); changed();
     var ins = tbl.querySelectorAll('tbody tr:last-child .rin'); if (ins[0]) { ins[0].focus(); ins[0].scrollIntoView({ block: 'nearest' }); }
   };
   $('#fx-addcol').onclick = function () {
