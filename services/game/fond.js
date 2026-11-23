@@ -185,7 +185,12 @@ const PRAHY = { koupit: BEZNE, vyplatit: ZASADNI, zrusit: BEZNE, dividenda: BEZN
   // hlasuje o svém vlastním obchodu — při běžném prahu by si většinový člen
   // prodal do fondu, co by chtěl, svým vlastním hlasem. Cenu si sice neurčuje
   // (bere se ocenění), ale jestli to fond vůbec chce, musí říct i ostatní.
-  odkup_podilu: ZASADNI };
+  odkup_podilu: ZASADNI,
+  // Majitel firmy si kupuje svůj podíl zpátky od fondu. Je to běžné
+  // rozhodnutí: fond za něj dostane peníze a nikdo z členů si tím nic
+  // nepřihrává — kupující ve fondu není a hlasovat v něm nesmí. Stejná
+  // váha jako u nákupu, jen obráceně.
+  odkup_zpet: BEZNE };
 const prahDruhu = (druh) => (PRAHY[druh] == null ? null : PRAHY[druh]);
 
 // ─── Žebríček fondů ──────────────────────────────────────────────

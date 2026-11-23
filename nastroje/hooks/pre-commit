@@ -498,6 +498,16 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|rout
   fi
 fi
 
+# Odkup podílu zpátky od fondu. Fond nesmí prodat víc, než drží, a platit se
+# má to, na čem se strany dohodly — jsou to cizí peníze a cizí kus firmy.
+if git diff --cached --name-only | grep -qE 'services/game/fond|routes/game-trade|public/compounder/game/game.js'; then
+  if ! node nastroje/tfondodkupzpet.js; then
+    echo ""
+    echo "STOP: zpětný odkup podílu od fondu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Půjčky mezi hráči: kde je hráč vidí a jestli se počítají do jmění. Dluh,
 # který se neodečítá, nafukuje žebříček i hodnosti.
 if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|services/game/jmeni|services/game/finance|routes/game-trade'; then

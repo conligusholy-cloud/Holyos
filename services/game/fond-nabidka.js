@@ -57,6 +57,29 @@ function zkontroluj(podil, cena, prodano, volne) {
   return { ok: true };
 }
 
+// ─── Opačný směr: majitel kupuje podíl zpátky od fondu ───────────────────────
+// Smlouvá se stejně (jedno kolo protinávrhu), jen se hlídá něco jiného:
+// fond nemůže prodat víc, než drží, a majitel musí mít na to, co nabídl.
+// Peníze fondu přibydou, takže se nekontroluje jeho pokladna.
+function zkontrolujZpet(podil, cena, drziFond, hotovost) {
+  const p = cislo(podil), c = zaokr(cena);
+  if (!(p >= PODIL_MIN - 1e-9)) return { ok: false, duvod: 'podil_maly' };
+  if (c < CENA_MIN) return { ok: false, duvod: 'cena_mala' };
+  // Fond víc, než má, prodat nemůže — a nula znamená, že v té firmě není.
+  if (!(cislo(drziFond) > 0)) return { ok: false, duvod: 'fond_nedrzi' };
+  if (p > cislo(drziFond) + 1e-9) return { ok: false, duvod: 'fond_tolik_nedrzi' };
+  // O penězích, které kupující nemá, nemá smysl hlasovat den a pak zjistit,
+  // že to nejde provést.
+  if (c > zaokr(hotovost)) return { ok: false, duvod: 'majitel_nema' };
+  return { ok: true };
+}
+
+// Kolik fondu v té firmě zbyde a jestli mu zůstane většina.
+function nasledkyZpet(podil, drziTed) {
+  const zbyde = Math.max(0, cislo(drziTed) - cislo(podil));
+  return { podil_po: Math.round(zbyde * 1000) / 1000, vetsina: zbyde > 0.5 + 1e-9 };
+}
+
 // Co se stane, až to projde. drziTed je, kolik té firmy fond drží dnes —
 // obě strany mají předem vidět, jestli tím fond získá většinu. Fond rozhoduje
 // kolektivně a zpátky se to nekoupí, takže tohle se nesmí dozvědět až potom.
@@ -66,4 +89,5 @@ function nasledky(podil, drziTed) {
 }
 
 module.exports = { naStole, smiProtinavrh, zkontroluj, nasledky,
+  zkontrolujZpet, nasledkyZpet,
   PODIL_MIN, PODIL_MAX, VETSINA, CENA_MIN };

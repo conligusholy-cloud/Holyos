@@ -50,8 +50,10 @@ const OCEKAVANI = {
   // Provedení přijatého návrhu zastavujeme: vyhlašuje se tím veřejná
   // nabídka, a ta je nový závazek stejně jako hráčova.
   '/trade/aliance/fond/navrh/:id/provest': true,
-  // Nabídka podílu fondu zvenču.
+  // Nabídka podílu fondu zvenču — a stejná věc obráceně: majitel kupuje
+  // svůj podíl zpátky. Obojí je nový závazek, takže při díře stojí.
   '/trade/fond/nabidka': true,
+  '/trade/fond/odkup-zpet': true,
   '/trade/aliance/fond/navrh/:id/protinavrh': true,
   '/trade/fond/nabidka/:id/odpoved': false,
   '/trade/fond/nabidka/:id/stahnout': false,

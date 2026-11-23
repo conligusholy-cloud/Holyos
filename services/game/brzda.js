@@ -31,6 +31,9 @@ const CESTY = [
   // takže se zastavují. Odpověď majitele a stažení vlastní nabídky ne — to
   // už je dokončování rozjednané věci a brzda nemá nikoho zamykat uprostřed.
   /^\/trade\/fond\/nabidka$/,
+  // Zpětný odkup podílu od fondu je totéž obráceně: nový závazek na obou
+  // stranách — fond pouští kus portfolia, majitel se zavazuje zaplatit.
+  /^\/trade\/fond\/odkup-zpet$/,
   /^\/trade\/aliance\/fond\/navrh\/[^/]+\/protinavrh$/,
 
   // Akcie fondu: obchod je jediná cesta, kterou se hýbe cenou, a mění
