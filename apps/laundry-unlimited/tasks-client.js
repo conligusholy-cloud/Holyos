@@ -37,10 +37,11 @@
       '<td>' + esc(t.creator_name || '') + '</td>' +
       '<td' + (late(t) ? ' class="late" title="Po termínu"' : '') + '>' + (t.due_date ? fd(dOnly(t.due_date)) + (late(t) ? ' ⚠' : '') : '<span class="mut">—</span>') + '</td>' +
       '<td class="mut">' + fdt(t.updated_at) + '</td>' +
+      '<td class="lcm">' + (t.last_comment ? '<div class="lct" title="' + esc(t.last_comment) + '">' + esc(t.last_comment) + '</div><div class="mut lcs">' + esc(t.last_comment_by || '') + ' · ' + fdt(t.last_comment_at) + '</div>' : '<span class="mut">—</span>') + '</td>' +
       '<td class="mut">' + (t.comments ? '💬 ' + t.comments : '') + (t.files ? ' 📎 ' + t.files : '') + '</td></tr>';
   }
   function build() {
-    $('#tk').innerHTML = '<thead><tr><th>Úkol</th><th>Stav</th><th>Priorita</th><th>Řešitel</th><th>Zadal</th><th>Termín</th><th>Změna</th><th></th></tr></thead><tbody></tbody>';
+    $('#tk').innerHTML = '<thead><tr><th>Úkol</th><th>Stav</th><th>Priorita</th><th>Řešitel</th><th>Zadal</th><th>Termín</th><th>Změna</th><th>Poslední komentář</th><th></th></tr></thead><tbody></tbody>';
     var cols = [
       { key: 'title', label: 'Úkol', type: 'text', ph: 'Hledat…', get: function (t) { return t.title + ' ' + (t.description || ''); }, sortGet: function (t) { return t.title; }, enum: false },
       { key: 'status', label: 'Stav', type: 'text', get: function (t) { return D.statuses[t.status] || t.status; }, enum: true },
@@ -49,6 +50,7 @@
       { key: 'creator', label: 'Zadal', type: 'text', get: function (t) { return t.creator_name || ''; }, enum: true },
       { key: 'due', label: 'Termín', type: 'date', ph: 'dd.mm.rrrr', get: function (t) { return t.due_date ? dOnly(t.due_date) : null; } },
       { key: 'upd', label: 'Změna', type: 'date', ph: 'dd.mm.rrrr', get: function (t) { return t.updated_at; } },
+      { key: 'lcm', label: 'Poslední komentář', type: 'text', ph: 'Hledat…', get: function (t) { return t.last_comment || ''; }, sortGet: function (t) { return t.last_comment_at || ''; } },
       null,
     ];
     if (window.ColFilters && window.ColFilters.table) T = window.ColFilters.table({ table: '#tk', columns: cols, renderRow: rowHtml, noun: 'tasků', emptyText: 'Žádné tasky. Nový založíte tlačítkem „＋ Nový task“.' });
@@ -58,7 +60,7 @@
     var f = (QUICK.filter(function (x) { return x[0] === QF; })[0] || QUICK[0])[2];
     var rows = D.tasks.filter(f);
     if (T) T.setRows(rows);
-    else $('#tk tbody').innerHTML = rows.map(rowHtml).join('') || '<tr><td colspan="9" class="mut">Žádné tasky.</td></tr>';
+    else $('#tk tbody').innerHTML = rows.map(rowHtml).join('') || '<tr><td colspan="10" class="mut">Žádné tasky.</td></tr>';
   }
   function load(openId) {
     return call('/admin/api/tasks').then(function (j) {
