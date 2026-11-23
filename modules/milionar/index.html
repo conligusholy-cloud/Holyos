@@ -1783,6 +1783,10 @@
       ['det_pujcky', 'Agent hlídá půjčky mezi vlastními účty, které se nesplácejí'],
       ['analytik_denne', 'AI analytik projde hru jednou denně sám (stojí tokeny; nálezy nic nezahajují)']];
     var ZL_STAV = { kontrola: 'Kontrola', soud: 'Soud', odvolani: 'Rozsudek / odvolání', uzavreno: 'Uzavřeno', zruseno: 'Zrušeno' };
+    // Kódy skutků v rozpisu škody. Pevná pravidla (zvoucí i kupec) počítají
+    // z jednoho pytle, proto mají jeden kód.
+    var ZL_SKUTKY = { pravidla: 'provize a levné nákupy', spojene_obchody: 'obchody mezi vlastními účty',
+      drazby: 'vlastní dražby', fond: 'podíl do fondu', pujcky: 'půjčky mezi účty' };
     function zlPripady() {
       var box = document.getElementById('zl-pripady');
       get('/zlocin/pripady').then(function (j) {
@@ -1796,7 +1800,20 @@
             var hl = r.hlasy || {};
             return '<tr' + (r.ceka_na_me ? ' style="background:rgba(248,113,113,.07)"' : '') + '><td><b style="cursor:pointer;text-decoration:underline dotted" data-detail="' + r.hlavni_id + '">' + esc(r.emblem || '') + ' ' + esc(r.firma || r.hlavni_nick) + '</b><div class="note">' + esc(r.utvar) + ' · ' + esc(r.typ) + '</div></td>'
               + '<td>' + esc(ZL_STAV[r.stav] || r.stav) + (r.admin_rozhodnuti ? '<div class="note">' + esc(r.admin_rozhodnuti) + '</div>' : '') + '</td>'
-              + '<td class="num">' + cz(r.skoda) + '</td><td class="num">' + cz(r.zmrazeno) + '</td>'
+              + '<td class="num">' + cz(r.skoda)
+                // Za co přesně a co z toho je nové — ať se dá zkontrolovat,
+                // že se za totéž nesoudí podruhé.
+                + '<div class="note" style="font-weight:400;text-align:left;max-width:320px;line-height:1.5;margin-top:4px">'
+                + esc(r.skutek || '') + '</div>'
+                + (r.rozpis ? '<div class="note" style="text-align:left;margin-top:4px">' + Object.keys(r.rozpis).map(function (k) {
+                  return esc(ZL_SKUTKY[k] || k) + ': ' + cz(r.rozpis[k]);
+                }).join('<br>') + '</div>' : '')
+                + (r.drive_odsouzeno ? '<div class="note" style="text-align:left;color:#fbbf24;margin-top:4px">'
+                  + 'už odsouzeno dřív: ' + cz(r.drive_odsouzeno)
+                  + (r.drive_rozpis ? ' (' + Object.keys(r.drive_rozpis).map(function (k) {
+                    return esc(ZL_SKUTKY[k] || k) + ' ' + cz(r.drive_rozpis[k]); }).join(', ') + ')' : '')
+                  + ' — v tomhle případu se to nepočítá znovu</div>' : '')
+                + '</td><td class="num">' + cz(r.zmrazeno) + '</td>'
               + '<td class="note">' + (r.trest_castka != null ? '<b>' + cz(r.trest_castka) + '</b> (' + esc(r.trest_uroven || '') + ')<br>' : '') + 'hlasy ' + (hl.nejnizsi || 0) + '/' + (hl.stredni || 0) + '/' + (hl.nejvyssi || 0)
                 + (r.nedoplatek ? '<br><span style="color:#fbbf24">nedoplatek ' + cz(r.nedoplatek) + ' (po zabavení strojů)</span>' : '')
                 + '<br><button class="btn sm" data-zlp="' + r.id + '">👥 Porota</button></td>'

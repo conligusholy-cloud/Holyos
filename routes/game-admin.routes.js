@@ -730,9 +730,16 @@ router.get('/zlocin/pripady', api(async (req, res) => {
     return { uroven, castka: Math.round(r.skoda * Rn['trest_' + uroven]), hlasu: n, min: Rn.min_porotcu,
       rozhodne: n > 0 && v.length === 1 };
   };
+  // Skutek a rozpis škody: bez nich se nedá zkontrolovat, že se za totéž
+  // nesoudí podruhé. Skládá je řízení, ať je to v novinách i tady stejné.
+  const RIZ = require('../services/game/zlocin-rizeni');
   res.json({ ok: true, pripady: rows.map((r) => Object.assign({}, r, { hlasy: H[r.id] || {},
     hlasujici: vsechnyHlasy.filter((x) => x.zlocin_id === r.id).map((x) => ({ kdo: J[x.player_id] || ('#' + x.player_id), volba: x.volba })),
     zatim: zatim(r),
+    skutek: RIZ.skutek(r),
+    rozpis: (r.detail && r.detail.rozpis) || null,
+    drive_odsouzeno: (r.detail && r.detail.drive_odsouzeno) || 0,
+    drive_rozpis: (r.detail && r.detail.drive_rozpis) || null,
     ceka_na_me: r.stav === 'odvolani' && !!r.odvolani_at })),
     k_odvolani: rows.filter((r) => r.stav === 'odvolani' && r.odvolani_at).length });
 }));

@@ -8999,7 +8999,9 @@ model GameZlocinZprava {
   id         Int      @id @default(autoincrement())
   zlocin_id  Int?
   nadpis     String   @db.VarChar(160)
-  text       String   @db.VarChar(600)
+  // 1200 znaků: zpráva musí vypsat skutky i s čísly, jinak se proti obvinění
+  // nedá bránit. Viz migrace 20261123210000_zlocin_zprava_delsi.
+  text       String   @db.VarChar(1200)
   emblem     String?  @db.VarChar(8)
   stav       String?  @db.VarChar(12)
   created_at DateTime @default(now())

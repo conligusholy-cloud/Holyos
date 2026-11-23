@@ -71,8 +71,8 @@ async function spust(pravidla, sken, zlociny) {
   ZLOCINY = zlociny; ZALOZENE = [];
   const zahajeno = [];
   const prisma = db().prisma;
-  const ctx = vm.createContext({ prisma, Math, Set, Map, Object, Promise, console,
-    AKTIVNI: R.AKTIVNI,
+  const ctx = vm.createContext({ prisma, Math, Set, Map, Object, Promise, console, Number,
+    AKTIVNI: R.AKTIVNI, rozpisRadku: R.rozpisRadku,
     R: pravidla, sken, kandidati: (sken.kontrola || []).slice(),
     zahaj: async (p, r, row) => { zahajeno.push(row); return {}; } });
   await vm.runInContext('(async function () {' + BLOK + '})()', ctx);
@@ -89,6 +89,57 @@ async function spust(pravidla, sken, zlociny) {
       [{ hlavni_id: 1, stav: 'kontrola', skoda: 5000000 }]);
     ma(zahajeno.length === 1, 'otevře se jen ten druhý', zahajeno.length);
     ma(zahajeno[0].id === 2, 'a je to ten bez běžícího případu');
+  }
+
+  console.log('\nŠkoda se odečítá po skutcích');
+  {
+    // Dřív odsouzen za provize (pravidla). Teď na něj ukazuje agent kvůli
+    // dražbám — to je jiný skutek a odečítat se nemá.
+    const sken = { kontrola: [{ id: 1, nick: 'A', typ: 'agent', skoda: 8000000,
+      nalezy: [{ kod: 'drazby', skoda: 8000000 }] }] };
+    const zahajeno = await spust(PRAVIDLA, sken,
+      [{ hlavni_id: 1, stav: 'uzavreno', skoda: 5000000, detail: { rozpis: { pravidla: 5000000 } } }]);
+    ma(zahajeno.length === 1 && zahajeno[0].skoda === 8000000,
+      'jiný skutek se neodečítá', zahajeno.length && zahajeno[0].skoda);
+    ma(zahajeno[0].rozpis && zahajeno[0].rozpis.drazby === 8000000, 'a nese svůj rozpis');
+  }
+  {
+    // Týž skutek: za dražby už odsouzen byl, přibylo 3 mil.
+    const sken = { kontrola: [{ id: 1, nick: 'A', typ: 'agent', skoda: 8000000,
+      nalezy: [{ kod: 'drazby', skoda: 8000000 }] }] };
+    const zahajeno = await spust(PRAVIDLA, sken,
+      [{ hlavni_id: 1, stav: 'uzavreno', skoda: 5000000, detail: { rozpis: { drazby: 5000000 } } }]);
+    ma(zahajeno.length === 1 && zahajeno[0].skoda === 3000000,
+      'týž skutek se odečte', zahajeno.length && zahajeno[0].skoda);
+    ma(zahajeno[0].drive_odsouzeno === 5000000, 'a je vidět, kolik už bylo');
+  }
+  {
+    // Dva skutky, z nichž jeden je celý odsouzený.
+    const sken = { kontrola: [{ id: 1, nick: 'A', typ: 'agent', skoda: 12000000,
+      nalezy: [{ kod: 'drazby', skoda: 5000000 }, { kod: 'fond', skoda: 7000000 }] }] };
+    const zahajeno = await spust(PRAVIDLA, sken,
+      [{ hlavni_id: 1, stav: 'uzavreno', skoda: 5000000, detail: { rozpis: { drazby: 5000000 } } }]);
+    ma(zahajeno.length === 1 && zahajeno[0].skoda === 7000000,
+      'odečte se jen ten doplacený skutek', zahajeno.length && zahajeno[0].skoda);
+    ma(zahajeno[0].rozpis && !zahajeno[0].rozpis.drazby && zahajeno[0].rozpis.fond === 7000000,
+      'a v rozpisu zbyde jen ten nový', JSON.stringify(zahajeno[0].rozpis));
+  }
+  {
+    // Starý případ bez rozpisu se bere celý jako „pravidla".
+    const sken = { kontrola: [{ id: 1, nick: 'A', skoda: 9000000 }] };
+    const zahajeno = await spust(PRAVIDLA, sken,
+      [{ hlavni_id: 1, stav: 'uzavreno', skoda: 5000000, detail: null }]);
+    ma(zahajeno.length === 1 && zahajeno[0].skoda === 4000000,
+      'případ bez rozpisu se odečte od pravidel', zahajeno.length && zahajeno[0].skoda);
+  }
+  {
+    // Zvoucí a kupec jsou jeden pytel — za provize odsouzený kupec se
+    // nesmí soudit znovu z týchž peněz.
+    const sken = { kontrola: [{ id: 1, nick: 'A', typ: 'kupec', skoda: 6000000 }] };
+    const zahajeno = await spust(PRAVIDLA, sken,
+      [{ hlavni_id: 1, stav: 'uzavreno', skoda: 5000000, detail: { rozpis: { pravidla: 5000000 } } }]);
+    ma(zahajeno.length === 1 && zahajeno[0].skoda === 1000000,
+      'zvoucí i kupec mají společný pytel', zahajeno.length && zahajeno[0].skoda);
   }
 
   console.log('\nKdo byl odsouzený, imunitu nemá');
@@ -152,6 +203,32 @@ async function spust(pravidla, sken, zlociny) {
     ma(!prazdno.length, 'prázdný sken nic neotevře');
   }
 
+  console.log('\nČím se provinil — do novin i do případu');
+  {
+    const pripad = { typ: 'zvouci', firma: 'Pinon s.r.o.', hlavni_nick: 'pinon', skoda: 41081460,
+      detail: { provize: 41081460, sleva: 0, mrtvych: 22, mrtvi_nicky: ['a', 'b', 'c', 'd', 'e', 'f'],
+        nakupu_od_mrtvych: 0, drive_odsouzeno: 5323513 } };
+    // Čísla se formátují s pevnou mezerou (U+00A0) — na porovnání se srovnají.
+    const mez = (x) => String(x).replace(/\u00a0/g, ' ');
+    const t = mez(R.skutek(pripad));
+    ma(/provize/.test(t) && /22 účtů/.test(t), 'u zvoucího je vidět kolik účtů a za kolik', t.slice(0, 80));
+    ma(/a další/.test(t), 'a vyjmenuje se pár z nich');
+    ma(/5 323 513/.test(mez(R.uzOdsouzeno(pripad))), 'a kolik už bylo odsouzeno dřív');
+    ma(/nepočítají/.test(R.uzOdsouzeno(pripad)), 'i že se to nepočítá znovu');
+    ma(R.uzOdsouzeno({ detail: {} }) === '', 'u prvního případu se o dřívějším nemluví');
+
+    const kupec = mez(R.skutek({ typ: 'kupec', detail: { provize: 0, sleva: 33727445, nakupu_od_mrtvych: 9, mrtvych: 3 } }));
+    ma(/9 prádlomatů/.test(kupec) && /33 727 445/.test(kupec), 'u kupce kolik strojů a jaký rozdíl', kupec);
+
+    const agent = mez(R.skutek({ typ: 'agent', detail: { kod: 'drazby', nalezy: [
+      { kod: 'drazby', nazev: 'Přihazování na vlastní dražbu', skoda: 900000,
+        dukazy: [{ text: 'na vlastní dražbu „Lidl" přihazoval i jeho účet Pomocny' }] }] } }));
+    ma(/Přihazování/.test(agent) && /Lidl/.test(agent), 'u agenta se vypíše i důkaz', agent);
+
+    ma(R.skutek({ typ: 'zvouci', detail: {} }).length > 0, 'bez podrobností zbyde aspoň obecné podezření');
+    ma(R.skutek(null).length > 0, 'a nesmysl nic neshodí');
+  }
+
   console.log('\nV kódu');
   ma(/where: \{ stav: \{ in: AKTIVNI \} \}, select: \{ hlavni_id: true \}/.test(SRC),
     'bere se jen běžící případ, ne všechny');
@@ -160,6 +237,15 @@ async function spust(pravidla, sken, zlociny) {
     PRAVIDLA.recidiva_min_skoda);
   const ADMIN = fs.readFileSync(path.join(__dirname, '..', 'modules/milionar/index.html'), 'utf8');
   ma(/recidiva_min_skoda/.test(ADMIN), 'a dá se nastavit v administraci');
+  ma(/drive_odsouzeno/.test(ADMIN) && /nepočítá znovu/.test(ADMIN),
+    'administrace ukazuje, co se nepočítá znovu');
+  ma(/ZL_SKUTKY/.test(ADMIN), 'a rozpis škody po skutcích');
+  const SRCR = fs.readFileSync(path.join(__dirname, '..', 'services/game/zlocin-rizeni.js'), 'utf8');
+  ma(/Co se jí konkrétně vyčítá: ' \+ skutek\(z\)/.test(SRCR), 'noviny píšou, čím přesně se provinil');
+  ma(/Odsouzena za: ' \+ skutek\(u\)/.test(SRCR), 'a rozsudek taky');
+  ma(/Škoda dohromady[\s\S]{0,120}\+ uzOdsouzeno\(z\)/.test(SRCR),
+    'a u opakovaného případu i to, co se nepočítá znovu');
+  ma(/slice\(0, 1200\)/.test(SRCR), 'na delší text je v novinách místo');
 
   console.log(chyb ? '\n' + chyb + ' CHYB' : '\nVšechno sedí.');
   process.exit(chyb ? 1 : 0);

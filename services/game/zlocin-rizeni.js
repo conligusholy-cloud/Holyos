@@ -21,7 +21,7 @@ const jmeno = (z) => z.firma || z.hlavni_nick;
 
 async function zprava(prisma, z, nadpis, text) {
   await prisma.gameZlocinZprava.create({ data: {
-    zlocin_id: z.id, nadpis: String(nadpis).slice(0, 160), text: String(text).slice(0, 600),
+    zlocin_id: z.id, nadpis: String(nadpis).slice(0, 160), text: String(text).slice(0, 1200),
     emblem: z.emblem || null, stav: z.stav || null } });
 }
 
@@ -30,18 +30,69 @@ async function dorucenka(prisma, playerId, amount, popis) {
   await prisma.gameDelivery.create({ data: { player_id: playerId, kind: 'cash', amount: Math.round(amount), popis: String(popis).slice(0, 200) } });
 }
 
+// Z čeho se škoda skládá. Pevná pravidla (zvoucí i kupec) počítají z jednoho
+// pytle — provize a slevy na strojích — takže mají společný kód: jinak by
+// se jeden a týž skutek odečítal dvakrát. Každý detektor agenta je skutek
+// sám pro sebe.
+function rozpisRadku(row) {
+  if (row && row.typ === 'agent' && Array.isArray(row.nalezy) && row.nalezy.length) {
+    const m = {};
+    row.nalezy.forEach((n) => { if (n && n.kod) m[n.kod] = (m[n.kod] || 0) + Math.round(n.skoda || 0); });
+    return m;
+  }
+  return { pravidla: Math.round((row && row.skoda) || 0) };
+}
+
 const PODEZRENI_AGENT = {
   spojene_obchody: 'obchody mezi účty jednoho člověka za cenu mimo ceník',
   drazby: 'přihazování na vlastní dražbu z druhého účtu',
   fond: 'prodej podílu do společného fondu přes vlastní účet',
   pujcky: 'půjčky mezi vlastními účty, které se nesplácejí',
 };
+// Čím přesně se provinil. „Podezření ze zvoucího" nikomu nic neřekne a hráč
+// se proti tomu nemá jak bránit — tohle vypíše skutky i s čísly, aby šlo
+// každé tvrzení ověřit.
+function skutek(z) {
+  const d = (z && z.detail) || {};
+  const casti = [];
+  if (z && z.typ === 'agent' && Array.isArray(d.nalezy)) {
+    d.nalezy.forEach((n) => {
+      if (!n) return;
+      const dk = (n.dukazy || []).slice(0, 2).map((x) => x && x.text).filter(Boolean).join('; ');
+      casti.push((n.nazev || '?') + ' — ' + L(n.skoda) + (dk ? ' (' + dk + ')' : ''));
+    });
+  } else {
+    if (d.provize > 0) {
+      const kdo = Array.isArray(d.mrtvi_nicky) && d.mrtvi_nicky.length
+        ? ' (' + d.mrtvi_nicky.slice(0, 5).join(', ') + (d.mrtvych > 5 ? ' a další' : '') + ')' : '';
+      casti.push('provize ' + L(d.provize) + ' za ' + (d.mrtvych || 0)
+        + ' účtů, které si sám pozval a které přestaly hrát nebo zmizely' + kdo);
+    }
+    if (d.sleva > 0) {
+      casti.push('nákup ' + (d.nakupu_od_mrtvych || d.nakupu_ks || 0)
+        + ' prádlomatů od takových účtů pod ceníkem — rozdíl proti ceníku ' + L(d.sleva));
+    }
+  }
+  if (!casti.length) casti.push(podezreni(z));
+  return casti.join('; ');
+}
+
+// Věta o tom, co se NEsoudí znovu. Bez ní vypadá druhý případ jako druhý
+// trest za totéž.
+function uzOdsouzeno(z) {
+  const d = (z && z.detail) || {};
+  const kolik = Math.round(d.drive_odsouzeno || 0);
+  if (!(kolik > 0)) return '';
+  return ' Za dřívější skutky už firma odsouzená byla (' + L(kolik)
+    + ') — ty se do téhle škody nepočítají, soudí se jen to, co přibylo od minula.';
+}
+
 function podezreni(z) {
-  if (z.typ === 'agent') {
+  if (z && z.typ === 'agent') {
     const kod = ((z.detail || {}).kod) || '';
     return PODEZRENI_AGENT[kod] || 'přelévání hodnoty mezi účty jednoho člověka';
   }
-  return z.typ === 'kupec'
+  return (z && z.typ) === 'kupec'
     ? 'skupování prádlomatů od zrušených účtů hluboko pod cenou'
     : 'provize z účelově založených a zrušených účtů';
 }
@@ -60,15 +111,22 @@ async function zahaj(prisma, R, row) {
     kontrola_do: new Date(ted.getTime() + R.kontrola_mesicu * MESIC_MS),
     detail: { pod_ids: row.pod_ids || [], provize: row.provize, sleva: row.sleva, zmrazit_cil: row.zmrazit,
       platici: !!row.platici,
-      // U opakovaného případu je vidět, že se soudí jen to nové.
-      drive_odsouzeno: row.drive_odsouzeno || 0,
+      // Čím se to dokládá — do novin i do administrace.
+      mrtvych: row.mrtvych || 0, mrtvi_nicky: row.mrtvi_nicky || [],
+      nakupu_ks: row.nakupu_ks || 0, nakupu_od_mrtvych: row.nakupu_od_mrtvych || 0,
+      // U opakovaného případu je vidět, že se soudí jen to nové — a po
+      // skutcích, aby šlo zkontrolovat, že se za totéž nesoudí dvakrát.
+      drive_odsouzeno: row.drive_odsouzeno || 0, drive_rozpis: row.drive_rozpis || null,
+      rozpis: row.rozpis || null,
       // Nález agenta: podle čeho se případ vede a čím je doložený.
       kod: row.kod || null, nalezy: row.nalezy || null },
   } });
   if (zmrazeno > 0) await dorucenka(prisma, row.id, -zmrazeno, 'Zmrazeno kvůli kontrole (' + row.utvar + '): ' + L(zmrazeno));
   await zprava(prisma, z, (z.emblem || '') + ' Kontrola firmy ' + jmeno(z),
-    row.utvar + ' zahájila kontrolu firmy ' + jmeno(z) + '. Podezření: ' + podezreni(z) + '. Odhadovaná škoda ' + L(z.skoda)
-    + '. Kontrola potrvá 1 herní měsíc, majetek firmy je zmrazen.');
+    row.utvar + ' zahájila kontrolu firmy ' + jmeno(z) + '. Podezření: ' + podezreni(z)
+    + '. Co se jí konkrétně vyčítá: ' + skutek(z) + '. Škoda dohromady ' + L(z.skoda) + '.'
+    + uzOdsouzeno(z)
+    + ' Kontrola potrvá 1 herní měsíc, majetek firmy je zmrazen.');
   return z;
 }
 
@@ -168,7 +226,8 @@ async function verdikt(prisma, R, z) {
     stav: 'odvolani', trest_uroven: uroven, trest_castka: castka, odvolani_do,
     detail: Object.assign({}, z.detail || {}, { hlasy: pocty, hlasu: hlasy.length, pozn }) } });
   await zprava(prisma, u, '⚖️ Rozsudek: firma ' + jmeno(u),
-    'Soud a porota rozhodly: firmě ' + jmeno(u) + ' se ukládá trest ' + L(castka) + ' (škoda ' + L(u.skoda) + ' × ' + koef + '). '
+    'Soud a porota rozhodly: firmě ' + jmeno(u) + ' se ukládá trest ' + L(castka)
+    + ' (škoda ' + L(u.skoda) + ' × ' + koef + '). Odsouzena za: ' + skutek(u) + '. '
     + 'Hlasy: ' + pocty.nejnizsi + '/' + pocty.stredni + '/' + pocty.nejvyssi + '. ' + pozn
     + ' Obviněný má 1 herní měsíc na odvolání, do té doby je majetek zmrazen.');
   return u;
@@ -308,25 +367,47 @@ async function tik() {
       // Co už bylo odsouzeno, se nesoudí podruhé: škoda se počítá z celé
       // historie provizí a nákupů, takže se od ní odečte škoda z uzavřených
       // případů. Zbyde to, co hráč napáchal od posledního rozsudku.
-      const odsouzeno = new Map();
+      // Odečítá se PO SKUTCÍCH, ne jedním číslem. Kdyby se od nové škody
+      // odečetlo všechno, co kdy hráč dostal, zmizel by pod tím i skutek
+      // úplně jiného druhu — za provize odsouzený by si pak mohl beztrestně
+      // přihazovat na vlastní dražby. A naopak: za provize se nesmí soudit
+      // podruhé jen proto, že se mezitím přidal jiný detektor.
+      const odsouzeno = new Map();   // hráč → { kód skutku → částka }
       (await prisma.gameZlocin.findMany({ where: { stav: 'uzavreno' },
-        select: { hlavni_id: true, skoda: true } }))
-        .forEach((x) => odsouzeno.set(x.hlavni_id, (odsouzeno.get(x.hlavni_id) || 0) + (x.skoda || 0)));
+        select: { hlavni_id: true, skoda: true, detail: true } }))
+        .forEach((x) => {
+          const m = odsouzeno.get(x.hlavni_id) || {};
+          const r = (x.detail && x.detail.rozpis) || null;
+          // Staré případy rozpis nemají — berou se celé jako „pravidla".
+          const zdroj = r && typeof r === 'object' ? r : { pravidla: x.skoda || 0 };
+          Object.keys(zdroj).forEach((k) => { m[k] = (m[k] || 0) + (Number(zdroj[k]) || 0); });
+          odsouzeno.set(x.hlavni_id, m);
+        });
       let n = 0;
       for (const puvodni of kandidati) {
         if (n >= R.max_novych_za_tik) break;
         if (bezi.has(puvodni.id)) continue;
         let row = puvodni;
-        const uz = odsouzeno.get(puvodni.id) || 0;
-        if (uz > 0) {
-          const nova = Math.max(0, Math.round((puvodni.skoda || 0) - uz));
+        // Rozpis toho, co se dnes vyčítá, po skutcích.
+        const dnes = rozpisRadku(puvodni);
+        const uz = odsouzeno.get(puvodni.id) || null;
+        if (uz) {
+          const novy = {};
+          let nova = 0, odecteno = 0;
+          Object.keys(dnes).forEach((k) => {
+            const zbyva = Math.max(0, Math.round(dnes[k] - (uz[k] || 0)));
+            odecteno += Math.min(dnes[k], uz[k] || 0);
+            if (zbyva > 0) { novy[k] = zbyva; nova += zbyva; }
+          });
           if (nova < (R.recidiva_min_skoda || 0)) continue;
-          row = Object.assign({}, puvodni, { skoda: nova,
+          row = Object.assign({}, puvodni, { skoda: nova, rozpis: novy,
             zmrazit: Math.round(nova * R.koef_zabaveni),
-            drive_odsouzeno: uz,
+            drive_odsouzeno: Math.round(odecteno), drive_rozpis: uz,
             trest: { nejnizsi: Math.round(nova * R.trest_nejnizsi),
               stredni: Math.round(nova * R.trest_stredni),
               nejvyssi: Math.round(nova * R.trest_nejvyssi) } });
+        } else {
+          row = Object.assign({}, puvodni, { rozpis: dnes });
         }
         await zahaj(prisma, R, row); n++;
       }
@@ -360,4 +441,5 @@ async function aktivniPripad(prisma, playerId) {
   return prisma.gameZlocin.findFirst({ where: { hlavni_id: playerId, stav: { in: AKTIVNI } } });
 }
 
-module.exports = { start, tik, zahaj, premer, hlasuj, odvolej, verdikt, uzavri, zrus, smiHlasovat, aktivniPripad, AKTIVNI, MERITELNE, UROVNE, MESIC_MS };
+module.exports = { start, tik, zahaj, premer, hlasuj, odvolej, verdikt, uzavri, zrus, smiHlasovat,
+  aktivniPripad, skutek, uzOdsouzeno, rozpisRadku, podezreni, AKTIVNI, MERITELNE, UROVNE, MESIC_MS };
