@@ -30,6 +30,10 @@
     '.gm-step{border:1px solid var(--border,#2a344d);border-radius:12px;padding:12px;margin:10px 0;background:rgba(255,255,255,.02)}',
     '.gm-c{border:1px solid var(--border,#2a344d);border-radius:14px;padding:14px 16px;margin:0 0 12px;background:var(--surface,#131a2b)}.gm-c h4{margin:0;font-size:15px}',
     '.gm-meta{display:flex;flex-wrap:wrap;gap:6px 16px;margin:6px 0 10px;font-size:12px;color:var(--text2,#8ea2c2)}.gm-meta b{color:var(--text,#e8edf7);font-weight:600}',
+    '.gm-dlg{position:relative}.gm-dlg .gm-x{position:absolute;top:12px;right:14px;background:none;border:0;color:var(--text2,#8ea2c2);font-size:22px;line-height:1;cursor:pointer;padding:4px 8px}.gm-dlg .gm-x:hover{color:#fff}.gm-dlg h3{padding-right:36px}',
+    '.gm-dlg.wide{width:min(1500px,100%)}.gm-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,600px);gap:20px;align-items:start}@media(max-width:1100px){.gm-split{grid-template-columns:1fr}}',
+    '.gm-pv{position:sticky;top:10px;border:1px solid var(--border,#2a344d);border-radius:12px;overflow:hidden;background:#eaf2ff}.gm-pvh{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 12px;background:var(--surface2,#1b2234);color:var(--text2,#8ea2c2);font-size:12px}.gm-pvh b{color:var(--text,#e8edf7)}.gm-pv iframe{display:block;width:100%;height:calc(92vh - 120px);border:0;background:#eaf2ff}',
+    '.gm-ai{border:1px dashed rgba(124,92,255,.55);border-radius:10px;padding:10px;background:rgba(124,92,255,.06)}.gm-ai textarea.gm-in{min-height:70px}.gm-img{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.gm-img img{max-height:70px;max-width:160px;border-radius:8px;border:1px solid var(--border,#2a344d)}',
     '.gm-btns{display:flex;flex-wrap:wrap;gap:8px}.gm-btn{cursor:pointer}.gm-st{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;background:rgba(142,162,194,.18)}',
     '.gm-st.active,.gm-st.sent{background:rgba(34,197,94,.18);color:#22c55e}.gm-st.scheduled,.gm-st.sending{background:rgba(245,158,11,.18);color:#f59e0b}.gm-st.paused{background:rgba(239,68,68,.15);color:#f87171}',
     '.gm-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-top:10px}.gm-stats div{background:rgba(255,255,255,.03);border:1px solid var(--border,#2a344d);border-radius:10px;padding:8px 10px}.gm-stats b{display:block;font-size:18px}.gm-stats span{font-size:10.5px;color:var(--text2,#8ea2c2);text-transform:uppercase;letter-spacing:.05em}',
@@ -41,17 +45,16 @@
 
   // ── dialog ────────────────────────────────────────────────────
   var ovl = null;
-  function openDlg(html) {
-    closeDlg();
-    ovl = document.createElement('div'); ovl.className = 'gm-ovl';
-    ovl.innerHTML = '<div class="gm-dlg">' + html + '</div>';
-    ovl.addEventListener('mousedown', function (e) { if (e.target === ovl) ovl.__down = true; else ovl.__down = false; });
-    ovl.addEventListener('mouseup', function (e) { if (e.target === ovl && ovl.__down) closeDlg(); });
+  // Okna se zavírají JEN křížkem / tlačítkem (ne kliknutím mimo ani Esc) — ať se rozdělaná kampaň neztratí
+  function openDlg(html, opt) {
+    closeDlg(); opt = opt || {};
+    ovl = document.createElement('div'); ovl.className = 'gm-ovl'; ovl.setAttribute('data-no-backdrop-close', '');
+    ovl.innerHTML = '<div class="gm-dlg' + (opt.wide ? ' wide' : '') + '"><button type="button" class="gm-x" title="Zavřít" aria-label="Zavřít">✕</button>' + html + '</div>';
+    ovl.querySelector('.gm-x').onclick = function () { closeDlg(); if (opt.onClose) opt.onClose(); };
     document.body.appendChild(ovl);
     return ovl.firstChild;
   }
   function closeDlg() { if (ovl) { ovl.remove(); ovl = null; } }
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && ovl) closeDlg(); });
 
   function loadSenders() {
     return api('GET', '/senders').then(function (j) { S.senders = j.senders || []; S.senderInfo = j; return j; }).catch(function () { S.senders = []; });
@@ -355,13 +358,14 @@
     if (!wantFrom && isNew) { var lm = S.senders.filter(function (x) { return /laundromats/i.test(x.domain); })[0]; if (lm) wantFrom = lm.address; }
     var senderHtml = S.senders.length ? '<select id="gme-from" class="gm-in" style="width:100%"><option value="">— vyber odesílatele —</option>' + S.senders.map(function (x) { return '<option value="' + esc(x.address) + '"' + (x.address === wantFrom ? ' selected' : '') + '>' + esc(x.address) + '</option>'; }).join('') + '</select>' : '<input id="gme-from" class="gm-in" style="width:100%" placeholder="info@laundromats.eu" value="' + esc(c.from_address || '') + '">';
     var warn = !S.senders.length ? '<div class="gm-warn">V HolyOS nejsou nastavení žádní odesílatelé Amazon SES. Adresu z domény Laundromats přidej v HolyOS → Nastavení → odesílatelé SES (doména musí být ověřená v SES), jinak se e-maily neodešlou.</div>' : (!S.senders.some(function (x) { return /laundromats/i.test(x.domain); }) ? '<div class="gm-warn">Mezi odesílateli SES není žádná adresa z domény Laundromats — přidej ji v HolyOS → Nastavení → odesílatelé SES (a ověř doménu v AWS SES).</div>' : '');
-    var phs = ['jmeno', 'prijmeni', 'firma', 'email', 'telefon'].concat(S.extraKeys.map(function (k) { return k.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''); }).filter(function (k) { return k && ['jmeno', 'prijmeni', 'firma', 'email', 'telefon'].indexOf(k) < 0; }));
+    var phs = ['osloveni', 'jmeno', 'prijmeni', 'firma', 'email', 'telefon'].concat(S.extraKeys.map(function (k) { return k.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''); }).filter(function (k) { return k && ['jmeno', 'prijmeni', 'firma', 'email', 'telefon'].indexOf(k) < 0; }));
     var phHtml = '<div class="gm-ph"><span class="note">Vložit proměnnou:</span>' + phs.map(function (p) { return '<button type="button" data-ph="' + esc(p) + '">{{' + esc(p) + '}}</button>'; }).join('') + '</div>';
     var tagOpts = '<option value="">všechny kontakty</option>' + S.tags.map(function (t) { return '<option value="' + esc(t) + '"' + (a.tag === t ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join('');
     var schedHtml = kind === 'recurring' ? '<div class="gm-row"><label>Rozvrh</label><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="gme-freq" class="gm-in"><option value="daily">každý den</option><option value="weekly">každý týden</option><option value="monthly">každý měsíc</option></select><span id="gme-dowbox">v <select id="gme-dow" class="gm-in">' + ['pondělí', 'úterý', 'středu', 'čtvrtek', 'pátek', 'sobotu', 'neděli'].map(function (n, i) { return '<option value="' + (i + 1) + '">' + n + '</option>'; }).join('') + '</select></span><span id="gme-dombox">dne <select id="gme-dom" class="gm-in">' + Array.apply(null, Array(28)).map(function (_, i) { return '<option value="' + (i + 1) + '">' + (i + 1) + '.</option>'; }).join('') + '</select></span> v <select id="gme-hour" class="gm-in">' + Array.apply(null, Array(24)).map(function (_, i) { return '<option value="' + i + '">' + i + ':00</option>'; }).join('') + '</select> <span class="note">(čas Praha)</span></div></div>' : '';
     var contentHtml = kind === 'sequence' ? '<div class="gm-row"><label>Kroky sekvence</label><div><div id="gme-steps"></div><button class="btn sm" id="gme-addstep" type="button">＋ Přidat krok</button><div class="note" style="margin-top:6px">Den 0 = ihned po zapnutí / po přidání kontaktu do seznamu, den 3 = o tři dny později. Nové kontakty začínají odpočet od svého přidání, stávající od zapnutí kampaně.</div></div></div>' :
       '<div class="gm-row"><label>Předmět *</label><input id="gme-subj" class="gm-in" style="width:100%" value="' + esc(c.subject || '') + '"></div><div class="gm-row"><label>Text zprávy *</label><div><textarea id="gme-body" class="gm-in">' + esc(c.body || '') + '</textarea>' + phHtml + '</div></div>';
-    var d = openDlg('<h3>' + title + '</h3><div id="gme-body-wrap">' + warn +
+    var aiHtml = '<div class="gm-row"><label>✨ AI návrh</label><div class="gm-ai"><textarea id="gme-brief" class="gm-in" placeholder="Zadání: o čem má e-mail být, komu, jaký tón a výzva k akci… (např. Pozvi zájemce o prádlomat, ať si zahrají Laundromat Tycoon a vyzkouší si podnikání nanečisto; tón přátelský, výzva Zahrát si)"></textarea><div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">' + (kind === 'sequence' ? '<span class="note">Počet kroků</span><input id="gme-aisteps" type="number" min="1" max="8" value="' + Math.max(1, steps.length || 3) + '" class="gm-in" style="width:70px">' : '') + '<button class="btn sm on" type="button" id="gme-aigo">✨ Vygenerovat</button><span id="gme-aires" class="note">Napíše předmět i text v jazyce šablony; současný text přepíše (Uložit až po kontrole).</span></div></div></div>';
+    var d = openDlg('<h3>' + title + '</h3><div class="gm-split"><div id="gme-body-wrap">' + warn +
       '<div class="gm-row"><label>Název (interní) *</label><input id="gme-name" class="gm-in" style="width:100%" value="' + esc(c.name || '') + '"></div>' +
       '<div class="gm-row"><label>Odesílatel *</label><div class="gm-2"><div>' + senderHtml + '</div><input id="gme-fname" class="gm-in" placeholder="Jméno odesílatele (Laundromats)" value="' + esc(c.from_name || 'Laundromats') + '"></div></div>' +
       '<div class="gm-row"><label>Odpovědi na</label><div class="gm-2"><input id="gme-reply" class="gm-in" placeholder="Reply-To (volitelné)" value="' + esc(c.reply_to || '') + '"><select id="gme-lang" class="gm-in">' + Object.keys(LANG).map(function (k) { return '<option value="' + k + '"' + ((c.lang || 'cs') === k ? ' selected' : '') + '>Šablona: ' + LANG[k] + '</option>'; }).join('') + '</select></div></div>' +
@@ -369,9 +373,12 @@
       '<label style="display:block;margin:8px 0 2px"><input type="checkbox" id="gme-ap"' + (a.players ? ' checked' : '') + '> Hráči hry (jen s vyplněným e-mailem) &nbsp;<select id="gme-apl" class="gm-in"><option value="">všechny jazyky</option>' + ['cs', 'en', 'pl', 'sk', 'de'].map(function (k) { return '<option value="' + k + '"' + (a.player_lang === k ? ' selected' : '') + '>' + LANG[k] + '</option>'; }).join('') + '</select></label>' +
       '<div id="gme-facets"></div>' +
       '<div style="margin-top:8px"><button class="btn sm" id="gme-count" type="button">Spočítat příjemce</button> <span id="gme-cnt" class="note"></span></div></div></div>' +
-      schedHtml + contentHtml +
+      schedHtml + aiHtml + contentHtml +
       '<div class="gm-row"><label>Tlačítko v e-mailu</label><div class="gm-2"><input id="gme-link" class="gm-in" placeholder="https://… (volitelné)" value="' + esc(c.link || '') + '"><input id="gme-ll" class="gm-in" placeholder="Popisek tlačítka" value="' + esc(c.link_label || '') + '"></div></div>' +
-      '<p id="gme-err" class="note" style="color:#f87171"></p><div class="gm-btns"><button class="btn on" id="gme-save">Uložit</button><button class="btn" id="gme-x">Zavřít</button></div></div>');
+      '<div class="gm-row"><label>Obrázek v e-mailu</label><div><div class="gm-img"><input type="file" id="gme-imgf" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none"><button class="btn sm" type="button" id="gme-imgb">🖼 Nahrát obrázek</button><input id="gme-img" class="gm-in" style="flex:1;min-width:220px" placeholder="nebo adresa obrázku https://…" value="' + esc(c.image_url || '') + '"><span id="gme-imgt"></span></div><div class="note" style="margin-top:4px">Zobrazí se pod textem (šířka e-mailu ~500 px, ideálně 1000 px široký). Když je vyplněné tlačítko, obrázek na něj také prokliká.</div></div></div>' +
+      '<div class="gm-row"><label>Testovací e-mail</label><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input id="gme-tto" class="gm-in" style="flex:1;min-width:220px" placeholder="kam poslat test (prázdné = tvůj e-mail z HolyOS)"><button class="btn sm" type="button" id="gme-tbtn">✉ Poslat test</button><span id="gme-tres" class="note"></span></div></div>' +
+      '<p id="gme-err" class="note" style="color:#f87171"></p><div class="gm-btns"><button class="btn on" id="gme-save">Uložit</button><button class="btn" id="gme-x">Zavřít</button></div></div>' +
+      '<div class="gm-pv"><div class="gm-pvh"><span>Náhled · <b id="gme-pvs">—</b></span><span id="gme-pvf"></span></div><iframe id="gme-pvi" title="Náhled e-mailu"></iframe></div></div>', { wide: true, onClose: function () { listCamps(which); } });
     var q = function (id) { return d.querySelector('#' + id); };
     if (kind === 'recurring') { q('gme-freq').value = s.freq || 'weekly'; q('gme-dow').value = s.dow || 1; q('gme-dom').value = s.dom || 1; q('gme-hour').value = s.hour == null ? 9 : s.hour; var vis = function () { q('gme-dowbox').style.display = q('gme-freq').value === 'weekly' ? '' : 'none'; q('gme-dombox').style.display = q('gme-freq').value === 'monthly' ? '' : 'none'; }; q('gme-freq').onchange = vis; vis(); }
     d.addEventListener('focusin', function (e) { if (e.target.tagName === 'TEXTAREA' || (e.target.tagName === 'INPUT' && e.target.id === 'gme-subj')) lastTa = e.target; });
@@ -399,10 +406,58 @@
     function audience() { return { contacts: q('gme-ac').checked, tag: q('gme-atag').value, kinds: picked.kinds, stages: picked.stages, countries: picked.countries, players: q('gme-ap').checked, player_lang: q('gme-apl').value }; }
     q('gme-count').onclick = function () { q('gme-cnt').textContent = 'Počítám…'; api('POST', '/audience-count', { audience: audience() }).then(function (n) { q('gme-cnt').innerHTML = '<b>' + n.sendable + '</b> příjemců' + (n.suppressed ? ' (vynecháno ' + n.suppressed + ' odhlášených / nedoručitelných)' : '') + ' — kontaktů ' + n.contacts + ', hráčů ' + n.players; }).catch(function (e) { q('gme-cnt').textContent = e.message; }); };
     q('gme-x').onclick = function () { closeDlg(); listCamps(which); };
-    q('gme-save').onclick = function () {
-      var body = { kind: kind, name: q('gme-name').value, from_address: q('gme-from').value, from_name: q('gme-fname').value, reply_to: q('gme-reply').value, lang: q('gme-lang').value, audience: audience(), link: q('gme-link').value, link_label: q('gme-ll').value };
+    function collect() {
+      var body = { kind: kind, name: q('gme-name').value, from_address: q('gme-from').value, from_name: q('gme-fname').value, reply_to: q('gme-reply').value, lang: q('gme-lang').value, audience: audience(), link: q('gme-link').value, link_label: q('gme-ll').value, image_url: q('gme-img').value.trim() };
       if (kind === 'sequence') body.steps = steps; else { body.subject = q('gme-subj').value; body.body = q('gme-body').value; }
       if (kind === 'recurring') body.schedule = { freq: q('gme-freq').value, dow: +q('gme-dow').value, dom: +q('gme-dom').value, hour: +q('gme-hour').value };
+      return body;
+    }
+    // ── živý náhled vpravo ──
+    var pvT = null, pvStep = 0;
+    function preview() {
+      clearTimeout(pvT);
+      pvT = setTimeout(function () {
+        var b = collect(); b.step = pvStep;
+        api('POST', '/preview', b).then(function (r) { if (!ovl || !d.isConnected) return; q('gme-pvi').srcdoc = r.html; q('gme-pvs').textContent = r.subject || '(bez předmětu)'; q('gme-pvf').textContent = r.from || ''; }).catch(function (e) { q('gme-pvs').textContent = 'Náhled se nepodařil: ' + e.message; });
+      }, 450);
+    }
+    d.addEventListener('input', function (e) { if (e.target.getAttribute && e.target.getAttribute('data-i') != null) pvStep = +e.target.getAttribute('data-i') || 0; if (e.target.id !== 'gme-brief' && e.target.id !== 'gme-tto') preview(); });
+    d.addEventListener('change', preview);
+    d.addEventListener('click', function (e) { if (e.target.getAttribute && (e.target.getAttribute('data-ph') || e.target.getAttribute('data-rm') != null)) preview(); });
+    preview();
+    // ── obrázek ──
+    function imgThumb() { var u = q('gme-img').value.trim(); q('gme-imgt').innerHTML = /^https:\/\//.test(u) ? '<img src="' + esc(u) + '" alt=""> <button class="btn sm" type="button" id="gme-imgx">Odebrat</button>' : ''; var x = q('gme-imgx'); if (x) x.onclick = function () { q('gme-img').value = ''; imgThumb(); preview(); }; }
+    imgThumb(); q('gme-img').addEventListener('change', imgThumb);
+    q('gme-imgb').onclick = function () { q('gme-imgf').click(); };
+    q('gme-imgf').onchange = function () {
+      var f = q('gme-imgf').files[0]; if (!f) return; if (f.size > 5 * 1024 * 1024) { alert('Obrázek je větší než 5 MB.'); return; }
+      var rd = new FileReader(); q('gme-imgb').disabled = true; q('gme-imgb').textContent = 'Nahrávám…';
+      rd.onload = function () { api('POST', '/image', { data: rd.result }).then(function (r) { q('gme-img').value = r.url; imgThumb(); preview(); }).catch(function (e) { alert(e.message); }).then(function () { q('gme-imgb').disabled = false; q('gme-imgb').textContent = '🖼 Nahrát obrázek'; q('gme-imgf').value = ''; }); };
+      rd.readAsDataURL(f);
+    };
+    // ── test bez uložení ──
+    try { q('gme-tto').value = localStorage.getItem('gm_test_to') || ''; } catch (e) { /* bez paměti */ }
+    q('gme-tbtn').onclick = function () {
+      var b = collect(); b.to = q('gme-tto').value.trim(); try { if (b.to) localStorage.setItem('gm_test_to', b.to); } catch (e) { /* bez paměti */ }
+      if (kind !== 'sequence' && !String(b.subject || '').trim()) { q('gme-tres').textContent = 'Vyplň předmět.'; return; }
+      q('gme-tres').style.color = ''; q('gme-tres').textContent = 'Odesílám…';
+      api('POST', '/test-draft', b).then(function (r) { q('gme-tres').style.color = '#4ade80'; q('gme-tres').textContent = '✓ Test odeslán na ' + r.to + (kind === 'sequence' ? ' (1. krok)' : ''); }).catch(function (e) { q('gme-tres').style.color = '#f87171'; q('gme-tres').textContent = e.message; });
+    };
+    // ── AI návrh ──
+    q('gme-aigo').onclick = function () {
+      var brief = q('gme-brief').value.trim(); if (!brief) { q('gme-aires').textContent = 'Napiš zadání.'; return; }
+      var cur = kind === 'sequence' ? null : { subject: q('gme-subj').value, body: q('gme-body').value };
+      if (cur && (cur.subject || cur.body) && !confirm('AI přepíše současný předmět a text. Pokračovat?')) return;
+      if (kind === 'sequence' && steps.some(function (s) { return s.subject || s.body; }) && !confirm('AI přepíše současné kroky sekvence. Pokračovat?')) return;
+      q('gme-aigo').disabled = true; q('gme-aires').textContent = 'AI píše… (10–30 s)';
+      api('POST', '/ai-draft', { brief: brief, lang: q('gme-lang').value, kind: kind, steps: kind === 'sequence' ? +q('gme-aisteps').value : 0, placeholders: phs, current: cur }).then(function (r) {
+        if (kind === 'sequence') { if (r.steps && r.steps.length) { steps = r.steps; renderSteps(); } }
+        else { q('gme-subj').value = r.subject || ''; q('gme-body').value = r.body || ''; if (r.link_label && !q('gme-ll').value) q('gme-ll').value = r.link_label; }
+        q('gme-aires').textContent = '✓ Hotovo — zkontroluj text a pak Ulož.'; preview();
+      }).catch(function (e) { q('gme-aires').textContent = e.message; }).then(function () { q('gme-aigo').disabled = false; });
+    };
+    q('gme-save').onclick = function () {
+      var body = collect();
       if (kind === 'sequence' && !steps.length) { q('gme-err').textContent = 'Přidej alespoň jeden krok.'; return; }
       if (kind !== 'sequence' && !body.subject.trim()) { q('gme-err').textContent = 'Vyplň předmět.'; return; }
       api(isNew ? 'POST' : 'PUT', '/campaigns' + (isNew ? '' : '/' + c.id), body).then(function () { closeDlg(); listCamps(which); }).catch(function (e) { q('gme-err').textContent = e.message; });

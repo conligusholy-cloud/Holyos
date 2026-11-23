@@ -9052,6 +9052,7 @@ model GameMailCampaign {
   body         String    @default("") @db.Text
   link         String?   @db.VarChar(500)
   link_label   String?   @db.VarChar(80)
+  image_url    String?   @db.VarChar(500) // obrázek v e-mailu (R2 / https)
   // sequence: [{ day, subject, body }]
   steps        Json?
   from_address String?   @db.VarChar(200)

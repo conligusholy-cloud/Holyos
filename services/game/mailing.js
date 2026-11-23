@@ -44,6 +44,8 @@ function contactVars(c) {
   const v = { jmeno: c.first_name || '', prijmeni: c.last_name || '', firma: c.company || '', email: c.email || '', telefon: c.phone || '' };
   v.first_name = v.jmeno; v.last_name = v.prijmeni; v.company = v.firma;
   v.stav = c.stage || ''; v.typ_kontaktu = c.kind || ''; v.zeme = c.country || '';
+  // {{osloveni}} = křestní jméno v 5. pádě (Petře, Jano); u neznámých jmen zůstane 1. pád
+  try { v.osloveni = v.jmeno ? require('../vocative').vocativeFirstName(v.jmeno) : ''; } catch (e) { v.osloveni = v.jmeno; }
   const ex = c.extra && typeof c.extra === 'object' ? c.extra : {};
   Object.keys(ex).forEach((k) => { const sk = slug(k); if (sk && v[sk] == null) v[sk] = String(ex[k] == null ? '' : ex[k]); });
   return v;
@@ -113,6 +115,7 @@ async function sendOne(c, rcpt, subject, body, campaignId) {
       to: rcpt.email, from, fromName: String(c.from_name || 'Laundromats').slice(0, 80), brand: 'laundromats:' + l,
       replyTo: c.reply_to || undefined, subject: render(subject, rcpt.vars).slice(0, 300), body: render(body, rcpt.vars).slice(0, 20000),
       link, linkLabel: link && c.link_label ? String(c.link_label).slice(0, 80) : undefined, noLink: !link,
+      flyerUrl: c.image_url && /^https:\/\//.test(c.image_url) ? c.image_url : undefined,
       campaignId: campaignId || ('gm-' + c.id), onlySes: true,
     });
     if (!r || !r.sent) return { ok: false, error: String((r && (r.error || r.skipped)) || 'Odeslání selhalo').slice(0, 290) };

@@ -182,6 +182,7 @@ function campaignData(b, kind) {
   const d = {
     name: str(b.name, 160) || 'Bez názvu', subject: str(b.subject, 300) || '', body: String(b.body || '').slice(0, 20000),
     link: b.link && /^https:\/\//.test(String(b.link).trim()) ? String(b.link).trim().slice(0, 500) : null, link_label: str(b.link_label, 80),
+    image_url: b.image_url && /^https:\/\//.test(String(b.image_url).trim()) ? String(b.image_url).trim().slice(0, 500) : null,
     from_address: str(b.from_address, 200), from_name: str(b.from_name, 100), reply_to: GM.cleanEmail(b.reply_to) || null,
     lang: GM.LANGS.includes(String(b.lang || '')) ? String(b.lang) : 'cs', audience: cleanAudience(b.audience), schedule: cleanSchedule(kind, b.schedule),
   };
@@ -216,6 +217,63 @@ router.put('/campaigns/:id(\\d+)', wrap(async (req, res) => {
 router.delete('/campaigns/:id(\\d+)', wrap(async (req, res) => {
   const id = parseInt(req.params.id, 10);
   await prisma.gameMailSend.deleteMany({ where: { campaign_id: id } }); await prisma.gameMailCampaign.deleteMany({ where: { id } }); res.json({ ok: true });
+}));
+
+// ── Rozpracovaná kampaň (bez uložení): náhled e-mailu, testovací odeslání, AI návrh, obrázek ──
+function draftOf(b) { const kind = KINDS.includes(String(b.kind)) ? String(b.kind) : 'oneoff'; const d = campaignData(b, kind); d.kind = kind; d.id = 0; return d; }
+const SAMPLE = () => GM.contactVars({ first_name: 'Jana', last_name: 'Nováková', company: 'Ukázka s.r.o.', email: 'jana.novakova@example.com', phone: '+420 600 000 000' });
+router.post('/preview', wrap(async (req, res) => {
+  const c = draftOf(req.body || {}), si = Math.max(0, parseInt((req.body || {}).step, 10) || 0);
+  const st = c.kind === 'sequence' && Array.isArray(c.steps) && c.steps.length ? (c.steps[si] || c.steps[0]) : { subject: c.subject, body: c.body };
+  const vars = SAMPLE(), link = c.link || undefined, subject = GM.render(st.subject || c.subject || '', vars);
+  const html = require('../services/email').renderEmailHtml({ title: subject, body: GM.render(st.body || '', vars), link, linkLabel: link ? (c.link_label || 'Otevřít') : undefined, noLink: !link, brand: 'laundromats:' + (c.lang || 'cs'), flyerUrl: c.image_url || undefined });
+  res.json({ html, subject, from: (c.from_name || 'Laundromats') + (GM.fromOf(c) ? ' <' + GM.fromOf(c) + '>' : '') });
+}));
+router.post('/test-draft', wrap(async (req, res) => {
+  const c = draftOf(req.body || {}), to = String((req.body && req.body.to) || (req.user && req.user.person && req.user.person.email) || '').trim();
+  if (!GM.fromOf(c)) return res.status(400).json({ error: 'Vyber odesílatele.' });
+  const r = await GM.sendTest(c, to); if (!r.ok) return res.status(502).json({ error: r.error });
+  res.json({ ok: true, to });
+}));
+// Obrázek do e-mailu: data URL (JPG/PNG/GIF/WebP, max 5 MB) → Cloudflare R2 → veřejná https adresa
+router.post('/image', wrap(async (req, res) => {
+  const m = /^data:(image\/(?:jpeg|png|gif|webp));base64,([A-Za-z0-9+/=\s]+)$/.exec(String((req.body || {}).data || ''));
+  if (!m) return res.status(400).json({ error: 'Nahraj obrázek JPG, PNG, GIF nebo WebP.' });
+  const buf = Buffer.from(m[2], 'base64'); if (buf.length > 5 * 1024 * 1024) return res.status(400).json({ error: 'Obrázek je větší než 5 MB.' });
+  const ext = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp' }[m[1]];
+  const { putObject } = require('../services/storage/r2');
+  const r = await putObject('game-mail/' + require('crypto').randomUUID() + ext, buf, m[1]);
+  if (!r.url) return res.status(503).json({ error: 'Úložiště obrázků nemá veřejnou adresu (R2_PUBLIC_URL).' });
+  res.json({ url: r.url });
+}));
+// AI návrh textu kampaně podle zadání
+router.post('/ai-draft', wrap(async (req, res) => {
+  const b = req.body || {}, brief = String(b.brief || '').trim().slice(0, 4000);
+  if (!brief) return res.status(400).json({ error: 'Napiš zadání — o čem má e-mail být.' });
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'Chybí ANTHROPIC_API_KEY.' });
+  const lang = GM.LANGS.includes(String(b.lang)) ? String(b.lang) : 'cs', kind = KINDS.includes(String(b.kind)) ? String(b.kind) : 'oneoff';
+  const nSteps = kind === 'sequence' ? Math.min(8, Math.max(1, parseInt(b.steps, 10) || 3)) : 0;
+  const phs = (Array.isArray(b.placeholders) ? b.placeholders : []).map((x) => String(x).slice(0, 40)).slice(0, 40);
+  const LN = { cs: 'češtině', en: 'angličtině', pl: 'polštině', sk: 'slovenštině', de: 'němčině', hu: 'maďarštině', ro: 'rumunštině', it: 'italštině', es: 'španělštině', fr: 'francouzštině' }[lang];
+  const system = [
+    'Píšeš marketingové e-maily pro značku Laundromats (síť samoobslužných prádelen — prádlomatů; provozovatel Best Series) a její online hru Laundromat Tycoon, kde hráči budují vlastní síť prádelen.',
+    'Příjemci jsou kontakty z CRM (zájemci o prádlomat nebo franšízu, zákazníci, hráči hry). E-mail má být lidský, konkrétní, krátký (cca 80–160 slov), s jasnou výzvou k akci. Žádné přehnané sliby, žádná vymyšlená čísla — co nevíš, nepiš.',
+    'Text je ČISTÝ TEXT (žádné HTML ani Markdown, žádné hvězdičky); odstavce odděl prázdným řádkem. Šablona e-mailu už má logo a hlavičku — nezačínej názvem značky.',
+    'Můžeš použít proměnné ve tvaru {{nazev}}: ' + (phs.length ? phs.join(', ') : 'jmeno, prijmeni, firma') + ', osloveni. V češtině oslovuj „Dobrý den, {{osloveni}},“ ({{osloveni}} = křestní jméno v 5. pádě); u kontaktů bez jména se doplní prázdno, proto ho nepoužívej jinde ve větě.',
+    'Piš v ' + LN + '. Předmět max 70 znaků, bez emoji na začátku, ať nepůsobí jako spam.',
+    'Vrať POUZE JSON bez bloku ```: ' + (kind === 'sequence'
+      ? '{"steps":[{"day":0,"subject":"…","body":"…"}, …]} — přesně ' + nSteps + ' kroků, den 0 = hned, další s rozestupem pár dní, každý krok navazuje na předchozí.'
+      : '{"subject":"…","body":"…","link_label":"krátký popisek tlačítka (max 30 znaků) nebo prázdné"}'),
+  ].join('\n');
+  const cur = b.current && (b.current.subject || b.current.body) ? '\n\nSOUČASNÁ VERZE (uprav podle zadání, pokud se hodí):\nPředmět: ' + String(b.current.subject || '').slice(0, 300) + '\n' + String(b.current.body || '').slice(0, 6000) : '';
+  const Anthropic = require('@anthropic-ai/sdk'); const { messagesCreate } = require('../services/anthropic-retry');
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const r = await messagesCreate(client, { model: process.env.GM_AI_MODEL || 'claude-sonnet-4-6', max_tokens: 4000, system, messages: [{ role: 'user', content: 'ZADÁNÍ: ' + brief + cur }] });
+  const t = (r.content || []).filter((x) => x.type === 'text').map((x) => x.text).join('');
+  let j = null; try { j = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)); } catch (e) { j = null; }
+  if (!j) return res.status(502).json({ error: 'AI nevrátila použitelný návrh, zkus to znovu.' });
+  if (kind === 'sequence') return res.json({ steps: (Array.isArray(j.steps) ? j.steps : []).slice(0, 8).map((s, i) => ({ day: Math.max(0, parseInt(s.day, 10) || (i ? i * 3 : 0)), subject: String(s.subject || '').slice(0, 300), body: String(s.body || '').slice(0, 20000) })) });
+  res.json({ subject: String(j.subject || '').slice(0, 300), body: String(j.body || '').slice(0, 20000), link_label: String(j.link_label || '').slice(0, 80) });
 }));
 
 router.post('/audience-count', wrap(async (req, res) => { res.json(await GM.audienceCount(cleanAudience((req.body || {}).audience))); }));
