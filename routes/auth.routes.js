@@ -477,6 +477,52 @@ router.post('/lu/mail', express.json({ limit: '20kb' }), async (req, res, next) 
   } catch (err) { next(err); }
 });
 
+// POST /api/auth/lu/model-analyze — Laundry Unlimited: AI rozbor myšlenkové mapy (Modelace business modelu).
+// Vstup: { name, graph } (graph = text uzlů a spojení); výstup: strukturovaný JSON (pochopení, mezery, dopracování, plán). Tajemství LU_SSO_SECRET.
+router.post('/lu/model-analyze', express.json({ limit: '600kb' }), async (req, res, next) => {
+  try {
+    const secret = process.env.LU_SSO_SECRET;
+    const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+    if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
+    try { jwt.verify(m[1], secret, { audience: 'holyos-api', issuer: 'laundry-unlimited' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'V HolyOS chybí ANTHROPIC_API_KEY' });
+    const graph = String((req.body || {}).graph || '').slice(0, 120000);
+    const name = String((req.body || {}).name || 'Business model').slice(0, 120);
+    if (graph.length < 20) return res.status(400).json({ error: 'Plátno je prázdné' });
+    const Anthropic = require('@anthropic-ai/sdk');
+    const { messagesCreate } = require('../services/anthropic-retry');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const system = [
+      'Jsi zkušený byznys analytik a provozní konzultant. Zakladatel firmy Laundry Unlimited (síť samoobslužných prádelen — „prádlomatů", jejich výroba, licence, master partneři, operátoři, MARKET PLACE míst, servis, infolinka) si nakreslil myšlenkovou mapu svého business modelu.',
+      'Dostaneš seznam uzlů ([id] text) a spojení (id → id; šipka = „vede k / navazuje / platí / dodává"). Texty jsou stručné poznámky psané česky, mohou obsahovat čísla (ceny, procenta, Kč, EUR) a otazníky u dosud nerozhodnutých věcí.',
+      '',
+      'ÚKOL: ukaž, jak jsi mapě porozuměl, najdi mezery a dopracuj model do podoby, ze které jde firmu skutečně provozovat.',
+      'PRAVIDLA: vycházej jen z mapy; co si domýšlíš, označ jako předpoklad. Čísla z mapy cituj přesně, nic nepřepočítávej ani si nevymýšlej nové hodnoty — chybějící hodnoty dej do mezer jako otázku. Piš česky, věcně, stručně (max ~25 slov na položku). Pole „uzly" obsahují ID uzlů z mapy, ke kterým se položka vztahuje (ID opisuj přesně).',
+      '',
+      'Vrať POUZE jeden JSON objekt (bez markdownu) v tomto tvaru:',
+      '{',
+      ' "souhrn": "3–5 vět: co je podstata podnikání, kdo komu co dodává a jak firma vydělává",',
+      ' "aktery": [{"nazev":"","role":"co dělá / za co zodpovídá","uzly":["id"]}],',
+      ' "toky": [{"nazev":"např. Prodej prádlomatu","kroky":["krok 1","krok 2"],"uzly":["id"]}],',
+      ' "prijmy": [{"zdroj":"","platí":"kdo platí","jak":"jednorázově/procento/měsíčně…","hodnota":"číslo z mapy nebo ???","uzly":["id"]}],',
+      ' "predpoklady": ["co jsem si musel domyslet"],',
+      ' "mezery": [{"otazka":"co chybí nebo je nejasné","proc":"proč to blokuje spuštění","priorita":"vysoká|střední|nízká","uzly":["id"]}],',
+      ' "rizika": [{"riziko":"","dopad":"","opatreni":""}],',
+      ' "dopracovani": [{"ref":"d1","text":"krátký název nového uzlu (max 60 znaků)","navazuje":["id existujícího uzlu nebo ref jiného nového uzlu"],"duvod":"proč ho přidat"}],',
+      ' "plan": [{"faze":"1","nazev":"","doba":"např. 2 týdny","kroky":["konkrétní krok"],"vystup":"co je na konci hotové"}],',
+      ' "kpi": [{"nazev":"","cil":"cílová hodnota nebo ???","jak_merit":""}]',
+      '}',
+      'Limity: aktery ≤ 10, toky ≤ 8, prijmy ≤ 10, mezery ≤ 15, rizika ≤ 8, dopracovani ≤ 20 (každý nový uzel musí mít ≥ 1 „navazuje"), plan 4–6 fází, kpi ≤ 8.',
+    ].join('\n');
+    const r = await messagesCreate(client, { model: process.env.LU_MODEL_AI || 'claude-sonnet-4-6', max_tokens: 9000, system, messages: [{ role: 'user', content: 'Plátno „' + name + '":\n\n' + graph }] });
+    const text = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('').trim();
+    const a = text.indexOf('{'), b = text.lastIndexOf('}');
+    let out = null; try { out = JSON.parse(text.slice(a, b + 1)); } catch (e) { out = null; }
+    if (!out || typeof out !== 'object') return res.status(502).json({ error: 'AI vrátila nečitelnou odpověď — zkuste to znovu' });
+    res.json({ ok: true, result: out, truncated: r.stop_reason === 'max_tokens' });
+  } catch (err) { next(err); }
+});
+
 // GET /api/auth/bs2/products — aktivní stroje z prodejního ceníku pro záložku Produkty v BS2.
 // Volá server BS2 (ne prohlížeč); ověřuje se krátkým JWT podepsaným sdíleným BS2_SSO_SECRET (aud 'holyos-api').
 router.get('/bs2/products', async (req, res, next) => {

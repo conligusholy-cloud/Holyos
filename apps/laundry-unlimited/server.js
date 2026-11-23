@@ -916,6 +916,20 @@ const MODEL_CSS = `
 #mb-bar .sep{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
 #mb-colors{display:flex;gap:5px;align-items:center}#mb-colors button{width:20px;height:20px;padding:0;border-radius:50%;border:2px solid transparent}#mb-colors button.on{border-color:#fff}
 #mb-st{font-size:12px;color:#86efac;min-width:80px}#mb-zoom{font-size:12px;color:var(--mut);min-width:42px;text-align:center}
+#mb-bar #mb-ai{background:linear-gradient(90deg,rgba(34,230,255,.2),rgba(167,139,250,.2));border-color:rgba(34,230,255,.55)}
+#mb-ai-p{position:absolute;right:14px;top:70px;bottom:14px;width:min(460px,calc(100% - 28px));z-index:9;display:flex;flex-direction:column;border-radius:16px;background:rgba(8,15,30,.97);border:1px solid var(--line);box-shadow:0 30px 80px -20px #000;backdrop-filter:blur(12px);overflow:hidden}
+#mb-ai-p .aih{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}#mb-ai-p .aib{display:flex;gap:6px}
+#mb-ai-p button{background:#07111f;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:5px 9px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;width:auto}#mb-ai-p button:hover{border-color:var(--cy)}
+.aitabs{display:flex;gap:4px;padding:8px 10px;border-bottom:1px solid var(--line);flex-wrap:wrap}.aitabs button{border-radius:999px!important}.aitabs button.on{background:var(--cy)!important;color:#04101c!important;border-color:var(--cy)!important}
+#mb-ai-body{overflow:auto;padding:14px;font-size:13.5px;line-height:1.55;flex:1}
+#mb-ai-body h4{margin:16px 0 6px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#8eeaff}#mb-ai-body h4:first-child{margin-top:0}
+#mb-ai-body .it{padding:9px 11px;margin:0 0 7px;border:1px solid var(--line);border-radius:10px;background:#07111f}#mb-ai-body .it[data-u]{cursor:pointer}#mb-ai-body .it[data-u]:hover{border-color:var(--cy)}
+#mb-ai-body .it b{color:#fff}#mb-ai-body .m{color:var(--mut);font-size:12.5px}#mb-ai-body ol,#mb-ai-body ul{margin:4px 0 0;padding-left:18px}
+#mb-ai-body .pr{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;margin-left:6px}.pr.v{background:rgba(248,113,113,.2);color:#fca5a5}.pr.s{background:rgba(251,191,36,.18);color:#fcd34d}.pr.n{background:rgba(148,163,184,.2);color:#cbd5e1}
+#mb-ai-body .ld{text-align:center;color:var(--mut);padding:50px 10px}#mb-ai-body .sp{width:34px;height:34px;margin:0 auto 14px;border-radius:50%;border:3px solid rgba(34,230,255,.2);border-top-color:#22e6ff;animation:aisp 0.9s linear infinite}@keyframes aisp{to{transform:rotate(360deg)}}
+#mb-ai-body .go{width:100%;padding:10px!important;margin-top:8px;background:linear-gradient(90deg,#22e6ff,#2f7bff)!important;color:#04101c!important;border:0!important;font-size:13px!important}
+#mb-ai-body label.it{display:flex;gap:9px;align-items:flex-start;cursor:pointer}#mb-ai-body label.it input{margin-top:3px;width:auto}
+.n.hl{box-shadow:0 0 0 3px #fbbf24,0 0 30px 2px rgba(251,191,36,.6)!important}
 #mb-title{position:absolute;left:16px;bottom:14px;z-index:4;font-size:13px;color:var(--mut);pointer-events:none}
 #mb-empty{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;text-align:center;color:var(--mut);max-width:420px;line-height:1.7}
 #mb-empty b{color:var(--text);font-size:18px;display:block;margin-bottom:6px}
@@ -928,7 +942,8 @@ app.get('/admin/model', requireAdmin, (req, res) => {
 <div id="mb-bar"><select id="mb-sel" title="Plátno"></select><button id="mb-newb" type="button" title="Nové plátno">＋ Plátno</button><button id="mb-ren" type="button" title="Přejmenovat plátno">✎</button><button id="mb-delb" type="button" title="Smazat plátno">🗑</button><span class="sep"></span>
 <button id="mb-add" type="button">＋ Uzel</button><span id="mb-selbox" style="display:none;gap:8px;align-items:center"><button id="mb-child" type="button" title="Přidat navazující uzel (Tab)">↳ Navazující</button><span id="mb-colors"></span><button id="mb-del" type="button" title="Smazat vybrané (Delete)">Smazat</button></span><span class="sep"></span>
 <button id="mb-undo" type="button" title="Zpět (Ctrl+Z)">↶</button><button id="mb-redo" type="button" title="Znovu (Ctrl+Y)">↷</button><span class="sep"></span>
-<button id="mb-zout" type="button">−</button><span id="mb-zoom">100 %</span><button id="mb-zin" type="button">＋</button><button id="mb-fit" type="button" title="Zobrazit vše">Vše</button><span id="mb-st"></span></div>
+<button id="mb-zout" type="button">−</button><span id="mb-zoom">100 %</span><button id="mb-zin" type="button">＋</button><button id="mb-fit" type="button" title="Zobrazit vše">Vše</button><span class="sep"></span><button id="mb-ai" type="button" title="AI zpracuje mapu: ukáže, jak jí rozumí, najde mezery a dopracuje ji do finální podoby">✨ Zpracovat mapu</button><span id="mb-st"></span></div>
+<div id="mb-ai-p" style="display:none"><div class="aih"><b>✨ Zpracování mapy</b><span class="aib"><button type="button" id="mb-ai-re" title="Zpracovat znovu">↻ Znovu</button><button type="button" id="mb-ai-md" title="Stáhnout rozbor jako dokument">⬇ Dokument</button><button type="button" id="mb-ai-x" title="Zavřít">✕</button></span></div><div class="aitabs" id="mb-ai-tabs"></div><div id="mb-ai-body"></div></div>
 <div id="mb-title"></div>
 <div id="mb-empty" style="display:none"><b>Prázdné plátno</b>Dvojklikem do plátna přidáš první uzel. Z kroužku na kraji uzlu přetáhni čáru do prázdna — vznikne navazující uzel, nebo na jiný uzel — spojí je.</div>
 <div id="mb-help">Dvojklik = nový / upravit uzel · Tab = navazující uzel · Delete = smazat<br>Kolečko = zoom · tažení prázdného místa = posun · Ctrl+Z = zpět</div></div>
@@ -965,6 +980,22 @@ app.post('/admin/api/model/boards/:id(\\d+)', requireAdmin, express.json({ limit
   const r = await q('UPDATE model_boards SET data=$2, rev=rev+1, updated_at=now(), updated_by=$4 WHERE id=$1 AND rev=$3 RETURNING rev', [req.params.id, JSON.stringify(data), Number(b.rev) || 0, (req.admin && req.admin.name) || '']);
   if (!r.rowCount) { const ex = (await q('SELECT 1 FROM model_boards WHERE id=$1', [req.params.id])).rowCount; return res.status(ex ? 409 : 404).json({ ok: false, error: ex ? 'Plátno mezitím změnil jiný uživatel' : 'Plátno nenalezeno' }); }
   res.json({ ok: true, rev: r.rows[0].rev });
+});
+// AI rozbor mapy: server z plátna poskládá text (uzly + spojení), HolyOS (Claude) vrátí strukturovaný výsledek
+app.post('/admin/api/model/boards/:id(\\d+)/analyze', requireAdmin, express.json({ limit: '3mb' }), async (req, res) => {
+  try {
+    if (!LU_SECRET) return res.json({ ok: false, error: 'Chybí LU_SSO_SECRET' });
+    const d = modelClean((req.body || {}).data);
+    if (d.nodes.length < 2) return res.json({ ok: false, error: 'Na plátně je málo uzlů k rozboru' });
+    const nm = (await q('SELECT name FROM model_boards WHERE id=$1', [req.params.id]).catch(() => ({ rows: [] }))).rows[0];
+    const txt = (s) => String(s).replace(/\s+/g, ' ').trim();
+    const graph = 'UZLY:\n' + d.nodes.map((n) => '[' + n.id + '] ' + txt(n.text || '(prázdný)')).join('\n') + '\n\nSPOJENÍ:\n' + d.edges.map((e) => e.from + ' → ' + e.to).join('\n');
+    const svc = jwt.sign({ aud: 'holyos-api', iss: 'laundry-unlimited' }, LU_SECRET, { expiresIn: '5m' });
+    const resp = await fetch(HOLYOS_URL + '/api/auth/lu/model-analyze', { method: 'POST', headers: { Authorization: 'Bearer ' + svc, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: nm ? nm.name : 'Business model', graph }), signal: AbortSignal.timeout(280000) });
+    let j = {}; try { j = await resp.json(); } catch (e) { /* bez těla */ }
+    if (!resp.ok || !j.ok) return res.json({ ok: false, error: j.error || ('HolyOS odpovědělo ' + resp.status) });
+    res.json({ ok: true, result: j.result, truncated: !!j.truncated, nodes: d.nodes.length, edges: d.edges.length });
+  } catch (e) { console.warn('[lu] model analyze:', e.message); res.json({ ok: false, error: e.name === 'TimeoutError' ? 'Rozbor trval příliš dlouho — zkuste to znovu' : 'Rozbor se nepovedl: ' + e.message }); }
 });
 app.post('/admin/api/model/boards/:id(\\d+)/rename', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   const name = String((req.body || {}).name || '').trim().slice(0, 80);
