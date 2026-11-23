@@ -409,10 +409,11 @@ async function tik() {
           // podruhé by znamenalo krátit nové skutky o staré. Částka se tu jen zobrazí jako „už odsouzeno".
           const poDatu = !!puvodni.po_datu;
           Object.keys(dnes).forEach((k) => {
-            const zbyva = Math.max(0, Math.round(dnes[k] - (poDatu && k === 'pravidla' ? 0 : (uz[k] || 0))));
-            odecteno += Math.min(poDatu && k === 'pravidla' ? (uz[k] || 0) : dnes[k], uz[k] || 0);
+            const zbyva = Math.max(0, Math.round(dnes[k] - (poDatu ? 0 : (uz[k] || 0))));
+            if (!poDatu) odecteno += Math.min(dnes[k], uz[k] || 0);
             if (zbyva > 0) { novy[k] = zbyva; nova += zbyva; }
           });
+          if (poDatu) odecteno = Object.keys(uz).reduce((a, k) => a + (Number(uz[k]) || 0), 0);
           // Druhá pojistka po jednotlivých položkách: nesmí se znovu soudit ani ten samý
           // účet (provize) nebo obchod (nákup). Platí nižší z obou čísel — nikdy víc, než kolik ještě nebylo odsouzeno.
           let polNove = puvodni.polozky || null;

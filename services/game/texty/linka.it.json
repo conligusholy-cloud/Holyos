@@ -1,1 +1,3020 @@
-[]
+[
+  {
+    "id": "stovka",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Buongiorno, il vostro automatico si è mangiato cento e non è partito niente.",
+        "o": [
+          {
+            "t": "Mi dispiace. Glieli rimando sul conto.",
+            "b": 2,
+            "r": "Va bene, è giusto così."
+          },
+          {
+            "t": "Senza scontrino non rimborsiamo niente, nel self-service è normale.",
+            "b": -2,
+            "r": "Quindi mi derubate e finisce lì?"
+          },
+          {
+            "t": "Capita ogni tanto, riprovi e speriamo che passi — i gettonieri a volte prendono umidità e la meccanica si inceppa.",
+            "b": -1,
+            "r": "Quindi devo buttarci dentro altri cento?"
+          }
+        ]
+      },
+      {
+        "t": "E quanto ci vuole prima che mi arrivino i soldi?",
+        "o": [
+          {
+            "t": "Entro due giorni. Se non arrivano, mi chiami direttamente.",
+            "b": 2,
+            "r": "Ci sto."
+          },
+          {
+            "t": "Difficile dire, se ne occupa la contabilità.",
+            "b": -1,
+            "r": "Che bello."
+          },
+          {
+            "t": "Di solito è veloce.",
+            "b": 0,
+            "r": "Mah."
+          }
+        ]
+      },
+      {
+        "t": "E adesso? Devo lavare oggi.",
+        "o": [
+          {
+            "t": "Le avvio la macchina da remoto, parte tra un minuto.",
+            "b": 2,
+            "r": "Lei è un tesoro, grazie!"
+          },
+          {
+            "t": "Allora venga domani.",
+            "b": -2,
+            "r": "Domani non mi serve a niente."
+          },
+          {
+            "t": "Provi quella accanto, lì si paga anche con la carta, ma se è libera da qui non glielo so dire.",
+            "b": 1,
+            "r": "Allora provo."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "svetr",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Ho lavato da voi un maglione di lana ed è venuta fuori una taglia da bambino.",
+        "o": [
+          {
+            "t": "Mi dispiace. Che programma ci ha messo?",
+            "b": 2,
+            "r": "Vedo che va subito al sodo, bene."
+          },
+          {
+            "t": "La lana nell’automatico non ci va, è colpa sua.",
+            "b": -2,
+            "r": "Be’, questo mi ha aiutato proprio tanto."
+          },
+          {
+            "t": "Per i restringimenti non rispondiamo, c’è scritto sulla macchina e nelle condizioni sul sito, guardi lì.",
+            "b": -2,
+            "r": "Chiamo per il maglione, non per le condizioni."
+          }
+        ]
+      },
+      {
+        "t": "Ho messo sessanta, era preimpostato.",
+        "o": [
+          {
+            "t": "Allora per la lana è troppo. Metto su quella macchina un’etichetta migliore, che non capiti a un altro.",
+            "b": 2,
+            "r": "Almeno qualcosa."
+          },
+          {
+            "t": "Ecco, vede, allora è chiaro.",
+            "b": -1,
+            "r": "Questa sì che mi ha consolata."
+          },
+          {
+            "t": "Sessanta è lo standard, non può far male a nessuno.",
+            "b": -2,
+            "r": "E allora perché dal maglione mi è uscito uno straccio?"
+          }
+        ]
+      },
+      {
+        "t": "E chi me lo paga il maglione?",
+        "o": [
+          {
+            "t": "Mi mandi una foto e lo scontrino, ci mettiamo d’accordo.",
+            "b": 2,
+            "r": "Va bene, mando."
+          },
+          {
+            "t": "Nessuno, ha lavato da sola e sulla macchina c’è scritto cosa ci va dentro.",
+            "b": -2,
+            "r": "Con voi ho chiuso."
+          },
+          {
+            "t": "Le posso dare un lavaggio gratis, di più purtroppo no.",
+            "b": 1,
+            "r": "Be’, meglio di niente."
+          }
+        ]
+      },
+      {
+        "t": "Va bene. E come lo devo lavare la prossima volta?",
+        "o": [
+          {
+            "t": "Trenta e mai in asciugatrice.",
+            "b": 2,
+            "r": "Annotato. Grazie."
+          },
+          {
+            "t": "Provi un po’ come le pare, è un self-service apposta.",
+            "b": -2,
+            "r": "Dice sul serio?"
+          },
+          {
+            "t": "La lana io la farei a mano a casa, nell’automatico è sempre un rischio, anche con il programma più basso e i giri lenti.",
+            "b": 0,
+            "r": "Allora da voi con la lana non ci vengo."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "drahe",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Siete troppo cari. Dietro l’angolo lavano a meno.",
+        "o": [
+          {
+            "t": "Quanto paga lì?",
+            "b": 2,
+            "r": "Bella domanda."
+          },
+          {
+            "t": "Allora vada dietro l’angolo, nessuno la trattiene.",
+            "b": -2,
+            "r": "Non si preoccupi, ci vado."
+          },
+          {
+            "t": "I nostri prezzi vengono dal fatto che abbiamo macchine nuove, siamo aperti sempre e il tecnico arriva entro il giorno dopo.",
+            "b": 1,
+            "r": "Sembra un volantino."
+          }
+        ]
+      },
+      {
+        "t": "Centotrenta per una lavatrice. Da voi duecento.",
+        "o": [
+          {
+            "t": "Da noi lava diciotto chili in una volta, lì probabilmente sei.",
+            "b": 2,
+            "r": "Mah, non ci avevo pensato."
+          },
+          {
+            "t": "Non si può confrontare, ognuno ha macchine diverse, acqua diversa e costi diversi, quindi il prezzo a ciclo lasci perdere.",
+            "b": -1,
+            "r": "Perché no?"
+          },
+          {
+            "t": "E allora ci vada.",
+            "b": -2,
+            "r": "Ma certo."
+          }
+        ]
+      },
+      {
+        "t": "Mah. E mi fate uno sconto, o vi scrivo una recensione?",
+        "o": [
+          {
+            "t": "La recensione se la scriva pure. Un lavaggio glielo do gratis, così prova.",
+            "b": 2,
+            "r": "Va bene, allora provo."
+          },
+          {
+            "t": "Le do il cinquanta per cento per sempre.",
+            "b": -1,
+            "r": "Lo prendo! E lo dico a tutti."
+          },
+          {
+            "t": "Allora scriva.",
+            "b": -2,
+            "r": "Ci può contare."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dvirka",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Non riesco ad aprire l’oblò e ho dentro tutto il bucato.",
+        "o": [
+          {
+            "t": "Sta finendo la centrifuga e scarica l’acqua. Due minuti e si sblocca.",
+            "b": 2,
+            "r": "Ah, allora aspetto."
+          },
+          {
+            "t": "Lo tiri forte.",
+            "b": -2,
+            "r": "Glielo stacco!"
+          },
+          {
+            "t": "La serratura è di sicurezza e non ci si può fare niente, il tecnico arriva domani al più presto, fino ad allora lì dentro ci resta.",
+            "b": -1,
+            "r": "Domani?!"
+          }
+        ]
+      },
+      {
+        "t": "Adesso si è sbloccato. Ma il bucato è tutto bagnato.",
+        "o": [
+          {
+            "t": "Non è partita la centrifuga. L’asciugatrice gliela offro io, il codice glielo mando per SMS.",
+            "b": 2,
+            "r": "Questo è corretto, grazie."
+          },
+          {
+            "t": "Allora lo metta in asciugatrice, è lì accanto.",
+            "b": 0,
+            "r": "Pagando ancora?"
+          },
+          {
+            "t": "Capita, la centrifuga ogni tanto salta e non si rovina niente, il bucato finisce di asciugarsi a casa sul balcone.",
+            "b": -2,
+            "r": "Non mi basta."
+          }
+        ]
+      },
+      {
+        "t": "E perché è saltata?",
+        "o": [
+          {
+            "t": "Do un’occhiata alla macchina. Se è un guasto, oggi ci mando un tecnico.",
+            "b": 2,
+            "r": "Va bene, grazie."
+          },
+          {
+            "t": "Probabilmente l’ha riempita troppo.",
+            "b": -1,
+            "r": "Al solito è tutta colpa mia."
+          },
+          {
+            "t": "Non ne ho idea.",
+            "b": -2,
+            "r": "E questo a me cosa serve."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "novy",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Buongiorno, passavo di qui e non so come funziona. È una lavanderia?",
+        "o": [
+          {
+            "t": "Self-service. Butta dentro il bucato, paga e in 35 minuti è pronto.",
+            "b": 2,
+            "r": "Ah, allora provo."
+          },
+          {
+            "t": "Si capisce dal nome, no, se fosse una lavanderia ci sarebbe qualcuno al bancone a prenderle il bucato.",
+            "b": -2,
+            "r": "Questo non serve a niente."
+          },
+          {
+            "t": "Self-service.",
+            "b": 0,
+            "r": "Be’… va bene."
+          }
+        ]
+      },
+      {
+        "t": "E il detersivo me lo devo portare?",
+        "o": [
+          {
+            "t": "Non serve, il dosatore è nella macchina.",
+            "b": 2,
+            "r": "Benissimo."
+          },
+          {
+            "t": "Faccia lei, ognuno fa a modo suo.",
+            "b": 0,
+            "r": "E allora cosa mi consiglia?"
+          },
+          {
+            "t": "Certo, senza il proprio detersivo non ha senso, il nostro dosatore ne mette poco e il bucato poi non viene pulito per bene.",
+            "b": -2,
+            "r": "Che bella pubblicità."
+          }
+        ]
+      },
+      {
+        "t": "Quanto ne devo mettere?",
+        "o": [
+          {
+            "t": "Una dose misurata. Più detersivo non lava meglio.",
+            "b": 2,
+            "r": "Buon consiglio."
+          },
+          {
+            "t": "Quello che pensa serva. Io davanti a quella macchina non ci sto.",
+            "b": -1,
+            "r": "Per questo lo chiedo a lei."
+          },
+          {
+            "t": "Lo legga sulla confezione, c’è una tabella secondo la durezza dell’acqua e quanto è sporco.",
+            "b": -1,
+            "r": "Sono davanti alla macchina, non a casa."
+          }
+        ]
+      },
+      {
+        "t": "E dove pago?",
+        "o": [
+          {
+            "t": "Con la carta al terminale vicino all’oblò, oppure a monete.",
+            "b": 2,
+            "r": "Ottimo, ci provo."
+          },
+          {
+            "t": "Da qualche parte lì c’è.",
+            "b": -2,
+            "r": "Ecco, questo mi ha aiutato."
+          },
+          {
+            "t": "Si paga dopo il lavaggio.",
+            "b": -2,
+            "r": "Allora la macchina non mi è partita."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "pes",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Posso lavare da voi la coperta del cane? Non voglio sporcarmi la lavatrice di casa.",
+        "o": [
+          {
+            "t": "Certo. Serve proprio a quello.",
+            "b": 2,
+            "r": "Ottimo."
+          },
+          {
+            "t": "La roba degli animali da noi non si lava.",
+            "b": -1,
+            "r": "Allora vado da un’altra parte."
+          },
+          {
+            "t": "A me non importa, lavi quello che vuole.",
+            "b": -2,
+            "r": "Bel modo di fare."
+          }
+        ]
+      },
+      {
+        "t": "E non darà fastidio a chi lava dopo di me?",
+        "o": [
+          {
+            "t": "No, tra un ciclo e l’altro la macchina risciacqua il cestello da sola.",
+            "b": 2,
+            "r": "È pensato bene."
+          },
+          {
+            "t": "Non lo so, finora non si è lamentato nessuno, ma forse gli darebbe fastidio, se lo sapessero.",
+            "b": -1,
+            "r": "Lei non sa come funziona la sua macchina?"
+          },
+          {
+            "t": "A loro non importa.",
+            "b": -2,
+            "r": "A me importerebbe."
+          }
+        ]
+      },
+      {
+        "t": "E poi la posso mettere in asciugatrice?",
+        "o": [
+          {
+            "t": "Certo, i peli finiscono nel filtro.",
+            "b": 2,
+            "r": "Grazie del consiglio."
+          },
+          {
+            "t": "L’asciugatrice meglio di no.",
+            "b": 0,
+            "r": "Ah, va bene."
+          },
+          {
+            "t": "Faccia come le pare.",
+            "b": -2,
+            "r": "Potevo risparmiarmi la telefonata."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "smrad",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Dopo il lavaggio il bucato mi puzza. Non è normale.",
+        "o": [
+          {
+            "t": "No, davvero non lo è. Quale macchina era?",
+            "b": 2,
+            "r": "Meno male che lo chiede."
+          },
+          {
+            "t": "Probabilmente puzzava già prima, la macchina non c’entra.",
+            "b": -2,
+            "r": "È incredibile."
+          },
+          {
+            "t": "Provi a mettere più ammorbidente, di solito copre tutto e il bucato poi profuma per giorni.",
+            "b": -2,
+            "r": "Io non voglio coprire la puzza, voglio non averla."
+          }
+        ]
+      },
+      {
+        "t": "Quella in fondo, vicino alla strada.",
+        "o": [
+          {
+            "t": "Grazie. Le faccio pulire il cestello e il lavaggio glielo offro io.",
+            "b": 2,
+            "r": "Questo è corretto."
+          },
+          {
+            "t": "Ci daremo un’occhiata prima o poi, quando il tecnico ci passa per altro.",
+            "b": -1,
+            "r": "Prima o poi?"
+          },
+          {
+            "t": "Di quella non si è lamentato nessuno.",
+            "b": -2,
+            "r": "Allora sono il primo."
+          }
+        ]
+      },
+      {
+        "t": "E come faccio a sapere che è sistemata?",
+        "o": [
+          {
+            "t": "Le faccio sapere appena il tecnico ha finito.",
+            "b": 2,
+            "r": "Aspetto, grazie."
+          },
+          {
+            "t": "Semplicemente riprova.",
+            "b": -1,
+            "r": "Con i miei soldi."
+          },
+          {
+            "t": "Se ne accorgerà.",
+            "b": -2,
+            "r": "Grazie di niente."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "penzion",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Ho una pensione e devo lavare la biancheria. Ce la fate?",
+        "o": [
+          {
+            "t": "Ce la facciamo. Quanta ne viene a settimana?",
+            "b": 2,
+            "r": "Subito al punto, mi piace."
+          },
+          {
+            "t": "Venga come tutti gli altri, prenotazioni non ne facciamo e il posto non si tiene.",
+            "b": 0,
+            "r": "Allora forse no."
+          },
+          {
+            "t": "A noi non interessa, lavoriamo sul self-service, non sulle aziende.",
+            "b": -2,
+            "r": "Peggio per voi."
+          }
+        ]
+      },
+      {
+        "t": "Saranno cento chili a settimana.",
+        "o": [
+          {
+            "t": "Sono cinque lavaggi. Le faccio un prezzo fisso e le tengo le macchine.",
+            "b": 2,
+            "r": "Suona benissimo."
+          },
+          {
+            "t": "Allora ci metterà un po’, cinque lavaggi da trentacinque minuti sono quasi tre ore, ci conti.",
+            "b": -1,
+            "r": "Questo non mi ha aiutato molto."
+          },
+          {
+            "t": "Tanta roba non la laviamo.",
+            "b": -2,
+            "r": "E allora a cosa le tenete quelle macchine?"
+          }
+        ]
+      },
+      {
+        "t": "E se è tutto occupato?",
+        "o": [
+          {
+            "t": "Le do un numero, mi chiama e le libero una macchina.",
+            "b": 2,
+            "r": "Ci sto, mi faccio sentire."
+          },
+          {
+            "t": "Allora aspetta.",
+            "b": -2,
+            "r": "Con la biancheria della pensione?"
+          },
+          {
+            "t": "Non succede.",
+            "b": -1,
+            "r": "Non mi basta."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "soused",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "La vostra lavanderia sta sotto le mie finestre e di notte ronza.",
+        "o": [
+          {
+            "t": "Mi dispiace. A che ora la sveglia di più?",
+            "b": 2,
+            "r": "Almeno qualcuno ascolta."
+          },
+          {
+            "t": "Abbiamo il permesso del Comune e la perizia acustica, quindi da parte nostra è tutto a posto.",
+            "b": -1,
+            "r": "Questo non mi consola."
+          },
+          {
+            "t": "È un problema suo, doveva guardare cosa le costruivano sotto le finestre.",
+            "b": -2,
+            "r": "Vedremo di chi sarà il problema."
+          }
+        ]
+      },
+      {
+        "t": "Verso le undici, quando la gente torna dal lavoro.",
+        "o": [
+          {
+            "t": "Ci metto la modalità notturna con i giri più bassi. Proviamo per una settimana.",
+            "b": 2,
+            "r": "Questo aiuterebbe."
+          },
+          {
+            "t": "Non ci posso fare niente, le macchine vanno come vanno e spegnerle di notte per una persona non lo faccio.",
+            "b": -2,
+            "r": "Allora la risolvo da un’altra parte."
+          },
+          {
+            "t": "Anche la gente deve lavare.",
+            "b": -1,
+            "r": "E io devo dormire."
+          }
+        ]
+      },
+      {
+        "t": "E se non aiuta?",
+        "o": [
+          {
+            "t": "Vengo a vedere e lo misuriamo.",
+            "b": 2,
+            "r": "Allora ci sto."
+          },
+          {
+            "t": "E allora si lamenti.",
+            "b": -2,
+            "r": "Ci può contare."
+          },
+          {
+            "t": "Aiuta.",
+            "b": -1,
+            "r": "Vedremo."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "tenisky",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Posso lavare da voi le scarpe da ginnastica?",
+        "o": [
+          {
+            "t": "Può. Nel sacchetto e a trenta.",
+            "b": 2,
+            "r": "Ottimo, grazie."
+          },
+          {
+            "t": "Le scarpe no.",
+            "b": -1,
+            "r": "Ah, peccato."
+          },
+          {
+            "t": "Provi e vedrà, io non glielo vieto e non glielo consiglio.",
+            "b": -2,
+            "r": "Ecco, questo mi ha aiutato."
+          }
+        ]
+      },
+      {
+        "t": "E in asciugatrice?",
+        "o": [
+          {
+            "t": "Quelle no, si scollerebbero. Le lasci finire di asciugare a casa.",
+            "b": 2,
+            "r": "Meno male che lo so."
+          },
+          {
+            "t": "Tranquillamente.",
+            "b": -2,
+            "r": "Così me le rovinate."
+          },
+          {
+            "t": "Come vuole.",
+            "b": -1,
+            "r": "Chiedo cosa è meglio."
+          }
+        ]
+      },
+      {
+        "t": "E non mi rovina il cestello?",
+        "o": [
+          {
+            "t": "No, il sacchetto serve a quello.",
+            "b": 2,
+            "r": "Chiaro. Grazie."
+          },
+          {
+            "t": "Può, le suole sono dure e il cestello è lamiera.",
+            "b": -1,
+            "r": "Allora non ce le metto."
+          },
+          {
+            "t": "Non lo so, non l’ho mai provato, ma le suole sono dure, quindi non mi stupirei se sì.",
+            "b": -1,
+            "r": "Ecco, adesso sì che sono tranquillo."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "karta",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Buongiorno, ho pagato con la carta e me l’ha addebitato due volte.",
+        "o": [
+          {
+            "t": "Un pagamento glielo annullo subito.",
+            "b": 2,
+            "r": "Grazie, questa sì che è stata veloce."
+          },
+          {
+            "t": "Lo fa la banca, non noi.",
+            "b": -2,
+            "r": "I soldi però ce li avete voi."
+          },
+          {
+            "t": "Ci do un’occhiata, ma il terminale ogni tanto manda due preautorizzazioni e una si sblocca da sola, quindi forse basta aspettare.",
+            "b": 0,
+            "r": "E se non si sblocca?"
+          }
+        ]
+      },
+      {
+        "t": "E come lo riconosco sull’estratto conto?",
+        "o": [
+          {
+            "t": "Questo non lo so.",
+            "b": -2,
+            "r": "E allora dove lo controllo?"
+          },
+          {
+            "t": "Le arriva un rimborso della stessa cifra, di solito entro tre giorni. Se non arriva, mi chiami e lo sistemo io.",
+            "b": 2,
+            "r": "Va bene, grazie."
+          },
+          {
+            "t": "Ci sarà scritto storno.",
+            "b": 1,
+            "r": "Allora guardo."
+          }
+        ]
+      },
+      {
+        "t": "E intanto posso lavare?",
+        "o": [
+          {
+            "t": "Certo, le avvio la macchina da remoto.",
+            "b": 2,
+            "r": "Ottimo."
+          },
+          {
+            "t": "Quando il pagamento è risolto, fino ad allora la macchina non gliela avvio.",
+            "b": -2,
+            "r": "Devo tornarmene a casa con la cesta?"
+          },
+          {
+            "t": "Provi a pagare a monete, ma spiccioli addosso non ne ha, immagino.",
+            "b": -1,
+            "r": "Non ne ho."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mraz",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Adesso d’inverno funziona? Ci sono meno dieci.",
+        "o": [
+          {
+            "t": "Funziona. La macchina è riscaldata e l’acqua non gela.",
+            "b": 2,
+            "r": "Non lo sapevo."
+          },
+          {
+            "t": "Provi.",
+            "b": -2,
+            "r": "Lo sto chiedendo a lei."
+          },
+          {
+            "t": "Con questo freddo lo lasci perdere per un altro giorno, potrebbe gelare e poi la riparazione tocca a noi.",
+            "b": -2,
+            "r": "E allora a cosa serve averla lì."
+          }
+        ]
+      },
+      {
+        "t": "E il bucato non mi diventa un ghiacciolo prima di arrivare alla macchina?",
+        "o": [
+          {
+            "t": "Non diventa.",
+            "b": 0,
+            "r": "E questo mi dovrebbe bastare?"
+          },
+          {
+            "t": "Lo faccia passare in asciugatrice, esce caldo e per strada non gela.",
+            "b": 2,
+            "r": "Buona idea."
+          },
+          {
+            "t": "Si metta i guanti.",
+            "b": -1,
+            "r": "Grazie del consiglio del secolo."
+          }
+        ]
+      },
+      {
+        "t": "E se invece gelasse?",
+        "o": [
+          {
+            "t": "Mi chiami, mando subito un tecnico.",
+            "b": 2,
+            "r": "Ci sto."
+          },
+          {
+            "t": "Finora non ci è mai successo, quindi non ci conto nemmeno.",
+            "b": -1,
+            "r": "Però può succedere."
+          },
+          {
+            "t": "Allora peggio per lei, il gelo è forza maggiore.",
+            "b": -2,
+            "r": "Bello."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "otviracka",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Fino a che ora siete aperti?",
+        "o": [
+          {
+            "t": "Sempre. La macchina sta fuori e va di continuo.",
+            "b": 2,
+            "r": "Questo è ottimo."
+          },
+          {
+            "t": "Fino alle otto di sera.",
+            "b": -2,
+            "r": "Allora non ce la faccio mai."
+          },
+          {
+            "t": "Aperto veramente non ce l’abbiamo, perché non è una lavanderia con il banco, ma una macchina, e quella non si chiude.",
+            "b": 1,
+            "r": "Ah, capisco."
+          }
+        ]
+      },
+      {
+        "t": "E di notte lì è sicuro?",
+        "o": [
+          {
+            "t": "Tranquillamente.",
+            "b": -1,
+            "r": "Questo non mi ha tranquillizzato molto."
+          },
+          {
+            "t": "C’è la luce e una telecamera sull’automatico. Ma di notte uno lì è da solo, non glielo nascondo.",
+            "b": 2,
+            "r": "Apprezzo che me lo dica chiaro."
+          },
+          {
+            "t": "Questo non glielo garantisco.",
+            "b": 0,
+            "r": "Mah."
+          }
+        ]
+      },
+      {
+        "t": "E nei giorni di festa?",
+        "o": [
+          {
+            "t": "Anche. Non chiudiamo niente.",
+            "b": 2,
+            "r": "Benissimo."
+          },
+          {
+            "t": "Le feste le valutiamo caso per caso.",
+            "b": -1,
+            "r": "Cosa vuol dire?"
+          },
+          {
+            "t": "Non lo so, guardi sul sito.",
+            "b": -2,
+            "r": "Chiamo proprio per non dover guardare."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "peri",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Ci sta un piumone? Ne ho uno matrimoniale.",
+        "o": [
+          {
+            "t": "Nella macchina grande sì, prende otto chili di bucato asciutto.",
+            "b": 2,
+            "r": "Allora prendo quella."
+          },
+          {
+            "t": "Non ci sta.",
+            "b": -2,
+            "r": "E lo sa da dove?"
+          },
+          {
+            "t": "Provi a pigiarcelo dentro, di solito in qualche modo ci entra, e se no lo tira fuori.",
+            "b": -2,
+            "r": "Pigiare un piumone nella lavatrice, bel consiglio."
+          }
+        ]
+      },
+      {
+        "t": "E nell’asciugatrice si asciuga?",
+        "o": [
+          {
+            "t": "Lo metta su un programma più lungo e ci butti dentro due asciugamani asciutti, prendono l’umidità e le piume non si appiccicano.",
+            "b": 2,
+            "r": "Provo, grazie."
+          },
+          {
+            "t": "Si asciuga.",
+            "b": 0,
+            "r": "Sicuro?"
+          },
+          {
+            "t": "I piumoni meglio non asciugarli.",
+            "b": -1,
+            "r": "E cosa dovrei farci, secondo lei?"
+          }
+        ]
+      },
+      {
+        "t": "Non rovino le piume?",
+        "o": [
+          {
+            "t": "No, se non mette una temperatura alta.",
+            "b": 2,
+            "r": "Va bene, grazie."
+          },
+          {
+            "t": "Può succedere.",
+            "b": -1,
+            "r": "E allora mi dica come evitarlo."
+          },
+          {
+            "t": "Le piume sono piume, quelle reggono tutto.",
+            "b": -2,
+            "r": "Non direi proprio."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "barva",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Ho lavato dopo qualcun altro e mi ha tinto la maglietta bianca.",
+        "o": [
+          {
+            "t": "È una cosa spiacevole. Quale macchina era e quando?",
+            "b": 2,
+            "r": "Stamattina, quella di mezzo."
+          },
+          {
+            "t": "L’ha avviata qualcun altro, non ci possiamo fare niente.",
+            "b": -2,
+            "r": "Quindi niente."
+          },
+          {
+            "t": "Dopo ogni lavaggio la macchina risciacqua il cestello, quindi il colore dentro non ci può restare — si sarà tinta da qualcosa di suo.",
+            "b": -1,
+            "r": "Mi sta dicendo che mento?"
+          }
+        ]
+      },
+      {
+        "t": "Stamattina, quella di mezzo.",
+        "o": [
+          {
+            "t": "Va bene, me lo segno.",
+            "b": 0,
+            "r": "E poi?"
+          },
+          {
+            "t": "Ci faccio fare un ciclo a vuoto e controllo. Per la maglietta le do un lavaggio gratis.",
+            "b": 2,
+            "r": "Questo è corretto."
+          },
+          {
+            "t": "Ormai non si può più dimostrare.",
+            "b": -2,
+            "r": "Allora arrivederci."
+          }
+        ]
+      },
+      {
+        "t": "E la maglietta si può ancora salvare?",
+        "o": [
+          {
+            "t": "Provi a rilavarla subito, finché il colore non si è fissato.",
+            "b": 2,
+            "r": "Vado a farlo."
+          },
+          {
+            "t": "Non lo so, non sono un chimico.",
+            "b": -1,
+            "r": "Bastava dire cosa farebbe lei."
+          },
+          {
+            "t": "Probabilmente no, qui non la aiuto più, questa è roba da lavanderia a secco.",
+            "b": -1,
+            "r": "Grazie dell’ottimismo."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "susicka",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "L’asciugatrice non ha finito, dopo tutto il ciclo il bucato è umido.",
+        "o": [
+          {
+            "t": "Non dovrebbe succedere. Il cestello era pieno?",
+            "b": 2,
+            "r": "Be’, l’ho riempito abbastanza."
+          },
+          {
+            "t": "Ci ha messo troppa roba.",
+            "b": -1,
+            "r": "Lo dice senza sapere quanta."
+          },
+          {
+            "t": "L’asciugatura dipende da un sacco di cose — da cosa asciuga, da come era centrifugato e da quanto fa freddo fuori.",
+            "b": 0,
+            "r": "Quindi?"
+          }
+        ]
+      },
+      {
+        "t": "Be’, l’ho riempito abbastanza.",
+        "o": [
+          {
+            "t": "Ecco, vede.",
+            "b": -2,
+            "r": "Non deve farmi la lezione."
+          },
+          {
+            "t": "Allora sarà quello — l’asciugatrice ha bisogno che il bucato giri libero. Ne metta metà e vedrà la differenza.",
+            "b": 2,
+            "r": "Va bene, provo."
+          },
+          {
+            "t": "Anche così doveva asciugare.",
+            "b": 0,
+            "r": "E allora cosa?"
+          }
+        ]
+      },
+      {
+        "t": "E l’asciugatura la pago un’altra volta?",
+        "o": [
+          {
+            "t": "No, questa gliela avvio gratis.",
+            "b": 2,
+            "r": "Grazie."
+          },
+          {
+            "t": "La paga, la macchina ha girato.",
+            "b": -1,
+            "r": "Ma non ha asciugato."
+          },
+          {
+            "t": "Questo non me ne occupo più, la macchina ha girato e per me finisce lì.",
+            "b": -2,
+            "r": "Bel modo di fare."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "miminko",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Posso lavare da voi la roba del bambino?",
+        "o": [
+          {
+            "t": "Può. Metta sessanta, per la roba dei bambini va benissimo.",
+            "b": 2,
+            "r": "Va bene."
+          },
+          {
+            "t": "Certo.",
+            "b": 0,
+            "r": "E a quanti gradi?"
+          },
+          {
+            "t": "Tranquillamente, ma sinceramente io la roba dei bambini in una lavatrice pubblica non ce la metterei, non si sa mai cosa ci ha lavato qualcuno prima di lei.",
+            "b": -2,
+            "r": "E allora perché la gestite?"
+          }
+        ]
+      },
+      {
+        "t": "E ci resta il detersivo di chi ha lavato prima di me?",
+        "o": [
+          {
+            "t": "Non ci resta.",
+            "b": 1,
+            "r": "Va bene allora."
+          },
+          {
+            "t": "No, tra un lavaggio e l’altro la macchina risciacqua il cestello con acqua pulita e il detersivo se lo dosa da sola, quindi non si accumula niente.",
+            "b": 2,
+            "r": "Questo mi ha tranquillizzata."
+          },
+          {
+            "t": "Qualcosa ci resta sempre.",
+            "b": -2,
+            "r": "Allora no di certo."
+          }
+        ]
+      },
+      {
+        "t": "E l’ammorbidente ce lo devo mettere?",
+        "o": [
+          {
+            "t": "Con la roba dei bambini meglio lasciarlo stare.",
+            "b": 2,
+            "r": "Grazie del consiglio."
+          },
+          {
+            "t": "Ci metta quello che vuole, io non mi ci intrometto.",
+            "b": -1,
+            "r": "Chiedevo un consiglio."
+          },
+          {
+            "t": "Fa lo stesso, l’ammorbidente non ha mai rovinato niente a nessuno.",
+            "b": -1,
+            "r": "Sulla pelle di un bambino non ne sarei così sicura."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "faktura",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Mi servirebbe una ricevuta del lavaggio per l’azienda.",
+        "o": [
+          {
+            "t": "Le mando una fattura per e-mail. Che partita IVA avete?",
+            "b": 2,
+            "r": "Gliela detto subito."
+          },
+          {
+            "t": "Nel self-service non facciamo documenti.",
+            "b": -2,
+            "r": "Allora il bucato lo porto da un’altra parte."
+          },
+          {
+            "t": "Il terminale stampa lo scontrino del pagamento, ma per la contabilità non le basterà, quindi non so che farci.",
+            "b": -1,
+            "r": "Chiamo proprio per questo."
+          }
+        ]
+      },
+      {
+        "t": "Siamo una srl, paghiamo con la carta aziendale.",
+        "o": [
+          {
+            "t": "Allora è semplice.",
+            "b": 0,
+            "r": "E cosa devo fare?"
+          },
+          {
+            "t": "Benissimo, quei pagamenti li so trovare nel sistema e posso mandarle una fattura riepilogativa una volta al mese.",
+            "b": 2,
+            "r": "Questo ci andrebbe bene."
+          },
+          {
+            "t": "Le carte aziendali qui meglio non usarle.",
+            "b": -2,
+            "r": "Perché no?"
+          }
+        ]
+      },
+      {
+        "t": "E si può impostare in modo fisso?",
+        "o": [
+          {
+            "t": "Si può. Glielo imposto oggi stesso.",
+            "b": 2,
+            "r": "Grazie."
+          },
+          {
+            "t": "Vedremo, adesso non le prometto niente.",
+            "b": -1,
+            "r": "Questa non è una risposta."
+          },
+          {
+            "t": "Dovrebbe parlare con la contabile, che però oggi non c’è e domani è libera.",
+            "b": -1,
+            "r": "Lei non lo può sbrigare?"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "kamery",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Qualcuno mi ha preso il bucato dall’automatico. Avete le telecamere?",
+        "o": [
+          {
+            "t": "La telecamera c’è. Mi dica l’ora e guardo la registrazione.",
+            "b": 2,
+            "r": "Era verso le cinque del pomeriggio."
+          },
+          {
+            "t": "Le abbiamo, le mando subito la registrazione.",
+            "b": -2,
+            "r": "Non dovrebbe mandarla così, no?"
+          },
+          {
+            "t": "Le telecamere ci sono, ma la registrazione non gliela posso dare, quella va alla polizia.",
+            "b": 1,
+            "r": "Almeno qualcosa."
+          }
+        ]
+      },
+      {
+        "t": "Era verso le cinque del pomeriggio.",
+        "o": [
+          {
+            "t": "Do un’occhiata.",
+            "b": 1,
+            "r": "Va bene."
+          },
+          {
+            "t": "La guardo, e se c’è qualcuno la passo alla polizia. A lei do una dichiarazione che è successo.",
+            "b": 2,
+            "r": "Questo mi aiuta."
+          },
+          {
+            "t": "Alle cinque ci passa un sacco di gente, non lo trovo.",
+            "b": -2,
+            "r": "Non ha nemmeno guardato."
+          }
+        ]
+      },
+      {
+        "t": "E me lo rimborsate?",
+        "o": [
+          {
+            "t": "Questo purtroppo no, ma il prossimo lavaggio lo offro io.",
+            "b": 2,
+            "r": "Giusto."
+          },
+          {
+            "t": "Per la roba dentro la macchina non rispondiamo, c’è scritto.",
+            "b": -1,
+            "r": "Tecnicamente ha ragione, umanamente no."
+          },
+          {
+            "t": "Doveva stare attento lei.",
+            "b": -2,
+            "r": "Grazie della comprensione."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "prepln",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Ho lavato e il bucato è ancora sporco.",
+        "o": [
+          {
+            "t": "Do un’occhiata a quella macchina. Quanta roba ci ha messo dentro? Il cestello va riempito al massimo per tre quarti.",
+            "b": 2,
+            "r": "Be’, era pieno fino in cima."
+          },
+          {
+            "t": "Ce ne ha messa troppa.",
+            "b": -1,
+            "r": "Questo non lo può sapere."
+          },
+          {
+            "t": "E allora lavi a casa.",
+            "b": -2,
+            "r": "Bello."
+          }
+        ]
+      },
+      {
+        "t": "Be’, era pieno fino in cima.",
+        "o": [
+          {
+            "t": "Ecco il punto.",
+            "b": 0,
+            "r": "E adesso?"
+          },
+          {
+            "t": "Così il bucato non ha modo di muoversi e non si lava. La prossima volta lasci sopra lo spazio di una mano.",
+            "b": 2,
+            "r": "Ah, questo ha senso."
+          },
+          {
+            "t": "Ecco, vede, quindi non è un guasto della macchina ma un errore di chi la usa, cioè suo.",
+            "b": -2,
+            "r": "Non deve dirmelo così."
+          }
+        ]
+      },
+      {
+        "t": "Va bene, e lo rilavo a mie spese?",
+        "o": [
+          {
+            "t": "Questa volta lo offro io.",
+            "b": 2,
+            "r": "Questo è corretto, grazie."
+          },
+          {
+            "t": "Sì, la macchina ha funzionato bene.",
+            "b": -1,
+            "r": "Capisco, ma mi dispiace."
+          },
+          {
+            "t": "Riprovi e vediamo come va a finire.",
+            "b": -1,
+            "r": "Cosa vediamo?"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "monterky",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Posso lavare da voi la tuta da lavoro sporca d’olio?",
+        "o": [
+          {
+            "t": "Lavarla sì. Ma poi non la metta in asciugatrice.",
+            "b": 2,
+            "r": "Perché no?"
+          },
+          {
+            "t": "Tranquillamente, qualsiasi cosa.",
+            "b": -2,
+            "r": "Anche in asciugatrice?"
+          },
+          {
+            "t": "Può, da noi ognuno lava quello che vuole — tute, stracci, anche tappeti, la macchina regge.",
+            "b": -1,
+            "r": "Questo non mi ha proprio tranquillizzato."
+          }
+        ]
+      },
+      {
+        "t": "Perché no?",
+        "o": [
+          {
+            "t": "È così che si consiglia.",
+            "b": 0,
+            "r": "Ma perché?"
+          },
+          {
+            "t": "I residui d’olio nel cestello caldo possono prendere fuoco. La lasci asciugare all’aria, è più sicuro.",
+            "b": 2,
+            "r": "Non lo sapevo, grazie."
+          },
+          {
+            "t": "Perché puzzerebbe.",
+            "b": -1,
+            "r": "Non mi sembra un motivo."
+          }
+        ]
+      },
+      {
+        "t": "E non sporco la macchina per gli altri?",
+        "o": [
+          {
+            "t": "No, dopo di lei la macchina risciacqua il cestello.",
+            "b": 2,
+            "r": "Va bene, grazie."
+          },
+          {
+            "t": "Un po’ sì, ma non se ne accorge nessuno.",
+            "b": -2,
+            "r": "Questo non mi piace per niente."
+          },
+          {
+            "t": "Difficile dire, così per telefono non glielo so dire.",
+            "b": -1,
+            "r": "Lei non lo sa?"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "koberec",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Nella vostra lavatrice ci sta un tappetino del bagno?",
+        "o": [
+          {
+            "t": "Di stoffa sì. Di gomma no, quello nel cestello si sbriciola.",
+            "b": 2,
+            "r": "Il mio è di stoffa."
+          },
+          {
+            "t": "Non ci sta.",
+            "b": -1,
+            "r": "Nemmeno piccolo?"
+          },
+          {
+            "t": "Dipende da quanto è grande, da quanto pesa, da quanta acqua prende e da cosa ha sotto.",
+            "b": 0,
+            "r": "È un tappetino normale."
+          }
+        ]
+      },
+      {
+        "t": "Il mio è di stoffa, un metro per mezzo metro.",
+        "o": [
+          {
+            "t": "Allora si può.",
+            "b": 1,
+            "r": "Bene."
+          },
+          {
+            "t": "Nessun problema. Lo metta da solo, prende molta acqua e con dell’altro bucato la macchina non ce la farebbe.",
+            "b": 2,
+            "r": "Va bene, lo porto a parte."
+          },
+          {
+            "t": "Provi e vedrà.",
+            "b": -1,
+            "r": "Preferirei saperlo prima."
+          }
+        ]
+      },
+      {
+        "t": "E lo asciugo da voi?",
+        "o": [
+          {
+            "t": "Sì, a temperatura più bassa e più a lungo.",
+            "b": 2,
+            "r": "Chiaro, grazie."
+          },
+          {
+            "t": "L’asciugatrice è per il bucato, non per i tappeti.",
+            "b": -1,
+            "r": "Ma ha appena detto che si può lavare."
+          },
+          {
+            "t": "Questo ormai dipende da lei.",
+            "b": -2,
+            "r": "Lo chiedo a lei, è lei che la gestisce."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "proud",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "A metà lavaggio è andata via la corrente e la macchina è ferma con dentro il mio bucato.",
+        "o": [
+          {
+            "t": "Le sblocco l’oblò da remoto. Aspetti un minuto.",
+            "b": 2,
+            "r": "Grazie!"
+          },
+          {
+            "t": "È un guasto del distributore, non ci posso fare niente.",
+            "b": -2,
+            "r": "E il mio bucato?"
+          },
+          {
+            "t": "Aspetti che riparta — la macchina si ricorda dov’era rimasta e finisce il lavaggio da sola, anche se ci può volere un po’.",
+            "b": 1,
+            "r": "Allora aspetto."
+          }
+        ]
+      },
+      {
+        "t": "E finisce il lavaggio, o ricomincio da capo?",
+        "o": [
+          {
+            "t": "Lo finisce.",
+            "b": 1,
+            "r": "Va bene."
+          },
+          {
+            "t": "Riprende da dov’era rimasta. E se non lo fa, le avvio tutto il ciclo di nuovo e gratis.",
+            "b": 2,
+            "r": "Questo è giusto."
+          },
+          {
+            "t": "Questo non glielo so dire.",
+            "b": -2,
+            "r": "Ma lei è l’assistenza, no?"
+          }
+        ]
+      },
+      {
+        "t": "E succede spesso?",
+        "o": [
+          {
+            "t": "No. In tutto l’anno è la seconda volta.",
+            "b": 2,
+            "r": "Allora ci sto."
+          },
+          {
+            "t": "Ogni tanto capita, in quella zona è così.",
+            "b": -1,
+            "r": "Non suona bene."
+          },
+          {
+            "t": "La corrente da noi è proprio un problema, l’anno scorso ci sarà capitato cinque volte.",
+            "b": -2,
+            "r": "Allora lì meglio che non ci lavi."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "sleva",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Vengo da voi tre volte a settimana. Non avete qualcosa per i clienti fissi?",
+        "o": [
+          {
+            "t": "Le posso aprire un credito prepagato con lo sconto. Lo vuole?",
+            "b": 2,
+            "r": "Suona bene."
+          },
+          {
+            "t": "Non abbiamo niente.",
+            "b": -1,
+            "r": "Peccato."
+          },
+          {
+            "t": "Sconti non ne facciamo, il prezzo è uguale per tutti, e se lo facessimo a uno lo vorrebbero subito tutti.",
+            "b": -1,
+            "r": "Non deve spiegarmi l’economia."
+          }
+        ]
+      },
+      {
+        "t": "E di quanto sarebbe lo sconto?",
+        "o": [
+          {
+            "t": "Qualche per cento.",
+            "b": 0,
+            "r": "Quanto esattamente?"
+          },
+          {
+            "t": "Ricaricando dieci lavaggi, un decimo in meno. Il credito non scade, le resta finché non lo usa.",
+            "b": 2,
+            "r": "Allora ci sto."
+          },
+          {
+            "t": "Questo lo studiamo ancora.",
+            "b": -1,
+            "r": "Preferirei sentire un numero."
+          }
+        ]
+      },
+      {
+        "t": "E vale anche per l’asciugatrice?",
+        "o": [
+          {
+            "t": "Vale, per tutte e due.",
+            "b": 2,
+            "r": "Benissimo."
+          },
+          {
+            "t": "Per ora solo per il lavaggio, l’asciugatrice non ce l’abbiamo messa.",
+            "b": 0,
+            "r": "Ah, va bene."
+          },
+          {
+            "t": "Non lo so, dovrei guardare come l’abbiamo impostato nel sistema.",
+            "b": -1,
+            "r": "Allora mi chiami quando lo saprà."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "parkovani",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Si riesce a parcheggiare vicino al vostro automatico? Porto il bucato in auto.",
+        "o": [
+          {
+            "t": "Ci sono due posti proprio davanti alla macchina, di solito sono liberi.",
+            "b": 2,
+            "r": "Allora va bene."
+          },
+          {
+            "t": "Non lo so.",
+            "b": -2,
+            "r": "Ma è il vostro posto."
+          },
+          {
+            "t": "Del parcheggio non ci occupiamo, è roba del Comune e noi non abbiamo voce in capitolo.",
+            "b": -1,
+            "r": "Lo chiedo in pratica, non per legge."
+          }
+        ]
+      },
+      {
+        "t": "E il sabato, quando accanto c’è il mercato?",
+        "o": [
+          {
+            "t": "Quello sarà peggio.",
+            "b": 0,
+            "r": "E allora quando?"
+          },
+          {
+            "t": "Il sabato mattina è pieno. Se venisse dopo mezzogiorno, lo trova libero.",
+            "b": 2,
+            "r": "Grazie, mi organizzo così."
+          },
+          {
+            "t": "Allora venga un altro giorno.",
+            "b": -1,
+            "r": "Grazie del consiglio."
+          }
+        ]
+      },
+      {
+        "t": "E fermarmi almeno un attimo davanti all’oblò?",
+        "o": [
+          {
+            "t": "Si può, per scaricare lì basta.",
+            "b": 2,
+            "r": "Ottimo."
+          },
+          {
+            "t": "Lì non può sostare, c’è il divieto, lo saprà.",
+            "b": -1,
+            "r": "Nemmeno un minuto?"
+          },
+          {
+            "t": "Non glielo consiglio, ci passano i vigili e fanno la multa.",
+            "b": 1,
+            "r": "Meno male che lo so."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "svatba",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Domani mi sposo e sull’abito ho una macchia di vino. Ce la fa il vostro automatico?",
+        "o": [
+          {
+            "t": "Un abito da sposa io nell’automatico non ce lo metterei. Provi una lavanderia a secco, questo è lavoro a mano.",
+            "b": 2,
+            "r": "Grazie della sincerità."
+          },
+          {
+            "t": "Certo, lo butti dentro, il programma delicati ce la fa.",
+            "b": -2,
+            "r": "E se lo rovino, poi?"
+          },
+          {
+            "t": "Dipende dal tessuto.",
+            "b": 0,
+            "r": "È seta."
+          }
+        ]
+      },
+      {
+        "t": "E se lo sciacquassi soltanto, giusto per averlo fresco?",
+        "o": [
+          {
+            "t": "Se deve essere per forza oggi, metta il programma a mano a venti gradi senza centrifuga. Ma la macchia non va via.",
+            "b": 2,
+            "r": "Va bene, ci provo con prudenza."
+          },
+          {
+            "t": "Fa lo stesso, un risciacquo è un risciacquo.",
+            "b": -1,
+            "r": "Questo non mi ha aiutato molto."
+          },
+          {
+            "t": "Meglio niente.",
+            "b": 0,
+            "r": "Mah."
+          }
+        ]
+      },
+      {
+        "t": "E l’asciugatrice ce la posso mettere?",
+        "o": [
+          {
+            "t": "Assolutamente no. La seta in asciugatrice si restringe e l’abito è finito.",
+            "b": 2,
+            "r": "Allora no di certo. Grazie!"
+          },
+          {
+            "t": "Un attimo alla temperatura più bassa, tranquillamente.",
+            "b": -2,
+            "r": "Mi vuole rovinare l’abito?"
+          },
+          {
+            "t": "Questo ormai dipende da lei.",
+            "b": -1,
+            "r": "Lo chiedo perché è lei che dovrebbe saperne."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "nocni",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Faccio i turni di notte. Alle tre di mattina ci arrivo?",
+        "o": [
+          {
+            "t": "Ci arriva, è aperto sempre. Si apre con la tessera o dall’app.",
+            "b": 2,
+            "r": "È esattamente quello che mi serve."
+          },
+          {
+            "t": "Di notte lì meglio non andarci.",
+            "b": -2,
+            "r": "E allora perché lo tenete aperto?"
+          },
+          {
+            "t": "Aperto è sempre, ma di notte lì non c’è nessuno.",
+            "b": 0,
+            "r": "Questo lo so, è un self-service."
+          }
+        ]
+      },
+      {
+        "t": "E di notte ci si vede? Non vorrei brancolare al buio.",
+        "o": [
+          {
+            "t": "La luce si accende al movimento e resta accesa tutto il ciclo.",
+            "b": 2,
+            "r": "Benissimo."
+          },
+          {
+            "t": "Si porti una torcia.",
+            "b": -2,
+            "r": "Dice sul serio?"
+          },
+          {
+            "t": "Qualcosa lì è acceso.",
+            "b": -1,
+            "r": "Suona poco sicuro."
+          }
+        ]
+      },
+      {
+        "t": "E se di notte si inceppa, chi chiamo?",
+        "o": [
+          {
+            "t": "Me. Questo numero lo prende una persona anche alle tre di mattina.",
+            "b": 2,
+            "r": "Questa sì che è una parola. Grazie."
+          },
+          {
+            "t": "Ci scriva una e-mail, la mattina lo sbrighiamo.",
+            "b": -1,
+            "r": "E fino al mattino cosa ci faccio con il bucato bagnato?"
+          },
+          {
+            "t": "Di notte non risponde nessuno, ma la macchina si ricorda e la mattina finisce.",
+            "b": -1,
+            "r": "Mah, vedremo."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ztrata",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Ho dimenticato il bucato nel cestello da voi, ci sono stata un’ora fa.",
+        "o": [
+          {
+            "t": "Guardo nel sistema quale macchina era e la blocco finché non arriva.",
+            "b": 2,
+            "r": "Mi ha salvata."
+          },
+          {
+            "t": "Ormai lì non ci sarà più.",
+            "b": -2,
+            "r": "Lei sì che sa tranquillizzare."
+          },
+          {
+            "t": "Faccia un salto a vedere.",
+            "b": 0,
+            "r": "Volevo farlo comunque."
+          }
+        ]
+      },
+      {
+        "t": "E se qualcuno l’avesse tirato fuori? C’era roba dei bambini.",
+        "o": [
+          {
+            "t": "Il bucato tirato fuori lo mettiamo nel contenitore accanto alla macchina, nessuno se ne va con quello.",
+            "b": 2,
+            "r": "Allora mi sento meglio."
+          },
+          {
+            "t": "Per la roba nell’automatico non rispondiamo, è nelle condizioni.",
+            "b": -2,
+            "r": "Chiedo cosa farete, non cosa non dovete."
+          },
+          {
+            "t": "Di solito non si perde niente.",
+            "b": 0,
+            "r": "Di solito."
+          }
+        ]
+      },
+      {
+        "t": "E cosa mi consiglia, per non dimenticarlo di nuovo?",
+        "o": [
+          {
+            "t": "Attivi nell’app la notifica di fine lavaggio. Le suona.",
+            "b": 2,
+            "r": "La imposto subito."
+          },
+          {
+            "t": "Semplicemente se lo ricordi.",
+            "b": -2,
+            "r": "Grazie del consiglio."
+          },
+          {
+            "t": "Si metta una sveglia sul telefono.",
+            "b": 1,
+            "r": "Non è una cattiva idea."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mince",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Sono davanti all’automatico e non ho spiccioli. Prende monete o carta?",
+        "o": [
+          {
+            "t": "Carta e anche telefono, le monete non le servono per niente.",
+            "b": 2,
+            "r": "Ottimo, allora provo."
+          },
+          {
+            "t": "Le monete sono una sicurezza, vada a cambiare.",
+            "b": -2,
+            "r": "Dove, alle nove e un quarto di sera?"
+          },
+          {
+            "t": "Tutte e due, come preferisce.",
+            "b": 1,
+            "r": "Va bene allora."
+          }
+        ]
+      },
+      {
+        "t": "E non mi addebita più di quanto lavo?",
+        "o": [
+          {
+            "t": "Si preautorizza una cifra più alta e il resto torna entro due giorni. Paga solo quello che ha lavato.",
+            "b": 2,
+            "r": "Ah, allora va bene."
+          },
+          {
+            "t": "Ogni tanto ci succede.",
+            "b": -2,
+            "r": "Allora meglio che non ci provi."
+          },
+          {
+            "t": "Addebita esattamente il prezzo del programma.",
+            "b": 1,
+            "r": "Va bene."
+          }
+        ]
+      },
+      {
+        "t": "E se non prendesse il pagamento?",
+        "o": [
+          {
+            "t": "Riprovi una volta e poi mi chiami, le avvio la macchina da remoto.",
+            "b": 2,
+            "r": "Questo sì che è servizio."
+          },
+          {
+            "t": "Non può succedere.",
+            "b": -1,
+            "r": "Tutto può succedere."
+          },
+          {
+            "t": "Il terminale ogni tanto salta, è il segnale.",
+            "b": -1,
+            "r": "Quindi peggio per me?"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "voda",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "Intorno al vostro automatico c’è una pozza. Perde?",
+        "o": [
+          {
+            "t": "Grazie che chiama. Ci mando un tecnico e intanto metto la macchina fuori servizio.",
+            "b": 2,
+            "r": "Questa sì che è stata veloce, grazie."
+          },
+          {
+            "t": "Sarà di qualcun altro.",
+            "b": -2,
+            "r": "E se non lo fosse?"
+          },
+          {
+            "t": "Ogni tanto resta un po’ d’acqua dallo scarico.",
+            "b": 0,
+            "r": "Ce n’è parecchia."
+          }
+        ]
+      },
+      {
+        "t": "La macchina la posso usare lo stesso, o mi si allaga tutto?",
+        "o": [
+          {
+            "t": "Non la usi. Accanto ce n’è un’altra, quella è a posto.",
+            "b": 2,
+            "r": "Allora provo quella."
+          },
+          {
+            "t": "Lavi tranquillamente, l’acqua non ha mai fatto male a nessuno.",
+            "b": -2,
+            "r": "E se va in corto?"
+          },
+          {
+            "t": "Io ci rischierei.",
+            "b": -2,
+            "r": "Io no di certo."
+          }
+        ]
+      },
+      {
+        "t": "E prendo qualcosa per avervelo segnalato?",
+        "o": [
+          {
+            "t": "Un lavaggio gratis, le mando il codice per messaggio. Grazie, senza di lei l’avrei saputo solo dal tecnico.",
+            "b": 2,
+            "r": "Questo mi fa piacere."
+          },
+          {
+            "t": "Questo non ce lo può chiedere nessuno.",
+            "b": -2,
+            "r": "Non ho chiesto niente, domando e basta."
+          },
+          {
+            "t": "Una cosa così non ce l’abbiamo, ma grazie.",
+            "b": 0,
+            "r": "E va bene."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "prasek",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Che detersivo ci mettete? Ho la pelle sensibile e i profumi forti non li sopporto.",
+        "o": [
+          {
+            "t": "Ci va un prodotto senza profumo. Le mando la composizione, così può controllare.",
+            "b": 2,
+            "r": "È gentile, grazie."
+          },
+          {
+            "t": "Un detersivo normale come dappertutto.",
+            "b": -1,
+            "r": "Questo non mi dice niente."
+          },
+          {
+            "t": "Questo davvero non lo so, se ne occupa un collega.",
+            "b": -2,
+            "r": "E allora me lo passi."
+          }
+        ]
+      },
+      {
+        "t": "E posso portarmi il mio?",
+        "o": [
+          {
+            "t": "Può, c’è lo scomparto. Ne metta metà, le macchine ne prendono meno di una lavatrice di casa.",
+            "b": 2,
+            "r": "Perfetto, allora faccio così."
+          },
+          {
+            "t": "Non si può, il sistema dosa da solo.",
+            "b": -1,
+            "r": "Peccato."
+          },
+          {
+            "t": "I detersivi propri li vietiamo, ci rovinano le macchine.",
+            "b": -2,
+            "r": "Quindi sarei io a rovinarvi le macchine."
+          }
+        ]
+      },
+      {
+        "t": "E tra un cliente e l’altro si risciacqua, o lavo nella schiuma degli altri?",
+        "o": [
+          {
+            "t": "Dopo ogni ciclo parte un risciacquo con acqua pulita, e una volta a settimana la disinfezione del cestello.",
+            "b": 2,
+            "r": "Questo volevo sentire."
+          },
+          {
+            "t": "L’acqua è acqua.",
+            "b": -2,
+            "r": "È una risposta parecchio disgustosa."
+          },
+          {
+            "t": "Il cestello si risciacqua, è tutto a posto.",
+            "b": 1,
+            "r": "Va bene."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "kolo",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Torno da un giro in bici, maglia e giacca sono piene di fango. Da voi si possono lavare?",
+        "o": [
+          {
+            "t": "Si può, ma prima scrolli il fango grosso fuori — altrimenti finisce nel filtro.",
+            "b": 2,
+            "r": "Allora faccio così."
+          },
+          {
+            "t": "La roba infangata nell’automatico non ci va.",
+            "b": -2,
+            "r": "E dove ci va, allora?"
+          },
+          {
+            "t": "La butti dentro, fa lo stesso.",
+            "b": -1,
+            "r": "Non voglio sporcarvi la macchina."
+          }
+        ]
+      },
+      {
+        "t": "E la giacca in membrana non si rovina? È costata cinquemila.",
+        "o": [
+          {
+            "t": "Metta trenta gradi, niente ammorbidente e centrifuga bassa. La membrana regge.",
+            "b": 2,
+            "r": "Grazie, mi serviva proprio."
+          },
+          {
+            "t": "Le membrane nell’automatico non si mettono.",
+            "b": -1,
+            "r": "Allora la lavo a casa."
+          },
+          {
+            "t": "Questo non glielo so dire, dipende dal produttore.",
+            "b": 0,
+            "r": "Mah."
+          }
+        ]
+      },
+      {
+        "t": "E lo zaino? Ci ho dentro tutta la macchina sporca.",
+        "o": [
+          {
+            "t": "Tolga lo zaino dal telaio, chiuda tutte le cerniere e lo metta sul delicato. Asciugatrice no, scioglierebbe le cerniere.",
+            "b": 2,
+            "r": "Chiaro, grazie del consiglio."
+          },
+          {
+            "t": "Gli zaini non li lavi, si rovinano.",
+            "b": 0,
+            "r": "Quindi peggio per me."
+          },
+          {
+            "t": "A me non importa, ha pagato.",
+            "b": -2,
+            "r": "E allora buona giornata."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "zdrazeni",
+    "rod": "",
+    "kroky": [
+      {
+        "t": "L’ultima volta ho pagato meno. Avete aumentato?",
+        "o": [
+          {
+            "t": "Abbiamo aumentato, di dieci corone a ciclo. Sono saliti acqua ed elettricità, più a lungo non riuscivamo a tenerlo.",
+            "b": 2,
+            "r": "Almeno lo dice chiaro."
+          },
+          {
+            "t": "I prezzi sono sempre gli stessi.",
+            "b": -2,
+            "r": "Ho lo scontrino che dice un’altra cosa."
+          },
+          {
+            "t": "Lo decide la direzione.",
+            "b": -1,
+            "r": "La direzione è lei, no?"
+          }
+        ]
+      },
+      {
+        "t": "E non potevate farlo sapere prima?",
+        "o": [
+          {
+            "t": "Ha ragione, doveva stare sulla porta una settimana prima. La prossima volta sarà così.",
+            "b": 2,
+            "r": "Va bene allora."
+          },
+          {
+            "t": "Il cartello c’era.",
+            "b": -1,
+            "r": "Non l’ho notato."
+          },
+          {
+            "t": "Non lo fa nessuno.",
+            "b": -2,
+            "r": "La gente per bene lo fa."
+          }
+        ]
+      },
+      {
+        "t": "Non avete qualcosa per chi viene regolarmente?",
+        "o": [
+          {
+            "t": "Un credito da dieci lavaggi, lì il prezzo è sempre quello vecchio. Glielo posso aprire adesso.",
+            "b": 2,
+            "r": "Allora ci sto."
+          },
+          {
+            "t": "Non abbiamo niente e non avremo niente.",
+            "b": -2,
+            "r": "La prossima volta provo la concorrenza."
+          },
+          {
+            "t": "Qualcosa stiamo preparando.",
+            "b": 0,
+            "r": "Mi faccia sapere."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "deti",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Vicino al vostro automatico giocano dei bambini, si infilano nel cestello. Lo sa?",
+        "o": [
+          {
+            "t": "Non lo sapevo, grazie. Metto il blocco dell’oblò anche fuori ciclo e faccio un salto a vedere.",
+            "b": 2,
+            "r": "Questo è un bene."
+          },
+          {
+            "t": "Per i bambini degli altri non rispondiamo.",
+            "b": -2,
+            "r": "Si tratta di non far succedere niente a nessuno."
+          },
+          {
+            "t": "Devono badarci i genitori.",
+            "b": -1,
+            "r": "Certo, ma la macchina è vostra."
+          }
+        ]
+      },
+      {
+        "t": "E l’oblò si apre da dentro?",
+        "o": [
+          {
+            "t": "Si apre. Il blocco tiene solo mentre la macchina gira e se va via la corrente si sgancia da solo.",
+            "b": 2,
+            "r": "Questo volevo sentire."
+          },
+          {
+            "t": "Non l’ho mai provato.",
+            "b": -1,
+            "r": "E allora lo provi."
+          },
+          {
+            "t": "Da dentro no, ma lì dentro non ci sta nessuno.",
+            "b": -2,
+            "r": "Un bambino di otto anni ci sta."
+          }
+        ]
+      },
+      {
+        "t": "Non vuole metterci un cartello, che lo vedano anche i genitori?",
+        "o": [
+          {
+            "t": "Buona idea, lo ordino oggi stesso. Grazie della spinta.",
+            "b": 2,
+            "r": "Si figuri."
+          },
+          {
+            "t": "I cartelli non li legge nessuno.",
+            "b": -1,
+            "r": "Qualcuno si legge."
+          },
+          {
+            "t": "Di cartelli ne abbiamo già abbastanza.",
+            "b": -2,
+            "r": "E allora arrivederci."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "klub",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Dirigo una squadra di calcio, venti maglie ogni settimana. Da voi si può concordare qualcosa?",
+        "o": [
+          {
+            "t": "Si può. Le faccio un credito per la società e le mostro come caricarle in due macchine.",
+            "b": 2,
+            "r": "Questo ci aiuterebbe molto."
+          },
+          {
+            "t": "Venga e paghi come tutti.",
+            "b": -1,
+            "r": "Chiedo se si può concordare qualcosa."
+          },
+          {
+            "t": "Commesse grandi non ne facciamo.",
+            "b": -2,
+            "r": "Venti maglie non sono una commessa grande."
+          }
+        ]
+      },
+      {
+        "t": "E quando avete meno gente? Non voglio bloccarvi tutto il locale.",
+        "o": [
+          {
+            "t": "Il martedì e il mercoledì mattina non c’è nessuno. Le porti allora.",
+            "b": 2,
+            "r": "Me lo segno."
+          },
+          {
+            "t": "È sempre pieno.",
+            "b": -1,
+            "r": "Questo non mi ha aiutato."
+          },
+          {
+            "t": "Non si può dire.",
+            "b": 0,
+            "r": "Mah."
+          }
+        ]
+      },
+      {
+        "t": "E mi fate una fattura per la società?",
+        "o": [
+          {
+            "t": "Mensile, con tutto quello che la società lava. Gliela mando per e-mail.",
+            "b": 2,
+            "r": "Perfetto, d’accordo."
+          },
+          {
+            "t": "Fatture non ne facciamo.",
+            "b": -2,
+            "r": "Allora la società non me lo rimborsa."
+          },
+          {
+            "t": "Questo lo deve vedere con la contabile.",
+            "b": -1,
+            "r": "Chiamo lei, non la contabile."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "qr",
+    "rod": "z",
+    "kroky": [
+      {
+        "t": "Ho letto il codice QR con il telefono e non è successo niente. Il pagamento non è passato.",
+        "o": [
+          {
+            "t": "Lo vedo nel sistema — il pagamento si è bloccato a metà strada e non è stato addebitato niente. Le avvio la macchina a mano.",
+            "b": 2,
+            "r": "Che velocità, grazie."
+          },
+          {
+            "t": "Sarà la sua banca.",
+            "b": -2,
+            "r": "Ci ho provato due volte."
+          },
+          {
+            "t": "Riprovi un’altra volta.",
+            "b": -1,
+            "r": "E se me lo addebita due volte?"
+          }
+        ]
+      },
+      {
+        "t": "E alla fine non me lo addebita due volte?",
+        "o": [
+          {
+            "t": "Se passa due volte, un pagamento glielo rimando e la richiamo io.",
+            "b": 2,
+            "r": "Va bene, conto su di lei."
+          },
+          {
+            "t": "Non succede.",
+            "b": -1,
+            "r": "A me è appena successo."
+          },
+          {
+            "t": "Quello poi lo deve sistemare con la banca.",
+            "b": -2,
+            "r": "Ma è il vostro sistema di pagamento."
+          }
+        ]
+      },
+      {
+        "t": "E non ce l’avete piuttosto con la carta? Quella la capisco meglio.",
+        "o": [
+          {
+            "t": "Il terminale è proprio sulla macchina, appoggia la carta e parte. Il QR è solo per chi non vuole tirare fuori il portafoglio.",
+            "b": 2,
+            "r": "Allora la prossima volta con la carta."
+          },
+          {
+            "t": "Il QR è moderno, ci si abitui.",
+            "b": -2,
+            "r": "Mi abituo alla concorrenza."
+          },
+          {
+            "t": "Funzionano uguale tutti e due.",
+            "b": 0,
+            "r": "Evidentemente no."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "cekani",
+    "rod": "m",
+    "kroky": [
+      {
+        "t": "Sono qui da voi e tutte le macchine girano. Quanto devo aspettare?",
+        "o": [
+          {
+            "t": "Guardo nel sistema: quella a sinistra finisce tra undici minuti, l’altra tra venti.",
+            "b": 2,
+            "r": "Allora aspetto, grazie."
+          },
+          {
+            "t": "Questo non glielo so dire.",
+            "b": -2,
+            "r": "Ma lo deve pur vedere."
+          },
+          {
+            "t": "Ci vorrà un po’.",
+            "b": -1,
+            "r": "Un po’ quanto?"
+          }
+        ]
+      },
+      {
+        "t": "E si può prenotare in qualche modo, per non venire per niente?",
+        "o": [
+          {
+            "t": "Prenotazioni non ne facciamo, ma nell’app vede cosa è libero prima di partire.",
+            "b": 2,
+            "r": "Questo mi basta."
+          },
+          {
+            "t": "No.",
+            "b": -1,
+            "r": "Ah."
+          },
+          {
+            "t": "Prenoti dalla concorrenza.",
+            "b": -2,
+            "r": "Non è stata una risposta molto intelligente."
+          }
+        ]
+      },
+      {
+        "t": "E se qualcuno lascia il bucato nella macchina e non viene a prenderlo?",
+        "o": [
+          {
+            "t": "Lo può tirare fuori nel contenitore accanto. Al proprietario arriva una notifica, di solito arriva entro dieci minuti.",
+            "b": 2,
+            "r": "Capito, allora provo."
+          },
+          {
+            "t": "Il bucato degli altri non lo tocchi.",
+            "b": -1,
+            "r": "E cosa devo fare?"
+          },
+          {
+            "t": "E allora aspetti.",
+            "b": -2,
+            "r": "Bel consiglio il suo."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mokre2",
+    "rod": "z",
+    "nalada": 18,
+    "kroky": [
+      {
+        "t": "Buongiorno, ho tirato fuori il bucato dall’asciugatrice ed è ancora tutto bagnato. Ho pagato due asciugature!",
+        "o": [
+          {
+            "t": "È colpa nostra, tutte e due le asciugature gliele rimborso. Provi per favore l’asciugatrice numero due, questa la metto subito fuori servizio.",
+            "b": 2,
+            "r": "Ecco, finalmente qualcuno ragionevole."
+          },
+          {
+            "t": "L’avrà riempita troppo, è il motivo più comune.",
+            "b": -2,
+            "r": "Quindi è colpa mia?"
+          },
+          {
+            "t": "Provi ad avviarla un’altra volta, magari finisce.",
+            "b": -1,
+            "r": "Con i soldi per la terza? Ma no."
+          }
+        ]
+      },
+      {
+        "t": "E adesso cosa faccio? Ho qui una borsa di bucato bagnato e tra un’ora parto.",
+        "o": [
+          {
+            "t": "Le avvio la due da remoto e gratis, parte tra un minuto. In mezz’ora il bucato è asciutto.",
+            "b": 2,
+            "r": "Grazie, mi salva la giornata."
+          },
+          {
+            "t": "Allora se lo porti a casa, lì finisce di asciugare.",
+            "b": -2,
+            "r": "Bucato bagnato in macchina, benissimo."
+          },
+          {
+            "t": "Può aspettare il tecnico, arriva nel pomeriggio.",
+            "b": -1,
+            "r": "Nel pomeriggio io sarò già via."
+          }
+        ]
+      },
+      {
+        "t": "E i soldi della prima asciugatura?",
+        "o": [
+          {
+            "t": "Li rimando sul conto, entro due giorni ci saranno. La conferma arriva per SMS.",
+            "b": 2,
+            "r": "Allora ci sto, grazie."
+          },
+          {
+            "t": "Quelli purtroppo non tornano, la macchina è partita.",
+            "b": -2,
+            "r": "È partita, ma non ha asciugato!"
+          },
+          {
+            "t": "Ce li chieda per e-mail, qualcuno ci darà un’occhiata.",
+            "b": -1,
+            "r": "Altre scartoffie."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "barva-2",
+    "rod": "m",
+    "nalada": 10,
+    "kroky": [
+      {
+        "t": "Qualcuno ha lasciato una maglietta rossa nel cestello e mi si è tinto tutto il bucato bianco. Le camicie da lavoro, tutto!",
+        "o": [
+          {
+            "t": "È una cosa spiacevole e le chiedo scusa. Mi conti cosa si è rovinato e glielo rimborso.",
+            "b": 2,
+            "r": "Va bene. Almeno qualcosa."
+          },
+          {
+            "t": "Per il contenuto del cestello non rispondiamo, sta a lei controllarlo.",
+            "b": -2,
+            "r": "Lei è incredibile."
+          },
+          {
+            "t": "Capita, provi a lavarlo con uno smacchiatore.",
+            "b": -1,
+            "r": "Lo smacchiatore sulle camicie da lavoro?"
+          }
+        ]
+      },
+      {
+        "t": "E come farete perché non succeda di nuovo?",
+        "o": [
+          {
+            "t": "Metto un cartello sulla porta e chi fa le pulizie controllerà i cestelli ogni volta. Finora non lo faceva, e questo è colpa nostra.",
+            "b": 2,
+            "r": "Questo suona come uno che fa sul serio."
+          },
+          {
+            "t": "In nessun modo, la gente è disordinata.",
+            "b": -2,
+            "r": "Allora la prossima volta lavo da un’altra parte."
+          },
+          {
+            "t": "Lo segnaleremo di sicuro.",
+            "b": 0,
+            "r": "Mah."
+          }
+        ]
+      },
+      {
+        "t": "Allora quanto mi date e quando?",
+        "o": [
+          {
+            "t": "Mi mandi le foto e lo scontrino, entro tre giorni mando i soldi. Se non ci accordiamo, mi dica lei quanto le sembra giusto.",
+            "b": 2,
+            "r": "Bene, le foto le mando."
+          },
+          {
+            "t": "Al massimo le rimborsiamo il lavaggio.",
+            "b": -2,
+            "r": "Con quello le camicie non me le ridà."
+          },
+          {
+            "t": "Dipende, vedremo.",
+            "b": -1,
+            "r": "Vedremo. Certo."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "prasek-2",
+    "rod": "z",
+    "nalada": 30,
+    "kroky": [
+      {
+        "t": "Buongiorno, il distributore del detersivo è vuoto e io sono qui con la borsa piena.",
+        "o": [
+          {
+            "t": "Mi dispiace. Nella macchina due il dosatore è pieno, gliela avvio con il detersivo gratis.",
+            "b": 2,
+            "r": "È gentile, grazie."
+          },
+          {
+            "t": "Il detersivo se lo può portare, nessuno glielo vieta.",
+            "b": -2,
+            "r": "E allora perché ce lo tenete, quel distributore?"
+          },
+          {
+            "t": "Lo riempiamo una volta a settimana, venga giovedì.",
+            "b": -1,
+            "r": "Giovedì? A quel punto a casa ho la muffa."
+          }
+        ]
+      },
+      {
+        "t": "E il negozio più vicino dov’è?",
+        "o": [
+          {
+            "t": "A due minuti c’è un minimarket, hanno il detersivo a venti. La differenza gliela rimetto in credito.",
+            "b": 2,
+            "r": "Allora ce la faccio."
+          },
+          {
+            "t": "Questo davvero non lo so, non sono un navigatore.",
+            "b": -2,
+            "r": "Mi ha aiutato proprio tanto."
+          },
+          {
+            "t": "In centro qualcosa ci sarà di sicuro.",
+            "b": -1,
+            "r": "Qualcosa. Ottimo."
+          }
+        ]
+      },
+      {
+        "t": "E lo riempite, o mi devo portare il detersivo per sempre?",
+        "o": [
+          {
+            "t": "Lo riempio stasera di persona e ci bado ogni settimana. Mi scusi.",
+            "b": 2,
+            "r": "Va bene, le do ancora una possibilità."
+          },
+          {
+            "t": "Si riempirà quando si riempirà.",
+            "b": -2,
+            "r": "Cioè mai."
+          },
+          {
+            "t": "Lo scrivo a un collega.",
+            "b": 0,
+            "r": "Lo spero bene."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "zamceno",
+    "rod": "m",
+    "nalada": 12,
+    "kroky": [
+      {
+        "t": "Sono davanti alla vostra lavanderia, sulla porta avete scritto sempre aperto ed è chiuso a chiave. Ho guidato venti minuti per venire qui.",
+        "o": [
+          {
+            "t": "La serratura si è bloccata, gliela apro da remoto. Mi dia dieci secondi.",
+            "b": 2,
+            "r": "Questo sì che è servizio, grazie."
+          },
+          {
+            "t": "Non è possibile, sempre aperto vuol dire sempre aperto.",
+            "b": -2,
+            "r": "Vuole una foto?"
+          },
+          {
+            "t": "Forse non le funziona la tessera, provi ad appoggiarla meglio.",
+            "b": -1,
+            "r": "Ci ho provato cinque volte."
+          }
+        ]
+      },
+      {
+        "t": "Adesso sono dentro. Ma la prossima volta vado da un’altra parte, se è così.",
+        "o": [
+          {
+            "t": "La capisco. Per la prossima volta le do un lavaggio gratis, così il viaggio non è stato inutile.",
+            "b": 2,
+            "r": "Va bene, ci sto."
+          },
+          {
+            "t": "Faccia lei, la concorrenza è a due passi.",
+            "b": -2,
+            "r": "Lei sì che è un commerciante."
+          },
+          {
+            "t": "Speriamo non si ripeta.",
+            "b": 0,
+            "r": "Speriamo."
+          }
+        ]
+      },
+      {
+        "t": "E quella serratura, la sistemate?",
+        "o": [
+          {
+            "t": "Il tecnico ci va domattina e la cambia. Fino ad allora la tengo d’occhio dalla centrale.",
+            "b": 2,
+            "r": "Va bene, grazie della sincerità."
+          },
+          {
+            "t": "La serratura è a posto, è stata un’eccezione.",
+            "b": -2,
+            "r": "Un’eccezione che mi è costata la serata."
+          },
+          {
+            "t": "Lo segnalo.",
+            "b": 0,
+            "r": "Mah."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "karta-2",
+    "rod": "z",
+    "nalada": 26,
+    "kroky": [
+      {
+        "t": "Il terminale mi ha rifiutato la carta tre volte e poi mi sono arrivati tre messaggi dalla banca che avevo pagato. Cos’è?",
+        "o": [
+          {
+            "t": "Sono preautorizzazioni, i soldi tornano da soli entro tre giorni. Il lavaggio glielo avvio subito.",
+            "b": 2,
+            "r": "Allora mi sento meglio."
+          },
+          {
+            "t": "È un problema con la banca, non con noi.",
+            "b": -2,
+            "r": "Tre pagamenti da voi e il problema ce l’ho io?"
+          },
+          {
+            "t": "Provi un’altra carta.",
+            "b": -1,
+            "r": "Un’altra non ce l’ho."
+          }
+        ]
+      },
+      {
+        "t": "E come faccio a essere sicura che mi tornino davvero?",
+        "o": [
+          {
+            "t": "Le mando per e-mail la conferma dell’annullamento di tutti e tre i pagamenti. Se entro tre giorni non arrivano, mi chiami direttamente.",
+            "b": 2,
+            "r": "Va bene, questo mi basta."
+          },
+          {
+            "t": "Deve fidarsi di noi.",
+            "b": -2,
+            "r": "Fidarmi. Dopo questa."
+          },
+          {
+            "t": "Di solito arrivano.",
+            "b": 0,
+            "r": "Di solito."
+          }
+        ]
+      },
+      {
+        "t": "E il terminale lo riparate?",
+        "o": [
+          {
+            "t": "Lo cambiamo domani. Oggi lì funziona il pagamento con il codice QR, quello va senza problemi.",
+            "b": 2,
+            "r": "Bene, grazie della risposta chiara."
+          },
+          {
+            "t": "Il terminale è a posto.",
+            "b": -2,
+            "r": "Certo, me lo sono inventato io."
+          },
+          {
+            "t": "Ci daremo un’occhiata.",
+            "b": 0,
+            "r": "Mah."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "proud-2",
+    "rod": "m",
+    "nalada": 20,
+    "kroky": [
+      {
+        "t": "A metà lavaggio è andata via la corrente e la macchina è bloccata con dentro il mio bucato.",
+        "o": [
+          {
+            "t": "Quando torna la corrente il programma riparte da dov’era rimasto. L’oblò glielo sblocco da remoto, se le serve prima.",
+            "b": 2,
+            "r": "Ah, questo è buono a sapersi."
+          },
+          {
+            "t": "Dei blackout non rispondiamo.",
+            "b": -2,
+            "r": "Questo mi ha tranquillizzato."
+          },
+          {
+            "t": "Aspetti, riparte.",
+            "b": -1,
+            "r": "Quanto devo aspettare?"
+          }
+        ]
+      },
+      {
+        "t": "E il lavaggio lo pago un’altra volta?",
+        "o": [
+          {
+            "t": "No. Il ciclo continua sul pagamento di prima e se non lo fa gliene avvio uno nuovo gratis.",
+            "b": 2,
+            "r": "Corretto."
+          },
+          {
+            "t": "Certo, la macchina è partita.",
+            "b": -2,
+            "r": "Ed è arrivata a metà!"
+          },
+          {
+            "t": "Questo lo vediamo dopo.",
+            "b": -1,
+            "r": "Dopo. Sempre dopo."
+          }
+        ]
+      },
+      {
+        "t": "Non avete un gruppo di continuità? Anche nel congelatore qui accanto è andata via.",
+        "o": [
+          {
+            "t": "Ce l’abbiamo solo per le serrature e le luci, così uno esce sempre e arriva al bucato. Per le macchine no, lì serve ben altro.",
+            "b": 2,
+            "r": "Capisco, ha senso."
+          },
+          {
+            "t": "Di queste cose non ci occupiamo.",
+            "b": -2,
+            "r": "Voi non vi occupate di niente."
+          },
+          {
+            "t": "Qualcosa lì ci sarà.",
+            "b": -1,
+            "r": "Ci sarà."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "penezenka",
+    "rod": "z",
+    "nalada": 16,
+    "kroky": [
+      {
+        "t": "Ho lasciato il portafoglio nella vostra lavanderia e dopo un’ora sono tornata e non c’era più.",
+        "o": [
+          {
+            "t": "È una cosa spiacevole. La telecamera c’è, guardo la registrazione adesso e la richiamo entro un’ora.",
+            "b": 2,
+            "r": "Grazie, almeno qualcosa."
+          },
+          {
+            "t": "Per le cose lasciate in giro non rispondiamo, è scritto sul cartello.",
+            "b": -2,
+            "r": "So cosa c’è sul cartello. Sto chiedendo aiuto."
+          },
+          {
+            "t": "Chieda agli altri clienti.",
+            "b": -1,
+            "r": "A quali, sono andati via."
+          }
+        ]
+      },
+      {
+        "t": "E se lo vede sulla telecamera, cosa fa?",
+        "o": [
+          {
+            "t": "Passo la registrazione alla polizia, è l’unica strada giusta. Lei faccia la denuncia e io gliela mando direttamente.",
+            "b": 2,
+            "r": "Va bene, lo faccio."
+          },
+          {
+            "t": "Niente, in questa storia non ci entriamo.",
+            "b": -2,
+            "r": "Quindi niente."
+          },
+          {
+            "t": "Vedremo in base a cosa c’è.",
+            "b": 0,
+            "r": "Mah."
+          }
+        ]
+      },
+      {
+        "t": "La registrazione la posso vedere?",
+        "o": [
+          {
+            "t": "Mostrargliela io non posso, ci sono anche altre persone. Alla polizia la consegno subito e lei può essere presente.",
+            "b": 2,
+            "r": "Questo lo capisco, grazie della chiarezza."
+          },
+          {
+            "t": "Tanto le telecamere non funzionano.",
+            "b": -2,
+            "r": "E allora perché stanno lì appese?"
+          },
+          {
+            "t": "Questo non si può fare.",
+            "b": -1,
+            "r": "Perché no?"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mastnota",
+    "rod": "m",
+    "nalada": 14,
+    "kroky": [
+      {
+        "t": "Nel cestello c’era l’unto di qualcun altro e ho due felpe rovinate. Pare che lì qualcuno abbia lavato una tuta da lavoro.",
+        "o": [
+          {
+            "t": "Le chiedo scusa. Le felpe gliele rimborso e la macchina la ritiro per la pulizia oggi stesso.",
+            "b": 2,
+            "r": "Va bene, allora ci sto."
+          },
+          {
+            "t": "Doveva controllare il cestello.",
+            "b": -2,
+            "r": "Devo controllare dopo di voi?"
+          },
+          {
+            "t": "Provi a lavarle ancora una volta.",
+            "b": -1,
+            "r": "Ci ho già provato due volte."
+          }
+        ]
+      },
+      {
+        "t": "E perché qualcuno lava una tuta da lavoro in una lavatrice normale?",
+        "o": [
+          {
+            "t": "Perché finora non ci badava nessuno. Metto nel locale una macchina segnata per gli indumenti da lavoro e sulle altre lo vieto.",
+            "b": 2,
+            "r": "Questa è una soluzione ragionevole."
+          },
+          {
+            "t": "Perché la gente è maiala.",
+            "b": -1,
+            "r": "Bel modo di parlare dei suoi clienti."
+          },
+          {
+            "t": "Non si riesce a controllare.",
+            "b": -2,
+            "r": "Ma è il suo mestiere, no?"
+          }
+        ]
+      },
+      {
+        "t": "Quanto resta fuori servizio quella macchina?",
+        "o": [
+          {
+            "t": "Fino a stasera. La pulisce un professionista, non io con uno straccio. Le scrivo appena riparte.",
+            "b": 2,
+            "r": "Bene, grazie."
+          },
+          {
+            "t": "Non lo so.",
+            "b": -2,
+            "r": "Lei non sa niente."
+          },
+          {
+            "t": "Qualche giorno.",
+            "b": 0,
+            "r": "Mah."
+          }
+        ]
+      }
+    ]
+  }
+]

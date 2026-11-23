@@ -42,6 +42,10 @@ const VYCHOZI = {
 //   { id, kod, nazev, utvar, skoda, duvod, dukazy: [] }
 // Škoda je vždycky to, co hráč získal navíc — ne obrat, ne hodnota firmy.
 
+// Co už bylo jednou souzeno, se nesoudí znovu: u hráče s uzavřeným případem se berou jen události
+// PO zahájení jeho posledního uzavřeného případu (data.hranice: hráč → ms).
+const po = (data, id, kdy) => { const h = (data.hranice || {})[id]; return !h || (kdy != null && new Date(kdy).getTime() > h); };
+
 // 1) Obchody mezi účty jednoho člověka.
 // Prodat si stroj sám sobě není obchod, je to přesun. Hra ale při každém
 // obchodu něco dává: provize zvoucímu, nový účet startovní hotovost. Když
@@ -65,10 +69,13 @@ function spojeneObchody(data, S, R) {
     const fer = ['stroj', 'pradlomat'].indexOf(t.predmet) >= 0 ? cenik(t.model) : 0;
     if (!fer) return;                       // co neumíme ocenit, nesoudíme
     const cena = cislo(t.cena);
+    const kdyT = t.resolved_at || t.created_at;
     if (cena < fer * dolni) {
+      if (!po(data, kup, kdyT)) return;
       pridej(kup, fer - cena, 'koupil ' + t.predmet + ' od svého účtu za ' + L(cena)
         + ' místo ' + L(fer), t.id);
     } else if (cena > fer * horni) {
+      if (!po(data, prod, kdyT)) return;
       pridej(prod, cena - fer, 'prodal ' + t.predmet + ' svému účtu za ' + L(cena)
         + ' místo ' + L(fer), t.id);
     }
@@ -89,6 +96,7 @@ function drazbyNaoko(data, S) {
   (data.drazby || []).forEach((d) => {
     const prihozy = podleDrazby.get(d.id) || [];
     if (!prihozy.length) return;
+    if (!po(data, d.prodavajici_id, d.konec || d.created_at)) return;
     const nastrceni = prihozy.filter((p) => p.player_id !== d.prodavajici_id
       && S.jedenClovek(p.player_id, d.prodavajici_id));
     if (!nastrceni.length) return;
@@ -122,6 +130,7 @@ function fondAkcie(data, S) {
     if (!e.fond_id || e.stav !== 'bezi') return;
     const cena = cislo(e.cena);
     if (!cena) return;
+    if (!po(data, e.firma_id, e.created_at)) return;
     // Komu fond zaplatil: majiteli firmy, ve které podíl drží.
     const clenove = fondu.get(e.fond_id) || [];
     const spojeny = clenove.filter((id) => id !== e.firma_id && S.jedenClovek(id, e.firma_id));
@@ -146,6 +155,7 @@ function pujckyNaoko(data, S) {
   const nalezy = new Map();
   (data.pujcky || []).forEach((p) => {
     if (!S.jedenClovek(p.lender_id, p.borrower_id)) return;
+    if (!po(data, p.lender_id, p.created_at)) return;
     const splaceno = cislo(p.splaceno) * cislo(p.splatka);
     const zbyva = Math.max(0, cislo(p.castka) - splaceno);
     // Doběhlá a poctivě splacená půjčka mezi příbuznými není škoda.
@@ -174,17 +184,20 @@ const DETEKTORY = [
 async function data(prisma) {
   const [obchody, drazby, prihozy, equity, clenove, pujcky, hraci] = await Promise.all([
     prisma.gameTrade.findMany({ where: { stav: 'prijato' },
-      select: { id: true, from_id: true, to_id: true, smer: true, predmet: true, model: true, cena: true } }),
+      select: { id: true, from_id: true, to_id: true, smer: true, predmet: true, model: true, cena: true, resolved_at: true, created_at: true } }),
     prisma.gameDrazba.findMany({ where: { stav: 'hotovo' },
-      select: { id: true, prodavajici_id: true, nazev: true, suma: true, cena: true, vitez_id: true } }),
+      select: { id: true, prodavajici_id: true, nazev: true, suma: true, cena: true, vitez_id: true, konec: true, created_at: true } }),
     prisma.gameDrazbaPrihoz.findMany({ select: { drazba_id: true, player_id: true, nick: true, castka: true } }),
-    prisma.gameEquity.findMany({ select: { id: true, investor_id: true, fond_id: true, firma_id: true, podil: true, cena: true, stav: true } }),
+    prisma.gameEquity.findMany({ select: { id: true, investor_id: true, fond_id: true, firma_id: true, podil: true, cena: true, stav: true, created_at: true } }),
     prisma.gameAlianceClen.findMany({ where: { stav: 'clen' }, select: { aliance_id: true, player_id: true } }).catch(() => []),
     prisma.gameLoan.findMany({ select: { id: true, lender_id: true, borrower_id: true, borrower_nick: true,
-      castka: true, splatka: true, splaceno: true, stav: true, zastava_spot: true } }),
+      castka: true, splatka: true, splaceno: true, stav: true, zastava_spot: true, created_at: true } }),
     prisma.gamePlayer.findMany({ select: { id: true, nick: true, company: true, disabled: true } }),
   ]);
-  return { obchody, drazby, prihozy, equity, clenove, pujcky, hraci };
+  const hranice = {};
+  try { (await prisma.gameZlocin.findMany({ where: { stav: 'uzavreno' }, select: { hlavni_id: true, zahajeno_at: true } })).forEach((x) => {
+    const t = new Date(x.zahajeno_at).getTime(); if (!hranice[x.hlavni_id] || t > hranice[x.hlavni_id]) hranice[x.hlavni_id] = t; }); } catch (e) { /* bez tabulky se počítá vše */ }
+  return { obchody, drazby, prihozy, equity, clenove, pujcky, hraci, hranice };
 }
 
 // Nálezy agenta, sloučené po hráčích. Vrací řádky ve tvaru, který umí
@@ -212,6 +225,7 @@ function vyhodnot(d, S, R) {
     ven.push({
       id: h.id, nick: p.nick, firma: p.company || null,
       typ: 'agent', kod: hlavni.kod, utvar: hlavni.utvar,
+      po_datu: (d.hranice || {})[h.id] ? new Date(d.hranice[h.id]).toISOString() : undefined,
       skoda: h.skoda,
       zmrazit: Math.round(h.skoda * (pravidla.koef_zabaveni || 1.2)),
       trest: { nejnizsi: Math.round(h.skoda * (pravidla.trest_nejnizsi || 1)),
