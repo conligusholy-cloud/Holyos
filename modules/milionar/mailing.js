@@ -286,6 +286,13 @@
   function audText(a) {
     a = a || {}; var p = []; if (a.contacts !== false) { var fl = [].concat(a.kinds || [], a.stages || [], a.countries || []); p.push('seznam kontaktů' + (a.tag ? ' (štítek: ' + a.tag + ')' : '') + (fl.length ? ' [' + fl.join(', ') + ']' : '')); } if (a.players) p.push('hráči hry' + (a.player_lang ? ' (' + a.player_lang + ')' : '')); return p.join(' + ') || '—';
   }
+  // Podrobný popis publika pro kartu kampaně: seznam, typy, stavy CRM, země, jazyk hráčů
+  function audDetail(a) {
+    a = a || {}; var L = function (t, arr) { return '<div>' + t + ': <b>' + (arr && arr.length ? esc(arr.join(', ')) : 'všechny') + '</b></div>'; }, h = '';
+    if (a.contacts !== false) h += '<div>Seznam: <b>Seznam kontaktů</b>' + (a.tag ? ' · štítek <b>' + esc(a.tag) + '</b>' : '') + '</div>' + L('Typ kontaktu', a.kinds) + L('Stav v CRM', a.stages) + L('Země', a.countries);
+    if (a.players) h += '<div>Seznam: <b>Hráči hry</b> (jen s vyplněným e-mailem) · jazyk: <b>' + (a.player_lang ? esc(a.player_lang) : 'všechny') + '</b></div>';
+    return h || '<div>—</div>';
+  }
   function openCamps(which) {
     var cfg = CAMP[which], box = $(cfg.box); if (!box) return;
     if (!box.__init) {
@@ -310,9 +317,10 @@
         else { if (c.status === 'active') a.push('<button class="btn sm" data-a="pause" data-id="' + c.id + '">Pozastavit</button>'); else a.push('<button class="btn on sm" data-a="activate" data-id="' + c.id + '">Zapnout</button>'); }
         a.push('<button class="btn sm" data-a="test" data-id="' + c.id + '">Test na e-mail</button><button class="btn sm" data-a="stats" data-id="' + c.id + '">📊 Statistiky</button><button class="btn sm" data-a="dup" data-id="' + c.id + '">Duplikovat</button><button class="btn sm" data-a="del" data-id="' + c.id + '">Smazat</button>');
         return '<div class="gm-c" id="gmc-' + c.id + '"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h4>' + esc(c.name) + '</h4><span class="gm-st ' + c.status + '">' + esc(STATUS[c.status] || c.status) + '</span>' + (c.kind !== 'oneoff' ? '<span class="chip">' + (c.kind === 'sequence' ? 'sekvence' : 'opakovaná') + '</span>' : '') + '</div>' +
-          '<div class="gm-meta"><span>Předmět: <b>' + esc(c.subject || (c.steps && c.steps[0] && c.steps[0].subject) || '—') + '</b></span><span>Od: <b>' + esc(c.from_address || '— nevybráno —') + '</b></span><span>Publikum: <b>' + esc(audText(c.audience)) + '</b></span><span>' + esc(schedText(c)) + '</span><span>Odesláno celkem: <b>' + (c.sent_count || 0) + '</b></span></div>' +
+          '<div class="gm-aud" style="margin:8px 0 2px;padding:9px 12px;border:1px solid rgba(124,92,255,.35);border-radius:10px;background:rgba(124,92,255,.07);font-size:13px;line-height:1.55"><div style="font-size:15px">Příjemců: <b id="gma-' + c.id + '">…</b></div>' + audDetail(c.audience) + '</div>' + '<div class="gm-meta"><span>Předmět: <b>' + esc(c.subject || (c.steps && c.steps[0] && c.steps[0].subject) || '—') + '</b></span><span>Od: <b>' + esc(c.from_address || '— nevybráno —') + '</b></span><span>' + esc(schedText(c)) + '</span><span>Odesláno celkem: <b>' + (c.sent_count || 0) + '</b></span></div>' +
           (c.last_error ? '<div class="gm-warn">Poslední chyba: ' + esc(c.last_error) + '</div>' : '') + '<div class="gm-btns">' + a.join('') + '</div><div id="gms-' + c.id + '"></div></div>';
       }).join('');
+      items.forEach(function (c) { api('POST', '/audience-count', { audience: c.audience }).then(function (n) { var e = $('gma-' + c.id); if (e) e.innerHTML = n.sendable + '</b> <span class="note">(kontaktů ' + n.contacts + ', hráčů ' + n.players + (n.suppressed ? '; vynecháno ' + n.suppressed + ' odhlášených / nedoručitelných' : '') + ')</span><b>'; }).catch(function () { var e = $('gma-' + c.id); if (e) e.textContent = '?'; }); });
       [].forEach.call(el.querySelectorAll('[data-a]'), function (b) { b.onclick = function () { campAction(b.getAttribute('data-a'), +b.getAttribute('data-id'), items, which); }; });
     }).catch(function (e) { err(el, e); });
   }
