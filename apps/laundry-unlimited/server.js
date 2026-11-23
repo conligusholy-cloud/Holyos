@@ -901,6 +901,9 @@ const MODEL_CSS = `
 .n .rz-nw{left:-6px;top:-6px;width:16px;height:16px;cursor:nwse-resize;z-index:2}.n .rz-se{right:-6px;bottom:-6px;width:16px;height:16px;cursor:nwse-resize;z-index:2}
 .n .rz-ne{right:-6px;top:-6px;width:16px;height:16px;cursor:nesw-resize;z-index:2}.n .rz-sw{left:-6px;bottom:-6px;width:16px;height:16px;cursor:nesw-resize;z-index:2}
 .n.edit .rz,.n.edit .ed{display:none}
+.n .fmt{display:none;position:absolute;left:0;top:-44px;gap:4px;align-items:center;padding:4px 6px;border-radius:10px;background:#0b1630;border:1px solid var(--c,#22e6ff);z-index:6;cursor:default;white-space:nowrap;font-size:13px}
+.n.edit .fmt{display:flex}.n .fmt button{min-width:30px;height:26px;padding:0 6px;border-radius:7px;border:1px solid rgba(255,255,255,.18);background:#0d1b30;color:#eef4ff;font-family:inherit;font-weight:600;font-size:13px;line-height:1;cursor:pointer}
+.n .fmt button:hover{background:rgba(34,230,255,.18)}.n .fmt button.on{background:var(--c,#22e6ff);color:#050a14}.n .fmt .fz{min-width:24px;text-align:center;color:#9fb4d6}.n .fmt .fb{font-weight:900!important}
 .n .ed{position:absolute;right:4px;top:-30px;width:26px;height:26px;padding:0;border-radius:50%;border:1px solid var(--c,#22e6ff);background:#0d1b30;color:var(--c,#22e6ff);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .15s;z-index:4}
 .n .ed::after{content:"";position:absolute;left:-4px;right:-4px;top:100%;height:8px}
 .n:hover .ed,.n.sel .ed{opacity:1;pointer-events:auto}.n .ed:hover{background:var(--c,#22e6ff);color:#050a14}
@@ -933,7 +936,7 @@ app.get('/admin/model', requireAdmin, (req, res) => {
 });
 const modelClean = (d) => {
   const str = (v, n) => String(v == null ? '' : v).slice(0, n), num = (v) => { const x = Math.round(Number(v)); return isFinite(x) ? Math.max(-100000, Math.min(100000, x)) : 0; };
-  const nodes = (Array.isArray(d && d.nodes) ? d.nodes : []).slice(0, 500).map((n) => ({ id: str(n.id, 40).replace(/[^\w-]/g, ''), x: num(n.x), y: num(n.y), w: isFinite(Number(n.w)) && Number(n.w) > 0 ? Math.max(60, Math.min(2000, Math.round(Number(n.w)))) : undefined, h: isFinite(Number(n.h)) && Number(n.h) > 0 ? Math.max(34, Math.min(2000, Math.round(Number(n.h)))) : undefined, text: str(n.text, 2000), color: /^#[0-9a-f]{6}$/i.test(String(n.color || '')) ? n.color : '#22e6ff' })).filter((n) => n.id);
+  const nodes = (Array.isArray(d && d.nodes) ? d.nodes : []).slice(0, 500).map((n) => ({ id: str(n.id, 40).replace(/[^\w-]/g, ''), x: num(n.x), y: num(n.y), w: isFinite(Number(n.w)) && Number(n.w) > 0 ? Math.max(60, Math.min(2000, Math.round(Number(n.w)))) : undefined, h: isFinite(Number(n.h)) && Number(n.h) > 0 ? Math.max(34, Math.min(2000, Math.round(Number(n.h)))) : undefined, fz: isFinite(Number(n.fz)) && Number(n.fz) > 0 ? Math.max(8, Math.min(120, Math.round(Number(n.fz)))) : undefined, b: n.b ? true : undefined, text: str(n.text, 2000), color: /^#[0-9a-f]{6}$/i.test(String(n.color || '')) ? n.color : '#22e6ff' })).filter((n) => n.id);
   const ids = new Set(nodes.map((n) => n.id));
   const edges = (Array.isArray(d && d.edges) ? d.edges : []).slice(0, 1500).map((e) => ({ id: str(e.id, 40).replace(/[^\w-]/g, ''), from: str(e.from, 40).replace(/[^\w-]/g, ''), to: str(e.to, 40).replace(/[^\w-]/g, ''), fs: /^[lrtb]$/.test(String(e.fs)) ? e.fs : undefined, ts: /^[lrtb]$/.test(String(e.ts)) ? e.ts : undefined })).filter((e) => e.id && ids.has(e.from) && ids.has(e.to) && e.from !== e.to);
   return { nodes, edges };

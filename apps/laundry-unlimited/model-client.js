@@ -72,10 +72,14 @@
       var d = document.createElement('div'); d.className = 'n' + (sel && sel.t === 'n' && sel.id === n.id ? ' sel' : ''); d.setAttribute('data-id', n.id);
       d.style.left = n.x + 'px'; d.style.top = n.y + 'px'; d.style.setProperty('--c', n.color || COLORS[0]);
       if (n.w || n.h) { d.classList.add('sized'); if (n.w) d.style.width = n.w + 'px'; if (n.h) d.style.height = n.h + 'px'; }
+      var fm = document.createElement('div'); fm.className = 'fmt';
+      fm.innerHTML = '<button type="button" data-f="dn" title="Menší písmo">A−</button><span class="fz">' + (n.fz || 15) + '</span><button type="button" data-f="up" title="Větší písmo">A+</button><button type="button" data-f="b" class="fb' + (n.b ? ' on' : '') + '" title="Tučně">B</button>';
+      d.appendChild(fm);
       var pb = document.createElement('button'); pb.type = 'button'; pb.className = 'ed'; pb.title = 'Upravit text (přepsat název)';
       pb.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>'; d.appendChild(pb);
       ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach(function (r) { var z = document.createElement('b'); z.className = 'rz rz-' + r; z.setAttribute('data-r', r); d.appendChild(z); });
       var t = document.createElement('div'); t.className = 't'; t.textContent = n.text || ''; d.appendChild(t);
+      if (n.fz) t.style.fontSize = n.fz + 'px'; if (n.b) t.style.fontWeight = '700';
       ['t', 'r', 'b', 'l'].forEach(function (sd) { var h = document.createElement('i'); h.className = 'h h-' + sd; h.setAttribute('data-s', sd); h.title = 'Přetáhni na jiný uzel (nebo do prázdna) pro spojení'; d.appendChild(h); });
       nodesEl.appendChild(d);
     });
@@ -293,7 +297,20 @@
     return m === dl ? 'l' : m === dr ? 'r' : m === dt ? 't' : 'b';
   }
   view.addEventListener('pointerup', endDrag); view.addEventListener('pointercancel', endDrag);
+  // formát textu uzlu (velikost, tučně) — lišta se ukazuje při úpravě textu; mousedown nesmí vzít focus textu
+  view.addEventListener('mousedown', function (ev) { if (ev.target.closest && ev.target.closest('.fmt')) ev.preventDefault(); });
+  var FZ = [10, 12, 13, 15, 18, 22, 28, 36, 48, 64];
   view.addEventListener('click', function (ev) {
+    var fb = ev.target.closest && ev.target.closest('.fmt button');
+    if (fb) {
+      var fn = fb.closest('.n'), fnode = nodeById(fn.getAttribute('data-id')), f = fb.getAttribute('data-f'); if (!fnode) return;
+      var cur = fnode.fz || 15, i = 0; FZ.forEach(function (v, k) { if (Math.abs(v - cur) < Math.abs(FZ[i] - cur)) i = k; });
+      if (f === 'up') fnode.fz = FZ[Math.min(FZ.length - 1, i + 1)]; else if (f === 'dn') fnode.fz = FZ[Math.max(0, i - 1)]; else fnode.b = !fnode.b;
+      if (fnode.fz === 15) delete fnode.fz; if (!fnode.b) delete fnode.b;
+      var tt = fn.querySelector('.t'); tt.style.fontSize = fnode.fz ? fnode.fz + 'px' : ''; tt.style.fontWeight = fnode.b ? '700' : '';
+      fn.querySelector('.fz').textContent = fnode.fz || 15; fn.querySelector('.fb').classList.toggle('on', !!fnode.b);
+      drawEdges(); commit(); return;
+    }
     var pe = ev.target.closest && ev.target.closest('.ed'); if (!pe) return;
     var pn = pe.closest('.n'); if (!pn) return; var pid = pn.getAttribute('data-id');
     select({ t: 'n', id: pid }); startEdit(pid, false);
