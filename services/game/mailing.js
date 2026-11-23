@@ -99,22 +99,78 @@ async function resolveAudience(aud) {
 async function audienceCount(aud) {
   const [list, sup] = await Promise.all([resolveAudience(aud), suppressedSet()]);
   const ok = list.filter((r) => !sup.has(r.lower));
-  return { total: list.length, sendable: ok.length, suppressed: list.length - ok.length, contacts: ok.filter((r) => r.kind === 'contact').length, players: ok.filter((r) => r.kind === 'player').length };
+  const langs = {}; ok.forEach((r) => { const l = LANGS.includes(String(r.lang || '').slice(0, 2).toLowerCase()) ? String(r.lang).slice(0, 2).toLowerCase() : '?'; langs[l] = (langs[l] || 0) + 1; });
+  return { total: list.length, sendable: ok.length, suppressed: list.length - ok.length, contacts: ok.filter((r) => r.kind === 'contact').length, players: ok.filter((r) => r.kind === 'player').length, langs };
 }
+
+// ── Překlady do jazyka příjemce ────────────────────────────────────
+// Jazyk příjemce = jazyk kontaktu (odvozený ze země) / hráče; neznámý = jazyk šablony kampaně.
+// Překlad dělá Claude jednou pro každý text a jazyk, ukládá se do kampaně (translations) pod hash zdroje,
+// takže změna textu vyvolá nový překlad. Když překlad selže, odejde text v jazyce kampaně.
+const LANG_NAMES = { cs: 'čeština', en: 'angličtina', pl: 'polština', sk: 'slovenština', de: 'němčina', hu: 'maďarština', ro: 'rumunština', it: 'italština', es: 'španělština', fr: 'francouzština' };
+const baseLang = (c) => (LANGS.includes(c.lang) ? c.lang : 'cs');
+function langOf(c, rcpt) { const l = String((rcpt && rcpt.lang) || '').slice(0, 2).toLowerCase(); return LANGS.includes(l) ? l : baseLang(c); }
+function srcKey(subject, body, linkLabel) { return require('crypto').createHash('sha1').update(String(subject || '') + '\u0001' + String(body || '') + '\u0001' + String(linkLabel || '')).digest('hex').slice(0, 16); }
+function pickText(c, l, subject, body) {
+  const out = { subject, body, link_label: c.link_label || '' };
+  if (l === baseLang(c)) return out;
+  const t = c.translations && c.translations[srcKey(subject, body, c.link_label)]; const x = t && t[l];
+  return x ? { subject: x.subject || subject, body: x.body || body, link_label: x.link_label || out.link_label } : out;
+}
+async function translateSource(src, from, langs) {
+  if (!process.env.ANTHROPIC_API_KEY || !langs.length) return null;
+  const Anthropic = require('@anthropic-ai/sdk'); const { messagesCreate } = require('../anthropic-retry');
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const system = 'Překládáš marketingový e-mail značky Laundromats (samoobslužné prádelny) a její hry Laundromat Tycoon. Přelož přirozeně a idiomaticky, jako by to psal rodilý mluvčí (ne doslovně), zachovej tón, odstavce (prázdné řádky) a délku. Proměnné ve tvaru {{nazev}} NEPŘEKLÁDEJ a nech je přesně, jak jsou (i se závorkami). Názvy Laundromats a Laundromat Tycoon nepřekládej. Text je čistý text bez HTML.\n'
+    + 'Vrať POUZE JSON bez bloku ```: {"<kód jazyka>":{"subject":"…","body":"…","link_label":"…"}, …} pro jazyky: ' + langs.map((l) => l + ' (' + LANG_NAMES[l] + ')').join(', ') + '. Když je link_label prázdný, nech ho prázdný.';
+  const user = 'ZDROJOVÝ JAZYK: ' + LANG_NAMES[from] + '\nPŘEDMĚT: ' + src.subject + '\nPOPISEK TLAČÍTKA: ' + (src.link_label || '') + '\nTEXT:\n' + src.body;
+  const r = await messagesCreate(client, { model: process.env.GM_AI_MODEL || 'claude-sonnet-4-6', max_tokens: Math.min(16000, 1500 + langs.length * 1800), system, messages: [{ role: 'user', content: user }] });
+  const t = (r.content || []).filter((x) => x.type === 'text').map((x) => x.text).join('');
+  let j = null; try { j = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)); } catch (e) { j = null; }
+  if (!j || typeof j !== 'object') return null;
+  const out = {}; langs.forEach((l) => { const x = j[l]; if (x && (x.subject || x.body)) out[l] = { subject: String(x.subject || '').slice(0, 300), body: String(x.body || '').slice(0, 20000), link_label: String(x.link_label || '').slice(0, 80) }; });
+  return out;
+}
+/** Doplní chybějící překlady pro zdroje [{subject, body}] a jazyky; uloží do kampaně (má-li id). Vrací c.translations. */
+async function ensureTranslations(c, sources, langs) {
+  const base = baseLang(c); const need = Array.from(new Set(langs)).filter((l) => LANGS.includes(l) && l !== base);
+  const tr = c.translations && typeof c.translations === 'object' ? Object.assign({}, c.translations) : {};
+  if (!need.length) { c.translations = tr; return tr; }
+  let changed = false;
+  for (const s of sources) {
+    if (!s || !(s.subject || s.body)) continue;
+    const k = srcKey(s.subject, s.body, c.link_label); const have = tr[k] || {};
+    const miss = need.filter((l) => !have[l]); if (!miss.length) continue;
+    for (let i = 0; i < miss.length; i += 4) { // po 4 jazycích, ať odpověď není useknutá
+      try { const got = await translateSource({ subject: s.subject || '', body: s.body || '', link_label: c.link_label || '' }, base, miss.slice(i, i + 4)); if (got && Object.keys(got).length) { tr[k] = Object.assign({}, tr[k] || {}, got); changed = true; } }
+      catch (e) { console.warn('[game-mailing] překlad', c.id, e.message); }
+    }
+  }
+  // staré překlady (k textům, které už v kampani nejsou) vyhodit
+  const live = new Set(sources.filter(Boolean).map((s) => srcKey(s.subject, s.body, c.link_label)));
+  Object.keys(tr).forEach((k) => { if (!live.has(k)) { delete tr[k]; changed = true; } });
+  c.translations = tr;
+  if (changed && c.id) await prisma.gameMailCampaign.update({ where: { id: c.id }, data: { translations: tr } }).catch((e) => console.warn('[game-mailing] uložení překladů', e.message));
+  return tr;
+}
+function campaignSources(c) { return c.kind === 'sequence' ? (Array.isArray(c.steps) ? c.steps : []).map((s) => ({ subject: s.subject || c.subject, body: s.body || '' })) : [{ subject: c.subject, body: c.body }]; }
 
 // ── Odeslání jedné zprávy ─────────────────────────────────────────
 function fromOf(c) { return String(c.from_address || process.env.GM_MAIL_FROM || '').trim(); }
 
-async function sendOne(c, rcpt, subject, body, campaignId) {
+async function sendOne(c, rcpt, subject, body, campaignId, prefix) {
   const from = fromOf(c);
   if (!from) return { ok: false, error: 'Chybí odesílatel (vyber ho u kampaně)' };
-  const l = LANGS.includes(String(rcpt.lang || '').slice(0, 2).toLowerCase()) ? String(rcpt.lang).slice(0, 2).toLowerCase() : (LANGS.includes(c.lang) ? c.lang : 'cs');
+  const l = langOf(c, rcpt);
+  // text v jazyce příjemce (překlad z kampaně), {{osloveni}} v 5. pádě jen v češtině
+  const tx = pickText(c, l, subject, body); subject = (prefix || '') + tx.subject; body = tx.body;
+  const vars = l === 'cs' ? rcpt.vars : Object.assign({}, rcpt.vars, { osloveni: rcpt.vars && rcpt.vars.jmeno ? rcpt.vars.jmeno : '' });
   try {
     const link = c.link && /^https:\/\//.test(c.link) ? c.link : undefined;
     const r = await require('../email').sendMail({
       to: rcpt.email, from, fromName: String(c.from_name || 'Laundromats').slice(0, 80), brand: 'laundromats:' + l,
-      replyTo: c.reply_to || undefined, subject: render(subject, rcpt.vars).slice(0, 300), body: render(body, rcpt.vars).slice(0, 20000),
-      link, linkLabel: link && c.link_label ? String(c.link_label).slice(0, 80) : undefined, noLink: !link,
+      replyTo: c.reply_to || undefined, subject: render(subject, vars).slice(0, 300), body: render(body, vars).slice(0, 20000),
+      link, linkLabel: link && tx.link_label ? String(tx.link_label).slice(0, 80) : undefined, noLink: !link,
       flyerUrl: c.image_url && /^https:\/\//.test(c.image_url) ? c.image_url : undefined,
       campaignId: campaignId || ('gm-' + c.id), onlySes: true,
     });
@@ -123,12 +179,13 @@ async function sendOne(c, rcpt, subject, body, campaignId) {
   } catch (e) { return { ok: false, error: String(e.message || e).slice(0, 290) }; }
 }
 
-async function sendTest(c, to) {
+async function sendTest(c, to, lang) {
   const email = cleanEmail(to); if (!email) return { ok: false, error: 'Neplatná adresa' };
-  const sample = { email, lower: email.toLowerCase(), lang: c.lang || '', vars: contactVars({ first_name: 'Jana', last_name: 'Nováková', company: 'Ukázka s.r.o.', email, phone: '+420 600 000 000' }) };
+  const sample = { email, lower: email.toLowerCase(), lang: LANGS.includes(String(lang || '')) ? String(lang) : (c.lang || ''), vars: contactVars({ first_name: 'Jana', last_name: 'Nováková', company: 'Ukázka s.r.o.', email, phone: '+420 600 000 000' }) };
   const steps = Array.isArray(c.steps) ? c.steps : [];
   const first = c.kind === 'sequence' && steps[0] ? steps[0] : { subject: c.subject, body: c.body };
-  return sendOne(c, sample, '[TEST] ' + (first.subject || c.subject || ''), first.body != null ? first.body : c.body, 'gm-test');
+  if (sample.lang && sample.lang !== baseLang(c)) await ensureTranslations(c, campaignSources(c), [sample.lang]);
+  return sendOne(c, sample, first.subject || c.subject || '', first.body != null ? first.body : c.body, 'gm-test', '[TEST] ');
 }
 
 // ── Rozvrh pravidelných kampaní (čas v Europe/Prague) ─────────────
@@ -170,6 +227,9 @@ async function record(campaignId, lower, runKey, r) {
 /** Rozešle jednu dávku: items = [{ rcpt, runKey, subject, body }]. Vrací { sent, failed, firstError } */
 async function dispatch(c, items, budget) {
   let sent = 0, failed = 0, firstError = '';
+  // před rozesláním doplnit překlady pro jazyky příjemců této dávky
+  const batch = budget != null ? items.slice(0, budget) : items;
+  if (batch.length) await ensureTranslations(c, campaignSources(c), batch.map((it) => langOf(c, it.rcpt)));
   for (const it of items) {
     if (budget != null && sent + failed >= budget) break;
     const r = await sendOne(c, it.rcpt, it.subject, it.body);
@@ -257,4 +317,4 @@ function start() {
   console.log('[game-mailing] worker spuštěn (každou minutu)');
 }
 
-module.exports = { start, tick, LANGS, cleanEmail, cleanText, parseEmails, langFromCountry, slug, render, contactVars, resolveAudience, audienceCount, suppressedSet, sendTest, nextRun, fromOf, dateKey };
+module.exports = { ensureTranslations, campaignSources, pickText, baseLang, LANG_NAMES, start, tick, LANGS, cleanEmail, cleanText, parseEmails, langFromCountry, slug, render, contactVars, resolveAudience, audienceCount, suppressedSet, sendTest, nextRun, fromOf, dateKey };

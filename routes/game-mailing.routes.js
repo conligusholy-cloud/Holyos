@@ -183,6 +183,7 @@ function campaignData(b, kind) {
     name: str(b.name, 160) || 'Bez názvu', subject: str(b.subject, 300) || '', body: String(b.body || '').slice(0, 20000),
     link: b.link && /^https:\/\//.test(String(b.link).trim()) ? String(b.link).trim().slice(0, 500) : null, link_label: str(b.link_label, 80),
     image_url: b.image_url && /^https:\/\//.test(String(b.image_url).trim()) ? String(b.image_url).trim().slice(0, 500) : null,
+    translations: b.translations && typeof b.translations === 'object' && !Array.isArray(b.translations) && JSON.stringify(b.translations).length < 400000 ? b.translations : undefined,
     from_address: str(b.from_address, 200), from_name: str(b.from_name, 100), reply_to: GM.cleanEmail(b.reply_to) || null,
     lang: GM.LANGS.includes(String(b.lang || '')) ? String(b.lang) : 'cs', audience: cleanAudience(b.audience), schedule: cleanSchedule(kind, b.schedule),
   };
@@ -225,15 +226,20 @@ const SAMPLE = () => GM.contactVars({ first_name: 'Jana', last_name: 'Nováková
 router.post('/preview', wrap(async (req, res) => {
   const c = draftOf(req.body || {}), si = Math.max(0, parseInt((req.body || {}).step, 10) || 0);
   const st = c.kind === 'sequence' && Array.isArray(c.steps) && c.steps.length ? (c.steps[si] || c.steps[0]) : { subject: c.subject, body: c.body };
-  const vars = SAMPLE(), link = c.link || undefined, subject = GM.render(st.subject || c.subject || '', vars);
-  const html = require('../services/email').renderEmailHtml({ title: subject, body: GM.render(st.body || '', vars), link, linkLabel: link ? (c.link_label || 'Otevřít') : undefined, noLink: !link, brand: 'laundromats:' + (c.lang || 'cs'), flyerUrl: c.image_url || undefined });
-  res.json({ html, subject, from: (c.from_name || 'Laundromats') + (GM.fromOf(c) ? ' <' + GM.fromOf(c) + '>' : '') });
+  // náhled v jazyce příjemce: chybějící překlad se dopočítá (vrací se klientovi a uloží se s kampaní)
+  const vl = GM.LANGS.includes(String((req.body || {}).view_lang)) ? String(req.body.view_lang) : GM.baseLang(c);
+  if (vl !== GM.baseLang(c)) await GM.ensureTranslations(c, GM.campaignSources(c), [vl]);
+  const tx = GM.pickText(c, vl, st.subject || c.subject || '', st.body || '');
+  const vars = SAMPLE(); if (vl !== 'cs') vars.osloveni = vars.jmeno;
+  const link = c.link || undefined, subject = GM.render(tx.subject, vars);
+  const html = require('../services/email').renderEmailHtml({ title: subject, body: GM.render(tx.body, vars), link, linkLabel: link ? (tx.link_label || 'Otevřít') : undefined, noLink: !link, brand: 'laundromats:' + vl, flyerUrl: c.image_url || undefined });
+  res.json({ html, subject, lang: vl, translations: c.translations || {}, from: (c.from_name || 'Laundromats') + (GM.fromOf(c) ? ' <' + GM.fromOf(c) + '>' : '') });
 }));
 router.post('/test-draft', wrap(async (req, res) => {
   const c = draftOf(req.body || {}), to = String((req.body && req.body.to) || (req.user && req.user.person && req.user.person.email) || '').trim();
   if (!GM.fromOf(c)) return res.status(400).json({ error: 'Vyber odesílatele.' });
-  const r = await GM.sendTest(c, to); if (!r.ok) return res.status(502).json({ error: r.error });
-  res.json({ ok: true, to });
+  const r = await GM.sendTest(c, to, (req.body || {}).view_lang); if (!r.ok) return res.status(502).json({ error: r.error });
+  res.json({ ok: true, to, translations: c.translations || {} });
 }));
 // Obrázek do e-mailu: data URL (JPG/PNG/GIF/WebP, max 5 MB) → Cloudflare R2 → veřejná https adresa
 router.post('/image', wrap(async (req, res) => {
