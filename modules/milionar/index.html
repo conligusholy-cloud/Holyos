@@ -245,8 +245,11 @@
           <div id="zl-pripady"></div>
         </div>
         <div class="toolbar"><button class="btn sm on" id="zl-spust">Vyhodnotit nanečisto</button>
-          <button class="btn sm" id="zl-agent-spust" title="Co našel agent: obchody mezi vlastními účty, vlastní dražby, fond, půjčky">🕵️ Co našel agent</button></div>
+          <button class="btn sm" id="zl-agent-spust" title="Co našel agent: obchody mezi vlastními účty, vlastní dražby, fond, půjčky">🕵️ Co našel agent</button>
+          <button class="btn sm" id="zl-ai-spust" title="Nechá model projít hru a hledat finty, na které detektory nestačí. Nic nezahajuje — jsou to návrhy.">🧠 Nechat projít AI</button>
+          <button class="btn sm" id="zl-ai-podklad" title="Co přesně model dostane k přečtení">Podklad</button></div>
         <div id="zl-agent-body"></div>
+        <div id="zl-ai-body"></div>
         <div id="zl-sum"></div>
         <div id="zl-body"></div>
       </div>
@@ -1847,6 +1850,7 @@
     }
     function loadZlocin() {
       zlPripady();
+      get('/zlocin/analytik').then(zlAiVykresli).catch(function () {});
       get('/zlocin/pravidla').then(function (j) {
         var P = j.pravidla;
         document.getElementById('zl-pravidla').innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px">'
@@ -1950,6 +1954,56 @@
           };
         });
       }).catch(function (e) { chyba('zl-agent-body', e); });
+    };
+    // Analytik: nálezy modelu. Je to NÁVRH pro člověka — nic se tím neotevírá
+    // a nikomu se nic nemrazí. Proto tu není tlačítko „zahájit": kdo chce
+    // z nálezu případ, podívá se na podklad a otevře ho ručně.
+    function zlAiVykresli(j) {
+      var box = document.getElementById('zl-ai-body');
+      if (!j || !j.analyza) {
+        box.innerHTML = '<p class="note">Analytik zatím neběžel.'
+          + (j && !j.klic ? ' <b style="color:#f87171">Na serveru chybí ANTHROPIC_API_KEY</b> — bez něj nepoběží.' : '')
+          + '</p>';
+        return;
+      }
+      var a = j.analyza;
+      var h = '<p class="note">Poslední průchod <b>' + esc(new Date(a.kdy).toLocaleString('cs-CZ')) + '</b>'
+        + ' · model ' + esc(a.model || j.model || '?')
+        + (a.tokeny ? ' · tokenů ' + cz(a.tokeny.vstup) + ' / ' + cz(a.tokeny.vystup) : '')
+        + ' · nálezů <b>' + (a.nalezu || 0) + '</b>. Tohle jsou <b>návrhy</b>, ne rozsudky — nic se tím neotevřelo.</p>';
+      if (a.poznamka) h += '<p class="note" style="font-style:italic">Poznámka modelu: ' + esc(a.poznamka) + '</p>';
+      if (!a.nalezy || !a.nalezy.length) { box.innerHTML = h + '<p class="note">Nic nenašel.</p>'; return; }
+      h += '<div class="tbl-wrap"><table class="data-table"><thead><tr><th>Nález</th><th>Koho se týká</th>'
+        + '<th class="num">Odhad škody</th><th>Jistota</th><th>Jak ověřit</th><th>Návrh detektoru</th></tr></thead><tbody>'
+        + a.nalezy.map(function (n) {
+          var barva = n.jistota === 'vysoká' ? '#f87171' : n.jistota === 'střední' ? '#fbbf24' : '#9ca3af';
+          return '<tr><td><b>' + esc(n.nazev) + '</b><div class="note" style="line-height:1.5">' + esc(n.popis)
+            + (n.proc_podezrele ? '<br><b>Proč:</b> ' + esc(n.proc_podezrele) : '') + '</div></td>'
+            + '<td class="note">' + esc((n.koho || []).join(', ')) + '</td>'
+            + '<td class="num">' + (n.odhad_skody == null ? '<span class="note">nelze odhadnout</span>' : cz(n.odhad_skody) + ' L$') + '</td>'
+            + '<td><span style="color:' + barva + '">' + esc(n.jistota) + '</span></td>'
+            + '<td class="note">' + esc(n.jak_overit) + '</td>'
+            + '<td class="note">' + esc(n.navrh_detektoru) + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+      box.innerHTML = h;
+    }
+    document.getElementById('zl-ai-spust').onclick = function () {
+      var b = this;
+      document.getElementById('zl-ai-body').innerHTML = '<p class="note">Model čte hru… (chvíli to trvá)</p>';
+      b.disabled = true;
+      post('/zlocin/analytik', {}).then(function () { return get('/zlocin/analytik'); })
+        .then(function (j) { b.disabled = false; zlAiVykresli(j); })
+        .catch(function (e) { b.disabled = false; chyba('zl-ai-body', e); });
+    };
+    document.getElementById('zl-ai-podklad').onclick = function () {
+      var box = document.getElementById('zl-ai-body');
+      box.innerHTML = '<p class="note">Načítám…</p>';
+      fetch('/api/game-admin/zlocin/analytik/podklad', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.text(); })
+        .then(function (t) {
+          box.innerHTML = '<p class="note">Přesně tohle dostane model k přečtení:</p>'
+            + '<pre style="white-space:pre-wrap;font-size:12px;line-height:1.5;max-height:420px;overflow:auto">' + esc(t) + '</pre>';
+        }).catch(function (e) { chyba('zl-ai-body', e); });
     };
     document.getElementById('zl-spust').onclick = function () {
       var box = document.getElementById('zl-body'); box.innerHTML = '<p class="note">Vyhodnocuji…</p>';

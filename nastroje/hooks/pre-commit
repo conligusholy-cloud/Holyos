@@ -227,6 +227,15 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; th
   fi
 fi
 
+# Analytik: výstup modelu je data, ne příkaz. Nesmí nic zahájit ani zmrazit.
+if git diff --cached --name-only | grep -qE 'services/game/zlocin|routes/game-admin'; then
+  if ! node nastroje/tzlocinanalytik.js; then
+    echo ""
+    echo "STOP: analytik nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Agent nad zločinem: detektory a jejich škody. Agent zahajuje řízení sám,
 # takže falešný nález znamená zmrazený majetek nevinnému hráči.
 if git diff --cached --name-only | grep -qE 'services/game/zlocin|services/game/spojeni|routes/game-admin'; then

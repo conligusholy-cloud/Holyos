@@ -822,6 +822,28 @@ router.get('/zlocin/agent', api(async (req, res) => {
     nalezy });
 }));
 
+// GET /zlocin/analytik → poslední analýza (jen čte, nic nespouští)
+// POST /zlocin/analytik → nechá model projít hru teď
+//
+// Analytik hledá finty, na které detektory nestačí. NIC nezahajuje: jeho
+// výstup je návrh pro člověka. Případ pořád otevírá admin tlačítkem nebo
+// detektor, který se podle návrhu teprve napíše.
+router.get('/zlocin/analytik', api(async (req, res) => {
+  const A = require('../services/game/zlocin-analytik');
+  res.json({ ok: true, model: A.MODEL, klic: !!process.env.ANTHROPIC_API_KEY, analyza: await A.posledni() });
+}));
+router.post('/zlocin/analytik', api(async (req, res) => {
+  const A = require('../services/game/zlocin-analytik');
+  const r = await A.analyzuj(prisma);
+  res.status(r.ok ? 200 : 400).json(r);
+}));
+// GET /zlocin/analytik/podklad → co přesně model dostane. Bez toho se nedá
+// posoudit, jestli jeho nález stojí na datech, nebo si ho vymyslel.
+router.get('/zlocin/analytik/podklad', api(async (req, res) => {
+  const A = require('../services/game/zlocin-analytik');
+  res.type('text/plain; charset=utf-8').send(await A.podklady(prisma));
+}));
+
 // ─── Vyčíslení okruhu: zvoucí (provize) + kupec (levné stroje) ──────────────
 // GET /api/game-admin/okruh?a=Pinon&b=Petulak  → čitelný text (jen čte).
 // A = ten, kdo zakládá pomocné účty a bere provizi, B = ten, kdo od nich skupuje
