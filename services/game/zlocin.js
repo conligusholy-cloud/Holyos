@@ -152,6 +152,11 @@ async function nanecisto(prisma, pravidla) {
 
   const minSek = R.min_odehrano_min * 60;
   const mrtvy = (h) => h.nick === SMAZANY || !!h.disabled || (h.hra_s_celkem || 0) < minSek;
+  const duvodMrtvy = (x) => x.nick === SMAZANY ? 'smazaný účet' : x.disabled ? 'zablokovaný' : 'odehráno jen ' + Math.round((x.hra_s_celkem || 0) / 60) + ' min';
+  // Položky, na kterých stojí obvinění — po jednotlivých účtech a obchodech. Podle nich se pozná,
+  // co už bylo jednou odsouzeno, a v administraci jde každé tvrzení ověřit.
+  const polNakupy = (arr) => arr.slice(0, 300).map((x) => ({ obchod: x.id, od: x.od, od_nick: (P[x.od] || {}).nick || null, od_firma: (P[x.od] || {}).company || null,
+    model: x.model || null, cena: Math.round(x.cena), cenik: Math.round(cenik(x.model)), rozdil: Math.round(Math.max(0, cenik(x.model) - x.cena)) }));
 
   // Provize: kdo komu za koho
   const majitel = {}; mista.forEach((m) => { majitel[m.spot_id] = m.player_id; });
@@ -167,7 +172,7 @@ async function nanecisto(prisma, pravidla) {
   const nakupy = {};
   obchody.forEach((t) => {
     const prod = t.smer === 'koupim' ? t.to_id : t.from_id, kup = t.smer === 'koupim' ? t.from_id : t.to_id;
-    (nakupy[kup] = nakupy[kup] || []).push({ od: prod, cena: Number(t.cena) || 0, model: t.model, predmet: t.predmet });
+    (nakupy[kup] = nakupy[kup] || []).push({ id: t.id, od: prod, cena: Number(t.cena) || 0, model: t.model, predmet: t.predmet });
   });
 
   const vysledek = [], nahled = [];
@@ -215,6 +220,10 @@ async function nanecisto(prisma, pravidla) {
       zivych_mezi: zivychMezi.length, hloubka,
       provize: Math.round(provize), nakupu_ks: kup.length, nakupu_od_mrtvych: odMrtvych, sleva: Math.round(sleva),
       mrtvi_nicky: mrtve.slice(0, 8).map((id) => P[id].nick),
+      polozky: {
+        provize: ids.filter((id) => mrtvy(P[id]) && (prov[id] || 0) > 0).slice(0, 300).map((id) => ({ id, nick: P[id].nick, firma: P[id].company || null, duvod: duvodMrtvy(P[id]), castka: Math.round(prov[id]) })),
+        nakupy: polNakupy(kup),
+      },
     };
     radek.platil_kc = Math.round(platil[h.id] || 0);
     radek.platici = radek.platil_kc > 0;
@@ -245,6 +254,7 @@ async function nanecisto(prisma, pravidla) {
       provize: 0, nakupu_ks: levne.length, nakupu_od_mrtvych: levne.length, sleva: Math.round(sleva),
       mrtvi_nicky: [...prodejci].slice(0, 8).map((id) => P[id].nick),
       pod_ids: [...prodejci].slice(0, 300),
+      polozky: { provize: [], nakupy: polNakupy(levne) },
       platil_kc: Math.round(platil[h.id] || 0),
     };
     radek.platici = radek.platil_kc > 0;

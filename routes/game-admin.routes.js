@@ -740,6 +740,10 @@ router.get('/zlocin/pripady', api(async (req, res) => {
     rozpis: (r.detail && r.detail.rozpis) || null,
     drive_odsouzeno: (r.detail && r.detail.drive_odsouzeno) || 0,
     drive_rozpis: (r.detail && r.detail.drive_rozpis) || null,
+    // Podrobnosti pro rozkliknutí: po jednotlivých účtech a obchodech, nálezy agenta, čísla ze starších případů
+    polozky: (r.detail && r.detail.polozky) || null,
+    nalezy: (r.detail && r.detail.nalezy) || null,
+    zaklad: r.detail ? { provize: r.detail.provize || 0, sleva: r.detail.sleva || 0, mrtvych: r.detail.mrtvych || 0, mrtvi_nicky: r.detail.mrtvi_nicky || [], nakupu_ks: r.detail.nakupu_ks || 0, nakupu_od_mrtvych: r.detail.nakupu_od_mrtvych || 0 } : null,
     ceka_na_me: r.stav === 'odvolani' && !!r.odvolani_at })),
     k_odvolani: rows.filter((r) => r.stav === 'odvolani' && r.odvolani_at).length });
 }));

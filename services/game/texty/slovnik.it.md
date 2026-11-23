@@ -25,9 +25,9 @@ Tenhle soubor čte automatický překlad — co je tady, to platí.
 | burza | borsa scambi | obchody mezi hráči; nikdy samotné *borsa* (to je akciová burza) |
 | tržiště | mercato | hotové prádlomaty na prodej |
 | dražba | asta | |
-| příhoz | offerta | v dražbě; ne *rilancio*, to zní dražebnicky |
+| příhoz | rilancio | v dražbě; `offerta` je nabídka obecně, `rilancio` je přihození nahoru |
 | vyvolávací cena | prezzo base | |
-| doplatek | saldo da pagare | co doplatí vítěz dražby |
+| doplatek | saldo | co doplatí vítěz dražby i jakýkoli jiný doplatek; `conguaglio` jen pro vyrovnání rozdílu |
 | podíl | quota | podíl ve firmě |
 | akcie | azione | akcie fondu, jiná věc než podíl |
 | fond | fondo | společná kasa aliance |
@@ -35,8 +35,10 @@ Tenhle soubor čte automatický překlad — co je tady, to platí.
 | odkup | riacquisto | majitel kupuje podíl zpět |
 | převod | cessione | podíl na třetího |
 | rámec | fido | limit v bance; ne *linea di credito*, je to dlouhé |
-| zástava | garanzia | krytí úvěru |
-| úvěr | prestito | |
+| zástava | garanzia | krytí úvěru; dát do zástavy = `dare in garanzia`, ne *pegno* |
+| úvěr | prestito | bankovní; když stojí vedle půjčky od hráče, `prestito bancario` |
+| půjčka (od hráče) | prestito | od hráče; v textu ji vždycky provází jeho jméno, tím se to pozná |
+| provozovna | esercizio | hotový prádlomat i s místem |
 | splátka | rata | |
 | úrok | interessi | vždy množné |
 | mimořádná splátka | rimborso anticipato | |
@@ -52,7 +54,7 @@ Tenhle soubor čte automatický překlad — co je tady, to platí.
 | krize | crisi | |
 | konkurzní rozprodej | liquidazione fallimentare | |
 | nájem | affitto | nikdy *noleggio* (to je půjčovna věcí) |
-| přípojka | allacciamento | voda, elektrika — `allacciamento idrico`, `allacciamento elettrico` |
+| přípojka | allacciamento | voda, elektrika; množné číslo vždycky `allacciamenti`, nikdy zkrácené *allacci* |
 | obrat | fatturato | |
 | zisk | utile | ne *profitto*, účetně je to utile |
 | tržba | incasso | co se vybere na místě |

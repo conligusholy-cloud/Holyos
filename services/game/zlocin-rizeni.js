@@ -118,6 +118,8 @@ async function zahaj(prisma, R, row) {
       // skutcích, aby šlo zkontrolovat, že se za totéž nesoudí dvakrát.
       drive_odsouzeno: row.drive_odsouzeno || 0, drive_rozpis: row.drive_rozpis || null,
       rozpis: row.rozpis || null,
+      // Položky obvinění (účty, obchody) — z nich se pozná, co už bylo odsouzeno, a dá se každé tvrzení ověřit.
+      polozky: row.polozky || null,
       // Nález agenta: podle čeho se případ vede a čím je doložený.
       kod: row.kod || null, nalezy: row.nalezy || null },
   } });
@@ -373,6 +375,7 @@ async function tik() {
       // přihazovat na vlastní dražby. A naopak: za provize se nesmí soudit
       // podruhé jen proto, že se mezitím přidal jiný detektor.
       const odsouzeno = new Map();   // hráč → { kód skutku → částka }
+      const odsPol = new Map();      // hráč → { provize: {účet → částka}, nakupy: Set(id obchodů) }
       (await prisma.gameZlocin.findMany({ where: { stav: 'uzavreno' },
         select: { hlavni_id: true, skoda: true, detail: true } }))
         .forEach((x) => {
@@ -382,6 +385,14 @@ async function tik() {
           const zdroj = r && typeof r === 'object' ? r : { pravidla: x.skoda || 0 };
           Object.keys(zdroj).forEach((k) => { m[k] = (m[k] || 0) + (Number(zdroj[k]) || 0); });
           odsouzeno.set(x.hlavni_id, m);
+          // Totéž po položkách: kolik už bylo odsouzeno za který účet a které obchody.
+          const pl = x.detail && x.detail.polozky;
+          if (pl) {
+            const o = odsPol.get(x.hlavni_id) || { provize: {}, nakupy: new Set() };
+            (pl.provize || []).forEach((q) => { o.provize[q.id] = (o.provize[q.id] || 0) + (Number(q.castka) || 0); });
+            (pl.nakupy || []).forEach((q) => { if (q.obchod != null) o.nakupy.add(q.obchod); });
+            odsPol.set(x.hlavni_id, o);
+          }
         });
       let n = 0;
       for (const puvodni of kandidati) {
@@ -399,8 +410,19 @@ async function tik() {
             odecteno += Math.min(dnes[k], uz[k] || 0);
             if (zbyva > 0) { novy[k] = zbyva; nova += zbyva; }
           });
+          // Druhá pojistka po jednotlivých položkách: nesmí se znovu soudit ani ten samý
+          // účet (provize) nebo obchod (nákup). Platí nižší z obou čísel — nikdy víc, než kolik ještě nebylo odsouzeno.
+          let polNove = puvodni.polozky || null;
+          const up = odsPol.get(puvodni.id);
+          if (polNove && up && dnes.pravidla != null) {
+            const provN = (polNove.provize || []).map((q) => Object.assign({}, q, { castka: Math.max(0, Math.round((Number(q.castka) || 0) - (up.provize[q.id] || 0))) })).filter((q) => q.castka > 0);
+            const nakN = (polNove.nakupy || []).filter((q) => !up.nakupy.has(q.obchod));
+            const polSoucet = provN.reduce((a, q) => a + q.castka, 0) + nakN.reduce((a, q) => a + (Number(q.rozdil) || 0), 0);
+            if (novy.pravidla != null && polSoucet < novy.pravidla) { novy.pravidla = polSoucet; nova = Object.keys(novy).reduce((a, k) => a + novy[k], 0); if (novy.pravidla <= 0) delete novy.pravidla; }
+            polNove = { provize: provN, nakupy: nakN };
+          }
           if (nova < (R.recidiva_min_skoda || 0)) continue;
-          row = Object.assign({}, puvodni, { skoda: nova, rozpis: novy,
+          row = Object.assign({}, puvodni, { polozky: polNove, skoda: nova, rozpis: novy,
             zmrazit: Math.round(nova * R.koef_zabaveni),
             drive_odsouzeno: Math.round(odecteno), drive_rozpis: uz,
             trest: { nejnizsi: Math.round(nova * R.trest_nejnizsi),

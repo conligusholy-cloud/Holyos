@@ -1787,6 +1787,39 @@
     // z jednoho pytle, proto mají jeden kód.
     var ZL_SKUTKY = { pravidla: 'provize a levné nákupy', spojene_obchody: 'obchody mezi vlastními účty',
       drazby: 'vlastní dražby', fond: 'podíl do fondu', pujcky: 'půjčky mezi účty' };
+    // Rozklikávací podrobnosti případu: přesně které účty a obchody se vyčítají, a co se kvůli ochraně
+    // před dvojím trestem nepočítá, protože už bylo odsouzeno dřív.
+    function zlPodrobnosti(r) {
+      var td = 'padding:3px 8px 3px 0;border-bottom:1px solid rgba(255,255,255,.06);text-align:left;font-weight:400', th = 'padding:3px 8px 3px 0;color:#94a3b8;text-align:left;font-weight:600;font-size:11px';
+      var pl = r.polozky, o = '';
+      if (pl && (pl.provize || []).length) {
+        var sp = 0;
+        o += '<div style="margin-top:8px"><b>Provize ze zrušených účtů, které si sám pozval</b><table style="margin-top:3px;border-collapse:collapse"><tr><th style="' + th + '">Účet</th><th style="' + th + '">Proč zrušený</th><th style="' + th + ';text-align:right">Provize</th></tr>'
+          + pl.provize.map(function (q) { sp += q.castka || 0; return '<tr><td style="' + td + '">' + esc(q.firma ? q.firma + ' (' + q.nick + ')' : q.nick) + '</td><td style="' + td + '">' + esc(q.duvod || '') + '</td><td style="' + td + ';text-align:right">' + cz(q.castka) + '</td></tr>'; }).join('')
+          + '<tr><td style="' + td + '" colspan="2"><b>Celkem</b></td><td style="' + td + ';text-align:right"><b>' + cz(sp) + '</b></td></tr></table></div>';
+      }
+      if (pl && (pl.nakupy || []).length) {
+        var sn = 0;
+        o += '<div style="margin-top:8px"><b>Nákupy od zrušených účtů pod ceníkem</b><table style="margin-top:3px;border-collapse:collapse"><tr><th style="' + th + '">Obchod</th><th style="' + th + '">Od koho</th><th style="' + th + '">Model</th><th style="' + th + ';text-align:right">Cena</th><th style="' + th + ';text-align:right">Ceník</th><th style="' + th + ';text-align:right">Rozdíl</th></tr>'
+          + pl.nakupy.map(function (q) { sn += q.rozdil || 0; return '<tr><td style="' + td + '">#' + esc(q.obchod) + '</td><td style="' + td + '">' + esc(q.od_firma ? q.od_firma + ' (' + q.od_nick + ')' : (q.od_nick || '?')) + '</td><td style="' + td + '">' + esc(q.model || '') + '</td><td style="' + td + ';text-align:right">' + cz(q.cena) + '</td><td style="' + td + ';text-align:right">' + cz(q.cenik) + '</td><td style="' + td + ';text-align:right">' + cz(q.rozdil) + '</td></tr>'; }).join('')
+          + '<tr><td style="' + td + '" colspan="5"><b>Rozdíl celkem</b></td><td style="' + td + ';text-align:right"><b>' + cz(sn) + '</b></td></tr></table></div>';
+      }
+      if ((r.nalezy || []).length) {
+        o += '<div style="margin-top:8px"><b>Nálezy agenta</b>' + r.nalezy.map(function (n) {
+          return '<div style="margin-top:4px">• <b>' + esc(n.nazev || n.kod || '?') + '</b> — ' + cz(n.skoda) + (n.dukazy && n.dukazy.length ? '<div style="margin-left:12px;color:#94a3b8">' + n.dukazy.map(function (d) { return esc(d && d.text || ''); }).join('<br>') + '</div>' : '') + '</div>'; }).join('') + '</div>';
+      }
+      if (!o) {
+        var z = r.zaklad || {};
+        o += '<div style="margin-top:8px;color:#94a3b8">U tohoto (staršího) případu nebyl uložen rozpis po jednotlivých položkách. Z uložených čísel: provize ' + cz(z.provize || 0) + ' za ' + (z.mrtvych || 0) + ' účtů'
+          + ((z.mrtvi_nicky || []).length ? ' (' + esc(z.mrtvi_nicky.join(', ')) + (z.mrtvych > z.mrtvi_nicky.length ? ' a další' : '') + ')' : '') + '; nákupy od zrušených účtů ' + (z.nakupu_od_mrtvych || z.nakupu_ks || 0) + '× s rozdílem proti ceníku ' + cz(z.sleva || 0) + '.</div>';
+      }
+      var dr = r.drive_rozpis ? Object.keys(r.drive_rozpis) : [];
+      o += '<div style="margin-top:8px;padding:6px 8px;border-radius:8px;background:rgba(251,191,36,.08);color:#fbbf24">'
+        + (r.drive_odsouzeno ? '<b>Ochrana před dvojím trestem:</b> za dřívější skutky už bylo odsouzeno ' + cz(r.drive_odsouzeno) + (dr.length ? ' (' + dr.map(function (k) { return esc(ZL_SKUTKY[k] || k) + ' ' + cz(r.drive_rozpis[k]); }).join(', ') + ')' : '') + ' — to se do škody ani do seznamu výše nepočítá. Soudí se jen to, co přibylo od posledního rozsudku, a nikdy se nesoudí stejný účet ani stejný obchod dvakrát.'
+          : '<b>Ochrana před dvojím trestem:</b> u tohoto hráče zatím žádný uzavřený případ není. Co se tu odsoudí, se příště už nepočítá — nesoudí se ani stejný účet, ani stejný obchod dvakrát.')
+        + '</div>';
+      return '<details style="margin-top:6px"><summary style="cursor:pointer;color:#7dd3fc">Podrobnosti — co přesně</summary><div style="line-height:1.5;font-weight:400">' + o + '</div></details>';
+    }
     function zlPripady() {
       var box = document.getElementById('zl-pripady');
       get('/zlocin/pripady').then(function (j) {
@@ -1826,7 +1859,7 @@
                   + (r.drive_rozpis ? ' (' + Object.keys(r.drive_rozpis).map(function (k) {
                     return esc(ZL_SKUTKY[k] || k) + ' ' + cz(r.drive_rozpis[k]); }).join(', ') + ')' : '')
                   + ' — v tomhle případu se to nepočítá znovu</div>' : '')
-                + '</td>'
+                + zlPodrobnosti(r) + '</td>'
               + '<td class="note" style="max-width:280px">' + (r.odvolani_text ? '<b style="color:#f87171">podáno ' + dt(r.odvolani_at) + '</b><br>' + esc(r.odvolani_text) : '—') + '</td>'
               + '<td style="white-space:nowrap">' + (aktivni ? (r.stav === 'odvolani' ? '<button class="btn sm" data-zlr="' + r.id + '" data-akce="potvrdit">Potvrdit</button> <button class="btn sm" data-zlr="' + r.id + '" data-akce="upravit" data-trest="' + (r.trest_castka || 0) + '">Upravit</button> ' : '')
                 + '<button class="btn sm" data-zlr="' + r.id + '" data-akce="zrusit">Zrušit</button>' : '') + '</td></tr>';
