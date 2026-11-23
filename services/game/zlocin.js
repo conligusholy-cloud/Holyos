@@ -112,7 +112,8 @@ const SMAZANY = 'smazaný hráč';
 // počítá se z toho trest a to není číslo, které se zkouší v provozu.
 function vetsiSkoda(radek, pv, R) {
   const uzka = Math.max(0, Math.round(radek.skoda || 0));
-  const siroka = Math.max(0, Math.round((pv && pv.zisk) || 0));
+  // U hráče s dřívějším rozsudkem se bere jen zisk po něm (zisk_po), ne celá historie
+  const siroka = Math.max(0, Math.round((pv && (radek.po_datu ? pv.zisk_po : pv.zisk)) || 0));
   radek.skoda_uzka = uzka;
   radek.zisk_podvod = siroka;
   radek.skoda = Math.max(uzka, siroka);
@@ -129,9 +130,9 @@ async function nanecisto(prisma, pravidla) {
   const [hraci, davky, obchody, mista] = await Promise.all([
     prisma.gamePlayer.findMany({ select: { id: true, nick: true, company: true, created_at: true, hra_s_celkem: true,
       invited_by_id: true, invited_by_ref: true, ref_id: true, disabled: true } }),
-    prisma.gameDelivery.findMany({ where: { kind: 'cash', popis: { startsWith: 'Provize' } }, select: { player_id: true, spot_id: true, amount: true } }),
+    prisma.gameDelivery.findMany({ where: { kind: 'cash', popis: { startsWith: 'Provize' } }, select: { player_id: true, spot_id: true, amount: true, created_at: true } }),
     prisma.gameTrade.findMany({ where: { stav: 'prijato', predmet: { in: ['stroj', 'pradlomat'] } },
-      select: { id: true, from_id: true, to_id: true, smer: true, predmet: true, model: true, cena: true } }),
+      select: { id: true, from_id: true, to_id: true, smer: true, predmet: true, model: true, cena: true, resolved_at: true, created_at: true } }),
     prisma.gameSpotClaim.findMany({ select: { player_id: true, spot_id: true } }),
   ]);
 
@@ -144,6 +145,13 @@ async function nanecisto(prisma, pravidla) {
     nak.forEach((n) => { platil[n.player_id] = (platil[n.player_id] || 0) + MENY.naKoruny(n.amount_cents, String(n.currency || 'czk').toLowerCase(), kurzy); });
   } catch (e) { /* bez plateb se nanečisto počítá dál */ }
 
+  // Co už bylo jednou souzeno, se nesoudí znovu: u hráče s uzavřeným případem se počítají jen skutky
+  // PO zahájení jeho posledního uzavřeného případu (tehdejší vyhodnocení pokrylo všechno do té doby).
+  const hranice = {};
+  (await prisma.gameZlocin.findMany({ where: { stav: 'uzavreno' }, select: { hlavni_id: true, zahajeno_at: true } })).forEach((x) => {
+    const t = new Date(x.zahajeno_at).getTime(); if (!hranice[x.hlavni_id] || t > hranice[x.hlavni_id]) hranice[x.hlavni_id] = t;
+  });
+  const poHranici = (id, kdy) => !hranice[id] || (kdy && new Date(kdy).getTime() > hranice[id]);
   const P = {}, podleRef = {};
   hraci.forEach((h) => { P[h.id] = h; if (h.ref_id) podleRef[h.ref_id] = h; });
   const zvouci = (h) => P[h.invited_by_id] || podleRef[h.invited_by_ref] || null;
@@ -165,6 +173,7 @@ async function nanecisto(prisma, pravidla) {
     const m = /^nakup:(\d+):/.exec(String(d.spot_id || ''));
     const za = m ? Number(m[1]) : majitel[d.spot_id];
     if (!za) return;
+    if (!poHranici(d.player_id, d.created_at)) return;   // provize z doby před posledním rozsudkem už se soudila
     const o = provizeKomu[d.player_id] || (provizeKomu[d.player_id] = {});
     o[za] = (o[za] || 0) + (Number(d.amount) || 0);
   });
@@ -172,7 +181,7 @@ async function nanecisto(prisma, pravidla) {
   const nakupy = {};
   obchody.forEach((t) => {
     const prod = t.smer === 'koupim' ? t.to_id : t.from_id, kup = t.smer === 'koupim' ? t.from_id : t.to_id;
-    (nakupy[kup] = nakupy[kup] || []).push({ id: t.id, od: prod, cena: Number(t.cena) || 0, model: t.model, predmet: t.predmet });
+    (nakupy[kup] = nakupy[kup] || []).push({ kdy: t.resolved_at || t.created_at, id: t.id, od: prod, cena: Number(t.cena) || 0, model: t.model, predmet: t.predmet });
   });
 
   const vysledek = [], nahled = [];
@@ -198,7 +207,7 @@ async function nanecisto(prisma, pravidla) {
     const prov = provizeKomu[h.id] || {};
     // Škoda jen ze zrušených / nehrajících účtů — provize od živých hráčů je v pořádku
     const provize = ids.reduce((a, id) => a + (mrtvy(P[id]) ? (prov[id] || 0) : 0), 0);
-    const kup = (nakupy[h.id] || []).filter((x) => strom.has(x.od) && mrtvy(P[x.od]));
+    const kup = (nakupy[h.id] || []).filter((x) => strom.has(x.od) && mrtvy(P[x.od]) && poHranici(h.id, x.kdy));
     const sleva = kup.reduce((a, x) => a + Math.max(0, cenik(x.model) - x.cena), 0);
     const odMrtvych = kup.filter((x) => mrtvy(P[x.od])).length;
     const mamDukaz = provize > 0 || kup.length > 0;
@@ -225,6 +234,7 @@ async function nanecisto(prisma, pravidla) {
         nakupy: polNakupy(kup),
       },
     };
+    if (hranice[h.id]) radek.po_datu = new Date(hranice[h.id]).toISOString();
     radek.platil_kc = Math.round(platil[h.id] || 0);
     radek.platici = radek.platil_kc > 0;
     radek.skoda = Math.round(provize + sleva);
@@ -241,7 +251,7 @@ async function nanecisto(prisma, pravidla) {
   const maxPomer = R.kup_max_pomer / 100;
   const radekPodleId = {}; vysledek.concat(nahled).forEach((r) => { radekPodleId[r.id] = r; });
   hraci.forEach((h) => {
-    const levne = (nakupy[h.id] || []).filter((x) => P[x.od] && mrtvy(P[x.od]) && x.od !== h.id
+    const levne = (nakupy[h.id] || []).filter((x) => P[x.od] && mrtvy(P[x.od]) && x.od !== h.id && poHranici(h.id, x.kdy)
       && (Number(x.cena) || 0) < maxPomer * cenik(x.model));
     const prodejci = new Set(levne.map((x) => x.od));
     if (prodejci.size < R.min_kupu_od_mrtvych) return;
@@ -257,6 +267,7 @@ async function nanecisto(prisma, pravidla) {
       polozky: { provize: [], nakupy: polNakupy(levne) },
       platil_kc: Math.round(platil[h.id] || 0),
     };
+    if (hranice[h.id]) radek.po_datu = new Date(hranice[h.id]).toISOString();
     radek.platici = radek.platil_kc > 0;
     radek.skoda = radek.sleva;
     radek.zmrazit = Math.round(radek.skoda * R.koef_zabaveni);

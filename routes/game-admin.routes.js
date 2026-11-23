@@ -740,7 +740,7 @@ router.get('/zlocin/pripady', api(async (req, res) => {
     const T = {};
     if (obIds.length) (await prisma.gameTrade.findMany({ where: { id: { in: obIds } }, select: { id: true, resolved_at: true, created_at: true } })).forEach((t) => { T[t.id] = t.resolved_at || t.created_at; });
     const hlIds = Array.from(new Set(rows.filter((r) => r.detail && r.detail.polozky && (r.detail.polozky.provize || []).length).map((r) => r.hlavni_id)));
-    const PR = {};   // hlavní hráč → { za(id pozvaného) → { od, do, n } }
+    const DL = {};   // hlavní hráč → jeho výplaty provizí (s údajem „za koho")
     if (hlIds.length) {
       const dl = await prisma.gameDelivery.findMany({ where: { player_id: { in: hlIds }, kind: 'cash', popis: { startsWith: 'Provize' } }, select: { player_id: true, spot_id: true, created_at: true } });
       const spoty = Array.from(new Set(dl.map((d) => d.spot_id).filter((x) => x && !/^nakup:\d+:/.test(String(x)))));
@@ -748,14 +748,19 @@ router.get('/zlocin/pripady', api(async (req, res) => {
       if (spoty.length) (await prisma.gameSpotClaim.findMany({ where: { spot_id: { in: spoty } }, select: { player_id: true, spot_id: true } })).forEach((m) => { maj[m.spot_id] = m.player_id; });
       dl.forEach((d) => {
         const m = /^nakup:(\d+):/.exec(String(d.spot_id || '')); const za = m ? Number(m[1]) : maj[d.spot_id]; if (!za) return;
-        const o = (PR[d.player_id] = PR[d.player_id] || {}); const e = (o[za] = o[za] || { od: d.created_at, do: d.created_at, n: 0 });
-        if (d.created_at < e.od) e.od = d.created_at; if (d.created_at > e.do) e.do = d.created_at; e.n++;
+        (DL[d.player_id] = DL[d.player_id] || []).push({ za, t: d.created_at });
       });
     }
     rows.forEach((r) => {
       const p = r.detail && r.detail.polozky; if (!p) return;
       (p.nakupy || []).forEach((q) => { q.kdy = T[q.obchod] || null; });
-      (p.provize || []).forEach((q) => { const e = (PR[r.hlavni_id] || {})[q.id]; if (e) { q.od = e.od; q.do = e.do; q.pocet = e.n; } });
+      // jen výplaty po posledním rozsudku, který případu předcházel (stejně jako při počítání škody)
+      const hr = r.detail.po_datu ? new Date(r.detail.po_datu).getTime() : 0, E = {};
+      (DL[r.hlavni_id] || []).forEach((d) => {
+        const t = new Date(d.t).getTime(); if (hr && t <= hr) return;
+        const e = (E[d.za] = E[d.za] || { od: d.t, do: d.t, n: 0 }); if (d.t < e.od) e.od = d.t; if (d.t > e.do) e.do = d.t; e.n++;
+      });
+      (p.provize || []).forEach((q) => { const e = E[q.id]; if (e) { q.od = e.od; q.do = e.do; q.pocet = e.n; } });
     });
   } catch (e) { console.warn('[zlocin] časy položek:', e && e.message); }
   res.json({ ok: true, pripady: rows.map((r) => Object.assign({}, r, { hlasy: H[r.id] || {},

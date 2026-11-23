@@ -26,14 +26,19 @@ async function spocitej(prisma) {
       invited_by_id: true, invited_by_ref: true, ref_id: true, disabled: true, email: true, last_login_at: true } }),
     prisma.gameTrade.findMany({ where: { stav: 'prijato', predmet: { in: STROJ_PREDMET.concat(['pobocka']) } },
       select: { id: true, from_id: true, to_id: true, smer: true, predmet: true, model: true, cena: true, created_at: true, resolved_at: true } }),
-    prisma.gameDelivery.findMany({ where: { kind: 'cash', popis: { startsWith: 'Provize' } }, select: { player_id: true, spot_id: true, amount: true } }),
+    prisma.gameDelivery.findMany({ where: { kind: 'cash', popis: { startsWith: 'Provize' } }, select: { player_id: true, spot_id: true, amount: true, created_at: true } }),
     prisma.gameSpotClaim.findMany({ select: { player_id: true, spot_id: true } }),
     // Přístupy za posledních 60 dní (services/game/pristupy.js) — před nasazením tabulky prázdné
     prisma.gameAccess ? prisma.gameAccess.findMany({ where: { created_at: { gte: new Date(Date.now() - 60 * D) } },
       select: { player_id: true, druh: true, ref_id: true, ip: true, dev: true, fp: true, hw: true, created_at: true }, orderBy: { id: 'asc' }, take: 300000 }).catch(() => []) : [],
   ]);
+  // Hranice po posledním rozsudku: „zisk_po" počítá jen skutky po zahájení posledního uzavřeného případu hráče
+  // (co se už soudilo, se nesoudí znovu). Celkový „zisk" zůstává pro přehled hráčů.
+  const hr = {};
+  try { (await prisma.gameZlocin.findMany({ where: { stav: 'uzavreno' }, select: { hlavni_id: true, zahajeno_at: true } })).forEach((x) => { const t = new Date(x.zahajeno_at).getTime(); if (!hr[x.hlavni_id] || t > hr[x.hlavni_id]) hr[x.hlavni_id] = t; }); } catch (e) { /* bez tabulky se počítá vše */ }
+  const poH = (id, kdy) => !hr[id] || (kdy != null && new Date(kdy).getTime() > hr[id]);
   const P = {}, podleRef = {};
-  hraci.forEach((h) => { P[h.id] = h; if (h.ref_id) podleRef[h.ref_id] = h; h._s = { mule: 0, ben: 0, duvody: [], zisk: 0, prodalLevne: 0, koupilLevne: 0 }; });
+  hraci.forEach((h) => { P[h.id] = h; if (h.ref_id) podleRef[h.ref_id] = h; h._s = { mule: 0, ben: 0, duvody: [], zisk: 0, ziskPo: 0, prodalLevne: 0, koupilLevne: 0 }; });
   const zvouci = (h) => P[h.invited_by_id] || podleRef[h.invited_by_ref] || null;
   const smazan = (h) => h.nick === SMAZANY;
 
@@ -56,7 +61,7 @@ async function spocitej(prisma) {
   const majitel = {}; mista.forEach((m) => { majitel[m.spot_id] = m.player_id; });
   const provizeZa = {}; // pozvaný id → { komu, castka }
   davky.forEach((d) => { const m = /^nakup:(\d+):/.exec(String(d.spot_id || '')); const za = m ? Number(m[1]) : majitel[d.spot_id]; if (!za) return;
-    const z = provizeZa[za] || (provizeZa[za] = { komu: d.player_id, castka: 0 }); z.castka += Number(d.amount) || 0; });
+    const z = provizeZa[za] || (provizeZa[za] = { komu: d.player_id, castka: 0, castkaPo: 0 }); z.castka += Number(d.amount) || 0; if (poH(d.player_id, d.created_at)) z.castkaPo += Number(d.amount) || 0; });
 
   // Obchody: kdo prodal komu, za kolik vůči ceníku
   const prodeje = obchody.map((t) => {
@@ -134,6 +139,7 @@ async function spocitej(prisma) {
       d(koupe.length >= 10 ? 45 : koupe.length >= 3 ? 35 : 20, 'koupil ' + koupe.length + '× stroj pod 30 % ceny');
       const slevaL = koupe.reduce((a, x) => a + Math.max(0, x.seznam - x.cena), 0);
       s.zisk += slevaL; s.sleva = (s.sleva || 0) + slevaL;
+      s.ziskPo += koupe.filter((x) => poH(h.id, x.kdy)).reduce((a, x) => a + Math.max(0, x.seznam - x.cena), 0);
       const mladi = koupe.filter((x) => x.kdy - new Date(x.prod.created_at).getTime() < 2 * D || smazan(x.prod) || jeMule(x.prod));
       if (mladi.length) d(mladi.length >= 3 ? 25 : 15, mladi.length + '× od účtu mladšího 2 dnů / smazaného / pomocného');
     }
@@ -144,13 +150,14 @@ async function spocitej(prisma) {
       d(polo.length >= 5 ? 20 : polo.length >= 2 ? 12 : 6, 'koupil ' + polo.length + '× stroj za 30–60 % ceny od nového / smazaného / pomocného účtu');
       const slevaP = polo.reduce((a, x) => a + Math.max(0, x.seznam - x.cena), 0);
       s.zisk += slevaP; s.sleva = (s.sleva || 0) + slevaP; s.koupilLevne += polo.length;
+      s.ziskPo += polo.filter((x) => poH(h.id, x.kdy)).reduce((a, x) => a + Math.max(0, x.seznam - x.cena), 0);
     }
     const pozvani = hraci.filter((x) => zvouci(x) && zvouci(x).id === h.id && provizeZa[x.id] && provizeZa[x.id].komu === h.id);
     const podezreli = pozvani.filter((x) => jeMule(x) || smazan(x) || (x.hra_s_celkem || 0) < 1800 || x._s.prodalLevne);
     if (podezreli.length) {
       d(podezreli.length >= 10 ? 35 : podezreli.length >= 3 ? 25 : 12, 'provize za ' + podezreli.length + ' podezřelých pozvaných (smazaní / krátká hra / levný prodej)');
       const prov = podezreli.reduce((a, x) => a + provizeZa[x.id].castka, 0);
-      s.zisk += prov; s.provize = prov; s.pomocnych = podezreli.length; s.pozvanych = pozvani.length;
+      s.zisk += prov; s.provize = prov; s.ziskPo += podezreli.reduce((a, x) => a + provizeZa[x.id].castkaPo, 0); s.pomocnych = podezreli.length; s.pozvanych = pozvani.length;
     }
     if (pozvani.length >= 3 && podezreli.length / pozvani.length >= 0.8) d(20, podezreli.length + ' z ' + pozvani.length + ' jeho pozvaných jsou podezřelé účty');
     // Stejné zařízení je silná stopa, samotná stejná IP slabá (mobilní operátor, rodina, kolej)
@@ -166,7 +173,7 @@ async function spocitej(prisma) {
     // PODVODNÍK = ten, kdo bere provize z účelových účtů a/nebo skupuje od nových účtů stroje pod cenou.
     // Pomocný účet je jen nástroj; tomu se píše, pro koho pracuje.
     const podvodnik = ben >= 45 && ben >= mule && ((s.provize || 0) > 0 || (s.sleva || 0) > 0);
-    out[h.id] = { pct, dukaz: !!s.dukaz, podvodnik, role: pct < 20 ? null : (podvodnik ? 'PODVODNÍK' : ben > mule ? 'příjemce' : 'pomocný účet'), mule, ben, zisk: Math.round(s.zisk),
+    out[h.id] = { pct, dukaz: !!s.dukaz, podvodnik, role: pct < 20 ? null : (podvodnik ? 'PODVODNÍK' : ben > mule ? 'příjemce' : 'pomocný účet'), mule, ben, zisk: Math.round(s.zisk), zisk_po: Math.round(s.ziskPo),
       provize: Math.round(s.provize || 0), sleva: Math.round(s.sleva || 0), pomocnych: s.pomocnych || 0, pozvanych: s.pozvanych || 0,
       levnych: s.koupilLevne || 0, pro: (!podvodnik && mule >= 45) ? (s.pro || null) : null,
       // Kdo ho přivedl (null = nikdo), s kým sdílí zařízení/IP a komu prodával stroje — admin to vidí přímo v tabulce.

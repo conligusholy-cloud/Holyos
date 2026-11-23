@@ -119,7 +119,7 @@ async function zahaj(prisma, R, row) {
       drive_odsouzeno: row.drive_odsouzeno || 0, drive_rozpis: row.drive_rozpis || null,
       rozpis: row.rozpis || null,
       // Položky obvinění (účty, obchody) — z nich se pozná, co už bylo odsouzeno, a dá se každé tvrzení ověřit.
-      polozky: row.polozky || null,
+      polozky: row.polozky || null, po_datu: row.po_datu || null,
       // Nález agenta: podle čeho se případ vede a čím je doložený.
       kod: row.kod || null, nalezy: row.nalezy || null },
   } });
@@ -405,16 +405,19 @@ async function tik() {
         if (uz) {
           const novy = {};
           let nova = 0, odecteno = 0;
+          // Řádek už je spočítaný jen ze skutků po posledním rozsudku (po_datu) — odečítat částku
+          // podruhé by znamenalo krátit nové skutky o staré. Částka se tu jen zobrazí jako „už odsouzeno".
+          const poDatu = !!puvodni.po_datu;
           Object.keys(dnes).forEach((k) => {
-            const zbyva = Math.max(0, Math.round(dnes[k] - (uz[k] || 0)));
-            odecteno += Math.min(dnes[k], uz[k] || 0);
+            const zbyva = Math.max(0, Math.round(dnes[k] - (poDatu && k === 'pravidla' ? 0 : (uz[k] || 0))));
+            odecteno += Math.min(poDatu && k === 'pravidla' ? (uz[k] || 0) : dnes[k], uz[k] || 0);
             if (zbyva > 0) { novy[k] = zbyva; nova += zbyva; }
           });
           // Druhá pojistka po jednotlivých položkách: nesmí se znovu soudit ani ten samý
           // účet (provize) nebo obchod (nákup). Platí nižší z obou čísel — nikdy víc, než kolik ještě nebylo odsouzeno.
           let polNove = puvodni.polozky || null;
           const up = odsPol.get(puvodni.id);
-          if (polNove && up && dnes.pravidla != null) {
+          if (polNove && up && dnes.pravidla != null && !puvodni.po_datu) {
             const provN = (polNove.provize || []).map((q) => Object.assign({}, q, { castka: Math.max(0, Math.round((Number(q.castka) || 0) - (up.provize[q.id] || 0))) })).filter((q) => q.castka > 0);
             const nakN = (polNove.nakupy || []).filter((q) => !up.nakupy.has(q.obchod));
             const polSoucet = provN.reduce((a, q) => a + q.castka, 0) + nakN.reduce((a, q) => a + (Number(q.rozdil) || 0), 0);
