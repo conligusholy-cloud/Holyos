@@ -82,6 +82,14 @@ async function initDb() {
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_by TEXT
   )`);
+  // Rozdělení financí: jedna sdílená tabulka (řádky = co se dělí, sloupce = pozice, buňky = podíl v %)
+  await q(`CREATE TABLE IF NOT EXISTS finance_split (
+    id INT PRIMARY KEY,
+    data JSONB NOT NULL,
+    rev INT NOT NULL DEFAULT 1,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_by TEXT
+  )`);
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS invite_sent_at TIMESTAMPTZ');
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS invite_count INT NOT NULL DEFAULT 0');
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS invite_error TEXT');
@@ -501,6 +509,7 @@ const UICO = {
   technika: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
   proc: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.74c.6.48 1 1.17 1 1.94V17h6v-.32c0-.77.4-1.46 1-1.94A7 7 0 0 0 12 2z"/>',
   model: '<circle cx="12" cy="12" r="3"/><circle cx="4.5" cy="5.5" r="2"/><circle cx="19.5" cy="5.5" r="2"/><circle cx="4.5" cy="18.5" r="2"/><circle cx="19.5" cy="18.5" r="2"/><path d="M10 10 6 7M14 10l4-3M10 14l-4 3M14 14l4 3"/>',
+  split: '<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
   uzivatele: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M16 11h6"/>',
   holyos: '<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
 };
@@ -508,7 +517,7 @@ const uico = (k) => `<span class="uic"><svg viewBox="0 0 24 24" fill="none" stro
 function topBar(o) {
   const en = o.lang && o.lang !== 'cs';
   const tabs = o.mode === 'admin'
-    ? [{ k: 'leady', href: '/admin', t: 'Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, t: x.cs })), [{ k: 'model', href: '/admin/model', t: 'Modelace business modelu' }])
+    ? [{ k: 'leady', href: '/admin', t: 'Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, t: x.cs })), [{ k: 'model', href: '/admin/model', t: 'Modelace business modelu' }, { k: 'split', href: '/admin/finance', t: 'Rozdělení financí' }])
     : SEKCE.filter((x) => (o.sekce || []).includes(x.k)).map((x) => ({ k: x.k, href: '/portal/m/' + x.k, t: en ? x.en : x.cs }));
   const rt = o.mode === 'admin'
     ? `<a href="/portal" class="rtl">${uico('report')}<span>Uživatelské prostředí</span></a><a href="/portal/logout" class="rtl"><span>Odhlásit</span></a>`
@@ -881,6 +890,67 @@ app.post('/admin/api/users/:id(\\d+)/delete', requireAdmin, express.json({ limit
 });
 // ── Modelace business modelu: plátno s myšlenkovou mapou ────────────────────
 let MODEL_JS = null;
+// ── Rozdělení financí ──
+let FIN_JS = null;
+app.get('/admin/finance.js', requireAdmin, (req, res) => {
+  if (!FIN_JS) FIN_JS = fs.readFileSync(path.join(__dirname, 'finance-client.js'), 'utf8');
+  res.set('Cache-Control', 'no-cache').type('application/javascript').send(FIN_JS);
+});
+const FIN_DEFAULT = { cols: ['Výroba', 'Master partner', 'Operátor', 'Provozovatel prádlomatu'].map((name, i) => ({ id: 'c_' + (i + 1), name })), rows: [] };
+const finClean = (d) => {
+  const str = (v, n) => String(v == null ? '' : v).slice(0, n), idc = (v) => str(v, 40).replace(/[^\w-]/g, '');
+  const cols = (Array.isArray(d && d.cols) ? d.cols : []).slice(0, 20).map((c) => ({ id: idc(c.id), name: str(c.name, 60) })).filter((c) => c.id);
+  const ids = new Set(cols.map((c) => c.id));
+  const rows = (Array.isArray(d && d.rows) ? d.rows : []).slice(0, 300).map((r) => {
+    const v = {}; Object.keys((r && r.v) || {}).forEach((k) => { const x = Number(r.v[k]); if (ids.has(k) && isFinite(x)) v[k] = Math.max(0, Math.min(100, Math.round(x * 100) / 100)); });
+    return { id: idc(r.id), name: str(r.name, 200), note: str(r.note, 300), v };
+  }).filter((r) => r.id);
+  return { cols, rows };
+};
+app.get('/admin/api/finance', requireAdmin, async (req, res) => {
+  try {
+    let r = (await q('SELECT data, rev FROM finance_split WHERE id=1')).rows[0];
+    if (!r) { await q('INSERT INTO finance_split (id, data) VALUES (1,$1) ON CONFLICT (id) DO NOTHING', [JSON.stringify(FIN_DEFAULT)]); r = (await q('SELECT data, rev FROM finance_split WHERE id=1')).rows[0]; }
+    res.set('Cache-Control', 'no-store').json({ ok: true, data: r.data, rev: r.rev });
+  } catch (e) { res.json({ ok: false, error: 'Tabulku se nepodařilo načíst' }); }
+});
+app.post('/admin/api/finance', requireAdmin, express.json({ limit: '1mb' }), async (req, res) => {
+  try {
+    const b = req.body || {}, data = finClean(b.data);
+    const r = await q('UPDATE finance_split SET data=$1, rev=rev+1, updated_at=now(), updated_by=$3 WHERE id=1 AND rev=$2 RETURNING rev', [JSON.stringify(data), Number(b.rev) || 0, (req.admin && req.admin.name) || '']);
+    if (!r.rowCount) return res.status(409).json({ ok: false, error: 'Tabulku mezitím změnil jiný uživatel' });
+    res.json({ ok: true, rev: r.rows[0].rev });
+  } catch (e) { res.json({ ok: false, error: 'Uložení se nepovedlo' }); }
+});
+const FIN_CSS = `
+.fxh{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0 4px}.fxh h3{margin:0}
+.fxbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:16px 0 12px}
+.fxbar button{background:#07111f;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 13px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;width:auto}.fxbar button:hover{border-color:var(--cy)}
+#fx-st{font-size:12.5px;color:#86efac;margin-left:6px}
+.fxw{overflow:auto;border:1px solid var(--line);border-radius:14px;background:rgba(8,15,30,.6);max-width:100%}
+#fx{border-collapse:separate;border-spacing:0;width:100%;min-width:760px}
+#fx th{position:sticky;top:0;background:#0b1630;z-index:2;text-align:left;padding:10px 8px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--line)}
+#fx td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:middle}
+#fx tbody tr:hover td{background:rgba(34,230,255,.04)}
+#fx .c0{width:34px;color:var(--mut);text-align:center}#fx .cn{min-width:230px}#fx .cm{min-width:170px}#fx .cp{min-width:128px;width:128px}#fx .cs{width:130px;white-space:nowrap}#fx .ca{width:150px;white-space:nowrap;text-align:right}
+#fx input{background:#07111f;border:1px solid transparent;border-radius:8px;color:var(--text);font:inherit;font-size:14px;padding:7px 9px;width:100%;box-sizing:border-box}
+#fx input:hover{border-color:var(--line)}#fx input:focus{outline:none;border-color:var(--cy);background:#0a1830}
+#fx .hin{font-weight:700;text-transform:none;letter-spacing:0;color:#eaf6ff;font-size:13.5px;background:rgba(34,230,255,.07)}
+#fx .ch{display:flex;align-items:center;gap:4px}#fx .x{background:none;border:0;color:#6f84a6;cursor:pointer;font-size:13px;padding:2px 4px;width:auto}#fx .x:hover{color:#fca5a5}
+#fx .pc{position:relative;display:block}#fx .pc .vin{text-align:right;padding-right:26px;font-variant-numeric:tabular-nums}#fx .pc i{position:absolute;right:9px;top:50%;transform:translateY(-50%);color:var(--mut);font-style:normal;font-size:13px;pointer-events:none}
+.fxc{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700}.fxc.ok{background:rgba(34,197,94,.18);color:#86efac}.fxc.w{background:rgba(251,191,36,.16);color:#fcd34d}.fxc.bad{background:rgba(248,113,113,.2);color:#fca5a5}.fxc.n{color:var(--mut)}
+#fx .ib{background:none;border:1px solid transparent;border-radius:7px;color:#9fb4d6;cursor:pointer;font-size:14px;padding:4px 7px;width:auto}#fx .ib:hover{border-color:var(--line);color:#fff}
+#fx .empty{text-align:center;color:var(--mut);padding:34px 14px;line-height:1.7}
+@media(max-width:900px){#fx .cm{display:none}}`;
+app.get('/admin/finance', requireAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Rozdělení financí — Laundry Unlimited</title>
+<style>${ADMIN_CSS}${BAR_CSS}.adm{max-width:none;padding:22px}.mut{color:var(--mut);font-size:13px}${FIN_CSS}</style></head><body>${topBar({ mode: 'admin', active: 'split' })}
+<div class="adm"><div class="fxh"><h3>Rozdělení financí</h3></div>
+<p class="mut" style="margin:4px 0 0;max-width:820px">Řádek = cokoli, co se dělí (např. cena prádlomatu, provize, servis). Sloupec = pozice, mezi které se dělí. Do buňky napiš podíl v %; součet řádku má dát 100 %. Vše se ukládá samo.</p>
+<div class="fxbar"><button id="fx-addrow" type="button">＋ Přidat řádek</button><button id="fx-addcol" type="button">＋ Přidat pozici</button><span id="fx-st"></span></div>
+<div class="fxw"><table id="fx"></table></div></div>
+<script src="/admin/finance.js"></script></body></html>`);
+});
 app.get('/admin/model.js', requireAdmin, (req, res) => {
   if (!MODEL_JS) MODEL_JS = fs.readFileSync(path.join(__dirname, 'model-client.js'), 'utf8');
   res.set('Cache-Control', 'no-cache').type('application/javascript').send(MODEL_JS);
