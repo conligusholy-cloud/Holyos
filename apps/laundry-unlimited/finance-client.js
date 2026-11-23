@@ -51,15 +51,15 @@
 
   // ── Vykreslení ──
   function render() {
-    var t = $('#fx'), h = '<thead><tr><th class="c0">#</th><th class="cn">Co se dělí (řádek)</th><th class="cm">Volné prostředky na rozdělení <span class="dph">EUR · bez DPH</span></th><th class="cf">Frekvence</th>';
+    var t = $('#fx'), h = '<thead><tr><th class="c0">#</th><th class="cn">Co se dělí (řádek)</th><th class="cr">Cena <span class="sub">z čeho se počítá</span></th><th class="cm">Volné prostředky na rozdělení <span class="dph">EUR · bez DPH</span></th><th class="cf">Frekvence</th>';
     D.cols.forEach(function (c) { h += '<th class="cp"><div class="ch"><input class="hin" data-c="' + c.id + '" value="' + esc(c.name) + '" maxlength="60" title="Název pozice"><button type="button" class="x" data-dc="' + c.id + '" title="Odebrat pozici">✕</button></div></th>'; });
     h += '<th class="cs">Součet</th><th class="ca"></th></tr></thead><tbody>';
     D.rows.forEach(function (r, i) {
-      h += '<tr data-r="' + r.id + '"><td class="c0">' + (i + 1) + '</td><td class="cn"><input class="rin" data-f="name" value="' + esc(r.name) + '" maxlength="200" placeholder="např. Prodej prádlomatu"></td><td class="cm"><span class="pc"><input class="ain" value="' + esc(fmtAmt(r.amt)) + '" inputmode="decimal" autocomplete="off" placeholder="0" title="Volné prostředky na rozdělení v EUR, bez DPH (editovatelné)"><i>€</i></span></td><td class="cf">' + freqSel(r.freq) + '</td>';
+      h += '<tr data-r="' + r.id + '"><td class="c0">' + (i + 1) + '</td><td class="cn"><input class="rin" data-f="name" value="' + esc(r.name) + '" maxlength="200" placeholder="např. Prodej prádlomatu"></td><td class="cr"><span class="pc"><input class="ain" data-f="price" value="' + esc(fmtAmt(r.price)) + '" inputmode="decimal" autocomplete="off" placeholder="0" title="Cena, ze které se volné prostředky vypočítávají (EUR)"><i>€</i></span></td><td class="cm"><span class="pc"><input class="ain" data-f="amt" value="' + esc(fmtAmt(r.amt)) + '" inputmode="decimal" autocomplete="off" placeholder="0" title="Volné prostředky na rozdělení v EUR, bez DPH (editovatelné)"><i>€</i></span></td><td class="cf">' + freqSel(r.freq) + '</td>';
       D.cols.forEach(function (c) { var x = r.v && r.v[c.id]; h += '<td class="cp"><span class="pc"><input class="vin" data-c="' + c.id + '" value="' + esc(fmt(typeof x === 'number' ? x : null)) + '" inputmode="decimal" autocomplete="off"><i>%</i></span></td>'; });
       h += '<td class="cs">' + sumChip(r) + '</td><td class="ca"><button type="button" class="ib" data-eq="' + r.id + '" title="Rozdělit rovným dílem">⚖</button><button type="button" class="ib" data-up="' + r.id + '" title="Posunout nahoru">↑</button><button type="button" class="ib" data-dn="' + r.id + '" title="Posunout dolů">↓</button><button type="button" class="ib" data-dr="' + r.id + '" title="Smazat řádek">🗑</button></td></tr>';
     });
-    if (!D.rows.length) h += '<tr><td colspan="' + (D.cols.length + 6) + '" class="empty">Zatím žádné řádky. Přidej první tlačítkem <b>＋ Přidat řádek</b> — řádek je cokoli, co se mezi pozice dělí (např. cena prádlomatu, provize, servis…).</td></tr>';
+    if (!D.rows.length) h += '<tr><td colspan="' + (D.cols.length + 7) + '" class="empty">Zatím žádné řádky. Přidej první tlačítkem <b>＋ Přidat řádek</b> — řádek je cokoli, co se mezi pozice dělí (např. cena prádlomatu, provize, servis…).</td></tr>';
     h += '</tbody>';
     t.innerHTML = h;
   }
@@ -75,11 +75,11 @@
       var v = num(t.value); r.v = r.v || {}; if (v == null) delete r.v[t.getAttribute('data-c')]; else r.v[t.getAttribute('data-c')] = v;
       updateRowSum(tr); changed();
     } else if (t.classList.contains('fin')) { if (t.value) r.freq = t.value; else delete r.freq; changed(); }
-    else if (t.classList.contains('ain')) { var a = parseAmt(t.value); if (a == null) delete r.amt; else r.amt = a; changed(); }
+    else if (t.classList.contains('ain')) { var a = parseAmt(t.value), fk = t.getAttribute('data-f') === 'price' ? 'price' : 'amt'; if (a == null) delete r[fk]; else r[fk] = a; changed(); }
     else if (t.classList.contains('rin')) { r[t.getAttribute('data-f')] = t.value; changed(); }
   });
   tbl.addEventListener('focusout', function (ev) { var t = ev.target;
-    if (t.classList && t.classList.contains('ain')) { var ar = D.rows.filter(function (x) { return x.id === t.closest('tr').getAttribute('data-r'); })[0]; t.value = ar ? fmtAmt(ar.amt) : ''; return; }
+    if (t.classList && t.classList.contains('ain')) { var ar = D.rows.filter(function (x) { return x.id === t.closest('tr').getAttribute('data-r'); })[0]; t.value = ar ? fmtAmt(ar[t.getAttribute('data-f') === 'price' ? 'price' : 'amt']) : ''; return; }
     if (t.classList && t.classList.contains('vin')) { var tr = t.closest('tr'), r = D.rows.filter(function (x) { return x.id === tr.getAttribute('data-r'); })[0], x = r && r.v && r.v[t.getAttribute('data-c')]; t.value = fmt(typeof x === 'number' ? x : null); } });
   tbl.addEventListener('click', function (ev) {
     var b = ev.target.closest && ev.target.closest('button'); if (!b) return;
