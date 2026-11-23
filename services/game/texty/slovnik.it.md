@@ -58,6 +58,7 @@ Tenhle soubor čte automatický překlad — co je tady, to platí.
 | obrat | fatturato | |
 | zisk | utile | ne *profitto*, účetně je to utile |
 | tržba | incasso | co se vybere na místě |
+| servis | manutenzione | servis strojů; `assistenza` je infolinka, ať se to neplete |
 | technik | tecnico | |
 | vedoucí servisních techniků | responsabile manutenzione | předplatné |
 | porucha | guasto | |

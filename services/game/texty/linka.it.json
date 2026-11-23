@@ -3016,5 +3016,340 @@
         ]
       }
     ]
+  },
+  {
+    "id": "voda-2",
+    "rod": "z",
+    "nalada": 22,
+    "kroky": [
+      {
+        "t": "Da voi c’è acqua per terra, sono quasi caduta. Con un bambino piccolo!",
+        "o": [
+          {
+            "t": "La prendo sul serio. Chiudo subito il locale finché non lo puliscono — grazie di aver chiamato.",
+            "b": 2,
+            "r": "Almeno qualcuno la prende sul serio."
+          },
+          {
+            "t": "Un po’ d’acqua dopo il lavaggio è normale.",
+            "b": -2,
+            "r": "È normale che qualcuno ci lasci la testa?"
+          },
+          {
+            "t": "Ci faccia attenzione e la eviti.",
+            "b": -2,
+            "r": "Me lo consiglia sul serio?"
+          }
+        ]
+      },
+      {
+        "t": "E da dove esce?",
+        "o": [
+          {
+            "t": "Probabilmente un tubo rotto sulla tre. Il tecnico sarà lì entro un’ora e fino ad allora la macchina è fuori servizio.",
+            "b": 2,
+            "r": "Va bene, grazie."
+          },
+          {
+            "t": "Da lontano non si può capire.",
+            "b": -1,
+            "r": "E allora ci mandi qualcuno."
+          },
+          {
+            "t": "L’avrà rovesciata qualcuno.",
+            "b": -1,
+            "r": "Dieci litri?"
+          }
+        ]
+      },
+      {
+        "t": "Io lì ho un lavaggio avviato, come faccio?",
+        "o": [
+          {
+            "t": "Finisce senza problemi, la tre non c’entra. Il prossimo lavaggio glielo offro io per il disturbo.",
+            "b": 2,
+            "r": "Grazie, è corretto."
+          },
+          {
+            "t": "Venga a riprenderlo domani.",
+            "b": -2,
+            "r": "Domani lavoro."
+          },
+          {
+            "t": "Questo se lo deve risolvere da sola.",
+            "b": -2,
+            "r": "Grazie di niente."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "drahe-2",
+    "rod": "m",
+    "nalada": 34,
+    "kroky": [
+      {
+        "t": "Avete aumentato di venti e qui accanto costa meno. Perché dovrei venire da voi?",
+        "o": [
+          {
+            "t": "Perché da noi lava anche a mezzanotte e la macchina è sempre pulita. Se non lo è, voglio saperlo subito.",
+            "b": 2,
+            "r": "Suona ragionevole."
+          },
+          {
+            "t": "E allora vada qui accanto.",
+            "b": -2,
+            "r": "Bel modo di trattare un cliente."
+          },
+          {
+            "t": "È aumentata l’energia, non ci possiamo fare niente.",
+            "b": 0,
+            "r": "Questo me lo dicono dappertutto."
+          }
+        ]
+      },
+      {
+        "t": "E uno sconto per i clienti fissi?",
+        "o": [
+          {
+            "t": "Ogni decimo lavaggio gratis, basta che mi dia un numero con cui la registro. La segno adesso.",
+            "b": 2,
+            "r": "Allora ci sto."
+          },
+          {
+            "t": "Sconti non ne abbiamo.",
+            "b": -1,
+            "r": "Peccato."
+          },
+          {
+            "t": "Chieda al punto vendita.",
+            "b": -1,
+            "r": "Ma sto chiamando l’assistenza."
+          }
+        ]
+      },
+      {
+        "t": "E non aumentate di nuovo tra un mese?",
+        "o": [
+          {
+            "t": "Fino a fine anno no, glielo dico chiaro. Se succedesse, lo scrivo sulla porta due settimane prima.",
+            "b": 2,
+            "r": "Corretto, grazie."
+          },
+          {
+            "t": "Questo non glielo promette nessuno.",
+            "b": 0,
+            "r": "Mah."
+          },
+          {
+            "t": "Tranquillamente, il mercato è il mercato.",
+            "b": -2,
+            "r": "Allora su di voi non ci conto."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "faktura-2",
+    "rod": "z",
+    "nalada": 38,
+    "kroky": [
+      {
+        "t": "Mi serve una fattura per l’azienda, laviamo da voi la biancheria della pensione. Dall’automatico esce solo uno scontrino.",
+        "o": [
+          {
+            "t": "La fattura gliela faccio. Mi mandi la partita IVA e tra un’ora ce l’ha per e-mail.",
+            "b": 2,
+            "r": "Benissimo, mando."
+          },
+          {
+            "t": "Noi fatture non ne facciamo, siamo un self-service.",
+            "b": -2,
+            "r": "Quindi da voi un’azienda non può lavare?"
+          },
+          {
+            "t": "Provi a scrivere per e-mail, magari qualcuno risponde.",
+            "b": -1,
+            "r": "Magari?"
+          }
+        ]
+      },
+      {
+        "t": "E si potrebbe fare regolarmente ogni mese, per non pensare a ogni lavaggio?",
+        "o": [
+          {
+            "t": "Sì. Le apro un conto aziendale, i lavaggi si accumulano e una volta al mese arriva una fattura riepilogativa.",
+            "b": 2,
+            "r": "Questo ci aiuterebbe molto."
+          },
+          {
+            "t": "È troppo complicato.",
+            "b": -2,
+            "r": "Per voi o per me?"
+          },
+          {
+            "t": "In teoria sì, credo.",
+            "b": 0,
+            "r": "In teoria."
+          }
+        ]
+      },
+      {
+        "t": "E su questo volume ci fate un prezzo?",
+        "o": [
+          {
+            "t": "Sopra i cinquanta lavaggi al mese, quindici per cento in meno. Lo metto nel contratto, così non vale solo fino alla prossima volta.",
+            "b": 2,
+            "r": "Con questo vado dal titolare."
+          },
+          {
+            "t": "I prezzi li abbiamo uguali per tutti.",
+            "b": 0,
+            "r": "Mah."
+          },
+          {
+            "t": "Questo lo dovrei vedere con qualcun altro.",
+            "b": -1,
+            "r": "E allora me lo trovi."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "svatky",
+    "rod": "m",
+    "nalada": 42,
+    "kroky": [
+      {
+        "t": "Siete aperti alla vigilia di Natale? Sul sito è contraddittorio.",
+        "o": [
+          {
+            "t": "È aperto sempre, anche alla vigilia. Il sito lo correggo oggi stesso, grazie della segnalazione.",
+            "b": 2,
+            "r": "Grazie, questa è una risposta chiara."
+          },
+          {
+            "t": "Non lo so, chiami dopo le feste.",
+            "b": -2,
+            "r": "Dopo le feste non mi serve a niente."
+          },
+          {
+            "t": "Credo di sì.",
+            "b": -1,
+            "r": "Credo non mi basta."
+          }
+        ]
+      },
+      {
+        "t": "E ci sarà qualcuno, se la macchina si inceppa?",
+        "o": [
+          {
+            "t": "Alla linea ci sono io, anche durante le feste. La macchina la sblocco da remoto e il tecnico è al telefono.",
+            "b": 2,
+            "r": "Questo è buono a sapersi."
+          },
+          {
+            "t": "Durante le feste non esce nessuno.",
+            "b": -1,
+            "r": "Quindi il rischio me lo prendo io."
+          },
+          {
+            "t": "Si vedrà.",
+            "b": -2,
+            "r": "Lei sì che è una certezza."
+          }
+        ]
+      },
+      {
+        "t": "E durante le feste i prezzi non salgono?",
+        "o": [
+          {
+            "t": "No, il prezzo è uguale ogni giorno dell’anno. Supplementi per le feste da noi non ce ne sono.",
+            "b": 2,
+            "r": "Benissimo."
+          },
+          {
+            "t": "Per ora no.",
+            "b": 0,
+            "r": "Per ora."
+          },
+          {
+            "t": "Durante le feste c’è un supplemento.",
+            "b": -2,
+            "r": "Allora lavo a casa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "svetr-2",
+    "rod": "z",
+    "nalada": 15,
+    "kroky": [
+      {
+        "t": "La vostra asciugatrice mi ha ristretto un maglione di lana merino. Costava duemila!",
+        "o": [
+          {
+            "t": "Le chiedo scusa. Mi mandi una foto e lo scontrino, lo tratto come un danno e glielo rimborso.",
+            "b": 2,
+            "r": "Questo non me lo aspettavo, grazie."
+          },
+          {
+            "t": "La lana in asciugatrice non ci va, lo sanno tutti.",
+            "b": -2,
+            "r": "E allora lo scriva lì, genio!"
+          },
+          {
+            "t": "Sarà stato il maglione.",
+            "b": -1,
+            "r": "Il maglione stava benissimo prima di portarlo da voi."
+          }
+        ]
+      },
+      {
+        "t": "E perché su quel programma non c’è scritto che rovina la lana?",
+        "o": [
+          {
+            "t": "Perché lì manca, e questo è un errore nostro. Oggi aggiungiamo le etichette a ogni programma.",
+            "b": 2,
+            "r": "Grazie di ammetterlo."
+          },
+          {
+            "t": "Perché è ovvio.",
+            "b": -2,
+            "r": "A me ovvio non era."
+          },
+          {
+            "t": "Lo mettiamo nella lista dei miglioramenti.",
+            "b": 0,
+            "r": "Nella lista. Certo."
+          }
+        ]
+      },
+      {
+        "t": "Quando li ricevo quei soldi?",
+        "o": [
+          {
+            "t": "Entro tre giorni lavorativi dalla foto. Se si blocca, mi chiami direttamente, ce l’ho in mano io.",
+            "b": 2,
+            "r": "Va bene, allora mando la foto."
+          },
+          {
+            "t": "Dipende dalla direzione.",
+            "b": -1,
+            "r": "La direzione è lei, no?"
+          },
+          {
+            "t": "Non le rimborsiamo niente.",
+            "b": -2,
+            "r": "Allora ci vediamo in tribunale."
+          }
+        ]
+      }
+    ]
   }
 ]
