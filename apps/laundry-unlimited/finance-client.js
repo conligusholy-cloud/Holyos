@@ -116,9 +116,11 @@
   var UNIT = { once: 'nových případů / měsíc', tx: 'transakcí / měsíc', month_unit: 'prádlomatů v provozu' };
   var ROLE = [[/master/i, 'Získává operátory, kteří naplní MARKET PLACE, prodává místa s prádlomaty a koordinuje umístění prádlomatů a infolinku.'], [/operát|operat/i, 'Hledá místo, nacení ho, dělá přípojky a prodává na MARKET PLACE; stará se o údržbu a servis strojů v provozu.']];
   function MD() { if (!D.model) D.model = { sel: null, vol: {} }; if (!D.model.vol) D.model.vol = {}; return D.model; }
+  // Výroba se v modelaci výdělku nenabízí (modelují se jen pozice, které „vydělávají“ z práce v terénu)
+  function modelCols() { return D.cols.filter(function (c) { return !/^\s*výrob/i.test(c.name); }); }
   function selCols() {
     var m = MD(), ids = Array.isArray(m.sel) ? m.sel : D.cols.filter(function (c) { return /master|operát|operat/i.test(c.name); }).map(function (c) { return c.id; });
-    return D.cols.filter(function (c) { return ids.indexOf(c.id) >= 0; });
+    return modelCols().filter(function (c) { return ids.indexOf(c.id) >= 0; });
   }
   function eur2(x) { return fmtAmt(Math.round(x * 100) / 100) + ' €'; }
   function volOf(c, r) { var v = MD().vol[c.id] && MD().vol[c.id][r.id]; return typeof v === 'number' ? v : null; }
@@ -144,7 +146,7 @@
     var sel = selCols().map(function (c) { return c.id; });
     var h = '<h3 class="mdh">Modelace výdělku pozic <span class="dph">z tržeb · bez nákladů · EUR bez DPH</span></h3>' +
       '<p class="mut" style="margin:4px 0 12px;max-width:900px">Výdělek pozice = objem × částka pozice z tabulky × frekvence. Objem je u jednorázových řádků počet nových případů za měsíc (např. nových operátorů, prodaných strojů), u transakcí počet transakcí za měsíc, u „Měsíčně z prádlomatu“ počet prádlomatů v provozu. U pravidelných plateb je prázdný objem 1×. Řádky bez frekvence se nepočítají.</p>' +
-      '<div class="mchips"><span class="mut">Modelovat:</span>' + D.cols.map(function (c) { return '<button type="button" class="mchip' + (sel.indexOf(c.id) >= 0 ? ' on' : '') + '" data-mc="' + c.id + '">' + esc(c.name || 'Pozice') + '</button>'; }).join('') + '</div>' +
+      '<div class="mchips"><span class="mut">Modelovat:</span>' + modelCols().map(function (c) { return '<button type="button" class="mchip' + (sel.indexOf(c.id) >= 0 ? ' on' : '') + '" data-mc="' + c.id + '">' + esc(c.name || 'Pozice') + '</button>'; }).join('') + '</div>' +
       '<div class="mcards">' + selCols().map(cardHtml).join('') + '</div>';
     box.innerHTML = h;
   }
