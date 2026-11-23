@@ -29,7 +29,7 @@
     return '<select class="st" data-st="' + t.id + '" title="Změnit stav">' + Object.keys(D.statuses).map(function (k) { return '<option value="' + k + '"' + (k === t.status ? ' selected' : '') + '>' + esc(D.statuses[k]) + '</option>'; }).join('') + '</select>';
   }
   function rowHtml(t) {
-    return '<tr data-id="' + t.id + '"' + (OPEN(t) ? '' : ' class="dn"') + '><td class="mut">' + t.id + '</td>' +
+    return '<tr data-id="' + t.id + '"' + (OPEN(t) ? '' : ' class="dn"') + '>' +
       '<td><div class="tt">' + esc(t.title) + '</div>' + (t.description ? '<div class="ds">' + esc(t.description) + '</div>' : '') + '</td>' +
       '<td>' + stSel(t) + '</td>' +
       '<td class="p-' + esc(t.priority) + '">' + esc(D.priorities[t.priority] || t.priority) + '</td>' +
@@ -40,9 +40,8 @@
       '<td class="mut">' + (t.comments ? '💬 ' + t.comments : '') + '</td></tr>';
   }
   function build() {
-    $('#tk').innerHTML = '<thead><tr><th>#</th><th>Úkol</th><th>Stav</th><th>Priorita</th><th>Řešitel</th><th>Zadal</th><th>Termín</th><th>Změna</th><th></th></tr></thead><tbody></tbody>';
+    $('#tk').innerHTML = '<thead><tr><th>Úkol</th><th>Stav</th><th>Priorita</th><th>Řešitel</th><th>Zadal</th><th>Termín</th><th>Změna</th><th></th></tr></thead><tbody></tbody>';
     var cols = [
-      { key: 'id', label: '#', type: 'num', get: function (t) { return t.id; } },
       { key: 'title', label: 'Úkol', type: 'text', ph: 'Hledat…', get: function (t) { return t.title + ' ' + (t.description || ''); }, sortGet: function (t) { return t.title; }, enum: false },
       { key: 'status', label: 'Stav', type: 'text', get: function (t) { return D.statuses[t.status] || t.status; }, enum: true },
       { key: 'priority', label: 'Priorita', type: 'text', get: function (t) { return D.priorities[t.priority] || t.priority; }, sortGet: function (t) { return { urgent: 0, high: 1, normal: 2, low: 3 }[t.priority]; }, enum: true },

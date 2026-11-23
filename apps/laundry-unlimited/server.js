@@ -7,6 +7,7 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const { LANGS, NAMES, T, QSEC } = require('./i18n');
+const AUD = require('./audit');
 const QS_FIELDS = QSEC.en.flatMap((sec) => sec.f.filter(Array.isArray));
 const QS_KEYS = QS_FIELDS.map((f) => f[0]); const QS_LABELS = QS_FIELDS.map((f) => f[2]);
 
@@ -38,6 +39,7 @@ setInterval(() => { const now = Date.now(); for (const [k, a] of rate) if (!a.so
 // ── Databáze ───────────────────────────────────────────────────────────────
 async function initDb() {
   if (!pool) { console.warn('[lu] DATABASE_URL chybí — poptávky se neukládají'); return; }
+  await AUD.init(q); // auditní log (historie změn)
   await q(`CREATE TABLE IF NOT EXISTS inquiries (
     id SERIAL PRIMARY KEY,
     token TEXT UNIQUE NOT NULL,
@@ -544,6 +546,7 @@ const UICO = {
   proc: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.74c.6.48 1 1.17 1 1.94V17h6v-.32c0-.77.4-1.46 1-1.94A7 7 0 0 0 12 2z"/>',
   model: '<circle cx="12" cy="12" r="3"/><circle cx="4.5" cy="5.5" r="2"/><circle cx="19.5" cy="5.5" r="2"/><circle cx="4.5" cy="18.5" r="2"/><circle cx="19.5" cy="18.5" r="2"/><path d="M10 10 6 7M14 10l4-3M10 14l-4 3M14 14l4 3"/>',
   split: '<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
+  audit: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   uzivatele: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M16 11h6"/>',
   holyos: '<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
   ukoly: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
@@ -552,7 +555,7 @@ const uico = (k) => `<span class="uic"><svg viewBox="0 0 24 24" fill="none" stro
 function topBar(o) {
   const en = o.lang && o.lang !== 'cs';
   const tabs = o.mode === 'admin'
-    ? [{ k: 'ukoly', href: '/admin/tasks', t: 'Tasky' }, { k: 'leady', href: '/admin', t: 'Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, t: x.cs })), [{ k: 'model', href: '/admin/model', t: 'Modelace business modelu' }, { k: 'split', href: '/admin/finance', t: 'Rozdělení financí' }])
+    ? [{ k: 'ukoly', href: '/admin/tasks', t: 'Tasky' }, { k: 'leady', href: '/admin', t: 'Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, t: x.cs })), [{ k: 'model', href: '/admin/model', t: 'Modelace business modelu' }, { k: 'split', href: '/admin/finance', t: 'Rozdělení financí' }, { k: 'audit', href: '/admin/audit', t: 'Historie změn' }])
     : SEKCE.filter((x) => (o.sekce || []).includes(x.k)).map((x) => ({ k: x.k, href: '/portal/m/' + x.k, t: en ? x.en : x.cs }));
   const rt = o.mode === 'admin'
     ? `<a href="/portal" class="rtl">${uico('report')}<span>Uživatelské prostředí</span></a><a href="/portal/logout" class="rtl"><span>Odhlásit</span></a>`
@@ -661,6 +664,7 @@ app.post('/admin/setup', form, async (req, res) => {
     if (pw.length < 8) return res.status(400).send(setupPage(t, 'Heslo musí mít aspoň 8 znaků.'));
     if (pw !== String(req.body.password2 || '')) return res.status(400).send(setupPage(t, 'Hesla se neshodují.'));
     await q('UPDATE admin_users SET password_hash=$2, last_login_at=now() WHERE id=$1', [r.id, hashPw(pw)]);
+    AUD.write(req, { actor: { name: r.name || r.email, email: String(r.email).toLowerCase() }, area: 'Přihlášení', action: 'Uživatel si nastavil heslo', method: 'POST', path: '/admin/setup' });
     const session = jwt.sign({ name: r.name || r.email, email: String(r.email).toLowerCase(), aud: 'lu-admin', iss: 'laundry-unlimited' }, SESSION_KEY, { expiresIn: '8h' });
     res.set('Set-Cookie', COOKIE + '=' + encodeURIComponent(session) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + 8 * 3600);
     res.redirect(302, '/admin');
@@ -691,7 +695,8 @@ app.post('/login', form, async (req, res) => {
     const bad = () => res.status(401).set('Cache-Control', 'no-store').send(loginPage(lang, '', (LGP[lang] || LGP.en).bad));
     if (pwLimited(String(req.ip || '') + '|' + email)) return bad();
     const au = await adminUserOf(email);
-    if (!au || au.active === false || !au.password_hash || !verifyPw(pw, au.password_hash)) return bad();
+    if (!au || au.active === false || !au.password_hash || !verifyPw(pw, au.password_hash)) { AUD.write(req, { actor: { name: au && au.name || email, email }, area: 'Přihlášení', action: 'Neúspěšné přihlášení heslem', ok: false, error: 'Špatný e-mail nebo heslo', method: 'POST', path: '/login' }); return bad(); }
+    AUD.write(req, { actor: { name: au.name || email, email }, area: 'Přihlášení', action: 'Přihlášení e-mailem a heslem', method: 'POST', path: '/login' });
     if (au.id) q('UPDATE admin_users SET last_login_at=now() WHERE id=$1', [au.id]).catch(() => {});
     const session = jwt.sign({ name: au.name || email, email, aud: 'lu-admin', iss: 'laundry-unlimited' }, SESSION_KEY, { expiresIn: '8h' });
     res.set('Set-Cookie', COOKIE + '=' + encodeURIComponent(session) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + 8 * 3600);
@@ -704,6 +709,7 @@ app.get('/admin/auth', async (req, res) => {
     const t = jwt.verify(String(req.query.t || ''), USER_KEY, { audience: 'lu-admin-link', issuer: 'laundry-unlimited' });
     const au = await adminUserOf(t.email);
     if (!au || au.active === false) throw new Error('není admin');
+    AUD.write(req, { actor: { name: au.name || t.email, email: String(t.email).toLowerCase() }, area: 'Přihlášení', action: 'Přihlášení odkazem z e-mailu', method: 'GET', path: '/admin/auth' });
     if (au.id) q('UPDATE admin_users SET last_login_at=now() WHERE id=$1', [au.id]).catch(() => {});
     const session = jwt.sign({ name: au.name || t.email, email: String(t.email).toLowerCase(), aud: 'lu-admin', iss: 'laundry-unlimited' }, SESSION_KEY, { expiresIn: '8h' });
     res.set('Set-Cookie', COOKIE + '=' + encodeURIComponent(session) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + 8 * 3600);
@@ -800,16 +806,18 @@ app.get('/sso', (req, res) => {
     const t = jwt.verify(String(req.query.t || ''), LU_SECRET, { audience: 'laundry-unlimited', issuer: 'holyos' });
     const session = jwt.sign({ name: t.name || '', email: t.email ? String(t.email).toLowerCase() : undefined, pid: t.pid || undefined, aud: 'lu-admin', iss: 'laundry-unlimited' }, SESSION_KEY, { expiresIn: '8h' });
     if (t.pid) q('INSERT INTO sso_people (pid, name, email, last_at) VALUES ($1,$2,$3,now()) ON CONFLICT (pid) DO UPDATE SET name=EXCLUDED.name, email=COALESCE(EXCLUDED.email, sso_people.email), last_at=now()', [Number(t.pid), t.name || '', t.email ? String(t.email).toLowerCase() : null]).catch(() => {});
+    AUD.write(req, { actor: { name: t.name || '', email: t.email ? String(t.email).toLowerCase() : '', pid: t.pid || null }, area: 'Přihlášení', action: 'Přihlášení z HolyOS', method: 'GET', path: '/sso' });
     res.set('Set-Cookie', COOKIE + '=' + encodeURIComponent(session) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + 8 * 3600);
     res.set('Cache-Control', 'no-store').redirect(302, '/admin');
   } catch (e) { res.status(401).type('text/plain').send('Přihlášení vypršelo. Otevři sekci Laundry Unlimited znovu z HolyOS.'); }
 });
-app.get('/admin/logout', (req, res) => { res.set('Set-Cookie', [COOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0', UCOOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0']); res.redirect(302, '/'); });
+app.get('/admin/logout', (req, res) => { { const who = adminOf(req); if (who) AUD.write(req, { actor: who, area: 'Přihlášení', action: 'Odhlášení', method: 'GET', path: '/admin/logout' }); } res.set('Set-Cookie', [COOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0', UCOOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0']); res.redirect(302, '/'); });
 const requireAdmin = (req, res, next) => {
   const a = adminOf(req); if (a) { req.admin = a; return next(); }
   if (req.path.startsWith('/admin/api/')) return res.status(401).json({ ok: false, error: 'Přihlášení vypršelo. Otevři sekci znovu z HolyOS.' });
   res.redirect(302, '/login');
 };
+app.use('/admin/api', AUD.middleware); // auditní log: každá změna v administraci (kdo, kdy, odkud, co)
 const STATUSES = [['new', 'Nová'], ['contacted', 'Kontaktován'], ['talks', 'Jednání'], ['won', 'Partner'], ['lost', 'Ztraceno'], ['spam', 'Spam']];
 const stLabel = (s) => (STATUSES.find((x) => x[0] === s) || [s, s])[1];
 const stColor = { new: '#22d3ee', contacted: '#60a5fa', talks: '#f59e0b', won: '#22c55e', lost: '#94a3b8', spam: '#ef4444' };
@@ -855,7 +863,15 @@ const pb=box.querySelector('.portal');const j=await call('/admin/api/inquiry/'+i
 app.post('/admin/api/inquiry/:id(\\d+)', requireAdmin, express.json({ limit: '20kb' }), async (req, res) => {
   const b = req.body || {}; const id = Number(req.params.id);
   if (!STATUSES.some((x) => x[0] === b.status)) return res.status(400).json({ ok: false, error: 'Neplatný stav' });
+  const before = (await q('SELECT name, status, note, portal_access FROM inquiries WHERE id=$1', [id]).catch(() => ({ rows: [] }))).rows[0];
   await q('UPDATE inquiries SET status=$2, note=$3, updated_at=now() WHERE id=$1', [id, b.status, String(b.note || '').slice(0, 2000) || null]);
+  if (before) {
+    const ch = []; const nn = String(b.note || '').slice(0, 2000);
+    if (before.status !== b.status) ch.push('stav: ' + stLabel(before.status) + ' → ' + stLabel(b.status));
+    if ((before.note || '') !== nn) ch.push('poznámka: ' + (before.note ? '„' + String(before.note).slice(0, 80) + '“' : '—') + ' → ' + (nn ? '„' + nn.slice(0, 80) + '“' : '—'));
+    if (b.portal_access !== undefined && !!before.portal_access !== !!b.portal_access) ch.push('přístup do portálu: ' + (b.portal_access ? 'zapnut' : 'vypnut'));
+    res.locals.audit = ch.length ? { label: before.name, changes: ch } : { label: before.name, summary: 'Uloženo beze změny (jen sekce portálu)' };
+  }
   if (b.portal_access !== undefined) {
     const sek = Array.isArray(b.portal_sections) ? b.portal_sections.filter((k) => SEKCE.some((x) => x.k === k)) : [];
     await q('UPDATE inquiries SET portal_access=$2, portal_sections=$3::jsonb WHERE id=$1', [id, !!b.portal_access, JSON.stringify(sek)]);
@@ -898,6 +914,7 @@ app.post('/admin/api/users', requireAdmin, express.json({ limit: '2kb' }), async
   if (!first || !last) return res.json({ ok: false, error: 'Vyplňte jméno i příjmení' });
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.json({ ok: false, error: 'Neplatný e-mail' });
   if (phone.replace(/\D/g, '').length < 7) return res.json({ ok: false, error: 'Vyplňte telefonní číslo' });
+  res.locals.audit = { label: first + ' ' + last, summary: 'Vytvořen uživatel ' + first + ' ' + last + ' (' + email + ')' };
   try { await q('INSERT INTO admin_users (email, name, first_name, last_name, phone) VALUES ($1,$2,$3,$4,$5)', [email, first + ' ' + last, first, last, phone]); { const sent = await sendAdminLink(email, 'cs', 'setup'); res.json({ ok: true, sent, error: sent ? undefined : luMailErr }); } }
   catch (e) { res.json({ ok: false, error: /unique|duplicate/i.test(e.message) ? 'Tento e-mail už je v seznamu' : 'Uložení se nepovedlo' }); }
 });
@@ -905,23 +922,27 @@ app.post('/admin/api/users/:id(\\d+)', requireAdmin, express.json({ limit: '2kb'
   const r = (await q('SELECT email FROM admin_users WHERE id=$1', [req.params.id])).rows[0];
   if (!r) return res.json({ ok: false, error: 'Nenalezeno' });
   if (req.body.active === false && String(r.email).toLowerCase() === String((req.admin && req.admin.email) || '').toLowerCase()) return res.json({ ok: false, error: 'Sám sebe zakázat nelze' });
+  res.locals.audit = { label: r.email, summary: (req.body.active ? 'Povolen' : 'Zakázán') + ' uživatel ' + r.email };
   await q('UPDATE admin_users SET active=$2 WHERE id=$1', [req.params.id, !!req.body.active]); res.json({ ok: true });
 });
 app.post('/admin/api/users/:id(\\d+)/password', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   const pw = String((req.body || {}).password || '');
   if (pw.length < 8) return res.json({ ok: false, error: 'Heslo musí mít aspoň 8 znaků' });
+  { const u = (await q('SELECT email FROM admin_users WHERE id=$1', [req.params.id]).catch(() => ({ rows: [] }))).rows[0]; res.locals.audit = { label: u && u.email, summary: 'Nastaveno nové heslo uživateli ' + (u ? u.email : '#' + req.params.id) + ' (heslo se neukládá do logu)' }; }
   const r = await q('UPDATE admin_users SET password_hash=$2 WHERE id=$1', [req.params.id, hashPw(pw)]);
   res.json({ ok: r.rowCount > 0, error: r.rowCount ? undefined : 'Nenalezeno' });
 });
 app.post('/admin/api/users/:id(\\d+)/link', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   const r = (await q('SELECT * FROM admin_users WHERE id=$1 AND active', [req.params.id])).rows[0];
   if (!r) return res.json({ ok: false, error: 'Uživatel nenalezen nebo je zakázán' });
+  res.locals.audit = { label: r.email, summary: 'Odeslán e-mail s odkazem pro nastavení hesla: ' + r.email };
   { const ok = await sendAdminLink(String(r.email).toLowerCase(), 'cs', 'setup'); res.json({ ok, error: ok ? undefined : 'E-mail se nepodařilo odeslat — ' + luMailErr }); }
 });
 app.post('/admin/api/users/:id(\\d+)/delete', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   const r = (await q('SELECT email FROM admin_users WHERE id=$1', [req.params.id])).rows[0];
   if (!r) return res.json({ ok: false, error: 'Nenalezeno' });
   if (String(r.email).toLowerCase() === String((req.admin && req.admin.email) || '').toLowerCase()) return res.json({ ok: false, error: 'Sám sebe smazat nelze' });
+  res.locals.audit = { label: r.email, summary: 'Smazán uživatel administrace ' + r.email };
   await q('DELETE FROM admin_users WHERE id=$1', [req.params.id]); res.json({ ok: true });
 });
 // ── Úkoly týmu ──────────────────────────────────────────────────────────────
@@ -997,6 +1018,7 @@ app.post('/admin/api/tasks', requireAdmin, express.json({ limit: '40kb' }), asyn
     const r = await q('INSERT INTO lu_tasks (title, description, status, priority, assignee_key, assignee_name, creator_key, creator_name, due_date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
       [d.title, d.description || null, d.status || 'todo', d.priority || 'normal', d.assignee_key || null, d.assignee_name || null, me.key, me.name, d.due_date || null]);
     const t = r.rows[0];
+    res.locals.audit = { id: t.id, label: '#' + t.id + ' ' + t.title, summary: 'Založen task „' + t.title + '“' + (t.assignee_name ? ' pro ' + t.assignee_name : '') + (t.due_date ? ', termín ' + new Date(t.due_date).toLocaleDateString('cs-CZ') : '') };
     taskLog(t.id, 'create', me, 'Založil úkol' + (t.assignee_name ? ' a zadal ho: ' + t.assignee_name : ''));
     if (d._assignee && d._assignee.key !== me.key) taskNotify(d._assignee, '📋 Nový úkol od ' + me.name, t.title + (t.due_date ? ' · termín ' + new Date(t.due_date).toLocaleDateString('cs-CZ') : '') + (t.priority === 'urgent' || t.priority === 'high' ? ' · priorita ' + TASK_PRI[t.priority].toLowerCase() : ''), t.id);
     res.json({ ok: true, task: t });
@@ -1009,7 +1031,7 @@ app.post('/admin/api/tasks/:id(\\d+)', requireAdmin, express.json({ limit: '40kb
     const d = taskIn(req.body || {}, people); if (d.title === '') return res.json({ ok: false, error: 'Název nesmí být prázdný' });
     const asg = d._assignee; delete d._assignee;
     const keys = Object.keys(d).filter((k) => String(d[k] == null ? '' : d[k]) !== String(old[k] == null ? '' : (k === 'due_date' && old[k] ? new Date(old[k]).toISOString().slice(0, 10) : old[k])));
-    if (!keys.length) return res.json({ ok: true, task: old });
+    if (!keys.length) { res.locals.audit = { skip: true }; return res.json({ ok: true, task: old }); }
     const sets = keys.map((k, i) => k + '=$' + (i + 2)); const vals = keys.map((k) => d[k]);
     if (keys.includes('status')) sets.push(d.status === 'done' ? 'done_at=now()' : 'done_at=NULL');
     const t = (await q('UPDATE lu_tasks SET ' + sets.join(', ') + ', updated_at=now() WHERE id=$1 RETURNING *', [req.params.id].concat(vals))).rows[0];
@@ -1019,6 +1041,7 @@ app.post('/admin/api/tasks/:id(\\d+)', requireAdmin, express.json({ limit: '40kb
     if (keys.includes('priority')) ch.push('priorita: ' + TASK_PRI[t.priority]);
     if (keys.includes('due_date')) ch.push('termín: ' + (t.due_date ? new Date(t.due_date).toLocaleDateString('cs-CZ') : 'bez termínu'));
     if (keys.includes('title') || keys.includes('description')) ch.push('upravil zadání');
+    res.locals.audit = { id: t.id, label: '#' + t.id + ' ' + t.title, changes: ch };
     taskLog(t.id, keys.includes('status') ? 'status' : 'change', me, ch.join(' · '));
     const creator = people.find((p) => p.key === t.creator_key) || (t.creator_key ? { key: t.creator_key, email: /@/.test(t.creator_key) ? t.creator_key : null, pid: /^pid:/.test(t.creator_key) ? Number(t.creator_key.slice(4)) : null } : null);
     const assignee = people.find((p) => p.key === t.assignee_key) || null;
@@ -1032,6 +1055,7 @@ app.post('/admin/api/tasks/:id(\\d+)/comment', requireAdmin, express.json({ limi
   try {
     const me = taskMe(req), text = String((req.body || {}).text || '').trim().slice(0, 5000); if (!text) return res.json({ ok: false, error: 'Napište komentář' });
     const t = (await q('SELECT * FROM lu_tasks WHERE id=$1', [req.params.id])).rows[0]; if (!t) return res.json({ ok: false, error: 'Úkol nenalezen' });
+    res.locals.audit = { id: t.id, label: '#' + t.id + ' ' + t.title, summary: 'Komentář: ' + text.slice(0, 300) };
     await taskLog(t.id, 'comment', me, text); await q('UPDATE lu_tasks SET updated_at=now() WHERE id=$1', [t.id]);
     const people = await taskPeople(); const notified = new Set([me.key]);
     [t.assignee_key, t.creator_key].forEach((k) => { if (!k || notified.has(k)) return; notified.add(k); const p = people.find((x) => x.key === k) || { key: k, email: /@/.test(k) ? k : null, pid: /^pid:/.test(k) ? Number(k.slice(4)) : null }; taskNotify(p, '💬 ' + me.name + ' k úkolu: ' + t.title, text.slice(0, 200), t.id); });
@@ -1040,7 +1064,8 @@ app.post('/admin/api/tasks/:id(\\d+)/comment', requireAdmin, express.json({ limi
 });
 app.post('/admin/api/tasks/:id(\\d+)/delete', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   try {
-    const me = taskMe(req), t = (await q('SELECT creator_key FROM lu_tasks WHERE id=$1', [req.params.id])).rows[0]; if (!t) return res.json({ ok: false, error: 'Úkol nenalezen' });
+    const me = taskMe(req), t = (await q('SELECT creator_key, title FROM lu_tasks WHERE id=$1', [req.params.id])).rows[0]; if (!t) return res.json({ ok: false, error: 'Úkol nenalezen' });
+    res.locals.audit = { id: req.params.id, label: '#' + req.params.id + ' ' + t.title, summary: 'Smazán task „' + t.title + '“' };
     if (t.creator_key && t.creator_key !== me.key) return res.json({ ok: false, error: 'Smazat může jen ten, kdo úkol založil. Můžete ho přepnout na „Zrušeno“.' });
     await q('DELETE FROM lu_tasks WHERE id=$1', [req.params.id]); res.json({ ok: true });
   } catch (e) { res.json({ ok: false, error: 'Smazání se nepovedlo' }); }
@@ -1127,8 +1152,10 @@ app.get('/admin/api/finance', requireAdmin, async (req, res) => {
 app.post('/admin/api/finance', requireAdmin, express.json({ limit: '1mb' }), async (req, res) => {
   try {
     const b = req.body || {}, data = finClean(b.data);
+    const prev = (await q('SELECT data FROM finance_split WHERE id=1').catch(() => ({ rows: [] }))).rows[0];
     const r = await q('UPDATE finance_split SET data=$1, rev=rev+1, updated_at=now(), updated_by=$3 WHERE id=1 AND rev=$2 RETURNING rev', [JSON.stringify(data), Number(b.rev) || 0, (req.admin && req.admin.name) || '']);
     if (!r.rowCount) return res.status(409).json({ ok: false, error: 'Tabulku mezitím změnil jiný uživatel' });
+    { const dif = AUD.diffFinance(prev && prev.data, data); res.locals.audit = dif.length ? { id: 1, label: 'Tabulka Rozdělení financí', changes: dif, coalesce: true } : { skip: true }; }
     res.json({ ok: true, rev: r.rows[0].rev });
   } catch (e) { res.json({ ok: false, error: 'Uložení se nepovedlo' }); }
 });
@@ -1179,6 +1206,46 @@ app.get('/admin/finance', requireAdmin, (req, res) => {
 <div class="fxw"><table id="fx"></table></div>
 <div id="fx-model"></div></div>
 <script src="/admin/column-filters.js"></script><script src="/admin/finance.js"></script></body></html>`);
+});
+
+// ── Historie změn (auditní log) ─────────────────────────────────────────────
+let AUD_JS = null;
+app.get('/admin/audit.js', requireAdmin, (req, res) => {
+  if (!AUD_JS) AUD_JS = fs.readFileSync(path.join(__dirname, 'audit-client.js'), 'utf8');
+  res.set('Cache-Control', 'no-cache').type('application/javascript').send(AUD_JS);
+});
+app.get('/admin/api/audit', requireAdmin, async (req, res) => {
+  try {
+    const days = Math.min(730, Math.max(0, parseInt(req.query.days, 10) || 0));
+    const rows = (await q('SELECT id, at, actor_name, actor_email, ip, device, method, path, area, action, entity_type, entity_id, label, summary, changes, n, ok, error FROM audit_log' + (days ? " WHERE at > now() - ($1 || ' days')::interval" : '') + ' ORDER BY at DESC LIMIT 1500', days ? [String(days)] : [])).rows;
+    res.set('Cache-Control', 'no-store').json({ ok: true, rows });
+  } catch (e) { res.json({ ok: false, error: 'Historii se nepodařilo načíst' }); }
+});
+const AUD_CSS = `
+.auh{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0 4px}.auh h3{margin:0}
+.aubar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:16px 0 12px}
+.aubar button,.aubar label.lv{background:#07111f;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 13px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;width:auto;display:inline-flex;align-items:center;gap:6px}
+.aubar button:hover{border-color:var(--cy)}.aubar button.on{border-color:var(--cy);background:#0b2a44;color:#fff}.aubar input[type=checkbox]{width:auto;margin:0}
+#au-st{font-size:12.5px;color:#86efac;margin-left:6px}
+#au-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:0 0 14px}.aukp{border:1px solid var(--line);border-radius:12px;padding:12px 16px;background:rgba(8,15,30,.6)}.aukp b{display:block;font-size:22px}.aukp span{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}.aukp.bad b{color:#fca5a5}
+.auw{overflow:auto;border:1px solid var(--line);border-radius:14px;background:rgba(8,15,30,.6);max-width:100%}.auw .cf-info{padding:10px 14px 4px;margin:0!important}
+#au{width:100%;border-collapse:collapse}#au th{text-align:left;padding:10px 12px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);white-space:normal!important;border-bottom:1px solid var(--line);background:#0b1630}
+#au td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06);font-size:13.5px;vertical-align:top}#au .cf-filter-row th{position:static;background:#0b1630;padding:4px 4px 8px}#au .cf-sort{width:auto;padding:0 2px!important}
+#au tr.au-bad td{background:rgba(239,68,68,.07)}.au-t{white-space:nowrap}.au-ago,.au-sub{font-size:11.5px;color:var(--mut)}.au-w{min-width:340px;max-width:620px;line-height:1.45}
+.au-w details summary{cursor:pointer}.au-ch{margin:6px 0 2px 18px;padding:0;color:#cfe0ff;font-size:12.5px}.au-ch li{margin:2px 0}
+.au-n{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;font-size:11px;background:rgba(124,92,255,.18);color:#c9bdff}.au-err{color:#fca5a5;font-size:12.5px;margin-top:3px}
+.au-pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:11.5px;font-weight:700}.au-pill.ok{background:rgba(34,197,94,.16);color:#4ade80}.au-pill.bad{background:rgba(239,68,68,.18);color:#fca5a5}
+:root{--border:var(--line);--text2:var(--mut);--bg:#07111f;--surface2:#0b1630}
+`;
+app.get('/admin/audit', requireAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Historie změn — Laundry Unlimited</title>
+<style>${ADMIN_CSS}${BAR_CSS}.adm{max-width:none;padding:22px}.mut{color:var(--mut);font-size:13px}${AUD_CSS}</style></head><body>${topBar({ mode: 'admin', active: 'audit' })}
+<div class="adm"><div class="auh"><h3>Historie změn</h3></div>
+<p class="mut" style="margin:4px 0 0;max-width:860px">Každá změna v administraci: kdo ji udělal, kdy, z jakého zařízení a z jaké adresy, v které sekci a co přesně se změnilo (u tabulek a plátna včetně hodnot před a po). Rychlé průběžné ukládání se sloučí do jedné položky. Hesla ani jiné citlivé údaje se do historie neukládají. Záznamy se uchovávají 2 roky.</p>
+<div class="aubar"><button data-days="1" type="button">24 hodin</button><button data-days="7" type="button" class="on">7 dní</button><button data-days="30" type="button">30 dní</button><button data-days="365" type="button">Rok</button><button data-days="0" type="button">Vše</button><label class="lv"><input type="checkbox" id="au-live" checked> Živě (obnovit co 15 s)</label><button id="au-reload" type="button">↻ Obnovit</button><span id="au-st"></span></div>
+<div id="au-kpi"></div>
+<div class="auw"><table id="au"></table></div></div>
+<script src="/admin/column-filters.js"></script><script src="/admin/audit.js"></script></body></html>`);
 });
 app.get('/admin/model.js', requireAdmin, (req, res) => {
   if (!MODEL_JS) MODEL_JS = fs.readFileSync(path.join(__dirname, 'model-client.js'), 'utf8');
@@ -1278,13 +1345,16 @@ app.post('/admin/api/model/boards', requireAdmin, express.json({ limit: '2kb' })
   const name = String((req.body || {}).name || '').trim().slice(0, 80);
   if (!name) return res.json({ ok: false, error: 'Zadejte název plátna' });
   const r = (await q('INSERT INTO model_boards (name, updated_by) VALUES ($1,$2) RETURNING id, name', [name, (req.admin && req.admin.name) || ''])).rows[0];
+  res.locals.audit = { id: r.id, label: r.name, summary: 'Vytvořeno plátno „' + r.name + '“' };
   res.json({ ok: true, id: r.id, name: r.name });
 });
 app.post('/admin/api/model/boards/:id(\\d+)', requireAdmin, express.json({ limit: '3mb' }), async (req, res) => {
   const b = req.body || {}; const data = modelClean(b.data);
+  const prevB = (await q('SELECT name, data FROM model_boards WHERE id=$1', [req.params.id]).catch(() => ({ rows: [] }))).rows[0];
   // Optimistická kontrola verze: když mezitím uložil někdo jiný, nepřepíšeme jeho práci
   const r = await q('UPDATE model_boards SET data=$2, rev=rev+1, updated_at=now(), updated_by=$4 WHERE id=$1 AND rev=$3 RETURNING rev', [req.params.id, JSON.stringify(data), Number(b.rev) || 0, (req.admin && req.admin.name) || '']);
   if (!r.rowCount) { const ex = (await q('SELECT 1 FROM model_boards WHERE id=$1', [req.params.id])).rowCount; return res.status(ex ? 409 : 404).json({ ok: false, error: ex ? 'Plátno mezitím změnil jiný uživatel' : 'Plátno nenalezeno' }); }
+  { const dif = AUD.diffBoard(prevB && prevB.data, data); res.locals.audit = dif.length ? { id: req.params.id, label: 'Plátno „' + ((prevB && prevB.name) || '#' + req.params.id) + '“', changes: dif, coalesce: true } : { skip: true }; }
   res.json({ ok: true, rev: r.rows[0].rev });
 });
 const modelGraphText = (d) => {
@@ -1340,6 +1410,7 @@ app.post('/admin/api/model/boards/:id(\\d+)/chat', requireAdmin, express.json({ 
     const b = req.body || {}, d = modelClean(b.data), message = String(b.message || '').trim().slice(0, 4000);
     if (!message) return res.json({ ok: false, error: 'Napište zprávu' });
     const nm = (await q('SELECT name FROM model_boards WHERE id=$1', [req.params.id]).catch(() => ({ rows: [] }))).rows[0];
+    res.locals.audit = { label: 'Plátno „' + ((nm && nm.name) || '#' + req.params.id) + '“', summary: 'Dotaz poradci: ' + message.slice(0, 300) };
     const svc = jwt.sign({ aud: 'holyos-api', iss: 'laundry-unlimited' }, LU_SECRET, { expiresIn: '5m' });
     const resp = await fetch(HOLYOS_URL + '/api/auth/lu/model-chat', { method: 'POST', headers: { Authorization: 'Bearer ' + svc, 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: nm ? nm.name : 'Business model', graph: await withFinance(modelGraphText(d)), message, history: Array.isArray(b.history) ? b.history.slice(-14) : [], brief: String(b.brief || '').slice(0, 6000) }), signal: AbortSignal.timeout(150000) });
@@ -1351,12 +1422,15 @@ app.post('/admin/api/model/boards/:id(\\d+)/chat', requireAdmin, express.json({ 
 app.post('/admin/api/model/boards/:id(\\d+)/rename', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   const name = String((req.body || {}).name || '').trim().slice(0, 80);
   if (!name) return res.json({ ok: false, error: 'Zadejte název plátna' });
+  const oldN = (await q('SELECT name FROM model_boards WHERE id=$1', [req.params.id]).catch(() => ({ rows: [] }))).rows[0];
   const r = await q('UPDATE model_boards SET name=$2 WHERE id=$1 RETURNING name', [req.params.id, name]);
+  res.locals.audit = { label: name, summary: 'Plátno „' + (oldN ? oldN.name : '#' + req.params.id) + '“ přejmenováno na „' + name + '“' };
   res.json(r.rowCount ? { ok: true, name: r.rows[0].name } : { ok: false, error: 'Plátno nenalezeno' });
 });
 app.post('/admin/api/model/boards/:id(\\d+)/delete', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   const n = (await q('SELECT count(*)::int AS n FROM model_boards')).rows[0].n;
   if (n < 2) return res.json({ ok: false, error: 'Poslední plátno nejde smazat' });
+  { const bn = (await q('SELECT name FROM model_boards WHERE id=$1', [req.params.id]).catch(() => ({ rows: [] }))).rows[0]; res.locals.audit = { label: bn && bn.name, summary: 'Smazáno plátno „' + (bn ? bn.name : '#' + req.params.id) + '“' }; }
   await q('DELETE FROM model_boards WHERE id=$1', [req.params.id]); res.json({ ok: true });
 });
 app.get('/admin/m/:sekce(report|ekonomika|technika|proc)', requireAdmin, (req, res) => {
@@ -1366,10 +1440,12 @@ app.post('/admin/api/inquiry/:id(\\d+)/portal-link', requireAdmin, express.json(
   const r = (await q('SELECT * FROM inquiries WHERE id=$1', [Number(req.params.id)])).rows[0];
   if (!r) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
   if (!r.portal_access) return res.status(400).json({ ok: false, error: 'Lead nemá zaškrtnutý přístup do portálu (ulož změny).' });
+  res.locals.audit = { label: r.name, summary: 'Odkaz do portálu pro ' + r.name + ' (' + r.email + ')' };
   const ok = await sendPortalLink(r);
   res.status(ok ? 200 : 502).json(ok ? { ok: true } : { ok: false, error: 'E-mail se nepodařilo odeslat' });
 });
 app.post('/admin/api/inquiry/:id(\\d+)/delete', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
+  { const l = (await q('SELECT name, email, company FROM inquiries WHERE id=$1', [Number(req.params.id)]).catch(() => ({ rows: [] }))).rows[0]; if (l) res.locals.audit = { label: l.name, summary: 'Smazán lead ' + l.name + ' (' + l.email + (l.company ? ', ' + l.company : '') + ')' }; }
   await q('DELETE FROM inquiries WHERE id=$1', [Number(req.params.id)]); res.json({ ok: true });
 });
 app.get('/admin/export.csv', requireAdmin, async (req, res) => {
