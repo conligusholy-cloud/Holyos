@@ -933,7 +933,7 @@ const FIN_CSS = `
 #fx th{position:sticky;top:0;background:#0b1630;z-index:2;text-align:left;padding:10px 8px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--line)}
 #fx td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:middle}
 #fx tbody tr:hover td{background:rgba(34,230,255,.04)}
-#fx .c0{width:34px;color:var(--mut);text-align:center}#fx .cn{min-width:230px}#fx .cm{min-width:190px;width:190px}#fx .ain{text-align:right;font-variant-numeric:tabular-nums}#fx .cp{min-width:128px;width:128px}#fx .cs{width:130px;white-space:nowrap}#fx .ca{width:150px;white-space:nowrap;text-align:right}
+#fx .c0{width:34px;color:var(--mut);text-align:center}#fx .cn{min-width:230px}#fx .cm{min-width:190px;width:190px}#fx .ain{text-align:right;font-variant-numeric:tabular-nums}#fx .cp{min-width:176px;width:176px}#fx .dph{display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;background:rgba(251,191,36,.16);color:#fcd34d;font-size:10.5px;letter-spacing:.04em;vertical-align:middle}#fx .cs{width:130px;white-space:nowrap}#fx .ca{width:150px;white-space:nowrap;text-align:right}
 #fx input{background:#07111f;border:1px solid transparent;border-radius:8px;color:var(--text);font:inherit;font-size:14px;padding:7px 9px;width:100%;box-sizing:border-box}
 #fx input:hover{border-color:var(--line)}#fx input:focus{outline:none;border-color:var(--cy);background:#0a1830}
 #fx .hin{font-weight:700;text-transform:none;letter-spacing:0;color:#eaf6ff;font-size:13.5px;background:rgba(34,230,255,.07)}
