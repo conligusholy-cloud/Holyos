@@ -512,13 +512,29 @@ router.post('/lu/model-analyze', express.json({ limit: '600kb' }), async (req, r
       ' "plan": [{"faze":"1","nazev":"","doba":"např. 2 týdny","kroky":["konkrétní krok"],"vystup":"co je na konci hotové"}],',
       ' "kpi": [{"nazev":"","cil":"cílová hodnota nebo ???","jak_merit":""}]',
       '}',
-      'Limity: aktery ≤ 10, toky ≤ 8, prijmy ≤ 10, mezery ≤ 15, rizika ≤ 8, dopracovani ≤ 20 (každý nový uzel musí mít ≥ 1 „navazuje"), plan 4–6 fází, kpi ≤ 8.',
+      'Limity: aktery ≤ 8, toky ≤ 6, prijmy ≤ 8, mezery ≤ 12, rizika ≤ 6, dopracovani ≤ 15 (každý nový uzel musí mít ≥ 1 „navazuje"), plan 4–6 fází, kpi ≤ 6. Buď úsporný — celá odpověď musí být platný JSON a nesmí být useknutá.',
     ].join('\n');
-    const r = await messagesCreate(client, { model: process.env.LU_MODEL_AI || 'claude-sonnet-4-6', max_tokens: 9000, system, messages: [{ role: 'user', content: 'Plátno „' + name + '":\n\n' + graph }] });
+    const r = await messagesCreate(client, { model: process.env.LU_MODEL_AI || 'claude-sonnet-4-6', max_tokens: 16000, system, messages: [{ role: 'user', content: 'Plátno „' + name + '":\n\n' + graph }] });
     const text = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('').trim();
-    const a = text.indexOf('{'), b = text.lastIndexOf('}');
-    let out = null; try { out = JSON.parse(text.slice(a, b + 1)); } catch (e) { out = null; }
-    if (!out || typeof out !== 'object') return res.status(502).json({ error: 'AI vrátila nečitelnou odpověď — zkuste to znovu' });
+    // vytáhne JSON objekt (i z ```json bloku); když je odpověď useknutá limitem tokenů, doplní chybějící závorky po poslední celé položce
+    const parseLoose = (t) => {
+      const a = t.indexOf('{'); if (a < 0) return null;
+      const s = t.slice(a);
+      try { return JSON.parse(s.slice(0, s.lastIndexOf('}') + 1)); } catch (e) { /* zkusíme opravu */ }
+      const stack = []; let inStr = false, esc = false, safe = null;
+      for (let i = 0; i < s.length; i++) {
+        const c = s[i];
+        if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+        if (c === '"') inStr = true;
+        else if (c === '{' || c === '[') stack.push(c);
+        else if (c === '}' || c === ']') { stack.pop(); safe = { pos: i, stack: stack.slice() }; }
+      }
+      if (!safe) return null;
+      const fixed = s.slice(0, safe.pos + 1) + safe.stack.reverse().map((c) => (c === '{' ? '}' : ']')).join('');
+      try { return JSON.parse(fixed); } catch (e) { return null; }
+    };
+    const out = parseLoose(text);
+    if (!out || typeof out !== 'object') { console.warn('[lu model-analyze] nečitelná odpověď, stop=' + r.stop_reason + ', délka=' + text.length + ', konec: ' + text.slice(-200)); return res.status(502).json({ error: 'AI vrátila nečitelnou odpověď (' + (r.stop_reason === 'max_tokens' ? 'příliš dlouhá' : 'chybný formát') + ') — zkuste to znovu' }); }
     res.json({ ok: true, result: out, truncated: r.stop_reason === 'max_tokens' });
   } catch (err) { next(err); }
 });
