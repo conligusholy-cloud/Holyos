@@ -176,7 +176,13 @@
     }
     if (nd && !nd.classList.contains('edit')) {
       var id2 = nd.getAttribute('data-id'), n = nodeById(id2); select({ t: 'n', id: id2 });
-      var w = toWorld(ev.clientX, ev.clientY); drag = { type: 'move', id: id2, ox: w.x - n.x, oy: w.y - n.y, moved: false, sx: ev.clientX, sy: ev.clientY };
+      var w = toWorld(ev.clientX, ev.clientY); drag = { type: 'move', id: id2, ox: w.x - n.x, oy: w.y - n.y, moved: false, sx: ev.clientX, sy: ev.clientY, kids: [] };
+      // navazující uzly (po šipkách dál) se pohybují spolu s tažením; Alt = jen samotný uzel
+      if (!ev.altKey) {
+        var seen = {}; seen[id2] = 1; var qu = [id2];
+        while (qu.length) { var cur = qu.shift(); S.edges.forEach(function (e) { if (e.from === cur && !seen[e.to]) { seen[e.to] = 1; qu.push(e.to); var k = nodeById(e.to); if (k) drag.kids.push({ n: k, x: k.x, y: k.y }); } }); }
+      }
+      drag.nx = n.x; drag.ny = n.y;
       view.setPointerCapture(ev.pointerId); return;
     }
     if (eh) { select({ t: 'e', id: eh.getAttribute('data-e') }); return; }
@@ -190,7 +196,10 @@
     else if (drag.type === 'move') {
       if (!drag.moved && Math.hypot(ev.clientX - drag.sx, ev.clientY - drag.sy) < 4) return; drag.moved = true;
       var n = nodeById(drag.id), w = toWorld(ev.clientX, ev.clientY); n.x = Math.round(w.x - drag.ox); n.y = Math.round(w.y - drag.oy);
-      var e = elOf(n.id); e.style.left = n.x + 'px'; e.style.top = n.y + 'px'; drawEdges();
+      var e = elOf(n.id); e.style.left = n.x + 'px'; e.style.top = n.y + 'px';
+      var dx = n.x - drag.nx, dy = n.y - drag.ny;
+      drag.kids.forEach(function (k) { k.n.x = k.x + dx; k.n.y = k.y + dy; var ke = elOf(k.n.id); if (ke) { ke.style.left = k.n.x + 'px'; ke.style.top = k.n.y + 'px'; } });
+      drawEdges();
     } else if (drag.type === 'link') {
       var a = nodeById(drag.from), w2 = toWorld(ev.clientX, ev.clientY), p = sidePoint(a, drag.side);
       var q = { x: w2.x, y: w2.y, d: OPP[p.d] };
