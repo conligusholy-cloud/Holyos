@@ -25,23 +25,32 @@
     hist = hist.slice(0, hi + 1); hist.push(snapshot()); if (hist.length > 80) hist.shift(); hi = hist.length - 1;
     changed();
   }
-  function changed() { dirtyFlag = true; status('Neuloženo…', false); clearTimeout(saveT); saveT = setTimeout(save, 700); updateBar(); }
+  // záloha v prohlížeči — kdyby uložení na server selhalo nebo se stránka zavřela, data se při dalším otevření obnoví
+  function backup() { if (board) { try { localStorage.setItem('lu_mb_bk_' + board.id, JSON.stringify({ rev: rev, t: Date.now(), data: S })); } catch (e) { /* bez paměti */ } } }
+  function clearBackup() { if (board) { try { localStorage.removeItem('lu_mb_bk_' + board.id); } catch (e) { /* bez paměti */ } } }
+  function changed() { dirtyFlag = true; backup(); status('Ukládám…', false); clearTimeout(saveT); saveT = setTimeout(save, 350); updateBar(); }
   function undo() { if (hi > 0) { hi--; S = JSON.parse(hist[hi]); sel = null; renderAll(); changed(); } }
   function redo() { if (hi < hist.length - 1) { hi++; S = JSON.parse(hist[hi]); sel = null; renderAll(); changed(); } }
   function save(keepalive) {
     if (!board || conflict) return;
     if (saving) { clearTimeout(saveT); saveT = setTimeout(save, 400); return; }
-    saving = true; var data = JSON.parse(snapshot());
+    saving = true; var snap = snapshot(), data = JSON.parse(snap), bid = board.id;
     fetch('/admin/api/model/boards/' + board.id, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: data, rev: rev }), keepalive: !!keepalive })
       .then(function (r) { return r.json().then(function (j) { j.__status = r.status; return j; }); })
       .then(function (j) {
         saving = false;
-        if (j.__status === 409) { conflict = true; status('Plátno mezitím změnil někdo jiný — obnov stránku (F5). Tvoje poslední změny se neuložily.', true); return; }
-        if (!j.ok) { status(j.error || 'Uložení se nepovedlo', true); return; }
-        rev = j.rev; dirtyFlag = false; status('Uloženo ✓', false);
-      }).catch(function () { saving = false; status('Uložení se nepovedlo (offline?)', true); });
+        if (!board || board.id !== bid) return;
+        if (j.__status === 409) { conflict = true; status('Plátno mezitím změnil někdo jiný — obnov stránku (F5). Tvoje změny zůstaly zálohované v tomto prohlížeči.', true); return; }
+        if (!j.ok) { status((j.error || 'Uložení se nepovedlo') + ' — zkusím znovu', true); clearTimeout(saveT); saveT = setTimeout(save, 4000); return; }
+        rev = j.rev;
+        if (snapshot() !== snap) { backup(); clearTimeout(saveT); saveT = setTimeout(save, 150); return; } // mezitím přibyla další změna
+        dirtyFlag = false; clearBackup(); status('Uloženo ✓', false);
+      }).catch(function () { saving = false; status('Uložení se nepovedlo (offline?) — zkusím znovu', true); clearTimeout(saveT); saveT = setTimeout(save, 4000); });
   }
-  window.addEventListener('beforeunload', function () { if (dirtyFlag && !conflict) save(true); });
+  function flush() { if (editing) stopEdit(true); if (dirtyFlag && !conflict) { clearTimeout(saveT); saving = false; save(true); } }
+  window.addEventListener('beforeunload', flush);
+  window.addEventListener('pagehide', flush);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flush(); });
 
   // ── Pomocné ──
   function nodeById(id) { return S.nodes.find(function (n) { return n.id === id; }); }
@@ -323,7 +332,15 @@
       board = { id: j.id, name: j.name }; rev = j.rev; conflict = false; dirtyFlag = false;
       S = { nodes: (j.data && j.data.nodes) || [], edges: (j.data && j.data.edges) || [] };
       sel = null; hist = [snapshot()]; hi = 0; try { localStorage.setItem('lu_mb_board', String(id)); } catch (e) { /* bez paměti */ }
+      // obnova nedoukládaných změn ze zálohy (pokud server od té doby nikdo neměnil)
+      var restored = false;
+      try {
+        var bk = JSON.parse(localStorage.getItem('lu_mb_bk_' + id) || 'null');
+        if (bk && bk.data && Array.isArray(bk.data.nodes) && bk.rev === j.rev && JSON.stringify({ nodes: bk.data.nodes, edges: bk.data.edges || [] }) !== snapshot()) { S = { nodes: bk.data.nodes, edges: bk.data.edges || [] }; restored = true; }
+        else if (bk) localStorage.removeItem('lu_mb_bk_' + id);
+      } catch (e) { /* bez zálohy */ }
       fillBoards(); renderAll(); status('', false);
+      if (restored) { hist = [snapshot()]; hi = 0; changed(); }
       var v = null; try { v = JSON.parse(localStorage.getItem('lu_mb_v_' + id) || 'null'); } catch (e) { v = null; }
       if (v && isFinite(v.x) && isFinite(v.y) && isFinite(v.k)) { V = v; applyView(); } else fit();
       $('#mb-title').textContent = j.name;
