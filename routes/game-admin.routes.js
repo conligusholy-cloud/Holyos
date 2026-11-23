@@ -374,6 +374,49 @@ router.get('/karty-puvod', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(await K.zprava(prisma, jeMule));
 }));
 
+// GET /trziste-prodeje?minut=120 → co se prodalo z tržiště a kdo kolik dostal
+//
+// Kupující zaplatí cenu, prodávající ji dostane. Obojí jde doručenkou, takže
+// se to dá zkontrolovat proti sobě: kdyby se někde připsalo jiné číslo, než
+// se strhlo, tohle to ukáže. Vedle toho se vypíše i to, co si kupující na
+// koupi půjčil — aby bylo vidět, kolik dal doopravdy ze svého.
+router.get('/trziste-prodeje', api(async (req, res) => {
+  const minut = Math.max(1, Math.min(10080, parseInt(req.query.minut, 10) || 120));
+  const od = new Date(Date.now() - minut * 60000);
+  const prodeje = await prisma.gameMarket.findMany({
+    where: { koupeno_at: { gte: od } }, orderBy: { koupeno_at: 'asc' } });
+  if (!prodeje.length) return res.type('text/plain; charset=utf-8').send('Za posledních ' + minut + ' minut se z tržiště nic neprodalo.');
+  const davky = await prisma.gameDelivery.findMany({
+    where: { kind: 'cash', created_at: { gte: new Date(od.getTime() - 60000) } },
+    select: { player_id: true, amount: true, popis: true, created_at: true } });
+  const kc = (n) => Math.round(n).toLocaleString('cs-CZ') + ' L$';
+  const radky = [];
+  let zaplaceno = 0, prijato = 0;
+  for (const m of prodeje) {
+    const klic = (m.name || m.spot_id);
+    const kupujici = davky.filter((d) => d.player_id === m.koupil_id && d.amount < 0
+      && String(d.popis || '').indexOf(klic) >= 0).reduce((a, d) => a + d.amount, 0);
+    const prodavajici = davky.filter((d) => d.player_id === m.player_id && d.amount > 0
+      && String(d.popis || '').indexOf(klic) >= 0).reduce((a, d) => a + d.amount, 0);
+    zaplaceno += -kupujici; prijato += prodavajici;
+    const sedi = Math.abs(-kupujici - m.cena) < 1 && Math.abs(prodavajici - m.cena) < 1;
+    radky.push((sedi ? '  ok  ' : '  !!  ') + (klic + '                         ').slice(0, 26)
+      + ' cena ' + (kc(m.cena) + '            ').slice(0, 14)
+      + ' kupující ' + (kc(kupujici) + '            ').slice(0, 14)
+      + ' prodávající ' + (kc(prodavajici) + '            ').slice(0, 14)
+      + ' ' + m.nick + ' → ' + (m.koupil_nick || '?'));
+  }
+  const text = 'TRŽIŠTĚ — PRODEJE ZA POSLEDNÍCH ' + minut + ' MINUT\n\n'
+    + radky.join('\n') + '\n\n'
+    + 'prodejů ' + prodeje.length + '\n'
+    + 'cena celkem        ' + kc(prodeje.reduce((a, m) => a + m.cena, 0)) + '\n'
+    + 'strženo kupujícím  ' + kc(zaplaceno) + '\n'
+    + 'připsáno prodávajícím ' + kc(prijato) + '\n'
+    + (Math.abs(zaplaceno - prijato) < 1 ? 'Sedí — co se strhlo, to se připsalo.'
+      : 'NESEDÍ — rozdíl ' + kc(prijato - zaplaceno));
+  res.type('text/plain; charset=utf-8').send(text);
+}));
+
 // GET /sit-rozdily → vidí server stejnou síť jako hra?
 // Rozhoduje to o tom, jestli má vůbec smysl porovnávat zisk: dokud se
 // rozchází model stroje nebo skóre místa, nebyl by rozdíl chybou výpočtu,
