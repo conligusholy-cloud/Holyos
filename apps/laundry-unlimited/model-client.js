@@ -72,6 +72,8 @@
       var d = document.createElement('div'); d.className = 'n' + (sel && sel.t === 'n' && sel.id === n.id ? ' sel' : ''); d.setAttribute('data-id', n.id);
       d.style.left = n.x + 'px'; d.style.top = n.y + 'px'; d.style.setProperty('--c', n.color || COLORS[0]);
       if (n.w || n.h) { d.classList.add('sized'); if (n.w) d.style.width = n.w + 'px'; if (n.h) d.style.height = n.h + 'px'; }
+      var pb = document.createElement('button'); pb.type = 'button'; pb.className = 'ed'; pb.title = 'Upravit text (přepsat název)';
+      pb.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>'; d.appendChild(pb);
       ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach(function (r) { var z = document.createElement('b'); z.className = 'rz rz-' + r; z.setAttribute('data-r', r); d.appendChild(z); });
       var t = document.createElement('div'); t.className = 't'; t.textContent = n.text || ''; d.appendChild(t);
       ['t', 'r', 'b', 'l'].forEach(function (sd) { var h = document.createElement('i'); h.className = 'h h-' + sd; h.setAttribute('data-s', sd); h.title = 'Přetáhni na jiný uzel (nebo do prázdna) pro spojení'; d.appendChild(h); });
@@ -212,6 +214,7 @@
     if (h && nd) {
       var id = nd.getAttribute('data-id'); drag = { type: 'link', from: id, side: h.getAttribute('data-s') || 'r' }; view.setPointerCapture(ev.pointerId); ev.preventDefault(); select({ t: 'n', id: id }); return;
     }
+    if (t.closest && t.closest('.ed')) return; // tužka — obslouží se v click
     var rz = t.closest && t.closest('.rz');
     if (rz && nd && !nd.classList.contains('edit')) {
       var rid = nd.getAttribute('data-id'), rn = nodeById(rid), rs = size(rn); select({ t: 'n', id: rid });
@@ -290,6 +293,11 @@
     return m === dl ? 'l' : m === dr ? 'r' : m === dt ? 't' : 'b';
   }
   view.addEventListener('pointerup', endDrag); view.addEventListener('pointercancel', endDrag);
+  view.addEventListener('click', function (ev) {
+    var pe = ev.target.closest && ev.target.closest('.ed'); if (!pe) return;
+    var pn = pe.closest('.n'); if (!pn) return; var pid = pn.getAttribute('data-id');
+    select({ t: 'n', id: pid }); startEdit(pid, false);
+  });
   view.addEventListener('dblclick', function (ev) {
     var nd = ev.target.closest && ev.target.closest('.n');
     if (nd) { startEdit(nd.getAttribute('data-id'), false); return; }

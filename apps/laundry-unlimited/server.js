@@ -900,7 +900,10 @@ const MODEL_CSS = `
 .n .rz-w{left:-5px;top:16px;bottom:16px;width:9px;cursor:ew-resize}.n .rz-e{right:-5px;top:16px;bottom:16px;width:9px;cursor:ew-resize}
 .n .rz-nw{left:-6px;top:-6px;width:16px;height:16px;cursor:nwse-resize;z-index:2}.n .rz-se{right:-6px;bottom:-6px;width:16px;height:16px;cursor:nwse-resize;z-index:2}
 .n .rz-ne{right:-6px;top:-6px;width:16px;height:16px;cursor:nesw-resize;z-index:2}.n .rz-sw{left:-6px;bottom:-6px;width:16px;height:16px;cursor:nesw-resize;z-index:2}
-.n.edit .rz{display:none}
+.n.edit .rz,.n.edit .ed{display:none}
+.n .ed{position:absolute;right:4px;top:-30px;width:26px;height:26px;padding:0;border-radius:50%;border:1px solid var(--c,#22e6ff);background:#0d1b30;color:var(--c,#22e6ff);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .15s;z-index:4}
+.n .ed::after{content:"";position:absolute;left:-4px;right:-4px;top:100%;height:8px}
+.n:hover .ed,.n.sel .ed{opacity:1;pointer-events:auto}.n .ed:hover{background:var(--c,#22e6ff);color:#050a14}
 .n.sel{box-shadow:0 0 0 3px rgba(255,255,255,.85),0 0 26px -4px var(--c,#22e6ff)}.n.tgt{box-shadow:0 0 0 3px #22c55e,0 0 26px -4px #22c55e}
 .n .h{position:absolute;width:18px;height:18px;border-radius:50%;background:var(--c,#22e6ff);border:2px solid #050a14;cursor:crosshair;opacity:0;transition:opacity .15s,transform .15s}
 .n .h-r{right:-10px;top:50%;margin-top:-9px}.n .h-l{left:-10px;top:50%;margin-top:-9px}.n .h-t{top:-10px;left:50%;margin-left:-9px}.n .h-b{bottom:-10px;left:50%;margin-left:-9px}.n:hover .h,.n.sel .h{opacity:1}.n .h:hover{transform:scale(1.25)}
