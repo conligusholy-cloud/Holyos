@@ -8889,6 +8889,27 @@ function cerpatSheet(chci) {
     });
   };
 }
+// Za jak dlouho úvěr doopravdy skončí. Mimořádná splátka nechává splátku
+// stejně vysokou a zkracuje dobu — jenže „zbývá měsíců" se počítalo jen tím,
+// že se jednou za herní měsíc ubere jednička. Po splátce 27 milionů se tak
+// nehnulo nic a vypadalo to, že se splátka nikde neprojevila.
+//
+// Počítá se to, co zbývá doopravdy: kolik anuit téhle výše ještě zbytek
+// dluhu unese. Nikdy víc, než kolik zbývá ze smlouvy.
+function uverMesicu(l) {
+  var zbyva = Math.max(0, Math.round((l && l.zbyva) || 0));
+  if (!zbyva) return 0;
+  var smlouva = Math.max(0, Math.round((l && l.zbyvaMesicu) || 0))
+    || Math.max(0, Math.round((l && l.mesicu) || 0)) || UVER_MESICU;
+  var splatka = Math.max(0, Math.round((l && l.splatka) || 0));
+  if (!splatka) return smlouva;
+  var r = Math.max(0, Number((l && l.sazba) || 0)) / 12;
+  if (!r) return Math.max(1, Math.min(smlouva, Math.ceil(zbyva / splatka)));
+  // Splátka nestačí ani na úrok — pak se doba odhadnout nedá a platí smlouva.
+  if (splatka <= zbyva * r) return smlouva;
+  var n = Math.ceil(-Math.log(1 - (zbyva * r) / splatka) / Math.log(1 + r));
+  return Math.max(1, Math.min(smlouva, n));
+}
 function uveryHtml() {
   var l = (S.loans || []).slice().sort(function (a, b) { return b.zbyva - a.zbyva; });
   if (!l.length) return '';
@@ -8900,7 +8921,7 @@ function uveryHtml() {
         var splatka = Math.min(u.splatka, u.zbyva + urok);
         return '<div class="uver' + (u.zmeskano ? ' dluzi' : '') + '">'
           + '<div class="uver-hl"><b>' + esc(u.popis || esc(tx('banka.uver_2'))) + '</b>'
-          + '<span>' + (u.sazba * 100).toFixed(1).replace('.', desZnak()) + tx('veta.span_div_div_class_kv_span', { p1: esc(tx('banka.zbyva_splatit')), p2: kcFull(u.zbyva), p3: esc(tx('banka.splatka_mesic_2')), p4: kcFull(splatka), p5: kcFull(urok), p6: esc(tx('banka.zbyva_mesicu')) }) + (u.zbyvaMesicu || 0) + ' z ' + (u.mesicu || 60) + '</b></div>'
+          + '<span>' + (u.sazba * 100).toFixed(1).replace('.', desZnak()) + tx('veta.span_div_div_class_kv_span', { p1: esc(tx('banka.zbyva_splatit')), p2: kcFull(u.zbyva), p3: esc(tx('banka.splatka_mesic_2')), p4: kcFull(splatka), p5: kcFull(urok), p6: esc(tx('banka.zbyva_mesicu')) }) + uverMesicu(u) + ' z ' + (u.mesicu || 60) + '</b></div>'
           + ((u.prepsano || u.prodlouzeno) ? tx('veta.p_class_fine_delku_splaceni_uz', { p1: ((u.prepsano || u.prodlouzeno) > 1 ? ' (' + (u.prepsano || u.prodlouzeno) + '×)' : '') }) : '')
           + (u.zmeskano ? tx('hra.p_class_fine_err_ze_kdyz', { p1: esc(tx('hra.nezaplacena_splatka')), p2: u.zmeskano, p3: KRACH_SPLATEK })
               + (u.zmeskano >= KRACH_SPLATEK - 1

@@ -99,6 +99,36 @@ function postav(hotovost, uvery) {
   ma(c.F('u1', 0) === 0 && c.S().cash === 500000, 'nula nic neudělá');
 }
 
+// ─── „Zbývá měsíců" se po splátce musí hnout ────────────────────────────────
+{
+  console.log('\nZbývá měsíců');
+  const ctx = vm.createContext({ Math, Number, UVER_MESICU: 60 });
+  vm.runInContext(telo(HRA, 'uverMesicu') + '\nthis.F = uverMesicu;', ctx);
+  const F = ctx.F;
+
+  // Honzův úvěr před splátkou a po ní. Splátka i sazba se nemění, mění se
+  // jen zbytek — a doba se musí zkrátit skoro o polovinu.
+  const pred = { zbyva: 66927136, sazba: 0.104, splatka: 1201951, zbyvaMesicu: 77, mesicu: 84 };
+  const po = { zbyva: 39291965, sazba: 0.104, splatka: 1201951, zbyvaMesicu: 77, mesicu: 84 };
+  ma(F(pred) === 77, 'před splátkou vychází doba na smlouvu', F(pred));
+  ma(F(po) === 39, 'po splátce 27,6 mil. zbývá 39 měsíců', F(po));
+  ma(F(po) < F(pred) / 1.8, 'tedy ani ne polovina', F(pred) + ' → ' + F(po));
+
+  ma(F({ zbyva: 0, sazba: 0.1, splatka: 1000, zbyvaMesicu: 50 }) === 0, 'doplacený úvěr má nula měsíců');
+  ma(F({ zbyva: 100000, sazba: 0, splatka: 25000, zbyvaMesicu: 50, mesicu: 60 }) === 4,
+    'bez úroku je to prostý podíl', F({ zbyva: 100000, sazba: 0, splatka: 25000, zbyvaMesicu: 50 }));
+  // Delší, než zbývá ze smlouvy, to ukazovat nesmí.
+  ma(F({ zbyva: 10000000, sazba: 0.1, splatka: 100000, zbyvaMesicu: 12, mesicu: 60 }) === 12,
+    'smlouva je strop', F({ zbyva: 10000000, sazba: 0.1, splatka: 100000, zbyvaMesicu: 12 }));
+  // Splátka, která nepokryje ani úrok, by dala nekonečno.
+  ma(F({ zbyva: 10000000, sazba: 0.12, splatka: 50000, zbyvaMesicu: 30, mesicu: 60 }) === 30,
+    'splátka pod úrok spadne zpátky na smlouvu');
+  ma(F({ zbyva: 500000, sazba: 0.1, splatka: 0, zbyvaMesicu: 20, mesicu: 60 }) === 20, 'bez splátky platí smlouva');
+  ma(F(null) === 0 && F({}) === 0, 'nesmysly nic neshodí');
+  ma(/uverMesicu\(u\) \+ ' z '/.test(HRA), 'banka to podle toho vypisuje');
+  ma(!/\(u\.zbyvaMesicu \|\| 0\) \+ ' z '/.test(HRA), 'a starý počítač měsíců v kódu nezbyl');
+}
+
 // ─── Hlášky jsou v kódu i ve všech jazycích ─────────────────────────────────
 {
   console.log('\nHlášky');
