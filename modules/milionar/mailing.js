@@ -2,10 +2,10 @@
 // Napojeno na /api/game-admin/mailing. Spouští se ze záložek v modules/milionar/index.html přes window.GMail.open(...).
 (function () {
   var API = '/api/game-admin/mailing';
-  var S = { senders: [], senderInfo: null, tags: [], extraKeys: [], list: { q: '', status: '', tag: '', offset: 0, sel: {}, last: null } };
+  var S = { senders: [], senderInfo: null, facets: { stage: [], kind: [], country: [] }, tags: [], extraKeys: [], list: { q: '', status: '', tag: '', stage: '', kind: '', country: '', offset: 0, sel: {}, last: null } };
   var LANG = { cs: 'Čeština', en: 'English', pl: 'Polski', sk: 'Slovenčina', de: 'Deutsch', hu: 'Magyar', ro: 'Română', it: 'Italiano', es: 'Español', fr: 'Français' };
   var STATUS = { draft: 'Koncept', scheduled: 'Naplánováno', sending: 'Odesílá se', sent: 'Odesláno', active: 'Zapnuto', paused: 'Pozastaveno' };
-  var CSTATUS = { active: 'Aktivní', unsubscribed: 'Odhlášen', bounced: 'Nedoručitelný' };
+  var CSTATUS = { active: 'Aktivní', unsubscribed: 'Odhlášen', bounced: 'Nedoručitelný', excluded: 'Vyřazen (nezasílat)' };
   var DOW = ['', 'každé pondělí', 'každé úterý', 'každou středu', 'každý čtvrtek', 'každý pátek', 'každou sobotu', 'každou neděli'];
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -66,16 +66,17 @@
       box.__init = true;
       box.innerHTML =
         '<div class="toolbar"><input id="gml-q" class="gm-in" style="width:240px" placeholder="Hledat e-mail, jméno, firmu, telefon">' +
-        '<select id="gml-status" class="gm-in"><option value="">Všechny stavy</option><option value="active">Aktivní</option><option value="unsubscribed">Odhlášení</option><option value="bounced">Nedoručitelné</option></select>' +
+        '<select id="gml-status" class="gm-in"><option value="">Všechny stavy e-mailu</option><option value="active">Aktivní</option><option value="excluded">Vyřazené (nezasílat)</option><option value="unsubscribed">Odhlášení</option><option value="bounced">Nedoručitelné</option></select>' +
+        '<select id="gml-kind" class="gm-in"><option value="">Všechny typy kontaktu</option></select><select id="gml-stage" class="gm-in"><option value="">Všechny stavy CRM</option></select><select id="gml-country" class="gm-in"><option value="">Všechny země</option></select>' +
         '<select id="gml-tag" class="gm-in"><option value="">Všechny štítky</option></select>' +
         '<button class="btn sm" id="gml-find">Hledat</button><span style="flex:1"></span>' +
         '<button class="btn sm" id="gml-add">＋ Kontakt</button><button class="btn on sm" id="gml-imp">⬆ Importovat CSV</button></div>' +
         '<p class="note" style="margin:0 0 12px">Samostatný seznam pro e-mailing hry — nesouvisí s hráči ani s ostatními seznamy v HolyOS. Kontakty sem přesuneš importem z jiného systému (CSV); sloupce, které nemají vlastní pole, se uloží jako vlastní pole a půjdou vložit do textu e-mailu jako <code>{{název_sloupce}}</code>. Odhlášení a nedoručitelné adresy se do kampaní nikdy nezahrnou.</p>' +
         '<div id="gml-kpi" class="kpis"></div><div id="gml-bulk" class="toolbar" style="margin:6px 0"></div>' +
         '<div class="tbl-wrap"><table class="data-table" id="gml-tbl"></table></div><div id="gml-pg" class="toolbar"></div>';
-      $('gml-find').onclick = function () { S.list.offset = 0; S.list.q = $('gml-q').value; S.list.status = $('gml-status').value; S.list.tag = $('gml-tag').value; S.list.sel = {}; loadContacts(); };
+      $('gml-find').onclick = function () { S.list.offset = 0; S.list.q = $('gml-q').value; S.list.status = $('gml-status').value; S.list.tag = $('gml-tag').value; S.list.kind = $('gml-kind').value; S.list.stage = $('gml-stage').value; S.list.country = $('gml-country').value; S.list.sel = {}; loadContacts(); };
       $('gml-q').onkeydown = function (e) { if (e.key === 'Enter') $('gml-find').onclick(); };
-      $('gml-status').onchange = $('gml-tag').onchange = function () { $('gml-find').onclick(); };
+      $('gml-status').onchange = $('gml-tag').onchange = $('gml-kind').onchange = $('gml-stage').onchange = $('gml-country').onchange = function () { $('gml-find').onclick(); };
       $('gml-add').onclick = function () { contactDlg(null); };
       $('gml-imp').onclick = importDlg;
     }
@@ -83,20 +84,25 @@
   }
 
   function loadContacts() {
-    var L = S.list, q = '?limit=100&offset=' + L.offset + '&q=' + encodeURIComponent(L.q) + '&status=' + L.status + '&tag=' + encodeURIComponent(L.tag);
+    var L = S.list, q = '?limit=100&offset=' + L.offset + '&q=' + encodeURIComponent(L.q) + '&status=' + L.status + '&tag=' + encodeURIComponent(L.tag) + '&stage=' + encodeURIComponent(L.stage) + '&kind=' + encodeURIComponent(L.kind) + '&country=' + encodeURIComponent(L.country);
+    api('GET', '/contacts/facets').then(function (f) {
+      S.facets = f; [['stage', 'gml-stage', 'Všechny stavy CRM'], ['kind', 'gml-kind', 'Všechny typy kontaktu'], ['country', 'gml-country', 'Všechny země']].forEach(function (x) {
+        var sel = $(x[1]); sel.innerHTML = '<option value="">' + x[2] + '</option>' + (f[x[0]] || []).map(function (o) { return '<option value="' + esc(o.v) + '"' + (L[x[0]] === o.v ? ' selected' : '') + '>' + esc(o.v) + ' (' + o.n + ')</option>'; }).join('');
+      });
+    }).catch(function () {});
     api('GET', '/contacts' + q).then(function (j) {
       L.last = j; S.tags = j.tags || []; S.extraKeys = j.extra_keys || [];
       var sel = $('gml-tag'), cur = sel.value; sel.innerHTML = '<option value="">Všechny štítky</option>' + S.tags.map(function (t) { return '<option' + (t === L.tag ? ' selected' : '') + ' value="' + esc(t) + '">' + esc(t) + '</option>'; }).join('');
       if (cur && S.tags.indexOf(cur) < 0) sel.value = '';
       var c = j.counts || {};
-      $('gml-kpi').innerHTML = '<div class="kpi"><div class="v">' + (c.active || 0) + '</div><div class="l">Aktivních kontaktů</div></div><div class="kpi"><div class="v">' + (c.unsubscribed || 0) + '</div><div class="l">Odhlášených</div></div><div class="kpi"><div class="v">' + (c.bounced || 0) + '</div><div class="l">Nedoručitelných</div></div><div class="kpi"><div class="v">' + j.total + '</div><div class="l">Odpovídá filtru</div></div>';
+      $('gml-kpi').innerHTML = '<div class="kpi"><div class="v">' + (c.active || 0) + '</div><div class="l">Aktivních kontaktů</div></div><div class="kpi"><div class="v">' + (c.excluded || 0) + '</div><div class="l">Vyřazených (nezasílat)</div></div><div class="kpi"><div class="v">' + (c.unsubscribed || 0) + '</div><div class="l">Odhlášených</div></div><div class="kpi"><div class="v">' + (c.bounced || 0) + '</div><div class="l">Nedoručitelných</div></div><div class="kpi"><div class="v">' + j.total + '</div><div class="l">Odpovídá filtru</div></div>';
       var rows = j.items.map(function (r) {
         var ex = r.extra && Object.keys(r.extra).length ? ' title="' + esc(Object.keys(r.extra).map(function (k) { return k + ': ' + r.extra[k]; }).join('\n')) + '"' : '';
-        return '<tr><td><input type="checkbox" data-sel="' + r.id + '"' + (L.sel[r.id] ? ' checked' : '') + '></td><td><b>' + esc(r.email) + '</b></td><td>' + esc(((r.first_name || '') + ' ' + (r.last_name || '')).trim() || '—') + '</td><td>' + esc(r.company || '') + '</td><td>' + esc(r.phone || '') + '</td><td>' + esc(r.lang || '') + '</td><td>' + esc(r.tags || '') + '</td>' +
+        return '<tr><td><input type="checkbox" data-sel="' + r.id + '"' + (L.sel[r.id] ? ' checked' : '') + '></td><td><b>' + esc(r.email) + '</b></td><td>' + esc(((r.first_name || '') + ' ' + (r.last_name || '')).trim() || '—') + '</td><td>' + esc(r.company || '') + '</td><td>' + esc(r.phone || '') + '</td><td>' + esc(r.country || '') + '</td><td>' + esc(r.kind || '') + '</td><td>' + esc(r.stage || '') + '</td><td>' + esc(r.lang || '') + '</td><td>' + esc(r.tags || '') + '</td>' +
           '<td><span class="chip' + (r.status === 'active' ? ' ok' : '') + '">' + esc(CSTATUS[r.status] || r.status) + '</span></td><td' + ex + ' class="note">' + esc(r.source || '') + (ex ? ' ⓘ' : '') + '</td><td class="note">' + fd(r.created_at) + '</td>' +
           '<td style="white-space:nowrap"><button class="btn sm" data-edit="' + r.id + '">Upravit</button> <button class="btn sm" data-del="' + r.id + '">✕</button></td></tr>';
       }).join('');
-      $('gml-tbl').innerHTML = '<thead><tr><th><input type="checkbox" id="gml-all"></th><th>E-mail</th><th>Jméno</th><th>Firma</th><th>Telefon</th><th>Jazyk</th><th>Štítky</th><th>Stav</th><th>Zdroj</th><th>Přidáno</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="11" class="note" style="padding:24px;text-align:center">Seznam je zatím prázdný — přidej kontakt nebo naimportuj CSV.</td></tr>') + '</tbody>';
+      $('gml-tbl').innerHTML = '<thead><tr><th><input type="checkbox" id="gml-all"></th><th>E-mail</th><th>Jméno</th><th>Firma</th><th>Telefon</th><th>Země</th><th>Typ kontaktu</th><th>Stav CRM</th><th>Jazyk</th><th>Štítky</th><th>Stav e-mailu</th><th>Zdroj</th><th>Přidáno</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="14" class="note" style="padding:24px;text-align:center">Seznam je zatím prázdný — přidej kontakt nebo naimportuj CSV.</td></tr>') + '</tbody>';
       $('gml-all').onchange = function () { j.items.forEach(function (r) { if ($('gml-all').checked) L.sel[r.id] = true; else delete L.sel[r.id]; }); loadContactsView(); };
       [].forEach.call($('gml-tbl').querySelectorAll('[data-sel]'), function (cb) { cb.onchange = function () { if (cb.checked) L.sel[cb.getAttribute('data-sel')] = true; else delete L.sel[cb.getAttribute('data-sel')]; bulkBar(); }; });
       [].forEach.call($('gml-tbl').querySelectorAll('[data-edit]'), function (b) { b.onclick = function () { var id = +b.getAttribute('data-edit'); contactDlg(j.items.filter(function (x) { return x.id === id; })[0]); }; });
@@ -110,14 +116,14 @@
   function loadContactsView() { [].forEach.call($('gml-tbl').querySelectorAll('[data-sel]'), function (cb) { cb.checked = !!S.list.sel[cb.getAttribute('data-sel')]; }); bulkBar(); }
   function bulkBar() {
     var n = Object.keys(S.list.sel).length, j = S.list.last || { total: 0 }, el = $('gml-bulk'); if (!el) return;
-    var filtered = !!(S.list.q || S.list.status || S.list.tag);
-    el.innerHTML = n ? '<span class="note"><b>' + n + '</b> vybráno:</span><button class="btn sm" data-b="tag">＋ Štítek</button><button class="btn sm" data-b="active">Označit aktivní</button><button class="btn sm" data-b="unsub">Označit odhlášené</button><button class="btn sm" data-b="del">Smazat vybrané</button>' :
+    var filtered = !!(S.list.q || S.list.status || S.list.tag || S.list.kind || S.list.stage || S.list.country);
+    el.innerHTML = n ? '<span class="note"><b>' + n + '</b> vybráno:</span><button class="btn sm" data-b="tag">＋ Štítek</button><button class="btn sm" data-b="active">Označit aktivní</button><button class="btn sm" data-b="excl">Vyřadit (nezasílat)</button><button class="btn sm" data-b="unsub">Označit odhlášené</button><button class="btn sm" data-b="del">Smazat vybrané</button>' :
       '<button class="btn sm" data-b="delall">Smazat všech ' + j.total + (filtered ? ' podle filtru' : ' kontaktů') + '</button>';
     [].forEach.call(el.querySelectorAll('[data-b]'), function (b) {
       b.onclick = function () {
-        var a = b.getAttribute('data-b'), ids = Object.keys(S.list.sel).map(Number), body = n ? { ids: ids } : { all: true, filter: { q: S.list.q, status: S.list.status, tag: S.list.tag } };
+        var a = b.getAttribute('data-b'), ids = Object.keys(S.list.sel).map(Number), body = n ? { ids: ids } : { all: true, filter: { q: S.list.q, status: S.list.status, tag: S.list.tag, kind: S.list.kind, stage: S.list.stage, country: S.list.country } };
         if (a === 'tag') { var t = prompt('Štítek, který se přidá vybraným kontaktům:', ''); if (!t) return; body.action = 'tag'; body.tag = t; }
-        else if (a === 'active' || a === 'unsub') { body.action = 'status'; body.status = a === 'active' ? 'active' : 'unsubscribed'; }
+        else if (a === 'active' || a === 'unsub' || a === 'excl') { body.action = 'status'; body.status = a === 'active' ? 'active' : (a === 'excl' ? 'excluded' : 'unsubscribed'); }
         else { if (!confirm(a === 'delall' ? 'Opravdu smazat ' + j.total + ' kontaktů? Nelze vrátit.' : 'Smazat ' + n + ' vybraných kontaktů? Nelze vrátit.')) return; body.action = 'delete'; }
         api('POST', '/contacts/bulk', body).then(function () { S.list.sel = {}; loadContacts(); }).catch(function (e) { alert(e.message); });
       };
@@ -130,7 +136,7 @@
     var d = openDlg('<h3>' + (c.id ? 'Upravit kontakt' : 'Nový kontakt') + '</h3><div id="gmc-body">' +
       '<div class="gm-2"><div><label class="note">E-mail *</label><input id="gmc-email" class="gm-in" style="width:100%" value="' + esc(c.email || '') + '"></div><div><label class="note">Telefon</label><input id="gmc-phone" class="gm-in" style="width:100%" value="' + esc(c.phone || '') + '"></div>' +
       '<div><label class="note">Jméno</label><input id="gmc-fn" class="gm-in" style="width:100%" value="' + esc(c.first_name || '') + '"></div><div><label class="note">Příjmení</label><input id="gmc-ln" class="gm-in" style="width:100%" value="' + esc(c.last_name || '') + '"></div>' +
-      '<div><label class="note">Firma</label><input id="gmc-co" class="gm-in" style="width:100%" value="' + esc(c.company || '') + '"></div><div><label class="note">Jazyk e-mailů</label><select id="gmc-lang" class="gm-in" style="width:100%"><option value="">(podle kampaně)</option>' + Object.keys(LANG).map(function (k) { return '<option value="' + k + '"' + (c.lang === k ? ' selected' : '') + '>' + LANG[k] + '</option>'; }).join('') + '</select></div>' +
+      '<div><label class="note">Firma</label><input id="gmc-co" class="gm-in" style="width:100%" value="' + esc(c.company || '') + '"></div><div><label class="note">Země</label><input id="gmc-country" class="gm-in" style="width:100%" value="' + esc(c.country || '') + '"></div><div><label class="note">Typ kontaktu</label><input id="gmc-kind" class="gm-in" style="width:100%" value="' + esc(c.kind || '') + '"></div><div><label class="note">Stav v CRM</label><input id="gmc-stage" class="gm-in" style="width:100%" value="' + esc(c.stage || '') + '"></div><div><label class="note">Datum získání kontaktu</label><input id="gmc-acq" type="date" class="gm-in" style="width:100%" value="' + esc(c.acquired_at ? String(c.acquired_at).slice(0, 10) : '') + '"></div><div><label class="note">ID v původním systému</label><input id="gmc-ext" class="gm-in" style="width:100%" value="' + esc(c.ext_id || '') + '"></div><div><label class="note">Jazyk e-mailů</label><select id="gmc-lang" class="gm-in" style="width:100%"><option value="">(podle kampaně)</option>' + Object.keys(LANG).map(function (k) { return '<option value="' + k + '"' + (c.lang === k ? ' selected' : '') + '>' + LANG[k] + '</option>'; }).join('') + '</select></div>' +
       '<div><label class="note">Štítky (oddělené čárkou)</label><input id="gmc-tags" class="gm-in" style="width:100%" value="' + esc(c.tags || '') + '"></div>' +
       (c.id ? '<div><label class="note">Stav</label><select id="gmc-status" class="gm-in" style="width:100%">' + Object.keys(CSTATUS).map(function (k) { return '<option value="' + k + '"' + (c.status === k ? ' selected' : '') + '>' + CSTATUS[k] + '</option>'; }).join('') + '</select></div>' : '') + '</div>' +
       '<div style="margin-top:12px"><label class="note">Vlastní pole (jedno na řádek: <code>název: hodnota</code>)</label><textarea id="gmc-extra" class="gm-in" style="min-height:90px">' + esc(Object.keys(ex).map(function (k) { return k + ': ' + ex[k]; }).join('\n')) + '</textarea></div>' +
@@ -138,7 +144,7 @@
     d.querySelector('#gmc-x').onclick = closeDlg;
     d.querySelector('#gmc-save').onclick = function () {
       var extra = {}; d.querySelector('#gmc-extra').value.split('\n').forEach(function (l) { var i = l.indexOf(':'); if (i > 0) { var k = l.slice(0, i).trim(), v = l.slice(i + 1).trim(); if (k && v) extra[k] = v; } });
-      var body = { email: d.querySelector('#gmc-email').value, phone: d.querySelector('#gmc-phone').value, first_name: d.querySelector('#gmc-fn').value, last_name: d.querySelector('#gmc-ln').value, company: d.querySelector('#gmc-co').value, lang: d.querySelector('#gmc-lang').value, tags: d.querySelector('#gmc-tags').value, extra: extra };
+      var body = { email: d.querySelector('#gmc-email').value, phone: d.querySelector('#gmc-phone').value, first_name: d.querySelector('#gmc-fn').value, last_name: d.querySelector('#gmc-ln').value, company: d.querySelector('#gmc-co').value, country: d.querySelector('#gmc-country').value, kind: d.querySelector('#gmc-kind').value, stage: d.querySelector('#gmc-stage').value, acquired_at: d.querySelector('#gmc-acq').value, ext_id: d.querySelector('#gmc-ext').value, lang: d.querySelector('#gmc-lang').value, tags: d.querySelector('#gmc-tags').value, extra: extra };
       if (c.id) body.status = d.querySelector('#gmc-status').value;
       api(c.id ? 'PUT' : 'POST', '/contacts' + (c.id ? '/' + c.id : ''), body).then(function () { closeDlg(); loadContacts(); }).catch(function (e) { d.querySelector('#gmc-err').textContent = e.message; });
     };
@@ -167,12 +173,17 @@
     return rows;
   }
   function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
-  var FIELDS = [['', '— ignorovat —'], ['email', 'E-mail'], ['first_name', 'Jméno'], ['last_name', 'Příjmení'], ['full_name', 'Celé jméno (rozdělí se)'], ['company', 'Firma'], ['phone', 'Telefon'], ['lang', 'Jazyk (cs, en, pl…)'], ['tags', 'Štítky'], ['extra', 'Vlastní pole (uloží se pod názvem sloupce)']];
+  var FIELDS = [['', '— ignorovat —'], ['email', 'E-mail'], ['first_name', 'Jméno'], ['last_name', 'Příjmení'], ['full_name', 'Celé jméno (rozdělí se)'], ['company', 'Firma'], ['phone', 'Telefon'], ['country', 'Země'], ['kind', 'Typ kontaktu'], ['stage', 'Stav (z CRM)'], ['acquired', 'Datum získání kontaktu'], ['ext_id', 'ID v původním systému'], ['lang', 'Jazyk (cs, en, pl…)'], ['tags', 'Štítky'], ['extra', 'Vlastní pole (uloží se pod názvem sloupce)']];
   function guessField(h) {
     var n = norm(h);
     if (/^(e ?mail|email|mail|e mailova adresa|emailova adresa|email address)$/.test(n) || /\be ?mail\b/.test(n)) return 'email';
     if (/^(jmeno|first name|firstname|krestni jmeno|given name)$/.test(n)) return 'first_name';
-    if (/^(prijmeni|last name|lastname|surname|family name)$/.test(n)) return 'last_name';
+    if (/^(prijmeni|prijimeni|last name|lastname|surname|family name)$/.test(n)) return 'last_name';
+    if (/^(stav|stav kontaktu|stav pripadu|status|stage)$/.test(n)) return 'stage';
+    if (/^(typ kontaktu|typ|druh kontaktu|kind|type)$/.test(n)) return 'kind';
+    if (/^(zeme|stat|country)$/.test(n)) return 'country';
+    if (/^(datum ziskani kontaktu|datum ziskani|datum vzniku|datum zalozeni|created|date)$/.test(n)) return 'acquired';
+    if (/^(id|ext id|id kontaktu|id v crm|crm id)$/.test(n)) return 'ext_id';
     if (/^(jmeno a prijmeni|cele jmeno|full name|name|nazev kontaktu|kontakt)$/.test(n)) return 'full_name';
     if (/^(firma|spolecnost|company|organizace|organization|nazev firmy|obchodni jmeno)$/.test(n)) return 'company';
     if (/^(telefon|phone|mobil|tel|mobile|cislo)$/.test(n) || /telefon|phone|mobil/.test(n)) return 'phone';
@@ -198,10 +209,28 @@
     var body = '<div id="gmi-body"><p class="note" style="margin:0 0 8px">Načteno <b>' + data.rows.length + '</b> řádků a <b>' + data.head.length + '</b> sloupců. Zkontroluj, do jakého pole se který sloupec uloží.</p>' +
       '<div style="overflow:auto;max-height:46vh"><table class="gm-map" style="width:100%;border-collapse:collapse"><thead><tr><th>Sloupec v souboru</th><th>Ukázka</th><th>Uložit do</th></tr></thead><tbody>' +
       data.head.map(function (h, i) { return '<tr><td><b>' + esc(h || '(bez názvu)') + '</b></td><td class="pv">' + esc(data.rows.slice(0, 3).map(function (r) { return r[i] || ''; }).filter(Boolean).join(' · ')) + '</td><td><select class="gm-in" data-col="' + i + '">' + FIELDS.map(function (f) { return '<option value="' + f[0] + '"' + (guess[i] === f[0] ? ' selected' : '') + '>' + f[1] + '</option>'; }).join('') + '</select></td></tr>'; }).join('') + '</tbody></table></div>' +
+      '<div id="gmi-info" style="margin-top:12px"></div><div id="gmi-excl"></div>' +
       '<div class="gm-2" style="margin-top:12px"><div><label class="note">Přidat štítek všem importovaným</label><input id="gmi-tag" class="gm-in" style="width:100%" placeholder="např. import-2026-11"></div><div><label class="note">Když e-mail už v seznamu je</label><select id="gmi-mode" class="gm-in" style="width:100%"><option value="upsert">Doplnit chybějící údaje</option><option value="skip">Přeskočit</option></select></div></div>' +
       '<p id="gmi-err" class="note" style="color:#f87171"></p><div class="gm-btns"><button class="btn on" id="gmi-go">Importovat ' + data.rows.length + ' řádků</button><button class="btn" id="gmi-back">← Zpět</button></div><div id="gmi-prog" class="note" style="margin-top:10px"></div></div>';
     d.querySelector('#gmi-body').outerHTML = body;
     d.querySelector('#gmi-back').onclick = function () { closeDlg(); importDlg(); };
+    var EXCL_RE = /nem[aá]\s*z[aá]jem|nelze\s*pou[zž]|nechce|odhl[aá]|spam|storn|nekontakt/i;
+    function colOf(f) { var i = -1; [].forEach.call(d.querySelectorAll('[data-col]'), function (sel) { if (sel.value === f && i < 0) i = +sel.getAttribute('data-col'); }); return i; }
+    function refresh() {
+      var ei = colOf('email'), info = d.querySelector('#gmi-info'), box = d.querySelector('#gmi-excl');
+      if (ei >= 0) {
+        var ok = 0, multi = 0, bad = 0, seen = {}, dup = 0;
+        data.rows.forEach(function (r) { var parts = String(r[ei] || '').split(/[\s,;]+/).filter(function (x) { return /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]{2,}$/.test(x); }); if (!parts.length) { bad++; return; } ok++; if (parts.length > 1) multi++; var k = parts[0].toLowerCase(); if (seen[k]) dup++; else seen[k] = 1; });
+        info.innerHTML = '<div class="gm-warn" style="background:rgba(124,92,255,.1);border-color:rgba(124,92,255,.35);color:#c9bdff">Použitelný e-mail má <b>' + ok + '</b> z ' + data.rows.length + ' řádků. Bez platné adresy: <b>' + bad + '</b> (přeskočí se). Různých adres: <b>' + Object.keys(seen).length + '</b> (duplicity <b>' + dup + '</b> se sloučí). Buněk s více adresami: <b>' + multi + '</b> — použije se první, ostatní se uloží do pole „Další e-maily“.</div>';
+      } else info.innerHTML = '';
+      var si = colOf('stage'), cnt = {};
+      if (si >= 0) data.rows.forEach(function (r) { var v = String(r[si] || '').trim(); if (v) cnt[v] = (cnt[v] || 0) + 1; });
+      var keys = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a]; });
+      var prev = {}; [].forEach.call(box.querySelectorAll('[data-ex]'), function (cb) { prev[cb.value] = cb.checked; });
+      box.innerHTML = keys.length ? '<div style="margin-top:12px"><label class="note">Kontakty v těchto stavech CRM se naimportují jako <b>vyřazené (nezasílat)</b> — do kampaní se nezahrnou:</label><div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:6px">' + keys.map(function (k) { var on = prev[k] != null ? prev[k] : EXCL_RE.test(k); return '<label style="font-size:13px"><input type="checkbox" data-ex value="' + esc(k) + '"' + (on ? ' checked' : '') + '> ' + esc(k) + ' <span class="note">(' + cnt[k] + ')</span></label>'; }).join('') + '</div></div>' : '';
+    }
+    [].forEach.call(d.querySelectorAll('[data-col]'), function (sel) { sel.addEventListener('change', refresh); });
+    refresh();
     d.querySelector('#gmi-go').onclick = function () {
       var map = data.head.map(function (h, i) { return d.querySelector('[data-col="' + i + '"]').value; });
       if (map.indexOf('email') < 0) { d.querySelector('#gmi-err').textContent = 'Vyber sloupec s e-mailem.'; return; }
@@ -215,15 +244,16 @@
         });
         return o;
       });
-      var tag = d.querySelector('#gmi-tag').value.trim(), mode = d.querySelector('#gmi-mode').value, tot = { created: 0, updated: 0, skipped: 0, invalid: 0, blocked: 0 }, i = 0, src = 'import ' + new Date().toLocaleDateString('cs-CZ');
+      var exStages = [].filter.call(d.querySelectorAll('[data-ex]'), function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
+      var tag = d.querySelector('#gmi-tag').value.trim(), mode = d.querySelector('#gmi-mode').value, tot = { created: 0, updated: 0, skipped: 0, invalid: 0, blocked: 0, excluded: 0, multi: 0 }, i = 0, src = 'import ' + new Date().toLocaleDateString('cs-CZ');
       d.querySelector('#gmi-go').disabled = true; d.querySelector('#gmi-back').disabled = true;
       (function chunk() {
         if (i >= recs.length) {
-          d.querySelector('#gmi-prog').innerHTML = '<div class="gm-warn" style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.4);color:#4ade80">Hotovo: nových <b>' + tot.created + '</b>, doplněno <b>' + tot.updated + '</b>, přeskočeno <b>' + tot.skipped + '</b>, neplatný e-mail <b>' + tot.invalid + '</b>' + (tot.blocked ? ', z toho <b>' + tot.blocked + '</b> už dříve odhlášených (vloženo jako odhlášené)' : '') + '.</div><div class="gm-btns"><button class="btn on" id="gmi-done">Zavřít</button></div>';
+          d.querySelector('#gmi-prog').innerHTML = '<div class="gm-warn" style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.4);color:#4ade80">Hotovo: nových <b>' + tot.created + '</b>, sloučeno s existujícími <b>' + tot.updated + '</b>, přeskočeno <b>' + tot.skipped + '</b>, bez platného e-mailu <b>' + tot.invalid + '</b>, vyřazeno (nezasílat) <b>' + tot.excluded + '</b>' + (tot.blocked ? ', z toho <b>' + tot.blocked + '</b> už dříve odhlášených (vloženo jako odhlášené)' : '') + '.</div><div class="gm-btns"><button class="btn on" id="gmi-done">Zavřít</button></div>';
           d.querySelector('#gmi-done').onclick = function () { closeDlg(); S.list.offset = 0; loadContacts(); }; return;
         }
         d.querySelector('#gmi-prog').textContent = 'Importuji… ' + i + ' / ' + recs.length;
-        api('POST', '/contacts/import', { rows: recs.slice(i, i + 500), tag: tag, mode: mode, source: src }).then(function (r) { Object.keys(tot).forEach(function (k) { tot[k] += r[k] || 0; }); i += 500; chunk(); })
+        api('POST', '/contacts/import', { rows: recs.slice(i, i + 500), tag: tag, mode: mode, source: src, exclude_stages: exStages }).then(function (r) { Object.keys(tot).forEach(function (k) { tot[k] += r[k] || 0; }); i += 500; chunk(); })
           .catch(function (e) { d.querySelector('#gmi-prog').innerHTML = '<span style="color:#f87171">Chyba po ' + i + ' řádcích: ' + esc(e.message) + '</span>'; d.querySelector('#gmi-go').disabled = false; });
       })();
     };
@@ -240,7 +270,7 @@
     return (s.freq === 'daily' ? 'každý den v ' + h : s.freq === 'monthly' ? 'každý ' + (s.dom || 1) + '. v měsíci v ' + h : DOW[s.dow || 1] + ' v ' + h) + (c.status === 'active' && c.next_run_at ? ' · příště ' + fdt(c.next_run_at) : '');
   }
   function audText(a) {
-    a = a || {}; var p = []; if (a.contacts !== false) p.push('seznam kontaktů' + (a.tag ? ' (štítek: ' + a.tag + ')' : '')); if (a.players) p.push('hráči hry' + (a.player_lang ? ' (' + a.player_lang + ')' : '')); return p.join(' + ') || '—';
+    a = a || {}; var p = []; if (a.contacts !== false) { var fl = [].concat(a.kinds || [], a.stages || [], a.countries || []); p.push('seznam kontaktů' + (a.tag ? ' (štítek: ' + a.tag + ')' : '') + (fl.length ? ' [' + fl.join(', ') + ']' : '')); } if (a.players) p.push('hráči hry' + (a.player_lang ? ' (' + a.player_lang + ')' : '')); return p.join(' + ') || '—';
   }
   function openCamps(which) {
     var cfg = CAMP[which], box = $(cfg.box); if (!box) return;
@@ -251,7 +281,7 @@
       box.innerHTML = '<div class="toolbar">' + btns + '<span style="flex:1"></span><span class="note" id="' + cfg.box + '-info"></span></div><p class="note" style="margin:0 0 12px">' + help + ' Odesílá se přes Amazon SES z adresy domény Laundromats; každá zpráva obsahuje odkaz pro odhlášení.</p><div id="' + cfg.box + '-list"></div>';
       [].forEach.call(box.querySelectorAll('[data-new]'), function (b) { b.onclick = function () { campDlg(null, b.getAttribute('data-new'), which); }; });
     }
-    Promise.all([loadSenders(), api('GET', '/contacts?limit=1').then(function (j) { S.tags = j.tags || []; S.extraKeys = j.extra_keys || []; }).catch(function () {})]).then(function () { listCamps(which); });
+    Promise.all([loadSenders(), api('GET', '/contacts/facets').then(function (f) { S.facets = f; }).catch(function () {}), api('GET', '/contacts?limit=1').then(function (j) { S.tags = j.tags || []; S.extraKeys = j.extra_keys || []; }).catch(function () {})]).then(function () { listCamps(which); });
   }
   function listCamps(which) {
     var cfg = CAMP[which], el = $(cfg.box + '-list');
@@ -337,6 +367,7 @@
       '<div class="gm-row"><label>Odpovědi na</label><div class="gm-2"><input id="gme-reply" class="gm-in" placeholder="Reply-To (volitelné)" value="' + esc(c.reply_to || '') + '"><select id="gme-lang" class="gm-in">' + Object.keys(LANG).map(function (k) { return '<option value="' + k + '"' + ((c.lang || 'cs') === k ? ' selected' : '') + '>Šablona: ' + LANG[k] + '</option>'; }).join('') + '</select></div></div>' +
       '<div class="gm-row"><label>Komu</label><div><label style="display:block;margin:2px 0"><input type="checkbox" id="gme-ac"' + (a.contacts !== false ? ' checked' : '') + '> Seznam kontaktů &nbsp;<select id="gme-atag" class="gm-in">' + tagOpts + '</select></label>' +
       '<label style="display:block;margin:8px 0 2px"><input type="checkbox" id="gme-ap"' + (a.players ? ' checked' : '') + '> Hráči hry (jen s vyplněným e-mailem) &nbsp;<select id="gme-apl" class="gm-in"><option value="">všechny jazyky</option>' + ['cs', 'en', 'pl', 'sk', 'de'].map(function (k) { return '<option value="' + k + '"' + (a.player_lang === k ? ' selected' : '') + '>' + LANG[k] + '</option>'; }).join('') + '</select></label>' +
+      '<div id="gme-facets"></div>' +
       '<div style="margin-top:8px"><button class="btn sm" id="gme-count" type="button">Spočítat příjemce</button> <span id="gme-cnt" class="note"></span></div></div></div>' +
       schedHtml + contentHtml +
       '<div class="gm-row"><label>Tlačítko v e-mailu</label><div class="gm-2"><input id="gme-link" class="gm-in" placeholder="https://… (volitelné)" value="' + esc(c.link || '') + '"><input id="gme-ll" class="gm-in" placeholder="Popisek tlačítka" value="' + esc(c.link_label || '') + '"></div></div>' +
@@ -355,7 +386,17 @@
       [].forEach.call(el.querySelectorAll('[data-rm]'), function (b) { b.onclick = function () { steps.splice(+b.getAttribute('data-rm'), 1); renderSteps(); }; });
     }
     if (kind === 'sequence') { renderSteps(); q('gme-addstep').onclick = function () { var last = steps[steps.length - 1]; steps.push({ day: last ? last.day + 3 : 0, subject: '', body: '' }); renderSteps(); }; }
-    function audience() { return { contacts: q('gme-ac').checked, tag: q('gme-atag').value, players: q('gme-ap').checked, player_lang: q('gme-apl').value }; }
+    var FACETS = [['kinds', 'kind', 'Typ kontaktu'], ['stages', 'stage', 'Stav v CRM'], ['countries', 'country', 'Země']];
+    var picked = { kinds: (a.kinds || []).slice(), stages: (a.stages || []).slice(), countries: (a.countries || []).slice() };
+    function drawFacets() {
+      q('gme-facets').innerHTML = FACETS.map(function (f) {
+        var list = (S.facets && S.facets[f[1]]) || []; if (!list.length) return '';
+        return '<div style="margin-top:10px"><div class="note" style="margin-bottom:4px">' + f[2] + ' — vyber, komu poslat (nic nevybráno = všichni):</div><div style="display:flex;flex-wrap:wrap;gap:6px">' + list.map(function (o) { var on = picked[f[0]].indexOf(o.v) >= 0; return '<button type="button" class="btn sm' + (on ? ' on' : '') + '" data-f="' + f[0] + '" data-v="' + esc(o.v) + '">' + esc(o.v) + ' (' + o.n + ')</button>'; }).join('') + '</div></div>';
+      }).join('');
+      [].forEach.call(q('gme-facets').querySelectorAll('[data-f]'), function (b) { b.onclick = function () { var arr = picked[b.getAttribute('data-f')], v = b.getAttribute('data-v'), i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v); drawFacets(); }; });
+    }
+    drawFacets();
+    function audience() { return { contacts: q('gme-ac').checked, tag: q('gme-atag').value, kinds: picked.kinds, stages: picked.stages, countries: picked.countries, players: q('gme-ap').checked, player_lang: q('gme-apl').value }; }
     q('gme-count').onclick = function () { q('gme-cnt').textContent = 'Počítám…'; api('POST', '/audience-count', { audience: audience() }).then(function (n) { q('gme-cnt').innerHTML = '<b>' + n.sendable + '</b> příjemců' + (n.suppressed ? ' (vynecháno ' + n.suppressed + ' odhlášených / nedoručitelných)' : '') + ' — kontaktů ' + n.contacts + ', hráčů ' + n.players; }).catch(function (e) { q('gme-cnt').textContent = e.message; }); };
     q('gme-x').onclick = function () { closeDlg(); listCamps(which); };
     q('gme-save').onclick = function () {

@@ -12,12 +12,38 @@ const EMAIL_RE = /^[^@\s<>,;]+@[^@\s<>,;]+\.[^@\s<>,;]{2,}$/;
 function cleanEmail(s) { const e = String(s == null ? '' : s).trim().replace(/^mailto:/i, '').replace(/^['"<]+|['">]+$/g, '').trim(); return EMAIL_RE.test(e) ? e.slice(0, 200) : null; }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Text z CRM: ořezat mezery, textové „null" = prázdné
+function cleanText(v, n) { const s = String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); return !s || /^(null|undefined|n\/a|-)$/i.test(s) ? null : s.slice(0, n || 200); }
+// Buňka s e-maily („a@x.cz, b@x.cz") → první platná adresa + ostatní platné zvlášť
+function parseEmails(v) {
+  const all = String(v == null ? '' : v).split(/[\s,;]+/).map(cleanEmail).filter(Boolean);
+  const uniq = []; all.forEach((e) => { if (!uniq.some((u) => u.toLowerCase() === e.toLowerCase())) uniq.push(e); });
+  return { email: uniq[0] || null, others: uniq.slice(1) };
+}
+// Země (jak ji píše CRM) → jazyk šablony e-mailu; neznámá země = nic (použije se jazyk kampaně)
+function langFromCountry(c) {
+  const t = String(c || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (!t) return null;
+  if (/ceska|^cr$|czech|cesko/.test(t)) return 'cs';
+  if (/slovensk|slovak/.test(t)) return 'sk';
+  if (/polsk|poland/.test(t)) return 'pl';
+  if (/nemeck|german|rakous|austria/.test(t)) return 'de';
+  if (/madar|hungary/.test(t)) return 'hu';
+  if (/rumun|romania/.test(t)) return 'ro';
+  if (/ital/.test(t)) return 'it';
+  if (/spanel|spain/.test(t)) return 'es';
+  if (/francie|france|francouz/.test(t)) return 'fr';
+  if (/portugal|irsk|ireland|chorvat|croatia|velka britanie|britanie|anglie|skotsk|england|scotland|nizozem|belgie|lucemb|slovinsk/.test(t)) return 'en';
+  return null;
+}
+
 // Klíč proměnné ze jména sloupce: „Název firmy" → nazev_firmy (bez diakritiky)
 function slug(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40); }
 
 function contactVars(c) {
   const v = { jmeno: c.first_name || '', prijmeni: c.last_name || '', firma: c.company || '', email: c.email || '', telefon: c.phone || '' };
   v.first_name = v.jmeno; v.last_name = v.prijmeni; v.company = v.firma;
+  v.stav = c.stage || ''; v.typ_kontaktu = c.kind || ''; v.zeme = c.country || '';
   const ex = c.extra && typeof c.extra === 'object' ? c.extra : {};
   Object.keys(ex).forEach((k) => { const sk = slug(k); if (sk && v[sk] == null) v[sk] = String(ex[k] == null ? '' : ex[k]); });
   return v;
@@ -44,8 +70,12 @@ async function resolveAudience(aud) {
     const where = { status: 'active' };
     const list = await prisma.gameMailContact.findMany({ where, orderBy: { id: 'asc' }, take: 100000 });
     const want = tagList(aud.tag);
+    const lc = (a) => (Array.isArray(a) ? a : []).map((x) => String(x).trim().toLowerCase()).filter(Boolean);
+    const stages = lc(aud.stages), kinds = lc(aud.kinds), countries = lc(aud.countries);
+    const has = (arr, v) => !arr.length || arr.includes(String(v || '').trim().toLowerCase() || '(prázdné)');
     list.forEach((c) => {
       if (want.length) { const have = tagList(c.tags); if (!want.some((t) => have.includes(t))) return; }
+      if (!has(stages, c.stage) || !has(kinds, c.kind) || !has(countries, c.country)) return;
       if (seen.has(c.email_lower)) return; seen.add(c.email_lower);
       out.push({ email: c.email, lower: c.email_lower, vars: contactVars(c), lang: c.lang || '', created_at: c.created_at, kind: 'contact' });
     });
@@ -224,4 +254,4 @@ function start() {
   console.log('[game-mailing] worker spuštěn (každou minutu)');
 }
 
-module.exports = { start, tick, LANGS, cleanEmail, slug, render, contactVars, resolveAudience, audienceCount, suppressedSet, sendTest, nextRun, fromOf, dateKey };
+module.exports = { start, tick, LANGS, cleanEmail, cleanText, parseEmails, langFromCountry, slug, render, contactVars, resolveAudience, audienceCount, suppressedSet, sendTest, nextRun, fromOf, dateKey };

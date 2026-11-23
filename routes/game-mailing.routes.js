@@ -42,8 +42,9 @@ router.get('/senders', wrap(async (req, res) => {
 // ── Kontakty ──────────────────────────────────────────────────────
 function contactWhere(q) {
   const where = {};
-  if (q.status && ['active', 'unsubscribed', 'bounced'].includes(String(q.status))) where.status = String(q.status);
+  if (q.status && ['active', 'unsubscribed', 'bounced', 'excluded'].includes(String(q.status))) where.status = String(q.status);
   if (q.tag) where.tags = { contains: String(q.tag).trim(), mode: 'insensitive' };
+  ['stage', 'kind', 'country'].forEach((f) => { if (q[f]) where[f] = String(q[f]) === '(prázdné)' ? null : String(q[f]); });
   const s = String(q.q || '').trim();
   if (s) where.OR = ['email', 'first_name', 'last_name', 'company', 'phone'].map((f) => ({ [f]: { contains: s, mode: 'insensitive' } }));
   return where;
@@ -60,15 +61,27 @@ router.get('/contacts', wrap(async (req, res) => {
   ]);
   const tags = {}; tagRows.forEach((r) => String(r.tags || '').split(/[,;]/).map((x) => x.trim()).filter(Boolean).forEach((t) => { tags[t] = 1; }));
   const keys = {}; extraKeys.forEach((r) => Object.keys(r.extra || {}).forEach((k) => { keys[k] = 1; }));
-  const counts = { active: 0, unsubscribed: 0, bounced: 0 }; byStatus.forEach((b) => { counts[b.status] = b._count._all; });
+  const counts = { active: 0, unsubscribed: 0, bounced: 0, excluded: 0 }; byStatus.forEach((b) => { counts[b.status] = b._count._all; });
   res.json({ total, items, counts, tags: Object.keys(tags).sort(), extra_keys: Object.keys(keys) });
 }));
 
+function parseDate(v) {
+  const t = String(v == null ? '' : v).trim(); if (!t) return undefined;
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(t); let y, mo, d;
+  if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; } else if ((m = /^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/.exec(t))) { d = +m[1]; mo = +m[2]; y = +m[3]; } else return undefined;
+  if (y < 1990 || y > 2100 || mo < 1 || mo > 12 || d < 1 || d > 31) return undefined;
+  return new Date(Date.UTC(y, mo - 1, d));
+}
 function contactData(b) {
-  const email = GM.cleanEmail(b.email); if (!email) return { error: 'Neplatný e-mail' };
-  const extra = b.extra && typeof b.extra === 'object' && !Array.isArray(b.extra) ? Object.fromEntries(Object.entries(b.extra).slice(0, 60).map(([k, v]) => [String(k).slice(0, 60), String(v == null ? '' : v).slice(0, 500)]).filter(([k, v]) => k && v !== '')) : null;
-  const lang = String(b.lang || '').trim().toLowerCase().slice(0, 2);
-  return { data: { email, email_lower: email.toLowerCase(), first_name: str(b.first_name, 100), last_name: str(b.last_name, 100), company: str(b.company, 200), phone: str(b.phone, 60), lang: GM.LANGS.includes(lang) ? lang : null, tags: str(Array.isArray(b.tags) ? b.tags.join(',') : b.tags, 300), extra: extra && Object.keys(extra).length ? extra : undefined, source: str(b.source, 80) } };
+  const pe = GM.parseEmails(b.email); const email = pe.email; if (!email) return { error: 'Neplatný e-mail' };
+  const ex0 = b.extra && typeof b.extra === 'object' && !Array.isArray(b.extra) ? Object.assign({}, b.extra) : {};
+  if (pe.others.length) ex0['Další e-maily'] = pe.others.join(', ');
+  const extra = Object.fromEntries(Object.entries(ex0).slice(0, 60).map(([k, v]) => [String(k).slice(0, 60), String(v == null ? '' : v).slice(0, 500)]).filter(([k, v]) => k && v !== ''));
+  const country = GM.cleanText(b.country, 80);
+  let lang = String(b.lang || '').trim().toLowerCase().slice(0, 2);
+  if (!GM.LANGS.includes(lang)) lang = GM.langFromCountry(country) || '';
+  const acq = parseDate(b.acquired_at != null ? b.acquired_at : b.acquired);
+  return { data: { email, email_lower: email.toLowerCase(), first_name: GM.cleanText(b.first_name, 100), last_name: GM.cleanText(b.last_name, 100), company: GM.cleanText(b.company, 200), phone: GM.cleanText(b.phone, 60), lang: lang || null, stage: GM.cleanText(b.stage, 60), kind: GM.cleanText(b.kind, 80), country, acquired_at: acq || null, ext_id: GM.cleanText(b.ext_id, 40), tags: str(Array.isArray(b.tags) ? b.tags.join(',') : b.tags, 300), extra: Object.keys(extra).length ? extra : undefined, source: str(b.source, 80) } };
 }
 
 router.post('/contacts', wrap(async (req, res) => {
@@ -84,7 +97,7 @@ router.put('/contacts/:id(\\d+)', wrap(async (req, res) => {
   const dup = await prisma.gameMailContact.findFirst({ where: { email_lower: c.data.email_lower, NOT: { id } } });
   if (dup) return res.status(409).json({ error: 'Jiný kontakt už má tento e-mail.' });
   const data = Object.assign({}, c.data); delete data.source;
-  const st = String((req.body || {}).status || ''); if (['active', 'unsubscribed', 'bounced'].includes(st)) data.status = st;
+  const st = String((req.body || {}).status || ''); if (['active', 'unsubscribed', 'bounced', 'excluded'].includes(st)) data.status = st;
   // Json pole: prázdné = smazat (Prisma.DbNull), nepřítomné v těle = nechat být
   if (data.extra === undefined && req.body && req.body.extra && typeof req.body.extra === 'object') data.extra = Prisma.DbNull;
   res.json(await prisma.gameMailContact.update({ where: { id }, data }));
@@ -99,7 +112,7 @@ router.post('/contacts/bulk', wrap(async (req, res) => {
   else if (b.all) where = contactWhere(b.filter || {});
   else return res.status(400).json({ error: 'Nic není vybráno.' });
   if (action === 'delete') { const r = await prisma.gameMailContact.deleteMany({ where }); return res.json({ ok: true, count: r.count }); }
-  if (action === 'status') { const st = String(b.status || ''); if (!['active', 'unsubscribed', 'bounced'].includes(st)) return res.status(400).json({ error: 'Neplatný stav' }); const r = await prisma.gameMailContact.updateMany({ where, data: { status: st } }); return res.json({ ok: true, count: r.count }); }
+  if (action === 'status') { const st = String(b.status || ''); if (!['active', 'unsubscribed', 'bounced', 'excluded'].includes(st)) return res.status(400).json({ error: 'Neplatný stav' }); const r = await prisma.gameMailContact.updateMany({ where, data: { status: st } }); return res.json({ ok: true, count: r.count }); }
   if (action === 'tag') {
     const tag = str(b.tag, 40); if (!tag) return res.status(400).json({ error: 'Chybí štítek' });
     const rows = await prisma.gameMailContact.findMany({ where, select: { id: true, tags: true }, take: 50000 }); let n = 0;
@@ -109,32 +122,52 @@ router.post('/contacts/bulk', wrap(async (req, res) => {
   res.status(400).json({ error: 'Neznámá akce' });
 }));
 
-// Import: klient pošle už namapované řádky po dávkách (viz mailing.js). mode: upsert = doplnit i existující, skip = přeskočit existující
+// Import: klient pošle už namapované řádky po dávkách (viz mailing.js).
+// mode: upsert = doplnit i existující, skip = přeskočit existující; exclude_stages = hodnoty „Stav“, jejichž kontakty se uloží jako vyřazené (nezasílat)
 router.post('/contacts/import', wrap(async (req, res) => {
   const b = req.body || {}; const rows = Array.isArray(b.rows) ? b.rows.slice(0, 3000) : [];
   const mode = b.mode === 'skip' ? 'skip' : 'upsert'; const tag = str(b.tag, 40); const source = str(b.source, 80) || 'import';
+  const excl = new Set((Array.isArray(b.exclude_stages) ? b.exclude_stages : []).map((x) => String(x).trim().toLowerCase()).filter(Boolean));
   const sup = await GM.suppressedSet();
-  let created = 0, updated = 0, skipped = 0, invalid = 0, blocked = 0; const seen = new Set();
+  const t = { created: 0, updated: 0, skipped: 0, invalid: 0, blocked: 0, excluded: 0, multi: 0 };
   for (const raw of rows) {
-    const c = contactData(Object.assign({}, raw, { source })); if (c.error) { invalid++; continue; }
-    const lo = c.data.email_lower; if (seen.has(lo)) { skipped++; continue; } seen.add(lo);
+    const c = contactData(Object.assign({}, raw, { source })); if (c.error) { t.invalid++; continue; }
+    if (c.data.extra && c.data.extra['Další e-maily']) t.multi++;
+    const lo = c.data.email_lower; const isExcl = !!(c.data.stage && excl.has(c.data.stage.toLowerCase()));
     const ex = await prisma.gameMailContact.findUnique({ where: { email_lower: lo } });
     const tags = Array.from(new Set(String(c.data.tags || '').split(/[,;]/).concat(tag ? [tag] : []).map((x) => x.trim()).filter(Boolean))).join(',').slice(0, 300) || null;
-    if (!ex) { const isSup = sup.has(lo); if (isSup) blocked++; await prisma.gameMailContact.create({ data: Object.assign({}, c.data, { tags, status: isSup ? 'unsubscribed' : 'active' }) }); created++; continue; }
-    if (mode === 'skip') { skipped++; continue; }
-    const merged = Object.assign({}, ex.extra || {}, c.data.extra || {});
+    if (!ex) {
+      const isSup = sup.has(lo); if (isSup) t.blocked++; else if (isExcl) t.excluded++;
+      await prisma.gameMailContact.create({ data: Object.assign({}, c.data, { tags, status: isSup ? 'unsubscribed' : (isExcl ? 'excluded' : 'active') }) }); t.created++; continue;
+    }
+    if (mode === 'skip') { t.skipped++; continue; }
+    const merged = Object.assign({}, c.data.extra || {}, ex.extra || {});
     const exTags = String(ex.tags || '').split(/[,;]/).map((x) => x.trim()).filter(Boolean);
     const allTags = Array.from(new Set(exTags.concat(String(tags || '').split(',').filter(Boolean)))).join(',').slice(0, 300) || null;
-    await prisma.gameMailContact.update({ where: { id: ex.id }, data: { first_name: c.data.first_name || ex.first_name, last_name: c.data.last_name || ex.last_name, company: c.data.company || ex.company, phone: c.data.phone || ex.phone, lang: c.data.lang || ex.lang, extra: Object.keys(merged).length ? merged : undefined, tags: allTags } });
-    updated++;
+    const upd = { first_name: ex.first_name || c.data.first_name, last_name: ex.last_name || c.data.last_name, company: ex.company || c.data.company, phone: ex.phone || c.data.phone, lang: ex.lang || c.data.lang, stage: ex.stage || c.data.stage, kind: ex.kind || c.data.kind, country: ex.country || c.data.country, acquired_at: ex.acquired_at || c.data.acquired_at, ext_id: ex.ext_id || c.data.ext_id, extra: Object.keys(merged).length ? merged : undefined, tags: allTags };
+    // vyřazení vítězí: pokud je kterýkoli záznam téhož e-mailu „nezasílat“, kontakt se nesmí oslovovat
+    if (isExcl && ex.status === 'active') { upd.status = 'excluded'; t.excluded++; }
+    await prisma.gameMailContact.update({ where: { id: ex.id }, data: upd });
+    t.updated++;
   }
-  res.json({ ok: true, created, updated, skipped, invalid, blocked });
+  res.json(Object.assign({ ok: true }, t));
+}));
+
+// Hodnoty polí z CRM s počty (pro filtry kampaní): jen aktivní kontakty
+router.get('/contacts/facets', wrap(async (req, res) => {
+  const out = {};
+  for (const f of ['stage', 'kind', 'country']) {
+    const g = await prisma.gameMailContact.groupBy({ by: [f], where: { status: 'active' }, _count: { _all: true } });
+    out[f] = g.map((x) => ({ v: x[f] || '(prázdné)', n: x._count._all })).sort((a, b) => b.n - a.n);
+  }
+  res.json(out);
 }));
 
 // ── Kampaně ───────────────────────────────────────────────────────
 function cleanAudience(a) {
   a = a && typeof a === 'object' ? a : {};
-  return { contacts: a.contacts !== false, tag: str(a.tag, 120) || '', players: !!a.players, player_lang: str(a.player_lang, 5) || '' };
+  const arr = (x) => (Array.isArray(x) ? x : []).map((v) => String(v).trim().slice(0, 80)).filter(Boolean).slice(0, 60);
+  return { contacts: a.contacts !== false, tag: str(a.tag, 120) || '', stages: arr(a.stages), kinds: arr(a.kinds), countries: arr(a.countries), players: !!a.players, player_lang: str(a.player_lang, 5) || '' };
 }
 function cleanSchedule(kind, s) {
   s = s && typeof s === 'object' ? s : {};

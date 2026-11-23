@@ -9020,6 +9020,12 @@ model GameMailContact {
   company     String?  @db.VarChar(200)
   phone       String?  @db.VarChar(60)
   lang        String?  @db.VarChar(5)
+  // Údaje ze starého CRM: stav obchodního případu, typ kontaktu, země, datum získání, původní id.
+  stage       String?  @db.VarChar(60)
+  kind        String?  @db.VarChar(80)
+  country     String?  @db.VarChar(80)
+  acquired_at DateTime? @db.Date
+  ext_id      String?  @db.VarChar(40)
   // Štítky oddělené čárkou (segmentace kampaní).
   tags        String?  @db.VarChar(300)
   // Všechny ostatní sloupce z importu (název sloupce → hodnota); lze je vkládat do textu jako {{sloupec}}.
@@ -9031,6 +9037,9 @@ model GameMailContact {
   updated_at  DateTime @updatedAt
 
   @@index([status])
+  @@index([stage])
+  @@index([kind])
+  @@index([country])
   @@map("game_mail_contacts")
 }
 
