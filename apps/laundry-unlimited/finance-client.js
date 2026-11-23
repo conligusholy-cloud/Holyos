@@ -117,7 +117,7 @@
   var ROLE = [[/master/i, 'Získává operátory, kteří naplní MARKET PLACE, prodává místa s prádlomaty a koordinuje umístění prádlomatů a infolinku.'], [/operát|operat/i, 'Hledá místo, nacení ho, dělá přípojky a prodává na MARKET PLACE; stará se o údržbu a servis strojů v provozu.']];
   function MD() { if (!D.model) D.model = { sel: null, vol: {} }; if (!D.model.vol) D.model.vol = {}; return D.model; }
   // Výroba se v modelaci výdělku nenabízí (modelují se jen pozice, které „vydělávají“ z práce v terénu)
-  function modelCols() { return D.cols.filter(function (c) { return !/^\s*výrob/i.test(c.name); }); }
+  function modelCols() { return D.cols.filter(function (c) { return !/^\s*(výrob|obchod)/i.test(c.name); }); }
   function selCols() {
     var m = MD(), ids = Array.isArray(m.sel) ? m.sel : D.cols.filter(function (c) { return /master|operát|operat/i.test(c.name); }).map(function (c) { return c.id; });
     return modelCols().filter(function (c) { return ids.indexOf(c.id) >= 0; });
