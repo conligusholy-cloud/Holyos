@@ -477,6 +477,24 @@ router.post('/lu/mail', express.json({ limit: '20kb' }), async (req, res, next) 
   } catch (err) { next(err); }
 });
 
+// vytáhne JSON objekt (i z ```json bloku); když je odpověď useknutá limitem tokenů, doplní chybějící závorky po poslední celé položce
+const luParseLoose = (t) => {
+  const a = t.indexOf('{'); if (a < 0) return null;
+  const s = t.slice(a);
+  try { return JSON.parse(s.slice(0, s.lastIndexOf('}') + 1)); } catch (e) { /* zkusíme opravu */ }
+  const stack = []; let inStr = false, esc = false, safe = null;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === '{' || c === '[') stack.push(c);
+    else if (c === '}' || c === ']') { stack.pop(); safe = { pos: i, stack: stack.slice() }; }
+  }
+  if (!safe) return null;
+  const fixed = s.slice(0, safe.pos + 1) + safe.stack.reverse().map((c) => (c === '{' ? '}' : ']')).join('');
+  try { return JSON.parse(fixed); } catch (e) { return null; }
+};
+
 // POST /api/auth/lu/model-analyze — Laundry Unlimited: AI rozbor myšlenkové mapy (Modelace business modelu).
 // Vstup: { name, graph } (graph = text uzlů a spojení); výstup: strukturovaný JSON (pochopení, mezery, dopracování, plán). Tajemství LU_SSO_SECRET.
 router.post('/lu/model-analyze', express.json({ limit: '600kb' }), async (req, res, next) => {
@@ -516,26 +534,58 @@ router.post('/lu/model-analyze', express.json({ limit: '600kb' }), async (req, r
     ].join('\n');
     const r = await messagesCreate(client, { model: process.env.LU_MODEL_AI || 'claude-sonnet-4-6', max_tokens: 16000, system, messages: [{ role: 'user', content: 'Plátno „' + name + '":\n\n' + graph }] });
     const text = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('').trim();
-    // vytáhne JSON objekt (i z ```json bloku); když je odpověď useknutá limitem tokenů, doplní chybějící závorky po poslední celé položce
-    const parseLoose = (t) => {
-      const a = t.indexOf('{'); if (a < 0) return null;
-      const s = t.slice(a);
-      try { return JSON.parse(s.slice(0, s.lastIndexOf('}') + 1)); } catch (e) { /* zkusíme opravu */ }
-      const stack = []; let inStr = false, esc = false, safe = null;
-      for (let i = 0; i < s.length; i++) {
-        const c = s[i];
-        if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
-        if (c === '"') inStr = true;
-        else if (c === '{' || c === '[') stack.push(c);
-        else if (c === '}' || c === ']') { stack.pop(); safe = { pos: i, stack: stack.slice() }; }
-      }
-      if (!safe) return null;
-      const fixed = s.slice(0, safe.pos + 1) + safe.stack.reverse().map((c) => (c === '{' ? '}' : ']')).join('');
-      try { return JSON.parse(fixed); } catch (e) { return null; }
-    };
-    const out = parseLoose(text);
+    const out = luParseLoose(text);
     if (!out || typeof out !== 'object') { console.warn('[lu model-analyze] nečitelná odpověď, stop=' + r.stop_reason + ', délka=' + text.length + ', konec: ' + text.slice(-200)); return res.status(502).json({ error: 'AI vrátila nečitelnou odpověď (' + (r.stop_reason === 'max_tokens' ? 'příliš dlouhá' : 'chybný formát') + ') — zkuste to znovu' }); }
     res.json({ ok: true, result: out, truncated: r.stop_reason === 'max_tokens' });
+  } catch (err) { next(err); }
+});
+
+// POST /api/auth/lu/model-chat — Laundry Unlimited: AI poradce nad mapou (rozhovor, hlídání logiky, návrhy změn plátna)
+router.post('/lu/model-chat', express.json({ limit: '700kb' }), async (req, res, next) => {
+  try {
+    const secret = process.env.LU_SSO_SECRET;
+    const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+    if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
+    try { jwt.verify(m[1], secret, { audience: 'holyos-api', issuer: 'laundry-unlimited' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'V HolyOS chybí ANTHROPIC_API_KEY' });
+    const b = req.body || {};
+    const graph = String(b.graph || '').slice(0, 120000), message = String(b.message || '').trim().slice(0, 4000), name = String(b.name || 'Business model').slice(0, 120);
+    const brief = String(b.brief || '').slice(0, 6000);
+    if (!message) return res.status(400).json({ error: 'Prázdná zpráva' });
+    let hist = (Array.isArray(b.history) ? b.history : []).slice(-14).map((h) => ({ role: h && h.role === 'assistant' ? 'assistant' : 'user', content: String((h && h.content) || '').slice(0, 3000) })).filter((h) => h.content);
+    while (hist.length && hist[0].role !== 'user') hist.shift();
+    const clean = []; hist.forEach((h) => { if (clean.length && clean[clean.length - 1].role === h.role) clean[clean.length - 1].content += '\n' + h.content; else clean.push(h); });
+    if (clean.length && clean[clean.length - 1].role === 'user') clean.pop(); // poslední user zpráva by se zdvojila
+    const system = [
+      'Jsi AI poradce a „strážce logiky" nad myšlenkovou mapou business modelu firmy Laundry Unlimited (síť samoobslužných prádelen — „prádlomatů": výroba, licence, master partneři, operátoři, MARKET PLACE míst, servis, infolinka). Mluvíš se zakladatelem Tomášem Holým. Mapa je jeho pracovní plán; ty mu pomáháš dotáhnout ji do podoby, ze které jde firmu skutečně provozovat.',
+      '',
+      'JAK PRACUJEŠ:',
+      '- Česky, přátelsky a věcně, stručně. Ptej se na nejvýš 1–2 věci najednou; začni tím, co blokuje spuštění nejvíc. Neodříkávej celou mapu.',
+      '- Z mapy vyplývají otázky (uzly s ???, chybějící ceny, nejasné kdo platí). Vedeš rozhovor tak, aby se postupně všechny zodpověděly a rozhodnutí se zapsala do mapy.',
+      '- Hlídáš LOGIKU A TOK: upozorni hned, když zjistíš rozpor (dvě různé hodnoty téhož, uzel bez návaznosti, chybějící krok mezi dvěma uzly, nejasný tok peněz, kruh bez výstupu, něco, co se neshoduje s dřívějším rozhodnutím v rozhovoru).',
+      '- Čísla a rozhodnutí si NEVYMÝŠLÍŠ. Když ti je Tomáš neřekl, zeptej se. Můžeš nabídnout rozumnou variantu, ale výslovně jako návrh k potvrzení — do mapy zapisuj jen to, co Tomáš potvrdil nebo sám řekl.',
+      '- Změny plátna navrhuj, když se na nich domluvíte (nebo když o ně Tomáš požádá). V odpovědi stručně řekni, co se změní. Tomáš změny před provedením potvrdí tlačítkem, proto je můžeš navrhnout hned. Hodnoty v uzlech aktualizuj přepisem uzlu (např. „provize z licence = ???" → „provize z licence = 8 % z ceny licence"). Texty uzlů drž krátké (jako v mapě).',
+      '- ID uzlů opisuj PŘESNĚ z mapy. U nových uzlů dávej ref (např. "x1") a napoj je na existující uzly, ať v mapě nevisí osamoceně.',
+      '',
+      'Operace v poli "zmeny" (může být prázdné):',
+      '{"op":"pridat_uzel","ref":"x1","text":"…","od":["id nebo ref"],"do":["id nebo ref"]}   // od = z kterých uzlů vede šipka do nového; do = do kterých vede šipka z nového',
+      '{"op":"upravit_uzel","id":"…","text":"nový celý text uzlu"}',
+      '{"op":"smazat_uzel","id":"…"}',
+      '{"op":"pridat_spojeni","od":"id","do":"id"}',
+      '{"op":"smazat_spojeni","od":"id","do":"id"}',
+      '',
+      'Vrať POUZE jeden JSON objekt (bez markdownu): {"odpoved":"text pro Tomáše","zmeny":[…]}',
+    ].join('\n');
+    const ctx = 'AKTUÁLNÍ MAPA „' + name + '" (stav právě teď):\n' + graph + (brief ? '\n\nSTRUČNÝ ROZBOR Z DŘÍVĚJŠKA (kontext, může být zastaralý):\n' + brief : '') + '\n\nTOMÁŠOVA ZPRÁVA:\n' + message;
+    const Anthropic = require('@anthropic-ai/sdk');
+    const { messagesCreate } = require('../services/anthropic-retry');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const r = await messagesCreate(client, { model: process.env.LU_MODEL_AI || 'claude-sonnet-4-6', max_tokens: 5000, system, messages: clean.concat([{ role: 'user', content: ctx }]) });
+    const text = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('').trim();
+    let out = luParseLoose(text);
+    if (!out || typeof out !== 'object') out = { odpoved: text.replace(/^```json|```$/g, '').trim() || 'Nepodařilo se mi odpovědět — zkus to znovu.', zmeny: [] };
+    const zm = (Array.isArray(out.zmeny) ? out.zmeny : []).slice(0, 40);
+    res.json({ ok: true, odpoved: String(out.odpoved || '').slice(0, 6000), zmeny: zm });
   } catch (err) { next(err); }
 });
 

@@ -422,7 +422,7 @@
   };
 
   // ── AI zpracování mapy: pochopení, mezery, dopracování, plán ──
-  var AI = { res: null, tab: 'p', busy: false, added: {} };
+  var AI = { res: null, tab: 'p', busy: false, added: {}, err: '' };
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function arr(v) { return Array.isArray(v) ? v : []; }
   function uAttr(u) { var ids = arr(u).filter(function (id) { return nodeById(String(id)); }); return ids.length ? ' data-u="' + esc(ids.join(',')) + '" title="Klikni — ukáže to v mapě"' : ''; }
@@ -435,13 +435,17 @@
     nodesEl.querySelectorAll('.n').forEach(function (e) { e.classList.toggle('hl', ids.indexOf(e.getAttribute('data-id')) >= 0); });
     setTimeout(function () { nodesEl.querySelectorAll('.n.hl').forEach(function (e) { e.classList.remove('hl'); }); }, 4000);
   }
-  var AI_TABS = [['p', 'Jak jsem to pochopil'], ['m', 'Mezery a rizika'], ['d', 'Dopracování mapy'], ['f', 'Plán uvedení']];
+  var AI_TABS = [['a', '💬 Poradce'], ['p', 'Jak jsem to pochopil'], ['m', 'Mezery a rizika'], ['d', 'Dopracování mapy'], ['f', 'Plán uvedení']];
   function aiRender() {
     var R = AI.res, body = $('#mb-ai-body'), tabs = $('#mb-ai-tabs');
-    if (!R) { tabs.innerHTML = ''; return; }
-    var cnt = { m: arr(R.mezery).length + arr(R.rizika).length, d: arr(R.dopracovani).filter(function (x, i) { return !AI.added[x.ref || ('i' + i)]; }).length };
+    var cnt = R ? { m: arr(R.mezery).length + arr(R.rizika).length, d: arr(R.dopracovani).filter(function (x, i) { return !AI.added[x.ref || ('i' + i)]; }).length } : {};
     tabs.innerHTML = AI_TABS.map(function (t) { return '<button type="button" data-t="' + t[0] + '" class="' + (AI.tab === t[0] ? 'on' : '') + '">' + t[1] + (cnt[t[0]] ? ' (' + cnt[t[0]] + ')' : '') + '</button>'; }).join('');
     var h = '';
+    if (AI.tab === 'a') { chatRender(); return; }
+    if (!R) {
+      body.innerHTML = AI.busy ? '<div class="ld"><div class="sp"></div>AI čte celou mapu (' + S.nodes.length + ' uzlů, ' + S.edges.length + ' spojení)…<br>trvá to asi 1–2 minuty</div>' : (AI.err ? '<div class="ld" style="color:#fca5a5">' + esc(AI.err) + '</div>' : '') + '<div class="ld">Celý rozbor mapy ještě nebyl spuštěn.<br><button type="button" id="mb-ai-retry" style="margin-top:12px">✨ Zpracovat mapu</button></div>';
+      return;
+    }
     if (AI.tab === 'p') {
       h += '<h4>Podstata</h4><div class="it">' + esc(R.souhrn) + '</div>';
       if (arr(R.aktery).length) h += '<h4>Kdo je kdo</h4>' + R.aktery.map(function (a) { return '<div class="it"' + uAttr(a.uzly) + '><b>' + esc(a.nazev) + '</b><div class="m">' + esc(a.role) + '</div></div>'; }).join('');
@@ -451,7 +455,7 @@
     } else if (AI.tab === 'm') {
       h += '<h4>Co chybí nebo je nejasné</h4>' + (arr(R.mezery).map(function (m) {
         var p = String(m.priorita || '').toLowerCase(), c = p.indexOf('vys') === 0 ? 'v' : p.indexOf('st') === 0 ? 's' : 'n';
-        return '<div class="it"' + uAttr(m.uzly) + '><b>' + esc(m.otazka) + '</b><span class="pr ' + c + '">' + esc(m.priorita || '') + '</span><div class="m">' + esc(m.proc) + '</div></div>';
+        return '<div class="it"' + uAttr(m.uzly) + '><b>' + esc(m.otazka) + '</b><span class="pr ' + c + '">' + esc(m.priorita || '') + '</span><div class="m">' + esc(m.proc) + '</div><button type="button" class="ask" data-q="' + esc('Pojďme vyřešit tuto mezeru: ' + m.otazka) + '">💬 Probrat s poradcem</button></div>';
       }).join('') || '<div class="m">Nic zásadního.</div>');
       if (arr(R.rizika).length) h += '<h4>Rizika</h4>' + R.rizika.map(function (r) { return '<div class="it"><b>' + esc(r.riziko) + '</b><div class="m">Dopad: ' + esc(r.dopad) + '</div><div class="m">Opatření: ' + esc(r.opatreni) + '</div></div>'; }).join('');
     } else if (AI.tab === 'd') {
@@ -471,22 +475,37 @@
   function aiOpen() {
     $('#mb-ai-p').style.display = 'flex';
     if (!AI.res) { try { var c = JSON.parse(localStorage.getItem('lu_mb_ai_' + (board && board.id)) || 'null'); if (c && c.res) { AI.res = c.res; AI.truncated = false; AI.added = c.added || {}; } } catch (e) { /* bez cache */ } }
-    if (AI.res) aiRender(); else aiRun();
+    if (!CH.msgs.length) chLoad();
+    if (AI.res || AI.busy) aiRender(); else aiRun(); // poprvé se mapa zpracuje hned; mezitím jde přepnout na záložku Poradce
   }
   function aiRun() {
     if (!board || AI.busy) return;
-    if (S.nodes.length < 2) { $('#mb-ai-body').innerHTML = '<div class="ld">Na plátně je zatím málo uzlů.</div>'; return; }
-    AI.busy = true; AI.res = null; AI.added = {}; $('#mb-ai-tabs').innerHTML = '';
-    $('#mb-ai-body').innerHTML = '<div class="ld"><div class="sp"></div>AI čte celou mapu (' + S.nodes.length + ' uzlů, ' + S.edges.length + ' spojení)…<br>trvá to asi 1–2 minuty</div>';
+    if (S.nodes.length < 2) { AI.err = 'Na plátně je zatím málo uzlů.'; aiRender(); return; }
+    AI.busy = true; AI.res = null; AI.added = {}; AI.err = ''; if (AI.tab !== 'a') AI.tab = 'p'; aiRender();
     var bid = board.id;
     req('/admin/api/model/boards/' + bid + '/analyze', { data: S }).then(function (j) {
       AI.busy = false;
       if (!board || board.id !== bid) return;
-      if (!j.ok) { $('#mb-ai-body').innerHTML = '<div class="ld" style="color:#fca5a5">' + esc(j.error || 'Zpracování se nepovedlo') + '</div><div style="text-align:center"><button type="button" id="mb-ai-retry">Zkusit znovu</button></div>'; return; }
-      AI.res = j.result; AI.truncated = !!j.truncated; AI.tab = 'p'; aiSave(); aiRender();
-    }).catch(function () { AI.busy = false; $('#mb-ai-body').innerHTML = '<div class="ld" style="color:#fca5a5">Spojení se serverem se přerušilo.</div><div style="text-align:center"><button type="button" id="mb-ai-retry">Zkusit znovu</button></div>'; });
+      if (!j.ok) { AI.err = j.error || 'Zpracování se nepovedlo'; aiRender(); return; }
+      AI.res = j.result; AI.truncated = !!j.truncated; if (AI.tab !== 'a') AI.tab = 'p'; aiSave(); aiRender();
+    }).catch(function () { AI.busy = false; AI.err = 'Spojení se serverem se přerušilo.'; aiRender(); });
   }
   function aiSave() { if (board && AI.res) { try { localStorage.setItem('lu_mb_ai_' + board.id, JSON.stringify({ res: AI.res, added: AI.added, t: Date.now() })); } catch (e) { /* bez paměti */ } } }
+  // rozmístění nových uzlů: vedle prvního rodiče, mimo kolize
+  function layoutNew(newIds, parents) {
+    var placed = {}, rects = S.nodes.filter(function (n) { return newIds.indexOf(n.id) < 0; }).map(function (n) { var s = size(n); return { x: n.x, y: n.y, w: s.w, h: s.h }; });
+    function free(x, y, w, h) { return !rects.some(function (r) { return x < r.x + r.w + 24 && x + w + 24 > r.x && y < r.y + r.h + 18 && y + h + 18 > r.y; }); }
+    for (var pass = 0; pass < 6; pass++) {
+      newIds.forEach(function (id) {
+        if (placed[id]) return; var n = nodeById(id), ps = (parents[id] || []).map(nodeById).filter(function (p) { return p && (newIds.indexOf(p.id) < 0 || placed[p.id]); });
+        if (!ps.length && pass < 5) return; var p = ps[0];
+        var w = Math.max(120, Math.min(260, 24 + String(n.text).length * 8)), h = 56;
+        var x = p ? p.x + size(p).w + 90 : viewCenterWorld().x, y = p ? p.y : viewCenterWorld().y, guard = 0;
+        while (!free(x, y, w, h) && guard < 60) { guard++; y += 76; if (guard % 15 === 0) { y = p ? p.y : y; x += 40; } }
+        n.x = Math.round(x); n.y = Math.round(y); placed[id] = true; rects.push({ x: n.x, y: n.y, w: w, h: h });
+      });
+    }
+  }
   function aiAddNodes() {
     var R = AI.res, list = arr(R.dopracovani), pick = {};
     $('#mb-ai-body').querySelectorAll('.aick').forEach(function (c) { if (c.checked) pick[c.getAttribute('data-k')] = true; });
@@ -501,19 +520,7 @@
         addEdge(to, idOf[o.k], null, null); (parents[idOf[o.k]] = parents[idOf[o.k]] || []).push(to);
       });
     });
-    // rozmístění: vedle prvního rodiče, mimo kolize
-    var placed = {}, rects = S.nodes.filter(function (n) { return newIds.indexOf(n.id) < 0; }).map(function (n) { var s = size(n); return { x: n.x, y: n.y, w: s.w, h: s.h }; });
-    function free(x, y, w, h) { return !rects.some(function (r) { return x < r.x + r.w + 24 && x + w + 24 > r.x && y < r.y + r.h + 18 && y + h + 18 > r.y; }); }
-    for (var pass = 0; pass < 6; pass++) {
-      newIds.forEach(function (id) {
-        if (placed[id]) return; var n = nodeById(id), ps = (parents[id] || []).map(nodeById).filter(function (p) { return p && (newIds.indexOf(p.id) < 0 || placed[p.id]); });
-        if (!ps.length && pass < 5) return; var p = ps[0];
-        var w = Math.max(120, Math.min(260, 24 + String(n.text).length * 8)), h = 56;
-        var x = p ? p.x + size(p).w + 90 : viewCenterWorld().x, y = p ? p.y : viewCenterWorld().y, guard = 0;
-        while (!free(x, y, w, h) && guard < 60) { guard++; y += 76; if (guard % 15 === 0) { y = p ? p.y : y; x += 40; } }
-        n.x = Math.round(x); n.y = Math.round(y); placed[id] = true; rects.push({ x: n.x, y: n.y, w: w, h: h });
-      });
-    }
+    layoutNew(newIds, parents);
     items.forEach(function (o) { AI.added[o.k] = true; });
     renderAll(); commit(); aiSave(); aiRender();
     status('Přidáno ' + items.length + ' uzlů (zeleně) ✓', false);
@@ -533,18 +540,99 @@
     sec('KPI', R.kpi, function (k) { return '- **' + k.nazev + '** — cíl: ' + k.cil + ' (' + k.jak_merit + ')'; });
     var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([L.join('\n')], { type: 'text/markdown;charset=utf-8' })); a.download = 'rozbor-mapy.md'; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
   }
+  // ── AI poradce nad mapou: rozhovor, hlídání logiky, zápis dohodnutých změn na plátno ──
+  var CH = { msgs: [], busy: false };
+  function chLoad() { CH.msgs = []; CH.busy = false; try { var c = JSON.parse(localStorage.getItem('lu_mb_ch_' + (board && board.id)) || 'null'); if (c && Array.isArray(c.msgs)) CH.msgs = c.msgs; } catch (e) { /* bez historie */ } }
+  function chSave() { if (board) { try { localStorage.setItem('lu_mb_ch_' + board.id, JSON.stringify({ msgs: CH.msgs.slice(-60) })); } catch (e) { /* bez paměti */ } } }
+  function short(t, n) { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; }
+  var OPS = ['pridat_uzel', 'upravit_uzel', 'smazat_uzel', 'pridat_spojeni', 'smazat_spojeni'];
+  function cleanOps(z) {
+    return arr(z).filter(function (o) { return o && OPS.indexOf(o.op) >= 0; }).slice(0, 40).map(function (o) {
+      return { op: o.op, ref: o.ref ? String(o.ref) : undefined, id: o.id ? String(o.id) : undefined, text: o.text != null ? String(o.text).slice(0, 2000) : undefined, od: Array.isArray(o.od) ? o.od.map(String) : (o.od ? [String(o.od)] : []), 'do': Array.isArray(o['do']) ? o['do'].map(String) : (o['do'] ? [String(o['do'])] : []) };
+    });
+  }
+  function opDescribe(ops) {
+    var refText = {}; ops.forEach(function (o) { if (o.op === 'pridat_uzel' && o.ref) refText[o.ref] = o.text; });
+    var nm = function (id) { var n = nodeById(id); return '„' + short(n ? n.text : (refText[id] || id), 36) + '“'; };
+    return ops.map(function (o) {
+      if (o.op === 'pridat_uzel') return '<div>➕ nový uzel <b>„' + esc(short(o.text, 60)) + '“</b>' + (o.od.length ? ' ← ' + esc(o.od.map(nm).join(', ')) : '') + (o['do'].length ? ' → ' + esc(o['do'].map(nm).join(', ')) : '') + '</div>';
+      if (o.op === 'upravit_uzel') { var n = nodeById(o.id); return '<div>✎ ' + esc(nm(o.id)) + ' → <b>„' + esc(short(o.text, 70)) + '“</b>' + (n ? '' : ' <span class="m">(uzel nenalezen)</span>') + '</div>'; }
+      if (o.op === 'smazat_uzel') return '<div>🗑 smazat uzel ' + esc(nm(o.id)) + '</div>';
+      if (o.op === 'pridat_spojeni') return '<div>↳ spojit ' + esc(nm(o.od[0])) + ' → ' + esc(nm(o['do'][0])) + '</div>';
+      return '<div>✂ zrušit spojení ' + esc(nm(o.od[0])) + ' → ' + esc(nm(o['do'][0])) + '</div>';
+    }).join('');
+  }
+  function chatRender() {
+    var body = $('#mb-ai-body'), h = '';
+    if (!CH.msgs.length) {
+      var open = AI.res ? arr(AI.res.mezery).length : 0;
+      h += '<div class="cb a">Ahoj, jsem tvůj poradce nad touto mapou. Znám všechny uzly a spojení a vidím je i při každé odpovědi znovu, takže se mnou můžeš mapu průběžně měnit.<br><br>Pomůžu ti probrat otevřené otázky' + (open ? ' (v rozboru jich je ' + open + ')' : '') + ', pohlídám, aby spolu věci logicky a v toku navazovaly, a co spolu dohodneme, zapíšu do mapy — ty to jedním kliknutím potvrdíš.</div>' +
+        '<div class="chips"><button type="button" data-send="Začni nejdůležitější otevřenou otázkou, která blokuje spuštění.">Začni nejdůležitější otázkou</button><button type="button" data-send="Zkontroluj logiku a tok celé mapy a řekni mi, kde to nedává smysl nebo chybí návaznost.">Zkontroluj logiku a tok</button><button type="button" data-send="Projdi všechny uzly s otazníky nebo chybějícími hodnotami a postupně se mě na ně zeptej.">Projít všechna ???</button></div>';
+    }
+    CH.msgs.forEach(function (m, i) {
+      if (m.role === 'user') { h += '<div class="cb u">' + esc(m.text) + '</div>'; return; }
+      h += '<div class="cb a"' + (m.err ? ' style="color:#fca5a5"' : '') + '>' + esc(m.text);
+      if (m.zmeny && m.zmeny.length) h += '<div class="chg"><b>Navržené změny na plátně:</b>' + opDescribe(m.zmeny) + '<button type="button" class="ap" data-i="' + i + '"' + (m.applied ? ' disabled' : '') + '>' + (m.applied ? 'Provedeno ✓' : '✓ Provést na plátně') + '</button></div>';
+      h += '</div>';
+    });
+    if (CH.busy) h += '<div class="cb a m">Poradce přemýšlí…</div>';
+    body.innerHTML = h; body.scrollTop = body.scrollHeight;
+    $('#mb-ai-send').disabled = CH.busy;
+  }
+  function chBrief() {
+    var R = AI.res; if (!R) return '';
+    return 'Souhrn: ' + String(R.souhrn || '') + '\nOtevřené otázky z rozboru: ' + arr(R.mezery).map(function (m) { return '- ' + m.otazka; }).join('\n');
+  }
+  function chatSend(text) {
+    text = String(text || '').trim(); if (!text || CH.busy || !board) return;
+    var hist = CH.msgs.filter(function (m) { return !m.err; }).map(function (m) { return { role: m.role, content: m.text + (m.role === 'assistant' && m.zmeny && m.zmeny.length ? (m.applied ? ' [změny byly provedeny na plátně]' : ' [navržené změny zatím nebyly provedeny]') : '') }; });
+    CH.msgs.push({ role: 'user', text: text }); CH.busy = true; chSave(); AI.tab = 'a'; aiRender();
+    var bid = board.id;
+    req('/admin/api/model/boards/' + bid + '/chat', { data: S, message: text, history: hist, brief: chBrief() }).then(function (j) {
+      CH.busy = false; if (!board || board.id !== bid) return;
+      if (!j.ok) CH.msgs.push({ role: 'assistant', text: j.error || 'Poradce neodpověděl — zkus to znovu.', err: true });
+      else CH.msgs.push({ role: 'assistant', text: String(j.odpoved || ''), zmeny: cleanOps(j.zmeny) });
+      chSave(); if (AI.tab === 'a') aiRender();
+    }).catch(function () { CH.busy = false; CH.msgs.push({ role: 'assistant', text: 'Spojení se serverem se přerušilo — zkus to znovu.', err: true }); if (AI.tab === 'a') aiRender(); });
+  }
+  function chatApply(i) {
+    var m = CH.msgs[i]; if (!m || m.applied || !m.zmeny) return;
+    var ops = m.zmeny, idOf = {}, newIds = [], parents = {}, touched = [], n = 0;
+    var rid = function (x) { return nodeById(x) ? x : idOf[x]; };
+    ops.forEach(function (o) { if (o.op === 'pridat_uzel' && o.text) { var nn = addNode(0, 0, o.text, '#34d399'); idOf[o.ref || nn.id] = nn.id; o._id = nn.id; newIds.push(nn.id); } });
+    ops.forEach(function (o) {
+      if (o.op === 'pridat_uzel' && o._id) {
+        o.od.forEach(function (x) { var f = rid(x); if (f && addEdge(f, o._id)) { (parents[o._id] = parents[o._id] || []).push(f); } });
+        o['do'].forEach(function (x) { var t = rid(x); if (t) addEdge(o._id, t); }); n++;
+      } else if (o.op === 'upravit_uzel') { var nd = nodeById(o.id); if (nd && o.text != null) { nd.text = o.text; touched.push(nd.id); n++; } }
+      else if (o.op === 'smazat_uzel') { if (nodeById(o.id)) { S.nodes = S.nodes.filter(function (x) { return x.id !== o.id; }); S.edges = S.edges.filter(function (e) { return e.from !== o.id && e.to !== o.id; }); n++; } }
+      else if (o.op === 'pridat_spojeni') { var a = rid(o.od[0]), b = rid(o['do'][0]); if (a && b && addEdge(a, b)) n++; }
+      else if (o.op === 'smazat_spojeni') { var a2 = rid(o.od[0]), b2 = rid(o['do'][0]); var before = S.edges.length; S.edges = S.edges.filter(function (e) { return !(e.from === a2 && e.to === b2); }); if (S.edges.length < before) n++; }
+    });
+    if (newIds.length) layoutNew(newIds, parents);
+    ops.forEach(function (o) { delete o._id; });
+    if (sel && sel.t === 'n' && !nodeById(sel.id)) sel = null;
+    m.applied = true; renderAll(); if (n) commit(); chSave(); aiRender();
+    status(n ? 'Poradce upravil plátno (' + n + ' změn) ✓' : 'Nebylo co změnit', false);
+    var f = newIds.concat(touched); if (f.length) focusNodes(f);
+  }
+  $('#mb-ai-send').onclick = function () { var t = $('#mb-ai-in'); var v = t.value; t.value = ''; chatSend(v); };
+  $('#mb-ai-in').addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); $('#mb-ai-send').click(); } });
   $('#mb-ai').onclick = function () { var p = $('#mb-ai-p'); if (p.style.display === 'none') aiOpen(); else p.style.display = 'none'; };
   $('#mb-ai-x').onclick = function () { $('#mb-ai-p').style.display = 'none'; };
   $('#mb-ai-re').onclick = function () { if (AI.busy) return; if (AI.res && !confirm('Zpracovat mapu znovu? Aktuální rozbor se nahradí novým.')) return; aiRun(); };
   $('#mb-ai-md').onclick = aiMarkdown;
   $('#mb-ai-p').addEventListener('click', function (ev) {
     var t = ev.target, tb = t.closest && t.closest('#mb-ai-tabs button'); if (tb) { AI.tab = tb.getAttribute('data-t'); aiRender(); $('#mb-ai-body').scrollTop = 0; return; }
+    var ask = t.closest && t.closest('.ask'); if (ask) { chatSend(ask.getAttribute('data-q')); return; }
+    var ap = t.closest && t.closest('.ap'); if (ap) { chatApply(Number(ap.getAttribute('data-i'))); return; }
+    var sd = t.closest && t.closest('[data-send]'); if (sd) { chatSend(sd.getAttribute('data-send')); return; }
     if (t.id === 'mb-ai-add') { aiAddNodes(); return; }
     if (t.id === 'mb-ai-retry') { aiRun(); return; }
     var it = t.closest && t.closest('.it[data-u]'); if (it && !(t.closest('label'))) focusNodes(it.getAttribute('data-u').split(','));
   });
   // při přepnutí plátna se rozbor vyčistí (každé plátno má vlastní, uložený v prohlížeči)
-  var _lb = loadBoard; loadBoard = function (id) { AI.res = null; AI.added = {}; AI.busy = false; if ($('#mb-ai-p').style.display !== 'none') $('#mb-ai-p').style.display = 'none'; return _lb(id); };
+  var _lb = loadBoard; loadBoard = function (id) { AI.res = null; AI.added = {}; AI.busy = false; AI.err = ''; CH.msgs = []; CH.busy = false; if ($('#mb-ai-p').style.display !== 'none') $('#mb-ai-p').style.display = 'none'; return _lb(id); };
 
   // ── Start ──
   req('/admin/api/model/boards').then(function (j) {
