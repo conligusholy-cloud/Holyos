@@ -10060,7 +10060,7 @@ function fondGraf(body) {
     + '</svg>'
     + '<div class="row"><span class="muted small">'
     + esc(tx('veta.fond_graf_od', { p1: datumKratce(vse[0].kdy) })) + '</span>'
-    + '<span class="muted small">' + kcFull(max) + '</span></div>';
+    + '<span class="muted small">' + esc(tx('veta.fond_graf_max', { p1: max })) + '</span></div>';
 }
 // Krátké datum do popisku grafu. Rok se nepise — vzorky se drží čtvrt roku.
 function datumKratce(x) {
@@ -10068,14 +10068,28 @@ function datumKratce(x) {
   if (isNaN(d.getTime())) return '';
   return d.getDate() + '. ' + (d.getMonth() + 1) + '.';
 }
+// Z čeho se hodnota fondu skládá. Pokladnu má člen před očima, podíly ve
+// firmách ne — a přitom se při odchodu vyplácí díl CELKU, ne vklad. Celek
+// počítá server (hodnota_fondu), tady se jen rozpadá na dvě části, ať je
+// vidět, kde ty peníze leží.
+function fondHodnota(f) {
+  var celkem = Math.max(0, Math.round((f && f.hodnota_fondu) || 0));
+  var pokladna = Math.max(0, Math.round((f && f.pokladna) || 0));
+  return { celkem: celkem, pokladna: pokladna, podily: Math.max(0, celkem - pokladna) };
+}
+
 function fondVnitrek() {
   if (!FOND) return '';
   var f = FOND.fond;
+  var hod = fondHodnota(f);
   var ja = fondJa();
   var h = '<p class="muted small" style="margin:2px 0 8px">' + esc(tx('fond.popis')) + '</p>'
     + '<h4 style="margin:10px 0 2px">' + esc(tx('fond.vyvoj')) + '</h4>'
     + fondGraf(f.historie)
-    + '<div class="kv"><span>' + esc(tx('fond.pokladna')) + '</span><b>' + kcFull(f.pokladna) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('fond.pokladna')) + '</span><b>' + kcFull(hod.pokladna) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('fond.v_podilech')) + '</span><b>' + kcFull(hod.podily) + '</b></div>'
+    + '<div class="kv souhrn"><span>' + esc(tx('fond.hodnota_celkem')) + '</span><b class="ok">'
+      + kcFull(hod.celkem) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('fond.vklady')) + '</span><b>' + kcFull(f.vkladu_celkem) + '</b></div>'
     // Zamčené se ukazuje jen když něco zamčeného je — jinak by to byl řádek
     // s nulou, který nikomu nic neřekne.
@@ -11639,7 +11653,7 @@ function akcieGraf(body) {
   return k
     + '<div class="row"><span class="muted small">'
     + esc(tx('veta.fond_graf_od', { p1: datumKratce(body[0].kdy) })) + '</span>'
-    + '<span class="muted small">' + kcFull(max) + '</span></div>';
+    + '<span class="muted small">' + esc(tx('veta.fond_graf_max', { p1: max })) + '</span></div>';
 }
 
 // Šipka u ceny. Měří se proti ceně na začátku grafu, takže ukazuje přesně

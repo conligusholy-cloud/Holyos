@@ -498,6 +498,16 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|rout
   fi
 fi
 
+# Celková hodnota fondu v panelu. Pokladna je ta menší půlka, zbytek leží
+# v podílech — a při odchodu z fondu se vyplácí díl celku, ne vklad.
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|services/game/texty/'; then
+  if ! node nastroje/tfondhodnota.js; then
+    echo ""
+    echo "STOP: celková hodnota fondu v panelu nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Výnos a návratnost drženého podílu. Samotná částka měsíčně neřekne nic;
 # teprve podíl k zaplacené ceně srovná nákupy mezi sebou.
 if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; then
