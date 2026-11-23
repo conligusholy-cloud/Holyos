@@ -244,7 +244,9 @@
           <p class="note" style="margin:0 0 8px">Odvolání čeká na tvoje rozhodnutí — majetek obviněného zůstává zmrazený, dokud ho nepotvrdíš, neupravíš nebo nezrušíš.</p>
           <div id="zl-pripady"></div>
         </div>
-        <div class="toolbar"><button class="btn sm on" id="zl-spust">Vyhodnotit nanečisto</button></div>
+        <div class="toolbar"><button class="btn sm on" id="zl-spust">Vyhodnotit nanečisto</button>
+          <button class="btn sm" id="zl-agent-spust" title="Co našel agent: obchody mezi vlastními účty, vlastní dražby, fond, půjčky">🕵️ Co našel agent</button></div>
+        <div id="zl-agent-body"></div>
         <div id="zl-sum"></div>
         <div id="zl-body"></div>
       </div>
@@ -1762,13 +1764,20 @@
       ['kontrola_mesicu', 'Kontrola trvá', 'herních měs.'], ['soud_mesicu', 'Soud trvá', 'herních měs.'],
       ['porotce_min_mesicu', 'Porotce: hráč starší než', 'herních měs.'], ['recidiva_dni', 'Zákaz při recidivě', 'dní'],
       ['recidiva_min_skoda', 'Opakovaný případ: nová škoda aspoň', 'L$'],
+      ['agent_min_skoda', 'Agent: menší nález nevede', 'L$'],
+      ['agent_levne_pomer', 'Agent: obchod „pod cenou" pod', '% ceníku'],
+      ['agent_drahe_pomer', 'Agent: obchod „nad cenou" nad', '% ceníku'],
       ['hranice_nahled', 'Hranice pro „na hraně"', '%'],
       ['min_kupu_od_mrtvych', 'Kupec: min. různých zrušených prodejců', ''], ['kup_max_pomer', 'Kupec: nákup levnější než (% ceníku)', '%']
     ];
     var ZL_EMBLEMY = [['celni', 'Celní správa'], ['policie', 'Policie'], ['financni', 'Finanční úřad'], ['soud', 'Soud'], ['porota', 'Porota (hlasování)'],
       ['recidiva', 'Zákaz při recidivě'], ['hotovo', 'Vyřízeno']];
     var ZL_PRIZNAKY = [['chranit_platici', 'Platící hráč nesmí během kontroly a soudu smazat účet'],
-      ['vratit_balicky', 'Koupené balíčky se platícímu hráči po rozsudku vrátí do hry znovu (trest se kryje z ostatního majetku)']];
+      ['vratit_balicky', 'Koupené balíčky se platícímu hráči po rozsudku vrátí do hry znovu (trest se kryje z ostatního majetku)'],
+      ['det_spojene_obchody', 'Agent hlídá obchody mezi účty jednoho člověka (cena mimo ceník)'],
+      ['det_drazby', 'Agent hlídá přihazování na vlastní dražbu z druhého účtu'],
+      ['det_fond', 'Agent hlídá prodej podílu do společného fondu přes vlastní účet'],
+      ['det_pujcky', 'Agent hlídá půjčky mezi vlastními účty, které se nesplácejí']];
     var ZL_STAV = { kontrola: 'Kontrola', soud: 'Soud', odvolani: 'Rozsudek / odvolání', uzavreno: 'Uzavřeno', zruseno: 'Zrušeno' };
     function zlPripady() {
       var box = document.getElementById('zl-pripady');
@@ -1853,7 +1862,8 @@
           + ZL_PRIZNAKY.map(function (f) {
             return '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-zlb="' + f[0] + '"' + (P[f[0]] ? ' checked' : '') + '> <span class="note">' + esc(f[1]) + '</span></label>';
           }).join('')
-          + '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="zl-zapnuto"' + (P.zapnuto ? ' checked' : '') + '> <span class="note"><b>Automatické řízení ve hře</b> — když je zapnuté, nové případy se otevírají samy (zmrazení, noviny, soud). Vypnuté = jen ruční otevření tlačítkem.</span></label></div>';
+          + '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="zl-zapnuto"' + (P.zapnuto ? ' checked' : '') + '> <span class="note"><b>Automatické řízení ve hře</b> — když je zapnuté, nové případy se otevírají samy (zmrazení, noviny, soud). Vypnuté = jen ruční otevření tlačítkem.</span></label>'
+          + '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="zl-agent"' + (P.agent_zapnuto ? ' checked' : '') + '> <span class="note"><b>Agent zahajuje řízení sám</b> — projde hru, dopočítá škodu a případ otevře. Majetek se zmrazí, hráč se může odvolat a ty máš u každého případu Potvrdit / Upravit / Zrušit. Vypnuté = nálezy si jen prohlédneš tlačítkem níž.</span></label></div>';
       }).catch(function (e) { chyba('zl-pravidla', e); });
     }
     function zlUloz() {
@@ -1863,6 +1873,7 @@
       b.emblemy = {};
       [].forEach.call(document.querySelectorAll('[data-zle]'), function (i) { b.emblemy[i.getAttribute('data-zle')] = i.value; });
       var z = document.getElementById('zl-zapnuto'); if (z) b.zapnuto = z.checked;
+      var ag = document.getElementById('zl-agent'); if (ag) b.agent_zapnuto = ag.checked;
       return post('/zlocin/pravidla', b).then(function () { document.getElementById('zl-stav').textContent = 'Uloženo.'; });
     }
     document.getElementById('zl-uloz').onclick = function () {
@@ -1901,6 +1912,45 @@
             + '<td><button class="btn sm" data-zahaj="' + r.id + '" title="Ručně otevřít řízení: zmrazení, noviny pro všechny hráče, kontrola">Otevřít řízení</button></td></tr>';
         }).join('') + '</tbody></table></div>';
     }
+    // Nálezy agenta nanečisto. Vypínače detektorů se při náhledu obcházejí —
+    // ať je vidět i to, co by našel detektor, který je zrovna vypnutý.
+    document.getElementById('zl-agent-spust').onclick = function () {
+      var box = document.getElementById('zl-agent-body');
+      box.innerHTML = '<p class="note">Agent prochází hru…</p>';
+      zlUloz().then(function () { return get('/zlocin/agent'); }).then(function (j) {
+        var stav = j.zapnuto ? '<b style="color:#34d399">Agent je zapnutý</b> — případy otevírá sám.'
+          : '<b style="color:#fbbf24">Agent je vypnutý</b> — tohle je jen náhled, nic se neotevře.';
+        var vyp = (j.detektory || []).filter(function (d) { return !d.zapnuty; }).map(function (d) { return d.kod; });
+        if (!j.nalezy.length) {
+          box.innerHTML = '<p class="note">' + stav + ' Nic nenašel.</p>';
+          return;
+        }
+        box.innerHTML = '<p class="note">' + stav + ' Nálezů: <b>' + j.nalezy.length + '</b>, dohromady '
+          + cz(j.nalezy.reduce(function (a, x) { return a + x.skoda; }, 0)) + ' L$. Menší nález než '
+          + cz(j.min_skoda) + ' L$ se nevede.'
+          + (vyp.length ? ' Vypnuté detektory (v náhledu se stejně počítají): ' + esc(vyp.join(', ')) + '.' : '') + '</p>'
+          + '<div class="tbl-wrap"><table class="data-table"><thead><tr><th>Hráč</th><th>Co našel</th>'
+          + '<th class="num">Škoda</th><th class="num">Zmrazit</th><th>Útvar</th><th></th></tr></thead><tbody>'
+          + j.nalezy.map(function (r) {
+            return '<tr><td><b>' + esc(r.firma || r.nick) + '</b><div class="note">' + esc(r.nick) + '</div></td>'
+              + '<td>' + r.nalezy.map(function (n) {
+                return '<div style="margin-bottom:4px"><b>' + esc(n.nazev) + '</b> — ' + cz(n.skoda) + ' L$'
+                  + '<div class="note" style="line-height:1.5">' + n.dukazy.map(function (d) { return '· ' + esc(d.text); }).join('<br>') + '</div></div>';
+              }).join('') + '</td>'
+              + '<td class="num"><b>' + cz(r.skoda) + '</b></td><td class="num">' + cz(r.zmrazit) + '</td>'
+              + '<td>' + esc(r.utvar) + '</td>'
+              + '<td><button class="btn sm" data-zahaj="' + r.id + '">Otevřít řízení</button></td></tr>';
+          }).join('') + '</tbody></table></div>';
+        [].forEach.call(box.querySelectorAll('[data-zahaj]'), function (b) {
+          b.onclick = function () {
+            if (!confirm('Opravdu otevřít řízení? Hráči se zmrazí hotovost a všem hráčům přijde zpráva v novinách.')) return;
+            b.disabled = true;
+            post('/zlocin/zahaj', { id: b.getAttribute('data-zahaj') }).then(function () { b.textContent = 'Otevřeno'; zlPripady(); })
+              .catch(function (e) { b.disabled = false; alert(e.message); });
+          };
+        });
+      }).catch(function (e) { chyba('zl-agent-body', e); });
+    };
     document.getElementById('zl-spust').onclick = function () {
       var box = document.getElementById('zl-body'); box.innerHTML = '<p class="note">Vyhodnocuji…</p>';
       // Nejdřív uložíme rozeditovaná pravidla, ať se vyhodnocení opře o to, co je vidět ve formuláři

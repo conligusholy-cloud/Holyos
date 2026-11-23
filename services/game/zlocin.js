@@ -43,6 +43,19 @@ const VYCHOZI = {
   kup_max_pomer: 60,           // % ceníku — levnější než tohle se počítá jako „pod cenou"
   chranit_platici: true,
   vratit_balicky: true,
+  // ── Agent nad zločinem ──────────────────────────────────────────────────
+  // Hledá vzorce, které pevná pravidla neumí: obchody mezi vlastními účty,
+  // přihazování na vlastní dražbu, prodej podílu do společného fondu přes
+  // spojený účet a půjčky, co se nesplácejí. Vypínač je zvlášť, ať se dá
+  // nejdřív nechat běžet nanečisto.
+  agent_zapnuto: false,
+  agent_min_skoda: 500000,     // menší nález se nevede
+  agent_levne_pomer: 60,       // % ceníku — pod tím je obchod „pod cenou"
+  agent_drahe_pomer: 160,      // % ceníku — nad tím je obchod „nad cenou"
+  det_spojene_obchody: true,
+  det_drazby: true,
+  det_fond: true,
+  det_pujcky: true,
   // Štítky u hráče v žebříčcích a profilu — mění se podle útvaru a fáze řízení
   emblemy: { celni: '🛃', policie: '🚓', financni: '💼', soud: '⚖️', porota: '👥', recidiva: '🚫', hotovo: '✅' },
 };
@@ -54,6 +67,7 @@ const LIMITY = {
   hranice_nahled: [10, 100], min_kupu_od_mrtvych: [1, 100], kup_max_pomer: [5, 100],
   odvolani_mesicu: [0, 12], min_porotcu: [0, 100], porotce_aktivni_h: [1, 720], max_novych_za_tik: [0, 50],
   recidiva_min_skoda: [0, 1000000000],
+  agent_min_skoda: [0, 1000000000], agent_levne_pomer: [1, 100], agent_drahe_pomer: [100, 1000],
 };
 
 async function nastaveni() {
@@ -67,6 +81,8 @@ async function uloz(vstup) {
   if ('zapnuto' in b) out.zapnuto = !!b.zapnuto;
   if ('chranit_platici' in b) out.chranit_platici = !!b.chranit_platici;
   if ('vratit_balicky' in b) out.vratit_balicky = !!b.vratit_balicky;
+  ['agent_zapnuto', 'det_spojene_obchody', 'det_drazby', 'det_fond', 'det_pujcky']
+    .forEach((k) => { if (k in b) out[k] = !!b[k]; });
   if (b.emblemy && typeof b.emblemy === 'object') {
     out.emblemy = Object.assign({}, VYCHOZI.emblemy, out.emblemy || {});
     Object.keys(VYCHOZI.emblemy).forEach((k) => {

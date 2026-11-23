@@ -62,7 +62,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'services/game/zlocin-rizeni.js'), 'utf8');
-const zac = SRC.indexOf('    if (R.zapnuto && sken) {');
+const zac = SRC.indexOf('    if (kandidati.length) {');
 const kon = SRC.indexOf('\n    }', SRC.indexOf('await zahaj(prisma, R, row); n++;')) + 6;
 if (zac < 0 || kon < 6) { console.log('CHYBA: blok zakládání nových případů se v tik() nenašel'); process.exit(1); }
 const BLOK = SRC.slice(zac, kon);
@@ -73,7 +73,7 @@ async function spust(pravidla, sken, zlociny) {
   const prisma = db().prisma;
   const ctx = vm.createContext({ prisma, Math, Set, Map, Object, Promise, console,
     AKTIVNI: R.AKTIVNI,
-    R: pravidla, sken,
+    R: pravidla, sken, kandidati: (sken.kontrola || []).slice(),
     zahaj: async (p, r, row) => { zahajeno.push(row); return {}; } });
   await vm.runInContext('(async function () {' + BLOK + '})()', ctx);
   return zahajeno;
@@ -146,8 +146,8 @@ async function spust(pravidla, sken, zlociny) {
     const sken = { kontrola: [1, 2, 3, 4, 5].map((i) => ({ id: i, nick: 'H' + i, skoda: 9000000 })) };
     const zahajeno = await spust(Object.assign({}, PRAVIDLA, { max_novych_za_tik: 2 }), sken, []);
     ma(zahajeno.length === 2, 'najednou se neotevře víc, než dovolí pojistka', zahajeno.length);
-    const vyp = await spust(Object.assign({}, PRAVIDLA, { zapnuto: false }), sken, []);
-    ma(!vyp.length, 's vypnutými pravidly se neotevře nic');
+    const vyp = await spust(Object.assign({}, PRAVIDLA, { zapnuto: false }), { kontrola: [] }, []);
+    ma(!vyp.length, 'bez kandidátů se neotevře nic');
     const prazdno = await spust(PRAVIDLA, { kontrola: [] }, []);
     ma(!prazdno.length, 'prázdný sken nic neotevře');
   }

@@ -227,6 +227,16 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; th
   fi
 fi
 
+# Agent nad zločinem: detektory a jejich škody. Agent zahajuje řízení sám,
+# takže falešný nález znamená zmrazený majetek nevinnému hráči.
+if git diff --cached --name-only | grep -qE 'services/game/zlocin|services/game/spojeni|routes/game-admin'; then
+  if ! node nastroje/tzlocinagent.js; then
+    echo ""
+    echo "STOP: agent nad zločinem nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Potrestaný hráč nemá imunitu — ale za totéž se podruhé nesoudí.
 if git diff --cached --name-only | grep -qE 'services/game/zlocin|modules/milionar/index.html'; then
   if ! node nastroje/tzlocinrecidiva.js; then

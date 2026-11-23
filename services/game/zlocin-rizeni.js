@@ -30,7 +30,17 @@ async function dorucenka(prisma, playerId, amount, popis) {
   await prisma.gameDelivery.create({ data: { player_id: playerId, kind: 'cash', amount: Math.round(amount), popis: String(popis).slice(0, 200) } });
 }
 
+const PODEZRENI_AGENT = {
+  spojene_obchody: 'obchody mezi účty jednoho člověka za cenu mimo ceník',
+  drazby: 'přihazování na vlastní dražbu z druhého účtu',
+  fond: 'prodej podílu do společného fondu přes vlastní účet',
+  pujcky: 'půjčky mezi vlastními účty, které se nesplácejí',
+};
 function podezreni(z) {
+  if (z.typ === 'agent') {
+    const kod = ((z.detail || {}).kod) || '';
+    return PODEZRENI_AGENT[kod] || 'přelévání hodnoty mezi účty jednoho člověka';
+  }
   return z.typ === 'kupec'
     ? 'skupování prádlomatů od zrušených účtů hluboko pod cenou'
     : 'provize z účelově založených a zrušených účtů';
@@ -44,13 +54,16 @@ async function zahaj(prisma, R, row) {
   const zmrazeno = Math.min(row.zmrazit || 0, cash);
   const ted = new Date();
   const z = await prisma.gameZlocin.create({ data: {
-    hlavni_id: row.id, hlavni_nick: row.nick, firma: h.company || row.firma || null, typ: row.typ === 'kupec' ? 'kupec' : 'zvouci',
+    hlavni_id: row.id, hlavni_nick: row.nick, firma: h.company || row.firma || null,
+    typ: (row.typ === 'kupec' || row.typ === 'agent') ? row.typ : 'zvouci',
     utvar: row.utvar, emblem: row.emblem || null, stav: 'kontrola', skoda: row.skoda, zmrazeno,
     kontrola_do: new Date(ted.getTime() + R.kontrola_mesicu * MESIC_MS),
     detail: { pod_ids: row.pod_ids || [], provize: row.provize, sleva: row.sleva, zmrazit_cil: row.zmrazit,
       platici: !!row.platici,
       // U opakovaného případu je vidět, že se soudí jen to nové.
-      drive_odsouzeno: row.drive_odsouzeno || 0 },
+      drive_odsouzeno: row.drive_odsouzeno || 0,
+      // Nález agenta: podle čeho se případ vede a čím je doložený.
+      kod: row.kod || null, nalezy: row.nalezy || null },
   } });
   if (zmrazeno > 0) await dorucenka(prisma, row.id, -zmrazeno, 'Zmrazeno kvůli kontrole (' + row.utvar + '): ' + L(zmrazeno));
   await zprava(prisma, z, (z.emblem || '') + ' Kontrola firmy ' + jmeno(z),
@@ -268,8 +281,25 @@ async function tik() {
         }
       } catch (e) { console.warn('[zlocin] případ #' + zz.id + ':', e && e.message); }
     }
-    // 2) nové případy z vyhodnocení (jen když jsou pravidla zapnutá)
-    if (R.zapnuto && sken) {
+    // 2) nové případy z vyhodnocení (jen když jsou pravidla zapnutá) a od agenta
+    //    (ten má vlastní vypínač — jeho detektory hledají jiné vzorce).
+    let kandidati = (R.zapnuto && sken) ? sken.kontrola.slice() : [];
+    if (R.agent_zapnuto) {
+      try {
+        const AGENT = require('./zlocin-agent');
+        const nalezy = (await AGENT.projdi(prisma, R))
+          .filter((x) => x.skoda >= (R.agent_min_skoda || 0));
+        // Když na hráče ukazují pravidla i agent, vede se jeden případ s tím
+        // vyšším číslem — ne dva zároveň.
+        const uz = new Map(kandidati.map((x) => [x.id, x]));
+        nalezy.forEach((x) => {
+          const stary = uz.get(x.id);
+          if (!stary) { kandidati.push(x); uz.set(x.id, x); return; }
+          if (x.skoda > (stary.skoda || 0)) kandidati[kandidati.indexOf(stary)] = x;
+        });
+      } catch (e) { console.warn('[zlocin-agent]', e && e.message); }
+    }
+    if (kandidati.length) {
       // Jen kdo má případ PRÁVĚ TEĎ. Dokud se tu braly všechny případy včetně
       // dávno uzavřených, měl každý jednou potrestaný hráč do konce hry klid —
       // a to, že někoho potrestáme, neznamená, že nemůže podvádět dál.
@@ -283,7 +313,7 @@ async function tik() {
         select: { hlavni_id: true, skoda: true } }))
         .forEach((x) => odsouzeno.set(x.hlavni_id, (odsouzeno.get(x.hlavni_id) || 0) + (x.skoda || 0)));
       let n = 0;
-      for (const puvodni of sken.kontrola) {
+      for (const puvodni of kandidati) {
         if (n >= R.max_novych_za_tik) break;
         if (bezi.has(puvodni.id)) continue;
         let row = puvodni;

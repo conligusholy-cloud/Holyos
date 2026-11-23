@@ -803,6 +803,25 @@ router.get('/zlocin/nanecisto', api(async (req, res) => {
   res.json(Object.assign({ ok: true }, await Z.nanecisto(prisma)));
 }));
 
+// GET /zlocin/agent → co našel agent, nanečisto. Nic nezahajuje.
+//
+// Agent hledá vzorce, na které pevná pravidla nestačí: obchody mezi účty
+// jednoho člověka, přihazování na vlastní dražbu, prodej podílu do společného
+// fondu přes spojený účet a půjčky, co se nesplácejí. Tohle je jediný způsob,
+// jak se na jeho nálezy podívat dřív, než se mu zapne pravomoc.
+router.get('/zlocin/agent', api(async (req, res) => {
+  const Z = require('../services/game/zlocin');
+  const A = require('../services/game/zlocin-agent');
+  const R = await Z.nastaveni();
+  // Vypínače detektorů se při náhledu dají obejít — ať je vidět, co by který
+  // našel, i když je zrovna vypnutý.
+  const vse = Object.assign({}, R, { det_spojene_obchody: true, det_drazby: true, det_fond: true, det_pujcky: true });
+  const nalezy = await A.projdi(prisma, vse);
+  res.json({ ok: true, zapnuto: !!R.agent_zapnuto, min_skoda: R.agent_min_skoda || 0,
+    detektory: A.DETEKTORY.map((d) => ({ kod: d.kod, zapnuty: !!R[d.prepinac] })),
+    nalezy });
+}));
+
 // ─── Vyčíslení okruhu: zvoucí (provize) + kupec (levné stroje) ──────────────
 // GET /api/game-admin/okruh?a=Pinon&b=Petulak  → čitelný text (jen čte).
 // A = ten, kdo zakládá pomocné účty a bere provizi, B = ten, kdo od nich skupuje
