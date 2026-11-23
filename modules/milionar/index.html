@@ -1806,7 +1806,7 @@
       }
       if ((r.nalezy || []).length) {
         o += '<div style="margin-top:8px"><b>Nálezy agenta</b>' + r.nalezy.map(function (n) {
-          return '<div style="margin-top:4px">• <b>' + esc(n.nazev || n.kod || '?') + '</b> — ' + cz(n.skoda) + (n.dukazy && n.dukazy.length ? '<div style="margin-left:12px;color:#94a3b8">' + n.dukazy.map(function (d) { return esc(d && d.text || ''); }).join('<br>') + '</div>' : '') + '</div>'; }).join('') + '</div>';
+          return '<div style="margin-top:4px">• <b>' + esc(n.nazev || n.kod || '?') + '</b> — ' + cz(n.skoda) + (n.dukazy && n.dukazy.length ? '<div style="margin-left:12px;color:#94a3b8">' + n.dukazy.map(function (d) { return (d && d.kdy ? '<span style="color:#7dd3fc;white-space:nowrap">' + dt(d.kdy) + '</span> · ' : '') + esc(d && d.text || ''); }).join('<br>') + '</div>' : '') + '</div>'; }).join('') + '</div>';
       }
       if (!o) {
         var z = r.zaklad || {};

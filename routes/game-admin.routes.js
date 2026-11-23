@@ -737,6 +737,16 @@ router.get('/zlocin/pripady', api(async (req, res) => {
   try {
     const pols = rows.map((r) => r.detail && r.detail.polozky).filter(Boolean);
     const obIds = Array.from(new Set([].concat(...pols.map((p) => (p.nakupy || []).map((q) => q.obchod).filter((x) => x != null)))));
+    // Nálezy agenta: každý důkaz odkazuje na obchod / dražbu / podíl / půjčku — doplníme, kdy se to stalo
+    const dk = rows.map((r) => (r.detail && Array.isArray(r.detail.nalezy)) ? r.detail.nalezy : []).reduce((a, b) => a.concat(b), []).map((n) => n.dukazy || []).reduce((a, b) => a.concat(b), []);
+    const ids = (k) => Array.from(new Set(dk.map((d) => d && d[k]).filter((x) => x != null)));
+    const ob2 = ids('obchod'), dr2 = ids('drazba'), eq2 = ids('equity'), pj2 = ids('pujcka');
+    const KD = { obchod: {}, drazba: {}, equity: {}, pujcka: {} };
+    if (ob2.length) (await prisma.gameTrade.findMany({ where: { id: { in: ob2 } }, select: { id: true, resolved_at: true, created_at: true } })).forEach((t) => { KD.obchod[t.id] = t.resolved_at || t.created_at; });
+    if (dr2.length) (await prisma.gameDrazba.findMany({ where: { id: { in: dr2 } }, select: { id: true, konec: true, created_at: true } })).forEach((t) => { KD.drazba[t.id] = t.konec || t.created_at; });
+    if (eq2.length) (await prisma.gameEquity.findMany({ where: { id: { in: eq2 } }, select: { id: true, created_at: true } })).forEach((t) => { KD.equity[t.id] = t.created_at; });
+    if (pj2.length) (await prisma.gameLoan.findMany({ where: { id: { in: pj2 } }, select: { id: true, created_at: true } })).forEach((t) => { KD.pujcka[t.id] = t.created_at; });
+    dk.forEach((d) => { if (!d) return; d.kdy = (d.obchod != null && KD.obchod[d.obchod]) || (d.drazba != null && KD.drazba[d.drazba]) || (d.equity != null && KD.equity[d.equity]) || (d.pujcka != null && KD.pujcka[d.pujcka]) || null; });
     const T = {};
     if (obIds.length) (await prisma.gameTrade.findMany({ where: { id: { in: obIds } }, select: { id: true, resolved_at: true, created_at: true } })).forEach((t) => { T[t.id] = t.resolved_at || t.created_at; });
     const hlIds = Array.from(new Set(rows.filter((r) => r.detail && r.detail.polozky && (r.detail.polozky.provize || []).length).map((r) => r.hlavni_id)));
